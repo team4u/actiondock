@@ -8,7 +8,7 @@ import org.team4u.actiondock.domain.model.UpstreamAssetType;
 import org.team4u.actiondock.domain.model.WebhookDefinition;
 import org.team4u.actiondock.plugin.PluginReferenceSourceType;
 import org.team4u.actiondock.plugin.PluginRuntimeService;
-import org.team4u.actiondock.shared.NormalizeUtils;
+import org.team4u.actiondock.common.NormalizeUtils;
 import org.team4u.actiondock.skill.SkillService;
 
 import java.time.LocalDateTime;

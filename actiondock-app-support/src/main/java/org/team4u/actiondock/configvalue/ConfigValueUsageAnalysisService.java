@@ -11,7 +11,7 @@ import org.team4u.actiondock.domain.port.ConfigValueRepository;
 import org.team4u.actiondock.domain.port.PluginRegistryRepository;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
-import org.team4u.actiondock.shared.NormalizeUtils;
+import org.team4u.actiondock.common.NormalizeUtils;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;

@@ -9,7 +9,7 @@ import org.team4u.actiondock.domain.port.ScriptRepository;
 import org.team4u.actiondock.plugin.PluginRuntimeService;
 import org.team4u.actiondock.plugin.PluginView;
 import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
-import org.team4u.actiondock.shared.NormalizeUtils;
+import org.team4u.actiondock.common.NormalizeUtils;
 
 import java.util.List;
 import java.util.Optional;

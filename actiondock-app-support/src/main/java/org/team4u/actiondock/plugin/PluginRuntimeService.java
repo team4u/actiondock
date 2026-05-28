@@ -24,7 +24,7 @@ import org.team4u.actiondock.plugin.api.PluginManifest;
 import org.team4u.actiondock.plugin.api.PluginRuntimeException;
 import org.team4u.actiondock.plugin.api.ActionDockPlugin;
 import org.team4u.actiondock.plugin.api.ScriptPluginContext;
-import org.team4u.actiondock.shared.NormalizeUtils;
+import org.team4u.actiondock.common.NormalizeUtils;
 
 import java.io.IOException;
 import java.nio.file.Files;

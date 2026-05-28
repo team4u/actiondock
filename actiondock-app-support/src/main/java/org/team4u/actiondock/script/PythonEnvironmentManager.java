@@ -7,7 +7,7 @@ import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptExecutionContext;
 import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.repository.RepositoryVersionUtils;
-import org.team4u.actiondock.shared.NormalizeUtils;
+import org.team4u.actiondock.common.NormalizeUtils;
 
 import java.io.IOException;
 import java.io.InputStream;

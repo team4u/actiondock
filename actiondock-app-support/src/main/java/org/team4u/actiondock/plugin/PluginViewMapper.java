@@ -1,6 +1,6 @@
 package org.team4u.actiondock.plugin;
 
-import org.team4u.actiondock.shared.NormalizeUtils;
+import org.team4u.actiondock.common.NormalizeUtils;
 
 import org.pf4j.PluginWrapper;
 import org.pf4j.DefaultPluginManager;

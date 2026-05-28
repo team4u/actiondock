@@ -12,6 +12,11 @@
     <dependencies>
         <dependency>
             <groupId>org.team4u</groupId>
+            <artifactId>actiondock-common</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.team4u</groupId>
             <artifactId>actiondock-app-support</artifactId>
             <version>${project.version}</version>
         </dependency>

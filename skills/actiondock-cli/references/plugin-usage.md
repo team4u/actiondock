@@ -53,6 +53,10 @@ actiondock plugin action <plugin-id> <action> --json
 - Output: 完整 outputSchema
 - Example: exampleArgs 示例
 
+解释 action schema 时，直接把 Input 里的顶层简单字段理解成可扁平的 CLI flag，把 `JSON-only fields` 理解成必须走 `--args-json` / `--args-file` 的字段。
+
+默认附 1 条对应的 `plugin invoke` 示例：纯简单字段时示例用扁平 flag；存在对象或数组字段时示例直接用 `--args-json` 或 `--args-file`。
+
 `--json` 返回单个动作的完整 `PluginActionDefinition` 对象（含 inputSchema、outputSchema、exampleArgs）。
 
 动作不存在时会列出所有可用动作名称。
@@ -85,7 +89,7 @@ actiondock plugin invoke <plugin-id> <action> --json
 
 1. `plugin get <plugin-id>` — 找到目标动作名
 2. `plugin action <plugin-id> <action>` — 查看 inputSchema
-3. 决定用动态 flag 还是 JSON / 文件输入
+3. 先区分哪些字段可扁平，哪些字段必须用 JSON / 文件输入
 4. 再执行 `plugin invoke`
 
 默认优先使用扁平入参，也就是把简单顶层字段直接展开成普通 flag。只有遇到对象、数组，或者终端里不适合内联的大 JSON，再退回 `--args-json` / `--args-file`。

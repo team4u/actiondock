@@ -3,6 +3,9 @@ package org.team4u.actiondock.workspace.plugin;
 import org.team4u.actiondock.plugin.api.ActionDockPlugin;
 import org.team4u.actiondock.plugin.api.PluginRuntimeException;
 import org.team4u.actiondock.plugin.api.ScriptPluginContext;
+import org.team4u.actiondock.common.shell.ShellExecutionOptions;
+import org.team4u.actiondock.common.shell.ShellExecutionResult;
+import org.team4u.actiondock.common.shell.ShellSupport;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -43,6 +46,7 @@ public class ActionDockWorkspaceSystemPlugin implements ActionDockPlugin {
 
     private final Path defaultBaseDir;
     private final Function<String, Path> executableResolver;
+    private final ShellSupport shellSupport = new ShellSupport();
 
     public ActionDockWorkspaceSystemPlugin() {
         this((String) null);
@@ -78,7 +82,7 @@ public class ActionDockWorkspaceSystemPlugin implements ActionDockPlugin {
                 case "findFiles" -> findFiles(values);
                 case "searchText" -> searchText(values);
                 case "getSystemInfo" -> getSystemInfo(values);
-                case "executeShellCommand" -> executeShellCommand(values);
+                case "exec" -> exec(values);
                 default -> throw new IllegalArgumentException("Unsupported workspace action: " + action);
             };
         } catch (PluginRuntimeException exception) {
@@ -302,43 +306,23 @@ public class ActionDockWorkspaceSystemPlugin implements ActionDockPlugin {
         return result;
     }
 
-    private Map<String, Object> executeShellCommand(Map<String, Object> values) throws IOException, InterruptedException {
+    private Map<String, Object> exec(Map<String, Object> values) {
         String command = requiredString(values, "command");
         int timeoutSeconds = intValue(values.get("timeoutSeconds"), DEFAULT_TIMEOUT_SECONDS);
         int maxOutputBytes = intValue(values.get("maxOutputBytes"), DEFAULT_MAX_OUTPUT_BYTES);
-        Path baseDir = baseDir(values);
-        String cwdValue = optionalString(values.get("cwd"));
-        Path cwd;
-        try {
-            cwd = cwdValue == null ? baseDir : validatePath(cwdValue, baseDir);
-        } catch (IOException exception) {
-            return shellCommandFailure(exception.getMessage());
+        boolean check = booleanValue(values.get("check"), true);
+        ShellExecutionResult result = shellSupport.exec(command, new ShellExecutionOptions(
+                resolveShellCwd(values.get("cwd")),
+                envMap(values.get("env")),
+                timeoutSeconds,
+                maxOutputBytes,
+                optionalString(values.get("shell"))
+        ));
+        Map<String, Object> mapped = shellResultMap(result);
+        if (check && !result.ok()) {
+            throw new PluginRuntimeException(500, "WORKSPACE_SHELL_EXEC_FAILED", buildShellFailureMessage(command, result), mapped);
         }
-        if (!Files.exists(cwd)) {
-            Files.createDirectories(cwd);
-        }
-        if (!Files.isDirectory(cwd)) {
-            return shellCommandFailure("cwd is not a directory: " + cwd);
-        }
-
-        List<List<String>> shellCandidates = shellCandidates(values);
-        Set<String> allowedCommands = stringSet(values.get("allowedCommands"));
-        if (!allowedCommands.isEmpty() && !allowed(command, allowedCommands)) {
-            return shellCommandFailure("Command is not allowed by allowedCommands: " + command);
-        }
-
-        IOException lastStartError = null;
-        for (List<String> shell : shellCandidates) {
-            try {
-                return withAvailableEnvironmentOnFailure(
-                        runProcess(shell, command, cwd, envMap(values.get("env")), timeoutSeconds, maxOutputBytes)
-                );
-            } catch (IOException exception) {
-                lastStartError = exception;
-            }
-        }
-        String message = lastStartError == null ? "No usable shell found." : lastStartError.getMessage();
-        return shellCommandFailure(message);
+        return mapped;
     }
 
     private Map<String, Object> getSystemInfo(Map<String, Object> values) throws IOException, InterruptedException {
@@ -354,81 +338,35 @@ public class ActionDockWorkspaceSystemPlugin implements ActionDockPlugin {
         return result;
     }
 
-    private Map<String, Object> runProcess(List<String> shell,
-                                           String command,
-                                           Path cwd,
-                                           Map<String, String> extraEnv,
-                                           int timeoutSeconds,
-                                           int maxOutputBytes) throws IOException, InterruptedException {
-        List<String> processCommand = new ArrayList<>(shell);
-        processCommand.add(command);
-        ProcessBuilder builder = new ProcessBuilder(processCommand);
-        builder.directory(cwd.toFile());
-        builder.environment().putAll(extraEnv);
-        long started = System.currentTimeMillis();
-        Process process = builder.start();
-
-        ByteArrayOutputStream stdout = new ByteArrayOutputStream();
-        ByteArrayOutputStream stderr = new ByteArrayOutputStream();
-        Thread outThread = streamCollector(process.getInputStream(), stdout, maxOutputBytes);
-        Thread errThread = streamCollector(process.getErrorStream(), stderr, maxOutputBytes);
-
-        boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
-        if (!finished) {
-            process.destroyForcibly();
-            process.waitFor(3, TimeUnit.SECONDS);
+    private Path resolveShellCwd(Object value) {
+        if (value == null || String.valueOf(value).isBlank()) {
+            return Paths.get(".").toAbsolutePath().normalize();
         }
-        outThread.join(Duration.ofSeconds(1));
-        errThread.join(Duration.ofSeconds(1));
-
-        String stdoutText = stdout.toString(StandardCharsets.UTF_8);
-        String stderrText = stderr.toString(StandardCharsets.UTF_8);
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("ok", finished && process.exitValue() == 0);
-        result.put("message", finished ? "Command finished." : "Command timed out.");
-        result.put("command", command);
-        result.put("cwd", cwd.toString());
-        result.put("shell", shell);
-        result.put("exitCode", finished ? process.exitValue() : null);
-        result.put("stdout", stdoutText);
-        result.put("stderr", stderrText);
-        result.put("durationMs", System.currentTimeMillis() - started);
-        result.put("timedOut", !finished);
-        result.put("stdoutTruncated", stdout.size() >= maxOutputBytes);
-        result.put("stderrTruncated", stderr.size() >= maxOutputBytes);
-        return result;
+        Path cwd = Paths.get(String.valueOf(value));
+        return cwd.isAbsolute() ? cwd.normalize() : cwd.toAbsolutePath().normalize();
     }
 
-    private Map<String, Object> shellCommandFailure(String message) throws IOException, InterruptedException {
-        return withAvailableEnvironmentOnFailure(error(message));
+    private Map<String, Object> shellResultMap(ShellExecutionResult result) {
+        Map<String, Object> mapped = new LinkedHashMap<>();
+        mapped.put("command", result.command());
+        mapped.put("cwd", result.cwd().toString());
+        mapped.put("shell", result.shell());
+        mapped.put("durationMs", result.durationMs());
+        mapped.put("ok", result.ok());
+        mapped.put("exitCode", result.exitCode());
+        mapped.put("stdout", result.stdout());
+        mapped.put("stderr", result.stderr());
+        mapped.put("timedOut", result.timedOut());
+        mapped.put("stdoutTruncated", result.stdoutTruncated());
+        mapped.put("stderrTruncated", result.stderrTruncated());
+        return mapped;
     }
 
-    private Map<String, Object> withAvailableEnvironmentOnFailure(Map<String, Object> result) throws IOException, InterruptedException {
-        if (Boolean.TRUE.equals(result.get("ok"))) {
-            return result;
+    private String buildShellFailureMessage(String command, ShellExecutionResult result) {
+        if (result.timedOut()) {
+            return "Shell command timed out: " + command;
         }
-        result.put("availableEnvironment", availableEnvironment());
-        return result;
-    }
-
-    private Thread streamCollector(InputStream inputStream, ByteArrayOutputStream output, int maxBytes) {
-        Thread thread = new Thread(() -> {
-            byte[] buffer = new byte[4096];
-            try (inputStream) {
-                int read;
-                while ((read = inputStream.read(buffer)) >= 0) {
-                    int remaining = maxBytes - output.size();
-                    if (remaining > 0) {
-                        output.write(buffer, 0, Math.min(read, remaining));
-                    }
-                }
-            } catch (IOException ignored) {
-                // Best effort stream capture.
-            }
-        });
-        thread.setDaemon(true);
-        thread.start();
-        return thread;
+        return "Shell command failed: " + command + " (exitCode=" + result.exitCode() + ")";
     }
 
     private Map<String, Object> workspaceInfo(Path baseDir) {
@@ -472,44 +410,6 @@ public class ActionDockWorkspaceSystemPlugin implements ActionDockPlugin {
             item.put("name", executable);
             item.put("available", resolved != null);
             item.put("resolvedPath", resolved == null ? null : resolved.toString());
-            result.add(item);
-        }
-        return result;
-    }
-
-    private Map<String, Object> availableEnvironment() throws IOException, InterruptedException {
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("shells", availableShellInfo());
-        result.put("commands", availableCommandInfo());
-        return result;
-    }
-
-    private List<Map<String, Object>> availableShellInfo() {
-        List<Map<String, Object>> result = new ArrayList<>();
-        for (Map<String, Object> shell : shellInfo(Map.of())) {
-            if (!Boolean.TRUE.equals(shell.get("available"))) {
-                continue;
-            }
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("name", shell.get("name"));
-            item.put("resolvedPath", shell.get("resolvedPath"));
-            result.add(item);
-        }
-        return result;
-    }
-
-    private List<Map<String, Object>> availableCommandInfo() throws IOException, InterruptedException {
-        List<Map<String, Object>> result = new ArrayList<>();
-        for (Map<String, Object> command : commandInfo(Map.of())) {
-            if (!Boolean.TRUE.equals(command.get("available"))) {
-                continue;
-            }
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("name", command.get("name"));
-            item.put("resolvedPath", command.get("resolvedPath"));
-            item.put("versionText", command.get("versionText"));
-            item.put("versionExitCode", command.get("versionExitCode"));
-            item.put("versionTimedOut", command.get("versionTimedOut"));
             result.add(item);
         }
         return result;
@@ -621,6 +521,26 @@ public class ActionDockWorkspaceSystemPlugin implements ActionDockPlugin {
         return result;
     }
 
+    private Thread streamCollector(InputStream inputStream, ByteArrayOutputStream output, int maxBytes) {
+        Thread thread = new Thread(() -> {
+            byte[] buffer = new byte[4096];
+            try (inputStream) {
+                int read;
+                while ((read = inputStream.read(buffer)) >= 0) {
+                    int remaining = maxBytes - output.size();
+                    if (remaining > 0) {
+                        output.write(buffer, 0, Math.min(read, remaining));
+                    }
+                }
+            } catch (IOException ignored) {
+                // Best effort stream capture for system probes.
+            }
+        });
+        thread.setDaemon(true);
+        thread.start();
+        return thread;
+    }
+
     private List<List<String>> shellCandidates(Map<String, Object> values) {
         String shellPath = optionalString(values.get("shellPath"));
         String osName = System.getProperty("os.name", "").toLowerCase();
@@ -709,11 +629,6 @@ public class ActionDockWorkspaceSystemPlugin implements ActionDockPlugin {
             return List.of(executable);
         }
         return List.of(executable + ".exe", executable + ".cmd", executable + ".bat", executable);
-    }
-
-    private boolean allowed(String command, Set<String> allowedCommands) {
-        String trimmed = command == null ? "" : command.trim();
-        return allowedCommands.stream().anyMatch(allowed -> trimmed.equals(allowed) || trimmed.startsWith(allowed + " "));
     }
 
     private Path baseDir(Map<String, Object> values) {
@@ -815,6 +730,16 @@ public class ActionDockWorkspaceSystemPlugin implements ActionDockPlugin {
     private int intValue(Object value, int defaultValue) {
         Integer integer = intValue(value);
         return integer == null ? defaultValue : integer;
+    }
+
+    private boolean booleanValue(Object value, boolean defaultValue) {
+        if (value == null) {
+            return defaultValue;
+        }
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        return Boolean.parseBoolean(String.valueOf(value));
     }
 
     @SuppressWarnings("unchecked")

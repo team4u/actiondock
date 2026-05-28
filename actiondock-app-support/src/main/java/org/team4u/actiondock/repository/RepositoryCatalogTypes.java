@@ -14,7 +14,7 @@ import org.team4u.actiondock.domain.model.WebhookSampleRequest;
 import org.team4u.actiondock.plugin.PluginView;
 import org.team4u.actiondock.skill.SkillFileUtils;
 import org.team4u.actiondock.skill.SkillTypes;
-import org.team4u.actiondock.shared.NormalizeUtils;
+import org.team4u.actiondock.common.NormalizeUtils;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;

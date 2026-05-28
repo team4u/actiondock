@@ -1,6 +1,6 @@
 package org.team4u.actiondock.repository;
 
-import org.team4u.actiondock.shared.NormalizeUtils;
+import org.team4u.actiondock.common.NormalizeUtils;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;

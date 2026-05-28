@@ -107,13 +107,13 @@ actiondock repository sync <repositoryId> --json
 | `writeTextFile` | 创建或覆盖文本文件 |
 | `findFiles` | 跨平台查找文件或目录，支持 `includeGlobs` / `excludeGlobs`、默认跳过常见生成目录，并轻量处理 `.gitignore` |
 | `searchText` | 跨平台搜索 UTF-8 文本文件，默认按正则匹配，支持普通字符串搜索、大小写、上下文行、glob 过滤和结果上限 |
-| `executeShellCommand` | 在项目目录下执行 Shell 命令（Linux/macOS 默认 bash 兼容 Shell，Windows 默认 PowerShell、失败时回退 cmd；可通过 `shellPath` 指定 Shell，并按常见 Shell 自动匹配参数，`allowedCommands` 限制可执行命令，支持超时设置；失败时返回自动探测到的可用 shell/命令环境） |
+| `exec` | 执行本机 Shell 命令，参数与脚本运行时 `shell.exec` 对齐，支持 `cwd` / `env` / `timeoutSeconds` / `check` / `shell` / `maxOutputBytes`；`cwd` 默认进程工作目录，显式传入时目录必须已存在 |
 | `getSystemInfo` | 探测系统信息：工作区路径、系统环境（OS、Java 版本）、PATH 环境变量、可用 Shell（bash/sh/PowerShell/cmd）、常用命令版本（bash、python、python3、node、npm、npx、git、java、mvn），支持 `additionalCommands` 补充探测更多命令 |
 
 参数使用原则：
 
 - `path`、`query`、`viewRange`、`command`、`regex`、`caseSensitive`、`contextLines`、`maxResults` 这类简单顶层字段，优先直接写 flag。
-- `includeGlobs`、`excludeGlobs`、`additionalCommands`、`allowedCommands`、`env` 这类数组或对象字段，使用 `--args-json` / `--args-file`。
+- `includeGlobs`、`excludeGlobs`、`additionalCommands`、`env` 这类数组或对象字段，使用 `--args-json` / `--args-file`。
 - 混合传参时，`--args-json` / `--args-file` 提供复杂字段，动态 flag 提供或覆盖简单字段。
 
 通过 CLI 调用：
@@ -153,9 +153,11 @@ actiondock plugin invoke actiondock-workspace searchText \
   --caseSensitive false \
   --json
 
-# 在项目目录下执行 Shell 命令
-actiondock plugin invoke actiondock-workspace executeShellCommand \
+# 执行 Shell 命令；需要产物目录时由脚本或调用方自行创建和清理
+actiondock plugin invoke actiondock-workspace exec \
   --command 'git status --short' \
+  --cwd <existing-dir> \
+  --check false \
   --json
 
 # 探测系统信息（工作区、Shell、常用命令版本等）

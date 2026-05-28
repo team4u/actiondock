@@ -2,7 +2,7 @@ package org.team4u.actiondock.repository;
 
 import org.team4u.actiondock.domain.model.ConfigValue;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
-import org.team4u.actiondock.shared.NormalizeUtils;
+import org.team4u.actiondock.common.NormalizeUtils;
 
 import java.nio.file.Path;
 import java.util.ArrayList;

@@ -7,7 +7,7 @@ import org.team4u.actiondock.domain.model.SkillInstallation;
 import org.team4u.actiondock.domain.model.SkillTarget;
 import org.team4u.actiondock.domain.port.SkillInstallationRepository;
 import org.team4u.actiondock.domain.port.SkillTargetRepository;
-import org.team4u.actiondock.shared.NormalizeUtils;
+import org.team4u.actiondock.common.NormalizeUtils;
 
 import static org.team4u.actiondock.skill.SkillTypes.*;
 

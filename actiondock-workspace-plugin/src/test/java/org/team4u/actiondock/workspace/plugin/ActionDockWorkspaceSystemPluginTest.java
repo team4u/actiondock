@@ -2,6 +2,7 @@ package org.team4u.actiondock.workspace.plugin;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.team4u.actiondock.plugin.api.PluginRuntimeException;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -11,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ActionDockWorkspaceSystemPluginTest {
     @TempDir
@@ -235,86 +237,90 @@ class ActionDockWorkspaceSystemPluginTest {
     }
 
     @Test
-    void executeShellCommandRespectsAllowedCommands() {
-        ActionDockWorkspaceSystemPlugin plugin = pluginWithDetectedEnvironment();
-
-        @SuppressWarnings("unchecked")
-        Map<String, Object> result = (Map<String, Object>) plugin.invoke("executeShellCommand", null, Map.of(
-                "command", "pwd",
-                "allowedCommands", List.of("ls")
-        ));
-
-        assertThat(result).containsEntry("ok", false);
-        assertThat(result).containsEntry("error", "Command is not allowed by allowedCommands: pwd");
-        assertThat(result).containsKey("availableEnvironment");
-        assertAvailableEnvironment(result, List.of("bash"), List.of("bash", "git"));
-    }
-
-    @Test
-    void executeShellCommandReturnsStdout() {
+    void execReturnsStdout() {
         ActionDockWorkspaceSystemPlugin plugin = new ActionDockWorkspaceSystemPlugin(Path.of(".").toAbsolutePath().normalize().toString());
 
         @SuppressWarnings("unchecked")
-        Map<String, Object> result = (Map<String, Object>) plugin.invoke("executeShellCommand", null, Map.of(
+        Map<String, Object> result = (Map<String, Object>) plugin.invoke("exec", null, Map.of(
                 "command", "printf 'hello'",
-                "allowedCommands", List.of("printf")
+                "shell", "sh"
         ));
 
         assertThat(result).containsEntry("ok", true);
         assertThat(result).containsEntry("timedOut", false);
         assertThat(result.get("stdout")).isEqualTo("hello");
-        assertThat(result).doesNotContainKey("availableEnvironment");
     }
 
     @Test
-    void executeShellCommandReturnsAvailableEnvironmentOnNonZeroExit() throws Exception {
-        ActionDockWorkspaceSystemPlugin plugin = pluginWithDetectedEnvironment();
-        Path shellPath = createExitShell("bash", 7);
+    void execReturnsNonZeroWhenCheckFalse() {
+        ActionDockWorkspaceSystemPlugin plugin = new ActionDockWorkspaceSystemPlugin(tempDir.toString());
 
         @SuppressWarnings("unchecked")
-        Map<String, Object> result = (Map<String, Object>) plugin.invoke("executeShellCommand", null, Map.of(
+        Map<String, Object> result = (Map<String, Object>) plugin.invoke("exec", null, Map.of(
                 "command", "exit 7",
-                "allowedCommands", List.of("exit"),
-                "shellPath", shellPath.toString()
+                "check", false,
+                "shell", "sh"
         ));
 
         assertThat(result).containsEntry("ok", false);
         assertThat(result).containsEntry("exitCode", 7);
-        assertAvailableEnvironment(result, List.of("bash"), List.of("bash", "git"));
     }
 
     @Test
-    void executeShellCommandReturnsAvailableEnvironmentOnTimeout() throws Exception {
-        ActionDockWorkspaceSystemPlugin plugin = pluginWithDetectedEnvironment();
-        Path shellPath = createSleepShell("bash");
+    void execThrowsWhenCheckTrueAndCommandFails() {
+        ActionDockWorkspaceSystemPlugin plugin = new ActionDockWorkspaceSystemPlugin(tempDir.toString());
+
+        assertThatThrownBy(() -> plugin.invoke("exec", null, Map.of(
+                "command", "exit 7",
+                "shell", "sh"
+        ))).isInstanceOf(PluginRuntimeException.class)
+                .hasMessageContaining("Shell command failed");
+    }
+
+    @Test
+    void execTimesOutWhenCheckFalse() {
+        ActionDockWorkspaceSystemPlugin plugin = new ActionDockWorkspaceSystemPlugin(tempDir.toString());
 
         @SuppressWarnings("unchecked")
-        Map<String, Object> result = (Map<String, Object>) plugin.invoke("executeShellCommand", null, Map.of(
+        Map<String, Object> result = (Map<String, Object>) plugin.invoke("exec", null, Map.of(
                 "command", "sleep 2",
-                "allowedCommands", List.of("sleep"),
                 "timeoutSeconds", 1,
-                "shellPath", shellPath.toString()
+                "check", false,
+                "shell", "sh"
         ));
 
         assertThat(result).containsEntry("ok", false);
         assertThat(result).containsEntry("timedOut", true);
-        assertAvailableEnvironment(result, List.of("bash"), List.of("bash", "git"));
     }
 
     @Test
-    void executeShellCommandReturnsAvailableEnvironmentWhenNoUsableShellExists() {
-        ActionDockWorkspaceSystemPlugin plugin = pluginWithDetectedEnvironment();
+    void execRejectsMissingCwd() {
+        ActionDockWorkspaceSystemPlugin plugin = new ActionDockWorkspaceSystemPlugin(tempDir.toString());
+        Path missing = tempDir.resolve("missing");
+
+        assertThatThrownBy(() -> plugin.invoke("exec", null, Map.of(
+                "command", "pwd",
+                "cwd", missing.toString(),
+                "shell", "sh"
+        ))).isInstanceOf(PluginRuntimeException.class)
+                .hasMessageContaining("cwd is not a directory");
+    }
+
+    @Test
+    void execCanUseCwdOutsideWorkspaceBaseDir() throws Exception {
+        ActionDockWorkspaceSystemPlugin plugin = new ActionDockWorkspaceSystemPlugin(tempDir.resolve("workspace").toString());
+        Path outside = tempDir.resolve("outside");
+        Files.createDirectories(outside);
 
         @SuppressWarnings("unchecked")
-        Map<String, Object> result = (Map<String, Object>) plugin.invoke("executeShellCommand", null, Map.of(
-                "command", "echo hello",
-                "allowedCommands", List.of("echo"),
-                "shellPath", tempDir.resolve("missing").resolve("bash").toString()
+        Map<String, Object> result = (Map<String, Object>) plugin.invoke("exec", null, Map.of(
+                "command", "pwd",
+                "cwd", outside.toString(),
+                "shell", "sh"
         ));
 
-        assertThat(result).containsEntry("ok", false);
-        assertThat(String.valueOf(result.get("error"))).contains(tempDir.resolve("missing").resolve("bash").toString());
-        assertAvailableEnvironment(result, List.of("bash"), List.of("bash", "git"));
+        assertThat(result).containsEntry("ok", true);
+        assertThat(result).containsEntry("cwd", outside.toString());
     }
 
     @Test
@@ -484,114 +490,12 @@ class ActionDockWorkspaceSystemPluginTest {
                 .containsEntry("resolvedPath", null);
     }
 
-    @Test
-    void executeShellCommandUsesPowerShellArgumentsForExplicitOverride() throws Exception {
-        ActionDockWorkspaceSystemPlugin plugin = new ActionDockWorkspaceSystemPlugin(tempDir.toString());
-        Path shellPath = createEchoShell("powershell.exe");
-
-        @SuppressWarnings("unchecked")
-        Map<String, Object> result = (Map<String, Object>) plugin.invoke("executeShellCommand", null, Map.of(
-                "command", "Write-Output hello",
-                "allowedCommands", List.of("Write-Output"),
-                "shellPath", shellPath.toString()
-        ));
-
-        assertThat(result).containsEntry("ok", true);
-        assertThat(result.get("shell")).isEqualTo(List.of(
-                shellPath.toString(), "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"
-        ));
-        assertThat((String) result.get("stdout")).isEqualTo("""
-                -NoProfile
-                -ExecutionPolicy
-                Bypass
-                -Command
-                Write-Output hello
-                """);
-    }
-
-    @Test
-    void executeShellCommandUsesCmdArgumentsForExplicitOverride() throws Exception {
-        ActionDockWorkspaceSystemPlugin plugin = new ActionDockWorkspaceSystemPlugin(tempDir.toString());
-        Path shellPath = createEchoShell("cmd.exe");
-
-        @SuppressWarnings("unchecked")
-        Map<String, Object> result = (Map<String, Object>) plugin.invoke("executeShellCommand", null, Map.of(
-                "command", "dir",
-                "allowedCommands", List.of("dir"),
-                "shellPath", shellPath.toString()
-        ));
-
-        assertThat(result).containsEntry("ok", true);
-        assertThat(result.get("shell")).isEqualTo(List.of(
-                shellPath.toString(), "/d", "/s", "/c"
-        ));
-        assertThat((String) result.get("stdout")).isEqualTo("""
-                /d
-                /s
-                /c
-                dir
-                """);
-    }
-
-    private Path createEchoShell(String fileName) throws Exception {
-        Path shell = tempDir.resolve(fileName);
-        Files.writeString(shell, """
-                #!/bin/sh
-                printf '%s\\n' "$@"
-                """, StandardCharsets.UTF_8);
-        assertThat(shell.toFile().setExecutable(true, false)).isTrue();
-        return shell;
-    }
-
-    private Path createExitShell(String fileName, int exitCode) throws Exception {
-        Path shell = tempDir.resolve(fileName);
-        Files.writeString(shell, """
-                #!/bin/sh
-                exit %d
-                """.formatted(exitCode), StandardCharsets.UTF_8);
-        assertThat(shell.toFile().setExecutable(true, false)).isTrue();
-        return shell;
-    }
-
-    private Path createSleepShell(String fileName) throws Exception {
-        Path shell = tempDir.resolve(fileName);
-        Files.writeString(shell, """
-                #!/bin/sh
-                sleep 2
-                """, StandardCharsets.UTF_8);
-        assertThat(shell.toFile().setExecutable(true, false)).isTrue();
-        return shell;
-    }
-
     private ActionDockWorkspaceSystemPlugin pluginWithDetectedEnvironment() {
         List<String> availableCommands = List.of("bash", "git");
         return new ActionDockWorkspaceSystemPlugin(
                 tempDir.toString(),
                 command -> availableCommands.contains(command) ? tempDir.resolve(command) : null
         );
-    }
-
-    @SuppressWarnings("unchecked")
-    private void assertAvailableEnvironment(Map<String, Object> result,
-                                            List<String> expectedShells,
-                                            List<String> expectedCommands) {
-        Map<String, Object> availableEnvironment = (Map<String, Object>) result.get("availableEnvironment");
-        List<Map<String, Object>> shells = (List<Map<String, Object>>) availableEnvironment.get("shells");
-        List<Map<String, Object>> commands = (List<Map<String, Object>>) availableEnvironment.get("commands");
-
-        assertThat(shells)
-                .extracting(entry -> entry.get("name"))
-                .containsExactlyElementsOf(expectedShells);
-        assertThat(shells)
-                .allSatisfy(entry -> assertThat(entry).containsOnlyKeys("name", "resolvedPath"));
-
-        assertThat(commands)
-                .extracting(entry -> entry.get("name"))
-                .containsExactlyElementsOf(expectedCommands);
-        assertThat(commands)
-                .allSatisfy(entry -> assertThat(entry).containsKeys(
-                        "name", "resolvedPath", "versionText", "versionExitCode", "versionTimedOut"
-                ));
     }
 
     private void restoreOsName(String originalOsName) {

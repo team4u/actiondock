@@ -19,7 +19,7 @@ import org.team4u.actiondock.domain.model.ScriptScope;
 import org.team4u.actiondock.domain.port.CapabilityPackageInstallationRepository;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 import org.team4u.actiondock.plugin.PluginRuntimeService;
-import org.team4u.actiondock.shared.NormalizeUtils;
+import org.team4u.actiondock.common.NormalizeUtils;
 
 import java.util.List;
 import java.util.function.Supplier;

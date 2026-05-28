@@ -18,6 +18,8 @@
     <description>Multi-module Spring ActionDock runtime with H2 and script execution</description>
 
     <modules>
+        <module>actiondock-common</module>
+        <module>actiondock-plugin-api</module>
         <module>actiondock-core</module>
         <module>actiondock-ai-api</module>
         <module>actiondock-ai-core</module>
@@ -25,7 +27,6 @@
         <module>actiondock-ai-plugin-bridge</module>
         <module>actiondock-workspace-plugin</module>
         <module>actiondock-project-knowledge-plugin</module>
-        <module>actiondock-plugin-api</module>
         <module>actiondock-storage-jpa</module>
         <module>actiondock-app-support</module>
         <module>actiondock-app-spring</module>

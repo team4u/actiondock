@@ -87,6 +87,9 @@ npm i -g actiondock
 - 默认使用 `--json`，让输出稳定可机读。
 - 默认连接本机服务 `http://127.0.0.1:5177`，本地使用不要要求用户先配置连接；只有连接其他 Server、保存 Token 或频繁切换多个 Server 时，才使用 `actiondock config add/use/list` 管理 profile，临时切换用 `--profile <name>`。
 - 第一次执行已发布脚本前，通过 `script schema <id>` 获取入参，避免用 `get` 查看脚本细节。
+- 当用户查看脚本 `inputSchema` 或插件 action `inputSchema` 时，不只复述字段名；要直接说明哪些顶层简单字段可扁平为 CLI flag，哪些对象/数组字段必须继续使用 JSON 或文件方式传入。
+- 解释 schema 时默认给 1 条对应 CLI 示例，优先展示最推荐的主路径：纯简单字段用扁平 flag；包含对象/数组等复杂字段时，直接示例 `--input-json` / `--input-file`（脚本）或 `--args-json` / `--args-file`（插件）。
+- 不要把对象或数组字段解释成多级 flag；混合 schema 只需在文字里说明“简单字段可扁平、复杂字段走 JSON”，示例仍保持 1 条主路径命令。
 - 项目相关任务必须先解析项目仓库：`actiondock repository resolve --repository-id <repositoryId> --json`。
 - 如果项目仓库是 `GIT` 类型且本地副本还没准备好，先执行 `actiondock repository sync <repositoryId>`。
 - 先读 `ACTIONDOCK.md`，再按正文里给出的入口文件、目录和关键词搜索；不要一上来就全仓库扫源码。

@@ -3,7 +3,7 @@ package org.team4u.actiondock.repository;
 import org.team4u.actiondock.skill.SkillFileUtils;
 import org.team4u.actiondock.skill.SkillArchiveManager;
 import org.team4u.actiondock.skill.SkillTypes;
-import org.team4u.actiondock.shared.NormalizeUtils;
+import org.team4u.actiondock.common.NormalizeUtils;
 
 import java.io.IOException;
 import java.nio.file.Files;

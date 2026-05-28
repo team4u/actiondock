@@ -8,7 +8,7 @@ import org.team4u.actiondock.domain.model.ScriptSchedule;
 import org.team4u.actiondock.domain.model.ScriptScope;
 import org.team4u.actiondock.domain.model.UpstreamAssetType;
 import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
-import org.team4u.actiondock.shared.NormalizeUtils;
+import org.team4u.actiondock.common.NormalizeUtils;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashSet;

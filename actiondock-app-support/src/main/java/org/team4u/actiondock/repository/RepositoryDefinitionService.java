@@ -6,7 +6,7 @@ import org.team4u.actiondock.domain.exception.ActionDockErrorCodes;
 import org.team4u.actiondock.domain.exception.ActionDockException;
 import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.domain.port.RepositoryDefinitionRepository;
-import org.team4u.actiondock.shared.NormalizeUtils;
+import org.team4u.actiondock.common.NormalizeUtils;
 
 import java.nio.file.Path;
 import java.time.LocalDateTime;

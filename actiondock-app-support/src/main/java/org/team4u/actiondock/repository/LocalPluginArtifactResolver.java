@@ -3,7 +3,7 @@ package org.team4u.actiondock.repository;
 import static org.team4u.actiondock.repository.RepositoryCatalogTypes.LOCAL_ARTIFACT_SCHEME;
 import static org.team4u.actiondock.repository.RepositoryCatalogTypes.REPO_TYPE_HTTP;
 import static org.team4u.actiondock.repository.RepositoryCatalogTypes.WINDOWS_ABSOLUTE_PATH_REGEX;
-import org.team4u.actiondock.shared.NormalizeUtils;
+import org.team4u.actiondock.common.NormalizeUtils;
 
 
 import java.io.IOException;

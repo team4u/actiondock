@@ -1,7 +1,7 @@
 package org.team4u.actiondock.skill;
 
 import org.team4u.actiondock.domain.port.JsonCodec;
-import org.team4u.actiondock.shared.NormalizeUtils;
+import org.team4u.actiondock.common.NormalizeUtils;
 
 import static org.team4u.actiondock.skill.SkillTypes.*;
 import java.io.IOException;

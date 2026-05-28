@@ -83,6 +83,12 @@ actiondock script schema <script-id>
 - **Flag fields**：可用 `--name value` 形式传入的简单类型（string/number/integer/boolean/enum）
 - **JSON-only fields**：只能通过 `--input-json` / `--input-file` 传入的复杂类型（object/array）
 
+解释 schema 时，先把这两类字段直接翻译成调用方式：顶层简单字段优先用扁平 flag；对象和数组字段继续用 `--input-json` 或 `--input-file`。
+
+默认附 1 条主路径示例：
+- schema 主要由简单字段组成时，示例直接写扁平 flag，例如 `actiondock script run <script-id> --name alice --count 3 --json`
+- schema 包含对象或数组字段时，示例直接写 JSON 或文件传参，例如 `actiondock script run <script-id> --input-file /tmp/my-script-input.json --json`
+
 加 `--draft` 查看草稿版本的 schema。
 
 ### 查看脚本完整定义
@@ -97,9 +103,9 @@ actiondock script get <script-id>
 
 ## 2. 执行脚本
 
-### 推荐方式：写入临时文件后再执行
+### 推荐方式：按 schema 选择传参形式
 
-当输入参数包含 JSON 对象、数组等复杂结构时，**优先将输入写入临时 JSON 文件，再用 `--input-file` 传参**，避免 shell 转义问题。
+如果 schema 里的输入主要是简单顶层字段，直接用扁平 flag 即可。只有当输入参数包含 JSON 对象、数组等复杂结构时，**优先将输入写入临时 JSON 文件，再用 `--input-file` 传参**，避免 shell 转义问题。
 
 ```bash
 # 1. 将输入参数写入临时文件

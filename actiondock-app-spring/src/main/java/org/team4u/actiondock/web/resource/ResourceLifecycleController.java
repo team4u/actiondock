@@ -14,7 +14,7 @@ import org.team4u.actiondock.repository.RepositoryPluginService;
 import org.team4u.actiondock.repository.RepositoryScriptService;
 import org.team4u.actiondock.repository.RepositoryKnowledgeService;
 import org.team4u.actiondock.repository.RepositoryCatalogTypes.ToolInstallationOptions;
-import org.team4u.actiondock.shared.NormalizeUtils;
+import org.team4u.actiondock.common.NormalizeUtils;
 import org.team4u.actiondock.web.common.ApiResponse;
 import org.team4u.actiondock.web.repository.RepositoryInstallRequest;
 import org.team4u.actiondock.web.repository.RepositoryPluginInstallRequest;

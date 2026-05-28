@@ -4,7 +4,7 @@ import org.team4u.actiondock.application.ScriptApplicationService;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptDependency;
-import org.team4u.actiondock.shared.NormalizeUtils;
+import org.team4u.actiondock.common.NormalizeUtils;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;

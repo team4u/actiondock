@@ -1,7 +1,7 @@
 package org.team4u.actiondock.repository;
 
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
-import org.team4u.actiondock.shared.NormalizeUtils;
+import org.team4u.actiondock.common.NormalizeUtils;
 
 import java.util.ArrayList;
 import java.util.Comparator;

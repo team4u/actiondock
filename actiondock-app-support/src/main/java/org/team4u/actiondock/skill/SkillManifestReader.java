@@ -1,6 +1,6 @@
 package org.team4u.actiondock.skill;
 
-import org.team4u.actiondock.shared.NormalizeUtils;
+import org.team4u.actiondock.common.NormalizeUtils;
 
 import org.team4u.actiondock.domain.port.JsonCodec;
 

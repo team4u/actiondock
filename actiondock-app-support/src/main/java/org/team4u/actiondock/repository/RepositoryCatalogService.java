@@ -30,7 +30,7 @@ import org.team4u.actiondock.domain.port.ScriptRepository;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
 import org.team4u.actiondock.plugin.PluginRuntimeService;
 import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
-import org.team4u.actiondock.shared.NormalizeUtils;
+import org.team4u.actiondock.common.NormalizeUtils;
 
 import java.io.IOException;
 import java.io.InputStream;

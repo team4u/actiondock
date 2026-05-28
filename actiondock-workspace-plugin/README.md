@@ -1,6 +1,6 @@
 # actiondock-workspace-plugin
 
-把工作区文件与 Shell 能力桥接成一个系统插件 `actiondock-workspace`，让 Groovy 和 Python 脚本通过统一的 `plugins.invoke(...)` 门面直接访问受限目录。
+把工作区文件与 Shell 能力桥接成一个系统插件 `actiondock-workspace`，让 Groovy 和 Python 脚本通过统一的 `plugins.invoke(...)` 门面访问文件工具和本机命令执行能力。
 
 ## 暴露方式
 
@@ -15,7 +15,7 @@
 - `findFiles`
 - `searchText`
 - `getSystemInfo`
-- `executeShellCommand`
+- `exec`
 
 ## Groovy 调用示例
 
@@ -76,16 +76,36 @@ return [
 ]
 ```
 
+## Shell 执行示例
+
+```groovy
+def result = plugins.invoke("actiondock-workspace", "exec", [
+  command: "git status --short",
+  cwd: ".",
+  timeoutSeconds: 30,
+  check: false,
+  shell: "auto"
+])
+
+return [
+  ok: result.ok,
+  stdout: result.stdout,
+  stderr: result.stderr,
+  exitCode: result.exitCode
+]
+```
+
 ## 使用约定
 
 - 对外接口统一使用 Java 驼峰风格动作名和参数名
-- `path` / `cwd` 默认相对当前工作目录解析
-- 所有路径访问都限制在 `baseDir` 范围内
+- 文件动作的 `path` 默认相对当前工作目录解析
+- 文件动作的路径访问限制在 `baseDir` 范围内
+- `exec` 复用脚本运行时 `shell.exec` 的执行能力，支持 `cwd` / `env` / `timeoutSeconds` / `check` / `shell` / `maxOutputBytes`
+- `exec` 的 `cwd` 默认是进程工作目录；显式传入时目录必须已存在，框架不自动创建或清理运行目录
 - `writeTextFile` 通过 `ranges` 支持局部替换
 - `findFiles` / `searchText` 默认跳过 `.git`、`target`、`node_modules` 等常见生成目录，并会轻量处理 `.gitignore`
 - `searchText` 默认使用正则匹配；如需普通字符串搜索，传入 `regex: false`
 - `getSystemInfo` 默认只返回 PATH 拆分、shell/命令探测结果，不暴露完整环境变量
-- `executeShellCommand` 失败时会附带 `availableEnvironment`，返回当前自动探测到的可用 shell 和常用命令，帮助调用方调整下一条命令
 
 ## 相关模块
 

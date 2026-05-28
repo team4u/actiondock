@@ -460,9 +460,9 @@
       }
     },
     {
-      "action": "executeShellCommand",
+      "action": "exec",
       "title": "Execute Shell Command",
-      "description": "Execute a shell command inside the workspace with optional timeouts and command restrictions. On Linux/macOS it prefers bash-compatible shells; on Windows it uses PowerShell first and falls back to cmd.exe if PowerShell is unavailable. Use 'shellPath' to override the default shell, or 'allowedCommands' to restrict which commands may run. When execution fails, the result includes a compact auto-detected available environment to help callers adapt their next command.",
+      "description": "Execute a local shell command with the same shell selection and quoting model as the script runtime shell.exec helper. On Linux/macOS it prefers bash-compatible shells; on Windows it uses PowerShell first and falls back to cmd.exe if PowerShell is unavailable.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -474,7 +474,7 @@
           "cwd": {
             "type": "string",
             "title": "Working Directory",
-            "description": "Working directory for command execution. Defaults to baseDir if not specified."
+            "description": "Working directory for command execution. Defaults to the current process working directory. The directory must already exist."
           },
           "timeoutSeconds": {
             "type": "integer",
@@ -484,25 +484,17 @@
           "maxOutputBytes": {
             "type": "integer",
             "title": "Max Output Bytes",
-            "description": "Truncate combined stdout+stderr output to this many bytes to avoid memory issues. Default: 1048576 (1 MB)."
+            "description": "Truncate stdout and stderr independently to this many bytes to avoid memory issues. Default: 1048576 (1 MB)."
           },
-          "allowedCommands": {
-            "type": "array",
-            "title": "Allowed Commands",
-            "description": "If non-empty, only commands whose first token appears in this list are permitted. Use this to restrict the command surface.",
-            "items": {
-              "type": "string"
-            }
+          "check": {
+            "type": "boolean",
+            "title": "Check",
+            "description": "Whether a failed command should raise a plugin runtime error. Default: true."
           },
-          "shellPath": {
+          "shell": {
             "type": "string",
-            "title": "Shell Path",
-            "description": "Explicit path to the shell executable. Overrides auto-detected shell and applies matching shell arguments for common shells such as '/bin/bash', 'C:\\Windows\\System32\\cmd.exe', or 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'."
-          },
-          "baseDir": {
-            "type": "string",
-            "title": "Base Directory",
-            "description": "Root directory for the workspace sandbox. Defaults to the filesystem root ('/' on Linux, drive root on Windows) if not specified."
+            "title": "Shell",
+            "description": "Shell selection: auto, bash, sh, powershell, or cmd. Default: auto."
           },
           "env": {
             "type": "object",
@@ -552,24 +544,14 @@
           },
           "stderrTruncated": {
             "type": "boolean"
-          },
-          "availableEnvironment": {
-            "type": "object",
-            "properties": {
-              "shells": {
-                "type": "array"
-              },
-              "commands": {
-                "type": "array"
-              }
-            }
           }
         }
       },
       "exampleArgs": {
         "command": "ls -la",
         "cwd": ".",
-        "timeoutSeconds": 10
+        "timeoutSeconds": 10,
+        "check": false
       }
     }
   ]

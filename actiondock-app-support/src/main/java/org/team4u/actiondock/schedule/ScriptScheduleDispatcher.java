@@ -1,6 +1,6 @@
 package org.team4u.actiondock.schedule;
 
-import org.team4u.actiondock.shared.NormalizeUtils;
+import org.team4u.actiondock.common.NormalizeUtils;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

@@ -76,6 +76,8 @@ actiondock script list --all
 actiondock script schema <script-id>
 ```
 
+这个命令不只是展示结构，也是在告诉你 CLI 应该怎么传参：顶层简单字段可以直接展平为 flag，对象和数组字段继续使用 JSON 或文件方式。
+
 输出示例：
 
 ```json
@@ -117,6 +119,8 @@ actiondock script run <script-id> --input-json '{"name": "alice", "tags": ["a", 
 
 ### Schema 驱动的 CLI 参数
 
+推荐顺序是：先看 schema，再判断字段是否能扁平，最后写执行命令。
+
 对于简单类型字段（string、integer、number、boolean），CLI 自动展平：
 
 ```bash
@@ -128,11 +132,15 @@ actiondock script run <script-id> --input-json '{"name": "alice", "tags": ["a", 
 actiondock script run my-script --name alice --age 30 --enabled --json
 ```
 
-对象和数组类型不能展平，需要使用 `--input-json`：
+如果 schema 主要是简单字段，默认就按上面的扁平 flag 方式调用。
+
+对象和数组类型不能展平，需要使用 `--input-json` 或 `--input-file`：
 
 ```bash
 actiondock script run my-script --input-json '{"name": "alice", "metadata": {"source": "web"}}'
 ```
+
+如果 schema 包含复杂字段，默认主路径就是 JSON 或文件传参，而不是把复杂字段拆成多级 flag。
 
 `--server`、`--token`、`--profile` 是 CLI 连接参数保留字，不会作为 Schema 动态字段传入；如果脚本输入字段同名，请使用 `--input-json` 或 `--input-file`。
 

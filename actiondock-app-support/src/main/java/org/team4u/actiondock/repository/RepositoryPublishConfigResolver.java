@@ -3,7 +3,7 @@ package org.team4u.actiondock.repository;
 import org.team4u.actiondock.configvalue.PlaceholderKeyExtractor;
 import org.team4u.actiondock.domain.model.ConfigValue;
 import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
-import org.team4u.actiondock.shared.NormalizeUtils;
+import org.team4u.actiondock.common.NormalizeUtils;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;

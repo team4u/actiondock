@@ -57,7 +57,7 @@ ActionDock 把这个过程收敛成一个叫 `project-knowledge-maintainer` 的 
 - `findFiles` 按模式找文件
 - `searchText` 搜文本证据
 - `getSystemInfo` 了解环境可见性
-- `executeShellCommand` 在受控边界内补充环境检查
+- `exec` 在需要时执行本机 Shell 命令，参数与脚本运行时 `shell.exec` 对齐
 
 这几类动作覆盖了"沿入口继续调查项目"需要的最小动作集。重要的是，它们把读取动作固定在一致边界内——后续的读目录、读文件、搜文本，都不能默认改用调用方本地的命令。
 
