@@ -27,6 +27,11 @@ public class ScriptShell {
     private static final String SH = "sh";
     private static final String POWERSHELL = "powershell";
     private static final String CMD = "cmd";
+    private static final String POWERSHELL_UTF8_BOOTSTRAP = String.join("; ",
+            "[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)",
+            "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)",
+            "$OutputEncoding = [System.Text.UTF8Encoding]::new($false)"
+    );
 
     private final AppProperties properties;
 
@@ -146,7 +151,7 @@ public class ScriptShell {
                                            int timeoutSeconds,
                                            int maxOutputBytes) throws IOException, InterruptedException {
         List<String> processCommand = new ArrayList<>(shellCommand.command());
-        processCommand.add(command);
+        processCommand.add(renderCommandForShell(shellCommand.shell(), command));
         ProcessBuilder builder = new ProcessBuilder(processCommand);
         builder.directory(cwd.toFile());
         builder.environment().putAll(env);
@@ -214,9 +219,9 @@ public class ScriptShell {
 
     private ShellCommand shellCommand(String shell) {
         return switch (shell) {
-            case BASH -> new ShellCommand(List.of("/bin/bash", "-lc"));
-            case SH -> new ShellCommand(List.of("/bin/sh", "-c"));
-            case POWERSHELL -> new ShellCommand(List.of(
+            case BASH -> new ShellCommand(shell, List.of("/bin/bash", "-lc"));
+            case SH -> new ShellCommand(shell, List.of("/bin/sh", "-c"));
+            case POWERSHELL -> new ShellCommand(shell, List.of(
                     "powershell.exe",
                     "-NoProfile",
                     "-NonInteractive",
@@ -224,9 +229,20 @@ public class ScriptShell {
                     "Bypass",
                     "-Command"
             ));
-            case CMD -> new ShellCommand(List.of("cmd.exe", "/d", "/s", "/c"));
+            case CMD -> new ShellCommand(shell, List.of("cmd.exe", "/d", "/s", "/c"));
             default -> throw new IllegalArgumentException("Unsupported shell: " + shell);
         };
+    }
+
+    private String renderCommandForShell(String shell, String command) {
+        if (POWERSHELL.equals(shell)) {
+            return POWERSHELL_UTF8_BOOTSTRAP + "; " + command;
+        }
+        return command;
+    }
+
+    String shellCommandPayload(String shell, String command) {
+        return renderCommandForShell(shellOption(shell), command);
     }
 
     private Path resolveCwd(Object value) {
@@ -371,6 +387,6 @@ public class ScriptShell {
         return "Shell command failed: " + command + " (exitCode=" + result.get("exitCode") + ")";
     }
 
-    private record ShellCommand(List<String> command) {
+    private record ShellCommand(String shell, List<String> command) {
     }
 }

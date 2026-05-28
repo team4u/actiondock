@@ -145,6 +145,19 @@ class ScriptShellTest {
                 .isEqualTo("agent-browser --session \"browser 1\" open \"https://example.test/a b\"");
     }
 
+    @Test
+    void powerShellPayloadPrependsUtf8Bootstrap() {
+        ScriptShell shell = new ScriptShell(properties(), context("powershell-utf8"));
+
+        String payload = shell.shellCommandPayload("powershell", "agent-browser '--session' 'browser 1'");
+
+        assertThat(payload)
+                .contains("[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)")
+                .contains("[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)")
+                .contains("$OutputEncoding = [System.Text.UTF8Encoding]::new($false)")
+                .endsWith("; agent-browser '--session' 'browser 1'");
+    }
+
     private AppProperties properties() {
         AppProperties properties = new AppProperties();
         properties.setHomeDir(tempDir.toString());
