@@ -24,7 +24,6 @@
         <module>actiondock-ai-agentscope</module>
         <module>actiondock-ai-plugin-bridge</module>
         <module>actiondock-workspace-plugin</module>
-        <module>actiondock-browser-plugin</module>
         <module>actiondock-project-knowledge-plugin</module>
         <module>actiondock-plugin-api</module>
         <module>actiondock-storage-jpa</module>
@@ -38,7 +37,6 @@
         <groovy.version>4.0.24</groovy.version>
         <pf4j.version>3.13.0</pf4j.version>
         <hutool.version>5.8.36</hutool.version>
-        <playwright.version>1.59.0</playwright.version>
     </properties>
 
     <build>

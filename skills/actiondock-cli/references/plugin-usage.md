@@ -6,7 +6,6 @@
 
 专项系统插件的场景化指引见：
 
-- 浏览器自动化 / `actiondock-browser`：`references/browser-plugin.md`
 - 项目知识库浏览 / `actiondock-workspace`：`references/project-knowledge.md`
 
 ---
