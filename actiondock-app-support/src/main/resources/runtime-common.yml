@@ -30,6 +30,10 @@ app:
     auto-sync-interval-seconds: 1800
   execution:
     async-pool-size: 4
+    artifact-root-dir: ${app.home-dir}/runs
+    shell:
+      timeout-seconds: 30
+      max-output-bytes: 1048576
     groovy:
       enabled: true
       cache-max-size: 128

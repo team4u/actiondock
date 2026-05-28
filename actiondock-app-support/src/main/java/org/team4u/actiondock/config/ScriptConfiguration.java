@@ -41,10 +41,10 @@ public class ScriptConfiguration {
                                      SharedStateApplicationService sharedStateApplicationService,
                                      @Qualifier("executionExecutor") Executor executionExecutor) {
         return new RoutingScriptEngine(
-                new GroovyScriptEngine(properties.getExecution().getGroovy(), pluginRuntimeService, scriptInvocationService, sharedStateApplicationService),
+                new GroovyScriptEngine(properties, pluginRuntimeService, scriptInvocationService, sharedStateApplicationService),
                 new PythonScriptEngine(
                         jsonCodec,
-                        properties.getExecution().getPython(),
+                        properties,
                         pluginRuntimeService,
                         scriptInvocationService,
                         sharedStateApplicationService,

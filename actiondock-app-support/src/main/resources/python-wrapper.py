@@ -86,5 +86,40 @@ class __ActionDockState:
 
 state = __ActionDockState()
 
+class __ActionDockShell:
+    def _request(self, payload):
+        sys.stderr.write("__ACTIONDOCK_SHELL__" + json.dumps(payload, ensure_ascii=False) + "\n")
+        sys.stderr.flush()
+        response_text = sys.stdin.readline()
+        if not response_text:
+            raise RuntimeError("Shell bridge closed")
+        response = json.loads(response_text)
+        if response.get("ok"):
+            return response.get("result")
+        raise RuntimeError(response.get("error") or "Shell request failed")
+
+    def exec(self, command, options=None):
+        return self._request({
+            "operation": "exec",
+            "command": command,
+            "options": {} if options is None else options
+        })
+
+    def quote(self, value, options=None):
+        return self._request({
+            "operation": "quote",
+            "command": "" if value is None else str(value),
+            "options": {} if options is None else options
+        })
+
+    def join(self, args, options=None):
+        return self._request({
+            "operation": "join",
+            "args": [] if args is None else args,
+            "options": {} if options is None else options
+        })
+
+shell = __ActionDockShell()
+
 def __actiondock_main(input):
 {{ user_script }}

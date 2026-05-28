@@ -49,6 +49,7 @@ public class PythonScriptEngine implements ScriptEngine {
     private static final String INVOKE_PREFIX = "__ACTIONDOCK_INVOKE__";
     private static final String PLUGIN_PREFIX = "__ACTIONDOCK_PLUGIN__";
     private static final String STATE_PREFIX = "__ACTIONDOCK_STATE__";
+    private static final String SHELL_PREFIX = "__ACTIONDOCK_SHELL__";
     private static final String VALIDATION_RUNNER = """
             import py_compile
             import sys
@@ -57,6 +58,7 @@ public class PythonScriptEngine implements ScriptEngine {
             """;
 
     private final JsonCodec jsonCodec;
+    private final AppProperties appProperties;
     private final AppProperties.Python properties;
     private final PluginRuntimeService pluginRuntimeService;
     private final ScriptInvocationService scriptInvocationService;
@@ -107,8 +109,36 @@ public class PythonScriptEngine implements ScriptEngine {
                               ScriptInvocationService scriptInvocationService,
                               SharedStateApplicationService sharedStateApplicationService,
                               Executor asyncExecutor) {
+        this(jsonCodec, null, properties, pluginRuntimeService, scriptInvocationService, sharedStateApplicationService, asyncExecutor);
+    }
+
+    public PythonScriptEngine(JsonCodec jsonCodec,
+                              AppProperties appProperties,
+                              PluginRuntimeService pluginRuntimeService,
+                              ScriptInvocationService scriptInvocationService,
+                              SharedStateApplicationService sharedStateApplicationService,
+                              Executor asyncExecutor) {
+        this(
+                jsonCodec,
+                appProperties,
+                appProperties == null ? null : appProperties.getExecution().getPython(),
+                pluginRuntimeService,
+                scriptInvocationService,
+                sharedStateApplicationService,
+                asyncExecutor
+        );
+    }
+
+    private PythonScriptEngine(JsonCodec jsonCodec,
+                               AppProperties appProperties,
+                               AppProperties.Python properties,
+                               PluginRuntimeService pluginRuntimeService,
+                               ScriptInvocationService scriptInvocationService,
+                               SharedStateApplicationService sharedStateApplicationService,
+                               Executor asyncExecutor) {
         this.jsonCodec = Objects.requireNonNull(jsonCodec);
-        this.properties = Objects.requireNonNull(properties);
+        this.appProperties = appProperties == null ? new AppProperties() : appProperties;
+        this.properties = properties == null ? this.appProperties.getExecution().getPython() : properties;
         this.pluginRuntimeService = pluginRuntimeService == null
                 ? PluginRuntimeService.disabled()
                 : pluginRuntimeService;
@@ -215,7 +245,7 @@ public class PythonScriptEngine implements ScriptEngine {
                         executionContext.log(event.level(), event.message());
                     }
                 },
-                new PythonBridge(jsonCodec, scriptInvocationService, pluginRuntimeService, sharedStateApplicationService, definition, input == null ? Map.of() : input, executionContext)
+                new PythonBridge(jsonCodec, scriptInvocationService, pluginRuntimeService, sharedStateApplicationService, appProperties, definition, input == null ? Map.of() : input, executionContext)
         );
     }
 
@@ -255,6 +285,7 @@ public class PythonScriptEngine implements ScriptEngine {
         ProcessBuilder processBuilder = new ProcessBuilder();
         processBuilder.command(command);
         processBuilder.environment().put("ACTIONDOCK_CONFIG_JSON", configJson == null ? "{}" : configJson);
+        processBuilder.environment().put("ACTIONDOCK_CONTEXT_JSON", invocationBridge == null ? "{}" : invocationBridge.contextJson());
         Process process = processBuilder.start();
         CompletableFuture<String> stdoutFuture = CompletableFuture.supplyAsync(() -> ProcessSupport.readStream(process.getInputStream()), asyncExecutor);
         CompletableFuture<String> stderrFuture = CompletableFuture.supplyAsync(() ->
@@ -290,6 +321,8 @@ public class PythonScriptEngine implements ScriptEngine {
                     input = {} if not payload_text.strip() else json.loads(payload_text)
                     config_text = os.environ.get("ACTIONDOCK_CONFIG_JSON", "")
                     config = {} if not config_text.strip() else json.loads(config_text)
+                    context_text = os.environ.get("ACTIONDOCK_CONTEXT_JSON", "")
+                    context = {} if not context_text.strip() else json.loads(context_text)
                     result = __actiondock_main(input)
                     json.dump(result, sys.stdout, ensure_ascii=False)
                 """;
@@ -341,6 +374,10 @@ public class PythonScriptEngine implements ScriptEngine {
                 handleState(line.substring(STATE_PREFIX.length()), stdinStream, bridge);
                 return true;
             }
+            if (line.startsWith(SHELL_PREFIX)) {
+                handleShell(line.substring(SHELL_PREFIX.length()), stdinStream, bridge);
+                return true;
+            }
             return false;
         });
     }
@@ -367,6 +404,14 @@ public class PythonScriptEngine implements ScriptEngine {
         handleBridgeMessage(payload, stdinStream, bridge,
                 "Python 插件桥接未初始化",
                 this::parsePluginRequest, PythonBridge::respondPlugin);
+    }
+
+    private void handleShell(String payload,
+                             OutputStream stdinStream,
+                             PythonBridge bridge) {
+        handleBridgeMessage(payload, stdinStream, bridge,
+                "Python Shell 桥接未初始化",
+                this::parseShellRequest, PythonBridge::respondShell);
     }
 
     private <R> void handleBridgeMessage(String payload,
@@ -415,6 +460,16 @@ public class PythonScriptEngine implements ScriptEngine {
         );
     }
 
+    private PythonShellRequest parseShellRequest(String payload) {
+        Map<String, Object> value = jsonCodec.readMap(payload);
+        return new PythonShellRequest(
+                stringField(value, "operation"),
+                stringField(value, "command"),
+                listField(value, "args"),
+                mapField(value, "options")
+        );
+    }
+
     private static String stringField(Map<String, Object> map, String key) {
         Object v = map.get(key);
         return v == null ? null : String.valueOf(v);
@@ -423,6 +478,11 @@ public class PythonScriptEngine implements ScriptEngine {
     private static Map<String, Object> mapField(Map<String, Object> map, String key) {
         Object v = map.get(key);
         return v instanceof Map<?, ?> m ? MapValueConverter.toResultMap(m) : Map.of();
+    }
+
+    private static List<Object> listField(Map<String, Object> map, String key) {
+        Object v = map.get(key);
+        return v instanceof List<?> list ? List.copyOf(list) : List.of();
     }
 
     private ProcessSupport.LogEvent parseLogEvent(String line) {
@@ -451,6 +511,12 @@ public class PythonScriptEngine implements ScriptEngine {
                               String key,
                               Long expectedVersion,
                               Object value,
+                              Map<String, Object> options) {
+    }
+
+    record PythonShellRequest(String operation,
+                              String command,
+                              List<Object> args,
                               Map<String, Object> options) {
     }
 

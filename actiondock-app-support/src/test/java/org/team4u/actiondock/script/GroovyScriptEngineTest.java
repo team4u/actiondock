@@ -2,6 +2,7 @@ package org.team4u.actiondock.script;
 
 import groovy.lang.Script;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.team4u.actiondock.application.ScriptInvocationService;
 import org.team4u.actiondock.application.SharedStateApplicationService;
 import org.team4u.actiondock.config.AppProperties;
@@ -22,10 +23,12 @@ import org.team4u.actiondock.plugin.api.ActionDockPlugin;
 import org.team4u.actiondock.plugin.api.PluginRuntimeException;
 import org.team4u.actiondock.plugin.api.ScriptPluginContext;
 
+import java.nio.file.Files;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -44,6 +47,9 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class GroovyScriptEngineTest {
+    @TempDir
+    Path tempDir;
+
     private final GroovyScriptEngine engine = new GroovyScriptEngine();
 
     @Test
@@ -217,6 +223,42 @@ class GroovyScriptEngineTest {
         );
 
         assertThat(result).isEqualTo(Map.of("apiKey", "secret-value"));
+    }
+
+    @Test
+    void executeExposesContextAndShellBindings() {
+        AppProperties properties = new AppProperties();
+        Path artifactRoot = tempDir.resolve("runs");
+        properties.getExecution().setArtifactRootDir(artifactRoot.toString());
+        GroovyScriptEngine shellEngine = new GroovyScriptEngine(
+                properties,
+                PluginRuntimeService.disabled(),
+                ScriptInvocationService.disabled(),
+                SharedStateApplicationService.disabled()
+        );
+
+        Object result = shellEngine.execute(
+                new ScriptDefinition().setSource("""
+                        def command = shell.join(["printf", "%s", input.message], [shell: "sh"])
+                        def executed = shell.exec(command, [shell: "sh"])
+                        return [
+                            executionId: context.executionId,
+                            artifactDir: context.artifactDir,
+                            stdout: executed.stdout,
+                            ok: executed.ok
+                        ]
+                        """),
+                Map.of("message", "hello shell"),
+                new ScriptExecutionContext().setExecutionId("exec-groovy-shell")
+        );
+
+        assertThat(result).isEqualTo(Map.of(
+                "executionId", "exec-groovy-shell",
+                "artifactDir", artifactRoot.resolve("exec-groovy-shell").toString(),
+                "stdout", "hello shell",
+                "ok", true
+        ));
+        assertThat(Files.exists(artifactRoot.resolve("exec-groovy-shell"))).isFalse();
     }
 
     @Test

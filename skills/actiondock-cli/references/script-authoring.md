@@ -28,6 +28,19 @@
 
 ActionDock 支持 Groovy 和 Python 两种脚本类型。脚本通过 `input` 对象访问输入参数，返回值作为 `output`。
 
+常用运行时对象：
+
+| 对象 | 作用 |
+|------|------|
+| `input` | 本次调用传入的参数 |
+| `config` | 读取配置快照 |
+| `log` | 写入执行日志 |
+| `scripts` | 调用其他已发布脚本 |
+| `plugins` | 调用插件 Action |
+| `state` | 读写共享状态 |
+| `shell` | 执行本机命令，返回 stdout / stderr / exitCode |
+| `context` | 读取 `executionId`、`submitMode`、`artifactDir` |
+
 ```groovy
 // input 是 Map 类型，访问参数用 input.字段名 或 input["字段名"]
 def name = input.name
@@ -152,7 +165,17 @@ return [result: joined]
 - 首次执行时需要下载依赖，后续会缓存编译结果（基于源码 SHA-256），不会重复下载
 - 仅支持 Maven Central 仓库中的依赖
 
-Python 脚本默认只有宿主 `python3` 与标准库；如需第三方包，不要假设环境已预装，必须显式提供 `pythonRequirements`。如需调用平台能力，优先使用内置的 `plugins`、`scripts`、`state` 门面。
+Python 脚本默认只有宿主 `python3` 与标准库；如需第三方包，不要假设环境已预装，必须显式提供 `pythonRequirements`。如需调用平台能力，优先使用内置的 `plugins`、`scripts`、`state`、`shell` 门面。
+
+如果脚本需要执行本机命令，优先使用：
+
+- `shell.join([...])` 拼命令参数
+- `shell.quote(value)` 转义单个参数
+- `shell.exec(command, options)` 执行命令
+
+不要直接把用户输入拼进命令字符串。`shell.exec` 默认 `check: true`，命令失败会抛异常；如果脚本要自己处理非 0 退出码，传 `check: false`。
+
+需要写入临时文件、截图、下载物或其他产物时，可以把 `context.artifactDir` 当作本次执行的约定路径，但它只是路径字符串。框架不会自动创建或清理该目录；脚本应按实际需要自行创建，并在不需要保留时自行回收。
 
 #### Python 依赖声明规范
 

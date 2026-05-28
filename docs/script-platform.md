@@ -243,7 +243,7 @@ ActionDock 把环境信息集中到配置层。
 
 ActionDock 不只是管理单个脚本。
 
-它还允许脚本调用其他脚本、调用插件、读取配置、写入日志和使用共享状态。
+它还允许脚本调用其他脚本、调用插件、读取配置、写入日志、使用共享状态，以及在需要时执行本机命令。
 
 ActionDock 支持 Groovy 和 Python 两种脚本语言。
 
@@ -256,6 +256,10 @@ ActionDock 支持 Groovy 和 Python 两种脚本语言。
 | `state`   | 读写共享状态    |
 | `config`  | 读取全局配置值   |
 | `log`     | 写入执行日志    |
+| `shell`   | 执行本机命令并读取 stdout、stderr 和退出码 |
+| `context` | 读取执行 ID、提交模式和本次执行的产物目录约定路径 |
+
+`context.artifactDir` 只提供路径，不自动创建或回收目录。需要写入产物的脚本自己创建目录；不需要产物的脚本不会因为一次执行产生空运行目录。
 
 Groovy 可以调用 Python 脚本，Python 也可以调用 Groovy 脚本。
 

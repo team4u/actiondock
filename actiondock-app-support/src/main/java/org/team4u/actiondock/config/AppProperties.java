@@ -74,8 +74,10 @@ public class AppProperties {
 
     public static class Execution {
         private int asyncPoolSize = 4;
+        private String artifactRootDir = Path.of(defaultHomeDir(), "runs").toString();
         private final Groovy groovy = new Groovy();
         private final Python python = new Python();
+        private final Shell shell = new Shell();
 
         public int getAsyncPoolSize() {
             return asyncPoolSize;
@@ -85,12 +87,24 @@ public class AppProperties {
             this.asyncPoolSize = asyncPoolSize;
         }
 
+        public String getArtifactRootDir() {
+            return artifactRootDir;
+        }
+
+        public void setArtifactRootDir(String artifactRootDir) {
+            this.artifactRootDir = artifactRootDir;
+        }
+
         public Groovy getGroovy() {
             return groovy;
         }
 
         public Python getPython() {
             return python;
+        }
+
+        public Shell getShell() {
+            return shell;
         }
     }
 
@@ -205,6 +219,27 @@ public class AppProperties {
 
         public void setInstallTimeoutSeconds(int installTimeoutSeconds) {
             this.installTimeoutSeconds = installTimeoutSeconds;
+        }
+    }
+
+    public static class Shell {
+        private int timeoutSeconds = 30;
+        private int maxOutputBytes = 1024 * 1024;
+
+        public int getTimeoutSeconds() {
+            return timeoutSeconds;
+        }
+
+        public void setTimeoutSeconds(int timeoutSeconds) {
+            this.timeoutSeconds = timeoutSeconds;
+        }
+
+        public int getMaxOutputBytes() {
+            return maxOutputBytes;
+        }
+
+        public void setMaxOutputBytes(int maxOutputBytes) {
+            this.maxOutputBytes = maxOutputBytes;
         }
     }
 

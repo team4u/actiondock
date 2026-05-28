@@ -16,7 +16,8 @@ def name = input.name ?: "world"
 
 // 运行时 API 在此可用：
 // scripts.invoke(), plugins.invoke(), state.get/put/cas(),
-// config.get(), log.info/warn/error(), file.read/write()
+// shell.exec(), shell.join(), shell.quote(),
+// config.get(), log.info/warn/error(), context.executionId
 
 // 返回 Map 作为输出，匹配 outputSchema
 return [
@@ -35,7 +36,8 @@ name = input.get("name", "world")
 
 # 运行时 API 在此可用：
 # scripts.invoke(), plugins.invoke(), state.get/put(),
-# config.get(), log.info/warn/error(), file.read/write()
+# shell.exec(), shell.join(), shell.quote(),
+# config.get(), log.info/warn/error(), context["executionId"]
 
 # 返回 dict 作为输出
 return {
@@ -293,6 +295,102 @@ log.error("处理失败: %s", error_message)
 ```
 
 日志会在执行记录的 `logs` 字段中展示，可通过执行详情查看。
+
+### shell.exec/quote/join() — 执行本机命令
+
+脚本可以通过 `shell` 门面执行运行主机上的命令，并读取标准输出、标准错误和退出码。
+
+```groovy
+def command = shell.join(["echo", input.message])
+def result = shell.exec(command, [
+    timeoutSeconds: 30,
+    check: false
+])
+
+if (!result.ok) {
+    throw new IllegalStateException("命令执行失败: ${result.stderr}")
+}
+
+return [
+    exitCode: result.exitCode,
+    stdout: result.stdout
+]
+```
+
+```python
+command = shell.join(["echo", input.get("message")])
+result = shell.exec(command, {
+    "timeoutSeconds": 30,
+    "check": False
+})
+
+if not result.get("ok"):
+    raise RuntimeError("命令执行失败: " + result.get("stderr", ""))
+
+return {
+    "exitCode": result.get("exitCode"),
+    "stdout": result.get("stdout")
+}
+```
+
+`shell.exec(command, options)` 常用参数：
+
+| 参数 | 说明 |
+|------|------|
+| `cwd` | 命令工作目录。相对路径基于服务进程当前工作目录解析；不传时继承服务进程当前工作目录。目录必须已存在，框架不会自动创建 |
+| `env` | 追加环境变量，key/value 会转成字符串 |
+| `timeoutSeconds` | 超时时间，默认 30 秒 |
+| `check` | 默认 `true`。命令失败、超时或启动失败时直接抛异常；设为 `false` 时返回失败结果 |
+| `shell` | `auto` / `bash` / `sh` / `powershell` / `cmd`，默认 `auto` |
+| `maxOutputBytes` | stdout 和 stderr 各自最多捕获的字节数，默认 1048576 |
+
+返回结果字段：
+
+| 字段 | 说明 |
+|------|------|
+| `ok` | 命令完成且退出码为 0 |
+| `exitCode` | 进程退出码；超时或启动失败时为 -1 |
+| `stdout` / `stderr` | 标准输出和标准错误 |
+| `timedOut` | 是否超时 |
+| `durationMs` | 执行耗时 |
+| `stdoutTruncated` / `stderrTruncated` | 输出是否因 `maxOutputBytes` 被截断 |
+
+拼接命令时优先使用：
+
+- `shell.quote(value)`：转义单个参数
+- `shell.join(args)`：把参数数组拼成安全命令字符串
+
+不要直接把用户输入拼进命令字符串；先用 `shell.join` 或 `shell.quote` 处理参数。
+
+如果脚本需要写入截图、下载文件、日志片段等产物，可以使用 `context.artifactDir` 作为约定路径，但框架不会自动创建或清理该目录。脚本需要自行创建目录，并在不需要保留产物时自行回收。
+
+### context — 执行上下文
+
+脚本可以通过 `context` 读取当前执行的运行时信息。
+
+Groovy：
+
+```groovy
+return [
+    executionId: context.executionId,
+    artifactDir: context.artifactDir
+]
+```
+
+Python：
+
+```python
+return {
+    "executionId": context.get("executionId"),
+    "artifactDir": context.get("artifactDir")
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `executionId` | 当前执行记录 ID |
+| `submitMode` | `SYNC` 或 `ASYNC` |
+| `artifactDir` | 本次执行的产物目录约定路径，默认位于 `${app.home-dir}/runs/<executionId>`；只返回路径字符串，不自动创建目录 |
 
 ### file.read/write() — 文件系统访问
 

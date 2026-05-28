@@ -3,6 +3,7 @@ package org.team4u.actiondock.script;
 import org.team4u.actiondock.application.ErrorDetailSupport;
 import org.team4u.actiondock.application.ScriptInvocationService;
 import org.team4u.actiondock.application.SharedStateApplicationService;
+import org.team4u.actiondock.config.AppProperties;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptExecutionContext;
 import org.team4u.actiondock.domain.port.JsonCodec;
@@ -25,11 +26,14 @@ class PythonBridge {
     private final Map<String, Object> input;
     private final ScriptExecutionContext executionContext;
     private final ScriptStateBridge stateBridge;
+    private final ScriptShell shell;
+    private final String contextJson;
 
     PythonBridge(JsonCodec jsonCodec,
                  ScriptInvocationService scriptInvocationService,
                  PluginRuntimeService pluginRuntimeService,
                  SharedStateApplicationService sharedStateApplicationService,
+                 AppProperties appProperties,
                  ScriptDefinition definition,
                  Map<String, Object> input,
                  ScriptExecutionContext executionContext) {
@@ -40,6 +44,8 @@ class PythonBridge {
         this.input = input == null ? Map.of() : new LinkedHashMap<>(input);
         this.executionContext = executionContext;
         this.stateBridge = new ScriptStateBridge(sharedStateApplicationService, definition, executionContext);
+        this.shell = new ScriptShell(appProperties, executionContext);
+        this.contextJson = jsonCodec.write(ScriptRuntimeSupport.context(appProperties, executionContext).asMap());
     }
 
     String respondInvocation(PythonScriptEngine.PythonInvocationRequest request) {
@@ -64,6 +70,19 @@ class PythonBridge {
             case "list" -> stateBridge.list(request.namespace());
             default -> throw new IllegalArgumentException("不支持的 state 操作: " + request.operation());
         });
+    }
+
+    String respondShell(PythonScriptEngine.PythonShellRequest request) {
+        return respond(() -> switch (request.operation()) {
+            case "exec" -> shell.exec(request.command(), request.options());
+            case "quote" -> shell.quote(request.command(), request.options());
+            case "join" -> shell.join(request.args(), request.options());
+            default -> throw new IllegalArgumentException("不支持的 shell 操作: " + request.operation());
+        });
+    }
+
+    String contextJson() {
+        return contextJson == null ? "{}" : contextJson;
     }
 
     private String writeResponse(boolean ok, Object data, String error) {

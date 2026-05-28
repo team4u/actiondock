@@ -23,6 +23,7 @@ import org.team4u.actiondock.plugin.api.ActionDockPlugin;
 import org.team4u.actiondock.plugin.api.PluginRuntimeException;
 import org.team4u.actiondock.plugin.api.ScriptPluginContext;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -198,6 +199,44 @@ class PythonScriptEngineTest {
     }
 
     @Test
+    void executeExposesContextAndShellBindings() {
+        AppProperties properties = pythonAppProperties(30);
+        properties.setHomeDir(tempDir.toString());
+        properties.getExecution().setArtifactRootDir(tempDir.resolve("runs").toString());
+        PythonScriptEngine shellEngine = new PythonScriptEngine(
+                jsonCodec,
+                properties,
+                PluginRuntimeService.disabled(),
+                ScriptInvocationService.disabled(),
+                SharedStateApplicationService.disabled(),
+                null
+        );
+
+        Object result = shellEngine.execute(
+                new ScriptDefinition().setSource("""
+                        command = shell.join(["printf", "%s", input.get("message")], {"shell": "sh"})
+                        executed = shell.exec(command, {"shell": "sh"})
+                        return {
+                            "executionId": context.get("executionId"),
+                            "artifactDir": context.get("artifactDir"),
+                            "stdout": executed.get("stdout"),
+                            "ok": executed.get("ok")
+                        }
+                        """),
+                Map.of("message", "hello shell"),
+                new ScriptExecutionContext().setExecutionId("exec-python-shell")
+        );
+
+        assertThat(result).isEqualTo(Map.of(
+                "executionId", "exec-python-shell",
+                "artifactDir", tempDir.resolve("runs").resolve("exec-python-shell").toString(),
+                "stdout", "hello shell",
+                "ok", true
+        ));
+        assertThat(Files.exists(tempDir.resolve("runs").resolve("exec-python-shell"))).isFalse();
+    }
+
+    @Test
     void executeExposesScriptsBinding() {
         PythonScriptEngine invocationEngine = new PythonScriptEngine(
                 jsonCodec,
@@ -300,6 +339,13 @@ class PythonScriptEngineTest {
         AppProperties.Python properties = new AppProperties.Python();
         properties.setExecutable("python3");
         properties.setTimeoutSeconds(timeoutSeconds);
+        return properties;
+    }
+
+    private static AppProperties pythonAppProperties(int timeoutSeconds) {
+        AppProperties properties = new AppProperties();
+        properties.getExecution().getPython().setExecutable("python3");
+        properties.getExecution().getPython().setTimeoutSeconds(timeoutSeconds);
         return properties;
     }
 

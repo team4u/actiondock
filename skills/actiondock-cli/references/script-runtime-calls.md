@@ -1,11 +1,16 @@
-# 脚本源码内调用插件和脚本
+# 脚本源码内运行时门面
 
-当用户要写 ActionDock 脚本，并且脚本内部需要调用插件或另一个已发布脚本时，读取本文件。
+当用户要写 ActionDock 脚本，并且脚本内部需要调用插件、另一个已发布脚本、共享状态或本机命令时，读取本文件。
 
 本文件只覆盖脚本源码内的运行时门面：
 
 - `plugins.invoke(...)`
 - `scripts.invoke(...)`
+- `state.get/put/cas/list/delete(...)`
+- `shell.exec(...)`
+- `shell.quote(...)`
+- `shell.join(...)`
+- `context`
 
 CLI 执行命令见 `references/script-execution.md`，CLI 插件调用见 `references/plugin-usage.md`。
 
@@ -54,6 +59,50 @@ return result
 
 - `scripts.invoke(...)` 调用的是**已发布脚本**
 - 目标脚本的入参与返回值要和其已发布 schema 对齐
+
+### 执行本机命令
+
+Groovy：
+
+```groovy
+def command = shell.join(["echo", input.message])
+def result = shell.exec(command, [check: false, timeoutSeconds: 30])
+return [ok: result.ok, stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode]
+```
+
+Python：
+
+```python
+command = shell.join(["echo", input.get("message")])
+result = shell.exec(command, {"check": False, "timeoutSeconds": 30})
+return {"ok": result["ok"], "stdout": result["stdout"], "stderr": result["stderr"], "exitCode": result["exitCode"]}
+```
+
+注意：
+
+- 拼命令时优先用 `shell.join([...])` 或 `shell.quote(value)`，不要直接拼用户输入
+- `shell.exec` 默认 `check: true`，非 0 退出码、超时或启动失败会抛异常
+- 需要自己处理失败时传 `check: false`
+- 不传 `cwd` 时使用服务进程当前工作目录；传入的 `cwd` 必须已存在，框架不会自动创建
+- `timeoutSeconds` 和 `maxOutputBytes` 用来防止命令挂死或输出过大
+
+### 执行上下文
+
+Groovy：
+
+```groovy
+def runDir = context.artifactDir
+return [executionId: context.executionId, runDir: runDir]
+```
+
+Python：
+
+```python
+run_dir = context.get("artifactDir")
+return {"executionId": context.get("executionId"), "runDir": run_dir}
+```
+
+`context.artifactDir` 是本次执行的产物目录约定路径，只返回字符串，不代表目录已经存在。需要写入截图、下载文件、日志片段等产物时，脚本应自行创建目录；临时产物也由脚本自行删除或按业务规则保留。
 
 ---
 

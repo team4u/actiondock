@@ -26,6 +26,7 @@ import java.util.Map;
  */
 public class GroovyScriptEngine implements ScriptEngine {
     private final CompiledGroovyScriptCache compiledScriptCache;
+    private final AppProperties properties;
     private final PluginRuntimeService pluginRuntimeService;
     private final ScriptInvocationService scriptInvocationService;
     private final SharedStateApplicationService sharedStateApplicationService;
@@ -48,14 +49,21 @@ public class GroovyScriptEngine implements ScriptEngine {
                               PluginRuntimeService pluginRuntimeService,
                               ScriptInvocationService scriptInvocationService,
                               SharedStateApplicationService sharedStateApplicationService) {
-        this(properties, Clock.systemUTC(), pluginRuntimeService, scriptInvocationService, sharedStateApplicationService);
+        this(new AppProperties(), properties, Clock.systemUTC(), pluginRuntimeService, scriptInvocationService, sharedStateApplicationService);
+    }
+
+    public GroovyScriptEngine(AppProperties properties,
+                              PluginRuntimeService pluginRuntimeService,
+                              ScriptInvocationService scriptInvocationService,
+                              SharedStateApplicationService sharedStateApplicationService) {
+        this(properties, properties == null ? null : properties.getExecution().getGroovy(), Clock.systemUTC(), pluginRuntimeService, scriptInvocationService, sharedStateApplicationService);
     }
 
     GroovyScriptEngine(AppProperties.Groovy properties,
                        Clock clock,
                        PluginRuntimeService pluginRuntimeService,
                        ScriptInvocationService scriptInvocationService) {
-        this(properties, clock, pluginRuntimeService, scriptInvocationService, SharedStateApplicationService.disabled());
+        this(new AppProperties(), properties, clock, pluginRuntimeService, scriptInvocationService, SharedStateApplicationService.disabled());
     }
 
     GroovyScriptEngine(AppProperties.Groovy properties,
@@ -63,7 +71,18 @@ public class GroovyScriptEngine implements ScriptEngine {
                        PluginRuntimeService pluginRuntimeService,
                        ScriptInvocationService scriptInvocationService,
                        SharedStateApplicationService sharedStateApplicationService) {
-        this.compiledScriptCache = new CompiledGroovyScriptCache(properties, clock, this::compileScriptClass);
+        this(new AppProperties(), properties, clock, pluginRuntimeService, scriptInvocationService, sharedStateApplicationService);
+    }
+
+    GroovyScriptEngine(AppProperties appProperties,
+                       AppProperties.Groovy properties,
+                       Clock clock,
+                       PluginRuntimeService pluginRuntimeService,
+                       ScriptInvocationService scriptInvocationService,
+                       SharedStateApplicationService sharedStateApplicationService) {
+        this.properties = appProperties == null ? new AppProperties() : appProperties;
+        AppProperties.Groovy groovyProperties = properties == null ? this.properties.getExecution().getGroovy() : properties;
+        this.compiledScriptCache = new CompiledGroovyScriptCache(groovyProperties, clock, this::compileScriptClass);
         this.pluginRuntimeService = pluginRuntimeService == null ? PluginRuntimeService.disabled() : pluginRuntimeService;
         this.scriptInvocationService = scriptInvocationService == null
                 ? ScriptInvocationService.disabled()
@@ -124,6 +143,8 @@ public class GroovyScriptEngine implements ScriptEngine {
         binding.setVariable("plugins", new GroovyPlugins(pluginRuntimeService, definition, input, executionContext));
         binding.setVariable("scripts", new GroovyScripts(scriptInvocationService, definition, executionContext));
         binding.setVariable("state", new ScriptStateBridge(sharedStateApplicationService, definition, executionContext));
+        binding.setVariable("context", ScriptRuntimeSupport.context(properties, executionContext));
+        binding.setVariable("shell", new ScriptShell(properties, executionContext));
         return binding;
     }
 
