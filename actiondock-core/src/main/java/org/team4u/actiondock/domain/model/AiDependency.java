@@ -2,6 +2,14 @@ package org.team4u.actiondock.domain.model;
 
 import java.util.Objects;
 
+/**
+ * AI 能力依赖，描述脚本对 AI 模型的依赖关系。
+ * <p>
+ * 用于声明脚本执行所需的 AI 能力类型、配置档案以及是否为必需依赖。
+ * 当 required 为 true 时，脚本执行前会校验对应的 AI 能力是否可用。
+ *
+ * @author jay.wu
+ */
 public class AiDependency {
     private String capability;
     private String profile;

@@ -14,6 +14,15 @@ import java.util.Map;
 import org.team4u.actiondock.domain.model.ScriptPackaging;
 
 
+/**
+ * AI 工具集服务，管理工具集的增删改查。
+ * <p>
+ * 提供工具集的校验（ID、名称必填，工具名有效性检查）、
+ * 托管资源可变性检查（禁止修改/删除托管资源）以及级联引用检查（被 Agent 引用时禁止删除）。
+ * 保存时自动填充创建时间和更新时间。
+ *
+ * @author jay.wu
+ */
 public class AiToolsetService {
 
     private final AiToolsetRepository repository;

@@ -40,6 +40,8 @@ import java.util.function.Function;
  * 并支持通过 stderr 的特殊前缀协议收集脚本日志与脚本互调请求。
  * <p>
  * 环境管理（虚拟环境创建、依赖安装等）委托给 {@link PythonEnvironmentManager}。
+ * <p>
+ * 推荐通过 {@link #builder(JsonCodec)} 构建，也可使用遗留的构造函数快捷方式。
  *
  * @author jay.wu
  */
@@ -67,90 +69,194 @@ public class PythonScriptEngine implements ScriptEngine {
     private final PythonEnvironmentManager environmentManager;
     private volatile String detectedExecutable = null;
 
+    /**
+     * 使用 JSON 编解码器和 Python 配置创建引擎（所有可选依赖均为禁用状态）。
+     *
+     * @param jsonCodec  JSON 编解码器，不能为 null
+     * @param properties Python 脚本引擎配置，为 null 时使用默认值
+     */
     public PythonScriptEngine(JsonCodec jsonCodec, AppProperties.Python properties) {
-        this(
-                jsonCodec,
-                properties,
-                PluginRuntimeService.disabled(),
-                ScriptInvocationService.disabled(),
-                SharedStateApplicationService.disabled()
-        );
+        this(builder(jsonCodec).pythonProperties(properties));
     }
 
+    /**
+     * 使用 JSON 编解码器、Python 配置和脚本互调服务创建引擎。
+     *
+     * @param jsonCodec                JSON 编解码器，不能为 null
+     * @param properties               Python 脚本引擎配置，为 null 时使用默认值
+     * @param scriptInvocationService  脚本互调服务，为 null 时使用禁用实现
+     */
     public PythonScriptEngine(JsonCodec jsonCodec,
                               AppProperties.Python properties,
                               ScriptInvocationService scriptInvocationService) {
-        this(
-                jsonCodec,
-                properties,
-                PluginRuntimeService.disabled(),
-                scriptInvocationService,
-                SharedStateApplicationService.disabled()
-        );
+        this(builder(jsonCodec).pythonProperties(properties).scriptInvocationService(scriptInvocationService));
     }
 
+    /**
+     * 使用 JSON 编解码器、Python 配置、脚本互调和共享状态服务创建引擎。
+     *
+     * @param jsonCodec                    JSON 编解码器，不能为 null
+     * @param properties                   Python 脚本引擎配置，为 null 时使用默认值
+     * @param scriptInvocationService      脚本互调服务，为 null 时使用禁用实现
+     * @param sharedStateApplicationService 共享状态服务，为 null 时使用禁用实现
+     */
     public PythonScriptEngine(JsonCodec jsonCodec,
                               AppProperties.Python properties,
                               ScriptInvocationService scriptInvocationService,
                               SharedStateApplicationService sharedStateApplicationService) {
-        this(jsonCodec, properties, PluginRuntimeService.disabled(), scriptInvocationService, sharedStateApplicationService);
+        this(builder(jsonCodec).pythonProperties(properties).scriptInvocationService(scriptInvocationService)
+                .sharedStateApplicationService(sharedStateApplicationService));
     }
 
+    /**
+     * 使用 JSON 编解码器、Python 配置和全部可选依赖创建引擎。
+     *
+     * @param jsonCodec                    JSON 编解码器，不能为 null
+     * @param properties                   Python 脚本引擎配置，为 null 时使用默认值
+     * @param pluginRuntimeService         插件运行时服务，为 null 时使用禁用实现
+     * @param scriptInvocationService      脚本互调服务，为 null 时使用禁用实现
+     * @param sharedStateApplicationService 共享状态服务，为 null 时使用禁用实现
+     */
     public PythonScriptEngine(JsonCodec jsonCodec,
                               AppProperties.Python properties,
                               PluginRuntimeService pluginRuntimeService,
                               ScriptInvocationService scriptInvocationService,
                               SharedStateApplicationService sharedStateApplicationService) {
-        this(jsonCodec, properties, pluginRuntimeService, scriptInvocationService, sharedStateApplicationService, null);
+        this(builder(jsonCodec).pythonProperties(properties).pluginRuntimeService(pluginRuntimeService)
+                .scriptInvocationService(scriptInvocationService).sharedStateApplicationService(sharedStateApplicationService));
     }
 
+    /**
+     * 使用 JSON 编解码器、Python 配置和全部可选依赖创建引擎（含异步执行器）。
+     *
+     * @param jsonCodec                    JSON 编解码器，不能为 null
+     * @param properties                   Python 脚本引擎配置，为 null 时使用默认值
+     * @param pluginRuntimeService         插件运行时服务，为 null 时使用禁用实现
+     * @param scriptInvocationService      脚本互调服务，为 null 时使用禁用实现
+     * @param sharedStateApplicationService 共享状态服务，为 null 时使用禁用实现
+     * @param asyncExecutor                异步执行器，为 null 时使用公共 ForkJoinPool
+     */
     public PythonScriptEngine(JsonCodec jsonCodec,
                               AppProperties.Python properties,
                               PluginRuntimeService pluginRuntimeService,
                               ScriptInvocationService scriptInvocationService,
                               SharedStateApplicationService sharedStateApplicationService,
                               Executor asyncExecutor) {
-        this(jsonCodec, null, properties, pluginRuntimeService, scriptInvocationService, sharedStateApplicationService, asyncExecutor);
+        this(builder(jsonCodec).pythonProperties(properties).pluginRuntimeService(pluginRuntimeService)
+                .scriptInvocationService(scriptInvocationService)
+                .sharedStateApplicationService(sharedStateApplicationService).asyncExecutor(asyncExecutor));
     }
 
+    /**
+     * 使用 JSON 编解码器、全局应用配置和全部可选依赖创建引擎。
+     * <p>
+     * Python 配置将从 {@code appProperties.getExecution().getPython()} 获取。
+     *
+     * @param jsonCodec                    JSON 编解码器，不能为 null
+     * @param appProperties                全局应用配置，为 null 时使用默认值
+     * @param pluginRuntimeService         插件运行时服务，为 null 时使用禁用实现
+     * @param scriptInvocationService      脚本互调服务，为 null 时使用禁用实现
+     * @param sharedStateApplicationService 共享状态服务，为 null 时使用禁用实现
+     * @param asyncExecutor                异步执行器，为 null 时使用公共 ForkJoinPool
+     */
     public PythonScriptEngine(JsonCodec jsonCodec,
                               AppProperties appProperties,
                               PluginRuntimeService pluginRuntimeService,
                               ScriptInvocationService scriptInvocationService,
                               SharedStateApplicationService sharedStateApplicationService,
                               Executor asyncExecutor) {
-        this(
-                jsonCodec,
-                appProperties,
-                appProperties == null ? null : appProperties.getExecution().getPython(),
-                pluginRuntimeService,
-                scriptInvocationService,
-                sharedStateApplicationService,
-                asyncExecutor
-        );
+        this(builder(jsonCodec).appProperties(appProperties).pluginRuntimeService(pluginRuntimeService)
+                .scriptInvocationService(scriptInvocationService)
+                .sharedStateApplicationService(sharedStateApplicationService).asyncExecutor(asyncExecutor));
     }
 
-    private PythonScriptEngine(JsonCodec jsonCodec,
-                               AppProperties appProperties,
-                               AppProperties.Python properties,
-                               PluginRuntimeService pluginRuntimeService,
-                               ScriptInvocationService scriptInvocationService,
-                               SharedStateApplicationService sharedStateApplicationService,
-                               Executor asyncExecutor) {
-        this.jsonCodec = Objects.requireNonNull(jsonCodec);
-        this.appProperties = appProperties == null ? new AppProperties() : appProperties;
-        this.properties = properties == null ? this.appProperties.getExecution().getPython() : properties;
-        this.pluginRuntimeService = pluginRuntimeService == null
-                ? PluginRuntimeService.disabled()
-                : pluginRuntimeService;
-        this.scriptInvocationService = scriptInvocationService == null
-                ? ScriptInvocationService.disabled()
-                : scriptInvocationService;
-        this.sharedStateApplicationService = sharedStateApplicationService == null
-                ? SharedStateApplicationService.disabled()
-                : sharedStateApplicationService;
-        this.asyncExecutor = asyncExecutor == null ? ForkJoinPool.commonPool() : asyncExecutor;
+    /**
+     * 使用 Builder 配置构建引擎。
+     */
+    private PythonScriptEngine(Builder b) {
+        this.jsonCodec = Objects.requireNonNull(b.jsonCodec);
+        this.appProperties = b.appProperties == null ? new AppProperties() : b.appProperties;
+        this.properties = b.pythonProperties == null ? this.appProperties.getExecution().getPython() : b.pythonProperties;
+        this.pluginRuntimeService = b.pluginRuntimeService == null
+                ? PluginRuntimeService.disabled() : b.pluginRuntimeService;
+        this.scriptInvocationService = b.scriptInvocationService == null
+                ? ScriptInvocationService.disabled() : b.scriptInvocationService;
+        this.sharedStateApplicationService = b.sharedStateApplicationService == null
+                ? SharedStateApplicationService.disabled() : b.sharedStateApplicationService;
+        this.asyncExecutor = b.asyncExecutor == null ? ForkJoinPool.commonPool() : b.asyncExecutor;
         this.environmentManager = new PythonEnvironmentManager(jsonCodec, properties, asyncExecutor);
+    }
+
+    /**
+     * 创建构建器，用于灵活配置引擎的所有依赖项。
+     * <p>
+     * 示例：{@code PythonScriptEngine.builder(jsonCodec).appProperties(props).pluginRuntimeService(svc).build()}
+     *
+     * @param jsonCodec JSON 编解码器（必填）
+     * @return 构建器实例
+     */
+    public static Builder builder(JsonCodec jsonCodec) {
+        return new Builder(jsonCodec);
+    }
+
+    /**
+     * Python 脚本引擎的构建器，支持链式配置所有可选依赖。
+     * <p>
+     * JSON 编解码器为必填项，其余配置项均为可选，未设置的依赖将自动使用禁用实现或默认值。
+     */
+    public static class Builder {
+        private final JsonCodec jsonCodec;
+        private AppProperties appProperties;
+        private AppProperties.Python pythonProperties;
+        private PluginRuntimeService pluginRuntimeService;
+        private ScriptInvocationService scriptInvocationService;
+        private SharedStateApplicationService sharedStateApplicationService;
+        private Executor asyncExecutor;
+
+        private Builder(JsonCodec jsonCodec) {
+            this.jsonCodec = jsonCodec;
+        }
+
+        /** 设置全局应用配置。 */
+        public Builder appProperties(AppProperties appProperties) {
+            this.appProperties = appProperties;
+            return this;
+        }
+
+        /** 设置 Python 脚本引擎专属配置。 */
+        public Builder pythonProperties(AppProperties.Python pythonProperties) {
+            this.pythonProperties = pythonProperties;
+            return this;
+        }
+
+        /** 设置插件运行时服务。 */
+        public Builder pluginRuntimeService(PluginRuntimeService pluginRuntimeService) {
+            this.pluginRuntimeService = pluginRuntimeService;
+            return this;
+        }
+
+        /** 设置脚本互调服务。 */
+        public Builder scriptInvocationService(ScriptInvocationService scriptInvocationService) {
+            this.scriptInvocationService = scriptInvocationService;
+            return this;
+        }
+
+        /** 设置共享状态应用服务。 */
+        public Builder sharedStateApplicationService(SharedStateApplicationService sharedStateApplicationService) {
+            this.sharedStateApplicationService = sharedStateApplicationService;
+            return this;
+        }
+
+        /** 设置异步执行器。 */
+        public Builder asyncExecutor(Executor asyncExecutor) {
+            this.asyncExecutor = asyncExecutor;
+            return this;
+        }
+
+        /** 构建 Python 脚本引擎实例。 */
+        public PythonScriptEngine build() {
+            return new PythonScriptEngine(this);
+        }
     }
 
     /**
@@ -184,7 +290,7 @@ public class PythonScriptEngine implements ScriptEngine {
                 throw new IllegalArgumentException(PythonErrorParser.extractErrorMessage(result));
             }
         } catch (IOException e) {
-            throw new IllegalStateException("Failed to validate Python script", e);
+            throw new IllegalStateException("校验 Python 脚本失败", e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Python validation interrupted", e);
@@ -221,7 +327,7 @@ public class PythonScriptEngine implements ScriptEngine {
             );
             return processExecuteResult(result, ctx.command);
         } catch (IOException e) {
-            throw new IllegalStateException("Failed to execute Python script", e);
+            throw new IllegalStateException("执行 Python 脚本失败", e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Python execution interrupted", e);
@@ -331,7 +437,7 @@ public class PythonScriptEngine implements ScriptEngine {
         List<String> candidates = Arrays.asList(DEFAULT_PYTHON_EXECUTABLE, "python", "py");
         for (String candidate : candidates) {
             if (!candidate.equals(configured) && isValidPython3(candidate)) {
-                log.log(System.Logger.Level.INFO, "Auto-detected Python executable: {0} (fallback from configured: {1})", candidate, configured);
+                log.log(System.Logger.Level.INFO, "自动检测到 Python 可执行文件: {0}（回退自配置项: {1}）", candidate, configured);
                 return candidate;
             }
         }
@@ -393,7 +499,7 @@ public class PythonScriptEngine implements ScriptEngine {
             }
             return new String(is.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {
-            throw new IllegalStateException("Failed to load python-wrapper.py template", e);
+            throw new IllegalStateException("加载 python-wrapper.py 模板失败", e);
         }
     }
 
@@ -485,7 +591,7 @@ public class PythonScriptEngine implements ScriptEngine {
             stdinStream.write((response + "\n").getBytes(StandardCharsets.UTF_8));
             stdinStream.flush();
         } catch (IOException e) {
-            throw new IllegalStateException("Failed to write Python bridge response", e);
+            throw new IllegalStateException("写入 Python 桥接响应失败", e);
         }
     }
 

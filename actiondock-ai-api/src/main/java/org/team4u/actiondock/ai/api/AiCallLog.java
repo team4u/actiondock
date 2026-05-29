@@ -4,28 +4,58 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * AI 模型调用日志。
+ * <p>
+ * 记录一次 AI 模型调用的完整信息，包括调用来源、模型配置、令牌消耗、
+ * 延迟及错误信息，用于审计追踪和用量分析。
+ *
+ * @author jay.wu
+ */
 public class AiCallLog {
+    /** 日志唯一标识 */
     private String id;
+    /** 关联的脚本执行记录标识 */
     private String executionId;
+    /** 关联的脚本标识 */
     private String scriptId;
+    /** 关联的插件标识 */
     private String pluginId;
+    /** 关联的 Agent 运行标识 */
     private String agentRunId;
+    /** 关联的 Agent 步骤标识 */
     private String agentStepId;
+    /** 调用来源类型 */
     private AiCallerType callerType;
+    /** 调用动作类型 */
     private AiCallAction action;
+    /** 模型配置名称 */
     private String modelProfile;
+    /** AI 模型提供商 */
     private AiProvider provider;
+    /** 模型名称 */
     private String model;
+    /** 调用状态 */
     private String status;
+    /** 输入令牌数 */
     private Integer inputTokens;
+    /** 输出令牌数 */
     private Integer outputTokens;
+    /** 总令牌数 */
     private Integer totalTokens;
+    /** 调用延迟（毫秒） */
     private Long latencyMs;
+    /** 错误类型 */
     private String errorType;
+    /** 错误消息 */
     private String errorMessage;
+    /** 请求内容哈希值，用于缓存命中判断 */
     private String promptHash;
+    /** 请求摘要信息 */
     private Map<String, Object> requestSummary = new LinkedHashMap<>();
+    /** 响应摘要信息 */
     private Map<String, Object> responseSummary = new LinkedHashMap<>();
+    /** 日志创建时间 */
     private LocalDateTime createdAt;
 
     public String getId() { return id; }

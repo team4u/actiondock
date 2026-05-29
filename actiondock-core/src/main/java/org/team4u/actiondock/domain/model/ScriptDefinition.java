@@ -10,7 +10,12 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * 脚本定义聚合，保存当前 draft 和已发布 revision 指针。
+ * 脚本定义聚合根，保存当前草稿（draft）和已发布修订（published revision）指针。
+ * <p>
+ * 每个脚本定义包含源码、输入输出 Schema、依赖声明和发布状态。
+ * 支持发布/回滚/合并等生命周期操作，通过防御性复制保证集合字段的不可变性。
+ *
+ * @author jay.wu
  */
 public class ScriptDefinition {
     private String id;
@@ -316,14 +321,30 @@ public class ScriptDefinition {
         return this;
     }
 
+    /**
+     * 判断脚本是否存在已发布修订。
+     *
+     * @return 如果存在已发布修订则返回 true
+     */
     public boolean hasPublishedRevision() {
         return publishedRevision != null;
     }
 
+    /**
+     * 判断脚本是否存在未发布的变更（草稿与已发布修订内容不一致）。
+     *
+     * @return 如果存在未发布的变更则返回 true
+     */
     public boolean hasUnpublishedChanges() {
         return publishedRevision != null && !publishedRevision.matchesDraft(this);
     }
 
+    /**
+     * 将当前草稿字段（名称、源码、Schema、依赖等）复制到目标对象。
+     *
+     * @param target 目标脚本定义
+     * @return 目标对象（支持链式调用）
+     */
     private ScriptDefinition copyDraftFieldsTo(ScriptDefinition target) {
         return target
                 .setName(name)
@@ -342,6 +363,12 @@ public class ScriptDefinition {
                 .setMaxExecutionRecords(maxExecutionRecords);
     }
 
+    /**
+     * 将当前元数据字段（ID、版本、发布状态、仓库信息等）复制到目标对象。
+     *
+     * @param target 目标脚本定义
+     * @return 目标对象（支持链式调用）
+     */
     private ScriptDefinition copyMetadataTo(ScriptDefinition target) {
         return target
                 .setId(id)
@@ -363,6 +390,14 @@ public class ScriptDefinition {
                 .setUpdatedAt(updatedAt);
     }
 
+    /**
+     * 将当前脚本定义转换为已发布版本的定义。
+     * <p>
+     * 基于已发布修订的内容创建新的脚本定义，保留元数据但使用发布时的源码和配置。
+     *
+     * @return 已发布版本的脚本定义
+     * @throws IllegalStateException 如果脚本尚未发布
+     */
     public ScriptDefinition toPublishedDefinition() {
         if (publishedRevision == null) {
             throw new IllegalStateException("脚本未发布: " + id);
@@ -402,6 +437,15 @@ public class ScriptDefinition {
         return this;
     }
 
+    /**
+     * 发布脚本，创建新的已发布修订。
+     * <p>
+     * 基于当前草稿内容创建 {@link PublishedScriptRevision}，更新版本号并清除脏标记。
+     *
+     * @param revisionId 新修订 ID
+     * @param publishedAt 发布时间
+     * @return 当前脚本定义（支持链式调用）
+     */
     public ScriptDefinition publish(String revisionId, LocalDateTime publishedAt) {
         PublishedScriptRevision revision = PublishedScriptRevision.fromDraft(this, revisionId, version + 1, publishedAt);
         this.publishedRevision = revision;
@@ -412,6 +456,14 @@ public class ScriptDefinition {
         return this;
     }
 
+    /**
+     * 回滚到已发布修订的内容。
+     * <p>
+     * 用已发布修订的草稿字段覆盖当前内容，并清除脏标记。
+     *
+     * @return 当前脚本定义（支持链式调用）
+     * @throws IllegalStateException 如果没有已发布修订
+     */
     public ScriptDefinition revertToPublished() {
         if (publishedRevision == null) {
             throw new IllegalStateException("没有已发布修订可恢复: " + id);
@@ -421,6 +473,14 @@ public class ScriptDefinition {
         return this;
     }
 
+    /**
+     * 将已有脚本定义的空字段合并到当前定义。
+     * <p>
+     * 用于仓库同步等场景，保留已有记录中的历史字段，同时检测草稿内容是否有变更。
+     *
+     * @param existing 已有的脚本定义（通常来自持久化层）
+     * @return 当前脚本定义（支持链式调用）
+     */
     public ScriptDefinition mergeFrom(ScriptDefinition existing) {
         mergeNullFieldsFrom(existing);
         setDirty(isEditable() ? existing.isDirty() || !sameDraftAs(existing) : existing.isDirty());
@@ -428,6 +488,12 @@ public class ScriptDefinition {
         return this;
     }
 
+    /**
+     * 比较两个脚本定义的草稿内容是否一致。
+     *
+     * @param other 另一个脚本定义
+     * @return 如果草稿字段完全相同则返回 true
+     */
     private boolean sameDraftAs(ScriptDefinition other) {
         return Objects.equals(name, other.name)
                 && type == other.type
@@ -445,6 +511,11 @@ public class ScriptDefinition {
                 && Objects.equals(maxExecutionRecords, other.maxExecutionRecords);
     }
 
+    /**
+     * 从已有定义中补充当前定义中为 null 的字段。
+     *
+     * @param existing 已有脚本定义
+     */
     private void mergeNullFieldsFrom(ScriptDefinition existing) {
         if (createdAt == null) setCreatedAt(existing.getCreatedAt());
         if (version == null) setVersion(existing.getVersion());
@@ -466,6 +537,13 @@ public class ScriptDefinition {
         if (maxExecutionRecords == null) setMaxExecutionRecords(existing.getMaxExecutionRecords());
     }
 
+    /**
+     * 创建当前脚本定义的完整深拷贝。
+     * <p>
+     * 包含草稿字段和元数据字段的完整复制，用于需要独立修改副本的场景。
+     *
+     * @return 完整复制的脚本定义
+     */
     public ScriptDefinition fullCopy() {
         ScriptDefinition copy = new ScriptDefinition()
                 .setVersion(version)

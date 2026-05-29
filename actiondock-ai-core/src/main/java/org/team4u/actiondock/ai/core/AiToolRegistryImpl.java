@@ -21,6 +21,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * AI 工具注册表实现，管理静态工具和动态工具提供者的注册、查找与调用。
+ * <p>
+ * 实现 {@link AiToolRegistry} 接口，支持通过工具集（Toolset）或 Agent 配置解析可用工具列表，
+ * 处理同一工具在不同来源（工具集/直接引用）之间的冲突检测，并在调用时执行权限校验。
+ * 工具提供者通过 {@link AiToolProvider} 接口动态扩展。
+ *
+ * @author jay.wu
+ */
 public class AiToolRegistryImpl implements AiToolRegistry {
     private final AiToolsetRepository toolsetRepository;
     private final Map<String, AiTool> tools;

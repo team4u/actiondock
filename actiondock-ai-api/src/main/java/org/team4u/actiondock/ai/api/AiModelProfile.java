@@ -6,6 +6,15 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * AI 模型配置档案。
+ * <p>
+ * 定义一个 AI 模型的完整连接和调用参数，包括模型供应商、模型名称、
+ * API 端点、认证配置、默认调用选项、用量限制和能力声明。
+ * 使用流式 setter 支持链式调用，集合字段提供防御性拷贝。
+ *
+ * @author jay.wu
+ */
 public class AiModelProfile {
     private String id;
     private String name;

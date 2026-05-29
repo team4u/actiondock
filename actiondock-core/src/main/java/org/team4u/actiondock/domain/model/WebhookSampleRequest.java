@@ -5,6 +5,15 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Webhook 示例请求领域模型。
+ * <p>
+ * 用于保存 Webhook 端点接收到的示例请求数据，包括 HTTP 方法、请求头、
+ * 查询参数、请求体原始内容和内容类型。支持通过 {@link #isEmpty()} 判断
+ * 是否为未配置的空请求。所有集合类型字段在存取时均进行防御性拷贝。
+ *
+ * @author jay.wu
+ */
 public class WebhookSampleRequest {
     private String method = "POST";
     private Map<String, List<String>> headers = new LinkedHashMap<>();

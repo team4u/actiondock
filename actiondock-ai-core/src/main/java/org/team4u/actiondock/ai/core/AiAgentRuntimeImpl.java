@@ -30,6 +30,15 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Executor;
 
+/**
+ * AI Agent 运行时实现，负责 Agent 运行的全生命周期管理。
+ * <p>
+ * 实现 {@link AiAgentRuntime} 接口，支持异步提交（submit）、同步执行（run）、
+ * 恢复（resume）和取消（cancel）等操作。运行过程中通过 {@link AiAgentRunObserver}
+ * 实时持久化流式文本输出和步骤记录，最终将运行结果（含用量统计和步骤详情）落库。
+ *
+ * @author jay.wu
+ */
 public class AiAgentRuntimeImpl implements AiAgentRuntime {
 
     private final AiAgentProfileService agentProfileService;

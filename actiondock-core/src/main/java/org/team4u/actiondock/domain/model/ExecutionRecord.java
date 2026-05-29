@@ -38,6 +38,7 @@ public class ExecutionRecord {
         return id;
     }
 
+    /** 设置执行记录 ID。 */
     public ExecutionRecord setId(String id) {
         this.id = id;
         return this;
@@ -47,6 +48,7 @@ public class ExecutionRecord {
         return scriptId;
     }
 
+    /** 设置关联的脚本 ID。 */
     public ExecutionRecord setScriptId(String scriptId) {
         this.scriptId = scriptId;
         return this;
@@ -61,6 +63,7 @@ public class ExecutionRecord {
         return status;
     }
 
+    /** 设置执行状态。 */
     public ExecutionRecord setStatus(ExecutionStatus status) {
         this.status = status;
         return this;
@@ -75,6 +78,7 @@ public class ExecutionRecord {
         return submitMode;
     }
 
+    /** 设置提交模式（同步/异步）。 */
     public ExecutionRecord setSubmitMode(SubmitMode submitMode) {
         this.submitMode = submitMode;
         return this;
@@ -84,6 +88,7 @@ public class ExecutionRecord {
         return triggerSource;
     }
 
+    /** 设置触发来源。 */
     public ExecutionRecord setTriggerSource(ExecutionTriggerSource triggerSource) {
         this.triggerSource = triggerSource == null ? ExecutionTriggerSource.MANUAL : triggerSource;
         return this;
@@ -93,6 +98,7 @@ public class ExecutionRecord {
         return scheduleId;
     }
 
+    /** 设置关联的调度 ID（定时触发时使用）。 */
     public ExecutionRecord setScheduleId(String scheduleId) {
         this.scheduleId = scheduleId;
         return this;
@@ -102,6 +108,7 @@ public class ExecutionRecord {
         return agentRunId;
     }
 
+    /** 设置关联的 Agent 运行 ID。 */
     public ExecutionRecord setAgentRunId(String agentRunId) {
         this.agentRunId = agentRunId;
         return this;
@@ -111,6 +118,7 @@ public class ExecutionRecord {
         return agentStepId;
     }
 
+    /** 设置关联的 Agent 步骤 ID。 */
     public ExecutionRecord setAgentStepId(String agentStepId) {
         this.agentStepId = agentStepId;
         return this;
@@ -120,6 +128,7 @@ public class ExecutionRecord {
         return webhookId;
     }
 
+    /** 设置关联的 Webhook ID。 */
     public ExecutionRecord setWebhookId(String webhookId) {
         this.webhookId = webhookId;
         return this;
@@ -134,6 +143,7 @@ public class ExecutionRecord {
         return Collections.unmodifiableMap(input);
     }
 
+    /** 设置执行输入参数（防御性复制）。 */
     public ExecutionRecord setInput(Map<String, Object> input) {
         this.input = input == null ? new LinkedHashMap<>() : new LinkedHashMap<>(input);
         return this;
@@ -148,6 +158,7 @@ public class ExecutionRecord {
         return Collections.unmodifiableMap(output);
     }
 
+    /** 设置执行输出结果（防御性复制）。 */
     public ExecutionRecord setOutput(Map<String, Object> output) {
         this.output = output == null ? new LinkedHashMap<>() : new LinkedHashMap<>(output);
         return this;
@@ -171,6 +182,7 @@ public class ExecutionRecord {
         this.logs.add(entry);
     }
 
+    /** 设置执行日志列表（防御性复制）。 */
     public ExecutionRecord setLogs(List<ExecutionLogEntry> logs) {
         this.logs = logs == null ? new ArrayList<>() : new ArrayList<>(logs);
         return this;
@@ -187,6 +199,7 @@ public class ExecutionRecord {
         return errorMessage;
     }
 
+    /** 设置错误信息。 */
     public ExecutionRecord setErrorMessage(String errorMessage) {
         this.errorMessage = errorMessage;
         return this;
@@ -196,6 +209,7 @@ public class ExecutionRecord {
         return errorDetail;
     }
 
+    /** 设置错误详情。 */
     public ExecutionRecord setErrorDetail(ErrorDetail errorDetail) {
         this.errorDetail = errorDetail;
         return this;
@@ -210,6 +224,7 @@ public class ExecutionRecord {
         return createdAt;
     }
 
+    /** 设置记录创建时间。 */
     public ExecutionRecord setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
         return this;
@@ -224,6 +239,7 @@ public class ExecutionRecord {
         return startedAt;
     }
 
+    /** 设置执行开始时间。 */
     public ExecutionRecord setStartedAt(LocalDateTime startedAt) {
         this.startedAt = startedAt;
         return this;
@@ -238,6 +254,7 @@ public class ExecutionRecord {
         return finishedAt;
     }
 
+    /** 设置执行完成时间。 */
     public ExecutionRecord setFinishedAt(LocalDateTime finishedAt) {
         this.finishedAt = finishedAt;
         return this;

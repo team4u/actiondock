@@ -6,6 +6,16 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * AI Agent 配置档案。
+ * <p>
+ * 定义一个 Agent 的完整配置，包括使用的模型、系统提示词、
+ * 关联的工具集与技能、以及运行参数。配置档案是 Agent 运行的入口元数据，
+ * 通过标识被运行时引用和加载。
+ * 使用流式 setter 支持链式调用，集合字段提供防御性拷贝。
+ *
+ * @author jay.wu
+ */
 public class AiAgentProfile {
     private String id;
     private String name;

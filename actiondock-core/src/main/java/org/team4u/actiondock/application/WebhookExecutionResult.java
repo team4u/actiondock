@@ -7,6 +7,13 @@ import org.team4u.actiondock.domain.model.SchemaValueCopier;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * Webhook 执行结果，封装脚本执行后的完整响应信息。
+ * <p>
+ * 包含原始请求数据、执行记录以及 Webhook 响应负载，用于将脚本执行结果回传给调用方。
+ *
+ * @author jay.wu
+ */
 public class WebhookExecutionResult {
     private Map<String, Object> request = new LinkedHashMap<>();
     private ExecutionRecord execution;

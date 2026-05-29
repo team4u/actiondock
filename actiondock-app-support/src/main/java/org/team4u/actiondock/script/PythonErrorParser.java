@@ -2,6 +2,8 @@ package org.team4u.actiondock.script;
 
 /**
  * Python 错误信息解析工具，从进程输出中提取可读的错误摘要。
+ *
+ * @author jay.wu
  */
 final class PythonErrorParser {
 

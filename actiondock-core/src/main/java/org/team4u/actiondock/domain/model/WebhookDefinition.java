@@ -2,6 +2,14 @@ package org.team4u.actiondock.domain.model;
 
 import java.time.LocalDateTime;
 
+/**
+ * Webhook 定义领域模型。
+ * <p>
+ * 表示一个 Webhook 端点的完整配置，包括基本信息（名称、描述）、作用域、
+ * 来源仓库信息、传输配置以及关联的脚本标识。采用流式 setter 模式支持链式调用。
+ *
+ * @author jay.wu
+ */
 public class WebhookDefinition {
     private String id;
     private String key;

@@ -71,6 +71,16 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.team4u.actiondock.ai.agentscope.AgentScopeOptions.*;
 
+/**
+ * 基于 AgentScope 的 AI 供应商客户端实现。
+ * <p>
+ * 通过 AgentScope 统一接入 DashScope、OpenAI、Anthropic、Gemini、Ollama 等多种 AI 模型供应商，
+ * 提供 Chat 对话、Structured 结构化输出、Embedding 向量嵌入和 ReAct Agent 运行四种核心能力。
+ * 内部根据 {@link AiModelProvider} 类型自动选择对应的 ChatModel 或 EmbeddingModel 实现，
+ * 并通过 {@link ProgressHook} 将 AgentScope 的推理过程以流式方式通知给观察者。
+ *
+ * @author jay.wu
+ */
 public class AgentScopeAiProviderClient implements AiProviderClient {
     private static final String PROVIDER_NAME = "AGENTSCOPE";
     private final AiSecretResolver secretResolver;

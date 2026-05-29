@@ -28,6 +28,15 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 
+/**
+ * AgentScope 内置 AI 工具的注册工厂。
+ * <p>
+ * 封装了文件读写、Shell 命令执行、DashScope 和 OpenAI 多模态等 AgentScope 原生工具，
+ * 将其统一适配为 ActionDock 的 {@link AiTool} 接口，供 Agent 运行时发现和调用。
+ * 每个工具均通过 {@link ConfigurableAiTool} 支持配置化定制（如限定根目录、API Key 引用等）。
+ *
+ * @author jay.wu
+ */
 public final class AgentScopeBuiltinAiTools {
     private static final String PREFIX = "agentscope.";
 

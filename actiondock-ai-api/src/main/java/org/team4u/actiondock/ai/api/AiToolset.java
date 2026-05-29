@@ -6,6 +6,15 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * AI 工具集。
+ * <p>
+ * 将一组相关工具打包为可复用的集合，支持统一配置工具选项和权限上限。
+ * Agent 配置档案通过引用工具集标识来批量加载关联工具。
+ * 使用流式 setter 支持链式调用，集合字段提供防御性拷贝。
+ *
+ * @author jay.wu
+ */
 public class AiToolset {
     private String id;
     private String name;

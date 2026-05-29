@@ -3,7 +3,11 @@ package org.team4u.actiondock.domain.model;
 import java.time.LocalDateTime;
 
 /**
- * Built-in system plugin enablement state.
+ * 内置系统插件的启用状态。
+ * <p>
+ * 记录系统级别插件的启用/禁用状态，支持运行时动态切换。
+ *
+ * @author jay.wu
  */
 public class SystemPluginState {
     private String pluginId;

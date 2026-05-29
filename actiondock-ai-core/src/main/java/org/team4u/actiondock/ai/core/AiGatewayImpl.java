@@ -26,6 +26,15 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.function.Supplier;
 
+/**
+ * AI 网关实现，提供统一的 AI 模型调用入口。
+ * <p>
+ * 实现 {@link AiGateway} 接口，封装聊天补全、结构化输出和向量嵌入三种 AI 能力，
+ * 并通过 {@link AiProviderClient} 委托给具体的 AI 供应商客户端执行。
+ * 每次调用都会自动记录审计日志（含用量统计、延迟、错误信息等）。
+ *
+ * @author jay.wu
+ */
 public class AiGatewayImpl implements AiGateway {
     private static final String CALL_STATUS_SUCCESS = AiStepStatus.SUCCESS;
     private static final String CALL_STATUS_FAILED = AiStepStatus.FAILED;

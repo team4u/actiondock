@@ -7,6 +7,15 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Webhook 请求模型，描述触发脚本执行的 HTTP 请求信息。
+ * <p>
+ * 包含 HTTP 方法、路径、请求头、查询参数、原始请求体和 Content-Type。
+ * 支持转换为脚本输入的 Map 结构，也可从 {@link WebhookSampleRequest} 示例构造。
+ * 所有集合类型的访问均通过防御性拷贝保证不可变性。
+ *
+ * @author jay.wu
+ */
 public class WebhookRequest {
     private String method = "POST";
     private String path;

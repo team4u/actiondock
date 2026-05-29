@@ -4,6 +4,15 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * AI Agent 运行记录。
+ * <p>
+ * 持久化的 Agent 运行实体，记录每次运行的完整生命周期信息，包括调用来源、
+ * 关联脚本与执行记录、输入输出摘要、模型与工具调用统计以及时间戳。
+ * 使用流式 setter 支持链式调用，集合字段提供防御性拷贝。
+ *
+ * @author jay.wu
+ */
 public class AiAgentRunRecord {
     private String id;
     private String agentProfile;

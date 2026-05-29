@@ -2,6 +2,14 @@ package org.team4u.actiondock.domain.model;
 
 import java.time.LocalDateTime;
 
+/**
+ * 仓库本地资产，记录仓库中安装的上游资产快照。
+ * <p>
+ * 每条记录对应一个从上游同步到本地仓库的资产（脚本或 Webhook），
+ * 包含版本锁定、同步状态以及来源追踪等信息。
+ *
+ * @author jay.wu
+ */
 public class RepositoryLocalAsset {
     private String id;
     private UpstreamAssetType assetType;

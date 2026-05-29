@@ -17,6 +17,15 @@ import org.team4u.actiondock.domain.model.ScriptPackaging;
 
 
 
+/**
+ * AI Agent 配置档案服务，管理 Agent Profile 的增删改查。
+ * <p>
+ * 提供 Agent 配置的校验（ID、名称、模型 Profile、工具集和 Skill 引用有效性检查）、
+ * 托管资源可变性检查，以及通过 {@link AiToolRegistryImpl} 进行的工具冲突预检。
+ * 保存时自动填充创建时间和更新时间。
+ *
+ * @author jay.wu
+ */
 public class AiAgentProfileService {
 
     private final AiAgentProfileRepository repository;

@@ -5,6 +5,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Webhook 响应载荷领域模型。
+ * <p>
+ * 封装 Webhook 处理脚本返回的 HTTP 响应信息，包括状态码、响应头和响应体。
+ * 所有集合类型字段在存取时均进行防御性拷贝，确保内部状态的不可变性。
+ *
+ * @author jay.wu
+ */
 public class WebhookResponsePayload {
     private int status = 200;
     private Map<String, List<String>> headers = new LinkedHashMap<>();

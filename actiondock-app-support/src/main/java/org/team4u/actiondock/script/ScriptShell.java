@@ -12,7 +12,11 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Script-visible shell facade shared by Groovy and Python.
+ * 脚本可访问的 Shell 命令执行器，供 Groovy 和 Python 脚本共享。
+ * <p>
+ * 提供命令拼接（join）和命令执行（exec）能力，执行过程受应用配置约束。
+ *
+ * @author jay.wu
  */
 public class ScriptShell {
     private final AppProperties properties;

@@ -13,6 +13,15 @@ import java.util.Map;
 import org.team4u.actiondock.domain.model.ScriptPackaging;
 
 
+/**
+ * AI 模型配置档案服务，管理模型 Profile 的增删改查。
+ * <p>
+ * 提供模型配置的校验（ID、名称、供应商、模型名称必填）、
+ * 托管资源可变性检查（禁止修改/删除托管资源）以及级联引用检查（被 Agent 引用时禁止删除）。
+ * 保存时自动填充创建时间和更新时间。
+ *
+ * @author jay.wu
+ */
 public class AiModelProfileService {
 
     private final AiModelProfileRepository repository;
