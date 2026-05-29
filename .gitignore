@@ -38,6 +38,7 @@ node_modules/
 .settings
 .springBeans
 .actiondock/
+.antigravitycli/
 !**/src/main/**
 !**/src/test/**
 ### STS ###

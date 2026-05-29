@@ -104,6 +104,21 @@ class PythonScriptEngineTest {
     }
 
     @Test
+    void executeAutoDetectsPythonFallback() {
+        AppProperties.Python properties = pythonProperties(30);
+        properties.setExecutable("invalid_python_executable");
+        PythonScriptEngine autoDetectEngine = new PythonScriptEngine(jsonCodec, properties);
+
+        Object result = autoDetectEngine.execute(
+                new ScriptDefinition().setSource("return {\"ok\": True}"),
+                null,
+                null
+        );
+
+        assertThat(result).isEqualTo(Map.of("ok", true));
+    }
+
+    @Test
     void executeStreamsLogsThroughInjectedLogger() {
         List<String> logs = new ArrayList<>();
         ScriptExecutionContext context = new ScriptExecutionContext()

@@ -65,6 +65,7 @@ public class PythonScriptEngine implements ScriptEngine {
     private final SharedStateApplicationService sharedStateApplicationService;
     private final Executor asyncExecutor;
     private final PythonEnvironmentManager environmentManager;
+    private volatile String detectedExecutable = null;
 
     public PythonScriptEngine(JsonCodec jsonCodec, AppProperties.Python properties) {
         this(
@@ -300,10 +301,65 @@ public class PythonScriptEngine implements ScriptEngine {
     }
 
     private String resolveExecutable() {
-        if (NormalizeUtils.isBlank(properties.getExecutable())) {
-            return DEFAULT_PYTHON_EXECUTABLE;
+        String configured = properties.getExecutable();
+        if (NormalizeUtils.isBlank(configured)) {
+            configured = DEFAULT_PYTHON_EXECUTABLE;
+        } else {
+            configured = configured.trim();
         }
-        return properties.getExecutable().trim();
+
+        String cached = this.detectedExecutable;
+        if (cached != null) {
+            return cached;
+        }
+
+        synchronized (this) {
+            cached = this.detectedExecutable;
+            if (cached != null) {
+                return cached;
+            }
+            this.detectedExecutable = detectPythonExecutable(configured);
+            return this.detectedExecutable;
+        }
+    }
+
+    private String detectPythonExecutable(String configured) {
+        if (isValidPython3(configured)) {
+            return configured;
+        }
+
+        List<String> candidates = Arrays.asList(DEFAULT_PYTHON_EXECUTABLE, "python", "py");
+        for (String candidate : candidates) {
+            if (!candidate.equals(configured) && isValidPython3(candidate)) {
+                log.log(System.Logger.Level.INFO, "Auto-detected Python executable: {0} (fallback from configured: {1})", candidate, configured);
+                return candidate;
+            }
+        }
+
+        return configured;
+    }
+
+    private boolean isValidPython3(String cmd) {
+        if (NormalizeUtils.isBlank(cmd)) {
+            return false;
+        }
+        try {
+            Process process = new ProcessBuilder(cmd.trim(), "-c", "import sys; print(sys.version_info.major)")
+                    .redirectErrorStream(true)
+                    .start();
+            if (!process.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                return false;
+            }
+            if (process.exitValue() == 0) {
+                try (InputStream is = process.getInputStream()) {
+                    String output = new String(is.readAllBytes(), StandardCharsets.UTF_8).trim();
+                    return "3".equals(output);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
     }
 
     private static Path writeScriptFile(String source, boolean executable) throws IOException {
