@@ -10,7 +10,6 @@ import org.team4u.actiondock.domain.port.ScriptRepository;
 import org.team4u.actiondock.domain.port.SystemPluginStateRepository;
 import org.team4u.actiondock.plugin.PluginRuntimeService;
 import org.team4u.actiondock.plugin.api.ActionDockPlugin;
-import org.team4u.actiondock.project.knowledge.plugin.ActionDockProjectKnowledgeSystemPlugin;
 import org.team4u.actiondock.workspace.plugin.ActionDockWorkspaceSystemPlugin;
 
 import java.util.List;
@@ -40,8 +39,4 @@ public class PluginConfiguration {
         return new ActionDockWorkspaceSystemPlugin();
     }
 
-    @Bean
-    public ActionDockPlugin actionDockProjectKnowledgeSystemPlugin(AiAgentRuntimeImpl aiAgentRuntime) {
-        return new ActionDockProjectKnowledgeSystemPlugin(aiAgentRuntime);
-    }
 }

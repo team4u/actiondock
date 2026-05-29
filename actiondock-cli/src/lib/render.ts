@@ -45,11 +45,12 @@ export function renderScriptList(items: ScriptDefinition[]): string {
 }
 
 export function renderSchemaDetail(params: {
+  exampleCliCommand?: string;
   script: ScriptDefinition;
   target: "published" | "draft";
   fields: SchemaFieldDescriptor[];
 }): string {
-  const { script, target, fields } = params;
+  const { exampleCliCommand, script, target, fields } = params;
   const lines = [
     `Script: ${script.id}${script.name ? ` (${script.name})` : ""}`,
     `Target: ${target}`,
@@ -81,6 +82,11 @@ export function renderSchemaDetail(params: {
     for (const field of jsonOnlyFields) {
       lines.push(`  ${field.name} <${field.kind}>${field.required ? " required" : ""}${formatSupplement(field)}`);
     }
+  }
+
+  if (exampleCliCommand) {
+    lines.push("Example CLI:");
+    lines.push(`  ${exampleCliCommand}`);
   }
 
   return lines.join("\n");
@@ -539,7 +545,7 @@ export function renderPluginDetail(plugin: PluginView | PluginReferenceView): st
   return lines.join("\n");
 }
 
-export function renderPluginActionDetail(action: PluginActionDefinition): string {
+export function renderPluginActionDetail(action: PluginActionDefinition, exampleCliCommand?: string): string {
   const lines: string[] = [
     `Action: ${action.action}${action.title ? ` (${action.title})` : ""}`
   ];
@@ -579,6 +585,11 @@ export function renderPluginActionDetail(action: PluginActionDefinition): string
   if (action.exampleArgs && Object.keys(action.exampleArgs).length > 0) {
     lines.push("Example:");
     lines.push(indent(formatValue(action.exampleArgs)));
+  }
+
+  if (exampleCliCommand) {
+    lines.push("Example CLI:");
+    lines.push(`  ${exampleCliCommand}`);
   }
 
   return lines.join("\n");

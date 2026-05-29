@@ -1267,13 +1267,21 @@ describe("CLI integration", () => {
         ],
         jsonOnlyFields: [
           expect.objectContaining({ name: "payload" })
-        ]
+        ],
+        exampleInput: {
+          name: "name-example",
+          count: 1,
+          payload: {}
+        },
+        exampleCliCommand: "actiondock script run 'published-tool' --name 'name-example' --count '1' --input-json '{\"payload\":{}}'"
       })
     );
 
     const textResult = await runCli(["script", "schema", "published-tool", "--server", baseUrl]);
     expect(textResult.status).toBe(0);
     expect(textResult.stdout).toContain("Description: Generate a published greeting");
+    expect(textResult.stdout).toContain("Example CLI:");
+    expect(textResult.stdout).toContain("actiondock script run 'published-tool' --name 'name-example' --count '1' --input-json '{\"payload\":{}}'");
   });
 
   it("runs a published script with flat flags and merged JSON input", async () => {
@@ -1931,7 +1939,13 @@ describe("CLI integration", () => {
     expect(parsed).toEqual(
       expect.objectContaining({
         action: "summarize",
-        title: "Summarize"
+        title: "Summarize",
+        exampleArgs: {
+          topic: "topic-example",
+          retries: 1,
+          payload: {}
+        },
+        exampleCliCommand: "actiondock plugin invoke 'plugin-a' 'summarize' --topic 'topic-example' --retries '1' --args-json '{\"payload\":{}}'"
       })
     );
     expect(parsed.inputSchema).toBeDefined();
@@ -1943,6 +1957,8 @@ describe("CLI integration", () => {
     expect(actionText.stdout).toContain("--topic <string> required");
     expect(actionText.stdout).toContain("JSON-only fields:");
     expect(actionText.stdout).toContain("payload <object>");
+    expect(actionText.stdout).toContain("Example CLI:");
+    expect(actionText.stdout).toContain("actiondock plugin invoke 'plugin-a' 'summarize' --topic 'topic-example' --retries '1' --args-json '{\"payload\":{}}'");
 
     const notFound = await runCli(["plugin", "action", "plugin-a", "nonexistent", "--server", baseUrl, "--json"]);
     expect(notFound.status).toBe(2);

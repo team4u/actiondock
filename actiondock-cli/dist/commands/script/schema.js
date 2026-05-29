@@ -1,6 +1,7 @@
 import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../lib/command.js";
 import { ActionDockClient } from "../../lib/client.js";
+import { buildScriptRunExampleCliCommand } from "../../lib/cli-examples.js";
 import { resolveServerUrl, resolveToken } from "../../lib/config.js";
 import { renderSchemaDetail } from "../../lib/render.js";
 import { extractSchemaFields, splitSchemaFields } from "../../lib/schema.js";
@@ -36,6 +37,11 @@ export default class ScriptSchemaCommand extends BaseCommand {
             const schema = flags.draft ? script.inputSchema : script.published?.inputSchema ?? script.inputSchema;
             const fields = extractSchemaFields(schema);
             const { flagFields, jsonOnlyFields } = splitSchemaFields(fields);
+            const example = buildScriptRunExampleCliCommand({
+                draft: flags.draft,
+                fields,
+                scriptId: args.scriptId
+            });
             const payload = {
                 script: {
                     id: script.id,
@@ -47,13 +53,16 @@ export default class ScriptSchemaCommand extends BaseCommand {
                 inputSchema: schema ?? {},
                 fields,
                 flagFields,
-                jsonOnlyFields
+                jsonOnlyFields,
+                exampleInput: example.input,
+                exampleCliCommand: example.command
             };
             if (flags.json) {
                 this.printJson(payload);
                 return;
             }
             this.log(renderSchemaDetail({
+                exampleCliCommand: example.command,
                 script,
                 target: flags.draft ? "draft" : "published",
                 fields
