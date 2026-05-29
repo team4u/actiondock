@@ -251,7 +251,7 @@ POST   /api/access-tokens/{id}/disable
 
 ### 创建备份
 
-1. 概览表格显示各类型数据量：脚本、调度、Webhook、Webhook、配置值、执行预设、仓库、插件、共享状态、AI 模型、AI Agent、AI Toolset、Skill 目标、Skills
+1. 概览表格显示各类型数据量：脚本、调度、Webhook、配置值、执行预设、仓库、插件、共享状态、AI 模型、AI Agent、AI Toolset、Skill 目标、Skills
 2. 可勾选「包含 Secret 配置值和共享状态明文值」
 3. 点击「创建备份」下载 `.zip` 文件
 

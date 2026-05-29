@@ -78,11 +78,16 @@ ActionDock 做的核心事情是：
 
 ### ⏱️ 触发
 
-- [触发中心](trigger-center.md) — 定时任务、Webhook、Webhook、执行记录
+- [触发中心](trigger-center.md) — 定时任务、Webhook、执行记录
 
 ### ⚙️ 设置
 
 - [系统设置](system-settings.md) — 配置值、共享状态、访问令牌、数据备份恢复
+
+### 💡 理念
+
+- [设计哲学](script-platform.md) — 脚本即 Skill，ActionDock 的核心设计哲学与价值
+- [项目知识库设计](project-knowledge.md) — 给 AI 一条确定的项目理解路径，为什么不用 RAG 以及入口协议设计
 
 ### 📖 参考
 
