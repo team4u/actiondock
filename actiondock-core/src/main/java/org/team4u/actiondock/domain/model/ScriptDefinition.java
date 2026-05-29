@@ -40,6 +40,7 @@ public class ScriptDefinition {
     private List<AiDependency> aiDependencies = new ArrayList<>();
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private Integer maxExecutionRecords = 1000;
 
     public ScriptDefinition() {
     }
@@ -337,7 +338,8 @@ public class ScriptDefinition {
                 .setTags(tags)
                 .setScriptDependencies(scriptDependencies)
                 .setPluginDependencies(pluginDependencies)
-                .setAiDependencies(aiDependencies);
+                .setAiDependencies(aiDependencies)
+                .setMaxExecutionRecords(maxExecutionRecords);
     }
 
     private ScriptDefinition copyMetadataTo(ScriptDefinition target) {
@@ -371,6 +373,15 @@ public class ScriptDefinition {
         publishedRevision.applyTo(definition);
         definition.setDirty(false);
         return copyMetadataTo(definition);
+    }
+
+    public Integer getMaxExecutionRecords() {
+        return maxExecutionRecords;
+    }
+
+    public ScriptDefinition setMaxExecutionRecords(Integer maxExecutionRecords) {
+        this.maxExecutionRecords = maxExecutionRecords != null ? maxExecutionRecords : 1000;
+        return this;
     }
 
     public LocalDateTime getCreatedAt() {
@@ -430,7 +441,8 @@ public class ScriptDefinition {
                 && Objects.equals(tags, other.tags)
                 && Objects.equals(scriptDependencies, other.scriptDependencies)
                 && Objects.equals(pluginDependencies, other.pluginDependencies)
-                && Objects.equals(aiDependencies, other.aiDependencies);
+                && Objects.equals(aiDependencies, other.aiDependencies)
+                && Objects.equals(maxExecutionRecords, other.maxExecutionRecords);
     }
 
     private void mergeNullFieldsFrom(ScriptDefinition existing) {
@@ -451,6 +463,7 @@ public class ScriptDefinition {
         if (getSourceCommit() == null) setSourceCommit(existing.getSourceCommit());
         if (getSourceDigest() == null) setSourceDigest(existing.getSourceDigest());
         if (getSourceSyncedAt() == null) setSourceSyncedAt(existing.getSourceSyncedAt());
+        if (maxExecutionRecords == null) setMaxExecutionRecords(existing.getMaxExecutionRecords());
     }
 
     public ScriptDefinition fullCopy() {

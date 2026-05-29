@@ -21,7 +21,7 @@ import java.util.Set;
 @Component
 public class ScriptPatchService {
 
-    private static final List<String> ALLOWED_PATCH_FIELDS = List.of("name", "description", "source", "pythonRequirements", "inputSchema", "outputSchema");
+    private static final List<String> ALLOWED_PATCH_FIELDS = List.of("name", "description", "source", "pythonRequirements", "inputSchema", "outputSchema", "maxExecutionRecords");
     private static final Set<String> ALLOWED_PATCH_FIELD_SET = Set.copyOf(ALLOWED_PATCH_FIELDS);
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
     };
@@ -68,6 +68,9 @@ public class ScriptPatchService {
         if (safePatch.containsKey("outputSchema")) {
             updated.setOutputSchema(applySchemaPatch(existing.getOutputSchema(), safePatch.get("outputSchema"), "outputSchema"));
         }
+        if (safePatch.containsKey("maxExecutionRecords")) {
+            applyMaxExecutionRecordsPatch(updated, safePatch.get("maxExecutionRecords"));
+        }
         return scriptApplicationService.save(updated);
     }
 
@@ -107,9 +110,20 @@ public class ScriptPatchService {
 
     private void applyPythonRequirementsPatch(ScriptDefinition definition, Object value) {
         if (value != null && !(value instanceof String)) {
-            throw new IllegalArgumentException("pythonRequirements 必须是字符串或 null");
+            throw new IllegalArgumentException("pythonRequirements 必须是字符串 or null");
         }
         definition.setPythonRequirements((String) value);
+    }
+
+    private void applyMaxExecutionRecordsPatch(ScriptDefinition definition, Object value) {
+        if (value == null) {
+            definition.setMaxExecutionRecords(1000);
+            return;
+        }
+        if (!(value instanceof Number number)) {
+            throw new IllegalArgumentException("maxExecutionRecords 必须是数字");
+        }
+        definition.setMaxExecutionRecords(number.intValue());
     }
 
     private Map<String, Object> applySchemaPatch(Map<String, Object> currentValue, Object patchValue, String fieldName) {

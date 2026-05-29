@@ -197,12 +197,27 @@ public class ExecutionApplicationService {
                     record.getInput(),
                     buildExecutionContext(definition, record, logCollector)
             );
-            return logCollector.completeSuccess(MapValueConverter.toResultMap(result));
+            ExecutionRecord successRecord = logCollector.completeSuccess(MapValueConverter.toResultMap(result));
+            cleanUpExecutionRecords(definition.getId(), definition.getMaxExecutionRecords());
+            return successRecord;
         } catch (Exception ex) {
-            return logCollector.completeFailure(ex);
+            ExecutionRecord failureRecord = logCollector.completeFailure(ex);
+            cleanUpExecutionRecords(definition.getId(), definition.getMaxExecutionRecords());
+            return failureRecord;
         } catch (Throwable t) {
             markFailedOnFatalError(record, t);
+            cleanUpExecutionRecords(definition.getId(), definition.getMaxExecutionRecords());
             throw t;
+        }
+    }
+
+    private void cleanUpExecutionRecords(String scriptId, Integer maxExecutionRecords) {
+        try {
+            int limit = maxExecutionRecords != null ? maxExecutionRecords : 1000;
+            executionRepository.keepLatest(scriptId, limit);
+        } catch (Exception e) {
+            System.getLogger(ExecutionApplicationService.class.getName())
+                    .log(System.Logger.Level.WARNING, "清理历史执行记录失败, scriptId: " + scriptId, e);
         }
     }
 

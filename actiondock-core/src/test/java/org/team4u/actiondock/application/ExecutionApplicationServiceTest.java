@@ -450,6 +450,25 @@ class ExecutionApplicationServiceTest {
                 .hasMessage("执行进行中，无法删除");
     }
 
+    @Test
+    void executeCleansUpExecutionRecords() {
+        scriptRepository.save(new ScriptDefinition().setId("script-cleanup").setMaxExecutionRecords(2));
+        when(scriptEngine.execute(any(), any(), any())).thenReturn(new LinkedHashMap<>());
+        ExecutionApplicationService service = new ExecutionApplicationService(
+                scriptRepository,
+                executionRepository,
+                scriptEngine,
+                Runnable::run
+        );
+
+        service.execute("script-cleanup", null, SubmitMode.SYNC);
+        service.execute("script-cleanup", null, SubmitMode.SYNC);
+        service.execute("script-cleanup", null, SubmitMode.SYNC);
+
+        List<ExecutionRecord> records = executionRepository.findByScriptId("script-cleanup");
+        assertThat(records).hasSize(2);
+    }
+
     private static ExecutionRecord record(String id, String scriptId, ExecutionStatus status) {
         return new ExecutionRecord()
                 .setId(id)
@@ -563,6 +582,21 @@ class ExecutionApplicationServiceTest {
         @Override
         public void deleteByScriptId(String scriptId) {
             store.entrySet().removeIf(entry -> scriptId.equals(entry.getValue().getScriptId()));
+        }
+
+        @Override
+        public void keepLatest(String scriptId, int limit) {
+            List<ExecutionRecord> records = store.values().stream()
+                    .filter(record -> scriptId.equals(record.getScriptId()))
+                    .sorted((r1, r2) -> {
+                        if (r1.getCreatedAt() == null) return 1;
+                        if (r2.getCreatedAt() == null) return -1;
+                        return r2.getCreatedAt().compareTo(r1.getCreatedAt());
+                    })
+                    .toList();
+            if (records.size() > limit) {
+                records.subList(limit, records.size()).forEach(record -> store.remove(record.getId()));
+            }
         }
 
         private static ExecutionRecord copy(ExecutionRecord source) {

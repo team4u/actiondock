@@ -72,4 +72,12 @@ public interface ExecutionRepository {
      * @param scriptId 脚本定义的唯一标识
      */
     void deleteByScriptId(String scriptId);
+
+    /**
+     * 保留最新指定数量的执行记录，删除超出部分的较旧记录。
+     *
+     * @param scriptId 脚本 ID
+     * @param limit    要保留的最新记录数
+     */
+    void keepLatest(String scriptId, int limit);
 }

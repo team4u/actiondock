@@ -23,4 +23,12 @@ public interface SpringDataExecutionEntityRepository extends JpaRepository<Execu
     @Transactional
     @Query("delete from ExecutionEntity e where e.scriptId = :scriptId")
     int deleteAllByScriptId(@Param("scriptId") String scriptId);
+
+    @Query("select e.id from ExecutionEntity e where e.scriptId = :scriptId order by e.createdAt desc")
+    List<String> findIdsByScriptIdOrderByCreatedAtDesc(@Param("scriptId") String scriptId);
+
+    @Modifying
+    @Transactional
+    @Query("delete from ExecutionEntity e where e.id in :ids")
+    int deleteByIds(@Param("ids") List<String> ids);
 }

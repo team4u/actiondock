@@ -1,5 +1,5 @@
 import { CodeOutlined } from "@ant-design/icons";
-import { Card, Empty, Form, Input, Row, Select, Space, Table, Tabs, Tag, Typography } from "antd";
+import { Card, Empty, Form, Input, InputNumber, Row, Select, Space, Table, Tabs, Tag, Typography } from "antd";
 import { Col } from "../../../../components/common/SafeCol";
 import { CodeEditor } from "../../../../components/common/CodeEditor";
 import { SchemaBuilder } from "../../../../components/schema/SchemaBuilder";
@@ -157,6 +157,27 @@ export function ScriptDefinitionTab({
                       { value: "TOOL", label: "TOOL" },
                       { value: "FLOW", label: "FLOW" }
                     ]}
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24}>
+                <Form.Item
+                  label="历史记录保留上限"
+                  name="maxExecutionRecords"
+                  tooltip="限制每个脚本最多保留的执行历史记录数量，默认 1000 条，超出限制将自动清理旧的历史记录。"
+                  rules={[
+                    {
+                      required: true,
+                      message: "请输入保留记录上限"
+                    }
+                  ]}
+                >
+                  <InputNumber
+                    style={{ width: "100%" }}
+                    min={1}
+                    max={100000}
+                    placeholder="默认 1000"
+                    disabled={isReadOnlyScript}
                   />
                 </Form.Item>
               </Col>

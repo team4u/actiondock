@@ -322,7 +322,7 @@ class ScriptControllerTest {
                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
-                .andExpect(jsonPath("$.msg").value("脚本 Patch 仅允许更新以下字段: name, description, source, pythonRequirements, inputSchema, outputSchema"))
+                .andExpect(jsonPath("$.msg").value("脚本 Patch 仅允许更新以下字段: name, description, source, pythonRequirements, inputSchema, outputSchema, maxExecutionRecords"))
                 .andExpect(jsonPath("$.data.code").value("INVALID_SCRIPT_PATCH"))
                 .andExpect(jsonPath("$.data.scriptId").value("script-1"))
                 .andExpect(jsonPath("$.data.rejectedFields[0]").value("status"))
@@ -331,7 +331,8 @@ class ScriptControllerTest {
                 .andExpect(jsonPath("$.data.allowedFields[2]").value("source"))
                 .andExpect(jsonPath("$.data.allowedFields[3]").value("pythonRequirements"))
                 .andExpect(jsonPath("$.data.allowedFields[4]").value("inputSchema"))
-                .andExpect(jsonPath("$.data.allowedFields[5]").value("outputSchema"));
+                .andExpect(jsonPath("$.data.allowedFields[5]").value("outputSchema"))
+                .andExpect(jsonPath("$.data.allowedFields[6]").value("maxExecutionRecords"));
     }
 
     @Test

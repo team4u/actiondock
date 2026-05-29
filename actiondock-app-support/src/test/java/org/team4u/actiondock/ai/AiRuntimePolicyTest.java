@@ -550,6 +550,19 @@ class AiRuntimePolicyTest {
         public void deleteById(String id) { values.remove(id); }
         public List<ExecutionRecord> findByScheduleId(String scheduleId) { return values.values().stream().filter(record -> scheduleId.equals(record.getScheduleId())).toList(); }
         public void deleteByScriptId(String scriptId) { values.values().removeIf(record -> scriptId.equals(record.getScriptId())); }
+        public void keepLatest(String scriptId, int limit) {
+            List<ExecutionRecord> records = values.values().stream()
+                    .filter(record -> scriptId.equals(record.getScriptId()))
+                    .sorted((r1, r2) -> {
+                        if (r1.getCreatedAt() == null) return 1;
+                        if (r2.getCreatedAt() == null) return -1;
+                        return r2.getCreatedAt().compareTo(r1.getCreatedAt());
+                    })
+                    .toList();
+            if (records.size() > limit) {
+                records.subList(limit, records.size()).forEach(record -> values.remove(record.getId()));
+            }
+        }
     }
 
     private static final class InMemoryPluginRegistryRepository implements PluginRegistryRepository {

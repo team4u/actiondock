@@ -70,6 +70,8 @@ public class ScriptEntity {
     private String aiDependenciesJson;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    @Column(name = "max_execution_records", nullable = false)
+    private Integer maxExecutionRecords = 1000;
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
@@ -129,4 +131,6 @@ public class ScriptEntity {
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+    public Integer getMaxExecutionRecords() { return maxExecutionRecords; }
+    public void setMaxExecutionRecords(Integer maxExecutionRecords) { this.maxExecutionRecords = maxExecutionRecords != null ? maxExecutionRecords : 1000; }
 }

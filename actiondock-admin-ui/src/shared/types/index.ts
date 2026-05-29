@@ -83,6 +83,7 @@ export interface ScriptDefinition {
   publication?: ScriptPublicationState;
   createdAt?: string;
   updatedAt?: string;
+  maxExecutionRecords?: number;
 }
 
 export interface PluginDependency {

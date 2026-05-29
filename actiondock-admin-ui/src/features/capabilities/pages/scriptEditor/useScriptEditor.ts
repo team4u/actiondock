@@ -113,7 +113,8 @@ export function useScriptEditor({
       type: script.type,
       packaging: script.packaging,
       description: script.description ?? "",
-      pythonRequirements: script.pythonRequirements ?? ""
+      pythonRequirements: script.pythonRequirements ?? "",
+      maxExecutionRecords: script.maxExecutionRecords ?? 1000
     });
     setSourceText(script.source);
     setInputSchemaState(deserializeSchema(script.inputSchema));
@@ -140,7 +141,8 @@ export function useScriptEditor({
       type: draft.type,
       packaging: draft.packaging,
       description: draft.description ?? "",
-      pythonRequirements: draft.pythonRequirements ?? ""
+      pythonRequirements: draft.pythonRequirements ?? "",
+      maxExecutionRecords: draft.maxExecutionRecords ?? 1000
     });
     form.setFields([{ name: "id", errors: [] }]);
     setSourceText(draft.source);
@@ -163,6 +165,7 @@ export function useScriptEditor({
         published: false,
         dirty: false
       },
+      maxExecutionRecords: 1000,
       version: 1
     });
   };
@@ -326,7 +329,8 @@ export function useScriptEditor({
       pluginDependencies: selectedScriptType === "GROOVY" ? detectedPluginDependencies : [],
       aiDependencies: selectedScriptType === "GROOVY" ? detectedAiDependencies : [],
       createdAt: currentScript?.createdAt,
-      updatedAt: currentScript?.updatedAt
+      updatedAt: currentScript?.updatedAt,
+      maxExecutionRecords: values.maxExecutionRecords
     };
   };
 

@@ -66,6 +66,15 @@ public class JpaExecutionRepositoryAdapter implements ExecutionRepository {
         repository.deleteAllByScriptId(scriptId);
     }
 
+    @Override
+    public void keepLatest(String scriptId, int limit) {
+        List<String> ids = repository.findIdsByScriptIdOrderByCreatedAtDesc(scriptId);
+        if (ids.size() > limit) {
+            List<String> idsToDelete = ids.subList(limit, ids.size());
+            repository.deleteByIds(idsToDelete);
+        }
+    }
+
     /**
      * 将执行记录领域对象转换为 JPA 实体。
      * <p>

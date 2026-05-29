@@ -109,6 +109,7 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
         entity.setAiDependenciesJson(jsonCodec.write(definition.getAiDependencies()));
         entity.setCreatedAt(definition.getCreatedAt());
         entity.setUpdatedAt(definition.getUpdatedAt());
+        entity.setMaxExecutionRecords(definition.getMaxExecutionRecords());
         return entity;
     }
 
@@ -143,7 +144,8 @@ public class JpaScriptRepositoryAdapter implements ScriptRepository {
                 .setPluginDependencies(jsonCodec.readList(entity.getPluginDependenciesJson(), PluginDependency.class))
                 .setAiDependencies(jsonCodec.readList(entity.getAiDependenciesJson(), AiDependency.class))
                 .setCreatedAt(entity.getCreatedAt())
-                .setUpdatedAt(entity.getUpdatedAt());
+                .setUpdatedAt(entity.getUpdatedAt())
+                .setMaxExecutionRecords(entity.getMaxExecutionRecords() == null ? 1000 : entity.getMaxExecutionRecords());
     }
 
     private PublishedScriptRevision resolvePublishedRevision(ScriptEntity entity) {

@@ -53,6 +53,7 @@ public final class ScriptViewMapper {
                         source.hasPublishedRevision() ? source.getVersion() : null,
                         source.getPublishedAt()
                 ),
+                source.getMaxExecutionRecords(),
                 source.getCreatedAt(),
                 source.getUpdatedAt()
         );

@@ -26,6 +26,7 @@ export interface ScriptEditorFormValues {
   packaging: ScriptPackaging;
   description?: string;
   pythonRequirements?: string;
+  maxExecutionRecords?: number;
 }
 
 export interface PublishToRepositoryFormValues {

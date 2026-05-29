@@ -39,6 +39,7 @@ public record ScriptDocumentView(
         List<AiDependency> aiDependencies,
         ScriptPublishedRevisionView published,
         ScriptPublicationView publication,
+        Integer maxExecutionRecords,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {
