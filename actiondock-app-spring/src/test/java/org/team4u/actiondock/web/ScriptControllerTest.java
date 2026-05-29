@@ -231,6 +231,51 @@ class ScriptControllerTest {
     }
 
     @Test
+    void patchUpdatesNameAndDescriptionWithoutResettingOtherFields() throws Exception {
+        when(scriptApplicationService.get("script-1")).thenReturn(new ScriptDefinition()
+                .setId("script-1")
+                .setName("Original")
+                .setSource("return [message: 'old']")
+                .setInputSchema(Map.of("type", "object"))
+                .setOutputSchema(Map.of("type", "object"))
+                .setDescription("old desc")
+                .setOwner("alice"));
+        when(scriptApplicationService.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        mockMvc.perform(patch("/api/scripts/script-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":" Updated ","description":" "}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.name").value("Updated"))
+                .andExpect(jsonPath("$.data.description").value(""))
+                .andExpect(jsonPath("$.data.source").value("return [message: 'old']"))
+                .andExpect(jsonPath("$.data.owner").value("alice"));
+    }
+
+    @Test
+    void patchRejectsInvalidNameAndDescriptionValues() throws Exception {
+        when(scriptApplicationService.get("script-1")).thenReturn(new ScriptDefinition().setId("script-1"));
+
+        mockMvc.perform(patch("/api/scripts/script-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":" "}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.msg").value("name 必须是非空字符串"));
+
+        mockMvc.perform(patch("/api/scripts/script-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"description":{"text":"desc"}}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.msg").value("description 必须是字符串"));
+    }
+
+    @Test
     void patchMergesNestedSchemaObjects() throws Exception {
         when(scriptApplicationService.get("script-1")).thenReturn(new ScriptDefinition()
                 .setId("script-1")
@@ -274,17 +319,19 @@ class ScriptControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                                 {"status":"PUBLISHED","source":"return [:]"}
-                                """))
+                """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
-                .andExpect(jsonPath("$.msg").value("脚本 Patch 仅允许更新以下字段: source, pythonRequirements, inputSchema, outputSchema"))
+                .andExpect(jsonPath("$.msg").value("脚本 Patch 仅允许更新以下字段: name, description, source, pythonRequirements, inputSchema, outputSchema"))
                 .andExpect(jsonPath("$.data.code").value("INVALID_SCRIPT_PATCH"))
                 .andExpect(jsonPath("$.data.scriptId").value("script-1"))
                 .andExpect(jsonPath("$.data.rejectedFields[0]").value("status"))
-                .andExpect(jsonPath("$.data.allowedFields[0]").value("source"))
-                .andExpect(jsonPath("$.data.allowedFields[1]").value("pythonRequirements"))
-                .andExpect(jsonPath("$.data.allowedFields[2]").value("inputSchema"))
-                .andExpect(jsonPath("$.data.allowedFields[3]").value("outputSchema"));
+                .andExpect(jsonPath("$.data.allowedFields[0]").value("name"))
+                .andExpect(jsonPath("$.data.allowedFields[1]").value("description"))
+                .andExpect(jsonPath("$.data.allowedFields[2]").value("source"))
+                .andExpect(jsonPath("$.data.allowedFields[3]").value("pythonRequirements"))
+                .andExpect(jsonPath("$.data.allowedFields[4]").value("inputSchema"))
+                .andExpect(jsonPath("$.data.allowedFields[5]").value("outputSchema"));
     }
 
     @Test

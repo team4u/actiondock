@@ -18,6 +18,15 @@ export default class ScriptPatchCommand extends BaseCommand {
         "patch-file": Flags.string({
             description: "Path to a JSON file containing a Merge Patch object"
         }),
+        name: Flags.string({
+            description: "Replace script name"
+        }),
+        description: Flags.string({
+            description: "Replace script description"
+        }),
+        desc: Flags.string({
+            description: "Alias for --description"
+        }),
         source: Flags.string({
             description: "Replace script source inline"
         }),
@@ -57,6 +66,16 @@ export default class ScriptPatchCommand extends BaseCommand {
         const { args, flags } = await this.parse(ScriptPatchCommand);
         try {
             const patch = parsePatchObject(flags["patch-json"], flags["patch-file"]);
+            if (flags.name !== undefined) {
+                setPatchField(patch, "name", flags.name);
+            }
+            if (flags.description !== undefined && flags.desc !== undefined) {
+                throw new ActionDockCliError("`--description` 和 `--desc` 不能同时使用。", 2);
+            }
+            const description = flags.description ?? flags.desc;
+            if (description !== undefined) {
+                setPatchField(patch, "description", description);
+            }
             const source = resolveScriptSource(flags.source, flags["source-file"], false);
             if (source !== undefined) {
                 setPatchField(patch, "source", source);

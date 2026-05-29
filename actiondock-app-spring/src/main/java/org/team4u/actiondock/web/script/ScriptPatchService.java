@@ -21,7 +21,7 @@ import java.util.Set;
 @Component
 public class ScriptPatchService {
 
-    private static final List<String> ALLOWED_PATCH_FIELDS = List.of("source", "pythonRequirements", "inputSchema", "outputSchema");
+    private static final List<String> ALLOWED_PATCH_FIELDS = List.of("name", "description", "source", "pythonRequirements", "inputSchema", "outputSchema");
     private static final Set<String> ALLOWED_PATCH_FIELD_SET = Set.copyOf(ALLOWED_PATCH_FIELDS);
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
     };
@@ -37,7 +37,7 @@ public class ScriptPatchService {
     /**
      * 对指定脚本定义应用 JSON Merge Patch。
      * <p>
-     * 仅允许补丁以下字段：source、pythonRequirements、inputSchema、outputSchema。
+     * 仅允许补丁以下字段：name、description、source、pythonRequirements、inputSchema、outputSchema。
      * 对 schema 字段采用 RFC 7396 递归合并策略。
      *
      * @param id   脚本 ID
@@ -50,6 +50,12 @@ public class ScriptPatchService {
 
         ScriptDefinition updated = objectMapper.convertValue(existing, ScriptDefinition.class);
         Map<String, Object> safePatch = patch == null ? Map.of() : patch;
+        if (safePatch.containsKey("name")) {
+            applyNamePatch(updated, safePatch.get("name"));
+        }
+        if (safePatch.containsKey("description")) {
+            applyDescriptionPatch(updated, safePatch.get("description"));
+        }
         if (safePatch.containsKey("source")) {
             applySourcePatch(updated, safePatch.get("source"));
         }
@@ -76,6 +82,20 @@ public class ScriptPatchService {
         if (!rejectedFields.isEmpty()) {
             throw new InvalidScriptPatchException(scriptId, rejectedFields, ALLOWED_PATCH_FIELDS);
         }
+    }
+
+    private void applyNamePatch(ScriptDefinition definition, Object value) {
+        if (!(value instanceof String text) || text.isBlank()) {
+            throw new IllegalArgumentException("name 必须是非空字符串");
+        }
+        definition.setName(text.trim());
+    }
+
+    private void applyDescriptionPatch(ScriptDefinition definition, Object value) {
+        if (!(value instanceof String text)) {
+            throw new IllegalArgumentException("description 必须是字符串");
+        }
+        definition.setDescription(text.trim());
     }
 
     private void applySourcePatch(ScriptDefinition definition, Object value) {

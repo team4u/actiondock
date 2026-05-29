@@ -49,11 +49,27 @@ export function parsePatchObject(patchJson, patchFile) {
     if (!isRecord(parsed)) {
         throw new ActionDockCliError("`--patch-json` / `--patch-file` 顶层必须是 JSON 对象。", 2);
     }
-    return { ...parsed };
+    return normalizeScriptPatchAliases({ ...parsed });
 }
 export function setPatchField(patch, field, value) {
     if (Object.hasOwn(patch, field)) {
         throw new ActionDockCliError(`Patch 字段重复定义: ${field}`, 2);
     }
     patch[field] = value;
+}
+function normalizeScriptPatchAliases(patch) {
+    movePatchAlias(patch, "desc", "description");
+    movePatchAlias(patch, "inputSchemaPatch", "inputSchema");
+    movePatchAlias(patch, "outputSchemaPatch", "outputSchema");
+    return patch;
+}
+function movePatchAlias(patch, alias, field) {
+    if (!Object.hasOwn(patch, alias)) {
+        return;
+    }
+    if (Object.hasOwn(patch, field)) {
+        throw new ActionDockCliError(`Patch 字段重复定义: ${field}`, 2);
+    }
+    patch[field] = patch[alias];
+    delete patch[alias];
 }

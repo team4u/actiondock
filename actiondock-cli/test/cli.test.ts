@@ -136,6 +136,24 @@ beforeAll(async () => {
       });
     }
 
+    if (req.method === "PATCH" && req.url === "/api/scripts/published-tool") {
+      return json(res, {
+        status: 0,
+        msg: "patched",
+        data: {
+          id: "published-tool",
+          name: body?.name ?? "Published Tool",
+          description: body?.description ?? "Generate a published greeting",
+          type: "GROOVY",
+          source: body?.source ?? "return [message: 'draft']",
+          inputSchema: body?.inputSchema ?? {},
+          outputSchema: body?.outputSchema ?? {},
+          publication: { published: true, dirty: true, publishedVersion: 7, publishedAt: "2026-04-01T00:00:00" },
+          published: null
+        }
+      });
+    }
+
     if (req.method === "DELETE" && req.url === "/api/scripts/published-tool") {
       return json(res, {
         status: 0,
@@ -1296,6 +1314,82 @@ describe("CLI integration", () => {
       mode: "SYNC",
       responseView: "RESULT"
     });
+  });
+
+  it("patches script metadata and schema aliases", async () => {
+    requests.length = 0;
+    const result = await runCli([
+      "script",
+      "patch",
+      "published-tool",
+      "--server",
+      baseUrl,
+      "--name",
+      "Updated Tool",
+      "--desc",
+      "Updated description",
+      "--input-schema-json",
+      '{"properties":{"enabled":{"type":"boolean"}}}',
+      "--json"
+    ]);
+
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual(
+      expect.objectContaining({
+        id: "published-tool",
+        name: "Updated Tool",
+        description: "Updated description"
+      })
+    );
+
+    const patchRequest = requests.find((item) => item.method === "PATCH" && item.url === "/api/scripts/published-tool");
+    expect(patchRequest?.body).toEqual({
+      name: "Updated Tool",
+      description: "Updated description",
+      inputSchema: {
+        properties: {
+          enabled: { type: "boolean" }
+        }
+      }
+    });
+
+    requests.length = 0;
+    const aliasResult = await runCli([
+      "script",
+      "patch",
+      "published-tool",
+      "--server",
+      baseUrl,
+      "--patch-json",
+      '{"desc":"Alias description","inputSchemaPatch":{"required":["enabled"]},"outputSchemaPatch":{"type":"object"}}',
+      "--json"
+    ]);
+    expect(aliasResult.status).toBe(0);
+    expect(requests.find((item) => item.method === "PATCH" && item.url === "/api/scripts/published-tool")?.body).toEqual({
+      description: "Alias description",
+      inputSchema: { required: ["enabled"] },
+      outputSchema: { type: "object" }
+    });
+  });
+
+  it("rejects duplicate script patch aliases", async () => {
+    const result = await runCli([
+      "script",
+      "patch",
+      "published-tool",
+      "--server",
+      baseUrl,
+      "--patch-json",
+      '{"description":"canonical","desc":"alias"}',
+      "--json"
+    ]);
+
+    expect(result.status).toBe(2);
+    expect(JSON.parse(result.stderr)).toEqual(
+      expect.objectContaining({
+        error: "Patch 字段重复定义: description"
+      })
+    );
   });
 
   it("reads script detail for draft with json output", async () => {

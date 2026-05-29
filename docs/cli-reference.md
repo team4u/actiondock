@@ -167,11 +167,21 @@ actiondock script create \
 # 更新源码
 actiondock script patch <id> --source-file ./new-source.groovy
 
-# 更新其他字段
+# 更新名称和描述
 actiondock script patch <id> --name "New Name"
+
+actiondock script patch <id> --description "New description"
+
+# 更新 inputSchema。对象字段会递归合并，数组会整体替换。
+actiondock script patch <id> \
+  --input-schema-json '{"properties":{"enabled":{"type":"boolean"}},"required":["enabled"]}'
+
+# 删除 schema 内字段用 null
+actiondock script patch <id> \
+  --input-schema-json '{"properties":{"oldField":null}}'
 ```
 
-`patch` 命令支持 JSON Merge Patch (RFC 7396) 部分更新。
+`patch` 命令支持 JSON Merge Patch (RFC 7396) 部分更新。允许更新的顶层字段是 `name`、`description`、`source`、`pythonRequirements`、`inputSchema`、`outputSchema`；`--desc` 是 `--description` 的别名。`--patch-json` / `--patch-file` 也兼容 AI Schema Patch 提案里的 `inputSchemaPatch`、`outputSchemaPatch`，CLI 会分别转换为后端字段 `inputSchema`、`outputSchema`。
 
 ### 校验和发布
 

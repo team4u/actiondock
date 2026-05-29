@@ -65,16 +65,34 @@ export function parsePatchObject(
   if (!isRecord(parsed)) {
     throw new ActionDockCliError("`--patch-json` / `--patch-file` 顶层必须是 JSON 对象。", 2);
   }
-  return { ...parsed };
+  return normalizeScriptPatchAliases({ ...parsed });
 }
 
 export function setPatchField(
   patch: Record<string, unknown>,
-  field: "source" | "pythonRequirements" | "inputSchema" | "outputSchema",
+  field: "name" | "description" | "source" | "pythonRequirements" | "inputSchema" | "outputSchema",
   value: unknown
 ): void {
   if (Object.hasOwn(patch, field)) {
     throw new ActionDockCliError(`Patch 字段重复定义: ${field}`, 2);
   }
   patch[field] = value;
+}
+
+function normalizeScriptPatchAliases(patch: Record<string, unknown>): Record<string, unknown> {
+  movePatchAlias(patch, "desc", "description");
+  movePatchAlias(patch, "inputSchemaPatch", "inputSchema");
+  movePatchAlias(patch, "outputSchemaPatch", "outputSchema");
+  return patch;
+}
+
+function movePatchAlias(patch: Record<string, unknown>, alias: string, field: string): void {
+  if (!Object.hasOwn(patch, alias)) {
+    return;
+  }
+  if (Object.hasOwn(patch, field)) {
+    throw new ActionDockCliError(`Patch 字段重复定义: ${field}`, 2);
+  }
+  patch[field] = patch[alias];
+  delete patch[alias];
 }
