@@ -48,6 +48,8 @@ class RepositoryAiPackageService {
                 repos.executionPresetRepository(),
                 repos.configValueRepository(),
                 repos.aiAgentProfileRepository(),
+                repos.playbookGroupRepository(),
+                repos.playbookRepository(),
                 dependencyCollector
         );
     }
@@ -103,6 +105,8 @@ class RepositoryAiPackageService {
                     new ArrayList<>(draft.bundle().toolsets().values()),
                     new ArrayList<>(draft.bundle().agents().values()),
                     new ArrayList<>(draft.bundle().scripts().values()),
+                    draft.playbookGroups(),
+                    draft.playbooks(),
                     draft.bundle().externalDependencies().values().stream().toList(),
                     draft.configTemplate().isEmpty() ? null : "config.template.json",
                     draft.scheduleTemplate().isEmpty() ? null : "schedules.template.json",

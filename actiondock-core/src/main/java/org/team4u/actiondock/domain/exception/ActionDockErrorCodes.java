@@ -23,6 +23,11 @@ public final class ActionDockErrorCodes {
     public static final String PLUGIN_NOT_STARTED = "PLUGIN_NOT_STARTED";
     public static final String PLUGIN_SYSTEM_OPERATION_UNSUPPORTED = "PLUGIN_SYSTEM_OPERATION_UNSUPPORTED";
     public static final String PLUGIN_VERSION_CONFLICT = "PLUGIN_VERSION_CONFLICT";
+    public static final String PLAYBOOK_GROUP_IN_USE = "PLAYBOOK_GROUP_IN_USE";
+    public static final String PLAYBOOK_GROUP_NOT_EDITABLE = "PLAYBOOK_GROUP_NOT_EDITABLE";
+    public static final String PLAYBOOK_GROUP_NOT_FOUND = "PLAYBOOK_GROUP_NOT_FOUND";
+    public static final String PLAYBOOK_NOT_EDITABLE = "PLAYBOOK_NOT_EDITABLE";
+    public static final String PLAYBOOK_NOT_FOUND = "PLAYBOOK_NOT_FOUND";
     public static final String PRESET_NOT_EDITABLE = "PRESET_NOT_EDITABLE";
     public static final String PRESET_NOT_FOUND = "PRESET_NOT_FOUND";
     public static final String PRESET_SCRIPT_MISMATCH = "PRESET_SCRIPT_MISMATCH";

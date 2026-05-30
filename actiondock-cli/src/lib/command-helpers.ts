@@ -69,3 +69,13 @@ export function resolveOutputPath(output: string | undefined, defaultFilename: s
   }
   return outputPath;
 }
+
+export function readDefinitionFile<T>(definitionFile: string): T {
+  const text = fs.readFileSync(definitionFile, "utf8");
+  try {
+    return JSON.parse(text) as T;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new ActionDockCliError(`definition file 不是合法 JSON: ${detail}`, 2);
+  }
+}

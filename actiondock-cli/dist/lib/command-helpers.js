@@ -55,3 +55,13 @@ export function resolveOutputPath(output, defaultFilename, force = false) {
     }
     return outputPath;
 }
+export function readDefinitionFile(definitionFile) {
+    const text = fs.readFileSync(definitionFile, "utf8");
+    try {
+        return JSON.parse(text);
+    }
+    catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        throw new ActionDockCliError(`definition file 不是合法 JSON: ${detail}`, 2);
+    }
+}

@@ -115,6 +115,76 @@ export interface ExecutionPresetUpsertRequest {
   input: Record<string, unknown>;
 }
 
+export type PlaybookRiskLevel = "LOW" | "MEDIUM" | "HIGH";
+
+export interface PlaybookGroup {
+  id: string;
+  name: string;
+  description?: string | null;
+  tags?: string[];
+  defaultRepositoryIds?: string[];
+  enabled?: boolean;
+  managed?: boolean;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  playbookCount?: number;
+}
+
+export interface PlaybookKnowledgeRef {
+  type: "ENTRY" | "FILE";
+  repositoryId: string;
+  path: string;
+}
+
+export interface PlaybookScriptRef {
+  scriptId: string;
+  purpose?: string | null;
+}
+
+export interface Playbook {
+  id: string;
+  groupId: string;
+  name: string;
+  description?: string | null;
+  intentAliases?: string[];
+  tags?: string[];
+  riskLevel?: PlaybookRiskLevel | null;
+  repositoryIds?: string[];
+  knowledgeRefs?: PlaybookKnowledgeRef[];
+  scriptRefs?: PlaybookScriptRef[];
+  guideMarkdown: string;
+  stopConditions?: string[];
+  enabled?: boolean;
+  managed?: boolean;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface PlaybookGuideView {
+  playbook: Playbook;
+  group: PlaybookGroup;
+  knowledgeRefs: PlaybookKnowledgeRef[];
+  scriptRefs: PlaybookScriptRef[];
+  guideMarkdown: string;
+  stopConditions: string[];
+}
+
+export interface PlaybookResolveRequest {
+  intent: string;
+  repositoryId?: string;
+  groupId?: string;
+  tags?: string[];
+}
+
+export interface PlaybookResolveMatch {
+  score: number;
+  playbook: Playbook;
+  group?: PlaybookGroup | null;
+  riskLevel?: PlaybookRiskLevel | null;
+  knowledgeRefCount: number;
+  scriptRefCount: number;
+}
+
 export interface WebhookTransport {
   type?: string;
   endpointPath?: string;

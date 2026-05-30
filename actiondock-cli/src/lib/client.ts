@@ -31,6 +31,11 @@ import type {
   RepositoryInstallRequest,
   RepositoryKnowledgeDescriptor,
   RepositoryKnowledgeDetail,
+  Playbook,
+  PlaybookGroup,
+  PlaybookGuideView,
+  PlaybookResolveMatch,
+  PlaybookResolveRequest,
   ResourceLifecycleOperationView,
   RepositoryScriptDescriptor,
   RepositoryScriptDetail,
@@ -742,6 +747,88 @@ export class ActionDockClient {
   async uninstallRepositoryKnowledge(repositoryId: string, knowledgeId: string): Promise<void> {
     await this.requestJson<null>(`/api/repositories/${repositoryId}/knowledge/${knowledgeId}`, {
       method: "DELETE"
+    });
+  }
+
+  async listPlaybookGroups(): Promise<PlaybookGroup[]> {
+    return this.requestJson<PlaybookGroup[]>("/api/playbook-groups");
+  }
+
+  async getPlaybookGroup(groupId: string): Promise<PlaybookGroup> {
+    return this.requestJson<PlaybookGroup>(`/api/playbook-groups/${groupId}`);
+  }
+
+  async createPlaybookGroup(payload: PlaybookGroup): Promise<PlaybookGroup> {
+    return this.requestJson<PlaybookGroup>("/api/playbook-groups", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async updatePlaybookGroup(groupId: string, payload: PlaybookGroup): Promise<PlaybookGroup> {
+    return this.requestJson<PlaybookGroup>(`/api/playbook-groups/${groupId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async deletePlaybookGroup(groupId: string): Promise<void> {
+    await this.requestJson<null>(`/api/playbook-groups/${groupId}`, {
+      method: "DELETE"
+    });
+  }
+
+  async listPlaybooks(params: {
+    groupId?: string;
+    repositoryId?: string;
+    tag?: string;
+    enabled?: boolean;
+    managed?: boolean;
+    keyword?: string;
+  } = {}): Promise<Playbook[]> {
+    const search = new URLSearchParams();
+    if (params.groupId) search.set("groupId", params.groupId);
+    if (params.repositoryId) search.set("repositoryId", params.repositoryId);
+    if (params.tag) search.set("tag", params.tag);
+    if (params.enabled !== undefined) search.set("enabled", String(params.enabled));
+    if (params.managed !== undefined) search.set("managed", String(params.managed));
+    if (params.keyword) search.set("keyword", params.keyword);
+    const suffix = search.toString() ? `?${search.toString()}` : "";
+    return this.requestJson<Playbook[]>(`/api/playbooks${suffix}`);
+  }
+
+  async getPlaybook(playbookId: string): Promise<Playbook> {
+    return this.requestJson<Playbook>(`/api/playbooks/${playbookId}`);
+  }
+
+  async createPlaybook(payload: Playbook): Promise<Playbook> {
+    return this.requestJson<Playbook>("/api/playbooks", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async updatePlaybook(playbookId: string, payload: Playbook): Promise<Playbook> {
+    return this.requestJson<Playbook>(`/api/playbooks/${playbookId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async deletePlaybook(playbookId: string): Promise<void> {
+    await this.requestJson<null>(`/api/playbooks/${playbookId}`, {
+      method: "DELETE"
+    });
+  }
+
+  async getPlaybookGuide(playbookId: string): Promise<PlaybookGuideView> {
+    return this.requestJson<PlaybookGuideView>(`/api/playbooks/${playbookId}/guide`);
+  }
+
+  async resolvePlaybooks(payload: PlaybookResolveRequest): Promise<PlaybookResolveMatch[]> {
+    return this.requestJson<PlaybookResolveMatch[]>("/api/playbooks/resolve", {
+      method: "POST",
+      body: JSON.stringify(payload)
     });
   }
 

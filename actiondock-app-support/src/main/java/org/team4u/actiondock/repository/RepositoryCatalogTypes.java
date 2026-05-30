@@ -5,6 +5,8 @@ import org.team4u.actiondock.domain.exception.RepositoryVersionExistsException;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
 import org.team4u.actiondock.domain.exception.RepositoryPluginConflict;
 import org.team4u.actiondock.domain.model.AiDependency;
+import org.team4u.actiondock.domain.model.Playbook;
+import org.team4u.actiondock.domain.model.PlaybookGroup;
 import org.team4u.actiondock.domain.model.WebhookTransport;
 import org.team4u.actiondock.domain.model.PluginDependency;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
@@ -398,7 +400,9 @@ public final class RepositoryCatalogTypes {
             List<String> scriptIds,
             List<String> agentIds,
             List<String> modelIds,
-            List<String> toolsetIds
+            List<String> toolsetIds,
+            List<String> playbookGroupIds,
+            List<String> playbookIds
     ) {
     }
 
@@ -410,6 +414,8 @@ public final class RepositoryCatalogTypes {
             List<String> toolsetIds,
             List<String> agentIds,
             List<String> scriptIds,
+            List<String> playbookGroupIds,
+            List<String> playbookIds,
             List<ConfigTemplateItem> configTemplate,
             List<ScheduleTemplateItem> scheduleTemplate,
             List<CapabilityPackagePresetTemplate> presetTemplate,
@@ -781,6 +787,8 @@ public final class RepositoryCatalogTypes {
                                                List<AiPackageToolsetFile> toolsets,
                                                List<AiPackageAgentFile> agents,
                                                List<AiPackageScriptFile> scripts,
+                                               List<PlaybookGroup> playbookGroups,
+                                               List<Playbook> playbooks,
                                                List<RepositoryAiPackageDependency> externalDependencies,
                                                String configTemplatePath,
                                                String scheduleTemplatePath,
@@ -804,6 +812,8 @@ public final class RepositoryCatalogTypes {
                                           CapabilityPackageSource source,
                                           List<CapabilityPackageEntryFile> entries,
                                           AiPackageBundle bundle,
+                                          List<PlaybookGroup> playbookGroups,
+                                          List<Playbook> playbooks,
                                           List<ConfigTemplateItem> configTemplate,
                                           List<ScheduleTemplateItem> scheduleTemplate,
                                           List<CapabilityPackagePresetTemplate> presetTemplate) {

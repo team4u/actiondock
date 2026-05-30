@@ -7,6 +7,8 @@ import org.team4u.actiondock.application.ConfigValueApplicationService;
 import org.team4u.actiondock.application.ScriptApplicationService;
 import org.team4u.actiondock.config.AppProperties;
 import org.team4u.actiondock.domain.model.AiDependency;
+import org.team4u.actiondock.domain.model.Playbook;
+import org.team4u.actiondock.domain.model.PlaybookGroup;
 import org.team4u.actiondock.domain.model.WebhookDefinition;
 import org.team4u.actiondock.domain.model.WebhookScope;
 import org.team4u.actiondock.domain.model.WebhookResponsePayload;
@@ -25,6 +27,8 @@ import org.team4u.actiondock.domain.port.ExecutionPresetRepository;
 import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.domain.port.CapabilityPackageInstallationRepository;
 import org.team4u.actiondock.domain.port.ManagedSkillRepository;
+import org.team4u.actiondock.domain.port.PlaybookGroupRepository;
+import org.team4u.actiondock.domain.port.PlaybookRepository;
 import org.team4u.actiondock.domain.port.RepositoryDefinitionRepository;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
@@ -87,8 +91,40 @@ public class RepositoryCatalogService {
             org.team4u.actiondock.domain.port.RepositoryLocalAssetRepository repositoryLocalAssetRepository,
             AiModelProfileRepository aiModelProfileRepository,
             AiAgentProfileRepository aiAgentProfileRepository,
-            AiToolsetRepository aiToolsetRepository
-    ) {}
+            AiToolsetRepository aiToolsetRepository,
+            PlaybookGroupRepository playbookGroupRepository,
+            PlaybookRepository playbookRepository
+    ) {
+        public Repositories(RepositoryDefinitionRepository repositoryDefinitionRepository,
+                            CapabilityPackageInstallationRepository capabilityPackageInstallationRepository,
+                            ManagedSkillRepository managedSkillRepository,
+                            ScriptRepository scriptRepository,
+                            ScriptScheduleRepository scriptScheduleRepository,
+                            ExecutionPresetRepository executionPresetRepository,
+                            ConfigValueRepository configValueRepository,
+                            org.team4u.actiondock.domain.port.WebhookRepository webhookRepository,
+                            org.team4u.actiondock.domain.port.RepositoryLocalAssetRepository repositoryLocalAssetRepository,
+                            AiModelProfileRepository aiModelProfileRepository,
+                            AiAgentProfileRepository aiAgentProfileRepository,
+                            AiToolsetRepository aiToolsetRepository) {
+            this(
+                    repositoryDefinitionRepository,
+                    capabilityPackageInstallationRepository,
+                    managedSkillRepository,
+                    scriptRepository,
+                    scriptScheduleRepository,
+                    executionPresetRepository,
+                    configValueRepository,
+                    webhookRepository,
+                    repositoryLocalAssetRepository,
+                    aiModelProfileRepository,
+                    aiAgentProfileRepository,
+                    aiToolsetRepository,
+                    emptyPlaybookGroupRepository(),
+                    emptyPlaybookRepository()
+            );
+        }
+    }
 
     /**
      * 应用服务分组，将所有应用层服务聚合为一个上下文。
@@ -531,12 +567,60 @@ public class RepositoryCatalogService {
         deleteAllByIds(installation.getToolsetIds(), repos.aiToolsetRepository()::deleteById);
         deleteAllByIds(installation.getModelIds(), repos.aiModelProfileRepository()::deleteById);
         deleteAllByIds(installation.getScheduleIds(), repos.scriptScheduleRepository()::deleteById);
+        deleteAllByIds(installation.getPlaybookIds(), repos.playbookRepository()::deleteById);
+        deleteAllByIds(installation.getPlaybookGroupIds(), repos.playbookGroupRepository()::deleteById);
     }
 
     private static void deleteAllByIds(List<String> ids, java.util.function.Consumer<String> deleter) {
         for (String id : ids) {
             deleter.accept(id);
         }
+    }
+
+    private static PlaybookGroupRepository emptyPlaybookGroupRepository() {
+        return new PlaybookGroupRepository() {
+            @Override
+            public PlaybookGroup save(PlaybookGroup group) {
+                return group;
+            }
+
+            @Override
+            public Optional<PlaybookGroup> findById(String id) {
+                return Optional.empty();
+            }
+
+            @Override
+            public List<PlaybookGroup> findAll() {
+                return List.of();
+            }
+
+            @Override
+            public void deleteById(String id) {
+            }
+        };
+    }
+
+    private static PlaybookRepository emptyPlaybookRepository() {
+        return new PlaybookRepository() {
+            @Override
+            public Playbook save(Playbook playbook) {
+                return playbook;
+            }
+
+            @Override
+            public Optional<Playbook> findById(String id) {
+                return Optional.empty();
+            }
+
+            @Override
+            public List<Playbook> findAll() {
+                return List.of();
+            }
+
+            @Override
+            public void deleteById(String id) {
+            }
+        };
     }
 
     RepositoryCatalogTypes.ToolSourceState resolveToolSourceState(RepositoryDefinition repository, RepositoryCatalogTypes.RepositoryScriptDetail detail) {

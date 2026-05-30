@@ -10,6 +10,9 @@ import org.team4u.actiondock.ai.api.AiToolPermission;
 import org.team4u.actiondock.ai.api.AiToolset;
 import org.team4u.actiondock.domain.model.CapabilityPackageInstallation;
 import org.team4u.actiondock.domain.model.ExecutionPreset;
+import org.team4u.actiondock.domain.model.Playbook;
+import org.team4u.actiondock.domain.model.PlaybookGroup;
+import org.team4u.actiondock.domain.model.PlaybookScriptRef;
 import org.team4u.actiondock.domain.model.PluginRegistration;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
@@ -182,7 +185,9 @@ public class RepositoryCapabilityPackageService {
             List<String> scriptIds,
             List<String> agentIds,
             List<String> scheduleIds,
-            List<String> presetIds
+            List<String> presetIds,
+            List<String> playbookGroupIds,
+            List<String> playbookIds
     ) {}
 
     private InstalledAssets installAllAssets(CapabilityPackageDetail detail, InstallationContext ctx) {
@@ -192,7 +197,9 @@ public class RepositoryCapabilityPackageService {
                 installScripts(ctx),
                 installAgents(ctx),
                 installSchedules(detail, ctx),
-                installPresets(detail, ctx)
+                installPresets(detail, ctx),
+                installPlaybookGroups(ctx),
+                installPlaybooks(ctx)
         );
     }
 
@@ -220,6 +227,8 @@ public class RepositoryCapabilityPackageService {
                 .setScriptIds(assets.scriptIds())
                 .setScheduleIds(assets.scheduleIds())
                 .setPresetIds(assets.presetIds())
+                .setPlaybookGroupIds(assets.playbookGroupIds())
+                .setPlaybookIds(assets.playbookIds())
                 .setInstalledAt(existing == null ? ctx.now : Optional.ofNullable(existing.getInstalledAt()).orElse(ctx.now))
                 .setUpdatedAt(ctx.now);
         return new CapabilityPackageInstallResult(
@@ -309,7 +318,9 @@ public class RepositoryCapabilityPackageService {
             Map<String, String> modelIdMappings,
             Map<String, String> toolsetIdMappings,
             Map<String, String> agentIdMappings,
-            Map<String, String> scriptIdMappings
+            Map<String, String> scriptIdMappings,
+            Map<String, String> playbookGroupIdMappings,
+            Map<String, String> playbookIdMappings
     ) {}
 
     private static InstallationContext buildInstallationContext(String repositoryId,
@@ -331,8 +342,17 @@ public class RepositoryCapabilityPackageService {
         for (AiPackageScriptFile script : NormalizeUtils.nullSafeList(release == null ? null : release.scripts())) {
             scriptIdMappings.put(script.id(), RepositoryCatalogTypes.aiPackageInternalId(repositoryId, packageId, "script", script.id()));
         }
+        Map<String, String> playbookGroupIdMappings = new LinkedHashMap<>();
+        Map<String, String> playbookIdMappings = new LinkedHashMap<>();
+        for (PlaybookGroup group : NormalizeUtils.nullSafeList(release == null ? null : release.playbookGroups())) {
+            playbookGroupIdMappings.put(group.getId(), RepositoryCatalogTypes.aiPackageInternalId(repositoryId, packageId, "playbook-group", group.getId()));
+        }
+        for (Playbook playbook : NormalizeUtils.nullSafeList(release == null ? null : release.playbooks())) {
+            playbookIdMappings.put(playbook.getId(), RepositoryCatalogTypes.aiPackageInternalId(repositoryId, packageId, "playbook", playbook.getId()));
+        }
         return new InstallationContext(repositoryId, packageId, LocalDateTime.now(),
-                release, modelIdMappings, toolsetIdMappings, agentIdMappings, scriptIdMappings);
+                release, modelIdMappings, toolsetIdMappings, agentIdMappings, scriptIdMappings,
+                playbookGroupIdMappings, playbookIdMappings);
     }
 
     private List<String> installModels(InstallationContext ctx) {
@@ -494,6 +514,62 @@ public class RepositoryCapabilityPackageService {
             installedIds.add(preset.getId());
         }
         return installedIds;
+    }
+
+    private List<String> installPlaybookGroups(InstallationContext ctx) {
+        List<String> installedIds = new ArrayList<>();
+        for (PlaybookGroup group : NormalizeUtils.nullSafeList(ctx.release == null ? null : ctx.release.playbookGroups())) {
+            String runtimeGroupId = ctx.playbookGroupIdMappings.get(group.getId());
+            PlaybookGroup value = new PlaybookGroup()
+                    .setId(runtimeGroupId)
+                    .setName(group.getName())
+                    .setDescription(group.getDescription())
+                    .setTags(group.getTags())
+                    .setDefaultRepositoryIds(group.getDefaultRepositoryIds())
+                    .setEnabled(group.isEnabled())
+                    .setManaged(true)
+                    .setCreatedAt(ctx.now)
+                    .setUpdatedAt(ctx.now);
+            repos.playbookGroupRepository().save(value);
+            installedIds.add(runtimeGroupId);
+        }
+        return installedIds;
+    }
+
+    private List<String> installPlaybooks(InstallationContext ctx) {
+        List<String> installedIds = new ArrayList<>();
+        for (Playbook playbook : NormalizeUtils.nullSafeList(ctx.release == null ? null : ctx.release.playbooks())) {
+            String runtimePlaybookId = ctx.playbookIdMappings.get(playbook.getId());
+            String runtimeGroupId = ctx.playbookGroupIdMappings.getOrDefault(playbook.getGroupId(), playbook.getGroupId());
+            Playbook value = new Playbook()
+                    .setId(runtimePlaybookId)
+                    .setGroupId(runtimeGroupId)
+                    .setName(playbook.getName())
+                    .setDescription(playbook.getDescription())
+                    .setIntentAliases(playbook.getIntentAliases())
+                    .setTags(playbook.getTags())
+                    .setRiskLevel(playbook.getRiskLevel())
+                    .setRepositoryIds(playbook.getRepositoryIds())
+                    .setKnowledgeRefs(playbook.getKnowledgeRefs())
+                    .setScriptRefs(rewritePlaybookScriptRefs(playbook.getScriptRefs(), ctx.scriptIdMappings))
+                    .setGuideMarkdown(playbook.getGuideMarkdown())
+                    .setStopConditions(playbook.getStopConditions())
+                    .setEnabled(playbook.isEnabled())
+                    .setManaged(true)
+                    .setCreatedAt(ctx.now)
+                    .setUpdatedAt(ctx.now);
+            repos.playbookRepository().save(value);
+            installedIds.add(runtimePlaybookId);
+        }
+        return installedIds;
+    }
+
+    private List<PlaybookScriptRef> rewritePlaybookScriptRefs(List<PlaybookScriptRef> refs, Map<String, String> scriptIdMappings) {
+        return NormalizeUtils.nullSafeList(refs).stream()
+                .map(ref -> new PlaybookScriptRef()
+                        .setScriptId(scriptIdMappings.getOrDefault(ref.getScriptId(), ref.getScriptId()))
+                        .setPurpose(ref.getPurpose()))
+                .toList();
     }
 
 }

@@ -552,6 +552,75 @@ export class ActionDockClient {
             method: "DELETE"
         });
     }
+    async listPlaybookGroups() {
+        return this.requestJson("/api/playbook-groups");
+    }
+    async getPlaybookGroup(groupId) {
+        return this.requestJson(`/api/playbook-groups/${groupId}`);
+    }
+    async createPlaybookGroup(payload) {
+        return this.requestJson("/api/playbook-groups", {
+            method: "POST",
+            body: JSON.stringify(payload)
+        });
+    }
+    async updatePlaybookGroup(groupId, payload) {
+        return this.requestJson(`/api/playbook-groups/${groupId}`, {
+            method: "PUT",
+            body: JSON.stringify(payload)
+        });
+    }
+    async deletePlaybookGroup(groupId) {
+        await this.requestJson(`/api/playbook-groups/${groupId}`, {
+            method: "DELETE"
+        });
+    }
+    async listPlaybooks(params = {}) {
+        const search = new URLSearchParams();
+        if (params.groupId)
+            search.set("groupId", params.groupId);
+        if (params.repositoryId)
+            search.set("repositoryId", params.repositoryId);
+        if (params.tag)
+            search.set("tag", params.tag);
+        if (params.enabled !== undefined)
+            search.set("enabled", String(params.enabled));
+        if (params.managed !== undefined)
+            search.set("managed", String(params.managed));
+        if (params.keyword)
+            search.set("keyword", params.keyword);
+        const suffix = search.toString() ? `?${search.toString()}` : "";
+        return this.requestJson(`/api/playbooks${suffix}`);
+    }
+    async getPlaybook(playbookId) {
+        return this.requestJson(`/api/playbooks/${playbookId}`);
+    }
+    async createPlaybook(payload) {
+        return this.requestJson("/api/playbooks", {
+            method: "POST",
+            body: JSON.stringify(payload)
+        });
+    }
+    async updatePlaybook(playbookId, payload) {
+        return this.requestJson(`/api/playbooks/${playbookId}`, {
+            method: "PUT",
+            body: JSON.stringify(payload)
+        });
+    }
+    async deletePlaybook(playbookId) {
+        await this.requestJson(`/api/playbooks/${playbookId}`, {
+            method: "DELETE"
+        });
+    }
+    async getPlaybookGuide(playbookId) {
+        return this.requestJson(`/api/playbooks/${playbookId}/guide`);
+    }
+    async resolvePlaybooks(payload) {
+        return this.requestJson("/api/playbooks/resolve", {
+            method: "POST",
+            body: JSON.stringify(payload)
+        });
+    }
     async requestJson(pathname, init) {
         const url = new URL(`${this.options.serverUrl}${pathname}`);
         const method = init?.method ?? "GET";

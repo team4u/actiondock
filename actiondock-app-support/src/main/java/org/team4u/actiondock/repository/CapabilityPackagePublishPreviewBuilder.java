@@ -32,6 +32,8 @@ final class CapabilityPackagePublishPreviewBuilder {
                 draft.bundle().toolsets().keySet().stream().sorted().toList(),
                 draft.bundle().agents().keySet().stream().sorted().toList(),
                 draft.bundle().scripts().keySet().stream().sorted().toList(),
+                draft.playbookGroups().stream().map(org.team4u.actiondock.domain.model.PlaybookGroup::getId).sorted().toList(),
+                draft.playbooks().stream().map(org.team4u.actiondock.domain.model.Playbook::getId).sorted().toList(),
                 draft.configTemplate(),
                 draft.scheduleTemplate(),
                 draft.presetTemplate(),
@@ -85,6 +87,12 @@ final class CapabilityPackagePublishPreviewBuilder {
         collectChangedAsset(changedAssets, "models", currentPackage,
                 currentPackage == null ? null : currentPackage.releaseFile().models().stream().map(AiPackageModelFile::id).toList(),
                 draft.bundle().models().keySet().stream().toList());
+        collectChangedAsset(changedAssets, "playbookGroups", currentPackage,
+                currentPackage == null ? null : currentPackage.releaseFile().playbookGroups().stream().map(org.team4u.actiondock.domain.model.PlaybookGroup::getId).toList(),
+                draft.playbookGroups().stream().map(org.team4u.actiondock.domain.model.PlaybookGroup::getId).toList());
+        collectChangedAsset(changedAssets, "playbooks", currentPackage,
+                currentPackage == null ? null : currentPackage.releaseFile().playbooks().stream().map(org.team4u.actiondock.domain.model.Playbook::getId).toList(),
+                draft.playbooks().stream().map(org.team4u.actiondock.domain.model.Playbook::getId).toList());
         return new CapabilityPackageDiffSummary(
                 currentPackage == null ? "INITIAL" : "COMPARE",
                 addedEntries,

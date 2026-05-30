@@ -83,6 +83,27 @@ mvn -pl actiondock-app-spring -am -DskipTests spring-boot:run
 
 > 完整安装方式和第一个脚本教程请阅读 [快速开始](docs/quick-start.md)。
 
+## 任务手册（Playbook）
+
+```bash
+actiondock playbook list
+actiondock playbook get refund-failure
+actiondock playbook guide refund-failure
+actiondock playbook resolve --intent "退款失败" --repository-id billing-service --json
+
+actiondock playbook create --definition-file ./playbook.json
+actiondock playbook update refund-failure --definition-file ./playbook.json
+actiondock playbook delete refund-failure
+
+actiondock playbook-group list
+actiondock playbook-group get billing-diagnosis
+actiondock playbook-group create --definition-file ./group.json
+actiondock playbook-group update billing-diagnosis --definition-file ./group.json
+actiondock playbook-group delete billing-diagnosis
+```
+
+`playbook create/update` 和 `playbook-group create/update` 只从 JSON definition file 读取复杂字段；文本输出面向人工阅读，`--json` 提供稳定机器可读结果。
+
 ## 开发指引
 
 ### 后端开发

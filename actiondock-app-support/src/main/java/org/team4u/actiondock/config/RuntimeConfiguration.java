@@ -9,11 +9,14 @@ import org.team4u.actiondock.application.ApiAccessTokenApplicationService;
 import org.team4u.actiondock.application.ConfigValueApplicationService;
 import org.team4u.actiondock.application.ExecutionApplicationService;
 import org.team4u.actiondock.application.ExecutionPresetApplicationService;
+import org.team4u.actiondock.application.PlaybookApplicationService;
 import org.team4u.actiondock.application.SharedStateApplicationService;
 import org.team4u.actiondock.domain.port.ApiAccessTokenRepository;
 import org.team4u.actiondock.domain.port.ConfigValueRepository;
 import org.team4u.actiondock.domain.port.ExecutionPresetRepository;
 import org.team4u.actiondock.domain.port.ExecutionRepository;
+import org.team4u.actiondock.domain.port.PlaybookGroupRepository;
+import org.team4u.actiondock.domain.port.PlaybookRepository;
 import org.team4u.actiondock.domain.port.SharedStateRepository;
 import org.team4u.actiondock.domain.port.ScriptEngine;
 import org.team4u.actiondock.domain.port.ScriptRepository;
@@ -82,5 +85,12 @@ public class RuntimeConfiguration {
     @Bean
     public ExecutionPresetApplicationService executionPresetApplicationService(ExecutionPresetRepository executionPresetRepository) {
         return new ExecutionPresetApplicationService(executionPresetRepository);
+    }
+
+    @Bean
+    public PlaybookApplicationService playbookApplicationService(PlaybookGroupRepository playbookGroupRepository,
+                                                                 PlaybookRepository playbookRepository,
+                                                                 ScriptRepository scriptRepository) {
+        return new PlaybookApplicationService(playbookGroupRepository, playbookRepository, scriptRepository);
     }
 }

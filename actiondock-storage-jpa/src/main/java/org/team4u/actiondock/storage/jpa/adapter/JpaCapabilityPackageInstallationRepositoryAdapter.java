@@ -64,6 +64,8 @@ public class JpaCapabilityPackageInstallationRepositoryAdapter implements Capabi
         entity.setScriptIdsJson(jsonCodec.write(installation.getScriptIds()));
         entity.setScheduleIdsJson(jsonCodec.write(installation.getScheduleIds()));
         entity.setPresetIdsJson(jsonCodec.write(installation.getPresetIds()));
+        entity.setPlaybookGroupIdsJson(jsonCodec.write(installation.getPlaybookGroupIds()));
+        entity.setPlaybookIdsJson(jsonCodec.write(installation.getPlaybookIds()));
         entity.setInstalledAt(installation.getInstalledAt());
         entity.setUpdatedAt(installation.getUpdatedAt());
         return entity;
@@ -86,6 +88,8 @@ public class JpaCapabilityPackageInstallationRepositoryAdapter implements Capabi
                 .setScriptIds(jsonCodec.readList(entity.getScriptIdsJson(), String.class))
                 .setScheduleIds(jsonCodec.readList(entity.getScheduleIdsJson(), String.class))
                 .setPresetIds(jsonCodec.readList(entity.getPresetIdsJson(), String.class))
+                .setPlaybookGroupIds(jsonCodec.readList(entity.getPlaybookGroupIdsJson(), String.class))
+                .setPlaybookIds(jsonCodec.readList(entity.getPlaybookIdsJson(), String.class))
                 .setInstalledAt(entity.getInstalledAt())
                 .setUpdatedAt(entity.getUpdatedAt());
     }

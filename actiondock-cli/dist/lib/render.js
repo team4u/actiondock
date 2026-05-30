@@ -194,6 +194,103 @@ export function renderExecutionPresetDetail(item) {
     }
     return lines.join("\n");
 }
+export function renderPlaybookGroupList(items) {
+    if (items.length === 0) {
+        return "没有任务分组。";
+    }
+    return items.map((item) => {
+        const name = item.name ? ` ${item.name}` : "";
+        const count = item.playbookCount === undefined ? "" : ` playbooks=${item.playbookCount}`;
+        const managed = item.managed ? " managed" : "";
+        const enabled = item.enabled === false ? " disabled" : " enabled";
+        return `${item.id}${name}${enabled}${managed}${count}`;
+    }).join("\n");
+}
+export function renderPlaybookGroupDetail(item) {
+    const lines = [
+        `PlaybookGroup: ${item.id}`,
+        `Name: ${item.name}`,
+        `Enabled: ${item.enabled === false ? "no" : "yes"}`,
+        `Managed: ${item.managed ? "yes" : "no"}`
+    ];
+    if (item.description)
+        lines.push(`Description: ${item.description}`);
+    if (item.tags?.length)
+        lines.push(`Tags: ${item.tags.join(", ")}`);
+    if (item.defaultRepositoryIds?.length)
+        lines.push(`DefaultRepositories: ${item.defaultRepositoryIds.join(", ")}`);
+    if (item.playbookCount !== undefined)
+        lines.push(`Playbooks: ${item.playbookCount}`);
+    return lines.join("\n");
+}
+export function renderPlaybookList(items) {
+    if (items.length === 0) {
+        return "没有任务手册。";
+    }
+    return items.map((item) => {
+        const name = item.name ? ` ${item.name}` : "";
+        const group = item.groupId ? ` group=${item.groupId}` : "";
+        const risk = item.riskLevel ? ` risk=${item.riskLevel}` : "";
+        const managed = item.managed ? " managed" : "";
+        const enabled = item.enabled === false ? " disabled" : " enabled";
+        return `${item.id}${name}${group}${risk}${enabled}${managed}`;
+    }).join("\n");
+}
+export function renderPlaybookDetail(item) {
+    const lines = [
+        `Playbook: ${item.id}`,
+        `Name: ${item.name}`,
+        `Group: ${item.groupId}`,
+        `Enabled: ${item.enabled === false ? "no" : "yes"}`,
+        `Managed: ${item.managed ? "yes" : "no"}`
+    ];
+    if (item.description)
+        lines.push(`Description: ${item.description}`);
+    if (item.riskLevel)
+        lines.push(`Risk: ${item.riskLevel}`);
+    if (item.intentAliases?.length)
+        lines.push(`IntentAliases: ${item.intentAliases.join(", ")}`);
+    if (item.tags?.length)
+        lines.push(`Tags: ${item.tags.join(", ")}`);
+    if (item.repositoryIds?.length)
+        lines.push(`Repositories: ${item.repositoryIds.join(", ")}`);
+    lines.push(`KnowledgeRefs: ${item.knowledgeRefs?.length ?? 0}`);
+    lines.push(`ScriptRefs: ${item.scriptRefs?.length ?? 0}`);
+    lines.push(`StopConditions: ${item.stopConditions?.length ?? 0}`);
+    return lines.join("\n");
+}
+export function renderPlaybookGuide(item) {
+    const lines = [
+        `Playbook: ${item.playbook.id}${item.playbook.name ? ` (${item.playbook.name})` : ""}`,
+        `Group: ${item.group.id}${item.group.name ? ` (${item.group.name})` : ""}`,
+        `Risk: ${item.playbook.riskLevel ?? "-"}`
+    ];
+    if (item.knowledgeRefs.length > 0) {
+        lines.push("Knowledge:");
+        lines.push(...item.knowledgeRefs.map((ref) => `  ${ref.type} ${ref.repositoryId}:${ref.path}`));
+    }
+    if (item.scriptRefs.length > 0) {
+        lines.push("Scripts:");
+        lines.push(...item.scriptRefs.map((ref) => `  ${ref.scriptId}${ref.purpose ? ` - ${ref.purpose}` : ""}`));
+    }
+    lines.push("Guide:");
+    lines.push(indent(item.guideMarkdown));
+    if (item.stopConditions.length > 0) {
+        lines.push("StopConditions:");
+        lines.push(...item.stopConditions.map((condition) => `  - ${condition}`));
+    }
+    return lines.join("\n");
+}
+export function renderPlaybookResolveMatches(items) {
+    if (items.length === 0) {
+        return "没有匹配的任务手册。";
+    }
+    return items.map((item) => {
+        const group = item.group?.id ? ` group=${item.group.id}` : "";
+        const risk = item.riskLevel ? ` risk=${item.riskLevel}` : "";
+        return `${item.playbook.id} ${item.playbook.name} score=${item.score}${group}${risk} knowledge=${item.knowledgeRefCount} scripts=${item.scriptRefCount}`;
+    }).join("\n");
+}
 export function renderWebhookList(items) {
     if (items.length === 0) {
         return "没有Webhook。";

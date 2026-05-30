@@ -941,6 +941,8 @@ export interface CapabilityPackageReleaseFile {
   toolsets: RepositoryAiPackageToolsetFile[];
   agents: RepositoryAiPackageAgentFile[];
   scripts: RepositoryAiPackageScriptFile[];
+  playbookGroups: PlaybookGroup[];
+  playbooks: Playbook[];
   externalDependencies: RepositoryAiPackageDependency[];
   configTemplatePath?: string;
   scheduleTemplatePath?: string;
@@ -976,6 +978,8 @@ export interface CapabilityPackagePublishPreviewRequest {
   agentIds?: string[];
   modelIds?: string[];
   toolsetIds?: string[];
+  playbookGroupIds?: string[];
+  playbookIds?: string[];
 }
 
 export interface CapabilityPackagePublishRequest extends CapabilityPackagePublishPreviewRequest {}
@@ -1001,6 +1005,8 @@ export interface CapabilityPackagePublishPreview {
   toolsetIds: string[];
   agentIds: string[];
   scriptIds: string[];
+  playbookGroupIds: string[];
+  playbookIds: string[];
   configTemplate: RepositoryConfigTemplateItem[];
   scheduleTemplate: RepositoryScheduleTemplateItem[];
   presetTemplate: CapabilityPackagePresetTemplate[];
@@ -1482,4 +1488,58 @@ export interface ExecutionPreset {
 export interface ExecutionPresetUpsertRequest {
   name: string;
   input: Record<string, unknown>;
+}
+
+export type PlaybookRiskLevel = "LOW" | "MEDIUM" | "HIGH";
+
+export interface PlaybookGroup {
+  id: string;
+  name: string;
+  description?: string;
+  tags: string[];
+  defaultRepositoryIds: string[];
+  enabled: boolean;
+  managed: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  playbookCount?: number;
+}
+
+export interface PlaybookKnowledgeRef {
+  type: "ENTRY" | "FILE";
+  repositoryId: string;
+  path: string;
+}
+
+export interface PlaybookScriptRef {
+  scriptId: string;
+  purpose?: string;
+}
+
+export interface Playbook {
+  id: string;
+  groupId: string;
+  name: string;
+  description?: string;
+  intentAliases: string[];
+  tags: string[];
+  riskLevel?: PlaybookRiskLevel;
+  repositoryIds: string[];
+  knowledgeRefs: PlaybookKnowledgeRef[];
+  scriptRefs: PlaybookScriptRef[];
+  guideMarkdown: string;
+  stopConditions: string[];
+  enabled: boolean;
+  managed: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface PlaybookGuideView {
+  playbook: Playbook;
+  group: PlaybookGroup;
+  knowledgeRefs: PlaybookKnowledgeRef[];
+  scriptRefs: PlaybookScriptRef[];
+  guideMarkdown: string;
+  stopConditions: string[];
 }

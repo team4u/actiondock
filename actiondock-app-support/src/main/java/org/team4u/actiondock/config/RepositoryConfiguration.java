@@ -52,6 +52,8 @@ public class RepositoryConfiguration {
                                                              AiModelProfileRepository aiModelProfileRepository,
                                                              AiAgentProfileRepository aiAgentProfileRepository,
                                                              AiToolsetRepository aiToolsetRepository,
+                                                             PlaybookGroupRepository playbookGroupRepository,
+                                                             PlaybookRepository playbookRepository,
                                                              ScriptApplicationService scriptApplicationService,
                                                              ConfigValueApplicationService configValueApplicationService,
                                                              PluginRuntimeService pluginRuntimeService,
@@ -71,7 +73,9 @@ public class RepositoryConfiguration {
                         repositoryLocalAssetRepository,
                         aiModelProfileRepository,
                         aiAgentProfileRepository,
-                        aiToolsetRepository
+                        aiToolsetRepository,
+                        playbookGroupRepository,
+                        playbookRepository
                 ),
                 new RepositoryCatalogService.ApplicationServices(
                         scriptApplicationService,
@@ -119,6 +123,8 @@ public class RepositoryConfiguration {
             RepositoryLocalAssetRepository repositoryLocalAssetRepository,
             RepositoryDefinitionRepository repositoryDefinitionRepository,
             ManagedSkillRepository managedSkillRepository,
+            PlaybookGroupRepository playbookGroupRepository,
+            PlaybookRepository playbookRepository,
             ScriptApplicationService scriptApplicationService,
             ConfigValueApplicationService configValueApplicationService,
             PluginRuntimeService pluginRuntimeService,
@@ -138,7 +144,9 @@ public class RepositoryConfiguration {
                         repositoryLocalAssetRepository,
                         aiModelProfileRepository,
                         aiAgentProfileRepository,
-                        aiToolsetRepository
+                        aiToolsetRepository,
+                        playbookGroupRepository,
+                        playbookRepository
                 ),
                 new RepositoryCatalogService.ApplicationServices(
                         scriptApplicationService,
