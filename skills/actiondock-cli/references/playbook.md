@@ -10,7 +10,7 @@ Playbook 只回答：
 - 建议怎么走
 - 什么时候别继续
 
-Playbook 不是步骤 DSL，也不是执行引擎。不要把推荐脚本理解为自动执行计划。
+Playbook 不是步骤 DSL，也不是执行引擎。不要把关联脚本理解为自动执行计划。
 
 ## 消费工作流
 
@@ -50,10 +50,10 @@ actiondock playbook guide <playbook-id> --json
 1. 查看 `riskLevel` 和 `stopConditions`，确认是否允许继续。
 2. 读取 `knowledgeRefs` 指向的知识。
 3. 按 `guideMarkdown` 判断下一步。
-4. 只有在信息足够、风险可接受时才考虑运行 `scriptRefs` 推荐脚本。
+4. 只有在信息足够、风险可接受时才考虑运行 `scriptRefs` 关联脚本。
 5. 命中任一停止条件时停止，并向用户说明缺少什么或为什么需要人工确认。
 
-给用户总结时，说明匹配到的 Playbook、风险等级、推荐知识数量、推荐脚本数量和停止条件。
+给用户总结时，说明匹配到的 Playbook、风险等级、关联知识数量、关联脚本数量和停止条件。
 
 ## 知识引用
 
@@ -72,9 +72,9 @@ actiondock playbook guide <playbook-id> --json
 
 不要因为本地恰好有同名目录就直接用本地文件命令读取项目仓库；ActionDock 可能运行在远端。
 
-## 推荐脚本
+## 关联脚本
 
-`scriptRefs` 只是推荐脚本清单，不复制脚本 schema，也不表示自动执行。
+`scriptRefs` 只是关联脚本清单，不复制脚本 schema，也不表示自动执行。
 
 执行脚本前先查 schema：
 

@@ -32,7 +32,7 @@ npm i -g actiondock
 - **Webhook**：配置 Webhook 与已发布脚本的一对一绑定，按固定地址接收请求 → 读取 `references/event-framework.md`
 - **项目知识库**：解析项目仓库，先读 `ACTIONDOCK.md`，再按文档指引检索项目内容 → 读取 `references/project-knowledge.md`
 - **知识源安装**：从 CAPABILITY 仓库发现并安装团队知识源指针 → 读取 `references/project-knowledge.md`
-- **任务手册（Playbook）**：按任务意图解析推荐路线，读取 Guide，维护 Playbook / PlaybookGroup → 读取 `references/playbook.md`
+- **任务手册（Playbook）**：按任务意图解析关联路线，读取 Guide，维护 Playbook / PlaybookGroup → 读取 `references/playbook.md`
 
 如果用户要编写 Python 脚本，且需求涉及第三方 PyPI 依赖、镜像源或 `requirements.txt`，作者态阶段仍读取 `references/script-authoring.md`，但必须按其中的 `pythonRequirements` / `requirements.txt` 约定一起产出并通过 CLI 提交。
 
@@ -46,7 +46,7 @@ npm i -g actiondock
 | "脚本里调插件" / "脚本里调脚本" / "plugins.invoke" / "scripts.invoke" | `references/script-runtime-calls.md` |
 | "Webhook" / "webhook" / "固定地址" | `references/event-framework.md` |
 | "项目仓库" / "项目知识库" / "ACTIONDOCK.md" / "resolve --repository-id" | `references/project-knowledge.md` |
-| "任务手册" / "Playbook" / "playbook resolve" / "任务导览" / "根据意图推荐路线" / "推荐知识" / "推荐脚本" / "playbook-group" | `references/playbook.md` |
+| "任务手册" / "Playbook" / "playbook resolve" / "任务导览" / "根据意图关联路线" / "关联知识" / "关联脚本" / "playbook-group" | `references/playbook.md` |
 | "查看执行结果" / "执行历史" / "清空执行记录" | `references/execution-history.md` |
 | "定时任务" / "定时执行" / "cron" / "schedule" | `references/schedule-management.md` |
 | "共享状态" / "state" / "命名空间" | `references/state-management.md` |
@@ -61,7 +61,7 @@ npm i -g actiondock
 | "脚本里调用插件" / "脚本里调用脚本" / "plugins.invoke" / "scripts.invoke" | 作者态 + `references/script-runtime-calls.md` |
 | "创建 Webhook" / "测试 webhook" / "调用 webhook" | `references/event-framework.md` |
 | "分析某个项目" / "读取项目知识库" / "项目里的退款流程" / "项目数据库文档" | `references/project-knowledge.md` |
-| "任务手册" / "Playbook" / "根据意图推荐路线" / "任务导览" / "推荐知识/推荐脚本" / "playbook resolve" / "playbook-group" | `references/playbook.md` |
+| "任务手册" / "Playbook" / "根据意图关联路线" / "任务导览" / "关联知识/关联脚本" / "playbook resolve" / "playbook-group" | `references/playbook.md` |
 | "执行脚本" / "跑一下脚本" / "运行 xxx" | 日常执行 |
 | "有哪些脚本" / "列出脚本" / "脚本入参" | 日常执行 |
 | "调用插件" / "看插件动作" / "插件参数" | `references/plugin-usage.md` |
