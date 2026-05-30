@@ -5,6 +5,7 @@ import org.team4u.actiondock.application.ConfigValueApplicationService;
 import org.team4u.actiondock.application.ScriptApplicationService;
 import org.team4u.actiondock.config.AppProperties;
 import org.team4u.actiondock.domain.model.CapabilityPackageInstallation;
+import org.team4u.actiondock.domain.model.Playbook;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.domain.model.RepositoryLocalAsset;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
@@ -15,6 +16,8 @@ import org.team4u.actiondock.domain.port.ConfigValueRepository;
 import org.team4u.actiondock.domain.port.ExecutionPresetRepository;
 import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.domain.port.ManagedSkillRepository;
+import org.team4u.actiondock.domain.port.PlaybookGroupRepository;
+import org.team4u.actiondock.domain.port.PlaybookRepository;
 import org.team4u.actiondock.domain.port.RepositoryDefinitionRepository;
 import org.team4u.actiondock.domain.port.RepositoryLocalAssetRepository;
 import org.team4u.actiondock.domain.port.ScriptRepository;
@@ -40,6 +43,8 @@ class InstalledResourceServiceTest {
     private final ExecutionPresetRepository executionPresetRepository = mock(ExecutionPresetRepository.class);
     private final ConfigValueRepository configValueRepository = mock(ConfigValueRepository.class);
     private final WebhookRepository webhookRepository = mock(WebhookRepository.class);
+    private final PlaybookGroupRepository playbookGroupRepository = mock(PlaybookGroupRepository.class);
+    private final PlaybookRepository playbookRepository = mock(PlaybookRepository.class);
     private final RepositoryLocalAssetRepository localAssetRepository = mock(RepositoryLocalAssetRepository.class);
     private final org.team4u.actiondock.ai.api.AiModelProfileRepository aiModelProfileRepository =
             mock(org.team4u.actiondock.ai.api.AiModelProfileRepository.class);
@@ -49,6 +54,7 @@ class InstalledResourceServiceTest {
             mock(org.team4u.actiondock.ai.api.AiToolsetRepository.class);
     private final RepositoryCapabilityPackageService capabilityPackageService = mock(RepositoryCapabilityPackageService.class);
     private final RepositoryKnowledgeService knowledgeService = mock(RepositoryKnowledgeService.class);
+    private final RepositoryPlaybookService playbookService = mock(RepositoryPlaybookService.class);
     private final SkillService skillService = mock(SkillService.class);
     private final PluginRuntimeService pluginRuntimeService = mock(PluginRuntimeService.class);
 
@@ -112,6 +118,35 @@ class InstalledResourceServiceTest {
         verify(capabilityPackageService).uninstallCapabilityPackageByInstallationId("repo-deleted:pkg");
     }
 
+    @Test
+    void listsAndUninstallsRepositoryPlaybooks() {
+        when(repositoryDefinitionRepository.findAll()).thenReturn(List.of(new RepositoryDefinition()
+                .setId("repo-live")
+                .setName("Live Repo")));
+        when(packageInstallationRepository.findAll()).thenReturn(List.of());
+        when(scriptRepository.findAll()).thenReturn(List.of());
+        when(webhookRepository.findAll()).thenReturn(List.of());
+        when(configValueRepository.findAll()).thenReturn(List.of());
+        when(managedSkillRepository.findAll()).thenReturn(List.of());
+        when(pluginRuntimeService.list()).thenReturn(List.of());
+        when(localAssetRepository.findAll()).thenReturn(List.of(
+                localAsset("asset-playbook", UpstreamAssetType.PLAYBOOK, "repo-live.refund-guide", "repo-live", "refund-guide")
+        ));
+        when(playbookRepository.findAll()).thenReturn(List.of(new Playbook()
+                .setId("repo-live.refund-guide")
+                .setName("Refund Guide")));
+
+        List<InstalledResourceService.InstalledResourceView> resources = service().list();
+
+        assertThat(resources)
+                .filteredOn(resource -> resource.id().equals("repo-live.refund-guide"))
+                .singleElement()
+                .satisfies(resource -> assertThat(resource.type()).isEqualTo("PLAYBOOK"));
+
+        service().uninstall("PLAYBOOK", "repo-live.refund-guide");
+        verify(playbookService).uninstallPlaybook("repo-live.refund-guide");
+    }
+
     private InstalledResourceService service() {
         RepositoryCatalogService catalog = new RepositoryCatalogService(
                 new RepositoryCatalogService.Repositories(
@@ -126,7 +161,9 @@ class InstalledResourceServiceTest {
                         localAssetRepository,
                         aiModelProfileRepository,
                         aiAgentProfileRepository,
-                        aiToolsetRepository
+                        aiToolsetRepository,
+                        playbookGroupRepository,
+                        playbookRepository
                 ),
                 new RepositoryCatalogService.ApplicationServices(
                         new ScriptApplicationService(scriptRepository, mock(org.team4u.actiondock.domain.port.ScriptEngine.class), scriptScheduleRepository, localAssetRepository),
@@ -155,6 +192,7 @@ class InstalledResourceServiceTest {
                 catalog,
                 scriptService,
                 webhookService,
+                playbookService,
                 capabilityPackageService,
                 knowledgeService,
                 skillService,

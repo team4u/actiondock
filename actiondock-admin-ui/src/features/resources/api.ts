@@ -12,6 +12,9 @@ import type {
   UpstreamStatus,
   RepositoryKnowledgePublishPreviewRequest,
   RepositoryKnowledgePublishRequest,
+  RepositoryPlaybookDescriptor,
+  RepositoryPlaybookDetail,
+  RepositoryPlaybookPublishRequest,
   RepositoryDefinition,
   RepositoryKnowledgeDescriptor,
   RepositoryKnowledgeDetail,
@@ -83,6 +86,10 @@ export function listRepositoryScripts(): Promise<RepositoryScriptDescriptor[]> {
 
 export function listRepositoryWebhooks(): Promise<RepositoryWebhookDescriptor[]> {
   return request<RepositoryWebhookDescriptor[]>("/api/repositories/webhooks");
+}
+
+export function listRepositoryPlaybooks(): Promise<RepositoryPlaybookDescriptor[]> {
+  return request<RepositoryPlaybookDescriptor[]>("/api/repositories/playbooks");
 }
 
 export function listCapabilityPackages(): Promise<CapabilityPackageDescriptor[]> {
@@ -178,6 +185,10 @@ export function getRepositoryWebhook(repositoryId: string, webhookId: string): P
   return request<RepositoryWebhookDetail>(`/api/repositories/${encodeURIComponent(repositoryId)}/webhooks/${encodeURIComponent(webhookId)}`);
 }
 
+export function getRepositoryPlaybook(repositoryId: string, playbookId: string): Promise<RepositoryPlaybookDetail> {
+  return request<RepositoryPlaybookDetail>(`/api/repositories/${encodeURIComponent(repositoryId)}/playbooks/${encodeURIComponent(playbookId)}`);
+}
+
 export function getCapabilityPackage(repositoryId: string, packageId: string): Promise<CapabilityPackageDetail> {
   return request<CapabilityPackageDetail>(`/api/repositories/${encodeURIComponent(repositoryId)}/packages/${encodeURIComponent(packageId)}`);
 }
@@ -248,6 +259,24 @@ export function updateRepositoryWebhookLocalAsset(
   }).then((operation) => operation.result);
 }
 
+export function addRepositoryPlaybookLocalAsset(repositoryId: string, playbookId: string): Promise<RepositoryLocalAsset> {
+  return runResourceLifecycleOperation<RepositoryLocalAsset>({
+    resourceType: "REPOSITORY_PLAYBOOK",
+    operation: "add-local",
+    repositoryId,
+    resourceId: playbookId
+  }).then((operation) => operation.result);
+}
+
+export function updateRepositoryPlaybookLocalAsset(repositoryId: string, playbookId: string): Promise<RepositoryLocalAsset> {
+  return runResourceLifecycleOperation<RepositoryLocalAsset>({
+    resourceType: "REPOSITORY_PLAYBOOK",
+    operation: "update-local",
+    repositoryId,
+    resourceId: playbookId
+  }).then((operation) => operation.result);
+}
+
 export function getUpstreamStatus(scriptId: string): Promise<UpstreamStatus | null> {
   return request<UpstreamStatus | null>(`/api/scripts/${encodeURIComponent(scriptId)}/upstream`);
 }
@@ -303,6 +332,18 @@ export function forkRepositoryTool(scriptId: string, payload: { id: string; name
 export function publishRepositoryTool(repositoryId: string, payload: RepositoryPublishRequest): Promise<RepositoryScriptDescriptor> {
   return runResourceLifecycleOperation<RepositoryScriptDescriptor, RepositoryPublishRequest>({
     resourceType: "REPOSITORY_SCRIPT",
+    operation: "publish",
+    repositoryId,
+    payload
+  }).then((operation) => operation.result);
+}
+
+export function publishRepositoryPlaybook(
+  repositoryId: string,
+  payload: RepositoryPlaybookPublishRequest
+): Promise<RepositoryPlaybookDescriptor> {
+  return runResourceLifecycleOperation<RepositoryPlaybookDescriptor, RepositoryPlaybookPublishRequest>({
+    resourceType: "REPOSITORY_PLAYBOOK",
     operation: "publish",
     repositoryId,
     payload

@@ -1,12 +1,14 @@
-import { Button, Drawer, Form, Input, Popconfirm, Select, Space, Switch, Table, Tabs, Tag, message } from "antd";
+import { Alert, Button, Drawer, Form, Input, Modal, Popconfirm, Select, Space, Switch, Table, Tabs, Tag, message } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import { MarkdownDescription } from "../../../components/common/MarkdownDescription";
 import { PageHeader } from "../../../components/common/PageHeader";
-import { listRepositories } from "../../resources/api";
+import { listRepositories, listRepositoryPlaybooks, publishRepositoryPlaybook, syncRepository } from "../../resources/api";
 import { listScripts } from "../../scripts/api";
 import { createPlaybook, deletePlaybook, getPlaybookGuide, listPlaybookGroups, listPlaybooks, updatePlaybook } from "../api";
-import type { Playbook, PlaybookGroup, PlaybookGuideView, RepositoryDefinition, ScriptDefinition } from "../../../shared/types";
+import type { Playbook, PlaybookGroup, PlaybookGuideView, RepositoryDefinition, RepositoryPlaybookPublishRequest, ScriptDefinition } from "../../../shared/types";
 import { getErrorMessage } from "../../../services/utils";
+import { getPublishableRepositories, pickDefaultPublishRepository } from "../../../services/repositoryPublish";
+import { useDefaultOwner } from "../../../shared/hooks/useDefaultOwner";
 
 interface PlaybookFormValues {
   id: string;
@@ -24,6 +26,16 @@ interface PlaybookFormValues {
   enabled: boolean;
 }
 
+interface PublishFormValues {
+  repositoryId: string;
+  playbookId: string;
+  displayName: string;
+  version: string;
+  owner?: string;
+  releaseNotes?: string;
+  tags: string[];
+}
+
 function splitText(value?: string): string[] {
   return value?.split(/[\n,，]/).map((item) => item.trim()).filter(Boolean) ?? [];
 }
@@ -35,31 +47,60 @@ function parseKnowledgeRefs(value?: string) {
   }).filter((item) => item.repositoryId && item.path);
 }
 
+function sanitizePlaybookId(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function bumpPatchVersion(version?: string): string | null {
+  if (!version) {
+    return "0.1.0";
+  }
+  const parts = version.split(".");
+  if (parts.length !== 3 || parts.some((part) => part.trim() === "" || Number.isNaN(Number(part)))) {
+    return null;
+  }
+  return `${parts[0]}.${parts[1]}.${Number(parts[2]) + 1}`;
+}
+
 export function PlaybookPage() {
   const [messageApi, contextHolder] = message.useMessage();
+  const defaultOwner = useDefaultOwner();
   const [items, setItems] = useState<Playbook[]>([]);
   const [groups, setGroups] = useState<PlaybookGroup[]>([]);
   const [repositories, setRepositories] = useState<RepositoryDefinition[]>([]);
+  const [publishRepositories, setPublishRepositories] = useState<RepositoryDefinition[]>([]);
   const [scripts, setScripts] = useState<ScriptDefinition[]>([]);
   const [loading, setLoading] = useState(false);
   const [filters, setFilters] = useState<{ groupId?: string; repositoryId?: string; tag?: string; managed?: boolean; keyword?: string }>({});
   const [editing, setEditing] = useState<Playbook | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [guide, setGuide] = useState<PlaybookGuideView | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [publishModalOpen, setPublishModalOpen] = useState(false);
+  const [publishingPlaybook, setPublishingPlaybook] = useState<Playbook | null>(null);
+  const [versionHint, setVersionHint] = useState<string | null>(null);
   const [form] = Form.useForm<PlaybookFormValues>();
+  const [publishForm] = Form.useForm<PublishFormValues>();
 
   const load = async () => {
     setLoading(true);
     try {
-      const [playbookData, groupData, repositoryData, scriptData] = await Promise.all([
+      const [playbookData, groupData, repositoryData, publishRepositoryData, scriptData] = await Promise.all([
         listPlaybooks(filters),
         listPlaybookGroups(),
         listRepositories("PROJECT"),
+        listRepositories(),
         listScripts()
       ]);
       setItems(playbookData);
       setGroups(groupData);
       setRepositories(repositoryData);
+      setPublishRepositories(publishRepositoryData);
       setScripts(scriptData);
     } catch (error) {
       messageApi.error(getErrorMessage(error, "加载任务手册失败"));
@@ -74,6 +115,8 @@ export function PlaybookPage() {
 
   const groupOptions = useMemo(() => groups.map((item) => ({ value: item.id, label: `${item.name} (${item.id})` })), [groups]);
   const repositoryOptions = useMemo(() => repositories.map((item) => ({ value: item.id, label: `${item.name} (${item.id})` })), [repositories]);
+  const publishableRepositories = useMemo(() => getPublishableRepositories(publishRepositories), [publishRepositories]);
+  const publishRepositoryOptions = useMemo(() => publishableRepositories.map((item) => ({ value: item.id, label: `${item.name} (${item.id})` })), [publishableRepositories]);
   const scriptOptions = useMemo(() => scripts.map((item) => ({ value: item.id, label: `${item.name} (${item.id})` })), [scripts]);
   const tags = useMemo(() => Array.from(new Set(items.flatMap((item) => item.tags ?? []))).sort(), [items]);
 
@@ -150,6 +193,72 @@ export function PlaybookPage() {
     }
   };
 
+  const suggestVersion = async (repositoryId?: string, playbookId?: string) => {
+    if (!repositoryId || !playbookId) {
+      setVersionHint(null);
+      return;
+    }
+    try {
+      await syncRepository(repositoryId);
+      const descriptors = await listRepositoryPlaybooks();
+      const current = descriptors.find((descriptor) => descriptor.repositoryId === repositoryId && descriptor.playbookId === playbookId);
+      const nextVersion = bumpPatchVersion(current?.version);
+      if (nextVersion) {
+        publishForm.setFieldValue("version", nextVersion);
+        setVersionHint(current ? `目标仓库当前版本 ${current.version}，已建议 ${nextVersion}` : "目标仓库未找到同 ID 任务手册，建议 0.1.0");
+      } else {
+        setVersionHint(`目标仓库当前版本 ${current?.version} 无法自动递增，请手动填写版本`);
+      }
+    } catch (error) {
+      setVersionHint(null);
+      messageApi.warning(getErrorMessage(error, "同步目标仓库或读取版本失败，请手动确认版本"));
+    }
+  };
+
+  const openPublishModal = (item: Playbook) => {
+    const defaultRepository = pickDefaultPublishRepository(publishableRepositories);
+    const playbookId = sanitizePlaybookId(item.id || item.name);
+    setPublishingPlaybook(item);
+    setPublishModalOpen(true);
+    setVersionHint(null);
+    publishForm.setFieldsValue({
+      repositoryId: defaultRepository?.id,
+      playbookId,
+      displayName: item.name,
+      version: "0.1.0",
+      owner: defaultOwner,
+      releaseNotes: "",
+      tags: item.tags ?? []
+    });
+    void suggestVersion(defaultRepository?.id, playbookId);
+  };
+
+  const publish = async () => {
+    if (!publishingPlaybook) {
+      return;
+    }
+    const values = await publishForm.validateFields();
+    setPublishing(true);
+    try {
+      const payload: RepositoryPlaybookPublishRequest = {
+        sourceId: publishingPlaybook.id,
+        playbookId: values.playbookId.trim(),
+        displayName: values.displayName.trim(),
+        version: values.version.trim(),
+        owner: values.owner?.trim() || undefined,
+        releaseNotes: values.releaseNotes?.trim() || undefined,
+        tags: values.tags ?? []
+      };
+      await publishRepositoryPlaybook(values.repositoryId, payload);
+      messageApi.success("任务手册已发布");
+      setPublishModalOpen(false);
+    } catch (error) {
+      messageApi.error(getErrorMessage(error, "发布任务手册失败"));
+    } finally {
+      setPublishing(false);
+    }
+  };
+
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
       {contextHolder}
@@ -184,6 +293,7 @@ export function PlaybookPage() {
               <Space>
                 <Button size="small" onClick={() => void previewGuide(item)}>预览</Button>
                 <Button size="small" disabled={item.managed} onClick={() => openEditor(item)}>编辑</Button>
+                <Button size="small" disabled={item.managed} onClick={() => openPublishModal(item)}>发布到仓库</Button>
                 <Popconfirm title="删除任务手册？" disabled={item.managed} onConfirm={() => void remove(item)}>
                   <Button size="small" danger disabled={item.managed}>删除</Button>
                 </Popconfirm>
@@ -248,6 +358,37 @@ export function PlaybookPage() {
           />
         )}
       </Drawer>
+      <Modal
+        title="发布任务手册到仓库"
+        open={publishModalOpen}
+        onCancel={() => setPublishModalOpen(false)}
+        onOk={() => void publish()}
+        confirmLoading={publishing}
+        okText="发布"
+        destroyOnHidden
+      >
+        <Form form={publishForm} layout="vertical">
+          <Form.Item name="repositoryId" label="目标仓库" rules={[{ required: true, message: "请选择目标仓库" }]}>
+            <Select
+              showSearch
+              optionFilterProp="label"
+              options={publishRepositoryOptions}
+              onChange={(repositoryId) => void suggestVersion(repositoryId, publishForm.getFieldValue("playbookId"))}
+            />
+          </Form.Item>
+          <Form.Item name="playbookId" label="仓库任务手册 ID" rules={[{ required: true, message: "请输入仓库任务手册 ID" }]}>
+            <Input onBlur={(event) => void suggestVersion(publishForm.getFieldValue("repositoryId"), event.target.value)} />
+          </Form.Item>
+          {versionHint ? <Alert type="info" showIcon message={versionHint} style={{ marginBottom: 16 }} /> : null}
+          <Form.Item name="displayName" label="显示名称" rules={[{ required: true, message: "请输入显示名称" }]}><Input /></Form.Item>
+          <Space size={12} style={{ width: "100%" }} align="start">
+            <Form.Item name="version" label="版本" rules={[{ required: true, message: "请输入版本" }]} style={{ flex: 1 }}><Input /></Form.Item>
+            <Form.Item name="owner" label="维护人" style={{ flex: 1 }}><Input /></Form.Item>
+          </Space>
+          <Form.Item name="tags" label="标签"><Select mode="tags" tokenSeparators={[","]} /></Form.Item>
+          <Form.Item name="releaseNotes" label="发布说明"><Input.TextArea autoSize={{ minRows: 4, maxRows: 10 }} /></Form.Item>
+        </Form>
+      </Modal>
     </Space>
   );
 }

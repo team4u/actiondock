@@ -7,6 +7,8 @@ import org.team4u.actiondock.domain.exception.RepositoryPluginConflict;
 import org.team4u.actiondock.domain.model.AiDependency;
 import org.team4u.actiondock.domain.model.Playbook;
 import org.team4u.actiondock.domain.model.PlaybookGroup;
+import org.team4u.actiondock.domain.model.PlaybookKnowledgeRef;
+import org.team4u.actiondock.domain.model.PlaybookScriptRef;
 import org.team4u.actiondock.domain.model.WebhookTransport;
 import org.team4u.actiondock.domain.model.PluginDependency;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
@@ -61,8 +63,16 @@ public final class RepositoryCatalogTypes {
     public static final String KNOWLEDGE_MANIFEST_FILE = "knowledge.json";
     /** Knowledge 配置模板文件名。 */
     public static final String KNOWLEDGE_CONFIG_TEMPLATE_FILE = "config.template.json";
+    /** Playbook 子目录名称。 */
+    public static final String PLAYBOOKS_DIR = "playbooks";
+    /** Playbook 描述文件名。 */
+    public static final String PLAYBOOK_DESCRIPTOR_FILE = "playbook.json";
+    /** Playbook Group 子目录名称。 */
+    public static final String PLAYBOOK_GROUPS_DIR = "playbook-groups";
+    /** Playbook Group 描述文件名。 */
+    public static final String PLAYBOOK_GROUP_DESCRIPTOR_FILE = "group.json";
     /** 仓库索引中的所有分节名称。 */
-    public static final List<String> REPO_INDEX_SECTIONS = List.of(SCRIPTS_DIR, WEBHOOKS_DIR, PLUGINS_DIR, CAPABILITY_PACKAGES_DIR, SKILLS_DIR, KNOWLEDGE_DIR);
+    public static final List<String> REPO_INDEX_SECTIONS = List.of(SCRIPTS_DIR, WEBHOOKS_DIR, PLUGINS_DIR, CAPABILITY_PACKAGES_DIR, SKILLS_DIR, KNOWLEDGE_DIR, PLAYBOOKS_DIR, PLAYBOOK_GROUPS_DIR);
     /** 默认的仓库索引/文件 schema 版本号。由 {@link RepositoryIndexUtils} 维护。 */
 
     /** 仓库类型：Git 仓库。 */
@@ -114,6 +124,8 @@ public final class RepositoryCatalogTypes {
     public static final String ASSET_TYPE_SKILL = "SKILL";
     /** 资产类型：知识源。 */
     public static final String ASSET_TYPE_KNOWLEDGE = "KNOWLEDGE";
+    /** 资产类型：任务手册。 */
+    public static final String ASSET_TYPE_PLAYBOOK = "PLAYBOOK";
 
     /** 配置发布模式：内联（值直接嵌入脚本源码）。 */
     public static final String PUBLISH_MODE_INLINE = "INLINE";
@@ -258,6 +270,40 @@ public final class RepositoryCatalogTypes {
     ) {
     }
 
+    public record RepositoryPlaybookDescriptor(
+            String repositoryId,
+            String playbookId,
+            String displayName,
+            String version,
+            String description,
+            String releaseNotes,
+            String owner,
+            List<String> tags,
+            String riskLevel,
+            String groupId,
+            String groupName,
+            String playbookPath,
+            String groupPath,
+            String digest,
+            boolean trusted,
+            RepositoryLocalAssetState localState
+    ) {
+        public RepositoryPlaybookDescriptor withLocalState(RepositoryLocalAssetState localState) {
+            return new RepositoryPlaybookDescriptor(
+                    repositoryId, playbookId, displayName, version,
+                    description, releaseNotes, owner, tags, riskLevel, groupId, groupName,
+                    playbookPath, groupPath, digest, trusted, localState
+            );
+        }
+    }
+
+    public record RepositoryPlaybookDetail(
+            RepositoryPlaybookDescriptor descriptor,
+            PlaybookFile playbook,
+            PlaybookGroupFile group
+    ) {
+    }
+
     public record RepositoryPublishRequest(
             String scriptId,
             String repositoryScriptId,
@@ -313,6 +359,18 @@ public final class RepositoryCatalogTypes {
             List<RepositoryPublishConfigItem> configItems,
             List<ScriptDependency> scriptDependencies,
             boolean publishScriptDependencies,
+            boolean force
+    ) {
+    }
+
+    public record RepositoryPlaybookPublishRequest(
+            String sourceId,
+            String playbookId,
+            String displayName,
+            String version,
+            String owner,
+            String releaseNotes,
+            List<String> tags,
             boolean force
     ) {
     }
@@ -598,14 +656,16 @@ public final class RepositoryCatalogTypes {
                                       List<RepositoryPluginIndexEntry> plugins,
                                       List<CapabilityPackageIndexEntry> packages,
                                       List<RepositorySkillIndexEntry> skills,
-                                      List<RepositoryKnowledgeIndexEntry> knowledge) {
+                                      List<RepositoryKnowledgeIndexEntry> knowledge,
+                                      List<RepositoryPlaybookIndexEntry> playbooks,
+                                      List<RepositoryPlaybookGroupIndexEntry> playbookGroups) {
         public RepositoryIndexFile(int repositoryVersion,
                                    String name,
                                    String description,
                                    List<RepositoryIndexEntry> scripts,
                                    List<RepositoryPluginIndexEntry> plugins,
                                    List<CapabilityPackageIndexEntry> packages) {
-            this(repositoryVersion, name, description, scripts, List.of(), plugins, packages, List.of(), List.of());
+            this(repositoryVersion, name, description, scripts, List.of(), plugins, packages, List.of(), List.of(), List.of(), List.of());
         }
 
         public List<RepositoryIndexEntry> safeScripts() {
@@ -631,6 +691,14 @@ public final class RepositoryCatalogTypes {
         public List<RepositoryKnowledgeIndexEntry> safeKnowledge() {
             return knowledge == null ? List.of() : knowledge;
         }
+
+        public List<RepositoryPlaybookIndexEntry> safePlaybooks() {
+            return playbooks == null ? List.of() : playbooks;
+        }
+
+        public List<RepositoryPlaybookGroupIndexEntry> safePlaybookGroups() {
+            return playbookGroups == null ? List.of() : playbookGroups;
+        }
     }
 
     public record RepositoryIndexEntry(String id,
@@ -648,6 +716,21 @@ public final class RepositoryCatalogTypes {
                                                   String description,
                                                   String releaseNotes,
                                                   String webhookPath) {
+    }
+
+    public record RepositoryPlaybookIndexEntry(String id,
+                                               String name,
+                                               String version,
+                                               String description,
+                                               String releaseNotes,
+                                               String playbookPath,
+                                               String groupId) {
+    }
+
+    public record RepositoryPlaybookGroupIndexEntry(String id,
+                                                    String name,
+                                                    String description,
+                                                    String groupPath) {
     }
 
     public record RepositoryPluginIndexEntry(String id,
@@ -857,6 +940,35 @@ public final class RepositoryCatalogTypes {
                                   String configTemplatePath) {
     }
 
+    public record PlaybookFile(int schemaVersion,
+                               String playbookId,
+                               String groupId,
+                               String displayName,
+                               String version,
+                               String description,
+                               String releaseNotes,
+                               String owner,
+                               List<String> tags,
+                               String riskLevel,
+                               List<String> intentAliases,
+                               List<String> repositoryIds,
+                               List<PlaybookKnowledgeRef> knowledgeRefs,
+                               List<PlaybookScriptRef> scriptRefs,
+                               String guideMarkdown,
+                               List<String> stopConditions,
+                               boolean enabled,
+                               String digest) {
+    }
+
+    public record PlaybookGroupFile(int schemaVersion,
+                                    String groupId,
+                                    String displayName,
+                                    String description,
+                                    List<String> tags,
+                                    List<String> defaultRepositoryIds,
+                                    boolean enabled) {
+    }
+
     public record PluginFile(int pluginFileVersion,
                              String pluginId,
                              String name,
@@ -1018,6 +1130,13 @@ public final class RepositoryCatalogTypes {
                                                   String webhookId,
                                                   String version) {
         assertVersionAvailable(ASSET_TYPE_WEBHOOK, repositoryId, index == null ? null : index.webhooks(), webhookId, version, RepositoryWebhookIndexEntry::id, RepositoryWebhookIndexEntry::version);
+    }
+
+    static void assertPlaybookVersionAvailable(String repositoryId,
+                                               RepositoryIndexFile index,
+                                               String playbookId,
+                                               String version) {
+        assertVersionAvailable(ASSET_TYPE_PLAYBOOK, repositoryId, index == null ? null : index.playbooks(), playbookId, version, RepositoryPlaybookIndexEntry::id, RepositoryPlaybookIndexEntry::version);
     }
 
     private static <T> void assertVersionAvailable(String assetType,

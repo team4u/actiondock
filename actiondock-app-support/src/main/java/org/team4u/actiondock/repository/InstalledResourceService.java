@@ -2,6 +2,7 @@ package org.team4u.actiondock.repository;
 
 import org.team4u.actiondock.application.ConfigValueApplicationService;
 import org.team4u.actiondock.domain.model.CapabilityPackageInstallation;
+import org.team4u.actiondock.domain.model.Playbook;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.UpstreamAssetType;
@@ -30,11 +31,13 @@ public class InstalledResourceService {
     private static final String TYPE_KNOWLEDGE = "KNOWLEDGE";
     private static final String TYPE_SKILL = "SKILL";
     private static final String TYPE_PLUGIN = "PLUGIN";
+    private static final String TYPE_PLAYBOOK = "PLAYBOOK";
     private static final String KNOWLEDGE_REPO_ID_PREFIX = "knowledge:";
 
     private final RepositoryCatalogService catalog;
     private final RepositoryScriptService scriptService;
     private final RepositoryWebhookService webhookService;
+    private final RepositoryPlaybookService playbookService;
     private final RepositoryCapabilityPackageService capabilityPackageService;
     private final RepositoryKnowledgeService knowledgeService;
     private final SkillService skillService;
@@ -44,6 +47,7 @@ public class InstalledResourceService {
     public InstalledResourceService(RepositoryCatalogService catalog,
                                     RepositoryScriptService scriptService,
                                     RepositoryWebhookService webhookService,
+                                    RepositoryPlaybookService playbookService,
                                     RepositoryCapabilityPackageService capabilityPackageService,
                                     RepositoryKnowledgeService knowledgeService,
                                     SkillService skillService,
@@ -52,6 +56,7 @@ public class InstalledResourceService {
         this.catalog = catalog;
         this.scriptService = scriptService;
         this.webhookService = webhookService;
+        this.playbookService = playbookService;
         this.capabilityPackageService = capabilityPackageService;
         this.knowledgeService = knowledgeService;
         this.skillService = skillService;
@@ -65,9 +70,13 @@ public class InstalledResourceService {
         Set<String> scriptPackageIds = catalog.getRepos().capabilityPackageInstallationRepository().findAll().stream()
                 .flatMap(installation -> installation.getScriptIds().stream())
                 .collect(Collectors.toSet());
+        Set<String> playbookPackageIds = catalog.getRepos().capabilityPackageInstallationRepository().findAll().stream()
+                .flatMap(installation -> installation.getPlaybookIds().stream())
+                .collect(Collectors.toSet());
         return java.util.stream.Stream.of(
                         scriptResources(repositories, scriptPackageIds),
                         webhookResources(repositories),
+                        playbookResources(repositories, playbookPackageIds),
                         configValueResources(repositories),
                         capabilityPackageResources(repositories),
                         knowledgeResources(repositories),
@@ -85,6 +94,7 @@ public class InstalledResourceService {
         switch (normalizedType) {
             case TYPE_SCRIPT -> scriptService.uninstallScript(normalizedId);
             case TYPE_WEBHOOK -> webhookService.uninstallWebhook(normalizedId);
+            case TYPE_PLAYBOOK -> playbookService.uninstallPlaybook(normalizedId);
             case TYPE_CONFIG_VALUE -> configValueService.delete(normalizedId);
             case TYPE_CAPABILITY_PACKAGE -> capabilityPackageService.uninstallCapabilityPackageByInstallationId(normalizedId);
             case TYPE_KNOWLEDGE -> knowledgeService.uninstallKnowledgeByInstalledRepositoryId(normalizedId);
@@ -129,6 +139,30 @@ public class InstalledResourceService {
                             TYPE_WEBHOOK,
                             asset.getLocalAssetId(),
                             webhook == null ? asset.getName() : webhook.getName(),
+                            asset.getDescription(),
+                            asset.getRepositoryId(),
+                            asset.getUpstreamAssetId(),
+                            asset.getVersion(),
+                            asset.getUpdatedAt(),
+                            repositories
+                    );
+                })
+                .toList();
+    }
+
+    private List<InstalledResourceView> playbookResources(Map<String, RepositoryDefinition> repositories,
+                                                          Set<String> playbookPackageIds) {
+        Map<String, Playbook> playbooksById = catalog.getRepos().playbookRepository().findAll().stream()
+                .collect(Collectors.toMap(Playbook::getId, Function.identity(), (left, right) -> left));
+        return catalog.getRepos().repositoryLocalAssetRepository().findAll().stream()
+                .filter(asset -> asset.getAssetType() == UpstreamAssetType.PLAYBOOK)
+                .filter(asset -> !playbookPackageIds.contains(asset.getLocalAssetId()))
+                .map(asset -> {
+                    Playbook playbook = playbooksById.get(asset.getLocalAssetId());
+                    return view(
+                            TYPE_PLAYBOOK,
+                            asset.getLocalAssetId(),
+                            playbook == null ? asset.getName() : playbook.getName(),
                             asset.getDescription(),
                             asset.getRepositoryId(),
                             asset.getUpstreamAssetId(),

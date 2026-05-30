@@ -60,6 +60,7 @@ export function RepositoryDiscoveryPage() {
             installedResourceActionKey={discovery.installedResourceActionKey}
             filteredTools={discovery.filteredTools}
             filteredWebhooks={discovery.filteredWebhooks}
+            filteredPlaybooks={discovery.filteredPlaybooks}
             filteredPackages={discovery.filteredPackages}
             filteredSkills={discovery.filteredSkills}
             filteredPlugins={discovery.filteredPlugins}
@@ -67,6 +68,7 @@ export function RepositoryDiscoveryPage() {
             filteredInstalledResources={discovery.filteredInstalledResources}
             onOpenToolDetail={discovery.openDetail}
             onOpenWebhookDetail={discovery.openWebhookDetail}
+            onOpenPlaybookDetail={discovery.openPlaybookDetail}
             onOpenPackageDetail={discovery.openPackageDetail}
             onOpenSkillDetail={discovery.openSkillDetail}
             onOpenSkillInstall={discovery.openSkillInstall}
@@ -75,6 +77,8 @@ export function RepositoryDiscoveryPage() {
             onAddToolToLocal={discovery.confirmAddToolToLocal}
             onWebhookLocalAssetAction={discovery.confirmWebhookLocalAssetAction}
             onAddWebhookToLocal={discovery.confirmAddWebhookToLocal}
+            onPlaybookLocalAssetAction={discovery.handlePlaybookLocalAssetAction}
+            onPlaybookUninstall={discovery.handlePlaybookUninstall}
             onPackageInstall={discovery.handlePackageInstall}
             onPackageUninstall={discovery.handlePackageUninstall}
             onPluginAction={discovery.handleRepositoryPluginAction}
@@ -99,6 +103,9 @@ export function RepositoryDiscoveryPage() {
         webhookDetailOpen={discovery.webhookDetailOpen}
         webhookDetailLoading={discovery.webhookDetailLoading}
         webhookDetail={discovery.webhookDetail}
+        playbookDetailOpen={discovery.playbookDetailOpen}
+        playbookDetailLoading={discovery.playbookDetailLoading}
+        playbookDetail={discovery.playbookDetail}
         packageDetailOpen={discovery.packageDetailOpen}
         packageDetailLoading={discovery.packageDetailLoading}
         packageDetail={discovery.packageDetail}
@@ -110,6 +117,7 @@ export function RepositoryDiscoveryPage() {
         knowledgeDetail={discovery.knowledgeDetail}
         onCloseToolDetail={discovery.closeDetail}
         onCloseWebhookDetail={discovery.closeWebhookDetail}
+        onClosePlaybookDetail={discovery.closePlaybookDetail}
         onClosePackageDetail={discovery.closePackageDetail}
         onCloseSkillDetail={discovery.closeSkillDetail}
         onCloseKnowledgeDetail={discovery.closeKnowledgeDetail}
@@ -118,6 +126,8 @@ export function RepositoryDiscoveryPage() {
         onAddToolToLocal={discovery.confirmAddToolToLocal}
         onWebhookLocalAssetAction={discovery.confirmWebhookLocalAssetAction}
         onAddWebhookToLocal={discovery.confirmAddWebhookToLocal}
+        onPlaybookLocalAssetAction={discovery.handlePlaybookLocalAssetAction}
+        onPlaybookUninstall={discovery.handlePlaybookUninstall}
         onPackageInstall={discovery.handlePackageInstall}
         onPackageUninstall={discovery.handlePackageUninstall}
         onKnowledgeInstall={discovery.handleKnowledgeInstall}

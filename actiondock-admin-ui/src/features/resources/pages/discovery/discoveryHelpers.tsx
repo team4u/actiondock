@@ -7,6 +7,7 @@ import type {
   RepositoryAiPackageDependency,
   RepositoryWebhookDescriptor,
   RepositoryKnowledgeDescriptor,
+  RepositoryPlaybookDescriptor,
   RepositoryPluginDescriptor,
   RepositorySkillDescriptor,
   RepositoryScriptDescriptor,
@@ -61,15 +62,19 @@ export function isLocalWebhook(record: RepositoryWebhookDescriptor): boolean {
   return Boolean(record.localState);
 }
 
-export function localAssetId(record: RepositoryScriptDescriptor | RepositoryWebhookDescriptor): string {
-  return record.localState?.localAssetId ?? ("scriptId" in record ? record.scriptId : record.webhookId);
+export function isLocalPlaybook(record: RepositoryPlaybookDescriptor): boolean {
+  return Boolean(record.localState);
 }
 
-export function isTrackedLocal(record: RepositoryScriptDescriptor | RepositoryWebhookDescriptor): boolean {
+export function localAssetId(record: RepositoryScriptDescriptor | RepositoryWebhookDescriptor | RepositoryPlaybookDescriptor): string {
+  return record.localState?.localAssetId ?? ("scriptId" in record ? record.scriptId : "webhookId" in record ? record.webhookId : record.playbookId);
+}
+
+export function isTrackedLocal(record: RepositoryScriptDescriptor | RepositoryWebhookDescriptor | RepositoryPlaybookDescriptor): boolean {
   return record.localState?.mode === "TRACKED";
 }
 
-export function isLockedLocal(record: RepositoryScriptDescriptor | RepositoryWebhookDescriptor): boolean {
+export function isLockedLocal(record: RepositoryScriptDescriptor | RepositoryWebhookDescriptor | RepositoryPlaybookDescriptor): boolean {
   return record.localState?.mode === "LOCKED";
 }
 
@@ -303,6 +308,39 @@ export function filterRepositoryKnowledge(
       item.displayName,
       item.knowledgeId,
       item.description,
+      item.repositoryId,
+      ...item.tags
+    ]);
+  });
+}
+
+export function filterRepositoryPlaybooks(
+  playbooks: RepositoryPlaybookDescriptor[],
+  filters: {
+    searchText: string;
+    repositoryFilter: string;
+    installFilter: InstallFilter;
+    trustFilter: TrustFilter;
+  }
+): RepositoryPlaybookDescriptor[] {
+  return playbooks.filter((item) => {
+    if (!matchesRepositoryFilter(item.repositoryId, filters.repositoryFilter)) {
+      return false;
+    }
+    if (!matchesInstallFilter(isLocalPlaybook(item), filters.installFilter)) {
+      return false;
+    }
+    if (!matchesTrustFilter(item.trusted, filters.trustFilter)) {
+      return false;
+    }
+    return matchesKeyword(filters.searchText, [
+      item.displayName,
+      item.playbookId,
+      item.localState?.localAssetId,
+      item.description,
+      item.owner,
+      item.groupId,
+      item.groupName,
       item.repositoryId,
       ...item.tags
     ]);

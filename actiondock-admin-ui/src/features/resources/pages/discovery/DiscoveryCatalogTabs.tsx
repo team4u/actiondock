@@ -8,6 +8,7 @@ import type {
   CapabilityPackageDescriptor,
   InstalledResourceView,
   RepositoryKnowledgeDescriptor,
+  RepositoryPlaybookDescriptor,
   RepositoryWebhookDescriptor,
   RepositoryPluginDescriptor,
   RepositorySkillDescriptor,
@@ -16,6 +17,7 @@ import type {
 import {
   getSkillInstallLabel,
   isLocalWebhook,
+  isLocalPlaybook,
   isLocalTool,
   isLockedLocal,
   isTrackedLocal,
@@ -34,6 +36,7 @@ interface DiscoveryCatalogTabsProps {
   installedResourceActionKey: string | null;
   filteredTools: RepositoryScriptDescriptor[];
   filteredWebhooks: RepositoryWebhookDescriptor[];
+  filteredPlaybooks: RepositoryPlaybookDescriptor[];
   filteredPackages: CapabilityPackageDescriptor[];
   filteredSkills: RepositorySkillDescriptor[];
   filteredPlugins: RepositoryPluginDescriptor[];
@@ -41,6 +44,7 @@ interface DiscoveryCatalogTabsProps {
   filteredInstalledResources: InstalledResourceView[];
   onOpenToolDetail: (descriptor: RepositoryScriptDescriptor) => void | Promise<void>;
   onOpenWebhookDetail: (descriptor: RepositoryWebhookDescriptor) => void | Promise<void>;
+  onOpenPlaybookDetail: (descriptor: RepositoryPlaybookDescriptor) => void | Promise<void>;
   onOpenPackageDetail: (descriptor: CapabilityPackageDescriptor) => void | Promise<void>;
   onOpenSkillDetail: (descriptor: RepositorySkillDescriptor) => void | Promise<void>;
   onOpenSkillInstall: (descriptor: RepositorySkillDescriptor) => void;
@@ -59,6 +63,8 @@ interface DiscoveryCatalogTabsProps {
     customLocalAssetId?: string
   ) => void | Promise<void>;
   onAddWebhookToLocal: (descriptor: RepositoryWebhookDescriptor) => void | Promise<void>;
+  onPlaybookLocalAssetAction: (descriptor: RepositoryPlaybookDescriptor, action: LocalAssetAction) => void | Promise<void>;
+  onPlaybookUninstall: (descriptor: RepositoryPlaybookDescriptor) => void | Promise<void>;
   onPackageInstall: (descriptor: CapabilityPackageDescriptor, action: InstallAction) => void | Promise<void>;
   onPackageUninstall: (descriptor: CapabilityPackageDescriptor) => void | Promise<void>;
   onPluginAction: (record: RepositoryPluginDescriptor, action: "install" | "update", force?: boolean) => Promise<void>;
@@ -71,6 +77,7 @@ interface DiscoveryCatalogTabsProps {
 const installedResourceTypeLabels: Record<InstalledResourceView["type"], string> = {
   SCRIPT: "脚本",
   WEBHOOK: "Webhook",
+  PLAYBOOK: "任务手册",
   CONFIG_VALUE: "配置",
   CAPABILITY_PACKAGE: "能力包",
   KNOWLEDGE: "知识源",
@@ -86,6 +93,7 @@ export function DiscoveryCatalogTabs({
   installedResourceActionKey,
   filteredTools,
   filteredWebhooks,
+  filteredPlaybooks,
   filteredPackages,
   filteredSkills,
   filteredPlugins,
@@ -93,6 +101,7 @@ export function DiscoveryCatalogTabs({
   filteredInstalledResources,
   onOpenToolDetail,
   onOpenWebhookDetail,
+  onOpenPlaybookDetail,
   onOpenPackageDetail,
   onOpenSkillDetail,
   onOpenSkillInstall,
@@ -101,6 +110,8 @@ export function DiscoveryCatalogTabs({
   onAddToolToLocal,
   onWebhookLocalAssetAction,
   onAddWebhookToLocal,
+  onPlaybookLocalAssetAction,
+  onPlaybookUninstall,
   onPackageInstall,
   onPackageUninstall,
   onPluginAction,
@@ -349,6 +360,94 @@ export function DiscoveryCatalogTabs({
     }
   ];
 
+  const playbookColumns: ColumnsType<RepositoryPlaybookDescriptor> = [
+    {
+      title: "任务手册",
+      key: "playbook",
+      render: (_value: unknown, record) => (
+        <Space direction="vertical" size={2}>
+          <TableLinkCell onClick={() => void onOpenPlaybookDetail(record)}>{record.displayName}</TableLinkCell>
+          <Text code>{localAssetId(record)}</Text>
+        </Space>
+      )
+    },
+    {
+      title: "分组",
+      key: "group",
+      width: 220,
+      render: (_value: unknown, record) => (
+        <Space direction="vertical" size={2}>
+          <Text>{record.groupName || record.groupId}</Text>
+          <Text code>{record.groupId}</Text>
+        </Space>
+      )
+    },
+    {
+      title: "来源",
+      key: "repositoryId",
+      width: 240,
+      render: (_value: unknown, record) => (
+        <Space size={[4, 4]}>
+          <Text>{record.repositoryId}</Text>
+          <TrustLevelTag level={record.trusted ? "TRUSTED" : "UNTRUSTED"} />
+        </Space>
+      )
+    },
+    {
+      title: "版本",
+      key: "version",
+      width: 150,
+      render: (_value: unknown, record) => (
+        <Space direction="vertical" size={2}>
+          <Text>{record.version}</Text>
+          {record.localState?.version ? <Text type="secondary">本地 {record.localState.version}</Text> : null}
+        </Space>
+      )
+    },
+    {
+      title: "操作",
+      key: "actions",
+      width: 220,
+      render: (_value: unknown, record) => (
+        <Space wrap size={[4, 4]}>
+          {isLocalPlaybook(record) ? (
+            <>
+              <Button
+                size="small"
+                type={record.localState?.updateAvailable ? "primary" : "default"}
+                ghost={record.localState?.updateAvailable}
+                icon={<SyncOutlined />}
+                disabled={!record.localState?.updateAvailable}
+                loading={actionKey === `update-local:${record.repositoryId}:${record.playbookId}`}
+                onClick={() => void onPlaybookLocalAssetAction(record, "update-local")}
+              >
+                {record.localState?.updateAvailable ? "更新" : "已安装"}
+              </Button>
+              <Button
+                size="small"
+                danger
+                loading={actionKey === `uninstall:${record.repositoryId}:${record.playbookId}`}
+                onClick={() => void onPlaybookUninstall(record)}
+              >
+                卸载
+              </Button>
+            </>
+          ) : (
+            <Button
+              size="small"
+              type="primary"
+              icon={<DownloadOutlined />}
+              loading={actionKey === `add-local:${record.repositoryId}:${record.playbookId}`}
+              onClick={() => void onPlaybookLocalAssetAction(record, "add-local")}
+            >
+              安装
+            </Button>
+          )}
+        </Space>
+      )
+    }
+  ];
+
   const skillColumns: ColumnsType<RepositorySkillDescriptor> = [
     {
       title: "Skill",
@@ -552,6 +651,28 @@ export function DiscoveryCatalogTabs({
                   <Empty
                     image={Empty.PRESENTED_IMAGE_SIMPLE}
                     description="当前没有可发现的脚本。先到仓库管理页添加并同步仓库。"
+                  />
+                )
+              }}
+            />
+          )
+        },
+        {
+          key: "playbooks",
+          label: `任务手册 (${filteredPlaybooks.length})`,
+          children: (
+            <Table<RepositoryPlaybookDescriptor>
+              rowKey={(item) => `${item.repositoryId}:${item.playbookId}`}
+              loading={loading}
+              columns={playbookColumns}
+              dataSource={filteredPlaybooks}
+              scroll={{ x: 980 }}
+              pagination={{ pageSize: 10, showSizeChanger: true }}
+              locale={{
+                emptyText: (
+                  <Empty
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                    description="当前没有可发现的任务手册。"
                   />
                 )
               }}

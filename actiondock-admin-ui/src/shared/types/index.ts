@@ -19,7 +19,7 @@ export type RepositoryType = "GIT" | "HTTP" | "LOCAL_DIR";
 export type RepositoryTrustLevel = "TRUSTED" | "UNTRUSTED";
 export type RepositoryPurpose = "CAPABILITY" | "PROJECT";
 export type UpstreamSyncState = "SYNCED" | "LOCAL_CHANGES" | "REMOTE_CHANGES" | "DIVERGED";
-export type InstalledResourceType = "SCRIPT" | "WEBHOOK" | "CONFIG_VALUE" | "CAPABILITY_PACKAGE" | "KNOWLEDGE" | "SKILL" | "PLUGIN";
+export type InstalledResourceType = "SCRIPT" | "WEBHOOK" | "PLAYBOOK" | "CONFIG_VALUE" | "CAPABILITY_PACKAGE" | "KNOWLEDGE" | "SKILL" | "PLUGIN";
 
 export interface ForkFormValues {
   id: string;
@@ -1052,7 +1052,7 @@ export interface RepositoryLocalAssetRequest extends RepositoryInstallRequest {
 
 export interface RepositoryLocalAsset {
   id: string;
-  assetType: "SCRIPT" | "WEBHOOK";
+  assetType: "SCRIPT" | "WEBHOOK" | "PLAYBOOK";
   localAssetId: string;
   repositoryId: string;
   upstreamAssetId: string;
@@ -1070,7 +1070,7 @@ export interface RepositoryLocalAsset {
   updatedAt?: string;
 }
 
-export type ResourceLifecycleResourceType = "REPOSITORY_SCRIPT" | "REPOSITORY_WEBHOOK" | "REPOSITORY_PLUGIN" | "CAPABILITY_PACKAGE" | "REPOSITORY_KNOWLEDGE";
+export type ResourceLifecycleResourceType = "REPOSITORY_SCRIPT" | "REPOSITORY_WEBHOOK" | "REPOSITORY_PLAYBOOK" | "REPOSITORY_PLUGIN" | "CAPABILITY_PACKAGE" | "REPOSITORY_KNOWLEDGE";
 export type ResourceLifecycleOperation = "install" | "update" | "add-local" | "update-local" | "publish" | "preview" | "uninstall";
 
 export interface ResourceLifecycleRequest<TPayload = Record<string, unknown>> {
@@ -1172,6 +1172,73 @@ export interface RepositoryKnowledgeDetail {
   descriptor: RepositoryKnowledgeDescriptor;
   knowledge: KnowledgeFile;
   configTemplate: RepositoryConfigTemplateItem[];
+}
+
+export interface RepositoryPlaybookDescriptor {
+  repositoryId: string;
+  playbookId: string;
+  displayName: string;
+  version: string;
+  description?: string;
+  releaseNotes?: string;
+  owner?: string;
+  tags: string[];
+  riskLevel?: string;
+  groupId: string;
+  groupName?: string;
+  playbookPath: string;
+  groupPath?: string;
+  digest?: string;
+  trusted: boolean;
+  localState?: RepositoryLocalAssetState;
+}
+
+export interface RepositoryPlaybookFile {
+  schemaVersion: number;
+  playbookId: string;
+  groupId: string;
+  displayName: string;
+  version: string;
+  description?: string;
+  releaseNotes?: string;
+  owner?: string;
+  tags: string[];
+  riskLevel?: PlaybookRiskLevel;
+  intentAliases: string[];
+  repositoryIds: string[];
+  knowledgeRefs: PlaybookKnowledgeRef[];
+  scriptRefs: PlaybookScriptRef[];
+  guideMarkdown: string;
+  stopConditions: string[];
+  enabled: boolean;
+  digest?: string;
+}
+
+export interface RepositoryPlaybookGroupFile {
+  schemaVersion: number;
+  groupId: string;
+  displayName: string;
+  description?: string;
+  tags: string[];
+  defaultRepositoryIds: string[];
+  enabled: boolean;
+}
+
+export interface RepositoryPlaybookDetail {
+  descriptor: RepositoryPlaybookDescriptor;
+  playbook: RepositoryPlaybookFile;
+  group: RepositoryPlaybookGroupFile;
+}
+
+export interface RepositoryPlaybookPublishRequest {
+  sourceId: string;
+  playbookId: string;
+  displayName?: string;
+  version: string;
+  owner?: string;
+  releaseNotes?: string;
+  tags?: string[];
+  force?: boolean;
 }
 
 export interface SkillDeployment {

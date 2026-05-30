@@ -369,6 +369,13 @@ public class RepositoryCatalogService {
                         .thenComparing(RepositoryCatalogTypes.RepositoryWebhookDescriptor::webhookId));
     }
 
+    public List<RepositoryCatalogTypes.RepositoryPlaybookDescriptor> listAllRepositoryPlaybooks() {
+        return listAllFromEnabledRepositories(
+                this::listRepositoryPlaybooks,
+                Comparator.comparing(RepositoryCatalogTypes.RepositoryPlaybookDescriptor::repositoryId)
+                        .thenComparing(RepositoryCatalogTypes.RepositoryPlaybookDescriptor::playbookId));
+    }
+
     public List<RepositoryCatalogTypes.RepositoryScriptDescriptor> listRepositoryScripts(String repositoryId) {
         RepositoryDefinition repository = getRepository(repositoryId);
         RepositoryCatalogTypes.RepositoryIndexFile index = readRepositoryIndex(repository);
@@ -387,6 +394,15 @@ public class RepositoryCatalogService {
         return index.safeWebhooks().stream()
                 .map(entry -> toWebhookDescriptor(repository, readWebhookFile(repository, entry.webhookPath()), entry.webhookPath()))
                 .sorted(Comparator.comparing(RepositoryCatalogTypes.RepositoryWebhookDescriptor::webhookId))
+                .toList();
+    }
+
+    public List<RepositoryCatalogTypes.RepositoryPlaybookDescriptor> listRepositoryPlaybooks(String repositoryId) {
+        RepositoryDefinition repository = getRepository(repositoryId);
+        RepositoryCatalogTypes.RepositoryIndexFile index = readRepositoryIndex(repository);
+        return index.safePlaybooks().stream()
+                .map(entry -> toPlaybookDescriptor(repository, readPlaybookFile(repository, entry.playbookPath()), entry.playbookPath()))
+                .sorted(Comparator.comparing(RepositoryCatalogTypes.RepositoryPlaybookDescriptor::playbookId))
                 .toList();
     }
 
@@ -478,6 +494,24 @@ public class RepositoryCatalogService {
                 toWebhookDescriptor(repository, webhook, entry.webhookPath()),
                 webhook,
                 configTemplate
+        );
+    }
+
+    public RepositoryCatalogTypes.RepositoryPlaybookDetail getRepositoryPlaybook(String repositoryId, String playbookId) {
+        RepositoryDefinition repository = getRepository(repositoryId);
+        RepositoryCatalogTypes.RepositoryIndexFile index = readRepositoryIndex(repository);
+        RepositoryCatalogTypes.RepositoryPlaybookIndexEntry entry = findEntryById(
+                index.safePlaybooks(), playbookId, RepositoryCatalogTypes.RepositoryPlaybookIndexEntry::id, "仓库任务手册");
+        RepositoryCatalogTypes.PlaybookFile playbook = readPlaybookFile(repository, entry.playbookPath());
+        RepositoryCatalogTypes.RepositoryPlaybookGroupIndexEntry groupEntry = index.safePlaybookGroups().stream()
+                .filter(item -> Objects.equals(item.id(), playbook.groupId()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("仓库任务分组不存在: " + playbook.groupId()));
+        RepositoryCatalogTypes.PlaybookGroupFile group = readPlaybookGroupFile(repository, groupEntry.groupPath());
+        return new RepositoryCatalogTypes.RepositoryPlaybookDetail(
+                toPlaybookDescriptor(repository, playbook, entry.playbookPath()),
+                playbook,
+                group
         );
     }
 
@@ -877,6 +911,28 @@ public class RepositoryCatalogService {
         ));
     }
 
+    private RepositoryCatalogTypes.RepositoryPlaybookDescriptor toPlaybookDescriptor(RepositoryDefinition repository,
+                                                                                    RepositoryCatalogTypes.PlaybookFile playbook,
+                                                                                    String playbookPath) {
+        RepositoryCatalogTypes.RepositoryPlaybookDescriptor base = toPlaybookDescriptorWithoutLocalState(repository, playbook, playbookPath);
+        RepositoryLocalAsset asset = repos.repositoryLocalAssetRepository()
+                .findByUpstreamAsset(UpstreamAssetType.PLAYBOOK, repository.getId(), playbook.playbookId())
+                .orElse(null);
+        if (asset == null) {
+            return base;
+        }
+        return base.withLocalState(new RepositoryCatalogTypes.RepositoryLocalAssetState(
+                "LOCKED",
+                asset.getLocalAssetId(),
+                asset.getVersion(),
+                playbook.version(),
+                !Objects.equals(asset.getVersion(), playbook.version()),
+                null,
+                false,
+                false
+        ));
+    }
+
     private record UpstreamInfo(boolean dirty, boolean remoteChanged, String syncState) {
     }
 
@@ -963,6 +1019,34 @@ public class RepositoryCatalogService {
                 resolveRelativeValue(webhookPath, webhook.configTemplatePath()),
                 webhook.digest(),
                 NormalizeUtils.nullSafeList(webhook.scriptDependencies()),
+                isTrusted(repository),
+                null
+        );
+    }
+
+    private RepositoryCatalogTypes.RepositoryPlaybookDescriptor toPlaybookDescriptorWithoutLocalState(RepositoryDefinition repository,
+                                                                                                      RepositoryCatalogTypes.PlaybookFile playbook,
+                                                                                                      String playbookPath) {
+        RepositoryCatalogTypes.RepositoryIndexFile index = readRepositoryIndex(repository);
+        RepositoryCatalogTypes.RepositoryPlaybookGroupIndexEntry groupEntry = index.safePlaybookGroups().stream()
+                .filter(item -> Objects.equals(item.id(), playbook.groupId()))
+                .findFirst()
+                .orElse(null);
+        return new RepositoryCatalogTypes.RepositoryPlaybookDescriptor(
+                repository.getId(),
+                playbook.playbookId(),
+                playbook.displayName(),
+                playbook.version(),
+                playbook.description(),
+                playbook.releaseNotes(),
+                playbook.owner(),
+                NormalizeUtils.nullSafeList(playbook.tags()),
+                playbook.riskLevel(),
+                playbook.groupId(),
+                groupEntry == null ? null : groupEntry.name(),
+                playbookPath,
+                groupEntry == null ? null : groupEntry.groupPath(),
+                playbook.digest(),
                 isTrusted(repository),
                 null
         );
@@ -1069,7 +1153,9 @@ public class RepositoryCatalogService {
                 scanPlugins(repository, root),
                 scanCapabilityPackages(repository, root),
                 scanSkills(repository, root),
-                scanKnowledge(repository, root)
+                scanKnowledge(repository, root),
+                scanPlaybooks(repository, root),
+                scanPlaybookGroups(repository, root)
         );
     }
 
@@ -1170,6 +1256,37 @@ public class RepositoryCatalogService {
                 .toList();
     }
 
+    private List<RepositoryCatalogTypes.RepositoryPlaybookIndexEntry> scanPlaybooks(RepositoryDefinition repository, Path root) {
+        return scanFixedDirectory(root, PLAYBOOKS_DIR, PLAYBOOK_DESCRIPTOR_FILE).stream()
+                .map(path -> readManifest(repository, path, RepositoryCatalogTypes.PlaybookFile.class)
+                        .map(file -> new RepositoryCatalogTypes.RepositoryPlaybookIndexEntry(
+                                file.playbookId(),
+                                file.displayName(),
+                                file.version(),
+                                file.description(),
+                                file.releaseNotes(),
+                                path,
+                                file.groupId()))
+                        .orElse(null))
+                .filter(Objects::nonNull)
+                .sorted(Comparator.comparing(RepositoryCatalogTypes.RepositoryPlaybookIndexEntry::id))
+                .toList();
+    }
+
+    private List<RepositoryCatalogTypes.RepositoryPlaybookGroupIndexEntry> scanPlaybookGroups(RepositoryDefinition repository, Path root) {
+        return scanFixedDirectory(root, PLAYBOOK_GROUPS_DIR, PLAYBOOK_GROUP_DESCRIPTOR_FILE).stream()
+                .map(path -> readManifest(repository, path, RepositoryCatalogTypes.PlaybookGroupFile.class)
+                        .map(file -> new RepositoryCatalogTypes.RepositoryPlaybookGroupIndexEntry(
+                                file.groupId(),
+                                file.displayName(),
+                                file.description(),
+                                path))
+                        .orElse(null))
+                .filter(Objects::nonNull)
+                .sorted(Comparator.comparing(RepositoryCatalogTypes.RepositoryPlaybookGroupIndexEntry::id))
+                .toList();
+    }
+
     private List<String> scanFixedDirectory(Path root, String directory, String manifestFile) {
         Path base = root.resolve(directory);
         if (!Files.isDirectory(base)) {
@@ -1223,6 +1340,14 @@ public class RepositoryCatalogService {
 
     RepositoryCatalogTypes.KnowledgeFile readKnowledgeFile(RepositoryDefinition repository, String knowledgePath) {
         return readRepositoryJsonFile(repository, knowledgePath, RepositoryCatalogTypes.KnowledgeFile.class);
+    }
+
+    RepositoryCatalogTypes.PlaybookFile readPlaybookFile(RepositoryDefinition repository, String playbookPath) {
+        return readRepositoryJsonFile(repository, playbookPath, RepositoryCatalogTypes.PlaybookFile.class);
+    }
+
+    RepositoryCatalogTypes.PlaybookGroupFile readPlaybookGroupFile(RepositoryDefinition repository, String groupPath) {
+        return readRepositoryJsonFile(repository, groupPath, RepositoryCatalogTypes.PlaybookGroupFile.class);
     }
 
     private RepositoryCatalogTypes.CapabilityPackageManifestFile readCapabilityPackageManifest(RepositoryDefinition repository, String manifestPath) {

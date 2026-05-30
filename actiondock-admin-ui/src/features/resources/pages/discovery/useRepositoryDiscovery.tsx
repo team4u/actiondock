@@ -5,11 +5,13 @@ import type { NavigateFunction } from "react-router-dom";
 import {
   addRepositoryWebhookLocalAsset,
   addRepositoryToolLocalAsset,
+  addRepositoryPlaybookLocalAsset,
   getCapabilityPackage,
   getRepositoryWebhook,
   getRepositorySkill,
   getRepositoryScript,
   getRepositoryKnowledge,
+  getRepositoryPlaybook,
   installCapabilityPackage,
   installRepositoryKnowledge,
   installRepositoryPlugin,
@@ -20,6 +22,7 @@ import {
   listRepositoryPlugins,
   listRepositorySkills,
   listRepositoryKnowledge,
+  listRepositoryPlaybooks,
   listRepositoryScripts,
   uninstallCapabilityPackage,
   uninstallInstalledResource,
@@ -27,6 +30,7 @@ import {
   updateCapabilityPackage,
   updateRepositoryWebhookLocalAsset,
   updateRepositoryPlugin,
+  updateRepositoryPlaybookLocalAsset,
   updateRepositoryToolLocalAsset
 } from "../../api";
 import { ApiError } from "../../../../shared/api/httpClient";
@@ -37,6 +41,8 @@ import type {
   RepositoryDefinition,
   RepositoryKnowledgeDescriptor,
   RepositoryKnowledgeDetail,
+  RepositoryPlaybookDescriptor,
+  RepositoryPlaybookDetail,
   RepositoryWebhookDescriptor,
   RepositoryWebhookDetail,
   RepositoryPluginDescriptor,
@@ -49,12 +55,14 @@ import { getErrorMessage } from "../../../../services/utils";
 import {
   filterCapabilityPackages,
   filterRepositoryKnowledge,
+  filterRepositoryPlaybooks,
   filterRepositoryWebhooks,
   filterRepositoryPlugins,
   filterRepositorySkills,
   filterRepositoryTools,
   getSkillInstallLabel,
   isLocalWebhook,
+  isLocalPlaybook,
   isLocalTool,
   localAssetId,
   renderPluginDependencies,
@@ -85,6 +93,7 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
   const [skills, setSkills] = useState<RepositorySkillDescriptor[]>([]);
   const [plugins, setPlugins] = useState<RepositoryPluginDescriptor[]>([]);
   const [knowledge, setKnowledge] = useState<RepositoryKnowledgeDescriptor[]>([]);
+  const [playbooks, setPlaybooks] = useState<RepositoryPlaybookDescriptor[]>([]);
   const [installedResources, setInstalledResources] = useState<InstalledResourceView[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionKey, setActionKey] = useState<string | null>(null);
@@ -112,6 +121,9 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
   const [knowledgeDetailLoading, setKnowledgeDetailLoading] = useState(false);
   const [knowledgeDetail, setKnowledgeDetail] = useState<RepositoryKnowledgeDetail | null>(null);
   const [knowledgeActionKey, setKnowledgeActionKey] = useState<string | null>(null);
+  const [playbookDetailOpen, setPlaybookDetailOpen] = useState(false);
+  const [playbookDetailLoading, setPlaybookDetailLoading] = useState(false);
+  const [playbookDetail, setPlaybookDetail] = useState<RepositoryPlaybookDetail | null>(null);
 
   const [searchText, setSearchText] = useState("");
   const [repositoryFilter, setRepositoryFilter] = useState<string>("ALL");
@@ -122,10 +134,11 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [repositoryData, toolData, webhookData, packageData, skillData, installedResourceData] = await Promise.all([
+      const [repositoryData, toolData, webhookData, playbookData, packageData, skillData, installedResourceData] = await Promise.all([
         listRepositories(),
         listRepositoryScripts(),
         listRepositoryWebhooks(),
+        listRepositoryPlaybooks(),
         listCapabilityPackages(),
         listRepositorySkills(),
         listInstalledResources()
@@ -137,6 +150,7 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
       setRepositories(repositoryData);
       setTools(toolData);
       setWebhooks(webhookData);
+      setPlaybooks(playbookData);
       setPackages(packageData);
       setSkills(skillData);
       setPlugins(pluginData);
@@ -194,6 +208,13 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
     installFilter,
     trustFilter
   }), [installFilter, knowledge, repositoryFilter, searchText, trustFilter]);
+
+  const filteredPlaybooks = useMemo(() => filterRepositoryPlaybooks(playbooks, {
+    searchText,
+    repositoryFilter,
+    installFilter,
+    trustFilter
+  }), [installFilter, playbooks, repositoryFilter, searchText, trustFilter]);
 
   const filteredInstalledResources = useMemo(() => {
     const tokens = searchText.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -304,6 +325,19 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
     }
   }, [messageApi]);
 
+  const openPlaybookDetail = useCallback(async (descriptor: RepositoryPlaybookDescriptor) => {
+    setPlaybookDetailOpen(true);
+    setPlaybookDetailLoading(true);
+    try {
+      setPlaybookDetail(await getRepositoryPlaybook(descriptor.repositoryId, descriptor.playbookId));
+    } catch (error) {
+      setPlaybookDetail(null);
+      messageApi.error(getErrorMessage(error, "加载任务手册详情失败"));
+    } finally {
+      setPlaybookDetailLoading(false);
+    }
+  }, [messageApi]);
+
   const handleKnowledgeInstall = useCallback(async (descriptor: RepositoryKnowledgeDescriptor) => {
     setKnowledgeActionKey(`install:${descriptor.repositoryId}:${descriptor.knowledgeId}`);
     try {
@@ -344,6 +378,60 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
           messageApi.error(getErrorMessage(error, "卸载知识源失败"));
         } finally {
           setKnowledgeActionKey(null);
+        }
+      }
+    });
+  }, [loadData, messageApi, modal]);
+
+  const handlePlaybookLocalAssetAction = useCallback(async (descriptor: RepositoryPlaybookDescriptor, action: LocalAssetAction) => {
+    setActionKey(`${action}:${descriptor.repositoryId}:${descriptor.playbookId}`);
+    try {
+      if (action === "add-local") {
+        await addRepositoryPlaybookLocalAsset(descriptor.repositoryId, descriptor.playbookId);
+        messageApi.success("任务手册已安装");
+      } else {
+        await updateRepositoryPlaybookLocalAsset(descriptor.repositoryId, descriptor.playbookId);
+        messageApi.success("任务手册已更新");
+      }
+      await loadData();
+      if (playbookDetailOpen) {
+        await openPlaybookDetail(descriptor);
+      }
+    } catch (error) {
+      messageApi.error(getErrorMessage(error, action === "add-local" ? "安装任务手册失败" : "更新任务手册失败"));
+    } finally {
+      setActionKey(null);
+    }
+  }, [loadData, messageApi, openPlaybookDetail, playbookDetailOpen]);
+
+  const handlePlaybookUninstall = useCallback((descriptor: RepositoryPlaybookDescriptor) => {
+    const installedId = descriptor.localState?.localAssetId;
+    if (!installedId) {
+      return;
+    }
+    modal.confirm({
+      title: "卸载任务手册",
+      okText: "卸载",
+      okButtonProps: { danger: true },
+      cancelText: "取消",
+      content: (
+        <Space direction="vertical" size={8} style={{ width: "100%" }}>
+          <Text>将删除仓库安装的托管任务手册；若任务分组不再被引用，也会一并删除。</Text>
+          <Text code>{installedId}</Text>
+        </Space>
+      ),
+      onOk: async () => {
+        setActionKey(`uninstall:${descriptor.repositoryId}:${descriptor.playbookId}`);
+        try {
+          await uninstallInstalledResource("PLAYBOOK", installedId);
+          messageApi.success("任务手册已卸载");
+          setPlaybookDetailOpen(false);
+          setPlaybookDetail(null);
+          await loadData();
+        } catch (error) {
+          messageApi.error(getErrorMessage(error, "卸载任务手册失败"));
+        } finally {
+          setActionKey(null);
         }
       }
     });
@@ -753,12 +841,14 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
   return {
     repositories,
     tools,
+    playbooks,
     loading,
     actionKey,
     packageActionKey,
     installedResourceActionKey,
     filteredTools,
     filteredWebhooks,
+    filteredPlaybooks,
     filteredPackages,
     filteredSkills,
     filteredPlugins,
@@ -782,6 +872,9 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
     knowledgeDetailLoading,
     knowledgeDetail,
     knowledgeActionKey,
+    playbookDetailOpen,
+    playbookDetailLoading,
+    playbookDetail,
     searchText,
     repositoryFilter,
     typeFilter,
@@ -800,8 +893,11 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
     openSkillInstall,
     closeSkillInstall,
     openKnowledgeDetail,
+    openPlaybookDetail,
     handleKnowledgeInstall,
     handleKnowledgeUninstall,
+    handlePlaybookLocalAssetAction,
+    handlePlaybookUninstall,
     handleRepositoryPluginAction,
     confirmToolLocalAssetAction,
     confirmAddToolToLocal,
@@ -814,6 +910,7 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
     closeWebhookDetail: () => setWebhookDetailOpen(false),
     closePackageDetail: () => setPackageDetailOpen(false),
     closeSkillDetail: () => setSkillDetailOpen(false),
-    closeKnowledgeDetail: () => setKnowledgeDetailOpen(false)
+    closeKnowledgeDetail: () => setKnowledgeDetailOpen(false),
+    closePlaybookDetail: () => setPlaybookDetailOpen(false)
   };
 }

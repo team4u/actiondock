@@ -13,6 +13,7 @@ import org.team4u.actiondock.repository.RepositoryWebhookService;
 import org.team4u.actiondock.repository.RepositoryPluginService;
 import org.team4u.actiondock.repository.RepositoryScriptService;
 import org.team4u.actiondock.repository.RepositoryKnowledgeService;
+import org.team4u.actiondock.repository.RepositoryPlaybookService;
 import org.team4u.actiondock.repository.RepositoryCatalogTypes.ToolInstallationOptions;
 import org.team4u.actiondock.common.NormalizeUtils;
 import org.team4u.actiondock.web.common.ApiResponse;
@@ -34,6 +35,7 @@ public class ResourceLifecycleController {
     private static final String RESOURCE_REPOSITORY_PLUGIN = "REPOSITORY_PLUGIN";
     private static final String RESOURCE_CAPABILITY_PACKAGE = "CAPABILITY_PACKAGE";
     private static final String RESOURCE_REPOSITORY_KNOWLEDGE = "REPOSITORY_KNOWLEDGE";
+    private static final String RESOURCE_REPOSITORY_PLAYBOOK = "REPOSITORY_PLAYBOOK";
 
     private static final String OP_INSTALL = "install";
     private static final String OP_UPDATE = "update";
@@ -49,6 +51,7 @@ public class ResourceLifecycleController {
     private final RepositoryPluginService repositoryPluginService;
     private final RepositoryCapabilityPackageService repositoryCapabilityPackageService;
     private final RepositoryKnowledgeService repositoryKnowledgeService;
+    private final RepositoryPlaybookService repositoryPlaybookService;
     private final ObjectMapper objectMapper;
 
     public ResourceLifecycleController(RepositoryCatalogService repositoryCatalogService,
@@ -57,6 +60,7 @@ public class ResourceLifecycleController {
                                        RepositoryPluginService repositoryPluginService,
                                        RepositoryCapabilityPackageService repositoryCapabilityPackageService,
                                        RepositoryKnowledgeService repositoryKnowledgeService,
+                                       RepositoryPlaybookService repositoryPlaybookService,
                                        ObjectMapper objectMapper) {
         this.repositoryCatalogService = repositoryCatalogService;
         this.repositoryToolService = repositoryToolService;
@@ -64,6 +68,7 @@ public class ResourceLifecycleController {
         this.repositoryPluginService = repositoryPluginService;
         this.repositoryCapabilityPackageService = repositoryCapabilityPackageService;
         this.repositoryKnowledgeService = repositoryKnowledgeService;
+        this.repositoryPlaybookService = repositoryPlaybookService;
         this.objectMapper = objectMapper;
     }
 
@@ -78,6 +83,7 @@ public class ResourceLifecycleController {
             case RESOURCE_REPOSITORY_PLUGIN -> executeRepositoryPlugin(operation, safeRequest);
             case RESOURCE_CAPABILITY_PACKAGE -> executeCapabilityPackage(operation, safeRequest);
             case RESOURCE_REPOSITORY_KNOWLEDGE -> executeRepositoryKnowledge(operation, safeRequest);
+            case RESOURCE_REPOSITORY_PLAYBOOK -> executeRepositoryPlaybook(operation, safeRequest);
             default -> throw new IllegalArgumentException("不支持的资源类型: " + resourceType);
         };
         return ApiResponse.success(
@@ -142,6 +148,23 @@ public class ResourceLifecycleController {
                 yield null;
             }
             default -> throw unsupported(operation, RESOURCE_REPOSITORY_WEBHOOK);
+        };
+    }
+
+    private Object executeRepositoryPlaybook(String operation, ResourceLifecycleRequest request) {
+        return switch (operation) {
+            case OP_ADD_LOCAL, OP_INSTALL -> repositoryPlaybookService.addLocalAsset(normalizeRepositoryId(request),
+                    normalizeResourceId(request, "playbookId 不能为空"));
+            case OP_UPDATE_LOCAL, OP_UPDATE -> repositoryPlaybookService.updateLocalAsset(normalizeRepositoryId(request),
+                    normalizeResourceId(request, "playbookId 不能为空"));
+            case OP_PUBLISH -> repositoryPlaybookService.publishPlaybook(normalizeRepositoryId(request),
+                    requirePayload(request.getPayload(), RepositoryCatalogTypes.RepositoryPlaybookPublishRequest.class));
+            case OP_UNINSTALL -> {
+                String installedResourceId = NormalizeUtils.normalize(request.getInstalledResourceId(), "installedResourceId 不能为空");
+                repositoryPlaybookService.uninstallPlaybook(installedResourceId);
+                yield null;
+            }
+            default -> throw unsupported(operation, RESOURCE_REPOSITORY_PLAYBOOK);
         };
     }
 

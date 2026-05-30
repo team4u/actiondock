@@ -26,37 +26,49 @@ final class RepositoryIndexUtils {
     static RepositoryCatalogTypes.RepositoryIndexFile withScripts(RepositoryCatalogTypes.RepositoryIndexFile current,
                                                                   RepositoryDefinition repository,
                                                                   List<RepositoryCatalogTypes.RepositoryIndexEntry> scripts) {
-        return withReplaced(current, repository, scripts, null, null, null, null, null);
+        return withReplaced(current, repository, scripts, null, null, null, null, null, null, null);
     }
 
     static RepositoryCatalogTypes.RepositoryIndexFile withWebhooks(RepositoryCatalogTypes.RepositoryIndexFile current,
                                                                        RepositoryDefinition repository,
                                                                        List<RepositoryCatalogTypes.RepositoryWebhookIndexEntry> webhooks) {
-        return withReplaced(current, repository, null, webhooks, null, null, null, null);
+        return withReplaced(current, repository, null, webhooks, null, null, null, null, null, null);
     }
 
     static RepositoryCatalogTypes.RepositoryIndexFile withPlugins(RepositoryCatalogTypes.RepositoryIndexFile current,
                                                    RepositoryDefinition repository,
                                                    List<RepositoryCatalogTypes.RepositoryPluginIndexEntry> plugins) {
-        return withReplaced(current, repository, null, null, plugins, null, null, null);
+        return withReplaced(current, repository, null, null, plugins, null, null, null, null, null);
     }
 
     static RepositoryCatalogTypes.RepositoryIndexFile withPackages(RepositoryCatalogTypes.RepositoryIndexFile current,
                                                     RepositoryDefinition repository,
                                                     List<RepositoryCatalogTypes.CapabilityPackageIndexEntry> packages) {
-        return withReplaced(current, repository, null, null, null, packages, null, null);
+        return withReplaced(current, repository, null, null, null, packages, null, null, null, null);
     }
 
     static RepositoryCatalogTypes.RepositoryIndexFile withSkills(RepositoryCatalogTypes.RepositoryIndexFile current,
                                                   RepositoryDefinition repository,
                                                   List<RepositoryCatalogTypes.RepositorySkillIndexEntry> skills) {
-        return withReplaced(current, repository, null, null, null, null, skills, null);
+        return withReplaced(current, repository, null, null, null, null, skills, null, null, null);
     }
 
     static RepositoryCatalogTypes.RepositoryIndexFile withKnowledge(RepositoryCatalogTypes.RepositoryIndexFile current,
                                                                      RepositoryDefinition repository,
                                                                      List<RepositoryCatalogTypes.RepositoryKnowledgeIndexEntry> knowledge) {
-        return withReplaced(current, repository, null, null, null, null, null, knowledge);
+        return withReplaced(current, repository, null, null, null, null, null, knowledge, null, null);
+    }
+
+    static RepositoryCatalogTypes.RepositoryIndexFile withPlaybooks(RepositoryCatalogTypes.RepositoryIndexFile current,
+                                                                    RepositoryDefinition repository,
+                                                                    List<RepositoryCatalogTypes.RepositoryPlaybookIndexEntry> playbooks) {
+        return withReplaced(current, repository, null, null, null, null, null, null, playbooks, null);
+    }
+
+    static RepositoryCatalogTypes.RepositoryIndexFile withPlaybookGroups(RepositoryCatalogTypes.RepositoryIndexFile current,
+                                                                         RepositoryDefinition repository,
+                                                                         List<RepositoryCatalogTypes.RepositoryPlaybookGroupIndexEntry> playbookGroups) {
+        return withReplaced(current, repository, null, null, null, null, null, null, null, playbookGroups);
     }
 
     @SuppressWarnings("unchecked")
@@ -67,7 +79,9 @@ final class RepositoryIndexUtils {
                                                                         List<RepositoryCatalogTypes.RepositoryPluginIndexEntry> plugins,
                                                                         List<RepositoryCatalogTypes.CapabilityPackageIndexEntry> packages,
                                                                         List<RepositoryCatalogTypes.RepositorySkillIndexEntry> skills,
-                                                                        List<RepositoryCatalogTypes.RepositoryKnowledgeIndexEntry> knowledge) {
+                                                                        List<RepositoryCatalogTypes.RepositoryKnowledgeIndexEntry> knowledge,
+                                                                        List<RepositoryCatalogTypes.RepositoryPlaybookIndexEntry> playbooks,
+                                                                        List<RepositoryCatalogTypes.RepositoryPlaybookGroupIndexEntry> playbookGroups) {
         return new RepositoryCatalogTypes.RepositoryIndexFile(
                 DEFAULT_VERSION,
                 repository.getName(),
@@ -77,7 +91,9 @@ final class RepositoryIndexUtils {
                 plugins != null ? plugins : new ArrayList<>(NormalizeUtils.nullSafeList(current == null ? null : current.plugins())),
                 packages != null ? packages : new ArrayList<>(NormalizeUtils.nullSafeList(current == null ? null : current.packages())),
                 skills != null ? skills : new ArrayList<>(NormalizeUtils.nullSafeList(current == null ? null : current.skills())),
-                knowledge != null ? knowledge : new ArrayList<>(NormalizeUtils.nullSafeList(current == null ? null : current.safeKnowledge()))
+                knowledge != null ? knowledge : new ArrayList<>(NormalizeUtils.nullSafeList(current == null ? null : current.safeKnowledge())),
+                playbooks != null ? playbooks : new ArrayList<>(NormalizeUtils.nullSafeList(current == null ? null : current.safePlaybooks())),
+                playbookGroups != null ? playbookGroups : new ArrayList<>(NormalizeUtils.nullSafeList(current == null ? null : current.safePlaybookGroups()))
         );
     }
 

@@ -12,6 +12,8 @@ import type {
   RepositoryWebhookDetail,
   RepositoryKnowledgeDescriptor,
   RepositoryKnowledgeDetail,
+  RepositoryPlaybookDescriptor,
+  RepositoryPlaybookDetail,
   RepositoryPluginDescriptor,
   RepositorySkillDetail,
   RepositoryScriptDescriptor,
@@ -21,6 +23,7 @@ import { getScriptTypeLabel } from "../../../../components/domain/typeLabels";
 import {
   getSkillInstallLabel,
   isLocalWebhook,
+  isLocalPlaybook,
   isLocalTool,
   isLockedLocal,
   isTrackedLocal,
@@ -46,6 +49,9 @@ interface DiscoveryDetailDrawersProps {
   webhookDetailOpen: boolean;
   webhookDetailLoading: boolean;
   webhookDetail: RepositoryWebhookDetail | null;
+  playbookDetailOpen: boolean;
+  playbookDetailLoading: boolean;
+  playbookDetail: RepositoryPlaybookDetail | null;
   packageDetailOpen: boolean;
   packageDetailLoading: boolean;
   packageDetail: CapabilityPackageDetail | null;
@@ -57,6 +63,7 @@ interface DiscoveryDetailDrawersProps {
   knowledgeDetail: RepositoryKnowledgeDetail | null;
   onCloseToolDetail: () => void;
   onCloseWebhookDetail: () => void;
+  onClosePlaybookDetail: () => void;
   onClosePackageDetail: () => void;
   onCloseSkillDetail: () => void;
   onCloseKnowledgeDetail: () => void;
@@ -75,6 +82,8 @@ interface DiscoveryDetailDrawersProps {
     customLocalAssetId?: string
   ) => void | Promise<void>;
   onAddWebhookToLocal: (descriptor: RepositoryWebhookDetail["descriptor"]) => void | Promise<void>;
+  onPlaybookLocalAssetAction: (descriptor: RepositoryPlaybookDescriptor, action: LocalAssetAction) => void | Promise<void>;
+  onPlaybookUninstall: (descriptor: RepositoryPlaybookDescriptor) => void | Promise<void>;
   onPackageInstall: (descriptor: CapabilityPackageDescriptor, action: InstallAction) => void | Promise<void>;
   onPackageUninstall: (descriptor: CapabilityPackageDescriptor) => void | Promise<void>;
   onKnowledgeInstall: (descriptor: RepositoryKnowledgeDescriptor) => void | Promise<void>;
@@ -95,6 +104,9 @@ export function DiscoveryDetailDrawers({
   webhookDetailOpen,
   webhookDetailLoading,
   webhookDetail,
+  playbookDetailOpen,
+  playbookDetailLoading,
+  playbookDetail,
   packageDetailOpen,
   packageDetailLoading,
   packageDetail,
@@ -106,6 +118,7 @@ export function DiscoveryDetailDrawers({
   knowledgeDetail,
   onCloseToolDetail,
   onCloseWebhookDetail,
+  onClosePlaybookDetail,
   onClosePackageDetail,
   onCloseSkillDetail,
   onCloseKnowledgeDetail,
@@ -114,6 +127,8 @@ export function DiscoveryDetailDrawers({
   onAddToolToLocal,
   onWebhookLocalAssetAction,
   onAddWebhookToLocal,
+  onPlaybookLocalAssetAction,
+  onPlaybookUninstall,
   onPackageInstall,
   onPackageUninstall,
   onKnowledgeInstall,
@@ -704,6 +719,162 @@ export function DiscoveryDetailDrawers({
                   key: "dependencies",
                   label: `外部依赖 (${packageDetail.releaseFile.externalDependencies.length})`,
                   children: renderExternalDependencies(packageDetail.releaseFile.externalDependencies)
+                }
+              ]}
+            />
+          </Space>
+        )}
+      </Drawer>
+
+      <Drawer
+        title={playbookDetail?.descriptor.displayName || "任务手册详情"}
+        open={playbookDetailOpen}
+        onClose={onClosePlaybookDetail}
+        width={920}
+        destroyOnHidden
+        extra={playbookDetail ? (
+          <Space>
+            {isLocalPlaybook(playbookDetail.descriptor) ? (
+              <>
+                <Button
+                  type={playbookDetail.descriptor.localState?.updateAvailable ? "primary" : "default"}
+                  ghost={playbookDetail.descriptor.localState?.updateAvailable}
+                  disabled={!playbookDetail.descriptor.localState?.updateAvailable}
+                  loading={actionKey === `update-local:${playbookDetail.descriptor.repositoryId}:${playbookDetail.descriptor.playbookId}`}
+                  onClick={() => void onPlaybookLocalAssetAction(playbookDetail.descriptor, "update-local")}
+                >
+                  {playbookDetail.descriptor.localState?.updateAvailable ? "更新" : "已安装"}
+                </Button>
+                <Button
+                  danger
+                  loading={actionKey === `uninstall:${playbookDetail.descriptor.repositoryId}:${playbookDetail.descriptor.playbookId}`}
+                  onClick={() => void onPlaybookUninstall(playbookDetail.descriptor)}
+                >
+                  卸载
+                </Button>
+              </>
+            ) : (
+              <Button
+                type="primary"
+                icon={<DownloadOutlined />}
+                loading={actionKey === `add-local:${playbookDetail.descriptor.repositoryId}:${playbookDetail.descriptor.playbookId}`}
+                onClick={() => void onPlaybookLocalAssetAction(playbookDetail.descriptor, "add-local")}
+              >
+                安装
+              </Button>
+            )}
+          </Space>
+        ) : null}
+      >
+        {playbookDetailLoading ? (
+          <div className="page-loading">
+            <Spin size="large" />
+          </div>
+        ) : !playbookDetail ? (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="任务手册详情加载失败" />
+        ) : (
+          <Space direction="vertical" size={16} style={{ width: "100%" }}>
+            <Descriptions
+              bordered
+              size="small"
+              column={2}
+              items={[
+                { key: "playbookId", label: "任务手册 ID", children: <Text code>{localAssetId(playbookDetail.descriptor)}</Text> },
+                { key: "repo", label: "来源仓库", children: playbookDetail.descriptor.repositoryId },
+                { key: "version", label: "远端版本", children: playbookDetail.descriptor.version },
+                { key: "installedVersion", label: "本机版本", children: playbookDetail.descriptor.localState?.version || "-" },
+                { key: "group", label: "任务分组", children: <Text code>{playbookDetail.group.groupId}</Text> },
+                { key: "owner", label: "维护人", children: playbookDetail.descriptor.owner || "-" },
+                { key: "risk", label: "风险等级", children: <RiskLevelTag level={playbookDetail.descriptor.riskLevel} /> },
+                { key: "trust", label: "仓库信任", children: <TrustLevelTag level={playbookDetail.descriptor.trusted ? "TRUSTED" : "UNTRUSTED"} /> }
+              ]}
+            />
+            <Space wrap size={[8, 8]}>
+              {playbookDetail.descriptor.tags.map((tag) => <Tag key={tag}>{tag}</Tag>)}
+              {isLocalPlaybook(playbookDetail.descriptor) ? <Tag color="blue">已安装</Tag> : <Tag>未安装</Tag>}
+              {playbookDetail.descriptor.localState?.updateAvailable ? <Tag color="processing">有更新</Tag> : null}
+              {playbookDetail.playbook.enabled ? <Tag color="green">启用</Tag> : <Tag>停用</Tag>}
+            </Space>
+            <Tabs
+              items={[
+                {
+                  key: "description",
+                  label: "说明",
+                  children: (
+                    <MarkdownDescription
+                      value={playbookDetail.playbook.description}
+                      emptyText="该任务手册没有填写说明。"
+                      className="markdown-description--panel"
+                    />
+                  )
+                },
+                {
+                  key: "guide",
+                  label: "Guide",
+                  children: (
+                    <MarkdownDescription
+                      value={playbookDetail.playbook.guideMarkdown}
+                      emptyText="该任务手册没有填写 Guide。"
+                      className="markdown-description--panel"
+                    />
+                  )
+                },
+                {
+                  key: "knowledge",
+                  label: `知识引用 (${playbookDetail.playbook.knowledgeRefs.length})`,
+                  children: playbookDetail.playbook.knowledgeRefs.length > 0 ? (
+                    <Table
+                      rowKey={(item) => `${item.type}:${item.repositoryId}:${item.path}`}
+                      size="small"
+                      pagination={false}
+                      dataSource={playbookDetail.playbook.knowledgeRefs}
+                      columns={[
+                        { title: "类型", dataIndex: "type", key: "type", width: 120 },
+                        { title: "仓库", dataIndex: "repositoryId", key: "repositoryId", render: (value: string) => <Text code>{value}</Text> },
+                        { title: "路径", dataIndex: "path", key: "path", render: (value: string) => <Text code>{value}</Text> }
+                      ]}
+                    />
+                  ) : (
+                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该任务手册没有知识引用" />
+                  )
+                },
+                {
+                  key: "scripts",
+                  label: `脚本引用 (${playbookDetail.playbook.scriptRefs.length})`,
+                  children: playbookDetail.playbook.scriptRefs.length > 0 ? (
+                    <Table
+                      rowKey="scriptId"
+                      size="small"
+                      pagination={false}
+                      dataSource={playbookDetail.playbook.scriptRefs}
+                      columns={[
+                        { title: "脚本", dataIndex: "scriptId", key: "scriptId", render: (value: string) => <Text code>{value}</Text> },
+                        { title: "用途", dataIndex: "purpose", key: "purpose", render: (value?: string) => value || "-" }
+                      ]}
+                    />
+                  ) : (
+                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该任务手册没有脚本引用" />
+                  )
+                },
+                {
+                  key: "stop",
+                  label: `停止条件 (${playbookDetail.playbook.stopConditions.length})`,
+                  children: playbookDetail.playbook.stopConditions.length > 0 ? (
+                    <Space wrap>{playbookDetail.playbook.stopConditions.map((item) => <Tag color="red" key={item}>{item}</Tag>)}</Space>
+                  ) : (
+                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该任务手册没有停止条件" />
+                  )
+                },
+                {
+                  key: "releaseNotes",
+                  label: "发布日志",
+                  children: (
+                    <MarkdownDescription
+                      value={playbookDetail.playbook.releaseNotes}
+                      emptyText="该版本没有填写发布日志。"
+                      className="markdown-description--panel"
+                    />
+                  )
                 }
               ]}
             />

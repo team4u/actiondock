@@ -11,5 +11,7 @@ public enum UpstreamAssetType {
     /** 脚本资产 */
     SCRIPT,
     /** Webhook 资产 */
-    WEBHOOK
+    WEBHOOK,
+    /** Playbook 资产 */
+    PLAYBOOK
 }

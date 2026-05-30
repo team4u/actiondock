@@ -214,9 +214,15 @@ public class RepositoryConfiguration {
     }
 
     @Bean
+    public RepositoryPlaybookService repositoryPlaybookService(RepositoryCatalogService repositoryCatalogService) {
+        return new RepositoryPlaybookService(repositoryCatalogService);
+    }
+
+    @Bean
     public InstalledResourceService installedResourceService(RepositoryCatalogService repositoryCatalogService,
                                                             RepositoryScriptService repositoryToolService,
                                                             RepositoryWebhookService repositoryWebhookService,
+                                                            RepositoryPlaybookService repositoryPlaybookService,
                                                             RepositoryCapabilityPackageService repositoryCapabilityPackageService,
                                                             RepositoryKnowledgeService repositoryKnowledgeService,
                                                             SkillService skillService,
@@ -226,6 +232,7 @@ public class RepositoryConfiguration {
                 repositoryCatalogService,
                 repositoryToolService,
                 repositoryWebhookService,
+                repositoryPlaybookService,
                 repositoryCapabilityPackageService,
                 repositoryKnowledgeService,
                 skillService,

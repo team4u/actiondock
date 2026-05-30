@@ -22,6 +22,7 @@ import org.team4u.actiondock.repository.RepositoryCapabilityPackageService;
 import org.team4u.actiondock.repository.RepositoryKnowledgeService;
 import org.team4u.actiondock.repository.RepositoryWebhookService;
 import org.team4u.actiondock.repository.RepositoryPluginService;
+import org.team4u.actiondock.repository.RepositoryPlaybookService;
 import org.team4u.actiondock.repository.RepositorySkillService;
 import org.team4u.actiondock.repository.RepositoryScriptService;
 import org.team4u.actiondock.web.common.ApiResponse;
@@ -45,6 +46,7 @@ public class RepositoryController {
     private final RepositoryCapabilityPackageService repositoryCapabilityPackageService;
     private final RepositorySkillService repositorySkillService;
     private final RepositoryKnowledgeService repositoryKnowledgeService;
+    private final RepositoryPlaybookService repositoryPlaybookService;
 
     public RepositoryController(RepositoryCatalogService repositoryCatalogService,
                                 RepositoryPluginService repositoryPluginService,
@@ -52,7 +54,8 @@ public class RepositoryController {
                                 RepositoryWebhookService repositoryWebhookService,
                                 RepositoryCapabilityPackageService repositoryCapabilityPackageService,
                                 RepositorySkillService repositorySkillService,
-                                RepositoryKnowledgeService repositoryKnowledgeService) {
+                                RepositoryKnowledgeService repositoryKnowledgeService,
+                                RepositoryPlaybookService repositoryPlaybookService) {
         this.repositoryCatalogService = repositoryCatalogService;
         this.repositoryPluginService = repositoryPluginService;
         this.repositoryToolService = repositoryToolService;
@@ -60,6 +63,7 @@ public class RepositoryController {
         this.repositoryCapabilityPackageService = repositoryCapabilityPackageService;
         this.repositorySkillService = repositorySkillService;
         this.repositoryKnowledgeService = repositoryKnowledgeService;
+        this.repositoryPlaybookService = repositoryPlaybookService;
     }
 
     /**
@@ -155,10 +159,26 @@ public class RepositoryController {
         return ApiResponse.success(repositoryCatalogService.listRepositoryWebhooks(id));
     }
 
+    @GetMapping("/playbooks")
+    public ApiResponse<List<RepositoryCatalogTypes.RepositoryPlaybookDescriptor>> listAllPlaybooks() {
+        return ApiResponse.success(repositoryCatalogService.listAllRepositoryPlaybooks());
+    }
+
+    @GetMapping("/{id}/playbooks")
+    public ApiResponse<List<RepositoryCatalogTypes.RepositoryPlaybookDescriptor>> listRepositoryPlaybooks(@PathVariable String id) {
+        return ApiResponse.success(repositoryCatalogService.listRepositoryPlaybooks(id));
+    }
+
     @GetMapping("/{id}/webhooks/{webhookId}")
     public ApiResponse<RepositoryCatalogTypes.RepositoryWebhookDetail> webhookDetail(@PathVariable String id,
                                                                                              @PathVariable String webhookId) {
         return ApiResponse.success(repositoryCatalogService.getRepositoryWebhook(id, webhookId));
+    }
+
+    @GetMapping("/{id}/playbooks/{playbookId}")
+    public ApiResponse<RepositoryCatalogTypes.RepositoryPlaybookDetail> playbookDetail(@PathVariable String id,
+                                                                                       @PathVariable String playbookId) {
+        return ApiResponse.success(repositoryCatalogService.getRepositoryPlaybook(id, playbookId));
     }
 
     @GetMapping("/packages")
@@ -276,6 +296,18 @@ public class RepositoryController {
                 options -> repositoryWebhookService.updateLocalAsset(id, webhookId, options), "本地资产已更新");
     }
 
+    @PostMapping("/{id}/playbooks/{playbookId}/local-assets")
+    public ApiResponse<RepositoryLocalAsset> addPlaybookLocalAsset(@PathVariable String id,
+                                                                   @PathVariable String playbookId) {
+        return ApiResponse.success(repositoryPlaybookService.addLocalAsset(id, playbookId), "任务手册已安装");
+    }
+
+    @PostMapping("/{id}/playbooks/{playbookId}/local-assets/update")
+    public ApiResponse<RepositoryLocalAsset> updatePlaybookLocalAsset(@PathVariable String id,
+                                                                      @PathVariable String playbookId) {
+        return ApiResponse.success(repositoryPlaybookService.updateLocalAsset(id, playbookId), "任务手册已更新");
+    }
+
     /**
      * 将本地脚本发布到仓库。
      *
@@ -287,6 +319,13 @@ public class RepositoryController {
     public ApiResponse<RepositoryCatalogTypes.RepositoryScriptDescriptor> publish(@PathVariable String id,
                                                                                   @RequestBody RepositoryCatalogTypes.RepositoryPublishRequest request) {
         return ApiResponse.success(repositoryToolService.publishScript(id, request), "发布完成");
+    }
+
+    @PostMapping("/{id}/playbooks/publish")
+    public ApiResponse<RepositoryCatalogTypes.RepositoryPlaybookDescriptor> publishPlaybook(
+            @PathVariable String id,
+            @RequestBody RepositoryCatalogTypes.RepositoryPlaybookPublishRequest request) {
+        return ApiResponse.success(repositoryPlaybookService.publishPlaybook(id, request), "任务手册发布完成");
     }
 
     @PostMapping("/{id}/packages/preview")
