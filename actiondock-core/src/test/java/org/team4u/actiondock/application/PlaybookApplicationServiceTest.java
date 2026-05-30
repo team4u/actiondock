@@ -134,6 +134,37 @@ class PlaybookApplicationServiceTest {
     }
 
     @Test
+    void resolvesByRegexAndHandlesInvalidRegex() {
+        service.saveGroup(new PlaybookGroup().setId("billing").setName("Billing").setTags(List.of("finance")));
+        service.savePlaybook(new Playbook()
+                .setId("refund")
+                .setGroupId("billing")
+                .setName("退款失败排查")
+                .setIntentAliases(List.of("退款失败"))
+                .setTags(List.of("refund"))
+                .setRepositoryIds(List.of("billing-service"))
+                .setGuideMarkdown("guide"));
+        service.savePlaybook(new Playbook()
+                .setId("timeout")
+                .setGroupId("billing")
+                .setName("超时排查")
+                .setIntentAliases(List.of("退款超时"))
+                .setTags(List.of("timeout"))
+                .setGuideMarkdown("guide"));
+
+        // Match by regex "退款|超时" - should match both "refund" and "timeout"
+        assertThat(service.resolve(new org.team4u.actiondock.domain.model.PlaybookResolveRequest(
+                "退款|超时", null, null, List.of())))
+                .extracting(match -> match.playbook().getId())
+                .containsExactlyInAnyOrder("refund", "timeout");
+
+        // Invalid regex "[invalid" - should fallback to literal quote match and match nothing here
+        assertThat(service.resolve(new org.team4u.actiondock.domain.model.PlaybookResolveRequest(
+                "[invalid", null, null, List.of())))
+                .isEmpty();
+    }
+
+    @Test
     void rejectsDirectManagedEditsAndDeletes() {
         service.saveManagedGroup(new PlaybookGroup().setId("g1").setName("G1"));
         service.saveManagedPlaybook(new Playbook().setId("p1").setGroupId("g1").setName("P1").setGuideMarkdown("guide"));

@@ -22,6 +22,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 public class PlaybookApplicationService {
     private static final String PROJECT_ENTRY_PATH = "ACTIONDOCK.md";
@@ -229,22 +230,30 @@ public class PlaybookApplicationService {
     private int score(Playbook playbook, PlaybookGroup group, String intent, Set<String> tags) {
         int score = 0;
         if (intent != null) {
-            if (playbook.getIntentAliases().stream().map(this::normalizeLower).anyMatch(intent::equals)) {
+            Pattern pattern;
+            try {
+                pattern = Pattern.compile(intent, Pattern.CASE_INSENSITIVE);
+            } catch (Exception e) {
+                pattern = Pattern.compile(Pattern.quote(intent), Pattern.CASE_INSENSITIVE);
+            }
+
+            final Pattern finalPattern = pattern;
+            if (playbook.getIntentAliases().stream().anyMatch(alias -> matches(finalPattern, alias))) {
                 score += 100;
             }
-            if (contains(playbook.getName(), intent)) {
+            if (matches(pattern, playbook.getName())) {
                 score += 50;
             }
-            if (contains(playbook.getDescription(), intent)) {
+            if (matches(pattern, playbook.getDescription())) {
                 score += 30;
             }
-            if (playbook.getTags().stream().map(this::normalizeLower).anyMatch(intent::equals)) {
+            if (playbook.getTags().stream().anyMatch(tag -> matches(finalPattern, tag))) {
                 score += 20;
             }
-            if (group != null && contains(group.getName(), intent)) {
+            if (group != null && matches(pattern, group.getName())) {
                 score += 10;
             }
-            if (group != null && group.getTags().stream().map(this::normalizeLower).anyMatch(intent::equals)) {
+            if (group != null && group.getTags().stream().anyMatch(tag -> matches(finalPattern, tag))) {
                 score += 10;
             }
         }
@@ -260,6 +269,10 @@ public class PlaybookApplicationService {
             }
         }
         return score;
+    }
+
+    private boolean matches(Pattern pattern, String value) {
+        return value != null && pattern.matcher(value).find();
     }
 
     private List<PlaybookKnowledgeRef> validateKnowledgeRefs(List<PlaybookKnowledgeRef> refs) {

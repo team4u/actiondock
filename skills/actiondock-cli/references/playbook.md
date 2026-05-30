@@ -26,6 +26,19 @@ actiondock playbook resolve --intent "<text>" --json
 actiondock playbook resolve --intent "<text>" --repository-id <repositoryId> --json
 ```
 
+### 意图匹配与搜索技巧 (AI 消费指引)
+
+用户的任务意图（`--intent`）在系统底层支持**正则表达式（Case-Insensitive Regex）**匹配。匹配字段包括：任务手册名称、别名（`intentAliases`）、描述、标签，以及分组名称和标签。
+
+由于用户的输入通常是一段复杂的自然语言，而系统底层的任务手册定义（如别名）非常精炼，**消费端 AI Agent 必须对用户意图进行预处理**，避免直接传入原始长句：
+
+1. **提取核心关键字**：将自然语言转化为核心的动词、名词（如将“昨天退款超时了，怎么排查”转化为“退款|超时”）。
+2. **使用正则或表达式**：使用正则表达式来实现模糊和多条件搜索。
+   - 单关键字搜索：`actiondock playbook resolve --intent "退款" --json`
+   - 多关键字逻辑或（OR）：`actiondock playbook resolve --intent "退款|refund|timeout" --json`
+   - 顺序关联匹配：`actiondock playbook resolve --intent "退款.*失败" --json`
+3. **分次尝试**：如果第一次精确正则匹配不到，应尝试退化到更宽泛的关键字（如从“退款.*失败”退化到“退款”）重新搜索，以获取最多的候选建议。
+
 从候选中选择最合适的 `playbook.id` 后读取 Guide：
 
 ```bash
