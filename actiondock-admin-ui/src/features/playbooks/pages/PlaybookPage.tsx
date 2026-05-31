@@ -1,7 +1,8 @@
-import { FileMarkdownOutlined, FileOutlined, FolderOpenOutlined } from "@ant-design/icons";
+import { DownloadOutlined, ExportOutlined, FileMarkdownOutlined, FileOutlined, FolderOpenOutlined, UploadOutlined } from "@ant-design/icons";
 import type { DataNode } from "antd/es/tree";
 import { Alert, Button, Drawer, Empty, Form, Grid, Image, Input, Modal, Popconfirm, Select, Space, Spin, Switch, Table, Tabs, Tag, Tree, Typography, message } from "antd";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ChangeEvent, Key } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MarkdownDescription } from "../../../components/common/MarkdownDescription";
 import { PageHeader } from "../../../components/common/PageHeader";
 import { CodeEditor } from "../../../components/common/CodeEditor";
@@ -18,6 +19,14 @@ import type {
 import { getErrorMessage } from "../../../services/utils";
 import { getPublishableRepositories, pickDefaultPublishRepository } from "../../../services/repositoryPublish";
 import { useDefaultOwner } from "../../../shared/hooks/useDefaultOwner";
+import {
+  analyzePlaybookImport,
+  buildPlaybookExportBundle,
+  formatPlaybookExportFileName,
+  parsePlaybookImportBundle,
+  type PlaybookImportAnalysis
+} from "../../../services/playbookTransfer";
+import { downloadJsonFile } from "../../../services/scriptTransfer";
 import {
   listProjectRepositoryFiles,
   listRepositories,
@@ -138,10 +147,15 @@ export function PlaybookPage() {
   const screens = useBreakpoint();
   const isCompactFilePicker = !screens.md;
   const defaultOwner = useDefaultOwner();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [items, setItems] = useState<Playbook[]>([]);
   const [repositories, setRepositories] = useState<RepositoryDefinition[]>([]);
   const [publishRepositories, setPublishRepositories] = useState<RepositoryDefinition[]>([]);
   const [scripts, setScripts] = useState<ScriptDefinition[]>([]);
+  const [selectedPlaybookIds, setSelectedPlaybookIds] = useState<Key[]>([]);
+  const [importing, setImporting] = useState(false);
+  const [importPreviewOpen, setImportPreviewOpen] = useState(false);
+  const [pendingImportAnalysis, setPendingImportAnalysis] = useState<PlaybookImportAnalysis | null>(null);
   const [knowledgeEditor, setKnowledgeEditor] = useState<KnowledgeEditorState[]>([]);
   const [filePicker, setFilePicker] = useState<FilePickerState>({ open: false });
   const [projectFileTree, setProjectFileTree] = useState<Record<string, RepositoryProjectFileNode[]>>({});
@@ -175,6 +189,9 @@ export function PlaybookPage() {
       setRepositories(repositoryData);
       setPublishRepositories(publishRepositoryData);
       setScripts(scriptData);
+      setSelectedPlaybookIds((previous) =>
+        previous.filter((id) => playbookData.some((item) => item.id === id && !item.managed))
+      );
     } catch (error) {
       messageApi.error(getErrorMessage(error, "加载任务手册失败"));
     } finally {
@@ -191,6 +208,7 @@ export function PlaybookPage() {
   const publishRepositoryOptions = useMemo(() => publishableRepositories.map((item) => ({ value: item.id, label: `${item.name} (${item.id})` })), [publishableRepositories]);
   const scriptOptions = useMemo(() => scripts.map((item) => ({ value: item.id, label: `${item.name} (${item.id})` })), [scripts]);
   const tags = useMemo(() => Array.from(new Set(items.flatMap((item) => item.tags ?? []))).sort(), [items]);
+  const editablePlaybooks = useMemo(() => items.filter((item) => !item.managed), [items]);
 
   const loadProjectRoot = useCallback(async (repositoryId: string) => {
     if (projectFileTree[repositoryId]) {
@@ -306,6 +324,112 @@ export function PlaybookPage() {
       await load();
     } catch (error) {
       messageApi.error(getErrorMessage(error, "删除任务手册失败"));
+    }
+  };
+
+  const exportPlaybooks = (targetPlaybooks: Playbook[], successMessage: string) => {
+    if (targetPlaybooks.length === 0) {
+      messageApi.warning("没有可导出的任务手册");
+      return;
+    }
+    try {
+      const bundle = buildPlaybookExportBundle(targetPlaybooks);
+      downloadJsonFile(formatPlaybookExportFileName(), bundle);
+      messageApi.success(successMessage);
+    } catch {
+      messageApi.error("导出任务手册失败");
+    }
+  };
+
+  const handleExportSelected = () => {
+    const selectedPlaybooks = editablePlaybooks.filter((item) => selectedPlaybookIds.includes(item.id));
+    exportPlaybooks(selectedPlaybooks, `已导出 ${selectedPlaybooks.length} 个选中任务手册`);
+  };
+
+  const handleExportVisible = () => {
+    const targetPlaybooks = items.filter((item) => !item.managed);
+    exportPlaybooks(targetPlaybooks, `已导出 ${targetPlaybooks.length} 个可编辑任务手册`);
+  };
+
+  const handleImportFile = async (file: File) => {
+    try {
+      const importedPlaybooks = parsePlaybookImportBundle(await file.text());
+      const analysis = analyzePlaybookImport(importedPlaybooks, items, scripts);
+      setPendingImportAnalysis(analysis);
+      setImportPreviewOpen(true);
+    } catch (error) {
+      messageApi.error(getErrorMessage(error, "导入任务手册失败"));
+    }
+  };
+
+  const handleImportChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) {
+      return;
+    }
+    if (!file.name.toLowerCase().endsWith(".json")) {
+      messageApi.error("仅支持导入 .json 文件");
+      return;
+    }
+    await handleImportFile(file);
+  };
+
+  const runImport = async () => {
+    if (!pendingImportAnalysis) {
+      return;
+    }
+    setImporting(true);
+    const blockedIds = new Set([
+      ...pendingImportAnalysis.managedConflictIds,
+      ...pendingImportAnalysis.missingScriptRefs.map((item) => item.playbookId)
+    ]);
+    const currentIds = new Set(items.map((item) => item.id));
+    const successes: string[] = [];
+    const failures: Array<{ id: string; reason: string }> = [];
+
+    try {
+      for (const playbook of pendingImportAnalysis.playbooks) {
+        if (blockedIds.has(playbook.id)) {
+          continue;
+        }
+        try {
+          if (currentIds.has(playbook.id)) {
+            await updatePlaybook(playbook.id, playbook);
+          } else {
+            await createPlaybook(playbook);
+            currentIds.add(playbook.id);
+          }
+          successes.push(playbook.id);
+        } catch (error) {
+          const detail = error instanceof ApiError ? error.message : getErrorMessage(error, "导入失败");
+          failures.push({ id: playbook.id, reason: detail });
+        }
+      }
+
+      setImportPreviewOpen(false);
+      setPendingImportAnalysis(null);
+      if (successes.length > 0) {
+        await load();
+      }
+      if (failures.length === 0) {
+        messageApi.success(`导入完成，成功处理 ${successes.length} 个任务手册`);
+        return;
+      }
+      Modal.warning({
+        title: "导入已完成，部分任务手册处理失败",
+        width: 640,
+        content: (
+          <Space direction="vertical" size={8} style={{ width: "100%" }}>
+            <Text>成功 {successes.length} 条，失败 {failures.length} 条。</Text>
+            <pre style={{ whiteSpace: "pre-wrap" }}>
+              {failures.slice(0, 10).map((item) => `${item.id}: ${item.reason}`).join("\n")}
+            </pre>
+          </Space>
+        )
+      });
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -515,25 +639,48 @@ export function PlaybookPage() {
   };
 
   const selectedRepositoryIds = Form.useWatch("repositoryIds", form) ?? [];
+  const pendingImportBlockedIds = pendingImportAnalysis ? new Set([
+    ...pendingImportAnalysis.managedConflictIds,
+    ...pendingImportAnalysis.missingScriptRefs.map((item) => item.playbookId)
+  ]) : new Set<string>();
 
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
       {contextHolder}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".json"
+        style={{ display: "none" }}
+        onChange={(event) => void handleImportChange(event)}
+      />
       <PageHeader
         title="任务手册"
         meta="以关联知识、关联脚本、导览 Markdown 和停止条件描述任务路线。"
-        actions={<Button type="primary" onClick={() => openEditor()}>新建任务手册</Button>}
+        actions={(
+          <Space wrap>
+            <Button icon={<DownloadOutlined />} onClick={handleExportVisible} disabled={editablePlaybooks.length === 0}>导出可编辑</Button>
+            <Button icon={<UploadOutlined />} loading={importing} onClick={() => fileInputRef.current?.click()}>导入任务手册</Button>
+            <Button type="primary" onClick={() => openEditor()}>新建任务手册</Button>
+          </Space>
+        )}
       />
       <Space wrap>
         <Input.Search allowClear placeholder="搜索任务手册" style={{ width: 260 }} onSearch={(keyword) => setFilters((value) => ({ ...value, keyword }))} onChange={(event) => setFilters((value) => ({ ...value, keyword: event.target.value }))} />
         <Select allowClear placeholder="Repository" style={{ width: 220 }} options={repositoryOptions} onChange={(repositoryId) => setFilters((value) => ({ ...value, repositoryId }))} />
         <Select allowClear placeholder="Tag" style={{ width: 160 }} options={tags.map((item) => ({ value: item, label: item }))} onChange={(tag) => setFilters((value) => ({ ...value, tag }))} />
         <Select allowClear placeholder="Managed" style={{ width: 140 }} options={[{ value: true, label: "托管" }]} onChange={(managed) => setFilters((value) => ({ ...value, managed }))} />
+        <Button icon={<ExportOutlined />} disabled={selectedPlaybookIds.length === 0} onClick={handleExportSelected}>导出选中</Button>
       </Space>
       <Table<Playbook>
         rowKey="id"
         loading={loading}
         dataSource={items}
+        rowSelection={{
+          selectedRowKeys: selectedPlaybookIds,
+          onChange: setSelectedPlaybookIds,
+          getCheckboxProps: (record) => ({ disabled: record.managed })
+        }}
         columns={[
           { title: "ID", dataIndex: "id", width: 220 },
           { title: "名称", dataIndex: "name" },
@@ -543,10 +690,11 @@ export function PlaybookPage() {
           {
             title: "操作",
             key: "actions",
-            width: 220,
+            width: 280,
             render: (_, item) => (
               <Space>
                 <Button size="small" onClick={() => previewPlaybook(item)}>预览</Button>
+                <Button size="small" disabled={item.managed} onClick={() => exportPlaybooks([item], `已导出 ${item.name || item.id}`)}>导出</Button>
                 <Button size="small" disabled={item.managed} onClick={() => openEditor(item)}>编辑</Button>
                 <Button size="small" disabled={item.managed} onClick={() => openPublishModal(item)}>发布到仓库</Button>
                 <Popconfirm title="删除任务手册？" disabled={item.managed} onConfirm={() => void remove(item)}>
@@ -557,6 +705,50 @@ export function PlaybookPage() {
           }
         ]}
       />
+      <Modal
+        title="确认导入任务手册"
+        open={importPreviewOpen}
+        onCancel={() => {
+          setImportPreviewOpen(false);
+          setPendingImportAnalysis(null);
+        }}
+        onOk={() => void runImport()}
+        okText="继续导入"
+        cancelText="取消"
+        confirmLoading={importing}
+        okButtonProps={{
+          disabled: !pendingImportAnalysis || pendingImportAnalysis.playbooks.length === pendingImportBlockedIds.size
+        }}
+        destroyOnHidden
+      >
+        {pendingImportAnalysis ? (
+          <Space direction="vertical" size={12} style={{ width: "100%" }}>
+            <Text>共解析到 {pendingImportAnalysis.playbooks.length} 个任务手册。</Text>
+            <Space wrap>
+              <Tag color="green">新增 {pendingImportAnalysis.createIds.length}</Tag>
+              <Tag color="orange">覆盖 {pendingImportAnalysis.overwriteIds.length}</Tag>
+              <Tag color="red">托管冲突 {pendingImportAnalysis.managedConflictIds.length}</Tag>
+              <Tag color="red">缺失脚本 {pendingImportAnalysis.missingScriptRefs.length}</Tag>
+            </Space>
+            {pendingImportAnalysis.managedConflictIds.length > 0 ? (
+              <Alert
+                type="warning"
+                showIcon
+                message="以下 ID 已存在为仓库托管任务手册，导入时会跳过"
+                description={pendingImportAnalysis.managedConflictIds.join(", ")}
+              />
+            ) : null}
+            {pendingImportAnalysis.missingScriptRefs.length > 0 ? (
+              <Alert
+                type="warning"
+                showIcon
+                message="以下任务手册引用了当前不存在的脚本，导入时会跳过"
+                description={pendingImportAnalysis.missingScriptRefs.map((item) => `${item.playbookId}: ${item.scriptIds.join(", ")}`).join("\n")}
+              />
+            ) : null}
+          </Space>
+        ) : null}
+      </Modal>
       <Drawer title={previewing ? "任务手册预览" : editing ? "编辑任务手册" : "新建任务手册"} open={drawerOpen} width={920} onClose={() => setDrawerOpen(false)} extra={!previewing ? <Button type="primary" onClick={() => void save()}>保存</Button> : null}>
         {previewing ? (
           <Space direction="vertical" size={16} style={{ width: "100%" }}>

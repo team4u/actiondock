@@ -51,6 +51,11 @@ import {
   updateScript
 } from "../../scripts/api";
 import {
+  createPlaybook,
+  listPlaybooks,
+  updatePlaybook
+} from "../../playbooks/api";
+import {
   createConfigValue,
   createSharedState,
   getSharedState,
@@ -86,6 +91,7 @@ import type {
   ConfigValue,
   ExecutionPreset,
   RepositoryDefinition,
+  Playbook,
   PluginView,
   SharedStateSummary,
   AiModelProfile,
@@ -153,6 +159,7 @@ export function DataBackupPanel() {
     configValues: number;
     presets: number;
     repositories: number;
+    playbooks: number;
     plugins: number;
     sharedStates: number;
     aiModels: number;
@@ -170,12 +177,13 @@ export function DataBackupPanel() {
   const [messageApi, contextHolder] = message.useMessage();
 
   const loadDataCounts = useCallback(async () => {
-    const [scripts, schedules, webhooks, configValues, repositories, plugins, sharedStates, aiModels, aiAgents, aiToolsets, skillTargets, skills] = await Promise.all([
+    const [scripts, schedules, webhooks, configValues, repositories, playbooks, plugins, sharedStates, aiModels, aiAgents, aiToolsets, skillTargets, skills] = await Promise.all([
       listScripts(),
       listSchedules(),
       listWebhooks(),
       listConfigValues(),
       listRepositories(),
+      listPlaybooks(),
       listPlugins(),
       listAllSharedStateSummaries(),
       listAiModels(),
@@ -200,6 +208,7 @@ export function DataBackupPanel() {
       configValues: configValues.length,
       presets: presetCount,
       repositories: repositories.length,
+      playbooks: playbooks.filter((item) => !item.managed).length,
       plugins: plugins.length,
       sharedStates: sharedStates.length,
       aiModels: aiModels.length,
@@ -219,12 +228,13 @@ export function DataBackupPanel() {
   const handleBackup = useCallback(async () => {
     setBackupLoading(true);
     try {
-      const [scripts, schedules, webhooks, configValues, repositories, plugins, sharedStates, aiModels, aiAgents, aiToolsets, skillTargets, skills] = await Promise.all([
+      const [scripts, schedules, webhooks, configValues, repositories, playbooks, plugins, sharedStates, aiModels, aiAgents, aiToolsets, skillTargets, skills] = await Promise.all([
         listScripts(),
         listSchedules(),
         listWebhooks(),
         listConfigValues(),
         listRepositories(),
+        listPlaybooks(),
         listPlugins(),
         buildSharedStateBackupEntries(includeSecrets),
         listAiModels(),
@@ -308,6 +318,7 @@ export function DataBackupPanel() {
           configValues,
           executionPresets: allPresets,
           repositories,
+          playbooks: playbooks.filter((item) => !item.managed),
           plugins: fullPlugins,
           pluginConfigs,
           pluginNamedConfigs,
@@ -406,12 +417,13 @@ export function DataBackupPanel() {
       }
       setPendingSkillFiles(skillFiles);
 
-      const [scripts, schedules, webhooks, configValues, repositories, plugins, sharedStates, aiModels, aiAgents, aiToolsets, skillTargets, skills] = await Promise.all([
+      const [scripts, schedules, webhooks, configValues, repositories, playbooks, plugins, sharedStates, aiModels, aiAgents, aiToolsets, skillTargets, skills] = await Promise.all([
         listScripts(),
         listSchedules(),
         listWebhooks(),
         listConfigValues(),
         listRepositories(),
+        listPlaybooks(),
         listPlugins(),
         listAllSharedStateSummaries(),
         listAiModels(),
@@ -440,6 +452,7 @@ export function DataBackupPanel() {
         configValues,
         executionPresets: allPresets,
         repositories,
+        playbooks,
         plugins,
         sharedStates,
         aiModels,
@@ -471,12 +484,13 @@ export function DataBackupPanel() {
     const skillFiles = pendingSkillFiles ?? new Map<string, Blob>();
 
     try {
-      const [currentScripts, currentSchedules, currentWebhooks, currentConfigValues, currentRepositories, currentPlugins, currentSharedStates, currentAiModels, currentAiAgents, currentAiToolsets, currentSkillTargets, currentSkills] = await Promise.all([
+      const [currentScripts, currentSchedules, currentWebhooks, currentConfigValues, currentRepositories, currentPlaybooks, currentPlugins, currentSharedStates, currentAiModels, currentAiAgents, currentAiToolsets, currentSkillTargets, currentSkills] = await Promise.all([
         listScripts(),
         listSchedules(),
         listWebhooks(),
         listConfigValues(),
         listRepositories(),
+        listPlaybooks(),
         listPlugins(),
         listAllSharedStateSummaries(),
         listAiModels(),
@@ -491,6 +505,7 @@ export function DataBackupPanel() {
       const currentWebhookIds = new Set(currentWebhooks.map(s => s.id));
       const currentConfigKeys = new Set(currentConfigValues.map(c => c.key));
       const currentRepoIds = new Set(currentRepositories.map(r => r.id));
+      const currentPlaybookById = new Map(currentPlaybooks.map((item) => [item.id, item]));
       const currentPluginIds = new Set(currentPlugins.map(p => p.pluginId));
       const currentSharedStateKeys = new Set(currentSharedStates.map(item => buildSharedStateBackupKey(item)));
       const currentSkillTargetIds = new Set(currentSkillTargets.map(t => t.id));
@@ -601,7 +616,32 @@ export function DataBackupPanel() {
         results.push({ type: "脚本", succeeded, failed: errors.length, errors });
       }
 
-      // 5. Execution Presets
+      // 5. Playbooks
+      {
+        let succeeded = 0;
+        const errors: string[] = [];
+        for (const playbook of bundle.data.playbooks) {
+          try {
+            const current = currentPlaybookById.get(playbook.id);
+            if (current?.managed) {
+              errors.push(`${playbook.name}: 已存在同 ID 仓库托管任务手册，已跳过`);
+              continue;
+            }
+            const payload: Playbook = { ...playbook, managed: false };
+            if (current) {
+              await updatePlaybook(playbook.id, payload);
+            } else {
+              await createPlaybook(payload);
+            }
+            succeeded++;
+          } catch (e) {
+            errors.push(`${playbook.name}: ${e instanceof Error ? e.message : "未知错误"}`);
+          }
+        }
+        results.push({ type: "任务手册", succeeded, failed: errors.length, errors });
+      }
+
+      // 6. Execution Presets
       {
         let succeeded = 0;
         const errors: string[] = [];
@@ -621,7 +661,7 @@ export function DataBackupPanel() {
         results.push({ type: "执行预设", succeeded, failed: errors.length, errors });
       }
 
-      // 6. Schedules
+      // 7. Schedules
       {
         let succeeded = 0;
         const errors: string[] = [];
@@ -647,7 +687,7 @@ export function DataBackupPanel() {
         results.push({ type: "定时任务", succeeded, failed: errors.length, errors });
       }
 
-      // 6.5 Event Sources
+      // 8. Event Sources
       {
         let succeeded = 0;
         const errors: string[] = [];
@@ -666,7 +706,7 @@ export function DataBackupPanel() {
         results.push({ type: "Webhook", succeeded, failed: errors.length, errors });
       }
 
-      // 7. Plugins (uninstall then install)
+      // 9. Plugins (uninstall then install)
       {
         let succeeded = 0;
         const errors: string[] = [];
@@ -715,7 +755,7 @@ export function DataBackupPanel() {
         results.push({ type: "插件", succeeded, failed: errors.length, errors });
       }
 
-      // 8. AI Models
+      // 10. AI Models
       {
         let succeeded = 0;
         const errors: string[] = [];
@@ -731,7 +771,7 @@ export function DataBackupPanel() {
         results.push({ type: "AI 模型", succeeded, failed: errors.length, errors });
       }
 
-      // 9. AI Agents
+      // 11. AI Agents
       {
         let succeeded = 0;
         const errors: string[] = [];
@@ -747,7 +787,7 @@ export function DataBackupPanel() {
         results.push({ type: "AI Agent", succeeded, failed: errors.length, errors });
       }
 
-      // 10. AI Toolsets
+      // 12. AI Toolsets
       {
         let succeeded = 0;
         const errors: string[] = [];
@@ -767,7 +807,7 @@ export function DataBackupPanel() {
         results.push({ type: "AI 工具集", succeeded, failed: errors.length, errors });
       }
 
-      // 11. Skill Targets
+      // 13. Skill Targets
       {
         let succeeded = 0;
         const errors: string[] = [];
@@ -794,7 +834,7 @@ export function DataBackupPanel() {
         results.push({ type: "Skill 目标", succeeded, failed: errors.length, errors });
       }
 
-      // 12. Skills
+      // 14. Skills
       {
         let succeeded = 0;
         const errors: string[] = [];
@@ -867,6 +907,7 @@ export function DataBackupPanel() {
               <Descriptions.Item label="配置值">{dataCounts.configValues}</Descriptions.Item>
               <Descriptions.Item label="执行预设">{dataCounts.presets}</Descriptions.Item>
               <Descriptions.Item label="仓库">{dataCounts.repositories}</Descriptions.Item>
+              <Descriptions.Item label="任务手册">{dataCounts.playbooks}</Descriptions.Item>
               <Descriptions.Item label="插件">{dataCounts.plugins}</Descriptions.Item>
               <Descriptions.Item label="共享状态">{dataCounts.sharedStates}</Descriptions.Item>
               <Descriptions.Item label="AI 模型">{dataCounts.aiModels}</Descriptions.Item>
@@ -1024,6 +1065,13 @@ export function DataBackupPanel() {
                 <Text type="success">新建 {analysis.repositories.create}</Text>
                 {" / "}
                 <Text type="warning">覆盖 {analysis.repositories.overwrite}</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="任务手册">
+                <Text>共 {analysis.playbooks.total} 条</Text>
+                <br />
+                <Text type="success">新建 {analysis.playbooks.create}</Text>
+                {" / "}
+                <Text type="warning">覆盖 {analysis.playbooks.overwrite}</Text>
               </Descriptions.Item>
               <Descriptions.Item label="插件">
                 <Text>共 {analysis.plugins.total} 个</Text>

@@ -59,13 +59,15 @@ ActionDock 把这个过程交给 `project-knowledge-maintainer` 这一技能。�
 
 ---
 
-## 搜索和执行分两层
+## Playbook 路由、知识协议和执行分层
 
-有了入口、能读文件之后，下一步是把知识变成动作。ActionDock 把搜索知识和脚本执行分成两层：
+有了入口、能读文件之后，下一步是把知识变成动作。ActionDock 把项目类任务拆成三层：
 
-**搜索者**（`actiondock-project-knowledge-searcher`）回答“应该看什么、应该用什么、还缺什么上下文”。AI 处理项目相关问题时，先拿入口，再顺着文档定位线索，不直接猜项目结构。
+**Playbook 路由层** 回答“这是什么任务、先看什么知识、什么时候停、哪些脚本可能有用”。AI 处理项目相关问题时，先搜索任务手册；没有专用手册时，使用通用项目调查手册作为 fallback。
 
-**执行者**（`actiondock-cli`）回答“怎么调用、参数是什么、怎么执行”——列出脚本、查看结构定义（Schema）、发起执行。
+**项目知识协议** 回答“应该读哪个仓库入口、沿哪些文件继续取证、还缺什么上下文”。它由 `ACTIONDOCK.md`、`docs/` 和 `actiondock-workspace` 组成，是 Playbook 的下游读取路径，不再作为单独的 Agent Skill 入口。
+
+**执行层**（`actiondock-cli`）回答“怎么调用、参数是什么、怎么执行”——列出脚本、查看结构定义（Schema）、发起执行。
 
 这两件事混在一起，AI 容易跳过知识确认而直接进入执行层。分层之后，项目知识成了执行的前置条件。`domain`、`dbType`、`idTree` 这类参数，往往需要先从项目知识里找出来，用户不会直接给出。
 
@@ -79,7 +81,7 @@ ActionDock 让知识跟着代码走。知识文件放在仓库里，跟着分支
 
 **隔绝分支干扰。** AI 在当前分支上工作时，读到的永远是当前分支的知识内容。集中式知识库要做到这一点，要么给每条知识打分支标签（代价高），要么接受信息污染（代价更高）。
 
-**技能标准化，不需要按业务定制。** 知识的入口（`ACTIONDOCK.md`）和存放位置（`docs/`）在所有项目中统一，标准技能 `actiondock-project-knowledge-searcher` 就能自动搜索所有项目知识。不需要为数据库信息、接口规范这类领域知识单独打包定制技能——搜索者沿统一入口走就行。
+**协议标准化，不需要按业务定制 Skill。** 知识的入口（`ACTIONDOCK.md`）和存放位置（`docs/`）在所有项目中统一，`actiondock-cli` 的 Playbook 消费协议就能沿统一入口搜索项目知识。不需要为数据库信息、接口规范这类领域知识单独打包定制 Skill。
 
 **知识可分发，团队快速复用。** 知识随代码进入 `master`，团队成员拉取代码就自动获得完整的项目理解路径。新成员加入、新环境搭建，不需要额外配置知识库、导入索引或运行预处理步骤。
 
@@ -89,11 +91,12 @@ ActionDock 让知识跟着代码走。知识文件放在仓库里，跟着分支
 
 以生产告警排查为例：
 
-1. **取入口。** 解析 `ACTIONDOCK.md`，确认阅读入口在哪里，哪些文档面向排查，哪些目录不值得优先搜索。
-2. **读文档。** 通过 `actiondock-workspace` 继续。需要看 `runbook`就读 `runbook`，需要看诊断手册就读诊断手册，需要确认某个目录下还有什么材料就先列目录。
-3. **进脚本层。** 问题收敛到具体操作后，先看脚本列表，再看结构定义，补齐脚本依赖的项目上下文，最后决定是否执行。
+1. **查任务手册。** 按仓库和关键词搜索 Playbook；命中专用手册就按它的风险、知识引用、停止条件推进。
+2. **取入口。** 进入项目知识协议，解析 `ACTIONDOCK.md`，确认阅读入口在哪里，哪些文档面向排查，哪些目录不值得优先搜索。
+3. **读文档。** 通过 `actiondock-workspace` 继续。需要看 `runbook` 就读 `runbook`，需要看诊断手册就读诊断手册，需要确认某个目录下还有什么材料就先列目录。
+4. **进脚本层。** 问题收敛到具体操作后，先看脚本结构定义，补齐脚本依赖的项目上下文，最后决定是否执行。
 
-AI 沿入口 $\rightarrow$ 文档 $\rightarrow$ 工作区 $\rightarrow$ 脚本的顺序推进，比盲扫仓库可靠。
+AI 沿 Playbook $\rightarrow$ 入口 $\rightarrow$ 文档 $\rightarrow$ 工作区 $\rightarrow$ 脚本的顺序推进，比盲扫仓库可靠。
 
 ---
 
@@ -108,9 +111,9 @@ flowchart TB
   A -->|docs/ 与 ACTIONDOCK.md| Consumption[知识消费层]
 
   subgraph Consumption[知识消费层]
-    B[ACTIONDOCK.md<br/>入口]
-    C[actiondock-workspace<br/>读取与取证]
-    D[actiondock-project-knowledge-searcher<br/>搜索者]
+    B[Playbook<br/>任务路由]
+    C[ACTIONDOCK.md<br/>入口]
+    D[actiondock-workspace<br/>读取与取证]
     E[actiondock-cli<br/>脚本查看与执行]
   end
 
@@ -119,4 +122,4 @@ flowchart TB
   D --> E
 ```
 
-入口、协议、工作区访问、搜索执行分层、仓库存储——五层边界确定后，项目知识从“看起来很全的说明材料”变成了 AI 能稳定依赖的读取路径。
+Playbook 路由、入口、协议、工作区访问、执行分层、仓库存储——边界确定后，项目知识从“看起来很全的说明材料”变成了 AI 能稳定依赖的读取路径。

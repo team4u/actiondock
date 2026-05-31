@@ -5,6 +5,7 @@ import type {
   RepositoryDefinition,
   ScriptDefinition,
   ScriptSchedule,
+  Playbook,
   PluginSummaryView,
   PluginView,
   AiModelProfile,
@@ -22,6 +23,7 @@ import {
   parseConfigValue,
   formatExportStamp
 } from "./scriptTransfer";
+import { parsePlaybookDefinition } from "./playbookTransfer";
 
 export interface PluginBackupEntry {
   pluginId: string;
@@ -79,6 +81,7 @@ export interface SystemBackupBundleV1 {
     configValues: ConfigValue[];
     executionPresets: ExecutionPreset[];
     repositories: RepositoryDefinition[];
+    playbooks: Playbook[];
     plugins: PluginBackupEntry[];
     sharedStates: SharedStateBackupEntry[];
     aiModels: AiModelProfile[];
@@ -96,6 +99,7 @@ export interface BackupAnalysis {
   configValues: { total: number; create: number; overwrite: number };
   executionPresets: { total: number; create: number; overwrite: number };
   repositories: { total: number; create: number; overwrite: number };
+  playbooks: { total: number; create: number; overwrite: number };
   plugins: { total: number; create: number; overwrite: number };
   sharedStates: { total: number; create: number; overwrite: number; skipped: number };
   aiModels: { total: number; create: number; overwrite: number };
@@ -211,6 +215,7 @@ export function buildBackupJson(
     configValues: ConfigValue[];
     executionPresets: ExecutionPreset[];
     repositories: RepositoryDefinition[];
+    playbooks?: Playbook[];
     plugins: PluginView[];
     pluginConfigs: Map<string, Record<string, unknown>>;
     pluginNamedConfigs?: Map<string, Record<string, Record<string, unknown>>>;
@@ -226,6 +231,7 @@ export function buildBackupJson(
   const includeSecretValues = options?.includeSecretValues ?? false;
   const skillTargets = data.skillTargets ?? [];
   const skills = data.skills ?? [];
+  const playbooks = data.playbooks ?? [];
   const pluginEntries: PluginBackupEntry[] = data.plugins.filter(p => p.sourceType !== "SYSTEM").map(p => ({
     pluginId: p.pluginId,
     fileName: p.fileName ?? `${p.pluginId}.jar`,
@@ -266,6 +272,9 @@ export function buildBackupJson(
         })),
       executionPresets: [...data.executionPresets].sort((a, b) => a.id.localeCompare(b.id)),
       repositories: [...data.repositories].sort((a, b) => a.id.localeCompare(b.id)),
+      playbooks: [...playbooks]
+        .sort((a, b) => a.id.localeCompare(b.id))
+        .map(item => ({ ...item, managed: false })),
       plugins: pluginEntries.sort((a, b) => a.pluginId.localeCompare(b.pluginId)),
       sharedStates: [...data.sharedStates].sort((a, b) =>
         a.namespace.localeCompare(b.namespace) || a.key.localeCompare(b.key)
@@ -324,6 +333,9 @@ export function parseBackupJson(text: string): SystemBackupBundleV1 {
   const repositories = Array.isArray(data.repositories)
     ? (data.repositories as RepositoryDefinition[])
     : [];
+  const playbooks = Array.isArray(data.playbooks)
+    ? (data.playbooks as unknown[]).map((item, index) => parsePlaybookDefinition(item, index))
+    : [];
   const plugins = Array.isArray(data.plugins)
     ? (data.plugins as PluginBackupEntry[])
     : [];
@@ -350,7 +362,7 @@ export function parseBackupJson(text: string): SystemBackupBundleV1 {
     version: 1,
     type: "actiondock-system-backup",
     exportedAt: parsed.exportedAt as string,
-    data: { scripts, schedules, webhooks, configValues, executionPresets, repositories, plugins, sharedStates, aiModels, aiAgents, aiToolsets, skillTargets, skills }
+    data: { scripts, schedules, webhooks, configValues, executionPresets, repositories, playbooks, plugins, sharedStates, aiModels, aiAgents, aiToolsets, skillTargets, skills }
   };
 }
 
@@ -363,6 +375,7 @@ export function analyzeBackupBundle(
     configValues: ConfigValue[];
     executionPresets: ExecutionPreset[];
     repositories: RepositoryDefinition[];
+    playbooks?: Playbook[];
     plugins: PluginSummaryView[];
     sharedStates: SharedStateSummary[];
     aiModels: AiModelProfile[];
@@ -458,6 +471,7 @@ export function analyzeBackupBundle(
     configValues: { total: bundle.data.configValues.length, create: cvCreate, overwrite: cvOverwrite },
     executionPresets: analyze(bundle.data.executionPresets, current.executionPresets),
     repositories: analyze(bundle.data.repositories, current.repositories),
+    playbooks: analyze(bundle.data.playbooks, current.playbooks ?? []),
     plugins: { total: bundle.data.plugins.length, create: pluginCreate, overwrite: pluginOverwrite },
     sharedStates: {
       total: bundle.data.sharedStates.length,

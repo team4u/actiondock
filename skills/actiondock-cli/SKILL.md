@@ -30,9 +30,9 @@ npm i -g actiondock
 - **作者态闭环**：创建脚本、调试、修复并发布 → 读取 `references/script-authoring.md`
 - **日常执行**：查找脚本、运行已发布脚本 → 读取 `references/script-execution.md`
 - **Webhook**：配置 Webhook 与已发布脚本的一对一绑定，按固定地址接收请求 → 读取 `references/event-framework.md`
-- **项目知识库**：解析项目仓库，先读 `ACTIONDOCK.md`，再按文档指引检索项目内容 → 读取 `references/project-knowledge.md`
+- **项目知识库**：作为 Playbook 下游协议解析项目仓库，先读 `ACTIONDOCK.md`，再按文档指引检索项目内容 → 读取 `references/project-knowledge.md`
 - **知识源安装**：从 CAPABILITY 仓库发现并安装团队知识源指针 → 读取 `references/project-knowledge.md`
-- **任务手册（Playbook）**：搜索候选任务手册，读取完整详情，维护 Playbook / PlaybookGroup → 读取 `references/playbook.md`
+- **任务手册（Playbook）**：搜索候选任务手册，读取完整详情，维护 Playbook → 读取 `references/playbook.md`
 
 如果用户要编写 Python 脚本，且需求涉及第三方 PyPI 依赖、镜像源或 `requirements.txt`，作者态阶段仍读取 `references/script-authoring.md`，但必须按其中的 `pythonRequirements` / `requirements.txt` 约定一起产出并通过 CLI 提交。
 
@@ -45,8 +45,8 @@ npm i -g actiondock
 | "调用插件" / "插件动作" / "plugin invoke" / "actiondock-ai" | `references/plugin-usage.md` |
 | "脚本里调插件" / "脚本里调脚本" / "plugins.invoke" / "scripts.invoke" | `references/script-runtime-calls.md` |
 | "Webhook" / "webhook" / "固定地址" | `references/event-framework.md` |
-| "项目仓库" / "项目知识库" / "ACTIONDOCK.md" / "resolve --repository-id" | `references/project-knowledge.md` |
-| "任务手册" / "Playbook" / "任务导览" / "搜索任务手册" / "关联知识" / "关联脚本" / "playbook-group" | `references/playbook.md` |
+| "项目仓库" / "项目知识库" / "ACTIONDOCK.md" / "resolve --repository-id" / "知识源安装" | `references/project-knowledge.md` |
+| "任务手册" / "Playbook" / "任务导览" / "搜索任务手册" / "关联知识" / "关联脚本" / "业务排查" / "项目流程" | `references/playbook.md` |
 | "查看执行结果" / "执行历史" / "清空执行记录" | `references/execution-history.md` |
 | "定时任务" / "定时执行" / "cron" / "schedule" | `references/schedule-management.md` |
 | "共享状态" / "state" / "命名空间" | `references/state-management.md` |
@@ -60,8 +60,9 @@ npm i -g actiondock
 | "发布脚本" / "调试脚本" / "patch 脚本" | 作者态 |
 | "脚本里调用插件" / "脚本里调用脚本" / "plugins.invoke" / "scripts.invoke" | 作者态 + `references/script-runtime-calls.md` |
 | "创建 Webhook" / "测试 webhook" / "调用 webhook" | `references/event-framework.md` |
-| "分析某个项目" / "读取项目知识库" / "项目里的退款流程" / "项目数据库文档" | `references/project-knowledge.md` |
-| "任务手册" / "Playbook" / "搜索任务手册" / "任务导览" / "关联知识/关联脚本" / "playbook-group" | `references/playbook.md` |
+| "分析某个业务项目" / "项目里的退款流程" / "项目数据库文档" / "排查项目问题" | `references/playbook.md` |
+| "解析项目仓库" / "读取 ACTIONDOCK.md" / "安装知识源" / "repository resolve" | `references/project-knowledge.md` |
+| "任务手册" / "Playbook" / "搜索任务手册" / "任务导览" / "关联知识/关联脚本" | `references/playbook.md` |
 | "执行脚本" / "跑一下脚本" / "运行 xxx" | 日常执行 |
 | "有哪些脚本" / "列出脚本" / "脚本入参" | 日常执行 |
 | "调用插件" / "看插件动作" / "插件参数" | `references/plugin-usage.md` |
@@ -69,12 +70,15 @@ npm i -g actiondock
 
 如果用户意图同时涉及多个模块（如"创建脚本并定时运行"、"写 Webhook 脚本并创建 Webhook"），先完成上游产物，再按需加载命令参考文档。
 
+如果用户是在问某个业务项目里的流程、数据库、接口、日志、告警或排障路径，默认先进入 `references/playbook.md` 搜索任务手册；只有没有命中专用 Playbook 或 Playbook 引导进入项目知识时，才转入 `references/project-knowledge.md`。
+
 如果需求同时涉及 CLI 调用和脚本源码内互调：
 
 - CLI 插件调用 → 读取 `references/plugin-usage.md`
 - 脚本源码内 `plugins.invoke(...)` / `scripts.invoke(...)` → 读取 `references/script-runtime-calls.md`
 - Webhook 对象创建 / 测试 / 观测 → 读取 `references/event-framework.md`
-- 项目知识入口定位 / `ACTIONDOCK.md` / 项目任务文档检索 → 读取 `references/project-knowledge.md`
+- 业务项目任务 / 排障 / 流程查询 → 先读取 `references/playbook.md`
+- 项目知识入口定位 / `ACTIONDOCK.md` / 项目任务文档检索 → 作为 Playbook 下游读取 `references/project-knowledge.md`
 - 任务手册搜索 / 详情读取 / Playbook 作者态维护 → 读取 `references/playbook.md`
 
 如果要通过 CLI 配完整 Webhook 链路，推荐顺序固定为：
@@ -94,7 +98,7 @@ npm i -g actiondock
 - 当用户查看脚本 `inputSchema` 或插件 action `inputSchema` 时，不只复述字段名；要直接说明哪些顶层简单字段可扁平为 CLI flag，哪些对象/数组字段必须继续使用 JSON 或文件方式传入。
 - 解释 schema 时默认给 1 条对应 CLI 示例，优先展示最推荐的主路径：纯简单字段用扁平 flag；包含对象/数组等复杂字段时，直接示例 `--input-json` / `--input-file`（脚本）或 `--args-json` / `--args-file`（插件）。
 - 不要把对象或数组字段解释成多级 flag；混合 schema 只需在文字里说明“简单字段可扁平、复杂字段走 JSON”，示例仍保持 1 条主路径命令。
-- 项目相关任务必须先解析项目仓库：`actiondock repository resolve --repository-id <repositoryId> --json`。
+- 业务项目相关任务必须先搜索 Playbook；Playbook 命中或进入通用项目调查后，再解析项目仓库：`actiondock repository resolve --repository-id <repositoryId> --json`。
 - 如果项目仓库是 `GIT` 类型且本地副本还没准备好，先执行 `actiondock repository sync <repositoryId>`。
 - 先读 `ACTIONDOCK.md`，再按正文里给出的入口文件、目录和关键词搜索；不要一上来就全仓库扫源码。
 - 如果 `ACTIONDOCK.md` 已明确说不要优先搜索 `dist`、`build`、`node_modules`，就遵守它。

@@ -586,11 +586,11 @@ actiondock repository:knowledge-uninstall --repository-id team-repo --knowledge-
 
 ```bash
 actiondock playbook list --json
-actiondock playbook list --group <groupId> --repository-id <repositoryId> --tag <tag> --enabled --json
+actiondock playbook list --repository-id <repositoryId> --tag <tag> --enabled --json
 actiondock playbook get <playbook-id> --json
 ```
 
-- `playbook list --json` 返回任务手册摘要列表，适合筛选候选；默认包含 `id`、`name`、`description`、`groupId`、`riskLevel`、`tags`、`repositoryIds`、启用状态和托管状态。
+- `playbook list --json` 返回任务手册摘要列表，适合筛选候选；默认包含 `id`、`name`、`description`、`riskLevel`、`tags`、`repositoryIds`、启用状态和托管状态。
 - `playbook list --json` 不返回 `guideMarkdown`、`knowledgeRefs`、`scriptRefs`、`stopConditions` 等大字段。
 - 需要单个任务手册的完整定义、导览文本、知识引用、脚本引用和停止条件时，使用 `playbook get <playbook-id> --json`。
 

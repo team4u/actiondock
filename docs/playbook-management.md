@@ -62,7 +62,6 @@ Playbook 是战术信息的核心载体，其物理实体（Java Model）结构�
 ```java
 public class Playbook {
     private String id;                           // 全局唯一标识 (例如 refund-failure)
-    private String groupId;                      // 所属的分组 ID
     private String name;                         // 手册名称 (例如 "退款失败排查")
     private String description;                  // 详细的任务说明
     private List<String> tags;                   // 任务标签
@@ -139,7 +138,7 @@ flowchart TD
 ### 第一步：搜索候选任务手册（List）
 用户输入：“昨晚 Billing 服务有告警，退款好像卡住了，怎么查？”
 1. Agent 从用户描述里提取核心关键词，例如 `退款`、`告警`、`卡住`、`超时`。
-2. Agent 调用 `list` 接口拉摘要候选，并结合 `groupId`、`repositoryId`、`tag` 或 `keyword` 过滤：
+2. Agent 调用 `list` 接口拉摘要候选，并结合 `repositoryId`、`tag` 或 `keyword` 过滤：
    ```bash
    actiondock playbook list --repository-id "billing-service" --keyword "退款 超时" --json
    ```
@@ -177,16 +176,25 @@ Agent 拿着 `knowledgeRefs` 中指定的相对路径，通过统一的 `actiond
 研发人员可以通过 CLI 工具直接对 Playbook 进行增删改查：
 
 ```bash
-# 导入或更新单篇 Playbook（推荐走定义文件以避免命令行转义地狱）
+# 创建或更新单篇 Playbook（推荐走定义文件以避免命令行转义地狱）
 actiondock playbook create --definition-file ./playbook.json --json
 actiondock playbook update refund-failure --definition-file ./playbook.json --json
 
 # 删除单篇 Playbook
 actiondock playbook delete refund-failure --json
-
-# 管理分组
-actiondock playbook-group create --definition-file ./group.json --json
 ```
+
+管理后台还支持按 JSON bundle 导入/导出任务手册，格式为：
+
+```json
+{
+  "version": 1,
+  "exportedAt": "2026-05-31T00:00:00.000Z",
+  "playbooks": []
+}
+```
+
+导入的任务手册会作为本地可编辑资产保存；仓库托管关系仍通过“发布到仓库”或能力包安装维护。
 
 ---
 

@@ -7,6 +7,7 @@ import {
   toSharedStateRestorePayload
 } from "./systemBackup";
 import type { SharedStateSummary } from "../shared/types";
+import type { Playbook } from "../shared/types";
 
 describe("systemBackup shared state support", () => {
   it("builds backup json with shared states and preserves explicit null values", () => {
@@ -78,6 +79,49 @@ describe("systemBackup shared state support", () => {
     }));
 
     expect(parsed.data.sharedStates).toEqual([]);
+    expect(parsed.data.playbooks).toEqual([]);
+  });
+
+  it("builds and parses backup json with playbooks", () => {
+    const playbook: Playbook = {
+      id: "generic-project-investigation",
+      name: "通用项目调查",
+      description: "fallback",
+      tags: ["project-knowledge"],
+      riskLevel: "LOW",
+      repositoryIds: [],
+      knowledgeRefs: [],
+      scriptRefs: [],
+      guideMarkdown: "先读取 ACTIONDOCK.md。",
+      stopConditions: ["缺少目标项目"],
+      enabled: true,
+      managed: true
+    };
+
+    const backup = buildBackupJson({
+      scripts: [],
+      schedules: [],
+      webhooks: [],
+      configValues: [],
+      executionPresets: [],
+      repositories: [],
+      playbooks: [playbook],
+      plugins: [],
+      pluginConfigs: new Map(),
+      sharedStates: [],
+      aiModels: [],
+      aiAgents: [],
+      aiToolsets: []
+    });
+    const parsed = parseBackupJson(JSON.stringify(backup));
+
+    expect(parsed.data.playbooks).toEqual([
+      expect.objectContaining({
+        id: "generic-project-investigation",
+        managed: false,
+        guideMarkdown: "先读取 ACTIONDOCK.md。"
+      })
+    ]);
   });
 
   it("parses new backups with shared states", () => {
@@ -215,6 +259,20 @@ describe("systemBackup shared state support", () => {
       configValues: [],
       executionPresets: [],
       repositories: [],
+      playbooks: [
+        {
+          id: "generic-project-investigation",
+          name: "通用项目调查",
+          tags: [],
+          repositoryIds: [],
+          knowledgeRefs: [],
+          scriptRefs: [],
+          guideMarkdown: "guide",
+          stopConditions: [],
+          enabled: true,
+          managed: false
+        }
+      ],
       plugins: [],
       sharedStates: currentSharedStates,
       aiModels: [],
@@ -227,6 +285,11 @@ describe("systemBackup shared state support", () => {
       create: 1,
       overwrite: 1,
       skipped: 1
+    });
+    expect(analysis.playbooks).toEqual({
+      total: 0,
+      create: 0,
+      overwrite: 0
     });
   });
 

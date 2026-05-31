@@ -1,6 +1,8 @@
 # 项目知识库解析
 
-当问题依赖某个业务项目自身的文档、数据库说明、流程说明或 runbook 时，先不要直接扫源码，先通过 ActionDock 解析项目知识入口。
+本文件是 Playbook 的下游项目知识检索协议。业务项目、流程、数据库、接口、日志、告警和排障类问题默认先走 `references/playbook.md`；只有 Playbook 引导进入项目知识，或用户明确要求解析仓库 / 读取 `ACTIONDOCK.md` / 安装知识源时，才直接使用本文件。
+
+当需要读取某个业务项目自身的文档、数据库说明、流程说明或 runbook 时，先不要直接扫源码，先通过 ActionDock 解析项目知识入口。
 
 本文件只覆盖项目知识入口解析和 `actiondock-workspace` 系统插件的常见场景。通用 `plugin` 命令、动态 flag、`--args-json` / `--args-file` 规则见 `references/plugin-usage.md`。
 
