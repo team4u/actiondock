@@ -115,6 +115,7 @@ npm run build     # 构建
 | [让脚本真正可复用](docs/script-platform.md) | 项目理念与核心能力介绍 |
 | [仓库与分发](docs/repository-distribution.md) | 能力仓库、项目仓库、`ACTIONDOCK.md` 知识入口 |
 | [项目知识库](docs/project-knowledge.md) | 项目知识从痛点到设计的完整链路 |
+| [任务手册 (Playbook)](docs/playbook-management.md) | 战术手册定位、与 Skill 的本质区别与 Agent 消费指南 |
 | [用户手册](docs/user-manual.md) | 完整文档入口 |
 
 ## 技术栈
