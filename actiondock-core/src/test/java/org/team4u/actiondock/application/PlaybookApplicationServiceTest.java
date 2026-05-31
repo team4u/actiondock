@@ -31,7 +31,7 @@ class PlaybookApplicationServiceTest {
     private final PlaybookApplicationService service = new PlaybookApplicationService(groupRepository, playbookRepository, scriptRepository);
 
     @Test
-    void savesPlaybookAndGuide() {
+    void savesPlaybook() {
         when(scriptRepository.findById("query-log")).thenReturn(Optional.of(new ScriptDefinition().setId("query-log")));
         service.saveGroup(new PlaybookGroup().setId("billing").setName("Billing").setTags(List.of("billing")));
 
@@ -39,7 +39,6 @@ class PlaybookApplicationServiceTest {
                 .setId("refund")
                 .setGroupId("billing")
                 .setName("退款失败排查")
-                .setIntentAliases(List.of("退款失败"))
                 .setRiskLevel(PlaybookRiskLevel.MEDIUM)
                 .setRepositoryIds(List.of("billing-service"))
                 .setKnowledgeRefs(List.of(new PlaybookKnowledgeRef()
@@ -51,8 +50,8 @@ class PlaybookApplicationServiceTest {
                 .setStopConditions(List.of("缺少上下文")));
 
         assertThat(saved.getCreatedAt()).isNotNull();
-        assertThat(service.guide("refund").group().getId()).isEqualTo("billing");
-        assertThat(service.guide("refund").knowledgeRefs()).hasSize(1);
+        assertThat(service.getPlaybook("refund").getGroupId()).isEqualTo("billing");
+        assertThat(service.getPlaybook("refund").getKnowledgeRefs()).hasSize(1);
     }
 
     @Test
@@ -139,13 +138,12 @@ class PlaybookApplicationServiceTest {
     }
 
     @Test
-    void resolvesByAliasNameTagAndRepository() {
+    void listsPlaybooksByKeywordTagAndRepository() {
         service.saveGroup(new PlaybookGroup().setId("billing").setName("Billing").setTags(List.of("finance")));
         service.savePlaybook(new Playbook()
                 .setId("refund")
                 .setGroupId("billing")
                 .setName("退款失败排查")
-                .setIntentAliases(List.of("退款失败"))
                 .setTags(List.of("refund"))
                 .setRepositoryIds(List.of("billing-service"))
                 .setGuideMarkdown("guide"));
@@ -156,40 +154,35 @@ class PlaybookApplicationServiceTest {
                 .setTags(List.of("billing"))
                 .setGuideMarkdown("guide"));
 
-        assertThat(service.resolve(new org.team4u.actiondock.domain.model.PlaybookResolveRequest(
-                "退款失败", "billing-service", null, List.of("refund"))))
-                .extracting(match -> match.playbook().getId())
+        assertThat(service.listPlaybooks(null, "billing-service", "refund", true, null, "退款失败"))
+                .extracting(Playbook::getId)
                 .containsExactly("refund");
     }
 
     @Test
-    void resolvesByRegexAndHandlesInvalidRegex() {
+    void listsPlaybooksByKeywordAcrossNameDescriptionAndTags() {
         service.saveGroup(new PlaybookGroup().setId("billing").setName("Billing").setTags(List.of("finance")));
         service.savePlaybook(new Playbook()
                 .setId("refund")
                 .setGroupId("billing")
                 .setName("退款失败排查")
-                .setIntentAliases(List.of("退款失败"))
+                .setDescription("定位退款失败根因")
                 .setTags(List.of("refund"))
-                .setRepositoryIds(List.of("billing-service"))
                 .setGuideMarkdown("guide"));
         service.savePlaybook(new Playbook()
                 .setId("timeout")
                 .setGroupId("billing")
                 .setName("超时排查")
-                .setIntentAliases(List.of("退款超时"))
                 .setTags(List.of("timeout"))
                 .setGuideMarkdown("guide"));
 
-        // Match by regex "退款|超时" - should match both "refund" and "timeout"
-        assertThat(service.resolve(new org.team4u.actiondock.domain.model.PlaybookResolveRequest(
-                "退款|超时", null, null, List.of())))
-                .extracting(match -> match.playbook().getId())
-                .containsExactlyInAnyOrder("refund", "timeout");
-
-        // Invalid regex "[invalid" - should fallback to literal quote match and match nothing here
-        assertThat(service.resolve(new org.team4u.actiondock.domain.model.PlaybookResolveRequest(
-                "[invalid", null, null, List.of())))
+        assertThat(service.listPlaybooks(null, null, null, null, null, "退款"))
+                .extracting(Playbook::getId)
+                .containsExactly("refund");
+        assertThat(service.listPlaybooks(null, null, null, null, null, "timeout"))
+                .extracting(Playbook::getId)
+                .containsExactly("timeout");
+        assertThat(service.listPlaybooks(null, null, null, null, null, "[invalid"))
                 .isEmpty();
     }
 

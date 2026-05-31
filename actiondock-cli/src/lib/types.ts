@@ -131,9 +131,10 @@ export interface PlaybookGroup {
 }
 
 export interface PlaybookKnowledgeRef {
-  type: "ENTRY" | "FILE";
+  type: "NOTE" | "FILE";
   repositoryId: string;
-  path: string;
+  path?: string;
+  markdown?: string;
 }
 
 export interface PlaybookScriptRef {
@@ -146,7 +147,6 @@ export interface Playbook {
   groupId: string;
   name: string;
   description?: string | null;
-  intentAliases?: string[];
   tags?: string[];
   riskLevel?: PlaybookRiskLevel | null;
   repositoryIds?: string[];
@@ -165,37 +165,11 @@ export interface PlaybookListItemSummary {
   groupId: string;
   name: string;
   description?: string | null;
-  intentAliases?: string[];
   tags?: string[];
   riskLevel?: PlaybookRiskLevel | null;
   repositoryIds?: string[];
   enabled?: boolean;
   managed?: boolean;
-}
-
-export interface PlaybookGuideView {
-  playbook: Playbook;
-  group: PlaybookGroup;
-  knowledgeRefs: PlaybookKnowledgeRef[];
-  scriptRefs: PlaybookScriptRef[];
-  guideMarkdown: string;
-  stopConditions: string[];
-}
-
-export interface PlaybookResolveRequest {
-  intent: string;
-  repositoryId?: string;
-  groupId?: string;
-  tags?: string[];
-}
-
-export interface PlaybookResolveMatch {
-  score: number;
-  playbook: Playbook;
-  group?: PlaybookGroup | null;
-  riskLevel?: PlaybookRiskLevel | null;
-  knowledgeRefCount: number;
-  scriptRefCount: number;
 }
 
 export interface WebhookTransport {

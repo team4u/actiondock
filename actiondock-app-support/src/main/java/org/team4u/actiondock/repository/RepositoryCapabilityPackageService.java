@@ -546,7 +546,6 @@ public class RepositoryCapabilityPackageService {
                     .setGroupId(runtimeGroupId)
                     .setName(playbook.getName())
                     .setDescription(playbook.getDescription())
-                    .setIntentAliases(playbook.getIntentAliases())
                     .setTags(playbook.getTags())
                     .setRiskLevel(playbook.getRiskLevel())
                     .setRepositoryIds(playbook.getRepositoryIds())

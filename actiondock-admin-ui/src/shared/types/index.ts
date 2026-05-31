@@ -1227,7 +1227,6 @@ export interface RepositoryPlaybookFile {
   owner?: string;
   tags: string[];
   riskLevel?: PlaybookRiskLevel;
-  intentAliases: string[];
   repositoryIds: string[];
   knowledgeRefs: PlaybookKnowledgeRef[];
   scriptRefs: PlaybookScriptRef[];
@@ -1612,7 +1611,6 @@ export interface Playbook {
   groupId: string;
   name: string;
   description?: string;
-  intentAliases: string[];
   tags: string[];
   riskLevel?: PlaybookRiskLevel;
   repositoryIds: string[];
@@ -1624,13 +1622,4 @@ export interface Playbook {
   managed: boolean;
   createdAt?: string;
   updatedAt?: string;
-}
-
-export interface PlaybookGuideView {
-  playbook: Playbook;
-  group: PlaybookGroup;
-  knowledgeRefs: PlaybookKnowledgeRef[];
-  scriptRefs: PlaybookScriptRef[];
-  guideMarkdown: string;
-  stopConditions: string[];
 }

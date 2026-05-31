@@ -9,7 +9,6 @@ import { ApiError } from "../../../shared/api/httpClient";
 import type {
   Playbook,
   PlaybookGroup,
-  PlaybookGuideView,
   PlaybookKnowledgeRef,
   RepositoryDefinition,
   RepositoryPlaybookPublishRequest,
@@ -29,7 +28,7 @@ import {
   syncRepository
 } from "../../resources/api";
 import { listScripts } from "../../scripts/api";
-import { createPlaybook, deletePlaybook, getPlaybookGuide, listPlaybookGroups, listPlaybooks, updatePlaybook } from "../api";
+import { createPlaybook, deletePlaybook, listPlaybookGroups, listPlaybooks, updatePlaybook } from "../api";
 
 const { Text } = Typography;
 const { useBreakpoint } = Grid;
@@ -39,7 +38,6 @@ interface PlaybookFormValues {
   groupId: string;
   name: string;
   description?: string;
-  intentAliasesText?: string;
   tagsText?: string;
   riskLevel?: "LOW" | "MEDIUM" | "HIGH";
   repositoryIds: string[];
@@ -159,7 +157,7 @@ export function PlaybookPage() {
   const [filters, setFilters] = useState<{ groupId?: string; repositoryId?: string; tag?: string; managed?: boolean; keyword?: string }>({});
   const [editing, setEditing] = useState<Playbook | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [guide, setGuide] = useState<PlaybookGuideView | null>(null);
+  const [previewing, setPreviewing] = useState<Playbook | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [publishModalOpen, setPublishModalOpen] = useState(false);
   const [publishingPlaybook, setPublishingPlaybook] = useState<Playbook | null>(null);
@@ -238,14 +236,13 @@ export function PlaybookPage() {
   const openEditor = (item?: Playbook) => {
     const repositoryIds = item?.repositoryIds ?? [];
     setEditing(item ?? null);
-    setGuide(null);
+    setPreviewing(null);
     setKnowledgeEditor(toKnowledgeEditorState(repositoryIds, item?.knowledgeRefs ?? []));
     form.setFieldsValue({
       id: item?.id ?? "",
       groupId: item?.groupId ?? groups[0]?.id,
       name: item?.name ?? "",
       description: item?.description,
-      intentAliasesText: item?.intentAliases?.join(", "),
       tagsText: item?.tags?.join(", "),
       riskLevel: item?.riskLevel,
       repositoryIds,
@@ -281,7 +278,6 @@ export function PlaybookPage() {
       groupId: values.groupId,
       name: values.name.trim(),
       description: values.description?.trim() || undefined,
-      intentAliases: splitText(values.intentAliasesText),
       tags: splitText(values.tagsText),
       riskLevel: values.riskLevel,
       repositoryIds: values.repositoryIds ?? [],
@@ -306,14 +302,10 @@ export function PlaybookPage() {
     }
   };
 
-  const previewGuide = async (item: Playbook) => {
-    try {
-      setGuide(await getPlaybookGuide(item.id));
-      setEditing(item);
-      setDrawerOpen(true);
-    } catch (error) {
-      messageApi.error(getErrorMessage(error, "加载 Guide 失败"));
-    }
+  const previewPlaybook = (item: Playbook) => {
+    setPreviewing(item);
+    setEditing(item);
+    setDrawerOpen(true);
   };
 
   const remove = async (item: Playbook) => {
@@ -565,7 +557,7 @@ export function PlaybookPage() {
             width: 220,
             render: (_, item) => (
               <Space>
-                <Button size="small" onClick={() => void previewGuide(item)}>预览</Button>
+                <Button size="small" onClick={() => previewPlaybook(item)}>预览</Button>
                 <Button size="small" disabled={item.managed} onClick={() => openEditor(item)}>编辑</Button>
                 <Button size="small" disabled={item.managed} onClick={() => openPublishModal(item)}>发布到仓库</Button>
                 <Popconfirm title="删除任务手册？" disabled={item.managed} onConfirm={() => void remove(item)}>
@@ -576,10 +568,10 @@ export function PlaybookPage() {
           }
         ]}
       />
-      <Drawer title={guide ? "Guide 预览" : editing ? "编辑任务手册" : "新建任务手册"} open={drawerOpen} width={920} onClose={() => setDrawerOpen(false)} extra={!guide ? <Button type="primary" onClick={() => void save()}>保存</Button> : null}>
-        {guide ? (
+      <Drawer title={previewing ? "任务手册预览" : editing ? "编辑任务手册" : "新建任务手册"} open={drawerOpen} width={920} onClose={() => setDrawerOpen(false)} extra={!previewing ? <Button type="primary" onClick={() => void save()}>保存</Button> : null}>
+        {previewing ? (
           <Space direction="vertical" size={16} style={{ width: "100%" }}>
-            {guide.knowledgeRefs.map((ref, index) => ref.type === "NOTE" ? (
+            {previewing.knowledgeRefs.map((ref, index) => ref.type === "NOTE" ? (
               <div key={`${ref.repositoryId}:note:${index}`}>
                 <Text strong>{ref.repositoryId} 说明</Text>
                 <MarkdownDescription value={ref.markdown} className="markdown-description--panel" />
@@ -587,9 +579,9 @@ export function PlaybookPage() {
             ) : (
               <Tag key={`${ref.repositoryId}:${ref.path}`}>FILE {ref.repositoryId}:{ref.path}</Tag>
             ))}
-            <Space wrap>{guide.scriptRefs.map((ref) => <Tag color="blue" key={ref.scriptId}>{ref.scriptId}</Tag>)}</Space>
-            <MarkdownDescription value={guide.guideMarkdown} className="markdown-description--panel" />
-            <Space wrap>{guide.stopConditions.map((item) => <Tag color="red" key={item}>{item}</Tag>)}</Space>
+            <Space wrap>{previewing.scriptRefs.map((ref) => <Tag color="blue" key={ref.scriptId}>{ref.scriptId}</Tag>)}</Space>
+            <MarkdownDescription value={previewing.guideMarkdown} className="markdown-description--panel" />
+            <Space wrap>{previewing.stopConditions.map((item) => <Tag color="red" key={item}>{item}</Tag>)}</Space>
           </Space>
         ) : (
           <Form form={form} layout="vertical" initialValues={{ enabled: true }}>
@@ -604,7 +596,6 @@ export function PlaybookPage() {
                       <Form.Item name="groupId" label="任务分组" rules={[{ required: true, message: "请选择任务分组" }]}><Select options={groupOptions} /></Form.Item>
                       <Form.Item name="name" label="名称" rules={[{ required: true, message: "请输入名称" }]}><Input /></Form.Item>
                       <Form.Item name="description" label="描述"><Input.TextArea rows={3} /></Form.Item>
-                      <Form.Item name="intentAliasesText" label="意图别名"><Input placeholder="逗号分隔" /></Form.Item>
                       <Form.Item name="tagsText" label="Tags"><Input placeholder="逗号分隔" /></Form.Item>
                       <Form.Item name="riskLevel" label="风险等级"><Select allowClear options={["LOW", "MEDIUM", "HIGH"].map((value) => ({ value, label: value }))} /></Form.Item>
                       <Form.Item name="enabled" label="启用" valuePropName="checked"><Switch /></Form.Item>

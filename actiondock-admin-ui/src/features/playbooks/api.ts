@@ -1,5 +1,5 @@
 import { JSON_HEADERS, request } from "../../shared/api/httpClient";
-import type { Playbook, PlaybookGroup, PlaybookGuideView } from "../../shared/types";
+import type { Playbook, PlaybookGroup } from "../../shared/types";
 
 export function listPlaybookGroups(): Promise<PlaybookGroup[]> {
   return request<PlaybookGroup[]>("/api/playbook-groups");
@@ -62,8 +62,4 @@ export function updatePlaybook(id: string, payload: Playbook): Promise<Playbook>
 
 export function deletePlaybook(id: string): Promise<void> {
   return request<void>(`/api/playbooks/${encodeURIComponent(id)}`, { method: "DELETE" });
-}
-
-export function getPlaybookGuide(id: string): Promise<PlaybookGuideView> {
-  return request<PlaybookGuideView>(`/api/playbooks/${encodeURIComponent(id)}/guide`);
 }

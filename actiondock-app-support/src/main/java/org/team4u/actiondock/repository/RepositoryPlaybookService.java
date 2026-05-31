@@ -201,7 +201,6 @@ public class RepositoryPlaybookService {
                 .setGroupId(localGroupId)
                 .setName(file.displayName())
                 .setDescription(file.description())
-                .setIntentAliases(file.intentAliases())
                 .setTags(file.tags())
                 .setRiskLevel(parseRiskLevel(file.riskLevel()))
                 .setRepositoryIds(file.repositoryIds())
@@ -230,7 +229,6 @@ public class RepositoryPlaybookService {
                 NormalizeUtils.normalizeNullable(request.owner()),
                 NormalizeUtils.nullSafeList(request.tags()),
                 source.getRiskLevel() == null ? null : source.getRiskLevel().name(),
-                source.getIntentAliases(),
                 source.getRepositoryIds(),
                 source.getKnowledgeRefs(),
                 source.getScriptRefs(),
@@ -250,7 +248,6 @@ public class RepositoryPlaybookService {
                 initial.owner(),
                 initial.tags(),
                 initial.riskLevel(),
-                initial.intentAliases(),
                 initial.repositoryIds(),
                 initial.knowledgeRefs(),
                 initial.scriptRefs(),
@@ -283,7 +280,6 @@ public class RepositoryPlaybookService {
         values.put("owner", file.owner());
         values.put("tags", file.tags());
         values.put("riskLevel", file.riskLevel());
-        values.put("intentAliases", file.intentAliases());
         values.put("repositoryIds", file.repositoryIds());
         values.put("knowledgeRefs", file.knowledgeRefs());
         values.put("scriptRefs", file.scriptRefs());

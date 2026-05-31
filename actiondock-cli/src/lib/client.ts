@@ -33,9 +33,6 @@ import type {
   RepositoryKnowledgeDetail,
   Playbook,
   PlaybookGroup,
-  PlaybookGuideView,
-  PlaybookResolveMatch,
-  PlaybookResolveRequest,
   ResourceLifecycleOperationView,
   RepositoryScriptDescriptor,
   RepositoryScriptDetail,
@@ -818,17 +815,6 @@ export class ActionDockClient {
   async deletePlaybook(playbookId: string): Promise<void> {
     await this.requestJson<null>(`/api/playbooks/${playbookId}`, {
       method: "DELETE"
-    });
-  }
-
-  async getPlaybookGuide(playbookId: string): Promise<PlaybookGuideView> {
-    return this.requestJson<PlaybookGuideView>(`/api/playbooks/${playbookId}/guide`);
-  }
-
-  async resolvePlaybooks(payload: PlaybookResolveRequest): Promise<PlaybookResolveMatch[]> {
-    return this.requestJson<PlaybookResolveMatch[]>("/api/playbooks/resolve", {
-      method: "POST",
-      body: JSON.stringify(payload)
     });
   }
 

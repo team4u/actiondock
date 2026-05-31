@@ -612,15 +612,6 @@ export class ActionDockClient {
             method: "DELETE"
         });
     }
-    async getPlaybookGuide(playbookId) {
-        return this.requestJson(`/api/playbooks/${playbookId}/guide`);
-    }
-    async resolvePlaybooks(payload) {
-        return this.requestJson("/api/playbooks/resolve", {
-            method: "POST",
-            body: JSON.stringify(payload)
-        });
-    }
     async requestJson(pathname, init) {
         const url = new URL(`${this.options.serverUrl}${pathname}`);
         const method = init?.method ?? "GET";

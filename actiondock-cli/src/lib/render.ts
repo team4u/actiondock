@@ -15,8 +15,6 @@ import type {
   Playbook,
   PlaybookListItemSummary,
   PlaybookGroup,
-  PlaybookGuideView,
-  PlaybookResolveMatch,
   RepositoryDefinition,
   ProjectRepositoryResolution,
   RepositoryWebhookDescriptor,
@@ -296,7 +294,6 @@ export function summarizePlaybookList(items: Playbook[]): PlaybookListItemSummar
     groupId: item.groupId,
     name: item.name,
     description: item.description,
-    intentAliases: item.intentAliases,
     tags: item.tags,
     riskLevel: item.riskLevel,
     repositoryIds: item.repositoryIds,
@@ -315,47 +312,34 @@ export function renderPlaybookDetail(item: Playbook): string {
   ];
   if (item.description) lines.push(`Description: ${item.description}`);
   if (item.riskLevel) lines.push(`Risk: ${item.riskLevel}`);
-  if (item.intentAliases?.length) lines.push(`IntentAliases: ${item.intentAliases.join(", ")}`);
   if (item.tags?.length) lines.push(`Tags: ${item.tags.join(", ")}`);
   if (item.repositoryIds?.length) lines.push(`Repositories: ${item.repositoryIds.join(", ")}`);
-  lines.push(`KnowledgeRefs: ${item.knowledgeRefs?.length ?? 0}`);
-  lines.push(`ScriptRefs: ${item.scriptRefs?.length ?? 0}`);
-  lines.push(`StopConditions: ${item.stopConditions?.length ?? 0}`);
-  return lines.join("\n");
-}
-
-export function renderPlaybookGuide(item: PlaybookGuideView): string {
-  const lines = [
-    `Playbook: ${item.playbook.id}${item.playbook.name ? ` (${item.playbook.name})` : ""}`,
-    `Group: ${item.group.id}${item.group.name ? ` (${item.group.name})` : ""}`,
-    `Risk: ${item.playbook.riskLevel ?? "-"}`
-  ];
-  if (item.knowledgeRefs.length > 0) {
+  if (item.knowledgeRefs?.length) {
     lines.push("Knowledge:");
-    lines.push(...item.knowledgeRefs.map((ref) => `  ${ref.type} ${ref.repositoryId}:${ref.path}`));
+    lines.push(...item.knowledgeRefs.map((ref) => {
+      if (ref.type === "NOTE") {
+        return `  NOTE ${ref.repositoryId}${ref.markdown ? ` - ${ref.markdown}` : ""}`;
+      }
+      return `  ${ref.type} ${ref.repositoryId}:${ref.path}`;
+    }));
+  } else {
+    lines.push("KnowledgeRefs: 0");
   }
-  if (item.scriptRefs.length > 0) {
+  if (item.scriptRefs?.length) {
     lines.push("Scripts:");
     lines.push(...item.scriptRefs.map((ref) => `  ${ref.scriptId}${ref.purpose ? ` - ${ref.purpose}` : ""}`));
+  } else {
+    lines.push("ScriptRefs: 0");
   }
   lines.push("Guide:");
   lines.push(indent(item.guideMarkdown));
-  if (item.stopConditions.length > 0) {
+  if (item.stopConditions?.length) {
     lines.push("StopConditions:");
     lines.push(...item.stopConditions.map((condition) => `  - ${condition}`));
+  } else {
+    lines.push("StopConditions: 0");
   }
   return lines.join("\n");
-}
-
-export function renderPlaybookResolveMatches(items: PlaybookResolveMatch[]): string {
-  if (items.length === 0) {
-    return "没有匹配的任务手册。";
-  }
-  return items.map((item) => {
-    const group = item.group?.id ? ` group=${item.group.id}` : "";
-    const risk = item.riskLevel ? ` risk=${item.riskLevel}` : "";
-    return `${item.playbook.id} ${item.playbook.name} score=${item.score}${group}${risk} knowledge=${item.knowledgeRefCount} scripts=${item.scriptRefCount}`;
-  }).join("\n");
 }
 
 export function renderWebhookList(items: WebhookDefinition[]): string {

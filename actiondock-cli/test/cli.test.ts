@@ -1234,7 +1234,6 @@ beforeAll(async () => {
             groupId: "billing-diagnosis",
             name: "退款失败排查",
             description: "定位退款失败根因并给出下一步建议",
-            intentAliases: ["退款失败", "refund failed", "退款超时"],
             tags: ["refund", "payment"],
             riskLevel: "MEDIUM",
             repositoryIds: ["billing-service"],
@@ -1265,7 +1264,6 @@ beforeAll(async () => {
             groupId: "billing-diagnosis",
             name: "退款失败排查",
             description: "定位退款失败根因并给出下一步建议",
-            intentAliases: ["退款失败", "refund failed", "退款超时"],
             tags: ["refund", "payment"],
             riskLevel: "MEDIUM",
             repositoryIds: ["billing-service"],
@@ -1281,6 +1279,35 @@ beforeAll(async () => {
             managed: true
           }
         ]
+      });
+    }
+
+    if (req.method === "GET" && req.url === "/api/playbooks/refund-failure") {
+      return json(res, {
+        status: 0,
+        msg: "ok",
+        data: {
+          id: "refund-failure",
+          groupId: "billing-diagnosis",
+          name: "退款失败排查",
+          description: "定位退款失败根因并给出下一步建议",
+          tags: ["refund", "payment"],
+          riskLevel: "MEDIUM",
+          repositoryIds: ["billing-service"],
+          knowledgeRefs: [
+            { type: "NOTE", repositoryId: "billing-service", markdown: "先看退款链路背景。" },
+            { type: "FILE", repositoryId: "billing-service", path: "docs/runbooks/refund-runbook.md" }
+          ],
+          scriptRefs: [
+            { scriptId: "query-log", purpose: "查询退款链路日志" }
+          ],
+          guideMarkdown: "先读取 ACTIONDOCK.md，再查看 refund-runbook.md。",
+          stopConditions: ["缺少关键上下文", "需要人工确认"],
+          enabled: true,
+          managed: false,
+          createdAt: "2026-05-01T00:00:00",
+          updatedAt: "2026-05-02T00:00:00"
+        }
       });
     }
 
@@ -2365,7 +2392,6 @@ describe("CLI integration", () => {
         groupId: "billing-diagnosis",
         name: "退款失败排查",
         description: "定位退款失败根因并给出下一步建议",
-        intentAliases: ["退款失败", "refund failed", "退款超时"],
         tags: ["refund", "payment"],
         riskLevel: "MEDIUM",
         repositoryIds: ["billing-service"],
@@ -2409,6 +2435,23 @@ describe("CLI integration", () => {
     expect(textResult.stdout).toContain("refund-failure");
     expect(textResult.stdout).toContain("group=billing-diagnosis");
     expect(textResult.stdout).toContain("risk=MEDIUM");
+  });
+
+  it("returns full playbook details through get", async () => {
+    const jsonResult = await runCli(["playbook", "get", "refund-failure", "--server", baseUrl, "--json"]);
+    expect(jsonResult.status).toBe(0);
+    const parsed = JSON.parse(jsonResult.stdout);
+    expect(parsed.guideMarkdown).toBe("先读取 ACTIONDOCK.md，再查看 refund-runbook.md。");
+    expect(parsed.knowledgeRefs).toHaveLength(2);
+    expect(parsed.scriptRefs).toHaveLength(1);
+    expect(parsed.stopConditions).toEqual(["缺少关键上下文", "需要人工确认"]);
+
+    const textResult = await runCli(["playbook", "get", "refund-failure", "--server", baseUrl]);
+    expect(textResult.status).toBe(0);
+    expect(textResult.stdout).toContain("Guide:");
+    expect(textResult.stdout).toContain("docs/runbooks/refund-runbook.md");
+    expect(textResult.stdout).toContain("query-log - 查询退款链路日志");
+    expect(textResult.stdout).toContain("缺少关键上下文");
   });
 
   it("writes shared state through the cli", async () => {

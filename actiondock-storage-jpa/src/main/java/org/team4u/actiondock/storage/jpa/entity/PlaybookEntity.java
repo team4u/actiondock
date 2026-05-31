@@ -32,8 +32,6 @@ public class PlaybookEntity {
     @Lob
     private String description;
     @Lob
-    private String intentAliasesJson;
-    @Lob
     private String tagsJson;
     private String riskLevel;
     @Lob
@@ -62,8 +60,6 @@ public class PlaybookEntity {
     public void setName(String name) { this.name = name; }
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
-    public String getIntentAliasesJson() { return intentAliasesJson; }
-    public void setIntentAliasesJson(String intentAliasesJson) { this.intentAliasesJson = intentAliasesJson; }
     public String getTagsJson() { return tagsJson; }
     public void setTagsJson(String tagsJson) { this.tagsJson = tagsJson; }
     public String getRiskLevel() { return riskLevel; }

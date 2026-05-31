@@ -4,25 +4,18 @@ import org.team4u.actiondock.domain.exception.ActionDockErrorCodes;
 import org.team4u.actiondock.domain.exception.ActionDockException;
 import org.team4u.actiondock.domain.model.Playbook;
 import org.team4u.actiondock.domain.model.PlaybookGroup;
-import org.team4u.actiondock.domain.model.PlaybookGuideView;
 import org.team4u.actiondock.domain.model.PlaybookKnowledgeRef;
 import org.team4u.actiondock.domain.model.PlaybookKnowledgeRefType;
-import org.team4u.actiondock.domain.model.PlaybookResolveMatch;
-import org.team4u.actiondock.domain.model.PlaybookResolveRequest;
 import org.team4u.actiondock.domain.model.PlaybookScriptRef;
 import org.team4u.actiondock.domain.port.PlaybookGroupRepository;
 import org.team4u.actiondock.domain.port.PlaybookRepository;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 
 import java.time.LocalDateTime;
-import java.util.Comparator;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
-import java.util.regex.Pattern;
 
 public class PlaybookApplicationService {
     private final PlaybookGroupRepository groupRepository;
@@ -126,7 +119,6 @@ public class PlaybookApplicationService {
         }
         playbook.setName(ApplicationServiceSupport.normalize(playbook.getName(), "任务手册名称不能为空"));
         playbook.setDescription(ApplicationServiceSupport.blankToNull(playbook.getDescription()));
-        playbook.setIntentAliases(normalizeDistinct(playbook.getIntentAliases()));
         playbook.setTags(normalizeDistinct(playbook.getTags()));
         playbook.setRepositoryIds(normalizeDistinct(playbook.getRepositoryIds()));
         playbook.setKnowledgeRefs(validateKnowledgeRefs(playbook.getKnowledgeRefs()));
@@ -180,99 +172,6 @@ public class PlaybookApplicationService {
         }
     }
 
-    public PlaybookGuideView guide(String id) {
-        Playbook playbook = getPlaybook(id);
-        PlaybookGroup group = getGroup(playbook.getGroupId());
-        return new PlaybookGuideView(
-                playbook,
-                group,
-                playbook.getKnowledgeRefs(),
-                playbook.getScriptRefs(),
-                playbook.getGuideMarkdown(),
-                playbook.getStopConditions()
-        );
-    }
-
-    public List<PlaybookResolveMatch> resolve(PlaybookResolveRequest request) {
-        String intent = normalizeLower(request == null ? null : request.intent());
-        String repositoryId = request == null ? null : ApplicationServiceSupport.blankToNull(request.repositoryId());
-        String groupId = request == null ? null : ApplicationServiceSupport.blankToNull(request.groupId());
-        Set<String> tags = request == null ? Set.of() : normalizeDistinct(request.tags()).stream()
-                .map(this::normalizeLower)
-                .filter(Objects::nonNull)
-                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
-        return playbookRepository.findAll().stream()
-                .filter(Playbook::isEnabled)
-                .filter(playbook -> groupId == null || groupId.equals(playbook.getGroupId()))
-                .filter(playbook -> repositoryId == null || playbook.getRepositoryIds().isEmpty() || playbook.getRepositoryIds().contains(repositoryId))
-                .map(playbook -> toResolveMatch(playbook, groupRepository.findById(playbook.getGroupId()).orElse(null), intent, tags))
-                .filter(match -> match.score() > 0)
-                .sorted(Comparator.comparingInt(PlaybookResolveMatch::score).reversed()
-                        .thenComparing(match -> match.playbook().getName(), Comparator.nullsLast(String::compareToIgnoreCase)))
-                .limit(10)
-                .toList();
-    }
-
-    private PlaybookResolveMatch toResolveMatch(Playbook playbook, PlaybookGroup group, String intent, Set<String> tags) {
-        int score = score(playbook, group, intent, tags);
-        return new PlaybookResolveMatch(
-                score,
-                playbook,
-                group,
-                playbook.getRiskLevel(),
-                playbook.getKnowledgeRefs().size(),
-                playbook.getScriptRefs().size()
-        );
-    }
-
-    private int score(Playbook playbook, PlaybookGroup group, String intent, Set<String> tags) {
-        int score = 0;
-        if (intent != null) {
-            Pattern pattern;
-            try {
-                pattern = Pattern.compile(intent, Pattern.CASE_INSENSITIVE);
-            } catch (Exception e) {
-                pattern = Pattern.compile(Pattern.quote(intent), Pattern.CASE_INSENSITIVE);
-            }
-
-            final Pattern finalPattern = pattern;
-            if (playbook.getIntentAliases().stream().anyMatch(alias -> matches(finalPattern, alias))) {
-                score += 100;
-            }
-            if (matches(pattern, playbook.getName())) {
-                score += 50;
-            }
-            if (matches(pattern, playbook.getDescription())) {
-                score += 30;
-            }
-            if (playbook.getTags().stream().anyMatch(tag -> matches(finalPattern, tag))) {
-                score += 20;
-            }
-            if (group != null && matches(pattern, group.getName())) {
-                score += 10;
-            }
-            if (group != null && group.getTags().stream().anyMatch(tag -> matches(finalPattern, tag))) {
-                score += 10;
-            }
-        }
-        if (!tags.isEmpty()) {
-            Set<String> playbookTags = playbook.getTags().stream()
-                    .map(this::normalizeLower)
-                    .filter(Objects::nonNull)
-                    .collect(java.util.stream.Collectors.toSet());
-            for (String tag : tags) {
-                if (playbookTags.contains(tag)) {
-                    score += 15;
-                }
-            }
-        }
-        return score;
-    }
-
-    private boolean matches(Pattern pattern, String value) {
-        return value != null && pattern.matcher(value).find();
-    }
-
     private List<PlaybookKnowledgeRef> validateKnowledgeRefs(List<PlaybookKnowledgeRef> refs) {
         return refs.stream().map(ref -> {
             PlaybookKnowledgeRefType type = ref.getType() == null ? PlaybookKnowledgeRefType.FILE : ref.getType();
@@ -312,7 +211,6 @@ public class PlaybookApplicationService {
         return contains(playbook.getId(), keyword)
                 || contains(playbook.getName(), keyword)
                 || contains(playbook.getDescription(), keyword)
-                || playbook.getIntentAliases().stream().anyMatch(value -> contains(value, keyword))
                 || playbook.getTags().stream().anyMatch(value -> contains(value, keyword));
     }
 

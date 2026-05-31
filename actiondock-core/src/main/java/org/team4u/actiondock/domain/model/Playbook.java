@@ -9,7 +9,6 @@ public class Playbook {
     private String groupId;
     private String name;
     private String description;
-    private List<String> intentAliases = new ArrayList<>();
     private List<String> tags = new ArrayList<>();
     private PlaybookRiskLevel riskLevel;
     private List<String> repositoryIds = new ArrayList<>();
@@ -55,15 +54,6 @@ public class Playbook {
 
     public Playbook setDescription(String description) {
         this.description = description;
-        return this;
-    }
-
-    public List<String> getIntentAliases() {
-        return List.copyOf(intentAliases);
-    }
-
-    public Playbook setIntentAliases(List<String> intentAliases) {
-        this.intentAliases = intentAliases == null ? new ArrayList<>() : new ArrayList<>(intentAliases);
         return this;
     }
 

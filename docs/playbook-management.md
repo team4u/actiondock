@@ -27,7 +27,7 @@ AI 助手在进入复杂的企业级项目或排查复杂的线上告警时，�
 * **能力覆盖**：同样在做场景导览，但更适合承载深到仓库内部的业务能力聚合。
 * **更适合放什么**：某个业务场景里该查什么、读什么、用什么脚本、何时停止。
 * **绑定方式**：天然绑定仓库、`knowledgeRefs`、`scriptRefs`、`riskLevel`、`stopConditions` 和 `guideMarkdown`。
-* **交付方式**：由 ActionDock 在运行时通过 `resolve` 和 `guide` 动态提供，跟随能力包与仓库映射生效，不需要额外发布一个独立 Skill。
+* **交付方式**：由 ActionDock 在运行时通过候选搜索和详情读取动态提供，跟随能力包与仓库映射生效，不需要额外发布一个独立 Skill。
 * **典型例子**：退款超时排查、计费异常诊断、发布事故处置。
 
 ### 维度对比
@@ -39,7 +39,7 @@ AI 助手在进入复杂的企业级项目或排查复杂的线上告警时，�
 | **上下文绑定** | 主要依赖 Skill 自身内容和 Agent 工具能力 | 显式绑定仓库、知识、脚本和风险边界 |
 | **内部资产聚合** | 可以写进去，但组织和维护更重 | 原生聚合 `knowledgeRefs`、`scriptRefs`、`stopConditions` 等 |
 | **是否需要单独发布 Skill** | 往往需要单独管理和发布 | 不需要额外发布独立 Skill |
-| **运行时消费** | Agent 本地加载后遵循 | Agent 运行时通过 `resolve` 和 `guide` 动态获取 |
+| **运行时消费** | Agent 本地加载后遵循 | Agent 运行时通过 `list` 搜索候选，再用 `get` 读取详情 |
 | **适合的场景** | 代码评审规范、调试守则、输出格式、工具调用规则 | 退款超时排查、计费异常诊断、发布事故处置 |
 
 ---
@@ -65,7 +65,6 @@ public class Playbook {
     private String groupId;                      // 所属的分组 ID
     private String name;                         // 手册名称 (例如 "退款失败排查")
     private String description;                  // 详细的任务说明
-    private List<String> intentAliases;          // 意图别名，用于正则/关键词匹配映射
     private List<String> tags;                   // 任务标签
     private PlaybookRiskLevel riskLevel;         // 风险等级 (LOW / MEDIUM / HIGH)
     private List<String> repositoryIds;          // 适用的具体项目仓库 ID 列表
@@ -79,21 +78,18 @@ public class Playbook {
 
 ### 关键属性深度解析
 
-#### 1) 意图别名 (`intentAliases`)
-这是 Agent 触达 Playbook 的“引信”。因为用户的输入通常是口语化的长句（如“昨天退款超时了，怎么排查”），我们不能依赖笨重的语义检索，而是建议 Agent 提取出核心关键词（如“退款.*超时”），通过别名进行快速、低成本且极其精准的正则匹配。
-
-#### 2) 知识引用 (`knowledgeRefs`)
+#### 1) 知识引用 (`knowledgeRefs`)
 Playbook 不内联庞大的项目文档本身，而是像一个“指针”指向仓库中的关键知识点，支持两类：
 * `FILE`：指向仓库中具体相对路径的文档（例如 `docs/runbooks/refund-runbook.md`）。
 * `NOTE`：针对特定仓库的临时性排查叮嘱，直接存放在 Playbook 内。
 
-#### 3) 脚本引用 (`scriptRefs`)
+#### 2) 脚本引用 (`scriptRefs`)
 Playbook 关联的一系列可用 Action 脚本工具。
 > [!IMPORTANT]
 > **这绝不是表示自动化的工作流 DSL，也不代表系统会自动按顺序执行这些脚本。**
 > 它仅仅是告诉 Agent：“针对这个排查，你可以使用这几个指定的脚本来获取数据或运行动作。在运行前，你必须去查询它们的 Schema 并核实参数。”
 
-#### 4) 停止条件 (`stopConditions`)
+#### 3) 停止条件 (`stopConditions`)
 这是防止 AI 盲目执行的“安全熔断阀”。例如，`["缺少关键上下文", "需要高风险写操作", "已确认根因"]`。一旦 Agent 发现满足其中任一条件，必须立刻终止任务，并向人类求助。
 
 ---
@@ -123,7 +119,7 @@ flowchart TD
     
     subgraph AgentRuntime[外部 Agent 消费层]
         Agent[AI Agent]
-        Agent -->|1. resolve 匹配意图| TargetRepo
+        Agent -->|1. list 搜索候选| TargetRepo
         Agent -->|2. 读取 guide 战术| Playbooks
         Agent -->|3. 借助 workspace 读取| TargetRepo
         Agent -->|4. 受控执行脚本| Scripts
@@ -140,19 +136,19 @@ flowchart TD
 
 当外部 Agent 被唤醒去解决一个特定的任务时，推荐的标准消费路径如下：
 
-### 第一步：意图识别与关键词过滤（Resolve）
+### 第一步：搜索候选任务手册（List）
 用户输入：“昨晚 Billing 服务有告警，退款好像卡住了，怎么查？”
-1. Agent 提取核心动词和名词，提炼出正则关键字：`退款.*卡住|退款.*超时`。
-2. Agent 调用 `resolve` API 寻找候选 Playbook：
+1. Agent 从用户描述里提取核心关键词，例如 `退款`、`告警`、`卡住`、`超时`。
+2. Agent 调用 `list` 接口拉摘要候选，并结合 `groupId`、`repositoryId`、`tag` 或 `keyword` 过滤：
    ```bash
-   actiondock playbook resolve --intent "退款.*(卡住|超时)" --repository-id "billing-service" --json
+   actiondock playbook list --repository-id "billing-service" --keyword "退款 超时" --json
    ```
 3. 系统返回匹配到的 Playbook ID（如 `refund-failure`）。
 
-### 第二步：载入导览与安全审查（Guide）
-Agent 决不能直接运行任何脚本，而是先读取 Playbook 的导览详情：
+### 第二步：载入详情与安全审查
+Agent 决不能直接运行任何脚本，而是先读取 Playbook 的完整详情：
 ```bash
-actiondock playbook guide refund-failure --json
+actiondock playbook get refund-failure --json
 ```
 Agent 必须依次解析并遵守返回的数据：
 1. **查看 `riskLevel`**：如果是 `HIGH`，意味着该任务排查存在极高风险，Agent 必须加倍小心，随时准备停止并请求人工介入。

@@ -49,7 +49,6 @@ public class JpaPlaybookRepositoryAdapter implements PlaybookRepository {
         entity.setGroupId(playbook.getGroupId());
         entity.setName(playbook.getName());
         entity.setDescription(playbook.getDescription());
-        entity.setIntentAliasesJson(jsonCodec.write(playbook.getIntentAliases()));
         entity.setTagsJson(jsonCodec.write(playbook.getTags()));
         entity.setRiskLevel(playbook.getRiskLevel() == null ? null : playbook.getRiskLevel().name());
         entity.setRepositoryIdsJson(jsonCodec.write(playbook.getRepositoryIds()));
@@ -70,7 +69,6 @@ public class JpaPlaybookRepositoryAdapter implements PlaybookRepository {
                 .setGroupId(entity.getGroupId())
                 .setName(entity.getName())
                 .setDescription(entity.getDescription())
-                .setIntentAliases(jsonCodec.readList(entity.getIntentAliasesJson(), String.class))
                 .setTags(jsonCodec.readList(entity.getTagsJson(), String.class))
                 .setRiskLevel(entity.getRiskLevel() == null || entity.getRiskLevel().isBlank()
                         ? null

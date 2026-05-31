@@ -11,9 +11,6 @@ import org.springframework.web.bind.annotation.RestController;
 import org.team4u.actiondock.application.PlaybookApplicationService;
 import org.team4u.actiondock.domain.model.Playbook;
 import org.team4u.actiondock.domain.model.PlaybookGroup;
-import org.team4u.actiondock.domain.model.PlaybookGuideView;
-import org.team4u.actiondock.domain.model.PlaybookResolveMatch;
-import org.team4u.actiondock.domain.model.PlaybookResolveRequest;
 import org.team4u.actiondock.web.common.ApiResponse;
 
 import java.util.List;
@@ -82,16 +79,6 @@ public class PlaybookController {
     public ApiResponse<Void> deletePlaybook(@PathVariable String id) {
         playbookService.deletePlaybook(id);
         return ApiResponse.success(null);
-    }
-
-    @GetMapping("/api/playbooks/{id}/guide")
-    public ApiResponse<PlaybookGuideView> guide(@PathVariable String id) {
-        return ApiResponse.success(playbookService.guide(id));
-    }
-
-    @PostMapping("/api/playbooks/resolve")
-    public ApiResponse<List<PlaybookResolveMatch>> resolve(@RequestBody(required = false) PlaybookResolveRequest request) {
-        return ApiResponse.success(playbookService.resolve(request));
     }
 
     private List<PlaybookGroupView> toGroupViews(List<PlaybookGroup> groups) {

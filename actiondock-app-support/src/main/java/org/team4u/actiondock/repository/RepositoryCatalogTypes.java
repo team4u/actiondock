@@ -974,7 +974,6 @@ public final class RepositoryCatalogTypes {
                                String owner,
                                List<String> tags,
                                String riskLevel,
-                               List<String> intentAliases,
                                List<String> repositoryIds,
                                List<PlaybookKnowledgeRef> knowledgeRefs,
                                List<PlaybookScriptRef> scriptRefs,
