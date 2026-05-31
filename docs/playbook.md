@@ -29,6 +29,8 @@ actiondock playbook get refund-failure --json
 
 Agent Skill 适合承载跨项目复用的通用能力，例如读取文件、调用 CLI、检索官方文档、访问云厂商工具或解析某类标准格式。业务排查场景会跟着项目代码、接口、表结构和 runbook 变化，把每个场景都做成 Skill，会把业务变化带进 Agent 运行时。
 
+从上下文噪声角度看，业务排查场景的基数极其庞大。如果将每个排查场景都打包成常驻 Skill，会导致 Agent 的工具集急剧膨胀。在日常开发、功能编写或普通重构场景下，这些高度特化的排查工具无需被召回。将它们全部载入，不仅污染运行时上下文，还容易引发工具误用，从而降低 Agent 执行主流开发任务时的准确率并增加 Token 消耗。
+
 Playbook 归项目，Skill 归 Agent 运行环境。项目侧只声明“这次任务建议用哪些能力和材料”，不负责安装或发布 Agent Skill。
 
 | 维度 | Agent Skill | Playbook |
