@@ -4,16 +4,26 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.team4u.actiondock.application.ScriptApplicationService;
 import org.team4u.actiondock.config.AppProperties;
+import org.team4u.actiondock.domain.model.Playbook;
+import org.team4u.actiondock.domain.model.PlaybookGroup;
+import org.team4u.actiondock.domain.model.PlaybookKnowledgeRef;
+import org.team4u.actiondock.domain.model.PlaybookKnowledgeRefType;
+import org.team4u.actiondock.domain.model.PlaybookScriptRef;
+import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.exception.RepositoryVersionExistsException;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.domain.model.RepositoryLocalAsset;
+import org.team4u.actiondock.domain.model.ScriptType;
 import org.team4u.actiondock.domain.model.UpstreamAssetType;
 import org.team4u.actiondock.domain.port.CapabilityPackageInstallationRepository;
 import org.team4u.actiondock.domain.port.ConfigValueRepository;
 import org.team4u.actiondock.domain.port.ExecutionPresetRepository;
 import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.domain.port.ManagedSkillRepository;
+import org.team4u.actiondock.domain.port.PlaybookGroupRepository;
+import org.team4u.actiondock.domain.port.PlaybookRepository;
 import org.team4u.actiondock.domain.port.RepositoryDefinitionRepository;
 import org.team4u.actiondock.domain.port.RepositoryLocalAssetRepository;
 import org.team4u.actiondock.domain.port.ScriptRepository;
@@ -26,6 +36,7 @@ import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -35,6 +46,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class RepositoryCatalogServiceTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -906,6 +918,179 @@ class RepositoryCatalogServiceTest {
         assertThat(Files.exists(projectRoot.resolve("tools"))).isFalse();
     }
 
+    @Test
+    void playbookPublishBlocksWhenReferencedAssetsMissingInTargetRepository() throws Exception {
+        Path repositoryRoot = tempDir.resolve("capability-repo");
+        Files.createDirectories(repositoryRoot);
+        RepositoryDefinition repository = new RepositoryDefinition()
+                .setId("capability-repo")
+                .setName("Capability Repository")
+                .setType(REPO_TYPE_LOCAL_DIR)
+                .setPurpose(REPO_PURPOSE_CAPABILITY)
+                .setUrl(repositoryRoot.toString())
+                .setEnabled(true);
+
+        InMemoryPlaybookGroupRepository playbookGroupRepository = new InMemoryPlaybookGroupRepository();
+        InMemoryPlaybookRepository playbookRepository = new InMemoryPlaybookRepository();
+        playbookGroupRepository.save(new PlaybookGroup().setId("billing-diagnosis").setName("Billing Diagnosis"));
+        playbookRepository.save(new Playbook()
+                .setId("refund-failure")
+                .setGroupId("billing-diagnosis")
+                .setName("Refund Failure")
+                .setGuideMarkdown("guide")
+                .setScriptRefs(List.of(new PlaybookScriptRef().setScriptId("query-log")))
+                .setKnowledgeRefs(List.of(new PlaybookKnowledgeRef()
+                        .setType(PlaybookKnowledgeRefType.FILE)
+                        .setRepositoryId("billing-service")
+                        .setPath("docs/runbooks/refund-runbook.md"))));
+
+        RepositoryCatalogService service = new RepositoryCatalogService(
+                repositories(List.of(repository), playbookGroupRepository, playbookRepository, new InMemoryScriptRepository()),
+                new RepositoryCatalogService.ApplicationServices(null, null, PluginRuntimeService.disabled()),
+                jsonCodec,
+                appProperties(),
+                null
+        );
+        RepositoryPlaybookService playbookService = new RepositoryPlaybookService(service);
+
+        assertThatThrownBy(() -> playbookService.publishPlaybook("capability-repo",
+                new RepositoryCatalogTypes.RepositoryPlaybookPublishRequest(
+                        "refund-failure",
+                        "refund-failure",
+                        "Refund Failure",
+                        "1.0.0",
+                        "team",
+                        null,
+                        List.of("refund"),
+                        false
+                )))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("query-log")
+                .hasMessageContaining("billing-service")
+                .hasMessageContaining("分别发布脚本")
+                .hasMessageContaining("分别发布知识源");
+    }
+
+    @Test
+    void capabilityPackagePreviewAddsBlockersForMissingPlaybookReferences() throws Exception {
+        Path repositoryRoot = tempDir.resolve("capability-repo-preview");
+        Files.createDirectories(repositoryRoot.resolve("scripts/query-log"));
+        Files.createDirectories(repositoryRoot);
+        Files.writeString(repositoryRoot.resolve("scripts/query-log/script.json"), """
+                {
+                  "scriptVersion": 1,
+                  "id": "query-log",
+                  "name": "Query Log",
+                  "version": "1.0.0",
+                  "type": "GROOVY",
+                  "sourcePath": "source.groovy",
+                  "tags": [],
+                  "pluginDependencies": []
+                }
+                """);
+        Files.writeString(repositoryRoot.resolve("scripts/query-log/source.groovy"), "return [message: 'ok']");
+        RepositoryDefinition repository = new RepositoryDefinition()
+                .setId("capability-repo-preview")
+                .setName("Capability Repository")
+                .setType(REPO_TYPE_LOCAL_DIR)
+                .setPurpose(REPO_PURPOSE_CAPABILITY)
+                .setUrl(repositoryRoot.toString())
+                .setEnabled(true);
+
+        InMemoryPlaybookGroupRepository playbookGroupRepository = new InMemoryPlaybookGroupRepository();
+        InMemoryPlaybookRepository playbookRepository = new InMemoryPlaybookRepository();
+        InMemoryScriptRepository scriptRepository = new InMemoryScriptRepository();
+        playbookGroupRepository.save(new PlaybookGroup().setId("billing-diagnosis").setName("Billing Diagnosis"));
+        playbookRepository.save(new Playbook()
+                .setId("refund-failure")
+                .setGroupId("billing-diagnosis")
+                .setName("Refund Failure")
+                .setGuideMarkdown("guide")
+                .setScriptRefs(List.of(
+                        new PlaybookScriptRef().setScriptId("query-log"),
+                        new PlaybookScriptRef().setScriptId("missing-script")
+                ))
+                .setKnowledgeRefs(List.of(new PlaybookKnowledgeRef()
+                        .setType(PlaybookKnowledgeRefType.FILE)
+                        .setRepositoryId("billing-service")
+                        .setPath("docs/runbooks/refund-runbook.md"))));
+        scriptRepository.save(new ScriptDefinition()
+                .setId("entry-script")
+                .setName("Entry Script")
+                .setType(ScriptType.GROOVY)
+                .setSource("return [:]"));
+
+        RepositoryCatalogService.Repositories repos = repositories(
+                List.of(repository),
+                playbookGroupRepository,
+                playbookRepository,
+                scriptRepository
+        );
+        ScriptApplicationService scriptApplicationService = mock(ScriptApplicationService.class);
+        when(scriptApplicationService.getPublished("entry-script")).thenReturn(new ScriptDefinition()
+                .setId("entry-script")
+                .setName("Entry Script")
+                .setType(ScriptType.GROOVY)
+                .setPackaging(org.team4u.actiondock.domain.model.ScriptPackaging.TOOL)
+                .setSource("return [:]")
+                .setCreatedAt(LocalDateTime.now())
+                .setUpdatedAt(LocalDateTime.now()));
+        RepositoryCatalogService.ApplicationServices appServices = new RepositoryCatalogService.ApplicationServices(
+                scriptApplicationService,
+                null,
+                PluginRuntimeService.disabled()
+        );
+        RepositoryCatalogService service = new RepositoryCatalogService(
+                repos,
+                appServices,
+                jsonCodec,
+                appProperties(),
+                null
+        );
+        RepositoryCapabilityPackageService packageService = new RepositoryCapabilityPackageService(
+                service,
+                repos,
+                appServices,
+                mock(RepositoryPluginService.class),
+                mock(RepositoryScriptService.class),
+                service.getConfigTemplateSyncService(),
+                service.getAiPackageService()
+        );
+
+        RepositoryCatalogTypes.CapabilityPackagePublishPreview preview = packageService.previewCapabilityPackage(
+                "capability-repo-preview",
+                new RepositoryCatalogTypes.CapabilityPackagePublishRequest(
+                        "pkg-1",
+                        "Package 1",
+                        "1.0.0",
+                        "team",
+                        "desc",
+                        null,
+                        List.of("demo"),
+                        "LOW",
+                        RepositoryCatalogTypes.CapabilityPackageSource.MANUAL,
+                        new RepositoryCatalogTypes.CapabilityPackageEntrySelection("SCRIPT", "entry-script", null),
+                        List.of("entry-script"),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of("refund-failure")
+                )
+        );
+
+        assertThat(preview.checks()).anySatisfy(item -> {
+            assertThat(item.severity()).isEqualTo("BLOCKER");
+            assertThat(item.code()).isEqualTo("PLAYBOOK_SCRIPT_REF_MISSING");
+            assertThat(item.message()).contains("missing-script");
+        });
+        assertThat(preview.checks()).anySatisfy(item -> {
+            assertThat(item.severity()).isEqualTo("BLOCKER");
+            assertThat(item.code()).isEqualTo("PLAYBOOK_KNOWLEDGE_REF_MISSING");
+            assertThat(item.message()).contains("billing-service");
+        });
+    }
+
     private RepositoryDefinition localRepository() {
         return new RepositoryDefinition().setId("repo-1").setType("LOCAL_DIR").setUrl(tempDir.toString());
     }
@@ -948,11 +1133,18 @@ class RepositoryCatalogServiceTest {
     }
 
     private RepositoryCatalogService.Repositories repositories(List<RepositoryDefinition> items) {
+        return repositories(items, new InMemoryPlaybookGroupRepository(), new InMemoryPlaybookRepository(), new InMemoryScriptRepository());
+    }
+
+    private RepositoryCatalogService.Repositories repositories(List<RepositoryDefinition> items,
+                                                               PlaybookGroupRepository playbookGroupRepository,
+                                                               PlaybookRepository playbookRepository,
+                                                               ScriptRepository scriptRepository) {
         return new RepositoryCatalogService.Repositories(
                 new InMemoryRepositoryDefinitionRepository(items),
                 mock(CapabilityPackageInstallationRepository.class),
                 mock(ManagedSkillRepository.class),
-                mock(ScriptRepository.class),
+                scriptRepository,
                 mock(ScriptScheduleRepository.class),
                 mock(ExecutionPresetRepository.class),
                 mock(ConfigValueRepository.class),
@@ -960,7 +1152,9 @@ class RepositoryCatalogServiceTest {
                 new EmptyRepositoryLocalAssetRepository(),
                 mock(org.team4u.actiondock.ai.api.AiModelProfileRepository.class),
                 mock(org.team4u.actiondock.ai.api.AiAgentProfileRepository.class),
-                mock(org.team4u.actiondock.ai.api.AiToolsetRepository.class)
+                mock(org.team4u.actiondock.ai.api.AiToolsetRepository.class),
+                playbookGroupRepository,
+                playbookRepository
         );
     }
 
@@ -995,6 +1189,81 @@ class RepositoryCatalogServiceTest {
 
         @Override
         public List<RepositoryDefinition> findAll() {
+            return List.copyOf(items.values());
+        }
+
+        @Override
+        public void deleteById(String id) {
+            items.remove(id);
+        }
+    }
+
+    private static final class InMemoryPlaybookGroupRepository implements PlaybookGroupRepository {
+        private final java.util.LinkedHashMap<String, PlaybookGroup> items = new java.util.LinkedHashMap<>();
+
+        @Override
+        public PlaybookGroup save(PlaybookGroup group) {
+            items.put(group.getId(), group);
+            return group;
+        }
+
+        @Override
+        public Optional<PlaybookGroup> findById(String id) {
+            return Optional.ofNullable(items.get(id));
+        }
+
+        @Override
+        public List<PlaybookGroup> findAll() {
+            return List.copyOf(items.values());
+        }
+
+        @Override
+        public void deleteById(String id) {
+            items.remove(id);
+        }
+    }
+
+    private static final class InMemoryPlaybookRepository implements PlaybookRepository {
+        private final java.util.LinkedHashMap<String, Playbook> items = new java.util.LinkedHashMap<>();
+
+        @Override
+        public Playbook save(Playbook playbook) {
+            items.put(playbook.getId(), playbook);
+            return playbook;
+        }
+
+        @Override
+        public Optional<Playbook> findById(String id) {
+            return Optional.ofNullable(items.get(id));
+        }
+
+        @Override
+        public List<Playbook> findAll() {
+            return List.copyOf(items.values());
+        }
+
+        @Override
+        public void deleteById(String id) {
+            items.remove(id);
+        }
+    }
+
+    private static final class InMemoryScriptRepository implements ScriptRepository {
+        private final java.util.LinkedHashMap<String, ScriptDefinition> items = new java.util.LinkedHashMap<>();
+
+        @Override
+        public ScriptDefinition save(ScriptDefinition script) {
+            items.put(script.getId(), script);
+            return script;
+        }
+
+        @Override
+        public Optional<ScriptDefinition> findById(String id) {
+            return Optional.ofNullable(items.get(id));
+        }
+
+        @Override
+        public List<ScriptDefinition> findAll() {
             return List.copyOf(items.values());
         }
 

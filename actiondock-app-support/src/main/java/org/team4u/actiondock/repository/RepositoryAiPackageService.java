@@ -28,6 +28,7 @@ class RepositoryAiPackageService {
     private final RepositoryCatalogService catalog;
     private final AiPackageDependencyCollector dependencyCollector;
     private final CapabilityPackageBuilderService builderService;
+    private final RepositoryKnowledgeService knowledgeService;
 
     RepositoryAiPackageService(RepositoryCatalogService catalog,
                                RepositoryCatalogService.Repositories repos,
@@ -52,6 +53,7 @@ class RepositoryAiPackageService {
                 repos.playbookRepository(),
                 dependencyCollector
         );
+        this.knowledgeService = new RepositoryKnowledgeService(catalog);
     }
 
     AiPackageBundle buildAiPackageBundle(RepositoryDefinition repository,
@@ -79,7 +81,13 @@ class RepositoryAiPackageService {
         } catch (IllegalArgumentException ignored) {
             // 能力包尚未发布，首次发布预览
         }
-        return builderService.buildCapabilityPackagePublishPreview(repository, draft, currentPackage);
+        return builderService.buildCapabilityPackagePublishPreview(
+                repository,
+                catalog.listRepositoryScripts(repository.getId()),
+                knowledgeService.listRepositoryKnowledge(repository.getId()),
+                draft,
+                currentPackage
+        );
     }
 
     void writeCapabilityPackageFiles(Path packageRoot,

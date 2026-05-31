@@ -14,6 +14,7 @@ import org.team4u.actiondock.repository.RepositoryCatalogService;
 import org.team4u.actiondock.repository.RepositoryCatalogTypes;
 import org.team4u.actiondock.repository.RepositoryKnowledgeService;
 import org.team4u.actiondock.repository.RepositoryPluginService;
+import org.team4u.actiondock.repository.RepositoryPlaybookService;
 import org.team4u.actiondock.repository.RepositoryScriptService;
 import org.team4u.actiondock.repository.RepositoryWebhookService;
 import org.team4u.actiondock.web.common.GlobalExceptionHandler;
@@ -66,6 +67,9 @@ class ResourceLifecycleControllerTest {
     @MockBean
     private RepositoryKnowledgeService repositoryKnowledgeService;
 
+    @MockBean
+    private RepositoryPlaybookService repositoryPlaybookService;
+
     @Test
     void routesWebhookPublishThroughLifecycleFacade() throws Exception {
         when(repositoryWebhookService.publishWebhook(any(), any())).thenReturn(
@@ -113,5 +117,53 @@ class ResourceLifecycleControllerTest {
                 .andExpect(jsonPath("$.data.result.webhookId").value("order-created"));
 
         verify(repositoryWebhookService).publishWebhook(any(), any());
+    }
+
+    @Test
+    void routesPlaybookPublishThroughLifecycleFacade() throws Exception {
+        when(repositoryPlaybookService.publishPlaybook(any(), any())).thenReturn(
+                new RepositoryCatalogTypes.RepositoryPlaybookDescriptor(
+                        "repo-1",
+                        "refund-failure",
+                        "退款失败排查",
+                        "1.0.0",
+                        "desc",
+                        null,
+                        "team",
+                        List.of("refund"),
+                        "MEDIUM",
+                        "billing-diagnosis",
+                        "Billing Diagnosis",
+                        "playbooks/refund-failure/playbook.json",
+                        "playbook-groups/billing-diagnosis/group.json",
+                        null,
+                        true,
+                        null
+                )
+        );
+
+        mockMvc.perform(post("/api/resource-lifecycle/operations")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "resourceType": "REPOSITORY_PLAYBOOK",
+                                  "operation": "publish",
+                                  "repositoryId": "repo-1",
+                                  "payload": {
+                                    "sourceId": "refund-failure",
+                                    "playbookId": "refund-failure",
+                                    "displayName": "退款失败排查",
+                                    "version": "1.0.0",
+                                    "force": false
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value(0))
+                .andExpect(jsonPath("$.data.resourceType").value("REPOSITORY_PLAYBOOK"))
+                .andExpect(jsonPath("$.data.operation").value("publish"))
+                .andExpect(jsonPath("$.data.result.playbookId").value("refund-failure"));
+
+        verify(repositoryPlaybookService).publishPlaybook(any(), any());
     }
 }

@@ -502,6 +502,12 @@ export function CapabilityPackagePublishPage() {
               showIcon
               message="底层脚本工具、插件和 AI 资产仍然作为内部 asset writer 存在，用户面向的是整包 Release。"
             />
+            <Alert
+              type="warning"
+              showIcon
+              message="Playbook 内引用的脚本和知识源不会自动随能力包发布"
+              description="生成发布计划时会检查目标仓库是否已经存在这些脚本和知识源；缺失时会产生阻断项，需先分别发布。"
+            />
           </Space>
         </Card>
 

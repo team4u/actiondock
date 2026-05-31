@@ -1,8 +1,13 @@
 package org.team4u.actiondock.repository;
 
 import org.team4u.actiondock.common.NormalizeUtils;
+import org.team4u.actiondock.domain.model.Playbook;
+import org.team4u.actiondock.domain.model.PlaybookKnowledgeRef;
+import org.team4u.actiondock.domain.model.PlaybookScriptRef;
+import org.team4u.actiondock.domain.model.RepositoryDefinition;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 
@@ -19,9 +24,12 @@ final class CapabilityPackagePublishPreviewBuilder {
     private CapabilityPackagePublishPreviewBuilder() {
     }
 
-    static CapabilityPackagePublishPreview buildPreview(CapabilityPackageDraft draft,
+    static CapabilityPackagePublishPreview buildPreview(RepositoryDefinition repository,
+                                                        List<RepositoryScriptDescriptor> publishedScripts,
+                                                        List<RepositoryKnowledgeDescriptor> publishedKnowledge,
+                                                        CapabilityPackageDraft draft,
                                                         CapabilityPackageDetail currentPackage) {
-        List<CapabilityPackageCheck> checks = buildPublishChecks(draft);
+        List<CapabilityPackageCheck> checks = buildPublishChecks(repository, publishedScripts, publishedKnowledge, draft);
         CapabilityPackageDiffSummary diff = computeEntryChanges(draft, currentPackage);
 
         return new CapabilityPackagePublishPreview(
@@ -43,7 +51,10 @@ final class CapabilityPackagePublishPreviewBuilder {
         );
     }
 
-    private static List<CapabilityPackageCheck> buildPublishChecks(CapabilityPackageDraft draft) {
+    private static List<CapabilityPackageCheck> buildPublishChecks(RepositoryDefinition repository,
+                                                                   List<RepositoryScriptDescriptor> publishedScripts,
+                                                                   List<RepositoryKnowledgeDescriptor> publishedKnowledge,
+                                                                   CapabilityPackageDraft draft) {
         List<CapabilityPackageCheck> checks = new ArrayList<>();
         if (draft.entries().isEmpty()) {
             checks.add(new CapabilityPackageCheck(CHECK_SEVERITY_BLOCKER, "ENTRY_MISSING", "缺少主入口"));
@@ -60,10 +71,59 @@ final class CapabilityPackagePublishPreviewBuilder {
                 checks.add(new CapabilityPackageCheck(CHECK_SEVERITY_WARNING, "PLUGIN_EXTERNAL_ONLY", "插件依赖缺少仓库来源，安装时需要本地已存在: " + dependency.assetId()));
             }
         }
+        addPlaybookReferenceChecks(repository, publishedScripts, publishedKnowledge, draft, checks);
         checks.add(new CapabilityPackageCheck(CHECK_SEVERITY_INFO, "ASSET_SUMMARY",
                 "包含 " + draft.bundle().scripts().size() + " 个脚本 / " + draft.bundle().agents().size() + " 个 Agent / "
                         + draft.bundle().toolsets().size() + " 个工具集 / " + draft.bundle().models().size() + " 个模型"));
         return checks;
+    }
+
+    private static void addPlaybookReferenceChecks(RepositoryDefinition repository,
+                                                   List<RepositoryScriptDescriptor> publishedScripts,
+                                                   List<RepositoryKnowledgeDescriptor> publishedKnowledge,
+                                                   CapabilityPackageDraft draft,
+                                                   List<CapabilityPackageCheck> checks) {
+        LinkedHashSet<String> missingScriptIds = new LinkedHashSet<>();
+        LinkedHashSet<String> missingKnowledgeRepositoryIds = new LinkedHashSet<>();
+
+        for (Playbook playbook : NormalizeUtils.nullSafeList(draft.playbooks())) {
+            for (PlaybookScriptRef ref : NormalizeUtils.nullSafeList(playbook.getScriptRefs())) {
+                String scriptId = NormalizeUtils.normalizeNullable(ref.getScriptId());
+                if (scriptId == null) {
+                    continue;
+                }
+                boolean published = publishedScripts.stream().anyMatch(item -> Objects.equals(item.scriptId(), scriptId));
+                if (!published) {
+                    missingScriptIds.add(scriptId);
+                }
+            }
+            for (PlaybookKnowledgeRef ref : NormalizeUtils.nullSafeList(playbook.getKnowledgeRefs())) {
+                String knowledgeRepositoryId = NormalizeUtils.normalizeNullable(ref.getRepositoryId());
+                if (knowledgeRepositoryId == null) {
+                    continue;
+                }
+                boolean published = publishedKnowledge.stream().anyMatch(item -> Objects.equals(item.knowledgeId(), knowledgeRepositoryId));
+                if (!published) {
+                    missingKnowledgeRepositoryIds.add(knowledgeRepositoryId);
+                }
+            }
+        }
+
+        if (!missingScriptIds.isEmpty()) {
+            checks.add(new CapabilityPackageCheck(
+                    CHECK_SEVERITY_BLOCKER,
+                    "PLAYBOOK_SCRIPT_REF_MISSING",
+                    "能力包中的 Playbook 引用了尚未发布到目标仓库的脚本，请先分别发布脚本: " + String.join(", ", missingScriptIds)
+            ));
+        }
+        if (!missingKnowledgeRepositoryIds.isEmpty()) {
+            checks.add(new CapabilityPackageCheck(
+                    CHECK_SEVERITY_BLOCKER,
+                    "PLAYBOOK_KNOWLEDGE_REF_MISSING",
+                    "能力包中的 Playbook 引用了尚未作为知识源发布到目标仓库的项目仓库，请先分别发布知识源: "
+                            + String.join(", ", missingKnowledgeRepositoryIds)
+            ));
+        }
     }
 
     private static CapabilityPackageDiffSummary computeEntryChanges(CapabilityPackageDraft draft,

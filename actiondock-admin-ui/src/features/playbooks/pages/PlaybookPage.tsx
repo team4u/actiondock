@@ -700,6 +700,13 @@ export function PlaybookPage() {
         destroyOnHidden
       >
         <Form form={publishForm} layout="vertical">
+          <Alert
+            type="warning"
+            showIcon
+            style={{ marginBottom: 16 }}
+            message="关联脚本和知识源不会自动随任务手册一起发布"
+            description="发布时会检查目标仓库里是否已经存在 scriptRefs 对应脚本，以及 knowledgeRefs 对应知识源；缺失时会直接阻断，请先分别发布。"
+          />
           <Form.Item name="repositoryId" label="目标仓库" rules={[{ required: true, message: "请选择目标仓库" }]}>
             <Select
               showSearch

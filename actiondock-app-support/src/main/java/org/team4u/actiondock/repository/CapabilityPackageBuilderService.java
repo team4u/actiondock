@@ -411,8 +411,16 @@ class CapabilityPackageBuilderService {
     }
 
     CapabilityPackagePublishPreview buildCapabilityPackagePublishPreview(RepositoryDefinition repository,
-                                                                                CapabilityPackageDraft draft,
-                                                                                CapabilityPackageDetail currentPackage) {
-        return CapabilityPackagePublishPreviewBuilder.buildPreview(draft, currentPackage);
+                                                                        List<RepositoryScriptDescriptor> publishedScripts,
+                                                                        List<RepositoryKnowledgeDescriptor> publishedKnowledge,
+                                                                        CapabilityPackageDraft draft,
+                                                                        CapabilityPackageDetail currentPackage) {
+        return CapabilityPackagePublishPreviewBuilder.buildPreview(
+                repository,
+                publishedScripts,
+                publishedKnowledge,
+                draft,
+                currentPackage
+        );
     }
 }

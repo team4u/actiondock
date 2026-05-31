@@ -3,6 +3,8 @@ package org.team4u.actiondock.repository;
 import org.team4u.actiondock.common.NormalizeUtils;
 import org.team4u.actiondock.domain.model.Playbook;
 import org.team4u.actiondock.domain.model.PlaybookGroup;
+import org.team4u.actiondock.domain.model.PlaybookKnowledgeRef;
+import org.team4u.actiondock.domain.model.PlaybookScriptRef;
 import org.team4u.actiondock.domain.model.PlaybookRiskLevel;
 import org.team4u.actiondock.domain.model.RepositoryLocalAsset;
 import org.team4u.actiondock.domain.model.RepositoryLocalAssetMode;
@@ -10,7 +12,9 @@ import org.team4u.actiondock.domain.model.UpstreamAssetType;
 
 import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -20,10 +24,12 @@ import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
 public class RepositoryPlaybookService {
     private final RepositoryCatalogService catalog;
     private final RepositoryCatalogService.Repositories repos;
+    private final RepositoryKnowledgeService knowledgeService;
 
     public RepositoryPlaybookService(RepositoryCatalogService catalog) {
         this.catalog = catalog;
         this.repos = catalog.getRepos();
+        this.knowledgeService = new RepositoryKnowledgeService(catalog);
     }
 
     public RepositoryPlaybookDescriptor publishPlaybook(String repositoryId, RepositoryPlaybookPublishRequest request) {
@@ -36,6 +42,7 @@ public class RepositoryPlaybookService {
         }
         PlaybookGroup group = repos.playbookGroupRepository().findById(source.getGroupId())
                 .orElseThrow(() -> new IllegalArgumentException("任务分组不存在: " + source.getGroupId()));
+        validateReferencedAssetsPublished(repositoryId, source);
         String playbookId = NormalizeUtils.normalize(request.playbookId(), "playbookId 不能为空");
         String version = NormalizeUtils.normalize(request.version(), "version 不能为空");
         assertPlaybookVersionAvailable(repositoryId, session.index(), playbookId, version);
@@ -104,6 +111,48 @@ public class RepositoryPlaybookService {
         Playbook saved = buildManagedPlaybook(detail.playbook(), localPlaybookId, localGroupId, existingPlaybook, now);
         repos.playbookRepository().save(saved);
         return saveLocalAsset(detail, saved, existingAsset, now);
+    }
+
+    private void validateReferencedAssetsPublished(String repositoryId, Playbook source) {
+        LinkedHashSet<String> missingScriptIds = new LinkedHashSet<>();
+        for (PlaybookScriptRef ref : NormalizeUtils.nullSafeList(source.getScriptRefs())) {
+            String scriptId = NormalizeUtils.normalizeNullable(ref.getScriptId());
+            if (scriptId == null) {
+                continue;
+            }
+            boolean published = catalog.listRepositoryScripts(repositoryId).stream()
+                    .anyMatch(item -> Objects.equals(item.scriptId(), scriptId));
+            if (!published) {
+                missingScriptIds.add(scriptId);
+            }
+        }
+
+        LinkedHashSet<String> missingKnowledgeRepositoryIds = new LinkedHashSet<>();
+        for (PlaybookKnowledgeRef ref : NormalizeUtils.nullSafeList(source.getKnowledgeRefs())) {
+            String knowledgeRepositoryId = NormalizeUtils.normalizeNullable(ref.getRepositoryId());
+            if (knowledgeRepositoryId == null) {
+                continue;
+            }
+            boolean published = knowledgeService.listRepositoryKnowledge(repositoryId).stream()
+                    .anyMatch(item -> Objects.equals(item.knowledgeId(), knowledgeRepositoryId));
+            if (!published) {
+                missingKnowledgeRepositoryIds.add(knowledgeRepositoryId);
+            }
+        }
+
+        if (missingScriptIds.isEmpty() && missingKnowledgeRepositoryIds.isEmpty()) {
+            return;
+        }
+
+        List<String> messages = new ArrayList<>();
+        if (!missingScriptIds.isEmpty()) {
+            messages.add("以下关联脚本尚未发布到目标仓库，请先分别发布脚本: " + String.join(", ", missingScriptIds));
+        }
+        if (!missingKnowledgeRepositoryIds.isEmpty()) {
+            messages.add("以下知识引用对应的项目仓库尚未作为知识源发布到目标仓库，请先分别发布知识源: "
+                    + String.join(", ", missingKnowledgeRepositoryIds));
+        }
+        throw new IllegalArgumentException(String.join("; ", messages));
     }
 
     private RepositoryLocalAsset saveLocalAsset(RepositoryPlaybookDetail detail,
