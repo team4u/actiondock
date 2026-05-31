@@ -152,20 +152,35 @@ actiondock playbook get refund-failure --json
 Agent 必须依次解析并遵守返回的数据：
 1. **查看 `riskLevel`**：如果是 `HIGH`，意味着该任务排查存在极高风险，Agent 必须加倍小心，随时准备停止并请求人工介入。
 2. **记录 `stopConditions`**：加载停止条件，将其写入自己的 System Prompt/内存中，作为全程监控的“熔断指标”。
-3. **读取 `knowledgeRefs`**：发现排查所依赖的参考文件路径。
+3. **阅读 `guideMarkdown`**：先理解当前用户问题属于哪段任务路径，提取业务对象、故障类型、时间范围、关键词和下一步意图。
 
-### 第三步：顺藤摸瓜调查项目（Knowledge）
-Agent 拿着 `knowledgeRefs` 中指定的相对路径，通过统一的 `actiondock-workspace` 插件（如 `viewTextFile`），去读取目标仓库的背景资料、接口约定或 DDL，补充任务所缺少的静态背景事实。
+### 第三步：选择相关脚本并读取 Schema
+Agent 按照 `guideMarkdown` 中推荐的排查逻辑，从 `scriptRefs` 中选择与当前用户问题相关的最小脚本集。
 
-### 第四步：受控且安全地调用脚本（Scripts）
-1. Agent 按照 `guideMarkdown` 中推荐的排查逻辑，发现可以调用关联的 `scriptRefs` 中的某个脚本（例如 `query-log`）。
-2. 调用脚本前，Agent **必须先查询其 Schema 契约**：
+* 默认只选 1 个最相关脚本；确有并行排查路径时最多选 3 个。
+* 选择依据是用户问题、`guideMarkdown` 当前阶段、业务对象、故障类型和 `scriptRefs[].purpose`。
+* 不相关脚本不查询 Schema。
+* 如果无法判断哪个脚本相关，先查项目知识或询问用户，不要批量读取所有 Schema。
+
+对选中的脚本，Agent **必须先查询其 Schema 契约**：
    ```bash
    actiondock script schema query-log --json
    ```
-3. 补齐所需的输入参数，受控执行，获得排查输出。
 
-### 第五步：熔断与总结
+### 第四步：带着问题清单定向调查项目（Knowledge）
+Agent 从用户问题、`guideMarkdown`、选中脚本 `purpose` 和脚本 Schema 中提取待补齐问题，例如 `domain`、`dbType`、`idTree`、业务 ID、日志关键词、时间范围、表名、接口名、环境名和枚举取值来源。
+
+随后通过统一的 `actiondock-workspace` 插件读取项目知识：
+
+* 先读 `ACTIONDOCK.md`，只用于确定入口、目录规则、推荐文档和禁搜目录。
+* 再按问题清单读取相关 `knowledgeRefs.NOTE` / `knowledgeRefs.FILE`。
+* 文档不足时，用问题清单中的关键词定向搜索文档；仍不足时才查源码。
+* 禁止无目标全量阅读知识库或批量扫仓库。
+
+### 第五步：受控且安全地调用脚本（Scripts）
+问题清单补齐、风险可接受且没有命中停止条件时，才补齐脚本入参并受控执行，获得排查输出。
+
+### 第六步：熔断与总结
 * **触发熔断**：在执行中，一旦命中任意 `stopConditions`（如发现需要修改数据库配置，属于“高风险写操作”），Agent 必须立刻终止，将中间证据链展示给用户，并请求人工确认。
 * **顺利完成**：若排查出根因并解决，Agent 向用户汇总：**命中的 Playbook**、**安全水位控制**、**排查中阅读的文档与执行的脚本**，以及**最终结论**。
 

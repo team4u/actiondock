@@ -63,13 +63,13 @@ ActionDock 把这个过程交给 `project-knowledge-maintainer` 这一技能。�
 
 有了入口、能读文件之后，下一步是把知识变成动作。ActionDock 把项目类任务拆成三层：
 
-**Playbook 路由层** 回答“这是什么任务、先看什么知识、什么时候停、哪些脚本可能有用”。AI 处理项目相关问题时，先搜索任务手册；没有专用手册时，使用 `actiondock-cli` 文档内的通用项目调查 fallback。
+**Playbook 路由层** 回答“这是什么任务、应该先走哪段 guide、什么时候停、哪些脚本可能有用”。AI 处理项目相关问题时，先搜索任务手册；没有专用手册时，使用 `actiondock-cli` 文档内的通用项目调查 fallback。
 
-**项目知识协议** 回答“应该读哪个仓库入口、沿哪些文件继续取证、还缺什么上下文”。它由 `ACTIONDOCK.md`、`docs/` 和 `actiondock-workspace` 组成，是 Playbook 的下游读取路径，不再作为单独的 Agent Skill 入口。
+**项目知识协议** 回答 Playbook guide 和选中脚本 Schema 提出的问题。它由 `ACTIONDOCK.md`、`docs/` 和 `actiondock-workspace` 组成，是下游取证路径，不再作为单独的 Agent Skill 入口。
 
-**执行层**（`actiondock-cli`）回答“怎么调用、参数是什么、怎么执行”——列出脚本、查看结构定义（Schema）、发起执行。
+**执行层**（`actiondock-cli`）回答“怎么调用、参数是什么、怎么执行”——选择相关脚本、查看选中脚本结构定义（Schema）、发起执行。
 
-这两件事混在一起，AI 容易跳过知识确认而直接进入执行层。分层之后，项目知识成了执行的前置条件。`domain`、`dbType`、`idTree` 这类参数，往往需要先从项目知识里找出来，用户不会直接给出。
+这几件事混在一起，AI 容易跳过任务理解或在庞大知识库里泛读。分层之后，`guideMarkdown` 和选中脚本 Schema 会先形成问题清单，再由项目知识协议定向回答。`domain`、`dbType`、`idTree` 这类参数，往往需要先从项目知识里找出来，用户不会直接给出。
 
 ---
 
@@ -81,7 +81,7 @@ ActionDock 让知识跟着代码走。知识文件放在仓库里，跟着分支
 
 **隔绝分支干扰。** AI 在当前分支上工作时，读到的永远是当前分支的知识内容。集中式知识库要做到这一点，要么给每条知识打分支标签（代价高），要么接受信息污染（代价更高）。
 
-**协议标准化，不需要按业务定制 Skill。** 知识的入口（`ACTIONDOCK.md`）和存放位置（`docs/`）在所有项目中统一，`actiondock-cli` 的 Playbook 消费协议就能沿统一入口搜索项目知识。不需要为数据库信息、接口规范这类领域知识单独打包定制 Skill。
+**协议标准化，不需要按业务定制 Skill。** 知识的入口（`ACTIONDOCK.md`）和存放位置（`docs/`）在所有项目中统一，`actiondock-cli` 的 Playbook 消费协议会带着用户问题、guide 和选中脚本 Schema 去搜索项目知识。不需要为数据库信息、接口规范这类领域知识单独打包定制 Skill。
 
 **知识可分发，团队快速复用。** 知识随代码进入 `master`，团队成员拉取代码就自动获得完整的项目理解路径。新成员加入、新环境搭建，不需要额外配置知识库、导入索引或运行预处理步骤。
 
@@ -91,12 +91,13 @@ ActionDock 让知识跟着代码走。知识文件放在仓库里，跟着分支
 
 以生产告警排查为例：
 
-1. **查任务手册。** 按仓库和关键词搜索 Playbook；命中专用手册就按它的风险、知识引用、停止条件推进。
-2. **取入口。** 进入项目知识协议，解析 `ACTIONDOCK.md`，确认阅读入口在哪里，哪些文档面向排查，哪些目录不值得优先搜索。
-3. **读文档。** 通过 `actiondock-workspace` 继续。需要看 `runbook` 就读 `runbook`，需要看诊断手册就读诊断手册，需要确认某个目录下还有什么材料就先列目录。
-4. **进脚本层。** 问题收敛到具体操作后，先看脚本结构定义，补齐脚本依赖的项目上下文，最后决定是否执行。
+1. **查任务手册。** 按仓库和关键词搜索 Playbook；命中专用手册后先读取风险和停止条件，再读 `guideMarkdown`。
+2. **选相关脚本。** 根据用户问题、guide 阶段和 `scriptRefs[].purpose` 选择最小相关脚本集，不遍历所有脚本。
+3. **看选中脚本 Schema。** 用字段名、字段描述、required、enum 和默认值生成待补齐问题清单。
+4. **定向取证。** 解析 `ACTIONDOCK.md` 确认入口、目录规则和禁搜目录，再通过 `actiondock-workspace` 围绕问题清单读取文档或搜索源码。
+5. **执行脚本。** 问题清单补齐、风险可接受且没有命中停止条件后，才补齐参数并执行脚本。
 
-AI 沿 Playbook $\rightarrow$ 入口 $\rightarrow$ 文档 $\rightarrow$ 工作区 $\rightarrow$ 脚本的顺序推进，比盲扫仓库可靠。
+AI 沿 Playbook guide $\rightarrow$ 相关脚本 Schema $\rightarrow$ 问题清单 $\rightarrow$ 项目知识取证 $\rightarrow$ 脚本执行的顺序推进，比盲扫仓库可靠。
 
 ---
 
