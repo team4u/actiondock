@@ -20,6 +20,7 @@ import type {
 import { getErrorMessage } from "../../../services/utils";
 import { getPublishableRepositories, pickDefaultPublishRepository } from "../../../services/repositoryPublish";
 import { useDefaultOwner } from "../../../shared/hooks/useDefaultOwner";
+import { useColorMode } from "../../../shared/contexts/ColorModeContext";
 import {
   analyzePlaybookImport,
   buildPlaybookExportBundle,
@@ -148,6 +149,8 @@ export function PlaybookPage() {
   const screens = useBreakpoint();
   const isCompactFilePicker = !screens.md;
   const defaultOwner = useDefaultOwner();
+  const colorMode = useColorMode();
+  const editorTheme = colorMode === "dark" ? "vs-dark" : "vs-light";
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [items, setItems] = useState<Playbook[]>([]);
   const [repositories, setRepositories] = useState<RepositoryDefinition[]>([]);
@@ -633,7 +636,7 @@ export function PlaybookPage() {
       return (
         <div className="skill-preview-panel">
           {projectPreview.truncated ? <Alert type="warning" showIcon message="文件内容过长，当前只展示前 200000 个字符。" /> : null}
-          <CodeEditor value={projectPreview.textContent ?? ""} onChange={() => undefined} theme="vs-light" language={projectPreview.language || "plaintext"} readOnly height={isCompactFilePicker ? "300px" : "420px"} />
+          <CodeEditor value={projectPreview.textContent ?? ""} onChange={() => undefined} theme={editorTheme} language={projectPreview.language || "plaintext"} readOnly height={isCompactFilePicker ? "300px" : "420px"} />
         </div>
       );
     }
@@ -967,8 +970,10 @@ export function PlaybookPage() {
                   label: "导览文本与停止条件",
                   children: (
                     <>
-                      <Form.Item name="guideMarkdown" label="Guide Markdown" rules={[{ required: true, message: "请输入导览文本" }]}><Input.TextArea rows={12} /></Form.Item>
-                      <Form.Item name="stopConditionsText" label="停止条件"><Input.TextArea rows={5} placeholder="每行一个停止条件" /></Form.Item>
+                      <Form.Item name="guideMarkdown" label="Guide Markdown" rules={[{ required: true, message: "请输入导览文本" }]}>
+                        <CodeEditor theme={editorTheme} language="markdown" height="360px" />
+                      </Form.Item>
+                      <Form.Item name="stopConditionsText" label="停止条件" style={{ marginTop: 16 }}><Input.TextArea rows={5} placeholder="每行一个停止条件" /></Form.Item>
                     </>
                   )
                 }

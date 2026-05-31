@@ -18,7 +18,6 @@ export interface AppNavChildItem {
 const SECTION_LABELS: Record<AppSectionKey, string> = {
   capabilities: "能力",
   resources: "资源",
-  playbooks: "任务手册",
   executions: "触发",
   settings: "设置"
 };

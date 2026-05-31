@@ -5,7 +5,7 @@ registerGroovyLanguage();
 
 interface CodeEditorProps {
   value?: string;
-  onChange: (nextValue: string) => void;
+  onChange?: (nextValue: string) => void;
   theme: "vs-light" | "vs-dark";
   language?: string;
   defaultLanguage?: string;
@@ -33,7 +33,7 @@ export function CodeEditor({
         defaultLanguage={defaultLanguage ?? language}
         language={language}
         value={safeValue}
-        onChange={(nextValue) => onChange(nextValue ?? "")}
+        onChange={(nextValue) => onChange?.(nextValue ?? "")}
         theme={theme}
         options={{
           minimap: { enabled: false },

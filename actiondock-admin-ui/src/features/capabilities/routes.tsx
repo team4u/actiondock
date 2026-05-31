@@ -32,6 +32,9 @@ const SkillDetailPage = lazy(() =>
 const ScanSkillsPage = lazy(() =>
   import("../skills/pages/ScanSkillsPage").then((module) => ({ default: module.ScanSkillsPage }))
 );
+const PlaybookPage = lazy(() =>
+  import("../playbooks/pages/PlaybookPage").then((module) => ({ default: module.PlaybookPage }))
+);
 const AiOverviewPage = lazy(() =>
   import("../ai/pages/AiOverviewPage").then((module) => ({ default: module.AiOverviewPage }))
 );
@@ -67,6 +70,7 @@ export const capabilitiesFeature: AppFeatureDefinition = {
   navPath: () => "/scripts",
   navItems: [
     { label: "脚本", path: "/scripts" },
+    { label: "任务手册", path: "/playbooks" },
     { label: "插件", path: "/plugins" },
     { label: "Skills", path: "/skills" },
     { label: "AI", path: "/ai" }
@@ -77,6 +81,7 @@ export const capabilitiesFeature: AppFeatureDefinition = {
     { path: "/scripts/new", element: <ScriptEditorPage mode="create" colorMode={colorMode} />, title: "脚本编辑器", navKey: "capabilities" },
     { path: "/scripts/:id", element: <ScriptEditorPage mode="edit" colorMode={colorMode} />, title: "脚本编辑器", navKey: "capabilities" },
     { path: "/scripts/:id/run", element: <ScriptRunPage />, title: "脚本运行", navKey: "capabilities" },
+    { path: "/playbooks", element: <PlaybookPage />, title: "任务手册", navKey: "capabilities" },
     { path: "/plugins", element: <PluginManagementPage />, title: "插件", navKey: "capabilities" },
     { path: "/plugins/:pluginId", element: <PluginDetailPage />, title: "插件详情", navKey: "capabilities" },
     { path: "/skills", element: <SkillManagementPage />, title: "Skills", navKey: "capabilities" },
