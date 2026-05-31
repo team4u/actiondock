@@ -165,7 +165,7 @@ export function PlaybookPage() {
   const [projectTreeLoading, setProjectTreeLoading] = useState(false);
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]);
   const [loading, setLoading] = useState(false);
-  const [filters, setFilters] = useState<{ groupId?: string; repositoryId?: string; tag?: string; managed?: boolean; keyword?: string }>({});
+  const [filters, setFilters] = useState<{ repositoryId?: string; tag?: string; managed?: boolean; intent?: string }>({});
   const [editing, setEditing] = useState<Playbook | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [previewing, setPreviewing] = useState<Playbook | null>(null);
@@ -201,7 +201,7 @@ export function PlaybookPage() {
 
   useEffect(() => {
     void load();
-  }, [filters.repositoryId, filters.tag, filters.managed, filters.keyword]);
+  }, [filters.repositoryId, filters.tag, filters.managed, filters.intent]);
   const repositoryOptions = useMemo(() => repositories.map((item) => ({ value: item.id, label: `${item.name} (${item.id})` })), [repositories]);
   const repositoryNameMap = useMemo(() => new Map(repositories.map((item) => [item.id, item.name])), [repositories]);
   const publishableRepositories = useMemo(() => getPublishableRepositories(publishRepositories), [publishRepositories]);
@@ -666,7 +666,12 @@ export function PlaybookPage() {
         )}
       />
       <Space wrap>
-        <Input.Search allowClear placeholder="搜索任务手册" style={{ width: 260 }} onSearch={(keyword) => setFilters((value) => ({ ...value, keyword }))} onChange={(event) => setFilters((value) => ({ ...value, keyword: event.target.value }))} />
+        <Input.Search
+          allowClear
+          placeholder="按意图搜索"
+          style={{ width: 260 }}
+          onSearch={(intent) => setFilters((value) => ({ ...value, intent: intent.trim() || undefined }))}
+        />
         <Select allowClear placeholder="Repository" style={{ width: 220 }} options={repositoryOptions} onChange={(repositoryId) => setFilters((value) => ({ ...value, repositoryId }))} />
         <Select allowClear placeholder="Tag" style={{ width: 160 }} options={tags.map((item) => ({ value: item, label: item }))} onChange={(tag) => setFilters((value) => ({ ...value, tag }))} />
         <Select allowClear placeholder="Managed" style={{ width: 140 }} options={[{ value: true, label: "托管" }]} onChange={(managed) => setFilters((value) => ({ ...value, managed }))} />

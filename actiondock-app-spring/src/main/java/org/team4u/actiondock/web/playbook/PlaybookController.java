@@ -28,10 +28,9 @@ public class PlaybookController {
                                                      @RequestParam(required = false) String tag,
                                                      @RequestParam(required = false) Boolean enabled,
                                                      @RequestParam(required = false) Boolean managed,
-                                                     @RequestParam(required = false) String keyword,
                                                      @RequestParam(required = false) String intent) {
         return ApiResponse.success(IntentFilter.filter(
-                playbookService.listPlaybooks(repositoryId, tag, enabled, managed, keyword),
+                playbookService.listPlaybooks(repositoryId, tag, enabled, managed),
                 intent,
                 Playbook::getId,
                 Playbook::getName,

@@ -11,7 +11,6 @@ import org.team4u.actiondock.domain.port.ScriptRepository;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
@@ -28,16 +27,13 @@ public class PlaybookApplicationService {
     public List<Playbook> listPlaybooks(String repositoryId,
                                         String tag,
                                         Boolean enabled,
-                                        Boolean managed,
-                                        String keyword) {
-        String normalizedKeyword = normalizeLower(keyword);
+                                        Boolean managed) {
         String normalizedTag = normalizeLower(tag);
         return playbookRepository.findAll().stream()
                 .filter(playbook -> enabled == null || enabled == playbook.isEnabled())
                 .filter(playbook -> managed == null || managed == playbook.isManaged())
                 .filter(playbook -> repositoryId == null || playbook.getRepositoryIds().isEmpty() || playbook.getRepositoryIds().contains(repositoryId))
                 .filter(playbook -> normalizedTag == null || playbook.getTags().stream().map(this::normalizeLower).anyMatch(normalizedTag::equals))
-                .filter(playbook -> normalizedKeyword == null || containsKeyword(playbook, normalizedKeyword))
                 .toList();
     }
 
@@ -133,20 +129,9 @@ public class PlaybookApplicationService {
         }).toList();
     }
 
-    private boolean containsKeyword(Playbook playbook, String keyword) {
-        return contains(playbook.getId(), keyword)
-                || contains(playbook.getName(), keyword)
-                || contains(playbook.getDescription(), keyword)
-                || playbook.getTags().stream().anyMatch(value -> contains(value, keyword));
-    }
-
-    private boolean contains(String value, String keyword) {
-        return value != null && keyword != null && value.toLowerCase(Locale.ROOT).contains(keyword);
-    }
-
     private String normalizeLower(String value) {
         String normalized = ApplicationServiceSupport.blankToNull(value);
-        return normalized == null ? null : normalized.toLowerCase(Locale.ROOT);
+        return normalized == null ? null : normalized.toLowerCase(java.util.Locale.ROOT);
     }
 
     private List<String> normalizeDistinct(List<String> values) {

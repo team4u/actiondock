@@ -13,7 +13,6 @@ export default class PlaybookListCommand extends BaseCommand {
     tag: Flags.string({ description: "Filter by tag" }),
     enabled: Flags.boolean({ description: "Only enabled playbooks" }),
     managed: Flags.boolean({ description: "Only managed playbooks" }),
-    keyword: Flags.string({ description: "Keyword filter" }),
     intent: intentFlag,
     ...serverTokenFlags,
     help: Flags.help({ char: "h" })
@@ -27,8 +26,7 @@ export default class PlaybookListCommand extends BaseCommand {
         repositoryId: flags["repository-id"],
         tag: flags.tag,
         enabled: flags.enabled ? true : undefined,
-        managed: flags.managed ? true : undefined,
-        keyword: flags.keyword
+        managed: flags.managed ? true : undefined
       };
       const items = await listWithIntentFallback(flags.intent, (intent) => client.listPlaybooks({ ...params, intent }));
       flags.json ? this.printJson(summarizePlaybookList(items)) : this.log(renderPlaybookList(items));

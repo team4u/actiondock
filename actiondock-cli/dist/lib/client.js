@@ -582,8 +582,6 @@ export class ActionDockClient {
             search.set("enabled", String(params.enabled));
         if (params.managed !== undefined)
             search.set("managed", String(params.managed));
-        if (params.keyword)
-            search.set("keyword", params.keyword);
         if (params.intent)
             search.set("intent", params.intent);
         const suffix = search.toString() ? `?${search.toString()}` : "";

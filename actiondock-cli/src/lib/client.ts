@@ -772,7 +772,6 @@ export class ActionDockClient {
     tag?: string;
     enabled?: boolean;
     managed?: boolean;
-    keyword?: string;
     intent?: string;
   } = {}): Promise<Playbook[]> {
     const search = new URLSearchParams();
@@ -780,7 +779,6 @@ export class ActionDockClient {
     if (params.tag) search.set("tag", params.tag);
     if (params.enabled !== undefined) search.set("enabled", String(params.enabled));
     if (params.managed !== undefined) search.set("managed", String(params.managed));
-    if (params.keyword) search.set("keyword", params.keyword);
     if (params.intent) search.set("intent", params.intent);
     const suffix = search.toString() ? `?${search.toString()}` : "";
     return this.requestJson<Playbook[]>(`/api/playbooks${suffix}`);

@@ -105,7 +105,7 @@ class PlaybookApplicationServiceTest {
     }
 
     @Test
-    void listsPlaybooksByKeywordTagAndRepository() {
+    void listsPlaybooksByTagAndRepository() {
         service.savePlaybook(new Playbook()
                 .setId("refund")
                 .setName("退款失败排查")
@@ -118,33 +118,9 @@ class PlaybookApplicationServiceTest {
                 .setTags(List.of("billing"))
                 .setGuideMarkdown("guide"));
 
-        assertThat(service.listPlaybooks("billing-service", "refund", true, null, "退款失败"))
+        assertThat(service.listPlaybooks("billing-service", "refund", true, null))
                 .extracting(Playbook::getId)
                 .containsExactly("refund");
-    }
-
-    @Test
-    void listsPlaybooksByKeywordAcrossNameDescriptionAndTags() {
-        service.savePlaybook(new Playbook()
-                .setId("refund")
-                .setName("退款失败排查")
-                .setDescription("定位退款失败根因")
-                .setTags(List.of("refund"))
-                .setGuideMarkdown("guide"));
-        service.savePlaybook(new Playbook()
-                .setId("timeout")
-                .setName("超时排查")
-                .setTags(List.of("timeout"))
-                .setGuideMarkdown("guide"));
-
-        assertThat(service.listPlaybooks(null, null, null, null, "退款"))
-                .extracting(Playbook::getId)
-                .containsExactly("refund");
-        assertThat(service.listPlaybooks(null, null, null, null, "timeout"))
-                .extracting(Playbook::getId)
-                .containsExactly("timeout");
-        assertThat(service.listPlaybooks(null, null, null, null, "[invalid"))
-                .isEmpty();
     }
 
     @Test

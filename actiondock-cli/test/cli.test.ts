@@ -1312,7 +1312,7 @@ beforeAll(async () => {
       });
     }
 
-    if (req.method === "GET" && req.url === "/api/playbooks?repositoryId=billing-service&tag=refund&enabled=true&managed=true&keyword=timeout&intent=%E9%80%80%E6%AC%BE") {
+    if (req.method === "GET" && req.url === "/api/playbooks?repositoryId=billing-service&tag=refund&enabled=true&managed=true&intent=%E9%80%80%E6%AC%BE") {
       return json(res, {
         status: 0,
         msg: "ok",
@@ -2499,8 +2499,6 @@ describe("CLI integration", () => {
       "refund",
       "--enabled",
       "--managed",
-      "--keyword",
-      "timeout",
       "--intent",
       "退款",
       "--server",
@@ -2508,7 +2506,7 @@ describe("CLI integration", () => {
       "--json"
     ]);
     expect(jsonResult.status).toBe(0);
-    expect(requests.some((item) => item.method === "GET" && item.url === "/api/playbooks?repositoryId=billing-service&tag=refund&enabled=true&managed=true&keyword=timeout&intent=%E9%80%80%E6%AC%BE")).toBe(true);
+    expect(requests.some((item) => item.method === "GET" && item.url === "/api/playbooks?repositoryId=billing-service&tag=refund&enabled=true&managed=true&intent=%E9%80%80%E6%AC%BE")).toBe(true);
 
     const textResult = await runCli(["playbook", "list", "--server", baseUrl]);
     expect(textResult.status).toBe(0);
