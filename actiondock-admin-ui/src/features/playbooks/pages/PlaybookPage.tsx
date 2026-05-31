@@ -1,4 +1,4 @@
-import { DownloadOutlined, ExportOutlined, FileMarkdownOutlined, FileOutlined, FolderOpenOutlined, UploadOutlined } from "@ant-design/icons";
+import { DownloadOutlined, ExportOutlined, FileMarkdownOutlined, FileOutlined, FolderOpenOutlined, UploadOutlined, PlusOutlined, DeleteOutlined } from "@ant-design/icons";
 import type { DataNode } from "antd/es/tree";
 import { Alert, Button, Drawer, Empty, Form, Grid, Image, Input, Modal, Popconfirm, Select, Space, Spin, Switch, Table, Tabs, Tag, Tree, Typography, message } from "antd";
 import type { ChangeEvent, Key } from "react";
@@ -10,6 +10,7 @@ import { ApiError } from "../../../shared/api/httpClient";
 import type {
   Playbook,
   PlaybookKnowledgeRef,
+  PlaybookScriptRef,
   RepositoryDefinition,
   RepositoryPlaybookPublishRequest,
   RepositoryProjectFileNode,
@@ -48,7 +49,7 @@ interface PlaybookFormValues {
   tagsText?: string;
   riskLevel?: "LOW" | "MEDIUM" | "HIGH";
   repositoryIds: string[];
-  scriptIds: string[];
+  scriptRefs: PlaybookScriptRef[];
   guideMarkdown: string;
   stopConditionsText?: string;
   enabled: boolean;
@@ -256,7 +257,7 @@ export function PlaybookPage() {
       tagsText: item?.tags?.join(", "),
       riskLevel: item?.riskLevel,
       repositoryIds,
-      scriptIds: item?.scriptRefs?.map((ref) => ref.scriptId) ?? [],
+      scriptRefs: item?.scriptRefs ?? [],
       guideMarkdown: item?.guideMarkdown ?? "",
       stopConditionsText: item?.stopConditions?.join("\n"),
       enabled: item?.enabled ?? true
@@ -291,7 +292,14 @@ export function PlaybookPage() {
       riskLevel: values.riskLevel,
       repositoryIds: values.repositoryIds ?? [],
       knowledgeRefs: fromKnowledgeEditorState(knowledgeEditor),
-      scriptRefs: (values.scriptIds ?? []).map((scriptId) => ({ scriptId })),
+      scriptRefs: (values.scriptRefs ?? []).map((ref) => {
+        const scriptId = ref.scriptId;
+        const script = scripts.find((s) => s.id === scriptId);
+        return {
+          scriptId,
+          purpose: ref.purpose?.trim() || script?.name || ""
+        };
+      }),
       guideMarkdown: values.guideMarkdown,
       stopConditions: splitText(values.stopConditionsText),
       enabled: values.enabled,
@@ -846,9 +854,50 @@ export function PlaybookPage() {
                   key: "scripts",
                   label: "关联脚本",
                   children: (
-                    <Form.Item name="scriptIds" label="脚本">
-                      <Select mode="multiple" showSearch optionFilterProp="label" options={scriptOptions} />
-                    </Form.Item>
+                    <Form.List name="scriptRefs">
+                      {(fields, { add, remove }) => (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                          {fields.map(({ key, name, ...restField }) => (
+                            <Space key={key} style={{ display: "flex", width: "100%" }} align="baseline">
+                              <Form.Item
+                                {...restField}
+                                name={[name, "scriptId"]}
+                                rules={[{ required: true, message: "请选择脚本" }]}
+                                style={{ width: 260, marginBottom: 0 }}
+                              >
+                                <Select
+                                  showSearch
+                                  placeholder="选择关联脚本"
+                                  optionFilterProp="label"
+                                  options={scriptOptions}
+                                />
+                              </Form.Item>
+                              <Form.Item noStyle shouldUpdate>
+                                {() => {
+                                  const scriptId = form.getFieldValue(["scriptRefs", name, "scriptId"]);
+                                  const script = scripts.find((s) => s.id === scriptId);
+                                  return (
+                                    <Form.Item
+                                      {...restField}
+                                      name={[name, "purpose"]}
+                                      style={{ width: 340, marginBottom: 0 }}
+                                    >
+                                      <Input placeholder={script ? `默认：${script.name}` : "脚本用途说明（可空，默认使用脚本名称）"} />
+                                    </Form.Item>
+                                  );
+                                }}
+                              </Form.Item>
+                              <Button type="text" danger onClick={() => remove(name)} icon={<DeleteOutlined />} title="删除关联" />
+                            </Space>
+                          ))}
+                          <Form.Item style={{ marginBottom: 0 }}>
+                            <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
+                              添加关联脚本
+                            </Button>
+                          </Form.Item>
+                        </div>
+                      )}
+                    </Form.List>
                   )
                 },
                 {
