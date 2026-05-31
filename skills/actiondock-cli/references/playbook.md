@@ -28,7 +28,7 @@ actiondock playbook resolve --intent "<text>" --repository-id <repositoryId> --j
 
 ### 意图匹配与搜索技巧 (AI 消费指引)
 
-用户的任务意图（`--intent`）在系统底层支持**正则表达式（Case-Insensitive Regex）**匹配。匹配字段包括：任务手册名称、别名（`intentAliases`）、描述、标签，以及分组名称和标签。
+用户的任务意图（`--intent`）在系统底层支持正则表达式匹配。匹配字段包括：任务手册名称、别名（`intentAliases`）、描述、标签，以及分组名称和标签。
 
 由于用户的输入通常是一段复杂的自然语言，而系统底层的任务手册定义（如别名）非常精炼，**消费端 AI Agent 必须对用户意图进行预处理**，避免直接传入原始长句：
 
