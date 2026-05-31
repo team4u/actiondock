@@ -253,18 +253,16 @@ export function renderPlaybookList(items: Playbook[]): string {
   }
   return items.map((item) => {
     const name = item.name ? ` ${item.name}` : "";
-    const group = item.groupId ? ` group=${item.groupId}` : "";
     const risk = item.riskLevel ? ` risk=${item.riskLevel}` : "";
     const managed = item.managed ? " managed" : "";
     const enabled = item.enabled === false ? " disabled" : " enabled";
-    return `${item.id}${name}${group}${risk}${enabled}${managed}`;
+    return `${item.id}${name}${risk}${enabled}${managed}`;
   }).join("\n");
 }
 
 export function summarizePlaybookList(items: Playbook[]): PlaybookListItemSummary[] {
   return items.map((item) => ({
     id: item.id,
-    groupId: item.groupId,
     name: item.name,
     description: item.description,
     tags: item.tags,
@@ -279,7 +277,6 @@ export function renderPlaybookDetail(item: Playbook): string {
   const lines = [
     `Playbook: ${item.id}`,
     `Name: ${item.name}`,
-    `Group: ${item.groupId}`,
     `Enabled: ${item.enabled === false ? "no" : "yes"}`,
     `Managed: ${item.managed ? "yes" : "no"}`
   ];

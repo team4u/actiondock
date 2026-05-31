@@ -6,7 +6,6 @@ export default class PlaybookListCommand extends BaseCommand {
     static description = "List ActionDock playbooks";
     static flags = {
         ...BaseCommand.baseFlags,
-        group: Flags.string({ description: "Filter by playbook group ID" }),
         "repository-id": Flags.string({ description: "Filter by repository ID" }),
         tag: Flags.string({ description: "Filter by tag" }),
         enabled: Flags.boolean({ description: "Only enabled playbooks" }),
@@ -19,7 +18,6 @@ export default class PlaybookListCommand extends BaseCommand {
         const { flags } = await this.parse(PlaybookListCommand);
         try {
             const items = await createClient(flags).listPlaybooks({
-                groupId: flags.group,
                 repositoryId: flags["repository-id"],
                 tag: flags.tag,
                 enabled: flags.enabled ? true : undefined,

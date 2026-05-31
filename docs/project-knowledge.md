@@ -63,7 +63,7 @@ ActionDock 把这个过程交给 `project-knowledge-maintainer` 这一技能。�
 
 有了入口、能读文件之后，下一步是把知识变成动作。ActionDock 把项目类任务拆成三层：
 
-**Playbook 路由层** 回答“这是什么任务、先看什么知识、什么时候停、哪些脚本可能有用”。AI 处理项目相关问题时，先搜索任务手册；没有专用手册时，使用通用项目调查手册作为 fallback。
+**Playbook 路由层** 回答“这是什么任务、先看什么知识、什么时候停、哪些脚本可能有用”。AI 处理项目相关问题时，先搜索任务手册；没有专用手册时，使用 `actiondock-cli` 文档内的通用项目调查 fallback。
 
 **项目知识协议** 回答“应该读哪个仓库入口、沿哪些文件继续取证、还缺什么上下文”。它由 `ACTIONDOCK.md`、`docs/` 和 `actiondock-workspace` 组成，是 Playbook 的下游读取路径，不再作为单独的 Agent Skill 入口。
 

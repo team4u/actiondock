@@ -194,52 +194,21 @@ export function renderExecutionPresetDetail(item) {
     }
     return lines.join("\n");
 }
-export function renderPlaybookGroupList(items) {
-    if (items.length === 0) {
-        return "没有任务分组。";
-    }
-    return items.map((item) => {
-        const name = item.name ? ` ${item.name}` : "";
-        const count = item.playbookCount === undefined ? "" : ` playbooks=${item.playbookCount}`;
-        const managed = item.managed ? " managed" : "";
-        const enabled = item.enabled === false ? " disabled" : " enabled";
-        return `${item.id}${name}${enabled}${managed}${count}`;
-    }).join("\n");
-}
-export function renderPlaybookGroupDetail(item) {
-    const lines = [
-        `PlaybookGroup: ${item.id}`,
-        `Name: ${item.name}`,
-        `Enabled: ${item.enabled === false ? "no" : "yes"}`,
-        `Managed: ${item.managed ? "yes" : "no"}`
-    ];
-    if (item.description)
-        lines.push(`Description: ${item.description}`);
-    if (item.tags?.length)
-        lines.push(`Tags: ${item.tags.join(", ")}`);
-    if (item.defaultRepositoryIds?.length)
-        lines.push(`DefaultRepositories: ${item.defaultRepositoryIds.join(", ")}`);
-    if (item.playbookCount !== undefined)
-        lines.push(`Playbooks: ${item.playbookCount}`);
-    return lines.join("\n");
-}
 export function renderPlaybookList(items) {
     if (items.length === 0) {
         return "没有任务手册。";
     }
     return items.map((item) => {
         const name = item.name ? ` ${item.name}` : "";
-        const group = item.groupId ? ` group=${item.groupId}` : "";
         const risk = item.riskLevel ? ` risk=${item.riskLevel}` : "";
         const managed = item.managed ? " managed" : "";
         const enabled = item.enabled === false ? " disabled" : " enabled";
-        return `${item.id}${name}${group}${risk}${enabled}${managed}`;
+        return `${item.id}${name}${risk}${enabled}${managed}`;
     }).join("\n");
 }
 export function summarizePlaybookList(items) {
     return items.map((item) => ({
         id: item.id,
-        groupId: item.groupId,
         name: item.name,
         description: item.description,
         tags: item.tags,
@@ -253,7 +222,6 @@ export function renderPlaybookDetail(item) {
     const lines = [
         `Playbook: ${item.id}`,
         `Name: ${item.name}`,
-        `Group: ${item.groupId}`,
         `Enabled: ${item.enabled === false ? "no" : "yes"}`,
         `Managed: ${item.managed ? "yes" : "no"}`
     ];

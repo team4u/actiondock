@@ -42,14 +42,7 @@ actiondock playbook get <playbook-id> --json
    5. 阅读 `guideMarkdown`
    6. 只有信息足够、风险可接受时才考虑 `scriptRefs`
 
-5. 如果没有专用命中，查找并使用通用项目调查 Playbook：
-
-```bash
-actiondock playbook list --keyword "generic-project-investigation" --enabled --json
-actiondock playbook get generic-project-investigation --json
-```
-
-如果通用 Playbook 尚未安装，也按本文件的“通用项目调查 fallback”执行。
+5. 如果没有命中专用 Playbook，直接按本文件的“通用项目调查 fallback”执行。
 
 命中任一停止条件时停止，并向用户说明缺少什么或为什么需要人工确认。
 
@@ -57,7 +50,7 @@ actiondock playbook get generic-project-investigation --json
 
 ## 通用项目调查 fallback
 
-没有专用 Playbook 或 `generic-project-investigation` 未安装时，使用这条最小路线：
+没有命中专用 Playbook 时，使用这条最小路线：
 
 1. 确认目标项目仓库 ID。
 2. 转到 `references/project-knowledge.md`，执行 `repository resolve` 并读取 `ACTIONDOCK.md`。

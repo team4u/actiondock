@@ -552,33 +552,8 @@ export class ActionDockClient {
             method: "DELETE"
         });
     }
-    async listPlaybookGroups() {
-        return this.requestJson("/api/playbook-groups");
-    }
-    async getPlaybookGroup(groupId) {
-        return this.requestJson(`/api/playbook-groups/${groupId}`);
-    }
-    async createPlaybookGroup(payload) {
-        return this.requestJson("/api/playbook-groups", {
-            method: "POST",
-            body: JSON.stringify(payload)
-        });
-    }
-    async updatePlaybookGroup(groupId, payload) {
-        return this.requestJson(`/api/playbook-groups/${groupId}`, {
-            method: "PUT",
-            body: JSON.stringify(payload)
-        });
-    }
-    async deletePlaybookGroup(groupId) {
-        await this.requestJson(`/api/playbook-groups/${groupId}`, {
-            method: "DELETE"
-        });
-    }
     async listPlaybooks(params = {}) {
         const search = new URLSearchParams();
-        if (params.groupId)
-            search.set("groupId", params.groupId);
         if (params.repositoryId)
             search.set("repositoryId", params.repositoryId);
         if (params.tag)
