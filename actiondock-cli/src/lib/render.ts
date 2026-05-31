@@ -13,6 +13,7 @@ import type {
   PluginSummaryView,
   PluginView,
   Playbook,
+  PlaybookListItemSummary,
   PlaybookGroup,
   PlaybookGuideView,
   PlaybookResolveMatch,
@@ -287,6 +288,21 @@ export function renderPlaybookList(items: Playbook[]): string {
     const enabled = item.enabled === false ? " disabled" : " enabled";
     return `${item.id}${name}${group}${risk}${enabled}${managed}`;
   }).join("\n");
+}
+
+export function summarizePlaybookList(items: Playbook[]): PlaybookListItemSummary[] {
+  return items.map((item) => ({
+    id: item.id,
+    groupId: item.groupId,
+    name: item.name,
+    description: item.description,
+    intentAliases: item.intentAliases,
+    tags: item.tags,
+    riskLevel: item.riskLevel,
+    repositoryIds: item.repositoryIds,
+    enabled: item.enabled,
+    managed: item.managed
+  }));
 }
 
 export function renderPlaybookDetail(item: Playbook): string {

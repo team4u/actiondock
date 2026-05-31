@@ -1224,6 +1224,66 @@ beforeAll(async () => {
       });
     }
 
+    if (req.method === "GET" && req.url === "/api/playbooks") {
+      return json(res, {
+        status: 0,
+        msg: "ok",
+        data: [
+          {
+            id: "refund-failure",
+            groupId: "billing-diagnosis",
+            name: "退款失败排查",
+            description: "定位退款失败根因并给出下一步建议",
+            intentAliases: ["退款失败", "refund failed", "退款超时"],
+            tags: ["refund", "payment"],
+            riskLevel: "MEDIUM",
+            repositoryIds: ["billing-service"],
+            knowledgeRefs: [
+              { type: "FILE", repositoryId: "billing-service", path: "docs/runbooks/refund-runbook.md" }
+            ],
+            scriptRefs: [
+              { scriptId: "query-log", purpose: "查询退款链路日志" }
+            ],
+            guideMarkdown: "先读取 ACTIONDOCK.md，再查看 refund-runbook.md。",
+            stopConditions: ["缺少关键上下文", "需要人工确认"],
+            enabled: true,
+            managed: false,
+            createdAt: "2026-05-01T00:00:00",
+            updatedAt: "2026-05-02T00:00:00"
+          }
+        ]
+      });
+    }
+
+    if (req.method === "GET" && req.url === "/api/playbooks?groupId=billing-diagnosis&repositoryId=billing-service&tag=refund&enabled=true&managed=true&keyword=timeout") {
+      return json(res, {
+        status: 0,
+        msg: "ok",
+        data: [
+          {
+            id: "refund-failure",
+            groupId: "billing-diagnosis",
+            name: "退款失败排查",
+            description: "定位退款失败根因并给出下一步建议",
+            intentAliases: ["退款失败", "refund failed", "退款超时"],
+            tags: ["refund", "payment"],
+            riskLevel: "MEDIUM",
+            repositoryIds: ["billing-service"],
+            knowledgeRefs: [
+              { type: "FILE", repositoryId: "billing-service", path: "docs/runbooks/refund-runbook.md" }
+            ],
+            scriptRefs: [
+              { scriptId: "query-log", purpose: "查询退款链路日志" }
+            ],
+            guideMarkdown: "先读取 ACTIONDOCK.md，再查看 refund-runbook.md。",
+            stopConditions: ["缺少关键上下文", "需要人工确认"],
+            enabled: true,
+            managed: true
+          }
+        ]
+      });
+    }
+
     res.statusCode = 404;
     res.end("not found");
   });
@@ -2293,6 +2353,63 @@ describe("CLI integration", () => {
 
     expect((await runCli(["script", "preset", "delete", "published-tool", "preset-1", "--server", baseUrl, "--json"])).status).toBe(0);
   }, 20_000);
+
+  it("returns playbook list summaries for json output", async () => {
+    const result = await runCli(["playbook", "list", "--server", baseUrl, "--json"]);
+    expect(result.status).toBe(0);
+
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed).toEqual([
+      {
+        id: "refund-failure",
+        groupId: "billing-diagnosis",
+        name: "退款失败排查",
+        description: "定位退款失败根因并给出下一步建议",
+        intentAliases: ["退款失败", "refund failed", "退款超时"],
+        tags: ["refund", "payment"],
+        riskLevel: "MEDIUM",
+        repositoryIds: ["billing-service"],
+        enabled: true,
+        managed: false
+      }
+    ]);
+
+    expect(parsed[0].guideMarkdown).toBeUndefined();
+    expect(parsed[0].knowledgeRefs).toBeUndefined();
+    expect(parsed[0].scriptRefs).toBeUndefined();
+    expect(parsed[0].stopConditions).toBeUndefined();
+    expect(parsed[0].createdAt).toBeUndefined();
+    expect(parsed[0].updatedAt).toBeUndefined();
+  });
+
+  it("passes playbook list filters through and keeps text output", async () => {
+    requests.length = 0;
+    const jsonResult = await runCli([
+      "playbook",
+      "list",
+      "--group",
+      "billing-diagnosis",
+      "--repository-id",
+      "billing-service",
+      "--tag",
+      "refund",
+      "--enabled",
+      "--managed",
+      "--keyword",
+      "timeout",
+      "--server",
+      baseUrl,
+      "--json"
+    ]);
+    expect(jsonResult.status).toBe(0);
+    expect(requests.some((item) => item.method === "GET" && item.url === "/api/playbooks?groupId=billing-diagnosis&repositoryId=billing-service&tag=refund&enabled=true&managed=true&keyword=timeout")).toBe(true);
+
+    const textResult = await runCli(["playbook", "list", "--server", baseUrl]);
+    expect(textResult.status).toBe(0);
+    expect(textResult.stdout).toContain("refund-failure");
+    expect(textResult.stdout).toContain("group=billing-diagnosis");
+    expect(textResult.stdout).toContain("risk=MEDIUM");
+  });
 
   it("writes shared state through the cli", async () => {
     const result = await runCli([

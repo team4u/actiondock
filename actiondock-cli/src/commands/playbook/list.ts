@@ -2,7 +2,7 @@ import { Flags } from "@oclif/core";
 
 import { BaseCommand } from "../../lib/command.js";
 import { createClient, serverTokenFlags } from "../../lib/command-helpers.js";
-import { renderPlaybookList } from "../../lib/render.js";
+import { renderPlaybookList, summarizePlaybookList } from "../../lib/render.js";
 
 export default class PlaybookListCommand extends BaseCommand {
   static description = "List ActionDock playbooks";
@@ -30,7 +30,7 @@ export default class PlaybookListCommand extends BaseCommand {
         managed: flags.managed ? true : undefined,
         keyword: flags.keyword
       });
-      flags.json ? this.printJson(items) : this.log(renderPlaybookList(items));
+      flags.json ? this.printJson(summarizePlaybookList(items)) : this.log(renderPlaybookList(items));
     } catch (error) {
       this.handleError(error, flags.json);
     }

@@ -236,6 +236,20 @@ export function renderPlaybookList(items) {
         return `${item.id}${name}${group}${risk}${enabled}${managed}`;
     }).join("\n");
 }
+export function summarizePlaybookList(items) {
+    return items.map((item) => ({
+        id: item.id,
+        groupId: item.groupId,
+        name: item.name,
+        description: item.description,
+        intentAliases: item.intentAliases,
+        tags: item.tags,
+        riskLevel: item.riskLevel,
+        repositoryIds: item.repositoryIds,
+        enabled: item.enabled,
+        managed: item.managed
+    }));
+}
 export function renderPlaybookDetail(item) {
     const lines = [
         `Playbook: ${item.id}`,

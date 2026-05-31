@@ -592,96 +592,102 @@ export function PlaybookPage() {
             <Space wrap>{guide.stopConditions.map((item) => <Tag color="red" key={item}>{item}</Tag>)}</Space>
           </Space>
         ) : (
-          <Tabs
-            items={[
-              {
-                key: "basic",
-                label: "基本信息",
-                children: (
-                  <Form form={form} layout="vertical" initialValues={{ enabled: true }}>
-                    <Form.Item name="id" label="ID" rules={[{ required: true, message: "请输入 ID" }]}><Input disabled={Boolean(editing)} /></Form.Item>
-                    <Form.Item name="groupId" label="任务分组" rules={[{ required: true, message: "请选择任务分组" }]}><Select options={groupOptions} /></Form.Item>
-                    <Form.Item name="name" label="名称" rules={[{ required: true, message: "请输入名称" }]}><Input /></Form.Item>
-                    <Form.Item name="description" label="描述"><Input.TextArea rows={3} /></Form.Item>
-                    <Form.Item name="intentAliasesText" label="意图别名"><Input placeholder="逗号分隔" /></Form.Item>
-                    <Form.Item name="tagsText" label="Tags"><Input placeholder="逗号分隔" /></Form.Item>
-                    <Form.Item name="riskLevel" label="风险等级"><Select allowClear options={["LOW", "MEDIUM", "HIGH"].map((value) => ({ value, label: value }))} /></Form.Item>
-                    <Form.Item name="enabled" label="启用" valuePropName="checked"><Switch /></Form.Item>
-                  </Form>
-                )
-              },
-              {
-                key: "knowledge",
-                label: "关联知识",
-                children: (
-                  <Form form={form} layout="vertical">
-                    <Form.Item name="repositoryIds" label="适用仓库">
-                      <Select mode="multiple" options={repositoryOptions} onChange={handleRepositoryIdsChange} />
-                    </Form.Item>
-                    {selectedRepositoryIds.length === 0 ? (
-                      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="先选择适用仓库，再添加知识说明和知识文件。" />
-                    ) : (
-                      <Space direction="vertical" size={16} style={{ width: "100%" }}>
-                        {knowledgeEditor.map((group) => (
-                          <div key={group.repositoryId} style={{ border: "1px solid #f0f0f0", borderRadius: 8, padding: 16 }}>
-                            <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                              <Space style={{ justifyContent: "space-between", width: "100%" }}>
-                                <Text strong>{repositoryNameMap.get(group.repositoryId) ?? group.repositoryId} ({group.repositoryId})</Text>
-                                <Space>
-                                  <Button size="small" onClick={() => addNote(group.repositoryId)}>添加说明</Button>
-                                  <Button size="small" onClick={() => void openFilePicker(group.repositoryId)}>添加文件</Button>
+          <Form form={form} layout="vertical" initialValues={{ enabled: true }}>
+            <Tabs
+              items={[
+                {
+                  key: "basic",
+                  label: "基本信息",
+                  children: (
+                    <>
+                      <Form.Item name="id" label="ID" rules={[{ required: true, message: "请输入 ID" }]}><Input disabled={Boolean(editing)} /></Form.Item>
+                      <Form.Item name="groupId" label="任务分组" rules={[{ required: true, message: "请选择任务分组" }]}><Select options={groupOptions} /></Form.Item>
+                      <Form.Item name="name" label="名称" rules={[{ required: true, message: "请输入名称" }]}><Input /></Form.Item>
+                      <Form.Item name="description" label="描述"><Input.TextArea rows={3} /></Form.Item>
+                      <Form.Item name="intentAliasesText" label="意图别名"><Input placeholder="逗号分隔" /></Form.Item>
+                      <Form.Item name="tagsText" label="Tags"><Input placeholder="逗号分隔" /></Form.Item>
+                      <Form.Item name="riskLevel" label="风险等级"><Select allowClear options={["LOW", "MEDIUM", "HIGH"].map((value) => ({ value, label: value }))} /></Form.Item>
+                      <Form.Item name="enabled" label="启用" valuePropName="checked"><Switch /></Form.Item>
+                    </>
+                  )
+                },
+                {
+                  key: "knowledge",
+                  label: "关联知识",
+                  children: (
+                    <>
+                      <Form.Item name="repositoryIds" label="适用仓库">
+                        <Select mode="multiple" options={repositoryOptions} onChange={handleRepositoryIdsChange} />
+                      </Form.Item>
+                      {selectedRepositoryIds.length === 0 ? (
+                        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="先选择适用仓库，再添加知识说明 and 知识文件。" />
+                      ) : (
+                        <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                          {knowledgeEditor.map((group) => (
+                            <div key={group.repositoryId} style={{ border: "1px solid #f0f0f0", borderRadius: 8, padding: 16 }}>
+                              <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                                <Space style={{ justifyContent: "space-between", width: "100%" }}>
+                                  <Text strong>{repositoryNameMap.get(group.repositoryId) ?? group.repositoryId} ({group.repositoryId})</Text>
+                                  <Space>
+                                    <Button size="small" onClick={() => addNote(group.repositoryId)}>添加说明</Button>
+                                    <Button size="small" onClick={() => void openFilePicker(group.repositoryId)}>添加文件</Button>
+                                  </Space>
                                 </Space>
-                              </Space>
-                              {group.notes.length === 0 && group.files.length === 0 ? (
-                                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有添加知识说明或文件引用" />
-                              ) : null}
-                              {group.notes.map((note, index) => (
-                                <div key={`${group.repositoryId}:note:${index}`} style={{ border: "1px solid #f0f0f0", borderRadius: 8, padding: 12 }}>
-                                  <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                                {group.notes.length === 0 && group.files.length === 0 ? (
+                                  <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有添加知识说明或文件引用" />
+                                ) : null}
+                                {group.notes.map((note, index) => (
+                                  <div key={`${group.repositoryId}:note:${index}`} style={{ border: "1px solid #f0f0f0", borderRadius: 8, padding: 12 }}>
+                                    <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                                      <Space style={{ justifyContent: "space-between", width: "100%" }}>
+                                        <Tag color="gold">NOTE</Tag>
+                                        <Button size="small" danger onClick={() => removeNote(group.repositoryId, index)}>删除说明</Button>
+                                      </Space>
+                                      <Input.TextArea rows={6} value={note} onChange={(event) => updateNote(group.repositoryId, index, event.target.value)} placeholder="输入针对该知识库的额外阅读指引（Markdown）" />
+                                    </Space>
+                                  </div>
+                                ))}
+                                {group.files.map((path) => (
+                                  <div key={`${group.repositoryId}:${path}`} style={{ border: "1px solid #f0f0f0", borderRadius: 8, padding: 12 }}>
                                     <Space style={{ justifyContent: "space-between", width: "100%" }}>
-                                      <Tag color="gold">NOTE</Tag>
-                                      <Button size="small" danger onClick={() => removeNote(group.repositoryId, index)}>删除说明</Button>
+                                      <Space>
+                                        <Tag color="blue">FILE</Tag>
+                                        <Text code>{path}</Text>
+                                      </Space>
+                                      <Button size="small" danger onClick={() => removeFile(group.repositoryId, path)}>删除文件</Button>
                                     </Space>
-                                    <Input.TextArea rows={6} value={note} onChange={(event) => updateNote(group.repositoryId, index, event.target.value)} placeholder="输入针对该知识库的额外阅读指引（Markdown）" />
-                                  </Space>
-                                </div>
-                              ))}
-                              {group.files.map((path) => (
-                                <div key={`${group.repositoryId}:${path}`} style={{ border: "1px solid #f0f0f0", borderRadius: 8, padding: 12 }}>
-                                  <Space style={{ justifyContent: "space-between", width: "100%" }}>
-                                    <Space>
-                                      <Tag color="blue">FILE</Tag>
-                                      <Text code>{path}</Text>
-                                    </Space>
-                                    <Button size="small" danger onClick={() => removeFile(group.repositoryId, path)}>删除文件</Button>
-                                  </Space>
-                                </div>
-                              ))}
-                            </Space>
-                          </div>
-                        ))}
-                      </Space>
-                    )}
-                  </Form>
-                )
-              },
-              {
-                key: "scripts",
-                label: "关联脚本",
-                children: <Form form={form} layout="vertical"><Form.Item name="scriptIds" label="脚本"><Select mode="multiple" showSearch optionFilterProp="label" options={scriptOptions} /></Form.Item></Form>
-              },
-              {
-                key: "guide",
-                label: "导览文本与停止条件",
-                children: (
-                  <Form form={form} layout="vertical">
-                    <Form.Item name="guideMarkdown" label="Guide Markdown" rules={[{ required: true, message: "请输入导览文本" }]}><Input.TextArea rows={12} /></Form.Item>
-                    <Form.Item name="stopConditionsText" label="停止条件"><Input.TextArea rows={5} placeholder="每行一个停止条件" /></Form.Item>
-                  </Form>
-                )
-              }
-            ]}
-          />
+                                  </div>
+                                ))}
+                              </Space>
+                            </div>
+                          ))}
+                        </Space>
+                      )}
+                    </>
+                  )
+                },
+                {
+                  key: "scripts",
+                  label: "关联脚本",
+                  children: (
+                    <Form.Item name="scriptIds" label="脚本">
+                      <Select mode="multiple" showSearch optionFilterProp="label" options={scriptOptions} />
+                    </Form.Item>
+                  )
+                },
+                {
+                  key: "guide",
+                  label: "导览文本与停止条件",
+                  children: (
+                    <>
+                      <Form.Item name="guideMarkdown" label="Guide Markdown" rules={[{ required: true, message: "请输入导览文本" }]}><Input.TextArea rows={12} /></Form.Item>
+                      <Form.Item name="stopConditionsText" label="停止条件"><Input.TextArea rows={5} placeholder="每行一个停止条件" /></Form.Item>
+                    </>
+                  )
+                }
+              ]}
+            />
+          </Form>
         )}
       </Drawer>
       <Modal

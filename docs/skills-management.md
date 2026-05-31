@@ -173,4 +173,4 @@ public class SkillInstallation {
 
 ---
 
-> [返回目录](user-manual.md) | 下一步：了解 [AI 能力](ai-capabilities.md)
+> [返回目录](user-manual.md) | 下一步：了解 [任务手册 (Playbook) 管理](playbook-management.md)

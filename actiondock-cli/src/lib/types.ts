@@ -160,6 +160,19 @@ export interface Playbook {
   updatedAt?: string | null;
 }
 
+export interface PlaybookListItemSummary {
+  id: string;
+  groupId: string;
+  name: string;
+  description?: string | null;
+  intentAliases?: string[];
+  tags?: string[];
+  riskLevel?: PlaybookRiskLevel | null;
+  repositoryIds?: string[];
+  enabled?: boolean;
+  managed?: boolean;
+}
+
 export interface PlaybookGuideView {
   playbook: Playbook;
   group: PlaybookGroup;

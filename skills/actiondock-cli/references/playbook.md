@@ -10,78 +10,89 @@ Playbook 只回答：
 - 建议怎么走
 - 什么时候别继续
 
-Playbook 不是步骤 DSL，也不是执行引擎。不要把关联脚本理解为自动执行计划。
+Playbook 不是步骤 DSL，也不是执行引擎；`scriptRefs` 只是关联脚本清单，不表示自动执行计划。
 
-## 消费工作流
+## 消费快路径
 
-当用户给出任务意图，优先用 `resolve` 找候选：
+推荐固定按下面顺序消费：
+
+1. 从用户原始描述里提取核心关键词或正则表达式。
+2. 先用 `resolve` 按意图找候选：
 
 ```bash
 actiondock playbook resolve --intent "<text>" --json
-```
-
-如果任务绑定具体项目仓库，带上 `repositoryId`：
-
-```bash
 actiondock playbook resolve --intent "<text>" --repository-id <repositoryId> --json
 ```
 
-### 意图匹配与搜索技巧 (AI 消费指引)
+3. 如果 `resolve` 为空，再拉全局摘要列表做二轮匹配：
 
-用户的任务意图（`--intent`）在系统底层支持正则表达式匹配。匹配字段包括：任务手册名称、别名（`intentAliases`）、描述、标签，以及分组名称和标签。
+```bash
+actiondock playbook list --json
+```
 
-由于用户的输入通常是一段复杂的自然语言，而系统底层的任务手册定义（如别名）非常精炼，**消费端 AI Agent 必须对用户意图进行预处理**，避免直接传入原始长句：
-
-1. **提取核心关键字**：将自然语言转化为核心的动词、名词（如将“昨天退款超时了，怎么排查”转化为“退款|超时”）。
-2. **使用正则或表达式**：使用正则表达式来实现模糊和多条件搜索。
-   - 单关键字搜索：`actiondock playbook resolve --intent "退款" --json`
-   - 多关键字逻辑或（OR）：`actiondock playbook resolve --intent "退款|refund|timeout" --json`
-   - 顺序关联匹配：`actiondock playbook resolve --intent "退款.*失败" --json`
-3. **分次尝试**：如果第一次精确正则匹配不到，应尝试退化到更宽泛的关键字（如从“退款.*失败”退化到“退款”）重新搜索，以获取最多的候选建议。
-
-### 降级兜底流 (Fallback Workflow)
-
-若经过多次尝试，`playbook resolve` 依然返回**空列表**（未匹配到任何手册），消费端 Agent 不应直接放弃，应按以下流程进行兜底处理：
-
-1. **拉取全局任务手册列表**：
-   运行列表命令，拉取系统中所有可用的任务手册和分组概览：
-   ```bash
-   actiondock playbook list --json
-   ```
-2. **重匹配与引导选择**：
-   - **智能二轮匹配**：Agent 可在 Prompt 上下文中，将用户的意图与返回的全局列表（包含 `id`, `name`, `description`, `tags`）进行语义级二次对比，查找是否存在高度相似的手册。
-   - **人工交互确认**：如果语义匹配依然不确定，Agent 应将所有可能相关的任务手册列表呈现给用户，友好地提示用户选择。例如：“未找到与您的意图精确匹配的手册，以下是系统中现存的手册列表，请问是否有符合您需求的？”
-3. **根据选定 ID 调取指南**：一旦确定了可能合适的手册，直接使用其 ID 获取关联指南以继续执行：
-   ```bash
-   actiondock playbook guide <playbook-id> --json
-   ```
-
-从候选中选择最合适的 `playbook.id` 后读取 Guide：
+4. 确定候选 `playbook.id` 后读取 Guide：
 
 ```bash
 actiondock playbook guide <playbook-id> --json
 ```
 
-处理顺序固定为：
+5. 固定按以下顺序消费 Guide：
+   1. 查看 `riskLevel`
+   2. 查看 `stopConditions`
+   3. 读取 `knowledgeRefs`
+   4. 阅读 `guideMarkdown`
+   5. 只有信息足够、风险可接受时才考虑 `scriptRefs`
 
-1. 查看 `riskLevel` 和 `stopConditions`，确认是否允许继续。
-2. 读取 `knowledgeRefs` 指向的知识。
-3. 按 `guideMarkdown` 判断下一步。
-4. 只有在信息足够、风险可接受时才考虑运行 `scriptRefs` 关联脚本。
-5. 命中任一停止条件时停止，并向用户说明缺少什么或为什么需要人工确认。
+6. 命中任一停止条件时停止，并向用户说明缺少什么或为什么需要人工确认。
 
-给用户总结时，说明匹配到的 Playbook、风险等级、关联知识数量、关联脚本数量和停止条件。
+给用户总结时，默认说明：命中的 Playbook、风险等级、关联知识数量、关联脚本数量和停止条件。
 
-## 知识引用
+## 意图匹配技巧
 
-`knowledgeRefs` 只做引用，不内联知识正文。
+`playbook resolve --intent` 支持正则表达式匹配，匹配字段包括：任务手册名称、`intentAliases`、描述、标签，以及分组名称和标签。
 
-支持两类：
+由于用户输入通常是自然语言长句，消费端 Agent 不要直接原样传入，优先做以下预处理：
 
-- `NOTE`: 针对某个项目仓库的额外阅读指引，使用 Markdown
-- `FILE`: 项目仓库内相对路径
+1. 提取核心动词、名词，例如把“昨天退款超时了，怎么排查”提炼为“退款|超时”
+2. 优先尝试较精炼的表达：
+   - 单关键字：`actiondock playbook resolve --intent "退款" --json`
+   - OR 匹配：`actiondock playbook resolve --intent "退款|refund|timeout" --json`
+   - 顺序匹配：`actiondock playbook resolve --intent "退款.*失败" --json`
+3. 如果第一次太窄导致空结果，再退化到更宽的关键词重新查
 
-如果需要读取项目内容，继续遵守 `references/project-knowledge.md`：
+## 命令选择
+
+### 查候选
+
+```bash
+actiondock playbook resolve --intent "<text>" --json
+actiondock playbook list --json
+```
+
+- `playbook resolve --json`：按任务意图找候选，是消费主入口
+- `playbook list --json`：摘要候选列表，只用于 fallback 或二轮匹配
+- `playbook list --json` 不返回 `guideMarkdown`、`knowledgeRefs`、`scriptRefs`、`stopConditions`
+
+### 读详情
+
+```bash
+actiondock playbook guide <playbook-id> --json
+actiondock playbook get <playbook-id> --json
+```
+
+- `playbook guide --json`：消费执行导览的主命令，返回 Guide、知识引用、脚本引用和停止条件
+- `playbook get --json`：查看单个 Playbook 定义，偏作者态和调试，不是消费主路径
+
+## 关联资源使用
+
+### 知识引用
+
+`knowledgeRefs` 只做引用，不内联知识正文，支持两类：
+
+- `NOTE`：针对某个项目仓库的附加阅读指引，正文在 `markdown` 字段
+- `FILE`：项目仓库内相对路径
+
+如果要继续读取项目内容，转到 `references/project-knowledge.md`：
 
 1. 先执行 `actiondock repository resolve --repository-id <repositoryId> --json`
 2. 先读返回的 `ACTIONDOCK.md` 内容
@@ -90,47 +101,28 @@ actiondock playbook guide <playbook-id> --json
 
 不要因为本地恰好有同名目录就直接用本地文件命令读取项目仓库；ActionDock 可能运行在远端。
 
-## 关联脚本
+### 关联脚本
 
-`scriptRefs` 只是关联脚本清单，不复制脚本 schema，也不表示自动执行。
-
-执行脚本前先查 schema：
+执行 `scriptRefs` 关联脚本前先查 schema：
 
 ```bash
 actiondock script schema <script-id> --json
 ```
 
-再按 `references/script-execution.md` 的规则执行。高风险写操作、缺少关键上下文、Guide 明确要求人工确认时，不要继续自动运行脚本。
+再按 `references/script-execution.md` 的规则执行。以下情况不要继续自动运行脚本：
 
-## 常用命令
+- 高风险写操作
+- 缺少关键上下文
+- Guide 明确要求人工确认
 
-查看任务手册：
+## 作者态维护
 
-```bash
-actiondock playbook list --json
-actiondock playbook list --group <groupId> --repository-id <repositoryId> --tag <tag> --enabled --json
-actiondock playbook get <playbook-id> --json
-actiondock playbook guide <playbook-id> --json
-```
-
-解析任务意图：
-
-```bash
-actiondock playbook resolve --intent "<text>" --json
-actiondock playbook resolve --intent "<text>" --repository-id <repositoryId> --json
-```
-
-作者态维护：
+查看和维护：
 
 ```bash
 actiondock playbook create --definition-file ./playbook.json --json
 actiondock playbook update <playbook-id> --definition-file ./playbook.json --json
 actiondock playbook delete <playbook-id> --json
-```
-
-任务分组：
-
-```bash
 actiondock playbook-group list --json
 actiondock playbook-group get <group-id> --json
 actiondock playbook-group create --definition-file ./group.json --json
@@ -139,8 +131,6 @@ actiondock playbook-group delete <group-id> --json
 ```
 
 复杂字段只走 `--definition-file`，不要把 `guideMarkdown`、知识引用、脚本引用拆成大量 CLI flags。
-
-## Definition 文件形状
 
 Group 最小示例：
 
