@@ -128,6 +128,7 @@ public class RepositorySkillService {
      * @return 发布后的 Skill 描述符
      */
     public RepositorySkillDescriptor publishSkillArchive(String repositoryId,
+                                                                                  String version,
                                                                                   String releaseNotes,
                                                                                   String fileName,
                                                                                   byte[] content) {
@@ -139,7 +140,7 @@ public class RepositorySkillService {
             SkillArchiveManager.unzipArchive(content, tempDir);
             Path skillRoot = SkillFileUtils.locateSkillRoot(tempDir);
             SkillTypes.SkillValidationResult validation = SkillFileUtils.validateSkillDirectory(skillRoot, fileName, false, jsonCodec);
-            return publishSkillDirectory(repository, skillRoot, validation, releaseNotes);
+            return publishSkillDirectory(repository, skillRoot, validation, version, releaseNotes);
         } catch (IOException exception) {
             throw new IllegalStateException("写入 Skill 仓库文件失败", exception);
         } finally {
@@ -159,8 +160,10 @@ public class RepositorySkillService {
     private RepositorySkillDescriptor publishSkillDirectory(RepositoryDefinition repository,
                                                                                      Path skillRoot,
                                                                                      SkillTypes.SkillValidationResult validation,
+                                                                                     String version,
                                                                                      String releaseNotes) {
-        String normalizedVersion = NormalizeUtils.normalize(validation.version(), SkillFileUtils.ERR_VERSION_REQUIRED);
+        String normalizedVersion = NormalizeUtils.normalizeOrDefault(version, validation.version());
+        normalizedVersion = NormalizeUtils.normalize(normalizedVersion, SkillFileUtils.ERR_VERSION_REQUIRED);
         String skillId = NormalizeUtils.normalize(validation.skillId(), "skillId 不能为空");
         Path root = resolveSkillRepositoryRoot(repository, skillId, normalizedVersion);
         writeSkillFilesToRepository(root, repository, skillRoot, validation, normalizedVersion, releaseNotes, skillId);

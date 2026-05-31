@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { getEnabledRepositories, getPublishableRepositories, pickDefaultPublishRepository } from "./repositoryPublish";
+import {
+  getEnabledRepositories,
+  getPublishableRepositories,
+  pickDefaultPublishRepository,
+  resolveRepositoryPublishVersion,
+  suggestNextRepositoryVersion
+} from "./repositoryPublish";
 import type { RepositoryDefinition } from "../shared/types";
 
 function repository(overrides: Partial<RepositoryDefinition>): RepositoryDefinition {
@@ -47,5 +53,51 @@ describe("repositoryPublish", () => {
     ];
 
     expect(pickDefaultPublishRepository(repositories)?.id).toBe("alpha");
+  });
+
+  it("uses 0.1.0 as the first repository version", () => {
+    expect(suggestNextRepositoryVersion()).toBe("0.1.0");
+  });
+
+  it("increments the last numeric version segment", () => {
+    expect(suggestNextRepositoryVersion("1.0.9")).toBe("1.0.10");
+  });
+
+  it("keeps non-numeric suffix versions unchanged", () => {
+    expect(suggestNextRepositoryVersion("1.0.0-beta")).toBe("1.0.0-beta");
+  });
+
+  it("suggests the next patch version for an existing repository item", () => {
+    expect(resolveRepositoryPublishVersion(
+      [
+        { skillId: "demo-skill", version: "1.0.0" },
+        { skillId: "manual-skill", version: "1.0.0-beta" }
+      ],
+      "demo-skill",
+      (item) => item.skillId
+    )).toEqual({
+      status: "READY",
+      currentVersion: "1.0.0",
+      suggestedVersion: "1.0.1"
+    });
+  });
+
+  it("does not suggest a version when the repository has no matching item", () => {
+    expect(resolveRepositoryPublishVersion(
+      [{ skillId: "demo-skill", version: "1.0.0" }],
+      "missing-skill",
+      (item) => item.skillId
+    )).toEqual({ status: "NOT_FOUND" });
+  });
+
+  it("asks for manual input when the current repository version cannot be incremented", () => {
+    expect(resolveRepositoryPublishVersion(
+      [{ skillId: "manual-skill", version: "1.0.0-beta" }],
+      "manual-skill",
+      (item) => item.skillId
+    )).toEqual({
+      status: "MANUAL",
+      currentVersion: "1.0.0-beta"
+    });
   });
 });

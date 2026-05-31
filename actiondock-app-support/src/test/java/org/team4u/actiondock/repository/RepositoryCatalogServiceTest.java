@@ -25,6 +25,7 @@ import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -813,6 +814,80 @@ class RepositoryCatalogServiceTest {
     }
 
     @Test
+    void publishSkillArchiveUsesPublishTimeVersionOverride() throws Exception {
+        Path repositoryRoot = tempDir.resolve("skill-publish-repo");
+        RepositoryDefinition repository = new RepositoryDefinition()
+                .setId("skill-publish-repo")
+                .setName("Skill Publish Repository")
+                .setType(REPO_TYPE_LOCAL_DIR)
+                .setPurpose(REPO_PURPOSE_CAPABILITY)
+                .setUrl(repositoryRoot.toString())
+                .setEnabled(true);
+        RepositoryCatalogService service = new RepositoryCatalogService(
+                repositories(List.of(repository)),
+                new RepositoryCatalogService.ApplicationServices(null, null, PluginRuntimeService.disabled()),
+                jsonCodec,
+                appProperties(),
+                null
+        );
+
+        byte[] archive = buildSkillArchive("demo-skill", "1.0.0");
+
+        RepositorySkillDescriptor descriptor = service.publishSkillArchive(
+                "skill-publish-repo",
+                "1.0.1",
+                "notes",
+                "demo-skill.zip",
+                archive
+        );
+
+        assertThat(descriptor.version()).isEqualTo("1.0.1");
+        SkillFile skillFile = objectMapper.readValue(
+                Files.readString(repositoryRoot.resolve("skills/demo-skill/skill.json")),
+                SkillFile.class
+        );
+        assertThat(skillFile.version()).isEqualTo("1.0.1");
+
+        RepositorySkillDescriptor fetched = service.getRepositorySkill("skill-publish-repo", "demo-skill").descriptor();
+        assertThat(fetched.version()).isEqualTo("1.0.1");
+        assertThat(fetched.digest()).isEqualTo(skillFile.digest());
+        assertThat(skillFile.digest()).isNotBlank();
+    }
+
+    @Test
+    void publishSkillArchiveRejectsExistingPublishTimeVersionOverride() throws Exception {
+        Path repositoryRoot = tempDir.resolve("skill-version-conflict-repo");
+        RepositoryDefinition repository = new RepositoryDefinition()
+                .setId("skill-version-conflict-repo")
+                .setName("Skill Version Conflict Repository")
+                .setType(REPO_TYPE_LOCAL_DIR)
+                .setPurpose(REPO_PURPOSE_CAPABILITY)
+                .setUrl(repositoryRoot.toString())
+                .setEnabled(true);
+        RepositoryCatalogService service = new RepositoryCatalogService(
+                repositories(List.of(repository)),
+                new RepositoryCatalogService.ApplicationServices(null, null, PluginRuntimeService.disabled()),
+                jsonCodec,
+                appProperties(),
+                null
+        );
+
+        byte[] archive = buildSkillArchive("demo-skill", "1.0.0");
+        service.publishSkillArchive("skill-version-conflict-repo", "1.0.1", null, "demo-skill.zip", archive);
+
+        assertThatThrownBy(() -> service.publishSkillArchive(
+                "skill-version-conflict-repo",
+                "1.0.1",
+                null,
+                "demo-skill.zip",
+                archive
+        ))
+                .isInstanceOf(RepositoryVersionExistsException.class)
+                .extracting("assetKind", "repositoryId", "assetId", "version")
+                .containsExactly("SKILL", "skill-version-conflict-repo", "demo-skill", "1.0.1");
+    }
+
+    @Test
     void projectLocalDirRepositoryDoesNotInitializeCapabilityWorkspaceOnSave() {
         Path projectRoot = tempDir.resolve("project-no-index");
         RepositoryDefinitionRepository repositoryDefinitionRepository = new InMemoryRepositoryDefinitionRepository();
@@ -833,6 +908,32 @@ class RepositoryCatalogServiceTest {
 
     private RepositoryDefinition localRepository() {
         return new RepositoryDefinition().setId("repo-1").setType("LOCAL_DIR").setUrl(tempDir.toString());
+    }
+
+    private byte[] buildSkillArchive(String skillId, String version) throws Exception {
+        Path skillRoot = tempDir.resolve("skill-src").resolve(skillId);
+        Files.createDirectories(skillRoot);
+        Files.writeString(skillRoot.resolve("SKILL.md"), """
+                ---
+                name: Demo Skill
+                description: Demo description
+                ---
+
+                # Demo Skill
+                """, StandardCharsets.UTF_8);
+        Files.writeString(skillRoot.resolve("skill.json"), """
+                {
+                  "schemaVersion": 1,
+                  "skillId": "%s",
+                  "displayName": "Demo Skill",
+                  "version": "%s",
+                  "description": "Demo description",
+                  "tags": ["demo"],
+                  "entrypointPath": "SKILL.md"
+                }
+                """.formatted(skillId, version), StandardCharsets.UTF_8);
+        var validation = org.team4u.actiondock.skill.SkillFileUtils.validateSkillDirectory(skillRoot, skillId, false, jsonCodec);
+        return org.team4u.actiondock.skill.SkillArchiveManager.buildArchive(skillRoot, validation, version, jsonCodec);
     }
 
     private HttpServer startHttpServer(int status, byte[] body) throws Exception {

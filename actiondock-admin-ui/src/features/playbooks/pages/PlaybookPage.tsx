@@ -1,6 +1,6 @@
 import { FileMarkdownOutlined, FileOutlined, FolderOpenOutlined } from "@ant-design/icons";
 import type { DataNode } from "antd/es/tree";
-import { Alert, Button, Drawer, Empty, Form, Image, Input, Modal, Popconfirm, Select, Space, Spin, Switch, Table, Tabs, Tag, Tree, Typography, message } from "antd";
+import { Alert, Button, Drawer, Empty, Form, Grid, Image, Input, Modal, Popconfirm, Select, Space, Spin, Switch, Table, Tabs, Tag, Tree, Typography, message } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { MarkdownDescription } from "../../../components/common/MarkdownDescription";
 import { PageHeader } from "../../../components/common/PageHeader";
@@ -32,6 +32,7 @@ import { listScripts } from "../../scripts/api";
 import { createPlaybook, deletePlaybook, getPlaybookGuide, listPlaybookGroups, listPlaybooks, updatePlaybook } from "../api";
 
 const { Text } = Typography;
+const { useBreakpoint } = Grid;
 
 interface PlaybookFormValues {
   id: string;
@@ -138,6 +139,8 @@ function fileNodeToTree(nodes: RepositoryProjectFileNode[]): DataNode[] {
 
 export function PlaybookPage() {
   const [messageApi, contextHolder] = message.useMessage();
+  const screens = useBreakpoint();
+  const isCompactFilePicker = !screens.md;
   const defaultOwner = useDefaultOwner();
   const [items, setItems] = useState<Playbook[]>([]);
   const [groups, setGroups] = useState<PlaybookGroup[]>([]);
@@ -515,7 +518,7 @@ export function PlaybookPage() {
       return (
         <div className="skill-preview-panel">
           {projectPreview.truncated ? <Alert type="warning" showIcon message="文件内容过长，当前只展示前 200000 个字符。" /> : null}
-          <CodeEditor value={projectPreview.textContent ?? ""} onChange={() => undefined} theme="vs-light" language={projectPreview.language || "plaintext"} readOnly height="420px" />
+          <CodeEditor value={projectPreview.textContent ?? ""} onChange={() => undefined} theme="vs-light" language={projectPreview.language || "plaintext"} readOnly height={isCompactFilePicker ? "300px" : "420px"} />
         </div>
       );
     }
@@ -723,11 +726,28 @@ export function PlaybookPage() {
         okButtonProps={{
           disabled: !projectPreview || projectPreview.directory || filePicker.selectedPath === "ACTIONDOCK.md" || Boolean(filePicker.repositoryId && knowledgeEditor.find((item) => item.repositoryId === filePicker.repositoryId)?.files.includes(filePicker.selectedPath ?? ""))
         }}
-        width={960}
+        width={isCompactFilePicker ? "calc(100vw - 24px)" : 960}
         destroyOnHidden
       >
-        <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: 16, minHeight: 480 }}>
-          <div style={{ borderRight: "1px solid #f0f0f0", paddingRight: 16, overflow: "auto" }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: isCompactFilePicker ? "minmax(0, 1fr)" : "280px minmax(0, 1fr)",
+            gridTemplateRows: isCompactFilePicker ? "220px minmax(0, 1fr)" : undefined,
+            gap: 16,
+            minHeight: isCompactFilePicker ? 560 : 480
+          }}
+        >
+          <div
+            style={{
+              borderRight: isCompactFilePicker ? "none" : "1px solid #f0f0f0",
+              borderBottom: isCompactFilePicker ? "1px solid #f0f0f0" : "none",
+              paddingRight: isCompactFilePicker ? 0 : 16,
+              paddingBottom: isCompactFilePicker ? 16 : 0,
+              overflow: "auto",
+              minHeight: 0
+            }}
+          >
             {projectTreeLoading ? <div style={{ display: "flex", justifyContent: "center", padding: 24 }}><Spin /></div> : (
               buildPickerTree.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有可浏览的文件" /> : (
                 <Tree
@@ -742,7 +762,13 @@ export function PlaybookPage() {
               )
             )}
           </div>
-          <div style={{ overflow: "auto" }}>
+          <div
+            style={{
+              minWidth: 0,
+              overflow: "auto",
+              maxHeight: isCompactFilePicker ? "calc(100vh - 360px)" : undefined
+            }}
+          >
             {filePicker.selectedPath === "ACTIONDOCK.md" ? <Alert type="info" showIcon message="ACTIONDOCK.md 会默认读取，无需显式添加到知识引用。" style={{ marginBottom: 12 }} /> : null}
             {filePicker.repositoryId && filePicker.selectedPath && knowledgeEditor.find((item) => item.repositoryId === filePicker.repositoryId)?.files.includes(filePicker.selectedPath) ? (
               <Alert type="warning" showIcon message="该文件已添加为知识引用。" style={{ marginBottom: 12 }} />

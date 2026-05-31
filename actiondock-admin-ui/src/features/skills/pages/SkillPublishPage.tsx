@@ -35,6 +35,10 @@ import { CodeEditor } from "../../../components/common/CodeEditor";
 import { PageHeader } from "../../../components/common/PageHeader";
 import { useColorMode } from "../../../shared/contexts/ColorModeContext";
 import {
+  type RepositoryPublishVersionSuggestion,
+  resolveRepositoryPublishVersion
+} from "../../../services/repositoryPublish";
+import {
   clearSkillPublishSession,
   readInlineSkillPublishArchive,
   readSkillPublishSession
@@ -51,6 +55,7 @@ const { Paragraph, Text } = Typography;
 
 interface PublishFormValues {
   repositoryId?: string;
+  version?: string;
   releaseNotes?: string;
 }
 
@@ -335,10 +340,13 @@ export function SkillPublishPage() {
   const [repositoryArchive, setRepositoryArchive] = useState<ParsedSkillArchive | null>(null);
   const [repositorySyncing, setRepositorySyncing] = useState(false);
   const [contentUnchanged, setContentUnchanged] = useState(false);
+  const [versionSuggestion, setVersionSuggestion] = useState<RepositoryPublishVersionSuggestion>({ status: "IDLE" });
   const [publishing, setPublishing] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
+  const [versionManuallyEdited, setVersionManuallyEdited] = useState(false);
 
   const watchedRepositoryId = Form.useWatch("repositoryId", form);
+  const watchedVersion = Form.useWatch("version", form);
 
   useEffect(() => {
     void (async () => {
@@ -386,7 +394,9 @@ export function SkillPublishPage() {
         const parsed = await parseSkillArchive(file);
         setParsedArchive(parsed);
         setSelectedFile(parsed.validation.entrypointPath);
-        form.setFieldsValue({ releaseNotes: "" });
+        form.setFieldsValue({ version: parsed.validation.version, releaseNotes: "" });
+        setVersionSuggestion({ status: "IDLE" });
+        setVersionManuallyEdited(false);
         clearSkillPublishSession();
       } catch (error) {
         setParsedArchive(null);
@@ -402,10 +412,12 @@ export function SkillPublishPage() {
       setRepositorySkillDetail(null);
       setRepositoryArchive(null);
       setContentUnchanged(false);
+      setVersionSuggestion({ status: "IDLE" });
       return;
     }
     let cancelled = false;
     setRepositorySyncing(true);
+    setVersionSuggestion({ status: "LOADING" });
     void (async () => {
       try {
         await syncRepository(watchedRepositoryId);
@@ -414,6 +426,29 @@ export function SkillPublishPage() {
           return;
         }
         const descriptor = items.find((item) => item.skillId === parsedArchive.validation.skillId);
+        const resolution = resolveRepositoryPublishVersion(items, parsedArchive.validation.skillId, (item) => item.skillId);
+        if (resolution.status === "READY") {
+          const autoFilled = !versionManuallyEdited;
+          if (autoFilled) {
+            form.setFieldsValue({ version: resolution.suggestedVersion });
+          }
+          setVersionSuggestion({
+            status: "READY",
+            currentVersion: resolution.currentVersion,
+            suggestedVersion: resolution.suggestedVersion,
+            autoFilled
+          });
+        } else if (resolution.status === "MANUAL") {
+          setVersionSuggestion({
+            status: "MANUAL",
+            currentVersion: resolution.currentVersion
+          });
+        } else {
+          setVersionSuggestion({ status: "NOT_FOUND" });
+          if (!versionManuallyEdited) {
+            form.setFieldsValue({ version: parsedArchive.validation.version });
+          }
+        }
         if (!descriptor) {
           setRepositorySkillDetail(null);
           setRepositoryArchive(null);
@@ -434,6 +469,10 @@ export function SkillPublishPage() {
         setRepositorySkillDetail(null);
         setRepositoryArchive(null);
         setContentUnchanged(false);
+        setVersionSuggestion({
+          status: "ERROR",
+          message: getErrorMessage(error, "拉取仓库版本失败")
+        });
         messageApi.error(getErrorMessage(error, "拉取仓库版本失败"));
       } finally {
         if (!cancelled) {
@@ -444,7 +483,7 @@ export function SkillPublishPage() {
     return () => {
       cancelled = true;
     };
-  }, [messageApi, parsedArchive, watchedRepositoryId]);
+  }, [form, messageApi, parsedArchive, versionManuallyEdited, watchedRepositoryId]);
 
   useEffect(() => {
     if (!parsedArchive) {
@@ -454,7 +493,7 @@ export function SkillPublishPage() {
     let cancelled = false;
     void (async () => {
       try {
-        const digest = await computePublishDigest(parsedArchive, parsedArchive.validation.version);
+        const digest = await computePublishDigest(parsedArchive, watchedVersion?.trim() || parsedArchive.validation.version);
         if (!cancelled) {
           const currentDigest = repositorySkillDetail?.descriptor.digest;
           setContentUnchanged(Boolean(currentDigest) && currentDigest === digest);
@@ -468,7 +507,7 @@ export function SkillPublishPage() {
     return () => {
       cancelled = true;
     };
-  }, [parsedArchive, repositorySkillDetail?.descriptor.digest]);
+  }, [parsedArchive, repositorySkillDetail?.descriptor.digest, watchedVersion]);
 
   const repositoryOptions = useMemo(
     () => repositories.map((item) => ({ value: item.id, label: `${item.name} (${item.id})` })),
@@ -484,8 +523,32 @@ export function SkillPublishPage() {
   const repositoryVersionExists = Boolean(
     parsedArchive
     && repositorySkillDetail
-    && repositorySkillDetail.descriptor.version === parsedArchive.validation.version
+    && repositorySkillDetail.descriptor.version === watchedVersion?.trim()
   );
+
+  const renderVersionSuggestion = () => {
+    if (versionSuggestion.status === "LOADING") {
+      return <Text type="secondary">正在同步目标仓库并拉取当前版本</Text>;
+    }
+    if (versionSuggestion.status === "READY") {
+      return (
+        <Text type="secondary">
+          仓库当前版本 {versionSuggestion.currentVersion}，建议发布 {versionSuggestion.suggestedVersion}
+          {versionSuggestion.autoFilled ? "，已自动填入。" : "；你已手动修改，未覆盖。"}
+        </Text>
+      );
+    }
+    if (versionSuggestion.status === "MANUAL") {
+      return <Text type="warning">仓库当前版本 {versionSuggestion.currentVersion} 无法自动递增，请手动填写新版本。</Text>;
+    }
+    if (versionSuggestion.status === "NOT_FOUND") {
+      return <Text type="secondary">目标仓库暂无该 Skill 版本。</Text>;
+    }
+    if (versionSuggestion.status === "ERROR") {
+      return <Text type="danger">{versionSuggestion.message}</Text>;
+    }
+    return null;
+  };
 
   const handlePublish = async () => {
     if (!parsedArchive) {
@@ -497,17 +560,22 @@ export function SkillPublishPage() {
       messageApi.warning("请选择仓库");
       return;
     }
+    if (!values.version?.trim()) {
+      messageApi.warning("请输入版本号");
+      return;
+    }
     if (contentUnchanged) {
       messageApi.warning("仓库当前内容与本次发布一致，无需重复发布");
       return;
     }
     if (repositoryVersionExists) {
-      messageApi.warning("仓库已存在相同版本，请先更新本地版本号");
+      messageApi.warning("仓库已存在相同版本，请填写新的发布版本");
       return;
     }
     setPublishing(true);
     try {
       await publishRepositorySkillArchive(values.repositoryId, {
+        version: values.version.trim(),
         releaseNotes: values.releaseNotes?.trim() || undefined,
         archive: parsedArchive.file
       });
@@ -553,7 +621,15 @@ export function SkillPublishPage() {
         ) : (
           <>
             <Card>
-              <Form form={form} layout="vertical">
+              <Form
+                form={form}
+                layout="vertical"
+                onValuesChange={(changedValues) => {
+                  if (Object.prototype.hasOwnProperty.call(changedValues, "version")) {
+                    setVersionManuallyEdited(true);
+                  }
+                }}
+              >
                 <Space size={16} style={{ width: "100%" }} direction="vertical">
                   <Space style={{ width: "100%" }} wrap>
                     <Form.Item label="仓库" name="repositoryId" style={{ minWidth: 300 }}>
@@ -561,9 +637,15 @@ export function SkillPublishPage() {
                     </Form.Item>
                   </Space>
                   <Space style={{ width: "100%" }} wrap align="start">
-                    <Descriptions size="small" bordered style={{ minWidth: 220, flex: "1 1 220px" }}>
-                      <Descriptions.Item label="发布版本">{parsedArchive.validation.version}</Descriptions.Item>
-                    </Descriptions>
+                    <Form.Item
+                      label="发布版本"
+                      name="version"
+                      style={{ minWidth: 220, flex: "1 1 220px" }}
+                      extra={renderVersionSuggestion()}
+                      rules={[{ required: true, message: "请输入发布版本" }]}
+                    >
+                      <Input placeholder="例如 1.0.0" />
+                    </Form.Item>
                     <Form.Item label="发布说明" name="releaseNotes" style={{ minWidth: 360, flex: "2 1 360px" }}>
                       <Input.TextArea rows={3} placeholder="本次发布的变更说明，支持 Markdown 语法" />
                     </Form.Item>
@@ -572,7 +654,7 @@ export function SkillPublishPage() {
                     <Alert type="info" showIcon message="仓库当前内容与本次 Skill 包完全一致，发布按钮已禁用。" />
                   ) : null}
                   {repositoryVersionExists ? (
-                    <Alert type="warning" showIcon message="仓库已存在相同版本，发布按钮已禁用。请在 Skill 详情页更新本地版本号后再发布。" />
+                    <Alert type="warning" showIcon message="仓库已存在相同版本，发布按钮已禁用。请填写新的发布版本后再发布。" />
                   ) : null}
                 </Space>
               </Form>

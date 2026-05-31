@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveRepositoryPublishVersion, suggestNextRepositoryVersion } from "./types";
+import { resolveRepositoryPublishVersion, suggestNextRepositoryVersion } from "../../../../services/repositoryPublish";
 
 describe("suggestNextRepositoryVersion", () => {
   it("uses 0.1.0 as the first repository version", () => {
@@ -22,7 +22,7 @@ describe("resolveRepositoryPublishVersion", () => {
   ];
 
   it("suggests the next patch version for an existing repository tool", () => {
-    expect(resolveRepositoryPublishVersion(tools, "demo-tool")).toEqual({
+    expect(resolveRepositoryPublishVersion(tools, "demo-tool", (item) => item.scriptId)).toEqual({
       status: "READY",
       currentVersion: "1.0.0",
       suggestedVersion: "1.0.1"
@@ -30,11 +30,11 @@ describe("resolveRepositoryPublishVersion", () => {
   });
 
   it("does not suggest a version when the repository has no matching tool", () => {
-    expect(resolveRepositoryPublishVersion(tools, "missing-tool")).toEqual({ status: "NOT_FOUND" });
+    expect(resolveRepositoryPublishVersion(tools, "missing-tool", (item) => item.scriptId)).toEqual({ status: "NOT_FOUND" });
   });
 
   it("asks for manual input when the current repository version cannot be incremented", () => {
-    expect(resolveRepositoryPublishVersion(tools, "manual-tool")).toEqual({
+    expect(resolveRepositoryPublishVersion(tools, "manual-tool", (item) => item.scriptId)).toEqual({
       status: "MANUAL",
       currentVersion: "1.0.0-beta"
     });

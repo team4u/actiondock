@@ -37,6 +37,7 @@ final class SkillRepositoryPublisher {
      * @return 发布后的 Skill 描述信息
      */
     RepositorySkillDescriptor publish(String repositoryId,
+                                      String version,
                                       String releaseNotes,
                                       String fileName,
                                       byte[] content) {
@@ -50,13 +51,15 @@ final class SkillRepositoryPublisher {
             SkillTypes.SkillValidationResult validation = SkillFileUtils.validateSkillDirectory(
                     skillRoot, fileName, false, catalog.jsonCodec());
 
-            String normalizedVersion = NormalizeUtils.normalize(validation.version(), SkillFileUtils.ERR_VERSION_REQUIRED);
+            String normalizedVersion = NormalizeUtils.normalizeOrDefault(version, validation.version());
+            normalizedVersion = NormalizeUtils.normalize(normalizedVersion, SkillFileUtils.ERR_VERSION_REQUIRED);
             String skillId = NormalizeUtils.normalize(validation.skillId(), "skillId 不能为空");
 
             RepositoryCatalogTypes.assertSkillVersionAvailable(
                     session.repository().getId(), session.index(), skillId, normalizedVersion);
             copySkillToRepository(session, skillRoot, validation, normalizedVersion);
             session.commitPublishedAsset(skillId, normalizedVersion, releaseNotes);
+            catalog.refreshRepositoryCache(repositoryId);
 
             return catalog.getRepositorySkill(repositoryId, skillId).descriptor();
         } catch (IOException exception) {

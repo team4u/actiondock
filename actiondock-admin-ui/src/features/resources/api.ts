@@ -428,9 +428,12 @@ export function publishRepositoryPlugin(repositoryId: string, payload: Repositor
 
 export function publishRepositorySkillArchive(
   repositoryId: string,
-  payload: { releaseNotes?: string; archive: File | Blob }
+  payload: { version?: string; releaseNotes?: string; archive: File | Blob }
 ): Promise<RepositorySkillDescriptor> {
   const formData = new FormData();
+  if (payload.version?.trim()) {
+    formData.append("version", payload.version.trim());
+  }
   if (payload.releaseNotes?.trim()) {
     formData.append("releaseNotes", payload.releaseNotes.trim());
   }

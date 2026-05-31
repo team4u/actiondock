@@ -33,6 +33,7 @@ import org.team4u.actiondock.domain.port.RepositoryDefinitionRepository;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
 import org.team4u.actiondock.plugin.PluginRuntimeService;
+import org.team4u.actiondock.skill.SkillArchiveManager;
 import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
 import org.team4u.actiondock.common.NormalizeUtils;
 
@@ -578,10 +579,11 @@ public class RepositoryCatalogService {
     }
 
     public RepositoryCatalogTypes.RepositorySkillDescriptor publishSkillArchive(String repositoryId,
+                                                         String version,
                                                          String releaseNotes,
                                                          String fileName,
                                                          byte[] content) {
-        RepositoryCatalogTypes.RepositorySkillDescriptor descriptor = skillPublisher.publish(repositoryId, releaseNotes, fileName, content);
+        RepositoryCatalogTypes.RepositorySkillDescriptor descriptor = skillPublisher.publish(repositoryId, version, releaseNotes, fileName, content);
         refreshRepositoryCache(repositoryId);
         return descriptor;
     }
@@ -1251,15 +1253,18 @@ public class RepositoryCatalogService {
 
     private List<RepositoryCatalogTypes.RepositorySkillIndexEntry> scanSkills(RepositoryDefinition repository, Path root) {
         return scanFixedDirectory(root, SKILLS_DIR, SKILL_MANIFEST_FILE).stream()
-                .map(path -> readManifest(repository, path, RepositoryCatalogTypes.SkillFile.class)
+                .map(path -> {
+                    String manifestPath = parentDirectoryPath(path).resolve(SkillArchiveManager.SKILL_PACKAGE_FILE).toString().replace('\\', '/');
+                    return readManifest(repository, manifestPath, RepositoryCatalogTypes.SkillFile.class)
                         .map(file -> new RepositoryCatalogTypes.RepositorySkillIndexEntry(
                                 file.skillId(),
                                 file.displayName(),
                                 file.version(),
                                 file.description(),
                                 null,
-                                path))
-                        .orElse(null))
+                                manifestPath))
+                        .orElse(null);
+                })
                 .filter(Objects::nonNull)
                 .sorted(Comparator.comparing(RepositoryCatalogTypes.RepositorySkillIndexEntry::id))
                 .toList();

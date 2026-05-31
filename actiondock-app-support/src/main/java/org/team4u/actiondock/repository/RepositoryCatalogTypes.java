@@ -16,6 +16,7 @@ import org.team4u.actiondock.domain.model.ScriptDependency;
 import org.team4u.actiondock.domain.model.ScriptPackaging;
 import org.team4u.actiondock.domain.model.WebhookSampleRequest;
 import org.team4u.actiondock.plugin.PluginView;
+import org.team4u.actiondock.skill.SkillArchiveManager;
 import org.team4u.actiondock.skill.SkillFileUtils;
 import org.team4u.actiondock.skill.SkillTypes;
 import org.team4u.actiondock.common.NormalizeUtils;
@@ -764,7 +765,7 @@ public final class RepositoryCatalogTypes {
                     NormalizeUtils.normalize(version, SkillFileUtils.ERR_VERSION_REQUIRED),
                     NormalizeUtils.normalizeNullable(validation.description()),
                     NormalizeUtils.normalizeNullable(releaseNotes),
-                    SKILLS_DIR + "/" + validation.skillId() + "/" + SKILL_MANIFEST_FILE
+                    SKILLS_DIR + "/" + validation.skillId() + "/" + SkillArchiveManager.SKILL_PACKAGE_FILE
             );
         }
     }

@@ -93,6 +93,37 @@ describe("api request auth handling", () => {
     expect(headers.get("Authorization")).toBe("Bearer secret-token");
   });
 
+  it("includes version in repository skill publish FormData", async () => {
+    getApiKeyMock.mockReturnValue("secret-token");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        status: 0,
+        msg: "ok",
+        data: { repositoryId: "main", skillId: "demo-skill", displayName: "Demo Skill", version: "1.0.1" }
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { publishRepositorySkillArchive } = await import("../features/resources/api");
+    await publishRepositorySkillArchive("main", {
+      version: "1.0.1",
+      releaseNotes: "notes",
+      archive: new File(["skill"], "demo-skill.zip")
+    });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/repositories/main/publish-skill-archive");
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.method).toBe("POST");
+    expect(init?.body).toBeInstanceOf(FormData);
+    const formData = init?.body as FormData;
+    expect(formData.get("version")).toBe("1.0.1");
+    expect(formData.get("releaseNotes")).toBe("notes");
+    expect(formData.get("archive")).toBeInstanceOf(File);
+  });
+
   it("downloads binary archives with Authorization header", async () => {
     getApiKeyMock.mockReturnValue("secret-token");
     const fetchMock = vi.fn().mockResolvedValue(

@@ -13,6 +13,14 @@ import type {
 } from "../../../../shared/types";
 import type { SchemaEditorState } from "../../../../services/schema";
 import type { ScriptEditorHeaderActionModel } from "./scriptEditorHeaderActions";
+export type {
+  RepositoryPublishVersionResolution,
+  RepositoryPublishVersionSuggestion
+} from "../../../../services/repositoryPublish";
+export {
+  resolveRepositoryPublishVersion,
+  suggestNextRepositoryVersion
+} from "../../../../services/repositoryPublish";
 
 export interface ScriptEditorPageProps {
   colorMode: "light" | "dark";
@@ -87,56 +95,6 @@ export function getEditorFooterHint(type: ScriptType): string {
 
 export function toTagOptions(tags: string[] | undefined): string[] {
   return (tags ?? []).filter((item) => item.trim().length > 0);
-}
-
-export function suggestNextRepositoryVersion(value?: string): string {
-  if (!value) {
-    return "0.1.0";
-  }
-  const parts = value.split(".");
-  const last = Number(parts[parts.length - 1]);
-  if (Number.isNaN(last)) {
-    return value;
-  }
-  const next = [...parts];
-  next[next.length - 1] = String(last + 1);
-  return next.join(".");
-}
-
-export type RepositoryPublishVersionResolution =
-  | { status: "NOT_FOUND" }
-  | { status: "READY"; currentVersion: string; suggestedVersion: string }
-  | { status: "MANUAL"; currentVersion: string };
-
-export type RepositoryPublishVersionSuggestion =
-  | { status: "IDLE" }
-  | { status: "LOADING" }
-  | { status: "NOT_FOUND" }
-  | { status: "READY"; currentVersion: string; suggestedVersion: string; autoFilled: boolean }
-  | { status: "MANUAL"; currentVersion: string }
-  | { status: "ERROR"; message: string };
-
-export function resolveRepositoryPublishVersion(
-  tools: Pick<RepositoryScriptDescriptor, "scriptId" | "version">[],
-  repositoryScriptId: string
-): RepositoryPublishVersionResolution {
-  const normalizedToolId = repositoryScriptId.trim();
-  if (!normalizedToolId) {
-    return { status: "NOT_FOUND" };
-  }
-  const current = tools.find((item) => item.scriptId === normalizedToolId);
-  if (!current?.version) {
-    return { status: "NOT_FOUND" };
-  }
-  const suggestedVersion = suggestNextRepositoryVersion(current.version);
-  if (suggestedVersion === current.version) {
-    return { status: "MANUAL", currentVersion: current.version };
-  }
-  return {
-    status: "READY",
-    currentVersion: current.version,
-    suggestedVersion
-  };
 }
 
 export interface ScriptEditorContext {
