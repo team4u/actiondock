@@ -33,8 +33,7 @@ public class CapabilityPackageInstallationEntity {
     private String scheduleIdsJson;
     @Lob
     private String presetIdsJson;
-    @Lob
-    private String playbookGroupIdsJson;
+
     @Lob
     private String playbookIdsJson;
     private LocalDateTime installedAt;
@@ -160,13 +159,7 @@ public class CapabilityPackageInstallationEntity {
         this.presetIdsJson = presetIdsJson;
     }
 
-    public String getPlaybookGroupIdsJson() {
-        return playbookGroupIdsJson;
-    }
 
-    public void setPlaybookGroupIdsJson(String playbookGroupIdsJson) {
-        this.playbookGroupIdsJson = playbookGroupIdsJson;
-    }
 
     public String getPlaybookIdsJson() {
         return playbookIdsJson;

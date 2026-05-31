@@ -3,13 +3,11 @@ package org.team4u.actiondock.application;
 import org.junit.jupiter.api.Test;
 import org.team4u.actiondock.domain.exception.ActionDockException;
 import org.team4u.actiondock.domain.model.Playbook;
-import org.team4u.actiondock.domain.model.PlaybookGroup;
 import org.team4u.actiondock.domain.model.PlaybookKnowledgeRef;
 import org.team4u.actiondock.domain.model.PlaybookKnowledgeRefType;
 import org.team4u.actiondock.domain.model.PlaybookRiskLevel;
 import org.team4u.actiondock.domain.model.PlaybookScriptRef;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
-import org.team4u.actiondock.domain.port.PlaybookGroupRepository;
 import org.team4u.actiondock.domain.port.PlaybookRepository;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 
@@ -25,19 +23,16 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class PlaybookApplicationServiceTest {
-    private final InMemoryPlaybookGroupRepository groupRepository = new InMemoryPlaybookGroupRepository();
     private final InMemoryPlaybookRepository playbookRepository = new InMemoryPlaybookRepository();
     private final ScriptRepository scriptRepository = mock(ScriptRepository.class);
-    private final PlaybookApplicationService service = new PlaybookApplicationService(groupRepository, playbookRepository, scriptRepository);
+    private final PlaybookApplicationService service = new PlaybookApplicationService(playbookRepository, scriptRepository);
 
     @Test
     void savesPlaybook() {
         when(scriptRepository.findById("query-log")).thenReturn(Optional.of(new ScriptDefinition().setId("query-log")));
-        service.saveGroup(new PlaybookGroup().setId("billing").setName("Billing").setTags(List.of("billing")));
 
         Playbook saved = service.savePlaybook(new Playbook()
                 .setId("refund")
-                .setGroupId("billing")
                 .setName("退款失败排查")
                 .setRiskLevel(PlaybookRiskLevel.MEDIUM)
                 .setRepositoryIds(List.of("billing-service"))
@@ -50,24 +45,14 @@ class PlaybookApplicationServiceTest {
                 .setStopConditions(List.of("缺少上下文")));
 
         assertThat(saved.getCreatedAt()).isNotNull();
-        assertThat(service.getPlaybook("refund").getGroupId()).isEqualTo("billing");
         assertThat(service.getPlaybook("refund").getKnowledgeRefs()).hasSize(1);
     }
 
     @Test
     void rejectsMissingGroupGuideAndScript() {
-        assertThatThrownBy(() -> service.savePlaybook(new Playbook()
-                .setId("p1")
-                .setGroupId("missing")
-                .setName("P1")
-                .setGuideMarkdown("guide")))
-                .isInstanceOf(ActionDockException.class);
-
-        service.saveGroup(new PlaybookGroup().setId("g1").setName("G1"));
         when(scriptRepository.findById("missing-script")).thenReturn(Optional.empty());
         assertThatThrownBy(() -> service.savePlaybook(new Playbook()
                 .setId("p2")
-                .setGroupId("g1")
                 .setName("P2")
                 .setScriptRefs(List.of(new PlaybookScriptRef().setScriptId("missing-script")))
                 .setGuideMarkdown("guide")))
@@ -75,7 +60,6 @@ class PlaybookApplicationServiceTest {
 
         assertThatThrownBy(() -> service.savePlaybook(new Playbook()
                 .setId("p3")
-                .setGroupId("g1")
                 .setName("P3")
                 .setGuideMarkdown(" ")))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -83,11 +67,8 @@ class PlaybookApplicationServiceTest {
 
     @Test
     void rejectsInvalidKnowledgeRef() {
-        service.saveGroup(new PlaybookGroup().setId("g1").setName("G1"));
-
         assertThatThrownBy(() -> service.savePlaybook(new Playbook()
                 .setId("p1")
-                .setGroupId("g1")
                 .setName("P1")
                 .setKnowledgeRefs(List.of(new PlaybookKnowledgeRef()
                         .setType(PlaybookKnowledgeRefType.FILE)
@@ -100,11 +81,8 @@ class PlaybookApplicationServiceTest {
 
     @Test
     void rejectsActiondockEntryFileAndEmptyNoteMarkdown() {
-        service.saveGroup(new PlaybookGroup().setId("g1").setName("G1"));
-
         assertThatThrownBy(() -> service.savePlaybook(new Playbook()
                 .setId("p1")
-                .setGroupId("g1")
                 .setName("P1")
                 .setKnowledgeRefs(List.of(new PlaybookKnowledgeRef()
                         .setType(PlaybookKnowledgeRefType.FILE)
@@ -116,7 +94,6 @@ class PlaybookApplicationServiceTest {
 
         assertThatThrownBy(() -> service.savePlaybook(new Playbook()
                 .setId("p2")
-                .setGroupId("g1")
                 .setName("P2")
                 .setKnowledgeRefs(List.of(new PlaybookKnowledgeRef()
                         .setType(PlaybookKnowledgeRefType.NOTE)
@@ -128,116 +105,68 @@ class PlaybookApplicationServiceTest {
     }
 
     @Test
-    void preventsDeletingReferencedGroup() {
-        service.saveGroup(new PlaybookGroup().setId("g1").setName("G1"));
-        service.savePlaybook(new Playbook().setId("p1").setGroupId("g1").setName("P1").setGuideMarkdown("guide"));
-
-        assertThatThrownBy(() -> service.deleteGroup("g1"))
-                .isInstanceOf(ActionDockException.class)
-                .hasMessageContaining("仍被任务手册引用");
-    }
-
-    @Test
     void listsPlaybooksByKeywordTagAndRepository() {
-        service.saveGroup(new PlaybookGroup().setId("billing").setName("Billing").setTags(List.of("finance")));
         service.savePlaybook(new Playbook()
                 .setId("refund")
-                .setGroupId("billing")
                 .setName("退款失败排查")
                 .setTags(List.of("refund"))
                 .setRepositoryIds(List.of("billing-service"))
                 .setGuideMarkdown("guide"));
         service.savePlaybook(new Playbook()
                 .setId("global")
-                .setGroupId("billing")
                 .setName("全局账单排查")
                 .setTags(List.of("billing"))
                 .setGuideMarkdown("guide"));
 
-        assertThat(service.listPlaybooks(null, "billing-service", "refund", true, null, "退款失败"))
+        assertThat(service.listPlaybooks("billing-service", "refund", true, null, "退款失败"))
                 .extracting(Playbook::getId)
                 .containsExactly("refund");
     }
 
     @Test
     void listsPlaybooksByKeywordAcrossNameDescriptionAndTags() {
-        service.saveGroup(new PlaybookGroup().setId("billing").setName("Billing").setTags(List.of("finance")));
         service.savePlaybook(new Playbook()
                 .setId("refund")
-                .setGroupId("billing")
                 .setName("退款失败排查")
                 .setDescription("定位退款失败根因")
                 .setTags(List.of("refund"))
                 .setGuideMarkdown("guide"));
         service.savePlaybook(new Playbook()
                 .setId("timeout")
-                .setGroupId("billing")
                 .setName("超时排查")
                 .setTags(List.of("timeout"))
                 .setGuideMarkdown("guide"));
 
-        assertThat(service.listPlaybooks(null, null, null, null, null, "退款"))
+        assertThat(service.listPlaybooks(null, null, null, null, "退款"))
                 .extracting(Playbook::getId)
                 .containsExactly("refund");
-        assertThat(service.listPlaybooks(null, null, null, null, null, "timeout"))
+        assertThat(service.listPlaybooks(null, null, null, null, "timeout"))
                 .extracting(Playbook::getId)
                 .containsExactly("timeout");
-        assertThat(service.listPlaybooks(null, null, null, null, null, "[invalid"))
+        assertThat(service.listPlaybooks(null, null, null, null, "[invalid"))
                 .isEmpty();
     }
 
     @Test
     void rejectsDirectManagedEditsAndDeletes() {
-        service.saveManagedGroup(new PlaybookGroup().setId("g1").setName("G1"));
-        service.saveManagedPlaybook(new Playbook().setId("p1").setGroupId("g1").setName("P1").setGuideMarkdown("guide"));
+        service.saveManagedPlaybook(new Playbook().setId("p1").setName("P1").setGuideMarkdown("guide"));
 
-        assertThatThrownBy(() -> service.saveGroup(new PlaybookGroup().setId("g1").setName("Changed")))
-                .isInstanceOf(ActionDockException.class);
         assertThatThrownBy(() -> service.deletePlaybook("p1"))
                 .isInstanceOf(ActionDockException.class);
     }
 
     @Test
     void normalSavesCannotCreateManagedAssets() {
-        PlaybookGroup group = service.saveGroup(new PlaybookGroup()
-                .setId("g1")
-                .setName("G1")
-                .setManaged(true));
         Playbook playbook = service.savePlaybook(new Playbook()
                 .setId("p1")
-                .setGroupId("g1")
                 .setName("P1")
                 .setManaged(true)
                 .setGuideMarkdown("guide"));
 
-        assertThat(group.isManaged()).isFalse();
         assertThat(playbook.isManaged()).isFalse();
     }
 
-    private static final class InMemoryPlaybookGroupRepository implements PlaybookGroupRepository {
-        private final Map<String, PlaybookGroup> items = new LinkedHashMap<>();
 
-        @Override
-        public PlaybookGroup save(PlaybookGroup group) {
-            items.put(group.getId(), group);
-            return group;
-        }
-
-        @Override
-        public Optional<PlaybookGroup> findById(String id) {
-            return Optional.ofNullable(items.get(id));
-        }
-
-        @Override
-        public List<PlaybookGroup> findAll() {
-            return new ArrayList<>(items.values());
-        }
-
-        @Override
-        public void deleteById(String id) {
-            items.remove(id);
-        }
-    }
 
     private static final class InMemoryPlaybookRepository implements PlaybookRepository {
         private final Map<String, Playbook> items = new LinkedHashMap<>();

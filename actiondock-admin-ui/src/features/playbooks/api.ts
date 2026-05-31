@@ -1,32 +1,7 @@
 import { JSON_HEADERS, request } from "../../shared/api/httpClient";
-import type { Playbook, PlaybookGroup } from "../../shared/types";
-
-export function listPlaybookGroups(): Promise<PlaybookGroup[]> {
-  return request<PlaybookGroup[]>("/api/playbook-groups");
-}
-
-export function createPlaybookGroup(payload: PlaybookGroup): Promise<PlaybookGroup> {
-  return request<PlaybookGroup>("/api/playbook-groups", {
-    method: "POST",
-    headers: JSON_HEADERS,
-    body: JSON.stringify(payload)
-  });
-}
-
-export function updatePlaybookGroup(id: string, payload: PlaybookGroup): Promise<PlaybookGroup> {
-  return request<PlaybookGroup>(`/api/playbook-groups/${encodeURIComponent(id)}`, {
-    method: "PUT",
-    headers: JSON_HEADERS,
-    body: JSON.stringify(payload)
-  });
-}
-
-export function deletePlaybookGroup(id: string): Promise<void> {
-  return request<void>(`/api/playbook-groups/${encodeURIComponent(id)}`, { method: "DELETE" });
-}
+import type { Playbook } from "../../shared/types";
 
 export function listPlaybooks(params: {
-  groupId?: string;
   repositoryId?: string;
   tag?: string;
   enabled?: boolean;
@@ -34,7 +9,6 @@ export function listPlaybooks(params: {
   keyword?: string;
 } = {}): Promise<Playbook[]> {
   const search = new URLSearchParams();
-  if (params.groupId) search.set("groupId", params.groupId);
   if (params.repositoryId) search.set("repositoryId", params.repositoryId);
   if (params.tag) search.set("tag", params.tag);
   if (params.enabled !== undefined) search.set("enabled", String(params.enabled));

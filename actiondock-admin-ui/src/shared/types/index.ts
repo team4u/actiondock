@@ -964,7 +964,6 @@ export interface CapabilityPackageReleaseFile {
   toolsets: RepositoryAiPackageToolsetFile[];
   agents: RepositoryAiPackageAgentFile[];
   scripts: RepositoryAiPackageScriptFile[];
-  playbookGroups: PlaybookGroup[];
   playbooks: Playbook[];
   externalDependencies: RepositoryAiPackageDependency[];
   configTemplatePath?: string;
@@ -1001,7 +1000,6 @@ export interface CapabilityPackagePublishPreviewRequest {
   agentIds?: string[];
   modelIds?: string[];
   toolsetIds?: string[];
-  playbookGroupIds?: string[];
   playbookIds?: string[];
 }
 
@@ -1028,7 +1026,6 @@ export interface CapabilityPackagePublishPreview {
   toolsetIds: string[];
   agentIds: string[];
   scriptIds: string[];
-  playbookGroupIds: string[];
   playbookIds: string[];
   configTemplate: RepositoryConfigTemplateItem[];
   scheduleTemplate: RepositoryScheduleTemplateItem[];
@@ -1207,10 +1204,7 @@ export interface RepositoryPlaybookDescriptor {
   owner?: string;
   tags: string[];
   riskLevel?: string;
-  groupId: string;
-  groupName?: string;
   playbookPath: string;
-  groupPath?: string;
   digest?: string;
   trusted: boolean;
   localState?: RepositoryLocalAssetState;
@@ -1219,7 +1213,6 @@ export interface RepositoryPlaybookDescriptor {
 export interface RepositoryPlaybookFile {
   schemaVersion: number;
   playbookId: string;
-  groupId: string;
   displayName: string;
   version: string;
   description?: string;
@@ -1236,20 +1229,9 @@ export interface RepositoryPlaybookFile {
   digest?: string;
 }
 
-export interface RepositoryPlaybookGroupFile {
-  schemaVersion: number;
-  groupId: string;
-  displayName: string;
-  description?: string;
-  tags: string[];
-  defaultRepositoryIds: string[];
-  enabled: boolean;
-}
-
 export interface RepositoryPlaybookDetail {
   descriptor: RepositoryPlaybookDescriptor;
   playbook: RepositoryPlaybookFile;
-  group: RepositoryPlaybookGroupFile;
 }
 
 export interface RepositoryPlaybookPublishRequest {
@@ -1581,18 +1563,7 @@ export interface ExecutionPresetUpsertRequest {
 
 export type PlaybookRiskLevel = "LOW" | "MEDIUM" | "HIGH";
 
-export interface PlaybookGroup {
-  id: string;
-  name: string;
-  description?: string;
-  tags: string[];
-  defaultRepositoryIds: string[];
-  enabled: boolean;
-  managed: boolean;
-  createdAt?: string;
-  updatedAt?: string;
-  playbookCount?: number;
-}
+
 
 export interface PlaybookKnowledgeRef {
   type: "NOTE" | "FILE";
@@ -1608,7 +1579,6 @@ export interface PlaybookScriptRef {
 
 export interface Playbook {
   id: string;
-  groupId: string;
   name: string;
   description?: string;
   tags: string[];

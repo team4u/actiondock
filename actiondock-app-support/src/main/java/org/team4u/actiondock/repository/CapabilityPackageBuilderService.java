@@ -2,15 +2,13 @@ package org.team4u.actiondock.repository;
 
 import org.team4u.actiondock.ai.api.AiAgentProfile;
 import org.team4u.actiondock.ai.api.AiAgentProfileRepository;
-import org.team4u.actiondock.domain.model.ExecutionPreset;
 import org.team4u.actiondock.domain.model.Playbook;
-import org.team4u.actiondock.domain.model.PlaybookGroup;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
+import org.team4u.actiondock.domain.model.ExecutionPreset;
 import org.team4u.actiondock.domain.model.ScriptSchedule;
 import org.team4u.actiondock.domain.port.ConfigValueRepository;
 import org.team4u.actiondock.domain.port.ExecutionPresetRepository;
-import org.team4u.actiondock.domain.port.PlaybookGroupRepository;
 import org.team4u.actiondock.domain.port.PlaybookRepository;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
@@ -44,7 +42,6 @@ class CapabilityPackageBuilderService {
     private final ExecutionPresetRepository executionPresetRepository;
     private final ConfigValueRepository configValueRepository;
     private final AiAgentProfileRepository aiAgentProfileRepository;
-    private final PlaybookGroupRepository playbookGroupRepository;
     private final PlaybookRepository playbookRepository;
     private final AiPackageDependencyCollector aiPackageDependencyCollector;
 
@@ -53,7 +50,6 @@ class CapabilityPackageBuilderService {
                                     ExecutionPresetRepository executionPresetRepository,
                                     ConfigValueRepository configValueRepository,
                                     AiAgentProfileRepository aiAgentProfileRepository,
-                                    PlaybookGroupRepository playbookGroupRepository,
                                     PlaybookRepository playbookRepository,
                                     AiPackageDependencyCollector aiPackageDependencyCollector) {
         this.scriptRepository = scriptRepository;
@@ -61,7 +57,6 @@ class CapabilityPackageBuilderService {
         this.executionPresetRepository = executionPresetRepository;
         this.configValueRepository = configValueRepository;
         this.aiAgentProfileRepository = aiAgentProfileRepository;
-        this.playbookGroupRepository = playbookGroupRepository;
         this.playbookRepository = playbookRepository;
         this.aiPackageDependencyCollector = aiPackageDependencyCollector;
     }
@@ -119,7 +114,6 @@ class CapabilityPackageBuilderService {
                 request.agentIds(),
                 request.modelIds(),
                 request.toolsetIds(),
-                request.playbookGroupIds(),
                 request.playbookIds()
         );
     }
@@ -140,7 +134,6 @@ class CapabilityPackageBuilderService {
                                                                List<String> agentIds,
                                                                List<String> modelIds,
                                                                List<String> toolsetIds,
-                                                               List<String> playbookGroupIds,
                                                                List<String> playbookIds) {
         String packageId = NormalizeUtils.normalize(packageIdValue, "packageId 不能为空");
         String version = NormalizeUtils.normalize(versionValue, SkillFileUtils.ERR_VERSION_REQUIRED);
@@ -165,7 +158,7 @@ class CapabilityPackageBuilderService {
         AiPackageBundle bundle = builder.build();
         return buildDraftFromBundle(
                 packageId, version, owner, displayNameValue, descriptionValue, releaseNotes,
-                tags, riskLevel, sourceType, entry, scriptIds, agentIds, playbookGroupIds, playbookIds, bundle
+                tags, riskLevel, sourceType, entry, scriptIds, agentIds, playbookIds, bundle
         );
     }
 
@@ -181,14 +174,12 @@ class CapabilityPackageBuilderService {
                                                         CapabilityPackageEntrySelection entry,
                                                         List<String> scriptIds,
                                                         List<String> agentIds,
-                                                        List<String> playbookGroupIds,
                                                         List<String> playbookIds,
                                                         AiPackageBundle bundle) {
         List<ConfigTemplateItem> configTemplate = buildAiPackageConfigTemplate(bundle);
         List<ScheduleTemplateItem> scheduleTemplate = buildCapabilityPackageScheduleTemplate(bundle);
         List<CapabilityPackagePresetTemplate> presetTemplate = buildCapabilityPackagePresetTemplate(bundle);
         List<CapabilityPackageEntryFile> entries = buildCapabilityPackageEntries(entry, bundle, scriptIds, agentIds);
-        List<PlaybookGroup> playbookGroups = collectPlaybookGroups(playbookGroupIds, playbookIds);
         List<Playbook> playbooks = collectPlaybooks(playbookIds);
         String displayName = NormalizeUtils.normalizeOrDefault(displayNameValue, resolveCapabilityPackageDisplayName(entry, bundle));
         String description = NormalizeUtils.normalizeNullable(descriptionValue == null ? resolveCapabilityPackageDescription(entry, bundle) : descriptionValue);
@@ -204,29 +195,11 @@ class CapabilityPackageBuilderService {
                 sourceType,
                 entries,
                 bundle,
-                playbookGroups,
                 playbooks,
                 configTemplate,
                 scheduleTemplate,
                 presetTemplate
         );
-    }
-
-    private List<PlaybookGroup> collectPlaybookGroups(List<String> playbookGroupIds, List<String> playbookIds) {
-        LinkedHashMap<String, PlaybookGroup> groups = new LinkedHashMap<>();
-        for (String groupId : NormalizeUtils.nullSafeList(playbookGroupIds)) {
-            PlaybookGroup group = playbookGroupRepository.findById(NormalizeUtils.normalize(groupId, "playbookGroupId 不能为空"))
-                    .orElseThrow(() -> new IllegalArgumentException("任务分组不存在: " + groupId));
-            groups.put(group.getId(), group);
-        }
-        for (String playbookId : NormalizeUtils.nullSafeList(playbookIds)) {
-            Playbook playbook = playbookRepository.findById(NormalizeUtils.normalize(playbookId, "playbookId 不能为空"))
-                    .orElseThrow(() -> new IllegalArgumentException("任务手册不存在: " + playbookId));
-            PlaybookGroup group = playbookGroupRepository.findById(playbook.getGroupId())
-                    .orElseThrow(() -> new IllegalArgumentException("任务分组不存在: " + playbook.getGroupId()));
-            groups.putIfAbsent(group.getId(), group);
-        }
-        return new ArrayList<>(groups.values());
     }
 
     private List<Playbook> collectPlaybooks(List<String> playbookIds) {

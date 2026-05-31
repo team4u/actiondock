@@ -23,7 +23,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { listAiAgents, listAiModels, listAiToolsets } from "../../ai/api";
-import { listPlaybookGroups, listPlaybooks } from "../../playbooks/api";
+import { listPlaybooks } from "../../playbooks/api";
 import { getCapabilityPackage, listRepositories, previewCapabilityPackagePublish, publishCapabilityPackage } from "../../resources/api";
 import { listScripts } from "../../scripts/api";
 import { MarkdownDescription } from "../../../components/common/MarkdownDescription";
@@ -44,7 +44,6 @@ import type {
   CapabilityPackagePublishRequest,
   CapabilityPackageSource,
   Playbook,
-  PlaybookGroup,
   RepositoryAiPackageDependency,
   RepositoryDefinition,
   ScriptDefinition
@@ -70,7 +69,6 @@ interface PublishFormValues {
   agentIds: string[];
   modelIds: string[];
   toolsetIds: string[];
-  playbookGroupIds: string[];
   playbookIds: string[];
 }
 
@@ -159,7 +157,6 @@ export function CapabilityPackagePublishPage() {
   const [agents, setAgents] = useState<AiAgentProfile[]>([]);
   const [models, setModels] = useState<AiModelProfile[]>([]);
   const [toolsets, setToolsets] = useState<AiToolset[]>([]);
-  const [playbookGroups, setPlaybookGroups] = useState<PlaybookGroup[]>([]);
   const [playbooks, setPlaybooks] = useState<Playbook[]>([]);
   const [existingPackage, setExistingPackage] = useState<CapabilityPackageDetail | null>(null);
   const [preview, setPreview] = useState<CapabilityPackagePublishPreview | null>(null);
@@ -173,13 +170,12 @@ export function CapabilityPackagePublishPage() {
     const load = async () => {
       setLoading(true);
       try {
-        const [repositoryData, scriptData, agentData, modelData, toolsetData, playbookGroupData, playbookData] = await Promise.all([
+        const [repositoryData, scriptData, agentData, modelData, toolsetData, playbookData] = await Promise.all([
           listRepositories(),
           listScripts(),
           listAiAgents(),
           listAiModels(),
           listAiToolsets(),
-          listPlaybookGroups(),
           listPlaybooks()
         ]);
         setRepositories(getPublishableRepositories(repositoryData));
@@ -187,7 +183,6 @@ export function CapabilityPackagePublishPage() {
         setAgents(agentData);
         setModels(modelData);
         setToolsets(toolsetData);
-        setPlaybookGroups(playbookGroupData);
         setPlaybooks(playbookData);
       } catch (error) {
         messageApi.error(getErrorMessage(error, "加载发布元数据失败"));
@@ -236,7 +231,6 @@ export function CapabilityPackagePublishPage() {
       agentIds: selectedSource === "AGENT" && sourceIdFromQuery ? [sourceIdFromQuery] : [],
       modelIds: [],
       toolsetIds: [],
-      playbookGroupIds: [],
       playbookIds: []
     });
     initializedRef.current = true;
@@ -283,7 +277,6 @@ export function CapabilityPackagePublishPage() {
           agentIds: detail.releaseFile.agents.map((item) => item.id),
           modelIds: detail.releaseFile.models.map((item) => item.id),
           toolsetIds: detail.releaseFile.toolsets.map((item) => item.id),
-          playbookGroupIds: detail.releaseFile.playbookGroups?.map((item) => item.id) ?? [],
           playbookIds: detail.releaseFile.playbooks?.map((item) => item.id) ?? []
         });
       } catch (error) {
@@ -316,10 +309,6 @@ export function CapabilityPackagePublishPage() {
   const toolsetOptions = useMemo(
     () => toolsets.map((item) => ({ value: item.id, label: `${item.name} (${item.id})` })),
     [toolsets]
-  );
-  const playbookGroupOptions = useMemo(
-    () => playbookGroups.map((item) => ({ value: item.id, label: `${item.name} (${item.id})` })),
-    [playbookGroups]
   );
   const playbookOptions = useMemo(
     () => playbooks.map((item) => ({ value: item.id, label: `${item.name} (${item.id})` })),
@@ -371,7 +360,6 @@ export function CapabilityPackagePublishPage() {
       agentIds,
       modelIds: dedupe(values.modelIds ?? []),
       toolsetIds: dedupe(values.toolsetIds ?? []),
-      playbookGroupIds: dedupe(values.playbookGroupIds ?? []),
       playbookIds: dedupe(values.playbookIds ?? [])
     };
 
@@ -580,9 +568,6 @@ export function CapabilityPackagePublishPage() {
             <Form.Item name="modelIds" label="包含模型 Profile">
               <Select mode="multiple" showSearch optionFilterProp="label" options={modelOptions} />
             </Form.Item>
-            <Form.Item name="playbookGroupIds" label="包含任务分组">
-              <Select mode="multiple" showSearch optionFilterProp="label" options={playbookGroupOptions} />
-            </Form.Item>
             <Form.Item name="playbookIds" label="包含任务手册">
               <Select mode="multiple" showSearch optionFilterProp="label" options={playbookOptions} />
             </Form.Item>
@@ -613,7 +598,6 @@ export function CapabilityPackagePublishPage() {
               <Descriptions.Item label="Agent">{preview.agentIds.length}</Descriptions.Item>
               <Descriptions.Item label="Toolset">{preview.toolsetIds.length}</Descriptions.Item>
               <Descriptions.Item label="模型">{preview.modelIds.length}</Descriptions.Item>
-              <Descriptions.Item label="任务分组">{preview.playbookGroupIds.length}</Descriptions.Item>
               <Descriptions.Item label="任务手册">{preview.playbookIds.length}</Descriptions.Item>
               <Descriptions.Item label="配置模板">{preview.configTemplate.length}</Descriptions.Item>
               <Descriptions.Item label="定时任务">{preview.scheduleTemplate.length}</Descriptions.Item>
@@ -704,7 +688,6 @@ export function CapabilityPackagePublishPage() {
                   <Descriptions.Item label="Agent 闭包">{preview.agentIds.join(", ") || "-"}</Descriptions.Item>
                   <Descriptions.Item label="Toolset 闭包">{preview.toolsetIds.join(", ") || "-"}</Descriptions.Item>
                   <Descriptions.Item label="模型闭包">{preview.modelIds.join(", ") || "-"}</Descriptions.Item>
-                  <Descriptions.Item label="任务分组">{preview.playbookGroupIds.join(", ") || "-"}</Descriptions.Item>
                   <Descriptions.Item label="任务手册">{preview.playbookIds.join(", ") || "-"}</Descriptions.Item>
                 </Descriptions>
               </Space>

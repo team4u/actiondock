@@ -783,7 +783,6 @@ export function DiscoveryDetailDrawers({
                 { key: "repo", label: "来源仓库", children: playbookDetail.descriptor.repositoryId },
                 { key: "version", label: "远端版本", children: playbookDetail.descriptor.version },
                 { key: "installedVersion", label: "本机版本", children: playbookDetail.descriptor.localState?.version || "-" },
-                { key: "group", label: "任务分组", children: <Text code>{playbookDetail.group.groupId}</Text> },
                 { key: "owner", label: "维护人", children: playbookDetail.descriptor.owner || "-" },
                 { key: "risk", label: "风险等级", children: <RiskLevelTag level={playbookDetail.descriptor.riskLevel} /> },
                 { key: "trust", label: "仓库信任", children: <TrustLevelTag level={playbookDetail.descriptor.trusted ? "TRUSTED" : "UNTRUSTED"} /> }

@@ -3,11 +3,9 @@ package org.team4u.actiondock.application;
 import org.team4u.actiondock.domain.exception.ActionDockErrorCodes;
 import org.team4u.actiondock.domain.exception.ActionDockException;
 import org.team4u.actiondock.domain.model.Playbook;
-import org.team4u.actiondock.domain.model.PlaybookGroup;
 import org.team4u.actiondock.domain.model.PlaybookKnowledgeRef;
 import org.team4u.actiondock.domain.model.PlaybookKnowledgeRefType;
 import org.team4u.actiondock.domain.model.PlaybookScriptRef;
-import org.team4u.actiondock.domain.port.PlaybookGroupRepository;
 import org.team4u.actiondock.domain.port.PlaybookRepository;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 
@@ -18,49 +16,16 @@ import java.util.Map;
 import java.util.Objects;
 
 public class PlaybookApplicationService {
-    private final PlaybookGroupRepository groupRepository;
     private final PlaybookRepository playbookRepository;
     private final ScriptRepository scriptRepository;
 
-    public PlaybookApplicationService(PlaybookGroupRepository groupRepository,
-                                      PlaybookRepository playbookRepository,
+    public PlaybookApplicationService(PlaybookRepository playbookRepository,
                                       ScriptRepository scriptRepository) {
-        this.groupRepository = groupRepository;
         this.playbookRepository = playbookRepository;
         this.scriptRepository = scriptRepository;
     }
 
-    public List<PlaybookGroup> listGroups() {
-        return groupRepository.findAll();
-    }
-
-    public PlaybookGroup getGroup(String id) {
-        return groupRepository.findById(id).orElseThrow(() -> ActionDockException.notFound(
-                ActionDockErrorCodes.PLAYBOOK_GROUP_NOT_FOUND,
-                "任务分组不存在: " + id,
-                Map.of("groupId", id)
-        ));
-    }
-
-    public PlaybookGroup saveGroup(PlaybookGroup group) {
-        return saveGroupInternal(group, false);
-    }
-
-    public void deleteGroup(String id) {
-        PlaybookGroup group = getGroup(id);
-        ensureGroupEditable(group);
-        if (playbookRepository.findAll().stream().anyMatch(playbook -> id.equals(playbook.getGroupId()))) {
-            throw ActionDockException.conflict(
-                    ActionDockErrorCodes.PLAYBOOK_GROUP_IN_USE,
-                    "任务分组仍被任务手册引用: " + id,
-                    Map.of("groupId", id)
-            );
-        }
-        groupRepository.deleteById(id);
-    }
-
-    public List<Playbook> listPlaybooks(String groupId,
-                                        String repositoryId,
+    public List<Playbook> listPlaybooks(String repositoryId,
                                         String tag,
                                         Boolean enabled,
                                         Boolean managed,
@@ -68,7 +33,6 @@ public class PlaybookApplicationService {
         String normalizedKeyword = normalizeLower(keyword);
         String normalizedTag = normalizeLower(tag);
         return playbookRepository.findAll().stream()
-                .filter(playbook -> groupId == null || groupId.equals(playbook.getGroupId()))
                 .filter(playbook -> enabled == null || enabled == playbook.isEnabled())
                 .filter(playbook -> managed == null || managed == playbook.isManaged())
                 .filter(playbook -> repositoryId == null || playbook.getRepositoryIds().isEmpty() || playbook.getRepositoryIds().contains(repositoryId))
@@ -93,10 +57,6 @@ public class PlaybookApplicationService {
         return savePlaybook(playbook.setManaged(true), true);
     }
 
-    public PlaybookGroup saveManagedGroup(PlaybookGroup group) {
-        return saveGroupInternal(group.setManaged(true), true);
-    }
-
     private Playbook savePlaybook(Playbook playbook, boolean allowManagedWrite) {
         LocalDateTime now = LocalDateTime.now();
         Playbook existing = playbook.getId() == null ? null : playbookRepository.findById(playbook.getId()).orElse(null);
@@ -109,14 +69,6 @@ public class PlaybookApplicationService {
             playbook.setManaged(allowManagedWrite && playbook.isManaged());
         }
         playbook.setId(ApplicationServiceSupport.normalize(playbook.getId(), "playbookId 不能为空"));
-        playbook.setGroupId(ApplicationServiceSupport.normalize(playbook.getGroupId(), "groupId 不能为空"));
-        if (groupRepository.findById(playbook.getGroupId()).isEmpty()) {
-            throw ActionDockException.notFound(
-                    ActionDockErrorCodes.PLAYBOOK_GROUP_NOT_FOUND,
-                    "任务分组不存在: " + playbook.getGroupId(),
-                    Map.of("groupId", playbook.getGroupId())
-            );
-        }
         playbook.setName(ApplicationServiceSupport.normalize(playbook.getName(), "任务手册名称不能为空"));
         playbook.setDescription(ApplicationServiceSupport.blankToNull(playbook.getDescription()));
         playbook.setTags(normalizeDistinct(playbook.getTags()));
@@ -127,26 +79,6 @@ public class PlaybookApplicationService {
         playbook.setStopConditions(normalizeDistinct(playbook.getStopConditions()));
         playbook.setUpdatedAt(now);
         return playbookRepository.save(playbook);
-    }
-
-    private PlaybookGroup saveGroupInternal(PlaybookGroup group, boolean allowManagedWrite) {
-        LocalDateTime now = LocalDateTime.now();
-        PlaybookGroup existing = group.getId() == null ? null : groupRepository.findById(group.getId()).orElse(null);
-        if (existing != null) {
-            ensureGroupEditable(existing, allowManagedWrite);
-            group.setCreatedAt(existing.getCreatedAt());
-            group.setManaged(allowManagedWrite ? group.isManaged() : existing.isManaged());
-        } else {
-            group.setCreatedAt(now);
-            group.setManaged(allowManagedWrite && group.isManaged());
-        }
-        group.setId(ApplicationServiceSupport.normalize(group.getId(), "groupId 不能为空"));
-        group.setName(ApplicationServiceSupport.normalize(group.getName(), "分组名称不能为空"));
-        group.setDescription(ApplicationServiceSupport.blankToNull(group.getDescription()));
-        group.setTags(normalizeDistinct(group.getTags()));
-        group.setDefaultRepositoryIds(normalizeDistinct(group.getDefaultRepositoryIds()));
-        group.setUpdatedAt(now);
-        return groupRepository.save(group);
     }
 
     public Playbook updatePlaybook(String id, Playbook playbook) {
@@ -163,12 +95,6 @@ public class PlaybookApplicationService {
     public void deleteManagedPlaybook(String id) {
         if (playbookRepository.findById(id).isPresent()) {
             playbookRepository.deleteById(id);
-        }
-    }
-
-    public void deleteManagedGroup(String id) {
-        if (groupRepository.findById(id).isPresent()) {
-            groupRepository.deleteById(id);
         }
     }
 
@@ -229,20 +155,6 @@ public class PlaybookApplicationService {
                 .filter(Objects::nonNull)
                 .distinct()
                 .toList();
-    }
-
-    private void ensureGroupEditable(PlaybookGroup group) {
-        ensureGroupEditable(group, false);
-    }
-
-    private void ensureGroupEditable(PlaybookGroup group, boolean allowManagedWrite) {
-        if (group.isManaged() && !allowManagedWrite) {
-            throw ActionDockException.conflict(
-                    ActionDockErrorCodes.PLAYBOOK_GROUP_NOT_EDITABLE,
-                    "能力包安装的任务分组为只读",
-                    Map.of("groupId", group.getId())
-            );
-        }
     }
 
     private void ensurePlaybookEditable(Playbook playbook, boolean allowManagedWrite) {

@@ -8,7 +8,6 @@ import { CodeEditor } from "../../../components/common/CodeEditor";
 import { ApiError } from "../../../shared/api/httpClient";
 import type {
   Playbook,
-  PlaybookGroup,
   PlaybookKnowledgeRef,
   RepositoryDefinition,
   RepositoryPlaybookPublishRequest,
@@ -28,14 +27,13 @@ import {
   syncRepository
 } from "../../resources/api";
 import { listScripts } from "../../scripts/api";
-import { createPlaybook, deletePlaybook, listPlaybookGroups, listPlaybooks, updatePlaybook } from "../api";
+import { createPlaybook, deletePlaybook, listPlaybooks, updatePlaybook } from "../api";
 
 const { Text } = Typography;
 const { useBreakpoint } = Grid;
 
 interface PlaybookFormValues {
   id: string;
-  groupId: string;
   name: string;
   description?: string;
   tagsText?: string;
@@ -141,7 +139,6 @@ export function PlaybookPage() {
   const isCompactFilePicker = !screens.md;
   const defaultOwner = useDefaultOwner();
   const [items, setItems] = useState<Playbook[]>([]);
-  const [groups, setGroups] = useState<PlaybookGroup[]>([]);
   const [repositories, setRepositories] = useState<RepositoryDefinition[]>([]);
   const [publishRepositories, setPublishRepositories] = useState<RepositoryDefinition[]>([]);
   const [scripts, setScripts] = useState<ScriptDefinition[]>([]);
@@ -168,15 +165,13 @@ export function PlaybookPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const [playbookData, groupData, repositoryData, publishRepositoryData, scriptData] = await Promise.all([
+      const [playbookData, repositoryData, publishRepositoryData, scriptData] = await Promise.all([
         listPlaybooks(filters),
-        listPlaybookGroups(),
         listRepositories("PROJECT"),
         listRepositories(),
         listScripts()
       ]);
       setItems(playbookData);
-      setGroups(groupData);
       setRepositories(repositoryData);
       setPublishRepositories(publishRepositoryData);
       setScripts(scriptData);
@@ -189,9 +184,7 @@ export function PlaybookPage() {
 
   useEffect(() => {
     void load();
-  }, [filters.groupId, filters.repositoryId, filters.tag, filters.managed, filters.keyword]);
-
-  const groupOptions = useMemo(() => groups.map((item) => ({ value: item.id, label: `${item.name} (${item.id})` })), [groups]);
+  }, [filters.repositoryId, filters.tag, filters.managed, filters.keyword]);
   const repositoryOptions = useMemo(() => repositories.map((item) => ({ value: item.id, label: `${item.name} (${item.id})` })), [repositories]);
   const repositoryNameMap = useMemo(() => new Map(repositories.map((item) => [item.id, item.name])), [repositories]);
   const publishableRepositories = useMemo(() => getPublishableRepositories(publishRepositories), [publishRepositories]);
@@ -240,7 +233,6 @@ export function PlaybookPage() {
     setKnowledgeEditor(toKnowledgeEditorState(repositoryIds, item?.knowledgeRefs ?? []));
     form.setFieldsValue({
       id: item?.id ?? "",
-      groupId: item?.groupId ?? groups[0]?.id,
       name: item?.name ?? "",
       description: item?.description,
       tagsText: item?.tags?.join(", "),
@@ -275,7 +267,6 @@ export function PlaybookPage() {
     const values = await form.validateFields();
     const payload: Playbook = {
       id: values.id.trim(),
-      groupId: values.groupId,
       name: values.name.trim(),
       description: values.description?.trim() || undefined,
       tags: splitText(values.tagsText),
@@ -535,7 +526,6 @@ export function PlaybookPage() {
       />
       <Space wrap>
         <Input.Search allowClear placeholder="搜索任务手册" style={{ width: 260 }} onSearch={(keyword) => setFilters((value) => ({ ...value, keyword }))} onChange={(event) => setFilters((value) => ({ ...value, keyword: event.target.value }))} />
-        <Select allowClear placeholder="Group" style={{ width: 220 }} options={groupOptions} onChange={(groupId) => setFilters((value) => ({ ...value, groupId }))} />
         <Select allowClear placeholder="Repository" style={{ width: 220 }} options={repositoryOptions} onChange={(repositoryId) => setFilters((value) => ({ ...value, repositoryId }))} />
         <Select allowClear placeholder="Tag" style={{ width: 160 }} options={tags.map((item) => ({ value: item, label: item }))} onChange={(tag) => setFilters((value) => ({ ...value, tag }))} />
         <Select allowClear placeholder="Managed" style={{ width: 140 }} options={[{ value: true, label: "托管" }]} onChange={(managed) => setFilters((value) => ({ ...value, managed }))} />
@@ -547,7 +537,6 @@ export function PlaybookPage() {
         columns={[
           { title: "ID", dataIndex: "id", width: 220 },
           { title: "名称", dataIndex: "name" },
-          { title: "Group", dataIndex: "groupId", width: 180 },
           { title: "风险", dataIndex: "riskLevel", width: 100, render: (value?: string) => value ? <Tag color={value === "HIGH" ? "red" : value === "MEDIUM" ? "orange" : "green"}>{value}</Tag> : "-" },
           { title: "Tag", dataIndex: "tags", render: (value: string[]) => <Space wrap>{value?.map((item) => <Tag key={item}>{item}</Tag>)}</Space> },
           { title: "状态", key: "status", width: 150, render: (_, item) => <Space>{item.enabled ? <Tag color="green">启用</Tag> : <Tag>停用</Tag>}{item.managed ? <Tag color="blue">托管</Tag> : null}</Space> },
@@ -593,7 +582,6 @@ export function PlaybookPage() {
                   children: (
                     <>
                       <Form.Item name="id" label="ID" rules={[{ required: true, message: "请输入 ID" }]}><Input disabled={Boolean(editing)} /></Form.Item>
-                      <Form.Item name="groupId" label="任务分组" rules={[{ required: true, message: "请选择任务分组" }]}><Select options={groupOptions} /></Form.Item>
                       <Form.Item name="name" label="名称" rules={[{ required: true, message: "请输入名称" }]}><Input /></Form.Item>
                       <Form.Item name="description" label="描述"><Input.TextArea rows={3} /></Form.Item>
                       <Form.Item name="tagsText" label="Tags"><Input placeholder="逗号分隔" /></Form.Item>

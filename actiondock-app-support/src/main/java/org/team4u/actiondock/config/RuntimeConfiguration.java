@@ -15,7 +15,6 @@ import org.team4u.actiondock.domain.port.ApiAccessTokenRepository;
 import org.team4u.actiondock.domain.port.ConfigValueRepository;
 import org.team4u.actiondock.domain.port.ExecutionPresetRepository;
 import org.team4u.actiondock.domain.port.ExecutionRepository;
-import org.team4u.actiondock.domain.port.PlaybookGroupRepository;
 import org.team4u.actiondock.domain.port.PlaybookRepository;
 import org.team4u.actiondock.domain.port.SharedStateRepository;
 import org.team4u.actiondock.domain.port.ScriptEngine;
@@ -88,9 +87,8 @@ public class RuntimeConfiguration {
     }
 
     @Bean
-    public PlaybookApplicationService playbookApplicationService(PlaybookGroupRepository playbookGroupRepository,
-                                                                 PlaybookRepository playbookRepository,
+    public PlaybookApplicationService playbookApplicationService(PlaybookRepository playbookRepository,
                                                                  ScriptRepository scriptRepository) {
-        return new PlaybookApplicationService(playbookGroupRepository, playbookRepository, scriptRepository);
+        return new PlaybookApplicationService(playbookRepository, scriptRepository);
     }
 }

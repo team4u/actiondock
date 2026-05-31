@@ -16,7 +16,6 @@ import org.team4u.actiondock.domain.port.ConfigValueRepository;
 import org.team4u.actiondock.domain.port.ExecutionPresetRepository;
 import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.domain.port.ManagedSkillRepository;
-import org.team4u.actiondock.domain.port.PlaybookGroupRepository;
 import org.team4u.actiondock.domain.port.PlaybookRepository;
 import org.team4u.actiondock.domain.port.RepositoryDefinitionRepository;
 import org.team4u.actiondock.domain.port.RepositoryLocalAssetRepository;
@@ -43,7 +42,6 @@ class InstalledResourceServiceTest {
     private final ExecutionPresetRepository executionPresetRepository = mock(ExecutionPresetRepository.class);
     private final ConfigValueRepository configValueRepository = mock(ConfigValueRepository.class);
     private final WebhookRepository webhookRepository = mock(WebhookRepository.class);
-    private final PlaybookGroupRepository playbookGroupRepository = mock(PlaybookGroupRepository.class);
     private final PlaybookRepository playbookRepository = mock(PlaybookRepository.class);
     private final RepositoryLocalAssetRepository localAssetRepository = mock(RepositoryLocalAssetRepository.class);
     private final org.team4u.actiondock.ai.api.AiModelProfileRepository aiModelProfileRepository =
@@ -162,7 +160,6 @@ class InstalledResourceServiceTest {
                         aiModelProfileRepository,
                         aiAgentProfileRepository,
                         aiToolsetRepository,
-                        playbookGroupRepository,
                         playbookRepository
                 ),
                 new RepositoryCatalogService.ApplicationServices(

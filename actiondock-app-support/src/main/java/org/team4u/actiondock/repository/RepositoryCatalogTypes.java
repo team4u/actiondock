@@ -6,7 +6,6 @@ import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
 import org.team4u.actiondock.domain.exception.RepositoryPluginConflict;
 import org.team4u.actiondock.domain.model.AiDependency;
 import org.team4u.actiondock.domain.model.Playbook;
-import org.team4u.actiondock.domain.model.PlaybookGroup;
 import org.team4u.actiondock.domain.model.PlaybookKnowledgeRef;
 import org.team4u.actiondock.domain.model.PlaybookScriptRef;
 import org.team4u.actiondock.domain.model.WebhookTransport;
@@ -68,12 +67,8 @@ public final class RepositoryCatalogTypes {
     public static final String PLAYBOOKS_DIR = "playbooks";
     /** Playbook 描述文件名。 */
     public static final String PLAYBOOK_DESCRIPTOR_FILE = "playbook.json";
-    /** Playbook Group 子目录名称。 */
-    public static final String PLAYBOOK_GROUPS_DIR = "playbook-groups";
-    /** Playbook Group 描述文件名。 */
-    public static final String PLAYBOOK_GROUP_DESCRIPTOR_FILE = "group.json";
     /** 仓库索引中的所有分节名称。 */
-    public static final List<String> REPO_INDEX_SECTIONS = List.of(SCRIPTS_DIR, WEBHOOKS_DIR, PLUGINS_DIR, CAPABILITY_PACKAGES_DIR, SKILLS_DIR, KNOWLEDGE_DIR, PLAYBOOKS_DIR, PLAYBOOK_GROUPS_DIR);
+    public static final List<String> REPO_INDEX_SECTIONS = List.of(SCRIPTS_DIR, WEBHOOKS_DIR, PLUGINS_DIR, CAPABILITY_PACKAGES_DIR, SKILLS_DIR, KNOWLEDGE_DIR, PLAYBOOKS_DIR);
     /** 默认的仓库索引/文件 schema 版本号。由 {@link RepositoryIndexUtils} 维护。 */
 
     /** 仓库类型：Git 仓库。 */
@@ -281,10 +276,7 @@ public final class RepositoryCatalogTypes {
             String owner,
             List<String> tags,
             String riskLevel,
-            String groupId,
-            String groupName,
             String playbookPath,
-            String groupPath,
             String digest,
             boolean trusted,
             RepositoryLocalAssetState localState
@@ -292,16 +284,15 @@ public final class RepositoryCatalogTypes {
         public RepositoryPlaybookDescriptor withLocalState(RepositoryLocalAssetState localState) {
             return new RepositoryPlaybookDescriptor(
                     repositoryId, playbookId, displayName, version,
-                    description, releaseNotes, owner, tags, riskLevel, groupId, groupName,
-                    playbookPath, groupPath, digest, trusted, localState
+                    description, releaseNotes, owner, tags, riskLevel,
+                    playbookPath, digest, trusted, localState
             );
         }
     }
 
     public record RepositoryPlaybookDetail(
             RepositoryPlaybookDescriptor descriptor,
-            PlaybookFile playbook,
-            PlaybookGroupFile group
+            PlaybookFile playbook
     ) {
     }
 
@@ -460,7 +451,6 @@ public final class RepositoryCatalogTypes {
             List<String> agentIds,
             List<String> modelIds,
             List<String> toolsetIds,
-            List<String> playbookGroupIds,
             List<String> playbookIds
     ) {
     }
@@ -473,7 +463,6 @@ public final class RepositoryCatalogTypes {
             List<String> toolsetIds,
             List<String> agentIds,
             List<String> scriptIds,
-            List<String> playbookGroupIds,
             List<String> playbookIds,
             List<ConfigTemplateItem> configTemplate,
             List<ScheduleTemplateItem> scheduleTemplate,
@@ -658,15 +647,14 @@ public final class RepositoryCatalogTypes {
                                       List<CapabilityPackageIndexEntry> packages,
                                       List<RepositorySkillIndexEntry> skills,
                                       List<RepositoryKnowledgeIndexEntry> knowledge,
-                                      List<RepositoryPlaybookIndexEntry> playbooks,
-                                      List<RepositoryPlaybookGroupIndexEntry> playbookGroups) {
+                                      List<RepositoryPlaybookIndexEntry> playbooks) {
         public RepositoryIndexFile(int repositoryVersion,
                                    String name,
                                    String description,
                                    List<RepositoryIndexEntry> scripts,
                                    List<RepositoryPluginIndexEntry> plugins,
                                    List<CapabilityPackageIndexEntry> packages) {
-            this(repositoryVersion, name, description, scripts, List.of(), plugins, packages, List.of(), List.of(), List.of(), List.of());
+            this(repositoryVersion, name, description, scripts, List.of(), plugins, packages, List.of(), List.of(), List.of());
         }
 
         public List<RepositoryIndexEntry> safeScripts() {
@@ -696,10 +684,6 @@ public final class RepositoryCatalogTypes {
         public List<RepositoryPlaybookIndexEntry> safePlaybooks() {
             return playbooks == null ? List.of() : playbooks;
         }
-
-        public List<RepositoryPlaybookGroupIndexEntry> safePlaybookGroups() {
-            return playbookGroups == null ? List.of() : playbookGroups;
-        }
     }
 
     public record RepositoryIndexEntry(String id,
@@ -724,14 +708,7 @@ public final class RepositoryCatalogTypes {
                                                String version,
                                                String description,
                                                String releaseNotes,
-                                               String playbookPath,
-                                               String groupId) {
-    }
-
-    public record RepositoryPlaybookGroupIndexEntry(String id,
-                                                    String name,
-                                                    String description,
-                                                    String groupPath) {
+                                               String playbookPath) {
     }
 
     public record RepositoryPluginIndexEntry(String id,
@@ -894,7 +871,6 @@ public final class RepositoryCatalogTypes {
                                                List<AiPackageToolsetFile> toolsets,
                                                List<AiPackageAgentFile> agents,
                                                List<AiPackageScriptFile> scripts,
-                                               List<PlaybookGroup> playbookGroups,
                                                List<Playbook> playbooks,
                                                List<RepositoryAiPackageDependency> externalDependencies,
                                                String configTemplatePath,
@@ -919,7 +895,6 @@ public final class RepositoryCatalogTypes {
                                           CapabilityPackageSource source,
                                           List<CapabilityPackageEntryFile> entries,
                                           AiPackageBundle bundle,
-                                          List<PlaybookGroup> playbookGroups,
                                           List<Playbook> playbooks,
                                           List<ConfigTemplateItem> configTemplate,
                                           List<ScheduleTemplateItem> scheduleTemplate,
@@ -966,7 +941,6 @@ public final class RepositoryCatalogTypes {
 
     public record PlaybookFile(int schemaVersion,
                                String playbookId,
-                               String groupId,
                                String displayName,
                                String version,
                                String description,
@@ -981,15 +955,6 @@ public final class RepositoryCatalogTypes {
                                List<String> stopConditions,
                                boolean enabled,
                                String digest) {
-    }
-
-    public record PlaybookGroupFile(int schemaVersion,
-                                    String groupId,
-                                    String displayName,
-                                    String description,
-                                    List<String> tags,
-                                    List<String> defaultRepositoryIds,
-                                    boolean enabled) {
     }
 
     public record PluginFile(int pluginFileVersion,

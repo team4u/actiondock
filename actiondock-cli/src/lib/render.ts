@@ -14,7 +14,6 @@ import type {
   PluginView,
   Playbook,
   PlaybookListItemSummary,
-  PlaybookGroup,
   RepositoryDefinition,
   ProjectRepositoryResolution,
   RepositoryWebhookDescriptor,
@@ -247,32 +246,6 @@ export function renderExecutionPresetDetail(item: ExecutionPresetView): string {
   return lines.join("\n");
 }
 
-export function renderPlaybookGroupList(items: PlaybookGroup[]): string {
-  if (items.length === 0) {
-    return "没有任务分组。";
-  }
-  return items.map((item) => {
-    const name = item.name ? ` ${item.name}` : "";
-    const count = item.playbookCount === undefined ? "" : ` playbooks=${item.playbookCount}`;
-    const managed = item.managed ? " managed" : "";
-    const enabled = item.enabled === false ? " disabled" : " enabled";
-    return `${item.id}${name}${enabled}${managed}${count}`;
-  }).join("\n");
-}
-
-export function renderPlaybookGroupDetail(item: PlaybookGroup): string {
-  const lines = [
-    `PlaybookGroup: ${item.id}`,
-    `Name: ${item.name}`,
-    `Enabled: ${item.enabled === false ? "no" : "yes"}`,
-    `Managed: ${item.managed ? "yes" : "no"}`
-  ];
-  if (item.description) lines.push(`Description: ${item.description}`);
-  if (item.tags?.length) lines.push(`Tags: ${item.tags.join(", ")}`);
-  if (item.defaultRepositoryIds?.length) lines.push(`DefaultRepositories: ${item.defaultRepositoryIds.join(", ")}`);
-  if (item.playbookCount !== undefined) lines.push(`Playbooks: ${item.playbookCount}`);
-  return lines.join("\n");
-}
 
 export function renderPlaybookList(items: Playbook[]): string {
   if (items.length === 0) {

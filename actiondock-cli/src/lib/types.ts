@@ -117,18 +117,7 @@ export interface ExecutionPresetUpsertRequest {
 
 export type PlaybookRiskLevel = "LOW" | "MEDIUM" | "HIGH";
 
-export interface PlaybookGroup {
-  id: string;
-  name: string;
-  description?: string | null;
-  tags?: string[];
-  defaultRepositoryIds?: string[];
-  enabled?: boolean;
-  managed?: boolean;
-  createdAt?: string | null;
-  updatedAt?: string | null;
-  playbookCount?: number;
-}
+
 
 export interface PlaybookKnowledgeRef {
   type: "NOTE" | "FILE";
@@ -144,7 +133,6 @@ export interface PlaybookScriptRef {
 
 export interface Playbook {
   id: string;
-  groupId: string;
   name: string;
   description?: string | null;
   tags?: string[];
@@ -162,7 +150,6 @@ export interface Playbook {
 
 export interface PlaybookListItemSummary {
   id: string;
-  groupId: string;
   name: string;
   description?: string | null;
   tags?: string[];

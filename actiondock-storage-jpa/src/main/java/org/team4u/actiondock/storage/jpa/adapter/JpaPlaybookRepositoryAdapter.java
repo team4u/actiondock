@@ -46,7 +46,6 @@ public class JpaPlaybookRepositoryAdapter implements PlaybookRepository {
     private PlaybookEntity toEntity(Playbook playbook) {
         PlaybookEntity entity = new PlaybookEntity();
         entity.setId(playbook.getId());
-        entity.setGroupId(playbook.getGroupId());
         entity.setName(playbook.getName());
         entity.setDescription(playbook.getDescription());
         entity.setTagsJson(jsonCodec.write(playbook.getTags()));
@@ -66,7 +65,6 @@ public class JpaPlaybookRepositoryAdapter implements PlaybookRepository {
     private Playbook toDomain(PlaybookEntity entity) {
         return new Playbook()
                 .setId(entity.getId())
-                .setGroupId(entity.getGroupId())
                 .setName(entity.getName())
                 .setDescription(entity.getDescription())
                 .setTags(jsonCodec.readList(entity.getTagsJson(), String.class))

@@ -6,7 +6,6 @@ import java.util.List;
 
 public class Playbook {
     private String id;
-    private String groupId;
     private String name;
     private String description;
     private List<String> tags = new ArrayList<>();
@@ -27,15 +26,6 @@ public class Playbook {
 
     public Playbook setId(String id) {
         this.id = id;
-        return this;
-    }
-
-    public String getGroupId() {
-        return groupId;
-    }
-
-    public Playbook setGroupId(String groupId) {
-        this.groupId = groupId;
         return this;
     }
 

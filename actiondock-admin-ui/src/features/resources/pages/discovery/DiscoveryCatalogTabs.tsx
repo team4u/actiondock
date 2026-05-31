@@ -371,17 +371,7 @@ export function DiscoveryCatalogTabs({
         </Space>
       )
     },
-    {
-      title: "分组",
-      key: "group",
-      width: 220,
-      render: (_value: unknown, record) => (
-        <Space direction="vertical" size={2}>
-          <Text>{record.groupName || record.groupId}</Text>
-          <Text code>{record.groupId}</Text>
-        </Space>
-      )
-    },
+
     {
       title: "来源",
       key: "repositoryId",

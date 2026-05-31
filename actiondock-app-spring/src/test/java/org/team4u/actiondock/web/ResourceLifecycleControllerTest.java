@@ -132,10 +132,7 @@ class ResourceLifecycleControllerTest {
                         "team",
                         List.of("refund"),
                         "MEDIUM",
-                        "billing-diagnosis",
-                        "Billing Diagnosis",
                         "playbooks/refund-failure/playbook.json",
-                        "playbook-groups/billing-diagnosis/group.json",
                         null,
                         true,
                         null

@@ -2,7 +2,6 @@ package org.team4u.actiondock.repository;
 
 import org.team4u.actiondock.common.NormalizeUtils;
 import org.team4u.actiondock.domain.model.Playbook;
-import org.team4u.actiondock.domain.model.PlaybookGroup;
 import org.team4u.actiondock.domain.model.PlaybookKnowledgeRef;
 import org.team4u.actiondock.domain.model.PlaybookScriptRef;
 import org.team4u.actiondock.domain.model.PlaybookRiskLevel;
@@ -40,18 +39,13 @@ public class RepositoryPlaybookService {
         if (source.isManaged() && !request.force()) {
             throw new IllegalArgumentException("托管任务手册为只读，不能直接发布: " + source.getId());
         }
-        PlaybookGroup group = repos.playbookGroupRepository().findById(source.getGroupId())
-                .orElseThrow(() -> new IllegalArgumentException("任务分组不存在: " + source.getGroupId()));
         validateReferencedAssetsPublished(repositoryId, source);
         String playbookId = NormalizeUtils.normalize(request.playbookId(), "playbookId 不能为空");
         String version = NormalizeUtils.normalize(request.version(), "version 不能为空");
         assertPlaybookVersionAvailable(repositoryId, session.index(), playbookId, version);
 
-        PlaybookGroupFile groupFile = buildGroupFile(group);
         PlaybookFile playbookFile = buildPlaybookFile(source, request, playbookId, version);
-        Path groupDir = session.root().resolve(PLAYBOOK_GROUPS_DIR).resolve(group.getId());
         Path playbookDir = session.root().resolve(PLAYBOOKS_DIR).resolve(playbookId);
-        catalog.writeJson(groupDir.resolve(PLAYBOOK_GROUP_DESCRIPTOR_FILE), groupFile);
         catalog.writeJson(playbookDir.resolve(PLAYBOOK_DESCRIPTOR_FILE), playbookFile);
         session.commitPublishedAsset(playbookId, version, request.releaseNotes());
         catalog.refreshRepositoryCache(repositoryId);
@@ -72,17 +66,10 @@ public class RepositoryPlaybookService {
         if (!playbook.isManaged()) {
             throw new IllegalArgumentException("仅支持卸载仓库托管任务手册: " + localAssetId);
         }
-        String groupId = playbook.getGroupId();
         repos.playbookRepository().deleteById(playbook.getId());
         repos.repositoryLocalAssetRepository()
                 .findByLocalAsset(UpstreamAssetType.PLAYBOOK, localAssetId)
                 .ifPresent(asset -> repos.repositoryLocalAssetRepository().deleteById(asset.getId()));
-        boolean groupStillUsed = repos.playbookRepository().findAll().stream()
-                .anyMatch(item -> Objects.equals(item.getGroupId(), groupId));
-        repos.playbookGroupRepository().findById(groupId)
-                .filter(PlaybookGroup::isManaged)
-                .filter(ignored -> !groupStillUsed)
-                .ifPresent(group -> repos.playbookGroupRepository().deleteById(group.getId()));
     }
 
     private RepositoryLocalAsset installOrUpdate(String repositoryId, String playbookId, boolean updateOnly) {
@@ -101,14 +88,8 @@ public class RepositoryPlaybookService {
         if (existingPlaybook != null && !existingPlaybook.isManaged()) {
             throw new IllegalArgumentException("本地已存在同 ID 非托管任务手册: " + localPlaybookId);
         }
-        String localGroupId = repositoryId + "." + detail.group().groupId();
-        PlaybookGroup existingGroup = repos.playbookGroupRepository().findById(localGroupId).orElse(null);
-        if (existingGroup != null && !existingGroup.isManaged()) {
-            throw new IllegalArgumentException("本地已存在同 ID 非托管任务分组: " + localGroupId);
-        }
         LocalDateTime now = LocalDateTime.now();
-        repos.playbookGroupRepository().save(buildManagedGroup(detail.group(), localGroupId, existingGroup, now));
-        Playbook saved = buildManagedPlaybook(detail.playbook(), localPlaybookId, localGroupId, existingPlaybook, now);
+        Playbook saved = buildManagedPlaybook(detail.playbook(), localPlaybookId, existingPlaybook, now);
         repos.playbookRepository().save(saved);
         return saveLocalAsset(detail, saved, existingAsset, now);
     }
@@ -175,30 +156,12 @@ public class RepositoryPlaybookService {
                 .setUpdatedAt(now));
     }
 
-    private static PlaybookGroup buildManagedGroup(PlaybookGroupFile file,
-                                                   String localGroupId,
-                                                   PlaybookGroup existing,
-                                                   LocalDateTime now) {
-        return new PlaybookGroup()
-                .setId(localGroupId)
-                .setName(file.displayName())
-                .setDescription(file.description())
-                .setTags(file.tags())
-                .setDefaultRepositoryIds(file.defaultRepositoryIds())
-                .setEnabled(file.enabled())
-                .setManaged(true)
-                .setCreatedAt(existing == null ? now : existing.getCreatedAt())
-                .setUpdatedAt(now);
-    }
-
     private static Playbook buildManagedPlaybook(PlaybookFile file,
                                                  String localPlaybookId,
-                                                 String localGroupId,
                                                  Playbook existing,
                                                  LocalDateTime now) {
         return new Playbook()
                 .setId(localPlaybookId)
-                .setGroupId(localGroupId)
                 .setName(file.displayName())
                 .setDescription(file.description())
                 .setTags(file.tags())
@@ -221,7 +184,6 @@ public class RepositoryPlaybookService {
         PlaybookFile initial = new PlaybookFile(
                 RepositoryIndexUtils.DEFAULT_VERSION,
                 playbookId,
-                source.getGroupId(),
                 NormalizeUtils.normalizeOrDefault(request.displayName(), source.getName()),
                 version,
                 source.getDescription(),
@@ -240,7 +202,6 @@ public class RepositoryPlaybookService {
         return new PlaybookFile(
                 initial.schemaVersion(),
                 initial.playbookId(),
-                initial.groupId(),
                 initial.displayName(),
                 initial.version(),
                 initial.description(),
@@ -258,22 +219,11 @@ public class RepositoryPlaybookService {
         );
     }
 
-    private static PlaybookGroupFile buildGroupFile(PlaybookGroup group) {
-        return new PlaybookGroupFile(
-                RepositoryIndexUtils.DEFAULT_VERSION,
-                group.getId(),
-                group.getName(),
-                group.getDescription(),
-                group.getTags(),
-                group.getDefaultRepositoryIds(),
-                group.isEnabled()
-        );
-    }
+    private static void buildGroupFile() {} // Removed buildGroupFile method
 
     private String computeDigest(PlaybookFile file) {
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("playbookId", file.playbookId());
-        values.put("groupId", file.groupId());
         values.put("displayName", file.displayName());
         values.put("version", file.version());
         values.put("description", file.description());

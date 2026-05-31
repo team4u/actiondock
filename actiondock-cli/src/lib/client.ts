@@ -32,7 +32,6 @@ import type {
   RepositoryKnowledgeDescriptor,
   RepositoryKnowledgeDetail,
   Playbook,
-  PlaybookGroup,
   ResourceLifecycleOperationView,
   RepositoryScriptDescriptor,
   RepositoryScriptDetail,
@@ -747,36 +746,7 @@ export class ActionDockClient {
     });
   }
 
-  async listPlaybookGroups(): Promise<PlaybookGroup[]> {
-    return this.requestJson<PlaybookGroup[]>("/api/playbook-groups");
-  }
-
-  async getPlaybookGroup(groupId: string): Promise<PlaybookGroup> {
-    return this.requestJson<PlaybookGroup>(`/api/playbook-groups/${groupId}`);
-  }
-
-  async createPlaybookGroup(payload: PlaybookGroup): Promise<PlaybookGroup> {
-    return this.requestJson<PlaybookGroup>("/api/playbook-groups", {
-      method: "POST",
-      body: JSON.stringify(payload)
-    });
-  }
-
-  async updatePlaybookGroup(groupId: string, payload: PlaybookGroup): Promise<PlaybookGroup> {
-    return this.requestJson<PlaybookGroup>(`/api/playbook-groups/${groupId}`, {
-      method: "PUT",
-      body: JSON.stringify(payload)
-    });
-  }
-
-  async deletePlaybookGroup(groupId: string): Promise<void> {
-    await this.requestJson<null>(`/api/playbook-groups/${groupId}`, {
-      method: "DELETE"
-    });
-  }
-
   async listPlaybooks(params: {
-    groupId?: string;
     repositoryId?: string;
     tag?: string;
     enabled?: boolean;
@@ -784,7 +754,6 @@ export class ActionDockClient {
     keyword?: string;
   } = {}): Promise<Playbook[]> {
     const search = new URLSearchParams();
-    if (params.groupId) search.set("groupId", params.groupId);
     if (params.repositoryId) search.set("repositoryId", params.repositoryId);
     if (params.tag) search.set("tag", params.tag);
     if (params.enabled !== undefined) search.set("enabled", String(params.enabled));

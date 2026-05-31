@@ -52,7 +52,6 @@ public class RepositoryConfiguration {
                                                              AiModelProfileRepository aiModelProfileRepository,
                                                              AiAgentProfileRepository aiAgentProfileRepository,
                                                              AiToolsetRepository aiToolsetRepository,
-                                                             PlaybookGroupRepository playbookGroupRepository,
                                                              PlaybookRepository playbookRepository,
                                                              ScriptApplicationService scriptApplicationService,
                                                              ConfigValueApplicationService configValueApplicationService,
@@ -74,7 +73,6 @@ public class RepositoryConfiguration {
                         aiModelProfileRepository,
                         aiAgentProfileRepository,
                         aiToolsetRepository,
-                        playbookGroupRepository,
                         playbookRepository
                 ),
                 new RepositoryCatalogService.ApplicationServices(
@@ -123,7 +121,6 @@ public class RepositoryConfiguration {
             RepositoryLocalAssetRepository repositoryLocalAssetRepository,
             RepositoryDefinitionRepository repositoryDefinitionRepository,
             ManagedSkillRepository managedSkillRepository,
-            PlaybookGroupRepository playbookGroupRepository,
             PlaybookRepository playbookRepository,
             ScriptApplicationService scriptApplicationService,
             ConfigValueApplicationService configValueApplicationService,
@@ -145,7 +142,6 @@ public class RepositoryConfiguration {
                         aiModelProfileRepository,
                         aiAgentProfileRepository,
                         aiToolsetRepository,
-                        playbookGroupRepository,
                         playbookRepository
                 ),
                 new RepositoryCatalogService.ApplicationServices(

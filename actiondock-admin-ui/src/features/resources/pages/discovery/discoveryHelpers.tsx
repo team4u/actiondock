@@ -339,8 +339,6 @@ export function filterRepositoryPlaybooks(
       item.localState?.localAssetId,
       item.description,
       item.owner,
-      item.groupId,
-      item.groupName,
       item.repositoryId,
       ...item.tags
     ]);

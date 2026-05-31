@@ -8,7 +8,6 @@ import org.team4u.actiondock.application.ScriptApplicationService;
 import org.team4u.actiondock.config.AppProperties;
 import org.team4u.actiondock.domain.model.AiDependency;
 import org.team4u.actiondock.domain.model.Playbook;
-import org.team4u.actiondock.domain.model.PlaybookGroup;
 import org.team4u.actiondock.domain.model.WebhookDefinition;
 import org.team4u.actiondock.domain.model.WebhookScope;
 import org.team4u.actiondock.domain.model.WebhookResponsePayload;
@@ -27,7 +26,6 @@ import org.team4u.actiondock.domain.port.ExecutionPresetRepository;
 import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.domain.port.CapabilityPackageInstallationRepository;
 import org.team4u.actiondock.domain.port.ManagedSkillRepository;
-import org.team4u.actiondock.domain.port.PlaybookGroupRepository;
 import org.team4u.actiondock.domain.port.PlaybookRepository;
 import org.team4u.actiondock.domain.port.RepositoryDefinitionRepository;
 import org.team4u.actiondock.domain.port.ScriptRepository;
@@ -93,7 +91,6 @@ public class RepositoryCatalogService {
             AiModelProfileRepository aiModelProfileRepository,
             AiAgentProfileRepository aiAgentProfileRepository,
             AiToolsetRepository aiToolsetRepository,
-            PlaybookGroupRepository playbookGroupRepository,
             PlaybookRepository playbookRepository
     ) {
         public Repositories(RepositoryDefinitionRepository repositoryDefinitionRepository,
@@ -121,7 +118,6 @@ public class RepositoryCatalogService {
                     aiModelProfileRepository,
                     aiAgentProfileRepository,
                     aiToolsetRepository,
-                    emptyPlaybookGroupRepository(),
                     emptyPlaybookRepository()
             );
         }
@@ -529,15 +525,9 @@ public class RepositoryCatalogService {
         RepositoryCatalogTypes.RepositoryPlaybookIndexEntry entry = findEntryById(
                 index.safePlaybooks(), playbookId, RepositoryCatalogTypes.RepositoryPlaybookIndexEntry::id, "仓库任务手册");
         RepositoryCatalogTypes.PlaybookFile playbook = readPlaybookFile(repository, entry.playbookPath());
-        RepositoryCatalogTypes.RepositoryPlaybookGroupIndexEntry groupEntry = index.safePlaybookGroups().stream()
-                .filter(item -> Objects.equals(item.id(), playbook.groupId()))
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("仓库任务分组不存在: " + playbook.groupId()));
-        RepositoryCatalogTypes.PlaybookGroupFile group = readPlaybookGroupFile(repository, groupEntry.groupPath());
         return new RepositoryCatalogTypes.RepositoryPlaybookDetail(
                 toPlaybookDescriptor(repository, playbook, entry.playbookPath()),
-                playbook,
-                group
+                playbook
         );
     }
 
@@ -629,7 +619,6 @@ public class RepositoryCatalogService {
         deleteAllByIds(installation.getModelIds(), repos.aiModelProfileRepository()::deleteById);
         deleteAllByIds(installation.getScheduleIds(), repos.scriptScheduleRepository()::deleteById);
         deleteAllByIds(installation.getPlaybookIds(), repos.playbookRepository()::deleteById);
-        deleteAllByIds(installation.getPlaybookGroupIds(), repos.playbookGroupRepository()::deleteById);
     }
 
     private static void deleteAllByIds(List<String> ids, java.util.function.Consumer<String> deleter) {
@@ -638,28 +627,7 @@ public class RepositoryCatalogService {
         }
     }
 
-    private static PlaybookGroupRepository emptyPlaybookGroupRepository() {
-        return new PlaybookGroupRepository() {
-            @Override
-            public PlaybookGroup save(PlaybookGroup group) {
-                return group;
-            }
 
-            @Override
-            public Optional<PlaybookGroup> findById(String id) {
-                return Optional.empty();
-            }
-
-            @Override
-            public List<PlaybookGroup> findAll() {
-                return List.of();
-            }
-
-            @Override
-            public void deleteById(String id) {
-            }
-        };
-    }
 
     private static PlaybookRepository emptyPlaybookRepository() {
         return new PlaybookRepository() {
@@ -1054,11 +1022,6 @@ public class RepositoryCatalogService {
     private RepositoryCatalogTypes.RepositoryPlaybookDescriptor toPlaybookDescriptorWithoutLocalState(RepositoryDefinition repository,
                                                                                                       RepositoryCatalogTypes.PlaybookFile playbook,
                                                                                                       String playbookPath) {
-        RepositoryCatalogTypes.RepositoryIndexFile index = readRepositoryIndex(repository);
-        RepositoryCatalogTypes.RepositoryPlaybookGroupIndexEntry groupEntry = index.safePlaybookGroups().stream()
-                .filter(item -> Objects.equals(item.id(), playbook.groupId()))
-                .findFirst()
-                .orElse(null);
         return new RepositoryCatalogTypes.RepositoryPlaybookDescriptor(
                 repository.getId(),
                 playbook.playbookId(),
@@ -1069,10 +1032,7 @@ public class RepositoryCatalogService {
                 playbook.owner(),
                 NormalizeUtils.nullSafeList(playbook.tags()),
                 playbook.riskLevel(),
-                playbook.groupId(),
-                groupEntry == null ? null : groupEntry.name(),
                 playbookPath,
-                groupEntry == null ? null : groupEntry.groupPath(),
                 playbook.digest(),
                 isTrusted(repository),
                 null
@@ -1181,8 +1141,7 @@ public class RepositoryCatalogService {
                 scanCapabilityPackages(repository, root),
                 scanSkills(repository, root),
                 scanKnowledge(repository, root),
-                scanPlaybooks(repository, root),
-                scanPlaybookGroups(repository, root)
+                scanPlaybooks(repository, root)
         );
     }
 
@@ -1295,27 +1254,14 @@ public class RepositoryCatalogService {
                                 file.version(),
                                 file.description(),
                                 file.releaseNotes(),
-                                path,
-                                file.groupId()))
+                                path))
                         .orElse(null))
                 .filter(Objects::nonNull)
                 .sorted(Comparator.comparing(RepositoryCatalogTypes.RepositoryPlaybookIndexEntry::id))
                 .toList();
     }
 
-    private List<RepositoryCatalogTypes.RepositoryPlaybookGroupIndexEntry> scanPlaybookGroups(RepositoryDefinition repository, Path root) {
-        return scanFixedDirectory(root, PLAYBOOK_GROUPS_DIR, PLAYBOOK_GROUP_DESCRIPTOR_FILE).stream()
-                .map(path -> readManifest(repository, path, RepositoryCatalogTypes.PlaybookGroupFile.class)
-                        .map(file -> new RepositoryCatalogTypes.RepositoryPlaybookGroupIndexEntry(
-                                file.groupId(),
-                                file.displayName(),
-                                file.description(),
-                                path))
-                        .orElse(null))
-                .filter(Objects::nonNull)
-                .sorted(Comparator.comparing(RepositoryCatalogTypes.RepositoryPlaybookGroupIndexEntry::id))
-                .toList();
-    }
+
 
     private List<String> scanFixedDirectory(Path root, String directory, String manifestFile) {
         Path base = root.resolve(directory);
@@ -1376,9 +1322,7 @@ public class RepositoryCatalogService {
         return readRepositoryJsonFile(repository, playbookPath, RepositoryCatalogTypes.PlaybookFile.class);
     }
 
-    RepositoryCatalogTypes.PlaybookGroupFile readPlaybookGroupFile(RepositoryDefinition repository, String groupPath) {
-        return readRepositoryJsonFile(repository, groupPath, RepositoryCatalogTypes.PlaybookGroupFile.class);
-    }
+
 
     private RepositoryCatalogTypes.CapabilityPackageManifestFile readCapabilityPackageManifest(RepositoryDefinition repository, String manifestPath) {
         return readRepositoryJsonFile(repository, manifestPath, RepositoryCatalogTypes.CapabilityPackageManifestFile.class);

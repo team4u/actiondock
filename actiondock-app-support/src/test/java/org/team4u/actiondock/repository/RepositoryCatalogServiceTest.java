@@ -7,7 +7,6 @@ import org.junit.jupiter.api.io.TempDir;
 import org.team4u.actiondock.application.ScriptApplicationService;
 import org.team4u.actiondock.config.AppProperties;
 import org.team4u.actiondock.domain.model.Playbook;
-import org.team4u.actiondock.domain.model.PlaybookGroup;
 import org.team4u.actiondock.domain.model.PlaybookKnowledgeRef;
 import org.team4u.actiondock.domain.model.PlaybookKnowledgeRefType;
 import org.team4u.actiondock.domain.model.PlaybookScriptRef;
@@ -22,7 +21,6 @@ import org.team4u.actiondock.domain.port.ConfigValueRepository;
 import org.team4u.actiondock.domain.port.ExecutionPresetRepository;
 import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.domain.port.ManagedSkillRepository;
-import org.team4u.actiondock.domain.port.PlaybookGroupRepository;
 import org.team4u.actiondock.domain.port.PlaybookRepository;
 import org.team4u.actiondock.domain.port.RepositoryDefinitionRepository;
 import org.team4u.actiondock.domain.port.RepositoryLocalAssetRepository;
@@ -930,12 +928,9 @@ class RepositoryCatalogServiceTest {
                 .setUrl(repositoryRoot.toString())
                 .setEnabled(true);
 
-        InMemoryPlaybookGroupRepository playbookGroupRepository = new InMemoryPlaybookGroupRepository();
         InMemoryPlaybookRepository playbookRepository = new InMemoryPlaybookRepository();
-        playbookGroupRepository.save(new PlaybookGroup().setId("billing-diagnosis").setName("Billing Diagnosis"));
         playbookRepository.save(new Playbook()
                 .setId("refund-failure")
-                .setGroupId("billing-diagnosis")
                 .setName("Refund Failure")
                 .setGuideMarkdown("guide")
                 .setScriptRefs(List.of(new PlaybookScriptRef().setScriptId("query-log")))
@@ -945,7 +940,7 @@ class RepositoryCatalogServiceTest {
                         .setPath("docs/runbooks/refund-runbook.md"))));
 
         RepositoryCatalogService service = new RepositoryCatalogService(
-                repositories(List.of(repository), playbookGroupRepository, playbookRepository, new InMemoryScriptRepository()),
+                repositories(List.of(repository), playbookRepository, new InMemoryScriptRepository()),
                 new RepositoryCatalogService.ApplicationServices(null, null, PluginRuntimeService.disabled()),
                 jsonCodec,
                 appProperties(),
@@ -997,13 +992,10 @@ class RepositoryCatalogServiceTest {
                 .setUrl(repositoryRoot.toString())
                 .setEnabled(true);
 
-        InMemoryPlaybookGroupRepository playbookGroupRepository = new InMemoryPlaybookGroupRepository();
         InMemoryPlaybookRepository playbookRepository = new InMemoryPlaybookRepository();
         InMemoryScriptRepository scriptRepository = new InMemoryScriptRepository();
-        playbookGroupRepository.save(new PlaybookGroup().setId("billing-diagnosis").setName("Billing Diagnosis"));
         playbookRepository.save(new Playbook()
                 .setId("refund-failure")
-                .setGroupId("billing-diagnosis")
                 .setName("Refund Failure")
                 .setGuideMarkdown("guide")
                 .setScriptRefs(List.of(
@@ -1022,7 +1014,6 @@ class RepositoryCatalogServiceTest {
 
         RepositoryCatalogService.Repositories repos = repositories(
                 List.of(repository),
-                playbookGroupRepository,
                 playbookRepository,
                 scriptRepository
         );
@@ -1071,7 +1062,6 @@ class RepositoryCatalogServiceTest {
                         RepositoryCatalogTypes.CapabilityPackageSource.MANUAL,
                         new RepositoryCatalogTypes.CapabilityPackageEntrySelection("SCRIPT", "entry-script", null),
                         List.of("entry-script"),
-                        List.of(),
                         List.of(),
                         List.of(),
                         List.of(),
@@ -1133,11 +1123,10 @@ class RepositoryCatalogServiceTest {
     }
 
     private RepositoryCatalogService.Repositories repositories(List<RepositoryDefinition> items) {
-        return repositories(items, new InMemoryPlaybookGroupRepository(), new InMemoryPlaybookRepository(), new InMemoryScriptRepository());
+        return repositories(items, new InMemoryPlaybookRepository(), new InMemoryScriptRepository());
     }
 
     private RepositoryCatalogService.Repositories repositories(List<RepositoryDefinition> items,
-                                                               PlaybookGroupRepository playbookGroupRepository,
                                                                PlaybookRepository playbookRepository,
                                                                ScriptRepository scriptRepository) {
         return new RepositoryCatalogService.Repositories(
@@ -1153,7 +1142,6 @@ class RepositoryCatalogServiceTest {
                 mock(org.team4u.actiondock.ai.api.AiModelProfileRepository.class),
                 mock(org.team4u.actiondock.ai.api.AiAgentProfileRepository.class),
                 mock(org.team4u.actiondock.ai.api.AiToolsetRepository.class),
-                playbookGroupRepository,
                 playbookRepository
         );
     }
@@ -1198,30 +1186,7 @@ class RepositoryCatalogServiceTest {
         }
     }
 
-    private static final class InMemoryPlaybookGroupRepository implements PlaybookGroupRepository {
-        private final java.util.LinkedHashMap<String, PlaybookGroup> items = new java.util.LinkedHashMap<>();
 
-        @Override
-        public PlaybookGroup save(PlaybookGroup group) {
-            items.put(group.getId(), group);
-            return group;
-        }
-
-        @Override
-        public Optional<PlaybookGroup> findById(String id) {
-            return Optional.ofNullable(items.get(id));
-        }
-
-        @Override
-        public List<PlaybookGroup> findAll() {
-            return List.copyOf(items.values());
-        }
-
-        @Override
-        public void deleteById(String id) {
-            items.remove(id);
-        }
-    }
 
     private static final class InMemoryPlaybookRepository implements PlaybookRepository {
         private final java.util.LinkedHashMap<String, Playbook> items = new java.util.LinkedHashMap<>();

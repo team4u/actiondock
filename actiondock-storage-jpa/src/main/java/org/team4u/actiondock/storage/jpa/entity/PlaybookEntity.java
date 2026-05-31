@@ -2,31 +2,22 @@ package org.team4u.actiondock.storage.jpa.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.ForeignKey;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
-import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Lob;
-import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "playbook", indexes = {
-        @Index(name = "idx_playbook_group_id", columnList = "group_id"),
         @Index(name = "idx_playbook_enabled", columnList = "enabled"),
         @Index(name = "idx_playbook_managed", columnList = "managed")
 })
 public class PlaybookEntity {
     @Id
     private String id;
-    @Column(name = "group_id", nullable = false)
-    private String groupId;
-    @ManyToOne(optional = false)
-    @JoinColumn(name = "group_id", insertable = false, updatable = false,
-            foreignKey = @ForeignKey(name = "fk_playbook_group"))
-    private PlaybookGroupEntity group;
+
     @Column(nullable = false)
     private String name;
     @Lob
@@ -52,10 +43,7 @@ public class PlaybookEntity {
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
-    public String getGroupId() { return groupId; }
-    public void setGroupId(String groupId) { this.groupId = groupId; }
-    public PlaybookGroupEntity getGroup() { return group; }
-    public void setGroup(PlaybookGroupEntity group) { this.group = group; }
+
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
     public String getDescription() { return description; }
