@@ -2,7 +2,9 @@ package org.team4u.actiondock.repository;
 
 import org.team4u.actiondock.common.NormalizeUtils;
 import org.team4u.actiondock.domain.model.Playbook;
+import org.team4u.actiondock.domain.model.PlaybookAgentSkillRef;
 import org.team4u.actiondock.domain.model.PlaybookKnowledgeRef;
+import org.team4u.actiondock.domain.model.PlaybookRelatedRef;
 import org.team4u.actiondock.domain.model.PlaybookScriptRef;
 import org.team4u.actiondock.domain.model.PlaybookRiskLevel;
 import org.team4u.actiondock.domain.model.RepositoryLocalAsset;
@@ -169,6 +171,8 @@ public class RepositoryPlaybookService {
                 .setRepositoryIds(file.repositoryIds())
                 .setKnowledgeRefs(file.knowledgeRefs())
                 .setScriptRefs(file.scriptRefs())
+                .setAgentSkillRefs(file.agentSkillRefs())
+                .setRelatedPlaybookRefs(file.relatedPlaybookRefs())
                 .setGuideMarkdown(file.guideMarkdown())
                 .setStopConditions(file.stopConditions())
                 .setEnabled(file.enabled())
@@ -194,6 +198,8 @@ public class RepositoryPlaybookService {
                 source.getRepositoryIds(),
                 source.getKnowledgeRefs(),
                 source.getScriptRefs(),
+                source.getAgentSkillRefs(),
+                source.getRelatedPlaybookRefs(),
                 source.getGuideMarkdown(),
                 source.getStopConditions(),
                 source.isEnabled(),
@@ -212,6 +218,8 @@ public class RepositoryPlaybookService {
                 initial.repositoryIds(),
                 initial.knowledgeRefs(),
                 initial.scriptRefs(),
+                initial.agentSkillRefs(),
+                initial.relatedPlaybookRefs(),
                 initial.guideMarkdown(),
                 initial.stopConditions(),
                 initial.enabled(),
@@ -233,6 +241,8 @@ public class RepositoryPlaybookService {
         values.put("repositoryIds", file.repositoryIds());
         values.put("knowledgeRefs", file.knowledgeRefs());
         values.put("scriptRefs", file.scriptRefs());
+        values.put("agentSkillRefs", file.agentSkillRefs());
+        values.put("relatedPlaybookRefs", file.relatedPlaybookRefs());
         values.put("guideMarkdown", file.guideMarkdown());
         values.put("stopConditions", file.stopConditions());
         values.put("enabled", file.enabled());

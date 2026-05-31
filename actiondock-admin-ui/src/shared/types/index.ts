@@ -1223,6 +1223,8 @@ export interface RepositoryPlaybookFile {
   repositoryIds: string[];
   knowledgeRefs: PlaybookKnowledgeRef[];
   scriptRefs: PlaybookScriptRef[];
+  agentSkillRefs: PlaybookAgentSkillRef[];
+  relatedPlaybookRefs: PlaybookRelatedRef[];
   guideMarkdown: string;
   stopConditions: string[];
   enabled: boolean;
@@ -1577,6 +1579,20 @@ export interface PlaybookScriptRef {
   purpose?: string;
 }
 
+export interface PlaybookAgentSkillRef {
+  skillId: string;
+  purpose?: string;
+  required: boolean;
+}
+
+export type PlaybookRelatedRefRelation = "RELATED" | "FOLLOW_UP" | "FALLBACK";
+
+export interface PlaybookRelatedRef {
+  playbookId: string;
+  relation: PlaybookRelatedRefRelation;
+  purpose?: string;
+}
+
 export interface Playbook {
   id: string;
   name: string;
@@ -1586,6 +1602,8 @@ export interface Playbook {
   repositoryIds: string[];
   knowledgeRefs: PlaybookKnowledgeRef[];
   scriptRefs: PlaybookScriptRef[];
+  agentSkillRefs: PlaybookAgentSkillRef[];
+  relatedPlaybookRefs: PlaybookRelatedRef[];
   guideMarkdown: string;
   stopConditions: string[];
   enabled: boolean;

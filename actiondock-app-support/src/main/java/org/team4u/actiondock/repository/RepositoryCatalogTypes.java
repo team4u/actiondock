@@ -6,7 +6,9 @@ import org.team4u.actiondock.domain.port.ScriptScheduleRepository;
 import org.team4u.actiondock.domain.exception.RepositoryPluginConflict;
 import org.team4u.actiondock.domain.model.AiDependency;
 import org.team4u.actiondock.domain.model.Playbook;
+import org.team4u.actiondock.domain.model.PlaybookAgentSkillRef;
 import org.team4u.actiondock.domain.model.PlaybookKnowledgeRef;
+import org.team4u.actiondock.domain.model.PlaybookRelatedRef;
 import org.team4u.actiondock.domain.model.PlaybookScriptRef;
 import org.team4u.actiondock.domain.model.WebhookTransport;
 import org.team4u.actiondock.domain.model.PluginDependency;
@@ -951,6 +953,8 @@ public final class RepositoryCatalogTypes {
                                List<String> repositoryIds,
                                List<PlaybookKnowledgeRef> knowledgeRefs,
                                List<PlaybookScriptRef> scriptRefs,
+                               List<PlaybookAgentSkillRef> agentSkillRefs,
+                               List<PlaybookRelatedRef> relatedPlaybookRefs,
                                String guideMarkdown,
                                List<String> stopConditions,
                                boolean enabled,

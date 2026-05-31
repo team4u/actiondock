@@ -13,6 +13,8 @@ public class Playbook {
     private List<String> repositoryIds = new ArrayList<>();
     private List<PlaybookKnowledgeRef> knowledgeRefs = new ArrayList<>();
     private List<PlaybookScriptRef> scriptRefs = new ArrayList<>();
+    private List<PlaybookAgentSkillRef> agentSkillRefs = new ArrayList<>();
+    private List<PlaybookRelatedRef> relatedPlaybookRefs = new ArrayList<>();
     private String guideMarkdown;
     private List<String> stopConditions = new ArrayList<>();
     private boolean enabled = true;
@@ -89,6 +91,24 @@ public class Playbook {
 
     public Playbook setScriptRefs(List<PlaybookScriptRef> scriptRefs) {
         this.scriptRefs = scriptRefs == null ? new ArrayList<>() : new ArrayList<>(scriptRefs);
+        return this;
+    }
+
+    public List<PlaybookAgentSkillRef> getAgentSkillRefs() {
+        return List.copyOf(agentSkillRefs);
+    }
+
+    public Playbook setAgentSkillRefs(List<PlaybookAgentSkillRef> agentSkillRefs) {
+        this.agentSkillRefs = agentSkillRefs == null ? new ArrayList<>() : new ArrayList<>(agentSkillRefs);
+        return this;
+    }
+
+    public List<PlaybookRelatedRef> getRelatedPlaybookRefs() {
+        return List.copyOf(relatedPlaybookRefs);
+    }
+
+    public Playbook setRelatedPlaybookRefs(List<PlaybookRelatedRef> relatedPlaybookRefs) {
+        this.relatedPlaybookRefs = relatedPlaybookRefs == null ? new ArrayList<>() : new ArrayList<>(relatedPlaybookRefs);
         return this;
     }
 

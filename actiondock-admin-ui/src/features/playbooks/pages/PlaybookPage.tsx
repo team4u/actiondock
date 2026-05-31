@@ -9,7 +9,9 @@ import { CodeEditor } from "../../../components/common/CodeEditor";
 import { ApiError } from "../../../shared/api/httpClient";
 import type {
   Playbook,
+  PlaybookAgentSkillRef,
   PlaybookKnowledgeRef,
+  PlaybookRelatedRef,
   PlaybookScriptRef,
   RepositoryDefinition,
   RepositoryPlaybookPublishRequest,
@@ -51,6 +53,8 @@ interface PlaybookFormValues {
   riskLevel?: "LOW" | "MEDIUM" | "HIGH";
   repositoryIds: string[];
   scriptRefs: PlaybookScriptRef[];
+  agentSkillRefs: PlaybookAgentSkillRef[];
+  relatedPlaybookRefs: PlaybookRelatedRef[];
   guideMarkdown: string;
   stopConditionsText?: string;
   enabled: boolean;
@@ -261,6 +265,8 @@ export function PlaybookPage() {
       riskLevel: item?.riskLevel,
       repositoryIds,
       scriptRefs: item?.scriptRefs ?? [],
+      agentSkillRefs: item?.agentSkillRefs ?? [],
+      relatedPlaybookRefs: item?.relatedPlaybookRefs ?? [],
       guideMarkdown: item?.guideMarkdown ?? "",
       stopConditionsText: item?.stopConditions?.join("\n"),
       enabled: item?.enabled ?? true
@@ -303,6 +309,16 @@ export function PlaybookPage() {
           purpose: ref.purpose?.trim() || script?.name || ""
         };
       }),
+      agentSkillRefs: (values.agentSkillRefs ?? []).map((ref) => ({
+        skillId: ref.skillId.trim(),
+        purpose: ref.purpose?.trim() || undefined,
+        required: Boolean(ref.required)
+      })),
+      relatedPlaybookRefs: (values.relatedPlaybookRefs ?? []).map((ref) => ({
+        playbookId: ref.playbookId.trim(),
+        relation: ref.relation ?? "RELATED",
+        purpose: ref.purpose?.trim() || undefined
+      })),
       guideMarkdown: values.guideMarkdown,
       stopConditions: splitText(values.stopConditionsText),
       enabled: values.enabled,
@@ -839,6 +855,8 @@ export function PlaybookPage() {
               <Tag key={`${ref.repositoryId}:${ref.path}`}>FILE {ref.repositoryId}:{ref.path}</Tag>
             ))}
             <Space wrap>{previewing.scriptRefs.map((ref) => <Tag color="blue" key={ref.scriptId}>{ref.scriptId}</Tag>)}</Space>
+            <Space wrap>{(previewing.agentSkillRefs ?? []).map((ref) => <Tag color={ref.required ? "volcano" : "cyan"} key={ref.skillId}>AGENT_SKILL {ref.skillId}</Tag>)}</Space>
+            <Space wrap>{(previewing.relatedPlaybookRefs ?? []).map((ref) => <Tag color="purple" key={`${ref.relation}:${ref.playbookId}`}>{ref.relation} {ref.playbookId}</Tag>)}</Space>
             <MarkdownDescription value={previewing.guideMarkdown} className="markdown-description--panel" />
             <Space wrap>{previewing.stopConditions.map((item) => <Tag color="red" key={item}>{item}</Tag>)}</Space>
           </Space>
@@ -958,6 +976,117 @@ export function PlaybookPage() {
                           <Form.Item style={{ marginBottom: 0 }}>
                             <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
                               添加关联脚本
+                            </Button>
+                          </Form.Item>
+                        </div>
+                      )}
+                    </Form.List>
+                  )
+                },
+                {
+                  key: "agentSkills",
+                  label: "Agent Skills",
+                  children: (
+                    <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                      <Alert
+                        type="info"
+                        showIcon
+                        message="这里引用的是 Agent 外部自带 Skill"
+                        description="ActionDock 不会校验、安装或发布这些 Skill；消费 Playbook 的 Agent 如果已有对应 Skill，可按用途优先使用。"
+                      />
+                      <Form.List name="agentSkillRefs">
+                        {(fields, { add, remove }) => (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                            {fields.map(({ key, name, ...restField }) => (
+                              <Space key={key} style={{ display: "flex", width: "100%" }} align="baseline">
+                                <Form.Item
+                                  {...restField}
+                                  name={[name, "skillId"]}
+                                  rules={[{ required: true, message: "请输入 Skill ID" }]}
+                                  style={{ width: 240, marginBottom: 0 }}
+                                >
+                                  <Input placeholder="Agent 外部 Skill ID" />
+                                </Form.Item>
+                                <Form.Item
+                                  {...restField}
+                                  name={[name, "purpose"]}
+                                  style={{ flex: 1, minWidth: 260, marginBottom: 0 }}
+                                >
+                                  <Input placeholder="使用场景说明（可空）" />
+                                </Form.Item>
+                                <Form.Item
+                                  {...restField}
+                                  name={[name, "required"]}
+                                  valuePropName="checked"
+                                  style={{ marginBottom: 0 }}
+                                >
+                                  <Switch checkedChildren="必需" unCheckedChildren="可选" />
+                                </Form.Item>
+                                <Button type="text" danger onClick={() => remove(name)} icon={<DeleteOutlined />} title="删除引用" />
+                              </Space>
+                            ))}
+                            <Form.Item style={{ marginBottom: 0 }}>
+                              <Button type="dashed" onClick={() => add({ required: false })} block icon={<PlusOutlined />}>
+                                添加 Agent Skill 引用
+                              </Button>
+                            </Form.Item>
+                          </div>
+                        )}
+                      </Form.List>
+                    </Space>
+                  )
+                },
+                {
+                  key: "relatedPlaybooks",
+                  label: "相关手册",
+                  children: (
+                    <Form.List name="relatedPlaybookRefs">
+                      {(fields, { add, remove }) => (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                          {fields.map(({ key, name, ...restField }) => (
+                            <Space key={key} style={{ display: "flex", width: "100%" }} align="baseline">
+                              <Form.Item
+                                {...restField}
+                                name={[name, "playbookId"]}
+                                rules={[{ required: true, message: "请选择或输入任务手册 ID" }]}
+                                style={{ width: 260, marginBottom: 0 }}
+                              >
+                                <Select
+                                  showSearch
+                                  placeholder="相关任务手册"
+                                  optionFilterProp="label"
+                                  options={items
+                                    .filter((item) => item.id !== editing?.id)
+                                    .map((item) => ({ value: item.id, label: `${item.name} (${item.id})` }))}
+                                />
+                              </Form.Item>
+                              <Form.Item
+                                {...restField}
+                                name={[name, "relation"]}
+                                rules={[{ required: true, message: "请选择关系" }]}
+                                style={{ width: 160, marginBottom: 0 }}
+                              >
+                                <Select
+                                  options={[
+                                    { value: "RELATED", label: "相关" },
+                                    { value: "FOLLOW_UP", label: "后续" },
+                                    { value: "FALLBACK", label: "兜底" }
+                                  ]}
+                                />
+                              </Form.Item>
+                              <Form.Item
+                                {...restField}
+                                name={[name, "purpose"]}
+                                style={{ flex: 1, minWidth: 260, marginBottom: 0 }}
+                              >
+                                <Input placeholder="跳转或参考说明（可空）" />
+                              </Form.Item>
+                              <Button type="text" danger onClick={() => remove(name)} icon={<DeleteOutlined />} title="删除引用" />
+                            </Space>
+                          ))}
+                          <Form.Item style={{ marginBottom: 0 }}>
+                            <Button type="dashed" onClick={() => add({ relation: "RELATED" })} block icon={<PlusOutlined />}>
+                              添加相关任务手册
                             </Button>
                           </Form.Item>
                         </div>

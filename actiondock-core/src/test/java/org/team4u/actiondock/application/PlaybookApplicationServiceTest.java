@@ -3,8 +3,11 @@ package org.team4u.actiondock.application;
 import org.junit.jupiter.api.Test;
 import org.team4u.actiondock.domain.exception.ActionDockException;
 import org.team4u.actiondock.domain.model.Playbook;
+import org.team4u.actiondock.domain.model.PlaybookAgentSkillRef;
 import org.team4u.actiondock.domain.model.PlaybookKnowledgeRef;
 import org.team4u.actiondock.domain.model.PlaybookKnowledgeRefType;
+import org.team4u.actiondock.domain.model.PlaybookRelatedRef;
+import org.team4u.actiondock.domain.model.PlaybookRelatedRefRelation;
 import org.team4u.actiondock.domain.model.PlaybookRiskLevel;
 import org.team4u.actiondock.domain.model.PlaybookScriptRef;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
@@ -41,11 +44,23 @@ class PlaybookApplicationServiceTest {
                         .setRepositoryId("billing-service")
                         .setMarkdown("先看退款链路背景。")))
                 .setScriptRefs(List.of(new PlaybookScriptRef().setScriptId("query-log").setPurpose("查询日志")))
+                .setAgentSkillRefs(List.of(new PlaybookAgentSkillRef()
+                        .setSkillId("openai-docs")
+                        .setPurpose("查官方文档")
+                        .setRequired(false)))
+                .setRelatedPlaybookRefs(List.of(new PlaybookRelatedRef()
+                        .setPlaybookId("generic-project-investigation")
+                        .setRelation(PlaybookRelatedRefRelation.FALLBACK)
+                        .setPurpose("退回通用项目调查")))
                 .setGuideMarkdown("先看知识，再运行脚本。")
                 .setStopConditions(List.of("缺少上下文")));
 
         assertThat(saved.getCreatedAt()).isNotNull();
         assertThat(service.getPlaybook("refund").getKnowledgeRefs()).hasSize(1);
+        assertThat(service.getPlaybook("refund").getAgentSkillRefs()).extracting(PlaybookAgentSkillRef::getSkillId)
+                .containsExactly("openai-docs");
+        assertThat(service.getPlaybook("refund").getRelatedPlaybookRefs()).extracting(PlaybookRelatedRef::getRelation)
+                .containsExactly(PlaybookRelatedRefRelation.FALLBACK);
     }
 
     @Test
@@ -140,6 +155,25 @@ class PlaybookApplicationServiceTest {
                 .setGuideMarkdown("guide"));
 
         assertThat(playbook.isManaged()).isFalse();
+    }
+
+    @Test
+    void rejectsEmptyAgentSkillAndSelfRelatedPlaybookRefs() {
+        assertThatThrownBy(() -> service.savePlaybook(new Playbook()
+                .setId("p1")
+                .setName("P1")
+                .setAgentSkillRefs(List.of(new PlaybookAgentSkillRef().setSkillId(" ")))
+                .setGuideMarkdown("guide")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("agentSkillRefs.skillId");
+
+        assertThatThrownBy(() -> service.savePlaybook(new Playbook()
+                .setId("p1")
+                .setName("P1")
+                .setRelatedPlaybookRefs(List.of(new PlaybookRelatedRef().setPlaybookId("p1")))
+                .setGuideMarkdown("guide")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("不能引用当前任务手册");
     }
 
 

@@ -1301,6 +1301,12 @@ beforeAll(async () => {
             scriptRefs: [
               { scriptId: "query-log", purpose: "查询退款链路日志" }
             ],
+            agentSkillRefs: [
+              { skillId: "openai-docs", purpose: "查官方文档", required: false }
+            ],
+            relatedPlaybookRefs: [
+              { playbookId: "generic-project-investigation", relation: "FALLBACK", purpose: "退回通用项目调查" }
+            ],
             guideMarkdown: "先读取 ACTIONDOCK.md，再查看 refund-runbook.md。",
             stopConditions: ["缺少关键上下文", "需要人工确认"],
             enabled: true,
@@ -1330,6 +1336,12 @@ beforeAll(async () => {
             scriptRefs: [
               { scriptId: "query-log", purpose: "查询退款链路日志" }
             ],
+            agentSkillRefs: [
+              { skillId: "openai-docs", purpose: "查官方文档", required: false }
+            ],
+            relatedPlaybookRefs: [
+              { playbookId: "generic-project-investigation", relation: "FALLBACK", purpose: "退回通用项目调查" }
+            ],
             guideMarkdown: "先读取 ACTIONDOCK.md，再查看 refund-runbook.md。",
             stopConditions: ["缺少关键上下文", "需要人工确认"],
             enabled: true,
@@ -1356,6 +1368,12 @@ beforeAll(async () => {
           ],
           scriptRefs: [
             { scriptId: "query-log", purpose: "查询退款链路日志" }
+          ],
+          agentSkillRefs: [
+            { skillId: "openai-docs", purpose: "查官方文档", required: false }
+          ],
+          relatedPlaybookRefs: [
+            { playbookId: "generic-project-investigation", relation: "FALLBACK", purpose: "退回通用项目调查" }
           ],
           guideMarkdown: "先读取 ACTIONDOCK.md，再查看 refund-runbook.md。",
           stopConditions: ["缺少关键上下文", "需要人工确认"],
@@ -2521,6 +2539,8 @@ describe("CLI integration", () => {
     expect(parsed.guideMarkdown).toBe("先读取 ACTIONDOCK.md，再查看 refund-runbook.md。");
     expect(parsed.knowledgeRefs).toHaveLength(2);
     expect(parsed.scriptRefs).toHaveLength(1);
+    expect(parsed.agentSkillRefs).toHaveLength(1);
+    expect(parsed.relatedPlaybookRefs).toHaveLength(1);
     expect(parsed.stopConditions).toEqual(["缺少关键上下文", "需要人工确认"]);
 
     const textResult = await runCli(["playbook", "get", "refund-failure", "--server", baseUrl]);
@@ -2528,6 +2548,8 @@ describe("CLI integration", () => {
     expect(textResult.stdout).toContain("Guide:");
     expect(textResult.stdout).toContain("docs/runbooks/refund-runbook.md");
     expect(textResult.stdout).toContain("query-log - 查询退款链路日志");
+    expect(textResult.stdout).toContain("openai-docs optional - 查官方文档");
+    expect(textResult.stdout).toContain("FALLBACK generic-project-investigation - 退回通用项目调查");
     expect(textResult.stdout).toContain("缺少关键上下文");
   });
 

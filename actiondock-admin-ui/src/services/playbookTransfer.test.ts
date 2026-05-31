@@ -18,6 +18,8 @@ const basePlaybook: Playbook = {
     { type: "FILE", repositoryId: "billing-service", path: "docs/runbook.md" }
   ],
   scriptRefs: [{ scriptId: "query-log", purpose: "查日志" }],
+  agentSkillRefs: [{ skillId: "openai-docs", purpose: "查官方文档", required: false }],
+  relatedPlaybookRefs: [{ playbookId: "fallback-investigation", relation: "FALLBACK", purpose: "专用手册不适用时使用" }],
   guideMarkdown: "先读取 ACTIONDOCK.md。",
   stopConditions: ["缺少目标项目"],
   enabled: true,
@@ -49,7 +51,9 @@ describe("parsePlaybookImportBundle", () => {
         name: "通用项目调查",
         managed: false,
         knowledgeRefs: basePlaybook.knowledgeRefs,
-        scriptRefs: basePlaybook.scriptRefs
+        scriptRefs: basePlaybook.scriptRefs,
+        agentSkillRefs: basePlaybook.agentSkillRefs,
+        relatedPlaybookRefs: basePlaybook.relatedPlaybookRefs
       })
     ]);
     expect(playbooks[0].createdAt).toBeUndefined();
@@ -80,6 +84,14 @@ describe("parsePlaybookImportBundle", () => {
       exportedAt: "2026-05-31T00:00:00Z",
       playbooks: [{ ...basePlaybook, riskLevel: "CRITICAL" }]
     }))).toThrow("riskLevel 仅支持");
+  });
+
+  it("rejects invalid related playbook relations", () => {
+    expect(() => parsePlaybookImportBundle(JSON.stringify({
+      version: 1,
+      exportedAt: "2026-05-31T00:00:00Z",
+      playbooks: [{ ...basePlaybook, relatedPlaybookRefs: [{ playbookId: "other", relation: "PARENT" }] }]
+    }))).toThrow("relation 仅支持");
   });
 });
 

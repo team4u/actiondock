@@ -2,7 +2,9 @@ package org.team4u.actiondock.storage.jpa.adapter;
 
 import org.springframework.stereotype.Component;
 import org.team4u.actiondock.domain.model.Playbook;
+import org.team4u.actiondock.domain.model.PlaybookAgentSkillRef;
 import org.team4u.actiondock.domain.model.PlaybookKnowledgeRef;
+import org.team4u.actiondock.domain.model.PlaybookRelatedRef;
 import org.team4u.actiondock.domain.model.PlaybookRiskLevel;
 import org.team4u.actiondock.domain.model.PlaybookScriptRef;
 import org.team4u.actiondock.domain.port.JsonCodec;
@@ -53,6 +55,8 @@ public class JpaPlaybookRepositoryAdapter implements PlaybookRepository {
         entity.setRepositoryIdsJson(jsonCodec.write(playbook.getRepositoryIds()));
         entity.setKnowledgeRefsJson(jsonCodec.write(playbook.getKnowledgeRefs()));
         entity.setScriptRefsJson(jsonCodec.write(playbook.getScriptRefs()));
+        entity.setAgentSkillRefsJson(jsonCodec.write(playbook.getAgentSkillRefs()));
+        entity.setRelatedPlaybookRefsJson(jsonCodec.write(playbook.getRelatedPlaybookRefs()));
         entity.setGuideMarkdown(playbook.getGuideMarkdown());
         entity.setStopConditionsJson(jsonCodec.write(playbook.getStopConditions()));
         entity.setEnabled(playbook.isEnabled());
@@ -74,6 +78,8 @@ public class JpaPlaybookRepositoryAdapter implements PlaybookRepository {
                 .setRepositoryIds(jsonCodec.readList(entity.getRepositoryIdsJson(), String.class))
                 .setKnowledgeRefs(jsonCodec.readList(entity.getKnowledgeRefsJson(), PlaybookKnowledgeRef.class))
                 .setScriptRefs(jsonCodec.readList(entity.getScriptRefsJson(), PlaybookScriptRef.class))
+                .setAgentSkillRefs(jsonCodec.readList(entity.getAgentSkillRefsJson(), PlaybookAgentSkillRef.class))
+                .setRelatedPlaybookRefs(jsonCodec.readList(entity.getRelatedPlaybookRefsJson(), PlaybookRelatedRef.class))
                 .setGuideMarkdown(entity.getGuideMarkdown())
                 .setStopConditions(jsonCodec.readList(entity.getStopConditionsJson(), String.class))
                 .setEnabled(entity.isEnabled())

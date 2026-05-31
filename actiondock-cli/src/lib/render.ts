@@ -301,6 +301,18 @@ export function renderPlaybookDetail(item: Playbook): string {
   } else {
     lines.push("ScriptRefs: 0");
   }
+  if (item.agentSkillRefs?.length) {
+    lines.push("AgentSkills:");
+    lines.push(...item.agentSkillRefs.map((ref) => `  ${ref.skillId}${ref.required ? " required" : " optional"}${ref.purpose ? ` - ${ref.purpose}` : ""}`));
+  } else {
+    lines.push("AgentSkillRefs: 0");
+  }
+  if (item.relatedPlaybookRefs?.length) {
+    lines.push("RelatedPlaybooks:");
+    lines.push(...item.relatedPlaybookRefs.map((ref) => `  ${ref.relation ?? "RELATED"} ${ref.playbookId}${ref.purpose ? ` - ${ref.purpose}` : ""}`));
+  } else {
+    lines.push("RelatedPlaybookRefs: 0");
+  }
   lines.push("Guide:");
   lines.push(indent(item.guideMarkdown));
   if (item.stopConditions?.length) {

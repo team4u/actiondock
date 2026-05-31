@@ -1,6 +1,9 @@
 import type {
   Playbook,
+  PlaybookAgentSkillRef,
   PlaybookKnowledgeRef,
+  PlaybookRelatedRef,
+  PlaybookRelatedRefRelation,
   PlaybookRiskLevel,
   PlaybookScriptRef,
   ScriptDefinition
@@ -22,6 +25,7 @@ export interface PlaybookImportAnalysis {
 }
 
 const SUPPORTED_RISK_LEVELS: PlaybookRiskLevel[] = ["LOW", "MEDIUM", "HIGH"];
+const SUPPORTED_RELATED_RELATIONS: PlaybookRelatedRefRelation[] = ["RELATED", "FOLLOW_UP", "FALLBACK"];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -137,6 +141,58 @@ function parseScriptRefs(value: unknown, fieldName: string): PlaybookScriptRef[]
   return value.map((item, index) => parseScriptRef(item, `${fieldName}[${index}]`));
 }
 
+function parseAgentSkillRef(value: unknown, fieldName: string): PlaybookAgentSkillRef {
+  if (!isRecord(value)) {
+    throw new Error(`${fieldName} 必须是对象`);
+  }
+  if (!isNonEmptyString(value.skillId)) {
+    throw new Error(`${fieldName}.skillId 缺少合法值`);
+  }
+  return {
+    skillId: value.skillId.trim(),
+    purpose: assertOptionalString(value.purpose, `${fieldName}.purpose`),
+    required: assertOptionalBoolean(value.required, `${fieldName}.required`) ?? false
+  };
+}
+
+function parseAgentSkillRefs(value: unknown, fieldName: string): PlaybookAgentSkillRef[] {
+  if (value == null) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    throw new Error(`${fieldName} 必须是数组`);
+  }
+  return value.map((item, index) => parseAgentSkillRef(item, `${fieldName}[${index}]`));
+}
+
+function parseRelatedPlaybookRef(value: unknown, fieldName: string): PlaybookRelatedRef {
+  if (!isRecord(value)) {
+    throw new Error(`${fieldName} 必须是对象`);
+  }
+  if (!isNonEmptyString(value.playbookId)) {
+    throw new Error(`${fieldName}.playbookId 缺少合法值`);
+  }
+  const relation = value.relation == null || value.relation === "" ? "RELATED" : value.relation;
+  if (!SUPPORTED_RELATED_RELATIONS.includes(relation as PlaybookRelatedRefRelation)) {
+    throw new Error(`${fieldName}.relation 仅支持 ${SUPPORTED_RELATED_RELATIONS.join(" / ")}`);
+  }
+  return {
+    playbookId: value.playbookId.trim(),
+    relation: relation as PlaybookRelatedRefRelation,
+    purpose: assertOptionalString(value.purpose, `${fieldName}.purpose`)
+  };
+}
+
+function parseRelatedPlaybookRefs(value: unknown, fieldName: string): PlaybookRelatedRef[] {
+  if (value == null) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    throw new Error(`${fieldName} 必须是数组`);
+  }
+  return value.map((item, index) => parseRelatedPlaybookRef(item, `${fieldName}[${index}]`));
+}
+
 export function parsePlaybookDefinition(value: unknown, index: number): Playbook {
   if (!isRecord(value)) {
     throw new Error(`第 ${index + 1} 条任务手册不是对象`);
@@ -165,6 +221,8 @@ export function parsePlaybookDefinition(value: unknown, index: number): Playbook
     repositoryIds: assertOptionalStringArray(value.repositoryIds, `第 ${index + 1} 条任务手册 ${id} 的 repositoryIds`),
     knowledgeRefs: parseKnowledgeRefs(value.knowledgeRefs, `第 ${index + 1} 条任务手册 ${id} 的 knowledgeRefs`),
     scriptRefs: parseScriptRefs(value.scriptRefs, `第 ${index + 1} 条任务手册 ${id} 的 scriptRefs`),
+    agentSkillRefs: parseAgentSkillRefs(value.agentSkillRefs, `第 ${index + 1} 条任务手册 ${id} 的 agentSkillRefs`),
+    relatedPlaybookRefs: parseRelatedPlaybookRefs(value.relatedPlaybookRefs, `第 ${index + 1} 条任务手册 ${id} 的 relatedPlaybookRefs`),
     guideMarkdown,
     stopConditions: assertOptionalStringArray(value.stopConditions, `第 ${index + 1} 条任务手册 ${id} 的 stopConditions`),
     enabled: assertOptionalBoolean(value.enabled, `第 ${index + 1} 条任务手册 ${id} 的 enabled`) ?? true,
@@ -187,6 +245,8 @@ export function buildPlaybookExportBundle(playbooks: Playbook[]): PlaybookExport
         repositoryIds: item.repositoryIds ?? [],
         knowledgeRefs: item.knowledgeRefs ?? [],
         scriptRefs: item.scriptRefs ?? [],
+        agentSkillRefs: item.agentSkillRefs ?? [],
+        relatedPlaybookRefs: item.relatedPlaybookRefs ?? [],
         guideMarkdown: item.guideMarkdown,
         stopConditions: item.stopConditions ?? [],
         enabled: item.enabled ?? true,

@@ -3,8 +3,11 @@ package org.team4u.actiondock.application;
 import org.team4u.actiondock.domain.exception.ActionDockErrorCodes;
 import org.team4u.actiondock.domain.exception.ActionDockException;
 import org.team4u.actiondock.domain.model.Playbook;
+import org.team4u.actiondock.domain.model.PlaybookAgentSkillRef;
 import org.team4u.actiondock.domain.model.PlaybookKnowledgeRef;
 import org.team4u.actiondock.domain.model.PlaybookKnowledgeRefType;
+import org.team4u.actiondock.domain.model.PlaybookRelatedRef;
+import org.team4u.actiondock.domain.model.PlaybookRelatedRefRelation;
 import org.team4u.actiondock.domain.model.PlaybookScriptRef;
 import org.team4u.actiondock.domain.port.PlaybookRepository;
 import org.team4u.actiondock.domain.port.ScriptRepository;
@@ -71,6 +74,8 @@ public class PlaybookApplicationService {
         playbook.setRepositoryIds(normalizeDistinct(playbook.getRepositoryIds()));
         playbook.setKnowledgeRefs(validateKnowledgeRefs(playbook.getKnowledgeRefs()));
         playbook.setScriptRefs(validateScriptRefs(playbook.getScriptRefs()));
+        playbook.setAgentSkillRefs(validateAgentSkillRefs(playbook.getAgentSkillRefs()));
+        playbook.setRelatedPlaybookRefs(validateRelatedPlaybookRefs(playbook.getId(), playbook.getRelatedPlaybookRefs()));
         playbook.setGuideMarkdown(ApplicationServiceSupport.normalize(playbook.getGuideMarkdown(), "guideMarkdown 不能为空"));
         playbook.setStopConditions(normalizeDistinct(playbook.getStopConditions()));
         playbook.setUpdatedAt(now);
@@ -125,6 +130,30 @@ public class PlaybookApplicationService {
             }
             return new PlaybookScriptRef()
                     .setScriptId(scriptId)
+                    .setPurpose(ApplicationServiceSupport.blankToNull(ref.getPurpose()));
+        }).toList();
+    }
+
+    private List<PlaybookAgentSkillRef> validateAgentSkillRefs(List<PlaybookAgentSkillRef> refs) {
+        return refs.stream().map(ref -> {
+            String skillId = ApplicationServiceSupport.normalize(ref.getSkillId(), "agentSkillRefs.skillId 不能为空");
+            return new PlaybookAgentSkillRef()
+                    .setSkillId(skillId)
+                    .setPurpose(ApplicationServiceSupport.blankToNull(ref.getPurpose()))
+                    .setRequired(ref.isRequired());
+        }).toList();
+    }
+
+    private List<PlaybookRelatedRef> validateRelatedPlaybookRefs(String currentPlaybookId, List<PlaybookRelatedRef> refs) {
+        return refs.stream().map(ref -> {
+            String playbookId = ApplicationServiceSupport.normalize(ref.getPlaybookId(), "relatedPlaybookRefs.playbookId 不能为空");
+            if (playbookId.equals(currentPlaybookId)) {
+                throw new IllegalArgumentException("relatedPlaybookRefs.playbookId 不能引用当前任务手册");
+            }
+            PlaybookRelatedRefRelation relation = ref.getRelation() == null ? PlaybookRelatedRefRelation.RELATED : ref.getRelation();
+            return new PlaybookRelatedRef()
+                    .setPlaybookId(playbookId)
+                    .setRelation(relation)
                     .setPurpose(ApplicationServiceSupport.blankToNull(ref.getPurpose()));
         }).toList();
     }

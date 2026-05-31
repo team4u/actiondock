@@ -32,6 +32,10 @@ public class PlaybookEntity {
     @Lob
     private String scriptRefsJson;
     @Lob
+    private String agentSkillRefsJson;
+    @Lob
+    private String relatedPlaybookRefsJson;
+    @Lob
     @Column(nullable = false)
     private String guideMarkdown;
     @Lob
@@ -58,6 +62,10 @@ public class PlaybookEntity {
     public void setKnowledgeRefsJson(String knowledgeRefsJson) { this.knowledgeRefsJson = knowledgeRefsJson; }
     public String getScriptRefsJson() { return scriptRefsJson; }
     public void setScriptRefsJson(String scriptRefsJson) { this.scriptRefsJson = scriptRefsJson; }
+    public String getAgentSkillRefsJson() { return agentSkillRefsJson; }
+    public void setAgentSkillRefsJson(String agentSkillRefsJson) { this.agentSkillRefsJson = agentSkillRefsJson; }
+    public String getRelatedPlaybookRefsJson() { return relatedPlaybookRefsJson; }
+    public void setRelatedPlaybookRefsJson(String relatedPlaybookRefsJson) { this.relatedPlaybookRefsJson = relatedPlaybookRefsJson; }
     public String getGuideMarkdown() { return guideMarkdown; }
     public void setGuideMarkdown(String guideMarkdown) { this.guideMarkdown = guideMarkdown; }
     public String getStopConditionsJson() { return stopConditionsJson; }
