@@ -1,6 +1,6 @@
-import { DownloadOutlined, ExportOutlined, FileMarkdownOutlined, FileOutlined, FolderOpenOutlined, UploadOutlined, PlusOutlined, DeleteOutlined } from "@ant-design/icons";
+import { DownloadOutlined, ExportOutlined, FileMarkdownOutlined, FileOutlined, FolderOpenOutlined, UploadOutlined, PlusOutlined, DeleteOutlined, DownOutlined } from "@ant-design/icons";
 import type { DataNode } from "antd/es/tree";
-import { Alert, Button, Drawer, Empty, Form, Grid, Image, Input, Modal, Popconfirm, Select, Space, Spin, Switch, Table, Tabs, Tag, Tree, Typography, message } from "antd";
+import { Alert, Button, Drawer, Dropdown, Empty, Form, Grid, Image, Input, Modal, Popconfirm, Select, Space, Spin, Switch, Table, Tabs, Tag, Tree, Typography, message } from "antd";
 import type { ChangeEvent, Key } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MarkdownDescription } from "../../../components/common/MarkdownDescription";
@@ -652,6 +652,31 @@ export function PlaybookPage() {
     ...pendingImportAnalysis.missingScriptRefs.map((item) => item.playbookId)
   ]) : new Set<string>();
 
+  const bulkActionMenu = {
+    items: [
+      {
+        key: "import",
+        label: "导入任务手册",
+        icon: <UploadOutlined />,
+        onClick: () => fileInputRef.current?.click()
+      },
+      {
+        key: "exportEditable",
+        label: "导出可编辑",
+        icon: <DownloadOutlined />,
+        disabled: editablePlaybooks.length === 0,
+        onClick: handleExportVisible
+      },
+      {
+        key: "exportSelected",
+        label: "导出选中",
+        icon: <ExportOutlined />,
+        disabled: selectedPlaybookIds.length === 0,
+        onClick: handleExportSelected
+      }
+    ]
+  };
+
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
       {contextHolder}
@@ -667,8 +692,11 @@ export function PlaybookPage() {
         meta="以关联知识、关联脚本、导览 Markdown 和停止条件描述任务路线。"
         actions={(
           <Space wrap>
-            <Button icon={<DownloadOutlined />} onClick={handleExportVisible} disabled={editablePlaybooks.length === 0}>导出可编辑</Button>
-            <Button icon={<UploadOutlined />} loading={importing} onClick={() => fileInputRef.current?.click()}>导入任务手册</Button>
+            <Dropdown menu={bulkActionMenu}>
+              <Button>
+                批量操作 <DownOutlined />
+              </Button>
+            </Dropdown>
             <Button type="primary" onClick={() => openEditor()}>新建任务手册</Button>
           </Space>
         )}
@@ -683,7 +711,6 @@ export function PlaybookPage() {
         <Select allowClear placeholder="Repository" style={{ width: 220 }} options={repositoryOptions} onChange={(repositoryId) => setFilters((value) => ({ ...value, repositoryId }))} />
         <Select allowClear placeholder="Tag" style={{ width: 160 }} options={tags.map((item) => ({ value: item, label: item }))} onChange={(tag) => setFilters((value) => ({ ...value, tag }))} />
         <Select allowClear placeholder="Managed" style={{ width: 140 }} options={[{ value: true, label: "托管" }]} onChange={(managed) => setFilters((value) => ({ ...value, managed }))} />
-        <Button icon={<ExportOutlined />} disabled={selectedPlaybookIds.length === 0} onClick={handleExportSelected}>导出选中</Button>
       </Space>
       <Table<Playbook>
         rowKey="id"
@@ -694,27 +721,62 @@ export function PlaybookPage() {
           onChange: setSelectedPlaybookIds,
           getCheckboxProps: (record) => ({ disabled: record.managed })
         }}
+        scroll={{ x: 800 }}
         columns={[
-          { title: "ID", dataIndex: "id", width: 220 },
+          { title: "ID", dataIndex: "id", width: 220, render: (value, item) => item.managed ? <Text disabled>{value}</Text> : <Button type="link" size="small" style={{ padding: 0 }} onClick={() => openEditor(item)}>{value}</Button> },
           { title: "名称", dataIndex: "name" },
-          { title: "风险", dataIndex: "riskLevel", width: 100, render: (value?: string) => value ? <Tag color={value === "HIGH" ? "red" : value === "MEDIUM" ? "orange" : "green"}>{value}</Tag> : "-" },
-          { title: "Tag", dataIndex: "tags", render: (value: string[]) => <Space wrap>{value?.map((item) => <Tag key={item}>{item}</Tag>)}</Space> },
           { title: "状态", key: "status", width: 150, render: (_, item) => <Space>{item.enabled ? <Tag color="green">启用</Tag> : <Tag>停用</Tag>}{item.managed ? <Tag color="blue">托管</Tag> : null}</Space> },
           {
             title: "操作",
             key: "actions",
-            width: 280,
-            render: (_, item) => (
-              <Space>
-                <Button size="small" onClick={() => previewPlaybook(item)}>预览</Button>
-                <Button size="small" disabled={item.managed} onClick={() => exportPlaybooks([item], `已导出 ${item.name || item.id}`)}>导出</Button>
-                <Button size="small" disabled={item.managed} onClick={() => openEditor(item)}>编辑</Button>
-                <Button size="small" disabled={item.managed} onClick={() => openPublishModal(item)}>发布到仓库</Button>
-                <Popconfirm title="删除任务手册？" disabled={item.managed} onConfirm={() => void remove(item)}>
-                  <Button size="small" danger disabled={item.managed}>删除</Button>
-                </Popconfirm>
-              </Space>
-            )
+            width: 100,
+            fixed: "right",
+            render: (_, item) => {
+              const menuItems = [
+                {
+                  key: "publish",
+                  label: "发布到仓库",
+                  disabled: item.managed,
+                  onClick: () => openPublishModal(item)
+                },
+                {
+                  key: "export",
+                  label: "导出",
+                  disabled: item.managed,
+                  onClick: () => exportPlaybooks([item], `已导出 ${item.name || item.id}`)
+                },
+                {
+                  type: "divider" as const
+                },
+                {
+                  key: "delete",
+                  label: "删除",
+                  danger: true,
+                  disabled: item.managed,
+                  onClick: () => {
+                    Modal.confirm({
+                      title: "确认删除任务手册？",
+                      content: `你确定要删除任务手册 "${item.name || item.id}" 吗？`,
+                      okText: "删除",
+                      okType: "danger",
+                      cancelText: "取消",
+                      onOk: () => remove(item)
+                    });
+                  }
+                }
+              ];
+
+              return (
+                <Space size="middle">
+                  <Button type="link" size="small" style={{ padding: 0 }} onClick={() => previewPlaybook(item)}>预览</Button>
+                  <Dropdown menu={{ items: menuItems }}>
+                    <Button type="link" size="small" style={{ padding: 0 }}>
+                      更多 <DownOutlined />
+                    </Button>
+                  </Dropdown>
+                </Space>
+              );
+            }
           }
         ]}
       />
@@ -915,14 +977,17 @@ export function PlaybookPage() {
           </Form>
         )}
       </Drawer>
-      <Modal
+      <Drawer
         title="发布任务手册到仓库"
         open={publishModalOpen}
-        onCancel={() => setPublishModalOpen(false)}
-        onOk={() => void publish()}
-        confirmLoading={publishing}
-        okText="发布"
-        destroyOnHidden
+        onClose={() => setPublishModalOpen(false)}
+        width={560}
+        extra={(
+          <Button type="primary" loading={publishing} onClick={() => void publish()}>
+            发布
+          </Button>
+        )}
+        destroyOnClose
       >
         <Form form={publishForm} layout="vertical">
           <Alert
@@ -952,7 +1017,7 @@ export function PlaybookPage() {
           <Form.Item name="tags" label="标签"><Select mode="tags" tokenSeparators={[","]} /></Form.Item>
           <Form.Item name="releaseNotes" label="发布说明"><Input.TextArea autoSize={{ minRows: 4, maxRows: 10 }} /></Form.Item>
         </Form>
-      </Modal>
+      </Drawer>
       <Modal
         title={filePicker.repositoryId ? `选择知识文件 - ${repositoryNameMap.get(filePicker.repositoryId) ?? filePicker.repositoryId}` : "选择知识文件"}
         open={filePicker.open}
