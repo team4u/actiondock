@@ -84,6 +84,7 @@ class RepositoryAiPackageService {
                 repository,
                 catalog.listRepositoryScripts(repository.getId()),
                 knowledgeService.listRepositoryKnowledge(repository.getId()),
+                catalog.listRepositoryPlaybooks(repository.getId()),
                 draft,
                 currentPackage
         );

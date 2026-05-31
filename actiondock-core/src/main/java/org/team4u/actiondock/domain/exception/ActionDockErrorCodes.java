@@ -26,6 +26,7 @@ public final class ActionDockErrorCodes {
     public static final String PLAYBOOK_GROUP_IN_USE = "PLAYBOOK_GROUP_IN_USE";
     public static final String PLAYBOOK_GROUP_NOT_EDITABLE = "PLAYBOOK_GROUP_NOT_EDITABLE";
     public static final String PLAYBOOK_GROUP_NOT_FOUND = "PLAYBOOK_GROUP_NOT_FOUND";
+    public static final String PLAYBOOK_IN_USE = "PLAYBOOK_IN_USE";
     public static final String PLAYBOOK_NOT_EDITABLE = "PLAYBOOK_NOT_EDITABLE";
     public static final String PLAYBOOK_NOT_FOUND = "PLAYBOOK_NOT_FOUND";
     public static final String PRESET_NOT_EDITABLE = "PRESET_NOT_EDITABLE";

@@ -3,6 +3,7 @@ package org.team4u.actiondock.repository;
 import org.team4u.actiondock.common.NormalizeUtils;
 import org.team4u.actiondock.domain.model.Playbook;
 import org.team4u.actiondock.domain.model.PlaybookKnowledgeRef;
+import org.team4u.actiondock.domain.model.PlaybookRelatedRef;
 import org.team4u.actiondock.domain.model.PlaybookScriptRef;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
 
@@ -27,9 +28,11 @@ final class CapabilityPackagePublishPreviewBuilder {
     static CapabilityPackagePublishPreview buildPreview(RepositoryDefinition repository,
                                                         List<RepositoryScriptDescriptor> publishedScripts,
                                                         List<RepositoryKnowledgeDescriptor> publishedKnowledge,
+                                                        List<RepositoryPlaybookDescriptor> publishedPlaybooks,
+                                                        List<String> localPlaybookIds,
                                                         CapabilityPackageDraft draft,
                                                         CapabilityPackageDetail currentPackage) {
-        List<CapabilityPackageCheck> checks = buildPublishChecks(repository, publishedScripts, publishedKnowledge, draft);
+        List<CapabilityPackageCheck> checks = buildPublishChecks(repository, publishedScripts, publishedKnowledge, publishedPlaybooks, localPlaybookIds, draft);
         CapabilityPackageDiffSummary diff = computeEntryChanges(draft, currentPackage);
 
         return new CapabilityPackagePublishPreview(
@@ -53,6 +56,8 @@ final class CapabilityPackagePublishPreviewBuilder {
     private static List<CapabilityPackageCheck> buildPublishChecks(RepositoryDefinition repository,
                                                                    List<RepositoryScriptDescriptor> publishedScripts,
                                                                    List<RepositoryKnowledgeDescriptor> publishedKnowledge,
+                                                                   List<RepositoryPlaybookDescriptor> publishedPlaybooks,
+                                                                   List<String> localPlaybookIds,
                                                                    CapabilityPackageDraft draft) {
         List<CapabilityPackageCheck> checks = new ArrayList<>();
         if (draft.entries().isEmpty()) {
@@ -70,7 +75,7 @@ final class CapabilityPackagePublishPreviewBuilder {
                 checks.add(new CapabilityPackageCheck(CHECK_SEVERITY_WARNING, "PLUGIN_EXTERNAL_ONLY", "插件依赖缺少仓库来源，安装时需要本地已存在: " + dependency.assetId()));
             }
         }
-        addPlaybookReferenceChecks(repository, publishedScripts, publishedKnowledge, draft, checks);
+        addPlaybookReferenceChecks(repository, publishedScripts, publishedKnowledge, publishedPlaybooks, localPlaybookIds, draft, checks);
         checks.add(new CapabilityPackageCheck(CHECK_SEVERITY_INFO, "ASSET_SUMMARY",
                 "包含 " + draft.bundle().scripts().size() + " 个脚本 / " + draft.bundle().agents().size() + " 个 Agent / "
                         + draft.bundle().toolsets().size() + " 个工具集 / " + draft.bundle().models().size() + " 个模型"));
@@ -80,10 +85,16 @@ final class CapabilityPackagePublishPreviewBuilder {
     private static void addPlaybookReferenceChecks(RepositoryDefinition repository,
                                                    List<RepositoryScriptDescriptor> publishedScripts,
                                                    List<RepositoryKnowledgeDescriptor> publishedKnowledge,
+                                                   List<RepositoryPlaybookDescriptor> publishedPlaybooks,
+                                                   List<String> localPlaybookIds,
                                                    CapabilityPackageDraft draft,
                                                    List<CapabilityPackageCheck> checks) {
         LinkedHashSet<String> missingScriptIds = new LinkedHashSet<>();
         LinkedHashSet<String> missingKnowledgeRepositoryIds = new LinkedHashSet<>();
+        LinkedHashSet<String> missingPlaybookIds = new LinkedHashSet<>();
+        java.util.Set<String> draftPlaybookIds = draft.playbooks().stream()
+                .map(org.team4u.actiondock.domain.model.Playbook::getId)
+                .collect(java.util.stream.Collectors.toSet());
 
         for (Playbook playbook : NormalizeUtils.nullSafeList(draft.playbooks())) {
             for (PlaybookScriptRef ref : NormalizeUtils.nullSafeList(playbook.getScriptRefs())) {
@@ -106,6 +117,24 @@ final class CapabilityPackagePublishPreviewBuilder {
                     missingKnowledgeRepositoryIds.add(knowledgeRepositoryId);
                 }
             }
+            for (PlaybookRelatedRef ref : NormalizeUtils.nullSafeList(playbook.getRelatedPlaybookRefs())) {
+                String relatedPlaybookId = NormalizeUtils.normalizeNullable(ref.getPlaybookId());
+                if (relatedPlaybookId == null) {
+                    continue;
+                }
+                if (draftPlaybookIds.contains(relatedPlaybookId)) {
+                    continue;
+                }
+                boolean published = publishedPlaybooks.stream().anyMatch(item -> Objects.equals(item.playbookId(), relatedPlaybookId));
+                if (published) {
+                    continue;
+                }
+                boolean localExists = localPlaybookIds.contains(relatedPlaybookId);
+                if (localExists) {
+                    continue;
+                }
+                missingPlaybookIds.add(relatedPlaybookId);
+            }
         }
 
         if (!missingScriptIds.isEmpty()) {
@@ -121,6 +150,14 @@ final class CapabilityPackagePublishPreviewBuilder {
                     "PLAYBOOK_KNOWLEDGE_REF_MISSING",
                     "能力包中的 Playbook 引用了尚未作为知识源发布到目标仓库的项目仓库，请先分别发布知识源: "
                             + String.join(", ", missingKnowledgeRepositoryIds)
+            ));
+        }
+        if (!missingPlaybookIds.isEmpty()) {
+            checks.add(new CapabilityPackageCheck(
+                    CHECK_SEVERITY_BLOCKER,
+                    "PLAYBOOK_RELATED_REF_MISSING",
+                    "能力包中的 Playbook 引用了包外且在目标仓库或本地不可解析的相关任务手册: "
+                            + String.join(", ", missingPlaybookIds)
             ));
         }
     }

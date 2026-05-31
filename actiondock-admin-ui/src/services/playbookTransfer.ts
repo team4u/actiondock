@@ -22,6 +22,8 @@ export interface PlaybookImportAnalysis {
   overwriteIds: string[];
   managedConflictIds: string[];
   missingScriptRefs: Array<{ playbookId: string; scriptIds: string[] }>;
+  missingRelatedPlaybookRefs: Array<{ playbookId: string; missingPlaybookIds: string[] }>;
+  circularIds: string[];
 }
 
 const SUPPORTED_RISK_LEVELS: PlaybookRiskLevel[] = ["LOW", "MEDIUM", "HIGH"];
@@ -305,10 +307,13 @@ export function analyzePlaybookImport(
 ): PlaybookImportAnalysis {
   const currentById = new Map(currentPlaybooks.map((item) => [item.id, item]));
   const currentScriptIds = new Set(currentScripts.map((script) => script.id));
+  const importedPlaybookIds = new Set(importedPlaybooks.map((p) => p.id));
+
   const createIds: string[] = [];
   const overwriteIds: string[] = [];
   const managedConflictIds: string[] = [];
   const missingScriptRefs: Array<{ playbookId: string; scriptIds: string[] }> = [];
+  const missingRelatedPlaybookRefs: Array<{ playbookId: string; missingPlaybookIds: string[] }> = [];
 
   for (const playbook of importedPlaybooks) {
     const current = currentById.get(playbook.id);
@@ -328,13 +333,84 @@ export function analyzePlaybookImport(
     if (missingScriptIds.length > 0) {
       missingScriptRefs.push({ playbookId: playbook.id, scriptIds: missingScriptIds });
     }
+
+    const missingPlaybookIds = Array.from(new Set(
+      (playbook.relatedPlaybookRefs ?? [])
+        .map((ref) => ref.playbookId)
+        .filter((playbookId) => !currentById.has(playbookId) && !importedPlaybookIds.has(playbookId))
+    ));
+    if (missingPlaybookIds.length > 0) {
+      missingRelatedPlaybookRefs.push({ playbookId: playbook.id, missingPlaybookIds });
+    }
+  }
+
+  // Topological sorting for createIds using Kahn's algorithm
+  const createIdsSet = new Set(createIds);
+  const importedMap = new Map(importedPlaybooks.map((p) => [p.id, p]));
+  const adj = new Map<string, string[]>();
+  const inDegree = new Map<string, number>();
+
+  for (const id of createIds) {
+    adj.set(id, []);
+    inDegree.set(id, 0);
+  }
+
+  for (const id of createIds) {
+    const playbook = importedMap.get(id);
+    const deps = (playbook?.relatedPlaybookRefs ?? [])
+      .map((ref) => ref.playbookId)
+      .filter((depId) => createIdsSet.has(depId));
+
+    for (const dep of deps) {
+      adj.get(dep)!.push(id);
+      inDegree.set(id, inDegree.get(id)! + 1);
+    }
+  }
+
+  const queue: string[] = [];
+  for (const id of createIds) {
+    if (inDegree.get(id) === 0) {
+      queue.push(id);
+    }
+  }
+
+  const sortedCreateIds: string[] = [];
+  while (queue.length > 0) {
+    queue.sort(); // Deterministic ordering
+    const u = queue.shift()!;
+    sortedCreateIds.push(u);
+    for (const v of adj.get(u)!) {
+      inDegree.set(v, inDegree.get(v)! - 1);
+      if (inDegree.get(v) === 0) {
+        queue.push(v);
+      }
+    }
+  }
+
+  let circularIds: string[] = [];
+  let sortedPlaybooks = importedPlaybooks;
+
+  if (sortedCreateIds.length < createIds.length) {
+    circularIds = createIds.filter((id) => inDegree.get(id)! > 0);
+  } else {
+    // Sort importedPlaybooks: sortedCreateIds first, then overwriteIds, then managedConflictIds
+    const allSortedIds = [
+      ...sortedCreateIds,
+      ...overwriteIds,
+      ...managedConflictIds
+    ];
+    sortedPlaybooks = allSortedIds
+      .map((id) => importedMap.get(id))
+      .filter(Boolean) as Playbook[];
   }
 
   return {
-    playbooks: importedPlaybooks,
+    playbooks: sortedPlaybooks,
     createIds,
     overwriteIds,
     managedConflictIds,
-    missingScriptRefs
+    missingScriptRefs,
+    missingRelatedPlaybookRefs,
+    circularIds
   };
 }

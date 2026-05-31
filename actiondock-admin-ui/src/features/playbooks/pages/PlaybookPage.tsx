@@ -409,7 +409,9 @@ export function PlaybookPage() {
     setImporting(true);
     const blockedIds = new Set([
       ...pendingImportAnalysis.managedConflictIds,
-      ...pendingImportAnalysis.missingScriptRefs.map((item) => item.playbookId)
+      ...pendingImportAnalysis.missingScriptRefs.map((item) => item.playbookId),
+      ...pendingImportAnalysis.missingRelatedPlaybookRefs.map((item) => item.playbookId),
+      ...pendingImportAnalysis.circularIds
     ]);
     const currentIds = new Set(items.map((item) => item.id));
     const successes: string[] = [];
@@ -668,7 +670,9 @@ export function PlaybookPage() {
   const selectedRepositoryIds = Form.useWatch("repositoryIds", form) ?? [];
   const pendingImportBlockedIds = pendingImportAnalysis ? new Set([
     ...pendingImportAnalysis.managedConflictIds,
-    ...pendingImportAnalysis.missingScriptRefs.map((item) => item.playbookId)
+    ...pendingImportAnalysis.missingScriptRefs.map((item) => item.playbookId),
+    ...pendingImportAnalysis.missingRelatedPlaybookRefs.map((item) => item.playbookId),
+    ...pendingImportAnalysis.circularIds
   ]) : new Set<string>();
 
   const bulkActionMenu = {
@@ -823,6 +827,8 @@ export function PlaybookPage() {
               <Tag color="orange">覆盖 {pendingImportAnalysis.overwriteIds.length}</Tag>
               <Tag color="red">托管冲突 {pendingImportAnalysis.managedConflictIds.length}</Tag>
               <Tag color="red">缺失脚本 {pendingImportAnalysis.missingScriptRefs.length}</Tag>
+              <Tag color="red">缺失相关手册 {pendingImportAnalysis.missingRelatedPlaybookRefs.length}</Tag>
+              <Tag color="red">循环引用 {pendingImportAnalysis.circularIds.length}</Tag>
             </Space>
             {pendingImportAnalysis.managedConflictIds.length > 0 ? (
               <Alert
@@ -838,6 +844,22 @@ export function PlaybookPage() {
                 showIcon
                 message="以下任务手册引用了当前不存在的脚本，导入时会跳过"
                 description={pendingImportAnalysis.missingScriptRefs.map((item) => `${item.playbookId}: ${item.scriptIds.join(", ")}`).join("\n")}
+              />
+            ) : null}
+            {pendingImportAnalysis.missingRelatedPlaybookRefs.length > 0 ? (
+              <Alert
+                type="warning"
+                showIcon
+                message="以下任务手册引用了不存在的外部相关任务手册，导入时会跳过"
+                description={pendingImportAnalysis.missingRelatedPlaybookRefs.map((item) => `${item.playbookId}: ${item.missingPlaybookIds.join(", ")}`).join("\n")}
+              />
+            ) : null}
+            {pendingImportAnalysis.circularIds.length > 0 ? (
+              <Alert
+                type="warning"
+                showIcon
+                message="以下新建任务手册之间存在循环引用，导入时会跳过"
+                description={pendingImportAnalysis.circularIds.join(", ")}
               />
             ) : null}
           </Space>

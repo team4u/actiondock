@@ -11,6 +11,8 @@ import org.team4u.actiondock.ai.api.AiToolset;
 import org.team4u.actiondock.domain.model.CapabilityPackageInstallation;
 import org.team4u.actiondock.domain.model.ExecutionPreset;
 import org.team4u.actiondock.domain.model.Playbook;
+import org.team4u.actiondock.domain.model.PlaybookRelatedRef;
+import org.team4u.actiondock.domain.model.PlaybookRelatedRefRelation;
 import org.team4u.actiondock.domain.model.PlaybookScriptRef;
 import org.team4u.actiondock.domain.model.PluginRegistration;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
@@ -117,6 +119,7 @@ public class RepositoryCapabilityPackageService {
     }
 
     private void uninstallCapabilityPackage(CapabilityPackageInstallation installation) {
+        validateCapabilityPackageUninstall(installation);
         catalog.uninstallManagedCapabilityPackageAssets(installation);
         for (String presetId : installation.getPresetIds()) {
             repos.executionPresetRepository().deleteById(presetId);
@@ -139,15 +142,18 @@ public class RepositoryCapabilityPackageService {
      * @return 安装结果，包含安装记录和解析后的外部依赖
      */
     private CapabilityPackageInstallResult installOrUpdateCapabilityPackage(String repositoryId,
-                                                                                                      String packageId,
-                                                                                                      boolean updateOnly,
-                                                                                                      LinkedHashSet<String> visiting) {
+                                                                            String packageId,
+                                                                            boolean updateOnly,
+                                                                            LinkedHashSet<String> visiting) {
         String installationId = RepositoryCatalogTypes.capabilityPackageInstallationId(repositoryId, packageId);
         if (!visiting.add(installationId)) {
             throw new IllegalStateException("检测到能力包循环依赖: " + String.join(" -> ", visiting) + " -> " + installationId);
         }
         try {
             CapabilityPackageInstallation existing = findExistingOrThrow(installationId, packageId, updateOnly);
+            if (existing != null) {
+                validateCapabilityPackageUninstall(existing);
+            }
             CapabilityPackageDetail detail = catalog.getCapabilityPackage(repositoryId, packageId);
             resolveExternalDependencies(repositoryId, detail.releaseFile().externalDependencies(), visiting);
             uninstallExistingAssets(existing);
@@ -509,8 +515,33 @@ public class RepositoryCapabilityPackageService {
 
     private List<String> installPlaybooks(InstallationContext ctx) {
         List<String> installedIds = new ArrayList<>();
+        List<Playbook> playbooksToSave = new ArrayList<>();
+
         for (Playbook playbook : NormalizeUtils.nullSafeList(ctx.release == null ? null : ctx.release.playbooks())) {
             String runtimePlaybookId = ctx.playbookIdMappings.get(playbook.getId());
+
+            List<PlaybookRelatedRef> rewrittenRelatedRefs = new ArrayList<>();
+            for (PlaybookRelatedRef ref : NormalizeUtils.nullSafeList(playbook.getRelatedPlaybookRefs())) {
+                String originalRefId = ref.getPlaybookId();
+                String targetPlaybookId;
+                if (ctx.playbookIdMappings.containsKey(originalRefId)) {
+                    targetPlaybookId = ctx.playbookIdMappings.get(originalRefId);
+                } else {
+                    targetPlaybookId = originalRefId;
+                    if (repos.playbookRepository().findById(targetPlaybookId).isEmpty()) {
+                        throw org.team4u.actiondock.domain.exception.ActionDockException.notFound(
+                                org.team4u.actiondock.domain.exception.ActionDockErrorCodes.PLAYBOOK_NOT_FOUND,
+                                "关联任务手册不存在: " + targetPlaybookId,
+                                Map.of("playbookId", targetPlaybookId)
+                        );
+                    }
+                }
+                rewrittenRelatedRefs.add(new PlaybookRelatedRef()
+                        .setPlaybookId(targetPlaybookId)
+                        .setRelation(ref.getRelation() == null ? PlaybookRelatedRefRelation.RELATED : ref.getRelation())
+                        .setPurpose(ref.getPurpose()));
+            }
+
             Playbook value = new Playbook()
                     .setId(runtimePlaybookId)
                     .setName(playbook.getName())
@@ -520,15 +551,22 @@ public class RepositoryCapabilityPackageService {
                     .setRepositoryIds(playbook.getRepositoryIds())
                     .setKnowledgeRefs(playbook.getKnowledgeRefs())
                     .setScriptRefs(rewritePlaybookScriptRefs(playbook.getScriptRefs(), ctx.scriptIdMappings))
+                    .setAgentSkillRefs(playbook.getAgentSkillRefs())
+                    .setRelatedPlaybookRefs(rewrittenRelatedRefs)
                     .setGuideMarkdown(playbook.getGuideMarkdown())
                     .setStopConditions(playbook.getStopConditions())
                     .setEnabled(playbook.isEnabled())
                     .setManaged(true)
                     .setCreatedAt(ctx.now)
                     .setUpdatedAt(ctx.now);
-            repos.playbookRepository().save(value);
-            installedIds.add(runtimePlaybookId);
+            playbooksToSave.add(value);
         }
+
+        for (Playbook value : playbooksToSave) {
+            repos.playbookRepository().save(value);
+            installedIds.add(value.getId());
+        }
+
         return installedIds;
     }
 
@@ -538,6 +576,27 @@ public class RepositoryCapabilityPackageService {
                         .setScriptId(scriptIdMappings.getOrDefault(ref.getScriptId(), ref.getScriptId()))
                         .setPurpose(ref.getPurpose()))
                 .toList();
+    }
+
+    private void validateCapabilityPackageUninstall(CapabilityPackageInstallation installation) {
+        List<String> playbookIdsBeingRemoved = NormalizeUtils.nullSafeList(installation.getPlaybookIds());
+        if (playbookIdsBeingRemoved.isEmpty()) {
+            return;
+        }
+        List<Playbook> allPlaybooks = repos.playbookRepository().findAll();
+        List<String> referencingPlaybookIds = allPlaybooks.stream()
+                .filter(p -> !playbookIdsBeingRemoved.contains(p.getId()))
+                .filter(p -> NormalizeUtils.nullSafeList(p.getRelatedPlaybookRefs()).stream()
+                        .anyMatch(ref -> playbookIdsBeingRemoved.contains(ref.getPlaybookId())))
+                .map(Playbook::getId)
+                .toList();
+        if (!referencingPlaybookIds.isEmpty()) {
+            throw org.team4u.actiondock.domain.exception.ActionDockException.conflict(
+                    org.team4u.actiondock.domain.exception.ActionDockErrorCodes.PLAYBOOK_IN_USE,
+                    "无法删除或卸载能力包，因为其中的任务手册被包外任务手册引用",
+                    Map.of("referencingPlaybookIds", referencingPlaybookIds)
+            );
+        }
     }
 
 }

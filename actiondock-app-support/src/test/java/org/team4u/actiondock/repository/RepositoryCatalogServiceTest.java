@@ -9,6 +9,7 @@ import org.team4u.actiondock.config.AppProperties;
 import org.team4u.actiondock.domain.model.Playbook;
 import org.team4u.actiondock.domain.model.PlaybookKnowledgeRef;
 import org.team4u.actiondock.domain.model.PlaybookKnowledgeRefType;
+import org.team4u.actiondock.domain.model.PlaybookRelatedRef;
 import org.team4u.actiondock.domain.model.PlaybookScriptRef;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.exception.RepositoryVersionExistsException;
@@ -1005,7 +1006,8 @@ class RepositoryCatalogServiceTest {
                 .setKnowledgeRefs(List.of(new PlaybookKnowledgeRef()
                         .setType(PlaybookKnowledgeRefType.FILE)
                         .setRepositoryId("billing-service")
-                        .setPath("docs/runbooks/refund-runbook.md"))));
+                        .setPath("docs/runbooks/refund-runbook.md")))
+                .setRelatedPlaybookRefs(List.of(new PlaybookRelatedRef().setPlaybookId("missing-related-playbook"))));
         scriptRepository.save(new ScriptDefinition()
                 .setId("entry-script")
                 .setName("Entry Script")
@@ -1078,6 +1080,11 @@ class RepositoryCatalogServiceTest {
             assertThat(item.severity()).isEqualTo("BLOCKER");
             assertThat(item.code()).isEqualTo("PLAYBOOK_KNOWLEDGE_REF_MISSING");
             assertThat(item.message()).contains("billing-service");
+        });
+        assertThat(preview.checks()).anySatisfy(item -> {
+            assertThat(item.severity()).isEqualTo("BLOCKER");
+            assertThat(item.code()).isEqualTo("PLAYBOOK_RELATED_REF_MISSING");
+            assertThat(item.message()).contains("missing-related-playbook");
         });
     }
 

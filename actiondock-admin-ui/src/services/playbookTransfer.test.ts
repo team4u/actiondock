@@ -110,12 +110,17 @@ describe("playbook import/export helpers", () => {
     expect(bundle.playbooks.every((item) => item.managed === false)).toBe(true);
   });
 
-  it("analyzes creates, overwrites, managed conflicts, and missing script references", () => {
+  it("analyzes creates, overwrites, managed conflicts, missing script and playbook references, topological sorting and circular dependency", () => {
     const imported = [
-      basePlaybook,
-      { ...basePlaybook, id: "existing-local" },
-      { ...basePlaybook, id: "existing-managed" },
-      { ...basePlaybook, id: "missing-script", scriptRefs: [{ scriptId: "missing" }] }
+      { ...basePlaybook, id: "generic-project-investigation", relatedPlaybookRefs: [] },
+      { ...basePlaybook, id: "existing-local", relatedPlaybookRefs: [] },
+      { ...basePlaybook, id: "existing-managed", relatedPlaybookRefs: [] },
+      { ...basePlaybook, id: "missing-script", scriptRefs: [{ scriptId: "missing" }], relatedPlaybookRefs: [] },
+      { ...basePlaybook, id: "missing-playbook", relatedPlaybookRefs: [{ playbookId: "non-existent", relation: "RELATED" as const }] },
+      // Dependency chain for topological sorting: p3 depends on p2, p2 depends on p1
+      { ...basePlaybook, id: "p3", relatedPlaybookRefs: [{ playbookId: "p2", relation: "RELATED" as const }] },
+      { ...basePlaybook, id: "p2", relatedPlaybookRefs: [{ playbookId: "p1", relation: "RELATED" as const }] },
+      { ...basePlaybook, id: "p1", relatedPlaybookRefs: [] }
     ];
 
     const analysis = analyzePlaybookImport(
@@ -127,11 +132,38 @@ describe("playbook import/export helpers", () => {
       [script]
     );
 
-    expect(analysis.createIds).toEqual(["generic-project-investigation", "missing-script"]);
+    expect(analysis.createIds).toEqual([
+      "generic-project-investigation",
+      "missing-script",
+      "missing-playbook",
+      "p3",
+      "p2",
+      "p1"
+    ]);
     expect(analysis.overwriteIds).toEqual(["existing-local"]);
     expect(analysis.managedConflictIds).toEqual(["existing-managed"]);
     expect(analysis.missingScriptRefs).toEqual([
       { playbookId: "missing-script", scriptIds: ["missing"] }
     ]);
+    expect(analysis.missingRelatedPlaybookRefs).toEqual([
+      { playbookId: "missing-playbook", missingPlaybookIds: ["non-existent"] }
+    ]);
+
+    // p1 should be created first, then p2, then p3 due to topological dependency ordering
+    const sortedCreateIds = analysis.playbooks
+      .map((p) => p.id)
+      .filter((id) => analysis.createIds.includes(id));
+    expect(sortedCreateIds.indexOf("p1")).toBeLessThan(sortedCreateIds.indexOf("p2"));
+    expect(sortedCreateIds.indexOf("p2")).toBeLessThan(sortedCreateIds.indexOf("p3"));
+    expect(analysis.circularIds).toEqual([]);
+
+    // Now test circular dependency detection
+    const circularImported = [
+      { ...basePlaybook, id: "cycle-a", relatedPlaybookRefs: [{ playbookId: "cycle-b", relation: "RELATED" as const }] },
+      { ...basePlaybook, id: "cycle-b", relatedPlaybookRefs: [{ playbookId: "cycle-a", relation: "RELATED" as const }] }
+    ];
+    const circularAnalysis = analyzePlaybookImport(circularImported, [], [script]);
+    expect(circularAnalysis.circularIds).toContain("cycle-a");
+    expect(circularAnalysis.circularIds).toContain("cycle-b");
   });
 });

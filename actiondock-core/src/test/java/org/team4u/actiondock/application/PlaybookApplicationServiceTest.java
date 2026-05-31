@@ -33,6 +33,8 @@ class PlaybookApplicationServiceTest {
     @Test
     void savesPlaybook() {
         when(scriptRepository.findById("query-log")).thenReturn(Optional.of(new ScriptDefinition().setId("query-log")));
+        // Save target playbook first
+        service.savePlaybook(new Playbook().setId("generic-project-investigation").setName("通用").setGuideMarkdown("guide"));
 
         Playbook saved = service.savePlaybook(new Playbook()
                 .setId("refund")
@@ -61,6 +63,31 @@ class PlaybookApplicationServiceTest {
                 .containsExactly("openai-docs");
         assertThat(service.getPlaybook("refund").getRelatedPlaybookRefs()).extracting(PlaybookRelatedRef::getRelation)
                 .containsExactly(PlaybookRelatedRefRelation.FALLBACK);
+    }
+
+    @Test
+    void rejectsMissingRelatedPlaybookRefs() {
+        assertThatThrownBy(() -> service.savePlaybook(new Playbook()
+                .setId("p1")
+                .setName("P1")
+                .setRelatedPlaybookRefs(List.of(new PlaybookRelatedRef().setPlaybookId("non-existent-target")))
+                .setGuideMarkdown("guide")))
+                .isInstanceOf(ActionDockException.class)
+                .hasMessageContaining("关联任务手册不存在");
+    }
+
+    @Test
+    void protectsPlaybookFromDeletionWhenReferenced() {
+        service.savePlaybook(new Playbook().setId("target").setName("Target").setGuideMarkdown("guide"));
+        service.savePlaybook(new Playbook()
+                .setId("referrer")
+                .setName("Referrer")
+                .setRelatedPlaybookRefs(List.of(new PlaybookRelatedRef().setPlaybookId("target")))
+                .setGuideMarkdown("guide"));
+
+        assertThatThrownBy(() -> service.deletePlaybook("target"))
+                .isInstanceOf(ActionDockException.class)
+                .hasMessageContaining("被其他任务手册引用");
     }
 
     @Test

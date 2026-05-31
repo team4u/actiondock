@@ -384,14 +384,20 @@ class CapabilityPackageBuilderService {
     }
 
     CapabilityPackagePublishPreview buildCapabilityPackagePublishPreview(RepositoryDefinition repository,
-                                                                        List<RepositoryScriptDescriptor> publishedScripts,
-                                                                        List<RepositoryKnowledgeDescriptor> publishedKnowledge,
-                                                                        CapabilityPackageDraft draft,
-                                                                        CapabilityPackageDetail currentPackage) {
+                                                                         List<RepositoryScriptDescriptor> publishedScripts,
+                                                                         List<RepositoryKnowledgeDescriptor> publishedKnowledge,
+                                                                         List<RepositoryPlaybookDescriptor> publishedPlaybooks,
+                                                                         CapabilityPackageDraft draft,
+                                                                         CapabilityPackageDetail currentPackage) {
+        List<String> localPlaybookIds = playbookRepository.findAll().stream()
+                .map(org.team4u.actiondock.domain.model.Playbook::getId)
+                .toList();
         return CapabilityPackagePublishPreviewBuilder.buildPreview(
                 repository,
                 publishedScripts,
                 publishedKnowledge,
+                publishedPlaybooks,
+                localPlaybookIds,
                 draft,
                 currentPackage
         );

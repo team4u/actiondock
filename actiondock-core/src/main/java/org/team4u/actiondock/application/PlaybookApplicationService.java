@@ -90,6 +90,20 @@ public class PlaybookApplicationService {
     public void deletePlaybook(String id) {
         Playbook playbook = getPlaybook(id);
         ensurePlaybookEditable(playbook, false);
+        List<Playbook> allPlaybooks = playbookRepository.findAll();
+        List<String> referencingPlaybookIds = allPlaybooks.stream()
+                .filter(p -> !p.getId().equals(id))
+                .filter(p -> p.getRelatedPlaybookRefs().stream()
+                        .anyMatch(ref -> id.equals(ref.getPlaybookId())))
+                .map(Playbook::getId)
+                .toList();
+        if (!referencingPlaybookIds.isEmpty()) {
+            throw ActionDockException.conflict(
+                    ActionDockErrorCodes.PLAYBOOK_IN_USE,
+                    "无法删除任务手册，因为它被其他任务手册引用",
+                    Map.of("referencingPlaybookIds", referencingPlaybookIds)
+            );
+        }
         playbookRepository.deleteById(id);
     }
 
@@ -149,6 +163,13 @@ public class PlaybookApplicationService {
             String playbookId = ApplicationServiceSupport.normalize(ref.getPlaybookId(), "relatedPlaybookRefs.playbookId 不能为空");
             if (playbookId.equals(currentPlaybookId)) {
                 throw new IllegalArgumentException("relatedPlaybookRefs.playbookId 不能引用当前任务手册");
+            }
+            if (playbookRepository.findById(playbookId).isEmpty()) {
+                throw ActionDockException.notFound(
+                        ActionDockErrorCodes.PLAYBOOK_NOT_FOUND,
+                        "关联任务手册不存在: " + playbookId,
+                        Map.of("playbookId", playbookId)
+                );
             }
             PlaybookRelatedRefRelation relation = ref.getRelation() == null ? PlaybookRelatedRefRelation.RELATED : ref.getRelation();
             return new PlaybookRelatedRef()

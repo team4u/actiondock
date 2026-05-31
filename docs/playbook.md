@@ -262,15 +262,22 @@ actiondock script schema query-refund-log --json
 }
 ```
 
-保存 Playbook 时，平台会校验基础契约：
+保存 Playbook 时，平台会进行严格的生命周期与关联校验：
 
-- `guideMarkdown` 非空。
-- `scriptRefs.scriptId` 指向已存在脚本。
-- `agentSkillRefs.skillId` 非空。
-- `relatedPlaybookRefs.playbookId` 不能引用当前 Playbook。
-- `relatedPlaybookRefs.relation` 只能是 `RELATED`、`FOLLOW_UP`、`FALLBACK`。
-- `NOTE` 的 `markdown` 非空。
-- `FILE` 的 `path` 是仓库内相对路径。
+- **保存强校验**：
+  - `guideMarkdown` 非空。
+  - `scriptRefs.scriptId` 必须非空且指向已存在脚本。
+  - `agentSkillRefs.skillId` 必须非空（但仍只做 Agent 能力提示，不校验 Skill 本身是否存在）。
+  - `relatedPlaybookRefs.playbookId` 必须非空、不能指向当前 Playbook、且引用的目标 Playbook 必须在本地已存在。
+  - `relatedPlaybookRefs.relation` 只能是 `RELATED`、`FOLLOW_UP`、`FALLBACK`。
+  - `NOTE` 的 `markdown` 非空。
+  - `FILE` 的 `path` 是仓库内相对路径。
+- **删除与卸载保护**：
+  - 手动删除或卸载某本 Playbook 时，系统将扫描所有已存在的 Playbook；若发现有其他手册引用了当前手册 ID，则阻断删除并返回 conflict（`PLAYBOOK_IN_USE` 错误）及引用方列表。
+- **能力包重写与依赖规则**：
+  - **保留 Agent Skill 提示**：安装能力包时将完整保留并保存 `agentSkillRefs`。
+  - **同包引用 ID 重写**：安装能力包时重写 `relatedPlaybookRefs.playbookId`：如果目标在同一能力包内，改为运行时的内部 Playbook ID；否则保持原 ID 且要求本地已存在该引用的外部相关手册。支持包内以任意顺序相互引用，且在整体随包卸载时允许一起安全删除。
+  - **更新/卸载断链保护**：如果卸载或更新能力包会移除被“包外”Playbook 引用的手册，则该操作会被系统阻断。
 
 ## 管理命令
 
