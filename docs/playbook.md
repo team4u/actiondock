@@ -56,7 +56,7 @@ actiondock playbook list --repository-id billing-service --enabled --intent "退
 
 ## 核心设计哲学
 
-### 1. 声明式约束优于程序式执行 (Declarative Constraints vs. Procedural Execution)
+### 1. 声明式约束优于程序式执行
 
 许多传统的脚本平台倾向于将运维 SOP 设计为类似于 Jenkins Pipeline 或 YAML 工作流的自动执行 DSL。然而，线上故障排查是一个高度动态且不可预测的过程，静态的工作流在面对未知错误状态时极易中断或引发次生灾害。
 
@@ -213,7 +213,7 @@ actiondock playbook delete refund-failure --json
 
 ---
 
-## 常见哲学思考 (FAQ)
+## FAQ
 
 ### Q: 既然有了项目知识库 (ACTIONDOCK.md)，为什么还需要 Playbook？
 知识库是证据层，Playbook 是任务路由层。
