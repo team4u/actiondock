@@ -1,6 +1,6 @@
 # 任务手册 (Playbook)：Agent 的任务装配协议
 
-Playbook 是 Agent 进入业务项目时读取的任务装配协议。它把一次任务所需的边界、证据、动作、外部能力提示和任务导航放在同一份定义里，让 Agent 先收窄任务，再进入项目知识和脚本执行。
+Playbook 是 Agent 进入业务项目时读取的任务装配协议。它把一次任务所需的边界、证据、动作、Agent 能力提示和任务导航放在同一份定义里，让 Agent 先收窄任务，再进入项目知识和脚本执行。
 
 这份文档面向两类读者：维护 Playbook 的研发人员，以及按 ActionDock 协议消费 Playbook 的 Agent 实现者。
 
@@ -38,7 +38,7 @@ Playbook 归项目，Skill 归 Agent 运行环境。项目侧只声明“这次�
 | 消费方式 | Agent 自己决定是否可用 | ActionDock 通过 `list/get` 分发任务定义 |
 | 风险 | 业务场景过多时会膨胀运行时上下文 | 只在命中任务后加载详情 |
 
-这也是 `agentSkillRefs` 存在的原因：Playbook 可以提示 Agent 使用某个外部 Skill，但不把业务场景重新包装成 Skill。
+这也是 `agentSkillRefs` 存在的原因：Playbook 可以提示当前执行的 Agent 使用某个已具备的 Skill，但不把业务场景重新包装成 Skill。
 
 ## 为什么不只写进项目知识库
 
@@ -57,7 +57,7 @@ Playbook 回答“这次任务怎么收窄”：先看哪些证据，哪些脚�
 | 边界 | `riskLevel`、`stopConditions`、`repositoryIds` | 限定任务所属项目、风险等级和停止条件 | 校验基础格式，随详情返回给消费端 |
 | 证据 | `knowledgeRefs`、`guideMarkdown` | 指向项目知识、runbook 和任务判断依据 | `knowledgeRefs` 可解析为 `NOTE` 或仓库内 `FILE` |
 | 动作 | `scriptRefs` | 提供候选脚本池 | 校验脚本存在，消费端只查选中脚本的 schema |
-| 外部能力 | `agentSkillRefs` | 提示 Agent 可优先使用的外部 Skill | 只校验 `skillId` 非空，不安装、不发布、不检查是否存在 |
+| Agent 能力提示 | `agentSkillRefs` | 提示当前执行的 Agent 可优先使用的 Skill | 只校验 `skillId` 非空，不安装、不发布、不检查是否存在 |
 | 任务拓扑 | `relatedPlaybookRefs` | 提供相关任务导航 | 校验关系枚举和非自引用，不自动展开 |
 
 这五类信息共同定义一次临时任务装配。Agent 可以按任务现场调整顺序和工具选择，但不能绕过风险边界。
@@ -113,7 +113,7 @@ Agent 应根据用户问题、`guideMarkdown` 和 `scriptRefs[].purpose` 选择�
 
 ### `agentSkillRefs`
 
-`agentSkillRefs` 是外部能力提示。它告诉 Agent：“如果你的运行环境已经有这个 Skill，可以优先考虑。”
+`agentSkillRefs` 是给当前执行 Agent 的 Skill 提示。它告诉 Agent：“如果你的运行环境已经有这个 Skill，可以优先考虑。”
 
 典型用途：
 
@@ -142,7 +142,7 @@ Agent 消费 Playbook 时按五段执行：Route、Bound、Equip、Investigate�
 ```mermaid
 flowchart TD
     Route[Route: 用 list 找候选任务] --> Bound[Bound: 读取风险和停止条件]
-    Bound --> Equip[Equip: 检查外部 Skill 提示]
+    Bound --> Equip[Equip: 检查 Agent Skill 提示]
     Equip --> Investigate[Investigate: 读取 guide 和证据入口]
     Investigate --> Act[Act/Handoff: 查脚本 schema、执行或跳转相关 Playbook]
 ```
@@ -169,11 +169,11 @@ actiondock playbook get refund-failure --json
 
 消费端读取详情后，先处理 `repositoryIds`、`riskLevel` 和 `stopConditions`。这一步完成前，不查询脚本 schema，不运行脚本，也不进入大范围项目搜索。
 
-### 3. Equip：检查外部能力提示
+### 3. Equip：检查 Agent Skill 提示
 
 读取 `agentSkillRefs`，判断当前 Agent 环境是否已有对应 Skill。可用则优先使用，不可用则继续走普通证据检索和脚本 schema 路径。
 
-`agentSkillRefs` 不能作为硬依赖处理。缺少某个外部 Skill 时，Agent 可以向用户说明“建议能力不可用”，但不能假设 ActionDock 会补装。
+`agentSkillRefs` 不能作为硬依赖处理。缺少某个提示的 Skill 时，Agent 可以向用户说明“建议能力不可用”，但不能假设 ActionDock 会补装。
 
 ### 4. Investigate：读取指南和证据
 
@@ -222,7 +222,7 @@ actiondock script schema query-refund-log --json
 
 ## 配置示例
 
-下面的退款失败排查示例展示了一篇 Playbook 如何同时声明证据、候选动作、外部能力提示和任务导航。
+下面的退款失败排查示例展示了一篇 Playbook 如何同时声明证据、候选动作、Agent 能力提示和任务导航。
 
 ```json
 {

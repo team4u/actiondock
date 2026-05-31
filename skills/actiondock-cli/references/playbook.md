@@ -8,7 +8,7 @@ Playbook 只回答：
 - 风险边界和停止条件是什么
 - 建议先看哪些知识
 - 建议用哪些脚本
-- 可选使用哪些外部 Agent Skill
+- 可选使用当前 Agent 的哪些 Skill
 - 任务失败、后续处理或相关任务该跳到哪里
 - 建议怎么走
 - 什么时候别继续
@@ -40,7 +40,7 @@ actiondock playbook get <playbook-id> --json
 4. 固定按五段式消费详情：
    1. Route：确认当前 Playbook 是用户问题的合适任务入口。
    2. Bound：先查看 `repositoryIds`、`riskLevel` 和 `stopConditions`。
-   3. Equip：查看 `agentSkillRefs`，判断当前 Agent 是否已有可用外部 Skill。
+   3. Equip：查看 `agentSkillRefs`，判断当前 Agent 是否已有可用 Skill。
    4. Investigate：阅读 `guideMarkdown`，生成问题清单，再按清单读取 `knowledgeRefs` 和项目知识。
    5. Act/Handoff：只对选中的 `scriptRefs` 查询 schema；信息足够且风险可接受时执行脚本，或按 `relatedPlaybookRefs` 显式跳转。
 
@@ -48,7 +48,7 @@ actiondock playbook get <playbook-id> --json
 
 命中任一停止条件时停止，并向用户说明缺少什么或为什么需要人工确认。
 
-给用户总结时，默认说明：命中的 Playbook、风险等级、使用或缺失的外部 Agent Skill、选中的脚本、查过的 schema、实际参考的项目文档、是否跳转过相关 Playbook，以及仍未补齐的问题。
+给用户总结时，默认说明：命中的 Playbook、风险等级、使用或缺失的 Agent Skill、选中的脚本、查过的 schema、实际参考的项目文档、是否跳转过相关 Playbook，以及仍未补齐的问题。
 
 ## 通用项目调查 fallback
 
@@ -110,16 +110,16 @@ actiondock playbook get <playbook-id> --json
 
 ## 关联资源使用
 
-### 外部 Agent Skill 提示
+### Agent Skill 提示
 
-`agentSkillRefs` 是给消费端 Agent 的软提示，不是 ActionDock Skill 资产，也不是能力包依赖。ActionDock 只校验 `skillId` 非空，不安装、不发布、不检查这些 Skill 是否存在。
+`agentSkillRefs` 是给当前执行 Agent 的软提示，不是 ActionDock Skill 资产，也不是能力包依赖。ActionDock 只校验 `skillId` 非空，不安装、不发布、不检查这些 Skill 是否存在。
 
 消费规则：
 
 - 如果当前 Agent 运行环境已有 `agentSkillRefs[].skillId` 对应 Skill，按 `purpose` 判断是否优先使用。
 - 如果缺少对应 Skill，不要尝试通过 ActionDock 安装；继续走 `guideMarkdown`、`knowledgeRefs` 和 `scriptRefs` 路径。
 - `required: true` 仍然只表示任务作者认为该能力很重要；消费端必须根据自己环境判断是否可用，必要时向用户说明缺失能力。
-- 不要把业务排查场景改写成 Agent Skill；业务边界留在 Playbook，外部通用能力才用 Skill。
+- 不要把业务排查场景改写成 Agent Skill；业务边界留在 Playbook，当前 Agent 已具备的通用能力才用 Skill 提示引用。
 
 常见写法：
 
