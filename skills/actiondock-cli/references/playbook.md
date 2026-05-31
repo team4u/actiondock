@@ -5,12 +5,15 @@
 Playbook 只回答：
 
 - 这是什么任务
+- 风险边界和停止条件是什么
 - 建议先看哪些知识
 - 建议用哪些脚本
+- 可选使用哪些外部 Agent Skill
+- 任务失败、后续处理或相关任务该跳到哪里
 - 建议怎么走
 - 什么时候别继续
 
-Playbook 不是步骤 DSL，也不是执行引擎；`scriptRefs` 只是关联脚本清单，不表示自动执行计划。
+Playbook 不是步骤 DSL，也不是执行引擎。`scriptRefs` 是候选脚本池，不表示自动执行计划；`relatedPlaybookRefs` 是任务导航，不表示自动工作流。
 
 ## 消费快路径
 
@@ -34,21 +37,18 @@ actiondock playbook list --repository-id <repositoryId> --enabled --intent "<reg
 actiondock playbook get <playbook-id> --json
 ```
 
-4. 固定按以下顺序消费详情：
-   1. 查看 `riskLevel`
-   2. 查看 `stopConditions`
-   3. 阅读 `guideMarkdown`，提取用户当前问题、任务阶段、业务对象、故障类型和关键词
-   4. 根据用户问题、`guideMarkdown` 和 `scriptRefs[].purpose` 选择最小相关脚本集
-   5. 只对选中的脚本查询 schema
-   6. 用选中脚本 schema 生成待补齐问题清单
-   7. 带着问题清单进入项目知识库定向查找答案
-   8. 信息足够且风险可接受时，才执行脚本
+4. 固定按五段式消费详情：
+   1. Route：确认当前 Playbook 是用户问题的合适任务入口。
+   2. Bound：先查看 `repositoryIds`、`riskLevel` 和 `stopConditions`。
+   3. Equip：查看 `agentSkillRefs`，判断当前 Agent 是否已有可用外部 Skill。
+   4. Investigate：阅读 `guideMarkdown`，生成问题清单，再按清单读取 `knowledgeRefs` 和项目知识。
+   5. Act/Handoff：只对选中的 `scriptRefs` 查询 schema；信息足够且风险可接受时执行脚本，或按 `relatedPlaybookRefs` 显式跳转。
 
 5. 如果没有命中专用 Playbook，CLI 会自动退回同一过滤条件下的全量摘要列表；仍无法判断时，按本文件的“通用项目调查 fallback”执行。
 
 命中任一停止条件时停止，并向用户说明缺少什么或为什么需要人工确认。
 
-给用户总结时，默认说明：命中的 Playbook、风险等级、选中的脚本、查过的 schema、实际参考的项目文档和仍未补齐的问题。
+给用户总结时，默认说明：命中的 Playbook、风险等级、使用或缺失的外部 Agent Skill、选中的脚本、查过的 schema、实际参考的项目文档、是否跳转过相关 Playbook，以及仍未补齐的问题。
 
 ## 通用项目调查 fallback
 
@@ -86,7 +86,7 @@ actiondock playbook list --repository-id <repositoryId> --tag <tag> --intent "<r
 ```
 
 - `playbook list --json`：摘要候选列表，是发现主入口。
-- `playbook list --json` 不返回 `guideMarkdown`、`knowledgeRefs`、`scriptRefs`、`stopConditions`。
+- `playbook list --json` 不返回 `guideMarkdown`、`knowledgeRefs`、`scriptRefs`、`agentSkillRefs`、`relatedPlaybookRefs`、`stopConditions`。
 - `--intent` 是正则意图搜索，匹配摘要字段；未命中时 CLI 自动回退全量候选。
   * **正则构建机制**：Agent 必须将用户的自然语言输入，提炼拆解为核心的领域名词、技术动作、状态/症状等关键实体词（中英文对照），并使用正则逻辑或 `|` 连接。禁止将整段自然语言原样传入 `--intent`。
   * **意图提取示例**：
@@ -106,9 +106,56 @@ actiondock playbook list --repository-id <repositoryId> --tag <tag> --intent "<r
 actiondock playbook get <playbook-id> --json
 ```
 
-- `playbook get --json`：读取单个 Playbook 完整定义，也是消费执行导览的主命令，返回 `riskLevel`、`guideMarkdown`、`knowledgeRefs`、`scriptRefs` 和 `stopConditions`。
+- `playbook get --json`：读取单个 Playbook 完整定义，也是消费执行导览的主命令，返回 `riskLevel`、`guideMarkdown`、`knowledgeRefs`、`scriptRefs`、`agentSkillRefs`、`relatedPlaybookRefs` 和 `stopConditions`。
 
 ## 关联资源使用
+
+### 外部 Agent Skill 提示
+
+`agentSkillRefs` 是给消费端 Agent 的软提示，不是 ActionDock Skill 资产，也不是能力包依赖。ActionDock 只校验 `skillId` 非空，不安装、不发布、不检查这些 Skill 是否存在。
+
+消费规则：
+
+- 如果当前 Agent 运行环境已有 `agentSkillRefs[].skillId` 对应 Skill，按 `purpose` 判断是否优先使用。
+- 如果缺少对应 Skill，不要尝试通过 ActionDock 安装；继续走 `guideMarkdown`、`knowledgeRefs` 和 `scriptRefs` 路径。
+- `required: true` 仍然只表示任务作者认为该能力很重要；消费端必须根据自己环境判断是否可用，必要时向用户说明缺失能力。
+- 不要把业务排查场景改写成 Agent Skill；业务边界留在 Playbook，外部通用能力才用 Skill。
+
+常见写法：
+
+```json
+{
+  "agentSkillRefs": [
+    { "skillId": "openai-docs", "purpose": "需要确认官方 API 文档时使用", "required": false },
+    { "skillId": "team-cloud-cli", "purpose": "需要读取团队云平台诊断信息时使用", "required": false }
+  ]
+}
+```
+
+### 相关任务手册导航
+
+`relatedPlaybookRefs` 只做任务导航，支持 `RELATED`、`FOLLOW_UP`、`FALLBACK`。它不表示继承关系、合并关系或自动编排关系。
+
+消费规则：
+
+- `RELATED`：提示同问题域的相关任务；只有用户问题需要时才跳转。
+- `FOLLOW_UP`：当前任务定位到某类结果后，建议继续处理的后续任务。
+- `FALLBACK`：当前专用 Playbook 不匹配或无法覆盖时的退路。
+- 跳转前必须向用户或最终总结说明跳转原因。
+- 跳转时执行 `actiondock playbook get <related-playbook-id> --json`，重新读取新 Playbook 的 `riskLevel`、`stopConditions`、`guideMarkdown` 和资源引用。
+- 禁止自动继承、自动合并、自动递归加载相关 Playbook。上一个 Playbook 的脚本池、知识引用和停止条件不能自动带到下一个 Playbook。
+
+常见写法：
+
+```json
+{
+  "relatedPlaybookRefs": [
+    { "playbookId": "generic-project-investigation", "relation": "FALLBACK", "purpose": "当前专用手册不适用时退回通用项目调查" },
+    { "playbookId": "database-slow-query", "relation": "FOLLOW_UP", "purpose": "日志显示数据库慢查询时继续定位" },
+    { "playbookId": "payment-callback-failure", "relation": "RELATED", "purpose": "用户同时反馈支付回调异常时参考" }
+  ]
+}
+```
 
 ### 脚本选择与 schema
 
@@ -203,6 +250,12 @@ Playbook 最小示例：
   "scriptRefs": [
     { "scriptId": "query-log", "purpose": "查询退款链路日志" }
   ],
+  "agentSkillRefs": [
+    { "skillId": "openai-docs", "purpose": "需要查官方文档时使用", "required": false }
+  ],
+  "relatedPlaybookRefs": [
+    { "playbookId": "generic-project-investigation", "relation": "FALLBACK", "purpose": "专用手册不适用时退回通用项目调查" }
+  ],
   "guideMarkdown": "先读取 ACTIONDOCK.md，再查看 refund-runbook.md。",
   "stopConditions": ["缺少关键上下文", "需要高风险写操作", "已确认根因"],
   "enabled": true
@@ -213,5 +266,8 @@ Playbook 最小示例：
 
 - `guideMarkdown` 非空
 - `scriptRefs.scriptId` 存在
+- `agentSkillRefs.skillId` 非空；不校验 Skill 是否存在
+- `relatedPlaybookRefs.playbookId` 非空，且不能引用当前任务手册
+- `relatedPlaybookRefs.relation` 只能是 `RELATED` / `FOLLOW_UP` / `FALLBACK`
 - `NOTE` 的 `markdown` 非空
 - `FILE` 的 `path` 必须是仓库内相对路径

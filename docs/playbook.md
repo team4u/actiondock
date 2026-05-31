@@ -1,190 +1,228 @@
-# 任务手册 (Playbook)：让 Agent 先拿到任务边界
+# 任务手册 (Playbook)：Agent 的任务装配协议
 
-在复杂的企业级项目或线上故障排查中，AI Agent 往往面临两个核心难题：一是容易迷失在庞大的代码库目录中，导致上下文检索成本高昂；二是缺乏风险防范意识，容易在未经验证的情况下盲目运行敏感脚本，引发线上故障。
+Playbook 是 Agent 进入业务项目时读取的任务装配协议。它把一次任务所需的边界、证据、动作、外部能力提示和任务导航放在同一份定义里，让 Agent 先收窄任务，再进入项目知识和脚本执行。
 
-**任务手册 (Playbook)** 是 ActionDock 平台专为解决上述问题设计的**战术级约束与导览资产**。它不以自动化执行为目的，而是为 Agent 动态挂载一套安全的水位边界、专属的工具箱以及结构化的排查路径指南。
+这份文档面向两类读者：维护 Playbook 的研发人员，以及按 ActionDock 协议消费 Playbook 的 Agent 实现者。
 
 ---
 
-## 为什么要把任务边界前置
+## Playbook 解决的问题
 
-Playbook 关注的不是“把排查经验写在哪里”，而是“Agent 在一次具体任务里，先拿到什么边界”。
+企业项目里的排查材料通常分散在 runbook、源码、日志平台、数据库说明和脚本工具里。Agent 如果直接进入这些材料，会先面对三个判断：
 
-两个替代方案很容易想到：一个排查场景写成一个 Agent Skill，或者把所有排查手册都写进项目知识库，再让一个通用 Skill 去搜索。它们在小规模场景里都能工作，问题会在排障场景变多之后出现。
+- 当前问题属于哪个任务。
+- 哪些材料和脚本与这个任务有关。
+- 哪些情况必须停止，交给人确认。
 
-### 1. 排查经验不能全塞进 Skill：避免 “Skill 膨胀与维护地狱”
+这些判断不能等 Agent 读完一堆文档后再归纳。生产排障里，边界要先到。
 
-在传统的开发模式中，为每一个特定的业务场景（如退款失败、数据库慢查询、Webhook 丢包）手写、打包并发布一个 Agent Skill，会迅速将团队拖入维护泥潭。
-
-当排障场景增长到几十个时，Agent 将面临两难选择：
-* **全量加载**：将数十个不相关的排障规则和私有工具塞进同一个上下文，导致 Context 迅速膨胀并引发严重的推理偏离。
-* **手动点名**：要求用户（或上游路由系统）先判断“当前故障到底该用哪一个特定的 Skill”，将路由责任交还给人类。
-
-ActionDock 通过 **“Skill 归平台，Playbook 归项目”** 的分层设计彻底解耦了这两者：
-
-* **Agent 原生 Skill 负责“通用感官与底层物理能力”**：
-  它是底座级的系统基建，定义了 Agent 跨项目、跨业务的底层操作（如文件读写、CLI 命令执行、数据库通用检索）。原生 Skill 属于全局静态加载，一次编写，全局复用。
-* **Playbook 负责“跟着代码走的战术地图与交战守则”**：
-  它是轻量级、声明式的战术配置（JSON + Markdown），直接存放在项目 Git 仓库中。它不定义如何具体执行，而是为特定场景声明一条排查指南（`guideMarkdown`）、一组受控的候选脚本（`scriptRefs`）、相关的知识指针（`knowledgeRefs`）和熔断条件（`stopConditions`）。
-
-| 维度 | Agent 原生 Skill | Playbook |
-| :--- | :--- | :--- |
-| **角色定位** | 骨骼与通用感官（决定 Agent “能做什么”） | 战术地图与交战守则（决定 Agent “针对当前任务怎么做”） |
-| **存放位置** | Agent 运行时或平台侧（全局静态加载） | 业务项目 Git 仓库中（随代码迭代与分发） |
-| **扩展成本** | 高（需要开发、测试、打包并重新安装 Skill） | 极低（声明式 JSON + Markdown，秒级动态匹配） |
-
-通过这种分层，Agent 凭借通用的原生 Skill，在进入具体项目时利用 Playbook 协议瞬间装配出针对该场景的“临时特种战术”，既隔绝了上下文污染，又彻底免去了业务级 Skill 的开发与维护成本。
-
-### 2. 排查手册不能只埋在知识库
-
-另一个方案是把“退款失败排查”“支付超时排查”“库存回滚检查”都写到项目知识库里，比如放进 `docs/runbooks/`，再让一个通用 Skill 先读 `ACTIONDOCK.md`，然后搜索这些文档。
-
-这个方案把 Skill 数量降下来了，但把任务路由埋进了知识检索里。
-
-当用户说“这笔退款为什么失败”时，Agent 需要先判断三件事：这属于哪个任务场景，这个场景允许看哪些知识和脚本，什么条件下必须停止。如果这些信息都放在知识库文档里，Agent 必须先检索、阅读、理解，再临时归纳任务边界。
-
-边界来得太晚。
-
-项目知识库适合保存事实：项目有哪些模块，接口字段是什么意思，数据库表怎么设计，日志在哪里，runbook 原文怎么写。Playbook 负责选择任务边界：当前问题属于哪个任务，先读哪些证据，哪些脚本是候选工具，风险等级是什么，哪些条件出现后必须停止。
-
-生产排障里，边界应该先于材料。Agent 先拿到 Playbook 给出的任务边界，再进入 `ACTIONDOCK.md` 和项目知识库取证。
-
-### 3. Playbook 是可预演的路由资产
-
-把排查场景做成 Skill，或者把手册全文放进项目知识库，很难在任务开始前预演 Agent 最终会装载何种边界。Skill 的水位边界藏在 Agent 运行环境内，知识库的边界则藏在文档正文深处；两者都需等 Agent 实际运行并阅读后，才能确认路由是否正确。
-
-Playbook 的关键差异在 list 阶段就暴露出来：
+Playbook 把任务入口前移到 `playbook list` 和 `playbook get` 两个阶段。`list` 给出可预演的候选任务摘要，`get` 只加载命中的任务定义。Agent 拿到任务定义后，再按定义里的引用读取项目知识、查询脚本 schema、决定是否执行动作。
 
 ```bash
-actiondock playbook list --repository-id billing-service --enabled --intent "退款|refund|payment" --json
+actiondock playbook list --repository-id billing-service --enabled --intent "退款|refund|失败|failure" --json
+actiondock playbook get refund-failure --json
 ```
 
-这条命令只返回摘要：`id`、`name`、`description`、`riskLevel`、`tags`、`repositoryIds`、启用状态和托管状态。研发人员、值班同学和 Agent 看到的是同一份候选清单，可以直接判断“这次问题会被路由到哪个手册”。如果 `--intent` 没有命中，CLI 会自动退回同一查询条件下的全量列表，Agent 不会因为关键词没写准就卡死。
+这套协议给 Agent 提供可审计的工作边界，不替 Agent 写死步骤。
 
-这就是 Playbook 比通用 Skill 或知识库更适合作为排障入口的地方：它把任务路由从“阅读后的模型推断”前移成“可查询、可审计、可预演的资产发现”。
+## 为什么不把排查场景全做成 Skill
 
----
+Agent Skill 适合承载跨项目复用的通用能力，例如读取文件、调用 CLI、检索官方文档、访问云厂商工具或解析某类标准格式。业务排查场景会跟着项目代码、接口、表结构和 runbook 变化，把每个场景都做成 Skill，会把业务变化带进 Agent 运行时。
 
-## 核心设计哲学
+Playbook 归项目，Skill 归 Agent 运行环境。项目侧只声明“这次任务建议用哪些能力和材料”，不负责安装或发布 Agent Skill。
 
-### 1. 声明式约束优于程序式执行
+| 维度 | Agent Skill | Playbook |
+|------|-------------|----------|
+| 适合承载 | 跨项目通用能力，例如官方文档检索、云 CLI、标准格式解析 | 项目内任务边界，例如退款失败、支付超时、慢查询定位 |
+| 生命周期 | 随 Agent 运行环境安装和升级 | 随项目仓库和能力包发布 |
+| 消费方式 | Agent 自己决定是否可用 | ActionDock 通过 `list/get` 分发任务定义 |
+| 风险 | 业务场景过多时会膨胀运行时上下文 | 只在命中任务后加载详情 |
 
-许多传统的脚本平台倾向于将运维 SOP 设计为类似于 Jenkins Pipeline 或 YAML 工作流的自动执行 DSL。然而，线上故障排查是一个高度动态且不可预测的过程，静态的工作流在面对未知错误状态时极易中断或引发次生灾害。
+这也是 `agentSkillRefs` 存在的原因：Playbook 可以提示 Agent 使用某个外部 Skill，但不把业务场景重新包装成 Skill。
 
-Playbook 采用了截然不同的**声明式约束**理念：
-* **不决定步骤顺序**：Playbook 关联的脚本引用（`scriptRefs`）仅代表一个受控的候选工具池，而非按特定顺序强制执行的步骤列表。
-* **交付自主决策权，控制边界**：系统在运行时将安全边界（阻断条件、风险评级）和推荐工具集交付给 Agent，由大语言模型基于实时状态自主决策调用顺序。
-* **熔断机制优先**：通过显示声明阻断条件（`stopConditions`），在 Agent 意图偏离安全水位或确认根因时强制要求人工介入，确保线上安全。
+## 为什么不只写进项目知识库
 
-### 2. 双阶段消费协议：轻量化上下文治理
+项目知识库适合保存事实：模块说明、接口字段、数据库表、日志位置、runbook 原文、源码入口。它回答“材料在哪里”。
 
-如果将所有的排查手册、脚本 Schema 和参考文档在 Agent 初始化时全量灌入，会迅速耗尽大模型的上下文窗口，并由于信息噪声导致推理偏离。
+Playbook 回答“这次任务怎么收窄”：先看哪些证据，哪些脚本是候选动作，风险等级是什么，哪些条件出现后要停止，失败后可以跳到哪个相关任务。
 
-为此，Playbook 在接口和命令行层面设计了**双阶段消费协议**：
+如果把这些边界都埋在 `ACTIONDOCK.md` 或 `docs/runbooks/` 里，Agent 要先搜索、阅读、判断，再临时整理任务边界。边界到得太晚，排障容易变成无目标阅读。
 
-```text
-       [用户问题输入]
-              │
-              ▼
-  1. 意图摘要发现 (List 阶段)  ───► 只返回 ID、名称与标签，极低 Token 损耗
-              │
-              ▼
-  2. 详情载入与解析 (Get 阶段)  ───► 精确载入对应 Playbook 的 Markdown 指南与边界
-```
+## 装配信息模型
 
-这种分离设计确保了 Agent 能够在第一阶段利用轻量级的元数据进行快速的意图匹配；仅在确认匹配到特定任务场景后，才在第二阶段拉取完整的安全限制与执行指南，实现上下文噪声控制。
+一篇 Playbook 给 Agent 装配五类信息。
 
----
+| 类型 | 字段 | 作用 | ActionDock 处理方式 |
+|------|------|------|--------------------|
+| 边界 | `riskLevel`、`stopConditions`、`repositoryIds` | 限定任务所属项目、风险等级和停止条件 | 校验基础格式，随详情返回给消费端 |
+| 证据 | `knowledgeRefs`、`guideMarkdown` | 指向项目知识、runbook 和任务判断依据 | `knowledgeRefs` 可解析为 `NOTE` 或仓库内 `FILE` |
+| 动作 | `scriptRefs` | 提供候选脚本池 | 校验脚本存在，消费端只查选中脚本的 schema |
+| 外部能力 | `agentSkillRefs` | 提示 Agent 可优先使用的外部 Skill | 只校验 `skillId` 非空，不安装、不发布、不检查是否存在 |
+| 任务拓扑 | `relatedPlaybookRefs` | 提供相关任务导航 | 校验关系枚举和非自引用，不自动展开 |
 
-## 核心概念模型
+这五类信息共同定义一次临时任务装配。Agent 可以按任务现场调整顺序和工具选择，但不能绕过风险边界。
 
-从设计层面来看，一篇任务手册由四个维度的声明构成，它们共同定义了 Agent 的活动空间：
+## 字段语义
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      Playbook 核心定义                       │
-├──────────────────────────────┬──────────────────────────────┤
-│          1. 安全水位          │          2. 战术指南          │
-│   - riskLevel (LOW/MED/HIGH) │   - guideMarkdown (SOP)      │
-├──────────────────────────────┼──────────────────────────────┤
-│          3. 资源映射          │          4. 阻断机制          │
-│   - knowledgeRefs (知识指针)  │   - stopConditions (熔断条件) │
-│   - scriptRefs (安全脚本池)    │                              │
-│   - agentSkillRefs (外部提示)  │                              │
-│   - relatedPlaybookRefs (导航) │                              │
-└──────────────────────────────┴──────────────────────────────┘
-```
+### `riskLevel`
 
-### 1. 安全水位 (Security Level)
-通过 `riskLevel`（如 `LOW`、`MEDIUM`、`HIGH`）静态声明场景的风险级别。这是 Agent 执行过程中的高空雷达，能让 Agent 在高风险写操作前自动进入审慎状态。
+`riskLevel` 标记任务风险，支持 `LOW`、`MEDIUM`、`HIGH`。消费端看到 `HIGH` 时，应把写操作、生产权限、数据修复和批量脚本执行放入人工确认路径。
 
-### 2. 战术指南 (Tactical Guide)
-由 `guideMarkdown` 承载，是一篇非结构化的 Markdown 文档。它提供给大模型阅读，不交给执行引擎解析成步骤 DSL。它指导 Agent 如何逐步解构问题、应该观察哪些日志特征以及采取何种排查姿态。
+### `stopConditions`
 
-### 3. 资源映射 (Resource Mapping)
-* **知识引用 (`knowledgeRefs`)**：不在数据库中复制大篇文档，只保存知识指针（`FILE` 类型指向仓库内相对路径，`NOTE` 类型承载特定仓库的临时叮嘱）。保持了手册自身的轻量。
-* **脚本引用 (`scriptRefs`)**：将具备执行权限的 Action 脚本与特定的 Playbook 绑定，限制了 Agent 仅能调配当前场景所需的最小工具集。
-* **外部 Agent Skill 引用 (`agentSkillRefs`)**：只提示消费端 Agent 可以使用自己已安装的 Skill。ActionDock 不校验、不安装、不发布这些 Skill，也不把它们视为平台资产依赖。
-* **相关任务手册引用 (`relatedPlaybookRefs`)**：只做导航提示，支持 `RELATED`、`FOLLOW_UP`、`FALLBACK`。消费端不应自动继承、合并或递归加载被引用手册。
+`stopConditions` 是任务停止条件，例如：
 
-### 4. 阻断机制 (Circuit Breaker)
-由 `stopConditions`（如 `["缺少关键参数", "需要高风险写操作", "已确认根因"]`）定义。这是规避 AI 盲目重试或失控的关键屏障。Agent 在执行中必须将这些条件作为全局不变量持续监控，一旦触发即刻熔断。
+- 缺少订单 ID、租户 ID、环境名等关键上下文。
+- 需要生产数据权限，但用户没有明确授权。
+- 即将执行高风险写操作。
+- 已确认根因，继续运行脚本只会增加风险。
 
----
+Agent 在任务过程中要持续对照这些条件。命中后停止，并向用户说明缺什么或为什么需要人工确认。
 
-## 消费端 Agent 消费协议流程
+### `guideMarkdown`
 
-当 Agent 介入排查时，必须严格遵循平台制定的 8 步消费协议。这一流程的核心是**逆向推导与定向检索**，而非无目标的盲目遍历：
+`guideMarkdown` 是给 Agent 阅读的任务指南。它可以写排查顺序、判断分支、常见误判、日志关键词和业务背景，但不能被消费端解析成步骤 DSL。
+
+适合写进 `guideMarkdown` 的内容：
+
+- 当前任务的判断标准。
+- 需要优先观察的业务对象、日志字段、接口名、表名。
+- 某些动作前必须补齐的上下文。
+- 常见错误路径，例如“退款状态为 `PENDING` 时不要直接重试打款脚本”。
+
+不适合写进 `guideMarkdown` 的内容：
+
+- 大段项目文档原文。应放进 `knowledgeRefs` 指向的文件。
+- 固定执行脚本序列。应让 Agent 基于 schema 和现场信息选择脚本。
+- 跨任务跳转规则。应放进 `relatedPlaybookRefs`。
+
+### `knowledgeRefs`
+
+`knowledgeRefs` 是证据入口，不是知识正文仓库。它支持两类引用：
+
+- `NOTE`：短说明，适合写“先读退款流程背景，再看 runbook”这类项目内提示。
+- `FILE`：仓库内相对路径，例如 `docs/runbooks/refund-runbook.md`。
+
+Agent 读取知识时要先形成问题清单，再按清单读取相关 `NOTE` 和 `FILE`。存在 `knowledgeRefs` 不代表要全量阅读所有引用。
+
+### `scriptRefs`
+
+`scriptRefs` 是候选动作池。它只表示“这些脚本可能用于当前任务”，不表示必须执行，也不表示执行顺序。
+
+Agent 应根据用户问题、`guideMarkdown` 和 `scriptRefs[].purpose` 选择最小脚本集。默认选 1 个，确有并行排查路径时最多选 3 个。只对选中的脚本查询 schema，再用 schema 反推需要补齐的上下文。
+
+### `agentSkillRefs`
+
+`agentSkillRefs` 是外部能力提示。它告诉 Agent：“如果你的运行环境已经有这个 Skill，可以优先考虑。”
+
+典型用途：
+
+- 需要查官方文档时，提示使用 `openai-docs`、`aws-docs`、`kubernetes-docs` 之类的文档检索 Skill。
+- 需要调用云厂商 CLI 时，提示使用团队封装过的云工具 Skill。
+- 需要访问团队私有知识或标准诊断工具时，提示使用私有 Agent Skill。
+
+ActionDock 不会安装这些 Skill，也不会检查它们是否存在。即便某个 `agentSkillRefs[].required` 为 `true`，平台也只把它作为语义提示交给消费端。原因很简单：Agent Skill 属于运行环境，ActionDock 不掌握不同 Agent 的安装状态。
+
+### `relatedPlaybookRefs`
+
+`relatedPlaybookRefs` 构成任务拓扑，只做导航。支持三种关系：
+
+- `RELATED`：同一问题域里的相关任务，例如退款失败和支付回调异常。
+- `FOLLOW_UP`：当前任务确认某类结果后，建议继续处理的后续任务，例如定位到数据库慢查询后跳到慢查询手册。
+- `FALLBACK`：当前专用手册不适用时的退路，例如回到 `generic-project-investigation`。
+
+消费端不能自动继承、合并或递归加载被引用的 Playbook。跳转前必须重新执行 `playbook get`，重新读取新任务的 `riskLevel`、`stopConditions`、`guideMarkdown` 和资源引用。
+
+这条限制防止 Playbook 变成隐式工作流。相关任务只负责导航，不负责自动编排。
+
+## 五段式消费协议
+
+Agent 消费 Playbook 时按五段执行：Route、Bound、Equip、Investigate、Act/Handoff。
 
 ```mermaid
 flowchart TD
-    Start[1. 确认项目仓库 ID] --> Search[2. 根据意图正则拉取候选摘要 playbook list]
-    Search --> Fetch[3. 命中有用 Playbook 后载入详情 playbook get]
-    Fetch --> Review[4. 解析指南与安全边界 riskLevel & stopConditions]
-    Review --> Select[5. 基于指南与问题筛选最相关的 1~3 个脚本]
-    Select --> Schema[6. 查询选中脚本的 Schema 契约]
-    Schema --> Derive[7. 逆向推导需要补齐的参数, 生成临时问题清单]
-    Derive --> Read[8. 携带清单定向读取 FILE/NOTE 知识或脚本执行]
+    Route[Route: 用 list 找候选任务] --> Bound[Bound: 读取风险和停止条件]
+    Bound --> Equip[Equip: 检查外部 Skill 提示]
+    Equip --> Investigate[Investigate: 读取 guide 和证据入口]
+    Investigate --> Act[Act/Handoff: 查脚本 schema、执行或跳转相关 Playbook]
 ```
 
-1. **确认项目仓库 ID**：锁定物理边界，防止多项目配置交叉污染。
-2. **候选搜索 (List)**：用 `playbook list --intent <regex>` 做轻量级检索，快速匹配意图；未命中时 CLI 自动退回全量候选摘要。
-3. **载入详情 (Get)**：加载专用 Playbook。
-4. **安全与导览审查**：先将阻断条件写入内存作为全局熔断器，再阅读指南提取故障特征。
-5. **筛选脚本**：不盲目读取所有脚本，根据需要只挑选 1 到 3 个高度相关的工具。
-6. **查询 Schema**：仅对选中的脚本获取输入参数契约。
-7. **逆向生成问题清单**：根据 Schema 参数的必填性、枚举和格式要求，**反向推导**自己需要获取哪些具体的上下文（如特定的订单 ID、日志字段或表名），列出临时问题清单。
-8. **定向知识检索与受控执行**：带着问题清单定向查阅 `ACTIONDOCK.md` 和关联文档。禁止无目标的扫描。在参数就绪且没有触发任何熔断条件的前提下，安全运行脚本并进行归纳总结。
+### 1. Route：找到候选任务
 
----
+先确认目标项目仓库 ID，再用用户问题提取领域词、症状词和动作词，构造 `--intent` 正则。
 
-## 兜底机制：通用项目调查 Fallback
+```bash
+actiondock playbook list --repository-id billing-service --enabled --intent "退款|refund|失败|failure" --json
+```
 
-好的设计应当提供完美的容错和退化路径。当系统没有匹配到特定场景的专用 Playbook 时，Agent 会退化到**通用项目调查流程**。
+`playbook list` 只返回摘要字段，例如 `id`、`name`、`description`、`riskLevel`、`tags`、`repositoryIds`、启用状态和托管状态。它不返回 `guideMarkdown`、`knowledgeRefs`、`scriptRefs`、`agentSkillRefs`、`relatedPlaybookRefs` 和 `stopConditions`。
 
-### 1. 声明式通用指南 (Fallback Guide)
+如果 `--intent` 没有命中，CLI 会退回同一过滤条件下的全量摘要列表。Agent 应从摘要里继续判断，仍无法判断时再使用通用项目调查 fallback。
 
-系统会使用一段精心设计的高抽象通用引导文本替代专用的 `guideMarkdown`：
+### 2. Bound：先读边界
+
+命中 Playbook 后读取完整详情。
+
+```bash
+actiondock playbook get refund-failure --json
+```
+
+消费端读取详情后，先处理 `repositoryIds`、`riskLevel` 和 `stopConditions`。这一步完成前，不查询脚本 schema，不运行脚本，也不进入大范围项目搜索。
+
+### 3. Equip：检查外部能力提示
+
+读取 `agentSkillRefs`，判断当前 Agent 环境是否已有对应 Skill。可用则优先使用，不可用则继续走普通证据检索和脚本 schema 路径。
+
+`agentSkillRefs` 不能作为硬依赖处理。缺少某个外部 Skill 时，Agent 可以向用户说明“建议能力不可用”，但不能假设 ActionDock 会补装。
+
+### 4. Investigate：读取指南和证据
+
+阅读 `guideMarkdown`，整理临时问题清单：
+
+- 用户当前问题要定位什么。
+- 当前任务里要先确认哪些业务对象。
+- 哪些字段可能来自用户输入、`ACTIONDOCK.md`、`knowledgeRefs` 或源码。
+- 哪些停止条件可能被触发。
+
+随后进入项目知识库：先 resolve 目标仓库，读取 `ACTIONDOCK.md`，再按问题清单读取 `knowledgeRefs` 指向的 `NOTE` 和 `FILE`。文档不足或疑似过期时，再查源码。
+
+### 5. Act/Handoff：执行动作或跳转任务
+
+只有在问题清单已经补齐、风险可接受、没有命中停止条件时，才选择脚本。
+
+```bash
+actiondock script schema query-refund-log --json
+```
+
+查询 schema 的目的是确认入参契约：必填字段、枚举值、格式要求和参数来源。参数补齐后，再按脚本执行协议运行。
+
+如果当前任务不匹配、证据指向另一个问题域，或者专用排查失败，可以读取 `relatedPlaybookRefs` 做人工可见的任务跳转。例如：
+
+- 专用退款失败手册无法覆盖当前现象，跳到 `generic-project-investigation`，关系为 `FALLBACK`。
+- 日志显示失败来自数据库慢查询，跳到 `database-slow-query`，关系为 `FOLLOW_UP`。
+- 用户同时问支付回调异常，提示可查看 `payment-callback-failure`，关系为 `RELATED`。
+
+跳转后重新执行五段协议，不能把上一个 Playbook 的脚本、知识引用或停止条件自动带过去。
+
+## 通用项目调查 fallback
+
+没有命中专用 Playbook 时，Agent 仍然按同一套目标驱动流程工作，只是使用通用指南替代 `guideMarkdown`。
 
 ```text
 根据用户当前问题定位项目知识、脚本参数和下一步动作。先判断是否需要脚本；需要脚本时，只从脚本摘要中选择与用户问题最相关的脚本。默认 1 个，最多 3 个。先看选中脚本 schema，再用 schema 字段、字段描述、枚举值和用户问题生成知识检索问题清单。只围绕问题清单读取项目知识、文档或源码。
 ```
 
-### 2. 最小执行路径与阻断
-即便在没有手册的未知场景中，Agent 仍必须遵循同样的“Schema 逆向推导 -> 定向检索”逻辑。同时，系统设置了默认的物理防线作为阻断条件：
-* 缺少目标项目仓库 ID 时自动中止。
-* 未找到 `ACTIONDOCK.md` 或项目知识入口为空时中止。
-* 涉及高风险写操作或需要生产数据权限但用户尚未确认时中止。
+通用 fallback 的停止条件：
 
----
+- 缺少目标项目仓库 ID。
+- 未找到 `ACTIONDOCK.md` 或项目知识入口为空。
+- 需要高风险写操作。
+- 需要生产数据权限但用户尚未确认。
+- 无法判断是否应使用专用 Playbook。
 
-## 声明与配置契约
+## 配置示例
 
-平台研发人员在发布能力包时，可以通过声明本地 JSON 配置文件来定义 Playbook 的拓扑结构。
-
-### 1. 配置声明示例
-
-以下是设计一篇 Playbook 时推荐的逻辑定义文件格式示例，展示了其简洁的拓扑关系：
+下面的退款失败排查示例展示了一篇 Playbook 如何同时声明证据、候选动作、外部能力提示和任务导航。
 
 ```json
 {
@@ -199,63 +237,77 @@ flowchart TD
     { "type": "FILE", "repositoryId": "billing-service", "path": "docs/runbooks/refund-runbook.md" }
   ],
   "scriptRefs": [
-    { "scriptId": "query-log", "purpose": "查询退款相关日志" }
+    { "scriptId": "query-refund-log", "purpose": "查询退款相关日志" },
+    { "scriptId": "query-payment-status", "purpose": "查询支付网关侧退款状态" }
   ],
   "agentSkillRefs": [
-    { "skillId": "openai-docs", "purpose": "需要查官方 OpenAI API 文档时使用", "required": false }
+    { "skillId": "openai-docs", "purpose": "需要确认 OpenAI API 行为或错误码时使用", "required": false },
+    { "skillId": "team-cloud-cli", "purpose": "需要读取团队云平台诊断信息时使用", "required": false }
   ],
   "relatedPlaybookRefs": [
-    { "playbookId": "generic-project-investigation", "relation": "FALLBACK", "purpose": "当前专用手册不匹配时退回通用项目调查" }
+    { "playbookId": "generic-project-investigation", "relation": "FALLBACK", "purpose": "当前专用手册不适用时退回通用项目调查" },
+    { "playbookId": "database-slow-query", "relation": "FOLLOW_UP", "purpose": "日志显示退款查询被数据库慢查询拖慢时继续定位" },
+    { "playbookId": "payment-callback-failure", "relation": "RELATED", "purpose": "用户同时反馈支付回调异常时参考" }
   ],
-  "guideMarkdown": "先读取 ACTIONDOCK.md，再查看 refund-runbook.md。",
+  "guideMarkdown": "先读取 ACTIONDOCK.md，确认 billing-service 的退款模块入口。拿到 refundId 或 orderId 后，优先查看 docs/runbooks/refund-runbook.md 中的状态流转说明，再决定是否查询退款日志。没有订单标识时停止，不要运行查询脚本。",
   "stopConditions": ["缺少关键上下文", "需要高风险写操作", "已确认根因"],
   "enabled": true
 }
 ```
 
-定义文件中描述了场景所需的全部上下文指针。保存时，系统会对其进行格式合法性校验，保证运行时分发无误。
+保存 Playbook 时，平台会校验基础契约：
 
-### 2. 本地管理 CLI
+- `guideMarkdown` 非空。
+- `scriptRefs.scriptId` 指向已存在脚本。
+- `agentSkillRefs.skillId` 非空。
+- `relatedPlaybookRefs.playbookId` 不能引用当前 Playbook。
+- `relatedPlaybookRefs.relation` 只能是 `RELATED`、`FOLLOW_UP`、`FALLBACK`。
+- `NOTE` 的 `markdown` 非空。
+- `FILE` 的 `path` 是仓库内相对路径。
 
-平台提供了 CLI 管理指令，供 AI Agent 或研发人员在终端提交、更新与删除 Playbook 定义：
+## 管理命令
+
+Playbook 的复杂字段建议通过定义文件维护，避免在命令行里手写多行 Markdown 或 JSON。
 
 ```bash
-# 创建任务手册
 actiondock playbook create --definition-file ./playbook.json --json
-
-# 更新任务手册
 actiondock playbook update refund-failure --definition-file ./playbook.json --json
-
-# 彻底移除任务手册
 actiondock playbook delete refund-failure --json
 ```
 
-这些管理指令采用声明式文件载入（`--definition-file`），避免了直接在命令行编写多行 Markdown 导致的格式转义地狱。
-
----
+维护时把 Playbook 当成项目资产处理：随代码、runbook、脚本和能力包一起评审。变更风险边界、停止条件和相关任务导航时，应按排障场景复查一次消费路径。
 
 ## FAQ
 
-### Q: 既然有了项目知识库 (ACTIONDOCK.md)，为什么还需要 Playbook？
-知识库是证据层，Playbook 是任务路由层。
+### 既然有 `ACTIONDOCK.md`，为什么还需要 Playbook？
 
-`ACTIONDOCK.md` 和项目文档回答“材料在哪里”：项目有哪些模块，文件从哪里读，接口和数据库事实是什么，日志和 runbook 原文在哪里。
+`ACTIONDOCK.md` 是项目知识入口，告诉 Agent 项目怎么读。Playbook 是任务入口，告诉 Agent 当前问题怎么收窄。
 
-Playbook 回答“这次任务怎么收窄”：当前问题属于哪个任务，先读哪些证据，哪些脚本是候选工具，风险等级是什么，哪些条件出现后必须停止。
+没有 Playbook 时，Agent 要从项目知识里自行判断“这是退款失败、支付超时还是库存回滚”。有 Playbook 时，Agent 先用摘要路由到任务，再按任务定义读取证据和脚本。
 
-把排查手册全部写进知识库，会让 Agent 先进入一堆材料，再自己归纳任务边界。Playbook 把边界前置：先确定任务，再进入知识库取证。
+### 为什么 `agentSkillRefs` 不校验 Skill 是否存在？
 
-### Q: 为什么不是“一个通用 Skill 搜索所有知识库手册”？
-通用 Skill 能统一入口，但它仍然要先进入知识材料再判断任务。它解决的是“用哪个 Skill”的问题，没有解决“这次任务的边界在哪里”的问题。
+Agent Skill 属于消费端运行环境，ActionDock 无法知道不同 Agent 装了哪些 Skill。平台如果强行校验，会把项目资产和运行环境绑死，反而降低 Playbook 的可移植性。
 
-Playbook 把边界放在知识库前面。`playbook list --intent <regex>` 先给出可预演的候选摘要，`playbook get` 再加载唯一任务的完整指南。知识库仍然保留 runbook 原文、接口事实、数据库说明和源码路径，但不承担任务路由。
+`agentSkillRefs` 只表达偏好：有这个 Skill 就优先用，没有就走普通证据检索和脚本 schema 路径。
 
-这样做的代价是多维护一个轻量资产；收益是 Agent 每次进入项目时，先拿到风险等级、停止条件、候选脚本和知识指针，而不是在一堆文档里临时归纳这些边界。
+### 为什么 `relatedPlaybookRefs` 不自动合并其他 Playbook？
 
-### Q: 为什么意图匹配不直接使用 RAG 向量检索？
-* **确定性重于一切**。在企业生产环境或告警排查中，我们需要的是“绝对确定”。RAG 检索存在一定的概率偏差，可能会因为用户长句中的语气词污染，把退款超时的排查匹配到用户注销的手册上，导致 Agent 执行错误的危险写操作。
-* 正则与精确关键词匹配能够提供 100% 的意图确定性分发，极易被研发人员维护，且排错路径极短。
+不同 Playbook 可能有不同风险等级、停止条件、知识引用和脚本池。自动合并会让 Agent 分不清哪个边界生效，也会把一个导航关系变成隐式工作流。
 
+正确做法是显式跳转：读取相关 Playbook 的详情，重新执行 Route、Bound、Equip、Investigate、Act/Handoff。
+
+### 什么时候写在 `guideMarkdown`，什么时候用 `relatedPlaybookRefs`？
+
+仍在当前任务内的判断，写进 `guideMarkdown`。例如退款状态怎么读、哪些日志字段要看、没有订单 ID 时停止。
+
+已经进入另一个任务的内容，放进 `relatedPlaybookRefs`。例如退款失败定位到数据库慢查询后，继续排查慢查询；专用手册不适用时，退回通用项目调查。
+
+### 为什么意图匹配不直接用向量检索？
+
+`playbook list --intent <regex>` 的价值在于可预演和可审计。研发人员能直接看到某个关键词会命中哪些任务，排错路径很短。
+
+向量检索适合知识材料召回，但任务入口需要更强的确定性。Playbook 先用摘要和正则收窄任务，再把证据检索交给后续阶段。
 
 ---
 
