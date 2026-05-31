@@ -1,14 +1,37 @@
-import { Alert, Button, Drawer, Form, Input, Modal, Popconfirm, Select, Space, Switch, Table, Tabs, Tag, message } from "antd";
-import { useEffect, useMemo, useState } from "react";
+import { FileMarkdownOutlined, FileOutlined, FolderOpenOutlined } from "@ant-design/icons";
+import type { DataNode } from "antd/es/tree";
+import { Alert, Button, Drawer, Empty, Form, Image, Input, Modal, Popconfirm, Select, Space, Spin, Switch, Table, Tabs, Tag, Tree, Typography, message } from "antd";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { MarkdownDescription } from "../../../components/common/MarkdownDescription";
 import { PageHeader } from "../../../components/common/PageHeader";
-import { listRepositories, listRepositoryPlaybooks, publishRepositoryPlaybook, syncRepository } from "../../resources/api";
-import { listScripts } from "../../scripts/api";
-import { createPlaybook, deletePlaybook, getPlaybookGuide, listPlaybookGroups, listPlaybooks, updatePlaybook } from "../api";
-import type { Playbook, PlaybookGroup, PlaybookGuideView, RepositoryDefinition, RepositoryPlaybookPublishRequest, ScriptDefinition } from "../../../shared/types";
+import { CodeEditor } from "../../../components/common/CodeEditor";
+import { ApiError } from "../../../shared/api/httpClient";
+import type {
+  Playbook,
+  PlaybookGroup,
+  PlaybookGuideView,
+  PlaybookKnowledgeRef,
+  RepositoryDefinition,
+  RepositoryPlaybookPublishRequest,
+  RepositoryProjectFileNode,
+  RepositoryProjectFilePreview,
+  ScriptDefinition
+} from "../../../shared/types";
 import { getErrorMessage } from "../../../services/utils";
 import { getPublishableRepositories, pickDefaultPublishRepository } from "../../../services/repositoryPublish";
 import { useDefaultOwner } from "../../../shared/hooks/useDefaultOwner";
+import {
+  listProjectRepositoryFiles,
+  listRepositories,
+  listRepositoryPlaybooks,
+  previewProjectRepositoryFile,
+  publishRepositoryPlaybook,
+  syncRepository
+} from "../../resources/api";
+import { listScripts } from "../../scripts/api";
+import { createPlaybook, deletePlaybook, getPlaybookGuide, listPlaybookGroups, listPlaybooks, updatePlaybook } from "../api";
+
+const { Text } = Typography;
 
 interface PlaybookFormValues {
   id: string;
@@ -19,7 +42,6 @@ interface PlaybookFormValues {
   tagsText?: string;
   riskLevel?: "LOW" | "MEDIUM" | "HIGH";
   repositoryIds: string[];
-  knowledgeRefsText?: string;
   scriptIds: string[];
   guideMarkdown: string;
   stopConditionsText?: string;
@@ -36,15 +58,20 @@ interface PublishFormValues {
   tags: string[];
 }
 
-function splitText(value?: string): string[] {
-  return value?.split(/[\n,，]/).map((item) => item.trim()).filter(Boolean) ?? [];
+interface KnowledgeEditorState {
+  repositoryId: string;
+  notes: string[];
+  files: string[];
 }
 
-function parseKnowledgeRefs(value?: string) {
-  return splitText(value).map((item) => {
-    const [typeValue, repositoryId, ...pathParts] = item.split(":");
-    return { type: typeValue === "ENTRY" ? "ENTRY" as const : "FILE" as const, repositoryId, path: pathParts.join(":") };
-  }).filter((item) => item.repositoryId && item.path);
+interface FilePickerState {
+  open: boolean;
+  repositoryId?: string;
+  selectedPath?: string;
+}
+
+function splitText(value?: string): string[] {
+  return value?.split(/[\n,，]/).map((item) => item.trim()).filter(Boolean) ?? [];
 }
 
 function sanitizePlaybookId(value: string): string {
@@ -67,6 +94,48 @@ function bumpPatchVersion(version?: string): string | null {
   return `${parts[0]}.${parts[1]}.${Number(parts[2]) + 1}`;
 }
 
+function toKnowledgeEditorState(repositoryIds: string[], refs: PlaybookKnowledgeRef[]): KnowledgeEditorState[] {
+  return repositoryIds.map((repositoryId) => {
+    const notes = refs
+      .filter((ref) => ref.repositoryId === repositoryId && ref.type === "NOTE" && ref.markdown)
+      .map((ref) => ref.markdown?.trim() ?? "")
+      .filter(Boolean);
+    const files = refs
+      .filter((ref) => ref.repositoryId === repositoryId && ref.type === "FILE" && ref.path)
+      .map((ref) => ref.path?.trim() ?? "")
+      .filter(Boolean);
+    return { repositoryId, notes, files };
+  });
+}
+
+function fromKnowledgeEditorState(groups: KnowledgeEditorState[]): PlaybookKnowledgeRef[] {
+  return groups.flatMap((group) => [
+    ...group.notes
+      .map((markdown) => markdown.trim())
+      .filter(Boolean)
+      .map((markdown) => ({ type: "NOTE" as const, repositoryId: group.repositoryId, markdown })),
+    ...group.files
+      .map((path) => path.trim())
+      .filter(Boolean)
+      .map((path) => ({ type: "FILE" as const, repositoryId: group.repositoryId, path }))
+  ]);
+}
+
+function upsertKnowledgeGroups(previous: KnowledgeEditorState[], repositoryIds: string[]): KnowledgeEditorState[] {
+  const next = repositoryIds.map((repositoryId) => previous.find((item) => item.repositoryId === repositoryId) ?? { repositoryId, notes: [], files: [] });
+  return next.sort((left, right) => left.repositoryId.localeCompare(right.repositoryId));
+}
+
+function fileNodeToTree(nodes: RepositoryProjectFileNode[]): DataNode[] {
+  return nodes.map((node) => ({
+    key: node.path,
+    title: node.name,
+    icon: node.directory ? <FolderOpenOutlined /> : node.path.toLowerCase().endsWith(".md") ? <FileMarkdownOutlined /> : <FileOutlined />,
+    isLeaf: !node.directory,
+    children: node.directory ? [] : undefined
+  }));
+}
+
 export function PlaybookPage() {
   const [messageApi, contextHolder] = message.useMessage();
   const defaultOwner = useDefaultOwner();
@@ -75,6 +144,14 @@ export function PlaybookPage() {
   const [repositories, setRepositories] = useState<RepositoryDefinition[]>([]);
   const [publishRepositories, setPublishRepositories] = useState<RepositoryDefinition[]>([]);
   const [scripts, setScripts] = useState<ScriptDefinition[]>([]);
+  const [knowledgeEditor, setKnowledgeEditor] = useState<KnowledgeEditorState[]>([]);
+  const [filePicker, setFilePicker] = useState<FilePickerState>({ open: false });
+  const [projectFileTree, setProjectFileTree] = useState<Record<string, RepositoryProjectFileNode[]>>({});
+  const [projectFileChildren, setProjectFileChildren] = useState<Record<string, Record<string, RepositoryProjectFileNode[]>>>({});
+  const [projectPreview, setProjectPreview] = useState<RepositoryProjectFilePreview | null>(null);
+  const [projectPreviewLoading, setProjectPreviewLoading] = useState(false);
+  const [projectTreeLoading, setProjectTreeLoading] = useState(false);
+  const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]);
   const [loading, setLoading] = useState(false);
   const [filters, setFilters] = useState<{ groupId?: string; repositoryId?: string; tag?: string; managed?: boolean; keyword?: string }>({});
   const [editing, setEditing] = useState<Playbook | null>(null);
@@ -115,14 +192,51 @@ export function PlaybookPage() {
 
   const groupOptions = useMemo(() => groups.map((item) => ({ value: item.id, label: `${item.name} (${item.id})` })), [groups]);
   const repositoryOptions = useMemo(() => repositories.map((item) => ({ value: item.id, label: `${item.name} (${item.id})` })), [repositories]);
+  const repositoryNameMap = useMemo(() => new Map(repositories.map((item) => [item.id, item.name])), [repositories]);
   const publishableRepositories = useMemo(() => getPublishableRepositories(publishRepositories), [publishRepositories]);
   const publishRepositoryOptions = useMemo(() => publishableRepositories.map((item) => ({ value: item.id, label: `${item.name} (${item.id})` })), [publishableRepositories]);
   const scriptOptions = useMemo(() => scripts.map((item) => ({ value: item.id, label: `${item.name} (${item.id})` })), [scripts]);
   const tags = useMemo(() => Array.from(new Set(items.flatMap((item) => item.tags ?? []))).sort(), [items]);
 
+  const loadProjectRoot = useCallback(async (repositoryId: string) => {
+    if (projectFileTree[repositoryId]) {
+      return;
+    }
+    setProjectTreeLoading(true);
+    try {
+      const rootNodes = await listProjectRepositoryFiles(repositoryId);
+      setProjectFileTree((value) => ({ ...value, [repositoryId]: rootNodes }));
+      setProjectFileChildren((value) => ({ ...value, [repositoryId]: {} }));
+    } catch (error) {
+      messageApi.error(getErrorMessage(error, "加载项目仓库文件失败"));
+    } finally {
+      setProjectTreeLoading(false);
+    }
+  }, [messageApi, projectFileTree]);
+
+  const loadProjectChildren = useCallback(async (repositoryId: string, path: string) => {
+    if (projectFileChildren[repositoryId]?.[path]) {
+      return;
+    }
+    try {
+      const children = await listProjectRepositoryFiles(repositoryId, path);
+      setProjectFileChildren((value) => ({
+        ...value,
+        [repositoryId]: {
+          ...(value[repositoryId] ?? {}),
+          [path]: children
+        }
+      }));
+    } catch (error) {
+      messageApi.error(getErrorMessage(error, "加载目录失败"));
+    }
+  }, [messageApi, projectFileChildren]);
+
   const openEditor = (item?: Playbook) => {
+    const repositoryIds = item?.repositoryIds ?? [];
     setEditing(item ?? null);
     setGuide(null);
+    setKnowledgeEditor(toKnowledgeEditorState(repositoryIds, item?.knowledgeRefs ?? []));
     form.setFieldsValue({
       id: item?.id ?? "",
       groupId: item?.groupId ?? groups[0]?.id,
@@ -131,14 +245,30 @@ export function PlaybookPage() {
       intentAliasesText: item?.intentAliases?.join(", "),
       tagsText: item?.tags?.join(", "),
       riskLevel: item?.riskLevel,
-      repositoryIds: item?.repositoryIds ?? [],
-      knowledgeRefsText: item?.knowledgeRefs?.map((ref) => `${ref.type}:${ref.repositoryId}:${ref.path}`).join("\n"),
+      repositoryIds,
       scriptIds: item?.scriptRefs?.map((ref) => ref.scriptId) ?? [],
       guideMarkdown: item?.guideMarkdown ?? "",
       stopConditionsText: item?.stopConditions?.join("\n"),
       enabled: item?.enabled ?? true
     });
     setDrawerOpen(true);
+  };
+
+  const handleRepositoryIdsChange = (nextIds: string[]) => {
+    const currentGroups = knowledgeEditor.filter((item) => !nextIds.includes(item.repositoryId));
+    if (currentGroups.some((item) => item.notes.length > 0 || item.files.length > 0)) {
+      Modal.confirm({
+        title: "移除适用仓库",
+        content: "移除仓库后，会同时删除该仓库下的知识说明和文件引用。",
+        onOk: () => {
+          form.setFieldValue("repositoryIds", nextIds);
+          setKnowledgeEditor((value) => upsertKnowledgeGroups(value, nextIds));
+        }
+      });
+      return;
+    }
+    form.setFieldValue("repositoryIds", nextIds);
+    setKnowledgeEditor((value) => upsertKnowledgeGroups(value, nextIds));
   };
 
   const save = async () => {
@@ -152,7 +282,7 @@ export function PlaybookPage() {
       tags: splitText(values.tagsText),
       riskLevel: values.riskLevel,
       repositoryIds: values.repositoryIds ?? [],
-      knowledgeRefs: parseKnowledgeRefs(values.knowledgeRefsText),
+      knowledgeRefs: fromKnowledgeEditorState(knowledgeEditor),
       scriptRefs: (values.scriptIds ?? []).map((scriptId) => ({ scriptId })),
       guideMarkdown: values.guideMarkdown,
       stopConditions: splitText(values.stopConditionsText),
@@ -259,6 +389,147 @@ export function PlaybookPage() {
     }
   };
 
+  const addNote = (repositoryId: string) => {
+    setKnowledgeEditor((value) => value.map((item) => item.repositoryId === repositoryId ? { ...item, notes: [...item.notes, ""] } : item));
+  };
+
+  const updateNote = (repositoryId: string, index: number, markdown: string) => {
+    setKnowledgeEditor((value) => value.map((item) => item.repositoryId === repositoryId ? {
+      ...item,
+      notes: item.notes.map((current, currentIndex) => currentIndex === index ? markdown : current)
+    } : item));
+  };
+
+  const removeNote = (repositoryId: string, index: number) => {
+    setKnowledgeEditor((value) => value.map((item) => item.repositoryId === repositoryId ? {
+      ...item,
+      notes: item.notes.filter((_, currentIndex) => currentIndex !== index)
+    } : item));
+  };
+
+  const openFilePicker = async (repositoryId: string) => {
+    setFilePicker({ open: true, repositoryId });
+    setProjectPreview(null);
+    setExpandedKeys([]);
+    await loadProjectRoot(repositoryId);
+  };
+
+  const previewProjectFile = async (repositoryId: string, path: string) => {
+    setProjectPreviewLoading(true);
+    try {
+      const preview = await previewProjectRepositoryFile(repositoryId, path);
+      setProjectPreview(preview);
+    } catch (error) {
+      setProjectPreview(null);
+      messageApi.error(getErrorMessage(error, "预览项目文件失败"));
+    } finally {
+      setProjectPreviewLoading(false);
+    }
+  };
+
+  const handleTreeExpand = async (keys: React.Key[]) => {
+    setExpandedKeys(keys);
+    const repositoryId = filePicker.repositoryId;
+    if (!repositoryId) {
+      return;
+    }
+    for (const key of keys) {
+      if (typeof key !== "string") {
+        continue;
+      }
+      const rootNodes = projectFileTree[repositoryId] ?? [];
+      const childNodes = projectFileChildren[repositoryId]?.[key];
+      const targetNode = [...rootNodes, ...(Object.values(projectFileChildren[repositoryId] ?? {}).flat())].find((item) => item.path === key);
+      if (targetNode?.directory && !childNodes) {
+        await loadProjectChildren(repositoryId, key);
+      }
+    }
+  };
+
+  const buildPickerTree = useMemo(() => {
+    const repositoryId = filePicker.repositoryId;
+    if (!repositoryId) {
+      return [];
+    }
+    const attachChildren = (nodes: RepositoryProjectFileNode[]): DataNode[] => nodes.map((node) => ({
+      key: node.path,
+      title: node.name,
+      icon: node.directory ? <FolderOpenOutlined /> : node.path.toLowerCase().endsWith(".md") ? <FileMarkdownOutlined /> : <FileOutlined />,
+      isLeaf: !node.directory,
+      children: node.directory ? attachChildren(projectFileChildren[repositoryId]?.[node.path] ?? []) : undefined
+    }));
+    return attachChildren(projectFileTree[repositoryId] ?? []);
+  }, [filePicker.repositoryId, projectFileChildren, projectFileTree]);
+
+  const handleTreeSelect = async (keys: React.Key[]) => {
+    const key = keys[0];
+    const repositoryId = filePicker.repositoryId;
+    if (typeof key !== "string" || !repositoryId) {
+      return;
+    }
+    setFilePicker((value) => ({ ...value, selectedPath: key }));
+    await previewProjectFile(repositoryId, key);
+  };
+
+  const confirmFileSelection = () => {
+    const repositoryId = filePicker.repositoryId;
+    const selectedPath = filePicker.selectedPath;
+    if (!repositoryId || !selectedPath || !projectPreview || projectPreview.directory) {
+      return;
+    }
+    if (selectedPath === "ACTIONDOCK.md") {
+      messageApi.warning("ACTIONDOCK.md 会默认读取，无需显式添加");
+      return;
+    }
+    setKnowledgeEditor((value) => value.map((item) => item.repositoryId === repositoryId ? {
+      ...item,
+      files: item.files.includes(selectedPath) ? item.files : [...item.files, selectedPath]
+    } : item));
+    setFilePicker({ open: false });
+    setProjectPreview(null);
+  };
+
+  const removeFile = (repositoryId: string, path: string) => {
+    setKnowledgeEditor((value) => value.map((item) => item.repositoryId === repositoryId ? {
+      ...item,
+      files: item.files.filter((current) => current !== path)
+    } : item));
+  };
+
+  const renderProjectPreview = () => {
+    if (projectPreviewLoading) {
+      return <div style={{ display: "flex", justifyContent: "center", padding: 24 }}><Spin /></div>;
+    }
+    if (!projectPreview) {
+      return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="请选择文件预览" />;
+    }
+    if (projectPreview.previewType === "MARKDOWN") {
+      return (
+        <div className="skill-preview-panel">
+          {projectPreview.truncated ? <Alert type="warning" showIcon message="文件内容过长，当前只展示前 200000 个字符。" /> : null}
+          <MarkdownDescription value={projectPreview.textContent} className="markdown-description--panel" emptyText="文件为空" />
+        </div>
+      );
+    }
+    if (projectPreview.previewType === "TEXT") {
+      return (
+        <div className="skill-preview-panel">
+          {projectPreview.truncated ? <Alert type="warning" showIcon message="文件内容过长，当前只展示前 200000 个字符。" /> : null}
+          <CodeEditor value={projectPreview.textContent ?? ""} onChange={() => undefined} theme="vs-light" language={projectPreview.language || "plaintext"} readOnly height="420px" />
+        </div>
+      );
+    }
+    if (projectPreview.previewType === "IMAGE") {
+      return <Image src={projectPreview.dataUrl} alt={projectPreview.name} />;
+    }
+    if (projectPreview.previewType === "DIRECTORY") {
+      return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="目录没有直接预览内容" />;
+    }
+    return <Alert type="info" showIcon message="当前文件类型不支持在线预览" description={<Text code>{projectPreview.contentType}</Text>} />;
+  };
+
+  const selectedRepositoryIds = Form.useWatch("repositoryIds", form) ?? [];
+
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
       {contextHolder}
@@ -302,10 +573,17 @@ export function PlaybookPage() {
           }
         ]}
       />
-      <Drawer title={guide ? "Guide 预览" : editing ? "编辑任务手册" : "新建任务手册"} open={drawerOpen} width={760} onClose={() => setDrawerOpen(false)} extra={!guide ? <Button type="primary" onClick={() => void save()}>保存</Button> : null}>
+      <Drawer title={guide ? "Guide 预览" : editing ? "编辑任务手册" : "新建任务手册"} open={drawerOpen} width={920} onClose={() => setDrawerOpen(false)} extra={!guide ? <Button type="primary" onClick={() => void save()}>保存</Button> : null}>
         {guide ? (
           <Space direction="vertical" size={16} style={{ width: "100%" }}>
-            <Space wrap>{guide.knowledgeRefs.map((ref) => <Tag key={`${ref.repositoryId}:${ref.path}`}>{ref.type} {ref.repositoryId}:{ref.path}</Tag>)}</Space>
+            {guide.knowledgeRefs.map((ref, index) => ref.type === "NOTE" ? (
+              <div key={`${ref.repositoryId}:note:${index}`}>
+                <Text strong>{ref.repositoryId} 说明</Text>
+                <MarkdownDescription value={ref.markdown} className="markdown-description--panel" />
+              </div>
+            ) : (
+              <Tag key={`${ref.repositoryId}:${ref.path}`}>FILE {ref.repositoryId}:{ref.path}</Tag>
+            ))}
             <Space wrap>{guide.scriptRefs.map((ref) => <Tag color="blue" key={ref.scriptId}>{ref.scriptId}</Tag>)}</Space>
             <MarkdownDescription value={guide.guideMarkdown} className="markdown-description--panel" />
             <Space wrap>{guide.stopConditions.map((item) => <Tag color="red" key={item}>{item}</Tag>)}</Space>
@@ -334,8 +612,53 @@ export function PlaybookPage() {
                 label: "关联知识",
                 children: (
                   <Form form={form} layout="vertical">
-                    <Form.Item name="repositoryIds" label="适用仓库"><Select mode="multiple" options={repositoryOptions} /></Form.Item>
-                    <Form.Item name="knowledgeRefsText" label="知识引用"><Input.TextArea rows={8} placeholder="ENTRY:billing-service:ACTIONDOCK.md&#10;FILE:billing-service:docs/runbooks/refund.md" /></Form.Item>
+                    <Form.Item name="repositoryIds" label="适用仓库">
+                      <Select mode="multiple" options={repositoryOptions} onChange={handleRepositoryIdsChange} />
+                    </Form.Item>
+                    {selectedRepositoryIds.length === 0 ? (
+                      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="先选择适用仓库，再添加知识说明和知识文件。" />
+                    ) : (
+                      <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                        {knowledgeEditor.map((group) => (
+                          <div key={group.repositoryId} style={{ border: "1px solid #f0f0f0", borderRadius: 8, padding: 16 }}>
+                            <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                              <Space style={{ justifyContent: "space-between", width: "100%" }}>
+                                <Text strong>{repositoryNameMap.get(group.repositoryId) ?? group.repositoryId} ({group.repositoryId})</Text>
+                                <Space>
+                                  <Button size="small" onClick={() => addNote(group.repositoryId)}>添加说明</Button>
+                                  <Button size="small" onClick={() => void openFilePicker(group.repositoryId)}>添加文件</Button>
+                                </Space>
+                              </Space>
+                              {group.notes.length === 0 && group.files.length === 0 ? (
+                                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有添加知识说明或文件引用" />
+                              ) : null}
+                              {group.notes.map((note, index) => (
+                                <div key={`${group.repositoryId}:note:${index}`} style={{ border: "1px solid #f0f0f0", borderRadius: 8, padding: 12 }}>
+                                  <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                                    <Space style={{ justifyContent: "space-between", width: "100%" }}>
+                                      <Tag color="gold">NOTE</Tag>
+                                      <Button size="small" danger onClick={() => removeNote(group.repositoryId, index)}>删除说明</Button>
+                                    </Space>
+                                    <Input.TextArea rows={6} value={note} onChange={(event) => updateNote(group.repositoryId, index, event.target.value)} placeholder="输入针对该知识库的额外阅读指引（Markdown）" />
+                                  </Space>
+                                </div>
+                              ))}
+                              {group.files.map((path) => (
+                                <div key={`${group.repositoryId}:${path}`} style={{ border: "1px solid #f0f0f0", borderRadius: 8, padding: 12 }}>
+                                  <Space style={{ justifyContent: "space-between", width: "100%" }}>
+                                    <Space>
+                                      <Tag color="blue">FILE</Tag>
+                                      <Text code>{path}</Text>
+                                    </Space>
+                                    <Button size="small" danger onClick={() => removeFile(group.repositoryId, path)}>删除文件</Button>
+                                  </Space>
+                                </div>
+                              ))}
+                            </Space>
+                          </div>
+                        ))}
+                      </Space>
+                    )}
                   </Form>
                 )
               },
@@ -388,6 +711,45 @@ export function PlaybookPage() {
           <Form.Item name="tags" label="标签"><Select mode="tags" tokenSeparators={[","]} /></Form.Item>
           <Form.Item name="releaseNotes" label="发布说明"><Input.TextArea autoSize={{ minRows: 4, maxRows: 10 }} /></Form.Item>
         </Form>
+      </Modal>
+      <Modal
+        title={filePicker.repositoryId ? `选择知识文件 - ${repositoryNameMap.get(filePicker.repositoryId) ?? filePicker.repositoryId}` : "选择知识文件"}
+        open={filePicker.open}
+        onCancel={() => {
+          setFilePicker({ open: false });
+          setProjectPreview(null);
+        }}
+        onOk={confirmFileSelection}
+        okButtonProps={{
+          disabled: !projectPreview || projectPreview.directory || filePicker.selectedPath === "ACTIONDOCK.md" || Boolean(filePicker.repositoryId && knowledgeEditor.find((item) => item.repositoryId === filePicker.repositoryId)?.files.includes(filePicker.selectedPath ?? ""))
+        }}
+        width={960}
+        destroyOnHidden
+      >
+        <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: 16, minHeight: 480 }}>
+          <div style={{ borderRight: "1px solid #f0f0f0", paddingRight: 16, overflow: "auto" }}>
+            {projectTreeLoading ? <div style={{ display: "flex", justifyContent: "center", padding: 24 }}><Spin /></div> : (
+              buildPickerTree.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有可浏览的文件" /> : (
+                <Tree
+                  showIcon
+                  blockNode
+                  expandedKeys={expandedKeys}
+                  selectedKeys={filePicker.selectedPath ? [filePicker.selectedPath] : []}
+                  treeData={buildPickerTree}
+                  onExpand={(keys) => void handleTreeExpand(keys)}
+                  onSelect={(keys) => void handleTreeSelect(keys)}
+                />
+              )
+            )}
+          </div>
+          <div style={{ overflow: "auto" }}>
+            {filePicker.selectedPath === "ACTIONDOCK.md" ? <Alert type="info" showIcon message="ACTIONDOCK.md 会默认读取，无需显式添加到知识引用。" style={{ marginBottom: 12 }} /> : null}
+            {filePicker.repositoryId && filePicker.selectedPath && knowledgeEditor.find((item) => item.repositoryId === filePicker.repositoryId)?.files.includes(filePicker.selectedPath) ? (
+              <Alert type="warning" showIcon message="该文件已添加为知识引用。" style={{ marginBottom: 12 }} />
+            ) : null}
+            {renderProjectPreview()}
+          </div>
+        </div>
       </Modal>
     </Space>
   );

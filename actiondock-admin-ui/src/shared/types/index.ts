@@ -724,6 +724,29 @@ export interface ProjectRepositoryResolution {
   content: string;
 }
 
+export interface RepositoryProjectFileNode {
+  name: string;
+  path: string;
+  directory: boolean;
+  size?: number;
+  hasChildren: boolean;
+}
+
+export type RepositoryProjectFilePreviewType = "TEXT" | "MARKDOWN" | "IMAGE" | "DIRECTORY" | "UNSUPPORTED";
+
+export interface RepositoryProjectFilePreview {
+  path: string;
+  name: string;
+  directory: boolean;
+  contentType: string;
+  size: number;
+  previewType: RepositoryProjectFilePreviewType;
+  language?: string;
+  textContent?: string;
+  dataUrl?: string;
+  truncated: boolean;
+}
+
 export interface RepositoryScriptDescriptor {
   repositoryId: string;
   scriptId: string;
@@ -1573,9 +1596,10 @@ export interface PlaybookGroup {
 }
 
 export interface PlaybookKnowledgeRef {
-  type: "ENTRY" | "FILE";
+  type: "NOTE" | "FILE";
   repositoryId: string;
-  path: string;
+  path?: string;
+  markdown?: string;
 }
 
 export interface PlaybookScriptRef {

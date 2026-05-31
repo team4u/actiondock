@@ -25,8 +25,6 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 public class PlaybookApplicationService {
-    private static final String PROJECT_ENTRY_PATH = "ACTIONDOCK.md";
-
     private final PlaybookGroupRepository groupRepository;
     private final PlaybookRepository playbookRepository;
     private final ScriptRepository scriptRepository;
@@ -279,14 +277,18 @@ public class PlaybookApplicationService {
         return refs.stream().map(ref -> {
             PlaybookKnowledgeRefType type = ref.getType() == null ? PlaybookKnowledgeRefType.FILE : ref.getType();
             String repositoryId = ApplicationServiceSupport.normalize(ref.getRepositoryId(), "knowledgeRefs.repositoryId 不能为空");
-            String path = ApplicationServiceSupport.normalize(ref.getPath(), "knowledgeRefs.path 不能为空");
-            if (type == PlaybookKnowledgeRefType.ENTRY && !PROJECT_ENTRY_PATH.equals(path)) {
-                throw new IllegalArgumentException("ENTRY knowledgeRefs.path 必须为 ACTIONDOCK.md");
+            PlaybookKnowledgeRef normalized = new PlaybookKnowledgeRef().setType(type).setRepositoryId(repositoryId);
+            if (type == PlaybookKnowledgeRefType.NOTE) {
+                return normalized.setMarkdown(ApplicationServiceSupport.normalize(ref.getMarkdown(), "knowledgeRefs.markdown 不能为空"));
             }
-            if (type == PlaybookKnowledgeRefType.FILE && (path.startsWith("/") || path.contains(".."))) {
+            String path = ApplicationServiceSupport.normalize(ref.getPath(), "knowledgeRefs.path 不能为空");
+            if (path.startsWith("/") || path.contains("..")) {
                 throw new IllegalArgumentException("FILE knowledgeRefs.path 必须为仓库内相对路径");
             }
-            return new PlaybookKnowledgeRef().setType(type).setRepositoryId(repositoryId).setPath(path);
+            if ("ACTIONDOCK.md".equals(path)) {
+                throw new IllegalArgumentException("ACTIONDOCK.md 为默认入口文档，不应作为显式 knowledgeRefs.file 添加");
+            }
+            return normalized.setPath(path);
         }).toList();
     }
 

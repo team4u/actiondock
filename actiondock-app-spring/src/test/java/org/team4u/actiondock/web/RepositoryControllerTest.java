@@ -92,6 +92,40 @@ class RepositoryControllerTest {
     }
 
     @Test
+    void projectFileRoutesReturnTreeAndPreview() throws Exception {
+        when(repositoryCatalogService.listProjectRepositoryFiles("billing-service", null))
+                .thenReturn(List.of(
+                        new RepositoryCatalogTypes.RepositoryProjectFileNode("docs", "docs", true, null, true),
+                        new RepositoryCatalogTypes.RepositoryProjectFileNode("README.md", "README.md", false, 128L, false)
+                ));
+        when(repositoryCatalogService.previewProjectRepositoryFile("billing-service", "docs/runbook.md"))
+                .thenReturn(new RepositoryCatalogTypes.RepositoryProjectFilePreview(
+                        "docs/runbook.md",
+                        "runbook.md",
+                        false,
+                        "text/markdown",
+                        64L,
+                        "MARKDOWN",
+                        "markdown",
+                        "# Runbook",
+                        null,
+                        false
+                ));
+
+        mockMvc.perform(get("/api/repositories/billing-service/project-files"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].path").value("docs"))
+                .andExpect(jsonPath("$.data[0].directory").value(true))
+                .andExpect(jsonPath("$.data[1].path").value("README.md"));
+
+        mockMvc.perform(get("/api/repositories/billing-service/project-files/preview").param("path", "docs/runbook.md"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.path").value("docs/runbook.md"))
+                .andExpect(jsonPath("$.data.previewType").value("MARKDOWN"))
+                .andExpect(jsonPath("$.data.textContent").value("# Runbook"));
+    }
+
+    @Test
     void repositoryScriptRoutesReturnScriptDescriptor() throws Exception {
         RepositoryCatalogTypes.RepositoryScriptDescriptor descriptor = new RepositoryCatalogTypes.RepositoryScriptDescriptor(
                 "repo-1",

@@ -729,6 +729,64 @@ class RepositoryCatalogServiceTest {
     }
 
     @Test
+    void projectRepositoryFileBrowsingAndPreviewWork() throws Exception {
+        Path projectRoot = tempDir.resolve("billing-service");
+        Files.createDirectories(projectRoot.resolve("docs"));
+        Files.writeString(projectRoot.resolve("ACTIONDOCK.md"), "# Billing Service\n");
+        Files.writeString(projectRoot.resolve("docs").resolve("refund.md"), "# Refund Runbook\n");
+        RepositoryDefinition repository = new RepositoryDefinition()
+                .setId("billing-service")
+                .setName("Billing Service")
+                .setType(REPO_TYPE_LOCAL_DIR)
+                .setPurpose(REPO_PURPOSE_PROJECT)
+                .setUrl(projectRoot.toString())
+                .setEnabled(true);
+
+        RepositoryCatalogService service = new RepositoryCatalogService(
+                repositories(List.of(repository)),
+                new RepositoryCatalogService.ApplicationServices(null, null, PluginRuntimeService.disabled()),
+                jsonCodec,
+                appProperties(),
+                null
+        );
+
+        List<RepositoryCatalogTypes.RepositoryProjectFileNode> rootFiles = service.listProjectRepositoryFiles("billing-service", null);
+        assertThat(rootFiles).extracting(RepositoryCatalogTypes.RepositoryProjectFileNode::path)
+                .contains("ACTIONDOCK.md", "docs");
+
+        RepositoryCatalogTypes.RepositoryProjectFilePreview preview = service.previewProjectRepositoryFile("billing-service", "docs/refund.md");
+        assertThat(preview.path()).isEqualTo("docs/refund.md");
+        assertThat(preview.previewType()).isEqualTo("MARKDOWN");
+        assertThat(preview.textContent()).contains("Refund Runbook");
+    }
+
+    @Test
+    void projectRepositoryFileBrowsingRejectsTraversal() throws Exception {
+        Path projectRoot = tempDir.resolve("billing-service");
+        Files.createDirectories(projectRoot);
+        Files.writeString(projectRoot.resolve("ACTIONDOCK.md"), "# Billing Service\n");
+        RepositoryDefinition repository = new RepositoryDefinition()
+                .setId("billing-service")
+                .setName("Billing Service")
+                .setType(REPO_TYPE_LOCAL_DIR)
+                .setPurpose(REPO_PURPOSE_PROJECT)
+                .setUrl(projectRoot.toString())
+                .setEnabled(true);
+
+        RepositoryCatalogService service = new RepositoryCatalogService(
+                repositories(List.of(repository)),
+                new RepositoryCatalogService.ApplicationServices(null, null, PluginRuntimeService.disabled()),
+                jsonCodec,
+                appProperties(),
+                null
+        );
+
+        assertThatThrownBy(() -> service.previewProjectRepositoryFile("billing-service", "../secret.txt"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("不允许包含 ..");
+    }
+
+    @Test
     void resolveProjectRepositoryDoesNotAutoSyncGitRepository() {
         Path missingGitRoot = tempDir.resolve("actiondock-home").resolve("repositories").resolve("billing-service");
         RepositoryDefinition repository = new RepositoryDefinition()

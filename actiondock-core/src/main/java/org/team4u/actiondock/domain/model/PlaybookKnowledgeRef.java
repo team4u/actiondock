@@ -4,6 +4,7 @@ public class PlaybookKnowledgeRef {
     private PlaybookKnowledgeRefType type = PlaybookKnowledgeRefType.FILE;
     private String repositoryId;
     private String path;
+    private String markdown;
 
     public PlaybookKnowledgeRefType getType() {
         return type;
@@ -29,6 +30,15 @@ public class PlaybookKnowledgeRef {
 
     public PlaybookKnowledgeRef setPath(String path) {
         this.path = path;
+        return this;
+    }
+
+    public String getMarkdown() {
+        return markdown;
+    }
+
+    public PlaybookKnowledgeRef setMarkdown(String markdown) {
+        this.markdown = markdown;
         return this;
     }
 }

@@ -43,9 +43,9 @@ class PlaybookApplicationServiceTest {
                 .setRiskLevel(PlaybookRiskLevel.MEDIUM)
                 .setRepositoryIds(List.of("billing-service"))
                 .setKnowledgeRefs(List.of(new PlaybookKnowledgeRef()
-                        .setType(PlaybookKnowledgeRefType.ENTRY)
+                        .setType(PlaybookKnowledgeRefType.NOTE)
                         .setRepositoryId("billing-service")
-                        .setPath("ACTIONDOCK.md")))
+                        .setMarkdown("先看退款链路背景。")))
                 .setScriptRefs(List.of(new PlaybookScriptRef().setScriptId("query-log").setPurpose("查询日志")))
                 .setGuideMarkdown("先看知识，再运行脚本。")
                 .setStopConditions(List.of("缺少上下文")));
@@ -91,12 +91,41 @@ class PlaybookApplicationServiceTest {
                 .setGroupId("g1")
                 .setName("P1")
                 .setKnowledgeRefs(List.of(new PlaybookKnowledgeRef()
-                        .setType(PlaybookKnowledgeRefType.ENTRY)
+                        .setType(PlaybookKnowledgeRefType.FILE)
                         .setRepositoryId("repo")
-                        .setPath("README.md")))
+                        .setPath("../README.md")))
                 .setGuideMarkdown("guide")))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("ACTIONDOCK.md");
+                .hasMessageContaining("仓库内相对路径");
+    }
+
+    @Test
+    void rejectsActiondockEntryFileAndEmptyNoteMarkdown() {
+        service.saveGroup(new PlaybookGroup().setId("g1").setName("G1"));
+
+        assertThatThrownBy(() -> service.savePlaybook(new Playbook()
+                .setId("p1")
+                .setGroupId("g1")
+                .setName("P1")
+                .setKnowledgeRefs(List.of(new PlaybookKnowledgeRef()
+                        .setType(PlaybookKnowledgeRefType.FILE)
+                        .setRepositoryId("repo")
+                        .setPath("ACTIONDOCK.md")))
+                .setGuideMarkdown("guide")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("默认入口文档");
+
+        assertThatThrownBy(() -> service.savePlaybook(new Playbook()
+                .setId("p2")
+                .setGroupId("g1")
+                .setName("P2")
+                .setKnowledgeRefs(List.of(new PlaybookKnowledgeRef()
+                        .setType(PlaybookKnowledgeRefType.NOTE)
+                        .setRepositoryId("repo")
+                        .setMarkdown(" ")))
+                .setGuideMarkdown("guide")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("knowledgeRefs.markdown");
     }
 
     @Test

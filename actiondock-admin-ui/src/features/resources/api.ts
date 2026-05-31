@@ -9,6 +9,8 @@ import type {
   InstalledResourceView,
   KnowledgeFile,
   ProjectRepositoryResolution,
+  RepositoryProjectFileNode,
+  RepositoryProjectFilePreview,
   UpstreamStatus,
   RepositoryKnowledgePublishPreviewRequest,
   RepositoryKnowledgePublishRequest,
@@ -78,6 +80,15 @@ export function syncRepository(id: string): Promise<RepositoryDefinition> {
 
 export function resolveProjectRepository(repositoryId: string): Promise<ProjectRepositoryResolution> {
   return request<ProjectRepositoryResolution>(`/api/repositories/resolve?repositoryId=${encodeURIComponent(repositoryId)}`);
+}
+
+export function listProjectRepositoryFiles(repositoryId: string, path?: string): Promise<RepositoryProjectFileNode[]> {
+  const suffix = path ? `?path=${encodeURIComponent(path)}` : "";
+  return request<RepositoryProjectFileNode[]>(`/api/repositories/${encodeURIComponent(repositoryId)}/project-files${suffix}`);
+}
+
+export function previewProjectRepositoryFile(repositoryId: string, path: string): Promise<RepositoryProjectFilePreview> {
+  return request<RepositoryProjectFilePreview>(`/api/repositories/${encodeURIComponent(repositoryId)}/project-files/preview?path=${encodeURIComponent(path)}`);
 }
 
 export function listRepositoryScripts(): Promise<RepositoryScriptDescriptor[]> {

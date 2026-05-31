@@ -61,14 +61,15 @@ actiondock playbook guide <playbook-id> --json
 
 支持两类：
 
-- `ENTRY`: 项目知识入口，`path` 固定为 `ACTIONDOCK.md`
+- `NOTE`: 针对某个项目仓库的额外阅读指引，使用 Markdown
 - `FILE`: 项目仓库内相对路径
 
 如果需要读取项目内容，继续遵守 `references/project-knowledge.md`：
 
 1. 先执行 `actiondock repository resolve --repository-id <repositoryId> --json`
 2. 先读返回的 `ACTIONDOCK.md` 内容
-3. 需要浏览文件时，通过 `actiondock-workspace` 插件访问项目文件
+3. 先看该仓库下的 `NOTE`
+4. 需要浏览文件时，通过 `actiondock-workspace` 插件访问 `FILE` 指向的项目文件
 
 不要因为本地恰好有同名目录就直接用本地文件命令读取项目仓库；ActionDock 可能运行在远端。
 
@@ -150,7 +151,7 @@ Playbook 最小示例：
   "riskLevel": "MEDIUM",
   "repositoryIds": ["billing-service"],
   "knowledgeRefs": [
-    { "type": "ENTRY", "repositoryId": "billing-service", "path": "ACTIONDOCK.md" },
+    { "type": "NOTE", "repositoryId": "billing-service", "markdown": "先看退款链路背景，再读 runbook。" },
     { "type": "FILE", "repositoryId": "billing-service", "path": "docs/runbooks/refund-runbook.md" }
   ],
   "scriptRefs": [
@@ -167,5 +168,5 @@ Playbook 最小示例：
 - `groupId` 存在
 - `guideMarkdown` 非空
 - `scriptRefs.scriptId` 存在
-- `ENTRY` 的 `path` 必须是 `ACTIONDOCK.md`
+- `NOTE` 的 `markdown` 非空
 - `FILE` 的 `path` 必须是仓库内相对路径

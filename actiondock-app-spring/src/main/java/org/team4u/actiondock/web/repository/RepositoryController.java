@@ -81,6 +81,18 @@ public class RepositoryController {
         return ApiResponse.success(repositoryCatalogService.resolveProjectRepository(repositoryId));
     }
 
+    @GetMapping("/{id}/project-files")
+    public ApiResponse<List<RepositoryCatalogTypes.RepositoryProjectFileNode>> listProjectFiles(@PathVariable String id,
+                                                                                                @RequestParam(value = "path", required = false) String path) {
+        return ApiResponse.success(repositoryCatalogService.listProjectRepositoryFiles(id, path));
+    }
+
+    @GetMapping("/{id}/project-files/preview")
+    public ApiResponse<RepositoryCatalogTypes.RepositoryProjectFilePreview> previewProjectFile(@PathVariable String id,
+                                                                                               @RequestParam("path") String path) {
+        return ApiResponse.success(repositoryCatalogService.previewProjectRepositoryFile(id, path));
+    }
+
     /**
      * 创建仓库定义。
      *

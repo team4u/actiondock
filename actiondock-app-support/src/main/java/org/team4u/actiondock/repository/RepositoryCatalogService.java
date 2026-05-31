@@ -355,6 +355,31 @@ public class RepositoryCatalogService {
         }
     }
 
+    public List<RepositoryCatalogTypes.RepositoryProjectFileNode> listProjectRepositoryFiles(String repositoryId, String relativePath) {
+        RepositoryDefinition repository = findProjectRepository(repositoryId);
+        Path root = resolveRepositoryRoot(repository);
+        ensureProjectRepositoryReadable(repository, root);
+        Path directory = NormalizeUtils.isBlank(relativePath) ? root : safeResolveRepositoryPath(root, relativePath);
+        if (!Files.exists(directory)) {
+            throw new IllegalArgumentException("项目仓库路径不存在: " + relativePath);
+        }
+        if (!Files.isDirectory(directory)) {
+            throw new IllegalArgumentException("项目仓库路径不是目录: " + relativePath);
+        }
+        return RepositoryProjectFileSupport.buildFileTree(root, directory);
+    }
+
+    public RepositoryCatalogTypes.RepositoryProjectFilePreview previewProjectRepositoryFile(String repositoryId, String relativePath) {
+        RepositoryDefinition repository = findProjectRepository(repositoryId);
+        Path root = resolveRepositoryRoot(repository);
+        ensureProjectRepositoryReadable(repository, root);
+        Path target = safeResolveRepositoryPath(root, NormalizeUtils.normalize(relativePath, "path 不能为空"));
+        if (!Files.exists(target)) {
+            throw new IllegalArgumentException("项目仓库文件不存在: " + relativePath);
+        }
+        return RepositoryProjectFileSupport.buildPreview(root, target);
+    }
+
     public List<RepositoryCatalogTypes.RepositoryScriptDescriptor> listAllRepositoryScripts() {
         return listAllFromEnabledRepositories(
                 this::listRepositoryScripts,
@@ -1392,6 +1417,26 @@ public class RepositoryCatalogService {
 
     private Path safeResolveProjectEntryPath(Path root) {
         return safeResolvePath(root, DEFAULT_PROJECT_ENTRY_PATH, "项目知识入口路径");
+    }
+
+    private void ensureProjectRepositoryReadable(RepositoryDefinition repository, Path root) {
+        boolean exists = Files.exists(root);
+        if (!exists) {
+            if (REPO_TYPE_GIT.equals(repository.getType())) {
+                throw new IllegalArgumentException("项目仓库尚未同步，请先同步仓库: " + repository.getId());
+            }
+            throw new IllegalArgumentException("项目仓库目录不存在: " + repository.getId());
+        }
+        if (!Files.isDirectory(root)) {
+            throw new IllegalArgumentException("项目仓库根路径必须是目录: " + repository.getId());
+        }
+        Path entry = safeResolveProjectEntryPath(root);
+        if (!Files.exists(entry)) {
+            throw new IllegalArgumentException("项目知识入口不存在，请重新同步仓库: " + repository.getId());
+        }
+        if (!Files.isRegularFile(entry)) {
+            throw new IllegalArgumentException("项目知识入口必须是文件: " + repository.getId());
+        }
     }
 
     private void ensureProjectEntryFile(RepositoryDefinition repository, Path root) {

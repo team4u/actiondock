@@ -830,6 +830,29 @@ public final class RepositoryCatalogTypes {
     ) {
     }
 
+    public record RepositoryProjectFileNode(
+            String name,
+            String path,
+            boolean directory,
+            Long size,
+            boolean hasChildren
+    ) {
+    }
+
+    public record RepositoryProjectFilePreview(
+            String path,
+            String name,
+            boolean directory,
+            String contentType,
+            long size,
+            String previewType,
+            String language,
+            String textContent,
+            String dataUrl,
+            boolean truncated
+    ) {
+    }
+
     public record CapabilityPackageManifestFile(int schemaVersion,
                                                 String packageId,
                                                 String displayName,
