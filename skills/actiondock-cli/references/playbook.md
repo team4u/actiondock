@@ -88,6 +88,17 @@ actiondock playbook list --repository-id <repositoryId> --tag <tag> --intent "<r
 - `playbook list --json`：摘要候选列表，是发现主入口。
 - `playbook list --json` 不返回 `guideMarkdown`、`knowledgeRefs`、`scriptRefs`、`stopConditions`。
 - `--intent` 是正则意图搜索，匹配摘要字段；未命中时 CLI 自动回退全量候选。
+  * **正则构建机制**：Agent 必须将用户的自然语言输入，提炼拆解为核心的领域名词、技术动作、状态/症状等关键实体词（中英文对照），并使用正则逻辑或 `|` 连接。禁止将整段自然语言原样传入 `--intent`。
+  * **意图提取示例**：
+    1. *自然语言*：“帮我查一下为什么刚才那个退款订单失败了，好几个用户在群里反馈退款不成功”
+       * *核心词提取*：退款 / refund（领域）、失败 / 不成功 / failure（症状）
+       * *构建正则*：`--intent "退款|refund|失败|failure"`
+    2. *自然语言*：“有个支付超时告警，帮我排查一下 billing-service 是不是挂了或者超时了”
+       * *核心词提取*：支付 / payment（领域）、超时 / timeout（症状）、告警 / alert（动作）
+       * *构建正则*：`--intent "支付|payment|超时|timeout|告警|alert"`
+    3. *自然语言*：“能把 web-hook 推送重试一下吗？刚才订单创建的回调丢了”
+       * *核心词提取*：webhook（实体）、重试 / retry（动作）、回调 / callback（动作）、推送 / push（动作）
+       * *构建正则*：`--intent "webhook|重试|retry|回调|callback"`
 
 ### 读详情
 
