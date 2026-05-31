@@ -88,7 +88,6 @@ actiondock playbook list --repository-id <repositoryId> --tag <tag> --intent "<r
 - `playbook list --json`：摘要候选列表，是发现主入口。
 - `playbook list --json` 不返回 `guideMarkdown`、`knowledgeRefs`、`scriptRefs`、`stopConditions`。
 - `--intent` 是正则意图搜索，匹配摘要字段；未命中时 CLI 自动回退全量候选。
-- 不要使用任务手册分组命令；当前 Playbook 模型已经不再使用分组。
 
 ### 读详情
 
