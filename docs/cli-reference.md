@@ -49,6 +49,32 @@ export ACTIONDOCK_PROFILE=local
 
 连接解析优先级：`--server` / `--token` > `--profile` > `ACTIONDOCK_BASE_URL` / `ACTIONDOCK_TOKEN` > `ACTIONDOCK_PROFILE` > 当前 profile > 默认 `http://127.0.0.1:5177`。
 
+## 通用 list 意图搜索
+
+业务资产类 `list` 命令支持 `--intent <regex>`。`intent` 是服务端执行的正则表达式，会在资产 ID、名称、描述、标签、来源仓库等摘要字段中匹配；如果正则没有命中，CLI 会自动退回同一查询条件下的全量列表，输出结构不变。
+
+适用命令：
+
+- `script list`
+- `script repository-list`
+- `plugin list`
+- `repository list`
+- `repository:knowledge-list`
+- `playbook list`
+- `webhook list`
+- `webhook repository-list`
+- `schedule list`
+- `script preset list`
+- `config-value list`
+
+```bash
+actiondock script list --intent "refund|payment" --json
+actiondock playbook list --repository-id billing-service --enabled --intent "退款|支付超时" --json
+actiondock repository:knowledge-list --intent "api|database" --json
+```
+
+`--intent` 用来先收窄候选，不改变详情命令和执行命令。需要完整定义时，继续使用对应的 `get` / `schema` / `action` 命令。
+
 ## 脚本命令
 
 脚本是 ActionDock 的主要资产对象。本节覆盖本地脚本的完整生命周期，以及来自仓库的脚本安装与管理。
@@ -64,6 +90,9 @@ export ACTIONDOCK_PROFILE=local
 ```bash
 # 列出所有可用的脚本
 actiondock script list
+
+# 按意图正则先收窄候选，未命中时自动退回全量列表
+actiondock script list --intent "refund|payment" --json
 
 # 显示所有状态（含草稿等）
 actiondock script list --all
@@ -204,7 +233,7 @@ actiondock script publish <id>
 ```bash
 actiondock script repository-list
 actiondock script repository-list --repository team-tools
-actiondock script repository-list --repository team-tools --json
+actiondock script repository-list --repository team-tools --intent "log|refund" --json
 ```
 
 #### 查看仓库脚本详情
@@ -268,6 +297,7 @@ actiondock script upstream-pull hello-groovy --force
 
 ```bash
 actiondock webhook list --json
+actiondock webhook list --intent "github|order" --json
 ```
 
 #### 查看 Webhook 详情
@@ -395,7 +425,7 @@ actiondock webhook publish order-created \
 ```bash
 actiondock webhook repository-list
 actiondock webhook repository-list --repository team-tools
-actiondock webhook repository-list --repository team-tools --json
+actiondock webhook repository-list --repository team-tools --intent "order|crm" --json
 ```
 
 #### 查看仓库 Webhook 详情
@@ -453,7 +483,7 @@ actiondock webhook upstream-pull order-created --force
 ```bash
 actiondock repository list
 actiondock repository list --purpose capability
-actiondock repository list --purpose project
+actiondock repository list --purpose project --intent "billing|order"
 ```
 
 `purpose` 用来区分仓库用途：
@@ -545,7 +575,7 @@ actiondock repository resolve --repository-id billing-service --json
 actiondock repository:knowledge-list --json
 
 # 列出指定仓库的知识源
-actiondock repository:knowledge-list --repository-id team-repo --json
+actiondock repository:knowledge-list --repository-id team-repo --intent "api|database" --json
 
 # 查看知识源详情
 actiondock repository:knowledge-get --repository-id team-repo --knowledge-id product-api --json
@@ -586,18 +616,20 @@ actiondock repository:knowledge-uninstall --repository-id team-repo --knowledge-
 
 ```bash
 actiondock playbook list --json
-actiondock playbook list --repository-id <repositoryId> --tag <tag> --enabled --json
+actiondock playbook list --repository-id <repositoryId> --tag <tag> --enabled --intent "refund|timeout" --json
 actiondock playbook get <playbook-id> --json
 ```
 
 - `playbook list --json` 返回任务手册摘要列表，适合筛选候选；默认包含 `id`、`name`、`description`、`riskLevel`、`tags`、`repositoryIds`、启用状态和托管状态。
 - `playbook list --json` 不返回 `guideMarkdown`、`knowledgeRefs`、`scriptRefs`、`stopConditions` 等大字段。
+- `--intent` 先按任务意图正则搜索摘要字段；未命中时 CLI 自动退回原过滤条件下的全量摘要列表，便于 Agent 继续做兜底判断。
 - 需要单个任务手册的完整定义、导览文本、知识引用、脚本引用和停止条件时，使用 `playbook get <playbook-id> --json`。
 
 ### 查看插件
 
 ```bash
 actiondock plugin list --json
+actiondock plugin list --intent "workspace|ai" --json
 actiondock plugin get <plugin-id> --json
 actiondock plugin action <plugin-id> <action> --json
 actiondock plugin references --json

@@ -40,13 +40,17 @@ actiondock schedule create \
 
 ```bash
 actiondock schedule list
+actiondock schedule list --intent "<regex>" --json
 ```
 
 可按脚本过滤：
 
 ```bash
 actiondock schedule list --script-id <script-id>
+actiondock schedule list --script-id <script-id> --intent "<regex>" --json
 ```
+
+`--intent` 按定时任务 ID、名称、脚本 ID 和 cron 表达式做正则搜索；未命中时 CLI 自动退回同一脚本过滤下的全量列表。
 
 ---
 

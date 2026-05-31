@@ -54,13 +54,39 @@ ActionDock 的 REST API 以 `/api` 为前缀，绝大多数接口使用 JSON 格
 | `413` / `431` | Webhook 请求体或请求头超限 |
 | `500` | 未预期的服务端错误，响应 `data.code` 为 `INTERNAL_ERROR` |
 
+### 通用 list 意图搜索
+
+业务资产列表接口支持 `intent` 查询参数。`intent` 是正则表达式，服务端在资产摘要字段中匹配；正则不合法时返回 `400`。CLI 的 `--intent` 会在服务端空命中时自动退回全量列表，REST API 本身只返回当前查询结果。
+
+适用接口：
+
+- `GET /api/scripts`
+- `GET /api/plugins`
+- `GET /api/repositories`
+- `GET /api/repositories/scripts`
+- `GET /api/repositories/{id}/scripts`
+- `GET /api/repositories/webhooks`
+- `GET /api/repositories/{id}/webhooks`
+- `GET /api/repositories/playbooks`
+- `GET /api/repositories/{id}/playbooks`
+- `GET /api/repositories/plugins`
+- `GET /api/repositories/{id}/plugins`
+- `GET /api/repositories/knowledge`
+- `GET /api/repositories/{id}/knowledge`
+- `GET /api/webhooks`
+- `GET /api/schedules`
+- `GET /api/scripts/{scriptId}/schedules`
+- `GET /api/scripts/{scriptId}/presets`
+- `GET /api/config-values`
+- `GET /api/playbooks`
+
 ## 脚本管理 API
 
 ### 脚本 CRUD
 
 | 方法 | 路径 | 说明 | 请求体 | 响应 |
 |------|------|------|--------|------|
-| `GET` | `/api/scripts` | 脚本列表 | - | `ScriptDefinition[]` |
+| `GET` | `/api/scripts` | 脚本列表，支持 `intent` 正则过滤 | - | `ScriptDefinition[]` |
 | `POST` | `/api/scripts` | 创建脚本 | `ScriptDefinition` | `ScriptDefinition` |
 | `GET` | `/api/scripts/{id}` | 脚本详情（草稿） | - | `ScriptDefinition` |
 | `GET` | `/api/scripts/{id}/published` | 已发布版本详情 | - | `ScriptDefinition` |
@@ -172,7 +198,7 @@ ActionDock 的 REST API 以 `/api` 为前缀，绝大多数接口使用 JSON 格
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `GET` | `/api/plugins` | 插件摘要列表（含 `actionCount`，不含 action schema） |
+| `GET` | `/api/plugins` | 插件摘要列表（含 `actionCount`，不含 action schema），支持 `intent` 正则过滤 |
 | `GET` | `/api/plugins/references` | 插件引用列表（编辑器用，含 action schema） |
 | `GET` | `/api/plugins/{pluginId}` | 插件详情（含 action schema） |
 | `GET` | `/api/plugins/{pluginId}/download` | 下载插件 JAR |
@@ -192,18 +218,19 @@ ActionDock 的 REST API 以 `/api` 为前缀，绝大多数接口使用 JSON 格
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `GET` | `/api/repositories` | 仓库列表，支持 `purpose` 过滤 |
+| `GET` | `/api/repositories` | 仓库列表，支持 `purpose` 和 `intent` 过滤 |
 | `POST` | `/api/repositories` | 创建仓库 |
 | `GET` | `/api/repositories/{id}` | 仓库详情 |
 | `PUT` | `/api/repositories/{id}` | 更新仓库 |
 | `DELETE` | `/api/repositories/{id}` | 删除仓库 |
 | `GET` | `/api/repositories/resolve?repositoryId={value}` | 解析项目仓库并返回 `ACTIONDOCK.md` 原文 |
 | `POST` | `/api/repositories/{id}/sync` | 同步仓库 |
-| `GET` | `/api/repositories/{id}/scripts` | 列出仓库中的可用工具 |
+| `GET` | `/api/repositories/scripts` | 列出所有仓库中的可用工具，支持 `intent` 正则过滤 |
+| `GET` | `/api/repositories/{id}/scripts` | 列出仓库中的可用工具，支持 `intent` 正则过滤 |
 | `POST` | `/api/repositories/{id}/scripts/{scriptId}/local-assets` | 添加仓库脚本到本地 |
 | `POST` | `/api/repositories/{id}/scripts/{scriptId}/local-assets/update` | 更新本地仓库脚本 |
-| `GET` | `/api/repositories/knowledge` | 列出所有仓库的知识源 |
-| `GET` | `/api/repositories/{id}/knowledge` | 列出单仓库知识源 |
+| `GET` | `/api/repositories/knowledge` | 列出所有仓库的知识源，支持 `intent` 正则过滤 |
+| `GET` | `/api/repositories/{id}/knowledge` | 列出单仓库知识源，支持 `intent` 正则过滤 |
 | `GET` | `/api/repositories/{id}/knowledge/{knowledgeId}` | 知识源详情 |
 | `POST` | `/api/repositories/{id}/knowledge/{knowledgeId}/install` | 安装知识源 |
 | `DELETE` | `/api/repositories/{id}/knowledge/{knowledgeId}` | 卸载知识源 |
@@ -254,7 +281,7 @@ ActionDock 的 REST API 以 `/api` 为前缀，绝大多数接口使用 JSON 格
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `GET` | `/api/schedules` | 定时任务列表 |
+| `GET` | `/api/schedules` | 定时任务列表，支持 `intent` 正则过滤 |
 | `POST` | `/api/schedules` | 创建定时任务 |
 | `GET` | `/api/schedules/{id}` | 定时任务详情 |
 | `PUT` | `/api/schedules/{id}` | 更新定时任务 |
@@ -274,7 +301,7 @@ ActionDock 的 REST API 以 `/api` 为前缀，绝大多数接口使用 JSON 格
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `GET` | `/api/config-values` | 配置值列表 |
+| `GET` | `/api/config-values` | 配置值列表，支持 `intent` 正则过滤 |
 | `POST` | `/api/config-values` | 创建配置值 |
 | `GET` | `/api/config-values/{key}` | 配置值详情 |
 | `PUT` | `/api/config-values/{key}` | 更新配置值 |
@@ -297,7 +324,7 @@ ActionDock 的 REST API 以 `/api` 为前缀，绝大多数接口使用 JSON 格
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `GET` | `/api/webhooks` | Webhook 列表 |
+| `GET` | `/api/webhooks` | Webhook 列表，支持 `intent` 正则过滤 |
 | `POST` | `/api/webhooks` | 创建 Webhook |
 | `GET` | `/api/webhooks/{id}` | Webhook 详情 |
 | `PUT` | `/api/webhooks/{id}` | 更新 Webhook |

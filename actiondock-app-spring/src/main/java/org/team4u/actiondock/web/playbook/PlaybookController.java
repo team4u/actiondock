@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.team4u.actiondock.application.PlaybookApplicationService;
 import org.team4u.actiondock.domain.model.Playbook;
 import org.team4u.actiondock.web.common.ApiResponse;
+import org.team4u.actiondock.web.common.IntentFilter;
 
 import java.util.List;
 
@@ -27,8 +28,19 @@ public class PlaybookController {
                                                      @RequestParam(required = false) String tag,
                                                      @RequestParam(required = false) Boolean enabled,
                                                      @RequestParam(required = false) Boolean managed,
-                                                     @RequestParam(required = false) String keyword) {
-        return ApiResponse.success(playbookService.listPlaybooks(repositoryId, tag, enabled, managed, keyword));
+                                                     @RequestParam(required = false) String keyword,
+                                                     @RequestParam(required = false) String intent) {
+        return ApiResponse.success(IntentFilter.filter(
+                playbookService.listPlaybooks(repositoryId, tag, enabled, managed, keyword),
+                intent,
+                Playbook::getId,
+                Playbook::getName,
+                Playbook::getDescription,
+                Playbook::getTags,
+                Playbook::getRiskLevel,
+                Playbook::getRepositoryIds,
+                Playbook::getStopConditions
+        ));
     }
 
     @PostMapping("/api/playbooks")

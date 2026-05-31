@@ -112,11 +112,23 @@ function normalizePublishedRevision(scriptId: string, revision: PublishedScriptR
   });
 }
 
+function querySuffix(params: Record<string, string | undefined>): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value) {
+      search.set(key, value);
+    }
+  }
+  const query = search.toString();
+  return query ? `?${query}` : "";
+}
+
 export class ActionDockClient {
   constructor(private readonly options: ClientOptions) {}
 
-  async listScripts(): Promise<ScriptDefinition[]> {
-    return this.requestJson<ScriptDefinition[]>("/api/scripts").then((items) => items.map(normalizeScriptDefinition));
+  async listScripts(intent?: string): Promise<ScriptDefinition[]> {
+    const suffix = querySuffix({ intent });
+    return this.requestJson<ScriptDefinition[]>(`/api/scripts${suffix}`).then((items) => items.map(normalizeScriptDefinition));
   }
 
   async getScript(scriptId: string, draft: boolean): Promise<ScriptDefinition> {
@@ -222,11 +234,12 @@ export class ActionDockClient {
     });
   }
 
-  async listSchedules(scriptId?: string): Promise<ScriptScheduleView[]> {
+  async listSchedules(scriptId?: string, intent?: string): Promise<ScriptScheduleView[]> {
+    const suffix = querySuffix({ intent });
     if (scriptId) {
-      return this.requestJson<ScriptScheduleView[]>(`/api/scripts/${scriptId}/schedules`);
+      return this.requestJson<ScriptScheduleView[]>(`/api/scripts/${scriptId}/schedules${suffix}`);
     }
-    return this.requestJson<ScriptScheduleView[]>("/api/schedules");
+    return this.requestJson<ScriptScheduleView[]>(`/api/schedules${suffix}`);
   }
 
   async getSchedule(scheduleId: string): Promise<ScriptScheduleView> {
@@ -265,8 +278,9 @@ export class ActionDockClient {
     });
   }
 
-  async listExecutionPresets(scriptId: string): Promise<ExecutionPresetView[]> {
-    return this.requestJson<ExecutionPresetView[]>(`/api/scripts/${scriptId}/presets`);
+  async listExecutionPresets(scriptId: string, intent?: string): Promise<ExecutionPresetView[]> {
+    const suffix = querySuffix({ intent });
+    return this.requestJson<ExecutionPresetView[]>(`/api/scripts/${scriptId}/presets${suffix}`);
   }
 
   async createExecutionPreset(scriptId: string, payload: ExecutionPresetUpsertRequest): Promise<ExecutionPresetView> {
@@ -289,8 +303,9 @@ export class ActionDockClient {
     });
   }
 
-  async listWebhooks(): Promise<WebhookDefinition[]> {
-    return this.requestJson<WebhookDefinition[]>("/api/webhooks");
+  async listWebhooks(intent?: string): Promise<WebhookDefinition[]> {
+    const suffix = querySuffix({ intent });
+    return this.requestJson<WebhookDefinition[]>(`/api/webhooks${suffix}`);
   }
 
   async getWebhookUpstreamStatus(webhookId: string): Promise<UpstreamStatus | null> {
@@ -346,12 +361,13 @@ export class ActionDockClient {
     });
   }
 
-  async listPlugins(): Promise<PluginSummaryView[]> {
-    return this.requestJson<PluginSummaryView[]>("/api/plugins");
+  async listPlugins(intent?: string): Promise<PluginSummaryView[]> {
+    const suffix = querySuffix({ intent });
+    return this.requestJson<PluginSummaryView[]>(`/api/plugins${suffix}`);
   }
 
-  async listRepositories(purpose?: string): Promise<RepositoryDefinition[]> {
-    const suffix = purpose ? `?${new URLSearchParams({ purpose }).toString()}` : "";
+  async listRepositories(purpose?: string, intent?: string): Promise<RepositoryDefinition[]> {
+    const suffix = querySuffix({ purpose, intent });
     return this.requestJson<RepositoryDefinition[]>(`/api/repositories${suffix}`);
   }
 
@@ -385,11 +401,12 @@ export class ActionDockClient {
     return this.requestJson<ProjectRepositoryResolution>(`/api/repositories/resolve?${new URLSearchParams({ repositoryId }).toString()}`);
   }
 
-  async listRepositoryScripts(repositoryId?: string): Promise<RepositoryScriptDescriptor[]> {
+  async listRepositoryScripts(repositoryId?: string, intent?: string): Promise<RepositoryScriptDescriptor[]> {
+    const suffix = querySuffix({ intent });
     if (repositoryId) {
-      return this.requestJson<RepositoryScriptDescriptor[]>(`/api/repositories/${repositoryId}/scripts`);
+      return this.requestJson<RepositoryScriptDescriptor[]>(`/api/repositories/${repositoryId}/scripts${suffix}`);
     }
-    return this.requestJson<RepositoryScriptDescriptor[]>("/api/repositories/scripts");
+    return this.requestJson<RepositoryScriptDescriptor[]>(`/api/repositories/scripts${suffix}`);
   }
 
   async getRepositoryScript(repositoryId: string, scriptId: string): Promise<RepositoryScriptDetail> {
@@ -438,12 +455,14 @@ export class ActionDockClient {
     });
   }
 
-  async listRepositoryWebhooks(): Promise<RepositoryWebhookDescriptor[]> {
-    return this.requestJson<RepositoryWebhookDescriptor[]>("/api/repositories/webhooks");
+  async listRepositoryWebhooks(intent?: string): Promise<RepositoryWebhookDescriptor[]> {
+    const suffix = querySuffix({ intent });
+    return this.requestJson<RepositoryWebhookDescriptor[]>(`/api/repositories/webhooks${suffix}`);
   }
 
-  async listRepositoryWebhooksByRepository(repositoryId: string): Promise<RepositoryWebhookDescriptor[]> {
-    return this.requestJson<RepositoryWebhookDescriptor[]>(`/api/repositories/${repositoryId}/webhooks`);
+  async listRepositoryWebhooksByRepository(repositoryId: string, intent?: string): Promise<RepositoryWebhookDescriptor[]> {
+    const suffix = querySuffix({ intent });
+    return this.requestJson<RepositoryWebhookDescriptor[]>(`/api/repositories/${repositoryId}/webhooks${suffix}`);
   }
 
   async getRepositoryWebhook(repositoryId: string, webhookId: string): Promise<RepositoryWebhookDetail> {
@@ -604,8 +623,9 @@ export class ActionDockClient {
     };
   }
 
-  async listConfigValues(): Promise<ConfigValueView[]> {
-    return this.requestJson<ConfigValueView[]>("/api/config-values");
+  async listConfigValues(intent?: string): Promise<ConfigValueView[]> {
+    const suffix = querySuffix({ intent });
+    return this.requestJson<ConfigValueView[]>(`/api/config-values${suffix}`);
   }
 
   async getConfigValue(key: string): Promise<ConfigValueDetailView> {
@@ -723,11 +743,12 @@ export class ActionDockClient {
     });
   }
 
-  async listRepositoryKnowledge(repositoryId?: string): Promise<RepositoryKnowledgeDescriptor[]> {
+  async listRepositoryKnowledge(repositoryId?: string, intent?: string): Promise<RepositoryKnowledgeDescriptor[]> {
+    const suffix = querySuffix({ intent });
     const path = repositoryId
       ? `/api/repositories/${repositoryId}/knowledge`
       : "/api/repositories/knowledge";
-    return this.requestJson<RepositoryKnowledgeDescriptor[]>(path);
+    return this.requestJson<RepositoryKnowledgeDescriptor[]>(`${path}${suffix}`);
   }
 
   async getRepositoryKnowledge(repositoryId: string, knowledgeId: string): Promise<RepositoryKnowledgeDetail> {
@@ -752,6 +773,7 @@ export class ActionDockClient {
     enabled?: boolean;
     managed?: boolean;
     keyword?: string;
+    intent?: string;
   } = {}): Promise<Playbook[]> {
     const search = new URLSearchParams();
     if (params.repositoryId) search.set("repositoryId", params.repositoryId);
@@ -759,6 +781,7 @@ export class ActionDockClient {
     if (params.enabled !== undefined) search.set("enabled", String(params.enabled));
     if (params.managed !== undefined) search.set("managed", String(params.managed));
     if (params.keyword) search.set("keyword", params.keyword);
+    if (params.intent) search.set("intent", params.intent);
     const suffix = search.toString() ? `?${search.toString()}` : "";
     return this.requestJson<Playbook[]>(`/api/playbooks${suffix}`);
   }

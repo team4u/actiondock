@@ -28,6 +28,21 @@ export const serverTokenFlags = {
   })
 };
 
+export const intentFlag = Flags.string({
+  description: "Regex filter for list intent; falls back to the full list when no item matches"
+});
+
+export async function listWithIntentFallback<T>(
+  intent: string | undefined,
+  fetchWithIntent: (intent?: string) => Promise<T[]>
+): Promise<T[]> {
+  if (!intent) {
+    return fetchWithIntent(undefined);
+  }
+  const matched = await fetchWithIntent(intent);
+  return matched.length === 0 ? fetchWithIntent(undefined) : matched;
+}
+
 export const jsonObjectFlags = (name: string, description: string) => ({
   [`${name}-json`]: Flags.string({
     description: `Inline JSON object for ${description}`

@@ -25,6 +25,7 @@ ActionDock 做的核心事情是：
 - 多入口复用 — 管理台、REST API、CLI、Agent 共用同一脚本
 - 仓库化协作 — 脚本、插件、AI 能力包可从仓库发现、安装、更新
 - 项目知识解析 — 项目仓库可通过 `repository resolve --repository-id` 返回 `ACTIONDOCK.md` 原文，供后续检索
+- 意图化资产发现 — 脚本、插件、仓库、知识源、Webhook、定时任务和 Playbook 的 list 命令支持 `--intent <regex>`，先收窄候选，未命中时自动回退全量列表
 - Webhook仓库资产 — Webhook可连同配置模板和脚本依赖一起发布、安装
 - AI 原生集成 — 脚本可暴露给 Agent，AI 辅助生成、诊断、Review
 - 治理能力完整 — 内置配置值、共享状态、访问令牌、执行记录、定时任务、备份恢复

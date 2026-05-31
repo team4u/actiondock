@@ -68,6 +68,47 @@ beforeAll(async () => {
       });
     }
 
+    if (req.method === "GET" && req.url === "/api/scripts?intent=published") {
+      return json(res, {
+        status: 0,
+        msg: "ok",
+        data: [
+          {
+            id: "published-tool",
+            name: "Published Tool",
+            type: "GROOVY",
+            publication: { published: true, dirty: false, publishedVersion: 7, publishedAt: "2026-04-01T00:00:00" },
+            published: {
+              scriptId: "published-tool",
+              revisionId: "revision-published-tool",
+              version: 7,
+              publishedAt: "2026-04-01T00:00:00",
+              name: "Published Tool",
+              type: "GROOVY",
+              packaging: "TOOL",
+              description: "Generate a published greeting",
+              inputSchema: {
+                type: "object",
+                required: ["name"],
+                properties: {
+                  name: { type: "string" }
+                }
+              },
+              outputSchema: {}
+            }
+          }
+        ]
+      });
+    }
+
+    if (req.method === "GET" && req.url === "/api/scripts?intent=missing") {
+      return json(res, {
+        status: 0,
+        msg: "ok",
+        data: []
+      });
+    }
+
     if (req.method === "GET" && req.url === "/api/scripts/published-tool") {
       return json(res, {
         status: 0,
@@ -589,6 +630,24 @@ beforeAll(async () => {
     }
 
     if (req.method === "GET" && req.url === "/api/plugins") {
+      return json(res, {
+        status: 0,
+        msg: "ok",
+        data: [
+          {
+            pluginId: "plugin-a",
+            name: "Plugin A",
+            version: "1.2.3",
+            state: "STARTED",
+            started: true,
+            configurable: true,
+            actionCount: 1
+          }
+        ]
+      });
+    }
+
+    if (req.method === "GET" && req.url === "/api/plugins?intent=plugin-a") {
       return json(res, {
         status: 0,
         msg: "ok",
@@ -1231,7 +1290,6 @@ beforeAll(async () => {
         data: [
           {
             id: "refund-failure",
-            groupId: "billing-diagnosis",
             name: "退款失败排查",
             description: "定位退款失败根因并给出下一步建议",
             tags: ["refund", "payment"],
@@ -1254,14 +1312,13 @@ beforeAll(async () => {
       });
     }
 
-    if (req.method === "GET" && req.url === "/api/playbooks?groupId=billing-diagnosis&repositoryId=billing-service&tag=refund&enabled=true&managed=true&keyword=timeout") {
+    if (req.method === "GET" && req.url === "/api/playbooks?repositoryId=billing-service&tag=refund&enabled=true&managed=true&keyword=timeout&intent=%E9%80%80%E6%AC%BE") {
       return json(res, {
         status: 0,
         msg: "ok",
         data: [
           {
             id: "refund-failure",
-            groupId: "billing-diagnosis",
             name: "退款失败排查",
             description: "定位退款失败根因并给出下一步建议",
             tags: ["refund", "payment"],
@@ -1288,7 +1345,6 @@ beforeAll(async () => {
         msg: "ok",
         data: {
           id: "refund-failure",
-          groupId: "billing-diagnosis",
           name: "退款失败排查",
           description: "定位退款失败根因并给出下一步建议",
           tags: ["refund", "payment"],
@@ -1337,6 +1393,31 @@ describe("CLI integration", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("published-tool");
     expect(result.stdout).not.toContain("draft-only-tool");
+  }, 15000);
+
+  it("passes list intent to server and falls back when intent has no match", async () => {
+    requests.length = 0;
+    const matched = await runCli(["script", "list", "--intent", "published", "--server", baseUrl, "--json"]);
+    expect(matched.status).toBe(0);
+    expect(JSON.parse(matched.stdout)).toEqual([
+      expect.objectContaining({
+        id: "published-tool"
+      })
+    ]);
+    expect(requests.map((item) => item.url)).toContain("/api/scripts?intent=published");
+
+    requests.length = 0;
+    const fallback = await runCli(["script", "list", "--intent", "missing", "--server", baseUrl, "--json"]);
+    expect(fallback.status).toBe(0);
+    expect(JSON.parse(fallback.stdout)).toEqual([
+      expect.objectContaining({
+        id: "published-tool"
+      })
+    ]);
+    expect(requests.map((item) => item.url)).toEqual([
+      "/api/scripts?intent=missing",
+      "/api/scripts"
+    ]);
   }, 15000);
 
   it("returns schema detail as JSON", async () => {
@@ -2389,7 +2470,6 @@ describe("CLI integration", () => {
     expect(parsed).toEqual([
       {
         id: "refund-failure",
-        groupId: "billing-diagnosis",
         name: "退款失败排查",
         description: "定位退款失败根因并给出下一步建议",
         tags: ["refund", "payment"],
@@ -2408,13 +2488,11 @@ describe("CLI integration", () => {
     expect(parsed[0].updatedAt).toBeUndefined();
   });
 
-  it("passes playbook list filters through and keeps text output", async () => {
+  it("passes playbook list filters and intent through and keeps text output", async () => {
     requests.length = 0;
     const jsonResult = await runCli([
       "playbook",
       "list",
-      "--group",
-      "billing-diagnosis",
       "--repository-id",
       "billing-service",
       "--tag",
@@ -2423,17 +2501,18 @@ describe("CLI integration", () => {
       "--managed",
       "--keyword",
       "timeout",
+      "--intent",
+      "退款",
       "--server",
       baseUrl,
       "--json"
     ]);
     expect(jsonResult.status).toBe(0);
-    expect(requests.some((item) => item.method === "GET" && item.url === "/api/playbooks?groupId=billing-diagnosis&repositoryId=billing-service&tag=refund&enabled=true&managed=true&keyword=timeout")).toBe(true);
+    expect(requests.some((item) => item.method === "GET" && item.url === "/api/playbooks?repositoryId=billing-service&tag=refund&enabled=true&managed=true&keyword=timeout&intent=%E9%80%80%E6%AC%BE")).toBe(true);
 
     const textResult = await runCli(["playbook", "list", "--server", baseUrl]);
     expect(textResult.status).toBe(0);
     expect(textResult.stdout).toContain("refund-failure");
-    expect(textResult.stdout).toContain("group=billing-diagnosis");
     expect(textResult.stdout).toContain("risk=MEDIUM");
   });
 

@@ -101,6 +101,7 @@ Webhook 脚本收到：
 ## CLI 命令
 
 ```bash
+actiondock webhook list --intent "<regex>" --json
 actiondock webhook create --definition-file ./webhook.json --json
 actiondock webhook get <webhook-id> --json
 actiondock webhook update <webhook-id> --definition-file ./webhook.json --json
@@ -108,8 +109,11 @@ actiondock webhook invoke <webhook-id> --payload-file ./webhook-request.json --j
 actiondock execution get <execution-id> --json
 ```
 
+`webhook list --intent` 按 Webhook ID、key、名称、描述和绑定脚本 ID 做正则搜索；未命中时 CLI 自动退回全量 Webhook 列表。
+
 ## 排查顺序
 
-1. 看 `webhook get <id>`，确认 `webhookScriptId`
-2. 看 `webhook invoke <id>` 的返回
-3. 看 `execution get <execution-id>`
+1. 不确定 Webhook ID 时先用 `webhook list --intent "<regex>"` 缩小候选
+2. 看 `webhook get <id>`，确认 `webhookScriptId`
+3. 看 `webhook invoke <id>` 的返回
+4. 看 `execution get <execution-id>`

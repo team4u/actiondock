@@ -404,7 +404,7 @@ repository/
 
 ```bash
 # 列出知识源
-actiondock repository:knowledge-list --repository-id team-repo --json
+actiondock repository:knowledge-list --repository-id team-repo --intent "api|database" --json
 
 # 安装
 actiondock repository:knowledge-install --repository-id team-repo --knowledge-id product-api
@@ -416,8 +416,8 @@ actiondock repository:knowledge-uninstall --repository-id team-repo --knowledge-
 REST API：
 
 ```bash
-GET    /api/repositories/knowledge                                    # 列出所有知识源
-GET    /api/repositories/{id}/knowledge                                # 列出单仓库知识源
+GET    /api/repositories/knowledge?intent=api                          # 列出所有知识源，可按 intent 正则过滤
+GET    /api/repositories/{id}/knowledge?intent=api                     # 列出单仓库知识源，可按 intent 正则过滤
 GET    /api/repositories/{id}/knowledge/{knowledgeId}                  # 知识源详情
 POST   /api/repositories/{id}/knowledge/{knowledgeId}/install          # 安装
 DELETE /api/repositories/{id}/knowledge/{knowledgeId}                  # 卸载

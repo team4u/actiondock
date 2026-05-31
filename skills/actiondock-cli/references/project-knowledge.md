@@ -19,7 +19,7 @@
 先列出项目仓库：
 
 ```bash
-actiondock repository list --purpose project --json
+actiondock repository list --purpose project --intent "<regex>" --json
 ```
 
 再解析具体项目：
@@ -202,7 +202,7 @@ actiondock plugin action actiondock-workspace <action> --json
 
 ```bash
 # 发现可用知识源
-actiondock repository:knowledge-list --repository-id team-cap-repo --json
+actiondock repository:knowledge-list --repository-id team-cap-repo --intent "<regex>" --json
 
 # 安装（自动注册为 PROJECT 仓库）
 actiondock repository:knowledge-install --repository-id team-cap-repo --knowledge-id product-api

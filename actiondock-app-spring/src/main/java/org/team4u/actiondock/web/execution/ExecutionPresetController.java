@@ -7,10 +7,12 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.team4u.actiondock.application.ExecutionPresetApplicationService;
 import org.team4u.actiondock.domain.model.ExecutionPreset;
 import org.team4u.actiondock.web.common.ApiResponse;
+import org.team4u.actiondock.web.common.IntentFilter;
 
 import java.util.List;
 
@@ -39,10 +41,19 @@ public class ExecutionPresetController {
      * @return API 响应，包含预设视图列表
      */
     @GetMapping
-    public ApiResponse<List<ExecutionPresetView>> list(@PathVariable String scriptId) {
-        return ApiResponse.success(executionPresetApplicationService.list(scriptId).stream()
+    public ApiResponse<List<ExecutionPresetView>> list(@PathVariable String scriptId,
+                                                       @RequestParam(required = false) String intent) {
+        List<ExecutionPresetView> items = executionPresetApplicationService.list(scriptId).stream()
                 .map(executionPresetViewMapper::toView)
-                .toList());
+                .toList();
+        return ApiResponse.success(IntentFilter.filter(items, intent,
+                ExecutionPresetView::id,
+                ExecutionPresetView::name,
+                ExecutionPresetView::scriptId,
+                ExecutionPresetView::repositoryId,
+                ExecutionPresetView::repositoryPackageId,
+                ExecutionPresetView::repositoryVersion
+        ));
     }
 
     /**

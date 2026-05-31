@@ -1,6 +1,6 @@
 import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../../lib/command.js";
-import { createClient, serverTokenFlags } from "../../../lib/command-helpers.js";
+import { createClient, intentFlag, listWithIntentFallback, serverTokenFlags } from "../../../lib/command-helpers.js";
 import { renderExecutionPresetList } from "../../../lib/render.js";
 export default class ScriptPresetListCommand extends BaseCommand {
     static description = "List script execution presets";
@@ -9,13 +9,15 @@ export default class ScriptPresetListCommand extends BaseCommand {
     };
     static flags = {
         ...BaseCommand.baseFlags,
+        intent: intentFlag,
         ...serverTokenFlags,
         help: Flags.help({ char: "h" })
     };
     async run() {
         const { args, flags } = await this.parse(ScriptPresetListCommand);
         try {
-            const items = await createClient(flags).listExecutionPresets(args.scriptId);
+            const client = createClient(flags);
+            const items = await listWithIntentFallback(flags.intent, (intent) => client.listExecutionPresets(args.scriptId, intent));
             flags.json ? this.printJson(items) : this.log(renderExecutionPresetList(items));
         }
         catch (error) {

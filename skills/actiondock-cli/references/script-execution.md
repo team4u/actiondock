@@ -67,9 +67,11 @@ actiondock script list --profile staging
 
 ```bash
 actiondock script list
+actiondock script list --intent "<regex>" --json
 ```
 
 默认只列出有已发布快照的脚本。加 `--all` 可包含仅有草稿的脚本。
+`--intent` 按脚本 ID、名称、描述、标签等摘要字段做正则搜索；未命中时 CLI 自动退回全量脚本列表。
 
 输出格式：`<id> <name> [<type>] published|draft-only`
 
@@ -242,7 +244,7 @@ actiondock script run my-script --name alice --count 3
 ### 查找并执行陌生脚本
 
 ```bash
-actiondock script list
+actiondock script list --intent "<regex>"
 actiondock script schema target-script
 actiondock script run target-script --param1 value1
 ```

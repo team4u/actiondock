@@ -42,13 +42,24 @@ function normalizePublishedRevision(scriptId, revision) {
         }
     });
 }
+function querySuffix(params) {
+    const search = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+        if (value) {
+            search.set(key, value);
+        }
+    }
+    const query = search.toString();
+    return query ? `?${query}` : "";
+}
 export class ActionDockClient {
     options;
     constructor(options) {
         this.options = options;
     }
-    async listScripts() {
-        return this.requestJson("/api/scripts").then((items) => items.map(normalizeScriptDefinition));
+    async listScripts(intent) {
+        const suffix = querySuffix({ intent });
+        return this.requestJson(`/api/scripts${suffix}`).then((items) => items.map(normalizeScriptDefinition));
     }
     async getScript(scriptId, draft) {
         if (draft) {
@@ -138,11 +149,12 @@ export class ActionDockClient {
             method: "DELETE"
         });
     }
-    async listSchedules(scriptId) {
+    async listSchedules(scriptId, intent) {
+        const suffix = querySuffix({ intent });
         if (scriptId) {
-            return this.requestJson(`/api/scripts/${scriptId}/schedules`);
+            return this.requestJson(`/api/scripts/${scriptId}/schedules${suffix}`);
         }
-        return this.requestJson("/api/schedules");
+        return this.requestJson(`/api/schedules${suffix}`);
     }
     async getSchedule(scheduleId) {
         return this.requestJson(`/api/schedules/${scheduleId}`);
@@ -174,8 +186,9 @@ export class ActionDockClient {
             method: "DELETE"
         });
     }
-    async listExecutionPresets(scriptId) {
-        return this.requestJson(`/api/scripts/${scriptId}/presets`);
+    async listExecutionPresets(scriptId, intent) {
+        const suffix = querySuffix({ intent });
+        return this.requestJson(`/api/scripts/${scriptId}/presets${suffix}`);
     }
     async createExecutionPreset(scriptId, payload) {
         return this.requestJson(`/api/scripts/${scriptId}/presets`, {
@@ -194,8 +207,9 @@ export class ActionDockClient {
             method: "DELETE"
         });
     }
-    async listWebhooks() {
-        return this.requestJson("/api/webhooks");
+    async listWebhooks(intent) {
+        const suffix = querySuffix({ intent });
+        return this.requestJson(`/api/webhooks${suffix}`);
     }
     async getWebhookUpstreamStatus(webhookId) {
         return this.requestJson(`/api/webhooks/${webhookId}/upstream`);
@@ -241,11 +255,12 @@ export class ActionDockClient {
             body: JSON.stringify(payload)
         });
     }
-    async listPlugins() {
-        return this.requestJson("/api/plugins");
+    async listPlugins(intent) {
+        const suffix = querySuffix({ intent });
+        return this.requestJson(`/api/plugins${suffix}`);
     }
-    async listRepositories(purpose) {
-        const suffix = purpose ? `?${new URLSearchParams({ purpose }).toString()}` : "";
+    async listRepositories(purpose, intent) {
+        const suffix = querySuffix({ purpose, intent });
         return this.requestJson(`/api/repositories${suffix}`);
     }
     async createRepository(payload) {
@@ -273,11 +288,12 @@ export class ActionDockClient {
     async resolveProjectRepository(repositoryId) {
         return this.requestJson(`/api/repositories/resolve?${new URLSearchParams({ repositoryId }).toString()}`);
     }
-    async listRepositoryScripts(repositoryId) {
+    async listRepositoryScripts(repositoryId, intent) {
+        const suffix = querySuffix({ intent });
         if (repositoryId) {
-            return this.requestJson(`/api/repositories/${repositoryId}/scripts`);
+            return this.requestJson(`/api/repositories/${repositoryId}/scripts${suffix}`);
         }
-        return this.requestJson("/api/repositories/scripts");
+        return this.requestJson(`/api/repositories/scripts${suffix}`);
     }
     async getRepositoryScript(repositoryId, scriptId) {
         return this.requestJson(`/api/repositories/${repositoryId}/scripts/${scriptId}`);
@@ -312,11 +328,13 @@ export class ActionDockClient {
             method: "DELETE"
         });
     }
-    async listRepositoryWebhooks() {
-        return this.requestJson("/api/repositories/webhooks");
+    async listRepositoryWebhooks(intent) {
+        const suffix = querySuffix({ intent });
+        return this.requestJson(`/api/repositories/webhooks${suffix}`);
     }
-    async listRepositoryWebhooksByRepository(repositoryId) {
-        return this.requestJson(`/api/repositories/${repositoryId}/webhooks`);
+    async listRepositoryWebhooksByRepository(repositoryId, intent) {
+        const suffix = querySuffix({ intent });
+        return this.requestJson(`/api/repositories/${repositoryId}/webhooks${suffix}`);
     }
     async getRepositoryWebhook(repositoryId, webhookId) {
         return this.requestJson(`/api/repositories/${repositoryId}/webhooks/${webhookId}`);
@@ -438,8 +456,9 @@ export class ActionDockClient {
             content: response.body
         };
     }
-    async listConfigValues() {
-        return this.requestJson("/api/config-values");
+    async listConfigValues(intent) {
+        const suffix = querySuffix({ intent });
+        return this.requestJson(`/api/config-values${suffix}`);
     }
     async getConfigValue(key) {
         return this.requestJson(`/api/config-values/${encodeURIComponent(key)}`);
@@ -533,11 +552,12 @@ export class ActionDockClient {
             method: "POST"
         });
     }
-    async listRepositoryKnowledge(repositoryId) {
+    async listRepositoryKnowledge(repositoryId, intent) {
+        const suffix = querySuffix({ intent });
         const path = repositoryId
             ? `/api/repositories/${repositoryId}/knowledge`
             : "/api/repositories/knowledge";
-        return this.requestJson(path);
+        return this.requestJson(`${path}${suffix}`);
     }
     async getRepositoryKnowledge(repositoryId, knowledgeId) {
         return this.requestJson(`/api/repositories/${repositoryId}/knowledge/${knowledgeId}`);
@@ -564,6 +584,8 @@ export class ActionDockClient {
             search.set("managed", String(params.managed));
         if (params.keyword)
             search.set("keyword", params.keyword);
+        if (params.intent)
+            search.set("intent", params.intent);
         const suffix = search.toString() ? `?${search.toString()}` : "";
         return this.requestJson(`/api/playbooks${suffix}`);
     }

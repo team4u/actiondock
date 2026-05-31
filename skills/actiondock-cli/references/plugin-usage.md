@@ -25,9 +25,11 @@
 
 ```bash
 actiondock plugin list --json
+actiondock plugin list --intent "<regex>" --json
 ```
 
 适合回答：当前装了哪些插件、插件是否已启动、动作数量。
+`--intent` 按插件 ID、名称、版本和描述做正则搜索；未命中时 CLI 自动退回全量插件摘要列表。
 
 ### L2: 查看某个插件的全部动作（无 schema）
 
@@ -190,7 +192,7 @@ actiondock plugin invoke <plugin-id> <action> \
 
 ### 常见判断顺序
 
-1. 插件是否存在：先看 `plugin list`
+1. 插件是否存在：先看 `plugin list --intent "<regex>"`
 2. 动作列表：看 `plugin get <id>`
 3. 动作 schema 详情：看 `plugin action <id> <action>`
 4. 入参是否匹配：对照 inputSchema
@@ -204,7 +206,7 @@ actiondock plugin invoke <plugin-id> <action> \
 ### 渐进式浏览再调用
 
 ```bash
-actiondock plugin list --json
+actiondock plugin list --intent "ai|workspace" --json
 actiondock plugin get actiondock-ai
 actiondock plugin action actiondock-ai chat
 actiondock plugin invoke actiondock-ai chat --args-json '{"modelProfile":"default-chat","messages":[{"role":"user","content":"hello"}]}' --json

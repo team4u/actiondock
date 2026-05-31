@@ -7,10 +7,12 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.team4u.actiondock.application.ConfigValueApplicationService;
 import org.team4u.actiondock.configvalue.ConfigValueUsageAnalysisService;
 import org.team4u.actiondock.web.common.ApiResponse;
+import org.team4u.actiondock.web.common.IntentFilter;
 
 import java.util.List;
 
@@ -38,8 +40,17 @@ public class ConfigValueController {
      * @return API 响应，包含配置值列表
      */
     @GetMapping
-    public ApiResponse<List<ConfigValueView>> list() {
-        return ApiResponse.success(configValueApplicationService.list().stream().map(ConfigValueViewMapper::toView).toList());
+    public ApiResponse<List<ConfigValueView>> list(@RequestParam(required = false) String intent) {
+        return ApiResponse.success(IntentFilter.filter(
+                configValueApplicationService.list().stream().map(ConfigValueViewMapper::toView).toList(),
+                intent,
+                ConfigValueView::getKey,
+                ConfigValueView::getDescription,
+                ConfigValueView::getRepositoryId,
+                ConfigValueView::getRepositoryScriptId,
+                ConfigValueView::getRepositoryVersion,
+                ConfigValueView::getPublishMode
+        ));
     }
 
     /**

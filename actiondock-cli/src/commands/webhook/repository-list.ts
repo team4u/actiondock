@@ -2,6 +2,7 @@ import { Flags } from "@oclif/core";
 
 import { BaseCommand } from "../../lib/command.js";
 import { ActionDockClient } from "../../lib/client.js";
+import { intentFlag, listWithIntentFallback } from "../../lib/command-helpers.js";
 import { resolveServerUrl, resolveToken } from "../../lib/config.js";
 import { renderRepositoryWebhookList } from "../../lib/render.js";
 
@@ -13,6 +14,7 @@ export default class WebhookRepositoryListCommand extends BaseCommand {
     repository: Flags.string({
       description: "Only show Webhooks from one repository"
     }),
+    intent: intentFlag,
     profile: Flags.string({
       description: "Use a configured server profile"
     }),
@@ -33,9 +35,11 @@ export default class WebhookRepositoryListCommand extends BaseCommand {
         serverUrl: resolveServerUrl(flags),
         token: resolveToken(flags)
       });
-      const items = flags.repository
-        ? await client.listRepositoryWebhooksByRepository(flags.repository)
-        : await client.listRepositoryWebhooks();
+      const items = await listWithIntentFallback(flags.intent, (intent) =>
+        flags.repository
+          ? client.listRepositoryWebhooksByRepository(flags.repository, intent)
+          : client.listRepositoryWebhooks(intent)
+      );
 
       if (flags.json) {
         this.printJson(items);

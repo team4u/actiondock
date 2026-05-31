@@ -22,6 +22,7 @@ import org.team4u.actiondock.plugin.PluginRuntimeService;
 import org.team4u.actiondock.plugin.PluginSummaryView;
 import org.team4u.actiondock.plugin.PluginView;
 import org.team4u.actiondock.web.common.ApiResponse;
+import org.team4u.actiondock.web.common.IntentFilter;
 import org.team4u.actiondock.web.execution.ExecutionResponseView;
 
 import java.io.IOException;
@@ -47,8 +48,13 @@ public class PluginController {
      * @return API 响应，包含插件视图列表
      */
     @GetMapping
-    public ApiResponse<List<PluginSummaryView>> list() {
-        return ApiResponse.success(pluginRuntimeService.list());
+    public ApiResponse<List<PluginSummaryView>> list(@RequestParam(required = false) String intent) {
+        return ApiResponse.success(IntentFilter.filter(pluginRuntimeService.list(), intent,
+                PluginSummaryView::getPluginId,
+                PluginSummaryView::getName,
+                PluginSummaryView::getVersion,
+                PluginSummaryView::getDescription
+        ));
     }
 
     /**

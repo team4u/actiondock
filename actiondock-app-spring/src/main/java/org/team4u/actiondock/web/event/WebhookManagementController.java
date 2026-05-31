@@ -18,6 +18,7 @@ import org.team4u.actiondock.application.WebhookRequest;
 import org.team4u.actiondock.repository.RepositoryCatalogTypes;
 import org.team4u.actiondock.repository.RepositoryWebhookService;
 import org.team4u.actiondock.web.common.ApiResponse;
+import org.team4u.actiondock.web.common.IntentFilter;
 
 import java.util.List;
 
@@ -37,8 +38,15 @@ public class WebhookManagementController {
     }
 
     @GetMapping
-    public ApiResponse<List<WebhookDefinition>> list() {
-        return ApiResponse.success(webhookApplicationService.list());
+    public ApiResponse<List<WebhookDefinition>> list(@RequestParam(required = false) String intent) {
+        return ApiResponse.success(IntentFilter.filter(webhookApplicationService.list(), intent,
+                WebhookDefinition::getId,
+                WebhookDefinition::getKey,
+                WebhookDefinition::getName,
+                WebhookDefinition::getDescription,
+                WebhookDefinition::getRepositoryId,
+                WebhookDefinition::getWebhookScriptId
+        ));
     }
 
     @GetMapping("/{id}")

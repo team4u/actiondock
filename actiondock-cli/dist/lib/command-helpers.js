@@ -22,6 +22,16 @@ export const serverTokenFlags = {
         description: "Override ActionDock bearer token"
     })
 };
+export const intentFlag = Flags.string({
+    description: "Regex filter for list intent; falls back to the full list when no item matches"
+});
+export async function listWithIntentFallback(intent, fetchWithIntent) {
+    if (!intent) {
+        return fetchWithIntent(undefined);
+    }
+    const matched = await fetchWithIntent(intent);
+    return matched.length === 0 ? fetchWithIntent(undefined) : matched;
+}
 export const jsonObjectFlags = (name, description) => ({
     [`${name}-json`]: Flags.string({
         description: `Inline JSON object for ${description}`

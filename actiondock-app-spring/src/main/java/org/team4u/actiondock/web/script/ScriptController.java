@@ -9,6 +9,7 @@ import org.team4u.actiondock.repository.RepositoryCatalogTypes;
 import org.team4u.actiondock.repository.RepositoryScriptService;
 import org.team4u.actiondock.schedule.ScriptScheduleDispatcher;
 import org.team4u.actiondock.web.common.ApiResponse;
+import org.team4u.actiondock.web.common.IntentFilter;
 import org.team4u.actiondock.web.execution.ExecuteRequest;
 import org.team4u.actiondock.web.execution.ExecutionResponse;
 import org.team4u.actiondock.web.execution.ExecutionResponseMapper;
@@ -55,10 +56,19 @@ public class ScriptController {
      */
     @GetMapping
     public ApiResponse<List<ScriptDocumentView>> list(@RequestParam(defaultValue = "false") boolean includeUiSchema,
-                                                      @RequestParam(defaultValue = "false") boolean includeManaged) {
-        return ApiResponse.success(scriptApplicationService.list(includeManaged).stream()
+                                                      @RequestParam(defaultValue = "false") boolean includeManaged,
+                                                      @RequestParam(required = false) String intent) {
+        List<ScriptDocumentView> items = scriptApplicationService.list(includeManaged).stream()
                 .map(definition -> toResponse(definition, includeUiSchema))
-                .toList());
+                .toList();
+        return ApiResponse.success(IntentFilter.filter(items, intent,
+                ScriptDocumentView::id,
+                ScriptDocumentView::name,
+                ScriptDocumentView::description,
+                ScriptDocumentView::owner,
+                ScriptDocumentView::tags,
+                ScriptDocumentView::type
+        ));
     }
 
     /**

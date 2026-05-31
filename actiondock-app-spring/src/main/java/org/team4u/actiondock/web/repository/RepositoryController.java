@@ -26,6 +26,7 @@ import org.team4u.actiondock.repository.RepositoryPlaybookService;
 import org.team4u.actiondock.repository.RepositorySkillService;
 import org.team4u.actiondock.repository.RepositoryScriptService;
 import org.team4u.actiondock.web.common.ApiResponse;
+import org.team4u.actiondock.web.common.IntentFilter;
 
 import java.io.IOException;
 import java.util.List;
@@ -72,8 +73,16 @@ public class RepositoryController {
      * @return API 响应，包含仓库定义列表
      */
     @GetMapping
-    public ApiResponse<List<RepositoryDefinition>> list(@RequestParam(value = "purpose", required = false) String purpose) {
-        return ApiResponse.success(repositoryCatalogService.listRepositories(purpose));
+    public ApiResponse<List<RepositoryDefinition>> list(@RequestParam(value = "purpose", required = false) String purpose,
+                                                        @RequestParam(required = false) String intent) {
+        return ApiResponse.success(IntentFilter.filter(repositoryCatalogService.listRepositories(purpose), intent,
+                RepositoryDefinition::getId,
+                RepositoryDefinition::getName,
+                RepositoryDefinition::getPurpose,
+                RepositoryDefinition::getType,
+                RepositoryDefinition::getUrl,
+                RepositoryDefinition::getDescription
+        ));
     }
 
     @GetMapping("/resolve")
@@ -146,8 +155,8 @@ public class RepositoryController {
      * @return API 响应，包含脚本描述符列表
      */
     @GetMapping("/scripts")
-    public ApiResponse<List<RepositoryCatalogTypes.RepositoryScriptDescriptor>> listAllTools() {
-        return ApiResponse.success(repositoryCatalogService.listAllRepositoryScripts());
+    public ApiResponse<List<RepositoryCatalogTypes.RepositoryScriptDescriptor>> listAllTools(@RequestParam(required = false) String intent) {
+        return ApiResponse.success(filterRepositoryScripts(repositoryCatalogService.listAllRepositoryScripts(), intent));
     }
 
     /**
@@ -157,28 +166,45 @@ public class RepositoryController {
      * @return API 响应，包含脚本描述符列表
      */
     @GetMapping("/{id}/scripts")
-    public ApiResponse<List<RepositoryCatalogTypes.RepositoryScriptDescriptor>> listRepositoryScripts(@PathVariable String id) {
-        return ApiResponse.success(repositoryCatalogService.listRepositoryScripts(id));
+    public ApiResponse<List<RepositoryCatalogTypes.RepositoryScriptDescriptor>> listRepositoryScripts(@PathVariable String id,
+                                                                                                      @RequestParam(required = false) String intent) {
+        return ApiResponse.success(filterRepositoryScripts(repositoryCatalogService.listRepositoryScripts(id), intent));
     }
 
     @GetMapping("/webhooks")
-    public ApiResponse<List<RepositoryCatalogTypes.RepositoryWebhookDescriptor>> listAllWebhooks() {
-        return ApiResponse.success(repositoryCatalogService.listAllRepositoryWebhooks());
+    public ApiResponse<List<RepositoryCatalogTypes.RepositoryWebhookDescriptor>> listAllWebhooks(@RequestParam(required = false) String intent) {
+        return ApiResponse.success(filterRepositoryWebhooks(repositoryCatalogService.listAllRepositoryWebhooks(), intent));
     }
 
     @GetMapping("/{id}/webhooks")
-    public ApiResponse<List<RepositoryCatalogTypes.RepositoryWebhookDescriptor>> listRepositoryWebhooks(@PathVariable String id) {
-        return ApiResponse.success(repositoryCatalogService.listRepositoryWebhooks(id));
+    public ApiResponse<List<RepositoryCatalogTypes.RepositoryWebhookDescriptor>> listRepositoryWebhooks(@PathVariable String id,
+                                                                                                        @RequestParam(required = false) String intent) {
+        return ApiResponse.success(filterRepositoryWebhooks(repositoryCatalogService.listRepositoryWebhooks(id), intent));
     }
 
     @GetMapping("/playbooks")
-    public ApiResponse<List<RepositoryCatalogTypes.RepositoryPlaybookDescriptor>> listAllPlaybooks() {
-        return ApiResponse.success(repositoryCatalogService.listAllRepositoryPlaybooks());
+    public ApiResponse<List<RepositoryCatalogTypes.RepositoryPlaybookDescriptor>> listAllPlaybooks(@RequestParam(required = false) String intent) {
+        return ApiResponse.success(IntentFilter.filter(repositoryCatalogService.listAllRepositoryPlaybooks(), intent,
+                RepositoryCatalogTypes.RepositoryPlaybookDescriptor::repositoryId,
+                RepositoryCatalogTypes.RepositoryPlaybookDescriptor::playbookId,
+                RepositoryCatalogTypes.RepositoryPlaybookDescriptor::displayName,
+                RepositoryCatalogTypes.RepositoryPlaybookDescriptor::description,
+                RepositoryCatalogTypes.RepositoryPlaybookDescriptor::tags,
+                RepositoryCatalogTypes.RepositoryPlaybookDescriptor::riskLevel
+        ));
     }
 
     @GetMapping("/{id}/playbooks")
-    public ApiResponse<List<RepositoryCatalogTypes.RepositoryPlaybookDescriptor>> listRepositoryPlaybooks(@PathVariable String id) {
-        return ApiResponse.success(repositoryCatalogService.listRepositoryPlaybooks(id));
+    public ApiResponse<List<RepositoryCatalogTypes.RepositoryPlaybookDescriptor>> listRepositoryPlaybooks(@PathVariable String id,
+                                                                                                          @RequestParam(required = false) String intent) {
+        return ApiResponse.success(IntentFilter.filter(repositoryCatalogService.listRepositoryPlaybooks(id), intent,
+                RepositoryCatalogTypes.RepositoryPlaybookDescriptor::repositoryId,
+                RepositoryCatalogTypes.RepositoryPlaybookDescriptor::playbookId,
+                RepositoryCatalogTypes.RepositoryPlaybookDescriptor::displayName,
+                RepositoryCatalogTypes.RepositoryPlaybookDescriptor::description,
+                RepositoryCatalogTypes.RepositoryPlaybookDescriptor::tags,
+                RepositoryCatalogTypes.RepositoryPlaybookDescriptor::riskLevel
+        ));
     }
 
     @GetMapping("/{id}/webhooks/{webhookId}")
@@ -210,8 +236,14 @@ public class RepositoryController {
     }
 
     @GetMapping("/plugins")
-    public ApiResponse<List<RepositoryCatalogTypes.RepositoryPluginDescriptor>> listAllPlugins() {
-        return ApiResponse.success(repositoryCatalogService.listAllRepositoryPlugins());
+    public ApiResponse<List<RepositoryCatalogTypes.RepositoryPluginDescriptor>> listAllPlugins(@RequestParam(required = false) String intent) {
+        return ApiResponse.success(IntentFilter.filter(repositoryCatalogService.listAllRepositoryPlugins(), intent,
+                RepositoryCatalogTypes.RepositoryPluginDescriptor::repositoryId,
+                RepositoryCatalogTypes.RepositoryPluginDescriptor::pluginId,
+                RepositoryCatalogTypes.RepositoryPluginDescriptor::displayName,
+                RepositoryCatalogTypes.RepositoryPluginDescriptor::description,
+                RepositoryCatalogTypes.RepositoryPluginDescriptor::tags
+        ));
     }
 
     @GetMapping("/skills")
@@ -220,8 +252,15 @@ public class RepositoryController {
     }
 
     @GetMapping("/{id}/plugins")
-    public ApiResponse<List<RepositoryCatalogTypes.RepositoryPluginDescriptor>> listRepositoryPlugins(@PathVariable String id) {
-        return ApiResponse.success(repositoryCatalogService.listRepositoryPlugins(id));
+    public ApiResponse<List<RepositoryCatalogTypes.RepositoryPluginDescriptor>> listRepositoryPlugins(@PathVariable String id,
+                                                                                                      @RequestParam(required = false) String intent) {
+        return ApiResponse.success(IntentFilter.filter(repositoryCatalogService.listRepositoryPlugins(id), intent,
+                RepositoryCatalogTypes.RepositoryPluginDescriptor::repositoryId,
+                RepositoryCatalogTypes.RepositoryPluginDescriptor::pluginId,
+                RepositoryCatalogTypes.RepositoryPluginDescriptor::displayName,
+                RepositoryCatalogTypes.RepositoryPluginDescriptor::description,
+                RepositoryCatalogTypes.RepositoryPluginDescriptor::tags
+        ));
     }
 
     @GetMapping("/{id}/skills")
@@ -397,13 +436,14 @@ public class RepositoryController {
     }
 
     @GetMapping("/knowledge")
-    public ApiResponse<List<RepositoryCatalogTypes.RepositoryKnowledgeDescriptor>> listAllKnowledge() {
-        return ApiResponse.success(repositoryKnowledgeService.listAllRepositoryKnowledge());
+    public ApiResponse<List<RepositoryCatalogTypes.RepositoryKnowledgeDescriptor>> listAllKnowledge(@RequestParam(required = false) String intent) {
+        return ApiResponse.success(filterRepositoryKnowledge(repositoryKnowledgeService.listAllRepositoryKnowledge(), intent));
     }
 
     @GetMapping("/{id}/knowledge")
-    public ApiResponse<List<RepositoryCatalogTypes.RepositoryKnowledgeDescriptor>> listRepositoryKnowledge(@PathVariable String id) {
-        return ApiResponse.success(repositoryKnowledgeService.listRepositoryKnowledge(id));
+    public ApiResponse<List<RepositoryCatalogTypes.RepositoryKnowledgeDescriptor>> listRepositoryKnowledge(@PathVariable String id,
+                                                                                                          @RequestParam(required = false) String intent) {
+        return ApiResponse.success(filterRepositoryKnowledge(repositoryKnowledgeService.listRepositoryKnowledge(id), intent));
     }
 
     @GetMapping("/{id}/knowledge/{knowledgeId}")
@@ -438,6 +478,46 @@ public class RepositoryController {
                         request.configItems()
                 )
         ), "知识源发布完成");
+    }
+
+    private List<RepositoryCatalogTypes.RepositoryScriptDescriptor> filterRepositoryScripts(List<RepositoryCatalogTypes.RepositoryScriptDescriptor> items,
+                                                                                            String intent) {
+        return IntentFilter.filter(items, intent,
+                RepositoryCatalogTypes.RepositoryScriptDescriptor::repositoryId,
+                RepositoryCatalogTypes.RepositoryScriptDescriptor::scriptId,
+                RepositoryCatalogTypes.RepositoryScriptDescriptor::displayName,
+                RepositoryCatalogTypes.RepositoryScriptDescriptor::description,
+                RepositoryCatalogTypes.RepositoryScriptDescriptor::owner,
+                RepositoryCatalogTypes.RepositoryScriptDescriptor::tags,
+                RepositoryCatalogTypes.RepositoryScriptDescriptor::type,
+                RepositoryCatalogTypes.RepositoryScriptDescriptor::riskLevel
+        );
+    }
+
+    private List<RepositoryCatalogTypes.RepositoryWebhookDescriptor> filterRepositoryWebhooks(List<RepositoryCatalogTypes.RepositoryWebhookDescriptor> items,
+                                                                                              String intent) {
+        return IntentFilter.filter(items, intent,
+                RepositoryCatalogTypes.RepositoryWebhookDescriptor::repositoryId,
+                RepositoryCatalogTypes.RepositoryWebhookDescriptor::webhookId,
+                RepositoryCatalogTypes.RepositoryWebhookDescriptor::displayName,
+                RepositoryCatalogTypes.RepositoryWebhookDescriptor::description,
+                RepositoryCatalogTypes.RepositoryWebhookDescriptor::owner,
+                RepositoryCatalogTypes.RepositoryWebhookDescriptor::tags,
+                RepositoryCatalogTypes.RepositoryWebhookDescriptor::webhookPath
+        );
+    }
+
+    private List<RepositoryCatalogTypes.RepositoryKnowledgeDescriptor> filterRepositoryKnowledge(List<RepositoryCatalogTypes.RepositoryKnowledgeDescriptor> items,
+                                                                                                 String intent) {
+        return IntentFilter.filter(items, intent,
+                RepositoryCatalogTypes.RepositoryKnowledgeDescriptor::repositoryId,
+                RepositoryCatalogTypes.RepositoryKnowledgeDescriptor::knowledgeId,
+                RepositoryCatalogTypes.RepositoryKnowledgeDescriptor::displayName,
+                RepositoryCatalogTypes.RepositoryKnowledgeDescriptor::description,
+                RepositoryCatalogTypes.RepositoryKnowledgeDescriptor::tags,
+                RepositoryCatalogTypes.RepositoryKnowledgeDescriptor::knowledgePath,
+                RepositoryCatalogTypes.RepositoryKnowledgeDescriptor::source
+        );
     }
 
     private <T> ApiResponse<T> resolveForceAndApply(RepositoryPluginInstallRequest request,

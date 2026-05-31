@@ -2,6 +2,7 @@ import { Flags } from "@oclif/core";
 
 import { BaseCommand } from "../../lib/command.js";
 import { ActionDockClient } from "../../lib/client.js";
+import { intentFlag, listWithIntentFallback } from "../../lib/command-helpers.js";
 import { resolveServerUrl, resolveToken } from "../../lib/config.js";
 import { renderScheduleList } from "../../lib/render.js";
 
@@ -13,6 +14,7 @@ export default class ScheduleListCommand extends BaseCommand {
     "script-id": Flags.string({
       description: "Only list schedules for the given script ID"
     }),
+    intent: intentFlag,
     profile: Flags.string({
       description: "Use a configured server profile"
     }),
@@ -33,7 +35,7 @@ export default class ScheduleListCommand extends BaseCommand {
         serverUrl: resolveServerUrl(flags),
         token: resolveToken(flags)
       });
-      const items = await client.listSchedules(flags["script-id"]);
+      const items = await listWithIntentFallback(flags.intent, (intent) => client.listSchedules(flags["script-id"], intent));
 
       if (flags.json) {
         this.printJson(items);

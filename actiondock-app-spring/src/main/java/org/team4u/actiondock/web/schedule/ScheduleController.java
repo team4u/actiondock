@@ -7,8 +7,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.team4u.actiondock.web.common.ApiResponse;
+import org.team4u.actiondock.web.common.IntentFilter;
 import org.team4u.actiondock.web.script.ScriptScheduleUpsertRequest;
 import org.team4u.actiondock.web.script.ScriptScheduleView;
 
@@ -29,8 +31,13 @@ public class ScheduleController {
     }
 
     @GetMapping
-    public ApiResponse<List<ScriptScheduleView>> list() {
-        return ApiResponse.success(support.listAll());
+    public ApiResponse<List<ScriptScheduleView>> list(@RequestParam(required = false) String intent) {
+        return ApiResponse.success(IntentFilter.filter(support.listAll(), intent,
+                ScriptScheduleView::id,
+                ScriptScheduleView::name,
+                ScriptScheduleView::scriptId,
+                ScriptScheduleView::cronExpression
+        ));
     }
 
     @GetMapping("/{scheduleId}")

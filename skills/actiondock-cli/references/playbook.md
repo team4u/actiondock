@@ -19,13 +19,13 @@ Playbook 不是步骤 DSL，也不是执行引擎；`scriptRefs` 只是关联脚
 1. 先确认目标项目仓库 ID；如果用户没给出，先列出项目仓库并请用户确认：
 
 ```bash
-actiondock repository list --purpose project --json
+actiondock repository list --purpose project --intent "<regex>" --json
 ```
 
-2. 根据项目仓库和关键词搜索候选任务手册：
+2. 根据项目仓库和意图正则搜索候选任务手册：
 
 ```bash
-actiondock playbook list --repository-id <repositoryId> --enabled --keyword "<text>" --json
+actiondock playbook list --repository-id <repositoryId> --enabled --intent "<regex>" --json
 ```
 
 3. 如果命中专用 Playbook，读取完整详情：
@@ -44,7 +44,7 @@ actiondock playbook get <playbook-id> --json
    7. 带着问题清单进入项目知识库定向查找答案
    8. 信息足够且风险可接受时，才执行脚本
 
-5. 如果没有命中专用 Playbook，直接按本文件的“通用项目调查 fallback”执行。
+5. 如果没有命中专用 Playbook，CLI 会自动退回同一过滤条件下的全量摘要列表；仍无法判断时，按本文件的“通用项目调查 fallback”执行。
 
 命中任一停止条件时停止，并向用户说明缺少什么或为什么需要人工确认。
 
@@ -82,11 +82,12 @@ actiondock playbook get <playbook-id> --json
 
 ```bash
 actiondock playbook list --json
-actiondock playbook list --repository-id <repositoryId> --tag <tag> --keyword "<text>" --enabled --json
+actiondock playbook list --repository-id <repositoryId> --tag <tag> --intent "<regex>" --enabled --json
 ```
 
 - `playbook list --json`：摘要候选列表，是发现主入口。
 - `playbook list --json` 不返回 `guideMarkdown`、`knowledgeRefs`、`scriptRefs`、`stopConditions`。
+- `--intent` 是正则意图搜索，匹配摘要字段；未命中时 CLI 自动回退全量候选。`--keyword` 仍可用于旧的普通关键词包含过滤，但任务路由优先使用 `--intent`。
 - 不要使用任务手册分组命令；当前 Playbook 模型已经不再使用分组。
 
 ### 读详情

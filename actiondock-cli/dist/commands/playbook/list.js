@@ -1,6 +1,6 @@
 import { Flags } from "@oclif/core";
 import { BaseCommand } from "../../lib/command.js";
-import { createClient, serverTokenFlags } from "../../lib/command-helpers.js";
+import { createClient, intentFlag, listWithIntentFallback, serverTokenFlags } from "../../lib/command-helpers.js";
 import { renderPlaybookList, summarizePlaybookList } from "../../lib/render.js";
 export default class PlaybookListCommand extends BaseCommand {
     static description = "List ActionDock playbooks";
@@ -11,19 +11,22 @@ export default class PlaybookListCommand extends BaseCommand {
         enabled: Flags.boolean({ description: "Only enabled playbooks" }),
         managed: Flags.boolean({ description: "Only managed playbooks" }),
         keyword: Flags.string({ description: "Keyword filter" }),
+        intent: intentFlag,
         ...serverTokenFlags,
         help: Flags.help({ char: "h" })
     };
     async run() {
         const { flags } = await this.parse(PlaybookListCommand);
         try {
-            const items = await createClient(flags).listPlaybooks({
+            const client = createClient(flags);
+            const params = {
                 repositoryId: flags["repository-id"],
                 tag: flags.tag,
                 enabled: flags.enabled ? true : undefined,
                 managed: flags.managed ? true : undefined,
                 keyword: flags.keyword
-            });
+            };
+            const items = await listWithIntentFallback(flags.intent, (intent) => client.listPlaybooks({ ...params, intent }));
             flags.json ? this.printJson(summarizePlaybookList(items)) : this.log(renderPlaybookList(items));
         }
         catch (error) {
