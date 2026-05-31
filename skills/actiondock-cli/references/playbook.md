@@ -39,6 +39,23 @@ actiondock playbook resolve --intent "<text>" --repository-id <repositoryId> --j
    - 顺序关联匹配：`actiondock playbook resolve --intent "退款.*失败" --json`
 3. **分次尝试**：如果第一次精确正则匹配不到，应尝试退化到更宽泛的关键字（如从“退款.*失败”退化到“退款”）重新搜索，以获取最多的候选建议。
 
+### 降级兜底流 (Fallback Workflow)
+
+若经过多次尝试，`playbook resolve` 依然返回**空列表**（未匹配到任何手册），消费端 Agent 不应直接放弃，应按以下流程进行兜底处理：
+
+1. **拉取全局任务手册列表**：
+   运行列表命令，拉取系统中所有可用的任务手册和分组概览：
+   ```bash
+   actiondock playbook list --json
+   ```
+2. **重匹配与引导选择**：
+   - **智能二轮匹配**：Agent 可在 Prompt 上下文中，将用户的意图与返回的全局列表（包含 `id`, `name`, `description`, `tags`）进行语义级二次对比，查找是否存在高度相似的手册。
+   - **人工交互确认**：如果语义匹配依然不确定，Agent 应将所有可能相关的任务手册列表呈现给用户，友好地提示用户选择。例如：“未找到与您的意图精确匹配的手册，以下是系统中现存的手册列表，请问是否有符合您需求的？”
+3. **根据选定 ID 调取指南**：一旦确定了可能合适的手册，直接使用其 ID 获取关联指南以继续执行：
+   ```bash
+   actiondock playbook guide <playbook-id> --json
+   ```
+
 从候选中选择最合适的 `playbook.id` 后读取 Guide：
 
 ```bash
