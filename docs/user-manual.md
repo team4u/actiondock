@@ -70,7 +70,7 @@ ActionDock 做的核心事情是：
 - [脚本管理](script-management.md) — 脚本库、编辑、发布、导入导出、Fork、工作副本
 - [插件管理](plugin-management.md) — 插件安装、生命周期、在脚本中调用 Action
 - [Skills 管理](skills-management.md) — Skills 安装目标、安装、发布、详情，以及项目知识库用法约定
-- [任务手册 (Playbook) 管理](playbook-management.md) — 任务手册定位、核心概念、与 Skill 的本质区别、能力包分发及 Agent 消费指南
+- [任务手册 (Playbook) 理念](playbook.md) — 任务手册定位、核心概念、与 Skill 的本质区别、能力包分发及 Agent 消费指南
 - [AI 能力](ai-capabilities.md) — 模型配置、Agent 配置、Toolset、运行记录
 
 ### 📦 资源
