@@ -176,7 +176,6 @@ export function PlaybookPage() {
   const [filters, setFilters] = useState<{ repositoryId?: string; tag?: string; managed?: boolean; intent?: string }>({});
   const [editing, setEditing] = useState<Playbook | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [previewing, setPreviewing] = useState<Playbook | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [publishModalOpen, setPublishModalOpen] = useState(false);
   const [publishingPlaybook, setPublishingPlaybook] = useState<Playbook | null>(null);
@@ -255,7 +254,6 @@ export function PlaybookPage() {
   const openEditor = (item?: Playbook) => {
     const repositoryIds = item?.repositoryIds ?? [];
     setEditing(item ?? null);
-    setPreviewing(null);
     setKnowledgeEditor(toKnowledgeEditorState(repositoryIds, item?.knowledgeRefs ?? []));
     form.setFieldsValue({
       id: item?.id ?? "",
@@ -336,12 +334,6 @@ export function PlaybookPage() {
     } catch (error) {
       messageApi.error(getErrorMessage(error, "保存任务手册失败"));
     }
-  };
-
-  const previewPlaybook = (item: Playbook) => {
-    setPreviewing(item);
-    setEditing(item);
-    setDrawerOpen(true);
   };
 
   const remove = async (item: Playbook) => {
@@ -791,7 +783,6 @@ export function PlaybookPage() {
 
               return (
                 <Space size="middle">
-                  <Button type="link" size="small" style={{ padding: 0 }} onClick={() => previewPlaybook(item)}>预览</Button>
                   <Dropdown menu={{ items: menuItems }}>
                     <Button type="link" size="small" style={{ padding: 0 }}>
                       更多 <DownOutlined />
@@ -865,25 +856,8 @@ export function PlaybookPage() {
           </Space>
         ) : null}
       </Modal>
-      <Drawer title={previewing ? "任务手册预览" : editing ? "编辑任务手册" : "新建任务手册"} open={drawerOpen} width={920} onClose={() => setDrawerOpen(false)} extra={!previewing ? <Button type="primary" onClick={() => void save()}>保存</Button> : null}>
-        {previewing ? (
-          <Space direction="vertical" size={16} style={{ width: "100%" }}>
-            {previewing.knowledgeRefs.map((ref, index) => ref.type === "NOTE" ? (
-              <div key={`${ref.repositoryId}:note:${index}`}>
-                <Text strong>{ref.repositoryId} 说明</Text>
-                <MarkdownDescription value={ref.markdown} className="markdown-description--panel" />
-              </div>
-            ) : (
-              <Tag key={`${ref.repositoryId}:${ref.path}`}>FILE {ref.repositoryId}:{ref.path}</Tag>
-            ))}
-            <Space wrap>{previewing.scriptRefs.map((ref) => <Tag color="blue" key={ref.scriptId}>{ref.scriptId}</Tag>)}</Space>
-            <Space wrap>{(previewing.agentSkillRefs ?? []).map((ref) => <Tag color={ref.required ? "volcano" : "cyan"} key={ref.skillId}>AGENT_SKILL {ref.skillId}</Tag>)}</Space>
-            <Space wrap>{(previewing.relatedPlaybookRefs ?? []).map((ref) => <Tag color="purple" key={`${ref.relation}:${ref.playbookId}`}>{ref.relation} {ref.playbookId}</Tag>)}</Space>
-            <MarkdownDescription value={previewing.guideMarkdown} className="markdown-description--panel" />
-            <Space wrap>{previewing.stopConditions.map((item) => <Tag color="red" key={item}>{item}</Tag>)}</Space>
-          </Space>
-        ) : (
-          <Form form={form} layout="vertical" initialValues={{ enabled: true }}>
+      <Drawer title={editing ? "编辑任务手册" : "新建任务手册"} open={drawerOpen} width={920} onClose={() => setDrawerOpen(false)} extra={<Button type="primary" onClick={() => void save()}>保存</Button>}>
+        <Form form={form} layout="vertical" initialValues={{ enabled: true }}>
             <Tabs
               items={[
                 {
@@ -1007,7 +981,7 @@ export function PlaybookPage() {
                 },
                 {
                   key: "agentSkills",
-                  label: "Agent Skills",
+                  label: "关联Skill",
                   children: (
                     <Space direction="vertical" size={12} style={{ width: "100%" }}>
                       <Alert
@@ -1049,7 +1023,7 @@ export function PlaybookPage() {
                             ))}
                             <Form.Item style={{ marginBottom: 0 }}>
                               <Button type="dashed" onClick={() => add({ required: false })} block icon={<PlusOutlined />}>
-                                添加 Agent Skill 引用
+                                添加关联Skill
                               </Button>
                             </Form.Item>
                           </div>
@@ -1060,7 +1034,7 @@ export function PlaybookPage() {
                 },
                 {
                   key: "relatedPlaybooks",
-                  label: "相关手册",
+                  label: "关联任务手册",
                   children: (
                     <Form.List name="relatedPlaybookRefs">
                       {(fields, { add, remove }) => (
@@ -1108,7 +1082,7 @@ export function PlaybookPage() {
                           ))}
                           <Form.Item style={{ marginBottom: 0 }}>
                             <Button type="dashed" onClick={() => add({ relation: "RELATED" })} block icon={<PlusOutlined />}>
-                              添加相关任务手册
+                              添加关联任务手册
                             </Button>
                           </Form.Item>
                         </div>
@@ -1131,7 +1105,6 @@ export function PlaybookPage() {
               ]}
             />
           </Form>
-        )}
       </Drawer>
       <Drawer
         title="发布任务手册到仓库"
