@@ -16,10 +16,10 @@ Playbook 是 Agent 进入业务项目时读取的任务装配协议。它把一�
 
 这些判断不能等 Agent 读完一堆文档后再归纳。生产排障里，边界要先到。
 
-Playbook 把任务入口前移到 `playbook list` 和 `playbook get` 两个阶段。`playbook list` 给出可预演的候选任务摘要，`playbook get` 则只加载命中的任务定义。Agent 拿到任务定义后，再按定义里的引用读取项目知识、查询脚本 Schema、决定是否执行动作。
+Playbook 把任务入口前移到 `playbook list` 和 `playbook get` 两个阶段。`playbook list` 给出可预演的候选任务摘要，`playbook get` 则只加载命中的任务定义。Agent 拿到任务定义后，再按定义里的引用选择脚本、查询 Schema、读取项目知识并决定是否执行动作。
 
 ```bash
-actiondock playbook list --repository-id billing-service --enabled --intent "退款|refund|失败|failure" --json
+actiondock playbook list --enabled --intent "退款|refund|失败|failure" --json
 actiondock playbook get refund-failure --json
 ```
 
@@ -150,21 +150,28 @@ Agent 执行 Playbook 时遵循以下五个步骤：路由（Route）、定界�
 flowchart TD
     Route[路由: 用 list 寻找候选任务] --> Bound[定界: 读取风险和停止条件]
     Bound --> Equip[整备: 检查 Agent 技能提示]
-    Equip --> Investigate[调查: 读取指南和证据入口]
-    Investigate --> Act[执行与流转: 查脚本 Schema、执行或跳转相关 Playbook]
+    Equip --> Investigate[调查: 读取指南、脚本 Schema 和证据入口]
+    Investigate --> Act[执行与流转: 执行脚本或跳转相关 Playbook]
 ```
 
 ### 1. 路由 (Route)：寻找候选任务
 
-先确认目标项目仓库 ID，再用用户问题提取领域词、症状词和动作词，构造 `--intent` 正则。
+先用用户问题提取领域词、症状词和动作词，构造 `--intent` 正则，按意图搜索候选任务手册。
 
 ```bash
+actiondock playbook list --enabled --intent "退款|refund|失败|failure" --json
+```
+
+如果用户已明确项目，或候选过多需要收窄，再追加项目过滤。用户没有给出项目且必须按项目判断时，先列出项目仓库并请用户确认：
+
+```bash
+actiondock repository list --purpose project --intent "退款|refund|失败|failure" --json
 actiondock playbook list --repository-id billing-service --enabled --intent "退款|refund|失败|failure" --json
 ```
 
 `playbook list` 只返回摘要字段，例如 `id`、`name`、`description`、`riskLevel`、`tags`、`repositoryIds`、启用状态和托管状态。它不返回 `guideMarkdown`、`knowledgeRefs`、`scriptRefs`、`agentSkillRefs`、`relatedPlaybookRefs` 和 `stopConditions`。
 
-如果 `--intent` 没有命中，CLI 会退回同一过滤条件下的全量摘要列表。Agent 应从摘要里继续判断，仍无法判断时再使用通用项目调查兜底机制（Fallback）。
+如果 `--intent` 没有命中，CLI 会退回同一过滤条件下的全量摘要列表。Agent 应从摘要里继续判断，仍无法判断或当前 Playbook 无法覆盖任务时，再使用通用项目调查兜底机制（Fallback）。
 
 ### 2. 定界 (Bound)：明确执行边界
 
@@ -184,24 +191,24 @@ Agent 端读取详情后，先处理 `repositoryIds`、`riskLevel` 和 `stopCond
 
 ### 4. 调查 (Investigate)：检索指南与证据
 
-阅读 `guideMarkdown`，整理临时问题清单：
+阅读 `guideMarkdown`，并根据用户问题、任务阶段和 `scriptRefs[].purpose` 选择最小相关脚本集。默认选 1 个，确有并行排查路径时最多选 3 个，只对选中的脚本查询 Schema。
+
+```bash
+actiondock script schema query-refund-log --json
+```
+
+查询 Schema 的目的不是立即执行脚本，而是确认入参契约：必填字段、枚举值、格式要求和参数来源。随后整理临时问题清单：
 
 - 用户当前问题要定位什么。
 - 当前任务里要先确认哪些业务对象。
-- 哪些字段可能来自用户输入、`ACTIONDOCK.md`、`knowledgeRefs` 或源码。
+- 哪些字段可能来自用户输入、`guideMarkdown`、脚本 Schema、`ACTIONDOCK.md`、`knowledgeRefs` 或源码。
 - 哪些停止条件可能被触发。
 
 随后进入项目知识库：先分析并解析（Resolve）目标仓库，读取 `ACTIONDOCK.md`，再按问题清单读取 `knowledgeRefs` 指向的 `NOTE` 和 `FILE`。文档不足或疑似过期时，再查源码。
 
 ### 5. 执行与流转 (Act/Handoff)：执行动作与任务跳转
 
-只有在问题清单已经补齐、风险可接受、没有命中停止条件时，才选择脚本。
-
-```bash
-actiondock script schema query-refund-log --json
-```
-
-查询 Schema 的目的是确认入参契约：必填字段、枚举值、格式要求和参数来源。参数补齐后，再按脚本执行协议运行。
+只有在问题清单已经补齐、风险可接受、没有命中停止条件时，才补齐参数并按脚本执行协议运行选中脚本。
 
 如果当前任务不匹配、证据指向另一个问题域，或者专用排查失败，可以读取 `relatedPlaybookRefs` 做人工可见的任务跳转。例如：
 
@@ -213,7 +220,7 @@ actiondock script schema query-refund-log --json
 
 ## 通用项目调查兜底 (Fallback)
 
-没有命中专用 Playbook 时，Agent 仍然按同一套目标驱动流程工作，只是使用通用指南替代 `guideMarkdown`。
+没有命中可用 Playbook，或当前 Playbook 无法覆盖任务时，Agent 仍然按同一套目标驱动流程工作，只是使用通用指南替代 `guideMarkdown`。
 
 ```text
 根据用户当前问题定位项目知识、脚本参数和下一步动作。先判断是否需要脚本；需要脚本时，只从脚本摘要中选择与用户问题最相关的脚本。默认 1 个，最多 3 个。先看选中脚本 Schema，再用 Schema 字段、字段描述、枚举值和用户问题生成知识检索问题清单。只围绕问题清单读取项目知识、文档或源码。

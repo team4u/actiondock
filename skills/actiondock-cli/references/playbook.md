@@ -19,15 +19,16 @@ Playbook 不是步骤 DSL，也不是执行引擎。`scriptRefs` 是候选脚本
 
 业务项目、流程、接口、数据库、日志、告警和排障类问题默认先走 Playbook。
 
-1. 先确认目标项目仓库 ID；如果用户没给出，先列出项目仓库并请用户确认：
+1. 先从用户自然语言提取意图正则，按意图搜索候选任务手册：
+
+```bash
+actiondock playbook list --enabled --intent "<regex>" --json
+```
+
+2. 如果用户已明确项目，或候选过多需要收窄，再追加项目过滤；如果用户没给出且必须按项目判断，先列出项目仓库并请用户确认：
 
 ```bash
 actiondock repository list --purpose project --intent "<regex>" --json
-```
-
-2. 根据项目仓库和意图正则搜索候选任务手册：
-
-```bash
 actiondock playbook list --repository-id <repositoryId> --enabled --intent "<regex>" --json
 ```
 
@@ -38,13 +39,13 @@ actiondock playbook get <playbook-id> --json
 ```
 
 4. 固定按五段式消费详情：
-   1. Route：确认当前 Playbook 是用户问题的合适任务入口。
-   2. Bound：先查看 `repositoryIds`、`riskLevel` 和 `stopConditions`。
+   1. Route：确认当前 Playbook 匹配用户意图，是当前问题的合适任务入口。
+   2. Bound：查看 `repositoryIds`、`riskLevel` 和 `stopConditions`，确认项目范围、风险边界和停止条件。
    3. Equip：查看 `agentSkillRefs`，判断当前 Agent 是否已有可用 Skill。
-   4. Investigate：阅读 `guideMarkdown`，生成问题清单，再按清单读取 `knowledgeRefs` 和项目知识。
-   5. Act/Handoff：只对选中的 `scriptRefs` 查询 schema；信息足够且风险可接受时执行脚本，或按 `relatedPlaybookRefs` 显式跳转。
+   4. Investigate：阅读 `guideMarkdown`，结合选中脚本 schema 和 `knowledgeRefs` 生成问题清单，再按清单解析项目仓库并读取项目知识。
+   5. Act/Handoff：信息足够且风险可接受时执行选中脚本，或按 `relatedPlaybookRefs` 显式跳转。
 
-5. 如果没有命中专用 Playbook，CLI 会自动退回同一过滤条件下的全量摘要列表；仍无法判断时，按本文件的“通用项目调查 fallback”执行。
+5. 如果没有命中可用 Playbook，CLI 会自动退回同一过滤条件下的全量摘要列表；仍无法判断，或当前 Playbook 无法覆盖任务时，按本文件的“通用项目调查 fallback”执行。
 
 命中任一停止条件时停止，并向用户说明缺少什么或为什么需要人工确认。
 
@@ -52,7 +53,7 @@ actiondock playbook get <playbook-id> --json
 
 ## 通用项目调查 fallback
 
-没有命中专用 Playbook 时，使用与命中 Playbook 相同的目标驱动流程；区别是用下面这段通用 guide 替代 `guideMarkdown`：
+没有命中可用 Playbook，或当前 Playbook 无法覆盖任务时，使用与命中 Playbook 相同的目标驱动流程；区别是用下面这段通用 guide 替代 `guideMarkdown`：
 
 ```text
 根据用户当前问题定位项目知识、脚本参数和下一步动作。先判断是否需要脚本；需要脚本时，只从脚本摘要中选择与用户问题最相关的脚本。默认 1 个，最多 3 个。先看选中脚本 schema，再用 schema 字段、字段描述、枚举值和用户问题生成知识检索问题清单。只围绕问题清单读取项目知识、文档或源码。
@@ -82,12 +83,14 @@ actiondock playbook get <playbook-id> --json
 
 ```bash
 actiondock playbook list --json
+actiondock playbook list --enabled --intent "<regex>" --json
 actiondock playbook list --repository-id <repositoryId> --tag <tag> --intent "<regex>" --enabled --json
 ```
 
 - `playbook list --json`：摘要候选列表，是发现主入口。
 - `playbook list --json` 不返回 `guideMarkdown`、`knowledgeRefs`、`scriptRefs`、`agentSkillRefs`、`relatedPlaybookRefs`、`stopConditions`。
 - `--intent` 是正则意图搜索，匹配摘要字段；未命中时 CLI 自动回退全量候选。
+- `--repository-id` 是可选收窄条件；默认先按意图找 Playbook，再根据命中的 Playbook 查后续关联数据。只有用户已明确项目、候选过多或必须按项目判断时才先补充项目过滤。
   * **正则构建机制**：Agent 必须将用户的自然语言输入，提炼拆解为核心的领域名词、技术动作、状态/症状等关键实体词（中英文对照），并使用正则逻辑或 `|` 连接。禁止将整段自然语言原样传入 `--intent`。
   * **意图提取示例**：
     1. *自然语言*：“帮我查一下为什么刚才那个退款订单失败了，好几个用户在群里反馈退款不成功”
