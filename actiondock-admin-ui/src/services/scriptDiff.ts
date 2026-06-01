@@ -184,7 +184,7 @@ function normalizeStringArray(value: unknown): string[] {
     .filter(Boolean);
 }
 
-function maxRisk(...levels: Array<RiskLevel | undefined>): RiskLevel {
+export function maxRisk(...levels: Array<RiskLevel | undefined>): RiskLevel {
   return levels.reduce<RiskLevel>(
     (highest, level) => (level && RISK_WEIGHTS[level] > RISK_WEIGHTS[highest] ? level : highest),
     "LOW"
