@@ -1,6 +1,6 @@
 import { DownloadOutlined, ExportOutlined, FileMarkdownOutlined, FileOutlined, FolderOpenOutlined, UploadOutlined, PlusOutlined, DeleteOutlined, DownOutlined } from "@ant-design/icons";
 import type { DataNode } from "antd/es/tree";
-import { Alert, Button, Drawer, Dropdown, Empty, Form, Grid, Image, Input, Modal, Popconfirm, Select, Space, Spin, Switch, Table, Tabs, Tag, Tree, Typography, message } from "antd";
+import { Alert, Button, Card, Drawer, Dropdown, Empty, Form, Grid, Image, Input, Modal, Popconfirm, Select, Space, Spin, Switch, Table, Tabs, Tag, Tree, Typography, message } from "antd";
 import type { ChangeEvent, Key } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MarkdownDescription } from "../../../components/common/MarkdownDescription";
@@ -32,6 +32,7 @@ import {
 } from "../../../services/playbookTransfer";
 import { downloadJsonFile } from "../../../services/scriptTransfer";
 import {
+  getRepositoryPlaybook,
   listProjectRepositoryFiles,
   listRepositories,
   listRepositoryPlaybooks,
@@ -41,6 +42,13 @@ import {
 } from "../../resources/api";
 import { listScripts } from "../../scripts/api";
 import { createPlaybook, deletePlaybook, listPlaybooks, updatePlaybook } from "../api";
+import { PlaybookDiffPanel } from "../../../components/diff/PlaybookDiffPanel";
+import {
+  buildPlaybookDiff,
+  buildPlaybookDiffTarget,
+  toRepositoryPlaybookDiffTarget,
+  type PlaybookDiffResult
+} from "../../../services/playbookDiff";
 
 const { Text } = Typography;
 const { useBreakpoint } = Grid;
@@ -63,11 +71,9 @@ interface PlaybookFormValues {
 interface PublishFormValues {
   repositoryId: string;
   playbookId: string;
-  displayName: string;
   version: string;
   owner?: string;
   releaseNotes?: string;
-  tags: string[];
 }
 
 interface KnowledgeEditorState {
@@ -176,10 +182,13 @@ export function PlaybookPage() {
   const [filters, setFilters] = useState<{ repositoryId?: string; tag?: string; managed?: boolean; intent?: string }>({});
   const [editing, setEditing] = useState<Playbook | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [readOnly, setReadOnly] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [publishModalOpen, setPublishModalOpen] = useState(false);
   const [publishingPlaybook, setPublishingPlaybook] = useState<Playbook | null>(null);
   const [versionHint, setVersionHint] = useState<string | null>(null);
+  const [playbookDiff, setPlaybookDiff] = useState<PlaybookDiffResult | null>(null);
+  const [playbookDiffLoading, setPlaybookDiffLoading] = useState(false);
   const [form] = Form.useForm<PlaybookFormValues>();
   const [publishForm] = Form.useForm<PublishFormValues>();
 
@@ -254,6 +263,7 @@ export function PlaybookPage() {
   const openEditor = (item?: Playbook) => {
     const repositoryIds = item?.repositoryIds ?? [];
     setEditing(item ?? null);
+    setReadOnly(Boolean(item?.managed));
     setKnowledgeEditor(toKnowledgeEditorState(repositoryIds, item?.knowledgeRefs ?? []));
     form.setFieldsValue({
       id: item?.id ?? "",
@@ -457,8 +467,10 @@ export function PlaybookPage() {
   const suggestVersion = async (repositoryId?: string, playbookId?: string) => {
     if (!repositoryId || !playbookId) {
       setVersionHint(null);
+      setPlaybookDiff(null);
       return;
     }
+    setPlaybookDiffLoading(true);
     try {
       await syncRepository(repositoryId);
       const descriptors = await listRepositoryPlaybooks();
@@ -470,9 +482,40 @@ export function PlaybookPage() {
       } else {
         setVersionHint(`目标仓库当前版本 ${current?.version} 无法自动递增，请手动填写版本`);
       }
+
+      // 计算与远端版本的 Diff
+      const localTarget = buildPlaybookDiffTarget(publishingPlaybook ?? {
+        id: playbookId,
+        name: playbookId,
+        tags: [],
+        repositoryIds: [],
+        knowledgeRefs: [],
+        scriptRefs: [],
+        agentSkillRefs: [],
+        relatedPlaybookRefs: [],
+        guideMarkdown: "",
+        stopConditions: [],
+        enabled: true,
+        managed: false
+      });
+      if (current) {
+        try {
+          const detail = await getRepositoryPlaybook(repositoryId, playbookId);
+          const remoteTarget = toRepositoryPlaybookDiffTarget(detail);
+          setPlaybookDiff(buildPlaybookDiff(remoteTarget, localTarget));
+        } catch (detailError) {
+          setPlaybookDiff(null);
+          messageApi.warning(getErrorMessage(detailError, "读取远端任务手册详情失败，无法生成 Diff"));
+        }
+      } else {
+        setPlaybookDiff(buildPlaybookDiff(undefined, localTarget));
+      }
     } catch (error) {
       setVersionHint(null);
+      setPlaybookDiff(null);
       messageApi.warning(getErrorMessage(error, "同步目标仓库或读取版本失败，请手动确认版本"));
+    } finally {
+      setPlaybookDiffLoading(false);
     }
   };
 
@@ -482,14 +525,13 @@ export function PlaybookPage() {
     setPublishingPlaybook(item);
     setPublishModalOpen(true);
     setVersionHint(null);
+    setPlaybookDiff(null);
     publishForm.setFieldsValue({
       repositoryId: defaultRepository?.id,
       playbookId,
-      displayName: item.name,
       version: "0.1.0",
       owner: defaultOwner,
-      releaseNotes: "",
-      tags: item.tags ?? []
+      releaseNotes: ""
     });
     void suggestVersion(defaultRepository?.id, playbookId);
   };
@@ -504,11 +546,11 @@ export function PlaybookPage() {
       const payload: RepositoryPlaybookPublishRequest = {
         sourceId: publishingPlaybook.id,
         playbookId: values.playbookId.trim(),
-        displayName: values.displayName.trim(),
+        displayName: publishingPlaybook.name,
         version: values.version.trim(),
         owner: values.owner?.trim() || undefined,
         releaseNotes: values.releaseNotes?.trim() || undefined,
-        tags: values.tags ?? []
+        tags: publishingPlaybook.tags ?? []
       };
       await publishRepositoryPlaybook(values.repositoryId, payload);
       messageApi.success("任务手册已发布");
@@ -738,13 +780,13 @@ export function PlaybookPage() {
         }}
         scroll={{ x: 800 }}
         columns={[
-          { title: "ID", dataIndex: "id", width: 220, render: (value, item) => item.managed ? <Text disabled>{value}</Text> : <Button type="link" size="small" style={{ padding: 0 }} onClick={() => openEditor(item)}>{value}</Button> },
+          { title: "ID", dataIndex: "id", width: 220, render: (value, item) => <Button type="link" size="small" style={{ padding: 0 }} onClick={() => openEditor(item)}>{value}</Button> },
           { title: "名称", dataIndex: "name" },
           { title: "状态", key: "status", width: 150, render: (_, item) => <Space>{item.enabled ? <Tag color="green">启用</Tag> : <Tag>停用</Tag>}{item.managed ? <Tag color="blue">托管</Tag> : null}</Space> },
           {
             title: "操作",
             key: "actions",
-            width: 100,
+            width: 180,
             fixed: "right",
             render: (_, item) => {
               const menuItems = [
@@ -759,25 +801,6 @@ export function PlaybookPage() {
                   label: "导出",
                   disabled: item.managed,
                   onClick: () => exportPlaybooks([item], `已导出 ${item.name || item.id}`)
-                },
-                {
-                  type: "divider" as const
-                },
-                {
-                  key: "delete",
-                  label: "删除",
-                  danger: true,
-                  disabled: item.managed,
-                  onClick: () => {
-                    Modal.confirm({
-                      title: "确认删除任务手册？",
-                      content: `你确定要删除任务手册 "${item.name || item.id}" 吗？`,
-                      okText: "删除",
-                      okType: "danger",
-                      cancelText: "取消",
-                      onOk: () => remove(item)
-                    });
-                  }
                 }
               ];
 
@@ -788,6 +811,19 @@ export function PlaybookPage() {
                       更多 <DownOutlined />
                     </Button>
                   </Dropdown>
+                  <Popconfirm
+                    title="确认删除任务手册？"
+                    description={`你确定要删除任务手册 "${item.name || item.id}" 吗？`}
+                    okText="删除"
+                    okType="danger"
+                    cancelText="取消"
+                    disabled={item.managed}
+                    onConfirm={() => void remove(item)}
+                  >
+                    <Button type="link" size="small" danger disabled={item.managed} style={{ padding: 0 }}>
+                      删除
+                    </Button>
+                  </Popconfirm>
                 </Space>
               );
             }
@@ -856,8 +892,14 @@ export function PlaybookPage() {
           </Space>
         ) : null}
       </Modal>
-      <Drawer title={editing ? "编辑任务手册" : "新建任务手册"} open={drawerOpen} width={920} onClose={() => setDrawerOpen(false)} extra={<Button type="primary" onClick={() => void save()}>保存</Button>}>
-        <Form form={form} layout="vertical" initialValues={{ enabled: true }}>
+      <Drawer
+        title={readOnly ? "查看任务手册" : editing ? "编辑任务手册" : "新建任务手册"}
+        open={drawerOpen}
+        width={920}
+        onClose={() => { setDrawerOpen(false); setReadOnly(false); }}
+        extra={readOnly ? <Button onClick={() => { setDrawerOpen(false); setReadOnly(false); }}>关闭</Button> : <Button type="primary" onClick={() => void save()}>保存</Button>}
+      >
+        <Form form={form} layout="vertical" initialValues={{ enabled: true }} disabled={readOnly}>
             <Tabs
               items={[
                 {
@@ -880,7 +922,7 @@ export function PlaybookPage() {
                   children: (
                     <>
                       <Form.Item name="guideMarkdown" label="导览 Markdown" rules={[{ required: true, message: "请输入导览文本" }]}>
-                        <CodeEditor theme={editorTheme} language="markdown" height="360px" />
+                        <CodeEditor theme={editorTheme} language="markdown" height="360px" readOnly={readOnly} />
                       </Form.Item>
                       <Form.Item name="stopConditionsText" label="停止条件" style={{ marginTop: 16 }}><Input.TextArea rows={5} placeholder="每行一个停止条件" /></Form.Item>
                     </>
@@ -904,8 +946,8 @@ export function PlaybookPage() {
                                 <Space style={{ justifyContent: "space-between", width: "100%" }}>
                                   <Text strong>{repositoryNameMap.get(group.repositoryId) ?? group.repositoryId} ({group.repositoryId})</Text>
                                   <Space>
-                                    <Button size="small" onClick={() => addNote(group.repositoryId)}>添加说明</Button>
-                                    <Button size="small" onClick={() => void openFilePicker(group.repositoryId)}>添加文件</Button>
+                                    <Button size="small" onClick={() => addNote(group.repositoryId)} disabled={readOnly}>添加说明</Button>
+                                    <Button size="small" onClick={() => void openFilePicker(group.repositoryId)} disabled={readOnly}>添加文件</Button>
                                   </Space>
                                 </Space>
                                 {group.notes.length === 0 && group.files.length === 0 ? (
@@ -916,7 +958,7 @@ export function PlaybookPage() {
                                     <Space direction="vertical" size={8} style={{ width: "100%" }}>
                                       <Space style={{ justifyContent: "space-between", width: "100%" }}>
                                         <Tag color="gold">NOTE</Tag>
-                                        <Button size="small" danger onClick={() => removeNote(group.repositoryId, index)}>删除说明</Button>
+                                        <Button size="small" danger onClick={() => removeNote(group.repositoryId, index)} disabled={readOnly}>删除说明</Button>
                                       </Space>
                                       <Input.TextArea rows={6} value={note} onChange={(event) => updateNote(group.repositoryId, index, event.target.value)} placeholder="输入针对该知识库的额外阅读指引（Markdown）" />
                                     </Space>
@@ -929,7 +971,7 @@ export function PlaybookPage() {
                                         <Tag color="blue">FILE</Tag>
                                         <Text code>{path}</Text>
                                       </Space>
-                                      <Button size="small" danger onClick={() => removeFile(group.repositoryId, path)}>删除文件</Button>
+                                      <Button size="small" danger onClick={() => removeFile(group.repositoryId, path)} disabled={readOnly}>删除文件</Button>
                                     </Space>
                                   </div>
                                 ))}
@@ -978,11 +1020,11 @@ export function PlaybookPage() {
                                   );
                                 }}
                               </Form.Item>
-                              <Button type="text" danger onClick={() => remove(name)} icon={<DeleteOutlined />} title="删除关联" />
+                              <Button type="text" danger onClick={() => remove(name)} icon={<DeleteOutlined />} title="删除关联" disabled={readOnly} />
                             </Space>
                           ))}
                           <Form.Item style={{ marginBottom: 0 }}>
-                            <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
+                            <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />} disabled={readOnly}>
                               添加关联脚本
                             </Button>
                           </Form.Item>
@@ -1024,11 +1066,11 @@ export function PlaybookPage() {
                                 >
                                   <Switch checkedChildren="必需" unCheckedChildren="可选" />
                                 </Form.Item>
-                                <Button type="text" danger onClick={() => remove(name)} icon={<DeleteOutlined />} title="删除引用" />
+                                <Button type="text" danger onClick={() => remove(name)} icon={<DeleteOutlined />} title="删除引用" disabled={readOnly} />
                               </Space>
                             ))}
                             <Form.Item style={{ marginBottom: 0 }}>
-                              <Button type="dashed" onClick={() => add({ required: false })} block icon={<PlusOutlined />}>
+                              <Button type="dashed" onClick={() => add({ required: false })} block icon={<PlusOutlined />} disabled={readOnly}>
                                 添加关联Skill
                               </Button>
                             </Form.Item>
@@ -1083,11 +1125,11 @@ export function PlaybookPage() {
                               >
                                 <Input placeholder="跳转或参考说明（可空）" />
                               </Form.Item>
-                              <Button type="text" danger onClick={() => remove(name)} icon={<DeleteOutlined />} title="删除引用" />
+                              <Button type="text" danger onClick={() => remove(name)} icon={<DeleteOutlined />} title="删除引用" disabled={readOnly} />
                             </Space>
                           ))}
                           <Form.Item style={{ marginBottom: 0 }}>
-                            <Button type="dashed" onClick={() => add({ relation: "RELATED" })} block icon={<PlusOutlined />}>
+                            <Button type="dashed" onClick={() => add({ relation: "RELATED" })} block icon={<PlusOutlined />} disabled={readOnly}>
                               添加关联任务手册
                             </Button>
                           </Form.Item>
@@ -1104,14 +1146,28 @@ export function PlaybookPage() {
         title="发布任务手册到仓库"
         open={publishModalOpen}
         onClose={() => setPublishModalOpen(false)}
-        width={560}
+        width={960}
         extra={(
-          <Button type="primary" loading={publishing} onClick={() => void publish()}>
+          <Button
+            type="primary"
+            loading={publishing}
+            onClick={() => void publish()}
+            disabled={playbookDiff !== null && !playbookDiff.hasChanges && playbookDiff.comparisonMode !== "INITIAL"}
+          >
             发布
           </Button>
         )}
         destroyOnClose
       >
+        {playbookDiffLoading ? (
+          <div style={{ display: "flex", justifyContent: "center", padding: 24 }}>
+            <Spin />
+          </div>
+        ) : playbookDiff ? (
+          <Card type="inner" title="变更明细" style={{ marginBottom: 16 }}>
+            <PlaybookDiffPanel diff={playbookDiff} theme={editorTheme} />
+          </Card>
+        ) : null}
         <Form form={publishForm} layout="vertical">
           <Alert
             type="warning"
@@ -1132,12 +1188,10 @@ export function PlaybookPage() {
             <Input onBlur={(event) => void suggestVersion(publishForm.getFieldValue("repositoryId"), event.target.value)} />
           </Form.Item>
           {versionHint ? <Alert type="info" showIcon message={versionHint} style={{ marginBottom: 16 }} /> : null}
-          <Form.Item name="displayName" label="显示名称" rules={[{ required: true, message: "请输入显示名称" }]}><Input /></Form.Item>
           <Space size={12} style={{ width: "100%" }} align="start">
             <Form.Item name="version" label="版本" rules={[{ required: true, message: "请输入版本" }]} style={{ flex: 1 }}><Input /></Form.Item>
             <Form.Item name="owner" label="维护人" style={{ flex: 1 }}><Input /></Form.Item>
           </Space>
-          <Form.Item name="tags" label="标签"><Select mode="tags" tokenSeparators={[","]} /></Form.Item>
           <Form.Item name="releaseNotes" label="发布说明"><Input.TextArea autoSize={{ minRows: 4, maxRows: 10 }} /></Form.Item>
         </Form>
       </Drawer>
