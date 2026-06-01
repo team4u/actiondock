@@ -83,6 +83,7 @@ interface DiscoveryDetailDrawersProps {
   ) => void | Promise<void>;
   onAddWebhookToLocal: (descriptor: RepositoryWebhookDetail["descriptor"]) => void | Promise<void>;
   onPlaybookLocalAssetAction: (descriptor: RepositoryPlaybookDescriptor, action: LocalAssetAction) => void | Promise<void>;
+  onPlaybookInstall: (descriptor: RepositoryPlaybookDescriptor) => void | Promise<void>;
   onPlaybookUninstall: (descriptor: RepositoryPlaybookDescriptor) => void | Promise<void>;
   onPackageInstall: (descriptor: CapabilityPackageDescriptor, action: InstallAction) => void | Promise<void>;
   onPackageUninstall: (descriptor: CapabilityPackageDescriptor) => void | Promise<void>;
@@ -128,6 +129,7 @@ export function DiscoveryDetailDrawers({
   onWebhookLocalAssetAction,
   onAddWebhookToLocal,
   onPlaybookLocalAssetAction,
+  onPlaybookInstall,
   onPlaybookUninstall,
   onPackageInstall,
   onPackageUninstall,
@@ -758,7 +760,7 @@ export function DiscoveryDetailDrawers({
                 type="primary"
                 icon={<DownloadOutlined />}
                 loading={actionKey === `add-local:${playbookDetail.descriptor.repositoryId}:${playbookDetail.descriptor.playbookId}`}
-                onClick={() => void onPlaybookLocalAssetAction(playbookDetail.descriptor, "add-local")}
+                onClick={() => void onPlaybookInstall(playbookDetail.descriptor)}
               >
                 安装
               </Button>

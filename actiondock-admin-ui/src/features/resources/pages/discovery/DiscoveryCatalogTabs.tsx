@@ -64,6 +64,7 @@ interface DiscoveryCatalogTabsProps {
   ) => void | Promise<void>;
   onAddWebhookToLocal: (descriptor: RepositoryWebhookDescriptor) => void | Promise<void>;
   onPlaybookLocalAssetAction: (descriptor: RepositoryPlaybookDescriptor, action: LocalAssetAction) => void | Promise<void>;
+  onPlaybookInstall: (descriptor: RepositoryPlaybookDescriptor) => void | Promise<void>;
   onPlaybookUninstall: (descriptor: RepositoryPlaybookDescriptor) => void | Promise<void>;
   onPackageInstall: (descriptor: CapabilityPackageDescriptor, action: InstallAction) => void | Promise<void>;
   onPackageUninstall: (descriptor: CapabilityPackageDescriptor) => void | Promise<void>;
@@ -111,6 +112,7 @@ export function DiscoveryCatalogTabs({
   onWebhookLocalAssetAction,
   onAddWebhookToLocal,
   onPlaybookLocalAssetAction,
+  onPlaybookInstall,
   onPlaybookUninstall,
   onPackageInstall,
   onPackageUninstall,
@@ -428,7 +430,7 @@ export function DiscoveryCatalogTabs({
               type="primary"
               icon={<DownloadOutlined />}
               loading={actionKey === `add-local:${record.repositoryId}:${record.playbookId}`}
-              onClick={() => void onPlaybookLocalAssetAction(record, "add-local")}
+              onClick={() => void onPlaybookInstall(record)}
             >
               安装
             </Button>

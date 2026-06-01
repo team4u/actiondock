@@ -350,7 +350,7 @@ public class RepositoryController {
     @PostMapping("/{id}/playbooks/{playbookId}/local-assets")
     public ApiResponse<RepositoryLocalAsset> addPlaybookLocalAsset(@PathVariable String id,
                                                                    @PathVariable String playbookId) {
-        return ApiResponse.success(repositoryPlaybookService.addLocalAsset(id, playbookId), "任务手册已安装");
+        return ApiResponse.success(repositoryPlaybookService.addLocalAsset(id, playbookId, null), "任务手册已安装");
     }
 
     @PostMapping("/{id}/playbooks/{playbookId}/local-assets/update")

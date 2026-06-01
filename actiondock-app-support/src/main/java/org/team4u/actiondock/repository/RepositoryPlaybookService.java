@@ -54,7 +54,13 @@ public class RepositoryPlaybookService {
         return catalog.getRepositoryPlaybook(repositoryId, playbookId).descriptor();
     }
 
-    public RepositoryLocalAsset addLocalAsset(String repositoryId, String playbookId) {
+    public RepositoryLocalAsset addLocalAsset(String repositoryId,
+                                             String playbookId,
+                                             RepositoryLocalAssetRequest request) {
+        RepositoryLocalAssetMode mode = parseMode(request == null ? null : request.mode());
+        if (mode == RepositoryLocalAssetMode.TRACKED) {
+            return createTrackedWorkingCopy(repositoryId, playbookId, request);
+        }
         return installOrUpdate(repositoryId, playbookId, false);
     }
 
@@ -94,6 +100,26 @@ public class RepositoryPlaybookService {
         Playbook saved = buildManagedPlaybook(detail.playbook(), localPlaybookId, existingPlaybook, now);
         repos.playbookRepository().save(saved);
         return saveLocalAsset(detail, saved, existingAsset, now);
+    }
+
+    private RepositoryLocalAsset createTrackedWorkingCopy(String repositoryId,
+                                                          String playbookId,
+                                                          RepositoryLocalAssetRequest request) {
+        if (repos.repositoryLocalAssetRepository()
+                .findByUpstreamAsset(UpstreamAssetType.PLAYBOOK, repositoryId, playbookId).isPresent()) {
+            throw new IllegalArgumentException("上游任务手册已添加到本地: " + repositoryId + "/" + playbookId);
+        }
+        RepositoryPlaybookDetail detail = catalog.getRepositoryPlaybook(repositoryId, playbookId);
+        String localPlaybookId = NormalizeUtils.normalizeOrDefault(
+                request == null ? null : request.localAssetId(),
+                repositoryId + "." + playbookId);
+        if (repos.playbookRepository().findById(localPlaybookId).isPresent()) {
+            throw new IllegalArgumentException("任务手册 ID 已存在，请指定其他本地副本 ID: " + localPlaybookId);
+        }
+        LocalDateTime now = LocalDateTime.now();
+        Playbook saved = buildTrackedPlaybook(detail.playbook(), localPlaybookId, now);
+        repos.playbookRepository().save(saved);
+        return saveTrackedLocalAsset(detail, saved, now);
     }
 
     private void validateReferencedAssetsPublished(String repositoryId, Playbook source) {
@@ -179,6 +205,54 @@ public class RepositoryPlaybookService {
                 .setManaged(true)
                 .setCreatedAt(existing == null ? now : existing.getCreatedAt())
                 .setUpdatedAt(now);
+    }
+
+    private static Playbook buildTrackedPlaybook(PlaybookFile file,
+                                                String localPlaybookId,
+                                                LocalDateTime now) {
+        return new Playbook()
+                .setId(localPlaybookId)
+                .setName(file.displayName())
+                .setDescription(file.description())
+                .setTags(file.tags())
+                .setRiskLevel(parseRiskLevel(file.riskLevel()))
+                .setRepositoryIds(file.repositoryIds())
+                .setKnowledgeRefs(file.knowledgeRefs())
+                .setScriptRefs(file.scriptRefs())
+                .setAgentSkillRefs(file.agentSkillRefs())
+                .setRelatedPlaybookRefs(file.relatedPlaybookRefs())
+                .setGuideMarkdown(file.guideMarkdown())
+                .setStopConditions(file.stopConditions())
+                .setEnabled(file.enabled())
+                .setManaged(false)
+                .setCreatedAt(now)
+                .setUpdatedAt(now);
+    }
+
+    private RepositoryLocalAsset saveTrackedLocalAsset(RepositoryPlaybookDetail detail,
+                                                      Playbook playbook,
+                                                      LocalDateTime now) {
+        return repos.repositoryLocalAssetRepository().save(new RepositoryLocalAsset()
+                .setId("PLAYBOOK:TRACKED:" + playbook.getId())
+                .setAssetType(UpstreamAssetType.PLAYBOOK)
+                .setLocalAssetId(playbook.getId())
+                .setRepositoryId(detail.descriptor().repositoryId())
+                .setUpstreamAssetId(detail.descriptor().playbookId())
+                .setMode(RepositoryLocalAssetMode.TRACKED)
+                .setVersion(detail.descriptor().version())
+                .setLatestVersion(detail.descriptor().version())
+                .setName(playbook.getName())
+                .setOwner(detail.descriptor().owner())
+                .setDescription(playbook.getDescription())
+                .setCreatedAt(now)
+                .setUpdatedAt(now));
+    }
+
+    private static RepositoryLocalAssetMode parseMode(String mode) {
+        if (NormalizeUtils.isBlank(mode)) {
+            return RepositoryLocalAssetMode.LOCKED;
+        }
+        return RepositoryLocalAssetMode.valueOf(mode);
     }
 
     private PlaybookFile buildPlaybookFile(Playbook source,

@@ -270,12 +270,13 @@ export function updateRepositoryWebhookLocalAsset(
   }).then((operation) => operation.result);
 }
 
-export function addRepositoryPlaybookLocalAsset(repositoryId: string, playbookId: string): Promise<RepositoryLocalAsset> {
-  return runResourceLifecycleOperation<RepositoryLocalAsset>({
+export function addRepositoryPlaybookLocalAsset(repositoryId: string, playbookId: string, payload?: RepositoryLocalAssetRequest): Promise<RepositoryLocalAsset> {
+  return runResourceLifecycleOperation<RepositoryLocalAsset, RepositoryLocalAssetRequest>({
     resourceType: "REPOSITORY_PLAYBOOK",
     operation: "add-local",
     repositoryId,
-    resourceId: playbookId
+    resourceId: playbookId,
+    payload
   }).then((operation) => operation.result);
 }
 

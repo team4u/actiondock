@@ -78,6 +78,7 @@ export function RepositoryDiscoveryPage() {
             onWebhookLocalAssetAction={discovery.confirmWebhookLocalAssetAction}
             onAddWebhookToLocal={discovery.confirmAddWebhookToLocal}
             onPlaybookLocalAssetAction={discovery.handlePlaybookLocalAssetAction}
+            onPlaybookInstall={discovery.confirmAddPlaybookToLocal}
             onPlaybookUninstall={discovery.handlePlaybookUninstall}
             onPackageInstall={discovery.handlePackageInstall}
             onPackageUninstall={discovery.handlePackageUninstall}
@@ -127,6 +128,7 @@ export function RepositoryDiscoveryPage() {
         onWebhookLocalAssetAction={discovery.confirmWebhookLocalAssetAction}
         onAddWebhookToLocal={discovery.confirmAddWebhookToLocal}
         onPlaybookLocalAssetAction={discovery.handlePlaybookLocalAssetAction}
+        onPlaybookInstall={discovery.confirmAddPlaybookToLocal}
         onPlaybookUninstall={discovery.handlePlaybookUninstall}
         onPackageInstall={discovery.handlePackageInstall}
         onPackageUninstall={discovery.handlePackageUninstall}

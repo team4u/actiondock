@@ -154,7 +154,8 @@ public class ResourceLifecycleController {
     private Object executeRepositoryPlaybook(String operation, ResourceLifecycleRequest request) {
         return switch (operation) {
             case OP_ADD_LOCAL, OP_INSTALL -> repositoryPlaybookService.addLocalAsset(normalizeRepositoryId(request),
-                    normalizeResourceId(request, "playbookId 不能为空"));
+                    normalizeResourceId(request, "playbookId 不能为空"),
+                    convertPayload(request.getPayload(), RepositoryCatalogTypes.RepositoryLocalAssetRequest.class));
             case OP_UPDATE_LOCAL, OP_UPDATE -> repositoryPlaybookService.updateLocalAsset(normalizeRepositoryId(request),
                     normalizeResourceId(request, "playbookId 不能为空"));
             case OP_PUBLISH -> repositoryPlaybookService.publishPlaybook(normalizeRepositoryId(request),

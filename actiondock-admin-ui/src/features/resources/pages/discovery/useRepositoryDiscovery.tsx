@@ -404,6 +404,67 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
     }
   }, [loadData, messageApi, openPlaybookDetail, playbookDetailOpen]);
 
+  const confirmAddPlaybookToLocal = useCallback(async (descriptor: RepositoryPlaybookDescriptor) => {
+    const selection: { mode: AddMode; localAssetId: string } = {
+      mode: "LOCKED",
+      localAssetId: localAssetId(descriptor)
+    };
+    const confirmed = await new Promise<boolean>((resolve) => {
+      modal.confirm({
+        title: "添加任务手册到本地",
+        okText: "添加",
+        cancelText: "取消",
+        onOk: () => { resolve(true); },
+        onCancel: () => { resolve(false); },
+        content: (
+          <Space direction="vertical" size={12} style={{ width: "100%" }}>
+            <Text>{descriptor.displayName} 将添加为本地资产。</Text>
+            <Input defaultValue={selection.localAssetId} onChange={(event) => { selection.localAssetId = event.target.value; }} />
+            <Select
+              defaultValue={selection.mode}
+              style={{ width: "100%" }}
+              onChange={(value: AddMode) => { selection.mode = value; }}
+              options={[
+                { value: "LOCKED", label: "锁定使用：安装只读任务手册，可后续更新" },
+                { value: "TRACKED", label: "可编辑跟踪：创建本地可编辑副本，可发布到仓库" }
+              ]}
+            />
+          </Space>
+        )
+      });
+    });
+    if (!confirmed) {
+      return;
+    }
+    setActionKey(`add-local:${descriptor.repositoryId}:${descriptor.playbookId}`);
+    try {
+      const asset = await addRepositoryPlaybookLocalAsset(descriptor.repositoryId, descriptor.playbookId, {
+        mode: selection.mode,
+        localAssetId: selection.localAssetId.trim() || localAssetId(descriptor),
+        installSchedules: false,
+        installScriptDependencies: false,
+        installPluginDependencies: false,
+        forcePluginUpgrade: false
+      });
+      messageApi.success("任务手册已添加");
+      await loadData();
+      if (playbookDetailOpen) {
+        await openPlaybookDetail(descriptor);
+      }
+      if (selection.mode === "TRACKED") {
+        navigate("/playbooks");
+      }
+    } catch (error) {
+      if (error instanceof ApiError) {
+        messageApi.error(error.message);
+      } else {
+        messageApi.error(getErrorMessage(error, "添加任务手册失败"));
+      }
+    } finally {
+      setActionKey(null);
+    }
+  }, [loadData, messageApi, modal, navigate, openPlaybookDetail, playbookDetailOpen]);
+
   const handlePlaybookUninstall = useCallback((descriptor: RepositoryPlaybookDescriptor) => {
     const installedId = descriptor.localState?.localAssetId;
     if (!installedId) {
@@ -901,6 +962,7 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
     handleRepositoryPluginAction,
     confirmToolLocalAssetAction,
     confirmAddToolToLocal,
+    confirmAddPlaybookToLocal,
     confirmWebhookLocalAssetAction,
     confirmAddWebhookToLocal,
     handlePackageInstall,
