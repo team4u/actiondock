@@ -15,6 +15,8 @@ Playbook 只回答：
 
 Playbook 不是步骤 DSL，也不是执行引擎。`scriptRefs` 是候选脚本池，不表示自动执行计划；`relatedPlaybookRefs` 是任务导航，不表示自动工作流。
 
+本文件只负责 Playbook 路由、边界、问题清单和关联资源选择，不承载项目知识检索协议。任何项目知识、知识库、项目文档或源码搜索都必须先实际读取 `references/project-knowledge.md`；不能只凭本文件的摘要继续项目知识检索。
+
 ## 消费快路径
 
 业务项目、流程、接口、数据库、日志、告警和排障类问题默认先走 Playbook。
@@ -42,7 +44,7 @@ actiondock playbook get <playbook-id> --json
    1. Route：确认当前 Playbook 匹配用户意图，是当前问题的合适任务入口。
    2. Bound：查看 `repositoryIds`、`riskLevel` 和 `stopConditions`，确认项目范围、风险边界和停止条件。
    3. Equip：查看 `agentSkillRefs`，判断当前 Agent 是否已有可用 Skill。
-   4. Investigate：阅读 `guideMarkdown`，结合选中脚本 schema 和 `knowledgeRefs` 生成问题清单；进入任何项目知识、知识库、文档或源码搜索前，必须先转到 `references/project-knowledge.md`，再按其协议解析项目仓库并读取项目知识。
+   4. Investigate：阅读 `guideMarkdown`，结合选中脚本 schema 和 `knowledgeRefs` 生成问题清单；进入任何项目知识、知识库、文档或源码搜索前，必须先实际读取 `references/project-knowledge.md`，再按其协议继续。
    5. Act/Handoff：信息足够且风险可接受时执行选中脚本，或按 `relatedPlaybookRefs` 显式跳转。
 
 5. 如果没有命中可用 Playbook，CLI 会自动退回同一过滤条件下的全量摘要列表；仍无法判断，或当前 Playbook 无法覆盖任务时，按本文件的“通用项目调查 fallback”执行。
@@ -56,7 +58,7 @@ actiondock playbook get <playbook-id> --json
 没有命中可用 Playbook，或当前 Playbook 无法覆盖任务时，使用与命中 Playbook 相同的目标驱动流程；区别是用下面这段通用 guide 替代 `guideMarkdown`：
 
 ```text
-根据用户当前问题定位项目知识、脚本参数和下一步动作。先判断是否需要脚本；需要脚本时，只从脚本摘要中选择与用户问题最相关的脚本。默认 1 个，最多 3 个。先看选中脚本 schema，再用 schema 字段、字段描述、枚举值和用户问题生成知识检索问题清单。进入任何项目知识、知识库、文档或源码搜索前，必须先转到 `references/project-knowledge.md`；只围绕问题清单读取项目知识、文档或源码。
+根据用户当前问题定位项目知识、脚本参数和下一步动作。先判断是否需要脚本；需要脚本时，只从脚本摘要中选择与用户问题最相关的脚本。默认 1 个，最多 3 个。先看选中脚本 schema，再用 schema 字段、字段描述、枚举值和用户问题生成知识检索问题清单。进入任何项目知识、知识库、文档或源码搜索前，必须先实际读取 `references/project-knowledge.md`；只围绕问题清单读取项目知识、文档或源码。
 ```
 
 最小路线：
@@ -65,7 +67,7 @@ actiondock playbook get <playbook-id> --json
 2. 按用户问题判断是否需要脚本；需要时先列脚本摘要，只选择相关脚本，不批量查 schema。
 3. 只对选中的脚本查询 schema。
 4. 用用户问题、通用 guide、选中脚本 schema 生成问题清单。
-5. 转到 `references/project-knowledge.md`，参考其中的项目知识检索协议确定入口、目录规则和禁搜目录。
+5. 实际读取 `references/project-knowledge.md`，参考其中的项目知识检索协议确定入口、目录规则和禁搜目录。
 6. 严格围绕问题清单读取项目知识、文档或源码。
 7. 信息足够且风险可接受时，才执行脚本。
 
@@ -167,7 +169,7 @@ actiondock playbook get <playbook-id> --json
 - 优先匹配用户当前问题、`guideMarkdown` 的任务阶段、业务对象、故障类型和 `scriptRefs[].purpose`。
 - 默认只选 1 个最相关脚本；确有并行路径时最多选 3 个。
 - 不相关脚本不查 schema。
-- 无法判断哪个脚本相关时，先转到 `references/project-knowledge.md` 查项目知识，或问用户；不要批量看所有 schema。
+- 无法判断哪个脚本相关时，先实际读取 `references/project-knowledge.md` 并按其协议查项目知识，或问用户；不要批量看所有 schema。
 
 只对选中的脚本查 schema：
 
@@ -206,7 +208,7 @@ schema 需要补齐：
 - `NOTE`：针对某个项目仓库的附加阅读指引，正文在 `markdown` 字段。
 - `FILE`：项目仓库内相对路径。
 
-知识引用必须按问题清单定向使用，不要因为存在 `knowledgeRefs` 就全量阅读。任何项目知识、知识库、文档或源码搜索都必须先读取 `references/project-knowledge.md`；本节只说明 Playbook 如何把问题清单交给下游项目知识协议。
+知识引用必须按问题清单定向使用，不要因为存在 `knowledgeRefs` 就全量阅读。任何项目知识、知识库、文档或源码搜索都必须先实际读取 `references/project-knowledge.md`；本节只说明 Playbook 如何把问题清单交给下游项目知识协议。
 
 进入项目知识时只需要带上问题清单、相关 `NOTE` / `FILE` 和目标仓库范围；入口解析、`ACTIONDOCK.md` 阅读、定向搜索、源码确认和禁搜目录规则，都以 `references/project-knowledge.md` 为准。
 
