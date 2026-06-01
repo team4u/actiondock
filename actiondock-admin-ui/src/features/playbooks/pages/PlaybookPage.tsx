@@ -875,6 +875,18 @@ export function PlaybookPage() {
                   )
                 },
                 {
+                  key: "rules",
+                  label: "运行规则",
+                  children: (
+                    <>
+                      <Form.Item name="guideMarkdown" label="导览 Markdown" rules={[{ required: true, message: "请输入导览文本" }]}>
+                        <CodeEditor theme={editorTheme} language="markdown" height="360px" />
+                      </Form.Item>
+                      <Form.Item name="stopConditionsText" label="停止条件" style={{ marginTop: 16 }}><Input.TextArea rows={5} placeholder="每行一个停止条件" /></Form.Item>
+                    </>
+                  )
+                },
+                {
                   key: "knowledge",
                   label: "关联知识",
                   children: (
@@ -984,12 +996,6 @@ export function PlaybookPage() {
                   label: "关联Skill",
                   children: (
                     <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                      <Alert
-                        type="info"
-                        showIcon
-                        message="这里引用的是 Agent 外部自带 Skill"
-                        description="ActionDock 不会校验、安装或发布这些 Skill；消费 Playbook 的 Agent 如果已有对应 Skill，可按用途优先使用。"
-                      />
                       <Form.List name="agentSkillRefs">
                         {(fields, { add, remove }) => (
                           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -1088,18 +1094,6 @@ export function PlaybookPage() {
                         </div>
                       )}
                     </Form.List>
-                  )
-                },
-                {
-                  key: "guide",
-                  label: "导览文本与停止条件",
-                  children: (
-                    <>
-                      <Form.Item name="guideMarkdown" label="Guide Markdown" rules={[{ required: true, message: "请输入导览文本" }]}>
-                        <CodeEditor theme={editorTheme} language="markdown" height="360px" />
-                      </Form.Item>
-                      <Form.Item name="stopConditionsText" label="停止条件" style={{ marginTop: 16 }}><Input.TextArea rows={5} placeholder="每行一个停止条件" /></Form.Item>
-                    </>
                   )
                 }
               ]}
