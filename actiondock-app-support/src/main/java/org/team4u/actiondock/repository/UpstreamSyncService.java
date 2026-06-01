@@ -9,6 +9,7 @@ import org.team4u.actiondock.domain.model.RepositoryLocalAsset;
 import org.team4u.actiondock.domain.model.RepositoryLocalAssetMode;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
 import org.team4u.actiondock.domain.model.ScriptPackaging;
+import org.team4u.actiondock.domain.model.ScriptSchedule;
 import org.team4u.actiondock.domain.model.ScriptScope;
 import org.team4u.actiondock.domain.model.ScriptType;
 import org.team4u.actiondock.domain.model.UpstreamAssetType;
@@ -18,6 +19,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 
 import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
 
@@ -71,7 +73,9 @@ class UpstreamSyncService {
             throw new IllegalArgumentException("脚本 ID 已存在，请指定其他工作副本 ID: " + scriptId);
         }
         ToolSourceState state = catalog.resolveToolSourceState(repository, detail);
+        LocalDateTime now = LocalDateTime.now();
         ScriptDefinition saved = repos.scriptRepository().save(buildWorkingCopyScript(scriptId, null, detail));
+        syncTrackedSchedules(saved, detail.scheduleTemplate(), now);
         repos.repositoryLocalAssetRepository().save(newBinding(
                 UpstreamAssetType.SCRIPT,
                 saved.getId(),
@@ -186,6 +190,30 @@ class UpstreamSyncService {
                 existing, ScriptScope.PERSONAL, true, now)
                 .setVersion(existing == null ? 1 : existing.getVersion())
                 .setDirty(false);
+    }
+
+    private void syncTrackedSchedules(ScriptDefinition definition,
+                                      List<ScheduleTemplateItem> templates,
+                                      LocalDateTime now) {
+        if (NormalizeUtils.nullSafeList(templates).isEmpty()) {
+            return;
+        }
+        for (ScheduleTemplateItem template : templates) {
+            ScriptSchedule schedule = new ScriptSchedule()
+                    .setId(UUID.randomUUID().toString())
+                    .setScriptId(definition.getId())
+                    .setName(template.name())
+                    .setCronExpression(template.cronExpression())
+                    .setInput(template.input() == null ? Map.of() : template.input())
+                    .setEnabled(false)
+                    .setEditable(true)
+                    .setRepositoryId(definition.getRepositoryId())
+                    .setRepositoryScriptId(definition.getId())
+                    .setRepositoryVersion(definition.getRepositoryVersion())
+                    .setCreatedAt(now)
+                    .setUpdatedAt(now);
+            repos.scriptScheduleRepository().save(schedule);
+        }
     }
 
     WebhookDefinition createWebhookWorkingCopy(String repositoryId,
