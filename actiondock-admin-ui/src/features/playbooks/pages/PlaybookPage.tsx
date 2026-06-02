@@ -464,60 +464,104 @@ export function PlaybookPage() {
     }
   };
 
-  const suggestVersion = async (repositoryId?: string, playbookId?: string) => {
-    if (!repositoryId || !playbookId) {
+  const selectedRepositoryId = Form.useWatch("repositoryId", publishForm);
+  const selectedPublishPlaybookId = Form.useWatch("playbookId", publishForm);
+  const diffRequestRef = useRef(0);
+  const syncedRepositoryIdsRef = useRef<Set<string>>(new Set());
+
+  // 与脚本发布一致：以 useEffect 声明式驱动 diff 计算，自动响应 form 字段变化，
+  // 并通过 diffRequestRef 防止旧请求的响应覆盖新请求的 state。
+  useEffect(() => {
+    if (!publishModalOpen || !selectedRepositoryId || !selectedPublishPlaybookId?.trim() || !publishingPlaybook) {
       setVersionHint(null);
       setPlaybookDiff(null);
+      setPlaybookDiffLoading(false);
       return;
     }
+    const requestId = diffRequestRef.current + 1;
+    diffRequestRef.current = requestId;
     setPlaybookDiffLoading(true);
-    try {
-      await syncRepository(repositoryId);
-      const descriptors = await listRepositoryPlaybooks();
-      const current = descriptors.find((descriptor) => descriptor.repositoryId === repositoryId && descriptor.playbookId === playbookId);
+    setVersionHint(null);
+
+    const repositoryId = selectedRepositoryId;
+    const playbookId = selectedPublishPlaybookId.trim();
+
+    void (async () => {
+      let syncFailed = false;
+      if (!syncedRepositoryIdsRef.current.has(repositoryId)) {
+        try {
+          await syncRepository(repositoryId);
+          syncedRepositoryIdsRef.current.add(repositoryId);
+        } catch (syncError) {
+          syncFailed = true;
+          if (diffRequestRef.current === requestId) {
+            messageApi.warning(getErrorMessage(syncError, "同步目标仓库失败，将基于已缓存的远端版本信息继续生成 Diff"));
+          }
+        }
+      }
+      if (diffRequestRef.current !== requestId) {
+        return;
+      }
+
+      let descriptors: Awaited<ReturnType<typeof listRepositoryPlaybooks>> = [];
+      try {
+        descriptors = await listRepositoryPlaybooks();
+      } catch (listError) {
+        if (diffRequestRef.current === requestId) {
+          setVersionHint(getErrorMessage(listError, "读取仓库任务手册列表失败"));
+          setPlaybookDiff(null);
+          setPlaybookDiffLoading(false);
+        }
+        return;
+      }
+      if (diffRequestRef.current !== requestId) {
+        return;
+      }
+
+      // 双向 sanitize，兼容大小写/特殊字符差异
+      const normalizedPlaybookId = sanitizePlaybookId(playbookId);
+      const current = descriptors.find(
+        (descriptor) =>
+          descriptor.repositoryId === repositoryId &&
+          sanitizePlaybookId(descriptor.playbookId) === normalizedPlaybookId
+      );
       const nextVersion = bumpPatchVersion(current?.version);
       if (nextVersion) {
         publishForm.setFieldValue("version", nextVersion);
-        setVersionHint(current ? `目标仓库当前版本 ${current.version}，已建议 ${nextVersion}` : "目标仓库未找到同 ID 任务手册，建议 0.1.0");
-      } else {
-        setVersionHint(`目标仓库当前版本 ${current?.version} 无法自动递增，请手动填写版本`);
+      }
+      if (diffRequestRef.current === requestId) {
+        setVersionHint(
+          current
+            ? `目标仓库当前版本 ${current.version}，已建议 ${nextVersion ?? current.version}`
+            : syncFailed
+              ? "同步失败且目标仓库未找到同 ID 任务手册，请手动确认版本"
+              : "目标仓库未找到同 ID 任务手册，建议 0.1.0"
+        );
       }
 
-      // 计算与远端版本的 Diff
-      const localTarget = buildPlaybookDiffTarget(publishingPlaybook ?? {
-        id: playbookId,
-        name: playbookId,
-        tags: [],
-        repositoryIds: [],
-        knowledgeRefs: [],
-        scriptRefs: [],
-        agentSkillRefs: [],
-        relatedPlaybookRefs: [],
-        guideMarkdown: "",
-        stopConditions: [],
-        enabled: true,
-        managed: false
-      });
+      // useEffect 闭包自动拿到最新的 publishingPlaybook，不再有陈旧值问题
+      const localTarget = buildPlaybookDiffTarget(publishingPlaybook);
       if (current) {
         try {
           const detail = await getRepositoryPlaybook(repositoryId, playbookId);
-          const remoteTarget = toRepositoryPlaybookDiffTarget(detail);
-          setPlaybookDiff(buildPlaybookDiff(remoteTarget, localTarget));
+          if (diffRequestRef.current === requestId) {
+            const remoteTarget = toRepositoryPlaybookDiffTarget(detail);
+            setPlaybookDiff(buildPlaybookDiff(remoteTarget, localTarget));
+          }
         } catch (detailError) {
-          setPlaybookDiff(null);
-          messageApi.warning(getErrorMessage(detailError, "读取远端任务手册详情失败，无法生成 Diff"));
+          if (diffRequestRef.current === requestId) {
+            setPlaybookDiff(null);
+            messageApi.warning(getErrorMessage(detailError, "读取远端任务手册详情失败，无法生成 Diff"));
+          }
         }
-      } else {
+      } else if (diffRequestRef.current === requestId) {
         setPlaybookDiff(buildPlaybookDiff(undefined, localTarget));
       }
-    } catch (error) {
-      setVersionHint(null);
-      setPlaybookDiff(null);
-      messageApi.warning(getErrorMessage(error, "同步目标仓库或读取版本失败，请手动确认版本"));
-    } finally {
-      setPlaybookDiffLoading(false);
-    }
-  };
+      if (diffRequestRef.current === requestId) {
+        setPlaybookDiffLoading(false);
+      }
+    })();
+  }, [messageApi, publishForm, publishModalOpen, publishingPlaybook, selectedPublishPlaybookId, selectedRepositoryId]);
 
   const openPublishModal = (item: Playbook) => {
     const defaultRepository = pickDefaultPublishRepository(publishableRepositories);
@@ -526,6 +570,9 @@ export function PlaybookPage() {
     setPublishModalOpen(true);
     setVersionHint(null);
     setPlaybookDiff(null);
+    setPlaybookDiffLoading(false);
+    diffRequestRef.current += 1;
+    syncedRepositoryIdsRef.current = new Set();
     publishForm.setFieldsValue({
       repositoryId: defaultRepository?.id,
       playbookId,
@@ -533,7 +580,6 @@ export function PlaybookPage() {
       owner: defaultOwner,
       releaseNotes: ""
     });
-    void suggestVersion(defaultRepository?.id, playbookId);
   };
 
   const publish = async () => {
@@ -1181,11 +1227,10 @@ export function PlaybookPage() {
               showSearch
               optionFilterProp="label"
               options={publishRepositoryOptions}
-              onChange={(repositoryId) => void suggestVersion(repositoryId, publishForm.getFieldValue("playbookId"))}
             />
           </Form.Item>
           <Form.Item name="playbookId" label="仓库任务手册 ID" rules={[{ required: true, message: "请输入仓库任务手册 ID" }]}>
-            <Input onBlur={(event) => void suggestVersion(publishForm.getFieldValue("repositoryId"), event.target.value)} />
+            <Input />
           </Form.Item>
           {versionHint ? <Alert type="info" showIcon message={versionHint} style={{ marginBottom: 16 }} /> : null}
           <Space size={12} style={{ width: "100%" }} align="start">
