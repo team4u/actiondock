@@ -9,6 +9,8 @@ description: 当任务涉及 ActionDock 平台能力资产或项目上下文时�
 
 ## 环境检查
 
+本 Skill 适配 `actiondock` CLI `0.1.32` 或以上版本。
+
 如果在执行actiondock过程中失败，请先检查环境是否就绪
 
 ### 检查 CLI 是否已安装
