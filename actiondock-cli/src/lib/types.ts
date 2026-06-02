@@ -4,6 +4,13 @@ export interface ApiEnvelope<T> {
   data: T;
 }
 
+export interface HealthView {
+  ok: boolean;
+  server: string;
+  status?: string;
+  details?: unknown;
+}
+
 export interface ScriptDefinition {
   id: string;
   name?: string;

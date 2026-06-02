@@ -106,7 +106,7 @@ actiondock webhook create --definition-file ./webhook.json --json
 actiondock webhook get <webhook-id> --json
 actiondock webhook update <webhook-id> --definition-file ./webhook.json --json
 actiondock webhook invoke <webhook-id> --payload-file ./webhook-request.json --json
-actiondock execution get <execution-id> --json
+actiondock execution get <execution-id> --json --output-file /tmp/actiondock-webhook-execution.json --overwrite-output
 ```
 
 `webhook list --intent` 按 Webhook ID、key、名称、描述和绑定脚本 ID 做正则搜索；未命中时 CLI 自动退回全量 Webhook 列表。

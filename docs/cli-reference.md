@@ -17,6 +17,12 @@ actiondock --version
 # 输出: actiondock/<version>
 ```
 
+检查本机服务是否可用：
+
+```bash
+actiondock health --json
+```
+
 ## 连接目标
 
 默认情况下，CLI 会连接本机服务：`http://127.0.0.1:5177`。本地开发或本机运行 `actiondock server` 时不需要先配置连接。
@@ -75,6 +81,16 @@ actiondock repository:knowledge-list --intent "api|database" --json
 
 `--intent` 用来先收窄候选，不改变详情命令和执行命令。需要完整定义时，继续使用对应的 `get` / `schema` / `action` 命令。
 
+## 长 JSON 输出写文件
+
+所有支持 `--json` 的命令都可以加 `--output-file <path>` 将完整 JSON 写入文件，避免长执行结果占满终端；文件已存在时需要加 `--overwrite-output` 覆盖。
+
+```bash
+actiondock execution get <execution-id> --json --output-file /tmp/actiondock-execution.json --overwrite-output
+actiondock script run <script-id> --response-view debug --json --output-file /tmp/actiondock-run.json --overwrite-output
+actiondock plugin invoke <plugin-id> <action> --json --output-file /tmp/actiondock-plugin.json --overwrite-output
+```
+
 ## 脚本命令
 
 脚本是 ActionDock 的主要资产对象。本节覆盖本地脚本的完整生命周期，以及来自仓库的脚本安装与管理。
@@ -132,6 +148,9 @@ actiondock script run <script-id> --draft --name alice --json
 # 以 debug 视图查看执行（含输入、日志、错误详情）
 actiondock script run <script-id> --response-view debug --name alice
 
+# debug 或输出很长时写入文件
+actiondock script run <script-id> --response-view debug --name alice --json --output-file /tmp/actiondock-run.json --overwrite-output
+
 # 复杂参数使用 --input-json 传入
 actiondock script run <script-id> --input-json '{"name": "alice", "tags": ["a", "b"]}'
 ```
@@ -141,6 +160,8 @@ actiondock script run <script-id> --input-json '{"name": "alice", "tags": ["a", 
 | 参数 | 说明 |
 |------|------|
 | `--json` | 输出格式化为 JSON |
+| `--output-file` | 将 JSON 输出写入文件 |
+| `--overwrite-output` | 覆盖已有输出文件 |
 | `--draft` | 执行草稿版本而非已发布版本 |
 | `--response-view debug` | 显示调试视图（含日志、输入、错误详情） |
 | `--input-json` | 以 JSON 字符串传入复杂参数 |
@@ -719,6 +740,7 @@ actiondock config remove <name>                                # 删除 profile
 ```bash
 actiondock server        # 前台启动服务
 actiondock server -p 8080  # 指定端口启动
+actiondock health --json # 检查服务健康状态
 ```
 
 ## 完整示例流程
@@ -727,8 +749,9 @@ actiondock server -p 8080  # 指定端口启动
 # 1. 安装 CLI
 npm install -g actiondock
 
-# 2. 查看可用脚本（默认连接 http://127.0.0.1:5177）
-actiondock script list
+# 2. 检查服务并查看可用脚本（默认连接 http://127.0.0.1:5177）
+actiondock health --json
+actiondock script list --intent "hello" --json
 
 # 3. 查看脚本 Schema
 actiondock script schema hello-groovy
@@ -770,7 +793,7 @@ npm list -g actiondock
 
 ### Q: 连接失败
 
-1. 检查 ActionDock 服务是否在运行：`actiondock script list`
+1. 检查 ActionDock 服务是否在运行：`actiondock health --json`
 2. 检查服务器地址配置：`actiondock config show`
 3. 多 server 场景确认当前 profile：`actiondock config list`
 4. 检查是否有网络防火墙拦截

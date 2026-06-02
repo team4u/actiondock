@@ -14,6 +14,12 @@
 
 默认情况下，CLI 会连接本机服务：`http://127.0.0.1:5177`。本地开发或本机运行 `actiondock server` 时，不需要先配置连接。
 
+检查服务是否可用时使用轻量健康检查，不要用脚本列表做探测：
+
+```bash
+actiondock health --json
+```
+
 只有需要连接其他服务器、保存认证 Token，或频繁切换多个服务器时，才创建 profile：
 
 ```bash
@@ -170,6 +176,17 @@ actiondock script run <script-id> --draft --name alice
 actiondock script run <script-id> --response-view debug --name alice
 ```
 
+调试视图或脚本输出可能很长时，优先写文件再读取：
+
+```bash
+actiondock script run <script-id> \
+  --response-view debug \
+  --name alice \
+  --json \
+  --output-file /tmp/actiondock-script-run.json \
+  --overwrite-output
+```
+
 ### 输入类型自动转换
 
 动态 flag 的值会根据 `inputSchema` 自动转换：
@@ -192,7 +209,10 @@ actiondock script run <script-id> --response-view debug --name alice
 如果是异步执行，先拿到 execution ID，再用：
 
 ```bash
-actiondock execution get <execution-id> --json
+actiondock execution get <execution-id> \
+  --json \
+  --output-file /tmp/actiondock-execution.json \
+  --overwrite-output
 ```
 
 ### 常见 Python 失败码

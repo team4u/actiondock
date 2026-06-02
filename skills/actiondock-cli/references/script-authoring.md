@@ -315,7 +315,7 @@ requests==2.32.3
 ### 关键原则
 
 - 默认使用 `--json`，让输出稳定可机读。
-- 调试草稿时，默认使用 `actiondock script run <id> --draft --response-view debug --json`。
+- 调试草稿时，默认使用 `actiondock script run <id> --draft --response-view debug --json --output-file /tmp/actiondock-run.json --overwrite-output`，再读取该文件判断结果。
 - 调试更新时，默认使用 `actiondock script patch`，不要用整对象覆盖思路。
 - 当前 patch 只允许更新：
   - `source`
@@ -367,7 +367,9 @@ actiondock script run hello-world \
   --draft \
   --input-json '{"name":"alice"}' \
   --response-view debug \
-  --json
+  --json \
+  --output-file /tmp/actiondock-run.json \
+  --overwrite-output
 ```
 
 关注这些字段：
@@ -384,7 +386,10 @@ actiondock script run hello-world \
 #### 4. 读取执行详情
 
 ```bash
-actiondock execution get <execution-id> --json
+actiondock execution get <execution-id> \
+  --json \
+  --output-file /tmp/actiondock-execution.json \
+  --overwrite-output
 ```
 
 优先从这些信息判断问题：
@@ -460,8 +465,8 @@ actiondock script patch hello-world \
 
 1. `script patch`
 2. `script validate`
-3. `script run --draft --response-view debug --json`
-4. 必要时 `execution get`
+3. `script run --draft --response-view debug --json --output-file /tmp/actiondock-run.json --overwrite-output`
+4. 必要时 `execution get --json --output-file /tmp/actiondock-execution.json --overwrite-output`
 
 直到：
 
@@ -556,11 +561,11 @@ actiondock script get hello-world --json
 ```bash
 actiondock script create --script-id <id> --name "<name>" --type groovy --source-file ./source.groovy --input-schema-file ./input.schema.json --output-schema-file ./output.schema.json --json
 actiondock script validate <id> --json
-actiondock script run <id> --draft --input-json '<input-json>' --response-view debug --json
-actiondock execution get <execution-id> --json
+actiondock script run <id> --draft --input-json '<input-json>' --response-view debug --json --output-file /tmp/actiondock-run.json --overwrite-output
+actiondock execution get <execution-id> --json --output-file /tmp/actiondock-execution.json --overwrite-output
 actiondock script patch <id> --source-file ./source.v2.groovy --json
 actiondock script validate <id> --json
-actiondock script run <id> --draft --input-json '<input-json>' --response-view debug --json
+actiondock script run <id> --draft --input-json '<input-json>' --response-view debug --json --output-file /tmp/actiondock-run.json --overwrite-output
 actiondock script publish <id> --json
 ```
 

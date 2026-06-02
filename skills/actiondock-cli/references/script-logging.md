@@ -67,7 +67,10 @@ else:
 脚本执行完成后，通过 CLI 查看日志：
 
 ```bash
-actiondock execution get <executionId> --json
+actiondock execution get <executionId> \
+  --json \
+  --output-file /tmp/actiondock-execution-logs.json \
+  --overwrite-output
 ```
 
 返回结果中的 `logs` 数组包含所有日志条目，每条包含 `level`、`message` 和 `createdAt`。

@@ -10,6 +10,15 @@
 actiondock execution get <execution-id>
 ```
 
+执行输出、debug 信息或日志可能很长时，默认写入文件后再读取：
+
+```bash
+actiondock execution get <execution-id> \
+  --json \
+  --output-file /tmp/actiondock-execution.json \
+  --overwrite-output
+```
+
 关注字段：
 - `status`：执行状态（SUCCEEDED / FAILED / RUNNING）
 - `output`：脚本输出结果

@@ -14,16 +14,24 @@ description: 当任务涉及 ActionDock 平台能力资产或项目上下文时�
 ### 检查 CLI 是否已安装
 
 ```bash
-actiondock script list
+actiondock --version
 ```
 
-- 如果返回成功 → CLI 已安装，继续下一步。
+- 如果返回成功 → CLI 已安装，继续检查 Server。
 - 如果找不到命令 → 执行安装：
-- 如果server连接失败 → 提醒用户手动启动，等待用户确认启动后再继续：ActionDock Server 未运行，请手动启动：`actiondock server`
 
 ```bash
 npm i -g actiondock
 ```
+
+### 检查 ActionDock Server 是否运行
+
+```bash
+actiondock health --json
+```
+
+- 如果返回成功且 `status` 为 `UP` → Server 可用，继续下一步。
+- 如果server连接失败 → 提醒用户手动启动，等待用户确认启动后再继续：ActionDock Server 未运行，请手动启动：`actiondock server`
 
 ## 主流程文档
 
@@ -95,6 +103,7 @@ npm i -g actiondock
 
 - 默认使用 `--json`，让输出稳定可机读。
 - 业务资产类 list 命令优先用 `--intent <regex>` 收窄候选，例如 `script list`、`plugin list`、`repository list`、`repository:knowledge-list`、`playbook list`、`webhook list`、`schedule list`、`script preset list`、`config-value list` 以及仓库资产的 `repository-list`。`--intent` 未命中时 CLI 会自动退回同一过滤条件下的全量列表，输出结构不变。
+- 对可能很长的 JSON 输出，默认写入文件再读取文件内容，例如 `--json --output-file /tmp/actiondock-result.json --overwrite-output`。适用场景包括 `script run --response-view debug`、`execution get`、`plugin invoke`、`playbook get`、`repository resolve` 和项目知识浏览结果；不要让长 JSON 直接占满终端。
 - 默认连接本机服务 `http://127.0.0.1:5177`，本地使用不要要求用户先配置连接；只有连接其他 Server、保存 Token 或频繁切换多个 Server 时，才使用 `actiondock config add/use/list` 管理 profile，临时切换用 `--profile <name>`。
 - 第一次执行已发布脚本前，通过 `script schema <id>` 获取入参，避免用 `get` 查看脚本细节。
 - 当用户查看脚本 `inputSchema` 或插件 action `inputSchema` 时，不只复述字段名；要直接说明哪些顶层简单字段可扁平为 CLI flag，哪些对象/数组字段必须继续使用 JSON 或文件方式传入。

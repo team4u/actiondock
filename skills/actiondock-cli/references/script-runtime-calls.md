@@ -134,7 +134,7 @@ actiondock plugin action <plugin-id> <action> --json
 先用 CLI：
 
 ```bash
-actiondock script list
+actiondock script list --intent "<regex>"
 actiondock script schema <script-id>
 ```
 

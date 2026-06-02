@@ -57,6 +57,16 @@ export class ActionDockClient {
     constructor(options) {
         this.options = options;
     }
+    async health() {
+        const payload = await this.requestRawJson("/actuator/health");
+        const status = isRecord(payload) && typeof payload.status === "string" ? payload.status : undefined;
+        return {
+            ok: status === "UP",
+            server: this.options.serverUrl,
+            status,
+            details: payload
+        };
+    }
     async listScripts(intent) {
         const suffix = querySuffix({ intent });
         return this.requestJson(`/api/scripts${suffix}`).then((items) => items.map(normalizeScriptDefinition));
@@ -652,6 +662,44 @@ export class ActionDockClient {
             throw new ActionDockCliError(`服务端响应格式非法: ${pathname}`, 5, parsed ?? payload.bodyText);
         }
         return parsed.data;
+    }
+    async requestRawJson(pathname, init) {
+        const url = new URL(`${this.options.serverUrl}${pathname}`);
+        const method = init?.method ?? "GET";
+        const headers = this.buildHeaders(init?.headers, init?.body);
+        const body = init?.body;
+        const transport = url.protocol === "https:" ? https : http;
+        const payload = await new Promise((resolve, reject) => {
+            const request = transport.request(url, { method, headers }, (response) => {
+                const chunks = [];
+                response.on("data", (chunk) => {
+                    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+                });
+                response.on("end", () => {
+                    resolve({
+                        statusCode: response.statusCode ?? 500,
+                        bodyText: Buffer.concat(chunks).toString("utf8")
+                    });
+                });
+            });
+            request.on("error", (error) => reject(error));
+            if (body) {
+                request.write(body);
+            }
+            request.end();
+        }).catch((error) => {
+            const detail = error instanceof Error ? error.message : String(error);
+            throw new ActionDockCliError(`请求 ActionDock 服务失败: ${detail}`, 4);
+        });
+        const parsed = parseMaybeJson(payload.bodyText);
+        if (payload.statusCode < 200 || payload.statusCode >= 300) {
+            const message = isRecord(parsed) && typeof parsed.message === "string"
+                ? parsed.message
+                : `请求失败: HTTP ${payload.statusCode}`;
+            const exitCode = payload.statusCode === 401 || payload.statusCode === 403 ? 3 : 5;
+            throw new ActionDockCliError(message, exitCode, parsed ?? payload.bodyText);
+        }
+        return parsed ?? payload.bodyText;
     }
     async requestBinary(pathname, init) {
         const url = new URL(`${this.options.serverUrl}${pathname}`);

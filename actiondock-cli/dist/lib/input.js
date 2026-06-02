@@ -1,10 +1,11 @@
 import fs from "node:fs";
 import { ActionDockCliError, isRecord } from "./error.js";
-const DEFAULT_BOOLEAN_FLAGS = new Set(["draft", "json"]);
+const DEFAULT_BOOLEAN_FLAGS = new Set(["draft", "json", "force", "overwrite-output"]);
 const DEFAULT_VALUE_FLAGS = new Set([
     "server",
     "token",
     "profile",
+    "output-file",
     "mode",
     "response-view",
     "config-name",

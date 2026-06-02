@@ -138,7 +138,9 @@ actiondock plugin invoke my-plugin summarize \
 ```bash
 actiondock plugin invoke my-plugin summarize \
   --args-file ./plugin-args.json \
-  --json > /tmp/plugin-result.json
+  --json \
+  --output-file /tmp/plugin-result.json \
+  --overwrite-output
 ```
 
 ### 混合传参

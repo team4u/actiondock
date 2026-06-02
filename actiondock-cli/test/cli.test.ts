@@ -68,6 +68,15 @@ beforeAll(async () => {
       });
     }
 
+    if (req.method === "GET" && req.url === "/actuator/health") {
+      return rawJson(res, {
+        status: "UP",
+        components: {
+          db: { status: "UP" }
+        }
+      });
+    }
+
     if (req.method === "GET" && req.url === "/api/scripts?intent=published") {
       return json(res, {
         status: 0,
@@ -2791,6 +2800,78 @@ describe("CLI integration", () => {
       }
     ]);
   });
+
+  it("checks server health without listing scripts", async () => {
+    requests.length = 0;
+
+    const result = await runCli(["health", "--server", baseUrl, "--json"]);
+
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({
+      ok: true,
+      server: baseUrl,
+      status: "UP",
+      details: {
+        status: "UP",
+        components: {
+          db: { status: "UP" }
+        }
+      }
+    });
+    expect(requests.map((request) => request.url)).toEqual(["/actuator/health"]);
+  });
+
+  it("writes json output to a file and keeps stdout short", async () => {
+    const outputFile = path.join(os.tmpdir(), `actiondock-cli-output-${Date.now()}.json`);
+    try {
+      const result = await runCli([
+        "script", "run", "published-tool",
+        "--server", baseUrl,
+        "--name", "alice",
+        "--json",
+        "--output-file", outputFile
+      ]);
+
+      expect(result.status).toBe(0);
+      expect(JSON.parse(result.stdout)).toEqual({
+        outputFile,
+        bytes: fs.statSync(outputFile).size
+      });
+      expect(JSON.parse(fs.readFileSync(outputFile, "utf8"))).toEqual(
+        expect.objectContaining({
+          id: "exec-1",
+          status: "SUCCESS",
+          output: {
+            input: { name: "alice" },
+            mode: "SYNC",
+            responseView: "RESULT"
+          }
+        })
+      );
+    } finally {
+      fs.rmSync(outputFile, { force: true });
+    }
+  });
+
+  it("refuses to overwrite json output files unless explicitly allowed", async () => {
+    const outputFile = path.join(os.tmpdir(), `actiondock-cli-existing-${Date.now()}.json`);
+    fs.writeFileSync(outputFile, "existing", "utf8");
+    try {
+      const blocked = await runCli(["health", "--server", baseUrl, "--json", "--output-file", outputFile]);
+
+      expect(blocked.status).toBe(2);
+      expect(blocked.stderr).toContain("输出文件已存在");
+      expect(fs.readFileSync(outputFile, "utf8")).toBe("existing");
+
+      const overwritten = await runCli(["health", "--server", baseUrl, "--json", "--output-file", outputFile, "--overwrite-output"]);
+      expect(overwritten.status).toBe(0);
+      expect(JSON.parse(fs.readFileSync(outputFile, "utf8"))).toEqual(
+        expect.objectContaining({ ok: true, status: "UP" })
+      );
+    } finally {
+      fs.rmSync(outputFile, { force: true });
+    }
+  });
 });
 
 async function runCli(args: string[], homeDir?: string, envOverrides?: NodeJS.ProcessEnv): Promise<{
@@ -2850,6 +2931,12 @@ async function closeServer(serverToClose: http.Server): Promise<void> {
 }
 
 function json(response: http.ServerResponse, payload: unknown): void {
+  response.statusCode = 200;
+  response.setHeader("Content-Type", "application/json");
+  response.end(JSON.stringify(payload));
+}
+
+function rawJson(response: http.ServerResponse, payload: unknown): void {
   response.statusCode = 200;
   response.setHeader("Content-Type", "application/json");
   response.end(JSON.stringify(payload));
