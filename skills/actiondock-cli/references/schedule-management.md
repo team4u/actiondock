@@ -1,6 +1,6 @@
 # 定时任务管理
 
-创建、查看、更新和删除定时任务。覆盖 `schedule` 命令。
+创建、查看、更新和删除定时任务。覆盖 `schedule` 命令。先遵守 `references/common.md`。
 
 定时任务允许脚本按 cron 表达式自动周期执行。cron 格式为 **Spring 6 位**：`秒 分 时 日 月 周`（比标准 Unix cron 多了秒位）。
 
@@ -18,7 +18,7 @@ actiondock schedule create \
   --name alice
 ```
 
-复杂输入优先写入临时文件再传参：
+复杂输入优先写入文件再传参：
 
 ```bash
 echo '{"name":"alice","config":{"timeout":30}}' > /tmp/schedule-input.json
@@ -39,25 +39,23 @@ actiondock schedule create \
 ## 列出定时任务
 
 ```bash
-actiondock schedule list
 actiondock schedule list --intent "<regex>" --json
 ```
 
 可按脚本过滤：
 
 ```bash
-actiondock schedule list --script-id <script-id>
 actiondock schedule list --script-id <script-id> --intent "<regex>" --json
 ```
 
-`--intent` 按定时任务 ID、名称、脚本 ID 和 cron 表达式做正则搜索；未命中时 CLI 自动退回同一脚本过滤下的全量列表。
+`--intent` 按定时任务 ID、名称、脚本 ID 和 cron 表达式做正则搜索。
 
 ---
 
 ## 查看定时任务详情
 
 ```bash
-actiondock schedule get <schedule-id>
+actiondock schedule get <schedule-id> --json
 ```
 
 显示 cron 表达式、下次执行时间、上次执行状态、输入参数等。
@@ -67,8 +65,7 @@ actiondock schedule get <schedule-id>
 ## 更新定时任务
 
 ```bash
-actiondock schedule update <schedule-id> \
-  --schedule-cron "0 0 8 * * 1-5"
+actiondock schedule update <schedule-id> --schedule-cron "0 0 8 * * 1-5" --json
 ```
 
 可更新：`--schedule-name`、`--schedule-cron`、输入参数。
@@ -79,9 +76,9 @@ actiondock schedule update <schedule-id> \
 ## 启用 / 禁用 / 删除
 
 ```bash
-actiondock schedule enable <schedule-id>
-actiondock schedule disable <schedule-id>
-actiondock schedule delete <schedule-id>
+actiondock schedule enable <schedule-id> --json
+actiondock schedule disable <schedule-id> --json
+actiondock schedule delete <schedule-id> --json
 ```
 
 ---

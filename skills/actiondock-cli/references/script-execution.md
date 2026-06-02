@@ -1,204 +1,64 @@
 # 脚本日常执行
 
-查找和运行已发布的 ActionDock 脚本。只覆盖 `script` 和 `config` 命令。
+查找和运行已发布的 ActionDock 脚本。先遵守 `references/common.md` 的输出、连接、`--intent` 和 schema 传参规则。
 
-其他管理命令见独立子文档：
-- 插件查看与调用 → `references/plugin-usage.md`
-- 执行历史管理 → `references/execution-history.md`
-- 定时任务管理 → `references/schedule-management.md`
-- 共享状态管理 → `references/state-management.md`
+相关文档：插件调用见 `plugin-usage.md`；执行历史见 `execution-history.md`；定时任务见 `schedule-management.md`。
 
----
-
-## 连接目标
-
-默认情况下，CLI 会连接本机服务：`http://127.0.0.1:5177`。本地开发或本机运行 `actiondock server` 时，不需要先配置连接。
-
-检查服务是否可用时使用轻量健康检查，不要用脚本列表做探测：
+## 查找脚本
 
 ```bash
-actiondock health --json
-```
-
-只有需要连接其他服务器、保存认证 Token，或频繁切换多个服务器时，才创建 profile：
-
-```bash
-actiondock config add prod --server https://your-server.example.com --token your-bearer-token
-actiondock config use prod
-```
-
-查看当前 profile 配置：
-
-```bash
-actiondock config show
-```
-
-如果需要频繁访问多个服务端，为每个服务端创建一个 profile：
-
-```bash
-actiondock config add staging --server https://staging.example.com --token staging-token
-actiondock config list
-actiondock script list --profile staging
-```
-
-连接解析优先级：`--server` / `--token` > `--profile` > `ACTIONDOCK_BASE_URL` / `ACTIONDOCK_TOKEN` > `ACTIONDOCK_PROFILE` > 当前 profile > 默认 `http://127.0.0.1:5177`。
-
-| 环境变量 | 说明 |
-|----------|------|
-| `ACTIONDOCK_BASE_URL` | 服务地址 |
-| `ACTIONDOCK_TOKEN` | Bearer Token |
-| `ACTIONDOCK_PROFILE` | 默认使用的 profile 名称 |
-
-配置文件位置：
-- Windows: `%APPDATA%\actiondock\config.json`
-- macOS: `~/Library/Application Support/actiondock/config.json`
-- Linux: `~/.config/actiondock/config.json`
-
-| 命令 | 说明 |
-|------|------|
-| `actiondock config add <name> --server <url> [--token <token>]` | 创建或更新 profile |
-| `actiondock config use <name>` | 设置当前 profile |
-| `actiondock config list` | 列出 profiles |
-| `actiondock config show [--profile <name>]` | 查看当前或指定 profile |
-| `actiondock config set server <url> [--profile <name>]` | 更新 profile 服务地址 |
-| `actiondock config set token <token> [--profile <name>]` | 更新 profile 认证 Token |
-| `actiondock config clear token [--profile <name>]` | 清除 profile Token |
-| `actiondock config remove <name>` | 删除 profile |
-
----
-
-## 1. 查找脚本
-
-### 列出已发布脚本
-
-```bash
-actiondock script list
 actiondock script list --intent "<regex>" --json
+actiondock script schema <script-id> --json
+actiondock script get <script-id> --json
 ```
 
-默认只列出有已发布快照的脚本。加 `--all` 可包含仅有草稿的脚本。
-`--intent` 按脚本 ID、名称、描述、标签等摘要字段做正则搜索；未命中时 CLI 自动退回全量脚本列表。
+- `script list` 默认只列出有已发布快照的脚本；加 `--all` 可包含仅有草稿的脚本。
+- 第一次执行前先看 `script schema`，按 common 规则区分扁平 flag 与 `--input-json` / `--input-file`。
+- `script get` 用于查看完整定义；加 `--draft` 查看草稿版本。
 
-输出格式：`<id> <name> [<type>] published|draft-only`
+## 执行脚本
 
-### 查看脚本输入参数
+简单顶层字段直接用动态 flag：
 
 ```bash
-actiondock script schema <script-id>
+actiondock script run <script-id> --name alice --count 3 --json
 ```
 
-输出两类字段：
-- **Flag fields**：可用 `--name value` 形式传入的简单类型（string/number/integer/boolean/enum）
-- **JSON-only fields**：只能通过 `--input-json` / `--input-file` 传入的复杂类型（object/array）
-
-解释 schema 时，先把这两类字段直接翻译成调用方式：顶层简单字段优先用扁平 flag；对象和数组字段继续用 `--input-json` 或 `--input-file`。
-
-默认附 1 条主路径示例：
-- schema 主要由简单字段组成时，示例直接写扁平 flag，例如 `actiondock script run <script-id> --name alice --count 3 --json`
-- schema 包含对象或数组字段时，示例直接写 JSON 或文件传参，例如 `actiondock script run <script-id> --input-file /tmp/my-script-input.json --json`
-
-加 `--draft` 查看草稿版本的 schema。
-
-### 查看脚本完整定义
+复杂输入优先写文件：
 
 ```bash
-actiondock script get <script-id>
+actiondock script run <script-id> --input-file /tmp/my-script-input.json --json
 ```
 
-加 `--draft` 查看草稿版本。
-
----
-
-## 2. 执行脚本
-
-### 推荐方式：按 schema 选择传参形式
-
-如果 schema 里的输入主要是简单顶层字段，直接用扁平 flag 即可。只有当输入参数包含 JSON 对象、数组等复杂结构时，**优先将输入写入临时 JSON 文件，再用 `--input-file` 传参**，避免 shell 转义问题。
+其他常用形式：
 
 ```bash
-# 1. 将输入参数写入临时文件
-echo '{"name":"alice","config":{"timeout":30}}' > /tmp/my-script-input.json
+# 基础输入来自文件，动态 flag 覆盖同名字段
+actiondock script run <script-id> --input-file /tmp/base-input.json --name override --json
 
-# 2. 用文件传参执行
-actiondock script run <script-id> --input-file /tmp/my-script-input.json
-```
+# 简单场景可内联 JSON，但复杂 JSON 不推荐
+actiondock script run <script-id> --input-json '{"name":"alice"}' --json
 
-简单字段（string/number/integer/boolean/enum）可单独用 flag 传参，无需写文件：
+# 长任务异步提交，返回 execution ID 后用 execution get 查询
+actiondock script run <script-id> --mode async --input-file ./input.json --json
 
-```bash
-actiondock script run <script-id> --name alice --count 3
-```
+# 调试草稿
+actiondock script run <script-id> --draft --input-file ./input.json --json
 
-`--server`、`--token`、`--profile` 是连接参数保留字，不会作为动态输入字段传入；如果脚本输入字段同名，使用 `--input-json` / `--input-file`。
-
-### 混合传参
-
-`--input-file` 提供基础输入对象，动态 flag 会合并进去并覆盖同名字段：
-
-```bash
-actiondock script run <script-id> \
-  --input-file /tmp/base-input.json \
-  --name override-value
-```
-
-### 直接 JSON 传参（仅适合简单场景）
-
-输入非常简单时可内联 JSON，但容易遇到 shell 转义问题，不推荐用于复杂输入：
-
-```bash
-actiondock script run <script-id> \
-  --input-json '{"name":"alice","config":{"timeout":30}}'
-```
-
-### 异步执行
-
-长时间运行的脚本，使用异步模式提交后通过 execution ID 查询结果：
-
-```bash
-actiondock script run <script-id> --mode async --name alice
-```
-
-返回结果中包含 `id`（execution ID），后续用 `execution get` 查询（见 `references/execution-history.md`）。
-
-### 执行草稿版本（调试）
-
-加 `--draft` 执行草稿而非已发布版本：
-
-```bash
-actiondock script run <script-id> --draft --name alice
-```
-
-### 查看调试信息
-
-加 `--response-view debug` 获取 debug 信息（含原始 input 和 rawOutput）：
-
-```bash
-actiondock script run <script-id> --response-view debug --name alice
-```
-
-调试视图或脚本输出可能很长时，优先写文件再读取：
-
-```bash
+# 长 debug 输出写文件
 actiondock script run <script-id> \
   --response-view debug \
-  --name alice \
+  --input-file ./input.json \
   --json \
   --output-file /tmp/actiondock-script-run.json \
   --overwrite-output
 ```
 
-### 输入类型自动转换
+动态 flag 会按 `inputSchema` 自动转换 integer、number、boolean 和 enum。
 
-动态 flag 的值会根据 `inputSchema` 自动转换：
-- `--count 3` → schema 定义为 integer 时自动转为数字
-- `--enabled true` → schema 定义为 boolean 时自动转为布尔值
-- `--mode fast` → schema 定义为 enum 时保持字符串
+## 失败判断
 
----
-
-## 3. 执行失败时怎么判断
-
-如果执行返回失败，优先看这些字段：
+执行失败先看：
 
 - `status`
 - `errorMessage`
@@ -206,7 +66,7 @@ actiondock script run <script-id> \
 - `errorDetail.details.code`
 - `logs`
 
-如果是异步执行，先拿到 execution ID，再用：
+异步执行或长结果用：
 
 ```bash
 actiondock execution get <execution-id> \
@@ -215,71 +75,34 @@ actiondock execution get <execution-id> \
   --overwrite-output
 ```
 
-### 常见 Python 失败码
+Python 常见失败码：
 
-如果目标脚本是 Python，`errorDetail.details.code` 可能出现以下值：
+| code | 优先判断 |
+|------|----------|
+| `PYTHON_RUNTIME_MISSING` | 服务端是否缺少 `python3` |
+| `PYTHON_ENV_PREPARE_FAILED` | 服务端是否缺少 `python3 -m venv` |
+| `PYTHON_DEP_INSTALL_FAILED` | `pythonRequirements` / `requirements.txt` 是否正确 |
+| `PYTHON_EXECUTION_FAILED` | 依赖已准备完成，再结合堆栈、日志修源码 |
 
-- `PYTHON_RUNTIME_MISSING`
-- `PYTHON_ENV_PREPARE_FAILED`
-- `PYTHON_DEP_INSTALL_FAILED`
-- `PYTHON_EXECUTION_FAILED`
+处理原则：
 
-判读建议：
+- 输入不合法：先修输入或 `inputSchema`。
+- Python 环境/依赖失败：先修运行环境或 `pythonRequirements`。
+- 脚本逻辑失败：回作者态修源码。
+- 输出结构不对：同时核对源码和 `outputSchema`。
 
-- `PYTHON_RUNTIME_MISSING`
-  - 说明宿主 Python 运行环境不可用
-  - 优先判断服务端是否缺少 `python3`
-
-- `PYTHON_ENV_PREPARE_FAILED`
-  - 说明虚拟环境准备失败
-  - 优先判断服务端是否缺少 `python3 -m venv` 能力，而不是先怀疑脚本业务逻辑
-
-- `PYTHON_DEP_INSTALL_FAILED`
-  - 说明脚本声明的第三方依赖安装失败
-  - 优先回到作者态流程检查 `pythonRequirements` / `requirements.txt`
-  - 不要先改业务代码
-
-- `PYTHON_EXECUTION_FAILED`
-  - 说明依赖已准备完成，但 Python 脚本本身运行失败
-  - 这时再结合 `errorMessage`、`stackTrace`、`logs` 判断代码问题
-
-### 处理原则
-
-- 输入不合法：先修输入，不要先改脚本
-- Python 环境/依赖失败：先修运行环境或 `pythonRequirements`
-- 脚本逻辑失败：再回作者态修源码
-- 输出结构不对：回作者态同时核对源码和 `outputSchema`
-
----
-
-## 4. 典型工作流
-
-### 执行已知脚本
+## 典型工作流
 
 ```bash
-actiondock script schema my-script
-actiondock script run my-script --name alice --count 3
-```
+# 执行已知脚本
+actiondock script schema my-script --json
+actiondock script run my-script --name alice --count 3 --json
 
-### 查找并执行陌生脚本
+# 查找并执行陌生脚本
+actiondock script list --intent "<regex>" --json
+actiondock script schema target-script --json
+actiondock script run target-script --input-file ./input.json --json
 
-```bash
-actiondock script list --intent "<regex>"
-actiondock script schema target-script
-actiondock script run target-script --param1 value1
-```
-
-### 复杂输入执行
-
-```bash
-actiondock script schema my-script
-echo '{"name":"alice","config":{"timeout":30}}' > /tmp/input.json
-actiondock script run my-script --input-file /tmp/input.json
-```
-
-### 长时间脚本异步执行
-
-```bash
-actiondock script run heavy-script --mode async --input-file ./input.json
-# 后续查看结果 → 见 references/execution-history.md
+# 长时间脚本
+actiondock script run heavy-script --mode async --input-file ./input.json --json
 ```

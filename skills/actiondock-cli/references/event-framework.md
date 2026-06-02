@@ -1,5 +1,11 @@
 # ActionDock CLI Webhook 参考
 
+先遵守 `references/common.md`。
+
+完整 Webhook 链路固定顺序：创建并发布 Webhook 脚本、创建 `webhook`、`webhook invoke`、`execution get`。
+
+Webhook 相关对象优先使用 `--definition-file`、`--payload-file`，不要把大段 JSON 直接内联到命令里。`webhook update` 按 CLI 侧“先读取当前对象，再深度合并 patch，再 PUT”理解，不要假设服务端自动局部合并。
+
 ## 当前模型
 
 当前版本只保留一对一 Webhook：
@@ -15,7 +21,7 @@
 - 一对多触发
 - 请求转换
 
-## Webhook定义最小模板
+## Webhook 定义最小模板
 
 ```json
 {
@@ -109,7 +115,7 @@ actiondock webhook invoke <webhook-id> --payload-file ./webhook-request.json --j
 actiondock execution get <execution-id> --json --output-file /tmp/actiondock-webhook-execution.json --overwrite-output
 ```
 
-`webhook list --intent` 按 Webhook ID、key、名称、描述和绑定脚本 ID 做正则搜索；未命中时 CLI 自动退回全量 Webhook 列表。
+`webhook list --intent` 按 Webhook ID、key、名称、描述和绑定脚本 ID 做正则搜索。
 
 ## 排查顺序
 

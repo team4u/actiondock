@@ -1,16 +1,10 @@
 # 执行历史管理
 
-查看、删除和清理脚本的执行记录。覆盖 `execution` 命令。
+查看、删除和清理脚本的执行记录。覆盖 `execution` 命令。先遵守 `references/common.md`。
 
 ---
 
 ## 查看单条执行记录
-
-```bash
-actiondock execution get <execution-id>
-```
-
-执行输出、debug 信息或日志可能很长时，默认写入文件后再读取：
 
 ```bash
 actiondock execution get <execution-id> \
@@ -30,7 +24,7 @@ actiondock execution get <execution-id> \
 ## 列出执行历史
 
 ```bash
-actiondock execution list --script-id <script-id>
+actiondock execution list --script-id <script-id> --json
 ```
 
 **必须**提供 `--script-id` 或 `--schedule-id` 之一。
@@ -38,7 +32,7 @@ actiondock execution list --script-id <script-id>
 按定时任务过滤：
 
 ```bash
-actiondock execution list --schedule-id <schedule-id>
+actiondock execution list --schedule-id <schedule-id> --json
 ```
 
 ---
@@ -46,7 +40,7 @@ actiondock execution list --schedule-id <schedule-id>
 ## 删除执行记录
 
 ```bash
-actiondock execution delete <execution-id>
+actiondock execution delete <execution-id> --json
 ```
 
 ---
@@ -56,11 +50,11 @@ actiondock execution delete <execution-id>
 清空指定脚本的执行记录：
 
 ```bash
-actiondock execution clear --script-id <script-id>
+actiondock execution clear --script-id <script-id> --json
 ```
 
 清空全部执行记录（不加 `--script-id`）：
 
 ```bash
-actiondock execution clear
+actiondock execution clear --json
 ```

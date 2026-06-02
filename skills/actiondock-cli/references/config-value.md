@@ -2,7 +2,7 @@
 
 通过 ActionDock CLI 查询、创建、更新和删除平台配置值（ConfigValue）。配置值用于存储脚本运行时所需的参数，如 API 凭证、连接地址等键值对。
 
-本文件只覆盖 `config value` 命令。共享状态（跨执行传递数据）见 `references/state-management.md`，CLI profile 管理（多 Server 切换）见 `SKILL.md` 通用原则。
+本文件只覆盖 `config value` 命令。先遵守 `references/common.md`。共享状态见 `state-management.md`。
 
 ---
 
@@ -12,13 +12,9 @@
 actiondock config value list --json
 ```
 
-优先使用 `--intent` 按正则收窄候选：
-
 ```bash
 actiondock config value list --intent "oa\." --json
 ```
-
-`--intent` 未命中时 CLI 自动退回全量列表，输出结构不变。
 
 ---
 

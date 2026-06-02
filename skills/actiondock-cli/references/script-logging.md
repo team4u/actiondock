@@ -2,6 +2,8 @@
 
 ActionDock 为脚本提供了内置的 `log` 对象，用于在脚本执行过程中输出结构化日志。日志会被平台收集并持久化到执行记录中，可在执行历史中查看。
 
+CLI 查看日志先遵守 `references/common.md`。
+
 `log` 对象无需导入或声明，脚本引擎会自动注入，与 `input`、`config`、`plugins`、`scripts`、`state` 一样属于全局可用绑定。
 
 ---
