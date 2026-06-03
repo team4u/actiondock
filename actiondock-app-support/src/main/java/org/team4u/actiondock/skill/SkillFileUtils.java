@@ -125,26 +125,39 @@ public final class SkillFileUtils {
             return;
         }
         try {
-            if (Files.isRegularFile(path)) {
-                Files.deleteIfExists(path);
-                return;
-            }
-            Files.walkFileTree(path, new SimpleFileVisitor<>() {
-                @Override
-                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                    Files.deleteIfExists(file);
-                    return FileVisitResult.CONTINUE;
-                }
-
-                @Override
-                public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
-                    Files.deleteIfExists(dir);
-                    return FileVisitResult.CONTINUE;
-                }
-            });
+            deleteRecursively(path);
         } catch (IOException exception) {
             log.log(System.Logger.Level.WARNING, "删除文件失败: {0}", exception.getMessage());
         }
+    }
+
+    /**
+     * 递归删除文件或目录，失败时抛出异常。
+     */
+    static void deleteRecursively(Path path) throws IOException {
+        if (path == null || Files.notExists(path)) {
+            return;
+        }
+        if (Files.isRegularFile(path)) {
+            Files.deleteIfExists(path);
+            return;
+        }
+        Files.walkFileTree(path, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                Files.deleteIfExists(file);
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+                if (exc != null) {
+                    throw exc;
+                }
+                Files.deleteIfExists(dir);
+                return FileVisitResult.CONTINUE;
+            }
+        });
     }
 
     /**
@@ -328,23 +341,18 @@ public final class SkillFileUtils {
     }
 
     /**
-     * 对目标目录执行原子交换，将临时目录替换为最终目标目录。
-     *
-     * <p>若目标已存在则备份为 .bak-UUID，然后将 tmp 移动为目标，最后删除备份。
-     * 失败时清理临时目录。</p>
+     * 删除旧目标目录后，将临时目录移动为最终目标目录。
      *
      * @param targetDir 最终目标目录
      * @param tempDir   临时目录（已准备好的内容）
      * @throws IOException 文件操作失败
      */
     public static void swapTempToTarget(Path targetDir, Path tempDir) throws IOException {
-        Path backupDir = targetDir.getParent().resolve(targetDir.getFileName() + ".bak-" + UUID.randomUUID());
         try {
             if (Files.exists(targetDir)) {
-                moveAtomically(targetDir, backupDir);
+                deleteRecursively(targetDir);
             }
             moveAtomically(tempDir, targetDir);
-            deleteQuietly(backupDir);
         } catch (IOException exception) {
             deleteQuietly(tempDir);
             throw exception;
@@ -355,6 +363,25 @@ public final class SkillFileUtils {
      * 在目标目录的父级创建带 .tmp-UUID 后缀的临时目录路径。
      */
     public static Path tempDirectoryFor(Path targetDir) {
+        cleanupSwapResiduals(targetDir);
         return targetDir.getParent().resolve(targetDir.getFileName() + ".tmp-" + UUID.randomUUID());
+    }
+
+    private static void cleanupSwapResiduals(Path targetDir) {
+        Path parent = targetDir.getParent();
+        Path fileName = targetDir.getFileName();
+        if (parent == null || fileName == null || Files.notExists(parent)) {
+            return;
+        }
+        String prefix = fileName + ".";
+        try (var stream = Files.list(parent)) {
+            stream.filter(path -> {
+                        String name = path.getFileName().toString();
+                        return name.startsWith(prefix) && (name.contains(".tmp-") || name.contains(".bak-"));
+                    })
+                    .forEach(SkillFileUtils::deleteQuietly);
+        } catch (IOException exception) {
+            log.log(System.Logger.Level.WARNING, "清理 Skill 临时目录失败: {0}", exception.getMessage());
+        }
     }
 }
