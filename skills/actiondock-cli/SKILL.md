@@ -34,7 +34,7 @@ actiondock health --json
 | 创建、调试、修复、发布脚本 | `references/script-authoring.md` |
 | 执行已发布脚本、查看脚本 schema、查找脚本 | `references/script-execution.md` |
 | Python 脚本第三方依赖、镜像源、`requirements.txt` | `references/script-authoring.md` |
-| Webhook 创建、测试、调用、排查 | `references/event-framework.md` |
+| Webhook 创建、测试、调用、排查 | `references/webhook.md` |
 | CLI 调用插件、查看插件动作或配置 | `references/plugin-usage.md` |
 | 脚本源码内调用插件、脚本、共享状态或本机命令 | `references/script-runtime-calls.md` |
 | 业务项目流程、接口、数据库、日志、告警、排障 | 先 `references/playbook.md`；进入项目知识前再实际读取 `references/project-knowledge.md` |

@@ -2,7 +2,7 @@
 
 从业务需求出发，完成脚本生成、创建草稿、校验、调试、Patch、循环修复和发布。先遵守 `references/common.md`。
 
-需要脚本内调用插件/脚本/本机命令时补读 `script-runtime-calls.md`；Webhook 脚本补读 `event-framework.md`。
+需要脚本内调用插件/脚本/本机命令时补读 `script-runtime-calls.md`；Webhook 脚本补读 `webhook.md`。
 
 ## 产物
 
