@@ -1551,7 +1551,8 @@ describe("CLI integration", () => {
       description: "Updated description",
       inputSchema: {
         properties: {
-          enabled: { type: "boolean" }
+          enabled: { type: "boolean" },
+          name: null
         }
       }
     });

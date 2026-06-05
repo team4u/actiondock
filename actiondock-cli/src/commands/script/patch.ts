@@ -5,7 +5,7 @@ import { ActionDockClient } from "../../lib/client.js";
 import { resolveServerUrl, resolveToken } from "../../lib/config.js";
 import { ActionDockCliError } from "../../lib/error.js";
 import { renderScriptDetail } from "../../lib/render.js";
-import { parsePatchObject, parseSchemaInput, resolveOptionalTextInput, resolveScriptSource, setPatchField } from "../../lib/script.js";
+import { buildSchemaReplacePatch, parsePatchObject, parseSchemaInput, resolveOptionalTextInput, resolveScriptSource, setPatchField } from "../../lib/script.js";
 
 export default class ScriptPatchCommand extends BaseCommand {
   static description = "Apply a JSON Merge Patch to an ActionDock draft script";
@@ -44,16 +44,16 @@ export default class ScriptPatchCommand extends BaseCommand {
       description: "Replace pythonRequirements using a requirements.txt file"
     }),
     "input-schema-json": Flags.string({
-      description: "Merge-patch inputSchema using an inline JSON object"
+      description: "Replace inputSchema using an inline JSON object"
     }),
     "input-schema-file": Flags.string({
-      description: "Merge-patch inputSchema using a JSON file"
+      description: "Replace inputSchema using a JSON file"
     }),
     "output-schema-json": Flags.string({
-      description: "Merge-patch outputSchema using an inline JSON object"
+      description: "Replace outputSchema using an inline JSON object"
     }),
     "output-schema-file": Flags.string({
-      description: "Merge-patch outputSchema using a JSON file"
+      description: "Replace outputSchema using a JSON file"
     }),
     profile: Flags.string({
       description: "Use a configured server profile"
@@ -99,19 +99,12 @@ export default class ScriptPatchCommand extends BaseCommand {
         jsonFlag: "`--input-schema-json`",
         fileFlag: "`--input-schema-file`"
       });
-      if (inputSchema !== undefined) {
-        setPatchField(patch, "inputSchema", inputSchema);
-      }
-
       const outputSchema = parseSchemaInput(flags["output-schema-json"], flags["output-schema-file"], {
         jsonFlag: "`--output-schema-json`",
         fileFlag: "`--output-schema-file`"
       });
-      if (outputSchema !== undefined) {
-        setPatchField(patch, "outputSchema", outputSchema);
-      }
 
-      if (Object.keys(patch).length === 0) {
+      if (Object.keys(patch).length === 0 && inputSchema === undefined && outputSchema === undefined) {
         throw new ActionDockCliError("至少需要提供一个 Patch 字段。", 2);
       }
 
@@ -119,6 +112,18 @@ export default class ScriptPatchCommand extends BaseCommand {
         serverUrl: resolveServerUrl(flags),
         token: resolveToken(flags)
       });
+
+      // Schema 标志使用替换语义：先获取当前 schema，为被删除的属性生成 null 条目
+      if (inputSchema !== undefined || outputSchema !== undefined) {
+        const current = await client.getScript(args.scriptId, true);
+        if (inputSchema !== undefined) {
+          setPatchField(patch, "inputSchema", buildSchemaReplacePatch(current.inputSchema, inputSchema));
+        }
+        if (outputSchema !== undefined) {
+          setPatchField(patch, "outputSchema", buildSchemaReplacePatch(current.outputSchema, outputSchema));
+        }
+      }
+
       const script = await client.patchScript(args.scriptId, patch);
 
       if (flags.json) {

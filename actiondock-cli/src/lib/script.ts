@@ -51,6 +51,45 @@ export function parseSchemaInput(
   return parsed;
 }
 
+/**
+ * 构建用于替换 schema 的 Merge Patch。
+ * <p>
+ * 当用户通过 --input-schema-json / --output-schema-json 提供新 schema 时，
+ * 期望的是"全量替换"语义（省略字段即删除），而非 RFC 7396 的增量合并。
+ * 此函数对比当前 schema 和新 schema，为被删除的 properties 生成 null 条目，
+ * 使得后端的 merge 逻辑能正确移除字段。
+ */
+export function buildSchemaReplacePatch(
+  currentSchema: Record<string, unknown> | undefined | null,
+  newSchema: Record<string, unknown>
+): Record<string, unknown> {
+  const currentProps = extractSchemaProperties(currentSchema);
+  const newProps = extractSchemaProperties(newSchema);
+
+  // 为当前存在但新 schema 中不存在的属性添加 null 条目
+  const patchProps: Record<string, unknown> = { ...newProps };
+  for (const key of Object.keys(currentProps)) {
+    if (!(key in patchProps)) {
+      patchProps[key] = null;
+    }
+  }
+
+  // 构建结果：使用新 schema 的所有顶层键，替换 properties 为 null 增强版本
+  const result: Record<string, unknown> = { ...newSchema };
+  result.properties = patchProps;
+  return result;
+}
+
+function extractSchemaProperties(schema: Record<string, unknown> | undefined | null): Record<string, unknown> {
+  if (!schema || !("properties" in schema)) {
+    return {};
+  }
+  const props = schema.properties;
+  return typeof props === "object" && props !== null && !Array.isArray(props)
+    ? (props as Record<string, unknown>)
+    : {};
+}
+
 export function parsePatchObject(
   patchJson: string | undefined,
   patchFile: string | undefined
