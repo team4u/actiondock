@@ -24,6 +24,10 @@ export default defineConfig({
       "/api": {
         target: "http://localhost:5177",
         changeOrigin: true
+      },
+      "/actuator": {
+        target: "http://localhost:5177",
+        changeOrigin: true
       }
     }
   }
