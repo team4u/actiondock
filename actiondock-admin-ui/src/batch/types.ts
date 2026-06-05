@@ -14,6 +14,7 @@ export type BatchItemStatus =
   | "RUNNING"
   | "SUCCESS"
   | "FAILED"
+  | "CANCELED"
   | "SUBMIT_FAILED"
   | "SKIPPED"
   | "INTERRUPTED";

@@ -28,6 +28,8 @@ import java.util.concurrent.Executor;
  * @author jay.wu
  */
 public class ExecutionApplicationService {
+    private static final String EXECUTION_CANCELED_MESSAGE = "执行已取消";
+
     private final ScriptRepository scriptRepository;
     private final ExecutionRepository executionRepository;
     private final ScriptEngine scriptEngine;
@@ -188,6 +190,9 @@ public class ExecutionApplicationService {
     private ExecutionRecord run(ScriptDefinition definition, ExecutionRecord record) {
         ExecutionLogCollector logCollector = new ExecutionLogCollector(record, executionRepository);
         try {
+            if (isExecutionCanceled(record.getId())) {
+                return get(record.getId());
+            }
             record.setStatus(ExecutionStatus.RUNNING);
             record.setStartedAt(LocalDateTime.now());
             executionRepository.save(record);
@@ -233,12 +238,22 @@ public class ExecutionApplicationService {
 
     private void markFailedOnFatalError(ExecutionRecord record, Throwable t) {
         try {
+            if (isExecutionCanceled(record.getId())) {
+                return;
+            }
             record.setStatus(ExecutionStatus.FAILED);
             record.setErrorMessage("致命错误: " + t.getClass().getName());
             record.setFinishedAt(LocalDateTime.now());
             executionRepository.save(record);
         } catch (Exception ignored) {
         }
+    }
+
+    private boolean isExecutionCanceled(String executionId) {
+        return executionRepository.findById(executionId)
+                .map(ExecutionRecord::getStatus)
+                .filter(status -> status == ExecutionStatus.CANCELED)
+                .isPresent();
     }
 
     /**
@@ -282,9 +297,34 @@ public class ExecutionApplicationService {
     }
 
     /**
+     * 取消执行记录。
+     * <p>
+     * 仅允许取消仍处于 PENDING 或 RUNNING 的记录。取消后记录进入 CANCELED 终态，
+     * 后续后台执行完成时不会覆盖该状态。
+     *
+     * @param id 执行记录 ID
+     * @return 取消后的执行记录
+     */
+    public ExecutionRecord cancel(String id) {
+        ExecutionRecord record = get(id);
+        if (!record.isActive()) {
+            throw ActionDockException.conflict(
+                    ActionDockErrorCodes.EXECUTION_NOT_ACTIVE,
+                    "执行已结束，无法取消",
+                    Map.of("executionId", record.getId(), "status", record.getStatus().name())
+            );
+        }
+        record.setStatus(ExecutionStatus.CANCELED);
+        record.setErrorMessage(EXECUTION_CANCELED_MESSAGE);
+        record.setErrorDetail(null);
+        record.setFinishedAt(LocalDateTime.now());
+        return executionRepository.save(record);
+    }
+
+    /**
      * 删除执行记录。
      * <p>
-     * 仅允许删除已完成（SUCCESS 或 FAILED）的执行记录，进行中的记录无法删除。
+     * 仅允许删除已结束（SUCCESS、FAILED 或 CANCELED）的执行记录，进行中的记录无法删除。
      *
      * @param id 执行记录 ID
      * @throws IllegalArgumentException 如果记录不存在或仍在执行中
@@ -303,7 +343,7 @@ public class ExecutionApplicationService {
     /**
      * 清除指定脚本的所有执行记录。
      * <p>
-     * 仅删除已完成（SUCCESS 或 FAILED）的记录。如果存在进行中的记录，将抛出异常。
+     * 仅删除已结束（SUCCESS、FAILED 或 CANCELED）的记录。如果存在进行中的记录，将抛出异常。
      *
      * @param scriptId 脚本 ID
      * @throws IllegalArgumentException 如果 scriptId 为空或存在仍在执行中的记录

@@ -13,5 +13,7 @@ public enum ExecutionStatus {
     /** 执行成功，脚本正常完成 */
     SUCCESS,
     /** 执行失败，脚本执行过程中发生错误 */
-    FAILED
+    FAILED,
+    /** 执行已取消，由用户或系统主动终止 */
+    CANCELED
 }

@@ -859,6 +859,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                           currentExecution={execution.currentExecution}
                           executionHistory={execution.executionHistory}
                           historyLoading={execution.historyLoading}
+                          cancelingExecutionId={execution.cancelingExecutionId}
                           deletingExecutionId={execution.deletingExecutionId}
                           clearingExecutionHistory={execution.clearingExecutionHistory}
                           pollingExecutionId={execution.pollingExecutionId}
@@ -866,6 +867,7 @@ export function ScriptEditorPage({ colorMode, mode }: ScriptEditorPageProps) {
                           editorTheme={editorTheme}
                           onExecute={execution.handleExecute}
                           onResetExecutionInput={execution.handleResetExecutionInput}
+                          onCancelExecution={execution.handleCancelExecution}
                           onDeleteExecution={execution.handleDeleteExecution}
                           onClearExecutionHistory={execution.handleClearExecutionHistory}
                           onRefreshHistory={() => void execution.loadExecutionHistory(editor.currentScript!.id)}

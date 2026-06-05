@@ -2,7 +2,8 @@ import {
   ArrowLeftOutlined,
   DeleteOutlined,
   PlayCircleOutlined,
-  QuestionCircleOutlined
+  QuestionCircleOutlined,
+  StopOutlined
 } from "@ant-design/icons";
 import {
   Alert,
@@ -33,7 +34,7 @@ import {
   getSchedule,
   updateSchedule
 } from "../../triggers/api";
-import { executePublishedScript, listExecutionsByScheduleId } from "../../executions/api";
+import { cancelExecution, executePublishedScript, listExecutionsByScheduleId } from "../../executions/api";
 import { listScripts } from "../../scripts/api";
 import { buildExecutionInputFromValues, type ObjectInputMode } from "../../../services/commands";
 import { ConfirmDangerAction } from "../../../components/common/ConfirmDangerAction";
@@ -116,6 +117,7 @@ export function ScheduleEditorPage({ colorMode, mode }: ScheduleEditorPageProps)
   const debugPanelRef = useRef<HTMLDivElement | null>(null);
   const [historyRecords, setHistoryRecords] = useState<ExecutionRecord[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [cancelingExecutionId, setCancelingExecutionId] = useState<string | null>(null);
   const [historyDetailRecord, setHistoryDetailRecord] = useState<ExecutionRecord | null>(null);
   const [historyDetailOpen, setHistoryDetailOpen] = useState(false);
   const { pollingExecutionId, startPolling, clearPolling } = usePollingExecution({
@@ -258,6 +260,26 @@ export function ScheduleEditorPage({ colorMode, mode }: ScheduleEditorPageProps)
     }
   };
 
+  const handleCancelHistoryExecution = async (record: ExecutionRecord) => {
+    setCancelingExecutionId(record.id);
+    try {
+      if (pollingExecutionId === record.id) {
+        clearPolling();
+      }
+      const canceled = await cancelExecution(record.id);
+      setHistoryRecords((previous) => [canceled, ...previous.filter((item) => item.id !== canceled.id)]);
+      setHistoryDetailRecord((previous) => (previous?.id === canceled.id ? canceled : previous));
+      if (debugResult?.id === canceled.id) {
+        setDebugResult(canceled);
+      }
+      messageApi.success("执行已取消");
+    } catch (error) {
+      messageApi.error(getErrorMessage(error, "取消执行失败"));
+    } finally {
+      setCancelingExecutionId(null);
+    }
+  };
+
   useEffect(() => {
     let disposed = false;
 
@@ -291,7 +313,7 @@ export function ScheduleEditorPage({ colorMode, mode }: ScheduleEditorPageProps)
         const detail = error instanceof ApiError || error instanceof Error ? error.message : "加载定时任务失败";
         messageApi.error(detail);
         if (mode === "edit") {
-          navigate("/webhooks", { replace: true });
+          navigate("/schedules", { replace: true });
         }
       } finally {
         if (!disposed) {
@@ -403,7 +425,7 @@ export function ScheduleEditorPage({ colorMode, mode }: ScheduleEditorPageProps)
     try {
       await deleteSchedule(currentSchedule.id);
       messageApi.success("定时任务已删除");
-      navigate("/webhooks", { replace: true });
+      navigate("/schedules", { replace: true });
     } catch (error) {
       const detail = error instanceof ApiError ? error.message : "删除定时任务失败";
       messageApi.error(detail);
@@ -523,7 +545,7 @@ export function ScheduleEditorPage({ colorMode, mode }: ScheduleEditorPageProps)
                   type="link"
                   icon={<ArrowLeftOutlined />}
                   style={{ paddingInline: 0 }}
-                  onClick={() => navigate("/webhooks")}
+                  onClick={() => navigate("/schedules")}
                 >
                   返回列表
                 </Button>
@@ -771,6 +793,32 @@ export function ScheduleEditorPage({ colorMode, mode }: ScheduleEditorPageProps)
                           key: "finishedAt",
                           width: 170,
                           render: (value?: string) => formatDateTime(value)
+                        },
+                        {
+                          title: "操作",
+                          key: "actions",
+                          width: 120,
+                          render: (_: unknown, record: ExecutionRecord) => (
+                            <ConfirmDangerAction
+                              title="确认取消这次执行？"
+                              description="取消后执行记录会进入 CANCELED 状态，定时任务后续可继续触发。"
+                              okText="取消执行"
+                              onConfirm={() => void handleCancelHistoryExecution(record)}
+                              loading={cancelingExecutionId === record.id}
+                              disabled={!isExecutionActive(record.status)}
+                            >
+                              <Button
+                                type="link"
+                                size="small"
+                                icon={<StopOutlined />}
+                                disabled={!isExecutionActive(record.status)}
+                                loading={cancelingExecutionId === record.id}
+                                onClick={(event) => event.stopPropagation()}
+                              >
+                                取消
+                              </Button>
+                            </ConfirmDangerAction>
+                          )
                         }
                       ]}
                       dataSource={historyRecords}

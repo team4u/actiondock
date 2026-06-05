@@ -30,6 +30,9 @@ class ExecutionLogCollector {
 
     void append(ExecutionLogLevel level, String message) {
         synchronized (monitor) {
+            if (isCurrentRecordCanceled()) {
+                return;
+            }
             record.addLog(new ExecutionLogEntry()
                     .setLevel(level)
                     .setMessage(message)
@@ -44,6 +47,9 @@ class ExecutionLogCollector {
 
     ExecutionRecord completeSuccess(Map<String, Object> output) {
         synchronized (monitor) {
+            if (isCurrentRecordCanceled()) {
+                return currentRecord();
+            }
             record.setOutput(output);
             record.setErrorMessage(null);
             record.setErrorDetail(null);
@@ -68,6 +74,9 @@ class ExecutionLogCollector {
 
     ExecutionRecord completeFailure(String message, ErrorDetail detail) {
         synchronized (monitor) {
+            if (isCurrentRecordCanceled()) {
+                return currentRecord();
+            }
             record.setStatus(ExecutionStatus.FAILED);
             record.setErrorMessage(message);
             record.setErrorDetail(detail);
@@ -83,5 +92,13 @@ class ExecutionLogCollector {
             log.log(System.Logger.Level.WARNING, "保存执行记录失败: " + record.getId(), ex);
             return record;
         }
+    }
+
+    private boolean isCurrentRecordCanceled() {
+        return currentRecord().getStatus() == ExecutionStatus.CANCELED;
+    }
+
+    private ExecutionRecord currentRecord() {
+        return executionRepository.findById(record.getId()).orElse(record);
     }
 }

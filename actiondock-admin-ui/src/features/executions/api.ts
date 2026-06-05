@@ -45,6 +45,12 @@ export function deleteExecution(id: string): Promise<void> {
   });
 }
 
+export function cancelExecution(id: string): Promise<ExecutionRecord> {
+  return request<ExecutionRecord>(`/api/executions/${id}/cancel`, {
+    method: "POST"
+  });
+}
+
 export function clearExecutions(scriptId: string): Promise<void> {
   const params = new URLSearchParams({ scriptId });
   return request<void>(`/api/executions?${params.toString()}`, {

@@ -13,6 +13,7 @@ public final class ActionDockErrorCodes {
     public static final String CONFIG_VALUE_EXISTS = "CONFIG_VALUE_EXISTS";
     public static final String CONFIG_VALUE_NOT_FOUND = "CONFIG_VALUE_NOT_FOUND";
     public static final String EXECUTION_IN_PROGRESS = "EXECUTION_IN_PROGRESS";
+    public static final String EXECUTION_NOT_ACTIVE = "EXECUTION_NOT_ACTIVE";
     public static final String EXECUTION_NOT_FOUND = "EXECUTION_NOT_FOUND";
     public static final String PLUGIN_ACTION_NOT_FOUND = "PLUGIN_ACTION_NOT_FOUND";
     public static final String PLUGIN_INVALID_ARGUMENTS = "PLUGIN_INVALID_ARGUMENTS";

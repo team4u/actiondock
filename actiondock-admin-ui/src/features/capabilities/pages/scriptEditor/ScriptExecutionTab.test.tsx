@@ -102,6 +102,7 @@ describe("ScriptExecutionTab", () => {
         currentExecution={execution}
         executionHistory={[execution]}
         historyLoading={false}
+        cancelingExecutionId={null}
         deletingExecutionId={null}
         clearingExecutionHistory={false}
         pollingExecutionId={null}
@@ -109,6 +110,7 @@ describe("ScriptExecutionTab", () => {
         editorTheme="vs-light"
         onExecute={async () => undefined}
         onResetExecutionInput={() => undefined}
+        onCancelExecution={async () => undefined}
         onDeleteExecution={async () => undefined}
         onClearExecutionHistory={async () => undefined}
         onRefreshHistory={() => undefined}

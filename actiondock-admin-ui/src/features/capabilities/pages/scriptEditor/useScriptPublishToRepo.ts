@@ -292,7 +292,7 @@ export function useScriptPublishToRepo({
         owner: script.owner ?? defaultOwner,
         releaseNotes: "",
         tags: toTagOptions(script.tags),
-        scheduleIds: []
+        scheduleIds: relatedSchedules.map((s) => s.id)
       });
       if (initialValues) {
         publishForm.setFieldsValue(initialValues);

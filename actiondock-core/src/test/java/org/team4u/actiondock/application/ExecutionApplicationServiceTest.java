@@ -403,6 +403,102 @@ class ExecutionApplicationServiceTest {
     }
 
     @Test
+    void cancelMarksPendingExecutionAsCanceled() {
+        ExecutionApplicationService service = new ExecutionApplicationService(
+                scriptRepository,
+                executionRepository,
+                scriptEngine,
+                Runnable::run
+        );
+        executionRepository.save(record("exec-1", "script-1", ExecutionStatus.PENDING));
+
+        ExecutionRecord record = service.cancel("exec-1");
+
+        assertThat(record.getStatus()).isEqualTo(ExecutionStatus.CANCELED);
+        assertThat(record.getErrorMessage()).isEqualTo("执行已取消");
+        assertThat(record.getFinishedAt()).isNotNull();
+    }
+
+    @Test
+    void cancelMarksRunningExecutionAsCanceled() {
+        ExecutionApplicationService service = new ExecutionApplicationService(
+                scriptRepository,
+                executionRepository,
+                scriptEngine,
+                Runnable::run
+        );
+        executionRepository.save(record("exec-1", "script-1", ExecutionStatus.RUNNING));
+
+        ExecutionRecord record = service.cancel("exec-1");
+
+        assertThat(record.getStatus()).isEqualTo(ExecutionStatus.CANCELED);
+        assertThat(executionRepository.findById("exec-1").orElseThrow().getStatus()).isEqualTo(ExecutionStatus.CANCELED);
+    }
+
+    @Test
+    void cancelRejectsCompletedExecution() {
+        ExecutionApplicationService service = new ExecutionApplicationService(
+                scriptRepository,
+                executionRepository,
+                scriptEngine,
+                Runnable::run
+        );
+        executionRepository.save(record("exec-1", "script-1", ExecutionStatus.SUCCESS));
+
+        assertThatThrownBy(() -> service.cancel("exec-1"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("执行已结束，无法取消");
+    }
+
+    @Test
+    void canceledAsyncExecutionIsNotStarted() {
+        scriptRepository.save(new ScriptDefinition().setId("script-1").setSource("return [:]"));
+        when(scriptEngine.execute(any(), any(), any())).thenReturn(Map.of("message", "done"));
+        ControllableExecutor executor = new ControllableExecutor();
+        ExecutionApplicationService service = new ExecutionApplicationService(
+                scriptRepository,
+                executionRepository,
+                scriptEngine,
+                executor
+        );
+
+        ExecutionRecord record = service.execute("script-1", Map.of(), SubmitMode.ASYNC);
+        service.cancel(record.getId());
+        executor.runAll();
+
+        assertThat(executionRepository.findById(record.getId()).orElseThrow().getStatus()).isEqualTo(ExecutionStatus.CANCELED);
+        assertThat(executionRepository.savedSnapshots)
+                .extracting(ExecutionRecord::getStatus)
+                .containsExactly(ExecutionStatus.PENDING, ExecutionStatus.CANCELED);
+    }
+
+    @Test
+    void canceledRunningExecutionIsNotOverwrittenBySuccess() {
+        scriptRepository.save(new ScriptDefinition().setId("script-1").setSource("return [:]"));
+        ExecutionApplicationService[] holder = new ExecutionApplicationService[1];
+        when(scriptEngine.execute(any(), any(), any())).thenAnswer(invocation -> {
+            ScriptExecutionContext context = invocation.getArgument(2);
+            holder[0].cancel(context.getExecutionId());
+            return Map.of("message", "done");
+        });
+        ExecutionApplicationService service = new ExecutionApplicationService(
+                scriptRepository,
+                executionRepository,
+                scriptEngine,
+                Runnable::run
+        );
+        holder[0] = service;
+
+        ExecutionRecord record = service.execute("script-1", Map.of(), SubmitMode.SYNC);
+
+        assertThat(record.getStatus()).isEqualTo(ExecutionStatus.CANCELED);
+        assertThat(executionRepository.findById(record.getId()).orElseThrow().getStatus()).isEqualTo(ExecutionStatus.CANCELED);
+        assertThat(executionRepository.savedSnapshots)
+                .extracting(ExecutionRecord::getStatus)
+                .containsExactly(ExecutionStatus.RUNNING, ExecutionStatus.CANCELED);
+    }
+
+    @Test
     void clearRemovesExecutionsForSingleScriptOnly() {
         ExecutionApplicationService service = new ExecutionApplicationService(
                 scriptRepository,

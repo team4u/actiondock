@@ -2,6 +2,7 @@ import type { FormInstance } from "antd";
 import type { MessageInstance } from "antd/es/message/interface";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  cancelExecution,
   clearExecutions,
   deleteExecution,
   listExecutions
@@ -47,6 +48,7 @@ export interface ScriptExecutionContext {
   closeExecutionDetail: () => void;
   executing: boolean;
   historyLoading: boolean;
+  cancelingExecutionId: string | null;
   deletingExecutionId: string | null;
   clearingExecutionHistory: boolean;
   pollingExecutionId: string | null;
@@ -60,6 +62,7 @@ export interface ScriptExecutionContext {
   supportsSchemaForm: boolean;
   executionInitialState: ReturnType<typeof buildSchemaFieldInitialState>;
   handleExecute: () => Promise<void>;
+  handleCancelExecution: (record: ExecutionRecord) => Promise<void>;
   handleDeleteExecution: (record: ExecutionRecord) => Promise<void>;
   handleClearExecutionHistory: () => Promise<void>;
   handleExecutionInputModeChange: (nextMode: string) => void;
@@ -100,6 +103,7 @@ export function useScriptExecution({
   const [executionValidationError, setExecutionValidationError] = useState<ValidationErrorData | null>(null);
   const [executing, setExecuting] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [cancelingExecutionId, setCancelingExecutionId] = useState<string | null>(null);
   const [deletingExecutionId, setDeletingExecutionId] = useState<string | null>(null);
   const [clearingExecutionHistory, setClearingExecutionHistory] = useState(false);
   const currentScriptRef = useRef(currentScript);
@@ -357,6 +361,23 @@ export function useScriptExecution({
     }
   };
 
+  const handleCancelExecution = async (record: ExecutionRecord) => {
+    setCancelingExecutionId(record.id);
+    try {
+      if (pollingExecutionId === record.id) {
+        clearPolling();
+      }
+      const canceled = await cancelExecution(record.id);
+      syncExecutionState([canceled, ...executionHistory.filter((item) => item.id !== canceled.id)], canceled.id);
+      messageApi.success("执行已取消");
+    } catch (error) {
+      const detail = error instanceof ApiError ? error.message : "取消执行失败";
+      messageApi.error(detail);
+    } finally {
+      setCancelingExecutionId(null);
+    }
+  };
+
   const handleClearExecutionHistory = async () => {
     if (!currentScript?.id) return;
 
@@ -389,6 +410,7 @@ export function useScriptExecution({
     closeExecutionDetail,
     executing,
     historyLoading,
+    cancelingExecutionId,
     deletingExecutionId,
     clearingExecutionHistory,
     pollingExecutionId,
@@ -402,6 +424,7 @@ export function useScriptExecution({
     supportsSchemaForm,
     executionInitialState,
     handleExecute,
+    handleCancelExecution,
     handleDeleteExecution,
     handleClearExecutionHistory,
     handleExecutionInputModeChange,

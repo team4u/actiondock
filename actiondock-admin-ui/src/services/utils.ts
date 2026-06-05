@@ -6,6 +6,8 @@ export function getExecutionStatusColor(status?: ExecutionStatus): string {
       return "green";
     case "FAILED":
       return "red";
+    case "CANCELED":
+      return "default";
     case "RUNNING":
       return "processing";
     case "PENDING":

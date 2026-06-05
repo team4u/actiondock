@@ -7,7 +7,8 @@ import {
   EyeOutlined,
   HistoryOutlined,
   PlayCircleOutlined,
-  ReloadOutlined
+  ReloadOutlined,
+  StopOutlined
 } from "@ant-design/icons";
 import { Col } from "../../../../components/common/SafeCol";
 import { ConfirmDangerAction } from "../../../../components/common/ConfirmDangerAction";
@@ -50,6 +51,7 @@ interface ScriptExecutionTabProps {
   currentExecution: ExecutionRecord | null;
   executionHistory: ExecutionRecord[];
   historyLoading: boolean;
+  cancelingExecutionId: string | null;
   deletingExecutionId: string | null;
   clearingExecutionHistory: boolean;
   pollingExecutionId: string | null;
@@ -57,6 +59,7 @@ interface ScriptExecutionTabProps {
   editorTheme: "vs-light" | "vs-dark";
   onExecute: () => Promise<void>;
   onResetExecutionInput: () => void;
+  onCancelExecution: (record: ExecutionRecord) => Promise<void>;
   onDeleteExecution: (record: ExecutionRecord) => Promise<void>;
   onClearExecutionHistory: () => Promise<void>;
   onRefreshHistory: () => void;
@@ -90,6 +93,7 @@ export function ScriptExecutionTab({
   currentExecution,
   executionHistory,
   historyLoading,
+  cancelingExecutionId,
   deletingExecutionId,
   clearingExecutionHistory,
   pollingExecutionId,
@@ -97,6 +101,7 @@ export function ScriptExecutionTab({
   editorTheme,
   onExecute,
   onResetExecutionInput,
+  onCancelExecution,
   onDeleteExecution,
   onClearExecutionHistory,
   onRefreshHistory,
@@ -152,7 +157,7 @@ export function ScriptExecutionTab({
     {
       title: "操作",
       key: "actions",
-      width: 180,
+      width: 240,
       render: (_: unknown, record) => (
         <Space size={4}>
           <Button
@@ -167,6 +172,25 @@ export function ScriptExecutionTab({
           >
             详情
           </Button>
+          <ConfirmDangerAction
+            title="确认取消这次执行？"
+            description="取消后执行记录会进入 CANCELED 状态，定时任务后续可继续触发。"
+            okText="取消执行"
+            onConfirm={() => void onCancelExecution(record)}
+            loading={cancelingExecutionId === record.id}
+            disabled={!isExecutionActive(record.status)}
+          >
+            <Button
+              type="link"
+              size="small"
+              icon={<StopOutlined />}
+              disabled={!isExecutionActive(record.status)}
+              loading={cancelingExecutionId === record.id}
+              onClick={(event) => event.stopPropagation()}
+            >
+              取消
+            </Button>
+          </ConfirmDangerAction>
           <ConfirmDangerAction
             title="确认删除这条执行记录？"
             onConfirm={() => void onDeleteExecution(record)}

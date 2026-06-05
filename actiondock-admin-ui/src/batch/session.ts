@@ -13,6 +13,7 @@ const ACTIVE_BATCH_ITEM_STATUSES = new Set<BatchItemStatus>(["SUBMITTING", "PEND
 const FINISHED_BATCH_ITEM_STATUSES = new Set<BatchItemStatus>([
   "SUCCESS",
   "FAILED",
+  "CANCELED",
   "SUBMIT_FAILED",
   "SKIPPED",
   "INTERRUPTED",
@@ -98,6 +99,7 @@ export function deriveBatchSessionStatus(items: BatchSession["items"]): BatchSes
 
   const successCount = items.filter((item) => item.status === "SUCCESS").length;
   const interruptedCount = items.filter((item) => item.status === "INTERRUPTED").length;
+  const canceledCount = items.filter((item) => item.status === "CANCELED").length;
   const failureCount = items.filter((item) =>
     item.status === "FAILED" ||
     item.status === "SUBMIT_FAILED" ||
@@ -108,11 +110,11 @@ export function deriveBatchSessionStatus(items: BatchSession["items"]): BatchSes
   if (successCount === items.length) {
     return "SUCCESS";
   }
-  if (interruptedCount > 0 && successCount === 0 && failureCount === 0 && skippedCount === 0) {
+  if (interruptedCount + canceledCount > 0 && successCount === 0 && failureCount === 0 && skippedCount === 0) {
     return "INTERRUPTED";
   }
-  if (successCount === 0 && failureCount + interruptedCount + skippedCount === items.length) {
-    return interruptedCount > 0 ? "INTERRUPTED" : "FAILED";
+  if (successCount === 0 && failureCount + interruptedCount + canceledCount + skippedCount === items.length) {
+    return interruptedCount + canceledCount > 0 ? "INTERRUPTED" : "FAILED";
   }
   return "PARTIAL_FAILED";
 }
@@ -172,6 +174,7 @@ export function buildBatchSessionStats(session: BatchSession | null): BatchSessi
         stats.finished += 1;
         break;
       case "INTERRUPTED":
+      case "CANCELED":
         stats.interrupted += 1;
         stats.finished += 1;
         break;

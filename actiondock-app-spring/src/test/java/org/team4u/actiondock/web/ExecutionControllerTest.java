@@ -307,6 +307,27 @@ class ExecutionControllerTest {
     }
 
     @Test
+    void cancelMarksExecutionAsCanceled() throws Exception {
+        when(executionApplicationService.cancel("exec-1")).thenReturn(new ExecutionRecord()
+                .setId("exec-1")
+                .setScriptId("script-1")
+                .setStatus(ExecutionStatus.CANCELED)
+                .setSubmitMode(SubmitMode.ASYNC)
+                .setInput(Map.of("name", "Alice"))
+                .setErrorMessage("执行已取消"));
+        when(scriptApplicationService.get("script-1")).thenReturn(new ScriptDefinition().setId("script-1"));
+
+        mockMvc.perform(post("/api/executions/exec-1/cancel"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.msg").value("已取消"))
+                .andExpect(jsonPath("$.data.id").value("exec-1"))
+                .andExpect(jsonPath("$.data.status").value("CANCELED"))
+                .andExpect(jsonPath("$.data.errorMessage").value("执行已取消"));
+
+        verify(executionApplicationService).cancel("exec-1");
+    }
+
+    @Test
     void clearRemovesExecutionHistoryForScript() throws Exception {
         doNothing().when(executionApplicationService).clear("script-1");
 

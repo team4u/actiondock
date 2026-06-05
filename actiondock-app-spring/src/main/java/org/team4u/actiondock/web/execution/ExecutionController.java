@@ -65,6 +65,19 @@ public class ExecutionController {
     }
 
     /**
+     * 取消仍在等待或运行中的执行记录。
+     *
+     * @param id 执行记录 ID
+     * @return API 响应，包含取消后的执行记录
+     */
+    @PostMapping("/{id}/cancel")
+    public ApiResponse<ExecutionRecordResponse> cancel(@PathVariable String id) {
+        ExecutionRecord record = executionApplicationService.cancel(id);
+        ScriptDefinition scriptDefinition = resolveScriptDefinition(record.getScriptId());
+        return ApiResponse.success(executionResponseMapper.toRecordResponse(record, scriptDefinition), "已取消");
+    }
+
+    /**
      * 查询执行记录列表。
      * <p>
      * 支持 scriptId 或 scheduleId 筛选，两者必须提供其一。
