@@ -1,6 +1,6 @@
 import type { FormInstance } from "antd";
 import type { MessageInstance } from "antd/es/message/interface";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   cancelExecution,
   clearExecutions,
@@ -180,6 +180,24 @@ export function useScriptExecution({
       setHistoryLoading(false);
     }
   };
+
+  const refreshExecutionHistory = useCallback(async () => {
+    const scriptId = currentScriptRef.current?.id;
+    if (!scriptId) return;
+    try {
+      const records = await listExecutions(scriptId);
+      syncExecutionState(records);
+    } catch {
+      // 静默刷新失败时不打扰用户
+    }
+  }, []);
+
+  useEffect(() => {
+    const scriptId = currentScript?.id;
+    if (!scriptId) return;
+    const timer = setInterval(() => void refreshExecutionHistory(), 10_000);
+    return () => clearInterval(timer);
+  }, [currentScript?.id, refreshExecutionHistory]);
 
   useEffect(() => {
     const scriptId = currentScript?.id ?? null;

@@ -336,12 +336,6 @@ export function ScriptExecutionTab({
                         pagination={{ pageSize: 5 }}
                         scroll={{ x: 720 }}
                         locale={{ emptyText: "当前脚本暂无执行结果" }}
-                        onRow={(record: ExecutionRecord) => ({
-                          onClick: () => {
-                            onExecutionHistoryRowClick(record);
-                            onOpenExecutionDetail(record);
-                          }
-                        })}
                         rowClassName={(record: ExecutionRecord) =>
                           record.id === activeExecutionId
                             ? "execution-history-row execution-history-row-active"
