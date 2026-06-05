@@ -10,12 +10,15 @@ import org.team4u.actiondock.application.ConfigValueApplicationService;
 import org.team4u.actiondock.application.ExecutionApplicationService;
 import org.team4u.actiondock.application.ExecutionPresetApplicationService;
 import org.team4u.actiondock.application.PlaybookApplicationService;
+import org.team4u.actiondock.application.PlaybookSessionApplicationService;
 import org.team4u.actiondock.application.SharedStateApplicationService;
 import org.team4u.actiondock.domain.port.ApiAccessTokenRepository;
 import org.team4u.actiondock.domain.port.ConfigValueRepository;
 import org.team4u.actiondock.domain.port.ExecutionPresetRepository;
 import org.team4u.actiondock.domain.port.ExecutionRepository;
+import org.team4u.actiondock.domain.port.JsonCodec;
 import org.team4u.actiondock.domain.port.PlaybookRepository;
+import org.team4u.actiondock.domain.port.PlaybookSessionRepository;
 import org.team4u.actiondock.domain.port.SharedStateRepository;
 import org.team4u.actiondock.domain.port.ScriptEngine;
 import org.team4u.actiondock.domain.port.ScriptRepository;
@@ -90,5 +93,12 @@ public class RuntimeConfiguration {
     public PlaybookApplicationService playbookApplicationService(PlaybookRepository playbookRepository,
                                                                  ScriptRepository scriptRepository) {
         return new PlaybookApplicationService(playbookRepository, scriptRepository);
+    }
+
+    @Bean
+    public PlaybookSessionApplicationService playbookSessionApplicationService(PlaybookRepository playbookRepository,
+                                                                               PlaybookSessionRepository playbookSessionRepository,
+                                                                               JsonCodec jsonCodec) {
+        return new PlaybookSessionApplicationService(playbookRepository, playbookSessionRepository, jsonCodec);
     }
 }

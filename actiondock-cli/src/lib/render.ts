@@ -14,6 +14,8 @@ import type {
   PluginView,
   Playbook,
   PlaybookListItemSummary,
+  PlaybookSession,
+  PlaybookSessionDetail,
   RepositoryDefinition,
   ProjectRepositoryResolution,
   RepositoryWebhookDescriptor,
@@ -322,6 +324,38 @@ export function renderPlaybookDetail(item: Playbook): string {
     lines.push("StopConditions: 0");
   }
   return lines.join("\n");
+}
+
+export function renderPlaybookSession(session: PlaybookSession): string {
+  const lines = [
+    `Session: ${session.id}`,
+    `Playbook: ${session.playbookId}${session.playbookName ? ` (${session.playbookName})` : ""}`,
+    `Status: ${session.status}`,
+    `Phase: ${session.currentPhase}`
+  ];
+  if (session.agentName) lines.push(`Agent: ${session.agentName}`);
+  if (session.agentRunId) lines.push(`AgentRun: ${session.agentRunId}`);
+  if (session.riskLevelSnapshot) lines.push(`Risk: ${session.riskLevelSnapshot}`);
+  if (session.finalSummary) lines.push(`Summary: ${session.finalSummary}`);
+  if (session.failureReason) lines.push(`Failure: ${session.failureReason}`);
+  return lines.join("\n");
+}
+
+export function renderPlaybookSessionDetail(detail: PlaybookSessionDetail, timeline = false): string {
+  if (!timeline) {
+    const lines = [renderPlaybookSession(detail.session)];
+    lines.push(`Events: ${detail.events?.length ?? 0}`);
+    return lines.join("\n");
+  }
+  if (!detail.events || detail.events.length === 0) {
+    return "没有 Trace 事件。";
+  }
+  return detail.events.map((event) => {
+    const decision = event.decision ? ` ${event.decision}` : "";
+    const ref = event.refId ? ` ${event.refType ?? "ref"}:${event.refId}` : "";
+    const reason = event.reason ? ` - ${event.reason}` : event.message ? ` - ${event.message}` : "";
+    return `[${event.phase}] ${event.type}${decision}${ref}${reason}`;
+  }).join("\n");
 }
 
 export function renderWebhookList(items: WebhookDefinition[]): string {

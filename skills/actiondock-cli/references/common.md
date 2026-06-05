@@ -5,7 +5,7 @@
 ## 输出与连接
 
 - 默认使用 `--json`，让输出稳定可机读。
-- 可能很长的 JSON 默认写入文件再读取：`--json --output-file /tmp/actiondock-result.json --overwrite-output`。常见场景包括 `script run --response-view debug`、`execution get`、`plugin invoke`、`playbook get`、`repository resolve` 和项目知识浏览结果。
+- 可能很长的 JSON 默认写入文件再读取：`--json --output-file /tmp/actiondock-result.json --overwrite-output`。常见场景包括 `script run --response-view debug`、`execution get`、`plugin invoke`、`playbook get`、`playbook session show`、`repository resolve` 和项目知识浏览结果。
 - 默认连接本机服务 `http://127.0.0.1:5177`；本地使用不要要求用户先配置连接。
 - 只有连接其他 Server、保存 Token 或频繁切换多个 Server 时，才使用 `actiondock config add/use/list` 管理 profile；临时切换用 `--profile <name>`。
 - 连接解析优先级：`--server` / `--token` > `--profile` > `ACTIONDOCK_BASE_URL` / `ACTIONDOCK_TOKEN` > `ACTIONDOCK_PROFILE` > 当前 profile > 默认本机服务。

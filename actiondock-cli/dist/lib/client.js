@@ -617,6 +617,27 @@ export class ActionDockClient {
             method: "DELETE"
         });
     }
+    async startPlaybookSession(playbookId, payload) {
+        return this.requestJson(`/api/playbooks/${playbookId}/sessions`, {
+            method: "POST",
+            body: JSON.stringify(payload)
+        });
+    }
+    async appendPlaybookSessionEvent(sessionId, payload) {
+        return this.requestJson(`/api/playbook-sessions/${sessionId}/events`, {
+            method: "POST",
+            body: JSON.stringify(payload)
+        });
+    }
+    async getPlaybookSession(sessionId) {
+        return this.requestJson(`/api/playbook-sessions/${sessionId}`);
+    }
+    async completePlaybookSession(sessionId, payload) {
+        return this.requestJson(`/api/playbook-sessions/${sessionId}/complete`, {
+            method: "POST",
+            body: JSON.stringify(payload)
+        });
+    }
     async requestJson(pathname, init) {
         const url = new URL(`${this.options.serverUrl}${pathname}`);
         const method = init?.method ?? "GET";
