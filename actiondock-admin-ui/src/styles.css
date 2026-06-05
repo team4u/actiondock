@@ -962,7 +962,7 @@ a {
 }
 
 .execution-history-row {
-  cursor: pointer;
+  cursor: default;
 }
 
 .script-editor-page .ant-card-head {
