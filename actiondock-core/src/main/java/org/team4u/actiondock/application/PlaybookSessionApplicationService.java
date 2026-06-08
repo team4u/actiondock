@@ -24,6 +24,9 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
+import java.util.stream.Stream;
 
 public class PlaybookSessionApplicationService {
     private static final List<String> SENSITIVE_KEYS = List.of(
@@ -152,6 +155,21 @@ public class PlaybookSessionApplicationService {
                         "Playbook Session 不存在: " + id,
                         Map.of("sessionId", id)
                 ));
+    }
+
+    public List<PlaybookSession> listSessions(String playbookId,
+                                              PlaybookSessionStatus status,
+                                              String agentRunId,
+                                              String intent) {
+        String normalizedPlaybookId = blankToNull(playbookId);
+        String normalizedAgentRunId = blankToNull(agentRunId);
+        Pattern intentPattern = compileIntentPattern(intent);
+        return sessionRepository.findAllSessions().stream()
+                .filter(session -> normalizedPlaybookId == null || normalizedPlaybookId.equals(session.getPlaybookId()))
+                .filter(session -> status == null || status == session.getStatus())
+                .filter(session -> normalizedAgentRunId == null || normalizedAgentRunId.equals(session.getAgentRunId()))
+                .filter(session -> intentPattern == null || matchesIntent(intentPattern, session))
+                .toList();
     }
 
     public List<PlaybookTraceEvent> listEvents(String sessionId) {
@@ -295,6 +313,35 @@ public class PlaybookSessionApplicationService {
 
     private String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private Pattern compileIntentPattern(String intent) {
+        String normalized = blankToNull(intent);
+        if (normalized == null) {
+            return null;
+        }
+        try {
+            return Pattern.compile(normalized, Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+        } catch (PatternSyntaxException exception) {
+            throw new IllegalArgumentException("intent 正则表达式不合法: " + exception.getDescription(), exception);
+        }
+    }
+
+    private boolean matchesIntent(Pattern pattern, PlaybookSession session) {
+        return Stream.of(
+                        session.getId(),
+                        session.getPlaybookId(),
+                        session.getPlaybookName(),
+                        session.getUserPrompt(),
+                        session.getIntent(),
+                        session.getAgentName(),
+                        session.getAgentRunId(),
+                        session.getStatus(),
+                        session.getCurrentPhase()
+                )
+                .filter(Objects::nonNull)
+                .map(String::valueOf)
+                .anyMatch(value -> pattern.matcher(value).find());
     }
 
     private record RedactionResult(Object value, List<String> fields) {

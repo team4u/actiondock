@@ -43,6 +43,11 @@ public class JpaPlaybookSessionRepositoryAdapter implements PlaybookSessionRepos
     }
 
     @Override
+    public List<PlaybookSession> findAllSessions() {
+        return sessionRepository.findAllByOrderByUpdatedAtDescStartedAtDesc().stream().map(this::toDomain).toList();
+    }
+
+    @Override
     public PlaybookTraceEvent saveEvent(PlaybookTraceEvent event) {
         try {
             return toDomain(eventRepository.save(toEntity(event)));

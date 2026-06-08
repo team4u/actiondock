@@ -1565,7 +1565,52 @@ export interface ExecutionPresetUpsertRequest {
 
 export type PlaybookRiskLevel = "LOW" | "MEDIUM" | "HIGH";
 
+export type PlaybookPhase = "ROUTE" | "BOUND" | "EQUIP" | "INVESTIGATE" | "ACT" | "HANDOFF";
 
+export type PlaybookSessionStatus =
+  | "RUNNING"
+  | "WAITING_CONFIRMATION"
+  | "STOPPED"
+  | "HANDED_OFF"
+  | "COMPLETED"
+  | "FAILED"
+  | "CANCELLED";
+
+export type PlaybookTraceEventType =
+  | "PLAYBOOK_CANDIDATES_LISTED"
+  | "PLAYBOOK_SELECTED"
+  | "PLAYBOOK_REJECTED"
+  | "FALLBACK_SELECTED"
+  | "BOUNDARY_READ"
+  | "STOP_CONDITION_CHECKED"
+  | "STOP_CONDITION_HIT"
+  | "RISK_ACCEPTED"
+  | "CONFIRMATION_REQUESTED"
+  | "CONFIRMATION_GRANTED"
+  | "CONFIRMATION_DENIED"
+  | "AGENT_SKILL_HINT_CHECKED"
+  | "AGENT_SKILL_AVAILABLE"
+  | "AGENT_SKILL_UNAVAILABLE"
+  | "GUIDE_READ"
+  | "KNOWLEDGE_REF_SELECTED"
+  | "KNOWLEDGE_REF_READ"
+  | "SCRIPT_SCHEMA_QUERIED"
+  | "SCRIPT_CANDIDATE_SELECTED"
+  | "SCRIPT_CANDIDATE_SKIPPED"
+  | "QUESTION_LIST_CREATED"
+  | "CONTEXT_FIELD_RESOLVED"
+  | "CONTEXT_FIELD_MISSING"
+  | "SCRIPT_EXECUTION_REQUESTED"
+  | "SCRIPT_EXECUTION_STARTED"
+  | "SCRIPT_EXECUTION_FINISHED"
+  | "SCRIPT_EXECUTION_FAILED"
+  | "DIAGNOSIS_EMITTED"
+  | "PLAYBOOK_HANDOFF_SUGGESTED"
+  | "PLAYBOOK_HANDOFF_STARTED"
+  | "SESSION_STARTED"
+  | "SESSION_COMPLETED"
+  | "SESSION_STOPPED"
+  | "SESSION_FAILED";
 
 export interface PlaybookKnowledgeRef {
   type: "NOTE" | "FILE";
@@ -1610,4 +1655,56 @@ export interface Playbook {
   managed: boolean;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface PlaybookSession {
+  id: string;
+  playbookId: string;
+  playbookName?: string | null;
+  playbookVersion?: string | null;
+  playbookSnapshotHash?: string | null;
+  userPrompt?: string | null;
+  intent?: string | null;
+  agentName?: string | null;
+  agentRunId?: string | null;
+  repositoryIds?: string[];
+  riskLevelSnapshot?: PlaybookRiskLevel | null;
+  stopConditionsSnapshot?: string[];
+  status: PlaybookSessionStatus;
+  currentPhase: PlaybookPhase;
+  parentSessionId?: string | null;
+  handoffFromSessionId?: string | null;
+  handoffRelation?: string | null;
+  startedAt?: string | null;
+  updatedAt?: string | null;
+  endedAt?: string | null;
+  finalSummary?: string | null;
+  failureReason?: string | null;
+}
+
+export interface PlaybookTraceEvent {
+  id: string;
+  sessionId: string;
+  externalEventId?: string | null;
+  sequence: number;
+  phase: PlaybookPhase;
+  type: PlaybookTraceEventType;
+  actor?: string | null;
+  message?: string | null;
+  refType?: string | null;
+  refId?: string | null;
+  decision?: string | null;
+  reason?: string | null;
+  observedRisk?: PlaybookRiskLevel | null;
+  stopConditionHit?: boolean;
+  stopCondition?: string | null;
+  payload?: Record<string, unknown>;
+  redacted?: boolean;
+  redactedFields?: string[];
+  createdAt?: string | null;
+}
+
+export interface PlaybookSessionDetail {
+  session: PlaybookSession;
+  events: PlaybookTraceEvent[];
 }

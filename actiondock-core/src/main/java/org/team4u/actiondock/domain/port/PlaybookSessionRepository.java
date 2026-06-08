@@ -11,6 +11,8 @@ public interface PlaybookSessionRepository {
 
     Optional<PlaybookSession> findSessionById(String id);
 
+    List<PlaybookSession> findAllSessions();
+
     PlaybookTraceEvent saveEvent(PlaybookTraceEvent event);
 
     Optional<PlaybookTraceEvent> findEventBySessionIdAndExternalEventId(String sessionId, String externalEventId);

@@ -119,6 +119,24 @@ class PlaybookSessionControllerTest {
                 .andExpect(jsonPath("$.data.finalSummary").value("done"));
     }
 
+    @Test
+    void listsSessions() throws Exception {
+        when(service.listSessions("refund", PlaybookSessionStatus.RUNNING, "run-1", "refund"))
+                .thenReturn(List.of(session().setAgentRunId("run-1")));
+
+        mockMvc.perform(get("/api/playbook-sessions")
+                        .param("playbookId", "refund")
+                        .param("status", "RUNNING")
+                        .param("agentRunId", "run-1")
+                        .param("intent", "refund"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].id").value("pbs-1"))
+                .andExpect(jsonPath("$.data[0].playbookId").value("refund"))
+                .andExpect(jsonPath("$.data[0].status").value("RUNNING"));
+
+        verify(service).listSessions("refund", PlaybookSessionStatus.RUNNING, "run-1", "refund");
+    }
+
     private PlaybookSession session() {
         return new PlaybookSession()
                 .setId("pbs-1")

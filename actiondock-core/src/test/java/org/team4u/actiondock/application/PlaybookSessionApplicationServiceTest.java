@@ -104,6 +104,34 @@ class PlaybookSessionApplicationServiceTest {
                 .hasMessageContaining("已结束");
     }
 
+    @Test
+    void listsSessionsWithFilters() {
+        playbookRepository.save(new Playbook().setId("refund").setName("Refund").setGuideMarkdown("guide"));
+        playbookRepository.save(new Playbook().setId("order").setName("Order").setGuideMarkdown("guide"));
+        PlaybookSession refund = service.startSession("refund", new PlaybookSession()
+                .setUserPrompt("rf_123 退款失败")
+                .setIntent("refund")
+                .setAgentName("cursor")
+                .setAgentRunId("run-1"), Map.of());
+        PlaybookSession order = service.startSession("order", new PlaybookSession()
+                .setUserPrompt("订单状态")
+                .setIntent("order")
+                .setAgentRunId("run-2"), Map.of());
+        service.completeSession(refund.getId(), PlaybookSessionStatus.COMPLETED, "done", null);
+
+        assertThat(service.listSessions(null, null, null, "退款")).extracting(PlaybookSession::getId)
+                .containsExactly(refund.getId());
+        assertThat(service.listSessions("refund", PlaybookSessionStatus.COMPLETED, "run-1", null))
+                .singleElement()
+                .satisfies(session -> {
+                    assertThat(session.getId()).isEqualTo(refund.getId());
+                    assertThat(session.getStatus()).isEqualTo(PlaybookSessionStatus.COMPLETED);
+                });
+        assertThat(service.listSessions("refund", PlaybookSessionStatus.RUNNING, null, null)).isEmpty();
+        assertThat(service.listSessions(null, null, "run-2", null)).extracting(PlaybookSession::getId)
+                .containsExactly(order.getId());
+    }
+
     private static final class InMemoryPlaybookRepository implements PlaybookRepository {
         private final Map<String, Playbook> items = new LinkedHashMap<>();
 
@@ -142,6 +170,14 @@ class PlaybookSessionApplicationServiceTest {
         @Override
         public Optional<PlaybookSession> findSessionById(String id) {
             return Optional.ofNullable(sessions.get(id));
+        }
+
+        @Override
+        public List<PlaybookSession> findAllSessions() {
+            return sessions.values().stream()
+                    .sorted(Comparator.comparing(PlaybookSession::getUpdatedAt, Comparator.nullsLast(Comparator.reverseOrder()))
+                            .thenComparing(PlaybookSession::getStartedAt, Comparator.nullsLast(Comparator.reverseOrder())))
+                    .toList();
         }
 
         @Override

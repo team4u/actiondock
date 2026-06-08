@@ -1,5 +1,5 @@
 import { JSON_HEADERS, request } from "../../shared/api/httpClient";
-import type { Playbook } from "../../shared/types";
+import type { Playbook, PlaybookSession, PlaybookSessionDetail, PlaybookSessionStatus } from "../../shared/types";
 
 export function listPlaybooks(params: {
   repositoryId?: string;
@@ -36,4 +36,23 @@ export function updatePlaybook(id: string, payload: Playbook): Promise<Playbook>
 
 export function deletePlaybook(id: string): Promise<void> {
   return request<void>(`/api/playbooks/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export function listPlaybookSessions(params: {
+  playbookId?: string;
+  status?: PlaybookSessionStatus;
+  agentRunId?: string;
+  intent?: string;
+} = {}): Promise<PlaybookSession[]> {
+  const search = new URLSearchParams();
+  if (params.playbookId) search.set("playbookId", params.playbookId);
+  if (params.status) search.set("status", params.status);
+  if (params.agentRunId) search.set("agentRunId", params.agentRunId);
+  if (params.intent) search.set("intent", params.intent);
+  const suffix = search.toString() ? `?${search.toString()}` : "";
+  return request<PlaybookSession[]>(`/api/playbook-sessions${suffix}`);
+}
+
+export function getPlaybookSession(id: string): Promise<PlaybookSessionDetail> {
+  return request<PlaybookSessionDetail>(`/api/playbook-sessions/${encodeURIComponent(id)}`);
 }

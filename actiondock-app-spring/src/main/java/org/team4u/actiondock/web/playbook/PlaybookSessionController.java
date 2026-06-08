@@ -7,10 +7,12 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import org.team4u.actiondock.application.PlaybookSessionApplicationService;
 import org.team4u.actiondock.domain.model.PlaybookSession;
+import org.team4u.actiondock.domain.model.PlaybookSessionStatus;
 import org.team4u.actiondock.domain.model.PlaybookTraceEvent;
 import org.team4u.actiondock.web.common.ApiResponse;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -49,6 +51,14 @@ public class PlaybookSessionController {
                 service.getSession(sessionId),
                 service.listEvents(sessionId)
         ));
+    }
+
+    @GetMapping("/api/playbook-sessions")
+    public ApiResponse<List<PlaybookSession>> listSessions(String playbookId,
+                                                           PlaybookSessionStatus status,
+                                                           String agentRunId,
+                                                           String intent) {
+        return ApiResponse.success(service.listSessions(playbookId, status, agentRunId, intent));
     }
 
     @PostMapping("/api/playbook-sessions/{sessionId}/complete")

@@ -38,6 +38,7 @@ class JpaPlaybookSessionRepositoryAdapterTest {
             return entity;
         });
         when(sessionRepository.findById("pbs-1")).thenAnswer(invocation -> Optional.ofNullable(storedSession.get()));
+        when(sessionRepository.findAllByOrderByUpdatedAtDescStartedAtDesc()).thenAnswer(invocation -> List.of(storedSession.get()));
         when(eventRepository.save(any())).thenAnswer(invocation -> {
             PlaybookTraceEventEntity entity = invocation.getArgument(0);
             storedEvent.set(entity);
@@ -77,6 +78,8 @@ class JpaPlaybookSessionRepositoryAdapterTest {
         assertThat(storedEvent.get().getPayloadJson()).contains("refundId");
         assertThat(event.getPayload()).containsEntry("field", "refundId");
         assertThat(adapter.findSessionById("pbs-1")).isPresent();
+        assertThat(adapter.findAllSessions()).singleElement().satisfies(value ->
+                assertThat(value.getId()).isEqualTo("pbs-1"));
         assertThat(adapter.findEventsBySessionId("pbs-1")).singleElement().satisfies(value ->
                 assertThat(value.getType()).isEqualTo(PlaybookTraceEventType.STOP_CONDITION_CHECKED));
         assertThat(adapter.nextSequence("pbs-1")).isEqualTo(2);
