@@ -101,6 +101,16 @@ export function renderPlaybookSession(session) {
         lines.push(`Failure: ${session.failureReason}`);
     return lines.join("\n");
 }
+export function renderPlaybookSessionList(items) {
+    if (items.length === 0) {
+        return "没有 Playbook Session。";
+    }
+    return items.map((session) => {
+        const agent = session.agentRunId ? ` agentRun=${session.agentRunId}` : session.agentName ? ` agent=${session.agentName}` : "";
+        const risk = session.riskLevelSnapshot ? ` risk=${session.riskLevelSnapshot}` : "";
+        return `${session.id} playbook=${session.playbookId} status=${session.status} phase=${session.currentPhase}${agent}${risk}`;
+    }).join("\n");
+}
 export function renderPlaybookSessionDetail(detail, timeline = false) {
     if (!timeline) {
         const lines = [renderPlaybookSession(detail.session)];

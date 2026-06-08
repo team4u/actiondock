@@ -44,6 +44,19 @@ export class PlaybookApi {
             body: JSON.stringify(payload)
         });
     }
+    async listSessions(params = {}) {
+        const search = new URLSearchParams();
+        if (params.playbookId)
+            search.set("playbookId", params.playbookId);
+        if (params.status)
+            search.set("status", params.status);
+        if (params.agentRunId)
+            search.set("agentRunId", params.agentRunId);
+        if (params.intent)
+            search.set("intent", params.intent);
+        const suffix = search.toString() ? `?${search.toString()}` : "";
+        return this.transport.requestJson(`/api/playbook-sessions${suffix}`);
+    }
     async appendSessionEvent(sessionId, payload) {
         return this.transport.requestJson(`/api/playbook-sessions/${sessionId}/events`, {
             method: "POST",

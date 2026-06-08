@@ -1,12 +1,4 @@
-import type {
-  Playbook,
-  PlaybookPhase,
-  PlaybookSession,
-  PlaybookSessionDetail,
-  PlaybookSessionStatus,
-  PlaybookTraceEventAppendResponse,
-  PlaybookTraceEventType,
-} from "../types.js";
+import type { Playbook } from "../types.js";
 import type { HttpTransport } from "./http-transport.js";
 
 export class PlaybookApi {
@@ -54,59 +46,6 @@ export class PlaybookApi {
   async delete(playbookId: string): Promise<void> {
     await this.transport.requestJson<null>(`/api/playbooks/${playbookId}`, {
       method: "DELETE"
-    });
-  }
-
-  async startSession(playbookId: string, payload: {
-    userPrompt?: string;
-    intent?: string;
-    agentName?: string;
-    agentRunId?: string;
-    parentSessionId?: string;
-    handoffFromSessionId?: string;
-    handoffRelation?: string;
-    selectedFrom?: Record<string, unknown>;
-    candidatePlaybookIds?: string[];
-  }): Promise<PlaybookSession> {
-    return this.transport.requestJson<PlaybookSession>(`/api/playbooks/${playbookId}/sessions`, {
-      method: "POST",
-      body: JSON.stringify(payload)
-    });
-  }
-
-  async appendSessionEvent(sessionId: string, payload: {
-    externalEventId?: string;
-    phase: PlaybookPhase;
-    type: PlaybookTraceEventType;
-    actor?: string;
-    message?: string;
-    refType?: string;
-    refId?: string;
-    decision?: string;
-    reason?: string;
-    observedRisk?: string;
-    stopConditionHit?: boolean;
-    stopCondition?: string;
-    payload?: Record<string, unknown>;
-  }): Promise<PlaybookTraceEventAppendResponse> {
-    return this.transport.requestJson<PlaybookTraceEventAppendResponse>(`/api/playbook-sessions/${sessionId}/events`, {
-      method: "POST",
-      body: JSON.stringify(payload)
-    });
-  }
-
-  async getSession(sessionId: string): Promise<PlaybookSessionDetail> {
-    return this.transport.requestJson<PlaybookSessionDetail>(`/api/playbook-sessions/${sessionId}`);
-  }
-
-  async completeSession(sessionId: string, payload: {
-    status?: PlaybookSessionStatus;
-    finalSummary?: string;
-    failureReason?: string;
-  }): Promise<PlaybookSession> {
-    return this.transport.requestJson<PlaybookSession>(`/api/playbook-sessions/${sessionId}/complete`, {
-      method: "POST",
-      body: JSON.stringify(payload)
     });
   }
 }

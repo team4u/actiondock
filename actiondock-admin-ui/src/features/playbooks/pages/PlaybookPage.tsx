@@ -11,10 +11,6 @@ import type {
   Playbook,
   PlaybookAgentSkillRef,
   PlaybookKnowledgeRef,
-  PlaybookSession,
-  PlaybookSessionDetail,
-  PlaybookSessionStatus,
-  PlaybookTraceEvent,
   PlaybookRelatedRef,
   PlaybookScriptRef,
   RepositoryDefinition,
@@ -45,7 +41,7 @@ import {
   syncRepository
 } from "../../resources/api";
 import { listScripts } from "../../scripts/api";
-import { createPlaybook, deletePlaybook, getPlaybookSession, listPlaybookSessions, listPlaybooks, updatePlaybook } from "../api";
+import { createPlaybook, deletePlaybook, listPlaybooks, updatePlaybook } from "../api";
 import { PlaybookDiffPanel } from "../../../components/diff/PlaybookDiffPanel";
 import {
   buildPlaybookDiff,
@@ -116,35 +112,6 @@ function bumpPatchVersion(version?: string): string | null {
   return `${parts[0]}.${parts[1]}.${Number(parts[2]) + 1}`;
 }
 
-const PLAYBOOK_SESSION_STATUSES: PlaybookSessionStatus[] = [
-  "RUNNING",
-  "WAITING_CONFIRMATION",
-  "STOPPED",
-  "HANDED_OFF",
-  "COMPLETED",
-  "FAILED",
-  "CANCELLED"
-];
-
-function getSessionStatusColor(status?: PlaybookSessionStatus): string {
-  switch (status) {
-    case "RUNNING":
-      return "processing";
-    case "WAITING_CONFIRMATION":
-      return "gold";
-    case "COMPLETED":
-      return "green";
-    case "FAILED":
-      return "red";
-    case "STOPPED":
-    case "HANDED_OFF":
-    case "CANCELLED":
-      return "default";
-    default:
-      return "default";
-  }
-}
-
 function getRiskColor(risk?: string | null): string {
   switch (risk) {
     case "HIGH":
@@ -156,10 +123,6 @@ function getRiskColor(risk?: string | null): string {
     default:
       return "default";
   }
-}
-
-function hasPayload(event: PlaybookTraceEvent): boolean {
-  return Boolean(event.payload && Object.keys(event.payload).length > 0);
 }
 
 function toKnowledgeEditorState(repositoryIds: string[], refs: PlaybookKnowledgeRef[]): KnowledgeEditorState[] {
@@ -230,12 +193,6 @@ export function PlaybookPage() {
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]);
   const [loading, setLoading] = useState(false);
   const [filters, setFilters] = useState<{ repositoryId?: string; tag?: string; managed?: boolean; intent?: string }>({});
-  const [sessionFilters, setSessionFilters] = useState<{ playbookId?: string; status?: PlaybookSessionStatus; agentRunId?: string; intent?: string }>({});
-  const [sessions, setSessions] = useState<PlaybookSession[]>([]);
-  const [sessionsLoading, setSessionsLoading] = useState(false);
-  const [sessionDetailOpen, setSessionDetailOpen] = useState(false);
-  const [sessionDetailLoading, setSessionDetailLoading] = useState(false);
-  const [sessionDetail, setSessionDetail] = useState<PlaybookSessionDetail | null>(null);
   const [editing, setEditing] = useState<Playbook | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [readOnly, setReadOnly] = useState(false);
@@ -275,21 +232,6 @@ export function PlaybookPage() {
     void load();
   }, [filters.repositoryId, filters.tag, filters.managed, filters.intent]);
 
-  const loadSessions = async () => {
-    setSessionsLoading(true);
-    try {
-      setSessions(await listPlaybookSessions(sessionFilters));
-    } catch (error) {
-      messageApi.error(getErrorMessage(error, "加载 Session 记录失败"));
-    } finally {
-      setSessionsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void loadSessions();
-  }, [sessionFilters.playbookId, sessionFilters.status, sessionFilters.agentRunId, sessionFilters.intent]);
-
   const repositoryOptions = useMemo(() => repositories.map((item) => ({ value: item.id, label: `${item.name} (${item.id})` })), [repositories]);
   const repositoryNameMap = useMemo(() => new Map(repositories.map((item) => [item.id, item.name])), [repositories]);
   const publishableRepositories = useMemo(() => getPublishableRepositories(publishRepositories), [publishRepositories]);
@@ -297,20 +239,6 @@ export function PlaybookPage() {
   const scriptOptions = useMemo(() => scripts.map((item) => ({ value: item.id, label: `${item.name} (${item.id})` })), [scripts]);
   const tags = useMemo(() => Array.from(new Set(items.flatMap((item) => item.tags ?? []))).sort(), [items]);
   const editablePlaybooks = useMemo(() => items.filter((item) => !item.managed), [items]);
-
-  const openSessionDetail = async (sessionId: string) => {
-    setSessionDetailOpen(true);
-    setSessionDetailLoading(true);
-    setSessionDetail(null);
-    try {
-      setSessionDetail(await getPlaybookSession(sessionId));
-    } catch (error) {
-      setSessionDetailOpen(false);
-      messageApi.error(getErrorMessage(error, "加载 Session 详情失败"));
-    } finally {
-      setSessionDetailLoading(false);
-    }
-  };
 
   const loadProjectRoot = useCallback(async (repositoryId: string) => {
     if (projectFileTree[repositoryId]) {
@@ -833,94 +761,6 @@ export function PlaybookPage() {
     return <Alert type="info" showIcon message="当前文件类型不支持在线预览" description={<Text code>{projectPreview.contentType}</Text>} />;
   };
 
-  const renderSessionEvent = (event: PlaybookTraceEvent) => (
-    <div key={event.id} className="ai-step-trace__card">
-      <div className="ai-step-trace__header">
-        <Text type="secondary" className="ai-step-trace__index">{event.sequence}</Text>
-        <Tag>{event.phase}</Tag>
-        <Text strong>{event.type}</Text>
-        {event.actor ? <Text type="secondary">{event.actor}</Text> : null}
-        {event.decision ? <Tag color="blue">{event.decision}</Tag> : null}
-        {event.stopConditionHit ? <Tag color="red">停止条件命中</Tag> : null}
-        {event.redacted ? <Tag color="gold">已脱敏</Tag> : null}
-        <span className="ai-step-trace__spacer" />
-        {event.createdAt ? <Text type="secondary">{formatDateTime(event.createdAt)}</Text> : null}
-      </div>
-      <div className="ai-step-trace__body">
-        {event.message ? <Typography.Paragraph style={{ whiteSpace: "pre-wrap", marginBottom: 8 }}>{event.message}</Typography.Paragraph> : null}
-        <Space wrap size={8}>
-          {event.refType || event.refId ? <Text type="secondary">Ref: {[event.refType, event.refId].filter(Boolean).join(" / ")}</Text> : null}
-          {event.observedRisk ? <Tag color={getRiskColor(event.observedRisk)}>{event.observedRisk}</Tag> : null}
-          {event.stopCondition ? <Text type="secondary">停止条件: {event.stopCondition}</Text> : null}
-        </Space>
-        {event.reason ? <Typography.Paragraph style={{ whiteSpace: "pre-wrap", marginTop: 8, marginBottom: 0 }}>{event.reason}</Typography.Paragraph> : null}
-        {event.redactedFields?.length ? <Text type="secondary">脱敏字段: {event.redactedFields.join(", ")}</Text> : null}
-        {hasPayload(event) ? (
-          <Collapse
-            ghost
-            size="small"
-            items={[{
-              key: "payload",
-              label: "Payload",
-              children: <pre className="json-preview">{prettyJson(event.payload)}</pre>
-            }]}
-          />
-        ) : null}
-      </div>
-    </div>
-  );
-
-  const renderSessionDetail = () => {
-    if (sessionDetailLoading) {
-      return <div style={{ display: "flex", justifyContent: "center", padding: 32 }}><Spin /></div>;
-    }
-    if (!sessionDetail) {
-      return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无 Session 详情" />;
-    }
-    const session = sessionDetail.session;
-    return (
-      <Space direction="vertical" size={16} style={{ width: "100%" }}>
-        <Descriptions size="small" column={{ xs: 1, sm: 2 }} bordered>
-          <Descriptions.Item label="Session ID"><Text code>{session.id}</Text></Descriptions.Item>
-          <Descriptions.Item label="状态"><Tag color={getSessionStatusColor(session.status)}>{session.status}</Tag></Descriptions.Item>
-          <Descriptions.Item label="任务手册">{session.playbookName || session.playbookId}</Descriptions.Item>
-          <Descriptions.Item label="阶段"><Tag>{session.currentPhase}</Tag></Descriptions.Item>
-          <Descriptions.Item label="风险">{session.riskLevelSnapshot ? <Tag color={getRiskColor(session.riskLevelSnapshot)}>{session.riskLevelSnapshot}</Tag> : "-"}</Descriptions.Item>
-          <Descriptions.Item label="Agent">{session.agentName || "-"}</Descriptions.Item>
-          <Descriptions.Item label="Agent Run ID">{session.agentRunId ? <Text code>{session.agentRunId}</Text> : "-"}</Descriptions.Item>
-          <Descriptions.Item label="Intent">{session.intent || "-"}</Descriptions.Item>
-          <Descriptions.Item label="开始">{formatDateTime(session.startedAt ?? undefined)}</Descriptions.Item>
-          <Descriptions.Item label="更新">{formatDateTime(session.updatedAt ?? undefined)}</Descriptions.Item>
-          <Descriptions.Item label="结束">{formatDateTime(session.endedAt ?? undefined)}</Descriptions.Item>
-          <Descriptions.Item label="Snapshot">{session.playbookSnapshotHash ? <Text code>{session.playbookSnapshotHash.slice(0, 16)}</Text> : "-"}</Descriptions.Item>
-        </Descriptions>
-        {session.userPrompt ? (
-          <Card size="small" title="用户 Prompt">
-            <Typography.Paragraph style={{ whiteSpace: "pre-wrap", margin: 0 }}>{session.userPrompt}</Typography.Paragraph>
-          </Card>
-        ) : null}
-        {session.finalSummary || session.failureReason ? (
-          <Card size="small" title="结果">
-            {session.finalSummary ? <Typography.Paragraph style={{ whiteSpace: "pre-wrap" }}>{session.finalSummary}</Typography.Paragraph> : null}
-            {session.failureReason ? <Alert type="error" showIcon message={session.failureReason} /> : null}
-          </Card>
-        ) : null}
-        {session.stopConditionsSnapshot?.length ? (
-          <Card size="small" title="停止条件快照">
-            <Space wrap>{session.stopConditionsSnapshot.map((item) => <Tag key={item}>{item}</Tag>)}</Space>
-          </Card>
-        ) : null}
-        <Card size="small" title={`事件时间线 (${sessionDetail.events.length})`}>
-          {sessionDetail.events.length === 0 ? (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无事件" />
-          ) : (
-            <div className="ai-step-trace">{sessionDetail.events.map(renderSessionEvent)}</div>
-          )}
-        </Card>
-      </Space>
-    );
-  };
-
   const selectedRepositoryIds = Form.useWatch("repositoryIds", form) ?? [];
   const pendingImportBlockedIds = pendingImportAnalysis ? new Set([
     ...pendingImportAnalysis.managedConflictIds,
@@ -1059,76 +899,6 @@ export function PlaybookPage() {
                 />
               </Space>
             )
-          },
-          {
-            key: "sessions",
-            label: "Session 记录",
-            children: (
-              <Space direction="vertical" size={16} style={{ width: "100%" }}>
-                <Space wrap>
-                  <Input.Search
-                    allowClear
-                    placeholder="按 Session / Prompt / Agent 搜索"
-                    style={{ width: 300 }}
-                    onSearch={(intent) => setSessionFilters((value) => ({ ...value, intent: intent.trim() || undefined }))}
-                  />
-                  <Select
-                    allowClear
-                    showSearch
-                    placeholder="Playbook"
-                    style={{ width: 240 }}
-                    options={items.map((item) => ({ value: item.id, label: `${item.name} (${item.id})` }))}
-                    onChange={(playbookId) => setSessionFilters((value) => ({ ...value, playbookId }))}
-                  />
-                  <Select
-                    allowClear
-                    placeholder="状态"
-                    style={{ width: 190 }}
-                    options={PLAYBOOK_SESSION_STATUSES.map((status) => ({ value: status, label: status }))}
-                    onChange={(status) => setSessionFilters((value) => ({ ...value, status }))}
-                  />
-                  <Input.Search
-                    allowClear
-                    placeholder="Agent Run ID"
-                    style={{ width: 220 }}
-                    onSearch={(agentRunId) => setSessionFilters((value) => ({ ...value, agentRunId: agentRunId.trim() || undefined }))}
-                  />
-                  <Button onClick={() => void loadSessions()}>刷新</Button>
-                </Space>
-                <Table<PlaybookSession>
-                  rowKey="id"
-                  loading={sessionsLoading}
-                  dataSource={sessions}
-                  scroll={{ x: 1200 }}
-                  pagination={{ pageSize: 10, showSizeChanger: true }}
-                  columns={[
-                    { title: "Session ID", dataIndex: "id", width: 170, render: (value) => <Button type="link" size="small" style={{ padding: 0 }} onClick={() => void openSessionDetail(value)}>{String(value).slice(0, 8)}</Button> },
-                    { title: "任务手册", key: "playbook", width: 220, render: (_, item) => item.playbookName || item.playbookId },
-                    { title: "状态", dataIndex: "status", width: 170, render: (status) => <Tag color={getSessionStatusColor(status)}>{status}</Tag> },
-                    { title: "阶段", dataIndex: "currentPhase", width: 120, render: (phase) => <Tag>{phase}</Tag> },
-                    { title: "风险", dataIndex: "riskLevelSnapshot", width: 100, render: (risk) => risk ? <Tag color={getRiskColor(risk)}>{risk}</Tag> : "-" },
-                    { title: "Agent", dataIndex: "agentName", width: 140, render: (value) => value || "-" },
-                    { title: "Agent Run", dataIndex: "agentRunId", width: 170, render: (value) => value ? <Text code>{value}</Text> : "-" },
-                    { title: "开始", dataIndex: "startedAt", width: 170, render: formatDateTime },
-                    { title: "更新", dataIndex: "updatedAt", width: 170, render: formatDateTime },
-                    { title: "结束", dataIndex: "endedAt", width: 170, render: formatDateTime },
-                    {
-                      title: "摘要",
-                      key: "summary",
-                      width: 260,
-                      render: (_, item) => item.finalSummary || item.failureReason || item.userPrompt || "-"
-                    },
-                    {
-                      title: "操作",
-                      key: "actions",
-                      width: 100,
-                      fixed: "right",
-                      render: (_, item) => <Button type="link" size="small" onClick={() => void openSessionDetail(item.id)}>查看</Button>
-                    }
-                  ]}
-                />
-              </Space>
-            )
           }
         ]}
       />
@@ -1194,15 +964,6 @@ export function PlaybookPage() {
           </Space>
         ) : null}
       </Modal>
-      <Drawer
-        title="Session 详情"
-        open={sessionDetailOpen}
-        width={960}
-        onClose={() => setSessionDetailOpen(false)}
-        extra={<Button onClick={() => setSessionDetailOpen(false)}>关闭</Button>}
-      >
-        {renderSessionDetail()}
-      </Drawer>
       <Drawer
         title={readOnly ? "查看任务手册" : editing ? "编辑任务手册" : "新建任务手册"}
         open={drawerOpen}
