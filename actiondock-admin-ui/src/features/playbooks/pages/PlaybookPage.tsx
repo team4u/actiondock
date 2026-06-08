@@ -9,10 +9,6 @@ import { CodeEditor } from "../../../components/common/CodeEditor";
 import { ApiError } from "../../../shared/api/httpClient";
 import type {
   Playbook,
-  PlaybookAgentSkillRef,
-  PlaybookKnowledgeRef,
-  PlaybookRelatedRef,
-  PlaybookScriptRef,
   RepositoryDefinition,
   RepositoryPlaybookPublishRequest,
   RepositoryProjectFileNode,
@@ -49,24 +45,17 @@ import {
   toRepositoryPlaybookDiffTarget,
   type PlaybookDiffResult
 } from "../../../services/playbookDiff";
+import {
+  buildPlaybookSavePayload,
+  splitText,
+  toKnowledgeEditorState,
+  upsertKnowledgeGroups,
+  type KnowledgeEditorState,
+  type PlaybookFormValues
+} from "../../../services/playbookEditor";
 
 const { Text } = Typography;
 const { useBreakpoint } = Grid;
-
-interface PlaybookFormValues {
-  id: string;
-  name: string;
-  description?: string;
-  tagsText?: string;
-  riskLevel?: "LOW" | "MEDIUM" | "HIGH";
-  repositoryIds: string[];
-  scriptRefs: PlaybookScriptRef[];
-  agentSkillRefs: PlaybookAgentSkillRef[];
-  relatedPlaybookRefs: PlaybookRelatedRef[];
-  guideMarkdown: string;
-  stopConditionsText?: string;
-  enabled: boolean;
-}
 
 interface PublishFormValues {
   repositoryId: string;
@@ -76,20 +65,10 @@ interface PublishFormValues {
   releaseNotes?: string;
 }
 
-interface KnowledgeEditorState {
-  repositoryId: string;
-  notes: string[];
-  files: string[];
-}
-
 interface FilePickerState {
   open: boolean;
   repositoryId?: string;
   selectedPath?: string;
-}
-
-function splitText(value?: string): string[] {
-  return value?.split(/[\n,，]/).map((item) => item.trim()).filter(Boolean) ?? [];
 }
 
 function sanitizePlaybookId(value: string): string {
@@ -123,38 +102,6 @@ function getRiskColor(risk?: string | null): string {
     default:
       return "default";
   }
-}
-
-function toKnowledgeEditorState(repositoryIds: string[], refs: PlaybookKnowledgeRef[]): KnowledgeEditorState[] {
-  return repositoryIds.map((repositoryId) => {
-    const notes = refs
-      .filter((ref) => ref.repositoryId === repositoryId && ref.type === "NOTE" && ref.markdown)
-      .map((ref) => ref.markdown?.trim() ?? "")
-      .filter(Boolean);
-    const files = refs
-      .filter((ref) => ref.repositoryId === repositoryId && ref.type === "FILE" && ref.path)
-      .map((ref) => ref.path?.trim() ?? "")
-      .filter(Boolean);
-    return { repositoryId, notes, files };
-  });
-}
-
-function fromKnowledgeEditorState(groups: KnowledgeEditorState[]): PlaybookKnowledgeRef[] {
-  return groups.flatMap((group) => [
-    ...group.notes
-      .map((markdown) => markdown.trim())
-      .filter(Boolean)
-      .map((markdown) => ({ type: "NOTE" as const, repositoryId: group.repositoryId, markdown })),
-    ...group.files
-      .map((path) => path.trim())
-      .filter(Boolean)
-      .map((path) => ({ type: "FILE" as const, repositoryId: group.repositoryId, path }))
-  ]);
-}
-
-function upsertKnowledgeGroups(previous: KnowledgeEditorState[], repositoryIds: string[]): KnowledgeEditorState[] {
-  const next = repositoryIds.map((repositoryId) => previous.find((item) => item.repositoryId === repositoryId) ?? { repositoryId, notes: [], files: [] });
-  return next.sort((left, right) => left.repositoryId.localeCompare(right.repositoryId));
 }
 
 function fileNodeToTree(nodes: RepositoryProjectFileNode[]): DataNode[] {
@@ -279,6 +226,7 @@ export function PlaybookPage() {
     setEditing(item ?? null);
     setReadOnly(Boolean(item?.managed));
     setKnowledgeEditor(toKnowledgeEditorState(repositoryIds, item?.knowledgeRefs ?? []));
+    form.resetFields();
     form.setFieldsValue({
       id: item?.id ?? "",
       name: item?.name ?? "",
@@ -314,38 +262,9 @@ export function PlaybookPage() {
   };
 
   const save = async () => {
-    const values = await form.validateFields();
-    const payload: Playbook = {
-      id: values.id.trim(),
-      name: values.name.trim(),
-      description: values.description?.trim() || undefined,
-      tags: splitText(values.tagsText),
-      riskLevel: values.riskLevel,
-      repositoryIds: values.repositoryIds ?? [],
-      knowledgeRefs: fromKnowledgeEditorState(knowledgeEditor),
-      scriptRefs: (values.scriptRefs ?? []).map((ref) => {
-        const scriptId = ref.scriptId;
-        const script = scripts.find((s) => s.id === scriptId);
-        return {
-          scriptId,
-          purpose: ref.purpose?.trim() || script?.name || ""
-        };
-      }),
-      agentSkillRefs: (values.agentSkillRefs ?? []).map((ref) => ({
-        skillId: ref.skillId.trim(),
-        purpose: ref.purpose?.trim() || undefined,
-        required: Boolean(ref.required)
-      })),
-      relatedPlaybookRefs: (values.relatedPlaybookRefs ?? []).map((ref) => ({
-        playbookId: ref.playbookId.trim(),
-        relation: ref.relation ?? "RELATED",
-        purpose: ref.purpose?.trim() || undefined
-      })),
-      guideMarkdown: values.guideMarkdown,
-      stopConditions: splitText(values.stopConditionsText),
-      enabled: values.enabled,
-      managed: editing?.managed ?? false
-    };
+    await form.validateFields();
+    const values = form.getFieldsValue(true);
+    const payload = buildPlaybookSavePayload({ values, knowledgeEditor, scripts, editing });
     try {
       if (editing) {
         await updatePlaybook(editing.id, payload);
@@ -977,6 +896,7 @@ export function PlaybookPage() {
                 {
                   key: "basic",
                   label: "基本信息",
+                  forceRender: true,
                   children: (
                     <>
                       <Form.Item name="id" label="ID" rules={[{ required: true, message: "请输入 ID" }]}><Input disabled={Boolean(editing)} /></Form.Item>
@@ -991,6 +911,7 @@ export function PlaybookPage() {
                 {
                   key: "rules",
                   label: "运行规则",
+                  forceRender: true,
                   children: (
                     <>
                       <Form.Item name="guideMarkdown" label="导览 Markdown" rules={[{ required: true, message: "请输入导览文本" }]}>
@@ -1003,6 +924,7 @@ export function PlaybookPage() {
                 {
                   key: "knowledge",
                   label: "关联知识",
+                  forceRender: true,
                   children: (
                     <>
                       <Form.Item name="repositoryIds" label="适用仓库">
@@ -1058,6 +980,7 @@ export function PlaybookPage() {
                 {
                   key: "scripts",
                   label: "关联脚本",
+                  forceRender: true,
                   children: (
                     <Form.List name="scriptRefs">
                       {(fields, { add, remove }) => (
@@ -1108,6 +1031,7 @@ export function PlaybookPage() {
                 {
                   key: "agentSkills",
                   label: "关联Skill",
+                  forceRender: true,
                   children: (
                     <Space direction="vertical" size={12} style={{ width: "100%" }}>
                       <Form.List name="agentSkillRefs">
@@ -1155,6 +1079,7 @@ export function PlaybookPage() {
                 {
                   key: "relatedPlaybooks",
                   label: "关联任务手册",
+                  forceRender: true,
                   children: (
                     <Form.List name="relatedPlaybookRefs">
                       {(fields, { add, remove }) => (
