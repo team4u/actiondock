@@ -1,8 +1,6 @@
 import { Flags } from "@oclif/core";
 
 import { BaseCommand } from "../../lib/command.js";
-import { ActionDockClient } from "../../lib/client.js";
-import { resolveServerUrl, resolveToken } from "../../lib/config.js";
 import { ActionDockCliError } from "../../lib/error.js";
 import { renderExecutionList } from "../../lib/render.js";
 
@@ -17,15 +15,7 @@ export default class ExecutionListCommand extends BaseCommand {
     "schedule-id": Flags.string({
       description: "Filter by schedule ID"
     }),
-    profile: Flags.string({
-      description: "Use a configured server profile"
-    }),
-    server: Flags.string({
-      description: "Override ActionDock server URL"
-    }),
-    token: Flags.string({
-      description: "Override ActionDock bearer token"
-    }),
+    ...BaseCommand.connectionFlags,
     help: Flags.help({ char: "h" })
   };
 
@@ -37,11 +27,8 @@ export default class ExecutionListCommand extends BaseCommand {
         throw new ActionDockCliError("`execution list` 需要提供 `--script-id` 或 `--schedule-id`。", 2);
       }
 
-      const client = new ActionDockClient({
-        serverUrl: resolveServerUrl(flags),
-        token: resolveToken(flags)
-      });
-      const items = await client.listExecutions({
+      const client = this.getClient(flags);
+      const items = await client.executions.list({
         scriptId: flags["script-id"],
         scheduleId: flags["schedule-id"]
       });

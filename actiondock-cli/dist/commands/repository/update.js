@@ -1,6 +1,5 @@
 import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../lib/command.js";
-import { createClient, serverTokenFlags } from "../../lib/command-helpers.js";
 import { renderRepositoryDetail } from "../../lib/render.js";
 export default class RepositoryUpdateCommand extends BaseCommand {
     static description = "Update an ActionDock repository";
@@ -18,14 +17,14 @@ export default class RepositoryUpdateCommand extends BaseCommand {
         description: Flags.string({ description: "Repository description" }),
         enabled: Flags.boolean({ description: "Mark repository as enabled" }),
         disabled: Flags.boolean({ description: "Mark repository as disabled" }),
-        ...serverTokenFlags,
+        ...BaseCommand.connectionFlags,
         help: Flags.help({ char: "h" })
     };
     async run() {
         const { args, flags } = await this.parse(RepositoryUpdateCommand);
         try {
             const isProject = flags.purpose === "project";
-            const item = await createClient(flags).updateRepository(args.repositoryId, {
+            const item = await this.getClient(flags).repositories.update(args.repositoryId, {
                 id: args.repositoryId,
                 name: flags.name,
                 type: flags.type.toUpperCase().replace("-", "_"),

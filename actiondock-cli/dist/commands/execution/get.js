@@ -1,7 +1,5 @@
 import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../lib/command.js";
-import { ActionDockClient } from "../../lib/client.js";
-import { resolveServerUrl, resolveToken } from "../../lib/config.js";
 import { renderExecution } from "../../lib/render.js";
 export default class ExecutionGetCommand extends BaseCommand {
     static description = "Show an ActionDock execution record";
@@ -10,25 +8,14 @@ export default class ExecutionGetCommand extends BaseCommand {
     };
     static flags = {
         ...BaseCommand.baseFlags,
-        profile: Flags.string({
-            description: "Use a configured server profile"
-        }),
-        server: Flags.string({
-            description: "Override ActionDock server URL"
-        }),
-        token: Flags.string({
-            description: "Override ActionDock bearer token"
-        }),
+        ...BaseCommand.connectionFlags,
         help: Flags.help({ char: "h" })
     };
     async run() {
         const { args, flags } = await this.parse(ExecutionGetCommand);
         try {
-            const client = new ActionDockClient({
-                serverUrl: resolveServerUrl(flags),
-                token: resolveToken(flags)
-            });
-            const execution = await client.getExecution(args.executionId);
+            const client = this.getClient(flags);
+            const execution = await client.executions.get(args.executionId);
             if (flags.json) {
                 this.printJson(execution);
                 return;

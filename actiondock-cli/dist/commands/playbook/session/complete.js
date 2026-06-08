@@ -1,6 +1,5 @@
 import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../../lib/command.js";
-import { createClient, serverTokenFlags } from "../../../lib/command-helpers.js";
 import { renderPlaybookSession } from "../../../lib/render.js";
 export default class PlaybookSessionCompleteCommand extends BaseCommand {
     static description = "Complete an ActionDock playbook session";
@@ -16,13 +15,13 @@ export default class PlaybookSessionCompleteCommand extends BaseCommand {
         }),
         "final-summary": Flags.string({ description: "Final session summary" }),
         "failure-reason": Flags.string({ description: "Failure or stop reason" }),
-        ...serverTokenFlags,
+        ...BaseCommand.connectionFlags,
         help: Flags.help({ char: "h" })
     };
     async run() {
         const { args, flags } = await this.parse(PlaybookSessionCompleteCommand);
         try {
-            const session = await createClient(flags).completePlaybookSession(args["session-id"], {
+            const session = await this.getClient(flags).playbooks.completeSession(args["session-id"], {
                 status: flags.status,
                 finalSummary: flags["final-summary"],
                 failureReason: flags["failure-reason"]

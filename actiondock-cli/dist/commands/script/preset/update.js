@@ -1,6 +1,6 @@
 import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../../lib/command.js";
-import { createClient, jsonObjectFlags, parseNamedObject, serverTokenFlags } from "../../../lib/command-helpers.js";
+import { jsonObjectFlags, parseNamedObject } from "../../../lib/command-helpers.js";
 import { renderExecutionPresetDetail } from "../../../lib/render.js";
 export default class ScriptPresetUpdateCommand extends BaseCommand {
     static description = "Update a script execution preset";
@@ -12,13 +12,13 @@ export default class ScriptPresetUpdateCommand extends BaseCommand {
         ...BaseCommand.baseFlags,
         name: Flags.string({ description: "Preset name", required: true }),
         ...jsonObjectFlags("input", "preset input"),
-        ...serverTokenFlags,
+        ...BaseCommand.connectionFlags,
         help: Flags.help({ char: "h" })
     };
     async run() {
         const { args, flags } = await this.parse(ScriptPresetUpdateCommand);
         try {
-            const item = await createClient(flags).updateExecutionPreset(args.scriptId, args.presetId, {
+            const item = await this.getClient(flags).presets.update(args.scriptId, args.presetId, {
                 name: flags.name,
                 input: parseNamedObject(flags, "input", "preset input")
             });

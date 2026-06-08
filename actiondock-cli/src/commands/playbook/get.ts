@@ -1,7 +1,6 @@
 import { Args, Flags } from "@oclif/core";
 
 import { BaseCommand } from "../../lib/command.js";
-import { createClient, serverTokenFlags } from "../../lib/command-helpers.js";
 import { renderPlaybookDetail } from "../../lib/render.js";
 
 export default class PlaybookGetCommand extends BaseCommand {
@@ -13,14 +12,14 @@ export default class PlaybookGetCommand extends BaseCommand {
 
   static flags = {
     ...BaseCommand.baseFlags,
-    ...serverTokenFlags,
+    ...BaseCommand.connectionFlags,
     help: Flags.help({ char: "h" })
   };
 
   async run(): Promise<void> {
     const { args, flags } = await this.parse(PlaybookGetCommand);
     try {
-      const item = await createClient(flags).getPlaybook(args["playbook-id"]);
+      const item = await this.getClient(flags).playbooks.get(args["playbook-id"]);
       flags.json ? this.printJson(item) : this.log(renderPlaybookDetail(item));
     } catch (error) {
       this.handleError(error, flags.json);

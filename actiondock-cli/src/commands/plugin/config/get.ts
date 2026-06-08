@@ -38,8 +38,8 @@ export default class PluginConfigGetCommand extends BaseCommand {
         token: resolveToken(flags)
       });
       const config = flags["config-name"]
-        ? await client.getNamedPluginConfig(args.pluginId, flags["config-name"])
-        : await client.getPluginConfig(args.pluginId);
+        ? await client.plugins.getNamedConfig(args.pluginId, flags["config-name"])
+        : await client.plugins.getConfig(args.pluginId);
 
       if (flags.json) {
         this.printJson(config);

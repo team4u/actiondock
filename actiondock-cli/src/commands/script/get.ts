@@ -1,8 +1,6 @@
 import { Args, Flags } from "@oclif/core";
 
 import { BaseCommand } from "../../lib/command.js";
-import { ActionDockClient } from "../../lib/client.js";
-import { resolveServerUrl, resolveToken } from "../../lib/config.js";
 import { renderScriptDetail } from "../../lib/render.js";
 
 export default class ScriptGetCommand extends BaseCommand {
@@ -17,15 +15,7 @@ export default class ScriptGetCommand extends BaseCommand {
     draft: Flags.boolean({
       description: "Read the draft script instead of the published snapshot"
     }),
-    profile: Flags.string({
-      description: "Use a configured server profile"
-    }),
-    server: Flags.string({
-      description: "Override ActionDock server URL"
-    }),
-    token: Flags.string({
-      description: "Override ActionDock bearer token"
-    }),
+    ...BaseCommand.connectionFlags,
     help: Flags.help({ char: "h" })
   };
 
@@ -33,11 +23,8 @@ export default class ScriptGetCommand extends BaseCommand {
     const { args, flags } = await this.parse(ScriptGetCommand);
 
     try {
-      const client = new ActionDockClient({
-        serverUrl: resolveServerUrl(flags),
-        token: resolveToken(flags)
-      });
-      const script = await client.getScript(args.scriptId, flags.draft);
+      const client = this.getClient(flags);
+      const script = await client.scripts.get(args.scriptId, flags.draft);
 
       if (flags.json) {
         this.printJson(script);

@@ -1,9 +1,7 @@
 import { Flags } from "@oclif/core";
 
 import { BaseCommand } from "../../lib/command.js";
-import { ActionDockClient } from "../../lib/client.js";
 import { intentFlag, listWithIntentFallback } from "../../lib/command-helpers.js";
-import { resolveServerUrl, resolveToken } from "../../lib/config.js";
 import { renderRepositoryWebhookList } from "../../lib/render.js";
 
 export default class WebhookRepositoryListCommand extends BaseCommand {
@@ -15,15 +13,7 @@ export default class WebhookRepositoryListCommand extends BaseCommand {
       description: "Only show Webhooks from one repository"
     }),
     intent: intentFlag,
-    profile: Flags.string({
-      description: "Use a configured server profile"
-    }),
-    server: Flags.string({
-      description: "Override ActionDock server URL"
-    }),
-    token: Flags.string({
-      description: "Override ActionDock bearer token"
-    }),
+    ...BaseCommand.connectionFlags,
     help: Flags.help({ char: "h" })
   };
 
@@ -31,14 +21,11 @@ export default class WebhookRepositoryListCommand extends BaseCommand {
     const { flags } = await this.parse(WebhookRepositoryListCommand);
 
     try {
-      const client = new ActionDockClient({
-        serverUrl: resolveServerUrl(flags),
-        token: resolveToken(flags)
-      });
+      const client = this.getClient(flags);
       const items = await listWithIntentFallback(flags.intent, (intent) =>
         flags.repository
-          ? client.listRepositoryWebhooksByRepository(flags.repository, intent)
-          : client.listRepositoryWebhooks(intent)
+          ? client.repositories.listWebhooksByRepository(flags.repository, intent)
+          : client.repositories.listWebhooks(intent)
       );
 
       if (flags.json) {

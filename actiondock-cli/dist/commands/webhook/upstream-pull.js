@@ -1,7 +1,5 @@
 import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../lib/command.js";
-import { ActionDockClient } from "../../lib/client.js";
-import { resolveServerUrl, resolveToken } from "../../lib/config.js";
 import { renderWebhookDetail } from "../../lib/render.js";
 export default class WebhookUpstreamPullCommand extends BaseCommand {
     static description = "Pull upstream updates into an Webhook working copy";
@@ -18,25 +16,14 @@ export default class WebhookUpstreamPullCommand extends BaseCommand {
             description: "Overwrite local changes when pulling",
             default: false
         }),
-        profile: Flags.string({
-            description: "Use a configured server profile"
-        }),
-        server: Flags.string({
-            description: "Override ActionDock server URL"
-        }),
-        token: Flags.string({
-            description: "Override ActionDock bearer token"
-        }),
+        ...BaseCommand.connectionFlags,
         help: Flags.help({ char: "h" })
     };
     async run() {
         const { args, flags } = await this.parse(WebhookUpstreamPullCommand);
         try {
-            const client = new ActionDockClient({
-                serverUrl: resolveServerUrl(flags),
-                token: resolveToken(flags)
-            });
-            const item = await client.pullUpstreamWebhook(args.webhookId, flags.force);
+            const client = this.getClient(flags);
+            const item = await client.webhooks.pullUpstream(args.webhookId, flags.force);
             if (flags.json) {
                 this.printJson(item);
                 return;

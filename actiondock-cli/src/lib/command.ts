@@ -4,6 +4,8 @@ import path from "node:path";
 import { Command, Flags } from "@oclif/core";
 
 import { ActionDockCliError } from "./error.js";
+import { ActionDockClient } from "./client.js";
+import { resolveServerUrl, resolveToken } from "./config.js";
 
 export abstract class BaseCommand extends Command {
   static baseFlags = {
@@ -17,6 +19,25 @@ export abstract class BaseCommand extends Command {
       description: "Overwrite an existing output file"
     })
   };
+
+  static connectionFlags = {
+    profile: Flags.string({
+      description: "Use a configured server profile"
+    }),
+    server: Flags.string({
+      description: "Override ActionDock server URL"
+    }),
+    token: Flags.string({
+      description: "Override ActionDock bearer token"
+    })
+  };
+
+  protected getClient(flags: { server?: string; token?: string; profile?: string }): ActionDockClient {
+    return new ActionDockClient({
+      serverUrl: resolveServerUrl(flags),
+      token: resolveToken(flags)
+    });
+  }
 
   protected printJson(data: unknown): void {
     const text = `${JSON.stringify(data, null, 2)}\n`;

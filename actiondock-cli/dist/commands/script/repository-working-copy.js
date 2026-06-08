@@ -1,6 +1,5 @@
 import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../lib/command.js";
-import { createClient, serverTokenFlags } from "../../lib/command-helpers.js";
 import { renderRepositoryLocalAsset } from "../../lib/render.js";
 export default class ScriptRepositoryWorkingCopyCommand extends BaseCommand {
     static description = "Create a script working copy from a repository script";
@@ -15,13 +14,13 @@ export default class ScriptRepositoryWorkingCopyCommand extends BaseCommand {
     static flags = {
         ...BaseCommand.baseFlags,
         "script-id": Flags.string({ description: "Working copy script ID override" }),
-        ...serverTokenFlags,
+        ...BaseCommand.connectionFlags,
         help: Flags.help({ char: "h" })
     };
     async run() {
         const { args, flags } = await this.parse(ScriptRepositoryWorkingCopyCommand);
         try {
-            const item = await createClient(flags).createRepositoryToolWorkingCopy(args.repositoryId, args.scriptId, flags["script-id"]);
+            const item = await this.getClient(flags).repositories.createWorkingCopy(args.repositoryId, args.scriptId, flags["script-id"]);
             flags.json ? this.printJson(item) : this.log(renderRepositoryLocalAsset(item));
         }
         catch (error) {

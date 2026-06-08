@@ -1,8 +1,6 @@
 import { Args, Flags } from "@oclif/core";
 
 import { BaseCommand } from "../../lib/command.js";
-import { ActionDockClient } from "../../lib/client.js";
-import { resolveServerUrl, resolveToken } from "../../lib/config.js";
 
 export default class ScheduleDeleteCommand extends BaseCommand {
   static description = "Delete an ActionDock schedule";
@@ -13,15 +11,7 @@ export default class ScheduleDeleteCommand extends BaseCommand {
 
   static flags = {
     ...BaseCommand.baseFlags,
-    profile: Flags.string({
-      description: "Use a configured server profile"
-    }),
-    server: Flags.string({
-      description: "Override ActionDock server URL"
-    }),
-    token: Flags.string({
-      description: "Override ActionDock bearer token"
-    }),
+    ...BaseCommand.connectionFlags,
     help: Flags.help({ char: "h" })
   };
 
@@ -29,11 +19,8 @@ export default class ScheduleDeleteCommand extends BaseCommand {
     const { args, flags } = await this.parse(ScheduleDeleteCommand);
 
     try {
-      const client = new ActionDockClient({
-        serverUrl: resolveServerUrl(flags),
-        token: resolveToken(flags)
-      });
-      await client.deleteSchedule(args.scheduleId);
+      const client = this.getClient(flags);
+      await client.schedules.delete(args.scheduleId);
 
       if (flags.json) {
         this.printJson({ deleted: true, scheduleId: args.scheduleId });

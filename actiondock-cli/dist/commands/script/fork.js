@@ -1,6 +1,5 @@
 import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../lib/command.js";
-import { createClient, serverTokenFlags } from "../../lib/command-helpers.js";
 import { renderScriptDetail } from "../../lib/render.js";
 export default class ScriptForkCommand extends BaseCommand {
     static description = "Fork an ActionDock script";
@@ -17,13 +16,13 @@ export default class ScriptForkCommand extends BaseCommand {
             description: "Target script name",
             required: true
         }),
-        ...serverTokenFlags,
+        ...BaseCommand.connectionFlags,
         help: Flags.help({ char: "h" })
     };
     async run() {
         const { args, flags } = await this.parse(ScriptForkCommand);
         try {
-            const script = await createClient(flags).forkScript(args.sourceScriptId, {
+            const script = await this.getClient(flags).scripts.fork(args.sourceScriptId, {
                 id: flags["script-id"],
                 name: flags.name
             });

@@ -1,20 +1,20 @@
 import { Flags } from "@oclif/core";
 import { BaseCommand } from "../../lib/command.js";
-import { createClient, intentFlag, listWithIntentFallback, serverTokenFlags } from "../../lib/command-helpers.js";
+import { intentFlag, listWithIntentFallback } from "../../lib/command-helpers.js";
 export default class RepositoryKnowledgeListCommand extends BaseCommand {
     static description = "List knowledge entries in repositories";
     static flags = {
         ...BaseCommand.baseFlags,
         "repository-id": Flags.string({ description: "Filter by repository ID" }),
         intent: intentFlag,
-        ...serverTokenFlags,
+        ...BaseCommand.connectionFlags,
         help: Flags.help({ char: "h" })
     };
     async run() {
         const { flags } = await this.parse(RepositoryKnowledgeListCommand);
         try {
-            const client = createClient(flags);
-            const items = await listWithIntentFallback(flags.intent, (intent) => client.listRepositoryKnowledge(flags["repository-id"], intent));
+            const client = this.getClient(flags);
+            const items = await listWithIntentFallback(flags.intent, (intent) => client.repositories.listKnowledge(flags["repository-id"], intent));
             flags.json ? this.printJson(items) : this.log(renderKnowledgeList(items));
         }
         catch (error) {

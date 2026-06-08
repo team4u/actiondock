@@ -1,6 +1,5 @@
 import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../lib/command.js";
-import { createClient, serverTokenFlags } from "../../lib/command-helpers.js";
 export default class PluginUninstallCommand extends BaseCommand {
     static description = "Uninstall an ActionDock plugin";
     static args = {
@@ -9,13 +8,13 @@ export default class PluginUninstallCommand extends BaseCommand {
     static flags = {
         ...BaseCommand.baseFlags,
         force: Flags.boolean({ description: "Force uninstall" }),
-        ...serverTokenFlags,
+        ...BaseCommand.connectionFlags,
         help: Flags.help({ char: "h" })
     };
     async run() {
         const { args, flags } = await this.parse(PluginUninstallCommand);
         try {
-            await createClient(flags).uninstallPlugin(args.pluginId, flags.force);
+            await this.getClient(flags).plugins.uninstall(args.pluginId, flags.force);
             flags.json ? this.printJson({ deleted: true, pluginId: args.pluginId }) : this.log(`插件已卸载: ${args.pluginId}`);
         }
         catch (error) {

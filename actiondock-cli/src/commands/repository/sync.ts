@@ -1,7 +1,6 @@
 import { Args, Flags } from "@oclif/core";
 
 import { BaseCommand } from "../../lib/command.js";
-import { createClient, serverTokenFlags } from "../../lib/command-helpers.js";
 import { renderRepositoryDetail } from "../../lib/render.js";
 
 export default class RepositorySyncCommand extends BaseCommand {
@@ -13,14 +12,14 @@ export default class RepositorySyncCommand extends BaseCommand {
 
   static flags = {
     ...BaseCommand.baseFlags,
-    ...serverTokenFlags,
+    ...BaseCommand.connectionFlags,
     help: Flags.help({ char: "h" })
   };
 
   async run(): Promise<void> {
     const { args, flags } = await this.parse(RepositorySyncCommand);
     try {
-      const item = await createClient(flags).syncRepository(args.repositoryId);
+      const item = await this.getClient(flags).repositories.sync(args.repositoryId);
       flags.json ? this.printJson(item) : this.log(renderRepositoryDetail(item));
     } catch (error) {
       this.handleError(error, flags.json);

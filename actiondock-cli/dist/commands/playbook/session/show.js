@@ -1,6 +1,5 @@
 import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../../lib/command.js";
-import { createClient, serverTokenFlags } from "../../../lib/command-helpers.js";
 import { renderPlaybookSessionDetail } from "../../../lib/render.js";
 export default class PlaybookSessionShowCommand extends BaseCommand {
     static description = "Show an ActionDock playbook session";
@@ -10,13 +9,13 @@ export default class PlaybookSessionShowCommand extends BaseCommand {
     static flags = {
         ...BaseCommand.baseFlags,
         timeline: Flags.boolean({ description: "Render trace events as a timeline" }),
-        ...serverTokenFlags,
+        ...BaseCommand.connectionFlags,
         help: Flags.help({ char: "h" })
     };
     async run() {
         const { args, flags } = await this.parse(PlaybookSessionShowCommand);
         try {
-            const detail = await createClient(flags).getPlaybookSession(args["session-id"]);
+            const detail = await this.getClient(flags).playbooks.getSession(args["session-id"]);
             flags.json ? this.printJson(detail) : this.log(renderPlaybookSessionDetail(detail, flags.timeline));
         }
         catch (error) {

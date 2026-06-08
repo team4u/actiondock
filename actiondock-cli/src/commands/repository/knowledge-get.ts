@@ -1,7 +1,6 @@
 import { Flags } from "@oclif/core";
 
 import { BaseCommand } from "../../lib/command.js";
-import { createClient, serverTokenFlags } from "../../lib/command-helpers.js";
 import type { RepositoryKnowledgeDetail } from "../../lib/types.js";
 
 export default class RepositoryKnowledgeGetCommand extends BaseCommand {
@@ -11,14 +10,14 @@ export default class RepositoryKnowledgeGetCommand extends BaseCommand {
     ...BaseCommand.baseFlags,
     "repository-id": Flags.string({ description: "Repository ID", required: true }),
     "knowledge-id": Flags.string({ description: "Knowledge entry ID", required: true }),
-    ...serverTokenFlags,
+    ...BaseCommand.connectionFlags,
     help: Flags.help({ char: "h" })
   };
 
   async run(): Promise<void> {
     const { flags } = await this.parse(RepositoryKnowledgeGetCommand);
     try {
-      const detail = await createClient(flags).getRepositoryKnowledge(flags["repository-id"], flags["knowledge-id"]);
+      const detail = await this.getClient(flags).repositories.getKnowledge(flags["repository-id"], flags["knowledge-id"]);
       flags.json ? this.printJson(detail) : this.log(renderKnowledgeDetail(detail));
     } catch (error) {
       this.handleError(error, flags.json);

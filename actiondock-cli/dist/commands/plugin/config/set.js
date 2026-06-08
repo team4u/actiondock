@@ -20,7 +20,7 @@ export default class PluginConfigSetCommand extends BaseCommand {
         const { args, flags } = await this.parse(PluginConfigSetCommand);
         try {
             const config = parseNamedObject(flags, "config", "plugin config");
-            const item = await createClient(flags).savePluginConfig(args.pluginId, config, flags["config-name"]);
+            const item = await createClient(flags).plugins.saveConfig(args.pluginId, config, flags["config-name"]);
             flags.json ? this.printJson(item) : this.log(renderPluginConfig(item));
         }
         catch (error) {

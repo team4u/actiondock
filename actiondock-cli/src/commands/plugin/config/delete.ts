@@ -20,7 +20,7 @@ export default class PluginConfigDeleteCommand extends BaseCommand {
   async run(): Promise<void> {
     const { args, flags } = await this.parse(PluginConfigDeleteCommand);
     try {
-      await createClient(flags).deletePluginConfig(args.pluginId, args.configName);
+      await createClient(flags).plugins.deleteConfig(args.pluginId, args.configName);
       flags.json
         ? this.printJson({ deleted: true, pluginId: args.pluginId, configName: args.configName })
         : this.log(`插件配置已删除: ${args.pluginId}/${args.configName}`);

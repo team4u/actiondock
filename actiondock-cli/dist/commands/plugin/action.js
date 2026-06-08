@@ -1,8 +1,6 @@
 import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../lib/command.js";
-import { ActionDockClient } from "../../lib/client.js";
 import { buildPluginInvokeExampleCliCommand } from "../../lib/cli-examples.js";
-import { resolveServerUrl, resolveToken } from "../../lib/config.js";
 import { ActionDockCliError } from "../../lib/error.js";
 import { renderPluginActionDetail } from "../../lib/render.js";
 import { extractSchemaFields } from "../../lib/schema.js";
@@ -14,25 +12,14 @@ export default class PluginActionCommand extends BaseCommand {
     };
     static flags = {
         ...BaseCommand.baseFlags,
-        profile: Flags.string({
-            description: "Use a configured server profile"
-        }),
-        server: Flags.string({
-            description: "Override ActionDock server URL"
-        }),
-        token: Flags.string({
-            description: "Override ActionDock bearer token"
-        }),
+        ...BaseCommand.connectionFlags,
         help: Flags.help({ char: "h" })
     };
     async run() {
         const { args, flags } = await this.parse(PluginActionCommand);
         try {
-            const client = new ActionDockClient({
-                serverUrl: resolveServerUrl(flags),
-                token: resolveToken(flags)
-            });
-            const plugin = await client.getPlugin(args.pluginId);
+            const client = this.getClient(flags);
+            const plugin = await client.plugins.get(args.pluginId);
             const action = plugin.actions.find(a => a.action === args.action);
             if (!action) {
                 const available = plugin.actions.map(a => a.action).join(", ");

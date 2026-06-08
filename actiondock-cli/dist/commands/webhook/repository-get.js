@@ -1,7 +1,5 @@
 import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../lib/command.js";
-import { ActionDockClient } from "../../lib/client.js";
-import { resolveServerUrl, resolveToken } from "../../lib/config.js";
 import { renderRepositoryWebhookDetail } from "../../lib/render.js";
 export default class WebhookRepositoryGetCommand extends BaseCommand {
     static description = "Show a repository Webhook";
@@ -11,25 +9,14 @@ export default class WebhookRepositoryGetCommand extends BaseCommand {
     };
     static flags = {
         ...BaseCommand.baseFlags,
-        profile: Flags.string({
-            description: "Use a configured server profile"
-        }),
-        server: Flags.string({
-            description: "Override ActionDock server URL"
-        }),
-        token: Flags.string({
-            description: "Override ActionDock bearer token"
-        }),
+        ...BaseCommand.connectionFlags,
         help: Flags.help({ char: "h" })
     };
     async run() {
         const { args, flags } = await this.parse(WebhookRepositoryGetCommand);
         try {
-            const client = new ActionDockClient({
-                serverUrl: resolveServerUrl(flags),
-                token: resolveToken(flags)
-            });
-            const item = await client.getRepositoryWebhook(args.repositoryId, args.webhookId);
+            const client = this.getClient(flags);
+            const item = await client.repositories.getWebhook(args.repositoryId, args.webhookId);
             if (flags.json) {
                 this.printJson(item);
                 return;

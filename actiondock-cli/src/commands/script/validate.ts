@@ -1,8 +1,6 @@
 import { Args, Flags } from "@oclif/core";
 
 import { BaseCommand } from "../../lib/command.js";
-import { ActionDockClient } from "../../lib/client.js";
-import { resolveServerUrl, resolveToken } from "../../lib/config.js";
 
 export default class ScriptValidateCommand extends BaseCommand {
   static description = "Validate an ActionDock draft script";
@@ -13,15 +11,7 @@ export default class ScriptValidateCommand extends BaseCommand {
 
   static flags = {
     ...BaseCommand.baseFlags,
-    profile: Flags.string({
-      description: "Use a configured server profile"
-    }),
-    server: Flags.string({
-      description: "Override ActionDock server URL"
-    }),
-    token: Flags.string({
-      description: "Override ActionDock bearer token"
-    }),
+    ...BaseCommand.connectionFlags,
     help: Flags.help({ char: "h" })
   };
 
@@ -29,11 +19,8 @@ export default class ScriptValidateCommand extends BaseCommand {
     const { args, flags } = await this.parse(ScriptValidateCommand);
 
     try {
-      const client = new ActionDockClient({
-        serverUrl: resolveServerUrl(flags),
-        token: resolveToken(flags)
-      });
-      await client.validateScript(args.scriptId);
+      const client = this.getClient(flags);
+      await client.scripts.validate(args.scriptId);
 
       if (flags.json) {
         this.printJson({ ok: true, scriptId: args.scriptId });

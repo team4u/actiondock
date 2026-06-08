@@ -1,8 +1,6 @@
 import { Flags } from "@oclif/core";
 
 import { BaseCommand } from "../../lib/command.js";
-import { ActionDockClient } from "../../lib/client.js";
-import { resolveServerUrl, resolveToken } from "../../lib/config.js";
 
 export default class ExecutionClearCommand extends BaseCommand {
   static description = "Clear ActionDock execution records";
@@ -12,15 +10,7 @@ export default class ExecutionClearCommand extends BaseCommand {
     "script-id": Flags.string({
       description: "Only clear records for the given script ID"
     }),
-    profile: Flags.string({
-      description: "Use a configured server profile"
-    }),
-    server: Flags.string({
-      description: "Override ActionDock server URL"
-    }),
-    token: Flags.string({
-      description: "Override ActionDock bearer token"
-    }),
+    ...BaseCommand.connectionFlags,
     help: Flags.help({ char: "h" })
   };
 
@@ -28,11 +18,8 @@ export default class ExecutionClearCommand extends BaseCommand {
     const { flags } = await this.parse(ExecutionClearCommand);
 
     try {
-      const client = new ActionDockClient({
-        serverUrl: resolveServerUrl(flags),
-        token: resolveToken(flags)
-      });
-      await client.clearExecutions(flags["script-id"]);
+      const client = this.getClient(flags);
+      await client.executions.clear(flags["script-id"]);
 
       if (flags.json) {
         this.printJson({ cleared: true, scriptId: flags["script-id"] ?? null });

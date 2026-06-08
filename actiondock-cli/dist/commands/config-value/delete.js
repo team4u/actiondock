@@ -1,6 +1,5 @@
 import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../lib/command.js";
-import { createClient, serverTokenFlags } from "../../lib/command-helpers.js";
 export default class ConfigValueDeleteCommand extends BaseCommand {
     static description = "Delete an ActionDock config value";
     static args = {
@@ -8,13 +7,13 @@ export default class ConfigValueDeleteCommand extends BaseCommand {
     };
     static flags = {
         ...BaseCommand.baseFlags,
-        ...serverTokenFlags,
+        ...BaseCommand.connectionFlags,
         help: Flags.help({ char: "h" })
     };
     async run() {
         const { args, flags } = await this.parse(ConfigValueDeleteCommand);
         try {
-            await createClient(flags).deleteConfigValue(args.key);
+            await this.getClient(flags).configValues.delete(args.key);
             flags.json ? this.printJson({ deleted: true, key: args.key }) : this.log(`配置值已删除: ${args.key}`);
         }
         catch (error) {

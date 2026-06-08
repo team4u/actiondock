@@ -1,6 +1,5 @@
 import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../lib/command.js";
-import { createClient, serverTokenFlags } from "../../lib/command-helpers.js";
 import { renderConfigValueDetail } from "../../lib/render.js";
 export default class ConfigValueGetCommand extends BaseCommand {
     static description = "Show an ActionDock config value";
@@ -9,13 +8,13 @@ export default class ConfigValueGetCommand extends BaseCommand {
     };
     static flags = {
         ...BaseCommand.baseFlags,
-        ...serverTokenFlags,
+        ...BaseCommand.connectionFlags,
         help: Flags.help({ char: "h" })
     };
     async run() {
         const { args, flags } = await this.parse(ConfigValueGetCommand);
         try {
-            const item = await createClient(flags).getConfigValue(args.key);
+            const item = await this.getClient(flags).configValues.get(args.key);
             flags.json ? this.printJson(item) : this.log(renderConfigValueDetail(item));
         }
         catch (error) {

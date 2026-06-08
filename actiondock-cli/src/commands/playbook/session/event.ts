@@ -1,7 +1,7 @@
 import { Args, Flags } from "@oclif/core";
 
 import { BaseCommand } from "../../../lib/command.js";
-import { createClient, parseNamedObject, jsonObjectFlags, serverTokenFlags } from "../../../lib/command-helpers.js";
+import { createClient, parseNamedObject, jsonObjectFlags } from "../../../lib/command-helpers.js";
 
 export default class PlaybookSessionEventCommand extends BaseCommand {
   static description = "Append an ActionDock playbook trace event";
@@ -25,7 +25,7 @@ export default class PlaybookSessionEventCommand extends BaseCommand {
     "stop-condition": Flags.string({ description: "Stop condition text" }),
     "external-event-id": Flags.string({ description: "External idempotency key for this event" }),
     ...jsonObjectFlags("payload", "trace payload"),
-    ...serverTokenFlags,
+    ...BaseCommand.connectionFlags,
     help: Flags.help({ char: "h" })
   };
 
@@ -33,7 +33,7 @@ export default class PlaybookSessionEventCommand extends BaseCommand {
     const { args, flags } = await this.parse(PlaybookSessionEventCommand);
     try {
       const payload = parseNamedObject(flags, "payload", "trace payload");
-      const response = await createClient(flags).appendPlaybookSessionEvent(args["session-id"], {
+      const response = await this.getClient(flags).playbooks.appendSessionEvent(args["session-id"], {
         externalEventId: flags["external-event-id"],
         phase: flags.phase.toUpperCase() as never,
         type: flags.type.toUpperCase() as never,

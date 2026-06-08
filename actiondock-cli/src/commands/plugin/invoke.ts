@@ -1,8 +1,6 @@
 import { Args, Flags } from "@oclif/core";
 
 import { BaseCommand } from "../../lib/command.js";
-import { ActionDockClient } from "../../lib/client.js";
-import { resolveServerUrl, resolveToken } from "../../lib/config.js";
 import { ActionDockCliError } from "../../lib/error.js";
 import { buildInputFromSchema, collectDynamicFlags, parseInputObject } from "../../lib/input.js";
 import { extractSchemaFields } from "../../lib/schema.js";
@@ -37,15 +35,7 @@ export default class PluginInvokeCommand extends BaseCommand {
     "config-name": Flags.string({
       description: "Named plugin config to use"
     }),
-    profile: Flags.string({
-      description: "Use a configured server profile"
-    }),
-    server: Flags.string({
-      description: "Override ActionDock server URL"
-    }),
-    token: Flags.string({
-      description: "Override ActionDock bearer token"
-    }),
+    ...BaseCommand.connectionFlags,
     help: Flags.help({ char: "h" })
   };
 
@@ -56,11 +46,8 @@ export default class PluginInvokeCommand extends BaseCommand {
     const { args, flags } = await this.parse(PluginInvokeCommand);
 
     try {
-      const client = new ActionDockClient({
-        serverUrl: resolveServerUrl(flags),
-        token: resolveToken(flags)
-      });
-      const plugin = await client.getPlugin(args.pluginId);
+      const client = this.getClient(flags);
+      const plugin = await client.plugins.get(args.pluginId);
       const action = plugin.actions.find((item) => item.action === args.action);
       if (!action) {
         throw new ActionDockCliError(`插件 ${args.pluginId} 不存在动作 ${args.action}`, 2);
@@ -83,7 +70,7 @@ export default class PluginInvokeCommand extends BaseCommand {
         fileFlag: "`--script-input-file`"
       });
 
-      const response = await client.invokePlugin(args.pluginId, args.action, {
+      const response = await client.plugins.invoke(args.pluginId, args.action, {
         args: actionArgs,
         scriptInput,
         responseView: flags["response-view"].toUpperCase() as "RESULT" | "DEBUG",

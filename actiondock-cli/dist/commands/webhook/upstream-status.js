@@ -1,7 +1,5 @@
 import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../lib/command.js";
-import { ActionDockClient } from "../../lib/client.js";
-import { resolveServerUrl, resolveToken } from "../../lib/config.js";
 import { renderUpstreamStatus } from "../../lib/render.js";
 export default class WebhookUpstreamStatusCommand extends BaseCommand {
     static description = "Show upstream sync status for an Webhook working copy";
@@ -14,25 +12,14 @@ export default class WebhookUpstreamStatusCommand extends BaseCommand {
     };
     static flags = {
         ...BaseCommand.baseFlags,
-        profile: Flags.string({
-            description: "Use a configured server profile"
-        }),
-        server: Flags.string({
-            description: "Override ActionDock server URL"
-        }),
-        token: Flags.string({
-            description: "Override ActionDock bearer token"
-        }),
+        ...BaseCommand.connectionFlags,
         help: Flags.help({ char: "h" })
     };
     async run() {
         const { args, flags } = await this.parse(WebhookUpstreamStatusCommand);
         try {
-            const client = new ActionDockClient({
-                serverUrl: resolveServerUrl(flags),
-                token: resolveToken(flags)
-            });
-            const item = await client.getWebhookUpstreamStatus(args.webhookId);
+            const client = this.getClient(flags);
+            const item = await client.webhooks.getUpstreamStatus(args.webhookId);
             if (flags.json) {
                 this.printJson(item);
                 return;

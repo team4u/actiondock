@@ -1,6 +1,5 @@
 import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../lib/command.js";
-import { createClient, serverTokenFlags } from "../../lib/command-helpers.js";
 export default class PlaybookDeleteCommand extends BaseCommand {
     static description = "Delete an ActionDock playbook";
     static args = {
@@ -8,13 +7,13 @@ export default class PlaybookDeleteCommand extends BaseCommand {
     };
     static flags = {
         ...BaseCommand.baseFlags,
-        ...serverTokenFlags,
+        ...BaseCommand.connectionFlags,
         help: Flags.help({ char: "h" })
     };
     async run() {
         const { args, flags } = await this.parse(PlaybookDeleteCommand);
         try {
-            await createClient(flags).deletePlaybook(args["playbook-id"]);
+            await this.getClient(flags).playbooks.delete(args["playbook-id"]);
             flags.json ? this.printJson({ deleted: true, id: args["playbook-id"] }) : this.log(`Deleted playbook: ${args["playbook-id"]}`);
         }
         catch (error) {

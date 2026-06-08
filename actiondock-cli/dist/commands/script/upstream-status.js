@@ -1,6 +1,5 @@
 import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../lib/command.js";
-import { createClient, serverTokenFlags } from "../../lib/command-helpers.js";
 import { renderUpstreamStatus } from "../../lib/render.js";
 export default class ScriptUpstreamStatusCommand extends BaseCommand {
     static description = "Show upstream sync status for a script working copy";
@@ -13,13 +12,13 @@ export default class ScriptUpstreamStatusCommand extends BaseCommand {
     };
     static flags = {
         ...BaseCommand.baseFlags,
-        ...serverTokenFlags,
+        ...BaseCommand.connectionFlags,
         help: Flags.help({ char: "h" })
     };
     async run() {
         const { args, flags } = await this.parse(ScriptUpstreamStatusCommand);
         try {
-            const item = await createClient(flags).getScriptUpstreamStatus(args.scriptId);
+            const item = await this.getClient(flags).scripts.getUpstreamStatus(args.scriptId);
             flags.json ? this.printJson(item) : this.log(renderUpstreamStatus(item));
         }
         catch (error) {

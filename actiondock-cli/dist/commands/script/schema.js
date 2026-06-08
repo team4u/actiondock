@@ -1,8 +1,6 @@
 import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../lib/command.js";
-import { ActionDockClient } from "../../lib/client.js";
 import { buildScriptRunExampleCliCommand } from "../../lib/cli-examples.js";
-import { resolveServerUrl, resolveToken } from "../../lib/config.js";
 import { renderSchemaDetail } from "../../lib/render.js";
 import { extractSchemaFields, splitSchemaFields } from "../../lib/schema.js";
 export default class ScriptSchemaCommand extends BaseCommand {
@@ -15,25 +13,14 @@ export default class ScriptSchemaCommand extends BaseCommand {
         draft: Flags.boolean({
             description: "Inspect the draft script instead of the published snapshot"
         }),
-        profile: Flags.string({
-            description: "Use a configured server profile"
-        }),
-        server: Flags.string({
-            description: "Override ActionDock server URL"
-        }),
-        token: Flags.string({
-            description: "Override ActionDock bearer token"
-        }),
+        ...BaseCommand.connectionFlags,
         help: Flags.help({ char: "h" })
     };
     async run() {
         const { args, flags } = await this.parse(ScriptSchemaCommand);
         try {
-            const client = new ActionDockClient({
-                serverUrl: resolveServerUrl(flags),
-                token: resolveToken(flags)
-            });
-            const script = await client.getScript(args.scriptId, flags.draft);
+            const client = this.getClient(flags);
+            const script = await client.scripts.get(args.scriptId, flags.draft);
             const schema = flags.draft ? script.inputSchema : script.published?.inputSchema ?? script.inputSchema;
             const fields = extractSchemaFields(schema);
             const { flagFields, jsonOnlyFields } = splitSchemaFields(fields);

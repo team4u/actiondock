@@ -1,9 +1,7 @@
 import { Flags } from "@oclif/core";
 
 import { BaseCommand } from "../../lib/command.js";
-import { ActionDockClient } from "../../lib/client.js";
-import { resolveServerUrl, resolveToken } from "../../lib/config.js";
-import { mergeWebhookDefinition, parseDefinitionInput, resolveEnabledFlag } from "../../lib/event.js";
+import { mergeWebhookDefinition, parseDefinitionInput, resolveEnabledFlag } from "../../lib/webhook.js";
 import { renderWebhookDetail } from "../../lib/render.js";
 
 export default class WebhookCreateCommand extends BaseCommand {
@@ -39,15 +37,7 @@ export default class WebhookCreateCommand extends BaseCommand {
     disabled: Flags.boolean({
       description: "Create the Webhook as disabled"
     }),
-    profile: Flags.string({
-      description: "Use a configured server profile"
-    }),
-    server: Flags.string({
-      description: "Override ActionDock server URL"
-    }),
-    token: Flags.string({
-      description: "Override ActionDock bearer token"
-    }),
+    ...BaseCommand.connectionFlags,
     help: Flags.help({ char: "h" })
   };
 
@@ -55,10 +45,7 @@ export default class WebhookCreateCommand extends BaseCommand {
     const { flags } = await this.parse(WebhookCreateCommand);
 
     try {
-      const client = new ActionDockClient({
-        serverUrl: resolveServerUrl(flags),
-        token: resolveToken(flags)
-      });
+      const client = this.getClient(flags);
       const definition = mergeWebhookDefinition(
         parseDefinitionInput(flags["definition-json"], flags["definition-file"], {
           jsonFlag: "`--definition-json`",
@@ -76,7 +63,7 @@ export default class WebhookCreateCommand extends BaseCommand {
           transportType: flags["transport-type"]?.toUpperCase()
         }
       );
-      const item = await client.createWebhook(definition);
+      const item = await client.webhooks.create(definition);
 
       if (flags.json) {
         this.printJson(item);

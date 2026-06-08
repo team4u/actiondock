@@ -1,8 +1,6 @@
 import { Args, Flags } from "@oclif/core";
 
 import { BaseCommand } from "../../lib/command.js";
-import { ActionDockClient } from "../../lib/client.js";
-import { resolveServerUrl, resolveToken } from "../../lib/config.js";
 import { renderRepositoryLocalAsset } from "../../lib/render.js";
 
 export default class WebhookRepositoryUpdateCommand extends BaseCommand {
@@ -19,15 +17,7 @@ export default class WebhookRepositoryUpdateCommand extends BaseCommand {
       description: "Install or update referenced script dependencies",
       default: true
     }),
-    profile: Flags.string({
-      description: "Use a configured server profile"
-    }),
-    server: Flags.string({
-      description: "Override ActionDock server URL"
-    }),
-    token: Flags.string({
-      description: "Override ActionDock bearer token"
-    }),
+    ...BaseCommand.connectionFlags,
     help: Flags.help({ char: "h" })
   };
 
@@ -35,11 +25,8 @@ export default class WebhookRepositoryUpdateCommand extends BaseCommand {
     const { args, flags } = await this.parse(WebhookRepositoryUpdateCommand);
 
     try {
-      const client = new ActionDockClient({
-        serverUrl: resolveServerUrl(flags),
-        token: resolveToken(flags)
-      });
-      const result = await client.updateRepositoryWebhook(args.repositoryId, args.webhookId, {
+      const client = this.getClient(flags);
+      const result = await client.repositories.updateWebhook(args.repositoryId, args.webhookId, {
         installSchedules: false,
         installScriptDependencies: flags["install-script-dependencies"]
       });

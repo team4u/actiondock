@@ -1,6 +1,5 @@
 import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../../lib/command.js";
-import { createClient, serverTokenFlags } from "../../../lib/command-helpers.js";
 import { renderPlaybookSession } from "../../../lib/render.js";
 export default class PlaybookSessionStartCommand extends BaseCommand {
     static description = "Start an ActionDock playbook session";
@@ -21,7 +20,7 @@ export default class PlaybookSessionStartCommand extends BaseCommand {
             description: "Candidate playbook ID, can be repeated",
             multiple: true
         }),
-        ...serverTokenFlags,
+        ...BaseCommand.connectionFlags,
         help: Flags.help({ char: "h" })
     };
     async run() {
@@ -35,7 +34,7 @@ export default class PlaybookSessionStartCommand extends BaseCommand {
                 selectedFrom.repositoryId = flags["repository-id"];
             if (candidatePlaybookIds.length > 0)
                 selectedFrom.candidatePlaybookIds = candidatePlaybookIds;
-            const session = await createClient(flags).startPlaybookSession(args["playbook-id"], {
+            const session = await this.getClient(flags).playbooks.startSession(args["playbook-id"], {
                 userPrompt: flags["user-prompt"],
                 intent: flags.intent,
                 agentName: flags.agent,

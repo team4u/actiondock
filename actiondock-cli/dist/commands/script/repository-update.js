@@ -1,6 +1,6 @@
 import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../lib/command.js";
-import { buildRepositoryInstallRequest, createClient, serverTokenFlags } from "../../lib/command-helpers.js";
+import { buildRepositoryInstallRequest } from "../../lib/command-helpers.js";
 import { renderRepositoryLocalAsset } from "../../lib/render.js";
 export default class ScriptRepositoryUpdateCommand extends BaseCommand {
     static description = "Update an installed repository script";
@@ -14,13 +14,13 @@ export default class ScriptRepositoryUpdateCommand extends BaseCommand {
         "install-script-dependencies": Flags.boolean({ description: "Update script dependencies" }),
         "install-plugin-dependencies": Flags.boolean({ description: "Update plugin dependencies" }),
         "force-plugin-upgrade": Flags.boolean({ description: "Force plugin dependency upgrades" }),
-        ...serverTokenFlags,
+        ...BaseCommand.connectionFlags,
         help: Flags.help({ char: "h" })
     };
     async run() {
         const { args, flags } = await this.parse(ScriptRepositoryUpdateCommand);
         try {
-            const item = await createClient(flags).updateRepositoryTool(args.repositoryId, args.scriptId, buildRepositoryInstallRequest(flags));
+            const item = await this.getClient(flags).repositories.updateTool(args.repositoryId, args.scriptId, buildRepositoryInstallRequest(flags));
             flags.json ? this.printJson(item) : this.log(renderRepositoryLocalAsset(item));
         }
         catch (error) {

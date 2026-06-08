@@ -1,8 +1,6 @@
 import { Flags } from "@oclif/core";
 
 import { BaseCommand } from "../../lib/command.js";
-import { ActionDockClient } from "../../lib/client.js";
-import { resolveServerUrl, resolveToken } from "../../lib/config.js";
 import { renderScheduleDetail } from "../../lib/render.js";
 import { buildScheduleInput, resolveScheduleEnabled } from "../../lib/schedule.js";
 
@@ -35,15 +33,7 @@ export default class ScheduleCreateCommand extends BaseCommand {
     "input-file": Flags.string({
       description: "Path to a JSON file containing the base schedule input object"
     }),
-    profile: Flags.string({
-      description: "Use a configured server profile"
-    }),
-    server: Flags.string({
-      description: "Override ActionDock server URL"
-    }),
-    token: Flags.string({
-      description: "Override ActionDock bearer token"
-    }),
+    ...BaseCommand.connectionFlags,
     help: Flags.help({ char: "h" })
   };
 
@@ -54,10 +44,7 @@ export default class ScheduleCreateCommand extends BaseCommand {
     const { flags } = await this.parse(ScheduleCreateCommand);
 
     try {
-      const client = new ActionDockClient({
-        serverUrl: resolveServerUrl(flags),
-        token: resolveToken(flags)
-      });
+      const client = this.getClient(flags);
       const input = await buildScheduleInput({
         client,
         scriptId: flags["script-id"],
@@ -68,7 +55,7 @@ export default class ScheduleCreateCommand extends BaseCommand {
         booleanFlags: ["schedule-enabled", "schedule-disabled"],
         valueFlags: ["script-id", "schedule-name", "schedule-cron"]
       });
-      const schedule = await client.createSchedule({
+      const schedule = await client.schedules.create({
         scriptId: flags["script-id"],
         name: flags["schedule-name"],
         cronExpression: flags["schedule-cron"],

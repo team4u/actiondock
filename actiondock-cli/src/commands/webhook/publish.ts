@@ -1,7 +1,6 @@
 import { Args, Flags } from "@oclif/core";
 
 import { BaseCommand } from "../../lib/command.js";
-import { createClient, serverTokenFlags } from "../../lib/command-helpers.js";
 import { parseJsonValueInput } from "../../lib/input.js";
 import { renderRepositoryWebhookDetail } from "../../lib/render.js";
 import type {
@@ -93,7 +92,7 @@ export default class WebhookPublishCommand extends BaseCommand {
       description: "Force publish even when upstream has changed",
       default: false
     }),
-    ...serverTokenFlags,
+    ...BaseCommand.connectionFlags,
     help: Flags.help({ char: "h" })
   };
 
@@ -124,7 +123,7 @@ export default class WebhookPublishCommand extends BaseCommand {
         ),
         force: flags.force
       };
-      const item = await createClient(flags).publishRepositoryWebhook(flags.repository, payload);
+      const item = await this.getClient(flags).repositories.publishWebhook(flags.repository, payload);
 
       if (flags.json) {
         this.printJson(item);

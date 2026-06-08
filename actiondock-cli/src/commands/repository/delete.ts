@@ -1,7 +1,6 @@
 import { Args, Flags } from "@oclif/core";
 
 import { BaseCommand } from "../../lib/command.js";
-import { createClient, serverTokenFlags } from "../../lib/command-helpers.js";
 
 export default class RepositoryDeleteCommand extends BaseCommand {
   static description = "Delete an ActionDock repository";
@@ -12,14 +11,14 @@ export default class RepositoryDeleteCommand extends BaseCommand {
 
   static flags = {
     ...BaseCommand.baseFlags,
-    ...serverTokenFlags,
+    ...BaseCommand.connectionFlags,
     help: Flags.help({ char: "h" })
   };
 
   async run(): Promise<void> {
     const { args, flags } = await this.parse(RepositoryDeleteCommand);
     try {
-      await createClient(flags).deleteRepository(args.repositoryId);
+      await this.getClient(flags).repositories.delete(args.repositoryId);
       flags.json ? this.printJson({ deleted: true, id: args.repositoryId }) : this.log(`仓库已删除: ${args.repositoryId}`);
     } catch (error) {
       this.handleError(error, flags.json);

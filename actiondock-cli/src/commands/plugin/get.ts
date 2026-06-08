@@ -1,8 +1,6 @@
 import { Args, Flags } from "@oclif/core";
 
 import { BaseCommand } from "../../lib/command.js";
-import { ActionDockClient } from "../../lib/client.js";
-import { resolveServerUrl, resolveToken } from "../../lib/config.js";
 import { renderPluginDetail } from "../../lib/render.js";
 
 export default class PluginGetCommand extends BaseCommand {
@@ -14,15 +12,7 @@ export default class PluginGetCommand extends BaseCommand {
 
   static flags = {
     ...BaseCommand.baseFlags,
-    profile: Flags.string({
-      description: "Use a configured server profile"
-    }),
-    server: Flags.string({
-      description: "Override ActionDock server URL"
-    }),
-    token: Flags.string({
-      description: "Override ActionDock bearer token"
-    }),
+    ...BaseCommand.connectionFlags,
     help: Flags.help({ char: "h" })
   };
 
@@ -30,11 +20,8 @@ export default class PluginGetCommand extends BaseCommand {
     const { args, flags } = await this.parse(PluginGetCommand);
 
     try {
-      const client = new ActionDockClient({
-        serverUrl: resolveServerUrl(flags),
-        token: resolveToken(flags)
-      });
-      const plugin = await client.getPlugin(args.pluginId);
+      const client = this.getClient(flags);
+      const plugin = await client.plugins.get(args.pluginId);
 
       if (flags.json) {
         this.printJson({

@@ -1,6 +1,5 @@
 import { Flags } from "@oclif/core";
 import { BaseCommand } from "../../lib/command.js";
-import { createClient, serverTokenFlags } from "../../lib/command-helpers.js";
 import { renderRepositoryDetail } from "../../lib/render.js";
 export default class RepositoryCreateCommand extends BaseCommand {
     static description = "Create an ActionDock repository";
@@ -15,14 +14,14 @@ export default class RepositoryCreateCommand extends BaseCommand {
         "trust-level": Flags.string({ description: "Repository trust level", options: ["trusted", "untrusted"], default: "untrusted" }),
         description: Flags.string({ description: "Repository description" }),
         disabled: Flags.boolean({ description: "Create repository as disabled" }),
-        ...serverTokenFlags,
+        ...BaseCommand.connectionFlags,
         help: Flags.help({ char: "h" })
     };
     async run() {
         const { flags } = await this.parse(RepositoryCreateCommand);
         try {
             const isProject = flags.purpose === "project";
-            const item = await createClient(flags).createRepository({
+            const item = await this.getClient(flags).repositories.create({
                 id: flags["repository-id"],
                 name: flags.name,
                 type: flags.type.toUpperCase().replace("-", "_"),

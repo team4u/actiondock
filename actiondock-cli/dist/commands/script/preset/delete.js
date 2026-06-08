@@ -1,6 +1,5 @@
 import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../../lib/command.js";
-import { createClient, serverTokenFlags } from "../../../lib/command-helpers.js";
 export default class ScriptPresetDeleteCommand extends BaseCommand {
     static description = "Delete a script execution preset";
     static args = {
@@ -9,13 +8,13 @@ export default class ScriptPresetDeleteCommand extends BaseCommand {
     };
     static flags = {
         ...BaseCommand.baseFlags,
-        ...serverTokenFlags,
+        ...BaseCommand.connectionFlags,
         help: Flags.help({ char: "h" })
     };
     async run() {
         const { args, flags } = await this.parse(ScriptPresetDeleteCommand);
         try {
-            await createClient(flags).deleteExecutionPreset(args.scriptId, args.presetId);
+            await this.getClient(flags).presets.delete(args.scriptId, args.presetId);
             flags.json ? this.printJson({ deleted: true, scriptId: args.scriptId, presetId: args.presetId }) : this.log(`执行参数预设已删除: ${args.presetId}`);
         }
         catch (error) {

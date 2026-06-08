@@ -1,7 +1,6 @@
 import { Args, Flags } from "@oclif/core";
 
 import { BaseCommand } from "../../lib/command.js";
-import { createClient, serverTokenFlags } from "../../lib/command-helpers.js";
 import { renderConfigValueDetail } from "../../lib/render.js";
 
 export default class ConfigValueSetCommand extends BaseCommand {
@@ -18,7 +17,7 @@ export default class ConfigValueSetCommand extends BaseCommand {
     secret: Flags.boolean({ description: "Mark the config value as secret" }),
     "preserve-value": Flags.boolean({ description: "Preserve existing value while updating metadata" }),
     create: Flags.boolean({ description: "Create instead of update" }),
-    ...serverTokenFlags,
+    ...BaseCommand.connectionFlags,
     help: Flags.help({ char: "h" })
   };
 
@@ -32,8 +31,8 @@ export default class ConfigValueSetCommand extends BaseCommand {
         secret: flags.secret,
         preserveValue: flags["preserve-value"]
       };
-      const client = createClient(flags);
-      const item = flags.create ? await client.createConfigValue(payload) : await client.updateConfigValue(args.key, payload);
+      const client = this.getClient(flags);
+      const item = flags.create ? await client.configValues.create(payload) : await client.configValues.update(args.key, payload);
       flags.json ? this.printJson(item) : this.log(renderConfigValueDetail(item));
     } catch (error) {
       this.handleError(error, flags.json);

@@ -1,8 +1,6 @@
 import { Args, Flags } from "@oclif/core";
 
 import { BaseCommand } from "../../lib/command.js";
-import { ActionDockClient } from "../../lib/client.js";
-import { resolveServerUrl, resolveToken } from "../../lib/config.js";
 import { collectDynamicFlags, buildInputFromSchema, parseInputObject } from "../../lib/input.js";
 import { renderExecution } from "../../lib/render.js";
 import { extractSchemaFields } from "../../lib/schema.js";
@@ -35,15 +33,7 @@ export default class ScriptRunCommand extends BaseCommand {
     "input-file": Flags.string({
       description: "Path to a JSON file containing the base script input object"
     }),
-    profile: Flags.string({
-      description: "Use a configured server profile"
-    }),
-    server: Flags.string({
-      description: "Override ActionDock server URL"
-    }),
-    token: Flags.string({
-      description: "Override ActionDock bearer token"
-    }),
+    ...BaseCommand.connectionFlags,
     help: Flags.help({ char: "h" })
   };
 
@@ -54,11 +44,8 @@ export default class ScriptRunCommand extends BaseCommand {
     const { args, flags } = await this.parse(ScriptRunCommand);
 
     try {
-      const client = new ActionDockClient({
-        serverUrl: resolveServerUrl(flags),
-        token: resolveToken(flags)
-      });
-      const script = await client.getScript(args.scriptId, flags.draft);
+      const client = this.getClient(flags);
+      const script = await client.scripts.get(args.scriptId, flags.draft);
       const schema = flags.draft ? script.inputSchema : script.published?.inputSchema ?? script.inputSchema;
       const fields = extractSchemaFields(schema);
       const baseInput = parseInputObject(flags["input-json"], flags["input-file"]);
@@ -67,7 +54,7 @@ export default class ScriptRunCommand extends BaseCommand {
       });
       const { input } = buildInputFromSchema(baseInput, dynamicFlags, fields);
 
-      const response = await client.executeScript({
+      const response = await client.scripts.execute({
         scriptId: args.scriptId,
         input,
         mode: flags.mode.toUpperCase() as "SYNC" | "ASYNC",

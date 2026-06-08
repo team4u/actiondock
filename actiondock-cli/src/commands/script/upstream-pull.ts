@@ -1,7 +1,6 @@
 import { Args, Flags } from "@oclif/core";
 
 import { BaseCommand } from "../../lib/command.js";
-import { createClient, serverTokenFlags } from "../../lib/command-helpers.js";
 import { renderScriptDetail } from "../../lib/render.js";
 
 export default class ScriptUpstreamPullCommand extends BaseCommand {
@@ -21,14 +20,14 @@ export default class ScriptUpstreamPullCommand extends BaseCommand {
     force: Flags.boolean({
       description: "Force pull even when local changes exist"
     }),
-    ...serverTokenFlags,
+    ...BaseCommand.connectionFlags,
     help: Flags.help({ char: "h" })
   };
 
   async run(): Promise<void> {
     const { args, flags } = await this.parse(ScriptUpstreamPullCommand);
     try {
-      const script = await createClient(flags).pullUpstreamScript(args.scriptId, flags.force);
+      const script = await this.getClient(flags).scripts.pullUpstream(args.scriptId, flags.force);
       flags.json ? this.printJson(script) : this.log(renderScriptDetail(script, "draft"));
     } catch (error) {
       this.handleError(error, flags.json);

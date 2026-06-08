@@ -1,9 +1,7 @@
 import { Flags } from "@oclif/core";
 
 import { BaseCommand } from "../../lib/command.js";
-import { ActionDockClient } from "../../lib/client.js";
 import { intentFlag, listWithIntentFallback } from "../../lib/command-helpers.js";
-import { resolveServerUrl, resolveToken } from "../../lib/config.js";
 import { renderScheduleList } from "../../lib/render.js";
 
 export default class ScheduleListCommand extends BaseCommand {
@@ -15,15 +13,7 @@ export default class ScheduleListCommand extends BaseCommand {
       description: "Only list schedules for the given script ID"
     }),
     intent: intentFlag,
-    profile: Flags.string({
-      description: "Use a configured server profile"
-    }),
-    server: Flags.string({
-      description: "Override ActionDock server URL"
-    }),
-    token: Flags.string({
-      description: "Override ActionDock bearer token"
-    }),
+    ...BaseCommand.connectionFlags,
     help: Flags.help({ char: "h" })
   };
 
@@ -31,11 +21,8 @@ export default class ScheduleListCommand extends BaseCommand {
     const { flags } = await this.parse(ScheduleListCommand);
 
     try {
-      const client = new ActionDockClient({
-        serverUrl: resolveServerUrl(flags),
-        token: resolveToken(flags)
-      });
-      const items = await listWithIntentFallback(flags.intent, (intent) => client.listSchedules(flags["script-id"], intent));
+      const client = this.getClient(flags);
+      const items = await listWithIntentFallback(flags.intent, (intent) => client.schedules.list(flags["script-id"], intent));
 
       if (flags.json) {
         this.printJson(items);

@@ -1,7 +1,5 @@
 import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../lib/command.js";
-import { ActionDockClient } from "../../lib/client.js";
-import { resolveServerUrl, resolveToken } from "../../lib/config.js";
 import { ActionDockCliError } from "../../lib/error.js";
 import { renderScriptDetail } from "../../lib/render.js";
 import { buildSchemaReplacePatch, parsePatchObject, parseSchemaInput, resolveOptionalTextInput, resolveScriptSource, setPatchField } from "../../lib/script.js";
@@ -51,15 +49,7 @@ export default class ScriptPatchCommand extends BaseCommand {
         "output-schema-file": Flags.string({
             description: "Replace outputSchema using a JSON file"
         }),
-        profile: Flags.string({
-            description: "Use a configured server profile"
-        }),
-        server: Flags.string({
-            description: "Override ActionDock server URL"
-        }),
-        token: Flags.string({
-            description: "Override ActionDock bearer token"
-        }),
+        ...BaseCommand.connectionFlags,
         help: Flags.help({ char: "h" })
     };
     async run() {
@@ -98,13 +88,10 @@ export default class ScriptPatchCommand extends BaseCommand {
             if (Object.keys(patch).length === 0 && inputSchema === undefined && outputSchema === undefined) {
                 throw new ActionDockCliError("至少需要提供一个 Patch 字段。", 2);
             }
-            const client = new ActionDockClient({
-                serverUrl: resolveServerUrl(flags),
-                token: resolveToken(flags)
-            });
+            const client = this.getClient(flags);
             // Schema 标志使用替换语义：先获取当前 schema，为被删除的属性生成 null 条目
             if (inputSchema !== undefined || outputSchema !== undefined) {
-                const current = await client.getScript(args.scriptId, true);
+                const current = await client.scripts.get(args.scriptId, true);
                 if (inputSchema !== undefined) {
                     setPatchField(patch, "inputSchema", buildSchemaReplacePatch(current.inputSchema, inputSchema));
                 }
@@ -112,7 +99,7 @@ export default class ScriptPatchCommand extends BaseCommand {
                     setPatchField(patch, "outputSchema", buildSchemaReplacePatch(current.outputSchema, outputSchema));
                 }
             }
-            const script = await client.patchScript(args.scriptId, patch);
+            const script = await client.scripts.patch(args.scriptId, patch);
             if (flags.json) {
                 this.printJson(script);
                 return;

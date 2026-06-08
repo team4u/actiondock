@@ -1,9 +1,7 @@
 import { Flags } from "@oclif/core";
 
 import { BaseCommand } from "../../lib/command.js";
-import { ActionDockClient } from "../../lib/client.js";
 import { intentFlag, listWithIntentFallback } from "../../lib/command-helpers.js";
-import { resolveServerUrl, resolveToken } from "../../lib/config.js";
 import { renderScriptList } from "../../lib/render.js";
 
 export default class ScriptListCommand extends BaseCommand {
@@ -15,15 +13,7 @@ export default class ScriptListCommand extends BaseCommand {
       description: "Include draft-only scripts"
     }),
     intent: intentFlag,
-    profile: Flags.string({
-      description: "Use a configured server profile"
-    }),
-    server: Flags.string({
-      description: "Override ActionDock server URL"
-    }),
-    token: Flags.string({
-      description: "Override ActionDock bearer token"
-    }),
+    ...BaseCommand.connectionFlags,
     help: Flags.help({ char: "h" })
   };
 
@@ -31,11 +21,8 @@ export default class ScriptListCommand extends BaseCommand {
     const { flags } = await this.parse(ScriptListCommand);
 
     try {
-      const client = new ActionDockClient({
-        serverUrl: resolveServerUrl(flags),
-        token: resolveToken(flags)
-      });
-      const scripts = await listWithIntentFallback(flags.intent, (intent) => client.listScripts(intent));
+      const client = this.getClient(flags);
+      const scripts = await listWithIntentFallback(flags.intent, (intent) => client.scripts.list(intent));
       const filtered = flags.all ? scripts : scripts.filter((item) => Boolean(item.publication?.published));
       const items = filtered.map((item) => ({
         id: item.id,

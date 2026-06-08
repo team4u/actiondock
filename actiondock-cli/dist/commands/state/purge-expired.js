@@ -1,7 +1,5 @@
 import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../lib/command.js";
-import { ActionDockClient } from "../../lib/client.js";
-import { resolveServerUrl, resolveToken } from "../../lib/config.js";
 export default class StatePurgeExpiredCommand extends BaseCommand {
     static description = "Purge expired shared-state entries";
     static args = {
@@ -9,25 +7,14 @@ export default class StatePurgeExpiredCommand extends BaseCommand {
     };
     static flags = {
         ...BaseCommand.baseFlags,
-        profile: Flags.string({
-            description: "Use a configured server profile"
-        }),
-        server: Flags.string({
-            description: "Override ActionDock server URL"
-        }),
-        token: Flags.string({
-            description: "Override ActionDock bearer token"
-        }),
+        ...BaseCommand.connectionFlags,
         help: Flags.help({ char: "h" })
     };
     async run() {
         const { args, flags } = await this.parse(StatePurgeExpiredCommand);
         try {
-            const client = new ActionDockClient({
-                serverUrl: resolveServerUrl(flags),
-                token: resolveToken(flags)
-            });
-            const count = await client.purgeExpiredSharedState(args.namespace);
+            const client = this.getClient(flags);
+            const count = await client.sharedState.purgeExpired(args.namespace);
             if (flags.json) {
                 this.printJson({ purged: count, namespace: args.namespace ?? null });
                 return;

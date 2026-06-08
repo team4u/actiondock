@@ -15,7 +15,7 @@ export default class PluginConfigListCommand extends BaseCommand {
     async run() {
         const { args, flags } = await this.parse(PluginConfigListCommand);
         try {
-            const items = await createClient(flags).listPluginConfigs(args.pluginId);
+            const items = await createClient(flags).plugins.listConfigs(args.pluginId);
             flags.json ? this.printJson(items) : this.log(renderPluginConfigList(items));
         }
         catch (error) {

@@ -1,8 +1,6 @@
 import { Args, Flags } from "@oclif/core";
 
 import { BaseCommand } from "../../lib/command.js";
-import { ActionDockClient } from "../../lib/client.js";
-import { resolveServerUrl, resolveToken } from "../../lib/config.js";
 import { ActionDockCliError } from "../../lib/error.js";
 import { parseJsonValueInput } from "../../lib/input.js";
 
@@ -32,15 +30,7 @@ export default class StateCasCommand extends BaseCommand {
     "expires-at": Flags.string({
       description: "Optional expiry time in local ISO format, for example 2026-04-28T12:00:00"
     }),
-    profile: Flags.string({
-      description: "Use a configured server profile"
-    }),
-    server: Flags.string({
-      description: "Override ActionDock server URL"
-    }),
-    token: Flags.string({
-      description: "Override ActionDock bearer token"
-    }),
+    ...BaseCommand.connectionFlags,
     help: Flags.help({ char: "h" })
   };
 
@@ -48,10 +38,7 @@ export default class StateCasCommand extends BaseCommand {
     const { args, flags } = await this.parse(StateCasCommand);
 
     try {
-      const client = new ActionDockClient({
-        serverUrl: resolveServerUrl(flags),
-        token: resolveToken(flags)
-      });
+      const client = this.getClient(flags);
       const value = parseJsonValueInput(flags["value-json"], flags["value-file"], {
         jsonFlag: "`--value-json`",
         fileFlag: "`--value-file`"
@@ -59,7 +46,7 @@ export default class StateCasCommand extends BaseCommand {
       if (value === undefined) {
         throw new ActionDockCliError("`state cas` 需要通过 `--value-json` 或 `--value-file` 提供值。", 2);
       }
-      const response = await client.compareAndSetSharedState({
+      const response = await client.sharedState.compareAndSet({
         namespace: args.namespace,
         key: args.key,
         expectedVersion: flags["expected-version"],

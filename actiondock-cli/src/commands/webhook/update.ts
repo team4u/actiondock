@@ -1,14 +1,12 @@
 import { Args, Flags } from "@oclif/core";
 
 import { BaseCommand } from "../../lib/command.js";
-import { ActionDockClient } from "../../lib/client.js";
-import { resolveServerUrl, resolveToken } from "../../lib/config.js";
 import {
   mergeDefinitionPatch,
   mergeWebhookDefinition,
   parseOptionalObject,
   resolveEnabledFlag
-} from "../../lib/event.js";
+} from "../../lib/webhook.js";
 import { renderWebhookDetail } from "../../lib/render.js";
 import type { WebhookDefinition } from "../../lib/types.js";
 
@@ -45,15 +43,7 @@ export default class WebhookUpdateCommand extends BaseCommand {
     disabled: Flags.boolean({
       description: "Mark the Webhook as disabled"
     }),
-    profile: Flags.string({
-      description: "Use a configured server profile"
-    }),
-    server: Flags.string({
-      description: "Override ActionDock server URL"
-    }),
-    token: Flags.string({
-      description: "Override ActionDock bearer token"
-    }),
+    ...BaseCommand.connectionFlags,
     help: Flags.help({ char: "h" })
   };
 
@@ -61,11 +51,8 @@ export default class WebhookUpdateCommand extends BaseCommand {
     const { args, flags } = await this.parse(WebhookUpdateCommand);
 
     try {
-      const client = new ActionDockClient({
-        serverUrl: resolveServerUrl(flags),
-        token: resolveToken(flags)
-      });
-      const existing = await client.getWebhook(args.webhookId);
+      const client = this.getClient(flags);
+      const existing = await client.webhooks.get(args.webhookId);
       const patch = parseOptionalObject<WebhookDefinition>(flags["definition-json"], flags["definition-file"], {
         jsonFlag: "`--definition-json`",
         fileFlag: "`--definition-file`"
@@ -85,7 +72,7 @@ export default class WebhookUpdateCommand extends BaseCommand {
           transportType: flags["transport-type"]?.toUpperCase()
         }
       );
-      const item = await client.updateWebhook(args.webhookId, merged);
+      const item = await client.webhooks.update(args.webhookId, merged);
 
       if (flags.json) {
         this.printJson(item);

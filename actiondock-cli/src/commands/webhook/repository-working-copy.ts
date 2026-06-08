@@ -1,8 +1,6 @@
 import { Args, Flags } from "@oclif/core";
 
 import { BaseCommand } from "../../lib/command.js";
-import { ActionDockClient } from "../../lib/client.js";
-import { resolveServerUrl, resolveToken } from "../../lib/config.js";
 import { renderRepositoryLocalAsset } from "../../lib/render.js";
 
 export default class WebhookRepositoryWorkingCopyCommand extends BaseCommand {
@@ -23,15 +21,7 @@ export default class WebhookRepositoryWorkingCopyCommand extends BaseCommand {
     "webhook-id": Flags.string({
       description: "Override the local working copy Webhook ID"
     }),
-    profile: Flags.string({
-      description: "Use a configured server profile"
-    }),
-    server: Flags.string({
-      description: "Override ActionDock server URL"
-    }),
-    token: Flags.string({
-      description: "Override ActionDock bearer token"
-    }),
+    ...BaseCommand.connectionFlags,
     help: Flags.help({ char: "h" })
   };
 
@@ -39,11 +29,8 @@ export default class WebhookRepositoryWorkingCopyCommand extends BaseCommand {
     const { args, flags } = await this.parse(WebhookRepositoryWorkingCopyCommand);
 
     try {
-      const client = new ActionDockClient({
-        serverUrl: resolveServerUrl(flags),
-        token: resolveToken(flags)
-      });
-      const item = await client.createRepositoryWebhookWorkingCopy(args.repositoryId, args.webhookId, flags["webhook-id"]);
+      const client = this.getClient(flags);
+      const item = await client.repositories.createWebhookWorkingCopy(args.repositoryId, args.webhookId, flags["webhook-id"]);
 
       if (flags.json) {
         this.printJson(item);

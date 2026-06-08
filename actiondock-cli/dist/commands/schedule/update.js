@@ -1,7 +1,5 @@
 import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../lib/command.js";
-import { ActionDockClient } from "../../lib/client.js";
-import { resolveServerUrl, resolveToken } from "../../lib/config.js";
 import { renderScheduleDetail } from "../../lib/render.js";
 import { buildScheduleInput, resolveScheduleEnabled } from "../../lib/schedule.js";
 export default class ScheduleUpdateCommand extends BaseCommand {
@@ -32,15 +30,7 @@ export default class ScheduleUpdateCommand extends BaseCommand {
         "input-file": Flags.string({
             description: "Path to a JSON file containing the base schedule input object"
         }),
-        profile: Flags.string({
-            description: "Use a configured server profile"
-        }),
-        server: Flags.string({
-            description: "Override ActionDock server URL"
-        }),
-        token: Flags.string({
-            description: "Override ActionDock bearer token"
-        }),
+        ...BaseCommand.connectionFlags,
         help: Flags.help({ char: "h" })
     };
     static strict = false;
@@ -48,11 +38,8 @@ export default class ScheduleUpdateCommand extends BaseCommand {
     async run() {
         const { args, flags } = await this.parse(ScheduleUpdateCommand);
         try {
-            const client = new ActionDockClient({
-                serverUrl: resolveServerUrl(flags),
-                token: resolveToken(flags)
-            });
-            const existing = await client.getSchedule(args.scheduleId);
+            const client = this.getClient(flags);
+            const existing = await client.schedules.get(args.scheduleId);
             const input = await buildScheduleInput({
                 client,
                 scriptId: existing.scriptId,
@@ -64,7 +51,7 @@ export default class ScheduleUpdateCommand extends BaseCommand {
                 booleanFlags: ["schedule-enabled", "schedule-disabled", "replace-input"],
                 valueFlags: ["schedule-name", "schedule-cron"]
             });
-            const schedule = await client.updateSchedule(args.scheduleId, {
+            const schedule = await client.schedules.update(args.scheduleId, {
                 scriptId: existing.scriptId,
                 name: flags["schedule-name"] ?? existing.name ?? existing.id,
                 cronExpression: flags["schedule-cron"] ?? existing.cronExpression ?? "",

@@ -1,8 +1,6 @@
 import { Flags } from "@oclif/core";
 
 import { BaseCommand } from "../../lib/command.js";
-import { ActionDockClient } from "../../lib/client.js";
-import { resolveServerUrl, resolveToken } from "../../lib/config.js";
 import { renderScriptDetail } from "../../lib/render.js";
 import { parseSchemaInput, resolveOptionalTextInput, resolveScriptSource } from "../../lib/script.js";
 
@@ -58,15 +56,7 @@ export default class ScriptCreateCommand extends BaseCommand {
     "output-schema-file": Flags.string({
       description: "Path to a JSON file containing outputSchema"
     }),
-    profile: Flags.string({
-      description: "Use a configured server profile"
-    }),
-    server: Flags.string({
-      description: "Override ActionDock server URL"
-    }),
-    token: Flags.string({
-      description: "Override ActionDock bearer token"
-    }),
+    ...BaseCommand.connectionFlags,
     help: Flags.help({ char: "h" })
   };
 
@@ -74,11 +64,8 @@ export default class ScriptCreateCommand extends BaseCommand {
     const { flags } = await this.parse(ScriptCreateCommand);
 
     try {
-      const client = new ActionDockClient({
-        serverUrl: resolveServerUrl(flags),
-        token: resolveToken(flags)
-      });
-      const script = await client.createScript({
+      const client = this.getClient(flags);
+      const script = await client.scripts.create({
         id: flags["script-id"],
         name: flags.name,
         type: flags.type.toUpperCase(),
