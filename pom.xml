@@ -1,0 +1,53 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.3.5</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>org.team4u</groupId>
+    <artifactId>actiondock</artifactId>
+    <version>0.3.0</version>
+    <packaging>pom</packaging>
+    <name>actiondock</name>
+    <description>Multi-module Spring ActionDock runtime with H2 and script execution</description>
+
+    <modules>
+        <module>actiondock-common</module>
+        <module>actiondock-plugin-api</module>
+        <module>actiondock-core</module>
+        <module>actiondock-ai-api</module>
+        <module>actiondock-ai-core</module>
+        <module>actiondock-ai-agentscope</module>
+        <module>actiondock-ai-plugin-bridge</module>
+        <module>actiondock-workspace-plugin</module>
+        <module>actiondock-storage-jpa</module>
+        <module>actiondock-app-support</module>
+        <module>actiondock-app-spring</module>
+        <module>actiondock-plugin-template</module>
+    </modules>
+
+    <properties>
+        <java.version>21</java.version>
+        <groovy.version>4.0.24</groovy.version>
+        <pf4j.version>3.13.0</pf4j.version>
+        <hutool.version>5.8.36</hutool.version>
+    </properties>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <skip>true</skip>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

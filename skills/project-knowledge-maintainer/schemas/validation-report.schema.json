@@ -1,0 +1,80 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ValidationReport",
+  "type": "object",
+  "required": [
+    "stage",
+    "status",
+    "summary",
+    "findings",
+    "next_action"
+  ],
+  "properties": {
+    "stage": {
+      "const": "validator"
+    },
+    "status": {
+      "enum": [
+        "PASS",
+        "FAIL_REPAIRABLE",
+        "FAIL_NEEDS_REPLAN",
+        "BLOCKED",
+        "INSUFFICIENT_EVIDENCE",
+        "UNAVAILABLE"
+      ]
+    },
+    "summary": {
+      "type": "string"
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "code",
+          "severity",
+          "message",
+          "evidence",
+          "required_action"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "info",
+              "warning",
+              "error"
+            ]
+          },
+          "target_path": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "required_action": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "next_action": {
+      "enum": [
+        "FINALIZE",
+        "REPAIR",
+        "REPLAN",
+        "STOP_BLOCKED"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

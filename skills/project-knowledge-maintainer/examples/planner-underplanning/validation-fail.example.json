@@ -1,0 +1,18 @@
+{
+  "stage": "validator",
+  "status": "FAIL_NEEDS_REPLAN",
+  "summary": "Plan A is too shallow for multi-domain evidence.",
+  "findings": [
+    {
+      "code": "shallow_global_plan",
+      "severity": "error",
+      "message": "Plan A contains only index docs despite API and data evidence.",
+      "evidence": [
+        "src/routes/orders.ts",
+        "db/migrations/001_orders.sql"
+      ],
+      "required_action": "Run Domain Planners and rebuild Plan A."
+    }
+  ],
+  "next_action": "REPLAN"
+}

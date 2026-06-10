@@ -1,0 +1,53 @@
+
+actiondock-admin-ui/dist/
+actiondock-admin-ui/.vite/
+!actiondock-cli/bin/
+!actiondock-cli/bin/**
+actiondock-cli/runtime/
+actiondock-cli/*.tgz
+.apt_generated
+bin
+build/
+.classpath
+.cx-index.db
+data/
+/dist/
+.DS_Store
+extensions.idx
+.factorypath
+.github/*
+!.github/workflows/
+!.github/workflows/**
+HELP.md
+.idea
+*.iml
+### IntelliJ IDEA ###
+*.ipr
+*.iws
+jdeploy
+jdeploy-bundle
+!.mvn/wrapper/maven-wrapper.jar
+/nbbuild/
+/nbdist/
+/.nb-gradle/
+/nbproject/private/
+### NetBeans ###
+node_modules/
+.planning/
+.project
+.settings
+.springBeans
+.actiondock/
+.antigravitycli/
+!**/src/main/**
+!**/src/test/**
+### STS ###
+.sts4-cache
+target/
+*.tsbuildinfo
+.vscode
+.vscode/
+### VS Code ###
+
+# Claude
+.claude/

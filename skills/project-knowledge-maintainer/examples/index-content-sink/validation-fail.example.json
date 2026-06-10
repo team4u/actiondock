@@ -1,0 +1,18 @@
+{
+  "stage": "validator",
+  "status": "FAIL_NEEDS_REPLAN",
+  "summary": "Index document is carrying substantive domain content.",
+  "findings": [
+    {
+      "code": "index_content_sink",
+      "severity": "error",
+      "target_path": "docs/api/index.md",
+      "message": "API index contains endpoint-level details that should move to leaf docs.",
+      "evidence": [
+        "docs/api/index.md"
+      ],
+      "required_action": "Split endpoint details into leaf documents and keep index navigational."
+    }
+  ],
+  "next_action": "REPLAN"
+}

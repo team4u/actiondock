@@ -1,0 +1,313 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DomainPlan",
+  "type": "object",
+  "required": [
+    "domain",
+    "status",
+    "activation_status",
+    "coverage_profile",
+    "evidence_scanned",
+    "domain_entities_found",
+    "recommended_documents",
+    "excluded_documents",
+    "self_check"
+  ],
+  "properties": {
+    "domain": {
+      "enum": [
+        "architecture",
+        "api",
+        "data",
+        "business_flow",
+        "agent_tool",
+        "infra_env",
+        "maintenance_ops",
+        "other"
+      ]
+    },
+    "status": {
+      "enum": [
+        "PASS",
+        "FAIL_REPAIRABLE",
+        "FAIL_NEEDS_REPLAN",
+        "BLOCKED",
+        "INSUFFICIENT_EVIDENCE",
+        "UNAVAILABLE"
+      ]
+    },
+    "activation_status": {
+      "enum": [
+        "active",
+        "candidate",
+        "excluded"
+      ]
+    },
+    "coverage_profile": {
+      "type": "object",
+      "required": [
+        "leaf_evidence_found",
+        "index_only_justified",
+        "coverage_level"
+      ],
+      "properties": {
+        "leaf_evidence_found": {
+          "type": "boolean"
+        },
+        "index_only_justified": {
+          "type": "boolean"
+        },
+        "coverage_level": {
+          "enum": [
+            "minimal",
+            "normal",
+            "high_coverage",
+            "insufficient_evidence"
+          ]
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "evidence_scanned": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "domain_entities_found": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "recommended_documents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "target_path",
+          "domain",
+          "category",
+          "doc_type",
+          "reason",
+          "evidence_basis",
+          "expected_content",
+          "acceptance_criteria",
+          "phase"
+        ],
+        "properties": {
+          "target_path": {
+            "type": "string"
+          },
+          "domain": {
+            "enum": [
+              "architecture",
+              "api",
+              "data",
+              "business_flow",
+              "agent_tool",
+              "infra_env",
+              "maintenance_ops",
+              "other"
+            ]
+          },
+          "category": {
+            "enum": [
+              "existing",
+              "must",
+              "should",
+              "candidate",
+              "defer",
+              "excluded"
+            ]
+          },
+          "doc_type": {
+            "enum": [
+              "actiondock",
+              "index",
+              "leaf",
+              "runbook",
+              "reference",
+              "other"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "evidence_basis": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "expected_content": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "acceptance_criteria": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "phase": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "dependencies": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "execution_eligibility": {
+            "enum": [
+              "execute_default",
+              "execute_high_coverage",
+              "defer",
+              "exclude"
+            ]
+          },
+          "source_domain_plan": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "excluded_documents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "target_path",
+          "domain",
+          "category",
+          "doc_type",
+          "reason",
+          "evidence_basis",
+          "expected_content",
+          "acceptance_criteria",
+          "phase"
+        ],
+        "properties": {
+          "target_path": {
+            "type": "string"
+          },
+          "domain": {
+            "enum": [
+              "architecture",
+              "api",
+              "data",
+              "business_flow",
+              "agent_tool",
+              "infra_env",
+              "maintenance_ops",
+              "other"
+            ]
+          },
+          "category": {
+            "enum": [
+              "existing",
+              "must",
+              "should",
+              "candidate",
+              "defer",
+              "excluded"
+            ]
+          },
+          "doc_type": {
+            "enum": [
+              "actiondock",
+              "index",
+              "leaf",
+              "runbook",
+              "reference",
+              "other"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "evidence_basis": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "expected_content": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "acceptance_criteria": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "phase": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "dependencies": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "execution_eligibility": {
+            "enum": [
+              "execute_default",
+              "execute_high_coverage",
+              "defer",
+              "exclude"
+            ]
+          },
+          "source_domain_plan": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "self_check": {
+      "type": "object",
+      "required": [
+        "index_content_sink_risk",
+        "under_split_risk",
+        "active_domain_index_only_risk",
+        "obvious_missing_docs",
+        "coverage_assertion"
+      ],
+      "properties": {
+        "index_content_sink_risk": {
+          "type": "boolean"
+        },
+        "under_split_risk": {
+          "type": "boolean"
+        },
+        "active_domain_index_only_risk": {
+          "type": "boolean"
+        },
+        "obvious_missing_docs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "coverage_assertion": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,38 @@
+{
+  "stage": "validator",
+  "status": "FAIL_NEEDS_REPLAN",
+  "summary": "Global Plan A compressed Domain Planner inventories into index-only docs.",
+  "findings": [
+    {
+      "code": "global_planner_compressed_inventory",
+      "severity": "error",
+      "message": "Global Planner removed leaf docs from Domain Planner results to reduce the Worker task count.",
+      "evidence": [
+        "api Domain Planner returned docs/api/http/orders.md as should",
+        "data Domain Planner returned docs/data/orders.md as should",
+        "Global Plan A kept only docs/api/index.md and docs/data/index.md"
+      ],
+      "required_action": "Restore omitted leaf docs or record valid merge decisions that preserve expected content and acceptance criteria."
+    },
+    {
+      "code": "should_doc_dropped_without_reason",
+      "severity": "error",
+      "message": "A Domain Planner should document was absent from Plan A without a merge decision.",
+      "evidence": [
+        "docs/api/http/orders.md missing from Plan A merge_decisions"
+      ],
+      "required_action": "Preserve, merge, defer, or block the should document with an explicit reason."
+    },
+    {
+      "code": "active_domain_index_only",
+      "severity": "error",
+      "message": "Activated domains with leaf-level evidence were represented only by index documents.",
+      "evidence": [
+        "src/routes/orders.ts",
+        "db/migrations/001_orders.sql"
+      ],
+      "required_action": "Rebuild Plan A with leaf documents for activated domains."
+    }
+  ],
+  "next_action": "REPLAN"
+}

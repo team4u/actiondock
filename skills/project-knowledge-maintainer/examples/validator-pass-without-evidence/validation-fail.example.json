@@ -1,0 +1,17 @@
+{
+  "stage": "validator",
+  "status": "FAIL_REPAIRABLE",
+  "summary": "Validator attempted to PASS without evidence-backed criteria results.",
+  "findings": [
+    {
+      "code": "validator_pass_without_evidence",
+      "severity": "error",
+      "message": "The validation report claims completion but does not include evidence for the acceptance criteria.",
+      "evidence": [
+        "VALIDATION_REPORT"
+      ],
+      "required_action": "Re-run Validator with evidence checks for Plan A, Worker results, hard failures, and acceptance criteria."
+    }
+  ],
+  "next_action": "REPAIR"
+}

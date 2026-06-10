@@ -1,0 +1,11 @@
+{
+  "private": true,
+  "name": "actiondock-app-spring-internal",
+  "version": "0.3.4",
+  "description": "ActionDock internal Spring runtime module",
+  "author": "jay.wu <fjayblue@126.com>",
+  "license": "MIT",
+  "scripts": {
+    "build:jar": "mvn -pl actiondock-app-spring -am package -DskipTests -f ../pom.xml"
+  }
+}

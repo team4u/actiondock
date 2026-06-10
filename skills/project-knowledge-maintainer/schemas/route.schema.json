@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RouteResult",
+  "type": "object",
+  "required": [
+    "scale",
+    "execution_mode",
+    "document_set_plan_required",
+    "reasons",
+    "required_references"
+  ],
+  "properties": {
+    "scale": {
+      "enum": [
+        "XS",
+        "S",
+        "M",
+        "L",
+        "XL"
+      ]
+    },
+    "execution_mode": {
+      "enum": [
+        "subagent",
+        "serial"
+      ]
+    },
+    "fallback_reason": {
+      "type": "string"
+    },
+    "document_set_plan_required": {
+      "type": "boolean"
+    },
+    "reasons": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "required_references": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

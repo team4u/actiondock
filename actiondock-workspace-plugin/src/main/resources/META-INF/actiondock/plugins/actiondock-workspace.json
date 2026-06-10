@@ -1,0 +1,558 @@
+{
+  "pluginId": "actiondock-workspace",
+  "name": "ActionDock Workspace",
+  "description": "Built-in workspace system plugin for controlled file-system and shell operations from scripts.",
+  "actions": [
+    {
+      "action": "listDirectory",
+      "title": "List Directory",
+      "description": "List directories and files under a workspace path.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Directory Path"
+          },
+          "baseDir": {
+            "type": "string",
+            "title": "Base Directory"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "dirPath": {
+            "type": "string"
+          },
+          "directories": {
+            "type": "array"
+          },
+          "files": {
+            "type": "array"
+          },
+          "directoryCount": {
+            "type": "integer"
+          },
+          "fileCount": {
+            "type": "integer"
+          }
+        }
+      },
+      "exampleArgs": {
+        "path": "."
+      }
+    },
+    {
+      "action": "viewTextFile",
+      "title": "View Text File",
+      "description": "Read text content from a file with optional line ranges.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "File Path"
+          },
+          "viewRange": {
+            "type": "string",
+            "title": "Line Range"
+          },
+          "baseDir": {
+            "type": "string",
+            "title": "Base Directory"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "filePath": {
+            "type": "string"
+          },
+          "startLine": {
+            "type": "integer"
+          },
+          "endLine": {
+            "type": "integer"
+          },
+          "lineCount": {
+            "type": "integer"
+          },
+          "content": {
+            "type": "string"
+          }
+        }
+      },
+      "exampleArgs": {
+        "path": "README.md",
+        "viewRange": "1,20"
+      }
+    },
+    {
+      "action": "writeTextFile",
+      "title": "Write Text File",
+      "description": "Create, overwrite, or replace a text file range.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "File Path"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "ranges": {
+            "type": "string",
+            "title": "Replace Range"
+          },
+          "baseDir": {
+            "type": "string",
+            "title": "Base Directory"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "filePath": {
+            "type": "string"
+          },
+          "created": {
+            "type": "boolean"
+          },
+          "replacedRange": {
+            "type": "array"
+          },
+          "snippet": {
+            "type": "string"
+          },
+          "snippetRange": {
+            "type": "array"
+          }
+        }
+      },
+      "exampleArgs": {
+        "path": "notes.txt",
+        "content": "updated line",
+        "ranges": "2,3"
+      }
+    },
+    {
+      "action": "insertTextFile",
+      "title": "Insert Text File",
+      "description": "Insert text content into a file at a specific line.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "File Path"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "lineNumber": {
+            "type": "integer",
+            "title": "Line Number"
+          },
+          "baseDir": {
+            "type": "string",
+            "title": "Base Directory"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "filePath": {
+            "type": "string"
+          },
+          "lineNumber": {
+            "type": "integer"
+          },
+          "snippet": {
+            "type": "string"
+          },
+          "snippetRange": {
+            "type": "array"
+          }
+        }
+      },
+      "exampleArgs": {
+        "path": "notes.txt",
+        "content": "inserted line",
+        "lineNumber": 3
+      }
+    },
+    {
+      "action": "findFiles",
+      "title": "Find Files",
+      "description": "Find files or directories under a workspace path using portable glob filters and ignore rules.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Search Root",
+            "description": "Root path to search. Defaults to '.'."
+          },
+          "baseDir": {
+            "type": "string",
+            "title": "Base Directory"
+          },
+          "includeGlobs": {
+            "type": "array",
+            "title": "Include Globs",
+            "items": {
+              "type": "string"
+            }
+          },
+          "excludeGlobs": {
+            "type": "array",
+            "title": "Exclude Globs",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fileType": {
+            "type": "string",
+            "title": "File Type",
+            "description": "One of 'file', 'directory', or 'any'. Default: file."
+          },
+          "respectGitIgnore": {
+            "type": "boolean",
+            "title": "Respect .gitignore",
+            "description": "Apply lightweight .gitignore rules while scanning. Default: true."
+          },
+          "includeDefaultExcludes": {
+            "type": "boolean",
+            "title": "Include Default Excludes",
+            "description": "Whether to skip common generated directories such as .git, target, node_modules, dist, and build. Default: true."
+          },
+          "maxResults": {
+            "type": "integer",
+            "title": "Max Results",
+            "description": "Maximum result entries to return. Default: 200."
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "rootPath": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array"
+          },
+          "resultCount": {
+            "type": "integer"
+          },
+          "scannedCount": {
+            "type": "integer"
+          },
+          "skippedCount": {
+            "type": "integer"
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        }
+      },
+      "exampleArgs": {
+        "path": ".",
+        "includeGlobs": [
+          "**/*.java"
+        ],
+        "excludeGlobs": [
+          "**/*Test.java"
+        ]
+      }
+    },
+    {
+      "action": "searchText",
+      "title": "Search Text",
+      "description": "Search UTF-8 text files under a workspace path using portable regex or literal matching.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query",
+            "description": "Search query. Interpreted as regex by default."
+          },
+          "path": {
+            "type": "string",
+            "title": "Search Root",
+            "description": "Root path to search. Defaults to '.'."
+          },
+          "baseDir": {
+            "type": "string",
+            "title": "Base Directory"
+          },
+          "regex": {
+            "type": "boolean",
+            "title": "Regex",
+            "description": "Whether query is a regular expression. Default: true."
+          },
+          "caseSensitive": {
+            "type": "boolean",
+            "title": "Case Sensitive",
+            "description": "Whether matching is case-sensitive. Default: true."
+          },
+          "contextLines": {
+            "type": "integer",
+            "title": "Context Lines",
+            "description": "Number of lines before and after each match. Default: 0."
+          },
+          "includeGlobs": {
+            "type": "array",
+            "title": "Include Globs",
+            "items": {
+              "type": "string"
+            }
+          },
+          "excludeGlobs": {
+            "type": "array",
+            "title": "Exclude Globs",
+            "items": {
+              "type": "string"
+            }
+          },
+          "respectGitIgnore": {
+            "type": "boolean",
+            "title": "Respect .gitignore",
+            "description": "Apply lightweight .gitignore rules while scanning. Default: true."
+          },
+          "includeDefaultExcludes": {
+            "type": "boolean",
+            "title": "Include Default Excludes",
+            "description": "Whether to skip common generated directories such as .git, target, node_modules, dist, and build. Default: true."
+          },
+          "maxMatches": {
+            "type": "integer",
+            "title": "Max Matches",
+            "description": "Maximum total matches to return. Default: 200."
+          },
+          "maxMatchesPerFile": {
+            "type": "integer",
+            "title": "Max Matches Per File",
+            "description": "Maximum matches to return from one file. Default: 20."
+          },
+          "maxFileSizeBytes": {
+            "type": "integer",
+            "title": "Max File Size Bytes",
+            "description": "Skip files larger than this size. Default: 1048576."
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "rootPath": {
+            "type": "string"
+          },
+          "matches": {
+            "type": "array"
+          },
+          "matchCount": {
+            "type": "integer"
+          },
+          "matchedFileCount": {
+            "type": "integer"
+          },
+          "searchedFileCount": {
+            "type": "integer"
+          },
+          "skippedFileCount": {
+            "type": "integer"
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        }
+      },
+      "exampleArgs": {
+        "query": "TODO|FIXME",
+        "path": ".",
+        "includeGlobs": [
+          "**/*.java"
+        ],
+        "contextLines": 1
+      }
+    },
+    {
+      "action": "getSystemInfo",
+      "title": "Get System Info",
+      "description": "Inspect the current system, workspace, available shells, and common command runtimes.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "baseDir": {
+            "type": "string",
+            "title": "Base Directory"
+          },
+          "shellPath": {
+            "type": "string",
+            "title": "Shell Path"
+          },
+          "additionalCommands": {
+            "type": "array",
+            "title": "Additional Commands",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "workspace": {
+            "type": "object"
+          },
+          "system": {
+            "type": "object"
+          },
+          "pathEntries": {
+            "type": "array"
+          },
+          "shells": {
+            "type": "array"
+          },
+          "commands": {
+            "type": "array"
+          }
+        }
+      },
+      "exampleArgs": {
+        "baseDir": ".",
+        "additionalCommands": [
+          "docker",
+          "uv"
+        ]
+      }
+    },
+    {
+      "action": "exec",
+      "title": "Execute Shell Command",
+      "description": "Execute a local shell command with the same shell selection and quoting model as the script runtime shell.exec helper. On Linux/macOS it prefers bash-compatible shells; on Windows it uses PowerShell first and falls back to cmd.exe if PowerShell is unavailable.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string",
+            "title": "Command",
+            "description": "The shell command string to execute. The command syntax must match the selected shell."
+          },
+          "cwd": {
+            "type": "string",
+            "title": "Working Directory",
+            "description": "Working directory for command execution. Defaults to the current process working directory. The directory must already exist."
+          },
+          "timeoutSeconds": {
+            "type": "integer",
+            "title": "Timeout Seconds",
+            "description": "Maximum execution time in seconds. The process is killed if it exceeds this limit. Default: 30."
+          },
+          "maxOutputBytes": {
+            "type": "integer",
+            "title": "Max Output Bytes",
+            "description": "Truncate stdout and stderr independently to this many bytes to avoid memory issues. Default: 1048576 (1 MB)."
+          },
+          "check": {
+            "type": "boolean",
+            "title": "Check",
+            "description": "Whether a failed command should raise a plugin runtime error. Default: true."
+          },
+          "shell": {
+            "type": "string",
+            "title": "Shell",
+            "description": "Shell selection: auto, bash, sh, powershell, or cmd. Default: auto."
+          },
+          "env": {
+            "type": "object",
+            "title": "Environment",
+            "description": "Additional environment variables to set for the child process, as key-value pairs. These are merged with the current process environment."
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "command": {
+            "type": "string"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "shell": {
+            "type": "array"
+          },
+          "exitCode": {
+            "type": "integer"
+          },
+          "stdout": {
+            "type": "string"
+          },
+          "stderr": {
+            "type": "string"
+          },
+          "durationMs": {
+            "type": "integer"
+          },
+          "timedOut": {
+            "type": "boolean"
+          },
+          "stdoutTruncated": {
+            "type": "boolean"
+          },
+          "stderrTruncated": {
+            "type": "boolean"
+          }
+        }
+      },
+      "exampleArgs": {
+        "command": "ls -la",
+        "cwd": ".",
+        "timeoutSeconds": 10,
+        "check": false
+      }
+    }
+  ]
+}

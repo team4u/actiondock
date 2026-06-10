@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "FinalReport",
+  "type": "object",
+  "required": [
+    "status",
+    "scale",
+    "execution_mode",
+    "changed_files",
+    "validation_status",
+    "unresolved_findings"
+  ],
+  "properties": {
+    "status": {
+      "enum": [
+        "PASS",
+        "BLOCKED",
+        "FAILED"
+      ]
+    },
+    "scale": {
+      "enum": [
+        "XS",
+        "S",
+        "M",
+        "L",
+        "XL"
+      ]
+    },
+    "execution_mode": {
+      "enum": [
+        "subagent",
+        "serial"
+      ]
+    },
+    "fallback_reason": {
+      "type": "string"
+    },
+    "changed_files": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidence_used": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "validation_status": {
+      "type": "string"
+    },
+    "unresolved_findings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

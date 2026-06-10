@@ -1,0 +1,19 @@
+{
+  "stage": "validator",
+  "status": "FAIL_NEEDS_REPLAN",
+  "summary": "Infra/env evidence exists but no required environment documentation was planned.",
+  "findings": [
+    {
+      "code": "missing_infra_env_doc",
+      "severity": "error",
+      "target_path": "docs/infra/env.md",
+      "message": "Environment variables are present in configuration but no infra/env leaf doc exists in Plan A.",
+      "evidence": [
+        ".env.example",
+        "config/app.ts"
+      ],
+      "required_action": "Activate infra_env Domain Planner and add a non-secret environment configuration doc to Plan A."
+    }
+  ],
+  "next_action": "REPLAN"
+}

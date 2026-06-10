@@ -1,0 +1,220 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WorkerResult",
+  "type": "object",
+  "required": [
+    "stage",
+    "target_path",
+    "status",
+    "changes",
+    "evidence_used",
+    "criteria_results",
+    "self_check",
+    "proposed_extra_tasks"
+  ],
+  "properties": {
+    "stage": {
+      "const": "worker"
+    },
+    "target_path": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "PASS",
+        "FAIL_REPAIRABLE",
+        "FAIL_NEEDS_REPLAN",
+        "BLOCKED",
+        "INSUFFICIENT_EVIDENCE",
+        "UNAVAILABLE"
+      ]
+    },
+    "changes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "action"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "action": {
+            "enum": [
+              "created",
+              "updated",
+              "unchanged",
+              "blocked"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "evidence_used": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "criteria_results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "criterion",
+          "status",
+          "evidence",
+          "notes"
+        ],
+        "properties": {
+          "criterion": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "UNKNOWN",
+              "NOT_APPLICABLE"
+            ]
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "self_check": {
+      "type": "object",
+      "required": [
+        "unsupported_claims",
+        "secret_leak",
+        "index_content_sink",
+        "needs_replan"
+      ],
+      "properties": {
+        "unsupported_claims": {
+          "type": "boolean"
+        },
+        "secret_leak": {
+          "type": "boolean"
+        },
+        "index_content_sink": {
+          "type": "boolean"
+        },
+        "needs_replan": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "proposed_extra_tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "target_path",
+          "domain",
+          "category",
+          "doc_type",
+          "reason",
+          "evidence_basis",
+          "expected_content",
+          "acceptance_criteria",
+          "phase"
+        ],
+        "properties": {
+          "target_path": {
+            "type": "string"
+          },
+          "domain": {
+            "enum": [
+              "architecture",
+              "api",
+              "data",
+              "business_flow",
+              "agent_tool",
+              "infra_env",
+              "maintenance_ops",
+              "other"
+            ]
+          },
+          "category": {
+            "enum": [
+              "existing",
+              "must",
+              "should",
+              "candidate",
+              "defer",
+              "excluded"
+            ]
+          },
+          "doc_type": {
+            "enum": [
+              "actiondock",
+              "index",
+              "leaf",
+              "runbook",
+              "reference",
+              "other"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "evidence_basis": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "expected_content": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "acceptance_criteria": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "phase": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "source_domain_plan": {
+            "type": "string"
+          },
+          "dependencies": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "execution_eligibility": {
+            "enum": [
+              "execute_default",
+              "execute_high_coverage",
+              "defer",
+              "exclude"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

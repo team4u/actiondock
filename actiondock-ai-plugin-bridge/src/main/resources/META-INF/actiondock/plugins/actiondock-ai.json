@@ -1,0 +1,256 @@
+{
+  "pluginId": "actiondock-ai",
+  "name": "ActionDock AI",
+  "description": "Built-in AI system plugin for chat, structured output, embeddings, and agent runs from Groovy scripts.",
+  "actions": [
+    {
+      "action": "chat",
+      "title": "Chat Completion",
+      "description": "Call a model profile with chat messages and optional runtime options.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "modelProfile": {
+            "type": "string",
+            "title": "Model Profile"
+          },
+          "messages": {
+            "type": "array",
+            "title": "Messages",
+            "items": {
+              "type": "object",
+              "properties": {
+                "role": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "options": {
+            "type": "object",
+            "title": "Options"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "string",
+            "title": "Data"
+          },
+          "usage": {
+            "type": "object",
+            "title": "Usage"
+          },
+          "raw": {
+            "type": "object",
+            "title": "Raw Response"
+          }
+        }
+      },
+      "exampleArgs": {
+        "modelProfile": "default-chat",
+        "messages": [
+          {
+            "role": "system",
+            "content": "你是一个脚本助手"
+          },
+          {
+            "role": "user",
+            "content": "请总结 input.text 的核心信息"
+          }
+        ],
+        "options": {
+          "temperature": 0.2
+        }
+      }
+    },
+    {
+      "action": "structured",
+      "title": "Structured Output",
+      "description": "Request JSON output constrained by a schema from a model profile.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "modelProfile": {
+            "type": "string",
+            "title": "Model Profile"
+          },
+          "messages": {
+            "type": "array",
+            "title": "Messages"
+          },
+          "outputSchema": {
+            "type": "object",
+            "title": "Output Schema"
+          },
+          "options": {
+            "type": "object",
+            "title": "Options"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "title": "Structured Data"
+          },
+          "usage": {
+            "type": "object",
+            "title": "Usage"
+          },
+          "raw": {
+            "type": "object",
+            "title": "Raw Response"
+          }
+        }
+      },
+      "exampleArgs": {
+        "modelProfile": "default-structured",
+        "messages": [
+          {
+            "role": "user",
+            "content": "提取标题和摘要"
+          }
+        ],
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "summary": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    {
+      "action": "embed",
+      "title": "Text Embedding",
+      "description": "Generate embeddings for one text or a list of texts with a model profile.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "modelProfile": {
+            "type": "string",
+            "title": "Model Profile"
+          },
+          "input": {
+            "title": "Input",
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ]
+          },
+          "options": {
+            "type": "object",
+            "title": "Options"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "title": "Data"
+          },
+          "usage": {
+            "type": "object",
+            "title": "Usage"
+          }
+        }
+      },
+      "exampleArgs": {
+        "modelProfile": "default-embedding",
+        "input": [
+          "第一段文本",
+          "第二段文本"
+        ]
+      }
+    },
+    {
+      "action": "agentRun",
+      "title": "Agent Run",
+      "description": "Run an AI agent profile with messages, structured input, and optional runtime options.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "agentProfile": {
+            "type": "string",
+            "title": "Agent Profile"
+          },
+          "messages": {
+            "type": "array",
+            "title": "Messages"
+          },
+          "input": {
+            "type": "object",
+            "title": "Input"
+          },
+          "options": {
+            "type": "object",
+            "title": "Options"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "title": "Run ID"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "data": {
+            "type": "object",
+            "title": "Data"
+          },
+          "steps": {
+            "type": "array",
+            "title": "Steps"
+          },
+          "usage": {
+            "type": "object",
+            "title": "Usage"
+          },
+          "errorMessage": {
+            "type": "string",
+            "title": "Error Message"
+          }
+        }
+      },
+      "exampleArgs": {
+        "agentProfile": "my-agent",
+        "messages": [
+          {
+            "role": "user",
+            "content": "分析当前脚本并给出改进建议"
+          }
+        ],
+        "input": {
+          "goal": "review script",
+          "scriptId": "hello-groovy"
+        }
+      }
+    }
+  ]
+}

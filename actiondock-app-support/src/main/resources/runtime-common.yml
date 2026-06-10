@@ -1,0 +1,44 @@
+spring:
+  datasource:
+    url: jdbc:h2:file:${app.home-dir}/data/actiondock;AUTO_SERVER=TRUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  servlet:
+    multipart:
+      max-file-size: 1024MB
+      max-request-size: 1024MB
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 0
+
+app:
+  home-dir: ${user.home}/.actiondock
+  plugins:
+    dir: ${app.home-dir}/plugins
+  repositories:
+    auto-sync-enabled: true
+    auto-sync-interval-seconds: 1800
+  execution:
+    async-pool-size: 4
+    artifact-root-dir: ${app.home-dir}/runs
+    shell:
+      timeout-seconds: 30
+      max-output-bytes: 1048576
+    groovy:
+      enabled: true
+      cache-max-size: 128
+      cache-expire-after-access-minutes: 30
+  schedules:
+    pool-size: 2
+  shared-state:
+    purge-interval-seconds: 300

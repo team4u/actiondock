@@ -1,0 +1,74 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RepairPlan",
+  "type": "object",
+  "required": [
+    "stage",
+    "status",
+    "repair_type",
+    "repairs",
+    "success_criteria"
+  ],
+  "properties": {
+    "stage": {
+      "const": "repair_planner"
+    },
+    "status": {
+      "enum": [
+        "PASS",
+        "FAIL_REPAIRABLE",
+        "FAIL_NEEDS_REPLAN",
+        "BLOCKED",
+        "INSUFFICIENT_EVIDENCE",
+        "UNAVAILABLE"
+      ]
+    },
+    "repair_type": {
+      "type": "string"
+    },
+    "repairs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "finding_code",
+          "repair_action",
+          "delegate"
+        ],
+        "properties": {
+          "finding_code": {
+            "type": "string"
+          },
+          "repair_action": {
+            "enum": [
+              "REPLAN",
+              "REWORK_TARGET_DOC",
+              "VALIDATE_AGAIN",
+              "STOP_BLOCKED"
+            ]
+          },
+          "delegate": {
+            "enum": [
+              "subagent",
+              "serial"
+            ]
+          },
+          "domain": {
+            "type": "string"
+          },
+          "target_path": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "success_criteria": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

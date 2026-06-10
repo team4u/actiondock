@@ -1,0 +1,18 @@
+{
+  "stage": "validator",
+  "status": "FAIL_NEEDS_REPLAN",
+  "summary": "Domain inventory is too shallow for the evidence found.",
+  "findings": [
+    {
+      "code": "domain_plan_too_shallow",
+      "severity": "error",
+      "message": "The API domain plan lists only docs/api/index.md despite discovered route and auth evidence.",
+      "evidence": [
+        "src/routes/orders.ts",
+        "src/middleware/auth.ts"
+      ],
+      "required_action": "Re-run API Domain Planner and produce leaf docs for route groups, auth, and error conventions."
+    }
+  ],
+  "next_action": "REPLAN"
+}

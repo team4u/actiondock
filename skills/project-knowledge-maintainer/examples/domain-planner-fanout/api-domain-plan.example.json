@@ -1,0 +1,52 @@
+{
+  "domain": "api",
+  "status": "PASS",
+  "activation_status": "active",
+  "coverage_profile": {
+    "leaf_evidence_found": true,
+    "index_only_justified": false,
+    "coverage_level": "normal",
+    "notes": "Route and test evidence support at least one API leaf document."
+  },
+  "evidence_scanned": [
+    "src/routes/orders.ts",
+    "tests/api/orders.test.ts"
+  ],
+  "domain_entities_found": [
+    "orders routes"
+  ],
+  "recommended_documents": [
+    {
+      "target_path": "docs/api/http/orders.md",
+      "domain": "api",
+      "category": "must",
+      "doc_type": "leaf",
+      "reason": "Orders route evidence exists.",
+      "evidence_basis": [
+        "src/routes/orders.ts",
+        "tests/api/orders.test.ts"
+      ],
+      "expected_content": [
+        "endpoint list",
+        "request/response shapes",
+        "auth and errors"
+      ],
+      "acceptance_criteria": [
+        "documents discovered endpoints",
+        "does not invent unsupported fields"
+      ],
+      "phase": 2,
+      "source_domain_plan": "api",
+      "dependencies": [],
+      "execution_eligibility": "execute_default"
+    }
+  ],
+  "excluded_documents": [],
+  "self_check": {
+    "index_content_sink_risk": false,
+    "under_split_risk": false,
+    "obvious_missing_docs": [],
+    "coverage_assertion": "API inventory covers discovered route evidence.",
+    "active_domain_index_only_risk": false
+  }
+}
