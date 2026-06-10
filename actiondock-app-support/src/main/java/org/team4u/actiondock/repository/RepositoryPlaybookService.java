@@ -25,12 +25,22 @@ import static org.team4u.actiondock.repository.RepositoryCatalogTypes.*;
 public class RepositoryPlaybookService {
     private final RepositoryCatalogService catalog;
     private final RepositoryCatalogService.Repositories repos;
+    private final RepositoryScriptService scriptService;
     private final RepositoryKnowledgeService knowledgeService;
+    private final RepositoryDependencyResolver dependencyResolver;
 
     public RepositoryPlaybookService(RepositoryCatalogService catalog) {
+        this(catalog, null, null);
+    }
+
+    public RepositoryPlaybookService(RepositoryCatalogService catalog,
+                                     RepositoryScriptService scriptService,
+                                     RepositoryKnowledgeService knowledgeService) {
         this.catalog = catalog;
         this.repos = catalog.getRepos();
-        this.knowledgeService = new RepositoryKnowledgeService(catalog);
+        this.scriptService = scriptService;
+        this.knowledgeService = knowledgeService == null ? new RepositoryKnowledgeService(catalog) : knowledgeService;
+        this.dependencyResolver = new RepositoryDependencyResolver(catalog);
     }
 
     public RepositoryPlaybookDescriptor publishPlaybook(String repositoryId, RepositoryPlaybookPublishRequest request) {
@@ -61,11 +71,11 @@ public class RepositoryPlaybookService {
         if (mode == RepositoryLocalAssetMode.TRACKED) {
             return createTrackedWorkingCopy(repositoryId, playbookId, request);
         }
-        return installOrUpdate(repositoryId, playbookId, false);
+        return installOrUpdate(repositoryId, playbookId, false, new LinkedHashSet<>());
     }
 
     public RepositoryLocalAsset updateLocalAsset(String repositoryId, String playbookId) {
-        return installOrUpdate(repositoryId, playbookId, true);
+        return installOrUpdate(repositoryId, playbookId, true, new LinkedHashSet<>());
     }
 
     public void uninstallPlaybook(String localAssetId) {
@@ -80,11 +90,25 @@ public class RepositoryPlaybookService {
                 .ifPresent(asset -> repos.repositoryLocalAssetRepository().deleteById(asset.getId()));
     }
 
-    private RepositoryLocalAsset installOrUpdate(String repositoryId, String playbookId, boolean updateOnly) {
+    private RepositoryLocalAsset installOrUpdate(String repositoryId,
+                                                 String playbookId,
+                                                 boolean updateOnly,
+                                                 LinkedHashSet<String> visiting) {
+        String installationKey = repositoryId + ":" + playbookId;
+        if (!visiting.add(installationKey)) {
+            throw new IllegalStateException("检测到任务手册循环依赖: " + String.join(" -> ", visiting) + " -> " + installationKey);
+        }
+        try {
         RepositoryPlaybookDetail detail = catalog.getRepositoryPlaybook(repositoryId, playbookId);
         RepositoryLocalAsset existingAsset = repos.repositoryLocalAssetRepository()
                 .findByUpstreamAsset(UpstreamAssetType.PLAYBOOK, repositoryId, playbookId)
                 .orElse(null);
+        if (existingAsset != null && existingAsset.getMode() == RepositoryLocalAssetMode.TRACKED) {
+            if (updateOnly) {
+                throw new IllegalArgumentException("上游任务手册已添加为可编辑跟踪资产，不能按只读资产更新: " + existingAsset.getLocalAssetId());
+            }
+            throw new IllegalArgumentException("上游任务手册已添加到本地: " + existingAsset.getLocalAssetId());
+        }
         if (!updateOnly && existingAsset != null) {
             throw new IllegalArgumentException("上游任务手册已添加到本地: " + existingAsset.getLocalAssetId());
         }
@@ -96,10 +120,14 @@ public class RepositoryPlaybookService {
         if (existingPlaybook != null && !existingPlaybook.isManaged()) {
             throw new IllegalArgumentException("本地已存在同 ID 非托管任务手册: " + localPlaybookId);
         }
+        PlaybookDependencyResolution dependencies = resolveAndInstallDependencies(repositoryId, detail.playbook(), true, visiting);
         LocalDateTime now = LocalDateTime.now();
-        Playbook saved = buildManagedPlaybook(detail.playbook(), localPlaybookId, existingPlaybook, now);
+        Playbook saved = buildManagedPlaybook(rewriteReferences(detail.playbook(), dependencies), localPlaybookId, existingPlaybook, now);
         repos.playbookRepository().save(saved);
         return saveLocalAsset(detail, saved, existingAsset, now);
+        } finally {
+            visiting.remove(installationKey);
+        }
     }
 
     private RepositoryLocalAsset createTrackedWorkingCopy(String repositoryId,
@@ -116,10 +144,180 @@ public class RepositoryPlaybookService {
         if (repos.playbookRepository().findById(localPlaybookId).isPresent()) {
             throw new IllegalArgumentException("任务手册 ID 已存在，请指定其他本地副本 ID: " + localPlaybookId);
         }
+        LinkedHashSet<String> visiting = new LinkedHashSet<>();
+        String installationKey = repositoryId + ":" + playbookId;
+        visiting.add(installationKey);
+        PlaybookDependencyResolution dependencies;
+        try {
+            dependencies = resolveAndInstallDependencies(repositoryId, detail.playbook(), false, visiting);
+        } finally {
+            visiting.remove(installationKey);
+        }
         LocalDateTime now = LocalDateTime.now();
-        Playbook saved = buildTrackedPlaybook(detail.playbook(), localPlaybookId, now);
+        Playbook saved = buildTrackedPlaybook(rewriteReferences(detail.playbook(), dependencies), localPlaybookId, now);
         repos.playbookRepository().save(saved);
         return saveTrackedLocalAsset(detail, saved, now);
+    }
+
+    private PlaybookDependencyResolution resolveAndInstallDependencies(String repositoryId,
+                                                                       PlaybookFile playbook,
+                                                                       boolean refreshLockedDependencies,
+                                                                       LinkedHashSet<String> visiting) {
+        PlaybookDependencyResolution resolution = new PlaybookDependencyResolution();
+        for (PlaybookKnowledgeRef ref : NormalizeUtils.nullSafeList(playbook.knowledgeRefs())) {
+            String knowledgeId = NormalizeUtils.normalizeNullable(ref.getRepositoryId());
+            if (knowledgeId == null) {
+                continue;
+            }
+            String dependencyRepositoryId = dependencyResolver.resolvePlaybookKnowledgeRepositoryId(repositoryId, knowledgeId, knowledgeId);
+            String installedRepositoryId = ensureKnowledgeInstalled(dependencyRepositoryId, knowledgeId);
+            resolution.knowledgeIds.put(knowledgeId, installedRepositoryId);
+        }
+        for (String repositoryIdRef : NormalizeUtils.nullSafeList(playbook.repositoryIds())) {
+            String knowledgeId = NormalizeUtils.normalizeNullable(repositoryIdRef);
+            if (knowledgeId == null) {
+                continue;
+            }
+            try {
+                String dependencyRepositoryId = dependencyResolver.resolvePlaybookKnowledgeRepositoryId(repositoryId, knowledgeId, knowledgeId);
+                String installedRepositoryId = ensureKnowledgeInstalled(dependencyRepositoryId, knowledgeId);
+                resolution.knowledgeIds.put(knowledgeId, installedRepositoryId);
+            } catch (IllegalArgumentException ignored) {
+                // repositoryIds can also point to local project repositories; only rewrite published knowledge refs.
+            }
+        }
+        for (PlaybookScriptRef ref : NormalizeUtils.nullSafeList(playbook.scriptRefs())) {
+            String scriptId = NormalizeUtils.normalizeNullable(ref.getScriptId());
+            if (scriptId == null) {
+                continue;
+            }
+            String dependencyRepositoryId = dependencyResolver.resolvePlaybookScriptRepositoryId(repositoryId, null, scriptId);
+            RepositoryLocalAsset asset = ensureScriptInstalled(dependencyRepositoryId, scriptId, refreshLockedDependencies);
+            resolution.scriptIds.put(scriptId, asset.getLocalAssetId());
+        }
+        for (PlaybookRelatedRef ref : NormalizeUtils.nullSafeList(playbook.relatedPlaybookRefs())) {
+            String relatedPlaybookId = NormalizeUtils.normalizeNullable(ref.getPlaybookId());
+            if (relatedPlaybookId == null) {
+                continue;
+            }
+            String dependencyRepositoryId = dependencyResolver.resolvePlaybookRepositoryId(repositoryId, null, relatedPlaybookId);
+            RepositoryLocalAsset asset = ensureRelatedPlaybookInstalled(dependencyRepositoryId, relatedPlaybookId, refreshLockedDependencies, visiting);
+            resolution.playbookIds.put(relatedPlaybookId, asset.getLocalAssetId());
+        }
+        return resolution;
+    }
+
+    private String ensureKnowledgeInstalled(String repositoryId, String knowledgeId) {
+        String installedRepositoryId = RepositoryKnowledgeService.buildInstalledRepositoryId(repositoryId, knowledgeId);
+        if (catalog.findRepository(installedRepositoryId).isEmpty()) {
+            knowledgeService.installKnowledge(repositoryId, knowledgeId);
+        }
+        return installedRepositoryId;
+    }
+
+    private RepositoryLocalAsset ensureScriptInstalled(String repositoryId,
+                                                       String scriptId,
+                                                       boolean refreshLockedDependencies) {
+        RepositoryLocalAsset existing = repos.repositoryLocalAssetRepository()
+                .findByUpstreamAsset(UpstreamAssetType.SCRIPT, repositoryId, scriptId)
+                .orElse(null);
+        if (existing != null) {
+            if (existing.getMode() == RepositoryLocalAssetMode.LOCKED && refreshLockedDependencies) {
+                return requiredScriptService().updateLocalAsset(repositoryId, scriptId, dependencyScriptOptions());
+            }
+            return existing;
+        }
+        return requiredScriptService().addLocalAsset(repositoryId, scriptId,
+                new RepositoryLocalAssetRequest("LOCKED", null, true, true, true, false));
+    }
+
+    private RepositoryLocalAsset ensureRelatedPlaybookInstalled(String repositoryId,
+                                                                String playbookId,
+                                                                boolean refreshLockedDependencies,
+                                                                LinkedHashSet<String> visiting) {
+        RepositoryLocalAsset existing = repos.repositoryLocalAssetRepository()
+                .findByUpstreamAsset(UpstreamAssetType.PLAYBOOK, repositoryId, playbookId)
+                .orElse(null);
+        if (existing != null) {
+            if (existing.getMode() == RepositoryLocalAssetMode.LOCKED && refreshLockedDependencies) {
+                return installOrUpdate(repositoryId, playbookId, true, visiting);
+            }
+            return existing;
+        }
+        return installOrUpdate(repositoryId, playbookId, false, visiting);
+    }
+
+    private RepositoryScriptService requiredScriptService() {
+        if (scriptService == null) {
+            throw new IllegalStateException("RepositoryScriptService 未配置，无法安装任务手册脚本依赖");
+        }
+        return scriptService;
+    }
+
+    private ToolInstallationOptions dependencyScriptOptions() {
+        return new ToolInstallationOptions(true, true, true, false);
+    }
+
+    private PlaybookFile rewriteReferences(PlaybookFile source, PlaybookDependencyResolution resolution) {
+        return new PlaybookFile(
+                source.schemaVersion(),
+                source.playbookId(),
+                source.displayName(),
+                source.version(),
+                source.description(),
+                source.releaseNotes(),
+                source.owner(),
+                source.tags(),
+                source.riskLevel(),
+                rewriteRepositoryIds(source.repositoryIds(), resolution.knowledgeIds),
+                rewriteKnowledgeRefs(source.knowledgeRefs(), resolution.knowledgeIds),
+                rewriteScriptRefs(source.scriptRefs(), resolution.scriptIds),
+                source.agentSkillRefs(),
+                rewriteRelatedPlaybookRefs(source.relatedPlaybookRefs(), resolution.playbookIds),
+                source.guideMarkdown(),
+                source.stopConditions(),
+                source.enabled(),
+                source.digest()
+        );
+    }
+
+    private List<String> rewriteRepositoryIds(List<String> repositoryIds, Map<String, String> knowledgeIds) {
+        return NormalizeUtils.nullSafeList(repositoryIds).stream()
+                .map(item -> knowledgeIds.getOrDefault(item, item))
+                .toList();
+    }
+
+    private List<PlaybookKnowledgeRef> rewriteKnowledgeRefs(List<PlaybookKnowledgeRef> refs, Map<String, String> knowledgeIds) {
+        return NormalizeUtils.nullSafeList(refs).stream()
+                .map(ref -> new PlaybookKnowledgeRef()
+                        .setType(ref.getType())
+                        .setRepositoryId(knowledgeIds.getOrDefault(ref.getRepositoryId(), ref.getRepositoryId()))
+                        .setPath(ref.getPath())
+                        .setMarkdown(ref.getMarkdown()))
+                .toList();
+    }
+
+    private List<PlaybookScriptRef> rewriteScriptRefs(List<PlaybookScriptRef> refs, Map<String, String> scriptIds) {
+        return NormalizeUtils.nullSafeList(refs).stream()
+                .map(ref -> new PlaybookScriptRef()
+                        .setScriptId(scriptIds.getOrDefault(ref.getScriptId(), ref.getScriptId()))
+                        .setPurpose(ref.getPurpose()))
+                .toList();
+    }
+
+    private List<PlaybookRelatedRef> rewriteRelatedPlaybookRefs(List<PlaybookRelatedRef> refs, Map<String, String> playbookIds) {
+        return NormalizeUtils.nullSafeList(refs).stream()
+                .map(ref -> new PlaybookRelatedRef()
+                        .setPlaybookId(playbookIds.getOrDefault(ref.getPlaybookId(), ref.getPlaybookId()))
+                        .setRelation(ref.getRelation())
+                        .setPurpose(ref.getPurpose()))
+                .toList();
+    }
+
+    private static final class PlaybookDependencyResolution {
+        private final Map<String, String> knowledgeIds = new LinkedHashMap<>();
+        private final Map<String, String> scriptIds = new LinkedHashMap<>();
+        private final Map<String, String> playbookIds = new LinkedHashMap<>();
     }
 
     private void validateReferencedAssetsPublished(String repositoryId, Playbook source) {

@@ -30,6 +30,18 @@ class RepositoryDependencyResolver {
         return resolveRepositoryId(currentRepositoryId, dependencyRepositoryId, packageId, this::repositoryContainsCapabilityPackage, "能力包");
     }
 
+    String resolvePlaybookScriptRepositoryId(String currentRepositoryId, String dependencyRepositoryId, String scriptId) {
+        return resolvePlaybookRepositoryId(currentRepositoryId, dependencyRepositoryId, scriptId, this::repositoryContainsTool, "脚本");
+    }
+
+    String resolvePlaybookKnowledgeRepositoryId(String currentRepositoryId, String dependencyRepositoryId, String knowledgeId) {
+        return resolvePlaybookRepositoryId(currentRepositoryId, dependencyRepositoryId, knowledgeId, this::repositoryContainsKnowledge, "知识源");
+    }
+
+    String resolvePlaybookRepositoryId(String currentRepositoryId, String dependencyRepositoryId, String playbookId) {
+        return resolvePlaybookRepositoryId(currentRepositoryId, dependencyRepositoryId, playbookId, this::repositoryContainsPlaybook, "任务手册");
+    }
+
     private String resolveRepositoryId(String currentRepositoryId,
                                        String dependencyRepositoryId,
                                        String assetId,
@@ -73,6 +85,51 @@ class RepositoryDependencyResolver {
         throw new IllegalArgumentException(assetLabel + "依赖不存在: " + normalizedDependencyRepositoryId + "/" + normalizedAssetId);
     }
 
+    private String resolvePlaybookRepositoryId(String currentRepositoryId,
+                                               String dependencyRepositoryId,
+                                               String assetId,
+                                               BiPredicate<String, String> matcher,
+                                               String assetLabel) {
+        String normalizedCurrentRepositoryId = NormalizeUtils.normalize(currentRepositoryId, "当前仓库 ID 不能为空");
+        String normalizedDependencyRepositoryId = NormalizeUtils.normalizeNullable(dependencyRepositoryId);
+        String normalizedAssetId = NormalizeUtils.normalize(assetId, assetLabel + "依赖 assetId 不能为空");
+        List<RepositoryDefinition> repositories = catalog.listRepositories();
+
+        if (repositoryExists(repositories, normalizedCurrentRepositoryId)
+                && matcher.test(normalizedCurrentRepositoryId, normalizedAssetId)) {
+            return normalizedCurrentRepositoryId;
+        }
+        if (normalizedDependencyRepositoryId != null
+                && !Objects.equals(normalizedCurrentRepositoryId, normalizedDependencyRepositoryId)
+                && repositoryExists(repositories, normalizedDependencyRepositoryId)
+                && matcher.test(normalizedDependencyRepositoryId, normalizedAssetId)) {
+            return normalizedDependencyRepositoryId;
+        }
+
+        List<String> matchedRepositoryIds = new ArrayList<>();
+        for (RepositoryDefinition repository : repositories) {
+            if (!repository.isEnabled() || REPO_TYPE_HTTP.equals(repository.getType())) {
+                continue;
+            }
+            String repositoryId = repository.getId();
+            if (Objects.equals(repositoryId, normalizedCurrentRepositoryId)
+                    || Objects.equals(repositoryId, normalizedDependencyRepositoryId)) {
+                continue;
+            }
+            if (matcher.test(repositoryId, normalizedAssetId)) {
+                matchedRepositoryIds.add(repositoryId);
+            }
+        }
+        if (matchedRepositoryIds.size() > 1) {
+            throw new IllegalArgumentException(assetLabel + "依赖仓库解析存在歧义: " + normalizedAssetId + " 可在多个仓库中找到 " + matchedRepositoryIds);
+        }
+        if (matchedRepositoryIds.size() == 1) {
+            return matchedRepositoryIds.get(0);
+        }
+        String location = normalizedDependencyRepositoryId == null ? normalizedCurrentRepositoryId : normalizedDependencyRepositoryId;
+        throw new IllegalArgumentException(assetLabel + "依赖不存在: " + location + "/" + normalizedAssetId);
+    }
+
     private boolean repositoryExists(List<RepositoryDefinition> repositories, String repositoryId) {
         return repositories.stream().anyMatch(repository -> Objects.equals(repository.getId(), repositoryId));
     }
@@ -90,5 +147,15 @@ class RepositoryDependencyResolver {
     private boolean repositoryContainsCapabilityPackage(String repositoryId, String packageId) {
         return catalog.listCapabilityPackages(repositoryId).stream()
                 .anyMatch(item -> Objects.equals(item.packageId(), packageId));
+    }
+
+    private boolean repositoryContainsKnowledge(String repositoryId, String knowledgeId) {
+        return new RepositoryKnowledgeService(catalog).listRepositoryKnowledge(repositoryId).stream()
+                .anyMatch(item -> Objects.equals(item.knowledgeId(), knowledgeId));
+    }
+
+    private boolean repositoryContainsPlaybook(String repositoryId, String playbookId) {
+        return catalog.listRepositoryPlaybooks(repositoryId).stream()
+                .anyMatch(item -> Objects.equals(item.playbookId(), playbookId));
     }
 }

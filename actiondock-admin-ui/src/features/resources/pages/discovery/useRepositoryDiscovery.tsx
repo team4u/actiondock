@@ -384,6 +384,19 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
   }, [loadData, messageApi, modal]);
 
   const handlePlaybookLocalAssetAction = useCallback(async (descriptor: RepositoryPlaybookDescriptor, action: LocalAssetAction) => {
+    await modal.confirm({
+      title: action === "add-local" ? "安装任务手册" : "更新任务手册",
+      okText: action === "add-local" ? "安装" : "更新",
+      cancelText: "取消",
+      content: (
+        <Space direction="vertical" size={8} style={{ width: "100%" }}>
+          <Text>{descriptor.displayName} 将同步到本地。</Text>
+          <Text type="secondary">
+            服务端会自动补齐关联脚本、知识库、关联任务手册、脚本依赖、插件依赖和定时任务模板。
+          </Text>
+        </Space>
+      )
+    });
     setActionKey(`${action}:${descriptor.repositoryId}:${descriptor.playbookId}`);
     try {
       if (action === "add-local") {
@@ -402,7 +415,7 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
     } finally {
       setActionKey(null);
     }
-  }, [loadData, messageApi, openPlaybookDetail, playbookDetailOpen]);
+  }, [loadData, messageApi, modal, openPlaybookDetail, playbookDetailOpen]);
 
   const confirmAddPlaybookToLocal = useCallback(async (descriptor: RepositoryPlaybookDescriptor) => {
     const selection: { mode: AddMode; localAssetId: string } = {
@@ -419,6 +432,9 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
         content: (
           <Space direction="vertical" size={12} style={{ width: "100%" }}>
             <Text>{descriptor.displayName} 将添加为本地资产。</Text>
+            <Text type="secondary">
+              服务端会自动补齐关联脚本、知识库、关联任务手册、脚本依赖、插件依赖和定时任务模板；依赖资产会按只读资产安装。
+            </Text>
             <Input defaultValue={selection.localAssetId} onChange={(event) => { selection.localAssetId = event.target.value; }} />
             <Select
               defaultValue={selection.mode}
@@ -440,11 +456,7 @@ export function useRepositoryDiscovery({ messageApi, modal, navigate }: UseRepos
     try {
       const asset = await addRepositoryPlaybookLocalAsset(descriptor.repositoryId, descriptor.playbookId, {
         mode: selection.mode,
-        localAssetId: selection.localAssetId.trim() || localAssetId(descriptor),
-        installSchedules: false,
-        installScriptDependencies: false,
-        installPluginDependencies: false,
-        forcePluginUpgrade: false
+        localAssetId: selection.localAssetId.trim() || localAssetId(descriptor)
       });
       messageApi.success("任务手册已添加");
       await loadData();

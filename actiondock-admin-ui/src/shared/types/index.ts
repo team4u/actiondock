@@ -1059,7 +1059,7 @@ export interface CapabilityPackageInstallResult {
 }
 
 export interface RepositoryInstallRequest {
-  installSchedules: boolean;
+  installSchedules?: boolean;
   installScriptDependencies?: boolean;
   installPluginDependencies?: boolean;
   forcePluginUpgrade?: boolean;
@@ -1611,4 +1611,3 @@ export interface Playbook {
   createdAt?: string;
   updatedAt?: string;
 }
-

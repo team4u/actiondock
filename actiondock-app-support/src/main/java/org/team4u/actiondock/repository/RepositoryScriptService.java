@@ -171,6 +171,7 @@ public class RepositoryScriptService {
         resolveScriptDependencies(
                 detail.descriptor().scriptDependencies(),
                 repositoryId,
+                options.installSchedules(),
                 options.installScriptDependencies(),
                 options.installPluginDependencies(),
                 options.forcePluginUpgrade(),
@@ -207,6 +208,7 @@ public class RepositoryScriptService {
 
     private void resolveScriptDependencies(List<ScriptDependency> dependencies,
                                            String repositoryId,
+                                           boolean installSchedules,
                                            boolean installScriptDependencies,
                                            boolean installPluginDependencies,
                                            boolean forcePluginUpgrade,
@@ -229,7 +231,7 @@ public class RepositoryScriptService {
             installOrUpdateTool(
                     depRepositoryId,
                     depToolId,
-                    new ToolInstallationOptions(false, true, installPluginDependencies, forcePluginUpgrade),
+                    new ToolInstallationOptions(installSchedules, true, installPluginDependencies, forcePluginUpgrade),
                     installed != null,
                     visiting
             );

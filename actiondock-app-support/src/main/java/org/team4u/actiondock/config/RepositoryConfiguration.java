@@ -210,8 +210,10 @@ public class RepositoryConfiguration {
     }
 
     @Bean
-    public RepositoryPlaybookService repositoryPlaybookService(RepositoryCatalogService repositoryCatalogService) {
-        return new RepositoryPlaybookService(repositoryCatalogService);
+    public RepositoryPlaybookService repositoryPlaybookService(RepositoryCatalogService repositoryCatalogService,
+                                                               RepositoryScriptService repositoryToolService,
+                                                               RepositoryKnowledgeService repositoryKnowledgeService) {
+        return new RepositoryPlaybookService(repositoryCatalogService, repositoryToolService, repositoryKnowledgeService);
     }
 
     @Bean
