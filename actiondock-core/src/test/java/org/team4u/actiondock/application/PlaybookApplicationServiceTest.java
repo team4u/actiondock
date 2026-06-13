@@ -6,6 +6,8 @@ import org.team4u.actiondock.domain.model.Playbook;
 import org.team4u.actiondock.domain.model.PlaybookAgentSkillRef;
 import org.team4u.actiondock.domain.model.PlaybookKnowledgeRef;
 import org.team4u.actiondock.domain.model.PlaybookKnowledgeRefType;
+import org.team4u.actiondock.domain.model.PlaybookPage;
+import org.team4u.actiondock.domain.model.PlaybookQuery;
 import org.team4u.actiondock.domain.model.PlaybookRelatedRef;
 import org.team4u.actiondock.domain.model.PlaybookRelatedRefRelation;
 import org.team4u.actiondock.domain.model.PlaybookRiskLevel;
@@ -225,8 +227,54 @@ class PlaybookApplicationServiceTest {
         }
 
         @Override
+        public List<Playbook> findByQuery(PlaybookQuery query) {
+            List<Playbook> filtered = filterByQuery(query);
+            if (query != null && query.isPaged()) {
+                int from = Math.min(query.pageIndex() * query.pageSize(), filtered.size());
+                int to = Math.min(from + query.pageSize(), filtered.size());
+                return new ArrayList<>(filtered.subList(from, to));
+            }
+            return filtered;
+        }
+
+        @Override
+        public PlaybookPage findPage(PlaybookQuery query) {
+            List<Playbook> filtered = filterByQuery(query);
+            int pageSize = query == null || query.pageSize() <= 0 ? filtered.size() : query.pageSize();
+            int pageIndex = query == null ? 0 : query.pageIndex();
+            int from = Math.min(pageIndex * pageSize, filtered.size());
+            int to = Math.min(from + pageSize, filtered.size());
+            List<Playbook> pageItems = new ArrayList<>(filtered.subList(from, to));
+            int totalPages = pageSize == 0 ? 1 : (int) Math.ceil((double) filtered.size() / pageSize);
+            return new PlaybookPage(pageItems, pageIndex, pageSize, filtered.size(), totalPages);
+        }
+
+        @Override
+        public List<Playbook> findReferencingPlaybooks(String playbookId) {
+            return items.values().stream()
+                    .filter(p -> !p.getId().equals(playbookId))
+                    .filter(p -> p.getRelatedPlaybookRefs().stream()
+                            .anyMatch(ref -> playbookId.equals(ref.getPlaybookId())))
+                    .toList();
+        }
+
+        @Override
         public void deleteById(String id) {
             items.remove(id);
+        }
+
+        private List<Playbook> filterByQuery(PlaybookQuery query) {
+            String normalizedTag = query == null || query.tag() == null || query.tag().isBlank()
+                    ? null : query.tag().trim().toLowerCase(java.util.Locale.ROOT);
+            return items.values().stream()
+                    .filter(p -> query == null || query.enabled() == null || query.enabled() == p.isEnabled())
+                    .filter(p -> query == null || query.managed() == null || query.managed() == p.isManaged())
+                    .filter(p -> query == null || query.repositoryId() == null
+                            || p.getRepositoryIds().isEmpty()
+                            || p.getRepositoryIds().contains(query.repositoryId()))
+                    .filter(p -> normalizedTag == null
+                            || p.getTags().stream().map(t -> t.toLowerCase(java.util.Locale.ROOT)).anyMatch(normalizedTag::equals))
+                    .toList();
         }
     }
 }

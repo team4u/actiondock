@@ -1565,8 +1565,6 @@ export interface ExecutionPresetUpsertRequest {
 
 export type PlaybookRiskLevel = "LOW" | "MEDIUM" | "HIGH";
 
-export type PlaybookPhase = "ROUTE" | "BOUND" | "EQUIP" | "INVESTIGATE" | "ACT" | "HANDOFF";
-
 export interface PlaybookKnowledgeRef {
   type: "NOTE" | "FILE";
   repositoryId: string;

@@ -1,9 +1,14 @@
 package org.team4u.actiondock.storage.jpa.adapter;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Component;
 import org.team4u.actiondock.domain.model.Playbook;
 import org.team4u.actiondock.domain.model.PlaybookAgentSkillRef;
 import org.team4u.actiondock.domain.model.PlaybookKnowledgeRef;
+import org.team4u.actiondock.domain.model.PlaybookPage;
+import org.team4u.actiondock.domain.model.PlaybookQuery;
 import org.team4u.actiondock.domain.model.PlaybookRelatedRef;
 import org.team4u.actiondock.domain.model.PlaybookRiskLevel;
 import org.team4u.actiondock.domain.model.PlaybookScriptRef;
@@ -41,8 +46,105 @@ public class JpaPlaybookRepositoryAdapter implements PlaybookRepository {
     }
 
     @Override
+    public List<Playbook> findByQuery(PlaybookQuery query) {
+        if (query == null) {
+            return findAll();
+        }
+        if (query.isPaged()) {
+            return findEntityPage(query).getContent().stream().map(this::toDomain).toList();
+        }
+        // 未启用分页时返回全部匹配记录（pageable 设为不限制大小）
+        Pageable unpageable = Pageable.ofSize(Integer.MAX_VALUE).withPage(0);
+        return repository.findByConditions(
+                        query.enabled(),
+                        query.managed(),
+                        buildTagLike(query.tag()),
+                        buildRepositoryIdLike(query.repositoryId()),
+                        unpageable)
+                .getContent().stream().map(this::toDomain).toList();
+    }
+
+    @Override
+    public PlaybookPage findPage(PlaybookQuery query) {
+        PlaybookQuery effective = query == null ? new PlaybookQuery(null, null, null, null, 0, 20) : query;
+        int pageIndex = effective.pageIndex();
+        int pageSize = effective.pageSize() <= 0 ? 20 : effective.pageSize();
+        Page<PlaybookEntity> page = repository.findByConditions(
+                effective.enabled(),
+                effective.managed(),
+                buildTagLike(effective.tag()),
+                buildRepositoryIdLike(effective.repositoryId()),
+                // 排序由 @Query 内的 order by 子句定义，此处不额外传 Sort 以避免冲突
+                PageRequest.of(pageIndex, pageSize));
+        List<Playbook> items = page.getContent().stream().map(this::toDomain).toList();
+        return new PlaybookPage(items, pageIndex, pageSize, page.getTotalElements(), page.getTotalPages());
+    }
+
+    @Override
+    public List<Playbook> findReferencingPlaybooks(String playbookId) {
+        if (playbookId == null || playbookId.isBlank()) {
+            return List.of();
+        }
+        // relatedPlaybookRefs 以 JSON 数组存储（如 [{"playbookId":"x"}]），采用 LIKE 匹配元素
+        return repository.findReferencingByPlaybookId(buildJsonElementLike(playbookId)).stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
     public void deleteById(String id) {
         repository.deleteById(id);
+    }
+
+    private Page<PlaybookEntity> findEntityPage(PlaybookQuery query) {
+        // 排序由 @Query 内的 order by 子句定义，此处不额外传 Sort 以避免冲突
+        return repository.findByConditions(
+                query.enabled(),
+                query.managed(),
+                buildTagLike(query.tag()),
+                buildRepositoryIdLike(query.repositoryId()),
+                PageRequest.of(query.pageIndex(), query.pageSize()));
+    }
+
+    /**
+     * 构造标签 LIKE 模式：匹配 JSON 数组中的字符串元素（如 ["refund"]）。
+     * <p>
+     * 标签匹配大小写不敏感，查询时对 tagsJson 做 lower()，故此处亦转为小写。
+     * 标签值为受控标识符，通常不含 SQL 通配符，因此不做转义。
+     *
+     * @param tag 标签原文，null 表示不过滤
+     * @return LIKE 模式，如 %refund%；null 表示不过滤
+     */
+    private String buildTagLike(String tag) {
+        if (tag == null || tag.isBlank()) {
+            return null;
+        }
+        return "%" + tag.trim().toLowerCase(java.util.Locale.ROOT) + "%";
+    }
+
+    /**
+     * 构造 repositoryId LIKE 模式：匹配 JSON 数组中的字符串元素（如 ["billing-service"]）。
+     * <p>
+     * repositoryId 为受控标识符，通常不含 SQL 通配符，因此不做转义。
+     *
+     * @param repositoryId 仓库 ID 原文，null 表示不过滤
+     * @return LIKE 模式，如 %billing-service%；null 表示不过滤
+     */
+    private String buildRepositoryIdLike(String repositoryId) {
+        if (repositoryId == null || repositoryId.isBlank()) {
+            return null;
+        }
+        return "%" + repositoryId.trim() + "%";
+    }
+
+    /**
+     * 构造 JSON 数组元素 LIKE 模式（用于 relatedPlaybookRefs 的 playbookId 字段匹配）。
+     *
+     * @param element 匹配元素
+     * @return LIKE 模式
+     */
+    private String buildJsonElementLike(String element) {
+        return "%" + element + "%";
     }
 
     private PlaybookEntity toEntity(Playbook playbook) {

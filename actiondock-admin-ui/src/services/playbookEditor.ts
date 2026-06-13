@@ -63,6 +63,46 @@ export function upsertKnowledgeGroups(previous: KnowledgeEditorState[], reposito
   return next.sort((left, right) => left.repositoryId.localeCompare(right.repositoryId));
 }
 
+/** 在指定仓库的知识组中追加一条空白说明。 */
+export function addKnowledgeNote(groups: KnowledgeEditorState[], repositoryId: string): KnowledgeEditorState[] {
+  return groups.map((item) => (item.repositoryId === repositoryId ? { ...item, notes: [...item.notes, ""] } : item));
+}
+
+/** 更新指定仓库下某条说明的 Markdown 文本。 */
+export function updateKnowledgeNote(groups: KnowledgeEditorState[], repositoryId: string, index: number, markdown: string): KnowledgeEditorState[] {
+  return groups.map((item) =>
+    item.repositoryId === repositoryId
+      ? { ...item, notes: item.notes.map((current, currentIndex) => (currentIndex === index ? markdown : current)) }
+      : item
+  );
+}
+
+/** 移除指定仓库下的某条说明。 */
+export function removeKnowledgeNote(groups: KnowledgeEditorState[], repositoryId: string, index: number): KnowledgeEditorState[] {
+  return groups.map((item) =>
+    item.repositoryId === repositoryId ? { ...item, notes: item.notes.filter((_, currentIndex) => currentIndex !== index) } : item
+  );
+}
+
+/** 为指定仓库追加一个知识文件路径（已存在则忽略）。 */
+export function addKnowledgeFile(groups: KnowledgeEditorState[], repositoryId: string, path: string): KnowledgeEditorState[] {
+  return groups.map((item) =>
+    item.repositoryId === repositoryId ? { ...item, files: item.files.includes(path) ? item.files : [...item.files, path] } : item
+  );
+}
+
+/** 移除指定仓库下的某个知识文件引用。 */
+export function removeKnowledgeFile(groups: KnowledgeEditorState[], repositoryId: string, path: string): KnowledgeEditorState[] {
+  return groups.map((item) =>
+    item.repositoryId === repositoryId ? { ...item, files: item.files.filter((current) => current !== path) } : item
+  );
+}
+
+/** 判断指定仓库是否已引用某个知识文件。 */
+export function hasKnowledgeFile(groups: KnowledgeEditorState[], repositoryId: string, path: string): boolean {
+  return Boolean(groups.find((item) => item.repositoryId === repositoryId)?.files.includes(path));
+}
+
 function hasField(values: Partial<PlaybookFormValues>, key: keyof PlaybookFormValues): boolean {
   return Object.prototype.hasOwnProperty.call(values, key);
 }

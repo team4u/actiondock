@@ -6,9 +6,11 @@ import org.team4u.actiondock.domain.model.Playbook;
 import org.team4u.actiondock.domain.model.PlaybookAgentSkillRef;
 import org.team4u.actiondock.domain.model.PlaybookKnowledgeRef;
 import org.team4u.actiondock.domain.model.PlaybookKnowledgeRefType;
+import org.team4u.actiondock.domain.model.PlaybookQuery;
 import org.team4u.actiondock.domain.model.PlaybookRelatedRef;
 import org.team4u.actiondock.domain.model.PlaybookRelatedRefRelation;
 import org.team4u.actiondock.domain.model.PlaybookScriptRef;
+import org.team4u.actiondock.domain.model.PlaybookPage;
 import org.team4u.actiondock.domain.port.PlaybookRepository;
 import org.team4u.actiondock.domain.port.ScriptRepository;
 
@@ -31,13 +33,40 @@ public class PlaybookApplicationService {
                                         String tag,
                                         Boolean enabled,
                                         Boolean managed) {
-        String normalizedTag = normalizeLower(tag);
-        return playbookRepository.findAll().stream()
-                .filter(playbook -> enabled == null || enabled == playbook.isEnabled())
-                .filter(playbook -> managed == null || managed == playbook.isManaged())
-                .filter(playbook -> repositoryId == null || playbook.getRepositoryIds().isEmpty() || playbook.getRepositoryIds().contains(repositoryId))
-                .filter(playbook -> normalizedTag == null || playbook.getTags().stream().map(this::normalizeLower).anyMatch(normalizedTag::equals))
-                .toList();
+        return listPlaybooks(repositoryId, tag, enabled, managed, null, null);
+    }
+
+    /**
+     * 按条件下推查询任务手册，支持可选分页。
+     * <p>
+     * 当 page 与 size 同时为 null 时返回全部匹配记录；否则返回对应分页的记录。
+     *
+     * @param repositoryId 仓库 ID 过滤，null 表示不过滤
+     * @param tag          标签过滤（大小写不敏感），null 表示不过滤
+     * @param enabled      启用标记过滤，null 表示不过滤
+     * @param managed      托管标记过滤，null 表示不过滤
+     * @param page         页码（从 0 开始），与 size 同时非 null 时启用分页
+     * @param size         每页大小，与 page 同时非 null 时启用分页
+     * @return 匹配的任务手册列表
+     */
+    public List<Playbook> listPlaybooks(String repositoryId,
+                                        String tag,
+                                        Boolean enabled,
+                                        Boolean managed,
+                                        Integer page,
+                                        Integer size) {
+        PlaybookQuery query = new PlaybookQuery(repositoryId, tag, enabled, managed, page, size);
+        return playbookRepository.findByQuery(query);
+    }
+
+    /**
+     * 按条件下推分页查询任务手册，返回包含总记录数与总页数的分页结果。
+     *
+     * @param query 查询条件（page/size 用于分页）
+     * @return 分页结果
+     */
+    public PlaybookPage findPage(PlaybookQuery query) {
+        return playbookRepository.findPage(query);
     }
 
     public Playbook getPlaybook(String id) {
@@ -90,12 +119,9 @@ public class PlaybookApplicationService {
     public void deletePlaybook(String id) {
         Playbook playbook = getPlaybook(id);
         ensurePlaybookEditable(playbook, false);
-        List<Playbook> allPlaybooks = playbookRepository.findAll();
-        List<String> referencingPlaybookIds = allPlaybooks.stream()
-                .filter(p -> !p.getId().equals(id))
-                .filter(p -> p.getRelatedPlaybookRefs().stream()
-                        .anyMatch(ref -> id.equals(ref.getPlaybookId())))
+        List<String> referencingPlaybookIds = playbookRepository.findReferencingPlaybooks(id).stream()
                 .map(Playbook::getId)
+                .filter(referrerId -> !referrerId.equals(id))
                 .toList();
         if (!referencingPlaybookIds.isEmpty()) {
             throw ActionDockException.conflict(
@@ -177,11 +203,6 @@ public class PlaybookApplicationService {
                     .setRelation(relation)
                     .setPurpose(ApplicationServiceSupport.blankToNull(ref.getPurpose()));
         }).toList();
-    }
-
-    private String normalizeLower(String value) {
-        String normalized = ApplicationServiceSupport.blankToNull(value);
-        return normalized == null ? null : normalized.toLowerCase(java.util.Locale.ROOT);
     }
 
     private List<String> normalizeDistinct(List<String> values) {

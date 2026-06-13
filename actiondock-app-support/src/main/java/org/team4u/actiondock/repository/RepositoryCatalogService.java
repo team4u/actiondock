@@ -8,6 +8,8 @@ import org.team4u.actiondock.application.ScriptApplicationService;
 import org.team4u.actiondock.config.AppProperties;
 import org.team4u.actiondock.domain.model.AiDependency;
 import org.team4u.actiondock.domain.model.Playbook;
+import org.team4u.actiondock.domain.model.PlaybookPage;
+import org.team4u.actiondock.domain.model.PlaybookQuery;
 import org.team4u.actiondock.domain.model.WebhookDefinition;
 import org.team4u.actiondock.domain.model.WebhookScope;
 import org.team4u.actiondock.domain.model.WebhookResponsePayload;
@@ -643,6 +645,21 @@ public class RepositoryCatalogService {
 
             @Override
             public List<Playbook> findAll() {
+                return List.of();
+            }
+
+            @Override
+            public List<Playbook> findByQuery(PlaybookQuery query) {
+                return List.of();
+            }
+
+            @Override
+            public PlaybookPage findPage(PlaybookQuery query) {
+                return new PlaybookPage(List.of(), 0, 0, 0L, 0);
+            }
+
+            @Override
+            public List<Playbook> findReferencingPlaybooks(String playbookId) {
                 return List.of();
             }
 

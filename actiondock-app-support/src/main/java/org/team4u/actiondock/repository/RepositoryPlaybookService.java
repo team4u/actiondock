@@ -1,6 +1,8 @@
 package org.team4u.actiondock.repository;
 
 import org.team4u.actiondock.common.NormalizeUtils;
+import org.team4u.actiondock.domain.exception.ActionDockErrorCodes;
+import org.team4u.actiondock.domain.exception.ActionDockException;
 import org.team4u.actiondock.domain.model.Playbook;
 import org.team4u.actiondock.domain.model.PlaybookAgentSkillRef;
 import org.team4u.actiondock.domain.model.PlaybookKnowledgeRef;
@@ -47,9 +49,15 @@ public class RepositoryPlaybookService {
         WritableRepositorySession session = catalog.openWritableRepositorySession(repositoryId);
         Playbook source = repos.playbookRepository()
                 .findById(NormalizeUtils.normalize(request.sourceId(), "sourceId 不能为空"))
-                .orElseThrow(() -> new IllegalArgumentException("任务手册不存在: " + request.sourceId()));
+                .orElseThrow(() -> ActionDockException.notFound(
+                        ActionDockErrorCodes.PLAYBOOK_NOT_FOUND,
+                        "任务手册不存在: " + request.sourceId(),
+                        Map.of("sourceId", request.sourceId())));
         if (source.isManaged() && !request.force()) {
-            throw new IllegalArgumentException("托管任务手册为只读，不能直接发布: " + source.getId());
+            throw ActionDockException.conflict(
+                    ActionDockErrorCodes.PLAYBOOK_NOT_EDITABLE,
+                    "托管任务手册为只读，不能直接发布: " + source.getId(),
+                    Map.of("playbookId", source.getId()));
         }
         validateReferencedAssetsPublished(repositoryId, source);
         String playbookId = NormalizeUtils.normalize(request.playbookId(), "playbookId 不能为空");
@@ -80,9 +88,15 @@ public class RepositoryPlaybookService {
 
     public void uninstallPlaybook(String localAssetId) {
         Playbook playbook = repos.playbookRepository().findById(NormalizeUtils.normalize(localAssetId, "localAssetId 不能为空"))
-                .orElseThrow(() -> new IllegalArgumentException("本地任务手册不存在: " + localAssetId));
+                .orElseThrow(() -> ActionDockException.notFound(
+                        ActionDockErrorCodes.PLAYBOOK_NOT_FOUND,
+                        "本地任务手册不存在: " + localAssetId,
+                        Map.of("localAssetId", localAssetId)));
         if (!playbook.isManaged()) {
-            throw new IllegalArgumentException("仅支持卸载仓库托管任务手册: " + localAssetId);
+            throw ActionDockException.conflict(
+                    ActionDockErrorCodes.PLAYBOOK_NOT_EDITABLE,
+                    "仅支持卸载仓库托管任务手册: " + localAssetId,
+                    Map.of("localAssetId", localAssetId));
         }
         repos.playbookRepository().deleteById(playbook.getId());
         repos.repositoryLocalAssetRepository()
@@ -96,7 +110,10 @@ public class RepositoryPlaybookService {
                                                  LinkedHashSet<String> visiting) {
         String installationKey = repositoryId + ":" + playbookId;
         if (!visiting.add(installationKey)) {
-            throw new IllegalStateException("检测到任务手册循环依赖: " + String.join(" -> ", visiting) + " -> " + installationKey);
+            throw ActionDockException.badRequest(
+                    ActionDockErrorCodes.PLAYBOOK_CIRCULAR_DEPENDENCY,
+                    "检测到任务手册循环依赖: " + String.join(" -> ", visiting) + " -> " + installationKey,
+                    Map.of("dependencyChain", String.join(" -> ", visiting) + " -> " + installationKey));
         }
         try {
         RepositoryPlaybookDetail detail = catalog.getRepositoryPlaybook(repositoryId, playbookId);
@@ -105,20 +122,35 @@ public class RepositoryPlaybookService {
                 .orElse(null);
         if (existingAsset != null && existingAsset.getMode() == RepositoryLocalAssetMode.TRACKED) {
             if (updateOnly) {
-                throw new IllegalArgumentException("上游任务手册已添加为可编辑跟踪资产，不能按只读资产更新: " + existingAsset.getLocalAssetId());
+                throw ActionDockException.conflict(
+                        ActionDockErrorCodes.UPSTREAM_CONFLICT,
+                        "上游任务手册已添加为可编辑跟踪资产，不能按只读资产更新: " + existingAsset.getLocalAssetId(),
+                        Map.of("localAssetId", existingAsset.getLocalAssetId()));
             }
-            throw new IllegalArgumentException("上游任务手册已添加到本地: " + existingAsset.getLocalAssetId());
+            throw ActionDockException.conflict(
+                    ActionDockErrorCodes.UPSTREAM_CONFLICT,
+                    "上游任务手册已添加到本地: " + existingAsset.getLocalAssetId(),
+                    Map.of("localAssetId", existingAsset.getLocalAssetId()));
         }
         if (!updateOnly && existingAsset != null) {
-            throw new IllegalArgumentException("上游任务手册已添加到本地: " + existingAsset.getLocalAssetId());
+            throw ActionDockException.conflict(
+                    ActionDockErrorCodes.UPSTREAM_CONFLICT,
+                    "上游任务手册已添加到本地: " + existingAsset.getLocalAssetId(),
+                    Map.of("localAssetId", existingAsset.getLocalAssetId()));
         }
         if (updateOnly && existingAsset == null) {
-            throw new IllegalArgumentException("任务手册尚未安装: " + repositoryId + "/" + playbookId);
+            throw ActionDockException.notFound(
+                    ActionDockErrorCodes.PLAYBOOK_NOT_FOUND,
+                    "任务手册尚未安装: " + repositoryId + "/" + playbookId,
+                    Map.of("repositoryId", repositoryId, "playbookId", playbookId));
         }
         String localPlaybookId = existingAsset == null ? repositoryId + "." + playbookId : existingAsset.getLocalAssetId();
         Playbook existingPlaybook = repos.playbookRepository().findById(localPlaybookId).orElse(null);
         if (existingPlaybook != null && !existingPlaybook.isManaged()) {
-            throw new IllegalArgumentException("本地已存在同 ID 非托管任务手册: " + localPlaybookId);
+            throw ActionDockException.conflict(
+                    ActionDockErrorCodes.PLAYBOOK_EXISTS,
+                    "本地已存在同 ID 非托管任务手册: " + localPlaybookId,
+                    Map.of("playbookId", localPlaybookId));
         }
         PlaybookDependencyResolution dependencies = resolveAndInstallDependencies(repositoryId, detail.playbook(), true, visiting);
         LocalDateTime now = LocalDateTime.now();
@@ -135,14 +167,20 @@ public class RepositoryPlaybookService {
                                                           RepositoryLocalAssetRequest request) {
         if (repos.repositoryLocalAssetRepository()
                 .findByUpstreamAsset(UpstreamAssetType.PLAYBOOK, repositoryId, playbookId).isPresent()) {
-            throw new IllegalArgumentException("上游任务手册已添加到本地: " + repositoryId + "/" + playbookId);
+            throw ActionDockException.conflict(
+                    ActionDockErrorCodes.UPSTREAM_CONFLICT,
+                    "上游任务手册已添加到本地: " + repositoryId + "/" + playbookId,
+                    Map.of("repositoryId", repositoryId, "playbookId", playbookId));
         }
         RepositoryPlaybookDetail detail = catalog.getRepositoryPlaybook(repositoryId, playbookId);
         String localPlaybookId = NormalizeUtils.normalizeOrDefault(
                 request == null ? null : request.localAssetId(),
                 repositoryId + "." + playbookId);
         if (repos.playbookRepository().findById(localPlaybookId).isPresent()) {
-            throw new IllegalArgumentException("任务手册 ID 已存在，请指定其他本地副本 ID: " + localPlaybookId);
+            throw ActionDockException.conflict(
+                    ActionDockErrorCodes.PLAYBOOK_EXISTS,
+                    "任务手册 ID 已存在，请指定其他本地副本 ID: " + localPlaybookId,
+                    Map.of("playbookId", localPlaybookId));
         }
         LinkedHashSet<String> visiting = new LinkedHashSet<>();
         String installationKey = repositoryId + ":" + playbookId;
@@ -249,7 +287,10 @@ public class RepositoryPlaybookService {
 
     private RepositoryScriptService requiredScriptService() {
         if (scriptService == null) {
-            throw new IllegalStateException("RepositoryScriptService 未配置，无法安装任务手册脚本依赖");
+            throw ActionDockException.badRequest(
+                    ActionDockErrorCodes.PLAYBOOK_REFERENCE_UNRESOLVED,
+                    "RepositoryScriptService 未配置，无法安装任务手册脚本依赖",
+                    Map.of());
         }
         return scriptService;
     }
@@ -359,7 +400,13 @@ public class RepositoryPlaybookService {
             messages.add("以下知识引用对应的项目仓库尚未作为知识源发布到目标仓库，请先分别发布知识源: "
                     + String.join(", ", missingKnowledgeRepositoryIds));
         }
-        throw new IllegalArgumentException(String.join("; ", messages));
+        throw ActionDockException.badRequest(
+                ActionDockErrorCodes.PLAYBOOK_REFERENCE_UNRESOLVED,
+                String.join("; ", messages),
+                Map.of(
+                        "missingScriptIds", new ArrayList<>(missingScriptIds),
+                        "missingKnowledgeRepositoryIds", new ArrayList<>(missingKnowledgeRepositoryIds)
+                ));
     }
 
     private RepositoryLocalAsset saveLocalAsset(RepositoryPlaybookDetail detail,
@@ -498,8 +545,6 @@ public class RepositoryPlaybookService {
                 computeDigest(initial)
         );
     }
-
-    private static void buildGroupFile() {} // Removed buildGroupFile method
 
     private String computeDigest(PlaybookFile file) {
         Map<String, Object> values = new LinkedHashMap<>();

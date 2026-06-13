@@ -1,10 +1,13 @@
 package org.team4u.actiondock.repository;
 
+import org.team4u.actiondock.domain.exception.ActionDockErrorCodes;
+import org.team4u.actiondock.domain.exception.ActionDockException;
 import org.team4u.actiondock.domain.model.RepositoryDefinition;
 import org.team4u.actiondock.common.NormalizeUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiPredicate;
 
@@ -77,12 +80,18 @@ class RepositoryDependencyResolver {
             }
         }
         if (matchedRepositoryIds.size() > 1) {
-            throw new IllegalArgumentException("依赖仓库解析存在歧义: " + normalizedAssetId + " 可在多个仓库中找到 " + matchedRepositoryIds);
+            throw ActionDockException.badRequest(
+                    ActionDockErrorCodes.PLAYBOOK_DEPENDENCY_AMBIGUOUS,
+                    "依赖仓库解析存在歧义: " + normalizedAssetId + " 可在多个仓库中找到 " + matchedRepositoryIds,
+                    Map.of("assetId", normalizedAssetId, "matchedRepositoryIds", matchedRepositoryIds));
         }
         if (matchedRepositoryIds.size() == 1) {
             return matchedRepositoryIds.get(0);
         }
-        throw new IllegalArgumentException(assetLabel + "依赖不存在: " + normalizedDependencyRepositoryId + "/" + normalizedAssetId);
+        throw ActionDockException.notFound(
+                ActionDockErrorCodes.PLAYBOOK_REFERENCE_UNRESOLVED,
+                assetLabel + "依赖不存在: " + normalizedDependencyRepositoryId + "/" + normalizedAssetId,
+                Map.of("repositoryId", normalizedDependencyRepositoryId, "assetId", normalizedAssetId));
     }
 
     private String resolvePlaybookRepositoryId(String currentRepositoryId,
@@ -121,13 +130,19 @@ class RepositoryDependencyResolver {
             }
         }
         if (matchedRepositoryIds.size() > 1) {
-            throw new IllegalArgumentException(assetLabel + "依赖仓库解析存在歧义: " + normalizedAssetId + " 可在多个仓库中找到 " + matchedRepositoryIds);
+            throw ActionDockException.badRequest(
+                    ActionDockErrorCodes.PLAYBOOK_DEPENDENCY_AMBIGUOUS,
+                    assetLabel + "依赖仓库解析存在歧义: " + normalizedAssetId + " 可在多个仓库中找到 " + matchedRepositoryIds,
+                    Map.of("assetId", normalizedAssetId, "matchedRepositoryIds", matchedRepositoryIds));
         }
         if (matchedRepositoryIds.size() == 1) {
             return matchedRepositoryIds.get(0);
         }
         String location = normalizedDependencyRepositoryId == null ? normalizedCurrentRepositoryId : normalizedDependencyRepositoryId;
-        throw new IllegalArgumentException(assetLabel + "依赖不存在: " + location + "/" + normalizedAssetId);
+        throw ActionDockException.notFound(
+                ActionDockErrorCodes.PLAYBOOK_REFERENCE_UNRESOLVED,
+                assetLabel + "依赖不存在: " + location + "/" + normalizedAssetId,
+                Map.of("repositoryId", location, "assetId", normalizedAssetId));
     }
 
     private boolean repositoryExists(List<RepositoryDefinition> repositories, String repositoryId) {

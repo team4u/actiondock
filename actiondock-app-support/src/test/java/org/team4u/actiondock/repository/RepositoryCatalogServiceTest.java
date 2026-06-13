@@ -9,6 +9,8 @@ import org.team4u.actiondock.config.AppProperties;
 import org.team4u.actiondock.domain.model.Playbook;
 import org.team4u.actiondock.domain.model.PlaybookKnowledgeRef;
 import org.team4u.actiondock.domain.model.PlaybookKnowledgeRefType;
+import org.team4u.actiondock.domain.model.PlaybookPage;
+import org.team4u.actiondock.domain.model.PlaybookQuery;
 import org.team4u.actiondock.domain.model.PlaybookRelatedRef;
 import org.team4u.actiondock.domain.model.PlaybookScriptRef;
 import org.team4u.actiondock.domain.model.ScriptDefinition;
@@ -1212,6 +1214,21 @@ class RepositoryCatalogServiceTest {
         @Override
         public List<Playbook> findAll() {
             return List.copyOf(items.values());
+        }
+
+        @Override
+        public List<Playbook> findByQuery(PlaybookQuery query) {
+            return PlaybookQuerySupport.findByQuery(items.values(), query);
+        }
+
+        @Override
+        public PlaybookPage findPage(PlaybookQuery query) {
+            return PlaybookQuerySupport.pageOf(items.values(), query);
+        }
+
+        @Override
+        public List<Playbook> findReferencingPlaybooks(String playbookId) {
+            return PlaybookQuerySupport.referencing(items.values(), playbookId);
         }
 
         @Override

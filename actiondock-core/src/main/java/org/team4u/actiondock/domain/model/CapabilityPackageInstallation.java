@@ -23,7 +23,6 @@ public class CapabilityPackageInstallation {
     private List<String> scriptIds = new ArrayList<>();
     private List<String> scheduleIds = new ArrayList<>();
     private List<String> presetIds = new ArrayList<>();
-    private List<String> playbookGroupIds = new ArrayList<>();
     private List<String> playbookIds = new ArrayList<>();
     private LocalDateTime installedAt;
     private LocalDateTime updatedAt;
@@ -160,15 +159,6 @@ public class CapabilityPackageInstallation {
 
     public CapabilityPackageInstallation setPresetIds(List<String> presetIds) {
         this.presetIds = presetIds == null ? new ArrayList<>() : new ArrayList<>(presetIds);
-        return this;
-    }
-
-    public List<String> getPlaybookGroupIds() {
-        return List.copyOf(playbookGroupIds);
-    }
-
-    public CapabilityPackageInstallation setPlaybookGroupIds(List<String> playbookGroupIds) {
-        this.playbookGroupIds = playbookGroupIds == null ? new ArrayList<>() : new ArrayList<>(playbookGroupIds);
         return this;
     }
 
