@@ -9,8 +9,11 @@ import org.team4u.actiondock.domain.port.RepositoryDefinitionRepository;
 import org.team4u.actiondock.common.NormalizeUtils;
 
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.util.Comparator;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -102,7 +105,14 @@ class RepositoryDefinitionService {
         if (REPO_TYPE_LOCAL_DIR.equals(repository.getType())) {
             return Path.of(resolveRepositoryUrl(repository));
         }
-        return repositoriesRoot.resolve(repository.getId());
+        Path legacyRoot = resolveLegacyRepositoryRoot(repository.getId());
+        if (legacyRoot != null && legacyRoot.toFile().exists()) {
+            return legacyRoot;
+        }
+        if (isPortableRepositoryDirectoryName(repository.getId()) && legacyRoot != null) {
+            return legacyRoot;
+        }
+        return repositoriesRoot.resolve(safeRepositoryDirectoryName(repository.getId()));
     }
 
     String resolveRepositoryUrl(RepositoryDefinition repository) {
@@ -142,6 +152,69 @@ class RepositoryDefinitionService {
 
     private String normalizePurpose(String purpose) {
         return NormalizeUtils.normalizeOrDefault(purpose, REPO_PURPOSE_CAPABILITY).toUpperCase(Locale.ROOT);
+    }
+
+    private Path resolveLegacyRepositoryRoot(String repositoryId) {
+        try {
+            Path legacyRoot = repositoriesRoot.resolve(repositoryId);
+            if (legacyRoot.getFileName() == null || !legacyRoot.getFileName().toString().equals(repositoryId)) {
+                return null;
+            }
+            return legacyRoot;
+        } catch (RuntimeException exception) {
+            return null;
+        }
+    }
+
+    private boolean isPortableRepositoryDirectoryName(String repositoryId) {
+        String normalizedId = NormalizeUtils.normalize(repositoryId, "仓库 ID 不能为空");
+        for (int index = 0; index < normalizedId.length(); index++) {
+            if (!isPortableRepositoryDirectoryChar(normalizedId.charAt(index))) {
+                return false;
+            }
+        }
+        return !normalizedId.endsWith(".") && !normalizedId.startsWith(".");
+    }
+
+    private String safeRepositoryDirectoryName(String repositoryId) {
+        String normalizedId = NormalizeUtils.normalize(repositoryId, "仓库 ID 不能为空");
+        StringBuilder readable = new StringBuilder();
+        boolean previousUnderscore = false;
+        for (int index = 0; index < normalizedId.length(); index++) {
+            char value = normalizedId.charAt(index);
+            if (isPortableRepositoryDirectoryChar(value)) {
+                readable.append(value);
+                previousUnderscore = false;
+            } else if (!previousUnderscore) {
+                readable.append('_');
+                previousUnderscore = true;
+            }
+        }
+        String prefix = readable.toString()
+                .replaceAll("^[._ ]+", "")
+                .replaceAll("[. ]+$", "");
+        if (prefix.isBlank()) {
+            prefix = "repository";
+        }
+        return prefix + "--" + shortHash(normalizedId);
+    }
+
+    private boolean isPortableRepositoryDirectoryChar(char value) {
+        return (value >= 'a' && value <= 'z')
+                || (value >= 'A' && value <= 'Z')
+                || (value >= '0' && value <= '9')
+                || value == '.'
+                || value == '-'
+                || value == '_';
+    }
+
+    private String shortHash(String value) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest, 0, 6);
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 不可用", exception);
+        }
     }
 
     private RepositoryDefinition buildRepositoryDefinition(String id,

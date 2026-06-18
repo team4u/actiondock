@@ -802,7 +802,6 @@ class RepositoryCatalogServiceTest {
 
     @Test
     void resolveProjectRepositoryDoesNotAutoSyncGitRepository() {
-        Path missingGitRoot = tempDir.resolve("actiondock-home").resolve("repositories").resolve("billing-service");
         RepositoryDefinition repository = new RepositoryDefinition()
                 .setId("billing-service")
                 .setName("Billing Service")
@@ -818,6 +817,7 @@ class RepositoryCatalogServiceTest {
                 appProperties(),
                 null
         );
+        Path missingGitRoot = service.resolveRepositoryRoot(repository);
 
         assertThatThrownBy(() -> service.resolveProjectRepository("billing-service"))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -917,6 +917,119 @@ class RepositoryCatalogServiceTest {
         assertThat(saved.getPurpose()).isEqualTo(REPO_PURPOSE_PROJECT);
         assertThat(Files.exists(projectRoot.resolve("actiondock.repository.json"))).isFalse();
         assertThat(Files.exists(projectRoot.resolve("tools"))).isFalse();
+    }
+
+    @Test
+    void gitRepositoryRootUsesExistingLegacyDirectoryWhenAvailable() throws Exception {
+        Path repositoriesRoot = tempDir.resolve("repositories");
+        Path legacyRoot = repositoriesRoot.resolve("billing-service");
+        Files.createDirectories(legacyRoot);
+        RepositoryDefinitionService service = new RepositoryDefinitionService(
+                new InMemoryRepositoryDefinitionRepository(),
+                jsonCodec,
+                repositoriesRoot
+        );
+
+        Path root = service.resolveRepositoryRoot(new RepositoryDefinition()
+                .setId("billing-service")
+                .setName("Billing Service")
+                .setType(REPO_TYPE_GIT)
+                .setPurpose(REPO_PURPOSE_PROJECT)
+                .setUrl("https://example.com/billing.git")
+                .setEnabled(true));
+
+        assertThat(root).isEqualTo(legacyRoot);
+    }
+
+    @Test
+    void gitRepositoryRootUsesPlainRepositoryIdWhenSafe() {
+        Path repositoriesRoot = tempDir.resolve("repositories");
+        RepositoryDefinitionService service = new RepositoryDefinitionService(
+                new InMemoryRepositoryDefinitionRepository(),
+                jsonCodec,
+                repositoriesRoot
+        );
+
+        Path root = service.resolveRepositoryRoot(new RepositoryDefinition()
+                .setId("billing-service")
+                .setName("Billing Service")
+                .setType(REPO_TYPE_GIT)
+                .setPurpose(REPO_PURPOSE_PROJECT)
+                .setUrl("https://example.com/billing.git")
+                .setEnabled(true));
+
+        assertThat(root).isEqualTo(repositoriesRoot.resolve("billing-service"));
+    }
+
+    @Test
+    void gitRepositoryRootEscapesUnsafeRepositoryIdForLocalDirectory() {
+        Path repositoriesRoot = tempDir.resolve("repositories");
+        RepositoryDefinitionService service = new RepositoryDefinitionService(
+                new InMemoryRepositoryDefinitionRepository(),
+                jsonCodec,
+                repositoriesRoot
+        );
+
+        Path root = service.resolveRepositoryRoot(new RepositoryDefinition()
+                .setId("knowledge:actiondock-script-repository:dacu-fupan")
+                .setName("Dacu Fupan")
+                .setType(REPO_TYPE_GIT)
+                .setPurpose(REPO_PURPOSE_PROJECT)
+                .setUrl("git@gitlab.tools.vipshop.com:tracy01.yu/dacu-fupan.git")
+                .setEnabled(true));
+
+        assertThat(root.getParent()).isEqualTo(repositoriesRoot);
+        assertThat(root.getFileName().toString()).startsWith("knowledge_actiondock-script-repository_dacu-fupan--");
+        assertThat(root.getFileName().toString()).doesNotContain(":");
+    }
+
+    @Test
+    void gitRepositoryRootAddsHashToAvoidSanitizedNameCollision() {
+        Path repositoriesRoot = tempDir.resolve("repositories");
+        RepositoryDefinitionService service = new RepositoryDefinitionService(
+                new InMemoryRepositoryDefinitionRepository(),
+                jsonCodec,
+                repositoriesRoot
+        );
+
+        Path first = service.resolveRepositoryRoot(new RepositoryDefinition()
+                .setId("knowledge:a:b")
+                .setName("First")
+                .setType(REPO_TYPE_GIT)
+                .setPurpose(REPO_PURPOSE_PROJECT)
+                .setUrl("https://example.com/first.git")
+                .setEnabled(true));
+        Path second = service.resolveRepositoryRoot(new RepositoryDefinition()
+                .setId("knowledge/a/b")
+                .setName("Second")
+                .setType(REPO_TYPE_GIT)
+                .setPurpose(REPO_PURPOSE_PROJECT)
+                .setUrl("https://example.com/second.git")
+                .setEnabled(true));
+
+        assertThat(first.getFileName().toString()).startsWith("knowledge_a_b--");
+        assertThat(second.getFileName().toString()).startsWith("knowledge_a_b--");
+        assertThat(first).isNotEqualTo(second);
+    }
+
+    @Test
+    void localDirRepositoryRootUsesConfiguredUrlWithoutEscaping() {
+        Path projectRoot = tempDir.resolve("project:with:colon");
+        RepositoryDefinitionService service = new RepositoryDefinitionService(
+                new InMemoryRepositoryDefinitionRepository(),
+                jsonCodec,
+                tempDir.resolve("repositories")
+        );
+
+        Path root = service.resolveRepositoryRoot(new RepositoryDefinition()
+                .setId("knowledge:local:repo")
+                .setName("Local Repo")
+                .setType(REPO_TYPE_LOCAL_DIR)
+                .setPurpose(REPO_PURPOSE_PROJECT)
+                .setUrl(projectRoot.toString())
+                .setEnabled(true));
+
+        assertThat(root).isEqualTo(projectRoot);
     }
 
     @Test
