@@ -153,8 +153,9 @@ actiondock script run hello-groovy --name alice --json
 1. 了解如何 [创建和管理脚本](script-management.md)
 2. 学习 [脚本编写指南](script-writing-guide.md) 掌握运行时 API
 3. 配置 [AI 模型](ai-capabilities.md) 让 Agent 调用你的脚本
-4. 通过 [仓库与分发](repository-distribution.md) 把脚本分发给团队
-5. 设置 [Webhook](trigger-center.md) 接入外部系统 Webhook
+4. 通过 [MCP 集成](mcp-integration.md) 让 ChatGPT / Cursor / Claude 直接调用你的脚本
+5. 通过 [仓库与分发](repository-distribution.md) 把脚本分发给团队
+6. 设置 [Webhook](trigger-center.md) 接入外部系统 Webhook
 
 ---
 

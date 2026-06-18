@@ -72,6 +72,7 @@ ActionDock 做的核心事情是：
 - [Skills 管理](skills-management.md) — Skills 安装目标、安装、发布、详情，以及项目知识库用法约定
 - [任务手册 (Playbook) 理念](playbook.md) — 任务手册定位、核心概念、与 Skill 的本质区别、能力包分发及 Agent 消费指南
 - [AI 能力](ai-capabilities.md) — 模型配置、Agent 配置、Toolset、运行记录
+- [MCP 集成](mcp-integration.md) — 通过 MCP 协议接入 ChatGPT / Cursor / Claude 等客户端，让 AI 直接调用 ActionDock 能力
 
 ### 📦 资源
 

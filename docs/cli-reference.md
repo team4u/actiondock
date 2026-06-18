@@ -743,6 +743,22 @@ actiondock server -p 8080  # 指定端口启动
 actiondock health --json # 检查服务健康状态
 ```
 
+## MCP Server（接入 AI 客户端）
+
+`actiondock mcp` 启动内置 MCP Server，让 ChatGPT、Cursor、Claude 等客户端通过 MCP 协议调用 ActionDock 能力。支持两种 transport：
+
+```bash
+# stdio：本地客户端（Cursor / Claude Desktop / Cline 等）
+actiondock mcp --transport stdio
+
+# HTTP：远程 / Web 客户端，默认仅监听 127.0.0.1
+actiondock mcp --transport http --host 127.0.0.1 --port 5178 --endpoint /mcp
+```
+
+默认只开启只读查询与脚本执行；创建/删除/令牌等高风险操作默认不暴露，可用 `--enable-write-tools` / `--enable-admin-tools` 分级开放。已发布脚本会自动注册为独立工具（`actiondock_script__<id>`）。
+
+> 完整接入步骤、各客户端配置、工具清单、安全策略与排错，见 [MCP 集成](mcp-integration.md)。
+
 ## 完整示例流程
 
 ```bash
