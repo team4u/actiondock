@@ -1,6 +1,7 @@
 
 actiondock-admin-ui/dist/
 actiondock-admin-ui/.vite/
+actiondock-cli/dist/
 !actiondock-cli/bin/
 !actiondock-cli/bin/**
 actiondock-cli/runtime/
