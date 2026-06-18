@@ -78,6 +78,16 @@ http://127.0.0.1:5178/mcp
 >
 > 生产环境建议走 `HTTPS 反向代理 + Bearer Token → 127.0.0.1:5178/mcp`，不要直接对外裸跑。
 
+### 鉴权：身份透传，MCP 不持有凭证
+
+HTTP 模式下 **MCP 进程本身不持有任何 token**，也不做独立的鉴权。它把鉴权完全交给 ActionDock 后端：
+
+- 客户端在请求里带 `Authorization: Bearer <访问令牌>`，MCP 会把这个 token **原样透传**给 ActionDock 后端去校验；
+- 后端校验通过 → 正常返回；token 缺失 / 失效 / 禁用 → 后端返回 `401`，MCP 把它转成工具错误回给客户端；
+- 客户端**没带** `Authorization` 时，MCP 也**不会**凭空补一个，而是以匿名身份请求后端——后端若启用了访问令牌认证就会拒绝，没启用就放行。
+
+也就是说，谁有什么权限，完全由后端的访问令牌决定；MCP 只是一层协议网关。`--token` / `ACTIONDOCK_TOKEN` 在 HTTP 模式下**不生效**（那是 stdio 模式下子进程的身份）。要在 HTTP 模式下传身份，请在客户端请求头里带 `Authorization`。
+
 ## 各客户端配置示例
 
 ### Cursor
@@ -231,7 +241,9 @@ actiondock mcp --transport stdio \
 
 ### Q: HTTP 模式如何对外安全暴露
 
-不要直接 `--host 0.0.0.0`。用 ngrok（联调）或反向代理（生产），在代理层做 HTTPS 和 Bearer Token 校验，再转发到本地 `127.0.0.1:5178/mcp`。
+不要直接 `--host 0.0.0.0`。用 ngrok（联调）或反向代理（生产）做 HTTPS，再转发到本地 `127.0.0.1:5178/mcp`。
+
+鉴权本身不需要在代理层另做一层——HTTP 模式会把客户端请求里的 `Authorization: Bearer <令牌>` 透传给 ActionDock 后端校验。所以只要客户端带上了有效的访问令牌，后端会按令牌权限放行；代理层只需负责 HTTPS 和（可选的）访问控制即可。
 
 ### Q: AI 调用返回结果被截断了
 

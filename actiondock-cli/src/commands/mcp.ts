@@ -1,6 +1,7 @@
 import { Flags } from "@oclif/core";
 
 import { BaseCommand } from "../lib/command.js";
+import { resolveServerUrl } from "../lib/config.js";
 import { startActionDockMcp } from "../mcp/index.js";
 import { defaultPolicy } from "../mcp/types.js";
 import { splitCsv } from "../mcp/core/names.js";
@@ -84,7 +85,8 @@ export default class McpCommand extends BaseCommand {
         transport: flags.transport as "stdio" | "http",
         host: flags.host,
         port: flags.port,
-        endpoint: flags.endpoint
+        endpoint: flags.endpoint,
+        serverUrl: resolveServerUrl(flags)
       });
     } catch (error) {
       this.handleError(error, flags.json);

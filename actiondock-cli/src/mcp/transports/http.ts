@@ -2,8 +2,9 @@ import http, { type IncomingMessage, type Server, type ServerResponse } from "no
 
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 
+import { ActionDockClient } from "../../lib/client.js";
 import { createActionDockMcpServer } from "../server.js";
-import type { ToolContext } from "../types.js";
+import type { McpPolicy, ToolContext } from "../types.js";
 
 /**
  * Loopback addresses the HTTP transport is allowed to bind. Binding to a
@@ -31,6 +32,19 @@ export interface HttpTransportOptions {
 }
 
 /**
+ * Per-request context: the ActionDock backend URL plus the active policy. The
+ * token is intentionally absent here — it is taken from each incoming request's
+ * {@code Authorization} header so identity is forwarded to the backend rather
+ * than owned by the MCP process. See {@link deriveRequestContext}.
+ */
+export interface HttpTransportContext {
+  /** ActionDock backend URL (e.g. {@code http://127.0.0.1:5177}). */
+  serverUrl: string;
+  /** Active policy gating tool registration and result shaping. */
+  policy: McpPolicy;
+}
+
+/**
  * Start the ActionDock MCP server on a stateless Streamable HTTP transport.
  *
  * <p>Each incoming POST to {@code opts.endpoint} builds a fresh
@@ -40,12 +54,19 @@ export interface HttpTransportOptions {
  * {@code 413}; invalid JSON gets a {@code 400}. The bind host must be
  * loopback or an error is thrown before {@code listen}.
  *
+ * <p><b>Authentication is pass-through, not enforced here.</b> The MCP server
+ * holds no credentials of its own. For every request it derives an
+ * {@link ActionDockClient} from the request's {@code Authorization: Bearer ...}
+ * header (falling back to an anonymous client when none is present) and lets
+ * the ActionDock backend decide — a missing/invalid token surfaces as a
+ * {@code 401} from the backend, returned to the client as a tool error.
+ *
  * <p>SIGINT/SIGTERM perform an orderly {@link Server.close} before exiting.
  *
- * @param ctx   shared context carrying the ActionDock client and active policy
+ * @param ctx   backend URL + policy (token is per-request, see above)
  * @param opts  listen host/port/endpoint
  */
-export async function startHttp(ctx: ToolContext, opts: HttpTransportOptions): Promise<void> {
+export async function startHttp(ctx: HttpTransportContext, opts: HttpTransportOptions): Promise<void> {
   if (!LOOPBACK_HOSTS.has(opts.host)) {
     throw new Error(
       `Refusing to bind HTTP transport to non-loopback host '${opts.host}'. ` +
@@ -72,6 +93,44 @@ export async function startHttp(ctx: ToolContext, opts: HttpTransportOptions): P
 }
 
 /**
+ * Extract the bearer token from an {@code Authorization} header, if present.
+ *
+ * <p>Accepts the standard {@code Bearer <token>} form (scheme matched
+ * case-insensitively). Returns {@code undefined} when the header is absent or
+ * does not use the bearer scheme — the caller then builds an anonymous client
+ * and lets the backend reject it if credentials are required.
+ *
+ * @param header  raw {@code Authorization} header value, possibly {@code undefined}
+ * @returns the bare token (no {@code Bearer } prefix) or {@code undefined}
+ */
+export function extractBearerToken(header: string | undefined): string | undefined {
+  if (!header) {
+    return undefined;
+  }
+  const match = header.match(/^\s*Bearer\s+(.+?)\s*$/i);
+  return match ? match[1] : undefined;
+}
+
+/**
+ * Derive a per-request {@link ToolContext} by forwarding the caller's identity.
+ *
+ * <p>Constructs a fresh {@link ActionDockClient} bound to {@code ctx.serverUrl}
+ * using the token extracted from the request's {@code Authorization} header.
+ * Constructing a client is pure object instantiation (no I/O), so doing it per
+ * request is cheap. When no bearer token is present, an anonymous client is
+ * built and the backend's own auth filter decides whether to allow the call.
+ *
+ * @param ctx   backend URL + policy
+ * @param req   incoming request carrying the (optional) {@code Authorization} header
+ * @returns a {@link ToolContext} whose client carries the caller's token
+ */
+export function deriveRequestContext(ctx: HttpTransportContext, req: IncomingMessage): ToolContext {
+  const token = extractBearerToken(req.headers.authorization);
+  const client = new ActionDockClient({ serverUrl: ctx.serverUrl, token });
+  return { client, policy: ctx.policy };
+}
+
+/**
  * Handle a single HTTP request: route to the MCP handler or respond with the
  * appropriate error envelope. Extracted from {@link startHttp} so the request
  * path is isolated from server lifecycle wiring.
@@ -79,7 +138,7 @@ export async function startHttp(ctx: ToolContext, opts: HttpTransportOptions): P
 async function handleRequest(
   req: IncomingMessage,
   res: ServerResponse,
-  ctx: ToolContext,
+  ctx: HttpTransportContext,
   opts: HttpTransportOptions
 ): Promise<void> {
   const url = new URL(req.url ?? "/", "http://localhost");
@@ -122,10 +181,12 @@ async function handleRequest(
     return;
   }
 
-  // Stateless: a brand-new server + transport pair per request. The transport
-  // and server are torn down when the response closes.
+  // Stateless + pass-through auth: derive a client carrying the caller's token
+  // for this request, then build a fresh server + transport pair around it.
+  // The transport and server are torn down when the response closes.
   try {
-    const mcpServer = await createActionDockMcpServer(ctx);
+    const requestCtx = deriveRequestContext(ctx, req);
+    const mcpServer = await createActionDockMcpServer(requestCtx);
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     await mcpServer.connect(transport);
     await transport.handleRequest(req, res, parsed);
