@@ -34,6 +34,7 @@
     "prepack": "npm run build && npm run build:runtime && npm run jdeploy:package && cp ../README.md ./README.md"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@oclif/core": "^4.10.6",
     "@oclif/plugin-autocomplete": "^3.2.46",
     "@oclif/plugin-warn-if-update-available": "^3.1.61",
@@ -41,7 +42,8 @@
     "node-fetch": "2.6.7",
     "shelljs": "^0.10.0",
     "tar": "^7.5.15",
-    "yauzl": "^2.10.0"
+    "yauzl": "^2.10.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
