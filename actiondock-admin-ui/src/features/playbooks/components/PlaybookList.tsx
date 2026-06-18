@@ -84,7 +84,8 @@ export function PlaybookList(props: PlaybookListProps) {
     {
       title: "ID",
       dataIndex: "id",
-      width: 220,
+      width: 320,
+      ellipsis: true,
       render: (value, item) => (
         <Button type="link" size="small" style={{ padding: 0 }} onClick={() => onEdit(item)}>
           {value}
