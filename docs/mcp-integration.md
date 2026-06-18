@@ -88,6 +88,8 @@ HTTP 模式下 **MCP 进程本身不持有任何 token**，也不做独立的鉴
 
 也就是说，谁有什么权限，完全由后端的访问令牌决定；MCP 只是一层协议网关。`--token` / `ACTIONDOCK_TOKEN` 在 HTTP 模式下**不生效**（那是 stdio 模式下子进程的身份）。要在 HTTP 模式下传身份，请在客户端请求头里带 `Authorization`。
 
+> ⚠️ 注意：并非所有客户端都能自己带 `Authorization`。比如 **ChatGPT Web 的自定义连接器就只能选「OAuth」或「无认证」，发不出 Bearer 令牌**——这种场景需要在反向代理层注入令牌，详见下方 [ChatGPT Web 章节](#chatgpt-web远程-http) 的「鉴权怎么配」。
+
 ## 各客户端配置示例
 
 ### Cursor
@@ -134,11 +136,53 @@ HTTP 模式下 **MCP 进程本身不持有任何 token**，也不做独立的鉴
 
 ### ChatGPT Web（远程 HTTP）
 
-启动 HTTP transport 后，通过隧道获得公网 URL，在 ChatGPT 的「Connectors / MCP」里填：
+启动 HTTP transport 后，通过隧道获得公网 URL，在 ChatGPT 的「Connectors / 自定义连接器」里填：
 
 ```text
 https://<你的公网域名>/mcp
 ```
+
+#### 鉴权怎么配
+
+**先说结论：ChatGPT 的自定义连接器不支持填自定义 `Authorization: Bearer <令牌>`，只支持「OAuth」或「无认证」。** 所以鉴权要按后端是否启用了访问令牌分两种情况：
+
+**情况一：后端没启用访问令牌认证（默认）**
+
+最简单。ActionDock 默认不强制鉴权（系统里没有任何启用的令牌时，所有 `/api/*` 请求直接放行）。ChatGPT 连接器选「无认证」直连即可，MCP 的身份透传此时也不会给请求补任何 header，链路完全透明。
+
+**情况二：后端启用了访问令牌认证**
+
+由于 ChatGPT 自己发不出 Bearer 令牌，需要在**反向代理层注入**令牌再转发给 MCP：
+
+```text
+ChatGPT（无认证 / OAuth）
+      │  https
+      ▼
+你的反向代理（nginx / Caddy / Cloudflare Worker）
+  └─ 注入 Authorization: Bearer <你的访问令牌>
+      │  http
+      ▼
+actiondock mcp --transport http（127.0.0.1:5178/mcp）
+      │  透传令牌
+      ▼
+ActionDock 后端（校验令牌）
+```
+
+nginx 示例（强制覆盖请求头里的令牌）：
+
+```nginx
+location /mcp {
+    proxy_pass http://127.0.0.1:5178/mcp;
+    proxy_set_header Authorization "Bearer adk_你的访问令牌";
+    proxy_buffering off;          # MCP 用 SSE 流式响应，必须关缓冲
+    proxy_read_timeout 600s;
+}
+```
+
+> 代理注入的是「给 ChatGPT 用的固定令牌」，相当于把 ChatGPT 当成一个具名客户端。若要给不同 ChatGPT 账号不同权限，需各自用独立令牌 + 各自代理路径。MCP 侧不区分客户端，身份完全由代理注入的令牌决定。
+
+> 若你希望走标准 OAuth（例如对接 Auth0），需要在 MCP 前再架一层 OAuth 网关把 ChatGPT 的 OAuth 流程接上，超出本文范围。
+
 
 ### 通用：MCP Inspector 调试
 
