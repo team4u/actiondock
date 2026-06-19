@@ -146,7 +146,7 @@ Agent 应根据用户问题、`guideMarkdown` 和 `scriptRefs[].purpose` 选择�
 - 需要调用云厂商 CLI 时，提示使用团队封装过的云工具 Skill。
 - 需要访问团队私有知识或标准诊断工具时，提示使用私有 Agent Skill。
 
-ActionDock 不会安装这些 Skill，也不会检查它们是否存在。即便某个 `agentSkillRefs[].required` 为 `true`，平台也只把它作为语义提示交给消费端。Agent Skill 属于运行环境，ActionDock 不掌握不同 Agent 的安装状态。
+ActionDock 不会安装这些 Skill，也不会检查它们是否存在。即便某个 `agentSkillRefs[].required` 为 `true`，平台也只把它作为语义提示交给消费端。原因见 FAQ。
 
 ### `relatedPlaybookRefs`
 
@@ -209,7 +209,7 @@ Agent 端读取详情后，先处理 `repositoryIds`、`riskLevel` 和 `stopCond
 
 ### 4. 调查 (Investigate)：检索指南与证据
 
-阅读 `guideMarkdown`，并根据用户问题、任务阶段和 `scriptRefs[].purpose` 选择最小相关脚本集。默认选 1 个，确有并行排查路径时最多选 3 个，只对选中的脚本查询 Schema。
+阅读 `guideMarkdown`，按 `scriptRefs` 的选择规则（见字段语义）选出最小相关脚本集，只对选中的脚本查询 Schema。
 
 ```bash
 actiondock script schema query-refund-log --json
@@ -236,7 +236,7 @@ actiondock script schema query-refund-log --json
 - 日志显示失败来自数据库慢查询，跳到 `database-slow-query`，关系为 `FOLLOW_UP`。
 - 用户同时问支付回调异常，提示可查看 `payment-callback-failure`，关系为 `RELATED`。
 
-跳转后重新执行五阶段协议，不能把上一个 Playbook 的脚本、知识引用或停止条件自动带过去。
+跳转后从头重新执行五阶段协议。被引用 Playbook 的边界不自动继承——见 `relatedPlaybookRefs` 的定义。
 
 ## 通用项目调查兜底 (Fallback)
 
