@@ -112,20 +112,68 @@ export function extractBearerToken(header: string | undefined): string | undefin
 }
 
 /**
+ * Extract the access token from a request's query string, if present.
+ *
+ * <p>Reads the {@code access_token} query parameter (the OAuth 2.0 convention
+ * for passing a bearer token in a URL). This is the fallback path for clients
+ * that cannot set an {@code Authorization} header — most notably the ChatGPT
+ * custom connector, whose URL is the only field it fully controls.
+ *
+ * <p><b>Trade-off:</b> a token in the query string leaks into server access
+ * logs, browser history, and {@code Referer} headers. It is acceptable for
+ * loopback / personal ngrok use; for production prefer the header path via a
+ * reverse proxy. The token value is trimmed; an empty value is ignored.
+ *
+ * @param url  parsed request URL
+ * @returns the bare token or {@code undefined}
+ */
+export function extractQueryToken(url: URL): string | undefined {
+  const value = url.searchParams.get("access_token");
+  if (!value) {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+/**
+ * Resolve the caller's token for a single request, preferring the
+ * {@code Authorization} header and falling back to the {@code access_token}
+ * query parameter.
+ *
+ * <p>Header takes precedence because it is the more secure channel (it does
+ * not leak into logs/history). When neither source yields a token, the result
+ * is {@code undefined} and the backend's own auth filter makes the final call.
+ *
+ * @param req  incoming HTTP request
+ * @param url  parsed request URL
+ * @returns the bare token to forward, or {@code undefined} for anonymous access
+ */
+export function resolveRequestToken(req: IncomingMessage, url: URL): string | undefined {
+  return extractBearerToken(req.headers.authorization) ?? extractQueryToken(url);
+}
+
+/**
  * Derive a per-request {@link ToolContext} by forwarding the caller's identity.
  *
  * <p>Constructs a fresh {@link ActionDockClient} bound to {@code ctx.serverUrl}
- * using the token extracted from the request's {@code Authorization} header.
- * Constructing a client is pure object instantiation (no I/O), so doing it per
- * request is cheap. When no bearer token is present, an anonymous client is
- * built and the backend's own auth filter decides whether to allow the call.
+ * using the token resolved from the request (Authorization header, falling back
+ * to the {@code access_token} query parameter). Constructing a client is pure
+ * object instantiation (no I/O), so doing it per request is cheap. When no
+ * token is present, an anonymous client is built and the backend's own auth
+ * filter decides whether to allow the call.
  *
  * @param ctx   backend URL + policy
- * @param req   incoming request carrying the (optional) {@code Authorization} header
+ * @param req   incoming request carrying the (optional) credentials
+ * @param url   parsed request URL (used for the query-parameter fallback)
  * @returns a {@link ToolContext} whose client carries the caller's token
  */
-export function deriveRequestContext(ctx: HttpTransportContext, req: IncomingMessage): ToolContext {
-  const token = extractBearerToken(req.headers.authorization);
+export function deriveRequestContext(
+  ctx: HttpTransportContext,
+  req: IncomingMessage,
+  url: URL
+): ToolContext {
+  const token = resolveRequestToken(req, url);
   const client = new ActionDockClient({ serverUrl: ctx.serverUrl, token });
   return { client, policy: ctx.policy };
 }
@@ -185,7 +233,7 @@ async function handleRequest(
   // for this request, then build a fresh server + transport pair around it.
   // The transport and server are torn down when the response closes.
   try {
-    const requestCtx = deriveRequestContext(ctx, req);
+    const requestCtx = deriveRequestContext(ctx, req, url);
     const mcpServer = await createActionDockMcpServer(requestCtx);
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     await mcpServer.connect(transport);

@@ -80,15 +80,16 @@ http://127.0.0.1:5178/mcp
 
 ### 鉴权：身份透传，MCP 不持有凭证
 
-HTTP 模式下 **MCP 进程本身不持有任何 token**，也不做独立的鉴权。它把鉴权完全交给 ActionDock 后端：
+HTTP 模式下 **MCP 进程本身不持有任何 token**，也不做独立的鉴权。它把鉴权完全交给 ActionDock 后端，每个请求从**两个来源之一**取出令牌、原样透传给后端校验：
 
-- 客户端在请求里带 `Authorization: Bearer <访问令牌>`，MCP 会把这个 token **原样透传**给 ActionDock 后端去校验；
-- 后端校验通过 → 正常返回；token 缺失 / 失效 / 禁用 → 后端返回 `401`，MCP 把它转成工具错误回给客户端；
-- 客户端**没带** `Authorization` 时，MCP 也**不会**凭空补一个，而是以匿名身份请求后端——后端若启用了访问令牌认证就会拒绝，没启用就放行。
+1. **请求头**（推荐）：`Authorization: Bearer <访问令牌>` —— 更安全，令牌不进 URL。
+2. **URL query 参数**（兜底）：`?access_token=<访问令牌>` —— 给「发不出 header」的客户端用（典型就是 ChatGPT Web）。
 
-也就是说，谁有什么权限，完全由后端的访问令牌决定；MCP 只是一层协议网关。`--token` / `ACTIONDOCK_TOKEN` 在 HTTP 模式下**不生效**（那是 stdio 模式下子进程的身份）。要在 HTTP 模式下传身份，请在客户端请求头里带 `Authorization`。
+两者同时存在时 **header 优先**。取不到令牌时，MCP 以匿名身份请求后端——后端校验通过则正常返回，缺失 / 失效 / 禁用则返回 `401`，MCP 把它转成工具错误回给客户端。也就是说，谁有什么权限，完全由后端的访问令牌决定；MCP 只是一层协议网关。
 
-> ⚠️ 注意：并非所有客户端都能自己带 `Authorization`。比如 **ChatGPT Web 的自定义连接器就只能选「OAuth」或「无认证」，发不出 Bearer 令牌**——这种场景需要在反向代理层注入令牌，详见下方 [ChatGPT Web 章节](#chatgpt-web远程-http) 的「鉴权怎么配」。
+`--token` / `ACTIONDOCK_TOKEN` 在 HTTP 模式下**不生效**（那是 stdio 模式下子进程的身份）。
+
+> ⚠️ 注意：并非所有客户端都能自己带 `Authorization`。比如 **ChatGPT Web 的自定义连接器就只能选「OAuth」或「无认证」，发不出 Bearer 令牌**——这种场景请把令牌拼在 URL 的 `access_token` 参数里（最省事），或在反向代理层注入 header（生产）。详见下方 [ChatGPT Web 章节](#chatgpt-web远程-http) 的「鉴权怎么配」。
 
 ## 各客户端配置示例
 
@@ -144,15 +145,27 @@ https://<你的公网域名>/mcp
 
 #### 鉴权怎么配
 
-**先说结论：ChatGPT 的自定义连接器不支持填自定义 `Authorization: Bearer <令牌>`，只支持「OAuth」或「无认证」。** 所以鉴权要按后端是否启用了访问令牌分两种情况：
+**先说结论：ChatGPT 的自定义连接器不支持填自定义 `Authorization: Bearer <令牌>`，只支持「OAuth」或「无认证」。** 但它**一定能填 URL**——所以最简单的办法是把令牌拼在 URL 的 query 参数里。鉴权按后端是否启用访问令牌分三种情况：
 
 **情况一：后端没启用访问令牌认证（默认）**
 
 最简单。ActionDock 默认不强制鉴权（系统里没有任何启用的令牌时，所有 `/api/*` 请求直接放行）。ChatGPT 连接器选「无认证」直连即可，MCP 的身份透传此时也不会给请求补任何 header，链路完全透明。
 
-**情况二：后端启用了访问令牌认证**
+**情况二：后端启用了访问令牌认证 —— URL 带令牌（推荐，最省事）**
 
-由于 ChatGPT 自己发不出 Bearer 令牌，需要在**反向代理层注入**令牌再转发给 MCP：
+把令牌作为 `access_token` 拼在 URL 末尾。MCP 会从 query 参数里取出令牌、透传给后端校验，等价于走 `Authorization` header：
+
+```text
+https://<你的公网域名>/mcp?access_token=adk_你的访问令牌
+```
+
+ChatGPT 连接器直接填这个完整 URL 即可，连接器类型选「无认证」（令牌已经在 URL 里了）。这是 ChatGPT 这类「发不出 header」的客户端最顺手的接法。
+
+> ⚠️ **安全权衡**：query 参数里的令牌会进**服务器访问日志、浏览器历史、Referer 头**。回环 + 个人 ngrok 联调没问题；面向公网长期暴露时，优先用下面的「情况三」反代注入（令牌走 header，不出现在 URL）。另外建议为 ChatGPT 专门建一个**可随时禁用**的独立令牌，不要复用你自己的主令牌。
+
+**情况三：后端启用了访问令牌认证 —— 反向代理注入 header（生产 / 多账号）**
+
+如果不想把令牌写进 URL（避免进日志），或要给不同 ChatGPT 账号配不同令牌，就在反向代理层注入 `Authorization` header 再转发：
 
 ```text
 ChatGPT（无认证 / OAuth）
@@ -179,7 +192,7 @@ location /mcp {
 }
 ```
 
-> 代理注入的是「给 ChatGPT 用的固定令牌」，相当于把 ChatGPT 当成一个具名客户端。若要给不同 ChatGPT 账号不同权限，需各自用独立令牌 + 各自代理路径。MCP 侧不区分客户端，身份完全由代理注入的令牌决定。
+> 当 header 和 URL `access_token` 同时存在时，**header 优先**（更安全的通道胜出）。
 
 > 若你希望走标准 OAuth（例如对接 Auth0），需要在 MCP 前再架一层 OAuth 网关把 ChatGPT 的 OAuth 流程接上，超出本文范围。
 
@@ -287,7 +300,7 @@ actiondock mcp --transport stdio \
 
 不要直接 `--host 0.0.0.0`。用 ngrok（联调）或反向代理（生产）做 HTTPS，再转发到本地 `127.0.0.1:5178/mcp`。
 
-鉴权本身不需要在代理层另做一层——HTTP 模式会把客户端请求里的 `Authorization: Bearer <令牌>` 透传给 ActionDock 后端校验。所以只要客户端带上了有效的访问令牌，后端会按令牌权限放行；代理层只需负责 HTTPS 和（可选的）访问控制即可。
+鉴权本身不需要在代理层另做一层——HTTP 模式会把客户端的访问令牌透传给 ActionDock 后端校验，令牌可以从 `Authorization: Bearer <令牌>` 请求头来，也可以从 URL 的 `?access_token=<令牌>` 来（header 优先）。所以只要客户端带上了有效令牌，后端就按令牌权限放行；代理层只需负责 HTTPS 和（可选的）访问控制即可。
 
 ### Q: AI 调用返回结果被截断了
 
