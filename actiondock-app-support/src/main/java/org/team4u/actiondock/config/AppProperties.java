@@ -5,6 +5,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Function;
 
 /**
  * 应用配置属性，绑定 {@code app.*} 前缀的配置项。
@@ -61,6 +62,14 @@ public class AppProperties {
     }
 
     public static String defaultHomeDir() {
+        return defaultHomeDir(System::getenv);
+    }
+
+    static String defaultHomeDir(Function<String, String> envLookup) {
+        String configured = envLookup.apply("ACTIONDOCK_HOME");
+        if (configured != null && !configured.isBlank()) {
+            return Path.of(configured.trim()).toString();
+        }
         return Path.of(System.getProperty("user.home"), ".actiondock").toString();
     }
 

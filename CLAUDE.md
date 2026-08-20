@@ -72,7 +72,7 @@ ActionDock 的内置工作区系统插件，为 Agent 脚本提供文件系统�
 - Runtime config: `actiondock-app-support/src/main/resources/runtime-common.yml`
 - App config: `actiondock-app-spring/src/main/resources/application.yml`
 - App properties bound to `AppProperties` class with `@ConfigurationProperties(prefix = "app")`
-- `app.home-dir`: Default `${user.home}/.actiondock` - Base directory for all local data
+- `app.home-dir`: Default `${ACTIONDOCK_HOME:${user.home}/.actiondock}` - Base directory for all local data; set `ACTIONDOCK_HOME` env or `--app.home-dir=<path>` to relocate (data/, plugins/, skills/, runs/, python-envs/, repositories/ all follow)
 - `app.plugins.dir`: Default `${app.home-dir}/plugins` - Plugin JAR storage
 - `app.repositories.auto-sync-enabled`: Enable/disable periodic git repository sync (default: true)
 - `app.repositories.auto-sync-interval-seconds`: Sync interval (default: 1800)

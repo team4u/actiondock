@@ -40,6 +40,20 @@ mvn -pl actiondock-app-spring -am -DskipTests compile
 mvn -pl actiondock-app-spring -am -DskipTests spring-boot:run
 ```
 
+## 自定义数据目录
+
+ActionDock 的本地运行时数据（H2 数据库、插件、技能、执行产物、Python 虚拟环境、仓库同步目录）默认都放在 `~/.actiondock` 下。可以通过环境变量整体迁移：
+
+```bash
+# 方式一：环境变量（推荐）
+ACTIONDOCK_HOME=/data/actiondock actiondock server
+
+# 方式二：Spring Boot 启动参数
+actiondock server --app.home-dir=/data/actiondock
+```
+
+两者等价，设置其一即可；同时设置时启动参数优先。`ACTIONDOCK_HOME` 需要是绝对路径，目录不存在时会自动创建。
+
 ## 启动后验证
 
 启动成功后，访问以下地址：

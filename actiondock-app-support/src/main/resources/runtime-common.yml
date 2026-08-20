@@ -22,9 +22,11 @@ spring:
     baseline-version: 0
 
 app:
-  home-dir: ${user.home}/.actiondock
+  home-dir: ${ACTIONDOCK_HOME:${user.home}/.actiondock}
   plugins:
     dir: ${app.home-dir}/plugins
+  skills:
+    dir: ${app.home-dir}/skills
   repositories:
     auto-sync-enabled: true
     auto-sync-interval-seconds: 1800
@@ -38,6 +40,8 @@ app:
       enabled: true
       cache-max-size: 128
       cache-expire-after-access-minutes: 30
+    python:
+      env-cache-dir: ${app.home-dir}/python-envs
   schedules:
     pool-size: 2
   shared-state:
