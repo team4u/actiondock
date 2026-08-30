@@ -142,5 +142,25 @@ describe("CLI End-to-End", () => {
     expect(
       existsSync(join(tempDir, "dist", "github-ops-skill", "bin", "github-ops"))
     ).toBe(true);
+
+    // 11. link package and execute from outside directory
+    const linkProc = runCli(["link"], tempDir);
+    expect(linkProc.exitCode).toBe(0);
+    expect(linkProc.stdout.toString()).toContain("[OK] Linked package");
+
+    // Execute from root (outside tempDir)
+    const outsideRun = runCli(
+      ["run", "sample.greet", "--input", '{"name": "Globetrotter"}'],
+      tmpdir()
+    );
+    expect(outsideRun.exitCode).toBe(0);
+    const outsideRes = JSON.parse(outsideRun.stdout.toString());
+    expect(outsideRes.ok).toBe(true);
+    expect(outsideRes.data.message).toBe("Howdy, Globetrotter!");
+
+    // 12. unlink
+    const unlinkProc = runCli(["unlink", "team.github-ops"], tmpdir());
+    expect(unlinkProc.exitCode).toBe(0);
+    expect(unlinkProc.stdout.toString()).toContain("[OK] Unlinked package");
   });
 });

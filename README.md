@@ -202,6 +202,8 @@ dist/my-tools-skill/
 | :--- | :--- |
 | `ac init [dir]` | 在指定目录初始化脚手架新项目 |
 | `ac info [--json]` | 查看当前项目元数据、Action 与 Playbook 清单 |
+| `ac link [path]` | 将本地 Action Package 注册到全局注册表（实现跨目录源码直跑） |
+| `ac unlink [id\|path]` | 从全局注册表中注销指定包 |
 | `ac action create <id>` | 快速生成新的 Action 声明模板文件 |
 | `ac action list [--json]` | 列出当前项目中的所有 Action |
 | `ac action show <id> [--json]` | 查看指定 Action 的详细定义与入参出参 Schema |

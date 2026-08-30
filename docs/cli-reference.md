@@ -27,6 +27,12 @@ ActionDock 命令行工具（`ac`）全量功能与参数参考。
 #### `ac info [--json]`
 展示当前项目的元数据、已发现的 Action 清单、Playbook 清单与声明的配置项。
 
+#### `ac link [path]`
+将本地的 Action Package 注册到全局开发态注册表（`~/.actiondock/registry.json`），注册后在系统任意目录均可直接通过 `ac run <action-id>` 源码直跑。
+
+#### `ac unlink [id|path]`
+从全局开发态注册表中注销指定包。
+
 ---
 
 ### Action 管理与执行

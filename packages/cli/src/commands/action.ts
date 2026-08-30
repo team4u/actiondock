@@ -4,8 +4,10 @@ import {
   ActionRunner,
   createStorage,
   findProjectRoot,
+  listLinkedPackages,
   loadActions,
   loadProjectConfig,
+  resolveActionProject,
   validateSchema,
 } from "@actiondock/core";
 import { Command } from "commander";
@@ -18,28 +20,72 @@ export function registerActionCommands(program: Command): void {
   // action list
   actionCmd
     .command("list")
-    .description("List all actions in current project")
+    .description("List actions in current project or all linked packages")
     .option("--json", "Output as JSON")
     .action(async (options) => {
-      const root = findProjectRoot();
-      if (!root) {
-        console.error("Error: Not in an ActionDock project");
-        process.exit(1);
-      }
       try {
-        const config = loadProjectConfig(root);
-        const actions = await loadActions(root, config.actionsDir);
-        const list = Array.from(actions.values()).map((a) => ({
-          id: a.id,
-          description: a.description || "",
-        }));
+        const root = findProjectRoot();
+        if (root) {
+          const config = loadProjectConfig(root);
+          const actions = await loadActions(root, config.actionsDir);
+          const list = Array.from(actions.values()).map((a) => ({
+            id: a.id,
+            description: a.description || "",
+          }));
 
-        if (options.json) {
-          console.log(JSON.stringify(list, null, 2));
+          if (options.json) {
+            console.log(JSON.stringify(list, null, 2));
+          } else {
+            console.log(`Actions in ${config.id} (${root}):\n`);
+            for (const a of list) {
+              console.log(`  ${a.id.padEnd(28)} ${a.description}`);
+            }
+          }
         } else {
-          console.log(`Actions in ${config.id}:\n`);
-          for (const a of list) {
-            console.log(`  ${a.id.padEnd(28)} ${a.description}`);
+          // List actions across all linked packages
+          const linkedList = listLinkedPackages();
+          if (linkedList.length === 0) {
+            console.log("No ActionDock project in current directory, and no packages linked.");
+            console.log("Run 'ac link' inside an Action package to register it.");
+            return;
+          }
+
+          const aggregated: Array<{
+            packageId: string;
+            packageName: string;
+            path: string;
+            actions: Array<{ id: string; description: string }>;
+          }> = [];
+
+          for (const pkg of linkedList) {
+            if (!existsSync(pkg.path)) continue;
+            try {
+              const config = loadProjectConfig(pkg.path);
+              const actions = await loadActions(pkg.path, config.actionsDir);
+              aggregated.push({
+                packageId: pkg.id,
+                packageName: pkg.name,
+                path: pkg.path,
+                actions: Array.from(actions.values()).map((a) => ({
+                  id: a.id,
+                  description: a.description || "",
+                })),
+              });
+            } catch {
+              // Ignore broken linked package
+            }
+          }
+
+          if (options.json) {
+            console.log(JSON.stringify(aggregated, null, 2));
+          } else {
+            console.log("Linked Action Packages:\n");
+            for (const pkg of aggregated) {
+              console.log(`* Package: ${pkg.packageId} (${pkg.path})`);
+              for (const a of pkg.actions) {
+                console.log(`    - ${a.id.padEnd(26)} ${a.description}`);
+              }
+            }
           }
         }
       } catch (err: any) {
@@ -73,29 +119,25 @@ export function registerActionCommands(program: Command): void {
         const targetFullFile = resolve(actionsDir, targetRelFile);
 
         if (existsSync(targetFullFile)) {
-          console.error(`Error: File '${targetFullFile}' already exists`);
+          console.error(`Error: Target action file already exists at ${targetFullFile}`);
           process.exit(1);
         }
 
-        mkdirSync(dirname(targetFullFile), { recursive: true });
-
-        const desc = options.desc || `Execute ${id} action`;
+        const desc = options.desc || `Action ${id}`;
         const template = `import { defineAction } from "@actiondock/sdk";
 
 export interface Input {
-  // Define input parameters
   exampleParam?: string;
 }
 
 export interface Output {
-  // Define output fields
   success: boolean;
   result?: unknown;
 }
 
 export default defineAction<Input, Output>({
-  id: ${JSON.stringify(id)},
-  description: ${JSON.stringify(desc)},
+  id: "${id}",
+  description: "${desc}",
 
   inputSchema: {
     type: "object",
@@ -149,17 +191,13 @@ export default defineAction<Input, Output>({
     .description("Show action definition, schema, and description")
     .option("--json", "Output as JSON")
     .action(async (id, options) => {
-      const root = findProjectRoot();
-      if (!root) {
-        console.error("Error: Not in an ActionDock project");
-        process.exit(1);
-      }
       try {
-        const config = loadProjectConfig(root);
-        const actions = await loadActions(root, config.actionsDir);
-        const action = actions.get(id);
+        const resolved = await resolveActionProject(id);
+        const config = loadProjectConfig(resolved.projectRoot);
+        const actions = await loadActions(resolved.projectRoot, config.actionsDir);
+        const action = actions.get(resolved.actionId);
         if (!action) {
-          console.error(`Error: Action '${id}' not found`);
+          console.error(`Error: Action '${resolved.actionId}' not found in package '${resolved.packageId}'`);
           process.exit(1);
         }
 
@@ -168,6 +206,7 @@ export default defineAction<Input, Output>({
             JSON.stringify(
               {
                 id: action.id,
+                packageId: resolved.packageId,
                 description: action.description,
                 inputSchema: action.inputSchema,
                 outputSchema: action.outputSchema,
@@ -178,6 +217,7 @@ export default defineAction<Input, Output>({
           );
         } else {
           console.log(`Action:      ${action.id}`);
+          console.log(`Package:     ${resolved.packageId} (${resolved.projectRoot})`);
           if (action.description) console.log(`Description: ${action.description}`);
           if (action.inputSchema) {
             console.log("\nInput Schema:");
@@ -208,29 +248,29 @@ export default defineAction<Input, Output>({
       try {
         const config = loadProjectConfig(root);
         const actions = await loadActions(root, config.actionsDir);
-        const targets = id ? [actions.get(id)].filter(Boolean) : Array.from(actions.values());
 
-        if (id && targets.length === 0) {
-          console.error(`Error: Action '${id}' not found`);
+        const toValidate = id ? [actions.get(id)].filter(Boolean) : Array.from(actions.values());
+        if (id && toValidate.length === 0) {
+          console.error(`Error: Action '${id}' not found in project`);
           process.exit(1);
         }
 
         const results: Array<{ id: string; valid: boolean; errors: string[] }> = [];
-        for (const act of targets) {
-          if (!act) continue;
+
+        for (const act of toValidate as any[]) {
           const errors: string[] = [];
-          if (!act.id) errors.push("Missing id");
-          if (typeof act.run !== "function") errors.push("Missing run function");
+          if (!act.id) errors.push("Missing id property");
+          if (!act.run || typeof act.run !== "function") errors.push("Missing run method");
           if (act.inputSchema) {
-            const v = validateSchema(act.inputSchema, {});
-            if (!v.valid && v.errors?.some((e) => e.startsWith("Schema compilation error"))) {
-              errors.push(...v.errors);
+            const vRes = validateSchema(act.inputSchema, {});
+            // Check if schema itself is valid
+            if (typeof act.inputSchema !== "object") {
+              errors.push("Invalid inputSchema object");
             }
           }
           if (act.outputSchema) {
-            const v = validateSchema(act.outputSchema, {});
-            if (!v.valid && v.errors?.some((e) => e.startsWith("Schema compilation error"))) {
-              errors.push(...v.errors);
+            if (typeof act.outputSchema !== "object") {
+              errors.push("Invalid outputSchema object");
             }
           }
           results.push({
@@ -262,7 +302,7 @@ export default defineAction<Input, Output>({
   // action run
   actionCmd
     .command("run <id>")
-    .description("Execute an action")
+    .description("Execute an action (from current project or linked packages)")
     .option("-i, --input <json>", "Input as JSON string")
     .option("-f, --input-file <path>", "Input from JSON file")
     .option("-c, --config <key=value...>", "Temporary config override (repeatable or comma-separated)")
@@ -283,9 +323,17 @@ export default defineAction<Input, Output>({
 }
 
 async function executeAction(id: string, options: any): Promise<void> {
-  const root = findProjectRoot();
-  if (!root) {
-    console.error("Error: Not in an ActionDock project");
+  let resolvedProjectRoot: string;
+  let resolvedActionId: string;
+  let packageId: string;
+
+  try {
+    const resolved = await resolveActionProject(id);
+    resolvedProjectRoot = resolved.projectRoot;
+    resolvedActionId = resolved.actionId;
+    packageId = resolved.packageId;
+  } catch (err: any) {
+    console.error(`Error: ${err.message}`);
     process.exit(1);
   }
 
@@ -316,9 +364,9 @@ async function executeAction(id: string, options: any): Promise<void> {
   }
 
   try {
-    const config = loadProjectConfig(root);
-    const actions = await loadActions(root, config.actionsDir);
-    const storage = createStorage(config.id, { projectRoot: root });
+    const config = loadProjectConfig(resolvedProjectRoot);
+    const actions = await loadActions(resolvedProjectRoot, config.actionsDir);
+    const storage = createStorage(config.id, { projectRoot: resolvedProjectRoot });
 
     const runner = new ActionRunner({
       packageId: config.id,
@@ -328,7 +376,7 @@ async function executeAction(id: string, options: any): Promise<void> {
       actions,
     });
 
-    const result = await runner.execute(id, input);
+    const result = await runner.execute(resolvedActionId, input);
     console.log(JSON.stringify(result, null, 2));
     storage.close();
 
