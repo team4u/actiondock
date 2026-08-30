@@ -167,7 +167,7 @@ describe("Build & Skill Export Contract", () => {
     const skillMd = readFileSync(join(exportRes.skillDir, "SKILL.md"), "utf-8");
     expect(skillMd).toContain("# Sample Tools");
     expect(skillMd).toContain("sample.greet");
-    expect(skillMd).toContain("Available Playbooks");
+    expect(skillMd).toContain("Playbook SOPs");
 
     // Execute exported binary directly
     const exportedBin = join(exportRes.skillDir, "bin", "sample-tools");

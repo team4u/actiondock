@@ -19,8 +19,8 @@ export function generateSkillMd(
       ) {
         const props = Object.keys((a.inputSchema as any).properties);
         const req = (a.inputSchema as any).required || [];
-        params = `\n  - Parameters: ${props
-          .map((p) => (req.includes(p) ? `\`${p}\` (required)` : `\`${p}\``))
+        params = `\n  - 参数列表: ${props
+          .map((p) => (req.includes(p) ? `\`${p}\` (必填)` : `\`${p}\``))
           .join(", ")}`;
       }
       return `* \`${a.id}\`${desc}${params}`;
@@ -32,13 +32,13 @@ export function generateSkillMd(
     const list = playbooks
       .map((p) => {
         const rel = `./playbooks/${basename(p.filePath)}`;
-        return `* **${p.id}** (\`${rel}\`): ${p.description || "Task guide"}`;
+        return `* **${p.id}** (\`${rel}\`): ${p.description || "任务指南"}`;
       })
       .join("\n");
     playbookSection = `
-## Available Playbooks (Task SOPs)
+## 📖 任务指南 (Playbook SOPs)
 
-Playbooks provide step-by-step guidance for complex tasks. Read the playbook markdown files for domain SOPs:
+Playbook 为复杂任务提供逐步操作规程。详细 SOP 请阅读对应 Markdown 文档：
 
 ${list}
 `;
@@ -46,29 +46,29 @@ ${list}
 
   return `# ${config.name} (${config.id})
 
-${config.description || "Standalone AI Agent Actions."}
+${config.description || "面向 AI Agent 的独立 Action 集合。"}
 
-## How to Run Actions
+## 🚀 如何调用 Action
 
-Use the included standalone executable \`${binaryRelPath}\` to discover and execute actions.
-The tool requires no pre-installed dependencies (no Node, Bun, Python, or Java needed).
+使用 Skill 目录中自带的独立可执行文件 \`${binaryRelPath}\` 即可完成工具发现与调用。
+**该工具无需在系统预先安装任何依赖**（无需安装 Node.js、Bun、Python 或 Java）。
 
-### 1. Discover available actions
+### 1. 发现可用 Action 清单
 \`\`\`bash
 ${binaryRelPath} list --json
 \`\`\`
 
-### 2. Inspect an action schema & parameters
+### 2. 查看 Action 结构与入参 Schema
 \`\`\`bash
 ${binaryRelPath} describe <action-id> --json
 \`\`\`
 
-### 3. Execute an action
+### 3. 执行 Action
 \`\`\`bash
 ${binaryRelPath} run <action-id> --input '{"param": "value"}'
 \`\`\`
 
-All actions write a structured JSON envelope to \`stdout\`:
+所有 Action 执行结果均在 \`stdout\` 输出标准格式的 JSON 结果：
 \`\`\`json
 {
   "ok": true,
@@ -76,27 +76,26 @@ All actions write a structured JSON envelope to \`stdout\`:
   "data": { ... }
 }
 \`\`\`
-Diagnostics and logs are written to \`stderr\`.
+日志与诊断信息输出至 \`stderr\`。
 
 ---
 
-## Action Catalog
+## 🛠️ Action 目录
 
 ${actionListMd}
 ${playbookSection}
 ---
 
-## Runtime State and Configuration
+## 💾 运行时配置与持久化状态
 
-The executable manages its local SQLite state store automatically.
-You can configure options or inspect state when needed:
+独立二进制会自动管理其本地 SQLite 数据库。如需检查或配置：
 
 \`\`\`bash
-# Manage config
+# 查看与设置配置项
 ${binaryRelPath} config list
 ${binaryRelPath} config set KEY VALUE
 
-# Manage state
+# 查看与检索状态数据
 ${binaryRelPath} state list
 ${binaryRelPath} state get KEY
 \`\`\`
