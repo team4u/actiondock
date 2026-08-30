@@ -10,6 +10,29 @@ import {
 import { Command } from "commander";
 import { resolveIntent } from "../utils/filter";
 
+function printRunRecord(run: any): void {
+  console.log(`Run:          ${run.id}`);
+  console.log(`Action:       ${run.actionId}`);
+  if (run.packageId) console.log(`Package:      ${run.packageId}`);
+  console.log(`Status:       ${run.status}`);
+  if (run.parentRunId) console.log(`Parent Run:   ${run.parentRunId}`);
+  console.log(`Started:      ${run.startedAt}`);
+  if (run.finishedAt) console.log(`Finished:     ${run.finishedAt}`);
+
+  console.log("\nInput:");
+  console.log(JSON.stringify(run.input, null, 2));
+
+  if (run.output !== undefined) {
+    console.log("\nOutput:");
+    console.log(JSON.stringify(run.output, null, 2));
+  }
+
+  if (run.error) {
+    console.log("\nError:");
+    console.log(JSON.stringify(run.error, null, 2));
+  }
+}
+
 export function registerRunsCommands(program: Command): void {
   const runsCmd = program
     .command("runs")
@@ -101,26 +124,7 @@ export function registerRunsCommands(program: Command): void {
           if (options.json) {
             console.log(JSON.stringify(run, null, 2));
           } else {
-            console.log(`Run:          ${run.id}`);
-            console.log(`Action:       ${run.actionId}`);
-            console.log(`Package:      ${run.packageId || "N/A"}`);
-            console.log(`Status:       ${run.status}`);
-            if (run.parentRunId) console.log(`Parent Run:   ${run.parentRunId}`);
-            console.log(`Started:      ${run.startedAt}`);
-            if (run.finishedAt) console.log(`Finished:     ${run.finishedAt}`);
-
-            console.log("\nInput:");
-            console.log(JSON.stringify(run.input, null, 2));
-
-            if (run.output !== undefined) {
-              console.log("\nOutput:");
-              console.log(JSON.stringify(run.output, null, 2));
-            }
-
-            if (run.error) {
-              console.log("\nError:");
-              console.log(JSON.stringify(run.error, null, 2));
-            }
+            printRunRecord(run);
           }
           return;
         } catch (err: any) {
@@ -149,25 +153,7 @@ export function registerRunsCommands(program: Command): void {
         if (options.json) {
           console.log(JSON.stringify(run, null, 2));
         } else {
-          console.log(`Run:          ${run.id}`);
-          console.log(`Action:       ${run.actionId}`);
-          console.log(`Status:       ${run.status}`);
-          if (run.parentRunId) console.log(`Parent Run:   ${run.parentRunId}`);
-          console.log(`Started:      ${run.startedAt}`);
-          if (run.finishedAt) console.log(`Finished:     ${run.finishedAt}`);
-
-          console.log("\nInput:");
-          console.log(JSON.stringify(run.input, null, 2));
-
-          if (run.output !== undefined) {
-            console.log("\nOutput:");
-            console.log(JSON.stringify(run.output, null, 2));
-          }
-
-          if (run.error) {
-            console.log("\nError:");
-            console.log(JSON.stringify(run.error, null, 2));
-          }
+          printRunRecord(run);
         }
       } catch (err: any) {
         console.error(`Error: ${err.message}`);

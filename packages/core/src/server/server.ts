@@ -29,6 +29,41 @@ function jsonResponse(
   });
 }
 
+function findRunAcrossStorages(
+  runId: string,
+  runtimeRegistry: ServerRuntimeRegistry,
+  projectRoot?: string | null,
+  customHome?: string
+) {
+  const inMemory = runtimeRegistry.findRun(runId);
+  if (inMemory) return inMemory;
+
+  if (projectRoot) {
+    try {
+      const config = loadProjectConfig(projectRoot);
+      const storage = runtimeRegistry.getStorage(config.id, projectRoot);
+      const run = storage.getRun(runId);
+      if (run) return { storage, run };
+    } catch {
+      // ignore
+    }
+  }
+
+  try {
+    const linked = listLinkedPackages(customHome);
+    for (const pkg of linked) {
+      if (!existsSync(pkg.path)) continue;
+      const storage = runtimeRegistry.getStorage(pkg.id, pkg.path);
+      const run = storage.getRun(runId);
+      if (run) return { storage, run };
+    }
+  } catch {
+    // ignore
+  }
+
+  return null;
+}
+
 export function startActionDockServer(
   options: ServerOptions = {}
 ): ActionDockServerInstance {
@@ -387,36 +422,9 @@ export function startActionDockServer(
       const runShowMatch = pathname.match(/^\/api\/v1\/runs\/([^/]+)$/);
       if (runShowMatch && req.method === "GET") {
         const runId = decodeURIComponent(runShowMatch[1]);
-        let foundRun = runtimeRegistry.findRun(runId)?.run || undefined;
+        const found = findRunAcrossStorages(runId, runtimeRegistry, projectRoot, customHome);
 
-        if (!foundRun && projectRoot) {
-          try {
-            const config = loadProjectConfig(projectRoot);
-            const storage = runtimeRegistry.getStorage(config.id, projectRoot);
-            foundRun = storage.getRun(runId) || undefined;
-          } catch {
-            // ignore
-          }
-        }
-
-        if (!foundRun) {
-          try {
-            const linked = listLinkedPackages(customHome);
-            for (const pkg of linked) {
-              if (!existsSync(pkg.path)) continue;
-              const storage = runtimeRegistry.getStorage(pkg.id, pkg.path);
-              const r = storage.getRun(runId);
-              if (r) {
-                foundRun = r;
-                break;
-              }
-            }
-          } catch {
-            // ignore
-          }
-        }
-
-        if (!foundRun) {
+        if (!found) {
           return jsonResponse(
             {
               ok: false,
@@ -430,7 +438,7 @@ export function startActionDockServer(
           );
         }
 
-        return jsonResponse(foundRun, 200, corsHeaders);
+        return jsonResponse(found.run, 200, corsHeaders);
       }
 
       // 7. Run Cancel: POST /api/v1/runs/:runId/cancel
@@ -464,34 +472,7 @@ export function startActionDockServer(
         }
 
         // 2. Check storage for run status
-        let found = runtimeRegistry.findRun(runId);
-        if (!found && projectRoot) {
-          try {
-            const config = loadProjectConfig(projectRoot);
-            const storage = runtimeRegistry.getStorage(config.id, projectRoot);
-            const run = storage.getRun(runId);
-            if (run) found = { storage, run };
-          } catch {
-            // ignore
-          }
-        }
-
-        if (!found) {
-          try {
-            const linked = listLinkedPackages(customHome);
-            for (const pkg of linked) {
-              if (!existsSync(pkg.path)) continue;
-              const storage = runtimeRegistry.getStorage(pkg.id, pkg.path);
-              const run = storage.getRun(runId);
-              if (run) {
-                found = { storage, run };
-                break;
-              }
-            }
-          } catch {
-            // ignore
-          }
-        }
+        const found = findRunAcrossStorages(runId, runtimeRegistry, projectRoot, customHome);
 
         if (!found) {
           return jsonResponse(

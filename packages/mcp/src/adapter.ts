@@ -52,6 +52,54 @@ interface ResolvedTarget {
   runner: ActionRunner;
 }
 
+function createMcpToolCallback(
+  runner: ActionRunner,
+  actionId: string,
+  executionManager: ExecutionManager,
+  timeoutMs?: number
+) {
+  return async (input: any, ctx: any) => {
+    const isAsync = Boolean(
+      input &&
+        typeof input === "object" &&
+        (input.execution?.mode === "async" ||
+          input.__async === true ||
+          input.async === true)
+    );
+    const signal = ctx.mcpReq?.signal;
+
+    if (isAsync) {
+      const handle = runner.start(actionId, input, {
+        signal,
+        timeoutMs,
+      });
+      executionManager.register(handle);
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify({
+              ok: true,
+              runId: handle.runId,
+              taskId: handle.runId,
+              status: "running",
+            }),
+          },
+        ],
+      };
+    }
+
+    const handle = runner.start(actionId, input, {
+      signal,
+      timeoutMs,
+    });
+    executionManager.register(handle);
+    const result = await handle.result;
+    return toMcpResult(result);
+  };
+}
+
 /**
  * Creates and configures an McpServer instance bound to one or more ActionDock packages with Tasks extension support.
  */
@@ -119,10 +167,12 @@ export async function createActionDockMcpServer(
     }
   }
 
+  const runtimeRegistry = options.runtimeRegistry ?? new ServerRuntimeRegistry();
+  const executionManager = options.executionManager ?? runtimeRegistry.executionManager;
+  const targets: ResolvedTarget[] = [];
+
   // Handle case where options.actions is provided directly (e.g. unit tests or virtual packages)
   if (resolvedRoots.size === 0 && options.actions) {
-    const runtimeRegistry = options.runtimeRegistry ?? new ServerRuntimeRegistry();
-    const executionManager = options.executionManager ?? runtimeRegistry.executionManager;
     const dummyConfig: ProjectConfig = {
       id: "virtual",
       name: "Virtual Package",
@@ -139,110 +189,48 @@ export async function createActionDockMcpServer(
       configOverrides: options.configOverrides,
       actions: options.actions,
     });
-
-    const server = new McpServer({
-      name: dummyConfig.id,
-      version: dummyConfig.version,
-    });
-
-    (server.server as any).registerCapabilities({
-      tasks: {
-        listChanged: true,
-        cancel: {},
-      },
-    });
-
-    for (const action of options.actions.values()) {
-      server.registerTool(
-        action.id,
-        {
-          description: action.description,
-          inputSchema: toMcpSchema(action.inputSchema),
-          outputSchema: action.outputSchema ? toMcpSchema(action.outputSchema) : undefined,
-        },
-        async (input: any, ctx) => {
-          const isAsync = Boolean(
-            input &&
-              typeof input === "object" &&
-              (input.execution?.mode === "async" ||
-                input.__async === true ||
-                input.async === true)
-          );
-          const signal = ctx.mcpReq?.signal;
-
-          if (isAsync) {
-            const handle = runner.start(action.id, input, {
-              signal,
-              timeoutMs: options.timeoutMs,
-            });
-            executionManager.register(handle);
-
-            return {
-              content: [
-                {
-                  type: "text" as const,
-                  text: JSON.stringify({
-                    ok: true,
-                    runId: handle.runId,
-                    taskId: handle.runId,
-                    status: "running",
-                  }),
-                },
-              ],
-            };
-          }
-
-          const handle = runner.start(action.id, input, {
-            signal,
-            timeoutMs: options.timeoutMs,
-          });
-          executionManager.register(handle);
-          const result = await handle.result;
-          return toMcpResult(result);
-        }
-      );
-    }
-
-    return server;
-  }
-
-  if (resolvedRoots.size === 0) {
-    throw new Error(
-      "No ActionDock project root found. Run inside an ActionDock package or specify --dir / --package / --all."
-    );
-  }
-
-  const runtimeRegistry = options.runtimeRegistry ?? new ServerRuntimeRegistry();
-  const executionManager = options.executionManager ?? runtimeRegistry.executionManager;
-  const targets: ResolvedTarget[] = [];
-
-  for (const root of resolvedRoots) {
-    const projectConfig = loadProjectConfig(root);
-    const actions =
-      options.actions && resolvedRoots.size === 1
-        ? options.actions
-        : await loadActions(root, projectConfig.actionsDir);
-
-    const storage =
-      options.storage && resolvedRoots.size === 1
-        ? options.storage
-        : runtimeRegistry.getStorage(projectConfig.id, root);
-
-    const runner = new ActionRunner({
-      packageId: projectConfig.id,
-      storage,
-      projectConfig,
-      configOverrides: options.configOverrides,
-      actions,
-    });
-
     targets.push({
-      projectRoot: root,
-      config: projectConfig,
-      actions,
+      projectRoot: "virtual",
+      config: dummyConfig,
+      actions: options.actions,
       storage,
       runner,
     });
+  } else {
+    if (resolvedRoots.size === 0) {
+      throw new Error(
+        "No ActionDock project root found. Run inside an ActionDock package or specify --dir / --package / --all."
+      );
+    }
+
+    for (const root of resolvedRoots) {
+      const projectConfig = loadProjectConfig(root);
+      const actions =
+        options.actions && resolvedRoots.size === 1
+          ? options.actions
+          : await loadActions(root, projectConfig.actionsDir);
+
+      const storage =
+        options.storage && resolvedRoots.size === 1
+          ? options.storage
+          : runtimeRegistry.getStorage(projectConfig.id, root);
+
+      const runner = new ActionRunner({
+        packageId: projectConfig.id,
+        storage,
+        projectConfig,
+        configOverrides: options.configOverrides,
+        actions,
+      });
+
+      targets.push({
+        projectRoot: root,
+        config: projectConfig,
+        actions,
+        storage,
+        runner,
+      });
+    }
   }
 
   const isMultiPackage = targets.length > 1;
@@ -290,46 +278,12 @@ export async function createActionDockMcpServer(
           inputSchema: toMcpSchema(action.inputSchema),
           outputSchema: action.outputSchema ? toMcpSchema(action.outputSchema) : undefined,
         },
-        async (input: any, ctx) => {
-          const isAsync = Boolean(
-            input &&
-              typeof input === "object" &&
-              (input.execution?.mode === "async" ||
-                input.__async === true ||
-                input.async === true)
-          );
-          const signal = ctx.mcpReq?.signal;
-
-          if (isAsync) {
-            const handle = target.runner.start(action.id, input, {
-              signal,
-              timeoutMs: options.timeoutMs,
-            });
-            executionManager.register(handle);
-
-            return {
-              content: [
-                {
-                  type: "text" as const,
-                  text: JSON.stringify({
-                    ok: true,
-                    runId: handle.runId,
-                    taskId: handle.runId,
-                    status: "running",
-                  }),
-                },
-              ],
-            };
-          }
-
-          const handle = target.runner.start(action.id, input, {
-            signal,
-            timeoutMs: options.timeoutMs,
-          });
-          executionManager.register(handle);
-          const result = await handle.result;
-          return toMcpResult(result);
-        }
+        createMcpToolCallback(
+          target.runner,
+          action.id,
+          executionManager,
+          options.timeoutMs
+        )
       );
     }
   }
@@ -405,5 +359,3 @@ export async function createActionDockMcpServer(
 
   return server;
 }
-
-

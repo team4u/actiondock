@@ -1,7 +1,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { toSnakeUpperCase } from "../runtime/env";
+import { getActionDockHome } from "../utils";
 import type {
   ProfileEntry,
   ProfilesConfig,
@@ -10,6 +10,16 @@ import type {
 } from "./types";
 
 const PROFILE_NAME_REGEX = /^[a-zA-Z0-9_\-\.]+$/;
+
+export const DEFAULT_PROFILES_CONFIG: ProfilesConfig = {
+  currentProfile: "local",
+  profiles: {
+    local: {
+      serverUrl: "local",
+      description: "Local execution environment",
+    },
+  },
+};
 
 export function normalizeServerUrl(url: string): string {
   let cleaned = url.trim().replace(/\/+$/, "");
@@ -20,49 +30,25 @@ export function normalizeServerUrl(url: string): string {
 }
 
 export function getProfilesFilePath(customHome?: string): string {
-  const baseDir = customHome || process.env.ACTIONDOCK_HOME || homedir();
+  const baseDir = getActionDockHome(customHome);
   return join(baseDir, ".actiondock", "profiles.json");
 }
 
 export function loadProfiles(customHome?: string): ProfilesConfig {
   const filePath = getProfilesFilePath(customHome);
   if (!existsSync(filePath)) {
-    return {
-      currentProfile: "local",
-      profiles: {
-        local: {
-          serverUrl: "local",
-          description: "Local execution environment",
-        },
-      },
-    };
+    return structuredClone(DEFAULT_PROFILES_CONFIG);
   }
 
   try {
     const raw = readFileSync(filePath, "utf-8");
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object" || !parsed.profiles) {
-      return {
-        currentProfile: "local",
-        profiles: {
-          local: {
-            serverUrl: "local",
-            description: "Local execution environment",
-          },
-        },
-      };
+      return structuredClone(DEFAULT_PROFILES_CONFIG);
     }
     return parsed as ProfilesConfig;
   } catch {
-    return {
-      currentProfile: "local",
-      profiles: {
-        local: {
-          serverUrl: "local",
-          description: "Local execution environment",
-        },
-      },
-    };
+    return structuredClone(DEFAULT_PROFILES_CONFIG);
   }
 }
 

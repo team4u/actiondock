@@ -198,6 +198,38 @@ export async function loadActions(
   return actions;
 }
 
+export interface ActionFileEntry {
+  id: string;
+  filePath: string;
+  action: ActionDefinition;
+}
+
+export async function loadActionFileMap(
+  projectRoot: string,
+  actionsDir = "actions"
+): Promise<Map<string, ActionFileEntry>> {
+  const files = discoverActionFiles(projectRoot, actionsDir);
+  const map = new Map<string, ActionFileEntry>();
+
+  for (const file of files) {
+    try {
+      const imported = await import(file);
+      const act = imported.default || imported.action;
+      if (act && typeof act === "object" && typeof act.id === "string") {
+        map.set(act.id, {
+          id: act.id,
+          filePath: resolve(file),
+          action: act,
+        });
+      }
+    } catch {
+      // Ignore non-actions
+    }
+  }
+
+  return map;
+}
+
 export function discoverPlaybookFiles(
   projectRoot: string,
   playbooksDir = "playbooks"

@@ -2,17 +2,17 @@ import { basename } from "node:path";
 import type { ActionDefinition } from "@actiondock/sdk";
 import type { PlaybookDefinition, ProjectConfig } from "../project/types";
 
-export function generateSourceSkillMd(
-  config: ProjectConfig,
-  actions: ActionDefinition[],
-  playbooks: PlaybookDefinition[]
-): string {
+function getCleanSkillMetadata(config: ProjectConfig) {
   const cleanName = config.id.replace(/[^a-zA-Z0-9-_]/g, "-").toLowerCase();
   const desc = config.description || `AI Agent skill for ${config.name} (${config.id})`;
-  const pkgId = config.id;
-  const firstAction = actions[0]?.id || "sample.greet";
+  return { cleanName, desc };
+}
 
-  const actionListMd = actions
+function renderActionListMarkdown(
+  actions: ActionDefinition[],
+  options: { packageId?: string } = {}
+): string {
+  return actions
     .map((a) => {
       const aDesc = a.description ? ` - ${a.description}` : "";
       let params = "";
@@ -27,26 +27,42 @@ export function generateSourceSkillMd(
           .map((p) => (req.includes(p) ? `\`${p}\` (必填)` : `\`${p}\``))
           .join(", ")}`;
       }
-      return `* \`${pkgId}/${a.id}\` (或 \`${a.id}\`)${aDesc}${params}`;
+      const idLabel = options.packageId
+        ? `\`${options.packageId}/${a.id}\` (或 \`${a.id}\`)`
+        : `\`${a.id}\``;
+      return `* ${idLabel}${aDesc}${params}`;
     })
     .join("\n");
+}
 
-  let playbookSection = "";
-  if (playbooks.length > 0) {
-    const list = playbooks
-      .map((p) => {
-        const rel = `./playbooks/${basename(p.filePath)}`;
-        return `* **${p.id}** (\`${rel}\`): ${p.description || "任务指南"}`;
-      })
-      .join("\n");
-    playbookSection = `
+function renderPlaybookSectionMarkdown(playbooks: PlaybookDefinition[]): string {
+  if (playbooks.length === 0) return "";
+  const list = playbooks
+    .map((p) => {
+      const rel = `./playbooks/${basename(p.filePath)}`;
+      return `* **${p.id}** (\`${rel}\`): ${p.description || "任务指南"}`;
+    })
+    .join("\n");
+  return `
 ## 任务指南 (Playbook SOPs)
 
 Playbook 为复杂任务提供逐步操作规程。详细 SOP 请阅读对应 Markdown 文档：
 
 ${list}
 `;
-  }
+}
+
+export function generateSourceSkillMd(
+  config: ProjectConfig,
+  actions: ActionDefinition[],
+  playbooks: PlaybookDefinition[]
+): string {
+  const { cleanName, desc } = getCleanSkillMetadata(config);
+  const pkgId = config.id;
+  const firstAction = actions[0]?.id || "sample.greet";
+
+  const actionListMd = renderActionListMarkdown(actions, { packageId: pkgId });
+  const playbookSection = renderPlaybookSectionMarkdown(playbooks);
 
   return `---
 name: ${cleanName}
@@ -127,45 +143,11 @@ export function generateStandaloneSkillMd(
   playbooks: PlaybookDefinition[],
   binaryRelPath = "./bin/action-bin"
 ): string {
-  const cleanName = config.id.replace(/[^a-zA-Z0-9-_]/g, "-").toLowerCase();
-  const desc = config.description || `AI Agent skill for ${config.name} (${config.id})`;
+  const { cleanName, desc } = getCleanSkillMetadata(config);
   const firstAction = actions[0]?.id || "sample.greet";
 
-  const actionListMd = actions
-    .map((a) => {
-      const aDesc = a.description ? ` - ${a.description}` : "";
-      let params = "";
-      if (
-        a.inputSchema &&
-        typeof a.inputSchema === "object" &&
-        (a.inputSchema as any).properties
-      ) {
-        const props = Object.keys((a.inputSchema as any).properties);
-        const req = (a.inputSchema as any).required || [];
-        params = `\n  - 参数列表: ${props
-          .map((p) => (req.includes(p) ? `\`${p}\` (必填)` : `\`${p}\``))
-          .join(", ")}`;
-      }
-      return `* \`${a.id}\`${aDesc}${params}`;
-    })
-    .join("\n");
-
-  let playbookSection = "";
-  if (playbooks.length > 0) {
-    const list = playbooks
-      .map((p) => {
-        const rel = `./playbooks/${basename(p.filePath)}`;
-        return `* **${p.id}** (\`${rel}\`): ${p.description || "任务指南"}`;
-      })
-      .join("\n");
-    playbookSection = `
-## 任务指南 (Playbook SOPs)
-
-Playbook 为复杂任务提供逐步操作规程。详细 SOP 请阅读对应 Markdown 文档：
-
-${list}
-`;
-  }
+  const actionListMd = renderActionListMarkdown(actions);
+  const playbookSection = renderPlaybookSectionMarkdown(playbooks);
 
   return `---
 name: ${cleanName}

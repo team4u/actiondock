@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { discoverActionFiles, loadActions, loadProjectConfig } from "../project/loader";
+import { loadActionFileMap, loadActions, loadProjectConfig } from "../project/loader";
 import type { ProjectConfig } from "../project/types";
+import { getPackageSlug } from "../utils";
 import { type ActionImport, generateStandaloneEntrypoint } from "./templates";
 
 export interface BuildOptions {
@@ -46,22 +47,15 @@ export async function buildProject(options: BuildOptions): Promise<BuildResult> 
   }
 
   // Action imports list
-  const actionFiles = discoverActionFiles(root, config.actionsDir);
+  const actionFileMap = await loadActionFileMap(root, config.actionsDir);
   const actionImports: ActionImport[] = [];
 
-  // Build list of action file mappings
-  for (const file of actionFiles) {
-    try {
-      const imported = await import(file);
-      const act = imported.default || imported.action;
-      if (act && act.id && actionsMap.has(act.id)) {
-        actionImports.push({
-          id: act.id,
-          filePath: resolve(file),
-        });
-      }
-    } catch {
-      // Ignore non-actions
+  for (const [id, entry] of actionFileMap.entries()) {
+    if (actionsMap.has(id)) {
+      actionImports.push({
+        id,
+        filePath: entry.filePath,
+      });
     }
   }
 
@@ -85,11 +79,7 @@ export async function buildProject(options: BuildOptions): Promise<BuildResult> 
 
   // Determine target and outfile
   const target = options.target || "bun";
-  const binaryName = config.id.includes("/")
-    ? config.id.split("/").pop()!
-    : config.id.includes(".")
-    ? config.id.split(".").pop()!
-    : config.id;
+  const binaryName = getPackageSlug(config.id);
 
   const defaultOutfile = join(root, "dist", binaryName);
   const outfile = resolve(options.outfile || defaultOutfile);

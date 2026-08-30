@@ -180,27 +180,50 @@ export async function executeRemoteAction<T = unknown>(
   }
 }
 
+async function fetchRemoteJson<T = any>(
+  serverUrl: string,
+  path: string,
+  token?: string,
+  options: { method?: string; body?: unknown; errorPrefix?: string } = {}
+): Promise<T> {
+  const base = normalizeServerUrl(serverUrl);
+  const url = `${base}${path.startsWith("/") ? path : `/${path}`}`;
+  const method = options.method || "GET";
+  const headers: Record<string, string> = {
+    ...buildHeaders(token),
+  };
+  if (options.body !== undefined) {
+    headers["Content-Type"] = "application/json";
+  }
+
+  const res = await fetch(url, {
+    method,
+    headers,
+    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+  });
+
+  const data = (await res.json().catch(() => ({}))) as any;
+
+  if (!res.ok || (options.method === "POST" && data && data.ok === false)) {
+    const errorPrefix = options.errorPrefix || "Remote request failed";
+    const msg = data?.error?.message || `${errorPrefix} (${res.status}): ${res.statusText}`;
+    throw new Error(msg);
+  }
+
+  return data as T;
+}
+
 export async function fetchRemoteRun(
   serverUrl: string,
   runId: string,
   token?: string
 ): Promise<RunRecord> {
-  const base = normalizeServerUrl(serverUrl);
-  const url = `${base}/api/v1/runs/${encodeURIComponent(runId)}`;
-
-  const res = await fetch(url, {
-    method: "GET",
-    headers: buildHeaders(token),
-  });
-
-  if (!res.ok) {
-    const errData = await res.json().catch(() => ({}));
-    throw new Error(
-      errData?.error?.message || `Failed to fetch remote run '${runId}' (${res.status}): ${res.statusText}`
-    );
-  }
-
-  return (await res.json()) as RunRecord;
+  return fetchRemoteJson<RunRecord>(
+    serverUrl,
+    `/api/v1/runs/${encodeURIComponent(runId)}`,
+    token,
+    { errorPrefix: `Failed to fetch remote run '${runId}'` }
+  );
 }
 
 export async function cancelRemoteRun(
@@ -209,26 +232,16 @@ export async function cancelRemoteRun(
   token?: string,
   reason?: string
 ): Promise<{ ok: boolean; runId: string; status: string }> {
-  const base = normalizeServerUrl(serverUrl);
-  const url = `${base}/api/v1/runs/${encodeURIComponent(runId)}/cancel`;
-
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      ...buildHeaders(token),
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ reason }),
-  });
-
-  const data = (await res.json().catch(() => ({}))) as any;
-  if (!res.ok || !data.ok) {
-    throw new Error(
-      data?.error?.message || `Failed to cancel remote run '${runId}' (${res.status}): ${res.statusText}`
-    );
-  }
-
-  return data;
+  return fetchRemoteJson(
+    serverUrl,
+    `/api/v1/runs/${encodeURIComponent(runId)}/cancel`,
+    token,
+    {
+      method: "POST",
+      body: { reason },
+      errorPrefix: `Failed to cancel remote run '${runId}'`,
+    }
+  );
 }
 
 export async function fetchRemoteActions(
@@ -236,20 +249,13 @@ export async function fetchRemoteActions(
   token?: string,
   intent?: string
 ): Promise<Array<{ id: string; description: string; packageId?: string }>> {
-  const base = normalizeServerUrl(serverUrl);
   const query = intent ? `?intent=${encodeURIComponent(intent)}` : "";
-  const url = `${base}/api/v1/actions${query}`;
-
-  const res = await fetch(url, {
-    method: "GET",
-    headers: buildHeaders(token),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Failed to fetch remote actions (${res.status}): ${res.statusText}`);
-  }
-
-  return (await res.json()) as any;
+  return fetchRemoteJson(
+    serverUrl,
+    `/api/v1/actions${query}`,
+    token,
+    { errorPrefix: "Failed to fetch remote actions" }
+  );
 }
 
 export async function fetchRemoteActionShow(
@@ -257,36 +263,22 @@ export async function fetchRemoteActionShow(
   actionId: string,
   token?: string
 ): Promise<any> {
-  const base = normalizeServerUrl(serverUrl);
-  const url = `${base}/api/v1/actions/${encodeURIComponent(actionId)}`;
-
-  const res = await fetch(url, {
-    method: "GET",
-    headers: buildHeaders(token),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Failed to fetch remote action '${actionId}' (${res.status}): ${res.statusText}`);
-  }
-
-  return await res.json();
+  return fetchRemoteJson(
+    serverUrl,
+    `/api/v1/actions/${encodeURIComponent(actionId)}`,
+    token,
+    { errorPrefix: `Failed to fetch remote action '${actionId}'` }
+  );
 }
 
 export async function fetchRemoteInfo(
   serverUrl: string,
   token?: string
 ): Promise<any> {
-  const base = normalizeServerUrl(serverUrl);
-  const url = `${base}/api/v1/info`;
-
-  const res = await fetch(url, {
-    method: "GET",
-    headers: buildHeaders(token),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Failed to fetch remote info (${res.status}): ${res.statusText}`);
-  }
-
-  return await res.json();
+  return fetchRemoteJson(
+    serverUrl,
+    "/api/v1/info",
+    token,
+    { errorPrefix: "Failed to fetch remote info" }
+  );
 }

@@ -2,13 +2,14 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from
 import { basename, dirname, join, resolve } from "node:path";
 import { buildProject } from "../build/builder";
 import {
-  discoverActionFiles,
   discoverPlaybookFiles,
+  loadActionFileMap,
   loadActions,
   loadPlaybooks,
   loadProjectConfig,
 } from "../project/loader";
 import type { ProjectConfig } from "../project/types";
+import { getPackageSlug } from "../utils";
 import { generateSkillJson, generateSkillMd, generateSourceSkillMd, generateStandaloneSkillMd } from "./templates";
 
 export interface ExportSkillOptions {
@@ -46,19 +47,7 @@ export async function exportSkill(
   const playbooksMap = loadPlaybooks(root, config.playbooksDir);
 
   // Map each action ID to its corresponding source file path
-  const actionFiles = discoverActionFiles(root, config.actionsDir);
-  const actionFileMap = new Map<string, string>();
-  for (const file of actionFiles) {
-    try {
-      const imported = await import(file);
-      const act = imported.default || imported.action;
-      if (act && typeof act.id === "string") {
-        actionFileMap.set(act.id, resolve(file));
-      }
-    } catch {
-      // Ignore files that cannot be imported
-    }
-  }
+  const actionFileMap = await loadActionFileMap(root, config.actionsDir);
 
   let selectedPlaybooks = Array.from(playbooksMap.values());
   let selectedActions = Array.from(actionsMap.values());
@@ -126,11 +115,7 @@ export async function exportSkill(
     }
   }
 
-  const pkgSlug = config.id.includes("/")
-    ? config.id.split("/").pop()!
-    : config.id.includes(".")
-    ? config.id.split(".").pop()!
-    : config.id;
+  const pkgSlug = getPackageSlug(config.id);
 
   const targetSuffix = mode === "standalone" && target !== "host" ? `-${target}` : "";
   const skillFolderName = `${pkgSlug}-skill${targetSuffix}`;
@@ -225,7 +210,8 @@ export async function exportSkill(
 
     // 5. Copy selected action source files
     for (const act of selectedActions) {
-      const srcPath = actionFileMap.get(act.id);
+      const entry = actionFileMap.get(act.id);
+      const srcPath = entry?.filePath;
       if (srcPath && existsSync(srcPath)) {
         copyFileSync(srcPath, join(actionsDestDir, basename(srcPath)));
       }

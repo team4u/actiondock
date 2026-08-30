@@ -1,11 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { findProjectRoot, loadActions, loadProjectConfig } from "../project/loader";
+import { getActionDockHome, getPackageSlug } from "../utils";
 import type { GlobalRegistryData, LinkedPackageEntry, ResolvedActionProject } from "./types";
 
 export function getRegistryFilePath(customHome?: string): string {
-  const baseDir = customHome || process.env.ACTIONDOCK_HOME || homedir();
+  const baseDir = getActionDockHome(customHome);
   return join(baseDir, ".actiondock", "registry.json");
 }
 
@@ -76,8 +76,7 @@ export function unlinkPackage(
       if (
         entry.path === absPath ||
         entry.id === identifier ||
-        entry.id.split(".").pop() === identifier ||
-        entry.id.split("/").pop() === identifier
+        getPackageSlug(entry.id) === identifier
       ) {
         targetKey = id;
         break;
@@ -144,10 +143,7 @@ export async function resolveActionProject(
     const pkg =
       registry.packages[targetPackage] ||
       linkedList.find(
-        (p) =>
-          p.id === targetPackage ||
-          p.id.split(".").pop() === targetPackage ||
-          p.id.split("/").pop() === targetPackage
+        (p) => p.id === targetPackage || getPackageSlug(p.id) === targetPackage
       );
 
     if (!pkg || !existsSync(pkg.path)) {
@@ -223,11 +219,7 @@ export function resolvePackageRoot(
       return registry.packages[packageIdOrPath].path;
     }
     for (const [id, entry] of Object.entries(registry.packages)) {
-      if (
-        id === packageIdOrPath ||
-        id.split(".").pop() === packageIdOrPath ||
-        id.split("/").pop() === packageIdOrPath
-      ) {
+      if (id === packageIdOrPath || getPackageSlug(id) === packageIdOrPath) {
         return entry.path;
       }
     }

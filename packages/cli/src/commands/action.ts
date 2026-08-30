@@ -8,6 +8,7 @@ import {
   fetchRemoteActionShow,
   filterWithFallbackInfo,
   findProjectRoot,
+  getPackageSlug,
   listLinkedPackages,
   loadActions,
   loadProjectConfig,
@@ -215,7 +216,7 @@ export function registerActionCommands(program: Command): void {
           mkdirSync(actionsDir, { recursive: true });
         }
 
-        const cleanName = id.includes(".") ? id.split(".").pop()! : id;
+        const cleanName = getPackageSlug(id);
         const targetRelFile = options.file || `${cleanName}.ts`;
         const targetFullFile = resolve(actionsDir, targetRelFile);
 

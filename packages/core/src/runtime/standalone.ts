@@ -1,31 +1,10 @@
 import { readFileSync } from "node:fs";
 import type { ActionDefinition } from "@actiondock/sdk";
 import { filterWithFallbackInfo } from "../filter";
-import { createStorage } from "../storage";
-import { ActionRunner } from "./runner";
-
-
 import type { ConfigItemDefinition } from "../project/types";
-
-function parseStandaloneDuration(input?: string): number | undefined {
-  if (!input || !input.trim()) return undefined;
-  const str = input.trim();
-  if (/^\d+$/.test(str)) return parseInt(str, 10);
-  const match = str.match(/^(\d+(?:\.\d+)?)\s*(ms|s|m|h|d)$/i);
-  if (!match) {
-    throw new Error(`Invalid duration format: '${input}'. Supported formats: 500ms, 30s, 5m, 1h`);
-  }
-  const val = parseFloat(match[1]);
-  const unit = match[2].toLowerCase();
-  switch (unit) {
-    case "ms": return Math.round(val);
-    case "s": return Math.round(val * 1000);
-    case "m": return Math.round(val * 60 * 1000);
-    case "h": return Math.round(val * 60 * 60 * 1000);
-    case "d": return Math.round(val * 24 * 60 * 60 * 1000);
-    default: return undefined;
-  }
-}
+import { createStorage } from "../storage";
+import { parseDuration } from "../utils";
+import { ActionRunner } from "./runner";
 
 export interface StandaloneRuntimeOptions {
 
@@ -205,9 +184,9 @@ export class StandaloneRuntime {
               process.exit(1);
             } else if (subArgs[i] === "--timeout" && i + 1 < subArgs.length) {
               const raw = subArgs[++i];
-              timeoutMs = parseStandaloneDuration(raw);
+              timeoutMs = parseDuration(raw);
             } else if (subArgs[i].startsWith("--timeout=")) {
-              timeoutMs = parseStandaloneDuration(subArgs[i].slice(10));
+              timeoutMs = parseDuration(subArgs[i].slice(10));
             } else if (subArgs[i] === "--input" && i + 1 < subArgs.length) {
               try {
                 input = JSON.parse(subArgs[++i]);
