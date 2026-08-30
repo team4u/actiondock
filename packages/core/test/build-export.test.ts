@@ -314,4 +314,26 @@ actions:
     expect(listData.length).toBe(1);
     expect(listData[0].id).toBe("sample.greet");
   });
+
+  it("supports customizing --bytecode and --minify options when building", async () => {
+    const unminifiedOut = join(tempDir, "dist", "unminified-bin");
+    const buildRes = await buildProject({
+      projectRoot: tempDir,
+      outfile: unminifiedOut,
+      bytecode: false,
+      minify: false,
+    });
+
+    expect(existsSync(buildRes.executablePath)).toBe(true);
+
+    const runProc = Bun.spawnSync(
+      [buildRes.executablePath, "run", "sample.greet", "--input", '{"name": "NoMinify"}'],
+      { cwd: tempDir, stdout: "pipe", stderr: "pipe" }
+    );
+    expect(runProc.exitCode).toBe(0);
+    const res = JSON.parse(runProc.stdout.toString());
+    expect(res.ok).toBe(true);
+    expect(res.data.message).toBe("Hello, NoMinify!");
+  });
 });
+

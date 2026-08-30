@@ -18,7 +18,7 @@ ActionDock 2.0 确立了**零安装独立二进制（Zero-Install Standalone Exe
 graph TD
     Scan["扫描项目 actions/*.ts 与 actiondock.json"] --> Gen["生成静态入口 .actiondock/.build/entry.ts"]
     Gen --> Import["静态 import 全部 Action 并绑定 StandaloneRuntime"]
-    Import --> BunCompile["调用 Bun.build 原生单文件编译器<br/>(bun build --compile entry.ts)"]
+    Import --> BunCompile["调用 Bun.build 原生单文件编译器<br/>(bun build entry.ts --compile --bytecode --minify)"]
     BunCompile --> TreeShake["Tree-shaking 优化并内联所有 npm 依赖"]
     TreeShake --> Binary["产出独立二进制 dist/bin/<package-id>"]
     Binary --> Hash["计算 SHA256 哈希并生成 dist/bin/artifact.json"]

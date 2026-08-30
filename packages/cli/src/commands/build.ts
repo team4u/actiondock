@@ -8,7 +8,10 @@ export function registerBuildCommand(program: Command): void {
     .option("-t, --target <target>", "Target compilation platform (e.g. bun, linux-x64, darwin-arm64, windows-x64)")
     .option("-o, --out <path>", "Output executable path")
     .option("-a, --actions <actions...>", "Only build specific action(s) into the standalone binary")
-    .option("-m, --minify", "Minify bundled JavaScript")
+    .option("-m, --minify", "Minify bundled JavaScript (default: true)", true)
+    .option("--no-minify", "Disable JavaScript minification")
+    .option("--bytecode", "Compile JavaScript to bytecode for faster startup (default: true)", true)
+    .option("--no-bytecode", "Disable bytecode compilation")
     .action(async (options) => {
       const root = findProjectRoot();
       if (!root) {
@@ -23,6 +26,7 @@ export function registerBuildCommand(program: Command): void {
           target: options.target,
           outfile: options.out,
           minify: options.minify,
+          bytecode: options.bytecode,
           actions: options.actions,
         });
 

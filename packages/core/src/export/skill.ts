@@ -21,6 +21,8 @@ export interface ExportSkillOptions {
   archive?: boolean;
   playbooks?: string[];
   actions?: string[];
+  minify?: boolean;
+  bytecode?: boolean;
 }
 
 export interface ExportSkillResult {
@@ -244,6 +246,8 @@ export async function exportSkill(
       target: options.target,
       outfile: binaryPath,
       actions: selectedActions.map((a) => a.id),
+      minify: options.minify,
+      bytecode: options.bytecode,
     });
 
     // Generate SKILL.md for Standalone Binary

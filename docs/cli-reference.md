@@ -240,7 +240,8 @@ ActionDock 命令行工具（简写为 `ac`）提供了全生命周期的项目�
 - `-t, --target <target>`：目标编译平台（如 `host`、`linux-x64`、`darwin-arm64`、`windows-x64`）。
 - `-o, --out <path>`：输出二进制路径。
 - `-a, --actions <actions...>`：仅编译指定的 Action(s)。
-- `-m, --minify`：是否开启代码压缩。
+- `-m, --minify` / `--no-minify`：代码压缩（默认开启）。
+- `--bytecode` / `--no-bytecode`：编译为字节码以加速启动（默认开启）。
 
 ### `ac export skill`
 导出面向 AI Agent 的 Skill 交付包（默认导出轻量级源码型 Skill；使用 `-s, --standalone` 导出包含预构建独立二进制的便携 Skill）。
@@ -249,6 +250,8 @@ ActionDock 命令行工具（简写为 `ac`）提供了全生命周期的项目�
 - `-o, --out <path>`：输出 Skill 目录路径。
 - `-p, --playbook <playbooks...>`：任务驱动导出：仅打包指定 Playbook 及其依赖的 Actions（自动 Tree-shaking 裁剪）。
 - `-a, --actions <actions...>`：仅导出指定的 Action(s)，并自动裁剪依赖未包含 Action 的 Playbooks。
+- `-m, --minify` / `--no-minify`：在 standalone 模式下开启/关闭代码压缩（默认开启）。
+- `--bytecode` / `--no-bytecode`：在 standalone 模式下开启/关闭字节码编译（默认开启）。
 - `-z, --archive`：自动打包为 `.zip` 压缩归档文件。
 
 ---

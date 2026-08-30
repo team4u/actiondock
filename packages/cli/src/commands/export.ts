@@ -14,6 +14,10 @@ export function registerExportCommand(program: Command): void {
     .option("-o, --out <path>", "Output skill directory")
     .option("-p, --playbook <playbooks...>", "Only export specific playbook(s) and their dependent actions (Playbook-driven minimal export)")
     .option("-a, --actions <actions...>", "Only export specific action(s)")
+    .option("-m, --minify", "Minify bundled JavaScript in standalone mode (default: true)", true)
+    .option("--no-minify", "Disable JavaScript minification in standalone mode")
+    .option("--bytecode", "Compile JavaScript to bytecode in standalone mode (default: true)", true)
+    .option("--no-bytecode", "Disable bytecode compilation in standalone mode")
     .option("-z, --archive", "Create a .zip archive of the exported skill")
     .action(async (options) => {
       const root = findProjectRoot();
@@ -35,6 +39,8 @@ export function registerExportCommand(program: Command): void {
           archive: options.archive,
           playbooks: options.playbook,
           actions: options.actions,
+          minify: options.minify,
+          bytecode: options.bytecode,
         });
 
         console.log(`[OK] Successfully exported ${result.mode === "standalone" ? "Standalone" : "Source"} Skill: ${result.packageId} (v${result.version})`);

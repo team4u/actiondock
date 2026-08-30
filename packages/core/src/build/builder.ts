@@ -11,6 +11,7 @@ export interface BuildOptions {
   target?: string;
   outfile?: string;
   minify?: boolean;
+  bytecode?: boolean;
   actions?: string[];
 }
 
@@ -86,26 +87,30 @@ export async function buildProject(options: BuildOptions): Promise<BuildResult> 
 
   mkdirSync(dirname(outfile), { recursive: true });
 
-  // Run bun build --compile
+  // Run bun build --compile --bytecode --minify
   const buildArgs = [
     "bun",
     "build",
-    "--compile",
     entryPath,
+    "--compile",
     "--outfile",
     outfile,
   ];
 
-  if (options.target && options.target !== "bun") {
+  if (options.bytecode !== false) {
+    buildArgs.push("--bytecode");
+  }
+
+  if (options.minify !== false) {
+    buildArgs.push("--minify");
+  }
+
+  if (options.target && options.target !== "bun" && options.target !== "host") {
     // e.g. bun-linux-x64 or linux-x64
     const formattedTarget = options.target.startsWith("bun-")
       ? options.target
       : `bun-${options.target}`;
     buildArgs.push(`--target=${formattedTarget}`);
-  }
-
-  if (options.minify) {
-    buildArgs.push("--minify");
   }
 
   const proc = Bun.spawnSync(buildArgs, {

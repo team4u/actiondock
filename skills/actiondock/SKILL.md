@@ -310,8 +310,8 @@ ac test
 
 ### 1. 构建独立可执行文件 (`ac build`)
 ```bash
-# 全量构建：打包项目中全部 Action 为独立二进制
-ac build [--target <target>] [--out <path>] [--minify]
+# 全量构建：打包项目中全部 Action 为独立二进制（默认集成 --compile --bytecode --minify）
+ac build [--target <target>] [--out <path>] [--no-minify] [--no-bytecode]
 
 # 按需构建：仅将指定 Action 编译进独立二进制
 ac build --actions github.get-pr github.review-pr

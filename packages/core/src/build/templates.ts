@@ -37,6 +37,9 @@ const app = createStandaloneRuntime({
   ],
 });
 
-await app.run(process.argv.slice(2));
+app.run(process.argv.slice(2)).catch((err: unknown) => {
+  console.error(err);
+  process.exit(1);
+});
 `;
 }
