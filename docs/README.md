@@ -10,7 +10,6 @@
 | :--- | :--- | :--- |
 | **[项目 README](../README.md)** | 项目介绍、安装方式与上手概览 | 所有人（入口） |
 | **[快速上手指南](quick-start.md)** | 从环境准备、脚手架、Action 编写、调试、编译到 Skill 导出全流程 | 新手与使用者 |
-| **[架构全景与核心设计](architecture.md)** | 三层分层、Filesystem-First、独立编译契约与领域模型 | 架构师与核心开发者 |
 | **[Skill 设计哲学与交付指南](skill-guide.md)** | Action/Playbook/Skill 三层关系、构成规范、交叉导出与 Agent 生命周期 | 所有开发者与 Agent 架构师 |
 | **[Action 编写与开发指南](action-authoring.md)** | `defineAction` 声明、TypeScript 接口、JSON Schema 校验与单测 | Action 编写者 |
 | **[ActionContext 核心能力详解](action-context.md)** | `ctx.config`、`ctx.state`、`ctx.actions` 与 `ctx.log` 深度剖析 | Action 编写者 |

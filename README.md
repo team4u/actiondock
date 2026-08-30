@@ -177,7 +177,6 @@ dist/my-tools-skill/
 ### 核心开发
 * **[快速上手指南](docs/quick-start.md)**：从环境准备到首个 Action 导出。
 * **[Skill 设计哲学与交付指南](docs/skill-guide.md)**：Action/Playbook/Skill 三层模型、构成规范与分发。
-* **[架构全景与核心设计](docs/architecture.md)**：三层分层、Filesystem-First、独立编译契约与领域模型。
 * **[Action 编写与开发指南](docs/action-authoring.md)**：Action 声明结构、JSON Schema 定义与标准 Web API 实践。
 * **[ActionContext 核心能力详解](docs/action-context.md)**：`ctx.config`、`ctx.state`、`ctx.actions` 与 `ctx.log` 深度剖析。
 
