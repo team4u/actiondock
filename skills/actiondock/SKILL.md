@@ -5,7 +5,7 @@ description: 使用 ActionDock 2.0 (ac CLI, Bun + TypeScript) 进行 AI Agent Ac
 
 # ActionDock 2.0 (ac) 开发者技能指南
 
-ActionDock 2.0 是面向 AI Agent Action 与 Skill 的开发工具链（CLI 门面命令为 **`ac`**）。它支持 **源码型 Skill (Source Skill，默认)** 与 **独立便携型 Skill (Standalone Skill，`--standalone`)** 双模交付，让开发者使用 TypeScript 快速开发原子工具（Action）与业务操作规程（Playbook），一键导出自包含的 Agent Skill。
+ActionDock 2.0 是面向 AI Agent Action 与 Skill 的开发工具链（CLI 门面命令为 `ac`）。它支持 **源码型 Skill** (Source Skill，默认)与**独立便携型 Skill** (Standalone Skill，--standalone) 双模交付，让开发者使用 TypeScript 快速开发原子工具（Action）与业务操作规程（Playbook），一键导出自包含的 Agent Skill。
 
 ---
 
@@ -365,11 +365,11 @@ dist/<package>-skill/
 ### AI Agent 调用 Source Skill 流程规范：
 - **解析 Skill 根目录**：将 `SKILL.md` 所在目录解析为 `<skill_root>`。
 - **幂等注册**：执行 `ac link "<skill_root>"`（可安全重复执行）。
-- **调用 Action**：始终使用 **Package-Qualified ID** 避免冲突：
+- **调用 Action**：始终使用**Package-Qualified ID** 避免冲突：
    ```bash
    ac run <package-id>/<action-id> --input '<json>'
    ```
-- **免注册直接执行（备选）**：
+- **免注册直接执行** (备选)：
    ```bash
    cd <skill_root> && ac run <action-id> --input '<json>'
    ```

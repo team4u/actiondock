@@ -225,8 +225,8 @@ export default defineAction({
 
 > [!NOTE]
 > **依赖的双阶段处理**：
-> - **开发态（`ac run`） **：ActionDock 会自动检测缺失的 npm 依赖，在后台**自动探测包管理器（支持 `bun` / `pnpm` / `yarn` / `npm` 自动降级适配）补齐依赖**并继续执行，安装日志输出至 `stderr`，确保 `stdout` 纯净。同时完全兼容开发者手动使用常规 `npm install`。
-> - **构建态（`ac build`） **：Bun 编译器会自动对所有第三方 npm 依赖进行 Tree-shaking 并**全量内联打包进单文件二进制**。分发后的独立可执行文件完全无需安装 `node_modules`。
+> - **开发态** （`ac run`）：ActionDock 会自动检测缺失的 npm 依赖，在后台**自动探测包管理器（支持 bun / pnpm / yarn / npm 自动降级适配）补齐依赖**并继续执行，安装日志输出至 `stderr`，确保 `stdout` 纯净。同时完全兼容开发者手动使用常规 `npm install`。
+> - **构建态** （`ac build`）：Bun 编译器会自动对所有第三方 npm 依赖进行 Tree-shaking 并**全量内联打包进单文件二进制**。分发后的独立可执行文件完全无需安装 `node_modules`。
 
 ---
 
@@ -298,8 +298,8 @@ export default defineAction({
 
 - **上下文透明继承**：子 Action 自动共享当前的 Config、State 与 Storage 存储上下文。
 - **全链路取消穿透**：父 Action 的 `ctx.signal` 自动向下传递给子 Action，父级取消时子级立即同步中断。
-- **调用链追踪（Runs Cascade）**：在 SQLite 的 `runs` 记录表中，子 Action 的 Run 记录会自动设置 `parent_run_id` 关联父级。
-- **循环依赖与死递归防御（Cycle Detection）**：底层调用栈会自动追踪执行链。一旦检测到 `A -> B -> A` 的循环调用，立即终止并抛出 `ACTION_CYCLE_DETECTED` 错误。
+- **调用链追踪** (Runs Cascade)：在 SQLite 的 `runs` 记录表中，子 Action 的 Run 记录会自动设置 `parent_run_id` 关联父级。
+- **循环依赖与死递归防御** (Cycle Detection)：底层调用栈会自动追踪执行链。一旦检测到 `A -> B -> A` 的循环调用，立即终止并抛出 `ACTION_CYCLE_DETECTED` 错误。
 
 ---
 
@@ -330,9 +330,9 @@ ActionDock 为每个 Action 注入了标准的 Web API `AbortSignal`（`ctx.sign
 
 > [!IMPORTANT]
 > **开发 Action 时必须严格遵守的 4 条底线**：
-> - **严禁直接向 `stdout` 输出非 JSON 数据**：绝对不要在 Action 代码中使用 `console.log()`；所有调试与业务日志一律使用 `ctx.log.info()` / `ctx.log.debug()`（强制写入 `stderr`）。
-> - **必须声明严格的 `inputSchema` 与 `outputSchema`**：明确定义字段类型、描述与必填项（`required`），严禁使用 `{}` 空 Schema。
-> - **保持幂等性设计（Idempotence）**：Action 可能被 AI Agent 重试调用，建议在业务上利用 `ctx.state` 检查幂等键或状态游标。
+> - **严禁直接向 stdout 输出非 JSON 数据**：绝对不要在 Action 代码中使用 `console.log()`；所有调试与业务日志一律使用 `ctx.log.info()` / `ctx.log.debug()`（强制写入 `stderr`）。
+> - **必须声明严格的 inputSchema 与 outputSchema**：明确定义字段类型、描述与必填项（`required`），严禁使用 `{}` 空 Schema。
+> - **保持幂等性设计** (Idempotence)：Action 可能被 AI Agent 重试调用，建议在业务上利用 `ctx.state` 检查幂等键或状态游标。
 > - **零隐式状态假定**：不要在模块全局变量中保存持久状态；跨执行保留的数据必须使用 `ctx.state`。
 
 ---

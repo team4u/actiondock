@@ -26,11 +26,11 @@ graph TD
     Context --> Exec["action.run(input, ctx)"]
 ```
 
-- **`ActionRunner` 是唯一执行核心**：无论是本地 CLI（`ac run`）、远程 HTTP Runner（`ac serve`）还是 MCP Server（`ac mcp`），所有 Action 的调用必须统一流经 `ActionRunner`，完全享有输入/输出 Schema 严格校验、SQLite 执行记录与循环调用防御。
+- **ActionRunner 是唯一执行核心**：无论是本地 CLI（`ac run`）、远程 HTTP Runner（`ac serve`）还是 MCP Server（`ac mcp`），所有 Action 的调用必须统一流经 `ActionRunner`，完全享有输入/输出 Schema 严格校验、SQLite 执行记录与循环调用防御。
 - **MCP 不实现第二套 Runtime**：MCP Tool 调用直接映射为 Action 执行，Schema 自动转换，执行历史无缝写入 SQLite `runs` 表。
 - **HTTP API 不实现第二套任务状态**：统一复用 SQLite `runs` 数据模型与 `runId` 标识，`runId` 等价于全局任务句柄。
 - **统一执行上下文与取消信号**：在 `ActionContext` 中引入标准 Web API `AbortSignal`（`ctx.signal`），实现跨协议全链路协作式取消。
-- **安全默认（Secure by Default）**：网络服务默认仅绑定 `127.0.0.1`，公网暴露强制要求 Token 鉴权，移除 URL Query Token，默认关闭跨域，敏感配置文件应用严格的 POSIX `0o600` 权限。
+- **安全默认** (Secure by Default)：网络服务默认仅绑定 `127.0.0.1`，公网暴露强制要求 Token 鉴权，移除 URL Query Token，默认关闭跨域，敏感配置文件应用严格的 POSIX `0o600` 权限。
 
 ---
 
@@ -38,7 +38,7 @@ graph TD
 
 ### 默认绑定与非 Loopback 强制认证
 * **默认监听**：`ac serve` 与 `ac mcp serve` 默认仅绑定回环地址 `127.0.0.1`。
-* **强制鉴权**：当绑定到 `0.0.0.0` 或非 Loopback 地址时，若未配置 `--token` 或 `ACTIONDOCK_TOKEN`，服务**直接拒绝启动**；若确需在受信内网无认证运行，必须显式传入 `--allow-insecure-no-auth`。
+* **强制鉴权**：当绑定到 0.0.0.0 或非 Loopback 地址时，若未配置 --token 或 ACTIONDOCK_TOKEN，服务**直接拒绝启动**；若确需在受信内网无认证运行，必须显式传入 `--allow-insecure-no-auth`。
 
 ### 移除 URL Query Token 与时间恒定比较
 * 彻底废弃 `?token=xxx` URL 参数认证支持，防止 Token 被代理服务器日志、访问日志或历史记录泄露；仅允许 `Authorization: Bearer <token>` 请求头。
@@ -66,8 +66,8 @@ ActionDock 在 `packages/mcp`（`@actiondock/mcp`）中实现了官方 MCP 规�
 * 基于 `@modelcontextprotocol/server`，将 Action 的 JSON Schema 自动转换为标准 MCP Tool Input/Output Schema，无需额外维护 MCP 清单。
 
 ### 双模 Transport
-* **STDIO 模式 (`ac mcp`)**：标准输入输出通信，适用于 Claude Code、Cursor、VS Code 等本地 Agent / 桌面 IDE 直连。
-* **Streamable HTTP 模式 (`ac mcp serve`)**：标准 HTTP 通信（端点 `/mcp`），适用于微服务或容器化远程部署。
+* **STDIO 模式** （`ac mcp`）：标准输入输出通信，适用于 Claude Code、Cursor、VS Code 等本地 Agent / 桌面 IDE 直连。
+* **Streamable HTTP 模式** （`ac mcp serve`）：标准 HTTP 通信（端点 `/mcp`），适用于微服务或容器化远程部署。
 
 ### 双向取消链路
 * MCP 客户端发出的取消请求（`ctx.mcpReq.signal`）无缝注入 Action 内部的 `ctx.signal`，实现跨协议协作取消。

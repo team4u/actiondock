@@ -250,15 +250,15 @@ ActionDock 原生支持官方 MCP Tasks 扩展，使 AI Agent 能够通过 MCP �
 ```
 
 ### Tasks 协议端点
-- **`tasks/get`** ：跨 Package 查询指定 Task 的执行进度、输入、输出或错误详情：
+- `tasks/get` ：跨 Package 查询指定 Task 的执行进度、输入、输出或错误详情：
   ```json
   { "method": "tasks/get", "params": { "taskId": "01JXYZ..." } }
   ```
-- **`tasks/cancel`** ：主动中断正在后台执行的长任务（直通底层 `ctx.signal`）：
+- `tasks/cancel` ：主动中断正在后台执行的长任务（直通底层 `ctx.signal`）：
   ```json
   { "method": "tasks/cancel", "params": { "taskId": "01JXYZ...", "reason": "用户取消" } }
   ```
-- **`tasks/list`** ：聚合列出所有已加载 Package 下的近期 Task 执行记录（按时间倒序）：
+- `tasks/list` ：聚合列出所有已加载 Package 下的近期 Task 执行记录（按时间倒序）：
   ```json
   { "method": "tasks/list", "params": { "limit": 20 } }
   ```

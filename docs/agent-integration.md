@@ -9,7 +9,7 @@
 - **协议不统一**：部分 Agent 仅支持 MCP 协议，部分 Agent 仅支持 CLI 子进程调用，开发同一套工具往往需要编写多套适配层。
 - **缺乏业务 SOP 引导**：工具缺乏操作规程，Agent 容易发生调用顺序错误或触发危险操作。
 
-ActionDock 2.0 提供了 **MCP 协议直连** 与 **自包含独立 Skill 交付包** 两种业界通用的集成范式，实现了一次编写、全生态无缝接入。
+ActionDock 2.0 提供了 **MCP 协议直连**与**自包含独立 Skill 交付包** 两种业界通用的集成范式，实现了一次编写、全生态无缝接入。
 
 ---
 
@@ -37,7 +37,7 @@ graph TD
 | :--- | :--- | :--- |
 | **通信机制** | JSON-RPC 2.0（STDIO / HTTP） | 子进程命令行调用（`./bin/pkg`） |
 | **接入配置** | MCP 客户端配置文件（`mcp.json`） | 放置于 Agent 的 Skills 目录 |
-| **目标环境要求** | 本地需安装 `ac` 或 `bunx` | **零依赖** （目标机器无需预装 Node/Bun/Python） |
+| **目标环境要求**| 本地需安装 ac 或 bunx | **零依赖** （目标机器无需预装 Node/Bun/Python） |
 | **适用场景** | 桌面端 IDE、本地开发调试、远程微服务 | 生产沙箱、无网络环境、自动化流程与多云调度 |
 
 ---
@@ -168,10 +168,10 @@ print("GitHub 用户信息:", data["name"])
 
 # 为什么 ActionDock 交付模式最适合 AI Agent？
 
-- **双模自由切换（Dual-Mode Delivery）**：既可在本地 IDE 中通过 MCP 协议低延迟直连，也可编译为自包含二进制跨服务器直接分发。
-- **零安装负担（Zero-Install Guarantee）**：独立二进制模式下无需在宿主机上预装 Node.js、Bun 或 Python，杜绝依赖冲突。
-- **输出绝对纯净（Clean Stdio Separation）**：所有数据严格输出至 `stdout`，日志输出至 `stderr`，Agent 不会因控制台杂乱输出而发生 JSON 解析崩溃。
-- **内置 SOP 约束（Playbook Driven）**：除了函数接口外附带业务操作 SOP，大幅降低 Agent 产生幻觉或执行高危操作的风险。
+- **双模自由切换** (Dual-Mode Delivery)：既可在本地 IDE 中通过 MCP 协议低延迟直连，也可编译为自包含二进制跨服务器直接分发。
+- **零安装负担** (Zero-Install Guarantee)：独立二进制模式下无需在宿主机上预装 Node.js、Bun 或 Python，杜绝依赖冲突。
+- **输出绝对纯净** (Clean Stdio Separation)：所有数据严格输出至 `stdout`，日志输出至 `stderr`，Agent 不会因控制台杂乱输出而发生 JSON 解析崩溃。
+- **内置 SOP 约束** (Playbook Driven)：除了函数接口外附带业务操作 SOP，大幅降低 Agent 产生幻觉或执行高危操作的风险。
 
 ---
 

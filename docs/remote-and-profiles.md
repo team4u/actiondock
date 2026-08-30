@@ -8,7 +8,7 @@
 - **重型代理（Agent Daemon）运维沉重**：传统远程调度框架要求在每台主机部署复杂的常驻守护进程与配置管理，升级与运维成本高昂。
 - **返回契约与可观测性割裂**：使用 SSH 脚本远程执行时，日志与返回值混杂在一起，难以结构化捕获与处理。
 
-ActionDock 2.0 提供了极简的 **Profile（命名环境配置） ** 与 **`ac serve`（轻量 HTTP Runner）** 机制，让 AI Agent 和开发者能够无缝调度分布在不同云厂商的主机与环境，享受统一的标准 JSON Envelope 输出与全生命周期追踪。
+ActionDock 2.0 提供了极简的 **Profile** （命名环境配置）与**ac serve** （轻量 HTTP Runner）机制，让 AI Agent 和开发者能够无缝调度分布在不同云厂商的主机与环境，享受统一的标准 JSON Envelope 输出与全生命周期追踪。
 
 ---
 
@@ -69,7 +69,7 @@ ac serve \
 
 ## 第二步：在本地配置 Profile (`ac profile add`)
 
-在本地机器上，使用 `ac profile add` 将远端云机器注册为命名 Profile。**推荐使用 `--token-env` 关联环境变量名**，避免明文持久化 Token：
+在本地机器上，使用 `ac profile add` 将远端云机器注册为命名 Profile。**推荐使用 --token-env 关联环境变量名**，避免明文持久化 Token：
 
 ```bash
 # 推荐方式：通过环境变量注入 Token

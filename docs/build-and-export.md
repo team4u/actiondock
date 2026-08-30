@@ -8,7 +8,7 @@
 - **体积庞大与网络依赖**：分发工具需要连同数万个文件的 `node_modules` 或庞大的 Python 虚拟环境一同打包，且部署时经常需要联网执行 `npm install`。
 - **依赖冲突与版本漂移**：目标环境中的全局依赖或子依赖版本不兼容，导致同一套工具在开发者电脑上正常，而在生产沙箱中运行失败。
 
-ActionDock 2.0 确立了**零安装独立二进制（Zero-Install Standalone Executable） **与**自包含 Agent Skill 交付包**的分发标准。通过 Bun 原生单文件编译引擎，将整个 Action Package 打包为单文件可执行程序，目标环境无需安装任何运行时即可直接执行。
+ActionDock 2.0 确立了**零安装独立二进制** (Zero-Install Standalone Executable)与**自包含 Agent Skill 交付包**的分发标准。通过 Bun 原生单文件编译引擎，将整个 Action Package 打包为单文件可执行程序，目标环境无需安装任何运行时即可直接执行。
 
 ---
 
@@ -117,7 +117,7 @@ ac export skill --standalone --target linux-x64
 ```bash
 ac export skill --playbook review-pr
 ```
-- **自动依赖裁剪（Tree-shaking）**：系统自动读取 `playbooks/review-pr.md` Frontmatter 中的 `actions` 依赖，仅导出该任务所需的 Action，剔除其余代码。
+- **自动依赖裁剪** (Tree-shaking)：系统自动读取 `playbooks/review-pr.md` Frontmatter 中的 `actions` 依赖，仅导出该任务所需的 Action，剔除其余代码。
 - **纯净产物**：导出的 `playbooks/` 仅含选中的 SOP，生成的 `SKILL.md` 仅包含相关 Action，杜绝 Agent 提示词冗余。
 
 ### 自动 ZIP 归档

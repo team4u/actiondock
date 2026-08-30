@@ -14,7 +14,7 @@ ActionDock 2.0 基于 Bun 原生运行时与单文件编译器构建。
   ```bash
   curl -fsSL https://bun.sh/install | bash
   ```
-* **Windows (PowerShell)**：
+* **Windows** (PowerShell)：
   ```powershell
   powershell -c "irm bun.sh/install.ps1 | iex"
   ```
@@ -178,7 +178,7 @@ ac run github.get-user --input '{"username": "torvalds"}'
 
 ### 标准输出解析（stdout vs stderr）
 
-* **`stdout`** （标准 JSON Envelope，供 AI Agent 或程序安全解析）：
+* `stdout` （标准 JSON Envelope，供 AI Agent 或程序安全解析）：
   ```json
   {
     "ok": true,
@@ -193,7 +193,7 @@ ac run github.get-user --input '{"username": "torvalds"}'
   }
   ```
 
-* **`stderr`** （诊断与运行日志）：
+* `stderr` （诊断与运行日志）：
   ```text
   [08:00:00] [INFO] [github.get-user] 正在查询 GitHub 用户: torvalds
   ```

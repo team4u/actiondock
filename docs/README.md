@@ -157,8 +157,8 @@ ac export skill
 
 ## 设计哲学
 
-- **轻量与自包含（Lightweight & Self-Contained）**：彻底摆脱传统框架对复杂运行时环境、虚拟机或集中式控制台的强依赖，编译后的产物可在任何干净的操作系统直接运行。
-- **契约严格一致（Standalone Contract Invariance）**：无论在本地 CLI、云端 Runner、MCP Server 还是编译后的独立二进制中，Action 的入参校验、配置解析、持久化状态与返回值协议均保持 100% 行为一致。
-- **标准与生态复用（Standard Web & npm Ecosystem）**：直接使用原生 Web 标准（`fetch`、`AbortSignal`、`JSON Schema`）与丰富 npm 生态包，不发明封闭的专有 DSL。
-- **纯净通道隔离（Clean Channel Separation）**：严格区分数据通道（`stdout` 机器 JSON Envelope）与可观测日志通道（`stderr` 诊断输出），从物理层面避免 LLM 语法解析崩溃。
-- **白盒链路可溯（Traceable Execution Lifecycle）**：内置基于 SQLite 的 Runs 历史与父子 Action 级联追踪，支持循环调用防御与全链路响应式取消。
+- **轻量与自包含** (Lightweight & Self-Contained)：彻底摆脱传统框架对复杂运行时环境、虚拟机或集中式控制台的强依赖，编译后的产物可在任何干净的操作系统直接运行。
+- **契约严格一致** (Standalone Contract Invariance)：无论在本地 CLI、云端 Runner、MCP Server 还是编译后的独立二进制中，Action 的入参校验、配置解析、持久化状态与返回值协议均保持 100% 行为一致。
+- **标准与生态复用** (Standard Web & npm Ecosystem)：直接使用原生 Web 标准（`fetch`、`AbortSignal`、`JSON Schema`）与丰富 npm 生态包，不发明封闭的专有 DSL。
+- **纯净通道隔离** (Clean Channel Separation)：严格区分数据通道（`stdout` 机器 JSON Envelope）与可观测日志通道（`stderr` 诊断输出），从物理层面避免 LLM 语法解析崩溃。
+- **白盒链路可溯** (Traceable Execution Lifecycle)：内置基于 SQLite 的 Runs 历史与父子 Action 级联追踪，支持循环调用防御与全链路响应式取消。

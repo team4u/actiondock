@@ -9,7 +9,7 @@ ActionDock 1.0 最初定位为中心化的脚本治理平台（基于 Java 21 + 
 - **告别庞大的常驻服务与数据库**：Agent 调用工具不应强依赖臃肿的 Java 虚拟机或外部关系数据库。
 - **文件系统与 Git 优先**：代码、提示词与规程应当作为普通文件纳入代码仓库进行严格的版本管理与 Code Review。
 
-ActionDock 2.0 是一次彻底的现代化重构：基于 **Bun + TypeScript + `bun:sqlite` + 原生单文件编译引擎**，全面转型为**面向 AI Agent 的 Action 与 Skill 开发、测试、构建与分发工具链**。
+ActionDock 2.0 是一次彻底的现代化重构：基于 **Bun + TypeScript + bun:sqlite + 原生单文件编译引擎**，全面转型为**面向 AI Agent 的 Action 与 Skill 开发、测试、构建与分发工具链**。
 
 ---
 
@@ -20,7 +20,7 @@ ActionDock 2.0 是一次彻底的现代化重构：基于 **Bun + TypeScript + `
 | **产品定位** | 中心化脚本管理平台（带后端 Server、Admin UI、数据库、权限与定时调度） | 面向 AI Agent 的轻量级 Action / Skill 独立开发、测试与分发工具链 | 专注于 Agent 时代的极简工具链标准 |
 | **技术栈** | Java 21 + Spring Boot 3 + JPA + Groovy / Python + React Admin UI | Bun + TypeScript + `bun:sqlite` + 原生单文件编译引擎 | 原生类型安全，极速冷启动，零资源浪费 |
 | **运行形态** | 长期运行的常驻 Server 守护进程 + Web 控制台 | 零常驻守护进程（Zero-Daemon），纯 CLI 工具（`ac`）按需执行；远端按需启动 `ac serve` | 随用随启，杜绝资源常驻开销 |
-| **交付形态** | 必须部署完整的 ActionDock 服务端才能运行脚本 | 编译为单个零外部依赖的自包含独立二进制 + 标准 `SKILL.md` | **零依赖独立交付**，分发后开箱即用 |
+| **交付形态**| 必须部署完整的 ActionDock 服务端才能运行脚本 | 编译为单个零外部依赖的自包含独立二进制 + 标准 SKILL.md |**零依赖独立交付**，分发后开箱即用 |
 | **开发模型** | Web 页面在线编辑脚本，存在中心化数据库中 | 文件系统优先（Filesystem First），`actions/*.ts` 普通文件纳入 Git 管理 | 享受 IDE 补全、Git 分支合并与 CI/CD 流水线 |
 | **依赖管理** | 复杂的动态 ClassLoader / 插件热插拔系统 | 标准 npm / TypeScript 原生模块导入（`import`）与自动补齐 | 复用海量 npm 生态，构建态自动 Tree-shaking |
 | **持久化** | MySQL / PostgreSQL + JPA 重型关系数据库 | 内置 `bun:sqlite` 轻量嵌入式存储（仅管理运行态 Config/State/Runs） | 零外部 DB 依赖，毫秒级本地存取 |
@@ -53,13 +53,13 @@ graph LR
 
 | 1.0 旧概念 | 2.0 新概念 | 演进与变化说明 |
 | :--- | :--- | :--- |
-| **Script (脚本)** | **Action (动作)** | 从松散脚本演变为具备严格输入/输出 JSON Schema 和全类型安全的 Action（`defineAction`）。 |
-| **Script Platform (多语言平台)** | **TypeScript 原生** | 统一为业界主流的 TypeScript，消除了跨语言上下文映射与复杂平台维护成本。 |
-| **Playbook Session (会话引擎)** | **Markdown SOP (操作规程)** | 废弃复杂的内部会话状态机，Playbook 升级为纯粹提供给 AI Agent 阅读与编排的标准 SOP Markdown 文档。 |
-| **Plugin System (插件机制)** | **npm / Web Standard API** | 废弃私有插件协议，直接使用现代 Web 标准（`fetch`、`Bun.spawn`、`Bun.file`）与海量 npm 生态包。 |
-| **Config Store (配置服务)** | **`ctx.config`** | 统一 5 级优先级回退：CLI 覆盖 > 本地 SQLite > 全局 SQLite > 环境变量 > 声明默认值。 |
-| **Shared State (共享状态)** | **`ctx.state`** | 延续跨执行持久化 Key-Value 理念，升级为基于 `bun:sqlite` 的原生轻量实现，支持命名空间与 TTL。 |
-| **Profile (多机器调度)** | **`ac profile` + `ac serve`** | 远端使用极轻量 `ac serve` 接收请求，本地通过 `ac profile` 管理多云节点，执行格式保持严格一致的标准 JSON Envelope。 |
+| **Script** (脚本)| **Action** (动作) | 从松散脚本演变为具备严格输入/输出 JSON Schema 和全类型安全的 Action（`defineAction`）。 |
+| **Script Platform** (多语言平台)|**TypeScript 原生** | 统一为业界主流的 TypeScript，消除了跨语言上下文映射与复杂平台维护成本。 |
+| **Playbook Session** (会话引擎)| **Markdown SOP** (操作规程) | 废弃复杂的内部会话状态机，Playbook 升级为纯粹提供给 AI Agent 阅读与编排的标准 SOP Markdown 文档。 |
+| **Plugin System** (插件机制)|**npm / Web Standard API** | 废弃私有插件协议，直接使用现代 Web 标准（`fetch`、`Bun.spawn`、`Bun.file`）与海量 npm 生态包。 |
+| **Config Store** (配置服务) | `ctx.config` | 统一 5 级优先级回退：CLI 覆盖 > 本地 SQLite > 全局 SQLite > 环境变量 > 声明默认值。 |
+| **Shared State** (共享状态) | `ctx.state` | 延续跨执行持久化 Key-Value 理念，升级为基于 `bun:sqlite` 的原生轻量实现，支持命名空间与 TTL。 |
+| **Profile** (多机器调度)|**ac profile + ac serve** | 远端使用极轻量 `ac serve` 接收请求，本地通过 `ac profile` 管理多云节点，执行格式保持严格一致的标准 JSON Envelope。 |
 
 ---
 

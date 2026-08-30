@@ -10,7 +10,7 @@
 - **日志污染通信协议**：控制台输出混杂在标准输出流中，导致上游 LLM 或 Agent 宿主解析返回结果时崩溃。
 - **缺乏协作式中断机制**：超时或取消发生时，底层耗时网络请求与 I/O 无法响应式中止。
 
-ActionDock 2.0 在 `run(input, ctx)` 中为每个 Action 注入了强类型的 **`ActionContext`** 上下文，系统化提供了 **`ctx.config`**、**`ctx.state`**、**`ctx.actions`**、**`ctx.log`** 与 **`ctx.signal`** 五大核心领域能力。
+ActionDock 2.0 在 `run(input, ctx)` 中为每个 Action 注入了强类型的 `ActionContext` 上下文，系统化提供了 `ctx.config`、`ctx.state`、`ctx.actions`、`ctx.log` 与 `ctx.signal` 五大核心领域能力。
 
 ---
 
@@ -128,7 +128,7 @@ const debugMode = ctx.config.get<boolean>("enableDebug", false);
 
 ### 典型应用场景
 - **断点续传与 Checkpoint**：记录长耗时批量同步任务的进度游标。
-- **分页与时间游标（Cursor）**：增量拉取日志、事件流或审计记录时的最新时间戳或 ID。
+- **分页与时间游标** (Cursor)：增量拉取日志、事件流或审计记录时的最新时间戳或 ID。
 - **调用计数与滑动窗口**：统计调用频次或实现业务级软限流。
 - **中间结果缓存**：缓存计算成本较高的临时数据。
 
@@ -228,8 +228,8 @@ export default defineAction({
 ### 组合调用的四大核心保障
 
 - **环境与存储透明共享**：子 Action 自动共享当前的 Config、State 与 Storage 数据库连接。
-- **执行链路级联（Runs Cascade）**：在 SQLite `runs` 记录表中，子 Action 会通过 `parent_run_id` 自动关联至父 Action，支持完整调用树追溯。
-- **循环依赖死循环防御（Cycle Detection）**：底层执行栈实时维护调用路径。一旦检测到 `A -> B -> A` 的循环依赖，立即中止并抛出 `ACTION_CYCLE_DETECTED` 错误。
+- **执行链路级联** (Runs Cascade)：在 SQLite `runs` 记录表中，子 Action 会通过 `parent_run_id` 自动关联至父 Action，支持完整调用树追溯。
+- **循环依赖死循环防御** (Cycle Detection)：底层执行栈实时维护调用路径。一旦检测到 `A -> B -> A` 的循环依赖，立即中止并抛出 `ACTION_CYCLE_DETECTED` 错误。
 - **取消信号层层穿透**：父 Action 触发取消（超时或中断）时，子 Action 会同步收到 `ctx.signal` 中断通知。
 
 ---
@@ -241,7 +241,7 @@ export default defineAction({
 ### 为什么强制输出至 `stderr`？
 AI Agent 和自动化系统依赖 `stdout` 解析 Action 执行输出的标准 JSON Envelope。如果将 `console.log()` 输出混杂在 `stdout` 中，会导致 JSON 解析器直接崩溃。
 
-`ctx.log` 会自动将所有日志格式化为 `[HH:MM:SS] [LEVEL] [action-id] 消息内容` 并**强制写入 `stderr`**，彻底实现日志与数据流的物理隔离。
+`ctx.log` 会自动将所有日志格式化为 `[HH:MM:SS] [LEVEL] [action-id] 消息内容` 并**强制写入 stderr**，彻底实现日志与数据流的物理隔离。
 
 ### API 使用规范
 

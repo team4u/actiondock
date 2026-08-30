@@ -32,19 +32,19 @@ ActionDock 2.0 在执行 Action、解析配置、校验 Schema、编译构建或
 
 | 错误代码 (Error Code) | 场景与含义 | 常见触发原因 | 排错与修复建议 |
 | :--- | :--- | :--- | :--- |
-| **`ACTION_NOT_FOUND`** | 请求的 Action 标识不存在 | 命令行传入的 Action ID 拼写错误，或文件未在 `actions/` 目录中声明。 | * 运行 `ac action list` 查看可用 Action。<br>* 检查 `actions/*.ts` 中的 `id` 属性。 |
-| **`INPUT_VALIDATION_FAILED`** | 入参不符合 `inputSchema` 定义 | 缺少必填字段、字段类型不匹配（如要求 number 却传入了 string）或未满足格式约束。 | * 运行 `ac action show <id>` 查看入参 Schema。<br>* 检查 `--input` 的 JSON 格式与字段类型。 |
-| **`OUTPUT_VALIDATION_FAILED`** | Action 返回值不符合 `outputSchema` 定义 | Action 代码的 `run` 函数返回的数据结构缺少必填字段或类型与 Schema 声明不一致。 | * 检查 Action 源码中的 `return` 对象结构。<br>* 修正代码或调整 `outputSchema`。 |
-| **`ACTION_FAILED`** | Action 业务执行抛出未捕获异常 | 外部网络请求失败（如 HTTP 500）、文件不存在、认证 Token 失效等运行时代码报错。 | * 查看 `stderr` 中的详细错误堆栈。<br>* 在 `run` 函数中增加 try-catch 进行防御性处理。 |
-| **`ACTION_CYCLE_DETECTED`** | 跨 Action 组合调用时检测到循环依赖 | Action A 调用了 Action B，而 Action B 又反向调用了 Action A，造成无限死循环。 | * 检查 Action 间的调用链。<br>* 拆解公共逻辑为底层原子 Action，避免相互循环调用。 |
-| **`ACTION_TIMEOUT`** | Action 执行时间超过设定阈值 | 执行 Action 时指定了 `--timeout`（如 `--timeout 30s`），底层执行耗时超出该限制。 | * 检查 Action 内部的网络请求或长耗时计算。<br>* 增大 `--timeout` 阈值，或在代码中使用 `ctx.signal` 加快响应式超时断开。 |
-| **`ACTION_CANCELLED`** | Action 执行被外部主动终止 | 用户在终端按下 `Ctrl+C`、MCP 客户端发送了 `notifications/cancelled`、或调用了取消端点。 | * 正常终止场景，无需特殊修复。<br>* Action 内部应使用 `ctx.signal` 监听并释放网络连接与临时资源。 |
-| **`BUILD_FAILED`** | 独立二进制编译失败 | 项目存在 TypeScript 语法错误、引用的模块不存在、或目标平台的交叉编译参数不合法。 | * 运行 `bun run typecheck` 检查全量类型错误。<br>* 查看编译失败时的具体编译器报错输出。 |
-| **`PLAYBOOK_VALIDATION_FAILED`** | Playbook 语法或引用校验失败 | Playbook 的 Markdown 文件缺少 YAML Frontmatter，或 `actions` 中引用的 Action 在项目中不存在。 | * 运行 `ac playbook validate` 查看具体告警与错误行。<br>* 修正 Frontmatter 中的 `id` 与 `actions` 清单。 |
-| **`RUN_NOT_FOUND`** | 查询或取消的 Run ID 不存在 | 传入了错误的 Run ID，或对应执行记录未在服务端存储中找到。 | * 运行 `ac runs list` 确认当前有效 Run ID。 |
-| **`RUN_ALREADY_FINISHED`** | 取消已终态的执行任务 | 尝试取消一个已经处于 `success`、`failed` 或 `cancelled` 终态的任务。 | * 运行 `ac runs show <id>` 查看任务完成详情。 |
-| **`UNAUTHORIZED`** | 远程 Runner 身份验证失败 | 访问受保护的 HTTP/MCP 服务端时未提供 Bearer Token，或 Token 不匹配。 | * 检查 `--token`、`--token-env` 或 `ACTIONDOCK_TOKEN` 是否配置正确。 |
-| **`REQUEST_TOO_LARGE`** | 请求 Body 超过最大字节限制 | 向 HTTP Runner 发送了超过 `--max-body` 设定大小的请求体。 | * 启动 `ac serve` 时增大 `--max-body` 限制（如 `--max-body 5mb`），或避免在单次入参中传输超大二进制。 |
+| `ACTION_NOT_FOUND` | 请求的 Action 标识不存在 | 命令行传入的 Action ID 拼写错误，或文件未在 `actions/` 目录中声明。 | * 运行 `ac action list` 查看可用 Action。<br>* 检查 `actions/*.ts` 中的 `id` 属性。 |
+| `INPUT_VALIDATION_FAILED` | 入参不符合 `inputSchema` 定义 | 缺少必填字段、字段类型不匹配（如要求 number 却传入了 string）或未满足格式约束。 | * 运行 `ac action show <id>` 查看入参 Schema。<br>* 检查 `--input` 的 JSON 格式与字段类型。 |
+| `OUTPUT_VALIDATION_FAILED` | Action 返回值不符合 `outputSchema` 定义 | Action 代码的 `run` 函数返回的数据结构缺少必填字段或类型与 Schema 声明不一致。 | * 检查 Action 源码中的 `return` 对象结构。<br>* 修正代码或调整 `outputSchema`。 |
+| `ACTION_FAILED` | Action 业务执行抛出未捕获异常 | 外部网络请求失败（如 HTTP 500）、文件不存在、认证 Token 失效等运行时代码报错。 | * 查看 `stderr` 中的详细错误堆栈。<br>* 在 `run` 函数中增加 try-catch 进行防御性处理。 |
+| `ACTION_CYCLE_DETECTED` | 跨 Action 组合调用时检测到循环依赖 | Action A 调用了 Action B，而 Action B 又反向调用了 Action A，造成无限死循环。 | * 检查 Action 间的调用链。<br>* 拆解公共逻辑为底层原子 Action，避免相互循环调用。 |
+| `ACTION_TIMEOUT` | Action 执行时间超过设定阈值 | 执行 Action 时指定了 `--timeout`（如 `--timeout 30s`），底层执行耗时超出该限制。 | * 检查 Action 内部的网络请求或长耗时计算。<br>* 增大 `--timeout` 阈值，或在代码中使用 `ctx.signal` 加快响应式超时断开。 |
+| `ACTION_CANCELLED` | Action 执行被外部主动终止 | 用户在终端按下 `Ctrl+C`、MCP 客户端发送了 `notifications/cancelled`、或调用了取消端点。 | * 正常终止场景，无需特殊修复。<br>* Action 内部应使用 `ctx.signal` 监听并释放网络连接与临时资源。 |
+| `BUILD_FAILED` | 独立二进制编译失败 | 项目存在 TypeScript 语法错误、引用的模块不存在、或目标平台的交叉编译参数不合法。 | * 运行 `bun run typecheck` 检查全量类型错误。<br>* 查看编译失败时的具体编译器报错输出。 |
+| `PLAYBOOK_VALIDATION_FAILED` | Playbook 语法或引用校验失败 | Playbook 的 Markdown 文件缺少 YAML Frontmatter，或 `actions` 中引用的 Action 在项目中不存在。 | * 运行 `ac playbook validate` 查看具体告警与错误行。<br>* 修正 Frontmatter 中的 `id` 与 `actions` 清单。 |
+| `RUN_NOT_FOUND` | 查询或取消的 Run ID 不存在 | 传入了错误的 Run ID，或对应执行记录未在服务端存储中找到。 | * 运行 `ac runs list` 确认当前有效 Run ID。 |
+| `RUN_ALREADY_FINISHED` | 取消已终态的执行任务 | 尝试取消一个已经处于 `success`、`failed` 或 `cancelled` 终态的任务。 | * 运行 `ac runs show <id>` 查看任务完成详情。 |
+| `UNAUTHORIZED` | 远程 Runner 身份验证失败 | 访问受保护的 HTTP/MCP 服务端时未提供 Bearer Token，或 Token 不匹配。 | * 检查 `--token`、`--token-env` 或 `ACTIONDOCK_TOKEN` 是否配置正确。 |
+| `REQUEST_TOO_LARGE` | 请求 Body 超过最大字节限制 | 向 HTTP Runner 发送了超过 `--max-body` 设定大小的请求体。 | * 启动 `ac serve` 时增大 `--max-body` 限制（如 `--max-body 5mb`），或避免在单次入参中传输超大二进制。 |
 
 ---
 
@@ -61,7 +61,7 @@ ActionDock 2.0 在执行 Action、解析配置、校验 Schema、编译构建或
 ## `ACTION_CYCLE_DETECTED` 排查
 - **原因分析**：当使用 `ctx.actions.invoke(childAction, input)` 组合调用其他 Action 时，ActionDock 会在内存执行栈中维护当前链路的所有 Action ID。如果链路上再次出现已在栈中的 Action ID，系统会立即触发循环依赖熔断。
 - **修复方案**：
-  - 梳理依赖关系，确保依赖图为**有向无环图 (DAG)**。
+  - 梳理依赖关系，确保依赖图为**有向无环图** (DAG)。
   - 将公共逻辑提取为独立的通用工具函数或底层原子 Action。
 
 ---

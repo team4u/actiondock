@@ -8,9 +8,9 @@
 
 > 一次编写，随处运行。面向 AI Agent 的 Action 与 Skill 开发、测试、构建与分发工具链。
 
-ActionDock 2.0 是面向 AI Agent 与研发团队的新一代工具链体系。它革新了传统 Agent 工具的开发与交付模式：采用 **源码型 Skill (Source Skill)** 与 **零安装独立二进制（Zero-Install Standalone Binary）** 双模交付，让开发者使用 TypeScript 与标准 JSON Schema 快速构建原子工具（Action），并无缝对接 Model Context Protocol (MCP)。
+ActionDock 2.0 是面向 AI Agent 与研发团队的新一代工具链体系。它革新了传统 Agent 工具的开发与交付模式：采用 **源码型 Skill** (Source Skill)与**零安装独立二进制** (Zero-Install Standalone Binary) 双模交付，让开发者使用 TypeScript 与标准 JSON Schema 快速构建原子工具（Action），并无缝对接 Model Context Protocol (MCP)。
 
-- **预装 ActionDock 环境（推荐）**：直接分发极轻量源码型 Skill（`SKILL.md + actiondock.json + actions`），跨平台免编译，动态加载依赖。
+- **预装 ActionDock 环境** (推荐)：直接分发极轻量源码型 Skill（`SKILL.md + actiondock.json + actions`），跨平台免编译，动态加载依赖。
 - **无依赖裸机环境**：一键打包为自包含、零外部依赖的独立可执行文件（`--standalone`），目标机器无需安装 Node.js、Bun、Python 或 Java 即可直接运行。
 
 [进入官方完整文档中心 (docs/README.md)](docs/README.md)
@@ -19,12 +19,12 @@ ActionDock 2.0 是面向 AI Agent 与研发团队的新一代工具链体系。�
 
 ## 设计思考与架构哲学
 
-- **零依赖独立交付（Zero-Install Standalone Executables）**：借助 Bun 原生编译引擎，将 TypeScript 代码、npm 依赖闭包及运行时打包为单一独立二进制文件。分发后开箱即用，从根源杜绝环境漂移与依赖冲突。
-- **文件系统优先（Filesystem First）**：Action（`actions/*.ts`）、Playbook（`playbooks/*.md`）与项目配置均为普通文件，天然契合 Git 版本控制、分支合并与代码评审流程。
-- **强类型与标准契约（TypeScript Native & Standard JSON Schema）**：统一全链路编程语言为 TypeScript，入参与出参使用标准 JSON Schema 配合 Ajv 严格校验，无自定义私有 DSL 学习负担。
-- **独立编译契约原则（Standalone Contract Consistency）**：在本地开发态（`ac run`）、编译后独立二进制态（`./bin/pkg run`）与 MCP Tool 态下，`ActionContext` 的上下文语义、5 级配置优先级、状态持久化与输出 JSON Envelope 保持严格一致。
-- **双模交付与协议适配（Dual-Mode Delivery: MCP + Binary）**：既可作为 Model Context Protocol (MCP) STDIO / HTTP 服务端供 Agent IDE 直连，亦可作为自包含 Skill 交付包跨机器分发。
-- **通道分离与白盒可观测（Clean Stdio Separation & White-Box Trace）**：执行数据严格输出至 `stdout`（标准 JSON Envelope），运行日志与诊断信息强制输出至 `stderr`，确保 Agent 协议消费绝对纯净。
+- **零依赖独立交付** (Zero-Install Standalone Executables)：借助 Bun 原生编译引擎，将 TypeScript 代码、npm 依赖闭包及运行时打包为单一独立二进制文件。分发后开箱即用，从根源杜绝环境漂移与依赖冲突。
+- **文件系统优先** (Filesystem First)：Action（`actions/*.ts`）、Playbook（`playbooks/*.md`）与项目配置均为普通文件，天然契合 Git 版本控制、分支合并与代码评审流程。
+- **强类型与标准契约** (TypeScript Native & Standard JSON Schema)：统一全链路编程语言为 TypeScript，入参与出参使用标准 JSON Schema 配合 Ajv 严格校验，无自定义私有 DSL 学习负担。
+- **独立编译契约原则** (Standalone Contract Consistency)：在本地开发态（`ac run`）、编译后独立二进制态（`./bin/pkg run`）与 MCP Tool 态下，`ActionContext` 的上下文语义、5 级配置优先级、状态持久化与输出 JSON Envelope 保持严格一致。
+- **双模交付与协议适配** (Dual-Mode Delivery: MCP + Binary)：既可作为 Model Context Protocol (MCP) STDIO / HTTP 服务端供 Agent IDE 直连，亦可作为自包含 Skill 交付包跨机器分发。
+- **通道分离与白盒可观测** (Clean Stdio Separation & White-Box Trace)：执行数据严格输出至 `stdout`（标准 JSON Envelope），运行日志与诊断信息强制输出至 `stderr`，确保 Agent 协议消费绝对纯净。
 
 ---
 
