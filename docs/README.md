@@ -3,12 +3,23 @@
 [![Bun](https://img.shields.io/badge/Bun-%3E%3D1.1-black?logo=bun)](https://bun.sh/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![MCP](https://img.shields.io/badge/MCP-Protocol%20Compliant-purple)](https://modelcontextprotocol.io/)
-[![Tests](https://img.shields.io/badge/tests-65%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-67%20passed-brightgreen.svg)]()
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 > 面向 AI Agent 的 Action 与 Skill 开发、测试、构建与分发工具链。
+> 用 TypeScript 编写原子工具，毫秒级纯内存单测，一键编译为零依赖独立二进制，原生直连 MCP 与 Agent Skill。
 
-ActionDock 2.0 是一套专为 AI Agent 研发与交付场景打造的轻量级、零环境依赖的基础工具链。平台遵循“**独立自包含交付、文件系统优先、强类型标准契约、通道绝对隔离、开发构建一致**”的设计哲学，帮助开发者与团队极速编写、调试、测试、独立构建与打包分发 AI Agent 工具集。
+---
+
+## 为什么需要 ActionDock？
+
+在为 AI Agent（Claude Code、Cursor、Antigravity 或自定义 Agent）编写和交付工具时，工程师通常面临三大现实痛点：
+
+* **目标机器的环境泥潭**：写好的 Python/Node 工具脚本部署到新机器或沙箱时，频繁由于缺少运行时、依赖包缺失或环境冲突而报错。
+* **调试日志污染导致大模型解析崩溃**：一句顺手打印的 `console.log` 混入标准输出（`stdout`），直接导致大模型 JSON 解析失败、任务中断。
+* **不同场景重复封装**：IDE 内直连需要写 MCP、远端部署需要写 HTTP 接口、交付给智能体又需要写 SOP 提示词，同一逻辑被迫维护多份代码。
+
+ActionDock 2.0 围绕 **“自包含独立编译、物理通道绝对隔离、双模全生态交付”** 重构了 Agent 工具的研发与分发标准。
 
 ---
 
@@ -34,7 +45,7 @@ ActionDock 2.0 是一套专为 AI Agent 研发与交付场景打造的轻量级�
 | :--- | :--- | :--- | :--- |
 | **Skill 设计哲学与规范** | `dist/*-skill/` · `SKILL.md` | Action/Playbook/Skill 三层关系与生命周期、`SKILL.md` YAML Frontmatter 规范、`actiondock.skill.json` 机器清单与交叉导出。 | [Skill 规范](skill-guide.md) |
 | **Playbook SOP 编写指南** | `playbooks/*.md` | 面向 AI Agent 的领域操作规程编写规范，包含前置检查、阶段操作、分支决策与安全红线，支持 `ac playbook validate` 语法校验。 | [Playbook 规范](playbook-guide.md) |
-| **构建编译与 Skill 分发** | `@actiondock/core` · `ac build` | `Bun.build` 单文件单包独立编译原理、全平台交叉编译（Linux/macOS/Windows）、全量打包与基于 Playbook 的 Tree-shaking 按需裁剪。 | [构建与分发](build-and-export.md) |
+| **构建编译与 Skill 分发** | `@actiondock/core` · `ac build` | `Bun.build` 单文件单包独立编译原理、全平台交叉编译（Linux/macOS/Windows）、全量打包与基于 Playbook 的按需裁剪。 | [构建与分发](build-and-export.md) |
 
 ---
 
@@ -45,7 +56,7 @@ ActionDock 2.0 是一套专为 AI Agent 研发与交付场景打造的轻量级�
 | 模块 / 主题 | 对应包 / 路径 | 说明与核心场景 | 文档入口 |
 | :--- | :--- | :--- | :--- |
 | **存储与状态管理机制** | `bun:sqlite` · `RuntimeStorage` | 纯运行态嵌入式 SQLite 数据模型（`config`、`state`、`runs` 表结构）、路径解析策略（开发态 vs 独立态）、TTL 惰性清理与 `PRAGMA user_version` 事务迁移。 | [存储与状态](storage-and-state.md) |
-| **安全加固与执行生命周期** | `@actiondock/core` · `ActionRunner` | 系统核心设计底线：唯一执行核心 `ActionRunner`、Security Hardening 规范、`ExecutionManager` 内存句柄、超时机制与 26 条验收标准。 | [设计与生命周期](design-security-mcp-execution.md) |
+| **安全加固与执行生命周期** | `@actiondock/core` · `ActionRunner` | 系统核心设计底线：唯一执行核心 `ActionRunner`、安全加固规范、`ExecutionManager` 内存句柄、超时机制与 26 条验收标准。 | [设计与生命周期](design-security-mcp-execution.md) |
 
 ---
 
@@ -74,91 +85,10 @@ ActionDock 2.0 是一套专为 AI Agent 研发与交付场景打造的轻量级�
 
 ---
 
-## 快速接入流程
-
-### 引入与安装
-```bash
-# 全局安装 ActionDock CLI
-bun install -g @actiondock/cli
-```
-
-### 初始化项目
-```bash
-ac init github-tools --id team4u.github-tools --name "GitHub Tools"
-cd github-tools
-```
-
-### 创建并编写 Action (`actions/get-pr.ts`)
-```ts
-import { defineAction } from "@actiondock/sdk";
-
-export default defineAction({
-  id: "github.get-pr",
-  description: "获取指定 Pull Request 的详细信息",
-
-  inputSchema: {
-    type: "object",
-    properties: {
-      prNumber: { type: "number", description: "PR 编号" },
-    },
-    required: ["prNumber"],
-  },
-
-  outputSchema: {
-    type: "object",
-    properties: {
-      id: { type: "number" },
-      title: { type: "string" },
-      state: { type: "string" },
-    },
-    required: ["id", "title", "state"],
-  },
-
-  async run(input, ctx) {
-    const token = ctx.config.get<string>("GITHUB_TOKEN");
-    ctx.log.info(`正在查询 PR #${input.prNumber}`);
-
-    const res = await fetch(`https://api.github.com/repos/team4u/framework/pulls/${input.prNumber}`, {
-      headers: {
-        Authorization: token ? `Bearer ${token}` : "",
-        "User-Agent": "ActionDock-Agent",
-      },
-      signal: ctx.signal,
-    });
-
-    if (!res.ok) throw new Error(`GitHub API Error: ${res.status}`);
-    const data = (await res.json()) as any;
-
-    return {
-      id: data.id,
-      title: data.title,
-      state: data.state,
-    };
-  },
-});
-```
-
-### 开发调试与运行
-```bash
-ac run github.get-pr --input '{"prNumber": 101}'
-```
-
-### 编译为零外部依赖独立二进制
-```bash
-ac build
-```
-
-### 一键导出自包含 Skill 交付包
-```bash
-ac export skill
-```
-
----
-
 ## 设计哲学
 
-- **轻量与自包含**：彻底摆脱传统框架对复杂运行时环境、虚拟机或集中式控制台的强依赖，编译后的产物可在任何干净的操作系统直接运行。
-- **契约严格一致**：无论在本地 CLI、云端 Runner、MCP Server 还是编译后的独立二进制中，Action 的入参校验、配置解析、持久化状态与返回值协议均保持 100% 行为一致。
-- **标准与生态复用**：直接使用原生 Web 标准（`fetch`、`AbortSignal`、`JSON Schema`）与丰富 npm 生态包，不发明封闭的专有 DSL。
-- **纯净通道隔离**：严格区分数据通道（`stdout` 机器 JSON Envelope）与可观测日志通道（`stderr` 诊断输出），从物理层面避免 LLM 语法解析崩溃。
-- **白盒链路可溯**：内置基于 SQLite 的 Runs 历史与父子 Action 级联追踪，支持循环调用防御与全链路响应式取消。
+* **轻量与自包含**：彻底摆脱传统框架对复杂运行时环境、虚拟机或集中式控制台的强依赖，编译后的产物可在任何干净的操作系统直接运行。
+* **契约严格一致**：无论在本地 CLI、云端 Runner、MCP Server 还是编译后的独立二进制中，Action 的入参校验、配置解析、持久化状态与返回值协议均保持 100% 行为一致。
+* **标准与生态复用**：直接使用原生 Web 标准（`fetch`、`AbortSignal`、`JSON Schema`）与丰富 npm 生态包，不发明封闭的专有 DSL。
+* **纯净通道隔离**：严格区分数据通道（`stdout` 机器 JSON Envelope）与可观测日志通道（`stderr` 诊断输出），从物理层面避免 LLM 语法解析崩溃。
+* **白盒链路可溯**：内置基于 SQLite 的 Runs 历史与父子 Action 级联追踪，支持循环调用防御与全链路响应式取消。

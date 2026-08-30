@@ -3,208 +3,227 @@
 [![Bun](https://img.shields.io/badge/Bun-%3E%3D1.1-black?logo=bun)](https://bun.sh/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![MCP](https://img.shields.io/badge/MCP-Protocol%20Compliant-purple)](https://modelcontextprotocol.io/)
-[![Tests](https://img.shields.io/badge/tests-66%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-67%20passed-brightgreen.svg)]()
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-> 一次编写，随处运行。面向 AI Agent 的 Action 与 Skill 开发、测试、构建与分发工具链。
-
-ActionDock 2.0 是面向 AI Agent 与研发团队的新一代工具链体系。它革新了传统 Agent 工具的开发与交付模式：采用 **源码型 Skill**与**零安装独立二进制** 双模交付，让开发者使用 TypeScript 与标准 JSON Schema 快速构建原子工具（Action），并无缝对接 Model Context Protocol (MCP)。
-
-- **预装 ActionDock 环境** (推荐)：直接分发极轻量源码型 Skill（`SKILL.md + actiondock.json + actions`），跨平台免编译，动态加载依赖。
-- **无依赖裸机环境**：一键打包为自包含、零外部依赖的独立可执行文件（`--standalone`），目标机器无需安装 Node.js、Bun、Python 或 Java 即可直接运行。
-
-[进入官方完整文档中心](docs/README.md)
+> 面向 AI Agent 的工具开发、测试、独立编译与分发工具链。
+> 用 TypeScript 编写原子工具，毫秒级纯内存单测，一键编译为零依赖独立二进制，原生直连 MCP 与 Agent Skill。
 
 ---
 
-## 设计思考与架构哲学
+## 为什么需要 ActionDock？
 
-- **零依赖独立交付**：借助 Bun 原生编译引擎，将 TypeScript 代码、npm 依赖闭包及运行时打包为单一独立二进制文件。分发后开箱即用，从根源杜绝环境漂移与依赖冲突。
-- **文件系统优先**：Action（`actions/*.ts`）、Playbook（`playbooks/*.md`）与项目配置均为普通文件，天然契合 Git 版本控制、分支合并与代码评审流程。
-- **强类型与标准契约**：统一全链路编程语言为 TypeScript，入参与出参使用标准 JSON Schema 配合 Ajv 严格校验，无自定义私有 DSL 学习负担。
-- **独立编译契约原则**：在本地开发态（`ac run`）、编译后独立二进制态（`./bin/pkg run`）与 MCP Tool 态下，`ActionContext` 的上下文语义、5 级配置优先级、状态持久化与输出 JSON Envelope 保持严格一致。
-- **双模交付与协议适配**：既可作为 Model Context Protocol (MCP) STDIO / HTTP 服务端供 Agent IDE 直连，亦可作为自包含 Skill 交付包跨机器分发。
-- **通道分离与白盒可观测**：执行数据严格输出至 `stdout`（标准 JSON Envelope），运行日志与诊断信息强制输出至 `stderr`，确保 Agent 协议消费绝对纯净。
+在为 AI Agent（Claude Code、Cursor、Antigravity 或自定义 Agent）编写和交付工具时，工程师通常会反复踩进三个坑：
 
----
+* **目标机器的环境泥潭**：
+  写好的 Python 或 Node.js 工具脚本，部署到新的生产机器、Docker 沙箱或交给 Agent 执行时，频繁因为目标机缺少运行时、Python 虚拟环境未激活、Node 版本冲突或数万个 `node_modules` 文件难以传输而无法启动。
+* **调试日志污染导致大模型解析崩溃**：
+  在工具中随手写了一句 `console.log`，或者引用的第三方库在初始化时打印了一行版本提示，这些非 JSON 字符直接混入标准输出（`stdout`），导致大模型的 JSON 解析器直接报错、任务中断。
+* **不同使用场景下的重复封装**：
+  在本地 IDE 里调试需要写一套 MCP 适配层；部署到远程机器需要写一套 HTTP/REST 包装；交付给自主智能体又需要手写一套 SOP 提示词，同一份业务逻辑被迫维护三份代码。
 
-## 核心功能与能力概览
-
-| 组件 / 能力 | 对应模块 / 命令 | 解决的典型问题 | 文档入口 |
-| :--- | :--- | :--- | :--- |
-| **极简公共 SDK** | `@actiondock/sdk` | `defineAction` 强类型定义、`ActionContext` 上下文、`createTestRuntime` 内存测试运行时。 | [Action 编写](docs/action-authoring.md) · [Context 详解](docs/action-context.md) |
-| **核心执行引擎** | `@actiondock/core` | ActionRunner 执行器、5 级配置优先级回退、跨 Action 组合调用与循环依赖防御、超时与协作式取消。 | [架构设计](docs/design-security-mcp-execution.md) · [单测指南](docs/testing-guide.md) |
-| **持久化状态存储** | `bun:sqlite` / Storage | 基于 SQLite 的 Config 配置、跨调用持久化 State（支持 TTL 与命名空间）以及 Runs 执行历史与调用链。 | [存储与状态](docs/storage-and-state.md) |
-| **MCP 协议适配器** | `@actiondock/mcp` / `ac mcp` | 提供 STDIO 与 HTTP 双模 Transport，Action 与 Tool 零冗余映射，支持 MCP Tasks 异步长任务扩展。 | [MCP 指南](docs/mcp-integration.md) |
-| **独立构建与编译** | `Bun.build` / `ac build` | 一键编译为单文件独立二进制，支持全平台交叉编译（Linux / macOS / Windows）与 Tree-shaking 裁剪。 | [构建与编译](docs/build-and-export.md) |
-| **SOP 与 Skill 交付** | `ac export skill` / Playbooks | 编写领域 SOP 操作规程，一键导出包含 `SKILL.md` 与独立二进制的自包含 Skill 交付包。 | [Skill 规范](docs/skill-guide.md) · [Playbook 编写](docs/playbook-guide.md) |
-| **多云与多环境调度** | `ac serve` / `ac profile` | 在远程主机启动轻量 HTTP Runner，本地通过 Profile 无缝调度多云主机，支持异步长任务生命周期管理。 | [多环境调度](docs/remote-and-profiles.md) |
-| **CLI 门面工具** | `@actiondock/cli` (`ac`) | 极速短命令 `ac`，提供脚手架初始化、正则与模糊意图过滤、开发态缺失依赖毫秒级自动补齐。 | [CLI 参考手册](docs/cli-reference.md) |
+ActionDock 2.0 围绕 **“自包含独立编译、物理通道绝对隔离、双模全生态交付”** 重构了工具链的研发与分发流程。
 
 ---
 
-## 快速接入
+## 核心机制
 
-### 安装 CLI (`ac`)
+* **零依赖单文件独立编译**：基于 Bun 原生单文件编译引擎，将 TypeScript 源码与引用的 npm 依赖全量 Tree-shaking 并内联打包为单文件可执行文件（`ac build`）。目标机器无需安装 Node.js、Bun、Python 或任何运行环境，开箱即用。
+* **物理级标准输入输出隔离**：数据通道（`stdout`）严格只输出格式统一的机器 JSON Envelope；所有业务日志与调试诊断（`ctx.log`）强制输出至错误通道（`stderr`），从底层彻底杜绝大模型解析崩溃。
+* **双模生态无缝交付**：同一个 Action Package，既可以通过 `ac mcp` 作为 Model Context Protocol 服务端供桌面 IDE 毫秒级直连，也可以通过 `ac export skill` 一键导出包含领域 SOP 规程（Playbook）的自包含 Skill 交付包。
+* **纯内存毫秒级测试运行时**：提供 `createTestRuntime` 内存测试沙箱，无需启动 HTTP 服务，无需连接外部真实数据库，5 毫秒内完成配置覆盖、持久化状态验证与 Action 级联调用测试。
+* **内置轻量持久化与全链路取消**：内置基于 SQLite 的配置、状态（支持 TTL 与命名空间）与执行历史记录；全链路透传标准 Web `AbortSignal`，支持客户端协同中断与超时自动熔断。
+
+---
+
+## 快速上手
+
+### 安装命令行工具 (`ac`)
+
+通过 Bun 全局安装 ActionDock 命令行工具门面：
 
 ```bash
-# 全局安装（推荐，安装后可全局使用 ac 命令）
 bun install -g @actiondock/cli
-
-# 或从源码仓库注册软链接（框架贡献者）
-cd packages/cli && bun link
 ```
 
-### 5 分钟完整开发与交付流
+### 初始化与创建 Action
 
-#### 初始化新项目
+初始化一个标准 Action Package 脚手架：
+
 ```bash
-ac init my-tools --id team.my-tools --name "My Tools" --desc "自定义 Agent Action 集合"
-cd my-tools
+ac init github-tools --id team.github-tools --name "GitHub Tools"
+cd github-tools
 ```
 
-#### 创建并编写 Action
-使用 CLI 生成模板或直接编辑 `actions/greet.ts`：
+编辑 `actions/get-pr.ts`，使用 `@actiondock/sdk` 声明一个具备严格 JSON Schema 入参出参校验的 Action：
 
 ```ts
 import { defineAction } from "@actiondock/sdk";
 
-export interface GreetInput {
-  name: string;
-}
-
-export interface GreetOutput {
-  message: string;
-  count: number;
-}
-
-export default defineAction<GreetInput, GreetOutput>({
-  id: "sample.greet",
-  description: "向指定用户发送个性化问候语",
+export default defineAction({
+  id: "github.get-pr",
+  description: "获取指定 GitHub Pull Request 的详细信息",
 
   inputSchema: {
     type: "object",
     properties: {
-      name: { type: "string", description: "被问候者的名字" },
+      repo: { type: "string", description: "仓库全名 (例如 team4u/framework)" },
+      prNumber: { type: "number", description: "PR 编号" },
     },
-    required: ["name"],
+    required: ["repo", "prNumber"],
   },
 
   outputSchema: {
     type: "object",
     properties: {
-      message: { type: "string" },
-      count: { type: "number" },
+      id: { type: "number" },
+      title: { type: "string" },
+      state: { type: "string" },
     },
-    required: ["message", "count"],
+    required: ["id", "title", "state"],
   },
 
   async run(input, ctx) {
-    // 读取配置（5 级回退：CLI覆盖 > 项目DB > 全局DB > 环境变量 > 声明默认值）
-    const greeting = ctx.config.get("GREETING", "你好");
+    const token = ctx.config.get<string>("GITHUB_TOKEN");
+    ctx.log.info(`正在查询 PR #${input.prNumber}`);
 
-    // 读写持久化状态（跨执行保留，支持 TTL）
-    const count = ((await ctx.state.get<number>("greet_count")) || 0) + 1;
-    await ctx.state.set("greet_count", count);
+    const res = await fetch(`https://api.github.com/repos/${input.repo}/pulls/${input.prNumber}`, {
+      headers: {
+        Authorization: token ? `Bearer ${token}` : "",
+        "User-Agent": "ActionDock-Agent",
+      },
+      signal: ctx.signal,
+    });
 
-    // 打印结构化日志（走 stderr，不污染 stdout JSON）
-    ctx.log.info(`正在问候 ${input.name}（第 ${count} 次）`);
+    if (!res.ok) throw new Error(`GitHub API 报错: HTTP ${res.status}`);
+    const data = (await res.json()) as any;
 
     return {
-      message: `${greeting}，${input.name}！`,
-      count,
+      id: data.id,
+      title: data.title,
+      state: data.state,
     };
   },
 });
 ```
 
-#### 开发态运行与调试
+### 本地开发运行与调试
+
+使用 `ac run` 在本地直接运行 Action：
+
 ```bash
-ac action run sample.greet --input '{"name": "张三"}'
+ac run github.get-pr --input '{"repo": "team4u/framework", "prNumber": 101}'
 ```
 
-输出标准 JSON Envelope（stdout）：
+命令将在 `stdout` 输出纯净的标准 JSON Envelope，供大模型或脚本消费：
+
 ```json
 {
   "ok": true,
-  "runId": "01J...",
+  "runId": "01JXYZ...",
   "data": {
-    "message": "你好，张三！",
-    "count": 1
+    "id": 1024,
+    "title": "feat: upgrade to ActionDock 2.0",
+    "state": "open"
   }
 }
 ```
 
-#### 运行内存单元测试
-```bash
-ac test
+而在 `stderr` 中输出格式化诊断日志：
+
+```text
+[15:30:00] [INFO] [github.get-pr] 正在查询 PR #101
 ```
 
-#### 编译为独立二进制
+### 作为 MCP 服务直连 IDE
+
+无需编写任何额外适配层，直接启动当前包为 MCP 服务，供 Claude Code、Cursor、Windsurf 等客户端使用：
+
+```bash
+# 启动 STDIO 模式 MCP 服务
+ac mcp
+
+# 或启动 HTTP 模式 MCP 微服务（监听 5178 端口）
+ac mcp --port 5178 --token my-secret-token
+```
+
+### 编译为零依赖独立二进制
+
+执行 `ac build` 将整个 Action Package 编译为单个自包含可执行程序：
+
 ```bash
 ac build
 ```
-编译产物位于 `dist/bin/my-tools`。目标机器**无需安装任何运行时**，直接执行：
+
+编译产物位于 `dist/bin/github-tools`。将该单文件传输到任何目标机器，无需安装任何环境直接执行：
+
 ```bash
-./dist/bin/my-tools run sample.greet --input '{"name": "李四"}'
+./dist/bin/github-tools run github.get-pr --input '{"repo": "team4u/framework", "prNumber": 101}'
 ```
 
-#### 导出 Agent Skill 交付包
+### 导出自包含 Agent Skill 交付包
+
 ```bash
-# 默认导出源码型 Skill（轻量、跨平台，由 ac 运行时直接加载）
+# 导出源码型 Skill（轻量、跨平台）
 ac export skill
 
-# 或导出独立自包含二进制 Skill（零外部依赖，内置预编译二进制）
+# 或导出独立二进制型 Skill（零外部依赖，自带预编译二进制）
 ac export skill --standalone
-```
-导出的源码型 Skill 目录结构：
-```text
-dist/my-tools-skill/
-├── SKILL.md                  # 面向 AI Agent 的主调用指南（含 YAML Frontmatter 与 ac link 指引）
-├── actiondock.json          # Package 清单与运行时配置
-├── package.json             # 依赖声明（@actiondock/sdk）
-├── actions/                 # TypeScript Action 源码
-│   └── greet.ts
-└── playbooks/                # 任务 SOP 规程目录
-    └── greet-user.md
 ```
 
 ---
 
-## 仓库架构与包结构
+## 方案对比
 
-ActionDock 采用清晰的正交分层 Monorepo 架构：
+| 维度 | 传统脚本 / 自建 HTTP 封装 | ActionDock 2.0 |
+| :--- | :--- | :--- |
+| **目标机运行环境** | 必须预装 Node.js/Python、传输巨大 `node_modules` | **零依赖单文件二进制**，无需任何运行时 |
+| **输出通道纯净度** | 日志与数据混杂在标准输出，容易搞崩 LLM 解析 | **物理通道隔离**：数据走 `stdout`，日志走 `stderr` |
+| **协议生态对接** | 需手写 MCP STDIO/HTTP 协议转换与工具映射 | **原生内置 MCP**，直接映射 Action Schema |
+| **复杂操作规程** | 无法硬性约束智能体的操作顺序与高危红线 | **Playbook SOP** 结构化声明步骤与拦截规则 |
+| **测试验证效率** | 依赖真实系统环境或外部数据库，测试缓慢 | **纯内存测试运行时**，5 毫秒极速完成测试 |
+| **多环境统一契约** | 本地调试与远程部署的参数格式经常不一致 | **契约严格一致**：本地、远程、MCP 输出 100% 同构 |
+
+---
+
+## 模块分层与代码结构
+
+ActionDock 采用分层清晰的 Monorepo 结构：
 
 ```text
 actiondock/
 ├── packages/
 │   ├── sdk/          # @actiondock/sdk：极简公共 SDK（defineAction, ActionContext, createTestRuntime）
-│   ├── core/         # @actiondock/core：公共领域内核（Runtime, Storage, Schema, Build, Export, Standalone）
+│   ├── core/         # @actiondock/core：公共领域内核（Runner, Storage, Schema, Build, Export）
 │   ├── mcp/          # @actiondock/mcp：Model Context Protocol 适配器（STDIO / HTTP / Tasks 扩展）
 │   └── cli/          # @actiondock/cli：命令行门面工具链（ac）
 ├── examples/
 │   └── github-tools/ # 官方完整示例 Action Package
 ├── docs/             # 官方完整技术文档中心
-└── skills/           # 面向 AI Agent 的官方 Skill 规范
+└── skills/           # 面向 AI 助手的官方 Skill 规范
 ```
 
 ---
 
-## 导航与参考
+## 文档导航
 
-- **[官方文档中心](docs/README.md)**：包含各组件的架构设计、API 手册、协议规范与实战指南。
-- **[快速上手指南](docs/quick-start.md)**：从环境准备到首个 Action 导出的 5 分钟教程。
-- **[Action 编写指南](docs/action-authoring.md)**：强类型定义、Schema 校验、依赖管理与 Action 组合。
-- **[ActionContext 核心能力详解](docs/action-context.md)**：配置回退、持久化状态、日志隔离与 AbortSignal 取消链路。
-- **[Model Context Protocol 适配器](docs/mcp-integration.md)**：STDIO / HTTP 协议、Tool 映射与 MCP Tasks 扩展。
-- **[CLI 命令行参考手册](docs/cli-reference.md)**：全量命令、参数选项与 JSON 协议规范。
+- **[快速开始](docs/quick-start.md)**：从环境准备到首个 Action 导出的 5 分钟实战教程。
+- **[Action 编写与开发指南](docs/action-authoring.md)**：强类型定义、Schema 校验、依赖管理与 Action 组合。
+- **[ActionContext 核心能力详解](docs/action-context.md)**：5 级配置回退、持久化状态、日志隔离与 AbortSignal 取消链路。
+- **[测试与验证指南](docs/testing-guide.md)**：纯内存测试沙箱与独立编译契约测试。
+- **[Model Context Protocol 适配器指南](docs/mcp-integration.md)**：STDIO / HTTP 双模 Transport、Tool 映射与 MCP Tasks 异步长任务扩展。
+- **[Skill 设计哲学与交付规范](docs/skill-guide.md)**：源码型与独立便携型 Skill 交付规范。
+- **[Playbook SOP 编写规范](docs/playbook-guide.md)**：面向智能体的领域操作规程编写与语法校验。
+- **[存储与状态管理机制](docs/storage-and-state.md)**：基于 SQLite 的运行态配置、状态与执行历史模型。
+- **[多环境与远程云机器调度指南](docs/remote-and-profiles.md)**：Profile 命名配置与轻量 HTTP Runner（`ac serve`）。
+- **[CLI 命令行参考手册](docs/cli-reference.md)**：全量命令、参数选项与退出码速查。
 
 ---
 
 ## 验证与测试
 
 ```bash
-# 执行全量单元与集成测试（65 个测试用例）
+# 执行全量单元与集成测试（67 个测试用例全部通过）
 bun test
 
 # 执行全量 TypeScript 类型检查
