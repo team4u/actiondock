@@ -4,19 +4,19 @@ ActionDock 2.0 采用极简的嵌入式 SQLite 引擎（`bun:sqlite`）来管理
 
 ---
 
-## 1. 存储设计原则
+## 存储设计原则
 
-1. **仅存储运行态数据**：数据库中绝不存储代码、Action 定义或 Playbook 内容（代码和定义全部由文件系统 Filesystem 管理）。
-2. **轻量与自包含**：通过 Bun 原生内置的 `bun:sqlite` 访问，零外部数据库服务依赖，零网络开销，支持 WAL（Write-Ahead Logging）高并发并发模式。
-3. **环境隔离**：开发态与独立二进制态的数据存储位置天然物理隔离，互不干扰。
+* **仅存储运行态数据**：数据库中绝不存储代码、Action 定义或 Playbook 内容（代码和定义全部由文件系统 Filesystem 管理）。
+* **轻量与自包含**：通过 Bun 原生内置的 `bun:sqlite` 访问，零外部数据库服务依赖，零网络开销，支持 WAL（Write-Ahead Logging）高并发模式。
+* **环境隔离**：开发态与独立二进制态的数据存储位置天然物理隔离，互不干扰。
 
 ---
 
-## 2. 数据库物理表结构
+## 数据库物理表结构
 
 ActionDock 存储引擎管理 3 张标准表：
 
-### 2.1 `config`（运行时配置表）
+### 运行时配置表 (`config`)
 保存本地持久化的配置键值对。
 
 ```sql
@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS config (
 );
 ```
 
-### 2.2 `state`（持久化共享状态表）
+### 持久化共享状态表 (`state`)
 保存跨 Action 执行保留的业务持久化状态，支持命名空间隔离。
 
 ```sql
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS state (
 );
 ```
 
-### 2.3 `runs`（执行历史与调用链记录表）
+### 执行历史与调用链记录表 (`runs`)
 记录每次 Action 调用的执行详情与父子链路。
 
 ```sql
@@ -66,7 +66,7 @@ CREATE INDEX IF NOT EXISTS idx_runs_started ON runs(started_at DESC);
 
 ---
 
-## 3. 存储路径解析策略
+## 存储路径解析策略
 
 ActionDock 根据运行模式自动解析 SQLite 数据库文件的存放位置：
 
@@ -84,7 +84,7 @@ ActionDock 根据运行模式自动解析 SQLite 数据库文件的存放位置�
 
 ---
 
-## 4. 数据库版本迁移机制（PRAGMA user_version）
+## 数据库版本迁移机制
 
 ActionDock 使用 SQLite 内置的 `PRAGMA user_version` 管理数据库结构演进：
 * 每次连接数据库时，读取当前 `user_version`。

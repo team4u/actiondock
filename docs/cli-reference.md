@@ -4,12 +4,6 @@ ActionDock 命令行工具（`ac`）全量功能与参数参考。
 
 ---
 
-## 安装与获取方式
-
-安装与获取的完整说明（npm 安装、本地源码链接、Tarball 安装等）见[项目 README](../README.md#安装与使用方式)，此处不再重复。
-
----
-
 ## 交互设计原则
 
 * **`stdout`**：机器可读的标准结果输出（执行 Action 时输出标准 JSON Envelope；管理类命令在传入 `--json` 时输出纯净 JSON）。
@@ -21,7 +15,7 @@ ActionDock 命令行工具（`ac`）全量功能与参数参考。
 
 ## 命令清单
 
-### 1. 项目管理（Project）
+### 项目管理（Project）
 
 #### `ac init [directory]`
 在指定目录初始化一个标准的 ActionDock 脚手架项目。
@@ -35,7 +29,7 @@ ActionDock 命令行工具（`ac`）全量功能与参数参考。
 
 ---
 
-### 2. Action 管理与执行
+### Action 管理与执行
 
 #### `ac action create <id>`（别名：`new`）
 快速脚手架生成一个标准的 Action `.ts` 文件。
@@ -69,7 +63,7 @@ ActionDock 命令行工具（`ac`）全量功能与参数参考。
 
 ---
 
-### 3. Playbook SOP 指南管理
+### Playbook SOP 指南管理
 
 #### `ac playbook create <id>`（别名：`new`）
 快速生成一个新的 Playbook Markdown 文件模板。
@@ -89,7 +83,7 @@ ActionDock 命令行工具（`ac`）全量功能与参数参考。
 
 ---
 
-### 4. 运行时配置管理（Config）
+### 运行时配置管理（Config）
 
 * `ac config list [--json]`：列出本地 SQLite 中保存的所有配置项。
 * `ac config get <key> [--json]`：获取指定配置项的有效值与来源。
@@ -98,7 +92,7 @@ ActionDock 命令行工具（`ac`）全量功能与参数参考。
 
 ---
 
-### 5. 共享状态管理（Shared State）
+### 共享状态管理（Shared State）
 
 * `ac state list [prefix] [--json]`：列出当前项目本地状态数据库中的所有 Key（支持前缀过滤）。
 * `ac state get <key> [--json]`：获取指定 Key 的持久化状态值。
@@ -107,21 +101,21 @@ ActionDock 命令行工具（`ac`）全量功能与参数参考。
 
 ---
 
-### 6. 执行记录检查（Runs）
+### 执行记录检查（Runs）
 
 * `ac runs list [-a, --action <id>] [-n, --limit <count>] [--json]`：列出最近的 Action 执行历史（支持按 Action 过滤与分页限制）。
 * `ac runs show <run-id> [--json]`：查看单次 Run 的完整执行详情、耗时、入参、出参及错误堆栈。
 
 ---
 
-### 7. 单元测试（Test）
+### 单元测试（Test）
 
 #### `ac test [pattern]`
 使用 Bun 内置的高性能测试运行器执行项目中的单元测试（`tests/**/*.test.ts`）。
 
 ---
 
-### 8. 构建与 Skill 导出（Build & Export）
+### 构建与 Skill 导出（Build & Export）
 
 #### `ac build`
 将当前项目的全部 Action 编译打包为单个自包含的独立可执行文件（无外部 Node/Bun/Python 依赖）。

@@ -9,7 +9,7 @@ ActionDock 2.0 是一个面向 AI Agent Action 与 Skill 的开发工具链（CL
 
 ---
 
-## 0. CLI 安装与获取方式
+## CLI 安装与获取方式
 
 安装与获取方式（npm 安装、本地源码软链、Tarball 本地安装等）详见[仓库 README](../../README.md#安装与使用方式)，此处仅列最常用两条：
 
@@ -20,7 +20,7 @@ bun install -g @actiondock/cli   # npm 发布后：全局安装，即刻可用 a
 
 ---
 
-## 1. 项目管理
+## 项目管理
 
 ### 初始化新项目
 ```bash
@@ -35,7 +35,7 @@ ac info [--json]
 
 ---
 
-## 2. Action 创建与编写规范
+## Action 创建与编写规范
 
 ### 脚手架创建 Action
 ```bash
@@ -81,18 +81,18 @@ export default defineAction<Input, Output>({
   },
 
   async run(input, ctx) {
-    // 1. Config: 命令行覆盖 > 本地 SQLite > 默认配置
+    // Config: 命令行覆盖 > 本地 SQLite > 默认配置
     const token = ctx.config.get<string>("GITHUB_TOKEN");
     const api = ctx.config.get("GITHUB_API", "https://api.github.com");
 
-    // 2. State: 跨执行持久化 Key-Value 存储
+    // State: 跨执行持久化 Key-Value 存储
     const lastSync = await ctx.state.get<string>("last_sync");
     await ctx.state.set("last_sync", new Date().toISOString());
 
-    // 3. Logger: 输出至 stderr（绝不污染 stdout 的标准 JSON 输出）
+    // Logger: 输出至 stderr（绝不污染 stdout 的标准 JSON 输出）
     ctx.log.info(`正在获取 ${input.repo} 的 issues`);
 
-    // 4. Action 组合: 跨 Action 组合调用（具备自动循环调用检测与父子 Run 关联）
+    // Action 组合: 跨 Action 组合调用（具备自动循环调用检测与父子 Run 关联）
     // const detail = await ctx.actions.invoke(otherAction, { ... });
 
     return {
@@ -105,7 +105,7 @@ export default defineAction<Input, Output>({
 
 ---
 
-## 3. 开发、验证与运行
+## 开发、验证与运行
 
 ### 校验 Action 语法与 Schema
 ```bash
@@ -135,7 +135,7 @@ ac action run <id> --config GITHUB_TOKEN=secret_token
 
 ---
 
-## 4. Playbook 任务 SOP 指南
+## Playbook 任务 SOP 指南
 
 Playbook（`playbooks/*.md`）为 AI Agent 提供领域任务的逐步操作规程（SOP）：
 
@@ -153,7 +153,7 @@ ac playbook validate
 
 ---
 
-## 5. 运行时存储管理（Config & State）
+## 运行时存储管理（Config & State）
 
 ### 配置管理
 ```bash
@@ -179,7 +179,7 @@ ac runs show <run-id> [--json]
 
 ---
 
-## 6. 单元测试 Action
+## 单元测试 Action
 
 使用 `@actiondock/sdk` 提供的 `createTestRuntime` 内存测试运行时：
 
@@ -211,7 +211,7 @@ bun test
 
 ---
 
-## 7. 构建与 Skill 导出
+## 构建与 Skill 导出
 
 ### 构建独立可执行文件
 ```bash

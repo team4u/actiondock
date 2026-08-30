@@ -4,18 +4,18 @@
 
 ---
 
-## 1. 核心开发与快速入门
+## 核心开发与快速入门
 
 | 文档 | 简介 | 目标读者 |
 | :--- | :--- | :--- |
-| **[项目 README](../README.md)** | 项目介绍、安装方式与 5 分钟上手概览 | 所有人（入口） |
+| **[项目 README](../README.md)** | 项目介绍、安装方式与上手概览 | 所有人（入口） |
 | **[快速上手指南](quick-start.md)** | 从环境准备、脚手架、Action 编写、调试、编译到 Skill 导出全流程 | 新手与使用者 |
 | **[Action 编写与开发指南](action-authoring.md)** | `defineAction` 声明、TypeScript 接口、JSON Schema 校验与单测 | Action 编写者 |
 | **[ActionContext 核心能力详解](action-context.md)** | `ctx.config`、`ctx.state`、`ctx.actions` 与 `ctx.log` 深度剖析 | Action 编写者 |
 
 ---
 
-## 2. 规程、存储与分发机制
+## 规程、存储与分发机制
 
 | 文档 | 简介 | 目标读者 |
 | :--- | :--- | :--- |
@@ -26,7 +26,7 @@
 
 ---
 
-## 3. 工具参考、排错与演进
+## 工具参考、排错与演进
 
 | 文档 | 简介 | 目标读者 |
 | :--- | :--- | :--- |

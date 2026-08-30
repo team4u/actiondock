@@ -61,17 +61,17 @@ ${desc}
 使用 Skill 目录中自带的独立可执行文件 \`${binaryRelPath}\` 即可完成工具发现与调用。
 **该工具无需在系统预先安装任何依赖**（无需安装 Node.js、Bun、Python 或 Java）。
 
-### 1. 发现可用 Action 清单
+### 发现可用 Action 清单
 \`\`\`bash
 ${binaryRelPath} list --json
 \`\`\`
 
-### 2. 查看 Action 结构与入参 Schema
+### 查看 Action 结构与入参 Schema
 \`\`\`bash
 ${binaryRelPath} describe <action-id> --json
 \`\`\`
 
-### 3. 执行 Action
+### 执行 Action
 \`\`\`bash
 ${binaryRelPath} run <action-id> --input '{"param": "value"}'
 \`\`\`

@@ -4,7 +4,7 @@ ActionDock 2.0 是对 ActionDock 1.0 的彻底重构。本文档阐述 2.0 在�
 
 ---
 
-## 1. 核心理念与架构对比
+## 核心理念与架构对比
 
 | 维度 | ActionDock 1.0 (旧版) | ActionDock 2.0 (新版) |
 | :--- | :--- | :--- |
@@ -18,7 +18,7 @@ ActionDock 2.0 是对 ActionDock 1.0 的彻底重构。本文档阐述 2.0 在�
 
 ---
 
-## 2. 核心概念映射与对照
+## 核心概念映射与对照
 
 | 1.0 旧概念 | 2.0 新概念 | 变化说明 |
 | :--- | :--- | :--- |
@@ -31,9 +31,9 @@ ActionDock 2.0 是对 ActionDock 1.0 的彻底重构。本文档阐述 2.0 在�
 
 ---
 
-## 3. Action 代码迁移示例
+## Action 代码迁移示例
 
-### 1.0 旧版 Groovy 脚本
+### 旧版 Groovy 脚本 (1.0)
 ```groovy
 // 1.0 动态脚本
 def name = input.name ?: "world"
@@ -42,7 +42,7 @@ log.info("Greeting user ${name}")
 return [message: "${greeting}, ${name}!"]
 ```
 
-### 2.0 新版 TypeScript Action
+### 新版 TypeScript Action (2.0)
 ```ts
 import { defineAction } from "@actiondock/sdk";
 

@@ -4,7 +4,7 @@
 
 ---
 
-## 1. 环境准备
+## 环境准备
 
 ActionDock 2.0 基于 Bun 原生运行时与编译器构建。
 
@@ -26,14 +26,14 @@ bun --version
 
 ---
 
-## 2. 获取与安装 ActionDock CLI (`ac`)
+## 获取与安装 ActionDock CLI (`ac`)
 
-### 方式 A：全局安装（发布后）
+### 从 npm 仓库安装（发布后）
 ```bash
 bun install -g @actiondock/cli
 ```
 
-### 方式 B：从本地源码开发使用
+### 从本地源码开发使用
 克隆本仓库后，在 `packages/cli` 目录下注册软链接：
 ```bash
 cd packages/cli
@@ -47,7 +47,7 @@ ac --help
 
 ---
 
-## 3. 初始化首个 ActionDock 项目
+## 初始化首个 ActionDock 项目
 
 使用 `ac init` 初始化一个新的 Action Package：
 
@@ -72,7 +72,7 @@ github-tools/
 
 ---
 
-## 4. 编写您的首个 Action
+## 编写您的首个 Action
 
 在 `actions/` 目录下创建 `actions/get-user.ts`：
 
@@ -144,7 +144,7 @@ export default defineAction<GetUserInput, GetUserOutput>({
 
 ---
 
-## 5. 本地运行与调试 Action
+## 本地运行与调试 Action
 
 使用 `ac action run` 在开发态直接执行：
 
@@ -168,7 +168,7 @@ ac action run github.get-user --input '{"username": "torvalds"}'
 
 ---
 
-## 6. 运行单元测试
+## 运行单元测试
 
 使用 `ac test` 快速执行基于 `@actiondock/sdk` 的内存单元测试：
 
@@ -178,7 +178,7 @@ ac test
 
 ---
 
-## 7. 编译为独立二进制可执行文件
+## 编译为独立二进制可执行文件
 
 使用 `ac build` 将整个项目编译为零安装独立二进制：
 
@@ -195,7 +195,7 @@ ac build
 
 ---
 
-## 8. 导出面向 AI Agent 的 Skill 包
+## 导出面向 AI Agent 的 Skill 包
 
 使用 `ac export skill` 生成包含 `SKILL.md` 的完整交付包：
 

@@ -4,24 +4,24 @@ ActionDock 2.0 是面向 AI Agent Action 与 Skill 的现代开发、测试、�
 
 ---
 
-## 1. 核心设计理念
+## 核心设计理念
 
-### 1.1 零安装交付（Zero-Install Artifacts）
+### 零安装交付（Zero-Install Artifacts）
 在 2.0 之前，执行 Action 必须依赖中心化的服务器进程或安装特定的运行时环境。
 2.0 彻底打破这一限制：通过 `Bun.build({ compile: true })` 将 Action Package 直接编译为单个自包含的静态二进制可执行文件。终端 Agent 或用户机器上**无需安装 ActionDock、Bun、Node.js、Python 或 Java**。
 
-### 1.2 无守护进程（Zero-Daemon）与 CLI 优先
+### 无守护进程（Zero-Daemon）与 CLI 优先
 ActionDock 不再维护长期运行的 Background Server 或 Web Server 守护进程。所有的开发、测试、构建、执行均通过命令行工具（`ac`）按需触发。
 
-### 1.3 文件系统优先（Filesystem First）
+### 文件系统优先（Filesystem First）
 Action（`actions/*.ts`）、Playbook（`playbooks/*.md`）与项目定义（`actiondock.json`）均以普通文本文件为唯一事实来源，天然享受 Git 分支管理、代码评审、历史回溯与团队协作。
 
-### 1.4 轻量持久化与无 ORM
+### 轻量持久化与无 ORM
 ActionDock 仅使用 `bun:sqlite` 存储运行态数据（Config、State、Runs）。彻底废弃重量级 ORM 与复杂的数据库表映射，表结构严格控制在 3 张轻量表。
 
 ---
 
-## 2. 仓库分层架构（Clean Architecture）
+## 仓库分层架构（Clean Architecture）
 
 代码库分为清晰的三层解耦架构：
 
@@ -37,7 +37,7 @@ ActionDock 仅使用 `bun:sqlite` 存储运行态数据（Config、State、Runs�
                |  - defineAction, ActionContext 类型   |
                |  - createTestRuntime (内存测试环境)   |
                |  - 0 外部重依赖 (纯 TS Types & Helpers) |
-               +--------------------------------------+
+               +------------------+-------------------+
                                   ^
                                   | (实现接口契约)
                +------------------+-------------------+
@@ -70,7 +70,7 @@ ActionDock 仅使用 `bun:sqlite` 存储运行态数据（Config、State、Runs�
 
 ---
 
-## 3. 八大核心领域模型
+## 核心领域模型
 
 | 领域模型 | 职责与事实来源 |
 | :--- | :--- |
@@ -85,10 +85,10 @@ ActionDock 仅使用 `bun:sqlite` 存储运行态数据（Config、State、Runs�
 
 ---
 
-## 4. 独立编译契约（Standalone Contract）
+## 独立编译契约（Standalone Contract）
 
 ActionDock 2.0 保证**开发态执行**（`ac action run`）与**编译后独立二进制执行**（`./bin/my-pkg run`）具备 100% 的语义一致性：
 
-1. **输入与输出一致性**：均通过 JSON Schema 严格校验，stdout 均输出统一格式的标准 JSON Envelope。
-2. **ActionContext 语义一致性**：在独立二进制中，`ctx.config`、`ctx.state`、`ctx.actions` 与 `ctx.log` 具备完全相同的行为与优先级规则。
-3. **存储隔离与可配置**：独立二进制默认将数据隔离在 `~/.actiondock/data/<package-id>/runtime.db`，并支持通过全局参数 `--data-dir <path>` 重定向。
+* **输入与输出一致性**：均通过 JSON Schema 严格校验，stdout 均输出统一格式的标准 JSON Envelope。
+* **ActionContext 语义一致性**：在独立二进制中，`ctx.config`、`ctx.state`、`ctx.actions` 与 `ctx.log` 具备完全相同的行为与优先级规则。
+* **存储隔离与可配置**：独立二进制默认将数据隔离在 `~/.actiondock/data/<package-id>/runtime.db`，并支持通过全局参数 `--data-dir <path>` 重定向。

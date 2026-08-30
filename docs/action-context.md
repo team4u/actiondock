@@ -6,7 +6,7 @@
 
 ---
 
-## 1. `ctx.config`（配置访问）
+## 配置访问 (`ctx.config`)
 
 `ctx.config` 提供了读取运行时配置的能力，专为环境密钥（如 API Token、网关地址、超时阈值等）设计。
 
@@ -15,35 +15,35 @@
 当调用 `ctx.config.get(key, defaultValue)` 时，ActionDock 按以下顺序解析配置：
 
 ```text
-[1. 命令行临时覆盖 (--config KEY=val)]
+[命令行临时覆盖 (--config KEY=val)]
                  | (未提供则回退)
                  v
-[2. 本地持久化数据库存储 (ac config set KEY val)]
+[本地持久化数据库存储 (ac config set KEY val)]
                  | (未设置则回退)
                  v
-[3. actiondock.json 声明的默认值 ("config[key].default")]
+[actiondock.json 声明的默认值 ("config[key].default")]
                  | (未声明则回退)
                  v
-[4. 代码内提供的 defaultValue 或 undefined]
+[代码内提供的 defaultValue 或 undefined]
 ```
 
 ### API 规范与示例
 
 ```ts
-// 1. 获取配置字符串
+// 获取配置字符串
 const apiKey = ctx.config.get<string>("GITHUB_TOKEN");
 
-// 2. 提供回退默认值
+// 提供回退默认值
 const apiBase = ctx.config.get("API_BASE_URL", "https://api.github.com");
 
-// 3. 读取布尔值或数值
+// 读取布尔值或数值
 const timeoutMs = ctx.config.get<number>("TIMEOUT_MS", 5000);
 const debugMode = ctx.config.get<boolean>("DEBUG_MODE", false);
 ```
 
 ---
 
-## 2. `ctx.state`（持久化共享状态）
+## 持久化共享状态 (`ctx.state`)
 
 `ctx.state` 是一个基于 `bun:sqlite` 的 Key-Value 持久化存储，数据在 Action 多次调用之间跨进程保留。
 
@@ -56,10 +56,10 @@ const debugMode = ctx.config.get<boolean>("DEBUG_MODE", false);
 ### API 规范与示例
 
 ```ts
-// 1. 异步读取状态
+// 异步读取状态
 const lastCursor = await ctx.state.get<string>("last_synced_id");
 
-// 2. 异步写入状态（支持任意可 JSON 序列化的数据类型）
+// 异步写入状态（支持任意可 JSON 序列化的数据类型）
 await ctx.state.set("last_synced_id", "evt_987654");
 await ctx.state.set("checkpoint_data", {
   processedCount: 150,
@@ -67,13 +67,13 @@ await ctx.state.set("checkpoint_data", {
   updatedAt: new Date().toISOString(),
 });
 
-// 3. 删除指定状态
+// 删除指定状态
 await ctx.state.delete("checkpoint_data");
 
-// 4. 列出前缀匹配的键名
+// 列出前缀匹配的键名
 const allOrderKeys = await ctx.state.keys("order_");
 
-// 5. 命名空间隔离 (Scoped State Store)
+// 命名空间隔离 (Scoped State Store)
 const orderStore = ctx.state.scope("orders");
 await orderStore.set("ord_1001", { amount: 99.5, status: "PAID" });
 const order = await orderStore.get("ord_1001");
@@ -81,16 +81,16 @@ const order = await orderStore.get("ord_1001");
 
 ---
 
-## 3. `ctx.actions`（Action 间组合调用）
+## Action 间组合调用 (`ctx.actions`)
 
 ActionDock 原生支持将多个原子 Action 组合为高级复合 Action（Composite Action）。
 
 通过普通的 TypeScript `import` 语句导入其他 Action 定义，并通过 `ctx.actions.invoke(action, input)` 执行调用。
 
 ### 核心机制与安全保障
-1. **环境与存储上下文透传**：被调用的子 Action 自动共享当前的 Config、State 与 Storage 上下文。
-2. **执行链路追踪（Runs Cascade）**：在 SQLite 的 `runs` 记录表中，子 Action 的 Run 记录会自动通过 `parent_run_id` 关联至父 Action，便于链路回溯。
-3. **循环调用依赖防御（Cycle Detection）**：ActionDock 会在内存调用栈中追踪执行链。一旦检测到 `Action A -> Action B -> Action A` 形式的递归或循环依赖，立即中止并抛出 `RuntimeError("ACTION_CYCLE_DETECTED")`。
+* **环境与存储上下文透传**：被调用的子 Action 自动共享当前的 Config、State 与 Storage 上下文。
+* **执行链路追踪（Runs Cascade）**：在 SQLite 的 `runs` 记录表中，子 Action 的 Run 记录会自动通过 `parent_run_id` 关联至父 Action，便于链路回溯。
+* **循环调用依赖防御（Cycle Detection）**：ActionDock 会在内存调用栈中追踪执行链。一旦检测到 `Action A -> Action B -> Action A` 形式的递归或循环依赖，立即中止并抛出 `RuntimeError("ACTION_CYCLE_DETECTED")`。
 
 ### 代码示例
 
@@ -112,18 +112,18 @@ export default defineAction({
   },
 
   async run(input, ctx) {
-    // 1. 组合调用 getPrAction
+    // 组合调用 getPrAction
     ctx.log.info(`第一步：获取 PR #${input.prNumber} 详情`);
     const pr = await ctx.actions.invoke(getPrAction, {
       prNumber: input.prNumber,
     });
 
-    // 2. 本地评审逻辑
+    // 本地评审逻辑
     const reviewComment = pr.additions > 500
       ? "警告：本次 PR 变更行数较大，建议拆分。"
       : "评审通过：代码规模适中。";
 
-    // 3. 组合调用 commentPrAction
+    // 组合调用 commentPrAction
     ctx.log.info("第二步：发表评审意见");
     const commentRes = await ctx.actions.invoke(commentPrAction, {
       prNumber: input.prNumber,
@@ -141,7 +141,7 @@ export default defineAction({
 
 ---
 
-## 4. `ctx.log`（结构化日志输出）
+## 结构化日志输出 (`ctx.log`)
 
 `ctx.log` 提供了标准的日志输出接口。
 
@@ -153,16 +153,16 @@ AI Agent 和自动化程序依赖 `stdout` 解析 Action 执行输出的标准 J
 ### API 规范与示例
 
 ```ts
-// 1. 诊断信息 (DEBUG)
+// 诊断信息 (DEBUG)
 ctx.log.debug("内部变量详情", { rawPayload: data });
 
-// 2. 常规信息 (INFO)
+// 常规信息 (INFO)
 ctx.log.info(`成功连接远程服务: ${url}`);
 
-// 3. 警告信息 (WARN)
+// 警告信息 (WARN)
 ctx.log.warn("接口响应时间超过 3000ms，请注意延迟");
 
-// 4. 错误信息 (ERROR)
+// 错误信息 (ERROR)
 try {
   // ...
 } catch (err: any) {

@@ -21,7 +21,7 @@ ActionDock 2.0 是一个基于 **Bun + TypeScript** 的轻量级开发工具链�
 
 ## 安装与使用方式
 
-### 方式 1：从 npm 仓库安装（发布后 / 终端用户）
+### 从 npm 仓库安装（发布后 / 终端用户）
 
 ```bash
 # 全局安装（推荐，安装后可全局直接使用 ac 命令）
@@ -33,21 +33,21 @@ bun x @actiondock/cli init my-tools
 
 ---
 
-### 方式 2：从源码开发（框架贡献者 / 未发布阶段）
+### 从源码开发（框架贡献者 / 未发布阶段）
 
 ```bash
-# 1. 克隆代码仓库
+# 克隆代码仓库
 git clone git@github.com:team4u/actiondock.git
 cd actiondock
 
-# 2. 安装全部 workspace 依赖
+# 安装全部 workspace 依赖
 bun install
 
-# 3. 注册本地软链接到全局（修改源码实时生效）
+# 注册本地软链接到全局（修改源码实时生效）
 cd packages/cli
 bun link
 
-# 4. 验证安装：此时在系统任意位置均可直接使用 ac 命令
+# 验证安装：此时在系统任意位置均可直接使用 ac 命令
 ac --help
 ```
 
@@ -57,13 +57,13 @@ ac --help
 
 ## 快速上手
 
-### 1. 初始化新项目
+### 初始化新项目
 ```bash
 ac init my-tools
 cd my-tools
 ```
 
-### 2. 创建 Action
+### 创建 Action
 使用 CLI 命令快速生成 Action 模板：
 ```bash
 ac action create greet.user --desc "向用户发送自定义问候语"
@@ -113,7 +113,7 @@ export default defineAction({
 });
 ```
 
-### 3. 开发态运行与调试
+### 开发态运行与调试
 ```bash
 ac action run greet.user --input '{"name": "张三"}'
 ```
@@ -130,7 +130,7 @@ ac action run greet.user --input '{"name": "张三"}'
 }
 ```
 
-### 4. 构建独立可执行文件
+### 构建独立可执行文件
 ```bash
 ac build
 ```
@@ -147,7 +147,7 @@ ac build --target windows-x64    # Windows (x86-64)
 
 > **提示**：分平台构建时建议配合 `--out` 指定输出路径（如 `ac build --target linux-x64 --out dist/my-tools-linux-x64`），否则默认输出 `dist/my-tools` 会被后续构建覆盖。交叉编译适用于纯 TypeScript/JS 依赖；若 Action 引用了含原生二进制的 npm 包（如 `sharp`、`better-sqlite3`），请在对应平台的 CI 上构建。
 
-### 5. 导出自包含 Skill 交付包
+### 导出自包含 Skill 交付包
 ```bash
 ac export skill
 ```
