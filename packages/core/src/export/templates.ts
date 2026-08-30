@@ -77,7 +77,7 @@ ${desc}
 
 本技能为 **ActionDock 源码型 Package (Source Skill)**。AI Agent 可直接通过已安装的 ActionDock 命令行工具 (\`ac\`) 执行其中的 Action。
 
-### 1. 注册与链接 (Idempotent Setup)
+### 注册与链接 (Idempotent Setup)
 
 在初次调用或初始化时，将包含本 \`SKILL.md\` 的目录解析为 \`<skill_root>\` 并完成注册：
 
@@ -87,7 +87,7 @@ ac link "<skill_root>"
 
 > \`ac link\` 天然具备幂等性，同一 Package 多次执行会直接更新路径，可安全重复调用。
 
-### 2. 执行 Action (统一推荐 Package-Qualified ID)
+### 执行 Action (统一推荐 Package-Qualified ID)
 
 为避免多技能之间的 Action ID 命名冲突，建议统一使用带有 Package 前缀的完全限定 ID：
 

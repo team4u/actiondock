@@ -67,7 +67,7 @@ erDiagram
 
 ---
 
-## 1. 运行时配置表 (`config`)
+## 运行时配置表 (`config`)
 
 保存当前 Package 或全局环境下持久化设置的配置键值对。
 
@@ -83,7 +83,7 @@ CREATE TABLE IF NOT EXISTS config (
 
 ---
 
-## 2. 持久化共享状态表 (`state`)
+## 持久化共享状态表 (`state`)
 
 保存跨 Action 执行保留的业务持久化状态，支持命名空间隔离（Namespace）与生存时间（TTL / expires_at）。
 
@@ -108,7 +108,7 @@ CREATE INDEX IF NOT EXISTS idx_state_expires ON state(expires_at);
 
 ---
 
-## 3. 执行历史与调用链记录表 (`runs`)
+## 执行历史与调用链记录表 (`runs`)
 
 记录每次 Action 调用的执行详情、耗时、输入输出及级联关系。
 
@@ -155,22 +155,22 @@ ActionDock 根据运行模式自动解析 SQLite 数据库文件的存放位置�
 # 数据库版本迁移机制 (`PRAGMA user_version`)
 
 ActionDock 使用 SQLite 原生的 `PRAGMA user_version` 管理数据库结构演进：
-1. 每次打开数据库连接时，读取当前的 `user_version`。
-2. 若当前版本低于最新的 Schema 版本，系统按序执行增量 DDL 脚本。
-3. 迁移过程完全封装在单一事务中执行，若迁移失败自动回滚，确保本地数据文件绝不损坏。
+- 每次打开数据库连接时，读取当前的 `user_version`。
+- 若当前版本低于最新的 Schema 版本，系统按序执行增量 DDL 脚本。
+- 迁移过程完全封装在单一事务中执行，若迁移失败自动回滚，确保本地数据文件绝不损坏。
 
 ---
 
 # CLI 存储管理命令速查
 
 ```bash
-# 1. 状态管理 (State)
+# 状态管理 (State)
 ac state list [prefix] [-i "<regex>"]     # 列出状态 Key
 ac state get <key>                        # 查看状态值
 ac state set <key> <json-val> [--ttl 60]  # 写入带 TTL 的状态
 ac state delete <key>                     # 删除状态
 
-# 2. 执行历史管理 (Runs)
+# 执行历史管理 (Runs)
 ac runs list [--action <id>] [--limit 20] # 查看执行历史
 ac runs show <run-id>                     # 查看单次 Run 详情与错误堆栈
 ```

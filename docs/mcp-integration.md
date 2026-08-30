@@ -39,35 +39,35 @@ graph TD
     end
 ```
 
-1. **唯一执行核心**：MCP 不实现第二套 Runtime，所有 Tool 调用统一经由 `ActionRunner` 执行，完全享有入参出参 Ajv 严格校验、SQLite 执行记录与循环调用防御。
-2. **Schema 零重复定义**：直接基于 `@modelcontextprotocol/server` 的 `fromJsonSchema`，自动转换 Action 定义的 JSON Schema。
-3. **全链路取消穿透**：客户端发送的 `notifications/cancelled` 自动接入 Action 内部的 `ctx.signal`，实现跨协议响应式中断。
-4. **统一安全模型**：HTTP 模式下复用 Bearer Token 强制认证、Loopback 绑定安全默认值与 CORS 白名单策略。
+- **唯一执行核心**：MCP 不实现第二套 Runtime，所有 Tool 调用统一经由 `ActionRunner` 执行，完全享有入参出参 Ajv 严格校验、SQLite 执行记录与循环调用防御。
+- **Schema 零重复定义**：直接基于 `@modelcontextprotocol/server` 的 `fromJsonSchema`，自动转换 Action 定义的 JSON Schema。
+- **全链路取消穿透**：客户端发送的 `notifications/cancelled` 自动接入 Action 内部的 `ctx.signal`，实现跨协议响应式中断。
+- **统一安全模型**：HTTP 模式下复用 Bearer Token 强制认证、Loopback 绑定安全默认值与 CORS 白名单策略。
 
 ---
 
-# 1. STDIO 模式（本地 Agent / 桌面 IDE 直连）
+# STDIO 模式（本地 Agent / 桌面 IDE 直连）
 
 STDIO 模式是桌面端 AI 编程助手的首选模式。`ac mcp` 保证 `stdout` 仅输出符合协议的 JSON-RPC 消息，所有日志均写入 `stderr`。
 
 ### 启动命令与参数选项
 
 ```bash
-# 1. 启动当前项目目录所在 Package 的 MCP 服务
+# 启动当前项目目录所在 Package 的 MCP 服务
 ac mcp
 
-# 2. 多目录聚合：同时加载并暴露多个本地项目目录
+# 多目录聚合：同时加载并暴露多个本地项目目录
 ac mcp -d /path/to/github-tools -d /path/to/slack-tools
 ac mcp -d /path/to/github-tools,/path/to/slack-tools
 
-# 3. 多 Package 聚合：指定已 link 到全局注册表的 package ID
+# 多 Package 聚合：指定已 link 到全局注册表的 package ID
 ac mcp --package github-tools --package slack-tools
 ac mcp --package github-tools,slack-tools
 
-# 4. 全局注册表模式：聚合暴露全局 Registry 中所有已 link 的 Packages
+# 全局注册表模式：聚合暴露全局 Registry 中所有已 link 的 Packages
 ac mcp --all
 
-# 5. 配置单次 Tool 调用执行超时（如 30s）
+# 配置单次 Tool 调用执行超时（如 30s）
 ac mcp --timeout 30s
 ```
 
@@ -120,20 +120,20 @@ ac mcp --timeout 30s
 
 ---
 
-# 2. Streamable HTTP 模式（远程微服务部署）
+# Streamable HTTP 模式（远程微服务部署）
 
 HTTP 模式将 ActionDock MCP 作为独立微服务部署，提供标准 `/mcp` 端点与 `/health` 健康检查接口。
 
 ### 启动命令与生产配置
 
 ```bash
-# 1. 本地测试（默认监听 127.0.0.1:5178）
+# 本地测试（默认监听 127.0.0.1:5178）
 ac mcp serve --port 5178
 
-# 2. 多目录/多包聚合暴露
+# 多目录/多包聚合暴露
 ac mcp serve -d ./pkg-github -d ./pkg-slack --port 5178
 
-# 3. 生产环境公网暴露（强制要求 Token 鉴权）
+# 生产环境公网暴露（强制要求 Token 鉴权）
 export ACTIONDOCK_MCP_TOKEN="super-secret-token"
 ac mcp serve \
   --host 0.0.0.0 \
@@ -157,7 +157,7 @@ ac mcp serve \
 
 ---
 
-# 3. Tool 映射与防冲突机制
+# Tool 映射与防冲突机制
 
 ### 映射规范矩阵
 
@@ -205,7 +205,7 @@ ac mcp serve \
 
 ---
 
-# 4. 取消传播机制 (Cancellation)
+# 取消传播机制 (Cancellation)
 
 当 MCP 客户端发送取消通知时：
 
@@ -225,11 +225,11 @@ sequenceDiagram
 
 ---
 
-# 5. MCP Tasks 长任务扩展 (`io.modelcontextprotocol/tasks`)
+# MCP Tasks 长任务扩展 (`io.modelcontextprotocol/tasks`)
 
 ActionDock 原生支持官方 MCP Tasks 扩展，使 AI Agent 能够通过 MCP 协议调度与追踪异步长耗时工作流：
 
-### 1. 契约映射原则
+### 契约映射原则
 * **任务标识**：`MCP taskId` 完全等价于 ActionDock 全局 `runId`。
 * **状态映射**：
   - `running` $\rightarrow$ `working`
@@ -238,7 +238,7 @@ ActionDock 原生支持官方 MCP Tasks 扩展，使 AI Agent 能够通过 MCP �
   - `cancelled` $\rightarrow$ `cancelled`
 * **持久化保障**：统一存取自 SQLite `runs` 表，无需维护第二套 Task 存储。
 
-### 2. 异步 Tool 调用
+### 异步 Tool 调用
 在调用 `tools/call` 时传入 `execution: { mode: "async" }`，服务端立即返回 `taskId` 并在后台异步执行：
 ```json
 {
@@ -249,7 +249,7 @@ ActionDock 原生支持官方 MCP Tasks 扩展，使 AI Agent 能够通过 MCP �
 }
 ```
 
-### 3. Tasks 协议端点
+### Tasks 协议端点
 - **`tasks/get`** ：跨 Package 查询指定 Task 的执行进度、输入、输出或错误详情：
   ```json
   { "method": "tasks/get", "params": { "taskId": "01JXYZ..." } }
@@ -265,7 +265,7 @@ ActionDock 原生支持官方 MCP Tasks 扩展，使 AI Agent 能够通过 MCP �
 
 ---
 
-# 6. 调试与排错 (MCP Inspector)
+# 调试与排错 (MCP Inspector)
 
 推荐使用官方 MCP Inspector 进行本地可视化调试：
 

@@ -50,23 +50,23 @@ ActionDock 2.0 在执行 Action、解析配置、校验 Schema、编译构建或
 
 # 深度排障指引与修复方案
 
-## 1. `INPUT_VALIDATION_FAILED` 排查
+## `INPUT_VALIDATION_FAILED` 排查
 - **原因分析**：ActionDock 底层基于 `Ajv` 执行严格的 JSON Schema 校验。如果传入的 JSON 属性类型与 Schema 不匹配（例如 Schema 声明 `"type": "number"`，而传入了 `"123"` 字符串），Ajv 会直接拦截并返回详细的 `details` 错误路径。
 - **修复方案**：
-  1. 执行 `ac action show <actionId>` 查看完整的参数约束与必填字段。
-  2. 确保在传递数值、布尔值或对象时保持纯净 JSON 类型。
+  - 执行 `ac action show <actionId>` 查看完整的参数约束与必填字段。
+  - 确保在传递数值、布尔值或对象时保持纯净 JSON 类型。
 
 ---
 
-## 2. `ACTION_CYCLE_DETECTED` 排查
+## `ACTION_CYCLE_DETECTED` 排查
 - **原因分析**：当使用 `ctx.actions.invoke(childAction, input)` 组合调用其他 Action 时，ActionDock 会在内存执行栈中维护当前链路的所有 Action ID。如果链路上再次出现已在栈中的 Action ID，系统会立即触发循环依赖熔断。
 - **修复方案**：
-  1. 梳理依赖关系，确保依赖图为**有向无环图 (DAG)**。
-  2. 将公共逻辑提取为独立的通用工具函数或底层原子 Action。
+  - 梳理依赖关系，确保依赖图为**有向无环图 (DAG)**。
+  - 将公共逻辑提取为独立的通用工具函数或底层原子 Action。
 
 ---
 
-## 3. `ACTION_TIMEOUT` 与协作式取消排查
+## `ACTION_TIMEOUT` 与协作式取消排查
 - **原因分析**：ActionDock 的超时机制通过 `Promise.race` 配合 `AbortController` 驱动。如果 Action 内部的网络请求（如 `fetch`）未绑定 `ctx.signal`，或在循环中未调用 `ctx.signal.throwIfAborted()`，底层 I/O 可能仍持续占用系统资源。
 - **最佳实践修复**：
   ```ts
@@ -82,12 +82,12 @@ ActionDock 2.0 在执行 Action、解析配置、校验 Schema、编译构建或
 
 ---
 
-## 4. `UNAUTHORIZED` 远程鉴权失败排查
+## `UNAUTHORIZED` 远程鉴权失败排查
 - **原因分析**：`ac serve` 启用了 Bearer Token 验证，且禁用了不安全的 URL Query Token。
 - **排查步骤**：
-  1. 确认请求头中包含 `Authorization: Bearer <token>`。
-  2. 本地执行 `ac profile show <name> --reveal` 确认本地记录的 Token 与远端 `ac serve` 启动时配置的 Token 是否完全一致。
-  3. 若远端绑定了非 `127.0.0.1` 地址（如 `0.0.0.0`），确保启动时传入了有效 Token。
+  - 确认请求头中包含 `Authorization: Bearer <token>`。
+  - 本地执行 `ac profile show <name> --reveal` 确认本地记录的 Token 与远端 `ac serve` 启动时配置的 Token 是否完全一致。
+  - 若远端绑定了非 `127.0.0.1` 地址（如 `0.0.0.0`），确保启动时传入了有效 Token。
 
 ---
 

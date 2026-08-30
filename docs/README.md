@@ -14,7 +14,7 @@ ActionDock 2.0 是一套专为 AI Agent 研发与交付场景打造的轻量级�
 
 ## 组件与功能分类导航
 
-### 1. 核心开发与 SDK 规范
+### 核心开发与 SDK 规范
 
 提供极简强类型的 SDK，统一 Action 定义、上下文能力、输入输出校验与内存单元测试。
 
@@ -26,7 +26,7 @@ ActionDock 2.0 是一套专为 AI Agent 研发与交付场景打造的轻量级�
 
 ---
 
-### 2. 规程编排与 Skill 交付
+### 规程编排与 Skill 交付
 
 将原子 Action、标准 SOP 操作规程与独立二进制统一打包为面向 AI Agent 的最高级自包含交付物。
 
@@ -38,7 +38,7 @@ ActionDock 2.0 是一套专为 AI Agent 研发与交付场景打造的轻量级�
 
 ---
 
-### 3. 运行时架构与持久化存储
+### 运行时架构与持久化存储
 
 基于 `bun:sqlite` 的自包含存储模型与全链路执行生命周期管理。
 
@@ -49,7 +49,7 @@ ActionDock 2.0 是一套专为 AI Agent 研发与交付场景打造的轻量级�
 
 ---
 
-### 4. 协议适配与多环境调度
+### 协议适配与多环境调度
 
 支持 Model Context Protocol (MCP) 标准直连与多云异构环境调度。
 
@@ -61,7 +61,7 @@ ActionDock 2.0 是一套专为 AI Agent 研发与交付场景打造的轻量级�
 
 ---
 
-### 5. 工具参考、排错与演进
+### 工具参考、排错与演进
 
 全量 CLI 指令速查、结构化错误排查及版本演进指南。
 
@@ -76,19 +76,19 @@ ActionDock 2.0 是一套专为 AI Agent 研发与交付场景打造的轻量级�
 
 ## 快速接入流程
 
-### 1. 引入与安装
+### 引入与安装
 ```bash
 # 全局安装 ActionDock CLI
 bun install -g @actiondock/cli
 ```
 
-### 2. 初始化项目
+### 初始化项目
 ```bash
 ac init github-tools --id team4u.github-tools --name "GitHub Tools"
 cd github-tools
 ```
 
-### 3. 创建并编写 Action (`actions/get-pr.ts`)
+### 创建并编写 Action (`actions/get-pr.ts`)
 ```ts
 import { defineAction } from "@actiondock/sdk";
 
@@ -138,17 +138,17 @@ export default defineAction({
 });
 ```
 
-### 4. 开发调试与运行
+### 开发调试与运行
 ```bash
 ac run github.get-pr --input '{"prNumber": 101}'
 ```
 
-### 5. 编译为零外部依赖独立二进制
+### 编译为零外部依赖独立二进制
 ```bash
 ac build
 ```
 
-### 6. 一键导出自包含 Skill 交付包
+### 一键导出自包含 Skill 交付包
 ```bash
 ac export skill
 ```

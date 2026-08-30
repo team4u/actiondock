@@ -39,10 +39,10 @@ sequenceDiagram
 登录到远端云服务器，进入 Action Package 目录（或已通过 `ac link` 注册全局包的环境），启动极轻量的 HTTP Runner：
 
 ```bash
-# 1. 本地回环监听（默认 127.0.0.1:5177）
+# 本地回环监听（默认 127.0.0.1:5177）
 ac serve --port 5177 --token my-secret-token-12345
 
-# 2. 暴露给局域网或公网网卡（0.0.0.0 强制要求配置 Token，或传入 --allow-insecure-no-auth）
+# 暴露给局域网或公网网卡（0.0.0.0 强制要求配置 Token，或传入 --allow-insecure-no-auth）
 ac serve \
   --host 0.0.0.0 \
   --port 5177 \
@@ -72,14 +72,14 @@ ac serve \
 在本地机器上，使用 `ac profile add` 将远端云机器注册为命名 Profile。**推荐使用 `--token-env` 关联环境变量名**，避免明文持久化 Token：
 
 ```bash
-# 1. 推荐方式：通过环境变量注入 Token
+# 推荐方式：通过环境变量注入 Token
 export ACTIONDOCK_ALIYUN_PROD_TOKEN=my-secret-token-12345
 ac profile add aliyun-prod \
   --server http://114.115.116.117:5177 \
   --token-env ACTIONDOCK_ALIYUN_PROD_TOKEN \
   --desc "阿里云华东生产节点"
 
-# 2. 标准命名自动推导：
+# 标准命名自动推导：
 # 若 Profile 命名为 aws-test，ActionDock 会自动检索环境变量 ACTIONDOCK_AWS_TEST_TOKEN
 export ACTIONDOCK_AWS_TEST_TOKEN=aws-secret-xyz
 ac profile add aws-test \
@@ -115,17 +115,17 @@ ac profile test aliyun-prod
 
 ## 第四步：调度远端 Action 执行
 
-### 1. 单次执行时指定 `--profile`
+### 单次执行时指定 `--profile`
 ```bash
 ac run check-disk --profile aliyun-prod -i '{"mount": "/data"}'
 ```
 
-### 2. 检索远端机器上的可用 Action
+### 检索远端机器上的可用 Action
 ```bash
 ac action list --profile aliyun-prod -i "disk|log"
 ```
 
-### 3. 切换默认 Profile
+### 切换默认 Profile
 如果一段会话内都需要针对该云节点执行：
 ```bash
 ac profile use aliyun-prod
@@ -134,7 +134,7 @@ ac profile use aliyun-prod
 ac run clean-logs
 ```
 
-### 4. 切回本地直接执行
+### 切回本地直接执行
 ```bash
 ac profile use local
 ```
@@ -145,19 +145,19 @@ ac profile use local
 
 当发起 Action 执行或元数据查询时，目标主机的解析优先级由高到低依次为：
 
-1. **CLI 命令行显式参数**：`--server <url>` 与 `--token <token>`（最高优先级）
-2. **CLI 命令行显式参数**：`--profile <name>`
-3. **环境变量**：`ACTIONDOCK_SERVER_URL` 与 `ACTIONDOCK_TOKEN`
-4. **环境变量**：`ACTIONDOCK_PROFILE`
-5. **当前激活的 Profile**：`~/.actiondock/profiles.json` 中的 `currentProfile`
-6. **本地默认执行** （`local`）
+- **CLI 命令行显式参数**：`--server <url>` 与 `--token <token>`（最高优先级）
+- **CLI 命令行显式参数**：`--profile <name>`
+- **环境变量**：`ACTIONDOCK_SERVER_URL` 与 `ACTIONDOCK_TOKEN`
+- **环境变量**：`ACTIONDOCK_PROFILE`
+- **当前激活的 Profile**：`~/.actiondock/profiles.json` 中的 `currentProfile`
+- **本地默认执行** （`local`）
 
 ### Token 多级解析优先级
-1. CLI 显式参数 `--token <token>`
-2. Profile 显式声明的 `tokenEnv` 环境变量
-3. 命名推导环境变量 `ACTIONDOCK_<PROFILE>_TOKEN` 或 `<PROFILE>_TOKEN`
-4. Profile 中存储的 Token（兼容历史）
-5. 全局兜底环境变量 `ACTIONDOCK_TOKEN`
+- CLI 显式参数 `--token <token>`
+- Profile 显式声明的 `tokenEnv` 环境变量
+- 命名推导环境变量 `ACTIONDOCK_<PROFILE>_TOKEN` 或 `<PROFILE>_TOKEN`
+- Profile 中存储的 Token（兼容历史）
+- 全局兜底环境变量 `ACTIONDOCK_TOKEN`
 
 ---
 
@@ -165,7 +165,7 @@ ac profile use local
 
 针对执行耗时较长的后台操作（如大数据量同步、集群批量巡检），ActionDock 支持标准异步长任务模式：
 
-### 1. 提交异步任务 (`--async`)
+### 提交异步任务 (`--async`)
 ```bash
 ac run sync-database --profile aliyun-prod --async -i '{"database": "analytics"}'
 ```
@@ -182,12 +182,12 @@ ac run sync-database --profile aliyun-prod --async -i '{"database": "analytics"}
 > [!IMPORTANT]
 > **生命周期原则**：本地单次执行（`ac run` 未指定常驻 server）属于短进程。为防止后台异步任务随 CLI 退出被系统强杀，CLI 会明确拦截并提示使用 `--server`、`--profile` 或启动 `ac serve`。
 
-### 2. 查询远端执行详情 (`ac runs show`)
+### 查询远端执行详情 (`ac runs show`)
 ```bash
 ac runs show 01JXYZ... --profile aliyun-prod [--json]
 ```
 
-### 3. 取消正在运行中的任务 (`ac runs cancel`)
+### 取消正在运行中的任务 (`ac runs cancel`)
 ```bash
 ac runs cancel 01JXYZ... --profile aliyun-prod --reason "手动终止"
 ```

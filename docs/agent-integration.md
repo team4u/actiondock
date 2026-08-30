@@ -46,7 +46,7 @@ graph TD
 
 若您的 Agent 宿主原生支持 MCP 协议，推荐使用 MCP 直连：
 
-### 1. Claude Code 直连配置 (`~/.claude/mcp.json`)
+### Claude Code 直连配置 (`~/.claude/mcp.json`)
 ```json
 {
   "mcpServers": {
@@ -65,7 +65,7 @@ graph TD
 }
 ```
 
-### 2. Cursor / Windsurf 直连配置 (`settings.json`)
+### Cursor / Windsurf 直连配置 (`settings.json`)
 ```json
 {
   "mcpServers": {
@@ -77,7 +77,7 @@ graph TD
 }
 ```
 
-### 3. 远程 HTTP 微服务接入
+### 远程 HTTP 微服务接入
 在远程服务器启动 `ac mcp serve` 后，客户端直接配置 HTTP 端点：
 ```bash
 ac mcp serve --host 0.0.0.0 --port 5178 --token <secret-token>
@@ -97,7 +97,7 @@ dist/github-tools-skill/
     └── github-tools          # 独立自包含二进制（零外部依赖）
 ```
 
-### 1. 接入 Google Antigravity / AGY
+### 接入 Google Antigravity / AGY
 将导出的 Skill 目录放置在用户或工作区的技能目录下：
 - 全局路径：`~/.gemini/antigravity-cli/custom/skills/github-tools/`
 - 项目路径：`<项目根目录>/.gemini/skills/github-tools/`
@@ -106,7 +106,7 @@ Antigravity 会自动扫描 `SKILL.md` 的 YAML Frontmatter，在规划任务时
 
 ---
 
-### 2. 接入 Claude Code Skills 目录
+### 接入 Claude Code Skills 目录
 ```bash
 # 将导出的 Skill 复制到 Claude Code 技能库
 cp -r dist/github-tools-skill ~/.claude/skills/github-tools
@@ -115,7 +115,7 @@ Claude Code 会在处理相关提示词时自动阅读 `SKILL.md` 并直接运�
 
 ---
 
-### 3. 接入 Cursor / Windsurf (通过 `.cursorrules` / System Prompt)
+### 接入 Cursor / Windsurf (通过 `.cursorrules` / System Prompt)
 在项目根目录的 `.cursorrules` 或 Agent 系统提示词中引入：
 
 ```markdown
@@ -130,7 +130,7 @@ Claude Code 会在处理相关提示词时自动阅读 `SKILL.md` 并直接运�
 
 ---
 
-### 4. 接入自定义 Python / LangChain / AutoGen Agent
+### 接入自定义 Python / LangChain / AutoGen Agent
 在 Python Agent 中直接通过子进程调用独立二进制，并解析标准 JSON Envelope：
 
 ```python
@@ -168,10 +168,10 @@ print("GitHub 用户信息:", data["name"])
 
 # 为什么 ActionDock 交付模式最适合 AI Agent？
 
-1. **双模自由切换（Dual-Mode Delivery）**：既可在本地 IDE 中通过 MCP 协议低延迟直连，也可编译为自包含二进制跨服务器直接分发。
-2. **零安装负担（Zero-Install Guarantee）**：独立二进制模式下无需在宿主机上预装 Node.js、Bun 或 Python，杜绝依赖冲突。
-3. **输出绝对纯净（Clean Stdio Separation）**：所有数据严格输出至 `stdout`，日志输出至 `stderr`，Agent 不会因控制台杂乱输出而发生 JSON 解析崩溃。
-4. **内置 SOP 约束（Playbook Driven）**：除了函数接口外附带业务操作 SOP，大幅降低 Agent 产生幻觉或执行高危操作的风险。
+- **双模自由切换（Dual-Mode Delivery）**：既可在本地 IDE 中通过 MCP 协议低延迟直连，也可编译为自包含二进制跨服务器直接分发。
+- **零安装负担（Zero-Install Guarantee）**：独立二进制模式下无需在宿主机上预装 Node.js、Bun 或 Python，杜绝依赖冲突。
+- **输出绝对纯净（Clean Stdio Separation）**：所有数据严格输出至 `stdout`，日志输出至 `stderr`，Agent 不会因控制台杂乱输出而发生 JSON 解析崩溃。
+- **内置 SOP 约束（Playbook Driven）**：除了函数接口外附带业务操作 SOP，大幅降低 Agent 产生幻觉或执行高危操作的风险。
 
 ---
 

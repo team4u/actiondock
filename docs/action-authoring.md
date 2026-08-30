@@ -50,7 +50,7 @@ export interface ActionDefinition<TInput = any, TOutput = any> {
 
 # 编写 Action 规范指南
 
-## 1. 创建 Action 模板
+## 创建 Action 模板
 
 ### 方式 A：通过 CLI 快速创建（推荐）
 ```bash
@@ -64,7 +64,7 @@ ac action create github.list-prs --desc "获取 GitHub 仓库的 Pull Requests �
 ```ts
 import { defineAction } from "@actiondock/sdk";
 
-// 1. 声明 TypeScript 泛型接口
+// 声明 TypeScript 泛型接口
 export interface ListPrsInput {
   repo: string;
   state?: "open" | "closed" | "all";
@@ -85,12 +85,12 @@ export interface ListPrsOutput {
   fetchedAt: string;
 }
 
-// 2. 声明 Action 定义
+// 声明 Action 定义
 export default defineAction<ListPrsInput, ListPrsOutput>({
   id: "github.list-prs",
   description: "获取指定 GitHub 仓库的 Pull Request 列表",
 
-  // 3. 入参 JSON Schema（Ajv 校验 + LLM 工具理解）
+  // 入参 JSON Schema（Ajv 校验 + LLM 工具理解）
   inputSchema: {
     type: "object",
     properties: {
@@ -113,7 +113,7 @@ export default defineAction<ListPrsInput, ListPrsOutput>({
     required: ["repo"],
   },
 
-  // 4. 出参 JSON Schema（保证调用方契约可靠）
+  // 出参 JSON Schema（保证调用方契约可靠）
   outputSchema: {
     type: "object",
     properties: {
@@ -137,7 +137,7 @@ export default defineAction<ListPrsInput, ListPrsOutput>({
     required: ["items", "total", "fetchedAt"],
   },
 
-  // 5. 核心业务执行函数
+  // 核心业务执行函数
   async run(input, ctx) {
     const token = ctx.config.get<string>("GITHUB_TOKEN");
     const state = input.state || "open";
@@ -187,7 +187,7 @@ export default defineAction<ListPrsInput, ListPrsOutput>({
 
 ---
 
-## 2. 命名与目录规范
+## 命名与目录规范
 
 - **文件位置**：所有 Action 源码放置于项目的 `actions/` 目录下。支持扁平存放（如 `actions/list-prs.ts`）或子目录模块化存放（如 `actions/github/list-prs.ts`）。
 - **Action ID 命名**：推荐采用 `包名.动作名` 或 `业务域.动宾结构`（如 `github.list-prs`、`k8s.apply-deployment`、`db.query-table`）。
@@ -195,7 +195,7 @@ export default defineAction<ListPrsInput, ListPrsOutput>({
 
 ---
 
-## 3. 标准 Web API 与 npm 依赖管理
+## 标准 Web API 与 npm 依赖管理
 
 ### 原生使用标准 Web API
 ActionDock 运行在现代化引擎之上，推荐优先使用标准 Web API：
@@ -225,12 +225,12 @@ export default defineAction({
 
 > [!NOTE]
 > **依赖的双阶段处理**：
-> 1. **开发态（`ac run`） **：ActionDock 会自动检测缺失的 npm 依赖，在后台**自动探测包管理器（支持 `bun` / `pnpm` / `yarn` / `npm` 自动降级适配）补齐依赖**并继续执行，安装日志输出至 `stderr`，确保 `stdout` 纯净。同时完全兼容开发者手动使用常规 `npm install`。
-> 2. **构建态（`ac build`） **：Bun 编译器会自动对所有第三方 npm 依赖进行 Tree-shaking 并**全量内联打包进单文件二进制**。分发后的独立可执行文件完全无需安装 `node_modules`。
+> - **开发态（`ac run`） **：ActionDock 会自动检测缺失的 npm 依赖，在后台**自动探测包管理器（支持 `bun` / `pnpm` / `yarn` / `npm` 自动降级适配）补齐依赖**并继续执行，安装日志输出至 `stderr`，确保 `stdout` 纯净。同时完全兼容开发者手动使用常规 `npm install`。
+> - **构建态（`ac build`） **：Bun 编译器会自动对所有第三方 npm 依赖进行 Tree-shaking 并**全量内联打包进单文件二进制**。分发后的独立可执行文件完全无需安装 `node_modules`。
 
 ---
 
-## 4. 跨 Action 组合调用 (Composite Actions)
+## 跨 Action 组合调用 (Composite Actions)
 
 ActionDock 原生支持将多个细粒度的原子 Action 编排组合为复合 Action。
 
@@ -265,19 +265,19 @@ export default defineAction({
   },
 
   async run(input, ctx) {
-    // 1. 组合调用子 Action: 获取 PR 详情
+    // 组合调用子 Action: 获取 PR 详情
     ctx.log.info(`[Step 1] 获取 PR #${input.prNumber} 详情`);
     const pr = await ctx.actions.invoke(getPrAction, {
       repo: input.repo,
       prNumber: input.prNumber,
     });
 
-    // 2. 业务分析逻辑
+    // 业务分析逻辑
     const verdict = pr.title.startsWith("feat")
       ? "特性 PR：评审通过，请补充相关单元测试。"
       : "常规 PR：评审通过。";
 
-    // 3. 组合调用子 Action: 发表评论
+    // 组合调用子 Action: 发表评论
     ctx.log.info(`[Step 2] 发表评审结论`);
     const commentRes = await ctx.actions.invoke(commentPrAction, {
       repo: input.repo,
@@ -296,28 +296,28 @@ export default defineAction({
 
 ### 组合调用核心保障机制
 
-1. **上下文透明继承**：子 Action 自动共享当前的 Config、State 与 Storage 存储上下文。
-2. **全链路取消穿透**：父 Action 的 `ctx.signal` 自动向下传递给子 Action，父级取消时子级立即同步中断。
-3. **调用链追踪（Runs Cascade）**：在 SQLite 的 `runs` 记录表中，子 Action 的 Run 记录会自动设置 `parent_run_id` 关联父级。
-4. **循环依赖与死递归防御（Cycle Detection）**：底层调用栈会自动追踪执行链。一旦检测到 `A -> B -> A` 的循环调用，立即终止并抛出 `ACTION_CYCLE_DETECTED` 错误。
+- **上下文透明继承**：子 Action 自动共享当前的 Config、State 与 Storage 存储上下文。
+- **全链路取消穿透**：父 Action 的 `ctx.signal` 自动向下传递给子 Action，父级取消时子级立即同步中断。
+- **调用链追踪（Runs Cascade）**：在 SQLite 的 `runs` 记录表中，子 Action 的 Run 记录会自动设置 `parent_run_id` 关联父级。
+- **循环依赖与死递归防御（Cycle Detection）**：底层调用栈会自动追踪执行链。一旦检测到 `A -> B -> A` 的循环调用，立即终止并抛出 `ACTION_CYCLE_DETECTED` 错误。
 
 ---
 
-## 5. 响应式取消与超时处理 (`ctx.signal`)
+## 响应式取消与超时处理 (`ctx.signal`)
 
 ActionDock 为每个 Action 注入了标准的 Web API `AbortSignal`（`ctx.signal`）。
 
 ### 最佳实践规则
 
-1. **网络请求透传**：始终将 `ctx.signal` 传给 `fetch(url, { signal: ctx.signal })`。
-2. **批处理循环检查**：在耗时较长的数据处理循环中，调用 `ctx.signal.throwIfAborted()` 主动检测并退出：
+- **网络请求透传**：始终将 `ctx.signal` 传给 `fetch(url, { signal: ctx.signal })`。
+- **批处理循环检查**：在耗时较长的数据处理循环中，调用 `ctx.signal.throwIfAborted()` 主动检测并退出：
    ```ts
    for (const item of largeDataset) {
      ctx.signal.throwIfAborted(); // 若外部已中断或超时，立即抛出 AbortError
      await processItem(item);
    }
    ```
-3. **资源释放监听**：监听 `abort` 事件清理临时文件或连接：
+- **资源释放监听**：监听 `abort` 事件清理临时文件或连接：
    ```ts
    ctx.signal.addEventListener("abort", () => {
      ctx.log.warn("任务收到终止信号，正在清理临时资源...");
@@ -326,14 +326,14 @@ ActionDock 为每个 Action 注入了标准的 Web API `AbortSignal`（`ctx.sign
 
 ---
 
-## 6. Action 编写设计底线
+## Action 编写设计底线
 
 > [!IMPORTANT]
 > **开发 Action 时必须严格遵守的 4 条底线**：
-> 1. **严禁直接向 `stdout` 输出非 JSON 数据**：绝对不要在 Action 代码中使用 `console.log()`；所有调试与业务日志一律使用 `ctx.log.info()` / `ctx.log.debug()`（强制写入 `stderr`）。
-> 2. **必须声明严格的 `inputSchema` 与 `outputSchema`**：明确定义字段类型、描述与必填项（`required`），严禁使用 `{}` 空 Schema。
-> 3. **保持幂等性设计（Idempotence）**：Action 可能被 AI Agent 重试调用，建议在业务上利用 `ctx.state` 检查幂等键或状态游标。
-> 4. **零隐式状态假定**：不要在模块全局变量中保存持久状态；跨执行保留的数据必须使用 `ctx.state`。
+> - **严禁直接向 `stdout` 输出非 JSON 数据**：绝对不要在 Action 代码中使用 `console.log()`；所有调试与业务日志一律使用 `ctx.log.info()` / `ctx.log.debug()`（强制写入 `stderr`）。
+> - **必须声明严格的 `inputSchema` 与 `outputSchema`**：明确定义字段类型、描述与必填项（`required`），严禁使用 `{}` 空 Schema。
+> - **保持幂等性设计（Idempotence）**：Action 可能被 AI Agent 重试调用，建议在业务上利用 `ctx.state` 检查幂等键或状态游标。
+> - **零隐式状态假定**：不要在模块全局变量中保存持久状态；跨执行保留的数据必须使用 `ctx.state`。
 
 ---
 

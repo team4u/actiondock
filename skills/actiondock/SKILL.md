@@ -9,7 +9,7 @@ ActionDock 2.0 是面向 AI Agent Action 与 Skill 的开发工具链（CLI 门�
 
 ---
 
-## 1. CLI 安装与环境初始化
+## CLI 安装与环境初始化
 
 ### 安装方式
 ```bash
@@ -40,7 +40,7 @@ ac unlink [id|path]     # 从全局注册表中移除
 
 ---
 
-## 2. Action 创建与编写规范
+## Action 创建与编写规范
 
 ### 脚手架创建 Action
 ```bash
@@ -86,21 +86,21 @@ export default defineAction<Input, Output>({
   },
 
   async run(input, ctx) {
-    // 1. Config: 命令行覆盖 > 本地 SQLite > 环境变量 > 默认配置
+    // Config: 命令行覆盖 > 本地 SQLite > 环境变量 > 默认配置
     const token = ctx.config.get<string>("GITHUB_TOKEN");
     const api = ctx.config.get("GITHUB_API", "https://api.github.com");
 
-    // 2. State: 跨执行持久化 Key-Value 存储（支持指定 TTL 秒数与命名空间）
+    // State: 跨执行持久化 Key-Value 存储（支持指定 TTL 秒数与命名空间）
     const lastSync = await ctx.state.get<string>("last_sync");
     await ctx.state.set("last_sync", new Date().toISOString(), 3600); // 1 小时后过期
 
-    // 3. Logger: 输出至 stderr（绝不污染 stdout 的标准 JSON 输出）
+    // Logger: 输出至 stderr（绝不污染 stdout 的标准 JSON 输出）
     ctx.log.info(`正在获取 ${input.repo} 的 issues`);
 
-    // 4. Signal: 标准 AbortSignal 取消信号（支持外部 Ctrl+C、超时及 MCP 客户端取消）
+    // Signal: 标准 AbortSignal 取消信号（支持外部 Ctrl+C、超时及 MCP 客户端取消）
     // const res = await fetch(api, { signal: ctx.signal });
 
-    // 5. Action 组合: 跨 Action 组合调用（具备自动循环依赖检测、取消信号向下传播与父子 Run 级联）
+    // Action 组合: 跨 Action 组合调用（具备自动循环依赖检测、取消信号向下传播与父子 Run 级联）
     // const detail = await ctx.actions.invoke(otherAction, { ... });
 
     return {
@@ -113,7 +113,7 @@ export default defineAction<Input, Output>({
 
 ---
 
-## 3. 开发、验证与运行
+## 开发、验证与运行
 
 ### 发现与模糊意图检索 Action 清单
 ```bash
@@ -162,9 +162,9 @@ ac action run <id> -i '{"repo": "owner/repo"}' --timeout 1m
 
 ---
 
-## 4. 多环境与远程云机器调度 (Profiles & Serve)
+## 多环境与远程云机器调度 (Profiles & Serve)
 
-### 1. 远端云机器启动 HTTP Runner
+### 远端云机器启动 HTTP Runner
 ```bash
 # 本地监听（默认安全绑定 127.0.0.1:5177）
 ac serve [--port 5177] [--token <secret-token>]
@@ -173,7 +173,7 @@ ac serve [--port 5177] [--token <secret-token>]
 ac serve --host 0.0.0.0 --token <secret-token> [--cors-origin <origin>] [--max-body 1mb]
 ```
 
-### 2. 本地管理 Profile
+### 本地管理 Profile
 ```bash
 # 添加云节点（推荐使用 --token-env 指定环境变量名，避免明文持久化）
 export ACTIONDOCK_ALIYUN_PROD_TOKEN=secret123
@@ -193,7 +193,7 @@ ac profile show [name] [--reveal] [--json]
 ac profile rm <name>
 ```
 
-### 3. 异步长任务调度 (Async Execution)
+### 异步长任务调度 (Async Execution)
 ```bash
 # 提交远端异步长任务，立即返回 202 Accepted 与 runId
 ac run sync-database --profile aliyun-prod --async -i '{"database": "analytics"}'
@@ -205,11 +205,11 @@ ac runs cancel <run-id> [--server http://127.0.0.1:5177 | --profile aliyun-prod]
 
 ---
 
-## 5. Model Context Protocol (MCP) 服务
+## Model Context Protocol (MCP) 服务
 
 ActionDock 2.0 原生支持作为 MCP 服务端运行，将项目中定义的所有 Action 自动暴露为标准 MCP Tools：
 
-### 1. STDIO 模式（本地 Agent / 桌面 IDE 直连）
+### STDIO 模式（本地 Agent / 桌面 IDE 直连）
 ```bash
 ac mcp                                      # 默认启动当前目录 package 的 MCP STDIO 服务
 ac mcp -d ./pkg-github -d ./pkg-slack       # 同时加载并暴露多个本地目录的 Action Packages
@@ -218,7 +218,7 @@ ac mcp --all                                # 自动聚合全局 Registry 中所
 ac mcp --timeout 30s                        # 限制单次 Tool 调用超时
 ```
 
-### 2. HTTP 模式（远程微服务 / Streamable HTTP）
+### HTTP 模式（远程微服务 / Streamable HTTP）
 ```bash
 # 启动 MCP HTTP 服务（默认监听 127.0.0.1:5178，端点为 /mcp）
 ac mcp serve --port 5178
@@ -227,13 +227,13 @@ ac mcp serve --port 5178
 ac mcp serve --host 0.0.0.0 --port 5178 --token <secret-token>
 ```
 
-### 3. MCP Tasks 长任务扩展 (`io.modelcontextprotocol/tasks`)
+### MCP Tasks 长任务扩展 (`io.modelcontextprotocol/tasks`)
 - 异步调用：`tools/call` 传入 `execution: { mode: "async" }`，立即返回 `taskId`（等价于全局 `runId`）。
 - 状态查询与取消：支持 `tasks/get`、`tasks/cancel`（直通底层 `ctx.signal`）与 `tasks/list`。
 
 ---
 
-## 6. Playbook 任务 SOP 规程
+## Playbook 任务 SOP 规程
 
 Playbook（`playbooks/*.md`）为 AI Agent 提供领域任务的标准操作规程：
 
@@ -246,7 +246,7 @@ ac playbook validate
 
 ---
 
-## 7. 运行时存储管理 (Config & State)
+## 运行时存储管理 (Config & State)
 
 ### 配置管理 (`ctx.config`)
 ```bash
@@ -274,7 +274,7 @@ ac runs cancel <run-id> --profile <profile-name> [--json]     # 取消远端运�
 
 ---
 
-## 8. 单元测试 Action
+## 单元测试 Action
 
 使用 `@actiondock/sdk` 提供的 `createTestRuntime` 内存测试运行时：
 
@@ -306,9 +306,9 @@ ac test
 
 ---
 
-## 9. 构建与 Skill 导出
+## 构建与 Skill 导出
 
-### 1. 构建独立可执行文件 (`ac build`)
+### 构建独立可执行文件 (`ac build`)
 ```bash
 # 全量构建：打包项目中全部 Action 为独立二进制（默认集成 --compile --bytecode --minify）
 ac build [--target <target>] [--out <path>] [--no-minify] [--no-bytecode]
@@ -317,7 +317,7 @@ ac build [--target <target>] [--out <path>] [--no-minify] [--no-bytecode]
 ac build --actions github.get-pr github.review-pr
 ```
 
-### 2. 导出 Skill 交付包 (`ac export skill`)
+### 导出 Skill 交付包 (`ac export skill`)
 
 ActionDock 提供清晰的两种分发形态：
 
@@ -360,25 +360,25 @@ dist/<package>-skill/
 
 ---
 
-## 10. Agent 接入与使用约定
+## Agent 接入与使用约定
 
 ### AI Agent 调用 Source Skill 流程规范：
-1. **解析 Skill 根目录**：将 `SKILL.md` 所在目录解析为 `<skill_root>`。
-2. **幂等注册**：执行 `ac link "<skill_root>"`（可安全重复执行）。
-3. **调用 Action**：始终使用 **Package-Qualified ID** 避免冲突：
+- **解析 Skill 根目录**：将 `SKILL.md` 所在目录解析为 `<skill_root>`。
+- **幂等注册**：执行 `ac link "<skill_root>"`（可安全重复执行）。
+- **调用 Action**：始终使用 **Package-Qualified ID** 避免冲突：
    ```bash
    ac run <package-id>/<action-id> --input '<json>'
    ```
-4. **免注册直接执行（备选）**：
+- **免注册直接执行（备选）**：
    ```bash
    cd <skill_root> && ac run <action-id> --input '<json>'
    ```
 
 ---
 
-## 11. Agent 开发核心红线
+## Agent 开发核心红线
 
-1. **通道隔离原则**：严禁在 Action 内部调用 `console.log`，所有日志一律使用 `ctx.log`（输出至 `stderr`），确保 `stdout` 仅输出标准 JSON Envelope。
-2. **严格 Schema 原则**：必须为每个 Action 定义完备的 `inputSchema` 与 `outputSchema`。
-3. **响应式取消原则**：对于网络 I/O 与耗时循环，始终绑定并检测 `ctx.signal`。
-4. **统一命名空间**：多 Package 交互时，Action 引用必须采用 `<package-id>/<action-id>`。
+- **通道隔离原则**：严禁在 Action 内部调用 `console.log`，所有日志一律使用 `ctx.log`（输出至 `stderr`），确保 `stdout` 仅输出标准 JSON Envelope。
+- **严格 Schema 原则**：必须为每个 Action 定义完备的 `inputSchema` 与 `outputSchema`。
+- **响应式取消原则**：对于网络 I/O 与耗时循环，始终绑定并检测 `ctx.signal`。
+- **统一命名空间**：多 Package 交互时，Action 引用必须采用 `<package-id>/<action-id>`。

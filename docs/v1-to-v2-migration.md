@@ -1,4 +1,4 @@
-# 1.0 到 2.0 架构升级对比与迁移指南
+# 到 2.0 架构升级对比与迁移指南
 
 # 背景与演进动因
 
@@ -65,18 +65,18 @@ graph LR
 
 # 代码迁移示例
 
-### 1.0 旧版 Groovy 脚本
+### 旧版 Groovy 脚本
 ```groovy
-// 1.0 旧版动态脚本 (无静态类型、无 Schema 约束、依赖全局变量)
+// 0 旧版动态脚本 (无静态类型、无 Schema 约束、依赖全局变量)
 def name = input.name ?: "world"
 def greeting = config.get("GREETING") ?: "Hello"
 log.info("Greeting user ${name}")
 return [message: "${greeting}, ${name}!"]
 ```
 
-### 2.0 新版 TypeScript Action
+### 新版 TypeScript Action
 ```ts
-// 2.0 新版 Action (全类型安全、严格 JSON Schema 校验、标准通道隔离)
+// 0 新版 Action (全类型安全、严格 JSON Schema 校验、标准通道隔离)
 import { defineAction } from "@actiondock/sdk";
 
 export interface GreetInput {

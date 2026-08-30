@@ -57,7 +57,7 @@ graph TD
 
 # Skill 交付目录结构
 
-### 1. 源码型 Skill (Source Skill，默认输出)
+### 源码型 Skill (Source Skill，默认输出)
 
 执行 `ac export skill` 生成的标准目录：
 
@@ -75,7 +75,7 @@ dist/github-tools-skill/
     └── review-pr.md          # 领域任务 SOP
 ```
 
-### 2. 独立便携型 Skill (Standalone Skill，`--standalone`)
+### 独立便携型 Skill (Standalone Skill，`--standalone`)
 
 执行 `ac export skill --standalone` 生成的目录：
 
@@ -111,14 +111,14 @@ description: GitHub 自动化运维与代码评审工具集
 
 ## ActionDock 运行时 (ActionDock Runtime)
 
-### 1. 注册与链接 (Idempotent Setup)
+### 注册与链接 (Idempotent Setup)
 在初次调用前，将包含本 `SKILL.md` 的目录解析为 `<skill_root>` 并执行：
 
     ac link "<skill_root>"
 
 > `ac link` 具备天然幂等性，安全支持重复执行。
 
-### 2. 执行 Action (统一推荐 Package-Qualified ID)
+### 执行 Action (统一推荐 Package-Qualified ID)
 为防止多技能场景下的 Action ID 冲突，推荐使用完整限定 ID：
 
     ac run team.github-tools/github.get-pr --input '{"repo":"owner/repo","prNumber":101}'
@@ -132,20 +132,20 @@ description: GitHub 自动化运维与代码评审工具集
 
 ActionDock 支持灵活的导出选项：
 
-### 1. 导出源码型 Skill（默认）
+### 导出源码型 Skill（默认）
 ```bash
 ac export skill
 # 产物输出至 dist/<package-name>-skill/
 ```
 
-### 2. 导出独立自包含二进制 Skill
+### 导出独立自包含二进制 Skill
 ```bash
 ac export skill --standalone
 # 或交叉编译至指定平台
 ac export skill --standalone --target linux-x64
 ```
 
-### 3. 任务驱动按需裁剪导出 (Playbook-Driven Export)
+### 任务驱动按需裁剪导出 (Playbook-Driven Export)
 当项目包含多个业务领域的 SOP 和数十个 Action 时，可按特定任务进行按需精准打包：
 ```bash
 ac export skill --playbook review-pr
@@ -154,7 +154,7 @@ ac export skill --playbook review-pr
 - **自动依赖裁剪（Tree-shaking）**：系统自动解析 `playbooks/review-pr.md` Frontmatter 中声明的 `actions` 依赖，仅将该任务所需的 Action 复制或编译进产物。
 - **纯净上下文**：导出的 `playbooks/` 仅含指定 SOP，`SKILL.md` 仅包含相关 Action，彻底避免 Agent 提示词上下文冗余。
 
-### 4. 自动归档压缩
+### 自动归档压缩
 ```bash
 ac export skill --archive               # 生成 .zip 压缩包
 ac export skill --standalone --archive  # 生成 standalone .zip 压缩包
@@ -186,10 +186,10 @@ sequenceDiagram
 
 # Skill 设计原则与最佳实践
 
-1. **源码优先（Source First）**：在 AI 智能体工作流中，优先分发源码型 Skill，享有体积小、可查看、可修改、跨平台无编译负担的优势。
-2. **统一使用 Package-Qualified ID**：在 `SKILL.md` 与 Playbook 中，调用 Action 统一使用 `<package-id>/<action-id>`，确保全局多 Package 共存时不发生冲突。
-3. **任务驱动最小化交付**：对外发布时善用 `--playbook` 进行按需 Tree-shaking 导出，降低 Agent 上下文负担与幻觉风险。
-4. **红线明确（Clear Guardrails）**：在 Playbook 中明确设立高危操作拦截线（如禁止未经确认直接物理删除数据库）。
+- **源码优先（Source First）**：在 AI 智能体工作流中，优先分发源码型 Skill，享有体积小、可查看、可修改、跨平台无编译负担的优势。
+- **统一使用 Package-Qualified ID**：在 `SKILL.md` 与 Playbook 中，调用 Action 统一使用 `<package-id>/<action-id>`，确保全局多 Package 共存时不发生冲突。
+- **任务驱动最小化交付**：对外发布时善用 `--playbook` 进行按需 Tree-shaking 导出，降低 Agent 上下文负担与幻觉风险。
+- **红线明确（Clear Guardrails）**：在 Playbook 中明确设立高危操作拦截线（如禁止未经确认直接物理删除数据库）。
 
 ---
 

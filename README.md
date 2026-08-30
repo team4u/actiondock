@@ -45,7 +45,7 @@ ActionDock 2.0 是面向 AI Agent 与研发团队的新一代工具链体系。�
 
 ## 快速接入
 
-### 1. 安装 CLI (`ac`)
+### 安装 CLI (`ac`)
 
 ```bash
 # 全局安装（推荐，安装后可全局使用 ac 命令）
@@ -55,7 +55,7 @@ bun install -g @actiondock/cli
 cd packages/cli && bun link
 ```
 
-### 2. 5 分钟完整开发与交付流
+### 5 分钟完整开发与交付流
 
 #### 初始化新项目
 ```bash
@@ -100,14 +100,14 @@ export default defineAction<GreetInput, GreetOutput>({
   },
 
   async run(input, ctx) {
-    // 1. 读取配置（5 级回退：CLI覆盖 > 项目DB > 全局DB > 环境变量 > 声明默认值）
+    // 读取配置（5 级回退：CLI覆盖 > 项目DB > 全局DB > 环境变量 > 声明默认值）
     const greeting = ctx.config.get("GREETING", "你好");
 
-    // 2. 读写持久化状态（跨执行保留，支持 TTL）
+    // 读写持久化状态（跨执行保留，支持 TTL）
     const count = ((await ctx.state.get<number>("greet_count")) || 0) + 1;
     await ctx.state.set("greet_count", count);
 
-    // 3. 打印结构化日志（走 stderr，不污染 stdout JSON）
+    // 打印结构化日志（走 stderr，不污染 stdout JSON）
     ctx.log.info(`正在问候 ${input.name}（第 ${count} 次）`);
 
     return {
@@ -151,10 +151,10 @@ ac build
 
 #### 导出 Agent Skill 交付包
 ```bash
-# 1. 默认导出源码型 Skill（轻量、跨平台，由 ac 运行时直接加载）
+# 默认导出源码型 Skill（轻量、跨平台，由 ac 运行时直接加载）
 ac export skill
 
-# 2. 或导出独立自包含二进制 Skill（零外部依赖，内置预编译二进制）
+# 或导出独立自包含二进制 Skill（零外部依赖，内置预编译二进制）
 ac export skill --standalone
 ```
 导出的源码型 Skill 目录结构：

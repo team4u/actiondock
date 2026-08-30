@@ -47,16 +47,16 @@ ActionDock 将一个 Package 内的所有 Action 聚合编译进**同一个独�
 ### 交叉编译命令示例
 
 ```bash
-# 1. 编译为当前宿主架构
+# 编译为当前宿主架构
 ac build
 
-# 2. 交叉编译为 Linux 生产服务器二进制
+# 交叉编译为 Linux 生产服务器二进制
 ac build --target linux-x64 --out dist/bin/my-tools-linux-x64
 
-# 3. 交叉编译为 Apple Silicon Mac 二进制
+# 交叉编译为 Apple Silicon Mac 二进制
 ac build --target darwin-arm64 --out dist/bin/my-tools-darwin-arm64
 
-# 4. 交叉编译为 Windows 二进制并开启代码压缩
+# 交叉编译为 Windows 二进制并开启代码压缩
 ac build --target windows-x64 --minify --out dist/bin/my-tools.exe
 ```
 
@@ -95,13 +95,13 @@ ac build --target windows-x64 --minify --out dist/bin/my-tools.exe
 
 通过 `ac export skill` 命令，将 Action Package 打包为标准 Agent Skill 交付包。
 
-### 1. 源码型 Skill 导出（默认推荐）
+### 源码型 Skill 导出（默认推荐）
 ```bash
 ac export skill
 ```
 输出目录为 `dist/<package-name>-skill/`，包含 `SKILL.md`、`actiondock.json`、`package.json`、`actions/*.ts` 与 `playbooks/*.md`。无需编译，体积小，跨平台通用，可直接被预装了 ActionDock 运行时的 AI Agent 通过 `ac link` 动态加载。
 
-### 2. 独立便携型 Skill 导出 (`--standalone`)
+### 独立便携型 Skill 导出 (`--standalone`)
 若目标机器未安装 ActionDock / Bun 运行时，可导出包含预编译单文件二进制的便携 Skill：
 ```bash
 # 当前宿主平台
@@ -112,7 +112,7 @@ ac export skill --standalone --target linux-x64
 ```
 输出目录包含 `SKILL.md`、`actiondock.skill.json`、`bin/<package-name>` 与 `playbooks/*.md`。
 
-### 3. 任务驱动按需导出 (Playbook-Driven Export)
+### 任务驱动按需导出 (Playbook-Driven Export)
 在复杂项目中，推荐使用 `--playbook` 参数针对特定任务精准打包（源码型与独立型均支持）：
 ```bash
 ac export skill --playbook review-pr
@@ -120,7 +120,7 @@ ac export skill --playbook review-pr
 - **自动依赖裁剪（Tree-shaking）**：系统自动读取 `playbooks/review-pr.md` Frontmatter 中的 `actions` 依赖，仅导出该任务所需的 Action，剔除其余代码。
 - **纯净产物**：导出的 `playbooks/` 仅含选中的 SOP，生成的 `SKILL.md` 仅包含相关 Action，杜绝 Agent 提示词冗余。
 
-### 4. 自动 ZIP 归档
+### 自动 ZIP 归档
 ```bash
 ac export skill --archive                      # 生成 dist/<pkg>-skill.zip
 ac export skill --standalone --archive         # 生成 standalone ZIP

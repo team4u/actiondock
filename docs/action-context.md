@@ -49,11 +49,11 @@ graph TD
 
 # 核心能力详解
 
-## 1. 运行时配置管理 (`ctx.config`)
+## 运行时配置管理 (`ctx.config`)
 
 `ctx.config` 提供了读取运行时环境配置与敏感密钥（API Token、服务端地址、超时限制等）的标准接口。
 
-### 5 级配置回退优先级
+### 级配置回退优先级
 
 当调用 `ctx.config.get(key, defaultValue)` 时，ActionDock 按照以下 5 级优先级严格解析配置值：
 
@@ -70,11 +70,11 @@ graph TD
 
 ActionDock 内置了智能环境变量解析引擎，按以下顺序匹配环境变量：
 
-1. **显式 Env 绑定**：若在 `actiondock.json` 中声明了 `env`（例如 `"env": ["GITHUB_TOKEN", "GH_TOKEN"]`），优先检查对应变量。
-2. **Package 命名空间前缀**：自动检查 `ACTIONDOCK_<PACKAGE>_<KEY>`（例如 `ACTIONDOCK_TEAM_GITHUB_TOOLS_TOKEN`），防止多包环境变量命名冲突。
-3. **SNAKE_CASE 自动匹配**：驼峰命名与短横线键名自动转换为蛇形大写（如 `apiToken` 或 `api-token` $\rightarrow$ `API_TOKEN`）。
-4. **原始键名匹配**：直接探测同名键名。
-5. **智能类型转换**：
+- **显式 Env 绑定**：若在 `actiondock.json` 中声明了 `env`（例如 `"env": ["GITHUB_TOKEN", "GH_TOKEN"]`），优先检查对应变量。
+- **Package 命名空间前缀**：自动检查 `ACTIONDOCK_<PACKAGE>_<KEY>`（例如 `ACTIONDOCK_TEAM_GITHUB_TOOLS_TOKEN`），防止多包环境变量命名冲突。
+- **SNAKE_CASE 自动匹配**：驼峰命名与短横线键名自动转换为蛇形大写（如 `apiToken` 或 `api-token` $\rightarrow$ `API_TOKEN`）。
+- **原始键名匹配**：直接探测同名键名。
+- **智能类型转换**：
    - `boolean`：`"true"`、`"1"`、`"yes"`、`"on"` $\rightarrow$ `true`；`"false"`、`"0"`、`"no"`、`"off"` $\rightarrow$ `false`。
    - `number`：`"5000"` $\rightarrow$ `5000`。
    - `object` / `array`：标准 JSON 字符串自动解析为对应 JS 对象或数组。
@@ -109,20 +109,20 @@ ActionDock 内置了智能环境变量解析引擎，按以下顺序匹配环境
 
 在 Action 源码中读取配置：
 ```ts
-// 1. 读取字符串配置（支持泛型推导）
+// 读取字符串配置（支持泛型推导）
 const token = ctx.config.get<string>("apiToken");
 
-// 2. 读取配置并提供代码级兜底默认值
+// 读取配置并提供代码级兜底默认值
 const apiBase = ctx.config.get("apiBaseUrl", "https://api.github.com");
 
-// 3. 读取布尔值与数值（环境变量注入时自动转换类型）
+// 读取布尔值与数值（环境变量注入时自动转换类型）
 const timeoutMs = ctx.config.get<number>("timeoutMs", 5000);
 const debugMode = ctx.config.get<boolean>("enableDebug", false);
 ```
 
 ---
 
-## 2. 持久化共享状态 (`ctx.state`)
+## 持久化共享状态 (`ctx.state`)
 
 `ctx.state` 是一个基于 `bun:sqlite` 的持久化 Key-Value 存储，用于跨 Action 执行保留业务数据。
 
@@ -135,10 +135,10 @@ const debugMode = ctx.config.get<boolean>("enableDebug", false);
 ### API 规范与操作示例
 
 ```ts
-// 1. 读取状态（支持泛型反序列化）
+// 读取状态（支持泛型反序列化）
 const lastCursor = await ctx.state.get<string>("last_synced_id");
 
-// 2. 写入状态（支持任意可 JSON 序列化的对象）
+// 写入状态（支持任意可 JSON 序列化的对象）
 await ctx.state.set("last_synced_id", "evt_987654");
 await ctx.state.set("checkpoint", {
   processed: 120,
@@ -146,17 +146,17 @@ await ctx.state.set("checkpoint", {
   updatedAt: new Date().toISOString(),
 });
 
-// 3. 写入带有生存时间（TTL，秒）的状态（到期自动惰性清理）
+// 写入带有生存时间（TTL，秒）的状态（到期自动惰性清理）
 await ctx.state.set("session_token", "jwt_token_xyz", 3600); // 1 小时后自动过期
 await ctx.state.set("temp_cache", { status: "cached" }, 60);  // 60 秒后自动过期
 
-// 4. 删除指定状态
+// 删除指定状态
 await ctx.state.delete("checkpoint");
 
-// 5. 列出匹配前缀的所有 Key（自动过滤并清理已过期的 Key）
+// 列出匹配前缀的所有 Key（自动过滤并清理已过期的 Key）
 const allSyncKeys = await ctx.state.keys("sync_");
 
-// 6. 命名空间隔离 (Scoped State Store)
+// 命名空间隔离 (Scoped State Store)
 const orderStore = ctx.state.scope("orders");
 await orderStore.set("ord_1001", { amount: 99.5, status: "PAID" }, 86400);
 const order = await orderStore.get("ord_1001");
@@ -164,7 +164,7 @@ const order = await orderStore.get("ord_1001");
 
 ---
 
-## 3. 跨 Action 组合调用 (`ctx.actions`)
+## 跨 Action 组合调用 (`ctx.actions`)
 
 ActionDock 支持将细粒度原子 Action 组合为高级复合 Action（Composite Action）。
 
@@ -227,14 +227,14 @@ export default defineAction({
 
 ### 组合调用的四大核心保障
 
-1. **环境与存储透明共享**：子 Action 自动共享当前的 Config、State 与 Storage 数据库连接。
-2. **执行链路级联（Runs Cascade）**：在 SQLite `runs` 记录表中，子 Action 会通过 `parent_run_id` 自动关联至父 Action，支持完整调用树追溯。
-3. **循环依赖死循环防御（Cycle Detection）**：底层执行栈实时维护调用路径。一旦检测到 `A -> B -> A` 的循环依赖，立即中止并抛出 `ACTION_CYCLE_DETECTED` 错误。
-4. **取消信号层层穿透**：父 Action 触发取消（超时或中断）时，子 Action 会同步收到 `ctx.signal` 中断通知。
+- **环境与存储透明共享**：子 Action 自动共享当前的 Config、State 与 Storage 数据库连接。
+- **执行链路级联（Runs Cascade）**：在 SQLite `runs` 记录表中，子 Action 会通过 `parent_run_id` 自动关联至父 Action，支持完整调用树追溯。
+- **循环依赖死循环防御（Cycle Detection）**：底层执行栈实时维护调用路径。一旦检测到 `A -> B -> A` 的循环依赖，立即中止并抛出 `ACTION_CYCLE_DETECTED` 错误。
+- **取消信号层层穿透**：父 Action 触发取消（超时或中断）时，子 Action 会同步收到 `ctx.signal` 中断通知。
 
 ---
 
-## 4. 结构化日志隔离输出 (`ctx.log`)
+## 结构化日志隔离输出 (`ctx.log`)
 
 `ctx.log` 提供了标准的结构化日志输出接口。
 
@@ -265,15 +265,15 @@ try {
 
 ---
 
-## 5. 响应式取消与超时信号 (`ctx.signal`)
+## 响应式取消与超时信号 (`ctx.signal`)
 
 `ctx.signal` 是一个标准的 Web API `AbortSignal` 对象，为 Action 提供了感知外部中断、超时以及客户端取消的响应式能力。
 
-### 4 大触发源
-1. **CLI 命令行超时**：执行时传入 `--timeout 30s`，超时自动触发 abort。
-2. **终端交互中断**：用户在终端按下 `Ctrl+C`（`SIGINT`），信号立即广播给 Action。
-3. **MCP 客户端取消**：Claude Code、Cursor 等发送 `notifications/cancelled` 或 `tasks/cancel` 时直通 Action。
-4. **远程任务取消**：通过 `ac runs cancel <runId>` 调用服务端取消端点。
+### 大触发源
+- **CLI 命令行超时**：执行时传入 `--timeout 30s`，超时自动触发 abort。
+- **终端交互中断**：用户在终端按下 `Ctrl+C`（`SIGINT`），信号立即广播给 Action。
+- **MCP 客户端取消**：Claude Code、Cursor 等发送 `notifications/cancelled` 或 `tasks/cancel` 时直通 Action。
+- **远程任务取消**：通过 `ac runs cancel <runId>` 调用服务端取消端点。
 
 ### API 使用示例
 
@@ -304,10 +304,10 @@ export default defineAction({
     let processedCount = 0;
 
     for (const item of input.items) {
-      // 1. 循环内主动检查取消状态，一旦被取消立即抛出 AbortError 退出
+      // 循环内主动检查取消状态，一旦被取消立即抛出 AbortError 退出
       ctx.signal.throwIfAborted();
 
-      // 2. 将 signal 传给原生 fetch（超时或取消时立即断开底层 TCP 连接）
+      // 将 signal 传给原生 fetch（超时或取消时立即断开底层 TCP 连接）
       await fetch(`https://api.example.com/sync?item=${encodeURIComponent(item)}`, {
         signal: ctx.signal,
       });

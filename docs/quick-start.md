@@ -4,7 +4,7 @@
 
 ---
 
-## 1. 环境准备
+## 环境准备
 
 ActionDock 2.0 基于 Bun 原生运行时与单文件编译器构建。
 
@@ -26,7 +26,7 @@ bun --version
 
 ---
 
-## 2. 安装 ActionDock CLI (`ac`)
+## 安装 ActionDock CLI (`ac`)
 
 ### 方式一：从 npm 仓库全局安装（推荐）
 
@@ -49,7 +49,7 @@ ac --help
 
 ---
 
-## 3. 初始化首个 Action Package 项目
+## 初始化首个 Action Package 项目
 
 使用 `ac init` 初始化脚手架项目：
 
@@ -75,14 +75,14 @@ github-tools/
 
 ---
 
-## 4. 编写您的首个 Action
+## 编写您的首个 Action
 
 在 `actions/` 目录下创建 `actions/get-user.ts`：
 
 ```ts
 import { defineAction } from "@actiondock/sdk";
 
-// 1. 定义 TypeScript 接口（用于 IDE 智能补全与静态检查）
+// 定义 TypeScript 接口（用于 IDE 智能补全与静态检查）
 export interface GetUserInput {
   username: string;
 }
@@ -95,7 +95,7 @@ export interface GetUserOutput {
   fetchedAt: string;
 }
 
-// 2. 使用 defineAction 声明 Action
+// 使用 defineAction 声明 Action
 export default defineAction<GetUserInput, GetUserOutput>({
   id: "github.get-user",
   description: "根据 GitHub 用户名获取其公开个人资料",
@@ -125,7 +125,7 @@ export default defineAction<GetUserInput, GetUserOutput>({
     required: ["id", "name", "url", "fetchedAt"],
   },
 
-  // 3. 核心执行逻辑
+  // 核心执行逻辑
   async run(input, ctx) {
     // 读取配置（自动支持：CLI 覆盖 > 本地/全局 SQLite > 环境变量 > 声明默认值）
     const token = ctx.config.get<string>("GITHUB_TOKEN");
@@ -168,7 +168,7 @@ export default defineAction<GetUserInput, GetUserOutput>({
 
 ---
 
-## 5. 本地运行与调试 Action
+## 本地运行与调试 Action
 
 使用 `ac action run`（简写为 `ac run`）直接执行 Action：
 
@@ -205,7 +205,7 @@ ac run github.get-user --input '{"username": "torvalds"}'
 
 ---
 
-## 6. 编写内存单元测试
+## 编写内存单元测试
 
 在 `tests/get-user.test.ts` 中使用 `@actiondock/sdk` 的 `createTestRuntime` 编写轻量内存单测：
 
@@ -245,7 +245,7 @@ ac test
 
 ---
 
-## 7. 编译为独立二进制可执行文件
+## 编译为独立二进制可执行文件
 
 使用 `ac build` 将整个 Action Package 编译为零外部安装依赖的单文件独立二进制：
 
@@ -268,7 +268,7 @@ ac build
 
 ---
 
-## 8. 导出面向 AI Agent 的 Skill 交付包
+## 导出面向 AI Agent 的 Skill 交付包
 
 使用 `ac export skill` 生成标准的 Agent Skill 交付包：
 
