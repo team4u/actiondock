@@ -188,11 +188,54 @@ ActionDock 会自动将 SQLite 中的 `runs` 状态置为 `cancelled`，错误�
 
 ---
 
-## 5. 调试与排错
+---
+
+## 5. MCP Tasks 长任务扩展 (`io.modelcontextprotocol/tasks`)
+
+ActionDock MCP 适配器实现了官方 MCP Tasks 扩展，支持异步长任务执行、状态查询与任务中断：
+
+### 1. 契约映射原则
+* **任务 ID**：`MCP taskId` 完全等价于 ActionDock 系统的 `runId`。
+* **状态映射**：
+  * `running` $\rightarrow$ `working`
+  * `success` $\rightarrow$ `completed`
+  * `failed` $\rightarrow$ `failed`
+  * `cancelled` $\rightarrow$ `cancelled`
+* **持久化**：统一存取自 SQLite `runs` 表，无需维护第二套 Task 存储。
+
+### 2. 异步 Tool 调用
+在调用 `tools/call` 时传入 `execution: { mode: "async" }`，MCP Server 将立即返回 `taskId` 与 `status: "running"`，任务在后台继续执行：
+```json
+{
+  "ok": true,
+  "runId": "01J...",
+  "taskId": "01J...",
+  "status": "running"
+}
+```
+
+### 3. Tasks 协议端点
+* **`tasks/get`**：查询指定 Task 的执行状态、输入、输出或错误详情。
+  ```json
+  { "method": "tasks/get", "params": { "taskId": "01J..." } }
+  ```
+* **`tasks/cancel`**：主动中断正在执行中的长任务（信号直通 `ctx.signal`）。
+  ```json
+  { "method": "tasks/cancel", "params": { "taskId": "01J...", "reason": "User cancelled" } }
+  ```
+* **`tasks/list`**：列出当前包的近期 Task 执行记录。
+  ```json
+  { "method": "tasks/list", "params": { "limit": 20 } }
+  ```
+
+---
+
+## 6. 调试与排错
 
 ### 使用 MCP Inspector 调试
-可以使用官方 MCP Inspector 本地测试 MCP Tool 注册与调用：
+可以使用官方 MCP Inspector 本地测试 MCP Tool 注册、调用与 Tasks 扩展：
 
 ```bash
 npx @modelcontextprotocol/inspector ac mcp --dir ./examples/github-tools
 ```
+

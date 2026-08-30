@@ -1,4 +1,11 @@
-import { isLoopbackHost, resolveCorsHeaders, verifyBearerToken } from "@actiondock/core";
+import {
+  findProjectRoot,
+  isLoopbackHost,
+  loadProjectConfig,
+  resolveCorsHeaders,
+  ServerRuntimeRegistry,
+  verifyBearerToken,
+} from "@actiondock/core";
 import { createMcpHandler } from "@modelcontextprotocol/server";
 import { createActionDockMcpServer } from "./adapter";
 import type { ActionDockMcpHttpOptions, ActionDockMcpHttpServerInstance } from "./types";
@@ -20,14 +27,40 @@ export function startMcpHttpServer(
     );
   }
 
+  const runtimeRegistry = new ServerRuntimeRegistry();
+
   const handler = createMcpHandler(
-    () => createActionDockMcpServer(options),
+    () => {
+      let resolvedRoot = options.projectRoot;
+      if (!resolvedRoot && !options.packageId) {
+        resolvedRoot = findProjectRoot(process.cwd()) || undefined;
+      }
+      let packageId = options.packageId;
+      if (!packageId && resolvedRoot) {
+        try {
+          const cfg = loadProjectConfig(resolvedRoot);
+          packageId = cfg.id;
+        } catch {
+          // ignore
+        }
+      }
+      const storage = packageId
+        ? runtimeRegistry.getStorage(packageId, resolvedRoot)
+        : undefined;
+
+      return createActionDockMcpServer({
+        ...options,
+        storage,
+        executionManager: runtimeRegistry.executionManager,
+      });
+    },
     {
       onerror: (err) => {
         process.stderr.write(`[MCP HTTP Error] ${err?.message || String(err)}\n`);
       },
     }
   );
+
 
   const server = Bun.serve({
     port,
@@ -144,7 +177,9 @@ export function startMcpHttpServer(
     host,
     url,
     stop: () => {
+      runtimeRegistry.close();
       server.stop(true);
     },
   };
 }
+

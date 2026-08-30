@@ -17,5 +17,7 @@ export type {
   Logger,
   RuntimeError,
   RunRecord,
+  RunStatus,
   StateStore,
 } from "./types";
+

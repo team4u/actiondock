@@ -96,14 +96,14 @@ ActionDock 命令行工具（`ac`）全量功能与参数参考。
 
 #### `ac mcp`
 
-以 STDIO 模式启动 MCP 服务端，将当前或指定 package 内的 Actions 作为 MCP Tools 提供给本地 MCP Client（Claude Code、Cursor、VS Code 等）。
+以 STDIO 模式启动 MCP 服务端，将当前或指定 package 内的 Actions 作为 MCP Tools 提供给本地 MCP Client（Claude Code、Cursor、VS Code 等）。内置支持 MCP Tasks 扩展（`io.modelcontextprotocol/tasks`），支持异步 Tool 调用与任务取消。
 * **参数选项**：
   * `-d, --dir <path>`：指定 ActionDock 项目根目录（默认当前目录）
   * `--package <package-id>`：指定全局已链接的 package ID
   * `--timeout <duration>`：单次 Action 执行的超时时间（如 `30s`）
 
 #### `ac mcp serve`
-以 HTTP 模式启动 MCP 服务端，提供标准 Streamable HTTP `/mcp` 端点与 `/health` 健康检查端点。
+以 HTTP 模式启动 MCP 服务端，提供标准 Streamable HTTP `/mcp` 端点与 `/health` 健康检查端点，支持 MCP Tasks 协议端点（`tasks/get`、`tasks/cancel`、`tasks/list`）。
 * **参数选项**：
   * `-p, --port <port>`：监听端口（默认 `5178`）
   * `-H, --host <host>`：绑定 IP 地址（默认安全监听 `127.0.0.1`）
@@ -115,6 +115,7 @@ ActionDock 命令行工具（`ac`）全量功能与参数参考。
   * `-d, --dir <path>`：项目根目录路径（默认当前工作目录）
   * `--package <package-id>`：指定已链接的 package ID
   * `--timeout <duration>`：单次 Action 执行的超时时间
+
 
 ---
 

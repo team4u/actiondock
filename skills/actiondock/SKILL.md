@@ -251,12 +251,21 @@ ac mcp serve --port 5178
 ac mcp serve --host 0.0.0.0 --port 5178 --token <secret-token>
 ```
 
+### 3. MCP Tasks 长任务扩展 (`io.modelcontextprotocol/tasks`)
+ActionDock MCP 原生支持官方 Tasks 扩展协议，使 AI Agent 能够通过 MCP 协议调度、监控与取消耗时异步任务：
+* **异步 Tool 调用**：在 `tools/call` 时传入 `execution: { mode: "async" }`，立即返回 `taskId`（等同于 ActionDock 全局 `runId`）并在后台执行。
+* **状态映射与查询**：支持 `tasks/get` 查询任务进度。状态自动映射（`running` $\rightarrow$ `working`，`success` $\rightarrow$ `completed`，`failed` $\rightarrow$ `failed`，`cancelled` $\rightarrow$ `cancelled`）。
+* **任务中断**：支持 `tasks/cancel` 中断运行中的长任务（直通底层 `ctx.signal`）。
+* **历史列表**：支持 `tasks/list` 获取当前 package 下的近期任务列表。
+
 #### MCP 核心特性保证：
 * **Schema 零冗余**：基于官方 `@modelcontextprotocol/server`，自动将 Action 的 JSON Schema 转换为 MCP Tool Schema，无需重复定义。
 * **统一执行核心**：所有 MCP Tool 调用继续流经 `ActionRunner`，完全享有输入/输出校验、SQLite `runs` 记录追踪与上下文能力。
-* **双向取消链路**：MCP 客户端发出的取消请求（`notifications/cancelled`）会直通 Action 内部的 `ctx.signal`，及时中止耗时计算与网络请求。
+* **全门面长任务统一**：无论通过 CLI（`ac run --async`）、HTTP API（`POST /runs`）还是 MCP 协议（`tools/call async`），底层全部复用 SQLite `runs` 表与 `runId` 标识。
+* **双向取消链路**：MCP 客户端发出的取消请求（`notifications/cancelled` 或 `tasks/cancel`）会直通 Action 内部的 `ctx.signal`，及时中止耗时计算与网络请求。
 
 ---
+
 
 ## Playbook 任务 SOP 指南
 

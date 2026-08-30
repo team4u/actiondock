@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { afterAll, describe, expect, it } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { defineAction } from "@actiondock/sdk";
@@ -449,9 +449,130 @@ describe("@actiondock/mcp Adapter", () => {
       expect(authMcp.status).toBe(200);
     } finally {
       serverInstance.stop();
-      try {
-        rmSync(tmpDir, { recursive: true, force: true });
-      } catch {}
     }
   });
+
+  afterAll(() => {
+    try {
+      rmSync(tmpDir, { recursive: true, force: true });
+    } catch {}
+  });
+
+  it("M15-M18: Tasks extension supports async tool calls, tasks/get, tasks/cancel, and tasks/list", async () => {
+
+    const server = await createActionDockMcpServer({ projectRoot: tmpDir });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverTransport);
+
+    let asyncCallResult: any = null;
+    let taskGetWorkingResult: any = null;
+    let taskGetCompletedResult: any = null;
+    let taskCancelResult: any = null;
+    let taskListResult: any = null;
+
+    clientTransport.onmessage = (msg: any) => {
+      if (msg.id === 1) {
+
+
+        // Initialized
+        clientTransport.send({
+          jsonrpc: "2.0",
+          method: "notifications/initialized",
+        });
+
+        // 1. Trigger async tool call on task.slow
+        clientTransport.send({
+          jsonrpc: "2.0",
+          id: 10,
+          method: "tools/call",
+          params: {
+            name: "task.slow",
+            arguments: { durationMs: 1500, execution: { mode: "async" } },
+          },
+        });
+      } else if (msg.id === 10 && msg.result?.content) {
+        asyncCallResult = JSON.parse(msg.result.content[0].text);
+        const taskId = asyncCallResult.taskId || asyncCallResult.runId;
+
+
+        // 2. Query tasks/get
+        clientTransport.send({
+          jsonrpc: "2.0",
+          id: 11,
+          method: "tasks/get",
+          params: { taskId },
+        });
+
+        // 3. Query tasks/list
+        clientTransport.send({
+          jsonrpc: "2.0",
+          id: 12,
+          method: "tasks/list",
+          params: { limit: 10 },
+        });
+
+        // 4. Trigger slow task to test cancel
+        clientTransport.send({
+          jsonrpc: "2.0",
+          id: 20,
+          method: "tools/call",
+          params: {
+            name: "task.slow",
+            arguments: { durationMs: 2000, execution: { mode: "async" } },
+          },
+        });
+      } else if (msg.id === 11) {
+        taskGetWorkingResult = msg.result;
+      } else if (msg.id === 12) {
+        taskListResult = msg.result;
+      } else if (msg.id === 20) {
+        const slowParsed = JSON.parse(msg.result.content[0].text);
+        const slowTaskId = slowParsed.taskId || slowParsed.runId;
+        // Cancel slow task
+        clientTransport.send({
+          jsonrpc: "2.0",
+          id: 21,
+          method: "tasks/cancel",
+          params: { taskId: slowTaskId, reason: "Testing MCP tasks/cancel" },
+        });
+      } else if (msg.id === 21) {
+        taskCancelResult = msg.result;
+      }
+    };
+
+    clientTransport.send({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2026-07-28",
+        capabilities: {},
+        clientInfo: { name: "test-client", version: "1.0.0" },
+      },
+    });
+
+    // Wait for async task execution and cancel roundtrips
+    await new Promise((r) => setTimeout(r, 350));
+
+    // Assert M15 / M16: Async tool call returned taskId and working status
+    expect(asyncCallResult).toBeDefined();
+    expect(asyncCallResult.taskId).toBeDefined();
+    expect(asyncCallResult.status).toBe("running");
+
+    // Assert M15: tasks/get returned task payload
+    expect(taskGetWorkingResult).toBeDefined();
+    expect(taskGetWorkingResult.task.taskId).toBe(asyncCallResult.taskId);
+    expect(["working", "completed"]).toContain(taskGetWorkingResult.task.status);
+
+    // Assert M18: tasks/list returned list of tasks
+    expect(taskListResult).toBeDefined();
+    expect(Array.isArray(taskListResult.tasks)).toBe(true);
+    expect(taskListResult.tasks.some((t: any) => t.taskId === asyncCallResult.taskId)).toBe(true);
+
+    // Assert M17: tasks/cancel successfully cancelled task
+    expect(taskCancelResult).toBeDefined();
+    expect(taskCancelResult.status).toBe("cancelled");
+  });
 });
+
+

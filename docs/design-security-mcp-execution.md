@@ -163,3 +163,8 @@ ActionDock 2.0 在 `packages/mcp`（`@actiondock/mcp`）中实现了官方 MCP �
 - [x] **M02**：MCP 调用统一经由 `ActionRunner` 并写入 SQLite `runs`。
 - [x] **M03**：MCP 客户端取消直通 Action 内部 `ctx.signal`。
 - [x] **M04**：MCP STDIO 与 HTTP Transport 具备一致的安全与执行语义。
+- [x] **M05**：MCP Tasks 扩展支持异步 Tool 调用（`execution: { mode: "async" }` 返回 `taskId`）。
+- [x] **M06**：MCP Tasks `tasks/get` 端点支持查询任务进度与结果。
+- [x] **M07**：MCP Tasks `tasks/cancel` 端点支持协作式中断取消（直通 `ctx.signal`）。
+- [x] **M08**：MCP Tasks `tasks/list` 端点支持任务历史分页与过滤。
+

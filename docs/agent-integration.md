@@ -28,9 +28,11 @@ ActionDock 2.0 导出的核心产物是一个符合业界通用规范的 **Skill
 ```bash
 ac mcp serve --port 5178 --token <secret-token>
 ```
-客户端配置 Streamable HTTP 端点 `http://<host>:5178/mcp` 与 Bearer Token。
+### 3. 长任务与异步执行 (MCP Tasks Extension)
+如果 Agent 需要执行耗时较长的工作流（如多阶段抓取、持续同步等），可直接使用 MCP Tasks 扩展（`execution: { mode: "async" }`），并配合 `tasks/get`、`tasks/cancel` 端点进行追踪与控制。
 
 详见 **[MCP 适配器指南](mcp-integration.md)**。
+
 
 ---
 
