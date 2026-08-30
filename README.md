@@ -33,49 +33,25 @@ bun x @actiondock/cli init my-tools
 
 ---
 
-### 方式 2：从本地源码安装（框架开发者 / 未发布阶段）
+### 方式 2：从源码开发（框架贡献者 / 未发布阶段）
 
-#### 开发前准备：克隆并链接
 ```bash
-# 1. 克隆仓库并安装依赖（monorepo workspace 会自动链接内部包）
-git clone https://github.com/team4u/actiondock.git
+# 1. 克隆代码仓库
+git clone git@github.com:team4u/actiondock.git
 cd actiondock
+
+# 2. 安装全部 workspace 依赖
 bun install
 
-# 2. 注册 ac 命令到全局（修改源码实时生效）
+# 3. 注册本地软链接到全局（修改源码实时生效）
 cd packages/cli
 bun link
-```
 
-#### 方法 A：使用 `bun link` 建立本地软链接（最推荐，修改代码实时生效）
-```bash
-# 上面的 bun link 已经完成注册，此时在系统任意位置均可直接使用 ac 命令
+# 4. 验证安装：此时在系统任意位置均可直接使用 ac 命令
 ac --help
 ```
 
-#### 方法 B：本地打包为 `.tgz` 压缩包安装
-```bash
-# 1. 在 packages/cli 目录下打包
-cd packages/cli
-bun pm pack
-
-# 2. 全局安装生成的本地 tarball 包
-bun install -g ./actiondock-cli-2.0.0.tgz
-```
-
-#### 方法 C：通过本地路径直接全局安装
-```bash
-# 在项目根目录下执行
-bun install -g ./packages/cli
-```
-
-#### 方法 D：直接运行本地脚本入口
-```bash
-# 在项目根目录下通过 Bun 运行入口文件
-bun packages/cli/bin/ac.js <命令>
-```
-
-> **⚠️ 框架开发者请注意**：`ac init` 创建的是面向最终用户的独立项目，其 `package.json` 依赖为 `"@actiondock/sdk": "^2.0.0"`。在 SDK 正式发布到 npm 之前，这些独立项目执行 `bun install` 会报 404，这是预期行为。**开发框架本身请在 monorepo 内进行**（例如在 `examples/` 下新建项目），内部包通过 `workspace:*` 引用，参见 `examples/github-tools/package.json`。
+> **注意**：在 `@actiondock/sdk` 正式发布到 npm 仓库之前，通过 `ac init` 初始化的独立项目执行 `bun install` 会因找不到远端包而报错，属正常现象。开发 Action Package 时建议直接使用仓库内的 `examples/github-tools` 作为模板，或在独立项目中将 `@actiondock/sdk` 声明为本地路径依赖（`"link:../../packages/sdk"`）。
 
 ---
 
@@ -86,8 +62,6 @@ bun packages/cli/bin/ac.js <命令>
 ac init my-tools
 cd my-tools
 ```
-
-> **⚠️ 注意**：`ac init` 生成的独立项目依赖 `@actiondock/sdk@^2.0.0`，该包尚未发布到 npm，发布前 `bun install` 会报 404。框架贡献者请在 monorepo 内开发（见上文「方式 2」的说明）。
 
 ### 2. 创建 Action
 使用 CLI 命令快速生成 Action 模板：
@@ -171,7 +145,7 @@ ac build --target darwin-arm64   # macOS (Apple Silicon)
 ac build --target windows-x64    # Windows (x86-64)
 ```
 
-> **💡 提示**：分平台构建时建议配合 `--out` 指定输出路径（如 `ac build --target linux-x64 --out dist/my-tools-linux-x64`），否则默认输出 `dist/my-tools` 会被后续构建覆盖。交叉编译适用于纯 TypeScript/JS 依赖；若 Action 引用了含原生二进制的 npm 包（如 `sharp`、`better-sqlite3`），请在对应平台的 CI 上构建。
+> **提示**：分平台构建时建议配合 `--out` 指定输出路径（如 `ac build --target linux-x64 --out dist/my-tools-linux-x64`），否则默认输出 `dist/my-tools` 会被后续构建覆盖。交叉编译适用于纯 TypeScript/JS 依赖；若 Action 引用了含原生二进制的 npm 包（如 `sharp`、`better-sqlite3`），请在对应平台的 CI 上构建。
 
 ### 5. 导出自包含 Skill 交付包
 ```bash
@@ -181,7 +155,7 @@ ac export skill
 导出其他平台的 Skill 交付包（目录名自动追加平台后缀，互不覆盖）：
 
 ```bash
-ac export skill --target linux-x64   # → dist/my-tools-skill-linux-x64/
+ac export skill --target linux-x64   # 输出至 dist/my-tools-skill-linux-x64/
 ```
 
 导出的 Skill 目录结构：
@@ -196,12 +170,28 @@ dist/my-tools-skill/
 
 ---
 
-## 进阶指南与文档
+## 进阶指南与完整文档体系
 
-* 完整文档索引见 [docs/](docs/README.md)，核心几篇：
-  * **[Action 编写与开发指南](docs/action-authoring.md)**：详细解析 Action 定义、`ActionContext` API（`config`/`state`/`actions`/`log`）、JSON Schema 规范及内存单测工具。
-  * **[CLI 命令参考手册 (`ac`)](docs/cli-reference.md)**：全量 CLI 命令、参数选项、过滤规则及退出码说明。
-  * **[2.0 架构设计文档](docs/architecture.md)**：ActionDock 2.0 的完整重构架构、设计哲学与约束边界。
+完整文档索引见 [docs/](docs/README.md)：
+
+### 核心开发
+* **[快速上手指南](docs/quick-start.md)**：从环境准备到首个 Action 导出。
+* **[架构总览与核心设计](docs/architecture-overview.md)**：三层分层、Filesystem-First 与独立编译契约。
+* **[Action 编写与开发指南](docs/action-authoring.md)**：Action 声明结构、JSON Schema 定义与标准 Web API 实践。
+* **[ActionContext 核心能力详解](docs/action-context.md)**：`ctx.config`、`ctx.state`、`ctx.actions` 与 `ctx.log` 深度剖析。
+
+### 规程与分发
+* **[Playbook SOP 编写指南](docs/playbook-guide.md)**：面向 AI Agent 的标准操作规程规范与校验。
+* **[存储与状态管理机制](docs/storage-and-state.md)**：SQLite 存储模型、表结构索引与路径解析。
+* **[构建编译与 Skill 分发](docs/build-and-export.md)**：Bun.build 编译、`artifact.json` 元数据与 Skill 打包。
+* **[AI Agent 接入与集成指南](docs/agent-integration.md)**：Antigravity、Claude Code、Cursor 等主流 Agent 框架接入。
+
+### 参考与排错
+* **[CLI 命令参考手册 (`ac`)](docs/cli-reference.md)**：全量命令、参数选项与 JSON 协议规范。
+* **[测试与验证指南](docs/testing-guide.md)**：内存单元测试与独立编译契约测试。
+* **[错误代码与排错手册](docs/error-codes.md)**：标准运行时错误码定义与修复指引。
+* **[1.0 到 2.0 迁移指南](docs/v1-to-v2-migration.md)**：旧版平台与 2.0 新架构概念映射。
+* **[2.0 架构设计全量文档](docs/architecture.md)**：原始 2.0 架构重构设计规格书。
 * **[ActionDock AI Agent 技能指南](skills/actiondock/SKILL.md)**：专门面向 AI 编程助手与自主 Agent 的开发规范。
 
 ---
@@ -224,7 +214,7 @@ dist/my-tools-skill/
 | `ac runs list / show <run-id>` | 查看 Action 执行历史与输入输出记录 |
 | `ac test` | 使用 Bun Test Runner 执行单元测试 |
 | `ac build [--target <target>] [--out <path>]` | 将项目编译为单个自包含独立二进制（支持交叉编译：`linux-x64` / `darwin-x64` / `darwin-arm64` / `windows-x64`） |
-| `ac export skill [--target <target>]` | 导出包含 `SKILL.md` + 独立二进制的完整 Skill 交付包（支持分平台交叉编译） |
+| `ac export skill [--target <target>] [--out <path>]` | 导出包含 `SKILL.md` + 独立二进制的完整 Skill 交付包 |
 
 ---
 
