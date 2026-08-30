@@ -208,3 +208,30 @@ export async function resolveActionProject(
     );
   }
 }
+
+export function resolvePackageRoot(
+  packageIdOrPath?: string,
+  cwd?: string,
+  customHome?: string
+): string | null {
+  if (packageIdOrPath) {
+    const directRoot = findProjectRoot(packageIdOrPath);
+    if (directRoot) return directRoot;
+
+    const registry = loadRegistry(customHome);
+    if (registry.packages[packageIdOrPath]) {
+      return registry.packages[packageIdOrPath].path;
+    }
+    for (const [id, entry] of Object.entries(registry.packages)) {
+      if (
+        id === packageIdOrPath ||
+        id.split(".").pop() === packageIdOrPath ||
+        id.split("/").pop() === packageIdOrPath
+      ) {
+        return entry.path;
+      }
+    }
+  }
+
+  return findProjectRoot(cwd);
+}

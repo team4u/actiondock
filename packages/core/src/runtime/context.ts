@@ -7,21 +7,25 @@ import type {
   StateStore,
 } from "@actiondock/sdk";
 import type { ProjectConfig } from "../project/types";
+import { createGlobalStorage } from "../storage";
 import type { RuntimeStorage } from "../storage/types";
 
 export class RuntimeConfig implements Config {
   private overrides: Map<string, unknown>;
   private storage: RuntimeStorage;
   private projectConfig?: ProjectConfig;
+  private globalStorage?: RuntimeStorage;
 
   constructor(
     storage: RuntimeStorage,
     overrides: Record<string, unknown> = {},
-    projectConfig?: ProjectConfig
+    projectConfig?: ProjectConfig,
+    globalStorage?: RuntimeStorage
   ) {
     this.storage = storage;
     this.overrides = new Map(Object.entries(overrides));
     this.projectConfig = projectConfig;
+    this.globalStorage = globalStorage !== undefined ? globalStorage : createGlobalStorage();
   }
 
   get<T = unknown>(key: string): T | undefined;
@@ -32,13 +36,30 @@ export class RuntimeConfig implements Config {
       return this.overrides.get(key) as T;
     }
 
-    // 2. Storage (SQLite)
+    // 2. Local Project Storage (SQLite)
     const stored = this.storage.getConfig<T>(key);
     if (stored !== undefined) {
       return stored;
     }
 
-    // 3. Project Default (actiondock.json)
+    // 3. Global Storage (~/.actiondock/global.db)
+    if (this.globalStorage) {
+      try {
+        const globalStored = this.globalStorage.getConfig<T>(key);
+        if (globalStored !== undefined) {
+          return globalStored;
+        }
+      } catch {
+        // Ignore global storage read error
+      }
+    }
+
+    // 4. Environment Variables (process.env)
+    if (typeof process !== "undefined" && process.env && process.env[key] !== undefined) {
+      return process.env[key] as unknown as T;
+    }
+
+    // 5. Project Default (actiondock.json)
     if (this.projectConfig?.config?.[key]?.default !== undefined) {
       return this.projectConfig.config[key].default as T;
     }
@@ -49,6 +70,8 @@ export class RuntimeConfig implements Config {
   has(key: string): boolean {
     if (this.overrides.has(key)) return true;
     if (this.storage.getConfig(key) !== undefined) return true;
+    if (this.globalStorage?.getConfig(key) !== undefined) return true;
+    if (typeof process !== "undefined" && process.env && process.env[key] !== undefined) return true;
     if (this.projectConfig?.config?.[key]?.default !== undefined) return true;
     return false;
   }

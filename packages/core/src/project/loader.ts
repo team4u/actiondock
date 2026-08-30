@@ -4,12 +4,21 @@ import YAML from "yaml";
 import type { ActionDefinition } from "@actiondock/sdk";
 import type { PlaybookDefinition, PlaybookFrontmatter, ProjectConfig } from "./types";
 
-export function findProjectRoot(cwd: string = process.cwd()): string | null {
-  let current = resolve(cwd);
+export function findProjectRoot(cwd?: string): string | null {
+  let current: string;
+  try {
+    current = resolve(cwd || process.cwd());
+  } catch {
+    return null;
+  }
   while (true) {
-    const configPath = join(current, "actiondock.json");
-    if (existsSync(configPath)) {
-      return current;
+    try {
+      const configPath = join(current, "actiondock.json");
+      if (existsSync(configPath)) {
+        return current;
+      }
+    } catch {
+      return null;
     }
     const parent = dirname(current);
     if (parent === current) {

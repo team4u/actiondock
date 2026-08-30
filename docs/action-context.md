@@ -10,7 +10,7 @@
 
 `ctx.config` 提供了读取运行时配置的能力，专为环境密钥（如 API Token、网关地址、超时阈值等）设计。
 
-### 配置解析优先级（三级策略）
+### 配置解析优先级（多级回退策略）
 
 当调用 `ctx.config.get(key, defaultValue)` 时，ActionDock 按以下顺序解析配置：
 
@@ -18,7 +18,13 @@
 [命令行临时覆盖 (--config KEY=val)]
                  | (未提供则回退)
                  v
-[本地持久化数据库存储 (ac config set KEY val)]
+[项目本地数据库存储 (ac config set KEY val)]
+                 | (未设置则回退)
+                 v
+[全局配置存储 (ac config set KEY val --global / ~/.actiondock/global.db)]
+                 | (未设置则回退)
+                 v
+[系统环境变量 (process.env.KEY)]
                  | (未设置则回退)
                  v
 [actiondock.json 声明的默认值 ("config[key].default")]

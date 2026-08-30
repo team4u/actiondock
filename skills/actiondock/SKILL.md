@@ -219,11 +219,12 @@ ac playbook validate
 ## 运行时存储管理（Config & State）
 
 ### 配置管理 (`ctx.config`)
+ActionDock 支持**全局配置**（`~/.actiondock/global.db`）与**项目级配置**两级存储：
 ```bash
-ac config list [patterns...] [-i "<regex>"] [--json]
-ac config get <key> [--json]
-ac config set <key> <value>
-ac config delete <key>
+ac config list [patterns...] [-P <pkg>] [-g] [--json]
+ac config get <key> [-P <pkg>] [-g] [--json]
+ac config set <key> <value> [-g]                  # 不在项目目录时自动全局生效，或传 -g 强制全局
+ac config delete <key> [-g]
 ```
 
 ### 状态管理 (`ctx.state`)

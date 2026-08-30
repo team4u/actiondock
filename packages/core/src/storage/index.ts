@@ -30,3 +30,10 @@ export function createStorage(
   const dbPath = resolveDatabasePath(packageId, options);
   return new SqliteRuntimeStorage({ dbPath, packageId });
 }
+
+export function createGlobalStorage(customHome?: string): RuntimeStorage {
+  const baseDir = customHome || process.env.ACTIONDOCK_HOME || homedir();
+  const dbPath = join(baseDir, ".actiondock", "global.db");
+  return new SqliteRuntimeStorage({ dbPath, packageId: "__global__" });
+}
+

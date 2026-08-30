@@ -1,11 +1,26 @@
 import {
   createStorage,
   filterWithFallbackInfo,
-  findProjectRoot,
   loadProjectConfig,
+  resolvePackageRoot,
 } from "@actiondock/core";
 import { Command } from "commander";
 import { resolveIntent } from "../utils/filter";
+
+function getTargetRoot(packageOption?: string): string {
+  const root = resolvePackageRoot(packageOption);
+  if (!root) {
+    if (packageOption) {
+      console.error(`Error: Package '${packageOption}' not found in linked packages or path`);
+    } else {
+      console.error(
+        "Error: Not in an ActionDock project (actiondock.json not found).\nPlease cd into the project directory (e.g. /root/code/sui-tools) or specify -P, --package <id>"
+      );
+    }
+    process.exit(1);
+  }
+  return root;
+}
 
 export function registerStateCommands(program: Command): void {
   const stateCmd = program
@@ -16,15 +31,12 @@ export function registerStateCommands(program: Command): void {
   stateCmd
     .command("list [prefix]")
     .description("List state keys matching prefix or intent pattern")
+    .option("-P, --package <id>", "Target package ID or path")
     .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("--json", "Output as JSON")
     .action(async (prefix = "", options) => {
-      const root = findProjectRoot();
-      if (!root) {
-        console.error("Error: Not in an ActionDock project");
-        process.exit(1);
-      }
+      const root = getTargetRoot(options.package);
       try {
         const effectiveIntent = resolveIntent(options.intent, prefix ? [prefix] : []);
         const shouldFallback = options.fallback !== false;
@@ -45,7 +57,7 @@ export function registerStateCommands(program: Command): void {
           console.log(JSON.stringify(filterRes.items, null, 2));
         } else {
           console.log(
-            `State keys for ${projConfig.id}${prefix ? ` (filter: ${prefix})` : ""}:\n`
+            `State keys for ${projConfig.id} (${root})${prefix ? ` (filter: ${prefix})` : ""}:\n`
           );
           if (filterRes.isFallback && effectiveIntent) {
             console.log(`(No state keys matched intent '${effectiveIntent}', showing all keys)\n`);
@@ -60,18 +72,14 @@ export function registerStateCommands(program: Command): void {
       }
     });
 
-
   // state get
   stateCmd
     .command("get <key>")
     .description("Get a state value by key")
+    .option("-P, --package <id>", "Target package ID or path")
     .option("--json", "Output as JSON")
     .action(async (key, options) => {
-      const root = findProjectRoot();
-      if (!root) {
-        console.error("Error: Not in an ActionDock project");
-        process.exit(1);
-      }
+      const root = getTargetRoot(options.package);
       try {
         const projConfig = loadProjectConfig(root);
         const storage = createStorage(projConfig.id, { projectRoot: root });
@@ -93,13 +101,10 @@ export function registerStateCommands(program: Command): void {
   stateCmd
     .command("set <key> <value>")
     .description("Set a state value by key")
+    .option("-P, --package <id>", "Target package ID or path")
     .option("--ttl <seconds>", "Time to live in seconds", (v) => parseInt(v, 10))
     .action(async (key, rawValue, options) => {
-      const root = findProjectRoot();
-      if (!root) {
-        console.error("Error: Not in an ActionDock project");
-        process.exit(1);
-      }
+      const root = getTargetRoot(options.package);
       try {
         const projConfig = loadProjectConfig(root);
         const storage = createStorage(projConfig.id, { projectRoot: root });
@@ -111,17 +116,10 @@ export function registerStateCommands(program: Command): void {
           parsed = rawValue;
         }
 
-        const ttl =
-          options.ttl !== undefined && !isNaN(options.ttl)
-            ? options.ttl
-            : undefined;
-
-        await storage.setState("", key, parsed, ttl);
+        await storage.setState("", key, parsed, options.ttl);
         storage.close();
-
-        const meta = ttl ? ` (ttl: ${ttl}s)` : "";
         console.log(
-          `[OK] State '${key}' set to ${JSON.stringify(parsed)}${meta}`
+          `[OK] State '${key}' set to ${JSON.stringify(parsed)}${options.ttl ? ` (TTL: ${options.ttl}s)` : ""} in ${projConfig.id}`
         );
       } catch (err: any) {
         console.error(`Error: ${err.message}`);
@@ -133,19 +131,16 @@ export function registerStateCommands(program: Command): void {
   stateCmd
     .command("delete <key>")
     .alias("rm")
-    .description("Delete a state key")
-    .action(async (key) => {
-      const root = findProjectRoot();
-      if (!root) {
-        console.error("Error: Not in an ActionDock project");
-        process.exit(1);
-      }
+    .description("Delete a state value from local database")
+    .option("-P, --package <id>", "Target package ID or path")
+    .action(async (key, options) => {
+      const root = getTargetRoot(options.package);
       try {
         const projConfig = loadProjectConfig(root);
         const storage = createStorage(projConfig.id, { projectRoot: root });
         await storage.deleteState("", key);
         storage.close();
-        console.log(`[OK] State '${key}' deleted`);
+        console.log(`[OK] State '${key}' deleted from ${projConfig.id}`);
       } catch (err: any) {
         console.error(`Error: ${err.message}`);
         process.exit(1);
