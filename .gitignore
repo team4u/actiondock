@@ -1,11 +1,9 @@
 # Dependencies
 node_modules/
-bun.lockb
-bun.lock
 
 # Build & artifacts
 dist/
-build/
+/build/
 *.tsbuildinfo
 
 # ActionDock runtime & local stores
