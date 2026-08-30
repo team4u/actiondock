@@ -8,23 +8,23 @@
 
 > 一次编写，随处运行。面向 AI Agent 的 Action 与 Skill 开发、测试、构建与分发工具链。
 
-ActionDock 2.0 是面向 AI Agent 与研发团队的新一代工具链体系。它革新了传统 Agent 工具的开发与交付模式：采用 **源码型 Skill** (Source Skill)与**零安装独立二进制** (Zero-Install Standalone Binary) 双模交付，让开发者使用 TypeScript 与标准 JSON Schema 快速构建原子工具（Action），并无缝对接 Model Context Protocol (MCP)。
+ActionDock 2.0 是面向 AI Agent 与研发团队的新一代工具链体系。它革新了传统 Agent 工具的开发与交付模式：采用 **源码型 Skill**与**零安装独立二进制** 双模交付，让开发者使用 TypeScript 与标准 JSON Schema 快速构建原子工具（Action），并无缝对接 Model Context Protocol (MCP)。
 
 - **预装 ActionDock 环境** (推荐)：直接分发极轻量源码型 Skill（`SKILL.md + actiondock.json + actions`），跨平台免编译，动态加载依赖。
 - **无依赖裸机环境**：一键打包为自包含、零外部依赖的独立可执行文件（`--standalone`），目标机器无需安装 Node.js、Bun、Python 或 Java 即可直接运行。
 
-[进入官方完整文档中心 (docs/README.md)](docs/README.md)
+[进入官方完整文档中心](docs/README.md)
 
 ---
 
 ## 设计思考与架构哲学
 
-- **零依赖独立交付** (Zero-Install Standalone Executables)：借助 Bun 原生编译引擎，将 TypeScript 代码、npm 依赖闭包及运行时打包为单一独立二进制文件。分发后开箱即用，从根源杜绝环境漂移与依赖冲突。
-- **文件系统优先** (Filesystem First)：Action（`actions/*.ts`）、Playbook（`playbooks/*.md`）与项目配置均为普通文件，天然契合 Git 版本控制、分支合并与代码评审流程。
-- **强类型与标准契约** (TypeScript Native & Standard JSON Schema)：统一全链路编程语言为 TypeScript，入参与出参使用标准 JSON Schema 配合 Ajv 严格校验，无自定义私有 DSL 学习负担。
-- **独立编译契约原则** (Standalone Contract Consistency)：在本地开发态（`ac run`）、编译后独立二进制态（`./bin/pkg run`）与 MCP Tool 态下，`ActionContext` 的上下文语义、5 级配置优先级、状态持久化与输出 JSON Envelope 保持严格一致。
-- **双模交付与协议适配** (Dual-Mode Delivery: MCP + Binary)：既可作为 Model Context Protocol (MCP) STDIO / HTTP 服务端供 Agent IDE 直连，亦可作为自包含 Skill 交付包跨机器分发。
-- **通道分离与白盒可观测** (Clean Stdio Separation & White-Box Trace)：执行数据严格输出至 `stdout`（标准 JSON Envelope），运行日志与诊断信息强制输出至 `stderr`，确保 Agent 协议消费绝对纯净。
+- **零依赖独立交付**：借助 Bun 原生编译引擎，将 TypeScript 代码、npm 依赖闭包及运行时打包为单一独立二进制文件。分发后开箱即用，从根源杜绝环境漂移与依赖冲突。
+- **文件系统优先**：Action（`actions/*.ts`）、Playbook（`playbooks/*.md`）与项目配置均为普通文件，天然契合 Git 版本控制、分支合并与代码评审流程。
+- **强类型与标准契约**：统一全链路编程语言为 TypeScript，入参与出参使用标准 JSON Schema 配合 Ajv 严格校验，无自定义私有 DSL 学习负担。
+- **独立编译契约原则**：在本地开发态（`ac run`）、编译后独立二进制态（`./bin/pkg run`）与 MCP Tool 态下，`ActionContext` 的上下文语义、5 级配置优先级、状态持久化与输出 JSON Envelope 保持严格一致。
+- **双模交付与协议适配**：既可作为 Model Context Protocol (MCP) STDIO / HTTP 服务端供 Agent IDE 直连，亦可作为自包含 Skill 交付包跨机器分发。
+- **通道分离与白盒可观测**：执行数据严格输出至 `stdout`（标准 JSON Envelope），运行日志与诊断信息强制输出至 `stderr`，确保 Agent 协议消费绝对纯净。
 
 ---
 
@@ -37,7 +37,7 @@ ActionDock 2.0 是面向 AI Agent 与研发团队的新一代工具链体系。�
 | **持久化状态存储** | `bun:sqlite` / Storage | 基于 SQLite 的 Config 配置、跨调用持久化 State（支持 TTL 与命名空间）以及 Runs 执行历史与调用链。 | [存储与状态](docs/storage-and-state.md) |
 | **MCP 协议适配器** | `@actiondock/mcp` / `ac mcp` | 提供 STDIO 与 HTTP 双模 Transport，Action 与 Tool 零冗余映射，支持 MCP Tasks 异步长任务扩展。 | [MCP 指南](docs/mcp-integration.md) |
 | **独立构建与编译** | `Bun.build` / `ac build` | 一键编译为单文件独立二进制，支持全平台交叉编译（Linux / macOS / Windows）与 Tree-shaking 裁剪。 | [构建与编译](docs/build-and-export.md) |
-| **SOP 与 Skill 交付** | `ac export skill` / Playbooks | 编写领域 SOP 操作规程（Playbook），一键导出包含 `SKILL.md` 与独立二进制的自包含 Skill 交付包。 | [Skill 规范](docs/skill-guide.md) · [Playbook 编写](docs/playbook-guide.md) |
+| **SOP 与 Skill 交付** | `ac export skill` / Playbooks | 编写领域 SOP 操作规程，一键导出包含 `SKILL.md` 与独立二进制的自包含 Skill 交付包。 | [Skill 规范](docs/skill-guide.md) · [Playbook 编写](docs/playbook-guide.md) |
 | **多云与多环境调度** | `ac serve` / `ac profile` | 在远程主机启动轻量 HTTP Runner，本地通过 Profile 无缝调度多云主机，支持异步长任务生命周期管理。 | [多环境调度](docs/remote-and-profiles.md) |
 | **CLI 门面工具** | `@actiondock/cli` (`ac`) | 极速短命令 `ac`，提供脚手架初始化、正则与模糊意图过滤、开发态缺失依赖毫秒级自动补齐。 | [CLI 参考手册](docs/cli-reference.md) |
 
@@ -192,12 +192,12 @@ actiondock/
 
 ## 导航与参考
 
-- **[官方文档中心 (docs/README.md)](docs/README.md)**：包含各组件的架构设计、API 手册、协议规范与实战指南。
-- **[快速上手指南 (docs/quick-start.md)](docs/quick-start.md)**：从环境准备到首个 Action 导出的 5 分钟教程。
-- **[Action 编写指南 (docs/action-authoring.md)](docs/action-authoring.md)**：强类型定义、Schema 校验、依赖管理与 Action 组合。
-- **[ActionContext 核心能力详解 (docs/action-context.md)](docs/action-context.md)**：配置回退、持久化状态、日志隔离与 AbortSignal 取消链路。
-- **[Model Context Protocol 适配器 (docs/mcp-integration.md)](docs/mcp-integration.md)**：STDIO / HTTP 协议、Tool 映射与 MCP Tasks 扩展。
-- **[CLI 命令行参考手册 (docs/cli-reference.md)](docs/cli-reference.md)**：全量命令、参数选项与 JSON 协议规范。
+- **[官方文档中心](docs/README.md)**：包含各组件的架构设计、API 手册、协议规范与实战指南。
+- **[快速上手指南](docs/quick-start.md)**：从环境准备到首个 Action 导出的 5 分钟教程。
+- **[Action 编写指南](docs/action-authoring.md)**：强类型定义、Schema 校验、依赖管理与 Action 组合。
+- **[ActionContext 核心能力详解](docs/action-context.md)**：配置回退、持久化状态、日志隔离与 AbortSignal 取消链路。
+- **[Model Context Protocol 适配器](docs/mcp-integration.md)**：STDIO / HTTP 协议、Tool 映射与 MCP Tasks 扩展。
+- **[CLI 命令行参考手册](docs/cli-reference.md)**：全量命令、参数选项与 JSON 协议规范。
 
 ---
 

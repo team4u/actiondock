@@ -21,6 +21,6 @@
   * [AI Agent 接入与集成指南](agent-integration.md)
 
 * **工具参考与排错演进**
-  * [CLI 命令行参考手册 (ac)](cli-reference.md)
+  * [CLI 命令行参考手册](cli-reference.md)
   * [错误代码与排错手册](error-codes.md)
   * [1.0 到 2.0 架构对比与迁移指南](v1-to-v2-migration.md)

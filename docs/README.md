@@ -22,7 +22,7 @@ ActionDock 2.0 是一套专为 AI Agent 研发与交付场景打造的轻量级�
 | :--- | :--- | :--- | :--- |
 | **Action 编写指南** | `@actiondock/sdk` · `actions/*.ts` | 基于 `defineAction` 声明 Action、TypeScript 泛型绑定、标准 JSON Schema 校验、标准 Web API 与 npm 依赖管理。 | [概览与实践](action-authoring.md) · [快速开始](quick-start.md) |
 | **ActionContext 详解** | `@actiondock/sdk` · `ActionContext` | 5 大上下文核心能力剖析：`ctx.config`（5 级优先级解析）、`ctx.state`（SQLite 持久化 KV 与 TTL）、`ctx.actions`（组合调用与循环防御）、`ctx.log`（stderr 隔离输出）与 `ctx.signal`（Web AbortSignal 取消链路）。 | [Context 详解](action-context.md) |
-| **测试与验证指南** | `@actiondock/sdk` · `tests/*.test.ts` | 极速纯内存单测工具 `createTestRuntime`，支持配置预填、初始状态注入、日志断言以及独立编译契约测试（Contract Testing）。 | [测试指南](testing-guide.md) |
+| **测试与验证指南** | `@actiondock/sdk` · `tests/*.test.ts` | 极速纯内存单测工具 `createTestRuntime`，支持配置预填、初始状态注入、日志断言以及独立编译契约测试。 | [测试指南](testing-guide.md) |
 
 ---
 
@@ -157,8 +157,8 @@ ac export skill
 
 ## 设计哲学
 
-- **轻量与自包含** (Lightweight & Self-Contained)：彻底摆脱传统框架对复杂运行时环境、虚拟机或集中式控制台的强依赖，编译后的产物可在任何干净的操作系统直接运行。
-- **契约严格一致** (Standalone Contract Invariance)：无论在本地 CLI、云端 Runner、MCP Server 还是编译后的独立二进制中，Action 的入参校验、配置解析、持久化状态与返回值协议均保持 100% 行为一致。
-- **标准与生态复用** (Standard Web & npm Ecosystem)：直接使用原生 Web 标准（`fetch`、`AbortSignal`、`JSON Schema`）与丰富 npm 生态包，不发明封闭的专有 DSL。
-- **纯净通道隔离** (Clean Channel Separation)：严格区分数据通道（`stdout` 机器 JSON Envelope）与可观测日志通道（`stderr` 诊断输出），从物理层面避免 LLM 语法解析崩溃。
-- **白盒链路可溯** (Traceable Execution Lifecycle)：内置基于 SQLite 的 Runs 历史与父子 Action 级联追踪，支持循环调用防御与全链路响应式取消。
+- **轻量与自包含**：彻底摆脱传统框架对复杂运行时环境、虚拟机或集中式控制台的强依赖，编译后的产物可在任何干净的操作系统直接运行。
+- **契约严格一致**：无论在本地 CLI、云端 Runner、MCP Server 还是编译后的独立二进制中，Action 的入参校验、配置解析、持久化状态与返回值协议均保持 100% 行为一致。
+- **标准与生态复用**：直接使用原生 Web 标准（`fetch`、`AbortSignal`、`JSON Schema`）与丰富 npm 生态包，不发明封闭的专有 DSL。
+- **纯净通道隔离**：严格区分数据通道（`stdout` 机器 JSON Envelope）与可观测日志通道（`stderr` 诊断输出），从物理层面避免 LLM 语法解析崩溃。
+- **白盒链路可溯**：内置基于 SQLite 的 Runs 历史与父子 Action 级联追踪，支持循环调用防御与全链路响应式取消。

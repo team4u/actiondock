@@ -10,7 +10,7 @@
   - 若客户端已预装 ActionDock 运行时，直接分发轻量源码是最高效、跨平台且具备最高可观测性的方式；
   - 若目标沙箱为无依赖的纯裸机环境，则需要提供自包含的独立便携二进制。
 
-在 ActionDock 2.0 中，**Skill** (技能)是面向 AI Agent 的自包含交付形态。它将**原子工具** (Action)、**操作规程** (Playbook)与**认知引导** (SKILL.md)深度融合，并支持**源码型 Skill** (默认)与**独立便携型 Skill** (Standalone)两种分发模型。
+在 ActionDock 2.0 中，**Skill** (技能)是面向 AI Agent 的自包含交付形态。它将**原子工具** (Action)、**操作规程** (Playbook)与**认知引导** (SKILL.md)深度融合，并支持**源码型 Skill** (默认)与**独立便携型 Skill**两种分发模型。
 
 ---
 
@@ -57,7 +57,7 @@ graph TD
 
 # Skill 交付目录结构
 
-### 源码型 Skill (Source Skill，默认输出)
+### 源码型 Skill
 
 执行 `ac export skill` 生成的标准目录：
 
@@ -145,13 +145,13 @@ ac export skill --standalone
 ac export skill --standalone --target linux-x64
 ```
 
-### 任务驱动按需裁剪导出 (Playbook-Driven Export)
+### 任务驱动按需裁剪导出
 当项目包含多个业务领域的 SOP 和数十个 Action 时，可按特定任务进行按需精准打包：
 ```bash
 ac export skill --playbook review-pr
 ```
 
-- **自动依赖裁剪** (Tree-shaking)：系统自动解析 `playbooks/review-pr.md` Frontmatter 中声明的 `actions` 依赖，仅将该任务所需的 Action 复制或编译进产物。
+- **自动依赖裁剪**：系统自动解析 `playbooks/review-pr.md` Frontmatter 中声明的 `actions` 依赖，仅将该任务所需的 Action 复制或编译进产物。
 - **纯净上下文**：导出的 `playbooks/` 仅含指定 SOP，`SKILL.md` 仅包含相关 Action，彻底避免 Agent 提示词上下文冗余。
 
 ### 自动归档压缩
@@ -186,10 +186,10 @@ sequenceDiagram
 
 # Skill 设计原则与最佳实践
 
-- **源码优先** (Source First)：在 AI 智能体工作流中，优先分发源码型 Skill，享有体积小、可查看、可修改、跨平台无编译负担的优势。
+- **源码优先**：在 AI 智能体工作流中，优先分发源码型 Skill，享有体积小、可查看、可修改、跨平台无编译负担的优势。
 - **统一使用 Package-Qualified ID**：在 `SKILL.md` 与 Playbook 中，调用 Action 统一使用 `<package-id>/<action-id>`，确保全局多 Package 共存时不发生冲突。
 - **任务驱动最小化交付**：对外发布时善用 `--playbook` 进行按需 Tree-shaking 导出，降低 Agent 上下文负担与幻觉风险。
-- **红线明确** (Clear Guardrails)：在 Playbook 中明确设立高危操作拦截线（如禁止未经确认直接物理删除数据库）。
+- **红线明确**：在 Playbook 中明确设立高危操作拦截线（如禁止未经确认直接物理删除数据库）。
 
 ---
 

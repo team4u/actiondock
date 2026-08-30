@@ -2,7 +2,7 @@
 
 # 背景
 
-在为 AI Agent 构建工具（Tools / Actions）时，开发者通常面临以下挑战：
+在为 AI Agent 构建工具 (Action) 时，开发者通常面临以下挑战：
 
 - **类型松散与 Schema 缺失**：传统的脚本或函数缺乏标准化的输入/输出契约，Agent 容易传错参数类型或遗漏必填字段，导致运行时崩溃。
 - **环境碎片与依赖地狱**：不同工具依赖不同的 Python 虚拟环境、Node 模块或系统工具，分发给其他机器或沙箱时经常因环境不一致而失效。
@@ -230,7 +230,7 @@ export default defineAction({
 
 ---
 
-## 跨 Action 组合调用 (Composite Actions)
+## 跨 Action 组合调用
 
 ActionDock 原生支持将多个细粒度的原子 Action 编排组合为复合 Action。
 
@@ -298,8 +298,8 @@ export default defineAction({
 
 - **上下文透明继承**：子 Action 自动共享当前的 Config、State 与 Storage 存储上下文。
 - **全链路取消穿透**：父 Action 的 `ctx.signal` 自动向下传递给子 Action，父级取消时子级立即同步中断。
-- **调用链追踪** (Runs Cascade)：在 SQLite 的 `runs` 记录表中，子 Action 的 Run 记录会自动设置 `parent_run_id` 关联父级。
-- **循环依赖与死递归防御** (Cycle Detection)：底层调用栈会自动追踪执行链。一旦检测到 `A -> B -> A` 的循环调用，立即终止并抛出 `ACTION_CYCLE_DETECTED` 错误。
+- **调用链追踪**：在 SQLite 的 `runs` 记录表中，子 Action 的 Run 记录会自动设置 `parent_run_id` 关联父级。
+- **循环依赖与死递归防御**：底层调用栈会自动追踪执行链。一旦检测到 `A -> B -> A` 的循环调用，立即终止并抛出 `ACTION_CYCLE_DETECTED` 错误。
 
 ---
 
@@ -332,7 +332,7 @@ ActionDock 为每个 Action 注入了标准的 Web API `AbortSignal`（`ctx.sign
 > **开发 Action 时必须严格遵守的 4 条底线**：
 > - **严禁直接向 stdout 输出非 JSON 数据**：绝对不要在 Action 代码中使用 `console.log()`；所有调试与业务日志一律使用 `ctx.log.info()` / `ctx.log.debug()`（强制写入 `stderr`）。
 > - **必须声明严格的 inputSchema 与 outputSchema**：明确定义字段类型、描述与必填项（`required`），严禁使用 `{}` 空 Schema。
-> - **保持幂等性设计** (Idempotence)：Action 可能被 AI Agent 重试调用，建议在业务上利用 `ctx.state` 检查幂等键或状态游标。
+> - **保持幂等性设计**：Action 可能被 AI Agent 重试调用，建议在业务上利用 `ctx.state` 检查幂等键或状态游标。
 > - **零隐式状态假定**：不要在模块全局变量中保存持久状态；跨执行保留的数据必须使用 `ctx.state`。
 
 ---

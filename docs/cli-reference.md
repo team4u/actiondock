@@ -58,7 +58,7 @@ ActionDock 命令行工具（简写为 `ac`）提供了全生命周期的项目�
 
 # 子命令详细手册
 
-## 项目管理 (Project)
+## 项目管理
 
 ### `ac init [directory]`
 在指定目录初始化一个标准的 ActionDock 脚手架项目。
@@ -142,7 +142,7 @@ ActionDock 命令行工具（简写为 `ac`）提供了全生命周期的项目�
 
 ---
 
-## 多环境与云机器调度 (Profile & Serve)
+## 多环境与云机器调度
 
 ### `ac profile list [patterns...] [--reveal] [--json]`
 列出所有配置的云节点/环境 profile，标记当前默认激活的目标与 Token 来源（支持 `-i, --intent <pattern>` 正则与位置关键字模糊过滤，支持敏感 Token 脱敏与 `--reveal` 明文展示）。
@@ -199,7 +199,7 @@ ActionDock 命令行工具（简写为 `ac`）提供了全生命周期的项目�
 
 ---
 
-## 运行时配置管理 (Config)
+## 运行时配置管理
 
 - `ac config schema [id] [--json]`（别名：`ac config check`）：检查当前项目或指定 Action 声明的配置依赖，展示生效状态（`[SET]` / `[DEFAULT]` / `[MISSING]`）与来源。
 - `ac config list [patterns...] [-P <pkg>] [-g] [--reveal] [--json]`：列出有效配置清单（支持敏感信息脱敏与 `--reveal` 明文展示）。
@@ -209,7 +209,7 @@ ActionDock 命令行工具（简写为 `ac`）提供了全生命周期的项目�
 
 ---
 
-## 共享状态管理 (Shared State)
+## 共享状态管理
 
 - `ac state list [prefix] [-i, --intent <pattern>] [--json]`：列出当前项目本地状态数据库中的 Key（自动剔除已过期 Key）。
 - `ac state get <key> [--json]`：获取指定 Key 的持久化状态值。
@@ -218,7 +218,7 @@ ActionDock 命令行工具（简写为 `ac`）提供了全生命周期的项目�
 
 ---
 
-## 执行记录检查 (Runs)
+## 执行记录检查
 
 - `ac runs list [patterns...] [-i, --intent <pattern>] [-a, --action <id>] [-n, --limit <count>] [--json]`：列出最近的 Action 执行历史。
 - `ac runs show <run-id> [-p <profile>] [-s <server>] [-t <token>] [--json]`：查看单次 Run 的完整执行详情、耗时、入参、出参及错误堆栈（支持本地或通过 `--profile` 查询远程记录）。
@@ -226,14 +226,14 @@ ActionDock 命令行工具（简写为 `ac`）提供了全生命周期的项目�
 
 ---
 
-## 单元测试 (Test)
+## 单元测试
 
 ### `ac test [pattern]`
 使用 Bun 内置的高性能测试运行器执行项目中的单元测试（`tests/**/*.test.ts`）。
 
 ---
 
-## 构建与 Skill 导出 (Build & Export)
+## 构建与 Skill 导出
 
 ### `ac build`
 将当前项目的 Action 编译打包为单个自包含的独立可执行文件。

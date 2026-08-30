@@ -26,7 +26,7 @@ graph LR
 ```
 
 - **数据与代码严格分离**：SQLite 数据库中**绝不存储代码、Action 源码或 Playbook 内容** （代码与元数据 100% 由文件系统与 Git 版本控制管理）。
-- **仅管理运行态数据**：数据库专注于 3 类运行态数据：环境配置（Config）、持久化共享状态（State）与执行历史记录（Runs）。
+- **仅管理运行态数据**：数据库专注于 3 类运行态数据：环境配置、持久化共享状态与执行历史记录。
 - **进程内原生直连**：基于 Bun 内置的原生 SQLite 驱动，无网络 I/O 损耗，默认支持 WAL（Write-Ahead Logging）高并发读写模式。
 
 ---
@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS config (
 
 ## 持久化共享状态表 (`state`)
 
-保存跨 Action 执行保留的业务持久化状态，支持命名空间隔离（Namespace）与生存时间（TTL / expires_at）。
+保存跨 Action 执行保留的业务持久化状态，支持命名空间隔离与生存时间 (TTL)。
 
 ```sql
 CREATE TABLE IF NOT EXISTS state (

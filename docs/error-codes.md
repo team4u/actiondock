@@ -28,9 +28,9 @@ ActionDock 2.0 在执行 Action、解析配置、校验 Schema、编译构建或
 
 ---
 
-# 标准错误代码清单 (Master Table)
+# 标准错误代码清单
 
-| 错误代码 (Error Code) | 场景与含义 | 常见触发原因 | 排错与修复建议 |
+| 错误代码 | 场景与含义 | 常见触发原因 | 排错与修复建议 |
 | :--- | :--- | :--- | :--- |
 | `ACTION_NOT_FOUND` | 请求的 Action 标识不存在 | 命令行传入的 Action ID 拼写错误，或文件未在 `actions/` 目录中声明。 | * 运行 `ac action list` 查看可用 Action。<br>* 检查 `actions/*.ts` 中的 `id` 属性。 |
 | `INPUT_VALIDATION_FAILED` | 入参不符合 `inputSchema` 定义 | 缺少必填字段、字段类型不匹配（如要求 number 却传入了 string）或未满足格式约束。 | * 运行 `ac action show <id>` 查看入参 Schema。<br>* 检查 `--input` 的 JSON 格式与字段类型。 |

@@ -205,7 +205,7 @@ ac mcp serve \
 
 ---
 
-# 取消传播机制 (Cancellation)
+# 取消传播机制
 
 当 MCP 客户端发送取消通知时：
 
@@ -265,7 +265,7 @@ ActionDock 原生支持官方 MCP Tasks 扩展，使 AI Agent 能够通过 MCP �
 
 ---
 
-# 调试与排错 (MCP Inspector)
+# 调试与排错
 
 推荐使用官方 MCP Inspector 进行本地可视化调试：
 

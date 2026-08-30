@@ -4,7 +4,7 @@
 
 ActionDock 1.0 最初定位为中心化的脚本治理平台（基于 Java 21 + Spring Boot 3 + JPA + Web Admin 控制台构建）。在 1.0 时代，系统主要面向人工运维与管理场景，由开发者在 Web 控制台上在线编辑脚本、配置定时调度并存储在中心化 MySQL 数据库中。
 
-随着大语言模型与自主智能体（Autonomous AI Agents）的爆发，工具链的交付形态发生了范式转移：
+随着大语言模型与自主智能体的爆发，工具链的交付形态发生了范式转移：
 - **AI Agent 不需要 Web 控制台**：Agent 需要的是**确定性、强类型、自包含且零环境依赖**的工具可执行实体。
 - **告别庞大的常驻服务与数据库**：Agent 调用工具不应强依赖臃肿的 Java 虚拟机或外部关系数据库。
 - **文件系统与 Git 优先**：代码、提示词与规程应当作为普通文件纳入代码仓库进行严格的版本管理与 Code Review。
@@ -19,9 +19,9 @@ ActionDock 2.0 是一次彻底的现代化重构：基于 **Bun + TypeScript + b
 | :--- | :--- | :--- | :--- |
 | **产品定位** | 中心化脚本管理平台（带后端 Server、Admin UI、数据库、权限与定时调度） | 面向 AI Agent 的轻量级 Action / Skill 独立开发、测试与分发工具链 | 专注于 Agent 时代的极简工具链标准 |
 | **技术栈** | Java 21 + Spring Boot 3 + JPA + Groovy / Python + React Admin UI | Bun + TypeScript + `bun:sqlite` + 原生单文件编译引擎 | 原生类型安全，极速冷启动，零资源浪费 |
-| **运行形态** | 长期运行的常驻 Server 守护进程 + Web 控制台 | 零常驻守护进程（Zero-Daemon），纯 CLI 工具（`ac`）按需执行；远端按需启动 `ac serve` | 随用随启，杜绝资源常驻开销 |
+| **运行形态** | 长期运行的常驻 Server 守护进程 + Web 控制台 | 零常驻守护进程，纯 CLI 工具（`ac`）按需执行；远端按需启动 `ac serve` | 随用随启，杜绝资源常驻开销 |
 | **交付形态**| 必须部署完整的 ActionDock 服务端才能运行脚本 | 编译为单个零外部依赖的自包含独立二进制 + 标准 SKILL.md |**零依赖独立交付**，分发后开箱即用 |
-| **开发模型** | Web 页面在线编辑脚本，存在中心化数据库中 | 文件系统优先（Filesystem First），`actions/*.ts` 普通文件纳入 Git 管理 | 享受 IDE 补全、Git 分支合并与 CI/CD 流水线 |
+| **开发模型** | Web 页面在线编辑脚本，存在中心化数据库中 | 文件系统优先，`actions/*.ts` 普通文件纳入 Git 管理 | 享受 IDE 补全、Git 分支合并与 CI/CD 流水线 |
 | **依赖管理** | 复杂的动态 ClassLoader / 插件热插拔系统 | 标准 npm / TypeScript 原生模块导入（`import`）与自动补齐 | 复用海量 npm 生态，构建态自动 Tree-shaking |
 | **持久化** | MySQL / PostgreSQL + JPA 重型关系数据库 | 内置 `bun:sqlite` 轻量嵌入式存储（仅管理运行态 Config/State/Runs） | 零外部 DB 依赖，毫秒级本地存取 |
 

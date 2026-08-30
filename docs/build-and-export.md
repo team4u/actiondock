@@ -8,7 +8,7 @@
 - **体积庞大与网络依赖**：分发工具需要连同数万个文件的 `node_modules` 或庞大的 Python 虚拟环境一同打包，且部署时经常需要联网执行 `npm install`。
 - **依赖冲突与版本漂移**：目标环境中的全局依赖或子依赖版本不兼容，导致同一套工具在开发者电脑上正常，而在生产沙箱中运行失败。
 
-ActionDock 2.0 确立了**零安装独立二进制** (Zero-Install Standalone Executable)与**自包含 Agent Skill 交付包**的分发标准。通过 Bun 原生单文件编译引擎，将整个 Action Package 打包为单文件可执行程序，目标环境无需安装任何运行时即可直接执行。
+ActionDock 2.0 确立了**零安装独立二进制**与**自包含 Agent Skill 交付包**的分发标准。通过 Bun 原生单文件编译引擎，将整个 Action Package 打包为单文件可执行程序，目标环境无需安装任何运行时即可直接执行。
 
 ---
 
@@ -24,14 +24,14 @@ graph TD
     Binary --> Hash["计算 SHA256 哈希并生成 dist/bin/artifact.json"]
 ```
 
-### 单包单二进制设计（One Package One Binary）
+### 单包单二进制设计
 ActionDock 将一个 Package 内的所有 Action 聚合编译进**同一个独立可执行文件**中（例如 `./bin/github-tools`）：
 - **杜绝体积膨胀**：避免每个 Action 单独打包导致的体积冗余，几十个 Action 共享单份运行时体积（通常约 40~50MB）。
 - **统一工具门面**：通过子命令分发（`./bin/pkg list`、`./bin/pkg describe`、`./bin/pkg run`），完全符合现代 CLI 工具规范。
 
 ---
 
-# 全平台交叉编译 (Cross-Target Compilation)
+# 全平台交叉编译
 
 借助 Bun 原生内置的跨平台交叉编译能力，在单台开发机上（例如 macOS）无需 Docker 或目标平台工具链，即可直接构建全平台可执行文件：
 
@@ -112,12 +112,12 @@ ac export skill --standalone --target linux-x64
 ```
 输出目录包含 `SKILL.md`、`actiondock.skill.json`、`bin/<package-name>` 与 `playbooks/*.md`。
 
-### 任务驱动按需导出 (Playbook-Driven Export)
+### 任务驱动按需导出
 在复杂项目中，推荐使用 `--playbook` 参数针对特定任务精准打包（源码型与独立型均支持）：
 ```bash
 ac export skill --playbook review-pr
 ```
-- **自动依赖裁剪** (Tree-shaking)：系统自动读取 `playbooks/review-pr.md` Frontmatter 中的 `actions` 依赖，仅导出该任务所需的 Action，剔除其余代码。
+- **自动依赖裁剪**：系统自动读取 `playbooks/review-pr.md` Frontmatter 中的 `actions` 依赖，仅导出该任务所需的 Action，剔除其余代码。
 - **纯净产物**：导出的 `playbooks/` 仅含选中的 SOP，生成的 `SKILL.md` 仅包含相关 Action，杜绝 Agent 提示词冗余。
 
 ### 自动 ZIP 归档

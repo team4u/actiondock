@@ -34,7 +34,7 @@ graph TD
 
 ---
 
-# 安全加固规范 (Security Hardening)
+# 安全加固规范
 
 ### 默认绑定与非 Loopback 强制认证
 * **默认监听**：`ac serve` 与 `ac mcp serve` 默认仅绑定回环地址 `127.0.0.1`。
@@ -110,13 +110,13 @@ export interface ExecutionHandle {
 * 主动取消归类为终态 `status = "cancelled"`，错误码为 `ACTION_CANCELLED`。
 * 内部设立 `finalized` 幂等标志，防止因底层非协作式 JS 耗时导致的“迟到 Promise”二次覆写 `RunRecord`。
 
-### 异步执行模型边界（Server-Lifetime Asynchronous Execution）
+### 异步执行模型边界
 * **Run 元数据持久化**：所有的 `RunRecord`（包括入参、状态、耗时、异常）均持久化在 SQLite 中。
 * **Server 生命周期绑定**：异步执行依赖当前长运行的 `ac serve` 进程（内存中的 `ExecutionManager` 与 Active Promise）。若 `ac serve` 进程被重启，未完成的任务将中止，不会自动重放（ActionDock 专注于轻量 Toolchain，不内置重型分布式分布式队列）。
 
 ---
 
-# 验收标准清单 (Acceptance Checklist)
+# 验收标准清单
 
 - [x] **S01**：`ac serve` 默认只监听 `127.0.0.1`。
 - [x] **S02**：`0.0.0.0` 且无 Token 启动失败。

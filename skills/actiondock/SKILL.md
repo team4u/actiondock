@@ -5,7 +5,7 @@ description: 使用 ActionDock 2.0 (ac CLI, Bun + TypeScript) 进行 AI Agent Ac
 
 # ActionDock 2.0 (ac) 开发者技能指南
 
-ActionDock 2.0 是面向 AI Agent Action 与 Skill 的开发工具链（CLI 门面命令为 `ac`）。它支持 **源码型 Skill** (Source Skill，默认)与**独立便携型 Skill** (Standalone Skill，--standalone) 双模交付，让开发者使用 TypeScript 快速开发原子工具（Action）与业务操作规程（Playbook），一键导出自包含的 Agent Skill。
+ActionDock 2.0 是面向 AI Agent Action 与 Skill 的开发工具链（CLI 门面命令为 `ac`）。它支持 **源码型 Skill**与**独立便携型 Skill** 双模交付，让开发者使用 TypeScript 快速开发原子工具（Action）与业务操作规程（Playbook），一键导出自包含的 Agent Skill。
 
 ---
 
@@ -32,7 +32,7 @@ ac info [--json]
 ac info --profile <profile-name> [--json]
 ```
 
-### 全局包注册与解绑 (Link / Unlink)
+### 全局包注册与解绑
 ```bash
 ac link [path]          # 注册当前或指定包到全局开发态注册表
 ac unlink [id|path]     # 从全局注册表中移除
@@ -162,7 +162,7 @@ ac action run <id> -i '{"repo": "owner/repo"}' --timeout 1m
 
 ---
 
-## 多环境与远程云机器调度 (Profiles & Serve)
+## 多环境与远程云机器调度
 
 ### 远端云机器启动 HTTP Runner
 ```bash
@@ -193,7 +193,7 @@ ac profile show [name] [--reveal] [--json]
 ac profile rm <name>
 ```
 
-### 异步长任务调度 (Async Execution)
+### 异步长任务调度
 ```bash
 # 提交远端异步长任务，立即返回 202 Accepted 与 runId
 ac run sync-database --profile aliyun-prod --async -i '{"database": "analytics"}'
@@ -246,7 +246,7 @@ ac playbook validate
 
 ---
 
-## 运行时存储管理 (Config & State)
+## 运行时存储管理
 
 ### 配置管理 (`ctx.config`)
 ```bash
@@ -264,7 +264,7 @@ ac state set <key> <json-value> [--ttl <seconds>]
 ac state delete <key>
 ```
 
-### 执行历史与任务取消 (Runs)
+### 执行历史与任务取消
 ```bash
 ac runs list [patterns...] [-i "<regex>"] [--action <id>] [--limit 20] [--json]
 ac runs show <run-id> [--json]

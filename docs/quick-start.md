@@ -176,7 +176,7 @@ export default defineAction<GetUserInput, GetUserOutput>({
 ac run github.get-user --input '{"username": "torvalds"}'
 ```
 
-### 标准输出解析（stdout vs stderr）
+### 标准输出解析
 
 * `stdout` （标准 JSON Envelope，供 AI Agent 或程序安全解析）：
   ```json
@@ -199,7 +199,7 @@ ac run github.get-user --input '{"username": "torvalds"}'
   ```
 
 > [!TIP]
-> **依赖自动补齐（Auto-Install）与包管理器支持**：
+> **依赖自动补齐与包管理器支持**：
 > - 若您的 Action 引用了项目中尚未安装的 npm 包，`ac run` 会在后台自动探测并调用包管理器（按 `bun install` -> `pnpm install` -> `yarn install` -> `npm install` 自动降级适配）补齐依赖并继续执行，无需手动打断。
 > - 同时您也可以随时使用常规的 `npm install`（Node.js 自带）手动管理依赖；只要项目根目录下存在 `node_modules`，ActionDock 将直接加载运行。
 
@@ -295,5 +295,5 @@ dist/github-tools-skill/
 
 - [Action 编写与开发指南](action-authoring.md)：深入学习 Schema 校验、标准 Web API 与复合 Action 编排。
 - [ActionContext 核心能力详解](action-context.md)：探索 5 级配置解析、持久化状态 TTL 与协作式取消机制。
-- [Skill 设计哲学与交付规范](skill-guide.md)：掌握任务驱动按需导出（Tree-shaking）与多平台交叉编译。
+- [Skill 设计哲学与交付规范](skill-guide.md)：掌握任务驱动按需导出与多平台交叉编译。
 - [Model Context Protocol 适配器指南](mcp-integration.md)：将项目一键作为 STDIO 或 HTTP MCP Tool Server 暴露给 IDE。

@@ -66,7 +66,7 @@ graph TD
     E -->|未声明| F["6. 代码内兜底默认值 (defaultValue) 或 undefined"]
 ```
 
-### 环境变量探测与自动类型转换（Type Coercion）
+### 环境变量探测与自动类型转换
 
 ActionDock 内置了智能环境变量解析引擎，按以下顺序匹配环境变量：
 
@@ -228,8 +228,8 @@ export default defineAction({
 ### 组合调用的四大核心保障
 
 - **环境与存储透明共享**：子 Action 自动共享当前的 Config、State 与 Storage 数据库连接。
-- **执行链路级联** (Runs Cascade)：在 SQLite `runs` 记录表中，子 Action 会通过 `parent_run_id` 自动关联至父 Action，支持完整调用树追溯。
-- **循环依赖死循环防御** (Cycle Detection)：底层执行栈实时维护调用路径。一旦检测到 `A -> B -> A` 的循环依赖，立即中止并抛出 `ACTION_CYCLE_DETECTED` 错误。
+- **执行链路级联**：在 SQLite `runs` 记录表中，子 Action 会通过 `parent_run_id` 自动关联至父 Action，支持完整调用树追溯。
+- **循环依赖死循环防御**：底层执行栈实时维护调用路径。一旦检测到 `A -> B -> A` 的循环依赖，立即中止并抛出 `ACTION_CYCLE_DETECTED` 错误。
 - **取消信号层层穿透**：父 Action 触发取消（超时或中断）时，子 Action 会同步收到 `ctx.signal` 中断通知。
 
 ---

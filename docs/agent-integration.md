@@ -2,7 +2,7 @@
 
 # 背景
 
-随着大语言模型与自主智能体（Autonomous Agents）的迅速普及，开发者需要将外部工具高效、安全地接入各类主流 Agent 宿主（如 Antigravity、Claude Code、Cursor、Windsurf、LangChain、AutoGen 等）。
+随着大语言模型与自主智能体的迅速普及，开发者需要将外部工具高效、安全地接入各类主流 Agent 宿主（如 Antigravity、Claude Code、Cursor、Windsurf、LangChain、AutoGen 等）。
 
 然而，传统的工具集成方案通常存在显著摩擦：
 - **运行环境强耦合**：Agent 必须在沙箱中执行 `pip install` 或 `npm install`，极易因网络抖动或版本不兼容而失败。
@@ -168,10 +168,10 @@ print("GitHub 用户信息:", data["name"])
 
 # 为什么 ActionDock 交付模式最适合 AI Agent？
 
-- **双模自由切换** (Dual-Mode Delivery)：既可在本地 IDE 中通过 MCP 协议低延迟直连，也可编译为自包含二进制跨服务器直接分发。
-- **零安装负担** (Zero-Install Guarantee)：独立二进制模式下无需在宿主机上预装 Node.js、Bun 或 Python，杜绝依赖冲突。
-- **输出绝对纯净** (Clean Stdio Separation)：所有数据严格输出至 `stdout`，日志输出至 `stderr`，Agent 不会因控制台杂乱输出而发生 JSON 解析崩溃。
-- **内置 SOP 约束** (Playbook Driven)：除了函数接口外附带业务操作 SOP，大幅降低 Agent 产生幻觉或执行高危操作的风险。
+- **双模自由切换**：既可在本地 IDE 中通过 MCP 协议低延迟直连，也可编译为自包含二进制跨服务器直接分发。
+- **零安装负担**：独立二进制模式下无需在宿主机上预装 Node.js、Bun 或 Python，杜绝依赖冲突。
+- **输出绝对纯净**：所有数据严格输出至 `stdout`，日志输出至 `stderr`，Agent 不会因控制台杂乱输出而发生 JSON 解析崩溃。
+- **内置 SOP 约束**：除了函数接口外附带业务操作 SOP，大幅降低 Agent 产生幻觉或执行高危操作的风险。
 
 ---
 

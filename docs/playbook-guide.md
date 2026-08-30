@@ -113,7 +113,7 @@ ac playbook validate
 
 ---
 
-# 任务驱动按需打包 (Playbook-Driven Export)
+# 任务驱动按需打包
 
 在拥有数十个 Action 的复杂项目中，可以通过指定 Playbook 一键导出该任务所需的最小自包含 Skill 包：
 
