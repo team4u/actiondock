@@ -6,7 +6,10 @@
       "name": "actiondock-monorepo",
       "dependencies": {
         "@actiondock/cli": "workspace:*",
+        "@actiondock/core": "workspace:*",
+        "@actiondock/mcp": "workspace:*",
         "@actiondock/sdk": "workspace:*",
+        "@modelcontextprotocol/server": "2.0.0",
       },
       "devDependencies": {
         "@types/bun": "latest",
@@ -28,10 +31,11 @@
       "name": "@actiondock/cli",
       "version": "2.0.0",
       "bin": {
-        "actiondock": "./bin/actiondock.js",
+        "ac": "./bin/ac.js",
       },
       "dependencies": {
         "@actiondock/core": "workspace:*",
+        "@actiondock/mcp": "workspace:*",
         "@actiondock/sdk": "workspace:*",
         "commander": "^13.1.0",
       },
@@ -54,6 +58,19 @@
         "typescript": "^5.7.0",
       },
     },
+    "packages/mcp": {
+      "name": "@actiondock/mcp",
+      "version": "2.0.0",
+      "dependencies": {
+        "@actiondock/core": "workspace:*",
+        "@actiondock/sdk": "workspace:*",
+        "@modelcontextprotocol/server": "^2.0.0",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "^5.7.0",
+      },
+    },
     "packages/sdk": {
       "name": "@actiondock/sdk",
       "version": "2.0.0",
@@ -64,7 +81,13 @@
 
     "@actiondock/core": ["@actiondock/core@workspace:packages/core"],
 
+    "@actiondock/mcp": ["@actiondock/mcp@workspace:packages/mcp"],
+
     "@actiondock/sdk": ["@actiondock/sdk@workspace:packages/sdk"],
+
+    "@modelcontextprotocol/core": ["@modelcontextprotocol/core@2.0.0", "https://registry.npmmirror.com/@modelcontextprotocol/core/-/core-2.0.0.tgz", { "dependencies": { "zod": "^4.2.0" } }, "sha512-pJCEwGG7Lfr/+PQp9ZTwKXNeO5wzbfKL7H3MYpCorM4oFBoQrdjnBgEoqG+RjhsvS1FKrDbKux+M1HhlnGWqcA=="],
+
+    "@modelcontextprotocol/server": ["@modelcontextprotocol/server@2.0.0", "https://registry.npmmirror.com/@modelcontextprotocol/server/-/server-2.0.0.tgz", { "dependencies": { "@modelcontextprotocol/core": "2.0.0", "zod": "^4.2.0" } }, "sha512-YhHWdHfpFMQfd0prsEnxKeS3Qz3ytIGmsS0sth4KDjnacIT7hxk6hXHkJ9KysxlkvTM+WZAtQbbcUhdoP4Hvtw=="],
 
     "@types/bun": ["@types/bun@1.4.0", "https://registry.npmmirror.com/@types/bun/-/bun-1.4.0.tgz", { "dependencies": { "bun-types": "1.4.0" } }, "sha512-K+lZULY23vRgK/CfTjFIV+tyifaNdSMlPh9j+6mQ/cLfpOznLyAuzgV/JQysyECpkBQLVMSyvjlr2fBUSA9wFQ=="],
 
@@ -93,5 +116,7 @@
     "undici-types": ["undici-types@8.3.0", "https://registry.npmmirror.com/undici-types/-/undici-types-8.3.0.tgz", {}, "sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ=="],
 
     "yaml": ["yaml@2.9.0", "https://registry.npmmirror.com/yaml/-/yaml-2.9.0.tgz", { "bin": { "yaml": "bin.mjs" } }, "sha512-2AvhNX3mb8zd6Zy7INTtSpl1F15HW6Wnqj0srWlkKLcpYl/gMIMJiyuGq2KeI2YFxUPjdlB+3Lc10seMLtL4cA=="],
+
+    "zod": ["zod@4.5.4", "https://registry.npmmirror.com/zod/-/zod-4.5.4.tgz", {}, "sha512-sC95tT5iHHH9gtpj6A81kh+NEaRAUFN+qlUPDUbRfOMvNf5QCBqsb3WgvnpVtK5Y+4UfA6KqufotuTvMGiTlsA=="],
   }
 }

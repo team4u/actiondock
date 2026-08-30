@@ -185,6 +185,7 @@ dist/my-tools-skill/
 * **[Playbook SOP 编写指南](docs/playbook-guide.md)**：面向 AI Agent 的标准操作规程规范与校验。
 * **[存储与状态管理机制](docs/storage-and-state.md)**：SQLite 存储模型、表结构索引与路径解析。
 * **[多环境与云机器调度指南](docs/remote-and-profiles.md)**：Profile 管理、`ac serve` 轻量 Runner 与多云节点执行。
+* **[Model Context Protocol (MCP) 适配器指南](docs/mcp-integration.md)**：STDIO 与 HTTP 协议、Tool 映射、取消链路与 Agent IDE 直连。
 * **[构建编译与 Skill 分发](docs/build-and-export.md)**：Bun.build 编译、`artifact.json` 元数据与 Skill 打包。
 * **[AI Agent 接入与集成指南](docs/agent-integration.md)**：Antigravity、Claude Code、Cursor 等主流 Agent 框架接入。
 
@@ -208,8 +209,10 @@ dist/my-tools-skill/
 | `ac action create <id>` | 快速生成新的 Action 声明模板文件 |
 | `ac action list [patterns...] [-i <regex>] [--json]` | 列出 Action（支持正则意图 `-i`、多关键字模糊查找与未命中回退） |
 | `ac action show <id> [--json]` | 查看指定 Action 的详细定义与入参出参 Schema |
-| `ac action run <id> --input '<json>'` | 运行 Action 并输出标准结果 JSON |
+| `ac action run <id> --input '<json>' [--timeout <t>]` | 运行 Action 并输出标准结果 JSON（支持超时限制与 Ctrl+C 取消） |
 | `ac action validate` | 校验 Action 与 JSON Schema 语法合法性 |
+| `ac mcp [--dir <d>] [--package <p>]` | 启动 MCP (Model Context Protocol) STDIO 服务端（Claude Code / Cursor 直连） |
+| `ac mcp serve [--port <p>] [--host <h>]` | 启动 MCP Streamable HTTP 协议微服务（默认监听 127.0.0.1:5178） |
 | `ac playbook create <id>` | 快速生成新的 Playbook SOP 模板文件 |
 | `ac playbook list [patterns...] [-i <regex>]` | 查看任务 SOP 指南 Playbook（支持模糊/正则意图收窄） |
 | `ac config list [patterns...] [-i <regex>]` | 查看与管理本地 SQLite 运行时配置（支持意图过滤） |
@@ -227,6 +230,7 @@ dist/my-tools-skill/
 
 * [`packages/sdk`](packages/sdk)：`@actiondock/sdk` 极简公共 SDK（`defineAction`、核心上下文类型、`createTestRuntime` 内存测试工具），零重依赖。
 * [`packages/core`](packages/core)：`@actiondock/core` 底层领域引擎（项目加载、ActionRunner 执行器、SQLite 存储管理、Ajv Schema 校验、Bun.build 单文件编译与 Skill 导出）。
+* [`packages/mcp`](packages/mcp)：`@actiondock/mcp` Model Context Protocol 适配器（STDIO 与 HTTP 协议、Tool 映射与取消链路）。
 * [`packages/cli`](packages/cli)：`@actiondock/cli` 命令行门面（`ac`），负责参数解析与终端交互。
 * [`examples/github-tools`](examples/github-tools)：官方完整 GitHub 工具集示例（Action 组合调用、持久化 Checkpoint 与 Skill 导出演示）。
 

@@ -6,6 +6,7 @@ import { registerExportCommand } from "./export";
 import { registerInfoCommand } from "./info";
 import { registerInitCommand } from "./init";
 import { registerLinkCommands } from "./link";
+import { registerMcpCommands } from "./mcp";
 import { registerPlaybookCommands } from "./playbook";
 import { registerProfileCommands } from "./profile";
 import { registerRunsCommands } from "./runs";
@@ -34,6 +35,7 @@ export function createCliProgram(): Command {
   registerLinkCommands(program);
   registerProfileCommands(program);
   registerServeCommand(program);
+  registerMcpCommands(program);
 
   return program;
 }

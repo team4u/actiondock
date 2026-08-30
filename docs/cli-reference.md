@@ -76,6 +76,7 @@ ActionDock 命令行工具（`ac`）全量功能与参数参考。
   * `-i, --input '<json>'`：通过命令行 JSON 字符串传入入参
   * `-f, --input-file <path>`：从 JSON 文件读取入参
   * `-c, --config <KEY=val>`：临时覆盖运行时配置项（可重复指定）
+  * `--timeout <duration>`：设置超时时间（如 `500ms`、`30s`、`5m`、`1h`），超时将触发 `ACTION_TIMEOUT` 终止
   * `-p, --profile <name>`：调度至指定的云机器/环境 profile 执行
   * `-s, --server <url>`：直接调度至指定远程 HTTP Runner 执行
   * `-t, --token <token>`：远程服务器鉴权 Token
@@ -87,6 +88,31 @@ ActionDock 命令行工具（`ac`）全量功能与参数参考。
     "data": { ... }
   }
   ```
+
+---
+
+### Model Context Protocol 服务（MCP）
+
+#### `ac mcp`
+以 STDIO 模式启动 MCP 服务端，将当前或指定 package 内的 Actions 作为 MCP Tools 提供给本地 MCP Client（Claude Code、Cursor、VS Code 等）。
+* **参数选项**：
+  * `-d, --dir <path>`：指定 ActionDock 项目根目录（默认当前目录）
+  * `--package <package-id>`：指定全局已链接的 package ID
+  * `--timeout <duration>`：单次 Action 执行的超时时间（如 `30s`）
+
+#### `ac mcp serve`
+以 HTTP 模式启动 MCP 服务端，提供标准 Streamable HTTP `/mcp` 端点与 `/health` 健康检查端点。
+* **参数选项**：
+  * `-p, --port <port>`：监听端口（默认 `5178`）
+  * `-H, --host <host>`：绑定 IP 地址（默认安全监听 `127.0.0.1`）
+  * `-t, --token <token>`：Bearer 鉴权 Token（或设置环境变量 `ACTIONDOCK_TOKEN`）
+  * `--token-env <env>`：指定包含 Token 的环境变量名（推荐）
+  * `--allow-insecure-no-auth`：允许在非 Loopback 地址上无 Token 运行（不安全）
+  * `--cors-origin <origin>`：允许跨域调用的 CORS Origin 白名单（支持多次指定）
+  * `--max-body <size>`：请求 Body 最大字节限制（默认 `1mb`）
+  * `-d, --dir <path>`：项目根目录路径（默认当前工作目录）
+  * `--package <package-id>`：指定已链接的 package ID
+  * `--timeout <duration>`：单次 Action 执行的超时时间
 
 ---
 

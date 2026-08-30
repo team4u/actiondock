@@ -5,7 +5,8 @@
 - **代码库分层结构**：
   - `packages/sdk`：`@actiondock/sdk`（极简公共 SDK：`defineAction`、`ActionContext`、`Config`、`StateStore`、`ActionInvoker`、`Logger`、`createTestRuntime`）。
   - `packages/core`：`@actiondock/core`（公共领域内核：`project`、`runtime`、`storage`、`schema`、`build`、`export`、`standalone`）。
-  - `packages/cli`：`@actiondock/cli`（CLI 门面工具链：`init`、`info`、`action`、`playbook`、`config`、`state`、`runs`、`test`、`build`、`export skill`）。
+  - `packages/mcp`：`@actiondock/mcp`（Model Context Protocol 适配器：STDIO/HTTP Transport、Tool 映射、取消链路）。
+  - `packages/cli`：`@actiondock/cli`（CLI 门面工具链：`init`、`info`、`action`、`mcp`、`playbook`、`config`、`state`、`runs`、`test`、`build`、`export skill`）。
   - `examples/*`：官方示例 Action Packages。
 - **常用验证命令**：
   - 执行所有单元与集成测试：`bun test`

@@ -21,6 +21,8 @@ export interface StorageOptions {
   packageId: string;
 }
 
+export type TerminalRunStatus = "success" | "failed" | "cancelled";
+
 export interface RuntimeStorage {
   // Config
   getConfig<T = unknown>(key: string): T | undefined;
@@ -43,7 +45,7 @@ export interface RuntimeStorage {
   createRun(record: RunRecord): void;
   updateRun(
     id: string,
-    status: "success" | "failed",
+    status: TerminalRunStatus,
     output?: unknown,
     error?: RuntimeError,
     finishedAt?: string

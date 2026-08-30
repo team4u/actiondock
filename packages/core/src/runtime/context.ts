@@ -157,6 +157,7 @@ export interface ContextOptions {
   projectConfig?: ProjectConfig;
   parentRunId?: string;
   callStack?: string[];
+  signal?: AbortSignal;
   onActionInvoke?: (
     action: ActionDefinition,
     input: unknown,
@@ -172,6 +173,7 @@ export function createActionContext(options: ContextOptions): ActionContext {
   );
   const state = new RuntimeStateStore(options.storage);
   const log = new StderrLogger();
+  const signal = options.signal ?? new AbortController().signal;
 
   const invoker: ActionInvoker = {
     async invoke<I, O>(action: ActionDefinition<I, O>, input: I): Promise<O> {
@@ -191,5 +193,6 @@ export function createActionContext(options: ContextOptions): ActionContext {
     state,
     actions: invoker,
     log,
+    signal,
   };
 }

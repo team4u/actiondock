@@ -11,6 +11,7 @@ export interface TestRuntimeOptions {
   config?: Record<string, unknown>;
   state?: Record<string, unknown>;
   logger?: Logger;
+  signal?: AbortSignal;
 }
 
 export class MemoryConfig implements Config {
@@ -170,6 +171,7 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
   );
   const state = new MemoryStateStore(memoryMap);
   const logger = (options.logger as MemoryLogger) || new MemoryLogger();
+  const signal = options.signal ?? new AbortController().signal;
 
   const callStack: string[] = [];
 
@@ -187,6 +189,7 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
           state,
           actions: invoker,
           log: logger,
+          signal,
         };
         return await action.run(input, ctx);
       } finally {

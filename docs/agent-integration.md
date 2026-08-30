@@ -6,7 +6,35 @@ ActionDock 2.0 导出的核心产物是一个符合业界通用规范的 **Skill
 
 ---
 
-## Skill 交付包的标准结构
+## 方式一：作为 Model Context Protocol (MCP) Server 接入（推荐）
+
+如果您的 AI Agent（如 Claude Code、Cursor、VS Code、Windsurf 等）原生支持 MCP 协议，可以直接将 ActionDock Package 作为 MCP Tool Server 接入：
+
+### 1. STDIO 直连（最简便）
+在 MCP 客户端配置文件中添加：
+
+```json
+{
+  "mcpServers": {
+    "github-tools": {
+      "command": "bunx",
+      "args": ["@actiondock/cli", "mcp", "--dir", "/path/to/my-tools"]
+    }
+  }
+}
+```
+
+### 2. HTTP 远程微服务接入
+```bash
+ac mcp serve --port 5178 --token <secret-token>
+```
+客户端配置 Streamable HTTP 端点 `http://<host>:5178/mcp` 与 Bearer Token。
+
+详见 **[MCP 适配器指南](mcp-integration.md)**。
+
+---
+
+## 方式二：自包含 Skill 交付包接入
 
 当您执行 `ac export skill` 后，生成的 Skill 目录包含：
 
@@ -58,10 +86,9 @@ Claude Code 会在处理相关提示词时自动阅读 `SKILL.md`，并直接运
 
 ---
 
-## 为什么这种交付模式最适合 AI Agent？
+## 为什么 ActionDock 交付模式最适合 AI Agent？
 
-* **零安装负担（Zero Dependency Headache）**：Agent 在沙箱容器或远程服务器中执行任务时，无需执行 `npm install`、`pip install` 或安装复杂的开发环境，直接执行单一二进制文件即可。
-* **标准机器协议（Clean JSON Protocol）**：
-  * 所有的结果数据强制输出在 `stdout`，格式统一为 `{"ok": true, "data": ...}`。
-  * 所有的日志与调试信息输出在 `stderr`，Agent 不会因为日志污染而导致 JSON 解析失败。
-* **内置 SOP 引导（Playbook Driven）**：除了单纯提供函数 API，Skill 还附带了 Playbook 业务操作手册，指导 Agent 按正确的业务顺序协同工作，大幅降低幻觉与误操作风险。
+* **双模支持（Dual Modes）**：既可以通过标准 **MCP 协议** 与各类现代化 LLM Client 直连，也可以导出为 **零外部依赖独立二进制 + Skill.md** 跨环境直接执行。
+* **零安装负担（Zero Dependency Headache）**：二进制模式下无需 `npm install`、`pip install`，无环境配置损坏风险。
+* **标准机器协议（Clean JSON Protocol）**：所有的结果数据强制输出在 `stdout`（`{"ok": true, "data": ...}`），日志输出在 `stderr`，Agent 不受日志污染。
+* **内置 SOP 引导（Playbook Driven）**：除函数接口外附带 Playbook 业务操作指南，大幅降低 Agent 幻觉与误操作风险。

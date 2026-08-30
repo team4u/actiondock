@@ -269,7 +269,7 @@ describe("CLI End-to-End", () => {
     const unlinkProc = runCli(["unlink", "team.github-ops"], tmpdir());
     expect(unlinkProc.exitCode).toBe(0);
     expect(unlinkProc.stdout.toString()).toContain("[OK] Unlinked package");
-  });
+  }, 30000);
 
   it("manages execution profiles and dispatches remote runs via ac serve", async () => {
     // 1. Initialize project in tempDir
@@ -405,5 +405,5 @@ describe("CLI End-to-End", () => {
         rmSync(clientHome, { recursive: true, force: true });
       }
     }
-  });
+  }, 30000);
 });

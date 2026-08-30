@@ -24,6 +24,7 @@
 | **[存储与状态管理机制](storage-and-state.md)** | 基于 `bun:sqlite` 的 Config、State、Runs 数据模型与路径隔离 | 架构师与系统开发者 |
 | **[多环境与云机器调度指南](remote-and-profiles.md)** | Profile 管理、`ac serve` 轻量 Runner 与多云节点执行 | 运维与系统开发者 |
 | **[构建编译与 Skill 分发](build-and-export.md)** | `Bun.build` 单文件编译原理、交叉编译与 Skill 导出目录结构 | 交付与运维工程师 |
+| **[Model Context Protocol (MCP) 适配器指南](mcp-integration.md)** | STDIO 与 HTTP 协议、Tool 映射、取消链路与 Agent IDE 直连 | Agent 与系统开发者 |
 | **[AI Agent 接入与集成指南](agent-integration.md)** | Antigravity、Claude Code、Cursor 等主流 Agent 框架接入 | Agent 开发者 |
 
 ---

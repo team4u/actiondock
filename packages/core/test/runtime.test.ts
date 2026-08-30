@@ -338,4 +338,87 @@ describe("ActionRunner", () => {
       delete process.env.KEY_ENV;
     }
   });
+
+  it("handles timeout correctly and finalizes run with ACTION_TIMEOUT", async () => {
+    const storage = new SqliteRuntimeStorage({
+      packageId: "test-pkg",
+      dbPath: ":memory:",
+    });
+
+    const sleepAction = defineAction({
+      id: "test.sleep",
+      async run(_input, ctx) {
+        return new Promise((resolve, reject) => {
+          const timer = setTimeout(() => resolve({ done: true }), 1000);
+          ctx.signal.addEventListener("abort", () => {
+            clearTimeout(timer);
+            reject(new Error("aborted"));
+          });
+        });
+      },
+    });
+
+    const runner = new ActionRunner({
+      packageId: "test-pkg",
+      storage,
+      actions: new Map([[sleepAction.id, sleepAction]]),
+    });
+
+    const result = await runner.execute(sleepAction, {}, { timeoutMs: 50 });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("ACTION_TIMEOUT");
+    }
+
+    const runs = storage.listRuns();
+    expect(runs.length).toBe(1);
+    expect(runs[0].status).toBe("failed");
+    expect(runs[0].error?.code).toBe("ACTION_TIMEOUT");
+  });
+
+  it("handles ExecutionHandle.cancel and ExecutionManager correctly", async () => {
+    const storage = new SqliteRuntimeStorage({
+      packageId: "test-pkg",
+      dbPath: ":memory:",
+    });
+
+    const cancellableAction = defineAction({
+      id: "test.cancellable",
+      async run(_input, ctx) {
+        return new Promise((resolve, reject) => {
+          const timer = setTimeout(() => resolve({ completed: true }), 2000);
+          ctx.signal.addEventListener("abort", () => {
+            clearTimeout(timer);
+            reject(new Error("aborted by signal"));
+          });
+        });
+      },
+    });
+
+    const runner = new ActionRunner({
+      packageId: "test-pkg",
+      storage,
+      actions: new Map([[cancellableAction.id, cancellableAction]]),
+    });
+
+    const handle = runner.start(cancellableAction, {});
+    expect(handle.runId).toBeDefined();
+
+    // Cancel execution after 30ms
+    setTimeout(() => {
+      handle.cancel("user requested cancel");
+    }, 30);
+
+    const result = await handle.result;
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("ACTION_CANCELLED");
+      expect(result.error.details).toEqual({ reason: "user requested cancel" });
+    }
+
+    const runRecord = storage.getRun(handle.runId);
+    expect(runRecord).toBeDefined();
+    expect(runRecord?.status).toBe("cancelled");
+    expect(runRecord?.error?.code).toBe("ACTION_CANCELLED");
+  });
 });

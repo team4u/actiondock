@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 import { chmodSync, existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { RuntimeError, RunRecord } from "@actiondock/sdk";
-import type { RuntimeStorage, StorageOptions } from "./types";
+import type { RuntimeStorage, StorageOptions, TerminalRunStatus } from "./types";
 
 export class SqliteRuntimeStorage implements RuntimeStorage {
   private db: Database;
@@ -271,7 +271,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
 
   updateRun(
     id: string,
-    status: "success" | "failed",
+    status: TerminalRunStatus,
     output?: unknown,
     error?: RuntimeError,
     finishedAt?: string

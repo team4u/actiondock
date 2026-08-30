@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@actiondock/core": "workspace:*",
+    "@actiondock/mcp": "workspace:*",
     "@actiondock/sdk": "workspace:*",
     "commander": "^13.1.0"
   },

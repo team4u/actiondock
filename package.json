@@ -13,8 +13,11 @@
     "build": "bun run --filter '@actiondock/*' build"
   },
   "dependencies": {
+    "@actiondock/cli": "workspace:*",
+    "@actiondock/core": "workspace:*",
+    "@actiondock/mcp": "workspace:*",
     "@actiondock/sdk": "workspace:*",
-    "@actiondock/cli": "workspace:*"
+    "@modelcontextprotocol/server": "2.0.0"
   },
   "devDependencies": {
     "@types/bun": "latest",

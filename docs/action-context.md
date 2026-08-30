@@ -219,3 +219,58 @@ try {
   ctx.log.error("处理数据异常", err);
 }
 ```
+
+---
+
+## 取消信号与生命周期 (`ctx.signal`)
+
+`ctx.signal` 是一个标准的 Web API `AbortSignal` 对象，为 Action 提供了感知外部中断、超时和客户端取消的能力。
+
+### 适用场景
+* **网络请求与长耗时 I/O**：将 `ctx.signal` 直接透传给 `fetch`、数据库驱动或 Child Process。
+* **分步批处理计算**：在循环或步骤之间检查 `ctx.signal.aborted` 或调用 `ctx.signal.throwIfAborted()`，及时停止无效计算。
+* **MCP 客户端取消传播**：当 MCP Host 发送 `notifications/cancelled` 时，信号会直达 Action 内部。
+* **CLI 超时与 Ctrl+C**：CLI 传入 `--timeout 30s` 或用户在终端按下 `Ctrl+C` 时，信号会自动触发 abort。
+
+### API 规范与示例
+
+```ts
+import { defineAction } from "@actiondock/sdk";
+
+export default defineAction({
+  id: "http.download-report",
+  description: "下载大型分析报告",
+
+  inputSchema: {
+    type: "object",
+    properties: {
+      url: { type: "string" },
+    },
+    required: ["url"],
+  },
+
+  async run(input, ctx) {
+    ctx.log.info(`开始下载: ${input.url}`);
+
+    // 1. 将 signal 传给原生 fetch（一旦触发取消，底层 TCP 连接将立即断开）
+    const response = await fetch(input.url, {
+      signal: ctx.signal,
+    });
+
+    const data = await response.json();
+
+    // 2. 长耗时批处理前检查取消状态
+    ctx.signal.throwIfAborted();
+
+    // 3. 事件监听式取消响应
+    ctx.signal.addEventListener("abort", () => {
+      ctx.log.warn("收到中断信号，正在清理临时资源...");
+    });
+
+    return {
+      status: "completed",
+      size: JSON.stringify(data).length,
+    };
+  },
+});
+```

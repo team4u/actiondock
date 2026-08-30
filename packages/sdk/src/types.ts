@@ -76,6 +76,7 @@ export interface ActionContext {
   state: StateStore;
   actions: ActionInvoker;
   log: Logger;
+  signal: AbortSignal;
 }
 
 /**
@@ -90,6 +91,11 @@ export interface ActionDefinition<I = unknown, O = unknown> {
 }
 
 /**
+ * Execution run status.
+ */
+export type RunStatus = "running" | "success" | "failed" | "cancelled";
+
+/**
  * Record of an Action execution.
  */
 export interface RunRecord {
@@ -97,7 +103,7 @@ export interface RunRecord {
   packageId: string;
   actionId: string;
   parentRunId?: string;
-  status: "running" | "success" | "failed";
+  status: RunStatus;
   input: unknown;
   output?: unknown;
   error?: RuntimeError;

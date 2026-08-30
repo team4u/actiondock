@@ -100,7 +100,10 @@ export default defineAction<Input, Output>({
     // Logger: 输出至 stderr（绝不污染 stdout 的标准 JSON 输出）
     ctx.log.info(`正在获取 ${input.repo} 的 issues`);
 
-    // Action 组合: 跨 Action 组合调用（具备自动循环调用检测与父子 Run 关联）
+    // Signal: 标准 AbortSignal 取消信号（支持外部 Ctrl+C、超时及 MCP 客户端取消）
+    // const res = await fetch(api, { signal: ctx.signal });
+
+    // Action 组合: 跨 Action 组合调用（具备自动循环调用检测、取消信号向下传播与父子 Run 关联）
     // const detail = await ctx.actions.invoke(otherAction, { ... });
 
     return {
@@ -142,9 +145,10 @@ ac action show <id> --profile <profile-name> [--json]
 ac run <id> --input '{"repo": "owner/repo"}'
 ac run <id> --input-file ./input.json
 ac run <id> --config GITHUB_TOKEN=secret_token
+ac run <id> --timeout 30s                       # 设置超时自动终止（支持 500ms, 30s, 5m, 1h）
 
 # 完整子命令方式 (ac action run)
-ac action run <id> -i '{"repo": "owner/repo"}'
+ac action run <id> -i '{"repo": "owner/repo"}' --timeout 1m
 ```
 
 标准输出格式：
@@ -156,7 +160,8 @@ ac action run <id> -i '{"repo": "owner/repo"}'
 }
 ```
 
-> **自动依赖管理**：若 Action 依赖了未安装的 npm 包，`ac run` 运行时会自动触发 `bun install` 毫秒级补齐依赖并继续执行，安装日志输出至 `stderr`，确保 `stdout` 始终为纯净 JSON。
+> **自动依赖管理**：若 Action 依赖了未安装的 npm 包，`ac run` 运行时会自动触发 `bun install` 毫秒级补齐依赖并继续执行，安装日志输出至 `stderr`，确保 `stdout` 始终为纯净 JSON。  
+> **响应式取消**：支持通过 `Ctrl+C` 传播终止信号给底层 Action（通过 `ctx.signal`），超时或主动取消时 RunRecord 将准确记录为 `ACTION_TIMEOUT`（failed）或 `ACTION_CANCELLED`（cancelled）。
 
 ---
 
@@ -200,6 +205,46 @@ ac run check-disk --profile aliyun-prod -i '{"mount": "/data"}'
 # 直接传 server 地址调度
 ac run check-disk --server http://1.2.3.4:5177 --token secret123
 ```
+
+---
+
+## Model Context Protocol (MCP) 服务
+
+ActionDock 2.0 原生支持作为 **Model Context Protocol (MCP)** 服务端运行，将项目中定义的所有 Action 自动暴露为标准 MCP Tools，供 Claude Code、Cursor、VS Code、Windsurf 等任意 MCP Host 直接连接调用。
+
+### 1. STDIO 模式（本地 Agent / 桌面 IDE 直连）
+```bash
+ac mcp                          # 默认启动当前目录 package 的 MCP STDIO 服务
+ac mcp --dir ./examples/github-tools
+ac mcp --package team4u.github-tools
+ac mcp --timeout 30s            # 限制单次 Tool 调用超时
+```
+
+#### MCP Host 配置示例 (Claude Code / Cursor / VS Code)：
+```json
+{
+  "mcpServers": {
+    "github-tools": {
+      "command": "bunx",
+      "args": ["@actiondock/cli", "mcp", "--dir", "/path/to/my-tools"]
+    }
+  }
+}
+```
+
+### 2. HTTP 模式（远程微服务 / Streamable HTTP）
+```bash
+# 启动 MCP HTTP 服务（默认监听 127.0.0.1:5178，MCP 端点为 /mcp）
+ac mcp serve --port 5178
+
+# 局域网/公网暴露（强制要求 Token 认证）
+ac mcp serve --host 0.0.0.0 --port 5178 --token <secret-token>
+```
+
+#### MCP 核心特性保证：
+* **Schema 零冗余**：基于官方 `@modelcontextprotocol/server`，自动将 Action 的 JSON Schema 转换为 MCP Tool Schema，无需重复定义。
+* **统一执行核心**：所有 MCP Tool 调用继续流经 `ActionRunner`，完全享有输入/输出校验、SQLite `runs` 记录追踪与上下文能力。
+* **双向取消链路**：MCP 客户端发出的取消请求（`notifications/cancelled`）会直通 Action 内部的 `ctx.signal`，及时中止耗时计算与网络请求。
 
 ---
 
@@ -265,10 +310,12 @@ import { createTestRuntime } from "@actiondock/sdk";
 import myAction from "../actions/my-action";
 
 describe("my-action", () => {
-  it("使用 Mock 配置与状态正常执行", async () => {
+  it("使用 Mock 配置、状态与取消信号正常执行", async () => {
+    const controller = new AbortController();
     const runtime = createTestRuntime({
       config: { GITHUB_TOKEN: "mock-token" },
       state: { last_sync: "2026-01-01" },
+      signal: controller.signal,
     });
 
     const res = await runtime.run(myAction, { repo: "test/repo" });
