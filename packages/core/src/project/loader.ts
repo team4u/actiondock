@@ -54,6 +54,29 @@ export function loadProjectConfig(projectRoot: string): ProjectConfig {
   }
 }
 
+function getInstallCommand(): string[] {
+  const candidates: [string, string][] = [
+    ["bun", "install"],
+    ["pnpm", "install"],
+    ["yarn", "install"],
+    ["npm", "install"],
+  ];
+  for (const [pm, action] of candidates) {
+    try {
+      const check = Bun.spawnSync([pm, "--version"], {
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      if (check.exitCode === 0) {
+        return [pm, action];
+      }
+    } catch {
+      // Continue searching
+    }
+  }
+  return ["bun", "install"];
+}
+
 export function ensureProjectDependencies(projectRoot: string, force = false): boolean {
   if (process.env.ACTIONDOCK_AUTO_INSTALL === "false") {
     return false;
@@ -79,18 +102,19 @@ export function ensureProjectDependencies(projectRoot: string, force = false): b
       return false;
     }
 
+    const installCmd = getInstallCommand();
     process.stderr.write(
-      `[actiondock] Installing dependencies for '${pkg.name || basename(projectRoot)}'...\n`
+      `[actiondock] Installing dependencies using ${installCmd[0]} for '${pkg.name || basename(projectRoot)}'...\n`
     );
 
-    const proc = Bun.spawnSync(["bun", "install"], {
+    const proc = Bun.spawnSync(installCmd, {
       cwd: projectRoot,
       stdout: "pipe",
       stderr: "pipe",
     });
 
     if (proc.exitCode !== 0) {
-      const errText = proc.stderr?.toString() || "Unknown error during bun install";
+      const errText = proc.stderr?.toString() || `Unknown error during ${installCmd[0]} install`;
       process.stderr.write(`[actiondock] Warning: Dependency installation failed: ${errText}\n`);
       return false;
     }
