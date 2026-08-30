@@ -1,6 +1,6 @@
 ---
 name: actiondock
-description: 使用 ActionDock 2.0 (ac CLI, Bun + TypeScript) 进行 AI Agent Action 与 Skill 的创建、开发、测试、独立构建与导出的完整工具链指南。
+description: 使用 ActionDock 2.0 (ac CLI, Bun + TypeScript) 进行 AI Agent Action 与 Skill 的创建、开发、测试、独立构建、多云调度与导出的完整工具链指南。
 ---
 
 # ActionDock 2.0 (ac) 开发者技能指南
@@ -11,7 +11,7 @@ ActionDock 2.0 是一个面向 AI Agent Action 与 Skill 的开发工具链（CL
 
 ## CLI 安装与获取方式
 
-安装与获取方式（npm 安装、本地源码软链、Tarball 本地安装等）详见[仓库 README](../../README.md#安装与使用方式)，此处仅列最常用两条：
+安装与获取方式（npm 安装、本地源码软链等）详见[仓库 README](../../README.md#安装与使用方式)，最常用方式：
 
 ```bash
 bun install -g @actiondock/cli   # npm 发布后：全局安装，即刻可用 ac
@@ -20,17 +20,25 @@ bun install -g @actiondock/cli   # npm 发布后：全局安装，即刻可用 a
 
 ---
 
-## 项目管理
+## 项目与包管理
 
-### 初始化新项目
+### 1. 初始化新项目
 ```bash
 ac init [directory] --id <package-id> --name <display-name> --desc <description>
 ```
 自动生成 `actiondock.json`、`package.json`、`tsconfig.json`、`actions/`、`playbooks/` 与 `tests/` 骨架。
 
-### 检查项目元数据
+### 2. 检查项目或远程目标元数据
 ```bash
 ac info [--json]
+ac info --profile <profile-name> [--json]
+```
+
+### 3. 全局包注册与解绑 (Link / Unlink)
+在 Action Package 根目录注册后，可在系统任意位置直接运行或被跨包引用：
+```bash
+ac link [path]          # 注册当前或指定包到全局开发态注册表
+ac unlink [id|path]     # 从全局注册表中移除
 ```
 
 ---
@@ -115,22 +123,65 @@ ac action validate [id] [--json]
 ### 查看 Action 详情与 Schema 定义
 ```bash
 ac action show <id> [--json]
+ac action show <id> --profile <profile-name> [--json]
 ```
 
 ### 运行 Action（stdout 输出标准 JSON 结果）
 ```bash
-ac action run <id> --input '{"repo": "owner/repo"}'
-ac action run <id> --input-file ./input.json
-ac action run <id> --config GITHUB_TOKEN=secret_token
+# 简写方式 (ac run)
+ac run <id> --input '{"repo": "owner/repo"}'
+ac run <id> --input-file ./input.json
+ac run <id> --config GITHUB_TOKEN=secret_token
+
+# 完整子命令方式 (ac action run)
+ac action run <id> -i '{"repo": "owner/repo"}'
 ```
 
 标准输出格式：
 ```json
 {
   "ok": true,
-  "runId": "uuid-...",
+  "runId": "01J...",
   "data": { ... }
 }
+```
+
+---
+
+## 多环境与远程云机器调度 (Profiles & Serve)
+
+### 1. 远端云机器启动 HTTP Runner
+在云端主机上启动微型监听服务：
+```bash
+ac serve [--port 5177] [--host 0.0.0.0] [--token <secret-token>]
+```
+
+### 2. 本地管理 Profile
+```bash
+# 添加云节点
+ac profile add aliyun-prod --server http://1.2.3.4:5177 --token secret123 --desc "阿里云生产节点"
+
+# 列出所有已配置的 profile
+ac profile list [--json]
+
+# 测试云节点连通性与延迟
+ac profile test aliyun-prod
+
+# 切换全局默认 profile
+ac profile use aliyun-prod
+
+# 查看或删除 profile
+ac profile show [name] [--json]
+ac profile rm <name>
+```
+
+### 3. 调度远端 Action 执行
+```bash
+# 通过 --profile 调度
+ac run server.check-disk --profile aliyun-prod -i '{"mount": "/data"}'
+
+# 直接传 server 地址调度
+ac run server.check-disk --server http://1.2.3.4:5177 --token secret123
 ```
 
 ---
@@ -155,7 +206,7 @@ ac playbook validate
 
 ## 运行时存储管理（Config & State）
 
-### 配置管理
+### 配置管理 (`ctx.config`)
 ```bash
 ac config list [--json]
 ac config get <key> [--json]
@@ -163,7 +214,7 @@ ac config set <key> <value>
 ac config delete <key>
 ```
 
-### 状态管理
+### 状态管理 (`ctx.state`)
 ```bash
 ac state list [prefix] [--json]
 ac state get <key> [--json]
@@ -223,7 +274,7 @@ ac build [--target <target>] [--out <path>] [--minify]
 ac export skill [--target <target>] [--out <path>] [--archive]
 ```
 
-生成的 Skill 目录：
+生成的 Skill 目录结构：
 ```text
 dist/<package>-skill/
 ├── SKILL.md                  # 面向 AI Agent 的调用说明
