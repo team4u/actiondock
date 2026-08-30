@@ -15,6 +15,125 @@ export function registerConfigCommands(program: Command): void {
     .command("config")
     .description("Manage runtime configuration store (Global & Project-level)");
 
+  // config schema / check
+  configCmd
+    .command("schema [identifier]")
+    .alias("check")
+    .description("Inspect declared configuration requirements and check resolution status")
+    .option("-P, --package <id>", "Target package ID or path")
+    .option("--json", "Output as JSON")
+    .action((identifier, options) => {
+      try {
+        const root = resolvePackageRoot(identifier || options.package);
+        if (!root) {
+          console.error(
+            "Error: Not in an ActionDock project.\nUsage: ac config schema [package-id] or cd into a project directory."
+          );
+          process.exit(1);
+        }
+
+        const projConfig = loadProjectConfig(root);
+        const declared = projConfig.config || {};
+        const declaredKeys = Object.keys(declared);
+
+        const globalStorage = createGlobalStorage();
+        const globalConfig = globalStorage.listConfig();
+        globalStorage.close();
+
+        const projectStorage = createStorage(projConfig.id, { projectRoot: root });
+        const projectConfig = projectStorage.listConfig();
+        projectStorage.close();
+
+        const items = declaredKeys.map((key) => {
+          const itemDef = declared[key];
+          const isSecret = isSecretConfigKey(key, itemDef);
+
+          let resolvedValue: unknown;
+          let source: "project" | "global" | "env" | "default" | "missing" = "missing";
+          let status: "SET" | "DEFAULT" | "MISSING" = "MISSING";
+
+          if (projectConfig[key] !== undefined) {
+            resolvedValue = projectConfig[key];
+            source = "project";
+            status = "SET";
+          } else if (globalConfig[key] !== undefined) {
+            resolvedValue = globalConfig[key];
+            source = "global";
+            status = "SET";
+          } else if (typeof process !== "undefined" && process.env && process.env[key] !== undefined) {
+            resolvedValue = process.env[key];
+            source = "env";
+            status = "SET";
+          } else if (itemDef.default !== undefined) {
+            resolvedValue = itemDef.default;
+            source = "default";
+            status = "DEFAULT";
+          } else {
+            status = "MISSING";
+          }
+
+          return {
+            key,
+            description: itemDef.description || "",
+            secret: isSecret,
+            default: itemDef.default,
+            status,
+            source,
+            value: isSecret && resolvedValue !== undefined ? maskSecretValue(resolvedValue) : resolvedValue,
+            required: itemDef.default === undefined,
+          };
+        });
+
+        const missingRequired = items.filter((i) => i.status === "MISSING");
+
+        if (options.json) {
+          console.log(
+            JSON.stringify(
+              {
+                packageId: projConfig.id,
+                projectRoot: root,
+                allReady: missingRequired.length === 0,
+                configs: items,
+              },
+              null,
+              2
+            )
+          );
+        } else {
+          console.log(`Configuration Requirements for ${projConfig.id} (${root}):\n`);
+          if (items.length === 0) {
+            console.log("  (No configuration dependencies declared for this package)");
+            return;
+          }
+
+          console.log(
+            `  ${"KEY".padEnd(24)} ${"STATUS".padEnd(12)} ${"SOURCE".padEnd(10)} ${"SECRET".padEnd(8)} DESCRIPTION`
+          );
+          console.log("  " + "-".repeat(85));
+
+          for (const item of items) {
+            const statusLabel = item.status === "SET" ? "[SET]" : item.status === "DEFAULT" ? "[DEFAULT]" : "[MISSING]";
+            const secretLabel = item.secret ? "yes" : "no";
+            console.log(
+              `  ${item.key.padEnd(24)} ${statusLabel.padEnd(12)} ${item.source.padEnd(10)} ${secretLabel.padEnd(8)} ${item.description}`
+            );
+          }
+
+          if (missingRequired.length > 0) {
+            console.log(`\n[WARNING] ${missingRequired.length} required config(s) not set:`);
+            for (const m of missingRequired) {
+              console.log(`  - ${m.key}: Run 'ac config set ${m.key} <value>' to configure.`);
+            }
+          } else {
+            console.log("\n[OK] All configuration dependencies are satisfied.");
+          }
+        }
+      } catch (err: any) {
+        console.error(`Error: ${err.message}`);
+        process.exit(1);
+      }
+    });
+
   // config list
   configCmd
     .command("list [patterns...]")

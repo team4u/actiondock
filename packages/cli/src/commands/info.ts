@@ -1,22 +1,23 @@
 import {
   fetchRemoteInfo,
-  findProjectRoot,
   loadActions,
   loadPlaybooks,
   loadProjectConfig,
+  resolvePackageRoot,
   resolveTarget,
 } from "@actiondock/core";
 import { Command } from "commander";
 
 export function registerInfoCommand(program: Command): void {
   program
-    .command("info")
-    .description("Display information about the current ActionDock project or remote target")
+    .command("info [identifier]")
+    .description("Display information about the current ActionDock project, a linked package, or remote target")
     .option("-p, --profile <name>", "Query against a specific profile")
     .option("-s, --server <url>", "Remote server URL")
     .option("-t, --token <token>", "Auth token for remote server")
+    .option("-P, --package <id>", "Target package ID or path")
     .option("--json", "Output information as JSON")
-    .action(async (options) => {
+    .action(async (identifier, options) => {
       try {
         const target = resolveTarget({
           profile: options.profile,
@@ -60,9 +61,13 @@ export function registerInfoCommand(program: Command): void {
           return;
         }
 
-        const root = findProjectRoot();
+        const root = resolvePackageRoot(identifier || options.package);
         if (!root) {
-          console.error("Error: Not in an ActionDock project (actiondock.json not found)");
+          if (identifier || options.package) {
+            console.error(`Error: Package '${identifier || options.package}' not found in linked packages or path`);
+          } else {
+            console.error("Error: Not in an ActionDock project (actiondock.json not found).\nUse 'ac info <package-id>' or cd into a project directory.");
+          }
           process.exit(1);
         }
 
@@ -82,7 +87,14 @@ export function registerInfoCommand(program: Command): void {
           playbooksCount: playbooks.size,
           actions: Array.from(actions.keys()),
           playbooks: Array.from(playbooks.keys()),
-          configDeclared: config.config ? Object.keys(config.config) : [],
+          configDeclared: config.config
+            ? Object.entries(config.config).map(([k, v]) => ({
+                key: k,
+                description: v.description || "",
+                default: v.default,
+                secret: v.secret || false,
+              }))
+            : [],
         };
 
         if (options.json) {
@@ -102,11 +114,10 @@ export function registerInfoCommand(program: Command): void {
           }
           if (info.configDeclared.length > 0) {
             console.log(`\nDeclared Config Keys:`);
-            for (const k of info.configDeclared) {
-              const item = config.config?.[k];
-              const isSec = item?.secret ? " [secret]" : "";
-              const def = item?.default !== undefined ? ` (default: ${JSON.stringify(item.default)})` : "";
-              console.log(`  - ${k.padEnd(24)} ${item?.description || ""}${def}${isSec}`);
+            for (const item of info.configDeclared) {
+              const isSec = item.secret ? " [secret]" : "";
+              const def = item.default !== undefined ? ` (default: ${JSON.stringify(item.default)})` : "";
+              console.log(`  - ${item.key.padEnd(24)} ${item.description}${def}${isSec}`);
             }
           }
         }
