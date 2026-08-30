@@ -109,7 +109,7 @@ describe("CLI End-to-End", () => {
     const runWithNewConfRes = JSON.parse(runWithNewConf.stdout.toString());
     expect(runWithNewConfRes.data.message).toBe("Howdy, Cowboy!");
 
-    // 7. state list & get
+    // 7. state list & get & set with --ttl
     const stateList = runCli(["state", "list", "--json"], tempDir);
     expect(stateList.exitCode).toBe(0);
     const stateKeys = JSON.parse(stateList.stdout.toString());
@@ -119,6 +119,18 @@ describe("CLI End-to-End", () => {
     expect(stateGet.exitCode).toBe(0);
     const stateVal = JSON.parse(stateGet.stdout.toString());
     expect(stateVal.value).toBe(2);
+
+    const stateSetTtl = runCli(
+      ["state", "set", "short_lived", "session_abc", "--ttl", "1"],
+      tempDir
+    );
+    expect(stateSetTtl.exitCode).toBe(0);
+    const getShortLived = runCli(
+      ["state", "get", "short_lived", "--json"],
+      tempDir
+    );
+    expect(getShortLived.exitCode).toBe(0);
+    expect(JSON.parse(getShortLived.stdout.toString()).value).toBe("session_abc");
 
     // 8. runs list & show
     const runsListProc = runCli(["runs", "list", "--json"], tempDir);

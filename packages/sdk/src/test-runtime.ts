@@ -38,12 +38,17 @@ export class MemoryConfig implements Config {
   }
 }
 
+export interface MemoryStateEntry {
+  value: unknown;
+  expiresAt?: number;
+}
+
 export class MemoryStateStore implements StateStore {
-  private store: Map<string, unknown>;
+  private store: Map<string, any>;
   private namespace: string;
 
   constructor(
-    store?: Map<string, unknown>,
+    store?: Map<string, any>,
     namespace = ""
   ) {
     this.store = store || new Map();
@@ -54,14 +59,45 @@ export class MemoryStateStore implements StateStore {
     return this.namespace ? `${this.namespace}:${key}` : key;
   }
 
-  async get<T = unknown>(key: string): Promise<T | undefined> {
-    const raw = this.store.get(this.qualify(key));
-    if (raw === undefined) return undefined;
-    return structuredClone(raw) as T;
+  private extractEntry(raw: unknown): MemoryStateEntry {
+    if (
+      raw !== null &&
+      typeof raw === "object" &&
+      ("__actiondock_entry__" in (raw as Record<string, unknown>) ||
+        "expiresAt" in (raw as Record<string, unknown>))
+    ) {
+      return raw as MemoryStateEntry;
+    }
+    return { value: raw };
   }
 
-  async set<T = unknown>(key: string, value: T): Promise<void> {
-    this.store.set(this.qualify(key), structuredClone(value));
+  async get<T = unknown>(key: string): Promise<T | undefined> {
+    const qKey = this.qualify(key);
+    const raw = this.store.get(qKey);
+    if (raw === undefined) return undefined;
+    const entry = this.extractEntry(raw);
+    if (entry.expiresAt !== undefined && entry.expiresAt <= Date.now()) {
+      this.store.delete(qKey);
+      return undefined;
+    }
+    return (entry.value !== undefined ? structuredClone(entry.value) : undefined) as T;
+  }
+
+  async set<T = unknown>(
+    key: string,
+    value: T,
+    ttl?: number
+  ): Promise<void> {
+    const qKey = this.qualify(key);
+    const expiresAt =
+      typeof ttl === "number" && ttl > 0 ? Date.now() + ttl * 1000 : undefined;
+
+    const entry: MemoryStateEntry = {
+      value: structuredClone(value),
+      expiresAt,
+    };
+    (entry as any).__actiondock_entry__ = true;
+    this.store.set(qKey, entry);
   }
 
   async delete(key: string): Promise<void> {
@@ -70,9 +106,15 @@ export class MemoryStateStore implements StateStore {
 
   async keys(prefix = ""): Promise<string[]> {
     const fullPrefix = this.qualify(prefix);
+    const now = Date.now();
     const result: string[] = [];
-    for (const k of this.store.keys()) {
+    for (const [k, raw] of this.store.entries()) {
       if (k.startsWith(fullPrefix)) {
+        const entry = this.extractEntry(raw);
+        if (entry.expiresAt !== undefined && entry.expiresAt <= now) {
+          this.store.delete(k);
+          continue;
+        }
         if (this.namespace) {
           result.push(k.slice(this.namespace.length + 1));
         } else {

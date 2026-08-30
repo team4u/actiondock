@@ -61,6 +61,86 @@ describe("SqliteRuntimeStorage", () => {
       await storage.deleteState("", "cursor");
       expect(await storage.getState("", "cursor")).toBeUndefined();
     });
+
+    it("should expire state keys based on TTL", async () => {
+      // 1. TTL in seconds (0.05s = 50ms)
+      await storage.setState("", "temp1", "val1", 0.05);
+      expect(await storage.getState<string>("", "temp1")).toBe("val1");
+
+      // 2. TTL in namespace
+      await storage.setState("ns1", "temp2", { a: 1 }, 0.05);
+      expect(await storage.getState<{ a: number }>("ns1", "temp2")).toEqual({ a: 1 });
+
+      // 3. Permanent key
+      await storage.setState("", "perm", "stay");
+
+      expect((await storage.listStateKeys("")).sort()).toEqual(["perm", "temp1"]);
+      expect(await storage.listStateKeys("ns1")).toEqual(["temp2"]);
+
+      // Wait 70ms for expiration
+      await new Promise((resolve) => setTimeout(resolve, 70));
+
+      expect(await storage.getState("", "temp1")).toBeUndefined();
+      expect(await storage.getState("ns1", "temp2")).toBeUndefined();
+      expect(await storage.getState<string>("", "perm")).toBe("stay");
+
+      expect(await storage.listStateKeys("")).toEqual(["perm"]);
+      expect(await storage.listStateKeys("ns1")).toEqual([]);
+    });
+
+    it("should migrate database from version 1 schema and support expires_at", () => {
+      const { Database } = require("bun:sqlite");
+      const tempDbPath = `/tmp/test-migration-${Date.now()}.db`;
+      
+      // Manually create v1 schema
+      const rawDb = new Database(tempDbPath);
+      rawDb.exec(`
+        CREATE TABLE IF NOT EXISTS config (
+          package_id TEXT NOT NULL,
+          key TEXT NOT NULL,
+          value_json TEXT,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (package_id, key)
+        );
+        CREATE TABLE IF NOT EXISTS state (
+          package_id TEXT NOT NULL,
+          namespace TEXT NOT NULL,
+          key TEXT NOT NULL,
+          value_json TEXT,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (package_id, namespace, key)
+        );
+        CREATE TABLE IF NOT EXISTS runs (
+          id TEXT PRIMARY KEY,
+          package_id TEXT NOT NULL,
+          action_id TEXT NOT NULL,
+          parent_run_id TEXT,
+          status TEXT NOT NULL,
+          input_json TEXT,
+          output_json TEXT,
+          error_json TEXT,
+          started_at TEXT NOT NULL,
+          finished_at TEXT
+        );
+        PRAGMA user_version = 1;
+      `);
+      rawDb.close();
+
+      // Open with SqliteRuntimeStorage (should trigger migration to v2)
+      const migratedStorage = new SqliteRuntimeStorage({
+        packageId: "migrated-pkg",
+        dbPath: tempDbPath,
+      });
+
+      // Verify setting and getting state with TTL works after migration
+      migratedStorage.setState("", "migrated-key", "ok", 100);
+      expect(migratedStorage.getState("", "migrated-key")).resolves.toBe("ok");
+
+      migratedStorage.close();
+      try {
+        unlinkSync(tempDbPath);
+      } catch {}
+    });
   });
 
   describe("Runs", () => {

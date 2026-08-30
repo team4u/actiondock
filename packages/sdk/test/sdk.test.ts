@@ -83,4 +83,25 @@ describe("@actiondock/sdk", () => {
     const runtime = createTestRuntime();
     expect(runtime.run(cycleAction, {})).rejects.toThrow("Cycle detected");
   });
+
+  it("handles state expiration with TTL in MemoryStateStore", async () => {
+    const runtime = createTestRuntime();
+
+    // 1. Set key with TTL (in seconds, 0.05s = 50ms)
+    await runtime.state.set("temp-key", "hello", 0.05);
+    expect(await runtime.state.get<string>("temp-key")).toBe("hello");
+    expect(await runtime.state.keys()).toContain("temp-key");
+
+    // 2. Permanent key
+    await runtime.state.set("permanent", "keep-me");
+
+    // Wait for 70ms to allow expiration
+    await new Promise((resolve) => setTimeout(resolve, 70));
+
+    expect(await runtime.state.get("temp-key")).toBeUndefined();
+    expect(await runtime.state.get<string>("permanent")).toBe("keep-me");
+
+    const remainingKeys = await runtime.state.keys();
+    expect(remainingKeys).toEqual(["permanent"]);
+  });
 });

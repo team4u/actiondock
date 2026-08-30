@@ -69,7 +69,8 @@ export function registerStateCommands(program: Command): void {
   stateCmd
     .command("set <key> <value>")
     .description("Set a state value by key")
-    .action(async (key, rawValue) => {
+    .option("--ttl <seconds>", "Time to live in seconds", (v) => parseInt(v, 10))
+    .action(async (key, rawValue, options) => {
       const root = findProjectRoot();
       if (!root) {
         console.error("Error: Not in an ActionDock project");
@@ -86,9 +87,18 @@ export function registerStateCommands(program: Command): void {
           parsed = rawValue;
         }
 
-        await storage.setState("", key, parsed);
+        const ttl =
+          options.ttl !== undefined && !isNaN(options.ttl)
+            ? options.ttl
+            : undefined;
+
+        await storage.setState("", key, parsed, ttl);
         storage.close();
-        console.log(`[OK] State '${key}' set to ${JSON.stringify(parsed)}`);
+
+        const meta = ttl ? ` (ttl: ${ttl}s)` : "";
+        console.log(
+          `[OK] State '${key}' set to ${JSON.stringify(parsed)}${meta}`
+        );
       } catch (err: any) {
         console.error(`Error: ${err.message}`);
         process.exit(1);

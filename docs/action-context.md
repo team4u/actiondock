@@ -67,15 +67,19 @@ await ctx.state.set("checkpoint_data", {
   updatedAt: new Date().toISOString(),
 });
 
+// 设置带有 TTL（过期时间，单位：秒）的状态
+await ctx.state.set("auth_token", "jwt_token_12345", 3600); // 1 小时后过期
+await ctx.state.set("temp_cache", { temp: true }, 60); // 60 秒后过期
+
 // 删除指定状态
 await ctx.state.delete("checkpoint_data");
 
-// 列出前缀匹配的键名
+// 列出前缀匹配的键名（自动过滤并清理已过期的键）
 const allOrderKeys = await ctx.state.keys("order_");
 
 // 命名空间隔离 (Scoped State Store)
 const orderStore = ctx.state.scope("orders");
-await orderStore.set("ord_1001", { amount: 99.5, status: "PAID" });
+await orderStore.set("ord_1001", { amount: 99.5, status: "PAID" }, 86400);
 const order = await orderStore.get("ord_1001");
 ```
 

@@ -93,9 +93,9 @@ export default defineAction<Input, Output>({
     const token = ctx.config.get<string>("GITHUB_TOKEN");
     const api = ctx.config.get("GITHUB_API", "https://api.github.com");
 
-    // State: 跨执行持久化 Key-Value 存储
+    // State: 跨执行持久化 Key-Value 存储（支持指定 TTL 秒数）
     const lastSync = await ctx.state.get<string>("last_sync");
-    await ctx.state.set("last_sync", new Date().toISOString());
+    await ctx.state.set("last_sync", new Date().toISOString(), 3600); // 1 小时后过期
 
     // Logger: 输出至 stderr（绝不污染 stdout 的标准 JSON 输出）
     ctx.log.info(`正在获取 ${input.repo} 的 issues`);
@@ -220,7 +220,7 @@ ac config delete <key>
 ```bash
 ac state list [prefix] [--json]
 ac state get <key> [--json]
-ac state set <key> <json-value>
+ac state set <key> <json-value> [--ttl <seconds>]
 ac state delete <key>
 ```
 

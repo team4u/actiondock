@@ -13,6 +13,7 @@ export interface StateEntry {
   key: string;
   value: unknown;
   updatedAt: string;
+  expiresAt?: string;
 }
 
 export interface StorageOptions {
@@ -29,7 +30,12 @@ export interface RuntimeStorage {
 
   // State
   getState<T = unknown>(namespace: string, key: string): Promise<T | undefined>;
-  setState<T = unknown>(namespace: string, key: string, value: T): Promise<void>;
+  setState<T = unknown>(
+    namespace: string,
+    key: string,
+    value: T,
+    ttl?: number
+  ): Promise<void>;
   deleteState(namespace: string, key: string): Promise<void>;
   listStateKeys(namespace: string, prefix?: string): Promise<string[]>;
 

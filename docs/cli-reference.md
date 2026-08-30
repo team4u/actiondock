@@ -152,9 +152,9 @@ ActionDock 命令行工具（`ac`）全量功能与参数参考。
 
 ### 共享状态管理（Shared State）
 
-* `ac state list [prefix] [--json]`：列出当前项目本地状态数据库中的所有 Key（支持前缀过滤）。
-* `ac state get <key> [--json]`：获取指定 Key 的持久化状态值。
-* `ac state set <key> <json-value>`：写入或更新指定 Key 的状态值。
+* `ac state list [prefix] [--json]`：列出当前项目本地状态数据库中的所有 Key（支持前缀过滤，自动剔除已过期 Key）。
+* `ac state get <key> [--json]`：获取指定 Key 的持久化状态值（若已过期则返回 undefined 并自动清理）。
+* `ac state set <key> <json-value> [--ttl <seconds>]`：写入或更新指定 Key 的状态值，支持指定生存时间（TTL，秒）。
 * `ac state delete <key>`（别名：`rm`）：删除指定 Key 的状态值。
 
 ---

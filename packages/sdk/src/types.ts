@@ -42,7 +42,7 @@ export interface Config {
  */
 export interface StateStore {
   get<T = unknown>(key: string): Promise<T | undefined>;
-  set<T = unknown>(key: string, value: T): Promise<void>;
+  set<T = unknown>(key: string, value: T, ttl?: number): Promise<void>;
   delete(key: string): Promise<void>;
   keys(prefix?: string): Promise<string[]>;
   scope(namespace: string): StateStore;

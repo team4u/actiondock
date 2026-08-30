@@ -30,18 +30,25 @@ CREATE TABLE IF NOT EXISTS config (
 ```
 
 ### 持久化共享状态表 (`state`)
-保存跨 Action 执行保留的业务持久化状态，支持命名空间隔离。
+保存跨 Action 执行保留的业务持久化状态，支持命名空间隔离与过期时间（TTL / expires_at）。
 
 ```sql
 CREATE TABLE IF NOT EXISTS state (
   package_id TEXT NOT NULL,
   namespace TEXT NOT NULL,
   key TEXT NOT NULL,
-  value_json TEXT NOT NULL,
+  value_json TEXT,
   updated_at TEXT NOT NULL,
+  expires_at TEXT,
   PRIMARY KEY (package_id, namespace, key)
 );
+
+CREATE INDEX IF NOT EXISTS idx_state_expires ON state(expires_at);
 ```
+
+#### 过期生存时间（TTL）机制
+* **写入支持 TTL**：通过 `ctx.state.set(key, val, 3600)` 设置过期生存时间（以秒为单位）。
+* **惰性剔除与自动清理**：读取（`get`）或列出（`keys` / `list`）时自动过滤已过期的 Key 并清理物理记录，兼顾高性能与零冗余。
 
 ### 执行历史与调用链记录表 (`runs`)
 记录每次 Action 调用的执行详情与父子链路。
@@ -53,7 +60,7 @@ CREATE TABLE IF NOT EXISTS runs (
   action_id TEXT NOT NULL,
   parent_run_id TEXT,
   status TEXT NOT NULL,
-  input_json TEXT NOT NULL,
+  input_json TEXT,
   output_json TEXT,
   error_json TEXT,
   started_at TEXT NOT NULL,

@@ -50,6 +50,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
             key TEXT NOT NULL,
             value_json TEXT,
             updated_at TEXT NOT NULL,
+            expires_at TEXT,
             PRIMARY KEY (package_id, namespace, key)
           );
 
@@ -68,9 +69,28 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
 
           CREATE INDEX IF NOT EXISTS idx_runs_action ON runs(package_id, action_id);
           CREATE INDEX IF NOT EXISTS idx_runs_started ON runs(started_at DESC);
+          CREATE INDEX IF NOT EXISTS idx_state_expires ON state(expires_at);
 
-          PRAGMA user_version = 1;
+          PRAGMA user_version = 2;
         `);
+      })();
+    } else if (version < 2) {
+      this.db.transaction(() => {
+        try {
+          const columns = this.db
+            .query("PRAGMA table_info(state);")
+            .all() as Array<{ name: string }>;
+          const hasExpiresAt = columns.some((c) => c.name === "expires_at");
+          if (!hasExpiresAt) {
+            this.db.exec("ALTER TABLE state ADD COLUMN expires_at TEXT;");
+          }
+        } catch {
+          // If table doesn't exist yet or already altered
+        }
+        this.db.exec(
+          "CREATE INDEX IF NOT EXISTS idx_state_expires ON state(expires_at);"
+        );
+        this.db.exec("PRAGMA user_version = 2;");
       })();
     }
   }
@@ -139,13 +159,21 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     key: string
   ): Promise<T | undefined> {
     const stmt = this.db.prepare(
-      "SELECT value_json FROM state WHERE package_id = ? AND namespace = ? AND key = ?"
+      "SELECT value_json, expires_at FROM state WHERE package_id = ? AND namespace = ? AND key = ?"
     );
     const row = stmt.get(this.packageId, namespace, key) as {
       value_json: string;
+      expires_at: string | null;
     } | null;
     if (!row || row.value_json === undefined || row.value_json === null) {
       return undefined;
+    }
+    if (row.expires_at) {
+      const expiresTime = new Date(row.expires_at).getTime();
+      if (!isNaN(expiresTime) && expiresTime <= Date.now()) {
+        await this.deleteState(namespace, key);
+        return undefined;
+      }
     }
     try {
       return JSON.parse(row.value_json) as T;
@@ -157,18 +185,25 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
   async setState<T = unknown>(
     namespace: string,
     key: string,
-    value: T
+    value: T,
+    ttl?: number
   ): Promise<void> {
+    const expiresAtStr =
+      typeof ttl === "number" && ttl > 0
+        ? new Date(Date.now() + ttl * 1000).toISOString()
+        : null;
+
     const stmt = this.db.prepare(`
-      INSERT INTO state (package_id, namespace, key, value_json, updated_at)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO state (package_id, namespace, key, value_json, updated_at, expires_at)
+      VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(package_id, namespace, key) DO UPDATE SET
         value_json = excluded.value_json,
-        updated_at = excluded.updated_at
+        updated_at = excluded.updated_at,
+        expires_at = excluded.expires_at
     `);
     const valJson = JSON.stringify(value);
     const now = new Date().toISOString();
-    stmt.run(this.packageId, namespace, key, valJson, now);
+    stmt.run(this.packageId, namespace, key, valJson, now, expiresAtStr);
   }
 
   async deleteState(namespace: string, key: string): Promise<void> {
@@ -180,10 +215,20 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
 
   async listStateKeys(namespace: string, prefix = ""): Promise<string[]> {
     const pattern = prefix ? `${prefix}%` : "%";
+    const nowStr = new Date().toISOString();
+    try {
+      const cleanupStmt = this.db.prepare(
+        "DELETE FROM state WHERE package_id = ? AND namespace = ? AND expires_at IS NOT NULL AND expires_at <= ?"
+      );
+      cleanupStmt.run(this.packageId, namespace, nowStr);
+    } catch {
+      // Best-effort cleanup
+    }
+
     const stmt = this.db.prepare(
-      "SELECT key FROM state WHERE package_id = ? AND namespace = ? AND key LIKE ? ORDER BY key ASC"
+      "SELECT key FROM state WHERE package_id = ? AND namespace = ? AND key LIKE ? AND (expires_at IS NULL OR expires_at > ?) ORDER BY key ASC"
     );
-    const rows = stmt.all(this.packageId, namespace, pattern) as Array<{
+    const rows = stmt.all(this.packageId, namespace, pattern, nowStr) as Array<{
       key: string;
     }>;
     return rows.map((r) => r.key);

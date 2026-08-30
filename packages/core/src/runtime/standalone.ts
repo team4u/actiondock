@@ -229,7 +229,17 @@ export class StandaloneRuntime {
             } catch {
               parsed = rawVal;
             }
-            await storage.setState("", key, parsed);
+
+            let ttl: number | undefined;
+            for (let i = 3; i < subArgs.length; i++) {
+              if (subArgs[i] === "--ttl" && i + 1 < subArgs.length) {
+                ttl = parseInt(subArgs[++i], 10);
+              } else if (subArgs[i].startsWith("--ttl=")) {
+                ttl = parseInt(subArgs[i].slice(6), 10);
+              }
+            }
+
+            await storage.setState("", key, parsed, ttl);
             console.log(`State '${key}' updated`);
           } else if (sub === "delete") {
             const key = subArgs[1];
