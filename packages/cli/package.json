@@ -4,8 +4,7 @@
   "description": "ActionDock CLI facade for developing, testing, building, and exporting standalone Agent Actions and Skills",
   "type": "module",
   "bin": {
-    "actiondock": "./bin/actiondock.js",
-    "ac": "./bin/actiondock.js"
+    "ac": "./bin/ac.js"
   },
   "main": "./src/index.ts",
   "module": "./src/index.ts",

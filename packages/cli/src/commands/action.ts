@@ -135,7 +135,7 @@ export default defineAction<Input, Output>({
         writeFileSync(targetFullFile, template, "utf-8");
         console.log(`✓ Created Action '${id}' at ${targetFullFile}`);
         console.log(`\nTo run this action:`);
-        console.log(`  actiondock action run ${id} --input '{"exampleParam": "hello"}'`);
+        console.log(`  ac action run ${id} --input '{"exampleParam": "hello"}'`);
       } catch (err: any) {
         console.error(`Error: ${err.message}`);
         process.exit(1);
@@ -270,10 +270,10 @@ export default defineAction<Input, Output>({
       await executeAction(id, options);
     });
 
-  // Root level alias: actiondock run <id>
+  // Root level alias: ac run <id>
   program
     .command("run <id>")
-    .description("Alias for 'actiondock action run <id>'")
+    .description("Alias for 'ac action run <id>'")
     .option("-i, --input <json>", "Input as JSON string")
     .option("-f, --input-file <path>", "Input from JSON file")
     .option("-c, --config <key=value...>", "Temporary config override")

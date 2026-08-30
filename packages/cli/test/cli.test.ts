@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-const cliPath = resolve(__dirname, "../bin/actiondock.js");
+const cliPath = resolve(__dirname, "../bin/ac.js");
 
 function runCli(args: string[], cwd?: string) {
   return Bun.spawnSync(["bun", cliPath, ...args], {

@@ -1,11 +1,11 @@
 ---
 name: actiondock
-description: 使用 ActionDock 2.0 (Bun + TypeScript) 进行 AI Agent Action 与 Skill 的创建、开发、测试、独立构建与导出的完整工具链指南。
+description: 使用 ActionDock 2.0 (ac CLI, Bun + TypeScript) 进行 AI Agent Action 与 Skill 的创建、开发、测试、独立构建与导出的完整工具链指南。
 ---
 
-# ActionDock 2.0 开发者技能指南
+# ActionDock 2.0 (ac) 开发者技能指南
 
-ActionDock 2.0 是一个面向 AI Agent Action 与 Skill 的开发工具链。它通过 Bun 原生编译器将 TypeScript 编写的 Action 一键打包为**零外部安装依赖的独立二进制可执行文件**，并生成包含 `SKILL.md` 引导的自包含 Skill 包。
+ActionDock 2.0 是一个面向 AI Agent Action 与 Skill 的开发工具链（CLI 命令为 `ac`）。它通过 Bun 原生编译器将 TypeScript 编写的 Action 一键打包为**零外部安装依赖的独立二进制可执行文件**，并生成包含 `SKILL.md` 引导的自包含 Skill 包。
 
 ---
 
@@ -15,7 +15,7 @@ ActionDock 2.0 是一个面向 AI Agent Action 与 Skill 的开发工具链。�
   * 全局安装：`bun install -g @actiondock/cli`
   * 临时免安装执行：`bun x @actiondock/cli <command>`
 * **从本地源码安装（开发态）**：
-  * 注册本地软链接：`cd packages/cli && bun link`（系统全局即刻可用 `actiondock`）
+  * 注册本地软链接：`cd packages/cli && bun link`（系统全局即刻可用 `ac`）
   * 打包本地安装：`cd packages/cli && bun pm pack && bun install -g ./actiondock-cli-2.0.0.tgz`
 
 ---
@@ -24,13 +24,13 @@ ActionDock 2.0 是一个面向 AI Agent Action 与 Skill 的开发工具链。�
 
 ### 初始化新项目
 ```bash
-actiondock init [directory] --id <package-id> --name <display-name> --desc <description>
+ac init [directory] --id <package-id> --name <display-name> --desc <description>
 ```
 自动生成 `actiondock.json`、`package.json`、`tsconfig.json`、`actions/`、`playbooks/` 与 `tests/` 骨架。
 
 ### 检查项目元数据
 ```bash
-actiondock info [--json]
+ac info [--json]
 ```
 
 ---
@@ -39,7 +39,7 @@ actiondock info [--json]
 
 ### 脚手架创建 Action
 ```bash
-actiondock action create <action-id> --desc "Action 功能描述" [--file <filename.ts>]
+ac action create <action-id> --desc "Action 功能描述" [--file <filename.ts>]
 ```
 
 ### Action 定义结构
@@ -109,19 +109,19 @@ export default defineAction<Input, Output>({
 
 ### 校验 Action 语法与 Schema
 ```bash
-actiondock action validate [id] [--json]
+ac action validate [id] [--json]
 ```
 
 ### 查看 Action 详情与 Schema 定义
 ```bash
-actiondock action show <id> [--json]
+ac action show <id> [--json]
 ```
 
 ### 运行 Action（stdout 输出标准 JSON 结果）
 ```bash
-actiondock action run <id> --input '{"repo": "owner/repo"}'
-actiondock action run <id> --input-file ./input.json
-actiondock action run <id> --config GITHUB_TOKEN=secret_token
+ac action run <id> --input '{"repo": "owner/repo"}'
+ac action run <id> --input-file ./input.json
+ac action run <id> --config GITHUB_TOKEN=secret_token
 ```
 
 标准输出格式：
@@ -141,14 +141,14 @@ Playbook（`playbooks/*.md`）为 AI Agent 提供领域任务的逐步操作规�
 
 ### 创建 Playbook
 ```bash
-actiondock playbook create <id> --desc "SOP 任务描述" --actions action-a action-b
+ac playbook create <id> --desc "SOP 任务描述" --actions action-a action-b
 ```
 
 ### 检查与校验 Playbook
 ```bash
-actiondock playbook list [--json]
-actiondock playbook show <id> [--json]
-actiondock playbook validate
+ac playbook list [--json]
+ac playbook show <id> [--json]
+ac playbook validate
 ```
 
 ---
@@ -157,24 +157,24 @@ actiondock playbook validate
 
 ### 配置管理
 ```bash
-actiondock config list [--json]
-actiondock config get <key> [--json]
-actiondock config set <key> <value>
-actiondock config delete <key>
+ac config list [--json]
+ac config get <key> [--json]
+ac config set <key> <value>
+ac config delete <key>
 ```
 
 ### 状态管理
 ```bash
-actiondock state list [prefix] [--json]
-actiondock state get <key> [--json]
-actiondock state set <key> <json-value>
-actiondock state delete <key>
+ac state list [prefix] [--json]
+ac state get <key> [--json]
+ac state set <key> <json-value>
+ac state delete <key>
 ```
 
 ### 执行历史
 ```bash
-actiondock runs list [--action <id>] [--limit 20] [--json]
-actiondock runs show <run-id> [--json]
+ac runs list [--action <id>] [--limit 20] [--json]
+ac runs show <run-id> [--json]
 ```
 
 ---
@@ -204,7 +204,7 @@ describe("my-action", () => {
 
 执行测试：
 ```bash
-actiondock test
+ac test
 # 或
 bun test
 ```
@@ -215,12 +215,12 @@ bun test
 
 ### 构建独立可执行文件
 ```bash
-actiondock build [--target <target>] [--out <path>] [--minify]
+ac build [--target <target>] [--out <path>] [--minify]
 ```
 
 ### 导出完整 Skill 交付包
 ```bash
-actiondock export skill [--target <target>] [--out <path>] [--archive]
+ac export skill [--target <target>] [--out <path>] [--archive]
 ```
 
 生成的 Skill 目录：

@@ -10,7 +10,7 @@
 
 ### 方式 1：使用 CLI 命令快速生成骨架（推荐）
 ```bash
-actiondock action create github.list-prs --desc "获取 GitHub 仓库的 Pull Requests"
+ac action create github.list-prs --desc "获取 GitHub 仓库的 Pull Requests"
 ```
 该命令会自动在 `actions/` 目录下创建带有类型与 Schema 声明的 `list-prs.ts` 模板。
 
@@ -80,7 +80,7 @@ export default defineAction<MyInput, MyOutput>({
 ### ① `ctx.config`（配置访问）
 支持三级优先级的配置解析：
 1. **命令行临时覆盖**：运行命令时通过 `--config KEY=val` 传入。
-2. **本地持久化存储**：通过 `actiondock config set KEY val` 写入本地 SQLite。
+2. **本地持久化存储**：通过 `ac config set KEY val` 写入本地 SQLite。
 3. **项目声明默认值**：在 `actiondock.json` 的 `"config"` 中声明的 `default`。
 
 ```ts
