@@ -1,0 +1,23 @@
+{
+  "name": "actiondock-monorepo",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "examples/*"
+  ],
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "build": "bun run --filter '@actiondock/*' build"
+  },
+  "dependencies": {
+    "@actiondock/sdk": "workspace:*",
+    "@actiondock/cli": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "github-tools",
+  "version": "1.0.0",
+  "description": "GitHub Actions for AI Agents",
+  "type": "module",
+  "scripts": {
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@actiondock/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.7.0"
+  }
+}

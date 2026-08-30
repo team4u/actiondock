@@ -1,133 +1,144 @@
-# ActionDock
+# ActionDock 2.0
 
-> 把脚本、插件、仓库分发、AI 调用和运行治理放进同一运行体系的工具平台。同一份脚本定义，可以同时被人、REST API、CLI 和 Agent 使用。
+> **Build once. Ship standalone Actions that AI Agents can run anywhere.**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-![Java 21](https://img.shields.io/badge/JDK-21-green.svg)
-![npm](https://img.shields.io/npm/v/actiondock.svg)
+ActionDock 2.0 is a lightweight, zero-daemon developer toolchain for building, testing, and distributing AI Agent Actions and Skills using **Bun + TypeScript**.
+
+Unlike legacy server-centric platforms, ActionDock produces **zero-install standalone executables** bundled alongside markdown `SKILL.md` instructions. End users and AI agents do not need to install ActionDock, Bun, Node, Python, or Java.
 
 ---
 
-## ActionDock 是什么
+## 🌟 Key Features
 
-ActionDock 做的核心事情是：
+* **Zero-Install Distribution**: Packages compile into single self-contained executables via Bun.
+* **Filesystem First**: Actions (`actions/*.ts`), Playbooks (`playbooks/*.md`), and configs are ordinary files tracked in Git.
+* **TypeScript Native**: Write actions with full type safety and import-based composition.
+* **Built-in Storage**: Embedded SQLite store (`bun:sqlite`) provides persistent Config, Shared State, and execution Run records.
+* **Standard JSON Schema**: Input and output schemas use standard JSON Schema validated with `Ajv`.
+* **Agent-Friendly CLI**: Every command provides predictable JSON outputs on `stdout` and logs on `stderr`.
 
-1. 你写一段脚本（Groovy 或 Python）
-2. 给它定义输入输出的格式（JSON Schema）
-3. 发布成不可变的快照版本
-4. 然后通过管理台、REST API、CLI、定时任务、Webhook、AI Agent 等多种入口执行它
+---
 
-整个过程有完整的生命周期管理（草稿 → 发布 → 归档）、依赖声明（脚本依赖、插件依赖、AI 依赖）、版本快照和执行审计轨迹。
+## 🚀 Quick Start
 
-## 核心特性
+### 1. Initialize a new project
+```bash
+bun x @actiondock/cli init my-tools
+cd my-tools
+```
 
-- 统一脚本抽象 — 脚本不是一段源码，而是带 Schema、发布快照、依赖、日志和执行入口的脚本资产
-- 多入口复用 — 管理台、REST API、CLI、Agent 共用同一脚本
-- 仓库化协作 — 脚本、插件、AI 能力包可从仓库发现、安装、更新
-- 项目知识解析 — 项目仓库可通过 `repository resolve --repository-id` 返回 `ACTIONDOCK.md` 原文，供后续检索
-- 意图化资产发现 — 脚本、插件、仓库、知识源、Webhook、定时任务和 Playbook 的 list 命令支持 `--intent <regex>`，先收窄候选，未命中时自动回退全量列表
-- Webhook仓库资产 — Webhook可连同配置模板和脚本依赖一起发布、安装
-- AI 原生集成 — 脚本可暴露给 Agent，AI 辅助生成、诊断、Review
-- 治理能力完整 — 内置配置值、共享状态、访问令牌、执行记录、定时任务、备份恢复
-- 插件扩展 — 基于 PF4J，编写 Java 插件打包成 JAR 上传安装
+### 2. Create an Action
+```bash
+actiondock action create greet.user --desc "Greet a user with custom message"
+```
+Or directly edit `actions/user.ts`:
+```ts
+import { defineAction } from "@actiondock/sdk";
 
-## 核心数据流架构
+export default defineAction({
+  id: "greet.user",
+  description: "Greet a user with custom message",
 
+  inputSchema: {
+    type: "object",
+    properties: {
+      name: { type: "string" },
+    },
+    required: ["name"],
+  },
+
+  async run(input: { name: string }, ctx) {
+    const greeting = ctx.config.get("GREETING", "Hello");
+    const count = ((await ctx.state.get<number>("count")) || 0) + 1;
+    await ctx.state.set("count", count);
+
+    ctx.log.info(`Greeting ${input.name} (times: ${count})`);
+    return {
+      message: `${greeting}, ${input.name}!`,
+    };
+  },
+});
+```
+
+### 3. Run and Debug in Development
+```bash
+actiondock action run greet.user --input '{"name": "Alice"}'
+```
+
+### 4. Build Standalone Executable
+```bash
+actiondock build
+```
+
+### 5. Export Standalone Skill
+```bash
+actiondock export skill
+```
+
+Output:
 ```text
-创建/编辑脚本 (DRAFT)
-       ↓ 校验
-       ↓ 发布
-已发布快照 (PUBLISHED, 不可变)
-       ↓
-┌──────────────────────────────────────────┐
-│              执行入口                      │
-│  ┌─────┐ ┌──────┐ ┌────┐ ┌──────┐ ┌──────┐ │
-│  │ UI  │ │ REST │ │CLI │ │定时  │ │Webhook│ │
-│  │运行 │ │ API  │ │运行│ │触发  │ │触发 │ │
-│  └─────┘ └──────┘ └────┘ └──────┘ └──────┘ │
-└──────────────────────────────────────────┘
-       ↓
-   脚本运行时
-  ┌──────────────────────┐
-  │ scripts.invoke()     │ ← 调用其他脚本
-  │ plugins.invoke()     │ ← 调用插件 Action
-  │ state.get/put/cas()  │ ← 读写共享状态
-  │ log.info/warn/error()│ ← 输出执行日志
-  │ config.get()         │ ← 读取配置值
-  └──────────────────────┘
-       ↓
-   ExecutionRecord (执行记录，全链路审计)
+dist/my-tools-skill/
+├── SKILL.md                  # LLM task instruction guide
+├── actiondock.skill.json     # Skill manifest
+├── playbooks/                # Task SOP markdown files
+└── bin/
+    └── my-tools              # Standalone binary (no Bun / Node needed)
 ```
 
-## 快速开始
+---
 
-### 系统要求
+## 📚 Documentation & Guides
 
-JDK 21+ | Maven 3.9+（源码构建） | Node.js 18+（CLI） | Python 3.x（Python 脚本）
+* **[Action Authoring Guide](file:///root/code/action-dock/docs/action-authoring.md)**: Deep dive into Action definition, `ActionContext` API (`config`, `state`, `actions`, `log`), JSON schemas, and testing.
+* **[CLI Reference](file:///root/code/action-dock/docs/cli-reference.md)**: Complete CLI command catalog, flags, and usage examples.
+* **[ActionDock AI Agent Skill](file:///root/code/action-dock/skills/actiondock/SKILL.md)**: Specialized instruction skill for AI coding assistants and agents.
+* **[Architecture Design Document](file:///root/code/action-dock/ActionDock_2.0_Design.md)**: Complete 2.0 system architecture and design principles.
 
-### 安装
+---
+
+## 🛠️ CLI Reference Summary
+
+| Command | Description |
+| :--- | :--- |
+| `actiondock init [dir]` | Scaffold a new ActionDock project |
+| `actiondock info [--json]` | Show project metadata, actions, and playbooks |
+| `actiondock action create <id>` | Scaffold a new Action definition file |
+| `actiondock action list [--json]` | List discovered actions |
+| `actiondock action show <id> [--json]` | Inspect action schema and description |
+| `actiondock action run <id> --input '<json>'` | Execute an action with JSON input |
+| `actiondock action validate` | Validate action schemas and definitions |
+| `actiondock playbook create <id>` | Scaffold a new Playbook markdown file |
+| `actiondock playbook list / show <id>` | Inspect task SOP playbooks |
+| `actiondock config list / get / set / delete` | Manage local config store |
+| `actiondock state list / get / set / delete` | Inspect and manage shared state store |
+| `actiondock runs list / show <run-id>` | Inspect execution run history |
+| `actiondock test` | Run tests with Bun test runner |
+| `actiondock build [--target <target>]` | Compile project into standalone executable |
+| `actiondock export skill [--target <target>]` | Export standalone skill bundle |
+
+---
+
+## 📦 Monorepo Structure
+
+* [`packages/sdk`](file:///root/code/action-dock/packages/sdk): `@actiondock/sdk` minimal public SDK & runtime types (`defineAction`, `createTestRuntime`). Zero heavyweight dependencies.
+* [`packages/core`](file:///root/code/action-dock/packages/core): `@actiondock/core` domain engine implementing project discovery, action execution runtime, SQLite storage, JSON Schema validation, standalone compilation builder, and skill exporter.
+* [`packages/cli`](file:///root/code/action-dock/packages/cli): `@actiondock/cli` developer command-line facade toolchain.
+* [`examples/github-tools`](file:///root/code/action-dock/examples/github-tools): Complete sample project demonstrating action composition, state checkpoints, and skill export.
+
+---
+
+## 🧪 Testing & Verification
 
 ```bash
-# CLI 一键安装（推荐）
-npm install -g actiondock
-actiondock server
+# Run all tests across monorepo
+bun test
 
-# 或从源码构建
-git clone https://github.com/team4u/actiondock.git
-cd action-dock
-mvn -pl actiondock-app-spring -am -DskipTests spring-boot:run
+# Run TypeScript type check
+bun run typecheck
 ```
 
-### 验证
-
-启动后访问 http://localhost:5177/admin/app/scripts
-
-> 完整安装方式和第一个脚本教程请阅读 [快速开始](docs/quick-start.md)。
-
-## 开发指引
-
-### 后端开发
-
-```bash
-# 启动后端服务
-mvn -pl actiondock-app-spring -am spring-boot:run
-
-# 编译检查
-mvn -pl actiondock-app-spring -am -DskipTests compile
-
-# 运行测试
-mvn test
-```
-
-### 前端开发
-
-```bash
-cd actiondock-admin-ui
-npm ci
-npm run dev       # 开发模式
-npx tsc --noEmit  # 类型检查
-npm run build     # 构建
-```
-
-## 文档
-
-| 文档 | 说明 |
-|------|------|
-| [让脚本真正可复用](docs/script-platform.md) | 项目理念与核心能力介绍 |
-| [仓库与分发](docs/repository-distribution.md) | 能力仓库、项目仓库、`ACTIONDOCK.md` 知识入口 |
-| [项目知识库](docs/project-knowledge.md) | 项目知识从痛点到设计的完整链路 |
-| [任务手册 (Playbook)](docs/playbook.md) | 战术手册定位、与 Skill 的本质区别与 Agent 消费指南 |
-| [用户手册](docs/user-manual.md) | 完整文档入口 |
-
-## 技术栈
-
-- 后端：Java 21 · Spring Boot 3.3 · Groovy 4.0 · Python 3
-- 前端：React 18 · Ant Design 5 · Monaco Editor
-- 插件：PF4J 3.13
-- CLI：Node.js (oclif)
-- 存储：JPA / H2
-- AI：OpenAI · Anthropic · Gemini · DashScope · Ollama
+---
 
 ## License
 
-[MIT](LICENSE)
+Apache-2.0

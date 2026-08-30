@@ -1,0 +1,21 @@
+{
+  "name": "@actiondock/sdk",
+  "version": "2.0.0",
+  "description": "ActionDock SDK for defining and testing standalone AI Agent Actions",
+  "type": "module",
+  "main": "./src/index.ts",
+  "module": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "test": "bun test"
+  },
+  "keywords": ["actiondock", "agent", "actions", "skill", "ai"],
+  "author": "team4u",
+  "license": "Apache-2.0"
+}

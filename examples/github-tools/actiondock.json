@@ -1,0 +1,17 @@
+{
+  "id": "team4u.github-tools",
+  "name": "GitHub Tools",
+  "version": "1.0.0",
+  "description": "GitHub Actions for AI Agents",
+  "actionsDir": "actions",
+  "playbooksDir": "playbooks",
+  "config": {
+    "GITHUB_API": {
+      "description": "GitHub API Base URL",
+      "default": "https://api.github.com"
+    },
+    "GITHUB_TOKEN": {
+      "description": "GitHub Personal Access Token"
+    }
+  }
+}
