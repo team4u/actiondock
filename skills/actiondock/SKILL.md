@@ -5,7 +5,7 @@ description: 使用 ActionDock 2.0 (ac CLI, Bun + TypeScript) 进行 AI Agent Ac
 
 # ActionDock 2.0 (ac) 开发者技能指南
 
-ActionDock 2.0 是面向 AI Agent Action 与 Skill 的开发工具链（CLI 门面命令为 **`ac`**）。它通过 Bun 原生编译器将 TypeScript 编写的 Action 一键打包为**零外部安装依赖的独立二进制可执行文件**，并生成包含 `SKILL.md` 引导的自包含 Skill 交付包。
+ActionDock 2.0 是面向 AI Agent Action 与 Skill 的开发工具链（CLI 门面命令为 **`ac`**）。它支持 **源码型 Skill (Source Skill，默认)** 与 **独立便携型 Skill (Standalone Skill，`--standalone`)** 双模交付，让开发者使用 TypeScript 快速开发原子工具（Action）与业务操作规程（Playbook），一键导出自包含的 Agent Skill。
 
 ---
 
@@ -86,11 +86,11 @@ export default defineAction<Input, Output>({
   },
 
   async run(input, ctx) {
-    // 1. Config: 命令行覆盖 > 本地 SQLite > 默认配置
+    // 1. Config: 命令行覆盖 > 本地 SQLite > 环境变量 > 默认配置
     const token = ctx.config.get<string>("GITHUB_TOKEN");
     const api = ctx.config.get("GITHUB_API", "https://api.github.com");
 
-    // 2. State: 跨执行持久化 Key-Value 存储（支持指定 TTL 秒数）
+    // 2. State: 跨执行持久化 Key-Value 存储（支持指定 TTL 秒数与命名空间）
     const lastSync = await ctx.state.get<string>("last_sync");
     await ctx.state.set("last_sync", new Date().toISOString(), 3600); // 1 小时后过期
 
@@ -139,6 +139,7 @@ ac action show <id> --profile <profile-name> [--json]
 ```bash
 # 简写方式 (ac run)
 ac run <id> --input '{"repo": "owner/repo"}'
+ac run <package-id>/<action-id> --input '{"repo": "owner/repo"}'  # 推荐使用 Package-Qualified ID
 ac run <id> --input-file ./input.json
 ac run <id> --config GITHUB_TOKEN=secret_token
 ac run <id> --timeout 30s                       # 设置超时自动终止（支持 500ms, 30s, 5m, 1h）
@@ -309,7 +310,7 @@ ac test
 
 ### 1. 构建独立可执行文件 (`ac build`)
 ```bash
-# 全量构建：打包项目中全部 Action
+# 全量构建：打包项目中全部 Action 为独立二进制
 ac build [--target <target>] [--out <path>] [--minify]
 
 # 按需构建：仅将指定 Action 编译进独立二进制
@@ -317,31 +318,67 @@ ac build --actions github.get-pr github.review-pr
 ```
 
 ### 2. 导出 Skill 交付包 (`ac export skill`)
+
+ActionDock 提供清晰的两种分发形态：
+
+#### A. 源码型 Skill (Source Skill，默认推荐)
 ```bash
-# 全量导出（默认）：包含所有 Action 和所有 Playbook
-ac export skill [--target <target>] [--out <path>] [--archive]
+# 全量导出源码 Skill
+ac export skill [-o <path>] [-z]
 
-# 任务驱动按需导出（推荐）：仅打包指定 Playbook 及其依赖的 Actions（自动 Tree-shaking 裁剪）
-ac export skill --playbook review-pr [-o <path>] [-z]
-
-# 工具驱动按需导出：仅打包指定 Actions，并自动裁剪依赖未包含 Action 的 Playbooks
-ac export skill --actions github.get-pr github.review-pr
+# 任务驱动按需裁剪导出（仅包含指定 Playbook 及其依赖的 actions *.ts 文件）
+ac export skill --playbook review-pr
 ```
-
-导出的 Skill 目录结构：
+导出的源码型 Skill 目录结构：
 ```text
 dist/<package>-skill/
-├── SKILL.md                  # 面向 AI Agent 的调用说明（自动生成 Action 与 Playbook 索引）
-├── actiondock.skill.json     # 机器可读的 Skill 清单
-├── playbooks/                # 任务 SOP Markdown 引导文档（按需打包时仅含匹配的 SOP）
+├── SKILL.md                  # 面向 AI Agent 的调用说明（包含 ac link 与 Package-Qualified ID 指引）
+├── actiondock.json          # Package 清单与运行时配置
+├── package.json             # 依赖声明（@actiondock/sdk）
+├── tsconfig.json            # TypeScript 配置（可选）
+├── actions/                 # TypeScript Action 源码
+│   └── review-pr.ts
+└── playbooks/                # 任务 SOP Markdown 引导文档
+    └── review-pr.md
+```
+
+#### B. 独立便携型 Skill (Standalone Skill，`--standalone`)
+```bash
+# 导出包含预构建单文件二进制的便携 Skill
+ac export skill --standalone [--target linux-x64] [-o <path>] [-z]
+```
+导出的独立型 Skill 目录结构：
+```text
+dist/<package>-skill/
+├── SKILL.md                  # 面向 AI Agent 的调用说明（指向 ./bin/<package>）
+├── actiondock.skill.json     # 机器可读的 Skill 清单（全量 JSON Schema）
+├── playbooks/                # 任务 SOP Markdown 引导文档
+│   └── review-pr.md
 └── bin/
-    └── <package>             # 零安装独立可执行文件（仅含已打包 Action）
+    └── <package>             # 零安装独立可执行文件（预编译二进制）
 ```
 
 ---
 
-## 10. Agent 开发核心红线
+## 10. Agent 接入与使用约定
+
+### AI Agent 调用 Source Skill 流程规范：
+1. **解析 Skill 根目录**：将 `SKILL.md` 所在目录解析为 `<skill_root>`。
+2. **幂等注册**：执行 `ac link "<skill_root>"`（可安全重复执行）。
+3. **调用 Action**：始终使用 **Package-Qualified ID** 避免冲突：
+   ```bash
+   ac run <package-id>/<action-id> --input '<json>'
+   ```
+4. **免注册直接执行（备选）**：
+   ```bash
+   cd <skill_root> && ac run <action-id> --input '<json>'
+   ```
+
+---
+
+## 11. Agent 开发核心红线
 
 1. **通道隔离原则**：严禁在 Action 内部调用 `console.log`，所有日志一律使用 `ctx.log`（输出至 `stderr`），确保 `stdout` 仅输出标准 JSON Envelope。
 2. **严格 Schema 原则**：必须为每个 Action 定义完备的 `inputSchema` 与 `outputSchema`。
 3. **响应式取消原则**：对于网络 I/O 与耗时循环，始终绑定并检测 `ctx.signal`。
+4. **统一命名空间**：多 Package 交互时，Action 引用必须采用 `<package-id>/<action-id>`。
