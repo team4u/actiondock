@@ -93,43 +93,64 @@ ac build --target windows-x64 --minify --out dist/bin/my-tools.exe
 
 # Skill 交付包导出 (`ac export skill`)
 
-通过 `ac export skill` 命令，一键将编译后的独立二进制、Playbook SOP 与 `SKILL.md` 打包为标准 Agent Skill 交付包。
+通过 `ac export skill` 命令，将 Action Package 打包为标准 Agent Skill 交付包。
 
-### 1. 全量导出（默认）
+### 1. 源码型 Skill 导出（默认推荐）
 ```bash
 ac export skill
 ```
-输出目录为 `dist/<package-name>-skill/`。
+输出目录为 `dist/<package-name>-skill/`，包含 `SKILL.md`、`actiondock.json`、`package.json`、`actions/*.ts` 与 `playbooks/*.md`。无需编译，体积小，跨平台通用，可直接被预装了 ActionDock 运行时的 AI Agent 通过 `ac link` 动态加载。
 
-### 2. 任务驱动按需导出 (Playbook-Driven Export)
-在复杂项目中，推荐使用 `--playbook` 参数针对特定任务精准打包：
+### 2. 独立便携型 Skill 导出 (`--standalone`)
+若目标机器未安装 ActionDock / Bun 运行时，可导出包含预编译单文件二进制的便携 Skill：
+```bash
+# 当前宿主平台
+ac export skill --standalone
+
+# 交叉编译至 Linux x64
+ac export skill --standalone --target linux-x64
+```
+输出目录包含 `SKILL.md`、`actiondock.skill.json`、`bin/<package-name>` 与 `playbooks/*.md`。
+
+### 3. 任务驱动按需导出 (Playbook-Driven Export)
+在复杂项目中，推荐使用 `--playbook` 参数针对特定任务精准打包（源码型与独立型均支持）：
 ```bash
 ac export skill --playbook review-pr
 ```
-- **自动依赖裁剪（Tree-shaking）**：系统自动读取 `playbooks/review-pr.md` Frontmatter 中的 `actions` 依赖，仅将该任务所需的 Action 编译进二进制，剔除其余代码。
+- **自动依赖裁剪（Tree-shaking）**：系统自动读取 `playbooks/review-pr.md` Frontmatter 中的 `actions` 依赖，仅导出该任务所需的 Action，剔除其余代码。
 - **纯净产物**：导出的 `playbooks/` 仅含选中的 SOP，生成的 `SKILL.md` 仅包含相关 Action，杜绝 Agent 提示词冗余。
 
-### 3. 多平台导出与 ZIP 归档
+### 4. 自动 ZIP 归档
 ```bash
-# 导出适配 Linux 的 Skill 包（目录自动命名为 dist/github-tools-skill-linux-x64/）
-ac export skill --target linux-x64
-
-# 导出并自动压缩为 ZIP 归档文件
-ac export skill --target linux-x64 --archive    # 生成 dist/github-tools-skill-linux-x64.zip
+ac export skill --archive                      # 生成 dist/<pkg>-skill.zip
+ac export skill --standalone --archive         # 生成 standalone ZIP
 ```
 
 ---
 
-# 导出的 Skill 目录结构
+# 导出的 Skill 目录结构对比
 
+### 源码型 Skill（默认）
 ```text
 dist/github-tools-skill/
-├── SKILL.md                  # 面向 AI Agent 的主引导手册（含标准 YAML Frontmatter 与参数表）
+├── SKILL.md                  # 面向 AI Agent 的主引导手册（包含 ac link 与限定 ID 说明）
+├── actiondock.json          # Package 清单
+├── package.json             # 依赖声明
+├── actions/                 # TypeScript Action 源码文件
+│   └── review-pr.ts
+└── playbooks/                # 任务 SOP Markdown 目录
+    └── review-pr.md
+```
+
+### 独立便携型 Skill (`--standalone`)
+```text
+dist/github-tools-skill/
+├── SKILL.md                  # 面向 AI Agent 的主引导手册（指向 ./bin/github-tools）
 ├── actiondock.skill.json     # 机器可读的结构化清单（包含全量 Action Schema）
 ├── playbooks/                # 任务 SOP Markdown 规程目录
 │   └── review-pr.md
 └── bin/
-    └── github-tools          # 独立自包含二进制（目标机器无需预装 Node/Bun/Python）
+    └── github-tools          # 独立自包含二进制
 ```
 
 ---

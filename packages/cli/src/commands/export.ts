@@ -8,8 +8,9 @@ export function registerExportCommand(program: Command): void {
 
   exportCmd
     .command("skill")
-    .description("Export standalone Skill directory with SKILL.md and pre-built standalone executable")
-    .option("-t, --target <target>", "Target compilation platform (e.g. host, linux-x64, darwin-arm64, windows-x64)")
+    .description("Export Skill directory for AI Agents (default: source skill; use -s/--standalone for pre-built standalone binary)")
+    .option("-s, --standalone", "Export pre-compiled standalone binary skill (for environments without ActionDock runtime)")
+    .option("-t, --target <target>", "Target compilation platform for standalone mode (e.g. host, linux-x64, darwin-arm64, windows-x64)")
     .option("-o, --out <path>", "Output skill directory")
     .option("-p, --playbook <playbooks...>", "Only export specific playbook(s) and their dependent actions (Playbook-driven minimal export)")
     .option("-a, --actions <actions...>", "Only export specific action(s)")
@@ -21,10 +22,14 @@ export function registerExportCommand(program: Command): void {
         process.exit(1);
       }
 
+      const isStandalone = Boolean(options.standalone);
+
       try {
-        console.log("Exporting standalone Skill artifact...");
+        console.log(`Exporting ${isStandalone ? "standalone binary" : "source"} Skill artifact...`);
         const result = await exportSkill({
           projectRoot: root,
+          mode: isStandalone ? "standalone" : "source",
+          standalone: isStandalone,
           target: options.target,
           outDir: options.out,
           archive: options.archive,
@@ -32,8 +37,8 @@ export function registerExportCommand(program: Command): void {
           actions: options.actions,
         });
 
-        console.log(`[OK] Successfully exported Skill: ${result.packageId} (v${result.version})`);
-        console.log(`  Target:     ${result.target}`);
+        console.log(`[OK] Successfully exported ${result.mode === "standalone" ? "Standalone" : "Source"} Skill: ${result.packageId} (v${result.version})`);
+        console.log(`  Mode:       ${result.mode}${result.mode === "standalone" ? ` (target: ${result.target})` : ""}`);
         console.log(`  Actions:    ${result.actionsCount}`);
         console.log(`  Playbooks:  ${result.playbooksCount}`);
         console.log(`  Skill Dir:  ${result.skillDir}`);

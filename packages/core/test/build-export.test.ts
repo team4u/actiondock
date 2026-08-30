@@ -193,11 +193,35 @@ describe("Build & Skill Export Contract", () => {
     expect(isoJson.data.message).toBe("Hello, Isolated!");
   });
 
-  it("exports standalone Skill package with SKILL.md and playbooks", async () => {
+  it("exports Source Skill package by default with SKILL.md, actiondock.json, actions, and playbooks", async () => {
     const exportRes = await exportSkill({
       projectRoot: tempDir,
     });
 
+    expect(exportRes.mode).toBe("source");
+    expect(existsSync(exportRes.skillDir)).toBe(true);
+    expect(existsSync(join(exportRes.skillDir, "SKILL.md"))).toBe(true);
+    expect(existsSync(join(exportRes.skillDir, "actiondock.json"))).toBe(true);
+    expect(existsSync(join(exportRes.skillDir, "package.json"))).toBe(true);
+    expect(existsSync(join(exportRes.skillDir, "actions", "greet.ts"))).toBe(true);
+    expect(existsSync(join(exportRes.skillDir, "playbooks", "greet-user.md"))).toBe(true);
+
+    const skillMd = readFileSync(join(exportRes.skillDir, "SKILL.md"), "utf-8");
+    expect(skillMd.startsWith("---\nname:")).toBe(true);
+    expect(skillMd).toContain("description:");
+    expect(skillMd).toContain("# Sample Tools");
+    expect(skillMd).toContain("ac link");
+    expect(skillMd).toContain("test.sample-tools/sample.greet");
+    expect(skillMd).toContain("Playbook SOPs");
+  });
+
+  it("exports standalone binary Skill package when standalone is true", async () => {
+    const exportRes = await exportSkill({
+      projectRoot: tempDir,
+      standalone: true,
+    });
+
+    expect(exportRes.mode).toBe("standalone");
     expect(existsSync(exportRes.skillDir)).toBe(true);
     expect(existsSync(join(exportRes.skillDir, "SKILL.md"))).toBe(true);
     expect(existsSync(join(exportRes.skillDir, "actiondock.skill.json"))).toBe(true);
@@ -205,11 +229,8 @@ describe("Build & Skill Export Contract", () => {
     expect(existsSync(join(exportRes.skillDir, "playbooks", "greet-user.md"))).toBe(true);
 
     const skillMd = readFileSync(join(exportRes.skillDir, "SKILL.md"), "utf-8");
-    expect(skillMd.startsWith("---\nname:")).toBe(true);
-    expect(skillMd).toContain("description:");
-    expect(skillMd).toContain("# Sample Tools");
+    expect(skillMd).toContain("./bin/sample-tools");
     expect(skillMd).toContain("sample.greet");
-    expect(skillMd).toContain("Playbook SOPs");
 
     // Execute exported binary directly
     const exportedBin = join(exportRes.skillDir, "bin", "sample-tools");
@@ -250,11 +271,11 @@ actions:
 `;
     fs.writeFileSync(join(tempDir, "playbooks", "farewell-sop.md"), pb2Content, "utf-8");
 
-    // Export only greet-user playbook
+    // 1. Export source skill for greet-user playbook only
     const exportRes = await exportSkill({
       projectRoot: tempDir,
       playbooks: ["greet-user"],
-      outDir: join(tempDir, "dist", "selective-skill"),
+      outDir: join(tempDir, "dist", "selective-source-skill"),
     });
 
     expect(exportRes.actionsCount).toBe(1);
@@ -264,6 +285,10 @@ actions:
     expect(existsSync(join(exportRes.skillDir, "playbooks", "greet-user.md"))).toBe(true);
     expect(existsSync(join(exportRes.skillDir, "playbooks", "farewell-sop.md"))).toBe(false);
 
+    // Only greet.ts should be in actions dir, farewell.ts must NOT exist
+    expect(existsSync(join(exportRes.skillDir, "actions", "greet.ts"))).toBe(true);
+    expect(existsSync(join(exportRes.skillDir, "actions", "farewell.ts"))).toBe(false);
+
     // SKILL.md should only mention sample.greet and greet-user
     const skillMd = fs.readFileSync(join(exportRes.skillDir, "SKILL.md"), "utf-8");
     expect(skillMd).toContain("sample.greet");
@@ -271,8 +296,15 @@ actions:
     expect(skillMd).toContain("greet-user");
     expect(skillMd).not.toContain("farewell-sop");
 
-    // Standalone binary in this skill only contains sample.greet
-    const selectiveBin = join(exportRes.skillDir, "bin", "sample-tools");
+    // 2. Export standalone binary skill for greet-user playbook only
+    const exportStandaloneRes = await exportSkill({
+      projectRoot: tempDir,
+      standalone: true,
+      playbooks: ["greet-user"],
+      outDir: join(tempDir, "dist", "selective-standalone-skill"),
+    });
+
+    const selectiveBin = join(exportStandaloneRes.skillDir, "bin", "sample-tools");
     const listProc = Bun.spawnSync([selectiveBin, "list", "--json"], {
       stdout: "pipe",
       stderr: "pipe",

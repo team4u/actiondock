@@ -3,14 +3,15 @@
 [![Bun](https://img.shields.io/badge/Bun-%3E%3D1.1-black?logo=bun)](https://bun.sh/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![MCP](https://img.shields.io/badge/MCP-Protocol%20Compliant-purple)](https://modelcontextprotocol.io/)
-[![Tests](https://img.shields.io/badge/tests-65%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-66%20passed-brightgreen.svg)]()
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-> 一次构建，随处运行。面向 AI Agent 的 Action 与 Skill 开发、测试、构建与分发工具链。
+> 一次编写，随处运行。面向 AI Agent 的 Action 与 Skill 开发、测试、构建与分发工具链。
 
-ActionDock 2.0 是面向 AI Agent 与研发团队的新一代工具链体系。它革新了传统 Agent 工具的开发与交付模式：采用 **零安装独立二进制（Zero-Install Standalone Binary）** 与 **Model Context Protocol (MCP)** 双模交付，让开发者使用 TypeScript 与标准 JSON Schema 快速构建原子工具（Action），一键打包为自包含、无任何外部依赖的可执行文件与标准 Skill 交付包。
+ActionDock 2.0 是面向 AI Agent 与研发团队的新一代工具链体系。它革新了传统 Agent 工具的开发与交付模式：采用 **源码型 Skill (Source Skill)** 与 **零安装独立二进制（Zero-Install Standalone Binary）** 双模交付，让开发者使用 TypeScript 与标准 JSON Schema 快速构建原子工具（Action），并无缝对接 Model Context Protocol (MCP)。
 
-最终消费者与 AI Agent **无需安装 Node.js、Bun、Python、Java 或配置虚拟环境**，即可直接调用并与各类主流 Agent 框架（Antigravity、Claude Code、Cursor、Windsurf、自定义 Agent）无缝整合。
+- **预装 ActionDock 环境（推荐）**：直接分发极轻量源码型 Skill（`SKILL.md + actiondock.json + actions`），跨平台免编译，动态加载依赖。
+- **无依赖裸机环境**：一键打包为自包含、零外部依赖的独立可执行文件（`--standalone`），目标机器无需安装 Node.js、Bun、Python 或 Java 即可直接运行。
 
 [进入官方完整文档中心 (docs/README.md)](docs/README.md)
 
@@ -148,18 +149,24 @@ ac build
 ./dist/bin/my-tools run sample.greet --input '{"name": "李四"}'
 ```
 
-#### 导出自包含 Agent Skill 交付包
+#### 导出 Agent Skill 交付包
 ```bash
+# 1. 默认导出源码型 Skill（轻量、跨平台，由 ac 运行时直接加载）
 ac export skill
+
+# 2. 或导出独立自包含二进制 Skill（零外部依赖，内置预编译二进制）
+ac export skill --standalone
 ```
-导出的 Skill 目录结构：
+导出的源码型 Skill 目录结构：
 ```text
 dist/my-tools-skill/
-├── SKILL.md                  # 面向 AI Agent 的主调用指南（含 YAML Frontmatter）
-├── actiondock.skill.json     # 机器可读的结构化清单（全量 Schema）
-├── playbooks/                # 任务 SOP 规程目录
-└── bin/
-    └── my-tools              # 独立自包含二进制（零外部依赖）
+├── SKILL.md                  # 面向 AI Agent 的主调用指南（含 YAML Frontmatter 与 ac link 指引）
+├── actiondock.json          # Package 清单与运行时配置
+├── package.json             # 依赖声明（@actiondock/sdk）
+├── actions/                 # TypeScript Action 源码
+│   └── greet.ts
+└── playbooks/                # 任务 SOP 规程目录
+    └── greet-user.md
 ```
 
 ---

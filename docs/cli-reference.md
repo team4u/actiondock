@@ -243,8 +243,9 @@ ActionDock 命令行工具（简写为 `ac`）提供了全生命周期的项目�
 - `-m, --minify`：是否开启代码压缩。
 
 ### `ac export skill`
-一键导出完整的 Skill 交付包，包含自动生成的 `SKILL.md` 引导文档、Playbook 任务指南与独立二进制。
-- `-t, --target <target>`：目标编译平台。
+导出面向 AI Agent 的 Skill 交付包（默认导出轻量级源码型 Skill；使用 `-s, --standalone` 导出包含预构建独立二进制的便携 Skill）。
+- `-s, --standalone`：导出预编译独立二进制 Skill（适用于目标机器未安装 ActionDock 的裸机环境）。
+- `-t, --target <target>`：独立编译模式下的目标平台（如 `host`、`linux-x64`、`darwin-arm64`、`windows-x64`）。
 - `-o, --out <path>`：输出 Skill 目录路径。
 - `-p, --playbook <playbooks...>`：任务驱动导出：仅打包指定 Playbook 及其依赖的 Actions（自动 Tree-shaking 裁剪）。
 - `-a, --actions <actions...>`：仅导出指定的 Action(s)，并自动裁剪依赖未包含 Action 的 Playbooks。

@@ -245,17 +245,33 @@ describe("CLI End-to-End", () => {
     expect(buildProc.exitCode).toBe(0);
     expect(existsSync(join(tempDir, "dist", "github-ops"))).toBe(true);
 
-    // 10. export skill
+    // 10. export skill (default: source skill)
     const exportProc = runCli(["export", "skill"], tempDir);
     expect(exportProc.exitCode).toBe(0);
     expect(
       existsSync(join(tempDir, "dist", "github-ops-skill", "SKILL.md"))
     ).toBe(true);
     expect(
-      existsSync(join(tempDir, "dist", "github-ops-skill", "bin", "github-ops"))
+      existsSync(join(tempDir, "dist", "github-ops-skill", "actiondock.json"))
+    ).toBe(true);
+    expect(
+      existsSync(join(tempDir, "dist", "github-ops-skill", "package.json"))
+    ).toBe(true);
+    expect(
+      existsSync(join(tempDir, "dist", "github-ops-skill", "actions", "greet.ts"))
     ).toBe(true);
 
-    // 10b. export skill with --playbook selective flag
+    // 10b. export skill --standalone
+    const exportStandaloneProc = runCli(["export", "skill", "--standalone"], tempDir);
+    expect(exportStandaloneProc.exitCode).toBe(0);
+    expect(
+      existsSync(join(tempDir, "dist", "github-ops-skill", "bin", "github-ops"))
+    ).toBe(true);
+    expect(
+      existsSync(join(tempDir, "dist", "github-ops-skill", "actiondock.skill.json"))
+    ).toBe(true);
+
+    // 10c. export skill with --playbook selective flag
     const selectiveOut = join(tempDir, "dist", "custom-skill");
     const exportSelectiveProc = runCli(
       ["export", "skill", "--playbook", "greet-user", "-o", selectiveOut],
@@ -264,6 +280,7 @@ describe("CLI End-to-End", () => {
     expect(exportSelectiveProc.exitCode).toBe(0);
     expect(existsSync(join(selectiveOut, "SKILL.md"))).toBe(true);
     expect(existsSync(join(selectiveOut, "playbooks", "greet-user.md"))).toBe(true);
+    expect(existsSync(join(selectiveOut, "actions", "greet.ts"))).toBe(true);
 
     // 11. link package and execute from outside directory
     const linkProc = runCli(["link"], tempDir);
