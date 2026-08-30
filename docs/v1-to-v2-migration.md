@@ -31,14 +31,14 @@ ActionDock 2.0 是一次彻底的现代化重构：基于 **Bun + TypeScript + b
 
 ```mermaid
 graph LR
-    subgraph 1.0 旧版概念
+    subgraph V1 ["1.0 旧版概念"]
         S1["Groovy/Python 脚本"]
         P1["Playbook Session 状态机"]
         C1["Config 表 (MySQL)"]
         D1["插件系统 (JAR 热加载)"]
     end
 
-    subgraph 2.0 新版概念
+    subgraph V2 ["2.0 新版概念"]
         S2["TypeScript Action (defineAction + JSON Schema)"]
         P2["Markdown SOP (playbooks/*.md)"]
         C2["ctx.config (5 级优先级解析)"]

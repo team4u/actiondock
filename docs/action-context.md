@@ -18,7 +18,7 @@ ActionDock 2.0 在 `run(input, ctx)` 中为每个 Action 注入了强类型的 `
 
 ```mermaid
 graph TD
-    subgraph ActionRunner 组装
+    subgraph RUNNER ["ActionRunner 组装"]
         Storage[("bun:sqlite 存储引擎")]
         EnvEngine["智能环境变量解析器"]
         ExecMgr["ExecutionManager 取消与超时"]
@@ -34,7 +34,7 @@ graph TD
     ExecMgr --> Signal["ctx.signal (标准 Web AbortSignal)"]
     StdErrPipe --> Log["ctx.log (强制 stderr 日志)"]
     
-    subgraph ActionContext 门面
+    subgraph CTX ["ActionContext 门面"]
         Config
         State
         Log
@@ -42,7 +42,7 @@ graph TD
         Actions["ctx.actions (组合调用 / 循环防御 / 级联 Run)"]
     end
 
-    ActionContext --> ActionRun["action.run(input, ctx)"]
+    CTX --> ActionRun["action.run(input, ctx)"]
 ```
 
 ---

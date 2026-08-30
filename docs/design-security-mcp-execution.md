@@ -10,13 +10,13 @@
 
 ```mermaid
 graph TD
-    subgraph 统一领域内核 (Core Domain Engine)
+    subgraph CORE ["统一领域内核 (Core Domain Engine)"]
         ActionDef["ActionDefinition<br/>(Schema / Types / Logic)"] --> ActionRunner["ActionRunner (唯一执行核心)"]
         ActionRunner --> Storage[("RuntimeStorage<br/>(SQLite runs / state / config)")]
         ActionRunner --> ExecMgr["ExecutionManager<br/>(内存句柄 / AbortController)"]
     end
 
-    subgraph 接入层 (Multi-Channel Ingress)
+    subgraph INGRESS ["接入层 (Multi-Channel Ingress)"]
         CLI["CLI 门面 (ac run)"] --> ActionRunner
         HTTP["HTTP Runner (ac serve)"] --> ActionRunner
         MCP["MCP Adapter (ac mcp / STDIO / HTTP)"] --> ActionRunner

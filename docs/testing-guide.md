@@ -20,19 +20,19 @@ ActionDock 在测试态、开发态与独立二进制态下保持统一的领域
 
 ```mermaid
 graph TD
-    subgraph 单元测试态 (Unit Test)
+    subgraph UT ["单元测试态 (Unit Test)"]
         TestCode["测试脚本 (*.test.ts)"] --> TestRuntime["createTestRuntime()"]
         TestRuntime --> MemStore["MemoryStateStore (纯内存)"]
         TestRuntime --> MemConf["MemoryConfig (纯内存)"]
         TestRuntime --> MemLog["MemoryLogger (纯内存日志抓取)"]
     end
 
-    subgraph 本地开发态 (Dev Mode)
+    subgraph DEV ["本地开发态 (Dev Mode)"]
         CLIRun["ac action run"] --> ActionRunner["ActionRunner (核心引擎)"]
         ActionRunner --> SQLiteDev[("项目本地 SQLite 存储")]
     end
 
-    subgraph 独立编译态 (Standalone Executable)
+    subgraph PROD ["独立编译态 (Standalone Executable)"]
         BinRun["./bin/pkg run"] --> StandaloneEngine["StandaloneRuntime"]
         StandaloneEngine --> SQLiteProd[("全局/自定义 SQLite 存储")]
     end

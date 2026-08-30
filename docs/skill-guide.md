@@ -34,14 +34,14 @@ Standalone Skill (独立便携型 Skill，--standalone)
 
 ```mermaid
 graph TD
-    subgraph Skill 技能交付物
+    subgraph SKILL ["Skill 技能交付物"]
         SM["SKILL.md (Agent 认知引导与运行时指令)"]
         
-        subgraph SOP 业务规程层
+        subgraph SOP ["SOP 业务规程层"]
             PB["Playbooks (Markdown 任务操作 SOP)"]
         end
 
-        subgraph 执行层实现模式
+        subgraph EXEC ["执行层实现模式"]
             SourcePkg["Source Skill (默认模式)<br/>actions/*.ts + actiondock.json<br/>(由系统 ac 运行时动态执行)"]
             BinPkg["Standalone Skill (--standalone)<br/>bin/pkg (Bun.build 独立二进制)<br/>(自包含免安装运行)"]
         end
@@ -167,9 +167,9 @@ ac export skill --standalone --archive  # 生成 standalone .zip 压缩包
 ```mermaid
 sequenceDiagram
     participant User as 用户
-    participant Agent as AI Agent (Antigravity/Claude/Cursor)
-    participant Skill as Skill (SKILL.md / Playbook)
-    participant Runtime as ActionDock Runtime (ac)
+    participant Agent as "AI Agent (Antigravity/Claude/Cursor)"
+    participant Skill as "Skill (SKILL.md / Playbook)"
+    participant Runtime as "ActionDock Runtime (ac)"
 
     User->>Agent: "请帮我评审 PR #101"
     Agent->>Skill: 1. 发现并解析 SKILL.md

@@ -16,10 +16,10 @@ ActionDock 2.0 提供了极简的 **Profile** （命名环境配置）与**ac se
 
 ```mermaid
 sequenceDiagram
-    participant Local as 本地开发机 / AI Agent
-    participant Remote as 远端云主机 (ac serve)
+    participant Local as "本地开发机 / AI Agent"
+    participant Remote as "远端云主机 (ac serve)"
     participant Runner as ActionRunner
-    participant SQLite as SQLite Storage
+    participant SQLite as "SQLite Storage"
 
     Local->>Remote: POST /api/v1/actions/check-disk/run (Authorization: Bearer <Token>)
     Remote->>Remote: 恒定时间验证 Bearer Token

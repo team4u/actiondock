@@ -20,19 +20,19 @@ ActionDock 2.0 在 `packages/mcp`（`@actiondock/mcp`）中提供了原生的 MC
 graph TD
     Host["MCP Host<br/>(Claude Code / Cursor / VS Code / Windsurf)"]
     
-    subgraph 通信传输层 (Transports)
+    subgraph TP ["通信传输层 (Transports)"]
         Host -->|STDIO 进程流| STDIO["STDIO Transport (ac mcp)"]
         Host -->|Streamable HTTP| HTTP["HTTP Transport (ac mcp serve)"]
     end
 
-    subgraph @actiondock/mcp 适配层
+    subgraph ADAPT ["@actiondock/mcp 适配层"]
         STDIO --> Adapter["MCP Adapter 核心门面"]
         HTTP --> Adapter
         Adapter --> ToolMap["fromJsonSchema 零冗余映射"]
         Adapter --> TasksExt["MCP Tasks 异步长任务扩展"]
     end
 
-    subgraph 统一执行引擎
+    subgraph CORE ["统一执行引擎"]
         ToolMap --> Runner["ActionRunner (唯一执行核心)"]
         TasksExt --> ExecMgr["ExecutionManager (取消与生命周期)"]
         Runner --> Storage[("SQLite runs 运行历史记录")]
@@ -211,10 +211,10 @@ ac mcp serve \
 
 ```mermaid
 sequenceDiagram
-    participant Host as MCP Client (Claude Code / Cursor)
-    participant MCP as @actiondock/mcp
+    participant Host as "MCP Client (Claude Code / Cursor)"
+    participant MCP as "@actiondock/mcp"
     participant Runner as ActionRunner
-    participant Action as Action.run()
+    participant Action as "Action.run()"
 
     Host->>MCP: notifications/cancelled (requestId)
     MCP->>Runner: 触发 ctx.mcpReq.signal.abort()

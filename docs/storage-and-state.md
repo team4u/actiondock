@@ -12,13 +12,13 @@ ActionDock 2.0 采用原生内嵌的轻量级嵌入式 SQLite 引擎（`bun:sqli
 
 ```mermaid
 graph LR
-    subgraph 文件系统 (Filesystem 管理)
+    subgraph FS ["文件系统 (Filesystem 管理)"]
         Code["actions/*.ts (Action 代码)"]
         SOP["playbooks/*.md (规程文档)"]
         CfgMeta["actiondock.json (项目清单)"]
     end
 
-    subgraph bun:sqlite 存储引擎 (纯运行态)
+    subgraph SQLITE ["bun:sqlite 存储引擎 (纯运行态)"]
         TConfig["config 表 (本地持久化配置)"]
         TState["state 表 (共享状态与 TTL)"]
         TRuns["runs 表 (执行历史与调用链)"]

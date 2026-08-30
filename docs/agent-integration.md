@@ -17,7 +17,7 @@ ActionDock 2.0 提供了 **MCP 协议直连**与**自包含独立 Skill 交付�
 
 ```mermaid
 graph TD
-    subgraph Action Package (ActionDock)
+    subgraph PKG ["Action Package (ActionDock)"]
         Actions["Actions (TypeScript + Schema)"]
     end
 

@@ -18,7 +18,7 @@ Playbook 统一存放在项目的 `playbooks/` 目录下（例如 `playbooks/rev
 
 ```mermaid
 graph TD
-    subgraph Playbook 文件构成 (playbooks/*.md)
+    subgraph PB ["Playbook 文件构成 (playbooks/*.md)"]
         FM["YAML Frontmatter<br/>• id: 唯一标识<br/>• description: SOP 描述<br/>• actions: 依赖 Action 列表"]
         Body["Markdown SOP 正文<br/>• 目标与前置条件<br/>• 分阶段执行步骤<br/>• 异常分支与决策<br/>• 安全红线与拦截准则"]
     end
