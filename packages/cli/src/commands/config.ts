@@ -1,14 +1,12 @@
 import {
-  type ConfigItemDefinition,
   createGlobalStorage,
   createStorage,
   filterWithFallbackInfo,
   isSecretConfigKey,
   loadProjectConfig,
   maskSecretValue,
-  resolveActionOrPackageRoot,
-  resolveEnvValue,
   resolvePackageRoot,
+  type ConfigItemDefinition,
 } from "@actiondock/core";
 import { Command } from "commander";
 import { resolveIntent } from "../utils/filter";
@@ -23,19 +21,18 @@ export function registerConfigCommands(program: Command): void {
     .command("schema [identifier]")
     .alias("check")
     .description("Inspect declared configuration requirements and check resolution status")
-    .option("-P, --package <id>", "Target package ID, action ID, or path")
+    .option("-P, --package <id>", "Target package ID or path")
     .option("--json", "Output as JSON")
-    .action(async (identifier, options) => {
+    .action((identifier, options) => {
       try {
-        const resolved = await resolveActionOrPackageRoot(identifier || options.package);
-        if (!resolved) {
+        const root = resolvePackageRoot(identifier || options.package);
+        if (!root) {
           console.error(
-            "Error: Not in an ActionDock project.\nUsage: ac config schema [action-or-package-id] or cd into a project directory."
+            "Error: Not in an ActionDock project.\nUsage: ac config schema [package-id] or cd into a project directory."
           );
           process.exit(1);
         }
 
-        const root = resolved.projectRoot;
         const projConfig = loadProjectConfig(root);
         const declared = projConfig.config || {};
         const declaredKeys = Object.keys(declared);
@@ -55,9 +52,6 @@ export function registerConfigCommands(program: Command): void {
           let resolvedValue: unknown;
           let source: "project" | "global" | "env" | "default" | "missing" = "missing";
           let status: "SET" | "DEFAULT" | "MISSING" = "MISSING";
-          let matchedEnvKey: string | undefined;
-
-          const envRes = resolveEnvValue(key, itemDef, projConfig.id);
 
           if (projectConfig[key] !== undefined) {
             resolvedValue = projectConfig[key];
@@ -67,11 +61,10 @@ export function registerConfigCommands(program: Command): void {
             resolvedValue = globalConfig[key];
             source = "global";
             status = "SET";
-          } else if (envRes !== undefined) {
-            resolvedValue = envRes.value;
+          } else if (typeof process !== "undefined" && process.env && process.env[key] !== undefined) {
+            resolvedValue = process.env[key];
             source = "env";
             status = "SET";
-            matchedEnvKey = envRes.envKey;
           } else if (itemDef.default !== undefined) {
             resolvedValue = itemDef.default;
             source = "default";
@@ -87,7 +80,6 @@ export function registerConfigCommands(program: Command): void {
             default: itemDef.default,
             status,
             source,
-            envKey: matchedEnvKey,
             value: isSecret && resolvedValue !== undefined ? maskSecretValue(resolvedValue) : resolvedValue,
             required: itemDef.default === undefined,
           };
@@ -123,9 +115,8 @@ export function registerConfigCommands(program: Command): void {
           for (const item of items) {
             const statusLabel = item.status === "SET" ? "[SET]" : item.status === "DEFAULT" ? "[DEFAULT]" : "[MISSING]";
             const secretLabel = item.secret ? "yes" : "no";
-            const sourceLabel = item.source === "env" && item.envKey && item.envKey !== item.key ? `env (${item.envKey})` : item.source;
             console.log(
-              `  ${item.key.padEnd(24)} ${statusLabel.padEnd(12)} ${sourceLabel.padEnd(10)} ${secretLabel.padEnd(8)} ${item.description}`
+              `  ${item.key.padEnd(24)} ${statusLabel.padEnd(12)} ${item.source.padEnd(10)} ${secretLabel.padEnd(8)} ${item.description}`
             );
           }
 
@@ -192,8 +183,6 @@ export function registerConfigCommands(program: Command): void {
         const rawList = Array.from(allKeys).map((k) => {
           let rawValue: unknown;
           let source: "project" | "global" | "env" | "default" = "default";
-          const itemDef = declaredDefaults[k];
-          const envRes = resolveEnvValue(k, itemDef, packageId !== "global" ? packageId : undefined);
 
           if (projectStored[k] !== undefined) {
             rawValue = projectStored[k];
@@ -201,8 +190,8 @@ export function registerConfigCommands(program: Command): void {
           } else if (globalConfig[k] !== undefined) {
             rawValue = globalConfig[k];
             source = "global";
-          } else if (envRes !== undefined) {
-            rawValue = envRes.value;
+          } else if (typeof process !== "undefined" && process.env && process.env[k] !== undefined) {
+            rawValue = process.env[k];
             source = "env";
           } else {
             rawValue = declaredDefaults[k]?.default;
@@ -270,12 +259,10 @@ export function registerConfigCommands(program: Command): void {
         let projVal: unknown = undefined;
         let fallbackVal: unknown = undefined;
         let declaredItem: ConfigItemDefinition | undefined;
-        let packageId: string | undefined;
 
         if (projectRoot) {
           try {
             const projConfig = loadProjectConfig(projectRoot);
-            packageId = projConfig.id;
             declaredItem = projConfig.config?.[key];
             const projectStorage = createStorage(projConfig.id, { projectRoot });
             projVal = projectStorage.getConfig(key);
@@ -286,14 +273,15 @@ export function registerConfigCommands(program: Command): void {
           }
         }
 
-        const envRes = resolveEnvValue(key, declaredItem as any, packageId);
+        const envVal = typeof process !== "undefined" && process.env ? process.env[key] : undefined;
+
         const rawEffective =
           projVal !== undefined
             ? projVal
             : globalVal !== undefined
             ? globalVal
-            : envRes !== undefined
-            ? envRes.value
+            : envVal !== undefined
+            ? envVal
             : fallbackVal;
 
         const source: string =
@@ -301,7 +289,7 @@ export function registerConfigCommands(program: Command): void {
             ? "project"
             : globalVal !== undefined
             ? "global"
-            : envRes !== undefined
+            : envVal !== undefined
             ? "env"
             : fallbackVal !== undefined
             ? "default"

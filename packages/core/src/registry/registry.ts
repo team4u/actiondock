@@ -235,35 +235,3 @@ export function resolvePackageRoot(
 
   return findProjectRoot(cwd);
 }
-
-export async function resolveActionOrPackageRoot(
-  identifier?: string,
-  cwd?: string,
-  customHome?: string
-): Promise<{ projectRoot: string; packageId: string; actionId?: string } | null> {
-  if (!identifier) {
-    const root = findProjectRoot(cwd);
-    if (!root) return null;
-    const config = loadProjectConfig(root);
-    return { projectRoot: root, packageId: config.id };
-  }
-
-  // 1. Try resolving as Action ID
-  try {
-    const actRes = await resolveActionProject(identifier, cwd, customHome);
-    return {
-      projectRoot: actRes.projectRoot,
-      packageId: actRes.packageId,
-      actionId: actRes.actionId,
-    };
-  } catch {
-    // 2. Try resolving as Package ID or Path
-    const pkgRoot = resolvePackageRoot(identifier, cwd, customHome);
-    if (pkgRoot) {
-      const config = loadProjectConfig(pkgRoot);
-      return { projectRoot: pkgRoot, packageId: config.id };
-    }
-  }
-
-  return null;
-}

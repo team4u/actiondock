@@ -333,15 +333,6 @@ export default defineAction<Input, Output>({
           process.exit(1);
         }
 
-        const declaredConfigs = config.config
-          ? Object.entries(config.config).map(([k, v]) => ({
-              key: k,
-              description: v.description || "",
-              default: v.default,
-              secret: v.secret || false,
-            }))
-          : [];
-
         if (options.json) {
           console.log(
             JSON.stringify(
@@ -351,7 +342,6 @@ export default defineAction<Input, Output>({
                 description: action.description,
                 inputSchema: action.inputSchema,
                 outputSchema: action.outputSchema,
-                config: declaredConfigs,
               },
               null,
               2
@@ -361,14 +351,6 @@ export default defineAction<Input, Output>({
           console.log(`Action:      ${action.id}`);
           console.log(`Package:     ${resolved.packageId} (${resolved.projectRoot})`);
           if (action.description) console.log(`Description: ${action.description}`);
-          if (declaredConfigs.length > 0) {
-            console.log("\nDeclared Configs:");
-            for (const item of declaredConfigs) {
-              const isSec = item.secret ? " [secret]" : "";
-              const def = item.default !== undefined ? ` (default: ${JSON.stringify(item.default)})` : "";
-              console.log(`  - ${item.key.padEnd(24)} ${item.description}${def}${isSec}`);
-            }
-          }
           if (action.inputSchema) {
             console.log("\nInput Schema:");
             console.log(JSON.stringify(action.inputSchema, null, 2));
