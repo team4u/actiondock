@@ -124,10 +124,12 @@ export async function executeRemoteAction(
 
 export async function fetchRemoteActions(
   serverUrl: string,
-  token?: string
+  token?: string,
+  intent?: string
 ): Promise<Array<{ id: string; description: string; packageId?: string }>> {
   const base = normalizeServerUrl(serverUrl);
-  const url = `${base}/api/v1/actions`;
+  const query = intent ? `?intent=${encodeURIComponent(intent)}` : "";
+  const url = `${base}/api/v1/actions${query}`;
 
   const res = await fetch(url, {
     method: "GET",
@@ -140,6 +142,7 @@ export async function fetchRemoteActions(
 
   return (await res.json()) as any;
 }
+
 
 export async function fetchRemoteActionShow(
   serverUrl: string,

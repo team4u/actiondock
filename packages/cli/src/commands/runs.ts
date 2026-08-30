@@ -1,5 +1,11 @@
-import { createStorage, findProjectRoot, loadProjectConfig } from "@actiondock/core";
+import {
+  createStorage,
+  filterWithFallbackInfo,
+  findProjectRoot,
+  loadProjectConfig,
+} from "@actiondock/core";
 import { Command } from "commander";
+import { resolveIntent } from "../utils/filter";
 
 export function registerRunsCommands(program: Command): void {
   const runsCmd = program
@@ -8,18 +14,23 @@ export function registerRunsCommands(program: Command): void {
 
   // runs list
   runsCmd
-    .command("list")
+    .command("list [patterns...]")
     .description("List recent execution records")
+    .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
     .option("-a, --action <actionId>", "Filter by action ID")
     .option("-n, --limit <count>", "Maximum number of records to return", "20")
+    .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("--json", "Output as JSON")
-    .action((options) => {
+    .action((patterns, options) => {
       const root = findProjectRoot();
       if (!root) {
         console.error("Error: Not in an ActionDock project");
         process.exit(1);
       }
       try {
+        const effectiveIntent = resolveIntent(options.intent, patterns);
+        const shouldFallback = options.fallback !== false;
+
         const projConfig = loadProjectConfig(root);
         const storage = createStorage(projConfig.id, { projectRoot: root });
         const limit = Number.parseInt(options.limit, 10) || 20;
@@ -29,15 +40,25 @@ export function registerRunsCommands(program: Command): void {
         });
         storage.close();
 
+        const filterRes = filterWithFallbackInfo(
+          records,
+          effectiveIntent,
+          [(r) => r.id, (r) => r.actionId, (r) => r.status, (r) => r.error?.message],
+          shouldFallback
+        );
+
         if (options.json) {
-          console.log(JSON.stringify(records, null, 2));
+          console.log(JSON.stringify(filterRes.items, null, 2));
         } else {
-          console.log(`Execution Runs (${records.length}):\n`);
+          console.log(`Execution Runs (${filterRes.items.length}):\n`);
+          if (filterRes.isFallback && effectiveIntent) {
+            console.log(`(No runs matched intent '${effectiveIntent}', showing all runs)\n`);
+          }
           console.log(
             `  ${"RUN ID".padEnd(38)} ${"ACTION".padEnd(24)} ${"STATUS".padEnd(10)} ${"STARTED"}`
           );
           console.log("  " + "-".repeat(90));
-          for (const r of records) {
+          for (const r of filterRes.items) {
             const time = r.startedAt.replace("T", " ").slice(0, 19);
             console.log(
               `  ${r.id.padEnd(38)} ${r.actionId.padEnd(24)} ${r.status.padEnd(10)} ${time}`
@@ -49,6 +70,7 @@ export function registerRunsCommands(program: Command): void {
         process.exit(1);
       }
     });
+
 
   // runs show
   runsCmd

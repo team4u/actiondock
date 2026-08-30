@@ -1,6 +1,7 @@
 import {
   addProfile,
   checkRemoteHealth,
+  filterWithFallbackInfo,
   getProfile,
   listProfiles,
   loadProfiles,
@@ -9,6 +10,7 @@ import {
   useProfile,
 } from "@actiondock/core";
 import { Command } from "commander";
+import { resolveIntent } from "../utils/filter";
 
 export function registerProfileCommands(program: Command): void {
   const profileCmd = program
@@ -17,17 +19,32 @@ export function registerProfileCommands(program: Command): void {
 
   // ac profile list
   profileCmd
-    .command("list")
+    .command("list [patterns...]")
     .description("List all configured profiles")
+    .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
+    .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("--json", "Output as JSON")
-    .action((options) => {
+    .action((patterns, options) => {
       try {
+        const effectiveIntent = resolveIntent(options.intent, patterns);
+        const shouldFallback = options.fallback !== false;
+
         const list = listProfiles();
+        const filterRes = filterWithFallbackInfo(
+          list,
+          effectiveIntent,
+          [(p) => p.name, (p) => p.entry.serverUrl, (p) => p.entry.description],
+          shouldFallback
+        );
+
         if (options.json) {
-          console.log(JSON.stringify(list, null, 2));
+          console.log(JSON.stringify(filterRes.items, null, 2));
         } else {
           console.log("ActionDock Execution Profiles:\n");
-          for (const item of list) {
+          if (filterRes.isFallback && effectiveIntent) {
+            console.log(`(No profiles matched intent '${effectiveIntent}', showing all profiles)\n`);
+          }
+          for (const item of filterRes.items) {
             const currentMarker = item.isCurrent ? "* " : "  ";
             const tokenInfo = item.entry.token ? " [token configured]" : "";
             const desc = item.entry.description ? ` - ${item.entry.description}` : "";
@@ -44,6 +61,7 @@ export function registerProfileCommands(program: Command): void {
         process.exit(1);
       }
     });
+
 
   // ac profile add <name>
   profileCmd

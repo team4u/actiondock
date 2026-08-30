@@ -66,6 +66,22 @@ describe("Build & Skill Export Contract", () => {
       { id: "sample.greet", description: "Greet a user with configurable greeting" },
     ]);
 
+    // 1b. Test binary `list --intent greet --json` and `list nonexist --no-fallback --json`
+    const listIntentProc = Bun.spawnSync(
+      [buildRes.executablePath, "list", "--intent", "greet|other", "--json"],
+      { cwd: tempDir, stdout: "pipe", stderr: "pipe" }
+    );
+    expect(listIntentProc.exitCode).toBe(0);
+    expect(JSON.parse(listIntentProc.stdout.toString()).length).toBe(1);
+
+    const listStrictProc = Bun.spawnSync(
+      [buildRes.executablePath, "list", "nomatch", "--no-fallback", "--json"],
+      { cwd: tempDir, stdout: "pipe", stderr: "pipe" }
+    );
+    expect(listStrictProc.exitCode).toBe(0);
+    expect(JSON.parse(listStrictProc.stdout.toString())).toEqual([]);
+
+
     // 2. Test binary `describe <id> --json`
     const descProc = Bun.spawnSync(
       [buildRes.executablePath, "describe", "sample.greet", "--json"],

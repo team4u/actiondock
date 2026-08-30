@@ -1,12 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { filterByIntent } from "../filter";
 import {
   findProjectRoot,
   loadActions,
   loadPlaybooks,
   loadProjectConfig,
 } from "../project/loader";
+
 import { listLinkedPackages, resolveActionProject } from "../registry/registry";
 import { ActionRunner } from "../runtime/runner";
 import { createStorage } from "../storage";
@@ -189,8 +191,19 @@ export function startActionDockServer(
             }
           }
 
-          return jsonResponse(actionList);
+          const intent = url.searchParams.get("intent");
+          const filtered = intent
+            ? filterByIntent(
+                actionList,
+                intent,
+                [(a) => a.id, (a) => a.description, (a) => a.packageId],
+                false
+              )
+            : actionList;
+
+          return jsonResponse(filtered);
         } catch (err: any) {
+
           return jsonResponse(
             {
               ok: false,

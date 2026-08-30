@@ -146,6 +146,14 @@ describe("Profile Management & Remote Server", () => {
     expect(actions.length).toBeGreaterThan(0);
     expect(actions[0].id).toBe("sample.greet");
 
+    // Filter remote actions by intent regex
+    const matched = await fetchRemoteActions(serverUrl, SECRET_TOKEN, "greet|sample");
+    expect(matched.length).toBe(1);
+    expect(matched[0].id).toBe("sample.greet");
+
+    const unmatched = await fetchRemoteActions(serverUrl, SECRET_TOKEN, "nonexistent");
+    expect(unmatched.length).toBe(0);
+
     const actionDetail = await fetchRemoteActionShow(
       serverUrl,
       "sample.greet",
@@ -154,6 +162,7 @@ describe("Profile Management & Remote Server", () => {
     expect(actionDetail.id).toBe("sample.greet");
     expect(actionDetail.inputSchema).toBeDefined();
   });
+
 
   test("Remote Server & Client > executes remote action via HTTP POST and returns JSON Envelope", async () => {
     const result = await executeRemoteAction(

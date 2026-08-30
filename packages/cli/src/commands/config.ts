@@ -1,5 +1,11 @@
-import { createStorage, findProjectRoot, loadProjectConfig } from "@actiondock/core";
+import {
+  createStorage,
+  filterWithFallbackInfo,
+  findProjectRoot,
+  loadProjectConfig,
+} from "@actiondock/core";
 import { Command } from "commander";
+import { resolveIntent } from "../utils/filter";
 
 export function registerConfigCommands(program: Command): void {
   const configCmd = program
@@ -8,16 +14,21 @@ export function registerConfigCommands(program: Command): void {
 
   // config list
   configCmd
-    .command("list")
-    .description("List all configuration entries in local database")
+    .command("list [patterns...]")
+    .description("List configuration entries in local database")
+    .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
+    .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("--json", "Output as JSON")
-    .action((options) => {
+    .action((patterns, options) => {
       const root = findProjectRoot();
       if (!root) {
         console.error("Error: Not in an ActionDock project");
         process.exit(1);
       }
       try {
+        const effectiveIntent = resolveIntent(options.intent, patterns);
+        const shouldFallback = options.fallback !== false;
+
         const projConfig = loadProjectConfig(root);
         const storage = createStorage(projConfig.id, { projectRoot: root });
         const stored = storage.listConfig();
@@ -26,7 +37,7 @@ export function registerConfigCommands(program: Command): void {
         const declared = projConfig.config || {};
         const allKeys = new Set([...Object.keys(declared), ...Object.keys(stored)]);
 
-        const list = Array.from(allKeys).map((k) => ({
+        const rawList = Array.from(allKeys).map((k) => ({
           key: k,
           value: stored[k] !== undefined ? stored[k] : declared[k]?.default,
           source: stored[k] !== undefined ? "database" : "default",
@@ -35,11 +46,21 @@ export function registerConfigCommands(program: Command): void {
 
         storage.close();
 
+        const filterRes = filterWithFallbackInfo(
+          rawList,
+          effectiveIntent,
+          [(c) => c.key, (c) => c.value, (c) => c.description, (c) => c.source],
+          shouldFallback
+        );
+
         if (options.json) {
-          console.log(JSON.stringify(list, null, 2));
+          console.log(JSON.stringify(filterRes.items, null, 2));
         } else {
           console.log(`Configuration for ${projConfig.id}:\n`);
-          for (const item of list) {
+          if (filterRes.isFallback && effectiveIntent) {
+            console.log(`(No config entries matched intent '${effectiveIntent}', showing all entries)\n`);
+          }
+          for (const item of filterRes.items) {
             const valStr = JSON.stringify(item.value);
             console.log(`  ${item.key.padEnd(24)} = ${valStr} (${item.source})`);
           }
@@ -49,6 +70,7 @@ export function registerConfigCommands(program: Command): void {
         process.exit(1);
       }
     });
+
 
   // config get
   configCmd

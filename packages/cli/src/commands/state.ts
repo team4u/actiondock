@@ -1,5 +1,11 @@
-import { createStorage, findProjectRoot, loadProjectConfig } from "@actiondock/core";
+import {
+  createStorage,
+  filterWithFallbackInfo,
+  findProjectRoot,
+  loadProjectConfig,
+} from "@actiondock/core";
 import { Command } from "commander";
+import { resolveIntent } from "../utils/filter";
 
 export function registerStateCommands(program: Command): void {
   const stateCmd = program
@@ -9,7 +15,9 @@ export function registerStateCommands(program: Command): void {
   // state list
   stateCmd
     .command("list [prefix]")
-    .description("List state keys matching prefix")
+    .description("List state keys matching prefix or intent pattern")
+    .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
+    .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("--json", "Output as JSON")
     .action(async (prefix = "", options) => {
       const root = findProjectRoot();
@@ -18,16 +26,31 @@ export function registerStateCommands(program: Command): void {
         process.exit(1);
       }
       try {
+        const effectiveIntent = resolveIntent(options.intent, prefix ? [prefix] : []);
+        const shouldFallback = options.fallback !== false;
+
         const projConfig = loadProjectConfig(root);
         const storage = createStorage(projConfig.id, { projectRoot: root });
-        const keys = await storage.listStateKeys("", prefix);
+        const allKeys = await storage.listStateKeys("");
         storage.close();
 
+        const filterRes = filterWithFallbackInfo(
+          allKeys,
+          effectiveIntent,
+          [(k) => k],
+          shouldFallback
+        );
+
         if (options.json) {
-          console.log(JSON.stringify(keys, null, 2));
+          console.log(JSON.stringify(filterRes.items, null, 2));
         } else {
-          console.log(`State keys for ${projConfig.id}${prefix ? ` (prefix: ${prefix})` : ""}:\n`);
-          for (const k of keys) {
+          console.log(
+            `State keys for ${projConfig.id}${prefix ? ` (filter: ${prefix})` : ""}:\n`
+          );
+          if (filterRes.isFallback && effectiveIntent) {
+            console.log(`(No state keys matched intent '${effectiveIntent}', showing all keys)\n`);
+          }
+          for (const k of filterRes.items) {
             console.log(`  - ${k}`);
           }
         }
@@ -36,6 +59,7 @@ export function registerStateCommands(program: Command): void {
         process.exit(1);
       }
     });
+
 
   // state get
   stateCmd

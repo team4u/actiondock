@@ -206,15 +206,16 @@ dist/my-tools-skill/
 | `ac link [path]` | 将本地 Action Package 注册到全局注册表（实现跨目录源码直跑） |
 | `ac unlink [id\|path]` | 从全局注册表中注销指定包 |
 | `ac action create <id>` | 快速生成新的 Action 声明模板文件 |
-| `ac action list [--json]` | 列出当前项目中的所有 Action |
+| `ac action list [patterns...] [-i <regex>] [--json]` | 列出 Action（支持正则意图 `-i`、多关键字模糊查找与未命中回退） |
 | `ac action show <id> [--json]` | 查看指定 Action 的详细定义与入参出参 Schema |
 | `ac action run <id> --input '<json>'` | 运行 Action 并输出标准结果 JSON |
 | `ac action validate` | 校验 Action 与 JSON Schema 语法合法性 |
 | `ac playbook create <id>` | 快速生成新的 Playbook SOP 模板文件 |
-| `ac playbook list / show <id>` | 查看任务 SOP 指南 Playbook |
-| `ac config list / get / set / delete` | 查看与管理本地 SQLite 运行时配置 |
-| `ac state list / get / set / delete` | 查看与管理本地 SQLite 共享状态存储 |
-| `ac runs list / show <run-id>` | 查看 Action 执行历史与输入输出记录 |
+| `ac playbook list [patterns...] [-i <regex>]` | 查看任务 SOP 指南 Playbook（支持模糊/正则意图收窄） |
+| `ac config list [patterns...] [-i <regex>]` | 查看与管理本地 SQLite 运行时配置（支持意图过滤） |
+| `ac state list [prefix] [-i <regex>]` | 查看与管理本地 SQLite 共享状态存储（支持前缀与意图正则） |
+| `ac runs list [patterns...] [-i <regex>]` | 查看 Action 执行历史与输入输出记录（支持意图过滤） |
+
 | `ac test` | 使用 Bun Test Runner 执行单元测试 |
 | `ac build [--target <target>] [--out <path>]` | 将项目编译为单个自包含独立二进制（支持交叉编译：`linux-x64` / `darwin-x64` / `darwin-arm64` / `windows-x64`） |
 | `ac export skill [--target <target>] [--out <path>]` | 导出包含 `SKILL.md` + 独立二进制的完整 Skill 交付包 |

@@ -115,6 +115,15 @@ export default defineAction<Input, Output>({
 
 ## 开发、验证与运行
 
+### 发现与模糊意图检索 Action 清单
+```bash
+ac action list [--json]
+ac action list pr issue [--json]                      # 多关键字模糊匹配
+ac action list -i "pr|issue" [--json]                 # 正则意图过滤（未命中默认回退全量）
+ac action list -i "nomatch" --no-fallback [--json]    # 禁用未命中回退
+ac action list --profile <profile-name> -i "<regex>"  # 远程云机器意图检索
+```
+
 ### 校验 Action 语法与 Schema
 ```bash
 ac action validate [id] [--json]
@@ -125,6 +134,7 @@ ac action validate [id] [--json]
 ac action show <id> [--json]
 ac action show <id> --profile <profile-name> [--json]
 ```
+
 
 ### 运行 Action（stdout 输出标准 JSON 结果）
 ```bash
@@ -199,7 +209,7 @@ ac playbook create <id> --desc "SOP 任务描述" --actions action-a action-b
 
 ### 检查与校验 Playbook
 ```bash
-ac playbook list [--json]
+ac playbook list [patterns...] [-i "<regex>"] [--json]
 ac playbook show <id> [--json]
 ac playbook validate
 ```
@@ -210,7 +220,7 @@ ac playbook validate
 
 ### 配置管理 (`ctx.config`)
 ```bash
-ac config list [--json]
+ac config list [patterns...] [-i "<regex>"] [--json]
 ac config get <key> [--json]
 ac config set <key> <value>
 ac config delete <key>
@@ -218,7 +228,7 @@ ac config delete <key>
 
 ### 状态管理 (`ctx.state`)
 ```bash
-ac state list [prefix] [--json]
+ac state list [prefix] [-i "<regex>"] [--json]
 ac state get <key> [--json]
 ac state set <key> <json-value> [--ttl <seconds>]
 ac state delete <key>
@@ -226,9 +236,10 @@ ac state delete <key>
 
 ### 执行历史
 ```bash
-ac runs list [--action <id>] [--limit 20] [--json]
+ac runs list [patterns...] [-i "<regex>"] [--action <id>] [--limit 20] [--json]
 ac runs show <run-id> [--json]
 ```
+
 
 ---
 

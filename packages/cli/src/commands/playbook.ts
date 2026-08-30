@@ -1,12 +1,14 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import {
+  filterWithFallbackInfo,
   findProjectRoot,
   loadActions,
   loadPlaybooks,
   loadProjectConfig,
 } from "@actiondock/core";
 import { Command } from "commander";
+import { resolveIntent } from "../utils/filter";
 
 export function registerPlaybookCommands(program: Command): void {
   const pbCmd = program
@@ -15,30 +17,45 @@ export function registerPlaybookCommands(program: Command): void {
 
   // playbook list
   pbCmd
-    .command("list")
+    .command("list [patterns...]")
     .description("List all playbooks in current project")
+    .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
+    .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("--json", "Output as JSON")
-    .action((options) => {
+    .action((patterns, options) => {
       const root = findProjectRoot();
       if (!root) {
         console.error("Error: Not in an ActionDock project");
         process.exit(1);
       }
       try {
+        const effectiveIntent = resolveIntent(options.intent, patterns);
+        const shouldFallback = options.fallback !== false;
+
         const config = loadProjectConfig(root);
         const playbooks = loadPlaybooks(root, config.playbooksDir);
-        const list = Array.from(playbooks.values()).map((p) => ({
+        const rawList = Array.from(playbooks.values()).map((p) => ({
           id: p.id,
           description: p.description || "",
           actions: p.actions || [],
           file: p.filePath,
         }));
 
+        const filterRes = filterWithFallbackInfo(
+          rawList,
+          effectiveIntent,
+          [(p) => p.id, (p) => p.description, (p) => p.actions, (p) => p.file],
+          shouldFallback
+        );
+
         if (options.json) {
-          console.log(JSON.stringify(list, null, 2));
+          console.log(JSON.stringify(filterRes.items, null, 2));
         } else {
           console.log(`Playbooks in ${config.id}:\n`);
-          for (const p of list) {
+          if (filterRes.isFallback && effectiveIntent) {
+            console.log(`(No playbooks matched intent '${effectiveIntent}', showing all playbooks)\n`);
+          }
+          for (const p of filterRes.items) {
             console.log(`  ${p.id.padEnd(24)} ${p.description}`);
           }
         }
@@ -47,6 +64,7 @@ export function registerPlaybookCommands(program: Command): void {
         process.exit(1);
       }
     });
+
 
   // playbook create / new
   pbCmd

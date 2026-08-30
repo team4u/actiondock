@@ -6,6 +6,7 @@ import {
   executeRemoteAction,
   fetchRemoteActions,
   fetchRemoteActionShow,
+  filterWithFallbackInfo,
   findProjectRoot,
   listLinkedPackages,
   loadActions,
@@ -15,6 +16,7 @@ import {
   validateSchema,
 } from "@actiondock/core";
 import { Command } from "commander";
+import { resolveIntent } from "../utils/filter";
 
 export function registerActionCommands(program: Command): void {
   const actionCmd = program
@@ -23,14 +25,19 @@ export function registerActionCommands(program: Command): void {
 
   // action list
   actionCmd
-    .command("list")
+    .command("list [patterns...]")
     .description("List actions in current project, linked packages, or remote profile")
+    .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
     .option("-p, --profile <name>", "Execute or query against a specific profile")
     .option("-s, --server <url>", "Remote server URL")
     .option("-t, --token <token>", "Auth token for remote server")
+    .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("--json", "Output as JSON")
-    .action(async (options) => {
+    .action(async (patterns, options) => {
       try {
+        const effectiveIntent = resolveIntent(options.intent, patterns);
+        const shouldFallback = options.fallback !== false;
+
         const target = resolveTarget({
           profile: options.profile,
           server: options.server,
@@ -38,13 +45,27 @@ export function registerActionCommands(program: Command): void {
         });
 
         if (target.type === "remote") {
-          const list = await fetchRemoteActions(target.serverUrl!, target.token);
+          let list = await fetchRemoteActions(
+            target.serverUrl!,
+            target.token,
+            effectiveIntent
+          );
+
+          let isFallback = false;
+          if (list.length === 0 && effectiveIntent && shouldFallback) {
+            list = await fetchRemoteActions(target.serverUrl!, target.token);
+            isFallback = true;
+          }
+
           if (options.json) {
             console.log(JSON.stringify(list, null, 2));
           } else {
             console.log(
               `Actions on remote server ${target.serverUrl}${target.profileName ? ` (Profile: ${target.profileName})` : ""}:\n`
             );
+            if (isFallback && effectiveIntent) {
+              console.log(`(No remote actions matched intent '${effectiveIntent}', showing all actions)\n`);
+            }
             for (const a of list) {
               console.log(`  ${a.id.padEnd(28)} ${a.description}`);
             }
@@ -56,16 +77,27 @@ export function registerActionCommands(program: Command): void {
         if (root) {
           const config = loadProjectConfig(root);
           const actions = await loadActions(root, config.actionsDir);
-          const list = Array.from(actions.values()).map((a) => ({
+          const rawList = Array.from(actions.values()).map((a) => ({
             id: a.id,
             description: a.description || "",
+            packageId: config.id,
           }));
 
+          const filterRes = filterWithFallbackInfo(
+            rawList,
+            effectiveIntent,
+            [(a) => a.id, (a) => a.description, (a) => a.packageId],
+            shouldFallback
+          );
+
           if (options.json) {
-            console.log(JSON.stringify(list, null, 2));
+            console.log(JSON.stringify(filterRes.items, null, 2));
           } else {
             console.log(`Actions in ${config.id} (${root}):\n`);
-            for (const a of list) {
+            if (filterRes.isFallback && effectiveIntent) {
+              console.log(`(No actions matched intent '${effectiveIntent}', showing all actions)\n`);
+            }
+            for (const a of filterRes.items) {
               console.log(`  ${a.id.padEnd(28)} ${a.description}`);
             }
           }
@@ -90,25 +122,63 @@ export function registerActionCommands(program: Command): void {
             try {
               const config = loadProjectConfig(pkg.path);
               const actions = await loadActions(pkg.path, config.actionsDir);
+              const pkgActions = Array.from(actions.values()).map((a) => ({
+                id: a.id,
+                description: a.description || "",
+              }));
+
               aggregated.push({
                 packageId: pkg.id,
                 packageName: pkg.name,
                 path: pkg.path,
-                actions: Array.from(actions.values()).map((a) => ({
-                  id: a.id,
-                  description: a.description || "",
-                })),
+                actions: pkgActions,
               });
             } catch {
               // Ignore broken linked package
             }
           }
 
+          let filteredPackages: typeof aggregated = [];
+          if (!effectiveIntent) {
+            filteredPackages = aggregated;
+          } else {
+            for (const pkg of aggregated) {
+              const pkgMatches = filterWithFallbackInfo(
+                [pkg],
+                effectiveIntent,
+                [(p) => p.packageId, (p) => p.packageName, (p) => p.path],
+                false
+              ).matchedCount > 0;
+
+              if (pkgMatches) {
+                filteredPackages.push(pkg);
+              } else {
+                const matchedActions = filterWithFallbackInfo(
+                  pkg.actions,
+                  effectiveIntent,
+                  [(a) => a.id, (a) => a.description],
+                  false
+                ).items;
+
+                if (matchedActions.length > 0) {
+                  filteredPackages.push({
+                    ...pkg,
+                    actions: matchedActions,
+                  });
+                }
+              }
+            }
+
+            if (filteredPackages.length === 0 && shouldFallback) {
+              filteredPackages = aggregated;
+            }
+          }
+
           if (options.json) {
-            console.log(JSON.stringify(aggregated, null, 2));
+            console.log(JSON.stringify(filteredPackages, null, 2));
           } else {
             console.log("Linked Action Packages:\n");
-            for (const pkg of aggregated) {
+            for (const pkg of filteredPackages) {
               console.log(`* Package: ${pkg.packageId} (${pkg.path})`);
               for (const a of pkg.actions) {
                 console.log(`    - ${a.id.padEnd(26)} ${a.description}`);
@@ -121,6 +191,7 @@ export function registerActionCommands(program: Command): void {
         process.exit(1);
       }
     });
+
 
   // action create / new
   actionCmd

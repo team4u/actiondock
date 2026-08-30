@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs";
 import type { ActionDefinition } from "@actiondock/sdk";
+import { filterWithFallbackInfo } from "../filter";
 import { createStorage } from "../storage";
 import { ActionRunner } from "./runner";
+
 
 export interface StandaloneRuntimeOptions {
   packageId: string;
@@ -64,20 +66,52 @@ export class StandaloneRuntime {
       switch (command) {
         case "list": {
           const json = subArgs.includes("--json");
+          const noFallback = subArgs.includes("--no-fallback");
+          let intent: string | undefined;
+          const positionalPatterns: string[] = [];
+
+          for (let i = 0; i < subArgs.length; i++) {
+            const arg = subArgs[i];
+            if (arg === "--intent" || arg === "-i") {
+              if (i + 1 < subArgs.length) intent = subArgs[++i];
+            } else if (arg.startsWith("--intent=")) {
+              intent = arg.slice(9);
+            } else if (arg.startsWith("-i=")) {
+              intent = arg.slice(3);
+            } else if (!arg.startsWith("-")) {
+              positionalPatterns.push(arg);
+            }
+          }
+
+          const effectiveIntent =
+            intent ||
+            (positionalPatterns.length > 0
+              ? positionalPatterns.join("|")
+              : undefined);
+
           const list = runner.listActions().map((a) => ({
             id: a.id,
             description: a.description || "",
           }));
+
+          const filterRes = filterWithFallbackInfo(
+            list,
+            effectiveIntent,
+            [(a) => a.id, (a) => a.description],
+            !noFallback
+          );
+
           if (json) {
-            console.log(JSON.stringify(list, null, 2));
+            console.log(JSON.stringify(filterRes.items, null, 2));
           } else {
             console.log(`Actions in ${this.packageId} (v${this.version}):\n`);
-            for (const a of list) {
+            for (const a of filterRes.items) {
               console.log(`  ${a.id.padEnd(28)} ${a.description}`);
             }
           }
           break;
         }
+
 
         case "describe":
         case "show": {

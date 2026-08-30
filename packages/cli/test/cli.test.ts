@@ -50,14 +50,37 @@ describe("CLI End-to-End", () => {
     expect(info.id).toBe("team.github-ops");
     expect(info.actions).toContain("sample.greet");
 
-    // 3. action list & show & validate
+    // 3. action list & show & validate (including intent fuzzy search and fallback)
     const listProc = runCli(["action", "list", "--json"], tempDir);
     expect(listProc.exitCode).toBe(0);
     const actionsList = JSON.parse(listProc.stdout.toString());
     expect(actionsList.length).toBe(1);
     expect(actionsList[0].id).toBe("sample.greet");
 
+    // 3b. Test action list with --intent and positional fuzzy search
+    const listIntentProc = runCli(["action", "list", "--intent", "greet|hello", "--json"], tempDir);
+    expect(listIntentProc.exitCode).toBe(0);
+    expect(JSON.parse(listIntentProc.stdout.toString()).length).toBe(1);
+
+    const listPositionalProc = runCli(["action", "list", "greet", "--json"], tempDir);
+    expect(listPositionalProc.exitCode).toBe(0);
+    expect(JSON.parse(listPositionalProc.stdout.toString()).length).toBe(1);
+
+    // Fallback when no match: returns full list by default
+    const listFallbackProc = runCli(["action", "list", "--intent", "nomatch", "--json"], tempDir);
+    expect(listFallbackProc.exitCode).toBe(0);
+    expect(JSON.parse(listFallbackProc.stdout.toString()).length).toBe(1);
+
+    // No fallback when --no-fallback is specified
+    const listNoFallbackProc = runCli(
+      ["action", "list", "--intent", "nomatch", "--no-fallback", "--json"],
+      tempDir
+    );
+    expect(listNoFallbackProc.exitCode).toBe(0);
+    expect(JSON.parse(listNoFallbackProc.stdout.toString()).length).toBe(0);
+
     const showProc = runCli(["action", "show", "sample.greet", "--json"], tempDir);
+
     expect(showProc.exitCode).toBe(0);
     const show = JSON.parse(showProc.stdout.toString());
     expect(show.id).toBe("sample.greet");
@@ -84,6 +107,14 @@ describe("CLI End-to-End", () => {
     const pbList = JSON.parse(pbListProc.stdout.toString());
     expect(pbList.length).toBe(1);
 
+    const pbListIntent = runCli(["playbook", "list", "greet", "--json"], tempDir);
+    expect(pbListIntent.exitCode).toBe(0);
+    expect(JSON.parse(pbListIntent.stdout.toString()).length).toBe(1);
+
+    const pbListStrict = runCli(["playbook", "list", "nomatch", "--no-fallback", "--json"], tempDir);
+    expect(pbListStrict.exitCode).toBe(0);
+    expect(JSON.parse(pbListStrict.stdout.toString()).length).toBe(0);
+
     const pbShowProc = runCli(["playbook", "show", "greet-user", "--json"], tempDir);
     expect(pbShowProc.exitCode).toBe(0);
     const pbShow = JSON.parse(pbShowProc.stdout.toString());
@@ -101,6 +132,10 @@ describe("CLI End-to-End", () => {
     const confObj = JSON.parse(confGet.stdout.toString());
     expect(confObj.value).toBe("Howdy");
 
+    const confListIntent = runCli(["config", "list", "--intent", "SAMPLE.*GREETING", "--json"], tempDir);
+    expect(confListIntent.exitCode).toBe(0);
+    expect(JSON.parse(confListIntent.stdout.toString()).some((c: any) => c.key === "SAMPLE_GREETING")).toBe(true);
+
     const runWithNewConf = runCli(
       ["run", "sample.greet", "--input", '{"name": "Cowboy"}'],
       tempDir
@@ -114,6 +149,10 @@ describe("CLI End-to-End", () => {
     expect(stateList.exitCode).toBe(0);
     const stateKeys = JSON.parse(stateList.stdout.toString());
     expect(stateKeys).toContain("greet_count");
+
+    const stateListIntent = runCli(["state", "list", "--intent", "greet.*", "--json"], tempDir);
+    expect(stateListIntent.exitCode).toBe(0);
+    expect(JSON.parse(stateListIntent.stdout.toString())).toContain("greet_count");
 
     const stateGet = runCli(["state", "get", "greet_count", "--json"], tempDir);
     expect(stateGet.exitCode).toBe(0);
@@ -138,11 +177,16 @@ describe("CLI End-to-End", () => {
     const runs = JSON.parse(runsListProc.stdout.toString());
     expect(runs.length).toBe(2);
 
+    const runsListIntent = runCli(["runs", "list", "--intent", "sample\\.greet", "--json"], tempDir);
+    expect(runsListIntent.exitCode).toBe(0);
+    expect(JSON.parse(runsListIntent.stdout.toString()).length).toBe(2);
+
     const runShowProc = runCli(["runs", "show", runs[0].id, "--json"], tempDir);
     expect(runShowProc.exitCode).toBe(0);
     const runDetail = JSON.parse(runShowProc.stdout.toString());
     expect(runDetail.id).toBe(runs[0].id);
     expect(runDetail.status).toBe("success");
+
 
     // 9. build
     const buildProc = runCli(["build"], tempDir);
@@ -226,6 +270,10 @@ describe("CLI End-to-End", () => {
       const listProfilesData = JSON.parse(listProfileProc.stdout.toString());
       expect(listProfilesData.some((p: any) => p.name === "cloud-aliyun")).toBe(true);
 
+      const listProfileIntent = runCli(["profile", "list", "--intent", "aliyun|tencent", "--json"], tmpdir(), env);
+      expect(listProfileIntent.exitCode).toBe(0);
+      expect(JSON.parse(listProfileIntent.stdout.toString()).some((p: any) => p.name === "cloud-aliyun")).toBe(true);
+
       // 4. Test connection via ac profile test
       const testProc = runCli(["profile", "test", "cloud-aliyun", "--json"], tmpdir(), env);
       expect(testProc.exitCode).toBe(0);
@@ -243,6 +291,15 @@ describe("CLI End-to-End", () => {
       expect(remoteListProc.exitCode).toBe(0);
       const remoteActions = JSON.parse(remoteListProc.stdout.toString());
       expect(remoteActions.some((a: any) => a.id === "sample.greet")).toBe(true);
+
+      const remoteListIntentProc = runCli(
+        ["action", "list", "--profile", "cloud-aliyun", "--intent", "sample\\.greet", "--json"],
+        tmpdir(),
+        env
+      );
+      expect(remoteListIntentProc.exitCode).toBe(0);
+      expect(JSON.parse(remoteListIntentProc.stdout.toString()).length).toBe(1);
+
 
       // 6. Execute action on remote server via ac run --profile
       const remoteRunProc = runCli(

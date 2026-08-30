@@ -48,9 +48,12 @@ ActionDock 命令行工具（`ac`）全量功能与参数参考。
   * `-d, --desc <desc>`：Action 描述信息
   * `-f, --file <path>`：相对 `actions/` 目录的目标文件名
 
-#### `ac action list [--json]`
-列出当前项目、全局已关联包或远程 Profile 中可用的 Action 及其描述。
+#### `ac action list [patterns...] [--json]`
+列出当前项目、全局已关联包或远程 Profile 中可用的 Action 及其描述。支持正则模糊意图搜索与多个关键字匹配。
 * **参数选项**：
+  * `[patterns...]`：位置参数关键字或模式，支持传入多个（如 `ac action list pr issue`）
+  * `-i, --intent <pattern>`：正则表达式或意图过滤（如 `-i "pr|issue"`、`-i "get.*user"`）；未命中时默认回退全量列表
+  * `--no-fallback`：禁用未命中时的全量回退，严格返回空匹配
   * `-p, --profile <name>`：查询指定 profile 对应的远程目标
   * `-s, --server <url>`：直接指定远程服务器地址
   * `-t, --token <token>`：远程服务器鉴权 Token
@@ -89,8 +92,8 @@ ActionDock 命令行工具（`ac`）全量功能与参数参考。
 
 ### 多环境与云机器调度（Profile & Serve）
 
-#### `ac profile list [--json]`
-列出所有配置的云节点/环境 profile，标记当前默认激活的目标。
+#### `ac profile list [patterns...] [--json]`
+列出所有配置的云节点/环境 profile，标记当前默认激活的目标。支持 `-i, --intent <pattern>` 正则与位置关键字模糊过滤。
 
 #### `ac profile add <name>`
 添加或更新远程云机器 Profile。
@@ -130,8 +133,8 @@ ActionDock 命令行工具（`ac`）全量功能与参数参考。
   * `-a, --actions <actions...>`：关联的 Action ID 列表
   * `-f, --file <path>`：目标文件名
 
-#### `ac playbook list [--json]`
-列出项目中所有的 Playbook 清单。
+#### `ac playbook list [patterns...] [--json]`
+列出项目中所有的 Playbook 清单。支持 `-i, --intent <pattern>` 正则与多个关键字模糊查找。
 
 #### `ac playbook show <id> [--json]`
 查看指定 Playbook 的 Frontmatter 元数据与 SOP Markdown 内容。
@@ -143,7 +146,7 @@ ActionDock 命令行工具（`ac`）全量功能与参数参考。
 
 ### 运行时配置管理（Config）
 
-* `ac config list [--json]`：列出本地 SQLite 中保存的所有配置项。
+* `ac config list [patterns...] [--json]`：列出本地 SQLite 中保存的所有配置项（支持 `-i, --intent` 正则与关键字模糊搜索）。
 * `ac config get <key> [--json]`：获取指定配置项的有效值与来源。
 * `ac config set <key> <value>`：设置或更新本地配置项（支持字符串、数值或 JSON 对象）。
 * `ac config delete <key>`（别名：`rm`）：删除指定的本地配置项。
@@ -152,7 +155,7 @@ ActionDock 命令行工具（`ac`）全量功能与参数参考。
 
 ### 共享状态管理（Shared State）
 
-* `ac state list [prefix] [--json]`：列出当前项目本地状态数据库中的所有 Key（支持前缀过滤，自动剔除已过期 Key）。
+* `ac state list [prefix] [-i, --intent <pattern>] [--json]`：列出当前项目本地状态数据库中的 Key（支持前缀与意图正则模糊过滤，自动剔除已过期 Key）。
 * `ac state get <key> [--json]`：获取指定 Key 的持久化状态值（若已过期则返回 undefined 并自动清理）。
 * `ac state set <key> <json-value> [--ttl <seconds>]`：写入或更新指定 Key 的状态值，支持指定生存时间（TTL，秒）。
 * `ac state delete <key>`（别名：`rm`）：删除指定 Key 的状态值。
@@ -161,8 +164,9 @@ ActionDock 命令行工具（`ac`）全量功能与参数参考。
 
 ### 执行记录检查（Runs）
 
-* `ac runs list [-a, --action <id>] [-n, --limit <count>] [--json]`：列出最近的 Action 执行历史（支持按 Action 过滤与分页限制）。
+* `ac runs list [patterns...] [-i, --intent <pattern>] [-a, --action <id>] [-n, --limit <count>] [--json]`：列出最近的 Action 执行历史（支持正则/关键字意图搜索、按 Action 过滤与分页限制）。
 * `ac runs show <run-id> [--json]`：查看单次 Run 的完整执行详情、耗时、入参、出参及错误堆栈。
+
 
 ---
 
