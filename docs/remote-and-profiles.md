@@ -10,7 +10,7 @@
        本地开发机 / AI Agent                           远端云主机 (阿里云 / AWS / 等)
   ┌───────────────────────────────┐                  ┌───────────────────────────────┐
   │                               │                  │                               │
-  │  ac run server.check-disk     │  HTTP POST /run  │  ac serve --port 5177         │
+  │  ac run clean-logs            │  HTTP POST /run  │  ac serve --port 5177         │
   │    --profile aliyun-prod      │ ───────────────► │    ├── 极轻量 Bun 原生 HTTP   │
   │                               │ (Bearer Token)   │    ├── 读取本地 Action 代码   │
   │                               │                  │    └── 执行并返回结果         │
@@ -87,7 +87,7 @@ ac profile test aliyun-prod
 
 #### 1. 单次执行时指定 `--profile`
 ```bash
-ac run server.check-disk --profile aliyun-prod -i '{"mount": "/data"}'
+ac run check-disk --profile aliyun-prod -i '{"mount": "/data"}'
 ```
 
 #### 2. 查看远端机器上可用的 Action
@@ -101,7 +101,7 @@ ac action list --profile aliyun-prod
 ac profile use aliyun-prod
 
 # 之后无需每次传 --profile，默认直接发往 aliyun-prod
-ac run server.clean-logs
+ac run clean-logs
 ```
 
 #### 4. 切回本地直接执行
@@ -131,8 +131,8 @@ ac profile use local
 ```text
 User: "请帮我检查阿里云机器 A 上的磁盘，并把告警上报给 AWS 机器 B 的监控服务。"
 Agent Actions:
-1. ac run ops.disk-usage --profile aliyun-app-a
-2. ac run monitor.send-alert --profile aws-monitor-b -i '{"level": "WARN", "msg": "..."}'
+1. ac run disk-usage --profile aliyun-app-a
+2. ac run send-alert --profile aws-monitor-b -i '{"level": "WARN", "msg": "..."}'
 ```
 
 输出的格式均为统一的 `{ ok: true, data: { ... } }` JSON Envelope，Agent 无需关心底层网络传输与异构拓扑差异。

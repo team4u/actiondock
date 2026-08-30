@@ -178,10 +178,10 @@ ac profile rm <name>
 ### 3. 调度远端 Action 执行
 ```bash
 # 通过 --profile 调度
-ac run server.check-disk --profile aliyun-prod -i '{"mount": "/data"}'
+ac run check-disk --profile aliyun-prod -i '{"mount": "/data"}'
 
 # 直接传 server 地址调度
-ac run server.check-disk --server http://1.2.3.4:5177 --token secret123
+ac run check-disk --server http://1.2.3.4:5177 --token secret123
 ```
 
 ---
