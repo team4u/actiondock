@@ -92,21 +92,22 @@ ActionDock 命令行工具（`ac`）全量功能与参数参考。
 
 ### 多环境与云机器调度（Profile & Serve）
 
-#### `ac profile list [patterns...] [--json]`
-列出所有配置的云节点/环境 profile，标记当前默认激活的目标。支持 `-i, --intent <pattern>` 正则与位置关键字模糊过滤。
+#### `ac profile list [patterns...] [--reveal] [--json]`
+列出所有配置的云节点/环境 profile，标记当前默认激活的目标与 Token 来源（支持 `-i, --intent <pattern>` 正则与位置关键字模糊过滤，支持敏感 Token 脱敏与 `--reveal` 明文展示）。
 
 #### `ac profile add <name>`
 添加或更新远程云机器 Profile。
 * **参数选项**：
   * `-s, --server <url>`（必填）：远程 ActionDock 服务端地址（如 `http://1.2.3.4:5177`）
-  * `-t, --token <token>`：远程服务器鉴权 Token
+  * `--token-env <env>`（推荐）：指定存储鉴权 Token 的环境变量名（如 `ACTIONDOCK_PROD_TOKEN`）
+  * `-t, --token <token>`（已弃用）：明文存储 Token（不推荐直接持久化明文）
   * `-d, --desc <description>`：机器/环境描述
 
 #### `ac profile use <name>`
 切换全局默认执行的目标 profile（切换后 `ac run` 默认发往该目标）。
 
-#### `ac profile show [name] [--json]`
-查看指定 profile 的服务器地址、鉴权状态和描述（默认查看当前激活的 profile）。
+#### `ac profile show [name] [--reveal] [--json]`
+查看指定 profile 的服务器地址、鉴权状态、解析来源和描述（默认查看当前激活的 profile，支持 `--reveal` 显示明文 Token）。
 
 #### `ac profile test [name] [--json]`
 测试与指定 profile 对应远程服务器的连通性与延迟。
@@ -118,8 +119,12 @@ ActionDock 命令行工具（`ac`）全量功能与参数参考。
 在远端云机器上启动轻量 ActionDock HTTP Runner 监听服务。
 * **参数选项**：
   * `-p, --port <port>`：监听端口（默认 `5177`）
-  * `-H, --host <host>`：绑定 IP 地址（默认 `0.0.0.0`）
-  * `-t, --token <token>`：用于鉴权的 Bearer Token（或设置环境变量 `ACTIONDOCK_TOKEN`）
+  * `-H, --host <host>`：绑定 IP 地址（默认安全监听 `127.0.0.1`）
+  * `-t, --token <token>`：用于鉴权的 Bearer / URL Token（或设置环境变量 `ACTIONDOCK_TOKEN`）
+  * `--allow-insecure-no-auth`：允许在非 Loopback 地址上无 Token 运行（不安全）
+  * `--cors-origin <origin>`：允许跨域调用的 CORS Origin 白名单（默认不返回 CORS 响应头，支持多次指定）
+  * `--max-body <size>`：请求 Body 最大字节限制（默认 `1mb`，支持 `500kb` 等）
+  * `--expose-debug-info`：在 health 和 info 接口中返回宿主机绝对路径
   * `-d, --dir <path>`：项目根目录路径（默认当前工作目录）
 
 ---
@@ -181,15 +186,18 @@ ActionDock 命令行工具（`ac`）全量功能与参数参考。
 ### 构建与 Skill 导出（Build & Export）
 
 #### `ac build`
-将当前项目的全部 Action 编译打包为单个自包含的独立可执行文件（无外部 Node/Bun/Python 依赖）。
+将当前项目的 Action 编译打包为单个自包含的独立可执行文件（无外部 Node/Bun/Python 依赖）。
 * **参数选项**：
   * `-t, --target <target>`：目标编译平台（如 `bun`、`linux-x64`、`darwin-arm64`、`windows-x64` 等）
   * `-o, --out <path>`：输出二进制路径
+  * `-a, --actions <actions...>`：仅编译指定的 Action(s)
   * `-m, --minify`：是否开启代码压缩
 
 #### `ac export skill`
-一键导出完整的 Skill 交付包，包含自动生成的 `SKILL.md` 引导文档、Playbook 任务指南与独立二进制。
+一键导出完整的 Skill 交付包，包含自动生成的 `SKILL.md` 引导文档、Playbook 任务指南与独立二进制。默认全量打包，支持基于 Playbook 或 Action 按需精准打包。
 * **参数选项**：
   * `-t, --target <target>`：目标编译平台
   * `-o, --out <path>`：输出 Skill 目录路径
+  * `-p, --playbook <playbooks...>`：任务驱动导出：仅打包指定 Playbook 及其依赖的 Actions（自动 Tree-shaking 裁剪）
+  * `-a, --actions <actions...>`：仅导出指定的 Action(s)，并自动裁剪不满足闭包的 Playbooks
   * `-z, --archive`：自动打包为 `.zip` 压缩归档文件

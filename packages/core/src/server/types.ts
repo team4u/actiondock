@@ -4,6 +4,10 @@ export interface ServerOptions {
   token?: string;
   projectRoot?: string;
   customHome?: string;
+  allowInsecureNoAuth?: boolean;
+  corsOrigins?: string[];
+  maxBodyBytes?: number;
+  exposeDebugInfo?: boolean;
 }
 
 export interface ActionDockServerInstance {

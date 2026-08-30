@@ -163,18 +163,23 @@ ac action run <id> -i '{"repo": "owner/repo"}'
 ## 多环境与远程云机器调度 (Profiles & Serve)
 
 ### 1. 远端云机器启动 HTTP Runner
-在云端主机上启动微型监听服务：
+在云端主机上启动微型监听服务（默认安全绑定 `127.0.0.1`，公网/局域网暴露强制要求 Token）：
 ```bash
-ac serve [--port 5177] [--host 0.0.0.0] [--token <secret-token>]
+# 本地监听
+ac serve [--port 5177] [--token <secret-token>]
+
+# 暴露给局域网或反向代理（必须配置 --token 或设置 ACTIONDOCK_TOKEN 环境变量）
+ac serve --host 0.0.0.0 --token <secret-token> [--cors-origin <origin>] [--max-body 1mb]
 ```
 
 ### 2. 本地管理 Profile
 ```bash
-# 添加云节点
-ac profile add aliyun-prod --server http://1.2.3.4:5177 --token secret123 --desc "阿里云生产节点"
+# 添加云节点（推荐使用 --token-env 指定环境变量名，避免明文持久化）
+export ACTIONDOCK_ALIYUN_PROD_TOKEN=secret123
+ac profile add aliyun-prod --server http://1.2.3.4:5177 --token-env ACTIONDOCK_ALIYUN_PROD_TOKEN --desc "阿里云生产节点"
 
-# 列出所有已配置的 profile
-ac profile list [--json]
+# 列出所有已配置的 profile（默认掩码脱敏，支持 --reveal 明文显示）
+ac profile list [--reveal] [--json]
 
 # 测试云节点连通性与延迟
 ac profile test aliyun-prod
@@ -183,13 +188,13 @@ ac profile test aliyun-prod
 ac profile use aliyun-prod
 
 # 查看或删除 profile
-ac profile show [name] [--json]
+ac profile show [name] [--reveal] [--json]
 ac profile rm <name>
 ```
 
 ### 3. 调度远端 Action 执行
 ```bash
-# 通过 --profile 调度
+# 通过 --profile 调度（自动按 5-tier 多级回退解析 Token）
 ac run check-disk --profile aliyun-prod -i '{"mount": "/data"}'
 
 # 直接传 server 地址调度
@@ -202,16 +207,22 @@ ac run check-disk --server http://1.2.3.4:5177 --token secret123
 
 Playbook（`playbooks/*.md`）为 AI Agent 提供领域任务的逐步操作规程（SOP）：
 
-### 创建 Playbook
+### 1. 创建 Playbook
 ```bash
 ac playbook create <id> --desc "SOP 任务描述" --actions action-a action-b
 ```
 
-### 检查与校验 Playbook
+### 2. 检查与校验 Playbook
 ```bash
 ac playbook list [patterns...] [-i "<regex>"] [--json]
 ac playbook show <id> [--json]
 ac playbook validate
+```
+
+### 3. 任务驱动一键导出 Skill
+指定 Playbook 后，系统会自动提取其 `actions` 依赖，仅将所需 Action 编译进二进制，并生成对应的独立 Skill 包：
+```bash
+ac export skill --playbook <playbook-id>
 ```
 
 ---
@@ -278,22 +289,36 @@ bun test
 
 ## 构建与 Skill 导出
 
-### 构建独立可执行文件
+ActionDock 支持**全量打包（默认）**与**按需精准打包（任务驱动 / 工具驱动）**两种模式：
+
+### 1. 构建独立可执行文件 (`ac build`)
 ```bash
+# 全量构建：打包项目中全部 Action
 ac build [--target <target>] [--out <path>] [--minify]
+
+# 按需构建：仅将指定 Action 编译进独立二进制
+ac build --actions github.get-pr github.review-pr
 ```
 
-### 导出完整 Skill 交付包
+### 2. 导出 Skill 交付包 (`ac export skill`)
 ```bash
+# 全量导出（默认）：包含所有 Action 和所有 Playbook
 ac export skill [--target <target>] [--out <path>] [--archive]
+
+# 任务驱动按需导出（推荐）：仅打包指定 Playbook 及其依赖的 Actions（自动 Tree-shaking 裁剪）
+ac export skill --playbook review-pr [-o <path>] [-z]
+ac export skill --playbook review-pr deploy-service
+
+# 工具驱动按需导出：仅打包指定 Actions，并自动裁剪依赖未包含 Action 的 Playbooks
+ac export skill --actions github.get-pr github.review-pr
 ```
 
-生成的 Skill 目录结构：
+### 生成的 Skill 目录结构：
 ```text
 dist/<package>-skill/
-├── SKILL.md                  # 面向 AI Agent 的调用说明
+├── SKILL.md                  # 面向 AI Agent 的调用说明（自动生成 Action 与 Playbook 索引）
 ├── actiondock.skill.json     # 机器可读的 Skill 清单
-├── playbooks/                # 任务 SOP Markdown 引导文档
+├── playbooks/                # 任务 SOP Markdown 引导文档（按需打包时仅含匹配的 SOP）
 └── bin/
-    └── <package>             # 零安装独立可执行文件
+    └── <package>             # 零安装独立可执行文件（仅含已打包 Action）
 ```

@@ -104,3 +104,22 @@ ac playbook validate
 * Frontmatter 是否包含必填的 `id`。
 * 正文内容是否为空。
 * `actions` 中声明引用的每个 Action ID 是否在当前项目中真实存在，并在缺失时给出警告提示。
+
+---
+
+## 任务驱动（Playbook-Driven）按需打包与导出
+
+当项目中有多个 Playbook 和 Action 时，若只想针对特定 SOP 制作最小可用的独立 Skill 包：
+
+```bash
+# 仅打包 review-pr 任务及其依赖的 Actions
+ac export skill --playbook review-pr
+
+# 导出多个 Playbook 及其依赖
+ac export skill --playbook review-pr deploy-service -o dist/devops-skill
+```
+
+ActionDock 会自动：
+1. 分析指定 Playbook 的 `actions` 依赖。
+2. 自动进行 Action 依赖裁剪（Tree-shaking），仅将所需 Action 编译进独立二进制。
+3. 仅打包指定的 Playbook 文件并生成对应的 `SKILL.md`，彻底避免上下文冗余与依赖悬空。

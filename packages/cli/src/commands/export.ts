@@ -11,6 +11,8 @@ export function registerExportCommand(program: Command): void {
     .description("Export standalone Skill directory with SKILL.md and pre-built standalone executable")
     .option("-t, --target <target>", "Target compilation platform (e.g. host, linux-x64, darwin-arm64, windows-x64)")
     .option("-o, --out <path>", "Output skill directory")
+    .option("-p, --playbook <playbooks...>", "Only export specific playbook(s) and their dependent actions (Playbook-driven minimal export)")
+    .option("-a, --actions <actions...>", "Only export specific action(s)")
     .option("-z, --archive", "Create a .zip archive of the exported skill")
     .action(async (options) => {
       const root = findProjectRoot();
@@ -26,6 +28,8 @@ export function registerExportCommand(program: Command): void {
           target: options.target,
           outDir: options.out,
           archive: options.archive,
+          playbooks: options.playbook,
+          actions: options.actions,
         });
 
         console.log(`[OK] Successfully exported Skill: ${result.packageId} (v${result.version})`);

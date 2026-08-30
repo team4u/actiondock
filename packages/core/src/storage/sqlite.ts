@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { existsSync, mkdirSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { RuntimeError, RunRecord } from "@actiondock/sdk";
 import type { RuntimeStorage, StorageOptions } from "./types";
@@ -15,11 +15,23 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     if (dbPath !== ":memory:") {
       const dir = dirname(dbPath);
       if (!existsSync(dir)) {
-        mkdirSync(dir, { recursive: true });
+        try {
+          mkdirSync(dir, { recursive: true, mode: 0o700 });
+          chmodSync(dir, 0o700);
+        } catch {
+          // Ignore
+        }
       }
     }
 
     this.db = new Database(dbPath);
+    if (dbPath !== ":memory:" && existsSync(dbPath)) {
+      try {
+        chmodSync(dbPath, 0o600);
+      } catch {
+        // Ignore
+      }
+    }
     this.init();
   }
 

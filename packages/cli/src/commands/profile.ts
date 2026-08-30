@@ -5,8 +5,11 @@ import {
   getProfile,
   listProfiles,
   loadProfiles,
+  maskSecretValue,
   removeProfile,
+  resolveProfileToken,
   resolveTarget,
+  toSnakeUpperCase,
   useProfile,
 } from "@actiondock/core";
 import { Command } from "commander";
@@ -22,18 +25,34 @@ export function registerProfileCommands(program: Command): void {
     .command("list [patterns...]")
     .description("List all configured profiles")
     .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
+    .option("--reveal, --show-secrets", "Reveal plain text values for tokens")
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("--json", "Output as JSON")
     .action((patterns, options) => {
       try {
         const effectiveIntent = resolveIntent(options.intent, patterns);
         const shouldFallback = options.fallback !== false;
+        const reveal = Boolean(options.reveal || options.showSecrets);
 
         const list = listProfiles();
+        const enriched = list.map((p) => {
+          const resolved = resolveProfileToken(p.name, p.entry);
+          return {
+            name: p.name,
+            isCurrent: p.isCurrent,
+            serverUrl: p.entry.serverUrl,
+            description: p.entry.description || "",
+            tokenEnv: p.entry.tokenEnv,
+            tokenConfigured: resolved.source !== "none",
+            tokenSource: resolved.source,
+            token: reveal ? resolved.token : (resolved.token ? maskSecretValue(resolved.token) : undefined),
+          };
+        });
+
         const filterRes = filterWithFallbackInfo(
-          list,
+          enriched,
           effectiveIntent,
-          [(p) => p.name, (p) => p.entry.serverUrl, (p) => p.entry.description],
+          [(p) => p.name, (p) => p.serverUrl, (p) => p.description, (p) => p.tokenSource],
           shouldFallback
         );
 
@@ -46,10 +65,24 @@ export function registerProfileCommands(program: Command): void {
           }
           for (const item of filterRes.items) {
             const currentMarker = item.isCurrent ? "* " : "  ";
-            const tokenInfo = item.entry.token ? " [token configured]" : "";
-            const desc = item.entry.description ? ` - ${item.entry.description}` : "";
+            let tokenInfo = "";
+            if (item.tokenSource === "tokenEnv") {
+              tokenInfo = ` [token: env(${item.tokenEnv})]`;
+            } else if (item.tokenSource === "profileEnv") {
+              tokenInfo = ` [token: env(ACTIONDOCK_${toSnakeUpperCase(item.name)}_TOKEN)]`;
+            } else if (item.tokenSource === "profile") {
+              tokenInfo = ` [token: stored in profile]`;
+            } else if (item.tokenSource === "globalEnv") {
+              tokenInfo = ` [token: env(ACTIONDOCK_TOKEN)]`;
+            }
+
+            if (reveal && item.token) {
+              tokenInfo += ` = ${item.token}`;
+            }
+
+            const desc = item.description ? ` - ${item.description}` : "";
             console.log(
-              `${currentMarker}${item.name.padEnd(20)} ${item.entry.serverUrl}${tokenInfo}${desc}`
+              `${currentMarker}${item.name.padEnd(20)} ${item.serverUrl}${tokenInfo}${desc}`
             );
           }
           console.log(
@@ -62,19 +95,25 @@ export function registerProfileCommands(program: Command): void {
       }
     });
 
-
   // ac profile add <name>
   profileCmd
     .command("add <name>")
     .description("Add or update a remote execution profile")
     .requiredOption("-s, --server <url>", "Remote ActionDock server URL (e.g. http://1.2.3.4:5177)")
-    .option("-t, --token <token>", "Authentication token for the remote server")
+    .option("-t, --token <token>", "Authentication token for the remote server (deprecated; prefer --token-env)")
+    .option("--token-env <env>", "Environment variable name containing the authentication token")
     .option("-d, --desc <description>", "Description of this profile/machine")
     .action((name, options) => {
       try {
+        if (options.token) {
+          console.warn(
+            "Warning: storing tokens directly in profiles.json is deprecated. Use --token-env or standard environment variables (e.g. ACTIONDOCK_<PROFILE>_TOKEN) instead."
+          );
+        }
         addProfile(name, {
           serverUrl: options.server,
           token: options.token,
+          tokenEnv: options.tokenEnv,
           description: options.desc,
         });
         console.log(`[OK] Profile '${name}' configured for server: ${options.server}`);
@@ -102,34 +141,57 @@ export function registerProfileCommands(program: Command): void {
   profileCmd
     .command("show [name]")
     .description("Display details of a profile (defaults to active profile)")
+    .option("--reveal, --show-secrets", "Reveal plain text values for tokens")
     .option("--json", "Output as JSON")
     .action((name, options) => {
       try {
         const config = loadProfiles();
         const targetName = name || config.currentProfile || "local";
         const entry = getProfile(targetName);
+        const reveal = Boolean(options.reveal || options.showSecrets);
 
         if (!entry && targetName !== "local") {
           console.error(`Error: Profile '${targetName}' not found.`);
           process.exit(1);
         }
 
+        const resolved = resolveProfileToken(targetName, entry);
+        const displayToken = reveal
+          ? resolved.token
+          : (resolved.token ? maskSecretValue(resolved.token) : undefined);
+
         const data = {
           name: targetName,
           isCurrent: config.currentProfile === targetName,
           serverUrl: entry?.serverUrl || "local",
-          tokenConfigured: Boolean(entry?.token),
+          tokenConfigured: resolved.source !== "none",
+          tokenSource: resolved.source,
+          tokenEnv: entry?.tokenEnv,
+          token: displayToken,
           description: entry?.description || "",
         };
 
         if (options.json) {
           console.log(JSON.stringify(data, null, 2));
         } else {
-          console.log(`Profile:     ${data.name}${data.isCurrent ? " (Active)" : ""}`);
-          console.log(`Server URL:  ${data.serverUrl}`);
-          console.log(`Auth Token:  ${data.tokenConfigured ? "Configured" : "None"}`);
+          console.log(`Profile:      ${data.name}${data.isCurrent ? " (Active)" : ""}`);
+          console.log(`Server URL:   ${data.serverUrl}`);
+          let sourceDetail = "None";
+          if (data.tokenSource === "tokenEnv") {
+            sourceDetail = `Environment Variable ($${data.tokenEnv})`;
+          } else if (data.tokenSource === "profileEnv") {
+            sourceDetail = `Profile Environment Variable ($ACTIONDOCK_${toSnakeUpperCase(data.name)}_TOKEN)`;
+          } else if (data.tokenSource === "profile") {
+            sourceDetail = "Stored in profiles.json (Deprecated)";
+          } else if (data.tokenSource === "globalEnv") {
+            sourceDetail = "Global Environment Variable ($ACTIONDOCK_TOKEN)";
+          }
+          console.log(`Auth Source:  ${sourceDetail}`);
+          if (data.tokenConfigured) {
+            console.log(`Token Value:  ${data.token}`);
+          }
           if (data.description) {
-            console.log(`Description: ${data.description}`);
+            console.log(`Description:  ${data.description}`);
           }
         }
       } catch (err: any) {

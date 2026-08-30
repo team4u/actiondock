@@ -240,6 +240,16 @@ describe("CLI End-to-End", () => {
       existsSync(join(tempDir, "dist", "github-ops-skill", "bin", "github-ops"))
     ).toBe(true);
 
+    // 10b. export skill with --playbook selective flag
+    const selectiveOut = join(tempDir, "dist", "custom-skill");
+    const exportSelectiveProc = runCli(
+      ["export", "skill", "--playbook", "greet-user", "-o", selectiveOut],
+      tempDir
+    );
+    expect(exportSelectiveProc.exitCode).toBe(0);
+    expect(existsSync(join(selectiveOut, "SKILL.md"))).toBe(true);
+    expect(existsSync(join(selectiveOut, "playbooks", "greet-user.md"))).toBe(true);
+
     // 11. link package and execute from outside directory
     const linkProc = runCli(["link"], tempDir);
     expect(linkProc.exitCode).toBe(0);
@@ -295,17 +305,44 @@ describe("CLI End-to-End", () => {
       expect(addProfileProc.exitCode).toBe(0);
       expect(addProfileProc.stdout.toString()).toContain("[OK] Profile 'cloud-aliyun' configured");
 
+      // Add profile with --token-env
+      const addTokenEnvProc = runCli(
+        ["profile", "add", "cloud-token-env", "--server", serverUrl, "--token-env", "REMOTE_TEST_TOKEN", "--desc", "Token Env Node"],
+        tmpdir(),
+        env
+      );
+      expect(addTokenEnvProc.exitCode).toBe(0);
+      expect(addTokenEnvProc.stdout.toString()).toContain("[OK] Profile 'cloud-token-env' configured");
+
       const showProfileProc = runCli(["profile", "show", "cloud-aliyun", "--json"], tmpdir(), env);
       expect(showProfileProc.exitCode).toBe(0);
       const profileData = JSON.parse(showProfileProc.stdout.toString());
       expect(profileData.name).toBe("cloud-aliyun");
       expect(profileData.serverUrl).toBe(serverUrl);
       expect(profileData.tokenConfigured).toBe(true);
+      expect(profileData.tokenSource).toBe("profile");
+      expect(profileData.token).toBe("********");
+
+      const showRevealProc = runCli(["profile", "show", "cloud-aliyun", "--reveal", "--json"], tmpdir(), env);
+      expect(showRevealProc.exitCode).toBe(0);
+      const revealData = JSON.parse(showRevealProc.stdout.toString());
+      expect(revealData.token).toBe(SECRET);
+
+      const showTokenEnvProc = runCli(
+        ["profile", "show", "cloud-token-env", "--reveal", "--json"],
+        tmpdir(),
+        { ...env, REMOTE_TEST_TOKEN: SECRET }
+      );
+      expect(showTokenEnvProc.exitCode).toBe(0);
+      const tokenEnvData = JSON.parse(showTokenEnvProc.stdout.toString());
+      expect(tokenEnvData.tokenSource).toBe("tokenEnv");
+      expect(tokenEnvData.token).toBe(SECRET);
 
       const listProfileProc = runCli(["profile", "list", "--json"], tmpdir(), env);
       expect(listProfileProc.exitCode).toBe(0);
       const listProfilesData = JSON.parse(listProfileProc.stdout.toString());
       expect(listProfilesData.some((p: any) => p.name === "cloud-aliyun")).toBe(true);
+      expect(listProfilesData.some((p: any) => p.name === "cloud-token-env")).toBe(true);
 
       const listProfileIntent = runCli(["profile", "list", "--intent", "aliyun|tencent", "--json"], tmpdir(), env);
       expect(listProfileIntent.exitCode).toBe(0);
@@ -336,7 +373,6 @@ describe("CLI End-to-End", () => {
       );
       expect(remoteListIntentProc.exitCode).toBe(0);
       expect(JSON.parse(remoteListIntentProc.stdout.toString()).length).toBe(1);
-
 
       // 6. Execute action on remote server via ac run --profile
       const remoteRunProc = runCli(

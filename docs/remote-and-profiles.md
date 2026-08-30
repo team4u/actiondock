@@ -28,8 +28,11 @@
 登录到你的云服务器（需要已安装 ActionDock CLI `ac`），进入 Action 项目目录（或注册了全局包的环境），启动服务：
 
 ```bash
-# 启动 HTTP Runner 监听 5177 端口，并设置访问密钥
+# 启动 HTTP Runner（默认安全绑定 127.0.0.1）
 ac serve --port 5177 --token my-secret-token-12345
+
+# 暴露给局域网或公网网卡（0.0.0.0 强制要求配置 Token，或传入 --allow-insecure-no-auth）
+ac serve --host 0.0.0.0 --port 5177 --token my-secret-token-12345 --cors-origin http://localhost:3000 --max-body 1mb
 ```
 
 控制台会显示服务已就绪：
@@ -37,9 +40,11 @@ ac serve --port 5177 --token my-secret-token-12345
 ======================================================
   ActionDock 2.0 HTTP Runner Server
 ======================================================
-  * Listening on:    http://0.0.0.0:5177
+  * Listening on:    http://127.0.0.1:5177
   * Project:         My Cloud Ops (org.cloud-ops)
-  * Authentication:  Bearer Token Enabled
+  * Authentication:  Bearer Token / Query Token Enabled
+  * CORS Origins:    Disabled (Default)
+  * Max Body Size:   1mb
   * Health Endpoint: http://127.0.0.1:5177/api/v1/health
 ======================================================
 ```
@@ -48,29 +53,37 @@ ac serve --port 5177 --token my-secret-token-12345
 
 ### 第二步：在本地配置 Profile (`ac profile add`)
 
-在本地机器上，使用 `ac profile add` 命令将远端云机器注册为一个命名 Profile：
+在本地机器上，使用 `ac profile add` 命令将远端云机器注册为一个命名 Profile。**推荐使用 `--token-env` 关联环境变量名**，避免明文持久化 Token：
 
 ```bash
-# 添加阿里云生产节点
+# 1. 推荐：通过环境变量管理 Token
+export ACTIONDOCK_ALIYUN_PROD_TOKEN=my-secret-token-12345
 ac profile add aliyun-prod \
   --server http://114.115.116.117:5177 \
-  --token my-secret-token-12345 \
+  --token-env ACTIONDOCK_ALIYUN_PROD_TOKEN \
   --desc "阿里云华东生产机器"
 
-# 添加 AWS 测试节点
+# 2. 或直接依赖标准命名推导规则（无需显式配置 tokenEnv）：
+# 若 Profile 名为 aws-test，ActionDock 会自动查找环境变量 ACTIONDOCK_AWS_TEST_TOKEN 或 AWS_TEST_TOKEN
+export ACTIONDOCK_AWS_TEST_TOKEN=aws-secret-token
 ac profile add aws-test \
   --server https://aws-runner.example.com \
-  --token aws-secret-token \
   --desc "AWS 美西测试节点"
 ```
+
+> **安全提示**：配置文件 `~/.actiondock/profiles.json` 会自动应用 POSIX `0o600` 文件权限与 `0o700` 目录权限保护。
 
 ---
 
 ### 第三步：测试连通性与查看状态
 
 ```bash
-# 列出所有配置的 profile
+# 列出所有配置的 profile（默认掩码脱敏并标注 Token 来源）
 ac profile list
+
+# 查看包含明文 Token 的详情
+ac profile list --reveal
+ac profile show aliyun-prod --reveal
 
 # 测试与阿里云节点的连接延迟和健康状态
 ac profile test aliyun-prod
@@ -121,6 +134,16 @@ ac profile use local
 4. **环境变量**：`ACTIONDOCK_PROFILE`
 5. **当前激活的 Profile**：`~/.actiondock/profiles.json` 中的 `currentProfile`
 6. **本地默认执行**（`local`）
+
+### Token 多级解析优先级 (Token Resolution)
+
+在选定 Remote 目标后，Token 按照与 Config 体系相同的 5-tier 多级回退解析：
+
+1. **CLI 显式参数**：`--token <token>`（最高优先级）
+2. **Profile 显式绑定的环境变量**：`profile.tokenEnv` 指定的环境变量
+3. **按命名空间规范推导的环境变量**：`ACTIONDOCK_<PROFILE>_TOKEN` 或 `<PROFILE>_TOKEN`
+4. **Profile 中存储的 Token**：`profile.token`（兼容历史，已弃用）
+5. **全局兜底环境变量**：`ACTIONDOCK_TOKEN`
 
 ---
 

@@ -14,6 +14,8 @@ export interface ExportSkillOptions {
   target?: string;
   outDir?: string;
   archive?: boolean;
+  playbooks?: string[];
+  actions?: string[];
 }
 
 export interface ExportSkillResult {
@@ -34,10 +36,73 @@ export async function exportSkill(
   const target = options.target || "host";
 
   const actionsMap = await loadActions(root, config.actionsDir);
-  const actions = Array.from(actionsMap.values());
-
   const playbooksMap = loadPlaybooks(root, config.playbooksDir);
-  const playbooks = Array.from(playbooksMap.values());
+
+  let selectedPlaybooks = Array.from(playbooksMap.values());
+  let selectedActions = Array.from(actionsMap.values());
+
+  // 1. If playbooks are explicitly specified (Playbook-driven minimal export)
+  if (options.playbooks && options.playbooks.length > 0) {
+    const specifiedPlaybookIds = new Set(options.playbooks);
+    const pbList = [];
+    for (const id of specifiedPlaybookIds) {
+      const pb = playbooksMap.get(id);
+      if (!pb) {
+        throw new Error(
+          `Playbook '${id}' specified in export options not found in project`
+        );
+      }
+      pbList.push(pb);
+    }
+    selectedPlaybooks = pbList;
+
+    // If actions were not explicitly specified, derive required actions from selected playbooks
+    if (!options.actions || options.actions.length === 0) {
+      const requiredActions = new Set<string>();
+      for (const pb of selectedPlaybooks) {
+        if (pb.actions) {
+          for (const act of pb.actions) {
+            requiredActions.add(act);
+          }
+        }
+      }
+      if (requiredActions.size > 0) {
+        for (const actId of requiredActions) {
+          if (!actionsMap.has(actId)) {
+            console.warn(
+              `[WARN] Action '${actId}' referenced in playbook is not found in project`
+            );
+          }
+        }
+        selectedActions = Array.from(actionsMap.values()).filter((a) =>
+          requiredActions.has(a.id)
+        );
+      }
+    }
+  }
+
+  // 2. If actions are explicitly specified (Action-driven export)
+  if (options.actions && options.actions.length > 0) {
+    const specifiedActionIds = new Set(options.actions);
+    for (const actId of specifiedActionIds) {
+      if (!actionsMap.has(actId)) {
+        throw new Error(
+          `Action '${actId}' specified in export options not found in project`
+        );
+      }
+    }
+    selectedActions = Array.from(actionsMap.values()).filter((a) =>
+      specifiedActionIds.has(a.id)
+    );
+
+    // If playbooks were not explicitly specified, tree-shake playbooks whose required actions are not included
+    if (!options.playbooks || options.playbooks.length === 0) {
+      selectedPlaybooks = selectedPlaybooks.filter((pb) => {
+        if (!pb.actions || pb.actions.length === 0) return true;
+        return pb.actions.every((a) => specifiedActionIds.has(a));
+      });
+    }
+  }
 
   const pkgSlug = config.id.includes("/")
     ? config.id.split("/").pop()!
@@ -56,7 +121,7 @@ export async function exportSkill(
   mkdirSync(binDir, { recursive: true });
   mkdirSync(playbooksDestDir, { recursive: true });
 
-  // 2. Build standalone binary
+  // 2. Build standalone binary with selected actions
   const binaryName = pkgSlug;
   const binaryPath = join(binDir, binaryName);
 
@@ -64,26 +129,33 @@ export async function exportSkill(
     projectRoot: root,
     target: options.target,
     outfile: binaryPath,
+    actions: selectedActions.map((a) => a.id),
   });
 
   // 3. Generate SKILL.md
   const skillMd = generateSkillMd(
     config,
-    actions,
-    playbooks,
+    selectedActions,
+    selectedPlaybooks,
     `./bin/${binaryName}`
   );
   writeFileSync(join(skillDir, "SKILL.md"), skillMd, "utf-8");
 
   // 4. Generate actiondock.skill.json
-  const skillJson = generateSkillJson(config, actions, binaryName, target);
+  const skillJson = generateSkillJson(
+    config,
+    selectedActions,
+    binaryName,
+    target
+  );
   writeFileSync(join(skillDir, "actiondock.skill.json"), skillJson, "utf-8");
 
-  // 5. Copy playbooks
-  const playbookFiles = discoverPlaybookFiles(root, config.playbooksDir);
-  for (const pf of playbookFiles) {
-    const filename = basename(pf);
-    copyFileSync(pf, join(playbooksDestDir, filename));
+  // 5. Copy selected playbooks
+  for (const pb of selectedPlaybooks) {
+    if (pb.filePath && existsSync(pb.filePath)) {
+      const filename = basename(pb.filePath);
+      copyFileSync(pb.filePath, join(playbooksDestDir, filename));
+    }
   }
 
   let archivePath: string | undefined;
@@ -113,7 +185,7 @@ export async function exportSkill(
     target,
     skillDir,
     archivePath,
-    actionsCount: actions.length,
-    playbooksCount: playbooks.length,
+    actionsCount: selectedActions.length,
+    playbooksCount: selectedPlaybooks.length,
   };
 }

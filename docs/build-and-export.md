@@ -80,27 +80,34 @@ ac build --target windows-x64
 
 ---
 
-## 导出自包含 Skill 交付包 (`ac export skill`)
+### 两种导出模式：全量打包 vs 任务驱动按需打包
 
-执行 `ac export skill` 会将独立二进制、标准 `SKILL.md` 指南与 SOP 规程整合为一个开箱即用的交付目录：
-
+#### 1. 全量打包（默认模式）
+如果不传任何过滤参数，系统会将项目内**所有的 Action** 和**所有的 Playbook** 打包进 Skill 中：
 ```bash
 ac export skill
 # 或打包为 .zip 归档文件
 ac export skill --archive
 ```
 
-### 导出的 Skill 目录结构与作用
-
-```text
-dist/github-tools-skill/
-├── SKILL.md                  # 包含标准 YAML Frontmatter 的 Agent 引导文档
-├── actiondock.skill.json     # 机器可读的 Skill 清单（包含 Action 列表与参数 Schema）
-├── playbooks/                # 复制项目内的所有 SOP 规程文件
-│   └── review-pr.md
-└── bin/
-    └── github-tools          # 独立自包含二进制可执行文件
+#### 2. 任务驱动按需打包（Playbook-Driven Export，推荐）
+当项目包含多个业务领域的 Action 和 SOP 时，可通过 `--playbook` 参数指定要导出的 SOP：
+```bash
+ac export skill --playbook review-pr
 ```
+* **自动依赖解析与裁剪（Tree-shaking）**：系统自动读取 `playbooks/review-pr.md` Frontmatter 中的 `actions` 依赖，仅将该任务所需的 Action 编译进独立二进制，其余无关 Action 自动剔除。
+* **干净的产物**：导出的 `playbooks/` 文件夹中仅包含选中的 SOP，生成的 `SKILL.md` 与 `actiondock.skill.json` 仅包含相关 Action 与指南，彻底避免上下文污染与悬空依赖。
+
+#### 3. 工具驱动按需打包（Action-Driven Export）
+```bash
+# 仅打包指定 Action，并自动裁剪依赖未包含 Action 的 Playbooks
+ac export skill --actions github.get-pr github.review-pr
+
+# 仅编译指定 Action 到独立二进制
+ac build --actions github.get-pr github.review-pr
+```
+
+---
 
 ### `SKILL.md` 自动生成规则
 导出的 `SKILL.md` 会自动包含：

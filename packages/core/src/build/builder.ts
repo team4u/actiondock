@@ -10,6 +10,7 @@ export interface BuildOptions {
   target?: string;
   outfile?: string;
   minify?: boolean;
+  actions?: string[];
 }
 
 export interface BuildResult {
@@ -30,25 +31,30 @@ export async function buildProject(options: BuildOptions): Promise<BuildResult> 
     throw new Error(`No valid actions found in ${join(root, config.actionsDir || "actions")}`);
   }
 
+  if (options.actions && options.actions.length > 0) {
+    const requestedActions = new Set(options.actions);
+    for (const reqId of requestedActions) {
+      if (!actionsMap.has(reqId)) {
+        throw new Error(`Action '${reqId}' requested in build options not found in project`);
+      }
+    }
+    for (const id of Array.from(actionsMap.keys())) {
+      if (!requestedActions.has(id)) {
+        actionsMap.delete(id);
+      }
+    }
+  }
+
   // Action imports list
   const actionFiles = discoverActionFiles(root, config.actionsDir);
   const actionImports: ActionImport[] = [];
-
-  for (const [id, act] of actionsMap.entries()) {
-    // Find matching file
-    const match = actionFiles.find((f) => {
-      // Check file content or base
-      return f;
-    });
-    // We can directly use the action file paths
-  }
 
   // Build list of action file mappings
   for (const file of actionFiles) {
     try {
       const imported = await import(file);
       const act = imported.default || imported.action;
-      if (act && act.id) {
+      if (act && act.id && actionsMap.has(act.id)) {
         actionImports.push({
           id: act.id,
           filePath: resolve(file),

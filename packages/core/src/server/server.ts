@@ -8,68 +8,56 @@ import {
   loadPlaybooks,
   loadProjectConfig,
 } from "../project/loader";
-
 import { listLinkedPackages, resolveActionProject } from "../registry/registry";
 import { ActionRunner } from "../runtime/runner";
 import { createStorage } from "../storage";
+import { InvalidJsonError, readJsonBody, RequestTooLargeError } from "./body";
+import { isLoopbackHost, resolveCorsHeaders, verifyBearerToken } from "./security";
 import type { ActionDockServerInstance, ServerOptions } from "./types";
 
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
-};
-
-function jsonResponse(data: unknown, status = 200): Response {
+function jsonResponse(
+  data: unknown,
+  status = 200,
+  corsHeaders: Record<string, string> = {}
+): Response {
   return new Response(JSON.stringify(data, null, 2), {
     status,
     headers: {
       "Content-Type": "application/json",
-      ...CORS_HEADERS,
+      ...corsHeaders,
     },
   });
-}
-
-function checkAuthorization(req: Request, expectedToken?: string): boolean {
-  if (!expectedToken || !expectedToken.trim()) {
-    return true;
-  }
-  const authHeader = req.headers.get("authorization");
-  if (authHeader && authHeader.startsWith("Bearer ")) {
-    const token = authHeader.slice(7).trim();
-    if (token === expectedToken.trim()) {
-      return true;
-    }
-  }
-
-  const url = new URL(req.url);
-  const tokenParam = url.searchParams.get("token");
-  if (tokenParam && tokenParam.trim() === expectedToken.trim()) {
-    return true;
-  }
-
-  return false;
 }
 
 export function startActionDockServer(
   options: ServerOptions = {}
 ): ActionDockServerInstance {
   const port = options.port ?? 5177;
-  const host = options.host ?? "0.0.0.0";
+  const host = options.host ?? "127.0.0.1";
   const token = options.token;
   const customHome = options.customHome;
   const projectRoot = options.projectRoot
     ? resolve(options.projectRoot)
     : findProjectRoot(process.cwd());
 
+  // Non-loopback address requires token authentication by default
+  if (!isLoopbackHost(host) && !token && !options.allowInsecureNoAuth) {
+    throw new Error(
+      "Authentication token is required when binding to a non-loopback address. Use --allow-insecure-no-auth to override."
+    );
+  }
+
   const server = Bun.serve({
     port,
     hostname: host,
     async fetch(req) {
+      const origin = req.headers.get("origin");
+      const corsHeaders = resolveCorsHeaders(origin, options.corsOrigins);
+
       if (req.method === "OPTIONS") {
         return new Response(null, {
           status: 204,
-          headers: CORS_HEADERS,
+          headers: corsHeaders,
         });
       }
 
@@ -78,7 +66,7 @@ export function startActionDockServer(
 
       // 1. Health Check (supports /api/v1/health and /health)
       if (pathname === "/api/v1/health" || pathname === "/health") {
-        if (!checkAuthorization(req, token)) {
+        if (!verifyBearerToken(req, token)) {
           return jsonResponse(
             {
               ok: false,
@@ -87,20 +75,24 @@ export function startActionDockServer(
                 message: "Invalid or missing Bearer token",
               },
             },
-            401
+            401,
+            corsHeaders
           );
         }
-        return jsonResponse({
+        const healthData: Record<string, unknown> = {
           status: "ok",
           version: "2.0.0",
           timestamp: new Date().toISOString(),
           uptime: process.uptime(),
-          projectRoot: projectRoot || null,
-        });
+        };
+        if (options.exposeDebugInfo && projectRoot) {
+          healthData.projectRoot = projectRoot;
+        }
+        return jsonResponse(healthData, 200, corsHeaders);
       }
 
       // Check authentication for remaining endpoints
-      if (!checkAuthorization(req, token)) {
+      if (!verifyBearerToken(req, token)) {
         return jsonResponse(
           {
             ok: false,
@@ -109,7 +101,8 @@ export function startActionDockServer(
               message: "Invalid or missing Bearer token",
             },
           },
-          401
+          401,
+          corsHeaders
         );
       }
 
@@ -120,25 +113,32 @@ export function startActionDockServer(
             const config = loadProjectConfig(projectRoot);
             const actions = await loadActions(projectRoot, config.actionsDir);
             const playbooks = loadPlaybooks(projectRoot, config.playbooksDir);
-            return jsonResponse({
+            const infoData: Record<string, unknown> = {
               ok: true,
               id: config.id,
               name: config.name,
               version: config.version,
               description: config.description,
-              projectRoot,
               actionsCount: actions.size,
               playbooksCount: playbooks.size,
               actions: Array.from(actions.keys()),
               playbooks: Array.from(playbooks.keys()),
-            });
+            };
+            if (options.exposeDebugInfo) {
+              infoData.projectRoot = projectRoot;
+            }
+            return jsonResponse(infoData, 200, corsHeaders);
           } else {
             const linked = listLinkedPackages(customHome);
-            return jsonResponse({
-              ok: true,
-              version: "2.0.0",
-              linkedPackages: linked,
-            });
+            return jsonResponse(
+              {
+                ok: true,
+                version: "2.0.0",
+                linkedPackages: linked,
+              },
+              200,
+              corsHeaders
+            );
           }
         } catch (err: any) {
           return jsonResponse(
@@ -146,7 +146,8 @@ export function startActionDockServer(
               ok: false,
               error: { code: "INFO_ERROR", message: err.message },
             },
-            500
+            500,
+            corsHeaders
           );
         }
       }
@@ -201,15 +202,15 @@ export function startActionDockServer(
               )
             : actionList;
 
-          return jsonResponse(filtered);
+          return jsonResponse(filtered, 200, corsHeaders);
         } catch (err: any) {
-
           return jsonResponse(
             {
               ok: false,
               error: { code: "ACTIONS_LIST_ERROR", message: err.message },
             },
-            500
+            500,
+            corsHeaders
           );
         }
       }
@@ -236,24 +237,30 @@ export function startActionDockServer(
                   message: `Action '${resolved.actionId}' not found in package '${resolved.packageId}'`,
                 },
               },
-              404
+              404,
+              corsHeaders
             );
           }
 
-          return jsonResponse({
-            id: action.id,
-            packageId: resolved.packageId,
-            description: action.description || "",
-            inputSchema: action.inputSchema || null,
-            outputSchema: action.outputSchema || null,
-          });
+          return jsonResponse(
+            {
+              id: action.id,
+              packageId: resolved.packageId,
+              description: action.description || "",
+              inputSchema: action.inputSchema || null,
+              outputSchema: action.outputSchema || null,
+            },
+            200,
+            corsHeaders
+          );
         } catch (err: any) {
           return jsonResponse(
             {
               ok: false,
               error: { code: "ACTION_NOT_FOUND", message: err.message },
             },
-            404
+            404,
+            corsHeaders
           );
         }
       }
@@ -264,11 +271,36 @@ export function startActionDockServer(
         const actionId = decodeURIComponent(actionRunMatch[1]);
         let body: any = {};
         try {
-          const raw = await req.text();
-          if (raw && raw.trim()) {
-            body = JSON.parse(raw);
-          }
+          body = await readJsonBody(req, { maxBytes: options.maxBodyBytes });
         } catch (err: any) {
+          if (err instanceof RequestTooLargeError) {
+            return jsonResponse(
+              {
+                ok: false,
+                runId: randomUUID(),
+                error: {
+                  code: "REQUEST_TOO_LARGE",
+                  message: err.message,
+                },
+              },
+              413,
+              corsHeaders
+            );
+          }
+          if (err instanceof InvalidJsonError) {
+            return jsonResponse(
+              {
+                ok: false,
+                runId: randomUUID(),
+                error: {
+                  code: "INVALID_JSON",
+                  message: err.message,
+                },
+              },
+              400,
+              corsHeaders
+            );
+          }
           return jsonResponse(
             {
               ok: false,
@@ -278,7 +310,8 @@ export function startActionDockServer(
                 message: `Failed to parse request body: ${err.message}`,
               },
             },
-            400
+            400,
+            corsHeaders
           );
         }
 
@@ -298,14 +331,14 @@ export function startActionDockServer(
             packageId: config.id,
             storage,
             projectConfig: config,
-            configOverrides: body.config || {},
+            configOverrides: body?.config || {},
             actions,
           });
 
-          const result = await runner.execute(resolved.actionId, body.input || {});
+          const result = await runner.execute(resolved.actionId, body?.input || {});
           storage.close();
 
-          return jsonResponse(result, result.ok ? 200 : 200);
+          return jsonResponse(result, 200, corsHeaders);
         } catch (err: any) {
           return jsonResponse(
             {
@@ -316,7 +349,8 @@ export function startActionDockServer(
                 message: err.message || String(err),
               },
             },
-            500
+            500,
+            corsHeaders
           );
         }
       }
@@ -330,7 +364,8 @@ export function startActionDockServer(
             message: `Route not found: ${req.method} ${pathname}`,
           },
         },
-        404
+        404,
+        corsHeaders
       );
     },
   });

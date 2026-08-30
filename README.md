@@ -215,7 +215,8 @@ dist/my-tools-skill/
 | `ac config list [patterns...] [-i <regex>]` | 查看与管理本地 SQLite 运行时配置（支持意图过滤） |
 | `ac state list [prefix] [-i <regex>]` | 查看与管理本地 SQLite 共享状态存储（支持前缀与意图正则） |
 | `ac runs list [patterns...] [-i <regex>]` | 查看 Action 执行历史与输入输出记录（支持意图过滤） |
-
+| `ac profile list [--reveal] [--json]` | 管理多环境与远程云机器 Profile（支持 Token 来源标注与脱敏） |
+| `ac serve [--port <p>] [--host <h>]` | 启动轻量安全 HTTP Runner 服务端（默认安全监听 127.0.0.1） |
 | `ac test` | 使用 Bun Test Runner 执行单元测试 |
 | `ac build [--target <target>] [--out <path>]` | 将项目编译为单个自包含独立二进制（支持交叉编译：`linux-x64` / `darwin-x64` / `darwin-arm64` / `windows-x64`） |
 | `ac export skill [--target <target>] [--out <path>]` | 导出包含 `SKILL.md` + 独立二进制的完整 Skill 交付包 |

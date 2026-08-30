@@ -1,7 +1,13 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import type { ProfileEntry, ProfilesConfig, ResolvedTarget } from "./types";
+import { toSnakeUpperCase } from "../runtime/env";
+import type {
+  ProfileEntry,
+  ProfilesConfig,
+  ResolvedTarget,
+  TokenResolutionSource,
+} from "./types";
 
 const PROFILE_NAME_REGEX = /^[a-zA-Z0-9_\-\.]+$/;
 
@@ -62,8 +68,28 @@ export function loadProfiles(customHome?: string): ProfilesConfig {
 
 export function saveProfiles(data: ProfilesConfig, customHome?: string): void {
   const filePath = getProfilesFilePath(customHome);
-  mkdirSync(dirname(filePath), { recursive: true });
-  writeFileSync(filePath, JSON.stringify(data, null, 2) + "\n", "utf-8");
+  const dir = dirname(filePath);
+  try {
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    try {
+      chmodSync(dir, 0o700);
+    } catch {
+      // Ignore on systems where chmod is not supported
+    }
+  } catch {
+    // Ignore
+  }
+
+  writeFileSync(filePath, JSON.stringify(data, null, 2) + "\n", {
+    encoding: "utf-8",
+    mode: 0o600,
+  });
+
+  try {
+    chmodSync(filePath, 0o600);
+  } catch {
+    // Ignore on systems where chmod is not supported
+  }
 }
 
 export function addProfile(
@@ -87,6 +113,7 @@ export function addProfile(
   profilesConfig.profiles[trimmedName] = {
     serverUrl: normalizedServer,
     token: entry.token?.trim() || undefined,
+    tokenEnv: entry.tokenEnv?.trim() || undefined,
     description: entry.description?.trim() || undefined,
   };
 
@@ -167,16 +194,71 @@ export function listProfiles(
   return entries;
 }
 
+/**
+ * Resolves token following multi-tier precedence:
+ * 1. CLI explicit --token
+ * 2. profile.tokenEnv specified environment variable
+ * 3. Derived profile environment variable: ACTIONDOCK_<PROFILE>_TOKEN or <PROFILE>_TOKEN
+ * 4. Stored token in profiles.json (deprecated)
+ * 5. Global ACTIONDOCK_TOKEN
+ */
+export function resolveProfileToken(
+  profileName?: string,
+  entry?: ProfileEntry,
+  explicitToken?: string
+): { token?: string; source: TokenResolutionSource } {
+  // 1. Explicit CLI --token
+  if (explicitToken && explicitToken.trim()) {
+    return { token: explicitToken.trim(), source: "cli" };
+  }
+
+  // 2. Explicit tokenEnv in profile
+  if (entry?.tokenEnv && entry.tokenEnv.trim()) {
+    const envKey = entry.tokenEnv.trim();
+    const envVal = process.env[envKey];
+    if (envVal !== undefined && envVal.trim()) {
+      return { token: envVal.trim(), source: "tokenEnv" };
+    }
+  }
+
+  // 3. Derived profile environment variable: ACTIONDOCK_<PROFILE>_TOKEN / <PROFILE>_TOKEN
+  if (profileName && profileName !== "local") {
+    const snakeName = toSnakeUpperCase(profileName);
+    const candidate1 = `ACTIONDOCK_${snakeName}_TOKEN`;
+    const candidate2 = `${snakeName}_TOKEN`;
+    if (process.env[candidate1] && process.env[candidate1]!.trim()) {
+      return { token: process.env[candidate1]!.trim(), source: "profileEnv" };
+    }
+    if (process.env[candidate2] && process.env[candidate2]!.trim()) {
+      return { token: process.env[candidate2]!.trim(), source: "profileEnv" };
+    }
+  }
+
+  // 4. Stored token in profiles.json (deprecated fallback)
+  if (entry?.token && entry.token.trim()) {
+    return { token: entry.token.trim(), source: "profile" };
+  }
+
+  // 5. Global ACTIONDOCK_TOKEN
+  if (process.env.ACTIONDOCK_TOKEN && process.env.ACTIONDOCK_TOKEN.trim()) {
+    return { token: process.env.ACTIONDOCK_TOKEN.trim(), source: "globalEnv" };
+  }
+
+  return { token: undefined, source: "none" };
+}
+
 export function resolveTarget(
   options?: { profile?: string; server?: string; token?: string },
   customHome?: string
 ): ResolvedTarget {
   // 1. Explicit CLI --server flag
   if (options?.server && options.server.trim()) {
+    const resolvedToken = resolveProfileToken(undefined, undefined, options.token);
     return {
       type: "remote",
       serverUrl: normalizeServerUrl(options.server),
-      token: options.token?.trim() || process.env.ACTIONDOCK_TOKEN,
+      token: resolvedToken.token,
+      tokenSource: resolvedToken.source,
     };
   }
 
@@ -194,20 +276,24 @@ export function resolveTarget(
         `Profile '${pName}' not found. Configure it with 'ac profile add ${pName} --server <url>'`
       );
     }
+    const resolvedToken = resolveProfileToken(pName, found, options.token);
     return {
       type: "remote",
       profileName: pName,
       serverUrl: found.serverUrl,
-      token: options.token?.trim() || found.token || process.env.ACTIONDOCK_TOKEN,
+      token: resolvedToken.token,
+      tokenSource: resolvedToken.source,
     };
   }
 
   // 3. Environment variable ACTIONDOCK_SERVER_URL
   if (process.env.ACTIONDOCK_SERVER_URL && process.env.ACTIONDOCK_SERVER_URL.trim()) {
+    const resolvedToken = resolveProfileToken(undefined, undefined, options?.token);
     return {
       type: "remote",
       serverUrl: normalizeServerUrl(process.env.ACTIONDOCK_SERVER_URL),
-      token: options?.token?.trim() || process.env.ACTIONDOCK_TOKEN,
+      token: resolvedToken.token,
+      tokenSource: resolvedToken.source,
     };
   }
 
@@ -223,11 +309,13 @@ export function resolveTarget(
         `Profile '${pName}' (from ACTIONDOCK_PROFILE) not found. Configure it with 'ac profile add ${pName} --server <url>'`
       );
     }
+    const resolvedToken = resolveProfileToken(pName, found, options?.token);
     return {
       type: "remote",
       profileName: pName,
       serverUrl: found.serverUrl,
-      token: options?.token?.trim() || found.token || process.env.ACTIONDOCK_TOKEN,
+      token: resolvedToken.token,
+      tokenSource: resolvedToken.source,
     };
   }
 
@@ -236,11 +324,13 @@ export function resolveTarget(
   if (current && current !== "local") {
     const found = profilesConfig.profiles[current];
     if (found && found.serverUrl && found.serverUrl !== "local") {
+      const resolvedToken = resolveProfileToken(current, found, options?.token);
       return {
         type: "remote",
         profileName: current,
         serverUrl: found.serverUrl,
-        token: options?.token?.trim() || found.token || process.env.ACTIONDOCK_TOKEN,
+        token: resolvedToken.token,
+        tokenSource: resolvedToken.source,
       };
     }
   }

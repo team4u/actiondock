@@ -201,4 +201,61 @@ describe("Build & Skill Export Contract", () => {
     expect(res.ok).toBe(true);
     expect(res.data.message).toBe("Hello, Agent!");
   });
+
+  it("supports Playbook-driven selective export (only packages specified playbook and its dependent actions)", async () => {
+    const fs = await import("node:fs");
+    // Add a second action
+    const action2Code = `
+import { defineAction } from "@actiondock/sdk";
+export default defineAction({
+  id: "sample.farewell",
+  description: "Say farewell to user",
+  run: async (ctx) => ({ message: "Goodbye" }),
+});
+`;
+    fs.writeFileSync(join(tempDir, "actions", "farewell.ts"), action2Code, "utf-8");
+
+    // Add a second playbook that only references sample.farewell
+    const pb2Content = `---
+id: farewell-sop
+description: SOP for saying farewell
+actions:
+  - sample.farewell
+---
+# Farewell SOP
+`;
+    fs.writeFileSync(join(tempDir, "playbooks", "farewell-sop.md"), pb2Content, "utf-8");
+
+    // Export only greet-user playbook
+    const exportRes = await exportSkill({
+      projectRoot: tempDir,
+      playbooks: ["greet-user"],
+      outDir: join(tempDir, "dist", "selective-skill"),
+    });
+
+    expect(exportRes.actionsCount).toBe(1);
+    expect(exportRes.playbooksCount).toBe(1);
+
+    // Only greet-user.md should be in playbooks dir, farewell-sop.md must NOT exist
+    expect(existsSync(join(exportRes.skillDir, "playbooks", "greet-user.md"))).toBe(true);
+    expect(existsSync(join(exportRes.skillDir, "playbooks", "farewell-sop.md"))).toBe(false);
+
+    // SKILL.md should only mention sample.greet and greet-user
+    const skillMd = fs.readFileSync(join(exportRes.skillDir, "SKILL.md"), "utf-8");
+    expect(skillMd).toContain("sample.greet");
+    expect(skillMd).not.toContain("sample.farewell");
+    expect(skillMd).toContain("greet-user");
+    expect(skillMd).not.toContain("farewell-sop");
+
+    // Standalone binary in this skill only contains sample.greet
+    const selectiveBin = join(exportRes.skillDir, "bin", "sample-tools");
+    const listProc = Bun.spawnSync([selectiveBin, "list", "--json"], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(listProc.exitCode).toBe(0);
+    const listData = JSON.parse(listProc.stdout.toString());
+    expect(listData.length).toBe(1);
+    expect(listData[0].id).toBe("sample.greet");
+  });
 });

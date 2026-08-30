@@ -1,19 +1,43 @@
 import { resolve } from "node:path";
 import { findProjectRoot, loadProjectConfig, startActionDockServer } from "@actiondock/core";
 import { Command } from "commander";
+import { parseByteSize } from "../utils/bytes";
 
 export function registerServeCommand(program: Command): void {
   program
     .command("serve")
     .description("Start the ActionDock lightweight HTTP Runner server for remote execution")
     .option("-p, --port <port>", "Port to listen on (default: 5177)", "5177")
-    .option("-H, --host <host>", "Host address to bind to (default: 0.0.0.0)", "0.0.0.0")
+    .option("-H, --host <host>", "Host address to bind to (default: 127.0.0.1)", "127.0.0.1")
     .option("-t, --token <token>", "Authentication token for securing the endpoint (or set ACTIONDOCK_TOKEN)")
+    .option("--allow-insecure-no-auth", "Allow non-loopback host binding without authentication token (INSECURE)")
+    .option(
+      "--cors-origin <origin>",
+      "Allowed CORS origin (can be specified multiple times)",
+      (val: string, prev: string[] = []) => [...prev, val],
+      []
+    )
+    .option("--max-body <size>", "Maximum allowed JSON request body size (e.g. 1mb, 500kb)", "1mb")
+    .option("--expose-debug-info", "Expose project root path in health and info responses")
     .option("-d, --dir <path>", "Project root directory (default: current working directory)")
     .action(async (options) => {
       const port = parseInt(options.port, 10) || 5177;
-      const host = options.host || "0.0.0.0";
+      const host = options.host || "127.0.0.1";
       const token = options.token || process.env.ACTIONDOCK_TOKEN;
+      const allowInsecureNoAuth = Boolean(options.allowInsecureNoAuth);
+      const corsOrigins = options.corsOrigin && options.corsOrigin.length > 0 ? options.corsOrigin : undefined;
+      const exposeDebugInfo = Boolean(options.exposeDebugInfo);
+
+      let maxBodyBytes: number | undefined;
+      if (options.maxBody) {
+        try {
+          maxBodyBytes = parseByteSize(options.maxBody);
+        } catch (err: any) {
+          console.error(`Error: ${err.message}`);
+          process.exit(1);
+        }
+      }
+
       const projectRoot = options.dir
         ? resolve(options.dir)
         : findProjectRoot(process.cwd());
@@ -36,6 +60,10 @@ export function registerServeCommand(program: Command): void {
           port,
           host,
           token,
+          allowInsecureNoAuth,
+          corsOrigins,
+          maxBodyBytes,
+          exposeDebugInfo,
           projectRoot: projectRoot || undefined,
         });
 
@@ -44,10 +72,12 @@ export function registerServeCommand(program: Command): void {
         console.log(`======================================================`);
         console.log(`  * Listening on:    http://${host}:${server.port}`);
         console.log(`  * Project:         ${projectName}`);
-        if (projectRoot) {
+        if (projectRoot && exposeDebugInfo) {
           console.log(`  * Root Path:       ${projectRoot}`);
         }
-        console.log(`  * Authentication:  ${token ? "Bearer Token Enabled" : "Disabled (Public/Local)"}`);
+        console.log(`  * Authentication:  ${token ? "Bearer Token / Query Token Enabled" : "Disabled (Public/Local)"}`);
+        console.log(`  * CORS Origins:    ${corsOrigins ? corsOrigins.join(", ") : "Disabled (Default)"}`);
+        console.log(`  * Max Body Size:   ${options.maxBody || "1mb"}`);
         console.log(`  * Health Endpoint: http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${server.port}/api/v1/health`);
         console.log(`======================================================\n`);
         console.log(`Server is ready to accept remote 'ac run' requests.`);
