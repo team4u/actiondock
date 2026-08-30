@@ -11,7 +11,8 @@
       "default": "https://api.github.com"
     },
     "GITHUB_TOKEN": {
-      "description": "GitHub Personal Access Token"
+      "description": "GitHub Personal Access Token",
+      "secret": true
     }
   }
 }

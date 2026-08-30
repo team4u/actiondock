@@ -1,6 +1,7 @@
 export interface ConfigItemDefinition {
   description?: string;
   default?: unknown;
+  secret?: boolean;
 }
 
 export interface ProjectConfig {

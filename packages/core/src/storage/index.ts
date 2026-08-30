@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { SqliteRuntimeStorage } from "./sqlite";
 import type { RuntimeStorage, StorageOptions } from "./types";
 
+export * from "./mask";
 export * from "./sqlite";
 export * from "./types";
 

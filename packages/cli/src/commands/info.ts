@@ -104,8 +104,9 @@ export function registerInfoCommand(program: Command): void {
             console.log(`\nDeclared Config Keys:`);
             for (const k of info.configDeclared) {
               const item = config.config?.[k];
+              const isSec = item?.secret ? " [secret]" : "";
               const def = item?.default !== undefined ? ` (default: ${JSON.stringify(item.default)})` : "";
-              console.log(`  - ${k.padEnd(24)} ${item?.description || ""}${def}`);
+              console.log(`  - ${k.padEnd(24)} ${item?.description || ""}${def}${isSec}`);
             }
           }
         }

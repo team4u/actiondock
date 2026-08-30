@@ -2,7 +2,9 @@ import {
   createGlobalStorage,
   createStorage,
   filterWithFallbackInfo,
+  isSecretConfigKey,
   loadProjectConfig,
+  maskSecretValue,
   resolvePackageRoot,
 } from "@actiondock/core";
 import { Command } from "commander";
@@ -20,19 +22,21 @@ export function registerConfigCommands(program: Command): void {
     .option("-P, --package <id>", "Target package ID or path")
     .option("-g, --global", "Show only global configurations")
     .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
+    .option("--reveal, --show-secrets", "Reveal plain text values for secrets")
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("--json", "Output as JSON")
     .action((patterns, options) => {
       try {
         const effectiveIntent = resolveIntent(options.intent, patterns);
         const shouldFallback = options.fallback !== false;
+        const reveal = options.reveal || options.showSecrets;
 
         const globalStorage = createGlobalStorage();
         const globalConfig = globalStorage.listConfig();
 
         const projectRoot = !options.global ? resolvePackageRoot(options.package) : null;
         let projectStored: Record<string, unknown> = {};
-        let declaredDefaults: Record<string, { description?: string; default?: unknown }> = {};
+        let declaredDefaults: Record<string, { description?: string; default?: unknown; secret?: boolean }> = {};
         let packageId = "global";
 
         if (projectRoot) {
@@ -57,24 +61,28 @@ export function registerConfigCommands(program: Command): void {
         ]);
 
         const rawList = Array.from(allKeys).map((k) => {
-          let value: unknown;
+          let rawValue: unknown;
           let source: "project" | "global" | "default" = "default";
 
           if (projectStored[k] !== undefined) {
-            value = projectStored[k];
+            rawValue = projectStored[k];
             source = "project";
           } else if (globalConfig[k] !== undefined) {
-            value = globalConfig[k];
+            rawValue = globalConfig[k];
             source = "global";
           } else {
-            value = declaredDefaults[k]?.default;
+            rawValue = declaredDefaults[k]?.default;
             source = "default";
           }
 
+          const isSecret = isSecretConfigKey(k, declaredDefaults[k]);
+          const displayValue = !reveal && isSecret && rawValue !== undefined ? maskSecretValue(rawValue) : rawValue;
+
           return {
             key: k,
-            value,
+            value: displayValue,
             source,
+            secret: isSecret,
             description: declaredDefaults[k]?.description || "",
           };
         });
@@ -98,8 +106,9 @@ export function registerConfigCommands(program: Command): void {
             console.log("  (No configuration entries found)");
           }
           for (const item of filterRes.items) {
-            const valStr = JSON.stringify(item.value);
-            console.log(`  ${item.key.padEnd(24)} = ${valStr} (${item.source})`);
+            const valStr = typeof item.value === "string" && item.secret && !reveal ? item.value : JSON.stringify(item.value);
+            const secretBadge = item.secret ? ", secret" : "";
+            console.log(`  ${item.key.padEnd(24)} = ${valStr} (${item.source}${secretBadge})`);
           }
         }
       } catch (err: any) {
@@ -114,9 +123,11 @@ export function registerConfigCommands(program: Command): void {
     .description("Get a configuration value")
     .option("-P, --package <id>", "Target package ID or path")
     .option("-g, --global", "Get from global configuration only")
+    .option("--reveal, --show-secrets", "Reveal plain text value for secret")
     .option("--json", "Output as JSON")
     .action((key, options) => {
       try {
+        const reveal = options.reveal || options.showSecrets;
         const globalStorage = createGlobalStorage();
         const globalVal = globalStorage.getConfig(key);
         globalStorage.close();
@@ -124,10 +135,12 @@ export function registerConfigCommands(program: Command): void {
         const projectRoot = !options.global ? resolvePackageRoot(options.package) : null;
         let projVal: unknown = undefined;
         let fallbackVal: unknown = undefined;
+        let declaredItem: { description?: string; default?: unknown; secret?: boolean } | undefined;
 
         if (projectRoot) {
           try {
             const projConfig = loadProjectConfig(projectRoot);
+            declaredItem = projConfig.config?.[key];
             const projectStorage = createStorage(projConfig.id, { projectRoot });
             projVal = projectStorage.getConfig(key);
             fallbackVal = projConfig.config?.[key]?.default;
@@ -137,9 +150,12 @@ export function registerConfigCommands(program: Command): void {
           }
         }
 
-        let effective = projVal !== undefined ? projVal : globalVal !== undefined ? globalVal : fallbackVal;
-        let source: string =
+        const rawEffective = projVal !== undefined ? projVal : globalVal !== undefined ? globalVal : fallbackVal;
+        const source: string =
           projVal !== undefined ? "project" : globalVal !== undefined ? "global" : fallbackVal !== undefined ? "default" : "undefined";
+
+        const isSecret = isSecretConfigKey(key, declaredItem);
+        const effective = !reveal && isSecret && rawEffective !== undefined ? maskSecretValue(rawEffective) : rawEffective;
 
         if (options.json) {
           console.log(
@@ -148,13 +164,14 @@ export function registerConfigCommands(program: Command): void {
                 key,
                 value: effective,
                 source,
+                secret: isSecret,
               },
               null,
               2
             )
           );
         } else {
-          console.log(effective !== undefined ? JSON.stringify(effective) : "undefined");
+          console.log(effective !== undefined ? (typeof effective === "string" && isSecret && !reveal ? effective : JSON.stringify(effective)) : "undefined");
         }
       } catch (err: any) {
         console.error(`Error: ${err.message}`);
@@ -178,20 +195,22 @@ export function registerConfigCommands(program: Command): void {
         }
 
         const projectRoot = !options.global ? resolvePackageRoot(options.package) : null;
+        const isSecret = isSecretConfigKey(key);
+        const displayVal = isSecret ? maskSecretValue(parsed) : JSON.stringify(parsed);
 
         if (options.global || !projectRoot) {
           // Set in Global storage (~/.actiondock/global.db)
           const globalStorage = createGlobalStorage();
           globalStorage.setConfig(key, parsed);
           globalStorage.close();
-          console.log(`[OK] Global config '${key}' set to ${JSON.stringify(parsed)}`);
+          console.log(`[OK] Global config '${key}' set to ${displayVal}`);
         } else {
           // Set in Project storage
           const projConfig = loadProjectConfig(projectRoot);
           const storage = createStorage(projConfig.id, { projectRoot });
           storage.setConfig(key, parsed);
           storage.close();
-          console.log(`[OK] Config '${key}' set to ${JSON.stringify(parsed)} in ${projConfig.id}`);
+          console.log(`[OK] Config '${key}' set to ${displayVal} in ${projConfig.id}`);
         }
       } catch (err: any) {
         console.error(`Error: ${err.message}`);
