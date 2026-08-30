@@ -1,4 +1,4 @@
-import type { ExecutionManager, RuntimeStorage } from "@actiondock/core";
+import type { ExecutionManager, RuntimeStorage, ServerRuntimeRegistry } from "@actiondock/core";
 import type { ActionDefinition, ExecutionResult, RunRecord, RunStatus } from "@actiondock/sdk";
 
 export type McpTaskStatus = "working" | "completed" | "failed" | "cancelled";
@@ -43,12 +43,16 @@ export function toMcpTaskPayload(run: RunRecord): McpTaskPayload {
 
 export interface ActionDockMcpOptions {
   projectRoot?: string;
+  projectRoots?: string[];
   packageId?: string;
+  packageIds?: string[];
+  all?: boolean;
   customHome?: string;
   configOverrides?: Record<string, unknown>;
   timeoutMs?: number;
   actions?: Map<string, ActionDefinition>;
   storage?: RuntimeStorage;
+  runtimeRegistry?: ServerRuntimeRegistry;
   executionManager?: ExecutionManager;
 }
 

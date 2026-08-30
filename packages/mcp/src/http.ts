@@ -1,7 +1,5 @@
 import {
-  findProjectRoot,
   isLoopbackHost,
-  loadProjectConfig,
   resolveCorsHeaders,
   ServerRuntimeRegistry,
   verifyBearerToken,
@@ -31,26 +29,9 @@ export function startMcpHttpServer(
 
   const handler = createMcpHandler(
     () => {
-      let resolvedRoot = options.projectRoot;
-      if (!resolvedRoot && !options.packageId) {
-        resolvedRoot = findProjectRoot(process.cwd()) || undefined;
-      }
-      let packageId = options.packageId;
-      if (!packageId && resolvedRoot) {
-        try {
-          const cfg = loadProjectConfig(resolvedRoot);
-          packageId = cfg.id;
-        } catch {
-          // ignore
-        }
-      }
-      const storage = packageId
-        ? runtimeRegistry.getStorage(packageId, resolvedRoot)
-        : undefined;
-
       return createActionDockMcpServer({
         ...options,
-        storage,
+        runtimeRegistry,
         executionManager: runtimeRegistry.executionManager,
       });
     },

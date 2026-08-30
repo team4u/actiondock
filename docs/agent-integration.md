@@ -11,14 +11,14 @@ ActionDock 2.0 导出的核心产物是一个符合业界通用规范的 **Skill
 如果您的 AI Agent（如 Claude Code、Cursor、VS Code、Windsurf 等）原生支持 MCP 协议，可以直接将 ActionDock Package 作为 MCP Tool Server 接入：
 
 ### 1. STDIO 直连（最简便）
-在 MCP 客户端配置文件中添加：
+在 MCP 客户端配置文件中添加（支持单个或多个目录聚合，或通过 `--all` 聚合全局已 link 的 packages）：
 
 ```json
 {
   "mcpServers": {
-    "github-tools": {
+    "actiondock-tools": {
       "command": "bunx",
-      "args": ["@actiondock/cli", "mcp", "--dir", "/path/to/my-tools"]
+      "args": ["@actiondock/cli", "mcp", "-d", "/path/to/my-tools", "-d", "/path/to/other-tools"]
     }
   }
 }
@@ -26,10 +26,11 @@ ActionDock 2.0 导出的核心产物是一个符合业界通用规范的 **Skill
 
 ### 2. HTTP 远程微服务接入
 ```bash
-ac mcp serve --port 5178 --token <secret-token>
+# 暴露单个包或通过 -d / --package / --all 聚合多个包
+ac mcp serve -d ./pkg-a -d ./pkg-b --port 5178 --token <secret-token>
 ```
 ### 3. 长任务与异步执行 (MCP Tasks Extension)
-如果 Agent 需要执行耗时较长的工作流（如多阶段抓取、持续同步等），可直接使用 MCP Tasks 扩展（`execution: { mode: "async" }`），并配合 `tasks/get`、`tasks/cancel` 端点进行追踪与控制。
+如果 Agent 需要执行耗时较长的工作流（如多阶段抓取、持续同步等），可直接使用 MCP Tasks 扩展（`execution: { mode: "async" }`），并配合 `tasks/get`、`tasks/cancel`、`tasks/list` 端点进行跨包追踪与控制。
 
 详见 **[MCP 适配器指南](mcp-integration.md)**。
 

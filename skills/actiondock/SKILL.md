@@ -219,23 +219,24 @@ ac runs cancel <run-id> [--server http://127.0.0.1:5177 | --profile aliyun-prod]
 
 ## Model Context Protocol (MCP) 服务
 
-ActionDock 2.0 原生支持作为 **Model Context Protocol (MCP)** 服务端运行，将项目中定义的所有 Action 自动暴露为标准 MCP Tools，供 Claude Code、Cursor、VS Code、Windsurf 等任意 MCP Host 直接连接调用。
+ActionDock 2.0 原生支持作为 **Model Context Protocol (MCP)** 服务端运行，将项目中定义的所有 Action 自动暴露为标准 MCP Tools，供 Claude Code、Cursor、VS Code、Windsurf 等任意 MCP Host 直接连接调用。支持单 Package 调试、多本地目录聚合、多已链接 Package 聚合以及全局全量注册表模式（`--all`）。
 
 ### 1. STDIO 模式（本地 Agent / 桌面 IDE 直连）
 ```bash
-ac mcp                          # 默认启动当前目录 package 的 MCP STDIO 服务
-ac mcp --dir ./examples/github-tools
-ac mcp --package team4u.github-tools
-ac mcp --timeout 30s            # 限制单次 Tool 调用超时
+ac mcp                                      # 默认启动当前目录 package 的 MCP STDIO 服务
+ac mcp -d ./pkg-github -d ./pkg-slack       # 同时加载并暴露多个本地目录的 Action Packages
+ac mcp --package github-tools,slack-tools   # 指定多个已 link 的 Package ID（支持多参数或逗号分隔）
+ac mcp --all                                # 自动聚合全局 Registry 中所有已 link 的 Action Packages
+ac mcp --timeout 30s                        # 限制单次 Tool 调用超时
 ```
 
 #### MCP Host 配置示例 (Claude Code / Cursor / VS Code)：
 ```json
 {
   "mcpServers": {
-    "github-tools": {
+    "actiondock-tools": {
       "command": "bunx",
-      "args": ["@actiondock/cli", "mcp", "--dir", "/path/to/my-tools"]
+      "args": ["@actiondock/cli", "mcp", "-d", "/path/to/my-tools", "-d", "/path/to/slack-tools"]
     }
   }
 }
@@ -246,16 +247,28 @@ ac mcp --timeout 30s            # 限制单次 Tool 调用超时
 # 启动 MCP HTTP 服务（默认监听 127.0.0.1:5178，MCP 端点为 /mcp）
 ac mcp serve --port 5178
 
+# 多包聚合 HTTP 服务
+ac mcp serve -d ./packages/github-tools -d ./packages/slack-tools --port 5178
+
+# 全量注册表暴露（Global Registry Mode）
+ac mcp serve --all --port 5178
+
 # 局域网/公网暴露（强制要求 Token 认证）
 ac mcp serve --host 0.0.0.0 --port 5178 --token <secret-token>
 ```
 
-### 3. MCP Tasks 长任务扩展 (`io.modelcontextprotocol/tasks`)
+### 3. 多 Package 聚合与防冲突机制
+* **唯一 Action ID 直出**：当不同 Package 的 Action ID 不冲突时，直接以 `action.id`（如 `list-prs`、`calc.multiply`）作为 Tool 名称。
+* **冲突自动命名空间隔离**：当多个 Package 存在同名 Action 时，自动规范化为 `${packageId}_${actionId}`（如 `pkg-one_echo` 与 `pkg-two_echo`），严格遵守 MCP Tool 命名规范（`[A-Za-z0-9_.-]`）。
+* **多包来源标注**：多包模式下，Tool Description 自动追加 Package 前缀（如 `[github-tools] List open PRs`），方便 LLM 精准识别。
+* **存储与运行时物理隔离**：每个 Package 拥有独立的 SQLite Storage 与 ActionRunner，配置、共享 State 与 Runs 记录互不干扰。
+
+### 4. MCP Tasks 长任务扩展 (`io.modelcontextprotocol/tasks`)
 ActionDock MCP 原生支持官方 Tasks 扩展协议，使 AI Agent 能够通过 MCP 协议调度、监控与取消耗时异步任务：
 * **异步 Tool 调用**：在 `tools/call` 时传入 `execution: { mode: "async" }`，立即返回 `taskId`（等同于 ActionDock 全局 `runId`）并在后台执行。
-* **状态映射与查询**：支持 `tasks/get` 查询任务进度。状态自动映射（`running` $\rightarrow$ `working`，`success` $\rightarrow$ `completed`，`failed` $\rightarrow$ `failed`，`cancelled` $\rightarrow$ `cancelled`）。
+* **状态映射与查询**：支持 `tasks/get` 跨包查询任务进度。状态自动映射（`running` $\rightarrow$ `working`，`success` $\rightarrow$ `completed`，`failed` $\rightarrow$ `failed`，`cancelled` $\rightarrow$ `cancelled`）。
 * **任务中断**：支持 `tasks/cancel` 中断运行中的长任务（直通底层 `ctx.signal`）。
-* **历史列表**：支持 `tasks/list` 获取当前 package 下的近期任务列表。
+* **多包聚合历史列表**：支持 `tasks/list` 聚合所有已加载 Package 下的近期任务列表（按开始时间倒序合并）。
 
 #### MCP 核心特性保证：
 * **Schema 零冗余**：基于官方 `@modelcontextprotocol/server`，自动将 Action 的 JSON Schema 转换为 MCP Tool Schema，无需重复定义。

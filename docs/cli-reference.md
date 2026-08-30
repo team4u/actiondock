@@ -98,8 +98,9 @@ ActionDock 命令行工具（`ac`）全量功能与参数参考。
 
 以 STDIO 模式启动 MCP 服务端，将当前或指定 package 内的 Actions 作为 MCP Tools 提供给本地 MCP Client（Claude Code、Cursor、VS Code 等）。内置支持 MCP Tasks 扩展（`io.modelcontextprotocol/tasks`），支持异步 Tool 调用与任务取消。
 * **参数选项**：
-  * `-d, --dir <path>`：指定 ActionDock 项目根目录（默认当前目录）
-  * `--package <package-id>`：指定全局已链接的 package ID
+  * `-d, --dir <path>`：指定 ActionDock 项目根目录（支持多次指定或逗号分隔指定多目录）
+  * `--package <package-id>`：指定全局已链接的 package ID（支持多次指定或逗号分隔指定多包）
+  * `--all`：聚合暴露全局注册表中所有已链接的 Packages
   * `--timeout <duration>`：单次 Action 执行的超时时间（如 `30s`）
 
 #### `ac mcp serve`
@@ -112,8 +113,9 @@ ActionDock 命令行工具（`ac`）全量功能与参数参考。
   * `--allow-insecure-no-auth`：允许在非 Loopback 地址上无 Token 运行（不安全）
   * `--cors-origin <origin>`：允许跨域调用的 CORS Origin 白名单（支持多次指定）
   * `--max-body <size>`：请求 Body 最大字节限制（默认 `1mb`）
-  * `-d, --dir <path>`：项目根目录路径（默认当前工作目录）
-  * `--package <package-id>`：指定已链接的 package ID
+  * `-d, --dir <path>`：项目根目录路径（支持多次指定或逗号分隔）
+  * `--package <package-id>`：指定已链接的 package ID（支持多次指定或逗号分隔）
+  * `--all`：聚合暴露全局注册表中所有已链接的 Packages
   * `--timeout <duration>`：单次 Action 执行的超时时间
 
 

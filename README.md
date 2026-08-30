@@ -211,8 +211,8 @@ dist/my-tools-skill/
 | `ac action show <id> [--json]` | 查看指定 Action 的详细定义与入参出参 Schema |
 | `ac action run <id> --input '<json>' [--timeout <t>] [--async]` | 运行 Action 并输出标准结果 JSON（支持超时限制、Ctrl+C 取消与远程异步模式） |
 | `ac action validate` | 校验 Action 与 JSON Schema 语法合法性 |
-| `ac mcp [--dir <d>] [--package <p>]` | 启动 MCP (Model Context Protocol) STDIO 服务端（支持 MCP Tasks 长任务扩展） |
-| `ac mcp serve [--port <p>] [--host <h>]` | 启动 MCP Streamable HTTP 协议微服务（支持 `/mcp` 端点与 Tasks 扩展） |
+| `ac mcp [-d <d...>] [--package <p...>] [--all]` | 启动 MCP (Model Context Protocol) STDIO 服务端（支持多目录/多包聚合与 MCP Tasks 扩展） |
+| `ac mcp serve [-d <d...>] [--package <p...>] [--all]` | 启动 MCP Streamable HTTP 协议微服务（支持多包聚合、`/mcp` 端点与 Tasks 扩展） |
 
 | `ac playbook create <id>` | 快速生成新的 Playbook SOP 模板文件 |
 | `ac playbook list [patterns...] [-i <regex>]` | 查看任务 SOP 指南 Playbook（支持模糊/正则意图收窄） |

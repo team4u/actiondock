@@ -41,14 +41,23 @@ STDIO 模式是桌面端 AI 编程助手的首选模式。`ac mcp` 保证 `stdou
 
 ### 启动命令
 ```bash
-# 启动当前项目所在 package
+# 1. 启动当前项目所在 package
 ac mcp
 
-# 指定项目目录或 package ID
-ac mcp --dir /path/to/my-tools
-ac mcp --package team4u.github-tools
+# 2. 指定单个或多个项目目录（支持多次指定或逗号分隔）
+ac mcp --dir /path/to/github-tools
+ac mcp -d ./pkg-github -d ./pkg-slack
+ac mcp -d ./pkg-github,./pkg-slack
 
-# 配置执行超时（默认无超时限制）
+# 3. 指定单个或多个全局已链接的 package ID（支持多次指定或逗号分隔）
+ac mcp --package team4u.github-tools
+ac mcp --package github-tools --package slack-tools
+ac mcp --package github-tools,slack-tools
+
+# 4. 聚合全局注册表中所有已链接的 Packages（Global Registry Mode）
+ac mcp --all
+
+# 5. 配置执行超时（默认无超时限制）
 ac mcp --timeout 30s
 ```
 
@@ -60,7 +69,7 @@ ac mcp --timeout 30s
   "mcpServers": {
     "my-tools": {
       "command": "bunx",
-      "args": ["@actiondock/cli", "mcp", "--dir", "/absolute/path/to/my-tools"]
+      "args": ["@actiondock/cli", "mcp", "-d", "/absolute/path/to/github-tools", "-d", "/absolute/path/to/slack-tools"]
     }
   }
 }
@@ -72,7 +81,7 @@ ac mcp --timeout 30s
   "mcpServers": {
     "my-tools": {
       "command": "ac",
-      "args": ["mcp", "--dir", "/absolute/path/to/my-tools"]
+      "args": ["mcp", "-d", "/absolute/path/to/my-tools"]
     }
   }
 }
@@ -84,7 +93,7 @@ ac mcp --timeout 30s
   "mcpServers": {
     "my-tools": {
       "command": "ac",
-      "args": ["mcp", "--dir", "${workspaceFolder}"]
+      "args": ["mcp", "--all"]
     }
   }
 }
@@ -100,6 +109,12 @@ HTTP 模式将 ActionDock MCP 作为独立微服务部署，提供标准 `/mcp` 
 ```bash
 # 本地开发测试（默认监听 127.0.0.1:5178）
 ac mcp serve --port 5178
+
+# 多包或多目录聚合启动
+ac mcp serve -d ./packages/github-tools -d ./packages/slack-tools --port 5178
+
+# 全量注册表暴露（Global Registry Mode）
+ac mcp serve --all --port 5178
 
 # 生产环境暴露（强制要求 Token 鉴权）
 export ACTIONDOCK_MCP_TOKEN="super-secret-token"
@@ -117,19 +132,27 @@ ac mcp serve \
 * `--token-env <env>`：推荐方式，通过环境变量名指定 Token，避免命令行明文记录。
 * `--allow-insecure-no-auth`：显式允许非本地无 Token 暴露（仅限隔离内网）。
 * `--cors-origin <origin>`：配置允许跨域调用的 Origin。
+* `-d, --dir <path>`：项目根目录路径（可多次指定或逗号分隔）。
+* `--package <package-id>`：指定已链接的 package ID（可多次指定或逗号分隔）。
+* `--all`：聚合暴露全局 Registry 中所有已链接包。
 
 ---
 
-## 3. Tool 映射与数据格式
+## 3. Tool 映射与防冲突规则
 
 ### 映射关系
 | ActionDock 概念 | MCP 概念 | 映射规则 |
 | :--- | :--- | :--- |
-| `action.id` | `tool.name` | 保持严格一致（如 `github.list-prs`） |
-| `action.description` | `tool.description` | 直接透传 |
+| `action.id` (无冲突) | `tool.name` | 保持严格一致（如 `github.list-prs`、`calc.multiply`） |
+| `action.id` (多包冲突) | `tool.name` | 自动命名空间前缀：`${packageId}_${actionId}`（如 `pkg-a_echo` 与 `pkg-b_echo`） |
+| `action.description` | `tool.description` | 单包直传；多包自动添加 `[packageId]` 来源前缀 |
 | `action.inputSchema` | `tool.inputSchema` | `fromJsonSchema(inputSchema)` |
 | `action.outputSchema`| `tool.outputSchema` | `fromJsonSchema(outputSchema)` |
-| `runner.execute()` | `tool.handler` | 内部调用 `ActionRunner.execute()` |
+| `runner.execute()` | `tool.handler` | 内部路由至对应 Package 的 `ActionRunner.execute()` |
+
+### 命名空间防冲突规范
+* **MCP 命名合规**：所有生成的 MCP Tool Name 均符合 `[A-Za-z0-9_.-]` 规范，避免在各类 MCP Client（如 Claude Desktop、Cursor）中报非法字符错误。
+* **独立 Storage 隔离**：每个 Package 分配独立的 SQLite Storage，`config`、`state` 与 `runs` 物理隔离。
 
 ### 响应格式规范
 
@@ -215,15 +238,15 @@ ActionDock MCP 适配器实现了官方 MCP Tasks 扩展，支持异步长任务
 ```
 
 ### 3. Tasks 协议端点
-* **`tasks/get`**：查询指定 Task 的执行状态、输入、输出或错误详情。
+* **`tasks/get`**：跨 Package 查询指定 Task 的执行状态、输入、输出或错误详情。
   ```json
   { "method": "tasks/get", "params": { "taskId": "01J..." } }
   ```
-* **`tasks/cancel`**：主动中断正在执行中的长任务（信号直通 `ctx.signal`）。
+* **`tasks/cancel`**：主动中断正在执行中的长任务（支持跨 Package 查询并信号直通对应 Runner 的 `ctx.signal`）。
   ```json
   { "method": "tasks/cancel", "params": { "taskId": "01J...", "reason": "User cancelled" } }
   ```
-* **`tasks/list`**：列出当前包的近期 Task 执行记录。
+* **`tasks/list`**：聚合列出所有已加载 Package 的近期 Task 执行记录（按时间倒序排列）。
   ```json
   { "method": "tasks/list", "params": { "limit": 20 } }
   ```

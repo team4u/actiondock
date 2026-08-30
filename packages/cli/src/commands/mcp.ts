@@ -5,12 +5,28 @@ import { Command } from "commander";
 import { parseByteSize } from "../utils/bytes";
 import { parseDuration } from "../utils/duration";
 
+function parseListOption(val: string, prev: string[] = []): string[] {
+  const parts = val.split(",").map((s) => s.trim()).filter(Boolean);
+  return [...prev, ...parts];
+}
+
 export function registerMcpCommands(program: Command): void {
   const mcpCommand = program
     .command("mcp")
     .description("Model Context Protocol (MCP) server for ActionDock Actions (STDIO default)")
-    .option("-d, --dir <path>", "Project root directory (default: current working directory)")
-    .option("--package <package-id>", "Specific linked package ID to serve")
+    .option(
+      "-d, --dir <path>",
+      "Project root directory or directories (can be specified multiple times or comma-separated)",
+      parseListOption,
+      []
+    )
+    .option(
+      "--package <package-id>",
+      "Specific linked package ID(s) to serve (can be specified multiple times or comma-separated)",
+      parseListOption,
+      []
+    )
+    .option("--all", "Serve all linked packages from global registry")
     .option("--timeout <duration>", "Execution timeout (e.g. 30s, 5m, 500ms)")
     .action(async (options) => {
       // Default: stdio mode
@@ -24,10 +40,19 @@ export function registerMcpCommands(program: Command): void {
         }
       }
 
+      const projectRoots =
+        options.dir && options.dir.length > 0
+          ? options.dir.map((d: string) => resolve(d))
+          : undefined;
+      const packageIds =
+        options.package && options.package.length > 0 ? options.package : undefined;
+      const all = Boolean(options.all);
+
       try {
         await startMcpStdio({
-          projectRoot: options.dir ? resolve(options.dir) : undefined,
-          packageId: options.package,
+          projectRoots,
+          packageIds,
+          all,
           timeoutMs,
         });
       } catch (err: any) {
@@ -51,8 +76,19 @@ export function registerMcpCommands(program: Command): void {
       []
     )
     .option("--max-body <size>", "Maximum allowed JSON request body size (e.g. 1mb, 500kb)", "1mb")
-    .option("-d, --dir <path>", "Project root directory (default: current working directory)")
-    .option("--package <package-id>", "Specific linked package ID to serve")
+    .option(
+      "-d, --dir <path>",
+      "Project root directory or directories (can be specified multiple times or comma-separated)",
+      parseListOption,
+      []
+    )
+    .option(
+      "--package <package-id>",
+      "Specific linked package ID(s) to serve (can be specified multiple times or comma-separated)",
+      parseListOption,
+      []
+    )
+    .option("--all", "Serve all linked packages from global registry")
     .option("--timeout <duration>", "Execution timeout (e.g. 30s, 5m, 500ms)")
     .action(async (options) => {
       const port = parseInt(options.port, 10) || 5178;
@@ -85,17 +121,39 @@ export function registerMcpCommands(program: Command): void {
         }
       }
 
-      const projectRoot = options.dir
-        ? resolve(options.dir)
-        : findProjectRoot(process.cwd());
+      const projectRoots =
+        options.dir && options.dir.length > 0
+          ? options.dir.map((d: string) => resolve(d))
+          : undefined;
+      const packageIds =
+        options.package && options.package.length > 0 ? options.package : undefined;
+      const all = Boolean(options.all);
 
-      let packageName = options.package || "ActionDock MCP Server";
-      if (projectRoot) {
+      let targetDescription = "ActionDock MCP Server";
+      if (all) {
+        targetDescription = "All Linked Packages (Global Registry Mode)";
+      } else if (packageIds && packageIds.length > 1) {
+        targetDescription = `Packages: ${packageIds.join(", ")}`;
+      } else if (projectRoots && projectRoots.length > 1) {
+        targetDescription = `Directories: ${projectRoots.join(", ")}`;
+      } else if (projectRoots && projectRoots.length === 1) {
         try {
-          const config = loadProjectConfig(projectRoot);
-          packageName = `${config.name} (${config.id})`;
+          const config = loadProjectConfig(projectRoots[0]);
+          targetDescription = `${config.name} (${config.id})`;
         } catch {
-          // ignore
+          targetDescription = projectRoots[0];
+        }
+      } else if (packageIds && packageIds.length === 1) {
+        targetDescription = `Package: ${packageIds[0]}`;
+      } else {
+        const currentRoot = findProjectRoot(process.cwd());
+        if (currentRoot) {
+          try {
+            const config = loadProjectConfig(currentRoot);
+            targetDescription = `${config.name} (${config.id})`;
+          } catch {
+            targetDescription = currentRoot;
+          }
         }
       }
 
@@ -107,8 +165,9 @@ export function registerMcpCommands(program: Command): void {
           allowInsecureNoAuth,
           corsOrigins,
           maxBodyBytes,
-          projectRoot: projectRoot || undefined,
-          packageId: options.package,
+          projectRoots,
+          packageIds,
+          all,
           timeoutMs,
         });
 
@@ -117,7 +176,7 @@ export function registerMcpCommands(program: Command): void {
         console.log(`======================================================`);
         console.log(`  * Listening on:    http://${host}:${server.port}`);
         console.log(`  * MCP Endpoint:    http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${server.port}/mcp`);
-        console.log(`  * Target:          ${packageName}`);
+        console.log(`  * Target:          ${targetDescription}`);
         console.log(`  * Authentication:  ${token ? "Bearer Token Enabled" : "Disabled (Local)"}`);
         console.log(`  * CORS Origins:    ${corsOrigins ? corsOrigins.join(", ") : "Disabled (Default)"}`);
         console.log(`======================================================\n`);
