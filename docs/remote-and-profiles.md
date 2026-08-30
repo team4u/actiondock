@@ -153,9 +153,14 @@ ac profile use local
 
 ### 1. 提交异步任务 (`--async`)
 
-在指定 `--profile` 或 `--server` 时传入 `--async`：
+所有异步任务（`--async`）必须依附于一个常驻服务宿主（本地 `ac serve` 或远端云节点）：
 
 ```bash
+# 模式 A：本地异步长任务（先在后台/终端 1 启动本地常驻服务）
+ac serve                                                      # 启动本地 Runner (127.0.0.1:5177)
+ac run sync-database --server http://127.0.0.1:5177 --async   # 提交本地异步任务，立即返回 202
+
+# 模式 B：远端异步长任务（通过 Profile 提交至云节点）
 ac run sync-database --profile aliyun-prod --async -i '{"db": "analytics"}'
 ```
 
@@ -168,7 +173,8 @@ ac run sync-database --profile aliyun-prod --async -i '{"db": "analytics"}'
 }
 ```
 
-> **注意**：本地单次进程执行（未配置远程 server）不支持 `--async`，CLI 会明确提示使用 `--profile` 或启动 `ac serve`。
+> **生命周期原则**：本地单进程执行（直接敲 `ac run` 未指定常驻 server）属于短进程（输出即退出）。为避免后台正在跑的任务随 CLI 退出被系统强行销毁，CLI 会明确拦截并提示使用 `--server`、`--profile` 或启动 `ac serve`。
+
 
 ### 2. 查询远端执行详情 (`ac runs show`)
 

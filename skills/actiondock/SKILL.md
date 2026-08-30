@@ -197,23 +197,22 @@ ac profile show [name] [--reveal] [--json]
 ac profile rm <name>
 ```
 
-### 3. 调度远端 Action 执行
-```bash
-# 同步执行：通过 --profile 调度（自动按 5-tier 多级回退解析 Token）
-ac run check-disk --profile aliyun-prod -i '{"mount": "/data"}'
+### 3. 异步长任务调度 (Async Execution)
+> **生命周期原则**：`ac run` 本地单次执行属于短进程（执行完毕即退出）。为保证异步任务在后台不随 CLI 退出而被强杀，所有异步长任务（`--async`）必须依附于一个常驻进程（本地 `ac serve`、远端云节点或 `ac mcp` 服务）。
 
-# 异步执行：提交长耗时任务，立即返回 202 Accepted 与 runId（由 Server 持续运行）
+```bash
+# 1. 本地异步执行：先启动本地常驻服务，再提交异步任务
+ac serve                                         # 终端 1 启动本地 Runner (127.0.0.1:5177)
+ac run sync-database --server http://127.0.0.1:5177 --async   # 终端 2 提交，立即返回 202 Accepted 与 runId
+
+# 2. 远端异步执行：通过 Profile 将长耗时任务提交到云端
 ac run sync-database --profile aliyun-prod --async
 
-# 查询远端任务执行详情与状态
-ac runs show <run-id> --profile aliyun-prod [--json]
-
-# 主动取消远端正在执行的任务
-ac runs cancel <run-id> --profile aliyun-prod [--reason "手动中止"]
-
-# 直接传 server 地址调度
-ac run check-disk --server http://1.2.3.4:5177 --token secret123
+# 3. 追踪与取消异步任务（本地与远程通用）
+ac runs show <run-id> [--server http://127.0.0.1:5177 | --profile aliyun-prod]
+ac runs cancel <run-id> [--server http://127.0.0.1:5177 | --profile aliyun-prod] [--reason "手动中止"]
 ```
+
 
 
 ---
