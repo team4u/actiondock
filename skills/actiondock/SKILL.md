@@ -158,7 +158,7 @@ ac action run <id> -i '{"repo": "owner/repo"}' --timeout 1m
 ```
 
 > [!NOTE]
-> **依赖自动管理**：若 Action 依赖了未安装的 npm 包，`ac run` 运行时会自动触发 `bun install` 毫秒级补齐依赖并继续执行，安装日志输出至 `stderr`，确保 `stdout` 始终为纯净 JSON。
+> **依赖自动管理与包管理器兼容**：若 Action 依赖了未安装的 npm 包，`ac run` 运行时会自动探测包管理器（按 `bun` -> `pnpm` -> `yarn` -> `npm` 降级链）补齐依赖并继续执行，安装日志输出至 `stderr`，确保 `stdout` 始终为纯净 JSON；同时完全兼容直接通过 `npm install` 手动安装的 `node_modules`。
 
 ---
 

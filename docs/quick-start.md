@@ -199,7 +199,9 @@ ac run github.get-user --input '{"username": "torvalds"}'
   ```
 
 > [!TIP]
-> **依赖自动补齐（Auto-Install）**：若您的 Action 引用了项目中尚未安装的 npm 包，`ac run` 会在后台毫秒级自动执行 `bun install` 补齐依赖并继续执行，无需手动打断。
+> **依赖自动补齐（Auto-Install）与包管理器支持**：
+> - 若您的 Action 引用了项目中尚未安装的 npm 包，`ac run` 会在后台自动探测并调用包管理器（按 `bun install` -> `pnpm install` -> `yarn install` -> `npm install` 自动降级适配）补齐依赖并继续执行，无需手动打断。
+> - 同时您也可以随时使用常规的 `npm install`（Node.js 自带）手动管理依赖；只要项目根目录下存在 `node_modules`，ActionDock 将直接加载运行。
 
 ---
 
