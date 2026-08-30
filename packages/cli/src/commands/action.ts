@@ -3,11 +3,15 @@ import { dirname, resolve } from "node:path";
 import {
   ActionRunner,
   createStorage,
+  executeRemoteAction,
+  fetchRemoteActions,
+  fetchRemoteActionShow,
   findProjectRoot,
   listLinkedPackages,
   loadActions,
   loadProjectConfig,
   resolveActionProject,
+  resolveTarget,
   validateSchema,
 } from "@actiondock/core";
 import { Command } from "commander";
@@ -20,10 +24,34 @@ export function registerActionCommands(program: Command): void {
   // action list
   actionCmd
     .command("list")
-    .description("List actions in current project or all linked packages")
+    .description("List actions in current project, linked packages, or remote profile")
+    .option("-p, --profile <name>", "Execute or query against a specific profile")
+    .option("-s, --server <url>", "Remote server URL")
+    .option("-t, --token <token>", "Auth token for remote server")
     .option("--json", "Output as JSON")
     .action(async (options) => {
       try {
+        const target = resolveTarget({
+          profile: options.profile,
+          server: options.server,
+          token: options.token,
+        });
+
+        if (target.type === "remote") {
+          const list = await fetchRemoteActions(target.serverUrl!, target.token);
+          if (options.json) {
+            console.log(JSON.stringify(list, null, 2));
+          } else {
+            console.log(
+              `Actions on remote server ${target.serverUrl}${target.profileName ? ` (Profile: ${target.profileName})` : ""}:\n`
+            );
+            for (const a of list) {
+              console.log(`  ${a.id.padEnd(28)} ${a.description}`);
+            }
+          }
+          return;
+        }
+
         const root = findProjectRoot();
         if (root) {
           const config = loadProjectConfig(root);
@@ -189,9 +217,42 @@ export default defineAction<Input, Output>({
     .command("show <id>")
     .alias("describe")
     .description("Show action definition, schema, and description")
+    .option("-p, --profile <name>", "Execute or query against a specific profile")
+    .option("-s, --server <url>", "Remote server URL")
+    .option("-t, --token <token>", "Auth token for remote server")
     .option("--json", "Output as JSON")
     .action(async (id, options) => {
       try {
+        const target = resolveTarget({
+          profile: options.profile,
+          server: options.server,
+          token: options.token,
+        });
+
+        if (target.type === "remote") {
+          const detail = await fetchRemoteActionShow(
+            target.serverUrl!,
+            id,
+            target.token
+          );
+          if (options.json) {
+            console.log(JSON.stringify(detail, null, 2));
+          } else {
+            console.log(`Action:      ${detail.id}`);
+            if (detail.packageId) console.log(`Package:     ${detail.packageId}`);
+            if (detail.description) console.log(`Description: ${detail.description}`);
+            if (detail.inputSchema) {
+              console.log("\nInput Schema:");
+              console.log(JSON.stringify(detail.inputSchema, null, 2));
+            }
+            if (detail.outputSchema) {
+              console.log("\nOutput Schema:");
+              console.log(JSON.stringify(detail.outputSchema, null, 2));
+            }
+          }
+          return;
+        }
+
         const resolved = await resolveActionProject(id);
         const config = loadProjectConfig(resolved.projectRoot);
         const actions = await loadActions(resolved.projectRoot, config.actionsDir);
@@ -302,10 +363,13 @@ export default defineAction<Input, Output>({
   // action run
   actionCmd
     .command("run <id>")
-    .description("Execute an action (from current project or linked packages)")
+    .description("Execute an action (from current project, linked packages, or remote profile)")
     .option("-i, --input <json>", "Input as JSON string")
     .option("-f, --input-file <path>", "Input from JSON file")
     .option("-c, --config <key=value...>", "Temporary config override (repeatable or comma-separated)")
+    .option("-p, --profile <name>", "Execute against a specific profile")
+    .option("-s, --server <url>", "Remote server URL")
+    .option("-t, --token <token>", "Auth token for remote server")
     .action(async (id, options) => {
       await executeAction(id, options);
     });
@@ -317,26 +381,15 @@ export default defineAction<Input, Output>({
     .option("-i, --input <json>", "Input as JSON string")
     .option("-f, --input-file <path>", "Input from JSON file")
     .option("-c, --config <key=value...>", "Temporary config override")
+    .option("-p, --profile <name>", "Execute against a specific profile")
+    .option("-s, --server <url>", "Remote server URL")
+    .option("-t, --token <token>", "Auth token for remote server")
     .action(async (id, options) => {
       await executeAction(id, options);
     });
 }
 
 async function executeAction(id: string, options: any): Promise<void> {
-  let resolvedProjectRoot: string;
-  let resolvedActionId: string;
-  let packageId: string;
-
-  try {
-    const resolved = await resolveActionProject(id);
-    resolvedProjectRoot = resolved.projectRoot;
-    resolvedActionId = resolved.actionId;
-    packageId = resolved.packageId;
-  } catch (err: any) {
-    console.error(`Error: ${err.message}`);
-    process.exit(1);
-  }
-
   let input: unknown = {};
   if (options.input) {
     try {
@@ -361,6 +414,52 @@ async function executeAction(id: string, options: any): Promise<void> {
       const [k, ...v] = item.split("=");
       if (k) configOverrides[k] = v.join("=");
     }
+  }
+
+  // Check target (remote profile vs local)
+  let target;
+  try {
+    target = resolveTarget({
+      profile: options.profile,
+      server: options.server,
+      token: options.token,
+    });
+  } catch (err: any) {
+    console.error(`Error: ${err.message}`);
+    process.exit(1);
+  }
+
+  if (target.type === "remote") {
+    try {
+      const result = await executeRemoteAction(
+        target.serverUrl!,
+        id,
+        input,
+        configOverrides,
+        target.token
+      );
+      console.log(JSON.stringify(result, null, 2));
+      if (!result.ok) {
+        process.exit(1);
+      }
+      return;
+    } catch (err: any) {
+      console.error(`Error: ${err.message}`);
+      process.exit(1);
+    }
+  }
+
+  // Local execution
+  let resolvedProjectRoot: string;
+  let resolvedActionId: string;
+
+  try {
+    const resolved = await resolveActionProject(id);
+    resolvedProjectRoot = resolved.projectRoot;
+    resolvedActionId = resolved.actionId;
+  } catch (err: any) {
+    console.error(`Error: ${err.message}`);
+    process.exit(1);
   }
 
   try {

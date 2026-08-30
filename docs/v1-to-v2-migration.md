@@ -10,7 +10,7 @@ ActionDock 2.0 是对 ActionDock 1.0 的彻底重构。本文档阐述 2.0 在�
 | :--- | :--- | :--- |
 | **产品定位** | 中心化脚本管理平台（带后端 Server、Admin UI、数据库、权限与定时调度） | 面向 AI Agent 的轻量级 Action / Skill 独立开发与分发工具链 |
 | **技术栈** | Java 21 + Spring Boot 3 + JPA + Groovy / Python + React Admin UI | Bun + TypeScript + `bun:sqlite` + 原生单文件编译引擎 |
-| **运行形态** | 长期运行的常驻 Server 守护进程 + Web 控制台 | 零常驻守护进程（Zero-Daemon），纯 CLI 工具（`ac`）按需执行 |
+| **运行形态** | 长期运行的常驻 Server 守护进程 + Web 控制台 | 零常驻守护进程（Zero-Daemon），纯 CLI 工具（`ac`）按需执行；远端按需启动 `ac serve` |
 | **交付形态** | 必须部署完整的 ActionDock 服务端才能运行脚本 | 编译为单个零外部依赖的自包含独立二进制 + 标准 `SKILL.md` |
 | **开发模型** | Web 页面在线编辑脚本，存在数据库中 | 文件系统优先（Filesystem First），`actions/*.ts` 普通文件纳入 Git 管理 |
 | **依赖管理** | 复杂的动态 ClassLoader / 插件热插拔系统 | 标准 npm / TypeScript 原生模块导入（`import`） |
@@ -28,6 +28,7 @@ ActionDock 2.0 是对 ActionDock 1.0 的彻底重构。本文档阐述 2.0 在�
 | **Plugin System (插件机制)** | **npm / Web Standard API** | 废弃私有插件协议，直接使用现代 Web 标准（`fetch`、`Bun.spawn`、`Bun.file`）与海量 npm 生态包。 |
 | **Config Store (配置服务)** | **`ctx.config`** | 统一三级优先级：命令行临时覆盖 > 本地 SQLite 存储 > `actiondock.json` 默认声明。 |
 | **Shared State (共享状态)** | **`ctx.state`** | 延续跨执行持久化 Key-Value 理念，升级为基于 `bun:sqlite` 的原生轻量实现，支持命名空间隔离。 |
+| **Profile (多机器调度)** | **`ac profile` + `ac serve`** | 远端使用极轻量 `ac serve` 接收请求，本地通过 `ac profile` 管理多云节点，执行格式保持严格一致的标准 JSON Envelope。 |
 
 ---
 

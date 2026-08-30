@@ -5,9 +5,13 @@ import { join, resolve } from "node:path";
 
 const cliPath = resolve(__dirname, "../bin/ac.js");
 
-function runCli(args: string[], cwd?: string) {
+function runCli(args: string[], cwd?: string, env?: Record<string, string>) {
   return Bun.spawnSync(["bun", cliPath, ...args], {
     cwd,
+    env: {
+      ...process.env,
+      ...env,
+    },
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -162,5 +166,102 @@ describe("CLI End-to-End", () => {
     const unlinkProc = runCli(["unlink", "team.github-ops"], tmpdir());
     expect(unlinkProc.exitCode).toBe(0);
     expect(unlinkProc.stdout.toString()).toContain("[OK] Unlinked package");
+  });
+
+  it("manages execution profiles and dispatches remote runs via ac serve", async () => {
+    // 1. Initialize project in tempDir
+    runCli(["init", "--id", "cloud.remote-node", "."], tempDir);
+
+    // 2. Start HTTP server process via 'ac serve'
+    const SECRET = "auth-token-xyz-987";
+    const port = 5199;
+    const serverUrl = `http://127.0.0.1:${port}`;
+
+    const serveProc = Bun.spawn(
+      ["bun", cliPath, "serve", "--port", String(port), "--host", "127.0.0.1", "--token", SECRET],
+      {
+        cwd: tempDir,
+        stdout: "pipe",
+        stderr: "pipe",
+      }
+    );
+
+    // Give server 150ms to bind port
+    await new Promise((r) => setTimeout(r, 150));
+
+    const clientHome = mkdtempSync(join(tmpdir(), "actiondock-client-home-"));
+    const env = { ACTIONDOCK_HOME: clientHome };
+
+    try {
+      // 3. Profile management commands
+      const addProfileProc = runCli(
+        ["profile", "add", "cloud-aliyun", "--server", serverUrl, "--token", SECRET, "--desc", "Aliyun Node 1"],
+        tmpdir(),
+        env
+      );
+      expect(addProfileProc.exitCode).toBe(0);
+      expect(addProfileProc.stdout.toString()).toContain("[OK] Profile 'cloud-aliyun' configured");
+
+      const showProfileProc = runCli(["profile", "show", "cloud-aliyun", "--json"], tmpdir(), env);
+      expect(showProfileProc.exitCode).toBe(0);
+      const profileData = JSON.parse(showProfileProc.stdout.toString());
+      expect(profileData.name).toBe("cloud-aliyun");
+      expect(profileData.serverUrl).toBe(serverUrl);
+      expect(profileData.tokenConfigured).toBe(true);
+
+      const listProfileProc = runCli(["profile", "list", "--json"], tmpdir(), env);
+      expect(listProfileProc.exitCode).toBe(0);
+      const listProfilesData = JSON.parse(listProfileProc.stdout.toString());
+      expect(listProfilesData.some((p: any) => p.name === "cloud-aliyun")).toBe(true);
+
+      // 4. Test connection via ac profile test
+      const testProc = runCli(["profile", "test", "cloud-aliyun", "--json"], tmpdir(), env);
+      expect(testProc.exitCode).toBe(0);
+      const testResult = JSON.parse(testProc.stdout.toString());
+      expect(testResult.ok).toBe(true);
+      expect(testResult.status).toBe("ok");
+
+      // 5. Query remote actions and info via --profile
+      const remoteInfoProc = runCli(["info", "--profile", "cloud-aliyun", "--json"], tmpdir(), env);
+      expect(remoteInfoProc.exitCode).toBe(0);
+      const remoteInfo = JSON.parse(remoteInfoProc.stdout.toString());
+      expect(remoteInfo.id).toBe("cloud.remote-node");
+
+      const remoteListProc = runCli(["action", "list", "--profile", "cloud-aliyun", "--json"], tmpdir(), env);
+      expect(remoteListProc.exitCode).toBe(0);
+      const remoteActions = JSON.parse(remoteListProc.stdout.toString());
+      expect(remoteActions.some((a: any) => a.id === "sample.greet")).toBe(true);
+
+      // 6. Execute action on remote server via ac run --profile
+      const remoteRunProc = runCli(
+        [
+          "run",
+          "sample.greet",
+          "--profile",
+          "cloud-aliyun",
+          "--input",
+          '{"name": "RemoteAgent"}',
+          "--config",
+          "SAMPLE_GREETING=Greetings from Cloud",
+        ],
+        tmpdir(),
+        env
+      );
+      expect(remoteRunProc.exitCode).toBe(0);
+      const runResult = JSON.parse(remoteRunProc.stdout.toString());
+      expect(runResult.ok).toBe(true);
+      expect(runResult.runId).toBeDefined();
+      expect(runResult.data.message).toBe("Greetings from Cloud, RemoteAgent!");
+
+      // 7. Remove profile
+      const rmProc = runCli(["profile", "rm", "cloud-aliyun"], tmpdir(), env);
+      expect(rmProc.exitCode).toBe(0);
+      expect(rmProc.stdout.toString()).toContain("[OK] Profile 'cloud-aliyun' removed");
+    } finally {
+      serveProc.kill();
+      if (existsSync(clientHome)) {
+        rmSync(clientHome, { recursive: true, force: true });
+      }
+    }
   });
 });

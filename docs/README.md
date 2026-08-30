@@ -10,6 +10,7 @@
 | :--- | :--- | :--- |
 | **[项目 README](../README.md)** | 项目介绍、安装方式与上手概览 | 所有人（入口） |
 | **[快速上手指南](quick-start.md)** | 从环境准备、脚手架、Action 编写、调试、编译到 Skill 导出全流程 | 新手与使用者 |
+| **[Skill 设计哲学与交付指南](skill-guide.md)** | Action/Playbook/Skill 三层关系、构成规范、交叉导出与 Agent 生命周期 | 所有开发者与 Agent 架构师 |
 | **[Action 编写与开发指南](action-authoring.md)** | `defineAction` 声明、TypeScript 接口、JSON Schema 校验与单测 | Action 编写者 |
 | **[ActionContext 核心能力详解](action-context.md)** | `ctx.config`、`ctx.state`、`ctx.actions` 与 `ctx.log` 深度剖析 | Action 编写者 |
 
@@ -21,6 +22,7 @@
 | :--- | :--- | :--- |
 | **[Playbook SOP 编写指南](playbook-guide.md)** | 面向 AI Agent 的领域任务操作规程规范与校验 | 提示词/流程设计者 |
 | **[存储与状态管理机制](storage-and-state.md)** | 基于 `bun:sqlite` 的 Config、State、Runs 数据模型与路径隔离 | 架构师与系统开发者 |
+| **[多环境与云机器调度指南](remote-and-profiles.md)** | Profile 管理、`ac serve` 轻量 Runner 与多云节点执行 | 运维与系统开发者 |
 | **[构建编译与 Skill 分发](build-and-export.md)** | `Bun.build` 单文件编译原理、交叉编译与 Skill 导出目录结构 | 交付与运维工程师 |
 | **[AI Agent 接入与集成指南](agent-integration.md)** | Antigravity、Claude Code、Cursor 等主流 Agent 框架接入 | Agent 开发者 |
 
