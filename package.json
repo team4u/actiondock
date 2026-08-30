@@ -10,7 +10,8 @@
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "build": "bun run --filter '@actiondock/*' build"
+    "build": "bun run --filter '@actiondock/*' build",
+    "docs:serve": "bunx docsify-cli serve docs"
   },
   "dependencies": {
     "@actiondock/cli": "workspace:*",
