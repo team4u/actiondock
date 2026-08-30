@@ -28,12 +28,14 @@ ActionDock CLI 提供了两种使用方式：**从 npm 官方仓库安装** 与 
 如果您希望在任何环境直接使用已经发布的官方包：
 
 ```bash
-# 全局安装（推荐，安装后可全局直接使用 actiondock 命令）
+# 全局安装（推荐，安装后可全局直接使用 actiondock 或短命令 ac）
 bun install -g @actiondock/cli
 
 # 或免安装临时执行（类似 npx）
 bun x @actiondock/cli init my-tools
 ```
+
+> 💡 **小提示**：ActionDock CLI 原生支持短命令别名 **`ac`**（如 `ac init`、`ac action run`、`ac build`），输入更快捷！
 
 ---
 
