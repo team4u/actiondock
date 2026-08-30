@@ -103,7 +103,7 @@ This playbook provides task execution guidance for AI Agents.
 `;
 
         writeFileSync(targetFullFile, template, "utf-8");
-        console.log(`✓ Created Playbook '${id}' at ${targetFullFile}`);
+        console.log(`[OK] Created Playbook '${id}' at ${targetFullFile}`);
       } catch (err: any) {
         console.error(`Error: ${err.message}`);
         process.exit(1);
@@ -203,9 +203,9 @@ This playbook provides task execution guidance for AI Agents.
           for (const r of results) {
             if (r.valid) {
               const warn = r.warnings.length > 0 ? ` (Warnings: ${r.warnings.join("; ")})` : "";
-              console.log(`✓ ${r.id}: Valid${warn}`);
+              console.log(`[OK] ${r.id}: Valid${warn}`);
             } else {
-              console.log(`✗ ${r.id}: ${r.errors.join("; ")}`);
+              console.log(`[FAIL] ${r.id}: ${r.errors.join("; ")}`);
             }
           }
         }

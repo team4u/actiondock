@@ -88,7 +88,7 @@ export function registerStateCommands(program: Command): void {
 
         await storage.setState("", key, parsed);
         storage.close();
-        console.log(`✓ State '${key}' set to ${JSON.stringify(parsed)}`);
+        console.log(`[OK] State '${key}' set to ${JSON.stringify(parsed)}`);
       } catch (err: any) {
         console.error(`Error: ${err.message}`);
         process.exit(1);
@@ -111,7 +111,7 @@ export function registerStateCommands(program: Command): void {
         const storage = createStorage(projConfig.id, { projectRoot: root });
         await storage.deleteState("", key);
         storage.close();
-        console.log(`✓ State '${key}' deleted`);
+        console.log(`[OK] State '${key}' deleted`);
       } catch (err: any) {
         console.error(`Error: ${err.message}`);
         process.exit(1);

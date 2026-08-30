@@ -8,9 +8,12 @@ export function generateSkillMd(
   playbooks: PlaybookDefinition[],
   binaryRelPath = "./bin/action-bin"
 ): string {
+  const cleanName = config.id.replace(/[^a-zA-Z0-9-_]/g, "-").toLowerCase();
+  const desc = config.description || `AI Agent skill for ${config.name} (${config.id})`;
+
   const actionListMd = actions
     .map((a) => {
-      const desc = a.description ? ` - ${a.description}` : "";
+      const aDesc = a.description ? ` - ${a.description}` : "";
       let params = "";
       if (
         a.inputSchema &&
@@ -23,7 +26,7 @@ export function generateSkillMd(
           .map((p) => (req.includes(p) ? `\`${p}\` (必填)` : `\`${p}\``))
           .join(", ")}`;
       }
-      return `* \`${a.id}\`${desc}${params}`;
+      return `* \`${a.id}\`${aDesc}${params}`;
     })
     .join("\n");
 
@@ -36,7 +39,7 @@ export function generateSkillMd(
       })
       .join("\n");
     playbookSection = `
-## 📖 任务指南 (Playbook SOPs)
+## 任务指南 (Playbook SOPs)
 
 Playbook 为复杂任务提供逐步操作规程。详细 SOP 请阅读对应 Markdown 文档：
 
@@ -44,11 +47,16 @@ ${list}
 `;
   }
 
-  return `# ${config.name} (${config.id})
+  return `---
+name: ${cleanName}
+description: ${desc}
+---
 
-${config.description || "面向 AI Agent 的独立 Action 集合。"}
+# ${config.name} (${config.id})
 
-## 🚀 如何调用 Action
+${desc}
+
+## 如何调用 Action
 
 使用 Skill 目录中自带的独立可执行文件 \`${binaryRelPath}\` 即可完成工具发现与调用。
 **该工具无需在系统预先安装任何依赖**（无需安装 Node.js、Bun、Python 或 Java）。
@@ -80,13 +88,13 @@ ${binaryRelPath} run <action-id> --input '{"param": "value"}'
 
 ---
 
-## 🛠️ Action 目录
+## Action 目录
 
 ${actionListMd}
 ${playbookSection}
 ---
 
-## 💾 运行时配置与持久化状态
+## 运行时配置与持久化状态
 
 独立二进制会自动管理其本地 SQLite 数据库。如需检查或配置：
 

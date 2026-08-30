@@ -28,7 +28,7 @@ export function registerExportCommand(program: Command): void {
           archive: options.archive,
         });
 
-        console.log(`✓ Successfully exported Skill: ${result.packageId} (v${result.version})`);
+        console.log(`[OK] Successfully exported Skill: ${result.packageId} (v${result.version})`);
         console.log(`  Target:     ${result.target}`);
         console.log(`  Actions:    ${result.actionsCount}`);
         console.log(`  Playbooks:  ${result.playbooksCount}`);

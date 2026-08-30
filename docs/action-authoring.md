@@ -77,7 +77,7 @@ export default defineAction<MyInput, MyOutput>({
 
 `run(input, ctx)` 的第二个参数 `ctx` 提供了 ActionDock 特有的 4 大核心领域能力：
 
-### ① `ctx.config`（配置访问）
+### 1. `ctx.config`（配置访问）
 支持三级优先级的配置解析：
 1. **命令行临时覆盖**：运行命令时通过 `--config KEY=val` 传入。
 2. **本地持久化存储**：通过 `ac config set KEY val` 写入本地 SQLite。
@@ -88,7 +88,7 @@ const apiKey = ctx.config.get<string>("API_KEY");
 const endpoint = ctx.config.get("API_ENDPOINT", "https://api.example.com");
 ```
 
-### ② `ctx.state`（共享持久化状态）
+### 2. `ctx.state`（共享持久化状态）
 基于内置 `bun:sqlite` 的持久化 Key-Value 存储，数据在 Action 多次调用之间跨进程保留，常用于断点续传（checkpoint）、增量同步游标（cursor）、去重与小型缓存：
 
 ```ts
@@ -106,7 +106,7 @@ const orderState = ctx.state.scope("orders");
 await orderState.set("order_123", { status: "shipped" });
 ```
 
-### ③ `ctx.log`（结构化日志）
+### 3. `ctx.log`（结构化日志）
 所有日志**强制输出至 `stderr`**，保证 `stdout` 仅包含机器可消费的标准 JSON Envelope，不会被杂乱的打印日志污染：
 
 ```ts
@@ -116,7 +116,7 @@ ctx.log.warn("API 调用速率接近限制");
 ctx.log.error("调用外部接口失败", err);
 ```
 
-### ④ `ctx.actions`（Action 间组合调用）
+### 4. `ctx.actions`（Action 间组合调用）
 Action 可以直接通过普通 TypeScript `import` 引用其他 Action 并组合调用。ActionDock 会自动：
 - 传递当前上下文环境、配置与状态。
 - 在 SQLite 中自动建立父子 Run 级联记录。

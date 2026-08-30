@@ -24,7 +24,7 @@ export function registerBuildCommand(program: Command): void {
           minify: options.minify,
         });
 
-        console.log(`✓ Successfully compiled ${result.packageId} (v${result.version})`);
+        console.log(`[OK] Successfully compiled ${result.packageId} (v${result.version})`);
         console.log(`  Target:     ${result.target}`);
         console.log(`  Actions:    ${result.actions.join(", ")}`);
         console.log(`  Executable: ${result.executablePath}`);

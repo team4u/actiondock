@@ -8,7 +8,7 @@ ActionDock 2.0 是一个基于 **Bun + TypeScript** 的轻量级开发工具链�
 
 ---
 
-## 🌟 核心特性
+## 核心特性
 
 * **零依赖独立交付**：通过 Bun 原生编译引擎，将整个 Action Package 打包为单个独立的自包含二进制可执行文件。
 * **文件系统优先（Filesystem First）**：Action（`actions/*.ts`）、Playbook（`playbooks/*.md`）与项目配置均为普通文件，天然适配 Git 版本管理、分支合并与代码评审。
@@ -19,7 +19,7 @@ ActionDock 2.0 是一个基于 **Bun + TypeScript** 的轻量级开发工具链�
 
 ---
 
-## 📦 安装与使用方式
+## 安装与使用方式
 
 ### 方式 1：从 npm 仓库安装（发布后 / 终端用户）
 
@@ -43,7 +43,7 @@ cd packages/cli
 # 2. 注册本地软链接到全局
 bun link
 
-# 3. 此时在系统任意位置均可直接使用 ac 命令！
+# 3. 此时在系统任意位置均可直接使用 ac 命令
 ac --help
 ```
 
@@ -71,7 +71,7 @@ bun packages/cli/bin/ac.js <命令>
 
 ---
 
-## 🚀 快速上手
+## 快速上手
 
 ### 1. 初始化新项目
 ```bash
@@ -168,7 +168,7 @@ dist/my-tools-skill/
 
 ---
 
-## 📚 进阶指南与文档
+## 进阶指南与文档
 
 * **[Action 编写与开发指南](file:///root/code/action-dock/docs/action-authoring.md)**：详细解析 Action 定义、`ActionContext` API（`config`/`state`/`actions`/`log`）、JSON Schema 规范及内存单测工具。
 * **[CLI 命令参考手册 (`ac`)](file:///root/code/action-dock/docs/cli-reference.md)**：全量 CLI 命令、参数选项、过滤规则及退出码说明。
@@ -177,7 +177,7 @@ dist/my-tools-skill/
 
 ---
 
-## 🛠️ CLI 命令速查表 (`ac`)
+## CLI 命令速查表 (`ac`)
 
 | 命令 | 功能描述 |
 | :--- | :--- |
@@ -199,7 +199,7 @@ dist/my-tools-skill/
 
 ---
 
-## 📦 代码仓库分层结构
+## 代码仓库分层结构
 
 * [`packages/sdk`](file:///root/code/action-dock/packages/sdk)：`@actiondock/sdk` 极简公共 SDK（`defineAction`、核心上下文类型、`createTestRuntime` 内存测试工具），零重依赖。
 * [`packages/core`](file:///root/code/action-dock/packages/core)：`@actiondock/core` 底层领域引擎（项目加载、ActionRunner 执行器、SQLite 存储管理、Ajv Schema 校验、Bun.build 单文件编译与 Skill 导出）。
@@ -208,7 +208,7 @@ dist/my-tools-skill/
 
 ---
 
-## 🧪 自动化测试与类型检查
+## 自动化测试与类型检查
 
 ```bash
 # 运行全仓库所有测试

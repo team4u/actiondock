@@ -165,6 +165,8 @@ describe("Build & Skill Export Contract", () => {
     expect(existsSync(join(exportRes.skillDir, "playbooks", "greet-user.md"))).toBe(true);
 
     const skillMd = readFileSync(join(exportRes.skillDir, "SKILL.md"), "utf-8");
+    expect(skillMd.startsWith("---\nname:")).toBe(true);
+    expect(skillMd).toContain("description:");
     expect(skillMd).toContain("# Sample Tools");
     expect(skillMd).toContain("sample.greet");
     expect(skillMd).toContain("Playbook SOPs");

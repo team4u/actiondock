@@ -133,7 +133,7 @@ export default defineAction<Input, Output>({
 `;
 
         writeFileSync(targetFullFile, template, "utf-8");
-        console.log(`✓ Created Action '${id}' at ${targetFullFile}`);
+        console.log(`[OK] Created Action '${id}' at ${targetFullFile}`);
         console.log(`\nTo run this action:`);
         console.log(`  ac action run ${id} --input '{"exampleParam": "hello"}'`);
       } catch (err: any) {
@@ -246,9 +246,9 @@ export default defineAction<Input, Output>({
         } else {
           for (const r of results) {
             if (r.valid) {
-              console.log(`✓ ${r.id}: Valid`);
+              console.log(`[OK] ${r.id}: Valid`);
             } else {
-              console.log(`✗ ${r.id}: ${r.errors.join(", ")}`);
+              console.log(`[FAIL] ${r.id}: ${r.errors.join(", ")}`);
             }
           }
         }

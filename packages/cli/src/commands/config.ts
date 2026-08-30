@@ -113,7 +113,7 @@ export function registerConfigCommands(program: Command): void {
 
         storage.setConfig(key, parsed);
         storage.close();
-        console.log(`✓ Config '${key}' set to ${JSON.stringify(parsed)}`);
+        console.log(`[OK] Config '${key}' set to ${JSON.stringify(parsed)}`);
       } catch (err: any) {
         console.error(`Error: ${err.message}`);
         process.exit(1);
@@ -137,7 +137,7 @@ export function registerConfigCommands(program: Command): void {
         const deleted = storage.deleteConfig(key);
         storage.close();
         if (deleted) {
-          console.log(`✓ Config '${key}' deleted`);
+          console.log(`[OK] Config '${key}' deleted`);
         } else {
           console.log(`Config '${key}' was not set in database`);
         }
