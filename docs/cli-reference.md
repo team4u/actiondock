@@ -6,29 +6,7 @@ ActionDock 命令行工具（`ac`）全量功能与参数参考。
 
 ## 安装与获取方式
 
-### 1. 从 npm 官方仓库安装（发布后）
-* **全局安装**：`bun install -g @actiondock/cli`（安装后直接使用 `ac` 命令）
-* **免安装执行**：`bun x @actiondock/cli <command>`（无需全局安装，即时拉取执行）
-
-### 2. 从本地源码构建与安装（开发态 / 本地模式）
-* **方法 A（本地软链接，最推荐）**：
-  ```bash
-  cd packages/cli && bun link
-  ```
-  执行后即可在全局直接使用 `ac` 命令，且本地源码变动即时生效。
-* **方法 B（打包为 Tarball 本地安装）**：
-  ```bash
-  cd packages/cli && bun pm pack
-  bun install -g ./actiondock-cli-2.0.0.tgz
-  ```
-* **方法 C（基于本地路径安装）**：
-  ```bash
-  bun install -g ./packages/cli
-  ```
-* **方法 D（源码直接执行）**：
-  ```bash
-  bun ./packages/cli/bin/ac.js <command>
-  ```
+安装与获取的完整说明（npm 安装、本地源码链接、Tarball 安装等）见[项目 README](../README.md#安装与使用方式)，此处不再重复。
 
 ---
 

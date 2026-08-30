@@ -11,12 +11,12 @@ ActionDock 2.0 是一个面向 AI Agent Action 与 Skill 的开发工具链（CL
 
 ## 0. CLI 安装与获取方式
 
-* **从 npm 仓库安装（发布后）**：
-  * 全局安装：`bun install -g @actiondock/cli`
-  * 临时免安装执行：`bun x @actiondock/cli <command>`
-* **从本地源码安装（开发态）**：
-  * 注册本地软链接：`cd packages/cli && bun link`（系统全局即刻可用 `ac`）
-  * 打包本地安装：`cd packages/cli && bun pm pack && bun install -g ./actiondock-cli-2.0.0.tgz`
+安装与获取方式（npm 安装、本地源码软链、Tarball 本地安装等）详见[仓库 README](../../README.md#安装与使用方式)，此处仅列最常用两条：
+
+```bash
+bun install -g @actiondock/cli   # npm 发布后：全局安装，即刻可用 ac
+# 本地源码开发态：cd packages/cli && bun link（修改源码实时生效）
+```
 
 ---
 

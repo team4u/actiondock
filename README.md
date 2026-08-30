@@ -198,10 +198,11 @@ dist/my-tools-skill/
 
 ## 进阶指南与文档
 
-* **[Action 编写与开发指南](file:///root/code/action-dock/docs/action-authoring.md)**：详细解析 Action 定义、`ActionContext` API（`config`/`state`/`actions`/`log`）、JSON Schema 规范及内存单测工具。
-* **[CLI 命令参考手册 (`ac`)](file:///root/code/action-dock/docs/cli-reference.md)**：全量 CLI 命令、参数选项、过滤规则及退出码说明。
-* **[ActionDock AI Agent 技能指南](file:///root/code/action-dock/skills/actiondock/SKILL.md)**：专门面向 AI 编程助手与自主 Agent 的开发规范。
-* **[2.0 架构设计文档](file:///root/code/action-dock/ActionDock_2.0_Design.md)**：ActionDock 2.0 的完整重构架构、设计哲学与约束边界。
+* 完整文档索引见 [docs/](docs/README.md)，核心几篇：
+  * **[Action 编写与开发指南](docs/action-authoring.md)**：详细解析 Action 定义、`ActionContext` API（`config`/`state`/`actions`/`log`）、JSON Schema 规范及内存单测工具。
+  * **[CLI 命令参考手册 (`ac`)](docs/cli-reference.md)**：全量 CLI 命令、参数选项、过滤规则及退出码说明。
+  * **[2.0 架构设计文档](docs/architecture.md)**：ActionDock 2.0 的完整重构架构、设计哲学与约束边界。
+* **[ActionDock AI Agent 技能指南](skills/actiondock/SKILL.md)**：专门面向 AI 编程助手与自主 Agent 的开发规范。
 
 ---
 
@@ -229,10 +230,10 @@ dist/my-tools-skill/
 
 ## 代码仓库分层结构
 
-* [`packages/sdk`](file:///root/code/action-dock/packages/sdk)：`@actiondock/sdk` 极简公共 SDK（`defineAction`、核心上下文类型、`createTestRuntime` 内存测试工具），零重依赖。
-* [`packages/core`](file:///root/code/action-dock/packages/core)：`@actiondock/core` 底层领域引擎（项目加载、ActionRunner 执行器、SQLite 存储管理、Ajv Schema 校验、Bun.build 单文件编译与 Skill 导出）。
-* [`packages/cli`](file:///root/code/action-dock/packages/cli)：`@actiondock/cli` 命令行门面（`ac`），负责参数解析与终端交互。
-* [`examples/github-tools`](file:///root/code/action-dock/examples/github-tools)：官方完整 GitHub 工具集示例（Action 组合调用、持久化 Checkpoint 与 Skill 导出演示）。
+* [`packages/sdk`](packages/sdk)：`@actiondock/sdk` 极简公共 SDK（`defineAction`、核心上下文类型、`createTestRuntime` 内存测试工具），零重依赖。
+* [`packages/core`](packages/core)：`@actiondock/core` 底层领域引擎（项目加载、ActionRunner 执行器、SQLite 存储管理、Ajv Schema 校验、Bun.build 单文件编译与 Skill 导出）。
+* [`packages/cli`](packages/cli)：`@actiondock/cli` 命令行门面（`ac`），负责参数解析与终端交互。
+* [`examples/github-tools`](examples/github-tools)：官方完整 GitHub 工具集示例（Action 组合调用、持久化 Checkpoint 与 Skill 导出演示）。
 
 ---
 
