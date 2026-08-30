@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { initProject } from "../src/project/init";
 import {
   discoverActionFiles,
+  ensureProjectDependencies,
   loadActions,
   loadPlaybooks,
   loadProjectConfig,
@@ -76,5 +77,23 @@ Follow these steps carefully.
     expect(pb.description).toBe("Deploy service to production");
     expect(pb.actions).toEqual(["k8s.apply", "health.check"]);
     expect(pb.content).toContain("# Deploy Service SOP");
+  });
+
+  it("handles ensureProjectDependencies correctly", () => {
+    // If no package.json, returns false
+    const emptyDir = mkdtempSync(join(tmpdir(), "empty-pkg-"));
+    try {
+      expect(ensureProjectDependencies(emptyDir)).toBe(false);
+
+      // If package.json exists but node_modules exists, returns false (fast path)
+      writeFileSync(
+        join(tempDir, "package.json"),
+        JSON.stringify({ name: "test", dependencies: { yaml: "^2.7.0" } })
+      );
+      // node_modules already symlinked in beforeEach, so returns false
+      expect(ensureProjectDependencies(tempDir)).toBe(false);
+    } finally {
+      rmSync(emptyDir, { recursive: true, force: true });
+    }
   });
 });

@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import YAML from "yaml";
 import type { ActionDefinition } from "@actiondock/sdk";
 import type { PlaybookDefinition, PlaybookFrontmatter, ProjectConfig } from "./types";
@@ -45,6 +45,55 @@ export function loadProjectConfig(projectRoot: string): ProjectConfig {
   }
 }
 
+export function ensureProjectDependencies(projectRoot: string, force = false): boolean {
+  if (process.env.ACTIONDOCK_AUTO_INSTALL === "false") {
+    return false;
+  }
+  const pkgJsonPath = join(projectRoot, "package.json");
+  if (!existsSync(pkgJsonPath)) {
+    return false;
+  }
+
+  const nodeModulesPath = join(projectRoot, "node_modules");
+  if (!force && existsSync(nodeModulesPath)) {
+    return false;
+  }
+
+  try {
+    const raw = readFileSync(pkgJsonPath, "utf-8");
+    const pkg = JSON.parse(raw);
+    const hasDeps =
+      (pkg.dependencies && Object.keys(pkg.dependencies).length > 0) ||
+      (pkg.devDependencies && Object.keys(pkg.devDependencies).length > 0);
+
+    if (!hasDeps && !force) {
+      return false;
+    }
+
+    process.stderr.write(
+      `[actiondock] Installing dependencies for '${pkg.name || basename(projectRoot)}'...\n`
+    );
+
+    const proc = Bun.spawnSync(["bun", "install"], {
+      cwd: projectRoot,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    if (proc.exitCode !== 0) {
+      const errText = proc.stderr?.toString() || "Unknown error during bun install";
+      process.stderr.write(`[actiondock] Warning: Dependency installation failed: ${errText}\n`);
+      return false;
+    }
+
+    process.stderr.write(`[actiondock] Dependencies installed successfully.\n`);
+    return true;
+  } catch (err: any) {
+    process.stderr.write(`[actiondock] Warning: Failed to run auto-install: ${err.message}\n`);
+    return false;
+  }
+}
+
 function scanFiles(dir: string, extension: string): string[] {
   if (!existsSync(dir)) return [];
   const results: string[] = [];
@@ -83,15 +132,42 @@ export function discoverActionFiles(
 
 export async function loadActions(
   projectRoot: string,
-  actionsDir = "actions"
+  actionsDir = "actions",
+  options: { autoInstall?: boolean } = { autoInstall: true }
 ): Promise<Map<string, ActionDefinition>> {
+  if (options.autoInstall !== false) {
+    ensureProjectDependencies(projectRoot);
+  }
+
   const files = discoverActionFiles(projectRoot, actionsDir);
   const actions = new Map<string, ActionDefinition>();
 
   for (const file of files) {
     try {
-      // Dynamic import
-      const imported = await import(file);
+      // Dynamic import with auto-install retry on missing module
+      let imported: any;
+      try {
+        imported = await import(file);
+      } catch (err: any) {
+        const msg = String(err.message || "");
+        if (
+          options.autoInstall !== false &&
+          (msg.includes("Cannot find package") ||
+            msg.includes("Cannot find module") ||
+            msg.includes("ERR_MODULE_NOT_FOUND") ||
+            msg.includes("Could not resolve"))
+        ) {
+          const installed = ensureProjectDependencies(projectRoot, true);
+          if (installed) {
+            imported = await import(file);
+          } else {
+            throw err;
+          }
+        } else {
+          throw err;
+        }
+      }
+
       const action = imported.default || imported.action;
       if (action && typeof action === "object" && typeof action.id === "string") {
         if (actions.has(action.id)) {
