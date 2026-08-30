@@ -19,12 +19,74 @@ ActionDock 2.0 是一个基于 **Bun + TypeScript** 的轻量级开发工具链�
 
 ---
 
+## 📦 安装与使用方式
+
+ActionDock CLI 提供了两种使用方式：**从 npm 官方仓库安装** 与 **从本地源码打包安装**。
+
+### 方式 1：从 npm 仓库安装（发布后 / 终端用户）
+
+如果您希望在任何环境直接使用已经发布的官方包：
+
+```bash
+# 全局安装（推荐，安装后可全局直接使用 actiondock 命令）
+bun install -g @actiondock/cli
+
+# 或免安装临时执行（类似 npx）
+bun x @actiondock/cli init my-tools
+```
+
+---
+
+### 方式 2：从本地源码打包与安装（源码开发 / 未发布阶段）
+
+如果您克隆了本项目源码，或正在进行 ActionDock 本身的功能二次开发：
+
+#### 方法 A：使用 `bun link` 建立本地软链接（最推荐，修改代码实时生效）
+```bash
+# 1. 进入 CLI 源码目录
+cd packages/cli
+
+# 2. 注册本地软链接到全局
+bun link
+
+# 3. 此时在系统任意位置均可直接使用 actiondock 命令！
+actiondock --help
+```
+
+#### 方法 B：本地打包为 `.tgz` 压缩包安装
+```bash
+# 1. 在 packages/cli 目录下打包
+cd packages/cli
+bun pm pack
+
+# 2. 全局安装生成的本地 tarball 包
+bun install -g ./actiondock-cli-2.0.0.tgz
+```
+
+#### 方法 C：通过本地路径直接全局安装
+```bash
+# 在项目根目录下执行
+bun install -g ./packages/cli
+```
+
+#### 方法 D：直接运行本地脚本入口
+```bash
+# 在项目根目录下通过 Bun 运行入口文件
+bun packages/cli/bin/actiondock.js <命令>
+```
+
+---
+
 ## 🚀 快速上手
 
 ### 1. 初始化新项目
 ```bash
-bun x @actiondock/cli init my-tools
+# 使用已安装的全局命令
+actiondock init my-tools
 cd my-tools
+
+# 或使用 bun x 免安装初始化
+# bun x @actiondock/cli init my-tools
 ```
 
 ### 2. 创建 Action

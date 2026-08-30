@@ -4,6 +4,34 @@ ActionDock 命令行工具（`actiondock`）全量功能与参数参考。
 
 ---
 
+## 安装与获取方式
+
+### 1. 从 npm 官方仓库安装（发布后）
+* **全局安装**：`bun install -g @actiondock/cli`（安装后直接使用 `actiondock` 命令）
+* **免安装执行**：`bun x @actiondock/cli <command>`（无需全局安装，即时拉取执行）
+
+### 2. 从本地源码构建与安装（开发态 / 本地模式）
+* **方法 A（本地软链接，最推荐）**：
+  ```bash
+  cd packages/cli && bun link
+  ```
+  执行后即可在全局直接使用 `actiondock` 命令，且本地源码变动即时生效。
+* **方法 B（打包为 Tarball 本地安装）**：
+  ```bash
+  cd packages/cli && bun pm pack
+  bun install -g ./actiondock-cli-2.0.0.tgz
+  ```
+* **方法 C（基于本地路径安装）**：
+  ```bash
+  bun install -g ./packages/cli
+  ```
+* **方法 D（源码直接执行）**：
+  ```bash
+  bun ./packages/cli/bin/actiondock.js <command>
+  ```
+
+---
+
 ## 交互设计原则
 
 * **`stdout`**：机器可读的标准结果输出（执行 Action 时输出标准 JSON Envelope；管理类命令在传入 `--json` 时输出纯净 JSON）。
