@@ -1,70 +1,81 @@
 # 构建编译与 Skill 分发
 
-ActionDock 2.0 的核心交付模型是**独立自包含二进制（Standalone Executable）**与**标准 Agent Skill 交付包**。
+# 背景
 
-本文档详细介绍独立二进制的构建原理、交叉编译支持、元数据规范以及 Skill 导出结构。
+在传统的 AI Agent 工具分发与部署模式中，团队通常面临极高的运维成本与环境不确定性：
+
+- **繁琐的环境准备**：目标机器或沙箱容器必须预先安装对应版本的 Node.js、Bun、Python 解释器与包管理工具。
+- **体积庞大与网络依赖**：分发工具需要连同数万个文件的 `node_modules` 或庞大的 Python 虚拟环境一同打包，且部署时经常需要联网执行 `npm install`。
+- **依赖冲突与版本漂移**：目标环境中的全局依赖或子依赖版本不兼容，导致同一套工具在开发者电脑上正常，而在生产沙箱中运行失败。
+
+ActionDock 2.0 确立了**零安装独立二进制（Zero-Install Standalone Executable）**与**自包含 Agent Skill 交付包**的分发标准。通过 Bun 原生单文件编译引擎，将整个 Action Package 打包为单文件可执行程序，目标环境无需安装任何运行时即可直接执行。
 
 ---
 
-## 独立二进制构建原理 (`ac build`)
+# 独立二进制构建原理 (`ac build`)
 
-在执行 `ac build` 时，ActionDock 会自动执行以下构建管线：
-
-```text
-扫描当前项目的 actions/ 目录与 actiondock.json 配置
-                 |
-                 v
-动态生成静态 Registry 入口 (.actiondock/.build/entry.ts)
-- 静态 import 项目内的每一个 Action
-- 创建 StandaloneRuntime 实例并绑定
-                 |
-                 v
-调用 Bun 原生单文件编译引擎
-- bun build --compile .actiondock/.build/entry.ts --outfile dist/bin/<package-id>
-- 将 TypeScript 代码、所有 npm 依赖及 Bun 极速运行时打包进单个可执行文件
-                 |
-                 v
-计算二进制哈希并生成构建元数据 (dist/bin/artifact.json)
+```mermaid
+graph TD
+    Scan["扫描项目 actions/*.ts 与 actiondock.json"] --> Gen["生成静态入口 .actiondock/.build/entry.ts"]
+    Gen --> Import["静态 import 全部 Action 并绑定 StandaloneRuntime"]
+    Import --> BunCompile["调用 Bun.build 原生单文件编译器<br/>(bun build --compile entry.ts)"]
+    BunCompile --> TreeShake["Tree-shaking 优化并内联所有 npm 依赖"]
+    TreeShake --> Binary["产出独立二进制 dist/bin/<package-id>"]
+    Binary --> Hash["计算 SHA256 哈希并生成 dist/bin/artifact.json"]
 ```
 
 ### 单包单二进制设计（One Package One Binary）
-ActionDock 将一个 Package 内的所有 Action 聚合到**同一个可执行文件**中（例如 `./bin/github-tools`）。
-* **避免体积膨胀**：无需为每个 Action 单独打包一个百兆二进制，几十个 Action 共享同一份打包体积。
-* **统一工具入口**：通过子命令路由（如 `./bin/github-tools run <action-id>`），符合标准 CLI 交互习惯。
+ActionDock 将一个 Package 内的所有 Action 聚合编译进**同一个独立可执行文件**中（例如 `./bin/github-tools`）：
+- **杜绝体积膨胀**：避免每个 Action 单独打包导致的体积冗余，几十个 Action 共享单份运行时体积（通常约 40~50MB）。
+- **统一工具门面**：通过子命令分发（`./bin/pkg list`、`./bin/pkg describe`、`./bin/pkg run`），完全符合现代 CLI 工具规范。
 
 ---
 
-## 交叉编译（Cross-Target Compilation）
+# 全平台交叉编译 (Cross-Target Compilation)
 
-ActionDock 支持使用 `--target` 参数为不同操作系统和 CPU 架构交叉编译独立二进制：
+借助 Bun 原生内置的跨平台交叉编译能力，在单台开发机上（例如 macOS）无需 Docker 或目标平台工具链，即可直接构建全平台可执行文件：
+
+| 目标平台标识 (`--target`) | 目标操作系统与架构 | 适用场景 |
+| :--- | :--- | :--- |
+| `host`（默认） | 当前编译宿主机操作系统与架构 | 本地开发与快速测试 |
+| `linux-x64` | Linux x86_64 (64-bit) | 绝大多数云服务器、Kubernetes 容器 |
+| `linux-arm64` | Linux ARM64 (64-bit) | AWS Graviton、树莓派等 ARM 服务器 |
+| `darwin-arm64` | macOS ARM64 (Apple Silicon M1/M2/M3/M4) | 现代化 Mac 电脑 |
+| `darwin-x64` | macOS x86_64 (Intel) | 旧款 Intel 架构 Mac |
+| `windows-x64` | Windows x86_64 (64-bit `.exe`) | Windows 开发机与服务器 |
+
+### 交叉编译命令示例
 
 ```bash
-# 编译为当前宿主机器架构（默认）
+# 1. 编译为当前宿主架构
 ac build
 
-# 交叉编译为 Linux x86_64 二进制
-ac build --target linux-x64
+# 2. 交叉编译为 Linux 生产服务器二进制
+ac build --target linux-x64 --out dist/bin/my-tools-linux-x64
 
-# 交叉编译为 macOS ARM64 (Apple Silicon) 二进制
-ac build --target darwin-arm64
+# 3. 交叉编译为 Apple Silicon Mac 二进制
+ac build --target darwin-arm64 --out dist/bin/my-tools-darwin-arm64
 
-# 交叉编译为 Windows x86_64 可执行程序
-ac build --target windows-x64
+# 4. 交叉编译为 Windows 二进制并开启代码压缩
+ac build --target windows-x64 --minify --out dist/bin/my-tools.exe
 ```
+
+> [!TIP]
+> 交叉编译适用于纯 TypeScript/JS 及其纯 JS npm 依赖；若 Action 引用了包含原生 C/C++ 动态链接库的 npm 扩展包，建议在目标系统的 CI 流水线中执行构建。
 
 ---
 
-## 构建元数据规范 (`artifact.json`)
+# 构建元数据清单 (`artifact.json`)
 
-每次编译成功后，系统会在二进制同级目录下生成 `artifact.json` 元数据文件：
+每次构建完成后，ActionDock 会在输出目录下自动生成结构化的 `artifact.json` 元数据文件：
 
 ```json
 {
-  "packageId": "fjay.github-tools",
+  "packageId": "team4u.github-tools",
   "name": "GitHub Tools",
-  "version": "0.1.0",
-  "description": "GitHub 运维与代码评审 Action 集合",
-  "target": "host",
+  "version": "1.0.0",
+  "description": "GitHub 自动化运维与代码评审工具集",
+  "target": "linux-x64",
   "actions": [
     "github.list-prs",
     "github.get-pr",
@@ -74,44 +85,72 @@ ac build --target windows-x64
   "bunVersion": "1.4.0",
   "lockHash": "34cbb9a4087e812a",
   "buildHash": "a9b8c7d6e5f41234",
-  "createdAt": "2026-08-30T07:00:00.000Z"
+  "createdAt": "2026-08-30T08:00:00.000Z"
 }
 ```
 
 ---
 
-### 两种导出模式：全量打包 vs 任务驱动按需打包
+# Skill 交付包导出 (`ac export skill`)
 
-#### 1. 全量打包（默认模式）
-如果不传任何过滤参数，系统会将项目内**所有的 Action** 和**所有的 Playbook** 打包进 Skill 中：
+通过 `ac export skill` 命令，一键将编译后的独立二进制、Playbook SOP 与 `SKILL.md` 打包为标准 Agent Skill 交付包。
+
+### 1. 全量导出（默认）
 ```bash
 ac export skill
-# 或打包为 .zip 归档文件
-ac export skill --archive
 ```
+输出目录为 `dist/<package-name>-skill/`。
 
-#### 2. 任务驱动按需打包（Playbook-Driven Export，推荐）
-当项目包含多个业务领域的 Action 和 SOP 时，可通过 `--playbook` 参数指定要导出的 SOP：
+### 2. 任务驱动按需导出 (Playbook-Driven Export)
+在复杂项目中，推荐使用 `--playbook` 参数针对特定任务精准打包：
 ```bash
 ac export skill --playbook review-pr
 ```
-* **自动依赖解析与裁剪（Tree-shaking）**：系统自动读取 `playbooks/review-pr.md` Frontmatter 中的 `actions` 依赖，仅将该任务所需的 Action 编译进独立二进制，其余无关 Action 自动剔除。
-* **干净的产物**：导出的 `playbooks/` 文件夹中仅包含选中的 SOP，生成的 `SKILL.md` 与 `actiondock.skill.json` 仅包含相关 Action 与指南，彻底避免上下文污染与悬空依赖。
+- **自动依赖裁剪（Tree-shaking）**：系统自动读取 `playbooks/review-pr.md` Frontmatter 中的 `actions` 依赖，仅将该任务所需的 Action 编译进二进制，剔除其余代码。
+- **纯净产物**：导出的 `playbooks/` 仅含选中的 SOP，生成的 `SKILL.md` 仅包含相关 Action，杜绝 Agent 提示词冗余。
 
-#### 3. 工具驱动按需打包（Action-Driven Export）
+### 3. 多平台导出与 ZIP 归档
 ```bash
-# 仅打包指定 Action，并自动裁剪依赖未包含 Action 的 Playbooks
-ac export skill --actions github.get-pr github.review-pr
+# 导出适配 Linux 的 Skill 包（目录自动命名为 dist/github-tools-skill-linux-x64/）
+ac export skill --target linux-x64
 
-# 仅编译指定 Action 到独立二进制
-ac build --actions github.get-pr github.review-pr
+# 导出并自动压缩为 ZIP 归档文件
+ac export skill --target linux-x64 --archive    # 生成 dist/github-tools-skill-linux-x64.zip
 ```
 
 ---
 
-### `SKILL.md` 自动生成规则
-导出的 `SKILL.md` 会自动包含：
-* **YAML Frontmatter**：包含 `name` 与 `description`，符合 Antigravity、Claude Code、Cursor 等标准 Skill 规范。
-* **二进制调用说明**：指导 Agent 如何使用 `./bin/<pkg>` 发现工具（`list --json`）、查看参数定义（`describe <id> --json`）与执行 Action（`run <id> --input '...'`）。
-* **Action 目录与参数清单**：自动从每个 Action 的 `inputSchema` 中提取必填与可选参数列表。
-* **Playbook SOP 索引**：列出所有可用的操作手册路径。
+# 导出的 Skill 目录结构
+
+```text
+dist/github-tools-skill/
+├── SKILL.md                  # 面向 AI Agent 的主引导手册（含标准 YAML Frontmatter 与参数表）
+├── actiondock.skill.json     # 机器可读的结构化清单（包含全量 Action Schema）
+├── playbooks/                # 任务 SOP Markdown 规程目录
+│   └── review-pr.md
+└── bin/
+    └── github-tools          # 独立自包含二进制（目标机器无需预装 Node/Bun/Python）
+```
+
+---
+
+# 独立编译契约一致性保证
+
+ActionDock 保证在**源码开发态**与**独立编译态**下行为 100% 严格一致：
+
+| 特性 | 本地开发态 (`ac run`) | 独立二进制态 (`./bin/pkg run`) | 一致性保证 |
+| :--- | :--- | :--- | :--- |
+| **输入/输出校验** | Ajv JSON Schema 校验 | Ajv JSON Schema 校验 | 完全一致 |
+| **配置解析优先级** | 5 级配置回退（CLI > DB > Env > Default） | 5 级配置回退（CLI > DB > Env > Default） | 完全一致 |
+| **持久化存储模型** | SQLite `runtime.db` | SQLite `~/.actiondock/data/<pkg>/runtime.db` | 表结构与 TTL 机制完全一致 |
+| **输出 Envelope** | `stdout` 标准 JSON Envelope | `stdout` 标准 JSON Envelope | 完全一致 |
+| **日志通道** | `stderr` 格式化日志 | `stderr` 格式化日志 | 完全一致 |
+| **超时与取消** | 支持 `--timeout` 与 `Ctrl+C` 信号 | 支持 `--timeout` 与 `Ctrl+C` 信号 | 完全一致 |
+
+---
+
+# 文档导航
+
+- [Skill 设计哲学与交付规范](skill-guide.md)：深入学习 Skill 交付包设计理念与 Agent 生命周期。
+- [Playbook SOP 编写规范](playbook-guide.md)：为 Skill 编写高质业务操作规程。
+- [AI Agent 接入指南](agent-integration.md)：将导出的 Skill 接入各类主流 Agent 宿主。
