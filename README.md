@@ -33,17 +33,23 @@ bun x @actiondock/cli init my-tools
 
 ---
 
-### 方式 2：从本地源码打包与安装（源码开发 / 未发布阶段）
+### 方式 2：从本地源码安装（框架开发者 / 未发布阶段）
+
+#### 开发前准备：克隆并链接
+```bash
+# 1. 克隆仓库并安装依赖（monorepo workspace 会自动链接内部包）
+git clone https://github.com/team4u/actiondock.git
+cd actiondock
+bun install
+
+# 2. 注册 ac 命令到全局（修改源码实时生效）
+cd packages/cli
+bun link
+```
 
 #### 方法 A：使用 `bun link` 建立本地软链接（最推荐，修改代码实时生效）
 ```bash
-# 1. 进入 CLI 源码目录
-cd packages/cli
-
-# 2. 注册本地软链接到全局
-bun link
-
-# 3. 此时在系统任意位置均可直接使用 ac 命令
+# 上面的 bun link 已经完成注册，此时在系统任意位置均可直接使用 ac 命令
 ac --help
 ```
 
@@ -69,6 +75,8 @@ bun install -g ./packages/cli
 bun packages/cli/bin/ac.js <命令>
 ```
 
+> **⚠️ 框架开发者请注意**：`ac init` 创建的是面向最终用户的独立项目，其 `package.json` 依赖为 `"@actiondock/sdk": "^2.0.0"`。在 SDK 正式发布到 npm 之前，这些独立项目执行 `bun install` 会报 404，这是预期行为。**开发框架本身请在 monorepo 内进行**（例如在 `examples/` 下新建项目），内部包通过 `workspace:*` 引用，参见 `examples/github-tools/package.json`。
+
 ---
 
 ## 快速上手
@@ -78,6 +86,8 @@ bun packages/cli/bin/ac.js <命令>
 ac init my-tools
 cd my-tools
 ```
+
+> **⚠️ 注意**：`ac init` 生成的独立项目依赖 `@actiondock/sdk@^2.0.0`，该包尚未发布到 npm，发布前 `bun install` 会报 404。框架贡献者请在 monorepo 内开发（见上文「方式 2」的说明）。
 
 ### 2. 创建 Action
 使用 CLI 命令快速生成 Action 模板：
@@ -151,9 +161,27 @@ ac action run greet.user --input '{"name": "张三"}'
 ac build
 ```
 
+#### 交叉编译其他平台
+基于 Bun 原生交叉编译能力，在任意一台开发机上即可构建全平台产物（无需 Docker 或目标平台工具链）：
+
+```bash
+ac build --target linux-x64      # Linux (x86-64)
+ac build --target darwin-x64     # macOS (Intel)
+ac build --target darwin-arm64   # macOS (Apple Silicon)
+ac build --target windows-x64    # Windows (x86-64)
+```
+
+> **💡 提示**：分平台构建时建议配合 `--out` 指定输出路径（如 `ac build --target linux-x64 --out dist/my-tools-linux-x64`），否则默认输出 `dist/my-tools` 会被后续构建覆盖。交叉编译适用于纯 TypeScript/JS 依赖；若 Action 引用了含原生二进制的 npm 包（如 `sharp`、`better-sqlite3`），请在对应平台的 CI 上构建。
+
 ### 5. 导出自包含 Skill 交付包
 ```bash
 ac export skill
+```
+
+导出其他平台的 Skill 交付包（目录名自动追加平台后缀，互不覆盖）：
+
+```bash
+ac export skill --target linux-x64   # → dist/my-tools-skill-linux-x64/
 ```
 
 导出的 Skill 目录结构：
@@ -194,8 +222,8 @@ dist/my-tools-skill/
 | `ac state list / get / set / delete` | 查看与管理本地 SQLite 共享状态存储 |
 | `ac runs list / show <run-id>` | 查看 Action 执行历史与输入输出记录 |
 | `ac test` | 使用 Bun Test Runner 执行单元测试 |
-| `ac build [--target <target>]` | 将项目编译为单个自包含独立二进制 |
-| `ac export skill [--target <target>]` | 导出包含 `SKILL.md` + 独立二进制的完整 Skill 交付包 |
+| `ac build [--target <target>] [--out <path>]` | 将项目编译为单个自包含独立二进制（支持交叉编译：`linux-x64` / `darwin-x64` / `darwin-arm64` / `windows-x64`） |
+| `ac export skill [--target <target>]` | 导出包含 `SKILL.md` + 独立二进制的完整 Skill 交付包（支持分平台交叉编译） |
 
 ---
 
