@@ -5,10 +5,13 @@ import { createStorage } from "../storage";
 import { ActionRunner } from "./runner";
 
 
+import type { ConfigItemDefinition } from "../project/types";
+
 export interface StandaloneRuntimeOptions {
   packageId: string;
   version: string;
   description?: string;
+  config?: Record<string, ConfigItemDefinition>;
   actions: ActionDefinition[];
 }
 
@@ -16,12 +19,14 @@ export class StandaloneRuntime {
   private packageId: string;
   private version: string;
   private description?: string;
+  private configDefs?: Record<string, ConfigItemDefinition>;
   private actionsMap: Map<string, ActionDefinition>;
 
   constructor(options: StandaloneRuntimeOptions) {
     this.packageId = options.packageId;
     this.version = options.version;
     this.description = options.description;
+    this.configDefs = options.config;
     this.actionsMap = new Map(options.actions.map((a) => [a.id, a]));
   }
 
@@ -59,6 +64,13 @@ export class StandaloneRuntime {
       packageId: this.packageId,
       storage,
       configOverrides,
+      projectConfig: {
+        id: this.packageId,
+        name: this.packageId,
+        version: this.version,
+        description: this.description,
+        config: this.configDefs,
+      },
       actions: this.actionsMap,
     });
 

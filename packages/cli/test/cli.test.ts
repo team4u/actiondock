@@ -144,6 +144,43 @@ describe("CLI End-to-End", () => {
     const runWithNewConfRes = JSON.parse(runWithNewConf.stdout.toString());
     expect(runWithNewConfRes.data.message).toBe("Howdy, Cowboy!");
 
+    // 6b. config from environment variables
+    const confDel = runCli(["config", "delete", "SAMPLE_GREETING"], tempDir);
+    expect(confDel.exitCode).toBe(0);
+
+    const confGetEnv = runCli(
+      ["config", "get", "SAMPLE_GREETING", "--json"],
+      tempDir,
+      { SAMPLE_GREETING: "Bonjour" }
+    );
+    expect(confGetEnv.exitCode).toBe(0);
+    const confEnvObj = JSON.parse(confGetEnv.stdout.toString());
+    expect(confEnvObj.value).toBe("Bonjour");
+    expect(confEnvObj.source).toBe("env");
+
+    const confSchemaEnv = runCli(
+      ["config", "schema", "--json"],
+      tempDir,
+      { SAMPLE_GREETING: "Bonjour" }
+    );
+    expect(confSchemaEnv.exitCode).toBe(0);
+    const schemaObj = JSON.parse(confSchemaEnv.stdout.toString());
+    const greetingItem = schemaObj.configs.find((c: any) => c.key === "SAMPLE_GREETING");
+    expect(greetingItem.source).toBe("env");
+    expect(greetingItem.status).toBe("SET");
+
+    const runWithEnv = runCli(
+      ["run", "sample.greet", "--input", '{"name": "Jean"}'],
+      tempDir,
+      { SAMPLE_GREETING: "Bonjour" }
+    );
+    expect(runWithEnv.exitCode).toBe(0);
+    const runWithEnvRes = JSON.parse(runWithEnv.stdout.toString());
+    expect(runWithEnvRes.data.message).toBe("Bonjour, Jean!");
+
+    // Restore SQLite config
+    runCli(["config", "set", "SAMPLE_GREETING", "Howdy"], tempDir);
+
     // 7. state list & get & set with --ttl
     const stateList = runCli(["state", "list", "--json"], tempDir);
     expect(stateList.exitCode).toBe(0);
@@ -157,7 +194,7 @@ describe("CLI End-to-End", () => {
     const stateGet = runCli(["state", "get", "greet_count", "--json"], tempDir);
     expect(stateGet.exitCode).toBe(0);
     const stateVal = JSON.parse(stateGet.stdout.toString());
-    expect(stateVal.value).toBe(2);
+    expect(stateVal.value).toBe(3);
 
     const stateSetTtl = runCli(
       ["state", "set", "short_lived", "session_abc", "--ttl", "1"],
@@ -175,11 +212,11 @@ describe("CLI End-to-End", () => {
     const runsListProc = runCli(["runs", "list", "--json"], tempDir);
     expect(runsListProc.exitCode).toBe(0);
     const runs = JSON.parse(runsListProc.stdout.toString());
-    expect(runs.length).toBe(2);
+    expect(runs.length).toBe(3);
 
     const runsListIntent = runCli(["runs", "list", "--intent", "sample\\.greet", "--json"], tempDir);
     expect(runsListIntent.exitCode).toBe(0);
-    expect(JSON.parse(runsListIntent.stdout.toString()).length).toBe(2);
+    expect(JSON.parse(runsListIntent.stdout.toString()).length).toBe(3);
 
     const runShowProc = runCli(["runs", "show", runs[0].id, "--json"], tempDir);
     expect(runShowProc.exitCode).toBe(0);

@@ -1,7 +1,11 @@
+export type ConfigValueType = "string" | "number" | "boolean" | "object" | "array";
+
 export interface ConfigItemDefinition {
   description?: string;
   default?: unknown;
   secret?: boolean;
+  type?: ConfigValueType;
+  env?: string | string[];
 }
 
 export interface ProjectConfig {

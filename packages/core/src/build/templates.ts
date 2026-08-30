@@ -9,7 +9,8 @@ export function generateStandaloneEntrypoint(
   packageId: string,
   version: string,
   description: string | undefined,
-  actions: ActionImport[]
+  actions: ActionImport[],
+  configDefs?: Record<string, unknown>
 ): string {
   // Resolve path to standalone runtime inside @actiondock/cli
   const standaloneRuntimePath = resolve(__dirname, "../runtime/standalone");
@@ -30,6 +31,7 @@ const app = createStandaloneRuntime({
   packageId: ${JSON.stringify(packageId)},
   version: ${JSON.stringify(version)},
   description: ${JSON.stringify(description || "")},
+  config: ${JSON.stringify(configDefs || {})},
   actions: [
     ${actionArray}
   ],

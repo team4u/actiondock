@@ -71,7 +71,8 @@ export async function buildProject(options: BuildOptions): Promise<BuildResult> 
     config.id,
     config.version,
     config.description,
-    actionImports
+    actionImports,
+    config.config
   );
   const entryPath = join(buildDir, "entry.ts");
   writeFileSync(entryPath, entryCode, "utf-8");

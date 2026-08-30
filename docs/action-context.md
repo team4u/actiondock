@@ -10,41 +10,81 @@
 
 `ctx.config` 提供了读取运行时配置的能力，专为环境密钥（如 API Token、网关地址、超时阈值等）设计。
 
-### 配置解析优先级（多级回退策略）
+### 配置解析优先级（5 层回退策略）
 
 当调用 `ctx.config.get(key, defaultValue)` 时，ActionDock 按以下顺序解析配置：
 
 ```text
-[命令行临时覆盖 (--config KEY=val)]
+1. [命令行临时覆盖 (--config KEY=val / overrides)]
                  | (未提供则回退)
                  v
-[项目本地数据库存储 (ac config set KEY val)]
+2. [项目本地 SQLite 存储 (.actiondock/storage.db)]
                  | (未设置则回退)
                  v
-[全局配置存储 (ac config set KEY val --global / ~/.actiondock/global.db)]
+3. [全局 SQLite 存储 (~/.actiondock/global.db)]
                  | (未设置则回退)
                  v
-[系统环境变量 (process.env.KEY)]
+4. [系统环境变量 (process.env / .env)]
                  | (未设置则回退)
                  v
-[actiondock.json 声明的默认值 ("config[key].default")]
+5. [actiondock.json 声明的默认值 ("config[key].default")]
                  | (未声明则回退)
                  v
-[代码内提供的 defaultValue 或 undefined]
+6. [代码内提供的 defaultValue 或 undefined]
+```
+
+### 环境变量探测与自动类型转换
+
+ActionDock 内建了智能环境变量解析引擎：
+
+1. **显式 Env 绑定**：若在 `actiondock.json` 中声明了 `env`（如 `"env": "GITHUB_PERSONAL_ACCESS_TOKEN"` 或 `"env": ["GH_TOKEN", "GITHUB_TOKEN"]`），优先检查对应环境变量。
+2. **Package 命名空间前缀**：自动检查 `ACTIONDOCK_<PACKAGE>_<KEY>`（例如 `ACTIONDOCK_TEAM_GITHUB_TOOLS_TOKEN`），防止多包环境变量命名冲突。
+3. **SNAKE_CASE 自动匹配**：驼峰命名与短横线键名自动转换为蛇形大写（例如 `apiKey` 或 `api-key` -> `API_KEY`）。
+4. **原始键名匹配**：直接探测同名键名。
+5. **智能类型转换（Type Coercion）**：
+   - `boolean`: `"true"`, `"1"`, `"yes"`, `"on"` -> `true`；`"false"`, `"0"`, `"no"`, `"off"` -> `false`
+   - `number`: `"5000"` -> `5000`
+   - `object` / `array`: JSON 字符串自动解析为对应 JS 对象/数组
+
+### `actiondock.json` 配置清单声明示例
+
+```json
+{
+  "id": "team.github-tools",
+  "config": {
+    "apiToken": {
+      "description": "GitHub 个人访问令牌",
+      "type": "string",
+      "env": ["GITHUB_TOKEN", "GH_TOKEN"],
+      "secret": true
+    },
+    "timeoutMs": {
+      "description": "请求超时毫秒数",
+      "type": "number",
+      "default": 5000,
+      "env": "GITHUB_TIMEOUT_MS"
+    },
+    "enableDebug": {
+      "description": "是否开启调试日志",
+      "type": "boolean",
+      "default": false
+    }
+  }
+}
 ```
 
 ### API 规范与示例
 
 ```ts
-// 获取配置字符串
-const apiKey = ctx.config.get<string>("GITHUB_TOKEN");
+// 获取配置字符串（支持泛型推导）
+const apiKey = ctx.config.get<string>("apiToken");
 
-// 提供回退默认值
-const apiBase = ctx.config.get("API_BASE_URL", "https://api.github.com");
+// 提供代码级兜底默认值
+const apiBase = ctx.config.get("apiBaseUrl", "https://api.github.com");
 
-// 读取布尔值或数值
-const timeoutMs = ctx.config.get<number>("TIMEOUT_MS", 5000);
-const debugMode = ctx.config.get<boolean>("DEBUG_MODE", false);
+// 读取布尔值或数值（环境变量注入时自动转换类型）
+const timeoutMs = ctx.config.get<number>("timeoutMs", 5000);
+const debugMode = ctx.config.get<boolean>("enableDebug", false);
 ```
 
 ---

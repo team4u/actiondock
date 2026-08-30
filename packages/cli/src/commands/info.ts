@@ -3,6 +3,7 @@ import {
   loadActions,
   loadPlaybooks,
   loadProjectConfig,
+  resolveActionOrPackageRoot,
   resolvePackageRoot,
   resolveTarget,
 } from "@actiondock/core";
@@ -61,15 +62,17 @@ export function registerInfoCommand(program: Command): void {
           return;
         }
 
-        const root = resolvePackageRoot(identifier || options.package);
-        if (!root) {
+        const resolved = await resolveActionOrPackageRoot(identifier || options.package);
+        if (!resolved) {
           if (identifier || options.package) {
-            console.error(`Error: Package '${identifier || options.package}' not found in linked packages or path`);
+            console.error(`Error: Action or package '${identifier || options.package}' not found in linked packages or path`);
           } else {
-            console.error("Error: Not in an ActionDock project (actiondock.json not found).\nUse 'ac info <package-id>' or cd into a project directory.");
+            console.error("Error: Not in an ActionDock project (actiondock.json not found).\nUse 'ac info <action-or-package-id>' or cd into a project directory.");
           }
           process.exit(1);
         }
+
+        const root = resolved.projectRoot;
 
         const config = loadProjectConfig(root);
         const actions = await loadActions(root, config.actionsDir);

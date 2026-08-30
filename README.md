@@ -96,7 +96,7 @@ export default defineAction({
   },
 
   async run(input: { name: string }, ctx) {
-    // 读取配置（优先级：命令行覆盖 > 本地数据库 > 默认值）
+    // 读取配置（优先级：命令行覆盖 > 本地/全局数据库 > 环境变量 > 声明默认值）
     const greeting = ctx.config.get("GREETING", "你好");
 
     // 读写持久化状态（跨执行保留）

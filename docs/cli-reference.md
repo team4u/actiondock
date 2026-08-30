@@ -146,10 +146,11 @@ ActionDock 命令行工具（`ac`）全量功能与参数参考。
 
 ### 运行时配置管理（Config）
 
-* `ac config list [patterns...] [--json]`：列出本地 SQLite 中保存的所有配置项（支持 `-i, --intent` 正则与关键字模糊搜索）。
-* `ac config get <key> [--json]`：获取指定配置项的有效值与来源。
-* `ac config set <key> <value>`：设置或更新本地配置项（支持字符串、数值或 JSON 对象）。
-* `ac config delete <key>`（别名：`rm`）：删除指定的本地配置项。
+* `ac config schema [id] [--json]`（别名：`ac config check`）：检查当前项目或指定 Action 声明的配置依赖，展示生效状态（`[SET]` / `[DEFAULT]` / `[MISSING]`）与来源（`project` / `global` / `env` / `default`）。
+* `ac config list [patterns...] [-P <pkg>] [-g] [--reveal] [--json]`：列出有效配置清单（支持 `-i, --intent` 正则与关键字模糊搜索，支持敏感信息脱敏与 `--reveal` 明文展示）。
+* `ac config get <key> [-P <pkg>] [-g] [--reveal] [--json]`：获取指定配置项的最终有效值与解析来源（按优先级遍历 CLI覆盖 -> 项目SQLite -> 全局SQLite -> 环境变量 -> Schema默认值）。
+* `ac config set <key> <value> [-g]`：设置或更新配置项（不在项目目录时默认写入全局 `~/.actiondock/global.db`，支持字符串、数值或 JSON 对象）。
+* `ac config delete <key> [-g]`（别名：`rm`）：删除指定的本地或全局配置项。
 
 ---
 

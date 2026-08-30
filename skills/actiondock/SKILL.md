@@ -89,7 +89,7 @@ export default defineAction<Input, Output>({
   },
 
   async run(input, ctx) {
-    // Config: 命令行覆盖 > 本地 SQLite > 默认配置
+    // Config: 命令行覆盖 > 项目本地 SQLite > 全局 SQLite > 环境变量 (带类型推断/别名) > actiondock.json 默认值
     const token = ctx.config.get<string>("GITHUB_TOKEN");
     const api = ctx.config.get("GITHUB_API", "https://api.github.com");
 
@@ -135,17 +135,40 @@ ac action show <id> [--json]
 ac action show <id> --profile <profile-name> [--json]
 ```
 
+### AI Agent 执行闭环：事前自检与配置引导流程
 
-### 运行 Action（stdout 输出标准 JSON 结果）
-```bash
-# 简写方式 (ac run)
-ac run <id> --input '{"repo": "owner/repo"}'
-ac run <id> --input-file ./input.json
-ac run <id> --config GITHUB_TOKEN=secret_token
+当 Agent 准备执行某个 Action 时，推荐遵循以下 3 步闭环标准流程：
 
-# 完整子命令方式 (ac action run)
-ac action run <id> -i '{"repo": "owner/repo"}'
-```
+1. **第一步：事前自检（查看参数契约与配置依赖）**
+   ```bash
+   ac action show <action-id> [--json]
+   # 或一键自检该 Action 依赖的配置是否均已就绪：
+   ac config check <action-id> [--json]
+   ```
+   - 检查 `inputSchema`：确认必填入参字段与数据类型
+   - 检查 `Declared Configs`：确认依赖的环境密钥（如 API Token / 账号密码）是否显示为 `[SET]`
+
+2. **第二步：缺失配置拦截与用户引导**
+   - 若发现缺少必填配置（状态为 `[MISSING]`）：
+     - 提示用户缺少该 Action 运行所需的凭证，并引导用户配置：
+       ```bash
+       ac config set <KEY> <value>
+       ```
+     - 或在运行时临时注入覆盖：
+       ```bash
+       ac run <action-id> --config KEY=val --input '...'
+       ```
+
+3. **第三步：执行 Action 并解析纯净 JSON**
+   ```bash
+   # 简写方式 (ac run)
+   ac run <id> --input '{"repo": "owner/repo"}'
+   ac run <id> --input-file ./input.json
+   ac run <id> --config GITHUB_TOKEN=secret_token
+   
+   # 完整子命令方式 (ac action run)
+   ac action run <id> -i '{"repo": "owner/repo"}'
+   ```
 
 标准输出格式：
 ```json
@@ -219,10 +242,31 @@ ac playbook validate
 ## 运行时存储管理（Config & State）
 
 ### 配置管理 (`ctx.config`)
-ActionDock 支持**全局配置**（`~/.actiondock/global.db`）与**项目级配置**两级存储：
+ActionDock 提供开箱即用的多级配置体系，按以下 **5 层优先级** 自动解析生效值：
+
+1. **命令行临时覆盖**：`--config KEY=val`（最高优先级）
+2. **项目本地存储**：`ac config set <key> <val>`（`.actiondock/storage.db` SQLite）
+3. **全局持久化存储**：`ac config set <key> <val> -g`（`~/.actiondock/global.db`）
+4. **系统环境变量**：`process.env`（支持显式绑定、Package 命名空间、SNAKE_CASE 自动匹配及类型自动转换）
+5. **项目声明默认值**：`actiondock.json` 中配置项的 `default` 声明
+
+#### 环境变量命名规范与回退机制
+当 Action 通过 `ctx.config.get("apiKey")` 读取配置时，系统依次在环境变量中探测：
+- **显式绑定的 Env 别名**：`actiondock.json` 中声明的 `env: "MY_CUSTOM_KEY"` 或 `env: ["KEY_A", "KEY_B"]`
+- **Package 命名空间变量**：`ACTIONDOCK_<PACKAGE>_<KEY>`（例如 `ACTIONDOCK_TEAM_GITHUB_TOOLS_API_KEY`）
+- **SNAKE_CASE 大写名称**：`apiKey` / `api-key` -> `API_KEY`
+- **原始键名**：`apiKey`
+
+#### 自动类型转换（Type Coercion）
+在 `actiondock.json` 声明 `type`（`string`、`number`、`boolean`、`object`、`array`）或配置了默认值时，环境变量字符串将自动转换为对应类型（如 `"true"` -> `true`, `"5000"` -> `5000`, `'{"a":1}'` -> 对象）。
+
 ```bash
-ac config list [patterns...] [-P <pkg>] [-g] [--json]
-ac config get <key> [-P <pkg>] [-g] [--json]
+# 检查配置依赖就绪状态（显示 source: env / project / global / default）
+ac config schema [action-or-pkg-id] [--json]
+
+# 查询与管理配置
+ac config list [patterns...] [-P <pkg>] [-g] [--reveal] [--json]
+ac config get <key> [-P <pkg>] [-g] [--reveal] [--json]
 ac config set <key> <value> [-g]                  # 不在项目目录时自动全局生效，或传 -g 强制全局
 ac config delete <key> [-g]
 ```

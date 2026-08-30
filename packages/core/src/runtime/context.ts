@@ -9,6 +9,7 @@ import type {
 import type { ProjectConfig } from "../project/types";
 import { createGlobalStorage } from "../storage";
 import type { RuntimeStorage } from "../storage/types";
+import { resolveEnvValue } from "./env";
 
 export class RuntimeConfig implements Config {
   private overrides: Map<string, unknown>;
@@ -54,14 +55,16 @@ export class RuntimeConfig implements Config {
       }
     }
 
-    // 4. Environment Variables (process.env)
-    if (typeof process !== "undefined" && process.env && process.env[key] !== undefined) {
-      return process.env[key] as unknown as T;
+    // 4. Environment Variables (process.env with explicit binding, prefix & type coercion)
+    const itemDef = this.projectConfig?.config?.[key];
+    const envResolved = resolveEnvValue(key, itemDef, this.projectConfig?.id);
+    if (envResolved !== undefined) {
+      return envResolved.value as T;
     }
 
     // 5. Project Default (actiondock.json)
-    if (this.projectConfig?.config?.[key]?.default !== undefined) {
-      return this.projectConfig.config[key].default as T;
+    if (itemDef?.default !== undefined) {
+      return itemDef.default as T;
     }
 
     return defaultValue;
@@ -71,8 +74,9 @@ export class RuntimeConfig implements Config {
     if (this.overrides.has(key)) return true;
     if (this.storage.getConfig(key) !== undefined) return true;
     if (this.globalStorage?.getConfig(key) !== undefined) return true;
-    if (typeof process !== "undefined" && process.env && process.env[key] !== undefined) return true;
-    if (this.projectConfig?.config?.[key]?.default !== undefined) return true;
+    const itemDef = this.projectConfig?.config?.[key];
+    if (resolveEnvValue(key, itemDef, this.projectConfig?.id) !== undefined) return true;
+    if (itemDef?.default !== undefined) return true;
     return false;
   }
 }
