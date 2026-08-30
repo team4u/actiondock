@@ -8,7 +8,7 @@
 - **体积庞大与网络依赖**：分发工具需要连同数万个文件的 `node_modules` 或庞大的 Python 虚拟环境一同打包，且部署时经常需要联网执行 `npm install`。
 - **依赖冲突与版本漂移**：目标环境中的全局依赖或子依赖版本不兼容，导致同一套工具在开发者电脑上正常，而在生产沙箱中运行失败。
 
-ActionDock 2.0 确立了**零安装独立二进制（Zero-Install Standalone Executable）**与**自包含 Agent Skill 交付包**的分发标准。通过 Bun 原生单文件编译引擎，将整个 Action Package 打包为单文件可执行程序，目标环境无需安装任何运行时即可直接执行。
+ActionDock 2.0 确立了**零安装独立二进制（Zero-Install Standalone Executable） **与**自包含 Agent Skill 交付包**的分发标准。通过 Bun 原生单文件编译引擎，将整个 Action Package 打包为单文件可执行程序，目标环境无需安装任何运行时即可直接执行。
 
 ---
 

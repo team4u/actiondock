@@ -150,7 +150,7 @@ ActionDock 命令行工具（简写为 `ac`）提供了全生命周期的项目�
 ### `ac profile add <name>`
 添加或更新远程云机器 Profile。
 - `-s, --server <url>`（必填）：远程 ActionDock 服务端地址（如 `http://1.2.3.4:5177`）。
-- `--token-env <env>`（**推荐**）：指定存储鉴权 Token 的环境变量名（如 `ACTIONDOCK_PROD_TOKEN`）。
+- `--token-env <env>`（ **推荐** ）：指定存储鉴权 Token 的环境变量名（如 `ACTIONDOCK_PROD_TOKEN`）。
 - `-t, --token <token>`：明文存储 Token（不推荐持久化明文）。
 - `-d, --desc <description>`：机器/环境描述。
 

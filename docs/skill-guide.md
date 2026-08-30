@@ -10,7 +10,7 @@
   - 若客户端已预装 ActionDock 运行时，直接分发轻量源码是最高效、跨平台且具备最高可观测性的方式；
   - 若目标沙箱为无依赖的纯裸机环境，则需要提供自包含的独立便携二进制。
 
-在 ActionDock 2.0 中，**Skill（技能）**是面向 AI Agent 的自包含交付形态。它将 **原子工具（Action）**、**操作规程（Playbook）** 与 **认知引导（`SKILL.md`）** 深度融合，并支持**源码型 Skill（默认）**与**独立便携型 Skill（Standalone）**两种分发模型。
+在 ActionDock 2.0 中，**Skill（技能） **是面向 AI Agent 的自包含交付形态。它将 **原子工具（Action） **、**操作规程（Playbook） ** 与 **认知引导（`SKILL.md`） ** 深度融合，并支持**源码型 Skill（默认） **与**独立便携型 Skill（Standalone）**两种分发模型。
 
 ---
 

@@ -225,8 +225,8 @@ export default defineAction({
 
 > [!NOTE]
 > **依赖的双阶段处理**：
-> 1. **开发态（`ac run`）**：ActionDock 会自动检测缺失的 npm 依赖，在后台**毫秒级自动执行 `bun install` 补齐**并继续执行，安装日志输出至 `stderr`，确保 `stdout` 纯净。
-> 2. **构建态（`ac build`）**：Bun 编译器会自动对所有第三方 npm 依赖进行 Tree-shaking 并**全量内联打包进单文件二进制**。分发后的独立可执行文件完全无需安装 `node_modules`。
+> 1. **开发态（`ac run`） **：ActionDock 会自动检测缺失的 npm 依赖，在后台**毫秒级自动执行 `bun install` 补齐**并继续执行，安装日志输出至 `stderr`，确保 `stdout` 纯净。
+> 2. **构建态（`ac build`） **：Bun 编译器会自动对所有第三方 npm 依赖进行 Tree-shaking 并**全量内联打包进单文件二进制**。分发后的独立可执行文件完全无需安装 `node_modules`。
 
 ---
 
