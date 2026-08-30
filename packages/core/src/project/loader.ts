@@ -4,6 +4,12 @@ import YAML from "yaml";
 import type { ActionDefinition } from "@actiondock/sdk";
 import type { PlaybookDefinition, PlaybookFrontmatter, ProjectConfig } from "./types";
 
+/**
+ * 从指定目录开始向上逐级递归查找包含 `actiondock.json` 的项目根目录。
+ * 
+ * @param cwd 起始搜索目录（默认为 process.cwd()）
+ * @returns 项目根目录绝对路径，若未找到则返回 null
+ */
 export function findProjectRoot(cwd?: string): string | null {
   let current: string;
   try {
@@ -29,6 +35,13 @@ export function findProjectRoot(cwd?: string): string | null {
   return null;
 }
 
+/**
+ * 加载并校验指定目录下的 `actiondock.json` 配置文件。
+ * 
+ * @param projectRoot 项目根目录绝对路径
+ * @returns 解析后的 ProjectConfig 对象
+ * @throws {Error} 若文件不存在或 JSON 格式错误、缺失必要字段
+ */
 export function loadProjectConfig(projectRoot: string): ProjectConfig {
   const configPath = join(projectRoot, "actiondock.json");
   if (!existsSync(configPath)) {
@@ -54,6 +67,9 @@ export function loadProjectConfig(projectRoot: string): ProjectConfig {
   }
 }
 
+/**
+ * 探测宿主系统中可用的包管理工具（优先级：bun > pnpm > yarn > npm）。
+ */
 function getInstallCommand(): string[] {
   const candidates: [string, string][] = [
     ["bun", "install"],
@@ -71,12 +87,20 @@ function getInstallCommand(): string[] {
         return [pm, action];
       }
     } catch {
-      // Continue searching
+      // 继续探测下一个候选包管理器
     }
   }
   return ["bun", "install"];
 }
 
+/**
+ * 确保项目依赖（node_modules）已正确安装。
+ * 若尚未安装或加载失败时，自动触发包管理器执行依赖安装。
+ * 
+ * @param projectRoot 项目根目录
+ * @param force 是否强制重新安装
+ * @returns 是否成功执行了安装
+ */
 export function ensureProjectDependencies(projectRoot: string, force = false): boolean {
   if (process.env.ACTIONDOCK_AUTO_INSTALL === "false") {
     return false;
@@ -127,6 +151,9 @@ export function ensureProjectDependencies(projectRoot: string, force = false): b
   }
 }
 
+/**
+ * 递归扫描指定目录下的特定后缀文件（自动排除测试文件 *.test.ts, *.spec.ts 和 *.d.ts）。
+ */
 function scanFiles(dir: string, extension: string): string[] {
   if (!existsSync(dir)) return [];
   const results: string[] = [];
@@ -139,7 +166,7 @@ function scanFiles(dir: string, extension: string): string[] {
       if (stat.isDirectory()) {
         walk(fullPath);
       } else if (stat.isFile() && fullPath.endsWith(extension)) {
-        // Exclude test files
+        // 排除测试与类型声明文件
         if (
           !fullPath.endsWith(".test.ts") &&
           !fullPath.endsWith(".spec.ts") &&
@@ -155,6 +182,12 @@ function scanFiles(dir: string, extension: string): string[] {
   return results;
 }
 
+/**
+ * 发现并检索项目 actions 目录下的所有 Action 源码文件（.ts）。
+ * 
+ * @param projectRoot 项目根目录
+ * @param actionsDir actions 子目录名称（默认 "actions"）
+ */
 export function discoverActionFiles(
   projectRoot: string,
   actionsDir = "actions"
@@ -163,6 +196,14 @@ export function discoverActionFiles(
   return scanFiles(fullDir, ".ts");
 }
 
+/**
+ * 动态导入并加载项目下的所有 Action 定义对象。
+ * 
+ * @param projectRoot 项目根目录
+ * @param actionsDir actions 子目录（默认 "actions"）
+ * @param options 控制是否允许自动安装依赖等选项
+ * @returns Map<ActionId, ActionDefinition> 映射
+ */
 export async function loadActions(
   projectRoot: string,
   actionsDir = "actions",
@@ -177,7 +218,7 @@ export async function loadActions(
 
   for (const file of files) {
     try {
-      // Dynamic import with auto-install retry on missing module
+      // 动态导入，若缺失模块则自动触发依赖重装与二次重试
       let imported: any;
       try {
         imported = await import(file);
@@ -222,12 +263,18 @@ export async function loadActions(
   return actions;
 }
 
+/**
+ * Action 文件映射条目，包含 Action ID、源文件绝对路径与 Action 定义对象。
+ */
 export interface ActionFileEntry {
   id: string;
   filePath: string;
   action: ActionDefinition;
 }
 
+/**
+ * 加载并建立 Action ID 与其物理源码文件路径之间的映射关系（供构建打包器使用）。
+ */
 export async function loadActionFileMap(
   projectRoot: string,
   actionsDir = "actions"
@@ -247,13 +294,16 @@ export async function loadActionFileMap(
         });
       }
     } catch {
-      // Ignore non-actions
+      // 忽略非 Action 导出的辅助模块
     }
   }
 
   return map;
 }
 
+/**
+ * 发现项目 playbooks 目录下的所有 Playbook Markdown 文档（.md）。
+ */
 export function discoverPlaybookFiles(
   projectRoot: string,
   playbooksDir = "playbooks"
@@ -262,6 +312,13 @@ export function discoverPlaybookFiles(
   return scanFiles(fullDir, ".md");
 }
 
+/**
+ * 解析单个 Playbook Markdown 文件的内容与 YAML Frontmatter 头部元数据。
+ * 
+ * @param content 文件文本内容
+ * @param filePath 物理文件路径
+ * @returns PlaybookDefinition 对象
+ */
 export function parsePlaybookContent(
   content: string,
   filePath: string
@@ -269,7 +326,7 @@ export function parsePlaybookContent(
   let frontmatter: Partial<PlaybookFrontmatter> = {};
   let body = content;
 
-  // Check for YAML frontmatter delimited by ---
+  // 正则提取以 --- 包裹的 YAML Frontmatter
   const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
   if (match) {
     try {
@@ -292,6 +349,13 @@ export function parsePlaybookContent(
   };
 }
 
+/**
+ * 加载项目 playbooks 目录下的所有 Playbook SOP 文档。
+ * 
+ * @param projectRoot 项目根目录
+ * @param playbooksDir playbooks 子目录（默认 "playbooks"）
+ * @returns Map<PlaybookId, PlaybookDefinition> 映射
+ */
 export function loadPlaybooks(
   projectRoot: string,
   playbooksDir = "playbooks"

@@ -1,12 +1,32 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 
+/**
+ * 项目初始化脚手架选项。
+ */
 export interface InitOptions {
+  /** 自定义项目 ID（默认使用目录名） */
   id?: string;
+  /** 自定义项目展示名称（默认由目录名美化生成） */
   name?: string;
+  /** 自定义项目描述 */
   description?: string;
 }
 
+/**
+ * 在目标目录初始化一个完整的 ActionDock 2.0 Action Package 脚手架。
+ * 生成内容包括：
+ * 1. actiondock.json（项目元数据与配置声明）
+ * 2. package.json（模块依赖与 bun test 脚本）
+ * 3. tsconfig.json（现代 ESNext / Bundler 编译配置）
+ * 4. .gitignore（排除持久化 db、node_modules、dist）
+ * 5. actions/greet.ts（标准示例 Action，演示 config、state、log 使用）
+ * 6. playbooks/greet-user.md（标准 SOP Playbook 演示）
+ * 7. tests/greet.test.ts（基于 createTestRuntime 的零依赖单元测试）
+ * 
+ * @param targetDir 目标项目目录
+ * @param options 初始化选项
+ */
 export function initProject(targetDir: string, options: InitOptions = {}): void {
   const root = resolve(targetDir);
   if (!existsSync(root)) {

@@ -18,7 +18,9 @@ import { toMcpSchema } from "./schemas";
 import { toMcpTaskPayload, type ActionDockMcpOptions } from "./types";
 
 /**
- * Maps standard ActionDock ExecutionResult to standard MCP Tool Call result.
+ * 将 ActionDock 标准的 ExecutionResult 信封结构转换为 MCP 协议规范的 Tool Call 返回结果。
+ * 
+ * @param result ExecutionResult 结果对象
  */
 export function toMcpResult(result: ExecutionResult) {
   if (result.ok) {

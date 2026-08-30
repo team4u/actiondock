@@ -11,27 +11,62 @@ import { validateSchema } from "../schema/validator";
 import type { RuntimeStorage, TerminalRunStatus } from "../storage/types";
 import { RuntimeConfig, RuntimeStateStore, StderrLogger } from "./context";
 
+/**
+ * ActionRunner 初始化配置选项。
+ */
 export interface RunnerOptions {
+  /** 运行所属的 Package ID */
   packageId: string;
+  /** 持久化运行时存储实例（SQLite） */
   storage: RuntimeStorage;
+  /** 项目元数据配置 */
   projectConfig?: ProjectConfig;
+  /** CLI 或上层注入的临时配置覆盖项 */
   configOverrides?: Record<string, unknown>;
+  /** 预加载的 Action 映射表 */
   actions?: Map<string, ActionDefinition>;
 }
 
+/**
+ * 启动 Action 执行时的可选控制参数。
+ */
 export interface ExecutionStartOptions {
+  /** 父级运行 ID（嵌套调用场景下建立调用链树） */
   parentRunId?: string;
+  /** 调用栈数组（用于检测 A -> B -> A 环路死锁） */
   callStack?: string[];
+  /** 外部传入的 AbortSignal 取消信号 */
   signal?: AbortSignal;
+  /** 最大超时时间（毫秒），超时将自动中止执行并标记为 ACTION_TIMEOUT */
   timeoutMs?: number;
 }
 
+/**
+ * 异步执行句柄，支持获取执行结果 Promise 与主动取消操作。
+ */
 export interface ExecutionHandle {
+  /** 本次执行生成的全局唯一运行 ID */
   runId: string;
+  /** 最终执行结果信封 Promise */
   result: Promise<ExecutionResult>;
+  /**
+   * 取消当前正在执行的任务
+   * @param reason 取消原因
+   * @returns 是否成功触发取消
+   */
   cancel(reason?: string): boolean;
 }
 
+/**
+ * ActionDock 核心执行引擎（ActionRunner）。
+ * 
+ * 职责：
+ * 1. 负责 Action 执行的全生命周期管理（校验、隔离、跟踪、落库）。
+ * 2. 入参 (inputSchema) 与出参 (outputSchema) 的 JSON Schema 严格校验。
+ * 3. 嵌套 Action 相互调用的环路检测（Cycle Detection）。
+ * 4. 超时 (Timeout) 与中断信号 (AbortSignal) 竞态控制。
+ * 5. 自动记录并持久化 RunRecord 运行记录至 SQLite 存储。
+ */
 export class ActionRunner {
   private packageId: string;
   private storage: RuntimeStorage;
@@ -47,20 +82,34 @@ export class ActionRunner {
     this.actions = options.actions || new Map();
   }
 
+  /**
+   * 注册单个 Action 到当前 Runner。
+   */
   public registerAction(action: ActionDefinition): void {
     this.actions.set(action.id, action);
   }
 
+  /**
+   * 根据 ID 检索注册的 Action。
+   */
   public getAction(id: string): ActionDefinition | undefined {
     return this.actions.get(id);
   }
 
+  /**
+   * 获取当前 Runner 已注册的所有 Action 列表。
+   */
   public listActions(): ActionDefinition[] {
     return Array.from(this.actions.values());
   }
 
   /**
-   * Starts an Action execution asynchronously and returns an ExecutionHandle.
+   * 异步启动 Action 的执行并立即返回 ExecutionHandle 句柄。
+   * 
+   * @param actionOrId Action 定义对象或已注册的 Action ID
+   * @param input 传递给 Action 的输入数据
+   * @param options 执行控制选项（超时、取消信号、父运行 ID 等）
+   * @returns 包含 runId、result Promise 和 cancel 方法的执行句柄
    */
   start(
     actionOrId: ActionDefinition | string,
@@ -90,7 +139,7 @@ export class ActionRunner {
       action = actionOrId;
     }
 
-    // 1. Cycle detection
+    // 1. 环路死锁检测 (Cycle Detection)
     if (callStack.includes(action.id)) {
       const error: RuntimeError = {
         code: "ACTION_CYCLE_DETECTED",
@@ -104,7 +153,7 @@ export class ActionRunner {
     }
     callStack.push(action.id);
 
-    // 2. Validate input schema
+    // 2. 输入参数 JSON Schema 校验
     if (action.inputSchema) {
       const val = validateSchema(action.inputSchema, input);
       if (!val.valid) {
@@ -121,7 +170,7 @@ export class ActionRunner {
       }
     }
 
-    // 3. Create initial RunRecord
+    // 3. 插入初始运行记录 (状态: running)
     const initialRun: RunRecord = {
       id: runId,
       packageId: this.packageId,
@@ -133,7 +182,7 @@ export class ActionRunner {
     };
     this.storage.createRun(initialRun);
 
-    // 4. Abort Controller & Timeout Setup
+    // 4. 初始化 AbortController 与超时定时器
     const controller = new AbortController();
     if (options.signal) {
       if (options.signal.aborted) {
@@ -171,7 +220,7 @@ export class ActionRunner {
       this.storage.updateRun(runId, status, output, error);
     };
 
-    // 5. Build ActionContext
+    // 5. 构建 ActionContext 运行时上下文
     const config = new RuntimeConfig(
       this.storage,
       this.configOverrides,
@@ -208,7 +257,7 @@ export class ActionRunner {
       signal: controller.signal,
     };
 
-    // 6. Execute action with cancellation / timeout race
+    // 6. 执行 Action 业务逻辑并与取消/超时信号进行竞态
     const abortPromise = new Promise<never>((_, reject) => {
       if (controller.signal.aborted) {
         reject(controller.signal.reason || new Error("Action execution was cancelled"));
@@ -228,7 +277,7 @@ export class ActionRunner {
           abortPromise,
         ]);
 
-        // Validate output schema if defined
+        // 输出结果 Schema 校验
         if (action.outputSchema) {
           const outVal = validateSchema(action.outputSchema, rawOutput);
           if (!outVal.valid) {
@@ -303,7 +352,11 @@ export class ActionRunner {
   }
 
   /**
-   * Execute an Action by definition or ID with input, producing standard ExecutionResult.
+   * 同步等待方式执行指定 Action，直接返回 ExecutionResult 信封结果。
+   * 
+   * @param actionOrId Action 定义对象或 ID
+   * @param input 输入参数
+   * @param options 执行控制选项
    */
   async execute(
     actionOrId: ActionDefinition | string,

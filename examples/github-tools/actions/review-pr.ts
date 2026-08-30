@@ -1,11 +1,19 @@
 import { defineAction } from "@actiondock/sdk";
 import getPrAction from "./get-pr";
 
+/**
+ * 审查 Pull Request 的输入参数接口。
+ */
 export interface ReviewPrInput {
+  /** GitHub 仓库名（格式：owner/repo） */
   repo: string;
+  /** PR 编号 */
   pullNumber: number;
 }
 
+/**
+ * 审查结果输出接口。
+ */
 export interface ReviewPrOutput {
   pullNumber: number;
   title: string;
@@ -15,6 +23,9 @@ export interface ReviewPrOutput {
   reviewedAt: string;
 }
 
+/**
+ * 自动化代码审查 Action：演示 Action 编排与嵌套调用（ctx.actions.invoke）、配置读取与状态持久化。
+ */
 export default defineAction({
   id: "github.review-pr",
   description: "Review a pull request and produce automated review findings",

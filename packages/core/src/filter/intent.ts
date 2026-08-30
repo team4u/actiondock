@@ -1,8 +1,13 @@
+/**
+ * 从对象中提取待过滤字段的提取器函数类型。
+ */
 export type Extractor<T> = (item: T) => unknown;
 
 /**
- * Safely compiles a pattern string or array of pattern strings into a case-insensitive RegExp.
- * If regex syntax is invalid, escapes special characters and constructs a literal match RegExp.
+ * 安全地将模式字符串、数组或现有正则编译为不区分大小写的 RegExp 正则表达式。
+ * 若正则语法不合法，自动对特殊字符进行转义并降级为字面量匹配正则，保证零 Crash。
+ * 
+ * @param intent 意图关键词、正则或数组
  */
 export function compileIntentRegex(
   intent?: string | string[] | RegExp | null
@@ -29,7 +34,10 @@ export function compileIntentRegex(
 }
 
 /**
- * Checks if a value (or any nested element within array/object) matches the given regex.
+ * 递归检查某个值（包括嵌套的数组或对象结构）是否匹配给定的正则表达式。
+ * 
+ * @param value 待检测的任意数据类型
+ * @param regex 正则表达式
  */
 export function matchIntent(value: unknown, regex: RegExp): boolean {
   if (value === undefined || value === null) return false;

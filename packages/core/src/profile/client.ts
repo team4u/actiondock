@@ -13,18 +13,36 @@ function buildHeaders(token?: string): Record<string, string> {
   return headers;
 }
 
+/**
+ * 调用远端 ActionDock 服务端执行 Action 时的选项参数。
+ */
 export interface RemoteExecuteOptions {
+  /** 动态配置覆盖 */
   configOverrides?: Record<string, unknown>;
+  /** 鉴权 Bearer Token */
   token?: string;
+  /** 超时毫秒数 */
   timeoutMs?: number;
+  /** 中断信号 */
   signal?: AbortSignal;
+  /** 是否异步触发（202 Accepted 立即返回 runId） */
   async?: boolean;
 }
 
+/**
+ * 远端 Action 执行结果信封对象。
+ */
 export type RemoteExecutionResult<T = unknown> = ExecutionResult<T> & {
   status?: string;
 };
 
+/**
+ * 探测指定远端 ActionDock 服务的健康状态与网络延迟。
+ * 
+ * @param serverUrl 目标服务端地址
+ * @param token 鉴权 Token（可选）
+ * @param timeoutMs 探测超时时间（默认 5000ms）
+ */
 export async function checkRemoteHealth(
   serverUrl: string,
   token?: string,

@@ -1,10 +1,24 @@
 import { resolve } from "node:path";
 
+/**
+ * 构建时 Action 导入映射。
+ */
 export interface ActionImport {
+  /** Action 唯一标识符 */
   id: string;
+  /** Action 源码文件物理路径 */
   filePath: string;
 }
 
+/**
+ * 动态生成 Standalone 独立可执行文件的 TypeScript 入口文件源码。
+ * 
+ * @param packageId 所属 Package ID
+ * @param version 版本号
+ * @param description 描述
+ * @param actions 待打包 Action 列表
+ * @param configDefs 声明的配置定义字典
+ */
 export function generateStandaloneEntrypoint(
   packageId: string,
   version: string,

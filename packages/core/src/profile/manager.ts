@@ -11,6 +11,9 @@ import type {
 
 const PROFILE_NAME_REGEX = /^[a-zA-Z0-9_\-\.]+$/;
 
+/**
+ * 默认初始 Profiles 配置（预设 local 本地环境）。
+ */
 export const DEFAULT_PROFILES_CONFIG: ProfilesConfig = {
   currentProfile: "local",
   profiles: {
@@ -21,6 +24,9 @@ export const DEFAULT_PROFILES_CONFIG: ProfilesConfig = {
   },
 };
 
+/**
+ * 格式化并规范化 Server URL 地址（自动补齐 http:// 协议头并移除末尾斜杠）。
+ */
 export function normalizeServerUrl(url: string): string {
   let cleaned = url.trim().replace(/\/+$/, "");
   if (!/^https?:\/\//i.test(cleaned) && cleaned !== "local") {
@@ -29,11 +35,17 @@ export function normalizeServerUrl(url: string): string {
   return cleaned;
 }
 
+/**
+ * 获取 profiles.json 配置文件的物理绝对路径（~/.actiondock/profiles.json）。
+ */
 export function getProfilesFilePath(customHome?: string): string {
   const baseDir = getActionDockHome(customHome);
   return join(baseDir, ".actiondock", "profiles.json");
 }
 
+/**
+ * 加载并读取 profiles.json 配置文件。
+ */
 export function loadProfiles(customHome?: string): ProfilesConfig {
   const filePath = getProfilesFilePath(customHome);
   if (!existsSync(filePath)) {
@@ -52,6 +64,9 @@ export function loadProfiles(customHome?: string): ProfilesConfig {
   }
 }
 
+/**
+ * 保存并写入 profiles.json 配置文件，并严格限制文件权限为 0600。
+ */
 export function saveProfiles(data: ProfilesConfig, customHome?: string): void {
   const filePath = getProfilesFilePath(customHome);
   const dir = dirname(filePath);

@@ -15,6 +15,9 @@ import { ServerRuntimeRegistry } from "./runtime-registry";
 import { isLoopbackHost, resolveCorsHeaders, verifyBearerToken } from "./security";
 import type { ActionDockServerInstance, ServerOptions } from "./types";
 
+/**
+ * 辅助函数：快速构造带 CORS 头的 JSON HTTP 响应。
+ */
 function jsonResponse(
   data: unknown,
   status = 200,
@@ -29,6 +32,9 @@ function jsonResponse(
   });
 }
 
+/**
+ * 跨内存活跃连接与所有已知持久化存储全局检索指定 runId 的运行记录。
+ */
 function findRunAcrossStorages(
   runId: string,
   runtimeRegistry: ServerRuntimeRegistry,
@@ -45,7 +51,7 @@ function findRunAcrossStorages(
       const run = storage.getRun(runId);
       if (run) return { storage, run };
     } catch {
-      // ignore
+      // 忽略读取错误
     }
   }
 
@@ -58,12 +64,27 @@ function findRunAcrossStorages(
       if (run) return { storage, run };
     }
   } catch {
-    // ignore
+    // 忽略读取错误
   }
 
   return null;
 }
 
+/**
+ * 启动 ActionDock 2.0 原生轻量级 HTTP Runner 服务端。
+ * 
+ * 提供 RESTful API 供跨机器或远端 AI Agent 执行 Action：
+ * - `GET  /api/v1/health` : 健康检查与就绪状态
+ * - `GET  /api/v1/info`   : 项目元数据、Action 与 Playbook 概览
+ * - `GET  /api/v1/actions`: 列出可用 Actions（支持 ?intent= 过滤）
+ * - `GET  /api/v1/actions/:id`: 查看单个 Action 的 Schema 详情
+ * - `POST /api/v1/actions/:id/run`: 同步或异步（202 Accepted）执行 Action
+ * - `GET  /api/v1/runs/:runId`: 查询历史或异步任务运行状态
+ * - `POST /api/v1/runs/:runId/cancel`: 中断在途任务
+ * 
+ * @param options 服务端启动配置参数
+ * @returns ActionDockServerInstance 服务端实例句柄
+ */
 export function startActionDockServer(
   options: ServerOptions = {}
 ): ActionDockServerInstance {
@@ -75,7 +96,7 @@ export function startActionDockServer(
     ? resolve(options.projectRoot)
     : findProjectRoot(process.cwd());
 
-  // Non-loopback address requires token authentication by default
+  // 非回环地址强制要求配置 Token 鉴权（防裸奔）
   if (!isLoopbackHost(host) && !token && !options.allowInsecureNoAuth) {
     throw new Error(
       "Authentication token is required when binding to a non-loopback address. Use --allow-insecure-no-auth to override."

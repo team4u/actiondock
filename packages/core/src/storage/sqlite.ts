@@ -4,6 +4,16 @@ import { dirname } from "node:path";
 import type { RuntimeError, RunRecord } from "@actiondock/sdk";
 import type { RuntimeStorage, StorageOptions, TerminalRunStatus } from "./types";
 
+/**
+ * 基于 Bun 内置原生 SQLite (`bun:sqlite`) 实现的高性能运行时存储。
+ * 
+ * 关键特性：
+ * 1. 零网络与外部进程开销：直接通过 Bun C-API 高速操作 SQLite 数据库文件。
+ * 2. 高并发优化：开启 `WAL`（Write-Ahead Logging）模式与 `synchronous = NORMAL`，支持高并发读写。
+ * 3. 严格的安全权限：自动配置目录权限为 0700，数据库文件权限为 0600。
+ * 4. 自动版本迁移：基于 SQLite `user_version` PRAGMA 实现无损自动 Schema 迁移。
+ * 5. TTL 自动过期：支持状态的过期清理。
+ */
 export class SqliteRuntimeStorage implements RuntimeStorage {
   private db: Database;
   private packageId: string;
@@ -19,7 +29,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
           mkdirSync(dir, { recursive: true, mode: 0o700 });
           chmodSync(dir, 0o700);
         } catch {
-          // Ignore
+          // 忽略系统权限设置失败（如只读文件系统）
         }
       }
     }
@@ -29,17 +39,20 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       try {
         chmodSync(dbPath, 0o600);
       } catch {
-        // Ignore
+        // 忽略文件权限设置异常
       }
     }
     this.init();
   }
 
+  /**
+   * 初始化数据库 Schema 并执行版本迁移。
+   */
   private init(): void {
     this.db.exec("PRAGMA journal_mode = WAL;");
     this.db.exec("PRAGMA synchronous = NORMAL;");
 
-    // Check version
+    // 读取 Schema 版本号
     const versionRes = this.db.query("PRAGMA user_version;").get() as {
       user_version: number;
     };

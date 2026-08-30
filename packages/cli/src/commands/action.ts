@@ -20,7 +20,11 @@ import { Command } from "commander";
 import { parseDuration } from "../utils/duration";
 import { resolveIntent } from "../utils/filter";
 
-
+/**
+ * 注册 Action 相关的 CLI 命令集合（包括 action list, action describe, action run, action new, action test 以及顶层 run 别名）。
+ * 
+ * @param program Commander 根程序对象
+ */
 export function registerActionCommands(program: Command): void {
   const actionCmd = program
     .command("action")

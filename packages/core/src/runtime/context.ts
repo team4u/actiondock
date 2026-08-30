@@ -11,6 +11,16 @@ import { createGlobalStorage } from "../storage";
 import type { RuntimeStorage } from "../storage/types";
 import { resolveEnvValue } from "./env";
 
+/**
+ * 生产级配置解析器实现。
+ * 严格践行 5 层配置解析优先级链：
+ * 1. CLI 临时参数覆写 (Overrides)
+ * 2. 本地项目持久化存储 (Local SQLite: .actiondock/runtime.db)
+ * 3. 全局共享持久化存储 (Global SQLite: ~/.actiondock/global.db)
+ * 4. 操作系统环境变量 (process.env: 显式绑定 / 包名前缀 / SNAKE_CASE / 类型转换)
+ * 5. 项目默认配置 (actiondock.json 中的 default 字段)
+ * 6. 代码级默认回退值 (fallback)
+ */
 export class RuntimeConfig implements Config {
   private overrides: Map<string, unknown>;
   private storage: RuntimeStorage;
@@ -32,18 +42,18 @@ export class RuntimeConfig implements Config {
   get<T = unknown>(key: string): T | undefined;
   get<T = unknown>(key: string, defaultValue: T): T;
   get<T = unknown>(key: string, defaultValue?: T): T | undefined {
-    // 1. CLI / Temporary Override
+    // 1. CLI 临时参数覆盖
     if (this.overrides.has(key)) {
       return this.overrides.get(key) as T;
     }
 
-    // 2. Local Project Storage (SQLite)
+    // 2. 本地项目 SQLite 存储
     const stored = this.storage.getConfig<T>(key);
     if (stored !== undefined) {
       return stored;
     }
 
-    // 3. Global Storage (~/.actiondock/global.db)
+    // 3. 全局 SQLite 存储 (~/.actiondock/global.db)
     if (this.globalStorage) {
       try {
         const globalStored = this.globalStorage.getConfig<T>(key);
@@ -51,22 +61,23 @@ export class RuntimeConfig implements Config {
           return globalStored;
         }
       } catch {
-        // Ignore global storage read error
+        // 忽略全局存储读取异常
       }
     }
 
-    // 4. Environment Variables (process.env with explicit binding, prefix & type coercion)
+    // 4. 环境变量（支持包名前缀、SNAKE_CASE 转换与类型自动推断）
     const itemDef = this.projectConfig?.config?.[key];
     const envResolved = resolveEnvValue(key, itemDef, this.projectConfig?.id);
     if (envResolved !== undefined) {
       return envResolved.value as T;
     }
 
-    // 5. Project Default (actiondock.json)
+    // 5. 项目声明的默认值 (actiondock.json)
     if (itemDef?.default !== undefined) {
       return itemDef.default as T;
     }
 
+    // 6. 调用方传入的代码级回退默认值
     return defaultValue;
   }
 
@@ -81,6 +92,9 @@ export class RuntimeConfig implements Config {
   }
 }
 
+/**
+ * 生产级状态存储实现，将状态持久化到 SQLite 中，完整支持命名空间分段隔离与 TTL。
+ */
 export class RuntimeStateStore implements StateStore {
   private storage: RuntimeStorage;
   private namespace: string;
@@ -118,6 +132,10 @@ export class RuntimeStateStore implements StateStore {
   }
 }
 
+/**
+ * 标准 Stderr 日志记录器实现。
+ * 遵循 Unix 哲学：所有诊断与追踪日志输出至 stderr，确保 stdout 纯净保留 JSON 信封。
+ */
 export class StderrLogger implements Logger {
   private prefix: string;
 
@@ -151,6 +169,9 @@ export class StderrLogger implements Logger {
   }
 }
 
+/**
+ * 创建 ActionContext 上下文所需的选项集合。
+ */
 export interface ContextOptions {
   storage: RuntimeStorage;
   overrides?: Record<string, unknown>;
@@ -165,6 +186,12 @@ export interface ContextOptions {
   ) => Promise<unknown>;
 }
 
+/**
+ * 构建并装配传递给 Action 的完整 ActionContext 运行时上下文。
+ * 
+ * @param options 上下文构建参数（包含存储连接、配置覆盖、项目元数据、取消信号与互调委托）
+ * @returns 组装完毕的 ActionContext 实例
+ */
 export function createActionContext(options: ContextOptions): ActionContext {
   const config = new RuntimeConfig(
     options.storage,

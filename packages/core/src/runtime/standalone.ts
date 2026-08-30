@@ -6,15 +6,30 @@ import { createStorage } from "../storage";
 import { parseDuration } from "../utils";
 import { ActionRunner } from "./runner";
 
+/**
+ * 独立编译可执行文件运行时的初始化选项。
+ */
 export interface StandaloneRuntimeOptions {
-
+  /** 所属 Package ID */
   packageId: string;
+  /** 版本号 */
   version: string;
+  /** 描述信息 */
   description?: string;
+  /** 声明的配置依赖定义 */
   config?: Record<string, ConfigItemDefinition>;
+  /** 打包内置的 Action 动作定义列表 */
   actions: ActionDefinition[];
 }
 
+/**
+ * 独立二进制可执行文件运行时（Standalone Runtime）。
+ * 
+ * 职责：
+ * 1. 作为由 `ac build` 编译生成的单文件独立可执行文件（Standalone Binary）的运行时入口。
+ * 2. 保证与开发态（`ac run` / `ac action`）在输出信封、配置优先级、状态存储等方面的 100% 行为一致性。
+ * 3. 自带轻量 CLI 分发器，支持 `list`, `describe`, `run`, `config`, `state`, `version`, `help` 子命令。
+ */
 export class StandaloneRuntime {
   private packageId: string;
   private version: string;
@@ -30,12 +45,17 @@ export class StandaloneRuntime {
     this.actionsMap = new Map(options.actions.map((a) => [a.id, a]));
   }
 
+  /**
+   * 解析命令行参数并执行对应的独立二进制子命令。
+   * 
+   * @param argv 命令行参数数组（通常为 process.argv.slice(2)）
+   */
   async run(argv: string[]): Promise<void> {
     const args = [...argv];
     let dataDir: string | undefined;
     const configOverrides: Record<string, unknown> = {};
 
-    // Extract global flags like --data-dir and --config
+    // 提取全局参数（--data-dir 与 --config）
     const filteredArgs: string[] = [];
     for (let i = 0; i < args.length; i++) {
       const arg = args[i];
