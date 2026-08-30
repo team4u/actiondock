@@ -45,3 +45,8 @@ ActionDock 2.0 在执行 Action、解析配置、校验 Schema 及编译构建�
 | **`ACTION_CANCELLED`** | Action 执行被外部主动终止 | 用户在终端按下 `Ctrl+C`、MCP 客户端发送了 `notifications/cancelled`、或调用了执行句柄的 `cancel()`。 | * 正常终止场景，无需特殊修复。<br>* Action 内部应使用 `ctx.signal` 监听并释放网络连接与临时文件等资源。 |
 | **`BUILD_FAILED`** | 独立二进制编译失败 | 项目存在 TypeScript 语法错误、引用的模块不存在、或目标平台的交叉编译参数不合法。 | * 运行 `bun run typecheck` 检查全量类型错误。<br>* 查看编译失败时的具体编译器报错输出。 |
 | **`PLAYBOOK_VALIDATION_FAILED`** | Playbook 语法或引用校验失败 | Playbook 的 Markdown 文件缺少 YAML Frontmatter，或 `actions` 中引用的 Action 在项目中不存在。 | * 运行 `ac playbook validate` 查看具体告警与错误行。<br>* 修正 Frontmatter 中的 `id` 与 `actions` 清单。 |
+| **`RUN_NOT_FOUND`** | 查询或取消的 Run ID 不存在 | 传入了错误的 Run ID，或对应执行记录未在服务端存储中找到。 | * 运行 `ac runs list` 确认当前有效 Run ID。 |
+| **`RUN_ALREADY_FINISHED`** | 取消已终态的执行任务 | 尝试取消一个已经处于 `success`、`failed` 或 `cancelled` 终态的任务。 | * 运行 `ac runs show <id>` 查看任务完成详情。 |
+| **`UNAUTHORIZED`** | 远程 Runner 身份验证失败 | 访问受保护的 HTTP/MCP 服务端时未提供 Bearer Token，或 Token 不匹配。 | * 检查 `--token`、`--token-env` 或 `ACTIONDOCK_TOKEN` 是否配置正确。 |
+| **`REQUEST_TOO_LARGE`** | 请求 Body 超过最大字节限制 | 向 HTTP Runner 发送了超过 `--max-body` 设定大小的请求体。 | * 启动 `ac serve` 时增大 `--max-body` 限制（如 `--max-body 5mb`），或避免在单次入参中传输超大二进制。 |
+

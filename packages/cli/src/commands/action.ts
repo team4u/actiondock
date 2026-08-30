@@ -16,7 +16,9 @@ import {
   validateSchema,
 } from "@actiondock/core";
 import { Command } from "commander";
+import { parseDuration } from "../utils/duration";
 import { resolveIntent } from "../utils/filter";
+
 
 export function registerActionCommands(program: Command): void {
   const actionCmd = program
@@ -441,6 +443,8 @@ export default defineAction<Input, Output>({
     .option("-p, --profile <name>", "Execute against a specific profile")
     .option("-s, --server <url>", "Remote server URL")
     .option("-t, --token <token>", "Auth token for remote server")
+    .option("--timeout <duration>", "Execution timeout (e.g. 30s, 5m, 500ms)")
+    .option("--async", "Execute asynchronously in background (requires remote server or profile)")
     .action(async (id, options) => {
       await executeAction(id, options);
     });
@@ -455,6 +459,8 @@ export default defineAction<Input, Output>({
     .option("-p, --profile <name>", "Execute against a specific profile")
     .option("-s, --server <url>", "Remote server URL")
     .option("-t, --token <token>", "Auth token for remote server")
+    .option("--timeout <duration>", "Execution timeout (e.g. 30s, 5m, 500ms)")
+    .option("--async", "Execute asynchronously in background (requires remote server or profile)")
     .action(async (id, options) => {
       await executeAction(id, options);
     });
@@ -474,6 +480,16 @@ async function executeAction(id: string, options: any): Promise<void> {
       input = JSON.parse(readFileSync(options.inputFile, "utf-8"));
     } catch (err: any) {
       console.error(`Error reading --input-file: ${err.message}`);
+      process.exit(1);
+    }
+  }
+
+  let timeoutMs: number | undefined;
+  if (options.timeout) {
+    try {
+      timeoutMs = parseDuration(options.timeout);
+    } catch (err: any) {
+      console.error(`Error: ${err.message}`);
       process.exit(1);
     }
   }
@@ -500,61 +516,82 @@ async function executeAction(id: string, options: any): Promise<void> {
     process.exit(1);
   }
 
-  if (target.type === "remote") {
-    try {
-      const result = await executeRemoteAction(
-        target.serverUrl!,
-        id,
-        input,
-        configOverrides,
-        target.token
-      );
-      console.log(JSON.stringify(result, null, 2));
-      if (!result.ok) {
+  const controller = new AbortController();
+  const sigintHandler = () => {
+    controller.abort(new Error("Interrupted by SIGINT"));
+  };
+  process.once("SIGINT", sigintHandler);
+
+  try {
+    if (target.type === "remote") {
+      try {
+        const result = await executeRemoteAction(target.serverUrl!, id, input, {
+          configOverrides,
+          token: target.token,
+          timeoutMs,
+          signal: controller.signal,
+          async: Boolean(options.async),
+        });
+        console.log(JSON.stringify(result, null, 2));
+        if (!result.ok) {
+          process.exit(1);
+        }
+        return;
+      } catch (err: any) {
+        console.error(`Error: ${err.message}`);
         process.exit(1);
       }
-      return;
+    }
+
+    // Local execution
+    if (options.async) {
+      console.error(
+        "Error: Async execution requires a long-running ActionDock server.\nUse --profile, --server, or start `ac serve`."
+      );
+      process.exit(1);
+    }
+
+    let resolvedProjectRoot: string;
+    let resolvedActionId: string;
+
+    try {
+      const resolved = await resolveActionProject(id);
+      resolvedProjectRoot = resolved.projectRoot;
+      resolvedActionId = resolved.actionId;
     } catch (err: any) {
       console.error(`Error: ${err.message}`);
       process.exit(1);
     }
-  }
 
-  // Local execution
-  let resolvedProjectRoot: string;
-  let resolvedActionId: string;
+    try {
+      const config = loadProjectConfig(resolvedProjectRoot);
+      const actions = await loadActions(resolvedProjectRoot, config.actionsDir);
+      const storage = createStorage(config.id, { projectRoot: resolvedProjectRoot });
 
-  try {
-    const resolved = await resolveActionProject(id);
-    resolvedProjectRoot = resolved.projectRoot;
-    resolvedActionId = resolved.actionId;
-  } catch (err: any) {
-    console.error(`Error: ${err.message}`);
-    process.exit(1);
-  }
+      const runner = new ActionRunner({
+        packageId: config.id,
+        storage,
+        projectConfig: config,
+        configOverrides,
+        actions,
+      });
 
-  try {
-    const config = loadProjectConfig(resolvedProjectRoot);
-    const actions = await loadActions(resolvedProjectRoot, config.actionsDir);
-    const storage = createStorage(config.id, { projectRoot: resolvedProjectRoot });
+      const result = await runner.execute(resolvedActionId, input, {
+        signal: controller.signal,
+        timeoutMs,
+      });
+      console.log(JSON.stringify(result, null, 2));
+      storage.close();
 
-    const runner = new ActionRunner({
-      packageId: config.id,
-      storage,
-      projectConfig: config,
-      configOverrides,
-      actions,
-    });
-
-    const result = await runner.execute(resolvedActionId, input);
-    console.log(JSON.stringify(result, null, 2));
-    storage.close();
-
-    if (!result.ok) {
+      if (!result.ok) {
+        process.exit(1);
+      }
+    } catch (err: any) {
+      console.error(`Error: ${err.message}`);
       process.exit(1);
     }
-  } catch (err: any) {
-    console.error(`Error: ${err.message}`);
-    process.exit(1);
+  } finally {
+    process.removeListener("SIGINT", sigintHandler);
   }
 }
+

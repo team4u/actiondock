@@ -209,7 +209,7 @@ dist/my-tools-skill/
 | `ac action create <id>` | 快速生成新的 Action 声明模板文件 |
 | `ac action list [patterns...] [-i <regex>] [--json]` | 列出 Action（支持正则意图 `-i`、多关键字模糊查找与未命中回退） |
 | `ac action show <id> [--json]` | 查看指定 Action 的详细定义与入参出参 Schema |
-| `ac action run <id> --input '<json>' [--timeout <t>]` | 运行 Action 并输出标准结果 JSON（支持超时限制与 Ctrl+C 取消） |
+| `ac action run <id> --input '<json>' [--timeout <t>] [--async]` | 运行 Action 并输出标准结果 JSON（支持超时限制、Ctrl+C 取消与远程异步模式） |
 | `ac action validate` | 校验 Action 与 JSON Schema 语法合法性 |
 | `ac mcp [--dir <d>] [--package <p>]` | 启动 MCP (Model Context Protocol) STDIO 服务端（Claude Code / Cursor 直连） |
 | `ac mcp serve [--port <p>] [--host <h>]` | 启动 MCP Streamable HTTP 协议微服务（默认监听 127.0.0.1:5178） |
@@ -218,11 +218,14 @@ dist/my-tools-skill/
 | `ac config list [patterns...] [-i <regex>]` | 查看与管理本地 SQLite 运行时配置（支持意图过滤） |
 | `ac state list [prefix] [-i <regex>]` | 查看与管理本地 SQLite 共享状态存储（支持前缀与意图正则） |
 | `ac runs list [patterns...] [-i <regex>]` | 查看 Action 执行历史与输入输出记录（支持意图过滤） |
+| `ac runs show <id> [--profile <p>]` | 查看单次 Action 详细执行记录（支持本地与远程 Profile 查询） |
+| `ac runs cancel <id> --profile <p>` | 取消正在远端云机器上运行中的 Action 任务 |
 | `ac profile list [--reveal] [--json]` | 管理多环境与远程云机器 Profile（支持 Token 来源标注与脱敏） |
 | `ac serve [--port <p>] [--host <h>]` | 启动轻量安全 HTTP Runner 服务端（默认安全监听 127.0.0.1） |
 | `ac test` | 使用 Bun Test Runner 执行单元测试 |
 | `ac build [--target <target>] [--out <path>]` | 将项目编译为单个自包含独立二进制（支持交叉编译：`linux-x64` / `darwin-x64` / `darwin-arm64` / `windows-x64`） |
 | `ac export skill [--target <target>] [--out <path>]` | 导出包含 `SKILL.md` + 独立二进制的完整 Skill 交付包 |
+
 
 ---
 

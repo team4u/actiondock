@@ -1,3 +1,5 @@
+import type { ServerRuntimeRegistry } from "./runtime-registry";
+
 export interface ServerOptions {
   port?: number;
   host?: string;
@@ -14,5 +16,7 @@ export interface ActionDockServerInstance {
   port: number;
   host: string;
   url: string;
+  runtimeRegistry?: ServerRuntimeRegistry;
   stop: () => Promise<void> | void;
 }
+

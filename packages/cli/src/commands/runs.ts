@@ -1,8 +1,11 @@
 import {
+  cancelRemoteRun,
   createStorage,
+  fetchRemoteRun,
   filterWithFallbackInfo,
   findProjectRoot,
   loadProjectConfig,
+  resolveTarget,
 } from "@actiondock/core";
 import { Command } from "commander";
 import { resolveIntent } from "../utils/filter";
@@ -71,13 +74,62 @@ export function registerRunsCommands(program: Command): void {
       }
     });
 
-
   // runs show
   runsCmd
     .command("show <id>")
     .description("Show details of a specific execution run")
+    .option("-p, --profile <name>", "Query run against a specific profile")
+    .option("-s, --server <url>", "Remote server URL")
+    .option("-t, --token <token>", "Auth token for remote server")
     .option("--json", "Output as JSON")
-    .action((id, options) => {
+    .action(async (id, options) => {
+      let target;
+      try {
+        target = resolveTarget({
+          profile: options.profile,
+          server: options.server,
+          token: options.token,
+        });
+      } catch (err: any) {
+        console.error(`Error: ${err.message}`);
+        process.exit(1);
+      }
+
+      if (target.type === "remote") {
+        try {
+          const run = await fetchRemoteRun(target.serverUrl!, id, target.token);
+          if (options.json) {
+            console.log(JSON.stringify(run, null, 2));
+          } else {
+            console.log(`Run:          ${run.id}`);
+            console.log(`Action:       ${run.actionId}`);
+            console.log(`Package:      ${run.packageId || "N/A"}`);
+            console.log(`Status:       ${run.status}`);
+            if (run.parentRunId) console.log(`Parent Run:   ${run.parentRunId}`);
+            console.log(`Started:      ${run.startedAt}`);
+            if (run.finishedAt) console.log(`Finished:     ${run.finishedAt}`);
+
+            console.log("\nInput:");
+            console.log(JSON.stringify(run.input, null, 2));
+
+            if (run.output !== undefined) {
+              console.log("\nOutput:");
+              console.log(JSON.stringify(run.output, null, 2));
+            }
+
+            if (run.error) {
+              console.log("\nError:");
+              console.log(JSON.stringify(run.error, null, 2));
+            }
+          }
+          return;
+        } catch (err: any) {
+          console.error(`Error: ${err.message}`);
+          process.exit(1);
+        }
+      }
+
+      // Local show
       const root = findProjectRoot();
       if (!root) {
         console.error("Error: Not in an ActionDock project");
@@ -116,6 +168,53 @@ export function registerRunsCommands(program: Command): void {
             console.log("\nError:");
             console.log(JSON.stringify(run.error, null, 2));
           }
+        }
+      } catch (err: any) {
+        console.error(`Error: ${err.message}`);
+        process.exit(1);
+      }
+    });
+
+  // runs cancel
+  runsCmd
+    .command("cancel <id>")
+    .description("Cancel a running action execution on a remote server")
+    .option("-p, --profile <name>", "Execute cancel against a specific profile")
+    .option("-s, --server <url>", "Remote server URL")
+    .option("-t, --token <token>", "Auth token for remote server")
+    .option("-r, --reason <reason>", "Reason for cancellation")
+    .option("--json", "Output as JSON")
+    .action(async (id, options) => {
+      let target;
+      try {
+        target = resolveTarget({
+          profile: options.profile,
+          server: options.server,
+          token: options.token,
+        });
+      } catch (err: any) {
+        console.error(`Error: ${err.message}`);
+        process.exit(1);
+      }
+
+      if (target.type === "local") {
+        console.error(
+          "Error: 'ac runs cancel' is only supported for remote execution targets. Use --profile <name> or --server <url>."
+        );
+        process.exit(1);
+      }
+
+      try {
+        const result = await cancelRemoteRun(
+          target.serverUrl!,
+          id,
+          target.token,
+          options.reason
+        );
+        if (options.json) {
+          console.log(JSON.stringify(result, null, 2));
+        } else {
+          console.log(`Run '${id}' cancellation requested (Status: ${result.status}).`);
         }
       } catch (err: any) {
         console.error(`Error: ${err.message}`);

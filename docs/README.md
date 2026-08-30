@@ -12,7 +12,8 @@
 | **[快速上手指南](quick-start.md)** | 从环境准备、脚手架、Action 编写、调试、编译到 Skill 导出全流程 | 新手与使用者 |
 | **[Skill 设计哲学与交付指南](skill-guide.md)** | Action/Playbook/Skill 三层关系、构成规范、交叉导出与 Agent 生命周期 | 所有开发者与 Agent 架构师 |
 | **[Action 编写与开发指南](action-authoring.md)** | `defineAction` 声明、TypeScript 接口、JSON Schema 校验与单测 | Action 编写者 |
-| **[ActionContext 核心能力详解](action-context.md)** | `ctx.config`、`ctx.state`、`ctx.actions` 与 `ctx.log` 深度剖析 | Action 编写者 |
+| **[ActionContext 核心能力详解](action-context.md)** | `ctx.config`、`ctx.state`、`ctx.actions`、`ctx.log` 与 `ctx.signal` 深度剖析 | Action 编写者 |
+| **[安全加固、MCP 与执行生命周期设计](design-security-mcp-execution.md)** | 架构设计底线：Security、MCP 适配器与执行生命周期全景 | 架构师与系统开发者 |
 
 ---
 
@@ -22,7 +23,7 @@
 | :--- | :--- | :--- |
 | **[Playbook SOP 编写指南](playbook-guide.md)** | 面向 AI Agent 的领域任务操作规程规范与校验 | 提示词/流程设计者 |
 | **[存储与状态管理机制](storage-and-state.md)** | 基于 `bun:sqlite` 的 Config、State、Runs 数据模型与路径隔离 | 架构师与系统开发者 |
-| **[多环境与云机器调度指南](remote-and-profiles.md)** | Profile 管理、`ac serve` 轻量 Runner 与多云节点执行 | 运维与系统开发者 |
+| **[多环境与云机器调度指南](remote-and-profiles.md)** | Profile 管理、`ac serve` 轻量 Runner、异步任务与多云节点执行 | 运维与系统开发者 |
 | **[构建编译与 Skill 分发](build-and-export.md)** | `Bun.build` 单文件编译原理、交叉编译与 Skill 导出目录结构 | 交付与运维工程师 |
 | **[Model Context Protocol (MCP) 适配器指南](mcp-integration.md)** | STDIO 与 HTTP 协议、Tool 映射、取消链路与 Agent IDE 直连 | Agent 与系统开发者 |
 | **[AI Agent 接入与集成指南](agent-integration.md)** | Antigravity、Claude Code、Cursor 等主流 Agent 框架接入 | Agent 开发者 |
@@ -38,3 +39,4 @@
 | **[错误代码与排错手册](error-codes.md)** | 标准运行时错误码定义、常见触发原因与排查修复建议 | 排错与日常使用 |
 | **[1.0 到 2.0 迁移指南](v1-to-v2-migration.md)** | 1.0 服务端/Java 平台与 2.0 Bun 独立工具链概念映射 | 历史用户 |
 | **[ActionDock AI Agent 技能指南](../skills/actiondock/SKILL.md)** | 专门面向 AI 编程助手与自主 Agent 的开发规范与元信息 | AI Agent |
+

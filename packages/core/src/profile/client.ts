@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { ExecutionResult } from "@actiondock/sdk";
+import type { ExecutionResult, RuntimeError, RunRecord } from "@actiondock/sdk";
 import { normalizeServerUrl } from "./manager";
 import type { RemoteHealthResult } from "./types";
 
@@ -12,6 +12,18 @@ function buildHeaders(token?: string): Record<string, string> {
   }
   return headers;
 }
+
+export interface RemoteExecuteOptions {
+  configOverrides?: Record<string, unknown>;
+  token?: string;
+  timeoutMs?: number;
+  signal?: AbortSignal;
+  async?: boolean;
+}
+
+export type RemoteExecutionResult<T = unknown> = ExecutionResult<T> & {
+  status?: string;
+};
 
 export async function checkRemoteHealth(
   serverUrl: string,
@@ -62,15 +74,49 @@ export async function checkRemoteHealth(
   }
 }
 
-export async function executeRemoteAction(
+export async function executeRemoteAction<T = unknown>(
   serverUrl: string,
   actionId: string,
   input: unknown = {},
-  configOverrides?: Record<string, unknown>,
-  token?: string
-): Promise<ExecutionResult> {
+  configOverridesOrOptions?: Record<string, unknown> | RemoteExecuteOptions,
+  tokenArg?: string
+): Promise<RemoteExecutionResult<T>> {
   const base = normalizeServerUrl(serverUrl);
   const url = `${base}/api/v1/actions/${encodeURIComponent(actionId)}/run`;
+
+  // Parse options / backwards compatibility
+  let configOverrides: Record<string, unknown> | undefined;
+  let token: string | undefined = tokenArg;
+  let timeoutMs: number | undefined;
+  let signal: AbortSignal | undefined;
+  let isAsync = false;
+
+  if (configOverridesOrOptions && typeof configOverridesOrOptions === "object") {
+    if (
+      "token" in configOverridesOrOptions ||
+      "timeoutMs" in configOverridesOrOptions ||
+      "signal" in configOverridesOrOptions ||
+      "async" in configOverridesOrOptions ||
+      "configOverrides" in configOverridesOrOptions
+    ) {
+      const opts = configOverridesOrOptions as RemoteExecuteOptions;
+      configOverrides = opts.configOverrides;
+      token = opts.token ?? tokenArg;
+      timeoutMs = opts.timeoutMs;
+      signal = opts.signal;
+      isAsync = Boolean(opts.async);
+    } else {
+      configOverrides = configOverridesOrOptions as Record<string, unknown>;
+    }
+  }
+
+  const executionPayload: Record<string, unknown> = {};
+  if (isAsync) {
+    executionPayload.mode = "async";
+  }
+  if (typeof timeoutMs === "number" && timeoutMs > 0) {
+    executionPayload.timeoutMs = timeoutMs;
+  }
 
   try {
     const headers = {
@@ -84,13 +130,15 @@ export async function executeRemoteAction(
       body: JSON.stringify({
         input,
         config: configOverrides,
+        execution: Object.keys(executionPayload).length > 0 ? executionPayload : undefined,
       }),
+      signal,
     });
 
     const data = (await res.json().catch(() => null)) as any;
 
     if (data && typeof data === "object" && typeof data.ok === "boolean") {
-      return data as ExecutionResult;
+      return data;
     }
 
     if (!res.ok) {
@@ -111,6 +159,16 @@ export async function executeRemoteAction(
       data,
     };
   } catch (err: any) {
+    if (err.name === "AbortError" || signal?.aborted) {
+      return {
+        ok: false,
+        runId: randomUUID(),
+        error: {
+          code: "ACTION_CANCELLED",
+          message: "Action execution was cancelled",
+        },
+      };
+    }
     return {
       ok: false,
       runId: randomUUID(),
@@ -120,6 +178,57 @@ export async function executeRemoteAction(
       },
     };
   }
+}
+
+export async function fetchRemoteRun(
+  serverUrl: string,
+  runId: string,
+  token?: string
+): Promise<RunRecord> {
+  const base = normalizeServerUrl(serverUrl);
+  const url = `${base}/api/v1/runs/${encodeURIComponent(runId)}`;
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: buildHeaders(token),
+  });
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(
+      errData?.error?.message || `Failed to fetch remote run '${runId}' (${res.status}): ${res.statusText}`
+    );
+  }
+
+  return (await res.json()) as RunRecord;
+}
+
+export async function cancelRemoteRun(
+  serverUrl: string,
+  runId: string,
+  token?: string,
+  reason?: string
+): Promise<{ ok: boolean; runId: string; status: string }> {
+  const base = normalizeServerUrl(serverUrl);
+  const url = `${base}/api/v1/runs/${encodeURIComponent(runId)}/cancel`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      ...buildHeaders(token),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ reason }),
+  });
+
+  const data = (await res.json().catch(() => ({}))) as any;
+  if (!res.ok || !data.ok) {
+    throw new Error(
+      data?.error?.message || `Failed to cancel remote run '${runId}' (${res.status}): ${res.statusText}`
+    );
+  }
+
+  return data;
 }
 
 export async function fetchRemoteActions(
@@ -142,7 +251,6 @@ export async function fetchRemoteActions(
 
   return (await res.json()) as any;
 }
-
 
 export async function fetchRemoteActionShow(
   serverUrl: string,

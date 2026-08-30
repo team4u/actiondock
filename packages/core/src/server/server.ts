@@ -10,8 +10,8 @@ import {
 } from "../project/loader";
 import { listLinkedPackages, resolveActionProject } from "../registry/registry";
 import { ActionRunner } from "../runtime/runner";
-import { createStorage } from "../storage";
 import { InvalidJsonError, readJsonBody, RequestTooLargeError } from "./body";
+import { ServerRuntimeRegistry } from "./runtime-registry";
 import { isLoopbackHost, resolveCorsHeaders, verifyBearerToken } from "./security";
 import type { ActionDockServerInstance, ServerOptions } from "./types";
 
@@ -46,6 +46,8 @@ export function startActionDockServer(
       "Authentication token is required when binding to a non-loopback address. Use --allow-insecure-no-auth to override."
     );
   }
+
+  const runtimeRegistry = new ServerRuntimeRegistry();
 
   const server = Bun.serve({
     port,
@@ -323,9 +325,7 @@ export function startActionDockServer(
           );
           const config = loadProjectConfig(resolved.projectRoot);
           const actions = await loadActions(resolved.projectRoot, config.actionsDir);
-          const storage = createStorage(config.id, {
-            projectRoot: resolved.projectRoot,
-          });
+          const storage = runtimeRegistry.getStorage(config.id, resolved.projectRoot);
 
           const runner = new ActionRunner({
             packageId: config.id,
@@ -335,8 +335,36 @@ export function startActionDockServer(
             actions,
           });
 
-          const result = await runner.execute(resolved.actionId, body?.input || {});
-          storage.close();
+          const executionMode = body?.execution?.mode || "sync";
+          const timeoutMs =
+            typeof body?.execution?.timeoutMs === "number" && body.execution.timeoutMs > 0
+              ? body.execution.timeoutMs
+              : undefined;
+
+          if (executionMode === "async") {
+            const handle = runner.start(resolved.actionId, body?.input || {}, {
+              timeoutMs,
+            });
+            runtimeRegistry.executionManager.register(handle);
+
+            return jsonResponse(
+              {
+                ok: true,
+                runId: handle.runId,
+                status: "running",
+              },
+              202,
+              corsHeaders
+            );
+          }
+
+          // Sync execution mode
+          const handle = runner.start(resolved.actionId, body?.input || {}, {
+            signal: req.signal,
+            timeoutMs,
+          });
+          runtimeRegistry.executionManager.register(handle);
+          const result = await handle.result;
 
           return jsonResponse(result, 200, corsHeaders);
         } catch (err: any) {
@@ -353,6 +381,162 @@ export function startActionDockServer(
             corsHeaders
           );
         }
+      }
+
+      // 6. Run Show: GET /api/v1/runs/:runId
+      const runShowMatch = pathname.match(/^\/api\/v1\/runs\/([^/]+)$/);
+      if (runShowMatch && req.method === "GET") {
+        const runId = decodeURIComponent(runShowMatch[1]);
+        let foundRun = runtimeRegistry.findRun(runId)?.run || undefined;
+
+        if (!foundRun && projectRoot) {
+          try {
+            const config = loadProjectConfig(projectRoot);
+            const storage = runtimeRegistry.getStorage(config.id, projectRoot);
+            foundRun = storage.getRun(runId) || undefined;
+          } catch {
+            // ignore
+          }
+        }
+
+        if (!foundRun) {
+          try {
+            const linked = listLinkedPackages(customHome);
+            for (const pkg of linked) {
+              if (!existsSync(pkg.path)) continue;
+              const storage = runtimeRegistry.getStorage(pkg.id, pkg.path);
+              const r = storage.getRun(runId);
+              if (r) {
+                foundRun = r;
+                break;
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
+
+        if (!foundRun) {
+          return jsonResponse(
+            {
+              ok: false,
+              error: {
+                code: "RUN_NOT_FOUND",
+                message: `Run '${runId}' not found`,
+              },
+            },
+            404,
+            corsHeaders
+          );
+        }
+
+        return jsonResponse(foundRun, 200, corsHeaders);
+      }
+
+      // 7. Run Cancel: POST /api/v1/runs/:runId/cancel
+      const runCancelMatch = pathname.match(/^\/api\/v1\/runs\/([^/]+)\/cancel$/);
+      if (runCancelMatch && req.method === "POST") {
+        const runId = decodeURIComponent(runCancelMatch[1]);
+        let body: any = {};
+        try {
+          body = await readJsonBody(req, { maxBytes: options.maxBodyBytes });
+        } catch {
+          // Body is optional
+        }
+
+        const reason = body?.reason || "Cancelled by client request";
+
+        // 1. Try cancelling in-memory active handle
+        const activeHandle = runtimeRegistry.executionManager.get(runId);
+        if (activeHandle) {
+          const cancelled = runtimeRegistry.executionManager.cancel(runId, reason);
+          if (cancelled) {
+            return jsonResponse(
+              {
+                ok: true,
+                runId,
+                status: "cancelled",
+              },
+              200,
+              corsHeaders
+            );
+          }
+        }
+
+        // 2. Check storage for run status
+        let found = runtimeRegistry.findRun(runId);
+        if (!found && projectRoot) {
+          try {
+            const config = loadProjectConfig(projectRoot);
+            const storage = runtimeRegistry.getStorage(config.id, projectRoot);
+            const run = storage.getRun(runId);
+            if (run) found = { storage, run };
+          } catch {
+            // ignore
+          }
+        }
+
+        if (!found) {
+          try {
+            const linked = listLinkedPackages(customHome);
+            for (const pkg of linked) {
+              if (!existsSync(pkg.path)) continue;
+              const storage = runtimeRegistry.getStorage(pkg.id, pkg.path);
+              const run = storage.getRun(runId);
+              if (run) {
+                found = { storage, run };
+                break;
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
+
+        if (!found) {
+          return jsonResponse(
+            {
+              ok: false,
+              error: {
+                code: "RUN_NOT_FOUND",
+                message: `Run '${runId}' not found`,
+              },
+            },
+            404,
+            corsHeaders
+          );
+        }
+
+        const { storage, run } = found;
+        if (run.status === "success" || run.status === "failed" || run.status === "cancelled") {
+          return jsonResponse(
+            {
+              ok: false,
+              error: {
+                code: "RUN_ALREADY_FINISHED",
+                message: `Run '${runId}' has already finished with status '${run.status}'`,
+              },
+            },
+            409,
+            corsHeaders
+          );
+        }
+
+        // Running in storage but no longer in memory
+        storage.updateRun(runId, "cancelled", undefined, {
+          code: "ACTION_CANCELLED",
+          message: reason,
+        });
+
+        return jsonResponse(
+          {
+            ok: true,
+            runId,
+            status: "cancelled",
+          },
+          200,
+          corsHeaders
+        );
       }
 
       // 404 Not Found
@@ -377,7 +561,9 @@ export function startActionDockServer(
     port: server.port ?? port,
     host,
     url,
+    runtimeRegistry,
     stop: () => {
+      runtimeRegistry.close();
       server.stop(true);
     },
   };

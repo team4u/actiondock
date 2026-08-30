@@ -2,7 +2,8 @@
 
 在 ActionDock 2.0 中，每个 Action 的 `run(input, ctx)` 执行函数都会接收一个强类型的上下文对象 `ctx`（即 `ActionContext`）。
 
-本文档深入解析 `ActionContext` 提供的 4 大核心领域能力：**`ctx.config`**、**`ctx.state`**、**`ctx.actions`** 与 **`ctx.log`**。
+本文档深入解析 `ActionContext` 提供的 5 大核心领域能力：**`ctx.config`**、**`ctx.state`**、**`ctx.actions`**、**`ctx.log`** 与 **`ctx.signal`**。
+
 
 ---
 

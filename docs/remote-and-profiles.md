@@ -147,6 +147,70 @@ ac profile use local
 
 ---
 
+## 异步任务执行与生命周期管理 (Async Tasks & Cancellation)
+
+针对执行耗时较长、无需即时等待结果的后台操作（例如大文件同步、跨集群批量巡检等），ActionDock HTTP Runner 支持标准异步任务模式。
+
+### 1. 提交异步任务 (`--async`)
+
+在指定 `--profile` 或 `--server` 时传入 `--async`：
+
+```bash
+ac run sync-database --profile aliyun-prod --async -i '{"db": "analytics"}'
+```
+
+服务端立即返回 `202 Accepted` 并输出 Run ID 与初始状态：
+```json
+{
+  "ok": true,
+  "runId": "01JXYZ...",
+  "status": "running"
+}
+```
+
+> **注意**：本地单次进程执行（未配置远程 server）不支持 `--async`，CLI 会明确提示使用 `--profile` 或启动 `ac serve`。
+
+### 2. 查询远端执行详情 (`ac runs show`)
+
+```bash
+# 查询远端 Run 详情与执行状态
+ac runs show 01JXYZ... --profile aliyun-prod [--json]
+```
+
+输出详情包含当前状态（`running` / `success` / `failed` / `cancelled`）、开始/结束时间、输入参数、输出数据或错误信息。
+
+### 3. 取消正在运行中的任务 (`ac runs cancel`)
+
+```bash
+# 主动取消远端正在执行的任务
+ac runs cancel 01JXYZ... --profile aliyun-prod --reason "手动停止任务"
+```
+
+服务端通过 `ExecutionManager` 触发该任务的 `AbortSignal` 并将执行记录终态标记为 `cancelled`。
+
+---
+
+## HTTP Runner API 规范
+
+ActionDock HTTP Runner 暴露标准的 RESTful 接口：
+
+| HTTP 方法与路径 | 功能说明 | 请求参数 / Body | 成功响应 |
+| :--- | :--- | :--- | :--- |
+| `GET /api/v1/health` | 服务端健康检查与版本 | Bearer Token（可选） | `200 { "status": "ok", "version": "2.0.0", "uptime": 123 }` |
+| `GET /api/v1/info` | 项目元数据与 Actions 列表 | Bearer Token | `200 { "ok": true, "id": "...", "actions": [...] }` |
+| `GET /api/v1/actions` | 列出可调用的 Actions（支持 `?intent=`） | Bearer Token | `200 [ { "id": "...", "description": "..." } ]` |
+| `GET /api/v1/actions/:id` | 获取单个 Action 的 Schema 详情 | Bearer Token | `200 { "id": "...", "inputSchema": {...} }` |
+| `POST /api/v1/actions/:id/run` | 执行 Action（同步阻塞 / 异步后台） | `{ "input": {}, "config": {}, "execution": { "mode": "sync"\|"async", "timeoutMs": 30000 } }` | 同步: `200 { "ok": true, "runId": "...", "data": ... }`<br>异步: `202 { "ok": true, "runId": "...", "status": "running" }` |
+| `GET /api/v1/runs/:runId` | 获取指定 Run 记录的最新状态与结果 | Bearer Token | `200 { "id": "...", "status": "success", "output": ... }` |
+| `POST /api/v1/runs/:runId/cancel` | 取消指定在运行的 Run 任务 | `{ "reason": "client abort" }` | `200 { "ok": true, "runId": "...", "status": "cancelled" }`<br>已结束: `409 RUN_ALREADY_FINISHED`<br>不存在: `404 RUN_NOT_FOUND` |
+
+### 异步持久化保证边界（Server-Lifetime Execution）
+
+* **Run 元数据持久化**：所有的 `RunRecord`（包括入参、状态、耗时、异常）均持久化在 SQLite 中。
+* **Server 生命周期绑定**：异步执行依赖当前长运行的 `ac serve` 进程（内存中的 `ExecutionManager` 与 Active Promise）。若 `ac serve` 进程被杀或重启，未完成的任务将中止，不会自动重放（ActionDock 专注于轻量 Toolchain，不内置重型分布式分布式队列）。
+
+---
+
 ## AI Agent 多云协同场景
 
 在导出的 Skill 中，AI Agent 可以通过简单的参数调度不同云端节点：
@@ -159,3 +223,4 @@ Agent Actions:
 ```
 
 输出的格式均为统一的 `{ ok: true, data: { ... } }` JSON Envelope，Agent 无需关心底层网络传输与异构拓扑差异。
+

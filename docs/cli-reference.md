@@ -77,6 +77,7 @@ ActionDock 命令行工具（`ac`）全量功能与参数参考。
   * `-f, --input-file <path>`：从 JSON 文件读取入参
   * `-c, --config <KEY=val>`：临时覆盖运行时配置项（可重复指定）
   * `--timeout <duration>`：设置超时时间（如 `500ms`、`30s`、`5m`、`1h`），超时将触发 `ACTION_TIMEOUT` 终止
+  * `--async`：异步执行任务（仅在通过 `--profile` 或 `--server` 执行时支持，返回 202 异步 Run 记录）
   * `-p, --profile <name>`：调度至指定的云机器/环境 profile 执行
   * `-s, --server <url>`：直接调度至指定远程 HTTP Runner 执行
   * `-t, --token <token>`：远程服务器鉴权 Token
@@ -94,6 +95,7 @@ ActionDock 命令行工具（`ac`）全量功能与参数参考。
 ### Model Context Protocol 服务（MCP）
 
 #### `ac mcp`
+
 以 STDIO 模式启动 MCP 服务端，将当前或指定 package 内的 Actions 作为 MCP Tools 提供给本地 MCP Client（Claude Code、Cursor、VS Code 等）。
 * **参数选项**：
   * `-d, --dir <path>`：指定 ActionDock 项目根目录（默认当前目录）
@@ -197,7 +199,9 @@ ActionDock 命令行工具（`ac`）全量功能与参数参考。
 ### 执行记录检查（Runs）
 
 * `ac runs list [patterns...] [-i, --intent <pattern>] [-a, --action <id>] [-n, --limit <count>] [--json]`：列出最近的 Action 执行历史（支持正则/关键字意图搜索、按 Action 过滤与分页限制）。
-* `ac runs show <run-id> [--json]`：查看单次 Run 的完整执行详情、耗时、入参、出参及错误堆栈。
+* `ac runs show <run-id> [-p <profile>] [-s <server>] [-t <token>] [--json]`：查看单次 Run 的完整执行详情、耗时、入参、出参及错误堆栈（支持本地或通过 `--profile` / `--server` 查询远程运行记录）。
+* `ac runs cancel <run-id> -p <profile>|-s <server> [-r, --reason <reason>] [--json]`：取消正在远端服务器上执行中的 Action 任务（仅支持远程目标）。
+
 
 
 ---

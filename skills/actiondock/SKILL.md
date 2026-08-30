@@ -199,12 +199,22 @@ ac profile rm <name>
 
 ### 3. 调度远端 Action 执行
 ```bash
-# 通过 --profile 调度（自动按 5-tier 多级回退解析 Token）
+# 同步执行：通过 --profile 调度（自动按 5-tier 多级回退解析 Token）
 ac run check-disk --profile aliyun-prod -i '{"mount": "/data"}'
+
+# 异步执行：提交长耗时任务，立即返回 202 Accepted 与 runId（由 Server 持续运行）
+ac run sync-database --profile aliyun-prod --async
+
+# 查询远端任务执行详情与状态
+ac runs show <run-id> --profile aliyun-prod [--json]
+
+# 主动取消远端正在执行的任务
+ac runs cancel <run-id> --profile aliyun-prod [--reason "手动中止"]
 
 # 直接传 server 地址调度
 ac run check-disk --server http://1.2.3.4:5177 --token secret123
 ```
+
 
 ---
 
@@ -291,11 +301,14 @@ ac state set <key> <json-value> [--ttl <seconds>]
 ac state delete <key>
 ```
 
-### 执行历史
+### 执行历史与任务取消
 ```bash
 ac runs list [patterns...] [-i "<regex>"] [--action <id>] [--limit 20] [--json]
 ac runs show <run-id> [--json]
+ac runs show <run-id> --profile <profile-name> [--json]       # 查询远程运行详情
+ac runs cancel <run-id> --profile <profile-name> [--json]     # 取消远端运行中的任务
 ```
+
 
 
 ---

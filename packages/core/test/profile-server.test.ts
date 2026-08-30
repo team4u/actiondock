@@ -1,14 +1,16 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, statSync, symlinkSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
   addProfile,
+  cancelRemoteRun,
   checkRemoteHealth,
   executeRemoteAction,
   fetchRemoteActions,
   fetchRemoteActionShow,
   fetchRemoteInfo,
+  fetchRemoteRun,
   getProfile,
   initProject,
   isLoopbackHost,
@@ -38,6 +40,37 @@ describe("Profile Management & Remote Server", () => {
       description: "App for testing profile and remote runner",
     });
 
+    // Add a long running action for timeout and cancel testing
+    writeFileSync(
+      join(projectDir, "actions", "long-task.ts"),
+      `import { defineAction } from "@actiondock/sdk";
+
+export default defineAction({
+  id: "sample.long-task",
+  description: "Long running action for testing timeout and cancel",
+  inputSchema: {
+    type: "object",
+    properties: {
+      delayMs: { type: "number" },
+    },
+  },
+  async run(input: any, ctx) {
+    const delay = input.delayMs || 300;
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(resolve, delay);
+      if (ctx.signal) {
+        ctx.signal.addEventListener("abort", () => {
+          clearTimeout(timer);
+          reject(ctx.signal.reason || new Error("Action cancelled"));
+        });
+      }
+    });
+    return { completed: true, delay };
+  },
+});
+`
+    );
+
     // Link root node_modules so @actiondock/sdk is resolvable
     const rootNodeModules = resolve(__dirname, "../../../node_modules");
     if (existsSync(rootNodeModules)) {
@@ -54,6 +87,7 @@ describe("Profile Management & Remote Server", () => {
     });
     serverUrl = `http://127.0.0.1:${serverInstance.port}`;
   });
+
 
   afterAll(async () => {
     if (serverInstance) {
@@ -399,12 +433,13 @@ describe("Profile Management & Remote Server", () => {
     const actions = await fetchRemoteActions(serverUrl, SECRET_TOKEN);
     expect(Array.isArray(actions)).toBe(true);
     expect(actions.length).toBeGreaterThan(0);
-    expect(actions[0].id).toBe("sample.greet");
+    expect(actions.some((a) => a.id === "sample.greet")).toBe(true);
 
     // Filter remote actions by intent regex
-    const matched = await fetchRemoteActions(serverUrl, SECRET_TOKEN, "greet|sample");
+    const matched = await fetchRemoteActions(serverUrl, SECRET_TOKEN, "greet");
     expect(matched.length).toBe(1);
     expect(matched[0].id).toBe("sample.greet");
+
 
     const unmatched = await fetchRemoteActions(serverUrl, SECRET_TOKEN, "nonexistent");
     expect(unmatched.length).toBe(0);
@@ -448,4 +483,114 @@ describe("Profile Management & Remote Server", () => {
       expect(result.error.code).toBe("INPUT_VALIDATION_FAILED");
     }
   });
+
+  test("Execution Lifecycle > executes action asynchronously and returns 202 Accepted", async () => {
+    const res = await executeRemoteAction(
+      serverUrl,
+      "sample.long-task",
+      { delayMs: 150 },
+      {
+        token: SECRET_TOKEN,
+        async: true,
+      }
+    );
+
+    expect(res.ok).toBe(true);
+    expect(res.runId).toBeDefined();
+    expect(res.status).toBe("running");
+
+    // Query run status immediately while running
+    const runWhileRunning = await fetchRemoteRun(serverUrl, res.runId, SECRET_TOKEN);
+    expect(runWhileRunning.id).toBe(res.runId);
+    expect(["running", "success"]).toContain(runWhileRunning.status);
+
+    // Wait for completion
+    await new Promise((r) => setTimeout(r, 250));
+
+    const runAfterComplete = await fetchRemoteRun(serverUrl, res.runId, SECRET_TOKEN);
+    expect(runAfterComplete.id).toBe(res.runId);
+    expect(runAfterComplete.status).toBe("success");
+    expect(runAfterComplete.output).toEqual({ completed: true, delay: 150 });
+  });
+
+  test("Execution Lifecycle > cancels in-flight async run via POST /runs/:id/cancel", async () => {
+    // Start long task
+    const startRes = await executeRemoteAction(
+      serverUrl,
+      "sample.long-task",
+      { delayMs: 500 },
+      {
+        token: SECRET_TOKEN,
+        async: true,
+      }
+    );
+
+    expect(startRes.ok).toBe(true);
+    const runId = startRes.runId;
+
+    // Cancel while in-flight
+    const cancelRes = await cancelRemoteRun(serverUrl, runId, SECRET_TOKEN, "User stopped job");
+    expect(cancelRes.ok).toBe(true);
+    expect(cancelRes.runId).toBe(runId);
+    expect(cancelRes.status).toBe("cancelled");
+
+    // Fetch run to verify cancelled status in storage
+    const run = await fetchRemoteRun(serverUrl, runId, SECRET_TOKEN);
+    expect(run.id).toBe(runId);
+    expect(run.status).toBe("cancelled");
+    expect(run.error?.code).toBe("ACTION_CANCELLED");
+
+    // Cancelling an already finished/cancelled run should return 409
+    expect(
+      cancelRemoteRun(serverUrl, runId, SECRET_TOKEN)
+    ).rejects.toThrow("has already finished");
+  });
+
+  test("Execution Lifecycle > returns 404 when cancelling or fetching non-existent run", async () => {
+    expect(
+      fetchRemoteRun(serverUrl, "non-existent-run-id", SECRET_TOKEN)
+    ).rejects.toThrow("not found");
+
+    expect(
+      cancelRemoteRun(serverUrl, "non-existent-run-id", SECRET_TOKEN)
+    ).rejects.toThrow("not found");
+  });
+
+  test("Execution Lifecycle > enforces server-side timeout", async () => {
+    const result = await executeRemoteAction(
+      serverUrl,
+      "sample.long-task",
+      { delayMs: 400 },
+      {
+        token: SECRET_TOKEN,
+        timeoutMs: 50,
+      }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("ACTION_TIMEOUT");
+    }
+  });
+
+  test("Execution Lifecycle > supports client-side AbortSignal cancellation", async () => {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(new Error("Client cancelled")), 40);
+
+    const result = await executeRemoteAction(
+      serverUrl,
+      "sample.long-task",
+      { delayMs: 400 },
+      {
+        token: SECRET_TOKEN,
+        signal: controller.signal,
+      }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("ACTION_CANCELLED");
+    }
+  });
 });
+

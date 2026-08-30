@@ -93,13 +93,22 @@ describe("CLI End-to-End", () => {
 
     // 4. action run
     const runProc = runCli(
-      ["action", "run", "sample.greet", "--input", '{"name": "Developer"}'],
+      ["action", "run", "sample.greet", "--input", '{"name": "Developer"}', "--timeout", "5s"],
       tempDir
     );
     expect(runProc.exitCode).toBe(0);
     const runRes = JSON.parse(runProc.stdout.toString());
     expect(runRes.ok).toBe(true);
     expect(runRes.data.message).toBe("Hello, Developer!");
+
+    // Local async is rejected
+    const localAsyncProc = runCli(
+      ["action", "run", "sample.greet", "--input", '{"name": "Developer"}', "--async"],
+      tempDir
+    );
+    expect(localAsyncProc.exitCode).toBe(1);
+    expect(localAsyncProc.stderr.toString()).toContain("Async execution requires a long-running ActionDock server");
+
 
     // 5. playbook list & show & validate
     const pbListProc = runCli(["playbook", "list", "--json"], tempDir);
@@ -223,6 +232,12 @@ describe("CLI End-to-End", () => {
     const runDetail = JSON.parse(runShowProc.stdout.toString());
     expect(runDetail.id).toBe(runs[0].id);
     expect(runDetail.status).toBe("success");
+
+    // Local runs cancel is rejected
+    const cancelLocalProc = runCli(["runs", "cancel", runs[0].id], tempDir);
+    expect(cancelLocalProc.exitCode).toBe(1);
+    expect(cancelLocalProc.stderr.toString()).toContain("'ac runs cancel' is only supported for remote execution targets");
+
 
 
     // 9. build
@@ -395,10 +410,50 @@ describe("CLI End-to-End", () => {
       expect(runResult.runId).toBeDefined();
       expect(runResult.data.message).toBe("Greetings from Cloud, RemoteAgent!");
 
+      // 6b. Remote Async Run & Remote Runs Show & Remote Runs Cancel
+      const remoteAsyncProc = runCli(
+        [
+          "run",
+          "sample.greet",
+          "--profile",
+          "cloud-aliyun",
+          "--input",
+          '{"name": "AsyncAgent"}',
+          "--async",
+        ],
+        tmpdir(),
+        env
+      );
+      expect(remoteAsyncProc.exitCode).toBe(0);
+      const asyncRunResult = JSON.parse(remoteAsyncProc.stdout.toString());
+      expect(asyncRunResult.ok).toBe(true);
+      expect(asyncRunResult.runId).toBeDefined();
+      expect(asyncRunResult.status).toBe("running");
+
+      // Query remote run via ac runs show --profile
+      const remoteShowProc = runCli(
+        ["runs", "show", asyncRunResult.runId, "--profile", "cloud-aliyun", "--json"],
+        tmpdir(),
+        env
+      );
+      expect(remoteShowProc.exitCode).toBe(0);
+      const remoteRunRecord = JSON.parse(remoteShowProc.stdout.toString());
+      expect(remoteRunRecord.id).toBe(asyncRunResult.runId);
+
+      // Cancel remote run via ac runs cancel --profile
+      const remoteCancelProc = runCli(
+        ["runs", "cancel", asyncRunResult.runId, "--profile", "cloud-aliyun", "--json"],
+        tmpdir(),
+        env
+      );
+      // It might be 0 if cancelled or 1 if already finished by the time CLI ran
+      expect([0, 1]).toContain(remoteCancelProc.exitCode);
+
       // 7. Remove profile
       const rmProc = runCli(["profile", "rm", "cloud-aliyun"], tmpdir(), env);
       expect(rmProc.exitCode).toBe(0);
       expect(rmProc.stdout.toString()).toContain("[OK] Profile 'cloud-aliyun' removed");
+
     } finally {
       serveProc.kill();
       if (existsSync(clientHome)) {

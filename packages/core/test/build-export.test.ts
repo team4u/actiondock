@@ -104,6 +104,8 @@ describe("Build & Skill Export Contract", () => {
         "sample.greet",
         "--input",
         '{"name": "Antigravity"}',
+        "--timeout",
+        "5s",
       ],
       {
         cwd: tempDir,
@@ -116,6 +118,28 @@ describe("Build & Skill Export Contract", () => {
     expect(runJson.ok).toBe(true);
     expect(runJson.data.message).toBe("Hello, Antigravity!");
     expect(runJson.runId).toBeDefined();
+
+    // 3b. Test binary rejects --async
+    const asyncProc = Bun.spawnSync(
+      [
+        buildRes.executablePath,
+        "run",
+        "sample.greet",
+        "--input",
+        '{"name": "Antigravity"}',
+        "--async",
+      ],
+      {
+        cwd: tempDir,
+        stdout: "pipe",
+        stderr: "pipe",
+      }
+    );
+    expect(asyncProc.exitCode).toBe(1);
+    expect(asyncProc.stderr.toString()).toContain(
+      "Async execution is not supported in standalone single-execution binaries"
+    );
+
 
     // 4. Test binary `config set` and verify persistence in subsequent run
     const confSet = Bun.spawnSync(
