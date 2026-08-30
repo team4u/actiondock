@@ -146,6 +146,8 @@ ac action run <id> -i '{"repo": "owner/repo"}'
 }
 ```
 
+> **自动依赖管理**：若 Action 依赖了未安装的 npm 包，`ac run` 运行时会自动触发 `bun install` 毫秒级补齐依赖并继续执行，安装日志输出至 `stderr`，确保 `stdout` 始终为纯净 JSON。
+
 ---
 
 ## 多环境与远程云机器调度 (Profiles & Serve)

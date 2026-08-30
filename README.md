@@ -14,6 +14,7 @@ ActionDock 2.0 是一个基于 **Bun + TypeScript** 的轻量级开发工具链�
 * **文件系统优先（Filesystem First）**：Action（`actions/*.ts`）、Playbook（`playbooks/*.md`）与项目配置均为普通文件，天然适配 Git 版本管理、分支合并与代码评审。
 * **TypeScript 原生开发**：统一平台与 Action 的编程语言，享受全类型安全约束与基于 `import` 的自然代码依赖闭包。
 * **内置轻量持久化存储**：基于 `bun:sqlite` 内置存储，为 Action 提供开箱即用的运行时配置（Config）、持久化状态（Shared State）与执行历史记录（Runs）。
+* **智能依赖自动安装**：开发态下 `ac run` 自动检测并毫秒级补齐缺失的 npm 依赖；构建态自动将依赖内联打包进单文件二进制。
 * **标准 JSON Schema**：Action 的输入与输出均使用标准 JSON Schema，基于 `Ajv` 严格校验，无自定义 DSL 学习负担。
 * **极简短命令 `ac`**：所有命令通过极速简洁的 `ac` 触发，执行结果输出标准 JSON Envelope 至 `stdout`，日志输出至 `stderr`。
 

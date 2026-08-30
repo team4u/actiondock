@@ -154,3 +154,30 @@ describe("myAction 单元测试", () => {
   });
 });
 ```
+
+---
+
+## 第三方 npm 依赖与智能自动安装
+
+在 Action 中，你可以直接使用海量的 npm 生态包（例如 `dayjs`、`axios`、`@aws-sdk/client-s3`、`lodash-es` 等）：
+
+```ts
+import dayjs from "dayjs";
+import { defineAction } from "@actiondock/sdk";
+
+export default defineAction({
+  id: "utils.format-date",
+  async run(input, ctx) {
+    return { formatted: dayjs().format("YYYY-MM-DD HH:mm:ss") };
+  },
+});
+```
+
+### 1. 开发态按需自动安装（Auto-Install）
+* 当你在本地执行 `ac run <actionId>` 时，ActionDock 会自动检测当前项目是否缺少依赖（如新 clone 的项目缺少 `node_modules`，或新引入的包尚未安装）。
+* ActionDock 会在后台**毫秒级自动执行 `bun install` 补齐依赖**并直接继续执行，无需手动重复敲安装命令。
+* 所有的安装日志统一输出到 `stderr`，确保 `stdout` 始终保持机器可读的标准 JSON 结果。
+
+### 2. 构建态全量内联打包
+* 当执行 `ac build` 或 `ac export skill` 时，Bun 编译引擎会将所有引用的第三方包**全量内联打包并摇树优化进独立二进制**。
+* 最终分发给 AI Agent 或终端使用者时，使用者环境**无需联网下载依赖**，开箱即用。
