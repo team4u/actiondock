@@ -41,16 +41,34 @@ cd packages/cli && bun link
 # 2. 注册全局 @actiondock/sdk 依赖
 cd ../sdk && bun link
 ```
+> [!NOTE]
+> 全局 link 是一次性操作。后续在各个 Action 项目内执行 `bun link @actiondock/sdk` 即可接入本地 SDK。常见安装报错见下方排查表。
 
 ### 3. 初始化新 Action 项目
 ```bash
 ac init [directory] --id <package-id> --name <display-name> --desc <description>
 cd [directory]
 
-# 若使用本地源码模式，链接本地 SDK：
-bun link @actiondock/sdk
+# SDK 已发布 npm 时：
+bun install
+
+# SDK 未发布 npm（当前开发态，404 即此情况）：
+bun link @actiondock/sdk   # 接入本地全局 SDK 并自动补齐其余依赖
 ```
 自动生成包含 `actiondock.json`、`package.json`、`tsconfig.json`、`actions/`、`playbooks/` 与 `tests/` 的完整工程骨架。
+
+### 依赖安装与故障排查
+
+| 症状 / 报错 | 根本原因 | 解决办法 |
+| :--- | :--- | :--- |
+| `GET .../@actiondock%2fsdk - 404` | SDK 尚未发布至 npm | 在 SDK 源码目录执行 `bun link`，随后在项目内执行 `bun link @actiondock/sdk` |
+| `SELF_SIGNED_CERT_IN_CHAIN` | 公司内网代理或自签 CA 证书 | 临时加前缀 `NODE_TLS_REJECT_UNAUTHORIZED=0` 或配置 `bun config set cafile <CA路径>` |
+| 清理 `node_modules` 后再次 404 | link 依赖不会写入 `bun.lock` | 项目内重新执行 `bun link @actiondock/sdk` 恢复链接 |
+
+#### Link 三原则（Agent 必读）：
+1. **契约原则**：`package.json` 永远声明 `"@actiondock/sdk": "^2.0.0"`，**严禁**改为 `link:` 或本地相对路径（保证跨机器与独立构建一致性）。
+2. **分层原则**：SDK 源码根目录 `bun link` 全局执行一次；各 Action 项目内 `bun link @actiondock/sdk` 每项目执行一次。
+3. **双 Link 区分**：`ac link` 是 **ActionDock 全局包注册**（支持跨目录 `ac run pkg/action`），`bun link` 是 **TypeScript/Node 依赖解析**，两者职责独立，开发态通常都需要执行。
 
 ### 检查项目或远程目标元数据
 ```bash
@@ -58,7 +76,10 @@ ac info [--json]
 ac info --profile <profile-name> [--json]
 ```
 
-### 全局包注册与解绑
+### 全局包注册与解绑 (ActionDock 路由表)
+> [!NOTE]
+> `ac link` 负责将当前 Package 注册到 ActionDock 全局路由表中，以便跨目录通过 `ac run <pkg>/<action>` 调度；它**不负责** `node_modules` 的代码依赖，依赖请使用 `bun link`。
+
 ```bash
 ac link [path]          # 注册当前或指定包到全局开发态注册表
 ac unlink [id|path]     # 从全局注册表中移除

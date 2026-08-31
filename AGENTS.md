@@ -17,3 +17,9 @@
   - **路径解析**：Windows 下 npm 全局命令是 `.cmd` shim，必须通过 `Bun.which("command")` 解析完整绝对路径后再 spawn。
   - **防管道死锁**：外部 CLI 进程（如 browser/daemon/node 子进程）可能遗留子句柄导致异步流 EOF 挂死，调用外部进程应统一采用 `Bun.spawnSync` 同步排空管道。
   - **防阻塞与取消**：必须设置超时兜底，多步执行间检查 `ctx.signal?.aborted` 响应外部取消。非零退出码由业务层灵活判定。
+- **依赖与 Link 规范（Dependencies & Link Contract）**：
+  - **契约保持**：`package.json` 始终声明 `"@actiondock/sdk": "^2.0.0"`，**严禁**修改为 `link:` 或相对路径，保证跨机器分发与独立构建一致性。
+  - **开发态解析**：未发布 npm 时，全局一次性 `cd packages/sdk && bun link`，新项目内执行 `bun link @actiondock/sdk`。
+  - **双 Link 区分**：`ac link` 是 ActionDock 全局路由表注册（跨目录调度 `ac run <pkg>/<action>`）；`bun link` 是 Node/Bun 依赖解析（填充 `node_modules`）。两者职责独立，开发态通常都需要执行。
+  - **企业证书处理**：遇到 `SELF_SIGNED_CERT_IN_CHAIN` 时，加前缀 `NODE_TLS_REJECT_UNAUTHORIZED=0` 或配置 `bun config set cafile <CA路径>`。
+

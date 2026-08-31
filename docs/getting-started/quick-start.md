@@ -11,10 +11,15 @@
 ```bash
 ac init hello-tools
 cd hello-tools
+
+# SDK 已发布 npm 时：
+bun install
+
+# SDK 未发布 npm（本地源码模式，404 即此情况）：
+bun link @actiondock/sdk   # 接入本地全局 SDK 并自动补齐其余依赖
 ```
 
-> **提示（源码开发模式）**：
-> 如果 ActionDock 尚未发布到 npm 仓库，请先在 SDK 目录执行 `cd packages/sdk && bun link`，然后在当前新建的项目目录下执行 `bun link @actiondock/sdk` 即可秒级完成本地源码挂载。
+> **提示**：关于本地开发态 link 原则及企业证书/404 故障排查，详见 [安装与环境准备 (Link 三原则与故障排查)](installation.md#3-依赖安装故障排查与-link-原则)。
 
 目录结构如下：
 

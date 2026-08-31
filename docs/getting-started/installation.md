@@ -62,6 +62,11 @@ bun link
 当您使用 `ac init my-action` 创建独立项目后，在项目目录下执行：
 ```bash
 cd /path/to/my-action
+
+# SDK 已发布 npm 时：
+bun install
+
+# SDK 未发布 npm 时（404 即此情况）：
 bun link @actiondock/sdk
 ```
 此时项目中的 `import { defineAction } from "@actiondock/sdk"` 将直接指向本地 SDK 源码，享受即时热更新与毫秒级 TypeScript 原生类型推导。
@@ -70,7 +75,25 @@ bun link @actiondock/sdk
 
 ---
 
-## 3. 独立二进制运行（目标环境免安装）
+## 3. 依赖安装故障排查与 Link 原则
+
+### 常见故障速查表
+
+| 症状 / 报错 | 根本原因 | 解决办法 |
+| :--- | :--- | :--- |
+| `GET .../@actiondock%2fsdk - 404` | SDK 尚未发布至 npm | 在 SDK 源码目录执行 `bun link`，随后在项目内执行 `bun link @actiondock/sdk` |
+| `SELF_SIGNED_CERT_IN_CHAIN` | 公司内网代理或自签 CA 证书 | 临时加前缀 `NODE_TLS_REJECT_UNAUTHORIZED=0` 或配置 `bun config set cafile <CA路径>` |
+| 清理 `node_modules` 后再次 404 | link 依赖不会写入 `bun.lock` | 项目内重新执行 `bun link @actiondock/sdk` 恢复链接 |
+
+### Link 三原则（开发者与 Agent 必读）
+
+1. **契约原则**：`package.json` 永远声明 `"@actiondock/sdk": "^2.0.0"`，**严禁**改为 `link:` 或本地相对路径（保证跨机器与独立构建一致性）。
+2. **分层原则**：SDK 源码根目录 `bun link` 全局执行一次；各 Action 项目内 `bun link @actiondock/sdk` 每项目执行一次。
+3. **双 Link 区分**：`ac link` 是 **ActionDock 全局包注册**（支持跨目录 `ac run pkg/action`），`bun link` 是 **TypeScript/Node 依赖解析**，两者职责独立，开发态通常都需要执行。
+
+---
+
+## 4. 独立二进制运行（目标环境免安装）
 
 请注意：**只有在开发和构建 Action Package 时才需要安装 Bun 与 ActionDock CLI**。
 

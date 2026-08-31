@@ -46,24 +46,10 @@ ActionDock treats an Agent Tool as a software artifact:
 
 ## Quick Start
 
-### 1. Install CLI & SDK
+### 1. Install CLI
 
-**From npm (Global Install):**
 ```bash
 bun install -g @actiondock/cli
-```
-
-**From Local Source (When not published to npm):**
-```bash
-git clone https://github.com/team4u/actiondock.git
-cd actiondock
-bun install
-
-# 1. Register global CLI
-cd packages/cli && bun link
-
-# 2. Register global @actiondock/sdk
-cd ../sdk && bun link
 ```
 
 ### 2. Initialize an Action Package
@@ -71,9 +57,7 @@ cd ../sdk && bun link
 ```bash
 ac init hello-tools
 cd hello-tools
-
-# In source development mode, link local SDK:
-bun link @actiondock/sdk
+bun install
 ```
 
 ### 3. Create an Action

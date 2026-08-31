@@ -46,24 +46,10 @@ ActionDock 将 Agent 工具视为标准化软件资产：
 
 ## 快速上手
 
-### 1. 安装命令行工具 (`ac`) 与 SDK
+### 1. 安装命令行工具 (`ac`)
 
-**发布到 npm 后（全局安装）：**
 ```bash
 bun install -g @actiondock/cli
-```
-
-**本地源码模式（未发布到 npm 时）：**
-```bash
-git clone https://github.com/team4u/actiondock.git
-cd actiondock
-bun install
-
-# 1. 注册全局 ac 命令行
-cd packages/cli && bun link
-
-# 2. 注册全局 @actiondock/sdk
-cd ../sdk && bun link
 ```
 
 ### 2. 初始化 Action Package
@@ -71,9 +57,7 @@ cd ../sdk && bun link
 ```bash
 ac init hello-tools
 cd hello-tools
-
-# 如果使用源码模式，链接本地 SDK：
-bun link @actiondock/sdk
+bun install
 ```
 
 ### 3. 创建 Action

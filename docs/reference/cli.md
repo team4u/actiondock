@@ -77,9 +77,9 @@ ac profile add <name> --endpoint <url> [--token <token>] [--token-env <env>]
 ac profile use <name>
 ac profile remove <name>
 
-# 全局包注册与软链接
-ac link [path]
-ac unlink [id|path]
+# 全局包注册与解绑 (ActionDock 路由表，区别于 bun link 依赖解析)
+ac link [path]          # 注册当前或指定包到全局开发态注册表（支持跨目录 ac run pkg/action）
+ac unlink [id|path]     # 从全局注册表中移除
 ```
 
 ---
