@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { createTestRuntime, defineAction } from "../src";
+import { createTestRuntime, defineAction, execCli } from "../src";
 
 describe("@actiondock/sdk", () => {
   it("defines an action with validation", () => {
@@ -104,4 +104,27 @@ describe("@actiondock/sdk", () => {
     const remainingKeys = await runtime.state.keys();
     expect(remainingKeys).toEqual(["permanent"]);
   });
+
+  it("executes CLI command safely using execCli", () => {
+    // 1. Successful execution
+    const res = execCli("bun", ["--version"]);
+    expect(res.ok).toBe(true);
+    expect(res.exitCode).toBe(0);
+    expect(res.stdout.length).toBeGreaterThan(0);
+
+    // 2. Non-existent command
+    const notFound = execCli("__non_existent_binary_xyz_123__");
+    expect(notFound.ok).toBe(false);
+    expect(notFound.exitCode).toBe(-1);
+    expect(notFound.stderr).toContain("not found in PATH");
+
+    // 3. Aborted signal
+    const controller = new AbortController();
+    controller.abort();
+    const aborted = execCli("bun", ["--version"], { signal: controller.signal });
+    expect(aborted.ok).toBe(false);
+    expect(aborted.exitCode).toBe(-1);
+    expect(aborted.stderr).toContain("aborted");
+  });
 });
+

@@ -123,49 +123,61 @@ export interface TestRuntime {
 
 ---
 
-## 4. Action 内执行外部 CLI 规范与防死锁模式
+## 4. `execCli` 跨平台 CLI 调度与防死锁
 
-当 Action 需调度系统外部 CLI 命令（如 `agent-browser`、`git`、`docker` 等）时，应遵循以下工程实践：
+`@actiondock/sdk` 内置了 `execCli` 辅助函数，专门用于在 Action 中安全调用系统外部 CLI 工具（如 `agent-browser`、`git`、`docker` 等），解决了 Windows `.cmd` 识别、管道挂死与信号取消问题。
 
-### 核心注意事项
-1. **Windows `.cmd` 路径解析**：npm 全局安装的命令在 Windows 上为 `.cmd` 批处理文件，必须通过 `Bun.which("command")` 解析完整绝对路径后再执行，否则底层 `CreateProcess` 会失败。
-2. **防管道死锁（避免异步流阻塞）**：外部子进程（尤其是有头/无头浏览器、Node 子进程）可能会残留打开的 stdout/stderr 句柄，导致 `new Response(proc.stdout).text()` 永久挂起卡死。**调用外部 CLI 统一推荐使用 `Bun.spawnSync`** 一次性同步排空管道。
-3. **配套防御机制**：
-   - **Timeout 兜底**：防单条命令异常挂死。
-   - **取消检测**：在多步命令间检测 `if (ctx.signal?.aborted) throw ...` 及时响应取消。
-   - **退出码业务判定**：非零退出码（如探测超时、diff 未命中）应作为业务分支处理，避免盲目抛出异常。
+### 核心特性
+1. **Windows `.cmd` 兼容**：自动通过 `Bun.which("command")` 解析 Windows 平台的 `.cmd` / `.bat` / `.exe` 物理绝对路径。
+2. **防管道死锁**：使用 `Bun.spawnSync` 一次性同步排空（Drain）管道，彻底避免浏览器/后台子进程因文件句柄继承导致异步流挂起。
+3. **取消信号与错误安全**：支持传入 `ctx.signal`；非零退出码不自动 throw Error，返回 `ok: false` 与对应退出码。
 
-### 推荐的 CLI 封装辅助函数
+### 类型签名与使用示例
 
 ```ts
-export function safeExecCli(
-  command: string,
-  args: string[],
-  options: { cwd?: string; env?: Record<string, string> } = {}
-) {
-  const binPath = Bun.which(command);
-  if (!binPath) {
-    return {
-      ok: false,
-      exitCode: -1,
-      stdout: "",
-      stderr: `Command '${command}' not found in PATH.`,
-    };
-  }
+import { defineAction, execCli, type ExecCliOptions, type ExecCliResult } from "@actiondock/sdk";
 
-  const proc = Bun.spawnSync([binPath, ...args], {
-    cwd: options.cwd || process.cwd(),
-    env: { ...process.env, ...options.env },
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+export default defineAction({
+  id: "browser.query",
+  async run(input, ctx) {
+    // 检查取消信号
+    if (ctx.signal.aborted) throw new Error("Aborted");
 
-  return {
-    ok: proc.exitCode === 0,
-    exitCode: proc.exitCode,
-    stdout: proc.stdout.toString().trim(),
-    stderr: proc.stderr.toString().trim(),
-  };
-}
+    // 一行安全调用外部 CLI
+    const res = execCli("agent-browser", ["wait", "--timeout", "5s"], {
+      cwd: process.cwd(),
+      signal: ctx.signal,
+    });
+
+    if (!res.ok) {
+      ctx.log.warn(`命令执行未成功 (code ${res.exitCode}): ${res.stderr}`);
+    }
+
+    return { output: res.stdout };
+  },
+});
 ```
+
+#### 函数类型定义：
+```ts
+export interface ExecCliOptions {
+  cwd?: string;
+  env?: Record<string, string>;
+  signal?: AbortSignal;
+}
+
+export interface ExecCliResult {
+  ok: boolean;
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+}
+
+export function execCli(
+  command: string,
+  args?: string[],
+  options?: ExecCliOptions
+): ExecCliResult;
+```
+
 

@@ -137,37 +137,37 @@ export default defineAction<Input, Output>({
 });
 ```
 
-### 执行外部 CLI 与系统命令最佳实践 (Windows 兼容与防死锁)
+### 执行外部 CLI 与系统命令最佳实践 (SDK 内置 `execCli`)
 
-当 Action 需调度系统外部 CLI 工具（如 `agent-browser`、`git`、`docker` 等）时，必须遵守以下规范：
+当 Action 需调度系统外部 CLI 工具（如 `agent-browser`、`git`、`docker` 等）时，推荐直接使用 `@actiondock/sdk` 导出的 `execCli`：
 
-1. **Windows 路径解析（`.cmd` shim）**：
-   Windows 下 npm 全局安装的命令均为 `.cmd` 批处理文件。直接 `spawn("agent-browser")` 会失败，必须使用 `Bun.which("agent-browser")` 解析完整绝对路径后再执行。
-2. **使用 `Bun.spawnSync` 防管道死锁**：
-   浏览器、Node 进程或后台任务常会残留 stdout/stderr 句柄，导致异步流 `new Response(proc.stdout).text()` 永久挂起卡死。调用外部 CLI 应统一使用 `Bun.spawnSync` 同步排空管道。
-3. **三大防御配套机制**：
-   - **Timeout 兜底**：设置超时防单条命令挂死；
-   - **取消检测**：命令步骤间检测 `if (ctx.signal?.aborted) throw ...` 响应取消；
-   - **灵活退出码判定**：非零退出码由业务层灵活判定分支（如 wait 超时属于正常探测分支），避免粗暴 throw。
+1. **Windows 路径自动解析**：自动通过 `Bun.which("command")` 解析 `.cmd` / `.bat` / `.exe` 物理绝对路径。
+2. **`Bun.spawnSync` 防管道死锁**：一次性同步排空管道，避免无头浏览器/后台守护进程因句柄继承导致流读取挂起。
+3. **取消信号与安全退出码**：支持传入 `ctx.signal`，非零退出码返回 `ok: false` 供业务层灵活判断。
 
 ```typescript
-function execCli(command: string, args: string[], cwd?: string) {
-  const binPath = Bun.which(command);
-  if (!binPath) throw new Error(`Command '${command}' not found in PATH`);
+import { defineAction, execCli } from "@actiondock/sdk";
 
-  const proc = Bun.spawnSync([binPath, ...args], {
-    cwd: cwd || process.cwd(),
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+export default defineAction({
+  id: "browser.query",
+  async run(input, ctx) {
+    // 检查取消信号
+    if (ctx.signal?.aborted) throw new Error("Cancelled");
 
-  return {
-    ok: proc.exitCode === 0,
-    exitCode: proc.exitCode,
-    stdout: proc.stdout.toString().trim(),
-    stderr: proc.stderr.toString().trim(),
-  };
-}
+    // 一行安全调用外部 CLI
+    const res = execCli("agent-browser", ["wait", "--timeout", "5s"], {
+      cwd: process.cwd(),
+      signal: ctx.signal,
+    });
+
+    if (!res.ok) {
+      ctx.log.warn(`Wait 未命中或非零退出: ${res.stderr}`);
+      return { matched: false };
+    }
+
+    return { matched: true, stdout: res.stdout };
+  },
+});
 ```
 
 ---
