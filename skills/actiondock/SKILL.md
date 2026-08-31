@@ -276,11 +276,20 @@ ac playbook validate
 
 ### 配置管理 (`ctx.config`)
 ```bash
-ac config list [patterns...] [-P <pkg>] [-g] [--json]
-ac config get <key> [-P <pkg>] [-g] [--json]
-ac config set <key> <value> [-g]
-ac config delete <key> [-g]
+# 项目级配置（在项目目录下默认写入 .actiondock/runtime.db，仅当前包生效）
+ac config set <key> <value> [-P <pkg>]
+ac config get <key> [-P <pkg>] [--reveal] [--json]
+ac config list [patterns...] [-P <pkg>] [--json]
+ac config delete <key> [-P <pkg>]
+
+# 全局级配置（使用 -g 写入 ~/.actiondock/global.db，跨所有包共享）
+ac config set -g <key> <value>
+ac config get -g <key>
+ac config list -g
+ac config delete -g <key>
 ```
+> [!TIP]
+> **作用域规则**：`ac config set` 在项目内默认写入**项目级配置**，在项目外自动回退写入**全局配置**；加 `-g` 显式写入全局配置。读取优先级：`临时参数覆盖 > 项目级 SQLite > 全局级 SQLite > 环境变量 > 默认配置`。
 
 ### 状态管理 (`ctx.state`)
 ```bash

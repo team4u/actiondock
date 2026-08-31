@@ -49,11 +49,13 @@ ac playbook validate [file]
 
 ### 6. 配置与状态管理
 ```bash
-# 配置管理
-ac config list
-ac config get <key>
-ac config set <key> <value>
-ac config delete <key>
+# 配置管理（默认当前项目，-g 作用于全局 ~/.actiondock/global.db）
+ac config list [patterns...] [-g] [-P <pkg>] [--json]
+ac config get <key> [-g] [-P <pkg>] [--reveal] [--json]
+ac config set <key> <value> [-g] [-P <pkg>]
+ac config delete <key> [-g] [-P <pkg>]
+ac config schema [pkg]                       # 检查配置声明与就绪状态
+```
 
 # 状态管理
 ac state list [--namespace <ns>]

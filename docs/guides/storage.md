@@ -6,8 +6,9 @@ ActionDock 2.0 采用内嵌式 SQLite（基于 `bun:sqlite`）作为零依赖持
 
 ## 1. 存储文件路径规则
 
-- **开发态（Development）**：存储于项目根目录下的 `.actiondock/actiondock.db`，跟随项目隔离。
-- **独立编译态（Standalone Binary）**：存储于当前用户主目录 `~/.actiondock/data/<package-id>.db`。
+- **开发态项目级（Project Scope）**：存储于项目根目录下的 `.actiondock/runtime.db`，跟随项目物理隔离。
+- **全局共享级（Global Scope）**：存储于用户主目录下的 `~/.actiondock/global.db`，跨所有 Action Package 共享公共配置（如全局 API Token）。
+- **独立编译态（Standalone Binary）**：独立二进制在目标机器运行时，默认存储于 `~/.actiondock/data/<package-id>/runtime.db`。
 
 ---
 
@@ -52,10 +53,15 @@ CREATE TABLE IF NOT EXISTS runs (
 
 ### A. 配置管理 (`ac config`)
 ```bash
+# 项目级配置（默认写入当前项目的 .actiondock/runtime.db）
 ac config set GITHUB_TOKEN "ghp_xxx"
 ac config get GITHUB_TOKEN
 ac config list
 ac config delete GITHUB_TOKEN
+
+# 全局共享配置（写入 ~/.actiondock/global.db，跨 Package 共享）
+ac config set -g OPENAI_API_KEY "sk-xxx"
+ac config list -g
 ```
 
 ### B. 状态管理 (`ac state`)
