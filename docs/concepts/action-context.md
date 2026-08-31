@@ -54,13 +54,13 @@ Action 经常需要记录运行状态（例如上次同步的 offset、游标、
 
 ```ts
 // 写入状态（支持 TTL 过期时间，单位：秒）
-await ctx.state.set("last_sync_time", new Date().toISOString(), { ttl: 3600 });
+await ctx.state.set("last_sync_time", new Date().toISOString(), 3600);
 
-// 读取状态
+// 读取状态（不存在或已过期返回 undefined）
 const lastSync = await ctx.state.get<string>("last_sync_time");
 
-// 作用域隔离 (Namespace)
-const cacheState = ctx.state.namespace("cache");
+// 作用域隔离 (Scope / Namespace)
+const cacheState = ctx.state.scope("cache");
 await cacheState.set("user_101", { name: "Alice" });
 ```
 
@@ -68,10 +68,12 @@ await cacheState.set("user_101", { name: "Alice" });
 
 ## 3. `ctx.actions`：级联调用与防循环机制
 
-Action 之间可以像普通函数一样互相调用，同时保留完整的 Schema 校验与日志链路：
+Action 之间可以互相安全调用，同时保留完整的 Schema 校验与日志链路：
 
 ```ts
-const user = await ctx.actions.invoke("github.get-user", {
+import getUserAction from "./get-user";
+
+const user = await ctx.actions.invoke(getUserAction, {
   username: "octocat",
 });
 ```

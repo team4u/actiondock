@@ -57,42 +57,43 @@ export interface ActionContext {
 }
 ```
 
-### `ConfigStore`
+### `Config`
 ```ts
-export interface ConfigStore {
-  get<T = any>(key: string, defaultValue?: T): T | undefined;
+export interface Config {
+  get<T = unknown>(key: string): T | undefined;
+  get<T = unknown>(key: string, defaultValue: T): T;
+  has(key: string): boolean;
 }
 ```
 
 ### `StateStore`
 ```ts
 export interface StateStore {
-  get<T = any>(key: string): Promise<T | null>;
-  set(key: string, value: any, options?: { ttl?: number }): Promise<void>;
-  delete(key: string): Promise<boolean>;
-  list(): Promise<Record<string, any>>;
-  namespace(ns: string): StateStore;
+  get<T = unknown>(key: string): Promise<T | undefined>;
+  set<T = unknown>(key: string, value: T, ttl?: number): Promise<void>;
+  delete(key: string): Promise<void>;
+  keys(prefix?: string): Promise<string[]>;
+  scope(namespace: string): StateStore;
 }
 ```
 
 ### `ActionInvoker`
 ```ts
 export interface ActionInvoker {
-  invoke<TInput = any, TOutput = any>(
-    actionId: string,
-    input?: TInput,
-    options?: { config?: Record<string, any> }
-  ): Promise<TOutput>;
+  invoke<I, O>(
+    action: ActionDefinition<I, O>,
+    input: I
+  ): Promise<O>;
 }
 ```
 
 ### `Logger`
 ```ts
 export interface Logger {
-  debug(message: string, ...args: any[]): void;
-  info(message: string, ...args: any[]): void;
-  warn(message: string, ...args: any[]): void;
-  error(message: string, ...args: any[]): void;
+  debug(message: string, data?: unknown): void;
+  info(message: string, data?: unknown): void;
+  warn(message: string, data?: unknown): void;
+  error(message: string, data?: unknown): void;
 }
 ```
 
@@ -106,18 +107,20 @@ export interface Logger {
 function createTestRuntime(options?: TestRuntimeOptions): TestRuntime;
 
 export interface TestRuntimeOptions {
-  config?: Record<string, any>;
-  initialState?: Record<string, any>;
-  actions?: Record<string, ActionDefinition<any, any>>;
+  config?: Record<string, unknown>;
+  state?: Record<string, unknown>;
+  logger?: Logger;
+  signal?: AbortSignal;
 }
 
 export interface TestRuntime {
-  execute<TInput, TOutput>(
-    action: ActionDefinition<TInput, TOutput>,
-    input: TInput
-  ): Promise<TOutput>;
-  state: StateStore;
-  logs: Array<{ level: string; message: string; timestamp: string }>;
+  config: MemoryConfig;
+  state: MemoryStateStore;
+  logger: MemoryLogger;
+  run<I, O>(
+    action: ActionDefinition<I, O>,
+    input: I
+  ): Promise<O>;
 }
 ```
 

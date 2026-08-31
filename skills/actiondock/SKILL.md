@@ -177,6 +177,77 @@ export default defineAction({
 
 ---
 
+## @actiondock/sdk 核心 API 规范与方法签名速查
+
+### 1. `defineAction<TInput, TOutput>(definition)`
+声明一个标准 Action 定义：
+```typescript
+function defineAction<I = unknown, O = unknown>(definition: {
+  id: string;                     // Action 唯一标识符（例如 "github.get-pr"）
+  description?: string;           // 功能描述（供 LLM 发现与 MCP Tool 使用）
+  inputSchema?: JsonSchema;       // 输入 JSON Schema（用于 Ajv 严格校验）
+  outputSchema?: JsonSchema;      // 输出 JSON Schema（用于结果契约校验）
+  run(input: I, ctx: ActionContext): Promise<O> | O; // 核心执行函数
+}): ActionDefinition<I, O>;
+```
+
+### 2. `ActionContext` (`ctx`) 运行时上下文
+传递给 Action `run` 方法的标准化执行上下文：
+
+| 模块 | 方法签名 | 说明 |
+| :--- | :--- | :--- |
+| **`ctx.config`** | `get<T>(key: string, defaultValue?: T): T` | 读取配置（严格遵循 5 级优先级解析） |
+| | `has(key: string): boolean` | 检查配置项是否存在 |
+| **`ctx.state`** | `get<T>(key: string): Promise<T \| undefined>` | 读取持久化状态（未设置或过期返回 `undefined`） |
+| | `set<T>(key: string, value: T, ttl?: number): Promise<void>` | 写入状态，`ttl` 单位为**秒**（可选） |
+| | `delete(key: string): Promise<void>` | 删除指定状态键 |
+| | `keys(prefix?: string): Promise<string[]>` | 列出所有未过期的状态键名 |
+| | `scope(namespace: string): StateStore` | 获取命名空间隔离的子状态存储实例 |
+| **`ctx.actions`**| `invoke<I, O>(action: ActionDefinition<I, O>, input: I): Promise<O>` | 纯内存零开销相互调用（带防循环调用检测） |
+| **`ctx.log`** | `debug / info / warn / error(msg: string, data?: unknown): void` | 结构化诊断日志，**强制定向至 stderr** |
+| **`ctx.signal`** | `signal: AbortSignal` | 协作式取消信号（`signal.aborted`） |
+
+### 3. `execCli(command, args?, options?)` 跨平台 CLI 调度
+```typescript
+function execCli(
+  command: string,
+  args?: string[],
+  options?: {
+    cwd?: string;                 // 工作目录（默认 process.cwd()）
+    env?: Record<string, string>; // 环境变量覆盖
+    signal?: AbortSignal;         // 取消信号（如 ctx.signal）
+    timeout?: number;             // 毫秒超时强杀
+    input?: string | Uint8Array;  // 标准输入管道灌入数据 (stdin)
+    encoding?: string;            // 输出文本字符集（默认 "utf-8"，支持 "gbk"）
+    throwOnError?: boolean;       // 失败时是否直接抛出 Error（默认 false）
+  }
+): {
+  ok: boolean;                    // 是否成功退出且未超时
+  exitCode: number;               // 退出码（-1 表示异常/超时/未找到）
+  stdout: string;                 // 解码并 trim 后的文本输出
+  stderr: string;                 // 解码并 trim 后的错误文本输出
+  raw: Uint8Array;                // 原始二进制字节流（用于图片/音视频）
+  timedOut?: boolean;             // 是否因超时强制终止
+  durationMs: number;             // 执行耗时（毫秒）
+};
+```
+
+### 4. `createTestRuntime(options?)` 纯内存单元测试沙箱
+```typescript
+function createTestRuntime(options?: {
+  config?: Record<string, unknown>;     // Mock 配置键值对
+  state?: Record<string, unknown>;      // 预填初始状态
+  signal?: AbortSignal;                 // Mock 取消信号
+}): {
+  run<I, O>(action: ActionDefinition<I, O>, input: I): Promise<O>;
+  config: MemoryConfig;
+  state: MemoryStateStore;
+  logger: MemoryLogger;
+};
+```
+
+---
+
 ## 开发、验证与运行
 
 ### 发现与模糊意图检索 Action 清单

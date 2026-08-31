@@ -23,13 +23,13 @@ describe("my-action 单元测试", () => {
         API_TOKEN: "mock-token-123",
         BASE_URL: "https://api.mock.test",
       },
-      initialState: {
+      state: {
         "user:count": 10,
       },
     });
 
     // 2. 传入 Action 定义与入参
-    const result = await runtime.execute(myAction, {
+    const result = await runtime.run(myAction, {
       userId: "u-101",
     });
 
@@ -41,29 +41,26 @@ describe("my-action 单元测试", () => {
     expect(newCount).toBe(11);
 
     // 5. 断言日志输出
-    expect(runtime.logs.some(l => l.level === "info" && l.message.includes("处理完成"))).toBe(true);
+    expect(runtime.logger.logs.some(l => l.level === "info" && l.message.includes("处理完成"))).toBe(true);
   });
 });
 ```
 
 ---
 
-## 2. Action 级联调用与 Mock 测试
+## 2. Action 级联调用测试
 
-当一个复合 Action 需要调用其他 Action 时，可以通过 `actions` 字典注入子 Action 或 Mock 实现：
+Action 之间相互调用在 `TestRuntime` 中天然支持，并内置自动调用栈防环路死锁检测：
 
 ```ts
 import compositeAction from "../actions/composite";
-import childAction from "../actions/child";
 
 it("支持 Action 间级联调用测试", async () => {
   const runtime = createTestRuntime({
-    actions: {
-      "system.child": childAction, // 或替换为 Mock Action
-    },
+    config: { ENV: "test" },
   });
 
-  const result = await runtime.execute(compositeAction, { task: "deploy" });
+  const result = await runtime.run(compositeAction, { task: "deploy" });
   expect(result.status).toBe("done");
 });
 ```
@@ -76,12 +73,12 @@ it("支持 Action 间级联调用测试", async () => {
 it("验证状态 TTL 自动过期", async () => {
   const runtime = createTestRuntime();
 
-  await runtime.state.set("temp_token", "abc", { ttl: 1 }); // 1 秒过期
+  await runtime.state.set("temp_token", "abc", 1); // 1 秒过期 (ttl 秒数)
   expect(await runtime.state.get("temp_token")).toBe("abc");
 
-  // 等待过期
+  // 等待过期 (1100ms > 1000ms)
   await new Promise(r => setTimeout(r, 1100));
-  expect(await runtime.state.get("temp_token")).toBeNull();
+  expect(await runtime.state.get("temp_token")).toBeUndefined();
 });
 ```
 

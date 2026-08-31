@@ -159,7 +159,7 @@ describe("github.get-pr Action", () => {
     });
 
     // 2. 在测试沙箱中执行
-    const result = await runtime.execute(getPrAction, {
+    const result = await runtime.run(getPrAction, {
       repo: "team4u/actiondock",
       prNumber: 1,
     });
