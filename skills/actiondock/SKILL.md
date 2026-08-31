@@ -139,11 +139,12 @@ export default defineAction<Input, Output>({
 
 ### 执行外部 CLI 与系统命令最佳实践 (SDK 内置 `execCli`)
 
-当 Action 需调度系统外部 CLI 工具（如 `agent-browser`、`git`、`docker` 等）时，推荐直接使用 `@actiondock/sdk` 导出的 `execCli`：
+当 Action 需调度系统外部 CLI 工具（如 `agent-browser`、`git`、`docker`、`jq` 等）时，推荐直接使用 `@actiondock/sdk` 导出的 `execCli`：
 
 1. **Windows 路径自动解析**：自动通过 `Bun.which("command")` 解析 `.cmd` / `.bat` / `.exe` 物理绝对路径。
 2. **`Bun.spawnSync` 防管道死锁**：一次性同步排空管道，避免无头浏览器/后台守护进程因句柄继承导致流读取挂起。
-3. **取消信号与安全退出码**：支持传入 `ctx.signal`，非零退出码返回 `ok: false` 供业务层灵活判断。
+3. **超时与取消安全**：支持毫秒级 `timeout` 强杀与 `signal` (AbortSignal) 取消响应。
+4. **Stdin 与原始字节流**：支持 `input` 管道写入与 `raw` 二进制字节流输出（图片/音视频）。
 
 ```typescript
 import { defineAction, execCli } from "@actiondock/sdk";
@@ -151,20 +152,24 @@ import { defineAction, execCli } from "@actiondock/sdk";
 export default defineAction({
   id: "browser.query",
   async run(input, ctx) {
-    // 检查取消信号
-    if (ctx.signal?.aborted) throw new Error("Cancelled");
-
-    // 一行安全调用外部 CLI
+    // 一行安全调用外部 CLI（带 5 秒超时、取消信号与耗时统计）
     const res = execCli("agent-browser", ["wait", "--timeout", "5s"], {
       cwd: process.cwd(),
       signal: ctx.signal,
+      timeout: 5000,
     });
+
+    if (res.timedOut) {
+      ctx.log.warn("探测超时，执行降级分支");
+      return { matched: false };
+    }
 
     if (!res.ok) {
       ctx.log.warn(`Wait 未命中或非零退出: ${res.stderr}`);
       return { matched: false };
     }
 
+    ctx.log.info(`执行完成，耗时: ${res.durationMs}ms`);
     return { matched: true, stdout: res.stdout };
   },
 });

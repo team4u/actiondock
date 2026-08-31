@@ -111,14 +111,33 @@ describe("@actiondock/sdk", () => {
     expect(res.ok).toBe(true);
     expect(res.exitCode).toBe(0);
     expect(res.stdout.length).toBeGreaterThan(0);
+    expect(res.raw.length).toBeGreaterThan(0);
+    expect(res.durationMs).toBeGreaterThanOrEqual(0);
 
-    // 2. Non-existent command
+    // 2. Stdin piping support (input)
+    const stdinRes = execCli("cat", [], { input: "Hello ActionDock Stdin" });
+    expect(stdinRes.ok).toBe(true);
+    expect(stdinRes.stdout).toBe("Hello ActionDock Stdin");
+
+    // 3. Timeout and timedOut flag
+    const timedOutRes = execCli("sleep", ["2"], { timeout: 100 });
+    expect(timedOutRes.ok).toBe(false);
+    expect(timedOutRes.timedOut).toBe(true);
+    expect(timedOutRes.exitCode).toBe(-1);
+    expect(timedOutRes.stderr).toContain("timed out");
+
+    // 4. Non-existent command
     const notFound = execCli("__non_existent_binary_xyz_123__");
     expect(notFound.ok).toBe(false);
     expect(notFound.exitCode).toBe(-1);
     expect(notFound.stderr).toContain("not found in PATH");
 
-    // 3. Aborted signal
+    // 5. throwOnError support
+    expect(() => {
+      execCli("__non_existent_binary_xyz_123__", [], { throwOnError: true });
+    }).toThrow();
+
+    // 6. Aborted signal
     const controller = new AbortController();
     controller.abort();
     const aborted = execCli("bun", ["--version"], { signal: controller.signal });
@@ -127,4 +146,5 @@ describe("@actiondock/sdk", () => {
     expect(aborted.stderr).toContain("aborted");
   });
 });
+
 

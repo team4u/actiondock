@@ -17,20 +17,48 @@ export interface ExecCliOptions {
    * 若信号在执行前或执行期间触发，将安全中断或拒绝执行。
    */
   signal?: AbortSignal;
+
+  /**
+   * 单条命令超时时间（单位：毫秒）。
+   * 超时后将向子进程发送终止信号强制结束，并标记 timedOut 为 true。
+   */
+  timeout?: number;
+
+  /**
+   * 写入子进程标准输入（stdin）的文本或原始二进制数据。
+   */
+  input?: string | Uint8Array;
+
+  /**
+   * 输出文本的解码字符集（默认为 "utf-8"，支持 "gbk" 等跨平台字符集）。
+   */
+  encoding?: string;
+
+  /**
+   * 当命令执行失败（非零退出码或超时）时是否直接抛出 Error（默认为 false）。
+   * 设为 true 时，可省去手动 if (!res.ok) 校验。
+   */
+  throwOnError?: boolean;
 }
 
 /**
  * CLI 执行结果结构体。
  */
 export interface ExecCliResult {
-  /** 命令是否成功退出（即 exitCode === 0） */
+  /** 命令是否成功退出（即 exitCode === 0 且未发生超时或中断） */
   ok: boolean;
-  /** 进程退出码（若未找到命令或信号中断等异常时为 -1） */
+  /** 进程退出码（若未找到命令、超时或信号中断等异常时为 -1） */
   exitCode: number;
-  /** 标准输出内容（已自动去除首尾空白） */
+  /** 解码并去除首尾空白后的标准输出文本 */
   stdout: string;
-  /** 标准错误输出内容（已自动去除首尾空白） */
+  /** 解码并去除首尾空白后的标准错误文本 */
   stderr: string;
+  /** 原始标准输出字节流（用于图片、音频、压缩包等二进制数据处理） */
+  raw: Uint8Array;
+  /** 是否因超时强制终止 */
+  timedOut?: boolean;
+  /** 命令执行总耗时（毫秒） */
+  durationMs: number;
 }
 
 /**
@@ -38,13 +66,15 @@ export interface ExecCliResult {
  * 
  * 核心特性与设计原则：
  * 1. **Windows .cmd 兼容**：自动通过 `Bun.which()` 解析 Windows 平台下的 `.cmd` / `.bat` / `.exe` 物理绝对路径；
- * 2. **防管道死锁**：采用 `Bun.spawnSync` 同步排空（Drain）管道并关闭句柄，彻底避免无头浏览器/Node 子进程因句柄残留导致异步流挂死；
- * 3. **安全取消响应**：检测 `signal` (AbortSignal) 取消信号；
- * 4. **非抛出式判定**：非零退出码不抛出异常，返回 `ok: false` 与退出码供业务层灵活判断。
+ * 2. **防管道死锁**：采用 `Bun.spawnSync` 同步排空（Drain）管道并关闭句柄，彻底避免无头浏览器/Node 子进程因句柄残留导致异步流挂起；
+ * 3. **超时与取消安全**：支持毫秒级 `timeout` 超时强杀与 `signal` (AbortSignal) 取消信号；
+ * 4. **标准输入与二进制支持**：支持 `input` 管道灌入与 `raw` 原始二进制字节流输出；
+ * 5. **耗时度量与编码支持**：自动统计 `durationMs`，支持自定义 `encoding`（如 Windows GBK/CP936 解码）；
+ * 6. **灵活判定与快速抛错**：默认返回 `ok: false` 供业务层分支判定，亦可通过 `throwOnError: true` 自动抛错。
  * 
- * @param command 可执行命令名称或路径（如 "git", "agent-browser", "docker"）
+ * @param command 可执行命令名称或路径（如 "git", "agent-browser", "docker", "jq"）
  * @param args 传递给命令的参数列表（默认为 []）
- * @param options 运行选项（工作目录、环境变量、取消信号）
+ * @param options 运行选项（工作目录、环境变量、取消信号、超时、stdin、字符编码、抛错开关）
  * @returns ExecCliResult 执行结果结构体
  */
 export function execCli(
@@ -52,14 +82,22 @@ export function execCli(
   args: string[] = [],
   options: ExecCliOptions = {}
 ): ExecCliResult {
+  const startTime = performance.now();
+
   // 1. 检查取消信号
   if (options.signal?.aborted) {
-    return {
+    const errRes: ExecCliResult = {
       ok: false,
       exitCode: -1,
       stdout: "",
       stderr: "Command aborted before execution by signal",
+      raw: new Uint8Array(0),
+      durationMs: 0,
     };
+    if (options.throwOnError) {
+      throw new Error(errRes.stderr);
+    }
+    return errRes;
   }
 
   // 2. 跨平台绝对路径解析（解决 Windows 下 npm 全局 .cmd shim 识别问题）
@@ -67,37 +105,86 @@ export function execCli(
   const binPath = hasPathSep ? command : (Bun.which(command) || command);
 
   if (!hasPathSep && !Bun.which(command)) {
-    return {
+    const errRes: ExecCliResult = {
       ok: false,
       exitCode: -1,
       stdout: "",
       stderr: `Command '${command}' not found in PATH.`,
+      raw: new Uint8Array(0),
+      durationMs: Math.round(performance.now() - startTime),
     };
+    if (options.throwOnError) {
+      throw new Error(errRes.stderr);
+    }
+    return errRes;
+  }
+
+  // 3. 处理标准输入数据
+  let stdinOption: Uint8Array | "ignore" | undefined = "ignore";
+  if (options.input !== undefined) {
+    if (typeof options.input === "string") {
+      stdinOption = new TextEncoder().encode(options.input);
+    } else if (options.input instanceof Uint8Array) {
+      stdinOption = options.input;
+    }
   }
 
   try {
     const proc = Bun.spawnSync([binPath, ...args], {
       cwd: options.cwd || process.cwd(),
       env: options.env ? { ...process.env, ...options.env } : process.env,
+      stdin: stdinOption,
       stdout: "pipe",
       stderr: "pipe",
+      timeout: options.timeout,
     });
 
-    const stdout = proc.stdout ? proc.stdout.toString().trim() : "";
-    const stderr = proc.stderr ? proc.stderr.toString().trim() : "";
+    const durationMs = Math.round(performance.now() - startTime);
+    const timedOut = Boolean((proc as any).exitedDueToTimeout);
 
-    return {
-      ok: proc.exitCode === 0,
-      exitCode: proc.exitCode ?? (proc.success ? 0 : -1),
+    // 4. 自定义字符集解码
+    const decoder = new TextDecoder(options.encoding || "utf-8");
+    const rawStdout = proc.stdout ? new Uint8Array(proc.stdout) : new Uint8Array(0);
+    const rawStderr = proc.stderr ? new Uint8Array(proc.stderr) : new Uint8Array(0);
+
+    const stdout = rawStdout.length > 0 ? decoder.decode(rawStdout).trim() : "";
+    let stderr = rawStderr.length > 0 ? decoder.decode(rawStderr).trim() : "";
+
+    if (timedOut && !stderr) {
+      stderr = `Command '${command}' timed out after ${options.timeout}ms`;
+    }
+
+    const exitCode = timedOut ? -1 : (proc.exitCode ?? (proc.success ? 0 : -1));
+    const ok = !timedOut && exitCode === 0;
+
+    const result: ExecCliResult = {
+      ok,
+      exitCode,
       stdout,
       stderr,
+      raw: rawStdout,
+      timedOut: timedOut || undefined,
+      durationMs,
     };
+
+    if (options.throwOnError && !ok) {
+      throw new Error(stderr || `Command '${command}' failed with exit code ${exitCode}`);
+    }
+
+    return result;
   } catch (err: any) {
-    return {
+    const durationMs = Math.round(performance.now() - startTime);
+    const errRes: ExecCliResult = {
       ok: false,
       exitCode: -1,
       stdout: "",
       stderr: err?.message || String(err),
+      raw: new Uint8Array(0),
+      durationMs,
     };
+    if (options.throwOnError) {
+      throw err;
+    }
+    return errRes;
   }
 }
