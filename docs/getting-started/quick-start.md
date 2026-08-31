@@ -13,6 +13,9 @@ ac init hello-tools
 cd hello-tools
 ```
 
+> **提示（源码开发模式）**：
+> 如果 ActionDock 尚未发布到 npm 仓库，请先在 SDK 目录执行 `cd packages/sdk && bun link`，然后在当前新建的项目目录下执行 `bun link @actiondock/sdk` 即可秒级完成本地源码挂载。
+
 目录结构如下：
 
 ```text

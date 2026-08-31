@@ -9,20 +9,46 @@ ActionDock 2.0 是面向 AI Agent Action 与 Skill 的开发工具链（CLI 门�
 
 ---
 
-## CLI 安装与环境初始化
+## 环境准备与 CLI 安装
 
-### 安装方式
+ActionDock 2.0 依赖 **Bun (>= 1.1)** 运行时环境。
+
+### 1. 安装 Bun 运行时
 ```bash
-# npm 全局安装（发布后）
-bun install -g @actiondock/cli
+# macOS / Linux
+curl -fsSL https://bun.sh/install | bash
 
-# 本地源码开发态（修改源码实时生效）
-cd packages/cli && bun link
+# Windows (PowerShell)
+powershell -c "irm bun.sh/install.ps1 | iex"
 ```
 
-### 初始化新项目
+### 2. 安装 ActionDock CLI 与 SDK
+
+#### 方式 A：npm 全局安装（已发布状态）
+```bash
+bun install -g @actiondock/cli
+```
+
+#### 方式 B：本地源码开发态（未发布 npm / 实时热生效）
+```bash
+git clone https://github.com/team4u/actiondock.git
+cd actiondock
+bun install
+
+# 1. 注册全局 ac CLI 命令
+cd packages/cli && bun link
+
+# 2. 注册全局 @actiondock/sdk 依赖
+cd ../sdk && bun link
+```
+
+### 3. 初始化新 Action 项目
 ```bash
 ac init [directory] --id <package-id> --name <display-name> --desc <description>
+cd [directory]
+
+# 若使用本地源码模式，链接本地 SDK：
+bun link @actiondock/sdk
 ```
 自动生成包含 `actiondock.json`、`package.json`、`tsconfig.json`、`actions/`、`playbooks/` 与 `tests/` 的完整工程骨架。
 
