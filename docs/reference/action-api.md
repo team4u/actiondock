@@ -120,3 +120,52 @@ export interface TestRuntime {
   logs: Array<{ level: string; message: string; timestamp: string }>;
 }
 ```
+
+---
+
+## 4. Action 内执行外部 CLI 规范与防死锁模式
+
+当 Action 需调度系统外部 CLI 命令（如 `agent-browser`、`git`、`docker` 等）时，应遵循以下工程实践：
+
+### 核心注意事项
+1. **Windows `.cmd` 路径解析**：npm 全局安装的命令在 Windows 上为 `.cmd` 批处理文件，必须通过 `Bun.which("command")` 解析完整绝对路径后再执行，否则底层 `CreateProcess` 会失败。
+2. **防管道死锁（避免异步流阻塞）**：外部子进程（尤其是有头/无头浏览器、Node 子进程）可能会残留打开的 stdout/stderr 句柄，导致 `new Response(proc.stdout).text()` 永久挂起卡死。**调用外部 CLI 统一推荐使用 `Bun.spawnSync`** 一次性同步排空管道。
+3. **配套防御机制**：
+   - **Timeout 兜底**：防单条命令异常挂死。
+   - **取消检测**：在多步命令间检测 `if (ctx.signal?.aborted) throw ...` 及时响应取消。
+   - **退出码业务判定**：非零退出码（如探测超时、diff 未命中）应作为业务分支处理，避免盲目抛出异常。
+
+### 推荐的 CLI 封装辅助函数
+
+```ts
+export function safeExecCli(
+  command: string,
+  args: string[],
+  options: { cwd?: string; env?: Record<string, string> } = {}
+) {
+  const binPath = Bun.which(command);
+  if (!binPath) {
+    return {
+      ok: false,
+      exitCode: -1,
+      stdout: "",
+      stderr: `Command '${command}' not found in PATH.`,
+    };
+  }
+
+  const proc = Bun.spawnSync([binPath, ...args], {
+    cwd: options.cwd || process.cwd(),
+    env: { ...process.env, ...options.env },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  return {
+    ok: proc.exitCode === 0,
+    exitCode: proc.exitCode,
+    stdout: proc.stdout.toString().trim(),
+    stderr: proc.stderr.toString().trim(),
+  };
+}
+```
+

@@ -70,3 +70,9 @@ export default defineAction<GreetInput, GreetOutput>({
 ### 4. 级联调用与循环检测
 - Action 可通过 `ctx.actions.invoke("other-action", input)` 组合调用其他 Action。
 - 运行时内置防死循环递归检测机制（`ACTION_CYCLE_DETECTED`），最大调用深度受控。
+
+### 5. 跨平台 CLI 调度与防死锁（Safe CLI Execution）
+- **Windows `.cmd` 兼容**：npm 全局安装的命令均为 `.cmd` 批处理文件，必须通过 `Bun.which("cmd")` 解析完整绝对路径后再执行。
+- **防管道死锁（Deadlock Avoidance）**：外部子进程（如无头浏览器、后台 daemon）残留管道句柄时，异步流读取会导致 EOF 永久阻塞。调用外部 CLI 推荐使用 `Bun.spawnSync` 一次性同步排空管道。
+- **取消响应与退出码策略**：在多步命令间检测 `ctx.signal?.aborted` 响应取消；非零退出码由调用方根据业务逻辑判定分支。
+
