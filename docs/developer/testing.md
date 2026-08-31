@@ -1,4 +1,4 @@
-# 实践指南：测试与验证
+# 实践指南：单元测试与沙箱验证 (Testing Guide)
 
 ActionDock 倡导 **“开箱即测试 (Testable by Default)”**。
 
@@ -90,11 +90,11 @@ it("验证状态 TTL 自动过期", async () => {
 
 ```bash
 # 1. 运行全部单测
-bun test
+ac test   # 或 bun test
 
 # 2. 编译独立二进制
 ac build
 
-# 3. 运行集成测试
+# 3. 运行集成验证
 ./dist/bin/my-tools run my-action --input '{"userId": "u-101"}'
 ```

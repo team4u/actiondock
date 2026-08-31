@@ -14,60 +14,67 @@
 
 ## 📚 文档分类导航
 
-ActionDock 文档中心遵循清晰的五层架构设计：
+ActionDock 文档中心遵循**使用者与开发者角色双轨制**设计：
 
 ```text
-Getting Started (新手入门) = 我怎么跑起来
-Concepts        (核心概念) = 它是什么
-Guides          (实践指南) = 我要完成某项任务
-Reference       (参考手册) = 参数与 API 是什么
-Architecture    (底层架构) = 为什么这么设计
+Getting Started (快速概览)   = 环境准备与全景双轨导引
+Consumer Guide  (使用者指南) = 拿到包/Skill 怎么在 Agent 与 IDE 中用起来
+Developer Guide (开发者指南) = 从零编写、单测、编译与导出发布 Skill
+Core Concepts   (核心概念)   = Action Package / Context / Playbook 底层模型
+Reference       (参考手册)   = CLI / Config / SDK API / 错误速查
+Architecture    (底层架构)   = 执行引擎 / 通道隔离 / 安全防御
 ```
 
 ---
 
-### 1. 新手入门 (Getting Started)
-从零开始搭建开发环境并在数分钟内掌握基础流程：
-- [环境安装与准备](getting-started/installation.md)：Bun 与 `ac` CLI 安装配置。
-- [快速上手 (Quick Start)](getting-started/quick-start.md)：3 分钟初始化、编写、测试与交付工具。
-- [编写首个业务 Action](getting-started/first-action.md)：实战构建带参数校验、配置、状态与单测的 GitHub Action。
+### 1. 快速概览 (Getting Started)
+- [环境安装与准备](getting-started/installation.md)：Bun 与 `ac` CLI 安装配置、Link 机制与排错。
+- [核心概览与双轨导引](getting-started/overview.md)：30 秒了解 ActionDock 核心全景与角色路径选择。
 
 ---
 
-### 2. 核心概念 (Concepts)
-深入理解 ActionDock 的核心建模抽象：
+### 2. 👤 使用者指南 (Consumer Guide)
+面向从仓库拉取项目源码、获取导出的 Skill 包或下载二进制的**使用者与智能体操作者**：
+- [消费与接入总览](consumer/overview.md)：四大消费姿态对比速查与克隆极速跑通。
+- [接入 Claude Code / Antigravity](consumer/use-as-skill.md)：将导出的 Skill 放入技能目录让 AI 自动发现。
+- [接入 Cursor / Windsurf / IDE](consumer/use-as-mcp.md)：作为 MCP STDIO 服务直连 IDE 工具库。
+- [独立二进制与免环境运行](consumer/standalone-run.md)：在无 Node.js / Bun 的服务器/沙箱中零依赖运行。
+- [HTTP 远程微服务与 API 调度](consumer/http-service.md)：启动持久微服务并通过 REST API 远程调度。
+- [消费端配置与凭证注入](consumer/configuration.md)：API Token、环境变量与 SQLite 持久化配置注入。
+
+---
+
+### 3. 👨‍💻 开发者指南 (Developer Guide)
+面向从 0 到 1 打造原子能力、编写 SOP 规程并分发的**工具创作者**：
+- [快速上手开发](developer/quick-start.md)：3 分钟初始化、编写 `defineAction` 与本地试跑。
+- [深入业务 Action 开发](developer/first-action.md)：强类型 Schema、`ctx.state` 持久化、`ctx.config` 读取与外部 API。
+- [编写 Playbook SOP 规程](developer/playbooks.md)：为 AI Agent 编写领域专家的标准作业步骤。
+- [单元测试与沙箱验证](developer/testing.md)：基于 `createTestRuntime` 的纯内存毫秒级测试。
+- [状态持久化与 SQLite 存储](developer/storage.md)：内嵌 SQLite 数据模型、KV 持久化与 TTL 过期。
+- [多环境 Profile 与远程调度](developer/profiles.md)：多云环境节点管理与安全凭证防护。
+- [构建、打包与 Skill 导出](developer/build-and-export.md)：编译单文件零依赖可执行程序，按 Playbook 裁剪导出 Agent Skill 并发布。
+
+---
+
+### 4. 🧠 核心概念 (Core Concepts)
 - [Action Package 核心抽象](concepts/action-package.md)：**[核心文档]** 四大支柱（Capability, Procedure, Contract, Runtime）。
-- [Action 原子能力](concepts/action.md)：`defineAction`、强类型约束与 Schema 即契约。
+- [Action 原子能力契约](concepts/action.md)：`defineAction`、强类型约束与 Schema 即契约。
 - [ActionContext 运行时上下文](concepts/action-context.md)：5 级配置、SQLite 持久化、级联调用、日志隔离与取消链路。
-- [Playbook SOP 规程](concepts/playbook.md)：面向 AI Agent 的领域操作规程、流程时序与安全红线。
-- [Agent Skill 技能交付物](concepts/skill.md)：源码型与独立二进制型 Skill 双模交付规范。
+- [Playbook SOP 规程模型](concepts/playbook.md)：面向 AI Agent 的领域操作规程、流程时序与安全红线。
+- [Agent Skill 交付物规范](concepts/skill.md)：源码型与独立二进制型 Skill 双模交付规范。
 
 ---
 
-### 3. 实践指南 (Guides)
-解决具体工程场景的操作手册：
-- [测试与验证指南](guides/testing.md)：基于 `createTestRuntime` 的纯内存毫秒级沙箱测试。
-- [MCP 协议集成指南](guides/mcp.md)：STDIO / HTTP Transport 模式与 Claude Code/Cursor 直连。
-- [独立二进制编译构建](guides/standalone-build.md)：`ac build` 编译单文件零依赖可执行程序。
-- [Skill 导出与分发](guides/skill-export.md)：`ac export skill` 与按 Playbook 按需裁剪打包。
-- [HTTP 服务与远程调度](guides/http-server.md)：`ac serve` 轻量 REST API 与异步长任务调度。
-- [SQLite 存储与状态管理](guides/storage.md)：内嵌 SQLite 数据模型、KV 持久化与 TTL 过期。
-- [多环境 Profile 与远程调度](guides/profiles.md)：多云环境节点管理与安全凭证防护。
-
----
-
-### 4. 参考手册 (Reference)
-权威参数速查与 API 手册：
-- [CLI 命令行手册](reference/cli.md)：全量 `ac` 命令、选项与参数清单。
-- [配置解析机制](reference/config.md)：5 级回退规则、环境变量转换与类型强转。
-- [Action SDK API](reference/action-api.md)：`@actiondock/sdk` 导出接口与函数规范。
+### 5. 📖 参考手册 (Reference)
+- [CLI 命令行速查](reference/cli.md)：全量 `ac` 命令、选项与参数清单。
+- [配置解析 5 级回退机制](reference/config.md)：5 级回退规则、环境变量转换与类型强转。
+- [Action SDK API 参考](reference/action-api.md)：`@actiondock/sdk` 导出接口与函数规范。
 - [错误代码与排错速查](reference/error-codes.md)：标准 JSON 错误 Envelope 与修复指南。
 - [1.0 到 2.0 架构对比与迁移](reference/v1-to-v2-migration.md)：7 维架构对比与升级步骤。
 
 ---
 
-### 5. 底层架构 (Architecture)
-深入探究 ActionDock 的底层技术原理：
+### 6. 🏗️ 底层架构 (Architecture)
 - [Runtime 执行引擎](architecture/runtime.md)：`ActionRunner` 执行生命周期与拦截器体系。
 - [Stdout/Stderr 物理通道隔离](architecture/stdout-stderr.md)：数据通道与诊断通道物理隔离，杜绝大模型解析崩溃。
 - [安全加固与防御模型](architecture/security.md)：非回环认证、权限固化、常数时间比对与原型污染防护。

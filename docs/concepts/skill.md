@@ -78,3 +78,14 @@ ac export skill --standalone --out ./dist/github-tools-skill
 # 按需按 Playbook 裁剪导出（仅导出该 Playbook 引用的 Action）
 ac export skill --playbook review-pr
 ```
+
+---
+
+## 使用者消费方式 (Skill Consumption)
+
+导出的 Skill 包可以直接投递给不同 AI 智能体使用：
+- **Claude Code**：放置在 `~/.claude/skills/<skill-name>` 或项目根目录 `.claude/skills/`
+- **Antigravity**：放置在 `~/.gemini/antigravity-cli/skills/<skill-name>`
+- **自研 Agent 框架**：解析 `actiondock.skill.json` 注册工具，将 `SKILL.md` 注入为系统提示词与 SOP 规程。
+
+详细使用方法请查阅 **[使用者指南：接入 Claude Code / Antigravity](../consumer/use-as-skill.md)** 与 **[开发者指南：构建与 Skill 导出](../developer/build-and-export.md)**。

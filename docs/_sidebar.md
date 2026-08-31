@@ -1,34 +1,41 @@
 * [文档首页](README.md)
 
-* **新手入门 (Getting Started)**
-  * [环境安装](getting-started/installation.md)
-  * [快速开始](getting-started/quick-start.md)
-  * [编写首个 Action](getting-started/first-action.md)
+* **快速概览 (Getting Started)**
+  * [环境安装与准备](getting-started/installation.md)
+  * [核心概览与双轨导引](getting-started/overview.md)
 
-* **核心概念 (Concepts)**
+* **使用者指南 (Consumer Guide)**
+  * [消费与接入总览](consumer/overview.md)
+  * [接入 Claude Code / Antigravity (Skill)](consumer/use-as-skill.md)
+  * [接入 Cursor / Windsurf / IDE (MCP)](consumer/use-as-mcp.md)
+  * [独立二进制与免环境运行](consumer/standalone-run.md)
+  * [HTTP 远程微服务与 API 调度](consumer/http-service.md)
+  * [消费端配置与凭证注入](consumer/configuration.md)
+
+* **开发者指南 (Developer Guide)**
+  * [快速上手开发](developer/quick-start.md)
+  * [深入业务 Action 开发](developer/first-action.md)
+  * [编写 Playbook SOP 规程](developer/playbooks.md)
+  * [单元测试与沙箱验证](developer/testing.md)
+  * [状态持久化与 SQLite 存储](developer/storage.md)
+  * [多环境 Profile 与远程调度](developer/profiles.md)
+  * [构建、打包与 Skill 导出](developer/build-and-export.md)
+
+* **核心概念 (Core Concepts)**
   * [Action Package 核心抽象](concepts/action-package.md)
-  * [Action 原子能力](concepts/action.md)
+  * [Action 原子能力契约](concepts/action.md)
   * [ActionContext 运行时上下文](concepts/action-context.md)
-  * [Playbook SOP 规程](concepts/playbook.md)
-  * [Agent Skill 技能交付物](concepts/skill.md)
-
-* **实践指南 (Guides)**
-  * [测试与验证指南](guides/testing.md)
-  * [MCP 协议集成](guides/mcp.md)
-  * [独立二进制编译构建](guides/standalone-build.md)
-  * [Skill 导出与分发](guides/skill-export.md)
-  * [HTTP 服务与远程调度](guides/http-server.md)
-  * [SQLite 存储与状态管理](guides/storage.md)
-  * [多环境 Profile 与远程调度](guides/profiles.md)
+  * [Playbook SOP 规程模型](concepts/playbook.md)
+  * [Agent Skill 交付物规范](concepts/skill.md)
 
 * **参考手册 (Reference)**
-  * [CLI 命令行手册](reference/cli.md)
-  * [配置解析机制](reference/config.md)
-  * [Action SDK API](reference/action-api.md)
+  * [CLI 命令行速查](reference/cli.md)
+  * [配置解析 5 级回退机制](reference/config.md)
+  * [Action SDK API 参考](reference/action-api.md)
   * [错误代码与排错速查](reference/error-codes.md)
   * [1.0 到 2.0 迁移指南](reference/v1-to-v2-migration.md)
 
 * **底层架构 (Architecture)**
   * [Runtime 执行引擎](architecture/runtime.md)
-  * [Stdout/Stderr 通道隔离](architecture/stdout-stderr.md)
+  * [Stdout/Stderr 物理通道隔离](architecture/stdout-stderr.md)
   * [安全加固与防御模型](architecture/security.md)

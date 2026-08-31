@@ -1,4 +1,4 @@
-# 实践指南：SQLite 存储与状态管理
+# 实践指南：SQLite 存储与状态管理 (Storage & State)
 
 ActionDock 2.0 采用内嵌式 SQLite（基于 `bun:sqlite`）作为零依赖持久化存储后端，无需安装 MySQL、Redis 或任何外部服务。
 
@@ -49,7 +49,22 @@ CREATE TABLE IF NOT EXISTS runs (
 
 ---
 
-## 3. CLI 管理命令
+## 3. 在 Action 代码中使用 `ctx.state`
+
+```ts
+// 写入状态（支持可选 TTL 秒数）
+await ctx.state.set("user_last_seen:1001", new Date().toISOString(), 86400);
+
+// 读取状态
+const lastSeen = await ctx.state.get<string>("user_last_seen:1001");
+
+// 删除状态
+await ctx.state.delete("user_last_seen:1001");
+```
+
+---
+
+## 4. CLI 管理命令速查
 
 ### A. 配置管理 (`ac config`)
 ```bash
