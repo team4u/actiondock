@@ -22,133 +22,57 @@ npm install -g @actiondock/cli
 
 ---
 
-## Quick Start
-
-### 1. Initialize a New Action Package
+## Quick Start in 5 Steps
 
 ```bash
+# 1. Initialize a new Action package scaffold
 ac init my-tools
 cd my-tools
-```
 
-### 2. List & Inspect Actions
-
-```bash
-ac action list
-ac action show sample.greet
-```
-
-### 3. Run Actions Locally
-
-```bash
+# 2. Run an Action locally (outputs standard JSON envelope)
 ac run sample.greet --input '{"name": "Alice"}'
-```
 
-### 4. Fast In-Memory Unit Testing
-
-```bash
+# 3. Run in-memory unit tests
 ac test
-```
 
-### 5. Build Standalone Executable Binary
-
-```bash
+# 4. Compile into a single standalone binary
 ac build
-# Executable generated in ./dist/my-tools
-./dist/my-tools run sample.greet --input '{"name": "Bob"}'
-```
 
-### 6. Export as Agent Skill
-
-```bash
-# Source Skill
+# 5. Export as a portable Agent Skill (with SOPs)
 ac export skill
-
-# Standalone Binary Skill
-ac export skill --standalone
-
-# Playbook-driven selective export
-ac export skill --playbook greet-user
 ```
 
 ---
 
-## Complete CLI Command Reference
+## Command Cheat Sheet
 
-### Project & Action Management
-
-| Command | Description |
+| Command | Purpose |
 |---|---|
-| `ac init [dir] [--id <id>] [--name <name>]` | Initialize an Action package scaffold |
-| `ac info [--json]` | Show current project metadata, actions, and playbooks |
-| `ac action list [pattern] [-i, --intent <regex>]` | List actions with intent fuzzy filtering |
-| `ac action show <id>` | Show action definition and JSON Schemas |
-| `ac action new <id>` | Scaffold a new Action TypeScript file |
-| `ac action validate` | Validate action schemas and exports |
-| `ac run <id> [--input '<json>'] [--config KEY=val]` | Execute an action and output standard JSON envelope |
-| `ac test [pattern]` | Run unit tests with Bun test runner |
+| `ac init [dir]` | Initialize an Action package scaffold |
+| `ac info` | Display project metadata, actions, and playbooks |
+| `ac action list` / `ac run <id>` | List and execute Actions |
+| `ac playbook list` / `show` | Inspect agent task SOP Playbooks |
+| `ac config list` / `get` / `set` | Manage runtime configurations |
+| `ac state list` / `get` / `set` | Inspect and manage persistent state (with TTL) |
+| `ac runs list` / `show` | Inspect execution history and traces |
+| `ac test` | Run fast unit tests |
+| `ac build` | Compile into a zero-dependency standalone binary |
+| `ac export skill` | Export Skill bundle for AI Agent platforms |
+| `ac link` / `unlink` | Register package in global cross-directory router |
+| `ac profile` / `ac serve` | Manage remote node profiles and start HTTP Runner |
+| `ac mcp` | Start ActionDock as STDIO or HTTP MCP server |
 
-### Playbooks (Agent SOPs)
+---
 
-| Command | Description |
-|---|---|
-| `ac playbook list [pattern] [-i, --intent <regex>]` | List playbooks with intent search |
-| `ac playbook show <id>` | View playbook frontmatter and markdown SOP content |
-| `ac playbook new <id>` | Scaffold a new playbook markdown file |
-| `ac playbook validate` | Validate playbook syntax and action dependencies |
+## 📖 Complete Documentation
 
-### Configuration & State Management
+For the full list of flags, options, remote profiles, and advanced usage, refer to the [ActionDock Documentation Center](https://github.com/team4u/actiondock#readme):
 
-| Command | Description |
-|---|---|
-| `ac config list [-i, --intent <regex>]` | List active configuration values and sources |
-| `ac config get <key>` | Get specific configuration value |
-| `ac config set <key> <val>` | Set local persistent configuration value |
-| `ac config delete <key>` | Delete configuration key |
-| `ac config schema` | View declared configuration schema and status table |
-| `ac state list [-i, --intent <regex>]` | List keys in shared persistent state store |
-| `ac state get <key>` | Read state key value |
-| `ac state set <key> <val> [--ttl <sec>]` | Set state value with optional TTL (seconds) |
-| `ac state delete <key>` | Delete state key |
-
-### Execution History & Runs
-
-| Command | Description |
-|---|---|
-| `ac runs list [--action <id>] [--limit <n>]` | View execution run history |
-| `ac runs show <run-id>` | View complete execution input, output, duration, and errors |
-| `ac runs cancel <run-id>` | Cancel an active in-flight remote execution |
-
-### Build & Skill Export
-
-| Command | Description |
-|---|---|
-| `ac build [-t <target>] [--no-minify] [--no-bytecode]` | Compile actions into a single standalone binary |
-| `ac export skill [--standalone] [--playbook <id>]` | Export standard Skill package for AI Agent platforms |
-
-### Global Registry Linking
-
-| Command | Description |
-|---|---|
-| `ac link [dir]` | Register local package in global routing registry |
-| `ac unlink <id>` | Unregister package from global registry |
-
-### Remote Profiles & HTTP Server
-
-| Command | Description |
-|---|---|
-| `ac profile list` | List configured remote execution profiles |
-| `ac profile add <name> --server <url> [--token <token>]` | Configure a remote node profile |
-| `ac profile test [name]` | Test latency and connectivity to remote server |
-| `ac profile use <name>` | Set active default profile |
-| `ac serve [--port 5178] [--token <secret>]` | Start lightweight HTTP Runner server for remote execution |
-
-### Model Context Protocol (MCP)
-
-| Command | Description |
-|---|---|
-| `ac mcp` | Start ActionDock as STDIO MCP server |
-| `ac mcp serve [--port 5178] [--token <secret>]` | Start ActionDock as HTTP MCP server |
+- [CLI Reference Manual](https://github.com/team4u/actiondock/blob/main/docs/reference/cli.md)
+- [Quick Start Guide](https://github.com/team4u/actiondock/blob/main/docs/getting-started/quick-start.md)
+- [MCP Integration Guide](https://github.com/team4u/actiondock/blob/main/docs/guides/mcp.md)
+- [Standalone Binary Build Guide](https://github.com/team4u/actiondock/blob/main/docs/guides/standalone-build.md)
+- [Skill Export Guide](https://github.com/team4u/actiondock/blob/main/docs/guides/skill-export.md)
 
 ---
 

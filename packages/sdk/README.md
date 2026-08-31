@@ -8,23 +8,6 @@ The lightweight, zero-dependency SDK for defining, orchestrating, and testing AI
 
 ---
 
-## Features
-
-- **Code as Contract**: Strongly-typed Action definitions with TypeScript generics and JSON Schema input/output validation.
-- **Rich Context (`ActionContext`)**:
-  - `ctx.config`: 5-tier hierarchical configuration reader (`CLI > SQLite > Global > ENV > default > fallback`).
-  - `ctx.state`: Cross-action persistent state store with namespacing and automatic TTL expiration.
-  - `ctx.actions`: Safe action-to-action composition with built-in recursion & cycle detection.
-  - `ctx.log`: Clean stderr-directed structured logging (keeping stdout clean for JSON envelopes).
-  - `ctx.signal`: Cooperative `AbortSignal` for graceful timeout and cancellation.
-- **Enterprise `execCli`**:
-  - Windows `.cmd`/`.bat` path resolution via `Bun.which`.
-  - Anti-pipe-deadlock synchronous buffer draining via `Bun.spawnSync`.
-  - Subprocess timeout, `AbortSignal`, stdin piping, and raw binary buffer outputs.
-- **Zero-Dependency In-Memory Test Harness (`createTestRuntime`)**: Millisecond unit testing without spinning up databases or external processes.
-
----
-
 ## Installation
 
 ```bash
@@ -35,27 +18,16 @@ npm install @actiondock/sdk
 
 ---
 
-## Quick Start
+## Quick Example
 
-### 1. Define an Action
-
-Create an action in `actions/greet.ts`:
+### 1. Define an Action (`actions/greet.ts`)
 
 ```ts
 import { defineAction } from "@actiondock/sdk";
 
-export interface GreetInput {
-  name: string;
-}
-
-export interface GreetOutput {
-  message: string;
-  count: number;
-}
-
 export default defineAction({
   id: "sample.greet",
-  description: "Greet a user and track greeting count in state",
+  description: "Greet a user and track greeting count in persistent state",
 
   inputSchema: {
     type: "object",
@@ -65,24 +37,10 @@ export default defineAction({
     required: ["name"],
   },
 
-  outputSchema: {
-    type: "object",
-    properties: {
-      message: { type: "string" },
-      count: { type: "number" },
-    },
-    required: ["message", "count"],
-  },
-
-  async run(input: GreetInput, ctx): Promise<GreetOutput> {
-    // 1. Read config (with fallback default)
+  async run(input: { name: string }, ctx) {
     const greeting = ctx.config.get("GREETING_PREFIX", "Hello");
-
-    // 2. Read and update state
     const count = ((await ctx.state.get<number>(`greet:${input.name}`)) || 0) + 1;
     await ctx.state.set(`greet:${input.name}`, count);
-
-    // 3. Stderr structured logging
     ctx.log.info(`Greeted ${input.name} ${count} time(s)`);
 
     return {
@@ -93,9 +51,7 @@ export default defineAction({
 });
 ```
 
-### 2. Test Your Action in Milliseconds
-
-Create a unit test in `tests/greet.test.ts`:
+### 2. Test in Milliseconds (`tests/greet.test.ts`)
 
 ```ts
 import { describe, expect, it } from "bun:test";
@@ -110,62 +66,25 @@ describe("sample.greet Action", () => {
     });
 
     const result = await runtime.run(greetAction, { name: "Alice" });
-
     expect(result.message).toBe("Welcome, Alice!");
     expect(result.count).toBe(3);
-
-    // Verify persisted state
-    const savedCount = await runtime.state.get("greet:Alice");
-    expect(savedCount).toBe(3);
-
-    // Verify logs
-    expect(runtime.logger.logs.length).toBe(1);
-    expect(runtime.logger.logs[0].message).toContain("Greeted Alice 3 time(s)");
+    expect(await runtime.state.get("greet:Alice")).toBe(3);
   });
 });
 ```
 
 ---
 
-## Action Composition (`ctx.actions.invoke`)
+## Core Capabilities
 
-Actions can safely invoke other actions with automatic cycle detection:
-
-```ts
-import { defineAction } from "@actiondock/sdk";
-import fetchUserAction from "./fetch-user";
-
-export default defineAction({
-  id: "composite.user-summary",
-  async run(input: { userId: string }, ctx) {
-    const user = await ctx.actions.invoke(fetchUserAction, { id: input.userId });
-    return { summary: `User ${user.name} (${user.email})` };
-  },
-});
-```
-
----
-
-## Calling External CLI Tools (`execCli`)
-
-`execCli` is designed specifically for agent actions executing shell binaries:
-
-```ts
-import { defineAction, execCli } from "@actiondock/sdk";
-
-export default defineAction({
-  id: "git.current-branch",
-  run(_input, ctx) {
-    const res = execCli("git", ["branch", "--show-current"], {
-      signal: ctx.signal,
-      timeout: 5000,
-      throwOnError: true,
-    });
-
-    return { branch: res.stdout };
-  },
-});
-```
+- **`ActionContext`**:
+  - `ctx.config`: 5-tier configuration resolution (`CLI > SQLite > Global > ENV > default > fallback`).
+  - `ctx.state`: Cross-action persistent state store with namespacing (`scope()`) and automatic TTL expiration.
+  - `ctx.actions`: Action-to-action invocation (`invoke()`) with recursion & cycle detection.
+  - `ctx.log`: Clean stderr-directed structured logging (keeping stdout clean for JSON envelopes).
+  - `ctx.signal`: Cooperative `AbortSignal` for graceful timeout and cancellation.
+- **`execCli`**: Deadlock-safe, cross-platform CLI executor with Windows `.cmd` resolution, stdin streaming, timeout, and signal support.
+- **`createTestRuntime`**: Fast, zero-dependency in-memory test harness for unit tests.
 
 ---
 
@@ -182,8 +101,16 @@ export default defineAction({
 | `ActionContext` | Interface | Runtime context provided to `action.run(input, ctx)` |
 | `ActionDefinition` | Interface | Schema and execution contract for an Action |
 | `ExecutionResult` | Type | Standard JSON envelope (`ok: true, data` or `ok: false, error`) |
-| `RuntimeError` | Interface | Machine-readable runtime error contract |
-| `RunRecord` | Interface | Execution run history record metadata |
+
+---
+
+## 📖 Documentation
+
+For detailed guides, design principles, and exhaustive API references, see the [ActionDock Documentation Center](https://github.com/team4u/actiondock#readme):
+
+- [Action SDK API Reference](https://github.com/team4u/actiondock/blob/main/docs/reference/action-api.md)
+- [ActionContext Concept](https://github.com/team4u/actiondock/blob/main/docs/concepts/action-context.md)
+- [Testing & Verification Guide](https://github.com/team4u/actiondock/blob/main/docs/guides/testing.md)
 
 ---
 

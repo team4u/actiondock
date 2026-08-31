@@ -12,6 +12,10 @@
       "types": "./src/index.ts"
     }
   },
+  "files": [
+    "src",
+    "README.md"
+  ],
   "dependencies": {
     "@actiondock/sdk": "workspace:*",
     "ajv": "^8.17.1",
@@ -24,5 +28,14 @@
   },
   "keywords": ["actiondock", "core", "runtime", "storage", "builder"],
   "author": "team4u",
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/team4u/actiondock.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/team4u/actiondock#readme",
+  "bugs": {
+    "url": "https://github.com/team4u/actiondock/issues"
+  }
 }
