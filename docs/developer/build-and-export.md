@@ -1,12 +1,12 @@
 # 构建、打包与 Skill 导出 (Build & Skill Export)
 
 ActionDock 2.0 提供了两大核心交付工具：
-1. **`ac build`**：编译为零外部依赖的单个独立可执行文件（适用于生产部署、CI/CD、容器）。
-2. **`ac export skill`**：打包为自包含的 Agent Skill 规范目录（适用于向 Claude Code、Antigravity、Codex 智能体分发）。
+- **`ac build`**：编译为零外部依赖的单个独立可执行文件（适用于生产部署、CI/CD、容器）。
+- **`ac export skill`**：打包为自包含的 Agent Skill 规范目录（适用于向 Claude Code、Antigravity、Codex 智能体分发）。
 
 ---
 
-## 1. 编译为零依赖独立二进制 (`ac build`)
+## 编译为零依赖独立二进制 (`ac build`)
 
 在项目根目录下执行 `ac build`：
 
@@ -24,16 +24,16 @@ ac build
 ### 独立编译契约 (Standalone Contract)
 编译生成的独立二进制保留了开发态的全量功能，且行为完全一致：
 ```bash
-# 1. 直接本地调用 Action
+# 直接本地调用 Action
 ./dist/bin/github-tools run github.get-pr --input '{"repo": "team4u/actiondock", "prNumber": 1}'
 
-# 2. 直接作为 MCP 服务端运行
+# 直接作为 MCP 服务端运行
 ./dist/bin/github-tools mcp
 
-# 3. 运行内置 HTTP 微服务
+# 运行内置 HTTP 微服务
 ./dist/bin/github-tools serve --port 8080
 
-# 4. 管理持久化配置与状态
+# 管理持久化配置与状态
 ./dist/bin/github-tools config list
 ./dist/bin/github-tools state list
 ```
@@ -48,11 +48,11 @@ ac build
 
 ---
 
-## 2. 导出为 Agent Skill (`ac export skill`)
+## 导出为 Agent Skill (`ac export skill`)
 
 `ac export skill` 用于将 Action Package 打包为可供 AI 智能体直接理解与调用的自包含 Skill。
 
-### A. 导出源码型 Skill (Source Skill，默认)
+### 导出源码型 Skill (Source Skill，默认)
 ```bash
 ac export skill
 ```
@@ -62,14 +62,14 @@ ac export skill
 - `actions/`：TypeScript Action 源码文件。
 - `playbooks/`：SOP 操作规程 Markdown 文件。
 
-### B. 导出独立二进制型 Skill (Standalone Skill)
+### 导出独立二进制型 Skill (Standalone Skill)
 如果使用者的目标机器没有安装 Bun / Node.js：
 ```bash
 ac export skill --standalone
 ```
 此时导出包内包含预编译好的单文件二进制（在 `./bin/` 下），Agent 读取 `SKILL.md` 后直接调用 `./bin/<name> run <action>`，使用者零环境依赖。
 
-### C. 按 Playbook 规程按需裁剪
+### 按 Playbook 规程按需裁剪
 当工具包很大，但特定任务只需要部分 Action 时，使用 `--playbook` 按需精简打包：
 ```bash
 ac export skill --playbook review-pr --out ./dist/review-pr-skill
@@ -78,12 +78,12 @@ ac export skill --playbook review-pr --out ./dist/review-pr-skill
 
 ---
 
-## 3. 分发与发布流程
+## 分发与发布流程
 
 开发者将构建产物分发给使用者的典型途径：
 
-1. **推送到 Git / 代码仓库**：使用者直接通过 `git clone` 拉取源码并在本地消费。
-2. **发布为 GitHub Release 制品**：将 `ac build` 生成的可执行文件或 `ac export skill` 生成的 Skill 压缩包挂载在 Release 资产中。
-3. **推送到 Skill 注册表 / S3**：供内部团队集中拉取。
+- **推送到 Git / 代码仓库**：使用者直接通过 `git clone` 拉取源码并在本地消费。
+- **发布为 GitHub Release 制品**：将 `ac build` 生成的可执行文件或 `ac export skill` 生成的 Skill 压缩包挂载在 Release 资产中。
+- **推送到 Skill 注册表 / S3**：供内部团队集中拉取。
 
 > **提示**：关于使用者拿到 Skill 后如何配置到 Claude Code 或 Cursor，请参考 **[使用者指南：接入 Claude Code / Antigravity](../consumer/use-as-skill.md)**。

@@ -1,10 +1,10 @@
 # 实践指南：SQLite 存储与状态管理 (Storage & State)
 
-ActionDock 2.0 采用内嵌式 SQLite（基于 `bun:sqlite`）作为零依赖持久化存储后端，无需安装 MySQL、Redis 或任何外部服务。
+ActionDock 2.0 采用内嵌式 SQLite（基于 `bun:sqlite`）作为零依赖持久化存储后端，无需安装外部服务。
 
 ---
 
-## 1. 存储文件路径规则
+## 存储文件路径规则
 
 - **开发态项目级（Project Scope）**：存储于项目根目录下的 `.actiondock/runtime.db`，跟随项目物理隔离。
 - **全局共享级（Global Scope）**：存储于用户主目录下的 `~/.actiondock/global.db`，跨所有 Action Package 共享公共配置（如全局 API Token）。
@@ -12,19 +12,19 @@ ActionDock 2.0 采用内嵌式 SQLite（基于 `bun:sqlite`）作为零依赖持
 
 ---
 
-## 2. 数据模型
+## 数据模型
 
 SQLite 数据库内维护三张核心表：
 
 ```sql
--- 1. 持久化配置表
+-- 持久化配置表
 CREATE TABLE IF NOT EXISTS config (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
 
--- 2. 状态持久化表 (支持命名空间与 TTL 过期)
+-- 状态持久化表 (支持命名空间与 TTL 过期)
 CREATE TABLE IF NOT EXISTS state (
   namespace TEXT NOT NULL,
   key TEXT NOT NULL,
@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS state (
   PRIMARY KEY (namespace, key)
 );
 
--- 3. 运行历史表
+-- 运行历史表
 CREATE TABLE IF NOT EXISTS runs (
   id TEXT PRIMARY KEY,
   action_id TEXT NOT NULL,
@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS runs (
 
 ---
 
-## 3. 在 Action 代码中使用 `ctx.state`
+## 在 Action 代码中使用 `ctx.state`
 
 ```ts
 // 写入状态（支持可选 TTL 秒数）
@@ -64,9 +64,9 @@ await ctx.state.delete("user_last_seen:1001");
 
 ---
 
-## 4. CLI 管理命令速查
+## CLI 管理命令速查
 
-### A. 配置管理 (`ac config`)
+### 配置管理 (`ac config`)
 ```bash
 # 项目级配置（默认写入当前项目的 .actiondock/runtime.db）
 ac config set GITHUB_TOKEN "ghp_xxx"
@@ -79,7 +79,7 @@ ac config set -g OPENAI_API_KEY "sk-xxx"
 ac config list -g
 ```
 
-### B. 状态管理 (`ac state`)
+### 状态管理 (`ac state`)
 ```bash
 ac state set last_id 100 --ttl 3600
 ac state get last_id
@@ -87,7 +87,7 @@ ac state list
 ac state delete last_id
 ```
 
-### C. 运行历史管理 (`ac runs`)
+### 运行历史管理 (`ac runs`)
 ```bash
 ac runs list --limit 20
 ac runs get 01JM8A...

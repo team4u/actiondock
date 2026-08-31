@@ -1,12 +1,12 @@
 # 快速上手 (Quick Start)
 
-本指南面向**工具创作者（Developer）**，带您在 3 分钟内完成首个 Action Package 的初始化、编写、本地测试与一键打包。
+本指南面向**工具创作者（Developer）**，介绍 Action Package 的初始化、编写、本地测试与打包。
 
 ---
 
-## 1. 初始化项目骨架
+## 初始化项目骨架
 
-使用 `ac init` 初始化全新的 Action Package：
+使用 `ac init` 初始化 Action Package：
 
 ```bash
 ac init hello-tools
@@ -36,7 +36,7 @@ hello-tools/
 
 ---
 
-## 2. 编写 Action (`defineAction`)
+## 编写 Action (`defineAction`)
 
 在 `actions/hello.ts` 中定义原子 Action：
 
@@ -74,7 +74,7 @@ export default defineAction({
 
 ---
 
-## 3. 本地执行与调试
+## 本地执行与调试
 
 使用 `ac run` 在本地调用 Action：
 
@@ -96,7 +96,7 @@ ac run hello --input '{"name": "ActionDock"}'
 
 ---
 
-## 4. 运行单元测试
+## 运行单元测试
 
 ActionDock 倡导纯内存测试，毫秒级即时反馈：
 
@@ -106,15 +106,15 @@ ac test
 
 ---
 
-## 5. 打包与分发交付
+## 打包与分发交付
 
-### A. 导出为 Agent Skill
+### 导出为 Agent Skill
 ```bash
 ac export skill
 ```
 产物生成在 `./dist/hello-tools-skill/`，包含 `SKILL.md`，可直接分发给 Claude Code 或 Antigravity 使用。
 
-### B. 编译为零依赖独立二进制
+### 编译为零依赖独立二进制
 ```bash
 ac build
 ```
@@ -125,5 +125,5 @@ ac build
 ## 下一步
 
 - 阅读 [深入业务 Action 开发](first-action.md) 了解配置、持久化与外部 API 调用。
-- 探索 [Playbook SOP 规程编写](playbooks.md)。
+- 探索 [编写 Playbook SOP 规程](playbooks.md)。
 - 了解 [单元测试与沙箱验证](testing.md)。
