@@ -1,26 +1,34 @@
-* [首页](README.md)
-* [快速开始](quick-start.md)
+* [文档首页](README.md)
 
-* **核心开发与 SDK 规范**
-  * [Action 编写与开发指南](action-authoring.md)
-  * [ActionContext 核心能力详解](action-context.md)
-  * [测试与验证指南](testing-guide.md)
+* **新手入门 (Getting Started)**
+  * [环境安装](getting-started/installation.md)
+  * [快速开始](getting-started/quick-start.md)
+  * [编写首个 Action](getting-started/first-action.md)
 
-* **规程编排与 Skill 交付**
-  * [Skill 设计哲学与交付规范](skill-guide.md)
-  * [Playbook SOP 编写规范](playbook-guide.md)
-  * [构建编译与 Skill 分发](build-and-export.md)
+* **核心概念 (Concepts)**
+  * [Action Package 核心抽象](concepts/action-package.md)
+  * [Action 原子能力](concepts/action.md)
+  * [ActionContext 运行时上下文](concepts/action-context.md)
+  * [Playbook SOP 规程](concepts/playbook.md)
+  * [Agent Skill 技能交付物](concepts/skill.md)
 
-* **运行时架构与持久化存储**
-  * [存储与状态管理机制](storage-and-state.md)
-  * [安全加固与执行生命周期设计](design-security-mcp-execution.md)
+* **实践指南 (Guides)**
+  * [测试与验证指南](guides/testing.md)
+  * [MCP 协议集成](guides/mcp.md)
+  * [独立二进制编译构建](guides/standalone-build.md)
+  * [Skill 导出与分发](guides/skill-export.md)
+  * [HTTP 服务与远程调度](guides/http-server.md)
+  * [SQLite 存储与状态管理](guides/storage.md)
+  * [多环境 Profile 与远程调度](guides/profiles.md)
 
-* **协议适配与多环境调度**
-  * [Model Context Protocol (MCP) 适配器指南](mcp-integration.md)
-  * [多环境与远程云机器调度指南](remote-and-profiles.md)
-  * [AI Agent 接入与集成指南](agent-integration.md)
+* **参考手册 (Reference)**
+  * [CLI 命令行手册](reference/cli.md)
+  * [配置解析机制](reference/config.md)
+  * [Action SDK API](reference/action-api.md)
+  * [错误代码与排错速查](reference/error-codes.md)
+  * [1.0 到 2.0 迁移指南](reference/v1-to-v2-migration.md)
 
-* **工具参考与排错演进**
-  * [CLI 命令行参考手册](cli-reference.md)
-  * [错误代码与排错手册](error-codes.md)
-  * [1.0 到 2.0 架构对比与迁移指南](v1-to-v2-migration.md)
+* **底层架构 (Architecture)**
+  * [Runtime 执行引擎](architecture/runtime.md)
+  * [Stdout/Stderr 通道隔离](architecture/stdout-stderr.md)
+  * [安全加固与防御模型](architecture/security.md)
