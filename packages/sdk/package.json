@@ -12,10 +12,23 @@
       "types": "./src/index.ts"
     }
   },
+  "files": [
+    "src",
+    "README.md"
+  ],
   "scripts": {
     "test": "bun test"
   },
-  "keywords": ["actiondock", "agent", "actions", "skill", "ai"],
+  "keywords": ["actiondock", "agent", "actions", "skill", "ai", "mcp"],
   "author": "team4u",
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/team4u/actiondock.git",
+    "directory": "packages/sdk"
+  },
+  "homepage": "https://github.com/team4u/actiondock#readme",
+  "bugs": {
+    "url": "https://github.com/team4u/actiondock/issues"
+  }
 }

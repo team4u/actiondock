@@ -1,5 +1,12 @@
 import { describe, expect, it } from "bun:test";
-import { createTestRuntime, defineAction, execCli } from "../src";
+import {
+  createTestRuntime,
+  defineAction,
+  execCli,
+  MemoryConfig,
+  MemoryLogger,
+  MemoryStateStore,
+} from "../src";
 
 describe("@actiondock/sdk", () => {
   it("defines an action with validation", () => {
@@ -16,11 +23,14 @@ describe("@actiondock/sdk", () => {
 
     expect(action.id).toBe("test.greet");
     expect(action.description).toBe("Greet a user");
+    expect(typeof action.run).toBe("function");
   });
 
   it("throws error for invalid action definition", () => {
     expect(() => defineAction({} as any)).toThrow();
     expect(() => defineAction({ id: "test" } as any)).toThrow();
+    expect(() => defineAction(null as any)).toThrow();
+    expect(() => defineAction({ id: "", run: () => {} } as any)).toThrow();
   });
 
   it("executes an action in test runtime with config and state", async () => {
@@ -51,6 +61,67 @@ describe("@actiondock/sdk", () => {
 
     expect(runtime.logger.logs.length).toBe(2);
     expect(runtime.logger.logs[0].message).toContain("Updated count to 6");
+  });
+
+  it("supports MemoryConfig get, set, has, and fallback defaults", () => {
+    const config = new MemoryConfig({ API_KEY: "secret_123" });
+    expect(config.has("API_KEY")).toBe(true);
+    expect(config.has("NON_EXISTENT")).toBe(false);
+    expect(config.get<string>("API_KEY")).toBe("secret_123");
+    expect(config.get("NON_EXISTENT")).toBeUndefined();
+    expect(config.get("NON_EXISTENT", "default_val")).toBe("default_val");
+
+    config.set("NEW_KEY", 42);
+    expect(config.get<number>("NEW_KEY")).toBe(42);
+    expect(config.has("NEW_KEY")).toBe(true);
+  });
+
+  it("supports MemoryStateStore scoping, prefix listing, and deletion", async () => {
+    const store = new MemoryStateStore();
+    await store.set("global_k1", "v1");
+    await store.set("global_k2", "v2");
+
+    const userScope = store.scope("users");
+    await userScope.set("alice", { age: 30 });
+    await userScope.set("bob", { age: 25 });
+
+    // Isolation check
+    expect(await store.get<string>("global_k1")).toBe("v1");
+    expect(await userScope.get<{ age: number }>("alice")).toEqual({ age: 30 });
+    expect(await store.get("alice")).toBeUndefined();
+
+    // Deep copy verification (structuredClone)
+    const obj = { nested: { val: 100 } };
+    await store.set("nested_obj", obj);
+    obj.nested.val = 200;
+    const fetched = await store.get<{ nested: { val: number } }>("nested_obj");
+    expect(fetched?.nested.val).toBe(100);
+
+    // Keys listing with prefix
+    const userKeys = await userScope.keys();
+    expect(userKeys.sort()).toEqual(["alice", "bob"]);
+
+    const userKeysFiltered = await userScope.keys("al");
+    expect(userKeysFiltered).toEqual(["alice"]);
+
+    // Deletion
+    await userScope.delete("alice");
+    expect(await userScope.get("alice")).toBeUndefined();
+    expect(await userScope.keys()).toEqual(["bob"]);
+  });
+
+  it("supports MemoryLogger debug, info, warn, and error levels with data", () => {
+    const logger = new MemoryLogger();
+    logger.debug("debug message", { d: 1 });
+    logger.info("info message", { i: 2 });
+    logger.warn("warn message", { w: 3 });
+    logger.error("error message", { e: 4 });
+
+    expect(logger.logs.length).toBe(4);
+    expect(logger.logs[0]).toEqual({ level: "debug", message: "debug message", data: { d: 1 } });
+    expect(logger.logs[1]).toEqual({ level: "info", message: "info message", data: { i: 2 } });
+    expect(logger.logs[2]).toEqual({ level: "warn", message: "warn message", data: { w: 3 } });
+    expect(logger.logs[3]).toEqual({ level: "error", message: "error message", data: { e: 4 } });
   });
 
   it("supports action-to-action invocation", async () => {
@@ -114,30 +185,43 @@ describe("@actiondock/sdk", () => {
     expect(res.raw.length).toBeGreaterThan(0);
     expect(res.durationMs).toBeGreaterThanOrEqual(0);
 
-    // 2. Stdin piping support (input)
+    // 2. Stdin piping support (string input)
     const stdinRes = execCli("cat", [], { input: "Hello ActionDock Stdin" });
     expect(stdinRes.ok).toBe(true);
     expect(stdinRes.stdout).toBe("Hello ActionDock Stdin");
 
-    // 3. Timeout and timedOut flag
+    // 3. Stdin piping support (Uint8Array input)
+    const u8Input = new TextEncoder().encode("Binary Stdin");
+    const u8Res = execCli("cat", [], { input: u8Input });
+    expect(u8Res.ok).toBe(true);
+    expect(u8Res.stdout).toBe("Binary Stdin");
+
+    // 4. Custom env & cwd
+    const envRes = execCli("sh", ["-c", "echo $MY_CUSTOM_VAR"], {
+      env: { MY_CUSTOM_VAR: "actiondock_val" },
+    });
+    expect(envRes.ok).toBe(true);
+    expect(envRes.stdout).toBe("actiondock_val");
+
+    // 5. Timeout and timedOut flag
     const timedOutRes = execCli("sleep", ["2"], { timeout: 100 });
     expect(timedOutRes.ok).toBe(false);
     expect(timedOutRes.timedOut).toBe(true);
     expect(timedOutRes.exitCode).toBe(-1);
     expect(timedOutRes.stderr).toContain("timed out");
 
-    // 4. Non-existent command
+    // 6. Non-existent command
     const notFound = execCli("__non_existent_binary_xyz_123__");
     expect(notFound.ok).toBe(false);
     expect(notFound.exitCode).toBe(-1);
     expect(notFound.stderr).toContain("not found in PATH");
 
-    // 5. throwOnError support
+    // 7. throwOnError support
     expect(() => {
       execCli("__non_existent_binary_xyz_123__", [], { throwOnError: true });
     }).toThrow();
 
-    // 6. Aborted signal
+    // 8. Aborted signal
     const controller = new AbortController();
     controller.abort();
     const aborted = execCli("bun", ["--version"], { signal: controller.signal });
@@ -146,5 +230,3 @@ describe("@actiondock/sdk", () => {
     expect(aborted.stderr).toContain("aborted");
   });
 });
-
-
