@@ -24,6 +24,8 @@ export interface StateEntry {
   namespace: string;
   /** 状态键名 */
   key: string;
+  /** 复合完整键名（例如 namespace 为空时为 "key"，非空时为 "namespace:key"） */
+  fullKey: string;
   /** 状态值（JSON 序列化存储） */
   value: unknown;
   /** 最近更新时间（ISO 8601 格式） */
@@ -65,6 +67,11 @@ export interface RuntimeStorage {
   // --- State 状态管理 ---
   /** 读取指定命名空间下的状态值（已过期则自动清除并返回 undefined） */
   getState<T = unknown>(namespace: string, key: string): Promise<T | undefined>;
+  /** 智能查找状态实体（支持 namespace 显式定位，或复合 key "namespace:key" 自动定位） */
+  findState<T = unknown>(
+    targetKey: string,
+    namespace?: string
+  ): Promise<StateEntry | undefined>;
   /** 写入状态值，可指定 TTL 存活秒数 */
   setState<T = unknown>(
     namespace: string,
@@ -72,10 +79,16 @@ export interface RuntimeStorage {
     value: T,
     ttl?: number
   ): Promise<void>;
-  /** 删除指定命名空间下的状态数据 */
-  deleteState(namespace: string, key: string): Promise<void>;
-  /** 列出指定命名空间下匹配前缀的所有状态键（自动触发过期键清理） */
-  listStateKeys(namespace: string, prefix?: string): Promise<string[]>;
+  /** 删除指定命名空间下的状态数据，返回是否实际删除了数据 */
+  deleteState(namespace: string, key: string): Promise<boolean>;
+  /** 智能删除状态（支持显式 namespace，或复合 key "namespace:key" 自动定位），返回是否实际删除 */
+  deleteStateSmart(targetKey: string, namespace?: string): Promise<boolean>;
+  /** 批量清理状态数据，返回实际清理的条数 */
+  clearState(options?: { namespace?: string; all?: boolean; prefix?: string }): Promise<number>;
+  /** 列出状态键名。当 namespace 为 null/undefined 时扫描全量 namespace 并返回 fullKey，否则只返回指定 namespace 下的 key */
+  listStateKeys(namespace?: string | null, prefix?: string): Promise<string[]>;
+  /** 列出状态条目富信息实体列表 */
+  listStateEntries(options?: { namespace?: string; prefix?: string }): Promise<StateEntry[]>;
 
   // --- Runs 运行记录管理 ---
   /** 创建并记录一条初始运行记录（status: running） */

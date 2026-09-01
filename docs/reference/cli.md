@@ -57,11 +57,12 @@ ac config delete <key> [-g] [-P <pkg>]
 ac config schema [pkg]                       # 检查配置声明与就绪状态
 ```
 
-# 状态管理
-ac state list [--namespace <ns>]
-ac state get <key> [--namespace <ns>]
-ac state set <key> <value> [--namespace <ns>] [--ttl <seconds>]
-ac state delete <key> [--namespace <ns>]
+# 状态管理（支持命名空间隔离与复合 Key "namespace:key" 智能解析）
+ac state list [prefix] [-n <ns>] [-i <intent>] [-d|--detail] [--json]
+ac state get <key> [-n <ns>] [--json]
+ac state set <key> <value> [-n <ns>] [--ttl <seconds>]
+ac state delete <key> [-n <ns>] [--silent]
+ac state clear [prefix] [-n <ns>] [-a|--all]
 
 # 运行历史
 ac runs list [--limit <number>] [--status <status>]

@@ -122,8 +122,20 @@ export class MemoryStateStore implements StateStore {
     this.store.set(qKey, entry);
   }
 
-  async delete(key: string): Promise<void> {
-    this.store.delete(this.qualify(key));
+  async delete(key: string): Promise<boolean> {
+    const qKey = this.qualify(key);
+    return this.store.delete(qKey);
+  }
+
+  async clear(prefix = ""): Promise<number> {
+    const keysToDelete = await this.keys(prefix);
+    let count = 0;
+    for (const k of keysToDelete) {
+      if (this.store.delete(this.qualify(k))) {
+        count++;
+      }
+    }
+    return count;
   }
 
   async keys(prefix = ""): Promise<string[]> {

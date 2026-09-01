@@ -53,7 +53,7 @@ ac export skill
 | `ac action list` / `ac run <id>` | List and execute Actions |
 | `ac playbook list` / `show` | Inspect agent task SOP Playbooks |
 | `ac config list` / `get` / `set` | Manage runtime configurations |
-| `ac state list` / `get` / `set` | Inspect and manage persistent state (with TTL) |
+| `ac state list` / `get` / `set` / `delete` / `clear` | Inspect and manage persistent state (with namespaces, TTL, and clear) |
 | `ac runs list` / `show` | Inspect execution history and traces |
 | `ac test` | Run fast unit tests |
 | `ac build` | Compile into a zero-dependency standalone binary |

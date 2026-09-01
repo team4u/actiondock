@@ -81,10 +81,17 @@ export interface StateStore {
    */
   set<T = unknown>(key: string, value: T, ttl?: number): Promise<void>;
   /**
-   * 删除指定键的状态数据
+   * 删除指定键的状态数据。
    * @param key 状态键名
+   * @returns 是否实际删除了数据（true: 存在并删除，false: 不存在）
    */
-  delete(key: string): Promise<void>;
+  delete(key: string): Promise<boolean>;
+  /**
+   * 清空当前命名空间（或指定前缀）下的所有状态数据
+   * @param prefix 可选的键名前缀过滤条件
+   * @returns 实际清除的条目数量
+   */
+  clear(prefix?: string): Promise<number>;
   /**
    * 列出当前命名空间下所有匹配前缀的状态键名（已自动过滤已过期的键）
    * @param prefix 键名前缀过滤条件

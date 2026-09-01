@@ -267,7 +267,8 @@ function defineAction<I = unknown, O = unknown>(definition: {
 | | `has(key: string): boolean` | 检查配置项是否存在 |
 | **`ctx.state`** | `get<T>(key: string): Promise<T \| undefined>` | 读取持久化状态（未设置或过期返回 `undefined`） |
 | | `set<T>(key: string, value: T, ttl?: number): Promise<void>` | 写入状态，`ttl` 单位为**秒**（可选） |
-| | `delete(key: string): Promise<void>` | 删除指定状态键 |
+| | `delete(key: string): Promise<boolean>` | 删除指定状态键（返回是否实际删除） |
+| | `clear(prefix?: string): Promise<number>` | 清空当前 scope 或指定前缀下的所有状态 |
 | | `keys(prefix?: string): Promise<string[]>` | 列出所有未过期的状态键名 |
 | | `scope(namespace: string): StateStore` | 获取命名空间隔离的子状态存储实例 |
 | **`ctx.actions`**| `invoke<I, O>(action: ActionDefinition<I, O>, input: I): Promise<O>` | 纯内存零开销相互调用（带防循环调用检测） |
@@ -483,10 +484,11 @@ ac config delete -g <key>
 
 ### 状态管理 (`ctx.state`)
 ```bash
-ac state list [prefix] [-i "<regex>"] [--json]
-ac state get <key> [--json]
-ac state set <key> <json-value> [--ttl <seconds>]
-ac state delete <key>
+ac state list [prefix] [-n "<namespace>"] [-i "<regex>"] [-d] [--json] # 默认扫描全量 namespace
+ac state get <key> [-n "<namespace>"] [--json]                         # 支持复合 Key (例如 "auth:session")
+ac state set <key> <json-value> [-n "<namespace>"] [--ttl <seconds>]
+ac state delete <key> [-n "<namespace>"] [--silent]                    # 智能匹配删除，不存在时报非零退出码
+ac state clear [prefix] [-n "<namespace>"] [-a|--all]                  # 批量清理指定命名空间或全量状态
 ```
 
 ### 执行历史与任务取消

@@ -105,10 +105,19 @@ describe("@actiondock/sdk", () => {
     const userKeysFiltered = await userScope.keys("al");
     expect(userKeysFiltered).toEqual(["alice"]);
 
-    // Deletion
-    await userScope.delete("alice");
+    // Deletion (returns boolean)
+    const deleted = await userScope.delete("alice");
+    expect(deleted).toBe(true);
     expect(await userScope.get("alice")).toBeUndefined();
     expect(await userScope.keys()).toEqual(["bob"]);
+
+    const deleteNonExistent = await userScope.delete("alice");
+    expect(deleteNonExistent).toBe(false);
+
+    // Clear
+    const cleared = await userScope.clear();
+    expect(cleared).toBe(1); // bob
+    expect(await userScope.keys()).toEqual([]);
   });
 
   it("supports MemoryLogger debug, info, warn, and error levels with data", () => {

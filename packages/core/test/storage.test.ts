@@ -58,8 +58,56 @@ describe("SqliteRuntimeStorage", () => {
       const nsKeys = await storage.listStateKeys("ns1");
       expect(nsKeys).toEqual(["counter"]);
 
-      await storage.deleteState("", "cursor");
+      // Global scan (namespace = null/undefined)
+      const allKeys = await storage.listStateKeys();
+      expect(allKeys).toEqual(["cursor", "ns1:counter"]);
+
+      // Smart find
+      const foundRoot = await storage.findState("cursor");
+      expect(foundRoot?.value).toBe("001");
+      expect(foundRoot?.namespace).toBe("");
+
+      const foundComposite = await storage.findState("ns1:counter");
+      expect(foundComposite?.value).toBe(42);
+      expect(foundComposite?.namespace).toBe("ns1");
+      expect(foundComposite?.key).toBe("counter");
+
+      // Smart delete with boolean check
+      const deletedRoot = await storage.deleteState("", "cursor");
+      expect(deletedRoot).toBe(true);
       expect(await storage.getState("", "cursor")).toBeUndefined();
+
+      const notFoundDeleted = await storage.deleteState("", "cursor");
+      expect(notFoundDeleted).toBe(false);
+
+      // Smart delete by composite key
+      const deletedComposite = await storage.deleteStateSmart("ns1:counter");
+      expect(deletedComposite).toBe(true);
+      expect(await storage.getState("ns1", "counter")).toBeUndefined();
+
+      const notFoundSmart = await storage.deleteStateSmart("ns1:counter");
+      expect(notFoundSmart).toBe(false);
+    });
+
+    it("should clear state by namespace, prefix, or all", async () => {
+      await storage.setState("", "k1", "v1");
+      await storage.setState("", "k2", "v2");
+      await storage.setState("auth", "token", "abc");
+      await storage.setState("auth", "session", "123");
+      await storage.setState("cache", "item1", "foo");
+
+      expect((await storage.listStateKeys()).length).toBe(5);
+
+      // Clear by namespace
+      const clearedAuth = await storage.clearState({ namespace: "auth" });
+      expect(clearedAuth).toBe(2);
+      expect(await storage.listStateKeys("auth")).toEqual([]);
+      expect(await storage.getState("auth", "token")).toBeUndefined();
+
+      // Clear all
+      const clearedAll = await storage.clearState({ all: true });
+      expect(clearedAll).toBe(3); // k1, k2, cache:item1
+      expect(await storage.listStateKeys()).toEqual([]);
     });
 
     it("should expire state keys based on TTL", async () => {

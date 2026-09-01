@@ -116,8 +116,15 @@ export class RuntimeStateStore implements StateStore {
     return this.storage.setState<T>(this.namespace, key, value, ttl);
   }
 
-  async delete(key: string): Promise<void> {
+  async delete(key: string): Promise<boolean> {
     return this.storage.deleteState(this.namespace, key);
+  }
+
+  async clear(prefix = ""): Promise<number> {
+    return this.storage.clearState({
+      namespace: this.namespace,
+      prefix: prefix || undefined,
+    });
   }
 
   async keys(prefix = ""): Promise<string[]> {

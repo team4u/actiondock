@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 import { chmodSync, existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { RuntimeError, RunRecord } from "@actiondock/sdk";
-import type { RuntimeStorage, StorageOptions, TerminalRunStatus } from "./types";
+import type { RuntimeStorage, StateEntry, StorageOptions, TerminalRunStatus } from "./types";
 
 /**
  * 基于 Bun 内置原生 SQLite (`bun:sqlite`) 实现的高性能运行时存储。
@@ -207,6 +207,66 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     }
   }
 
+  async findState<T = unknown>(
+    targetKey: string,
+    namespace?: string
+  ): Promise<StateEntry | undefined> {
+    let row: any = null;
+
+    if (namespace !== undefined) {
+      const stmt = this.db.prepare(
+        "SELECT * FROM state WHERE package_id = ? AND namespace = ? AND key = ?"
+      );
+      row = stmt.get(this.packageId, namespace, targetKey);
+    } else {
+      // 1. 先在根命名空间精确查找
+      const rootStmt = this.db.prepare(
+        "SELECT * FROM state WHERE package_id = ? AND namespace = '' AND key = ?"
+      );
+      row = rootStmt.get(this.packageId, targetKey);
+
+      // 2. 若未命中且包含 ':'，尝试通过 (namespace || ':' || key) 复合匹配
+      if (!row && targetKey.includes(":")) {
+        const compositeStmt = this.db.prepare(
+          "SELECT * FROM state WHERE package_id = ? AND (namespace || ':' || key) = ?"
+        );
+        row = compositeStmt.get(this.packageId, targetKey);
+      }
+    }
+
+    if (!row) return undefined;
+
+    // 校验过期
+    if (row.expires_at) {
+      const expiresTime = new Date(row.expires_at).getTime();
+      if (!isNaN(expiresTime) && expiresTime <= Date.now()) {
+        await this.deleteState(row.namespace, row.key);
+        return undefined;
+      }
+    }
+
+    let parsedVal: unknown;
+    try {
+      parsedVal =
+        row.value_json !== null && row.value_json !== undefined
+          ? JSON.parse(row.value_json)
+          : row.value_json;
+    } catch {
+      parsedVal = row.value_json;
+    }
+
+    const fullKey = row.namespace ? `${row.namespace}:${row.key}` : row.key;
+    return {
+      packageId: row.package_id,
+      namespace: row.namespace,
+      key: row.key,
+      fullKey,
+      value: parsedVal as T,
+      updatedAt: row.updated_at,
+      expiresAt: row.expires_at || undefined,
+    };
+  }
+
   async setState<T = unknown>(
     namespace: string,
     key: string,
@@ -231,32 +291,169 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     stmt.run(this.packageId, namespace, key, valJson, now, expiresAtStr);
   }
 
-  async deleteState(namespace: string, key: string): Promise<void> {
+  async deleteState(namespace: string, key: string): Promise<boolean> {
     const stmt = this.db.prepare(
       "DELETE FROM state WHERE package_id = ? AND namespace = ? AND key = ?"
     );
-    stmt.run(this.packageId, namespace, key);
+    const res = stmt.run(this.packageId, namespace, key);
+    return res.changes > 0;
   }
 
-  async listStateKeys(namespace: string, prefix = ""): Promise<string[]> {
-    const pattern = prefix ? `${prefix}%` : "%";
+  async deleteStateSmart(
+    targetKey: string,
+    namespace?: string
+  ): Promise<boolean> {
+    if (namespace !== undefined) {
+      return this.deleteState(namespace, targetKey);
+    }
+    // 1. 先尝试在根命名空间删除
+    const rootDeleted = await this.deleteState("", targetKey);
+    if (rootDeleted) return true;
+
+    // 2. 若 targetKey 包含 ':'，尝试按 (namespace || ':' || key) 复合键删除
+    if (targetKey.includes(":")) {
+      const stmt = this.db.prepare(
+        "DELETE FROM state WHERE package_id = ? AND (namespace || ':' || key) = ?"
+      );
+      const res = stmt.run(this.packageId, targetKey);
+      return res.changes > 0;
+    }
+
+    return false;
+  }
+
+  async clearState(
+    options: { namespace?: string; all?: boolean; prefix?: string } = {}
+  ): Promise<number> {
+    if (options.all) {
+      const stmt = this.db.prepare("DELETE FROM state WHERE package_id = ?");
+      const res = stmt.run(this.packageId);
+      return res.changes;
+    }
+
+    if (options.namespace !== undefined) {
+      if (options.prefix) {
+        const stmt = this.db.prepare(
+          "DELETE FROM state WHERE package_id = ? AND namespace = ? AND key LIKE ?"
+        );
+        const res = stmt.run(
+          this.packageId,
+          options.namespace,
+          `${options.prefix}%`
+        );
+        return res.changes;
+      } else {
+        const stmt = this.db.prepare(
+          "DELETE FROM state WHERE package_id = ? AND namespace = ?"
+        );
+        const res = stmt.run(this.packageId, options.namespace);
+        return res.changes;
+      }
+    }
+
+    if (options.prefix) {
+      const pattern = `${options.prefix}%`;
+      const stmt = this.db.prepare(
+        "DELETE FROM state WHERE package_id = ? AND (CASE WHEN namespace = '' THEN key ELSE (namespace || ':' || key) END) LIKE ?"
+      );
+      const res = stmt.run(this.packageId, pattern);
+      return res.changes;
+    }
+
+    const stmt = this.db.prepare(
+      "DELETE FROM state WHERE package_id = ? AND namespace = ''"
+    );
+    const res = stmt.run(this.packageId);
+    return res.changes;
+  }
+
+  async listStateKeys(
+    namespace?: string | null,
+    prefix = ""
+  ): Promise<string[]> {
     const nowStr = new Date().toISOString();
     try {
       const cleanupStmt = this.db.prepare(
-        "DELETE FROM state WHERE package_id = ? AND namespace = ? AND expires_at IS NOT NULL AND expires_at <= ?"
+        "DELETE FROM state WHERE package_id = ? AND expires_at IS NOT NULL AND expires_at <= ?"
       );
-      cleanupStmt.run(this.packageId, namespace, nowStr);
+      cleanupStmt.run(this.packageId, nowStr);
     } catch {
       // Best-effort cleanup
     }
 
-    const stmt = this.db.prepare(
-      "SELECT key FROM state WHERE package_id = ? AND namespace = ? AND key LIKE ? AND (expires_at IS NULL OR expires_at > ?) ORDER BY key ASC"
-    );
-    const rows = stmt.all(this.packageId, namespace, pattern, nowStr) as Array<{
-      key: string;
-    }>;
-    return rows.map((r) => r.key);
+    if (namespace === null || namespace === undefined) {
+      const pattern = prefix ? `${prefix}%` : "%";
+      const stmt = this.db.prepare(
+        "SELECT namespace, key FROM state WHERE package_id = ? AND (expires_at IS NULL OR expires_at > ?) AND (CASE WHEN namespace = '' THEN key ELSE (namespace || ':' || key) END) LIKE ? ORDER BY namespace ASC, key ASC"
+      );
+      const rows = stmt.all(this.packageId, nowStr, pattern) as Array<{
+        namespace: string;
+        key: string;
+      }>;
+      return rows.map((r) => (r.namespace ? `${r.namespace}:${r.key}` : r.key));
+    } else {
+      const pattern = prefix ? `${prefix}%` : "%";
+      const stmt = this.db.prepare(
+        "SELECT key FROM state WHERE package_id = ? AND namespace = ? AND key LIKE ? AND (expires_at IS NULL OR expires_at > ?) ORDER BY key ASC"
+      );
+      const rows = stmt.all(
+        this.packageId,
+        namespace,
+        pattern,
+        nowStr
+      ) as Array<{
+        key: string;
+      }>;
+      return rows.map((r) => r.key);
+    }
+  }
+
+  async listStateEntries(
+    options: { namespace?: string; prefix?: string } = {}
+  ): Promise<StateEntry[]> {
+    const nowStr = new Date().toISOString();
+    try {
+      const cleanupStmt = this.db.prepare(
+        "DELETE FROM state WHERE package_id = ? AND expires_at IS NOT NULL AND expires_at <= ?"
+      );
+      cleanupStmt.run(this.packageId, nowStr);
+    } catch {}
+
+    const pattern = options.prefix ? `${options.prefix}%` : "%";
+    let rows: any[] = [];
+
+    if (options.namespace !== undefined) {
+      const stmt = this.db.prepare(
+        "SELECT * FROM state WHERE package_id = ? AND namespace = ? AND key LIKE ? AND (expires_at IS NULL OR expires_at > ?) ORDER BY key ASC"
+      );
+      rows = stmt.all(this.packageId, options.namespace, pattern, nowStr);
+    } else {
+      const stmt = this.db.prepare(
+        "SELECT * FROM state WHERE package_id = ? AND (expires_at IS NULL OR expires_at > ?) AND (CASE WHEN namespace = '' THEN key ELSE (namespace || ':' || key) END) LIKE ? ORDER BY namespace ASC, key ASC"
+      );
+      rows = stmt.all(this.packageId, nowStr, pattern);
+    }
+
+    return rows.map((row) => {
+      let parsedVal: unknown;
+      try {
+        parsedVal =
+          row.value_json !== null && row.value_json !== undefined
+            ? JSON.parse(row.value_json)
+            : row.value_json;
+      } catch {
+        parsedVal = row.value_json;
+      }
+      return {
+        packageId: row.package_id,
+        namespace: row.namespace,
+        key: row.key,
+        fullKey: row.namespace ? `${row.namespace}:${row.key}` : row.key,
+        value: parsedVal,
+        updatedAt: row.updated_at,
+        expiresAt: row.expires_at || undefined,
+      };
+    });
   }
 
   // --- Runs ---

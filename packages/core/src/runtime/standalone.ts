@@ -295,18 +295,44 @@ export class StandaloneRuntime {
 
         case "state": {
           const sub = subArgs[0] || "list";
+          let namespace: string | undefined;
+          let isAll = false;
+          let isJson = false;
+
+          for (let i = 1; i < subArgs.length; i++) {
+            if ((subArgs[i] === "-n" || subArgs[i] === "--namespace") && i + 1 < subArgs.length) {
+              namespace = subArgs[++i];
+            } else if (subArgs[i].startsWith("--namespace=")) {
+              namespace = subArgs[i].slice(12);
+            } else if (subArgs[i] === "-a" || subArgs[i] === "--all") {
+              isAll = true;
+            } else if (subArgs[i] === "--json") {
+              isJson = true;
+            }
+          }
+
           if (sub === "list") {
-            const prefix = subArgs[1] || "";
-            const keys = await storage.listStateKeys("", prefix);
+            const prefix = subArgs[1] && !subArgs[1].startsWith("-") ? subArgs[1] : "";
+            const keys = await storage.listStateKeys(namespace !== undefined ? namespace : null, prefix);
             console.log(JSON.stringify(keys, null, 2));
           } else if (sub === "get") {
-            const key = subArgs[1];
+            const key = subArgs[1] && !subArgs[1].startsWith("-") ? subArgs[1] : subArgs[2];
             if (!key) {
               console.error("Error: state key required");
               process.exit(1);
             }
-            const val = await storage.getState("", key);
-            console.log(val !== undefined ? JSON.stringify(val) : "undefined");
+            let val: unknown;
+            if (namespace !== undefined) {
+              val = await storage.getState(namespace, key);
+            } else {
+              const entry = await storage.findState(key);
+              val = entry?.value;
+            }
+            if (isJson) {
+              console.log(JSON.stringify({ key, value: val }, null, 2));
+            } else {
+              console.log(val !== undefined ? JSON.stringify(val) : "undefined");
+            }
           } else if (sub === "set") {
             const key = subArgs[1];
             const rawVal = subArgs[2];
@@ -314,6 +340,15 @@ export class StandaloneRuntime {
               console.error("Error: key and value required");
               process.exit(1);
             }
+
+            let ns = namespace || "";
+            let actualKey = key;
+            if (namespace === undefined && key.includes(":")) {
+              const colonIdx = key.indexOf(":");
+              ns = key.slice(0, colonIdx);
+              actualKey = key.slice(colonIdx + 1);
+            }
+
             let parsed: unknown = rawVal;
             try {
               parsed = JSON.parse(rawVal);
@@ -330,16 +365,30 @@ export class StandaloneRuntime {
               }
             }
 
-            await storage.setState("", key, parsed, ttl);
-            console.log(`State '${key}' updated`);
-          } else if (sub === "delete") {
-            const key = subArgs[1];
+            await storage.setState(ns, actualKey, parsed, ttl);
+            const displayKey = ns ? `${ns}:${actualKey}` : actualKey;
+            console.log(`State '${displayKey}' updated`);
+          } else if (sub === "delete" || sub === "rm") {
+            const key = subArgs[1] && !subArgs[1].startsWith("-") ? subArgs[1] : subArgs[2];
             if (!key) {
               console.error("Error: state key required");
               process.exit(1);
             }
-            await storage.deleteState("", key);
-            console.log(`State '${key}' deleted`);
+            const deleted = await storage.deleteStateSmart(key, namespace);
+            if (deleted) {
+              console.log(`State '${key}' deleted`);
+            } else {
+              console.error(`Error: State key '${key}' not found`);
+              process.exit(1);
+            }
+          } else if (sub === "clear" || sub === "clean") {
+            const prefix = subArgs[1] && !subArgs[1].startsWith("-") ? subArgs[1] : "";
+            const count = await storage.clearState({
+              namespace,
+              all: isAll,
+              prefix: prefix || undefined,
+            });
+            console.log(`Cleared ${count} state entry(s)`);
           }
           break;
         }

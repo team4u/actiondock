@@ -71,7 +71,8 @@ export interface Config {
 export interface StateStore {
   get<T = unknown>(key: string): Promise<T | undefined>;
   set<T = unknown>(key: string, value: T, ttl?: number): Promise<void>;
-  delete(key: string): Promise<void>;
+  delete(key: string): Promise<boolean>;
+  clear(prefix?: string): Promise<number>;
   keys(prefix?: string): Promise<string[]>;
   scope(namespace: string): StateStore;
 }

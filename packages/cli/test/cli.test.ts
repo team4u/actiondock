@@ -217,6 +217,68 @@ describe("CLI End-to-End", () => {
     expect(getShortLived.exitCode).toBe(0);
     expect(JSON.parse(getShortLived.stdout.toString()).value).toBe("session_abc");
 
+    // 7b. Scoped state operations (namespace:key & -n flag)
+    const stateSetScoped = runCli(
+      ["state", "set", "cas-login:host", "vipshop.com"],
+      tempDir
+    );
+    expect(stateSetScoped.exitCode).toBe(0);
+
+    const stateGetScoped = runCli(
+      ["state", "get", "cas-login:host", "--json"],
+      tempDir
+    );
+    expect(stateGetScoped.exitCode).toBe(0);
+    expect(JSON.parse(stateGetScoped.stdout.toString()).value).toBe("vipshop.com");
+    expect(JSON.parse(stateGetScoped.stdout.toString()).namespace).toBe("cas-login");
+
+    const stateGetScopedNs = runCli(
+      ["state", "get", "host", "-n", "cas-login", "--json"],
+      tempDir
+    );
+    expect(stateGetScopedNs.exitCode).toBe(0);
+    expect(JSON.parse(stateGetScopedNs.stdout.toString()).value).toBe("vipshop.com");
+
+    // Global list discovers scoped key
+    const stateListAll = runCli(["state", "list", "--json"], tempDir);
+    expect(stateListAll.exitCode).toBe(0);
+    expect(JSON.parse(stateListAll.stdout.toString())).toContain("cas-login:host");
+
+    // Scoped list only lists scoped keys
+    const stateListNs = runCli(["state", "list", "-n", "cas-login", "--json"], tempDir);
+    expect(stateListNs.exitCode).toBe(0);
+    expect(JSON.parse(stateListNs.stdout.toString())).toEqual(["host"]);
+
+    // Non-existent key delete fails with exitCode 1
+    const stateDelNotFound = runCli(
+      ["state", "delete", "not_exist_key"],
+      tempDir
+    );
+    expect(stateDelNotFound.exitCode).toBe(1);
+    expect(stateDelNotFound.stderr.toString()).toContain("not found");
+
+    // Composite key delete succeeds
+    const stateDelScoped = runCli(
+      ["state", "delete", "cas-login:host"],
+      tempDir
+    );
+    expect(stateDelScoped.exitCode).toBe(0);
+    expect(stateDelScoped.stdout.toString()).toContain("deleted");
+
+    // Verify it is actually deleted
+    const stateGetAfterDel = runCli(
+      ["state", "get", "cas-login:host", "--json"],
+      tempDir
+    );
+    expect(JSON.parse(stateGetAfterDel.stdout.toString()).value).toBeUndefined();
+
+    // Clear state test
+    runCli(["state", "set", "cache:k1", "v1"], tempDir);
+    runCli(["state", "set", "cache:k2", "v2"], tempDir);
+    const clearProc = runCli(["state", "clear", "-n", "cache"], tempDir);
+    expect(clearProc.exitCode).toBe(0);
+    expect(clearProc.stdout.toString()).toContain("Cleared 2 state entry(s)");
+
     // 8. runs list & show
     const runsListProc = runCli(["runs", "list", "--json"], tempDir);
     expect(runsListProc.exitCode).toBe(0);

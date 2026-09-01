@@ -58,8 +58,15 @@ await ctx.state.set("user_last_seen:1001", new Date().toISOString(), 86400);
 // 读取状态
 const lastSeen = await ctx.state.get<string>("user_last_seen:1001");
 
-// 删除状态
-await ctx.state.delete("user_last_seen:1001");
+// 命名空间隔离
+const authState = ctx.state.scope("auth");
+await authState.set("session_token", "abc-123", 3600);
+
+// 删除状态（返回 boolean 指示是否实际删除了数据）
+const deleted = await ctx.state.delete("user_last_seen:1001");
+
+// 批量清理命名空间
+const clearedCount = await authState.clear();
 ```
 
 ---
@@ -81,10 +88,29 @@ ac config list -g
 
 ### 状态管理 (`ac state`)
 ```bash
+# 设置状态（支持复合 Key 或 -n 指定命名空间）
 ac state set last_id 100 --ttl 3600
+ac state set "auth:session" "token_123" --ttl 7200
+ac state set "session" "token_123" -n "auth" --ttl 7200
+
+# 读取状态
 ac state get last_id
+ac state get "auth:session"
+ac state get "session" -n "auth"
+
+# 列出状态（默认全量平铺扫描所有命名空间）
 ac state list
+ac state list -n "auth"
+ac state list --detail --json
+
+# 删除状态（智能匹配复合 Key 或命名空间；不存在时非零退出码报错）
 ac state delete last_id
+ac state delete "auth:session"
+ac state delete "session" -n "auth"
+
+# 批量清理状态
+ac state clear -n "auth"      # 清空 auth 命名空间下的所有缓存
+ac state clear --all          # 清空该 package 下的所有状态
 ```
 
 ### 运行历史管理 (`ac runs`)
