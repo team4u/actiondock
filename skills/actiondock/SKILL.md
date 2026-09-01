@@ -96,6 +96,25 @@ ac link [path]          # 注册当前或指定包到全局开发态注册表
 ac unlink [id|path]     # 从全局注册表中移除
 ```
 
+### 跨目录包目标参数 (`-P, --package`)
+
+ActionDock 支持多包协作开发与跨目录全局调度。当开发者或 AI Agent 在任意工作目录下工作时，**无需反复 `cd` 切换目录**，通过 `-P, --package <id|path>` 参数即可精确指定目标 Action Package：
+
+| 命令分类 | 跨包使用示例 (`-P`) | 说明 |
+| :--- | :--- | :--- |
+| **元数据检查** | `ac info -P team4u.github-tools` | 查看指定包的元数据、Actions、Playbooks 与 Config Schema |
+| **配置读写** | `ac config get GITHUB_TOKEN -P team4u.github-tools`<br>`ac config set GITHUB_TOKEN "ghp_xxx" -P team4u.github-tools` | 读写指定包的项目级配置（`.actiondock/runtime.db`） |
+| **状态持久化** | `ac state list -P team4u.github-tools`<br>`ac state get auth:session -P team4u.github-tools` | 读写与清空指定包的持久化状态存储 |
+| **运行历史** | `ac runs list -P team4u.github-tools`<br>`ac runs show <id> -P team4u.github-tools` | 查询过滤指定包的执行历史与链路详情 |
+| **独立构建** | `ac build -P team4u.github-tools -o ./dist/github-tools` | 从任意外部目录一键将指定包编译为独立可执行程序 |
+| **Skill 导出** | `ac export skill -P team4u.github-tools -o ./dist/skill` | 从任意外部目录一键将指定包导出为 Agent Skill 交付包 |
+| **Action 调度** | `ac run team4u.github-tools/github.get-pr --input '...'` | 通过 Package-Qualified ID 直接跨包调用 Action |
+
+> [!TIP]
+> **`-P` 参数值解析机制（按优先级匹配）**：
+> 1. **已注册 Package ID**：如完整 ID `team4u.github-tools` 或短 ID `github-tools`（通过 `ac link` 注册在 `~/.actiondock/registry.json` 中）。
+> 2. **物理文件路径**：如相对路径 `../examples/github-tools` 或绝对路径 `/root/code/sui-tools`。
+
 ---
 
 ## Action 创建与编写规范
