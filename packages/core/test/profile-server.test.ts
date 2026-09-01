@@ -93,7 +93,18 @@ export default defineAction({
     if (serverInstance) {
       serverInstance.stop();
     }
-    rmSync(tempDir, { recursive: true, force: true });
+    if (existsSync(tempDir)) {
+      try {
+        rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      } catch {
+        await new Promise((r) => setTimeout(r, 200));
+        try {
+          rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+        } catch {
+          // Ignore
+        }
+      }
+    }
   });
 
   test("Profile Manager > adds, lists, uses, and removes profiles", () => {

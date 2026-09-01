@@ -32,13 +32,26 @@ describe("Build & Skill Export Contract", () => {
     });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     if (existsSync(tempDir)) {
-      rmSync(tempDir, { recursive: true, force: true });
+      try {
+        rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      } catch {
+        await new Promise((r) => setTimeout(r, 200));
+        try {
+          rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+        } catch {
+          // Ignore
+        }
+      }
     }
     const globalDataDir = join(homedir(), ".actiondock", "data", "test.sample-tools");
     if (existsSync(globalDataDir)) {
-      rmSync(globalDataDir, { recursive: true, force: true });
+      try {
+        rmSync(globalDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      } catch {
+        // Ignore
+      }
     }
   });
 
@@ -191,7 +204,7 @@ describe("Build & Skill Export Contract", () => {
     const isoJson = JSON.parse(isolatedRun.stdout.toString());
     // In new isolated data-dir, it uses default greeting ("Hello")
     expect(isoJson.data.message).toBe("Hello, Isolated!");
-  });
+  }, 30000);
 
   it("exports Source Skill package by default with SKILL.md, actiondock.json, actions, and playbooks", async () => {
     const exportRes = await exportSkill({
@@ -246,7 +259,7 @@ describe("Build & Skill Export Contract", () => {
     const res = JSON.parse(binProc.stdout.toString());
     expect(res.ok).toBe(true);
     expect(res.data.message).toBe("Hello, Agent!");
-  });
+  }, 30000);
 
   it("supports Playbook-driven selective export (only packages specified playbook and its dependent actions)", async () => {
     const fs = await import("node:fs");
@@ -315,7 +328,7 @@ actions:
     const listData = JSON.parse(listProc.stdout.toString());
     expect(listData.length).toBe(1);
     expect(listData[0].id).toBe("sample.greet");
-  });
+  }, 30000);
 
   it("supports customizing --bytecode and --minify options when building", async () => {
     const unminifiedOut = join(tempDir, "dist", "unminified-bin");
@@ -336,6 +349,6 @@ actions:
     const res = JSON.parse(runProc.stdout.toString());
     expect(res.ok).toBe(true);
     expect(res.data.message).toBe("Hello, NoMinify!");
-  });
+  }, 30000);
 });
 

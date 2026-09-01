@@ -29,9 +29,18 @@ describe("CLI End-to-End", () => {
     }
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     if (existsSync(tempDir)) {
-      rmSync(tempDir, { recursive: true, force: true });
+      try {
+        rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      } catch {
+        await new Promise((r) => setTimeout(r, 200));
+        try {
+          rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+        } catch {
+          // Ignore
+        }
+      }
     }
   });
 
@@ -537,8 +546,13 @@ describe("CLI End-to-End", () => {
 
     } finally {
       serveProc.kill();
+      await serveProc.exited.catch(() => {});
       if (existsSync(clientHome)) {
-        rmSync(clientHome, { recursive: true, force: true });
+        try {
+          rmSync(clientHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+        } catch {
+          // Ignore
+        }
       }
     }
   }, 30000);
