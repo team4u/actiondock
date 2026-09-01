@@ -83,7 +83,8 @@ describe("sample.greet Action", () => {
   - `ctx.actions`: Action-to-action invocation (`invoke()`) with recursion & cycle detection.
   - `ctx.log`: Clean stderr-directed structured logging (keeping stdout clean for JSON envelopes).
   - `ctx.signal`: Cooperative `AbortSignal` for graceful timeout and cancellation.
-- **`execCli`**: Deadlock-safe, cross-platform CLI executor with Windows `.cmd` resolution, stdin streaming, timeout, and signal support.
+- **`execCli`**: Deadlock-safe, cross-platform synchronous CLI executor with Windows `.cmd` resolution, stdin streaming, timeout, and signal support.
+- **`spawnDetached`**: Safe asynchronous launcher for daemon-spawning CLI tools (e.g., `agent-browser open`), preventing pipe EOF hangs via fire-and-forget stdio decoupling and polling probe.
 - **`createTestRuntime`**: Fast, zero-dependency in-memory test harness for unit tests.
 
 ---
@@ -95,6 +96,7 @@ describe("sample.greet Action", () => {
 | `defineAction(def)` | Function | Defines and defensively validates an Action |
 | `createTestRuntime(opts)` | Function | Creates an in-memory test runner (`config`, `state`, `logger`, `run()`) |
 | `execCli(cmd, args, opts)` | Function | Synchronous, deadlock-safe CLI execution utility |
+| `spawnDetached(opts)` | Function | Safe asynchronous launcher & readiness prober for daemon-spawning CLI tools |
 | `MemoryConfig` | Class | In-memory `Config` provider for unit tests |
 | `MemoryStateStore` | Class | In-memory `StateStore` with TTL and namespace support |
 | `MemoryLogger` | Class | In-memory `Logger` collecting log entries for test assertions |

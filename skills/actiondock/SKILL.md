@@ -158,12 +158,14 @@ export default defineAction<Input, Output>({
 });
 ```
 
-### 执行外部 CLI 与系统命令最佳实践 (SDK 内置 `execCli`)
+### 执行外部 CLI 与系统命令最佳实践 (`execCli` & `spawnDetached`)
 
-当 Action 需调度系统外部 CLI 工具（如 `agent-browser`、`git`、`docker`、`jq` 等）时，推荐直接使用 `@actiondock/sdk` 导出的 `execCli`：
+当 Action 需调度系统外部 CLI 工具（如 `agent-browser`、`git`、`docker`、`jq` 等）时，按场景选用 `@actiondock/sdk` 导出的公共工具：
 
+#### 场景 A：常规 CLI 执行（使用 `execCli`）
+适用于一次性命令或已常驻 daemon 下的无损交互（如 `agent-browser get/click/type/snapshot`、`git status`、`docker ps` 等）：
 1. **Windows 路径自动解析**：自动通过 `Bun.which("command")` 解析 `.cmd` / `.bat` / `.exe` 物理绝对路径。
-2. **`Bun.spawnSync` 防管道死锁**：一次性同步排空管道，避免无头浏览器/后台守护进程因句柄继承导致流读取挂起。
+2. **`Bun.spawnSync` 防管道死锁**：一次性同步排空管道，避免子进程句柄继承导致流读取挂起。
 3. **超时与取消安全**：支持毫秒级 `timeout` 强杀与 `signal` (AbortSignal) 取消响应。
 4. **Stdin 与原始字节流**：支持 `input` 管道写入与 `raw` 二进制字节流输出（图片/音视频）。
 
@@ -192,6 +194,50 @@ export default defineAction({
 
     ctx.log.info(`执行完成，耗时: ${res.durationMs}ms`);
     return { matched: true, stdout: res.stdout };
+  },
+});
+```
+
+#### 场景 B：会拉起后台守护进程的命令（使用 `spawnDetached`）
+当 CLI 命令首次拉起常驻后台守护进程（如 `agent-browser open` 会拉起常驻 daemon）：
+- **问题根因**：若使用 `spawnSync`，后台 daemon 会继承 stderr/stdout 管道写句柄且常驻不退出，导致同步管道等待 EOF 挂满 timeout；若不等待 CLI 前端退出直接发 probe，又会并发拉起两个 daemon 导致配置冲突。
+- **解决方案（三步闭环）**：
+  1. **异步 fire**：stdio 全部 `ignore`，daemon 继承不到任何管道句柄；
+  2. **等待 CLI 前端退出**：`await child.exited` 错开冷启动窗口，避免探测命令并发竞争；
+  3. **轮询探测就绪**：通过轻量 probe 回调确认副作用生效（如 URL 稳定）后继续。
+
+```typescript
+import { defineAction, execCli, spawnDetached } from "@actiondock/sdk";
+
+export default defineAction({
+  id: "browser.login",
+  async run(input: { url: string }, ctx) {
+    let prevUrl = "", stableCount = 0;
+
+    const ok = await spawnDetached({
+      command: "agent-browser",
+      args: ["open", input.url, "--timeout", "30s"],
+      signal: ctx.signal,
+      intervalMs: 400,
+      timeoutMs: 30000,
+      probe: async () => {
+        // warm daemon 下 pipe 安全，用轻量 execCli 探测状态
+        const r = execCli("agent-browser", ["get", "url"], { timeout: 5000 });
+        const current = r.stdout.trim();
+        if (current && current === prevUrl && current !== "about:blank") {
+          return ++stableCount >= 3;
+        }
+        stableCount = 0;
+        prevUrl = current;
+        return false;
+      },
+    });
+
+    if (!ok) {
+      throw new Error(`页面打开超时未就绪: ${input.url}`);
+    }
+
+    return { status: "ready" };
   },
 });
 ```
@@ -253,7 +299,21 @@ function execCli(
 };
 ```
 
-### 4. `createTestRuntime(options?)` 纯内存单元测试沙箱
+### 4. `spawnDetached(options)` 守护进程类 CLI 异步启动与就绪探测
+```typescript
+function spawnDetached(options: {
+  command: string;                          // 可执行命令（如 "agent-browser"）
+  args?: string[];                          // 参数列表（如 ["open", url]）
+  probe: () => Promise<boolean> | boolean;  // 就绪探测回调函数
+  intervalMs?: number;                      // 轮询间隔（默认 400ms）
+  timeoutMs?: number;                       // 总超时毫秒数（默认 30000ms）
+  signal?: AbortSignal;                     // 取消信号（如 ctx.signal）
+  cwd?: string;                             // 工作目录
+  env?: Record<string, string>;             // 环境变量
+}): Promise<boolean>;
+```
+
+### 5. `createTestRuntime(options?)` 纯内存单元测试沙箱
 ```typescript
 function createTestRuntime(options?: {
   config?: Record<string, unknown>;     // Mock 配置键值对

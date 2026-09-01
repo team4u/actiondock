@@ -73,6 +73,8 @@ export default defineAction<GreetInput, GreetOutput>({
 
 ### 5. 跨平台 CLI 调度与防死锁（Safe CLI Execution）
 - **Windows `.cmd` 兼容**：npm 全局安装的命令均为 `.cmd` 批处理文件，必须通过 `Bun.which("cmd")` 解析完整绝对路径后再执行。
-- **防管道死锁（Deadlock Avoidance）**：外部子进程（如无头浏览器、后台 daemon）残留管道句柄时，异步流读取会导致 EOF 永久阻塞。调用外部 CLI 推荐使用 `Bun.spawnSync` 一次性同步排空管道。
+- **常规命令防管道死锁**：外部子进程残留管道句柄时，异步流读取会导致 EOF 永久阻塞。常规外部 CLI 推荐使用 `execCli` (`Bun.spawnSync`) 一次性同步排空管道。
+- **拉起守护进程的命令（如 `agent-browser open`）**：常驻 daemon 继承管道句柄会导致同步等待永不 EOF 挂死，推荐使用 SDK 提供的 `spawnDetached`（stdio ignore 异步 fire + 等待前端退出 + 轮询 probe 判定就绪）。
 - **取消响应与退出码策略**：在多步命令间检测 `ctx.signal?.aborted` 响应取消；非零退出码由调用方根据业务逻辑判定分支。
+
 

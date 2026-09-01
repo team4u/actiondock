@@ -1,8 +1,10 @@
 export { defineAction } from "./action";
 export {
   execCli,
+  spawnDetached,
   type ExecCliOptions,
   type ExecCliResult,
+  type SpawnDetachedOptions,
 } from "./cli";
 export {
   createTestRuntime,

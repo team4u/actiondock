@@ -188,3 +188,130 @@ export function execCli(
     return errRes;
   }
 }
+
+/**
+ * 启动后台守护进程类 CLI 命令的选项配置。
+ */
+export interface SpawnDetachedOptions {
+  /**
+   * 可执行命令名称或路径（如 "agent-browser", "docker", "daemon"）。
+   */
+  command: string;
+
+  /**
+   * 传递给命令的参数列表（默认为 []）。
+   */
+  args?: string[];
+
+  /**
+   * 就绪探测回调函数（返回 true 表示守护进程已就绪或命令副作用已生效）。
+   */
+  probe: () => Promise<boolean> | boolean;
+
+  /**
+   * 轮询探测间隔时间（单位：毫秒，默认为 400ms）。
+   */
+  intervalMs?: number;
+
+  /**
+   * 总超时时间（单位：毫秒，默认为 30000ms）。
+   */
+  timeoutMs?: number;
+
+  /**
+   * 协作式取消信号（如 ActionContext 中的 ctx.signal）。
+   */
+  signal?: AbortSignal;
+
+  /**
+   * 子进程工作目录，默认为当前工作目录 (process.cwd())。
+   */
+  cwd?: string;
+
+  /**
+   * 自定义环境变量字典（合并到 process.env 之上）。
+   */
+  env?: Record<string, string>;
+}
+
+/**
+ * 安全执行“会拉起后台守护进程”的 CLI 命令（如 agent-browser open）。
+ *
+ * 核心三步工作流：
+ * 1. 异步 fire：stdio 全 ignore —— 确保后台 daemon 进程继承不到任何管道句柄，从根源杜绝管道 EOF 挂起；
+ * 2. 等 CLI 进程自身退出：错开冷启动窗口，避免探测命令并发拉起第二个 daemon 导致冲突；
+ * 3. 轮询探测就绪：执行轻量 probe 回调确认守护进程就绪或副作用生效。
+ *
+ * @param options 启动与探测配置项
+ * @returns Promise<boolean> 若在超时前 probe 返回 true 则返回 true；若超时仍未就绪则返回 false
+ */
+export async function spawnDetached(options: SpawnDetachedOptions): Promise<boolean> {
+  const { command, args = [], probe, signal, cwd, env } = options;
+  const intervalMs = options.intervalMs ?? 400;
+  const timeoutMs = options.timeoutMs ?? 30_000;
+
+  // 1. 检查取消信号
+  if (signal?.aborted) {
+    throw new Error("Command aborted before execution by signal");
+  }
+
+  // 2. 跨平台绝对路径解析（解决 Windows 下 npm 全局 .cmd shim 识别问题）
+  const hasPathSep = command.includes("/") || command.includes("\\");
+  const binPath = hasPathSep ? command : (Bun.which(command) || command);
+
+  if (!hasPathSep && !Bun.which(command)) {
+    throw new Error(`Command '${command}' not found in PATH.`);
+  }
+
+  // 3. fire-and-forget：ignore 所有 stdio，unref 防止阻塞事件循环
+  const child = Bun.spawn([binPath, ...args], {
+    cwd: cwd || process.cwd(),
+    env: env ? { ...process.env, ...env } : process.env,
+    stdin: "ignore",
+    stdout: "ignore",
+    stderr: "ignore",
+    signal,
+  });
+  child.unref();
+
+  // 4. 等待 CLI 前端进程自身退出（错开冷启动窗口，避免 probe 并发拉起两个 daemon）
+  try {
+    await child.exited;
+  } catch (err) {
+    if (signal?.aborted) {
+      throw new Error("aborted");
+    }
+    throw err;
+  }
+
+  if (signal?.aborted) {
+    throw new Error("aborted");
+  }
+
+  // 5. 轮询探测就绪
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (signal?.aborted) {
+      throw new Error("aborted");
+    }
+
+    try {
+      const ready = await probe();
+      if (ready) {
+        return true;
+      }
+    } catch (probeErr) {
+      if (signal?.aborted) {
+        throw new Error("aborted");
+      }
+      // probe 异常通常为守护进程未完全就绪时的暂时性错误，继续等待轮询
+    }
+
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
+    const sleepTime = Math.min(intervalMs, remaining);
+    await new Promise((resolve) => setTimeout(resolve, sleepTime));
+  }
+
+  return false;
+}

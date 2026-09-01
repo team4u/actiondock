@@ -3,6 +3,7 @@ import {
   createTestRuntime,
   defineAction,
   execCli,
+  spawnDetached,
   MemoryConfig,
   MemoryLogger,
   MemoryStateStore,
@@ -229,4 +230,85 @@ describe("@actiondock/sdk", () => {
     expect(aborted.exitCode).toBe(-1);
     expect(aborted.stderr).toContain("aborted");
   });
+
+  it("executes daemon-spawning CLI safely using spawnDetached", async () => {
+    // 1. Successful execution and immediate probe success
+    let probeCount = 0;
+    const ok = await spawnDetached({
+      command: "bun",
+      args: ["--version"],
+      probe: () => {
+        probeCount++;
+        return true;
+      },
+    });
+    expect(ok).toBe(true);
+    expect(probeCount).toBe(1);
+
+    // 2. Multi-step polling until probe becomes true
+    let pollCount = 0;
+    const polledOk = await spawnDetached({
+      command: "bun",
+      args: ["--version"],
+      intervalMs: 20,
+      timeoutMs: 1000,
+      probe: async () => {
+        pollCount++;
+        return pollCount >= 3;
+      },
+    });
+    expect(polledOk).toBe(true);
+    expect(pollCount).toBe(3);
+
+    // 3. Timeout when probe never succeeds
+    const timedOut = await spawnDetached({
+      command: "bun",
+      args: ["--version"],
+      intervalMs: 20,
+      timeoutMs: 100,
+      probe: () => false,
+    });
+    expect(timedOut).toBe(false);
+
+    // 4. Pre-aborted signal rejection
+    const preAbortController = new AbortController();
+    preAbortController.abort();
+    await expect(
+      spawnDetached({
+        command: "bun",
+        args: ["--version"],
+        signal: preAbortController.signal,
+        probe: () => true,
+      })
+    ).rejects.toThrow(/aborted/i);
+
+    // 5. In-flight abort during polling
+    const inFlightController = new AbortController();
+    let pollStep = 0;
+    await expect(
+      spawnDetached({
+        command: "bun",
+        args: ["--version"],
+        intervalMs: 20,
+        timeoutMs: 2000,
+        signal: inFlightController.signal,
+        probe: () => {
+          pollStep++;
+          if (pollStep >= 2) {
+            inFlightController.abort();
+          }
+          return false;
+        },
+      })
+    ).rejects.toThrow(/aborted/i);
+
+    // 6. Non-existent command throws
+    await expect(
+      spawnDetached({
+        command: "__non_existent_binary_xyz_123__",
+        probe: () => true,
+      })
+    ).rejects.toThrow(/not found in PATH/i);
+  });
 });
+

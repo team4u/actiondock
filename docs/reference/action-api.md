@@ -212,5 +212,81 @@ export function execCli(
 ): ExecCliResult;
 ```
 
+---
+
+## 5. `spawnDetached` 守护进程 CLI 异步启动与就绪探测
+
+当 CLI 命令首次拉起常驻后台守护进程（如 `agent-browser open` 会拉起常驻 daemon 进程）：
+- **管道 EOF 死锁**：使用常规同步 `execCli` (`Bun.spawnSync`) 收集标准流时，后台 daemon 进程继承了 stderr/stdout 管道句柄且常驻不释放，导致管道永远无法接收 EOF，命令挂满超时。
+- **并发冲突**：若不等待 CLI 前端退出即并发发送探测命令，可能同时拉起多个 daemon 导致配置冲突。
+
+`spawnDetached` 提供 **stdio ignore 异步 fire + 等待 CLI 退出 + 轮询 probe 就绪** 的三步闭环机制：
+
+### 类型签名与使用示例
+
+```ts
+import { defineAction, execCli, spawnDetached } from "@actiondock/sdk";
+
+export default defineAction({
+  id: "browser.open-page",
+  async run(input: { url: string }, ctx) {
+    let prevUrl = "", stableCount = 0;
+
+    const ok = await spawnDetached({
+      command: "agent-browser",
+      args: ["open", input.url, "--timeout", "30s"],
+      signal: ctx.signal,
+      intervalMs: 400,
+      timeoutMs: 30000,
+      probe: async () => {
+        // warm daemon 状态下管道安全，通过轻量 execCli 探测状态
+        const r = execCli("agent-browser", ["get", "url"], { timeout: 5000 });
+        const current = r.stdout.trim();
+        // 就绪判定：URL 连续 3 次读取一致且非空白
+        if (current && current === prevUrl && current !== "about:blank") {
+          return ++stableCount >= 3;
+        }
+        stableCount = 0;
+        prevUrl = current;
+        return false;
+      },
+    });
+
+    if (!ok) {
+      throw new Error(`页面打开超时未就绪: ${input.url}`);
+    }
+
+    return { status: "ready" };
+  },
+});
+```
+
+#### 完整接口定义：
+```ts
+export interface SpawnDetachedOptions {
+  /** 可执行命令名称或路径（如 "agent-browser"） */
+  command: string;
+  /** 传递给命令的参数列表（默认为 []） */
+  args?: string[];
+  /** 就绪探测回调函数（返回 true 表示就绪） */
+  probe: () => Promise<boolean> | boolean;
+  /** 轮询探测间隔时间（毫秒，默认 400） */
+  intervalMs?: number;
+  /** 总超时时间（毫秒，默认 30000） */
+  timeoutMs?: number;
+  /** 协作式取消信号（如 ctx.signal） */
+  signal?: AbortSignal;
+  /** 子进程工作目录 */
+  cwd?: string;
+  /** 自定义环境变量 */
+  env?: Record<string, string>;
+}
+
+export function spawnDetached(
+  options: SpawnDetachedOptions
+): Promise<boolean>;
+```
+
+
 
 
