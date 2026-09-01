@@ -153,8 +153,17 @@ export async function buildProject(options: BuildOptions): Promise<BuildResult> 
     throw new Error(`Bun compile failed (exit code ${proc.exitCode}):\n${errText}`);
   }
 
+  // Compile artifact resolution (on Windows bun compile automatically appends .exe)
+  let artifactPath = outfile;
+  if (!existsSync(artifactPath)) {
+    const withExe = outfile + ".exe";
+    if (existsSync(withExe)) {
+      artifactPath = withExe;
+    }
+  }
+
   // Calculate build hash
-  const binaryBuffer = readFileSync(outfile);
+  const binaryBuffer = readFileSync(artifactPath);
   const buildHash = createHash("sha256").update(binaryBuffer).digest("hex").slice(0, 16);
 
   // Calculate lockHash
@@ -182,14 +191,14 @@ export async function buildProject(options: BuildOptions): Promise<BuildResult> 
     createdAt: new Date().toISOString(),
   };
 
-  const metadataPath = join(dirname(outfile), "artifact.json");
+  const metadataPath = join(dirname(artifactPath), "artifact.json");
   writeFileSync(metadataPath, JSON.stringify(metadata, null, 2) + "\n", "utf-8");
 
   return {
     packageId: config.id,
     version: config.version,
     target: options.target || "host",
-    executablePath: outfile,
+    executablePath: artifactPath,
     metadataPath,
     actions: metadata.actions,
   };

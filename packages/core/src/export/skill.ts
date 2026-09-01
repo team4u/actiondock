@@ -277,7 +277,7 @@ export async function exportSkill(
     const binaryPath = join(binDir, binaryName);
 
     // Build standalone binary with selected actions
-    await buildProject({
+    const buildRes = await buildProject({
       projectRoot: root,
       target: options.target,
       outfile: binaryPath,
@@ -286,12 +286,14 @@ export async function exportSkill(
       bytecode: options.bytecode,
     });
 
+    const actualBinaryName = basename(buildRes.executablePath);
+
     // Generate SKILL.md for Standalone Binary
     const skillMd = generateStandaloneSkillMd(
       config,
       selectedActions,
       selectedPlaybooks,
-      `./bin/${binaryName}`
+      `./bin/${actualBinaryName}`
     );
     writeFileSync(join(skillDir, "SKILL.md"), skillMd, "utf-8");
 
@@ -299,7 +301,7 @@ export async function exportSkill(
     const skillJson = generateSkillJson(
       config,
       selectedActions,
-      binaryName,
+      actualBinaryName,
       target
     );
     writeFileSync(join(skillDir, "actiondock.skill.json"), skillJson, "utf-8");

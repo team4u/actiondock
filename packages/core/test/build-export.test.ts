@@ -221,19 +221,20 @@ describe("Build & Skill Export Contract", () => {
       standalone: true,
     });
 
+    const expectedBinName = process.platform === "win32" ? "sample-tools.exe" : "sample-tools";
     expect(exportRes.mode).toBe("standalone");
     expect(existsSync(exportRes.skillDir)).toBe(true);
     expect(existsSync(join(exportRes.skillDir, "SKILL.md"))).toBe(true);
     expect(existsSync(join(exportRes.skillDir, "actiondock.skill.json"))).toBe(true);
-    expect(existsSync(join(exportRes.skillDir, "bin", "sample-tools"))).toBe(true);
+    expect(existsSync(join(exportRes.skillDir, "bin", expectedBinName))).toBe(true);
     expect(existsSync(join(exportRes.skillDir, "playbooks", "greet-user.md"))).toBe(true);
 
     const skillMd = readFileSync(join(exportRes.skillDir, "SKILL.md"), "utf-8");
-    expect(skillMd).toContain("./bin/sample-tools");
+    expect(skillMd).toContain(`./bin/${expectedBinName}`);
     expect(skillMd).toContain("sample.greet");
 
     // Execute exported binary directly
-    const exportedBin = join(exportRes.skillDir, "bin", "sample-tools");
+    const exportedBin = join(exportRes.skillDir, "bin", expectedBinName);
     const binProc = Bun.spawnSync(
       [exportedBin, "run", "sample.greet", "--input", '{"name": "Agent"}'],
       {
@@ -304,7 +305,8 @@ actions:
       outDir: join(tempDir, "dist", "selective-standalone-skill"),
     });
 
-    const selectiveBin = join(exportStandaloneRes.skillDir, "bin", "sample-tools");
+    const expectedBinName = process.platform === "win32" ? "sample-tools.exe" : "sample-tools";
+    const selectiveBin = join(exportStandaloneRes.skillDir, "bin", expectedBinName);
     const listProc = Bun.spawnSync([selectiveBin, "list", "--json"], {
       stdout: "pipe",
       stderr: "pipe",

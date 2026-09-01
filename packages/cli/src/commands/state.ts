@@ -127,6 +127,11 @@ export function registerStateCommands(program: Command): void {
         }
         storage.close();
 
+        if (val === undefined) {
+          console.error(`Error: State key '${key}' not found in ${projConfig.id}`);
+          process.exit(1);
+        }
+
         if (options.json) {
           console.log(
             JSON.stringify(

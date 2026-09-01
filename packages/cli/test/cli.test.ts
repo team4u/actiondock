@@ -270,7 +270,8 @@ describe("CLI End-to-End", () => {
       ["state", "get", "cas-login:host", "--json"],
       tempDir
     );
-    expect(JSON.parse(stateGetAfterDel.stdout.toString()).value).toBeUndefined();
+    expect(stateGetAfterDel.exitCode).toBe(1);
+    expect(stateGetAfterDel.stderr.toString()).toContain("not found");
 
     // Clear state test
     runCli(["state", "set", "cache:k1", "v1"], tempDir);
@@ -305,7 +306,8 @@ describe("CLI End-to-End", () => {
     // 9. build
     const buildProc = runCli(["build"], tempDir);
     expect(buildProc.exitCode).toBe(0);
-    expect(existsSync(join(tempDir, "dist", "github-ops"))).toBe(true);
+    const expectedGithubOpsBin = process.platform === "win32" ? "github-ops.exe" : "github-ops";
+    expect(existsSync(join(tempDir, "dist", expectedGithubOpsBin))).toBe(true);
 
     // 10. export skill (default: source skill)
     const exportProc = runCli(["export", "skill"], tempDir);
@@ -327,7 +329,7 @@ describe("CLI End-to-End", () => {
     const exportStandaloneProc = runCli(["export", "skill", "--standalone"], tempDir);
     expect(exportStandaloneProc.exitCode).toBe(0);
     expect(
-      existsSync(join(tempDir, "dist", "github-ops-skill", "bin", "github-ops"))
+      existsSync(join(tempDir, "dist", "github-ops-skill", "bin", expectedGithubOpsBin))
     ).toBe(true);
     expect(
       existsSync(join(tempDir, "dist", "github-ops-skill", "actiondock.skill.json"))
