@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { findProjectRoot, loadActions, loadProjectConfig } from "../project/loader";
+import { findProjectRoot, loadActions, loadPlaybooks, loadProjectConfig } from "../project/loader";
 import { getActionDockHome, getPackageSlug } from "../utils";
-import type { GlobalRegistryData, LinkedPackageEntry, ResolvedActionProject } from "./types";
+import type { GlobalRegistryData, LinkedPackageEntry, ResolvedActionProject, ResolvedPlaybookProject } from "./types";
 
 export function getRegistryFilePath(customHome?: string): string {
   const baseDir = getActionDockHome(customHome);
@@ -227,3 +227,118 @@ export function resolvePackageRoot(
 
   return findProjectRoot(cwd);
 }
+
+export function resolvePlaybookProject(
+  playbookIdentifier: string,
+  cwd: string = process.cwd(),
+  customHome?: string
+): ResolvedPlaybookProject {
+  // 1. Check current directory / parent project
+  const currentRoot = findProjectRoot(cwd);
+  if (currentRoot) {
+    try {
+      const config = loadProjectConfig(currentRoot);
+      const playbooks = loadPlaybooks(currentRoot, config.playbooksDir);
+      if (playbooks.has(playbookIdentifier)) {
+        return {
+          projectRoot: currentRoot,
+          packageId: config.id,
+          playbookId: playbookIdentifier,
+          playbook: playbooks.get(playbookIdentifier)!,
+        };
+      }
+    } catch {
+      // Ignore and proceed to registry lookup
+    }
+  }
+
+  // 2. Check if scoped format: <package-id>/<playbook-id> or <package-id>:<playbook-id>
+  let targetPackage: string | undefined;
+  let purePlaybookId = playbookIdentifier;
+
+  if (playbookIdentifier.includes("/")) {
+    const slashIdx = playbookIdentifier.indexOf("/");
+    targetPackage = playbookIdentifier.slice(0, slashIdx);
+    purePlaybookId = playbookIdentifier.slice(slashIdx + 1);
+  } else if (playbookIdentifier.includes(":")) {
+    const colonIdx = playbookIdentifier.indexOf(":");
+    targetPackage = playbookIdentifier.slice(0, colonIdx);
+    purePlaybookId = playbookIdentifier.slice(colonIdx + 1);
+  }
+
+  const registry = loadRegistry(customHome);
+  const linkedList = Object.values(registry.packages);
+
+  if (targetPackage) {
+    const pkg =
+      registry.packages[targetPackage] ||
+      linkedList.find(
+        (p) => p.id === targetPackage || getPackageSlug(p.id) === targetPackage
+      );
+
+    if (!pkg || !existsSync(pkg.path)) {
+      throw new Error(
+        `Linked package '${targetPackage}' not found or path no longer exists (${pkg?.path || "unregistered"}). Run 'ac link' in the package directory.`
+      );
+    }
+
+    const config = loadProjectConfig(pkg.path);
+    const playbooks = loadPlaybooks(pkg.path, config.playbooksDir);
+    const pb = playbooks.get(purePlaybookId);
+    if (!pb) {
+      throw new Error(`Playbook '${purePlaybookId}' not found in package '${pkg.id}' (${pkg.path})`);
+    }
+
+    return {
+      projectRoot: pkg.path,
+      packageId: pkg.id,
+      playbookId: purePlaybookId,
+      playbook: pb,
+    };
+  }
+
+  // 3. Search across all linked packages
+  const matches: Array<{ entry: LinkedPackageEntry; playbookId: string; playbook: import("../project/types").PlaybookDefinition }> = [];
+
+  for (const pkg of linkedList) {
+    if (!existsSync(pkg.path)) continue;
+    try {
+      const config = loadProjectConfig(pkg.path);
+      const playbooks = loadPlaybooks(pkg.path, config.playbooksDir);
+      if (playbooks.has(playbookIdentifier)) {
+        matches.push({
+          entry: pkg,
+          playbookId: playbookIdentifier,
+          playbook: playbooks.get(playbookIdentifier)!,
+        });
+      }
+    } catch {
+      // Ignore invalid linked package
+    }
+  }
+
+  if (matches.length === 1) {
+    return {
+      projectRoot: matches[0].entry.path,
+      packageId: matches[0].entry.id,
+      playbookId: matches[0].playbookId,
+      playbook: matches[0].playbook,
+    };
+  }
+
+  if (matches.length > 1) {
+    const pkgList = matches.map((m) => `'${m.entry.id}'`).join(", ");
+    throw new Error(
+      `Playbook '${playbookIdentifier}' is provided by multiple linked packages: ${pkgList}. Please specify using '<package-id>/${playbookIdentifier}'.`
+    );
+  }
+
+  if (currentRoot) {
+    throw new Error(`Playbook '${playbookIdentifier}' not found in current project or any linked packages`);
+  } else {
+    throw new Error(
+      `Playbook '${playbookIdentifier}' not found. You are not in an ActionDock project, and no linked package provides '${playbookIdentifier}'. Use 'ac link' to register your package.`
+    );
+  }
+}
+

@@ -64,7 +64,7 @@ export default defineAction({
   },
 
   async run(input, ctx) {
-    ctx.logger.info("Executing hello action for", input.name);
+    ctx.log.info("Executing hello action for", input.name);
     return {
       message: `Hello ${input.name}!`,
     };

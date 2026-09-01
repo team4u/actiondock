@@ -70,10 +70,21 @@ bun link @actiondock/sdk   # 接入本地全局 SDK 并自动补齐其余依赖
 2. **分层原则**：SDK 源码根目录 `bun link` 全局执行一次；各 Action 项目内 `bun link @actiondock/sdk` 每项目执行一次。
 3. **双 Link 区分**：`ac link` 是 **ActionDock 全局包注册**（支持跨目录 `ac run pkg/action`），`bun link` 是 **TypeScript/Node 依赖解析**，两者职责独立，开发态通常都需要执行。
 
-### 检查项目或远程目标元数据
+### 检查项目、全局注册包或远程目标元数据
 ```bash
+# 当前项目内：展示当前包元数据、Actions、Playbooks 与 Config Schema
 ac info [--json]
+
+# 非项目目录下：自动输出全局已注册 Linked Packages 概览清单
+ac info [--json]
+
+# 查看指定包（支持 packageId 或物理路径）：跨目录查看其完整元数据与配置
+ac info <package-id> [--json]
+ac info -P <package-id> [--json]
+
+# 查看远程云端节点元数据
 ac info --profile <profile-name> [--json]
+ac info --server <url> --token <token> [--json]
 ```
 
 ### 全局包注册与解绑 (ActionDock 路由表)
@@ -452,13 +463,20 @@ ac mcp serve --host 0.0.0.0 --port 5178 --token <secret-token>
 
 ## Playbook 任务 SOP 规程
 
-Playbook（`playbooks/*.md`）为 AI Agent 提供领域任务的标准操作规程：
+Playbook（`playbooks/*.md`）为 AI Agent 提供领域任务的标准操作规程。所有 Playbook 命令均支持项目内与跨包全局检索：
 
 ```bash
+# 创建规程脚手架
 ac playbook create <id> --desc "SOP 任务描述" --actions action-a action-b
+
+# 列出规程（项目内列出当前包规程；项目外自动汇总所有 linked packages 规程）
 ac playbook list [patterns...] [-i "<regex>"] [--json]
+
+# 查看规程内容（自动跨本地项目与 linked packages 查找，支持 <package-id>/<playbook-id>）
 ac playbook show <id> [--json]
-ac playbook validate
+
+# 校验规程语法与 Actions 引用合法性（支持当前项目或全局 linked packages）
+ac playbook validate [id] [--json]
 ```
 
 ---
@@ -472,6 +490,7 @@ ac config set <key> <value> [-P <pkg>]
 ac config get <key> [-P <pkg>] [--reveal] [--json]
 ac config list [patterns...] [-P <pkg>] [--json]
 ac config delete <key> [-P <pkg>]
+ac config schema [pkg]                                # 检查配置依赖与就绪状态
 
 # 全局级配置（使用 -g 写入 ~/.actiondock/global.db，跨所有包共享）
 ac config set -g <key> <value>
@@ -484,19 +503,33 @@ ac config delete -g <key>
 
 ### 状态管理 (`ctx.state`)
 ```bash
-ac state list [prefix] [-n "<namespace>"] [-i "<regex>"] [-d] [--json] # 默认扫描全量 namespace
-ac state get <key> [-n "<namespace>"] [--json]                         # 支持复合 Key (例如 "auth:session")
-ac state set <key> <json-value> [-n "<namespace>"] [--ttl <seconds>]
-ac state delete <key> [-n "<namespace>"] [--silent]                    # 智能匹配删除，不存在时报非零退出码
-ac state clear [prefix] [-n "<namespace>"] [-a|--all]                  # 批量清理指定命名空间或全量状态
+# 列出状态键（项目内列出当前包状态；外部目录自动汇总所有 linked packages 的状态键）
+ac state list [prefix] [-P <pkg>] [-n "<namespace>"] [-i "<regex>"] [-d] [--json]
+
+# 获取状态值（支持复合 Key 如 "auth:session"，或 package 前缀如 "my-pkg/auth:session"）
+ac state get <key> [-P <pkg>] [-n "<namespace>"] [--json]
+
+# 设置状态值（支持秒级 TTL 过期与命名空间）
+ac state set <key> <json-value> [-P <pkg>] [-n "<namespace>"] [--ttl <seconds>]
+
+# 删除状态
+ac state delete <key> [-P <pkg>] [-n "<namespace>"] [--silent]
+
+# 批量清理状态
+ac state clear [prefix] [-P <pkg>] [-n "<namespace>"] [-a|--all]
 ```
 
 ### 执行历史与任务取消
 ```bash
-ac runs list [patterns...] [-i "<regex>"] [--action <id>] [--limit 20] [--json]
-ac runs show <run-id> [--json]
+# 查看调用历史（项目内查看当前包；外部目录自动聚合所有 linked packages 的最近运行记录）
+ac runs list [patterns...] [-P <pkg>] [-i "<regex>"] [--action <id>] [--limit 20] [--json]
+
+# 查看指定运行记录（自动跨本地与 linked packages 查找）
+ac runs show <run-id> [-P <pkg>] [--json]
 ac runs show <run-id> --profile <profile-name> [--json]       # 查询远程运行详情
-ac runs cancel <run-id> --profile <profile-name> [--json]     # 取消远端运行中的任务
+
+# 取消远端运行中的长任务
+ac runs cancel <run-id> --profile <profile-name> [--json]
 ```
 
 ---
@@ -537,24 +570,24 @@ ac test
 
 ### 构建独立可执行文件 (`ac build`)
 ```bash
-# 全量构建：打包项目中全部 Action 为独立二进制（默认集成 --compile --bytecode --minify）
-ac build [--target <target>] [--out <path>] [--no-minify] [--no-bytecode]
+# 全量构建：打包当前或指定包的全部 Action 为独立二进制（支持 -P 跨目录构建）
+ac build [-P <package-id>] [--target <target>] [--out <path>] [--no-minify] [--no-bytecode]
 
 # 按需构建：仅将指定 Action 编译进独立二进制
-ac build --actions github.get-pr github.review-pr
+ac build [-P <package-id>] --actions github.get-pr github.review-pr
 ```
 
 ### 导出 Skill 交付包 (`ac export skill`)
 
-ActionDock 提供清晰的两种分发形态：
+ActionDock 提供清晰的两种分发形态（均支持 `-P, --package <id>` 跨目录导出）：
 
 #### A. 源码型 Skill (Source Skill，默认推荐)
 ```bash
-# 全量导出源码 Skill
-ac export skill [-o <path>] [-z]
+# 全量导出源码 Skill（当前包或指定 package-id）
+ac export skill [-P <package-id>] [-o <path>] [-z]
 
 # 任务驱动按需裁剪导出（仅包含指定 Playbook 及其依赖的 actions *.ts 文件）
-ac export skill --playbook review-pr
+ac export skill [-P <package-id>] --playbook review-pr
 ```
 导出的源码型 Skill 目录结构：
 ```text

@@ -1,4 +1,4 @@
-import { exportSkill, findProjectRoot } from "@actiondock/core";
+import { exportSkill, findProjectRoot, resolvePackageRoot } from "@actiondock/core";
 import { Command } from "commander";
 
 export function registerExportCommand(program: Command): void {
@@ -9,6 +9,7 @@ export function registerExportCommand(program: Command): void {
   exportCmd
     .command("skill")
     .description("Export Skill directory for AI Agents (default: source skill; use -s/--standalone for pre-built standalone binary)")
+    .option("-P, --package <id>", "Target package ID or path")
     .option("-s, --standalone", "Export pre-compiled standalone binary skill (for environments without ActionDock runtime)")
     .option("-t, --target <target>", "Target compilation platform for standalone mode (e.g. host, linux-x64, darwin-arm64, windows-x64)")
     .option("-o, --out <path>", "Output skill directory")
@@ -20,9 +21,18 @@ export function registerExportCommand(program: Command): void {
     .option("--no-bytecode", "Disable bytecode compilation in standalone mode")
     .option("-z, --archive", "Create a .zip archive of the exported skill")
     .action(async (options) => {
-      const root = findProjectRoot();
+      const root = options.package
+        ? resolvePackageRoot(options.package)
+        : findProjectRoot();
+
       if (!root) {
-        console.error("Error: Not in an ActionDock project (actiondock.json not found)");
+        if (options.package) {
+          console.error(`Error: Package '${options.package}' not found in linked packages or path`);
+        } else {
+          console.error(
+            "Error: Not in an ActionDock project (actiondock.json not found).\nPlease specify -P, --package <id> or cd into a project directory."
+          );
+        }
         process.exit(1);
       }
 
@@ -57,3 +67,4 @@ export function registerExportCommand(program: Command): void {
       }
     });
 }
+

@@ -8,10 +8,14 @@ ActionDock 2.0 提供了两大核心交付工具：
 
 ## 编译为零依赖独立二进制 (`ac build`)
 
-在项目根目录下执行 `ac build`：
+在项目根目录下或使用 `-P <package-id>` 跨目录执行 `ac build`：
 
 ```bash
+# 本地项目构建
 ac build
+
+# 跨目录构建指定的 linked package
+ac build -P team4u.github-tools
 ```
 
 控制台输出：
@@ -42,6 +46,7 @@ ac build
 
 | 参数 | 默认值 | 说明 |
 | :--- | :--- | :--- |
+| `-P, --package <id>` | 当前项目 | 目标 Package ID 或路径（支持跨目录构建） |
 | `-o, --out <path>` | `./dist/bin/<name>` | 自定义输出可执行文件路径 |
 | `--bytecode` | `false` | 启用 Bun 字节码预编译（加快冷启动，保护源码） |
 | `--minify` | `false` | 压缩 JavaScript 代码与标识符，减小体积 |
@@ -50,11 +55,12 @@ ac build
 
 ## 导出为 Agent Skill (`ac export skill`)
 
-`ac export skill` 用于将 Action Package 打包为可供 AI 智能体直接理解与调用的自包含 Skill。
+`ac export skill` 用于将 Action Package 打包为可供 AI 智能体直接理解与调用的自包含 Skill（支持 `-P` 跨目录导出）。
 
 ### 导出源码型 Skill (Source Skill，默认)
 ```bash
 ac export skill
+ac export skill -P team4u.github-tools
 ```
 产物生成在 `./dist/<package-id>-skill/`：
 - `SKILL.md`：包含 YAML Frontmatter 元数据与工具说明书。

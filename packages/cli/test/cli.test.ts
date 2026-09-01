@@ -360,6 +360,65 @@ describe("CLI End-to-End", () => {
     expect(linkProc.exitCode).toBe(0);
     expect(linkProc.stdout.toString()).toContain("[OK] Linked package");
 
+    // Info from outside directory (summary list)
+    const outsideInfoList = runCli(["info", "--json"], tmpdir());
+    expect(outsideInfoList.exitCode).toBe(0);
+    const outsideInfoListData = JSON.parse(outsideInfoList.stdout.toString());
+    expect(outsideInfoListData.linkedPackages).toBeDefined();
+    const pkgInInfo = outsideInfoListData.linkedPackages.find((p: any) => p.id === "team.github-ops");
+    expect(pkgInInfo).toBeDefined();
+    expect(pkgInInfo.actionsCount).toBeGreaterThan(0);
+
+    // Info for specific package from outside directory
+    const outsideInfoPkg = runCli(["info", "team.github-ops", "--json"], tmpdir());
+    expect(outsideInfoPkg.exitCode).toBe(0);
+    const outsideInfoPkgData = JSON.parse(outsideInfoPkg.stdout.toString());
+    expect(outsideInfoPkgData.id).toBe("team.github-ops");
+
+    // List actions and playbooks from outside directory
+    const outsidePbList = runCli(["playbook", "list", "--json"], tmpdir());
+    expect(outsidePbList.exitCode).toBe(0);
+    const outsidePbListData = JSON.parse(outsidePbList.stdout.toString());
+    const pkgInList = outsidePbListData.find((p: any) => p.packageId === "team.github-ops");
+    expect(pkgInList).toBeDefined();
+    expect(pkgInList.playbooks.length).toBe(1);
+    expect(pkgInList.playbooks[0].id).toBe("greet-user");
+
+    // Show playbook from outside directory
+    const outsidePbShow = runCli(["playbook", "show", "greet-user", "--json"], tmpdir());
+    expect(outsidePbShow.exitCode).toBe(0);
+    const outsidePbShowData = JSON.parse(outsidePbShow.stdout.toString());
+    expect(outsidePbShowData.id).toBe("greet-user");
+    expect(outsidePbShowData.packageId).toBe("team.github-ops");
+
+    // Validate playbooks from outside directory
+    const outsidePbVal = runCli(["playbook", "validate", "--json"], tmpdir());
+    expect(outsidePbVal.exitCode).toBe(0);
+
+    // Runs list from outside directory
+    const outsideRunsList = runCli(["runs", "list", "--json"], tmpdir());
+    expect(outsideRunsList.exitCode).toBe(0);
+
+    // State list from outside directory
+    const outsideStateList = runCli(["state", "list", "--json"], tmpdir());
+    expect(outsideStateList.exitCode).toBe(0);
+
+    // State get with package prefix from outside directory
+    runCli(["state", "set", "user:session", "active"], tempDir);
+    const outsideStateGet = runCli(["state", "get", "user:session", "-P", "team.github-ops", "--json"], tmpdir());
+    expect(outsideStateGet.exitCode).toBe(0);
+
+    // Build with -P from outside directory
+    const outsideBuildOut = join(tmpdir(), "dist-outside-bin");
+    const outsideBuild = runCli(["build", "-P", "team.github-ops", "-o", outsideBuildOut], tmpdir());
+    expect(outsideBuild.exitCode).toBe(0);
+
+    // Export with -P from outside directory
+    const outsideExportDir = join(tmpdir(), "dist-outside-skill");
+    const outsideExport = runCli(["export", "skill", "-P", "team.github-ops", "-o", outsideExportDir], tmpdir());
+    expect(outsideExport.exitCode).toBe(0);
+    expect(existsSync(join(outsideExportDir, "SKILL.md"))).toBe(true);
+
     // Execute from root (outside tempDir)
     const outsideRun = runCli(
       ["run", "sample.greet", "--input", '{"name": "Globetrotter"}'],

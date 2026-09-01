@@ -1,25 +1,39 @@
+import { existsSync } from "node:fs";
 import {
   createStorage,
   filterWithFallbackInfo,
+  findProjectRoot,
+  listLinkedPackages,
   loadProjectConfig,
   resolvePackageRoot,
 } from "@actiondock/core";
 import { Command } from "commander";
 import { resolveIntent } from "../utils/filter";
 
-function getTargetRoot(packageOption?: string): string {
-  const root = resolvePackageRoot(packageOption);
+function getTargetRoot(packageOption?: string, keyHint?: string): { root: string; key: string } {
+  let targetPackage = packageOption;
+  let effectiveKey = keyHint || "";
+
+  if (!targetPackage && keyHint) {
+    if (keyHint.includes("/")) {
+      const slashIdx = keyHint.indexOf("/");
+      targetPackage = keyHint.slice(0, slashIdx);
+      effectiveKey = keyHint.slice(slashIdx + 1);
+    }
+  }
+
+  const root = resolvePackageRoot(targetPackage);
   if (!root) {
-    if (packageOption) {
-      console.error(`Error: Package '${packageOption}' not found in linked packages or path`);
+    if (targetPackage) {
+      console.error(`Error: Package '${targetPackage}' not found in linked packages or path`);
     } else {
       console.error(
-        "Error: Not in an ActionDock project (actiondock.json not found).\nPlease cd into the project directory (e.g. /root/code/sui-tools) or specify -P, --package <id>"
+        "Error: Not in an ActionDock project (actiondock.json not found).\nPlease specify -P, --package <id> or cd into a project directory."
       );
     }
     process.exit(1);
   }
-  return root;
+  return { root, key: effectiveKey };
 }
 
 export function registerStateCommands(program: Command): void {
@@ -30,7 +44,7 @@ export function registerStateCommands(program: Command): void {
   // state list
   stateCmd
     .command("list [prefix]")
-    .description("List state keys matching prefix, namespace, or intent pattern")
+    .description("List state keys matching prefix, namespace, or intent pattern (in current project or linked packages)")
     .option("-P, --package <id>", "Target package ID or path")
     .option("-n, --namespace <ns>", "Filter by specific namespace")
     .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
@@ -38,59 +52,175 @@ export function registerStateCommands(program: Command): void {
     .option("-d, --detail", "Show detailed state entry objects (including namespace, expiration, update time)")
     .option("--json", "Output as JSON")
     .action(async (prefix = "", options) => {
-      const root = getTargetRoot(options.package);
       try {
         const effectiveIntent = resolveIntent(options.intent, prefix ? [prefix] : []);
         const shouldFallback = options.fallback !== false;
 
-        const projConfig = loadProjectConfig(root);
-        const storage = createStorage(projConfig.id, { projectRoot: root });
+        const targetRoot = options.package
+          ? resolvePackageRoot(options.package)
+          : findProjectRoot();
 
-        if (options.detail && options.json) {
-          const entries = await storage.listStateEntries({
-            namespace: options.namespace,
-            prefix: prefix || undefined,
-          });
+        if (options.package && !targetRoot) {
+          console.error(`Error: Package '${options.package}' not found in linked packages or path`);
+          process.exit(1);
+        }
+
+        if (targetRoot) {
+          const projConfig = loadProjectConfig(targetRoot);
+          const storage = createStorage(projConfig.id, { projectRoot: targetRoot });
+
+          if (options.detail && options.json) {
+            const entries = await storage.listStateEntries({
+              namespace: options.namespace,
+              prefix: prefix || undefined,
+            });
+            storage.close();
+
+            const filterRes = filterWithFallbackInfo(
+              entries,
+              effectiveIntent,
+              [(e) => e.fullKey, (e) => e.key, (e) => e.namespace],
+              shouldFallback
+            );
+
+            console.log(JSON.stringify(filterRes.items, null, 2));
+            return;
+          }
+
+          const allKeys = await storage.listStateKeys(
+            options.namespace !== undefined ? options.namespace : null,
+            prefix
+          );
           storage.close();
 
           const filterRes = filterWithFallbackInfo(
-            entries,
+            allKeys,
             effectiveIntent,
-            [(e) => e.fullKey, (e) => e.key, (e) => e.namespace],
+            [(k) => k],
             shouldFallback
           );
 
-          console.log(JSON.stringify(filterRes.items, null, 2));
+          if (options.json) {
+            console.log(JSON.stringify(filterRes.items, null, 2));
+          } else {
+            const nsDesc = options.namespace ? ` [namespace: ${options.namespace}]` : "";
+            const filterDesc = prefix ? ` (filter: ${prefix})` : "";
+            console.log(`State keys for ${projConfig.id} (${targetRoot})${nsDesc}${filterDesc}:\n`);
+            if (filterRes.isFallback && effectiveIntent) {
+              console.log(`(No state keys matched intent '${effectiveIntent}', showing all keys)\n`);
+            }
+            if (filterRes.items.length === 0) {
+              console.log("  (no state keys found)\n");
+            } else {
+              for (const k of filterRes.items) {
+                console.log(`  - ${k}`);
+              }
+            }
+          }
           return;
         }
 
-        const allKeys = await storage.listStateKeys(
-          options.namespace !== undefined ? options.namespace : null,
-          prefix
-        );
-        storage.close();
+        // Outside project: list state keys across all linked packages
+        const linkedList = listLinkedPackages();
+        if (linkedList.length === 0) {
+          console.log("No ActionDock project in current directory, and no packages linked.");
+          console.log("Run 'ac link' inside an Action package to register it.");
+          return;
+        }
 
-        const filterRes = filterWithFallbackInfo(
-          allKeys,
-          effectiveIntent,
-          [(k) => k],
-          shouldFallback
-        );
+        const aggregated: Array<{
+          packageId: string;
+          packageName: string;
+          path: string;
+          keys: string[];
+          entries?: any[];
+        }> = [];
+
+        for (const pkg of linkedList) {
+          if (!existsSync(pkg.path)) continue;
+          try {
+            const projConfig = loadProjectConfig(pkg.path);
+            const storage = createStorage(projConfig.id, { projectRoot: pkg.path });
+
+            if (options.detail && options.json) {
+              const entries = await storage.listStateEntries({
+                namespace: options.namespace,
+                prefix: prefix || undefined,
+              });
+              storage.close();
+              aggregated.push({
+                packageId: pkg.id,
+                packageName: pkg.name,
+                path: pkg.path,
+                keys: entries.map((e) => e.fullKey),
+                entries,
+              });
+            } else {
+              const keys = await storage.listStateKeys(
+                options.namespace !== undefined ? options.namespace : null,
+                prefix
+              );
+              storage.close();
+              aggregated.push({
+                packageId: pkg.id,
+                packageName: pkg.name,
+                path: pkg.path,
+                keys,
+              });
+            }
+          } catch {
+            // Ignore broken linked package
+          }
+        }
+
+        let filteredPackages: typeof aggregated = [];
+        if (!effectiveIntent) {
+          filteredPackages = aggregated;
+        } else {
+          for (const pkg of aggregated) {
+            const pkgMatches = filterWithFallbackInfo(
+              [pkg],
+              effectiveIntent,
+              [(p) => p.packageId, (p) => p.packageName, (p) => p.path],
+              false
+            ).matchedCount > 0;
+
+            if (pkgMatches) {
+              filteredPackages.push(pkg);
+            } else {
+              const matchedKeys = filterWithFallbackInfo(
+                pkg.keys,
+                effectiveIntent,
+                [(k) => k],
+                false
+              ).items;
+
+              if (matchedKeys.length > 0) {
+                filteredPackages.push({
+                  ...pkg,
+                  keys: matchedKeys,
+                });
+              }
+            }
+          }
+
+          if (filteredPackages.length === 0 && shouldFallback) {
+            filteredPackages = aggregated;
+          }
+        }
 
         if (options.json) {
-          console.log(JSON.stringify(filterRes.items, null, 2));
+          console.log(JSON.stringify(filteredPackages, null, 2));
         } else {
-          const nsDesc = options.namespace ? ` [namespace: ${options.namespace}]` : "";
-          const filterDesc = prefix ? ` (filter: ${prefix})` : "";
-          console.log(`State keys for ${projConfig.id} (${root})${nsDesc}${filterDesc}:\n`);
-          if (filterRes.isFallback && effectiveIntent) {
-            console.log(`(No state keys matched intent '${effectiveIntent}', showing all keys)\n`);
-          }
-          if (filterRes.items.length === 0) {
-            console.log("  (no state keys found)\n");
-          } else {
-            for (const k of filterRes.items) {
-              console.log(`  - ${k}`);
+          console.log("State Keys in Linked Packages:\n");
+          for (const pkg of filteredPackages) {
+            console.log(`* Package: ${pkg.packageId} (${pkg.path})`);
+            if (pkg.keys.length === 0) {
+              console.log("    (no state keys found)");
+            } else {
+              for (const k of pkg.keys) {
+                console.log(`    - ${k}`);
+              }
             }
           }
         }
@@ -103,12 +233,12 @@ export function registerStateCommands(program: Command): void {
   // state get
   stateCmd
     .command("get <key>")
-    .description("Get a state value by key or namespace:key")
+    .description("Get a state value by key, namespace:key, or package/namespace:key")
     .option("-P, --package <id>", "Target package ID or path")
     .option("-n, --namespace <ns>", "Target namespace")
     .option("--json", "Output as JSON")
-    .action(async (key, options) => {
-      const root = getTargetRoot(options.package);
+    .action(async (rawKey, options) => {
+      const { root, key } = getTargetRoot(options.package, rawKey);
       try {
         const projConfig = loadProjectConfig(root);
         const storage = createStorage(projConfig.id, { projectRoot: root });
@@ -137,6 +267,7 @@ export function registerStateCommands(program: Command): void {
             JSON.stringify(
               {
                 key,
+                packageId: projConfig.id,
                 namespace: entryNamespace,
                 value: val,
               },
@@ -156,12 +287,12 @@ export function registerStateCommands(program: Command): void {
   // state set
   stateCmd
     .command("set <key> <value>")
-    .description("Set a state value by key or namespace:key")
+    .description("Set a state value by key, namespace:key, or package/namespace:key")
     .option("-P, --package <id>", "Target package ID or path")
     .option("-n, --namespace <ns>", "Target namespace")
     .option("--ttl <seconds>", "Time to live in seconds", (v) => parseInt(v, 10))
-    .action(async (key, rawValue, options) => {
-      const root = getTargetRoot(options.package);
+    .action(async (rawKey, rawValue, options) => {
+      const { root, key } = getTargetRoot(options.package, rawKey);
       try {
         const projConfig = loadProjectConfig(root);
         const storage = createStorage(projConfig.id, { projectRoot: root });
@@ -202,12 +333,12 @@ export function registerStateCommands(program: Command): void {
   stateCmd
     .command("delete <key>")
     .alias("rm")
-    .description("Delete a state value by key or namespace:key")
+    .description("Delete a state value by key, namespace:key, or package/namespace:key")
     .option("-P, --package <id>", "Target package ID or path")
     .option("-n, --namespace <ns>", "Target namespace")
     .option("--silent", "Do not exit with error if key is not found")
-    .action(async (key, options) => {
-      const root = getTargetRoot(options.package);
+    .action(async (rawKey, options) => {
+      const { root, key } = getTargetRoot(options.package, rawKey);
       try {
         const projConfig = loadProjectConfig(root);
         const storage = createStorage(projConfig.id, { projectRoot: root });
@@ -237,7 +368,7 @@ export function registerStateCommands(program: Command): void {
     .option("-n, --namespace <ns>", "Target namespace to clear")
     .option("-a, --all", "Clear all state entries across all namespaces in this package")
     .action(async (prefix = "", options) => {
-      const root = getTargetRoot(options.package);
+      const { root } = getTargetRoot(options.package);
       try {
         const projConfig = loadProjectConfig(root);
         const storage = createStorage(projConfig.id, { projectRoot: root });
@@ -262,3 +393,4 @@ export function registerStateCommands(program: Command): void {
       }
     });
 }
+

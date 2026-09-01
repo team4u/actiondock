@@ -3,10 +3,13 @@ import { dirname, resolve } from "node:path";
 import {
   filterWithFallbackInfo,
   findProjectRoot,
+  listLinkedPackages,
   loadActions,
   loadPlaybooks,
   loadProjectConfig,
+  resolvePlaybookProject,
 } from "@actiondock/core";
+import type { PlaybookDefinition } from "@actiondock/core";
 import { Command } from "commander";
 import { resolveIntent } from "../utils/filter";
 
@@ -18,45 +21,139 @@ export function registerPlaybookCommands(program: Command): void {
   // playbook list
   pbCmd
     .command("list [patterns...]")
-    .description("List all playbooks in current project")
+    .description("List playbooks in current project or linked packages")
     .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("--json", "Output as JSON")
     .action((patterns, options) => {
-      const root = findProjectRoot();
-      if (!root) {
-        console.error("Error: Not in an ActionDock project");
-        process.exit(1);
-      }
       try {
         const effectiveIntent = resolveIntent(options.intent, patterns);
         const shouldFallback = options.fallback !== false;
 
-        const config = loadProjectConfig(root);
-        const playbooks = loadPlaybooks(root, config.playbooksDir);
-        const rawList = Array.from(playbooks.values()).map((p) => ({
-          id: p.id,
-          description: p.description || "",
-          actions: p.actions || [],
-          file: p.filePath,
-        }));
+        const root = findProjectRoot();
+        if (root) {
+          const config = loadProjectConfig(root);
+          const playbooks = loadPlaybooks(root, config.playbooksDir);
+          const rawList = Array.from(playbooks.values()).map((p) => ({
+            id: p.id,
+            description: p.description || "",
+            actions: p.actions || [],
+            file: p.filePath,
+            packageId: config.id,
+          }));
 
-        const filterRes = filterWithFallbackInfo(
-          rawList,
-          effectiveIntent,
-          [(p) => p.id, (p) => p.description, (p) => p.actions, (p) => p.file],
-          shouldFallback
-        );
+          const filterRes = filterWithFallbackInfo(
+            rawList,
+            effectiveIntent,
+            [(p) => p.id, (p) => p.description, (p) => p.actions, (p) => p.file],
+            shouldFallback
+          );
 
-        if (options.json) {
-          console.log(JSON.stringify(filterRes.items, null, 2));
-        } else {
-          console.log(`Playbooks in ${config.id}:\n`);
-          if (filterRes.isFallback && effectiveIntent) {
-            console.log(`(No playbooks matched intent '${effectiveIntent}', showing all playbooks)\n`);
+          if (options.json) {
+            console.log(JSON.stringify(filterRes.items, null, 2));
+          } else {
+            console.log(`Playbooks in ${config.id} (${root}):\n`);
+            if (filterRes.isFallback && effectiveIntent) {
+              console.log(`(No playbooks matched intent '${effectiveIntent}', showing all playbooks)\n`);
+            }
+            for (const p of filterRes.items) {
+              console.log(`  ${p.id.padEnd(24)} ${p.description}`);
+            }
           }
-          for (const p of filterRes.items) {
-            console.log(`  ${p.id.padEnd(24)} ${p.description}`);
+        } else {
+          // List playbooks across all linked packages
+          const linkedList = listLinkedPackages();
+          if (linkedList.length === 0) {
+            console.log("No ActionDock project in current directory, and no packages linked.");
+            console.log("Run 'ac link' inside an Action package to register it.");
+            return;
+          }
+
+          const aggregated: Array<{
+            packageId: string;
+            packageName: string;
+            path: string;
+            playbooks: Array<{
+              id: string;
+              description: string;
+              actions: string[];
+              file: string;
+            }>;
+          }> = [];
+
+          for (const pkg of linkedList) {
+            if (!existsSync(pkg.path)) continue;
+            try {
+              const config = loadProjectConfig(pkg.path);
+              const playbooks = loadPlaybooks(pkg.path, config.playbooksDir);
+              const pkgPlaybooks = Array.from(playbooks.values()).map((p) => ({
+                id: p.id,
+                description: p.description || "",
+                actions: p.actions || [],
+                file: p.filePath,
+              }));
+
+              aggregated.push({
+                packageId: pkg.id,
+                packageName: pkg.name,
+                path: pkg.path,
+                playbooks: pkgPlaybooks,
+              });
+            } catch {
+              // Ignore broken linked package
+            }
+          }
+
+          let filteredPackages: typeof aggregated = [];
+          if (!effectiveIntent) {
+            filteredPackages = aggregated;
+          } else {
+            for (const pkg of aggregated) {
+              const pkgMatches = filterWithFallbackInfo(
+                [pkg],
+                effectiveIntent,
+                [(p) => p.packageId, (p) => p.packageName, (p) => p.path],
+                false
+              ).matchedCount > 0;
+
+              if (pkgMatches) {
+                filteredPackages.push(pkg);
+              } else {
+                const matchedPlaybooks = filterWithFallbackInfo(
+                  pkg.playbooks,
+                  effectiveIntent,
+                  [(p) => p.id, (p) => p.description, (p) => p.actions, (p) => p.file],
+                  false
+                ).items;
+
+                if (matchedPlaybooks.length > 0) {
+                  filteredPackages.push({
+                    ...pkg,
+                    playbooks: matchedPlaybooks,
+                  });
+                }
+              }
+            }
+
+            if (filteredPackages.length === 0 && shouldFallback) {
+              filteredPackages = aggregated;
+            }
+          }
+
+          if (options.json) {
+            console.log(JSON.stringify(filteredPackages, null, 2));
+          } else {
+            console.log("Playbooks in Linked Packages:\n");
+            for (const pkg of filteredPackages) {
+              console.log(`* Package: ${pkg.packageId} (${pkg.path})`);
+              if (pkg.playbooks.length === 0) {
+                console.log("    (No playbooks)");
+              } else {
+                for (const p of pkg.playbooks) {
+                  console.log(`    - ${p.id.padEnd(26)} ${p.description}`);
+                }
+              }
+            }
           }
         }
       } catch (err: any) {
@@ -64,7 +161,6 @@ export function registerPlaybookCommands(program: Command): void {
         process.exit(1);
       }
     });
-
 
   // playbook create / new
   pbCmd
@@ -131,27 +227,17 @@ This playbook provides task execution guidance for AI Agents.
   // playbook show
   pbCmd
     .command("show <id>")
-    .description("Show playbook content and metadata")
+    .description("Show playbook content and metadata (from current project or linked packages)")
     .option("--json", "Output as JSON")
     .action((id, options) => {
-      const root = findProjectRoot();
-      if (!root) {
-        console.error("Error: Not in an ActionDock project");
-        process.exit(1);
-      }
       try {
-        const config = loadProjectConfig(root);
-        const playbooks = loadPlaybooks(root, config.playbooksDir);
-        const pb = playbooks.get(id);
-        if (!pb) {
-          console.error(`Error: Playbook '${id}' not found`);
-          process.exit(1);
-        }
+        const resolved = resolvePlaybookProject(id);
+        const pb = resolved.playbook;
 
         if (options.json) {
-          console.log(JSON.stringify(pb, null, 2));
+          console.log(JSON.stringify({ ...pb, packageId: resolved.packageId }, null, 2));
         } else {
-          console.log(`Playbook:    ${pb.id}`);
+          console.log(`Playbook:    ${pb.id} (Package: ${resolved.packageId})`);
           if (pb.description) console.log(`Description: ${pb.description}`);
           if (pb.actions && pb.actions.length > 0) {
             console.log(`Actions:     ${pb.actions.join(", ")}`);
@@ -169,49 +255,84 @@ This playbook provides task execution guidance for AI Agents.
   // playbook validate
   pbCmd
     .command("validate [id]")
-    .description("Validate playbook format and action references")
+    .description("Validate playbook format and action references (in current project or linked packages)")
     .option("--json", "Output as JSON")
     .action(async (id, options) => {
-      const root = findProjectRoot();
-      if (!root) {
-        console.error("Error: Not in an ActionDock project");
-        process.exit(1);
-      }
       try {
-        const config = loadProjectConfig(root);
-        const playbooks = loadPlaybooks(root, config.playbooksDir);
-        const actions = await loadActions(root, config.actionsDir);
+        const root = findProjectRoot();
+        const targets: Array<{ root: string; packageId: string; playbooks: PlaybookDefinition[] }> = [];
 
-        const targets = id ? [playbooks.get(id)].filter(Boolean) : Array.from(playbooks.values());
-        if (id && targets.length === 0) {
-          console.error(`Error: Playbook '${id}' not found`);
-          process.exit(1);
+        if (root) {
+          const config = loadProjectConfig(root);
+          const playbooks = loadPlaybooks(root, config.playbooksDir);
+          if (id) {
+            const pb = playbooks.get(id);
+            if (!pb) {
+              console.error(`Error: Playbook '${id}' not found in current project`);
+              process.exit(1);
+            }
+            targets.push({ root, packageId: config.id, playbooks: [pb] });
+          } else {
+            targets.push({ root, packageId: config.id, playbooks: Array.from(playbooks.values()) });
+          }
+        } else if (id) {
+          const resolved = resolvePlaybookProject(id);
+          targets.push({
+            root: resolved.projectRoot,
+            packageId: resolved.packageId,
+            playbooks: [resolved.playbook],
+          });
+        } else {
+          // Outside project: validate all linked packages
+          const linkedList = listLinkedPackages();
+          if (linkedList.length === 0) {
+            console.error("Error: Not in an ActionDock project, and no packages linked.");
+            process.exit(1);
+          }
+          for (const pkg of linkedList) {
+            if (!existsSync(pkg.path)) continue;
+            try {
+              const config = loadProjectConfig(pkg.path);
+              const playbooks = loadPlaybooks(pkg.path, config.playbooksDir);
+              targets.push({
+                root: pkg.path,
+                packageId: pkg.id,
+                playbooks: Array.from(playbooks.values()),
+              });
+            } catch {}
+          }
         }
 
-        const results: Array<{ id: string; valid: boolean; warnings: string[]; errors: string[] }> = [];
+        const results: Array<{ id: string; packageId: string; valid: boolean; warnings: string[]; errors: string[] }> = [];
 
-        for (const pb of targets) {
-          if (!pb) continue;
-          const errors: string[] = [];
-          const warnings: string[] = [];
+        for (const target of targets) {
+          const config = loadProjectConfig(target.root);
+          const actions = await loadActions(target.root, config.actionsDir);
 
-          if (!pb.id) errors.push("Missing playbook id");
-          if (!pb.content) warnings.push("Playbook content is empty");
+          for (const pb of target.playbooks) {
+            if (!pb) continue;
+            const errors: string[] = [];
+            const warnings: string[] = [];
 
-          if (pb.actions) {
-            for (const actId of pb.actions) {
-              if (!actions.has(actId)) {
-                warnings.push(`Referenced action '${actId}' not found in project actions`);
+            if (!pb.id) errors.push("Missing playbook id");
+            if (!pb.content) warnings.push("Playbook content is empty");
+
+            if (pb.actions) {
+              for (const actId of pb.actions) {
+                if (!actions.has(actId)) {
+                  warnings.push(`Referenced action '${actId}' not found in package '${target.packageId}'`);
+                }
               }
             }
-          }
 
-          results.push({
-            id: pb.id,
-            valid: errors.length === 0,
-            warnings,
-            errors,
-          });
+            results.push({
+              id: pb.id,
+              packageId: target.packageId,
+              valid: errors.length === 0,
+              warnings,
+              errors,
+            });
+          }
         }
 
         const allValid = results.every((r) => r.valid);
@@ -219,11 +340,12 @@ This playbook provides task execution guidance for AI Agents.
           console.log(JSON.stringify({ valid: allValid, results }, null, 2));
         } else {
           for (const r of results) {
+            const prefix = targets.length > 1 || !root ? `[${r.packageId}] ` : "";
             if (r.valid) {
               const warn = r.warnings.length > 0 ? ` (Warnings: ${r.warnings.join("; ")})` : "";
-              console.log(`[OK] ${r.id}: Valid${warn}`);
+              console.log(`[OK] ${prefix}${r.id}: Valid${warn}`);
             } else {
-              console.log(`[FAIL] ${r.id}: ${r.errors.join("; ")}`);
+              console.log(`[FAIL] ${prefix}${r.id}: ${r.errors.join("; ")}`);
             }
           }
         }
@@ -234,3 +356,4 @@ This playbook provides task execution guidance for AI Agents.
       }
     });
 }
+

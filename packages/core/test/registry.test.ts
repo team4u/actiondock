@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { initProject } from "../src/project/init";
@@ -8,6 +8,7 @@ import {
   listLinkedPackages,
   loadRegistry,
   resolveActionProject,
+  resolvePlaybookProject,
   unlinkPackage,
 } from "../src/registry";
 
@@ -43,6 +44,16 @@ export default defineAction({
 `;
     writeFileSync(join(pkgADir, "actions", "common.ts"), actionAContent);
 
+    mkdirSync(join(pkgADir, "playbooks"), { recursive: true });
+    writeFileSync(
+      join(pkgADir, "playbooks", "common-sop.md"),
+      "---\nid: common-sop\ndescription: Common SOP in A\nactions:\n  - common.action\n---\n# Common SOP A"
+    );
+    writeFileSync(
+      join(pkgADir, "playbooks", "unique-a-sop.md"),
+      "---\nid: unique-a-sop\ndescription: Unique SOP in A\nactions:\n  - common.action\n---\n# Unique SOP A"
+    );
+
     // Init Package B with action 'common.action' and 'unique.b'
     initProject(pkgBDir, {
       id: "team.pkg-b",
@@ -68,6 +79,16 @@ export default defineAction({
 });
 `;
     writeFileSync(join(pkgBDir, "actions", "unique-b.ts"), actionUniqueBContent);
+
+    mkdirSync(join(pkgBDir, "playbooks"), { recursive: true });
+    writeFileSync(
+      join(pkgBDir, "playbooks", "common-sop.md"),
+      "---\nid: common-sop\ndescription: Common SOP in B\nactions:\n  - common.action\n---\n# Common SOP B"
+    );
+    writeFileSync(
+      join(pkgBDir, "playbooks", "unique-b-sop.md"),
+      "---\nid: unique-b-sop\ndescription: Unique SOP in B\nactions:\n  - unique.b\n---\n# Unique SOP B"
+    );
   });
 
   afterEach(() => {
@@ -136,5 +157,31 @@ export default defineAction({
 
     const resB = await resolveActionProject("pkg-b/common.action", outsideDir, fakeHome);
     expect(resB.packageId).toBe("team.pkg-b");
+  });
+
+  it("resolves playbook from current project and linked packages", () => {
+    linkPackage(pkgADir, fakeHome);
+    linkPackage(pkgBDir, fakeHome);
+
+    // 1. Inside pkgADir
+    const localRes = resolvePlaybookProject("common-sop", pkgADir, fakeHome);
+    expect(localRes.packageId).toBe("team.pkg-a");
+    expect(localRes.playbook.description).toBe("Common SOP in A");
+
+    // 2. Outside project: unique playbook
+    const outsideDir = fakeHome;
+    const uniqueRes = resolvePlaybookProject("unique-b-sop", outsideDir, fakeHome);
+    expect(uniqueRes.packageId).toBe("team.pkg-b");
+    expect(uniqueRes.playbook.id).toBe("unique-b-sop");
+
+    // 3. Outside project: conflicting playbook throws
+    expect(() =>
+      resolvePlaybookProject("common-sop", outsideDir, fakeHome)
+    ).toThrow("provided by multiple linked packages");
+
+    // 4. Outside project: scoped playbook resolves cleanly
+    const scopedRes = resolvePlaybookProject("team.pkg-a/common-sop", outsideDir, fakeHome);
+    expect(scopedRes.packageId).toBe("team.pkg-a");
+    expect(scopedRes.playbook.id).toBe("common-sop");
   });
 });

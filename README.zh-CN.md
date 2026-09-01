@@ -3,7 +3,7 @@
 [![Bun](https://img.shields.io/badge/Bun-%3E%3D1.1-black?logo=bun)](https://bun.sh/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![MCP](https://img.shields.io/badge/MCP-Protocol%20Compliant-purple)](https://modelcontextprotocol.io/)
-[![Tests](https://img.shields.io/badge/tests-71%20passed-brightgreen.svg)](https://github.com/team4u/actiondock)
+[![Tests](https://img.shields.io/badge/tests-74%20passed-brightgreen.svg)](https://github.com/team4u/actiondock)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 [English](README.md) | **简体中文**
