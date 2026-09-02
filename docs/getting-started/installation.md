@@ -33,9 +33,9 @@ ac --version
 ac --help
 ```
 
-### 贡献者 / 源码本地开发模式（未发布到 npm 时）
+### 贡献者 / 源码本地开发模式
 
-如果您直接通过 Git 仓库源码使用或开发 ActionDock，只需使用 Bun 原生的 `bun link` 机制，无需发布到 npm：
+如果您直接通过 Git 仓库源码使用或开发 ActionDock，只需使用 Bun 原生的 `bun link` 机制。
 
 #### 链接 CLI 命令行工具与 SDK
 ```bash
