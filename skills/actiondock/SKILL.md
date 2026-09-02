@@ -89,6 +89,7 @@ ac info -i "nonexistent" --no-fallback # 严格匹配（未命中时非零退出
 
 # 2. 精确项目、已注册包或物理路径查看
 ac info                               # 当前项目内：展示当前包详情；项目外：展示全部已注册包概览
+ac info --tree [--json]               # 树形层级查看所有已挂载 Workspace 与子包结构
 ac info <package-id> [--json]         # 精确 Package ID（如 team4u.github-tools）
 ac info -P <package-id> [--json]      # 显式 -P 参数（支持包 ID 或物理文件路径）
 ac info ./examples/github-tools       # 物理相对/绝对路径
@@ -109,18 +110,17 @@ ac doctor -P <package-id>      # 诊断指定 Action Package 的配置与依赖�
 ac doctor --json               # 输出机器可读的诊断报告（Agent 适用）
 ```
 
-### 全局包与工作区注册、树形查看与失效清理 (ActionDock 路由表)
+### 全局包与工作区注册与解绑 (ActionDock 路由表)
 > [!NOTE]
 > `ac link` 负责将当前 Package 或包含多个子包的工作区（Workspace）注册到 ActionDock 全局路由表中，以便跨目录通过 `ac run <pkg>/<action>` 调度；它**不负责** `node_modules` 的代码依赖，依赖请使用 `bun link`。
 > - **单包注册（智能默认）**：在 Action Package 目录下执行，自动注册当前单包。
 > - **工作区挂载与子项目自动感知（智能默认）**：在包含多个子包的目录（如 `examples/`、`packages/` 或 Monorepo 根目录）执行 `ac link [path]`，自动批量扫描所有子包并挂载为 Workspace；后续工作区内新增子包**无需重新 link**，全局路由与 `ac info` 自动动态感知。
 > - **`-r, --recursive` 强制递归**：当当前根目录本身已是一个 Action Package，但子目录下仍嵌套了其他独立子包时，使用 `-r` 强制深度遍历所有嵌套子包并统一注册为 Workspace。
-> - **树形查看与失效清理**：通过 `ac link list`（或 `ac link -l`）查看全局注册表树形层级；通过 `ac unlink --prune`（或 `ac unlink -p`）一键清理已删除的失效路径。
+> - **树形查看与失效清理**：通过 `ac info --tree` 查看注册表树形层级；通过 `ac unlink --prune`（或 `ac unlink -p`）一键清理已删除的失效路径。
 
 ```bash
 ac link [path]                     # 智能注册：单包目录注册单包，多包目录自动扫描并挂载 Workspace
 ac link [path] -r, --recursive     # 强制递归：在包内嵌套子包的复杂结构下强制深度扫描并挂载
-ac link list                       # 以树形层级列出所有已注册的 Workspace、子包及失效条目（或 ac link -l [--json]）
 ac unlink [id|path]                # 从全局注册表中移除指定包或工作区
 ac unlink --prune                  # 自动扫描并清理本地已失效/不存在的幽灵路径（或 ac unlink -p）
 ```

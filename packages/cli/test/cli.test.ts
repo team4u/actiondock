@@ -677,11 +677,25 @@ describe("CLI End-to-End", () => {
       expect(linkOut).toContain("team.link-sub1");
       expect(linkOut).toContain("team.link-sub2");
 
-      // Test ac link list tree view
-      const listProc = runCli(["link", "list"], tmpdir(), env);
-      expect(listProc.exitCode).toBe(0);
-      expect(listProc.stdout.toString()).toContain("ActionDock Global Registry");
-      expect(listProc.stdout.toString()).toContain("team.link-sub1");
+      // Test ac info (default behavior maintains summary list)
+      const infoProc = runCli(["info"], tmpdir(), env);
+      expect(infoProc.exitCode).toBe(0);
+      expect(infoProc.stdout.toString()).toContain("ActionDock Linked Packages");
+      expect(infoProc.stdout.toString()).toContain("team.link-sub1");
+
+      // Test ac info --tree (hierarchical tree view)
+      const treeProc = runCli(["info", "--tree"], tmpdir(), env);
+      expect(treeProc.exitCode).toBe(0);
+      expect(treeProc.stdout.toString()).toContain("ActionDock Workspace & Package Tree");
+      expect(treeProc.stdout.toString()).toContain("team.link-sub1");
+      expect(treeProc.stdout.toString()).toContain("Workspaces:");
+
+      // Test ac info --tree --json
+      const treeJsonProc = runCli(["info", "--tree", "--json"], tmpdir(), env);
+      expect(treeJsonProc.exitCode).toBe(0);
+      const treeJson = JSON.parse(treeJsonProc.stdout.toString());
+      expect(treeJson.workspaces.length).toBe(1);
+      expect(treeJson.totalPackagesCount).toBe(2);
 
       // Test ac doctor --json
       const doctorProc = runCli(["doctor", "--json"], sub1, env);

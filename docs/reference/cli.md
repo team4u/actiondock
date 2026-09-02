@@ -11,8 +11,8 @@
 # 脚手架初始化项目
 ac init [directory] [--id <package-id>] [--name <name>] [--desc <desc>]
 
-# 元数据检查与意图模糊探索（首选能力发现入口）
-ac info [patterns...] [-i <intent>] [--no-fallback] [-P <pkg>] [--json] [--profile <name>] [--server <url>] [--token <token>]
+# 元数据检查与意图模糊探索（首选能力发现入口；支持 --tree 查看 Workspace 树形层级）
+ac info [patterns...] [-i <intent>] [--tree] [--no-fallback] [-P <pkg>] [--json] [--profile <name>] [--server <url>] [--token <token>]
 
 # 系统环境、注册表健康与项目诊断检查
 ac doctor [-P <pkg>] [--json]
@@ -108,10 +108,9 @@ ac profile test <name>
 ac profile use <name>
 ac profile remove <name>
 
-# 全局包与工作区注册、树形查看与失效清理 (ActionDock 路由表)
+# 全局包与工作区注册与解绑 (ActionDock 路由表，查看树形请使用 ac info --tree)
 ac link [path]                     # 智能注册：单包目录注册单包，多包目录自动扫描并挂载 Workspace（新增子包零操作感知）
 ac link [path] -r, --recursive     # 强制递归：在包内嵌套子包的复杂结构下强制深度扫描并挂载 Workspace
-ac link list                       # 以树形层级列出所有已注册的 Workspace、子包及失效条目（或 ac link -l [--json]）
 ac unlink [id|path]                # 从全局注册表中移除指定包或工作区
 ac unlink --prune                  # 自动扫描并清理本地已失效/不存在的幽灵路径（或 ac unlink -p）
 ```

@@ -3,6 +3,7 @@ import {
   fetchRemoteInfo,
   filterWithFallbackInfo,
   findProjectRoot,
+  getRegistryStatus,
   listLinkedPackages,
   loadActions,
   loadPlaybooks,
@@ -126,6 +127,48 @@ function printAggregatedPackages(
   }
 }
 
+function printRegistryTree(status: ReturnType<typeof getRegistryStatus>): void {
+  const hasWorkspaces = status.workspaces.length > 0;
+  const hasPackages = status.packages.length > 0;
+
+  if (!hasWorkspaces && !hasPackages) {
+    console.log("[INFO] No ActionDock packages or workspaces currently linked.");
+    console.log("       Run 'ac link' inside an Action package or workspace to register it.");
+    return;
+  }
+
+  console.log("[ActionDock Workspace & Package Tree]\n");
+
+  if (hasWorkspaces) {
+    console.log("Workspaces:");
+    for (const ws of status.workspaces) {
+      const tag = ws.status === "active" ? "[OK]" : "[STALE]";
+      console.log(`  ${tag} ${ws.path} (${ws.packagesCount} package${ws.packagesCount === 1 ? "" : "s"})`);
+      if (ws.children && ws.children.length > 0) {
+        ws.children.forEach((child: any, idx: number) => {
+          const isLast = idx === ws.children!.length - 1;
+          const prefix = isLast ? "    +-- " : "    |-- ";
+          console.log(`${prefix}${child.id} (v${child.version}) -> ${child.path}`);
+        });
+      }
+    }
+  }
+
+  if (hasPackages) {
+    if (hasWorkspaces) console.log("");
+    console.log("Standalone Packages:");
+    for (const pkg of status.packages) {
+      const tag = pkg.status === "active" ? "[OK]" : "[STALE]";
+      console.log(`  ${tag} ${pkg.id} (v${pkg.version || "unknown"}) -> ${pkg.path}`);
+    }
+  }
+
+  console.log(`\n[Summary] Total: ${status.totalPackagesCount} active package(s), ${status.workspaces.length} workspace(s)`);
+  if (status.staleCount > 0) {
+    console.log(`[WARN] ${status.staleCount} stale entry/entries detected. Run 'ac unlink --prune' to clean up.`);
+  }
+}
+
 export function registerInfoCommand(program: Command): void {
   program
     .command("info [patterns...]")
@@ -137,6 +180,7 @@ export function registerInfoCommand(program: Command): void {
       "Regex or fuzzy intent filter; falls back to full list when no match"
     )
     .option("-P, --package <id>", "Target package ID or path")
+    .option("--tree", "Display packages in hierarchical tree view grouped by workspace")
     .option("-p, --profile <name>", "Query against a specific profile")
     .option("-s, --server <url>", "Remote server URL")
     .option("-t, --token <token>", "Auth token for remote server")
@@ -147,6 +191,16 @@ export function registerInfoCommand(program: Command): void {
     .option("--json", "Output information as JSON")
     .action(async (patterns: string[] = [], options: any) => {
       try {
+        if (options.tree) {
+          const status = getRegistryStatus();
+          if (options.json) {
+            console.log(JSON.stringify(status, null, 2));
+          } else {
+            printRegistryTree(status);
+          }
+          return;
+        }
+
         const effectiveIntent = resolveIntent(options.intent, patterns);
         const shouldFallback = options.fallback !== false;
 
