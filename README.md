@@ -221,7 +221,6 @@ Distribution Targets
 ✅ npm packages       (@actiondock/sdk, @actiondock/core, @actiondock/mcp, @actiondock/cli)
 ✅ Standalone Binary  (ac build -> self-contained executable)
 ✅ Agent Skill        (ac export skill -> portable skill bundle)
-⬜ MCPB               (Desktop extension bundle - on roadmap)
 ⬜ Docker             (Containerized image target - on roadmap)
 ```
 

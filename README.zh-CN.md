@@ -218,7 +218,6 @@ actions/*.ts ─────┼─ HTTP 微服务 (`ac serve`)
 - npm 模块生态包（`@actiondock/sdk`、`@actiondock/core`、`@actiondock/mcp`、`@actiondock/cli`）
 - 独立可执行文件（`ac build` 编译为单文件自包含二进制）
 - Agent Skill（`ac export skill` 导出为便携式 Skill 交付包）
-- MCPB 扩展包（桌面端一键安装格式，规划中）
 - Docker 容器镜像（标准容器镜像，规划中）
 
 ---
