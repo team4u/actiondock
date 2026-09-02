@@ -24,31 +24,31 @@ ActionContext
 
 ---
 
-## 1. `ctx.config`：5 级配置解析机制
+## `ctx.config`：5 级配置解析机制
 
 ActionDock 实现了业界最严格的 5 级配置回退优先级模型：
 
 ```text
-1. 调用参数覆盖 (--config k=v)                          [最高]
+调用参数覆盖 (--config k=v)                          [最高]
        ↓
-2. SQLite 持久化配置库 (ac config set KEY val)
+SQLite 持久化配置库 (ac config set KEY val)
        ↓
-3. 环境变量 (PACKAGE__KEY / KEY)
+环境变量 (PACKAGE__KEY / KEY)
        ↓
-4. 项目默认配置 (actiondock.json -> defaultConfig)
+项目默认配置 (actiondock.json -> defaultConfig)
        ↓
-5. 代码内联兜底 (ctx.config.get("KEY", "fallback"))     [最低]
+代码内联兜底 (ctx.config.get("KEY", "fallback"))     [最低]
 ```
 
 ### 环境变量解析规则
-1. **显式映射**：`actiondock.json` 中声明的 `env` 映射。
-2. **包前缀转换**：包标识符转大写下划线前缀（例如 `TEAM4U_GITHUB_TOOLS__API_TOKEN`）。
-3. **全局匹配**：直接读取 `API_TOKEN`。
-4. **类型强转**：环境变量中的 `"true"`/`"false"` 转为布尔型，数字字符串转为数值型。
+- **显式映射**：`actiondock.json` 中声明的 `env` 映射。
+- **包前缀转换**：包标识符转大写下划线前缀（例如 `TEAM4U_GITHUB_TOOLS__API_TOKEN`）。
+- **全局匹配**：直接读取 `API_TOKEN`。
+- **类型强转**：环境变量中的 `"true"`/`"false"` 转为布尔型，数字字符串转为数值型。
 
 ---
 
-## 2. `ctx.state`：持久化状态与 TTL
+## `ctx.state`：持久化状态与 TTL
 
 Action 经常需要记录运行状态（例如上次同步的 offset、游标、缓存数据或限流计数器）。ActionDock 内置基于 SQLite 的轻量状态持久化机制。
 
@@ -66,7 +66,7 @@ await cacheState.set("user_101", { name: "Alice" });
 
 ---
 
-## 3. `ctx.actions`：级联调用与防循环机制
+## `ctx.actions`：级联调用与防循环机制
 
 Action 之间可以互相安全调用，同时保留完整的 Schema 校验与日志链路：
 
@@ -83,7 +83,7 @@ const user = await ctx.actions.invoke(getUserAction, {
 
 ---
 
-## 4. `ctx.log`：强制 stderr 隔离日志
+## `ctx.log`：强制 stderr 隔离日志
 
 所有通过 `ctx.log` 打印的日志均被格式化并输出到 `stderr`：
 
@@ -103,7 +103,7 @@ ctx.log.error("处理失败", err);
 
 ---
 
-## 5. `ctx.signal`：协同式取消链路
+## `ctx.signal`：协同式取消链路
 
 `ctx.signal` 是标准的 Web API `AbortSignal` 实例：
 

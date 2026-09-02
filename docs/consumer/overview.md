@@ -4,20 +4,20 @@
 
 ---
 
-## 2 分钟极速上手（基于官方示例）
+## 极速上手（基于官方示例）
 
 ActionDock 具备两大开箱即用特性：
-1. **零手动依赖安装**：首次执行 `ac run` 时，ActionDock 会自动检测并静默安装所需依赖（如 `bun install`），无需手动执行安装步骤。
-2. **开箱即用示例降级**：官方内置示例（如 `github-tools`）自带模拟数据降级逻辑。在未配置真实 Token 时直接返回示例数据，无需准备 GitHub Token 即可立即体验完整流。
+- **零手动依赖安装**：首次执行 `ac run` 时，ActionDock 会自动检测并静默安装所需依赖（如 `bun install`），无需手动执行安装步骤。
+- **开箱即用示例降级**：官方内置示例（如 `github-tools`）自带模拟数据降级逻辑。在未配置真实 Token 时直接返回示例数据，无需准备 GitHub Token 即可立即体验完整流。
 
-### 步骤 1：克隆官方仓库并自动注册
+### 步骤：克隆官方仓库并自动注册
 
 ```bash
-# 1. 克隆官方仓库
+# 克隆官方仓库
 git clone https://github.com/team4u/actiondock.git
 cd actiondock
 
-# 2. 直接在仓库根目录执行 link（自动识别工作区，一键发现并注册全部内置示例包）
+# 直接在仓库根目录执行 link（自动识别工作区，一键发现并注册全部内置示例包）
 ac link
 ```
 > `ac link` 会自动扫描仓库内的子项目，输出类似：  
@@ -25,7 +25,7 @@ ac link
 
 ---
 
-### 步骤 2：直接在任意目录运行第一个 Action
+### 步骤：直接在任意目录运行 Action
 
 无需进入子目录，也无需手动 `bun install`，在系统任意终端路径直接调用：
 
@@ -66,11 +66,11 @@ ac run github-tools/github.list-prs --input '{"repo": "team4u/actiondock"}'
 
 ---
 
-### 步骤 3：一键体验 4 种消费形态
+### 步骤：体验不同消费形态
 
 依托刚刚已注册的 `github-tools` 示例，你可以立即体验不同的消费姿态：
 
-#### 姿态 1：挂载为 IDE 的 MCP 服务（Cursor / Windsurf / Claude Code）
+#### 姿态：挂载为 IDE 的 MCP 服务（Cursor / Windsurf / Claude Code）
 在 IDE 的 `mcp.json` 中添加 `--all` 参数，即可一键挂载已 link 的所有工具包：
 ```json
 {
@@ -83,20 +83,20 @@ ac run github-tools/github.list-prs --input '{"repo": "team4u/actiondock"}'
 }
 ```
 
-#### 姿态 2：导出为 Agent Skill（Claude Code / Antigravity）
+#### 姿态：导出为 Agent Skill（Claude Code / Antigravity）
 一键将示例导出为带规程的标准 Skill 并放入技能目录：
 ```bash
 ac export skill -P team4u.github-tools --out ~/.claude/skills/github-tools
 ```
 
-#### 姿态 3：启动本地 HTTP 微服务
+#### 姿态：启动本地 HTTP 微服务
 ```bash
 cd examples/github-tools
 ac serve --port 8080
 # 即可通过 cURL 或 REST API 远程调度 Action
 ```
 
-#### 姿态 4：一键构建为零依赖独立二进制
+#### 姿态：构建为零依赖独立二进制
 ```bash
 cd examples/github-tools
 ac build
@@ -106,7 +106,7 @@ ac build
 
 ---
 
-### 步骤 4：注入真实凭证（从示例切换到真实 API）
+### 步骤：注入真实凭证（从示例切换到真实 API）
 
 当需要请求真实 GitHub 数据时，只需注入 Token：
 

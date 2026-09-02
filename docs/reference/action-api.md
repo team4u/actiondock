@@ -4,7 +4,7 @@
 
 ---
 
-## 1. `defineAction`
+## `defineAction`
 
 声明一个标准 Action 定义：
 
@@ -19,16 +19,12 @@ function defineAction<TInput = any, TOutput = any>(
 export interface ActionDefinition<TInput = any, TOutput = any> {
   /** 全局唯一 Action 标识符（如 github.get-pr） */
   id: string;
-
   /** 面向人类与 LLM 的功能描述 */
   description: string;
-
   /** 入参 JSON Schema（用于 Ajv 校验与 MCP Tool 发现） */
   inputSchema: Record<string, any>;
-
   /** 出参 JSON Schema（用于 Ajv 校验与类型保证） */
   outputSchema?: Record<string, any>;
-
   /** 核心执行逻辑函数 */
   run(input: TInput, ctx: ActionContext): Promise<TOutput>;
 }
@@ -36,22 +32,18 @@ export interface ActionDefinition<TInput = any, TOutput = any> {
 
 ---
 
-## 2. `ActionContext` 接口
+## `ActionContext` 接口
 
 ```ts
 export interface ActionContext {
   /** 5 级优先级配置存储 */
   config: ConfigStore;
-
   /** SQLite 状态持久化存储 */
   state: StateStore;
-
   /** Action 间级联调用器（带循环调用保护） */
   actions: ActionInvoker;
-
   /** 隔离写入 stderr 的结构化日志记录器 */
   log: Logger;
-
   /** 协作式取消信号 */
   signal?: AbortSignal;
 }
@@ -100,7 +92,7 @@ export interface Logger {
 
 ---
 
-## 3. `createTestRuntime`
+## `createTestRuntime`
 
 创建极速纯内存测试沙箱：
 
@@ -127,17 +119,17 @@ export interface TestRuntime {
 
 ---
 
-## 4. `execCli` 跨平台 CLI 调度与防死锁
+## `execCli` 跨平台 CLI 调度与防死锁
 
 `@actiondock/sdk` 内置了企业级 `execCli` 辅助函数，专门用于在 Action 中安全调用系统外部 CLI 工具（如 `agent-browser`、`git`、`docker`、`jq` 等），彻底解决 Windows `.cmd` 识别、管道死锁挂起、超时控制与取消响应问题。
 
 ### 核心特性
-1. **Windows `.cmd` 兼容**：自动通过 `Bun.which("command")` 解析 Windows 平台的 `.cmd` / `.bat` / `.exe` 物理绝对路径。
-2. **防管道死锁**：使用 `Bun.spawnSync` 一次性同步排空（Drain）管道并关闭句柄，彻底避免无头浏览器/后台守护进程因句柄继承导致流读取挂起。
-3. **毫秒级超时与取消安全**：支持 `timeout` 毫秒超时强杀与 `signal` (AbortSignal) 取消响应。
-4. **标准输入与二进制支持**：支持 `input` 管道写入（如传 JSON 给 `jq`）与 `raw` 原始二进制字节流输出（图片/音视频/压缩包）。
-5. **耗时度量与编码支持**：自动统计 `durationMs`，支持自定义 `encoding`（如 Windows GBK/CP936 解码）。
-6. **灵活判定与快速抛错**：默认返回 `ok: false` 供业务层分支判定，亦可通过 `throwOnError: true` 自动抛错。
+- **Windows .cmd 兼容**：自动通过 `Bun.which("command")` 解析 Windows 平台的 `.cmd` / `.bat` / `.exe` 物理绝对路径。
+- **防管道死锁**：使用 `Bun.spawnSync` 一次性同步排空（Drain）管道并关闭句柄，彻底避免无头浏览器/后台守护进程因句柄继承导致流读取挂起。
+- **毫秒级超时与取消安全**：支持 `timeout` 毫秒超时强杀与 `signal` (AbortSignal) 取消响应。
+- **标准输入与二进制支持**：支持 `input` 管道写入（如传 JSON 给 `jq`）与 `raw` 原始二进制字节流输出（图片/音视频/压缩包）。
+- **耗时度量与编码支持**：自动统计 `durationMs`，支持自定义 `encoding`（如 Windows GBK/CP936 解码）。
+- **灵活判定与快速抛错**：默认返回 `ok: false` 供业务层分支判定，亦可通过 `throwOnError: true` 自动抛错。
 
 ### 类型签名与使用示例
 
@@ -215,7 +207,7 @@ export function execCli(
 
 ---
 
-## 5. `spawnDetached` 守护进程 CLI 异步启动与就绪探测
+## `spawnDetached` 守护进程 CLI 异步启动与就绪探测
 
 当 CLI 命令首次拉起常驻后台守护进程（如 `agent-browser open` 会拉起常驻 daemon 进程）：
 - **管道 EOF 死锁**：使用常规同步 `execCli` (`Bun.spawnSync`) 收集标准流时，后台 daemon 进程继承了 stderr/stdout 管道句柄且常驻不释放，导致管道永远无法接收 EOF，命令挂满超时。

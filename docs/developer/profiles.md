@@ -46,4 +46,4 @@ ac info --profile prod
 ## 安全加固保证
 
 - **文件权限保护**：Profile 配置文件 `~/.actiondock/profiles.json` 写入时强制设置 `0o600` 文件权限（仅当前系统用户可读写）。
-- **支持 `tokenEnv`**：避免在配置文件中明文保存高权限敏感 Token。
+- **支持 tokenEnv 环境变量**：避免在配置文件中明文保存高权限敏感 Token。

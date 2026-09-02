@@ -6,7 +6,7 @@
 
 ## 全量命令列表
 
-### 1. 项目生命周期、元数据与能力发现
+### 项目生命周期、元数据与能力发现
 ```bash
 # 脚手架初始化项目
 ac init [directory] [--id <package-id>] [--name <name>] [--desc <desc>]
@@ -18,7 +18,7 @@ ac info [patterns...] [-i <intent>] [--tree] [--no-fallback] [-P <pkg>] [--json]
 ac doctor [-P <pkg>] [--json]
 ```
 
-### 2. Action 开发与执行
+### Action 开发与执行
 ```bash
 # 脚手架创建 Action
 ac action create <id> [--desc <description>] [--file <file.ts>]
@@ -40,7 +40,7 @@ ac run <package-id>/<action-id> --input '<json>'    # Package-Qualified ID
 ac test [file]
 ```
 
-### 3. 构建与分发
+### 构建与分发
 ```bash
 # 编译单文件零依赖独立可执行文件（支持 -P 跨目录构建）
 ac build [-P <package-id>] [--target <target>] [--out <path>] [--actions <actions...>] [--bytecode] [--minify]
@@ -49,7 +49,7 @@ ac build [-P <package-id>] [--target <target>] [--out <path>] [--actions <action
 ac export skill [-P <package-id>] [--out <dir>] [--standalone] [--playbook <id>] [--archive]
 ```
 
-### 4. 协议与服务
+### 协议与服务
 ```bash
 # 启动 MCP 服务（STDIO 默认）
 ac mcp [-d <dir>] [--package <id>] [--all] [--timeout <duration>]
@@ -61,7 +61,7 @@ ac mcp serve [--host <host>] [--port <port>] [--token <token>] [--cors-origin <o
 ac serve [--host <host>] [--port <port>] [--token <token>] [--cors-origin <origin>] [--max-body <size>]
 ```
 
-### 5. Playbook 规程
+### Playbook 规程
 ```bash
 # 脚手架创建 Playbook
 ac playbook create <id> [--desc <description>] [--actions <actions...>]
@@ -76,7 +76,7 @@ ac playbook show <id> [--json]
 ac playbook validate [id] [--json]
 ```
 
-### 6. 配置与状态管理
+### 配置与状态管理
 ```bash
 # 配置管理（默认当前项目，-g 作用于全局 ~/.actiondock/global.db）
 ac config list [patterns...] [-g] [-P <pkg>] [-i <intent>] [--reveal] [--json]
@@ -98,7 +98,7 @@ ac runs show <run-id> [-P <pkg>] [--profile <name>] [--json]
 ac runs cancel <run-id> [--profile <name>] [--reason <reason>]
 ```
 
-### 7. 多环境 Profile 与全局注册
+### 多环境 Profile 与全局注册
 ```bash
 # Profile 管理
 ac profile list [--reveal] [--json]

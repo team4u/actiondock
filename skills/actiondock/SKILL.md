@@ -61,10 +61,10 @@ bun link @actiondock/sdk   # 接入本地全局 SDK 并自动补齐其余依赖
 | `SELF_SIGNED_CERT_IN_CHAIN` | 公司内网代理或自签 CA 证书 | 临时加前缀 `NODE_TLS_REJECT_UNAUTHORIZED=0` 或配置 `bun config set cafile <CA路径>` |
 | 清理 `node_modules` 后再次 404 | link 依赖不会写入 `bun.lock` | 项目内重新执行 `bun link @actiondock/sdk` 恢复链接 |
 
-#### Link 三原则（Agent 必读）：
-1. **契约原则**：`package.json` 永远声明 `"@actiondock/sdk": "^2.0.0"`，**严禁**改为 `link:` 或本地相对路径（保证跨机器与独立构建一致性）。
-2. **分层原则**：SDK 源码根目录 `bun link` 全局执行一次；各 Action 项目内 `bun link @actiondock/sdk` 每项目执行一次。
-3. **双 Link 区分**：`ac link` 是 **ActionDock 全局包与工作区注册**（支持跨目录 `ac run pkg/action`，支持单包或工作区一键挂载并动态感知子包），`bun link` 是 **TypeScript/Node 依赖解析**，两者职责独立，开发态通常都需要执行。
+#### Link 原则（Agent 必读）：
+- **契约原则**：`package.json` 永远声明 `"@actiondock/sdk": "^2.0.0"`，严禁改为 `link:` 或本地相对路径（保证跨机器与独立构建一致性）。
+- **分层原则**：SDK 源码根目录 `bun link` 全局执行一次；各 Action 项目内 `bun link @actiondock/sdk` 每项目执行一次。
+- **双 Link 区分**：`ac link` 是 **ActionDock 全局包与工作区注册**（支持跨目录 `ac run pkg/action`，支持单包或工作区一键挂载并动态感知子包），`bun link` 是 **TypeScript/Node 依赖解析**，两者职责独立，开发态通常都需要执行。
 
 ### 核心指引：能力发现与模糊探索（Agent 操作首选）
 
@@ -77,20 +77,20 @@ bun link @actiondock/sdk   # 接入本地全局 SDK 并自动补齐其余依赖
 >   - **未命中降级**：若未匹配到任何包，默认自动回退展示全部已注册包（配合 `--no-fallback` 可严格校验）。
 
 ```bash
-# 1. 意图模糊探索（支持多关键词 / 正则）：探索可用工具与包
+# 意图模糊探索（支持多关键词 / 正则）：探索可用工具与包
 ac info browser                       # 模糊搜索包含 browser 的包（唯一匹配直接展开详情）
 ac info github issue                  # 多关键词 OR 模糊匹配
 ac info -i "github|gitlab"            # 正则意图过滤
 ac info -i "nonexistent" --no-fallback # 严格匹配（未命中时非零退出）
 
-# 2. 精确项目、已注册包或物理路径查看
+# 精确项目、已注册包或物理路径查看
 ac info                               # 当前项目内：展示当前包详情；项目外：展示全部已注册包概览
 ac info --tree [--json]               # 树形层级查看所有已挂载 Workspace 与子包结构
 ac info <package-id> [--json]         # 精确 Package ID（如 team4u.github-tools）
 ac info -P <package-id> [--json]      # 显式 -P 参数（支持包 ID 或物理文件路径）
 ac info ./examples/github-tools       # 物理相对/绝对路径
 
-# 3. 远程云端节点能力探索
+# 远程云端节点能力探索
 ac info --profile <profile-name> [--json]       # 查看远程节点元数据与 Actions
 ac info --profile <profile-name> -i "sync"      # 远程节点能力模糊过滤
 ac info --server <url> --token <token> [--json]
@@ -111,7 +111,7 @@ ac doctor --json               # 输出机器可读的诊断报告（Agent 适�
 > `ac link` 负责将当前 Package 或包含多个子包的工作区（Workspace）注册到 ActionDock 全局路由表中，以便跨目录通过 `ac run <pkg>/<action>` 调度；它**不负责** `node_modules` 的代码依赖，依赖请使用 `bun link`。
 > - **单包注册（智能默认）**：在 Action Package 目录下执行，自动注册当前单包。
 > - **工作区挂载与子项目自动感知（智能默认）**：在包含多个子包的目录（如 `examples/`、`packages/` 或 Monorepo 根目录）执行 `ac link [path]`，自动批量扫描所有子包并挂载为 Workspace；后续工作区内新增子包**无需重新 link**，全局路由与 `ac info` 自动动态感知。
-> - **`-r, --recursive` 强制递归**：当当前根目录本身已是一个 Action Package，但子目录下仍嵌套了其他独立子包时，使用 `-r` 强制深度遍历所有嵌套子包并统一注册为 Workspace。
+> - **强制递归 (-r, --recursive)**：当当前根目录本身已是一个 Action Package，但子目录下仍嵌套了其他独立子包时，使用 `-r` 强制深度遍历所有嵌套子包并统一注册为 Workspace。
 > - **树形查看与失效清理**：通过 `ac info --tree` 查看注册表树形层级；通过 `ac unlink --prune`（或 `ac unlink -p`）一键清理已删除的失效路径。
 
 ```bash
@@ -123,7 +123,7 @@ ac unlink --prune                  # 自动扫描并清理本地已失效/不存
 
 ### 跨目录包目标参数 (`-P, --package`)
 
-ActionDock 支持多包协作开发与跨目录全局调度。当开发者或 AI Agent 在任意工作目录下工作时，**无需反复 `cd` 切换目录**，通过 `-P, --package <id|path>` 参数即可精确指定目标 Action Package：
+ActionDock 支持多包协作开发与跨目录全局调度。当开发者或 AI Agent 在任意工作目录下工作时，无需反复 `cd` 切换目录，通过 `-P, --package <id|path>` 参数即可精确指定目标 Action Package：
 
 | 命令分类 | 跨包使用示例 (`-P`) | 说明 |
 | :--- | :--- | :--- |
@@ -136,9 +136,9 @@ ActionDock 支持多包协作开发与跨目录全局调度。当开发者或 AI
 | **Action 调度** | `ac run team4u.github-tools/github.get-pr --input '...'` | 通过 Package-Qualified ID 直接跨包调用 Action |
 
 > [!TIP]
-> **`-P` 参数值解析机制（按优先级匹配）**：
-> 1. **已注册 Package ID**：如完整 ID `team4u.github-tools` 或短 ID `github-tools`（通过 `ac link` 注册在 `~/.actiondock/registry.json` 中）。
-> 2. **物理文件路径**：如相对路径 `../examples/github-tools` 或绝对路径 `/root/code/sui-tools`。
+> **-P 参数值解析机制（按优先级匹配）**：
+- **已注册 Package ID**：如完整 ID `team4u.github-tools` 或短 ID `github-tools`（通过 `ac link` 注册在 `~/.actiondock/registry.json` 中）。
+- **物理文件路径**：如相对路径 `../examples/github-tools` 或绝对路径 `/root/code/sui-tools`。
 
 ---
 
@@ -219,10 +219,10 @@ export default defineAction<Input, Output>({
 
 #### 场景 A：常规 CLI 执行（使用 `execCli`）
 适用于一次性命令或已常驻 daemon 下的无损交互（如 `agent-browser get/click/type/snapshot`、`git status`、`docker ps` 等）：
-1. **Windows 路径自动解析**：自动通过 `Bun.which("command")` 解析 `.cmd` / `.bat` / `.exe` 物理绝对路径。
-2. **`Bun.spawnSync` 防管道死锁**：一次性同步排空管道，避免子进程句柄继承导致流读取挂起。
-3. **超时与取消安全**：支持毫秒级 `timeout` 强杀与 `signal` (AbortSignal) 取消响应。
-4. **Stdin 与原始字节流**：支持 `input` 管道写入与 `raw` 二进制字节流输出（图片/音视频）。
+- **Windows 路径自动解析**：自动通过 `Bun.which("command")` 解析 `.cmd` / `.bat` / `.exe` 物理绝对路径。
+- **防管道死锁**：使用 `Bun.spawnSync` 一次性同步排空管道，避免子进程句柄继承导致流读取挂起。
+- **超时与取消安全**：支持毫秒级 `timeout` 强杀与 `signal` (AbortSignal) 取消响应。
+- **Stdin 与原始字节流**：支持 `input` 管道写入与 `raw` 二进制字节流输出（图片/音视频）。
 
 ```typescript
 import { defineAction, execCli } from "@actiondock/sdk";
@@ -257,9 +257,9 @@ export default defineAction({
 当 CLI 命令首次拉起常驻后台守护进程（如 `agent-browser open` 会拉起常驻 daemon）：
 - **问题根因**：若使用 `spawnSync`，后台 daemon 会继承 stderr/stdout 管道写句柄且常驻不退出，导致同步管道等待 EOF 挂满 timeout；若不等待 CLI 前端退出直接发 probe，又会并发拉起两个 daemon 导致配置冲突。
 - **解决方案（三步闭环）**：
-  1. **异步 fire**：stdio 全部 `ignore`，daemon 继承不到任何管道句柄；
-  2. **等待 CLI 前端退出**：`await child.exited` 错开冷启动窗口，避免探测命令并发竞争；
-  3. **轮询探测就绪**：通过轻量 probe 回调确认副作用生效（如 URL 稳定）后继续。
+  - **异步启动**：stdio 全部 `ignore`，daemon 继承不到任何管道句柄；
+  - **等待 CLI 前端退出**：`await child.exited` 错开冷启动窗口，避免探测命令并发竞争；
+  - **轮询探测就绪**：通过轻量 probe 回调确认副作用生效（如 URL 稳定）后继续。
 
 ```typescript
 import { defineAction, execCli, spawnDetached } from "@actiondock/sdk";
@@ -301,7 +301,7 @@ export default defineAction({
 
 ## @actiondock/sdk 核心 API 规范与方法签名速查
 
-### 1. `defineAction<TInput, TOutput>(definition)`
+### `defineAction<TInput, TOutput>(definition)`
 声明一个标准 Action 定义：
 ```typescript
 function defineAction<I = unknown, O = unknown>(definition: {
@@ -313,24 +313,24 @@ function defineAction<I = unknown, O = unknown>(definition: {
 }): ActionDefinition<I, O>;
 ```
 
-### 2. `ActionContext` (`ctx`) 运行时上下文
+### `ActionContext` (`ctx`) 运行时上下文
 传递给 Action `run` 方法的标准化执行上下文：
 
 | 模块 | 方法签名 | 说明 |
 | :--- | :--- | :--- |
-| **`ctx.config`** | `get<T>(key: string, defaultValue?: T): T` | 读取配置（严格遵循 5 级优先级解析） |
+| `ctx.config` | `get<T>(key: string, defaultValue?: T): T` | 读取配置（严格遵循 5 级优先级解析） |
 | | `has(key: string): boolean` | 检查配置项是否存在 |
-| **`ctx.state`** | `get<T>(key: string): Promise<T \| undefined>` | 读取持久化状态（未设置或过期返回 `undefined`） |
+| `ctx.state` | `get<T>(key: string): Promise<T \| undefined>` | 读取持久化状态（未设置或过期返回 `undefined`） |
 | | `set<T>(key: string, value: T, ttl?: number): Promise<void>` | 写入状态，`ttl` 单位为**秒**（可选） |
 | | `delete(key: string): Promise<boolean>` | 删除指定状态键（返回是否实际删除） |
 | | `clear(prefix?: string): Promise<number>` | 清空当前 scope 或指定前缀下的所有状态 |
 | | `keys(prefix?: string): Promise<string[]>` | 列出所有未过期的状态键名 |
 | | `scope(namespace: string): StateStore` | 获取命名空间隔离的子状态存储实例 |
-| **`ctx.actions`**| `invoke<I, O>(action: ActionDefinition<I, O>, input: I): Promise<O>` | 纯内存零开销相互调用（带防循环调用检测） |
-| **`ctx.log`** | `debug / info / warn / error(msg: string, data?: unknown): void` | 结构化诊断日志，**强制定向至 stderr** |
-| **`ctx.signal`** | `signal: AbortSignal` | 协作式取消信号（`signal.aborted`） |
+| `ctx.actions` | `invoke<I, O>(action: ActionDefinition<I, O>, input: I): Promise<O>` | 纯内存零开销相互调用（带防循环调用检测） |
+| `ctx.log` | `debug / info / warn / error(msg: string, data?: unknown): void` | 结构化诊断日志，强制定向至 stderr |
+| `ctx.signal` | `signal: AbortSignal` | 协作式取消信号（`signal.aborted`） |
 
-### 3. `execCli(command, args?, options?)` 跨平台 CLI 调度
+### `execCli(command, args?, options?)` 跨平台 CLI 调度
 ```typescript
 function execCli(
   command: string,
@@ -667,18 +667,18 @@ dist/<package>-skill/
 ## Agent 接入与使用约定
 
 ### AI Agent 调用 Source Skill 流程规范：
-1. **探索与匹配能力（首选第一步）**：
-   - 当接到任务或用户指令时，首先通过 `ac info <intent>`（如 `ac info github`）模糊搜索匹配的 Package 与 Action 工具。
-2. **解析 Skill 根目录**：将 `SKILL.md` 所在目录解析为 `<skill_root>`。
-3. **幂等注册**：执行 `ac link "<skill_root>"`（可安全重复执行）。
-4. **调用 Action**：始终使用 **Package-Qualified ID** 避免冲突：
-   ```bash
-   ac run <package-id>/<action-id> --input '<json>'
-   ```
-5. **免注册直接执行** (备选)：
-   ```bash
-   cd <skill_root> && ac run <action-id> --input '<json>'
-   ```
+- **探索与匹配能力（首选第一步）**：
+  - 当接到任务或用户指令时，首先通过 `ac info <intent>`（如 `ac info github`）模糊搜索匹配的 Package 与 Action 工具。
+- **解析 Skill 根目录**：将 `SKILL.md` 所在目录解析为 `<skill_root>`。
+- **幂等注册**：执行 `ac link "<skill_root>"`（可安全重复执行）。
+- **调用 Action**：始终使用 Package-Qualified ID 避免冲突：
+  ```bash
+  ac run <package-id>/<action-id> --input '<json>'
+  ```
+- **免注册直接执行 (备选)**：
+  ```bash
+  cd <skill_root> && ac run <action-id> --input '<json>'
+  ```
 
 ---
 

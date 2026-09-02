@@ -77,15 +77,15 @@ describe("sample.greet Action", () => {
 
 ## Core Capabilities
 
-- **`ActionContext`**:
-  - `ctx.config`: 5-tier configuration resolution (`CLI > SQLite > Global > ENV > default > fallback`).
-  - `ctx.state`: Cross-action persistent state store with namespacing (`scope()`) and automatic TTL expiration.
-  - `ctx.actions`: Action-to-action invocation (`invoke()`) with recursion & cycle detection.
-  - `ctx.log`: Clean stderr-directed structured logging (keeping stdout clean for JSON envelopes).
-  - `ctx.signal`: Cooperative `AbortSignal` for graceful timeout and cancellation.
-- **`execCli`**: Deadlock-safe, cross-platform synchronous CLI executor with Windows `.cmd` resolution, stdin streaming, timeout, and signal support.
-- **`spawnDetached`**: Safe asynchronous launcher for daemon-spawning CLI tools (e.g., `agent-browser open`), preventing pipe EOF hangs via fire-and-forget stdio decoupling and polling probe.
-- **`createTestRuntime`**: Fast, zero-dependency in-memory test harness for unit tests.
+- `ActionContext`:
+  - `ctx.config`: 5-tier configuration resolution (`override > sqlite > env > default > fallback`)
+  - `ctx.state`: Embedded SQLite state store with namespace and TTL support
+  - `ctx.actions`: Inter-action invocation with cycle detection
+  - `ctx.log`: Isolated logging directed to `stderr`
+  - `ctx.signal`: Cooperative cancellation via `AbortSignal`
+- `execCli`: Deadlock-safe, cross-platform synchronous CLI executor with Windows `.cmd` resolution, stdin streaming, timeout, and signal support.
+- `spawnDetached`: Safe asynchronous launcher for daemon-spawning CLI tools (e.g., `agent-browser open`), preventing pipe EOF hangs via fire-and-forget stdio decoupling and polling probe.
+- `createTestRuntime`: Fast, zero-dependency in-memory test harness for unit tests.
 
 ---
 

@@ -34,20 +34,20 @@ actions:
 
 # PR 自动化审查规程
 
-## 1. 前置条件检查
+## 前置条件检查
 - 检查 PR 状态是否为 `open`。若为 `closed` 或 `draft`，终止流程并记录原因。
 - 检查 PR 是否包含针对核心安全配置的修改。
 
-## 2. 审查与评论
+## 审查与评论
 - 调用 `github.get-pr` 获取文件变更列表。
 - 针对每一项缺陷调用 `github.create-comment` 提交行内评论。
 
-## 3. 合并与终态
+## 合并与终态
 - 仅当全部 CI 检查通过且评审打分 >= 80 时，方可调用 `github.merge-pr`。
 
-## 4. 安全红线
-- ⚠️ 绝对禁止在未通过 CI 验证的情况下执行合并。
-- ⚠️ 绝对禁止在涉及删除生产数据库脚本的 PR 上直接通过。
+## 安全红线
+- 绝对禁止在未通过 CI 验证的情况下执行合并。
+- 绝对禁止在涉及删除生产数据库脚本的 PR 上直接通过。
 ```
 
 ---
@@ -65,6 +65,6 @@ ac playbook validate playbooks/review-pr.md
 ```
 
 校验器会检查：
-1. YAML Frontmatter 是否包含 `id`、`name`、`description` 与 `actions` 字段。
-2. 声明引用的 `actions` 是否全部存在于当前包或注册表中。
-3. Markdown 语法是否符合规范。
+- YAML Frontmatter 是否包含 `id`、`name`、`description` 与 `actions` 字段。
+- 声明引用的 `actions` 是否全部存在于当前包或注册表中。
+- Markdown 语法是否符合规范。

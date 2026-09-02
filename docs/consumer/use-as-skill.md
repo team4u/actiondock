@@ -71,12 +71,12 @@ ac export skill -P team4u.github-tools --out ~/.gemini/antigravity-cli/skills/gi
 ## 目标机器无 Bun 环境时使用独立二进制 Skill
 
 如果消费者的机器、容器或沙箱中未安装 Bun / Node.js 运行时：
-1. 导出时加上 `--standalone` 参数：
+- 导出时加上 `--standalone` 参数：
    ```bash
    ac export skill -P team4u.github-tools --standalone --out ~/.claude/skills/github-tools
    ```
-2. 导出的 Skill 会在 `./bin/` 目录下内嵌平台自包含的可执行文件（如 `./bin/github-tools`）。
-3. Agent 读取 `SKILL.md` 后，会自动通过 `./bin/github-tools run <action>` 执行，宿主机器无需安装任何运行时即可开箱即用。
+- 导出的 Skill 会在 `./bin/` 目录下内嵌平台自包含的可执行文件（如 `./bin/github-tools`）。
+- Agent 读取 `SKILL.md` 后，会自动通过 `./bin/github-tools run <action>` 执行，宿主机器无需安装任何运行时即可开箱即用。
 
 ---
 

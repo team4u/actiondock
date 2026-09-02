@@ -1,8 +1,8 @@
 # 构建、打包与 Skill 导出
 
 ActionDock 2.0 提供了两大核心交付工具：
-- **`ac build`**：编译为零外部依赖的单个独立可执行文件（适用于生产部署、CI/CD、容器）。
-- **`ac export skill`**：打包为自包含的 Agent Skill 规范目录（适用于向 Claude Code、Antigravity、Codex 智能体分发）。
+- `ac build`：编译为零外部依赖的单个独立可执行文件（适用于生产部署、CI/CD、容器）。
+- `ac export skill`：打包为自包含的 Agent Skill 规范目录（适用于向 Claude Code、Antigravity、Codex 智能体分发）。
 
 ---
 

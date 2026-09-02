@@ -4,7 +4,7 @@ ActionDock 2.0 构建于原生 TypeScript 与 [Bun](https://bun.sh/) 运行时�
 
 ---
 
-## 1. 安装 Bun 运行时
+## 安装 Bun 运行时
 
 ActionDock CLI 和核心编译器需要 Bun >= 1.2.0 环境。
 
@@ -20,7 +20,7 @@ bun --version
 
 ---
 
-## 2. 安装 ActionDock CLI (`ac`)
+## 安装 ActionDock CLI (`ac`)
 
 ### 全局安装
 ```bash
@@ -37,22 +37,22 @@ ac --help
 
 如果您直接通过 Git 仓库源码使用或开发 ActionDock，只需使用 Bun 原生的 `bun link` 机制，无需发布到 npm：
 
-#### 1. 链接 CLI 命令行工具与 SDK
+#### 链接 CLI 命令行工具与 SDK
 ```bash
 git clone https://github.com/team4u/actiondock.git
 cd actiondock
 bun install
 
-# 1. 注册全局 ac 命令行工具
+# 注册全局 ac 命令行工具
 cd packages/cli
 bun link
 
-# 2. 注册全局 @actiondock/sdk 依赖
+# 注册全局 @actiondock/sdk 依赖
 cd ../sdk
 bun link
 ```
 
-#### 2. 在外部 Action 项目中引用本地 SDK
+#### 在外部 Action 项目中引用本地 SDK
 当您使用 `ac init my-action` 创建独立项目后，在项目目录下执行：
 ```bash
 cd /path/to/my-action
@@ -69,7 +69,7 @@ bun link @actiondock/sdk
 
 ---
 
-## 3. 依赖安装故障排查与 Link 原则
+## 依赖安装故障排查与 Link 原则
 
 ### 常见故障速查表
 
@@ -79,15 +79,15 @@ bun link @actiondock/sdk
 | `SELF_SIGNED_CERT_IN_CHAIN` | 公司内网代理或自签 CA 证书 | 临时加前缀 `NODE_TLS_REJECT_UNAUTHORIZED=0` 或配置 `bun config set cafile <CA路径>` |
 | 清理 `node_modules` 后再次 404 | link 依赖不会写入 `bun.lock` | 项目内重新执行 `bun link @actiondock/sdk` 恢复链接 |
 
-### Link 三原则（开发者与 Agent 必读）
+### Link 原则（开发者与 Agent 必读）
 
-1. **契约原则**：`package.json` 永远声明 `"@actiondock/sdk": "^2.0.0"`，**严禁**改为 `link:` 或本地相对路径（保证跨机器与独立构建一致性）。
-2. **分层原则**：SDK 源码根目录 `bun link` 全局执行一次；各 Action 项目内 `bun link @actiondock/sdk` 每项目执行一次。
-3. **双 Link 区分**：`ac link` 是 **ActionDock 全局包注册**（支持跨目录 `ac run pkg/action`），`bun link` 是 **TypeScript/Node 依赖解析**，两者职责独立，开发态通常都需要执行。
+- **契约原则**：`package.json` 永远声明 `"@actiondock/sdk": "^2.0.0"`，**严禁**改为 `link:` 或本地相对路径（保证跨机器与独立构建一致性）。
+- **分层原则**：SDK 源码根目录 `bun link` 全局执行一次；各 Action 项目内 `bun link @actiondock/sdk` 每项目执行一次。
+- **双 Link 区分**：`ac link` 是 **ActionDock 全局包注册**（支持跨目录 `ac run pkg/action`），`bun link` 是 **TypeScript/Node 依赖解析**，两者职责独立，开发态通常都需要执行。
 
 ---
 
-## 4. 独立二进制运行（目标环境免安装）
+## 独立二进制运行（目标环境免安装）
 
 请注意：**只有在开发和构建 Action Package 时才需要安装 Bun 与 ActionDock CLI**。
 

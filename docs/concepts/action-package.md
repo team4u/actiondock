@@ -22,10 +22,10 @@ Action Package
     └─ 运行态 (Runtime)  → ActionContext (配置、存储、日志与取消链路)
 ```
 
-1. **能力 (Capability) → Action**：定义 Agent「能做什么」。每个 Action 是一个原子函数，负责确定性的数据交互、外部 API 调用或本地计算。
-2. **规程 (Procedure) → Playbook**：定义 Agent「该怎么做」。通过 Markdown 结构化编写领域知识、步骤时序、前置校验与安全红线。
-3. **契约 (Contract) → Schema**：代码即契约。利用 JSON Schema 精确声明入参、出参和字段说明，消除大模型幻觉与文档脱节。
-4. **运行态 (Runtime) → ActionContext**：为 Action 提供统一的运行环境，包括 5 级配置回退、SQLite 持久化状态存储、强制 `stderr` 隔离的结构化日志以及 Web 原生 `AbortSignal`。
+- **能力 (Capability) → Action**：定义 Agent「能做什么」。每个 Action 是一个原子函数，负责确定性的数据交互、外部 API 调用或本地计算。
+- **规程 (Procedure) → Playbook**：定义 Agent「该怎么做」。通过 Markdown 结构化编写领域知识、步骤时序、前置校验与安全红线。
+- **契约 (Contract) → Schema**：代码即契约。利用 JSON Schema 精确声明入参、出参和字段说明，消除大模型幻觉与文档脱节。
+- **运行态 (Runtime) → ActionContext**：为 Action 提供统一的运行环境，包括 5 级配置回退、SQLite 持久化状态存储、强制 `stderr` 隔离的结构化日志以及 Web 原生 `AbortSignal`。
 
 ---
 

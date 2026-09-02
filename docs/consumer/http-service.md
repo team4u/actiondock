@@ -64,12 +64,12 @@ ac serve -d ./examples/github-tools --host 0.0.0.0 --port 8080 --token "sk-actio
 
 ## 网络监听与安全防御机制
 
-1. **非回环地址强制 Token 认证（安全底线）**：
-   - 默认 `--host 127.0.0.1` 仅允许本机回环访问。
-   - 当监听在非回环地址（如 `--host 0.0.0.0` 或服务器公网/局域网 IP）供远程调度时，**执行引擎强制要求传入 `--token`（或通过环境变量 `ACTIONDOCK_TOKEN` 注入）**，若未配置鉴权凭证将直接拒绝启动，杜绝服务意外裸奔。
-2. **防时序攻击比对**：内置基于 `crypto.timingSafeEqual` 的常数时间 Token 校验，彻底杜绝旁路分析。
-3. **请求体大小防护**：默认限制单个 JSON 请求体上限为 1MB（可通过 `--max-body 10mb` 调整），超限返回 `413 Payload Too Large`。
-4. **CORS 策略**：默认关闭跨域，可通过 `--cors-origin <origin>` 显式添加白名单源。
+- **非回环地址强制 Token 认证**：
+  - 默认 `--host 127.0.0.1` 仅允许本机回环访问。
+  - 当监听在非回环地址（如 `--host 0.0.0.0` 或服务器公网/局域网 IP）供远程调度时，执行引擎强制要求传入 `--token`（或通过环境变量 `ACTIONDOCK_TOKEN` 注入），若未配置鉴权凭证将直接拒绝启动，杜绝服务意外暴露。
+- **防时序攻击比对**：内置基于 `crypto.timingSafeEqual` 的常数时间 Token 校验，彻底杜绝旁路分析。
+- **请求体大小防护**：默认限制单个 JSON 请求体上限为 1MB（可通过 `--max-body 10mb` 调整），超限返回 `413 Payload Too Large`。
+- **CORS 策略**：默认关闭跨域，可通过 `--cors-origin <origin>` 显式添加白名单源。
 
 ---
 
@@ -77,7 +77,7 @@ ac serve -d ./examples/github-tools --host 0.0.0.0 --port 8080 --token "sk-actio
 
 所有接口均支持通过 Header `Authorization: Bearer <token>` 或 URL 参数 `?token=<token>` 进行身份鉴权。
 
-### 1. 健康检查与就绪探查 (`GET /api/v1/health`)
+### 健康检查与就绪探查 (`GET /api/v1/health`)
 ```bash
 curl http://localhost:5177/api/v1/health \
   -H "Authorization: Bearer sk-actiondock-secret"
@@ -94,7 +94,7 @@ curl http://localhost:5177/api/v1/health \
 
 ---
 
-### 2. 检索可用 Actions 清单 (`GET /api/v1/actions`)
+### 检索可用 Actions 清单 (`GET /api/v1/actions`)
 支持通过 `?intent=<pattern>` 进行关键词或正则模糊检索：
 
 ```bash
@@ -119,7 +119,7 @@ curl "http://localhost:5177/api/v1/actions?intent=github" \
 
 ---
 
-### 3. 同步执行 Action (`POST /api/v1/actions/:id/run`)
+### 同步执行 Action (`POST /api/v1/actions/:id/run`)
 向目标 Action 投递参数，服务端同步阻塞执行完毕后返回标准 JSON Envelope：
 
 ```bash
@@ -148,7 +148,7 @@ curl -X POST http://localhost:5177/api/v1/actions/github.get-pr/run \
 
 ---
 
-### 4. 异步长任务调度 (`POST /api/v1/actions/:id/run` with async)
+### 异步长任务调度 (`POST /api/v1/actions/:id/run` with async)
 对于长耗时 Action（如全量数据备份、大模型深度分析、批量扫描），在请求体中传入 `"execution": { "mode": "async" }`：
 
 ```bash
@@ -174,7 +174,7 @@ curl -X POST http://localhost:5177/api/v1/actions/github.sync-all/run \
 
 ---
 
-### 5. 查询任务状态与历史 (`GET /api/v1/runs/:runId`)
+### 查询任务状态与历史 (`GET /api/v1/runs/:runId`)
 ```bash
 curl http://localhost:5177/api/v1/runs/01JMB999ABCD... \
   -H "Authorization: Bearer sk-actiondock-secret"
@@ -196,7 +196,7 @@ curl http://localhost:5177/api/v1/runs/01JMB999ABCD... \
 
 ---
 
-### 6. 取消在途任务 (`POST /api/v1/runs/:runId/cancel`)
+### 取消在途任务 (`POST /api/v1/runs/:runId/cancel`)
 对于执行中的异步任务，可随时发送取消指令（直通底层的 `ctx.signal` 中断 I/O）：
 
 ```bash
@@ -213,9 +213,9 @@ curl -X POST http://localhost:5177/api/v1/runs/01JMB999ABCD.../cancel \
 开发者本地 CLI 可以配置远程节点的 Profile，之后所有 `ac run` 命令即可像本地一样透明调度远端微服务：
 
 ```bash
-# 1. 注册远程云节点 Profile
+# 注册远程云节点 Profile
 ac profile add prod --server http://1.2.3.4:5177 --token "sk-actiondock-secret"
 
-# 2. 像本地一样远程调度 Action
+# 像本地一样远程调度 Action
 ac run github.get-pr --input '{"repo": "team4u/actiondock", "prNumber": 101}' --profile prod
 ```
