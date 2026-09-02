@@ -2,9 +2,11 @@
 
 The lightweight, zero-dependency SDK for defining, orchestrating, and testing AI Agent Actions and Skills in ActionDock 2.0.
 
-[![Bun](https://img.shields.io/badge/Bun-%3E%3D1.1-black?logo=bun)](https://bun.sh/)
+[![Bun](https://img.shields.io/badge/Bun-%3E%3D1.2-black?logo=bun)](https://bun.sh/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
+> **Runtime requirement**: [Bun](https://bun.sh/) >= 1.2.0 is required.
 
 ---
 
@@ -12,8 +14,6 @@ The lightweight, zero-dependency SDK for defining, orchestrating, and testing AI
 
 ```bash
 bun add @actiondock/sdk
-# or
-npm install @actiondock/sdk
 ```
 
 ---

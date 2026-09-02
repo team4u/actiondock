@@ -16,12 +16,19 @@
     "src",
     "README.md"
   ],
+  "engines": {
+    "bun": ">=1.2.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "scripts": {
     "test": "bun test"
   },
   "dependencies": {
-    "@actiondock/core": "workspace:*",
-    "@actiondock/sdk": "workspace:*",
+    "@actiondock/core": "^2.0.0",
+    "@actiondock/sdk": "^2.0.0",
     "@modelcontextprotocol/server": "^2.0.0"
   },
   "devDependencies": {

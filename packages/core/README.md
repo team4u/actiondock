@@ -1,12 +1,19 @@
 # @actiondock/core
 
-The core engine of ActionDock 2.0.
+The core engine and domain kernel of ActionDock 2.0.
 
-[![Bun](https://img.shields.io/badge/Bun-%3E%3D1.1-black?logo=bun)](https://bun.sh/)
+[![Bun](https://img.shields.io/badge/Bun-%3E%3D1.2-black?logo=bun)](https://bun.sh/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-`@actiondock/core` contains the project loader, runtime execution engine (`ActionRunner`), native SQLite persistence, standalone binary compiler, remote HTTP server/client, and Agent Skill exporter.
+`@actiondock/core` provides the project loader, runtime execution engine (`ActionRunner`), native SQLite persistence, standalone binary compiler, remote HTTP server/client, and Agent Skill exporter.
+
+> **Role & Usage Context**:
+> - **Authoring Actions**: Use [`@actiondock/sdk`](../sdk) for defining actions, testing with in-memory harness, and zero-dependency action packages.
+> - **CLI Toolchain**: Use [`@actiondock/cli`](../cli) (`ac`) for command-line workflows.
+> - **Engine & Embedding**: Use `@actiondock/core` when you need programmatic access to the ActionRunner engine, project loader, or custom server integrations.
+>
+> **Runtime requirement**: [Bun](https://bun.sh/) >= 1.2.0 is required (`@actiondock/core` leverages native `bun:sqlite` and Bun runtime APIs).
 
 ---
 
@@ -14,8 +21,6 @@ The core engine of ActionDock 2.0.
 
 ```bash
 bun add @actiondock/core
-# or
-npm install @actiondock/core
 ```
 
 ---

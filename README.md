@@ -1,9 +1,9 @@
 # ActionDock
 
-[![Bun](https://img.shields.io/badge/Bun-%3E%3D1.1-black?logo=bun)](https://bun.sh/)
+[![Bun](https://img.shields.io/badge/Bun-%3E%3D1.2-black?logo=bun)](https://bun.sh/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![MCP](https://img.shields.io/badge/MCP-Protocol%20Compliant-purple)](https://modelcontextprotocol.io/)
-[![Tests](https://img.shields.io/badge/tests-74%20passed-brightgreen.svg)](https://github.com/team4u/actiondock)
+[![Tests](https://img.shields.io/badge/tests-81%20passed-brightgreen.svg)](https://github.com/team4u/actiondock)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 **English** | [简体中文](README.zh-CN.md)
@@ -46,10 +46,14 @@ ActionDock treats an Agent Tool as a software artifact:
 
 ## Quick Start
 
+> **Runtime requirement**: [Bun](https://bun.sh/) >= 1.2.0 is required.  
+> *(ActionDock is natively designed for the Bun runtime. Even when installing globally via npm, Bun must be installed on your system as the CLI runs via `#!/usr/bin/env bun`.)*
+
 ### 1. Install CLI
 
 ```bash
 bun install -g @actiondock/cli
+# or: npm install -g @actiondock/cli
 ```
 
 ### 2. Initialize an Action Package
@@ -212,11 +216,11 @@ actions/*.ts ─────┼─ HTTP (`ac serve`)
 ```text
 Distribution Targets
 
+✅ npm packages       (@actiondock/sdk, @actiondock/core, @actiondock/mcp, @actiondock/cli)
 ✅ Standalone Binary  (ac build -> self-contained executable)
 ✅ Agent Skill        (ac export skill -> portable skill bundle)
 ⬜ MCPB               (Desktop extension bundle - on roadmap)
 ⬜ Docker             (Containerized image target - on roadmap)
-⬜ npm package        (Library export - on roadmap)
 ```
 
 ---

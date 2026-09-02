@@ -6,7 +6,7 @@ ActionDock 2.0 构建于原生 TypeScript 与 [Bun](https://bun.sh/) 运行时�
 
 ## 1. 安装 Bun 运行时
 
-ActionDock CLI 和核心编译器需要 Bun 1.1+ 环境。
+ActionDock CLI 和核心编译器需要 Bun >= 1.2.0 环境。
 
 ```bash
 npm install bun -g
@@ -15,7 +15,7 @@ npm install bun -g
 ### 验证安装
 ```bash
 bun --version
-# 输出类似: 1.1.0 或更高版本
+# 输出类似: 1.2.0 或更高版本
 ```
 
 ---
@@ -65,7 +65,7 @@ bun link @actiondock/sdk
 ```
 此时项目中的 `import { defineAction } from "@actiondock/sdk"` 将直接指向本地 SDK 源码，享受即时热更新与毫秒级 TypeScript 原生类型推导。
 
-*(注：如果是在 ActionDock Monorepo 的 `examples/` 目录下开发示例，Bun Workspaces 会自动解析 `@actiondock/sdk: "workspace:*"`，无需手动 link。)*
+*(注：如果是在 ActionDock Monorepo 的 `examples/` 目录下开发示例，Bun Workspaces 会自动解析 `@actiondock/sdk: "^2.0.0"`，无需手动 link。)*
 
 ---
 

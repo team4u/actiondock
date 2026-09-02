@@ -1,9 +1,9 @@
 # ActionDock
 
-[![Bun](https://img.shields.io/badge/Bun-%3E%3D1.1-black?logo=bun)](https://bun.sh/)
+[![Bun](https://img.shields.io/badge/Bun-%3E%3D1.2-black?logo=bun)](https://bun.sh/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![MCP](https://img.shields.io/badge/MCP-Protocol%20Compliant-purple)](https://modelcontextprotocol.io/)
-[![Tests](https://img.shields.io/badge/tests-74%20passed-brightgreen.svg)](https://github.com/team4u/actiondock)
+[![Tests](https://img.shields.io/badge/tests-81%20passed-brightgreen.svg)](https://github.com/team4u/actiondock)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 [English](README.md) | **简体中文**
@@ -46,10 +46,14 @@ ActionDock 将 Agent 工具视为标准化软件资产：
 
 ## 快速上手
 
+> **运行环境要求**：需要 [Bun](https://bun.sh/) >= 1.2.0。  
+> *(ActionDock 基于 Bun 原生架构打造。即使通过 `npm install -g @actiondock/cli` 安装，本机也必须安装 Bun 运行时，因为 CLI 入口通过 `#!/usr/bin/env bun` 调度执行。)*
+
 ### 1. 安装命令行工具 (`ac`)
 
 ```bash
 bun install -g @actiondock/cli
+# 或: npm install -g @actiondock/cli
 ```
 
 ### 2. 初始化 Action Package
@@ -212,11 +216,11 @@ actions/*.ts ─────┼─ HTTP 微服务 (`ac serve`)
 ```text
 分发目标 (Distribution Targets)
 
+✅ npm 模块生态包 (@actiondock/sdk, @actiondock/core, @actiondock/mcp, @actiondock/cli)
 ✅ 独立可执行文件 (ac build -> 单文件自包含二进制)
 ✅ Agent Skill    (ac export skill -> 便携式 Skill 交付包)
 ⬜ MCPB 扩展包    (桌面端一键安装格式 - 规划中)
 ⬜ Docker 容器镜像 (标准容器镜像 - 规划中)
-⬜ npm 依赖包     (标准 Node 库导出 - 规划中)
 ```
 
 ---

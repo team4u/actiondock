@@ -11,7 +11,7 @@ ActionDock 2.0 是面向 AI Agent Action 与 Skill 的开发工具链（CLI 门�
 
 ## 环境准备与 CLI 安装
 
-ActionDock 2.0 依赖 **Bun (>= 1.1)** 运行时环境。
+ActionDock 2.0 依赖 **Bun (>= 1.2)** 运行时环境。
 
 ### 1. 安装 Bun 运行时
 ```bash

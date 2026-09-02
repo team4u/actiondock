@@ -1,0 +1,55 @@
+name: Publish Packages
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  publish:
+    name: Build, Verify & Publish to npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # Required for npm provenance / Trusted Publishing
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun Runtime
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Monorepo Dependencies
+        run: bun install
+
+      - name: TypeScript Typecheck
+        run: bun run typecheck
+
+      - name: Run Unit & Integration Tests
+        run: bun test
+
+      - name: Run Pack Smoke Test
+        run: bun run test:pack
+
+      - name: Setup npm Auth Token
+        if: env.NPM_TOKEN != ''
+        run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> ~/.npmrc
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # Publish in strict dependency order: sdk -> core -> mcp -> cli
+      - name: Publish @actiondock/sdk
+        run: cd packages/sdk && bun publish --access public
+
+      - name: Publish @actiondock/core
+        run: cd packages/core && bun publish --access public
+
+      - name: Publish @actiondock/mcp
+        run: cd packages/mcp && bun publish --access public
+
+      - name: Publish @actiondock/cli
+        run: cd packages/cli && bun publish --access public

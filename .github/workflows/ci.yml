@@ -23,3 +23,7 @@ jobs:
 
       - name: Run Monorepo Tests
         run: bun test
+
+      - name: Run Pack Smoke Test
+        run: bun run test:pack
+

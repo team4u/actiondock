@@ -15,14 +15,21 @@
     "dist",
     "README.md"
   ],
+  "engines": {
+    "bun": ">=1.2.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "scripts": {
     "test": "bun test",
     "build": "bun build ./src/index.ts --outdir ./dist --target bun"
   },
   "dependencies": {
-    "@actiondock/core": "workspace:*",
-    "@actiondock/mcp": "workspace:*",
-    "@actiondock/sdk": "workspace:*",
+    "@actiondock/core": "^2.0.0",
+    "@actiondock/mcp": "^2.0.0",
+    "@actiondock/sdk": "^2.0.0",
     "commander": "^13.1.0"
   },
   "devDependencies": {
