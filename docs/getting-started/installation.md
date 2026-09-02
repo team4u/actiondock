@@ -8,14 +8,8 @@ ActionDock 2.0 构建于原生 TypeScript 与 [Bun](https://bun.sh/) 运行时�
 
 ActionDock CLI 和核心编译器需要 Bun 1.1+ 环境。
 
-### macOS / Linux
 ```bash
-curl -fsSL https://bun.sh/install | bash
-```
-
-### Windows (PowerShell)
-```powershell
-powershell -c "irm bun.sh/install.ps1 | iex"
+npm install bun -g
 ```
 
 ### 验证安装

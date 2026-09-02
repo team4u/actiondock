@@ -15,11 +15,7 @@ ActionDock 2.0 依赖 **Bun (>= 1.1)** 运行时环境。
 
 ### 1. 安装 Bun 运行时
 ```bash
-# macOS / Linux
-curl -fsSL https://bun.sh/install | bash
-
-# Windows (PowerShell)
-powershell -c "irm bun.sh/install.ps1 | iex"
+npm install bun -g
 ```
 
 ### 2. 安装 ActionDock CLI 与 SDK
