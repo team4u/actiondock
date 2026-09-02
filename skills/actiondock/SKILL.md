@@ -70,20 +70,32 @@ bun link @actiondock/sdk   # 接入本地全局 SDK 并自动补齐其余依赖
 2. **分层原则**：SDK 源码根目录 `bun link` 全局执行一次；各 Action 项目内 `bun link @actiondock/sdk` 每项目执行一次。
 3. **双 Link 区分**：`ac link` 是 **ActionDock 全局包注册**（支持跨目录 `ac run pkg/action`），`bun link` 是 **TypeScript/Node 依赖解析**，两者职责独立，开发态通常都需要执行。
 
-### 检查项目、全局注册包或远程目标元数据
+### 核心指引：能力发现与模糊探索（Agent 操作首选）
+
+> [!IMPORTANT]
+> **Agent 关键行动指引**：当用户需要进行某项业务操作、探索系统可用能力，或不确定有哪些 Package / Action / Playbook 适合当前任务时，**务必优先使用 `ac info <patterns...>` 或 `ac info -i <pattern>` 进行意图模糊搜索**！
+> - **先查后用**：先通过模糊搜索查看当前环境（本地项目、全局 Linked Packages 或远程 Profile）中有哪些工具组件最契合任务。
+> - **智能决议机制**：
+>   - **唯一命中**：若搜索词唯一定位到某个 Package（如 `ac info browser`），直接自动展开并输出该包的完整详细元数据、所有 Actions 清单、Playbooks 规程及配置 Schema。
+>   - **多项命中**：若搜索词匹配到多个 Package（如 `ac info ops`），输出过滤后的包摘要清单与 Actions/Playbooks 数量，供进一步通过 `ac info <package-id>` 精确定位。
+>   - **未命中降级**：若未匹配到任何包，默认自动回退展示全部已注册包（配合 `--no-fallback` 可严格校验）。
+
 ```bash
-# 当前项目内：展示当前包元数据、Actions、Playbooks 与 Config Schema
-ac info [--json]
+# 1. 意图模糊探索（支持多关键词 / 正则）：探索可用工具与包
+ac info browser                       # 模糊搜索包含 browser 的包（唯一匹配直接展开详情）
+ac info github issue                  # 多关键词 OR 模糊匹配
+ac info -i "github|gitlab"            # 正则意图过滤
+ac info -i "nonexistent" --no-fallback # 严格匹配（未命中时非零退出）
 
-# 非项目目录下：自动输出全局已注册 Linked Packages 概览清单
-ac info [--json]
+# 2. 精确项目、已注册包或物理路径查看
+ac info                               # 当前项目内：展示当前包详情；项目外：展示全部已注册包概览
+ac info <package-id> [--json]         # 精确 Package ID（如 team4u.github-tools）
+ac info -P <package-id> [--json]      # 显式 -P 参数（支持包 ID 或物理文件路径）
+ac info ./examples/github-tools       # 物理相对/绝对路径
 
-# 查看指定包（支持 packageId 或物理路径）：跨目录查看其完整元数据与配置
-ac info <package-id> [--json]
-ac info -P <package-id> [--json]
-
-# 查看远程云端节点元数据
-ac info --profile <profile-name> [--json]
+# 3. 远程云端节点能力探索
+ac info --profile <profile-name> [--json]       # 查看远程节点元数据与 Actions
+ac info --profile <profile-name> -i "sync"      # 远程节点能力模糊过滤
 ac info --server <url> --token <token> [--json]
 ```
 
@@ -642,13 +654,15 @@ dist/<package>-skill/
 ## Agent 接入与使用约定
 
 ### AI Agent 调用 Source Skill 流程规范：
-- **解析 Skill 根目录**：将 `SKILL.md` 所在目录解析为 `<skill_root>`。
-- **幂等注册**：执行 `ac link "<skill_root>"`（可安全重复执行）。
-- **调用 Action**：始终使用**Package-Qualified ID** 避免冲突：
+1. **探索与匹配能力（首选第一步）**：
+   - 当接到任务或用户指令时，首先通过 `ac info <intent>`（如 `ac info github`）模糊搜索匹配的 Package 与 Action 工具。
+2. **解析 Skill 根目录**：将 `SKILL.md` 所在目录解析为 `<skill_root>`。
+3. **幂等注册**：执行 `ac link "<skill_root>"`（可安全重复执行）。
+4. **调用 Action**：始终使用 **Package-Qualified ID** 避免冲突：
    ```bash
    ac run <package-id>/<action-id> --input '<json>'
    ```
-- **免注册直接执行** (备选)：
+5. **免注册直接执行** (备选)：
    ```bash
    cd <skill_root> && ac run <action-id> --input '<json>'
    ```

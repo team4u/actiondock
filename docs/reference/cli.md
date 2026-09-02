@@ -6,10 +6,13 @@
 
 ## 全量命令列表
 
-### 1. 项目生命周期与元数据
+### 1. 项目生命周期、元数据与能力发现
 ```bash
+# 脚手架初始化项目
 ac init [directory] [--id <package-id>] [--name <name>] [--desc <desc>]
-ac info [identifier] [-P <pkg>] [--json] [--profile <name>] [--server <url>] [--token <token>]
+
+# 元数据检查与意图模糊探索（首选能力发现入口）
+ac info [patterns...] [-i <intent>] [--no-fallback] [-P <pkg>] [--json] [--profile <name>] [--server <url>] [--token <token>]
 ```
 
 ### 2. Action 开发与执行

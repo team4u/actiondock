@@ -369,11 +369,44 @@ describe("CLI End-to-End", () => {
     expect(pkgInInfo).toBeDefined();
     expect(pkgInInfo.actionsCount).toBeGreaterThan(0);
 
-    // Info for specific package from outside directory
+    // Info for specific package from outside directory (exact match)
     const outsideInfoPkg = runCli(["info", "team.github-ops", "--json"], tmpdir());
     expect(outsideInfoPkg.exitCode).toBe(0);
     const outsideInfoPkgData = JSON.parse(outsideInfoPkg.stdout.toString());
     expect(outsideInfoPkgData.id).toBe("team.github-ops");
+
+    // Info with fuzzy matching (multi-match pattern returns filtered list)
+    const outsideInfoFuzzy = runCli(["info", "github", "--json"], tmpdir());
+    expect(outsideInfoFuzzy.exitCode).toBe(0);
+    const outsideInfoFuzzyData = JSON.parse(outsideInfoFuzzy.stdout.toString());
+    if (outsideInfoFuzzyData.linkedPackages) {
+      expect(outsideInfoFuzzyData.linkedPackages.some((p: any) => p.id === "team.github-ops")).toBe(true);
+    } else {
+      expect(outsideInfoFuzzyData.id).toBe("team.github-ops");
+    }
+
+    // Info with unique fuzzy matching pattern (returns single package detail)
+    const outsideInfoUnique = runCli(["info", "github-ops", "--json"], tmpdir());
+    expect(outsideInfoUnique.exitCode).toBe(0);
+    const outsideInfoUniqueData = JSON.parse(outsideInfoUnique.stdout.toString());
+    expect(outsideInfoUniqueData.id).toBe("team.github-ops");
+
+    // Info with explicit intent flag (--intent)
+    const outsideInfoIntent = runCli(["info", "-i", "github-ops", "--json"], tmpdir());
+    expect(outsideInfoIntent.exitCode).toBe(0);
+    const outsideInfoIntentData = JSON.parse(outsideInfoIntent.stdout.toString());
+    expect(outsideInfoIntentData.id).toBe("team.github-ops");
+
+    // Info with unmatched intent + fallback (returns linked packages with isFallback)
+    const outsideInfoFallback = runCli(["info", "nonexistent-keyword-xyz", "--json"], tmpdir());
+    expect(outsideInfoFallback.exitCode).toBe(0);
+    const outsideInfoFallbackData = JSON.parse(outsideInfoFallback.stdout.toString());
+    expect(outsideInfoFallbackData.linkedPackages).toBeDefined();
+    expect(outsideInfoFallbackData.isFallback).toBe(true);
+
+    // Info with unmatched intent + --no-fallback (fails with non-zero exit code)
+    const outsideInfoNoFallback = runCli(["info", "nonexistent-keyword-xyz", "--no-fallback", "--json"], tmpdir());
+    expect(outsideInfoNoFallback.exitCode).not.toBe(0);
 
     // List actions and playbooks from outside directory
     const outsidePbList = runCli(["playbook", "list", "--json"], tmpdir());

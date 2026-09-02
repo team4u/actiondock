@@ -223,6 +223,7 @@ export function resolvePackageRoot(
         return entry.path;
       }
     }
+    return null;
   }
 
   return findProjectRoot(cwd);

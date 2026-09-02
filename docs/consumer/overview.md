@@ -34,9 +34,14 @@ bun install
 bun link @actiondock/sdk
 ```
 
-### 检查包能力清单
+### 检查包能力清单与模糊探索
 ```bash
+# 当前项目内查看详情
 ac info
+
+# 跨目录或全局意图模糊搜索（首选能力发现入口）
+ac info github
+ac info -i "browser|search"
 ```
 
 ### 设置必要的 Token 与配置项

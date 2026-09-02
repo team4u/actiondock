@@ -49,7 +49,7 @@ ac export skill
 | Command | Purpose |
 |---|---|
 | `ac init [dir]` | Initialize an Action package scaffold |
-| `ac info` | Display project metadata, actions, and playbooks |
+| `ac info [patterns...]` | Explore capabilities and display project metadata, actions, and playbooks (supports fuzzy matching) |
 | `ac action list` / `ac run <id>` | List and execute Actions |
 | `ac playbook list` / `show` | Inspect agent task SOP Playbooks |
 | `ac config list` / `get` / `set` | Manage runtime configurations |
