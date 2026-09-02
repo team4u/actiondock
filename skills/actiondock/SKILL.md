@@ -154,6 +154,8 @@ ac action create <action-id> --desc "Action 功能描述" [--file <filename.ts>]
 
 ```ts
 import { defineAction } from "@actiondock/sdk";
+// 级联调用其他 Action 时，使用标准相对路径导入其定义对象（非字符串 ID）
+// import otherAction from "./other-action";
 
 export interface Input {
   repo: string;
@@ -202,7 +204,7 @@ export default defineAction<Input, Output>({
     // Signal: 标准 AbortSignal 取消信号（支持外部 Ctrl+C、超时及 MCP 客户端取消）
     // const res = await fetch(api, { signal: ctx.signal });
 
-    // Action 组合: 跨 Action 组合调用（具备自动循环依赖检测、取消信号向下传播与父子 Run 级联）
+    // Action 组合: 跨 Action 级联调用（传入导入的 Action 定义对象，具备自动循环依赖检测、取消信号向下传播与父子 Run 级联）
     // const detail = await ctx.actions.invoke(otherAction, { ... });
 
     return {
@@ -326,7 +328,7 @@ function defineAction<I = unknown, O = unknown>(definition: {
 | | `clear(prefix?: string): Promise<number>` | 清空当前 scope 或指定前缀下的所有状态 |
 | | `keys(prefix?: string): Promise<string[]>` | 列出所有未过期的状态键名 |
 | | `scope(namespace: string): StateStore` | 获取命名空间隔离的子状态存储实例 |
-| `ctx.actions` | `invoke<I, O>(action: ActionDefinition<I, O>, input: I): Promise<O>` | 纯内存零开销相互调用（带防循环调用检测） |
+| `ctx.actions` | `invoke<I, O>(action: ActionDefinition<I, O>, input: I): Promise<O>` | 纯内存相互调用（传入导入的 Action 定义对象，内置防循环检测与链路继承） |
 | `ctx.log` | `debug / info / warn / error(msg: string, data?: unknown): void` | 结构化诊断日志，强制定向至 stderr |
 | `ctx.signal` | `signal: AbortSignal` | 协作式取消信号（`signal.aborted`） |
 
@@ -421,13 +423,39 @@ ac action run <id> -i '{"repo": "owner/repo"}' --timeout 1m
 ```
 
 标准输出格式：
-```json
-{
-  "ok": true,
-  "runId": "01J...",
-  "data": { ... }
-}
-```
+
+- **执行成功**：
+  ```json
+  {
+    "ok": true,
+    "runId": "01J...",
+    "data": { ... }
+  }
+  ```
+
+- **执行失败**：
+  ```json
+  {
+    "ok": false,
+    "runId": "01J...",
+    "error": {
+      "code": "INPUT_VALIDATION_FAILED",
+      "message": "入参校验失败: /repo is required",
+      "details": [ ... ]
+    }
+  }
+  ```
+
+#### 常见错误代码速查
+
+| 错误代码 | 常见原因 | 修复建议 |
+| :--- | :--- | :--- |
+| `INPUT_VALIDATION_FAILED` | 入参不符合 `inputSchema` 约束 | 核对入参字段名与数据类型 |
+| `OUTPUT_VALIDATION_FAILED` | 返回值不符合 `outputSchema` 约束 | 检查 Action 内部返回对象的结构 |
+| `ACTION_CYCLE_DETECTED` | 级联调用出现递归环路依赖 | 检查并解耦 Action 相互调用链 |
+| `CONFIG_VALIDATION_FAILED` | 缺少必填配置项 | 通过 `ac config set` 或环境变量注入配置 |
+| `ACTION_TIMEOUT` | 执行超出设定的超时时间 | 优化 I/O 或在调用时调大 `--timeout` |
+| `ACTION_NOT_FOUND` | 未找到指定 Action | 核对 Action ID 或检查包是否已 link |
 
 > [!NOTE]
 > **依赖自动管理与包管理器兼容**：若 Action 依赖了未安装的 npm 包，`ac run` 运行时会自动探测包管理器（按 `bun` -> `pnpm` -> `yarn` -> `npm` 降级链）补齐依赖并继续执行，安装日志输出至 `stderr`，确保 `stdout` 始终为纯净 JSON；同时完全兼容直接通过 `npm install` 手动安装的 `node_modules`。
@@ -523,6 +551,29 @@ ac playbook show <id> [--json]
 ac playbook validate [id] [--json]
 ```
 
+### Playbook 标准定义结构 (`playbooks/<id>.md`)
+
+```markdown
+---
+id: deploy-service
+description: 自动化构建、健康检查与线上部署操作规程
+actions:
+  - build-image
+  - health-check
+  - deploy-k8s
+---
+
+# 服务上线标准操作规程 (SOP)
+
+指导 AI Agent 依序调度 Action 完成自动化发布：
+
+## 操作步骤
+
+- 前置环境检查：调用 build-image 构建产物并进行基本验证。
+- 探测服务状态：调用 health-check 确认集群就绪状态。
+- 执行线上部署：调用 deploy-k8s 完成滚动更新。
+```
+
 ---
 
 ## 运行时存储管理
@@ -543,7 +594,9 @@ ac config list -g
 ac config delete -g <key>
 ```
 > [!TIP]
-> **作用域规则**：`ac config set` 在项目内默认写入**项目级配置**，在项目外自动回退写入**全局配置**；加 `-g` 显式写入全局配置。读取优先级：`临时参数覆盖 > 项目级 SQLite > 全局级 SQLite > 环境变量 > 默认配置`。
+> 作用域与解析规则：`ac config set` 在项目内默认写入项目级配置，在项目外自动回退写入全局配置；加 `-g` 显式写入全局配置。
+> - 读取优先级：临时参数覆盖 > 项目级 SQLite > 全局级 SQLite > 环境变量 > 默认配置。
+> - 环境变量命名映射：支持包名大写双下划线前缀（如 `TEAM4U_GITHUB_TOOLS__API_TOKEN`）与全局直接匹配（`API_TOKEN`）。
 
 ### 状态管理 (`ctx.state`)
 ```bash
@@ -596,6 +649,7 @@ describe("my-action", () => {
       signal: controller.signal,
     });
 
+    // 级联调用天然支持：若 myAction 内部通过 ctx.actions.invoke 调用了其他 Action，同样在内存沙箱中执行并校验防环
     const res = await runtime.run(myAction, { repo: "test/repo" });
     expect(res.total).toBe(0);
     expect(await runtime.state.get("last_sync")).toBeDefined();
