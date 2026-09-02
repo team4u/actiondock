@@ -4,52 +4,59 @@ on:
   push:
     tags:
       - "v*"
-  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
 
 jobs:
   publish:
-    name: Build, Verify & Publish to npm
+    name: Verify & Publish to npm
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write # Required for npm provenance / Trusted Publishing
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
-      - name: Setup Bun Runtime
+      - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
-      - name: Install Monorepo Dependencies
-        run: bun install
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
 
-      - name: TypeScript Typecheck
+      - name: Update npm
+        run: npm install -g npm@latest
+
+      - name: Install Dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
         run: bun run typecheck
 
-      - name: Run Unit & Integration Tests
+      - name: Test
         run: bun test
 
-      - name: Run Pack Smoke Test
+      - name: Pack Smoke Test
         run: bun run test:pack
 
-      - name: Setup npm Auth Token
-        if: env.NPM_TOKEN != ''
-        run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> ~/.npmrc
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish SDK
+        working-directory: packages/sdk
+        run: npm publish --access public
 
-      # Publish in strict dependency order: sdk -> core -> mcp -> cli
-      - name: Publish @actiondock/sdk
-        run: cd packages/sdk && bun publish --access public
+      - name: Publish Core
+        working-directory: packages/core
+        run: npm publish --access public
 
-      - name: Publish @actiondock/core
-        run: cd packages/core && bun publish --access public
+      - name: Publish MCP
+        working-directory: packages/mcp
+        run: npm publish --access public
 
-      - name: Publish @actiondock/mcp
-        run: cd packages/mcp && bun publish --access public
-
-      - name: Publish @actiondock/cli
-        run: cd packages/cli && bun publish --access public
+      - name: Publish CLI
+        working-directory: packages/cli
+        run: npm publish --access public
