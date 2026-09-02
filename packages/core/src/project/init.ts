@@ -161,8 +161,8 @@ actions:
 
 # Greeting SOP
 
-1. Call \`sample.greet\` with the user's name.
-2. Confirm the returned greeting message.
+- Call \`sample.greet\` with the user's name.
+- Confirm the returned greeting message.
 `;
   writeFileSync(join(playbooksDir, "greet-user.md"), samplePlaybook);
 
