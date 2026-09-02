@@ -15,7 +15,7 @@ ActionDock 2.0 依赖 **Bun (>= 1.2)** 运行时环境。
 
 ### 1. 安装 Bun 运行时
 ```bash
-npm install bun -g
+npm install -g bun
 ```
 
 ### 2. 安装 ActionDock CLI 与 SDK

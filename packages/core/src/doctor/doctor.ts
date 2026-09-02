@@ -55,7 +55,7 @@ export async function runDoctorChecks(options?: {
       name: "Bun Runtime",
       status: "error",
       message: "Bun runtime not detected",
-      fix: "Install Bun via 'npm install bun -g'",
+      fix: "Install Bun via 'npm install -g bun'",
     });
   }
 

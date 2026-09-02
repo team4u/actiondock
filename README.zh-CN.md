@@ -46,12 +46,16 @@ ActionDock 将 Agent 工具视为标准化软件资产：
 
 ## 快速上手
 
-> **运行环境要求**：需要 [Bun](https://bun.sh/) >= 1.2.0。  
+> **运行环境要求**：需要 [Bun](https://bun.sh/) >= 1.2.0（支持通过 `npm install -g bun` 全局安装）。  
 > *(ActionDock 基于 Bun 原生架构打造。即使通过 `npm install -g @actiondock/cli` 安装，本机也必须安装 Bun 运行时，因为 CLI 入口通过 `#!/usr/bin/env bun` 调度执行。)*
 
 ### 1. 安装命令行工具 (`ac`)
 
 ```bash
+# 安装 Bun 运行时（如尚未安装）
+npm install -g bun
+
+# 全局安装 ActionDock CLI
 npm install -g @actiondock/cli
 ```
 
