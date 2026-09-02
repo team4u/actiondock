@@ -12,7 +12,10 @@
 在系统的**任意终端路径**直接执行 `ac serve`。服务端会自动启动为 **Global Registry Mode**，一键聚合当前系统通过 `ac link` 注册的所有 Action Packages 与 Workspaces：
 
 ```bash
-# 启动在 5177 端口（默认）并设置安全 Token
+# 生产/云端远程微服务启动（监听非回环地址 0.0.0.0，供局域网/公网/Docker/其他机器调用，强制要求 Token 鉴权）
+ac serve --host 0.0.0.0 --port 5177 --token "sk-actiondock-secret"
+
+# 本地仅本机调试（默认绑定 127.0.0.1 回环地址）
 ac serve --port 5177 --token "sk-actiondock-secret"
 ```
 终端输出示例：
@@ -20,7 +23,7 @@ ac serve --port 5177 --token "sk-actiondock-secret"
 ======================================================
   ActionDock 2.0 HTTP Runner Server
 ======================================================
-  * Listening on:    http://127.0.0.1:5177
+  * Listening on:    http://0.0.0.0:5177
   * Project:         Global Registry Mode
   * Authentication:  Bearer Token / Query Token Enabled
   * Health Endpoint: http://127.0.0.1:5177/api/v1/health
@@ -31,11 +34,11 @@ ac serve --port 5177 --token "sk-actiondock-secret"
 ---
 
 ### 姿态 2：单包项目模式（在包项目目录内）
-在包含 `actiondock.json` 的项目目录内运行：
+在包含 `actiondock.json` 的项目目录内运行，并暴露至公网/局域网：
 
 ```bash
 cd examples/github-tools
-ac serve --port 8080 --token "sk-actiondock-secret"
+ac serve --host 0.0.0.0 --port 8080 --token "sk-actiondock-secret"
 ```
 服务将专属绑定该项目，默认直接暴露该包下的所有 Actions 与 Playbooks。
 
@@ -45,23 +48,25 @@ ac serve --port 8080 --token "sk-actiondock-secret"
 无需 `cd` 切换目录，在任意路径通过 `-d` 参数指定目标 Action Package 目录：
 
 ```bash
-ac serve -d ./examples/github-tools --port 8080 --token "sk-actiondock-secret"
+ac serve -d ./examples/github-tools --host 0.0.0.0 --port 8080 --token "sk-actiondock-secret"
 ```
 
 ---
 
 ### 姿态 4：独立单文件二进制运行（目标环境零依赖）
-对于通过 `ac build` 编译生成的独立可执行文件，可在未安装 Bun 或 Node.js 的服务器/容器中直接以服务模式启动：
+对于通过 `ac build` 编译生成的独立可执行文件，可在未安装 Bun 或 Node.js 的生产服务器或容器中直接以微服务模式启动：
 
 ```bash
-./dist/bin/github-tools serve --port 8080 --token "sk-actiondock-secret"
+./dist/bin/github-tools serve --host 0.0.0.0 --port 8080 --token "sk-actiondock-secret"
 ```
 
 ---
 
-## 安全防御机制
+## 网络监听与安全防御机制
 
-1. **非回环地址强制 Token 认证**：当监听在 `0.0.0.0` 或外网 IP 时，强制要求配置 `--token`（或通过环境变量 `ACTIONDOCK_TOKEN` 注入），否则拒绝启动。
+1. **非回环地址强制 Token 认证（安全底线）**：
+   - 默认 `--host 127.0.0.1` 仅允许本机回环访问。
+   - 当监听在非回环地址（如 `--host 0.0.0.0` 或服务器公网/局域网 IP）供远程调度时，**执行引擎强制要求传入 `--token`（或通过环境变量 `ACTIONDOCK_TOKEN` 注入）**，若未配置鉴权凭证将直接拒绝启动，杜绝服务意外裸奔。
 2. **防时序攻击比对**：内置基于 `crypto.timingSafeEqual` 的常数时间 Token 校验，彻底杜绝旁路分析。
 3. **请求体大小防护**：默认限制单个 JSON 请求体上限为 1MB（可通过 `--max-body 10mb` 调整），超限返回 `413 Payload Too Large`。
 4. **CORS 策略**：默认关闭跨域，可通过 `--cors-origin <origin>` 显式添加白名单源。
