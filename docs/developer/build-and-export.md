@@ -112,7 +112,7 @@ ac export skill --playbook review-pr --out ./dist/review-pr-skill
 开发者将构建产物分发给使用者的典型途径：
 
 - **推送到 Git / 代码仓库**：使用者直接通过 `git clone` 拉取源码并在本地消费。
-- **发布为 GitHub Release 制品**：将 `ac build` 生成的可执行文件或 `ac export skill` 生成的 Skill 压缩包挂载在 Release 资产中。
+- **发布为 GitHub Release 资产**：将 `ac build` 生成的可执行文件或 `ac export skill` 生成的 Skill 压缩包挂载在 Release 资产中。
 - **推送到 Skill 注册表 / S3**：供内部团队集中拉取。
 
 > **提示**：关于使用者拿到 Skill 后如何配置到 Claude Code 或 Cursor，请参考 **[使用者指南：接入 Claude Code / Antigravity](/consumer/use-as-skill.md)**。
