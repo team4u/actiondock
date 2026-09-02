@@ -7,6 +7,9 @@ import type {
   LinkedPackageEntry,
   LinkedWorkspaceEntry,
   LinkResult,
+  PruneResult,
+  RegistryStatusReport,
+  RegistryTreeItem,
   ResolvedActionProject,
   ResolvedPlaybookProject,
   UnlinkResult,
@@ -564,6 +567,137 @@ export function resolvePlaybookProject(
       `Playbook '${playbookIdentifier}' not found. You are not in an ActionDock project, and no linked package provides '${playbookIdentifier}'. Use 'ac link' to register your package.`
     );
   }
+}
+
+export function getRegistryStatus(customHome?: string): RegistryStatusReport {
+  const registry = loadRegistry(customHome);
+  const workspaces: RegistryTreeItem[] = [];
+  const packages: RegistryTreeItem[] = [];
+  let staleCount = 0;
+  const seenPackageIds = new Set<string>();
+
+  // 1. Process workspaces
+  if (registry.workspaces) {
+    for (const [wsPath, wsEntry] of Object.entries(registry.workspaces)) {
+      const isWsActive = existsSync(wsPath);
+      if (!isWsActive) {
+        staleCount++;
+        workspaces.push({
+          type: "workspace",
+          id: basename(wsPath),
+          path: wsPath,
+          status: "stale",
+          packagesCount: 0,
+          children: [],
+        });
+        continue;
+      }
+
+      const discoveredRoots = discoverProjects(wsPath);
+      const children: NonNullable<RegistryTreeItem["children"]> = [];
+
+      for (const root of discoveredRoots) {
+        try {
+          const config = loadProjectConfig(root);
+          seenPackageIds.add(config.id);
+          children.push({
+            id: config.id,
+            name: config.name,
+            version: config.version,
+            path: root,
+            status: "active",
+          });
+        } catch {
+          // ignore broken project
+        }
+      }
+
+      workspaces.push({
+        type: "workspace",
+        id: basename(wsPath),
+        path: wsPath,
+        status: "active",
+        packagesCount: children.length,
+        children,
+      });
+    }
+  }
+
+  // 2. Process standalone packages (not part of an active workspace)
+  for (const [pkgId, pkgEntry] of Object.entries(registry.packages)) {
+    if (pkgEntry.workspaceRoot && registry.workspaces && registry.workspaces[pkgEntry.workspaceRoot]) {
+      continue;
+    }
+    if (seenPackageIds.has(pkgId)) {
+      continue;
+    }
+
+    const isPkgActive = existsSync(pkgEntry.path);
+    if (!isPkgActive) {
+      staleCount++;
+      packages.push({
+        type: "package",
+        id: pkgEntry.id,
+        name: pkgEntry.name,
+        version: pkgEntry.version,
+        path: pkgEntry.path,
+        status: "stale",
+      });
+    } else {
+      packages.push({
+        type: "package",
+        id: pkgEntry.id,
+        name: pkgEntry.name,
+        version: pkgEntry.version,
+        path: pkgEntry.path,
+        status: "active",
+      });
+    }
+  }
+
+  const totalPackagesCount =
+    workspaces.reduce((acc, ws) => acc + (ws.children?.length || 0), 0) +
+    packages.filter((p) => p.status === "active").length;
+
+  return {
+    workspaces,
+    packages,
+    staleCount,
+    totalPackagesCount,
+  };
+}
+
+export function pruneRegistry(customHome?: string): PruneResult {
+  const registry = loadRegistry(customHome);
+  const prunedWorkspaces: LinkedWorkspaceEntry[] = [];
+  const prunedPackages: LinkedPackageEntry[] = [];
+
+  // 1. Prune workspaces
+  if (registry.workspaces) {
+    for (const [wsPath, wsEntry] of Object.entries(registry.workspaces)) {
+      if (!existsSync(wsPath)) {
+        prunedWorkspaces.push(wsEntry);
+        delete registry.workspaces[wsPath];
+      }
+    }
+  }
+
+  // 2. Prune packages
+  for (const [pkgId, pkgEntry] of Object.entries(registry.packages)) {
+    if (!existsSync(pkgEntry.path)) {
+      prunedPackages.push(pkgEntry);
+      delete registry.packages[pkgId];
+    }
+  }
+
+  if (prunedWorkspaces.length > 0 || prunedPackages.length > 0) {
+    saveRegistry(registry, customHome);
+  }
+
+  return {
+    prunedPackages,
+    prunedWorkspaces,
+  };
 }
 
 

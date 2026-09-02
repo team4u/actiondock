@@ -62,6 +62,44 @@ export interface UnlinkResult {
 }
 
 /**
+ * 注册表树形层级节点。
+ */
+export interface RegistryTreeItem {
+  type: "workspace" | "package";
+  id: string;
+  name?: string;
+  version?: string;
+  path: string;
+  status: "active" | "stale";
+  packagesCount?: number;
+  children?: Array<{
+    id: string;
+    name: string;
+    version: string;
+    path: string;
+    status: "active" | "stale";
+  }>;
+}
+
+/**
+ * 注册表健康状态与列表报告。
+ */
+export interface RegistryStatusReport {
+  workspaces: RegistryTreeItem[];
+  packages: RegistryTreeItem[];
+  staleCount: number;
+  totalPackagesCount: number;
+}
+
+/**
+ * 失效清理结果。
+ */
+export interface PruneResult {
+  prunedPackages: LinkedPackageEntry[];
+  prunedWorkspaces: LinkedWorkspaceEntry[];
+}
+
+/**
  * Action 归属项目解析结果。
  */
 export interface ResolvedActionProject {

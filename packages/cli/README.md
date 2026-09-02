@@ -50,6 +50,7 @@ ac export skill
 |---|---|
 | `ac init [dir]` | Initialize an Action package scaffold |
 | `ac info [patterns...]` | Explore capabilities and display project metadata, actions, and playbooks (supports fuzzy matching) |
+| `ac doctor` | Run environment, global registry health, and project diagnostics |
 | `ac action list` / `ac run <id>` | List and execute Actions |
 | `ac playbook list` / `show` | Inspect agent task SOP Playbooks |
 | `ac config list` / `get` / `set` | Manage runtime configurations |
@@ -58,7 +59,7 @@ ac export skill
 | `ac test` | Run fast unit tests |
 | `ac build` | Compile into a zero-dependency standalone binary |
 | `ac export skill` | Export Skill bundle for AI Agent platforms |
-| `ac link` / `unlink` | Register package(s) or workspace directory in global router (with live subproject discovery) |
+| `ac link` / `unlink` | Manage global router (with tree listing, auto-discovery, and prune) |
 | `ac profile` / `ac serve` | Manage remote node profiles and start HTTP Runner |
 | `ac mcp` | Start ActionDock as STDIO or HTTP MCP server |
 

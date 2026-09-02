@@ -2,6 +2,7 @@ import { Command } from "commander";
 import { registerActionCommands } from "./action";
 import { registerBuildCommand } from "./build";
 import { registerConfigCommands } from "./config";
+import { registerDoctorCommand } from "./doctor";
 import { registerExportCommand } from "./export";
 import { registerInfoCommand } from "./info";
 import { registerInitCommand } from "./init";
@@ -24,6 +25,7 @@ export function createCliProgram(): Command {
 
   registerInitCommand(program);
   registerInfoCommand(program);
+  registerDoctorCommand(program);
   registerActionCommands(program);
   registerPlaybookCommands(program);
   registerConfigCommands(program);

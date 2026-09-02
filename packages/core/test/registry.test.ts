@@ -4,9 +4,11 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { initProject } from "../src/project/init";
 import {
+  getRegistryStatus,
   linkPackage,
   listLinkedPackages,
   loadRegistry,
+  pruneRegistry,
   resolveActionProject,
   resolvePlaybookProject,
   unlinkPackage,
@@ -274,4 +276,35 @@ export default defineAction({
 
     rmSync(wsDir, { recursive: true, force: true });
   });
+
+  it("reports registry status and prunes stale links", () => {
+    // 1. Link a valid package A
+    linkPackage(pkgADir, fakeHome);
+
+    // 2. Link a temporary package that will be deleted
+    const tempDir = mkdtempSync(join(tmpdir(), "temp-stale-"));
+    initProject(tempDir, { id: "team.will-delete", name: "Will Delete" });
+    linkPackage(tempDir, fakeHome);
+
+    // Delete tempDir to simulate stale link
+    rmSync(tempDir, { recursive: true, force: true });
+
+    // 3. getRegistryStatus should detect 1 active and 1 stale
+    const statusBefore = getRegistryStatus(fakeHome);
+    expect(statusBefore.staleCount).toBe(1);
+    expect(statusBefore.packages.some((p: any) => p.id === "team.pkg-a" && p.status === "active")).toBe(true);
+    expect(statusBefore.packages.some((p: any) => p.id === "team.will-delete" && p.status === "stale")).toBe(true);
+
+    // 4. pruneRegistry should remove the stale entry
+    const pruneRes = pruneRegistry(fakeHome);
+    expect(pruneRes.prunedPackages.length).toBe(1);
+    expect(pruneRes.prunedPackages[0].id).toBe("team.will-delete");
+
+    // 5. getRegistryStatus after prune should have 0 stale
+    const statusAfter = getRegistryStatus(fakeHome);
+    expect(statusAfter.staleCount).toBe(0);
+    expect(statusAfter.packages.length).toBe(1);
+    expect(statusAfter.packages[0].id).toBe("team.pkg-a");
+  });
 });
+

@@ -1,4 +1,5 @@
 export * from "./build";
+export * from "./doctor";
 export * from "./export";
 export * from "./filter";
 export * from "./profile";

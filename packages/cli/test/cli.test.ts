@@ -677,12 +677,25 @@ describe("CLI End-to-End", () => {
       expect(linkOut).toContain("team.link-sub1");
       expect(linkOut).toContain("team.link-sub2");
 
-      // Test cross-directory execution via ac info
-      const infoProc = runCli(["info", "--json"], tmpdir(), env);
-      expect(infoProc.exitCode).toBe(0);
-      const infoData = JSON.parse(infoProc.stdout.toString());
-      expect(infoData.linkedPackages.some((p: any) => p.id === "team.link-sub1")).toBe(true);
-      expect(infoData.linkedPackages.some((p: any) => p.id === "team.link-sub2")).toBe(true);
+      // Test ac link list tree view
+      const listProc = runCli(["link", "list"], tmpdir(), env);
+      expect(listProc.exitCode).toBe(0);
+      expect(listProc.stdout.toString()).toContain("ActionDock Global Registry");
+      expect(listProc.stdout.toString()).toContain("team.link-sub1");
+
+      // Test ac doctor --json
+      const doctorProc = runCli(["doctor", "--json"], sub1, env);
+      expect(doctorProc.exitCode).toBe(0);
+      const doctorData = JSON.parse(doctorProc.stdout.toString());
+      expect(doctorData.ok).toBe(true);
+      expect(doctorData.hasProject).toBe(true);
+      expect(doctorData.packageId).toBe("team.link-sub1");
+
+      // Delete sub2 directory to simulate stale link and test prune
+      rmSync(sub2, { recursive: true, force: true });
+      const pruneProc = runCli(["unlink", "--prune"], tmpdir(), env);
+      expect(pruneProc.exitCode).toBe(0);
+      expect(pruneProc.stdout.toString()).toContain("[OK]");
 
       // Unlink workspace
       const unlinkProc = runCli(["unlink", wsDir], tmpdir(), env);
@@ -699,3 +712,4 @@ describe("CLI End-to-End", () => {
     }
   });
 });
+
