@@ -6,32 +6,45 @@ ActionDock 支持通过 `ac build` 将整个 Action Package（包含所有 Actio
 
 ---
 
-## 运行独立可执行文件
+## 编译与获取独立可执行文件
 
-下载可执行文件后（Linux/macOS 下需赋予执行权限）：
+在官方示例目录执行 `ac build`：
 
 ```bash
-chmod +x ./my-tools
+cd examples/github-tools
+ac build
+```
+
+编译完成后会在 `./bin/` 目录下生成跨平台自包含二进制（如 `./bin/github-tools`）。
+
+---
+
+## 运行独立可执行文件
+
+在 Linux/macOS 下赋予执行权限后直接运行：
+
+```bash
+chmod +x ./bin/github-tools
 
 # 查看内置的 Actions 列表与元数据
-./my-tools info
+./bin/github-tools info
 
-# 查看帮助
-./my-tools --help
+# 查看帮助信息
+./bin/github-tools --help
 ```
 
 ---
 
 ## 直接在命令行调用 Action
 
-通过 `run` 命令传入 JSON 参数或 JSON 文件：
+通过 `run` 命令传入 JSON 参数或 JSON 文件（同样支持无 Token 的 Demo 模式）：
 
 ```bash
 # 行内 JSON 字符串
-./my-tools run github.get-pr --input '{"repo": "team4u/actiondock", "prNumber": 1}'
+./bin/github-tools run github.list-prs --input '{"repo": "team4u/actiondock"}'
 
 # 指定输入文件
-./my-tools run github.get-pr --input ./input.json
+./bin/github-tools run github.get-pr --input ./input.json
 ```
 
 ### 标准 JSON Envelope 输出
@@ -42,10 +55,15 @@ chmod +x ./my-tools
   "ok": true,
   "runId": "01JMB394...",
   "data": {
-    "id": 123456,
-    "number": 1,
-    "title": "feat: standalone build support",
-    "state": "open"
+    "items": [
+      {
+        "number": 101,
+        "title": "feat(core): support bun native compilation",
+        "author": "octocat",
+        "state": "open"
+      }
+    ],
+    "count": 1
   }
 }
 ```
@@ -57,28 +75,28 @@ chmod +x ./my-tools
 独立二进制同样内嵌了独立的 SQLite 配置存储系统：
 
 ```bash
-# 设置凭证（存入当前工作区或默认 SQLite 数据库）
-./my-tools config set GITHUB_TOKEN ghp_xxxxxxxxx
+# 设置凭证（存入工作区 SQLite 数据库）
+./bin/github-tools config set GITHUB_TOKEN ghp_xxxxxxxxx
 
 # 查看配置需求清单
-./my-tools config schema
+./bin/github-tools config schema
 ```
 
 也可以直接通过操作系统环境变量传入配置：
 ```bash
-GITHUB_TOKEN=ghp_xxxxxxxxx ./my-tools run github.get-pr --input '{"repo": "team4u/actiondock", "prNumber": 1}'
+GITHUB_TOKEN=ghp_xxxxxxxxx ./bin/github-tools run github.list-prs --input '{"repo": "team4u/actiondock"}'
 ```
 
 ---
 
 ## 启动内置的 MCP 或 HTTP 服务
 
-独立二进制保留了完整的服务模式：
+独立二进制保留了完整的服务模式，无需安装任何开发环境：
 
 ```bash
 # 启动为零依赖的 MCP STDIO Server（供 Cursor/Claude 直连）
-./my-tools mcp
+./bin/github-tools mcp
 
 # 启动为轻量 HTTP REST API 微服务
-./my-tools serve --port 8080 --token "your-secret-token"
+./bin/github-tools serve --port 8080 --token "your-secret-token"
 ```

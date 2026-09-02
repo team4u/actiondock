@@ -6,10 +6,26 @@ ActionDock 原生支持 [Model Context Protocol (MCP)](https://modelcontextproto
 
 ## 快速配置
 
-在 IDE 的 MCP 配置文件（如 `~/.cursor/mcp.json` 或 Claude Desktop 的 `claude_desktop_config.json`）中添加：
+在 IDE 的 MCP 配置文件（如 `~/.cursor/mcp.json` 或 Claude Desktop 的 `claude_desktop_config.json`）中添加配置：
 
-### 基于本地 Action Package 源码运行
-如果本地已安装了 `ac` CLI（或克隆了源码包）：
+### 推荐：全局一键挂载所有已 link 包（最简方式）
+如果在仓库根目录执行过 `ac link`，可直接使用 `--all` 参数将所有已注册包（包括官方示例包）一次性暴露给 IDE：
+
+```json
+{
+  "mcpServers": {
+    "actiondock-tools": {
+      "command": "ac",
+      "args": ["mcp", "--all"]
+    }
+  }
+}
+```
+
+---
+
+### 方式二：指定具体示例包源码目录
+也可以通过 `cwd` 参数精确挂载特定的示例包目录（首次调用时 ActionDock 会自动检测并静默补齐依赖）：
 
 ```json
 {
@@ -17,14 +33,16 @@ ActionDock 原生支持 [Model Context Protocol (MCP)](https://modelcontextproto
     "github-tools": {
       "command": "ac",
       "args": ["mcp"],
-      "cwd": "/absolute/path/to/my-action-tools"
+      "cwd": "/absolute/path/to/actiondock/examples/github-tools"
     }
   }
 }
 ```
 
-### 基于独立单文件二进制运行（免环境依赖）
-如果目标开发机未安装 Bun 或 `ac`，直接指向编译后的独立可执行文件：
+---
+
+### 方式三：基于独立单文件二进制运行（零环境依赖）
+如果目标开发机未安装 Bun 或 `ac`，直接指向编译后的独立可执行文件（如通过 `ac build` 生成的二进制）：
 
 ```json
 {
@@ -39,14 +57,14 @@ ActionDock 原生支持 [Model Context Protocol (MCP)](https://modelcontextproto
 
 ---
 
-## 常用 IDE 配置路径速查
+## 常用 IDE 配置文件路径速查
 
 | IDE / 客户端 | 配置文件路径 |
 | :--- | :--- |
 | **Claude Code** | `~/.claude.json` 或项目根目录 `.claude.json` |
 | **Claude Desktop (macOS)** | `~/Library/Application Support/Claude/claude_desktop_config.json` |
 | **Claude Desktop (Windows)** | `%APPDATA%\Claude\claude_desktop_config.json` |
-| **Cursor** | Cursor 设置中的 MCP 配置项 |
+| **Cursor** | Cursor 设置中的 MCP 配置项 (`~/.cursor/mcp.json`) |
 | **Windsurf** | `~/.codeium/windsurf/mcp_config.json` |
 
 ---
@@ -57,12 +75,10 @@ ActionDock 原生支持 [Model Context Protocol (MCP)](https://modelcontextproto
 `ac mcp` 支持一次性挂载多个工具包目录，重名 Action 会自动附加包名命名空间：
 
 ```bash
-ac mcp /path/to/pkg1 /path/to/pkg2
+ac mcp ./examples/github-tools ./packages/my-custom-tools
 ```
 
 ### 挂载全局所有注册包
-如果之前在多个项目下执行过 `ac link`，可直接使用 `--all` 一键暴露全局所有包：
-
 ```bash
 ac mcp --all
 ```

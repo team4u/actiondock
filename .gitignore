@@ -21,3 +21,4 @@ dist/
 *.iml
 .planning/
 .claude/
+tmp/
