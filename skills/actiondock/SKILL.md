@@ -102,12 +102,14 @@ ac info --server <url> --token <token> [--json]
 ### 全局包与工作区注册与解绑 (ActionDock 路由表)
 > [!NOTE]
 > `ac link` 负责将当前 Package 或包含多个子包的工作区（Workspace）注册到 ActionDock 全局路由表中，以便跨目录通过 `ac run <pkg>/<action>` 调度；它**不负责** `node_modules` 的代码依赖，依赖请使用 `bun link`。
-> - **单包注册**：在 Action Package 目录下执行，注册当前单包。
-> - **工作区挂载与子项目自动感知**：在包含多个子包的目录（如 `examples/`、`packages/` 或 Monorepo 根目录）执行 `ac link [path]`，自动批量注册所有子包并挂载为 Workspace；后续工作区内新增子包**无需重新 link**，全局路由与 `ac info` 自动动态感知。
+> - **单包注册（智能默认）**：在 Action Package 目录下执行，自动注册当前单包。
+> - **工作区挂载与子项目自动感知（智能默认）**：在包含多个子包的目录（如 `examples/`、`packages/` 或 Monorepo 根目录）执行 `ac link [path]`，自动批量扫描所有子包并挂载为 Workspace；后续工作区内新增子包**无需重新 link**，全局路由与 `ac info` 自动动态感知。
+> - **`-r, --recursive` 强制递归**：当当前根目录本身已是一个 Action Package，但子目录下仍嵌套了其他独立子包时，使用 `-r` 强制深度遍历所有嵌套子包并统一注册为 Workspace。
 
 ```bash
-ac link [path] [-r|--recursive]    # 注册当前包、指定包或整个工作区目录（自动扫描子项目，新增子包零操作动态感知）
-ac unlink [id|path]                 # 从全局注册表中移除指定包或工作区
+ac link [path]                     # 智能注册：单包目录注册单包，多包目录自动扫描并挂载 Workspace
+ac link [path] -r, --recursive     # 强制递归：在包内嵌套子包的复杂结构下强制深度扫描并挂载
+ac unlink [id|path]                # 从全局注册表中移除指定包或工作区
 ```
 
 ### 跨目录包目标参数 (`-P, --package`)

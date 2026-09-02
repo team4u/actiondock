@@ -106,8 +106,9 @@ ac profile use <name>
 ac profile remove <name>
 
 # 全局包与工作区注册与解绑 (ActionDock 路由表，支持子项目自动发现与零操作动态感知)
-ac link [path] [-r|--recursive]    # 注册当前包、指定包或整个工作区目录（自动扫描子项目，新增子包零操作动态感知）
-ac unlink [id|path]                 # 从全局注册表中移除指定包或工作区
+ac link [path]                     # 智能注册：单包目录注册单包，多包目录自动扫描并挂载 Workspace（新增子包零操作感知）
+ac link [path] -r, --recursive     # 强制递归：在包内嵌套子包的复杂结构下强制深度扫描并挂载 Workspace
+ac unlink [id|path]                # 从全局注册表中移除指定包或工作区
 ```
 
 ---
