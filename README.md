@@ -252,27 +252,34 @@ Visit the [Documentation Center](docs/README.md) for full guides:
 
 - **Getting Started**
   - [Installation](docs/getting-started/installation.md)
-  - [Quick Start](docs/getting-started/quick-start.md)
-  - [Create Your First Action](docs/getting-started/first-action.md)
+  - [Core Overview & Dual Paths](docs/getting-started/overview.md)
+- **Consumer Guide**
+  - [Overview](docs/consumer/overview.md)
+  - [Use as Agent Skill](docs/consumer/use-as-skill.md)
+  - [Use as MCP Server](docs/consumer/use-as-mcp.md)
+  - [Standalone Binary Run](docs/consumer/standalone-run.md)
+  - [HTTP Service](docs/consumer/http-service.md)
+  - [Configuration & Credentials](docs/consumer/configuration.md)
+- **Developer Guide**
+  - [Quick Start](docs/developer/quick-start.md)
+  - [First Action](docs/developer/first-action.md)
+  - [Playbooks](docs/developer/playbooks.md)
+  - [Testing & Verification](docs/developer/testing.md)
+  - [Storage & Persistence](docs/developer/storage.md)
+  - [Profiles & Remote Dispatch](docs/developer/profiles.md)
+  - [Build & Skill Export](docs/developer/build-and-export.md)
 - **Core Concepts**
   - [Action Package](docs/concepts/action-package.md) *(The core architectural abstraction)*
   - [Action](docs/concepts/action.md)
   - [ActionContext](docs/concepts/action-context.md)
   - [Playbook](docs/concepts/playbook.md)
   - [Agent Skill](docs/concepts/skill.md)
-- **Guides**
-  - [Testing & Verification](docs/guides/testing.md)
-  - [MCP Integration](docs/guides/mcp.md)
-  - [Standalone Binary Build](docs/guides/standalone-build.md)
-  - [Skill Export](docs/guides/skill-export.md)
-  - [HTTP Runner Service](docs/guides/http-server.md)
-  - [Storage & Persistence](docs/guides/storage.md)
-  - [Profiles & Remote Dispatch](docs/guides/profiles.md)
 - **Reference**
   - [CLI Reference](docs/reference/cli.md)
   - [Configuration Resolution](docs/reference/config.md)
   - [SDK Action API](docs/reference/action-api.md)
   - [Error Codes & Diagnostics](docs/reference/error-codes.md)
+  - [1.0 to 2.0 Migration Guide](docs/reference/v1-to-v2-migration.md)
 - **Architecture**
   - [Runtime Engine](docs/architecture/runtime.md)
   - [Stdout/Stderr Physical Isolation](docs/architecture/stdout-stderr.md)

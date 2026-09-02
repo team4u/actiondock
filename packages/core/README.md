@@ -38,13 +38,13 @@ bun add @actiondock/core
 
 ## 📖 Documentation
 
-- [Runtime Architecture](https://github.com/team4u/actiondock/blob/main/docs/architecture/runtime.md)
-- [Storage & Persistence Guide](https://github.com/team4u/actiondock/blob/main/docs/guides/storage.md)
-- [Standalone Binary Build](https://github.com/team4u/actiondock/blob/main/docs/guides/standalone-build.md)
-- [HTTP Server & Remote Dispatch](https://github.com/team4u/actiondock/blob/main/docs/guides/http-server.md)
+- [Runtime Architecture](../../docs/architecture/runtime.md)
+- [Storage & Persistence Guide](../../docs/developer/storage.md)
+- [Standalone Binary Build](../../docs/developer/build-and-export.md)
+- [HTTP Server & Remote Dispatch](../../docs/consumer/http-service.md)
 
 ---
 
 ## License
 
-[Apache-2.0](LICENSE) © team4u
+[Apache-2.0](../../LICENSE) © team4u

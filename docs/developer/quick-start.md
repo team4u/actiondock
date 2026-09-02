@@ -124,6 +124,6 @@ ac build
 
 ## 下一步
 
-- 阅读 [深入业务 Action 开发](/developer/first-action.md) 了解配置、持久化与外部 API 调用。
-- 探索 [编写 Playbook 规程](/developer/playbooks.md)。
-- 了解 [单元测试与沙箱验证](/developer/testing.md)。
+- 阅读 [深入业务 Action 开发](first-action.md) 了解配置、持久化与外部 API 调用。
+- 探索 [编写 Playbook 规程](playbooks.md)。
+- 了解 [单元测试与沙箱验证](testing.md)。

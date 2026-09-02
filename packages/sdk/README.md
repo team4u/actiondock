@@ -108,14 +108,14 @@ describe("sample.greet Action", () => {
 
 ## 📖 Documentation
 
-For detailed guides, design principles, and exhaustive API references, see the [ActionDock Documentation Center](https://github.com/team4u/actiondock#readme):
+For detailed guides, design principles, and exhaustive API references, see the [ActionDock Documentation Center](../../docs/README.md):
 
-- [Action SDK API Reference](https://github.com/team4u/actiondock/blob/main/docs/reference/action-api.md)
-- [ActionContext Concept](https://github.com/team4u/actiondock/blob/main/docs/concepts/action-context.md)
-- [Testing & Verification Guide](https://github.com/team4u/actiondock/blob/main/docs/guides/testing.md)
+- [Action SDK API Reference](../../docs/reference/action-api.md)
+- [ActionContext Concept](../../docs/concepts/action-context.md)
+- [Testing & Verification Guide](../../docs/developer/testing.md)
 
 ---
 
 ## License
 
-[Apache-2.0](LICENSE) © team4u
+[Apache-2.0](../../LICENSE) © team4u

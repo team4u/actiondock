@@ -70,16 +70,16 @@ ac export skill
 
 ## 📖 Complete Documentation
 
-For the full list of flags, options, remote profiles, and advanced usage, refer to the [ActionDock Documentation Center](https://github.com/team4u/actiondock#readme):
+For the full list of flags, options, remote profiles, and advanced usage, refer to the [ActionDock Documentation Center](../../docs/README.md):
 
-- [CLI Reference Manual](https://github.com/team4u/actiondock/blob/main/docs/reference/cli.md)
-- [Quick Start Guide](https://github.com/team4u/actiondock/blob/main/docs/getting-started/quick-start.md)
-- [MCP Integration Guide](https://github.com/team4u/actiondock/blob/main/docs/guides/mcp.md)
-- [Standalone Binary Build Guide](https://github.com/team4u/actiondock/blob/main/docs/guides/standalone-build.md)
-- [Skill Export Guide](https://github.com/team4u/actiondock/blob/main/docs/guides/skill-export.md)
+- [CLI Reference Manual](../../docs/reference/cli.md)
+- [Quick Start Guide](../../docs/developer/quick-start.md)
+- [MCP Integration Guide](../../docs/consumer/use-as-mcp.md)
+- [Standalone Binary Build Guide](../../docs/developer/build-and-export.md)
+- [Skill Export Guide](../../docs/consumer/use-as-skill.md)
 
 ---
 
 ## License
 
-[Apache-2.0](LICENSE) © team4u
+[Apache-2.0](../../LICENSE) © team4u

@@ -250,29 +250,36 @@ actiondock/
 
 请参阅 [官方技术文档中心](docs/README.md) 获取详尽指南：
 
-- **新手入门 (Getting Started)**
+- **快速概览 (Getting Started)**
   - [环境安装](docs/getting-started/installation.md)
-  - [快速开始](docs/getting-started/quick-start.md)
-  - [编写第一个 Action](docs/getting-started/first-action.md)
+  - [核心概览与双轨导引](docs/getting-started/overview.md)
+- **使用者指南 (Consumer Guide)**
+  - [消费与接入总览](docs/consumer/overview.md)
+  - [接入 Claude Code / Antigravity 技能库](docs/consumer/use-as-skill.md)
+  - [接入 Cursor / Windsurf / IDE (MCP 服务)](docs/consumer/use-as-mcp.md)
+  - [独立二进制单文件运行](docs/consumer/standalone-run.md)
+  - [HTTP 远程微服务与 API 调度](docs/consumer/http-service.md)
+  - [消费端配置与凭证注入](docs/consumer/configuration.md)
+- **开发者指南 (Developer Guide)**
+  - [快速上手开发](docs/developer/quick-start.md)
+  - [深入业务 Action 开发](docs/developer/first-action.md)
+  - [编写 Playbook 规程](docs/developer/playbooks.md)
+  - [单元测试与沙箱验证](docs/developer/testing.md)
+  - [状态持久化与 SQLite 存储](docs/developer/storage.md)
+  - [多环境 Profile 与远程调度](docs/developer/profiles.md)
+  - [构建、打包与 Skill 导出](docs/developer/build-and-export.md)
 - **核心概念 (Concepts)**
   - [Action Package 核心抽象](docs/concepts/action-package.md) *(核心架构模型)*
   - [Action 原子工具](docs/concepts/action.md)
   - [ActionContext 上下文机制](docs/concepts/action-context.md)
   - [Playbook 规程规范](docs/concepts/playbook.md)
   - [Agent Skill 技能交付包](docs/concepts/skill.md)
-- **实践指南 (Guides)**
-  - [测试与验证指南](docs/guides/testing.md)
-  - [MCP 协议集成](docs/guides/mcp.md)
-  - [独立二进制编译构建](docs/guides/standalone-build.md)
-  - [Agent Skill 导出分发](docs/guides/skill-export.md)
-  - [HTTP 服务与远程运行](docs/guides/http-server.md)
-  - [SQLite 存储与状态管理](docs/guides/storage.md)
-  - [多环境 Profile 与远程调度](docs/guides/profiles.md)
 - **参考手册 (Reference)**
   - [CLI 命令行参考手册](docs/reference/cli.md)
   - [配置解析优先级](docs/reference/config.md)
   - [SDK Action API 手册](docs/reference/action-api.md)
   - [错误代码与排错手册](docs/reference/error-codes.md)
+  - [1.0 到 2.0 迁移指南](docs/reference/v1-to-v2-migration.md)
 - **底层架构 (Architecture)**
   - [Runtime 运行时执行引擎](docs/architecture/runtime.md)
   - [Stdout/Stderr 物理通道隔离](docs/architecture/stdout-stderr.md)

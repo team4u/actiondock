@@ -33,11 +33,11 @@ npm install @actiondock/mcp
 
 ## 📖 Documentation
 
-- [MCP Integration Guide](https://github.com/team4u/actiondock/blob/main/docs/guides/mcp.md)
-- [Action API Reference](https://github.com/team4u/actiondock/blob/main/docs/reference/action-api.md)
+- [MCP Integration Guide](../../docs/consumer/use-as-mcp.md)
+- [Action API Reference](../../docs/reference/action-api.md)
 
 ---
 
 ## License
 
-[Apache-2.0](LICENSE) © team4u
+[Apache-2.0](../../LICENSE) © team4u
