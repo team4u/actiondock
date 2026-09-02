@@ -184,4 +184,94 @@ export default defineAction({
     expect(scopedRes.packageId).toBe("team.pkg-a");
     expect(scopedRes.playbook.id).toBe("common-sop");
   });
+
+  it("links workspace directory and auto-discovers subprojects", () => {
+    // Create a workspace root containing pkg-sub1 and pkg-sub2
+    const wsDir = mkdtempSync(join(tmpdir(), "ws-root-"));
+    const sub1 = join(wsDir, "packages", "sub1");
+    const sub2 = join(wsDir, "packages", "sub2");
+
+    initProject(sub1, { id: "team.sub-1", name: "Sub 1" });
+    initProject(sub2, { id: "team.sub-2", name: "Sub 2" });
+
+    // Link the workspace root (which does NOT have actiondock.json itself)
+    const result = linkPackage(wsDir, fakeHome);
+    expect(result.isWorkspace).toBe(true);
+    expect(result.entries.length).toBe(2);
+    expect(result.entries.map((e) => e.id)).toContain("team.sub-1");
+    expect(result.entries.map((e) => e.id)).toContain("team.sub-2");
+
+    // listLinkedPackages should list both
+    const linked = listLinkedPackages(fakeHome);
+    expect(linked.map((p) => p.id)).toContain("team.sub-1");
+    expect(linked.map((p) => p.id)).toContain("team.sub-2");
+
+    // Unlink workspace
+    const unlinked = unlinkPackage(wsDir, fakeHome);
+    expect(unlinked?.type).toBe("workspace");
+    expect(unlinked?.packagesCount).toBe(2);
+
+    const afterUnlink = listLinkedPackages(fakeHome);
+    expect(afterUnlink.find((p) => p.id === "team.sub-1")).toBeUndefined();
+    expect(afterUnlink.find((p) => p.id === "team.sub-2")).toBeUndefined();
+
+    rmSync(wsDir, { recursive: true, force: true });
+  });
+
+  it("dynamically discovers newly added subprojects in linked workspace without re-linking", async () => {
+    const rootNodeModules = resolve(__dirname, "../../../node_modules");
+
+    // 1. Create workspace with initial sub1
+    const wsDir = mkdtempSync(join(tmpdir(), "ws-dynamic-"));
+    const sub1 = join(wsDir, "tools", "sub1");
+    initProject(sub1, { id: "team.dyn-1", name: "Dynamic Sub 1" });
+    if (existsSync(rootNodeModules)) {
+      symlinkSync(rootNodeModules, join(sub1, "node_modules"), "dir");
+    }
+
+    const action1Content = `
+import { defineAction } from "@actiondock/sdk";
+export default defineAction({
+  id: "dyn.action1",
+  inputSchema: { type: "object" },
+  async run() { return { ok: true }; }
+});
+`;
+    writeFileSync(join(sub1, "actions", "dyn1.ts"), action1Content);
+
+    // 2. Link workspace
+    const res = linkPackage(wsDir, fakeHome);
+    expect(res.isWorkspace).toBe(true);
+    expect(res.entries.length).toBe(1);
+
+    // 3. Add sub2 into workspace WITHOUT calling linkPackage again (simulating git pull / new package)
+    const sub2 = join(wsDir, "tools", "sub2");
+    initProject(sub2, { id: "team.dyn-2", name: "Dynamic Sub 2" });
+    if (existsSync(rootNodeModules)) {
+      symlinkSync(rootNodeModules, join(sub2, "node_modules"), "dir");
+    }
+
+    const action2Content = `
+import { defineAction } from "@actiondock/sdk";
+export default defineAction({
+  id: "dyn.action2",
+  inputSchema: { type: "object" },
+  async run() { return { fromDyn2: true }; }
+});
+`;
+    writeFileSync(join(sub2, "actions", "dyn2.ts"), action2Content);
+
+    // 4. listLinkedPackages should automatically include newly added sub2!
+    const allLinked = listLinkedPackages(fakeHome);
+    expect(allLinked.map((p) => p.id)).toContain("team.dyn-1");
+    expect(allLinked.map((p) => p.id)).toContain("team.dyn-2");
+
+    // 5. resolveActionProject should seamlessly resolve action from newly added sub2!
+    const resolved = await resolveActionProject("dyn.action2", fakeHome, fakeHome);
+    expect(resolved.packageId).toBe("team.dyn-2");
+    expect(resolved.projectRoot).toBe(sub2);
+    expect(resolved.actionId).toBe("dyn.action2");
+
+    rmSync(wsDir, { recursive: true, force: true });
+  });
 });

@@ -68,7 +68,7 @@ bun link @actiondock/sdk   # 接入本地全局 SDK 并自动补齐其余依赖
 #### Link 三原则（Agent 必读）：
 1. **契约原则**：`package.json` 永远声明 `"@actiondock/sdk": "^2.0.0"`，**严禁**改为 `link:` 或本地相对路径（保证跨机器与独立构建一致性）。
 2. **分层原则**：SDK 源码根目录 `bun link` 全局执行一次；各 Action 项目内 `bun link @actiondock/sdk` 每项目执行一次。
-3. **双 Link 区分**：`ac link` 是 **ActionDock 全局包注册**（支持跨目录 `ac run pkg/action`），`bun link` 是 **TypeScript/Node 依赖解析**，两者职责独立，开发态通常都需要执行。
+3. **双 Link 区分**：`ac link` 是 **ActionDock 全局包与工作区注册**（支持跨目录 `ac run pkg/action`，支持单包或工作区一键挂载并动态感知子包），`bun link` 是 **TypeScript/Node 依赖解析**，两者职责独立，开发态通常都需要执行。
 
 ### 核心指引：能力发现与模糊探索（Agent 操作首选）
 
@@ -99,13 +99,15 @@ ac info --profile <profile-name> -i "sync"      # 远程节点能力模糊过滤
 ac info --server <url> --token <token> [--json]
 ```
 
-### 全局包注册与解绑 (ActionDock 路由表)
+### 全局包与工作区注册与解绑 (ActionDock 路由表)
 > [!NOTE]
-> `ac link` 负责将当前 Package 注册到 ActionDock 全局路由表中，以便跨目录通过 `ac run <pkg>/<action>` 调度；它**不负责** `node_modules` 的代码依赖，依赖请使用 `bun link`。
+> `ac link` 负责将当前 Package 或包含多个子包的工作区（Workspace）注册到 ActionDock 全局路由表中，以便跨目录通过 `ac run <pkg>/<action>` 调度；它**不负责** `node_modules` 的代码依赖，依赖请使用 `bun link`。
+> - **单包注册**：在 Action Package 目录下执行，注册当前单包。
+> - **工作区挂载与子项目自动感知**：在包含多个子包的目录（如 `examples/`、`packages/` 或 Monorepo 根目录）执行 `ac link [path]`，自动批量注册所有子包并挂载为 Workspace；后续工作区内新增子包**无需重新 link**，全局路由与 `ac info` 自动动态感知。
 
 ```bash
-ac link [path]          # 注册当前或指定包到全局开发态注册表
-ac unlink [id|path]     # 从全局注册表中移除
+ac link [path] [-r|--recursive]    # 注册当前包、指定包或整个工作区目录（自动扫描子项目，新增子包零操作动态感知）
+ac unlink [id|path]                 # 从全局注册表中移除指定包或工作区
 ```
 
 ### 跨目录包目标参数 (`-P, --package`)

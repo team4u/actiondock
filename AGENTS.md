@@ -23,6 +23,7 @@
   - **契约保持**：`package.json` 始终声明 `"@actiondock/sdk": "^2.0.0"`，**严禁**修改为 `link:` 或相对路径，保证跨机器分发与独立构建一致性。
   - **开发态解析**：未发布 npm 时，全局一次性 `cd packages/sdk && bun link`，新项目内执行 `bun link @actiondock/sdk`。
   - **双 Link 区分**：`ac link` 是 ActionDock 全局路由表注册（跨目录调度 `ac run <pkg>/<action>`）；`bun link` 是 Node/Bun 依赖解析（填充 `node_modules`）。两者职责独立，开发态通常都需要执行。
+  - **工作区与子项目自动感知**：`ac link [path]` 支持单包与工作区容器目录。在包含多个子包的目录执行时，会自动注册 Workspace 并扫描子包；后续在工作区内新增子包无需重新 link，全局路由与 `ac info` 自动动态感知。
 - **能力发现与模糊探索规范（Capability Discovery with `ac info`）**：
   - **首选探索入口**：Agent 接收到业务操作指令或需要探索可用能力时，**首选执行 `ac info <patterns...>` 或 `ac info -i <pattern>`** 进行意图模糊搜索，先确认有哪些 Package、Action、Playbook 适合当前任务。
   - **决议机制**：唯一命中时自动展开该包完整详情与配置依赖；多项命中时输出匹配包清单；未命中时默认降级展示全量已注册包。

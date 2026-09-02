@@ -12,6 +12,18 @@ export interface LinkedPackageEntry {
   path: string;
   /** 建立软链接的时间戳（ISO 8601） */
   linkedAt: string;
+  /** 所属 Workspace 根目录（如果是通过 Workspace 自动关联的） */
+  workspaceRoot?: string;
+}
+
+/**
+ * 本地软链接（Link）注册的 Workspace 工作区目录记录。
+ */
+export interface LinkedWorkspaceEntry {
+  /** 工作区物理目录绝对路径 */
+  path: string;
+  /** 建立软链接的时间戳（ISO 8601） */
+  linkedAt: string;
 }
 
 /**
@@ -20,6 +32,33 @@ export interface LinkedPackageEntry {
 export interface GlobalRegistryData {
   version: "2.0.0";
   packages: Record<string, LinkedPackageEntry>;
+  workspaces?: Record<string, LinkedWorkspaceEntry>;
+}
+
+/**
+ * Link 操作返回结果。
+ */
+export interface LinkResult {
+  id: string;
+  name: string;
+  version: string;
+  path: string;
+  linkedAt: string;
+  isWorkspace?: boolean;
+  entries: LinkedPackageEntry[];
+  workspace?: LinkedWorkspaceEntry;
+}
+
+/**
+ * Unlink 操作返回结果。
+ */
+export interface UnlinkResult {
+  type: "package" | "workspace";
+  id: string;
+  path: string;
+  packagesCount?: number;
+  removedPackage?: LinkedPackageEntry;
+  removedWorkspace?: LinkedWorkspaceEntry;
 }
 
 /**

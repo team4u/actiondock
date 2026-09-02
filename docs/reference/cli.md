@@ -105,9 +105,9 @@ ac profile test <name>
 ac profile use <name>
 ac profile remove <name>
 
-# 全局包注册与解绑 (ActionDock 路由表，区别于 bun link 依赖解析)
-ac link [path]          # 注册当前或指定包到全局开发态注册表（支持跨目录 ac run pkg/action）
-ac unlink [id|path]     # 从全局注册表中移除
+# 全局包与工作区注册与解绑 (ActionDock 路由表，支持子项目自动发现与零操作动态感知)
+ac link [path] [-r|--recursive]    # 注册当前包、指定包或整个工作区目录（自动扫描子项目，新增子包零操作动态感知）
+ac unlink [id|path]                 # 从全局注册表中移除指定包或工作区
 ```
 
 ---

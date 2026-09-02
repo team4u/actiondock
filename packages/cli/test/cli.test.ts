@@ -648,4 +648,54 @@ describe("CLI End-to-End", () => {
       }
     }
   }, 30000);
+
+  it("links workspace directory and unlinks via CLI", () => {
+    const wsHome = mkdtempSync(join(tmpdir(), "actiondock-link-home-"));
+    const wsDir = mkdtempSync(join(tmpdir(), "actiondock-ws-"));
+    const env = { ACTIONDOCK_HOME: wsHome, HOME: wsHome };
+    const rootNodeModules = resolve(__dirname, "../../../node_modules");
+
+    try {
+      const sub1 = join(wsDir, "packages", "pkg1");
+      const sub2 = join(wsDir, "packages", "pkg2");
+
+      const init1 = runCli(["init", "--id", "team.link-sub1", "--name", "Sub 1", sub1], wsDir, env);
+      expect(init1.exitCode).toBe(0);
+      const init2 = runCli(["init", "--id", "team.link-sub2", "--name", "Sub 2", sub2], wsDir, env);
+      expect(init2.exitCode).toBe(0);
+
+      if (existsSync(rootNodeModules)) {
+        symlinkSync(rootNodeModules, join(sub1, "node_modules"), "dir");
+        symlinkSync(rootNodeModules, join(sub2, "node_modules"), "dir");
+      }
+
+      // Link the workspace root
+      const linkProc = runCli(["link", wsDir], tmpdir(), env);
+      expect(linkProc.exitCode).toBe(0);
+      const linkOut = linkProc.stdout.toString();
+      expect(linkOut).toContain("Linked workspace");
+      expect(linkOut).toContain("team.link-sub1");
+      expect(linkOut).toContain("team.link-sub2");
+
+      // Test cross-directory execution via ac info
+      const infoProc = runCli(["info", "--json"], tmpdir(), env);
+      expect(infoProc.exitCode).toBe(0);
+      const infoData = JSON.parse(infoProc.stdout.toString());
+      expect(infoData.linkedPackages.some((p: any) => p.id === "team.link-sub1")).toBe(true);
+      expect(infoData.linkedPackages.some((p: any) => p.id === "team.link-sub2")).toBe(true);
+
+      // Unlink workspace
+      const unlinkProc = runCli(["unlink", wsDir], tmpdir(), env);
+      expect(unlinkProc.exitCode).toBe(0);
+      expect(unlinkProc.stdout.toString()).toContain("Unlinked workspace");
+
+    } finally {
+      if (existsSync(wsHome)) {
+        rmSync(wsHome, { recursive: true, force: true });
+      }
+      if (existsSync(wsDir)) {
+        rmSync(wsDir, { recursive: true, force: true });
+      }
+    }
+  });
 });

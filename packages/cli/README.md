@@ -58,7 +58,7 @@ ac export skill
 | `ac test` | Run fast unit tests |
 | `ac build` | Compile into a zero-dependency standalone binary |
 | `ac export skill` | Export Skill bundle for AI Agent platforms |
-| `ac link` / `unlink` | Register package in global cross-directory router |
+| `ac link` / `unlink` | Register package(s) or workspace directory in global router (with live subproject discovery) |
 | `ac profile` / `ac serve` | Manage remote node profiles and start HTTP Runner |
 | `ac mcp` | Start ActionDock as STDIO or HTTP MCP server |
 
