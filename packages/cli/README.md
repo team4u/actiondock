@@ -6,8 +6,7 @@ The official Command Line Interface (CLI) toolchain for ActionDock 2.0.
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-> **Runtime requirement**: [Bun](https://bun.sh/) >= 1.2.0 is required (can be installed via `npm install -g bun`).  
-> *(ActionDock CLI relies natively on Bun. Even if you install via `npm install -g @actiondock/cli`, Bun must be installed on your machine as the executable shebang runs via `#!/usr/bin/env bun`.)*
+> **Runtime requirement**: [Bun](https://bun.sh/) >= 1.2.0.
 
 `@actiondock/cli` provides the `ac` command to develop, test, build, deploy, and export AI Agent Actions and Skills across MCP, HTTP, CLI, and standalone executables.
 

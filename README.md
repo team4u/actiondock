@@ -46,8 +46,7 @@ ActionDock treats an Agent Tool as a software artifact:
 
 ## Quick Start
 
-> **Runtime requirement**: [Bun](https://bun.sh/) >= 1.2.0 is required (can be installed globally via `npm install -g bun`).  
-> *(ActionDock is natively designed for the Bun runtime. Even when installing globally via npm, Bun must be installed on your system as the CLI runs via `#!/usr/bin/env bun`.)*
+> **Runtime requirement**: [Bun](https://bun.sh/) >= 1.2.0.
 
 ### 1. Install CLI
 
