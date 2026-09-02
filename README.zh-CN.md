@@ -29,18 +29,18 @@ TypeScript Action
 
 ## 为什么选择 ActionDock？
 
-AI Agent 工具正在演进为严肃的软件工程。
+AI 智能体工具正在演进为严肃的软件工程。
 
-它们需要严格的 Schema 约束、单元测试、版本控制、可复现构建和多种分发目标 —— 而不是在每个不同的 Agent 平台和运行时里反复复制同一套业务逻辑。
+它们需要严格的 Schema 约束、单元测试、版本控制、可复现构建和多种分发目标，而不是在每个不同的智能体平台和运行时里反复复制同一套业务逻辑。
 
-ActionDock 将 Agent 工具视为标准化软件资产：
+ActionDock 将智能体工具视为标准化软件资产：
 
-* **代码即契约（Code as Contract）** — TypeScript + 标准 JSON Schema 一体化定义实现与工具契约，运行时自动严格校验。
-* **开箱即测试（Testable by Default）** — 内置纯内存沙箱测试运行时，无需启动 MCP 服务或模拟复杂网络，毫秒级验证。
-* **一次编写，多端复用（Build Once）** — 同一份 Action 源码无缝运行于 CLI、MCP、HTTP 服务与独立二进制。
-* **便携式分发（Portable Distribution）** — 将 Action Package 编译为零外部依赖的单文件独立二进制（目标机器无需安装 Node.js 或 Bun）。
-* **规程化 Agent Skill** — 将原子 Action 与操作规程 Playbook 结合，一键导出为包含领域知识的自包含 Agent Skill。
-* **Git 原生（Git Native）** — Action 与 Playbook 均为纯文本文件，天然适配代码评审（Code Review）、分支管理与 CI/CD 流水线。
+- **代码即契约** — TypeScript 与标准 JSON Schema 一体化定义实现与工具契约，运行时自动严格校验。
+- **开箱即测试** — 内置纯内存沙箱测试运行时，无需启动 MCP 服务或模拟复杂网络，毫秒级验证。
+- **一次编写，多端复用** — 同一份 Action 源码无缝运行于 CLI、MCP、HTTP 服务与独立二进制。
+- **便携式分发** — 将 Action Package 编译为零外部依赖的单文件独立二进制，目标机器无需安装 Node.js 或 Bun。
+- **规程化 Agent Skill** — 将原子 Action 与操作规程 Playbook 结合，一键导出为包含领域知识的自包含 Agent Skill。
+- **Git 原生** — Action 与 Playbook 均为纯文本文件，天然适配代码评审、分支管理与持续集成流水线。
 
 ---
 
@@ -49,7 +49,7 @@ ActionDock 将 Agent 工具视为标准化软件资产：
 > **运行环境要求**：需要 [Bun](https://bun.sh/) >= 1.2.0（支持通过 `npm install -g bun` 全局安装）。  
 > *(ActionDock 基于 Bun 原生架构打造。即使通过 `npm install -g @actiondock/cli` 安装，本机也必须安装 Bun 运行时，因为 CLI 入口通过 `#!/usr/bin/env bun` 调度执行。)*
 
-### 1. 安装命令行工具 (`ac`)
+### 安装命令行工具
 
 ```bash
 # 安装 Bun 运行时（如尚未安装）
@@ -59,7 +59,7 @@ npm install -g bun
 npm install -g @actiondock/cli
 ```
 
-### 2. 初始化 Action Package
+### 初始化 Action Package
 
 ```bash
 ac init hello-tools
@@ -67,7 +67,7 @@ cd hello-tools
 bun install
 ```
 
-### 3. 创建 Action
+### 创建 Action
 
 编写 `actions/hello.ts`：
 
@@ -94,29 +94,29 @@ export default defineAction({
 });
 ```
 
-### 4. 运行、测试与交付
+### 运行、测试与交付
 
-**本地运行：**
+- 本地运行：
 ```bash
 ac run hello --input '{"name":"ActionDock"}'
 ```
 
-**运行内存测试：**
+- 运行内存测试：
 ```bash
 ac test
 ```
 
-**作为 MCP 服务直连 IDE（Claude Code、Cursor、Windsurf）：**
+- 作为 MCP 服务直连 IDE（Claude Code、Cursor、Windsurf）：
 ```bash
 ac mcp
 ```
 
-**编译为零依赖单文件独立二进制：**
+- 编译为零依赖单文件独立二进制：
 ```bash
 ac build
 ```
 
-**导出为便携式 Agent Skill：**
+- 导出为便携式 Agent Skill：
 ```bash
 ac export skill
 ```
@@ -125,13 +125,13 @@ ac export skill
 
 ---
 
-## Action + Playbook
+## Action 与 Playbook
 
-ActionDock 倡导**能力（Capability）与规程（Procedure）分离**：
+ActionDock 倡导能力与规程分离：
 
 ```text
-Action   = 智能体「能做什么」 (Capability)
-Playbook = 智能体「该怎么做」 (Procedure)
+Action   = 智能体「能做什么」
+Playbook = 智能体「该怎么做」
 
              ↓
 
@@ -193,44 +193,40 @@ actions/*.ts ─────┼─ HTTP 微服务 (`ac serve`)
                   └─ 单文件独立二进制 (`ac build`)
 ```
 
-> **One implementation, multiple delivery targets.**
+> **一次实现，全模态交付。**
 
 ---
 
 ## 方案与竞品对比
 
-| 功能 / 评估维度 | ActionDock | mcp-use | FastMCP | Arcade MCP |
+| 功能与评估维度 | ActionDock | mcp-use | FastMCP | Arcade MCP |
 | :--- | :---: | :---: | :---: | :---: |
-| **MCP Server（STDIO 与 HTTP）** | ✅ | ✅ | ✅ | ✅ |
-| **原生 TypeScript 支持** | ✅ | ✅ | ✅ | ✅ / Python |
-| **纯内存单测运行时** | ✅ | ✅ | ✅ | ✅ |
-| **零依赖单文件独立二进制** | **✅** | — | — | — |
-| **Agent Skill 导出（含 SOP 规程）** | **✅** | — | — | — |
-| **Playbook 规程化编排** | **✅** | — | — | — |
-| **远程 HTTP 调度服务** | ✅ | ✅ | ✅ | ✅ |
-| **Git 原生包架构** | ✅ | ✅ | ✅ | ✅ |
-| **托管 OAuth** | — | — | — | **✅** |
-| **托管云平台** | — | ✅ | — | **✅** |
+| MCP 服务（STDIO 与 HTTP） | 支持 | 支持 | 支持 | 支持 |
+| 原生 TypeScript 支持 | 支持 | 支持 | 支持 | 支持 / Python |
+| 纯内存单测运行时 | 支持 | 支持 | 支持 | 支持 |
+| 零依赖单文件独立二进制 | 支持 | — | — | — |
+| Agent Skill 导出（含规程） | 支持 | — | — | — |
+| Playbook 规程化编排 | 支持 | — | — | — |
+| 远程 HTTP 调度服务 | 支持 | 支持 | 支持 | 支持 |
+| Git 原生包架构 | 支持 | 支持 | 支持 | 支持 |
+| 托管 OAuth | — | — | — | 支持 |
+| 托管云平台 | — | 支持 | — | 支持 |
 
 ---
 
 ## 分发目标
 
-```text
-分发目标 (Distribution Targets)
-
-✅ npm 模块生态包 (@actiondock/sdk, @actiondock/core, @actiondock/mcp, @actiondock/cli)
-✅ 独立可执行文件 (ac build -> 单文件自包含二进制)
-✅ Agent Skill    (ac export skill -> 便携式 Skill 交付包)
-⬜ MCPB 扩展包    (桌面端一键安装格式 - 规划中)
-⬜ Docker 容器镜像 (标准容器镜像 - 规划中)
-```
+- npm 模块生态包（`@actiondock/sdk`、`@actiondock/core`、`@actiondock/mcp`、`@actiondock/cli`）
+- 独立可执行文件（`ac build` 编译为单文件自包含二进制）
+- Agent Skill（`ac export skill` 导出为便携式 Skill 交付包）
+- MCPB 扩展包（桌面端一键安装格式，规划中）
+- Docker 容器镜像（标准容器镜像，规划中）
 
 ---
 
 ## 模块分层与代码结构
 
-ActionDock 采用清晰的 Monorepo 分层架构：
+ActionDock 采用清晰的分层架构：
 
 ```text
 actiondock/
@@ -250,17 +246,17 @@ actiondock/
 
 请参阅 [官方技术文档中心](docs/README.md) 获取详尽指南：
 
-- **快速概览 (Getting Started)**
+- **快速概览**
   - [环境安装](docs/getting-started/installation.md)
   - [核心概览与双轨导引](docs/getting-started/overview.md)
-- **使用者指南 (Consumer Guide)**
+- **使用者指南**
   - [消费与接入总览](docs/consumer/overview.md)
   - [接入 Claude Code / Antigravity 技能库](docs/consumer/use-as-skill.md)
   - [接入 Cursor / Windsurf / IDE (MCP 服务)](docs/consumer/use-as-mcp.md)
   - [独立二进制单文件运行](docs/consumer/standalone-run.md)
   - [HTTP 远程微服务与 API 调度](docs/consumer/http-service.md)
   - [消费端配置与凭证注入](docs/consumer/configuration.md)
-- **开发者指南 (Developer Guide)**
+- **开发者指南**
   - [快速上手开发](docs/developer/quick-start.md)
   - [深入业务 Action 开发](docs/developer/first-action.md)
   - [编写 Playbook 规程](docs/developer/playbooks.md)
@@ -268,19 +264,19 @@ actiondock/
   - [状态持久化与 SQLite 存储](docs/developer/storage.md)
   - [多环境 Profile 与远程调度](docs/developer/profiles.md)
   - [构建、打包与 Skill 导出](docs/developer/build-and-export.md)
-- **核心概念 (Concepts)**
-  - [Action Package 核心抽象](docs/concepts/action-package.md) *(核心架构模型)*
+- **核心概念**
+  - [Action Package 核心抽象](docs/concepts/action-package.md)
   - [Action 原子工具](docs/concepts/action.md)
   - [ActionContext 上下文机制](docs/concepts/action-context.md)
   - [Playbook 规程规范](docs/concepts/playbook.md)
   - [Agent Skill 技能交付包](docs/concepts/skill.md)
-- **参考手册 (Reference)**
+- **参考手册**
   - [CLI 命令行参考手册](docs/reference/cli.md)
   - [配置解析优先级](docs/reference/config.md)
   - [SDK Action API 手册](docs/reference/action-api.md)
   - [错误代码与排错手册](docs/reference/error-codes.md)
   - [1.0 到 2.0 迁移指南](docs/reference/v1-to-v2-migration.md)
-- **底层架构 (Architecture)**
+- **底层架构**
   - [Runtime 运行时执行引擎](docs/architecture/runtime.md)
   - [Stdout/Stderr 物理通道隔离](docs/architecture/stdout-stderr.md)
   - [安全加固设计模型](docs/architecture/security.md)

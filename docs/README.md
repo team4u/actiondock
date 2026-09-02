@@ -6,8 +6,8 @@
 [![Tests](https://img.shields.io/badge/tests-81%20passed-brightgreen.svg)](https://github.com/team4u/actiondock)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-> **Build Agent Tools once. Run them anywhere.**
-> 面向 AI Agent 的 Action 与 Skill 开发、测试、构建与分发工具链。
+> **一次编写，全模态交付。**
+> 面向 AI 智能体的 Action 与 Skill 开发、测试、构建与分发工具链。
 > 用 TypeScript 编写原子工具，毫秒级纯内存单测，一键编译为零依赖独立二进制，原生直连 MCP 与 Agent Skill。
 
 ---
@@ -18,7 +18,7 @@ ActionDock 文档中心遵循使用者与开发者角色双轨制设计：
 
 ```text
 快速概览   = 环境准备与全景双轨导引
-使用者指南 = 拿到包或 Skill 怎么在 Agent 与 IDE 中用起来
+使用者指南 = 拿到包或 Skill 怎么在智能体与 IDE 中用起来
 开发者指南 = 从零编写、单测、编译与导出发布 Skill
 核心概念   = Action Package、ActionContext、Playbook 底层模型
 参考手册   = CLI、配置解析、SDK API、错误速查
@@ -45,10 +45,10 @@ ActionDock 文档中心遵循使用者与开发者角色双轨制设计：
 ---
 
 ### 开发者指南
-面向从零打造原子能力、编写 SOP 规程并分发的工具创作者：
+面向从零打造原子能力、编写规程并分发的工具创作者：
 - [快速上手开发](developer/quick-start.md)：初始化、编写 `defineAction` 与本地试跑。
 - [深入业务 Action 开发](developer/first-action.md)：强类型 Schema、`ctx.state` 持久化、`ctx.config` 读取与外部 API。
-- [编写 Playbook 规程](developer/playbooks.md)：为 AI Agent 编写领域专家的标准作业步骤。
+- [编写 Playbook 规程](developer/playbooks.md)：为 AI 智能体编写领域专家的标准作业步骤。
 - [单元测试与沙箱验证](developer/testing.md)：基于 `createTestRuntime` 的纯内存毫秒级测试。
 - [状态持久化与 SQLite 存储](developer/storage.md)：内嵌 SQLite 数据模型、KV 持久化与 TTL 过期。
 - [多环境 Profile 与远程调度](developer/profiles.md)：多云环境节点管理与安全凭证防护。
@@ -60,7 +60,7 @@ ActionDock 文档中心遵循使用者与开发者角色双轨制设计：
 - [Action Package 核心抽象](concepts/action-package.md)：四大支柱（能力、规程、契约、运行态）。
 - [Action 原子能力契约](concepts/action.md)：`defineAction`、强类型约束与 Schema 即契约。
 - [ActionContext 运行时上下文](concepts/action-context.md)：配置解析、SQLite 持久化、级联调用、日志隔离与取消链路。
-- [Playbook 规程模型](concepts/playbook.md)：面向 AI Agent 的领域操作规程、流程时序与安全红线。
+- [Playbook 规程模型](concepts/playbook.md)：面向 AI 智能体的领域操作规程、流程时序与安全红线。
 - [Agent Skill 交付物规范](concepts/skill.md)：源码型与独立二进制型 Skill 双模交付规范。
 
 ---
