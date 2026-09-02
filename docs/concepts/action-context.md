@@ -29,11 +29,11 @@ ActionContext
 ActionDock 实现了业界最严格的 5 级配置回退优先级模型：
 
 ```text
-1. 调用参数覆盖 (Invocation Override: --config k=v)      [最高]
+1. 调用参数覆盖 (--config k=v)                          [最高]
        ↓
 2. SQLite 持久化配置库 (ac config set KEY val)
        ↓
-3. 环境变量 (Explicit ENV / PACKAGE__KEY / KEY)
+3. 环境变量 (PACKAGE__KEY / KEY)
        ↓
 4. 项目默认配置 (actiondock.json -> defaultConfig)
        ↓
@@ -59,7 +59,7 @@ await ctx.state.set("last_sync_time", new Date().toISOString(), 3600);
 // 读取状态（不存在或已过期返回 undefined）
 const lastSync = await ctx.state.get<string>("last_sync_time");
 
-// 作用域隔离 (Scope / Namespace)
+// 作用域隔离 (Namespace)
 const cacheState = ctx.state.scope("cache");
 await cacheState.set("user_101", { name: "Alice" });
 ```

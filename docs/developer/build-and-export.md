@@ -1,4 +1,4 @@
-# 构建、打包与 Skill 导出 (Build & Skill Export)
+# 构建、打包与 Skill 导出
 
 ActionDock 2.0 提供了两大核心交付工具：
 - **`ac build`**：编译为零外部依赖的单个独立可执行文件（适用于生产部署、CI/CD、容器）。
@@ -25,7 +25,7 @@ ac build -P team4u.github-tools
 [SUCCESS] 独立可执行程序已构建: dist/bin/github-tools (大小: ~45MB)
 ```
 
-### 独立编译契约 (Standalone Contract)
+### 独立编译契约
 编译生成的独立二进制保留了开发态的全量功能，且行为完全一致：
 ```bash
 # 直接本地调用 Action
@@ -57,7 +57,7 @@ ac build -P team4u.github-tools
 
 `ac export skill` 用于将 Action Package 打包为可供 AI 智能体直接理解与调用的自包含 Skill（支持 `-P` 跨目录导出）。
 
-### 导出源码型 Skill (Source Skill，默认)
+### 导出源码型 Skill（默认）
 ```bash
 ac export skill
 ac export skill -P team4u.github-tools
@@ -68,7 +68,7 @@ ac export skill -P team4u.github-tools
 - `actions/`：TypeScript Action 源码文件。
 - `playbooks/`：SOP 操作规程 Markdown 文件。
 
-### 导出独立二进制型 Skill (Standalone Skill)
+### 导出独立二进制型 Skill
 如果使用者的目标机器没有安装 Bun / Node.js：
 ```bash
 ac export skill --standalone

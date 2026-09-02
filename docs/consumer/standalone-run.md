@@ -1,4 +1,4 @@
-# 独立二进制与免环境运行 (Standalone Run)
+# 独立二进制与免环境运行
 
 ActionDock 支持通过 `ac build` 将整个 Action Package（包含所有 Action 逻辑、嵌入式 SQLite 引擎、配置系统与 CLI 调度器）编译为**单个零外部依赖的独立可执行文件**。
 
@@ -37,7 +37,7 @@ chmod +x ./bin/github-tools
 
 ## 直接在命令行调用 Action
 
-通过 `run` 命令传入 JSON 参数或 JSON 文件（同样支持无 Token 的 Demo 模式）：
+通过 `run` 命令传入 JSON 参数或 JSON 文件（同样支持无 Token 的示例降级模式）：
 
 ```bash
 # 行内 JSON 字符串
@@ -94,9 +94,9 @@ GITHUB_TOKEN=ghp_xxxxxxxxx ./bin/github-tools run github.list-prs --input '{"rep
 独立二进制保留了完整的服务模式，无需安装任何开发环境：
 
 ```bash
-# 启动为零依赖的 MCP STDIO Server（供 Cursor/Claude 直连）
+# 启动为零依赖的 MCP STDIO 服务（供 Cursor/Claude 直连）
 ./bin/github-tools mcp
 
 # 启动为轻量 HTTP REST API 微服务
-./bin/github-tools serve --port 8080 --token "your-secret-token"
+./bin/github-tools serve --host 0.0.0.0 --port 8080 --token "your-secret-token"
 ```

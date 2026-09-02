@@ -1,4 +1,4 @@
-# 深入业务 Action 开发 (First Business Action)
+# 深入业务 Action 开发
 
 本教程带领编写一个具备真实业务能力的 Action，涵盖输入输出校验、配置读取、状态持久化、日志输出与单元测试。
 

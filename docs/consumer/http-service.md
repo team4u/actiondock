@@ -1,10 +1,10 @@
-# HTTP 远程微服务与 API 调度 (HTTP Service)
+# HTTP 远程微服务与 API 调度
 
 当需要将 ActionDock 部署为微服务，供远程 AI Agent、Webhook、CI/CD 流水线或前端业务系统远程调度时，可以使用 `ac serve` 启动轻量级 HTTP 调度微服务。
 
 ---
 
-## 4 种启动姿态 (Startup Modes)
+## 4 种启动姿态
 
 `ac serve` 具备高度灵活性，无需局限在特定项目目录下运行：
 

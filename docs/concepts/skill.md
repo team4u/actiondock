@@ -11,12 +11,12 @@
 ActionDock 支持两种 Skill 交付形态：
 
 ```text
-               ┌─ 源码型 Skill (Source Skill)
+               ┌─ 源码型 Skill
                │   • 包含 TypeScript 源码与 actiondock.json
 Agent Skill ───┤   • 跨平台体积极小 (< 100KB)
                │   • 依赖宿主环境已安装 Bun
                │
-               └─ 独立二进制型 Skill (Standalone Skill)
+               └─ 独立二进制型 Skill
                    • 内置已编译的零依赖单文件可执行文件
                    • 零外部环境依赖，开箱即用
 ```
@@ -33,7 +33,7 @@ dist/github-tools-skill/
 ├── actiondock.skill.json    # 机器可读的 Skill 清单（包含 Action 列表与参数 Schema）
 ├── actiondock.json          # 包配置定义
 ├── actions/                 # Action 实现文件（源码型）
-├── playbooks/               # SOP 规程文件
+├── playbooks/               # 规程文件
 └── bin/                     # 预编译二进制文件（独立型）
     └── github-tools
 ```
@@ -57,7 +57,7 @@ description: GitHub 自动化运维与代码评审工具集，支持 PR 查询�
 - `github.create-comment`: 提交 Review 评论
 - `github.merge-pr`: 执行 PR 合并
 
-## 推荐操作规程 (Playbooks)
+## 推荐操作规程
 - [PR 自动化审查规程](playbooks/review-pr.md)
 
 ## 调用命令
@@ -81,11 +81,11 @@ ac export skill --playbook review-pr
 
 ---
 
-## 使用者消费方式 (Skill Consumption)
+## 使用者消费方式
 
 导出的 Skill 包可以直接投递给不同 AI 智能体使用：
 - **Claude Code**：放置在 `~/.claude/skills/<skill-name>` 或项目根目录 `.claude/skills/`
 - **Antigravity**：放置在 `~/.gemini/antigravity-cli/skills/<skill-name>`
-- **自研 Agent 框架**：解析 `actiondock.skill.json` 注册工具，将 `SKILL.md` 注入为系统提示词与 SOP 规程。
+- **自研 Agent 框架**：解析 `actiondock.skill.json` 注册工具，将 `SKILL.md` 注入为系统提示词与规程。
 
-详细使用方法请查阅 **[使用者指南：接入 Claude Code / Antigravity](/consumer/use-as-skill.md)** 与 **[开发者指南：构建与 Skill 导出](/developer/build-and-export.md)**。
+详细使用方法请查阅 **[使用者指南：接入 Claude Code / Antigravity 技能库](/consumer/use-as-skill.md)** 与 **[开发者指南：构建、打包与 Skill 导出](/developer/build-and-export.md)**。

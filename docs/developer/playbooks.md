@@ -1,4 +1,4 @@
-# 编写 Playbook SOP 规程 (Authoring Playbooks)
+# 编写 Playbook 规程
 
 **Playbook（规程）** 是 ActionDock 中面向 AI Agent 的业务操作流程规范。
 
@@ -23,9 +23,9 @@ actions:
 # PR 自动化审查操作规程
 
 ## 目标与适用范围
-当开发者提出 PR 审查请求时，AI 助手应遵循以下标准作业规程 (SOP)。
+当开发者提出 PR 审查请求时，AI 助手应遵循以下标准作业规程。
 
-## 标准作业流程 (SOP)
+## 标准作业流程
 - **获取详情**：首先调用 `github.get-pr` 获取 PR 标题、描述与目标分支。
 - **分析差异**：若代码修改量超过 500 行，要求用户确认是否分批审查。
 - **提交反馈**：调用 `github.create-comment` 提交包含安全漏洞、性能建议与风格检查的结构化评论。

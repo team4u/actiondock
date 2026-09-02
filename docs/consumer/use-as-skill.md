@@ -1,12 +1,12 @@
-# 接入 Claude Code / Antigravity (Agent Skill)
+# 接入 Claude Code / Antigravity 技能库
 
 ActionDock 导出的 Agent Skill（通过 `ac export skill` 生成）是一个包含 `SKILL.md`、`actiondock.skill.json`、`actions/` 与 `playbooks/` 的自包含技能包。
 
-AI Agent（如 Claude Code、Antigravity、Codex 等）可以直接识别该目录，并在识别到任务意图时，自主按 SOP 规程调度执行。
+AI Agent（如 Claude Code、Antigravity、Codex 等）可以直接识别该目录，并在识别到任务意图时，自主按规程调度执行。
 
 ---
 
-## 快速导出官方示例为 Agent Skill
+## 快速导出官方示例为 Skill
 
 克隆官方仓库并在根目录执行 `ac link` 后，可在任意路径通过包名直接导出 Skill：
 
@@ -50,7 +50,7 @@ ac export skill -P team4u.github-tools --out .claude/skills/github-tools
 ```bash
 claude
 ```
-在 Claude 对话中，Claude Code 会自动加载 `SKILL.md` 中的能力定义与 SOP 规程。当你向模型提问：“*帮我审查 PR #101 并根据规则提出反馈*” 时，模型会自动识别意图并调度 `github.get-pr`、`github.review-pr` 完成任务。
+在 Claude 对话中，Claude Code 会自动加载 `SKILL.md` 中的能力定义与规程。当你向模型提问：“*帮我审查 PR #101 并根据规则提出反馈*” 时，模型会自动识别意图并调度 `github.get-pr`、`github.review-pr` 完成任务。
 
 ---
 
@@ -84,5 +84,5 @@ ac export skill -P team4u.github-tools --out ~/.gemini/antigravity-cli/skills/gi
 
 自研智能体或使用 LangChain / LlamaIndex / AutoGen 时：
 
-- **自动注册 Tool Functions**：读取 Skill 根目录下的 `actiondock.skill.json`，将其中的 `actions` 字段（包含输入输出 JSON Schema）转换为 LLM 的 Tool Definition。
-- **SOP 注入系统提示词**：将 `SKILL.md` 和 `playbooks/*.md` 文本注入为 System Prompt 或 RAG 检索知识库，使模型遵循领域专家的作业规程。
+- **自动注册工具函数**：读取 Skill 根目录下的 `actiondock.skill.json`，将其中的 `actions` 字段（包含输入输出 JSON Schema）转换为大模型的 Tool Definition。
+- **规程注入系统提示词**：将 `SKILL.md` 和 `playbooks/*.md` 文本注入为 System Prompt 或 RAG 检索知识库，使模型遵循领域专家的作业规程。

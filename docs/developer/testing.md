@@ -1,6 +1,6 @@
-# 实践指南：单元测试与沙箱验证 (Testing Guide)
+# 实践指南：单元测试与沙箱验证
 
-ActionDock 倡导 **“开箱即测试 (Testable by Default)”**。
+ActionDock 倡导**开箱即测试**。
 
 ActionDock 提供了原生的纯内存测试沙箱 `createTestRuntime`，无需启动任何外部进程或真实数据库，即可快速完成全量验证。
 
@@ -84,7 +84,7 @@ it("验证状态 TTL 自动过期", async () => {
 
 ---
 
-## 独立编译契约测试 (Standalone Contract Test)
+## 独立编译契约测试
 
 确保 Action 在源码态与编译后的独立二进制中行为一致：
 

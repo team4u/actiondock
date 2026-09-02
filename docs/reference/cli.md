@@ -51,7 +51,7 @@ ac export skill [-P <package-id>] [--out <dir>] [--standalone] [--playbook <id>]
 
 ### 4. 协议与服务
 ```bash
-# 启动 Model Context Protocol (MCP) 服务（STDIO 默认）
+# 启动 MCP 服务（STDIO 默认）
 ac mcp [-d <dir>] [--package <id>] [--all] [--timeout <duration>]
 
 # 启动 MCP HTTP 微服务
@@ -108,7 +108,7 @@ ac profile test <name>
 ac profile use <name>
 ac profile remove <name>
 
-# 全局包与工作区注册与解绑 (ActionDock 路由表，查看树形请使用 ac info --tree)
+# 全局包与工作区注册与解绑（ActionDock 路由表，查看树形请使用 ac info --tree）
 ac link [path]                     # 智能注册：单包目录注册单包，多包目录自动扫描并挂载 Workspace（新增子包零操作感知）
 ac link [path] -r, --recursive     # 强制递归：在包内嵌套子包的复杂结构下强制深度扫描并挂载 Workspace
 ac unlink [id|path]                # 从全局注册表中移除指定包或工作区

@@ -1,6 +1,6 @@
-# 核心概念：Playbook SOP 规程
+# 核心概念：Playbook 规程
 
-**Playbook** 是面向 AI Agent 的**标准作业程序（Standard Operating Procedure, SOP）**。
+**Playbook** 是面向 AI Agent 的**标准作业规程**。
 
 如果说 Action 决定了智能体「能做什么」，那么 Playbook 规定了智能体「该怎么做、按什么顺序做、遇到错误如何分支、哪些高危操作绝不能做」。
 
@@ -45,7 +45,7 @@ actions:
 ## 3. 合并与终态
 - 仅当全部 CI 检查通过且评审打分 >= 80 时，方可调用 `github.merge-pr`。
 
-## 4. 安全红线 (Guardrails)
+## 4. 安全红线
 - ⚠️ 绝对禁止在未通过 CI 验证的情况下执行合并。
 - ⚠️ 绝对禁止在涉及删除生产数据库脚本的 PR 上直接通过。
 ```

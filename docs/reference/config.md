@@ -9,7 +9,7 @@ ActionDock 提供了强类型、多层级回退的配置管理机制，使得 Ac
 当 Action 内调用 `ctx.config.get("API_KEY")` 时，执行引擎按如下严格顺序逐级寻找配置，一旦命中即刻返回：
 
 ```text
-第 1 级：调用时参数覆盖 (Invocation Override)
+第 1 级：调用时参数覆盖
         CLI: --config API_KEY=xxx
         HTTP: body.config = { API_KEY: "xxx" }
         ↓
@@ -19,16 +19,16 @@ ActionDock 提供了强类型、多层级回退的配置管理机制，使得 Ac
 第 3 级：全局级 SQLite 持久化配置 (~/.actiondock/global.db)
         通过 ac config set -g API_KEY xxx 写入（跨所有 Action Package 共享）
         ↓
-第 4 级：环境变量 (Environment Variables)
+第 4 级：环境变量
         依序查找：
         a. actiondock.json 中声明的 env 映射
         b. 包命名空间环境变量：<PACKAGE_ID>__<KEY>
         c. 全局环境变量：<KEY>
         ↓
-第 5 级：项目默认配置 (Project Defaults)
+第 5 级：项目默认配置
         actiondock.json -> config.<KEY>.default
         ↓
-第 6 级：代码内联默认值 (Code Fallback)
+第 6 级：代码内联默认值
         ctx.config.get("API_KEY", "fallback-val")
 ```
 

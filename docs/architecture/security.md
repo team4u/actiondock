@@ -9,7 +9,7 @@ ActionDock 2.0 在设计之初将安全性置于首位，构建了多层级纵�
 当使用 `ac serve` 或 `ac mcp --port` 启动网络服务时，执行引擎实施以下安全约束：
 
 1. **非回环地址强制 Token 鉴权**：当监听地址为 `0.0.0.0` 或局域网/公网 IP 时，必须配置访问 Token，否则拒绝启动。
-2. **防时序攻击验证**：服务端对客户端传入的 Token 采用常数时间比较（Constant-time comparison / `crypto.timingSafeEqual`），防止旁路时序推测攻击。
+2. **防时序攻击验证**：服务端对客户端传入的 Token 采用常数时间比较（基于 `crypto.timingSafeEqual`），防止旁路时序推测攻击。
 3. **请求体大小硬上限**：默认限制 HTTP 请求体最大为 10MB，拒绝超大畸形 Payload 导致内存耗尽（返回 `413 Payload Too Large`）。
 4. **CORS 严格白名单**：默认关闭跨域共享，仅在显式配置 `corsWhitelist` 时放行指定源。
 

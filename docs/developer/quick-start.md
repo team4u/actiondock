@@ -1,6 +1,6 @@
-# 快速上手 (Quick Start)
+# 快速上手
 
-本指南面向**工具创作者（Developer）**，介绍 Action Package 的初始化、编写、本地测试与打包。
+本指南面向**工具创作者**，介绍 Action Package 的初始化、编写、本地测试与打包。
 
 ---
 
@@ -28,7 +28,7 @@ hello-tools/
 ├── tsconfig.json         # TypeScript 配置
 ├── actions/              # 原子 Action 目录
 │   └── greet.ts          # 脚手架示例 Action
-├── playbooks/            # 规程 SOP 目录
+├── playbooks/            # 规程目录
 │   └── greet-user.md     # 示例 Playbook
 └── tests/                # 单元测试目录
     └── greet.test.ts     # 内存单测
@@ -108,7 +108,7 @@ ac test
 
 ## 打包与分发交付
 
-### 导出为 Agent Skill
+### 导出为 Skill
 ```bash
 ac export skill
 ```
@@ -125,5 +125,5 @@ ac build
 ## 下一步
 
 - 阅读 [深入业务 Action 开发](/developer/first-action.md) 了解配置、持久化与外部 API 调用。
-- 探索 [编写 Playbook SOP 规程](/developer/playbooks.md)。
+- 探索 [编写 Playbook 规程](/developer/playbooks.md)。
 - 了解 [单元测试与沙箱验证](/developer/testing.md)。

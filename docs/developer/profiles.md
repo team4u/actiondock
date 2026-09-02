@@ -1,6 +1,6 @@
-# 实践指南：多环境 Profile 与远程调度 (Profiles Guide)
+# 实践指南：多环境 Profile 与远程调度
 
-**Execution Profile** 机制允许开发者在本地终端中无缝管理多个远端 ActionDock 云节点，实现跨开发、测试与生产环境的调度。
+**Profile（多环境配置）** 机制允许开发者在本地终端中无缝管理多个远端 ActionDock 云节点，实现跨开发、测试与生产环境的调度。
 
 ---
 
@@ -37,7 +37,7 @@ ac profile remove old-env
 # 在 staging 节点执行 Action
 ac run github.get-pr --input '{"repo": "team4u/actiondock", "prNumber": 1}' --profile staging
 
-# 查询 remote 节点的健康状态与 Action 清单
+# 查询远程节点的健康状态与 Action 清单
 ac info --profile prod
 ```
 

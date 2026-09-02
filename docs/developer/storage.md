@@ -1,4 +1,4 @@
-# 实践指南：SQLite 存储与状态管理 (Storage & State)
+# 实践指南：SQLite 存储与状态管理
 
 ActionDock 2.0 采用内嵌式 SQLite（基于 `bun:sqlite`）作为零依赖持久化存储后端，无需安装外部服务。
 
@@ -6,9 +6,9 @@ ActionDock 2.0 采用内嵌式 SQLite（基于 `bun:sqlite`）作为零依赖持
 
 ## 存储文件路径规则
 
-- **开发态项目级（Project Scope）**：存储于项目根目录下的 `.actiondock/runtime.db`，跟随项目物理隔离。
-- **全局共享级（Global Scope）**：存储于用户主目录下的 `~/.actiondock/global.db`，跨所有 Action Package 共享公共配置（如全局 API Token）。
-- **独立编译态（Standalone Binary）**：独立二进制在目标机器运行时，默认存储于 `~/.actiondock/data/<package-id>/runtime.db`。
+- **开发态项目级**：存储于项目根目录下的 `.actiondock/runtime.db`，跟随项目物理隔离。
+- **全局共享级**：存储于用户主目录下的 `~/.actiondock/global.db`，跨所有 Action Package 共享公共配置（如全局 API Token）。
+- **独立编译态**：独立二进制在目标机器运行时，默认存储于 `~/.actiondock/data/<package-id>/runtime.db`。
 
 ---
 

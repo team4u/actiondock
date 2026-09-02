@@ -24,7 +24,7 @@ graph TD
 
 ---
 
-## 2. 核心设计底线（Design Tenets）
+## 2. 核心设计底线
 
 1. **单一事实执行核心**：所有入口必须通过 `ActionRunner` 执行，严禁绕过 Schema 校验与日志隔离层直接执行 Action 函数。
 2. **确定性耗时记录**：每次执行均记录毫秒级耗时与状态（`SUCCESS` / `FAILED` / `TIMEOUT` / `CANCELLED`）。
