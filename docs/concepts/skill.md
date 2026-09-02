@@ -88,4 +88,4 @@ ac export skill --playbook review-pr
 - **Antigravity**：放置在 `~/.gemini/antigravity-cli/skills/<skill-name>`
 - **自研 Agent 框架**：解析 `actiondock.skill.json` 注册工具，将 `SKILL.md` 注入为系统提示词与 SOP 规程。
 
-详细使用方法请查阅 **[使用者指南：接入 Claude Code / Antigravity](../consumer/use-as-skill.md)** 与 **[开发者指南：构建与 Skill 导出](../developer/build-and-export.md)**。
+详细使用方法请查阅 **[使用者指南：接入 Claude Code / Antigravity](/consumer/use-as-skill.md)** 与 **[开发者指南：构建与 Skill 导出](/developer/build-and-export.md)**。

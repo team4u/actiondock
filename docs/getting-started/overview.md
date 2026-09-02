@@ -37,19 +37,19 @@ ActionDock 2.0 是面向 AI Agent 的 **Action 与 Skill 开发、测试、构�
 ### 使用者与智能体操作者 (Consumer)
 > 目标：从 Git 克隆了一个 Action 项目，或者拿到了导出的 Skill 包，需要在 IDE 或 Agent 中运行。
 
-- [消费与接入方式总览](../consumer/overview.md)：对比接入姿态，选择适合的使用方式。
-- [接入 Claude Code / Antigravity](../consumer/use-as-skill.md)：将导出的 Skill 放入技能目录，实现大模型自主调度。
-- [接入 Cursor / Windsurf / IDE](../consumer/use-as-mcp.md)：作为 MCP STDIO Server 直连 IDE。
-- [独立二进制单文件运行](../consumer/standalone-run.md)：在无 Node.js / Bun 的生产服务器或沙箱免依赖运行。
-- [消费端配置与凭证注入](../consumer/configuration.md)：注入 API Token、环境变量与 SQLite 持久化配置。
+- [消费与接入方式总览](/consumer/overview.md)：对比接入姿态，选择适合的使用方式。
+- [接入 Claude Code / Antigravity](/consumer/use-as-skill.md)：将导出的 Skill 放入技能目录，实现大模型自主调度。
+- [接入 Cursor / Windsurf / IDE](/consumer/use-as-mcp.md)：作为 MCP STDIO Server 直连 IDE。
+- [独立二进制单文件运行](/consumer/standalone-run.md)：在无 Node.js / Bun 的生产服务器或沙箱免依赖运行。
+- [消费端配置与凭证注入](/consumer/configuration.md)：注入 API Token、环境变量与 SQLite 持久化配置。
 
 ---
 
 ### 开发者与工具创作者 (Developer)
 > 目标：从零开发强类型校验的原子能力和领域 SOP，并打包分发给团队和 Agent。
 
-- [快速开发首个 Action](../developer/quick-start.md)：初始化、编写 `defineAction` 与本地试跑。
-- [深入业务 Action 实战](../developer/first-action.md)：状态持久化 (`ctx.state`)、配置读取 (`ctx.config`) 与外部 API 调用。
-- [编写 Playbook SOP 规程](../developer/playbooks.md)：为 AI Agent 编写领域专家的标准作业步骤。
-- [单元测试与沙箱验证](../developer/testing.md)：基于 `createTestRuntime` 纯内存测试。
-- [构建、打包与 Skill 导出](../developer/build-and-export.md)：编译独立单文件可执行程序，按 Playbook 裁剪导出 Agent Skill 并发布。
+- [快速开发首个 Action](/developer/quick-start.md)：初始化、编写 `defineAction` 与本地试跑。
+- [深入业务 Action 实战](/developer/first-action.md)：状态持久化 (`ctx.state`)、配置读取 (`ctx.config`) 与外部 API 调用。
+- [编写 Playbook SOP 规程](/developer/playbooks.md)：为 AI Agent 编写领域专家的标准作业步骤。
+- [单元测试与沙箱验证](/developer/testing.md)：基于 `createTestRuntime` 纯内存测试。
+- [构建、打包与 Skill 导出](/developer/build-and-export.md)：编译独立单文件可执行程序，按 Playbook 裁剪导出 Agent Skill 并发布。

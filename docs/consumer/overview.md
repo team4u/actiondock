@@ -67,8 +67,8 @@ ac run my-tools/get-pr --input '{"repo": "team4u/actiondock", "prNumber": 1}'
 
 ## 各消费姿态接入指南
 
-- [接入 Claude Code / Antigravity (Agent Skill)](use-as-skill.md)：将 Skill 放入技能目录让 AI 自动发现。
-- [接入 Cursor / Windsurf / IDE (MCP 服务)](use-as-mcp.md)：在 IDE 配置文件中添加 STDIO MCP Server。
-- [独立二进制单文件运行 (零环境依赖)](standalone-run.md)：在生产服务器或沙箱中免依赖运行。
-- [HTTP 远程微服务与 REST 调度](http-service.md)：启动 HTTP 服务并通过 cURL 或 API 远程调用。
-- [消费端配置与凭证注入](configuration.md)：配置覆盖、环境变量与安全 Token 管理。
+- [接入 Claude Code / Antigravity (Agent Skill)](/consumer/use-as-skill.md)：将 Skill 放入技能目录让 AI 自动发现。
+- [接入 Cursor / Windsurf / IDE (MCP 服务)](/consumer/use-as-mcp.md)：在 IDE 配置文件中添加 STDIO MCP Server。
+- [独立二进制单文件运行 (零环境依赖)](/consumer/standalone-run.md)：在生产服务器或沙箱中免依赖运行。
+- [HTTP 远程微服务与 REST 调度](/consumer/http-service.md)：启动 HTTP 服务并通过 cURL 或 API 远程调用。
+- [消费端配置与凭证注入](/consumer/configuration.md)：配置覆盖、环境变量与安全 Token 管理。

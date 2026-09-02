@@ -28,53 +28,53 @@ Architecture    (底层架构)   = 执行引擎 / 通道隔离 / 安全防御
 ---
 
 ### 快速概览 (Getting Started)
-- [环境安装与准备](getting-started/installation.md)：Bun 与 `ac` CLI 安装配置、Link 机制与排错。
-- [核心概览与双轨导引](getting-started/overview.md)：了解 ActionDock 核心全景与角色路径选择。
+- [环境安装与准备](/getting-started/installation.md)：Bun 与 `ac` CLI 安装配置、Link 机制与排错。
+- [核心概览与双轨导引](/getting-started/overview.md)：了解 ActionDock 核心全景与角色路径选择。
 
 ---
 
 ### 使用者指南 (Consumer Guide)
 面向从仓库拉取项目源码、获取导出的 Skill 包或下载二进制的使用者与智能体操作者：
-- [消费与接入总览](consumer/overview.md)：消费姿态对比速查与克隆极速跑通。
-- [接入 Claude Code / Antigravity](consumer/use-as-skill.md)：将导出的 Skill 放入技能目录让 AI 自动发现。
-- [接入 Cursor / Windsurf / IDE](consumer/use-as-mcp.md)：作为 MCP STDIO 服务直连 IDE 工具库。
-- [独立二进制与免环境运行](consumer/standalone-run.md)：在无 Node.js / Bun 的服务器/沙箱中零依赖运行。
-- [HTTP 远程微服务与 API 调度](consumer/http-service.md)：启动持久微服务并通过 REST API 远程调度。
-- [消费端配置与凭证注入](consumer/configuration.md)：API Token、环境变量与 SQLite 持久化配置注入。
+- [消费与接入总览](/consumer/overview.md)：消费姿态对比速查与克隆极速跑通。
+- [接入 Claude Code / Antigravity](/consumer/use-as-skill.md)：将导出的 Skill 放入技能目录让 AI 自动发现。
+- [接入 Cursor / Windsurf / IDE](/consumer/use-as-mcp.md)：作为 MCP STDIO 服务直连 IDE 工具库。
+- [独立二进制与免环境运行](/consumer/standalone-run.md)：在无 Node.js / Bun 的服务器/沙箱中零依赖运行。
+- [HTTP 远程微服务与 API 调度](/consumer/http-service.md)：启动持久微服务并通过 REST API 远程调度。
+- [消费端配置与凭证注入](/consumer/configuration.md)：API Token、环境变量与 SQLite 持久化配置注入。
 
 ---
 
 ### 开发者指南 (Developer Guide)
 面向从零打造原子能力、编写 SOP 规程并分发的工具创作者：
-- [快速上手开发](developer/quick-start.md)：初始化、编写 `defineAction` 与本地试跑。
-- [深入业务 Action 开发](developer/first-action.md)：强类型 Schema、`ctx.state` 持久化、`ctx.config` 读取与外部 API。
-- [编写 Playbook SOP 规程](developer/playbooks.md)：为 AI Agent 编写领域专家的标准作业步骤。
-- [单元测试与沙箱验证](developer/testing.md)：基于 `createTestRuntime` 的纯内存毫秒级测试。
-- [状态持久化与 SQLite 存储](developer/storage.md)：内嵌 SQLite 数据模型、KV 持久化与 TTL 过期。
-- [多环境 Profile 与远程调度](developer/profiles.md)：多云环境节点管理与安全凭证防护。
-- [构建、打包与 Skill 导出](developer/build-and-export.md)：编译单文件零依赖可执行程序，按 Playbook 裁剪导出 Agent Skill 并发布。
+- [快速上手开发](/developer/quick-start.md)：初始化、编写 `defineAction` 与本地试跑。
+- [深入业务 Action 开发](/developer/first-action.md)：强类型 Schema、`ctx.state` 持久化、`ctx.config` 读取与外部 API。
+- [编写 Playbook SOP 规程](/developer/playbooks.md)：为 AI Agent 编写领域专家的标准作业步骤。
+- [单元测试与沙箱验证](/developer/testing.md)：基于 `createTestRuntime` 的纯内存毫秒级测试。
+- [状态持久化与 SQLite 存储](/developer/storage.md)：内嵌 SQLite 数据模型、KV 持久化与 TTL 过期。
+- [多环境 Profile 与远程调度](/developer/profiles.md)：多云环境节点管理与安全凭证防护。
+- [构建、打包与 Skill 导出](/developer/build-and-export.md)：编译单文件零依赖可执行程序，按 Playbook 裁剪导出 Agent Skill 并发布。
 
 ---
 
 ### 核心概念 (Core Concepts)
-- [Action Package 核心抽象](concepts/action-package.md)：四大支柱（Capability, Procedure, Contract, Runtime）。
-- [Action 原子能力契约](concepts/action.md)：`defineAction`、强类型约束与 Schema 即契约。
-- [ActionContext 运行时上下文](concepts/action-context.md)：配置解析、SQLite 持久化、级联调用、日志隔离与取消链路。
-- [Playbook SOP 规程模型](concepts/playbook.md)：面向 AI Agent 的领域操作规程、流程时序与安全红线。
-- [Agent Skill 交付物规范](concepts/skill.md)：源码型与独立二进制型 Skill 双模交付规范。
+- [Action Package 核心抽象](/concepts/action-package.md)：四大支柱（Capability, Procedure, Contract, Runtime）。
+- [Action 原子能力契约](/concepts/action.md)：`defineAction`、强类型约束与 Schema 即契约。
+- [ActionContext 运行时上下文](/concepts/action-context.md)：配置解析、SQLite 持久化、级联调用、日志隔离与取消链路。
+- [Playbook SOP 规程模型](/concepts/playbook.md)：面向 AI Agent 的领域操作规程、流程时序与安全红线。
+- [Agent Skill 交付物规范](/concepts/skill.md)：源码型与独立二进制型 Skill 双模交付规范。
 
 ---
 
 ### 参考手册 (Reference)
-- [CLI 命令行速查](reference/cli.md)：全量 `ac` 命令、选项与参数清单。
-- [配置解析回退机制](reference/config.md)：配置回退规则、环境变量转换与类型强转。
-- [Action SDK API 参考](reference/action-api.md)：`@actiondock/sdk` 导出接口与函数规范。
-- [错误代码与排错速查](reference/error-codes.md)：标准 JSON 错误 Envelope 与修复指南。
-- [1.0 到 2.0 迁移指南](reference/v1-to-v2-migration.md)：架构对比与升级步骤。
+- [CLI 命令行速查](/reference/cli.md)：全量 `ac` 命令、选项与参数清单。
+- [配置解析回退机制](/reference/config.md)：配置回退规则、环境变量转换与类型强转。
+- [Action SDK API 参考](/reference/action-api.md)：`@actiondock/sdk` 导出接口与函数规范。
+- [错误代码与排错速查](/reference/error-codes.md)：标准 JSON 错误 Envelope 与修复指南。
+- [1.0 到 2.0 迁移指南](/reference/v1-to-v2-migration.md)：架构对比与升级步骤。
 
 ---
 
 ### 底层架构 (Architecture)
-- [Runtime 执行引擎](architecture/runtime.md)：`ActionRunner` 执行生命周期与拦截器体系。
-- [Stdout/Stderr 物理通道隔离](architecture/stdout-stderr.md)：数据通道与诊断通道物理隔离，杜绝大模型解析崩溃。
-- [安全加固与防御模型](architecture/security.md)：非回环认证、权限固化、常数时间比对与原型污染防护。
+- [Runtime 执行引擎](/architecture/runtime.md)：`ActionRunner` 执行生命周期与拦截器体系。
+- [Stdout/Stderr 物理通道隔离](/architecture/stdout-stderr.md)：数据通道与诊断通道物理隔离，杜绝大模型解析崩溃。
+- [安全加固与防御模型](/architecture/security.md)：非回环认证、权限固化、常数时间比对与原型污染防护。
