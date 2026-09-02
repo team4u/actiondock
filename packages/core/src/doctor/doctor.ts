@@ -29,14 +29,14 @@ export async function runDoctorChecks(options?: {
   // 1. Check Bun Runtime
   const bunVersion = (typeof Bun !== "undefined" && Bun.version) || (process.versions as any).bun;
   if (bunVersion) {
-    const isGte11 = compareSemver(bunVersion, "1.1.0") >= 0;
-    if (isGte11) {
+    const isGte12 = compareSemver(bunVersion, "1.2.0") >= 0;
+    if (isGte12) {
       checks.push({
         id: "runtime.bun",
         category: "runtime",
         name: "Bun Runtime",
         status: "ok",
-        message: `v${bunVersion} (>= 1.1.0 required)`,
+        message: `v${bunVersion} (>= 1.2.0 required)`,
       });
     } else {
       checks.push({
@@ -44,7 +44,7 @@ export async function runDoctorChecks(options?: {
         category: "runtime",
         name: "Bun Runtime",
         status: "error",
-        message: `v${bunVersion} is too old (>= 1.1.0 required)`,
+        message: `v${bunVersion} is too old (>= 1.2.0 required)`,
         fix: "Run 'bun upgrade' to update Bun",
       });
     }
@@ -55,7 +55,7 @@ export async function runDoctorChecks(options?: {
       name: "Bun Runtime",
       status: "error",
       message: "Bun runtime not detected",
-      fix: "Install Bun via 'curl -fsSL https://bun.sh/install | bash'",
+      fix: "Install Bun via 'npm install bun -g'",
     });
   }
 
