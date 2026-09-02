@@ -47,9 +47,32 @@ ac build -P team4u.github-tools
 | 参数 | 默认值 | 说明 |
 | :--- | :--- | :--- |
 | `-P, --package <id>` | 当前项目 | 目标 Package ID 或路径（支持跨目录构建） |
+| `-t, --target <target>` | 当前宿主平台 (`bun`) | 目标平台与 CPU 架构，支持全平台交叉编译 |
 | `-o, --out <path>` | `./dist/bin/<name>` | 自定义输出可执行文件路径 |
-| `--bytecode` | `false` | 启用 Bun 字节码预编译（加快冷启动，保护源码） |
-| `--minify` | `false` | 压缩 JavaScript 代码与标识符，减小体积 |
+| `-a, --actions <actions...>` | 全部 Action | 仅将指定的 Action 打包进独立二进制 |
+| `--bytecode` | `true` | 启用 Bun 字节码预编译（加快冷启动，保护源码；可通过 `--no-bytecode` 关闭） |
+| `--minify` | `true` | 压缩 JavaScript 代码与标识符，减小体积（可通过 `--no-minify` 关闭） |
+
+### 全平台跨平台交叉编译 (`--target`)
+
+ActionDock 支持在单台构建机（如 Linux CI 或 macOS 开发机）上直接为 Windows、macOS 与 Linux 生成目标平台的单文件独立可执行程序：
+
+```bash
+# 为 Linux x86_64 服务器构建
+ac build -t linux-x64 -o ./dist/bin/github-tools-linux
+
+# 为 Linux ARM64 (如 AWS Graviton / 树莓派) 构建
+ac build -t linux-arm64 -o ./dist/bin/github-tools-linux-arm64
+
+# 为 macOS Apple Silicon (M 系列芯片) 构建
+ac build -t darwin-arm64 -o ./dist/bin/github-tools-macos-arm64
+
+# 为 macOS Intel x86_64 构建
+ac build -t darwin-x64 -o ./dist/bin/github-tools-macos-x64
+
+# 为 Windows 平台构建（自动追加 .exe 扩展名）
+ac build -t windows-x64 -o ./dist/bin/github-tools-windows
+```
 
 ---
 

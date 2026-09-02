@@ -18,7 +18,7 @@ export interface BuildOptions {
   outfile?: string;
   /** 是否开启代码压缩混淆（默认 true） */
   minify?: boolean;
-  /** 是否编译为 V8/JavaScriptCore 字节码（默认 false） */
+  /** 是否编译为 V8/JavaScriptCore 字节码（默认 true） */
   bytecode?: boolean;
   /** 显式挑选打包的 Action ID 清单（用于按需子集打包） */
   actions?: string[];

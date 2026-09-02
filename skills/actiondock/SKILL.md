@@ -614,11 +614,16 @@ ac test
 
 ### 构建独立可执行文件 (`ac build`)
 ```bash
-# 全量构建：打包当前或指定包的全部 Action 为独立二进制（支持 -P 跨目录构建）
-ac build [-P <package-id>] [--target <target>] [--out <path>] [--no-minify] [--no-bytecode]
+# 全量构建：打包当前或指定包的全部 Action 为独立二进制（支持 -P 跨目录构建与 -t 全平台交叉编译）
+ac build [-P <package-id>] [-t|--target <target>] [-o|--out <path>] [--no-minify] [--no-bytecode]
+
+# 全平台交叉编译示例（支持 linux-x64, linux-arm64, darwin-x64, darwin-arm64, windows-x64）
+ac build -t linux-x64 -o ./dist/bin/my-tools-linux
+ac build -t darwin-arm64 -o ./dist/bin/my-tools-macos
+ac build -t windows-x64 -o ./dist/bin/my-tools-windows.exe
 
 # 按需构建：仅将指定 Action 编译进独立二进制
-ac build [-P <package-id>] --actions github.get-pr github.review-pr
+ac build [-P <package-id>] -a github.get-pr github.review-pr
 ```
 
 ### 导出 Skill 交付包 (`ac export skill`)

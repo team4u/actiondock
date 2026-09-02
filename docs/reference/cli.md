@@ -42,11 +42,11 @@ ac test [file]
 
 ### 构建与分发
 ```bash
-# 编译单文件零依赖独立可执行文件（支持 -P 跨目录构建）
-ac build [-P <package-id>] [--target <target>] [--out <path>] [--actions <actions...>] [--bytecode] [--minify]
+# 编译单文件零依赖独立可执行文件（支持 -P 跨目录构建与 -t 全平台交叉编译）
+ac build [-P <package-id>] [-t|--target <target>] [-o|--out <path>] [-a|--actions <actions...>] [--no-bytecode] [--no-minify]
 
 # 导出自包含 Agent Skill 交付包（支持 -P 跨目录导出与 Playbook 按需裁剪）
-ac export skill [-P <package-id>] [--out <dir>] [--standalone] [--playbook <id>] [--archive]
+ac export skill [-P <package-id>] [-o|--out <dir>] [-s|--standalone] [-t|--target <target>] [-p|--playbook <id>] [-z|--archive] [--no-bytecode] [--no-minify]
 ```
 
 ### 协议与服务
