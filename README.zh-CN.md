@@ -52,8 +52,7 @@ ActionDock 将 Agent 工具视为标准化软件资产：
 ### 1. 安装命令行工具 (`ac`)
 
 ```bash
-bun install -g @actiondock/cli
-# 或: npm install -g @actiondock/cli
+npm install -g @actiondock/cli
 ```
 
 ### 2. 初始化 Action Package

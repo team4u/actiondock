@@ -22,7 +22,7 @@ npm install bun -g
 
 #### 方式 A：npm 全局安装（已发布状态）
 ```bash
-bun install -g @actiondock/cli
+npm install -g @actiondock/cli
 ```
 
 #### 方式 B：本地源码开发态（未发布 npm / 实时热生效）

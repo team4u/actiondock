@@ -16,10 +16,6 @@ The official Command Line Interface (CLI) toolchain for ActionDock 2.0.
 ## Installation
 
 ```bash
-# Global installation via Bun
-bun add -g @actiondock/cli
-
-# Or via npm
 npm install -g @actiondock/cli
 ```
 

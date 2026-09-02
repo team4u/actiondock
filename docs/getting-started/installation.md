@@ -22,9 +22,9 @@ bun --version
 
 ## 2. 安装 ActionDock CLI (`ac`)
 
-### 推荐：全局安装
+### 全局安装
 ```bash
-bun install -g @actiondock/cli
+npm install -g @actiondock/cli
 ```
 
 ### 验证 CLI

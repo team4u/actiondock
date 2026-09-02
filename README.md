@@ -52,8 +52,7 @@ ActionDock treats an Agent Tool as a software artifact:
 ### 1. Install CLI
 
 ```bash
-bun install -g @actiondock/cli
-# or: npm install -g @actiondock/cli
+npm install -g @actiondock/cli
 ```
 
 ### 2. Initialize an Action Package
