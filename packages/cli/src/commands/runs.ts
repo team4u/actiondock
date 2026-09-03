@@ -1,8 +1,10 @@
 import { existsSync } from "node:fs";
 import {
   cancelRemoteRun,
+  clearRemoteRuns,
   createStorage,
   fetchRemoteRun,
+  fetchRemoteRuns,
   filterWithFallbackInfo,
   findProjectRoot,
   listLinkedPackages,
@@ -49,13 +51,49 @@ export function registerRunsCommands(program: Command): void {
     .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
     .option("-a, --action <actionId>", "Filter by action ID")
     .option("-n, --limit <count>", "Maximum number of records to return", "20")
+    .option("-p, --profile <name>", "Query against a specific profile")
+    .option("-s, --server <url>", "Remote server URL")
+    .option("-t, --token <token>", "Auth token for remote server")
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("--json", "Output as JSON")
-    .action((patterns, options) => {
+    .action(async (patterns, options) => {
       try {
         const effectiveIntent = resolveIntent(options.intent, patterns);
         const shouldFallback = options.fallback !== false;
         const limit = Number.parseInt(options.limit, 10) || 20;
+
+        const target = resolveTarget({
+          profile: options.profile,
+          server: options.server,
+          token: options.token,
+        });
+
+        if (target.type === "remote") {
+          const res = await fetchRemoteRuns(target.serverUrl!, target.token, {
+            packageId: options.package,
+            actionId: options.action,
+            intent: effectiveIntent,
+            limit,
+          });
+          if (options.json) {
+            console.log(JSON.stringify(res.items, null, 2));
+            return;
+          }
+          console.log(
+            `Execution Runs on remote server ${target.serverUrl}${target.profileName ? ` (Profile: ${target.profileName})` : ""} (${res.items.length}):\n`
+          );
+          console.log(
+            `  ${"RUN ID".padEnd(38)} ${"ACTION".padEnd(24)} ${"STATUS".padEnd(10)} ${"STARTED"}`
+          );
+          console.log("  " + "-".repeat(90));
+          for (const r of res.items) {
+            const time = (r.startedAt || "").replace("T", " ").slice(0, 19);
+            console.log(
+              `  ${r.id.padEnd(38)} ${r.actionId.padEnd(24)} ${r.status.padEnd(10)} ${time}`
+            );
+          }
+          return;
+        }
 
         const targetRoot = options.package
           ? resolvePackageRoot(options.package)
@@ -309,6 +347,58 @@ export function registerRunsCommands(program: Command): void {
           console.log(JSON.stringify(result, null, 2));
         } else {
           console.log(`Run '${id}' cancellation requested (Status: ${result.status}).`);
+        }
+      } catch (err: any) {
+        console.error(`Error: ${err.message}`);
+        process.exit(1);
+      }
+    });
+
+  // runs clear
+  runsCmd
+    .command("clear")
+    .description("Clear execution run records (locally or on remote server)")
+    .option("-P, --package <id>", "Target package ID or path")
+    .option("-a, --action <actionId>", "Filter by action ID")
+    .option("-p, --profile <name>", "Target profile")
+    .option("-s, --server <url>", "Remote server URL")
+    .option("-t, --token <token>", "Auth token for remote server")
+    .option("--json", "Output as JSON")
+    .action(async (options) => {
+      try {
+        const target = resolveTarget({
+          profile: options.profile,
+          server: options.server,
+          token: options.token,
+        });
+
+        if (target.type === "remote") {
+          const res = await clearRemoteRuns(target.serverUrl!, target.token, {
+            packageId: options.package,
+            actionId: options.action,
+          });
+          if (options.json) {
+            console.log(JSON.stringify(res, null, 2));
+          } else {
+            console.log(`Cleared ${res.clearedCount} execution run(s) on remote server.`);
+          }
+          return;
+        }
+
+        const targetRoot = options.package
+          ? resolvePackageRoot(options.package)
+          : findProjectRoot();
+
+        if (targetRoot) {
+          const projConfig = loadProjectConfig(targetRoot);
+          const storage = createStorage(projConfig.id, { projectRoot: targetRoot });
+          const count = storage.clearRuns({ actionId: options.action });
+          storage.close();
+          if (options.json) {
+            console.log(JSON.stringify({ ok: true, clearedCount: count }, null, 2));
+          } else {
+            console.log(`Cleared ${count} execution run(s) in package '${projConfig.id}'.`);
+          }
         }
       } catch (err: any) {
         console.error(`Error: ${err.message}`);

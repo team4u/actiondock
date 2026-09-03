@@ -291,12 +291,262 @@ export async function fetchRemoteActionShow(
 
 export async function fetchRemoteInfo(
   serverUrl: string,
+  token?: string,
+  options?: { intent?: string; package?: string; tree?: boolean }
+): Promise<any> {
+  const params = new URLSearchParams();
+  if (options?.intent) params.set("intent", options.intent);
+  if (options?.package) params.set("package", options.package);
+  if (options?.tree) params.set("tree", "true");
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  return fetchRemoteJson(
+    serverUrl,
+    `/api/v1/info${qs}`,
+    token,
+    { errorPrefix: "Failed to fetch remote info" }
+  );
+}
+
+export async function fetchRemoteDoctor(
+  serverUrl: string,
+  token?: string,
+  targetPackage?: string
+): Promise<any> {
+  const query = targetPackage ? `?package=${encodeURIComponent(targetPackage)}` : "";
+  return fetchRemoteJson(
+    serverUrl,
+    `/api/v1/doctor${query}`,
+    token,
+    { errorPrefix: "Failed to fetch remote doctor report" }
+  );
+}
+
+export async function fetchRemotePlaybooks(
+  serverUrl: string,
+  token?: string,
+  options?: { intent?: string; package?: string }
+): Promise<Array<{ id: string; description: string; actions: string[]; packageId: string; filePath: string }>> {
+  const params = new URLSearchParams();
+  if (options?.intent) params.set("intent", options.intent);
+  if (options?.package) params.set("package", options.package);
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  return fetchRemoteJson(
+    serverUrl,
+    `/api/v1/playbooks${qs}`,
+    token,
+    { errorPrefix: "Failed to fetch remote playbooks" }
+  );
+}
+
+export async function fetchRemotePlaybookShow(
+  serverUrl: string,
+  playbookId: string,
   token?: string
 ): Promise<any> {
   return fetchRemoteJson(
     serverUrl,
-    "/api/v1/info",
+    `/api/v1/playbooks/${encodeURIComponent(playbookId)}`,
     token,
-    { errorPrefix: "Failed to fetch remote info" }
+    { errorPrefix: `Failed to fetch remote playbook '${playbookId}'` }
+  );
+}
+
+export async function fetchRemoteRuns(
+  serverUrl: string,
+  token?: string,
+  options?: { status?: string; actionId?: string; packageId?: string; intent?: string; limit?: number }
+): Promise<{ ok: boolean; total: number; items: RunRecord[] }> {
+  const params = new URLSearchParams();
+  if (options?.status) params.set("status", options.status);
+  if (options?.actionId) params.set("actionId", options.actionId);
+  if (options?.packageId) params.set("packageId", options.packageId);
+  if (options?.intent) params.set("intent", options.intent);
+  if (options?.limit) params.set("limit", String(options.limit));
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  return fetchRemoteJson(
+    serverUrl,
+    `/api/v1/runs${qs}`,
+    token,
+    { errorPrefix: "Failed to fetch remote runs" }
+  );
+}
+
+export async function clearRemoteRuns(
+  serverUrl: string,
+  token?: string,
+  options?: { packageId?: string; actionId?: string; status?: string }
+): Promise<{ ok: boolean; clearedCount: number }> {
+  return fetchRemoteJson(
+    serverUrl,
+    "/api/v1/runs/clear",
+    token,
+    {
+      method: "POST",
+      body: options || {},
+      errorPrefix: "Failed to clear remote runs",
+    }
+  );
+}
+
+export async function fetchRemoteStateList(
+  serverUrl: string,
+  token?: string,
+  options?: { package?: string; namespace?: string; prefix?: string }
+): Promise<{ ok: boolean; packageId: string; keys: string[] }> {
+  const params = new URLSearchParams();
+  if (options?.package) params.set("package", options.package);
+  if (options?.namespace !== undefined) params.set("namespace", options.namespace);
+  if (options?.prefix) params.set("prefix", options.prefix);
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  return fetchRemoteJson(
+    serverUrl,
+    `/api/v1/state${qs}`,
+    token,
+    { errorPrefix: "Failed to list remote state keys" }
+  );
+}
+
+export async function getRemoteStateKey(
+  serverUrl: string,
+  key: string,
+  token?: string,
+  options?: { package?: string; namespace?: string }
+): Promise<any> {
+  const params = new URLSearchParams();
+  if (options?.package) params.set("package", options.package);
+  if (options?.namespace !== undefined) params.set("namespace", options.namespace);
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  return fetchRemoteJson(
+    serverUrl,
+    `/api/v1/state/${encodeURIComponent(key)}${qs}`,
+    token,
+    { errorPrefix: `Failed to fetch remote state key '${key}'` }
+  );
+}
+
+export async function setRemoteStateKey(
+  serverUrl: string,
+  key: string,
+  value: unknown,
+  token?: string,
+  options?: { package?: string; namespace?: string; ttl?: number }
+): Promise<any> {
+  return fetchRemoteJson(
+    serverUrl,
+    `/api/v1/state/${encodeURIComponent(key)}`,
+    token,
+    {
+      method: "PUT",
+      body: {
+        value,
+        package: options?.package,
+        namespace: options?.namespace,
+        ttl: options?.ttl,
+      },
+      errorPrefix: `Failed to set remote state key '${key}'`,
+    }
+  );
+}
+
+export async function deleteRemoteStateKey(
+  serverUrl: string,
+  key: string,
+  token?: string,
+  options?: { package?: string; namespace?: string }
+): Promise<any> {
+  const params = new URLSearchParams();
+  if (options?.package) params.set("package", options.package);
+  if (options?.namespace !== undefined) params.set("namespace", options.namespace);
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  return fetchRemoteJson(
+    serverUrl,
+    `/api/v1/state/${encodeURIComponent(key)}${qs}`,
+    token,
+    {
+      method: "DELETE",
+      errorPrefix: `Failed to delete remote state key '${key}'`,
+    }
+  );
+}
+
+export async function clearRemoteState(
+  serverUrl: string,
+  token?: string,
+  options?: { package?: string; namespace?: string; prefix?: string; all?: boolean }
+): Promise<{ ok: boolean; packageId: string; clearedCount: number }> {
+  return fetchRemoteJson(
+    serverUrl,
+    "/api/v1/state/clear",
+    token,
+    {
+      method: "POST",
+      body: options || {},
+      errorPrefix: "Failed to clear remote state",
+    }
+  );
+}
+
+export async function fetchRemoteConfig(
+  serverUrl: string,
+  token?: string,
+  packageId?: string
+): Promise<any> {
+  const query = packageId ? `?package=${encodeURIComponent(packageId)}` : "";
+  return fetchRemoteJson(
+    serverUrl,
+    `/api/v1/config${query}`,
+    token,
+    { errorPrefix: "Failed to fetch remote config" }
+  );
+}
+
+export async function setRemoteConfig(
+  serverUrl: string,
+  key: string,
+  value: unknown,
+  token?: string,
+  packageId?: string
+): Promise<any> {
+  return fetchRemoteJson(
+    serverUrl,
+    "/api/v1/config",
+    token,
+    {
+      method: "PUT",
+      body: { key, value, package: packageId },
+      errorPrefix: `Failed to set remote config '${key}'`,
+    }
+  );
+}
+
+export async function deleteRemoteConfig(
+  serverUrl: string,
+  key: string,
+  token?: string,
+  packageId?: string
+): Promise<any> {
+  const query = packageId ? `?package=${encodeURIComponent(packageId)}` : "";
+  return fetchRemoteJson(
+    serverUrl,
+    `/api/v1/config/${encodeURIComponent(key)}${query}`,
+    token,
+    {
+      method: "DELETE",
+      errorPrefix: `Failed to delete remote config '${key}'`,
+    }
+  );
+}
+
+export async function fetchRemoteConfigEnv(
+  serverUrl: string,
+  token?: string,
+  packageId?: string
+): Promise<any> {
+  const query = packageId ? `?package=${encodeURIComponent(packageId)}` : "";
+  return fetchRemoteJson(
+    serverUrl,
+    `/api/v1/config/env${query}`,
+    token,
+    { errorPrefix: "Failed to fetch remote config env checks" }
   );
 }

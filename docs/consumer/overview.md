@@ -97,7 +97,7 @@ ad export skill -P team4u.github-tools --out ~/.claude/skills/github-tools
 ```bash
 cd examples/github-tools
 ad serve --port 8080
-# 即可通过 cURL 或 REST API 远程调度 Action
+# 即可通过 cURL 或 REST API 远程调度动作，同时提供 /mcp 端点与自省、状态治理
 ```
 
 #### 姿态：构建为零依赖独立二进制

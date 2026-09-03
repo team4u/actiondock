@@ -1,17 +1,29 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
   addProfile,
   cancelRemoteRun,
   checkRemoteHealth,
+  clearRemoteRuns,
+  clearRemoteState,
+  deleteRemoteConfig,
+  deleteRemoteStateKey,
   executeRemoteAction,
   fetchRemoteActions,
   fetchRemoteActionShow,
+  fetchRemoteConfig,
+  fetchRemoteConfigEnv,
+  fetchRemoteDoctor,
   fetchRemoteInfo,
+  fetchRemotePlaybookShow,
+  fetchRemotePlaybooks,
   fetchRemoteRun,
+  fetchRemoteRuns,
+  fetchRemoteStateList,
   getProfile,
+  getRemoteStateKey,
   initProject,
   isLoopbackHost,
   listProfiles,
@@ -20,6 +32,8 @@ import {
   resolveProfileToken,
   resolveTarget,
   safeEqual,
+  setRemoteConfig,
+  setRemoteStateKey,
   startActionDockServer,
   useProfile,
   verifyBearerToken,
@@ -68,6 +82,22 @@ export default defineAction({
     return { completed: true, delay };
   },
 });
+`
+    );
+
+    // Add sample playbook
+    mkdirSync(join(projectDir, "playbooks"), { recursive: true });
+    writeFileSync(
+      join(projectDir, "playbooks", "sample-sop.md"),
+      `---
+id: sample.sample-sop
+description: SOP for greeting and executing tasks
+actions:
+  - sample.greet
+---
+
+# Greeting SOP
+Follow these steps to greet a user.
 `
     );
 
@@ -602,6 +632,161 @@ export default defineAction({
     if (!result.ok) {
       expect(result.error.code).toBe("ACTION_CANCELLED");
     }
+  });
+
+  describe("Extended HTTP Service Endpoints", () => {
+    test("GET /api/v1/info > supports tree, package, and intent query parameters", async () => {
+      // 1. Info with intent filter
+      const infoIntent = await fetchRemoteInfo(serverUrl, SECRET_TOKEN, { intent: "greet" });
+      expect(infoIntent).toBeDefined();
+
+      // 2. Info with package drill-down
+      const infoPkg = await fetchRemoteInfo(serverUrl, SECRET_TOKEN, { package: "test.profile-app" });
+      expect(infoPkg.type).toBe("package_detail");
+      expect(infoPkg.id).toBe("test.profile-app");
+      expect(infoPkg.actionsCount).toBeGreaterThanOrEqual(2);
+
+      // 3. Info with tree=true
+      const infoTree = await fetchRemoteInfo(serverUrl, SECRET_TOKEN, { tree: true });
+      expect(infoTree.type).toBe("tree");
+      expect(infoTree.packages).toBeDefined();
+    });
+
+    test("GET /api/v1/playbooks > lists playbooks and shows SOP content", async () => {
+      // List playbooks
+      const pbs = await fetchRemotePlaybooks(serverUrl, SECRET_TOKEN);
+      expect(Array.isArray(pbs)).toBe(true);
+      expect(pbs.length).toBeGreaterThanOrEqual(1);
+      const sop = pbs.find((p: any) => p.id === "sample.sample-sop");
+      expect(sop).toBeDefined();
+      expect(sop?.description).toContain("SOP for greeting");
+
+      // Show playbook
+      const pbDetail = await fetchRemotePlaybookShow(serverUrl, "sample.sample-sop", SECRET_TOKEN);
+      expect(pbDetail.id).toBe("sample.sample-sop");
+      expect(pbDetail.content).toContain("# Greeting SOP");
+      expect(pbDetail.actions).toContain("sample.greet");
+    });
+
+    test("GET & POST /api/v1/runs > queries execution runs and clears records", async () => {
+      // 1. Fetch runs list
+      const runsList = await fetchRemoteRuns(serverUrl, SECRET_TOKEN, { limit: 10 });
+      expect(Array.isArray(runsList.items)).toBe(true);
+      expect(runsList.items.length).toBeGreaterThan(0);
+
+      // 2. Clear runs
+      const clearRes = await clearRemoteRuns(serverUrl, SECRET_TOKEN, {
+        actionId: "sample.long-task",
+      });
+      expect(clearRes.ok).toBe(true);
+      expect(typeof clearRes.clearedCount).toBe("number");
+    });
+
+    test("State Endpoints > supports list, set, get, delete, and clear operations", async () => {
+      // 1. Set state key
+      const setRes = await setRemoteStateKey(
+        serverUrl,
+        "test_key",
+        { hello: "world", count: 42 },
+        SECRET_TOKEN,
+        { namespace: "session", ttl: 3600 }
+      );
+      expect(setRes.ok).toBe(true);
+
+      // 2. Get state key
+      const getRes = await getRemoteStateKey(serverUrl, "test_key", SECRET_TOKEN, {
+        namespace: "session",
+      });
+      expect(getRes.value).toEqual({ hello: "world", count: 42 });
+
+      // 3. List state keys
+      const listRes = await fetchRemoteStateList(serverUrl, SECRET_TOKEN, {
+        namespace: "session",
+      });
+      expect(listRes.keys).toContain("test_key");
+
+      // 4. Delete state key
+      const delRes = await deleteRemoteStateKey(serverUrl, "test_key", SECRET_TOKEN, {
+        namespace: "session",
+      });
+      expect(delRes.deleted).toBe(true);
+
+      // 5. Clear state
+      await setRemoteStateKey(serverUrl, "temp1", "val1", SECRET_TOKEN);
+      await setRemoteStateKey(serverUrl, "temp2", "val2", SECRET_TOKEN);
+      const clearStateRes = await clearRemoteState(serverUrl, SECRET_TOKEN, { all: true });
+      expect(clearStateRes.ok).toBe(true);
+      expect(clearStateRes.clearedCount).toBeGreaterThanOrEqual(2);
+    });
+
+    test("Config Endpoints > supports list, set, delete, and env verification", async () => {
+      // 1. Set config
+      const setConf = await setRemoteConfig(
+        serverUrl,
+        "TEST_API_URL",
+        "https://api.example.com",
+        SECRET_TOKEN
+      );
+      expect(setConf.ok).toBe(true);
+
+      // 2. List config
+      const confList = await fetchRemoteConfig(serverUrl, SECRET_TOKEN);
+      expect(confList.values["TEST_API_URL"]).toBe("https://api.example.com");
+
+      // 3. Delete config
+      const delConf = await deleteRemoteConfig(serverUrl, "TEST_API_URL", SECRET_TOKEN);
+      expect(delConf.deleted).toBe(true);
+
+      // 4. Env status check
+      const envRes = await fetchRemoteConfigEnv(serverUrl, SECRET_TOKEN);
+      expect(envRes.packageId).toBe("test.profile-app");
+      expect(Array.isArray(envRes.envChecks)).toBe(true);
+    });
+
+    test("GET /api/v1/doctor > runs diagnostics on remote server", async () => {
+      const doc = await fetchRemoteDoctor(serverUrl, SECRET_TOKEN);
+      expect(doc.ok !== undefined).toBe(true);
+      expect((doc.report || doc).summary).toBeDefined();
+      expect((doc.report || doc).checks.length).toBeGreaterThan(0);
+    });
+
+    test("GET /api/v1/runs/:runId/stream > connects to SSE stream and receives updates", async () => {
+      // Dispatch an async run
+      const asyncRes = await fetch(`${serverUrl}/api/v1/actions/sample.long-task/run`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${SECRET_TOKEN}`,
+        },
+        body: JSON.stringify({
+          input: { delayMs: 100 },
+          async: true,
+        }),
+      });
+      expect(asyncRes.status).toBe(202);
+      const asyncData = await asyncRes.json();
+      const runId = asyncData.runId;
+      expect(runId).toBeDefined();
+
+      // Connect to SSE stream
+      const sseRes = await fetch(`${serverUrl}/api/v1/runs/${runId}/stream`, {
+        headers: {
+          Authorization: `Bearer ${SECRET_TOKEN}`,
+        },
+      });
+      expect(sseRes.status).toBe(200);
+      expect(sseRes.headers.get("content-type")).toContain("text/event-stream");
+
+      // Read at least one chunk
+      const reader = sseRes.body?.getReader();
+      if (reader) {
+        const { value } = await reader.read();
+        const text = new TextDecoder().decode(value);
+        expect(text).toContain("event:");
+        reader.cancel();
+      }
+      await new Promise((r) => setTimeout(r, 150));
+    });
   });
 });
 

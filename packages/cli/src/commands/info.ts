@@ -191,16 +191,6 @@ export function registerInfoCommand(program: Command): void {
     .option("--json", "Output information as JSON")
     .action(async (patterns: string[] = [], options: any) => {
       try {
-        if (options.tree) {
-          const status = getRegistryStatus();
-          if (options.json) {
-            console.log(JSON.stringify(status, null, 2));
-          } else {
-            printRegistryTree(status);
-          }
-          return;
-        }
-
         const effectiveIntent = resolveIntent(options.intent, patterns);
         const shouldFallback = options.fallback !== false;
 
@@ -214,121 +204,110 @@ export function registerInfoCommand(program: Command): void {
         if (target.type === "remote") {
           const remoteInfo = await fetchRemoteInfo(
             target.serverUrl!,
-            target.token
+            target.token,
+            {
+              intent: effectiveIntent,
+              package: options.package,
+              tree: Boolean(options.tree),
+            }
           );
 
           if (options.json) {
-            if (Array.isArray(remoteInfo.linkedPackages) && effectiveIntent) {
-              const filterRes = filterWithFallbackInfo(
-                remoteInfo.linkedPackages,
-                effectiveIntent,
-                [
-                  (p: any) => p.id,
-                  (p: any) => p.name,
-                  (p: any) => p.description,
-                  (p: any) => p.path,
-                  (p: any) => p.actions,
-                  (p: any) => p.playbooks,
-                ],
-                shouldFallback
-              );
-              console.log(
-                JSON.stringify(
-                  {
-                    ...remoteInfo,
-                    linkedPackages: filterRes.items,
-                    isFallback: filterRes.isFallback,
-                  },
-                  null,
-                  2
-                )
-              );
-            } else {
-              console.log(JSON.stringify(remoteInfo, null, 2));
+            console.log(JSON.stringify(remoteInfo, null, 2));
+            return;
+          }
+
+          console.log(
+            `Remote ActionDock Server: ${target.serverUrl}${target.profileName ? ` (Profile: ${target.profileName})` : ""}\n`
+          );
+
+          // Remote Tree
+          if (remoteInfo.type === "tree" || (options.tree && remoteInfo.workspaces)) {
+            printRegistryTree(remoteInfo);
+            return;
+          }
+
+          // Remote Package Detail
+          if (remoteInfo.type === "package_detail" || (remoteInfo.id && !remoteInfo.packages)) {
+            console.log(`ActionDock Project: ${remoteInfo.name || remoteInfo.id} (${remoteInfo.id})`);
+            console.log(`Version:     ${remoteInfo.version || "unknown"}`);
+            if (remoteInfo.description) console.log(`Description: ${remoteInfo.description}`);
+            if (remoteInfo.path || remoteInfo.projectRoot) {
+              console.log(`Root:        ${remoteInfo.path || remoteInfo.projectRoot}`);
             }
-          } else {
-            console.log(
-              `Remote ActionDock Server: ${target.serverUrl}${target.profileName ? ` (Profile: ${target.profileName})` : ""}`
-            );
-            if (remoteInfo.id) {
-              if (effectiveIntent) {
-                const match = filterWithFallbackInfo(
-                  [remoteInfo],
-                  effectiveIntent,
-                  [
-                    (r: any) => r.id,
-                    (r: any) => r.name,
-                    (r: any) => r.description,
-                    (r: any) => r.actions,
-                    (r: any) => r.playbooks,
-                  ],
-                  shouldFallback
-                );
-                if (match.matchedCount === 0 && !shouldFallback) {
-                  console.error(
-                    `Error: Remote project '${remoteInfo.id}' did not match intent '${effectiveIntent}'`
-                  );
-                  process.exit(1);
-                }
+
+            const actions = remoteInfo.actionsDetail || remoteInfo.actions || [];
+            console.log(`\nActions (${remoteInfo.actionsCount || actions.length}):`);
+            for (const act of actions) {
+              if (typeof act === "string") {
+                console.log(`  - ${act}`);
+              } else {
+                console.log(`  - ${(act.id || "").padEnd(28)} ${act.description || ""}`);
               }
-              console.log(
-                `Project:     ${remoteInfo.name || remoteInfo.id} (${remoteInfo.id})`
-              );
-              console.log(`Version:     ${remoteInfo.version || "unknown"}`);
-              if (remoteInfo.description) {
-                console.log(`Description: ${remoteInfo.description}`);
+            }
+
+            const playbooks = remoteInfo.playbooksDetail || remoteInfo.playbooks || [];
+            console.log(`\nPlaybooks (${remoteInfo.playbooksCount || playbooks.length}):`);
+            for (const pb of playbooks) {
+              if (typeof pb === "string") {
+                console.log(`  - ${pb}`);
+              } else {
+                console.log(`  - ${(pb.id || "").padEnd(28)} ${pb.description || ""}`);
               }
-              if (Array.isArray(remoteInfo.actions)) {
-                console.log(`\nActions (${remoteInfo.actions.length}):`);
-                for (const actId of remoteInfo.actions) {
-                  console.log(`  - ${actId}`);
-                }
-              }
-              if (Array.isArray(remoteInfo.playbooks)) {
-                console.log(`\nPlaybooks (${remoteInfo.playbooks.length}):`);
-                for (const pbId of remoteInfo.playbooks) {
-                  console.log(`  - ${pbId}`);
-                }
-              }
-            } else if (Array.isArray(remoteInfo.linkedPackages)) {
-              let list = remoteInfo.linkedPackages;
-              let isFallback = false;
-              if (effectiveIntent) {
-                const filterRes = filterWithFallbackInfo(
-                  list,
-                  effectiveIntent,
-                  [
-                    (p: any) => p.id,
-                    (p: any) => p.name,
-                    (p: any) => p.description,
-                    (p: any) => p.path,
-                    (p: any) => p.actions,
-                    (p: any) => p.playbooks,
-                  ],
-                  shouldFallback
-                );
-                if (filterRes.matchedCount === 0 && !shouldFallback) {
-                  console.error(
-                    `Error: No remote packages matched intent '${effectiveIntent}'`
-                  );
-                  process.exit(1);
-                }
-                list = filterRes.items;
-                isFallback = filterRes.isFallback;
-              }
-              console.log(`Version:     ${remoteInfo.version || "2.0.0"}`);
-              if (isFallback && effectiveIntent) {
+            }
+
+            const declared = remoteInfo.configDeclared || {};
+            const declaredKeys = Object.keys(declared);
+            if (declaredKeys.length > 0) {
+              console.log(`\nDeclared Config Keys:`);
+              for (const k of declaredKeys) {
+                const item = declared[k];
+                const isSec = item?.secret ? " [secret]" : "";
+                const def =
+                  item?.default !== undefined
+                    ? ` (default: ${JSON.stringify(item.default)})`
+                    : "";
                 console.log(
-                  `\n(No remote packages matched intent '${effectiveIntent}', showing all linked packages)`
+                  `  - ${k.padEnd(24)} ${item?.description || ""}${def}${isSec}`
                 );
               }
-              console.log(`\nLinked Packages (${list.length}):`);
-              for (const pkg of list) {
-                console.log(`  - ${pkg.id} (${pkg.path})`);
-              }
-            } else {
-              console.log(JSON.stringify(remoteInfo, null, 2));
             }
+            return;
+          }
+
+          // Remote Package List
+          const packages = remoteInfo.packages || remoteInfo.linkedPackages || [];
+          if (Array.isArray(packages)) {
+            console.log(`Remote ActionDock Packages (${packages.length}):\n`);
+            for (const p of packages) {
+              console.log(`* ${p.name || p.id} (${p.id}) v${p.version || "unknown"}`);
+              if (p.path) console.log(`  Path:      ${p.path}`);
+              if (p.description) console.log(`  Desc:      ${p.description}`);
+              const actNames = Array.isArray(p.actions)
+                ? p.actions.map((a: any) => (typeof a === "string" ? a : a.id)).join(", ")
+                : "";
+              const pbNames = Array.isArray(p.playbooks)
+                ? p.playbooks.map((pb: any) => (typeof pb === "string" ? pb : pb.id)).join(", ")
+                : "";
+              console.log(`  Actions (${p.actionsCount || (p.actions ? p.actions.length : 0)}):   ${actNames || "(none)"}`);
+              console.log(`  Playbooks (${p.playbooksCount || (p.playbooks ? p.playbooks.length : 0)}): ${pbNames || "(none)"}`);
+              console.log("");
+            }
+            console.log("Tip: Run 'ad info <package-id> --server <url>' to view detailed package configuration and schema.");
+            return;
+          }
+
+          console.log(JSON.stringify(remoteInfo, null, 2));
+          return;
+        }
+
+        // Local Tree
+        if (options.tree) {
+          const status = getRegistryStatus();
+          if (options.json) {
+            console.log(JSON.stringify(status, null, 2));
+          } else {
+            printRegistryTree(status);
           }
           return;
         }

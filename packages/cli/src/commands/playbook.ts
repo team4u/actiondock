@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import {
+  fetchRemotePlaybooks,
+  fetchRemotePlaybookShow,
   filterWithFallbackInfo,
   findProjectRoot,
   listLinkedPackages,
@@ -8,6 +10,7 @@ import {
   loadPlaybooks,
   loadProjectConfig,
   resolvePlaybookProject,
+  resolveTarget,
 } from "@actiondock/core";
 import type { PlaybookDefinition } from "@actiondock/core";
 import { Command } from "commander";
@@ -23,12 +26,44 @@ export function registerPlaybookCommands(program: Command): void {
     .command("list [patterns...]")
     .description("List playbooks in current project or linked packages")
     .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
+    .option("-P, --package <id>", "Target package ID or path")
+    .option("-p, --profile <name>", "Query against a specific profile")
+    .option("-s, --server <url>", "Remote server URL")
+    .option("-t, --token <token>", "Auth token for remote server")
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("--json", "Output as JSON")
-    .action((patterns, options) => {
+    .action(async (patterns, options) => {
       try {
         const effectiveIntent = resolveIntent(options.intent, patterns);
         const shouldFallback = options.fallback !== false;
+
+        const target = resolveTarget({
+          profile: options.profile,
+          server: options.server,
+          token: options.token,
+        });
+
+        if (target.type === "remote") {
+          const remotePbs = await fetchRemotePlaybooks(target.serverUrl!, target.token, {
+            intent: effectiveIntent,
+            package: options.package,
+          });
+          if (options.json) {
+            console.log(JSON.stringify(remotePbs, null, 2));
+            return;
+          }
+          console.log(
+            `Playbooks on remote server ${target.serverUrl}${target.profileName ? ` (Profile: ${target.profileName})` : ""}:\n`
+          );
+          if (remotePbs.length === 0) {
+            console.log("  (No playbooks found)");
+          } else {
+            for (const p of remotePbs) {
+              console.log(`  ${p.id.padEnd(24)} ${p.description} (Package: ${p.packageId})`);
+            }
+          }
+          return;
+        }
 
         const root = findProjectRoot();
         if (root) {
@@ -228,9 +263,35 @@ This playbook provides task execution guidance for AI Agents.
   pbCmd
     .command("show <id>")
     .description("Show playbook content and metadata (from current project or linked packages)")
+    .option("-p, --profile <name>", "Query against a specific profile")
+    .option("-s, --server <url>", "Remote server URL")
+    .option("-t, --token <token>", "Auth token for remote server")
     .option("--json", "Output as JSON")
-    .action((id, options) => {
+    .action(async (id, options) => {
       try {
+        const target = resolveTarget({
+          profile: options.profile,
+          server: options.server,
+          token: options.token,
+        });
+
+        if (target.type === "remote") {
+          const pb = await fetchRemotePlaybookShow(target.serverUrl!, id, target.token);
+          if (options.json) {
+            console.log(JSON.stringify(pb, null, 2));
+            return;
+          }
+          console.log(`Playbook:    ${pb.id} (Package: ${pb.packageId})`);
+          if (pb.description) console.log(`Description: ${pb.description}`);
+          if (pb.actions && pb.actions.length > 0) {
+            console.log(`Actions:     ${pb.actions.join(", ")}`);
+          }
+          if (pb.filePath) console.log(`File:        ${pb.filePath}\n`);
+          console.log("--- Content ---");
+          console.log(pb.content);
+          return;
+        }
+
         const resolved = resolvePlaybookProject(id);
         const pb = resolved.playbook;
 

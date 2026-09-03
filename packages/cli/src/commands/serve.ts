@@ -1,5 +1,7 @@
 import { resolve } from "node:path";
 import { findProjectRoot, loadProjectConfig, startActionDockServer } from "@actiondock/core";
+import { createActionDockMcpServer } from "@actiondock/mcp";
+import { createMcpHandler } from "@modelcontextprotocol/server";
 import { Command } from "commander";
 import { parseByteSize } from "../utils/bytes";
 
@@ -19,6 +21,7 @@ export function registerServeCommand(program: Command): void {
     )
     .option("--max-body <size>", "Maximum allowed JSON request body size (e.g. 1mb, 500kb)", "1mb")
     .option("--expose-debug-info", "Expose project root path in health and info responses")
+    .option("--no-mcp", "Disable unified MCP protocol endpoint at /mcp")
     .option("-d, --dir <path>", "Project root directory (default: current working directory)")
     .action(async (options) => {
       const port = parseInt(options.port, 10) || 5177;
@@ -55,6 +58,30 @@ export function registerServeCommand(program: Command): void {
         }
       }
 
+      let mcpHandler: ((req: Request) => Promise<Response | null | undefined>) | undefined;
+      const enableMcp = options.mcp !== false;
+      if (enableMcp) {
+        try {
+          const handler = createMcpHandler(
+            () => {
+              return createActionDockMcpServer({
+                projectRoot: projectRoot || undefined,
+              });
+            },
+            {
+              onerror: (err) => {
+                process.stderr.write(`[MCP HTTP Error] ${err?.message || String(err)}\n`);
+              },
+            }
+          );
+          mcpHandler = async (req: Request) => {
+            return handler.fetch(req);
+          };
+        } catch {
+          // 忽略 MCP 初始化异常
+        }
+      }
+
       try {
         const server = startActionDockServer({
           port,
@@ -64,6 +91,8 @@ export function registerServeCommand(program: Command): void {
           corsOrigins,
           maxBodyBytes,
           exposeDebugInfo,
+          enableMcp,
+          mcpHandler,
           projectRoot: projectRoot || undefined,
         });
 
@@ -79,6 +108,9 @@ export function registerServeCommand(program: Command): void {
         console.log(`  * CORS Origins:    ${corsOrigins ? corsOrigins.join(", ") : "Disabled (Default)"}`);
         console.log(`  * Max Body Size:   ${options.maxBody || "1mb"}`);
         console.log(`  * Health Endpoint: http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${server.port}/api/v1/health`);
+        if (enableMcp) {
+          console.log(`  * MCP Endpoint:    http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${server.port}/mcp`);
+        }
         console.log(`======================================================\n`);
         console.log(`Server is ready to accept remote 'ad run' requests.`);
         console.log(`Press Ctrl+C to terminate.\n`);

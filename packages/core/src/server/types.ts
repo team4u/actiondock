@@ -22,6 +22,10 @@ export interface ServerOptions {
   maxBodyBytes?: number;
   /** 是否在 health 和 info 接口中透传本地 projectRoot 等调试路径 */
   exposeDebugInfo?: boolean;
+  /** 是否启用一体化 MCP 协议支持（默认开启） */
+  enableMcp?: boolean;
+  /** 自定义 MCP 请求处理器钩子（若挂载则 /mcp 路由交由其处理） */
+  mcpHandler?: (req: Request) => Promise<Response | null | undefined> | Response | null | undefined;
 }
 
 /**

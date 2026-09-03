@@ -105,6 +105,8 @@ export interface RuntimeStorage {
   getRun(id: string): RunRecord | null;
   /** 分页或按 Action 查询历史运行记录列表（按 startedAt 倒序排列） */
   listRuns(options?: { actionId?: string; limit?: number }): RunRecord[];
+  /** 批量清理历史运行记录，返回实际清理的条数 */
+  clearRuns(options?: { actionId?: string; status?: string }): number;
 
   /** 关闭底层 SQLite 数据库连接并释放句柄 */
   close(): void;

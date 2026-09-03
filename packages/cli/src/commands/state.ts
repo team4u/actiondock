@@ -1,11 +1,17 @@
 import { existsSync } from "node:fs";
 import {
+  clearRemoteState,
   createStorage,
+  deleteRemoteStateKey,
+  fetchRemoteStateList,
   filterWithFallbackInfo,
   findProjectRoot,
+  getRemoteStateKey,
   listLinkedPackages,
   loadProjectConfig,
   resolvePackageRoot,
+  resolveTarget,
+  setRemoteStateKey,
 } from "@actiondock/core";
 import { Command } from "commander";
 import { resolveIntent } from "../utils/filter";
@@ -47,6 +53,9 @@ export function registerStateCommands(program: Command): void {
     .description("List state keys matching prefix, namespace, or intent pattern (in current project or linked packages)")
     .option("-P, --package <id>", "Target package ID or path")
     .option("-n, --namespace <ns>", "Filter by specific namespace")
+    .option("-p, --profile <name>", "Query state on a remote target")
+    .option("-s, --server <url>", "Remote server URL")
+    .option("-t, --token <token>", "Auth token for remote server")
     .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("-d, --detail", "Show detailed state entry objects (including namespace, expiration, update time)")
@@ -55,6 +64,31 @@ export function registerStateCommands(program: Command): void {
       try {
         const effectiveIntent = resolveIntent(options.intent, prefix ? [prefix] : []);
         const shouldFallback = options.fallback !== false;
+
+        const target = resolveTarget({
+          profile: options.profile,
+          server: options.server,
+          token: options.token,
+        });
+
+        if (target.type === "remote") {
+          const res = await fetchRemoteStateList(target.serverUrl!, target.token, {
+            package: options.package,
+            namespace: options.namespace,
+            prefix,
+          });
+          if (options.json) {
+            console.log(JSON.stringify(res.keys, null, 2));
+            return;
+          }
+          console.log(
+            `State keys on remote server ${target.serverUrl}${target.profileName ? ` (Profile: ${target.profileName})` : ""} (${res.keys.length}):\n`
+          );
+          for (const k of res.keys) {
+            console.log(`  - ${k}`);
+          }
+          return;
+        }
 
         const targetRoot = options.package
           ? resolvePackageRoot(options.package)
@@ -236,10 +270,32 @@ export function registerStateCommands(program: Command): void {
     .description("Get a state value by key, namespace:key, or package/namespace:key")
     .option("-P, --package <id>", "Target package ID or path")
     .option("-n, --namespace <ns>", "Target namespace")
+    .option("-p, --profile <name>", "Query state on a remote target")
+    .option("-s, --server <url>", "Remote server URL")
+    .option("-t, --token <token>", "Auth token for remote server")
     .option("--json", "Output as JSON")
     .action(async (rawKey, options) => {
-      const { root, key } = getTargetRoot(options.package, rawKey);
       try {
+        const target = resolveTarget({
+          profile: options.profile,
+          server: options.server,
+          token: options.token,
+        });
+
+        if (target.type === "remote") {
+          const res = await getRemoteStateKey(target.serverUrl!, rawKey, target.token, {
+            package: options.package,
+            namespace: options.namespace,
+          });
+          if (options.json) {
+            console.log(JSON.stringify(res, null, 2));
+          } else {
+            console.log(res.value !== undefined ? JSON.stringify(res.value, null, 2) : "undefined");
+          }
+          return;
+        }
+
+        const { root, key } = getTargetRoot(options.package, rawKey);
         const projConfig = loadProjectConfig(root);
         const storage = createStorage(projConfig.id, { projectRoot: root });
 
@@ -290,10 +346,36 @@ export function registerStateCommands(program: Command): void {
     .description("Set a state value by key, namespace:key, or package/namespace:key")
     .option("-P, --package <id>", "Target package ID or path")
     .option("-n, --namespace <ns>", "Target namespace")
+    .option("-p, --profile <name>", "Set state on a remote target")
+    .option("-s, --server <url>", "Remote server URL")
+    .option("-t, --token <token>", "Auth token for remote server")
     .option("--ttl <seconds>", "Time to live in seconds", (v) => parseInt(v, 10))
     .action(async (rawKey, rawValue, options) => {
-      const { root, key } = getTargetRoot(options.package, rawKey);
       try {
+        let parsed: unknown = rawValue;
+        try {
+          parsed = JSON.parse(rawValue);
+        } catch {
+          parsed = rawValue;
+        }
+
+        const target = resolveTarget({
+          profile: options.profile,
+          server: options.server,
+          token: options.token,
+        });
+
+        if (target.type === "remote") {
+          await setRemoteStateKey(target.serverUrl!, rawKey, parsed, target.token, {
+            package: options.package,
+            namespace: options.namespace,
+            ttl: options.ttl,
+          });
+          console.log(`[OK] State '${rawKey}' updated on remote server ${target.serverUrl}`);
+          return;
+        }
+
+        const { root, key } = getTargetRoot(options.package, rawKey);
         const projConfig = loadProjectConfig(root);
         const storage = createStorage(projConfig.id, { projectRoot: root });
 
@@ -307,13 +389,6 @@ export function registerStateCommands(program: Command): void {
           const colonIdx = key.indexOf(":");
           ns = key.slice(0, colonIdx);
           actualKey = key.slice(colonIdx + 1);
-        }
-
-        let parsed: unknown = rawValue;
-        try {
-          parsed = JSON.parse(rawValue);
-        } catch {
-          parsed = rawValue;
         }
 
         await storage.setState(ns, actualKey, parsed, options.ttl);
@@ -336,10 +411,28 @@ export function registerStateCommands(program: Command): void {
     .description("Delete a state value by key, namespace:key, or package/namespace:key")
     .option("-P, --package <id>", "Target package ID or path")
     .option("-n, --namespace <ns>", "Target namespace")
+    .option("-p, --profile <name>", "Delete state on a remote target")
+    .option("-s, --server <url>", "Remote server URL")
+    .option("-t, --token <token>", "Auth token for remote server")
     .option("--silent", "Do not exit with error if key is not found")
     .action(async (rawKey, options) => {
-      const { root, key } = getTargetRoot(options.package, rawKey);
       try {
+        const target = resolveTarget({
+          profile: options.profile,
+          server: options.server,
+          token: options.token,
+        });
+
+        if (target.type === "remote") {
+          await deleteRemoteStateKey(target.serverUrl!, rawKey, target.token, {
+            package: options.package,
+            namespace: options.namespace,
+          });
+          console.log(`[OK] State '${rawKey}' deleted from remote server ${target.serverUrl}`);
+          return;
+        }
+
+        const { root, key } = getTargetRoot(options.package, rawKey);
         const projConfig = loadProjectConfig(root);
         const storage = createStorage(projConfig.id, { projectRoot: root });
         const deleted = await storage.deleteStateSmart(key, options.namespace);
@@ -366,10 +459,30 @@ export function registerStateCommands(program: Command): void {
     .description("Clear state entries by namespace, prefix, or all")
     .option("-P, --package <id>", "Target package ID or path")
     .option("-n, --namespace <ns>", "Target namespace to clear")
+    .option("-p, --profile <name>", "Clear state on a remote target")
+    .option("-s, --server <url>", "Remote server URL")
+    .option("-t, --token <token>", "Auth token for remote server")
     .option("-a, --all", "Clear all state entries across all namespaces in this package")
     .action(async (prefix = "", options) => {
-      const { root } = getTargetRoot(options.package);
       try {
+        const target = resolveTarget({
+          profile: options.profile,
+          server: options.server,
+          token: options.token,
+        });
+
+        if (target.type === "remote") {
+          const res = await clearRemoteState(target.serverUrl!, target.token, {
+            package: options.package,
+            namespace: options.namespace,
+            prefix,
+            all: Boolean(options.all),
+          });
+          console.log(`[OK] Cleared ${res.clearedCount} state entry(s) on remote server ${target.serverUrl}`);
+          return;
+        }
+
+        const { root } = getTargetRoot(options.package);
         const projConfig = loadProjectConfig(root);
         const storage = createStorage(projConfig.id, { projectRoot: root });
         const count = await storage.clearState({

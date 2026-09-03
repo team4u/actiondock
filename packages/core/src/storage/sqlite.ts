@@ -17,6 +17,7 @@ import type { RuntimeStorage, StateEntry, StorageOptions, TerminalRunStatus } fr
 export class SqliteRuntimeStorage implements RuntimeStorage {
   private db: Database;
   private packageId: string;
+  private isClosed = false;
 
   constructor(options: StorageOptions) {
     this.packageId = options.packageId;
@@ -486,21 +487,26 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     error?: RuntimeError,
     finishedAt?: string
   ): void {
-    const stmt = this.db.prepare(`
-      UPDATE runs SET
-        status = ?,
-        output_json = ?,
-        error_json = ?,
-        finished_at = ?
-      WHERE id = ?
-    `);
-    stmt.run(
-      status,
-      output !== undefined ? JSON.stringify(output) : null,
-      error ? JSON.stringify(error) : null,
-      finishedAt || new Date().toISOString(),
-      id
-    );
+    if (this.isClosed) return;
+    try {
+      const stmt = this.db.prepare(`
+        UPDATE runs SET
+          status = ?,
+          output_json = ?,
+          error_json = ?,
+          finished_at = ?
+        WHERE id = ?
+      `);
+      stmt.run(
+        status,
+        output !== undefined ? JSON.stringify(output) : null,
+        error ? JSON.stringify(error) : null,
+        finishedAt || new Date().toISOString(),
+        id
+      );
+    } catch {
+      // 数据库已关闭，安全忽略
+    }
   }
 
   getRun(id: string): RunRecord | null {
@@ -533,6 +539,22 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       rows = stmt.all(this.packageId, limit);
     }
     return rows.map((r) => this.mapRunRecord(r));
+  }
+
+  clearRuns(options: { actionId?: string; status?: string } = {}): number {
+    let sql = "DELETE FROM runs WHERE package_id = ?";
+    const params: any[] = [this.packageId];
+    if (options.actionId) {
+      sql += " AND action_id = ?";
+      params.push(options.actionId);
+    }
+    if (options.status) {
+      sql += " AND status = ?";
+      params.push(options.status);
+    }
+    const stmt = this.db.prepare(sql);
+    const res = stmt.run(...params);
+    return res.changes;
   }
 
   private mapRunRecord(row: any): RunRecord {
@@ -573,6 +595,11 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
   }
 
   close(): void {
-    this.db.close();
+    this.isClosed = true;
+    try {
+      this.db.close();
+    } catch {
+      // 忽略重复关闭异常
+    }
   }
 }

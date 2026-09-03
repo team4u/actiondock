@@ -1,11 +1,15 @@
 import {
   createGlobalStorage,
   createStorage,
+  deleteRemoteConfig,
+  fetchRemoteConfig,
   filterWithFallbackInfo,
   isSecretConfigKey,
   loadProjectConfig,
   maskSecretValue,
   resolvePackageRoot,
+  resolveTarget,
+  setRemoteConfig,
   type ConfigItemDefinition,
 } from "@actiondock/core";
 import { Command } from "commander";
@@ -69,18 +73,17 @@ export function registerConfigCommands(program: Command): void {
             resolvedValue = itemDef.default;
             source = "default";
             status = "DEFAULT";
-          } else {
-            status = "MISSING";
           }
+
+          const displayValue = isSecret && resolvedValue !== undefined ? maskSecretValue(resolvedValue) : resolvedValue;
 
           return {
             key,
-            description: itemDef.description || "",
-            secret: isSecret,
-            default: itemDef.default,
+            value: displayValue,
             status,
             source,
-            value: isSecret && resolvedValue !== undefined ? maskSecretValue(resolvedValue) : resolvedValue,
+            secret: isSecret,
+            description: itemDef.description || "",
             required: itemDef.default === undefined,
           };
         });
@@ -141,15 +144,44 @@ export function registerConfigCommands(program: Command): void {
     .description("List configuration entries (Global & Project)")
     .option("-P, --package <id>", "Target package ID or path")
     .option("-g, --global", "Show only global configurations")
+    .option("-p, --profile <name>", "Query config on a remote target")
+    .option("-s, --server <url>", "Remote server URL")
+    .option("-t, --token <token>", "Auth token for remote server")
     .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
     .option("--reveal, --show-secrets", "Reveal plain text values for secrets")
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("--json", "Output as JSON")
-    .action((patterns, options) => {
+    .action(async (patterns, options) => {
       try {
         const effectiveIntent = resolveIntent(options.intent, patterns);
         const shouldFallback = options.fallback !== false;
         const reveal = options.reveal || options.showSecrets;
+
+        const target = resolveTarget({
+          profile: options.profile,
+          server: options.server,
+          token: options.token,
+        });
+
+        if (target.type === "remote") {
+          const res = await fetchRemoteConfig(target.serverUrl!, target.token, options.package);
+          if (options.json) {
+            console.log(JSON.stringify(res, null, 2));
+            return;
+          }
+          console.log(
+            `Config on remote server ${target.serverUrl}${target.profileName ? ` (Profile: ${target.profileName})` : ""}:\n`
+          );
+          const entries = Object.entries(res.values || {});
+          if (entries.length === 0) {
+            console.log("  (No config entries stored)");
+          } else {
+            for (const [k, v] of entries) {
+              console.log(`  ${k.padEnd(24)} = ${JSON.stringify(v)}`);
+            }
+          }
+          return;
+        }
 
         const globalStorage = createGlobalStorage();
         const globalConfig = globalStorage.listConfig();
@@ -246,10 +278,30 @@ export function registerConfigCommands(program: Command): void {
     .description("Get a configuration value")
     .option("-P, --package <id>", "Target package ID or path")
     .option("-g, --global", "Get from global configuration only")
+    .option("-p, --profile <name>", "Query config on a remote target")
+    .option("-s, --server <url>", "Remote server URL")
+    .option("-t, --token <token>", "Auth token for remote server")
     .option("--reveal, --show-secrets", "Reveal plain text value for secret")
     .option("--json", "Output as JSON")
-    .action((key, options) => {
+    .action(async (key, options) => {
       try {
+        const target = resolveTarget({
+          profile: options.profile,
+          server: options.server,
+          token: options.token,
+        });
+
+        if (target.type === "remote") {
+          const res = await fetchRemoteConfig(target.serverUrl!, target.token, options.package);
+          const val = res.values?.[key];
+          if (options.json) {
+            console.log(JSON.stringify({ key, value: val }, null, 2));
+          } else {
+            console.log(val !== undefined ? JSON.stringify(val) : "undefined");
+          }
+          return;
+        }
+
         const reveal = options.reveal || options.showSecrets;
         const globalStorage = createGlobalStorage();
         const globalVal = globalStorage.getConfig(key);
@@ -326,13 +378,28 @@ export function registerConfigCommands(program: Command): void {
     .description("Set a configuration value (Global by default outside project, or use -g for global)")
     .option("-P, --package <id>", "Target package ID or path")
     .option("-g, --global", "Set globally across all packages")
-    .action((key, rawValue, options) => {
+    .option("-p, --profile <name>", "Set config on a remote target")
+    .option("-s, --server <url>", "Remote server URL")
+    .option("-t, --token <token>", "Auth token for remote server")
+    .action(async (key, rawValue, options) => {
       try {
         let parsed: unknown = rawValue;
         try {
           parsed = JSON.parse(rawValue);
         } catch {
           parsed = rawValue;
+        }
+
+        const target = resolveTarget({
+          profile: options.profile,
+          server: options.server,
+          token: options.token,
+        });
+
+        if (target.type === "remote") {
+          await setRemoteConfig(target.serverUrl!, key, parsed, target.token, options.package);
+          console.log(`[OK] Remote config '${key}' updated on ${target.serverUrl}`);
+          return;
         }
 
         const projectRoot = !options.global ? resolvePackageRoot(options.package) : null;
@@ -366,8 +433,27 @@ export function registerConfigCommands(program: Command): void {
     .description("Delete a configuration value")
     .option("-P, --package <id>", "Target package ID or path")
     .option("-g, --global", "Delete from global configuration")
-    .action((key, options) => {
+    .option("-p, --profile <name>", "Delete config on a remote target")
+    .option("-s, --server <url>", "Remote server URL")
+    .option("-t, --token <token>", "Auth token for remote server")
+    .action(async (key, options) => {
       try {
+        const target = resolveTarget({
+          profile: options.profile,
+          server: options.server,
+          token: options.token,
+        });
+
+        if (target.type === "remote") {
+          const res = await deleteRemoteConfig(target.serverUrl!, key, target.token, options.package);
+          if (res.deleted) {
+            console.log(`[OK] Remote config '${key}' deleted from ${target.serverUrl}`);
+          } else {
+            console.log(`Remote config '${key}' not found on ${target.serverUrl}`);
+          }
+          return;
+        }
+
         const projectRoot = !options.global ? resolvePackageRoot(options.package) : null;
 
         if (options.global || !projectRoot) {

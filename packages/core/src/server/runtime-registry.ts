@@ -12,10 +12,45 @@ import type { RuntimeStorage } from "../storage/types";
  */
 export class ServerRuntimeRegistry {
   private storages = new Map<string, RuntimeStorage>();
+  private listeners = new Map<string, Set<(event: { type: string; data: any }) => void>>();
   public executionManager: ExecutionManager;
 
   constructor() {
     this.executionManager = new ExecutionManager();
+  }
+
+  /**
+   * 订阅指定 runId 的事件（用于 SSE 流式推送）。
+   */
+  public subscribe(runId: string, listener: (event: { type: string; data: any }) => void): () => void {
+    let set = this.listeners.get(runId);
+    if (!set) {
+      set = new Set();
+      this.listeners.set(runId, set);
+    }
+    set.add(listener);
+    return () => {
+      set?.delete(listener);
+      if (set && set.size === 0) {
+        this.listeners.delete(runId);
+      }
+    };
+  }
+
+  /**
+   * 向指定 runId 的订阅者广播事件。
+   */
+  public emit(runId: string, event: { type: string; data: any }): void {
+    const set = this.listeners.get(runId);
+    if (set) {
+      for (const listener of set) {
+        try {
+          listener(event);
+        } catch {
+          // 忽略单个监听器错误
+        }
+      }
+    }
   }
 
   /**
