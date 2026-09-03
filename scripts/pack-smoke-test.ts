@@ -27,7 +27,7 @@ try {
 
     const output = packProc.stdout.toString() + packProc.stderr.toString();
     const tgzMatch = output.match(/actiondock-[a-z0-9\-\.]+\.tgz/i);
-    const tgzFilename = tgzMatch ? tgzMatch[0] : `actiondock-${pkg}-2.0.0.tgz`;
+    const tgzFilename = tgzMatch ? tgzMatch[0] : `actiondock-${pkg}-2.0.1.tgz`;
     const tgzPath = join(pkgDir, tgzFilename);
 
     if (!existsSync(tgzPath)) {
@@ -149,10 +149,10 @@ console.log("   ✓ MCP createActionDockMcpServer & toMcpResult export verified"
 
   // ad --version
   const verProc = Bun.spawnSync([cliBin, "--version"], { cwd: testDir, stdout: "pipe", stderr: "pipe" });
-  if (verProc.exitCode !== 0 || !verProc.stdout.toString().includes("2.0.0")) {
+  if (verProc.exitCode !== 0 || !verProc.stdout.toString().includes("2.0.1")) {
     throw new Error(`'ad --version' failed: ${verProc.stderr.toString()} (output: ${verProc.stdout.toString()})`);
   }
-  console.log(`   ✓ ad --version returned 2.0.0`);
+  console.log(`   ✓ ad --version returned 2.0.1`);
 
   // ad --help
   const helpProc = Bun.spawnSync([cliBin, "--help"], { cwd: testDir, stdout: "pipe", stderr: "pipe" });

@@ -1,6 +1,6 @@
 {
   "name": "@actiondock/cli",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "ActionDock CLI facade for developing, testing, building, and exporting standalone Agent Actions and Skills",
   "type": "module",
   "bin": {

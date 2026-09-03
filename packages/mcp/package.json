@@ -1,6 +1,6 @@
 {
   "name": "@actiondock/mcp",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "ActionDock MCP Adapter for exposing Actions as Model Context Protocol (MCP) Tools",
   "type": "module",
   "main": "./src/index.ts",
