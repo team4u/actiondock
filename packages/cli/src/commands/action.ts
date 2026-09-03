@@ -113,7 +113,7 @@ export function registerActionCommands(program: Command): void {
           const linkedList = listLinkedPackages();
           if (linkedList.length === 0) {
             console.log("No ActionDock project in current directory, and no packages linked.");
-            console.log("Run 'ac link' inside an Action package to register it.");
+            console.log("Run 'ad link' inside an Action package to register it.");
             return;
           }
 
@@ -283,7 +283,7 @@ export default defineAction<Input, Output>({
         writeFileSync(targetFullFile, template, "utf-8");
         console.log(`[OK] Created Action '${id}' at ${targetFullFile}`);
         console.log(`\nTo run this action:`);
-        console.log(`  ac action run ${id} --input '{"exampleParam": "hello"}'`);
+        console.log(`  ad action run ${id} --input '{"exampleParam": "hello"}'`);
       } catch (err: any) {
         console.error(`Error: ${err.message}`);
         process.exit(1);
@@ -454,10 +454,10 @@ export default defineAction<Input, Output>({
       await executeAction(id, options);
     });
 
-  // Root level alias: ac run <id>
+  // Root level alias: ad run <id>
   program
     .command("run <id>")
-    .description("Alias for 'ac action run <id>'")
+    .description("Alias for 'ad action run <id>'")
     .option("-i, --input <json>", "Input as JSON string")
     .option("-f, --input-file <path>", "Input from JSON file")
     .option("-c, --config <key=value...>", "Temporary config override")
@@ -551,7 +551,7 @@ async function executeAction(id: string, options: any): Promise<void> {
     // Local execution
     if (options.async) {
       console.error(
-        "Error: Async execution requires a long-running ActionDock server.\nUse --profile, --server, or start `ac serve`."
+        "Error: Async execution requires a long-running ActionDock server.\nUse --profile, --server, or start `ad serve`."
       );
       process.exit(1);
     }

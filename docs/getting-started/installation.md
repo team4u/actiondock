@@ -20,7 +20,7 @@ bun --version
 
 ---
 
-## 安装 ActionDock CLI (`ac`)
+## 安装 ActionDock CLI (`ad`)
 
 ### 全局安装
 ```bash
@@ -29,8 +29,8 @@ npm install -g @actiondock/cli
 
 ### 验证 CLI
 ```bash
-ac --version
-ac --help
+ad --version
+ad --help
 ```
 
 ### 贡献者 / 源码本地开发模式
@@ -43,7 +43,7 @@ git clone https://github.com/team4u/actiondock.git
 cd actiondock
 bun install
 
-# 注册全局 ac 命令行工具
+# 注册全局 ad 命令行工具
 cd packages/cli
 bun link
 
@@ -53,7 +53,7 @@ bun link
 ```
 
 #### 在外部 Action 项目中引用本地 SDK
-当您使用 `ac init my-action` 创建独立项目后，在项目目录下执行：
+当您使用 `ad init my-action` 创建独立项目后，在项目目录下执行：
 ```bash
 cd /path/to/my-action
 
@@ -83,7 +83,7 @@ bun link @actiondock/sdk
 
 - **契约原则**：`package.json` 永远声明 `"@actiondock/sdk": "^2.0.0"`，**严禁**改为 `link:` 或本地相对路径（保证跨机器与独立构建一致性）。
 - **分层原则**：SDK 源码根目录 `bun link` 全局执行一次；各 Action 项目内 `bun link @actiondock/sdk` 每项目执行一次。
-- **双 Link 区分**：`ac link` 是 **ActionDock 全局包注册**（支持跨目录 `ac run pkg/action`），`bun link` 是 **TypeScript/Node 依赖解析**，两者职责独立，开发态通常都需要执行。
+- **双 Link 区分**：`ad link` 是 **ActionDock 全局包注册**（支持跨目录 `ad run pkg/action`），`bun link` 是 **TypeScript/Node 依赖解析**，两者职责独立，开发态通常都需要执行。
 
 ---
 
@@ -91,5 +91,5 @@ bun link @actiondock/sdk
 
 请注意：**只有在开发和构建 Action Package 时才需要安装 Bun 与 ActionDock CLI**。
 
-一旦您通过 `ac build` 将 Action Package 编译为独立二进制（如 `./dist/bin/my-tools`），该二进制是完全自包含、零外部依赖的单个可执行文件。在部署目标机器、Docker 最小镜像或 CI 沙箱中，**无需安装 Bun、Node.js 或任何依赖库**，直接运行即可。
+一旦您通过 `ad build` 将 Action Package 编译为独立二进制（如 `./dist/bin/my-tools`），该二进制是完全自包含、零外部依赖的单个可执行文件。在部署目标机器、Docker 最小镜像或 CI 沙箱中，**无需安装 Bun、Node.js 或任何依赖库**，直接运行即可。
 

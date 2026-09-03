@@ -6,7 +6,7 @@ import type { RuntimeStorage } from "../storage/types";
  * 服务端运行时注册表（ServerRuntimeRegistry）。
  * 
  * 职责：
- * 1. 在长期运行的 HTTP 服务端（`ac serve` / `ac mcp serve`）中，跨请求缓存并池化管理 SQLite 数据库存储连接。
+ * 1. 在长期运行的 HTTP 服务端（`ad serve` / `ad mcp serve`）中，跨请求缓存并池化管理 SQLite 数据库存储连接。
  * 2. 集中维护活跃的在途任务执行句柄（ExecutionManager）。
  * 3. 服务端停止或优雅关机（Graceful Shutdown）时，统一中断在途任务并安全关闭所有数据库连接。
  */

@@ -141,36 +141,36 @@ console.log("   ✓ MCP createActionDockMcpServer & toMcpResult export verified"
   console.log(nodeProc.stdout.toString().trimEnd());
 
   // 6. Test CLI executable in node_modules/.bin
-  console.log("⚙️  Testing CLI executable in node_modules/.bin/ac...");
-  const cliBin = join(testDir, "node_modules", ".bin", "ac");
+  console.log("⚙️  Testing CLI executable in node_modules/.bin/ad...");
+  const cliBin = join(testDir, "node_modules", ".bin", "ad");
   if (!existsSync(cliBin)) {
     throw new Error(`CLI executable not found at: ${cliBin}`);
   }
 
-  // ac --version
+  // ad --version
   const verProc = Bun.spawnSync([cliBin, "--version"], { cwd: testDir, stdout: "pipe", stderr: "pipe" });
   if (verProc.exitCode !== 0 || !verProc.stdout.toString().includes("2.0.0")) {
-    throw new Error(`'ac --version' failed: ${verProc.stderr.toString()} (output: ${verProc.stdout.toString()})`);
+    throw new Error(`'ad --version' failed: ${verProc.stderr.toString()} (output: ${verProc.stdout.toString()})`);
   }
-  console.log(`   ✓ ac --version returned 2.0.0`);
+  console.log(`   ✓ ad --version returned 2.0.0`);
 
-  // ac --help
+  // ad --help
   const helpProc = Bun.spawnSync([cliBin, "--help"], { cwd: testDir, stdout: "pipe", stderr: "pipe" });
-  if (helpProc.exitCode !== 0 || !helpProc.stdout.toString().includes("ActionDock (ac) 2.0")) {
-    throw new Error(`'ac --help' failed: ${helpProc.stderr.toString()}`);
+  if (helpProc.exitCode !== 0 || !helpProc.stdout.toString().includes("ActionDock (ad) 2.0")) {
+    throw new Error(`'ad --help' failed: ${helpProc.stderr.toString()}`);
   }
-  console.log(`   ✓ ac --help verified`);
+  console.log(`   ✓ ad --help verified`);
 
-  // ac doctor --json
+  // ad doctor --json
   const docProc = Bun.spawnSync([cliBin, "doctor", "--json"], { cwd: testDir, stdout: "pipe", stderr: "pipe" });
   if (docProc.exitCode !== 0) {
-    throw new Error(`'ac doctor --json' failed: ${docProc.stderr.toString()}`);
+    throw new Error(`'ad doctor --json' failed: ${docProc.stderr.toString()}`);
   }
   const docJson = JSON.parse(docProc.stdout.toString());
   if (!docJson.summary || docJson.summary.errorCount > 0) {
-    throw new Error(`'ac doctor' reported unexpected errors: ${JSON.stringify(docJson.summary)}`);
+    throw new Error(`'ad doctor' reported unexpected errors: ${JSON.stringify(docJson.summary)}`);
   }
-  console.log(`   ✓ ac doctor passed with 0 errors`);
+  console.log(`   ✓ ad doctor passed with 0 errors`);
 
   // Cleanup testDir
   rmSync(testDir, { recursive: true, force: true });

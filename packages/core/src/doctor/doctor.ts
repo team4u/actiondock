@@ -60,20 +60,20 @@ export async function runDoctorChecks(options?: {
   }
 
   // 2. Check CLI in PATH
-  let acPath: string | null = null;
+  let adPath: string | null = null;
   try {
-    acPath = typeof Bun !== "undefined" && Bun.which ? Bun.which("ac") : null;
+    adPath = typeof Bun !== "undefined" && Bun.which ? Bun.which("ad") : null;
   } catch {
     // ignore
   }
 
-  if (acPath) {
+  if (adPath) {
     checks.push({
       id: "runtime.cli",
       category: "runtime",
       name: "CLI Executable",
       status: "ok",
-      message: `Found 'ac' in PATH at ${acPath}`,
+      message: `Found 'ad' in PATH at ${adPath}`,
     });
   } else {
     checks.push({
@@ -81,7 +81,7 @@ export async function runDoctorChecks(options?: {
       category: "runtime",
       name: "CLI Executable",
       status: "warn",
-      message: "'ac' command not found in PATH",
+      message: "'ad' command not found in PATH",
       fix: "Run 'npm install -g @actiondock/cli' or in SDK workspace run 'cd packages/cli && bun link'",
     });
   }
@@ -99,7 +99,7 @@ export async function runDoctorChecks(options?: {
       category: "storage",
       name: "Global Storage",
       status: "ok",
-      message: `Database writable at ${join(globalHome, ".actiondock", "global.db")}`,
+      message: `Global SQLite database verified at ${globalHome}`,
     });
   } catch (err: any) {
     checks.push({
@@ -107,8 +107,8 @@ export async function runDoctorChecks(options?: {
       category: "storage",
       name: "Global Storage",
       status: "error",
-      message: `Failed to write global database: ${err.message}`,
-      fix: `Check write permissions for directory '${join(globalHome, ".actiondock")}'`,
+      message: `Failed to access global storage: ${err.message}`,
+      fix: `Ensure directory '${globalHome}' is writable`,
     });
   }
 
@@ -122,7 +122,7 @@ export async function runDoctorChecks(options?: {
         name: "Global Registry",
         status: "warn",
         message: `${regStatus.totalPackagesCount} package(s), ${regStatus.workspaces.length} workspace(s), but ${regStatus.staleCount} stale path(s) detected`,
-        fix: "Run 'ac unlink --prune' to clean up stale entries from registry",
+        fix: "Run 'ad unlink --prune' to clean up stale entries from registry",
       });
     } else {
       checks.push({
@@ -226,7 +226,7 @@ export async function runDoctorChecks(options?: {
             name: "Actions",
             status: "warn",
             message: `No actions found in '${config.actionsDir || "actions"}'`,
-            fix: "Run 'ac action create <id>' to create your first action",
+            fix: "Run 'ad action create <id>' to create your first action",
           });
         } else {
           checks.push({
@@ -289,7 +289,7 @@ export async function runDoctorChecks(options?: {
             name: "Config Readiness",
             status: "warn",
             message: `Required config item(s) missing: ${missingKeys.join(", ")}`,
-            fix: `Run 'ac config set <KEY> <VALUE>' to configure missing keys`,
+            fix: `Run 'ad config set <KEY> <VALUE>' to configure missing keys`,
           });
         } else {
           checks.push({

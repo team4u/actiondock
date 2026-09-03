@@ -15,12 +15,12 @@ A TypeScript toolchain for building, testing, and shipping AI Agent tools as **M
 ```text
 TypeScript Action
        │
-       ├── ac run          # Local CLI execution
-       ├── ac test         # In-memory fast testing
-       ├── ac mcp          # STDIO / HTTP MCP server
-       ├── ac serve        # Remote HTTP service
-       ├── ac export skill # Self-contained Agent Skill
-       └── ac build        # Zero-dependency standalone binary
+       ├── ad run          # Local CLI execution
+       ├── ad test         # In-memory fast testing
+       ├── ad mcp          # STDIO / HTTP MCP server
+       ├── ad serve        # Remote HTTP service
+       ├── ad export skill # Self-contained Agent Skill
+       └── ad build        # Zero-dependency standalone binary
               ↓
         standalone binary
 ```
@@ -77,7 +77,7 @@ npm install -g @actiondock/cli
 #### Initialize an Action Package
 
 ```bash
-ac init hello-tools
+ad init hello-tools
 cd hello-tools
 bun install
 ```
@@ -113,27 +113,27 @@ export default defineAction({
 
 - Run locally:
 ```bash
-ac run hello --input '{"name":"ActionDock"}'
+ad run hello --input '{"name":"ActionDock"}'
 ```
 
 - Run in-memory tests:
 ```bash
-ac test
+ad test
 ```
 
 - Serve as an MCP server (for Claude Code, Cursor, Windsurf):
 ```bash
-ac mcp
+ad mcp
 ```
 
 - Compile to a zero-dependency standalone binary:
 ```bash
-ac build
+ad build
 ```
 
 - Export as a portable Agent Skill:
 ```bash
-ac export skill
+ad export skill
 ```
 
 > **One Action. Multiple runtimes. One contract.**
@@ -198,14 +198,14 @@ ActionDock is not an Agent framework or workflow canvas. It focuses specifically
 ## Build Once, Run Anywhere
 
 ```text
-                  ┌─ CLI (`ac run`)
+                  ┌─ CLI (`ad run`)
                   │
-                  ├─ MCP (`ac mcp`)
-actions/*.ts ─────┼─ HTTP (`ac serve`)
+                  ├─ MCP (`ad mcp`)
+actions/*.ts ─────┼─ HTTP (`ad serve`)
                   │
-                  ├─ Agent Skill (`ac export skill`)
+                  ├─ Agent Skill (`ad export skill`)
                   │
-                  └─ Standalone Binary (`ac build`)
+                  └─ Standalone Binary (`ad build`)
 ```
 
 > **One implementation, multiple delivery targets.**
@@ -235,8 +235,8 @@ actions/*.ts ─────┼─ HTTP (`ac serve`)
 Distribution Targets
 
 ✅ npm packages       (@actiondock/sdk, @actiondock/core, @actiondock/mcp, @actiondock/cli)
-✅ Standalone Binary  (ac build -> self-contained executable)
-✅ Agent Skill        (ac export skill -> portable skill bundle)
+✅ Standalone Binary  (ad build -> self-contained executable)
+✅ Agent Skill        (ad export skill -> portable skill bundle)
 ⬜ Docker             (Containerized image target - on roadmap)
 ```
 
@@ -252,7 +252,7 @@ actiondock/
 │   ├── sdk/          # @actiondock/sdk: Minimal SDK (defineAction, ActionContext, createTestRuntime)
 │   ├── core/         # @actiondock/core: Engine (Runner, Storage, Schema, Build, Export)
 │   ├── mcp/          # @actiondock/mcp: MCP Adapter (STDIO / HTTP / Tasks extension)
-│   └── cli/          # @actiondock/cli: Command-line interface facade (ac)
+│   └── cli/          # @actiondock/cli: Command-line interface facade (ad)
 ├── examples/
 │   └── github-tools/ # Complete example Action Package with Actions & Playbooks
 └── docs/             # Technical documentation center

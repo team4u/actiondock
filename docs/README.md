@@ -44,7 +44,7 @@ ActionDock 文档中心遵循使用者与开发者角色双轨制设计：
 ---
 
 ### 快速概览
-- [环境安装与准备](getting-started/installation.md)：Bun 与 `ac` CLI 安装配置、Link 机制与排错。
+- [环境安装与准备](getting-started/installation.md)：Bun 与 `ad` CLI 安装配置、Link 机制与排错。
 - [核心概览与双轨导引](getting-started/overview.md)：了解 ActionDock 核心全景与角色路径选择。
 
 ---
@@ -82,7 +82,7 @@ ActionDock 文档中心遵循使用者与开发者角色双轨制设计：
 ---
 
 ### 参考手册
-- [CLI 命令行速查](reference/cli.md)：全量 `ac` 命令、选项与参数清单。
+- [CLI 命令行速查](reference/cli.md)：全量 `ad` 命令、选项与参数清单。
 - [配置解析回退机制](reference/config.md)：配置回退规则、环境变量转换与类型强转。
 - [Action SDK API 参考](reference/action-api.md)：`@actiondock/sdk` 导出接口与函数规范。
 - [错误代码与排错速查](reference/error-codes.md)：标准 JSON 错误 Envelope 与修复指南。

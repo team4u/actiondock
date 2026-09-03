@@ -14,14 +14,14 @@ ActionDock 提供了灵活且安全的配置解析机制，并支持**示例降�
 
 ---
 
-## 探查必需配置 (`ac config schema`)
+## 探查必需配置 (`ad config schema`)
 
 在开始使用某个 Action Package 前，可以先查看其声明了哪些配置项：
 
 ```bash
 # 进入包目录探查
 cd examples/github-tools
-ac config schema
+ad config schema
 ```
 
 输出示例：
@@ -42,13 +42,13 @@ ActionDock 会按以下优先级（从高到低）自动解析配置：
 命令行临时覆盖 (--config)
        │
        ▼
-项目本地 SQLite 存储 (ac config set)
+项目本地 SQLite 存储 (ad config set)
        │
        ▼
 操作系统环境变量 / .env 文件
        │
        ▼
-全局 SQLite 存储 (ac config set -g)
+全局 SQLite 存储 (ad config set -g)
        │
        ▼
 Action 默认值 / 示例降级
@@ -57,16 +57,16 @@ Action 默认值 / 示例降级
 ### 全局配置（推荐，跨目录与跨项目通用）
 如果某项凭证（如个人通用 GitHub Token）希望在所有跨目录调用的 ActionDock 包中生效：
 ```bash
-ac config set GITHUB_TOKEN ghp_xxxxxxxxxxxxxxxxxxxx -g
+ad config set GITHUB_TOKEN ghp_xxxxxxxxxxxxxxxxxxxx -g
 ```
 > 全局配置安全保存在 `~/.actiondock/global.db` SQLite 数据库中。
 
 ### 项目本地 SQLite 配置
-在特定 Action Package 目录下执行 `ac config set`，配置将安全存入当前项目目录下的 `.actiondock/runtime.db` 中（已被 `.gitignore` 忽略，绝不泄露到 Git）：
+在特定 Action Package 目录下执行 `ad config set`，配置将安全存入当前项目目录下的 `.actiondock/runtime.db` 中（已被 `.gitignore` 忽略，绝不泄露到 Git）：
 
 ```bash
 cd examples/github-tools
-ac config set GITHUB_TOKEN ghp_xxxxxxxxxxxxxxxxxxxx
+ad config set GITHUB_TOKEN ghp_xxxxxxxxxxxxxxxxxxxx
 ```
 
 ### 使用 `.env` 文件或系统环境变量
@@ -76,12 +76,12 @@ GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
 ```
 或者在执行命令时直接作为系统环境变量传入：
 ```bash
-GITHUB_TOKEN=ghp_xxxx ac run github-tools/github.list-prs --input '{"repo":"team4u/actiondock"}'
+GITHUB_TOKEN=ghp_xxxx ad run github-tools/github.list-prs --input '{"repo":"team4u/actiondock"}'
 ```
 
 ### 命令行单次临时覆盖
 ```bash
-ac run github-tools/github.get-pr --config GITHUB_TOKEN=ghp_temp_token --input '{"repo":"team4u/actiondock","pullNumber":1}'
+ad run github-tools/github.get-pr --config GITHUB_TOKEN=ghp_temp_token --input '{"repo":"team4u/actiondock","pullNumber":1}'
 ```
 
 ---
@@ -90,16 +90,16 @@ ac run github-tools/github.get-pr --config GITHUB_TOKEN=ghp_temp_token --input '
 
 ```bash
 # 列出当前项目配置项（默认掩码屏蔽敏感凭证）
-ac config list
+ad config list
 
 # 查看全局配置清单
-ac config list -g
+ad config list -g
 
 # 明文查看某个敏感配置值
-ac config get GITHUB_TOKEN --reveal
-ac config get GITHUB_TOKEN -g --reveal
+ad config get GITHUB_TOKEN --reveal
+ad config get GITHUB_TOKEN -g --reveal
 
 # 删除已设置的配置
-ac config delete GITHUB_TOKEN
-ac config delete GITHUB_TOKEN -g
+ad config delete GITHUB_TOKEN
+ad config delete GITHUB_TOKEN -g
 ```

@@ -102,11 +102,11 @@ npx skills remove <skill-name>
 
 ```bash
 # 从本地已注册的 Action Package 导出
-ac export skill -P team4u.github-tools --out ~/.claude/skills/github-tools
+ad export skill -P team4u.github-tools --out ~/.claude/skills/github-tools
 
 # 或在 Action Package 根目录就地导出
 cd examples/github-tools
-ac export skill --out ~/.claude/skills/github-tools
+ad export skill --out ~/.claude/skills/github-tools
 ```
 
 ### 导出为独立二进制型 Skill
@@ -114,7 +114,7 @@ ac export skill --out ~/.claude/skills/github-tools
 适用于宿主环境零依赖（未安装 Bun 或 Node.js）的服务器与沙箱环境：
 
 ```bash
-ac export skill -P team4u.github-tools --standalone --out ~/.claude/skills/github-tools
+ad export skill -P team4u.github-tools --standalone --out ~/.claude/skills/github-tools
 ```
 
 导出的 Skill 会在内层 `./bin/` 目录下生成跨平台单文件二进制程序。智能体将直接通过该二进制文件调度执行，不依赖任何外部环境。
@@ -124,7 +124,7 @@ ac export skill -P team4u.github-tools --standalone --out ~/.claude/skills/githu
 当底层工具包庞大，而特定业务仅需部分能力时，可通过指定 Playbook 导出精简版 Skill，减少智能体上下文干扰：
 
 ```bash
-ac export skill -P team4u.github-tools --playbook review-pr --out ~/.claude/skills/review-pr
+ad export skill -P team4u.github-tools --playbook review-pr --out ~/.claude/skills/review-pr
 ```
 
 ---
@@ -147,7 +147,7 @@ Claude Code 原生支持文件系统技能发现：
 Cursor 与 Windsurf 提供双轨支持：
 
 - **技能文件目录**：`<project-root>/.cursor/skills/<skill-name>`
-- **MCP 协议挂载**：在 `mcp.json` 中配置 ActionDock STDIO 服务（`ac mcp --all`），将所有已注册能力转化为原生工具接口。
+- **MCP 协议挂载**：在 `mcp.json` 中配置 ActionDock STDIO 服务（`ad mcp --all`），将所有已注册能力转化为原生工具接口。
 
 ### Antigravity 与 Gemini CLI
 
@@ -176,7 +176,7 @@ Antigravity 原生支持工作区与全局双层发现机制：
 智能体使用 ActionDock Skill 时，遵循规范的执行生命周期：
 
 ```text
-意图匹配 (SKILL.md) ──► 规程决议 (Playbook) ──► 执行调用 (ac run / bin)
+意图匹配 (SKILL.md) ──► 规程决议 (Playbook) ──► 执行调用 (ad run / bin)
                                                        │
                                                        ▼
 状态持久化 (ctx.state) ◄── 结果校验 (JSON Envelope) ◄──┘
@@ -190,7 +190,7 @@ Antigravity 原生支持工作区与全局双层发现机制：
 
 智能体在调度底层能力前，必须严格遵循**规程优先准则**：
 
-- **优先遵循规程**：激活技能后，智能体必须首先检查是否存在匹配当前场景的 Playbook。若存在规程，必须执行 `ac playbook show <id>` 或阅读 `playbooks/<id>.md`，严格按照规程界定的操作时序、依赖条件与安全红线推进。
+- **优先遵循规程**：激活技能后，智能体必须首先检查是否存在匹配当前场景的 Playbook。若存在规程，必须执行 `ad playbook show <id>` 或阅读 `playbooks/<id>.md`，严格按照规程界定的操作时序、依赖条件与安全红线推进。
 - **严禁无序拼凑**：严禁在规程存在的情况下，跳过规程直接猜测或无序调用底层 Action。
 - **单点降级调用**：仅当无匹配规程或用户明确指示执行单点原子操作时，方可直接调用单一 Action。
 
@@ -200,7 +200,7 @@ Antigravity 原生支持工作区与全局双层发现机制：
 
 - **源码型调用方式**：
   ```bash
-  ac run <action-id> --input '<json-string>'
+  ad run <action-id> --input '<json-string>'
   ```
 - **独立二进制型调用方式**：
   ```bash
@@ -220,7 +220,7 @@ Antigravity 原生支持工作区与全局双层发现机制：
   EOF
 
   # 通过参数文件调用 Action
-  ac run github.get-pr --input-file /tmp/input.json
+  ad run github.get-pr --input-file /tmp/input.json
   ```
 
 ### 结果解析与闭环反馈
@@ -283,19 +283,19 @@ npx skills add team4u/actiondock -y
 
 - **获取 PR 基础信息**：
   ```bash
-  ac run github-tools/github.get-pr --input '{"repo":"team4u/actiondock","number":101}'
+  ad run github-tools/github.get-pr --input '{"repo":"team4u/actiondock","number":101}'
   ```
   返回 PR 标题为新增功能，变更行数正常。
 
 - **执行合规体检**：
   ```bash
-  ac run github-tools/github.review-pr --input '{"repo":"team4u/actiondock","number":101}'
+  ad run github-tools/github.review-pr --input '{"repo":"team4u/actiondock","number":101}'
   ```
   体检通过，生成建议反馈清单。
 
 - **发表评审意见**：
   ```bash
-  ac run github-tools/github.comment-pr --input '{"repo":"team4u/actiondock","number":101,"comment":"代码规范检查通过，建议补充单元测试用例。"}'
+  ad run github-tools/github.comment-pr --input '{"repo":"team4u/actiondock","number":101,"comment":"代码规范检查通过，建议补充单元测试用例。"}'
   ```
   评论发表成功。
 
@@ -322,7 +322,7 @@ npx skills add team4u/actiondock -y
 
 - 对于需要外部鉴权的技能，可通过 ActionDock 全局配置注入：
   ```bash
-  ac config set GITHUB_TOKEN ghp_xxxxxxxxxxxxxxxxxxxx -g
+  ad config set GITHUB_TOKEN ghp_xxxxxxxxxxxxxxxxxxxx -g
   ```
 - 或直接在智能体运行环境中声明对应的环境变量。
 

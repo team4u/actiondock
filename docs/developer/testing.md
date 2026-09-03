@@ -90,10 +90,10 @@ it("验证状态 TTL 自动过期", async () => {
 
 ```bash
 # 运行全部单测
-ac test
+ad test
 
 # 编译独立二进制
-ac build
+ad build
 
 # 运行集成验证
 ./dist/bin/my-tools run my-action --input '{"userId": "u-101"}'

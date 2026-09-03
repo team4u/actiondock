@@ -54,25 +54,25 @@ ActionDock 支持在项目内或全局任意目录查看已注册的 Playbook：
 
 ```bash
 # 列表检索 Playbook（支持模糊搜索与 intent 正则匹配）
-ac playbook list
-ac playbook list -i "review|test"
+ad playbook list
+ad playbook list -i "review|test"
 
 # 查看 Playbook 详情与完整 SOP 正文（支持自动跨包定位）
-ac playbook show review-pr
+ad playbook show review-pr
 ```
 
 ---
 
 ## 校验 Playbook
 
-使用 `ac playbook validate` 命令检查 Playbook 文件格式与引用的 Action 是否存在（支持当前项目或全局 linked packages）：
+使用 `ad playbook validate` 命令检查 Playbook 文件格式与引用的 Action 是否存在（支持当前项目或全局 linked packages）：
 
 ```bash
 # 校验当前包或全局所有 Playbook
-ac playbook validate
+ad playbook validate
 
 # 校验指定 Playbook
-ac playbook validate review-pr
+ad playbook validate review-pr
 ```
 
 ---
@@ -82,7 +82,7 @@ ac playbook validate review-pr
 在将大型 Action Package 分发为 Skill 时，可以通过 `--playbook` 参数仅导出该 Playbook 所需的最小 Action 依赖子集（支持 `-P` 跨目录导出）：
 
 ```bash
-ac export skill --playbook review-pr --out ./dist/review-pr-skill
+ad export skill --playbook review-pr --out ./dist/review-pr-skill
 ```
 
 导出引擎会自动裁剪掉未在 `actions` 列表中声明的无用文件，生成极简自包含的专属 Skill 包。

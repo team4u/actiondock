@@ -113,13 +113,13 @@ export default defineAction<GetPrInput, GetPrOutput>({
 export GITHUB_TOKEN="ghp_xxx"
 
 # 写入 ActionDock SQLite 配置库
-ac config set GITHUB_TOKEN "ghp_xxx"
+ad config set GITHUB_TOKEN "ghp_xxx"
 ```
 
 运行 Action：
 
 ```bash
-ac run github.get-pr --input '{"repo": "team4u/actiondock", "prNumber": 1}'
+ad run github.get-pr --input '{"repo": "team4u/actiondock", "prNumber": 1}'
 ```
 
 查看 stdout 输出：

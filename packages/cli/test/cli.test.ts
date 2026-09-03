@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-const cliPath = resolve(__dirname, "../bin/ac.js");
+const cliPath = resolve(__dirname, "../bin/ad.js");
 
 function runCli(args: string[], cwd?: string, env?: Record<string, string>) {
   return Bun.spawnSync(["bun", cliPath, ...args], {
@@ -308,7 +308,7 @@ describe("CLI End-to-End", () => {
     // Local runs cancel is rejected
     const cancelLocalProc = runCli(["runs", "cancel", runs[0].id], tempDir);
     expect(cancelLocalProc.exitCode).toBe(1);
-    expect(cancelLocalProc.stderr.toString()).toContain("'ac runs cancel' is only supported for remote execution targets");
+    expect(cancelLocalProc.stderr.toString()).toContain("'ad runs cancel' is only supported for remote execution targets");
 
 
 
@@ -468,11 +468,11 @@ describe("CLI End-to-End", () => {
     expect(unlinkProc.stdout.toString()).toContain("[OK] Unlinked package");
   }, 30000);
 
-  it("manages execution profiles and dispatches remote runs via ac serve", async () => {
+  it("manages execution profiles and dispatches remote runs via ad serve", async () => {
     // 1. Initialize project in tempDir
     runCli(["init", "--id", "cloud.remote-node", "."], tempDir);
 
-    // 2. Start HTTP server process via 'ac serve'
+    // 2. Start HTTP server process via 'ad serve'
     const SECRET = "auth-token-xyz-987";
     const port = 5199;
     const serverUrl = `http://127.0.0.1:${port}`;
@@ -545,7 +545,7 @@ describe("CLI End-to-End", () => {
       expect(listProfileIntent.exitCode).toBe(0);
       expect(JSON.parse(listProfileIntent.stdout.toString()).some((p: any) => p.name === "cloud-aliyun")).toBe(true);
 
-      // 4. Test connection via ac profile test
+      // 4. Test connection via ad profile test
       const testProc = runCli(["profile", "test", "cloud-aliyun", "--json"], tmpdir(), env);
       expect(testProc.exitCode).toBe(0);
       const testResult = JSON.parse(testProc.stdout.toString());
@@ -571,7 +571,7 @@ describe("CLI End-to-End", () => {
       expect(remoteListIntentProc.exitCode).toBe(0);
       expect(JSON.parse(remoteListIntentProc.stdout.toString()).length).toBe(1);
 
-      // 6. Execute action on remote server via ac run --profile
+      // 6. Execute action on remote server via ad run --profile
       const remoteRunProc = runCli(
         [
           "run",
@@ -612,7 +612,7 @@ describe("CLI End-to-End", () => {
       expect(asyncRunResult.runId).toBeDefined();
       expect(asyncRunResult.status).toBe("running");
 
-      // Query remote run via ac runs show --profile
+      // Query remote run via ad runs show --profile
       const remoteShowProc = runCli(
         ["runs", "show", asyncRunResult.runId, "--profile", "cloud-aliyun", "--json"],
         tmpdir(),
@@ -622,7 +622,7 @@ describe("CLI End-to-End", () => {
       const remoteRunRecord = JSON.parse(remoteShowProc.stdout.toString());
       expect(remoteRunRecord.id).toBe(asyncRunResult.runId);
 
-      // Cancel remote run via ac runs cancel --profile
+      // Cancel remote run via ad runs cancel --profile
       const remoteCancelProc = runCli(
         ["runs", "cancel", asyncRunResult.runId, "--profile", "cloud-aliyun", "--json"],
         tmpdir(),
@@ -677,27 +677,27 @@ describe("CLI End-to-End", () => {
       expect(linkOut).toContain("team.link-sub1");
       expect(linkOut).toContain("team.link-sub2");
 
-      // Test ac info (default behavior maintains summary list)
+      // Test ad info (default behavior maintains summary list)
       const infoProc = runCli(["info"], tmpdir(), env);
       expect(infoProc.exitCode).toBe(0);
       expect(infoProc.stdout.toString()).toContain("ActionDock Linked Packages");
       expect(infoProc.stdout.toString()).toContain("team.link-sub1");
 
-      // Test ac info --tree (hierarchical tree view)
+      // Test ad info --tree (hierarchical tree view)
       const treeProc = runCli(["info", "--tree"], tmpdir(), env);
       expect(treeProc.exitCode).toBe(0);
       expect(treeProc.stdout.toString()).toContain("ActionDock Workspace & Package Tree");
       expect(treeProc.stdout.toString()).toContain("team.link-sub1");
       expect(treeProc.stdout.toString()).toContain("Workspaces:");
 
-      // Test ac info --tree --json
+      // Test ad info --tree --json
       const treeJsonProc = runCli(["info", "--tree", "--json"], tmpdir(), env);
       expect(treeJsonProc.exitCode).toBe(0);
       const treeJson = JSON.parse(treeJsonProc.stdout.toString());
       expect(treeJson.workspaces.length).toBe(1);
       expect(treeJson.totalPackagesCount).toBe(2);
 
-      // Test ac doctor --json
+      // Test ad doctor --json
       const doctorProc = runCli(["doctor", "--json"], sub1, env);
       expect(doctorProc.exitCode).toBe(0);
       const doctorData = JSON.parse(doctorProc.stdout.toString());

@@ -1,22 +1,22 @@
 # HTTP 远程微服务与 API 调度
 
-当需要将 ActionDock 部署为微服务，供远程 AI Agent、Webhook、CI/CD 流水线或前端业务系统远程调度时，可以使用 `ac serve` 启动轻量级 HTTP 调度微服务。
+当需要将 ActionDock 部署为微服务，供远程 AI Agent、Webhook、CI/CD 流水线或前端业务系统远程调度时，可以使用 `ad serve` 启动轻量级 HTTP 调度微服务。
 
 ---
 
 ## 4 种启动姿态
 
-`ac serve` 具备高度灵活性，无需局限在特定项目目录下运行：
+`ad serve` 具备高度灵活性，无需局限在特定项目目录下运行：
 
 ### 姿态 1：全局路由模式（推荐，任意目录直接启动）
-在系统的**任意终端路径**直接执行 `ac serve`。服务端会自动启动为 **Global Registry Mode**，一键聚合当前系统通过 `ac link` 注册的所有 Action Packages 与 Workspaces：
+在系统的**任意终端路径**直接执行 `ad serve`。服务端会自动启动为 **Global Registry Mode**，一键聚合当前系统通过 `ad link` 注册的所有 Action Packages 与 Workspaces：
 
 ```bash
 # 生产/云端远程微服务启动（监听非回环地址 0.0.0.0，供局域网/公网/Docker/其他机器调用，强制要求 Token 鉴权）
-ac serve --host 0.0.0.0 --port 5177 --token "sk-actiondock-secret"
+ad serve --host 0.0.0.0 --port 5177 --token "sk-actiondock-secret"
 
 # 本地仅本机调试（默认绑定 127.0.0.1 回环地址）
-ac serve --port 5177 --token "sk-actiondock-secret"
+ad serve --port 5177 --token "sk-actiondock-secret"
 ```
 终端输出示例：
 ```text
@@ -38,7 +38,7 @@ ac serve --port 5177 --token "sk-actiondock-secret"
 
 ```bash
 cd examples/github-tools
-ac serve --host 0.0.0.0 --port 8080 --token "sk-actiondock-secret"
+ad serve --host 0.0.0.0 --port 8080 --token "sk-actiondock-secret"
 ```
 服务将专属绑定该项目，默认直接暴露该包下的所有 Actions 与 Playbooks。
 
@@ -48,13 +48,13 @@ ac serve --host 0.0.0.0 --port 8080 --token "sk-actiondock-secret"
 无需 `cd` 切换目录，在任意路径通过 `-d` 参数指定目标 Action Package 目录：
 
 ```bash
-ac serve -d ./examples/github-tools --host 0.0.0.0 --port 8080 --token "sk-actiondock-secret"
+ad serve -d ./examples/github-tools --host 0.0.0.0 --port 8080 --token "sk-actiondock-secret"
 ```
 
 ---
 
 ### 姿态 4：独立单文件二进制运行（目标环境零依赖）
-对于通过 `ac build` 编译生成的独立可执行文件，可在未安装 Bun 或 Node.js 的生产服务器或容器中直接以微服务模式启动：
+对于通过 `ad build` 编译生成的独立可执行文件，可在未安装 Bun 或 Node.js 的生产服务器或容器中直接以微服务模式启动：
 
 ```bash
 ./dist/bin/github-tools serve --host 0.0.0.0 --port 8080 --token "sk-actiondock-secret"
@@ -208,14 +208,14 @@ curl -X POST http://localhost:5177/api/v1/runs/01JMB999ABCD.../cancel \
 
 ---
 
-## 配合 `ac profile` 实现 CLI 远程透明调度
+## 配合 `ad profile` 实现 CLI 远程透明调度
 
-开发者本地 CLI 可以配置远程节点的 Profile，之后所有 `ac run` 命令即可像本地一样透明调度远端微服务：
+开发者本地 CLI 可以配置远程节点的 Profile，之后所有 `ad run` 命令即可像本地一样透明调度远端微服务：
 
 ```bash
 # 注册远程云节点 Profile
-ac profile add prod --server http://1.2.3.4:5177 --token "sk-actiondock-secret"
+ad profile add prod --server http://1.2.3.4:5177 --token "sk-actiondock-secret"
 
 # 像本地一样远程调度 Action
-ac run github.get-pr --input '{"repo": "team4u/actiondock", "prNumber": 101}' --profile prod
+ad run github.get-pr --input '{"repo": "team4u/actiondock", "prNumber": 101}' --profile prod
 ```

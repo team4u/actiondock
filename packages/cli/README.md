@@ -8,7 +8,7 @@ The official Command Line Interface (CLI) toolchain for ActionDock 2.0.
 
 > **Runtime requirement**: [Bun](https://bun.sh/) >= 1.2.0.
 
-`@actiondock/cli` provides the `ac` command to develop, test, build, deploy, and export AI Agent Actions and Skills across MCP, HTTP, CLI, and standalone executables.
+`@actiondock/cli` provides the `ad` command to develop, test, build, deploy, and export AI Agent Actions and Skills across MCP, HTTP, CLI, and standalone executables.
 
 ---
 
@@ -28,20 +28,20 @@ npm install -g @actiondock/cli
 
 ```bash
 # 1. Initialize a new Action package scaffold
-ac init my-tools
+ad init my-tools
 cd my-tools
 
 # 2. Run an Action locally (outputs standard JSON envelope)
-ac run sample.greet --input '{"name": "Alice"}'
+ad run sample.greet --input '{"name": "Alice"}'
 
 # 3. Run in-memory unit tests
-ac test
+ad test
 
 # 4. Compile into a single standalone binary
-ac build
+ad build
 
 # 5. Export as a portable Agent Skill (with SOPs)
-ac export skill
+ad export skill
 ```
 
 ---
@@ -50,20 +50,20 @@ ac export skill
 
 | Command | Purpose |
 |---|---|
-| `ac init [dir]` | Initialize an Action package scaffold |
-| `ac info [patterns...]` | Explore capabilities and display metadata (supports fuzzy matching and `--tree`) |
-| `ac doctor` | Run environment, global registry health, and project diagnostics |
-| `ac action list` / `ac run <id>` | List and execute Actions |
-| `ac playbook list` / `show` | Inspect agent task SOP Playbooks |
-| `ac config list` / `get` / `set` | Manage runtime configurations |
-| `ac state list` / `get` / `set` / `delete` / `clear` | Inspect and manage persistent state (with namespaces, TTL, and clear) |
-| `ac runs list` / `show` | Inspect execution history and traces |
-| `ac test` | Run fast unit tests |
-| `ac build` | Compile into a zero-dependency standalone binary |
-| `ac export skill` | Export Skill bundle for AI Agent platforms |
-| `ac link` / `unlink` | Manage global router (with live subproject auto-discovery and prune) |
-| `ac profile` / `ac serve` | Manage remote node profiles and start HTTP Runner |
-| `ac mcp` | Start ActionDock as STDIO or HTTP MCP server |
+| `ad init [dir]` | Initialize an Action package scaffold |
+| `ad info [patterns...]` | Explore capabilities and display metadata (supports fuzzy matching and `--tree`) |
+| `ad doctor` | Run environment, global registry health, and project diagnostics |
+| `ad action list` / `ad run <id>` | List and execute Actions |
+| `ad playbook list` / `show` | Inspect agent task SOP Playbooks |
+| `ad config list` / `get` / `set` | Manage runtime configurations |
+| `ad state list` / `get` / `set` / `delete` / `clear` | Inspect and manage persistent state (with namespaces, TTL, and clear) |
+| `ad runs list` / `show` | Inspect execution history and traces |
+| `ad test` | Run fast unit tests |
+| `ad build` | Compile into a zero-dependency standalone binary |
+| `ad export skill` | Export Skill bundle for AI Agent platforms |
+| `ad link` / `unlink` | Manage global router (with live subproject auto-discovery and prune) |
+| `ad profile` / `ad serve` | Manage remote node profiles and start HTTP Runner |
+| `ad mcp` | Start ActionDock as STDIO or HTTP MCP server |
 
 ---
 

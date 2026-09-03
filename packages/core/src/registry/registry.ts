@@ -376,7 +376,7 @@ export async function resolveActionProject(
 
     if (!pkg || !existsSync(pkg.path)) {
       throw new Error(
-        `Linked package '${targetPackage}' not found or path no longer exists (${pkg?.path || "unregistered"}). Run 'ac link' in the package directory.`
+        `Linked package '${targetPackage}' not found or path no longer exists (${pkg?.path || "unregistered"}). Run 'ad link' in the package directory.`
       );
     }
 
@@ -428,7 +428,7 @@ export async function resolveActionProject(
     throw new Error(`Action '${actionIdentifier}' not found in current project or any linked packages`);
   } else {
     throw new Error(
-      `Action '${actionIdentifier}' not found. You are not in an ActionDock project, and no linked package provides '${actionIdentifier}'. Use 'ac link' to register your package.`
+      `Action '${actionIdentifier}' not found. You are not in an ActionDock project, and no linked package provides '${actionIdentifier}'. Use 'ad link' to register your package.`
     );
   }
 }
@@ -505,7 +505,7 @@ export function resolvePlaybookProject(
 
     if (!pkg || !existsSync(pkg.path)) {
       throw new Error(
-        `Linked package '${targetPackage}' not found or path no longer exists (${pkg?.path || "unregistered"}). Run 'ac link' in the package directory.`
+        `Linked package '${targetPackage}' not found or path no longer exists (${pkg?.path || "unregistered"}). Run 'ad link' in the package directory.`
       );
     }
 
@@ -564,7 +564,7 @@ export function resolvePlaybookProject(
     throw new Error(`Playbook '${playbookIdentifier}' not found in current project or any linked packages`);
   } else {
     throw new Error(
-      `Playbook '${playbookIdentifier}' not found. You are not in an ActionDock project, and no linked package provides '${playbookIdentifier}'. Use 'ac link' to register your package.`
+      `Playbook '${playbookIdentifier}' not found. You are not in an ActionDock project, and no linked package provides '${playbookIdentifier}'. Use 'ad link' to register your package.`
     );
   }
 }

@@ -6,10 +6,10 @@
 
 ## 初始化项目骨架
 
-使用 `ac init` 初始化 Action Package：
+使用 `ad init` 初始化 Action Package：
 
 ```bash
-ac init hello-tools
+ad init hello-tools
 cd hello-tools
 
 # SDK 已发布 npm 时：
@@ -76,10 +76,10 @@ export default defineAction({
 
 ## 本地执行与调试
 
-使用 `ac run` 在本地调用 Action：
+使用 `ad run` 在本地调用 Action：
 
 ```bash
-ac run hello --input '{"name": "ActionDock"}'
+ad run hello --input '{"name": "ActionDock"}'
 ```
 
 输出标准 JSON Envelope：
@@ -101,7 +101,7 @@ ac run hello --input '{"name": "ActionDock"}'
 ActionDock 倡导纯内存测试，毫秒级即时反馈：
 
 ```bash
-ac test
+ad test
 ```
 
 ---
@@ -110,13 +110,13 @@ ac test
 
 ### 导出为 Skill
 ```bash
-ac export skill
+ad export skill
 ```
 产物生成在 `./dist/hello-tools-skill/`，包含 `SKILL.md`，可直接分发给 Claude Code 或 Antigravity 使用。
 
 ### 编译为零依赖独立二进制
 ```bash
-ac build
+ad build
 ```
 编译生成单个零外部依赖的可执行程序 `./dist/bin/hello-tools`。
 

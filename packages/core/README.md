@@ -10,7 +10,7 @@ The core engine and domain kernel of ActionDock 2.0.
 
 > **Role & Usage Context**:
 > - **Authoring Actions**: Use [`@actiondock/sdk`](../sdk) for defining actions, testing with in-memory harness, and zero-dependency action packages.
-> - **CLI Toolchain**: Use [`@actiondock/cli`](../cli) (`ac`) for command-line workflows.
+> - **CLI Toolchain**: Use [`@actiondock/cli`](../cli) (`ad`) for command-line workflows.
 > - **Engine & Embedding**: Use `@actiondock/core` when you need programmatic access to the ActionRunner engine, project loader, or custom server integrations.
 >
 > **Runtime requirement**: [Bun](https://bun.sh/) >= 1.2.0 is required (`@actiondock/core` leverages native `bun:sqlite` and Bun runtime APIs).

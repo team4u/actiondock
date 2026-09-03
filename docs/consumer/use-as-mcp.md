@@ -9,13 +9,13 @@ ActionDock 原生支持 [Model Context Protocol (MCP)](https://modelcontextproto
 在 IDE 的 MCP 配置文件（如 `~/.cursor/mcp.json` 或 Claude Desktop 的 `claude_desktop_config.json`）中添加配置：
 
 ### 推荐：全局一键挂载所有已 link 包（最简方式）
-如果在仓库根目录执行过 `ac link`，可直接使用 `--all` 参数将所有已注册包（包括官方示例包）一次性暴露给 IDE：
+如果在仓库根目录执行过 `ad link`，可直接使用 `--all` 参数将所有已注册包（包括官方示例包）一次性暴露给 IDE：
 
 ```json
 {
   "mcpServers": {
     "actiondock-tools": {
-      "command": "ac",
+      "command": "ad",
       "args": ["mcp", "--all"]
     }
   }
@@ -31,7 +31,7 @@ ActionDock 原生支持 [Model Context Protocol (MCP)](https://modelcontextproto
 {
   "mcpServers": {
     "github-tools": {
-      "command": "ac",
+      "command": "ad",
       "args": ["mcp"],
       "cwd": "/absolute/path/to/actiondock/examples/github-tools"
     }
@@ -42,7 +42,7 @@ ActionDock 原生支持 [Model Context Protocol (MCP)](https://modelcontextproto
 ---
 
 ### 方式三：基于独立单文件二进制运行（零环境依赖）
-如果目标开发机未安装 Bun 或 `ac`，直接指向编译后的独立可执行文件（如通过 `ac build` 生成的二进制）：
+如果目标开发机未安装 Bun 或 `ad`，直接指向编译后的独立可执行文件（如通过 `ad build` 生成的二进制）：
 
 ```json
 {
@@ -72,15 +72,15 @@ ActionDock 原生支持 [Model Context Protocol (MCP)](https://modelcontextproto
 ## 多包聚合与高级参数
 
 ### 聚合多个 Action Package 目录
-`ac mcp` 支持一次性挂载多个工具包目录，重名 Action 会自动附加包名命名空间：
+`ad mcp` 支持一次性挂载多个工具包目录，重名 Action 会自动附加包名命名空间：
 
 ```bash
-ac mcp ./examples/github-tools ./packages/my-custom-tools
+ad mcp ./examples/github-tools ./packages/my-custom-tools
 ```
 
 ### 挂载全局所有注册包
 ```bash
-ac mcp --all
+ad mcp --all
 ```
 
 ---

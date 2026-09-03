@@ -11,9 +11,9 @@ ActionDock 2.0 是面向 AI Agent 的 **Action 与 Skill 开发、测试、构�
 ```text
                开发者 / 创作者
                ┌────────────────────────────────────────────────────────┐
-               │  ac init ──► defineAction ──► Playbook ──► ac test     │
+               │  ad init ──► defineAction ──► Playbook ──► ad test     │
                │                             │                          │
-               │                      ac export skill                   │
+               │                      ad export skill                   │
                └─────────────────────────────┬──────────────────────────┘
                                              │ 交付物 (Skill / Git / Binary)
                                              ▼

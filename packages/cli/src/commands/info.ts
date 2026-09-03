@@ -122,7 +122,7 @@ function printAggregatedPackages(
   }
   if (options?.showTip !== false) {
     console.log(
-      "Tip: Run 'ac info <package-id>' to view detailed package configuration and schema."
+      "Tip: Run 'ad info <package-id>' to view detailed package configuration and schema."
     );
   }
 }
@@ -133,7 +133,7 @@ function printRegistryTree(status: ReturnType<typeof getRegistryStatus>): void {
 
   if (!hasWorkspaces && !hasPackages) {
     console.log("[INFO] No ActionDock packages or workspaces currently linked.");
-    console.log("       Run 'ac link' inside an Action package or workspace to register it.");
+    console.log("       Run 'ad link' inside an Action package or workspace to register it.");
     return;
   }
 
@@ -165,7 +165,7 @@ function printRegistryTree(status: ReturnType<typeof getRegistryStatus>): void {
 
   console.log(`\n[Summary] Total: ${status.totalPackagesCount} active package(s), ${status.workspaces.length} workspace(s)`);
   if (status.staleCount > 0) {
-    console.log(`[WARN] ${status.staleCount} stale entry/entries detected. Run 'ac unlink --prune' to clean up.`);
+    console.log(`[WARN] ${status.staleCount} stale entry/entries detected. Run 'ad unlink --prune' to clean up.`);
   }
 }
 
@@ -423,7 +423,7 @@ export function registerInfoCommand(program: Command): void {
               "No ActionDock project in current directory, and no packages linked."
             );
             console.log(
-              "Run 'ac link' inside an Action package to register it."
+              "Run 'ad link' inside an Action package to register it."
             );
             return;
           }

@@ -7,7 +7,7 @@
 ## 极速上手（基于官方示例）
 
 ActionDock 具备两大开箱即用特性：
-- **零手动依赖安装**：首次执行 `ac run` 时，ActionDock 会自动检测并静默安装所需依赖（如 `bun install`），无需手动执行安装步骤。
+- **零手动依赖安装**：首次执行 `ad run` 时，ActionDock 会自动检测并静默安装所需依赖（如 `bun install`），无需手动执行安装步骤。
 - **开箱即用示例降级**：官方内置示例（如 `github-tools`）自带模拟数据降级逻辑。在未配置真实 Token 时直接返回示例数据，无需准备 GitHub Token 即可立即体验完整流。
 
 ### 步骤：克隆官方仓库并自动注册
@@ -18,9 +18,9 @@ git clone https://github.com/team4u/actiondock.git
 cd actiondock
 
 # 直接在仓库根目录执行 link（自动识别工作区，一键发现并注册全部内置示例包）
-ac link
+ad link
 ```
-> `ac link` 会自动扫描仓库内的子项目，输出类似：  
+> `ad link` 会自动扫描仓库内的子项目，输出类似：  
 > `[OK] Linked workspace '.../actiondock' (1 package): team4u.github-tools -> ...`
 
 ---
@@ -30,7 +30,7 @@ ac link
 无需进入子目录，也无需手动 `bun install`，在系统任意终端路径直接调用：
 
 ```bash
-ac run github-tools/github.list-prs --input '{"repo": "team4u/actiondock"}'
+ad run github-tools/github.list-prs --input '{"repo": "team4u/actiondock"}'
 ```
 
 输出标准 JSON Envelope：
@@ -58,10 +58,10 @@ ac run github-tools/github.list-prs --input '{"repo": "team4u/actiondock"}'
 }
 ```
 
-> **提示**：也可以直接进入示例目录就地运行（无需经过 `ac link`）：
+> **提示**：也可以直接进入示例目录就地运行（无需经过 `ad link`）：
 > ```bash
 > cd examples/github-tools
-> ac run github.list-prs --input '{"repo": "team4u/actiondock"}'
+> ad run github.list-prs --input '{"repo": "team4u/actiondock"}'
 > ```
 
 ---
@@ -76,7 +76,7 @@ ac run github-tools/github.list-prs --input '{"repo": "team4u/actiondock"}'
 {
   "mcpServers": {
     "actiondock-tools": {
-      "command": "ac",
+      "command": "ad",
       "args": ["mcp", "--all"]
     }
   }
@@ -90,20 +90,20 @@ ac run github-tools/github.list-prs --input '{"repo": "team4u/actiondock"}'
 npx skills add team4u/actiondock -y
 
 # 方式二：本地一键导出并放入技能目录
-ac export skill -P team4u.github-tools --out ~/.claude/skills/github-tools
+ad export skill -P team4u.github-tools --out ~/.claude/skills/github-tools
 ```
 
 #### 姿态：启动本地 HTTP 微服务
 ```bash
 cd examples/github-tools
-ac serve --port 8080
+ad serve --port 8080
 # 即可通过 cURL 或 REST API 远程调度 Action
 ```
 
 #### 姿态：构建为零依赖独立二进制
 ```bash
 cd examples/github-tools
-ac build
+ad build
 # 产生 ./bin/github-tools 单文件，可在任意服务器/沙箱免 Node/Bun 独立运行
 ./bin/github-tools run github.list-prs --input '{"repo": "team4u/actiondock"}'
 ```
@@ -116,10 +116,10 @@ ac build
 
 ```bash
 # 全局生效（对所有跨目录调用的 linked package 生效）
-ac config set GITHUB_TOKEN ghp_xxxxxxxxxxxxxxxxxxxx -g
+ad config set GITHUB_TOKEN ghp_xxxxxxxxxxxxxxxxxxxx -g
 
 # 再次调用即可获取真实的 GitHub PR 列表
-ac run github-tools/github.list-prs --input '{"repo": "team4u/actiondock"}'
+ad run github-tools/github.list-prs --input '{"repo": "team4u/actiondock"}'
 ```
 
 ---
@@ -129,25 +129,25 @@ ac run github-tools/github.list-prs --input '{"repo": "team4u/actiondock"}'
 | 消费姿态 | 适用场景 | 目标客户端 / 宿主 | 环境依赖 |
 | :--- | :--- | :--- | :--- |
 | **Agent Skill** | 大模型自主理解规程并调度 | Claude Code, Antigravity, Codex | 源码型需 Bun；独立型零依赖 |
-| **MCP 服务** | 本地 IDE 扩展工具调用 | Cursor, Windsurf, Claude Code, VSCode | 本地安装 `ac` CLI 或指定独立二进制 |
+| **MCP 服务** | 本地 IDE 扩展工具调用 | Cursor, Windsurf, Claude Code, VSCode | 本地安装 `ad` CLI 或指定独立二进制 |
 | **独立单文件 CLI** | 终端手动执行 / CI 脚本 / 容器 | Linux, macOS, Windows 终端 / CI 沙箱 | **零依赖**（无需 Bun/Node） |
-| **HTTP 远程微服务** | 远程集群 / 多租户 SaaS / REST 调度 | 任意支持 HTTP/cURL 的 Agent 或业务系统 | 服务端需 `ac serve` 运行 |
+| **HTTP 远程微服务** | 远程集群 / 多租户 SaaS / REST 调度 | 任意支持 HTTP/cURL 的 Agent 或业务系统 | 服务端需 `ad serve` 运行 |
 
 ---
 
-## 全局能力探索 (`ac info`)
+## 全局能力探索 (`ad info`)
 
 想了解当前环境中有哪些包与 Action 可用时：
 
 ```bash
 # 查看所有已 link 的工作区与包
-ac info
+ad info
 
 # 模糊意图匹配（如搜索 github 相关能力）
-ac info github
+ad info github
 
 # 查看工作区层级树
-ac info --tree
+ad info --tree
 ```
 
 ---

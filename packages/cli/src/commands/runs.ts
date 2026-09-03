@@ -107,7 +107,7 @@ export function registerRunsCommands(program: Command): void {
         const linkedList = listLinkedPackages();
         if (linkedList.length === 0) {
           console.log("No ActionDock project in current directory, and no packages linked.");
-          console.log("Run 'ac link' inside an Action package to register it.");
+          console.log("Run 'ad link' inside an Action package to register it.");
           return;
         }
 
@@ -293,7 +293,7 @@ export function registerRunsCommands(program: Command): void {
 
       if (target.type === "local") {
         console.error(
-          "Error: 'ac runs cancel' is only supported for remote execution targets. Use --profile <name> or --server <url>."
+          "Error: 'ad runs cancel' is only supported for remote execution targets. Use --profile <name> or --server <url>."
         );
         process.exit(1);
       }

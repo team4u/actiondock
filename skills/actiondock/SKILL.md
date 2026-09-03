@@ -4,15 +4,15 @@ description: >-
   ActionDock 2.0 开发者套件与运行指南。当用户需要执行以下任务或涉及相关概念时激活此技能：
   创建、编写、修改或测试 ActionDock Action 工具（涉及 defineAction、ActionContext、execCli、spawnDetached）；
   编写、校验或执行 Playbook 任务操作规程；
-  使用或排查 ac 命令行工具（包括 ac info、ac run、ac build、ac export skill、ac link、ac doctor、ac test、ac mcp 等）；
+  使用或排查 ad 命令行工具（包括 ad info、ad run、ad build、ad export skill、ad link、ad doctor、ad test、ad mcp 等）；
   配置持久化状态与环境变量、管理全局路由注册表、执行环境体检；
   将工具构建为独立可执行文件或导出为源码型与独立便携型 Agent Skill 交付包。
-  凡用户询问 ActionDock、ac 命令、@actiondock/sdk 或涉及 Agent 工具开发场景均须应用此技能。
+  凡用户询问 ActionDock、ad 命令、@actiondock/sdk 或涉及 Agent 工具开发场景均须应用此技能。
 ---
 
 # ActionDock 2.0 开发者技能指南
 
-ActionDock 2.0 是面向 AI Agent Action 与 Skill 的工程化开发与分发工具链，命令行工具为 `ac`。
+ActionDock 2.0 是面向 AI Agent Action 与 Skill 的工程化开发与分发工具链，命令行工具为 `ad`。
 ActionDock 支持**源码型**与**独立便携型**双模交付形态，让开发者使用 TypeScript 快速开发原子工具（Action）与业务操作规程（Playbook），一键导出自包含的 Agent Skill 资产。
 
 ---
@@ -23,17 +23,17 @@ ActionDock 支持**源码型**与**独立便携型**双模交付形态，让开�
 
 | 业务意图与用户需求 | 执行范式与决策建议 | 核心命令与操作路径 |
 | :--- | :--- | :--- |
-| **新建工程项目** | 生成标准工程骨架，包含配置清单、代码与规程目录 | `ac init [directory] --id <id> --name <name>` |
-| **探索可用能力** | 模糊意图检索，优先检查规程与工具清单 | `ac info <patterns...>` 或 `ac info -i <pattern>` |
-| **执行复合业务任务** | 规程优先原则，阅读 SOP 后依序调度 | `ac playbook show <id>`，依步骤调度对应 Action |
-| **调用单点原子工具** | 使用文件传参，避免终端引号转义崩溃 | `ac run <pkg>/<action> --input-file <path>` |
-| **新建 Action 工具** | 脚手架生成并实现标准输入输出契约 | `ac action create <id>`，编写 `actions/<name>.ts` |
-| **编排业务操作规程** | 规范编写多步骤操作引导文档 | `ac playbook create <id>`，编写 `playbooks/<id>.md` |
-| **单元测试与逻辑验证** | 纯内存沙箱测试，验证多步与状态逻辑 | `ac test`，结合 `createTestRuntime` |
-| **交付导出为 Skill** | 双模导出：源码型或独立预编译便携型 | `ac export skill` 或 `ac export skill --standalone` |
-| **编译为独立二进制** | 全平台交叉编译为单文件独立程序 | `ac build -t <target> -o <path>` |
-| **管理配置与持久化状态** | 跨包读写配置项、状态键与执行历史 | `ac config`、`ac state`、`ac runs` |
-| **排查错误与自愈修复** | 按需排查：检查挂载树、清理软链、体检 | `ac info --tree` -> `ac unlink -p` -> `ac doctor` |
+| **新建工程项目** | 生成标准工程骨架，包含配置清单、代码与规程目录 | `ad init [directory] --id <id> --name <name>` |
+| **探索可用能力** | 模糊意图检索，优先检查规程与工具清单 | `ad info <patterns...>` 或 `ad info -i <pattern>` |
+| **执行复合业务任务** | 规程优先原则，阅读 SOP 后依序调度 | `ad playbook show <id>`，依步骤调度对应 Action |
+| **调用单点原子工具** | 使用文件传参，避免终端引号转义崩溃 | `ad run <pkg>/<action> --input-file <path>` |
+| **新建 Action 工具** | 脚手架生成并实现标准输入输出契约 | `ad action create <id>`，编写 `actions/<name>.ts` |
+| **编排业务操作规程** | 规范编写多步骤操作引导文档 | `ad playbook create <id>`，编写 `playbooks/<id>.md` |
+| **单元测试与逻辑验证** | 纯内存沙箱测试，验证多步与状态逻辑 | `ad test`，结合 `createTestRuntime` |
+| **交付导出为 Skill** | 双模导出：源码型或独立预编译便携型 | `ad export skill` 或 `ad export skill --standalone` |
+| **编译为独立二进制** | 全平台交叉编译为单文件独立程序 | `ad build -t <target> -o <path>` |
+| **管理配置与持久化状态** | 跨包读写配置项、状态键与执行历史 | `ad config`、`ad state`、`ad runs` |
+| **排查错误与自愈修复** | 按需排查：检查挂载树、清理软链、体检 | `ad info --tree` -> `ad unlink -p` -> `ad doctor` |
 
 ---
 
@@ -41,25 +41,25 @@ ActionDock 支持**源码型**与**独立便携型**双模交付形态，让开�
 
 > [!IMPORTANT]
 > **智能体关键行动指引**：当用户需要进行某项业务操作、探索可用工具，或不确定有哪些组件契合任务时，必须遵循以下行动准则：
-> - **按需排查原则**：默认运行环境、命令行工具与依赖均已就绪，严禁在任务启动前习惯性运行安装检查或 `ac doctor` 体检；仅在实际调用报错时按需修复。
-> - **先查后用原则**：首先使用 `ac info <patterns...>` 或 `ac info -i <pattern>` 模糊搜索相关包与规程。
-> - **规程优先决议**：在命中目标包后，**优先检查输出中是否存在匹配的 Playbook**。若存在规程，必须执行 `ac playbook show <id>` 读取标准操作规程，依规程步骤调用 Action；严禁擅自跳过规程自行拼凑调用顺序。仅当无匹配规程或用户明确指定单点操作时，方可直接调用单一 Action。
+> - **按需排查原则**：默认运行环境、命令行工具与依赖均已就绪，严禁在任务启动前习惯性运行安装检查或 `ad doctor` 体检；仅在实际调用报错时按需修复。
+> - **先查后用原则**：首先使用 `ad info <patterns...>` 或 `ad info -i <pattern>` 模糊搜索相关包与规程。
+> - **规程优先决议**：在命中目标包后，**优先检查输出中是否存在匹配的 Playbook**。若存在规程，必须执行 `ad playbook show <id>` 读取标准操作规程，依规程步骤调用 Action；严禁擅自跳过规程自行拼凑调用顺序。仅当无匹配规程或用户明确指定单点操作时，方可直接调用单一 Action。
 
 ### 意图模糊探索与包检索
 ```bash
 # 模糊搜索（唯一匹配时直接自动展开完整包详情、Action 清单与规程列表）
-ac info browser
-ac info github pr
+ad info browser
+ad info github pr
 
 # 正则意图过滤
-ac info -i "github|gitlab"
+ad info -i "github|gitlab"
 
 # 查看当前工作区注册树与挂载结构
-ac info --tree
+ad info --tree
 
 # 查看指定包详情（支持包 ID 或物理路径）
-ac info <package-id>
-ac info -P <package-id>
+ad info <package-id>
+ad info -P <package-id>
 ```
 
 ---
@@ -110,13 +110,13 @@ actions:
 ### 规程命令行操作
 ```bash
 # 列出可用规程（支持多关键词模糊检索）
-ac playbook list [patterns...] [-i "<regex>"]
+ad playbook list [patterns...] [-i "<regex>"]
 
 # 查看规程内容详情
-ac playbook show <id>
+ad playbook show <id>
 
 # 校验规程格式与依赖 Action 合法性
-ac playbook validate [id]
+ad playbook validate [id]
 ```
 
 ---
@@ -127,7 +127,7 @@ ac playbook validate [id]
 
 ### 脚手架创建 Action
 ```bash
-ac action create <action-id> --desc "功能简要描述" [--file <filename.ts>]
+ad action create <action-id> --desc "功能简要描述" [--file <filename.ts>]
 ```
 
 ### Action 契约定义与标准实现
@@ -309,13 +309,13 @@ cat << 'EOF' > /tmp/action-input.json
   "maxCount": 20
 }
 EOF
-ac run github.list-issues --input-file /tmp/action-input.json
+ad run github.list-issues --input-file /tmp/action-input.json
 
 # 方式二：跨包使用 Package-Qualified ID 执行
-ac run team4u.github-tools/github.list-issues --input-file /tmp/action-input.json
+ad run team4u.github-tools/github.list-issues --input-file /tmp/action-input.json
 
 # 方式三：行内传递简单参数（仅适用于无复杂嵌套的简单场景）
-ac run github.list-issues --input '{"repo":"team4u/actiondock"}'
+ad run github.list-issues --input '{"repo":"team4u/actiondock"}'
 ```
 
 ### 标准输出格式与响应契约
@@ -374,7 +374,7 @@ describe("github.list-issues", () => {
 
 执行全量测试：
 ```bash
-ac test
+ad test
 ```
 
 ---
@@ -386,13 +386,13 @@ ActionDock 支持将 Action Package 一键打包分发给不同场景的智能�
 ### 源码型 Skill 导出（默认标准交付形态）
 ```bash
 # 全量导出当前项目为源码型 Skill
-ac export skill -o ./dist/my-skill
+ad export skill -o ./dist/my-skill
 
 # 跨目录指定目标包导出
-ac export skill -P <package-id> -o ./dist/my-skill
+ad export skill -P <package-id> -o ./dist/my-skill
 
 # 规程驱动的裁剪导出（仅打包指定 Playbook 及其依赖的 Action 源码）
-ac export skill --playbook deploy-service -o ./dist/deploy-skill
+ad export skill --playbook deploy-service -o ./dist/deploy-skill
 ```
 
 导出的源码型目录结构：
@@ -408,18 +408,18 @@ dist/my-skill/
 ### 独立便携型 Skill 导出（预编译单文件可执行产物）
 ```bash
 # 导出包含预构建二进制文件的便携 Skill
-ac export skill --standalone -o ./dist/portable-skill
+ad export skill --standalone -o ./dist/portable-skill
 ```
 
 ### 独立可执行程序构建
 ```bash
 # 编译全量 Action 为单一跨平台可执行二进制文件
-ac build -o ./dist/bin/my-tools
+ad build -o ./dist/bin/my-tools
 
 # 交叉编译到不同操作系统与架构
-ac build -t linux-x64 -o ./dist/bin/my-tools-linux
-ac build -t darwin-arm64 -o ./dist/bin/my-tools-macos
-ac build -t windows-x64 -o ./dist/bin/my-tools-windows.exe
+ad build -t linux-x64 -o ./dist/bin/my-tools-linux
+ad build -t darwin-arm64 -o ./dist/bin/my-tools-macos
+ad build -t windows-x64 -o ./dist/bin/my-tools-windows.exe
 ```
 
 ---
@@ -430,24 +430,24 @@ ac build -t windows-x64 -o ./dist/bin/my-tools-windows.exe
 
 在任意目录下执行命令时，通过 `-P <id|path>` 精确指定目标包，无需切换当前工作目录：
 
-- **读取目标包配置**：`ac config get GITHUB_TOKEN -P team4u.github-tools`
-- **写入目标包配置**：`ac config set GITHUB_TOKEN "ghp_xxx" -P team4u.github-tools`
-- **查看目标包状态**：`ac state list -P team4u.github-tools`
-- **查询目标包执行记录**：`ac runs list -P team4u.github-tools`
+- **读取目标包配置**：`ad config get GITHUB_TOKEN -P team4u.github-tools`
+- **写入目标包配置**：`ad config set GITHUB_TOKEN "ghp_xxx" -P team4u.github-tools`
+- **查看目标包状态**：`ad state list -P team4u.github-tools`
+- **查询目标包执行记录**：`ad runs list -P team4u.github-tools`
 
-### 全局包挂载与工作区路由 (`ac link`)
+### 全局包挂载与工作区路由 (`ad link`)
 ```bash
 # 在单包目录下执行，将当前包注册至全局路由表
-ac link
+ad link
 
 # 在多包目录或工作区根目录下执行，自动批量扫描并挂载所有子包
-ac link ./examples
+ad link ./examples
 
 # 解除包或工作区挂载
-ac unlink <package-id|path>
+ad unlink <package-id|path>
 
 # 一键清理所有失效或已被物理删除的挂载路径
-ac unlink --prune
+ad unlink --prune
 ```
 
 ---
@@ -461,48 +461,62 @@ ac unlink --prune
 
 | 报错现象或错误码 | 根本原因分析 | 标准自愈修复步骤 |
 | :--- | :--- | :--- |
-| `ACTION_NOT_FOUND` 或找不到包 | 全局路由表中未注册该包，或挂载路径已移动失效 | 执行 `ac info --tree` 确认挂载状态；若路径失效执行 `ac unlink -p` 清理幽灵软链，随后在包目录下重新执行 `ac link` |
-| `INPUT_VALIDATION_FAILED` | 输入参数未满足 Action 声明的 `inputSchema` 约束 | 执行 `ac action show <id>` 查看完整的参数定义与必填字段要求，核对数据类型与字段名称 |
+| `ACTION_NOT_FOUND` 或找不到包 | 全局路由表中未注册该包，或挂载路径已移动失效 | 执行 `ad info --tree` 确认挂载状态；若路径失效执行 `ad unlink -p` 清理幽灵软链，随后在包目录下重新执行 `ad link` |
+| `INPUT_VALIDATION_FAILED` | 输入参数未满足 Action 声明的 `inputSchema` 约束 | 执行 `ad action show <id>` 查看完整的参数定义与必填字段要求，核对数据类型与字段名称 |
 | `OUTPUT_VALIDATION_FAILED` | Action `run` 方法返回的对象不匹配 `outputSchema` | 检查 Action 代码返回字段是否包含所有必须属性 |
-| `CONFIG_VALIDATION_FAILED` | 未注入当前 Action 依赖的必填配置项 | 执行 `ac config schema` 查看缺失的配置项，通过 `ac config set <key> <val>` 补全配置 |
+| `CONFIG_VALIDATION_FAILED` | 未注入当前 Action 依赖的必填配置项 | 执行 `ad config schema` 查看缺失的配置项，通过 `ad config set <key> <val>` 补全配置 |
 | `ACTION_TIMEOUT` | 执行时间超过预设阈值 | 优化 I/O 链路，或在调用时添加 `--timeout 60s` 调大超时时间 |
+| `ad` 命令行工具未找到 | 宿主未安装 ActionDock CLI，或 PATH 未生效 | 执行 `npm install -g @actiondock/cli` 或本地编译链接（详见下方冷启动安装指引） |
 | 外部 CLI 提示找不到命令 | 宿主未安装对应工具，或 PATH 未生效 | 使用绝对路径调用，或执行 `Bun.which("command")` 检查环境可执行文件完整路径 |
 
-### 环境体检工具 (`ac doctor`)
+### 环境体检工具 (`ad doctor`)
 
 当遭遇未知环境异常或多项命令连续失败时，执行全量体检诊断：
 
 ```bash
 # 运行全套系统与项目依赖健康诊断
-ac doctor
+ad doctor
 
 # 输出机器可读的 JSON 报告
-ac doctor --json
+ad doctor --json
 ```
 
 ### 基础开发环境初始化（全新环境冷启动参考）
 
 仅在宿主环境完全缺少 Bun 或 ActionDock 工具链时执行一次：
 
-```bash
-# 安装 Bun 运行时
-npm install -g bun
+- **安装 Bun 运行时**（若系统未安装）：
+  ```bash
+  npm install -g bun
+  ```
 
-# 本地源码开发态链接 CLI 与 SDK
-cd packages/cli && bun link
-cd ../sdk && bun link
+- **全局安装 ActionDock 命令行工具**：
+  ```bash
+  npm install -g @actiondock/cli
+  ```
 
-# Action 项目接入 SDK
-cd /path/to/my-action-project
-bun link @actiondock/sdk
-```
+- **验证工具就绪**：
+  ```bash
+  ad --version
+  ```
+
+- **源码本地开发模式**（若在 ActionDock 源码仓库中贡献或开发）：
+  ```bash
+  # 本地源码开发态链接 CLI 与 SDK
+  cd packages/cli && bun link
+  cd ../sdk && bun link
+
+  # Action 项目接入 SDK
+  cd /path/to/my-action-project
+  bun link @actiondock/sdk
+  ```
 
 ---
 
 ## Agent 行动核心红线
 
 - **规程优先原则**：面对业务编排任务，必须优先检索并遵循现成的 Playbook，严禁无视既有 SOP 规程擅自拼凑 Action 调度次序。
-- **按需排查原则**：严禁在每次任务执行前盲目进行前置环境检查、依赖重装或运行 `ac doctor` 体检；默认环境完备就绪，仅在实际遇到报错时按需修复。
+- **按需排查原则**：严禁在每次任务执行前盲目进行前置环境检查、依赖重装或运行 `ad doctor` 体检；默认环境完备就绪，仅在实际遇到报错时按需修复。
 - **通道隔离原则**：严禁在 Action 内部调用 `console.log`，所有日志一律使用 `ctx.log`（输出至 `stderr`），确保 `stdout` 仅输出标准 JSON Envelope。
 - **严格 Schema 原则**：必须为每个 Action 定义完备的 `inputSchema` 与 `outputSchema`。
 - **响应式取消原则**：对于网络 I/O 与耗时循环，始终绑定并检测 `ctx.signal`。

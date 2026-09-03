@@ -223,9 +223,12 @@ describe("Build & Skill Export Contract", () => {
     expect(skillMd.startsWith("---\nname:")).toBe(true);
     expect(skillMd).toContain("description:");
     expect(skillMd).toContain("# Sample Tools");
-    expect(skillMd).toContain("ac link");
+    expect(skillMd).toContain("ad link");
     expect(skillMd).toContain("test.sample-tools/sample.greet");
     expect(skillMd).toContain("Playbook SOPs");
+    expect(skillMd).toContain("故障排查与环境安装指引");
+    expect(skillMd).toContain("npm install -g @actiondock/cli");
+    expect(skillMd).toContain("ad doctor");
   });
 
   it("exports standalone binary Skill package when standalone is true", async () => {

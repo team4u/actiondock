@@ -30,7 +30,7 @@ function renderActionListMarkdown(
       const idLabel = options.packageId
         ? `\`${options.packageId}/${a.id}\` (或 \`${a.id}\`)`
         : `\`${a.id}\``;
-      return `* ${idLabel}${aDesc}${params}`;
+      return `- ${idLabel}${aDesc}${params}`;
     })
     .join("\n");
 }
@@ -40,7 +40,7 @@ function renderPlaybookSectionMarkdown(playbooks: PlaybookDefinition[]): string 
   const list = playbooks
     .map((p) => {
       const rel = `./playbooks/${basename(p.filePath)}`;
-      return `* **${p.id}** (\`${rel}\`): ${p.description || "任务指南"}`;
+      return `- **${p.id}** (\`${rel}\`): ${p.description || "任务指南"}`;
     })
     .join("\n");
   return `
@@ -73,34 +73,34 @@ description: ${desc}
 
 ${desc}
 
-## ActionDock 运行时 (ActionDock Runtime)
+## ActionDock 运行时
 
-本技能为 **ActionDock 源码型 Package (Source Skill)**。AI Agent 可直接通过已安装的 ActionDock 命令行工具 (\`ac\`) 执行其中的 Action。
+本技能为 **ActionDock 源码型技能包**。AI Agent 可直接通过已安装的 ActionDock 命令行工具 (\`ad\`) 执行其中的 Action。
 
-### 注册与链接 (Idempotent Setup)
+### 注册与链接
 
 在初次调用或初始化时，将包含本 \`SKILL.md\` 的目录解析为 \`<skill_root>\` 并完成注册：
 
 \`\`\`bash
-ac link "<skill_root>"
+ad link "<skill_root>"
 \`\`\`
 
-> \`ac link\` 天然具备幂等性，同一 Package 多次执行会直接更新路径，可安全重复调用。
+> \`ad link\` 天然具备幂等性，同一 Package 多次执行会直接更新路径，可安全重复调用。
 
-### 执行 Action (统一推荐 Package-Qualified ID)
+### 执行 Action
 
 为避免多技能之间的 Action ID 命名冲突，建议统一使用带有 Package 前缀的完全限定 ID：
 
 \`\`\`bash
-# 格式：ac run <package-id>/<action-id> --input '<json>'
-ac run ${pkgId}/${firstAction} --input '{"param": "value"}'
+# 格式：ad run <package-id>/<action-id> --input '<json>'
+ad run ${pkgId}/${firstAction} --input '{"param": "value"}'
 \`\`\`
 
-> **免注册本地执行 (Direct Execution Alternative)**:
+> **免注册本地执行**：
 > 若 Agent 工作目录已位于本 Skill 根目录，亦可直接免 link 执行：
 > \`\`\`bash
 > cd <skill_root>
-> ac run <action-id> --input '<json>'
+> ad run <action-id> --input '<json>'
 > \`\`\`
 
 所有 Action 执行结果均在 \`stdout\` 输出标准格式的 JSON Envelope：
@@ -127,13 +127,56 @@ ${playbookSection}
 
 \`\`\`bash
 # 查看与设置配置项
-ac config list --package ${pkgId}
-ac config set KEY VALUE --package ${pkgId}
+ad config list --package ${pkgId}
+ad config set KEY VALUE --package ${pkgId}
 
 # 查看与检索状态数据
-ac state list --package ${pkgId}
-ac state get KEY --package ${pkgId}
+ad state list --package ${pkgId}
+ad state get KEY --package ${pkgId}
 \`\`\`
+
+---
+
+## 故障排查与环境安装指引（按需查阅）
+
+> [!NOTE]
+> **按需排查原则**：默认宿主环境中已预置 \`ad\` 命令行工具。正常执行流程直接调用上述 Action 即可，**严禁在任务启动前盲目进行前置环境检查或体检**；仅在终端明确报错提示命令不存在（如 \`ad: command not found\`）时，方可按本节指引安装初始化。
+
+### 命令行工具未找到时的安装指引
+
+若宿主环境未安装 \`ad\` 命令行工具，请依次按如下步骤完成安装：
+
+- **安装 Bun 运行时**（若系统未安装）：
+  \`\`\`bash
+  npm install -g bun
+  \`\`\`
+
+- **全局安装 ActionDock 命令行工具**：
+  \`\`\`bash
+  npm install -g @actiondock/cli
+  \`\`\`
+
+- **验证工具就绪**：
+  \`\`\`bash
+  ad --version
+  \`\`\`
+
+- **源码本地开发模式**（若在本地源码仓库中贡献或开发）：
+  \`\`\`bash
+  cd packages/cli && bun link
+  cd ../sdk && bun link
+  \`\`\`
+
+- **环境诊断与体检**：
+  安装完成后若仍遇到异常，执行体检命令排查：
+  \`\`\`bash
+  ad doctor
+  \`\`\`
+
+- **完成安装后重新链接本技能**：
+  \`\`\`bash
+  ad link "<skill_root>"
+  \`\`\`
 `;
 }
 

@@ -4,7 +4,8 @@
   "description": "ActionDock CLI facade for developing, testing, building, and exporting standalone Agent Actions and Skills",
   "type": "module",
   "bin": {
-    "ac": "./bin/ac.js"
+    "ad": "./bin/ad.js",
+    "actiondock": "./bin/ad.js"
   },
   "main": "./src/index.ts",
   "module": "./src/index.ts",
@@ -36,7 +37,7 @@
     "@types/bun": "latest",
     "typescript": "^5.7.0"
   },
-  "keywords": ["actiondock", "ac", "agent", "cli", "skill", "builder", "mcp"],
+  "keywords": ["actiondock", "ad", "agent", "cli", "skill", "builder", "mcp"],
   "author": "team4u",
   "license": "Apache-2.0",
   "repository": {

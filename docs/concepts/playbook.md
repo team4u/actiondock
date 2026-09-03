@@ -58,10 +58,10 @@ ActionDock CLI 提供了专用的校验命令：
 
 ```bash
 # 校验当前包的所有 Playbook
-ac playbook validate
+ad playbook validate
 
 # 校验单个 Playbook
-ac playbook validate playbooks/review-pr.md
+ad playbook validate playbooks/review-pr.md
 ```
 
 校验器会检查：

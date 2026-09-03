@@ -19,8 +19,8 @@ export function createCliProgram(): Command {
   const program = new Command();
 
   program
-    .name("ac")
-    .description("ActionDock (ac) 2.0 - Toolchain for building and shipping standalone AI Agent Actions & Skills")
+    .name("ad")
+    .description("ActionDock (ad) 2.0 - Toolchain for building and shipping standalone AI Agent Actions & Skills")
     .version("2.0.0");
 
   registerInitCommand(program);

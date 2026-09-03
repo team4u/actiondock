@@ -20,7 +20,7 @@ export function registerProfileCommands(program: Command): void {
     .command("profile")
     .description("Manage multi-cloud and remote execution profiles");
 
-  // ac profile list
+  // ad profile list
   profileCmd
     .command("list [patterns...]")
     .description("List all configured profiles")
@@ -86,7 +86,7 @@ export function registerProfileCommands(program: Command): void {
             );
           }
           console.log(
-            "\nUse 'ac profile use <name>' to switch or 'ac run <action> --profile <name>' to execute on a specific target."
+            "\nUse 'ad profile use <name>' to switch or 'ad run <action> --profile <name>' to execute on a specific target."
           );
         }
       } catch (err: any) {
@@ -95,7 +95,7 @@ export function registerProfileCommands(program: Command): void {
       }
     });
 
-  // ac profile add <name>
+  // ad profile add <name>
   profileCmd
     .command("add <name>")
     .description("Add or update a remote execution profile")
@@ -123,7 +123,7 @@ export function registerProfileCommands(program: Command): void {
       }
     });
 
-  // ac profile use <name>
+  // ad profile use <name>
   profileCmd
     .command("use <name>")
     .description("Switch active default profile")
@@ -137,7 +137,7 @@ export function registerProfileCommands(program: Command): void {
       }
     });
 
-  // ac profile show [name]
+  // ad profile show [name]
   profileCmd
     .command("show [name]")
     .description("Display details of a profile (defaults to active profile)")
@@ -200,7 +200,7 @@ export function registerProfileCommands(program: Command): void {
       }
     });
 
-  // ac profile rm / remove <name>
+  // ad profile rm / remove <name>
   profileCmd
     .command("rm <name>")
     .alias("remove")
@@ -223,7 +223,7 @@ export function registerProfileCommands(program: Command): void {
       }
     });
 
-  // ac profile test [name]
+  // ad profile test [name]
   profileCmd
     .command("test [name]")
     .description("Test connection latency and health of a profile")

@@ -1,6 +1,6 @@
 # 底层架构：Runtime 执行引擎
 
-ActionDock 的所有执行请求（无论是通过 `ac run` 本地调用、MCP Tool 调用、HTTP 服务调度还是独立二进制执行）均汇聚至唯一的核心执行引擎：`ActionRunner`。
+ActionDock 的所有执行请求（无论是通过 `ad run` 本地调用、MCP Tool 调用、HTTP 服务调度还是独立二进制执行）均汇聚至唯一的核心执行引擎：`ActionRunner`。
 
 ---
 

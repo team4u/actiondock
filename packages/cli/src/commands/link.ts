@@ -6,7 +6,7 @@ import {
 import { Command } from "commander";
 
 export function registerLinkCommands(program: Command): void {
-  // ac link [path]
+  // ad link [path]
   program
     .command("link [path]")
     .option("-r, --recursive", "Recursively discover and link packages in subdirectories")
@@ -32,7 +32,7 @@ export function registerLinkCommands(program: Command): void {
       }
     });
 
-  // ac unlink [id|path]
+  // ad unlink [id|path]
   program
     .command("unlink [identifier]")
     .option("-p, --prune", "Automatically scan and prune any stale/missing paths from registry")

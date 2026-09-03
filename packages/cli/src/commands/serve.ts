@@ -80,7 +80,7 @@ export function registerServeCommand(program: Command): void {
         console.log(`  * Max Body Size:   ${options.maxBody || "1mb"}`);
         console.log(`  * Health Endpoint: http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${server.port}/api/v1/health`);
         console.log(`======================================================\n`);
-        console.log(`Server is ready to accept remote 'ac run' requests.`);
+        console.log(`Server is ready to accept remote 'ad run' requests.`);
         console.log(`Press Ctrl+C to terminate.\n`);
 
         // Keep process running

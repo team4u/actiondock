@@ -46,5 +46,5 @@ Action 执行 ───┤
 
 ```bash
 # 纯净提取 data 字段，即使 stderr 中有大量日志，jq 也绝不报错
-ac run github.get-pr --input '{"repo": "team4u/actiondock", "prNumber": 1}' | jq .data.title
+ad run github.get-pr --input '{"repo": "team4u/actiondock", "prNumber": 1}' | jq .data.title
 ```

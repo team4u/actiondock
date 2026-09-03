@@ -1,6 +1,6 @@
 # 独立二进制与免环境运行
 
-ActionDock 支持通过 `ac build` 将整个 Action Package（包含所有 Action 逻辑、嵌入式 SQLite 引擎、配置系统与 CLI 调度器）编译为**单个零外部依赖的独立可执行文件**。
+ActionDock 支持通过 `ad build` 将整个 Action Package（包含所有 Action 逻辑、嵌入式 SQLite 引擎、配置系统与 CLI 调度器）编译为**单个零外部依赖的独立可执行文件**。
 
 在目标服务器、轻量 Docker 镜像、CI/CD 构建机或沙箱中，**无需安装 Bun、Node.js 或任何 npm 依赖**。
 
@@ -8,11 +8,11 @@ ActionDock 支持通过 `ac build` 将整个 Action Package（包含所有 Actio
 
 ## 编译与获取独立可执行文件
 
-在官方示例目录执行 `ac build`：
+在官方示例目录执行 `ad build`：
 
 ```bash
 cd examples/github-tools
-ac build
+ad build
 ```
 
 编译完成后会在 `./bin/` 目录下生成跨平台自包含二进制（如 `./bin/github-tools`）。

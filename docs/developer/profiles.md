@@ -9,36 +9,36 @@
 ### 添加远程 Profile
 ```bash
 # 使用固定 Token
-ac profile add staging --endpoint http://10.0.0.12:8080 --token secret-token-123
+ad profile add staging --endpoint http://10.0.0.12:8080 --token secret-token-123
 
 # 使用环境变量引用（更安全，推荐）
-ac profile add prod --endpoint https://actiondock.internal.company.com --token-env PROD_ACTIONDOCK_TOKEN
+ad profile add prod --endpoint https://actiondock.internal.company.com --token-env PROD_ACTIONDOCK_TOKEN
 ```
 
 ### 查看与切换 Profile
 ```bash
 # 列出所有配置的 Profile
-ac profile list
+ad profile list
 
 # 设为默认 Profile
-ac profile use staging
+ad profile use staging
 
 # 删除 Profile
-ac profile remove old-env
+ad profile remove old-env
 ```
 
 ---
 
 ## 跨节点远程执行
 
-在执行命令时传入 `--profile` 参数，CLI 会自动将请求转发给远端 `ac serve` 节点执行：
+在执行命令时传入 `--profile` 参数，CLI 会自动将请求转发给远端 `ad serve` 节点执行：
 
 ```bash
 # 在 staging 节点执行 Action
-ac run github.get-pr --input '{"repo": "team4u/actiondock", "prNumber": 1}' --profile staging
+ad run github.get-pr --input '{"repo": "team4u/actiondock", "prNumber": 1}' --profile staging
 
 # 查询远程节点的健康状态与 Action 清单
-ac info --profile prod
+ad info --profile prod
 ```
 
 ---

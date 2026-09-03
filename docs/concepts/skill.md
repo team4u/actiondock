@@ -25,7 +25,7 @@ Agent Skill ───┤   • 跨平台体积极小 (< 100KB)
 
 ## Skill 目录结构
 
-执行 `ac export skill` 导出的目录结构如下：
+执行 `ad export skill` 导出的目录结构如下：
 
 ```text
 dist/github-tools-skill/
@@ -61,7 +61,7 @@ description: GitHub 自动化运维与代码评审工具集，支持 PR 查询�
 - [PR 自动化审查规程](playbooks/review-pr.md)
 
 ## 调用命令
-`ac run <action-id> --input '<json>'`
+`ad run <action-id> --input '<json>'`
 ```
 
 ---
@@ -70,13 +70,13 @@ description: GitHub 自动化运维与代码评审工具集，支持 PR 查询�
 
 ```bash
 # 导出源码型 Skill
-ac export skill --out ./dist/github-tools-skill
+ad export skill --out ./dist/github-tools-skill
 
 # 导出独立二进制型 Skill
-ac export skill --standalone --out ./dist/github-tools-skill
+ad export skill --standalone --out ./dist/github-tools-skill
 
 # 按需按 Playbook 裁剪导出（仅导出该 Playbook 引用的 Action）
-ac export skill --playbook review-pr
+ad export skill --playbook review-pr
 ```
 
 ---

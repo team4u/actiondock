@@ -144,7 +144,7 @@ export function useProfile(name: string, customHome?: string): void {
 
   if (trimmedName !== "local" && !profilesConfig.profiles[trimmedName]) {
     throw new Error(
-      `Profile '${trimmedName}' not found. Use 'ac profile list' to see available profiles or 'ac profile add' to register one.`
+      `Profile '${trimmedName}' not found. Use 'ad profile list' to see available profiles or 'ad profile add' to register one.`
     );
   }
 
@@ -274,7 +274,7 @@ export function resolveTarget(
     const found = profilesConfig.profiles[pName];
     if (!found) {
       throw new Error(
-        `Profile '${pName}' not found. Configure it with 'ac profile add ${pName} --server <url>'`
+        `Profile '${pName}' not found. Configure it with 'ad profile add ${pName} --server <url>'`
       );
     }
     const resolvedToken = resolveProfileToken(pName, found, options.token);
@@ -307,7 +307,7 @@ export function resolveTarget(
     const found = profilesConfig.profiles[pName];
     if (!found) {
       throw new Error(
-        `Profile '${pName}' (from ACTIONDOCK_PROFILE) not found. Configure it with 'ac profile add ${pName} --server <url>'`
+        `Profile '${pName}' (from ACTIONDOCK_PROFILE) not found. Configure it with 'ad profile add ${pName} --server <url>'`
       );
     }
     const resolvedToken = resolveProfileToken(pName, found, options?.token);

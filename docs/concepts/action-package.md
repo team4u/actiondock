@@ -86,17 +86,17 @@ github-tools/
 Action Package 是「一次编写，全模态交付」的物理载体：
 
 ```text
-                     ┌─ ac run (本地 CLI 调试)
+                     ┌─ ad run (本地 CLI 调试)
                      │
-                     ├─ ac test (毫秒级内存单测)
+                     ├─ ad test (毫秒级内存单测)
                      │
-Action Package ──────┼─ ac mcp (STDIO / HTTP MCP 服务直连 IDE)
+Action Package ──────┼─ ad mcp (STDIO / HTTP MCP 服务直连 IDE)
  (actions/ +         │
-  playbooks/)        ├─ ac serve (轻量 HTTP 微服务，支持多云调度)
+  playbooks/)        ├─ ad serve (轻量 HTTP 微服务，支持多云调度)
                      │
-                     ├─ ac export skill (导出自包含 Agent Skill)
+                     ├─ ad export skill (导出自包含 Agent Skill)
                      │
-                     └─ ac build (编译为零依赖单文件独立二进制)
+                     └─ ad build (编译为零依赖单文件独立二进制)
 ```
 
 无论通过何种形式运行，Action Package 内部的业务逻辑、Schema 校验规则、配置优先级与状态持久化行为均严格保持一致（**独立编译契约原则**）。

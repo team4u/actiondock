@@ -26,8 +26,8 @@ export interface StandaloneRuntimeOptions {
  * 独立二进制可执行文件运行时（Standalone Runtime）。
  * 
  * 职责：
- * 1. 作为由 `ac build` 编译生成的单文件独立可执行文件（Standalone Binary）的运行时入口。
- * 2. 保证与开发态（`ac run` / `ac action`）在输出信封、配置优先级、状态存储等方面的 100% 行为一致性。
+ * 1. 作为由 `ad build` 编译生成的单文件独立可执行文件（Standalone Binary）的运行时入口。
+ * 2. 保证与开发态（`ad run` / `ad action`）在输出信封、配置优先级、状态存储等方面的 100% 行为一致性。
  * 3. 自带轻量 CLI 分发器，支持 `list`, `describe`, `run`, `config`, `state`, `version`, `help` 子命令。
  */
 export class StandaloneRuntime {

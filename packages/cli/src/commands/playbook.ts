@@ -65,7 +65,7 @@ export function registerPlaybookCommands(program: Command): void {
           const linkedList = listLinkedPackages();
           if (linkedList.length === 0) {
             console.log("No ActionDock project in current directory, and no packages linked.");
-            console.log("Run 'ac link' inside an Action package to register it.");
+            console.log("Run 'ad link' inside an Action package to register it.");
             return;
           }
 

@@ -15,12 +15,12 @@
 ```text
 TypeScript Action
        │
-       ├── ac run          # 本地 CLI 执行
-       ├── ac test         # 毫秒级内存单测
-       ├── ac mcp          # STDIO / HTTP MCP 服务
-       ├── ac serve        # 远程 HTTP 微服务
-       ├── ac export skill # 自包含 Agent Skill
-       └── ac build        # 零依赖单文件独立二进制
+       ├── ad run          # 本地 CLI 执行
+       ├── ad test         # 毫秒级内存单测
+       ├── ad mcp          # STDIO / HTTP MCP 服务
+       ├── ad serve        # 远程 HTTP 微服务
+       ├── ad export skill # 自包含 Agent Skill
+       └── ad build        # 零依赖单文件独立二进制
               ↓
           独立可执行文件
 ```
@@ -77,7 +77,7 @@ npm install -g @actiondock/cli
 #### 初始化 Action Package
 
 ```bash
-ac init hello-tools
+ad init hello-tools
 cd hello-tools
 bun install
 ```
@@ -113,27 +113,27 @@ export default defineAction({
 
 - 本地运行：
 ```bash
-ac run hello --input '{"name":"ActionDock"}'
+ad run hello --input '{"name":"ActionDock"}'
 ```
 
 - 运行内存测试：
 ```bash
-ac test
+ad test
 ```
 
 - 作为 MCP 服务直连 IDE（Claude Code、Cursor、Windsurf）：
 ```bash
-ac mcp
+ad mcp
 ```
 
 - 编译为零依赖单文件独立二进制：
 ```bash
-ac build
+ad build
 ```
 
 - 导出为便携式 Agent Skill：
 ```bash
-ac export skill
+ad export skill
 ```
 
 > **一个 Action，多端运行，单一契约。**
@@ -198,14 +198,14 @@ ActionDock 不是 Agent 框架，也不是可视化工作流画布。它专注�
 ## 一次实现，全模态交付
 
 ```text
-                  ┌─ CLI 本地执行 (`ac run`)
+                  ┌─ CLI 本地执行 (`ad run`)
                   │
-                  ├─ MCP 协议直连 (`ac mcp`)
-actions/*.ts ─────┼─ HTTP 微服务 (`ac serve`)
+                  ├─ MCP 协议直连 (`ad mcp`)
+actions/*.ts ─────┼─ HTTP 微服务 (`ad serve`)
                   │
-                  ├─ Agent Skill 导出 (`ac export skill`)
+                  ├─ Agent Skill 导出 (`ad export skill`)
                   │
-                  └─ 单文件独立二进制 (`ac build`)
+                  └─ 单文件独立二进制 (`ad build`)
 ```
 
 > **一次实现，全模态交付。**
@@ -232,8 +232,8 @@ actions/*.ts ─────┼─ HTTP 微服务 (`ac serve`)
 ## 分发目标
 
 - npm 模块生态包（`@actiondock/sdk`、`@actiondock/core`、`@actiondock/mcp`、`@actiondock/cli`）
-- 独立可执行文件（`ac build` 编译为单文件自包含二进制）
-- Agent Skill（`ac export skill` 导出为便携式 Skill 交付包）
+- 独立可执行文件（`ad build` 编译为单文件自包含二进制）
+- Agent Skill（`ad export skill` 导出为便携式 Skill 交付包）
 - Docker 容器镜像（标准容器镜像，规划中）
 
 ---
@@ -248,7 +248,7 @@ actiondock/
 │   ├── sdk/          # @actiondock/sdk：极简 SDK（defineAction, ActionContext, createTestRuntime）
 │   ├── core/         # @actiondock/core：核心引擎（Runner, Storage, Schema, Build, Export）
 │   ├── mcp/          # @actiondock/mcp：MCP 适配器（STDIO / HTTP / Tasks 异步扩展）
-│   └── cli/          # @actiondock/cli：命令行门面工具链（ac）
+│   └── cli/          # @actiondock/cli：命令行门面工具链（ad）
 ├── examples/
 │   └── github-tools/ # 官方完整示例包（包含 GitHub PR 工具集与评审 Playbook）
 └── docs/             # 官方技术文档中心

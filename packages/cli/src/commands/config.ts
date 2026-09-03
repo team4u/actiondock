@@ -28,7 +28,7 @@ export function registerConfigCommands(program: Command): void {
         const root = resolvePackageRoot(identifier || options.package);
         if (!root) {
           console.error(
-            "Error: Not in an ActionDock project.\nUsage: ac config schema [package-id] or cd into a project directory."
+            "Error: Not in an ActionDock project.\nUsage: ad config schema [package-id] or cd into a project directory."
           );
           process.exit(1);
         }
@@ -123,7 +123,7 @@ export function registerConfigCommands(program: Command): void {
           if (missingRequired.length > 0) {
             console.log(`\n[WARNING] ${missingRequired.length} required config(s) not set:`);
             for (const m of missingRequired) {
-              console.log(`  - ${m.key}: Run 'ac config set ${m.key} <value>' to configure.`);
+              console.log(`  - ${m.key}: Run 'ad config set ${m.key} <value>' to configure.`);
             }
           } else {
             console.log("\n[OK] All configuration dependencies are satisfied.");

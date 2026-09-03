@@ -31,7 +31,7 @@ ActionDock 实现了业界最严格的 5 级配置回退优先级模型：
 ```text
 调用参数覆盖 (--config k=v)                          [最高]
        ↓
-SQLite 持久化配置库 (ac config set KEY val)
+SQLite 持久化配置库 (ad config set KEY val)
        ↓
 环境变量 (PACKAGE__KEY / KEY)
        ↓
