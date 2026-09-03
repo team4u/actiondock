@@ -76,8 +76,9 @@ bun link @actiondock/sdk   # 接入本地全局 SDK 并自动补齐其余依赖
 ### 核心指引：能力发现与模糊探索（Agent 操作首选）
 
 > [!IMPORTANT]
-> **Agent 关键行动指引**：当用户需要进行某项业务操作、探索系统可用能力，或不确定有哪些 Package / Action / Playbook 适合当前任务时，**务必优先使用 `ac info <patterns...>` 或 `ac info -i <pattern>` 进行意图模糊搜索**！
+> **Agent 关键行动指引**：当用户需要进行某项业务操作、探索系统可用能力，或不确定有哪些 Package / Action / Playbook 适合当前任务时，务必优先使用 `ac info <patterns...>` 或 `ac info -i <pattern>` 进行意图模糊搜索！
 > - **先查后用**：先通过模糊搜索查看当前环境（本地项目、全局 Linked Packages 或远程 Profile）中有哪些工具组件最契合任务。
+> - **规程优先法则**：面对复合业务目标时，务必优先检查输出中是否存在匹配的 Playbook（或执行 `ac playbook list <patterns>`）。**若存在规程**，必须先阅读规程内容（`ac playbook show <id>`），严格依循标准操作规程依序调度各 Action；严禁擅自跳过既有规程自行拼接原子调用。仅当确认无匹配规程或用户明确指定单点操作时，方可直接调用单一 Action。
 > - **智能决议机制**：
 >   - **唯一命中**：若搜索词唯一定位到某个 Package（如 `ac info browser`），直接自动展开并输出该包的完整详细元数据、所有 Actions 清单、Playbooks 规程及配置 Schema。
 >   - **多项命中**：若搜索词匹配到多个 Package（如 `ac info ops`），输出过滤后的包摘要清单与 Actions/Playbooks 数量，供进一步通过 `ac info <package-id>` 精确定位。
@@ -734,7 +735,11 @@ dist/<package>-skill/
 
 ### AI Agent 调用 Source Skill 流程规范：
 - **探索与匹配能力（首选第一步）**：
-  - 当接到任务或用户指令时，首先通过 `ac info <intent>`（如 `ac info github`）模糊搜索匹配的 Package 与 Action 工具。
+  - 当接到任务或用户指令时，首先通过 `ac info <intent>`（如 `ac info github`）模糊搜索匹配的包、规程与工具。
+- **规程优先决策（核心判断）**：
+  - 检查目标包中是否包含针对当前业务场景的 Playbook。
+  - **存在规程**：执行 `ac playbook show <id>` 查看完整的任务 SOP 步骤，严格依序调度各步骤对应的 Action。
+  - **无规程**：直接针对具体需求调度单个原子 Action。
 - **解析 Skill 根目录**：将 `SKILL.md` 所在目录解析为 `<skill_root>`。
 - **幂等注册**：执行 `ac link "<skill_root>"`（可安全重复执行）。
 - **调用 Action**：始终使用 Package-Qualified ID 避免冲突：
@@ -750,6 +755,7 @@ dist/<package>-skill/
 
 ## Agent 开发核心红线
 
+- **规程优先原则**：面对业务编排任务，必须优先检索并遵循现成的 Playbook，严禁无视既有 SOP 规程擅自拼凑 Action 调度次序。
 - **通道隔离原则**：严禁在 Action 内部调用 `console.log`，所有日志一律使用 `ctx.log`（输出至 `stderr`），确保 `stdout` 仅输出标准 JSON Envelope。
 - **严格 Schema 原则**：必须为每个 Action 定义完备的 `inputSchema` 与 `outputSchema`。
 - **响应式取消原则**：对于网络 I/O 与耗时循环，始终绑定并检测 `ctx.signal`。
