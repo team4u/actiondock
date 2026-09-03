@@ -1,6 +1,6 @@
 {
   "name": "@actiondock/core",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "ActionDock Core Engine - Project loader, runtime execution, SQLite storage, standalone builder, and skill exporter",
   "type": "module",
   "main": "./src/index.ts",

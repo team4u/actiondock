@@ -1,6 +1,6 @@
 {
   "name": "@actiondock/sdk",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "ActionDock SDK for defining and testing standalone AI Agent Actions",
   "type": "module",
   "main": "./src/index.ts",
