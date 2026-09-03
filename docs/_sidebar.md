@@ -6,7 +6,7 @@
 
 * **使用者指南**
   * [消费与接入总览](/consumer/overview.md)
-  * [接入 Claude Code / Antigravity 技能库](/consumer/use-as-skill.md)
+  * [Agent Skill 使用指南](/consumer/use-as-skill.md)
   * [接入 Cursor / Windsurf / IDE (MCP 服务)](/consumer/use-as-mcp.md)
   * [独立二进制与免环境运行](/consumer/standalone-run.md)
   * [HTTP 远程微服务与 API 调度](/consumer/http-service.md)

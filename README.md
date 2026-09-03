@@ -46,9 +46,25 @@ ActionDock treats an Agent Tool as a software artifact:
 
 ## Quick Start
 
+### For AI Agents (Install Skills from GitHub)
+
+ActionDock is built as a tool foundation for AI Agents. Agents (such as Claude Code, Cursor, Antigravity, and GitHub Copilot CLI) can directly install skills from GitHub repositories using `npx skills`:
+
+```bash
+# Install ActionDock skill for your agent
+npx skills add team4u/actiondock
+
+# Or install any skill from GitHub
+npx skills add <owner/repo>
+```
+
+Once installed, your agent automatically discovers the skill SOPs and executes actions. See [Agent Skill Usage Guide](docs/consumer/use-as-skill.md).
+
+### For Tool Developers (Build & Ship Actions)
+
 > **Runtime requirement**: [Bun](https://bun.sh/) >= 1.2.0.
 
-### 1. Install CLI
+#### Install CLI
 
 ```bash
 # Install Bun runtime (if not already installed)
@@ -58,7 +74,7 @@ npm install -g bun
 npm install -g @actiondock/cli
 ```
 
-### 2. Initialize an Action Package
+#### Initialize an Action Package
 
 ```bash
 ac init hello-tools
@@ -66,7 +82,7 @@ cd hello-tools
 bun install
 ```
 
-### 3. Create an Action
+#### Create an Action
 
 Create `actions/hello.ts`:
 
@@ -93,29 +109,29 @@ export default defineAction({
 });
 ```
 
-### 4. Run, Test, and Deliver
+#### Run, Test, and Deliver
 
-**Run locally:**
+- Run locally:
 ```bash
 ac run hello --input '{"name":"ActionDock"}'
 ```
 
-**Run in-memory tests:**
+- Run in-memory tests:
 ```bash
 ac test
 ```
 
-**Serve as an MCP server (for Claude Code, Cursor, Windsurf):**
+- Serve as an MCP server (for Claude Code, Cursor, Windsurf):
 ```bash
 ac mcp
 ```
 
-**Compile to a zero-dependency standalone binary:**
+- Compile to a zero-dependency standalone binary:
 ```bash
 ac build
 ```
 
-**Export as a portable Agent Skill:**
+- Export as a portable Agent Skill:
 ```bash
 ac export skill
 ```
@@ -253,7 +269,7 @@ Visit the [Documentation Center](docs/README.md) for full guides:
   - [Core Overview & Dual Paths](docs/getting-started/overview.md)
 - **Consumer Guide**
   - [Overview](docs/consumer/overview.md)
-  - [Use as Agent Skill](docs/consumer/use-as-skill.md)
+  - [Agent Skill Usage Guide](docs/consumer/use-as-skill.md)
   - [Use as MCP Server](docs/consumer/use-as-mcp.md)
   - [Standalone Binary Run](docs/consumer/standalone-run.md)
   - [HTTP Service](docs/consumer/http-service.md)

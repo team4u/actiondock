@@ -12,6 +12,22 @@
 
 ---
 
+## 智能体极速上手
+
+ActionDock 是专为 AI 智能体设计的工具底座。智能体客户端（如 Claude Code、Cursor、Antigravity、GitHub Copilot CLI 等）可直接使用 `npx skills` 从 GitHub 仓库一键安装技能：
+
+```bash
+# 一键安装 ActionDock 官方技能
+npx skills add team4u/actiondock
+
+# 安装 GitHub 上任意开源仓库的技能
+npx skills add <owner/repo>
+```
+
+安装完成后，智能体即可自动识别 `SKILL.md` 与操作规程，并在执行任务时自主调度原子能力。详见 [Agent Skill 使用指南](consumer/use-as-skill.md)。
+
+---
+
 ## 文档分类导航
 
 ActionDock 文档中心遵循使用者与开发者角色双轨制设计：
@@ -36,7 +52,7 @@ ActionDock 文档中心遵循使用者与开发者角色双轨制设计：
 ### 使用者指南
 面向从仓库拉取项目源码、获取导出的 Skill 包或下载二进制的使用者与智能体操作者：
 - [消费与接入总览](consumer/overview.md)：消费姿态对比速查与克隆极速跑通。
-- [接入 Claude Code / Antigravity 技能库](consumer/use-as-skill.md)：将导出的 Skill 放入技能目录让 AI 自动发现。
+- [Agent Skill 使用指南](consumer/use-as-skill.md)：通过 npx skills 一键安装 GitHub 技能、智能体装载路径与规程优先调用规范。
 - [接入 Cursor / Windsurf / IDE (MCP 服务)](consumer/use-as-mcp.md)：作为 MCP STDIO 服务直连 IDE 工具库。
 - [独立二进制与免环境运行](consumer/standalone-run.md)：在无 Node.js / Bun 的服务器/沙箱中零依赖运行。
 - [HTTP 远程微服务与 API 调度](consumer/http-service.md)：启动持久微服务并通过 REST API 远程调度。

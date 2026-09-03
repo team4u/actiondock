@@ -83,9 +83,13 @@ ac run github-tools/github.list-prs --input '{"repo": "team4u/actiondock"}'
 }
 ```
 
-#### 姿态：导出为 Agent Skill（Claude Code / Antigravity）
-一键将示例导出为带规程的标准 Skill 并放入技能目录：
+#### 姿态：作为 Agent Skill 使用（Claude Code / Antigravity / Cursor）
+智能体生态支持通过 `npx skills` 直接从 GitHub 安装技能，或通过 ActionDock CLI 一键导出本地包为带规程的标准 Skill：
 ```bash
+# 方式一：使用 npx skills 直接从 GitHub 安装技能
+npx skills add team4u/actiondock
+
+# 方式二：本地一键导出并放入技能目录
 ac export skill -P team4u.github-tools --out ~/.claude/skills/github-tools
 ```
 
@@ -151,7 +155,7 @@ ac info --tree
 ## 各消费姿态接入指南
 
 - [接入 Cursor / Windsurf / IDE (MCP 服务)](use-as-mcp.md)：IDE 配置文件中添加 STDIO MCP Server。
-- [接入 Claude Code / Antigravity 技能库](use-as-skill.md)：将 Skill 放入技能目录让 AI 自动发现与执行规程。
+- [Agent Skill 使用指南](use-as-skill.md)：通过 npx skills 一键安装 GitHub 技能、智能体装载路径与规程优先调用规范。
 - [独立二进制单文件运行](standalone-run.md)：在生产服务器或沙箱中免依赖运行。
 - [HTTP 远程微服务与 REST 调度](http-service.md)：启动 HTTP 服务并通过 cURL 或 API 远程调用。
 - [消费端配置与凭证注入](configuration.md)：配置覆盖、环境变量与安全 Token 管理。

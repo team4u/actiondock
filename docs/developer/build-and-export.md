@@ -115,4 +115,4 @@ ac export skill --playbook review-pr --out ./dist/review-pr-skill
 - **发布为 GitHub Release 资产**：将 `ac build` 生成的可执行文件或 `ac export skill` 生成的 Skill 压缩包挂载在 Release 资产中。
 - **推送到 Skill 注册表 / S3**：供内部团队集中拉取。
 
-> **提示**：关于使用者拿到 Skill 后如何配置到 Claude Code 或 Cursor，请参考 **[使用者指南：接入 Claude Code / Antigravity](../consumer/use-as-skill.md)**。
+> **提示**：关于使用者拿到 Skill 后如何配置到 Claude Code 或 Cursor，请参考 [使用者指南：Agent Skill 使用指南](../consumer/use-as-skill.md)。

@@ -38,7 +38,7 @@ ActionDock 2.0 是面向 AI Agent 的 **Action 与 Skill 开发、测试、构�
 > 目标：从 Git 克隆了一个 Action 项目，或者拿到了导出的 Skill 包，需要在 IDE 或 Agent 中运行。
 
 - [消费与接入总览](../consumer/overview.md)：对比接入姿态，选择适合的使用方式。
-- [接入 Claude Code / Antigravity 技能库](../consumer/use-as-skill.md)：将导出的 Skill 放入技能目录，实现大模型自主调度。
+- [Agent Skill 使用指南](../consumer/use-as-skill.md)：通过 npx skills 一键安装 GitHub 技能，实现大模型自主调度与规程执行。
 - [接入 Cursor / Windsurf / IDE (MCP 服务)](../consumer/use-as-mcp.md)：作为 MCP STDIO Server 直连 IDE。
 - [独立二进制单文件运行](../consumer/standalone-run.md)：在无 Node.js / Bun 的生产服务器或沙箱免依赖运行。
 - [消费端配置与凭证注入](../consumer/configuration.md)：注入 API Token、环境变量与 SQLite 持久化配置。

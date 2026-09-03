@@ -46,9 +46,25 @@ ActionDock 将智能体工具视为标准化软件资产：
 
 ## 快速上手
 
+### 智能体极速接入（一键安装 GitHub 技能）
+
+ActionDock 是专为 AI 智能体设计的工具底座。智能体（如 Claude Code、Cursor、Antigravity、GitHub Copilot CLI 等）可直接使用 `npx skills` 从 GitHub 仓库一键安装技能：
+
+```bash
+# 为智能体一键安装 ActionDock 官方技能
+npx skills add team4u/actiondock
+
+# 或安装 GitHub 上任意开源仓库的技能
+npx skills add <owner/repo>
+```
+
+安装完成后，智能体即可在对话中自动发现该技能的业务规程，并自主调度底层原子能力完成任务。详见 [Agent Skill 使用指南](docs/consumer/use-as-skill.md)。
+
+### 开发者极速上手（创建与交付 Action）
+
 > **运行环境**：需要 [Bun](https://bun.sh/) >= 1.2.0。
 
-### 安装命令行工具
+#### 安装命令行工具
 
 ```bash
 # 安装 Bun 运行时（如尚未安装）
@@ -58,7 +74,7 @@ npm install -g bun
 npm install -g @actiondock/cli
 ```
 
-### 初始化 Action Package
+#### 初始化 Action Package
 
 ```bash
 ac init hello-tools
@@ -66,7 +82,7 @@ cd hello-tools
 bun install
 ```
 
-### 创建 Action
+#### 创建 Action
 
 编写 `actions/hello.ts`：
 
@@ -93,7 +109,7 @@ export default defineAction({
 });
 ```
 
-### 运行、测试与交付
+#### 运行、测试与交付
 
 - 本地运行：
 ```bash
@@ -249,7 +265,7 @@ actiondock/
   - [核心概览与双轨导引](docs/getting-started/overview.md)
 - **使用者指南**
   - [消费与接入总览](docs/consumer/overview.md)
-  - [接入 Claude Code / Antigravity 技能库](docs/consumer/use-as-skill.md)
+  - [Agent Skill 使用指南](docs/consumer/use-as-skill.md)
   - [接入 Cursor / Windsurf / IDE (MCP 服务)](docs/consumer/use-as-mcp.md)
   - [独立二进制单文件运行](docs/consumer/standalone-run.md)
   - [HTTP 远程微服务与 API 调度](docs/consumer/http-service.md)

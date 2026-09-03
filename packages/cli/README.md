@@ -75,7 +75,7 @@ For the full list of flags, options, remote profiles, and advanced usage, refer 
 - [Quick Start Guide](../../docs/developer/quick-start.md)
 - [MCP Integration Guide](../../docs/consumer/use-as-mcp.md)
 - [Standalone Binary Build Guide](../../docs/developer/build-and-export.md)
-- [Skill Export Guide](../../docs/consumer/use-as-skill.md)
+- [Agent Skill Usage Guide](../../docs/consumer/use-as-skill.md)
 
 ---
 
