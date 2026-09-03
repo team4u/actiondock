@@ -597,7 +597,10 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
   close(): void {
     this.isClosed = true;
     try {
-      this.db.close();
+      // 强制立即 finalize 所有未释放的 prepared statement。
+      // 否则 Windows 下未 finalize 的语句会继续持有数据库文件句柄，
+      // 导致关闭连接后目录仍无法删除（rmSync 报 EBUSY）。
+      this.db.close(true);
     } catch {
       // 忽略重复关闭异常
     }

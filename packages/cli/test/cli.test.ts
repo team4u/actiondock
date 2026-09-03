@@ -1,4 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
+// Windows 下端到端流程会多次冷启动 Bun 子进程，默认 5s 超时不够
+setDefaultTimeout(120000);
 import { existsSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -466,7 +468,7 @@ describe("CLI End-to-End", () => {
     const unlinkProc = runCli(["unlink", "team.github-ops"], tmpdir());
     expect(unlinkProc.exitCode).toBe(0);
     expect(unlinkProc.stdout.toString()).toContain("[OK] Unlinked package");
-  }, 30000);
+  }, 120000);
 
   it("manages execution profiles and dispatches remote runs via ad serve", async () => {
     // 1. Initialize project in tempDir
@@ -647,7 +649,7 @@ describe("CLI End-to-End", () => {
         }
       }
     }
-  }, 30000);
+  }, 120000);
 
   it("links workspace directory and unlinks via CLI", () => {
     const wsHome = mkdtempSync(join(tmpdir(), "actiondock-link-home-"));

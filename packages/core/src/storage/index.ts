@@ -1,5 +1,5 @@
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { getActionDockHome } from "../utils";
 import { SqliteRuntimeStorage } from "./sqlite";
 import type { RuntimeStorage, StorageOptions } from "./types";
 
@@ -33,7 +33,7 @@ export function resolveDatabasePath(
     return join(options.projectRoot, ".actiondock", "runtime.db");
   }
   // 独立执行二进制默认存储路径: ~/.actiondock/data/<package-id>/runtime.db
-  return join(homedir(), ".actiondock", "data", packageId, "runtime.db");
+  return join(getActionDockHome(), ".actiondock", "data", packageId, "runtime.db");
 }
 
 /**
@@ -57,7 +57,7 @@ export function createStorage(
  * @param customHome 自定义家目录路径（可选）
  */
 export function createGlobalStorage(customHome?: string): RuntimeStorage {
-  const baseDir = customHome || process.env.ACTIONDOCK_HOME || homedir();
+  const baseDir = getActionDockHome(customHome);
   const dbPath = join(baseDir, ".actiondock", "global.db");
   return new SqliteRuntimeStorage({ dbPath, packageId: "__global__" });
 }
