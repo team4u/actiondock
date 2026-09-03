@@ -21,4 +21,5 @@ dist/
 *.iml
 .planning/
 .claude/
+.zvec-grep/
 tmp/

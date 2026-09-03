@@ -1,6 +1,13 @@
 ---
 name: actiondock
-description: 使用 ActionDock 2.0 (ac CLI, Bun + TypeScript) 进行 AI Agent Action 与 Skill 的创建、开发、测试、独立构建、多云调度与导出的完整工具链指南。
+description: >-
+  ActionDock 2.0 开发者套件与运行指南。当用户需要执行以下任务或涉及相关概念时激活此技能：
+  创建、编写、修改或测试 ActionDock Action 工具（涉及 defineAction、ActionContext、execCli、spawnDetached）；
+  编写、校验或执行 Playbook 任务操作规程；
+  使用或排查 ac 命令行工具（包括 ac info、ac run、ac build、ac export skill、ac link、ac doctor、ac test、ac mcp 等）；
+  配置持久化状态与环境变量、管理全局路由注册表、执行环境体检；
+  将工具构建为独立可执行文件或导出为源码型与独立便携型 Agent Skill 交付包。
+  凡用户询问 ActionDock、ac 命令、@actiondock/sdk 或涉及 Agent 工具开发场景均须应用此技能。
 ---
 
 # ActionDock 2.0 (ac) 开发者技能指南
