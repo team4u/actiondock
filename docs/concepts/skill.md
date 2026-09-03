@@ -84,7 +84,7 @@ ac export skill --playbook review-pr
 ## 使用者消费方式
 
 智能体生态可通过 `npx skills` 直接从 GitHub 安装技能，导出的 Skill 包也可以直接投递给不同 AI 智能体使用：
-- **快速安装**：执行 `npx skills add team4u/actiondock` 直接装载。
+- **快速安装**：执行 `npx skills add team4u/actiondock -y` 直接装载。
 - **Claude Code**：放置在 `~/.claude/skills/<skill-name>` 或项目根目录 `.claude/skills/`
 - **Antigravity**：放置在 `~/.gemini/antigravity-cli/skills/<skill-name>`
 - **自研 Agent 框架**：解析 `actiondock.skill.json` 注册工具，将 `SKILL.md` 注入为系统提示词与规程。

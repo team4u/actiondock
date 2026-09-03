@@ -51,11 +51,11 @@ ActionDock treats an Agent Tool as a software artifact:
 ActionDock is built as a tool foundation for AI Agents. Agents (such as Claude Code, Cursor, Antigravity, and GitHub Copilot CLI) can directly install skills from GitHub repositories using `npx skills`:
 
 ```bash
-# Install ActionDock skill for your agent
-npx skills add team4u/actiondock
+# Install ActionDock skill for your agent (-y automatically confirms and installs)
+npx skills add team4u/actiondock -y
 
 # Or install any skill from GitHub
-npx skills add <owner/repo>
+npx skills add <owner/repo> -y
 ```
 
 Once installed, your agent automatically discovers the skill SOPs and executes actions. See [Agent Skill Usage Guide](docs/consumer/use-as-skill.md).

@@ -34,21 +34,21 @@ Agent Skill ───┼─ playbooks/               # 领域专家标准操作�
 
 ### 一键安装官方技能
 
-无需预先克隆代码或手动构建，直接在终端执行：
+无需预先克隆代码或手动构建，直接在终端执行（默认附带 `-y` 参数自动确认并适配当前环境，无需手动介入交互）：
 
 ```bash
 # 为当前工作区的智能体安装 ActionDock 官方技能
-npx skills add team4u/actiondock
+npx skills add team4u/actiondock -y
 ```
 
 ### 从任意 GitHub 仓库安装技能
 
 ```bash
 # 安装指定 GitHub 仓库中的技能包
-npx skills add <owner/repo>
+npx skills add <owner/repo> -y
 
 # 安装仓库内的指定子技能
-npx skills add <owner/repo> -s <skill-name>
+npx skills add <owner/repo> -s <skill-name> -y
 ```
 
 ### 常用安装参数
@@ -56,22 +56,22 @@ npx skills add <owner/repo> -s <skill-name>
 - **全局生效安装**：
   添加 `-g` 或 `--global`，安装至当前用户全局目录，供系统内所有智能体复用：
   ```bash
-  npx skills add team4u/actiondock -g
+  npx skills add team4u/actiondock -g -y
   ```
 - **指定智能体客户端**：
   使用 `-a` 或 `--agent` 指定安装目标（如 Claude Code、Cursor 等）：
   ```bash
-  npx skills add team4u/actiondock -a claude-code cursor
+  npx skills add team4u/actiondock -a claude-code cursor -y
   ```
-- **跳过交互确认**：
-  添加 `-y` 或 `--yes` 跳过终端交互提示，便于脚本自动化拉取：
+- **自动确认与非交互模式**：
+  默认推荐添加 `-y` 或 `--yes`，自动跳过终端多选与确认提示，适用于脚本自动化拉取或 Agent 自治安装：
   ```bash
   npx skills add team4u/actiondock -y
   ```
 - **独立拷贝文件**：
   添加 `--copy` 强制复制技能目录而非创建符号链接：
   ```bash
-  npx skills add team4u/actiondock --copy
+  npx skills add team4u/actiondock --copy -y
   ```
 
 ### 技能管理与维护
@@ -262,7 +262,7 @@ ActionDock 底座内置轻量级持久化存储（基于 SQLite），Action 执�
 用户或运维在终端执行命令安装技能：
 
 ```bash
-npx skills add team4u/actiondock
+npx skills add team4u/actiondock -y
 ```
 
 ### 步骤二：用户向智能体发出业务指令
