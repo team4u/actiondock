@@ -51,11 +51,11 @@ ActionDock 将智能体工具视为标准化软件资产：
 ActionDock 是专为 AI 智能体设计的工具底座。智能体（如 Claude Code、Cursor、Antigravity、GitHub Copilot CLI 等）可直接使用 `npx skills` 从 GitHub 仓库一键安装技能：
 
 ```bash
-# 为智能体一键静默安装 ActionDock 官方技能（-y 自动确认并完成适配）
-npx skills add team4u/actiondock -y
+# 为智能体全局安装 ActionDock 官方技能（-g 全局安装，-y 自动确认并完成适配）
+npx skills add team4u/actiondock -g -y
 
-# 或安装 GitHub 上任意开源仓库的技能
-npx skills add <owner/repo> -y
+# 或全局安装 GitHub 上任意开源仓库的技能
+npx skills add <owner/repo> -g -y
 ```
 
 安装完成后，智能体即可在对话中自动发现该技能的业务规程，并自主调度底层原子能力完成任务。详见 [Agent Skill 使用指南](docs/consumer/use-as-skill.md)。

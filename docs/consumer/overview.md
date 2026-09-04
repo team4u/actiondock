@@ -84,10 +84,10 @@ ad run github-tools/github.list-prs --input '{"repo": "team4u/actiondock"}'
 ```
 
 #### 姿态：作为 Agent Skill 使用（Claude Code / Antigravity / Cursor）
-智能体生态支持通过 `npx skills` 直接从 GitHub 安装技能，或通过 ActionDock CLI 一键导出本地包为带规程的标准 Skill：
+智能体生态支持通过 `npx skills` 直接从 GitHub 全局安装技能，或通过 ActionDock CLI 一键导出本地包为带规程的标准 Skill：
 ```bash
-# 方式一：使用 npx skills 直接从 GitHub 安装技能（-y 自动确认并完成适配）
-npx skills add team4u/actiondock -y
+# 方式一：使用 npx skills 直接从 GitHub 全局安装技能（-g 全局安装，-y 自动确认并完成适配）
+npx skills add team4u/actiondock -g -y
 
 # 方式二：本地一键导出并放入技能目录
 ad export skill -P team4u.github-tools --out ~/.claude/skills/github-tools
