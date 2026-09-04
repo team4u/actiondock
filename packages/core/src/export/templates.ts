@@ -163,7 +163,7 @@ ad state get KEY --package ${pkgId}
 
 - **源码本地开发模式**（若在本地源码仓库中贡献或开发）：
   \`\`\`bash
-  cd packages/cli && bun link
+  cd packages/cli && npm link
   cd ../sdk && bun link
   \`\`\`
 

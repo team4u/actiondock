@@ -82,7 +82,7 @@ export async function runDoctorChecks(options?: {
       name: "CLI Executable",
       status: "warn",
       message: "'ad' command not found in PATH",
-      fix: "Run 'npm install -g @actiondock/cli' or in SDK workspace run 'cd packages/cli && bun link'",
+      fix: "Run 'npm install -g @actiondock/cli' or in SDK workspace run 'cd packages/cli && npm link'",
     });
   }
 

@@ -31,7 +31,8 @@
       "name": "@actiondock/cli",
       "version": "2.0.0",
       "bin": {
-        "ac": "./bin/ac.js",
+        "ad": "./bin/ad.js",
+        "actiondock": "./bin/ad.js",
       },
       "dependencies": {
         "@actiondock/core": "workspace:*",

@@ -45,7 +45,7 @@ bun install
 
 # 注册全局 ad 命令行工具
 cd packages/cli
-bun link
+npm link
 
 # 注册全局 @actiondock/sdk 依赖
 cd ../sdk
@@ -76,6 +76,7 @@ bun link @actiondock/sdk
 | 症状 / 报错 | 根本原因 | 解决办法 |
 | :--- | :--- | :--- |
 | `GET .../@actiondock%2fsdk - 404` | SDK 尚未发布至 npm | 在 SDK 源码目录执行 `bun link`，随后在项目内执行 `bun link @actiondock/sdk` |
+| `command not found: ad` | 未注册全局命令或未软链接至系统路径 | 在 `packages/cli` 源码目录执行 `npm link` 将命令注册至系统路径 |
 | `SELF_SIGNED_CERT_IN_CHAIN` | 公司内网代理或自签 CA 证书 | 临时加前缀 `NODE_TLS_REJECT_UNAUTHORIZED=0` 或配置 `bun config set cafile <CA路径>` |
 | 清理 `node_modules` 后再次 404 | link 依赖不会写入 `bun.lock` | 项目内重新执行 `bun link @actiondock/sdk` 恢复链接 |
 

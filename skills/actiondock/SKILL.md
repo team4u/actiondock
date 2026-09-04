@@ -510,7 +510,7 @@ ad doctor --json
 - **源码本地开发模式**（若在 ActionDock 源码仓库中贡献或开发）：
   ```bash
   # 本地源码开发态链接 CLI 与 SDK
-  cd packages/cli && bun link
+  cd packages/cli && npm link
   cd ../sdk && bun link
 
   # Action 项目接入 SDK
