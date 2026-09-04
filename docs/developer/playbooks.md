@@ -44,7 +44,7 @@ actions:
 | `id` | `string` | 是 | Playbook 唯一标识符（如 `review-pr`） |
 | `name` | `string` | 是 | 人类与 AI 可读的规程名称 |
 | `description` | `string` | 是 | 规程功能描述与意图匹配提示 |
-| `actions` | `string[]` | 否 | 该 Playbook 所依赖的 Action ID 列表（用于按需裁剪导出） |
+| `actions` | `string[]` | 否 | 该 Playbook 所依赖的 Action ID 列表（支持当前包动作或 `<package-id>/<action-id>` 跨包完全限定标识符） |
 
 ---
 
@@ -65,10 +65,10 @@ ad playbook show review-pr
 
 ## 校验 Playbook
 
-使用 `ad playbook validate` 命令检查 Playbook 文件格式与引用的 Action 是否存在（支持当前项目或全局 linked packages）：
+使用 `ad playbook validate` 命令检查 Playbook 文件格式与引用的 Action 是否存在（支持当前项目或全局已链接包）：
 
 ```bash
-# 校验当前包或全局所有 Playbook
+# 校验当前包或全局所有 Playbook（自动支持跨包 Action 解析）
 ad playbook validate
 
 # 校验指定 Playbook

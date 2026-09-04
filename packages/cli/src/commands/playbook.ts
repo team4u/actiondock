@@ -9,6 +9,7 @@ import {
   loadActions,
   loadPlaybooks,
   loadProjectConfig,
+  resolveActionProject,
   resolvePlaybookProject,
   resolveTarget,
 } from "@actiondock/core";
@@ -380,8 +381,13 @@ This playbook provides task execution guidance for AI Agents.
 
             if (pb.actions) {
               for (const actId of pb.actions) {
-                if (!actions.has(actId)) {
-                  warnings.push(`Referenced action '${actId}' not found in package '${target.packageId}'`);
+                if (actions.has(actId)) {
+                  continue;
+                }
+                try {
+                  await resolveActionProject(actId, target.root);
+                } catch (err: any) {
+                  warnings.push(err.message);
                 }
               }
             }

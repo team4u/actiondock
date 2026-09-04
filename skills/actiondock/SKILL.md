@@ -107,6 +107,13 @@ actions:
 - 若滚动更新步骤超时或返回错误，应依序调用 rollback-k8s 回退至前一稳定版本，并向运维频道发送告警。
 ```
 
+### 跨包 Action 依赖与规程编排
+
+当规程需要调度其他包中的 Action 时：
+- **依赖声明**：在 `actions` 列表中使用完全限定标识符 `<package-id>/<action-id>`（例如 `team4u.github-tools/github.list-issues`），或在无命名冲突时使用短标识。
+- **执行指引**：在 SOP 正文中指引智能体使用完全限定标识符调用命令：`ad run <package-id>/<action-id> --input '<json>'`。
+- **跨包校验**：执行 `ad playbook validate` 时，校验器会自动结合当前包与全局已链接包（通过 `ad link` 挂载）解析 Action，跨包依赖有效时将顺利通过校验，杜绝缺失警告。
+
 ### 规程命令行操作
 ```bash
 # 列出可用规程（支持多关键词模糊检索）
@@ -115,7 +122,7 @@ ad playbook list [patterns...] [-i "<regex>"]
 # 查看规程内容详情
 ad playbook show <id>
 
-# 校验规程格式与依赖 Action 合法性
+# 校验规程格式与依赖 Action 合法性（支持自动跨包解析）
 ad playbook validate [id]
 ```
 

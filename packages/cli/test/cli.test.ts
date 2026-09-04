@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 // Windows 下端到端流程会多次冷启动 Bun 子进程，默认 5s 超时不够
 setDefaultTimeout(120000);
-import { existsSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -464,7 +464,30 @@ describe("CLI End-to-End", () => {
     expect(outsideRes.ok).toBe(true);
     expect(outsideRes.data.message).toBe("Howdy, Globetrotter!");
 
-    // 12. unlink
+    // 12. Validate cross-package action in playbook
+    const pkgBDir = join(tmpdir(), `test-ad-pkgb-${Date.now()}`);
+    mkdirSync(pkgBDir, { recursive: true });
+    runCli(["init", "--id", "team.consumer-pkg", "."], pkgBDir);
+    runCli(
+      [
+        "playbook",
+        "create",
+        "cross-playbook",
+        "-d",
+        "Cross package SOP",
+        "-a",
+        "team.github-ops/sample.greet",
+      ],
+      pkgBDir
+    );
+    const crossVal = runCli(["playbook", "validate", "cross-playbook", "--json"], pkgBDir);
+    expect(crossVal.exitCode).toBe(0);
+    const crossValData = JSON.parse(crossVal.stdout.toString());
+    expect(crossValData.valid).toBe(true);
+    expect(crossValData.results[0].warnings.length).toBe(0);
+    rmSync(pkgBDir, { recursive: true, force: true });
+
+    // 13. unlink
     const unlinkProc = runCli(["unlink", "team.github-ops"], tmpdir());
     expect(unlinkProc.exitCode).toBe(0);
     expect(unlinkProc.stdout.toString()).toContain("[OK] Unlinked package");
