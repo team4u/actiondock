@@ -12,8 +12,9 @@ description: >-
 
 # ActionDock 2.0 开发者技能指南
 
-ActionDock 2.0 是面向 AI Agent Action 与 Skill 的工程化开发与分发工具链，命令行工具为 `ad`。
-ActionDock 支持**源码型**与**独立便携型**双模交付形态，让开发者使用 TypeScript 快速开发原子工具（Action）与业务操作规程（Playbook），一键导出自包含的 Agent Skill 资产。
+ActionDock 2.0 是面向 AI Agent Action 与 Skill 的工程化开发、测试、构建与分发工具链，命令行工具为 `ad`。
+ActionDock 默认运行于 Node.js 22+ / 24 LTS 生产环境，仅在执行单文件二进制构建时按需调用外部 Bun 编译器。
+ActionDock 支持**源码型**与**独立便携型**双模交付形态，让开发者使用 TypeScript 快速开发原子 Action 工具与业务 Playbook 规程，一键导出自包含的 Agent Skill 资产。
 
 ---
 
@@ -23,10 +24,10 @@ ActionDock 支持**源码型**与**独立便携型**双模交付形态，让开�
 
 | 业务意图与用户需求 | 执行范式与决策建议 | 核心命令与操作路径 |
 | :--- | :--- | :--- |
-| **新建工程项目** | 生成标准工程骨架，包含配置清单、代码与规程目录 | `ad init [directory] --id <id> --name <name>` |
+| **新建工程项目** | 生成标准工程骨架，包含清单、配置、代码与规程目录 | `ad init [directory] --id <id> --name <name>` |
 | **探索可用能力** | 模糊意图检索，优先检查规程与工具清单 | `ad info <patterns...>` 或 `ad info -i <pattern>` |
-| **执行复合业务任务** | 规程优先原则，阅读 SOP 后依序调度 | `ad playbook show <id>`，依步骤调度对应 Action |
-| **调用单点原子工具** | 使用文件传参，避免终端引号转义崩溃 | `ad run <pkg>/<action> --input-file <path>` |
+| **执行复合业务任务** | 规程优先原则，阅读规程后依序调度 | `ad playbook show <id>`，依步骤调度对应 Action |
+| **调用单点原子工具** | 使用文件传参，避免终端转义问题 | `ad run <pkg>/<action> --input-file <path>` |
 | **新建 Action 工具** | 脚手架生成并实现标准输入输出契约 | `ad action create <id>`，编写 `actions/<name>.ts` |
 | **编排业务操作规程** | 规范编写多步骤操作引导文档 | `ad playbook create <id>`，编写 `playbooks/<id>.md` |
 | **单元测试与逻辑验证** | 纯内存沙箱测试，验证多步与状态逻辑 | `ad test`，结合 `createTestRuntime` |
@@ -57,7 +58,7 @@ ad info -i "github|gitlab"
 # 查看当前工作区注册树与挂载结构
 ad info --tree
 
-# 查看指定包详情（支持包 ID 或物理路径）
+# 查看指定包详情（支持包标识或物理路径）
 ad info <package-id>
 ad info -P <package-id>
 ```
@@ -66,7 +67,7 @@ ad info -P <package-id>
 
 ## Playbook 操作规程编排规范
 
-Playbook（存放于 `playbooks/<id>.md`）是针对复合业务场景的标准操作规程（SOP）。
+Playbook（存放于 `playbooks/<id>.md`）是针对复合业务场景的标准操作规程。
 规程的核心职责是明确各步骤调用次序、前后置校验逻辑与数据流动，供智能体准确依循执行。
 
 ### 规程标准结构与编写模板
@@ -92,13 +93,13 @@ actions:
 
 ## 操作步骤
 
-- **前置构建**：
+- 前置构建：
   调用 build-image 构建部署镜像，入参传入代码版本分支与构建标签。
   若构建返回失败或超时，立即终止发布流程并报告错误。
-- **服务健康探测**：
+- 服务健康探测：
   调用 health-check 探测集群当前节点就绪情况。
   确认关键指标正常后方可推进下一阶段。
-- **执行滚动更新**：
+- 执行滚动更新：
   调用 deploy-k8s 将新版本推送到集群，入参指定目标集群命名空间与副本数。
   监听发布完成状态。
 
@@ -111,7 +112,7 @@ actions:
 
 当规程需要调度其他包中的 Action 时：
 - **依赖声明**：在 `actions` 列表中使用完全限定标识符 `<package-id>/<action-id>`（例如 `team4u.github-tools/github.list-issues`），或在无命名冲突时使用短标识。
-- **执行指引**：在 SOP 正文中指引智能体使用完全限定标识符调用命令：`ad run <package-id>/<action-id> --input '<json>'`。
+- **执行指引**：在规程正文中指引智能体使用完全限定标识符调用命令：`ad run <package-id>/<action-id> --input '<json>'`。
 - **跨包校验**：执行 `ad playbook validate` 时，校验器会自动结合当前包与全局已链接包（通过 `ad link` 挂载）解析 Action，跨包依赖有效时将顺利通过校验，杜绝缺失警告。
 
 ### 规程命令行操作
@@ -130,7 +131,7 @@ ad playbook validate [id]
 
 ## Action 创建与代码开发规范
 
-每个 Action 放置于 `actions/<name>.ts` 中，使用 `@actiondock/sdk` 导出的 [`defineAction`](file:///root/code/action-dock/packages/sdk/src/action.ts) 声明。
+每个 Action 放置于 `actions/<name>.ts` 中，使用 `@actiondock/sdk` 导出的 [`defineAction`](file:///root/code/action-dock/packages/sdk/src/action.ts) 声明。项目元数据与契约声明以 `actiondock.manifest.json` 为单一事实源。
 
 ### 脚手架创建 Action
 ```bash
@@ -175,23 +176,29 @@ export default defineAction<Input, Output>({
   },
 
   async run(input, ctx) {
-    // 1. 配置读取：命令行参数覆盖 > 本地存储 > 环境变量 > 默认配置
+    // 配置读取：命令行参数覆盖 > 本地存储 > 环境变量 > 默认配置
     const token = ctx.config.get<string>("GITHUB_TOKEN");
     const api = ctx.config.get("GITHUB_API", "https://api.github.com");
 
-    // 2. 状态读写：跨执行生命周期的持久化存储（支持秒级过期 TTL）
+    // 状态读写：跨执行生命周期的持久化存储（支持秒级过期 TTL）
     const lastSync = await ctx.state.get<string>("last_sync");
     await ctx.state.set("last_sync", new Date().toISOString(), 3600);
 
-    // 3. 日志记录：输出至 stderr，严禁调用 console.log 污染标准输出
+    // 日志记录：输出至 stderr，严禁调用 console.log 污染标准输出
     ctx.log.info(`正在抓取仓库数据: ${input.repo}`);
 
-    // 4. 协作式取消：响应外部取消信号与超时中断
+    // 进度报告：向上层调用者汇报执行进度
+    ctx.progress.report(1, 10, "正在连接 GitHub API");
+
+    // 协作式取消：响应外部取消信号与超时中断
     if (ctx.signal.aborted) {
       throw new Error("任务已被调用方中止");
     }
 
-    // 5. 级联调用：内存调用其他已导入 Action（内置递归检测与取消信号传递）
+    // 进程调度：安全调度外部命令
+    // const procRes = await ctx.process.exec("git", ["status"], { cwd: process.cwd() });
+
+    // 级联调用：内存调用其他已导入 Action（内置递归检测与取消信号传递）
     // const detail = await ctx.actions.invoke(otherAction, { ... });
 
     return {
@@ -204,7 +211,7 @@ export default defineAction<Input, Output>({
 
 ### 运行时上下文方法速查表
 
-传递给 Action 的 [`ActionContext`](file:///root/code/action-dock/packages/sdk/src/context.ts) 包含以下核心能力：
+传递给 Action 的 [`ActionContext`](file:///root/code/action-dock/packages/sdk/src/types.ts) 包含以下核心能力：
 
 | 上下文模块 | 核心方法签名 | 职责说明 |
 | :--- | :--- | :--- |
@@ -214,23 +221,29 @@ export default defineAction<Input, Output>({
 | | `set<T>(key: string, value: T, ttl?: number): Promise<void>` | 写入状态数据，`ttl` 单位为秒 |
 | | `delete(key: string): Promise<boolean>` | 删除指定状态键 |
 | | `clear(prefix?: string): Promise<number>` | 清空命名空间或指定前缀下的所有状态 |
+| | `keys(prefix?: string): Promise<string[]>` | 列出指定前缀下的所有状态键 |
 | | `scope(namespace: string): StateStore` | 派生出隔离命名的子状态存储 |
-| `ctx.actions` | `invoke<I, O>(action: ActionDefinition<I, O>, input: I): Promise<O>` | 内存级联调用其他 Action，继承取消信号与防环链 |
+| `ctx.process` | `exec(command: string, args?: string[], options?: ProcessExecOptions): Promise<ProcessResult>` | 执行外部命令，具备超时、取消与缓冲区超限保护 |
+| | `spawnDetached(options: DetachedProcessOptions): Promise<DetachedProcessResult>` | 启动后台守护进程并探针就绪状态 |
+| `ctx.actions` | `invoke<I, O>(action: ActionDefinition<I, O> \| ActionRef \| string, input?: I): Promise<O>` | 内存级联调用其他 Action，继承取消信号与防环保护 |
 | `ctx.log` | `info / warn / error / debug(msg: string, data?: unknown): void` | 结构化诊断日志，强制定向至标准错误流 |
-| `ctx.signal` | `signal: AbortSignal` | 协作式中断信号，用于长 I/O 与耗时循环终止 |
+| `ctx.progress` | `report(current: number, total?: number, message?: string): void` | 汇报当前执行进度 |
+| `ctx.signal` | `signal: AbortSignal` | 协作式中断信号，用于长操作与耗时循环终止 |
+| `ctx.run` | `{ id: string; rootId: string; parentId?: string }` | 当前执行任务追踪标识 |
 
 ---
 
 ## 外部命令行进程调度最佳实践
 
-当 Action 需要调用宿主系统外部命令（例如 `git`、`docker`、`agent-browser` 等）时，按场景选用标准调度工具：
+当 Action 需要调用宿主系统外部命令（例如 `git`、`docker`、`curl` 等）时，按场景选用标准调度工具：
 
-### 常规 CLI 命令同步执行（使用 `execCli`）
+### 常规命令行命令执行（使用 `ctx.process.exec` 或 `execCli`）
 
 适用于一次性工具或已处于常驻状态的命令：
-- 自动利用 `Bun.which` 跨平台解析命令物理路径。
+- 自动跨平台解析命令物理路径。
 - 同步排空管道并断开流句柄，从根本上防止子进程句柄继承引发的管道死锁挂起。
 - 内置毫秒级超时强杀与 `ctx.signal` 取消支持。
+- 具备输出缓冲区上限保护（默认 10MB），防止异常大输出撑爆内存。
 
 ```typescript
 import { defineAction, execCli } from "@actiondock/sdk";
@@ -238,10 +251,10 @@ import { defineAction, execCli } from "@actiondock/sdk";
 export default defineAction({
   id: "git.check-status",
   async run(input, ctx) {
-    const res = execCli("git", ["status", "--porcelain"], {
+    const res = await ctx.process.exec("git", ["status", "--porcelain"], {
       cwd: process.cwd(),
       signal: ctx.signal,
-      timeout: 10000,
+      timeoutMs: 10000,
     });
 
     if (res.timedOut) {
@@ -258,29 +271,30 @@ export default defineAction({
 });
 ```
 
-### 会拉起后台守护进程的命令（使用 `spawnDetached`）
+### 会拉起后台守护进程的命令（使用 `ctx.process.spawnDetached` 或 `spawnDetached`）
 
-当命令在初次调用时会拉起常驻后台守护进程（例如 `agent-browser open`）：
-- **管道隔离**：标准输入输出全部采用 `ignore`，后台守护进程继承不到任何管道句柄，杜绝同步管道永久等待 EOF。
+当命令在初次调用时会拉起常驻后台守护进程：
+- **管道隔离**：标准输入输出全部采用隔离模式，后台守护进程不继承主进程管道句柄，杜绝同步管道等待挂起。
 - **冷启动解耦**：等待前端启动进程退出，避开冷启动资源竞争。
 - **轮询就绪**：通过轻量探针回调轮询确认目标服务稳定就绪。
 
 ```typescript
-import { defineAction, execCli, spawnDetached } from "@actiondock/sdk";
+import { defineAction } from "@actiondock/sdk";
 
 export default defineAction({
   id: "browser.open-page",
   async run(input: { url: string }, ctx) {
-    let stableUrl = "", stableTimes = 0;
+    let stableUrl = "";
+    let stableTimes = 0;
 
-    const ready = await spawnDetached({
+    const readyRes = await ctx.process.spawnDetached({
       command: "agent-browser",
       args: ["open", input.url, "--timeout", "30s"],
       signal: ctx.signal,
-      intervalMs: 500,
-      timeoutMs: 30000,
+      probeIntervalMs: 500,
+      probeTimeoutMs: 30000,
       probe: async () => {
-        const probeRes = execCli("agent-browser", ["get", "url"], { timeout: 3000 });
+        const probeRes = await ctx.process.exec("agent-browser", ["get", "url"], { timeoutMs: 3000 });
         const current = probeRes.stdout.trim();
         if (current && current === stableUrl && current !== "about:blank") {
           return ++stableTimes >= 2;
@@ -291,7 +305,7 @@ export default defineAction({
       },
     });
 
-    if (!ready) {
+    if (!readyRes.ready) {
       throw new Error(`浏览器页面加载超时未就绪: ${input.url}`);
     }
 
@@ -306,30 +320,34 @@ export default defineAction({
 
 ### 参数传递健壮性建议
 
-在通过命令行向 Action 传递复合对象参数时，直接在行内拼接 JSON 字符串极易受到宿主终端双引号与单引号转义影响。**强烈推荐使用临时文件传参**：
+在通过命令行向 Action 传递复合对象参数时，直接在行内拼接 JSON 字符串极易受到宿主终端双引号与单引号转义影响。推荐使用临时文件传参：
 
-```bash
-# 方式一（推荐）：通过临时文件传递参数（彻底规避终端转义）
-cat << 'EOF' > /tmp/action-input.json
-{
-  "repo": "team4u/actiondock",
-  "maxCount": 20
-}
-EOF
-ad run github.list-issues --input-file /tmp/action-input.json
+- 推荐方式：通过临时文件传递参数（规避终端引号转义）
+  ```bash
+  cat << 'EOF' > /tmp/action-input.json
+  {
+    "repo": "team4u/actiondock",
+    "maxCount": 20
+  }
+  EOF
+  ad run github.list-issues --input-file /tmp/action-input.json
+  ```
 
-# 方式二：跨包使用 Package-Qualified ID 执行
-ad run team4u.github-tools/github.list-issues --input-file /tmp/action-input.json
+- 跨包使用方式：使用完全限定标识符执行
+  ```bash
+  ad run team4u.github-tools/github.list-issues --input-file /tmp/action-input.json
+  ```
 
-# 方式三：行内传递简单参数（仅适用于无复杂嵌套的简单场景）
-ad run github.list-issues --input '{"repo":"team4u/actiondock"}'
-```
+- 简易方式：行内传递简单参数（适用于扁平无嵌套参数）
+  ```bash
+  ad run github.list-issues --input '{"repo":"team4u/actiondock"}'
+  ```
 
 ### 标准输出格式与响应契约
 
-ActionDock 保证标准输出（stdout）始终为纯净的标准 JSON Envelope，所有日志与诊断信息均输出到标准错误流（stderr）：
+ActionDock 保证标准输出 stdout 始终为纯净的标准 JSON 信封，所有日志与诊断信息均输出到标准错误流 stderr：
 
-- **成功响应**：
+- 成功响应：
   ```json
   {
     "ok": true,
@@ -338,7 +356,7 @@ ActionDock 保证标准输出（stdout）始终为纯净的标准 JSON Envelope�
   }
   ```
 
-- **失败响应**：
+- 失败响应：
   ```json
   {
     "ok": false,
@@ -355,7 +373,7 @@ ActionDock 保证标准输出（stdout）始终为纯净的标准 JSON Envelope�
 
 ## 单元测试与验证
 
-ActionDock SDK 提供了纯内存测试沙箱 [`createTestRuntime`](file:///root/code/action-dock/packages/sdk/src/testing.ts)，无需启动真实数据库或网络环境：
+ActionDock 提供了纯内存测试沙箱 [`createTestRuntime`](file:///root/code/action-dock/packages/testing/src/test-runtime.ts)（在 `@actiondock/testing` 与 `@actiondock/sdk` 中均有导出），可与标准测试套件无缝配合：
 
 ```typescript
 import { describe, expect, it } from "bun:test";
@@ -388,7 +406,7 @@ ad test
 
 ## 构建与 Skill 导出交付
 
-ActionDock 支持将 Action Package 一键打包分发给不同场景的智能体系统：
+ActionDock 支持将 Action Package 打包分发给不同场景的智能体系统：
 
 ### 源码型 Skill 导出（默认标准交付形态）
 ```bash
@@ -398,29 +416,29 @@ ad export skill -o ./dist/my-skill
 # 跨目录指定目标包导出
 ad export skill -P <package-id> -o ./dist/my-skill
 
-# 规程驱动的裁剪导出（仅打包指定 Playbook 及其依赖的 Action 源码）
+# 规程驱动的裁剪导出（仅打包指定 Playbook 及其依赖的 Action 源码闭包）
 ad export skill --playbook deploy-service -o ./dist/deploy-skill
 ```
 
 导出的源码型目录结构：
 ```text
 dist/my-skill/
-├── SKILL.md                  # 面向智能体的调用说明
-├── actiondock.json          # Package 清单与配置定义
+├── SKILL.md                  # 面向智能体的调用说明文档
+├── actiondock.manifest.json  # 声明式清单事实源与配置定义
 ├── package.json             # 依赖声明
 ├── actions/                 # TypeScript Action 源码
-└── playbooks/                # 任务 SOP 规程文件
+└── playbooks/                # 任务规程文件
 ```
 
 ### 独立便携型 Skill 导出（预编译单文件可执行产物）
 ```bash
-# 导出包含预构建二进制文件的便携 Skill
+# 导出包含预构建独立可执行程序的便携 Skill
 ad export skill --standalone -o ./dist/portable-skill
 ```
 
 ### 独立可执行程序构建
 ```bash
-# 编译全量 Action 为单一跨平台可执行二进制文件
+# 编译全量 Action 为单一跨平台可执行二进制文件（依赖外部 Bun 编译器）
 ad build -o ./dist/bin/my-tools
 
 # 交叉编译到不同操作系统与架构
@@ -436,11 +454,10 @@ ad build -t windows-x64 -o ./dist/bin/my-tools-windows.exe
 ### 跨目录包目标参数 (`-P, --package`)
 
 在任意目录下执行命令时，通过 `-P <id|path>` 精确指定目标包，无需切换当前工作目录：
-
-- **读取目标包配置**：`ad config get GITHUB_TOKEN -P team4u.github-tools`
-- **写入目标包配置**：`ad config set GITHUB_TOKEN "ghp_xxx" -P team4u.github-tools`
-- **查看目标包状态**：`ad state list -P team4u.github-tools`
-- **查询目标包执行记录**：`ad runs list -P team4u.github-tools`
+- 读取目标包配置：`ad config get GITHUB_TOKEN -P team4u.github-tools`
+- 写入目标包配置：`ad config set GITHUB_TOKEN "ghp_xxx" -P team4u.github-tools`
+- 查看目标包状态：`ad state list -P team4u.github-tools`
+- 查询目标包执行记录：`ad runs list -P team4u.github-tools`
 
 ### 全局包挂载与工作区路由 (`ad link`)
 ```bash
@@ -468,18 +485,17 @@ ad unlink --prune
 
 | 报错现象或错误码 | 根本原因分析 | 标准自愈修复步骤 |
 | :--- | :--- | :--- |
-| `ACTION_NOT_FOUND` 或找不到包 | 全局路由表中未注册该包，或挂载路径已移动失效 | 执行 `ad info --tree` 确认挂载状态；若路径失效执行 `ad unlink -p` 清理幽灵软链，随后在包目录下重新执行 `ad link` |
+| `ACTION_NOT_FOUND` 或找不到包 | 全局路由表中未注册该包，或挂载路径已移动失效 | 执行 `ad info --tree` 确认挂载状态；若路径失效执行 `ad unlink -p` 清理软链，随后在包目录下重新执行 `ad link` |
 | `INPUT_VALIDATION_FAILED` | 输入参数未满足 Action 声明的 `inputSchema` 约束 | 执行 `ad action show <id>` 查看完整的参数定义与必填字段要求，核对数据类型与字段名称 |
 | `OUTPUT_VALIDATION_FAILED` | Action `run` 方法返回的对象不匹配 `outputSchema` | 检查 Action 代码返回字段是否包含所有必须属性 |
-| `CONFIG_VALIDATION_FAILED` | 未注入当前 Action 依赖的必填配置项 | 执行 `ad config schema` 查看缺失的配置项，通过 `ad config set <key> <val>` 补全配置 |
-| `ACTION_TIMEOUT` | 执行时间超过预设阈值 | 优化 I/O 链路，或在调用时添加 `--timeout 60s` 调大超时时间 |
-| `ad` 命令行工具未找到 | 宿主未安装 ActionDock CLI，或 PATH 未生效 | 执行 `npm install -g @actiondock/cli` 或本地编译链接（详见下方冷启动安装指引） |
-| 外部 CLI 提示找不到命令 | 宿主未安装对应工具，或 PATH 未生效 | 使用绝对路径调用，或执行 `Bun.which("command")` 检查环境可执行文件完整路径 |
+| `CONFIG_VALIDATION_FAILED` | 未注入当前 Action 依赖的必填配置项 | 执行 `ad config list` 查看缺失的配置项，通过 `ad config set <key> <val>` 补全配置 |
+| `ACTION_TIMEOUT` | 执行时间超过预设阈值 | 优化底层调用耗时，或在调用时添加 `--timeout 60s` 增大超时时间 |
+| `ad` 命令行工具未找到 | 宿主未安装 ActionDock CLI，或 PATH 未生效 | 执行 `npm install -g @actiondock/cli` 或本地链接（详见下方冷启动安装指引） |
+| 外部命令提示找不到 | 宿主未安装对应工具，或 PATH 未生效 | 使用绝对路径调用，或检查系统环境变量 PATH 中是否包含该可执行文件 |
 
 ### 环境体检工具 (`ad doctor`)
 
 当遭遇未知环境异常或多项命令连续失败时，执行全量体检诊断：
-
 ```bash
 # 运行全套系统与项目依赖健康诊断
 ad doctor
@@ -490,41 +506,34 @@ ad doctor --json
 
 ### 基础开发环境初始化（全新环境冷启动参考）
 
-仅在宿主环境完全缺少 Bun 或 ActionDock 工具链时执行一次：
-
-- **安装 Bun 运行时**（若系统未安装）：
-  ```bash
-  npm install -g bun
-  ```
-
-- **全局安装 ActionDock 命令行工具**：
+仅在宿主环境完全缺少 Node.js 或 ActionDock 工具链时执行：
+- 全局安装 ActionDock 命令行工具：
   ```bash
   npm install -g @actiondock/cli
   ```
 
-- **验证工具就绪**：
+- 验证工具就绪：
   ```bash
   ad --version
   ```
 
-- **源码本地开发模式**（若在 ActionDock 源码仓库中贡献或开发）：
+- 本地贡献与源码开发模式（若在 ActionDock 源码仓库中开发）：
   ```bash
-  # 本地源码开发态链接 CLI 与 SDK
+  # 本地源码开发态链接全局 CLI
   cd packages/cli && npm link
-  cd ../sdk && bun link
 
-  # Action 项目接入 SDK
+  # Action 项目接入开发态 SDK
   cd /path/to/my-action-project
-  bun link @actiondock/sdk
+  npm link @actiondock/sdk
   ```
 
 ---
 
 ## Agent 行动核心红线
 
-- **规程优先原则**：面对业务编排任务，必须优先检索并遵循现成的 Playbook，严禁无视既有 SOP 规程擅自拼凑 Action 调度次序。
+- **规程优先原则**：面对业务编排任务，必须优先检索并遵循现成的 Playbook，严禁无视既有规程擅自拼凑 Action 调度次序。
 - **按需排查原则**：严禁在每次任务执行前盲目进行前置环境检查、依赖重装或运行 `ad doctor` 体检；默认环境完备就绪，仅在实际遇到报错时按需修复。
-- **通道隔离原则**：严禁在 Action 内部调用 `console.log`，所有日志一律使用 `ctx.log`（输出至 `stderr`），确保 `stdout` 仅输出标准 JSON Envelope。
-- **严格 Schema 原则**：必须为每个 Action 定义完备的 `inputSchema` 与 `outputSchema`。
-- **响应式取消原则**：对于网络 I/O 与耗时循环，始终绑定并检测 `ctx.signal`。
-- **统一命名空间**：多 Package 交互时，Action 引用必须采用 `<package-id>/<action-id>`。
+- **通道隔离原则**：严禁在 Action 内部调用 `console.log`，所有日志一律使用 `ctx.log`（输出至 `stderr`），确保 `stdout` 仅输出标准 JSON 信封。
+- **严格契约原则**：必须为每个 Action 定义完备的 `inputSchema` 与 `outputSchema`。
+- **响应式取消原则**：对于网络通信与耗时循环，始终绑定并检测 `ctx.signal`。
+- **统一命名空间**：多包交互时，Action 引用必须采用完全限定标识符 `<package-id>/<action-id>`。
