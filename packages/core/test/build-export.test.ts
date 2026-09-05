@@ -76,7 +76,7 @@ describe("Build & Skill Export Contract", () => {
     expect(listProc.exitCode).toBe(0);
     const listJson = JSON.parse(listProc.stdout.toString());
     expect(listJson).toEqual([
-      { id: "sample.greet", description: "Greet a user with configurable greeting" },
+      { id: "sample.greet", description: "Greeting action demonstrating basic input, config, and state usage" },
     ]);
 
     // 1b. Test binary `list --intent greet --json` and `list nonexist --no-fallback --json`

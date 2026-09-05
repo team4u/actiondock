@@ -3,6 +3,9 @@ import type {
   ActionContext,
   ActionDefinition,
   ExecutionResult,
+  JsonValue,
+  ProcessAPI,
+  ProgressReporter,
   RuntimeError,
   RunRecord,
 } from "@actiondock/sdk";
@@ -10,6 +13,7 @@ import type { ProjectConfig } from "../project/types";
 import { validateSchema } from "../schema/validator";
 import type { RuntimeStorage, TerminalRunStatus } from "../storage/types";
 import { RuntimeConfig, RuntimeStateStore, StderrLogger } from "./context";
+import { getProcessExecutor } from "./process";
 
 /**
  * ActionRunner 初始化配置选项。
@@ -25,20 +29,34 @@ export interface RunnerOptions {
   configOverrides?: Record<string, unknown>;
   /** 预加载的 Action 映射表 */
   actions?: Map<string, ActionDefinition>;
+  /** 外部注入的进程执行器 */
+  process?: ProcessAPI;
 }
 
 /**
  * 启动 Action 执行时的可选控制参数。
  */
 export interface ExecutionStartOptions {
+  /** 根运行 ID */
+  rootRunId?: string;
   /** 父级运行 ID（嵌套调用场景下建立调用链树） */
   parentRunId?: string;
+  /** 包物理实例标识 */
+  packageInstanceId?: string;
+  /** 快照代次标识 */
+  generationId?: string;
+  /** 执行所有者标识 */
+  ownerId?: string;
   /** 调用栈数组（用于检测 A -> B -> A 环路死锁） */
   callStack?: string[];
   /** 外部传入的 AbortSignal 取消信号 */
   signal?: AbortSignal;
   /** 最大超时时间（毫秒），超时将自动中止执行并标记为 ACTION_TIMEOUT */
   timeoutMs?: number;
+  /** 外部注入的进程执行器 */
+  process?: ProcessAPI;
+  /** 外部注入的进度报告器 */
+  progress?: ProgressReporter;
 }
 
 /**
@@ -173,11 +191,15 @@ export class ActionRunner {
     // 3. 插入初始运行记录 (状态: running)
     const initialRun: RunRecord = {
       id: runId,
-      packageId: this.packageId,
-      actionId: action.id,
+      rootRunId: options.rootRunId || options.parentRunId || runId,
       parentRunId: options.parentRunId,
+      packageId: this.packageId,
+      packageInstanceId: options.packageInstanceId || this.packageId,
+      actionId: action.id,
+      generationId: options.generationId || "1",
+      ownerId: options.ownerId || "local",
       status: "running",
-      input,
+      input: input as JsonValue | undefined,
       startedAt,
     };
     this.storage.createRun(initialRun);
@@ -235,9 +257,12 @@ export class ActionRunner {
         childInput: I
       ): Promise<O> => {
         const childResult = await this.execute(childAction, childInput, {
+          rootRunId: initialRun.rootRunId,
           parentRunId: runId,
           callStack,
           signal: controller.signal,
+          process: options.process,
+          progress: options.progress,
         });
         if (!childResult.ok) {
           const err = new Error(childResult.error.message);
@@ -253,8 +278,17 @@ export class ActionRunner {
       config,
       state,
       actions: invoker,
+      process: options.process || getProcessExecutor(),
       log,
+      progress: options.progress || {
+        report() {},
+      },
       signal: controller.signal,
+      run: {
+        id: runId,
+        rootId: initialRun.rootRunId,
+        parentId: options.parentRunId,
+      },
     };
 
     // 6. 执行 Action 业务逻辑并与取消/超时信号进行竞态
@@ -295,7 +329,7 @@ export class ActionRunner {
         return {
           ok: true,
           runId,
-          data: rawOutput,
+          data: rawOutput as JsonValue,
         };
       } catch (err: any) {
         if (isTimeout) {

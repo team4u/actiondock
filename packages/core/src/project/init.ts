@@ -16,13 +16,14 @@ export interface InitOptions {
 /**
  * 在目标目录初始化一个完整的 ActionDock 2.0 Action Package 脚手架。
  * 生成内容包括：
- * 1. actiondock.json（项目元数据与配置声明）
- * 2. package.json（模块依赖与 bun test 脚本）
- * 3. tsconfig.json（现代 ESNext / Bundler 编译配置）
- * 4. .gitignore（排除持久化 db、node_modules、dist）
- * 5. actions/greet.ts（标准示例 Action，演示 config、state、log 使用）
- * 6. playbooks/greet-user.md（标准 SOP Playbook 演示）
- * 7. tests/greet.test.ts（基于 createTestRuntime 的零依赖单元测试）
+ * - actiondock.json（项目元数据与配置声明）
+ * - actiondock.manifest.json（声明式元数据清单事实源）
+ * - package.json（Node.js 标准脚本与依赖声明）
+ * - tsconfig.json（现代 NodeNext 模块规范）
+ * - .gitignore（排除持久化 db、node_modules、dist）
+ * - actions/greet.ts（标准示例 Action，演示 config、state、log 使用）
+ * - playbooks/greet-user.md（标准 SOP Playbook 演示）
+ * - tests/greet.test.ts（基于 node:test 与 @actiondock/testing 的测试用例）
  * 
  * @param targetDir 目标项目目录
  * @param options 初始化选项
@@ -58,20 +59,58 @@ export function initProject(targetDir: string, options: InitOptions = {}): void 
     JSON.stringify(actiondockJson, null, 2) + "\n"
   );
 
-  // 2. package.json
+  // 2. actiondock.manifest.json
+  const manifestJson = {
+    schemaVersion: 1,
+    actions: {
+      "sample.greet": {
+        entry: "actions/greet.ts",
+        description: "Greeting action demonstrating basic input, config, and state usage",
+        inputSchema: {
+          type: "object",
+          properties: {
+            name: {
+              type: "string",
+              description: "Name of the person to greet",
+            },
+          },
+          required: ["name"],
+        },
+        outputSchema: {
+          type: "object",
+          properties: {
+            message: { type: "string" },
+            timesGreeted: { type: "number" },
+          },
+          required: ["message", "timesGreeted"],
+        },
+        uses: [],
+        tags: ["sample"],
+      },
+    },
+    assets: [],
+  };
+  writeFileSync(
+    join(root, "actiondock.manifest.json"),
+    JSON.stringify(manifestJson, null, 2) + "\n"
+  );
+
+  // 3. package.json
   const packageJson = {
     name: id,
     version: "0.1.0",
     description,
     type: "module",
     scripts: {
-      test: "bun test",
+      test: "node --import tsx --test tests/*.test.ts",
     },
     dependencies: {
-      "@actiondock/sdk": "^2.0.0",
+      "@actiondock/sdk": "^2.0.2",
     },
     devDependencies: {
-      "@types/bun": "latest",
+      "@actiondock/testing": "^2.0.2",
+      "@types/node": "^22.0.0",
+      "tsx": "^4.19.0",
       "typescript": "^5.7.0",
     },
   };
@@ -80,15 +119,15 @@ export function initProject(targetDir: string, options: InitOptions = {}): void 
     JSON.stringify(packageJson, null, 2) + "\n"
   );
 
-  // 3. tsconfig.json
+  // 4. tsconfig.json
   const tsconfigJson = {
     compilerOptions: {
-      target: "ESNext",
-      module: "ESNext",
-      moduleResolution: "bundler",
+      target: "ES2022",
+      module: "NodeNext",
+      moduleResolution: "NodeNext",
       strict: true,
       skipLibCheck: true,
-      types: ["bun-types"],
+      types: ["node"],
     },
   };
   writeFileSync(
@@ -96,16 +135,17 @@ export function initProject(targetDir: string, options: InitOptions = {}): void 
     JSON.stringify(tsconfigJson, null, 2) + "\n"
   );
 
-  // 4. .gitignore
+  // 5. .gitignore
   const gitignore = `.actiondock/
 node_modules/
 dist/
-bun.lock
-*.db
+build/
+*.log
+.env
 `;
   writeFileSync(join(root, ".gitignore"), gitignore);
 
-  // 5. actions/
+  // 6. actions/
   const actionsDir = join(root, "actions");
   mkdirSync(actionsDir, { recursive: true });
 
@@ -113,12 +153,15 @@ bun.lock
 
 export default defineAction({
   id: "sample.greet",
-  description: "Greet a user with configurable greeting",
+  description: "Greeting action demonstrating basic input, config, and state usage",
 
   inputSchema: {
     type: "object",
     properties: {
-      name: { type: "string", description: "Name of person to greet" },
+      name: {
+        type: "string",
+        description: "Name of the person to greet",
+      },
     },
     required: ["name"],
   },
@@ -127,9 +170,9 @@ export default defineAction({
     type: "object",
     properties: {
       message: { type: "string" },
-      timestamp: { type: "string" },
+      timesGreeted: { type: "number" },
     },
-    required: ["message", "timestamp"],
+    required: ["message", "timesGreeted"],
   },
 
   async run(input: { name: string }, ctx) {
@@ -141,14 +184,14 @@ export default defineAction({
 
     return {
       message: \`\${greeting}, \${input.name}!\`,
-      timestamp: new Date().toISOString(),
+      timesGreeted: count,
     };
   },
 });
 `;
   writeFileSync(join(actionsDir, "greet.ts"), sampleAction);
 
-  // 6. playbooks/
+  // 7. playbooks/
   const playbooksDir = join(root, "playbooks");
   mkdirSync(playbooksDir, { recursive: true });
 
@@ -166,12 +209,13 @@ actions:
 `;
   writeFileSync(join(playbooksDir, "greet-user.md"), samplePlaybook);
 
-  // 7. tests/
+  // 8. tests/
   const testsDir = join(root, "tests");
   mkdirSync(testsDir, { recursive: true });
 
-  const sampleTest = `import { describe, expect, it } from "bun:test";
-import { createTestRuntime } from "@actiondock/sdk";
+  const sampleTest = `import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { createTestRuntime } from "@actiondock/testing";
 import greetAction from "../actions/greet";
 
 describe("greet action", () => {
@@ -181,12 +225,12 @@ describe("greet action", () => {
     });
 
     const res1 = await runtime.run(greetAction, { name: "Alice" });
-    expect(res1.message).toBe("Hi, Alice!");
-    expect(await runtime.state.get("greet_count")).toBe(1);
+    assert.equal(res1.message, "Hi, Alice!");
+    assert.equal(await runtime.state.get("greet_count"), 1);
 
     const res2 = await runtime.run(greetAction, { name: "Bob" });
-    expect(res2.message).toBe("Hi, Bob!");
-    expect(await runtime.state.get("greet_count")).toBe(2);
+    assert.equal(res2.message, "Hi, Bob!");
+    assert.equal(await runtime.state.get("greet_count"), 2);
   });
 });
 `;

@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import {
   ActionRunner,
   createStorage,
@@ -11,9 +11,11 @@ import {
   getPackageSlug,
   listLinkedPackages,
   loadActions,
+  loadManifest,
   loadProjectConfig,
   resolveActionProject,
   resolveTarget,
+  saveManifest,
   validateSchema,
 } from "@actiondock/core";
 import { Command } from "commander";
@@ -281,6 +283,35 @@ export default defineAction<Input, Output>({
 `;
 
         writeFileSync(targetFullFile, template, "utf-8");
+
+        const manifest = loadManifest(root) || { schemaVersion: 1, actions: {}, assets: [] };
+        manifest.actions = manifest.actions || {};
+        manifest.actions[id] = {
+          entry: join(config.actionsDir || "actions", targetRelFile),
+          description: desc,
+          inputSchema: {
+            type: "object",
+            properties: {
+              exampleParam: {
+                type: "string",
+                description: "Example parameter description",
+              },
+            },
+            required: [],
+          },
+          outputSchema: {
+            type: "object",
+            properties: {
+              success: { type: "boolean" },
+              result: {},
+            },
+            required: ["success"],
+          },
+          uses: [],
+          tags: [],
+        };
+        saveManifest(root, manifest);
+
         console.log(`[OK] Created Action '${id}' at ${targetFullFile}`);
         console.log(`\nTo run this action:`);
         console.log(`  ad action run ${id} --input '{"exampleParam": "hello"}'`);

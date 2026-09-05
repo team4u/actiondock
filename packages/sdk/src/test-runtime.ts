@@ -1,9 +1,11 @@
+import { execCli, spawnDetached } from "./cli";
 import type {
   ActionContext,
   ActionDefinition,
   ActionInvoker,
   Config,
   Logger,
+  ProcessResult,
   StateStore,
 } from "./types";
 
@@ -248,12 +250,75 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
       }
       callStack.push(action.id);
       try {
+        const runId = "test-" + Math.random().toString(36).slice(2, 10);
         const ctx: ActionContext = {
           config,
           state,
           actions: invoker,
+          process: {
+            async exec(command, args, options) {
+              const res = await execCli(command, args, {
+                cwd: options?.cwd,
+                env: options?.env,
+                timeout: options?.timeoutMs,
+                throwOnError: options?.throwOnError,
+                signal: options?.signal,
+              });
+              return {
+                ok: res.ok,
+                exitCode: res.exitCode,
+                stdout: res.stdout,
+                stderr: res.stderr,
+                raw: res.raw,
+                timedOut: res.timedOut ?? false,
+                cancelled: Boolean(options?.signal?.aborted),
+                durationMs: res.durationMs,
+              };
+            },
+            async spawnDetached(options) {
+              const probeFn = options.probe
+                ? async () => {
+                    const fakeRes: ProcessResult = {
+                      ok: true,
+                      exitCode: 0,
+                      stdout: "",
+                      stderr: "",
+                      raw: new Uint8Array(),
+                      timedOut: false,
+                      cancelled: false,
+                      durationMs: 0,
+                    };
+                    return options.probe!(fakeRes);
+                  }
+                : () => true;
+
+              const ready = await spawnDetached({
+                command: options.command,
+                args: options.args,
+                cwd: options.cwd,
+                env: options.env,
+                timeoutMs: options.timeoutMs,
+                intervalMs: options.probeIntervalMs,
+                signal: options.signal,
+                probe: probeFn,
+              });
+
+              return {
+                ok: ready,
+                ready,
+                durationMs: 0,
+              };
+            },
+          },
           log: logger,
+          progress: {
+            report() {},
+          },
           signal,
+          run: {
+            id: runId,
+            rootId: runId,
+          },
         };
         return await action.run(input, ctx);
       } finally {

@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import YAML from "yaml";
@@ -68,29 +69,28 @@ export function loadProjectConfig(projectRoot: string): ProjectConfig {
 }
 
 /**
- * 探测宿主系统中可用的包管理工具（优先级：bun > pnpm > yarn > npm）。
+ * 探测宿主系统中可用的包管理工具（优先级：pnpm > npm > yarn > bun）。
  */
 function getInstallCommand(): string[] {
   const candidates: [string, string][] = [
-    ["bun", "install"],
     ["pnpm", "install"],
-    ["yarn", "install"],
     ["npm", "install"],
+    ["yarn", "install"],
+    ["bun", "install"],
   ];
   for (const [pm, action] of candidates) {
     try {
-      const check = Bun.spawnSync([pm, "--version"], {
-        stdout: "pipe",
-        stderr: "pipe",
+      const check = spawnSync(pm, ["--version"], {
+        stdio: "pipe",
       });
-      if (check.exitCode === 0) {
+      if (check.status === 0) {
         return [pm, action];
       }
     } catch {
       // 继续探测下一个候选包管理器
     }
   }
-  return ["bun", "install"];
+  return ["npm", "install"];
 }
 
 /**
@@ -131,13 +131,12 @@ export function ensureProjectDependencies(projectRoot: string, force = false): b
       `[actiondock] Installing dependencies using ${installCmd[0]} for '${pkg.name || basename(projectRoot)}'...\n`
     );
 
-    const proc = Bun.spawnSync(installCmd, {
+    const proc = spawnSync(installCmd[0], installCmd.slice(1), {
       cwd: projectRoot,
-      stdout: "pipe",
-      stderr: "pipe",
+      stdio: "pipe",
     });
 
-    if (proc.exitCode !== 0) {
+    if (proc.status !== 0) {
       const errText = proc.stderr?.toString() || `Unknown error during ${installCmd[0]} install`;
       process.stderr.write(`[actiondock] Warning: Dependency installation failed: ${errText}\n`);
       return false;

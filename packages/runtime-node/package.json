@@ -1,0 +1,43 @@
+{
+  "name": "@actiondock/runtime-node",
+  "version": "2.0.2",
+  "description": "Node.js Runtime Adapters for ActionDock (node:sqlite, execa, tsx, http)",
+  "type": "module",
+  "main": "./src/index.ts",
+  "module": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    }
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "scripts": {
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@actiondock/core": "workspace:*",
+    "@actiondock/sdk": "workspace:*",
+    "execa": "^9.5.2",
+    "tsx": "^4.19.3"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  },
+  "keywords": ["actiondock", "runtime", "node", "sqlite", "execa", "tsx"],
+  "author": "team4u",
+  "license": "Apache-2.0"
+}

@@ -1,5 +1,16 @@
 import type { ServerRuntimeRegistry } from "./runtime-registry";
 
+export interface CoreHttpServerInstance {
+  port: number;
+  stop: (closeActiveConnections?: boolean) => void | Promise<void>;
+}
+
+export type CoreHttpServerFactory = (options: {
+  port: number;
+  host: string;
+  fetch: (req: Request) => Promise<Response>;
+}) => CoreHttpServerInstance | Promise<CoreHttpServerInstance>;
+
 /**
  * 启动 ActionDock HTTP Runner 服务端的配置选项。
  */

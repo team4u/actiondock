@@ -1,21 +1,21 @@
-import { Database } from "bun:sqlite";
 import { chmodSync, existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { RuntimeError, RunRecord } from "@actiondock/sdk";
-import type { RuntimeStorage, StateEntry, StorageOptions, TerminalRunStatus } from "./types";
+import type { JsonValue, RuntimeError, RunRecord } from "@actiondock/sdk";
+import { createDefaultSqliteDriver } from "./driver";
+import type {
+  RuntimeStorage,
+  SqliteDriver,
+  StateEntry,
+  StorageOptions,
+  TerminalRunStatus,
+} from "./types";
 
 /**
- * 基于 Bun 内置原生 SQLite (`bun:sqlite`) 实现的高性能运行时存储。
- * 
- * 关键特性：
- * 1. 零网络与外部进程开销：直接通过 Bun C-API 高速操作 SQLite 数据库文件。
- * 2. 高并发优化：开启 `WAL`（Write-Ahead Logging）模式与 `synchronous = NORMAL`，支持高并发读写。
- * 3. 严格的安全权限：自动配置目录权限为 0700，数据库文件权限为 0600。
- * 4. 自动版本迁移：基于 SQLite `user_version` PRAGMA 实现无损自动 Schema 迁移。
- * 5. TTL 自动过期：支持状态的过期清理。
+ * 统一 SQLite 运行时存储实现。
+ * 通过 SqliteDriver 抽象驱动，解耦底层具体运行时引擎（Node.js / Bun）。
  */
 export class SqliteRuntimeStorage implements RuntimeStorage {
-  private db: Database;
+  private driver: SqliteDriver;
   private packageId: string;
   private isClosed = false;
 
@@ -30,12 +30,13 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
           mkdirSync(dir, { recursive: true, mode: 0o700 });
           chmodSync(dir, 0o700);
         } catch {
-          // 忽略系统权限设置失败（如只读文件系统）
+          // 忽略系统权限设置失败
         }
       }
     }
 
-    this.db = new Database(dbPath);
+    this.driver = options.driver ?? createDefaultSqliteDriver(dbPath);
+
     if (dbPath !== ":memory:" && existsSync(dbPath)) {
       try {
         chmodSync(dbPath, 0o600);
@@ -47,21 +48,21 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
   }
 
   /**
-   * 初始化数据库 Schema 并执行版本迁移。
+   * 初始化数据库结构并执行无损版本升级。
    */
   private init(): void {
-    this.db.exec("PRAGMA journal_mode = WAL;");
-    this.db.exec("PRAGMA synchronous = NORMAL;");
+    this.driver.exec("PRAGMA journal_mode = WAL;");
+    this.driver.exec("PRAGMA synchronous = NORMAL;");
 
     // 读取 Schema 版本号
-    const versionRes = this.db.query("PRAGMA user_version;").get() as {
+    const versionRes = this.driver.prepare("PRAGMA user_version;").get<{
       user_version: number;
-    };
+    }>();
     const version = versionRes?.user_version ?? 0;
 
     if (version === 0) {
-      this.db.transaction(() => {
-        this.db.exec(`
+      this.driver.transaction(() => {
+        this.driver.exec(`
           CREATE TABLE IF NOT EXISTS config (
             package_id TEXT NOT NULL,
             key TEXT NOT NULL,
@@ -82,52 +83,91 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
 
           CREATE TABLE IF NOT EXISTS runs (
             id TEXT PRIMARY KEY,
-            package_id TEXT NOT NULL,
-            action_id TEXT NOT NULL,
+            root_run_id TEXT NOT NULL,
             parent_run_id TEXT,
+            package_id TEXT NOT NULL,
+            package_instance_id TEXT NOT NULL,
+            action_id TEXT NOT NULL,
+            generation_id TEXT NOT NULL,
+            owner_id TEXT NOT NULL,
             status TEXT NOT NULL,
             input_json TEXT,
             output_json TEXT,
             error_json TEXT,
             started_at TEXT NOT NULL,
-            finished_at TEXT
+            finished_at TEXT,
+            duration_ms INTEGER
           );
 
           CREATE INDEX IF NOT EXISTS idx_runs_action ON runs(package_id, action_id);
+          CREATE INDEX IF NOT EXISTS idx_runs_root ON runs(root_run_id);
           CREATE INDEX IF NOT EXISTS idx_runs_started ON runs(started_at DESC);
           CREATE INDEX IF NOT EXISTS idx_state_expires ON state(expires_at);
 
-          PRAGMA user_version = 2;
+          PRAGMA user_version = 3;
         `);
-      })();
+      });
     } else if (version < 2) {
-      this.db.transaction(() => {
+      this.driver.transaction(() => {
         try {
-          const columns = this.db
-            .query("PRAGMA table_info(state);")
-            .all() as Array<{ name: string }>;
+          const columns = this.driver
+            .prepare("PRAGMA table_info(state);")
+            .all<{ name: string }>();
           const hasExpiresAt = columns.some((c) => c.name === "expires_at");
           if (!hasExpiresAt) {
-            this.db.exec("ALTER TABLE state ADD COLUMN expires_at TEXT;");
+            this.driver.exec("ALTER TABLE state ADD COLUMN expires_at TEXT;");
           }
         } catch {
-          // If table doesn't exist yet or already altered
+          // 忽略表已存在或字段已添加
         }
-        this.db.exec(
+        this.driver.exec(
           "CREATE INDEX IF NOT EXISTS idx_state_expires ON state(expires_at);"
         );
-        this.db.exec("PRAGMA user_version = 2;");
-      })();
+        this.driver.exec("PRAGMA user_version = 2;");
+      });
+    }
+
+    // 升级至版本 3：补齐运行记录调用链与实例字段
+    if (version < 3) {
+      this.driver.transaction(() => {
+        try {
+          const columns = this.driver
+            .prepare("PRAGMA table_info(runs);")
+            .all<{ name: string }>();
+          const columnNames = new Set(columns.map((c) => c.name));
+
+          if (!columnNames.has("root_run_id")) {
+            this.driver.exec("ALTER TABLE runs ADD COLUMN root_run_id TEXT DEFAULT '';");
+            this.driver.exec("UPDATE runs SET root_run_id = id WHERE root_run_id = '' OR root_run_id IS NULL;");
+          }
+          if (!columnNames.has("package_instance_id")) {
+            this.driver.exec("ALTER TABLE runs ADD COLUMN package_instance_id TEXT DEFAULT '';");
+          }
+          if (!columnNames.has("generation_id")) {
+            this.driver.exec("ALTER TABLE runs ADD COLUMN generation_id TEXT DEFAULT '1';");
+          }
+          if (!columnNames.has("owner_id")) {
+            this.driver.exec("ALTER TABLE runs ADD COLUMN owner_id TEXT DEFAULT 'local';");
+          }
+          if (!columnNames.has("duration_ms")) {
+            this.driver.exec("ALTER TABLE runs ADD COLUMN duration_ms INTEGER;");
+          }
+        } catch {
+          // 忽略已存在的字段
+        }
+        this.driver.exec("CREATE INDEX IF NOT EXISTS idx_runs_root ON runs(root_run_id);");
+        this.driver.exec("PRAGMA user_version = 3;");
+      });
     }
   }
 
-  // --- Config ---
+  // --- Config 配置管理 ---
 
   getConfig<T = unknown>(key: string): T | undefined {
-    const stmt = this.db.prepare(
+    const stmt = this.driver.prepare(
       "SELECT value_json FROM config WHERE package_id = ? AND key = ?"
     );
-    const row = stmt.get(this.packageId, key) as { value_json: string } | null;
+    const row = stmt.get<{ value_json: string }>(this.packageId, key);
     if (!row || row.value_json === undefined || row.value_json === null) {
       return undefined;
     }
@@ -139,13 +179,10 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
   }
 
   listConfig(): Record<string, unknown> {
-    const stmt = this.db.prepare(
+    const stmt = this.driver.prepare(
       "SELECT key, value_json FROM config WHERE package_id = ?"
     );
-    const rows = stmt.all(this.packageId) as Array<{
-      key: string;
-      value_json: string;
-    }>;
+    const rows = stmt.all<{ key: string; value_json: string }>(this.packageId);
     const result: Record<string, unknown> = {};
     for (const row of rows) {
       try {
@@ -158,7 +195,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
   }
 
   setConfig(key: string, value: unknown): void {
-    const stmt = this.db.prepare(`
+    const stmt = this.driver.prepare(`
       INSERT INTO config (package_id, key, value_json, updated_at)
       VALUES (?, ?, ?, ?)
       ON CONFLICT(package_id, key) DO UPDATE SET
@@ -171,36 +208,36 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
   }
 
   deleteConfig(key: string): boolean {
-    const stmt = this.db.prepare(
+    const stmt = this.driver.prepare(
       "DELETE FROM config WHERE package_id = ? AND key = ?"
     );
     const res = stmt.run(this.packageId, key);
     return res.changes > 0;
   }
 
-  // --- State ---
+  // --- State 状态管理 ---
 
-  async getState<T = unknown>(
-    namespace: string,
-    key: string
-  ): Promise<T | undefined> {
-    const stmt = this.db.prepare(
+  async getState<T = unknown>(namespace: string, key: string): Promise<T | undefined> {
+    const stmt = this.driver.prepare(
       "SELECT value_json, expires_at FROM state WHERE package_id = ? AND namespace = ? AND key = ?"
     );
-    const row = stmt.get(this.packageId, namespace, key) as {
-      value_json: string;
-      expires_at: string | null;
-    } | null;
+    const row = stmt.get<{ value_json: string; expires_at?: string }>(
+      this.packageId,
+      namespace,
+      key
+    );
     if (!row || row.value_json === undefined || row.value_json === null) {
       return undefined;
     }
+
     if (row.expires_at) {
-      const expiresTime = new Date(row.expires_at).getTime();
-      if (!isNaN(expiresTime) && expiresTime <= Date.now()) {
-        await this.deleteState(namespace, key);
+      const expires = new Date(row.expires_at).getTime();
+      if (Date.now() >= expires) {
+        this.deleteState(namespace, key).catch(() => {});
         return undefined;
       }
     }
+
     try {
       return JSON.parse(row.value_json) as T;
     } catch {
@@ -212,60 +249,94 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     targetKey: string,
     namespace?: string
   ): Promise<StateEntry | undefined> {
-    let row: any = null;
+    let ns = namespace;
+    let actualKey = targetKey;
 
-    if (namespace !== undefined) {
-      const stmt = this.db.prepare(
-        "SELECT * FROM state WHERE package_id = ? AND namespace = ? AND key = ?"
+    if (!ns && targetKey.includes(":")) {
+      const parts = targetKey.split(":");
+      ns = parts[0];
+      actualKey = parts.slice(1).join(":");
+    }
+
+    if (ns) {
+      const val = await this.getState<T>(ns, actualKey);
+      if (val === undefined) return undefined;
+
+      const stmt = this.driver.prepare(
+        "SELECT updated_at, expires_at FROM state WHERE package_id = ? AND namespace = ? AND key = ?"
       );
-      row = stmt.get(this.packageId, namespace, targetKey);
-    } else {
-      // 1. 先在根命名空间精确查找
-      const rootStmt = this.db.prepare(
-        "SELECT * FROM state WHERE package_id = ? AND namespace = '' AND key = ?"
+      const row = stmt.get<{ updated_at: string; expires_at?: string }>(
+        this.packageId,
+        ns,
+        actualKey
       );
-      row = rootStmt.get(this.packageId, targetKey);
 
-      // 2. 若未命中且包含 ':'，尝试通过 (namespace || ':' || key) 复合匹配
-      if (!row && targetKey.includes(":")) {
-        const compositeStmt = this.db.prepare(
-          "SELECT * FROM state WHERE package_id = ? AND (namespace || ':' || key) = ?"
-        );
-        row = compositeStmt.get(this.packageId, targetKey);
+      return {
+        packageId: this.packageId,
+        namespace: ns,
+        key: actualKey,
+        fullKey: targetKey,
+        value: val,
+        updatedAt: row?.updated_at || new Date().toISOString(),
+        expiresAt: row?.expires_at,
+      };
+    }
+
+    const val = await this.getState<T>("", actualKey);
+    if (val !== undefined) {
+      const stmt = this.driver.prepare(
+        "SELECT updated_at, expires_at FROM state WHERE package_id = ? AND namespace = ? AND key = ?"
+      );
+      const row = stmt.get<{ updated_at: string; expires_at?: string }>(
+        this.packageId,
+        "",
+        actualKey
+      );
+      return {
+        packageId: this.packageId,
+        namespace: "",
+        key: actualKey,
+        fullKey: actualKey,
+        value: val,
+        updatedAt: row?.updated_at || new Date().toISOString(),
+        expiresAt: row?.expires_at,
+      };
+    }
+
+    const stmt = this.driver.prepare(
+      "SELECT namespace, key, value_json, updated_at, expires_at FROM state WHERE package_id = ? AND key = ?"
+    );
+    const rows = stmt.all<{
+      namespace: string;
+      key: string;
+      value_json: string;
+      updated_at: string;
+      expires_at?: string;
+    }>(this.packageId, actualKey);
+
+    const now = Date.now();
+    for (const row of rows) {
+      if (row.expires_at && now >= new Date(row.expires_at).getTime()) {
+        continue;
       }
-    }
-
-    if (!row) return undefined;
-
-    // 校验过期
-    if (row.expires_at) {
-      const expiresTime = new Date(row.expires_at).getTime();
-      if (!isNaN(expiresTime) && expiresTime <= Date.now()) {
-        await this.deleteState(row.namespace, row.key);
-        return undefined;
+      let parsedVal: unknown;
+      try {
+        parsedVal = JSON.parse(row.value_json);
+      } catch {
+        parsedVal = row.value_json;
       }
+      return {
+        packageId: this.packageId,
+        namespace: row.namespace,
+        key: row.key,
+        fullKey: row.namespace ? `${row.namespace}:${row.key}` : row.key,
+        value: parsedVal,
+        updatedAt: row.updated_at,
+        expiresAt: row.expires_at,
+      };
     }
 
-    let parsedVal: unknown;
-    try {
-      parsedVal =
-        row.value_json !== null && row.value_json !== undefined
-          ? JSON.parse(row.value_json)
-          : row.value_json;
-    } catch {
-      parsedVal = row.value_json;
-    }
-
-    const fullKey = row.namespace ? `${row.namespace}:${row.key}` : row.key;
-    return {
-      packageId: row.package_id,
-      namespace: row.namespace,
-      key: row.key,
-      fullKey,
-      value: parsedVal as T,
-      updatedAt: row.updated_at,
-      expiresAt: row.expires_at || undefined,
-    };
+    return undefined;
   }
 
   async setState<T = unknown>(
@@ -274,12 +345,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     value: T,
     ttl?: number
   ): Promise<void> {
-    const expiresAtStr =
-      typeof ttl === "number" && ttl > 0
-        ? new Date(Date.now() + ttl * 1000).toISOString()
-        : null;
-
-    const stmt = this.db.prepare(`
+    const stmt = this.driver.prepare(`
       INSERT INTO state (package_id, namespace, key, value_json, updated_at, expires_at)
       VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(package_id, namespace, key) DO UPDATE SET
@@ -288,195 +354,207 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
         expires_at = excluded.expires_at
     `);
     const valJson = JSON.stringify(value);
-    const now = new Date().toISOString();
-    stmt.run(this.packageId, namespace, key, valJson, now, expiresAtStr);
+    const now = new Date();
+    const updatedAt = now.toISOString();
+
+    let expiresAt: string | null = null;
+    if (typeof ttl === "number" && ttl > 0) {
+      expiresAt = new Date(now.getTime() + ttl * 1000).toISOString();
+    }
+
+    stmt.run(this.packageId, namespace, key, valJson, updatedAt, expiresAt);
   }
 
   async deleteState(namespace: string, key: string): Promise<boolean> {
-    const stmt = this.db.prepare(
+    const stmt = this.driver.prepare(
       "DELETE FROM state WHERE package_id = ? AND namespace = ? AND key = ?"
     );
     const res = stmt.run(this.packageId, namespace, key);
     return res.changes > 0;
   }
 
-  async deleteStateSmart(
-    targetKey: string,
-    namespace?: string
-  ): Promise<boolean> {
-    if (namespace !== undefined) {
-      return this.deleteState(namespace, targetKey);
-    }
-    // 1. 先尝试在根命名空间删除
-    const rootDeleted = await this.deleteState("", targetKey);
-    if (rootDeleted) return true;
+  async deleteStateSmart(targetKey: string, namespace?: string): Promise<boolean> {
+    let ns = namespace;
+    let actualKey = targetKey;
 
-    // 2. 若 targetKey 包含 ':'，尝试按 (namespace || ':' || key) 复合键删除
-    if (targetKey.includes(":")) {
-      const stmt = this.db.prepare(
-        "DELETE FROM state WHERE package_id = ? AND (namespace || ':' || key) = ?"
-      );
-      const res = stmt.run(this.packageId, targetKey);
-      return res.changes > 0;
+    if (!ns && targetKey.includes(":")) {
+      const parts = targetKey.split(":");
+      ns = parts[0];
+      actualKey = parts.slice(1).join(":");
     }
 
-    return false;
+    if (ns !== undefined) {
+      return this.deleteState(ns, actualKey);
+    }
+
+    const deletedRoot = await this.deleteState("", actualKey);
+    if (deletedRoot) return true;
+
+    const stmt = this.driver.prepare(
+      "DELETE FROM state WHERE package_id = ? AND key = ?"
+    );
+    const res = stmt.run(this.packageId, actualKey);
+    return res.changes > 0;
   }
 
   async clearState(
     options: { namespace?: string; all?: boolean; prefix?: string } = {}
   ): Promise<number> {
-    if (options.all) {
-      const stmt = this.db.prepare("DELETE FROM state WHERE package_id = ?");
-      const res = stmt.run(this.packageId);
-      return res.changes;
-    }
+    let sql = "DELETE FROM state WHERE package_id = ?";
+    const params: any[] = [this.packageId];
 
     if (options.namespace !== undefined) {
-      if (options.prefix) {
-        const stmt = this.db.prepare(
-          "DELETE FROM state WHERE package_id = ? AND namespace = ? AND key LIKE ?"
-        );
-        const res = stmt.run(
-          this.packageId,
-          options.namespace,
-          `${options.prefix}%`
-        );
-        return res.changes;
-      } else {
-        const stmt = this.db.prepare(
-          "DELETE FROM state WHERE package_id = ? AND namespace = ?"
-        );
-        const res = stmt.run(this.packageId, options.namespace);
-        return res.changes;
-      }
+      sql += " AND namespace = ?";
+      params.push(options.namespace);
     }
 
     if (options.prefix) {
-      const pattern = `${options.prefix}%`;
-      const stmt = this.db.prepare(
-        "DELETE FROM state WHERE package_id = ? AND (CASE WHEN namespace = '' THEN key ELSE (namespace || ':' || key) END) LIKE ?"
-      );
-      const res = stmt.run(this.packageId, pattern);
-      return res.changes;
+      sql += " AND key LIKE ? ESCAPE '\\'";
+      const escapedPrefix = options.prefix.replace(/([%_\\])/g, "\\$1");
+      params.push(`${escapedPrefix}%`);
     }
 
-    const stmt = this.db.prepare(
-      "DELETE FROM state WHERE package_id = ? AND namespace = ''"
-    );
-    const res = stmt.run(this.packageId);
+    const stmt = this.driver.prepare(sql);
+    const res = stmt.run(...params);
     return res.changes;
   }
 
   async listStateKeys(
     namespace?: string | null,
-    prefix = ""
+    prefix?: string
   ): Promise<string[]> {
-    const nowStr = new Date().toISOString();
-    try {
-      const cleanupStmt = this.db.prepare(
-        "DELETE FROM state WHERE package_id = ? AND expires_at IS NOT NULL AND expires_at <= ?"
-      );
-      cleanupStmt.run(this.packageId, nowStr);
-    } catch {
-      // Best-effort cleanup
+    let sql = "SELECT namespace, key, expires_at FROM state WHERE package_id = ?";
+    const params: any[] = [this.packageId];
+
+    if (namespace !== null && namespace !== undefined) {
+      sql += " AND namespace = ?";
+      params.push(namespace);
     }
 
-    if (namespace === null || namespace === undefined) {
-      const pattern = prefix ? `${prefix}%` : "%";
-      const stmt = this.db.prepare(
-        "SELECT namespace, key FROM state WHERE package_id = ? AND (expires_at IS NULL OR expires_at > ?) AND (CASE WHEN namespace = '' THEN key ELSE (namespace || ':' || key) END) LIKE ? ORDER BY namespace ASC, key ASC"
-      );
-      const rows = stmt.all(this.packageId, nowStr, pattern) as Array<{
-        namespace: string;
-        key: string;
-      }>;
-      return rows.map((r) => (r.namespace ? `${r.namespace}:${r.key}` : r.key));
-    } else {
-      const pattern = prefix ? `${prefix}%` : "%";
-      const stmt = this.db.prepare(
-        "SELECT key FROM state WHERE package_id = ? AND namespace = ? AND key LIKE ? AND (expires_at IS NULL OR expires_at > ?) ORDER BY key ASC"
-      );
-      const rows = stmt.all(
-        this.packageId,
-        namespace,
-        pattern,
-        nowStr
-      ) as Array<{
-        key: string;
-      }>;
-      return rows.map((r) => r.key);
+    if (prefix) {
+      sql += " AND key LIKE ? ESCAPE '\\'";
+      const escapedPrefix = prefix.replace(/([%_\\])/g, "\\$1");
+      params.push(`${escapedPrefix}%`);
     }
+
+    const stmt = this.driver.prepare(sql);
+    const rows = stmt.all<{
+      namespace: string;
+      key: string;
+      expires_at?: string;
+    }>(...params);
+
+    const now = Date.now();
+    const result: string[] = [];
+
+    for (const row of rows) {
+      if (row.expires_at && now >= new Date(row.expires_at).getTime()) {
+        continue;
+      }
+      if (namespace !== null && namespace !== undefined) {
+        result.push(row.key);
+      } else {
+        result.push(row.namespace ? `${row.namespace}:${row.key}` : row.key);
+      }
+    }
+
+    return result;
   }
 
   async listStateEntries(
     options: { namespace?: string; prefix?: string } = {}
   ): Promise<StateEntry[]> {
-    const nowStr = new Date().toISOString();
-    try {
-      const cleanupStmt = this.db.prepare(
-        "DELETE FROM state WHERE package_id = ? AND expires_at IS NOT NULL AND expires_at <= ?"
-      );
-      cleanupStmt.run(this.packageId, nowStr);
-    } catch {}
-
-    const pattern = options.prefix ? `${options.prefix}%` : "%";
-    let rows: any[] = [];
+    let sql = "SELECT namespace, key, value_json, updated_at, expires_at FROM state WHERE package_id = ?";
+    const params: any[] = [this.packageId];
 
     if (options.namespace !== undefined) {
-      const stmt = this.db.prepare(
-        "SELECT * FROM state WHERE package_id = ? AND namespace = ? AND key LIKE ? AND (expires_at IS NULL OR expires_at > ?) ORDER BY key ASC"
-      );
-      rows = stmt.all(this.packageId, options.namespace, pattern, nowStr);
-    } else {
-      const stmt = this.db.prepare(
-        "SELECT * FROM state WHERE package_id = ? AND (expires_at IS NULL OR expires_at > ?) AND (CASE WHEN namespace = '' THEN key ELSE (namespace || ':' || key) END) LIKE ? ORDER BY namespace ASC, key ASC"
-      );
-      rows = stmt.all(this.packageId, nowStr, pattern);
+      sql += " AND namespace = ?";
+      params.push(options.namespace);
     }
 
-    return rows.map((row) => {
+    if (options.prefix) {
+      sql += " AND key LIKE ? ESCAPE '\\'";
+      const escapedPrefix = options.prefix.replace(/([%_\\])/g, "\\$1");
+      params.push(`${escapedPrefix}%`);
+    }
+
+    const stmt = this.driver.prepare(sql);
+    const rows = stmt.all<{
+      namespace: string;
+      key: string;
+      value_json: string;
+      updated_at: string;
+      expires_at?: string;
+    }>(...params);
+
+    const now = Date.now();
+    const results: StateEntry[] = [];
+
+    for (const row of rows) {
+      if (row.expires_at && now >= new Date(row.expires_at).getTime()) {
+        continue;
+      }
+
       let parsedVal: unknown;
       try {
-        parsedVal =
-          row.value_json !== null && row.value_json !== undefined
-            ? JSON.parse(row.value_json)
-            : row.value_json;
+        parsedVal = JSON.parse(row.value_json);
       } catch {
         parsedVal = row.value_json;
       }
-      return {
-        packageId: row.package_id,
+
+      results.push({
+        packageId: this.packageId,
         namespace: row.namespace,
         key: row.key,
         fullKey: row.namespace ? `${row.namespace}:${row.key}` : row.key,
         value: parsedVal,
         updatedAt: row.updated_at,
-        expiresAt: row.expires_at || undefined,
-      };
-    });
+        expiresAt: row.expires_at,
+      });
+    }
+
+    return results;
   }
 
-  // --- Runs ---
+  // --- Runs 运行记录管理 ---
 
-  createRun(record: RunRecord): void {
-    const stmt = this.db.prepare(`
+  createRun(record: RunRecord | any): void {
+    const stmt = this.driver.prepare(`
       INSERT INTO runs (
-        id, package_id, action_id, parent_run_id, status,
-        input_json, output_json, error_json, started_at, finished_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, root_run_id, parent_run_id, package_id, package_instance_id,
+        action_id, generation_id, owner_id, status, input_json, output_json,
+        error_json, started_at, finished_at, duration_ms
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
+
+    const rootRunId = record.rootRunId || record.id;
+    const parentRunId = record.parentRunId || null;
+    const packageInstanceId = record.packageInstanceId || record.packageId || this.packageId;
+    const generationId = record.generationId || "1";
+    const ownerId = record.ownerId || "local";
+    const inputJson = record.input !== undefined ? JSON.stringify(record.input) : null;
+    const outputJson = record.output !== undefined ? JSON.stringify(record.output) : null;
+    const errorJson = record.error ? JSON.stringify(record.error) : null;
+    const finishedAt = record.finishedAt || null;
+    const durationMs = typeof record.durationMs === "number" ? record.durationMs : null;
+
     stmt.run(
       record.id,
-      this.packageId,
+      rootRunId,
+      parentRunId,
+      record.packageId || this.packageId,
+      packageInstanceId,
       record.actionId,
-      record.parentRunId || null,
+      generationId,
+      ownerId,
       record.status,
-      record.input !== undefined ? JSON.stringify(record.input) : null,
-      record.output !== undefined ? JSON.stringify(record.output) : null,
-      record.error ? JSON.stringify(record.error) : null,
+      inputJson,
+      outputJson,
+      errorJson,
       record.startedAt,
-      record.finishedAt || null
+      finishedAt,
+      durationMs
     );
   }
 
@@ -489,12 +567,9 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
   ): void {
     if (this.isClosed) return;
     try {
-      const stmt = this.db.prepare(`
-        UPDATE runs SET
-          status = ?,
-          output_json = ?,
-          error_json = ?,
-          finished_at = ?
+      const stmt = this.driver.prepare(`
+        UPDATE runs
+        SET status = ?, output_json = ?, error_json = ?, finished_at = ?
         WHERE id = ?
       `);
       stmt.run(
@@ -505,15 +580,15 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
         id
       );
     } catch {
-      // 数据库已关闭，安全忽略
+      // 数据库已关闭或操作异常，安全忽略
     }
   }
 
   getRun(id: string): RunRecord | null {
-    const stmt = this.db.prepare(
+    const stmt = this.driver.prepare(
       "SELECT * FROM runs WHERE id = ? AND package_id = ?"
     );
-    const row = stmt.get(id, this.packageId) as any;
+    const row = stmt.get<any>(id, this.packageId);
     if (!row) return null;
     return this.mapRunRecord(row);
   }
@@ -522,7 +597,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     const limit = options.limit || 50;
     let rows: any[];
     if (options.actionId) {
-      const stmt = this.db.prepare(`
+      const stmt = this.driver.prepare(`
         SELECT * FROM runs
         WHERE package_id = ? AND action_id = ?
         ORDER BY started_at DESC
@@ -530,7 +605,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       `);
       rows = stmt.all(this.packageId, options.actionId, limit);
     } else {
-      const stmt = this.db.prepare(`
+      const stmt = this.driver.prepare(`
         SELECT * FROM runs
         WHERE package_id = ?
         ORDER BY started_at DESC
@@ -552,14 +627,14 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       sql += " AND status = ?";
       params.push(options.status);
     }
-    const stmt = this.db.prepare(sql);
+    const stmt = this.driver.prepare(sql);
     const res = stmt.run(...params);
     return res.changes;
   }
 
   private mapRunRecord(row: any): RunRecord {
-    let input: unknown;
-    let output: unknown;
+    let input: JsonValue | undefined;
+    let output: JsonValue | undefined;
     let error: RuntimeError | undefined;
 
     try {
@@ -582,25 +657,27 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
 
     return {
       id: row.id,
-      packageId: row.package_id,
-      actionId: row.action_id,
+      rootRunId: row.root_run_id || row.id,
       parentRunId: row.parent_run_id || undefined,
+      packageId: row.package_id,
+      packageInstanceId: row.package_instance_id || row.package_id,
+      actionId: row.action_id,
+      generationId: row.generation_id || "1",
+      ownerId: row.owner_id || "local",
       status: row.status,
       input,
       output,
       error,
       startedAt: row.started_at,
       finishedAt: row.finished_at || undefined,
+      durationMs: typeof row.duration_ms === "number" ? row.duration_ms : undefined,
     };
   }
 
   close(): void {
     this.isClosed = true;
     try {
-      // 强制立即 finalize 所有未释放的 prepared statement。
-      // 否则 Windows 下未 finalize 的语句会继续持有数据库文件句柄，
-      // 导致关闭连接后目录仍无法删除（rmSync 报 EBUSY）。
-      this.db.close(true);
+      this.driver.close();
     } catch {
       // 忽略重复关闭异常
     }

@@ -44,8 +44,8 @@ ActionDock 文档中心遵循使用者与开发者角色双轨制设计：
 ---
 
 ### 快速概览
-- [环境安装与准备](getting-started/installation.md)：Bun 与 `ad` CLI 安装配置、Link 机制与排错。
-- [核心概览与双轨导引](getting-started/overview.md)：了解 ActionDock 核心全景与角色路径选择。
+- [环境安装与准备](getting-started/installation.md)：Node.js 运行环境、`ad` CLI 全局安装、可选 Bun 编译器与多包链接规范。
+- [核心概览与双轨导引](getting-started/overview.md)：系统架构总览、9 个子包分层体系、声明式清单单一事实源与角色路径选择。
 
 ---
 
@@ -91,6 +91,6 @@ ActionDock 文档中心遵循使用者与开发者角色双轨制设计：
 ---
 
 ### 底层架构
-- [Runtime 执行引擎](architecture/runtime.md)：`ActionRunner` 执行生命周期与拦截器体系。
+- [Runtime 执行引擎](architecture/runtime.md)：分层解耦体系、`ActionRunner` 单一终态状态机与并发配额管理。
 - [标准输出与错误通道隔离](architecture/stdout-stderr.md)：数据通道与诊断通道物理隔离，杜绝大模型解析崩溃。
 - [安全加固与防御模型](architecture/security.md)：非回环认证、权限固化、常数时间比对与原型污染防护。

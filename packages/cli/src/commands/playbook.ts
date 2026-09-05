@@ -7,6 +7,7 @@ import {
   findProjectRoot,
   listLinkedPackages,
   loadActions,
+  loadManifest,
   loadPlaybooks,
   loadProjectConfig,
   resolveActionProject,
@@ -369,7 +370,18 @@ This playbook provides task execution guidance for AI Agents.
 
         for (const target of targets) {
           const config = loadProjectConfig(target.root);
-          const actions = await loadActions(target.root, config.actionsDir);
+          let actionIds = new Set<string>();
+          const manifest = loadManifest(target.root);
+          if (manifest?.actions) {
+            actionIds = new Set(Object.keys(manifest.actions));
+          } else {
+            try {
+              const actions = await loadActions(target.root, config.actionsDir, { autoInstall: false });
+              actionIds = new Set(actions.keys());
+            } catch {
+              // Ignore action loading failure during validation
+            }
+          }
 
           for (const pb of target.playbooks) {
             if (!pb) continue;
@@ -381,7 +393,7 @@ This playbook provides task execution guidance for AI Agents.
 
             if (pb.actions) {
               for (const actId of pb.actions) {
-                if (actions.has(actId)) {
+                if (actionIds.has(actId)) {
                   continue;
                 }
                 try {

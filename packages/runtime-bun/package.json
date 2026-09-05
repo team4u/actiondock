@@ -1,0 +1,40 @@
+{
+  "name": "@actiondock/runtime-bun",
+  "version": "2.0.2",
+  "description": "Bun Runtime Adapters for ActionDock (bun:sqlite, Bun.serve, Bun.spawn)",
+  "type": "module",
+  "main": "./src/index.ts",
+  "module": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    }
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "engines": {
+    "bun": ">=1.2.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "scripts": {
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@actiondock/core": "workspace:*",
+    "@actiondock/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.7.0"
+  },
+  "keywords": ["actiondock", "runtime", "bun", "sqlite"],
+  "author": "team4u",
+  "license": "Apache-2.0"
+}

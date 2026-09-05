@@ -60,3 +60,33 @@ export interface PlaybookDefinition extends PlaybookFrontmatter {
   /** Playbook 源文件的绝对物理路径 */
   filePath: string;
 }
+
+/**
+ * 单个 Action 在清单中的声明项。
+ */
+export interface ActionManifestEntry {
+  /** Action 入口文件相对路径（如 "actions/greet.ts"） */
+  entry: string;
+  /** Action 功能描述 */
+  description?: string;
+  /** 输入参数模式规范 */
+  inputSchema?: Record<string, unknown> | boolean;
+  /** 输出结果模式规范 */
+  outputSchema?: Record<string, unknown> | boolean;
+  /** 静态依赖的 Action 列表 */
+  uses?: string[];
+  /** 标签列表 */
+  tags?: string[];
+  /** 协议注解元数据 */
+  annotations?: Record<string, unknown>;
+}
+
+/**
+ * ActionDock 声明式清单（actiondock.manifest.json）规范。
+ * 作为元数据的单一事实源，实现无副作用的模块发现与构建规划。
+ */
+export interface ActionDockManifest {
+  schemaVersion: number;
+  actions: Record<string, ActionManifestEntry>;
+  assets?: string[];
+}

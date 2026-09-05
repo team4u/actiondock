@@ -1,16 +1,16 @@
 # ActionDock
 
-[![Bun](https://img.shields.io/badge/Bun-%3E%3D1.2-black?logo=bun)](https://bun.sh/)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22-green?logo=node.js)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![MCP](https://img.shields.io/badge/MCP-Protocol%20Compliant-purple)](https://modelcontextprotocol.io/)
-[![Tests](https://img.shields.io/badge/tests-81%20passed-brightgreen.svg)](https://github.com/team4u/actiondock)
+[![Tests](https://img.shields.io/badge/tests-173%20passed-brightgreen.svg)](https://github.com/team4u/actiondock)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-**English** | [简体中文](README.zh-CN.md)
+English | [简体中文](README.zh-CN.md)
 
-**Build Agent Tools once. Run them anywhere.**
+Build Agent Tools once. Run them anywhere.
 
-A TypeScript toolchain for building, testing, and shipping AI Agent tools as **MCP servers, Agent Skills, HTTP services, or standalone binaries**.
+A TypeScript toolchain for building, testing, and shipping AI Agent tools as MCP servers, Agent Skills, HTTP services, or standalone binaries.
 
 ```text
 TypeScript Action
@@ -22,7 +22,7 @@ TypeScript Action
        ├── ad export skill # Self-contained Agent Skill
        └── ad build        # Zero-dependency standalone binary
               ↓
-        standalone binary
+         executable binary
 ```
 
 ---
@@ -31,67 +31,150 @@ TypeScript Action
 
 Agent tools are becoming real software.
 
-They need schemas, tests, version control, reproducible builds, and multiple distribution targets — not another copy of the same business logic for every Agent runtime.
+They require schema contracts, automated testing, version control, reproducible builds, and multiple distribution targets, rather than copy-pasting business logic across different agent runtimes.
 
-ActionDock treats an Agent Tool as a software artifact:
+ActionDock treats an Agent Tool as a standard software asset:
 
-* **Code as Contract** — TypeScript + JSON Schema define the implementation and tool contract together with automatic runtime validation.
-* **Testable by Default** — Test Actions in an in-memory runtime in milliseconds without starting an MCP server or mocking complex networks.
-* **Build Once** — The same Action runs seamlessly through CLI, MCP, HTTP, and standalone executables.
-* **Portable Distribution** — Compile an Action Package into a single standalone binary with zero dependencies (no Node.js or Bun required on target machines).
-* **Agent Skills** — Combine deterministic Actions with operational Playbooks and export them as self-contained Agent Skills.
-* **Git Native** — Actions and Playbooks are plain files designed for code review, branching, and CI/CD pipelines.
+- **Code as Contract**: TypeScript and JSON Schema define the tool contract and implementation together with automatic runtime validation.
+- **Testable by Default**: Test Actions in an in-memory sandbox in milliseconds without launching network services or configuring external databases.
+- **Build Once, Run Anywhere**: The exact same Action runs across CLI, MCP, HTTP microservices, and standalone binaries.
+- **Portable Distribution**: Compile an Action Package into a single standalone binary with zero external dependencies (target machines require neither Node.js nor Bun).
+- **Agent Skills with SOPs**: Combine deterministic Actions with operational Playbooks and export them as self-contained Agent Skills.
+- **Git Native**: Actions and Playbooks are plain text files designed for code reviews, branch workflows, and CI/CD automation pipelines.
+
+---
+
+## Runtime and Dependencies
+
+ActionDock 2.0 provides an upgraded runtime architecture:
+
+- **Daily Development and Runtime**: Natively runs on Node.js 22+ and Node.js 24 LTS. Standard authoring, testing, CLI execution, MCP servers, and HTTP services run directly on Node.js, supporting npm, pnpm, and yarn. Daily execution is completely independent of Bun.
+- **Standalone Binary Compilation**: When compiling an Action Package into a zero-dependency standalone binary using `ad build`, the system schedules the external Bun compiler to generate the standalone executable.
+
+---
+
+## Declarative Metadata Manifest Specification
+
+ActionDock 2.0 establishes `actiondock.manifest.json` as the declarative single source of truth for tool metadata:
+
+```json
+{
+  "schemaVersion": 1,
+  "actions": {
+    "sample.greet": {
+      "entry": "actions/greet.ts",
+      "description": "Greeting action demonstrating input, config, and state",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "description": "Name of the person to greet" }
+        },
+        "required": ["name"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "message": { "type": "string" },
+          "count": { "type": "number" }
+        },
+        "required": ["message", "count"]
+      },
+      "uses": [],
+      "tags": ["sample"]
+    }
+  },
+  "assets": []
+}
+```
+
+- **Zero Side-Effect Discovery**: Tool discovery and metadata parsing require no execution of user TypeScript code, preventing initialization side effects.
+- **Static Dependency Closure**: The build planner statically computes dependency closures across Actions and Playbooks, enabling tree-shaking and minimal bundle packaging.
+- **Consistent Contracts**: CLI commands, MCP tool endpoints, and documentation generators consume the exact same manifest schema.
 
 ---
 
 ## Quick Start
 
-### For AI Agents (Install Skills from GitHub)
+### For AI Agents
 
-ActionDock is built as a tool foundation for AI Agents. Agents (such as Claude Code, Cursor, Antigravity, and GitHub Copilot CLI) can directly install skills from GitHub repositories using `npx skills`:
+AI agents can install and discover ActionDock skills using standard skill package managers:
 
 ```bash
-# Install ActionDock skill globally for your agent (-g for global install, -y for automatic confirmation)
+# Install ActionDock skill globally
 npx skills add team4u/actiondock -g -y
 
-# Or install any skill globally from GitHub
+# Or install any skill repository globally from GitHub
 npx skills add <owner/repo> -g -y
 ```
 
-Once installed, your agent automatically discovers the skill SOPs and executes actions. See [Agent Skill Usage Guide](docs/consumer/use-as-skill.md).
+Once installed, your agent automatically reads the SOP playbooks and invokes the deterministic actions.
 
-### For Tool Developers (Build & Ship Actions)
+### Standard Developer Workflow
 
-> **Runtime requirement**: [Bun](https://bun.sh/) >= 1.2.0.
+Use standard Node.js and npm workflows:
 
-#### Install CLI
-
+- Install the CLI globally:
 ```bash
-# Install Bun runtime (if not already installed)
-npm install -g bun
-
-# Install ActionDock CLI
 npm install -g @actiondock/cli
 ```
 
-#### Initialize an Action Package
-
+- Initialize a project scaffold:
 ```bash
 ad init hello-tools
 cd hello-tools
-bun install
+npm install
 ```
 
-#### Create an Action
+- Run unit tests:
+```bash
+npm test
+```
 
-Create `actions/hello.ts`:
+- Execute an Action locally:
+```bash
+ad run sample.greet --input '{"name":"ActionDock"}'
+```
+
+- Start as an MCP server:
+```bash
+ad mcp
+```
+
+- Export as an Agent Skill:
+```bash
+ad export skill
+```
+
+- Compile into a standalone binary (requires external Bun compiler):
+```bash
+ad build
+```
+
+---
+
+## Action and Playbook
+
+ActionDock separates capability from procedure:
+
+```text
+Action   = What an agent can do (deterministic capability)
+Playbook = How an agent should do it (operational procedure)
+
+             ↓ combined into
+
+         Agent Skill
+```
+
+### Define an Action
+
+In `actions/greet.ts`:
 
 ```ts
 import { defineAction } from "@actiondock/sdk";
 
 export default defineAction({
-  id: "hello",
-  description: "Say hello to someone",
+  id: "sample.greet",
+  description: "Greet a user and track greeting count in persistent state",
 
   inputSchema: {
     type: "object",
@@ -101,210 +184,111 @@ export default defineAction({
     required: ["name"],
   },
 
-  async run(input) {
+  async run(input, ctx) {
+    const prefix = ctx.config.get("GREETING_PREFIX", "Hello");
+    const count = ((await ctx.state.get<number>(`greet:${input.name}`)) || 0) + 1;
+    await ctx.state.set(`greet:${input.name}`, count);
+    ctx.log.info(`User ${input.name} greeted ${count} time(s)`);
+
     return {
-      message: `Hello ${input.name}!`,
+      message: `${prefix}, ${input.name}!`,
+      count,
     };
   },
 });
 ```
 
-#### Run, Test, and Deliver
+### Write a Playbook
 
-- Run locally:
-```bash
-ad run hello --input '{"name":"ActionDock"}'
-```
+In `playbooks/greet-user.md`:
 
-- Run in-memory tests:
-```bash
-ad test
-```
-
-- Serve as an MCP server (for Claude Code, Cursor, Windsurf):
-```bash
-ad mcp
-```
-
-- Compile to a zero-dependency standalone binary:
-```bash
-ad build
-```
-
-- Export as a portable Agent Skill:
-```bash
-ad export skill
-```
-
-> **One Action. Multiple runtimes. One contract.**
-
+```markdown
+---
+id: greet-user
+description: Standard operating procedure for greeting users
+actions:
+  - sample.greet
 ---
 
-## Action + Playbook
+# User Greeting Procedure
 
-ActionDock separates **capability** from **procedure**:
+When greeting a new user in the conversation:
 
-```text
-Action   = what an Agent can do
-Playbook = how an Agent should do it
-
-             ↓
-
-        Agent Skill
-```
-
-For example:
-
-```text
-actions/
-├── get-pr.ts
-├── create-comment.ts
-└── merge-pr.ts
-
-playbooks/
-└── review-pr.md
-```
-
-- **Actions** provide deterministic, type-safe capabilities with strict input/output schemas.
-- **Playbooks** describe higher-level procedures, constraints, guardrails, and operational knowledge for LLMs.
-- Together, they form an **Action Package** that can be exported as a self-contained **Agent Skill**.
-
----
-
-## Where ActionDock Fits
-
-ActionDock is not an Agent framework or workflow canvas. It focuses specifically on the **development and delivery lifecycle of Agent Tools**.
-
-```text
-                 Agent / LLM
-                     │
-            ┌────────┴────────┐
-            │                 │
-         MCP Client       Agent Skill
-            │                 │
-            └────────┬────────┘
-                     │
-                ActionDock
-                     │
-        ┌────────────┼────────────┐
-        │            │            │
-      Action       Action       Action
-        │            │            │
-   Your APIs      Database    Services
+- Verify the user's name; never assume unverified nicknames.
+- Execute `sample.greet` to perform the greeting and read the count.
+- If the count exceeds 1, acknowledge the returning user.
 ```
 
 ---
 
-## Build Once, Run Anywhere
-
-```text
-                  ┌─ CLI (`ad run`)
-                  │
-                  ├─ MCP (`ad mcp`)
-actions/*.ts ─────┼─ HTTP (`ad serve`)
-                  │
-                  ├─ Agent Skill (`ad export skill`)
-                  │
-                  └─ Standalone Binary (`ad build`)
-```
-
-> **One implementation, multiple delivery targets.**
-
----
-
-## How It Compares
+## Feature Comparison
 
 | Capability / Dimension | ActionDock | mcp-use | FastMCP | Arcade MCP |
 | :--- | :---: | :---: | :---: | :---: |
-| **MCP Server (STDIO & HTTP)** | ✅ | ✅ | ✅ | ✅ |
-| **TypeScript Native** | ✅ | ✅ | ✅ | ✅ / Python |
-| **Pure In-Memory Tool Testing** | ✅ | ✅ | ✅ | ✅ |
-| **Zero-Dependency Standalone Binary** | **✅** | — | — | — |
-| **Agent Skill Export (with SOP)** | **✅** | — | — | — |
-| **Playbook / Procedure Definition** | **✅** | — | — | — |
-| **Remote HTTP Runner** | ✅ | ✅ | ✅ | ✅ |
-| **Git-Native Package Architecture** | ✅ | ✅ | ✅ | ✅ |
-| **Managed OAuth** | — | — | — | **✅** |
-| **Managed Cloud Platform** | — | ✅ | — | **✅** |
+| MCP Server (STDIO & HTTP) | Supported | Supported | Supported | Supported |
+| TypeScript Native | Supported | Supported | Supported | Supported / Python |
+| Pure In-Memory Test Harness | Supported | Supported | Supported | Supported |
+| Zero-Dependency Standalone Binary | Supported | — | — | — |
+| Agent Skill Export with SOPs | Supported | — | — | — |
+| Playbook Procedure Orchestration | Supported | — | — | — |
+| Remote HTTP Service Dispatch | Supported | Supported | Supported | Supported |
+| Git-Native Text Asset Model | Supported | Supported | Supported | Supported |
+| Declarative Manifest Source | Supported | — | — | — |
 
 ---
 
-## Distribution Targets
+## Architecture and Layering
+
+ActionDock 2.0 adopts a 9-package modular architecture:
 
 ```text
-Distribution Targets
-
-✅ npm packages       (@actiondock/sdk, @actiondock/core, @actiondock/mcp, @actiondock/cli)
-✅ Standalone Binary  (ad build -> self-contained executable)
-✅ Agent Skill        (ad export skill -> portable skill bundle)
-⬜ Docker             (Containerized image target - on roadmap)
+┌─────────────────────────────────────────────────────────────┐
+│                      @actiondock/cli                        │
+│                 Node.js 24 LTS Facade CLI                   │
+└──────────────┬──────────────────────────────┬───────────────┘
+               │                              │
+               ▼                              ▼
+┌─────────────────────────────┐┌──────────────────────────────┐
+│  @actiondock/runtime-cli    ││    @actiondock/builder       │
+│ Shared Runtime & Envelopes  ││ Dependency Closure & Build   │
+└──────────────┬──────────────┘└──────────────┬───────────────┘
+               │                              │
+               ▼                              │
+┌─────────────────────────────┐               │
+│     @actiondock/mcp         │               │
+│  MCP Protocol & Async Tasks │               │
+└──────────────┬──────────────┘               │
+               │                              │
+               ▼                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                      @actiondock/core                       │
+│    Domain Model, ActionRunner, Manifest & Driver Contracts  │
+└───────┬──────────────┬──────────────┬───────────────┬───────┘
+        │              │              │               │
+        ▼              ▼              ▼               ▼
+┌──────────────┐┌──────────────┐┌─────────────┐┌──────────────┐
+│ runtime-node ││ runtime-bun  ││   testing   ││     sdk      │
+│Node.js Driver││Bun Assembly  ││Deterministic││Zero-Dep Dev  │
+│& tsx Loader  ││for Binaries  ││Test Harness ││Contract      │
+└──────────────┘└──────────────┘└─────────────┘└──────────────┘
 ```
 
----
-
-## Codebase Architecture
-
-ActionDock uses a modular monorepo structure:
-
-```text
-actiondock/
-├── packages/
-│   ├── sdk/          # @actiondock/sdk: Minimal SDK (defineAction, ActionContext, createTestRuntime)
-│   ├── core/         # @actiondock/core: Engine (Runner, Storage, Schema, Build, Export)
-│   ├── mcp/          # @actiondock/mcp: MCP Adapter (STDIO / HTTP / Tasks extension)
-│   └── cli/          # @actiondock/cli: Command-line interface facade (ad)
-├── examples/
-│   └── github-tools/ # Complete example Action Package with Actions & Playbooks
-└── docs/             # Technical documentation center
-```
+- `@actiondock/cli`: The command line facade running on Node.js 24 LTS, coordinating project initialization, testing, building, and exporting.
+- `@actiondock/builder`: Build planning and compiler scheduling package, including `BuildPlanner` dependency closure calculation, `BunCompiler` external compiler driver, and `SkillExporter`.
+- `@actiondock/runtime-cli`: Shared runtime commands and envelope formatters, implementing `info`, `action`, `playbook`, `config`, `state`, `runs`, `serve`, and `mcp`.
+- `@actiondock/mcp`: MCP adapter providing STDIO and HTTP protocol transports, fully supporting the Tasks asynchronous task extension.
+- `@actiondock/core`: Core domain kernel providing project configuration loading, `actiondock.manifest.json` parsing, `SqliteDriver` interface, `ProcessExecutor` interface, `DefaultExecutionService`, and `ActionRunner` state machine.
+- `@actiondock/runtime-node`: Node.js runtime adapter providing `node:sqlite` database driver, `execa` process executor, `tsx` module loader, and `node:http` streaming server.
+- `@actiondock/runtime-bun`: Bun runtime adapter providing `bun:sqlite` driver, `Bun.spawn` executor, and `Bun.serve` server, designed specifically for standalone binary assembly.
+- `@actiondock/testing`: Standalone deterministic test framework offering `FakeClock`, `MockProcessExecutor`, `MemoryStorage`, and the `createTestRuntime` harness.
+- `@actiondock/sdk`: Minimal zero-dependency developer contract exporting `defineAction`, `ActionContext`, `execCli`, `spawnDetached`, and core types.
 
 ---
 
-## Documentation
-
-Visit the [Documentation Center](docs/README.md) for full guides:
-
-- **Getting Started**
-  - [Installation](docs/getting-started/installation.md)
-  - [Core Overview & Dual Paths](docs/getting-started/overview.md)
-- **Consumer Guide**
-  - [Overview](docs/consumer/overview.md)
-  - [Agent Skill Usage Guide](docs/consumer/use-as-skill.md)
-  - [Use as MCP Server](docs/consumer/use-as-mcp.md)
-  - [Standalone Binary Run](docs/consumer/standalone-run.md)
-  - [HTTP Service](docs/consumer/http-service.md)
-  - [Configuration & Credentials](docs/consumer/configuration.md)
-- **Developer Guide**
-  - [Quick Start](docs/developer/quick-start.md)
-  - [First Action](docs/developer/first-action.md)
-  - [Playbooks](docs/developer/playbooks.md)
-  - [Testing & Verification](docs/developer/testing.md)
-  - [Storage & Persistence](docs/developer/storage.md)
-  - [Profiles & Remote Dispatch](docs/developer/profiles.md)
-  - [Build & Skill Export](docs/developer/build-and-export.md)
-- **Core Concepts**
-  - [Action Package](docs/concepts/action-package.md) *(The core architectural abstraction)*
-  - [Action](docs/concepts/action.md)
-  - [ActionContext](docs/concepts/action-context.md)
-  - [Playbook](docs/concepts/playbook.md)
-  - [Agent Skill](docs/concepts/skill.md)
-- **Reference**
-  - [CLI Reference](docs/reference/cli.md)
-  - [Configuration Resolution](docs/reference/config.md)
-  - [SDK Action API](docs/reference/action-api.md)
-  - [Error Codes & Diagnostics](docs/reference/error-codes.md)
-  - [1.0 to 2.0 Migration Guide](docs/reference/v1-to-v2-migration.md)
-- **Architecture**
-  - [Runtime Engine](docs/architecture/runtime.md)
-  - [Stdout/Stderr Physical Isolation](docs/architecture/stdout-stderr.md)
-  - [Security Hardening](docs/architecture/security.md)
-
----
-
-## Verification & Testing
+## Verification and Testing
 
 ```bash
-# Run all unit and integration tests
+# Run all unit and integration tests (173 tests passing)
 bun test
 
 # Run full TypeScript type checks
@@ -315,4 +299,4 @@ bun run typecheck
 
 ## License
 
-Apache-2.0 License. See [LICENSE](LICENSE) for details.
+Apache-2.0 License.

@@ -1,0 +1,43 @@
+{
+  "name": "@actiondock/runtime-cli",
+  "version": "2.0.2",
+  "description": "Shared runtime commands and rendering for ActionDock CLI and standalone binaries",
+  "type": "module",
+  "main": "./src/index.ts",
+  "module": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    }
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "scripts": {
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@actiondock/core": "workspace:*",
+    "@actiondock/mcp": "workspace:*",
+    "@actiondock/sdk": "workspace:*",
+    "@modelcontextprotocol/server": "^2.0.0",
+    "commander": "^13.1.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.7.0"
+  },
+  "keywords": ["actiondock", "cli", "runtime-cli", "commands"],
+  "author": "team4u",
+  "license": "Apache-2.0"
+}

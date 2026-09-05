@@ -18,10 +18,107 @@ import {
 } from "../registry/registry";
 import { ActionRunner } from "../runtime/runner";
 import type { RuntimeStorage } from "../storage/types";
+import { createServer as createNodeHttpServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { InvalidJsonError, readJsonBody, RequestTooLargeError } from "./body";
 import { ServerRuntimeRegistry } from "./runtime-registry";
 import { isLoopbackHost, resolveCorsHeaders, verifyBearerToken } from "./security";
-import type { ActionDockServerInstance, ServerOptions } from "./types";
+import type { ActionDockServerInstance, CoreHttpServerFactory, CoreHttpServerInstance, ServerOptions } from "./types";
+
+let customHttpServerFactory: CoreHttpServerFactory | undefined;
+
+/**
+ * 注册自定义 HTTP 服务端工厂（用于 Node.js / Bun 运行时环境适配）。
+ */
+export function setHttpServerFactory(factory: CoreHttpServerFactory): void {
+  customHttpServerFactory = factory;
+}
+
+/**
+ * 根据当前运行时环境启动标准 Web Request/Response 兼容的 HTTP 服务。
+ */
+function launchHttpServer(
+  port: number,
+  host: string,
+  fetchHandler: (req: Request) => Promise<Response>
+): CoreHttpServerInstance {
+  if (customHttpServerFactory) {
+    return customHttpServerFactory({ port, host, fetch: fetchHandler }) as CoreHttpServerInstance;
+  }
+
+  // 若处于原生 Bun 运行时
+  if (typeof (globalThis as any).Bun !== "undefined" && typeof (globalThis as any).Bun.serve === "function") {
+    const bunServer = (globalThis as any).Bun.serve({
+      port,
+      hostname: host,
+      fetch: fetchHandler,
+    });
+    return {
+      port: bunServer.port,
+      stop: (closeActive?: boolean) => bunServer.stop(closeActive),
+    };
+  }
+
+  // Node.js 原生 node:http 兜底实现
+  const srv = createNodeHttpServer(async (req: IncomingMessage, res: ServerResponse) => {
+    try {
+      const protocol = (req.socket as any)?.encrypted ? "https" : "http";
+      const hostHeader = req.headers.host || "127.0.0.1";
+      const url = new URL(req.url || "/", `${protocol}://${hostHeader}`).href;
+
+      const headers = new Headers();
+      for (const [k, v] of Object.entries(req.headers)) {
+        if (v === undefined) continue;
+        if (Array.isArray(v)) {
+          for (const item of v) headers.append(k, item);
+        } else {
+          headers.set(k, v);
+        }
+      }
+
+      const method = (req.method || "GET").toUpperCase();
+      const hasBody = method !== "GET" && method !== "HEAD";
+      const init: RequestInit = { method, headers };
+      if (hasBody) {
+        (init as any).body = Readable.toWeb(req);
+        (init as any).duplex = "half";
+      }
+
+      const webReq = new Request(url, init);
+      const webRes = await fetchHandler(webReq);
+
+      res.statusCode = webRes.status;
+      if (webRes.statusText) res.statusMessage = webRes.statusText;
+      webRes.headers.forEach((v, k) => res.setHeader(k, v));
+
+      if (!webRes.body) {
+        res.end();
+        return;
+      }
+      await pipeline(Readable.fromWeb(webRes.body as any), res);
+    } catch (err: any) {
+      if (!res.headersSent) {
+        res.statusCode = 500;
+        res.end(JSON.stringify({ error: err?.message || String(err) }));
+      } else {
+        res.destroy(err);
+      }
+    }
+  });
+
+  srv.listen(port, host);
+  const addr = srv.address();
+  const actualPort = typeof addr === "object" && addr ? addr.port : port;
+
+  return {
+    port: actualPort,
+    stop: () => {
+      srv.close();
+      (srv as any).closeAllConnections?.();
+    },
+  };
+}
 
 /**
  * 辅助函数：快速构造带 CORS 头的 JSON HTTP 响应。
@@ -176,11 +273,8 @@ export function startActionDockServer(
 
   const runtimeRegistry = new ServerRuntimeRegistry();
 
-  const server = Bun.serve({
-    port,
-    hostname: host,
-    async fetch(req) {
-      const origin = req.headers.get("origin");
+  const server = launchHttpServer(port, host, async (req) => {
+    const origin = req.headers.get("origin");
       const corsHeaders = resolveCorsHeaders(origin, options.corsOrigins);
 
       if (req.method === "OPTIONS") {
@@ -1379,8 +1473,8 @@ export function startActionDockServer(
         404,
         corsHeaders
       );
-    },
-  });
+    }
+  );
 
   const actualHost = host === "0.0.0.0" ? "127.0.0.1" : host;
   const url = `http://${actualHost}:${server.port}`;

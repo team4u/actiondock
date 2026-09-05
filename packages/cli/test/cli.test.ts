@@ -467,6 +467,10 @@ describe("CLI End-to-End", () => {
     // 12. Validate cross-package action in playbook
     const pkgBDir = join(tmpdir(), `test-ad-pkgb-${Date.now()}`);
     mkdirSync(pkgBDir, { recursive: true });
+    const rootNodeModules = resolve(__dirname, "../../../node_modules");
+    if (existsSync(rootNodeModules)) {
+      symlinkSync(rootNodeModules, join(pkgBDir, "node_modules"), "dir");
+    }
     runCli(["init", "--id", "team.consumer-pkg", "."], pkgBDir);
     runCli(
       [

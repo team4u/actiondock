@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
@@ -142,15 +143,18 @@ export async function buildProject(options: BuildOptions): Promise<BuildResult> 
     buildArgs.push(`--target=${formattedTarget}`);
   }
 
-  const proc = Bun.spawnSync(buildArgs, {
+  const proc = spawnSync(buildArgs[0], buildArgs.slice(1), {
     cwd: root,
-    stdout: "pipe",
-    stderr: "pipe",
+    stdio: "pipe",
   });
 
-  if (proc.exitCode !== 0) {
-    const errText = proc.stderr.toString() || proc.stdout.toString();
-    throw new Error(`Bun compile failed (exit code ${proc.exitCode}):\n${errText}`);
+  if (proc.error) {
+    throw new Error(`Bun compile failed to spawn: ${proc.error.message}`);
+  }
+
+  if (proc.status !== 0) {
+    const errText = proc.stderr?.toString() || proc.stdout?.toString() || "Unknown error";
+    throw new Error(`Bun compile failed (exit code ${proc.status}):\n${errText}`);
   }
 
   // Compile artifact resolution (on Windows bun compile automatically appends .exe)
@@ -177,6 +181,15 @@ export async function buildProject(options: BuildOptions): Promise<BuildResult> 
     }
   }
 
+  const detectedBunVersion = (typeof (globalThis as any).Bun !== "undefined" && (globalThis as any).Bun.version) || (() => {
+    try {
+      const vProc = spawnSync("bun", ["--version"], { stdio: "pipe" });
+      return vProc.stdout ? vProc.stdout.toString().trim() : "unknown";
+    } catch {
+      return "unknown";
+    }
+  })();
+
   // Generate artifact.json metadata
   const metadata = {
     packageId: config.id,
@@ -185,7 +198,7 @@ export async function buildProject(options: BuildOptions): Promise<BuildResult> 
     description: config.description,
     target: options.target || "host",
     actions: actionImports.map((a) => a.id),
-    bunVersion: Bun.version,
+    bunVersion: detectedBunVersion,
     lockHash,
     buildHash,
     createdAt: new Date().toISOString(),

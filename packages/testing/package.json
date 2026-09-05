@@ -1,0 +1,40 @@
+{
+  "name": "@actiondock/testing",
+  "version": "2.0.2",
+  "description": "ActionDock Test Runtime for testing Actions with real Core execution semantics",
+  "type": "module",
+  "main": "./src/index.ts",
+  "module": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    }
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "scripts": {
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@actiondock/core": "workspace:*",
+    "@actiondock/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.7.0"
+  },
+  "keywords": ["actiondock", "testing", "agent", "actions", "mock"],
+  "author": "team4u",
+  "license": "Apache-2.0"
+}

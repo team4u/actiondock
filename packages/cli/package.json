@@ -17,7 +17,7 @@
     "README.md"
   ],
   "engines": {
-    "bun": ">=1.2.0"
+    "node": ">=22.0.0"
   },
   "publishConfig": {
     "access": "public",
@@ -28,9 +28,12 @@
     "build": "bun build ./src/index.ts --outdir ./dist --target bun"
   },
   "dependencies": {
-    "@actiondock/core": "^2.0.0",
-    "@actiondock/mcp": "^2.0.0",
-    "@actiondock/sdk": "^2.0.0",
+    "@actiondock/builder": "workspace:*",
+    "@actiondock/core": "workspace:*",
+    "@actiondock/mcp": "workspace:*",
+    "@actiondock/runtime-cli": "workspace:*",
+    "@actiondock/runtime-node": "workspace:*",
+    "@actiondock/sdk": "workspace:*",
     "commander": "^13.1.0"
   },
   "devDependencies": {

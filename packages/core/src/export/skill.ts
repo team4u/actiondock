@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { buildProject } from "../build/builder";
@@ -319,17 +320,17 @@ export async function exportSkill(
   if (options.archive) {
     const zipName = `${skillFolderName}.zip`;
     archivePath = join(dirname(skillDir), zipName);
-    const zipProc = Bun.spawnSync(
-      ["zip", "-r", archivePath, basename(skillDir)],
+    const zipProc = spawnSync(
+      "zip",
+      ["-r", archivePath, basename(skillDir)],
       {
         cwd: dirname(skillDir),
-        stdout: "pipe",
-        stderr: "pipe",
+        stdio: "pipe",
       }
     );
-    if (zipProc.exitCode !== 0) {
+    if (zipProc.status !== 0) {
       console.warn(
-        `[WARN] Failed to create zip archive: ${zipProc.stderr.toString()}`
+        `[WARN] Failed to create zip archive: ${zipProc.stderr?.toString() || "zip command failed"}`
       );
       archivePath = undefined;
     }

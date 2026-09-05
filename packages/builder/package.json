@@ -1,0 +1,41 @@
+{
+  "name": "@actiondock/builder",
+  "version": "2.0.2",
+  "description": "ActionDock Build Planner, Bun standalone compiler, and Skill exporter",
+  "type": "module",
+  "main": "./src/index.ts",
+  "module": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    }
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "scripts": {
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@actiondock/core": "workspace:*",
+    "@actiondock/sdk": "workspace:*",
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.7.0"
+  },
+  "keywords": ["actiondock", "builder", "compiler", "skill", "export"],
+  "author": "team4u",
+  "license": "Apache-2.0"
+}

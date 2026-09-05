@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { findProjectRoot, loadActions, loadPlaybooks, loadProjectConfig } from "../project/loader";
 import { getRegistryStatus } from "../registry/registry";
 import { createGlobalStorage, createStorage } from "../storage";
@@ -18,6 +18,36 @@ function compareSemver(v1: string, v2: string): number {
   return 0;
 }
 
+function findExecutable(command: string): string | null {
+  if (typeof (globalThis as any).Bun !== "undefined" && typeof (globalThis as any).Bun.which === "function") {
+    try {
+      const bPath = (globalThis as any).Bun.which(command);
+      if (bPath) return bPath;
+    } catch {}
+  }
+  const hasPathSep = command.includes("/") || command.includes("\\");
+  if (hasPathSep) {
+    return existsSync(command) ? command : null;
+  }
+  const pathEnv = process.env.PATH || "";
+  const dirs = pathEnv.split(delimiter);
+  const isWindows = process.platform === "win32";
+  const pathext = isWindows
+    ? (process.env.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";")
+    : [""];
+
+  for (const dir of dirs) {
+    if (!dir) continue;
+    for (const ext of pathext) {
+      const candidate = join(dir, isWindows && !command.includes(".") ? command + ext : command);
+      if (existsSync(candidate)) {
+        return candidate;
+      }
+    }
+  }
+  return null;
+}
+
 export async function runDoctorChecks(options?: {
   cwd?: string;
   packageIdOrPath?: string;
@@ -26,46 +56,42 @@ export async function runDoctorChecks(options?: {
   const cwd = options?.cwd || process.cwd();
   const checks: DoctorCheckItem[] = [];
 
-  // 1. Check Bun Runtime
-  const bunVersion = (typeof Bun !== "undefined" && Bun.version) || (process.versions as any).bun;
+  // 1. Check Node.js Runtime
+  const nodeVersion = process.versions.node;
+  if (nodeVersion) {
+    const isGte22 = compareSemver(nodeVersion, "22.0.0") >= 0;
+    checks.push({
+      id: "runtime.node",
+      category: "runtime",
+      name: "Node.js Runtime",
+      status: isGte22 ? "ok" : "warn",
+      message: `v${nodeVersion} (${isGte22 ? ">= 22.0.0 supported" : ">= 22.0.0 recommended"})`,
+      fix: isGte22 ? undefined : "Upgrade Node.js to v22+ or v24 LTS",
+    });
+  }
+
+  // 2. Check Bun Runtime (Optional compiler for standalone binaries)
+  const bunVersion = (typeof (globalThis as any).Bun !== "undefined" && (globalThis as any).Bun.version) || (process.versions as any).bun;
   if (bunVersion) {
-    const isGte12 = compareSemver(bunVersion, "1.2.0") >= 0;
-    if (isGte12) {
-      checks.push({
-        id: "runtime.bun",
-        category: "runtime",
-        name: "Bun Runtime",
-        status: "ok",
-        message: `v${bunVersion} (>= 1.2.0 required)`,
-      });
-    } else {
-      checks.push({
-        id: "runtime.bun",
-        category: "runtime",
-        name: "Bun Runtime",
-        status: "error",
-        message: `v${bunVersion} is too old (>= 1.2.0 required)`,
-        fix: "Run 'bun upgrade' to update Bun",
-      });
-    }
+    checks.push({
+      id: "runtime.bun",
+      category: "runtime",
+      name: "Bun Runtime",
+      status: "ok",
+      message: `v${bunVersion} (available for standalone binary compilation)`,
+    });
   } else {
     checks.push({
       id: "runtime.bun",
       category: "runtime",
       name: "Bun Runtime",
-      status: "error",
-      message: "Bun runtime not detected",
-      fix: "Install Bun via 'npm install -g bun'",
+      status: "ok",
+      message: "Bun compiler not detected (optional, required only for 'ad build' standalone binaries)",
     });
   }
 
-  // 2. Check CLI in PATH
-  let adPath: string | null = null;
-  try {
-    adPath = typeof Bun !== "undefined" && Bun.which ? Bun.which("ad") : null;
-  } catch {
-    // ignore
-  }
+  // 3. Check CLI in PATH
+  const adPath = findExecutable("ad");
 
   if (adPath) {
     checks.push({

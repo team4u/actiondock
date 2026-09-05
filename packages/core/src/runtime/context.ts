@@ -1,15 +1,19 @@
+import { randomUUID } from "node:crypto";
 import type {
   ActionContext,
   ActionDefinition,
   ActionInvoker,
   Config,
   Logger,
+  ProcessAPI,
+  ProgressReporter,
   StateStore,
 } from "@actiondock/sdk";
 import type { ProjectConfig } from "../project/types";
 import { createGlobalStorage } from "../storage";
 import type { RuntimeStorage } from "../storage/types";
 import { resolveEnvValue } from "./env";
+import { getProcessExecutor } from "./process";
 
 /**
  * 生产级配置解析器实现。
@@ -184,8 +188,12 @@ export interface ContextOptions {
   overrides?: Record<string, unknown>;
   projectConfig?: ProjectConfig;
   parentRunId?: string;
+  runId?: string;
+  rootRunId?: string;
   callStack?: string[];
   signal?: AbortSignal;
+  process?: ProcessAPI;
+  progress?: ProgressReporter;
   onActionInvoke?: (
     action: ActionDefinition,
     input: unknown,
@@ -196,7 +204,7 @@ export interface ContextOptions {
 /**
  * 构建并装配传递给 Action 的完整 ActionContext 运行时上下文。
  * 
- * @param options 上下文构建参数（包含存储连接、配置覆盖、项目元数据、取消信号与互调委托）
+ * @param options 上下文构建参数
  * @returns 组装完毕的 ActionContext 实例
  */
 export function createActionContext(options: ContextOptions): ActionContext {
@@ -208,6 +216,8 @@ export function createActionContext(options: ContextOptions): ActionContext {
   const state = new RuntimeStateStore(options.storage);
   const log = new StderrLogger();
   const signal = options.signal ?? new AbortController().signal;
+  const currentRunId = options.runId || randomUUID();
+  const currentRootRunId = options.rootRunId || options.parentRunId || currentRunId;
 
   const invoker: ActionInvoker = {
     async invoke<I, O>(action: ActionDefinition<I, O>, input: I): Promise<O> {
@@ -215,18 +225,30 @@ export function createActionContext(options: ContextOptions): ActionContext {
         return (await options.onActionInvoke(
           action as any,
           input,
-          options.parentRunId
+          currentRunId
         )) as O;
       }
       throw new Error("ActionInvoker not configured with an invocation delegate");
     },
   };
 
+  const processApi = options.process || getProcessExecutor();
+  const progressApi: ProgressReporter = options.progress || {
+    report() {},
+  };
+
   return {
     config,
     state,
     actions: invoker,
+    process: processApi,
     log,
+    progress: progressApi,
     signal,
+    run: {
+      id: currentRunId,
+      rootId: currentRootRunId,
+      parentId: options.parentRunId,
+    },
   };
 }

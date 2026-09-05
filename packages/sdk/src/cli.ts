@@ -77,6 +77,48 @@ export interface ExecCliResult {
  * @param options 运行选项（工作目录、环境变量、取消信号、超时、stdin、字符编码、抛错开关）
  * @returns ExecCliResult 执行结果结构体
  */
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { delimiter, join } from "node:path";
+
+/**
+ * 跨运行时安全查找可执行文件绝对物理路径。
+ */
+function findExecutable(command: string): string | null {
+  if (typeof (globalThis as any).Bun !== "undefined" && typeof (globalThis as any).Bun.which === "function") {
+    try {
+      const bPath = (globalThis as any).Bun.which(command);
+      if (bPath) return bPath;
+    } catch {
+      // 忽略 Bun.which 异常，进入通用解析
+    }
+  }
+
+  const hasPathSep = command.includes("/") || command.includes("\\");
+  if (hasPathSep) {
+    return existsSync(command) ? command : null;
+  }
+
+  const pathEnv = process.env.PATH || "";
+  const dirs = pathEnv.split(delimiter);
+  const isWindows = process.platform === "win32";
+  const pathext = isWindows
+    ? (process.env.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";")
+    : [""];
+
+  for (const dir of dirs) {
+    if (!dir) continue;
+    for (const ext of pathext) {
+      const candidate = join(dir, isWindows && !command.includes(".") ? command + ext : command);
+      if (existsSync(candidate)) {
+        return candidate;
+      }
+    }
+  }
+
+  return null;
+}
+
 export function execCli(
   command: string,
   args: string[] = [],
@@ -100,11 +142,11 @@ export function execCli(
     return errRes;
   }
 
-  // 2. 跨平台绝对路径解析（解决 Windows 下 npm 全局 .cmd shim 识别问题）
+  // 2. 跨平台绝对路径解析
   const hasPathSep = command.includes("/") || command.includes("\\");
-  const binPath = hasPathSep ? command : (Bun.which(command) || command);
+  const binPath = hasPathSep ? (existsSync(command) ? command : null) : findExecutable(command);
 
-  if (!hasPathSep && !Bun.which(command)) {
+  if (!binPath) {
     const errRes: ExecCliResult = {
       ok: false,
       exitCode: -1,
@@ -120,27 +162,26 @@ export function execCli(
   }
 
   // 3. 处理标准输入数据
-  let stdinOption: Uint8Array | "ignore" | undefined = "ignore";
+  let stdinInput: Buffer | undefined;
   if (options.input !== undefined) {
     if (typeof options.input === "string") {
-      stdinOption = new TextEncoder().encode(options.input);
+      stdinInput = Buffer.from(options.input);
     } else if (options.input instanceof Uint8Array) {
-      stdinOption = options.input;
+      stdinInput = Buffer.from(options.input);
     }
   }
 
   try {
-    const proc = Bun.spawnSync([binPath, ...args], {
+    const proc = spawnSync(binPath, args, {
       cwd: options.cwd || process.cwd(),
       env: options.env ? { ...process.env, ...options.env } : process.env,
-      stdin: stdinOption,
-      stdout: "pipe",
-      stderr: "pipe",
+      input: stdinInput,
+      stdio: [stdinInput ? "pipe" : "ignore", "pipe", "pipe"],
       timeout: options.timeout,
     });
 
     const durationMs = Math.round(performance.now() - startTime);
-    const timedOut = Boolean((proc as any).exitedDueToTimeout);
+    const timedOut = Boolean(proc.error && (proc.error as any).code === "ETIMEDOUT");
 
     // 4. 自定义字符集解码
     const decoder = new TextDecoder(options.encoding || "utf-8");
@@ -154,7 +195,7 @@ export function execCli(
       stderr = `Command '${command}' timed out after ${options.timeout}ms`;
     }
 
-    const exitCode = timedOut ? -1 : (proc.exitCode ?? (proc.success ? 0 : -1));
+    const exitCode = timedOut ? -1 : (proc.status ?? (proc.error ? -1 : 0));
     const ok = !timedOut && exitCode === 0;
 
     const result: ExecCliResult = {
@@ -255,28 +296,36 @@ export async function spawnDetached(options: SpawnDetachedOptions): Promise<bool
     throw new Error("Command aborted before execution by signal");
   }
 
-  // 2. 跨平台绝对路径解析（解决 Windows 下 npm 全局 .cmd shim 识别问题）
+  // 2. 跨平台绝对路径解析
   const hasPathSep = command.includes("/") || command.includes("\\");
-  const binPath = hasPathSep ? command : (Bun.which(command) || command);
+  const binPath = hasPathSep ? (existsSync(command) ? command : null) : findExecutable(command);
 
-  if (!hasPathSep && !Bun.which(command)) {
+  if (!binPath) {
     throw new Error(`Command '${command}' not found in PATH.`);
   }
 
   // 3. fire-and-forget：ignore 所有 stdio，unref 防止阻塞事件循环
-  const child = Bun.spawn([binPath, ...args], {
+  const child = spawn(binPath, args, {
     cwd: cwd || process.cwd(),
     env: env ? { ...process.env, ...env } : process.env,
-    stdin: "ignore",
-    stdout: "ignore",
-    stderr: "ignore",
+    stdio: "ignore",
+    detached: true,
     signal,
   });
   child.unref();
 
-  // 4. 等待 CLI 前端进程自身退出（错开冷启动窗口，避免 probe 并发拉起两个 daemon）
+  // 4. 等待 CLI 前端进程自身退出
   try {
-    await child.exited;
+    await new Promise<void>((resolveChild, rejectChild) => {
+      child.on("exit", () => resolveChild());
+      child.on("error", (err) => {
+        if (signal?.aborted) {
+          rejectChild(new Error("aborted"));
+        } else {
+          rejectChild(err);
+        }
+      });
+    });
   } catch (err) {
     if (signal?.aborted) {
       throw new Error("aborted");

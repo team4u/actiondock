@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 1,
+  "actions": {
+    "github.get-pr": {
+      "entry": "actions/get-pr.ts",
+      "description": "Get detailed information about a specific GitHub pull request",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "repo": { "type": "string", "description": "Repository in owner/repo format" },
+          "pullNumber": { "type": "number", "description": "Pull request number" }
+        },
+        "required": ["repo", "pullNumber"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "number": { "type": "number" },
+          "title": { "type": "string" },
+          "body": { "type": "string" },
+          "author": { "type": "string" },
+          "state": { "type": "string" },
+          "changedFiles": { "type": "number" },
+          "additions": { "type": "number" },
+          "deletions": { "type": "number" }
+        },
+        "required": ["number", "title", "state"]
+      },
+      "uses": [],
+      "tags": ["github", "pull-request"]
+    },
+    "github.review-pr": {
+      "entry": "actions/review-pr.ts",
+      "description": "Review a pull request and produce automated review findings",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "repo": { "type": "string" },
+          "pullNumber": { "type": "number" }
+        },
+        "required": ["repo", "pullNumber"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "pullNumber": { "type": "number" },
+          "title": { "type": "string" },
+          "verdict": { "type": "string", "enum": ["APPROVE", "REQUEST_CHANGES", "COMMENT"] },
+          "summary": { "type": "string" },
+          "findings": { "type": "array" },
+          "reviewedAt": { "type": "string" }
+        },
+        "required": ["pullNumber", "title", "verdict", "summary", "findings", "reviewedAt"]
+      },
+      "uses": ["github.get-pr"],
+      "tags": ["github", "review"]
+    },
+    "github.comment-pr": {
+      "entry": "actions/comment-pr.ts",
+      "description": "Post a review comment to a GitHub pull request",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "repo": { "type": "string" },
+          "pullNumber": { "type": "number" },
+          "comment": { "type": "string" }
+        },
+        "required": ["repo", "pullNumber", "comment"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "posted": { "type": "boolean" },
+          "commentId": { "type": "string" },
+          "timestamp": { "type": "string" }
+        },
+        "required": ["posted", "commentId", "timestamp"]
+      },
+      "uses": [],
+      "tags": ["github", "comment"]
+    },
+    "github.list-prs": {
+      "entry": "actions/list-prs.ts",
+      "description": "List pull requests for a GitHub repository",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "repo": { "type": "string", "description": "Repository in owner/repo format" },
+          "state": {
+            "type": "string",
+            "enum": ["open", "closed", "all"],
+            "default": "open"
+          }
+        },
+        "required": ["repo"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "items": { "type": "array" },
+          "count": { "type": "number" }
+        },
+        "required": ["items", "count"]
+      },
+      "uses": [],
+      "tags": ["github", "list"]
+    }
+  },
+  "assets": []
+}

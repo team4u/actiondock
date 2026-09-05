@@ -16,16 +16,25 @@ export {
 } from "./test-runtime";
 export type {
   ActionContext,
+  ActionContract,
   ActionDefinition,
   ActionInvoker,
+  ActionRef,
   Config,
+  DetachedProcessOptions,
+  DetachedProcessResult,
+  ExecutionEvent,
   ExecutionResult,
   JsonSchema,
+  JsonValue,
   Logger,
+  ProcessAPI,
+  ProcessExecOptions,
+  ProcessResult,
+  ProgressReporter,
+  ResolvedActionRef,
   RuntimeError,
   RunRecord,
   RunStatus,
   StateStore,
 } from "./types";
-
-

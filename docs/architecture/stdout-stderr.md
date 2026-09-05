@@ -1,50 +1,99 @@
 # 底层架构：标准输出与错误通道的物理隔离
 
-在为 AI Agent（如 Claude Code、Cursor、Antigravity）构建工具时，最常见的致命故障之一是 **输出通道污染**。
+在面向智能体与自动化系统构建工具链时，最常见且致命的运行时故障之一是输出通道污染。ActionDock 从底层架构上确立了标准输出与标准错误通道的物理隔离机制。
 
 ---
 
-## 传统工具脚本的日志污染问题
+## 日志污染问题与大模型解析崩溃
 
-传统的脚本或工具中，开发者常常随手书写 `console.log()` 或 `print()`，或者第三方依赖库在初始化时打印版本号横幅（Banner）。
+在传统脚本与工具设计中，开发者常通过直接打印的方式输出调试日志，或者引入的第三方依赖包在初始化时输出版本横幅与连接提示：
 
 ```text
-[传统脚本输出 stdout]
-Checking database connection...
-Initialized SDK v1.2.3
+[传统脚本标准输出 stdout]
+Connecting to database at 10.0.0.1...
+Connected successfully.
 {"result": "success", "count": 42}
 ```
 
-当大模型或下游管道尝试使用 `JSON.parse()` 解析结果时，非 JSON 字符将直接导致解析异常（SyntaxError），导致整个 Agent 规划链路中断崩溃。
+当大模型或下游管道尝试解析上述输出时，混入的非 JSON 文本将直接导致解析异常，破坏智能体的规程规划与自主调度链路。
 
 ---
 
-## ActionDock 的物理通道隔离方案
+## 物理通道隔离架构设计
 
-ActionDock 从架构底层严格分离两个通道的职责：
+ActionDock 在运行时底层严格划分两个通信通道的物理职责边界：
 
 ```text
-               ┌── stdout (数据通道) ──> 纯净标准 JSON Envelope (供 LLM/程序解析)
+               ┌── 标准输出 (stdout 数据通道) ──> 纯净标准 JSON Envelope (供 LLM 与程序解析)
 Action 执行 ───┤
-               └── stderr (诊断通道) ──> 格式化日志、警告、堆栈与终端着色 (供人类排错)
+               └── 标准错误 (stderr 诊断通道) ──> 结构化日志、进度指示器与异常堆栈 (供调试与排错)
 ```
 
-### 标准输出通道 (`stdout`)
-- 严格仅输出机器可读的 **JSON Envelope**。
-- 绝不包含任何 ANSI 颜色控制字符、无意义换行或调试文本。
-- 无论执行成功或失败，始终输出形如 `{"ok": true, ...}` 或 `{"ok": false, "error": {...}}` 的纯净 JSON。
-
-### 标准错误通道 (`stderr`)
-- Action 内通过 `ctx.log.info()` 等方法打印的业务日志统一经过格式化（包含毫秒级时间戳、日志级别、Action ID）后输出至 `stderr`。
-- CLI 的进度提示、Spinner 动画与未捕获异常的完整调用栈均流向 `stderr`。
+- **标准输出通道（stdout）**：作为机器可读的数据交付通道。在机器模式下，严格仅输出符合格式规范的结构化数据，绝不掺杂任何 ANSI 控制符、换行噪音或调试文本。
+- **标准错误通道（stderr）**：作为人类与排错系统的诊断通道。承载所有业务日志、进度动画、警告信息与异常调用栈。
 
 ---
 
-## 管道组合与自动化验证
+## 标准化信封格式渲染
 
-由于两个通道物理隔离，您可以将 ActionDock 命令无缝串联进 Unix 管道或 jq 过滤器：
+在机器交互模式下，执行引擎对标准输出实施统一的信封格式封装，消除下游消费者处理结果时的歧义：
 
-```bash
-# 纯净提取 data 字段，即使 stderr 中有大量日志，jq 也绝不报错
-ad run github.get-pr --input '{"repo": "team4u/actiondock", "prNumber": 1}' | jq .data.title
+### 执行成功信封结构
+当 Action 成功执行并通过模式校验时，标准输出交付标准的成功信封：
+```json
+{
+  "ok": true,
+  "runId": "4a7b9c1d-2e3f-4a5b-6c7d-8e9f0a1b2c3d",
+  "data": {
+    "title": "Fix memory leak in HTTP parser",
+    "status": "merged"
+  }
+}
 ```
+
+### 执行失败信封结构
+当遇到入参模式不匹配、业务逻辑异常、超时或中断等失败情形时，标准输出交付标准错误信封：
+```json
+{
+  "ok": false,
+  "runId": "4a7b9c1d-2e3f-4a5b-6c7d-8e9f0a1b2c3d",
+  "error": {
+    "code": "INPUT_VALIDATION_FAILED",
+    "message": "Input schema validation failed for action 'merge-pr'",
+    "details": [
+      {
+        "instancePath": "/prNumber",
+        "message": "must be integer"
+      }
+    ]
+  }
+}
+```
+
+- **一致的根字段约定**：通过确定的布尔值字段 `ok` 表明执行状态，下游程序无需推测数据格式。
+- **全局唯一运行标识**：信封始终附带本次执行的 `runId`，便于端到端追踪审计与历史查询。
+- **规范的错误对象模型**：失败信封统一包含错误码 `code`、可读描述 `message` 与可选上下文详情 `details`。
+
+---
+
+## 机器模式标准输出与错误流隔离原则
+
+为确保 ActionDock 命令能够无缝集成进自动化流水线与 Unix 管道，系统遵循以下隔离原则：
+
+- **业务日志强制重定向**：在 Action 内部通过 `ctx.log.info()`、`ctx.log.warn()`、`ctx.log.error()` 等方法打印的结构化日志，在输出时均由底层日志驱动自动添加时间戳与 Action 标识后，全部重定向至标准错误输出。
+- **进度指示与交互隔离**：命令行工具展示的任务进度条、动画指示器（Spinner）与交互式提示文本，一律使用标准错误输出进行终端渲染，严禁占用标准输出通道。
+- **管道串联零干扰**：标准输出与标准错误分离后，用户与智能体可直接将命令输出通过管道传递给外部处理工具，无论标准错误输出多少排错日志，下游解析器均可稳定解析标准输出：
+```bash
+# 提取 data 中的特定字段，日志输出完全不影响 jq 语法解析
+ad run github.get-pr --input '{"prNumber": 42}' | jq .data.title
+```
+
+---
+
+## MCP STDIO 通道纯净性保障
+
+当 ActionDock 作为 MCP 服务以 STDIO 模式运行时，标准输入与标准输出是宿主智能体与服务之间传输 JSON-RPC 2.0 协议报文的生命线：
+
+- **协议通道独占**：标准输出通道由 MCP 协议处理器独占使用，专门用于发送协议格式的响应报文与服务端通知。
+- **零污染红线**：在 STDIO 传输模式下，任何随手编写的打印语句、第三方库输出的提示字符或未经拦截的警告，一旦溢出至标准输出，都会立即破坏 JSON-RPC 报文的封包边界，直接导致客户端协议解析崩溃并断开会话连接。
+- **全链路防护**：ActionDock 的 MCP 适配层在启动时接管底层输出流，确保框架内部事件、业务执行日志与未捕获异常全量流向标准错误输出，彻底保障协议通道的绝对纯净与高可用通信。
