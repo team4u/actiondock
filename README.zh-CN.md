@@ -280,7 +280,7 @@ ActionDock 2.0 采用 9 个职责专注的子包分层架构：
 - `@actiondock/runtime-node`：Node.js 运行时适配器，提供基于 `node:sqlite` 的数据库驱动、`execa` 进程执行器、`tsx` 模块加载器与基于 `node:http` 的服务监听。
 - `@actiondock/runtime-bun`：Bun 运行时适配器，提供基于 `bun:sqlite` 的驱动、`Bun.spawn` 进程执行器与 `Bun.serve` 服务，专用于独立单文件二进制产物装配。
 - `@actiondock/testing`：独立测试框架包，提供 `FakeClock` 确定性时钟、`MockProcessExecutor` 进程模拟、`MemoryStorage` 内存存储以及 `createTestRuntime` 测试运行时。
-- `@actiondock/sdk`：极简纯净开发者契约，零外部依赖，提供 `defineAction`、`ActionContext`、`execCli`、`spawnDetached` 及核心接口类型。
+- `@actiondock/sdk`：极简纯净开发者契约，零外部依赖，提供 `defineAction`、`ActionContext` 及核心接口类型。
 
 ---
 

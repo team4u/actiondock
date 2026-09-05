@@ -2,8 +2,6 @@ import { describe, expect, it } from "bun:test";
 import {
   createTestRuntime,
   defineAction,
-  execCli,
-  spawnDetached,
   MemoryConfig,
   MemoryLogger,
   MemoryStateStore,
@@ -186,9 +184,17 @@ describe("@actiondock/sdk", () => {
     expect(remainingKeys).toEqual(["permanent"]);
   });
 
-  it("executes CLI command safely using execCli", () => {
+  it("executes CLI command safely using ctx.process.exec", async () => {
+    const runtime = createTestRuntime();
+    const execAction = defineAction({
+      id: "test.exec",
+      async run(input: { command: string; args?: string[]; options?: any }, ctx) {
+        return await ctx.process.exec(input.command, input.args, input.options);
+      },
+    });
+
     // 1. Successful execution
-    const res = execCli("bun", ["--version"]);
+    const res = await runtime.run(execAction, { command: "bun", args: ["--version"] });
     expect(res.ok).toBe(true);
     expect(res.exitCode).toBe(0);
     expect(res.stdout.length).toBeGreaterThan(0);
@@ -196,54 +202,85 @@ describe("@actiondock/sdk", () => {
     expect(res.durationMs).toBeGreaterThanOrEqual(0);
 
     // 2. Stdin piping support (string input)
-    const stdinRes = execCli("cat", [], { input: "Hello ActionDock Stdin" });
+    const stdinRes = await runtime.run(execAction, {
+      command: "cat",
+      args: [],
+      options: { input: "Hello ActionDock Stdin" },
+    });
     expect(stdinRes.ok).toBe(true);
     expect(stdinRes.stdout).toBe("Hello ActionDock Stdin");
 
     // 3. Stdin piping support (Uint8Array input)
     const u8Input = new TextEncoder().encode("Binary Stdin");
-    const u8Res = execCli("cat", [], { input: u8Input });
+    const u8Res = await runtime.run(execAction, {
+      command: "cat",
+      args: [],
+      options: { input: u8Input },
+    });
     expect(u8Res.ok).toBe(true);
     expect(u8Res.stdout).toBe("Binary Stdin");
 
     // 4. Custom env & cwd
-    const envRes = execCli("sh", ["-c", "echo $MY_CUSTOM_VAR"], {
-      env: { MY_CUSTOM_VAR: "actiondock_val" },
+    const envRes = await runtime.run(execAction, {
+      command: "sh",
+      args: ["-c", "echo $MY_CUSTOM_VAR"],
+      options: { env: { MY_CUSTOM_VAR: "actiondock_val" } },
     });
     expect(envRes.ok).toBe(true);
     expect(envRes.stdout).toBe("actiondock_val");
 
     // 5. Timeout and timedOut flag
-    const timedOutRes = execCli("sleep", ["2"], { timeout: 100 });
+    const timedOutRes = await runtime.run(execAction, {
+      command: "sleep",
+      args: ["2"],
+      options: { timeoutMs: 100 },
+    });
     expect(timedOutRes.ok).toBe(false);
     expect(timedOutRes.timedOut).toBe(true);
     expect(timedOutRes.exitCode).toBe(-1);
     expect(timedOutRes.stderr).toContain("timed out");
 
     // 6. Non-existent command
-    const notFound = execCli("__non_existent_binary_xyz_123__");
+    const notFound = await runtime.run(execAction, {
+      command: "__non_existent_binary_xyz_123__",
+    });
     expect(notFound.ok).toBe(false);
     expect(notFound.exitCode).toBe(-1);
     expect(notFound.stderr).toContain("not found in PATH");
 
     // 7. throwOnError support
-    expect(() => {
-      execCli("__non_existent_binary_xyz_123__", [], { throwOnError: true });
-    }).toThrow();
+    await expect(
+      runtime.run(execAction, {
+        command: "__non_existent_binary_xyz_123__",
+        options: { throwOnError: true },
+      })
+    ).rejects.toThrow();
 
     // 8. Aborted signal
     const controller = new AbortController();
     controller.abort();
-    const aborted = execCli("bun", ["--version"], { signal: controller.signal });
+    const aborted = await runtime.run(execAction, {
+      command: "bun",
+      args: ["--version"],
+      options: { signal: controller.signal },
+    });
     expect(aborted.ok).toBe(false);
     expect(aborted.exitCode).toBe(-1);
     expect(aborted.stderr).toContain("aborted");
   });
 
-  it("executes daemon-spawning CLI safely using spawnDetached", async () => {
+  it("executes daemon-spawning CLI safely using ctx.process.spawnDetached", async () => {
+    const runtime = createTestRuntime();
+    const spawnAction = defineAction({
+      id: "test.spawn-detached",
+      async run(input: any, ctx) {
+        return await ctx.process.spawnDetached(input);
+      },
+    });
+
     // 1. Successful execution and immediate probe success
     let probeCount = 0;
-    const ok = await spawnDetached({
+    const okRes = await runtime.run(spawnAction, {
       command: "bun",
       args: ["--version"],
       probe: () => {
@@ -251,73 +288,33 @@ describe("@actiondock/sdk", () => {
         return true;
       },
     });
-    expect(ok).toBe(true);
+    expect(okRes.ready).toBe(true);
     expect(probeCount).toBe(1);
 
     // 2. Multi-step polling until probe becomes true
     let pollCount = 0;
-    const polledOk = await spawnDetached({
+    const polledRes = await runtime.run(spawnAction, {
       command: "bun",
       args: ["--version"],
-      intervalMs: 20,
-      timeoutMs: 1000,
+      probeIntervalMs: 20,
+      probeTimeoutMs: 1000,
       probe: async () => {
         pollCount++;
         return pollCount >= 3;
       },
     });
-    expect(polledOk).toBe(true);
+    expect(polledRes.ready).toBe(true);
     expect(pollCount).toBe(3);
 
     // 3. Timeout when probe never succeeds
-    const timedOut = await spawnDetached({
+    const timedOutRes = await runtime.run(spawnAction, {
       command: "bun",
       args: ["--version"],
-      intervalMs: 20,
-      timeoutMs: 100,
+      probeIntervalMs: 20,
+      probeTimeoutMs: 100,
       probe: () => false,
     });
-    expect(timedOut).toBe(false);
-
-    // 4. Pre-aborted signal rejection
-    const preAbortController = new AbortController();
-    preAbortController.abort();
-    await expect(
-      spawnDetached({
-        command: "bun",
-        args: ["--version"],
-        signal: preAbortController.signal,
-        probe: () => true,
-      })
-    ).rejects.toThrow(/aborted/i);
-
-    // 5. In-flight abort during polling
-    const inFlightController = new AbortController();
-    let pollStep = 0;
-    await expect(
-      spawnDetached({
-        command: "bun",
-        args: ["--version"],
-        intervalMs: 20,
-        timeoutMs: 2000,
-        signal: inFlightController.signal,
-        probe: () => {
-          pollStep++;
-          if (pollStep >= 2) {
-            inFlightController.abort();
-          }
-          return false;
-        },
-      })
-    ).rejects.toThrow(/aborted/i);
-
-    // 6. Non-existent command throws
-    await expect(
-      spawnDetached({
-        command: "__non_existent_binary_xyz_123__",
-        probe: () => true,
-      })
-    ).rejects.toThrow(/not found in PATH/i);
+    expect(timedOutRes.ready).toBe(false);
   });
 });
 

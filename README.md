@@ -281,7 +281,7 @@ ActionDock 2.0 adopts a 9-package modular architecture:
 - `@actiondock/runtime-node`: Node.js runtime adapter providing `node:sqlite` database driver, `execa` process executor, `tsx` module loader, and `node:http` streaming server.
 - `@actiondock/runtime-bun`: Bun runtime adapter providing `bun:sqlite` driver, `Bun.spawn` executor, and `Bun.serve` server, designed specifically for standalone binary assembly.
 - `@actiondock/testing`: Standalone deterministic test framework offering `FakeClock`, `MockProcessExecutor`, `MemoryStorage`, and the `createTestRuntime` harness.
-- `@actiondock/sdk`: Minimal zero-dependency developer contract exporting `defineAction`, `ActionContext`, `execCli`, `spawnDetached`, and core types.
+- `@actiondock/sdk`: Minimal zero-dependency developer contract exporting `defineAction`, `ActionContext`, and core types.
 
 ---
 

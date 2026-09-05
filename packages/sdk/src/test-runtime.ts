@@ -260,6 +260,7 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
               const res = await execCli(command, args, {
                 cwd: options?.cwd,
                 env: options?.env,
+                input: options?.input,
                 timeout: options?.timeoutMs,
                 throwOnError: options?.throwOnError,
                 signal: options?.signal,
@@ -297,7 +298,7 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
                 args: options.args,
                 cwd: options.cwd,
                 env: options.env,
-                timeoutMs: options.timeoutMs,
+                timeoutMs: options.timeoutMs ?? options.probeTimeoutMs,
                 intervalMs: options.probeIntervalMs,
                 signal: options.signal,
                 probe: probeFn,

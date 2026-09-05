@@ -2,7 +2,7 @@
 name: actiondock
 description: >-
   ActionDock 2.0 开发者套件与运行指南。当用户需要执行以下任务或涉及相关概念时激活此技能：
-  创建、编写、修改或测试 ActionDock Action 工具（涉及 defineAction、ActionContext、execCli、spawnDetached）；
+  创建、编写、修改或测试 ActionDock Action 工具（涉及 defineAction、ActionContext）；
   编写、校验或执行 Playbook 任务操作规程；
   使用或排查 ad 命令行工具（包括 ad info、ad run、ad build、ad export skill、ad link、ad doctor、ad test、ad mcp 等）；
   配置持久化状态与环境变量、管理全局路由注册表、执行环境体检；
@@ -235,9 +235,9 @@ export default defineAction<Input, Output>({
 
 ## 外部命令行进程调度最佳实践
 
-当 Action 需要调用宿主系统外部命令（例如 `git`、`docker`、`curl` 等）时，按场景选用标准调度工具：
+当 Action 需要调用宿主系统外部命令（例如 `git`、`docker`、`curl` 等）时，统一使用 `ctx.process` 接口进行调度：
 
-### 常规命令行命令执行（使用 `ctx.process.exec` 或 `execCli`）
+### 常规命令行命令执行（使用 `ctx.process.exec`）
 
 适用于一次性工具或已处于常驻状态的命令：
 - 自动跨平台解析命令物理路径。
@@ -246,7 +246,7 @@ export default defineAction<Input, Output>({
 - 具备输出缓冲区上限保护（默认 10MB），防止异常大输出撑爆内存。
 
 ```typescript
-import { defineAction, execCli } from "@actiondock/sdk";
+import { defineAction } from "@actiondock/sdk";
 
 export default defineAction({
   id: "git.check-status",
@@ -271,7 +271,7 @@ export default defineAction({
 });
 ```
 
-### 会拉起后台守护进程的命令（使用 `ctx.process.spawnDetached` 或 `spawnDetached`）
+### 会拉起后台守护进程的命令（使用 `ctx.process.spawnDetached`）
 
 当命令在初次调用时会拉起常驻后台守护进程：
 - **管道隔离**：标准输入输出全部采用隔离模式，后台守护进程不继承主进程管道句柄，杜绝同步管道等待挂起。
