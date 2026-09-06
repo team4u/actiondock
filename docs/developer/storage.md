@@ -1,6 +1,6 @@
 # 实践指南：SQLite 存储与状态管理
 
-ActionDock 2.0 采用内嵌式 SQLite（基于 `bun:sqlite`）作为零依赖持久化存储后端，无需安装外部服务。
+ActionDock 2.0 采用内嵌式 SQLite（在 Node.js 环境下基于 `node:sqlite`，在独立二进制内部基于 `bun:sqlite`）作为零依赖持久化存储后端，无需安装外部服务。
 
 ---
 

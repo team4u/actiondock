@@ -67,7 +67,7 @@ graph TD
 
 - `BunSqliteDriver` 驱动：绑定 Bun 原生内置的高性能 `bun:sqlite`。
 - `BunProcessExecutor` 驱动：绑定原生高性能进程派生机制 `Bun.spawn`。
-- `BunHttpServer` 驱动：绑定原生原生 Web 标准服务器 `Bun.serve`。
+- `BunHttpServer` 驱动：绑定原生 Web 标准服务器 `Bun.serve`。
 - **独立二进制内部自激活**：在编译生成的独立二进制产物启动时，通过内部自动注入该适配层，无需外部 Node.js 运行时即可独立运行。
 
 ---

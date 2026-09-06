@@ -376,7 +376,8 @@ ActionDock 保证标准输出 stdout 始终为纯净的标准 JSON 信封，所�
 ActionDock 提供了纯内存测试沙箱 [`createTestRuntime`](file:///root/code/action-dock/packages/testing/src/test-runtime.ts)（在 `@actiondock/testing` 与 `@actiondock/sdk` 中均有导出），可与标准测试套件无缝配合：
 
 ```typescript
-import { describe, expect, it } from "bun:test";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
 import { createTestRuntime } from "@actiondock/sdk";
 import listIssuesAction from "../actions/list-issues";
 
@@ -391,8 +392,8 @@ describe("github.list-issues", () => {
       repo: "team4u/actiondock",
     });
 
-    expect(result.total).toBe(0);
-    expect(await runtime.state.get("last_sync")).toBeDefined();
+    assert.equal(result.total, 0);
+    assert.ok(await runtime.state.get("last_sync"));
   });
 });
 ```
