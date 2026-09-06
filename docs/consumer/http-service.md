@@ -2,7 +2,7 @@
 
 当需要将 ActionDock 部署为微服务，供远程 AI Agent、Webhook、持续集成流水线或前端业务系统远程调度时，可以使用 `ad serve` 启动轻量级 HTTP 调度微服务。
 
-服务端原生基于 Bun 高性能 HTTP 引擎与 SQLite 内置驱动构建，具备极低的冷启动延迟与内存占用，全面对齐 CLI 的全套能力，包括能力自省、动作执行、剧本检索、任务流、状态管理、配置治理、深度体检以及一体化 Model Context Protocol 协议网关。
+服务端默认基于 Node.js 原生 node:http 与 node:sqlite 构建，亦可在 Bun 环境或独立二进制下极速运行，全面对齐 CLI 的全套能力，包括能力自省、动作执行、剧本检索、任务流、状态管理、配置治理、深度体检以及一体化 Model Context Protocol 协议网关。
 
 ---
 
@@ -37,7 +37,7 @@ ad serve -d ./examples/github-tools --host 0.0.0.0 --port 8080 --token "sk-actio
 ```
 
 - **独立单文件可执行文件运行（目标环境零依赖）**
-  对于通过 `ad build` 编译生成的独立可执行文件，可在未安装 Bun 的生产服务器或容器中直接以微服务模式启动：
+  对于通过 `ad build` 编译生成的独立可执行文件，可在未安装 Node.js 或 Bun 的生产服务器或容器中直接以微服务模式启动：
 
 ```bash
 ./dist/bin/github-tools serve --host 0.0.0.0 --port 8080 --token "sk-actiondock-secret"

@@ -128,7 +128,7 @@ ad run github-tools/github.list-prs --input '{"repo": "team4u/actiondock"}'
 
 | 消费姿态 | 适用场景 | 目标客户端 / 宿主 | 环境依赖 |
 | :--- | :--- | :--- | :--- |
-| **Agent Skill** | 大模型自主理解规程并调度 | Claude Code, Antigravity, Codex | 源码型需 Bun；独立型零依赖 |
+| **Agent Skill** | 大模型自主理解规程并调度 | Claude Code, Antigravity, Codex | 源码型需 Node.js（或 Bun）与 ad；独立型零依赖 |
 | **MCP 服务** | 本地 IDE 扩展工具调用 | Cursor, Windsurf, Claude Code, VSCode | 本地安装 `ad` CLI 或指定独立二进制 |
 | **独立单文件 CLI** | 终端手动执行 / CI 脚本 / 容器 | Linux, macOS, Windows 终端 / CI 沙箱 | **零依赖**（无需 Bun/Node） |
 | **HTTP 远程微服务** | 远程集群 / 多租户 SaaS / REST 调度 | 任意支持 HTTP/cURL 的 Agent 或业务系统 | 服务端需 `ad serve` 运行 |

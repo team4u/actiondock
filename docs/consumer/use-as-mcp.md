@@ -42,7 +42,7 @@ ActionDock 原生支持 [Model Context Protocol (MCP)](https://modelcontextproto
 ---
 
 ### 方式三：基于独立单文件二进制运行（零环境依赖）
-如果目标开发机未安装 Bun 或 `ad`，直接指向编译后的独立可执行文件（如通过 `ad build` 生成的二进制）：
+如果目标开发机未安装 Node.js、Bun 或 `ad`，直接指向编译后的独立可执行文件（如通过 `ad build` 生成的二进制）：
 
 ```json
 {

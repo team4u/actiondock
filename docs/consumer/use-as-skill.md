@@ -15,7 +15,7 @@ ActionDock 规范化了面向智能体的完整交付物体系：
 - **机器可读契约**：`actiondock.skill.json` 包含各 Action 的输入输出 JSON Schema 约束，确保参数校验确定性。
 - **领域操作规程**：`playbooks/` 目录下提供经过验证的标准作业规程，明确告知智能体步骤时序、前后置条件与安全拦截红线。
 - **双模执行载体**：
-  - **源码型 Skill**：跨平台文件体积精简（通常小于 100KB），基于宿主 Bun 运行时执行原生 TypeScript 代码。
+  - **源码型 Skill**：跨平台文件体积精简（通常小于 100KB），基于宿主 Node.js（或 Bun）运行底座与 ActionDock 命令行工具直接执行。
   - **独立二进制型 Skill**：内嵌单文件自包含二进制（位于 `./bin/` 目录），执行环境无需安装 Node.js、Bun 或任何外部依赖，开箱即用。
 
 ```text
@@ -103,7 +103,7 @@ npx skills remove <skill-name>
 
 ### 导出为源码型 Skill
 
-适用于宿主环境已安装 Bun 运行时的智能体沙箱：
+适用于宿主环境具备 Node.js（或 Bun）及 ActionDock 工具链的智能体环境：
 
 ```bash
 # 从本地已注册的 Action Package 导出
@@ -331,7 +331,7 @@ npx skills add team4u/actiondock -g -y
   ```
 - 或直接在智能体运行环境中声明对应的环境变量。
 
-### 沙箱或受限容器中无 Bun 运行时
+### 沙箱或受限容器中无 Node.js 或 Bun 运行时
 
 - 使用携带 `--standalone` 导出的独立单文件 Skill。
 - 直接执行 Skill 内置的 `./bin/<name>` 可执行文件，无需宿主具备任何语言解释器或依赖项。

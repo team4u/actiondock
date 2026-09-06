@@ -14,7 +14,7 @@ ActionDock 支持两种 Skill 交付形态：
                ┌─ 源码型 Skill
                │   • 包含 TypeScript 源码与 actiondock.json
 Agent Skill ───┤   • 跨平台体积极小 (< 100KB)
-               │   • 依赖宿主环境已安装 Bun
+               │   • 依赖宿主环境具备 Node.js（或 Bun）与 ActionDock 运行底座
                │
                └─ 独立二进制型 Skill
                    • 内置已编译的零依赖单文件可执行文件
