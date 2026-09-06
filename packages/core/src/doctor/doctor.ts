@@ -59,14 +59,14 @@ export async function runDoctorChecks(options?: {
   // 1. Check Node.js Runtime
   const nodeVersion = process.versions.node;
   if (nodeVersion) {
-    const isGte22 = compareSemver(nodeVersion, "22.0.0") >= 0;
+    const isGte22 = compareSemver(nodeVersion, "22.12.0") >= 0;
     checks.push({
       id: "runtime.node",
       category: "runtime",
       name: "Node.js Runtime",
       status: isGte22 ? "ok" : "warn",
-      message: `v${nodeVersion} (${isGte22 ? ">= 22.0.0 supported" : ">= 22.0.0 recommended"})`,
-      fix: isGte22 ? undefined : "Upgrade Node.js to v22+ or v24 LTS",
+      message: `v${nodeVersion} (${isGte22 ? ">= 22.12.0 supported" : ">= 22.12.0 recommended"})`,
+      fix: isGte22 ? undefined : "Upgrade Node.js to v22.12.0 or higher",
     });
   }
 

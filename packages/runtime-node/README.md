@@ -2,11 +2,11 @@
 
 ActionDock 2.0 原生 Node.js 运行时适配器包。
 
-[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22-green?logo=node.js)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.12.0-green?logo=node.js)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-`@actiondock/runtime-node` 为 ActionDock 核心内核提供基于 Node.js 22+ 与 Node.js 24 LTS 原生特性的运行时驱动实现。
+`@actiondock/runtime-node` 为 ActionDock 核心内核提供基于 Node.js 22.12.0 或更高版本原生特性的运行时驱动实现。
 
 ---
 

@@ -1,6 +1,6 @@
 # ActionDock 2.0 官方技术文档
 
-[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.0.0-green?logo=node.js)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.12.0-green?logo=node.js)](https://nodejs.org/)
 [![Bun](https://img.shields.io/badge/Bun-%3E%3D1.2%20(Compiler)-black?logo=bun)](https://bun.sh/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![MCP](https://img.shields.io/badge/MCP-Protocol%20Compliant-purple)](https://modelcontextprotocol.io/)

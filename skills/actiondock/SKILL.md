@@ -13,7 +13,7 @@ description: >-
 # ActionDock 2.0 开发者技能指南
 
 ActionDock 2.0 是面向 AI Agent Action 与 Skill 的工程化开发、测试、构建与分发工具链，命令行工具为 `ad`。
-ActionDock 默认运行于 Node.js 22+ / 24 LTS 生产环境，仅在执行单文件二进制构建时按需调用外部 Bun 编译器。
+ActionDock 默认运行于 Node.js 22.12.0 或更高版本环境，仅在执行单文件二进制构建时按需调用外部 Bun 编译器。
 ActionDock 支持**源码型**与**独立便携型**双模交付形态，让开发者使用 TypeScript 快速开发原子 Action 工具与业务 Playbook 规程，一键导出自包含的 Agent Skill 资产。
 
 ---

@@ -2,7 +2,7 @@
 
 ActionDock 2.0 官方命令行门面工具链。
 
-[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22-green?logo=node.js)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.12.0-green?logo=node.js)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
@@ -12,7 +12,7 @@ ActionDock 2.0 官方命令行门面工具链。
 
 ## 运行环境
 
-- 原生基于 Node.js 22+ 与 Node.js 24 LTS 运行。
+- 原生基于 Node.js 22.12.0 或更高版本运行。
 - 支持 npm、pnpm 与 yarn 进行全局安装或项目级管理。
 - 日常开发、调试、测试、MCP 服务启动与 HTTP 部署完全基于 Node.js，无需安装 Bun。
 - 仅在使用 `ad build` 编译单文件独立二进制产物时，需要系统安装外部 Bun 编译器。

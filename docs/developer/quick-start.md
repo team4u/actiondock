@@ -48,14 +48,14 @@ my-action/
   },
   "devDependencies": {
     "@actiondock/testing": "^2.0.2",
-    "@types/node": "^22.0.0",
+    "@types/node": "^22.12.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0"
   }
 }
 ```
 
-在 Node.js 24 LTS 底座下，项目默认利用原生 `node:test` 运行器配合 `tsx` 直接加载执行 TypeScript 测试文件，实现零编译等待的亚秒级测试反馈。
+在 Node.js 22.12.0 或更高版本底座下，项目默认利用原生 `node:test` 运行器配合 `tsx` 直接加载执行 TypeScript 测试文件，实现零编译等待的亚秒级测试反馈。
 
 ---
 

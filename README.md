@@ -48,7 +48,7 @@ ActionDock treats an Agent Tool as a standard software asset:
 
 ActionDock 2.0 provides an upgraded runtime architecture:
 
-- **Daily Development and Runtime**: Natively runs on Node.js 22+ and Node.js 24 LTS. Standard authoring, testing, CLI execution, MCP servers, and HTTP services run directly on Node.js, supporting npm, pnpm, and yarn. Daily execution is completely independent of Bun.
+- **Daily Development and Runtime**: Natively runs on Node.js 22.12.0 or higher. Standard authoring, testing, CLI execution, MCP servers, and HTTP services run directly on Node.js, supporting npm, pnpm, and yarn. Daily execution is completely independent of Bun.
 - **Standalone Binary Compilation**: When compiling an Action Package into a zero-dependency standalone binary using `ad build`, the system schedules the external Bun compiler to generate the standalone executable.
 
 ---
@@ -244,7 +244,7 @@ ActionDock 2.0 adopts a 9-package modular architecture:
 ```text
 ┌─────────────────────────────────────────────────────────────┐
 │                      @actiondock/cli                        │
-│                 Node.js 24 LTS Facade CLI                   │
+│                 Node.js >= 22.12.0 Facade CLI                │
 └──────────────┬──────────────────────────────┬───────────────┘
                │                              │
                ▼                              ▼
@@ -273,7 +273,7 @@ ActionDock 2.0 adopts a 9-package modular architecture:
 └──────────────┘└──────────────┘└─────────────┘└──────────────┘
 ```
 
-- `@actiondock/cli`: The command line facade running on Node.js 24 LTS, coordinating project initialization, testing, building, and exporting.
+- `@actiondock/cli`: The command line facade running on Node.js 22.12.0 or higher, coordinating project initialization, testing, building, and exporting.
 - `@actiondock/builder`: Build planning and compiler scheduling package, including `BuildPlanner` dependency closure calculation, `BunCompiler` external compiler driver, and `SkillExporter`.
 - `@actiondock/runtime-cli`: Shared runtime commands and envelope formatters, implementing `info`, `action`, `playbook`, `config`, `state`, `runs`, `serve`, and `mcp`.
 - `@actiondock/mcp`: MCP adapter providing STDIO and HTTP protocol transports, fully supporting the Tasks asynchronous task extension.
