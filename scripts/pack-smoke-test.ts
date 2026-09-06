@@ -3,7 +3,15 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 const rootDir = resolve(__dirname, "..");
-const packages = ["sdk", "core", "mcp", "cli"] as const;
+const packages = [
+  "sdk",
+  "core",
+  "mcp",
+  "builder",
+  "runtime-node",
+  "runtime-cli",
+  "cli",
+] as const;
 
 console.log("🚀 Starting ActionDock Pack Smoke Test...");
 
@@ -51,12 +59,19 @@ try {
       "@actiondock/sdk": `file:${tarballPaths.sdk}`,
       "@actiondock/core": `file:${tarballPaths.core}`,
       "@actiondock/mcp": `file:${tarballPaths.mcp}`,
+      "@actiondock/builder": `file:${tarballPaths.builder}`,
+      "@actiondock/runtime-node": `file:${tarballPaths["runtime-node"]}`,
+      "@actiondock/runtime-cli": `file:${tarballPaths["runtime-cli"]}`,
       "@actiondock/cli": `file:${tarballPaths.cli}`,
     },
     overrides: {
       "@actiondock/sdk": `file:${tarballPaths.sdk}`,
       "@actiondock/core": `file:${tarballPaths.core}`,
       "@actiondock/mcp": `file:${tarballPaths.mcp}`,
+      "@actiondock/builder": `file:${tarballPaths.builder}`,
+      "@actiondock/runtime-node": `file:${tarballPaths["runtime-node"]}`,
+      "@actiondock/runtime-cli": `file:${tarballPaths["runtime-cli"]}`,
+      "@actiondock/cli": `file:${tarballPaths.cli}`,
     },
   };
 

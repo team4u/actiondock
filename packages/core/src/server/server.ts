@@ -38,7 +38,7 @@ export function setHttpServerFactory(factory: CoreHttpServerFactory): void {
 /**
  * 根据当前运行时环境启动标准 Web Request/Response 兼容的 HTTP 服务。
  */
-function launchHttpServer(
+export function launchHttpServer(
   port: number,
   host: string,
   fetchHandler: (req: Request) => Promise<Response>

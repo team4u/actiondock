@@ -1,5 +1,6 @@
 import {
   isLoopbackHost,
+  launchHttpServer,
   resolveCorsHeaders,
   ServerRuntimeRegistry,
   verifyBearerToken,
@@ -42,11 +43,7 @@ export function startMcpHttpServer(
     }
   );
 
-
-  const server = Bun.serve({
-    port,
-    hostname: host,
-    async fetch(req) {
+  const server = launchHttpServer(port, host, async (req) => {
       const origin = req.headers.get("origin");
       const corsHeaders = resolveCorsHeaders(origin, options.corsOrigins);
 
@@ -147,8 +144,8 @@ export function startMcpHttpServer(
           },
         }
       );
-    },
-  });
+    }
+  );
 
   const actualHost = host === "0.0.0.0" ? "127.0.0.1" : host;
   const url = `http://${actualHost}:${server.port}`;

@@ -1,10 +1,15 @@
 # Agent 开发协作指引 - ActionDock 2.0
 
 - **核心定位**：ActionDock 2.0 是面向 AI Agent Action 与 Skill 的开发、测试、构建与分发工具链。
-- **运行时与引擎**：Bun（原生 TypeScript 运行、`Bun.build` 独立编译器、`bun:sqlite` 内置存储）。
+- **运行时与引擎**：默认运行时为 Node.js（版本大于等于 22.0.0，基于 node:sqlite、node:http 与 tsx 提供驱动）；Bun 作为可选的单文件独立二进制编译器（Bun.build）以及独立二进制内嵌驱动（@actiondock/runtime-bun）。
 - **代码库分层结构**：
   - `packages/sdk`：`@actiondock/sdk`（极简公共 SDK：`defineAction`、`ActionContext`、`Config`、`StateStore`、`ActionInvoker`、`Logger`、`createTestRuntime`）。
-  - `packages/core`：`@actiondock/core`（公共领域内核：`project`、`runtime`、`storage`、`schema`、`build`、`export`、`standalone`）。
+  - `packages/core`：`@actiondock/core`（公共领域内核：`project`、`runtime`、`storage`、`schema`、`catalog`、`execution`、`server`）。
+  - `packages/builder`：`@actiondock/builder`（依赖规划与编译器调度：`BuildPlanner`、`BunCompiler`、`SkillExporter`）。
+  - `packages/runtime-node`：`@actiondock/runtime-node`（Node.js 运行时适配层：`NodeSqliteDriver`、`ExecaProcessExecutor`、`NodeHttpServer`）。
+  - `packages/runtime-bun`：`@actiondock/runtime-bun`（Bun 运行时适配层：`BunSqliteDriver`、`BunProcessExecutor`、`BunHttpServer`）。
+  - `packages/runtime-cli`：`@actiondock/runtime-cli`（轻量级无依赖通用 CLI 命令集合与渲染管道）。
+  - `packages/testing`：`@actiondock/testing`（确定性测试工具框架：`FakeClock`、`MockProcessExecutor`、`MemoryStorage`）。
   - `packages/mcp`：`@actiondock/mcp`（Model Context Protocol 适配器：STDIO/HTTP Transport、Tool 映射、取消链路）。
   - `packages/cli`：`@actiondock/cli`（CLI 门面工具链：`init`、`info`、`action`、`mcp`、`playbook`、`config`、`state`、`runs`、`test`、`build`、`export skill`）。
   - `examples/*`：官方示例 Action Packages。

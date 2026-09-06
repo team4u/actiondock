@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import {
@@ -48,23 +49,22 @@ function createArchive(
     rmSync(archivePath, { force: true });
   }
 
-  let proc;
-  if (format === "tar.gz") {
-    proc = Bun.spawnSync(["tar", "-czf", archivePath, folderName], {
-      cwd: parentDir,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-  } else {
-    proc = Bun.spawnSync(["zip", "-r", archivePath, folderName], {
-      cwd: parentDir,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+  const cmd = format === "tar.gz" ? "tar" : "zip";
+  const args = format === "tar.gz"
+    ? ["-czf", archivePath, folderName]
+    : ["-r", archivePath, folderName];
+
+  const proc = spawnSync(cmd, args, {
+    cwd: parentDir,
+    stdio: "pipe",
+  });
+
+  if (proc.error) {
+    throw new BuilderError(`Failed to execute ${cmd}: ${proc.error.message}`);
   }
 
-  if (proc.exitCode !== 0) {
-    const errText = proc.stderr?.toString() || `Exit code ${proc.exitCode}`;
+  if (proc.status !== 0) {
+    const errText = proc.stderr?.toString() || `Exit code ${proc.status}`;
     throw new BuilderError(`Failed to create ${format} archive: ${errText}`);
   }
 

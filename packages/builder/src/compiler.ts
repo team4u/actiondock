@@ -243,6 +243,18 @@ export class BunCompiler {
     let metadataPath: string | undefined;
     if (options.emitMetadata !== false) {
       metadataPath = resolve(outDir, "artifact.json");
+      const bunVersion =
+        (typeof (globalThis as any).Bun !== "undefined" && (globalThis as any).Bun.version) ||
+        (() => {
+          try {
+            const vProc = spawnSync("bun", ["--version"], { stdio: "pipe" });
+            if (vProc.status === 0) {
+              return vProc.stdout.toString().trim();
+            }
+          } catch {}
+          return "unknown";
+        })();
+
       const metadata = {
         packageId: options.packageId,
         version: options.version,
@@ -250,7 +262,7 @@ export class BunCompiler {
         executable: basename(actualExecutablePath),
         sizeBytes,
         sha256,
-        bunVersion: Bun.version,
+        bunVersion,
         minify,
         bytecode,
         actions: options.actions || [],

@@ -235,7 +235,7 @@ export function registerProfileCommands(program: Command): void {
           if (options.json) {
             console.log(JSON.stringify({ ok: true, type: "local", message: "Local execution" }, null, 2));
           } else {
-            console.log(`Target profile '${target.profileName || "local"}' is local (runs in local Bun runtime).`);
+            console.log(`Target profile '${target.profileName || "local"}' is local (runs in local runtime).`);
           }
           return;
         }
