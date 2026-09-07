@@ -1,8 +1,10 @@
-# 核心概念：Agent Skill 交付物
+# 核心概念：Agent Skill 技能资产
 
-**Agent Skill** 是面向 AI 编程助手（如 Claude Code、Cursor、Antigravity、Codex 等）的最高级自包含交付产物。
+Agent Skill 是面向智能体（如 Claude Code、Cursor、Antigravity、Codex 等）的高级自包含交付资产。
 
-它将原子能力（Actions）、操作规程（Playbooks）与执行载体（源码或独立二进制）打包为一个标准的 Skill 目录。
+它将原子能力（Action）、操作规程（Playbook）与执行载体（源码或独立二进制）打包为一个标准的技能目录。
+
+在人制定规程、智能体编写实现的协作模式下，Agent Skill 是最理想的交付载体：它不仅向智能体提供了确定性的可执行能力，更内嵌了人制定的操作时序与安全底线，使智能体能够自主索引规程、安全调用底层工具，告别盲目试错与失控调用。
 
 ---
 
@@ -18,7 +20,7 @@ Agent Skill ───┤   • 跨平台体积极小 (< 100KB)
                │
                └─ 独立二进制型 Skill
                    • 内置已编译的零依赖单文件可执行文件
-                   • 零外部环境依赖，开箱即用
+                   • 零外部环境依赖，随处复制即开即用
 ```
 
 ---

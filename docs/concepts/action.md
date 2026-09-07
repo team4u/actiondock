@@ -53,19 +53,20 @@ export default defineAction<GreetInput, GreetOutput>({
 
 ## 核心设计原则
 
-### 代码即契约
-- **开发态**：TypeScript 泛型接口 `defineAction<TInput, TOutput>` 为开发者提供丝滑的代码自动补全与静态类型检查。
-- **运行态**：`inputSchema` 与 `outputSchema` 基于标准 JSON Schema（Ajv 引擎）执行严格的双向校验。
-- **协议层**：自动映射为 MCP Tool 描述或 Agent Skill 入参规范，杜绝大模型幻觉与参数传递错误。
+### 代码即契约与自愈基准
+- **开发态**：TypeScript 泛型接口 `defineAction<TInput, TOutput>` 提供准确的代码自动补全与静态类型检查。当智能体负责编写代码时，结构化的模式契约能够有效抑制参数幻觉与输出畸变。
+- **运行态**：`inputSchema` 与 `outputSchema` 基于标准 JSON Schema 执行严格的双向校验。
+- **协议层**：自动映射为 MCP 工具描述或智能体技能入参规范，确保下游模型消费接口时的精准理解。
 
 ### 纯净的标准输出与通道隔离
-- Action 执行过程中的所有返回值由执行器统一封装为结构化 **JSON Envelope** 写入 `stdout`。
+- Action 执行过程中的所有返回值由执行器统一封装为结构化 JSON 信封写入 `stdout`。
 - 业务日志和调试诊断通过 `ctx.log` 强制输出至 `stderr`。
-- 保证任何调试输出都不会破坏大模型或下游管道的 JSON 解析。
+- 保证任何调试输出都不会污染标准输出通道，避免破坏模型或自动化流水线的 JSON 数据解析。
 
-### 可测试与零副作用沙箱
+### 内存沙箱与智能体自测自愈
 - Action 设计为天然支持纯内存沙箱测试。
-- 通过 `createTestRuntime` 可在毫秒级内注入 Mock 配置、预填状态并进行断言。
+- 通过 `createTestRuntime` 可在毫秒级内注入模拟配置、预填状态并进行断言。
+- 当智能体生成 Action 实现代码后，能够依靠这一纯内存测试底座实现本地自治验证；遇到边界失败时，依据精确的错误结构自主修正代码，实现闭环自愈。
 
 ### 级联调用与循环检测
 - Action 可通过 `ctx.actions.invoke("other-action", input)` 组合调用其他 Action。

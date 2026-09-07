@@ -26,7 +26,7 @@
   * [Action 原子能力契约](/concepts/action.md)
   * [ActionContext 运行时上下文](/concepts/action-context.md)
   * [Playbook 规程模型](/concepts/playbook.md)
-  * [Agent Skill 交付物规范](/concepts/skill.md)
+  * [Agent Skill 技能资产规范](/concepts/skill.md)
 
 * **参考手册**
   * [CLI 命令行速查](/reference/cli.md)

@@ -29,18 +29,18 @@ TypeScript Action
 
 ## Why ActionDock?
 
-Agent tools are becoming real software.
+In an era where AI writes most of the code, the bottleneck of tool development is no longer typing boilerplate glue code—it is deterministic execution, self-healing quality, and zero-maintenance delivery.
 
-They require schema contracts, automated testing, version control, reproducible builds, and multiple distribution targets, rather than copy-pasting business logic across different agent runtimes.
+Ad-hoc scripts easily break due to missing dependencies, unpinned runtimes, or out-of-order execution. Generic wrapper libraries simply expose APIs to models without guardrails, leading to hallucinations and unexpected destructive actions.
 
-ActionDock treats an Agent Tool as a standard software asset:
+ActionDock establishes Agent Tools as industrial-grade software assets:
 
-- **Code as Contract**: TypeScript and JSON Schema define the tool contract and implementation together with automatic runtime validation.
-- **Testable by Default**: Test Actions in an in-memory sandbox in milliseconds without launching network services or configuring external databases.
-- **Build Once, Run Anywhere**: The exact same Action runs across CLI, MCP, HTTP microservices, and standalone binaries.
-- **Portable Distribution**: Compile an Action Package into a single standalone binary with zero external dependencies (target machines require neither Node.js nor Bun).
-- **Agent Skills with SOPs**: Combine deterministic Actions with operational Playbooks and export them as self-contained Agent Skills.
-- **Git Native**: Actions and Playbooks are plain text files designed for code reviews, branch workflows, and CI/CD automation pipelines.
+- **Humans Define SOPs, Agents Write Implementation**: Humans establish operational boundaries, sequence constraints, and safety guardrails in Playbooks; AI agents write the deterministic Action implementations against contracts.
+- **In-Memory Sandbox and Self-Healing Loop**: Test Actions in an in-memory sandbox with deterministic clocks in milliseconds. When AI generates code, it can run automated tests and self-heal autonomously based on structured errors.
+- **Zero-Dependency Standalone Distribution**: Compile an Action Package into a single standalone binary. Target machines need neither Node.js nor Bun—just copy and run.
+- **Build Once, Deliver Everywhere**: The exact same Action runs seamlessly across CLI, MCP servers, HTTP microservices, and Agent Skills.
+- **Code and Contract in Sync**: The declarative manifest acts as the single source of truth for zero-side-effect static analysis, dependency closure computation, and pruning.
+- **Git-Native Plain Text Assets**: Actions and Playbooks are plain text files designed for version control, code reviews, and CI/CD pipelines.
 
 ---
 
@@ -152,17 +152,20 @@ ad build
 
 ---
 
-## Action and Playbook
+## Authoring Actions and Playbooks
 
-ActionDock separates capability from procedure:
+Under the AI-driven development paradigm, humans and agents establish a clear division of responsibility:
+
+- Humans write operational Playbooks to define expert workflows, decision branches, and strict safety guardrails.
+- Agents write deterministic Actions against typed contracts and complete self-healing loops via automated unit tests.
 
 ```text
-Action   = What an agent can do (deterministic capability)
-Playbook = How an agent should do it (operational procedure)
+Playbook = Human-defined SOPs (workflow sequences, branches, guardrails)
+Action   = Agent-implemented code (strongly typed, deterministic capabilities)
 
-             ↓ combined into
+             ↓ Combined Export
 
-         Agent Skill
+         Agent Skill Package
 ```
 
 ### Define an Action
@@ -225,15 +228,15 @@ When greeting a new user in the conversation:
 
 | Capability / Dimension | ActionDock | mcp-use | FastMCP | Arcade MCP |
 | :--- | :---: | :---: | :---: | :---: |
-| MCP Server (STDIO & HTTP) | Supported | Supported | Supported | Supported |
-| TypeScript Native | Supported | Supported | Supported | Supported / Python |
-| Pure In-Memory Test Harness | Supported | Supported | Supported | Supported |
 | Zero-Dependency Standalone Binary | Supported | — | — | — |
-| Agent Skill Export with SOPs | Supported | — | — | — |
-| Playbook Procedure Orchestration | Supported | — | — | — |
+| In-Memory Sandbox & Self-Healing Testing | Supported | Supported | Supported | Supported |
+| Procedure & Guardrail Decoupling (Playbook) | Supported | — | — | — |
+| Self-Contained Agent Skill Export | Supported | — | — | — |
+| Declarative Manifest & Dependency Pruning | Supported | — | — | — |
+| Multimodal Delivery (CLI, MCP, HTTP, Skill) | Supported | Partial | Partial | Partial |
+| MCP Protocol Native (STDIO & HTTP) | Supported | Supported | Supported | Supported |
 | Remote HTTP Service Dispatch | Supported | Supported | Supported | Supported |
-| Git-Native Text Asset Model | Supported | Supported | Supported | Supported |
-| Declarative Manifest Source | Supported | — | — | — |
+| Git-Native Plain Text Asset Model | Supported | Supported | Supported | Supported |
 
 ---
 
