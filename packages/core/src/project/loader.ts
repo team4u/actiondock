@@ -1,9 +1,19 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import YAML from "yaml";
 import type { ActionDefinition } from "@actiondock/sdk";
 import type { PlaybookDefinition, PlaybookFrontmatter, ProjectConfig } from "./types";
+
+/**
+ * 将绝对路径规范化为 ESM 动态导入可用的 file:// URL 标识符。
+ * Windows 绝对路径（如 D:\a\b.ts）不是合法的 ESM 标识符，会被解析为 "d:" 协议导致
+ * 加载失败；POSIX 绝对路径虽可直接导入，统一转换后跨平台行为一致。
+ */
+function toImportSpecifier(filePath: string): string {
+  return pathToFileURL(filePath).href;
+}
 
 /**
  * 从指定目录开始向上逐级递归查找包含 `actiondock.json` 的项目根目录。
@@ -220,7 +230,7 @@ export async function loadActions(
       // 动态导入，若缺失模块则自动触发依赖重装与二次重试
       let imported: any;
       try {
-        imported = await import(file);
+        imported = await import(toImportSpecifier(file));
       } catch (err: any) {
         const msg = String(err.message || "");
         if (
@@ -232,7 +242,7 @@ export async function loadActions(
         ) {
           const installed = ensureProjectDependencies(projectRoot, true);
           if (installed) {
-            imported = await import(file);
+            imported = await import(toImportSpecifier(file));
           } else {
             throw err;
           }
@@ -283,7 +293,7 @@ export async function loadActionFileMap(
 
   for (const file of files) {
     try {
-      const imported = await import(file);
+      const imported = await import(toImportSpecifier(file));
       const act = imported.default || imported.action;
       if (act && typeof act === "object" && typeof act.id === "string") {
         map.set(act.id, {

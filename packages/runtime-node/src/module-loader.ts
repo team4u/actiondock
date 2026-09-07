@@ -160,10 +160,12 @@ export class TsxModuleLoader {
       }
     }
 
-    // Node.js 环境下优先使用 tsx 的 ESM 动态导入
+    // Node.js 环境下优先使用 tsx 的 ESM 动态导入。
+    // tsImport 的首参按 URL 解析，Windows 绝对路径（D:\...）会被误判为 "d:" 协议，
+    // 必须转换为 file:// URL；POSIX 路径转换后行为一致。
     try {
       const { tsImport } = await import("tsx/esm/api");
-      return (await tsImport(resolvedPath, parentUrl)) as T;
+      return (await tsImport(pathToFileURL(resolvedPath).href, parentUrl)) as T;
     } catch (esmErr) {
       try {
         const { require: tsxRequire } = cjsRequire("tsx/cjs/api");

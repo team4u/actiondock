@@ -1,6 +1,6 @@
 {
   "name": "@actiondock/runtime-cli",
-  "version": "2.0.7",
+  "version": "2.0.8",
   "description": "Shared runtime commands and rendering for ActionDock CLI and standalone binaries",
   "type": "module",
   "main": "./src/index.ts",
