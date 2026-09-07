@@ -39,5 +39,14 @@
   },
   "keywords": ["actiondock", "runtime", "node", "sqlite", "execa", "tsx"],
   "author": "team4u",
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/team4u/actiondock.git",
+    "directory": "packages/runtime-node"
+  },
+  "homepage": "https://github.com/team4u/actiondock#readme",
+  "bugs": {
+    "url": "https://github.com/team4u/actiondock/issues"
+  }
 }

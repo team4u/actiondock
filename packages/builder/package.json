@@ -37,5 +37,14 @@
   },
   "keywords": ["actiondock", "builder", "compiler", "skill", "export"],
   "author": "team4u",
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/team4u/actiondock.git",
+    "directory": "packages/builder"
+  },
+  "homepage": "https://github.com/team4u/actiondock#readme",
+  "bugs": {
+    "url": "https://github.com/team4u/actiondock/issues"
+  }
 }
