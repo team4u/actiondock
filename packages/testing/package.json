@@ -1,6 +1,6 @@
 {
   "name": "@actiondock/testing",
-  "version": "2.0.5",
+  "version": "2.0.4",
   "description": "ActionDock Test Runtime for testing Actions with real Core execution semantics",
   "type": "module",
   "main": "./src/index.ts",
