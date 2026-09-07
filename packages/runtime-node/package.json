@@ -27,8 +27,8 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@actiondock/core": "^2.0.0",
-    "@actiondock/sdk": "^2.0.0",
+    "@actiondock/core": "^2.0.8",
+    "@actiondock/sdk": "^2.0.8",
     "execa": "^9.5.2",
     "tsx": "^4.19.3"
   },
@@ -37,7 +37,14 @@
     "@types/node": "^22.12.0",
     "typescript": "^5.7.0"
   },
-  "keywords": ["actiondock", "runtime", "node", "sqlite", "execa", "tsx"],
+  "keywords": [
+    "actiondock",
+    "runtime",
+    "node",
+    "sqlite",
+    "execa",
+    "tsx"
+  ],
   "author": "team4u",
   "license": "Apache-2.0",
   "repository": {

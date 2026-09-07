@@ -15,13 +15,14 @@
     "test:pack": "bun run ./scripts/pack-smoke-test.ts",
     "typecheck": "tsc --noEmit",
     "build": "bun run --filter '@actiondock/*' build",
+    "bump": "bun run ./scripts/bump-version.ts",
     "docs:serve": "bunx docsify-cli serve docs"
   },
   "dependencies": {
-    "@actiondock/cli": "^2.0.0",
-    "@actiondock/core": "^2.0.0",
-    "@actiondock/mcp": "^2.0.0",
-    "@actiondock/sdk": "^2.0.0",
+    "@actiondock/cli": "^2.0.8",
+    "@actiondock/core": "^2.0.8",
+    "@actiondock/mcp": "^2.0.8",
+    "@actiondock/sdk": "^2.0.8",
     "@modelcontextprotocol/server": "2.0.0"
   },
   "devDependencies": {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { defineAction } from "@actiondock/sdk";
+import rootPkg from "../../../package.json";
 import {
   ArgumentError,
   CliError,
@@ -152,7 +153,7 @@ describe("@actiondock/runtime-cli - Exit Code Strategy", () => {
       stdout: (msg) => stdoutLogs.push(msg),
     });
     expect(code).toBe(ExitCode.SUCCESS);
-    expect(stdoutLogs.join("")).toContain("v2.0.8");
+    expect(stdoutLogs.join("")).toContain(`v${rootPkg.version}`);
   });
 
   it("returns exit code 0 on help command", async () => {

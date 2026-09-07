@@ -27,9 +27,9 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@actiondock/core": "^2.0.0",
-    "@actiondock/mcp": "^2.0.0",
-    "@actiondock/sdk": "^2.0.0",
+    "@actiondock/core": "^2.0.8",
+    "@actiondock/mcp": "^2.0.8",
+    "@actiondock/sdk": "^2.0.8",
     "@modelcontextprotocol/server": "^2.0.0",
     "commander": "^13.1.0"
   },
@@ -37,7 +37,12 @@
     "@types/bun": "latest",
     "typescript": "^5.7.0"
   },
-  "keywords": ["actiondock", "cli", "runtime-cli", "commands"],
+  "keywords": [
+    "actiondock",
+    "cli",
+    "runtime-cli",
+    "commands"
+  ],
   "author": "team4u",
   "license": "Apache-2.0",
   "repository": {

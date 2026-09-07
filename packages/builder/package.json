@@ -27,15 +27,21 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@actiondock/core": "^2.0.0",
-    "@actiondock/sdk": "^2.0.0",
+    "@actiondock/core": "^2.0.8",
+    "@actiondock/sdk": "^2.0.8",
     "yaml": "^2.7.0"
   },
   "devDependencies": {
     "@types/bun": "latest",
     "typescript": "^5.7.0"
   },
-  "keywords": ["actiondock", "builder", "compiler", "skill", "export"],
+  "keywords": [
+    "actiondock",
+    "builder",
+    "compiler",
+    "skill",
+    "export"
+  ],
   "author": "team4u",
   "license": "Apache-2.0",
   "repository": {

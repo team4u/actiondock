@@ -3,6 +3,9 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 const rootDir = resolve(__dirname, "..");
+const rootPkg = JSON.parse(readFileSync(join(rootDir, "package.json"), "utf8"));
+const currentVersion = rootPkg.version;
+
 const packages = [
   "sdk",
   "core",
@@ -35,7 +38,7 @@ try {
 
     const output = packProc.stdout.toString() + packProc.stderr.toString();
     const tgzMatch = output.match(/actiondock-[a-z0-9\-\.]+\.tgz/i);
-    const tgzFilename = tgzMatch ? tgzMatch[0] : `actiondock-${pkg}-2.0.8.tgz`;
+    const tgzFilename = tgzMatch ? tgzMatch[0] : `actiondock-${pkg}-${currentVersion}.tgz`;
     const tgzPath = join(pkgDir, tgzFilename);
 
     if (!existsSync(tgzPath)) {
@@ -164,10 +167,10 @@ console.log("   ✓ MCP createActionDockMcpServer & toMcpResult export verified"
 
   // ad --version
   const verProc = Bun.spawnSync([cliBin, "--version"], { cwd: testDir, stdout: "pipe", stderr: "pipe" });
-  if (verProc.exitCode !== 0 || !verProc.stdout.toString().includes("2.0.8")) {
+  if (verProc.exitCode !== 0 || !verProc.stdout.toString().includes(currentVersion)) {
     throw new Error(`'ad --version' failed: ${verProc.stderr.toString()} (output: ${verProc.stdout.toString()})`);
   }
-  console.log(`   ✓ ad --version returned 2.0.8`);
+  console.log(`   ✓ ad --version returned ${currentVersion}`);
 
   // ad --help
   const helpProc = Bun.spawnSync([cliBin, "--help"], { cwd: testDir, stdout: "pipe", stderr: "pipe" });

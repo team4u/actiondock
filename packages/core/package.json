@@ -27,7 +27,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@actiondock/sdk": "^2.0.0",
+    "@actiondock/sdk": "^2.0.8",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
     "yaml": "^2.7.0"
@@ -36,7 +36,13 @@
     "@types/bun": "latest",
     "typescript": "^5.7.0"
   },
-  "keywords": ["actiondock", "core", "runtime", "storage", "builder"],
+  "keywords": [
+    "actiondock",
+    "core",
+    "runtime",
+    "storage",
+    "builder"
+  ],
   "author": "team4u",
   "license": "Apache-2.0",
   "repository": {

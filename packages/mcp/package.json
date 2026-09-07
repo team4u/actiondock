@@ -27,15 +27,21 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@actiondock/core": "^2.0.0",
-    "@actiondock/sdk": "^2.0.0",
+    "@actiondock/core": "^2.0.8",
+    "@actiondock/sdk": "^2.0.8",
     "@modelcontextprotocol/server": "^2.0.0"
   },
   "devDependencies": {
     "@types/bun": "latest",
     "typescript": "^5.7.0"
   },
-  "keywords": ["actiondock", "mcp", "model-context-protocol", "tools", "agent"],
+  "keywords": [
+    "actiondock",
+    "mcp",
+    "model-context-protocol",
+    "tools",
+    "agent"
+  ],
   "author": "team4u",
   "license": "Apache-2.0",
   "repository": {

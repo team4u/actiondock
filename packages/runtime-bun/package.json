@@ -27,14 +27,19 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@actiondock/core": "^2.0.0",
-    "@actiondock/sdk": "^2.0.0"
+    "@actiondock/core": "^2.0.8",
+    "@actiondock/sdk": "^2.0.8"
   },
   "devDependencies": {
     "@types/bun": "latest",
     "typescript": "^5.7.0"
   },
-  "keywords": ["actiondock", "runtime", "bun", "sqlite"],
+  "keywords": [
+    "actiondock",
+    "runtime",
+    "bun",
+    "sqlite"
+  ],
   "author": "team4u",
   "license": "Apache-2.0",
   "repository": {
