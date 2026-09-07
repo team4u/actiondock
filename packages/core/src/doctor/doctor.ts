@@ -4,7 +4,7 @@ import { discoverActionFiles, findProjectRoot, loadActions, loadPlaybooks, loadP
 import { loadManifest, MANIFEST_FILE_NAME } from "../project/manifest";
 import { getRegistryStatus } from "../registry/registry";
 import { createGlobalStorage, createStorage } from "../storage";
-import { getActionDockHome } from "../utils";
+import { findExecutable, getActionDockHome } from "../utils";
 import type { DoctorCheckItem, DoctorReport } from "./types";
 
 function compareSemver(v1: string, v2: string): number {
@@ -17,36 +17,6 @@ function compareSemver(v1: string, v2: string): number {
     if (num1 < num2) return -1;
   }
   return 0;
-}
-
-function findExecutable(command: string): string | null {
-  if (typeof (globalThis as any).Bun !== "undefined" && typeof (globalThis as any).Bun.which === "function") {
-    try {
-      const bPath = (globalThis as any).Bun.which(command);
-      if (bPath) return bPath;
-    } catch {}
-  }
-  const hasPathSep = command.includes("/") || command.includes("\\");
-  if (hasPathSep) {
-    return existsSync(command) ? command : null;
-  }
-  const pathEnv = process.env.PATH || "";
-  const dirs = pathEnv.split(delimiter);
-  const isWindows = process.platform === "win32";
-  const pathext = isWindows
-    ? (process.env.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";")
-    : [""];
-
-  for (const dir of dirs) {
-    if (!dir) continue;
-    for (const ext of pathext) {
-      const candidate = join(dir, isWindows && !command.includes(".") ? command + ext : command);
-      if (existsSync(candidate)) {
-        return candidate;
-      }
-    }
-  }
-  return null;
 }
 
 export async function runDoctorChecks(options?: {

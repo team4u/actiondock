@@ -1,10 +1,12 @@
 import { chmodSync, existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { JsonValue, RuntimeError, RunRecord } from "@actiondock/sdk";
+import { type Clock, getSystemClock } from "../runtime/clock";
 import { createDefaultSqliteDriver } from "./driver";
 import type {
   RuntimeStorage,
   SqliteDriver,
+  SqliteStatement,
   StateEntry,
   StorageOptions,
   TerminalRunStatus,
@@ -17,10 +19,21 @@ import type {
 export class SqliteRuntimeStorage implements RuntimeStorage {
   private driver: SqliteDriver;
   private packageId: string;
+  private clock: Clock;
   private isClosed = false;
+  private statementCache = new Map<string, SqliteStatement>();
+
+  get isOpen(): boolean {
+    return !this.isClosed;
+  }
+
+  get closed(): boolean {
+    return this.isClosed;
+  }
 
   constructor(options: StorageOptions) {
     this.packageId = options.packageId;
+    this.clock = options.clock ?? getSystemClock();
     const dbPath = options.dbPath || ":memory:";
 
     if (dbPath !== ":memory:") {
@@ -161,10 +174,22 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     }
   }
 
+  /**
+   * 获取或复用预编译 SQL 语句缓存。
+   */
+  private getStatement(sql: string): SqliteStatement {
+    let stmt = this.statementCache.get(sql);
+    if (!stmt) {
+      stmt = this.driver.prepare(sql);
+      this.statementCache.set(sql, stmt);
+    }
+    return stmt;
+  }
+
   // --- Config 配置管理 ---
 
   getConfig<T = unknown>(key: string): T | undefined {
-    const stmt = this.driver.prepare(
+    const stmt = this.getStatement(
       "SELECT value_json FROM config WHERE package_id = ? AND key = ?"
     );
     const row = stmt.get<{ value_json: string }>(this.packageId, key);
@@ -179,7 +204,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
   }
 
   listConfig(): Record<string, unknown> {
-    const stmt = this.driver.prepare(
+    const stmt = this.getStatement(
       "SELECT key, value_json FROM config WHERE package_id = ?"
     );
     const rows = stmt.all<{ key: string; value_json: string }>(this.packageId);
@@ -195,7 +220,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
   }
 
   setConfig(key: string, value: unknown): void {
-    const stmt = this.driver.prepare(`
+    const stmt = this.getStatement(`
       INSERT INTO config (package_id, key, value_json, updated_at)
       VALUES (?, ?, ?, ?)
       ON CONFLICT(package_id, key) DO UPDATE SET
@@ -203,12 +228,12 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
         updated_at = excluded.updated_at
     `);
     const valJson = JSON.stringify(value);
-    const now = new Date().toISOString();
+    const now = this.clock.now().toISOString();
     stmt.run(this.packageId, key, valJson, now);
   }
 
   deleteConfig(key: string): boolean {
-    const stmt = this.driver.prepare(
+    const stmt = this.getStatement(
       "DELETE FROM config WHERE package_id = ? AND key = ?"
     );
     const res = stmt.run(this.packageId, key);
@@ -218,7 +243,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
   // --- State 状态管理 ---
 
   async getState<T = unknown>(namespace: string, key: string): Promise<T | undefined> {
-    const stmt = this.driver.prepare(
+    const stmt = this.getStatement(
       "SELECT value_json, expires_at FROM state WHERE package_id = ? AND namespace = ? AND key = ?"
     );
     const row = stmt.get<{ value_json: string; expires_at?: string }>(
@@ -232,7 +257,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
 
     if (row.expires_at) {
       const expires = new Date(row.expires_at).getTime();
-      if (Date.now() >= expires) {
+      if (this.clock.now().getTime() >= expires) {
         this.deleteState(namespace, key).catch(() => {});
         return undefined;
       }
@@ -262,7 +287,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       const val = await this.getState<T>(ns, actualKey);
       if (val === undefined) return undefined;
 
-      const stmt = this.driver.prepare(
+      const stmt = this.getStatement(
         "SELECT updated_at, expires_at FROM state WHERE package_id = ? AND namespace = ? AND key = ?"
       );
       const row = stmt.get<{ updated_at: string; expires_at?: string }>(
@@ -277,14 +302,14 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
         key: actualKey,
         fullKey: targetKey,
         value: val,
-        updatedAt: row?.updated_at || new Date().toISOString(),
+        updatedAt: row?.updated_at || this.clock.now().toISOString(),
         expiresAt: row?.expires_at,
       };
     }
 
     const val = await this.getState<T>("", actualKey);
     if (val !== undefined) {
-      const stmt = this.driver.prepare(
+      const stmt = this.getStatement(
         "SELECT updated_at, expires_at FROM state WHERE package_id = ? AND namespace = ? AND key = ?"
       );
       const row = stmt.get<{ updated_at: string; expires_at?: string }>(
@@ -298,12 +323,12 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
         key: actualKey,
         fullKey: actualKey,
         value: val,
-        updatedAt: row?.updated_at || new Date().toISOString(),
+        updatedAt: row?.updated_at || this.clock.now().toISOString(),
         expiresAt: row?.expires_at,
       };
     }
 
-    const stmt = this.driver.prepare(
+    const stmt = this.getStatement(
       "SELECT namespace, key, value_json, updated_at, expires_at FROM state WHERE package_id = ? AND key = ?"
     );
     const rows = stmt.all<{
@@ -314,7 +339,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       expires_at?: string;
     }>(this.packageId, actualKey);
 
-    const now = Date.now();
+    const now = this.clock.now().getTime();
     for (const row of rows) {
       if (row.expires_at && now >= new Date(row.expires_at).getTime()) {
         continue;
@@ -345,7 +370,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     value: T,
     ttl?: number
   ): Promise<void> {
-    const stmt = this.driver.prepare(`
+    const stmt = this.getStatement(`
       INSERT INTO state (package_id, namespace, key, value_json, updated_at, expires_at)
       VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(package_id, namespace, key) DO UPDATE SET
@@ -354,7 +379,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
         expires_at = excluded.expires_at
     `);
     const valJson = JSON.stringify(value);
-    const now = new Date();
+    const now = this.clock.now();
     const updatedAt = now.toISOString();
 
     let expiresAt: string | null = null;
@@ -366,7 +391,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
   }
 
   async deleteState(namespace: string, key: string): Promise<boolean> {
-    const stmt = this.driver.prepare(
+    const stmt = this.getStatement(
       "DELETE FROM state WHERE package_id = ? AND namespace = ? AND key = ?"
     );
     const res = stmt.run(this.packageId, namespace, key);
@@ -390,7 +415,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     const deletedRoot = await this.deleteState("", actualKey);
     if (deletedRoot) return true;
 
-    const stmt = this.driver.prepare(
+    const stmt = this.getStatement(
       "DELETE FROM state WHERE package_id = ? AND key = ?"
     );
     const res = stmt.run(this.packageId, actualKey);
@@ -414,7 +439,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       params.push(`${escapedPrefix}%`);
     }
 
-    const stmt = this.driver.prepare(sql);
+    const stmt = this.getStatement(sql);
     const res = stmt.run(...params);
     return res.changes;
   }
@@ -437,14 +462,14 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       params.push(`${escapedPrefix}%`);
     }
 
-    const stmt = this.driver.prepare(sql);
+    const stmt = this.getStatement(sql);
     const rows = stmt.all<{
       namespace: string;
       key: string;
       expires_at?: string;
     }>(...params);
 
-    const now = Date.now();
+    const now = this.clock.now().getTime();
     const result: string[] = [];
 
     for (const row of rows) {
@@ -478,7 +503,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       params.push(`${escapedPrefix}%`);
     }
 
-    const stmt = this.driver.prepare(sql);
+    const stmt = this.getStatement(sql);
     const rows = stmt.all<{
       namespace: string;
       key: string;
@@ -487,7 +512,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       expires_at?: string;
     }>(...params);
 
-    const now = Date.now();
+    const now = this.clock.now().getTime();
     const results: StateEntry[] = [];
 
     for (const row of rows) {
@@ -519,7 +544,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
   // --- Runs 运行记录管理 ---
 
   createRun(record: RunRecord | any): void {
-    const stmt = this.driver.prepare(`
+    const stmt = this.getStatement(`
       INSERT INTO runs (
         id, root_run_id, parent_run_id, package_id, package_instance_id,
         action_id, generation_id, owner_id, status, input_json, output_json,
@@ -567,7 +592,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
   ): void {
     if (this.isClosed) return;
     try {
-      const stmt = this.driver.prepare(`
+      const stmt = this.getStatement(`
         UPDATE runs
         SET status = ?, output_json = ?, error_json = ?, finished_at = ?
         WHERE id = ?
@@ -576,16 +601,18 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
         status,
         output !== undefined ? JSON.stringify(output) : null,
         error ? JSON.stringify(error) : null,
-        finishedAt || new Date().toISOString(),
+        finishedAt || this.clock.now().toISOString(),
         id
       );
-    } catch {
-      // 数据库已关闭或操作异常，安全忽略
+    } catch (err) {
+      if (this.isClosed) return;
+      console.warn(`[SqliteRuntimeStorage] Failed to update run "${id}":`, err);
+      throw err;
     }
   }
 
   getRun(id: string): RunRecord | null {
-    const stmt = this.driver.prepare(
+    const stmt = this.getStatement(
       "SELECT * FROM runs WHERE id = ? AND package_id = ?"
     );
     const row = stmt.get<any>(id, this.packageId);
@@ -597,7 +624,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     const limit = options.limit || 50;
     let rows: any[];
     if (options.actionId) {
-      const stmt = this.driver.prepare(`
+      const stmt = this.getStatement(`
         SELECT * FROM runs
         WHERE package_id = ? AND action_id = ?
         ORDER BY started_at DESC
@@ -605,7 +632,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       `);
       rows = stmt.all(this.packageId, options.actionId, limit);
     } else {
-      const stmt = this.driver.prepare(`
+      const stmt = this.getStatement(`
         SELECT * FROM runs
         WHERE package_id = ?
         ORDER BY started_at DESC
@@ -627,7 +654,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       sql += " AND status = ?";
       params.push(options.status);
     }
-    const stmt = this.driver.prepare(sql);
+    const stmt = this.getStatement(sql);
     const res = stmt.run(...params);
     return res.changes;
   }
@@ -675,7 +702,9 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
   }
 
   close(): void {
+    if (this.isClosed) return;
     this.isClosed = true;
+    this.statementCache.clear();
     try {
       this.driver.close();
     } catch {

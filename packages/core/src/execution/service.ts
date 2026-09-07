@@ -5,6 +5,7 @@ import type {
   ExecutionEvent,
   ExecutionResult,
   JsonValue,
+  Logger,
   ProgressReporter,
   RunRecord,
   RunStatus,
@@ -159,6 +160,7 @@ export class DefaultExecutionService implements ExecutionService {
       }
     }
 
+    const runId = randomUUID();
     let sequence = 0;
     type EventPayload =
       | { type: "log"; level: "debug" | "info" | "warn" | "error"; message: string; data?: JsonValue }
@@ -166,16 +168,11 @@ export class DefaultExecutionService implements ExecutionService {
       | { type: "status"; status: RunStatus }
       | { type: "finish"; result: ExecutionResult };
 
-    const handle = this.runner.start(action, input, {
-      signal: controller.signal,
-      timeoutMs: options.timeoutMs,
-    });
-
     const emitEvent = (payload: EventPayload) => {
       const evt: ExecutionEvent = {
         ...payload,
-        runId: handle.runId,
-        rootRunId: handle.runId,
+        runId,
+        rootRunId: runId,
         sequence: sequence++,
         timestamp: new Date().toISOString(),
       };
@@ -192,6 +189,49 @@ export class DefaultExecutionService implements ExecutionService {
         });
       },
     };
+
+    const executionLogger: Logger = {
+      debug(message: string, data?: unknown) {
+        emitEvent({
+          type: "log",
+          level: "debug",
+          message,
+          data: data as JsonValue | undefined,
+        });
+      },
+      info(message: string, data?: unknown) {
+        emitEvent({
+          type: "log",
+          level: "info",
+          message,
+          data: data as JsonValue | undefined,
+        });
+      },
+      warn(message: string, data?: unknown) {
+        emitEvent({
+          type: "log",
+          level: "warn",
+          message,
+          data: data as JsonValue | undefined,
+        });
+      },
+      error(message: string, data?: unknown) {
+        emitEvent({
+          type: "log",
+          level: "error",
+          message,
+          data: data as JsonValue | undefined,
+        });
+      },
+    };
+
+    const handle = this.runner.start(action, input, {
+      runId,
+      signal: controller.signal,
+      timeoutMs: options.timeoutMs,
+      progress: progressReporter,
+      logger: executionLogger,
+    });
 
     const activeItem: ActiveRun = {
       runId: handle.runId,

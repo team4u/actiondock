@@ -1,4 +1,5 @@
 import { fetchRemoteDoctor, resolveTarget, runDoctorChecks } from "@actiondock/core";
+import { ExecutionError } from "@actiondock/runtime-cli";
 import { Command } from "commander";
 
 export function registerDoctorCommand(program: Command): void {
@@ -31,7 +32,7 @@ export function registerDoctorCommand(program: Command): void {
         if (options.json) {
           console.log(JSON.stringify(report, null, 2));
           if (!report.ok) {
-            process.exit(1);
+            process.exitCode = 1;
           }
           return;
         }
@@ -72,11 +73,10 @@ export function registerDoctorCommand(program: Command): void {
         console.log(`\n[Summary] ${report.summary.ok} passed, ${report.summary.warn} warning(s), ${report.summary.error} error(s)`);
 
         if (!report.ok) {
-          process.exit(1);
+          process.exitCode = 1;
         }
       } catch (err: any) {
-        console.error(`[ERROR] Doctor failed to run diagnostics: ${err.message}`);
-        process.exit(1);
+        throw new ExecutionError(`Doctor failed to run diagnostics: ${err.message}`);
       }
     });
 }

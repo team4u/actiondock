@@ -42,7 +42,7 @@ export function registerTestCommand(program: Command): void {
       });
 
       if (proc.status !== 0) {
-        process.exit(proc.status ?? 1);
+        process.exitCode = proc.status ?? 1;
       }
     });
 }

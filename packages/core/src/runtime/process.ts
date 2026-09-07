@@ -200,23 +200,24 @@ export class DefaultProcessExecutor implements ProcessExecutor {
         }
 
         try {
-          const checkRes = await this.exec(options.command, ["--version"], {
-            timeoutMs: 1000,
-          });
-          const isReady = await options.probe(checkRes);
+          const res: DetachedProcessResult = {
+            ok: true,
+            pid: child.pid,
+            ready: true,
+            durationMs: Date.now() - startTime,
+          };
+          const isReady = await options.probe(res as any);
           if (isReady) {
-            return {
-              ok: true,
-              pid: child.pid,
-              ready: true,
-              durationMs: Date.now() - startTime,
-            };
+            return res;
           }
         } catch {
           // 探测失败继续轮询
         }
 
-        await new Promise((r) => setTimeout(r, probeInterval));
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) break;
+        const sleepTime = Math.min(probeInterval, remaining);
+        await new Promise((r) => setTimeout(r, sleepTime));
       }
 
       return {

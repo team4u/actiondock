@@ -12,6 +12,7 @@ import {
   resolveTarget,
 } from "@actiondock/core";
 import { Command } from "commander";
+import { ArgumentError, CliError, ExecutionError } from "@actiondock/runtime-cli";
 import { resolveIntent } from "../utils/filter";
 
 interface AggregatedPackage {
@@ -333,10 +334,9 @@ export function registerInfoCommand(program: Command): void {
             }
             return;
           }
-          console.error(
-            `Error: Package '${options.package}' not found in linked packages or path`
+          throw new ArgumentError(
+            `Package '${options.package}' not found in linked packages or path`
           );
-          process.exit(1);
         }
 
         // 3. Collect local candidate packages (current project + linked packages)
@@ -444,10 +444,9 @@ export function registerInfoCommand(program: Command): void {
         }
 
         if (aggregated.length === 0) {
-          console.error(
-            `Error: No ActionDock project or linked packages available to match '${effectiveIntent}'`
+          throw new ExecutionError(
+            `No ActionDock project or linked packages available to match '${effectiveIntent}'`
           );
-          process.exit(1);
         }
 
         // 5.2 Intent filtering across candidate packages
@@ -470,12 +469,12 @@ export function registerInfoCommand(program: Command): void {
           if (!shouldFallback) {
             if (options.json) {
               console.log(JSON.stringify({ linkedPackages: [] }, null, 2));
-            } else {
-              console.error(
-                `Error: No packages matched intent '${effectiveIntent}'`
-              );
+              process.exitCode = 1;
+              return;
             }
-            process.exit(1);
+            throw new ExecutionError(
+              `No packages matched intent '${effectiveIntent}'`
+            );
           }
 
           // Fallback enabled: display all packages with a notice
@@ -520,8 +519,10 @@ export function registerInfoCommand(program: Command): void {
           });
         }
       } catch (err: any) {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
+        if (err instanceof CliError) {
+          throw err;
+        }
+        throw new ExecutionError(err.message);
       }
     });
 }

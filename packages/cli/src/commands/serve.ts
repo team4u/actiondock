@@ -3,6 +3,7 @@ import { findProjectRoot, loadProjectConfig, startActionDockServer } from "@acti
 import { createActionDockMcpServer } from "@actiondock/mcp";
 import { createMcpHandler } from "@modelcontextprotocol/server";
 import { Command } from "commander";
+import { ExecutionError } from "@actiondock/runtime-cli";
 import { parseByteSize } from "../utils/bytes";
 
 export function registerServeCommand(program: Command): void {
@@ -36,8 +37,7 @@ export function registerServeCommand(program: Command): void {
         try {
           maxBodyBytes = parseByteSize(options.maxBody);
         } catch (err: any) {
-          console.error(`Error: ${err.message}`);
-          process.exit(1);
+          throw new ExecutionError(err.message);
         }
       }
 
@@ -126,8 +126,7 @@ export function registerServeCommand(program: Command): void {
           process.exit(0);
         });
       } catch (err: any) {
-        console.error(`Failed to start ActionDock server: ${err.message}`);
-        process.exit(1);
+        throw new ExecutionError(`Failed to start ActionDock server: ${err.message}`);
       }
     });
 }

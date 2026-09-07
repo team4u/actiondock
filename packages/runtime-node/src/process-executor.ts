@@ -166,36 +166,15 @@ export class ExecaProcessExecutor implements ProcessExecutor {
         }
 
         try {
-          let checkRes: ProcessResult;
-          try {
-            checkRes = await this.exec(options.command, ["--version"], {
-              timeoutMs: 1000,
-            });
-          } catch (execErr: any) {
-            checkRes = {
-              ok: false,
-              exitCode: null,
-              stdout: "",
-              stderr: execErr?.message || String(execErr),
-              raw: new Uint8Array(),
-              timedOut: false,
-              cancelled: false,
-              durationMs: 0,
-              error: {
-                code: "PROBE_EXEC_ERROR",
-                message: execErr?.message || String(execErr),
-              },
-            };
-          }
-
-          const isReady = await options.probe(checkRes);
+          const res: DetachedProcessResult = {
+            ok: true,
+            pid: child.pid,
+            ready: true,
+            durationMs: Date.now() - startTime,
+          };
+          const isReady = await options.probe(res as any);
           if (isReady) {
-            return {
-              ok: true,
-              pid: child.pid,
-              ready: true,
-              durationMs: Date.now() - startTime,
-            };
+            return res;
           }
         } catch {
           // 探测阶段出现异常继续等待下一次轮询

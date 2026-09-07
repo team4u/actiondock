@@ -84,7 +84,7 @@ import { delimiter, join } from "node:path";
 /**
  * 跨运行时安全查找可执行文件绝对物理路径。
  */
-function findExecutable(command: string): string | null {
+export function findExecutable(command: string): string | null {
   if (typeof (globalThis as any).Bun !== "undefined" && typeof (globalThis as any).Bun.which === "function") {
     try {
       const bPath = (globalThis as any).Bun.which(command);

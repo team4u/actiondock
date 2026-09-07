@@ -1,5 +1,5 @@
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
-import { createActionDockMcpServer } from "./adapter";
+import { createActionDockMcpServer, type ActionDockMcpServer } from "./adapter";
 import type { ActionDockMcpOptions } from "./types";
 
 /**
@@ -8,9 +8,44 @@ import type { ActionDockMcpOptions } from "./types";
 export async function startMcpStdio(
   options: ActionDockMcpOptions = {}
 ): Promise<void> {
-  serveStdio(() => createActionDockMcpServer(options), {
-    onerror: (err) => {
-      process.stderr.write(`[MCP Error] ${err?.message || String(err)}\n`);
+  let activeServer: ActionDockMcpServer | undefined;
+
+  const stdioHandler = serveStdio(
+    async () => {
+      const server = await createActionDockMcpServer(options);
+      activeServer = server;
+      return server;
     },
+    {
+      onerror: (err) => {
+        process.stderr.write(`[MCP Error] ${err?.message || String(err)}\n`);
+      },
+    }
+  );
+
+  const cleanup = async () => {
+    if (activeServer) {
+      try {
+        await activeServer.close();
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  process.once("SIGINT", async () => {
+    await cleanup();
+    try {
+      await stdioHandler.close();
+    } catch {}
+    process.exit(0);
+  });
+
+  process.once("SIGTERM", async () => {
+    await cleanup();
+    try {
+      await stdioHandler.close();
+    } catch {}
+    process.exit(0);
   });
 }

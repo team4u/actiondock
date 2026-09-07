@@ -72,12 +72,4 @@ export interface IndexedAction {
   projectRoot: string;
 }
 
-/**
- * 模块加载器接口。
- */
-export interface ModuleLoader {
-  load<T>(file: string, options: {
-    projectRoot: string;
-    tsconfigPath?: string;
-  }): Promise<T>;
-}
+export type { ModuleLoader } from "../runtime/module-loader";

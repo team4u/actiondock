@@ -1,11 +1,8 @@
-import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
-import { loadActionFileMap, loadActions, loadProjectConfig } from "../project/loader";
-import type { ProjectConfig } from "../project/types";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { BuildPlanner, BunCompiler } from "@actiondock/builder";
 import { getPackageSlug } from "../utils";
-import { type ActionImport, generateStandaloneEntrypoint } from "./templates";
+import { generateStandaloneEntrypoint } from "./templates";
 
 /**
  * 独立二进制可执行文件构建选项。
@@ -46,173 +43,64 @@ export interface BuildResult {
 /**
  * 调用 Bun 原生编译引擎（Bun.build --compile）将 Action Package 打包为零外部依赖的独立二进制可执行文件。
  * 
- * 构建过程：
- * 1. 动态生成 Standalone 入口点代码（包含 StandaloneRuntime 与 Action 注册）。
- * 2. 生成 sidecar metadata 文件（.actiondock-meta.json），包含 Package 元数据与 sha256 校验和。
- * 3. 执行 Bun.build({ compile: true, target, minify, bytecode })。
- * 
  * @param options 构建参数
  * @returns 构建产物结果元数据
  */
 export async function buildProject(options: BuildOptions): Promise<BuildResult> {
   const root = resolve(options.projectRoot);
-  const config = loadProjectConfig(root);
-  const actionsMap = await loadActions(root, config.actionsDir);
+  const plan = BuildPlanner.plan({
+    projectRoot: root,
+    actions: options.actions,
+  });
 
-  if (actionsMap.size === 0) {
-    throw new Error(`No valid actions found in ${join(root, config.actionsDir || "actions")}`);
-  }
-
-  if (options.actions && options.actions.length > 0) {
-    const requestedActions = new Set(options.actions);
-    for (const reqId of requestedActions) {
-      if (!actionsMap.has(reqId)) {
-        throw new Error(`Action '${reqId}' requested in build options not found in project`);
-      }
-    }
-    for (const id of Array.from(actionsMap.keys())) {
-      if (!requestedActions.has(id)) {
-        actionsMap.delete(id);
-      }
-    }
-  }
-
-  // Action imports list
-  const actionFileMap = await loadActionFileMap(root, config.actionsDir);
-  const actionImports: ActionImport[] = [];
-
-  for (const [id, entry] of actionFileMap.entries()) {
-    if (actionsMap.has(id)) {
-      actionImports.push({
-        id,
-        filePath: entry.filePath,
-      });
-    }
-  }
-
-  if (actionImports.length === 0) {
+  if (plan.actions.length === 0) {
     throw new Error("Could not map any action files for build");
   }
 
-  // Create build dir
   const buildDir = join(root, ".actiondock", ".build");
   mkdirSync(buildDir, { recursive: true });
 
   const entryCode = generateStandaloneEntrypoint(
-    config.id,
-    config.version,
-    config.description,
-    actionImports,
-    config.config
+    plan.packageId,
+    plan.version,
+    plan.description,
+    plan.actions.map((a) => ({ id: a.id, filePath: a.resolvedPath })),
+    plan.configDefs
   );
-  const entryPath = join(buildDir, "entry.ts");
+
+  const entryFileName = `entry-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.ts`;
+  const entryPath = join(buildDir, entryFileName);
   writeFileSync(entryPath, entryCode, "utf-8");
 
-  // Determine target and outfile
-  const target = options.target || "bun";
-  const binaryName = getPackageSlug(config.id);
-
+  const binaryName = getPackageSlug(plan.packageId);
   const defaultOutfile = join(root, "dist", binaryName);
   const outfile = resolve(options.outfile || defaultOutfile);
 
-  mkdirSync(dirname(outfile), { recursive: true });
+  try {
+    const result = await BunCompiler.compile({
+      entrypoint: entryPath,
+      outfile,
+      target: options.target,
+      minify: options.minify,
+      bytecode: options.bytecode,
+      cwd: root,
+      packageId: plan.packageId,
+      version: plan.version,
+      actions: plan.actions.map((a) => a.id),
+    });
 
-  // Run bun build --compile --bytecode --minify
-  const buildArgs = [
-    "bun",
-    "build",
-    entryPath,
-    "--compile",
-    "--outfile",
-    outfile,
-  ];
-
-  if (options.bytecode !== false) {
-    buildArgs.push("--bytecode");
-  }
-
-  if (options.minify !== false) {
-    buildArgs.push("--minify");
-  }
-
-  if (options.target && options.target !== "bun" && options.target !== "host") {
-    // e.g. bun-linux-x64 or linux-x64
-    const formattedTarget = options.target.startsWith("bun-")
-      ? options.target
-      : `bun-${options.target}`;
-    buildArgs.push(`--target=${formattedTarget}`);
-  }
-
-  const proc = spawnSync(buildArgs[0], buildArgs.slice(1), {
-    cwd: root,
-    stdio: "pipe",
-  });
-
-  if (proc.error) {
-    throw new Error(`Bun compile failed to spawn: ${proc.error.message}`);
-  }
-
-  if (proc.status !== 0) {
-    const errText = proc.stderr?.toString() || proc.stdout?.toString() || "Unknown error";
-    throw new Error(`Bun compile failed (exit code ${proc.status}):\n${errText}`);
-  }
-
-  // Compile artifact resolution (on Windows bun compile automatically appends .exe)
-  let artifactPath = outfile;
-  if (!existsSync(artifactPath)) {
-    const withExe = outfile + ".exe";
-    if (existsSync(withExe)) {
-      artifactPath = withExe;
+    return {
+      packageId: result.packageId || plan.packageId,
+      version: result.version || plan.version,
+      target: result.target,
+      executablePath: result.executablePath,
+      metadataPath: result.metadataPath || "",
+      actions: plan.actions.map((a) => a.id),
+    };
+  } finally {
+    if (existsSync(entryPath)) {
+      rmSync(entryPath, { force: true });
     }
   }
-
-  // Calculate build hash
-  const binaryBuffer = readFileSync(artifactPath);
-  const buildHash = createHash("sha256").update(binaryBuffer).digest("hex").slice(0, 16);
-
-  // Calculate lockHash
-  let lockHash = "none";
-  const lockFiles = ["bun.lock", "bun.lockb", "package.json"];
-  for (const lf of lockFiles) {
-    const p = join(root, lf);
-    if (existsSync(p)) {
-      lockHash = createHash("sha256").update(readFileSync(p)).digest("hex").slice(0, 16);
-      break;
-    }
-  }
-
-  const detectedBunVersion = (typeof (globalThis as any).Bun !== "undefined" && (globalThis as any).Bun.version) || (() => {
-    try {
-      const vProc = spawnSync("bun", ["--version"], { stdio: "pipe" });
-      return vProc.stdout ? vProc.stdout.toString().trim() : "unknown";
-    } catch {
-      return "unknown";
-    }
-  })();
-
-  // Generate artifact.json metadata
-  const metadata = {
-    packageId: config.id,
-    name: config.name,
-    version: config.version,
-    description: config.description,
-    target: options.target || "host",
-    actions: actionImports.map((a) => a.id),
-    bunVersion: detectedBunVersion,
-    lockHash,
-    buildHash,
-    createdAt: new Date().toISOString(),
-  };
-
-  const metadataPath = join(dirname(artifactPath), "artifact.json");
-  writeFileSync(metadataPath, JSON.stringify(metadata, null, 2) + "\n", "utf-8");
-
-  return {
-    packageId: config.id,
-    version: config.version,
-    target: options.target || "host",
-    executablePath: artifactPath,
-    metadataPath,
-    actions: metadata.actions,
-  };
 }
+

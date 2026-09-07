@@ -13,6 +13,7 @@ import {
   useProfile,
 } from "@actiondock/core";
 import { Command } from "commander";
+import { CliError, ExecutionError } from "@actiondock/runtime-cli";
 import { resolveIntent } from "../utils/filter";
 
 export function registerProfileCommands(program: Command): void {
@@ -90,8 +91,7 @@ export function registerProfileCommands(program: Command): void {
           );
         }
       } catch (err: any) {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
+        throw new ExecutionError(err.message);
       }
     });
 
@@ -118,8 +118,7 @@ export function registerProfileCommands(program: Command): void {
         });
         console.log(`[OK] Profile '${name}' configured for server: ${options.server}`);
       } catch (err: any) {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
+        throw new ExecutionError(err.message);
       }
     });
 
@@ -132,8 +131,7 @@ export function registerProfileCommands(program: Command): void {
         useProfile(name);
         console.log(`[OK] Active profile switched to '${name}'`);
       } catch (err: any) {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
+        throw new ExecutionError(err.message);
       }
     });
 
@@ -151,8 +149,7 @@ export function registerProfileCommands(program: Command): void {
         const reveal = Boolean(options.reveal || options.showSecrets);
 
         if (!entry && targetName !== "local") {
-          console.error(`Error: Profile '${targetName}' not found.`);
-          process.exit(1);
+          throw new ExecutionError(`Profile '${targetName}' not found.`);
         }
 
         const resolved = resolveProfileToken(targetName, entry);
@@ -195,8 +192,10 @@ export function registerProfileCommands(program: Command): void {
           }
         }
       } catch (err: any) {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
+        if (err instanceof CliError) {
+          throw err;
+        }
+        throw new ExecutionError(err.message);
       }
     });
 
@@ -208,18 +207,18 @@ export function registerProfileCommands(program: Command): void {
     .action((name) => {
       try {
         if (name === "local") {
-          console.error("Error: Cannot remove built-in 'local' profile");
-          process.exit(1);
+          throw new ExecutionError("Cannot remove built-in 'local' profile");
         }
         const removed = removeProfile(name);
         if (!removed) {
-          console.error(`Error: Profile '${name}' not found`);
-          process.exit(1);
+          throw new ExecutionError(`Profile '${name}' not found`);
         }
         console.log(`[OK] Profile '${name}' removed`);
       } catch (err: any) {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
+        if (err instanceof CliError) {
+          throw err;
+        }
+        throw new ExecutionError(err.message);
       }
     });
 
@@ -252,12 +251,12 @@ export function registerProfileCommands(program: Command): void {
             console.error(
               `[FAIL] Connection to ${target.serverUrl} failed (${health.latencyMs}ms): ${health.error}`
             );
-            process.exit(1);
+            process.exitCode = 1;
+            return;
           }
         }
       } catch (err: any) {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
+        throw new ExecutionError(err.message);
       }
     });
 }

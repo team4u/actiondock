@@ -6,4 +6,5 @@ export * from "./env";
 export * from "./clock";
 export * from "./process";
 export * from "./events";
+export * from "./module-loader";
 

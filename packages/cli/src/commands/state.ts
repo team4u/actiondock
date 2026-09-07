@@ -13,6 +13,7 @@ import {
   resolveTarget,
   setRemoteStateKey,
 } from "@actiondock/core";
+import { ArgumentError, ExecutionError } from "@actiondock/runtime-cli";
 import { Command } from "commander";
 import { resolveIntent } from "../utils/filter";
 
@@ -31,13 +32,11 @@ function getTargetRoot(packageOption?: string, keyHint?: string): { root: string
   const root = resolvePackageRoot(targetPackage);
   if (!root) {
     if (targetPackage) {
-      console.error(`Error: Package '${targetPackage}' not found in linked packages or path`);
-    } else {
-      console.error(
-        "Error: Not in an ActionDock project (actiondock.json not found).\nPlease specify -P, --package <id> or cd into a project directory."
-      );
+      throw new ExecutionError(`Package '${targetPackage}' not found in linked packages or path`);
     }
-    process.exit(1);
+    throw new ExecutionError(
+      "Not in an ActionDock project (actiondock.json not found).\nPlease specify -P, --package <id> or cd into a project directory."
+    );
   }
   return { root, key: effectiveKey };
 }
@@ -95,8 +94,7 @@ export function registerStateCommands(program: Command): void {
           : findProjectRoot();
 
         if (options.package && !targetRoot) {
-          console.error(`Error: Package '${options.package}' not found in linked packages or path`);
-          process.exit(1);
+          throw new ExecutionError(`Package '${options.package}' not found in linked packages or path`);
         }
 
         if (targetRoot) {
@@ -259,8 +257,8 @@ export function registerStateCommands(program: Command): void {
           }
         }
       } catch (err: any) {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
+        if (err instanceof ExecutionError) throw err;
+        throw new ExecutionError(err.message);
       }
     });
 
@@ -314,8 +312,7 @@ export function registerStateCommands(program: Command): void {
         storage.close();
 
         if (val === undefined) {
-          console.error(`Error: State key '${key}' not found in ${projConfig.id}`);
-          process.exit(1);
+          throw new ExecutionError(`State key '${key}' not found in ${projConfig.id}`);
         }
 
         if (options.json) {
@@ -335,8 +332,8 @@ export function registerStateCommands(program: Command): void {
           console.log(val !== undefined ? JSON.stringify(val, null, 2) : "undefined");
         }
       } catch (err: any) {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
+        if (err instanceof ExecutionError) throw err;
+        throw new ExecutionError(err.message);
       }
     });
 
@@ -399,8 +396,8 @@ export function registerStateCommands(program: Command): void {
           `[OK] State '${displayKey}' set to ${JSON.stringify(parsed)}${options.ttl ? ` (TTL: ${options.ttl}s)` : ""} in ${projConfig.id}`
         );
       } catch (err: any) {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
+        if (err instanceof ExecutionError) throw err;
+        throw new ExecutionError(err.message);
       }
     });
 
@@ -442,13 +439,12 @@ export function registerStateCommands(program: Command): void {
           console.log(`[OK] State '${key}' deleted from ${projConfig.id}`);
         } else {
           if (!options.silent) {
-            console.error(`Error: State key '${key}' not found in ${projConfig.id}`);
-            process.exit(1);
+            throw new ExecutionError(`State key '${key}' not found in ${projConfig.id}`);
           }
         }
       } catch (err: any) {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
+        if (err instanceof ExecutionError) throw err;
+        throw new ExecutionError(err.message);
       }
     });
 
@@ -501,8 +497,8 @@ export function registerStateCommands(program: Command): void {
               : "root namespace";
         console.log(`[OK] Cleared ${count} state entry(s) (${scopeDesc}) from ${projConfig.id}`);
       } catch (err: any) {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
+        if (err instanceof ExecutionError) throw err;
+        throw new ExecutionError(err.message);
       }
     });
 }

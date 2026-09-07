@@ -1,5 +1,7 @@
 import { homedir } from "node:os";
 
+export { findExecutable } from "@actiondock/sdk";
+
 /**
  * Parses duration strings like "500ms", "30s", "5m", "1h", "1d" or pure numbers into milliseconds.
  */

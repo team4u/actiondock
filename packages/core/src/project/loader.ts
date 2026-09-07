@@ -5,6 +5,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import YAML from "yaml";
 import type { ActionDefinition } from "@actiondock/sdk";
+import { getModuleLoader } from "../runtime/module-loader";
 import type { PlaybookDefinition, PlaybookFrontmatter, ProjectConfig } from "./types";
 
 /**
@@ -273,13 +274,14 @@ export async function loadActions(
 
   const files = discoverActionFiles(projectRoot, actionsDir);
   const actions = new Map<string, ActionDefinition>();
+  const loader = getModuleLoader();
 
   for (const file of files) {
     try {
       // 动态导入，若缺失模块则自动触发依赖重装与二次重试
       let imported: any;
       try {
-        imported = await import(toImportSpecifier(file));
+        imported = await loader.load(file);
       } catch (err: any) {
         const msg = String(err.message || "");
         if (
@@ -291,7 +293,7 @@ export async function loadActions(
         ) {
           const installed = ensureProjectDependencies(projectRoot, true);
           if (installed) {
-            imported = await import(toImportSpecifier(file));
+            imported = await loader.load(file);
           } else {
             throw err;
           }
@@ -344,12 +346,13 @@ export async function loadActionFileMap(
 
   const files = discoverActionFiles(projectRoot, actionsDir);
   const map = new Map<string, ActionFileEntry>();
+  const loader = getModuleLoader();
 
   for (const file of files) {
     try {
       let imported: any;
       try {
-        imported = await import(toImportSpecifier(file));
+        imported = await loader.load(file);
       } catch (err: any) {
         const msg = String(err.message || "");
         if (
@@ -361,7 +364,7 @@ export async function loadActionFileMap(
         ) {
           const installed = ensureProjectDependencies(projectRoot, true);
           if (installed) {
-            imported = await import(toImportSpecifier(file));
+            imported = await loader.load(file);
           } else {
             throw err;
           }

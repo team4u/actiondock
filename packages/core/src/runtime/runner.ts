@@ -4,6 +4,7 @@ import type {
   ActionDefinition,
   ExecutionResult,
   JsonValue,
+  Logger,
   ProcessAPI,
   ProgressReporter,
   RuntimeError,
@@ -12,8 +13,7 @@ import type {
 import type { ProjectConfig } from "../project/types";
 import { validateSchema } from "../schema/validator";
 import type { RuntimeStorage, TerminalRunStatus } from "../storage/types";
-import { RuntimeConfig, RuntimeStateStore, StderrLogger } from "./context";
-import { getProcessExecutor } from "./process";
+import { createActionContext, StderrLogger } from "./context";
 
 /**
  * ActionRunner 初始化配置选项。
@@ -37,6 +37,8 @@ export interface RunnerOptions {
  * 启动 Action 执行时的可选控制参数。
  */
 export interface ExecutionStartOptions {
+  /** 显式指定的运行 ID */
+  runId?: string;
   /** 根运行 ID */
   rootRunId?: string;
   /** 父级运行 ID（嵌套调用场景下建立调用链树） */
@@ -57,6 +59,8 @@ export interface ExecutionStartOptions {
   process?: ProcessAPI;
   /** 外部注入的进度报告器 */
   progress?: ProgressReporter;
+  /** 外部注入的日志记录器 */
+  logger?: Logger;
 }
 
 /**
@@ -134,7 +138,7 @@ export class ActionRunner {
     input: unknown = {},
     options: ExecutionStartOptions = {}
   ): ExecutionHandle {
-    const runId = randomUUID();
+    const runId = options.runId || randomUUID();
     const startedAt = new Date().toISOString();
     const callStack = [...(options.callStack || [])];
 
@@ -243,26 +247,26 @@ export class ActionRunner {
     };
 
     // 5. 构建 ActionContext 运行时上下文
-    const config = new RuntimeConfig(
-      this.storage,
-      this.configOverrides,
-      this.projectConfig
-    );
-    const state = new RuntimeStateStore(this.storage);
-    const log = new StderrLogger(action.id);
-
-    const invoker = {
-      invoke: async <I, O>(
-        childAction: ActionDefinition<I, O>,
-        childInput: I
-      ): Promise<O> => {
+    const ctx = createActionContext({
+      storage: this.storage,
+      overrides: this.configOverrides,
+      projectConfig: this.projectConfig,
+      runId,
+      rootRunId: initialRun.rootRunId,
+      parentRunId: options.parentRunId,
+      signal: controller.signal,
+      process: options.process,
+      progress: options.progress,
+      logger: options.logger || new StderrLogger(action.id),
+      onActionInvoke: async (childAction, childInput, parentRunId) => {
         const childResult = await this.execute(childAction, childInput, {
           rootRunId: initialRun.rootRunId,
-          parentRunId: runId,
+          parentRunId,
           callStack,
           signal: controller.signal,
           process: options.process,
           progress: options.progress,
+          logger: options.logger,
         });
         if (!childResult.ok) {
           const err = new Error(childResult.error.message);
@@ -270,26 +274,9 @@ export class ActionRunner {
           (err as any).details = childResult.error.details;
           throw err;
         }
-        return childResult.data as O;
+        return childResult.data;
       },
-    };
-
-    const ctx: ActionContext = {
-      config,
-      state,
-      actions: invoker,
-      process: options.process || getProcessExecutor(),
-      log,
-      progress: options.progress || {
-        report() {},
-      },
-      signal: controller.signal,
-      run: {
-        id: runId,
-        rootId: initialRun.rootRunId,
-        parentId: options.parentRunId,
-      },
-    };
+    });
 
     // 6. 执行 Action 业务逻辑并与取消/超时信号进行竞态
     const abortPromise = new Promise<never>((_, reject) => {

@@ -1,4 +1,5 @@
 export { defineAction } from "./action";
+export { execCli, findExecutable, spawnDetached } from "./cli";
 export {
   createTestRuntime,
   MemoryConfig,

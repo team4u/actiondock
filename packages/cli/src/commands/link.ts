@@ -3,6 +3,7 @@ import {
   pruneRegistry,
   unlinkPackage,
 } from "@actiondock/core";
+import { ExecutionError } from "@actiondock/runtime-cli";
 import { Command } from "commander";
 
 export function registerLinkCommands(program: Command): void {
@@ -27,8 +28,7 @@ export function registerLinkCommands(program: Command): void {
           console.log(`[OK] Linked package '${result.id}' (v${result.version}) from ${result.path}`);
         }
       } catch (err: any) {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
+        throw new ExecutionError(err.message);
       }
     });
 
@@ -67,8 +67,7 @@ export function registerLinkCommands(program: Command): void {
           console.log(`Package or workspace '${identifier || process.cwd()}' was not linked in registry`);
         }
       } catch (err: any) {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
+        throw new ExecutionError(err.message);
       }
     });
 }

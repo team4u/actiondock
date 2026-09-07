@@ -194,6 +194,7 @@ export interface ContextOptions {
   signal?: AbortSignal;
   process?: ProcessAPI;
   progress?: ProgressReporter;
+  logger?: Logger;
   onActionInvoke?: (
     action: ActionDefinition,
     input: unknown,
@@ -214,7 +215,7 @@ export function createActionContext(options: ContextOptions): ActionContext {
     options.projectConfig
   );
   const state = new RuntimeStateStore(options.storage);
-  const log = new StderrLogger();
+  const log = options.logger || new StderrLogger();
   const signal = options.signal ?? new AbortController().signal;
   const currentRunId = options.runId || randomUUID();
   const currentRootRunId = options.rootRunId || options.parentRunId || currentRunId;

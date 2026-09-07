@@ -16,6 +16,7 @@ import {
 } from "@actiondock/core";
 import type { PlaybookDefinition } from "@actiondock/core";
 import { Command } from "commander";
+import { CliError, ExecutionError } from "@actiondock/runtime-cli";
 import { resolveIntent } from "../utils/filter";
 
 export function registerPlaybookCommands(program: Command): void {
@@ -194,8 +195,7 @@ export function registerPlaybookCommands(program: Command): void {
           }
         }
       } catch (err: any) {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
+        throw new ExecutionError(err.message);
       }
     });
 
@@ -210,8 +210,7 @@ export function registerPlaybookCommands(program: Command): void {
     .action((id, options) => {
       const root = findProjectRoot();
       if (!root) {
-        console.error("Error: Not in an ActionDock project (actiondock.json not found)");
-        process.exit(1);
+        throw new ExecutionError("Not in an ActionDock project (actiondock.json not found)");
       }
       try {
         const config = loadProjectConfig(root);
@@ -225,8 +224,7 @@ export function registerPlaybookCommands(program: Command): void {
         const targetFullFile = resolve(pbDir, targetRelFile);
 
         if (existsSync(targetFullFile)) {
-          console.error(`Error: File '${targetFullFile}' already exists`);
-          process.exit(1);
+          throw new ExecutionError(`File '${targetFullFile}' already exists`);
         }
 
         mkdirSync(dirname(targetFullFile), { recursive: true });
@@ -256,8 +254,10 @@ This playbook provides task execution guidance for AI Agents.
         writeFileSync(targetFullFile, template, "utf-8");
         console.log(`[OK] Created Playbook '${id}' at ${targetFullFile}`);
       } catch (err: any) {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
+        if (err instanceof CliError) {
+          throw err;
+        }
+        throw new ExecutionError(err.message);
       }
     });
 
@@ -310,8 +310,7 @@ This playbook provides task execution guidance for AI Agents.
           console.log(pb.content);
         }
       } catch (err: any) {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
+        throw new ExecutionError(err.message);
       }
     });
 
@@ -331,8 +330,7 @@ This playbook provides task execution guidance for AI Agents.
           if (id) {
             const pb = playbooks.get(id);
             if (!pb) {
-              console.error(`Error: Playbook '${id}' not found in current project`);
-              process.exit(1);
+              throw new ExecutionError(`Playbook '${id}' not found in current project`);
             }
             targets.push({ root, packageId: config.id, playbooks: [pb] });
           } else {
@@ -349,8 +347,7 @@ This playbook provides task execution guidance for AI Agents.
           // Outside project: validate all linked packages
           const linkedList = listLinkedPackages();
           if (linkedList.length === 0) {
-            console.error("Error: Not in an ActionDock project, and no packages linked.");
-            process.exit(1);
+            throw new ExecutionError("Not in an ActionDock project, and no packages linked.");
           }
           for (const pkg of linkedList) {
             if (!existsSync(pkg.path)) continue;
@@ -428,10 +425,12 @@ This playbook provides task execution guidance for AI Agents.
             }
           }
         }
-        if (!allValid) process.exit(1);
+        if (!allValid) process.exitCode = 1;
       } catch (err: any) {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
+        if (err instanceof CliError) {
+          throw err;
+        }
+        throw new ExecutionError(err.message);
       }
     });
 }

@@ -12,4 +12,5 @@ export * from "./schema/validator";
 export * from "./server";
 export * from "./storage";
 export * from "./utils";
+export type { ModuleLoader } from "./runtime";
 

@@ -1,4 +1,5 @@
 import { initProject } from "@actiondock/core";
+import { ExecutionError } from "@actiondock/runtime-cli";
 import { Command } from "commander";
 
 export function registerInitCommand(program: Command): void {
@@ -17,8 +18,7 @@ export function registerInitCommand(program: Command): void {
         });
         console.log(`Successfully initialized ActionDock project in ${dir}`);
       } catch (err: any) {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
+        throw new ExecutionError(err.message);
       }
     });
 }

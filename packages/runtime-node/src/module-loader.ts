@@ -2,6 +2,7 @@ import { existsSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import type { ModuleLoader } from "@actiondock/core";
 
 /** ESM 环境下可用的 CommonJS require，用于动态加载 tsx/cjs/api */
 const cjsRequire = createRequire(import.meta.url);
@@ -58,7 +59,7 @@ export function unwrapDefaultExport<T = any>(moduleExports: any): T {
  * 基于 tsx 的 TypeScript 源码模块加载器。
  * 支持 .ts、.tsx、.mts、.cts 等 TypeScript 文件在 Node.js 与 Bun 环境下的无缝加载。
  */
-export class TsxModuleLoader {
+export class TsxModuleLoader implements ModuleLoader {
   /**
    * 解析模块标识符与路径，支持相对路径、文件后缀省略以及目录索引文件补全。
    */

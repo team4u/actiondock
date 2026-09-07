@@ -13,6 +13,7 @@ import {
   type ConfigItemDefinition,
 } from "@actiondock/core";
 import { Command } from "commander";
+import { ExecutionError } from "@actiondock/runtime-cli";
 import { resolveIntent } from "../utils/filter";
 
 export function registerConfigCommands(program: Command): void {
@@ -31,10 +32,9 @@ export function registerConfigCommands(program: Command): void {
       try {
         const root = resolvePackageRoot(identifier || options.package);
         if (!root) {
-          console.error(
-            "Error: Not in an ActionDock project.\nUsage: ad config schema [package-id] or cd into a project directory."
+          throw new ExecutionError(
+            "Not in an ActionDock project.\nUsage: ad config schema [package-id] or cd into a project directory."
           );
-          process.exit(1);
         }
 
         const projConfig = loadProjectConfig(root);
@@ -133,8 +133,7 @@ export function registerConfigCommands(program: Command): void {
           }
         }
       } catch (err: any) {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
+        throw new ExecutionError(err.message);
       }
     });
 
@@ -267,8 +266,7 @@ export function registerConfigCommands(program: Command): void {
           }
         }
       } catch (err: any) {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
+        throw new ExecutionError(err.message);
       }
     });
 
@@ -367,8 +365,7 @@ export function registerConfigCommands(program: Command): void {
           console.log(effective !== undefined ? (typeof effective === "string" && isSecret && !reveal ? effective : JSON.stringify(effective)) : "undefined");
         }
       } catch (err: any) {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
+        throw new ExecutionError(err.message);
       }
     });
 
@@ -421,8 +418,7 @@ export function registerConfigCommands(program: Command): void {
           console.log(`[OK] Config '${key}' set to ${displayVal} in ${projConfig.id}`);
         }
       } catch (err: any) {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
+        throw new ExecutionError(err.message);
       }
     });
 
@@ -477,8 +473,7 @@ export function registerConfigCommands(program: Command): void {
           }
         }
       } catch (err: any) {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
+        throw new ExecutionError(err.message);
       }
     });
 }

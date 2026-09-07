@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { linkPackage } from "@actiondock/core";
 import { defineAction } from "@actiondock/sdk";
 import { InMemoryTransport } from "@modelcontextprotocol/server";
-import { createActionDockMcpServer } from "../src/adapter";
+import { createActionDockMcpServer, toMcpResult } from "../src/adapter";
 import { startMcpHttpServer } from "../src/http";
 
 function setupTestProject(tmpDir: string) {
@@ -704,6 +704,94 @@ describe("@actiondock/mcp Adapter", () => {
 
     expect(toolsList).toBeDefined();
     expect(toolsList.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("M21: toMcpResult wraps non-plain objects into { value: result.data }", () => {
+    // 1. Plain object is kept as-is
+    const objResult = toMcpResult({
+      ok: true,
+      runId: "run-1",
+      data: { score: 100, name: "alpha" },
+    });
+    expect(objResult.structuredContent).toEqual({ score: 100, name: "alpha" });
+    expect(JSON.parse(objResult.content[0].text).ok).toBe(true);
+
+    // 2. String primitive
+    const strResult = toMcpResult({
+      ok: true,
+      runId: "run-2",
+      data: "hello world",
+    });
+    expect(strResult.structuredContent).toEqual({ value: "hello world" });
+
+    // 3. Number primitive
+    const numResult = toMcpResult({
+      ok: true,
+      runId: "run-3",
+      data: 42,
+    });
+    expect(numResult.structuredContent).toEqual({ value: 42 });
+
+    // 4. Boolean primitive
+    const boolResult = toMcpResult({
+      ok: true,
+      runId: "run-4",
+      data: true,
+    });
+    expect(boolResult.structuredContent).toEqual({ value: true });
+
+    // 5. Array
+    const arrResult = toMcpResult({
+      ok: true,
+      runId: "run-5",
+      data: [1, 2, 3],
+    });
+    expect(arrResult.structuredContent).toEqual({ value: [1, 2, 3] });
+
+    // 6. null and undefined
+    const nullResult = toMcpResult({
+      ok: true,
+      runId: "run-6",
+      data: null,
+    });
+    expect(nullResult.structuredContent).toEqual({ value: null });
+
+    const undefResult = toMcpResult({
+      ok: true,
+      runId: "run-7",
+      data: undefined as any,
+    });
+    expect(undefResult.structuredContent).toEqual({ value: undefined });
+
+    // 7. Error case
+    const errResult = toMcpResult({
+      ok: false,
+      runId: "run-8",
+      error: { code: "ERR", message: "fail" },
+    });
+    expect(errResult.isError).toBe(true);
+    expect(errResult.structuredContent).toBeUndefined();
+  });
+
+  it("M22: server.close() releases underlying storage resources", async () => {
+    let storageClosed = false;
+    const mockStorage: any = {
+      getRun: () => undefined,
+      listRuns: () => [],
+      updateRun: () => {},
+      close: () => {
+        storageClosed = true;
+      },
+    };
+
+    const server = await createActionDockMcpServer({
+      actions: new Map(),
+      storage: mockStorage,
+    });
+
+    expect(typeof server.close).toBe("function");
+    await server.close();
+    expect(storageClosed).toBe(true);
   });
 });
 

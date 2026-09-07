@@ -1,4 +1,6 @@
-import { exportSkill, findProjectRoot, resolvePackageRoot } from "@actiondock/core";
+import { exportSkill } from "@actiondock/builder";
+import { findProjectRoot, resolvePackageRoot } from "@actiondock/core";
+import { ExecutionError } from "@actiondock/runtime-cli";
 import { Command } from "commander";
 
 export function registerExportCommand(program: Command): void {
@@ -27,13 +29,11 @@ export function registerExportCommand(program: Command): void {
 
       if (!root) {
         if (options.package) {
-          console.error(`Error: Package '${options.package}' not found in linked packages or path`);
-        } else {
-          console.error(
-            "Error: Not in an ActionDock project (actiondock.json not found).\nPlease specify -P, --package <id> or cd into a project directory."
-          );
+          throw new ExecutionError(`Package '${options.package}' not found in linked packages or path`);
         }
-        process.exit(1);
+        throw new ExecutionError(
+          "Not in an ActionDock project (actiondock.json not found).\nPlease specify -P, --package <id> or cd into a project directory."
+        );
       }
 
       const isStandalone = Boolean(options.standalone);
@@ -62,9 +62,9 @@ export function registerExportCommand(program: Command): void {
           console.log(`  Archive:    ${result.archivePath}`);
         }
       } catch (err: any) {
-        console.error(`Export failed: ${err.message}`);
-        process.exit(1);
+        throw new ExecutionError(`Export failed: ${err.message}`);
       }
     });
 }
+
 

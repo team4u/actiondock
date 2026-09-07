@@ -18,12 +18,29 @@ import { toMcpSchema } from "./schemas";
 import { toMcpTaskPayload, type ActionDockMcpOptions } from "./types";
 
 /**
+ * 判断目标值是否为普通对象（Plain Object）。
+ * 
+ * @param value 待检查的值
+ */
+export function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+/**
  * 将 ActionDock 标准的 ExecutionResult 信封结构转换为 MCP 协议规范的 Tool Call 返回结果。
  * 
  * @param result ExecutionResult 结果对象
  */
 export function toMcpResult(result: ExecutionResult) {
   if (result.ok) {
+    const structuredContent = isPlainObject(result.data)
+      ? (result.data as Record<string, unknown>)
+      : { value: result.data };
+
     return {
       content: [
         {
@@ -31,7 +48,7 @@ export function toMcpResult(result: ExecutionResult) {
           text: JSON.stringify(result),
         },
       ],
-      structuredContent: result.data as Record<string, unknown>,
+      structuredContent,
     };
   }
 
@@ -102,12 +119,16 @@ function createMcpToolCallback(
   };
 }
 
+export type ActionDockMcpServer = McpServer & {
+  close: () => Promise<void>;
+};
+
 /**
  * Creates and configures an McpServer instance bound to one or more ActionDock packages with Tasks extension support.
  */
 export async function createActionDockMcpServer(
   options: ActionDockMcpOptions = {}
-): Promise<McpServer> {
+): Promise<ActionDockMcpServer> {
   const targetRoots: string[] = [];
   if (options.projectRoot) {
     targetRoots.push(options.projectRoot);
@@ -359,5 +380,58 @@ export async function createActionDockMcpServer(
     };
   });
 
-  return server;
+  const originalClose = server.close.bind(server);
+  let isClosed = false;
+
+  const closeFn = async (): Promise<void> => {
+    if (isClosed) return;
+    isClosed = true;
+
+    process.removeListener("exit", onProcessExit);
+
+    for (const storage of storages) {
+      try {
+        storage.close();
+      } catch {
+        // ignore
+      }
+    }
+
+    if (!options.runtimeRegistry) {
+      try {
+        runtimeRegistry.close();
+      } catch {
+        // ignore
+      }
+    }
+
+    try {
+      await originalClose();
+    } catch {
+      // ignore
+    }
+  };
+
+  const onProcessExit = () => {
+    for (const storage of storages) {
+      try {
+        storage.close();
+      } catch {
+        // ignore
+      }
+    }
+    if (!options.runtimeRegistry) {
+      try {
+        runtimeRegistry.close();
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  process.once("exit", onProcessExit);
+
+  (server as any).close = closeFn;
+
+  return server as ActionDockMcpServer;
 }

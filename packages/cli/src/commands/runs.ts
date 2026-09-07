@@ -13,6 +13,7 @@ import {
   resolveTarget,
 } from "@actiondock/core";
 import { Command } from "commander";
+import { CliError, ExecutionError } from "@actiondock/runtime-cli";
 import { resolveIntent } from "../utils/filter";
 
 function printRunRecord(run: any): void {
@@ -100,8 +101,7 @@ export function registerRunsCommands(program: Command): void {
           : findProjectRoot();
 
         if (options.package && !targetRoot) {
-          console.error(`Error: Package '${options.package}' not found in linked packages or path`);
-          process.exit(1);
+          throw new ExecutionError(`Package '${options.package}' not found in linked packages or path`);
         }
 
         if (targetRoot) {
@@ -198,8 +198,10 @@ export function registerRunsCommands(program: Command): void {
           }
         }
       } catch (err: any) {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
+        if (err instanceof CliError) {
+          throw err;
+        }
+        throw new ExecutionError(err.message);
       }
     });
 
@@ -221,8 +223,7 @@ export function registerRunsCommands(program: Command): void {
           token: options.token,
         });
       } catch (err: any) {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
+        throw new ExecutionError(err.message);
       }
 
       if (target.type === "remote") {
@@ -235,8 +236,7 @@ export function registerRunsCommands(program: Command): void {
           }
           return;
         } catch (err: any) {
-          console.error(`Error: ${err.message}`);
-          process.exit(1);
+          throw new ExecutionError(err.message);
         }
       }
 
@@ -247,8 +247,7 @@ export function registerRunsCommands(program: Command): void {
         if (options.package) {
           const targetRoot = resolvePackageRoot(options.package);
           if (!targetRoot) {
-            console.error(`Error: Package '${options.package}' not found in linked packages or path`);
-            process.exit(1);
+            throw new ExecutionError(`Package '${options.package}' not found in linked packages or path`);
           }
           const projConfig = loadProjectConfig(targetRoot);
           const storage = createStorage(projConfig.id, { projectRoot: targetRoot });
@@ -292,8 +291,7 @@ export function registerRunsCommands(program: Command): void {
         }
 
         if (!foundRun) {
-          console.error(`Error: Run record '${id}' not found in current project or any linked packages`);
-          process.exit(1);
+          throw new ExecutionError(`Run record '${id}' not found in current project or any linked packages`);
         }
 
         if (options.json) {
@@ -302,8 +300,10 @@ export function registerRunsCommands(program: Command): void {
           printRunRecord(foundRun);
         }
       } catch (err: any) {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
+        if (err instanceof CliError) {
+          throw err;
+        }
+        throw new ExecutionError(err.message);
       }
     });
 
@@ -325,15 +325,13 @@ export function registerRunsCommands(program: Command): void {
           token: options.token,
         });
       } catch (err: any) {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
+        throw new ExecutionError(err.message);
       }
 
       if (target.type === "local") {
-        console.error(
-          "Error: 'ad runs cancel' is only supported for remote execution targets. Use --profile <name> or --server <url>."
+        throw new ExecutionError(
+          "'ad runs cancel' is only supported for remote execution targets. Use --profile <name> or --server <url>."
         );
-        process.exit(1);
       }
 
       try {
@@ -349,8 +347,7 @@ export function registerRunsCommands(program: Command): void {
           console.log(`Run '${id}' cancellation requested (Status: ${result.status}).`);
         }
       } catch (err: any) {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
+        throw new ExecutionError(err.message);
       }
     });
 
@@ -401,8 +398,7 @@ export function registerRunsCommands(program: Command): void {
           }
         }
       } catch (err: any) {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
+        throw new ExecutionError(err.message);
       }
     });
 }

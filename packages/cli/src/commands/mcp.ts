@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import { findProjectRoot, loadProjectConfig } from "@actiondock/core";
 import { startMcpHttpServer, startMcpStdio } from "@actiondock/mcp";
 import { Command } from "commander";
+import { ExecutionError } from "@actiondock/runtime-cli";
 import { parseByteSize } from "../utils/bytes";
 import { parseDuration } from "../utils/duration";
 
@@ -35,8 +36,7 @@ export function registerMcpCommands(program: Command): void {
         try {
           timeoutMs = parseDuration(options.timeout);
         } catch (err: any) {
-          process.stderr.write(`Error: ${err.message}\n`);
-          process.exit(1);
+          throw new ExecutionError(err.message);
         }
       }
 
@@ -56,8 +56,7 @@ export function registerMcpCommands(program: Command): void {
           timeoutMs,
         });
       } catch (err: any) {
-        process.stderr.write(`Failed to start MCP STDIO server: ${err.message}\n`);
-        process.exit(1);
+        throw new ExecutionError(`Failed to start MCP STDIO server: ${err.message}`);
       }
     });
 
@@ -106,8 +105,7 @@ export function registerMcpCommands(program: Command): void {
         try {
           maxBodyBytes = parseByteSize(options.maxBody);
         } catch (err: any) {
-          console.error(`Error: ${err.message}`);
-          process.exit(1);
+          throw new ExecutionError(err.message);
         }
       }
 
@@ -116,8 +114,7 @@ export function registerMcpCommands(program: Command): void {
         try {
           timeoutMs = parseDuration(options.timeout);
         } catch (err: any) {
-          console.error(`Error: ${err.message}`);
-          process.exit(1);
+          throw new ExecutionError(err.message);
         }
       }
 
@@ -192,8 +189,7 @@ export function registerMcpCommands(program: Command): void {
           process.exit(0);
         });
       } catch (err: any) {
-        console.error(`Failed to start ActionDock MCP HTTP server: ${err.message}`);
-        process.exit(1);
+        throw new ExecutionError(`Failed to start ActionDock MCP HTTP server: ${err.message}`);
       }
     });
 }

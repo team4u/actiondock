@@ -23,6 +23,11 @@ export function createCliProgram(): Command {
     .description("ActionDock (ad) 2.0 - Toolchain for building and shipping standalone AI Agent Actions & Skills")
     .version("2.0.9");
 
+  // 禁用 Commander 内部直接 process.exit，统一由顶层调度器管控退出码
+  program.exitOverride((err) => {
+    throw err;
+  });
+
   registerInitCommand(program);
   registerInfoCommand(program);
   registerDoctorCommand(program);

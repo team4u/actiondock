@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { type ActionDefinition, defineAction } from "@actiondock/sdk";
+import { DefaultExecutionService } from "../src/execution/service";
 import { ActionRunner } from "../src/runtime/runner";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
 
@@ -420,5 +421,58 @@ describe("ActionRunner", () => {
     expect(runRecord).toBeDefined();
     expect(runRecord?.status).toBe("cancelled");
     expect(runRecord?.error?.code).toBe("ACTION_CANCELLED");
+  });
+
+  it("DefaultExecutionService correctly passes progressReporter and captures logs as events", async () => {
+    const storage = new SqliteRuntimeStorage({
+      packageId: "test-pkg",
+      dbPath: ":memory:",
+    });
+
+    const progressAndLogAction = defineAction({
+      id: "test.progress-log",
+      async run(_input, ctx) {
+        ctx.log.info("Starting task", { step: 1 });
+        ctx.progress.report(50, 100, "halfway done");
+        ctx.log.warn("Caution on step 2");
+        ctx.progress.report(100, 100, "all done");
+        return { done: true };
+      },
+    });
+
+    const emittedEvents: any[] = [];
+    const eventSink = {
+      emit(event: any) {
+        emittedEvents.push(event);
+      },
+      subscribe() {
+        return { [Symbol.asyncIterator]: async function* () {} };
+      },
+    };
+
+    const service = new DefaultExecutionService({
+      packageId: "test-pkg",
+      storage,
+      eventSink: eventSink as any,
+    });
+    service.registerAction(progressAndLogAction);
+
+    const result = await service.execute({ actionId: "test.progress-log" }, {});
+    expect(result.ok).toBe(true);
+
+    const logEvents = emittedEvents.filter((e) => e.type === "log");
+    expect(logEvents.length).toBe(2);
+    expect(logEvents[0].level).toBe("info");
+    expect(logEvents[0].message).toBe("Starting task");
+    expect(logEvents[0].data).toEqual({ step: 1 });
+    expect(logEvents[1].level).toBe("warn");
+    expect(logEvents[1].message).toBe("Caution on step 2");
+
+    const progressEvents = emittedEvents.filter((e) => e.type === "progress");
+    expect(progressEvents.length).toBe(2);
+    expect(progressEvents[0].current).toBe(50);
+    expect(progressEvents[0].total).toBe(100);
+    expect(progressEvents[0].message).toBe("halfway done");
+    expect(progressEvents[1].current).toBe(100);
   });
 });

@@ -1,4 +1,5 @@
 import type { JsonValue, RuntimeError, RunRecord } from "@actiondock/sdk";
+import type { Clock } from "../runtime/clock";
 
 /**
  * SQLite 基础参数值类型。
@@ -73,6 +74,8 @@ export interface StorageOptions {
   packageId: string;
   /** 显式注入的 SQLite 底层驱动 */
   driver?: SqliteDriver;
+  /** 可选注入的时间提供器，便于与模拟时钟联动 */
+  clock?: Clock;
 }
 
 /**
@@ -89,6 +92,11 @@ export type TerminalRunStatus =
  * 统一运行时存储抽象接口。
  */
 export interface RuntimeStorage {
+  /** 数据库是否处于打开状态 */
+  readonly isOpen?: boolean;
+  /** 数据库是否已关闭 */
+  readonly closed?: boolean;
+
   // --- Config 配置管理 ---
   getConfig<T = unknown>(key: string): T | undefined;
   listConfig(): Record<string, unknown>;
