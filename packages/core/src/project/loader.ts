@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import YAML from "yaml";
@@ -80,8 +81,15 @@ export function loadProjectConfig(projectRoot: string): ProjectConfig {
 
 /**
  * 探测宿主系统中可用的包管理工具（优先级：pnpm > npm > yarn > bun）。
+ * 可通过环境变量 ACTIONDOCK_INSTALLER 强制指定（如 npm、pnpm、yarn、bun）。
+ * 探测必须经 shell 执行：Windows 下 npm/pnpm/yarn 均为 .cmd 垫片，
+ * 不经 shell 的 spawnSync 无法解析，将错误地回退到原生 exe 的 bun。
  */
 function getInstallCommand(): string[] {
+  const preferred = process.env.ACTIONDOCK_INSTALLER?.trim();
+  if (preferred) {
+    return [preferred, "install"];
+  }
   const candidates: [string, string][] = [
     ["pnpm", "install"],
     ["npm", "install"],
@@ -90,8 +98,9 @@ function getInstallCommand(): string[] {
   ];
   for (const [pm, action] of candidates) {
     try {
-      const check = spawnSync(pm, ["--version"], {
+      const check = spawnSync(`${pm} --version`, {
         stdio: "pipe",
+        shell: true,
       });
       if (check.status === 0) {
         return [pm, action];
@@ -101,6 +110,30 @@ function getInstallCommand(): string[] {
     }
   }
   return ["npm", "install"];
+}
+
+/**
+ * 解析 npm 风格 .npmrc 中的 strict-ssl 配置（项目级优先于用户级）。
+ * 返回 undefined 表示各级配置均未声明该键。
+ */
+function resolveNpmStrictSsl(projectRoot: string): boolean | undefined {
+  const configPaths = [join(projectRoot, ".npmrc"), join(homedir(), ".npmrc")];
+  for (const configPath of configPaths) {
+    try {
+      if (!existsSync(configPath)) continue;
+      const raw = readFileSync(configPath, "utf-8");
+      for (const line of raw.split(/\r?\n/)) {
+        const matched = line.match(/^\s*strict-ssl\s*=\s*(\S+)\s*$/i);
+        if (matched) {
+          const falsy = ["false", "0", "no", "off"];
+          return !falsy.includes(matched[1].toLowerCase());
+        }
+      }
+    } catch {
+      // 配置不可读时继续检查下一级
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -141,14 +174,30 @@ export function ensureProjectDependencies(projectRoot: string, force = false): b
       `[actiondock] Installing dependencies using ${installCmd[0]} for '${pkg.name || basename(projectRoot)}'...\n`
     );
 
-    const proc = spawnSync(installCmd[0], installCmd.slice(1), {
+    // bun 不读取 .npmrc 的 strict-ssl 配置；当 npm 侧已声明 strict-ssl=false 时，
+    // 桥接为 bun 子进程的 NODE_TLS_REJECT_UNAUTHORIZED=0，保证内网自签名证书源下行为一致
+    const childEnv = { ...process.env };
+    if (installCmd[0] === "bun" && resolveNpmStrictSsl(projectRoot) === false) {
+      childEnv.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+    }
+
+    // shell 模式下须传入单一命令字符串；候选命令均来自内置白名单，无注入面
+    const proc = spawnSync(installCmd.join(" "), {
       cwd: projectRoot,
       stdio: "pipe",
+      shell: true,
+      env: childEnv,
     });
 
     if (proc.status !== 0) {
       const errText = proc.stderr?.toString() || `Unknown error during ${installCmd[0]} install`;
       process.stderr.write(`[actiondock] Warning: Dependency installation failed: ${errText}\n`);
+      if (installCmd[0] === "bun" && /SELF_SIGNED_CERT|CERT_|UNABLE_TO_VERIFY|ERR_TLS/i.test(errText)) {
+        process.stderr.write(
+          `[actiondock] Hint: bun ignores 'strict-ssl=false' from .npmrc. ` +
+            `Add 'strict-ssl=false' to the project or user .npmrc, or set ACTIONDOCK_INSTALLER=npm.\n`
+        );
+      }
       return false;
     }
 
