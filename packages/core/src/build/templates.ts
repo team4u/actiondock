@@ -27,7 +27,7 @@ export function generateStandaloneEntrypoint(
   configDefs?: Record<string, unknown>
 ): string {
   // Resolve path to standalone runtime inside @actiondock/cli
-  const standaloneRuntimePath = resolve(__dirname, "../runtime/standalone");
+  const standaloneRuntimePath = resolve(import.meta.dirname, "../runtime/standalone");
 
   const imports = actions
     .map((a, idx) => `import action_${idx} from ${JSON.stringify(a.filePath)};`)
