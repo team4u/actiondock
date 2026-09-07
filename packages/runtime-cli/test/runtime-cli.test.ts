@@ -152,7 +152,7 @@ describe("@actiondock/runtime-cli - Exit Code Strategy", () => {
       stdout: (msg) => stdoutLogs.push(msg),
     });
     expect(code).toBe(ExitCode.SUCCESS);
-    expect(stdoutLogs.join("")).toContain("v2.0.4");
+    expect(stdoutLogs.join("")).toContain("v2.0.6");
   });
 
   it("returns exit code 0 on help command", async () => {

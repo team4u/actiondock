@@ -1,6 +1,6 @@
 {
   "name": "@actiondock/runtime-node",
-  "version": "2.0.4",
+  "version": "2.0.6",
   "description": "Node.js Runtime Adapters for ActionDock (node:sqlite, execa, tsx, http)",
   "type": "module",
   "main": "./src/index.ts",
