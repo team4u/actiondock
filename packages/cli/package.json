@@ -28,12 +28,12 @@
     "build": "bun build ./src/index.ts --outdir ./dist --target bun"
   },
   "dependencies": {
-    "@actiondock/builder": "workspace:*",
-    "@actiondock/core": "workspace:*",
-    "@actiondock/mcp": "workspace:*",
-    "@actiondock/runtime-cli": "workspace:*",
-    "@actiondock/runtime-node": "workspace:*",
-    "@actiondock/sdk": "workspace:*",
+    "@actiondock/builder": "^2.0.0",
+    "@actiondock/core": "^2.0.0",
+    "@actiondock/mcp": "^2.0.0",
+    "@actiondock/runtime-cli": "^2.0.0",
+    "@actiondock/runtime-node": "^2.0.0",
+    "@actiondock/sdk": "^2.0.0",
     "commander": "^13.1.0"
   },
   "devDependencies": {

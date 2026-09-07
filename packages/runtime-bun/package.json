@@ -27,8 +27,8 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@actiondock/core": "workspace:*",
-    "@actiondock/sdk": "workspace:*"
+    "@actiondock/core": "^2.0.0",
+    "@actiondock/sdk": "^2.0.0"
   },
   "devDependencies": {
     "@types/bun": "latest",

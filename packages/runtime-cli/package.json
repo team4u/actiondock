@@ -27,9 +27,9 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@actiondock/core": "workspace:*",
-    "@actiondock/mcp": "workspace:*",
-    "@actiondock/sdk": "workspace:*",
+    "@actiondock/core": "^2.0.0",
+    "@actiondock/mcp": "^2.0.0",
+    "@actiondock/sdk": "^2.0.0",
     "@modelcontextprotocol/server": "^2.0.0",
     "commander": "^13.1.0"
   },
