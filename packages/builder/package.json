@@ -1,6 +1,6 @@
 {
   "name": "@actiondock/builder",
-  "version": "2.0.8",
+  "version": "2.0.9",
   "description": "ActionDock Build Planner, Bun standalone compiler, and Skill exporter",
   "type": "module",
   "main": "./src/index.ts",
@@ -27,8 +27,8 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@actiondock/core": "^2.0.8",
-    "@actiondock/sdk": "^2.0.8",
+    "@actiondock/core": "^2.0.9",
+    "@actiondock/sdk": "^2.0.9",
     "yaml": "^2.7.0"
   },
   "devDependencies": {
