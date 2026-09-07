@@ -14,7 +14,7 @@ export function createRuntimeProgram(options?: RuntimeProgramOptions): Command {
 
   const isStandalone = Boolean(options?.standalone);
   const name = options?.name || (isStandalone ? options!.standalone!.packageId : "ad");
-  const version = options?.version || (isStandalone ? options!.standalone!.version : "2.0.4");
+  const version = options?.version || (isStandalone ? options!.standalone!.version : "2.0.5");
   const description =
     options?.description ||
     (isStandalone

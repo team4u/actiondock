@@ -54,10 +54,31 @@ jobs:
         working-directory: packages/core
         run: npm publish --access public
 
+      - name: Publish Testing
+        working-directory: packages/testing
+        run: npm publish --access public
+
+      - name: Publish Runtime Node
+        working-directory: packages/runtime-node
+        run: npm publish --access public
+
+      - name: Publish Runtime Bun
+        working-directory: packages/runtime-bun
+        run: npm publish --access public
+
+      - name: Publish Builder
+        working-directory: packages/builder
+        run: npm publish --access public
+
       - name: Publish MCP
         working-directory: packages/mcp
+        run: npm publish --access public
+
+      - name: Publish Runtime CLI
+        working-directory: packages/runtime-cli
         run: npm publish --access public
 
       - name: Publish CLI
         working-directory: packages/cli
         run: npm publish --access public
+
