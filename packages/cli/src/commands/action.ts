@@ -16,6 +16,7 @@ import {
   resolveActionProject,
   resolveTarget,
   saveManifest,
+  syncManifest,
   validateSchema,
 } from "@actiondock/core";
 import { Command } from "commander";
@@ -319,6 +320,74 @@ export default defineAction<Input, Output>({
         console.log(`[OK] Created Action '${id}' at ${targetFullFile}`);
         console.log(`\nTo run this action:`);
         console.log(`  ad action run ${id} --input '{"exampleParam": "hello"}'`);
+      } catch (err: any) {
+        console.error(`Error: ${err.message}`);
+        process.exit(1);
+      }
+    });
+
+  // action sync
+  actionCmd
+    .command("sync")
+    .description("Synchronize action metadata manifest with TypeScript definitions")
+    .option("--check", "Check if manifest is synchronized without modifying files")
+    .option("--no-prune", "Do not remove deleted actions from manifest")
+    .option("--json", "Output as JSON")
+    .action(async (options) => {
+      const root = findProjectRoot();
+      if (!root) {
+        console.error("Error: Not in an ActionDock project (actiondock.json not found)");
+        process.exit(1);
+      }
+
+      try {
+        const result = await syncManifest(root, {
+          check: Boolean(options.check),
+          prune: options.prune !== false,
+        });
+
+        if (options.json) {
+          console.log(JSON.stringify(result, null, 2));
+          if (options.check && !result.inSync) {
+            process.exit(1);
+          }
+          return;
+        }
+
+        if (options.check) {
+          if (result.inSync) {
+            console.log("[OK] actiondock.manifest.json is up to date.");
+          } else {
+            console.log("[FAIL] actiondock.manifest.json is out of sync with action definitions:\n");
+            if (result.added.length > 0) {
+              console.log(`  - Added actions:   ${result.added.join(", ")}`);
+            }
+            if (result.updated.length > 0) {
+              console.log(`  - Updated actions: ${result.updated.join(", ")}`);
+            }
+            if (result.removed.length > 0) {
+              console.log(`  - Removed actions: ${result.removed.join(", ")}`);
+            }
+            console.log("\nRun 'ad action sync' to synchronize metadata manifest.");
+            process.exit(1);
+          }
+        } else {
+          if (result.inSync) {
+            console.log(`[OK] actiondock.manifest.json is already up to date (${result.unchanged.length} action(s)).`);
+          } else {
+            console.log("[OK] Successfully synchronized actiondock.manifest.json:\n");
+            if (result.added.length > 0) {
+              console.log(`  - Added:   ${result.added.join(", ")}`);
+            }
+            if (result.updated.length > 0) {
+              console.log(`  - Updated: ${result.updated.join(", ")}`);
+            }
+            if (result.removed.length > 0) {
+              console.log(`  - Removed: ${result.removed.join(", ")}`);
+            }
+            console.log(`\nManifest updated at ${result.manifestPath}`);
+          }
+        }
       } catch (err: any) {
         console.error(`Error: ${err.message}`);
         process.exit(1);

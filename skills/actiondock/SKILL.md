@@ -29,6 +29,7 @@ ActionDock 支持**源码型**与**独立便携型**双模交付形态，让开�
 | **执行复合业务任务** | 规程优先原则，阅读规程后依序调度 | `ad playbook show <id>`，依步骤调度对应 Action |
 | **调用单点原子工具** | 使用文件传参，避免终端转义问题 | `ad run <pkg>/<action> --input-file <path>` |
 | **新建 Action 工具** | 脚手架生成并实现标准输入输出契约 | `ad action create <id>`，编写 `actions/<name>.ts` |
+| **更新 Action 元数据** | 源码或模式修改后同步刷新声明式清单 | `ad action sync`（或 `--check` 门禁检查） |
 | **编排业务操作规程** | 规范编写多步骤操作引导文档 | `ad playbook create <id>`，编写 `playbooks/<id>.md` |
 | **单元测试与逻辑验证** | 纯内存沙箱测试，验证多步与状态逻辑 | `ad test`，结合 `createTestRuntime` |
 | **交付导出为 Skill** | 双模导出：源码型或独立预编译便携型 | `ad export skill` 或 `ad export skill --standalone` |
@@ -136,6 +137,30 @@ ad playbook validate [id]
 ### 脚手架创建 Action
 ```bash
 ad action create <action-id> --desc "功能简要描述" [--file <filename.ts>]
+```
+
+### 代码修改与元数据同步 (`ad action sync`)
+
+在开发与迭代 Action 时，TypeScript 源码是开发态的实现事实源，而 `actiondock.manifest.json` 则是外部检索、MCP 协议映射与构建规划的声明式清单事实源。
+
+当完成以下任一代码调整时，必须执行 `ad action sync` 将最新的代码定义同步刷新至清单：
+- **修改模式契约**：在 Action 源码中更新了 `inputSchema` 或 `outputSchema` 字段结构或参数说明。
+- **调整功能描述**：修改了 Action 的 `description` 描述文本。
+- **更新依赖与标签**：调整了 `uses` 静态依赖项或 `tags` 分类标签。
+- **手动增删文件**：在 `actions/` 目录下手工新增了 `.ts` 动作文件，或物理删除了废弃动作。
+
+```bash
+# 全量扫描 actions/ 目录并自动增量同步清单文件
+ad action sync
+
+# 仅检查清单是否与代码保持一致，不覆写文件（适合持续集成门禁检查）
+ad action sync --check
+
+# 同步清单，但保留物理上已删除的 Action 声明
+ad action sync --no-prune
+
+# 输出机器可读的 JSON 结构
+ad action sync --json
 ```
 
 ### Action 契约定义与标准实现
@@ -491,6 +516,7 @@ ad unlink --prune
 | `OUTPUT_VALIDATION_FAILED` | Action `run` 方法返回的对象不匹配 `outputSchema` | 检查 Action 代码返回字段是否包含所有必须属性 |
 | `CONFIG_VALIDATION_FAILED` | 未注入当前 Action 依赖的必填配置项 | 执行 `ad config list` 查看缺失的配置项，通过 `ad config set <key> <val>` 补全配置 |
 | `ACTION_TIMEOUT` | 执行时间超过预设阈值 | 优化底层调用耗时，或在调用时添加 `--timeout 60s` 增大超时时间 |
+| 元数据清单与代码脱节或缺少新增 Action | 源码修改后未同步更新清单文件 | 在项目根目录下执行 `ad action sync` 同步刷新清单 |
 | `ad` 命令行工具未找到 | 宿主未安装 ActionDock CLI，或 PATH 未生效 | 执行 `npm install -g @actiondock/cli` 或本地链接（详见下方冷启动安装指引） |
 | 外部命令提示找不到 | 宿主未安装对应工具，或 PATH 未生效 | 使用绝对路径调用，或检查系统环境变量 PATH 中是否包含该可执行文件 |
 
@@ -534,6 +560,7 @@ ad doctor --json
 
 - **规程优先原则**：面对业务编排任务，必须优先检索并遵循现成的 Playbook，严禁无视既有规程擅自拼凑 Action 调度次序。
 - **按需排查原则**：严禁在每次任务执行前盲目进行前置环境检查、依赖重装或运行 `ad doctor` 体检；默认环境完备就绪，仅在实际遇到报错时按需修复。
+- **元数据同步原则**：在修改 Action 源码（包括参数模式、描述、依赖）或新增与删除 Action 文件后，必须执行 `ad action sync` 保持清单一致性。
 - **通道隔离原则**：严禁在 Action 内部调用 `console.log`，所有日志一律使用 `ctx.log`（输出至 `stderr`），确保 `stdout` 仅输出标准 JSON 信封。
 - **严格契约原则**：必须为每个 Action 定义完备的 `inputSchema` 与 `outputSchema`。
 - **响应式取消原则**：对于网络通信与耗时循环，始终绑定并检测 `ctx.signal`。

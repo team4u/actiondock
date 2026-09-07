@@ -1,7 +1,7 @@
-import { existsSync } from "node:fs";
-import { delimiter, join } from "node:path";
-import { findProjectRoot, loadActions, loadPlaybooks, loadProjectConfig } from "../project/loader";
-import { loadManifest } from "../project/manifest";
+import { existsSync, statSync } from "node:fs";
+import { delimiter, join, relative } from "node:path";
+import { discoverActionFiles, findProjectRoot, loadActions, loadPlaybooks, loadProjectConfig } from "../project/loader";
+import { loadManifest, MANIFEST_FILE_NAME } from "../project/manifest";
 import { getRegistryStatus } from "../registry/registry";
 import { createGlobalStorage, createStorage } from "../storage";
 import { getActionDockHome } from "../utils";
@@ -281,6 +281,88 @@ export async function runDoctorChecks(options?: {
           message: `Failed to load actions: ${err.message}`,
         });
       }
+
+      // Project Manifest Check (Lightweight Static Detection)
+      try {
+        const manifestPath = join(projectRoot, MANIFEST_FILE_NAME);
+        const manifest = loadManifest(projectRoot);
+        const actionFiles = discoverActionFiles(projectRoot, config.actionsDir || "actions");
+
+        if (!existsSync(manifestPath)) {
+          if (actionFiles.length > 0) {
+            checks.push({
+              id: "project.manifest",
+              category: "project",
+              name: "Action Manifest",
+              status: "warn",
+              message: `${MANIFEST_FILE_NAME} not found (${actionFiles.length} action source file(s) exist)`,
+              fix: "Run 'ad action sync' to generate manifest",
+            });
+          }
+        } else if (manifest && manifest.actions) {
+          const missingFiles = Object.entries(manifest.actions)
+            .filter(([_, item]) => !existsSync(join(projectRoot, item.entry)))
+            .map(([id, item]) => `${id} (${item.entry})`);
+
+          const manifestEntries = new Set(
+            Object.values(manifest.actions).map((a) => a.entry.replace(/\\/g, "/"))
+          );
+          const untracked = actionFiles
+            .map((f) => relative(projectRoot, f).replace(/\\/g, "/"))
+            .filter((rel) => !manifestEntries.has(rel));
+
+          if (missingFiles.length > 0) {
+            checks.push({
+              id: "project.manifest",
+              category: "project",
+              name: "Action Manifest",
+              status: "warn",
+              message: `${missingFiles.length} action(s) in manifest point to missing files: ${missingFiles.join(", ")}`,
+              fix: "Run 'ad action sync' to synchronize manifest",
+            });
+          } else if (untracked.length > 0) {
+            checks.push({
+              id: "project.manifest",
+              category: "project",
+              name: "Action Manifest",
+              status: "warn",
+              message: `${untracked.length} action file(s) not declared in manifest: ${untracked.join(", ")}`,
+              fix: "Run 'ad action sync' to synchronize manifest",
+            });
+          } else {
+            const manifestStat = statSync(manifestPath);
+            const newerFiles = actionFiles.filter(
+              (f) => statSync(f).mtimeMs > manifestStat.mtimeMs + 2000
+            );
+            if (newerFiles.length > 0) {
+              checks.push({
+                id: "project.manifest",
+                category: "project",
+                name: "Action Manifest",
+                status: "ok",
+                message: `Manifest valid (Note: ${newerFiles.length} action file(s) modified after manifest; run 'ad action sync' if definitions changed)`,
+              });
+            } else {
+              checks.push({
+                id: "project.manifest",
+                category: "project",
+                name: "Action Manifest",
+                status: "ok",
+                message: "Manifest synchronized with action files",
+              });
+            }
+          }
+        }
+      } catch (err: any) {
+        checks.push({
+          id: "project.manifest",
+          category: "project",
+          name: "Action Manifest",
+          status: "error",
+          message: `Failed to inspect manifest: ${err.message}`,
+        });
+      }
+
 
       // Playbooks Check
       try {

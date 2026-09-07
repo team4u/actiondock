@@ -853,5 +853,74 @@ describe("CLI End-to-End", () => {
       }
     }
   });
+
+  it("synchronizes action manifest when source code changes (ad action sync)", () => {
+    // 1. Initialize project
+    const initProc = runCli(
+      ["init", "--id", "team.sync-cli", "--name", "Sync CLI", "."],
+      tempDir
+    );
+    expect(initProc.exitCode).toBe(0);
+
+    // 2. action sync --check should pass initially
+    const checkInitProc = runCli(["action", "sync", "--check"], tempDir);
+    expect(checkInitProc.exitCode).toBe(0);
+    expect(checkInitProc.stdout.toString()).toContain("is up to date");
+
+    // 3. Modify action file
+    const greetPath = join(tempDir, "actions", "greet.ts");
+    const updatedCode = `import { defineAction } from "@actiondock/sdk";
+
+export default defineAction({
+  id: "sample.greet",
+  description: "Synchronized greeting action description",
+  tags: ["sample", "v2"],
+  inputSchema: {
+    type: "object",
+    properties: {
+      name: { type: "string" },
+      role: { type: "string" },
+    },
+    required: ["name"],
+  },
+  outputSchema: {
+    type: "object",
+    properties: {
+      message: { type: "string" },
+    },
+    required: ["message"],
+  },
+  async run(input: any) {
+    return { message: "Hello " + input.name };
+  },
+});
+`;
+    writeFileSync(greetPath, updatedCode, "utf-8");
+
+    // 4. action sync --check should fail now
+    const checkFailProc = runCli(["action", "sync", "--check"], tempDir);
+    expect(checkFailProc.exitCode).toBe(1);
+    expect(checkFailProc.stdout.toString()).toContain("out of sync");
+    expect(checkFailProc.stdout.toString()).toContain("Updated actions: sample.greet");
+
+    // 5. Execute action sync to write changes
+    const syncProc = runCli(["action", "sync"], tempDir);
+    expect(syncProc.exitCode).toBe(0);
+    expect(syncProc.stdout.toString()).toContain("Successfully synchronized");
+    expect(syncProc.stdout.toString()).toContain("- Updated: sample.greet");
+
+    // 6. Verify with action show and action sync --check
+    const showProc = runCli(["action", "show", "sample.greet", "--json"], tempDir);
+    expect(showProc.exitCode).toBe(0);
+    const showRes = JSON.parse(showProc.stdout.toString());
+    expect(showRes.description).toBe("Synchronized greeting action description");
+    expect(showRes.inputSchema.properties.role).toBeDefined();
+
+    const checkPassProc = runCli(["action", "sync", "--check", "--json"], tempDir);
+    expect(checkPassProc.exitCode).toBe(0);
+    const checkJson = JSON.parse(checkPassProc.stdout.toString());
+    expect(checkJson.inSync).toBe(true);
+    expect(checkJson.unchanged).toContain("sample.greet");
+  });
 });
 

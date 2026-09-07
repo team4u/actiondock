@@ -90,3 +90,52 @@ export interface ActionDockManifest {
   actions: Record<string, ActionManifestEntry>;
   assets?: string[];
 }
+
+/**
+ * 清单同步操作选项。
+ */
+export interface SyncManifestOptions {
+  /** 自定义 actions 源码目录（默认为工程配置中的 actionsDir 或 "actions"） */
+  actionsDir?: string;
+  /** 是否仅检查同步状态而不保存写入文件（默认 false） */
+  check?: boolean;
+  /** 是否自动移除源码中已不存在的 Action（默认 true） */
+  prune?: boolean;
+  /** 缺失依赖时是否自动执行安装（默认 true） */
+  autoInstall?: boolean;
+}
+
+/**
+ * 单个 Action 的清单同步变更项。
+ */
+export interface ManifestSyncChange {
+  /** Action 标识符 */
+  actionId: string;
+  /** 变更类型：新增、更新、删除或未变 */
+  type: "added" | "updated" | "removed" | "unchanged";
+  /** 源码入口文件相对路径 */
+  entry?: string;
+  /** 发生变更的字段列表（例如 ["description", "inputSchema"]） */
+  changedFields?: string[];
+}
+
+/**
+ * 清单同步执行结果。
+ */
+export interface ManifestSyncResult {
+  /** 清单当前是否已与源码完全一致 */
+  inSync: boolean;
+  /** 清单文件的物理绝对路径 */
+  manifestPath: string;
+  /** 所有 Action 的变更详情列表 */
+  changes: ManifestSyncChange[];
+  /** 新增的 Action 标识列表 */
+  added: string[];
+  /** 更新的 Action 标识列表 */
+  updated: string[];
+  /** 移除的 Action 标识列表 */
+  removed: string[];
+  /** 未改变的 Action 标识列表 */
+  unchanged: string[];
+}
+

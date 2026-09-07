@@ -56,6 +56,11 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
   ad action new <id> [--desc <description>] [--file <filePath>]
   ```
   在 `actions/` 创建代码模板，并自动向 `actiondock.manifest.json` 注册元数据契约。
+- **同步 Action 元数据清单**：
+  ```bash
+  ad action sync [--check] [--no-prune] [--json]
+  ```
+  扫描动作源码目录（`actions/`），动态加载 Action 定义并自动增量更新 `actiondock.manifest.json` 清单。传入 `--check` 时仅校验清单是否已与代码同步而不覆写文件。
 - **列出 Action 清单**：
   ```bash
   ad action list [patterns...] [-i, --intent <pattern>] [--no-fallback] [-P, --package <id>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--json] [--envelope]

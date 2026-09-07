@@ -157,6 +157,7 @@ build/
 export default defineAction({
   id: "sample.greet",
   description: "Greeting action demonstrating basic input, config, and state usage",
+  tags: ["sample"],
 
   inputSchema: {
     type: "object",

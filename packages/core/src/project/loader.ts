@@ -331,28 +331,64 @@ export interface ActionFileEntry {
 }
 
 /**
- * 加载并建立 Action ID 与其物理源码文件路径之间的映射关系（供构建打包器使用）。
+ * 加载并建立 Action ID 与其物理源码文件路径之间的映射关系（供构建打包器及清单同步使用）。
  */
 export async function loadActionFileMap(
   projectRoot: string,
-  actionsDir = "actions"
+  actionsDir = "actions",
+  options: { autoInstall?: boolean; strict?: boolean } = { autoInstall: true, strict: false }
 ): Promise<Map<string, ActionFileEntry>> {
+  if (options.autoInstall !== false) {
+    ensureProjectDependencies(projectRoot);
+  }
+
   const files = discoverActionFiles(projectRoot, actionsDir);
   const map = new Map<string, ActionFileEntry>();
 
   for (const file of files) {
     try {
-      const imported = await import(toImportSpecifier(file));
+      let imported: any;
+      try {
+        imported = await import(toImportSpecifier(file));
+      } catch (err: any) {
+        const msg = String(err.message || "");
+        if (
+          options.autoInstall !== false &&
+          (msg.includes("Cannot find package") ||
+            msg.includes("Cannot find module") ||
+            msg.includes("ERR_MODULE_NOT_FOUND") ||
+            msg.includes("Could not resolve"))
+        ) {
+          const installed = ensureProjectDependencies(projectRoot, true);
+          if (installed) {
+            imported = await import(toImportSpecifier(file));
+          } else {
+            throw err;
+          }
+        } else {
+          throw err;
+        }
+      }
+
       const act = imported.default || imported.action;
       if (act && typeof act === "object" && typeof act.id === "string") {
+        if (map.has(act.id)) {
+          throw new Error(
+            `Duplicate action ID '${act.id}' found in ${file} (previously loaded from ${map.get(act.id)!.filePath})`
+          );
+        }
         map.set(act.id, {
           id: act.id,
           filePath: resolve(file),
           action: act,
         });
+      } else if (options.strict) {
+        console.warn(`[WARN] File ${file} does not export a valid default ActionDefinition`);
       }
-    } catch {
-      // 忽略非 Action 导出的辅助模块
+    } catch (err: any) {
+      if (options.strict) {
+        throw new Error(`Failed to load action from ${file}: ${err.message}`);
+      }
     }
   }
 
