@@ -5,7 +5,7 @@ import {
   findProjectRoot,
   getRegistryStatus,
   listLinkedPackages,
-  loadActions,
+  loadManifest,
   loadPlaybooks,
   loadProjectConfig,
   resolvePackageRoot,
@@ -24,7 +24,16 @@ import { getEffectiveOptions, resolveIntent } from "../utils";
 
 async function getProjectDetailInfo(root: string): Promise<ProjectDetailInfo> {
   const config = loadProjectConfig(root);
-  const actions = await loadActions(root, config.actionsDir);
+  const manifest = loadManifest(root);
+  const actionsMap = new Map<string, { id: string; description?: string }>();
+  if (manifest?.actions) {
+    for (const [id, item] of Object.entries(manifest.actions)) {
+      actionsMap.set(id, {
+        id,
+        description: item.description,
+      });
+    }
+  }
   const playbooks = loadPlaybooks(root, config.playbooksDir);
 
   return {
@@ -35,13 +44,13 @@ async function getProjectDetailInfo(root: string): Promise<ProjectDetailInfo> {
     projectRoot: root,
     actionsDir: config.actionsDir || "actions",
     playbooksDir: config.playbooksDir || "playbooks",
-    actionsCount: actions.size,
+    actionsCount: actionsMap.size,
     playbooksCount: playbooks.size,
-    actions: Array.from(actions.keys()),
+    actions: Array.from(actionsMap.keys()),
     playbooks: Array.from(playbooks.keys()),
     configDeclared: config.config ? Object.keys(config.config) : [],
     configDef: config.config,
-    actionsMap: actions,
+    actionsMap,
     playbooksMap: playbooks,
   };
 }
@@ -253,7 +262,8 @@ export function registerInfoCommand(program: Command, context?: RuntimeCliContex
       if (currentRoot) {
         try {
           const config = loadProjectConfig(currentRoot);
-          const actions = await loadActions(currentRoot, config.actionsDir);
+          const manifest = loadManifest(currentRoot);
+          const manifestActionIds = manifest?.actions ? Object.keys(manifest.actions) : [];
           const playbooks = loadPlaybooks(currentRoot, config.playbooksDir);
           aggregated.push({
             id: config.id,
@@ -261,9 +271,9 @@ export function registerInfoCommand(program: Command, context?: RuntimeCliContex
             version: config.version,
             description: config.description,
             path: currentRoot,
-            actionsCount: actions.size,
+            actionsCount: manifestActionIds.length,
             playbooksCount: playbooks.size,
-            actions: Array.from(actions.keys()),
+            actions: manifestActionIds,
             playbooks: Array.from(playbooks.keys()),
             configDeclared: config.config ? Object.keys(config.config) : [],
           });
@@ -278,7 +288,8 @@ export function registerInfoCommand(program: Command, context?: RuntimeCliContex
         if (seenPaths.has(pkg.path)) continue;
         try {
           const config = loadProjectConfig(pkg.path);
-          const actions = await loadActions(pkg.path, config.actionsDir);
+          const manifest = loadManifest(pkg.path);
+          const manifestActionIds = manifest?.actions ? Object.keys(manifest.actions) : [];
           const playbooks = loadPlaybooks(pkg.path, config.playbooksDir);
 
           aggregated.push({
@@ -287,9 +298,9 @@ export function registerInfoCommand(program: Command, context?: RuntimeCliContex
             version: config.version,
             description: config.description,
             path: pkg.path,
-            actionsCount: actions.size,
+            actionsCount: manifestActionIds.length,
             playbooksCount: playbooks.size,
-            actions: Array.from(actions.keys()),
+            actions: manifestActionIds,
             playbooks: Array.from(playbooks.keys()),
             configDeclared: config.config ? Object.keys(config.config) : [],
           });

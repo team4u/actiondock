@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 // Windows 下端到端流程会多次冷启动 Bun 子进程，默认 5s 超时不够
 setDefaultTimeout(120000);
-import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -751,6 +751,75 @@ describe("CLI End-to-End", () => {
       }
       if (existsSync(wsDir)) {
         rmSync(wsDir, { recursive: true, force: true });
+      }
+    }
+  });
+
+  it("info does not auto install dependencies and does not import actions when manifest is absent", () => {
+    const noManifestDir = join(tmpdir(), `ad-cli-no-manifest-${Date.now()}`);
+    mkdirSync(join(noManifestDir, "actions"), { recursive: true });
+
+    try {
+      writeFileSync(
+        join(noManifestDir, "actiondock.json"),
+        JSON.stringify({
+          id: "team.no-manifest",
+          name: "No Manifest",
+          version: "1.0.0",
+          actionsDir: "actions",
+        }),
+        "utf-8"
+      );
+
+      writeFileSync(
+        join(noManifestDir, "package.json"),
+        JSON.stringify({
+          name: "team.no-manifest",
+          version: "1.0.0",
+          dependencies: {
+            "non-existent-pkg-xyz": "^1.0.0",
+          },
+        }),
+        "utf-8"
+      );
+
+      writeFileSync(
+        join(noManifestDir, "actions", "foo.ts"),
+        `import { defineAction } from "@actiondock/sdk";\nexport default defineAction({ id: "team.foo", run: async () => ({}) });\n`,
+        "utf-8"
+      );
+
+      const infoProc = runCli(["info", "--json"], noManifestDir);
+      expect(infoProc.exitCode).toBe(0);
+      const info = JSON.parse(infoProc.stdout.toString());
+      expect(info.id).toBe("team.no-manifest");
+      expect(info.actionsCount).toBe(0);
+      expect(info.actions.length).toBe(0);
+      expect(existsSync(join(noManifestDir, "node_modules"))).toBe(false);
+
+      writeFileSync(
+        join(noManifestDir, "actiondock.manifest.json"),
+        JSON.stringify({
+          schemaVersion: 1,
+          actions: {
+            "team.foo": {
+              entry: "actions/foo.ts",
+              description: "Test action foo",
+            },
+          },
+        }),
+        "utf-8"
+      );
+
+      const infoWithManifestProc = runCli(["info", "--json"], noManifestDir);
+      expect(infoWithManifestProc.exitCode).toBe(0);
+      const infoWithManifest = JSON.parse(infoWithManifestProc.stdout.toString());
+      expect(infoWithManifest.actionsCount).toBe(1);
+      expect(infoWithManifest.actions).toEqual(["team.foo"]);
+      expect(existsSync(join(noManifestDir, "node_modules"))).toBe(false);
+    } finally {
+      if (existsSync(noManifestDir)) {
+        rmSync(noManifestDir, { recursive: true, force: true });
       }
     }
   });

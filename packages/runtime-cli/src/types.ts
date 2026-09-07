@@ -94,7 +94,7 @@ export interface ProjectDetailInfo {
   playbooks: string[];
   configDeclared: string[];
   configDef?: Record<string, ConfigItemDefinition>;
-  actionsMap?: Map<string, ActionDefinition>;
+  actionsMap?: Map<string, ActionDefinition | { id: string; description?: string }>;
   playbooksMap?: Map<string, any>;
 }
 
