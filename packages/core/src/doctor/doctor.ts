@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { findProjectRoot, loadActions, loadPlaybooks, loadProjectConfig } from "../project/loader";
+import { loadManifest } from "../project/manifest";
 import { getRegistryStatus } from "../registry/registry";
 import { createGlobalStorage, createStorage } from "../storage";
 import { getActionDockHome } from "../utils";
@@ -244,15 +245,23 @@ export async function runDoctorChecks(options?: {
 
       // Actions Check
       try {
-        const actions = await loadActions(projectRoot, config.actionsDir);
-        if (actions.size === 0) {
+        const manifest = loadManifest(projectRoot);
+        let actionsCount = 0;
+        if (manifest?.actions) {
+          actionsCount = Object.keys(manifest.actions).length;
+        } else {
+          const actions = await loadActions(projectRoot, config.actionsDir, { autoInstall: false });
+          actionsCount = actions.size;
+        }
+
+        if (actionsCount === 0) {
           checks.push({
             id: "project.actions",
             category: "project",
             name: "Actions",
             status: "warn",
             message: `No actions found in '${config.actionsDir || "actions"}'`,
-            fix: "Run 'ad action create <id>' to create your first action",
+            fix: "Run 'ad action new <id>' to create your first action",
           });
         } else {
           checks.push({
@@ -260,7 +269,7 @@ export async function runDoctorChecks(options?: {
             category: "project",
             name: "Actions",
             status: "ok",
-            message: `${actions.size} action(s) valid and loaded`,
+            message: `${actionsCount} action(s) valid and loaded`,
           });
         }
       } catch (err: any) {

@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { findProjectRoot, loadActions, loadPlaybooks, loadProjectConfig } from "../project/loader";
+import { loadManifest } from "../project/manifest";
 import { getActionDockHome, getPackageSlug } from "../utils";
 import type {
   GlobalRegistryData,
@@ -330,6 +331,23 @@ export function listLinkedWorkspaces(customHome?: string): LinkedWorkspaceEntry[
   return Object.values(registry.workspaces || {});
 }
 
+async function projectHasAction(
+  projectRoot: string,
+  actionsDir: string | undefined,
+  actionId: string
+): Promise<boolean> {
+  const manifest = loadManifest(projectRoot);
+  if (manifest?.actions && actionId in manifest.actions) {
+    return true;
+  }
+  try {
+    const actions = await loadActions(projectRoot, actionsDir, { autoInstall: false });
+    return actions.has(actionId);
+  } catch {
+    return false;
+  }
+}
+
 export async function resolveActionProject(
   actionIdentifier: string,
   cwd: string = process.cwd(),
@@ -340,8 +358,7 @@ export async function resolveActionProject(
   if (currentRoot) {
     try {
       const config = loadProjectConfig(currentRoot);
-      const actions = await loadActions(currentRoot, config.actionsDir);
-      if (actions.has(actionIdentifier)) {
+      if (await projectHasAction(currentRoot, config.actionsDir, actionIdentifier)) {
         return {
           projectRoot: currentRoot,
           packageId: config.id,
@@ -381,8 +398,7 @@ export async function resolveActionProject(
     }
 
     const config = loadProjectConfig(pkg.path);
-    const actions = await loadActions(pkg.path, config.actionsDir);
-    if (!actions.has(pureActionId)) {
+    if (!(await projectHasAction(pkg.path, config.actionsDir, pureActionId))) {
       throw new Error(`Action '${pureActionId}' not found in package '${pkg.id}' (${pkg.path})`);
     }
 
@@ -400,8 +416,7 @@ export async function resolveActionProject(
     if (!existsSync(pkg.path)) continue;
     try {
       const config = loadProjectConfig(pkg.path);
-      const actions = await loadActions(pkg.path, config.actionsDir);
-      if (actions.has(actionIdentifier)) {
+      if (await projectHasAction(pkg.path, config.actionsDir, actionIdentifier)) {
         matches.push({ entry: pkg, actionId: actionIdentifier });
       }
     } catch {

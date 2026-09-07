@@ -85,12 +85,14 @@ export function registerActionCommands(program: Command): void {
         const root = findProjectRoot();
         if (root) {
           const config = loadProjectConfig(root);
-          const actions = await loadActions(root, config.actionsDir);
-          const rawList = Array.from(actions.values()).map((a) => ({
-            id: a.id,
-            description: a.description || "",
-            packageId: config.id,
-          }));
+          const manifest = loadManifest(root);
+          const rawList = manifest?.actions
+            ? Object.entries(manifest.actions).map(([actId, a]) => ({
+                id: actId,
+                description: a.description || "",
+                packageId: config.id,
+              }))
+            : [];
 
           const filterRes = filterWithFallbackInfo(
             rawList,
@@ -130,11 +132,13 @@ export function registerActionCommands(program: Command): void {
             if (!existsSync(pkg.path)) continue;
             try {
               const config = loadProjectConfig(pkg.path);
-              const actions = await loadActions(pkg.path, config.actionsDir);
-              const pkgActions = Array.from(actions.values()).map((a) => ({
-                id: a.id,
-                description: a.description || "",
-              }));
+              const manifest = loadManifest(pkg.path);
+              const pkgActions = manifest?.actions
+                ? Object.entries(manifest.actions).map(([actId, a]) => ({
+                    id: actId,
+                    description: a.description || "",
+                  }))
+                : [];
 
               aggregated.push({
                 packageId: pkg.id,
@@ -364,9 +368,10 @@ export default defineAction<Input, Output>({
 
         const resolved = await resolveActionProject(id);
         const config = loadProjectConfig(resolved.projectRoot);
-        const actions = await loadActions(resolved.projectRoot, config.actionsDir);
-        const action = actions.get(resolved.actionId);
-        if (!action) {
+        const manifest = loadManifest(resolved.projectRoot);
+        const actionMeta = manifest?.actions?.[resolved.actionId];
+
+        if (!actionMeta) {
           console.error(`Error: Action '${resolved.actionId}' not found in package '${resolved.packageId}'`);
           process.exit(1);
         }
@@ -375,27 +380,27 @@ export default defineAction<Input, Output>({
           console.log(
             JSON.stringify(
               {
-                id: action.id,
+                id: resolved.actionId,
                 packageId: resolved.packageId,
-                description: action.description,
-                inputSchema: action.inputSchema,
-                outputSchema: action.outputSchema,
+                description: actionMeta.description,
+                inputSchema: actionMeta.inputSchema,
+                outputSchema: actionMeta.outputSchema,
               },
               null,
               2
             )
           );
         } else {
-          console.log(`Action:      ${action.id}`);
+          console.log(`Action:      ${resolved.actionId}`);
           console.log(`Package:     ${resolved.packageId} (${resolved.projectRoot})`);
-          if (action.description) console.log(`Description: ${action.description}`);
-          if (action.inputSchema) {
+          if (actionMeta.description) console.log(`Description: ${actionMeta.description}`);
+          if (actionMeta.inputSchema) {
             console.log("\nInput Schema:");
-            console.log(JSON.stringify(action.inputSchema, null, 2));
+            console.log(JSON.stringify(actionMeta.inputSchema, null, 2));
           }
-          if (action.outputSchema) {
+          if (actionMeta.outputSchema) {
             console.log("\nOutput Schema:");
-            console.log(JSON.stringify(action.outputSchema, null, 2));
+            console.log(JSON.stringify(actionMeta.outputSchema, null, 2));
           }
         }
       } catch (err: any) {

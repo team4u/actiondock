@@ -797,6 +797,16 @@ describe("CLI End-to-End", () => {
       expect(info.actions.length).toBe(0);
       expect(existsSync(join(noManifestDir, "node_modules"))).toBe(false);
 
+      const actionListProc = runCli(["action", "list", "--json"], noManifestDir);
+      expect(actionListProc.exitCode).toBe(0);
+      const actionList = JSON.parse(actionListProc.stdout.toString());
+      expect(actionList.length).toBe(0);
+      expect(existsSync(join(noManifestDir, "node_modules"))).toBe(false);
+
+      const doctorProc = runCli(["doctor", "--json"], noManifestDir);
+      expect(doctorProc.exitCode).toBe(0);
+      expect(existsSync(join(noManifestDir, "node_modules"))).toBe(false);
+
       writeFileSync(
         join(noManifestDir, "actiondock.manifest.json"),
         JSON.stringify({
@@ -805,6 +815,8 @@ describe("CLI End-to-End", () => {
             "team.foo": {
               entry: "actions/foo.ts",
               description: "Test action foo",
+              inputSchema: { type: "object" },
+              outputSchema: { type: "object" },
             },
           },
         }),
@@ -816,6 +828,24 @@ describe("CLI End-to-End", () => {
       const infoWithManifest = JSON.parse(infoWithManifestProc.stdout.toString());
       expect(infoWithManifest.actionsCount).toBe(1);
       expect(infoWithManifest.actions).toEqual(["team.foo"]);
+      expect(existsSync(join(noManifestDir, "node_modules"))).toBe(false);
+
+      const actionListWithManifestProc = runCli(["action", "list", "--json"], noManifestDir);
+      expect(actionListWithManifestProc.exitCode).toBe(0);
+      const actionListWithManifest = JSON.parse(actionListWithManifestProc.stdout.toString());
+      expect(actionListWithManifest.length).toBe(1);
+      expect(actionListWithManifest[0].id).toBe("team.foo");
+      expect(existsSync(join(noManifestDir, "node_modules"))).toBe(false);
+
+      const actionShowProc = runCli(["action", "show", "team.foo", "--json"], noManifestDir);
+      expect(actionShowProc.exitCode).toBe(0);
+      const actionShow = JSON.parse(actionShowProc.stdout.toString());
+      expect(actionShow.id).toBe("team.foo");
+      expect(actionShow.description).toBe("Test action foo");
+      expect(existsSync(join(noManifestDir, "node_modules"))).toBe(false);
+
+      const doctorWithManifestProc = runCli(["doctor", "--json"], noManifestDir);
+      expect(doctorWithManifestProc.exitCode).toBe(0);
       expect(existsSync(join(noManifestDir, "node_modules"))).toBe(false);
     } finally {
       if (existsSync(noManifestDir)) {

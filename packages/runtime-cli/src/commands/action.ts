@@ -9,6 +9,7 @@ import {
   findProjectRoot,
   listLinkedPackages,
   loadActions,
+  loadManifest,
   loadProjectConfig,
   parseDuration,
   resolveActionProject,
@@ -308,12 +309,14 @@ export function registerActionCommands(program: Command, context?: RuntimeCliCon
       const root = findProjectRoot();
       if (root) {
         const config = loadProjectConfig(root);
-        const actions = await loadActions(root, config.actionsDir);
-        const rawList = Array.from(actions.values()).map((a) => ({
-          id: a.id,
-          description: a.description || "",
-          packageId: config.id,
-        }));
+        const manifest = loadManifest(root);
+        const rawList = manifest?.actions
+          ? Object.entries(manifest.actions).map(([actId, a]) => ({
+              id: actId,
+              description: a.description || "",
+              packageId: config.id,
+            }))
+          : [];
 
         const filterRes = filterWithFallbackInfo(
           rawList,
@@ -364,11 +367,13 @@ export function registerActionCommands(program: Command, context?: RuntimeCliCon
         if (!existsSync(pkg.path)) continue;
         try {
           const config = loadProjectConfig(pkg.path);
-          const actions = await loadActions(pkg.path, config.actionsDir);
-          const pkgActions = Array.from(actions.values()).map((a) => ({
-            id: a.id,
-            description: a.description || "",
-          }));
+          const manifest = loadManifest(pkg.path);
+          const pkgActions = manifest?.actions
+            ? Object.entries(manifest.actions).map(([actId, a]) => ({
+                id: actId,
+                description: a.description || "",
+              }))
+            : [];
 
           aggregated.push({
             packageId: pkg.id,
@@ -502,22 +507,22 @@ export function registerActionCommands(program: Command, context?: RuntimeCliCon
       // 3. 本地工程模式
       const resolved = await resolveActionProject(id);
       const config = loadProjectConfig(resolved.projectRoot);
-      const actions = await loadActions(resolved.projectRoot, config.actionsDir);
-      const action = actions.get(resolved.actionId);
+      const manifest = loadManifest(resolved.projectRoot);
+      const actionMeta = manifest?.actions?.[resolved.actionId];
 
-      if (!action) {
+      if (!actionMeta) {
         throw new ExecutionError(
           `Action '${resolved.actionId}' not found in package '${resolved.packageId}'`
         );
       }
 
       const detail = {
-        id: action.id,
+        id: resolved.actionId,
         packageId: resolved.packageId,
         projectRoot: resolved.projectRoot,
-        description: action.description,
-        inputSchema: action.inputSchema,
-        outputSchema: action.outputSchema,
+        description: actionMeta.description,
+        inputSchema: actionMeta.inputSchema,
+        outputSchema: actionMeta.outputSchema,
       };
 
       renderResult(detail, {
