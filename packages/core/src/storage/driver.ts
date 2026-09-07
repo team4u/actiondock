@@ -1,6 +1,10 @@
+import { createRequire } from "node:module";
 import type { SqliteDriver } from "./types";
 
 export type SqliteDriverFactory = (dbPath: string) => SqliteDriver;
+
+/** ESM 环境下可用的 CommonJS require，用于动态加载 node:sqlite / bun:sqlite */
+const cjsRequire = createRequire(import.meta.url);
 
 let customDriverFactory: SqliteDriverFactory | undefined;
 
@@ -23,14 +27,19 @@ export function createDefaultSqliteDriver(dbPath: string): SqliteDriver {
   // 检查是否在 Bun 运行时环境
   if (typeof (globalThis as any).Bun !== "undefined") {
     try {
-      const { Database } = (globalThis as any).Bun.sqlite || require("bun:sqlite");
+      const { Database } = (globalThis as any).Bun.sqlite || cjsRequire("bun:sqlite");
       const db = new Database(dbPath);
+      // bun:sqlite 的 statement 未 finalize 时会一直持有数据库文件句柄，
+      // Windows 下导致 db.close() 后文件仍被锁（EBUSY 无法删除）。
+      // 跟踪全部 prepared statement，close() 时统一 finalize 释放句柄。
+      const openStatements = new Set<any>();
       return {
         exec(sql: string) {
           db.exec(sql);
         },
         prepare(sql: string) {
           const stmt = db.prepare(sql);
+          openStatements.add(stmt);
           return {
             run(...args: any[]) {
               const params = args.length === 1 && Array.isArray(args[0]) ? args[0] : args;
@@ -51,6 +60,14 @@ export function createDefaultSqliteDriver(dbPath: string): SqliteDriver {
           return db.transaction(fn)() as T;
         },
         close() {
+          for (const stmt of openStatements) {
+            try {
+              stmt.finalize();
+            } catch {
+              // 已 finalize 或重复释放时忽略
+            }
+          }
+          openStatements.clear();
           db.close();
         },
       };
@@ -61,7 +78,7 @@ export function createDefaultSqliteDriver(dbPath: string): SqliteDriver {
 
   // 在 Node.js 环境下使用 node:sqlite
   try {
-    const { DatabaseSync } = require("node:sqlite");
+    const { DatabaseSync } = cjsRequire("node:sqlite");
     const db = new DatabaseSync(dbPath);
     return {
       exec(sql: string) {

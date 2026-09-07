@@ -4,13 +4,15 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, join, relative, resolve, sep } from "node:path";
 import {
   type ActionDockManifest,
   initProject,
@@ -27,6 +29,26 @@ import {
   PlannerError,
   SkillExporter,
 } from "../src";
+import { readTarGzEntries, readZipEntries } from "./archive-reader";
+
+/** 递归收集目录内文件：归档内相对路径（含根目录前缀）→ 文件内容 */
+function collectFiles(dir: string): Map<string, Buffer> {
+  const files = new Map<string, Buffer>();
+  const root = basename(dir);
+  const walk = (current: string) => {
+    for (const name of readdirSync(current).sort()) {
+      const fullPath = join(current, name);
+      if (statSync(fullPath).isDirectory()) {
+        walk(fullPath);
+      } else {
+        const relPath = relative(dir, fullPath).split(sep).join("/");
+        files.set(`${root}/${relPath}`, readFileSync(fullPath));
+      }
+    }
+  };
+  walk(dir);
+  return files;
+}
 
 describe("@actiondock/builder 测试套件", () => {
   let tempDir: string;
@@ -567,6 +589,30 @@ process.exit(0);
       expect(tarRes.archivePath).toBeDefined();
       expect(tarRes.archivePath!.endsWith(".tar.gz")).toBe(true);
       expect(existsSync(tarRes.archivePath!)).toBe(true);
+
+      // 3. 纯代码解包两种归档，与各自导出目录逐文件比对内容（不依赖外部解压命令）
+      const zipExpected = collectFiles(zipRes.skillDir);
+      expect(zipExpected.size).toBeGreaterThan(0);
+
+      const zipEntries = readZipEntries(zipRes.archivePath!);
+      // zip 含目录条目，文件条目数应与源一致
+      const zipFiles = [...zipEntries].filter(([, v]) => v !== null);
+      expect(zipFiles.length).toBe(zipExpected.size);
+      for (const [relPath, content] of zipExpected) {
+        const archived = zipEntries.get(relPath);
+        expect(archived).toBeDefined();
+        expect(archived!.equals(content)).toBe(true);
+      }
+
+      const tarExpected = collectFiles(tarRes.skillDir);
+      expect(tarExpected.size).toBe(zipExpected.size);
+      const tarEntries = readTarGzEntries(tarRes.archivePath!);
+      // tar 条目包含目录行，文件条目逐项比对
+      for (const [relPath, content] of tarExpected) {
+        const archived = tarEntries.get(relPath);
+        expect(archived).toBeDefined();
+        expect(archived!.equals(content)).toBe(true);
+      }
     });
   });
 });

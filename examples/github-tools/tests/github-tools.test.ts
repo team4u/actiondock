@@ -1,5 +1,6 @@
-import { describe, expect, it } from "bun:test";
-import { createTestRuntime } from "@actiondock/sdk";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { createTestRuntime } from "@actiondock/testing";
 import getPrAction from "../actions/get-pr";
 import listPrsAction from "../actions/list-prs";
 import reviewPrAction from "../actions/review-pr";
@@ -8,8 +9,8 @@ describe("GitHub Tools Action Package", () => {
   it("executes list-prs action", async () => {
     const runtime = createTestRuntime();
     const res = await runtime.run(listPrsAction, { repo: "team4u/actiondock" });
-    expect(res.items.length).toBeGreaterThan(0);
-    expect(res.count).toBe(res.items.length);
+    assert.ok(res.items.length > 0);
+    assert.equal(res.count, res.items.length);
   });
 
   it("executes get-pr action", async () => {
@@ -18,9 +19,9 @@ describe("GitHub Tools Action Package", () => {
       repo: "team4u/actiondock",
       pullNumber: 42,
     });
-    expect(pr.number).toBe(42);
-    expect(pr.title).toBeDefined();
-    expect(pr.state).toBe("open");
+    assert.equal(pr.number, 42);
+    assert.notEqual(pr.title, undefined);
+    assert.equal(pr.state, "open");
   });
 
   it("executes review-pr composite action and saves state", async () => {
@@ -30,12 +31,12 @@ describe("GitHub Tools Action Package", () => {
       pullNumber: 42,
     });
 
-    expect(review.pullNumber).toBe(42);
-    expect(review.verdict).toBeDefined();
-    expect(review.summary).toBeDefined();
+    assert.equal(review.pullNumber, 42);
+    assert.notEqual(review.verdict, undefined);
+    assert.notEqual(review.summary, undefined);
 
     // Verify state checkpoint
     const saved = await runtime.state.get("review:team4u/actiondock:42");
-    expect(saved).toBeDefined();
+    assert.notEqual(saved, undefined);
   });
 });

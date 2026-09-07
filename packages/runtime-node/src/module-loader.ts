@@ -1,6 +1,10 @@
 import { existsSync, statSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+
+/** ESM 环境下可用的 CommonJS require，用于动态加载 tsx/cjs/api */
+const cjsRequire = createRequire(import.meta.url);
 
 const CANDIDATE_EXTENSIONS = [
   "",
@@ -116,7 +120,7 @@ export class TsxModuleLoader {
 
     // 3. 尝试使用 tsx 的 require.resolve 机制解析
     try {
-      const { require: tsxRequire } = require("tsx/cjs/api");
+      const { require: tsxRequire } = cjsRequire("tsx/cjs/api");
       const resolved = tsxRequire.resolve(target, { paths: [baseDir] });
       if (resolved) {
         return resolved;
@@ -148,7 +152,7 @@ export class TsxModuleLoader {
         return (await import(pathToFileURL(resolvedPath).href)) as T;
       } catch (bunImportErr) {
         try {
-          const { require: tsxRequire } = require("tsx/cjs/api");
+          const { require: tsxRequire } = cjsRequire("tsx/cjs/api");
           return tsxRequire(resolvedPath, parentUrl) as T;
         } catch {
           throw bunImportErr;
@@ -162,7 +166,7 @@ export class TsxModuleLoader {
       return (await tsImport(resolvedPath, parentUrl)) as T;
     } catch (esmErr) {
       try {
-        const { require: tsxRequire } = require("tsx/cjs/api");
+        const { require: tsxRequire } = cjsRequire("tsx/cjs/api");
         return tsxRequire(resolvedPath, parentUrl) as T;
       } catch {
         try {

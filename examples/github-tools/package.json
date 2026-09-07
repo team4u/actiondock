@@ -4,13 +4,18 @@
   "description": "GitHub Actions for AI Agents",
   "type": "module",
   "scripts": {
-    "test": "bun test"
+    "test": "node --import tsx --test tests/*.test.ts"
   },
   "dependencies": {
-    "@actiondock/sdk": "^2.0.0"
+    "@actiondock/sdk": "^2.0.0",
+    "@actiondock/testing": "^2.0.0"
   },
   "devDependencies": {
-    "@types/bun": "latest",
+    "@types/node": "^22.12.0",
+    "tsx": "^4.19.3",
     "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }

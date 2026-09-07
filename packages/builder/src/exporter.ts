@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import {
@@ -9,6 +8,7 @@ import {
   getPackageSlug,
   type ProjectConfig,
 } from "@actiondock/core";
+import { createTarGzArchive, createZipArchive } from "./archive";
 import { BunCompiler } from "./compiler";
 import { BuilderError } from "./errors";
 import { BuildPlanner } from "./planner";
@@ -35,6 +35,9 @@ function scanRelativeFiles(dir: string, baseDir = dir): string[] {
 
 /**
  * 执行归档压缩操作（支持 .zip 与 .tar.gz）。
+ *
+ * 归档在进程内完成（见 archive.ts），不依赖宿主机的 zip / tar 命令行工具，
+ * 保证 Windows 与最小化 Linux 环境下行为一致。
  */
 function createArchive(
   skillDir: string,
@@ -49,23 +52,14 @@ function createArchive(
     rmSync(archivePath, { force: true });
   }
 
-  const cmd = format === "tar.gz" ? "tar" : "zip";
-  const args = format === "tar.gz"
-    ? ["-czf", archivePath, folderName]
-    : ["-r", archivePath, folderName];
-
-  const proc = spawnSync(cmd, args, {
-    cwd: parentDir,
-    stdio: "pipe",
-  });
-
-  if (proc.error) {
-    throw new BuilderError(`Failed to execute ${cmd}: ${proc.error.message}`);
-  }
-
-  if (proc.status !== 0) {
-    const errText = proc.stderr?.toString() || `Exit code ${proc.status}`;
-    throw new BuilderError(`Failed to create ${format} archive: ${errText}`);
+  try {
+    if (format === "tar.gz") {
+      createTarGzArchive(skillDir, archivePath);
+    } else {
+      createZipArchive(skillDir, archivePath);
+    }
+  } catch (err: any) {
+    throw new BuilderError(`Failed to create ${format} archive: ${err?.message || String(err)}`);
   }
 
   return archivePath;

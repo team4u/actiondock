@@ -25,6 +25,8 @@ export interface BunSqliteDriverOptions {
 export class BunSqliteDriver implements SqliteDriver {
   private db: Database;
   private isClosed = false;
+  /** 未释放的 prepared statement 集合，close() 时统一 finalize */
+  private openStatements = new Set<any>();
 
   constructor(
     dbOrPath: string | Database = ":memory:",
@@ -63,12 +65,17 @@ export class BunSqliteDriver implements SqliteDriver {
 
   /**
    * 预编译 SQL 语句，统一处理参数映射。
+   *
+   * bun:sqlite 的 statement 未 finalize 时会一直持有数据库文件句柄，
+   * Windows 下导致 close() 后文件仍被锁（EBUSY 无法删除）。
+   * statement 均登记至待释放集合，close() 时统一 finalize 释放句柄。
    */
   prepare(sql: string): SqliteStatement {
     if (this.isClosed) {
       throw new Error("Database is closed");
     }
     const stmt = this.db.prepare(sql);
+    this.openStatements.add(stmt);
     return {
       run: (...args: any[]) => {
         const params = normalizeParams(args);
@@ -109,12 +116,23 @@ export class BunSqliteDriver implements SqliteDriver {
 
   /**
    * 妥善关闭数据库连接。
+   *
+   * 关库前统一 finalize 全部 prepared statement，
+   * 释放 Windows 平台残留的数据库文件句柄锁。
    */
   close(): void {
     if (this.isClosed) {
       return;
     }
     this.isClosed = true;
+    for (const stmt of this.openStatements) {
+      try {
+        stmt.finalize();
+      } catch {
+        // 已 finalize 或重复释放时忽略
+      }
+    }
+    this.openStatements.clear();
     try {
       this.db.close();
     } catch {

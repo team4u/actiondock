@@ -23,4 +23,5 @@ dist/
 .claude/
 .pi/
 .zvec-grep/
+.codekb/
 tmp/
