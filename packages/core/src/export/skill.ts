@@ -182,6 +182,17 @@ export async function exportSkill(
     );
     writeFileSync(join(skillDir, "SKILL.md"), skillMd, "utf-8");
 
+    // 1b. Generate actiondock.skill.json for Source Package
+    const skillJson = generateSkillJson(
+      config,
+      selectedActions,
+      {
+        mode: "source",
+        playbooks: selectedPlaybooks,
+      }
+    );
+    writeFileSync(join(skillDir, "actiondock.skill.json"), skillJson, "utf-8");
+
     // 2. Export tailored actiondock.json
     const exportedConfig: Partial<ProjectConfig> = {
       id: config.id,
@@ -302,8 +313,12 @@ export async function exportSkill(
     const skillJson = generateSkillJson(
       config,
       selectedActions,
-      actualBinaryName,
-      target
+      {
+        mode: "standalone",
+        executable: `./bin/${actualBinaryName}`,
+        target,
+        playbooks: selectedPlaybooks,
+      }
     );
     writeFileSync(join(skillDir, "actiondock.skill.json"), skillJson, "utf-8");
 

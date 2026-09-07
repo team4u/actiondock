@@ -15,24 +15,78 @@ function renderActionListMarkdown(
   return actions
     .map((a) => {
       const aDesc = a.description ? ` - ${a.description}` : "";
-      let params = "";
+      const idLabel = options.packageId
+        ? `\`${options.packageId}/${a.id}\` (或 \`${a.id}\`)`
+        : `\`${a.id}\``;
+
+      const lines: string[] = [`- ${idLabel}${aDesc}`];
+
+      // 标注元数据解析
+      if (a.annotations && typeof a.annotations === "object") {
+        const annoList: string[] = [];
+        if ((a.annotations as any).readOnly === true) {
+          annoList.push("只读操作");
+        }
+        if ((a.annotations as any).destructive === true) {
+          annoList.push("破坏性操作（执行前须向用户确认）");
+        }
+        if (annoList.length > 0) {
+          lines.push(`  - 属性标注: ${annoList.join(", ")}`);
+        }
+      }
+
+      // 输入参数模式解析
       if (
         a.inputSchema &&
         typeof a.inputSchema === "object" &&
         (a.inputSchema as any).properties
       ) {
-        const props = Object.keys((a.inputSchema as any).properties);
-        const req = (a.inputSchema as any).required || [];
-        params = `\n  - 参数列表: ${props
-          .map((p) => (req.includes(p) ? `\`${p}\` (必填)` : `\`${p}\``))
-          .join(", ")}`;
+        const props = (a.inputSchema as any).properties as Record<string, any>;
+        const req = ((a.inputSchema as any).required || []) as string[];
+        const propKeys = Object.keys(props);
+
+        if (propKeys.length > 0) {
+          lines.push("  - 输入参数:");
+          for (const k of propKeys) {
+            const p = props[k] || {};
+            const typeStr = p.type ? `\`${p.type}\`` : "`any`";
+            const reqStr = req.includes(k) ? ", 必填" : "";
+            const descStr = p.description ? `: ${p.description}` : "";
+            const defStr =
+              p.default !== undefined
+                ? ` (默认值: \`${JSON.stringify(p.default)}\`)`
+                : "";
+            lines.push(`    - \`${k}\` (${typeStr}${reqStr})${descStr}${defStr}`);
+          }
+        } else {
+          lines.push("  - 输入参数: 无");
+        }
+      } else {
+        lines.push("  - 输入参数: 无");
       }
-      const idLabel = options.packageId
-        ? `\`${options.packageId}/${a.id}\` (或 \`${a.id}\`)`
-        : `\`${a.id}\``;
-      return `- ${idLabel}${aDesc}${params}`;
+
+      // 输出字段模式解析
+      if (
+        a.outputSchema &&
+        typeof a.outputSchema === "object" &&
+        (a.outputSchema as any).properties
+      ) {
+        const outProps = (a.outputSchema as any).properties as Record<string, any>;
+        const outKeys = Object.keys(outProps);
+        if (outKeys.length > 0) {
+          lines.push("  - 输出字段:");
+          for (const k of outKeys) {
+            const p = outProps[k] || {};
+            const typeStr = p.type ? `\`${p.type}\`` : "`any`";
+            const descStr = p.description ? `: ${p.description}` : "";
+            lines.push(`    - \`${k}\` (${typeStr})${descStr}`);
+          }
+        }
+      }
+
+      return lines.join("\n");
     })
-    .join("\n");
+    .join("\n\n");
 }
 
 function renderPlaybookSectionMarkdown(playbooks: PlaybookDefinition[]): string {
@@ -40,13 +94,16 @@ function renderPlaybookSectionMarkdown(playbooks: PlaybookDefinition[]): string 
   const list = playbooks
     .map((p) => {
       const rel = `./playbooks/${basename(p.filePath)}`;
-      return `- **${p.id}** (\`${rel}\`): ${p.description || "任务指南"}`;
+      return `- **${p.id}** (\`${rel}\`): ${p.description || "业务操作指南"}`;
     })
     .join("\n");
   return `
-## 任务指南 (Playbook SOPs)
+## 业务操作规程
 
-Playbook 为复杂任务提供逐步操作规程。详细 SOP 请阅读对应 Markdown 文档：
+> [!IMPORTANT]
+> **规程优先准则**：当处理复合业务任务时，智能体必须优先检查是否存在匹配场景的 Playbook。若存在规程，必须优先查阅并严格遵循规程界定的步骤时序与校验逻辑推进，严禁无序拼凑调用底层 Action。
+
+Playbook SOPs 为复杂业务任务提供逐步指导规程。详细规程请查阅对应文档：
 
 ${list}
 `;
@@ -61,8 +118,8 @@ export function generateSourceSkillMd(
   const pkgId = config.id;
   const firstAction = actions[0]?.id || "sample.greet";
 
-  const actionListMd = renderActionListMarkdown(actions, { packageId: pkgId });
   const playbookSection = renderPlaybookSectionMarkdown(playbooks);
+  const actionListMd = renderActionListMarkdown(actions, { packageId: pkgId });
 
   return `---
 name: ${cleanName}
@@ -75,7 +132,7 @@ ${desc}
 
 ## ActionDock 运行时
 
-本技能为 **ActionDock 源码型技能包**。AI Agent 可直接通过已安装的 ActionDock 命令行工具 (\`ad\`) 执行其中的 Action。
+本技能为 **ActionDock 源码型技能包**。智能体可直接通过宿主环境中已安装的 ActionDock 命令行工具 \`ad\` 执行其中的 Action。
 
 ### 注册与链接
 
@@ -89,36 +146,65 @@ ad link "<skill_root>"
 
 ### 执行 Action
 
-为避免多技能之间的 Action ID 命名冲突，建议统一使用带有 Package 前缀的完全限定 ID：
+为避免多技能之间的 Action ID 命名冲突，建议统一使用带有 Package 前缀的完全限定 ID。
+
+推荐最佳实践：使用文件传递参数，杜绝终端引号转义问题：
 
 \`\`\`bash
-# 格式：ad run <package-id>/<action-id> --input '<json>'
+# 写入参数到临时文件并通过 --input-file 传递
+cat << 'EOF' > /tmp/input.json
+{
+  "param": "value"
+}
+EOF
+ad run ${pkgId}/${firstAction} --input-file /tmp/input.json
+\`\`\`
+
+亦可通过内联参数进行简易命令调用：
+
+\`\`\`bash
 ad run ${pkgId}/${firstAction} --input '{"param": "value"}'
 \`\`\`
 
 > **免注册本地执行**：
-> 若 Agent 工作目录已位于本 Skill 根目录，亦可直接免 link 执行：
+> 若工作目录已位于本技能根目录，亦可直接免 link 执行：
 > \`\`\`bash
 > cd <skill_root>
-> ad run <action-id> --input '<json>'
+> ad run <action-id> --input-file /tmp/input.json
 > \`\`\`
 
-所有 Action 执行结果均在 \`stdout\` 输出标准格式的 JSON Envelope：
+### 结构化响应解析
+
+所有 Action 执行结果均在 \`stdout\` 输出标准格式的 JSON 信封：
+
 \`\`\`json
+// 执行成功响应 (ok 为 true)
 {
   "ok": true,
   "runId": "01J...",
   "data": { ... }
 }
-\`\`\`
-日志与诊断信息输出至 \`stderr\`。
 
+// 执行失败响应 (ok 为 false)
+{
+  "ok": false,
+  "runId": "01J...",
+  "error": {
+    "code": "ACTION_EXECUTION_FAILED",
+    "message": "错误详细描述信息"
+  }
+}
+\`\`\`
+
+- \`stdout\`：标准 JSON 信封结果。当 \`ok\` 为 \`true\` 时，从 \`data\` 提取业务返回值推进后续步骤；当 \`ok\` 为 \`false\` 时，从 \`error\` 提取错误码与信息以判定自愈策略或上报。
+- \`stderr\`：执行日志与诊断跟踪信息。
+${playbookSection}
 ---
 
 ## Action 目录
 
 ${actionListMd}
-${playbookSection}
+
 ---
 
 ## 运行时配置与持久化状态
@@ -140,39 +226,26 @@ ad state get KEY --package ${pkgId}
 ## 故障排查与环境安装指引（按需查阅）
 
 > [!NOTE]
-> **按需排查原则**：默认宿主环境中已预置 \`ad\` 命令行工具。正常执行流程直接调用上述 Action 即可，**严禁在任务启动前盲目进行前置环境检查或体检**；仅在终端明确报错提示命令不存在（如 \`ad: command not found\`）时，方可按本节指引安装初始化。
+> **按需排查原则**：默认宿主环境中已预置 \`ad\` 命令行工具与 Node.js 运行环境。正常执行流程直接调用上述 Action 即可，**严禁在任务启动前盲目进行前置环境检查或体检**；仅在终端明确报错提示命令不存在（如 \`ad: command not found\`）时，方可按本节指引安装初始化。
 
 ### 命令行工具未找到时的安装指引
 
 若宿主环境未安装 \`ad\` 命令行工具，请依次按如下步骤完成安装：
 
-- **安装 Bun 运行时**（若系统未安装）：
-  \`\`\`bash
-  npm install -g bun
-  \`\`\`
-
+- **环境要求**：Node.js 版本大于等于 22.12.0（执行 \`node -v\` 确认）。
 - **全局安装 ActionDock 命令行工具**：
   \`\`\`bash
   npm install -g @actiondock/cli
   \`\`\`
-
 - **验证工具就绪**：
   \`\`\`bash
   ad --version
   \`\`\`
-
-- **源码本地开发模式**（若在本地源码仓库中贡献或开发）：
-  \`\`\`bash
-  cd packages/cli && npm link
-  cd ../sdk && bun link
-  \`\`\`
-
 - **环境诊断与体检**：
   安装完成后若仍遇到异常，执行体检命令排查：
   \`\`\`bash
   ad doctor
   \`\`\`
-
 - **完成安装后重新链接本技能**：
   \`\`\`bash
   ad link "<skill_root>"
@@ -189,8 +262,8 @@ export function generateStandaloneSkillMd(
   const { cleanName, desc } = getCleanSkillMetadata(config);
   const firstAction = actions[0]?.id || "sample.greet";
 
-  const actionListMd = renderActionListMarkdown(actions);
   const playbookSection = renderPlaybookSectionMarkdown(playbooks);
+  const actionListMd = renderActionListMarkdown(actions);
 
   return `---
 name: ${cleanName}
@@ -203,48 +276,78 @@ ${desc}
 
 ## 如何调用 Action
 
-使用 Skill 目录中自带的独立可执行文件 \`${binaryRelPath}\` 即可完成工具发现与调用。
+使用技能目录中自带的独立可执行程序 \`${binaryRelPath}\` 即可完成工具发现与调用。
 **该工具无需在系统预先安装任何依赖**（无需安装 Node.js、Bun、Python 或 Java）。
 
 ### 发现可用 Action 清单
+
 \`\`\`bash
 ${binaryRelPath} list --json
 \`\`\`
 
-### 查看 Action 结构与入参 Schema
+### 查看 Action 结构与入参规范
+
 \`\`\`bash
 ${binaryRelPath} describe <action-id> --json
 \`\`\`
 
 ### 执行 Action
-\`\`\`bash
-${binaryRelPath} run <action-id> --input '{"param": "value"}'
 
-# 示例：
+推荐最佳实践：使用文件传递参数，杜绝终端引号转义问题：
+
+\`\`\`bash
+# 写入参数到临时文件并通过 --input-file 传递
+cat << 'EOF' > /tmp/input.json
+{
+  "param": "value"
+}
+EOF
+${binaryRelPath} run <action-id> --input-file /tmp/input.json
+\`\`\`
+
+亦可通过内联参数进行简易命令调用：
+
+\`\`\`bash
 ${binaryRelPath} run ${firstAction} --input '{"param": "value"}'
 \`\`\`
 
+### 结构化响应解析
+
 所有 Action 执行结果均在 \`stdout\` 输出标准格式的 JSON 结果：
+
 \`\`\`json
+// 执行成功响应 (ok 为 true)
 {
   "ok": true,
   "runId": "01J...",
   "data": { ... }
 }
-\`\`\`
-日志与诊断信息输出至 \`stderr\`。
 
+// 执行失败响应 (ok 为 false)
+{
+  "ok": false,
+  "runId": "01J...",
+  "error": {
+    "code": "ACTION_EXECUTION_FAILED",
+    "message": "错误详细描述信息"
+  }
+}
+\`\`\`
+
+- \`stdout\`：标准 JSON 结果信封。当 \`ok\` 为 \`true\` 时，从 \`data\` 提取业务数据；当 \`ok\` 为 \`false\` 时，从 \`error\` 读取错误原因以处理异常。
+- \`stderr\`：执行日志与诊断信息。
+${playbookSection}
 ---
 
 ## Action 目录
 
 ${actionListMd}
-${playbookSection}
+
 ---
 
 ## 运行时配置与持久化状态
 
-独立二进制会自动管理其本地 SQLite 数据库。如需检查或配置：
+独立二进制程序会自动管理其本地 SQLite 数据库。如需检查或配置：
 
 \`\`\`bash
 # 查看与设置配置项
@@ -273,29 +376,88 @@ export function generateSkillMd(
   return generateStandaloneSkillMd(config, actions, playbooks, optionsOrBinaryPath.binaryRelPath || "./bin/action-bin");
 }
 
+export interface GenerateSkillJsonOptions {
+  mode?: "source" | "standalone";
+  executable?: string;
+  target?: string;
+  playbooks?: PlaybookDefinition[];
+}
+
 export function generateSkillJson(
   config: ProjectConfig,
   actions: ActionDefinition[],
-  binaryName: string,
-  target: string
+  binaryNameOrOptions?: string | GenerateSkillJsonOptions,
+  target = "host",
+  playbooksList: PlaybookDefinition[] = []
 ): string {
-  const manifest = {
+  let mode: "source" | "standalone" = "source";
+  let executable: string | undefined;
+  let targetPlatform = target;
+  let playbooks = playbooksList;
+
+  if (typeof binaryNameOrOptions === "string") {
+    mode = "standalone";
+    executable = `./bin/${binaryNameOrOptions}`;
+  } else if (binaryNameOrOptions && typeof binaryNameOrOptions === "object") {
+    mode = binaryNameOrOptions.mode || (binaryNameOrOptions.executable ? "standalone" : "source");
+    executable = binaryNameOrOptions.executable;
+    targetPlatform = binaryNameOrOptions.target || target;
+    if (binaryNameOrOptions.playbooks) {
+      playbooks = binaryNameOrOptions.playbooks;
+    }
+  }
+
+  const manifest: Record<string, unknown> = {
     schemaVersion: "2.0.0",
     packageId: config.id,
     name: config.name,
     version: config.version,
     description: config.description,
-    target,
-    executable: `./bin/${binaryName}`,
-    actions: actions.map((a) => ({
-      id: a.id,
-      description: a.description,
-      inputSchema: a.inputSchema,
-      outputSchema: a.outputSchema,
-    })),
-    exportedAt: new Date().toISOString(),
+    mode,
   };
+
+  if (mode === "standalone" && executable) {
+    manifest.target = targetPlatform;
+    manifest.executable = executable;
+  }
+
+  manifest.actions = actions.map((a: any) => {
+    const item: Record<string, unknown> = {
+      id: a.id,
+    };
+    if (a.entry) {
+      item.entry = a.entry;
+    }
+    if (a.description) {
+      item.description = a.description;
+    }
+    if (a.inputSchema !== undefined) {
+      item.inputSchema = a.inputSchema;
+    }
+    if (a.outputSchema !== undefined) {
+      item.outputSchema = a.outputSchema;
+    }
+    if (a.uses) {
+      item.uses = a.uses;
+    }
+    if (a.tags) {
+      item.tags = a.tags;
+    }
+    if (a.annotations) {
+      item.annotations = a.annotations;
+    }
+    return item;
+  });
+
+  if (playbooks && playbooks.length > 0) {
+    manifest.playbooks = playbooks.map((p) => ({
+      id: p.id,
+      description: p.description,
+      entry: `playbooks/${basename(p.filePath)}`,
+    }));
+  }
+
+  manifest.exportedAt = new Date().toISOString();
 
   return JSON.stringify(manifest, null, 2) + "\n";
 }
-

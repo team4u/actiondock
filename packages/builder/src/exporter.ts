@@ -130,32 +130,17 @@ export class SkillExporter {
       writeFileSync(join(skillDir, "SKILL.md"), skillMd, "utf-8");
 
       // 2. 生成 actiondock.skill.json 工具清单
-      const skillJsonContent = {
-        schemaVersion: "2.0.0",
-        packageId: plan.packageId,
-        name: plan.packageName,
-        version: plan.version,
-        description: plan.description,
-        mode: "source",
-        actions: plan.actions.map((a) => ({
-          id: a.id,
-          entry: a.entry,
-          description: a.description,
-          inputSchema: a.inputSchema,
-          outputSchema: a.outputSchema,
-          uses: a.uses,
-          tags: a.tags,
-        })),
-        playbooks: plan.playbooks.map((p) => ({
-          id: p.id,
-          description: p.description,
-          entry: `playbooks/${basename(p.filePath)}`,
-        })),
-        exportedAt: new Date().toISOString(),
-      };
+      const skillJsonContent = generateSkillJson(
+        configForTemplates,
+        plan.actions as any,
+        {
+          mode: "source",
+          playbooks: plan.playbooks as any,
+        }
+      );
       writeFileSync(
         join(skillDir, "actiondock.skill.json"),
-        JSON.stringify(skillJsonContent, null, 2) + "\n",
+        skillJsonContent,
         "utf-8"
       );
 
@@ -329,17 +314,19 @@ export class SkillExporter {
       writeFileSync(join(skillDir, "SKILL.md"), skillMd, "utf-8");
 
       // 2. 生成 actiondock.skill.json
-      const rawSkillJson = generateSkillJson(
+      const skillJsonContent = generateSkillJson(
         configForTemplates,
         plan.actions as any,
-        actualBinaryName,
-        target
+        {
+          mode: "standalone",
+          executable: `./bin/${actualBinaryName}`,
+          target,
+          playbooks: plan.playbooks as any,
+        }
       );
-      const parsedSkillJson = JSON.parse(rawSkillJson);
-      parsedSkillJson.mode = "standalone";
       writeFileSync(
         join(skillDir, "actiondock.skill.json"),
-        JSON.stringify(parsedSkillJson, null, 2) + "\n",
+        skillJsonContent,
         "utf-8"
       );
 
