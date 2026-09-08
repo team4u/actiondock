@@ -462,14 +462,20 @@ dist/my-skill/
 支持批量独立导出与复合套件导出两种范式：
 
 ```bash
-# 批量导出多个包至目标目录（各自生成独立技能）
+# 批量独立导出：将指定多个包导出至目标目录（各自生成独立技能）
 ad export skill -P team4u.github-tools team4u.gitlab-tools -o ./dist/skills
 
-# 一键导出当前工作区内所有子包
+# 批量独立导出：一键将当前工作区内所有子包分别导出为独立技能
 ad export skill --workspace -o ./dist/skills
 
-# 复合模式聚合导出：将多个包融合成一个统一的复合工作区技能
+# 复合套件导出：指定多个包融合成一个统一的复合工作区技能
 ad export skill -P team4u.github-tools team4u.k8s-ops --bundle devops-suite -o ./dist/devops-suite
+
+# 一键工作区复合导出：一键将当前工作区内所有子包聚合导出为统一的复合技能套件
+ad export skill --workspace --bundle devops-suite -o ./dist/devops-suite
+
+# 一键工作区复合导出（套件名称缺省时默认取当前工作区目录名称）
+ad export skill --workspace --bundle -o ./dist/workspace-suite
 ```
 
 复合技能套件目录结构：

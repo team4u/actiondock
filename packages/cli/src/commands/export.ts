@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { basename } from "node:path";
 import { exportCompositeSkill, exportSkill, exportSkillBatch } from "@actiondock/builder";
 import { discoverProjects, findProjectRoot, listLinkedPackages, resolvePackageRoot } from "@actiondock/core";
 import { ExecutionError } from "@actiondock/runtime-cli";
@@ -25,7 +26,10 @@ export function registerExportCommand(program: Command): void {
     )
     .option("--workspace", "Export all packages discovered in current workspace")
     .option("--all", "Export all linked packages from global registry")
-    .option("--bundle <name>", "Export multiple packages as a unified composite Skill bundle")
+    .option(
+      "--bundle [name]",
+      "Export multiple packages as a unified composite Skill bundle (defaults to workspace directory name if omitted)"
+    )
     .option("-s, --standalone", "Export pre-compiled standalone binary skill (for environments without ActionDock runtime)")
     .option("-t, --target <target>", "Target compilation platform for standalone mode (e.g. host, linux-x64, darwin-arm64, windows-x64)")
     .option("-o, --out <path>", "Output skill directory")
@@ -101,10 +105,14 @@ export function registerExportCommand(program: Command): void {
       }
 
       try {
-        if (options.bundle) {
-          console.log(`Exporting composite Skill bundle '${options.bundle}' (${roots.length} package${roots.length > 1 ? "s" : ""})...`);
+        if (options.bundle !== undefined) {
+          const bundleName =
+            typeof options.bundle === "string" && options.bundle.trim()
+              ? options.bundle.trim()
+              : basename(process.cwd());
+          console.log(`Exporting composite Skill bundle '${bundleName}' (${roots.length} package${roots.length > 1 ? "s" : ""})...`);
           const result = await exportCompositeSkill({
-            bundleName: options.bundle,
+            bundleName,
             projectRoots: roots,
             outDir: options.out,
             archive: options.archive,

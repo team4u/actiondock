@@ -140,7 +140,11 @@ ad export skill --standalone --target linux-arm64 --archive
 - **复合套件导出**：
   将多个功能包聚合为一个统一的复合技能包，原位保留各包代码与就近规程，对外仅生成单一统领全局的 `SKILL.md`，内部子包不再重复生成 `SKILL.md`，确保消费端智能体识别为单一整体技能：
   ```bash
+  # 指定包聚合复合导出
   ad export skill -P team4u.github-tools team4u.k8s-ops --bundle devops-suite --out ./dist/devops-suite
+
+  # 一键导出当前工作区内所有子包为单一复合技能套件
+  ad export skill --workspace --bundle devops-suite --out ./dist/devops-suite
   ```
 - **已有技能说明书复用机制**：
   无论单包导出还是复合导出，若当前动作目录或工作区根目录下已存在现成的 `SKILL.md` 文件（如人工精心维护的业务说明书），导出器将自动识别并直接复用该文件，避免被动态模板覆盖；亦可通过 `--skill-md <path>` 选项显式指定自定义说明书路径。
