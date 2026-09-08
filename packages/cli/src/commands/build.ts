@@ -1,12 +1,5 @@
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { BuildPlanner, BunCompiler } from "@actiondock/builder";
-import {
-  findProjectRoot,
-  generateStandaloneEntrypoint,
-  getPackageSlug,
-  resolvePackageRoot,
-} from "@actiondock/core";
+import { buildProject } from "@actiondock/builder";
+import { findProjectRoot, resolvePackageRoot } from "@actiondock/core";
 import { ExecutionError } from "@actiondock/runtime-cli";
 import { Command } from "commander";
 
@@ -38,64 +31,26 @@ export function registerBuildCommand(program: Command): void {
 
       console.log("Building standalone executable...");
 
-      // 1. Calculate dependency closure via BuildPlanner
-      const plan = BuildPlanner.plan({
-        projectRoot: root,
-        actions: options.actions,
-      });
-
-      if (plan.actions.length === 0) {
-        throw new ExecutionError("No actions resolved for standalone compilation");
-      }
-
-      // 2. Generate standalone entrypoint
-      const buildDir = join(root, ".actiondock", ".build");
-      mkdirSync(buildDir, { recursive: true });
-
-      const entryCode = generateStandaloneEntrypoint(
-        plan.packageId,
-        plan.version,
-        plan.description,
-        plan.actions.map((a) => ({ id: a.id, filePath: a.resolvedPath })),
-        plan.configDefs
-      );
-
-      const entryFileName = `entry-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.ts`;
-      const entryPath = join(buildDir, entryFileName);
-      writeFileSync(entryPath, entryCode, "utf-8");
-
-      const binaryName = getPackageSlug(plan.packageId);
-      const defaultOutfile = join(root, "dist", binaryName);
-      const outfile = resolve(options.out || defaultOutfile);
-
+      let result;
       try {
-        const result = await BunCompiler.compile({
-          entrypoint: entryPath,
-          outfile,
+        result = await buildProject({
+          projectRoot: root,
           target: options.target,
+          outfile: options.out,
           minify: options.minify,
           bytecode: options.bytecode,
-          cwd: root,
-          packageId: plan.packageId,
-          version: plan.version,
-          actions: plan.actions.map((a) => a.id),
+          actions: options.actions,
         });
-
-        console.log(`[OK] Successfully compiled ${result.packageId || plan.packageId} (v${result.version || plan.version})`);
-        console.log(`  Target:     ${result.target}`);
-        console.log(`  Actions:    ${plan.actions.map((a) => a.id).join(", ")}`);
-        console.log(`  Executable: ${result.executablePath}`);
-        if (result.metadataPath) {
-          console.log(`  Metadata:   ${result.metadataPath}`);
-        }
       } catch (err: any) {
         throw new ExecutionError(`Build failed: ${err.message}`);
-      } finally {
-        if (existsSync(entryPath)) {
-          rmSync(entryPath, { force: true });
-        }
+      }
+
+      console.log(`[OK] Successfully compiled ${result.packageId} (v${result.version})`);
+      console.log(`  Target:     ${result.target}`);
+      console.log(`  Actions:    ${result.actions.join(", ")}`);
+      console.log(`  Executable: ${result.executablePath}`);
+      if (result.metadataPath) {
+        console.log(`  Metadata:   ${result.metadataPath}`);
       }
     });
 }
-
-

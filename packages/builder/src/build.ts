@@ -1,8 +1,9 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { BuildPlanner, BunCompiler } from "@actiondock/builder";
-import { getPackageSlug } from "../utils";
-import { generateStandaloneEntrypoint } from "./templates";
+import { generateStandaloneEntrypoint, getPackageSlug } from "@actiondock/core";
+import { BunCompiler } from "./compiler";
+import { BuilderError } from "./errors";
+import { BuildPlanner } from "./planner";
 
 /**
  * 独立二进制可执行文件构建选项。
@@ -42,7 +43,7 @@ export interface BuildResult {
 
 /**
  * 调用 Bun 原生编译引擎（Bun.build --compile）将 Action Package 打包为零外部依赖的独立二进制可执行文件。
- * 
+ *
  * @param options 构建参数
  * @returns 构建产物结果元数据
  */
@@ -54,7 +55,7 @@ export async function buildProject(options: BuildOptions): Promise<BuildResult> 
   });
 
   if (plan.actions.length === 0) {
-    throw new Error("Could not map any action files for build");
+    throw new BuilderError("No actions resolved for standalone compilation");
   }
 
   const buildDir = join(root, ".actiondock", ".build");
@@ -103,4 +104,3 @@ export async function buildProject(options: BuildOptions): Promise<BuildResult> 
     }
   }
 }
-

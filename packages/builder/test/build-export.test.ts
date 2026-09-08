@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { buildProject } from "../src/build/builder";
-import { exportSkill } from "../src/export/skill";
-import { initProject } from "../src/project/init";
+import { buildProject } from "../src/build";
+import { exportSkill } from "../src/exporter";
+import { initProject } from "@actiondock/core";
 
 describe("Build & Skill Export Contract", () => {
   let tempDir: string;
