@@ -1,6 +1,6 @@
 {
   "name": "@actiondock/runtime-bun",
-  "version": "2.0.10",
+  "version": "2.0.11-beta.0",
   "description": "Bun Runtime Adapters for ActionDock (bun:sqlite, Bun.serve, Bun.spawn)",
   "type": "module",
   "main": "./src/index.ts",
@@ -27,8 +27,8 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@actiondock/core": "^2.0.10",
-    "@actiondock/sdk": "^2.0.10"
+    "@actiondock/core": "2.0.11-beta.0",
+    "@actiondock/sdk": "2.0.11-beta.0"
   },
   "devDependencies": {
     "@types/bun": "latest",

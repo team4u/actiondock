@@ -5,10 +5,10 @@
     "": {
       "name": "actiondock-monorepo",
       "dependencies": {
-        "@actiondock/cli": "^2.0.10",
-        "@actiondock/core": "^2.0.10",
-        "@actiondock/mcp": "^2.0.10",
-        "@actiondock/sdk": "^2.0.10",
+        "@actiondock/cli": "2.0.11-beta.0",
+        "@actiondock/core": "2.0.11-beta.0",
+        "@actiondock/mcp": "2.0.11-beta.0",
+        "@actiondock/sdk": "2.0.11-beta.0",
         "@modelcontextprotocol/server": "2.0.0",
       },
       "devDependencies": {
@@ -34,7 +34,7 @@
     },
     "packages/builder": {
       "name": "@actiondock/builder",
-      "version": "2.0.10",
+      "version": "2.0.11-beta.0",
       "dependencies": {
         "@actiondock/core": "^2.0.10",
         "@actiondock/sdk": "^2.0.10",
@@ -47,7 +47,7 @@
     },
     "packages/cli": {
       "name": "@actiondock/cli",
-      "version": "2.0.10",
+      "version": "2.0.11-beta.0",
       "bin": {
         "ad": "./bin/ad.js",
         "actiondock": "./bin/ad.js",
@@ -69,7 +69,7 @@
     },
     "packages/core": {
       "name": "@actiondock/core",
-      "version": "2.0.10",
+      "version": "2.0.11-beta.0",
       "dependencies": {
         "@actiondock/sdk": "^2.0.10",
         "ajv": "^8.17.1",
@@ -83,7 +83,7 @@
     },
     "packages/mcp": {
       "name": "@actiondock/mcp",
-      "version": "2.0.10",
+      "version": "2.0.11-beta.0",
       "dependencies": {
         "@actiondock/core": "^2.0.10",
         "@actiondock/sdk": "^2.0.10",
@@ -96,7 +96,7 @@
     },
     "packages/runtime-bun": {
       "name": "@actiondock/runtime-bun",
-      "version": "2.0.10",
+      "version": "2.0.11-beta.0",
       "dependencies": {
         "@actiondock/core": "workspace:*",
         "@actiondock/sdk": "workspace:*",
@@ -108,7 +108,7 @@
     },
     "packages/runtime-cli": {
       "name": "@actiondock/runtime-cli",
-      "version": "2.0.10",
+      "version": "2.0.11-beta.0",
       "dependencies": {
         "@actiondock/core": "^2.0.10",
         "@actiondock/mcp": "^2.0.10",
@@ -123,7 +123,7 @@
     },
     "packages/runtime-node": {
       "name": "@actiondock/runtime-node",
-      "version": "2.0.10",
+      "version": "2.0.11-beta.0",
       "dependencies": {
         "@actiondock/core": "^2.0.10",
         "@actiondock/sdk": "^2.0.10",
@@ -138,11 +138,11 @@
     },
     "packages/sdk": {
       "name": "@actiondock/sdk",
-      "version": "2.0.10",
+      "version": "2.0.11-beta.0",
     },
     "packages/testing": {
       "name": "@actiondock/testing",
-      "version": "2.0.10",
+      "version": "2.0.11-beta.0",
       "dependencies": {
         "@actiondock/core": "workspace:*",
         "@actiondock/sdk": "workspace:*",
@@ -334,6 +334,10 @@
 
     "cross-spawn/path-key": ["path-key@3.1.1", "https://registry.npmmirror.com/path-key/-/path-key-3.1.1.tgz", {}, "sha512-ojmeN0qd+y0jszEtoY48r0Peq5dwMEkIlCOu6Q5f41lfkswXuKtYrhgoTpLnyIcHm24Uhqx+5Tqm2InSwLhE6Q=="],
 
+    "github-tools/@actiondock/sdk": ["@actiondock/sdk@2.0.10", "", {}, "sha512-yHOGU67AfWfWqVZu9pXU/z9ePioj4kP+dfiDMMzRpT50UG64jk7vHyPzKg2dy2hSm0jOBSolY1ron7pyVJ94Jg=="],
+
+    "github-tools/@actiondock/testing": ["@actiondock/testing@2.0.10", "", { "dependencies": { "@actiondock/core": "^2.0.10", "@actiondock/sdk": "^2.0.10" } }, "sha512-w/0zdzjGNBFRMEc7OxkVc7UTwX1IZ4rkn2g2DhluZbm4x/3PGRqHtfeU2d38sou52OGMLf8fW00GHMT88kBttw=="],
+
     "github-tools/@types/node": ["@types/node@22.20.1", "https://registry.npmmirror.com/@types/node/-/node-22.20.1.tgz", { "dependencies": { "undici-types": "~6.21.0" } }, "sha512-EANqOCF9QFyra+4pfxUcX9STKJpCLjMbObVzljIJomAWSnuSIEAvyzEU53GaajbXJEgdh0iEcPL+DGvpUd4k1Q=="],
 
     "@actiondock/builder/@types/bun/bun-types": ["bun-types@1.4.2", "", { "dependencies": { "@types/node": "*" } }, "sha512-bxV1FgK7yBIzjRe5zBozIM4Bem11ZJcCXSrjWRG3YWLt8yFDePu4cLjpebO8OvPeIE9trbyPF4fuj3Cia4Fj3w=="],
@@ -353,6 +357,8 @@
     "@actiondock/runtime-node/@types/node/undici-types": ["undici-types@6.21.0", "https://registry.npmmirror.com/undici-types/-/undici-types-6.21.0.tgz", {}, "sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ=="],
 
     "@actiondock/testing/@types/bun/bun-types": ["bun-types@1.4.1", "https://registry.npmmirror.com/bun-types/-/bun-types-1.4.1.tgz", { "dependencies": { "@types/node": "*" } }, "sha512-loKuVrAFZKfEv+JvWkHRS9GW5IqLuLRjVXN9p+vZvBN86O5hf/pBZQ5hSoyipsrMmWObZBDvWnlmKvjKTM0PdA=="],
+
+    "github-tools/@actiondock/testing/@actiondock/core": ["@actiondock/core@2.0.10", "", { "dependencies": { "@actiondock/sdk": "^2.0.10", "ajv": "^8.17.1", "ajv-formats": "^3.0.1", "yaml": "^2.7.0" } }, "sha512-m8Q3BY/X8g3wRHldYnwJRrXzoFSTTBZ6g9/aK+v11hevs8zR14BtJpsX3/JEpZ94Z9pMhWJPdH33fsVFQcF/dA=="],
 
     "github-tools/@types/node/undici-types": ["undici-types@6.21.0", "https://registry.npmmirror.com/undici-types/-/undici-types-6.21.0.tgz", {}, "sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ=="],
 
