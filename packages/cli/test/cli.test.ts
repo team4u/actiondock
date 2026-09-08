@@ -4,6 +4,7 @@ setDefaultTimeout(120000);
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import pkg from "../package.json";
 
 const cliPath = resolve(__dirname, "../bin/ad.js");
 
@@ -971,18 +972,18 @@ describe("CLI Review & Machine Contract Regression", () => {
     }
   });
 
-  it("supports -v, -V, and --version flags returning exit code 0 and version 2.0.9", () => {
+  it("supports -v, -V, and --version flags returning exit code 0 and package version", () => {
     const vProc = runCli(["-v"], tempDir, env);
     expect(vProc.exitCode).toBe(0);
-    expect(vProc.stdout.toString().trim()).toBe("2.0.9");
+    expect(vProc.stdout.toString().trim()).toBe(pkg.version);
 
     const capVProc = runCli(["-V"], tempDir, env);
     expect(capVProc.exitCode).toBe(0);
-    expect(capVProc.stdout.toString().trim()).toBe("2.0.9");
+    expect(capVProc.stdout.toString().trim()).toBe(pkg.version);
 
     const fullVProc = runCli(["--version"], tempDir, env);
     expect(fullVProc.exitCode).toBe(0);
-    expect(fullVProc.stdout.toString().trim()).toBe("2.0.9");
+    expect(fullVProc.stdout.toString().trim()).toBe(pkg.version);
   });
 
   it("enforces strict target resolution with exit code 2 on nonexistent package across all commands", () => {

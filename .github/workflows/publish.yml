@@ -48,7 +48,7 @@ jobs:
           echo "tag=$DIST_TAG" >> $GITHUB_OUTPUT
 
       - name: Install Dependencies
-        run: bun install --frozen-lockfile
+        run: bun install
 
       - name: Sync Monorepo Versions from Tag
         run: bun run ./scripts/bump-version.ts --from-git-tag

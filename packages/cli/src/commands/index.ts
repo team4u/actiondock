@@ -40,7 +40,7 @@ export function createCliProgram(): Command {
   program
     .name("ad")
     .description("ActionDock (ad) 2.0 - Toolchain for building and shipping standalone AI Agent Actions & Skills")
-    .version("2.0.9", "-v, --version");
+    .version("2.0.10", "-v, --version");
 
   program.option("-V", "output the version number");
   program.on("option:V", () => {

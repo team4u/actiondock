@@ -119,7 +119,7 @@ function main() {
   // 3.2 packages/cli/src/commands/index.ts
   const cliIndexTsPath = join(rootDir, "packages", "cli", "src", "commands", "index.ts");
   let cliIndexTs = readFileSync(cliIndexTsPath, "utf8");
-  cliIndexTs = cliIndexTs.replace(/\.version\("[^"]+"\)/, `.version("${targetVersion}")`);
+  cliIndexTs = cliIndexTs.replace(/\.version\("[^"]+"/, `.version("${targetVersion}"`);
   writeFileSync(cliIndexTsPath, cliIndexTs);
   console.log("Updated packages/cli/src/commands/index.ts");
 
@@ -143,7 +143,18 @@ function main() {
   writeFileSync(programTsPath, programTs);
   console.log("Updated packages/runtime-cli/src/program.ts");
 
-  // 4. Rebuild CLI dist
+  // 4. Update lockfile
+  console.log("Updating lockfile via bun install...");
+  const installRes = spawnSync("bun", ["install"], {
+    cwd: rootDir,
+    stdio: "inherit",
+  });
+  if (installRes.status !== 0) {
+    console.error("Failed to update lockfile");
+    process.exit(1);
+  }
+
+  // 5. Rebuild CLI dist
   console.log("Rebuilding @actiondock/cli dist bundle...");
   const buildRes = spawnSync("bun", ["run", "--cwd", join(rootDir, "packages", "cli"), "build"], {
     stdio: "inherit",

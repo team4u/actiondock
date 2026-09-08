@@ -1,6 +1,6 @@
 {
   "name": "@actiondock/testing",
-  "version": "2.0.9",
+  "version": "2.0.10",
   "description": "ActionDock Test Runtime for testing Actions with real Core execution semantics",
   "type": "module",
   "main": "./src/index.ts",
@@ -27,8 +27,8 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@actiondock/core": "^2.0.9",
-    "@actiondock/sdk": "^2.0.9"
+    "@actiondock/core": "^2.0.10",
+    "@actiondock/sdk": "^2.0.10"
   },
   "devDependencies": {
     "@types/bun": "latest",

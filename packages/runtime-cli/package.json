@@ -1,6 +1,6 @@
 {
   "name": "@actiondock/runtime-cli",
-  "version": "2.0.9",
+  "version": "2.0.10",
   "description": "Shared runtime commands and rendering for ActionDock CLI and standalone binaries",
   "type": "module",
   "main": "./src/index.ts",
@@ -27,9 +27,9 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@actiondock/core": "^2.0.9",
-    "@actiondock/mcp": "^2.0.9",
-    "@actiondock/sdk": "^2.0.9",
+    "@actiondock/core": "^2.0.10",
+    "@actiondock/mcp": "^2.0.10",
+    "@actiondock/sdk": "^2.0.10",
     "@modelcontextprotocol/server": "^2.0.0",
     "commander": "^13.1.0"
   },
