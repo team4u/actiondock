@@ -732,6 +732,9 @@ process.exit(0);
         expect(existsSync(join(compositeRes.skillDir, "actiondock.skill.json"))).toBe(false);
         expect(existsSync(join(compositeRes.skillDir, "packages", "builder-fixture"))).toBe(true);
         expect(existsSync(join(compositeRes.skillDir, "packages", "second-package"))).toBe(true);
+        // 验证子包原位保留代码但不再包含独立的 SKILL.md，对外保持单一 Skill 入口
+        expect(existsSync(join(compositeRes.skillDir, "packages", "builder-fixture", "SKILL.md"))).toBe(false);
+        expect(existsSync(join(compositeRes.skillDir, "packages", "second-package", "SKILL.md"))).toBe(false);
 
         // 验证物理 Playbook 文件与 SKILL.md 相对路径严格一致
         const expectedPbPath = join(compositeRes.skillDir, "packages", "second-package", "playbooks", "deploy.md");

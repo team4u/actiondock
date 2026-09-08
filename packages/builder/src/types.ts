@@ -231,6 +231,8 @@ export interface SkillExporterOptions {
   config?: ProjectConfig;
   /** 预置的声明式清单（可选） */
   manifest?: ActionDockManifest;
+  /** 是否跳过生成 SKILL.md（多包聚合时避免子包重复生成，对外保持唯一定义） */
+  skipSkillMd?: boolean;
 }
 
 /**

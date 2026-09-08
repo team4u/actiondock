@@ -475,7 +475,7 @@ ad export skill -P team4u.github-tools team4u.k8s-ops --bundle devops-suite -o .
 复合技能套件目录结构：
 ```text
 dist/devops-suite/
-├── SKILL.md                  # 统领全局的复合引导说明书
+├── SKILL.md                  # 统领全局的复合引导说明书（对外唯一入口，子包不再生成冗余 SKILL.md）
 └── packages/                 # 各子包原位代码与就近规程
     ├── github-tools/
     └── k8s-ops/

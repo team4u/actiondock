@@ -378,6 +378,7 @@ describe("CLI End-to-End", () => {
     expect(existsSync(join(bundleOut, "SKILL.md"))).toBe(true);
     expect(existsSync(join(bundleOut, "actiondock.skill.json"))).toBe(false);
     expect(existsSync(join(bundleOut, "packages", "github-ops"))).toBe(true);
+    expect(existsSync(join(bundleOut, "packages", "github-ops", "SKILL.md"))).toBe(false);
 
     // 10e. export skill validation tests: conflict rejection
     const conflictProc = runCli(["export", "skill", "--bundle", "suite", "--standalone"], tempDir);

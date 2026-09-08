@@ -130,13 +130,15 @@ export class SkillExporter {
     if (mode === "source") {
       // ----------------------------------------------------
       // 源码 Skill 导出 (Source Skill Export)
-      // - 生成 SKILL.md
-      const skillMd = generateSourceSkillMd(
-        configForTemplates,
-        plan.actions as any,
-        plan.playbooks as any
-      );
-      writeFileSync(join(skillDir, "SKILL.md"), skillMd, "utf-8");
+      // - 生成 SKILL.md（若未显式跳过）
+      if (!options.skipSkillMd) {
+        const skillMd = generateSourceSkillMd(
+          configForTemplates,
+          plan.actions as any,
+          plan.playbooks as any
+        );
+        writeFileSync(join(skillDir, "SKILL.md"), skillMd, "utf-8");
+      }
 
       // - 导出精简后的 actiondock.manifest.json 清单
       const manifestActions: Record<string, unknown> = {};
@@ -298,16 +300,18 @@ export class SkillExporter {
 
       const actualBinaryName = basename(compileRes.executablePath);
 
-      // 1. 生成独立模式 SKILL.md
-      const skillMd = generateStandaloneSkillMd(
-        configForTemplates,
-        plan.actions as any,
-        plan.playbooks as any,
-        `./bin/${actualBinaryName}`
-      );
-      writeFileSync(join(skillDir, "SKILL.md"), skillMd, "utf-8");
+      // - 生成独立模式 SKILL.md（若未显式跳过）
+      if (!options.skipSkillMd) {
+        const skillMd = generateStandaloneSkillMd(
+          configForTemplates,
+          plan.actions as any,
+          plan.playbooks as any,
+          `./bin/${actualBinaryName}`
+        );
+        writeFileSync(join(skillDir, "SKILL.md"), skillMd, "utf-8");
+      }
 
-      // 2. 拷贝 Playbook
+      // - 拷贝 Playbook 规程文件
       for (const pb of plan.playbooks) {
         if (existsSync(pb.filePath)) {
           const destPb = join(playbooksDestDir, basename(pb.filePath));
@@ -315,7 +319,7 @@ export class SkillExporter {
         }
       }
 
-      // 4. 拷贝静态资产
+      // - 拷贝静态资产
       for (const dep of plan.dependencies.modulesAndAssets) {
         if (dep.type === "asset" && existsSync(dep.resolvedPath)) {
           const destAsset = join(skillDir, dep.path);
@@ -441,6 +445,7 @@ export class SkillExporter {
         projectRoot,
         outDir: destPkgDir,
         archive: false,
+        skipSkillMd: true,
       });
 
       const manifest = loadManifest(destPkgDir) || loadManifest(projectRoot);
