@@ -53,11 +53,18 @@ my-action/
 
 ---
 
-## 清单契约复用与维护
+## 源码事实源与静态清单快照
 
-ActionDock 2.0 强制倡导声明式契约驱动。在编写业务代码之前，Action 的契约需在 `actiondock.manifest.json` 中予以声明。
+在 ActionDock 架构中，TypeScript 源码中的 `defineAction` 声明是系统能力的**唯一事实源**。`actiondock.manifest.json` 清单文件则是面向编译期构建、外部协议映射与能力检索的**编译期静态快照**。
 
-可以通过脚手架命令一键生成源码并注册契约条目：
+### 清单契约的作用与开发期静态发现原则
+
+ActionDock 倡导**开发期静态发现原则**：
+- **无代码执行的静态检索**：在执行 `ad info`、`ad action list`、`ad playbook list` 以及 MCP 协议工具注册时，系统仅读取分析静态清单快照与项目元数据，严禁动态执行 Action 业务代码或动态探测外部模块，从而避免开发期的执行副作用与安全隐患。
+- **构建规划与静态裁剪**：在执行产物打包（`ad build`）与技能导出（`ad export skill`）时，规划器直接解析静态清单中的 `uses` 闭包与输入输出约束，确定打包边界并剔除无用依赖代码。
+- **统一模式暴露**：静态清单中的 JSON Schema 与源码中的 `defineAction` 模式保持同步，为外部客户端和智能体提供准确的接口契约说明。
+
+可通过脚手架命令一键生成源码并注册初始清单契约条目：
 
 ```bash
 ad action create github.get-pr --desc "获取指定 GitHub 仓库的 Pull Request 详细信息" --file get-pr.ts
@@ -106,11 +113,30 @@ ad action create github.get-pr --desc "获取指定 GitHub 仓库的 Pull Reques
 }
 ```
 
-### 清单契约复用的核心机制
+### 清单同步流程与脱节后果
 
-- **构建规划与静态裁剪**：在执行产物打包时，规划器直接解析静态清单的 `uses` 闭包与输入输出约束，无需执行 Action 的实际业务代码，既安全又高效。
-- **协议层无缝暴露**：MCP 适配器直接依据清单暴露工具列表，在服务启动时无需加载全部业务模块即可完成能力就绪通告。
-- **模式单点事实源**：清单中的 Schema 契约作为单一事实源，与源码中的 `defineAction` 保持对齐，避免口径漂移。
+当在源码中调整了 Action 的入参、出参、描述或增删了动作文件时，必须通过 `ad action sync` 同步刷新清单快照：
+
+- **同步清单快照**：
+  ```bash
+  ad action sync
+  ```
+  该命令扫描 `actions/` 目录，解析所有 Action 的最新模式与元数据，自动增量更新 `actiondock.manifest.json`，并清理已不存在的动作条目。
+- **门禁校验机制**：
+  ```bash
+  ad action sync --check
+  ```
+  在持续集成与代码审查流程中，使用 `--check` 选项检测源码与清单是否脱节。若清单未同步，命令将返回非零退出码并指出差异项，而不会修改任何文件。
+
+#### 源码与清单脱节引发的严重后果
+
+若开发者修改源码后未执行 `ad action sync`，将导致以下两类严重异常：
+- **运行期后果**：
+  - 外部协议层（如 MCP 服务或智能体发现引擎）依赖静态清单暴露工具。若新增 Action 未登记，智能体将无法发现并调用该工具；若已删除 Action 仍保留在清单中，智能体发起调用时将遭遇定位异常。
+  - 若输入输出 Schema 脱节，智能体依据旧清单生成的参数结构在传入运行时会被源码的 `defineAction` 严格校验拒绝，引发参数校验失败。
+- **构建期后果**：
+  - 执行 `ad build` 或 `ad export skill` 时，构建规划器完全基于清单中的依赖闭包进行静态裁剪与打包。
+  - 未在清单中登记的 Action 及其关联依赖文件将被打包器作为无用代码彻底忽略，导致编译产物或导出的技能包中缺失关键业务逻辑。
 
 ---
 
@@ -171,13 +197,13 @@ export default defineAction<GetPrInput, GetPrOutput>({
   },
 
   async run(input, ctx) {
-    // 1. 读取配置（支持运行期覆盖、内置 SQLite、环境变量与默认值回退）
+    // 读取配置（支持运行期覆盖、内置 SQLite、环境变量与默认值回退）
     const token = ctx.config.get<string>("GITHUB_TOKEN");
 
-    // 2. 输出结构化诊断日志（输出至 stderr，绝不污染 stdout 业务流）
+    // 输出结构化诊断日志（输出至 stderr，绝不污染 stdout 业务流）
     ctx.log.info(`正在查询 PR #${input.prNumber}（仓库: ${input.repo}）`);
 
-    // 3. 发起网络请求并挂接取消信号
+    // 发起网络请求并挂接取消信号
     const res = await fetch(
       `https://api.github.com/repos/${input.repo}/pulls/${input.prNumber}`,
       {
@@ -196,10 +222,10 @@ export default defineAction<GetPrInput, GetPrOutput>({
     const data = (await res.json()) as any;
     const now = new Date().toISOString();
 
-    // 4. 状态持久化（存入内嵌状态库，设定生存时间为 3600 秒）
+    // 状态持久化（存入内嵌状态库，设定生存时间为 3600 秒）
     await ctx.state.set(`last_query:${input.repo}#${input.prNumber}`, now, 3600);
 
-    // 5. 返回符合 outputSchema 契约的业务数据
+    // 返回符合 outputSchema 契约的业务数据
     return {
       id: data.id,
       number: data.number,
@@ -318,7 +344,7 @@ npm test
 
 ## 规范要点总结
 
-- **清单与源码双轨契约**：静态清单 `actiondock.manifest.json` 供依赖裁剪与工具暴露；源码 `defineAction` 负责运行期强校验与业务实现。
+- **源码唯一事实源与清单静态快照**：源码中的 `defineAction` 声明是唯一事实源，静态清单 `actiondock.manifest.json` 是供依赖裁剪与工具暴露的静态快照。源码变动后通过 `ad action sync` 同步，CI 阶段使用 `ad action sync --check` 执行门禁校验。
 - **配置多级回退**：优先级依次为命令行临时覆写、内置持久化存储、操作系统环境变量、项目配置默认值。
 - **通信通道彻底隔离**：标准输出专供结构化 JSON 信封；诊断日志一律经由 `ctx.log` 发射至标准错误输出，防止智能体解析异常。
 - **确定性测试先行**：借助 `@actiondock/testing` 与原生 `node:test`，实现无真实外部网络与磁盘污染的高速单测。

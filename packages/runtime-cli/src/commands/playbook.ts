@@ -7,6 +7,7 @@ import {
   listLinkedPackages,
   loadPlaybooks,
   loadProjectConfig,
+  resolvePackageRoot,
   resolvePlaybookProject,
   resolveTarget,
 } from "@actiondock/core";
@@ -43,6 +44,7 @@ export function registerPlaybookCommands(program: Command, context?: RuntimeCliC
       const options = getEffectiveOptions(rawOptions, cmd);
       const effectiveIntent = resolveIntent(options.intent, patterns);
       const shouldFallback = options.fallback !== false;
+      const isMachine = Boolean(options.json || options.envelope);
 
       // 1. 独立运行模式
       if (context?.standalone) {
@@ -84,10 +86,21 @@ export function registerPlaybookCommands(program: Command, context?: RuntimeCliC
       }
 
       // 3. 本地工程模式
-      const root = findProjectRoot();
-      if (root) {
-        const config = loadProjectConfig(root);
-        const playbooks = loadPlaybooks(root, config.playbooksDir);
+      let targetRoot: string | null = null;
+      if (options.package) {
+        targetRoot = resolvePackageRoot(options.package);
+        if (!targetRoot) {
+          throw new ArgumentError(
+            `Package '${options.package}' not found in linked packages or path`
+          );
+        }
+      } else {
+        targetRoot = findProjectRoot();
+      }
+
+      if (targetRoot) {
+        const config = loadProjectConfig(targetRoot);
+        const playbooks = loadPlaybooks(targetRoot, config.playbooksDir);
         const rawList = Array.from(playbooks.values()).map((p) => ({
           id: p.id,
           description: p.description || "",
@@ -103,13 +116,21 @@ export function registerPlaybookCommands(program: Command, context?: RuntimeCliC
           shouldFallback
         );
 
+        if (filterRes.isFallback && isMachine) {
+          renderResult(
+            { items: filterRes.items, isFallback: true, matchedCount: 0 },
+            { json: options.json, envelope: options.envelope, context }
+          );
+          return;
+        }
+
         renderResult(filterRes.items, {
           json: options.json,
           envelope: options.envelope,
           humanFormatter: () =>
             renderPlaybookList(
               filterRes.items,
-              `Playbooks in ${config.id} (${root})`,
+              `Playbooks in ${config.id} (${targetRoot})`,
               filterRes.isFallback,
               effectiveIntent
             ),
@@ -162,22 +183,22 @@ export function registerPlaybookCommands(program: Command, context?: RuntimeCliC
             playbooks: pkgPlaybooks,
           });
         } catch {
-          // 忽略失效链接
+          // 忽略破损的链接包
         }
       }
 
       let filteredPackages: typeof aggregated = [];
+      let isFallback = false;
       if (!effectiveIntent) {
         filteredPackages = aggregated;
       } else {
         for (const pkg of aggregated) {
-          const pkgMatches =
-            filterWithFallbackInfo(
-              [pkg],
-              effectiveIntent,
-              [(p) => p.packageId, (p) => p.packageName, (p) => p.path],
-              false
-            ).matchedCount > 0;
+          const pkgMatches = filterWithFallbackInfo(
+            [pkg],
+            effectiveIntent,
+            [(p) => p.packageId, (p) => p.packageName, (p) => p.path],
+            false
+          ).matchedCount > 0;
 
           if (pkgMatches) {
             filteredPackages.push(pkg);
@@ -200,7 +221,16 @@ export function registerPlaybookCommands(program: Command, context?: RuntimeCliC
 
         if (filteredPackages.length === 0 && shouldFallback) {
           filteredPackages = aggregated;
+          isFallback = true;
         }
+      }
+
+      if (isFallback && isMachine) {
+        renderResult(
+          { packages: filteredPackages, isFallback: true, matchedCount: 0 },
+          { json: options.json, envelope: options.envelope, context }
+        );
+        return;
       }
 
       renderResult(filteredPackages, {
@@ -228,6 +258,7 @@ export function registerPlaybookCommands(program: Command, context?: RuntimeCliC
   pbCmd
     .command("show <id>")
     .description("Show playbook content and metadata (from current project or linked packages)")
+    .option("-P, --package <id>", "Target package ID or path")
     .option("-p, --profile <name>", "Query against a specific profile")
     .option("-s, --server <url>", "Remote server URL")
     .option("-t, --token <token>", "Auth token for remote server")
@@ -240,7 +271,7 @@ export function registerPlaybookCommands(program: Command, context?: RuntimeCliC
       }
 
       if (context?.standalone) {
-        throw new ExecutionError(`Playbook '${id}' not found in standalone package`);
+        throw new ArgumentError(`Playbook '${id}' not found in standalone package`);
       }
 
       const target = resolveTarget({
@@ -260,7 +291,27 @@ export function registerPlaybookCommands(program: Command, context?: RuntimeCliC
         return;
       }
 
-      const resolved = resolvePlaybookProject(id);
+      let showTarget = id;
+      if (options.package && !id.includes("/") && !id.includes(":")) {
+        const pkgRoot = resolvePackageRoot(options.package);
+        if (!pkgRoot) {
+          throw new ArgumentError(
+            `Package '${options.package}' not found in linked packages or path`
+          );
+        }
+        showTarget = `${options.package}/${id}`;
+      }
+
+      let resolved;
+      try {
+        resolved = resolvePlaybookProject(showTarget);
+      } catch (err: any) {
+        if (err.message?.includes("not found") || err.message?.includes("no longer exists")) {
+          throw new ArgumentError(err.message);
+        }
+        throw new ExecutionError(err.message);
+      }
+
       const pb = resolved.playbook;
       const payload = { ...pb, packageId: resolved.packageId };
 

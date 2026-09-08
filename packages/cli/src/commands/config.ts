@@ -13,7 +13,7 @@ import {
   type ConfigItemDefinition,
 } from "@actiondock/core";
 import { Command } from "commander";
-import { ExecutionError } from "@actiondock/runtime-cli";
+import { ArgumentError, ExecutionError, getEffectiveOptions, renderResult } from "@actiondock/runtime-cli";
 import { resolveIntent } from "../utils/filter";
 
 export function registerConfigCommands(program: Command): void {
@@ -27,12 +27,21 @@ export function registerConfigCommands(program: Command): void {
     .alias("check")
     .description("Inspect declared configuration requirements and check resolution status")
     .option("-P, --package <id>", "Target package ID or path")
+    .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
-    .action((identifier, options) => {
+    .option("--envelope", "Wrap JSON output in standard envelope")
+    .action((identifier, rawOptions, cmd) => {
       try {
-        const root = resolvePackageRoot(identifier || options.package);
+        const options = getEffectiveOptions(rawOptions, cmd);
+        const targetPkg = identifier || options.package;
+        const root = resolvePackageRoot(targetPkg);
         if (!root) {
-          throw new ExecutionError(
+          if (targetPkg) {
+            throw new ArgumentError(
+              `Package '${targetPkg}' not found in linked packages or path`
+            );
+          }
+          throw new ArgumentError(
             "Not in an ActionDock project.\nUsage: ad config schema [package-id] or cd into a project directory."
           );
         }
@@ -41,11 +50,14 @@ export function registerConfigCommands(program: Command): void {
         const declared = projConfig.config || {};
         const declaredKeys = Object.keys(declared);
 
-        const globalStorage = createGlobalStorage();
+        const globalStorage = createGlobalStorage(options.dataDir);
         const globalConfig = globalStorage.listConfig();
         globalStorage.close();
 
-        const projectStorage = createStorage(projConfig.id, { projectRoot: root });
+        const projectStorage = createStorage(projConfig.id, {
+          projectRoot: root,
+          dataDir: options.dataDir,
+        });
         const projectConfig = projectStorage.listConfig();
         projectStorage.close();
 
@@ -89,20 +101,15 @@ export function registerConfigCommands(program: Command): void {
         });
 
         const missingRequired = items.filter((i) => i.status === "MISSING");
+        const payload = {
+          packageId: projConfig.id,
+          projectRoot: root,
+          allReady: missingRequired.length === 0,
+          configs: items,
+        };
 
-        if (options.json) {
-          console.log(
-            JSON.stringify(
-              {
-                packageId: projConfig.id,
-                projectRoot: root,
-                allReady: missingRequired.length === 0,
-                configs: items,
-              },
-              null,
-              2
-            )
-          );
+        if (options.json || options.envelope) {
+          renderResult(payload, { json: options.json, envelope: options.envelope });
         } else {
           console.log(`Configuration Requirements for ${projConfig.id} (${root}):\n`);
           if (items.length === 0) {
@@ -133,6 +140,9 @@ export function registerConfigCommands(program: Command): void {
           }
         }
       } catch (err: any) {
+        if (err instanceof ArgumentError || err instanceof ExecutionError) {
+          throw err;
+        }
         throw new ExecutionError(err.message);
       }
     });
@@ -149,11 +159,16 @@ export function registerConfigCommands(program: Command): void {
     .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
     .option("--reveal, --show-secrets", "Reveal plain text values for secrets")
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
+    .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
-    .action(async (patterns, options) => {
+    .option("--envelope", "Wrap JSON output in standard envelope")
+    .action(async (patterns, rawOptions, cmd) => {
       try {
+        const options = getEffectiveOptions(rawOptions, cmd);
         const effectiveIntent = resolveIntent(options.intent, patterns);
-        const shouldFallback = options.fallback !== false;
+        const isMachine = Boolean(options.json || options.envelope);
+        const fallbackExplicit = options.fallback === true || (Array.isArray(process.argv) && process.argv.includes("--fallback"));
+        const shouldFallback = isMachine ? fallbackExplicit : options.fallback !== false;
         const reveal = options.reveal || options.showSecrets;
 
         const target = resolveTarget({
@@ -164,8 +179,8 @@ export function registerConfigCommands(program: Command): void {
 
         if (target.type === "remote") {
           const res = await fetchRemoteConfig(target.serverUrl!, target.token, options.package);
-          if (options.json) {
-            console.log(JSON.stringify(res, null, 2));
+          if (isMachine) {
+            renderResult(res, { json: options.json, envelope: options.envelope });
             return;
           }
           console.log(
@@ -182,7 +197,16 @@ export function registerConfigCommands(program: Command): void {
           return;
         }
 
-        const globalStorage = createGlobalStorage();
+        if (options.package && !options.global) {
+          const directRoot = resolvePackageRoot(options.package);
+          if (!directRoot) {
+            throw new ArgumentError(
+              `Package '${options.package}' not found in linked packages or path`
+            );
+          }
+        }
+
+        const globalStorage = createGlobalStorage(options.dataDir);
         const globalConfig = globalStorage.listConfig();
 
         const projectRoot = !options.global ? resolvePackageRoot(options.package) : null;
@@ -194,7 +218,10 @@ export function registerConfigCommands(program: Command): void {
           try {
             const projConfig = loadProjectConfig(projectRoot);
             packageId = projConfig.id;
-            const projectStorage = createStorage(projConfig.id, { projectRoot });
+            const projectStorage = createStorage(projConfig.id, {
+              projectRoot,
+              dataDir: options.dataDir,
+            });
             projectStored = projectStorage.listConfig();
             declaredDefaults = projConfig.config || {};
             projectStorage.close();
@@ -248,8 +275,8 @@ export function registerConfigCommands(program: Command): void {
           shouldFallback
         );
 
-        if (options.json) {
-          console.log(JSON.stringify(filterRes.items, null, 2));
+        if (isMachine) {
+          renderResult(filterRes.items, { json: options.json, envelope: options.envelope });
         } else {
           const scopeLabel = projectRoot ? `${packageId} (${projectRoot})` : "Global Scope";
           console.log(`Configurations [${scopeLabel}]:\n`);
@@ -266,6 +293,9 @@ export function registerConfigCommands(program: Command): void {
           }
         }
       } catch (err: any) {
+        if (err instanceof ArgumentError || err instanceof ExecutionError) {
+          throw err;
+        }
         throw new ExecutionError(err.message);
       }
     });
@@ -280,9 +310,13 @@ export function registerConfigCommands(program: Command): void {
     .option("-s, --server <url>", "Remote server URL")
     .option("-t, --token <token>", "Auth token for remote server")
     .option("--reveal, --show-secrets", "Reveal plain text value for secret")
+    .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
-    .action(async (key, options) => {
+    .option("--envelope", "Wrap JSON output in standard envelope")
+    .action(async (key, rawOptions, cmd) => {
       try {
+        const options = getEffectiveOptions(rawOptions, cmd);
+        const isMachine = Boolean(options.json || options.envelope);
         const target = resolveTarget({
           profile: options.profile,
           server: options.server,
@@ -292,16 +326,25 @@ export function registerConfigCommands(program: Command): void {
         if (target.type === "remote") {
           const res = await fetchRemoteConfig(target.serverUrl!, target.token, options.package);
           const val = res.values?.[key];
-          if (options.json) {
-            console.log(JSON.stringify({ key, value: val }, null, 2));
+          if (isMachine) {
+            renderResult({ key, value: val }, { json: options.json, envelope: options.envelope });
           } else {
             console.log(val !== undefined ? JSON.stringify(val) : "undefined");
           }
           return;
         }
 
+        if (options.package && !options.global) {
+          const directRoot = resolvePackageRoot(options.package);
+          if (!directRoot) {
+            throw new ArgumentError(
+              `Package '${options.package}' not found in linked packages or path`
+            );
+          }
+        }
+
         const reveal = options.reveal || options.showSecrets;
-        const globalStorage = createGlobalStorage();
+        const globalStorage = createGlobalStorage(options.dataDir);
         const globalVal = globalStorage.getConfig(key);
         globalStorage.close();
 
@@ -314,7 +357,10 @@ export function registerConfigCommands(program: Command): void {
           try {
             const projConfig = loadProjectConfig(projectRoot);
             declaredItem = projConfig.config?.[key];
-            const projectStorage = createStorage(projConfig.id, { projectRoot });
+            const projectStorage = createStorage(projConfig.id, {
+              projectRoot,
+              dataDir: options.dataDir,
+            });
             projVal = projectStorage.getConfig(key);
             fallbackVal = projConfig.config?.[key]?.default;
             projectStorage.close();
@@ -348,23 +394,23 @@ export function registerConfigCommands(program: Command): void {
         const isSecret = isSecretConfigKey(key, declaredItem);
         const effective = !reveal && isSecret && rawEffective !== undefined ? maskSecretValue(rawEffective) : rawEffective;
 
-        if (options.json) {
-          console.log(
-            JSON.stringify(
-              {
-                key,
-                value: effective,
-                source,
-                secret: isSecret,
-              },
-              null,
-              2
-            )
+        if (isMachine) {
+          renderResult(
+            {
+              key,
+              value: effective,
+              source,
+              secret: isSecret,
+            },
+            { json: options.json, envelope: options.envelope }
           );
         } else {
           console.log(effective !== undefined ? (typeof effective === "string" && isSecret && !reveal ? effective : JSON.stringify(effective)) : "undefined");
         }
       } catch (err: any) {
+        if (err instanceof ArgumentError || err instanceof ExecutionError) {
+          throw err;
+        }
         throw new ExecutionError(err.message);
       }
     });
@@ -378,8 +424,13 @@ export function registerConfigCommands(program: Command): void {
     .option("-p, --profile <name>", "Set config on a remote target")
     .option("-s, --server <url>", "Remote server URL")
     .option("-t, --token <token>", "Auth token for remote server")
-    .action(async (key, rawValue, options) => {
+    .option("--data-dir <path>", "Custom database storage directory")
+    .option("--json", "Output as JSON")
+    .option("--envelope", "Wrap JSON output in standard envelope")
+    .action(async (key, rawValue, rawOptions, cmd) => {
       try {
+        const options = getEffectiveOptions(rawOptions, cmd);
+        const isMachine = Boolean(options.json || options.envelope);
         let parsed: unknown = rawValue;
         try {
           parsed = JSON.parse(rawValue);
@@ -395,8 +446,21 @@ export function registerConfigCommands(program: Command): void {
 
         if (target.type === "remote") {
           await setRemoteConfig(target.serverUrl!, key, parsed, target.token, options.package);
-          console.log(`[OK] Remote config '${key}' updated on ${target.serverUrl}`);
+          if (isMachine) {
+            renderResult({ ok: true, key, value: parsed }, { json: options.json, envelope: options.envelope });
+          } else {
+            console.log(`[OK] Remote config '${key}' updated on ${target.serverUrl}`);
+          }
           return;
+        }
+
+        if (options.package && !options.global) {
+          const directRoot = resolvePackageRoot(options.package);
+          if (!directRoot) {
+            throw new ArgumentError(
+              `Package '${options.package}' not found in linked packages or path`
+            );
+          }
         }
 
         const projectRoot = !options.global ? resolvePackageRoot(options.package) : null;
@@ -404,20 +468,34 @@ export function registerConfigCommands(program: Command): void {
         const displayVal = isSecret ? maskSecretValue(parsed) : JSON.stringify(parsed);
 
         if (options.global || !projectRoot) {
-          // Set in Global storage (~/.actiondock/global.db)
-          const globalStorage = createGlobalStorage();
+          // Set in Global storage
+          const globalStorage = createGlobalStorage(options.dataDir);
           globalStorage.setConfig(key, parsed);
           globalStorage.close();
-          console.log(`[OK] Global config '${key}' set to ${displayVal}`);
+          if (isMachine) {
+            renderResult({ ok: true, key, value: parsed, scope: "global" }, { json: options.json, envelope: options.envelope });
+          } else {
+            console.log(`[OK] Global config '${key}' set to ${displayVal}`);
+          }
         } else {
           // Set in Project storage
           const projConfig = loadProjectConfig(projectRoot);
-          const storage = createStorage(projConfig.id, { projectRoot });
+          const storage = createStorage(projConfig.id, {
+            projectRoot,
+            dataDir: options.dataDir,
+          });
           storage.setConfig(key, parsed);
           storage.close();
-          console.log(`[OK] Config '${key}' set to ${displayVal} in ${projConfig.id}`);
+          if (isMachine) {
+            renderResult({ ok: true, key, value: parsed, packageId: projConfig.id }, { json: options.json, envelope: options.envelope });
+          } else {
+            console.log(`[OK] Config '${key}' set to ${displayVal} in ${projConfig.id}`);
+          }
         }
       } catch (err: any) {
+        if (err instanceof ArgumentError || err instanceof ExecutionError) {
+          throw err;
+        }
         throw new ExecutionError(err.message);
       }
     });
@@ -432,8 +510,13 @@ export function registerConfigCommands(program: Command): void {
     .option("-p, --profile <name>", "Delete config on a remote target")
     .option("-s, --server <url>", "Remote server URL")
     .option("-t, --token <token>", "Auth token for remote server")
-    .action(async (key, options) => {
+    .option("--data-dir <path>", "Custom database storage directory")
+    .option("--json", "Output as JSON")
+    .option("--envelope", "Wrap JSON output in standard envelope")
+    .action(async (key, rawOptions, cmd) => {
       try {
+        const options = getEffectiveOptions(rawOptions, cmd);
+        const isMachine = Boolean(options.json || options.envelope);
         const target = resolveTarget({
           profile: options.profile,
           server: options.server,
@@ -442,7 +525,9 @@ export function registerConfigCommands(program: Command): void {
 
         if (target.type === "remote") {
           const res = await deleteRemoteConfig(target.serverUrl!, key, target.token, options.package);
-          if (res.deleted) {
+          if (isMachine) {
+            renderResult(res, { json: options.json, envelope: options.envelope });
+          } else if (res.deleted) {
             console.log(`[OK] Remote config '${key}' deleted from ${target.serverUrl}`);
           } else {
             console.log(`Remote config '${key}' not found on ${target.serverUrl}`);
@@ -450,29 +535,48 @@ export function registerConfigCommands(program: Command): void {
           return;
         }
 
+        if (options.package && !options.global) {
+          const directRoot = resolvePackageRoot(options.package);
+          if (!directRoot) {
+            throw new ArgumentError(
+              `Package '${options.package}' not found in linked packages or path`
+            );
+          }
+        }
+
         const projectRoot = !options.global ? resolvePackageRoot(options.package) : null;
 
         if (options.global || !projectRoot) {
-          const globalStorage = createGlobalStorage();
+          const globalStorage = createGlobalStorage(options.dataDir);
           const deleted = globalStorage.deleteConfig(key);
           globalStorage.close();
-          if (deleted) {
+          if (isMachine) {
+            renderResult({ ok: true, key, deleted, scope: "global" }, { json: options.json, envelope: options.envelope });
+          } else if (deleted) {
             console.log(`[OK] Global config '${key}' deleted`);
           } else {
             console.log(`Global config '${key}' was not found`);
           }
         } else {
           const projConfig = loadProjectConfig(projectRoot);
-          const storage = createStorage(projConfig.id, { projectRoot });
+          const storage = createStorage(projConfig.id, {
+            projectRoot,
+            dataDir: options.dataDir,
+          });
           const deleted = storage.deleteConfig(key);
           storage.close();
-          if (deleted) {
+          if (isMachine) {
+            renderResult({ ok: true, key, deleted, packageId: projConfig.id }, { json: options.json, envelope: options.envelope });
+          } else if (deleted) {
             console.log(`[OK] Config '${key}' deleted from ${projConfig.id}`);
           } else {
             console.log(`Config '${key}' was not set in database for ${projConfig.id}`);
           }
         }
       } catch (err: any) {
+        if (err instanceof ArgumentError || err instanceof ExecutionError) {
+          throw err;
+        }
         throw new ExecutionError(err.message);
       }
     });

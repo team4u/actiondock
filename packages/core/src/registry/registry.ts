@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { findProjectRoot, loadActions, loadPlaybooks, loadProjectConfig } from "../project/loader";
 import { loadManifest } from "../project/manifest";
@@ -387,24 +387,41 @@ export async function resolveActionProject(
   const linkedList = listLinkedPackages(customHome);
 
   if (targetPackage) {
+    let targetRoot: string | undefined;
+    let targetPkgId = targetPackage;
+
     const pkg = linkedList.find(
       (p) => p.id === targetPackage || getPackageSlug(p.id) === targetPackage
     );
+    if (pkg && existsSync(pkg.path)) {
+      targetRoot = pkg.path;
+      targetPkgId = pkg.id;
+    } else if (currentRoot) {
+      try {
+        const config = loadProjectConfig(currentRoot);
+        if (config.id === targetPackage || getPackageSlug(config.id) === targetPackage) {
+          targetRoot = currentRoot;
+          targetPkgId = config.id;
+        }
+      } catch {
+        // Ignore
+      }
+    }
 
-    if (!pkg || !existsSync(pkg.path)) {
+    if (!targetRoot || !existsSync(targetRoot)) {
       throw new Error(
         `Linked package '${targetPackage}' not found or path no longer exists (${pkg?.path || "unregistered"}). Run 'ad link' in the package directory.`
       );
     }
 
-    const config = loadProjectConfig(pkg.path);
-    if (!(await projectHasAction(pkg.path, config.actionsDir, pureActionId))) {
-      throw new Error(`Action '${pureActionId}' not found in package '${pkg.id}' (${pkg.path})`);
+    const config = loadProjectConfig(targetRoot);
+    if (!(await projectHasAction(targetRoot, config.actionsDir, pureActionId))) {
+      throw new Error(`Action '${pureActionId}' not found in package '${targetPkgId}' (${targetRoot})`);
     }
 
     return {
-      projectRoot: pkg.path,
-      packageId: pkg.id,
+      projectRoot: targetRoot,
+      packageId: targetPkgId,
       actionId: pureActionId,
     };
   }
@@ -453,24 +470,69 @@ export function resolvePackageRoot(
   cwd?: string,
   customHome?: string
 ): string | null {
-  if (packageIdOrPath) {
-    const directRoot = findProjectRoot(packageIdOrPath);
-    if (directRoot) return directRoot;
+  if (!packageIdOrPath) {
+    return findProjectRoot(cwd);
+  }
 
-    const linkedList = listLinkedPackages(customHome);
-    const found = linkedList.find(
-      (p) =>
-        p.id === packageIdOrPath ||
-        getPackageSlug(p.id) === packageIdOrPath ||
-        p.path === resolve(packageIdOrPath)
-    );
-    if (found) {
-      return found.path;
+  const baseDir = cwd || process.cwd();
+  const resolvedPath = resolve(baseDir, packageIdOrPath);
+
+  // 1. Check if packageIdOrPath is an existing directory or file path on disk
+  if (existsSync(resolvedPath)) {
+    try {
+      const stat = statSync(resolvedPath);
+      const targetDir = stat.isDirectory() ? resolvedPath : dirname(resolvedPath);
+      if (existsSync(join(targetDir, "actiondock.json"))) {
+        return targetDir;
+      }
+      const parentRoot = findProjectRoot(targetDir);
+      if (parentRoot) {
+        return parentRoot;
+      }
+    } catch {
+      // ignore
     }
+  }
+
+  // If it was explicitly a path (starts with . or / or ~ or contains / or \), and did not resolve above:
+  const isExplicitPath =
+    packageIdOrPath.startsWith(".") ||
+    packageIdOrPath.startsWith("/") ||
+    packageIdOrPath.startsWith("~") ||
+    packageIdOrPath.includes("/") ||
+    packageIdOrPath.includes("\\");
+
+  if (isExplicitPath) {
+    // An explicit path that does not exist or is not an ActionDock project must fail
     return null;
   }
 
-  return findProjectRoot(cwd);
+  // 2. Check linked packages in registry
+  const linkedList = listLinkedPackages(customHome);
+  const found = linkedList.find(
+    (p) =>
+      p.id === packageIdOrPath ||
+      getPackageSlug(p.id) === packageIdOrPath ||
+      p.path === resolvedPath
+  );
+  if (found) {
+    return found.path;
+  }
+
+  // 3. Check current project (from cwd)
+  const currentRoot = findProjectRoot(cwd);
+  if (currentRoot) {
+    try {
+      const config = loadProjectConfig(currentRoot);
+      if (config.id === packageIdOrPath || getPackageSlug(config.id) === packageIdOrPath) {
+        return currentRoot;
+      }
+    } catch {
+      // ignore broken config
+    }
+  }
+
+  return null;
 }
 
 export function resolvePlaybookProject(
@@ -514,26 +576,43 @@ export function resolvePlaybookProject(
   const linkedList = listLinkedPackages(customHome);
 
   if (targetPackage) {
+    let targetRoot: string | undefined;
+    let targetPkgId = targetPackage;
+
     const pkg = linkedList.find(
       (p) => p.id === targetPackage || getPackageSlug(p.id) === targetPackage
     );
+    if (pkg && existsSync(pkg.path)) {
+      targetRoot = pkg.path;
+      targetPkgId = pkg.id;
+    } else if (currentRoot) {
+      try {
+        const config = loadProjectConfig(currentRoot);
+        if (config.id === targetPackage || getPackageSlug(config.id) === targetPackage) {
+          targetRoot = currentRoot;
+          targetPkgId = config.id;
+        }
+      } catch {
+        // Ignore
+      }
+    }
 
-    if (!pkg || !existsSync(pkg.path)) {
+    if (!targetRoot || !existsSync(targetRoot)) {
       throw new Error(
         `Linked package '${targetPackage}' not found or path no longer exists (${pkg?.path || "unregistered"}). Run 'ad link' in the package directory.`
       );
     }
 
-    const config = loadProjectConfig(pkg.path);
-    const playbooks = loadPlaybooks(pkg.path, config.playbooksDir);
+    const config = loadProjectConfig(targetRoot);
+    const playbooks = loadPlaybooks(targetRoot, config.playbooksDir);
     const pb = playbooks.get(purePlaybookId);
     if (!pb) {
-      throw new Error(`Playbook '${purePlaybookId}' not found in package '${pkg.id}' (${pkg.path})`);
+      throw new Error(`Playbook '${purePlaybookId}' not found in package '${targetPkgId}' (${targetRoot})`);
     }
 
     return {
-      projectRoot: pkg.path,
-      packageId: pkg.id,
+      projectRoot: targetRoot,
+      packageId: targetPkgId,
       playbookId: purePlaybookId,
       playbook: pb,
     };

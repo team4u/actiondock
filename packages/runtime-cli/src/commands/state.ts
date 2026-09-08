@@ -39,7 +39,7 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
     // 1. 独立运行模式
     if (context?.standalone) {
       const sa = context.standalone;
-      const storage = createStorage(sa.packageId, { dataDir: context.dataDir });
+      const storage = createStorage(sa.packageId, { dataDir: options.dataDir || context.dataDir });
       try {
         if (options.detail && options.json) {
           const entries = await storage.listStateEntries({
@@ -125,7 +125,10 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
 
     if (targetRoot) {
       const projConfig = loadProjectConfig(targetRoot);
-      const storage = createStorage(projConfig.id, { projectRoot: targetRoot });
+      const storage = createStorage(projConfig.id, {
+        projectRoot: targetRoot,
+        dataDir: options.dataDir || context?.dataDir,
+      });
       try {
         if (options.detail && options.json) {
           const entries = await storage.listStateEntries({
@@ -198,7 +201,10 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
       if (!existsSync(pkg.path)) continue;
       try {
         const projConfig = loadProjectConfig(pkg.path);
-        const storage = createStorage(projConfig.id, { projectRoot: pkg.path });
+        const storage = createStorage(projConfig.id, {
+          projectRoot: pkg.path,
+          dataDir: options.dataDir || context?.dataDir,
+        });
 
         if (options.detail && options.json) {
           const entries = await storage.listStateEntries({
@@ -301,6 +307,7 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
     .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("-d, --detail", "Show detailed state entry objects")
+    .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
     .option("--envelope", "Wrap JSON output in standard envelope")
     .action(handleListKeys);
@@ -316,6 +323,7 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
     .option("-t, --token <token>", "Auth token for remote server")
     .option("-i, --intent <pattern>", "Regex or fuzzy intent filter")
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
+    .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
     .option("--envelope", "Wrap JSON output in standard envelope")
     .action(handleListKeys);
@@ -329,6 +337,7 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
     .option("-p, --profile <name>", "Query state on a remote target")
     .option("-s, --server <url>", "Remote server URL")
     .option("-t, --token <token>", "Auth token for remote server")
+    .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
     .option("--envelope", "Wrap JSON output in standard envelope")
     .action(async (rawKey: string, rawOptions: any, cmd: any) => {
@@ -340,7 +349,7 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
       // 1. 独立运行模式
       if (context?.standalone) {
         const sa = context.standalone;
-        const storage = createStorage(sa.packageId, { dataDir: context.dataDir });
+        const storage = createStorage(sa.packageId, { dataDir: options.dataDir || context.dataDir });
         let val: unknown;
         let entryNs = options.namespace || "";
 
@@ -399,7 +408,10 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
       // 3. 本地存储模式
       const { root, key } = getTargetRoot(options.package, rawKey);
       const projConfig = loadProjectConfig(root);
-      const storage = createStorage(projConfig.id, { projectRoot: root });
+      const storage = createStorage(projConfig.id, {
+        projectRoot: root,
+        dataDir: options.dataDir || context?.dataDir,
+      });
 
       let val: unknown;
       let entryNamespace = options.namespace || "";
@@ -444,6 +456,7 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
     .option("-s, --server <url>", "Remote server URL")
     .option("-t, --token <token>", "Auth token for remote server")
     .option("--ttl <seconds>", "Time to live in seconds", (v) => parseInt(v, 10))
+    .option("--data-dir <path>", "Custom database storage directory")
     .action(async (rawKey: string, rawValue: string, rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
       if (!rawKey || rawValue === undefined) {
@@ -460,7 +473,7 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
       // 1. 独立运行模式
       if (context?.standalone) {
         const sa = context.standalone;
-        const storage = createStorage(sa.packageId, { dataDir: context.dataDir });
+        const storage = createStorage(sa.packageId, { dataDir: options.dataDir || context.dataDir });
         let ns = options.namespace || "";
         let actualKey = rawKey;
 
@@ -501,7 +514,10 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
       // 3. 本地存储模式
       const { root, key } = getTargetRoot(options.package, rawKey);
       const projConfig = loadProjectConfig(root);
-      const storage = createStorage(projConfig.id, { projectRoot: root });
+      const storage = createStorage(projConfig.id, {
+        projectRoot: root,
+        dataDir: options.dataDir || context?.dataDir,
+      });
 
       let ns = "";
       let actualKey = key;
@@ -536,6 +552,7 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
     .option("-s, --server <url>", "Remote server URL")
     .option("-t, --token <token>", "Auth token for remote server")
     .option("--silent", "Do not fail if key is not found")
+    .option("--data-dir <path>", "Custom database storage directory")
     .action(async (rawKey: string, rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
       if (!rawKey) {
@@ -545,7 +562,7 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
       // 1. 独立运行模式
       if (context?.standalone) {
         const sa = context.standalone;
-        const storage = createStorage(sa.packageId, { dataDir: context.dataDir });
+        const storage = createStorage(sa.packageId, { dataDir: options.dataDir || context.dataDir });
         const deleted = await storage.deleteStateSmart(rawKey, options.namespace);
         storage.close();
 
@@ -576,7 +593,10 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
       // 3. 本地存储模式
       const { root, key } = getTargetRoot(options.package, rawKey);
       const projConfig = loadProjectConfig(root);
-      const storage = createStorage(projConfig.id, { projectRoot: root });
+      const storage = createStorage(projConfig.id, {
+        projectRoot: root,
+        dataDir: options.dataDir || context?.dataDir,
+      });
       const deleted = await storage.deleteStateSmart(key, options.namespace);
       storage.close();
 
@@ -598,6 +618,7 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
     .option("-s, --server <url>", "Remote server URL")
     .option("-t, --token <token>", "Auth token for remote server")
     .option("-a, --all", "Clear all state entries across all namespaces in this package")
+    .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
     .option("--envelope", "Wrap JSON output in standard envelope")
     .action(async (prefix: string = "", rawOptions: any, cmd: any) => {
@@ -605,7 +626,7 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
       // 1. 独立运行模式
       if (context?.standalone) {
         const sa = context.standalone;
-        const storage = createStorage(sa.packageId, { dataDir: context.dataDir });
+        const storage = createStorage(sa.packageId, { dataDir: options.dataDir || context.dataDir });
         const count = await storage.clearState({
           namespace: options.namespace,
           all: options.all,
@@ -651,7 +672,10 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
       // 3. 本地存储模式
       const { root } = getTargetRoot(options.package);
       const projConfig = loadProjectConfig(root);
-      const storage = createStorage(projConfig.id, { projectRoot: root });
+      const storage = createStorage(projConfig.id, {
+        projectRoot: root,
+        dataDir: options.dataDir || context?.dataDir,
+      });
       const count = await storage.clearState({
         namespace: options.namespace,
         all: options.all,

@@ -6,9 +6,10 @@ import {
   loadActions,
   loadProjectConfig,
   resolveActionProject,
+  resolvePackageRoot,
   resolveTarget,
 } from "@actiondock/core";
-import { ArgumentError, ExecutionError } from "@actiondock/runtime-cli";
+import { ArgumentError, ExecutionError, getEffectiveOptions } from "@actiondock/runtime-cli";
 import type { Command } from "commander";
 import { parseDuration } from "../../utils/duration";
 
@@ -91,21 +92,38 @@ export async function executeAction(id: string, options: any): Promise<void> {
       );
     }
 
+    let actionTarget = id;
+    if (options.package && !id.includes("/") && !id.includes(":")) {
+      const pkgRoot = resolvePackageRoot(options.package);
+      if (!pkgRoot) {
+        throw new ArgumentError(
+          `Package '${options.package}' not found in linked packages or path`
+        );
+      }
+      actionTarget = `${options.package}/${id}`;
+    }
+
     let resolvedProjectRoot: string;
     let resolvedActionId: string;
 
     try {
-      const resolved = await resolveActionProject(id);
+      const resolved = await resolveActionProject(actionTarget);
       resolvedProjectRoot = resolved.projectRoot;
       resolvedActionId = resolved.actionId;
     } catch (err: any) {
+      if (err.message?.includes("not found") || err.message?.includes("no longer exists")) {
+        throw new ArgumentError(err.message);
+      }
       throw new ExecutionError(err.message);
     }
 
     try {
       const config = loadProjectConfig(resolvedProjectRoot);
       const actions = await loadActions(resolvedProjectRoot, config.actionsDir);
-      const storage = createStorage(config.id, { projectRoot: resolvedProjectRoot });
+      const storage = createStorage(config.id, {
+        projectRoot: resolvedProjectRoot,
+        dataDir: options.dataDir,
+      });
 
       const runner = new ActionRunner({
         packageId: config.id,
@@ -119,6 +137,7 @@ export async function executeAction(id: string, options: any): Promise<void> {
         signal: controller.signal,
         timeoutMs,
       });
+
       console.log(JSON.stringify(result, null, 2));
       storage.close();
 
@@ -126,6 +145,7 @@ export async function executeAction(id: string, options: any): Promise<void> {
         process.exitCode = 1;
       }
     } catch (err: any) {
+      if (err instanceof ArgumentError) throw err;
       throw new ExecutionError(err.message);
     }
   } finally {
@@ -137,6 +157,7 @@ export function registerActionRunCommand(actionCmd: Command, program: Command): 
   actionCmd
     .command("run <id>")
     .description("Execute an action (from current project, linked packages, or remote profile)")
+    .option("-P, --package <id>", "Target package ID or path")
     .option("-i, --input <json>", "Input as JSON string")
     .option("-f, --input-file <path>", "Input from JSON file")
     .option("-c, --config <key=value...>", "Temporary config override (repeatable or comma-separated)")
@@ -145,7 +166,11 @@ export function registerActionRunCommand(actionCmd: Command, program: Command): 
     .option("-t, --token <token>", "Auth token for remote server")
     .option("--timeout <duration>", "Execution timeout (e.g. 30s, 5m, 500ms)")
     .option("--async", "Execute asynchronously in background (requires remote server or profile)")
-    .action(async (id, options) => {
+    .option("--data-dir <path>", "Custom database directory")
+    .option("--json", "Output as JSON")
+    .option("--envelope", "Wrap JSON output in standard envelope")
+    .action(async (id, rawOptions, cmd) => {
+      const options = getEffectiveOptions(rawOptions, cmd);
       await executeAction(id, options);
     });
 
@@ -153,6 +178,7 @@ export function registerActionRunCommand(actionCmd: Command, program: Command): 
   program
     .command("run <id>")
     .description("Alias for 'ad action run <id>'")
+    .option("-P, --package <id>", "Target package ID or path")
     .option("-i, --input <json>", "Input as JSON string")
     .option("-f, --input-file <path>", "Input from JSON file")
     .option("-c, --config <key=value...>", "Temporary config override")
@@ -161,7 +187,11 @@ export function registerActionRunCommand(actionCmd: Command, program: Command): 
     .option("-t, --token <token>", "Auth token for remote server")
     .option("--timeout <duration>", "Execution timeout (e.g. 30s, 5m, 500ms)")
     .option("--async", "Execute asynchronously in background (requires remote server or profile)")
-    .action(async (id, options) => {
+    .option("--data-dir <path>", "Custom database directory")
+    .option("--json", "Output as JSON")
+    .option("--envelope", "Wrap JSON output in standard envelope")
+    .action(async (id, rawOptions, cmd) => {
+      const options = getEffectiveOptions(rawOptions, cmd);
       await executeAction(id, options);
     });
 }

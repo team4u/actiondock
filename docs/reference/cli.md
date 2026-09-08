@@ -17,13 +17,13 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
 
 ## 全局通用选项
 
-绝大多数 CLI 子命令均支持以下通用控制选项：
+绝大多数 CLI 子命令均支持以下通用控制选项（支持在子命令前或子命令后灵活指定）：
 
+- **选项** `-v, -V, --version`：打印 CLI 工具版本号并退出。
+- **选项** `-h, --help`：打印命令帮助说明并退出。
 - **选项** `--json`：以标准 JSON 格式输出结果。
 - **选项** `--envelope`：将 JSON 输出包装为标准信封结构对象（包含 `ok: true, data: T` 或 `ok: false, error: { code, message, details }`）。
 - **选项** `--data-dir <path>`：指定自定义数据存储目录（覆盖默认的 `.actiondock/` 存储路径）。
-- **选项** `-v, --version`：打印 CLI 工具版本号并退出。
-- **选项** `-h, --help`：打印命令帮助说明并退出。
 
 ---
 
@@ -38,12 +38,12 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
   初始化生成包含 `actiondock.json`、`actiondock.manifest.json`、`actions/`、`playbooks/` 与 `tests/` 的标准工程。
 - **元数据检查与意图发现**：
   ```bash
-  ad info [patterns...] [-i, --intent <pattern>] [--tree] [--no-fallback] [-P, --package <id>] [--profile <name>] [--server <url>] [--token <token>] [--json] [--envelope]
+  ad info [patterns...] [-i, --intent <pattern>] [--tree] [--fallback] [--no-fallback] [-P, --package <id>] [--profile <name>] [--server <url>] [--token <token>] [--data-dir <path>] [--json] [--envelope]
   ```
-  智能体与开发者能力发现的首选入口。支持模糊匹配、正则意图过滤以及通过 `--tree` 打印层级依赖树。
+  智能体与开发者能力发现的首选入口。支持模糊匹配、正则意图过滤以及通过 `--tree` 打印层级依赖树。未找到匹配时在机器模式下返回确定性空结果数组并退出码 0。
 - **环境诊断与体检**：
   ```bash
-  ad doctor [-P, --package <id>] [--json] [--envelope]
+  ad doctor [-P, --package <id>] [--data-dir <path>] [--json] [--envelope]
   ```
   全面检查运行时环境、依赖状态、配置就绪度及全局链接有效性。
 
@@ -58,26 +58,26 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
   在 `actions/` 创建代码模板，并自动向 `actiondock.manifest.json` 注册元数据契约。
 - **同步 Action 元数据清单**：
   ```bash
-  ad action sync [--check] [--no-prune] [--json]
+  ad action sync [--check] [--no-prune] [--data-dir <path>] [--json] [--envelope]
   ```
   扫描动作源码目录（`actions/`），动态加载 Action 定义并自动增量更新 `actiondock.manifest.json` 清单。传入 `--check` 时仅校验清单是否已与代码同步而不覆写文件。
 - **列出 Action 清单**：
   ```bash
-  ad action list [patterns...] [-i, --intent <pattern>] [--no-fallback] [-P, --package <id>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--json] [--envelope]
+  ad action list [patterns...] [-i, --intent <pattern>] [--fallback] [--no-fallback] [-P, --package <id>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--data-dir <path>] [--json] [--envelope]
   ```
 - **查看 Action 详情与模式规范**：
   ```bash
-  ad action show <id> [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--json] [--envelope]
+  ad action show <id> [-P, --package <id>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--data-dir <path>] [--json] [--envelope]
   ```
 - **校验 Action 模式与语法**：
   ```bash
-  ad action validate [id] [--json] [--envelope]
+  ad action validate [id] [-P, --package <id>] [--data-dir <path>] [--json] [--envelope]
   ```
 - **执行 Action（核心命令）**：
   ```bash
-  ad action run <id> [-i, --input <json>] [-f, --input-file <path>] [-c, --config <k=v...>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--timeout <duration>] [--async] [--json] [--envelope]
+  ad action run <id> [-P, --package <id>] [-i, --input <json>] [-f, --input-file <path>] [-c, --config <k=v...>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--timeout <duration>] [--async] [--data-dir <path>] [--json] [--envelope]
   # 顶层快速别名
-  ad run <id> [-i, --input <json>] [-f, --input-file <path>] [-c, --config <k=v...>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--timeout <duration>] [--async] [--json] [--envelope]
+  ad run <id> [-P, --package <id>] [-i, --input <json>] [-f, --input-file <path>] [-c, --config <k=v...>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--timeout <duration>] [--async] [--data-dir <path>] [--json] [--envelope]
   ```
 - **运行单元测试套件**：
   ```bash
@@ -106,15 +106,15 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
   ```
 - **列出规程清单**：
   ```bash
-  ad playbook list [patterns...] [-i, --intent <pattern>] [--no-fallback] [--json] [--envelope]
+  ad playbook list [patterns...] [-i, --intent <pattern>] [--no-fallback] [-P, --package <id>] [--data-dir <path>] [--json] [--envelope]
   ```
 - **查看规程详细内容**：
   ```bash
-  ad playbook show <id> [--json] [--envelope]
+  ad playbook show <id> [-P, --package <id>] [--data-dir <path>] [--json] [--envelope]
   ```
 - **校验规程语法与 Action 引用**：
   ```bash
-  ad playbook validate [id] [--json] [--envelope]
+  ad playbook validate [id] [-P, --package <id>] [--data-dir <path>] [--json] [--envelope]
   ```
 
 ### 配置与状态管理
@@ -122,39 +122,39 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
 - **配置查询与管理**：
   ```bash
   # 列出配置项
-  ad config list [patterns...] [-g, --global] [-P, --package <id>] [-i, --intent <pattern>] [--reveal] [--json] [--envelope]
+  ad config list [patterns...] [-g, --global] [-P, --package <id>] [-i, --intent <pattern>] [--reveal] [--data-dir <path>] [--json] [--envelope]
   # 读取配置值
-  ad config get <key> [-g, --global] [-P, --package <id>] [--reveal] [--json] [--envelope]
+  ad config get <key> [-g, --global] [-P, --package <id>] [--reveal] [--data-dir <path>] [--json] [--envelope]
   # 写入配置键值
-  ad config set <key> <value> [-g, --global] [-P, --package <id>]
+  ad config set <key> <value> [-g, --global] [-P, --package <id>] [--data-dir <path>]
   # 删除配置项
-  ad config delete <key> [-g, --global] [-P, --package <id>]
+  ad config delete <key> [-g, --global] [-P, --package <id>] [--data-dir <path>]
   # 查看项目配置声明模式
-  ad config schema [packageId] [--json] [--envelope]
+  ad config schema [packageId] [--data-dir <path>] [--json] [--envelope]
   ```
 - **状态持久化与生存时间管理**：
   ```bash
   # 列出状态键名
-  ad state list [prefix] [-P, --package <id>] [-n, --namespace <ns>] [-i, --intent <pattern>] [-d, --detail] [--json] [--envelope]
+  ad state list [prefix] [-P, --package <id>] [-n, --namespace <ns>] [-i, --intent <pattern>] [-d, --detail] [--data-dir <path>] [--json] [--envelope]
   # 读取状态值
-  ad state get <key> [-P, --package <id>] [-n, --namespace <ns>] [--json] [--envelope]
+  ad state get <key> [-P, --package <id>] [-n, --namespace <ns>] [--data-dir <path>] [--json] [--envelope]
   # 写入状态键值（支持生存时间秒数）
-  ad state set <key> <value> [-P, --package <id>] [-n, --namespace <ns>] [--ttl <seconds>]
+  ad state set <key> <value> [-P, --package <id>] [-n, --namespace <ns>] [--ttl <seconds>] [--data-dir <path>]
   # 删除状态项
-  ad state delete <key> [-P, --package <id>] [-n, --namespace <ns>] [--silent]
+  ad state delete <key> [-P, --package <id>] [-n, --namespace <ns>] [--silent] [--data-dir <path>]
   # 清空状态数据
-  ad state clear [prefix] [-P, --package <id>] [-n, --namespace <ns>] [-a, --all]
+  ad state clear [prefix] [-P, --package <id>] [-n, --namespace <ns>] [-a, --all] [--data-dir <path>]
   ```
 
 ### 运行历史追溯
 
 - **列出执行历史**：
   ```bash
-  ad runs list [patterns...] [-P, --package <id>] [-i, --intent <pattern>] [-a, --action <actionId>] [-n, --limit <count>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--no-fallback] [--json] [--envelope]
+  ad runs list [patterns...] [-P, --package <id>] [-i, --intent <pattern>] [-a, --action <actionId>] [-n, --limit <count>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--no-fallback] [--data-dir <path>] [--json] [--envelope]
   ```
 - **查看单次执行详情**：
   ```bash
-  ad runs show <id> [-P, --package <id>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--json] [--envelope]
+  ad runs show <id> [-P, --package <id>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--data-dir <path>] [--json] [--envelope]
   ```
 - **取消正在运行的任务**：
   ```bash
@@ -168,7 +168,7 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
   ad profile list [--reveal] [--json] [--envelope]
   ad profile add <name> --server <url> [--token <token>] [--token-env <env>] [--desc <description>]
   ad profile show [name] [--reveal] [--json] [--envelope]
-  ad profile test <name>
+  ad profile test <name> [--json] [--envelope]
   ad profile use <name>
   ad profile remove <name>
   ```

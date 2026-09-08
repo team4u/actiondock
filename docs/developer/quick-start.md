@@ -68,48 +68,37 @@ my-action/
 - **唯一标识命名**：Action 的 `id` 必须保持唯一，并推荐使用命名空间前缀（例如 `sample.greet` 或 `github.get-pr`）。
 - **纯粹物理通道**：业务数据仅通过 `run` 方法返回值输出至标准输出；过程日志一律使用 `ctx.log` 写入标准错误输出，严禁使用 `console.log` 混杂输出流。
 
-### 清单契约复用机制
+### 源码唯一事实源与静态清单快照
 
-ActionDock 2.0 引入 `actiondock.manifest.json` 作为声明式元数据清单的事实源。
+在 ActionDock 体系中，TypeScript 源码中的 `defineAction` 声明是**唯一事实源**，负责强类型推导、运行时模式校验与实际业务执行。`actiondock.manifest.json` 清单文件则是面向编译构建、协议暴露与能力检索的**编译期静态快照**。
 
-```json
-{
-  "schemaVersion": 1,
-  "actions": {
-    "sample.greet": {
-      "entry": "actions/greet.ts",
-      "description": "Greeting action demonstrating basic input, config, and state usage",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "description": "Name of the person to greet"
-          }
-        },
-        "required": ["name"]
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "message": { "type": "string" },
-          "timesGreeted": { "type": "number" }
-        },
-        "required": ["message", "timesGreeted"]
-      },
-      "uses": [],
-      "tags": ["sample"]
-    }
-  },
-  "assets": []
-}
-```
+### 开发期静态发现原则
 
-声明式清单带来以下核心优势与复用方式：
+ActionDock 遵循**开发期静态发现原则**：
+- **静态发现与能力暴露**：在执行 `ad info`、`ad action list`、`ad playbook list` 以及启动 MCP 协议映射时，框架直接读取解析静态清单快照，无需也严禁动态执行 Action 的 TypeScript 业务代码，杜绝开发期的副作用与安全风险。
+- **构建规划与依赖裁剪**：在执行 `ad build` 或 `ad export skill` 时，构建引擎基于清单中的声明分析依赖闭包并完成代码静态裁剪。
+- **契约定义同步**：通过 `ad action create <id>` 脚手架创建新动作时，会自动在 `actions/` 生成模板源码并向 `actiondock.manifest.json` 注册契约项。
 
-- **无代码执行的静态分析**：在构建规划器裁剪依赖、MCP 协议暴露工具列表或文档生成时，框架直接读取静态清单，无需执行 Action 的 TypeScript 源码，杜绝副作用与安全隐患。
-- **契约双向同步**：通过 `ad action create <id>` 命令行脚手架创建新 Action 时，脚手架会自动在 `actions/` 生成模板源码，并同步向 `actiondock.manifest.json` 注册元数据契约。
-- **运行期与编译期双重保障**：源码中的 `defineAction` 负责类型推导与内存执行，静态清单负责工具链闭包依赖计算与外部协议暴露。
+### 清单同步流程与脱节后果
+
+当在源码中调整了 Action 属性（如修改了 `inputSchema`、`outputSchema`、`description` 或新增/删除了动作源码文件）后，必须使用 `ad action sync` 保持清单快照一致：
+
+- **同步清单快照**：
+  ```bash
+  ad action sync
+  ```
+  该命令扫描 `actions/` 目录，解析所有 Action 的最新模式与元数据，自动增量更新 `actiondock.manifest.json` 并移除物理上已删除的动作条目。
+- **门禁校验检查**：
+  ```bash
+  ad action sync --check
+  ```
+  在代码提交与 CI/CD 自动化流水线中，通过 `--check` 选项核对清单与源码是否一致。若检测到脱节，命令以非零状态码退出并报告差异，不会篡改文件。
+
+#### 源码与清单脱节的潜在后果
+
+若代码发生变更但未执行同步，会引发严重的运行期与构建期异常：
+- **运行期后果**：外部协议层（如 MCP 工具列表、智能体工具发现）依赖清单提供能力目录。若新增 Action 未入清单，智能体无法感知该能力；若接口模式脱节，智能体按旧清单构造的输入数据将在运行时被 `defineAction` 模式校验拦截而报错。
+- **构建期后果**：`ad build` 与 `ad export skill` 的静态裁剪器完全依据清单闭包进行打包。未在清单中声明的 Action 及其关联模块将被判定为冗余代码而直接丢弃，导致构建产物缺失核心能力。
 
 ### Action 源码示例
 

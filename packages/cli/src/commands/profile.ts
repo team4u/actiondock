@@ -13,7 +13,13 @@ import {
   useProfile,
 } from "@actiondock/core";
 import { Command } from "commander";
-import { CliError, ExecutionError } from "@actiondock/runtime-cli";
+import {
+  ArgumentError,
+  CliError,
+  ExecutionError,
+  getEffectiveOptions,
+  renderResult,
+} from "@actiondock/runtime-cli";
 import { resolveIntent } from "../utils/filter";
 
 export function registerProfileCommands(program: Command): void {
@@ -27,12 +33,17 @@ export function registerProfileCommands(program: Command): void {
     .description("List all configured profiles")
     .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
     .option("--reveal, --show-secrets", "Reveal plain text values for tokens")
+    .option("--fallback", "Enable fallback to full list when no items match intent")
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("--json", "Output as JSON")
-    .action((patterns, options) => {
+    .option("--envelope", "Wrap JSON output in standard envelope")
+    .action((patterns, rawOptions, cmd) => {
       try {
+        const options = getEffectiveOptions(rawOptions, cmd);
         const effectiveIntent = resolveIntent(options.intent, patterns);
-        const shouldFallback = options.fallback !== false;
+        const isMachine = Boolean(options.json || options.envelope);
+        const fallbackExplicit = options.fallback === true || (Array.isArray(process.argv) && process.argv.includes("--fallback"));
+        const shouldFallback = isMachine ? fallbackExplicit : options.fallback !== false;
         const reveal = Boolean(options.reveal || options.showSecrets);
 
         const list = listProfiles();
@@ -57,40 +68,52 @@ export function registerProfileCommands(program: Command): void {
           shouldFallback
         );
 
-        if (options.json) {
-          console.log(JSON.stringify(filterRes.items, null, 2));
-        } else {
-          console.log("ActionDock Execution Profiles:\n");
-          if (filterRes.isFallback && effectiveIntent) {
-            console.log(`(No profiles matched intent '${effectiveIntent}', showing all profiles)\n`);
-          }
-          for (const item of filterRes.items) {
-            const currentMarker = item.isCurrent ? "* " : "  ";
-            let tokenInfo = "";
-            if (item.tokenSource === "tokenEnv") {
-              tokenInfo = ` [token: env(${item.tokenEnv})]`;
-            } else if (item.tokenSource === "profileEnv") {
-              tokenInfo = ` [token: env(ACTIONDOCK_${toSnakeUpperCase(item.name)}_TOKEN)]`;
-            } else if (item.tokenSource === "profile") {
-              tokenInfo = ` [token: stored in profile]`;
-            } else if (item.tokenSource === "globalEnv") {
-              tokenInfo = ` [token: env(ACTIONDOCK_TOKEN)]`;
-            }
-
-            if (reveal && item.token) {
-              tokenInfo += ` = ${item.token}`;
-            }
-
-            const desc = item.description ? ` - ${item.description}` : "";
-            console.log(
-              `${currentMarker}${item.name.padEnd(20)} ${item.serverUrl}${tokenInfo}${desc}`
-            );
-          }
-          console.log(
-            "\nUse 'ad profile use <name>' to switch or 'ad run <action> --profile <name>' to execute on a specific target."
+        if (filterRes.isFallback && isMachine) {
+          renderResult(
+            { items: filterRes.items, isFallback: true, matchedCount: 0 },
+            { json: options.json, envelope: options.envelope }
           );
+          return;
         }
+
+        renderResult(filterRes.items, {
+          json: options.json,
+          envelope: options.envelope,
+          humanFormatter: () => {
+            const lines = ["ActionDock Execution Profiles:\n"];
+            if (filterRes.isFallback && effectiveIntent) {
+              lines.push(`(No profiles matched intent '${effectiveIntent}', showing all profiles)\n`);
+            }
+            for (const item of filterRes.items) {
+              const currentMarker = item.isCurrent ? "* " : "  ";
+              let tokenInfo = "";
+              if (item.tokenSource === "tokenEnv") {
+                tokenInfo = ` [token: env(${item.tokenEnv})]`;
+              } else if (item.tokenSource === "profileEnv") {
+                tokenInfo = ` [token: env(ACTIONDOCK_${toSnakeUpperCase(item.name)}_TOKEN)]`;
+              } else if (item.tokenSource === "profile") {
+                tokenInfo = ` [token: stored in profile]`;
+              } else if (item.tokenSource === "globalEnv") {
+                tokenInfo = ` [token: env(ACTIONDOCK_TOKEN)]`;
+              }
+
+              if (reveal && item.token) {
+                tokenInfo += ` = ${item.token}`;
+              }
+
+              const desc = item.description ? ` - ${item.description}` : "";
+              lines.push(
+                `${currentMarker}${item.name.padEnd(20)} ${item.serverUrl}${tokenInfo}${desc}`
+              );
+            }
+            lines.push(
+              "\nUse 'ad profile use <name>' to switch or 'ad run <action> --profile <name>' to execute on a specific target."
+            );
+            return lines.join("\n");
+          },
+        });
       } catch (err: any) {
+        if (err instanceof ArgumentError || err instanceof CliError) throw err;
         throw new ExecutionError(err.message);
       }
     });
@@ -141,15 +164,17 @@ export function registerProfileCommands(program: Command): void {
     .description("Display details of a profile (defaults to active profile)")
     .option("--reveal, --show-secrets", "Reveal plain text values for tokens")
     .option("--json", "Output as JSON")
-    .action((name, options) => {
+    .option("--envelope", "Wrap JSON output in standard envelope")
+    .action((name, rawOptions, cmd) => {
       try {
+        const options = getEffectiveOptions(rawOptions, cmd);
         const config = loadProfiles();
         const targetName = name || config.currentProfile || "local";
         const entry = getProfile(targetName);
         const reveal = Boolean(options.reveal || options.showSecrets);
 
         if (!entry && targetName !== "local") {
-          throw new ExecutionError(`Profile '${targetName}' not found.`);
+          throw new ArgumentError(`Profile '${targetName}' not found.`);
         }
 
         const resolved = resolveProfileToken(targetName, entry);
@@ -168,31 +193,35 @@ export function registerProfileCommands(program: Command): void {
           description: entry?.description || "",
         };
 
-        if (options.json) {
-          console.log(JSON.stringify(data, null, 2));
-        } else {
-          console.log(`Profile:      ${data.name}${data.isCurrent ? " (Active)" : ""}`);
-          console.log(`Server URL:   ${data.serverUrl}`);
-          let sourceDetail = "None";
-          if (data.tokenSource === "tokenEnv") {
-            sourceDetail = `Environment Variable ($${data.tokenEnv})`;
-          } else if (data.tokenSource === "profileEnv") {
-            sourceDetail = `Profile Environment Variable ($ACTIONDOCK_${toSnakeUpperCase(data.name)}_TOKEN)`;
-          } else if (data.tokenSource === "profile") {
-            sourceDetail = "Stored in profiles.json (Deprecated)";
-          } else if (data.tokenSource === "globalEnv") {
-            sourceDetail = "Global Environment Variable ($ACTIONDOCK_TOKEN)";
-          }
-          console.log(`Auth Source:  ${sourceDetail}`);
-          if (data.tokenConfigured) {
-            console.log(`Token Value:  ${data.token}`);
-          }
-          if (data.description) {
-            console.log(`Description:  ${data.description}`);
-          }
-        }
+        renderResult(data, {
+          json: options.json,
+          envelope: options.envelope,
+          humanFormatter: () => {
+            const lines: string[] = [];
+            lines.push(`Profile:      ${data.name}${data.isCurrent ? " (Active)" : ""}`);
+            lines.push(`Server URL:   ${data.serverUrl}`);
+            let sourceDetail = "None";
+            if (data.tokenSource === "tokenEnv") {
+              sourceDetail = `Environment Variable ($${data.tokenEnv})`;
+            } else if (data.tokenSource === "profileEnv") {
+              sourceDetail = `Profile Environment Variable ($ACTIONDOCK_${toSnakeUpperCase(data.name)}_TOKEN)`;
+            } else if (data.tokenSource === "profile") {
+              sourceDetail = "Stored in profiles.json (Deprecated)";
+            } else if (data.tokenSource === "globalEnv") {
+              sourceDetail = "Global Environment Variable ($ACTIONDOCK_TOKEN)";
+            }
+            lines.push(`Auth Source:  ${sourceDetail}`);
+            if (data.tokenConfigured) {
+              lines.push(`Token Value:  ${data.token}`);
+            }
+            if (data.description) {
+              lines.push(`Description:  ${data.description}`);
+            }
+            return lines.join("\n");
+          },
+        });
       } catch (err: any) {
-        if (err instanceof CliError) {
+        if (err instanceof ArgumentError || err instanceof CliError) {
           throw err;
         }
         throw new ExecutionError(err.message);
@@ -227,35 +256,40 @@ export function registerProfileCommands(program: Command): void {
     .command("test [name]")
     .description("Test connection latency and health of a profile")
     .option("--json", "Output as JSON")
-    .action(async (name, options) => {
+    .option("--envelope", "Wrap JSON output in standard envelope")
+    .action(async (name, rawOptions, cmd) => {
       try {
+        const options = getEffectiveOptions(rawOptions, cmd);
         const target = resolveTarget({ profile: name });
         if (target.type === "local") {
-          if (options.json) {
-            console.log(JSON.stringify({ ok: true, type: "local", message: "Local execution" }, null, 2));
-          } else {
-            console.log(`Target profile '${target.profileName || "local"}' is local (runs in local runtime).`);
-          }
+          renderResult(
+            { ok: true, type: "local", message: "Local execution" },
+            {
+              json: options.json,
+              envelope: options.envelope,
+              humanFormatter: () =>
+                `Target profile '${target.profileName || "local"}' is local (runs in local runtime).`,
+            }
+          );
           return;
         }
 
         const health = await checkRemoteHealth(target.serverUrl!, target.token);
-        if (options.json) {
-          console.log(JSON.stringify(health, null, 2));
-        } else {
-          if (health.ok) {
-            console.log(
-              `[OK] Connected to ${target.serverUrl} (${health.latencyMs}ms) - Version: ${health.version}, Status: ${health.status}`
-            );
-          } else {
-            console.error(
-              `[FAIL] Connection to ${target.serverUrl} failed (${health.latencyMs}ms): ${health.error}`
-            );
-            process.exitCode = 1;
-            return;
-          }
+        renderResult(health, {
+          json: options.json,
+          envelope: options.envelope,
+          humanFormatter: () => {
+            if (health.ok) {
+              return `[OK] Connected to ${target.serverUrl} (${health.latencyMs}ms) - Version: ${health.version}, Status: ${health.status}`;
+            }
+            return `[FAIL] Connection to ${target.serverUrl} failed (${health.latencyMs}ms): ${health.error}`;
+          },
+        });
+        if (!health.ok) {
+          process.exitCode = 1;
         }
       } catch (err: any) {
+        if (err instanceof ArgumentError || err instanceof CliError) throw err;
         throw new ExecutionError(err.message);
       }
     });

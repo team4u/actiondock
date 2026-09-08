@@ -77,10 +77,20 @@ describe("CLI End-to-End", () => {
     expect(listPositionalProc.exitCode).toBe(0);
     expect(JSON.parse(listPositionalProc.stdout.toString()).length).toBe(1);
 
-    // Fallback when no match: returns full list by default
-    const listFallbackProc = runCli(["action", "list", "--intent", "nomatch", "--json"], tempDir);
+    // In machine mode (--json / --envelope), no fallback by default when no match: returns empty array
+    const listNoMatchProc = runCli(["action", "list", "--intent", "nomatch", "--json"], tempDir);
+    expect(listNoMatchProc.exitCode).toBe(0);
+    expect(JSON.parse(listNoMatchProc.stdout.toString()).length).toBe(0);
+
+    // Fallback only when explicitly requested via --fallback in machine mode
+    const listFallbackProc = runCli(
+      ["action", "list", "--intent", "nomatch", "--fallback", "--json"],
+      tempDir
+    );
     expect(listFallbackProc.exitCode).toBe(0);
-    expect(JSON.parse(listFallbackProc.stdout.toString()).length).toBe(1);
+    const fallbackRes = JSON.parse(listFallbackProc.stdout.toString());
+    expect(fallbackRes.isFallback).toBe(true);
+    expect(fallbackRes.items.length).toBe(1);
 
     // No fallback when --no-fallback is specified
     const listNoFallbackProc = runCli(
@@ -282,7 +292,7 @@ describe("CLI End-to-End", () => {
       tempDir
     );
     expect(stateGetAfterDel.exitCode).toBe(1);
-    expect(stateGetAfterDel.stderr.toString()).toContain("not found");
+    expect(stateGetAfterDel.stdout.toString() + stateGetAfterDel.stderr.toString()).toContain("not found");
 
     // Clear state test
     runCli(["state", "set", "cache:k1", "v1"], tempDir);
@@ -307,9 +317,9 @@ describe("CLI End-to-End", () => {
     expect(runDetail.id).toBe(runs[0].id);
     expect(runDetail.status).toBe("success");
 
-    // Local runs cancel is rejected
+    // Local runs cancel is rejected (ArgumentError, exit code 2)
     const cancelLocalProc = runCli(["runs", "cancel", runs[0].id], tempDir);
-    expect(cancelLocalProc.exitCode).toBe(1);
+    expect(cancelLocalProc.exitCode).toBe(2);
     expect(cancelLocalProc.stderr.toString()).toContain("'ad runs cancel' is only supported for remote execution targets");
 
 
@@ -397,18 +407,23 @@ describe("CLI End-to-End", () => {
     const outsideInfoIntent = runCli(["info", "-i", "github-ops", "--json"], tmpdir());
     expect(outsideInfoIntent.exitCode).toBe(0);
     const outsideInfoIntentData = JSON.parse(outsideInfoIntent.stdout.toString());
-    expect(outsideInfoIntentData.id).toBe("team.github-ops");
+    expect(outsideInfoIntentData.linkedPackages).toBeDefined();
+    expect(outsideInfoIntentData.linkedPackages.some((p: any) => p.id === "team.github-ops")).toBe(true);
+    expect(outsideInfoIntentData.matchedCount).toBe(1);
 
     // Info with unmatched intent + fallback (returns linked packages with isFallback)
-    const outsideInfoFallback = runCli(["info", "nonexistent-keyword-xyz", "--json"], tmpdir());
+    const outsideInfoFallback = runCli(["info", "nonexistent-keyword-xyz", "--fallback", "--json"], tmpdir());
     expect(outsideInfoFallback.exitCode).toBe(0);
     const outsideInfoFallbackData = JSON.parse(outsideInfoFallback.stdout.toString());
     expect(outsideInfoFallbackData.linkedPackages).toBeDefined();
     expect(outsideInfoFallbackData.isFallback).toBe(true);
 
-    // Info with unmatched intent + --no-fallback (fails with non-zero exit code)
+    // Info with unmatched intent + --no-fallback (returns empty list with exit code 0)
     const outsideInfoNoFallback = runCli(["info", "nonexistent-keyword-xyz", "--no-fallback", "--json"], tmpdir());
-    expect(outsideInfoNoFallback.exitCode).not.toBe(0);
+    expect(outsideInfoNoFallback.exitCode).toBe(0);
+    const outsideInfoNoFallbackData = JSON.parse(outsideInfoNoFallback.stdout.toString());
+    expect(outsideInfoNoFallbackData.linkedPackages).toBeDefined();
+    expect(outsideInfoNoFallbackData.linkedPackages.length).toBe(0);
 
     // List actions and playbooks from outside directory
     const outsidePbList = runCli(["playbook", "list", "--json"], tmpdir());
@@ -923,4 +938,213 @@ export default defineAction({
     expect(checkJson.unchanged).toContain("sample.greet");
   });
 });
+
+describe("CLI Review & Machine Contract Regression", () => {
+  let tempDir: string;
+  let customHome: string;
+  let customDataDir: string;
+  let env: Record<string, string>;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), "actiondock-regression-project-"));
+    customHome = mkdtempSync(join(tmpdir(), "actiondock-regression-home-"));
+    customDataDir = mkdtempSync(join(tmpdir(), "actiondock-regression-data-"));
+    env = { ACTIONDOCK_HOME: customHome };
+
+    const rootNodeModules = resolve(__dirname, "../../../node_modules");
+    if (existsSync(rootNodeModules)) {
+      symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "dir");
+    }
+
+    runCli(["init", "--id", "reg.demo", "--name", "Regression Demo", "."], tempDir, env);
+  });
+
+  afterEach(() => {
+    for (const dir of [tempDir, customHome, customDataDir]) {
+      if (existsSync(dir)) {
+        try {
+          rmSync(dir, { recursive: true, force: true });
+        } catch {
+          // ignore
+        }
+      }
+    }
+  });
+
+  it("supports -v, -V, and --version flags returning exit code 0 and version 2.0.9", () => {
+    const vProc = runCli(["-v"], tempDir, env);
+    expect(vProc.exitCode).toBe(0);
+    expect(vProc.stdout.toString().trim()).toBe("2.0.9");
+
+    const capVProc = runCli(["-V"], tempDir, env);
+    expect(capVProc.exitCode).toBe(0);
+    expect(capVProc.stdout.toString().trim()).toBe("2.0.9");
+
+    const fullVProc = runCli(["--version"], tempDir, env);
+    expect(fullVProc.exitCode).toBe(0);
+    expect(fullVProc.stdout.toString().trim()).toBe("2.0.9");
+  });
+
+  it("enforces strict target resolution with exit code 2 on nonexistent package across all commands", () => {
+    const nonExistentId = "review-nonexistent-pkg";
+
+    // 1. ad info -P
+    const infoProc = runCli(["info", "-P", nonExistentId, "--json"], tempDir, env);
+    expect(infoProc.exitCode).toBe(2);
+    const infoJson = JSON.parse(infoProc.stdout.toString());
+    expect(infoJson.ok).toBe(false);
+    expect(infoJson.error.code).toBe("INVALID_ARGUMENT");
+    expect(infoJson.error.message).toContain(`Package '${nonExistentId}' not found`);
+
+    // 2. ad action list -P
+    const actListProc = runCli(["action", "list", "-P", nonExistentId, "--json"], tempDir, env);
+    expect(actListProc.exitCode).toBe(2);
+    const actListJson = JSON.parse(actListProc.stdout.toString());
+    expect(actListJson.ok).toBe(false);
+    expect(actListJson.error.code).toBe("INVALID_ARGUMENT");
+
+    // 3. ad action run -P
+    const actRunProc = runCli(["action", "run", "greet", "-P", nonExistentId, "--json"], tempDir, env);
+    expect(actRunProc.exitCode).toBe(2);
+    const actRunJson = JSON.parse(actRunProc.stdout.toString());
+    expect(actRunJson.ok).toBe(false);
+    expect(actRunJson.error.code).toBe("INVALID_ARGUMENT");
+
+    // 4. ad config list -P
+    const cfgListProc = runCli(["config", "list", "-P", nonExistentId, "--json"], tempDir, env);
+    expect(cfgListProc.exitCode).toBe(2);
+    const cfgListJson = JSON.parse(cfgListProc.stdout.toString());
+    expect(cfgListJson.ok).toBe(false);
+    expect(cfgListJson.error.code).toBe("INVALID_ARGUMENT");
+
+    // 5. ad config get -P
+    const cfgGetProc = runCli(["config", "get", "api_key", "-P", nonExistentId, "--json"], tempDir, env);
+    expect(cfgGetProc.exitCode).toBe(2);
+    const cfgGetJson = JSON.parse(cfgGetProc.stdout.toString());
+    expect(cfgGetJson.ok).toBe(false);
+    expect(cfgGetJson.error.code).toBe("INVALID_ARGUMENT");
+
+    // 6. ad state list -P
+    const stateListProc = runCli(["state", "list", "-P", nonExistentId, "--json"], tempDir, env);
+    expect(stateListProc.exitCode).toBe(2);
+    const stateListJson = JSON.parse(stateListProc.stdout.toString());
+    expect(stateListJson.ok).toBe(false);
+    expect(stateListJson.error.code).toBe("INVALID_ARGUMENT");
+
+    // 7. ad state get -P
+    const stateGetProc = runCli(["state", "get", "mykey", "-P", nonExistentId, "--json"], tempDir, env);
+    expect(stateGetProc.exitCode).toBe(2);
+    const stateGetJson = JSON.parse(stateGetProc.stdout.toString());
+    expect(stateGetJson.ok).toBe(false);
+    expect(stateGetJson.error.code).toBe("INVALID_ARGUMENT");
+
+    // 8. ad runs list -P
+    const runsListProc = runCli(["runs", "list", "-P", nonExistentId, "--json"], tempDir, env);
+    expect(runsListProc.exitCode).toBe(2);
+    const runsListJson = JSON.parse(runsListProc.stdout.toString());
+    expect(runsListJson.ok).toBe(false);
+    expect(runsListJson.error.code).toBe("INVALID_ARGUMENT");
+
+    // 9. ad playbook list -P
+    const pbListProc = runCli(["playbook", "list", "-P", nonExistentId, "--json"], tempDir, env);
+    expect(pbListProc.exitCode).toBe(2);
+    const pbListJson = JSON.parse(pbListProc.stdout.toString());
+    expect(pbListJson.ok).toBe(false);
+    expect(pbListJson.error.code).toBe("INVALID_ARGUMENT");
+
+    // 10. ad playbook show -P
+    const pbShowProc = runCli(["playbook", "show", "mypb", "-P", nonExistentId, "--json"], tempDir, env);
+    expect(pbShowProc.exitCode).toBe(2);
+    const pbShowJson = JSON.parse(pbShowProc.stdout.toString());
+    expect(pbShowJson.ok).toBe(false);
+    expect(pbShowJson.error.code).toBe("INVALID_ARGUMENT");
+  });
+
+  it("maintains stable machine contract with exit code 0 when search keywords have no matches", () => {
+    // Unmatched keyword in info search
+    const noMatchProc = runCli(["info", "nonexistent-keyword-9999", "--json"], tmpdir(), env);
+    expect(noMatchProc.exitCode).toBe(0);
+    const noMatchJson = JSON.parse(noMatchProc.stdout.toString());
+    expect(noMatchJson.linkedPackages).toEqual([]);
+    expect(noMatchJson.matchedCount).toBe(0);
+    expect(noMatchJson.isFallback).toBe(false);
+
+    // Unmatched keyword with --intent
+    const noMatchIntentProc = runCli(["info", "-i", "nonexistent-keyword-9999", "--json"], tmpdir(), env);
+    expect(noMatchIntentProc.exitCode).toBe(0);
+    const noMatchIntentJson = JSON.parse(noMatchIntentProc.stdout.toString());
+    expect(noMatchIntentJson.linkedPackages).toEqual([]);
+    expect(noMatchIntentJson.matchedCount).toBe(0);
+    expect(noMatchIntentJson.isFallback).toBe(false);
+
+    // Unmatched action list
+    const noMatchActionProc = runCli(["action", "list", "--intent", "nonexistent-act-9999", "--json"], tempDir, env);
+    expect(noMatchActionProc.exitCode).toBe(0);
+    expect(JSON.parse(noMatchActionProc.stdout.toString())).toEqual([]);
+  });
+
+  it("supports common options passed before or after subcommands and envelope formatting", () => {
+    // Before subcommand: ad --json action list
+    const preJson = runCli(["--json", "action", "list"], tempDir, env);
+    expect(preJson.exitCode).toBe(0);
+    const preJsonList = JSON.parse(preJson.stdout.toString());
+    expect(Array.isArray(preJsonList)).toBe(true);
+
+    // After subcommand: ad action list --json
+    const postJson = runCli(["action", "list", "--json"], tempDir, env);
+    expect(postJson.exitCode).toBe(0);
+    const postJsonList = JSON.parse(postJson.stdout.toString());
+    expect(Array.isArray(postJsonList)).toBe(true);
+
+    // Independent --envelope mode (without explicit --json): ad --envelope action list
+    const preEnv = runCli(["--envelope", "action", "list"], tempDir, env);
+    expect(preEnv.exitCode).toBe(0);
+    const preEnvData = JSON.parse(preEnv.stdout.toString());
+    expect(preEnvData.ok).toBe(true);
+    expect(Array.isArray(preEnvData.data)).toBe(true);
+
+    // After subcommand: ad action list --envelope
+    const postEnv = runCli(["action", "list", "--envelope"], tempDir, env);
+    expect(postEnv.exitCode).toBe(0);
+    const postEnvData = JSON.parse(postEnv.stdout.toString());
+    expect(postEnvData.ok).toBe(true);
+    expect(Array.isArray(postEnvData.data)).toBe(true);
+  });
+
+  it("respects custom --data-dir isolation for state and config", () => {
+    const otherDataDir = mkdtempSync(join(tmpdir(), "actiondock-regression-other-data-"));
+    try {
+      // Set state in customDataDir
+      const setProc = runCli(
+        ["state", "set", "custom_key", "custom_val", "--data-dir", customDataDir],
+        tempDir,
+        env
+      );
+      expect(setProc.exitCode).toBe(0);
+
+      // Get from customDataDir -> exists
+      const getCustomProc = runCli(
+        ["state", "get", "custom_key", "--json", "--data-dir", customDataDir],
+        tempDir,
+        env
+      );
+      expect(getCustomProc.exitCode).toBe(0);
+      const getCustomData = JSON.parse(getCustomProc.stdout.toString());
+      expect(getCustomData.value).toBe("custom_val");
+
+      // Get from otherDataDir -> not found (exit code 1)
+      const getOtherProc = runCli(
+        ["state", "get", "custom_key", "--json", "--data-dir", otherDataDir],
+        tempDir,
+        env
+      );
+      expect(getOtherProc.exitCode).toBe(1);
+    } finally {
+      if (existsSync(otherDataDir)) {
+        rmSync(otherDataDir, { recursive: true, force: true });
+      }
+    }
+  });
+});
+
 

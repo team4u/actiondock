@@ -13,6 +13,7 @@ import {
   loadProjectConfig,
   parseDuration,
   resolveActionProject,
+  resolvePackageRoot,
   resolveTarget,
   validateSchema,
 } from "@actiondock/core";
@@ -169,7 +170,27 @@ export async function executeAction(
       );
     }
 
-    const resolved = await resolveActionProject(id);
+    let actionTarget = id;
+    if (options.package && !id.includes("/") && !id.includes(":")) {
+      const pkgRoot = resolvePackageRoot(options.package);
+      if (!pkgRoot) {
+        throw new ArgumentError(
+          `Package '${options.package}' not found in linked packages or path`
+        );
+      }
+      actionTarget = `${options.package}/${id}`;
+    }
+
+    let resolved;
+    try {
+      resolved = await resolveActionProject(actionTarget);
+    } catch (err: any) {
+      if (err.message?.includes("not found") || err.message?.includes("no longer exists")) {
+        throw new ArgumentError(err.message);
+      }
+      throw new ExecutionError(err.message);
+    }
+
     const config = loadProjectConfig(resolved.projectRoot);
     const actions = await loadActions(resolved.projectRoot, config.actionsDir);
     const storage = createStorage(config.id, {
@@ -228,16 +249,20 @@ export function registerActionCommands(program: Command, context?: RuntimeCliCon
     .command("list [patterns...]")
     .description("List actions in current project, linked packages, or remote profile")
     .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
+    .option("-P, --package <id>", "Target package ID or path")
     .option("-p, --profile <name>", "Execute or query against a specific profile")
     .option("-s, --server <url>", "Remote server URL")
     .option("-t, --token <token>", "Auth token for remote server")
+    .option("--fallback", "Enable fallback to full list when no items match intent")
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("--json", "Output as JSON")
     .option("--envelope", "Wrap JSON output in standard envelope")
     .action(async (patterns: string[] = [], rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
       const effectiveIntent = resolveIntent(options.intent, patterns);
-      const shouldFallback = options.fallback !== false;
+      const isMachine = Boolean(options.json || options.envelope);
+      const fallbackExplicit = options.fallback === true || (Array.isArray(process.argv) && process.argv.includes("--fallback"));
+      const shouldFallback = isMachine ? fallbackExplicit : options.fallback !== false;
 
       // 1. 独立运行模式
       if (context?.standalone) {
@@ -259,6 +284,14 @@ export function registerActionCommands(program: Command, context?: RuntimeCliCon
           [(a) => a.id, (a) => a.description],
           shouldFallback
         );
+
+        if (filterRes.isFallback && isMachine) {
+          renderResult(
+            { items: filterRes.items, isFallback: true, matchedCount: 0 },
+            { json: options.json, envelope: options.envelope, context }
+          );
+          return;
+        }
 
         renderResult(filterRes.items, {
           json: options.json,
@@ -290,6 +323,14 @@ export function registerActionCommands(program: Command, context?: RuntimeCliCon
           isFallback = true;
         }
 
+        if (isFallback && isMachine) {
+          renderResult(
+            { items: list, isFallback: true, matchedCount: 0 },
+            { json: options.json, envelope: options.envelope, context }
+          );
+          return;
+        }
+
         renderResult(list, {
           json: options.json,
           envelope: options.envelope,
@@ -306,10 +347,19 @@ export function registerActionCommands(program: Command, context?: RuntimeCliCon
       }
 
       // 3. 本地工程或全局已链接包分支
-      const root = findProjectRoot();
-      if (root) {
-        const config = loadProjectConfig(root);
-        const manifest = loadManifest(root);
+      let targetRoot: string | null = null;
+      if (options.package) {
+        targetRoot = resolvePackageRoot(options.package);
+        if (!targetRoot) {
+          throw new ArgumentError(`Package '${options.package}' not found in linked packages or path`);
+        }
+      } else {
+        targetRoot = findProjectRoot();
+      }
+
+      if (targetRoot) {
+        const config = loadProjectConfig(targetRoot);
+        const manifest = loadManifest(targetRoot);
         const rawList = manifest?.actions
           ? Object.entries(manifest.actions).map(([actId, a]) => ({
               id: actId,
@@ -325,13 +375,21 @@ export function registerActionCommands(program: Command, context?: RuntimeCliCon
           shouldFallback
         );
 
+        if (filterRes.isFallback && isMachine) {
+          renderResult(
+            { items: filterRes.items, isFallback: true, matchedCount: 0 },
+            { json: options.json, envelope: options.envelope, context }
+          );
+          return;
+        }
+
         renderResult(filterRes.items, {
           json: options.json,
           envelope: options.envelope,
           humanFormatter: () =>
             renderActionList(
               filterRes.items,
-              `Actions in ${config.id} (${root})`,
+              `Actions in ${config.id} (${targetRoot})`,
               filterRes.isFallback,
               effectiveIntent
             ),
@@ -387,6 +445,7 @@ export function registerActionCommands(program: Command, context?: RuntimeCliCon
       }
 
       let filteredPackages: typeof aggregated = [];
+      let isFallback = false;
       if (!effectiveIntent) {
         filteredPackages = aggregated;
       } else {
@@ -420,7 +479,16 @@ export function registerActionCommands(program: Command, context?: RuntimeCliCon
 
         if (filteredPackages.length === 0 && shouldFallback) {
           filteredPackages = aggregated;
+          isFallback = true;
         }
+      }
+
+      if (isFallback && isMachine) {
+        renderResult(
+          { packages: filteredPackages, isFallback: true, matchedCount: 0 },
+          { json: options.json, envelope: options.envelope, context }
+        );
+        return;
       }
 
       renderResult(filteredPackages, {
@@ -445,6 +513,7 @@ export function registerActionCommands(program: Command, context?: RuntimeCliCon
     .command("show <id>")
     .alias("describe")
     .description("Show action definition, schema, and description")
+    .option("-P, --package <id>", "Target package ID or path")
     .option("-p, --profile <name>", "Execute or query against a specific profile")
     .option("-s, --server <url>", "Remote server URL")
     .option("-t, --token <token>", "Auth token for remote server")
@@ -466,7 +535,7 @@ export function registerActionCommands(program: Command, context?: RuntimeCliCon
 
         const action = actionsMap.get(id);
         if (!action) {
-          throw new ExecutionError(`Action '${id}' not found in package '${sa.packageId}'`);
+          throw new ArgumentError(`Action '${id}' not found in package '${sa.packageId}'`);
         }
 
         const detail = {
@@ -505,13 +574,33 @@ export function registerActionCommands(program: Command, context?: RuntimeCliCon
       }
 
       // 3. 本地工程模式
-      const resolved = await resolveActionProject(id);
+      let showTarget = id;
+      if (options.package && !id.includes("/") && !id.includes(":")) {
+        const pkgRoot = resolvePackageRoot(options.package);
+        if (!pkgRoot) {
+          throw new ArgumentError(
+            `Package '${options.package}' not found in linked packages or path`
+          );
+        }
+        showTarget = `${options.package}/${id}`;
+      }
+
+      let resolved;
+      try {
+        resolved = await resolveActionProject(showTarget);
+      } catch (err: any) {
+        if (err.message?.includes("not found") || err.message?.includes("no longer exists")) {
+          throw new ArgumentError(err.message);
+        }
+        throw new ExecutionError(err.message);
+      }
+
       const config = loadProjectConfig(resolved.projectRoot);
       const manifest = loadManifest(resolved.projectRoot);
       const actionMeta = manifest?.actions?.[resolved.actionId];
 
       if (!actionMeta) {
-        throw new ExecutionError(
+        throw new ArgumentError(
           `Action '${resolved.actionId}' not found in package '${resolved.packageId}'`
         );
       }
@@ -537,6 +626,7 @@ export function registerActionCommands(program: Command, context?: RuntimeCliCon
   actionCmd
     .command("validate [id]")
     .description("Validate action schemas and definitions")
+    .option("-P, --package <id>", "Target package ID or path")
     .option("--json", "Output as JSON")
     .option("--envelope", "Wrap JSON output in standard envelope")
     .action(async (id: string, rawOptions: any, cmd: any) => {
@@ -553,14 +643,25 @@ export function registerActionCommands(program: Command, context?: RuntimeCliCon
         if (id) {
           const act = actionsMap.get(id);
           if (!act) {
-            throw new ExecutionError(`Action '${id}' not found in standalone package`);
+            throw new ArgumentError(`Action '${id}' not found in standalone package`);
           }
           toValidate = [act];
         } else {
           toValidate = Array.from(actionsMap.values());
         }
       } else {
-        const root = findProjectRoot();
+        let root: string | null = null;
+        if (options.package) {
+          root = resolvePackageRoot(options.package);
+          if (!root) {
+            throw new ArgumentError(
+              `Package '${options.package}' not found in linked packages or path`
+            );
+          }
+        } else {
+          root = findProjectRoot();
+        }
+
         if (!root) {
           throw new ArgumentError("Not in an ActionDock project (actiondock.json not found)");
         }
@@ -570,7 +671,7 @@ export function registerActionCommands(program: Command, context?: RuntimeCliCon
         if (id) {
           const act = actions.get(id);
           if (!act) {
-            throw new ExecutionError(`Action '${id}' not found in project`);
+            throw new ArgumentError(`Action '${id}' not found in project`);
           }
           toValidate = [act];
         } else {
@@ -616,6 +717,7 @@ export function registerActionCommands(program: Command, context?: RuntimeCliCon
   actionCmd
     .command("run <id>")
     .description("Execute an action (from current project, linked packages, or remote profile)")
+    .option("-P, --package <id>", "Target package ID or path")
     .option("-i, --input <json>", "Input as JSON string")
     .option("-f, --input-file <path>", "Input from JSON file")
     .option("-c, --config <key=value...>", "Temporary config override (repeatable)")
@@ -625,6 +727,8 @@ export function registerActionCommands(program: Command, context?: RuntimeCliCon
     .option("--timeout <duration>", "Execution timeout (e.g. 30s, 5m, 500ms)")
     .option("--async", "Execute asynchronously in background (requires remote server or profile)")
     .option("--data-dir <path>", "Custom database directory")
+    .option("--json", "Output as JSON")
+    .option("--envelope", "Wrap JSON output in standard envelope")
     .action(async (id: string, rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
       await executeAction(id, options, context);
@@ -634,6 +738,7 @@ export function registerActionCommands(program: Command, context?: RuntimeCliCon
   program
     .command("run <id>")
     .description("Alias for 'ad action run <id>'")
+    .option("-P, --package <id>", "Target package ID or path")
     .option("-i, --input <json>", "Input as JSON string")
     .option("-f, --input-file <path>", "Input from JSON file")
     .option("-c, --config <key=value...>", "Temporary config override")
@@ -643,6 +748,8 @@ export function registerActionCommands(program: Command, context?: RuntimeCliCon
     .option("--timeout <duration>", "Execution timeout (e.g. 30s, 5m, 500ms)")
     .option("--async", "Execute asynchronously in background (requires remote server or profile)")
     .option("--data-dir <path>", "Custom database directory")
+    .option("--json", "Output as JSON")
+    .option("--envelope", "Wrap JSON output in standard envelope")
     .action(async (id: string, rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
       await executeAction(id, options, context);

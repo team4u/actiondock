@@ -12,7 +12,7 @@ import {
   resolveTarget,
 } from "@actiondock/core";
 import { Command } from "commander";
-import { ArgumentError, CliError, ExecutionError } from "@actiondock/runtime-cli";
+import { ArgumentError, CliError, ExecutionError, getEffectiveOptions, renderResult } from "@actiondock/runtime-cli";
 import { resolveIntent } from "../utils/filter";
 
 interface AggregatedPackage {
@@ -194,15 +194,21 @@ export function registerInfoCommand(program: Command): void {
     .option("-p, --profile <name>", "Query against a specific profile")
     .option("-s, --server <url>", "Remote server URL")
     .option("-t, --token <token>", "Auth token for remote server")
+    .option("--fallback", "Enable fallback to full list when no items match intent")
     .option(
       "--no-fallback",
       "Disable fallback to full list when no items match intent"
     )
     .option("--json", "Output information as JSON")
-    .action(async (patterns: string[] = [], options: any) => {
+    .option("--envelope", "Wrap JSON output in standard envelope")
+    .option("--data-dir <path>", "Custom database storage directory")
+    .action(async (patterns: string[] = [], rawOptions: any, cmd: any) => {
       try {
+        const options = getEffectiveOptions(rawOptions, cmd);
         const effectiveIntent = resolveIntent(options.intent, patterns);
-        const shouldFallback = options.fallback !== false;
+        const isMachine = Boolean(options.json || options.envelope);
+        const fallbackExplicit = options.fallback === true || (Array.isArray(process.argv) && process.argv.includes("--fallback"));
+        const shouldFallback = isMachine ? fallbackExplicit : options.fallback !== false;
 
         const target = resolveTarget({
           profile: options.profile,
@@ -222,8 +228,8 @@ export function registerInfoCommand(program: Command): void {
             }
           );
 
-          if (options.json) {
-            console.log(JSON.stringify(remoteInfo, null, 2));
+          if (isMachine) {
+            renderResult(remoteInfo, { json: options.json, envelope: options.envelope });
             return;
           }
 
@@ -314,8 +320,8 @@ export function registerInfoCommand(program: Command): void {
         // Local Tree
         if (options.tree) {
           const status = getRegistryStatus();
-          if (options.json) {
-            console.log(JSON.stringify(status, null, 2));
+          if (isMachine) {
+            renderResult(status, { json: options.json, envelope: options.envelope });
           } else {
             printRegistryTree(status);
           }
@@ -327,8 +333,8 @@ export function registerInfoCommand(program: Command): void {
           const directRoot = resolvePackageRoot(options.package);
           if (directRoot) {
             const detail = await getProjectDetailInfo(directRoot);
-            if (options.json) {
-              console.log(JSON.stringify(projectDetailToJson(detail), null, 2));
+            if (isMachine) {
+              renderResult(projectDetailToJson(detail), { json: options.json, envelope: options.envelope });
             } else {
               printProjectDetail(detail);
             }
@@ -400,8 +406,8 @@ export function registerInfoCommand(program: Command): void {
         if (!effectiveIntent) {
           if (currentRoot) {
             const detail = await getProjectDetailInfo(currentRoot);
-            if (options.json) {
-              console.log(JSON.stringify(projectDetailToJson(detail), null, 2));
+            if (isMachine) {
+              renderResult(projectDetailToJson(detail), { json: options.json, envelope: options.envelope });
             } else {
               printProjectDetail(detail);
             }
@@ -409,19 +415,21 @@ export function registerInfoCommand(program: Command): void {
           }
 
           if (aggregated.length === 0) {
+            if (isMachine) {
+              renderResult({ linkedPackages: [] }, { json: options.json, envelope: options.envelope });
+              return;
+            }
             console.log(
               "No ActionDock project in current directory, and no packages linked."
             );
             console.log(
-              "Run 'ad link' inside an Action package to register it."
+              "Run 'ad link' inside an Action package or specify a target package."
             );
             return;
           }
 
-          if (options.json) {
-            console.log(
-              JSON.stringify({ linkedPackages: aggregated }, null, 2)
-            );
+          if (isMachine) {
+            renderResult({ linkedPackages: aggregated }, { json: options.json, envelope: options.envelope });
           } else {
             printAggregatedPackages(aggregated);
           }
@@ -434,8 +442,8 @@ export function registerInfoCommand(program: Command): void {
           const directRoot = resolvePackageRoot(patterns[0]);
           if (directRoot) {
             const detail = await getProjectDetailInfo(directRoot);
-            if (options.json) {
-              console.log(JSON.stringify(projectDetailToJson(detail), null, 2));
+            if (isMachine) {
+              renderResult(projectDetailToJson(detail), { json: options.json, envelope: options.envelope });
             } else {
               printProjectDetail(detail);
             }
@@ -444,6 +452,10 @@ export function registerInfoCommand(program: Command): void {
         }
 
         if (aggregated.length === 0) {
+          if (isMachine) {
+            renderResult({ linkedPackages: [], matchedCount: 0, isFallback: false }, { json: options.json, envelope: options.envelope });
+            return;
+          }
           throw new ExecutionError(
             `No ActionDock project or linked packages available to match '${effectiveIntent}'`
           );
@@ -466,10 +478,9 @@ export function registerInfoCommand(program: Command): void {
 
         // Subcase A: 0 items matched
         if (filterRes.matchedCount === 0) {
-          if (!shouldFallback) {
-            if (options.json) {
-              console.log(JSON.stringify({ linkedPackages: [] }, null, 2));
-              process.exitCode = 1;
+          if (!filterRes.isFallback) {
+            if (isMachine) {
+              renderResult({ linkedPackages: [], matchedCount: 0, isFallback: false }, { json: options.json, envelope: options.envelope });
               return;
             }
             throw new ExecutionError(
@@ -478,46 +489,42 @@ export function registerInfoCommand(program: Command): void {
           }
 
           // Fallback enabled: display all packages with a notice
-          if (options.json) {
-            console.log(
-              JSON.stringify(
-                { linkedPackages: filterRes.items, isFallback: true },
-                null,
-                2
-              )
+          if (isMachine) {
+            renderResult(
+              { linkedPackages: filterRes.items, isFallback: true, matchedCount: 0 },
+              { json: options.json, envelope: options.envelope }
             );
-          } else {
-            console.log(
-              `(No linked packages matched intent '${effectiveIntent}', showing all packages)\n`
-            );
-            printAggregatedPackages(filterRes.items);
+            return;
           }
+          console.log(
+            `(No linked packages matched intent '${effectiveIntent}', showing all packages)\n`
+          );
+          printAggregatedPackages(filterRes.items);
           return;
         }
 
-        // Subcase B: Exactly 1 item matched -> Display its full project detail
-        if (filterRes.matchedCount === 1 && !filterRes.isFallback) {
+        // Subcase B: Matched items in machine mode
+        if (isMachine) {
+          renderResult(
+            { linkedPackages: filterRes.items, matchedCount: filterRes.matchedCount, isFallback: false },
+            { json: options.json, envelope: options.envelope }
+          );
+          return;
+        }
+
+        // Subcase C: Exactly 1 item matched in human terminal mode -> Display full project detail
+        if (filterRes.matchedCount === 1) {
           const matchedPkg = filterRes.items[0];
           const detail = await getProjectDetailInfo(matchedPkg.path);
-          if (options.json) {
-            console.log(JSON.stringify(projectDetailToJson(detail), null, 2));
-          } else {
-            printProjectDetail(detail);
-          }
+          printProjectDetail(detail);
           return;
         }
 
-        // Subcase C: Multiple items matched -> Display filtered summary list
-        if (options.json) {
-          console.log(
-            JSON.stringify({ linkedPackages: filterRes.items }, null, 2)
-          );
-        } else {
-          printAggregatedPackages(filterRes.items, {
-            header: `ActionDock Linked Packages (${filterRes.matchedCount} matches for '${effectiveIntent}'):\n`,
-            showTip: true,
-          });
-        }
+        // Subcase D: Multiple items matched in human terminal mode -> Display filtered summary list
+        printAggregatedPackages(filterRes.items, {
+          header: `ActionDock Linked Packages (${filterRes.matchedCount} matches for '${effectiveIntent}'):\n`,
+          showTip: true,
+        });
       } catch (err: any) {
         if (err instanceof CliError) {
           throw err;

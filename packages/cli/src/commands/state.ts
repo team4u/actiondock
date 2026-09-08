@@ -13,7 +13,7 @@ import {
   resolveTarget,
   setRemoteStateKey,
 } from "@actiondock/core";
-import { ArgumentError, ExecutionError } from "@actiondock/runtime-cli";
+import { ArgumentError, ExecutionError, getEffectiveOptions, renderResult } from "@actiondock/runtime-cli";
 import { Command } from "commander";
 import { resolveIntent } from "../utils/filter";
 
@@ -32,9 +32,9 @@ function getTargetRoot(packageOption?: string, keyHint?: string): { root: string
   const root = resolvePackageRoot(targetPackage);
   if (!root) {
     if (targetPackage) {
-      throw new ExecutionError(`Package '${targetPackage}' not found in linked packages or path`);
+      throw new ArgumentError(`Package '${targetPackage}' not found in linked packages or path`);
     }
-    throw new ExecutionError(
+    throw new ArgumentError(
       "Not in an ActionDock project (actiondock.json not found).\nPlease specify -P, --package <id> or cd into a project directory."
     );
   }
@@ -58,11 +58,15 @@ export function registerStateCommands(program: Command): void {
     .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("-d, --detail", "Show detailed state entry objects (including namespace, expiration, update time)")
+    .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
-    .action(async (prefix = "", options) => {
+    .option("--envelope", "Wrap JSON output in standard envelope")
+    .action(async (prefix = "", rawOptions, cmd) => {
       try {
+        const options = getEffectiveOptions(rawOptions, cmd);
         const effectiveIntent = resolveIntent(options.intent, prefix ? [prefix] : []);
         const shouldFallback = options.fallback !== false;
+        const isMachine = Boolean(options.json || options.envelope);
 
         const target = resolveTarget({
           profile: options.profile,
@@ -76,8 +80,8 @@ export function registerStateCommands(program: Command): void {
             namespace: options.namespace,
             prefix,
           });
-          if (options.json) {
-            console.log(JSON.stringify(res.keys, null, 2));
+          if (isMachine) {
+            renderResult(res.keys, { json: options.json, envelope: options.envelope });
             return;
           }
           console.log(
@@ -94,14 +98,17 @@ export function registerStateCommands(program: Command): void {
           : findProjectRoot();
 
         if (options.package && !targetRoot) {
-          throw new ExecutionError(`Package '${options.package}' not found in linked packages or path`);
+          throw new ArgumentError(`Package '${options.package}' not found in linked packages or path`);
         }
 
         if (targetRoot) {
           const projConfig = loadProjectConfig(targetRoot);
-          const storage = createStorage(projConfig.id, { projectRoot: targetRoot });
+          const storage = createStorage(projConfig.id, {
+            projectRoot: targetRoot,
+            dataDir: options.dataDir,
+          });
 
-          if (options.detail && options.json) {
+          if (options.detail && isMachine) {
             const entries = await storage.listStateEntries({
               namespace: options.namespace,
               prefix: prefix || undefined,
@@ -115,7 +122,7 @@ export function registerStateCommands(program: Command): void {
               shouldFallback
             );
 
-            console.log(JSON.stringify(filterRes.items, null, 2));
+            renderResult(filterRes.items, { json: options.json, envelope: options.envelope });
             return;
           }
 
@@ -132,8 +139,8 @@ export function registerStateCommands(program: Command): void {
             shouldFallback
           );
 
-          if (options.json) {
-            console.log(JSON.stringify(filterRes.items, null, 2));
+          if (isMachine) {
+            renderResult(filterRes.items, { json: options.json, envelope: options.envelope });
           } else {
             const nsDesc = options.namespace ? ` [namespace: ${options.namespace}]` : "";
             const filterDesc = prefix ? ` (filter: ${prefix})` : "";
@@ -155,6 +162,10 @@ export function registerStateCommands(program: Command): void {
         // Outside project: list state keys across all linked packages
         const linkedList = listLinkedPackages();
         if (linkedList.length === 0) {
+          if (isMachine) {
+            renderResult([], { json: options.json, envelope: options.envelope });
+            return;
+          }
           console.log("No ActionDock project in current directory, and no packages linked.");
           console.log("Run 'ad link' inside an Action package to register it.");
           return;
@@ -172,9 +183,12 @@ export function registerStateCommands(program: Command): void {
           if (!existsSync(pkg.path)) continue;
           try {
             const projConfig = loadProjectConfig(pkg.path);
-            const storage = createStorage(projConfig.id, { projectRoot: pkg.path });
+            const storage = createStorage(projConfig.id, {
+              projectRoot: pkg.path,
+              dataDir: options.dataDir,
+            });
 
-            if (options.detail && options.json) {
+            if (options.detail && isMachine) {
               const entries = await storage.listStateEntries({
                 namespace: options.namespace,
                 prefix: prefix || undefined,
@@ -241,8 +255,8 @@ export function registerStateCommands(program: Command): void {
           }
         }
 
-        if (options.json) {
-          console.log(JSON.stringify(filteredPackages, null, 2));
+        if (isMachine) {
+          renderResult(filteredPackages, { json: options.json, envelope: options.envelope });
         } else {
           console.log("State Keys in Linked Packages:\n");
           for (const pkg of filteredPackages) {
@@ -257,7 +271,7 @@ export function registerStateCommands(program: Command): void {
           }
         }
       } catch (err: any) {
-        if (err instanceof ExecutionError) throw err;
+        if (err instanceof ArgumentError || err instanceof ExecutionError) throw err;
         throw new ExecutionError(err.message);
       }
     });
@@ -271,9 +285,13 @@ export function registerStateCommands(program: Command): void {
     .option("-p, --profile <name>", "Query state on a remote target")
     .option("-s, --server <url>", "Remote server URL")
     .option("-t, --token <token>", "Auth token for remote server")
+    .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
-    .action(async (rawKey, options) => {
+    .option("--envelope", "Wrap JSON output in standard envelope")
+    .action(async (rawKey, rawOptions, cmd) => {
       try {
+        const options = getEffectiveOptions(rawOptions, cmd);
+        const isMachine = Boolean(options.json || options.envelope);
         const target = resolveTarget({
           profile: options.profile,
           server: options.server,
@@ -285,8 +303,8 @@ export function registerStateCommands(program: Command): void {
             package: options.package,
             namespace: options.namespace,
           });
-          if (options.json) {
-            console.log(JSON.stringify(res, null, 2));
+          if (isMachine) {
+            renderResult(res, { json: options.json, envelope: options.envelope });
           } else {
             console.log(res.value !== undefined ? JSON.stringify(res.value, null, 2) : "undefined");
           }
@@ -295,7 +313,10 @@ export function registerStateCommands(program: Command): void {
 
         const { root, key } = getTargetRoot(options.package, rawKey);
         const projConfig = loadProjectConfig(root);
-        const storage = createStorage(projConfig.id, { projectRoot: root });
+        const storage = createStorage(projConfig.id, {
+          projectRoot: root,
+          dataDir: options.dataDir,
+        });
 
         let val: unknown;
         let entryNamespace = options.namespace || "";
@@ -315,24 +336,21 @@ export function registerStateCommands(program: Command): void {
           throw new ExecutionError(`State key '${key}' not found in ${projConfig.id}`);
         }
 
-        if (options.json) {
-          console.log(
-            JSON.stringify(
-              {
-                key,
-                packageId: projConfig.id,
-                namespace: entryNamespace,
-                value: val,
-              },
-              null,
-              2
-            )
+        if (isMachine) {
+          renderResult(
+            {
+              key,
+              packageId: projConfig.id,
+              namespace: entryNamespace,
+              value: val,
+            },
+            { json: options.json, envelope: options.envelope }
           );
         } else {
           console.log(val !== undefined ? JSON.stringify(val, null, 2) : "undefined");
         }
       } catch (err: any) {
-        if (err instanceof ExecutionError) throw err;
+        if (err instanceof ArgumentError || err instanceof ExecutionError) throw err;
         throw new ExecutionError(err.message);
       }
     });
@@ -347,8 +365,13 @@ export function registerStateCommands(program: Command): void {
     .option("-s, --server <url>", "Remote server URL")
     .option("-t, --token <token>", "Auth token for remote server")
     .option("--ttl <seconds>", "Time to live in seconds", (v) => parseInt(v, 10))
-    .action(async (rawKey, rawValue, options) => {
+    .option("--data-dir <path>", "Custom database storage directory")
+    .option("--json", "Output as JSON")
+    .option("--envelope", "Wrap JSON output in standard envelope")
+    .action(async (rawKey, rawValue, rawOptions, cmd) => {
       try {
+        const options = getEffectiveOptions(rawOptions, cmd);
+        const isMachine = Boolean(options.json || options.envelope);
         let parsed: unknown = rawValue;
         try {
           parsed = JSON.parse(rawValue);
@@ -368,13 +391,23 @@ export function registerStateCommands(program: Command): void {
             namespace: options.namespace,
             ttl: options.ttl,
           });
-          console.log(`[OK] State '${rawKey}' updated on remote server ${target.serverUrl}`);
+          if (isMachine) {
+            renderResult(
+              { ok: true, key: rawKey, value: parsed, ttl: options.ttl },
+              { json: options.json, envelope: options.envelope }
+            );
+          } else {
+            console.log(`[OK] State '${rawKey}' updated on remote server ${target.serverUrl}`);
+          }
           return;
         }
 
         const { root, key } = getTargetRoot(options.package, rawKey);
         const projConfig = loadProjectConfig(root);
-        const storage = createStorage(projConfig.id, { projectRoot: root });
+        const storage = createStorage(projConfig.id, {
+          projectRoot: root,
+          dataDir: options.dataDir,
+        });
 
         let ns = "";
         let actualKey = key;
@@ -392,11 +425,24 @@ export function registerStateCommands(program: Command): void {
         storage.close();
 
         const displayKey = ns ? `${ns}:${actualKey}` : actualKey;
-        console.log(
-          `[OK] State '${displayKey}' set to ${JSON.stringify(parsed)}${options.ttl ? ` (TTL: ${options.ttl}s)` : ""} in ${projConfig.id}`
-        );
+        if (isMachine) {
+          renderResult(
+            {
+              ok: true,
+              key: displayKey,
+              value: parsed,
+              ttl: options.ttl,
+              packageId: projConfig.id,
+            },
+            { json: options.json, envelope: options.envelope }
+          );
+        } else {
+          console.log(
+            `[OK] State '${displayKey}' set to ${JSON.stringify(parsed)}${options.ttl ? ` (TTL: ${options.ttl}s)` : ""} in ${projConfig.id}`
+          );
+        }
       } catch (err: any) {
-        if (err instanceof ExecutionError) throw err;
+        if (err instanceof ArgumentError || err instanceof ExecutionError) throw err;
         throw new ExecutionError(err.message);
       }
     });
@@ -412,8 +458,13 @@ export function registerStateCommands(program: Command): void {
     .option("-s, --server <url>", "Remote server URL")
     .option("-t, --token <token>", "Auth token for remote server")
     .option("--silent", "Do not exit with error if key is not found")
-    .action(async (rawKey, options) => {
+    .option("--data-dir <path>", "Custom database storage directory")
+    .option("--json", "Output as JSON")
+    .option("--envelope", "Wrap JSON output in standard envelope")
+    .action(async (rawKey, rawOptions, cmd) => {
       try {
+        const options = getEffectiveOptions(rawOptions, cmd);
+        const isMachine = Boolean(options.json || options.envelope);
         const target = resolveTarget({
           profile: options.profile,
           server: options.server,
@@ -425,25 +476,39 @@ export function registerStateCommands(program: Command): void {
             package: options.package,
             namespace: options.namespace,
           });
-          console.log(`[OK] State '${rawKey}' deleted from remote server ${target.serverUrl}`);
+          if (isMachine) {
+            renderResult({ ok: true, key: rawKey }, { json: options.json, envelope: options.envelope });
+          } else {
+            console.log(`[OK] State '${rawKey}' deleted from remote server ${target.serverUrl}`);
+          }
           return;
         }
 
         const { root, key } = getTargetRoot(options.package, rawKey);
         const projConfig = loadProjectConfig(root);
-        const storage = createStorage(projConfig.id, { projectRoot: root });
+        const storage = createStorage(projConfig.id, {
+          projectRoot: root,
+          dataDir: options.dataDir,
+        });
         const deleted = await storage.deleteStateSmart(key, options.namespace);
         storage.close();
 
         if (deleted) {
-          console.log(`[OK] State '${key}' deleted from ${projConfig.id}`);
+          if (isMachine) {
+            renderResult({ ok: true, key, deleted: true, packageId: projConfig.id }, { json: options.json, envelope: options.envelope });
+          } else {
+            console.log(`[OK] State '${key}' deleted from ${projConfig.id}`);
+          }
         } else {
           if (!options.silent) {
             throw new ExecutionError(`State key '${key}' not found in ${projConfig.id}`);
           }
+          if (isMachine) {
+            renderResult({ ok: true, key, deleted: false, packageId: projConfig.id }, { json: options.json, envelope: options.envelope });
+          }
         }
       } catch (err: any) {
-        if (err instanceof ExecutionError) throw err;
+        if (err instanceof ArgumentError || err instanceof ExecutionError) throw err;
         throw new ExecutionError(err.message);
       }
     });
@@ -459,8 +524,13 @@ export function registerStateCommands(program: Command): void {
     .option("-s, --server <url>", "Remote server URL")
     .option("-t, --token <token>", "Auth token for remote server")
     .option("-a, --all", "Clear all state entries across all namespaces in this package")
-    .action(async (prefix = "", options) => {
+    .option("--data-dir <path>", "Custom database storage directory")
+    .option("--json", "Output as JSON")
+    .option("--envelope", "Wrap JSON output in standard envelope")
+    .action(async (prefix = "", rawOptions, cmd) => {
       try {
+        const options = getEffectiveOptions(rawOptions, cmd);
+        const isMachine = Boolean(options.json || options.envelope);
         const target = resolveTarget({
           profile: options.profile,
           server: options.server,
@@ -474,13 +544,20 @@ export function registerStateCommands(program: Command): void {
             prefix,
             all: Boolean(options.all),
           });
-          console.log(`[OK] Cleared ${res.clearedCount} state entry(s) on remote server ${target.serverUrl}`);
+          if (isMachine) {
+            renderResult(res, { json: options.json, envelope: options.envelope });
+          } else {
+            console.log(`[OK] Cleared ${res.clearedCount} state entry(s) on remote server ${target.serverUrl}`);
+          }
           return;
         }
 
         const { root } = getTargetRoot(options.package);
         const projConfig = loadProjectConfig(root);
-        const storage = createStorage(projConfig.id, { projectRoot: root });
+        const storage = createStorage(projConfig.id, {
+          projectRoot: root,
+          dataDir: options.dataDir,
+        });
         const count = await storage.clearState({
           namespace: options.namespace,
           all: options.all,
@@ -495,9 +572,17 @@ export function registerStateCommands(program: Command): void {
             : prefix
               ? `prefix '${prefix}'`
               : "root namespace";
-        console.log(`[OK] Cleared ${count} state entry(s) (${scopeDesc}) from ${projConfig.id}`);
+
+        if (isMachine) {
+          renderResult(
+            { ok: true, clearedCount: count, scope: scopeDesc, packageId: projConfig.id },
+            { json: options.json, envelope: options.envelope }
+          );
+        } else {
+          console.log(`[OK] Cleared ${count} state entry(s) (${scopeDesc}) from ${projConfig.id}`);
+        }
       } catch (err: any) {
-        if (err instanceof ExecutionError) throw err;
+        if (err instanceof ArgumentError || err instanceof ExecutionError) throw err;
         throw new ExecutionError(err.message);
       }
     });

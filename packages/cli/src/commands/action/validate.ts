@@ -1,24 +1,50 @@
-import { findProjectRoot, loadActions, loadProjectConfig, validateSchema } from "@actiondock/core";
-import { ExecutionError } from "@actiondock/runtime-cli";
+import {
+  findProjectRoot,
+  loadActions,
+  loadProjectConfig,
+  resolvePackageRoot,
+  validateSchema,
+} from "@actiondock/core";
+import {
+  ArgumentError,
+  ExecutionError,
+  getEffectiveOptions,
+  renderResult,
+} from "@actiondock/runtime-cli";
 import type { Command } from "commander";
 
 export function registerActionValidateCommand(actionCmd: Command): void {
   actionCmd
     .command("validate [id]")
     .description("Validate action schemas and definitions")
+    .option("-P, --package <id>", "Target package ID or path")
     .option("--json", "Output as JSON")
-    .action(async (id, options) => {
-      const root = findProjectRoot();
-      if (!root) {
-        throw new ExecutionError("Not in an ActionDock project");
+    .option("--envelope", "Wrap JSON output in standard envelope")
+    .action(async (id, rawOptions, cmd) => {
+      const options = getEffectiveOptions(rawOptions, cmd);
+      let root: string | null = null;
+      if (options.package) {
+        root = resolvePackageRoot(options.package);
+        if (!root) {
+          throw new ArgumentError(
+            `Package '${options.package}' not found in linked packages or path`
+          );
+        }
+      } else {
+        root = findProjectRoot();
       }
+
+      if (!root) {
+        throw new ArgumentError("Not in an ActionDock project (actiondock.json not found)");
+      }
+
       try {
         const config = loadProjectConfig(root);
         const actions = await loadActions(root, config.actionsDir);
 
         const toValidate = id ? [actions.get(id)].filter(Boolean) : Array.from(actions.values());
         if (id && toValidate.length === 0) {
-          throw new ExecutionError(`Action '${id}' not found in project`);
+          throw new ArgumentError(`Action '${id}' not found in project`);
         }
 
         const results: Array<{ id: string; valid: boolean; errors: string[] }> = [];
@@ -46,22 +72,30 @@ export function registerActionValidateCommand(actionCmd: Command): void {
         }
 
         const allValid = results.every((r) => r.valid);
-        if (options.json) {
-          console.log(JSON.stringify({ valid: allValid, results }, null, 2));
-        } else {
-          for (const r of results) {
-            if (r.valid) {
-              console.log(`[OK] ${r.id}: Valid`);
-            } else {
-              console.log(`[FAIL] ${r.id}: ${r.errors.join(", ")}`);
-            }
+        renderResult(
+          { valid: allValid, results },
+          {
+            json: options.json,
+            envelope: options.envelope,
+            humanFormatter: () => {
+              const lines: string[] = [];
+              for (const r of results) {
+                if (r.valid) {
+                  lines.push(`[OK] ${r.id}: Valid`);
+                } else {
+                  lines.push(`[FAIL] ${r.id}: ${r.errors.join(", ")}`);
+                }
+              }
+              return lines.join("\n");
+            },
           }
-        }
+        );
+
         if (!allValid) {
           process.exitCode = 1;
         }
       } catch (err: any) {
-        if (err instanceof ExecutionError) throw err;
+        if (err instanceof ArgumentError || err instanceof ExecutionError) throw err;
         throw new ExecutionError(err.message);
       }
     });

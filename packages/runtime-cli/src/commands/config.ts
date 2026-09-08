@@ -47,6 +47,7 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
     .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
     .option("--reveal, --show-secrets", "Reveal plain text values for secrets")
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
+    .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
     .option("--envelope", "Wrap JSON output in standard envelope")
     .action(async (patterns: string[] = [], rawOptions: any, cmd: any) => {
@@ -58,7 +59,7 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
       // 1. 独立运行模式
       if (context?.standalone) {
         const sa = context.standalone;
-        const storage = createStorage(sa.packageId, { dataDir: context.dataDir });
+        const storage = createStorage(sa.packageId, { dataDir: options.dataDir || context.dataDir });
         const stored = storage.listConfig();
         storage.close();
 
@@ -148,7 +149,14 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
       }
 
       // 3. 本地与全局配置存储
-      const globalStorage = createGlobalStorage();
+      if (options.package && !options.global) {
+        const directRoot = resolvePackageRoot(options.package);
+        if (!directRoot) {
+          throw new ArgumentError(`Package '${options.package}' not found in linked packages or path`);
+        }
+      }
+
+      const globalStorage = createGlobalStorage(options.dataDir || context?.dataDir);
       const globalConfig = globalStorage.listConfig();
       globalStorage.close();
 
@@ -161,7 +169,10 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
         try {
           const projConfig = loadProjectConfig(projectRoot);
           packageId = projConfig.id;
-          const projectStorage = createStorage(projConfig.id, { projectRoot });
+          const projectStorage = createStorage(projConfig.id, {
+            projectRoot,
+            dataDir: options.dataDir || context?.dataDir,
+          });
           projectStored = projectStorage.listConfig();
           declaredDefaults = projConfig.config || {};
           projectStorage.close();
@@ -234,6 +245,7 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
     .option("-s, --server <url>", "Remote server URL")
     .option("-t, --token <token>", "Auth token for remote server")
     .option("--reveal, --show-secrets", "Reveal plain text value for secret")
+    .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
     .option("--envelope", "Wrap JSON output in standard envelope")
     .action(async (key: string, rawOptions: any, cmd: any) => {
@@ -247,7 +259,7 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
       // 1. 独立运行模式
       if (context?.standalone) {
         const sa = context.standalone;
-        const storage = createStorage(sa.packageId, { dataDir: context.dataDir });
+        const storage = createStorage(sa.packageId, { dataDir: options.dataDir || context.dataDir });
         const val = storage.getConfig(key);
         storage.close();
 
@@ -299,7 +311,14 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
       }
 
       // 3. 本地与全局查询
-      const globalStorage = createGlobalStorage();
+      if (options.package && !options.global) {
+        const directRoot = resolvePackageRoot(options.package);
+        if (!directRoot) {
+          throw new ArgumentError(`Package '${options.package}' not found in linked packages or path`);
+        }
+      }
+
+      const globalStorage = createGlobalStorage(options.dataDir || context?.dataDir);
       const globalVal = globalStorage.getConfig(key);
       globalStorage.close();
 
@@ -312,7 +331,10 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
         try {
           const projConfig = loadProjectConfig(projectRoot);
           declaredItem = projConfig.config?.[key];
-          const projectStorage = createStorage(projConfig.id, { projectRoot });
+          const projectStorage = createStorage(projConfig.id, {
+            projectRoot,
+            dataDir: options.dataDir || context?.dataDir,
+          });
           projVal = projectStorage.getConfig(key);
           fallbackVal = projConfig.config?.[key]?.default;
           projectStorage.close();
@@ -375,6 +397,7 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
     .option("-p, --profile <name>", "Set config on a remote target")
     .option("-s, --server <url>", "Remote server URL")
     .option("-t, --token <token>", "Auth token for remote server")
+    .option("--data-dir <path>", "Custom database storage directory")
     .action(async (key: string, rawValue: string, rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
       if (!key || rawValue === undefined) {
@@ -391,7 +414,7 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
       // 1. 独立运行模式
       if (context?.standalone) {
         const sa = context.standalone;
-        const storage = createStorage(sa.packageId, { dataDir: context.dataDir });
+        const storage = createStorage(sa.packageId, { dataDir: options.dataDir || context.dataDir });
         storage.setConfig(key, parsed);
         storage.close();
 
@@ -415,18 +438,28 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
       }
 
       // 3. 本地存储模式
+      if (options.package && !options.global) {
+        const directRoot = resolvePackageRoot(options.package);
+        if (!directRoot) {
+          throw new ArgumentError(`Package '${options.package}' not found in linked packages or path`);
+        }
+      }
+
       const projectRoot = !options.global ? resolvePackageRoot(options.package) : null;
       const isSecret = isSecretConfigKey(key);
       const displayVal = isSecret ? maskSecretValue(parsed) : JSON.stringify(parsed);
 
       if (options.global || !projectRoot) {
-        const globalStorage = createGlobalStorage();
+        const globalStorage = createGlobalStorage(options.dataDir || context?.dataDir);
         globalStorage.setConfig(key, parsed);
         globalStorage.close();
         writeStdout(`[OK] Global config '${key}' set to ${displayVal}`, context);
       } else {
         const projConfig = loadProjectConfig(projectRoot);
-        const storage = createStorage(projConfig.id, { projectRoot });
+        const storage = createStorage(projConfig.id, {
+          projectRoot,
+          dataDir: options.dataDir || context?.dataDir,
+        });
         storage.setConfig(key, parsed);
         storage.close();
         writeStdout(`[OK] Config '${key}' set to ${displayVal} in ${projConfig.id}`, context);
@@ -443,6 +476,7 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
     .option("-p, --profile <name>", "Delete config on a remote target")
     .option("-s, --server <url>", "Remote server URL")
     .option("-t, --token <token>", "Auth token for remote server")
+    .option("--data-dir <path>", "Custom database storage directory")
     .action(async (key: string, rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
       if (!key) {
@@ -452,7 +486,7 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
       // 1. 独立运行模式
       if (context?.standalone) {
         const sa = context.standalone;
-        const storage = createStorage(sa.packageId, { dataDir: context.dataDir });
+        const storage = createStorage(sa.packageId, { dataDir: options.dataDir || context.dataDir });
         const deleted = storage.deleteConfig(key);
         storage.close();
 
@@ -482,10 +516,17 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
       }
 
       // 3. 本地存储模式
+      if (options.package && !options.global) {
+        const directRoot = resolvePackageRoot(options.package);
+        if (!directRoot) {
+          throw new ArgumentError(`Package '${options.package}' not found in linked packages or path`);
+        }
+      }
+
       const projectRoot = !options.global ? resolvePackageRoot(options.package) : null;
 
       if (options.global || !projectRoot) {
-        const globalStorage = createGlobalStorage();
+        const globalStorage = createGlobalStorage(options.dataDir || context?.dataDir);
         const deleted = globalStorage.deleteConfig(key);
         globalStorage.close();
         if (deleted) {
@@ -495,7 +536,10 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
         }
       } else {
         const projConfig = loadProjectConfig(projectRoot);
-        const storage = createStorage(projConfig.id, { projectRoot });
+        const storage = createStorage(projConfig.id, {
+          projectRoot,
+          dataDir: options.dataDir || context?.dataDir,
+        });
         const deleted = storage.deleteConfig(key);
         storage.close();
         if (deleted) {
@@ -572,6 +616,9 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
       // 3. 本地工程模式
       const root = resolvePackageRoot(options.package);
       if (!root) {
+        if (options.package) {
+          throw new ArgumentError(`Package '${options.package}' not found in linked packages or path`);
+        }
         throw new ArgumentError(
           "Not in an ActionDock project. Usage: ad config env -P <package-id> or cd into a project directory."
         );

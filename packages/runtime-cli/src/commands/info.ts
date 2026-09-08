@@ -88,13 +88,17 @@ export function registerInfoCommand(program: Command, context?: RuntimeCliContex
     .option("-p, --profile <name>", "Query against a specific profile")
     .option("-s, --server <url>", "Remote server URL")
     .option("-t, --token <token>", "Auth token for remote server")
+    .option("--fallback", "Enable fallback to full list when no items match intent")
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("--json", "Output information as JSON")
     .option("--envelope", "Wrap JSON output in standard envelope")
+    .option("--data-dir <path>", "Custom database storage directory")
     .action(async (patterns: string[] = [], rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
       const effectiveIntent = resolveIntent(options.intent, patterns);
-      const shouldFallback = options.fallback !== false;
+      const isMachine = Boolean(options.json || options.envelope);
+      const fallbackExplicit = options.fallback === true || (Array.isArray(process.argv) && process.argv.includes("--fallback"));
+      const shouldFallback = isMachine ? fallbackExplicit : options.fallback !== false;
 
       // 1. 独立程序运行模式分支
       if (context?.standalone) {
@@ -173,9 +177,9 @@ export function registerInfoCommand(program: Command, context?: RuntimeCliContex
           }
         );
 
-        if (options.json) {
+        if (isMachine) {
           renderResult(remoteInfo, {
-            json: true,
+            json: options.json,
             envelope: options.envelope,
             context,
           });
@@ -365,6 +369,13 @@ export function registerInfoCommand(program: Command, context?: RuntimeCliContex
       }
 
       if (aggregated.length === 0) {
+        if (isMachine) {
+          renderResult(
+            { linkedPackages: [], matchedCount: 0, isFallback: false },
+            { json: options.json, envelope: options.envelope, context }
+          );
+          return;
+        }
         throw new ExecutionError(
           `No ActionDock project or linked packages available to match '${effectiveIntent}'`
         );
@@ -386,15 +397,28 @@ export function registerInfoCommand(program: Command, context?: RuntimeCliContex
 
       // 无匹配项
       if (filterRes.matchedCount === 0) {
-        if (!shouldFallback) {
-          if (options.json) {
-            renderResult({ linkedPackages: [] }, { json: true, envelope: options.envelope, context });
+        if (!filterRes.isFallback) {
+          if (isMachine) {
+            renderResult(
+              { linkedPackages: [], matchedCount: 0, isFallback: false },
+              { json: options.json, envelope: options.envelope, context }
+            );
+            return;
           }
           throw new ExecutionError(`No packages matched intent '${effectiveIntent}'`);
         }
 
+        // Fallback enabled: display all packages with a notice
+        if (isMachine) {
+          renderResult(
+            { linkedPackages: filterRes.items, isFallback: true, matchedCount: 0 },
+            { json: options.json, envelope: options.envelope, context }
+          );
+          return;
+        }
+
         renderResult(
-          { linkedPackages: filterRes.items, isFallback: true },
+          { linkedPackages: filterRes.items, isFallback: true, matchedCount: 0 },
           {
             json: options.json,
             envelope: options.envelope,
@@ -407,8 +431,17 @@ export function registerInfoCommand(program: Command, context?: RuntimeCliContex
         return;
       }
 
-      // 精确匹配单个包：直接展开其完整项目详情
-      if (filterRes.matchedCount === 1 && !filterRes.isFallback) {
+      // 机器模式下搜索：稳定返回列表结构，不因为 matchedCount === 1 突变为详情
+      if (isMachine) {
+        renderResult(
+          { linkedPackages: filterRes.items, matchedCount: filterRes.matchedCount, isFallback: false },
+          { json: options.json, envelope: options.envelope, context }
+        );
+        return;
+      }
+
+      // 人类终端交互：精确匹配单个包展开详情
+      if (filterRes.matchedCount === 1) {
         const matchedPkg = filterRes.items[0];
         const detail = await getProjectDetailInfo(matchedPkg.path);
         renderResult(projectDetailToJson(detail), {

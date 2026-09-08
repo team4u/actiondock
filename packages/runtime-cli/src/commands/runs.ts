@@ -41,6 +41,7 @@ export function registerRunsCommands(program: Command, context?: RuntimeCliConte
     .option("-s, --server <url>", "Remote server URL")
     .option("-t, --token <token>", "Auth token for remote server")
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
+    .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
     .option("--envelope", "Wrap JSON output in standard envelope")
     .action(async (patterns: string[] = [], rawOptions: any, cmd: any) => {
@@ -52,7 +53,7 @@ export function registerRunsCommands(program: Command, context?: RuntimeCliConte
       // 1. 独立运行模式
       if (context?.standalone) {
         const sa = context.standalone;
-        const storage = createStorage(sa.packageId, { dataDir: context.dataDir });
+        const storage = createStorage(sa.packageId, { dataDir: options.dataDir || context.dataDir });
         const records = storage.listRuns({
           actionId: options.action,
           limit,
@@ -122,7 +123,10 @@ export function registerRunsCommands(program: Command, context?: RuntimeCliConte
 
       if (targetRoot) {
         const projConfig = loadProjectConfig(targetRoot);
-        const storage = createStorage(projConfig.id, { projectRoot: targetRoot });
+        const storage = createStorage(projConfig.id, {
+          projectRoot: targetRoot,
+          dataDir: options.dataDir || context?.dataDir,
+        });
         const records = storage.listRuns({
           actionId: options.action,
           limit,
@@ -169,7 +173,10 @@ export function registerRunsCommands(program: Command, context?: RuntimeCliConte
         if (!existsSync(pkg.path)) continue;
         try {
           const projConfig = loadProjectConfig(pkg.path);
-          const storage = createStorage(projConfig.id, { projectRoot: pkg.path });
+          const storage = createStorage(projConfig.id, {
+            projectRoot: pkg.path,
+            dataDir: options.dataDir || context?.dataDir,
+          });
           const records = storage.listRuns({
             actionId: options.action,
             limit,
@@ -215,6 +222,7 @@ export function registerRunsCommands(program: Command, context?: RuntimeCliConte
     .option("-p, --profile <name>", "Query run against a specific profile")
     .option("-s, --server <url>", "Remote server URL")
     .option("-t, --token <token>", "Auth token for remote server")
+    .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
     .option("--envelope", "Wrap JSON output in standard envelope")
     .action(async (id: string, rawOptions: any, cmd: any) => {
@@ -226,7 +234,7 @@ export function registerRunsCommands(program: Command, context?: RuntimeCliConte
       // 1. 独立运行模式
       if (context?.standalone) {
         const sa = context.standalone;
-        const storage = createStorage(sa.packageId, { dataDir: context.dataDir });
+        const storage = createStorage(sa.packageId, { dataDir: options.dataDir || context.dataDir });
         const run = storage.getRun(id);
         storage.close();
 
@@ -270,7 +278,10 @@ export function registerRunsCommands(program: Command, context?: RuntimeCliConte
           throw new ArgumentError(`Package '${options.package}' not found in linked packages or path`);
         }
         const projConfig = loadProjectConfig(targetRoot);
-        const storage = createStorage(projConfig.id, { projectRoot: targetRoot });
+        const storage = createStorage(projConfig.id, {
+          projectRoot: targetRoot,
+          dataDir: options.dataDir || context?.dataDir,
+        });
         foundRun = storage.getRun(id);
         storage.close();
         if (foundRun && !foundRun.packageId) {
@@ -281,7 +292,10 @@ export function registerRunsCommands(program: Command, context?: RuntimeCliConte
         if (currentRoot) {
           try {
             const projConfig = loadProjectConfig(currentRoot);
-            const storage = createStorage(projConfig.id, { projectRoot: currentRoot });
+            const storage = createStorage(projConfig.id, {
+              projectRoot: currentRoot,
+              dataDir: options.dataDir || context?.dataDir,
+            });
             foundRun = storage.getRun(id);
             storage.close();
             if (foundRun && !foundRun.packageId) {
@@ -296,7 +310,10 @@ export function registerRunsCommands(program: Command, context?: RuntimeCliConte
             if (!existsSync(pkg.path)) continue;
             try {
               const projConfig = loadProjectConfig(pkg.path);
-              const storage = createStorage(projConfig.id, { projectRoot: pkg.path });
+              const storage = createStorage(projConfig.id, {
+                projectRoot: pkg.path,
+                dataDir: options.dataDir || context?.dataDir,
+              });
               const r = storage.getRun(id);
               storage.close();
               if (r) {
@@ -372,6 +389,7 @@ export function registerRunsCommands(program: Command, context?: RuntimeCliConte
     .option("-p, --profile <name>", "Target profile")
     .option("-s, --server <url>", "Remote server URL")
     .option("-t, --token <token>", "Auth token for remote server")
+    .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
     .option("--envelope", "Wrap JSON output in standard envelope")
     .action(async (rawOptions: any, cmd: any) => {
@@ -379,7 +397,7 @@ export function registerRunsCommands(program: Command, context?: RuntimeCliConte
       // 1. 独立运行模式
       if (context?.standalone) {
         const sa = context.standalone;
-        const storage = createStorage(sa.packageId, { dataDir: context.dataDir });
+        const storage = createStorage(sa.packageId, { dataDir: options.dataDir || context.dataDir });
         const count = storage.clearRuns({ actionId: options.action });
         storage.close();
 
@@ -420,9 +438,16 @@ export function registerRunsCommands(program: Command, context?: RuntimeCliConte
         ? resolvePackageRoot(options.package)
         : findProjectRoot();
 
+      if (options.package && !targetRoot) {
+        throw new ArgumentError(`Package '${options.package}' not found in linked packages or path`);
+      }
+
       if (targetRoot) {
         const projConfig = loadProjectConfig(targetRoot);
-        const storage = createStorage(projConfig.id, { projectRoot: targetRoot });
+        const storage = createStorage(projConfig.id, {
+          projectRoot: targetRoot,
+          dataDir: options.dataDir || context?.dataDir,
+        });
         const count = storage.clearRuns({ actionId: options.action });
         storage.close();
 

@@ -55,11 +55,27 @@ export function createStorage(
  * 工厂函数：创建或连接 ActionDock 全局共享数据库（~/.actiondock/global.db）。
  * 用于跨 Package 共享的全局配置项存储。
  * 
- * @param customHome 自定义家目录路径（可选）
+ * @param customHomeOrOptions 自定义家目录路径或配置对象（可选）
+ * @param dataDirArg 自定义数据存储目录（可选）
  */
-export function createGlobalStorage(customHome?: string): RuntimeStorage {
-  const baseDir = getActionDockHome(customHome);
-  const dbPath = join(baseDir, ".actiondock", "global.db");
+export function createGlobalStorage(
+  customHomeOrOptions?: string | { customHome?: string; dataDir?: string },
+  dataDirArg?: string
+): RuntimeStorage {
+  let customHome: string | undefined;
+  let dataDir: string | undefined;
+
+  if (typeof customHomeOrOptions === "object" && customHomeOrOptions !== null) {
+    customHome = customHomeOrOptions.customHome;
+    dataDir = customHomeOrOptions.dataDir;
+  } else {
+    customHome = customHomeOrOptions;
+    dataDir = dataDirArg;
+  }
+
+  const dbPath = dataDir
+    ? join(dataDir, "global.db")
+    : join(getActionDockHome(customHome), ".actiondock", "global.db");
   return new SqliteRuntimeStorage({ dbPath, packageId: "__global__" });
 }
 

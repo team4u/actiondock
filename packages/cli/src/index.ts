@@ -15,9 +15,11 @@ export async function main(argv: string[] = process.argv): Promise<number> {
   setupNodeRuntime();
   const program = createCliProgram();
 
+  const isMachine = argv.includes("--json") || argv.includes("--envelope");
+
   try {
     await program.parseAsync(argv);
-    return 0;
+    return typeof process.exitCode === "number" ? process.exitCode : 0;
   } catch (err: unknown) {
     if (err instanceof CommanderError) {
       if (err.exitCode === 0) {
@@ -26,10 +28,22 @@ export async function main(argv: string[] = process.argv): Promise<number> {
     }
 
     const formatted = formatError(err);
-    const msg = formatted.message.startsWith("Error: ")
-      ? formatted.message
-      : `Error: ${formatted.message}`;
-    console.error(msg);
+    if (isMachine) {
+      const errorEnv = {
+        ok: false,
+        error: {
+          code: formatted.code,
+          message: formatted.message,
+          ...(formatted.details !== undefined ? { details: formatted.details } : {}),
+        },
+      };
+      console.log(JSON.stringify(errorEnv, null, 2));
+    } else {
+      const msg = formatted.message.startsWith("Error: ")
+        ? formatted.message
+        : `Error: ${formatted.message}`;
+      console.error(msg);
+    }
     process.exitCode = formatted.exitCode;
     return formatted.exitCode;
   }

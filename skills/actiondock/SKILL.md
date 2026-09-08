@@ -477,13 +477,24 @@ ad build -t windows-x64 -o ./dist/bin/my-tools-windows.exe
 
 ## 全局路由与配置状态管理
 
-### 跨目录包目标参数 (`-P, --package`)
+### 跨目录精确目标参数 (`-P, --package`) 与目标解析契约
 
-在任意目录下执行命令时，通过 `-P <id|path>` 精确指定目标包，无需切换当前工作目录：
+在任意目录下执行命令时，通过 `-P, --package <id|path>` 精确定位目标包，无需切换当前工作目录：
+- 目标解析机制：严格区分物理路径与包标识符。如果传入的是相对路径或绝对路径，严格校验对应目录存在且包含 `actiondock.json`；如果传入的是包标识符，严格在当前项目与全局注册表中精确查找。
+- 拒绝静默回退：若目标包或路径不存在，系统坚决不会向当前工程目录或父级目录静默回退，而是抛出参数校验异常并以退出码 2 严格终止。
+- 机器检索契约：在执行多目标检索（如 `ad info <keywords>` 或 `ad action list`）时，若无任何匹配项，在机器输出模式下始终输出空集合（如 `{ linkedPackages: [], matchedCount: 0, isFallback: false }`）并保持退出码 0。
 - 读取目标包配置：`ad config get GITHUB_TOKEN -P team4u.github-tools`
 - 写入目标包配置：`ad config set GITHUB_TOKEN "ghp_xxx" -P team4u.github-tools`
 - 查看目标包状态：`ad state list -P team4u.github-tools`
 - 查询目标包执行记录：`ad runs list -P team4u.github-tools`
+
+### 全局通用控制选项
+
+所有命令均支持在子命令前或子命令后灵活传入通用控制选项：
+- `-v, -V, --version`：打印版本号并以退出码 0 退出。
+- `--json`：以纯净标准 JSON 格式输出结果至标准输出。
+- `--envelope`：将 JSON 输出包装为标准信封结构对象（包含 `ok: true, data: T` 或 `ok: false, error: { code, message, details }`）。
+- `--data-dir <path>`：指定自定义数据存储目录（覆盖默认的 `.actiondock/` 存储路径），实现多测试沙箱或并发环境下的数据完全物理隔离。
 
 ### 全局包挂载与工作区路由 (`ad link`)
 ```bash

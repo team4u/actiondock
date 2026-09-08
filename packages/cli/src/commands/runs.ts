@@ -13,7 +13,7 @@ import {
   resolveTarget,
 } from "@actiondock/core";
 import { Command } from "commander";
-import { CliError, ExecutionError } from "@actiondock/runtime-cli";
+import { ArgumentError, CliError, ExecutionError, getEffectiveOptions, renderResult } from "@actiondock/runtime-cli";
 import { resolveIntent } from "../utils/filter";
 
 function printRunRecord(run: any): void {
@@ -56,12 +56,16 @@ export function registerRunsCommands(program: Command): void {
     .option("-s, --server <url>", "Remote server URL")
     .option("-t, --token <token>", "Auth token for remote server")
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
+    .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
-    .action(async (patterns, options) => {
+    .option("--envelope", "Wrap JSON output in standard envelope")
+    .action(async (patterns, rawOptions, cmd) => {
       try {
+        const options = getEffectiveOptions(rawOptions, cmd);
         const effectiveIntent = resolveIntent(options.intent, patterns);
         const shouldFallback = options.fallback !== false;
         const limit = Number.parseInt(options.limit, 10) || 20;
+        const isMachine = Boolean(options.json || options.envelope);
 
         const target = resolveTarget({
           profile: options.profile,
@@ -76,8 +80,8 @@ export function registerRunsCommands(program: Command): void {
             intent: effectiveIntent,
             limit,
           });
-          if (options.json) {
-            console.log(JSON.stringify(res.items, null, 2));
+          if (isMachine) {
+            renderResult(res.items, { json: options.json, envelope: options.envelope });
             return;
           }
           console.log(
@@ -101,12 +105,15 @@ export function registerRunsCommands(program: Command): void {
           : findProjectRoot();
 
         if (options.package && !targetRoot) {
-          throw new ExecutionError(`Package '${options.package}' not found in linked packages or path`);
+          throw new ArgumentError(`Package '${options.package}' not found in linked packages or path`);
         }
 
         if (targetRoot) {
           const projConfig = loadProjectConfig(targetRoot);
-          const storage = createStorage(projConfig.id, { projectRoot: targetRoot });
+          const storage = createStorage(projConfig.id, {
+            projectRoot: targetRoot,
+            dataDir: options.dataDir,
+          });
           const records = storage.listRuns({
             actionId: options.action,
             limit,
@@ -120,8 +127,8 @@ export function registerRunsCommands(program: Command): void {
             shouldFallback
           );
 
-          if (options.json) {
-            console.log(JSON.stringify(filterRes.items, null, 2));
+          if (isMachine) {
+            renderResult(filterRes.items, { json: options.json, envelope: options.envelope });
           } else {
             console.log(`Execution Runs in ${projConfig.id} (${filterRes.items.length}):\n`);
             if (filterRes.isFallback && effectiveIntent) {
@@ -144,6 +151,10 @@ export function registerRunsCommands(program: Command): void {
         // Outside project: List recent runs across all linked packages
         const linkedList = listLinkedPackages();
         if (linkedList.length === 0) {
+          if (isMachine) {
+            renderResult([], { json: options.json, envelope: options.envelope });
+            return;
+          }
           console.log("No ActionDock project in current directory, and no packages linked.");
           console.log("Run 'ad link' inside an Action package to register it.");
           return;
@@ -154,7 +165,10 @@ export function registerRunsCommands(program: Command): void {
           if (!existsSync(pkg.path)) continue;
           try {
             const projConfig = loadProjectConfig(pkg.path);
-            const storage = createStorage(projConfig.id, { projectRoot: pkg.path });
+            const storage = createStorage(projConfig.id, {
+              projectRoot: pkg.path,
+              dataDir: options.dataDir,
+            });
             const records = storage.listRuns({
               actionId: options.action,
               limit,
@@ -179,8 +193,8 @@ export function registerRunsCommands(program: Command): void {
           shouldFallback
         );
 
-        if (options.json) {
-          console.log(JSON.stringify(filterRes.items, null, 2));
+        if (isMachine) {
+          renderResult(filterRes.items, { json: options.json, envelope: options.envelope });
         } else {
           console.log(`Execution Runs across Linked Packages (${filterRes.items.length}):\n`);
           if (filterRes.isFallback && effectiveIntent) {
@@ -213,9 +227,13 @@ export function registerRunsCommands(program: Command): void {
     .option("-p, --profile <name>", "Query run against a specific profile")
     .option("-s, --server <url>", "Remote server URL")
     .option("-t, --token <token>", "Auth token for remote server")
+    .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
-    .action(async (id, options) => {
+    .option("--envelope", "Wrap JSON output in standard envelope")
+    .action(async (id, rawOptions, cmd) => {
       let target;
+      const options = getEffectiveOptions(rawOptions, cmd);
+      const isMachine = Boolean(options.json || options.envelope);
       try {
         target = resolveTarget({
           profile: options.profile,
@@ -229,8 +247,8 @@ export function registerRunsCommands(program: Command): void {
       if (target.type === "remote") {
         try {
           const run = await fetchRemoteRun(target.serverUrl!, id, target.token);
-          if (options.json) {
-            console.log(JSON.stringify(run, null, 2));
+          if (isMachine) {
+            renderResult(run, { json: options.json, envelope: options.envelope });
           } else {
             printRunRecord(run);
           }
@@ -247,10 +265,13 @@ export function registerRunsCommands(program: Command): void {
         if (options.package) {
           const targetRoot = resolvePackageRoot(options.package);
           if (!targetRoot) {
-            throw new ExecutionError(`Package '${options.package}' not found in linked packages or path`);
+            throw new ArgumentError(`Package '${options.package}' not found in linked packages or path`);
           }
           const projConfig = loadProjectConfig(targetRoot);
-          const storage = createStorage(projConfig.id, { projectRoot: targetRoot });
+          const storage = createStorage(projConfig.id, {
+            projectRoot: targetRoot,
+            dataDir: options.dataDir,
+          });
           foundRun = storage.getRun(id);
           storage.close();
           if (foundRun && !foundRun.packageId) {
@@ -262,7 +283,10 @@ export function registerRunsCommands(program: Command): void {
           if (currentRoot) {
             try {
               const projConfig = loadProjectConfig(currentRoot);
-              const storage = createStorage(projConfig.id, { projectRoot: currentRoot });
+              const storage = createStorage(projConfig.id, {
+                projectRoot: currentRoot,
+                dataDir: options.dataDir,
+              });
               foundRun = storage.getRun(id);
               storage.close();
               if (foundRun && !foundRun.packageId) {
@@ -278,7 +302,10 @@ export function registerRunsCommands(program: Command): void {
               if (!existsSync(pkg.path)) continue;
               try {
                 const projConfig = loadProjectConfig(pkg.path);
-                const storage = createStorage(projConfig.id, { projectRoot: pkg.path });
+                const storage = createStorage(projConfig.id, {
+                  projectRoot: pkg.path,
+                  dataDir: options.dataDir,
+                });
                 const r = storage.getRun(id);
                 storage.close();
                 if (r) {
@@ -294,8 +321,8 @@ export function registerRunsCommands(program: Command): void {
           throw new ExecutionError(`Run record '${id}' not found in current project or any linked packages`);
         }
 
-        if (options.json) {
-          console.log(JSON.stringify(foundRun, null, 2));
+        if (isMachine) {
+          renderResult(foundRun, { json: options.json, envelope: options.envelope });
         } else {
           printRunRecord(foundRun);
         }
@@ -316,8 +343,11 @@ export function registerRunsCommands(program: Command): void {
     .option("-t, --token <token>", "Auth token for remote server")
     .option("-r, --reason <reason>", "Reason for cancellation")
     .option("--json", "Output as JSON")
-    .action(async (id, options) => {
+    .option("--envelope", "Wrap JSON output in standard envelope")
+    .action(async (id, rawOptions, cmd) => {
       let target;
+      const options = getEffectiveOptions(rawOptions, cmd);
+      const isMachine = Boolean(options.json || options.envelope);
       try {
         target = resolveTarget({
           profile: options.profile,
@@ -329,7 +359,7 @@ export function registerRunsCommands(program: Command): void {
       }
 
       if (target.type === "local") {
-        throw new ExecutionError(
+        throw new ArgumentError(
           "'ad runs cancel' is only supported for remote execution targets. Use --profile <name> or --server <url>."
         );
       }
@@ -341,8 +371,8 @@ export function registerRunsCommands(program: Command): void {
           target.token,
           options.reason
         );
-        if (options.json) {
-          console.log(JSON.stringify(result, null, 2));
+        if (isMachine) {
+          renderResult(result, { json: options.json, envelope: options.envelope });
         } else {
           console.log(`Run '${id}' cancellation requested (Status: ${result.status}).`);
         }
@@ -360,9 +390,13 @@ export function registerRunsCommands(program: Command): void {
     .option("-p, --profile <name>", "Target profile")
     .option("-s, --server <url>", "Remote server URL")
     .option("-t, --token <token>", "Auth token for remote server")
+    .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
-    .action(async (options) => {
+    .option("--envelope", "Wrap JSON output in standard envelope")
+    .action(async (rawOptions, cmd) => {
       try {
+        const options = getEffectiveOptions(rawOptions, cmd);
+        const isMachine = Boolean(options.json || options.envelope);
         const target = resolveTarget({
           profile: options.profile,
           server: options.server,
@@ -374,8 +408,8 @@ export function registerRunsCommands(program: Command): void {
             packageId: options.package,
             actionId: options.action,
           });
-          if (options.json) {
-            console.log(JSON.stringify(res, null, 2));
+          if (isMachine) {
+            renderResult(res, { json: options.json, envelope: options.envelope });
           } else {
             console.log(`Cleared ${res.clearedCount} execution run(s) on remote server.`);
           }
@@ -386,18 +420,31 @@ export function registerRunsCommands(program: Command): void {
           ? resolvePackageRoot(options.package)
           : findProjectRoot();
 
+        if (options.package && !targetRoot) {
+          throw new ArgumentError(`Package '${options.package}' not found in linked packages or path`);
+        }
+
         if (targetRoot) {
           const projConfig = loadProjectConfig(targetRoot);
-          const storage = createStorage(projConfig.id, { projectRoot: targetRoot });
+          const storage = createStorage(projConfig.id, {
+            projectRoot: targetRoot,
+            dataDir: options.dataDir,
+          });
           const count = storage.clearRuns({ actionId: options.action });
           storage.close();
-          if (options.json) {
-            console.log(JSON.stringify({ ok: true, clearedCount: count }, null, 2));
+          if (isMachine) {
+            renderResult({ ok: true, clearedCount: count, packageId: projConfig.id }, { json: options.json, envelope: options.envelope });
           } else {
             console.log(`Cleared ${count} execution run(s) in package '${projConfig.id}'.`);
           }
+          return;
         }
+
+        throw new ArgumentError(
+          "Not in an ActionDock project. Please specify -P, --package <id> or cd into a project directory."
+        );
       } catch (err: any) {
+        if (err instanceof CliError) throw err;
         throw new ExecutionError(err.message);
       }
     });

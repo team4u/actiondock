@@ -90,7 +90,7 @@ export function renderResult<T>(
     context?: RuntimeCliContext;
   }
 ): void {
-  const isJson = Boolean(options.json);
+  const isJson = Boolean(options.json || options.envelope);
   const useEnvelope = Boolean(options.envelope || (isJson && options.context?.defaultEnvelope));
 
   if (isJson) {
@@ -125,9 +125,9 @@ export function renderError(
   }
 ): void {
   const formatted = formatError(err);
-  const isJson = Boolean(options.json);
+  const isMachine = Boolean(options.json || options.envelope || options.context?.defaultEnvelope);
 
-  if (isJson) {
+  if (isMachine) {
     const errorEnv = createErrorEnvelope(formatted.code, formatted.message, formatted.details);
     writeStdout(formatJson(errorEnv), options.context);
   } else {
