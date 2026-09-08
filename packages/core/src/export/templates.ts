@@ -144,6 +144,14 @@ ad link "<skill_root>"
 
 > \`ad link\` 天然具备幂等性，同一 Package 多次执行会直接更新路径，可安全重复调用。
 
+### 动作参数契约按需调阅
+
+在调用未知参数的 Action 前，可在终端执行命令按需查阅该 Action 的输入输出模式与详细说明：
+
+\`\`\`bash
+ad action show ${pkgId}/${firstAction}
+\`\`\`
+
 ### 执行 Action
 
 为避免多技能之间的 Action ID 命名冲突，建议统一使用带有 Package 前缀的完全限定 ID。
@@ -375,6 +383,125 @@ export function generateSkillMd(
   }
   return generateStandaloneSkillMd(config, actions, playbooks, optionsOrBinaryPath.binaryRelPath || "./bin/action-bin");
 }
+
+export interface CompositeSkillPackageInfo {
+  config: ProjectConfig;
+  actions: Array<{ id: string; description?: string }>;
+  playbooks: Array<{ id: string; name?: string; description?: string; filePath: string }>;
+  packageDir: string;
+}
+
+/**
+ * 生成多包聚合的复合模式 SKILL.md 文档。
+ */
+export function generateCompositeSkillMd(
+  bundleName: string,
+  description: string,
+  packages: CompositeSkillPackageInfo[]
+): string {
+  const cleanName = bundleName.replace(/[^a-zA-Z0-9-_]/g, "-").toLowerCase();
+  const samplePkg = packages.find((p) => p.actions && p.actions.length > 0);
+  const sampleActionId = samplePkg
+    ? `${samplePkg.config.id}/${samplePkg.actions[0].id}`
+    : "sample.greet";
+
+  const actionSections = packages
+    .map((pkg) => {
+      const actList = pkg.actions
+        .map((a) => {
+          const desc = a.description ? `: ${a.description}` : "";
+          return `- \`${pkg.config.id}/${a.id}\`${desc}`;
+        })
+        .join("\n");
+      return `### ${pkg.config.name} (${pkg.config.id})\n${actList || "- 无可用 Action"}`;
+    })
+    .join("\n\n");
+
+  const playbookEntries: string[] = [];
+  for (const pkg of packages) {
+    for (const pb of pkg.playbooks) {
+      const relPath = `packages/${pkg.packageDir}/playbooks/${basename(pb.filePath)}`;
+      playbookEntries.push(`- [${pb.name || pb.id}](${relPath}): ${pb.description || "标准操作规程"}`);
+    }
+  }
+
+  const playbookSection =
+    playbookEntries.length > 0
+      ? `## 推荐操作规程\n\n涉及多步骤或业务流程时，优先遵循以下原位规程：\n\n${playbookEntries.join("\n")}\n\n---\n`
+      : "";
+
+  return `---
+name: ${cleanName}
+description: ${description}
+---
+
+# ${bundleName} 复合技能套件
+
+${description}
+
+## ActionDock 运行时初始化
+
+本技能为 **ActionDock 复合工作区技能包**，聚合了多个功能包。智能体在初次调用或初始化时，在当前技能根目录执行注册命令：
+
+\`\`\`bash
+ad link "<skill_root>"
+\`\`\`
+
+> \`ad link\` 会自动识别并注册工作区下的所有子包，使其中的 Action 随时可以通过完全限定标识调用。
+
+## 动作参数契约按需调阅
+
+为节省上下文开销，各 Action 的详细参数结构不静态内嵌在说明书中。在调用未知参数的 Action 前，可在终端执行命令查阅输入输出约束：
+
+\`\`\`bash
+ad action show ${sampleActionId}
+\`\`\`
+
+## 可用 Action 工具清单
+
+${actionSections}
+
+---
+
+${playbookSection}
+## 标准调用命令
+
+推荐使用参数文件传递内容，杜绝终端引号转义问题：
+
+\`\`\`bash
+cat << 'EOF' > /tmp/input.json
+{
+  "param": "value"
+}
+EOF
+ad run ${sampleActionId} --input-file /tmp/input.json
+\`\`\`
+
+### 结构化响应解析
+
+所有 Action 执行结果均在 \`stdout\` 输出标准格式的 JSON 信封：
+
+\`\`\`json
+// 执行成功响应 (ok 为 true)
+{
+  "ok": true,
+  "runId": "01J...",
+  "data": { ... }
+}
+
+// 执行失败响应 (ok 为 false)
+{
+  "ok": false,
+  "runId": "01J...",
+  "error": {
+    "code": "ACTION_EXECUTION_FAILED",
+    "message": "错误详细描述信息"
+  }
+}
+\`\`\`
+`;
+}
+
 
 export interface GenerateSkillJsonOptions {
   mode?: "source" | "standalone";

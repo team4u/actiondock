@@ -84,7 +84,6 @@ ad export skill --playbook deploy-sop --archive
 ```text
 <package-slug>-skill/
 ├── SKILL.md                  # 智能体指令说明书，包含 YAML 模式说明与源码模式调用规范
-├── actiondock.skill.json     # 机器可读的工具模式清单，标记 mode 为 source
 ├── actiondock.manifest.json  # 经过闭包裁剪后的精简版声明式清单
 ├── actiondock.json           # 项目配置元数据定义
 ├── package.json              # 依赖声明文件
@@ -111,7 +110,6 @@ ad export skill --standalone --target linux-arm64 --archive
 ```text
 <package-slug>-skill-<target>/
 ├── SKILL.md                  # 智能体指令说明书，包含 ./bin/<binary> run <action> 命令行调用规范
-├── actiondock.skill.json     # 机器可读的工具模式清单，标记 mode 为 standalone
 ├── bin/
 │   └── <package-slug>        # 预编译生成的单文件零依赖独立可执行文件
 ├── playbooks/                # 闭包裁剪后的 Playbook 规程 Markdown 文件
@@ -123,6 +121,27 @@ ad export skill --standalone --target linux-arm64 --archive
 - **环境依赖差异**：源码 Skill 要求消费端机器具备执行 TypeScript 或 JavaScript 的宿主底座；独立二进制 Skill 目标机无需安装 Node.js、Bun 或任何包管理器，开箱即用。
 - **包含内容差异**：源码 Skill 包含 `actions/` 源码目录、`actiondock.manifest.json`、`package.json` 与 `tsconfig.json`；独立二进制 Skill 将所有源码、引擎与依赖完整封装在 `bin/` 目录下的单个可执行程序中，不再散落源码文件。
 - **智能体调用路径**：在生成的 `SKILL.md` 中，源码 Skill 指导智能体通过环境中的运行时调用 Action；独立二进制 Skill 则指导智能体直接以子进程方式运行 `./bin/<binary> run <action> --input '<json>'`。
+
+---
+
+## 多包与工作区技能导出
+
+当工程中包含多个原子包时，ActionDock 支持批量独立导出与复合套件导出两种范式：
+
+- **批量独立导出**：
+  将指定的多个包或当前工作区内的所有包，分别导出为独立的技能目录：
+  ```bash
+  # 批量导出指定包至目标目录
+  ad export skill -P team4u.github-tools,team4u.gitlab-tools --out ./dist/skills
+
+  # 一键导出当前工作区内所有子包
+  ad export skill --workspace --out ./dist/skills
+  ```
+- **复合套件导出**：
+  将多个功能包聚合为一个统一的复合技能包，原位保留各包代码，生成统领全局的 `SKILL.md`：
+  ```bash
+  ad export skill -P team4u.github-tools team4u.k8s-ops --bundle devops-suite --out ./dist/devops-suite
+  ```
 
 ---
 
@@ -151,4 +170,12 @@ ad export skill --standalone --target linux-arm64 --archive
 - **按 Playbook 最小依赖闭包导出**：
   ```bash
   ad export skill --playbook greet-user --out ./dist/greet-skill
+  ```
+- **批量导出多个包**：
+  ```bash
+  ad export skill -P pkg1,pkg2 --out ./dist/skills
+  ```
+- **多包复合模式导出**：
+  ```bash
+  ad export skill -P pkg1 pkg2 --bundle my-suite --out ./dist/my-suite
   ```

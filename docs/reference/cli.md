@@ -94,9 +94,9 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
   通过外部编译器将 Action 依赖闭包、运行时调度器与内嵌存储编译为单个本机可执行程序。
 - **导出自包含 Agent Skill 产物**：
   ```bash
-  ad export skill [-P, --package <id>] [-s, --standalone] [-t, --target <target>] [-o, --out <path>] [-p, --playbook <playbooks...>] [-a, --actions <actions...>] [-m, --minify] [--no-minify] [--bytecode] [--no-bytecode] [-z, --archive]
+  ad export skill [-P, --package <id...>] [--workspace] [--all] [--bundle <name>] [-s, --standalone] [-t, --target <target>] [-o, --out <path>] [-p, --playbook <playbooks...>] [-a, --actions <actions...>] [-m, --minify] [--no-minify] [--bytecode] [--no-bytecode] [-z, --archive]
   ```
-  默认导出源码型 Skill；传入 `-s, --standalone` 时导出内置预编译独立二进制程序的 Skill；传入 `-z, --archive` 时生成压缩归档文件。
+  默认导出源码型 Skill；支持单包、多包批量（`-P`、`--workspace`、`--all`）与复合模式（`--bundle <name>`）；传入 `-s, --standalone` 时导出内置预编译独立二进制程序的 Skill；传入 `-z, --archive` 时生成压缩归档文件。
 
 ### Playbook 规程
 

@@ -22,10 +22,13 @@ import {
   buildPlan,
   BuildPlanner,
   BunCompiler,
+  BuilderError,
   compileBinary,
   CompilerError,
   CompilerValidationError,
   exportSkill,
+  exportSkillBatch,
+  exportCompositeSkill,
   PlannerError,
   SkillExporter,
 } from "../src";
@@ -534,15 +537,9 @@ process.exit(0);
       expect(skillMd.startsWith("---\nname:")).toBe(true);
       expect(skillMd).toContain("sample.greet");
 
-      // 2. 验证 actiondock.skill.json
+      // 2. 验证已废弃且不再生成 actiondock.skill.json
       const skillJsonPath = join(exportRes.skillDir, "actiondock.skill.json");
-      expect(existsSync(skillJsonPath)).toBe(true);
-      const skillJson = JSON.parse(readFileSync(skillJsonPath, "utf-8"));
-      expect(skillJson.schemaVersion).toBe("2.0.0");
-      expect(skillJson.mode).toBe("source");
-      expect(skillJson.actions.length).toBe(1);
-      expect(skillJson.actions[0].id).toBe("sample.greet");
-      expect(skillJson.actions[0].entry).toBe("actions/greet.ts");
+      expect(existsSync(skillJsonPath)).toBe(false);
 
       // 3. 验证 actiondock.manifest.json 清单
       const manifestPath = join(exportRes.skillDir, "actiondock.manifest.json");
@@ -602,10 +599,8 @@ process.exit(0);
       const binPath = join(exportRes.skillDir, "bin", expectedBin);
       expect(existsSync(binPath)).toBe(true);
 
-      // 验证 actiondock.skill.json 指向二进制
-      const skillJson = JSON.parse(readFileSync(join(exportRes.skillDir, "actiondock.skill.json"), "utf-8"));
-      expect(skillJson.mode).toBe("standalone");
-      expect(skillJson.executable).toContain(expectedBin);
+      // 验证不再生成 actiondock.skill.json
+      expect(existsSync(join(exportRes.skillDir, "actiondock.skill.json"))).toBe(false);
 
       // 直接执行导出的独立二进制
       const runProc = Bun.spawnSync([binPath, "run", "sample.greet", "--input", '{"name": "SkillUser"}'], {
@@ -673,6 +668,87 @@ process.exit(0);
         const archived = tarEntries.get(relPath);
         expect(archived).toBeDefined();
         expect(archived!.equals(content)).toBe(true);
+      }
+    });
+
+    it("支持批量导出多个 Skill 包 (exportSkillBatch)", async () => {
+      const pkg2Dir = mkdtempSync(join(tmpdir(), "ad-builder-test-pkg2-"));
+      try {
+        initProject(pkg2Dir, {
+          id: "test.second-package",
+          name: "Second Package",
+          description: "Second test package",
+        });
+
+        const batchRes = await exportSkillBatch({
+          projectRoots: [tempDir, pkg2Dir],
+          outDir: join(tempDir, "dist", "batch-skills"),
+        });
+
+        expect(batchRes.results.length).toBe(2);
+        expect(batchRes.results[0].packageId).toBe("test.builder-fixture");
+        expect(batchRes.results[1].packageId).toBe("test.second-package");
+
+        expect(existsSync(join(batchRes.outDir, "builder-fixture-skill", "SKILL.md"))).toBe(true);
+        expect(existsSync(join(batchRes.outDir, "second-package-skill", "SKILL.md"))).toBe(true);
+        expect(existsSync(join(batchRes.outDir, "builder-fixture-skill", "actiondock.skill.json"))).toBe(false);
+      } finally {
+        rmSync(pkg2Dir, { recursive: true, force: true });
+      }
+    });
+
+    it("批量与复合导出拒绝空项目列表", async () => {
+      await expect(exportSkillBatch({ projectRoots: [] })).rejects.toThrow(BuilderError);
+      await expect(exportCompositeSkill({ bundleName: "empty-suite", projectRoots: [] })).rejects.toThrow(BuilderError);
+    });
+
+    it("支持多包复合套件导出与归档压缩 (exportCompositeSkill)", async () => {
+      const pkg2Dir = mkdtempSync(join(tmpdir(), "ad-builder-test-pkg2-"));
+      try {
+        initProject(pkg2Dir, {
+          id: "test.second-package",
+          name: "Second Package",
+          description: "Second test package",
+        });
+
+        mkdirSync(join(pkg2Dir, "playbooks"), { recursive: true });
+        writeFileSync(
+          join(pkg2Dir, "playbooks", "deploy.md"),
+          `---\nid: deploy\nname: 部署规程\ndescription: 自动化部署标准流程\n---\n# 部署规程`,
+          "utf-8"
+        );
+
+        const compositeRes = await exportCompositeSkill({
+          bundleName: "test-composite-suite",
+          projectRoots: [tempDir, pkg2Dir],
+          outDir: join(tempDir, "dist", "my-suite"),
+          archive: true,
+        });
+
+        expect(compositeRes.bundleName).toBe("test-composite-suite");
+        expect(compositeRes.packagesCount).toBe(2);
+        expect(compositeRes.playbooksCount).toBeGreaterThanOrEqual(1);
+        expect(existsSync(join(compositeRes.skillDir, "SKILL.md"))).toBe(true);
+        expect(existsSync(join(compositeRes.skillDir, "actiondock.skill.json"))).toBe(false);
+        expect(existsSync(join(compositeRes.skillDir, "packages", "builder-fixture"))).toBe(true);
+        expect(existsSync(join(compositeRes.skillDir, "packages", "second-package"))).toBe(true);
+
+        // 验证物理 Playbook 文件与 SKILL.md 相对路径严格一致
+        const expectedPbPath = join(compositeRes.skillDir, "packages", "second-package", "playbooks", "deploy.md");
+        expect(existsSync(expectedPbPath)).toBe(true);
+
+        const skillMd = readFileSync(join(compositeRes.skillDir, "SKILL.md"), "utf-8");
+        expect(skillMd).toContain("test-composite-suite");
+        expect(skillMd).toContain("test.builder-fixture");
+        expect(skillMd).toContain("test.second-package");
+        expect(skillMd).toContain("packages/second-package/playbooks/deploy.md");
+        expect(skillMd).toContain("ad link");
+
+        // 验证归档产物
+        expect(compositeRes.archivePath).toBeDefined();
+        expect(existsSync(compositeRes.archivePath!)).toBe(true);
+      } finally {
+        rmSync(pkg2Dir, { recursive: true, force: true });
       }
     });
   });

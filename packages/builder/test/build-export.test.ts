@@ -282,7 +282,7 @@ export default defineAction({
     expect(exportRes.mode).toBe("standalone");
     expect(existsSync(exportRes.skillDir)).toBe(true);
     expect(existsSync(join(exportRes.skillDir, "SKILL.md"))).toBe(true);
-    expect(existsSync(join(exportRes.skillDir, "actiondock.skill.json"))).toBe(true);
+    expect(existsSync(join(exportRes.skillDir, "actiondock.skill.json"))).toBe(false);
     expect(existsSync(join(exportRes.skillDir, "bin", expectedBinName))).toBe(true);
     expect(existsSync(join(exportRes.skillDir, "playbooks", "greet-user.md"))).toBe(true);
 

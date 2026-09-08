@@ -260,3 +260,66 @@ export interface SkillExportResult {
   /** 导出的文件相对路径清单 */
   files: string[];
 }
+
+/**
+ * 批量 Skill 导出选项。
+ */
+export interface BatchSkillExportOptions extends Omit<SkillExporterOptions, "projectRoot"> {
+  /** 待导出的项目根目录绝对路径列表 */
+  projectRoots: string[];
+}
+
+/**
+ * 批量 Skill 导出结果。
+ */
+export interface BatchSkillExportResult {
+  /** 各包独立导出结果列表 */
+  results: SkillExportResult[];
+  /** 批量导出根目录 */
+  outDir: string;
+  /** 导出的总 Action 数量 */
+  totalActions: number;
+  /** 导出的总 Playbook 数量 */
+  totalPlaybooks: number;
+}
+
+/**
+ * 复合 Skill 套件导出选项。
+ */
+export interface CompositeSkillExportOptions {
+  /** 复合技能套件名称 */
+  bundleName: string;
+  /** 参与聚合的项目根目录绝对路径列表 */
+  projectRoots: string[];
+  /** 复合套件输出目标目录（默认输出至 dist 目录） */
+  outDir?: string;
+  /** 复合技能描述信息 */
+  description?: string;
+  /** 是否执行归档压缩，亦可直接指定归档格式 */
+  archive?: boolean | ArchiveFormat;
+  /** 归档压缩格式（zip 或 tar.gz） */
+  archiveFormat?: ArchiveFormat;
+}
+
+/**
+ * 复合 Skill 套件导出结果。
+ */
+export interface CompositeSkillExportResult {
+  /** 复合技能套件名称 */
+  bundleName: string;
+  /** 生成的复合 Skill 目录绝对路径 */
+  skillDir: string;
+  /** 生成的归档文件绝对路径（若开启压缩） */
+  archivePath?: string;
+  /** 包含的 Package 数量 */
+  packagesCount: number;
+  /** 包含的总 Action 数量 */
+  actionsCount: number;
+  /** 包含的总 Playbook 数量 */
+  playbooksCount: number;
+  /** 各包的摘要明细 */
+  packages: Array<{ packageId: string; actions: string[]; playbooks: string[] }>;
+  /** 生成的文件清单 */
+  files: string[];
+}
+

@@ -12,17 +12,16 @@ ActionDock 是专为 AI 智能体打造的原子能力与操作规程底座。
 ActionDock 规范化了面向智能体的完整交付物体系：
 
 - **标准入口说明书**：`SKILL.md` 包含 YAML 描述元数据与规程索引，供智能体在系统提示词中自动匹配意图并激活。
-- **机器可读契约**：`actiondock.skill.json` 包含各 Action 的输入输出 JSON Schema 约束，确保参数校验确定性。
-- **领域操作规程**：`playbooks/` 目录下提供经过验证的标准作业规程，明确告知智能体步骤时序、前后置条件与安全拦截红线。
+- **参数契约按需查验**：通过 `ad action show <id>` 动态查验各 Action 的输入输出模式与描述，消除静态 JSON 文件冗余。
+- **领域操作规程**：`playbooks/` 或 `actions/` 目录下提供经过验证的标准作业规程，明确告知智能体步骤时序、前后置条件与安全拦截红线。
 - **双模执行载体**：
   - **源码型 Skill**：跨平台文件体积精简（通常小于 100KB），基于宿主 Node.js（或 Bun）运行底座与 ActionDock 命令行工具直接执行。
   - **独立二进制型 Skill**：内嵌单文件自包含二进制（位于 `./bin/` 目录），执行环境无需安装 Node.js、Bun 或任何外部依赖，开箱即用。
 
 ```text
                ┌─ SKILL.md                 # 智能体技能说明与规程索引
-               ├─ actiondock.skill.json    # 机器可读参数契约 Schema
-Agent Skill ───┼─ playbooks/               # 领域专家标准操作规程
-               ├─ actions/                 # 源码型原子能力实现 (TypeScript)
+               ├─ playbooks/ / actions/    # 领域专家标准操作规程
+Agent Skill ───┼─ actions/                 # 源码型原子能力实现 (TypeScript)
                └─ bin/                     # 独立型自包含二进制程序
 ```
 
@@ -171,8 +170,8 @@ Antigravity 原生支持工作区与全局双层发现机制：
 
 对于基于 LangChain、LlamaIndex 或自研 Agent 引擎的系统：
 
-- **动态加载工具契约**：读取 Skill 根目录下的 `actiondock.skill.json`，将其中的 `actions` 字典转换为模型的 Tool Definition。
-- **系统提示词注入**：将 `SKILL.md` 与目标 Playbook 文本直接注入为系统提示词或 RAG 检索知识库，使模型严谨遵循标准操作规程。
+- **系统提示词注入**：将 `SKILL.md` 与目标 Playbook 文本直接注入为系统提示词或知识库，使模型严谨遵循标准操作规程。
+- **参数契约按需获取**：通过执行 `ad action show <id> --json` 实时获取特定 Action 的输入输出结构，精准对接模型的函数调用体系。
 
 ---
 

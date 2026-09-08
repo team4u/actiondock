@@ -32,7 +32,6 @@ Agent Skill ───┤   • 跨平台体积极小 (< 100KB)
 ```text
 dist/github-tools-skill/
 ├── SKILL.md                 # 面向 AI 助手的标准说明书（含 YAML Frontmatter 与规程索引）
-├── actiondock.skill.json    # 机器可读的 Skill 清单（包含 Action 列表与参数 Schema）
 ├── actiondock.json          # 包配置定义
 ├── actions/                 # Action 实现文件（源码型）
 ├── playbooks/               # 规程文件
@@ -79,6 +78,15 @@ ad export skill --standalone --out ./dist/github-tools-skill
 
 # 按需按 Playbook 裁剪导出（仅导出该 Playbook 引用的 Action）
 ad export skill --playbook review-pr
+
+# 批量导出多个包为独立技能
+ad export skill -P team4u.github-tools team4u.gitlab-tools --out ./dist/skills
+
+# 导出当前工作区内所有子包
+ad export skill --workspace --out ./dist/skills
+
+# 复合模式聚合导出为单套件技能
+ad export skill -P team4u.github-tools team4u.k8s-ops --bundle devops-suite --out ./dist/devops-suite
 ```
 
 ---
@@ -89,6 +97,6 @@ ad export skill --playbook review-pr
 - **全局安装**：执行 `npx skills add team4u/actiondock -g -y` 全局装载。
 - **Claude Code**：放置在 `~/.claude/skills/<skill-name>` 或项目根目录 `.claude/skills/`
 - **Antigravity**：放置在 `~/.gemini/antigravity-cli/skills/<skill-name>`
-- **自研 Agent 框架**：解析 `actiondock.skill.json` 注册工具，将 `SKILL.md` 注入为系统提示词与规程。
+- **通用智能体客户端**：解析 `SKILL.md` 注入系统提示词与规程，通过 `ad action show <id>` 动态查验参数契约并调度执行。
 
 详细使用方法请查阅 [使用者指南：Agent Skill 使用指南](../consumer/use-as-skill.md) 与 [开发者指南：构建、打包与 Skill 导出](../developer/build-and-export.md)。

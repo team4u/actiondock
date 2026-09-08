@@ -355,7 +355,7 @@ describe("CLI End-to-End", () => {
     ).toBe(true);
     expect(
       existsSync(join(tempDir, "dist", "github-ops-skill", "actiondock.skill.json"))
-    ).toBe(true);
+    ).toBe(false);
 
     // 10c. export skill with --playbook selective flag
     const selectiveOut = join(tempDir, "dist", "custom-skill");
@@ -367,6 +367,26 @@ describe("CLI End-to-End", () => {
     expect(existsSync(join(selectiveOut, "SKILL.md"))).toBe(true);
     expect(existsSync(join(selectiveOut, "playbooks", "greet-user.md"))).toBe(true);
     expect(existsSync(join(selectiveOut, "actions", "greet.ts"))).toBe(true);
+
+    // 10d. export skill --bundle composite mode
+    const bundleOut = join(tempDir, "dist", "my-composite-suite");
+    const exportBundleProc = runCli(
+      ["export", "skill", "--bundle", "my-composite-suite", "-o", bundleOut],
+      tempDir
+    );
+    expect(exportBundleProc.exitCode).toBe(0);
+    expect(existsSync(join(bundleOut, "SKILL.md"))).toBe(true);
+    expect(existsSync(join(bundleOut, "actiondock.skill.json"))).toBe(false);
+    expect(existsSync(join(bundleOut, "packages", "github-ops"))).toBe(true);
+
+    // 10e. export skill validation tests: conflict rejection
+    const conflictProc = runCli(["export", "skill", "--bundle", "suite", "--standalone"], tempDir);
+    expect(conflictProc.exitCode).not.toBe(0);
+    expect(conflictProc.stderr.toString()).toContain("Composite Skill export (--bundle) currently only supports source mode");
+
+    const conflictSourceProc = runCli(["export", "skill", "--all", "--workspace"], tempDir);
+    expect(conflictSourceProc.exitCode).not.toBe(0);
+    expect(conflictSourceProc.stderr.toString()).toContain("mutually exclusive");
 
     // 11. link package and execute from outside directory
     const linkProc = runCli(["link"], tempDir);

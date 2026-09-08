@@ -32,7 +32,7 @@ ActionDock 支持**源码型**与**独立便携型**双模交付形态，让开�
 | **更新 Action 元数据** | 源码或模式修改后同步刷新声明式清单 | `ad action sync`（或 `--check` 门禁检查） |
 | **编排业务操作规程** | 规范编写多步骤操作引导文档 | `ad playbook create <id>`，编写 `playbooks/<id>.md` |
 | **单元测试与逻辑验证** | 纯内存沙箱测试，验证多步与状态逻辑 | `ad test`，结合 `createTestRuntime` |
-| **交付导出为 Skill** | 双模导出：源码型或独立预编译便携型 | `ad export skill` 或 `ad export skill --standalone` |
+| **交付导出为 Skill** | 单包/多包/复合导出：源码型或独立预编译便携型 | `ad export skill [-P <ids...>] [--bundle <name>]` |
 | **编译为独立二进制** | 全平台交叉编译为单文件独立程序 | `ad build -t <target> -o <path>` |
 | **管理配置与持久化状态** | 跨包读写配置项、状态键与执行历史 | `ad config`、`ad state`、`ad runs` |
 | **排查错误与自愈修复** | 按需排查：检查挂载树、清理软链、体检 | `ad info --tree` -> `ad unlink -p` -> `ad doctor` |
@@ -449,11 +449,36 @@ ad export skill --playbook deploy-service -o ./dist/deploy-skill
 导出的源码型目录结构：
 ```text
 dist/my-skill/
-├── SKILL.md                  # 面向智能体的调用说明文档
-├── actiondock.manifest.json  # 声明式清单事实源与配置定义
-├── package.json             # 依赖声明
-├── actions/                 # TypeScript Action 源码
-└── playbooks/                # 任务规程文件
+├── SKILL.md                  # 面向智能体的唯一标准调用说明文档（参数通过 ad action show 动态调阅）
+├── actiondock.manifest.json  # 声明式清单事实源
+├── actiondock.json           # 项目配置元数据定义
+├── package.json              # 依赖声明
+├── actions/                  # TypeScript Action 源码与就近规程
+└── playbooks/                # 任务规程文件（若存在）
+```
+
+### 多包与工作区技能导出
+
+支持批量独立导出与复合套件导出两种范式：
+
+```bash
+# 批量导出多个包至目标目录（各自生成独立技能）
+ad export skill -P team4u.github-tools team4u.gitlab-tools -o ./dist/skills
+
+# 一键导出当前工作区内所有子包
+ad export skill --workspace -o ./dist/skills
+
+# 复合模式聚合导出：将多个包融合成一个统一的复合工作区技能
+ad export skill -P team4u.github-tools team4u.k8s-ops --bundle devops-suite -o ./dist/devops-suite
+```
+
+复合技能套件目录结构：
+```text
+dist/devops-suite/
+├── SKILL.md                  # 统领全局的复合引导说明书
+└── packages/                 # 各子包原位代码与就近规程
+    ├── github-tools/
+    └── k8s-ops/
 ```
 
 ### 独立便携型 Skill 导出（预编译单文件可执行产物）

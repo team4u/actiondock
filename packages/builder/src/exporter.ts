@@ -1,18 +1,30 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import {
-  generateSkillJson,
+  generateCompositeSkillMd,
   generateSourceSkillMd,
   generateStandaloneEntrypoint,
   generateStandaloneSkillMd,
   getPackageSlug,
+  loadManifest,
+  loadPlaybooks,
+  loadProjectConfig,
+  type CompositeSkillPackageInfo,
   type ProjectConfig,
 } from "@actiondock/core";
 import { createTarGzArchive, createZipArchive } from "./archive";
 import { BunCompiler } from "./compiler";
 import { BuilderError } from "./errors";
 import { BuildPlanner } from "./planner";
-import type { ArchiveFormat, SkillExporterOptions, SkillExportResult } from "./types";
+import type {
+  ArchiveFormat,
+  BatchSkillExportOptions,
+  BatchSkillExportResult,
+  CompositeSkillExportOptions,
+  CompositeSkillExportResult,
+  SkillExporterOptions,
+  SkillExportResult,
+} from "./types";
 
 /**
  * 递归扫描生成目录中的所有相对文件路径。
@@ -118,10 +130,7 @@ export class SkillExporter {
     if (mode === "source") {
       // ----------------------------------------------------
       // 源码 Skill 导出 (Source Skill Export)
-      // 包含: SKILL.md, actiondock.skill.json, actiondock.manifest.json, actiondock.json, package.json, 源码与资产
-      // ----------------------------------------------------
-
-      // 1. 生成 SKILL.md
+      // - 生成 SKILL.md
       const skillMd = generateSourceSkillMd(
         configForTemplates,
         plan.actions as any,
@@ -129,22 +138,7 @@ export class SkillExporter {
       );
       writeFileSync(join(skillDir, "SKILL.md"), skillMd, "utf-8");
 
-      // 2. 生成 actiondock.skill.json 工具清单
-      const skillJsonContent = generateSkillJson(
-        configForTemplates,
-        plan.actions as any,
-        {
-          mode: "source",
-          playbooks: plan.playbooks as any,
-        }
-      );
-      writeFileSync(
-        join(skillDir, "actiondock.skill.json"),
-        skillJsonContent,
-        "utf-8"
-      );
-
-      // 3. 导出精简后的 actiondock.manifest.json 清单
+      // - 导出精简后的 actiondock.manifest.json 清单
       const manifestActions: Record<string, unknown> = {};
       for (const a of plan.actions) {
         manifestActions[a.id] = {
@@ -168,7 +162,7 @@ export class SkillExporter {
         "utf-8"
       );
 
-      // 4. 导出精简后的 actiondock.json 项目配置
+      // - 导出精简后的 actiondock.json 项目配置
       const exportedConfig = {
         id: plan.packageId,
         name: plan.packageName,
@@ -184,7 +178,7 @@ export class SkillExporter {
         "utf-8"
       );
 
-      // 5. 导出 package.json
+      // - 导出 package.json
       const projectPkgPath = join(root, "package.json");
       let exportedPkg: any;
       if (existsSync(projectPkgPath)) {
@@ -225,13 +219,13 @@ export class SkillExporter {
         "utf-8"
       );
 
-      // 6. 拷贝 tsconfig.json（若存在）
+      // - 拷贝 tsconfig.json（若存在）
       const tsconfigPath = join(root, "tsconfig.json");
       if (existsSync(tsconfigPath)) {
         copyFileSync(tsconfigPath, join(skillDir, "tsconfig.json"));
       }
 
-      // 7. 拷贝 Action 源码文件，完整保留相对路径
+      // - 拷贝 Action 源码文件，完整保留相对路径
       for (const act of plan.actions) {
         if (existsSync(act.resolvedPath)) {
           const destFile = join(skillDir, act.entry);
@@ -240,7 +234,7 @@ export class SkillExporter {
         }
       }
 
-      // 8. 拷贝静态资产与代码模块文件，完整保留相对路径
+      // - 拷贝静态资产与代码模块文件，完整保留相对路径
       for (const dep of plan.dependencies.modulesAndAssets) {
         if ((dep.type === "asset" || dep.type === "module") && existsSync(dep.resolvedPath)) {
           const destAsset = join(skillDir, dep.path);
@@ -249,7 +243,7 @@ export class SkillExporter {
         }
       }
 
-      // 9. 拷贝 Playbook 文件
+      // - 拷贝 Playbook 规程文件
       for (const pb of plan.playbooks) {
         if (existsSync(pb.filePath)) {
           const destPb = join(playbooksDestDir, basename(pb.filePath));
@@ -259,7 +253,7 @@ export class SkillExporter {
     } else {
       // ----------------------------------------------------
       // 独立二进制 Skill 导出 (Standalone Binary Skill Export)
-      // 包含: SKILL.md, actiondock.skill.json, bin/<binary>, playbooks/*, assets/*
+      // 包含: SKILL.md, bin/<binary>, playbooks/*, assets/*
       // ----------------------------------------------------
       const binDir = join(skillDir, "bin");
       mkdirSync(binDir, { recursive: true });
@@ -313,24 +307,7 @@ export class SkillExporter {
       );
       writeFileSync(join(skillDir, "SKILL.md"), skillMd, "utf-8");
 
-      // 2. 生成 actiondock.skill.json
-      const skillJsonContent = generateSkillJson(
-        configForTemplates,
-        plan.actions as any,
-        {
-          mode: "standalone",
-          executable: `./bin/${actualBinaryName}`,
-          target,
-          playbooks: plan.playbooks as any,
-        }
-      );
-      writeFileSync(
-        join(skillDir, "actiondock.skill.json"),
-        skillJsonContent,
-        "utf-8"
-      );
-
-      // 3. 拷贝 Playbook
+      // 2. 拷贝 Playbook
       for (const pb of plan.playbooks) {
         if (existsSync(pb.filePath)) {
           const destPb = join(playbooksDestDir, basename(pb.filePath));
@@ -378,6 +355,158 @@ export class SkillExporter {
   }
 
   /**
+   * 批量导出多个 Skill。
+   */
+  public async exportBatch(options: BatchSkillExportOptions): Promise<BatchSkillExportResult> {
+    if (!options.projectRoots || options.projectRoots.length === 0) {
+      throw new BuilderError("No project roots provided for batch skill export.");
+    }
+
+    const results: SkillExportResult[] = [];
+    const baseOutDir = resolve(options.outDir || join(process.cwd(), "dist", "skills"));
+    mkdirSync(baseOutDir, { recursive: true });
+
+    const usedDirNames = new Set<string>();
+    for (const projectRoot of options.projectRoots) {
+      const config = loadProjectConfig(projectRoot);
+      let pkgSlug = getPackageSlug(config.id);
+      if (usedDirNames.has(pkgSlug)) {
+        pkgSlug = config.id.replace(/[^a-zA-Z0-9-_]/g, "-").replace(/^-+|-+$/g, "");
+      }
+      usedDirNames.add(pkgSlug);
+
+      const pkgOutDir = join(baseOutDir, `${pkgSlug}-skill`);
+
+      const res = await this.export({
+        ...options,
+        projectRoot,
+        outDir: pkgOutDir,
+      });
+      results.push(res);
+    }
+
+    const totalActions = results.reduce((sum, r) => sum + r.actionsCount, 0);
+    const totalPlaybooks = results.reduce((sum, r) => sum + r.playbooksCount, 0);
+
+    return {
+      results,
+      outDir: baseOutDir,
+      totalActions,
+      totalPlaybooks,
+    };
+  }
+
+  /**
+   * 静态辅助调用批量导出方法。
+   */
+  public static async exportBatch(options: BatchSkillExportOptions): Promise<BatchSkillExportResult> {
+    const exporter = new SkillExporter();
+    return exporter.exportBatch(options);
+  }
+
+  /**
+   * 复合模式导出：将多个包聚合为一个统一的复合技能目录。
+   */
+  public async exportComposite(options: CompositeSkillExportOptions): Promise<CompositeSkillExportResult> {
+    if (!options.projectRoots || options.projectRoots.length === 0) {
+      throw new BuilderError("No project roots provided for composite skill export.");
+    }
+    if (!options.bundleName || !options.bundleName.trim()) {
+      throw new BuilderError("bundleName is required for composite skill export.");
+    }
+
+    const bundleSlug = getPackageSlug(options.bundleName);
+    const defaultSkillDir = join(process.cwd(), "dist", `${bundleSlug}-skill`);
+    const skillDir = resolve(options.outDir || defaultSkillDir);
+
+    mkdirSync(skillDir, { recursive: true });
+    const packagesDestDir = join(skillDir, "packages");
+    mkdirSync(packagesDestDir, { recursive: true });
+
+    const packageInfos: CompositeSkillPackageInfo[] = [];
+    const packageSummaries: Array<{ packageId: string; actions: string[]; playbooks: string[] }> = [];
+
+    const usedDirNames = new Set<string>();
+    for (const projectRoot of options.projectRoots) {
+      const config = loadProjectConfig(projectRoot);
+      let pkgSlug = getPackageSlug(config.id);
+      if (usedDirNames.has(pkgSlug)) {
+        pkgSlug = config.id.replace(/[^a-zA-Z0-9-_]/g, "-").replace(/^-+|-+$/g, "");
+      }
+      usedDirNames.add(pkgSlug);
+
+      const destPkgDir = join(packagesDestDir, pkgSlug);
+
+      const singleExport = await this.export({
+        projectRoot,
+        outDir: destPkgDir,
+        archive: false,
+      });
+
+      const manifest = loadManifest(destPkgDir) || loadManifest(projectRoot);
+      const playbooks = loadPlaybooks(projectRoot, config.playbooksDir);
+
+      const actionEntries = singleExport.actions.map((actId) => ({
+        id: actId,
+        description: manifest?.actions?.[actId]?.description,
+      }));
+
+      packageInfos.push({
+        config,
+        actions: actionEntries,
+        playbooks: Array.from(playbooks.values()),
+        packageDir: pkgSlug,
+      });
+
+      packageSummaries.push({
+        packageId: config.id,
+        actions: singleExport.actions,
+        playbooks: singleExport.playbooks,
+      });
+    }
+
+    const description =
+      options.description ||
+      `ActionDock 复合技能套件，聚合 ${packageInfos.map((p) => p.config.name).join("、")}`;
+    const compositeSkillMd = generateCompositeSkillMd(options.bundleName, description, packageInfos);
+    writeFileSync(join(skillDir, "SKILL.md"), compositeSkillMd, "utf-8");
+
+    let archivePath: string | undefined;
+    if (options.archive) {
+      let format: ArchiveFormat = "zip";
+      if (options.archiveFormat === "tar.gz" || options.archive === "tar.gz") {
+        format = "tar.gz";
+      } else if (options.archiveFormat === "zip" || options.archive === "zip") {
+        format = "zip";
+      }
+      archivePath = createArchive(skillDir, format);
+    }
+
+    const files = scanRelativeFiles(skillDir);
+    const totalActions = packageSummaries.reduce((sum, p) => sum + p.actions.length, 0);
+    const totalPlaybooks = packageSummaries.reduce((sum, p) => sum + p.playbooks.length, 0);
+
+    return {
+      bundleName: options.bundleName,
+      skillDir,
+      archivePath,
+      packagesCount: packageInfos.length,
+      actionsCount: totalActions,
+      playbooksCount: totalPlaybooks,
+      packages: packageSummaries,
+      files,
+    };
+  }
+
+  /**
+   * 静态辅助调用复合导出方法。
+   */
+  public static async exportComposite(options: CompositeSkillExportOptions): Promise<CompositeSkillExportResult> {
+    const exporter = new SkillExporter();
+    return exporter.exportComposite(options);
+  }
+
+  /**
    * 静态辅助调用方法。
    */
   public static async export(options: SkillExporterOptions): Promise<SkillExportResult> {
@@ -392,3 +521,18 @@ export class SkillExporter {
 export async function exportSkill(options: SkillExporterOptions): Promise<SkillExportResult> {
   return SkillExporter.export(options);
 }
+
+/**
+ * 快捷批量导出多个 Skill 产物函数。
+ */
+export async function exportSkillBatch(options: BatchSkillExportOptions): Promise<BatchSkillExportResult> {
+  return SkillExporter.exportBatch(options);
+}
+
+/**
+ * 快捷复合模式导出 Skill 产物函数。
+ */
+export async function exportCompositeSkill(options: CompositeSkillExportOptions): Promise<CompositeSkillExportResult> {
+  return SkillExporter.exportComposite(options);
+}
+
