@@ -277,11 +277,19 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
       ) {
         target = action as ActionDefinition<I, O>;
       } else {
-        const id = typeof action === "string" ? action : (action as ActionRef).actionId;
-        const pureId = id.includes("/") ? id.slice(id.lastIndexOf("/") + 1) : id;
-        const found = actionsMap.get(id) || actionsMap.get(pureId);
+        let fullId: string;
+        let pureId: string;
+        if (typeof action === "string") {
+          fullId = action;
+          pureId = action.includes("/") ? action.slice(action.lastIndexOf("/") + 1) : action;
+        } else {
+          const ref = action as ActionRef;
+          pureId = ref.actionId;
+          fullId = ref.packageId ? `${ref.packageId}/${ref.actionId}` : ref.actionId;
+        }
+        const found = actionsMap.get(fullId) || actionsMap.get(pureId);
         if (!found) {
-          throw new Error(`Action '${id}' not found in TestRuntime actions registry`);
+          throw new Error(`Action '${fullId}' not found in TestRuntime actions registry`);
         }
         target = found as ActionDefinition<I, O>;
       }

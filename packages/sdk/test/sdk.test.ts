@@ -163,15 +163,34 @@ describe("@actiondock/sdk", () => {
         const res1 = await ctx.actions.invoke<{ val: number }, number>("child", { val: input.val });
         const res2 = await ctx.actions.invoke<{ val: number }, number>({ actionId: "child" }, { val: input.val });
         const res3 = await ctx.actions.invoke<{ val: number }, number>("my-pkg/child", { val: input.val });
-        return { total: res1 + res2 + res3 };
+        const res4 = await ctx.actions.invoke<{ val: number }, number>({ packageId: "my-pkg", actionId: "child" }, { val: input.val });
+        return { total: res1 + res2 + res3 + res4 };
       },
     });
 
+    const scopedWorker = defineAction({
+      id: "worker",
+      run: (input: { msg: string }) => `processed: ${input.msg}`,
+    });
+
     const runtime = createTestRuntime({
-      actions: [childAction],
+      actions: {
+        child: childAction,
+        "shared-pkg/worker": scopedWorker,
+      },
     });
     const res = await runtime.run(parentAction, { val: 5 });
-    expect(res).toEqual({ total: 15 + 15 + 15 });
+    expect(res).toEqual({ total: 15 + 15 + 15 + 15 });
+
+    // 验证以结构化 ActionRef 指定 packageId 调用以完全限定键名注册的 Action
+    const scopedCaller = defineAction({
+      id: "caller",
+      async run(_input, ctx) {
+        return ctx.actions.invoke({ packageId: "shared-pkg", actionId: "worker" }, { msg: "hello" });
+      },
+    });
+    const scopedRes = await runtime.run(scopedCaller, {});
+    expect(scopedRes).toBe("processed: hello");
   });
 
   it("detects recursion/cycle in action invocation", async () => {

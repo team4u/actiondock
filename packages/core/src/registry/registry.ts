@@ -358,7 +358,17 @@ function projectHasActionSync(
     return true;
   }
   const dir = join(projectRoot, actionsDir || "actions");
+  if (!existsSync(dir)) {
+    return false;
+  }
+  if (actionId.includes("..") || actionId.startsWith("/") || actionId.startsWith("\\")) {
+    return false;
+  }
   if (existsSync(join(dir, `${actionId}.ts`)) || existsSync(join(dir, `${actionId}.js`))) {
+    return true;
+  }
+  const relFile = actionId.replace(/\./g, "/");
+  if (existsSync(join(dir, `${relFile}.ts`)) || existsSync(join(dir, `${relFile}.js`))) {
     return true;
   }
   return false;
@@ -391,11 +401,11 @@ export function resolveActionProjectSync(
   let pureActionId = actionIdentifier;
 
   if (actionIdentifier.includes("/")) {
-    const slashIdx = actionIdentifier.indexOf("/");
+    const slashIdx = actionIdentifier.lastIndexOf("/");
     targetPackage = actionIdentifier.slice(0, slashIdx);
     pureActionId = actionIdentifier.slice(slashIdx + 1);
   } else if (actionIdentifier.includes(":")) {
-    const colonIdx = actionIdentifier.indexOf(":");
+    const colonIdx = actionIdentifier.lastIndexOf(":");
     targetPackage = actionIdentifier.slice(0, colonIdx);
     pureActionId = actionIdentifier.slice(colonIdx + 1);
   }
@@ -508,11 +518,11 @@ export async function resolveActionProject(
   let pureActionId = actionIdentifier;
 
   if (actionIdentifier.includes("/")) {
-    const slashIdx = actionIdentifier.indexOf("/");
+    const slashIdx = actionIdentifier.lastIndexOf("/");
     targetPackage = actionIdentifier.slice(0, slashIdx);
     pureActionId = actionIdentifier.slice(slashIdx + 1);
   } else if (actionIdentifier.includes(":")) {
-    const colonIdx = actionIdentifier.indexOf(":");
+    const colonIdx = actionIdentifier.lastIndexOf(":");
     targetPackage = actionIdentifier.slice(0, colonIdx);
     pureActionId = actionIdentifier.slice(colonIdx + 1);
   }

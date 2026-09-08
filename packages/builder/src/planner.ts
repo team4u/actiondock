@@ -575,19 +575,28 @@ export class BuildPlanner {
     const actionPathSet = new Set(actionDependencies.map((a) => a.resolvedPath));
 
     // 静态递归追踪 Action 源码引用的本地模块代码（如 lib/、辅助工具等）
-    const entryFiles = actionDependencies.map((a) => a.resolvedPath);
-    const tracedModulePaths = traceLocalModuleDependencies(entryFiles, root);
+    const rootActionsMap = new Map<string, string[]>();
+    for (const act of actionDependencies) {
+      const actRoot = externalActionRoots.get(act.id) || root;
+      if (!rootActionsMap.has(actRoot)) {
+        rootActionsMap.set(actRoot, []);
+      }
+      rootActionsMap.get(actRoot)!.push(act.resolvedPath);
+    }
 
-    for (const modPath of tracedModulePaths) {
-      if (!actionPathSet.has(modPath)) {
-        const rel = relative(root, modPath).replace(/\\/g, "/");
-        if (!modulePathSet.has(rel) && !isIgnoredModulePath(rel)) {
-          modulePathSet.add(rel);
-          modulesAndAssets.push({
-            path: rel,
-            resolvedPath: modPath,
-            type: "module",
-          });
+    for (const [actRoot, files] of rootActionsMap) {
+      const tracedModulePaths = traceLocalModuleDependencies(files, actRoot);
+      for (const modPath of tracedModulePaths) {
+        if (!actionPathSet.has(modPath)) {
+          const rel = relative(actRoot, modPath).replace(/\\/g, "/");
+          if (!modulePathSet.has(rel) && !isIgnoredModulePath(rel)) {
+            modulePathSet.add(rel);
+            modulesAndAssets.push({
+              path: rel,
+              resolvedPath: modPath,
+              type: "module",
+            });
+          }
         }
       }
     }

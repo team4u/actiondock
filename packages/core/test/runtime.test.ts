@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { type ActionDefinition, defineAction } from "@actiondock/sdk";
+import { ActionResolver } from "../src/catalog/action-resolver";
 import { DefaultExecutionService } from "../src/execution/service";
 import { ActionRunner } from "../src/runtime/runner";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
@@ -231,6 +232,68 @@ describe("ActionRunner", () => {
         extRes: "Hello, ActionDock!",
       });
     }
+  });
+
+  it("handles cross-package same-name action invocation without hijacking or false cycle detection", async () => {
+    const storage = new SqliteRuntimeStorage({
+      packageId: "local-pkg",
+      dbPath: ":memory:",
+    });
+
+    const localCalc = defineAction({
+      id: "calc",
+      run: (input: { x: number }) => input.x + 1,
+    });
+
+    const extCalc = defineAction({
+      id: "calc",
+      run: (input: { x: number }) => input.x * 10,
+    });
+
+    const caller = defineAction({
+      id: "caller",
+      async run(input: { x: number }, ctx) {
+        // 1. 调用本地动作
+        const local = await ctx.actions.invoke("calc", { x: input.x });
+        // 2. 跨包调用同名外部动作（字符串限定标识符），严禁被本地动作截断抢占
+        const extStr = await ctx.actions.invoke("ext-pkg/calc", { x: input.x });
+        // 3. 跨包调用同名外部动作（结构化 ActionRef 对象）
+        const extRef = await ctx.actions.invoke({ packageId: "ext-pkg", actionId: "calc" }, { x: input.x });
+        return { local, extStr, extRef };
+      },
+    });
+
+    const runner = new ActionRunner({
+      packageId: "local-pkg",
+      storage,
+      actions: new Map<string, ActionDefinition<any, any>>([
+        [localCalc.id, localCalc],
+        [caller.id, caller],
+      ]),
+      actionResolver: async (ref) => {
+        const id = typeof ref === "string" ? ref : `${ref.packageId}/${ref.actionId}`;
+        if (id === "ext-pkg/calc") {
+          return extCalc;
+        }
+        return undefined;
+      },
+    });
+
+    const res = await runner.execute(caller, { x: 5 });
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.data).toEqual({
+        local: 6,
+        extStr: 50,
+        extRef: 50,
+      });
+    }
+  });
+
+  it("resolves scoped package action references (@scope/pkg/action)", () => {
+    const parsed = ActionResolver.parseRef("@team/tools/add");
+    expect(parsed.packageId).toBe("@team/tools");
+    expect(parsed.actionId).toBe("add");
   });
 
   it("handles environment variables: explicit env, package prefix, snake case, and type coercion", async () => {

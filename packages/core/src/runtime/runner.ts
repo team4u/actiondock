@@ -156,20 +156,30 @@ export class ActionRunner {
     const targetPackageId = parsed.packageId;
 
     // 1. 本地 actions 映射表优先检索
-    if (this.actions.has(targetActionId) && (!targetPackageId || targetPackageId === this.packageId)) {
-      return this.actions.get(targetActionId);
-    }
-    if (targetPackageId && this.actions.has(`${targetPackageId}/${targetActionId}`)) {
-      return this.actions.get(`${targetPackageId}/${targetActionId}`);
+    if (targetPackageId && targetPackageId !== this.packageId) {
+      if (this.actions.has(`${targetPackageId}/${targetActionId}`)) {
+        return this.actions.get(`${targetPackageId}/${targetActionId}`);
+      }
+    } else {
+      if (this.actions.has(targetActionId)) {
+        return this.actions.get(targetActionId);
+      }
+      if (this.packageId && this.actions.has(`${this.packageId}/${targetActionId}`)) {
+        return this.actions.get(`${this.packageId}/${targetActionId}`);
+      }
     }
 
     // 2. 外部注入的自定义 actionResolver 调度
     if (this.actionResolver) {
       const customResolved = await this.actionResolver(ref, this.packageId);
       if (customResolved) {
-        this.actions.set(targetActionId, customResolved);
-        if (targetPackageId) {
+        if (targetPackageId && targetPackageId !== this.packageId) {
           this.actions.set(`${targetPackageId}/${targetActionId}`, customResolved);
+        } else {
+          this.actions.set(targetActionId, customResolved);
+          if (this.packageId) {
+            this.actions.set(`${this.packageId}/${targetActionId}`, customResolved);
+          }
         }
         return customResolved;
       }
@@ -189,7 +199,8 @@ export class ActionRunner {
         const matched = actionsMap.get(resolved.actionId);
         if (matched) {
           this.actions.set(`${resolved.packageId}/${resolved.actionId}`, matched);
-          if (!this.actions.has(resolved.actionId)) {
+          // 仅当目标包就是当前项目时才注册短标识符，避免跨包动态载入污染全局短标识符
+          if (!targetPackageId || resolved.packageId === this.packageId) {
             this.actions.set(resolved.actionId, matched);
           }
           return matched;
@@ -244,16 +255,26 @@ export class ActionRunner {
         targetPackageId = parsed.packageId;
       }
 
-      action =
-        this.actions.get(targetActionId) ||
-        (parsed.packageId ? this.actions.get(`${parsed.packageId}/${targetActionId}`) : undefined);
+      if (parsed.packageId && parsed.packageId !== this.packageId) {
+        action = this.actions.get(`${parsed.packageId}/${targetActionId}`);
+      } else {
+        action =
+          this.actions.get(targetActionId) ||
+          (this.packageId ? this.actions.get(`${this.packageId}/${targetActionId}`) : undefined);
+      }
     }
 
     // 1. 环路死锁检测 (Cycle Detection)
-    const callKey = targetPackageId && targetPackageId !== this.packageId
+    const isExternal = Boolean(targetPackageId && targetPackageId !== this.packageId);
+    const callKey = isExternal
       ? `${targetPackageId}/${targetActionId}`
       : targetActionId;
-    if (callStack.includes(callKey) || callStack.includes(targetActionId)) {
+
+    const hasCycle = isExternal
+      ? callStack.includes(callKey)
+      : (callStack.includes(callKey) || (this.packageId ? callStack.includes(`${this.packageId}/${targetActionId}`) : false));
+
+    if (hasCycle) {
       const error: RuntimeError = {
         code: "ACTION_CYCLE_DETECTED",
         message: `Cycle detected in action invocation: ${callStack.join(" -> ")} -> ${callKey}`,
