@@ -157,6 +157,9 @@ export class MemoryStateStore implements StateStore {
         if (this.namespace) {
           result.push(k.slice(this.namespace.length + 1));
         } else {
+          if (!prefix.includes(":") && k.includes(":")) {
+            continue;
+          }
           result.push(k);
         }
       }
@@ -262,50 +265,57 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
     }
   }
 
-  const callStack: string[] = [];
-
-  const invoker: ActionInvoker = {
-    async invoke<I = unknown, O = unknown>(
-      action: ActionDefinition<I, O> | ActionRef | string,
-      input?: I
-    ): Promise<O> {
-      let target: ActionDefinition<I, O>;
-      if (
-        typeof action === "object" &&
-        "run" in action &&
-        typeof (action as any).run === "function"
-      ) {
-        target = action as ActionDefinition<I, O>;
-      } else {
-        let fullId: string;
-        let pureId: string;
-        if (typeof action === "string") {
-          fullId = action;
-          pureId = action.includes("/") ? action.slice(action.lastIndexOf("/") + 1) : action;
+  function createInvoker(
+    parentRunId?: string,
+    rootRunId?: string,
+    currentCallStack: readonly string[] = []
+  ): ActionInvoker {
+    const invoker: ActionInvoker = {
+      async invoke<I = unknown, O = unknown>(
+        action: ActionDefinition<I, O> | ActionRef | string,
+        input?: I
+      ): Promise<O> {
+        let target: ActionDefinition<I, O>;
+        let targetCallKey: string;
+        if (
+          typeof action === "object" &&
+          "run" in action &&
+          typeof (action as any).run === "function"
+        ) {
+          target = action as ActionDefinition<I, O>;
+          targetCallKey = target.id;
         } else {
-          const ref = action as ActionRef;
-          pureId = ref.actionId;
-          fullId = ref.packageId ? `${ref.packageId}/${ref.actionId}` : ref.actionId;
+          let fullId: string;
+          let pureId: string;
+          if (typeof action === "string") {
+            fullId = action;
+            pureId = action.includes("/") ? action.slice(action.lastIndexOf("/") + 1) : action;
+          } else {
+            const ref = action as ActionRef;
+            pureId = ref.actionId;
+            fullId = ref.packageId ? `${ref.packageId}/${ref.actionId}` : ref.actionId;
+          }
+          const found = actionsMap.get(fullId) || actionsMap.get(pureId);
+          if (!found) {
+            throw new Error(`Action '${fullId}' not found in TestRuntime actions registry`);
+          }
+          target = found as ActionDefinition<I, O>;
+          targetCallKey = actionsMap.has(fullId) ? fullId : target.id;
         }
-        const found = actionsMap.get(fullId) || actionsMap.get(pureId);
-        if (!found) {
-          throw new Error(`Action '${fullId}' not found in TestRuntime actions registry`);
-        }
-        target = found as ActionDefinition<I, O>;
-      }
 
-      if (callStack.includes(target.id)) {
-        throw new Error(
-          `Cycle detected in action invocation: ${callStack.join(" -> ")} -> ${target.id}`
-        );
-      }
-      callStack.push(target.id);
-      try {
+        if (currentCallStack.includes(targetCallKey)) {
+          throw new Error(
+            `Cycle detected in action invocation: ${[...currentCallStack, targetCallKey].join(" -> ")}`
+          );
+        }
+
+        const nextCallStack = [...currentCallStack, targetCallKey];
         const runId = "test-" + Math.random().toString(36).slice(2, 10);
+        const currentRootId = rootRunId || runId;
         const ctx: ActionContext = {
           config,
           state,
-          actions: invoker,
+          actions: createInvoker(runId, currentRootId, nextCallStack),
           process: {
             async exec(command, args, options) {
               const res = await execCli(command, args, {
@@ -369,15 +379,17 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
           signal,
           run: {
             id: runId,
-            rootId: runId,
+            rootId: currentRootId,
+            parentId: parentRunId,
           },
         };
         return (await target.run(input as I, ctx)) as O;
-      } finally {
-        callStack.pop();
-      }
-    },
-  };
+      },
+    };
+    return invoker;
+  }
+
+  const rootInvoker = createInvoker();
 
   return {
     config,
@@ -387,7 +399,7 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
       action: ActionDefinition<I, O> | ActionRef | string,
       input?: I
     ): Promise<O> {
-      return invoker.invoke(action, input);
+      return rootInvoker.invoke(action, input);
     },
   };
 }

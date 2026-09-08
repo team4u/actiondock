@@ -451,19 +451,36 @@ describe("@actiondock/runtime-cli - Standalone Binary Runtime Mode", () => {
     const revealParsed = JSON.parse(revealLogs.join(""));
     expect(revealParsed.value).toBe("secret123");
 
-    // 3. config env --json
-    const envLogs: string[] = [];
-    const envCode = await runRuntimeCli(
-      ["node", "app", "config", "env", "--json"],
-      {
-        standalone: standaloneOptions,
-        stdout: (msg) => envLogs.push(msg),
-      }
-    );
-    expect(envCode).toBe(ExitCode.SUCCESS);
-    const envParsed = JSON.parse(envLogs.join(""));
-    expect(envParsed.packageId).toBe("standalone-greeting");
-    expect(envParsed.envChecks.length).toBeGreaterThan(0);
+    // 3. config env --json and environment variable resolution
+    process.env.ACTIONDOCK_STANDALONE_GREETING_DEFAULT_NAME = "AliceEnv";
+    try {
+      const envLogs: string[] = [];
+      const envCode = await runRuntimeCli(
+        ["node", "app", "config", "env", "--json"],
+        {
+          standalone: standaloneOptions,
+          stdout: (msg) => envLogs.push(msg),
+        }
+      );
+      expect(envCode).toBe(ExitCode.SUCCESS);
+      const envParsed = JSON.parse(envLogs.join(""));
+      expect(envParsed.packageId).toBe("standalone-greeting");
+      expect(envParsed.envChecks.length).toBeGreaterThan(0);
+      const nameCheck = envParsed.envChecks.find((c: any) => c.key === "DEFAULT_NAME");
+      expect(nameCheck?.matchedEnv).toBe("ACTIONDOCK_STANDALONE_GREETING_DEFAULT_NAME");
+
+      // Verify config get resolves via resolveEnvValue
+      const envGetLogs: string[] = [];
+      await runRuntimeCli(
+        ["node", "app", "config", "get", "DEFAULT_NAME", "--json"],
+        { standalone: standaloneOptions, stdout: (msg) => envGetLogs.push(msg) }
+      );
+      const envGetParsed = JSON.parse(envGetLogs.join(""));
+      expect(envGetParsed.value).toBe("AliceEnv");
+      expect(envGetParsed.source).toBe("env");
+    } finally {
+      delete process.env.ACTIONDOCK_STANDALONE_GREETING_DEFAULT_NAME;
+    }
   });
 
   it("manages shared state in standalone mode", async () => {

@@ -10,6 +10,8 @@ import {
   loadRegistry,
   pruneRegistry,
   resolveActionProject,
+  resolveActionProjectSync,
+  resolvePackageRoot,
   resolvePlaybookProject,
   unlinkPackage,
 } from "../src/registry";
@@ -305,6 +307,95 @@ export default defineAction({
     expect(statusAfter.staleCount).toBe(0);
     expect(statusAfter.packages.length).toBe(1);
     expect(statusAfter.packages[0].id).toBe("team.pkg-a");
+  });
+
+  it("resolves scoped package IDs, package root, and playbooks (@scope/pkg)", async () => {
+    const scopedDir = mkdtempSync(join(tmpdir(), "scoped-pkg-"));
+    try {
+      initProject(scopedDir, { id: "@team/tools", name: "Scoped Tools" });
+      const actionContent = `
+import { defineAction } from "@actiondock/sdk";
+export default defineAction({
+  id: "greet",
+  run() { return "hello"; }
+});
+`;
+      writeFileSync(join(scopedDir, "actions", "greet.ts"), actionContent);
+      writeFileSync(
+        join(scopedDir, "playbooks", "deploy.md"),
+        `---\nid: deploy\ndescription: Scoped Deploy Playbook\nactions:\n  - greet\n---\nRun greet\n`
+      );
+
+      linkPackage(scopedDir, fakeHome);
+
+      // 1. resolvePackageRoot should resolve @team/tools without being treated as an invalid explicit file path
+      const root = resolvePackageRoot("@team/tools", fakeHome, fakeHome);
+      expect(root).toBe(scopedDir);
+
+      // 2. resolvePlaybookProject should resolve @team/tools/deploy correctly using lastIndexOf
+      const pbRes = resolvePlaybookProject("@team/tools/deploy", fakeHome, fakeHome);
+      expect(pbRes.packageId).toBe("@team/tools");
+      expect(pbRes.playbookId).toBe("deploy");
+      expect(pbRes.projectRoot).toBe(scopedDir);
+
+      // 3. resolveActionProject should resolve @team/tools/greet
+      const actRes = await resolveActionProject("@team/tools/greet", fakeHome, fakeHome);
+      expect(actRes.packageId).toBe("@team/tools");
+      expect(actRes.actionId).toBe("greet");
+      expect(actRes.projectRoot).toBe(scopedDir);
+    } finally {
+      rmSync(scopedDir, { recursive: true, force: true });
+    }
+  });
+
+  it("prioritizes current project over global registry when target package ID matches current project", async () => {
+    // Simulate an old linked copy in global registry
+    const oldDir = mkdtempSync(join(tmpdir(), "old-pkg-"));
+    const currentDir = mkdtempSync(join(tmpdir(), "current-pkg-"));
+    try {
+      initProject(oldDir, { id: "team.shared", name: "Old Copy" });
+      initProject(currentDir, { id: "team.shared", name: "Current Working Copy" });
+
+      writeFileSync(
+        join(oldDir, "actions", "echo.ts"),
+        `import { defineAction } from "@actiondock/sdk"; export default defineAction({ id: "echo", run: () => "old" });`
+      );
+      writeFileSync(
+        join(currentDir, "actions", "echo.ts"),
+        `import { defineAction } from "@actiondock/sdk"; export default defineAction({ id: "echo", run: () => "current" });`
+      );
+      writeFileSync(
+        join(oldDir, "playbooks", "sop.md"),
+        `---\nid: sop\ndescription: Old SOP\n---\nOld\n`
+      );
+      writeFileSync(
+        join(currentDir, "playbooks", "sop.md"),
+        `---\nid: sop\ndescription: Current SOP\n---\nCurrent\n`
+      );
+
+      // Link the old directory in registry
+      linkPackage(oldDir, fakeHome);
+
+      // When executing inside currentDir:
+      // 1. resolvePackageRoot should return currentDir, NOT oldDir
+      expect(resolvePackageRoot("team.shared", currentDir, fakeHome)).toBe(currentDir);
+
+      // 2. resolveActionProjectSync should resolve from currentDir
+      const syncAct = resolveActionProjectSync("team.shared/echo", currentDir, fakeHome);
+      expect(syncAct.projectRoot).toBe(currentDir);
+
+      // 3. resolveActionProject (async) should resolve from currentDir
+      const asyncAct = await resolveActionProject("team.shared/echo", currentDir, fakeHome);
+      expect(asyncAct.projectRoot).toBe(currentDir);
+
+      // 4. resolvePlaybookProject should resolve from currentDir
+      const pbRes = resolvePlaybookProject("team.shared/sop", currentDir, fakeHome);
+      expect(pbRes.projectRoot).toBe(currentDir);
+      expect(pbRes.playbook.description).toBe("Current SOP");
+    } finally {
+      rmSync(oldDir, { recursive: true, force: true });
+      rmSync(currentDir, { recursive: true, force: true });
+    }
   });
 });
 

@@ -185,6 +185,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
 
       const runner = new ActionRunner({
         packageId: config.id,
+        projectRoot: resolved.projectRoot,
         storage,
         projectConfig: config,
         configOverrides: body?.config || {},

@@ -84,6 +84,10 @@ export interface BuildPlan {
   description?: string;
   /** 项目根目录绝对路径 */
   projectRoot: string;
+  /** actions 目录相对路径 */
+  actionsDir?: string;
+  /** playbooks 目录相对路径 */
+  playbooksDir?: string;
   /** 参与构建的 Action 列表 */
   actions: ActionDependency[];
   /** 参与构建的 Playbook 列表 */

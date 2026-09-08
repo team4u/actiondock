@@ -388,6 +388,65 @@ describe("ActionRunner", () => {
     }
   });
 
+  it("handles scoped package environment variables and double underscore conventions", async () => {
+    const storage = new SqliteRuntimeStorage({
+      packageId: "@scope/my-service",
+      dbPath: ":memory:",
+    });
+
+    const projectConfig = {
+      id: "@scope/my-service",
+      name: "My Service",
+      version: "0.1.0",
+      config: {
+        apiKey: { description: "API Key" },
+        dbHost: { description: "DB Host" },
+        slugKey: { description: "Slug prefixed key" },
+      },
+    };
+
+    // 1. ACTIONDOCK_<CLEAN_PKG>_<KEY> (stripping @ and replacing / with _)
+    process.env.ACTIONDOCK_SCOPE_MY_SERVICE_API_KEY = "scope_key_val";
+    // 2. <CLEAN_PKG>__<KEY> (double underscore notation)
+    process.env.SCOPE_MY_SERVICE__DB_HOST = "db.internal";
+    // 3. Slug prefix: <SLUG>__<KEY>
+    process.env.MY_SERVICE__SLUG_KEY = "slug_val";
+
+    try {
+      const action = defineAction({
+        id: "env-test",
+        run(_input, ctx) {
+          return {
+            apiKey: ctx.config.get("apiKey"),
+            dbHost: ctx.config.get("dbHost"),
+            slugKey: ctx.config.get("slugKey"),
+          };
+        },
+      });
+
+      const runner = new ActionRunner({
+        packageId: "@scope/my-service",
+        storage,
+        projectConfig,
+        actions: new Map([[action.id, action]]),
+      });
+
+      const res = await runner.execute(action, {});
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.data).toEqual({
+          apiKey: "scope_key_val",
+          dbHost: "db.internal",
+          slugKey: "slug_val",
+        });
+      }
+    } finally {
+      delete process.env.ACTIONDOCK_SCOPE_MY_SERVICE_API_KEY;
+      delete process.env.SCOPE_MY_SERVICE__DB_HOST;
+      delete process.env.MY_SERVICE__SLUG_KEY;
+    }
+  });
+
   it("strictly respects 5-tier config precedence: override > storage > env > default > fallback", async () => {
     const storage = new SqliteRuntimeStorage({
       packageId: "tier-pkg",

@@ -793,6 +793,85 @@ describe("@actiondock/mcp Adapter", () => {
     await server.close();
     expect(storageClosed).toBe(true);
   });
+
+  it("M23: sanitizes scoped package names and enforces 64-character limit on MCP tool names", async () => {
+    const pkg1Dir = join(tmpDir, "scoped-pkg1");
+    const pkg2Dir = join(tmpDir, "scoped-pkg2");
+    mkdirSync(pkg1Dir, { recursive: true });
+    mkdirSync(pkg2Dir, { recursive: true });
+
+    // Scoped package with long package name
+    writeFileSync(
+      join(pkg1Dir, "actiondock.json"),
+      JSON.stringify({
+        id: "@enterprise-scope/super-long-subsystem-management-tools-package",
+        name: "Enterprise Long Tools",
+        version: "1.0.0",
+      })
+    );
+    mkdirSync(join(pkg1Dir, "actions"), { recursive: true });
+    writeFileSync(
+      join(pkg1Dir, "actions", "reconcile.ts"),
+      `import { defineAction } from "@actiondock/sdk"; export default defineAction({ id: "reconcile", run: () => "ok1" });`
+    );
+
+    // Another package with the same action id to cause collision
+    writeFileSync(
+      join(pkg2Dir, "actiondock.json"),
+      JSON.stringify({
+        id: "simple-pkg",
+        name: "Simple Pkg",
+        version: "1.0.0",
+      })
+    );
+    mkdirSync(join(pkg2Dir, "actions"), { recursive: true });
+    writeFileSync(
+      join(pkg2Dir, "actions", "reconcile.ts"),
+      `import { defineAction } from "@actiondock/sdk"; export default defineAction({ id: "reconcile", run: () => "ok2" });`
+    );
+
+    const server = await createActionDockMcpServer({
+      projectRoots: [pkg1Dir, pkg2Dir],
+    });
+
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverTransport);
+
+    let toolsList: any = null;
+    clientTransport.onmessage = (msg: any) => {
+      if (msg.id === 1) {
+        clientTransport.send({ jsonrpc: "2.0", method: "notifications/initialized" });
+        clientTransport.send({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });
+      } else if (msg.id === 2) {
+        toolsList = msg.result.tools;
+      }
+    };
+
+    clientTransport.send({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: { protocolVersion: "2026-07-28", capabilities: {}, clientInfo: { name: "client", version: "1.0" } },
+    });
+
+    await new Promise((r) => setTimeout(r, 150));
+
+    expect(toolsList).toBeDefined();
+    const toolNames = toolsList.map((t: any) => t.name);
+
+    // simple-pkg_reconcile
+    expect(toolNames).toContain("simple-pkg_reconcile");
+
+    // The long scoped tool name should not contain @ or /
+    const longTool = toolsList.find((t: any) => !t.name.startsWith("simple-pkg"));
+    expect(longTool).toBeDefined();
+    expect(longTool.name).not.toContain("@");
+    expect(longTool.name).not.toContain("/");
+    // Must be <= 64 characters
+    expect(longTool.name.length).toBeLessThanOrEqual(64);
+
+    await server.close();
+  });
 });
 
 

@@ -81,7 +81,7 @@ export function getTargetRoot(
   let effectiveKey = keyHint || "";
 
   if (!targetPackage && keyHint && keyHint.includes("/")) {
-    const slashIdx = keyHint.indexOf("/");
+    const slashIdx = keyHint.lastIndexOf("/");
     targetPackage = keyHint.slice(0, slashIdx);
     effectiveKey = keyHint.slice(slashIdx + 1);
   }

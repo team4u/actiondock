@@ -211,7 +211,9 @@ export class SkillExporter {
 
     mkdirSync(skillDir, { recursive: true });
 
-    const playbooksDestDir = join(skillDir, "playbooks");
+    const actionsDir = plan.actionsDir || "actions";
+    const playbooksDir = plan.playbooksDir || "playbooks";
+    const playbooksDestDir = join(skillDir, playbooksDir);
     if (plan.playbooks.length > 0) {
       mkdirSync(playbooksDestDir, { recursive: true });
     }
@@ -221,8 +223,8 @@ export class SkillExporter {
       name: plan.packageName,
       version: plan.version,
       description: plan.description,
-      actionsDir: "actions",
-      playbooksDir: "playbooks",
+      actionsDir,
+      playbooksDir,
       config: plan.configDefs as any,
     };
 
@@ -287,8 +289,8 @@ export class SkillExporter {
         name: plan.packageName,
         version: plan.version,
         description: plan.description,
-        actionsDir: "actions",
-        playbooksDir: "playbooks",
+        actionsDir,
+        playbooksDir,
         config: plan.configDefs,
       };
       writeFileSync(

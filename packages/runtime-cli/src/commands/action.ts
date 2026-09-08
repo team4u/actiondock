@@ -201,6 +201,7 @@ export async function executeAction(
     try {
       const runner = new ActionRunner({
         packageId: config.id,
+        projectRoot: resolved.projectRoot,
         storage,
         projectConfig: config,
         configOverrides,

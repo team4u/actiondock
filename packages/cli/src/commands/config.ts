@@ -3,6 +3,7 @@ import {
   createStorage,
   deleteRemoteConfig,
   fetchRemoteConfig,
+  fetchRemoteConfigEnv,
   filterWithFallbackInfo,
   isSecretConfigKey,
   loadProjectConfig,
@@ -10,10 +11,18 @@ import {
   resolvePackageRoot,
   resolveTarget,
   setRemoteConfig,
+  resolveEnvValue,
   type ConfigItemDefinition,
 } from "@actiondock/core";
 import { Command } from "commander";
-import { ArgumentError, ExecutionError, getEffectiveOptions, renderResult } from "@actiondock/runtime-cli";
+import {
+  ArgumentError,
+  ExecutionError,
+  getEffectiveOptions,
+  renderResult,
+  renderConfigEnv,
+  type EnvCheckItem,
+} from "@actiondock/runtime-cli";
 import { resolveIntent } from "../utils/filter";
 
 export function registerConfigCommands(program: Command): void {
@@ -68,6 +77,7 @@ export function registerConfigCommands(program: Command): void {
           let resolvedValue: unknown;
           let source: "project" | "global" | "env" | "default" | "missing" = "missing";
           let status: "SET" | "DEFAULT" | "MISSING" = "MISSING";
+          const envResolved = resolveEnvValue(key, itemDef, projConfig.id);
 
           if (projectConfig[key] !== undefined) {
             resolvedValue = projectConfig[key];
@@ -77,8 +87,8 @@ export function registerConfigCommands(program: Command): void {
             resolvedValue = globalConfig[key];
             source = "global";
             status = "SET";
-          } else if (typeof process !== "undefined" && process.env && process.env[key] !== undefined) {
-            resolvedValue = process.env[key];
+          } else if (envResolved !== undefined) {
+            resolvedValue = envResolved.value;
             source = "env";
             status = "SET";
           } else if (itemDef.default !== undefined) {
@@ -241,6 +251,7 @@ export function registerConfigCommands(program: Command): void {
         const rawList = Array.from(allKeys).map((k) => {
           let rawValue: unknown;
           let source: "project" | "global" | "env" | "default" = "default";
+          const envResolved = resolveEnvValue(k, declaredDefaults[k], projectRoot ? packageId : undefined);
 
           if (projectStored[k] !== undefined) {
             rawValue = projectStored[k];
@@ -248,8 +259,8 @@ export function registerConfigCommands(program: Command): void {
           } else if (globalConfig[k] !== undefined) {
             rawValue = globalConfig[k];
             source = "global";
-          } else if (typeof process !== "undefined" && process.env && process.env[k] !== undefined) {
-            rawValue = process.env[k];
+          } else if (envResolved !== undefined) {
+            rawValue = envResolved.value;
             source = "env";
           } else {
             rawValue = declaredDefaults[k]?.default;
@@ -352,10 +363,12 @@ export function registerConfigCommands(program: Command): void {
         let projVal: unknown = undefined;
         let fallbackVal: unknown = undefined;
         let declaredItem: ConfigItemDefinition | undefined;
+        let packageId: string | undefined;
 
         if (projectRoot) {
           try {
             const projConfig = loadProjectConfig(projectRoot);
+            packageId = projConfig.id;
             declaredItem = projConfig.config?.[key];
             const projectStorage = createStorage(projConfig.id, {
               projectRoot,
@@ -369,7 +382,8 @@ export function registerConfigCommands(program: Command): void {
           }
         }
 
-        const envVal = typeof process !== "undefined" && process.env ? process.env[key] : undefined;
+        const envResolved = resolveEnvValue(key, declaredItem, packageId);
+        const envVal = envResolved !== undefined ? envResolved.value : undefined;
 
         const rawEffective =
           projVal !== undefined
@@ -573,6 +587,77 @@ export function registerConfigCommands(program: Command): void {
             console.log(`Config '${key}' was not set in database for ${projConfig.id}`);
           }
         }
+      } catch (err: any) {
+        if (err instanceof ArgumentError || err instanceof ExecutionError) {
+          throw err;
+        }
+        throw new ExecutionError(err.message);
+      }
+    });
+
+  // config env: 检查环境变量满足率
+  configCmd
+    .command("env")
+    .description("Check environment variable satisfaction for declared configuration")
+    .option("-P, --package <id>", "Target package ID or path")
+    .option("-p, --profile <name>", "Query config on a remote target")
+    .option("-s, --server <url>", "Remote server URL")
+    .option("-t, --token <token>", "Auth token for remote server")
+    .option("--json", "Output as JSON")
+    .option("--envelope", "Wrap JSON output in standard envelope")
+    .action(async (rawOptions: any, cmd: any) => {
+      try {
+        const options = getEffectiveOptions(rawOptions, cmd);
+        // 1. 远端服务模式
+        const target = resolveTarget({
+          profile: options.profile,
+          server: options.server,
+          token: options.token,
+        });
+
+        if (target.type === "remote") {
+          const res = await fetchRemoteConfigEnv(target.serverUrl!, target.token, options.package);
+          renderResult(res, {
+            json: options.json,
+            envelope: options.envelope,
+            humanFormatter: () => renderConfigEnv(res.envChecks || [], res.packageId),
+          });
+          return;
+        }
+
+        // 2. 本地工程模式
+        const root = resolvePackageRoot(options.package);
+        if (!root) {
+          if (options.package) {
+            throw new ArgumentError(`Package '${options.package}' not found in linked packages or path`);
+          }
+          throw new ArgumentError(
+            "Not in an ActionDock project. Usage: ad config env -P <package-id> or cd into a project directory."
+          );
+        }
+
+        const cfg = loadProjectConfig(root);
+        const declared = cfg.config || {};
+        const envChecks: EnvCheckItem[] = [];
+
+        for (const [k, def] of Object.entries(declared)) {
+          const envResolved = resolveEnvValue(k, def, cfg.id);
+          envChecks.push({
+            key: k,
+            required: def.default === undefined,
+            satisfied: Boolean(envResolved !== undefined || def.default !== undefined),
+            matchedEnv: envResolved?.envKey || null,
+            hasDefault: def.default !== undefined,
+            secret: Boolean(def.secret),
+          });
+        }
+
+        const payload = { ok: true, packageId: cfg.id, envChecks };
+        renderResult(payload, {
+          json: options.json,
+          envelope: options.envelope,
+          humanFormatter: () => renderConfigEnv(envChecks, cfg.id),
+        });
       } catch (err: any) {
         if (err instanceof ArgumentError || err instanceof ExecutionError) {
           throw err;

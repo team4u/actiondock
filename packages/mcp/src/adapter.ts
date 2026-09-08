@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import {
@@ -240,6 +241,7 @@ export async function createActionDockMcpServer(
 
       const runner = new ActionRunner({
         packageId: projectConfig.id,
+        projectRoot: root,
         storage,
         projectConfig,
         configOverrides: options.configOverrides,
@@ -289,7 +291,12 @@ export async function createActionDockMcpServer(
   for (const target of targets) {
     for (const action of target.actions.values()) {
       const count = actionIdCounts.get(action.id) || 1;
-      const toolName = count > 1 ? `${target.config.id}_${action.id}` : action.id;
+      const cleanPkgId = target.config.id.replace(/^@/, "").replace(/[^a-zA-Z0-9_-]+/g, "_");
+      let toolName = count > 1 ? `${cleanPkgId}_${action.id}` : action.id;
+      if (toolName.length > 64) {
+        const hash = createHash("sha256").update(toolName).digest("hex").slice(0, 8);
+        toolName = `${toolName.slice(0, 55)}_${hash}`;
+      }
       const description = isMultiPackage
         ? `[${target.config.id}] ${action.description || ""}`
         : action.description;

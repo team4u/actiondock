@@ -11,6 +11,7 @@ import {
   resolvePackageRoot,
   resolveTarget,
   setRemoteConfig,
+  resolveEnvValue,
   type ConfigItemDefinition,
 } from "@actiondock/core";
 import { Command } from "commander";
@@ -69,11 +70,12 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
         const rawList = Array.from(allKeys).map((k) => {
           let rawValue: unknown;
           let source = "default";
+          const envResolved = resolveEnvValue(k, declared[k], sa.packageId);
           if (stored[k] !== undefined) {
             rawValue = stored[k];
             source = "project";
-          } else if (typeof process !== "undefined" && process.env && process.env[k] !== undefined) {
-            rawValue = process.env[k];
+          } else if (envResolved !== undefined) {
+            rawValue = envResolved.value;
             source = "env";
           } else {
             rawValue = declared[k]?.default;
@@ -190,6 +192,7 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
       const rawList = Array.from(allKeys).map((k) => {
         let rawValue: unknown;
         let source: "project" | "global" | "env" | "default" = "default";
+        const envResolved = resolveEnvValue(k, declaredDefaults[k], projectRoot ? packageId : undefined);
 
         if (projectStored[k] !== undefined) {
           rawValue = projectStored[k];
@@ -197,8 +200,8 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
         } else if (globalConfig[k] !== undefined) {
           rawValue = globalConfig[k];
           source = "global";
-        } else if (typeof process !== "undefined" && process.env && process.env[k] !== undefined) {
-          rawValue = process.env[k];
+        } else if (envResolved !== undefined) {
+          rawValue = envResolved.value;
           source = "env";
         } else {
           rawValue = declaredDefaults[k]?.default;
@@ -265,13 +268,14 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
 
         const declared = sa.configDefs?.[key];
         const isSecret = isSecretConfigKey(key, declared);
-        const effectiveRaw = val !== undefined ? val : (process.env[key] !== undefined ? process.env[key] : declared?.default);
+        const envResolved = resolveEnvValue(key, declared, sa.packageId);
+        const effectiveRaw = val !== undefined ? val : (envResolved !== undefined ? envResolved.value : declared?.default);
         const displayVal = !reveal && isSecret && effectiveRaw !== undefined ? maskSecretValue(effectiveRaw) : effectiveRaw;
 
         const payload = {
           key,
           value: displayVal,
-          source: val !== undefined ? "project" : (process.env[key] !== undefined ? "env" : "default"),
+          source: val !== undefined ? "project" : (envResolved !== undefined ? "env" : "default"),
           secret: isSecret,
         };
 
@@ -326,10 +330,12 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
       let projVal: unknown = undefined;
       let fallbackVal: unknown = undefined;
       let declaredItem: ConfigItemDefinition | undefined;
+      let packageId: string | undefined;
 
       if (projectRoot) {
         try {
           const projConfig = loadProjectConfig(projectRoot);
+          packageId = projConfig.id;
           declaredItem = projConfig.config?.[key];
           const projectStorage = createStorage(projConfig.id, {
             projectRoot,
@@ -343,7 +349,8 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
         }
       }
 
-      const envVal = typeof process !== "undefined" && process.env ? process.env[key] : undefined;
+      const envResolved = resolveEnvValue(key, declaredItem, packageId);
+      const envVal = envResolved !== undefined ? envResolved.value : undefined;
 
       const rawEffective =
         projVal !== undefined
@@ -569,17 +576,12 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
         const envChecks: EnvCheckItem[] = [];
 
         for (const [k, def] of Object.entries(declared)) {
-          const envKeys = [
-            k,
-            `ACTIONDOCK_${k}`,
-            `${sa.packageId.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_${k}`,
-          ];
-          const foundEnv = envKeys.find((ek) => typeof process !== "undefined" && process.env && process.env[ek] !== undefined);
+          const envResolved = resolveEnvValue(k, def, sa.packageId);
           envChecks.push({
             key: k,
             required: def.default === undefined,
-            satisfied: Boolean(foundEnv || def.default !== undefined),
-            matchedEnv: foundEnv || null,
+            satisfied: Boolean(envResolved !== undefined || def.default !== undefined),
+            matchedEnv: envResolved?.envKey || null,
             hasDefault: def.default !== undefined,
             secret: Boolean(def.secret),
           });
@@ -629,17 +631,12 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
       const envChecks: EnvCheckItem[] = [];
 
       for (const [k, def] of Object.entries(declared)) {
-        const envKeys = [
-          k,
-          `ACTIONDOCK_${k}`,
-          `${cfg.id.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_${k}`,
-        ];
-        const foundEnv = envKeys.find((ek) => typeof process !== "undefined" && process.env && process.env[ek] !== undefined);
+        const envResolved = resolveEnvValue(k, def, cfg.id);
         envChecks.push({
           key: k,
           required: def.default === undefined,
-          satisfied: Boolean(foundEnv || def.default !== undefined),
-          matchedEnv: foundEnv || null,
+          satisfied: Boolean(envResolved !== undefined || def.default !== undefined),
+          matchedEnv: envResolved?.envKey || null,
           hasDefault: def.default !== undefined,
           secret: Boolean(def.secret),
         });

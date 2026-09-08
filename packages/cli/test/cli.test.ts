@@ -200,6 +200,19 @@ describe("CLI End-to-End", () => {
     expect(greetingItem.source).toBe("env");
     expect(greetingItem.status).toBe("SET");
 
+    // config env --json verification
+    const confEnvCheck = runCli(
+      ["config", "env", "--json"],
+      tempDir,
+      { SAMPLE_GREETING: "Bonjour" }
+    );
+    expect(confEnvCheck.exitCode).toBe(0);
+    const envCheckObj = JSON.parse(confEnvCheck.stdout.toString());
+    expect(envCheckObj.ok).toBe(true);
+    const greetingEnvItem = envCheckObj.envChecks.find((c: any) => c.key === "SAMPLE_GREETING");
+    expect(greetingEnvItem.satisfied).toBe(true);
+    expect(greetingEnvItem.matchedEnv).toBe("SAMPLE_GREETING");
+
     const runWithEnv = runCli(
       ["run", "sample.greet", "--input", '{"name": "Jean"}'],
       tempDir,

@@ -243,7 +243,7 @@ function parsePlaybookFile(filePath: string): PlaybookPlanEntry | null {
     const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
     if (match) {
       const parsed = YAML.parse(match[1]) || {};
-      const id = parsed.id || basename(filePath, ".md");
+      const id = parsed.id || basename(filePath.replace(/\\/g, "/"), ".md");
       return {
         id,
         filePath,
@@ -252,7 +252,7 @@ function parsePlaybookFile(filePath: string): PlaybookPlanEntry | null {
       };
     }
     return {
-      id: basename(filePath, ".md"),
+      id: basename(filePath.replace(/\\/g, "/"), ".md"),
       filePath,
       actions: [],
     };
@@ -494,8 +494,16 @@ export class BuildPlanner {
         try {
           const resolvedExternal = resolveActionProjectSync(currentId, root);
           if (resolvedExternal && existsSync(resolvedExternal.projectRoot)) {
-            const externalManifest = loadManifest(resolvedExternal.projectRoot);
-            const externalEntry = externalManifest?.actions?.[resolvedExternal.actionId];
+            let externalManifest = loadManifest(resolvedExternal.projectRoot);
+            let externalEntry = externalManifest?.actions?.[resolvedExternal.actionId];
+            if (!externalEntry) {
+              const extConfig = loadProjectConfig(resolvedExternal.projectRoot);
+              const staticManifest = generateStaticManifest(
+                resolvedExternal.projectRoot,
+                extConfig.actionsDir || "actions"
+              );
+              externalEntry = staticManifest.actions[resolvedExternal.actionId];
+            }
             if (externalEntry) {
               entry = externalEntry;
               entryRoot = resolvedExternal.projectRoot;
@@ -700,6 +708,8 @@ export class BuildPlanner {
       version: config.version || "0.1.0",
       description: config.description,
       projectRoot: root,
+      actionsDir: config.actionsDir || "actions",
+      playbooksDir: config.playbooksDir || "playbooks",
       actions: actionDependencies,
       playbooks: selectedPlaybooks,
       dependencies,

@@ -18,6 +18,7 @@ import type { ProjectConfig } from "../project/types";
 import { resolveActionProject } from "../registry/registry";
 import { validateSchema } from "../schema/validator";
 import type { RuntimeStorage, TerminalRunStatus } from "../storage/types";
+import type { Clock } from "./clock";
 import { createActionContext, StderrLogger } from "./context";
 
 /**
@@ -28,6 +29,8 @@ export interface RunnerOptions {
   packageId: string;
   /** 持久化运行时存储实例（SQLite） */
   storage: RuntimeStorage;
+  /** 项目根目录绝对路径 */
+  projectRoot?: string;
   /** 项目元数据配置 */
   projectConfig?: ProjectConfig;
   /** CLI 或上层注入的临时配置覆盖项 */
@@ -36,6 +39,8 @@ export interface RunnerOptions {
   actions?: Map<string, ActionDefinition>;
   /** 外部注入的进程执行器 */
   process?: ProcessAPI;
+  /** 可选的时间与时钟源（默认使用存储内嵌时钟或系统时间） */
+  clock?: Clock;
   /** 动态解析跨包或未注册 Action 的委托函数 */
   actionResolver?: (
     ref: ActionRef | string,
@@ -102,9 +107,11 @@ export interface ExecutionHandle {
 export class ActionRunner {
   private packageId: string;
   private storage: RuntimeStorage;
+  private projectRoot?: string;
   private projectConfig?: ProjectConfig;
   private configOverrides: Record<string, unknown>;
   private actions: Map<string, ActionDefinition>;
+  private clock?: Clock;
   private actionResolver?: (
     ref: ActionRef | string,
     currentPackageId?: string
@@ -113,9 +120,11 @@ export class ActionRunner {
   constructor(options: RunnerOptions) {
     this.packageId = options.packageId;
     this.storage = options.storage;
+    this.projectRoot = options.projectRoot;
     this.projectConfig = options.projectConfig;
     this.configOverrides = options.configOverrides || {};
     this.actions = options.actions || new Map();
+    this.clock = options.clock;
     this.actionResolver = options.actionResolver;
   }
 
@@ -190,7 +199,7 @@ export class ActionRunner {
       const identifier = targetPackageId
         ? `${targetPackageId}/${targetActionId}`
         : targetActionId;
-      const resolved = await resolveActionProject(identifier);
+      const resolved = await resolveActionProject(identifier, this.projectRoot);
       if (resolved && existsSync(resolved.projectRoot)) {
         const config = loadProjectConfig(resolved.projectRoot);
         const actionsMap = await loadActions(resolved.projectRoot, config.actionsDir, {
@@ -234,7 +243,11 @@ export class ActionRunner {
     options: ExecutionStartOptions = {}
   ): ExecutionHandle {
     const runId = options.runId || randomUUID();
-    const startedAt = new Date().toISOString();
+    const startedAt =
+      this.clock?.now().toISOString() ||
+      (typeof (this.storage as any).clock?.now === "function"
+        ? (this.storage as any).clock.now().toISOString()
+        : new Date().toISOString());
     const callStack = [...(options.callStack || [])];
 
     let action: ActionDefinition | undefined;

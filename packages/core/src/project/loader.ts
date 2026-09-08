@@ -82,16 +82,47 @@ export function loadProjectConfig(projectRoot: string): ProjectConfig {
 }
 
 /**
- * 探测宿主系统中可用的包管理工具（优先级：pnpm > npm > yarn > bun）。
- * 可通过环境变量 ACTIONDOCK_INSTALLER 强制指定（如 npm、pnpm、yarn、bun）。
+ * 探测宿主系统中可用的包管理工具。
+ * 优先级：
+ * 1. 环境变量 ACTIONDOCK_INSTALLER 显式指定；
+ * 2. 依据项目根目录下现存的锁文件进行精确匹配（pnpm-lock.yaml -> pnpm, bun.lock/bun.lockb -> bun, yarn.lock -> yarn, package-lock.json -> npm）；
+ * 3. 候选回退优先级探测（pnpm > npm > yarn > bun）。
+ *
  * 探测必须经 shell 执行：Windows 下 npm/pnpm/yarn 均为 .cmd 垫片，
  * 不经 shell 的 spawnSync 无法解析，将错误地回退到原生 exe 的 bun。
  */
-function getInstallCommand(): string[] {
+function getInstallCommand(projectRoot?: string): string[] {
   const preferred = process.env.ACTIONDOCK_INSTALLER?.trim();
   if (preferred) {
     return [preferred, "install"];
   }
+
+  if (projectRoot) {
+    const lockfileMap: [string, string][] = [
+      ["pnpm-lock.yaml", "pnpm"],
+      ["bun.lockb", "bun"],
+      ["bun.lock", "bun"],
+      ["yarn.lock", "yarn"],
+      ["package-lock.json", "npm"],
+      ["npm-shrinkwrap.json", "npm"],
+    ];
+    for (const [lockFile, pm] of lockfileMap) {
+      if (existsSync(join(projectRoot, lockFile))) {
+        try {
+          const check = spawnSync(`${pm} --version`, {
+            stdio: "pipe",
+            shell: true,
+          });
+          if (check.status === 0) {
+            return [pm, "install"];
+          }
+        } catch {
+          // 忽略并继续检查下一个候选
+        }
+      }
+    }
+  }
+
   const candidates: [string, string][] = [
     ["pnpm", "install"],
     ["npm", "install"],
@@ -179,6 +210,20 @@ export function saveDependencyFingerprint(projectRoot: string, fingerprint: stri
 }
 
 /**
+ * 递归对对象所有键名进行升序排序，保证 JSON.stringify 序列化结果的唯一性与确定性。
+ */
+function sortObjectKeys(obj: unknown): unknown {
+  if (obj === null || typeof obj !== "object" || Array.isArray(obj)) {
+    return obj;
+  }
+  const sorted: Record<string, unknown> = {};
+  for (const key of Object.keys(obj as Record<string, unknown>).sort()) {
+    sorted[key] = sortObjectKeys((obj as Record<string, unknown>)[key]);
+  }
+  return sorted;
+}
+
+/**
  * 计算项目依赖的指纹哈希（基于 package.json 依赖声明及可能存在的锁文件内容）。
  * 
  * @param projectRoot 项目根目录
@@ -204,7 +249,7 @@ export function computeDependencyFingerprint(projectRoot: string): string | null
     };
 
     const hash = createHash("sha256");
-    hash.update(JSON.stringify(depSpec));
+    hash.update(JSON.stringify(sortObjectKeys(depSpec)));
 
     // 锁文件变化（如团队协同合并或手动更新锁文件）同样代表依赖版本变更
     const lockFiles = [
@@ -290,7 +335,7 @@ export function ensureProjectDependencies(projectRoot: string, force = false): b
   }
 
   try {
-    const installCmd = getInstallCommand();
+    const installCmd = getInstallCommand(projectRoot);
     const actionText = !force && nodeModulesExists ? "Updating" : "Installing";
     process.stderr.write(
       `[actiondock] ${actionText} dependencies using ${installCmd[0]} for '${pkg.name || basename(projectRoot)}'...\n`
@@ -565,7 +610,7 @@ export function parsePlaybookContent(
     }
   }
 
-  const filename = filePath.split("/").pop() || "unknown";
+  const filename = basename(filePath.replace(/\\/g, "/"));
   const defaultId = filename.replace(/\.md$/, "");
 
   return {

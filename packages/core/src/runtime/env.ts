@@ -1,3 +1,4 @@
+import { getPackageSlug } from "../utils";
 import type { ConfigItemDefinition, ConfigValueType } from "../project/types";
 
 /**
@@ -14,15 +15,17 @@ export interface ResolvedEnv {
 
 /**
  * 将任意命名格式的字符串转换为标准的大写蛇形命名（UPPER_SNAKE_CASE）。
- * 兼容处理 camelCase、kebab-case、点号分隔以及斜杠等符号。
+ * 兼容处理 camelCase、kebab-case、点号分隔、斜杠以及 @ 作用域符号。
  * 
- * @param str 输入字符串，如 "apiKey"、"team4u.github-tools"
+ * @param str 输入字符串，如 "apiKey"、"@team4u/github-tools"
  * @returns 转换后的字符串，如 "API_KEY"、"TEAM4U_GITHUB_TOOLS"
  */
 export function toSnakeUpperCase(str: string): string {
   return str
+    .replace(/^@/, "")
     .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
-    .replace(/[-.\s/]+/g, "_")
+    .replace(/[-.\s/@]+/g, "_")
+    .replace(/^_+|_+$/g, "")
     .toUpperCase();
 }
 
@@ -139,12 +142,22 @@ export function resolveEnvValue(
     }
   }
 
-  // 2. 包名前缀的环境变量 (例如 ACTIONDOCK_GITHUB_TOOLS_API_KEY)
+  // 2. 包名前缀的环境变量 (例如 ACTIONDOCK_GITHUB_TOOLS_API_KEY / GITHUB_TOOLS__API_KEY)
   const snakeKey = toSnakeUpperCase(key);
   if (packageId) {
     const cleanPkg = toSnakeUpperCase(packageId);
     candidateKeys.add(`ACTIONDOCK_${cleanPkg}_${snakeKey}`);
+    candidateKeys.add(`ACTIONDOCK_${cleanPkg}__${snakeKey}`);
     candidateKeys.add(`${cleanPkg}_${snakeKey}`);
+    candidateKeys.add(`${cleanPkg}__${snakeKey}`);
+
+    const slug = toSnakeUpperCase(getPackageSlug(packageId));
+    if (slug && slug !== cleanPkg) {
+      candidateKeys.add(`ACTIONDOCK_${slug}_${snakeKey}`);
+      candidateKeys.add(`ACTIONDOCK_${slug}__${snakeKey}`);
+      candidateKeys.add(`${slug}_${snakeKey}`);
+      candidateKeys.add(`${slug}__${snakeKey}`);
+    }
   }
 
   // 3. 标准大写蛇形变量名 (例如 API_KEY)

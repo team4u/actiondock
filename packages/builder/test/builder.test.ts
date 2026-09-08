@@ -16,6 +16,7 @@ import { basename, join, relative, resolve, sep } from "node:path";
 import {
   type ActionDockManifest,
   initProject,
+  linkPackage,
   saveManifest,
 } from "@actiondock/core";
 import {
@@ -31,6 +32,7 @@ import {
   exportCompositeSkill,
   PlannerError,
   SkillExporter,
+  createTarGzArchive,
 } from "../src";
 import { readTarGzEntries, readZipEntries } from "./archive-reader";
 
@@ -806,6 +808,117 @@ process.exit(0);
         expect(existsSync(join(res.skillDir, "packages", "pkg-b", "SKILL.md"))).toBe(false);
       } finally {
         rmSync(workspaceDir, { recursive: true, force: true });
+      }
+    });
+
+    it("resolves external linked action in BuildPlanner when linked package has no actiondock.manifest.json", () => {
+      const extDir = mkdtempSync(join(tmpdir(), "ext-pkg-"));
+      try {
+        initProject(extDir, { id: "test.ext-tools", name: "External Tools" });
+        writeFileSync(
+          join(extDir, "actions", "calc.ts"),
+          `import { defineAction } from "@actiondock/sdk"; export default defineAction({ id: "calc", uses: [], run: () => 42 });`
+        );
+        // extDir does NOT have actiondock.manifest.json!
+        linkPackage(extDir);
+
+        const planner = new BuildPlanner({ projectRoot: tempDir });
+        const plan = planner.plan({
+          projectRoot: tempDir,
+          manifest: {
+            schemaVersion: 1,
+            actions: {
+              "sample.greet": {
+                entry: "actions/greet.ts",
+                uses: ["test.ext-tools/calc"],
+              },
+            },
+          },
+        });
+
+        expect(plan.actions.some((a) => a.id === "test.ext-tools/calc")).toBe(true);
+      } finally {
+        rmSync(extDir, { recursive: true, force: true });
+      }
+    });
+
+    it("preserves custom actionsDir and playbooksDir in BuildPlan and exported config", async () => {
+      const customDir = mkdtempSync(join(tmpdir(), "custom-dirs-pkg-"));
+      try {
+        writeFileSync(
+          join(customDir, "actiondock.json"),
+          JSON.stringify({
+            id: "custom-dirs-pkg",
+            name: "Custom Dirs",
+            version: "1.0.0",
+            actionsDir: "src/my-actions",
+            playbooksDir: "docs/my-playbooks",
+          })
+        );
+        mkdirSync(join(customDir, "src", "my-actions"), { recursive: true });
+        mkdirSync(join(customDir, "docs", "my-playbooks"), { recursive: true });
+        writeFileSync(
+          join(customDir, "src", "my-actions", "task.ts"),
+          `import { defineAction } from "@actiondock/sdk"; export default defineAction({ id: "task", run: () => "done" });`
+        );
+        writeFileSync(
+          join(customDir, "docs", "my-playbooks", "guide.md"),
+          `---\nid: guide\n---\n# Guide`
+        );
+
+        const planner = new BuildPlanner({ projectRoot: customDir });
+        const plan = planner.plan({ projectRoot: customDir });
+        expect(plan.actionsDir).toBe("src/my-actions");
+        expect(plan.playbooksDir).toBe("docs/my-playbooks");
+
+        const outDir = join(customDir, "dist", "exported");
+        const expResult = await exportSkill({
+          projectRoot: customDir,
+          outDir,
+        });
+
+        const exportedConfig = JSON.parse(readFileSync(join(outDir, "actiondock.json"), "utf-8"));
+        expect(exportedConfig.actionsDir).toBe("src/my-actions");
+        expect(exportedConfig.playbooksDir).toBe("docs/my-playbooks");
+        expect(existsSync(join(outDir, "docs", "my-playbooks", "guide.md"))).toBe(true);
+
+        const exportedSkillMd = readFileSync(join(outDir, "SKILL.md"), "utf-8");
+        expect(exportedSkillMd).toContain("./docs/my-playbooks/guide.md");
+      } finally {
+        rmSync(customDir, { recursive: true, force: true });
+      }
+    });
+
+    it("creates valid USTAR tar.gz archives with long directory and file paths (>100 chars)", () => {
+      const archiveDir = mkdtempSync(join(tmpdir(), "archive-long-path-"));
+      const outTarGz = join(archiveDir, "archive.tar.gz");
+      try {
+        // Build a path that exceeds 100 bytes
+        const deepDir = join(
+          archiveDir,
+          "very_long_nested_directory_level_1",
+          "second_long_nested_directory_level_2",
+          "third_long_nested_directory_level_3"
+        );
+        mkdirSync(deepDir, { recursive: true });
+        writeFileSync(join(deepDir, "sample.txt"), "hello long path");
+
+        createTarGzArchive(archiveDir, outTarGz);
+        expect(existsSync(outTarGz)).toBe(true);
+
+        const entries = readTarGzEntries(outTarGz);
+        const keys = Array.from(entries.keys());
+        const dirKey = keys.find((k) => k.includes("third_long_nested_directory_level_3"));
+        expect(dirKey).toBeDefined();
+        // Dir entry path in tar header ends with / or is registered as directory
+        expect(dirKey!.length).toBeGreaterThan(100);
+        expect(entries.get(dirKey!)).toBeNull();
+
+        const fileKey = keys.find((k) => k.endsWith("sample.txt"));
+        expect(fileKey).toBeDefined();
+        expect(entries.get(fileKey!)?.toString("utf-8")).toBe("hello long path");
+      } finally {
+        rmSync(archiveDir, { recursive: true, force: true });
       }
     });
   });

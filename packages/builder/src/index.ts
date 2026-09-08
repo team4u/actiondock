@@ -4,3 +4,4 @@ export * from "./build";
 export * from "./planner";
 export * from "./compiler";
 export * from "./exporter";
+export * from "./archive";

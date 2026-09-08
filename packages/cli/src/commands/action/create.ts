@@ -93,7 +93,7 @@ export default defineAction<Input, Output>({
         const manifest = loadManifest(root) || { schemaVersion: 1, actions: {}, assets: [] };
         manifest.actions = manifest.actions || {};
         manifest.actions[id] = {
-          entry: join(config.actionsDir || "actions", targetRelFile),
+          entry: join(config.actionsDir || "actions", targetRelFile).replace(/\\/g, "/"),
           description: desc,
           inputSchema: {
             type: "object",

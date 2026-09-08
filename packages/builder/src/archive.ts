@@ -182,12 +182,14 @@ function tarHeader(path: string, size: number, mtimeSec: number, isDir: boolean)
   let name = path;
   let prefix = "";
   if (Buffer.byteLength(name, "utf8") > 100) {
-    const split = name.lastIndexOf("/");
-    if (split <= 0 || split > 155 || name.length - split - 1 > 100) {
+    const trailingSlash = name.endsWith("/");
+    const cleanPath = trailingSlash ? name.slice(0, -1) : name;
+    const split = cleanPath.lastIndexOf("/");
+    prefix = cleanPath.slice(0, split);
+    name = cleanPath.slice(split + 1) + (trailingSlash ? "/" : "");
+    if (split <= 0 || Buffer.byteLength(prefix, "utf8") > 155 || Buffer.byteLength(name, "utf8") > 100) {
       throw new Error(`归档路径超出 USTAR 字段容量: ${path}`);
     }
-    prefix = name.slice(0, split);
-    name = name.slice(split + 1);
   }
 
   const buf = Buffer.alloc(512);
@@ -230,7 +232,7 @@ export function createTarGzArchive(dir: string, outPath: string): void {
   const chunks: Buffer[] = [];
 
   for (const entry of entries) {
-    const path = `${rootName}/${entry.relPath}`;
+    const path = `${rootName}/${entry.relPath}${entry.isDir ? "/" : ""}`;
     const fullPath = join(dir, entry.relPath);
     const stat = statSync(fullPath);
     const content = entry.isDir ? Buffer.alloc(0) : readFileSync(fullPath);

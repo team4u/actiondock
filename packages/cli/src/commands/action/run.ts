@@ -127,6 +127,7 @@ export async function executeAction(id: string, options: any): Promise<void> {
 
       const runner = new ActionRunner({
         packageId: config.id,
+        projectRoot: resolvedProjectRoot,
         storage,
         projectConfig: config,
         configOverrides,

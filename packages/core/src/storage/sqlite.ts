@@ -592,16 +592,22 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
   ): void {
     if (this.isClosed) return;
     try {
+      const finishIso = finishedAt || this.clock.now().toISOString();
       const stmt = this.getStatement(`
         UPDATE runs
-        SET status = ?, output_json = ?, error_json = ?, finished_at = ?
+        SET status = ?, output_json = ?, error_json = ?, finished_at = ?,
+            duration_ms = CASE
+              WHEN started_at IS NOT NULL THEN MAX(0, CAST(ROUND((julianday(?) - julianday(started_at)) * 86400000) AS INTEGER))
+              ELSE NULL
+            END
         WHERE id = ?
       `);
       stmt.run(
         status,
         output !== undefined ? JSON.stringify(output) : null,
         error ? JSON.stringify(error) : null,
-        finishedAt || this.clock.now().toISOString(),
+        finishIso,
+        finishIso,
         id
       );
     } catch (err) {

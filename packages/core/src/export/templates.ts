@@ -89,11 +89,15 @@ function renderActionListMarkdown(
     .join("\n\n");
 }
 
-function renderPlaybookSectionMarkdown(playbooks: PlaybookDefinition[]): string {
+function renderPlaybookSectionMarkdown(
+  playbooks: PlaybookDefinition[],
+  playbooksDir = "playbooks"
+): string {
   if (playbooks.length === 0) return "";
+  const normalizedDir = playbooksDir.replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/+$/, "");
   const list = playbooks
     .map((p) => {
-      const rel = `./playbooks/${basename(p.filePath)}`;
+      const rel = `./${normalizedDir}/${basename(p.filePath)}`;
       return `- **${p.id}** (\`${rel}\`): ${p.description || "业务操作指南"}`;
     })
     .join("\n");
@@ -118,7 +122,7 @@ export function generateSourceSkillMd(
   const pkgId = config.id;
   const firstAction = actions[0]?.id || "sample.greet";
 
-  const playbookSection = renderPlaybookSectionMarkdown(playbooks);
+  const playbookSection = renderPlaybookSectionMarkdown(playbooks, config.playbooksDir || "playbooks");
   const actionListMd = renderActionListMarkdown(actions, { packageId: pkgId });
 
   return `---
@@ -270,7 +274,7 @@ export function generateStandaloneSkillMd(
   const { cleanName, desc } = getCleanSkillMetadata(config);
   const firstAction = actions[0]?.id || "sample.greet";
 
-  const playbookSection = renderPlaybookSectionMarkdown(playbooks);
+  const playbookSection = renderPlaybookSectionMarkdown(playbooks, config.playbooksDir || "playbooks");
   const actionListMd = renderActionListMarkdown(actions);
 
   return `---

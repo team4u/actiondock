@@ -230,6 +230,8 @@ describe("SqliteRuntimeStorage", () => {
       const updated = storage.getRun("run-1");
       expect(updated?.status).toBe("success");
       expect(updated?.output).toEqual({ y: 2 });
+      expect(typeof updated?.durationMs).toBe("number");
+      expect(updated?.durationMs).toBeGreaterThanOrEqual(0);
 
       const list = storage.listRuns();
       expect(list.length).toBe(1);

@@ -80,6 +80,10 @@ Follow these steps carefully.
     expect(pb.description).toBe("Deploy service to production");
     expect(pb.actions).toEqual(["k8s.apply", "health.check"]);
     expect(pb.content).toContain("# Deploy Service SOP");
+
+    // Windows backslash path fallback test
+    const winPb = parsePlaybookContent("# Just content", "C:\\Users\\dev\\playbooks\\quick-start.md");
+    expect(winPb.id).toBe("quick-start");
   });
 
   it("handles ensureProjectDependencies correctly", () => {
@@ -129,6 +133,26 @@ Follow these steps carefully.
       );
       const fp1Same = computeDependencyFingerprint(emptyDir);
       expect(fp1Same).toBe(fp1);
+
+      // Reordering dependency keys does not alter fingerprint (deterministic key sorting)
+      writeFileSync(
+        pkgPath,
+        JSON.stringify({
+          name: "demo",
+          dependencies: { yaml: "^2.7.0", axios: "^1.0.0" },
+        })
+      );
+      const fpOrder1 = computeDependencyFingerprint(emptyDir);
+
+      writeFileSync(
+        pkgPath,
+        JSON.stringify({
+          name: "demo",
+          dependencies: { axios: "^1.0.0", yaml: "^2.7.0" },
+        })
+      );
+      const fpOrder2 = computeDependencyFingerprint(emptyDir);
+      expect(fpOrder2).toBe(fpOrder1);
 
       // Upgraded dependency version alters fingerprint
       writeFileSync(

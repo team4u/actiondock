@@ -97,6 +97,9 @@ describe("@actiondock/sdk", () => {
     expect(fetched?.nested.val).toBe(100);
 
     // Keys listing with prefix
+    const rootKeys = await store.keys();
+    expect(rootKeys.sort()).toEqual(["global_k1", "global_k2", "nested_obj"]);
+
     const userKeys = await userScope.keys();
     expect(userKeys.sort()).toEqual(["alice", "bob"]);
 
@@ -203,6 +206,108 @@ describe("@actiondock/sdk", () => {
 
     const runtime = createTestRuntime();
     expect(runtime.run(cycleAction, {})).rejects.toThrow("Cycle detected");
+  });
+
+  it("supports full-trace run context (rootId, parentId) in nested action invocation", async () => {
+    let capturedParentRun: any;
+    let capturedChildRun: any;
+
+    const childAction = defineAction({
+      id: "child-worker",
+      run(_input: unknown, ctx) {
+        capturedChildRun = { ...ctx.run };
+        return "child-ok";
+      },
+    });
+
+    const parentAction = defineAction({
+      id: "parent-caller",
+      async run(_input: unknown, ctx) {
+        capturedParentRun = { ...ctx.run };
+        await ctx.actions.invoke(childAction, {});
+        return "parent-ok";
+      },
+    });
+
+    const runtime = createTestRuntime({
+      actions: [childAction],
+    });
+
+    await runtime.run(parentAction, {});
+
+    expect(capturedParentRun).toBeDefined();
+    expect(capturedChildRun).toBeDefined();
+
+    // Parent is root, so rootId equals id and parentId is undefined
+    expect(capturedParentRun.id).toBeTruthy();
+    expect(capturedParentRun.rootId).toBe(capturedParentRun.id);
+    expect(capturedParentRun.parentId).toBeUndefined();
+
+    // Child inherits parent's rootId and sets parentId to parent's id
+    expect(capturedChildRun.id).toBeTruthy();
+    expect(capturedChildRun.id).not.toBe(capturedParentRun.id);
+    expect(capturedChildRun.rootId).toBe(capturedParentRun.rootId);
+    expect(capturedChildRun.parentId).toBe(capturedParentRun.id);
+  });
+
+  it("handles cross-package same-name action invocation in test runtime without cycle false positive", async () => {
+    const localCalc = defineAction({
+      id: "calc",
+      run: (input: { x: number }) => input.x + 1,
+    });
+
+    const extCalc = defineAction({
+      id: "calc",
+      run: (input: { x: number }) => input.x * 10,
+    });
+
+    const caller = defineAction({
+      id: "caller",
+      async run(input: { x: number }, ctx) {
+        const local = await ctx.actions.invoke("calc", { x: input.x });
+        const ext = await ctx.actions.invoke({ packageId: "ext-pkg", actionId: "calc" }, { x: input.x });
+        return { local, ext };
+      },
+    });
+
+    const runtime = createTestRuntime({
+      actions: {
+        calc: localCalc,
+        "ext-pkg/calc": extCalc,
+      },
+    });
+
+    const res = await runtime.run(caller, { x: 5 });
+    expect(res).toEqual({ local: 6, ext: 50 });
+  });
+
+  it("supports concurrent sub-action invocations without call stack race conditions", async () => {
+    const workerAction = defineAction({
+      id: "async-worker",
+      async run(input: { val: number }) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return input.val * 2;
+      },
+    });
+
+    const concurrentCaller = defineAction({
+      id: "concurrent-caller",
+      async run(_input: unknown, ctx) {
+        const results = await Promise.all([
+          ctx.actions.invoke(workerAction, { val: 1 }),
+          ctx.actions.invoke(workerAction, { val: 2 }),
+          ctx.actions.invoke(workerAction, { val: 3 }),
+        ]);
+        return results;
+      },
+    });
+
+    const runtime = createTestRuntime({
+      actions: [workerAction],
+    });
+
+    const results = await runtime.run(concurrentCaller, {});
+    expect(results).toEqual([2, 4, 6]);
   });
 
   it("handles state expiration with TTL in MemoryStateStore", async () => {

@@ -23,7 +23,7 @@ function getTargetRoot(packageOption?: string, keyHint?: string): { root: string
 
   if (!targetPackage && keyHint) {
     if (keyHint.includes("/")) {
-      const slashIdx = keyHint.indexOf("/");
+      const slashIdx = keyHint.lastIndexOf("/");
       targetPackage = keyHint.slice(0, slashIdx);
       effectiveKey = keyHint.slice(slashIdx + 1);
     }

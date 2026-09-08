@@ -344,7 +344,7 @@ async function projectHasAction(
     const actions = await loadActions(projectRoot, actionsDir, { autoInstall: false });
     return actions.has(actionId);
   } catch {
-    return false;
+    return projectHasActionSync(projectRoot, actionsDir, actionId);
   }
 }
 
@@ -416,13 +416,7 @@ export function resolveActionProjectSync(
     let targetRoot: string | undefined;
     let targetPkgId = targetPackage;
 
-    const pkg = linkedList.find(
-      (p) => p.id === targetPackage || getPackageSlug(p.id) === targetPackage
-    );
-    if (pkg && existsSync(pkg.path)) {
-      targetRoot = pkg.path;
-      targetPkgId = pkg.id;
-    } else if (currentRoot) {
+    if (currentRoot) {
       try {
         const config = loadProjectConfig(currentRoot);
         if (config.id === targetPackage || getPackageSlug(config.id) === targetPackage) {
@@ -431,6 +425,17 @@ export function resolveActionProjectSync(
         }
       } catch {
         // Ignore
+      }
+    }
+
+    let pkg: LinkedPackageEntry | undefined;
+    if (!targetRoot) {
+      pkg = linkedList.find(
+        (p) => p.id === targetPackage || getPackageSlug(p.id) === targetPackage
+      );
+      if (pkg && existsSync(pkg.path)) {
+        targetRoot = pkg.path;
+        targetPkgId = pkg.id;
       }
     }
 
@@ -533,13 +538,7 @@ export async function resolveActionProject(
     let targetRoot: string | undefined;
     let targetPkgId = targetPackage;
 
-    const pkg = linkedList.find(
-      (p) => p.id === targetPackage || getPackageSlug(p.id) === targetPackage
-    );
-    if (pkg && existsSync(pkg.path)) {
-      targetRoot = pkg.path;
-      targetPkgId = pkg.id;
-    } else if (currentRoot) {
+    if (currentRoot) {
       try {
         const config = loadProjectConfig(currentRoot);
         if (config.id === targetPackage || getPackageSlug(config.id) === targetPackage) {
@@ -548,6 +547,17 @@ export async function resolveActionProject(
         }
       } catch {
         // Ignore
+      }
+    }
+
+    let pkg: LinkedPackageEntry | undefined;
+    if (!targetRoot) {
+      pkg = linkedList.find(
+        (p) => p.id === targetPackage || getPackageSlug(p.id) === targetPackage
+      );
+      if (pkg && existsSync(pkg.path)) {
+        targetRoot = pkg.path;
+        targetPkgId = pkg.id;
       }
     }
 
@@ -638,31 +648,22 @@ export function resolvePackageRoot(
   }
 
   // If it was explicitly a path (starts with . or / or ~ or contains / or \), and did not resolve above:
+  // Scoped package identifiers (e.g. @team/tools) contain '/' but are package IDs, not file paths.
+  const isScopedPackage = packageIdOrPath.startsWith("@");
   const isExplicitPath =
-    packageIdOrPath.startsWith(".") ||
-    packageIdOrPath.startsWith("/") ||
-    packageIdOrPath.startsWith("~") ||
-    packageIdOrPath.includes("/") ||
-    packageIdOrPath.includes("\\");
+    !isScopedPackage &&
+    (packageIdOrPath.startsWith(".") ||
+      packageIdOrPath.startsWith("/") ||
+      packageIdOrPath.startsWith("~") ||
+      packageIdOrPath.includes("/") ||
+      packageIdOrPath.includes("\\"));
 
   if (isExplicitPath) {
     // An explicit path that does not exist or is not an ActionDock project must fail
     return null;
   }
 
-  // 2. Check linked packages in registry
-  const linkedList = listLinkedPackages(customHome);
-  const found = linkedList.find(
-    (p) =>
-      p.id === packageIdOrPath ||
-      getPackageSlug(p.id) === packageIdOrPath ||
-      p.path === resolvedPath
-  );
-  if (found) {
-    return found.path;
-  }
-
-  // 3. Check current project (from cwd)
+  // 2. Check current project (from cwd)
   const currentRoot = findProjectRoot(cwd);
   if (currentRoot) {
     try {
@@ -673,6 +674,18 @@ export function resolvePackageRoot(
     } catch {
       // ignore broken config
     }
+  }
+
+  // 3. Check linked packages in registry
+  const linkedList = listLinkedPackages(customHome);
+  const found = linkedList.find(
+    (p) =>
+      p.id === packageIdOrPath ||
+      getPackageSlug(p.id) === packageIdOrPath ||
+      p.path === resolvedPath
+  );
+  if (found) {
+    return found.path;
   }
 
   return null;
@@ -707,11 +720,11 @@ export function resolvePlaybookProject(
   let purePlaybookId = playbookIdentifier;
 
   if (playbookIdentifier.includes("/")) {
-    const slashIdx = playbookIdentifier.indexOf("/");
+    const slashIdx = playbookIdentifier.lastIndexOf("/");
     targetPackage = playbookIdentifier.slice(0, slashIdx);
     purePlaybookId = playbookIdentifier.slice(slashIdx + 1);
   } else if (playbookIdentifier.includes(":")) {
-    const colonIdx = playbookIdentifier.indexOf(":");
+    const colonIdx = playbookIdentifier.lastIndexOf(":");
     targetPackage = playbookIdentifier.slice(0, colonIdx);
     purePlaybookId = playbookIdentifier.slice(colonIdx + 1);
   }
@@ -722,13 +735,7 @@ export function resolvePlaybookProject(
     let targetRoot: string | undefined;
     let targetPkgId = targetPackage;
 
-    const pkg = linkedList.find(
-      (p) => p.id === targetPackage || getPackageSlug(p.id) === targetPackage
-    );
-    if (pkg && existsSync(pkg.path)) {
-      targetRoot = pkg.path;
-      targetPkgId = pkg.id;
-    } else if (currentRoot) {
+    if (currentRoot) {
       try {
         const config = loadProjectConfig(currentRoot);
         if (config.id === targetPackage || getPackageSlug(config.id) === targetPackage) {
@@ -737,6 +744,17 @@ export function resolvePlaybookProject(
         }
       } catch {
         // Ignore
+      }
+    }
+
+    let pkg: LinkedPackageEntry | undefined;
+    if (!targetRoot) {
+      pkg = linkedList.find(
+        (p) => p.id === targetPackage || getPackageSlug(p.id) === targetPackage
+      );
+      if (pkg && existsSync(pkg.path)) {
+        targetRoot = pkg.path;
+        targetPkgId = pkg.id;
       }
     }
 
