@@ -1,5 +1,5 @@
 import { ExecutionManager } from "../runtime/execution-manager";
-import { createStorage } from "../storage";
+import { createGlobalStorage, createStorage } from "../storage";
 import type { RuntimeStorage } from "../storage/types";
 
 /**
@@ -12,6 +12,7 @@ import type { RuntimeStorage } from "../storage/types";
  */
 export class ServerRuntimeRegistry {
   private storages = new Map<string, RuntimeStorage>();
+  private globalStorage?: RuntimeStorage;
   private listeners = new Map<string, Set<(event: { type: string; data: any }) => void>>();
   public executionManager: ExecutionManager;
 
@@ -71,6 +72,19 @@ export class ServerRuntimeRegistry {
   }
 
   /**
+   * 获取或懒加载全局共享持久化存储实例（~/.actiondock/global.db）。
+   * 实现全局数据库单例池化，避免重复创建连接泄漏。
+   * 
+   * @param customHome 自定义家目录路径（可选）
+   */
+  public getGlobalStorage(customHome?: string): RuntimeStorage {
+    if (!this.globalStorage) {
+      this.globalStorage = createGlobalStorage(customHome);
+    }
+    return this.globalStorage;
+  }
+
+  /**
    * 获取当前缓存的所有活跃 RuntimeStorage 实例列表。
    */
   public getAllStorages(): RuntimeStorage[] {
@@ -111,5 +125,14 @@ export class ServerRuntimeRegistry {
       }
     }
     this.storages.clear();
+
+    if (this.globalStorage) {
+      try {
+        this.globalStorage.close();
+      } catch {
+        // 忽略关机过程中的全局存储关闭异常
+      }
+      this.globalStorage = undefined;
+    }
   }
 }

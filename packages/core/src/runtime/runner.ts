@@ -29,6 +29,8 @@ export interface RunnerOptions {
   packageId: string;
   /** 持久化运行时存储实例（SQLite） */
   storage: RuntimeStorage;
+  /** 全局共享持久化存储实例（SQLite，用于单例池化避免泄漏） */
+  globalStorage?: RuntimeStorage;
   /** 项目根目录绝对路径 */
   projectRoot?: string;
   /** 项目元数据配置 */
@@ -47,6 +49,9 @@ export interface RunnerOptions {
     currentPackageId?: string
   ) => ActionDefinition | undefined | Promise<ActionDefinition | undefined>;
 }
+
+/** ActionRunnerOptions 别名兼容 */
+export type ActionRunnerOptions = RunnerOptions;
 
 /**
  * 启动 Action 执行时的可选控制参数。
@@ -107,6 +112,7 @@ export interface ExecutionHandle {
 export class ActionRunner {
   private packageId: string;
   private storage: RuntimeStorage;
+  private globalStorage?: RuntimeStorage;
   private projectRoot?: string;
   private projectConfig?: ProjectConfig;
   private configOverrides: Record<string, unknown>;
@@ -120,6 +126,7 @@ export class ActionRunner {
   constructor(options: RunnerOptions) {
     this.packageId = options.packageId;
     this.storage = options.storage;
+    this.globalStorage = options.globalStorage;
     this.projectRoot = options.projectRoot;
     this.projectConfig = options.projectConfig;
     this.configOverrides = options.configOverrides || {};
@@ -374,6 +381,7 @@ export class ActionRunner {
     // 5. 构建 ActionContext 运行时上下文
     const ctx = createActionContext({
       storage: this.storage,
+      globalStorage: this.globalStorage,
       overrides: this.configOverrides,
       projectConfig: this.projectConfig,
       runId,

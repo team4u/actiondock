@@ -1,4 +1,4 @@
-import Ajv from "ajv";
+import Ajv, { type ValidateFunction } from "ajv";
 import addFormats from "ajv-formats";
 import type { JsonSchema } from "@actiondock/sdk";
 
@@ -9,6 +9,9 @@ const ajv = new Ajv({
   coerceTypes: false,
 });
 addFormats(ajv);
+
+// 缓存已编译的 ValidateFunction，提升性能并支持同对象引用复用
+const validatorCache = new WeakMap<object, ValidateFunction>();
 
 /**
  * JSON Schema 校验结果对象。
@@ -36,7 +39,17 @@ export function validateSchema(
   }
 
   try {
-    const validate = ajv.compile(schema);
+    let validate = validatorCache.get(schema);
+    if (!validate) {
+      const schemaId = (schema as any).$id;
+      if (typeof schemaId === "string" && schemaId.length > 0) {
+        validate = ajv.getSchema(schemaId);
+      }
+      if (!validate) {
+        validate = ajv.compile(schema);
+      }
+      validatorCache.set(schema, validate);
+    }
     const valid = validate(data);
 
     if (valid) {

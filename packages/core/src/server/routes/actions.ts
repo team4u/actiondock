@@ -187,6 +187,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
         packageId: config.id,
         projectRoot: resolved.projectRoot,
         storage,
+        globalStorage: runtimeRegistry.getGlobalStorage(customHome),
         projectConfig: config,
         configOverrides: body?.config || {},
         actions,

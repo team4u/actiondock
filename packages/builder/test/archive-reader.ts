@@ -112,3 +112,73 @@ export function readTarGzEntries(tarGzPath: string): ArchiveContents {
 
   return contents;
 }
+
+/**
+ * 读取 zip 归档中各条目的外部权限属性（mode）。
+ */
+export function readZipEntryModes(zipPath: string): Map<string, number> {
+  const buf = readFileSync(zipPath);
+  const modes = new Map<string, number>();
+
+  let eocd = -1;
+  const searchStart = Math.max(0, buf.length - 22 - 65535);
+  for (let i = buf.length - 22; i >= searchStart; i--) {
+    if (buf.readUInt32LE(i) === 0x06054b50) {
+      eocd = i;
+      break;
+    }
+  }
+  if (eocd < 0) {
+    throw new Error("zip EOCD record not found");
+  }
+
+  const entryCount = buf.readUInt16LE(eocd + 10);
+  let ptr = buf.readUInt32LE(eocd + 16);
+
+  for (let i = 0; i < entryCount; i++) {
+    if (buf.readUInt32LE(ptr) !== 0x02014b50) {
+      throw new Error(`zip central directory signature mismatch at ${ptr}`);
+    }
+    const nameLen = buf.readUInt16LE(ptr + 28);
+    const extraLen = buf.readUInt16LE(ptr + 30);
+    const commentLen = buf.readUInt16LE(ptr + 32);
+    const extAttrs = buf.readUInt32LE(ptr + 38);
+    const name = buf.toString("utf8", ptr + 46, ptr + 46 + nameLen);
+    const cleanName = name.endsWith("/") ? name.slice(0, -1) : name;
+    // Unix 权限保存在 external attributes 高 16 位
+    modes.set(cleanName, (extAttrs >>> 16) & 0o777777);
+
+    ptr += 46 + nameLen + extraLen + commentLen;
+  }
+
+  return modes;
+}
+
+/**
+ * 读取 tar.gz 归档中各条目的权限属性（mode）。
+ */
+export function readTarGzEntryModes(tarGzPath: string): Map<string, number> {
+  const buf = gunzipSync(readFileSync(tarGzPath));
+  const modes = new Map<string, number>();
+
+  let offset = 0;
+  while (offset + 512 <= buf.length) {
+    const block = buf.subarray(offset, offset + 512);
+    if (block.every((byte) => byte === 0)) {
+      break;
+    }
+
+    const name = readStringField(block, 0, 100);
+    const mode = readOctalField(block, 100, 8);
+    const size = readOctalField(block, 124, 12);
+    const prefix = readStringField(block, 345, 155);
+    const fullPath = prefix ? `${prefix}/${name}` : name;
+    const cleanPath = fullPath.endsWith("/") ? fullPath.slice(0, -1) : fullPath;
+
+    modes.set(cleanPath, mode);
+
+    offset += 512 + Math.ceil(size / 512) * 512;
+  }
+
+  return modes;
+}

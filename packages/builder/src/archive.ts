@@ -125,7 +125,7 @@ export function createZipArchive(dir: string, outPath: string): void {
     // Central Directory Header（46 字节 + 文件名）
     const central = Buffer.alloc(46);
     central.writeUInt32LE(0x02014b50, 0);
-    central.writeUInt16LE(20, 4); // version made by
+    central.writeUInt16LE((3 << 8) | 20, 4); // version made by: Unix + ZIP 2.0
     central.writeUInt16LE(20, 6); // version needed
     central.writeUInt16LE(0x0800, 8);
     central.writeUInt16LE(method, 10);
@@ -140,7 +140,11 @@ export function createZipArchive(dir: string, outPath: string): void {
     central.writeUInt16LE(0, 34); // disk start
     central.writeUInt16LE(0, 36); // internal attrs
     // 外部属性：Unix 权限左移 16 位，目录附加 MS-DOS 目录位
-    const extAttrs = ((entry.isDir ? 0o40755 : 0o100644) << 16) | (entry.isDir ? 0x10 : 0);
+    const isExec =
+      !entry.isDir &&
+      (Boolean(stat.mode & 0o111) || entry.relPath.includes("bin/") || entry.relPath.startsWith("bin/"));
+    const fileMode = isExec ? 0o100755 : 0o100644;
+    const extAttrs = ((entry.isDir ? 0o40755 : fileMode) << 16) | (entry.isDir ? 0x10 : 0);
     central.writeUInt32LE(extAttrs >>> 0, 38);
     central.writeUInt32LE(offset, 42);
     centralRecords.push({ header: Buffer.concat([central, nameBuf]), localOffset: offset });
@@ -178,7 +182,13 @@ export function createZipArchive(dir: string, outPath: string): void {
  * 构造单个条目的 USTAR 头块（512 字节）。
  * 路径超长时按 USTAR prefix 字段拆分，仍放不下则抛错。
  */
-function tarHeader(path: string, size: number, mtimeSec: number, isDir: boolean): Buffer {
+function tarHeader(
+  path: string,
+  size: number,
+  mtimeSec: number,
+  isDir: boolean,
+  modeOrExec: string | boolean = false
+): Buffer {
   let name = path;
   let prefix = "";
   if (Buffer.byteLength(name, "utf8") > 100) {
@@ -194,7 +204,13 @@ function tarHeader(path: string, size: number, mtimeSec: number, isDir: boolean)
 
   const buf = Buffer.alloc(512);
   buf.write(name, 0, 100, "utf8");
-  buf.write(isDir ? "0000755" : "0000644", 100, 8, "ascii"); // mode
+  let mode: string;
+  if (typeof modeOrExec === "string") {
+    mode = modeOrExec;
+  } else {
+    mode = isDir ? "0000755" : (modeOrExec ? "0000755" : "0000644");
+  }
+  buf.write(mode, 100, 8, "ascii"); // mode
   buf.write("0000000", 108, 8, "ascii"); // uid
   buf.write("0000000", 116, 8, "ascii"); // gid
   buf.write(size.toString(8).padStart(11, "0"), 124, 12, "ascii"); // size
@@ -236,8 +252,19 @@ export function createTarGzArchive(dir: string, outPath: string): void {
     const fullPath = join(dir, entry.relPath);
     const stat = statSync(fullPath);
     const content = entry.isDir ? Buffer.alloc(0) : readFileSync(fullPath);
+    const isExec =
+      !entry.isDir &&
+      (Boolean(stat.mode & 0o111) || entry.relPath.includes("bin/") || entry.relPath.startsWith("bin/"));
 
-    chunks.push(tarHeader(path, content.length, Math.floor(stat.mtimeMs / 1000), entry.isDir));
+    chunks.push(
+      tarHeader(
+        path,
+        content.length,
+        Math.floor(stat.mtimeMs / 1000),
+        entry.isDir,
+        isExec
+      )
+    );
     if (!entry.isDir) {
       chunks.push(content, pad512(content.length));
     }

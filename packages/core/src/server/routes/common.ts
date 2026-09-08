@@ -47,7 +47,7 @@ export function resolveStorageForPackage(
   customHome?: string
 ): { packageId: string; storage: RuntimeStorage; projectRoot?: string } {
   if (packageIdOrPath) {
-    const root = resolvePackageRoot(packageIdOrPath, customHome);
+    const root = resolvePackageRoot(packageIdOrPath, projectRoot || undefined, customHome);
     if (root) {
       const config = loadProjectConfig(root);
       return {

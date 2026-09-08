@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import {
+  chmodSync,
   copyFileSync,
   existsSync,
   mkdirSync,
@@ -33,8 +34,14 @@ import {
   PlannerError,
   SkillExporter,
   createTarGzArchive,
+  createZipArchive,
 } from "../src";
-import { readTarGzEntries, readZipEntries } from "./archive-reader";
+import {
+  readTarGzEntries,
+  readTarGzEntryModes,
+  readZipEntries,
+  readZipEntryModes,
+} from "./archive-reader";
 
 /** 递归收集目录内文件：归档内相对路径（含根目录前缀）→ 文件内容 */
 function collectFiles(dir: string): Map<string, Buffer> {
@@ -670,6 +677,44 @@ process.exit(0);
         const archived = tarEntries.get(relPath);
         expect(archived).toBeDefined();
         expect(archived!.equals(content)).toBe(true);
+      }
+    });
+
+    it("打包归档时正确识别并保留可执行文件与 bin 目录权限位 (zip 与 tar.gz)", () => {
+      const archiveTestDir = mkdtempSync(join(tmpdir(), "ad-archive-perm-test-"));
+      try {
+        const binDir = join(archiveTestDir, "bin");
+        mkdirSync(binDir, { recursive: true });
+
+        const execScript = join(binDir, "run.sh");
+        writeFileSync(execScript, "#!/bin/sh\necho ok\n");
+        chmodSync(execScript, 0o755);
+
+        const normalFile = join(archiveTestDir, "readme.txt");
+        writeFileSync(normalFile, "Hello World\n");
+        chmodSync(normalFile, 0o644);
+
+        const zipOut = join(tempDir, "perm-test.zip");
+        const tarOut = join(tempDir, "perm-test.tar.gz");
+
+        createZipArchive(archiveTestDir, zipOut);
+        createTarGzArchive(archiveTestDir, tarOut);
+
+        const rootName = basename(archiveTestDir);
+
+        // 验证 zip 权限位
+        const zipModes = readZipEntryModes(zipOut);
+        expect(zipModes.get(`${rootName}/bin/run.sh`)).toBe(0o100755);
+        expect(zipModes.get(`${rootName}/readme.txt`)).toBe(0o100644);
+        expect(zipModes.get(`${rootName}/bin`)).toBe(0o40755);
+
+        // 验证 tar.gz 权限位
+        const tarModes = readTarGzEntryModes(tarOut);
+        expect(tarModes.get(`${rootName}/bin/run.sh`)).toBe(0o755);
+        expect(tarModes.get(`${rootName}/readme.txt`)).toBe(0o644);
+        expect(tarModes.get(`${rootName}/bin`)).toBe(0o755);
+      } finally {
+        rmSync(archiveTestDir, { recursive: true, force: true });
       }
     });
 

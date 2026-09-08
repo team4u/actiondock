@@ -16,7 +16,7 @@ const packages = [
   "cli",
 ] as const;
 
-console.log("🚀 Starting ActionDock Pack Smoke Test...");
+console.log("[START] Starting ActionDock Pack Smoke Test...");
 
 // 1. Pack all packages
 const tarballPaths: Record<string, string> = {};
@@ -24,7 +24,7 @@ const tarballPaths: Record<string, string> = {};
 try {
   for (const pkg of packages) {
     const pkgDir = join(rootDir, "packages", pkg);
-    console.log(`📦 Packing @actiondock/${pkg}...`);
+    console.log(`[PACK] Packing @actiondock/${pkg}...`);
     
     const packProc = Bun.spawnSync(["bun", "pm", "pack"], {
       cwd: pkgDir,
@@ -46,12 +46,12 @@ try {
     }
 
     tarballPaths[pkg] = tgzPath;
-    console.log(`   ✓ Created ${tgzFilename} (${(Bun.file(tgzPath).size / 1024).toFixed(2)} KB)`);
+    console.log(`   [OK] Created ${tgzFilename} (${(Bun.file(tgzPath).size / 1024).toFixed(2)} KB)`);
   }
 
   // 2. Create clean temporary directory
   const testDir = mkdtempSync(join(tmpdir(), "actiondock-pack-smoke-"));
-  console.log(`🧪 Testing in isolated temporary environment: ${testDir}`);
+  console.log(`[TEST] Testing in isolated temporary environment: ${testDir}`);
 
   // 3. Write test package.json with overrides pointing to packed tgz files
   const testPkgJson = {
@@ -81,7 +81,7 @@ try {
   writeFileSync(join(testDir, "package.json"), JSON.stringify(testPkgJson, null, 2));
 
   // 4. Run bun install in clean directory
-  console.log("📥 Installing packed tarballs into test environment...");
+  console.log("[INSTALL] Installing packed tarballs into test environment...");
   const installProc = Bun.spawnSync(["bun", "install"], {
     cwd: testDir,
     stdout: "pipe",
@@ -91,10 +91,10 @@ try {
   if (installProc.exitCode !== 0) {
     throw new Error(`bun install failed: ${installProc.stderr.toString()}`);
   }
-  console.log("   ✓ Dependencies installed cleanly");
+  console.log("   [OK] Dependencies installed cleanly");
 
   // 5. Test SDK & Core imports and functionality
-  console.log("🔍 Testing SDK, Core, and MCP module imports and runtime execution...");
+  console.log("[TEST] Testing SDK, Core, and MCP module imports and runtime execution...");
   const testScriptContent = `
 import { defineAction, createTestRuntime } from "@actiondock/sdk";
 import { ActionRunner } from "@actiondock/core";
@@ -130,19 +130,19 @@ if ((await runtime.state.get("count")) !== 42) {
   throw new Error("State store update failed");
 }
 
-console.log("   ✓ SDK defineAction & TestRuntime verified");
+console.log("   [OK] SDK defineAction & TestRuntime verified");
 
 // 2. Core verification
 if (typeof ActionRunner !== "function") {
   throw new Error("ActionRunner export missing from @actiondock/core");
 }
-console.log("   ✓ Core ActionRunner export verified");
+console.log("   [OK] Core ActionRunner export verified");
 
 // 3. MCP verification
 if (typeof createActionDockMcpServer !== "function" || typeof toMcpResult !== "function") {
   throw new Error("createActionDockMcpServer export missing from @actiondock/mcp");
 }
-console.log("   ✓ MCP createActionDockMcpServer & toMcpResult export verified");
+console.log("   [OK] MCP createActionDockMcpServer & toMcpResult export verified");
 `;
 
   writeFileSync(join(testDir, "test-runtime.mjs"), testScriptContent);
@@ -159,7 +159,7 @@ console.log("   ✓ MCP createActionDockMcpServer & toMcpResult export verified"
   console.log(nodeProc.stdout.toString().trimEnd());
 
   // 6. Test CLI executable in node_modules/.bin
-  console.log("⚙️  Testing CLI executable in node_modules/.bin/ad...");
+  console.log("[TEST] Testing CLI executable in node_modules/.bin/ad...");
   const cliBin = join(testDir, "node_modules", ".bin", "ad");
   if (!existsSync(cliBin)) {
     throw new Error(`CLI executable not found at: ${cliBin}`);
@@ -170,14 +170,14 @@ console.log("   ✓ MCP createActionDockMcpServer & toMcpResult export verified"
   if (verProc.exitCode !== 0 || !verProc.stdout.toString().includes(currentVersion)) {
     throw new Error(`'ad --version' failed: ${verProc.stderr.toString()} (output: ${verProc.stdout.toString()})`);
   }
-  console.log(`   ✓ ad --version returned ${currentVersion}`);
+  console.log(`   [OK] ad --version returned ${currentVersion}`);
 
   // ad --help
   const helpProc = Bun.spawnSync([cliBin, "--help"], { cwd: testDir, stdout: "pipe", stderr: "pipe" });
   if (helpProc.exitCode !== 0 || !helpProc.stdout.toString().includes("ActionDock (ad) 2.0")) {
     throw new Error(`'ad --help' failed: ${helpProc.stderr.toString()}`);
   }
-  console.log(`   ✓ ad --help verified`);
+  console.log(`   [OK] ad --help verified`);
 
   // ad doctor --json
   const docProc = Bun.spawnSync([cliBin, "doctor", "--json"], { cwd: testDir, stdout: "pipe", stderr: "pipe" });
@@ -188,13 +188,13 @@ console.log("   ✓ MCP createActionDockMcpServer & toMcpResult export verified"
   if (!docJson.summary || docJson.summary.errorCount > 0) {
     throw new Error(`'ad doctor' reported unexpected errors: ${JSON.stringify(docJson.summary)}`);
   }
-  console.log(`   ✓ ad doctor passed with 0 errors`);
+  console.log(`   [OK] ad doctor passed with 0 errors`);
 
   // Cleanup testDir
   rmSync(testDir, { recursive: true, force: true });
-  console.log("🧹 Cleaned up temporary test environment");
+  console.log("[CLEANUP] Cleaned up temporary test environment");
 
-  console.log("\n🎉 All Pack Smoke Tests Passed Successfully!");
+  console.log("\n[SUCCESS] All Pack Smoke Tests Passed Successfully!");
 } finally {
   // Always remove generated tarball files
   for (const tgz of Object.values(tarballPaths)) {

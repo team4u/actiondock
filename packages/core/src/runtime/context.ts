@@ -186,6 +186,7 @@ export class StderrLogger implements Logger {
  */
 export interface ContextOptions {
   storage: RuntimeStorage;
+  globalStorage?: RuntimeStorage;
   overrides?: Record<string, unknown>;
   projectConfig?: ProjectConfig;
   parentRunId?: string;
@@ -213,7 +214,8 @@ export function createActionContext(options: ContextOptions): ActionContext {
   const config = new RuntimeConfig(
     options.storage,
     options.overrides,
-    options.projectConfig
+    options.projectConfig,
+    options.globalStorage
   );
   const state = new RuntimeStateStore(options.storage);
   const log = options.logger || new StderrLogger();

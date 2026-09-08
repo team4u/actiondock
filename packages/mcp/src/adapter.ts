@@ -209,6 +209,7 @@ export async function createActionDockMcpServer(
     const runner = new ActionRunner({
       packageId: dummyConfig.id,
       storage,
+      globalStorage: runtimeRegistry.getGlobalStorage(options.customHome),
       projectConfig: dummyConfig,
       configOverrides: options.configOverrides,
       actions: options.actions,
@@ -243,6 +244,7 @@ export async function createActionDockMcpServer(
         packageId: projectConfig.id,
         projectRoot: root,
         storage,
+        globalStorage: runtimeRegistry.getGlobalStorage(options.customHome),
         projectConfig,
         configOverrides: options.configOverrides,
         actions,

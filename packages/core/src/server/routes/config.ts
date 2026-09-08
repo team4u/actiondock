@@ -1,4 +1,5 @@
 import { loadProjectConfig } from "../../project/loader";
+import { resolveEnvValue } from "../../runtime";
 import { readJsonBody } from "../body";
 import { type RouteContext, jsonResponse, resolveStorageForPackage } from "./common";
 
@@ -25,17 +26,13 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
       const declared = cfg.config || {};
       const envChecks: any[] = [];
       for (const [k, def] of Object.entries(declared)) {
-        const envKeys = [
-          k,
-          `ACTIONDOCK_${k}`,
-          `${packageId.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_${k}`,
-        ];
-        const foundEnv = envKeys.find((ek) => process.env[ek] !== undefined);
+        const resolved = resolveEnvValue(k, def, packageId);
+        const matchedEnv = resolved?.envKey || null;
         envChecks.push({
           key: k,
           required: def.default === undefined,
-          satisfied: Boolean(foundEnv || def.default !== undefined),
-          matchedEnv: foundEnv || null,
+          satisfied: Boolean(resolved !== undefined || def.default !== undefined),
+          matchedEnv,
           hasDefault: def.default !== undefined,
           secret: Boolean(def.secret),
         });
