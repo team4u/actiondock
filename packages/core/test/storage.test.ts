@@ -111,29 +111,47 @@ describe("SqliteRuntimeStorage", () => {
     });
 
     it("should expire state keys based on TTL", async () => {
-      // 1. TTL in seconds (0.05s = 50ms)
-      await storage.setState("", "temp1", "val1", 0.05);
-      expect(await storage.getState<string>("", "temp1")).toBe("val1");
+      let currentTime = 1000000;
+      const testClock = {
+        now: () => new Date(currentTime),
+        monotonic: () => currentTime,
+        sleep: async (ms: number) => {
+          currentTime += ms;
+        },
+      };
+      const ttlStorage = new SqliteRuntimeStorage({
+        packageId: "test-pkg",
+        dbPath: ":memory:",
+        clock: testClock,
+      });
 
-      // 2. TTL in namespace
-      await storage.setState("ns1", "temp2", { a: 1 }, 0.05);
-      expect(await storage.getState<{ a: number }>("ns1", "temp2")).toEqual({ a: 1 });
+      try {
+        // 1. TTL in seconds (10s)
+        await ttlStorage.setState("", "temp1", "val1", 10);
+        expect(await ttlStorage.getState<string>("", "temp1")).toBe("val1");
 
-      // 3. Permanent key
-      await storage.setState("", "perm", "stay");
+        // 2. TTL in namespace
+        await ttlStorage.setState("ns1", "temp2", { a: 1 }, 10);
+        expect(await ttlStorage.getState<{ a: number }>("ns1", "temp2")).toEqual({ a: 1 });
 
-      expect((await storage.listStateKeys("")).sort()).toEqual(["perm", "temp1"]);
-      expect(await storage.listStateKeys("ns1")).toEqual(["temp2"]);
+        // 3. Permanent key
+        await ttlStorage.setState("", "perm", "stay");
 
-      // Wait 70ms for expiration
-      await new Promise((resolve) => setTimeout(resolve, 70));
+        expect((await ttlStorage.listStateKeys("")).sort()).toEqual(["perm", "temp1"]);
+        expect(await ttlStorage.listStateKeys("ns1")).toEqual(["temp2"]);
 
-      expect(await storage.getState("", "temp1")).toBeUndefined();
-      expect(await storage.getState("ns1", "temp2")).toBeUndefined();
-      expect(await storage.getState<string>("", "perm")).toBe("stay");
+        // Advance clock by 11 seconds (11000ms)
+        currentTime += 11000;
 
-      expect(await storage.listStateKeys("")).toEqual(["perm"]);
-      expect(await storage.listStateKeys("ns1")).toEqual([]);
+        expect(await ttlStorage.getState("", "temp1")).toBeUndefined();
+        expect(await ttlStorage.getState("ns1", "temp2")).toBeUndefined();
+        expect(await ttlStorage.getState<string>("", "perm")).toBe("stay");
+
+        expect(await ttlStorage.listStateKeys("")).toEqual(["perm"]);
+        expect(await ttlStorage.listStateKeys("ns1")).toEqual([]);
+      } finally {
+        ttlStorage.close();
+      }
     });
 
     it("should migrate database from version 1 schema and support expires_at", () => {

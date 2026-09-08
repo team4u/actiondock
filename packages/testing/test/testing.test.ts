@@ -1,5 +1,4 @@
-import { afterAll, describe, expect, it } from "bun:test";
-import { setSystemClock, SystemClock } from "@actiondock/core";
+import { describe, expect, it } from "bun:test";
 import { defineAction, type ActionDefinition } from "@actiondock/sdk";
 import {
   ActionRuntimeError,
@@ -418,9 +417,5 @@ describe("@actiondock/testing", () => {
       expect(runtime.process.hasCalled("docker")).toBe(true);
       expect(runtime.process.getLastCall()?.args).toEqual(["ps"]);
     });
-  });
-
-  afterAll(() => {
-    setSystemClock(new SystemClock());
   });
 });

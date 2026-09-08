@@ -7,7 +7,6 @@ import {
   RuntimeStateStore,
   setDefaultEventSink,
   setProcessExecutor,
-  setSystemClock,
 } from "@actiondock/core";
 import type {
   ActionDefinition,
@@ -226,8 +225,7 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
       clock,
     });
 
-  // 全局注入测试时钟与进程执行器
-  setSystemClock(clock);
+  // 全局注入测试进程执行器
   setProcessExecutor(process);
 
   // 初始化配置数据
