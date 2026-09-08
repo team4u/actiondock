@@ -17,7 +17,7 @@ export function registerVersionHelpCommands(program: Command, context?: RuntimeC
       if (context?.standalone) {
         writeStdout(`${context.standalone.packageId} v${context.standalone.version}`, context);
       } else {
-        const ver = program.version() || "2.0.11-beta.0";
+        const ver = program.version() || "2.0.11";
         const name = program.name() || "ActionDock";
         writeStdout(`${name} v${ver}`, context);
       }
