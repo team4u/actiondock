@@ -4,12 +4,15 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { initProject } from "../src/project/init";
 import {
+  computeDependencyFingerprint,
   discoverActionFiles,
   ensureProjectDependencies,
   loadActions,
   loadPlaybooks,
   loadProjectConfig,
   parsePlaybookContent,
+  readStoredDependencyFingerprint,
+  saveDependencyFingerprint,
 } from "../src/project/loader";
 
 describe("Project Loader & Init", () => {
@@ -94,6 +97,90 @@ Follow these steps carefully.
       expect(ensureProjectDependencies(tempDir)).toBe(false);
     } finally {
       rmSync(emptyDir, { recursive: true, force: true });
+    }
+  });
+
+  it("computes dependency fingerprint and detects version changes", () => {
+    const emptyDir = mkdtempSync(join(tmpdir(), "empty-fingerprint-"));
+    try {
+      expect(computeDependencyFingerprint(emptyDir)).toBeNull();
+
+      const pkgPath = join(emptyDir, "package.json");
+      writeFileSync(
+        pkgPath,
+        JSON.stringify({
+          name: "demo",
+          version: "1.0.0",
+          dependencies: { yaml: "^2.7.0" },
+        })
+      );
+      const fp1 = computeDependencyFingerprint(emptyDir);
+      expect(fp1).toBeTruthy();
+
+      // Irrelevant field changes do not alter dependency fingerprint
+      writeFileSync(
+        pkgPath,
+        JSON.stringify({
+          name: "demo-renamed",
+          version: "1.0.1",
+          description: "different description",
+          dependencies: { yaml: "^2.7.0" },
+        })
+      );
+      const fp1Same = computeDependencyFingerprint(emptyDir);
+      expect(fp1Same).toBe(fp1);
+
+      // Upgraded dependency version alters fingerprint
+      writeFileSync(
+        pkgPath,
+        JSON.stringify({
+          name: "demo-renamed",
+          dependencies: { yaml: "^2.8.0" },
+        })
+      );
+      const fp2 = computeDependencyFingerprint(emptyDir);
+      expect(fp2).not.toBe(fp1);
+
+      // Lockfile changes alter fingerprint
+      writeFileSync(join(emptyDir, "package-lock.json"), JSON.stringify({ lockfileVersion: 3 }));
+      const fp3 = computeDependencyFingerprint(emptyDir);
+      expect(fp3).not.toBe(fp2);
+    } finally {
+      rmSync(emptyDir, { recursive: true, force: true });
+    }
+  });
+
+  it("reads and saves dependency fingerprint in cache", () => {
+    saveDependencyFingerprint(tempDir, "sample-fingerprint-hash");
+    expect(readStoredDependencyFingerprint(tempDir)).toBe("sample-fingerprint-hash");
+  });
+
+  it("detects dependency changes and records fingerprint during ensureProjectDependencies", () => {
+    writeFileSync(
+      join(tempDir, "package.json"),
+      JSON.stringify({ name: "test-pkg", dependencies: { yaml: "^2.7.0" } })
+    );
+
+    // First call saves fingerprint and returns false (existing node_modules trusted)
+    expect(ensureProjectDependencies(tempDir)).toBe(false);
+    const initialFp = readStoredDependencyFingerprint(tempDir);
+    expect(initialFp).toBe(computeDependencyFingerprint(tempDir));
+
+    // Second call with same dependencies returns false immediately
+    expect(ensureProjectDependencies(tempDir)).toBe(false);
+
+    // When ACTIONDOCK_AUTO_INSTALL is false, returns false even if fingerprint changes
+    const oldEnv = process.env.ACTIONDOCK_AUTO_INSTALL;
+    try {
+      process.env.ACTIONDOCK_AUTO_INSTALL = "false";
+      saveDependencyFingerprint(tempDir, "stale-outdated-hash");
+      expect(ensureProjectDependencies(tempDir)).toBe(false);
+    } finally {
+      if (oldEnv === undefined) {
+        delete process.env.ACTIONDOCK_AUTO_INSTALL;
+      } else {
+        process.env.ACTIONDOCK_AUTO_INSTALL = oldEnv;
+      }
     }
   });
 });
