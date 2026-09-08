@@ -177,6 +177,62 @@ describe("ActionRunner", () => {
     expect(runs.length).toBe(2);
   });
 
+  it("handles action invocation by string ID, ActionRef, and dynamic actionResolver", async () => {
+    const storage = new SqliteRuntimeStorage({
+      packageId: "local-pkg",
+      dbPath: ":memory:",
+    });
+
+    const localStep = defineAction({
+      id: "local.calc",
+      run: (input: { x: number }) => input.x * 2,
+    });
+
+    const extAction = defineAction({
+      id: "greet",
+      run: (input: { name: string }) => `Hello, ${input.name}!`,
+    });
+
+    const orchestrator = defineAction({
+      id: "orchestrator",
+      async run(input: { val: number }, ctx) {
+        // 1. 调用本地动作（通过字符串 ID）
+        const calcRes = await ctx.actions.invoke("local.calc", { x: input.val });
+        // 2. 调用本地动作（通过 ActionRef）
+        const refRes = await ctx.actions.invoke({ actionId: "local.calc" }, { x: calcRes });
+        // 3. 跨包显式调用外部动作（通过 package/action 字符串）
+        const extRes = await ctx.actions.invoke("ext-pkg/greet", { name: "ActionDock" });
+        return { calcRes, refRes, extRes };
+      },
+    });
+
+    const runner = new ActionRunner({
+      packageId: "local-pkg",
+      storage,
+      actions: new Map<string, ActionDefinition<any, any>>([
+        [localStep.id, localStep],
+        [orchestrator.id, orchestrator],
+      ]),
+      actionResolver: async (ref) => {
+        const id = typeof ref === "string" ? ref : ref.actionId;
+        if (id === "ext-pkg/greet" || id === "greet") {
+          return extAction;
+        }
+        return undefined;
+      },
+    });
+
+    const res = await runner.execute(orchestrator, { val: 5 });
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.data).toEqual({
+        calcRes: 10,
+        refRes: 20,
+        extRes: "Hello, ActionDock!",
+      });
+    }
+  });
+
   it("handles environment variables: explicit env, package prefix, snake case, and type coercion", async () => {
     const storage = new SqliteRuntimeStorage({
       packageId: "team.demo-service",

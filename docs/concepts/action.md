@@ -69,7 +69,8 @@ export default defineAction<GreetInput, GreetOutput>({
 - 当智能体生成 Action 实现代码后，能够依靠这一纯内存测试底座实现本地自治验证；遇到边界失败时，依据精确的错误结构自主修正代码，实现闭环自愈。
 
 ### 级联调用与循环检测
-- Action 可通过 `ctx.actions.invoke("other-action", input)` 组合调用其他 Action。
+- Action 可通过 [`ctx.actions.invoke`](file:///root/code/action-dock/packages/sdk/src/types.ts) 灵活组合调用其他 Action，支持传入动作定义对象、短标识符（如 `"b"`）、跨包限定标识符（如 `"shared-pkg/b"`）或 [`ActionRef`](file:///root/code/action-dock/packages/sdk/src/types.ts) 引用对象。
+- 彻底解耦动作互调对相对文件路径的直接依赖，支持自包含技能资产闭包导出与全局挂载包共享寻址。
 - 运行时内置防死循环递归检测机制（`ACTION_CYCLE_DETECTED`），最大调用深度受控。
 
 ### 跨平台 CLI 调度与防死锁

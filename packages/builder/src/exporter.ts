@@ -263,6 +263,12 @@ export class SkillExporter {
           tags: a.tags,
           annotations: a.annotations,
         };
+        if (a.id.includes("/")) {
+          const shortId = a.id.slice(a.id.lastIndexOf("/") + 1);
+          if (!manifestActions[shortId]) {
+            manifestActions[shortId] = manifestActions[a.id];
+          }
+        }
       }
       const exportedManifest = {
         schemaVersion: 1,

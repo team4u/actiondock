@@ -3,6 +3,7 @@ import type {
   ActionContext,
   ActionDefinition,
   ActionInvoker,
+  ActionRef,
   Config,
   Logger,
   ProcessResult,
@@ -21,6 +22,8 @@ export interface TestRuntimeOptions {
   logger?: Logger;
   /** 自定义取消信号（可选，默认使用未中断的 AbortSignal） */
   signal?: AbortSignal;
+  /** 预注册的 Action 集合（供跨 Action 调用或按 ID 标识符解析） */
+  actions?: ActionDefinition[] | Record<string, ActionDefinition> | Map<string, ActionDefinition>;
 }
 
 /**
@@ -204,10 +207,13 @@ export interface TestRuntime {
   logger: MemoryLogger;
   /**
    * 执行指定的 Action 并返回最终输出结果
-   * @param action 目标 Action
+   * @param action 目标 Action 定义对象、引用或标识符
    * @param input 输入参数
    */
-  run<I, O>(action: ActionDefinition<I, O>, input: I): Promise<O>;
+  run<I = unknown, O = unknown>(
+    action: ActionDefinition<I, O> | ActionRef | string,
+    input?: I
+  ): Promise<O>;
 }
 
 /**
@@ -239,16 +245,53 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
   const logger = (options.logger as MemoryLogger) || new MemoryLogger();
   const signal = options.signal ?? new AbortController().signal;
 
+  const actionsMap = new Map<string, ActionDefinition>();
+  if (options.actions) {
+    if (Array.isArray(options.actions)) {
+      for (const act of options.actions) {
+        actionsMap.set(act.id, act);
+      }
+    } else if (options.actions instanceof Map) {
+      for (const [k, v] of options.actions) {
+        actionsMap.set(k, v);
+      }
+    } else if (typeof options.actions === "object") {
+      for (const [k, v] of Object.entries(options.actions)) {
+        actionsMap.set(k, v);
+      }
+    }
+  }
+
   const callStack: string[] = [];
 
   const invoker: ActionInvoker = {
-    async invoke<I, O>(action: ActionDefinition<I, O>, input: I): Promise<O> {
-      if (callStack.includes(action.id)) {
+    async invoke<I = unknown, O = unknown>(
+      action: ActionDefinition<I, O> | ActionRef | string,
+      input?: I
+    ): Promise<O> {
+      let target: ActionDefinition<I, O>;
+      if (
+        typeof action === "object" &&
+        "run" in action &&
+        typeof (action as any).run === "function"
+      ) {
+        target = action as ActionDefinition<I, O>;
+      } else {
+        const id = typeof action === "string" ? action : (action as ActionRef).actionId;
+        const pureId = id.includes("/") ? id.slice(id.lastIndexOf("/") + 1) : id;
+        const found = actionsMap.get(id) || actionsMap.get(pureId);
+        if (!found) {
+          throw new Error(`Action '${id}' not found in TestRuntime actions registry`);
+        }
+        target = found as ActionDefinition<I, O>;
+      }
+
+      if (callStack.includes(target.id)) {
         throw new Error(
-          `Cycle detected in action invocation: ${callStack.join(" -> ")} -> ${action.id}`
+          `Cycle detected in action invocation: ${callStack.join(" -> ")} -> ${target.id}`
         );
       }
-      callStack.push(action.id);
+      callStack.push(target.id);
       try {
         const runId = "test-" + Math.random().toString(36).slice(2, 10);
         const ctx: ActionContext = {
@@ -321,7 +364,7 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
             rootId: runId,
           },
         };
-        return await action.run(input, ctx);
+        return (await target.run(input as I, ctx)) as O;
       } finally {
         callStack.pop();
       }
@@ -332,7 +375,10 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
     config,
     state,
     logger,
-    async run<I, O>(action: ActionDefinition<I, O>, input: I): Promise<O> {
+    async run<I = unknown, O = unknown>(
+      action: ActionDefinition<I, O> | ActionRef | string,
+      input?: I
+    ): Promise<O> {
       return invoker.invoke(action, input);
     },
   };

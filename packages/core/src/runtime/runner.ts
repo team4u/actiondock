@@ -1,7 +1,9 @@
+import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import type {
   ActionContext,
   ActionDefinition,
+  ActionRef,
   ExecutionResult,
   JsonValue,
   Logger,
@@ -10,7 +12,10 @@ import type {
   RuntimeError,
   RunRecord,
 } from "@actiondock/sdk";
+import { ActionResolver } from "../catalog/action-resolver";
+import { loadActions, loadProjectConfig } from "../project/loader";
 import type { ProjectConfig } from "../project/types";
+import { resolveActionProject } from "../registry/registry";
 import { validateSchema } from "../schema/validator";
 import type { RuntimeStorage, TerminalRunStatus } from "../storage/types";
 import { createActionContext, StderrLogger } from "./context";
@@ -31,6 +36,11 @@ export interface RunnerOptions {
   actions?: Map<string, ActionDefinition>;
   /** 外部注入的进程执行器 */
   process?: ProcessAPI;
+  /** 动态解析跨包或未注册 Action 的委托函数 */
+  actionResolver?: (
+    ref: ActionRef | string,
+    currentPackageId?: string
+  ) => ActionDefinition | undefined | Promise<ActionDefinition | undefined>;
 }
 
 /**
@@ -95,6 +105,10 @@ export class ActionRunner {
   private projectConfig?: ProjectConfig;
   private configOverrides: Record<string, unknown>;
   private actions: Map<string, ActionDefinition>;
+  private actionResolver?: (
+    ref: ActionRef | string,
+    currentPackageId?: string
+  ) => ActionDefinition | undefined | Promise<ActionDefinition | undefined>;
 
   constructor(options: RunnerOptions) {
     this.packageId = options.packageId;
@@ -102,6 +116,7 @@ export class ActionRunner {
     this.projectConfig = options.projectConfig;
     this.configOverrides = options.configOverrides || {};
     this.actions = options.actions || new Map();
+    this.actionResolver = options.actionResolver;
   }
 
   /**
@@ -119,6 +134,75 @@ export class ActionRunner {
   }
 
   /**
+   * 动态解析 Action（支持本地注册表、自定义解析器委托与已链接包目录索引检索）。
+   * 
+   * @param actionOrRef Action 定义对象、引用或标识符
+   * @returns 解析出的 ActionDefinition，若未找到则返回 undefined
+   */
+  public async resolveAction(
+    actionOrRef: ActionDefinition | ActionRef | string
+  ): Promise<ActionDefinition | undefined> {
+    if (
+      typeof actionOrRef === "object" &&
+      "run" in actionOrRef &&
+      typeof (actionOrRef as any).run === "function"
+    ) {
+      return actionOrRef as ActionDefinition;
+    }
+
+    const ref = actionOrRef as ActionRef | string;
+    const parsed = ActionResolver.parseRef(ref);
+    const targetActionId = parsed.actionId;
+    const targetPackageId = parsed.packageId;
+
+    // 1. 本地 actions 映射表优先检索
+    if (this.actions.has(targetActionId) && (!targetPackageId || targetPackageId === this.packageId)) {
+      return this.actions.get(targetActionId);
+    }
+    if (targetPackageId && this.actions.has(`${targetPackageId}/${targetActionId}`)) {
+      return this.actions.get(`${targetPackageId}/${targetActionId}`);
+    }
+
+    // 2. 外部注入的自定义 actionResolver 调度
+    if (this.actionResolver) {
+      const customResolved = await this.actionResolver(ref, this.packageId);
+      if (customResolved) {
+        this.actions.set(targetActionId, customResolved);
+        if (targetPackageId) {
+          this.actions.set(`${targetPackageId}/${targetActionId}`, customResolved);
+        }
+        return customResolved;
+      }
+    }
+
+    // 3. 基于全局链接注册表与目录索引的动态寻址与按需加载
+    try {
+      const identifier = targetPackageId
+        ? `${targetPackageId}/${targetActionId}`
+        : targetActionId;
+      const resolved = await resolveActionProject(identifier);
+      if (resolved && existsSync(resolved.projectRoot)) {
+        const config = loadProjectConfig(resolved.projectRoot);
+        const actionsMap = await loadActions(resolved.projectRoot, config.actionsDir, {
+          autoInstall: false,
+        });
+        const matched = actionsMap.get(resolved.actionId);
+        if (matched) {
+          this.actions.set(`${resolved.packageId}/${resolved.actionId}`, matched);
+          if (!this.actions.has(resolved.actionId)) {
+            this.actions.set(resolved.actionId, matched);
+          }
+          return matched;
+        }
+      }
+    } catch {
+      // 忽略寻址异常并返回 undefined
+    }
+
+    return undefined;
+  }
+
+  /**
    * 获取当前 Runner 已注册的所有 Action 列表。
    */
   public listActions(): ActionDefinition[] {
@@ -128,13 +212,13 @@ export class ActionRunner {
   /**
    * 异步启动 Action 的执行并立即返回 ExecutionHandle 句柄。
    * 
-   * @param actionOrId Action 定义对象或已注册的 Action ID
+   * @param actionOrId Action 定义对象、引用或标识符
    * @param input 传递给 Action 的输入数据
    * @param options 执行控制选项（超时、取消信号、父运行 ID 等）
    * @returns 包含 runId、result Promise 和 cancel 方法的执行句柄
    */
   start(
-    actionOrId: ActionDefinition | string,
+    actionOrId: ActionDefinition | ActionRef | string,
     input: unknown = {},
     options: ExecutionStartOptions = {}
   ): ExecutionHandle {
@@ -142,30 +226,37 @@ export class ActionRunner {
     const startedAt = new Date().toISOString();
     const callStack = [...(options.callStack || [])];
 
-    let action: ActionDefinition;
-    if (typeof actionOrId === "string") {
-      const found = this.actions.get(actionOrId);
-      if (!found) {
-        const error: RuntimeError = {
-          code: "ACTION_NOT_FOUND",
-          message: `Action '${actionOrId}' not found in registry`,
-        };
-        return {
-          runId,
-          result: Promise.resolve({ ok: false, runId, error }),
-          cancel: () => false,
-        };
-      }
-      action = found;
+    let action: ActionDefinition | undefined;
+    let targetActionId: string;
+    let targetPackageId: string = this.packageId;
+
+    if (
+      typeof actionOrId === "object" &&
+      "run" in actionOrId &&
+      typeof (actionOrId as any).run === "function"
+    ) {
+      action = actionOrId as ActionDefinition;
+      targetActionId = action.id;
     } else {
-      action = actionOrId;
+      const parsed = ActionResolver.parseRef(actionOrId as ActionRef | string);
+      targetActionId = parsed.actionId;
+      if (parsed.packageId) {
+        targetPackageId = parsed.packageId;
+      }
+
+      action =
+        this.actions.get(targetActionId) ||
+        (parsed.packageId ? this.actions.get(`${parsed.packageId}/${targetActionId}`) : undefined);
     }
 
     // 1. 环路死锁检测 (Cycle Detection)
-    if (callStack.includes(action.id)) {
+    const callKey = targetPackageId && targetPackageId !== this.packageId
+      ? `${targetPackageId}/${targetActionId}`
+      : targetActionId;
+    if (callStack.includes(callKey) || callStack.includes(targetActionId)) {
       const error: RuntimeError = {
         code: "ACTION_CYCLE_DETECTED",
-        message: `Cycle detected in action invocation: ${callStack.join(" -> ")} -> ${action.id}`,
+        message: `Cycle detected in action invocation: ${callStack.join(" -> ")} -> ${callKey}`,
       };
       return {
         runId,
@@ -173,10 +264,10 @@ export class ActionRunner {
         cancel: () => false,
       };
     }
-    callStack.push(action.id);
+    callStack.push(callKey);
 
-    // 2. 输入参数 JSON Schema 校验
-    if (action.inputSchema) {
+    // 2. 输入参数 JSON Schema 校验（若 action 已就绪）
+    if (action?.inputSchema) {
       const val = validateSchema(action.inputSchema, input);
       if (!val.valid) {
         const error: RuntimeError = {
@@ -197,9 +288,9 @@ export class ActionRunner {
       id: runId,
       rootRunId: options.rootRunId || options.parentRunId || runId,
       parentRunId: options.parentRunId,
-      packageId: this.packageId,
-      packageInstanceId: options.packageInstanceId || this.packageId,
-      actionId: action.id,
+      packageId: targetPackageId,
+      packageInstanceId: options.packageInstanceId || targetPackageId,
+      actionId: targetActionId,
       generationId: options.generationId || "1",
       ownerId: options.ownerId || "local",
       status: "running",
@@ -257,7 +348,7 @@ export class ActionRunner {
       signal: controller.signal,
       process: options.process,
       progress: options.progress,
-      logger: options.logger || new StderrLogger(action.id),
+      logger: options.logger || new StderrLogger(action?.id || targetActionId),
       onActionInvoke: async (childAction, childInput, parentRunId) => {
         const childResult = await this.execute(childAction, childInput, {
           rootRunId: initialRun.rootRunId,
@@ -293,18 +384,44 @@ export class ActionRunner {
 
     const executionPromise = (async (): Promise<ExecutionResult> => {
       try {
+        let currentAction = action;
+        if (!currentAction) {
+          currentAction = await this.resolveAction(actionOrId);
+          if (!currentAction) {
+            const error: RuntimeError = {
+              code: "ACTION_NOT_FOUND",
+              message: `Action '${targetActionId}' not found in registry or linked packages`,
+            };
+            finalizeRun("failed", undefined, error);
+            return { ok: false, runId, error };
+          }
+
+          if (currentAction.inputSchema) {
+            const val = validateSchema(currentAction.inputSchema, input);
+            if (!val.valid) {
+              const error: RuntimeError = {
+                code: "INPUT_VALIDATION_FAILED",
+                message: `Input schema validation failed for action '${currentAction.id}'`,
+                details: val.errors,
+              };
+              finalizeRun("failed", undefined, error);
+              return { ok: false, runId, error };
+            }
+          }
+        }
+
         const rawOutput = await Promise.race([
-          Promise.resolve().then(() => action.run(input, ctx)),
+          Promise.resolve().then(() => currentAction!.run(input, ctx)),
           abortPromise,
         ]);
 
         // 输出结果 Schema 校验
-        if (action.outputSchema) {
-          const outVal = validateSchema(action.outputSchema, rawOutput);
+        if (currentAction.outputSchema) {
+          const outVal = validateSchema(currentAction.outputSchema, rawOutput);
           if (!outVal.valid) {
             const error: RuntimeError = {
               code: "OUTPUT_VALIDATION_FAILED",
-              message: `Output schema validation failed for action '${action.id}'`,
+              message: `Output schema validation failed for action '${currentAction.id}'`,
               details: outVal.errors,
             };
             finalizeRun("failed", undefined, error);
@@ -375,12 +492,12 @@ export class ActionRunner {
   /**
    * 同步等待方式执行指定 Action，直接返回 ExecutionResult 信封结果。
    * 
-   * @param actionOrId Action 定义对象或 ID
+   * @param actionOrId Action 定义对象、引用或标识符
    * @param input 输入参数
    * @param options 执行控制选项
    */
   async execute(
-    actionOrId: ActionDefinition | string,
+    actionOrId: ActionDefinition | ActionRef | string,
     input: unknown = {},
     options: ExecutionStartOptions = {}
   ): Promise<ExecutionResult> {

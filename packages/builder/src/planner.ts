@@ -8,6 +8,7 @@ import {
   loadProjectConfig,
   type PlaybookDefinition,
   type ProjectConfig,
+  resolveActionProjectSync,
   validateManifest,
 } from "@actiondock/core";
 import { PlannerError } from "./errors";
@@ -474,9 +475,11 @@ export class BuildPlanner {
       }
     }
 
-    // 5. 进行依赖闭包（uses）解析计算，自动处理环形依赖与传递依赖
+    // 5. 进行依赖闭包（uses）解析计算，自动处理环形依赖与传递依赖（支持当前清单与已链接外部包）
     const resolvedActionIds = new Set<string>();
     const queue = Array.from(initialActionIds);
+    const externalActionRoots = new Map<string, string>();
+    const externalActionEntries = new Map<string, ActionManifestEntry>();
 
     while (queue.length > 0) {
       const currentId = queue.shift()!;
@@ -484,12 +487,35 @@ export class BuildPlanner {
         continue;
       }
 
-      const entry = manifest.actions[currentId];
+      let entry = manifest.actions[currentId];
+      let entryRoot = root;
+
+      if (!entry) {
+        try {
+          const resolvedExternal = resolveActionProjectSync(currentId, root);
+          if (resolvedExternal && existsSync(resolvedExternal.projectRoot)) {
+            const externalManifest = loadManifest(resolvedExternal.projectRoot);
+            const externalEntry = externalManifest?.actions?.[resolvedExternal.actionId];
+            if (externalEntry) {
+              entry = externalEntry;
+              entryRoot = resolvedExternal.projectRoot;
+            }
+          }
+        } catch {
+          // 忽略
+        }
+      }
+
       if (!entry) {
         throw new PlannerError(
-          `Action '${currentId}' referenced in dependency closure (uses) was not found in manifest`,
+          `Action '${currentId}' referenced in dependency closure (uses) was not found in manifest or linked packages`,
           "MISSING_DEPENDENCY"
         );
+      }
+
+      if (entryRoot !== root) {
+        externalActionRoots.set(currentId, entryRoot);
+        externalActionEntries.set(currentId, entry);
       }
 
       resolvedActionIds.add(currentId);
@@ -514,8 +540,15 @@ export class BuildPlanner {
     // 7. 构造 Action 依赖结构
     const actionDependencies: ActionDependency[] = [];
     for (const actId of resolvedActionIds) {
-      const entry = manifest.actions[actId];
-      const resolvedPath = resolve(root, entry.entry);
+      const entry = manifest.actions[actId] || externalActionEntries.get(actId);
+      const entryRoot = externalActionRoots.get(actId) || root;
+      if (!entry) {
+        throw new PlannerError(
+          `Action '${actId}' entry not found`,
+          "ENTRY_FILE_NOT_FOUND"
+        );
+      }
+      const resolvedPath = resolve(entryRoot, entry.entry);
       if (!existsSync(resolvedPath)) {
         throw new PlannerError(
           `Action '${actId}' entry file not found on disk: ${entry.entry}`,

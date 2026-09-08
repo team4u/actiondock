@@ -348,6 +348,139 @@ async function projectHasAction(
   }
 }
 
+function projectHasActionSync(
+  projectRoot: string,
+  actionsDir: string | undefined,
+  actionId: string
+): boolean {
+  const manifest = loadManifest(projectRoot);
+  if (manifest?.actions && actionId in manifest.actions) {
+    return true;
+  }
+  const dir = join(projectRoot, actionsDir || "actions");
+  if (existsSync(join(dir, `${actionId}.ts`)) || existsSync(join(dir, `${actionId}.js`))) {
+    return true;
+  }
+  return false;
+}
+
+export function resolveActionProjectSync(
+  actionIdentifier: string,
+  cwd: string = process.cwd(),
+  customHome?: string
+): ResolvedActionProject {
+  // 1. Check current directory / parent project
+  const currentRoot = findProjectRoot(cwd);
+  if (currentRoot) {
+    try {
+      const config = loadProjectConfig(currentRoot);
+      if (projectHasActionSync(currentRoot, config.actionsDir, actionIdentifier)) {
+        return {
+          projectRoot: currentRoot,
+          packageId: config.id,
+          actionId: actionIdentifier,
+        };
+      }
+    } catch {
+      // Ignore and proceed to registry lookup
+    }
+  }
+
+  // 2. Check if scoped format: <package-id>/<action-id> or <package-id>:<action-id>
+  let targetPackage: string | undefined;
+  let pureActionId = actionIdentifier;
+
+  if (actionIdentifier.includes("/")) {
+    const slashIdx = actionIdentifier.indexOf("/");
+    targetPackage = actionIdentifier.slice(0, slashIdx);
+    pureActionId = actionIdentifier.slice(slashIdx + 1);
+  } else if (actionIdentifier.includes(":")) {
+    const colonIdx = actionIdentifier.indexOf(":");
+    targetPackage = actionIdentifier.slice(0, colonIdx);
+    pureActionId = actionIdentifier.slice(colonIdx + 1);
+  }
+
+  const linkedList = listLinkedPackages(customHome);
+
+  if (targetPackage) {
+    let targetRoot: string | undefined;
+    let targetPkgId = targetPackage;
+
+    const pkg = linkedList.find(
+      (p) => p.id === targetPackage || getPackageSlug(p.id) === targetPackage
+    );
+    if (pkg && existsSync(pkg.path)) {
+      targetRoot = pkg.path;
+      targetPkgId = pkg.id;
+    } else if (currentRoot) {
+      try {
+        const config = loadProjectConfig(currentRoot);
+        if (config.id === targetPackage || getPackageSlug(config.id) === targetPackage) {
+          targetRoot = currentRoot;
+          targetPkgId = config.id;
+        }
+      } catch {
+        // Ignore
+      }
+    }
+
+    if (!targetRoot || !existsSync(targetRoot)) {
+      throw new Error(
+        `Linked package '${targetPackage}' not found or path no longer exists (${pkg?.path || "unregistered"}). Run 'ad link' in the package directory.`
+      );
+    }
+
+    const config = loadProjectConfig(targetRoot);
+    if (!projectHasActionSync(targetRoot, config.actionsDir, pureActionId)) {
+      throw new Error(`Action '${pureActionId}' not found in package '${targetPkgId}' (${targetRoot})`);
+    }
+
+    return {
+      projectRoot: targetRoot,
+      packageId: targetPkgId,
+      actionId: pureActionId,
+    };
+  }
+
+  // 3. Search across all linked packages
+  const matches: Array<{ entry: LinkedPackageEntry; actionId: string }> = [];
+
+  for (const pkg of linkedList) {
+    if (!existsSync(pkg.path)) continue;
+    try {
+      const config = loadProjectConfig(pkg.path);
+      if (projectHasActionSync(pkg.path, config.actionsDir, actionIdentifier)) {
+        matches.push({ entry: pkg, actionId: actionIdentifier });
+      }
+    } catch {
+      // Ignore invalid linked package
+    }
+  }
+
+  if (matches.length === 1) {
+    return {
+      projectRoot: matches[0].entry.path,
+      packageId: matches[0].entry.id,
+      actionId: matches[0].actionId,
+    };
+  }
+
+  if (matches.length > 1) {
+    const pkgList = matches.map((m) => `'${m.entry.id}'`).join(", ");
+    throw new Error(
+      `Action '${actionIdentifier}' is provided by multiple linked packages: ${pkgList}. Please specify using '<package-id>/${actionIdentifier}'.`
+    );
+  }
+
+  if (currentRoot) {
+    throw new Error(`Action '${actionIdentifier}' not found in current project or any linked packages`);
+  } else {
+    throw new Error(
+      `Action '${actionIdentifier}' not found. You are not in an ActionDock project, and no linked package provides '${actionIdentifier}'. Use 'ad link' to register your package.`
+    );
+  }
+}
+
 export async function resolveActionProject(
   actionIdentifier: string,
   cwd: string = process.cwd(),

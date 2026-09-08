@@ -151,6 +151,29 @@ describe("@actiondock/sdk", () => {
     expect(res).toEqual({ result: 21 });
   });
 
+  it("supports action invocation by string ID and ActionRef", async () => {
+    const childAction = defineAction({
+      id: "child",
+      run: (input: { val: number }) => input.val * 3,
+    });
+
+    const parentAction = defineAction({
+      id: "parent",
+      async run(input: { val: number }, ctx) {
+        const res1 = await ctx.actions.invoke<{ val: number }, number>("child", { val: input.val });
+        const res2 = await ctx.actions.invoke<{ val: number }, number>({ actionId: "child" }, { val: input.val });
+        const res3 = await ctx.actions.invoke<{ val: number }, number>("my-pkg/child", { val: input.val });
+        return { total: res1 + res2 + res3 };
+      },
+    });
+
+    const runtime = createTestRuntime({
+      actions: [childAction],
+    });
+    const res = await runtime.run(parentAction, { val: 5 });
+    expect(res).toEqual({ total: 15 + 15 + 15 });
+  });
+
   it("detects recursion/cycle in action invocation", async () => {
     const cycleAction: any = defineAction({
       id: "test.cycle",

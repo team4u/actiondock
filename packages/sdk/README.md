@@ -83,7 +83,7 @@ export default defineAction({
 - `ctx.run`：当前执行实例元数据，包含 `id`（本次运行标识）、`rootId`（根调用标识）和 `parentId`（父级调用标识），便于全链路追踪。
 - `ctx.config`：分层配置读取接口，提供 `get` 与 `has` 方法，支持优先级回退与类型强转。
 - `ctx.state`：持久化状态接口，提供基于当前 Package 命名空间隔离的键值存储与存活时间控制。
-- `ctx.actions`：动作相互调用接口，支持调用包内其他 Action，并内置调用栈环路死锁检测。
+- `ctx.actions`：动作相互调用接口，支持通过定义对象、短标识符、跨包限定标识符或引用结构体调用下游 Action，并内置调用栈环路死锁检测。
 
 ---
 
@@ -94,10 +94,13 @@ export default defineAction({
 ```ts
 import { createTestRuntime } from "@actiondock/sdk";
 import addAction from "../actions/add";
+import calcAction from "../actions/calc";
 
-const runtime = createTestRuntime();
-const result = await runtime.run(addAction, { a: 10, b: 20 });
-console.log(result.result); // 输出 30
+// 纯内存沙箱支持预注入依赖动作，无需外部挂载即可模拟相互调用
+const runtime = createTestRuntime({
+  actions: [addAction],
+});
+const result = await runtime.run(calcAction, { a: 10, b: 20 });
 ```
 
 ---

@@ -3,6 +3,7 @@ import type {
   ActionContext,
   ActionDefinition,
   ActionInvoker,
+  ActionRef,
   Config,
   Logger,
   ProcessAPI,
@@ -196,7 +197,7 @@ export interface ContextOptions {
   progress?: ProgressReporter;
   logger?: Logger;
   onActionInvoke?: (
-    action: ActionDefinition,
+    action: ActionDefinition | ActionRef | string,
     input: unknown,
     parentRunId?: string
   ) => Promise<unknown>;
@@ -221,7 +222,10 @@ export function createActionContext(options: ContextOptions): ActionContext {
   const currentRootRunId = options.rootRunId || options.parentRunId || currentRunId;
 
   const invoker: ActionInvoker = {
-    async invoke<I, O>(action: ActionDefinition<I, O>, input: I): Promise<O> {
+    async invoke<I, O>(
+      action: ActionDefinition<I, O> | ActionRef | string,
+      input?: I
+    ): Promise<O> {
       if (options.onActionInvoke) {
         return (await options.onActionInvoke(
           action as any,

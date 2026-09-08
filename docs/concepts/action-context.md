@@ -66,17 +66,44 @@ await cacheState.set("user_101", { name: "Alice" });
 
 ---
 
-## `ctx.actions`：级联调用与防循环机制
+## `ctx.actions`：级联调用、跨包寻址与防循环机制
 
-Action 之间可以互相安全调用，同时保留完整的 Schema 校验与日志链路：
+Action 之间可以互相安全调用，支持直接对象引用、短标识符以及跨包动态寻址，同时保留完整的入参校验与日志链路：
 
 ```ts
 import getUserAction from "./get-user";
 
+// 方式一：直接通过定义对象调用（适用于同包已导入模块，具备静态类型推导）
 const user = await ctx.actions.invoke(getUserAction, {
   username: "octocat",
 });
+
+// 方式二：通过短标识符调用（适用于同包或自包含导出的下游动作）
+const profile = await ctx.actions.invoke("get-user", {
+  username: "octocat",
+});
+
+// 方式三：通过完全限定标识符跨包调用（适用于 ad link 挂载的外部共享包动作）
+const stats = await ctx.actions.invoke("shared-pkg/get-stats", {
+  username: "octocat",
+});
+
+// 方式四：通过 ActionRef 引用对象调用
+const repo = await ctx.actions.invoke({ packageId: "team4u.github-tools", actionId: "get-repo" }, {
+  repo: "team4u/actiondock",
+});
 ```
+
+### 动态寻址与调用机制
+
+- **短标识符与自包含模式**：
+  - 在动作契约中声明 `uses: ["get-user"]`，代码中调用 `ctx.actions.invoke("get-user", input)`。
+  - 构建导出时，[`BuildPlanner`](file:///root/code/action-dock/packages/builder/src/planner.ts) 自动将依赖闭包抽取并打包为自包含的独立技能资产。
+  - 消费者挂载多个包含同名依赖的自包含包时，各包在内部封闭运行，互不干扰。
+- **完全限定标识符与外部共享包模式**：
+  - 在动作契约中声明 `uses: ["shared-pkg/get-stats"]`，代码中调用 `ctx.actions.invoke("shared-pkg/get-stats", input)`。
+  - 运行时通过全局注册表动态查找已通过 `ad link` 挂载的目标包并执行。
+  - 所有调用方共享目标包的单一实例与底层状态存储，避免代码拷贝并保障状态一致。
 
 ### 循环调用防御
 当 Action A 调用 Action B，Action B 又调用 Action A 时，执行引擎会自动检测调用链中的重复 ID，并在达到阈值时立即抛出 `ACTION_CYCLE_DETECTED` 错误，防止死循环耗尽资源。

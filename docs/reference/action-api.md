@@ -170,7 +170,24 @@ export interface ActionInvoker {
     input?: I
   ): Promise<O>;
 }
+
+export interface ActionRef {
+  /** 所属包标识（可选） */
+  packageId?: string;
+  /** Action 动作标识 */
+  actionId: string;
+}
 ```
+
+#### 调用参数形态与动态解析机制
+- **定义对象直接调用**：直接传入已导入的 `ActionDefinition` 对象，具备全流程静态类型约束与入参校验。
+- **短标识符调用**：传入纯字符串动作标识符（如 `"calc"`），优先在当前项目动作清单与自包含导出闭包内部就近解析。
+- **跨包限定标识符调用**：传入包含包标识符的字符串（如 `"shared-pkg/calc"`），运行时通过全局路由注册表（`ad link`）动态检索已挂载的外部包并按需加载。
+- **结构化引用对象调用**：传入 `ActionRef` 对象（如 `{ packageId: "shared-pkg", actionId: "calc" }`），以结构化形式指定目标包与动作。
+
+#### 依赖声明模式差异
+- **自包含模式**：在 `defineAction` 的 `uses` 声明短标识符（如 `uses: ["b"]`），构建导出时自动将依赖动作源码抽取并打包为自包含的独立技能资产，各包内部封闭无外部依赖。
+- **显式共享包模式**：在 `defineAction` 的 `uses` 声明限定标识符（如 `uses: ["shared-pkg/b"]`），依赖通过全局挂载（`ad link`）统一管理，所有调用方共享同一实例与持久化存储。
 
 ### 结构化日志接口 `Logger`
 
@@ -379,3 +396,63 @@ export default defineAction({
   },
 });
 ```
+
+---
+
+## 纯内存测试沙箱 `createTestRuntime`
+
+[`createTestRuntime`](file:///root/code/action-dock/packages/sdk/src/test-runtime.ts)（从 `@actiondock/sdk` 或 `@actiondock/testing` 导出）提供轻量级纯内存测试沙箱，无需真实文件系统或外部进程即可验证 Action 执行逻辑、状态持久化与多动作互调。
+
+```ts
+export function createTestRuntime(options?: TestRuntimeOptions): TestRuntime;
+
+export interface TestRuntimeOptions {
+  /** 预填的配置字典 */
+  config?: Record<string, unknown>;
+  /** 预填的状态字典 */
+  state?: Record<string, unknown>;
+  /** 预注入的动作定义集合，支持数组或键值映射 */
+  actions?: ActionDefinition[] | Record<string, ActionDefinition>;
+  /** 自定义日志记录器 */
+  logger?: Logger;
+  /** 自定义进程执行器 */
+  process?: ProcessAPI;
+}
+```
+
+### 使用示例
+```ts
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { createTestRuntime, defineAction } from "@actiondock/sdk";
+
+const childAction = defineAction({
+  id: "math.add",
+  run(input: { a: number; b: number }) {
+    return { sum: input.a + input.b };
+  },
+});
+
+const parentAction = defineAction({
+  id: "math.calc",
+  async run(input: { x: number }, ctx) {
+    const res = await ctx.actions.invoke<{ a: number; b: number }, { sum: number }>(
+      "math.add",
+      { a: input.x, b: 10 }
+    );
+    return { total: res.sum };
+  },
+});
+
+describe("math.calc", () => {
+  it("在纯内存沙箱中模拟动作互调", async () => {
+    const runtime = createTestRuntime({
+      actions: [childAction],
+    });
+
+    const output = await runtime.run(parentAction, { x: 5 });
+    assert.equal(output.total, 15);
+  });
+});
+```
+

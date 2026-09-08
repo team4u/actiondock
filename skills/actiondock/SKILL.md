@@ -223,8 +223,9 @@ export default defineAction<Input, Output>({
     // 进程调度：安全调度外部命令
     // const procRes = await ctx.process.exec("git", ["status"], { cwd: process.cwd() });
 
-    // 级联调用：内存调用其他已导入 Action（内置递归检测与取消信号传递）
+    // 动作互调：支持直接传入定义对象、短标识符或跨包限定标识符
     // const detail = await ctx.actions.invoke(otherAction, { ... });
+    // const sharedRes = await ctx.actions.invoke("shared-pkg/b", { ... });
 
     return {
       items: [],
@@ -255,6 +256,36 @@ export default defineAction<Input, Output>({
 | `ctx.progress` | `report(current: number, total?: number, message?: string): void` | 汇报当前执行进度 |
 | `ctx.signal` | `signal: AbortSignal` | 协作式中断信号，用于长操作与耗时循环终止 |
 | `ctx.run` | `{ id: string; rootId: string; parentId?: string }` | 当前执行任务追踪标识 |
+
+### 动作相互调用与跨包动态寻址规范
+
+ActionDock 彻底解耦动作互调对相对文件路径物理引用的限制，通过 [`ActionInvoker`](file:///root/code/action-dock/packages/sdk/src/types.ts) 接口（即 `ctx.actions.invoke`）以统一规范调用本地动作或已通过 `ad link` 注册至全局路由表的外部包动作。
+
+- 调用范式与参数形式：
+  - **定义对象直接调用**：直接传入已导入的动作定义对象，例如 `await ctx.actions.invoke(childAction, input)`。适合同包内同构模块调用，具备静态类型推导。
+  - **短标识符与自包含调用**：传入纯动作标识符，例如 `await ctx.actions.invoke<Input, Output>("b", input)`。系统优先在当前包清单及构建闭包内部就近解析匹配。
+  - **跨包限定标识符调用**：传入携带包名前缀的限定标识符，例如 `await ctx.actions.invoke<Input, Output>("shared-pkg/b", input)`。系统自动委托全局路由注册表，动态寻址已通过 `ad link` 挂载的外部共享包。
+  - **引用对象结构体调用**：传入结构化引用对象 [`ActionRef`](file:///root/code/action-dock/packages/sdk/src/types.ts)，例如 `await ctx.actions.invoke({ packageId: "shared-pkg", actionId: "b" }, input)`，兼具动态性与语义化。
+
+- 自包含模式与显式共享包模式：
+  - **自包含模式**：
+    - 声明与调用：在动作契约中声明 `uses: ["b"]`，并在代码中通过 `ctx.actions.invoke("b", input)` 调用。
+    - 导出构建机制：在执行 `ad export skill` 导出当前动作或规程时，[`BuildPlanner`](file:///root/code/action-dock/packages/builder/src/planner.ts) 自动解析依赖闭包，将下游依赖动作源码完整提取打包至同一资产目录中。
+    - 隔离特性：即使多个动作分别打包了动作 b，各自导出的技能包内部也是完全自治的闭包；消费者挂载使用时各自在内部就近匹配，完全杜绝包名与符号冲突。
+  - **显式共享包模式**：
+    - 声明与调用：在动作契约中声明 `uses: ["shared-pkg/b"]`，并在代码中通过 `ctx.actions.invoke("shared-pkg/b", input)` 调用。
+    - 路由与共享机制：依赖的外部包作为独立工程发布与维护，消费者通过 `ad link` 挂载至全局注册表。
+    - 状态一致性：所有调用方在运行时均路由至全局唯一实例，共享同一底层存储命名空间与配置，确保持久化状态强一致，避免代码冗余拷贝。
+
+- 测试沙箱模拟支持：
+  - 单元测试沙箱 [`createTestRuntime`](file:///root/code/action-dock/packages/sdk/src/test-runtime.ts) 支持通过 `actions` 参数直接预装模拟动作定义：
+    ```typescript
+    const runtime = createTestRuntime({
+      actions: [mockChildAction],
+    });
+    // 沙箱内部自动支持短标识符与限定标识符动态寻址
+    const result = await runtime.run(callerAction, input);
+    ```
 
 ---
 
@@ -610,3 +641,4 @@ ad doctor --json
 - **严格契约原则**：必须为每个 Action 定义完备的 `inputSchema` 与 `outputSchema`。
 - **响应式取消原则**：对于网络通信与耗时循环，始终绑定并检测 `ctx.signal`。
 - **统一命名空间**：多包交互时，Action 引用必须采用完全限定标识符 `<package-id>/<action-id>`。
+- **解耦引用原则**：跨工作区或跨包调用 Action 时禁止使用文件系统物理相对路径导入，必须使用逻辑标识符（短标识符、完全限定标识符或 Action 引用对象）通过 `ctx.actions.invoke` 进行动态寻址与调用。
