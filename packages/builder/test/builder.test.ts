@@ -326,6 +326,67 @@ actions:
         });
       }).toThrowError(/missing\.dependency/);
     });
+
+    it("静态解析 Action 源码引用的本地模块闭包（lib 与辅助文件）并正确标记为 module", () => {
+      // 创建 lib 源码目录与多级依赖
+      mkdirSync(join(tempDir, "lib", "utils"), { recursive: true });
+      writeFileSync(join(tempDir, "lib", "utils", "sanitize.ts"), "export const sanitize = (s: string) => s.trim();", "utf-8");
+      writeFileSync(
+        join(tempDir, "lib", "format.ts"),
+        'import { sanitize } from "./utils/sanitize.js";\nexport const format = (s: string) => sanitize(s).toUpperCase();',
+        "utf-8"
+      );
+      // 未被引用的额外 lib 文件
+      writeFileSync(join(tempDir, "lib", "unused.ts"), "export const unused = 42;", "utf-8");
+
+      // Action 源码显式引用 lib/format.js
+      const actionWithLibCode = `
+import { defineAction } from "@actiondock/sdk";
+import { format } from "../lib/format.js";
+
+export default defineAction({
+  id: "sample.custom-greet",
+  description: "Greet using helper",
+  run: async (input: { name: string }) => ({ message: format(input.name) }),
+});
+`;
+      writeFileSync(join(tempDir, "actions", "custom-greet.ts"), actionWithLibCode, "utf-8");
+
+      const manifest: ActionDockManifest = {
+        schemaVersion: 1,
+        actions: {
+          "sample.custom-greet": {
+            entry: "actions/custom-greet.ts",
+            description: "Greet using helper",
+            uses: [],
+          },
+        },
+      };
+      saveManifest(tempDir, manifest);
+
+      // 1. 按需选择 Action 规划：仅闭包内的 lib/format.ts 与 lib/utils/sanitize.ts 应当被收集，unused.ts 不在其中
+      const selectivePlan = buildPlan({
+        projectRoot: tempDir,
+        actions: ["sample.custom-greet"],
+      });
+
+      const selectiveModules = selectivePlan.dependencies.modulesAndAssets.filter((d) => d.type === "module");
+      const selectivePaths = selectiveModules.map((m) => m.path);
+      expect(selectivePaths).toContain("lib/format.ts");
+      expect(selectivePaths).toContain("lib/utils/sanitize.ts");
+      expect(selectivePaths).not.toContain("lib/unused.ts");
+
+      // 2. 全量包构建规划：lib 下全部有效源码（含 unused.ts）均被纳入
+      const fullPlan = buildPlan({
+        projectRoot: tempDir,
+      });
+
+      const fullModules = fullPlan.dependencies.modulesAndAssets.filter((d) => d.type === "module");
+      const fullPaths = fullModules.map((m) => m.path);
+      expect(fullPaths).toContain("lib/format.ts");
+      expect(fullPaths).toContain("lib/utils/sanitize.ts");
+      expect(fullPaths).toContain("lib/unused.ts");
+    });
   });
 
   describe("BunCompiler: 独立二进制编译器", () => {

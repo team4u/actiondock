@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import YAML from "yaml";
 import {
   type ActionDockManifest,
@@ -38,6 +38,199 @@ function walkDirectory(dir: string): string[] {
     }
   }
   return results;
+}
+
+/**
+ * 忽略的模块路径与文件模式判断（排除测试文件、类型声明文件以及构建/版本控制等私有目录）。
+ */
+function isIgnoredModulePath(relPath: string): boolean {
+  const normalized = relPath.replace(/\\/g, "/");
+  return (
+    normalized.startsWith("node_modules/") ||
+    normalized.includes("/node_modules/") ||
+    normalized.startsWith(".git/") ||
+    normalized.startsWith("dist/") ||
+    normalized.startsWith(".actiondock/") ||
+    normalized.endsWith(".test.ts") ||
+    normalized.endsWith(".test.js") ||
+    normalized.endsWith(".test.tsx") ||
+    normalized.endsWith(".test.jsx") ||
+    normalized.endsWith(".spec.ts") ||
+    normalized.endsWith(".spec.js") ||
+    normalized.endsWith(".spec.tsx") ||
+    normalized.endsWith(".spec.jsx") ||
+    normalized.endsWith(".d.ts")
+  );
+}
+
+/**
+ * 提取源码文本中的所有相对路径模块引用说明符（如 ./... 与 ../...）。
+ * 采用纯正则静态提取，杜绝动态 import 与代码执行。
+ */
+function extractRelativeImports(source: string): string[] {
+  // 移除多行注释与单行注释，避免注释中的无效相对路径被误提取
+  const stripped = source
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/[^\n]*/g, "");
+
+  const specifiers = new Set<string>();
+
+  // 匹配 from "..."、from '...'、from `...`
+  const fromRegex = /\bfrom\s*["'`]([^"'`]+)["'`]/g;
+  let match: RegExpExecArray | null;
+  while ((match = fromRegex.exec(stripped)) !== null) {
+    const spec = match[1].trim();
+    if (spec.startsWith("./") || spec.startsWith("../")) {
+      specifiers.add(spec);
+    }
+  }
+
+  // 匹配 import(...) 或 import "..."
+  const importRegex = /\bimport\s*(?:\(\s*)?["'`]([^"'`]+)["'`]/g;
+  while ((match = importRegex.exec(stripped)) !== null) {
+    const spec = match[1].trim();
+    if (spec.startsWith("./") || spec.startsWith("../")) {
+      specifiers.add(spec);
+    }
+  }
+
+  // 匹配 require(...)
+  const requireRegex = /\brequire\s*\(\s*["'`]([^"'`]+)["'`]/g;
+  while ((match = requireRegex.exec(stripped)) !== null) {
+    const spec = match[1].trim();
+    if (spec.startsWith("./") || spec.startsWith("../")) {
+      specifiers.add(spec);
+    }
+  }
+
+  return Array.from(specifiers);
+}
+
+const CANDIDATE_EXTENSIONS = [
+  "",
+  ".ts",
+  ".tsx",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+  ".mts",
+  ".cts",
+  ".json",
+];
+
+/**
+ * 在文件系统上探测解析相对导入说明符所对应的物理源文件。
+ * 兼容 NodeNext 规范中将 .js / .mjs / .cjs 说明符解析映射到 .ts / .mts / .cts 源文件。
+ */
+function resolveLocalModulePath(baseDir: string, specifier: string): string | null {
+  const candidate = resolve(baseDir, specifier);
+
+  // 1. 若候选路径直接存在且为文件
+  if (existsSync(candidate)) {
+    try {
+      if (statSync(candidate).isFile()) {
+        return candidate;
+      }
+    } catch {
+      // 忽略文件属性读取异常
+    }
+  }
+
+  // 2. NodeNext / ESM 规范映射：若导入说明符以 .js / .mjs / .cjs 结尾，优先尝试对应 TypeScript 源码文件
+  if (candidate.endsWith(".js")) {
+    const tsPath = candidate.slice(0, -3) + ".ts";
+    if (existsSync(tsPath)) return tsPath;
+    const tsxPath = candidate.slice(0, -3) + ".tsx";
+    if (existsSync(tsxPath)) return tsxPath;
+  } else if (candidate.endsWith(".mjs")) {
+    const mtsPath = candidate.slice(0, -4) + ".mts";
+    if (existsSync(mtsPath)) return mtsPath;
+  } else if (candidate.endsWith(".cjs")) {
+    const ctsPath = candidate.slice(0, -4) + ".cts";
+    if (existsSync(ctsPath)) return ctsPath;
+  }
+
+  // 3. 尝试追加常见扩展名
+  for (const ext of CANDIDATE_EXTENSIONS) {
+    if (!ext) continue;
+    const withExt = candidate + ext;
+    if (existsSync(withExt)) {
+      try {
+        if (statSync(withExt).isFile()) {
+          return withExt;
+        }
+      } catch {
+        // 忽略
+      }
+    }
+  }
+
+  // 4. 若为目录，尝试 index 文件
+  if (existsSync(candidate)) {
+    try {
+      if (statSync(candidate).isDirectory()) {
+        for (const ext of [".ts", ".tsx", ".js", ".mjs", ".json"]) {
+          const indexFile = join(candidate, `index${ext}`);
+          if (existsSync(indexFile)) {
+            return indexFile;
+          }
+        }
+      }
+    } catch {
+      // 忽略
+    }
+  }
+
+  return null;
+}
+
+/**
+ * 从一组入口文件出发，静态深度追踪所有相对路径引用的本地源码模块闭包。
+ */
+function traceLocalModuleDependencies(
+  entryFiles: string[],
+  projectRoot: string
+): string[] {
+  const visited = new Set<string>();
+  const modules = new Set<string>();
+  const queue = [...entryFiles];
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (visited.has(current)) continue;
+    visited.add(current);
+
+    const relToRoot = relative(projectRoot, current);
+    if (relToRoot.startsWith("..") || isAbsolute(relToRoot)) {
+      continue;
+    }
+
+    let content = "";
+    try {
+      content = readFileSync(current, "utf-8");
+    } catch {
+      continue;
+    }
+
+    const specifiers = extractRelativeImports(content);
+    const dir = dirname(current);
+
+    for (const spec of specifiers) {
+      const resolved = resolveLocalModulePath(dir, spec);
+      if (resolved) {
+        const rel = relative(projectRoot, resolved);
+        if (!rel.startsWith("..") && !isAbsolute(rel) && !isIgnoredModulePath(rel)) {
+          modules.add(resolved);
+          if (!visited.has(resolved)) {
+            queue.push(resolved);
+          }
+        }
+      }
+    }
+  }
+
+  return Array.from(modules);
 }
 
 /**
@@ -345,6 +538,49 @@ export class BuildPlanner {
     // 8. 构造模块与资产依赖结构
     const modulesAndAssets: AssetDependency[] = [];
     const assetPathSet = new Set<string>();
+    const modulePathSet = new Set<string>();
+    const actionPathSet = new Set(actionDependencies.map((a) => a.resolvedPath));
+
+    // 静态递归追踪 Action 源码引用的本地模块代码（如 lib/、辅助工具等）
+    const entryFiles = actionDependencies.map((a) => a.resolvedPath);
+    const tracedModulePaths = traceLocalModuleDependencies(entryFiles, root);
+
+    for (const modPath of tracedModulePaths) {
+      if (!actionPathSet.has(modPath)) {
+        const rel = relative(root, modPath).replace(/\\/g, "/");
+        if (!modulePathSet.has(rel) && !isIgnoredModulePath(rel)) {
+          modulePathSet.add(rel);
+          modulesAndAssets.push({
+            path: rel,
+            resolvedPath: modPath,
+            type: "module",
+          });
+        }
+      }
+    }
+
+    // 若未显式过滤 Action 与 Playbook（全量构建模式），且存在根目录 lib 目录，自动全量扫描 lib 源码
+    const isSelective =
+      Boolean(options?.actions && options.actions.length > 0) ||
+      Boolean(options?.playbooks && options.playbooks.length > 0);
+
+    if (!isSelective) {
+      const defaultLibDir = join(root, "lib");
+      if (existsSync(defaultLibDir)) {
+        const libFiles = walkDirectory(defaultLibDir);
+        for (const file of libFiles) {
+          const rel = relative(root, file).replace(/\\/g, "/");
+          if (!isIgnoredModulePath(rel) && !actionPathSet.has(file) && !modulePathSet.has(rel)) {
+            modulePathSet.add(rel);
+            modulesAndAssets.push({
+              path: rel,
+              resolvedPath: file,
+              type: "module",
+            });
+          }
+        }
+      }
+    }
 
     // 清单声明资产
     if (manifest.assets && Array.isArray(manifest.assets)) {

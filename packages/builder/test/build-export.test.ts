@@ -231,6 +231,47 @@ describe("Build & Skill Export Contract", () => {
     expect(skillMd).toContain("ad doctor");
   });
 
+  it("exports Source Skill package including dependent lib files and non-action helpers", async () => {
+    const fs = await import("node:fs");
+    // 准备 lib 目录与源码辅助文件
+    fs.mkdirSync(join(tempDir, "lib", "utils"), { recursive: true });
+    fs.writeFileSync(
+      join(tempDir, "lib", "utils", "formatter.ts"),
+      'export function formatGreeting(name: string): string { return `Welcome, ${name}!`; }',
+      "utf-8"
+    );
+    fs.writeFileSync(
+      join(tempDir, "lib", "greet-client.ts"),
+      'import { formatGreeting } from "./utils/formatter.js";\nexport function buildGreeting(name: string) { return formatGreeting(name); }',
+      "utf-8"
+    );
+
+    // 更新 actions/greet.ts 引入 lib/greet-client.js
+    const greetActionCode = `
+import { defineAction } from "@actiondock/sdk";
+import { buildGreeting } from "../lib/greet-client.js";
+
+export default defineAction({
+  id: "sample.greet",
+  description: "Greeting with lib helper",
+  run: async (input: { name: string }) => ({ message: buildGreeting(input.name) }),
+});
+`;
+    fs.writeFileSync(join(tempDir, "actions", "greet.ts"), greetActionCode, "utf-8");
+
+    const exportRes = await exportSkill({
+      projectRoot: tempDir,
+    });
+
+    expect(exportRes.mode).toBe("source");
+    expect(existsSync(join(exportRes.skillDir, "lib", "greet-client.ts"))).toBe(true);
+    expect(existsSync(join(exportRes.skillDir, "lib", "utils", "formatter.ts"))).toBe(true);
+
+    // 验证导出的文件列表中包含 lib 文件
+    expect(exportRes.files).toContain("lib/greet-client.ts");
+    expect(exportRes.files).toContain("lib/utils/formatter.ts");
+  });
+
   it("exports standalone binary Skill package when standalone is true", async () => {
     const exportRes = await exportSkill({
       projectRoot: tempDir,

@@ -240,9 +240,9 @@ export class SkillExporter {
         }
       }
 
-      // 8. 拷贝静态资产文件，完整保留相对路径
+      // 8. 拷贝静态资产与代码模块文件，完整保留相对路径
       for (const dep of plan.dependencies.modulesAndAssets) {
-        if (dep.type === "asset" && existsSync(dep.resolvedPath)) {
+        if ((dep.type === "asset" || dep.type === "module") && existsSync(dep.resolvedPath)) {
           const destAsset = join(skillDir, dep.path);
           mkdirSync(dirname(destAsset), { recursive: true });
           copyFileSync(dep.resolvedPath, destAsset);
