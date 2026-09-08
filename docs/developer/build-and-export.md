@@ -142,6 +142,8 @@ ad export skill --standalone --target linux-arm64 --archive
   ```bash
   ad export skill -P team4u.github-tools team4u.k8s-ops --bundle devops-suite --out ./dist/devops-suite
   ```
+- **已有技能说明书复用机制**：
+  无论单包导出还是复合导出，若当前动作目录或工作区根目录下已存在现成的 `SKILL.md` 文件（如人工精心维护的业务说明书），导出器将自动识别并直接复用该文件，避免被动态模板覆盖；亦可通过 `--skill-md <path>` 选项显式指定自定义说明书路径。
 
 ---
 

@@ -754,5 +754,59 @@ process.exit(0);
         rmSync(pkg2Dir, { recursive: true, force: true });
       }
     });
+
+    it("单包导出若当前动作目录已有 SKILL.md 则直接复用不再自动生成", async () => {
+      const customSkillContent = `# Custom Pre-existing Skill Document\n\nCustom instructions for agent.`;
+      const customSkillPath = join(tempDir, "SKILL.md");
+      writeFileSync(customSkillPath, customSkillContent, "utf-8");
+
+      try {
+        const res = await exportSkill({
+          projectRoot: tempDir,
+          outDir: join(tempDir, "dist", "custom-reused-skill"),
+        });
+
+        expect(res.usedExistingSkillMd).toBe(customSkillPath);
+        expect(existsSync(join(res.skillDir, "SKILL.md"))).toBe(true);
+        const copiedContent = readFileSync(join(res.skillDir, "SKILL.md"), "utf-8");
+        expect(copiedContent).toBe(customSkillContent);
+      } finally {
+        rmSync(customSkillPath, { force: true });
+      }
+    });
+
+    it("复合导出若当前工作区已有 SKILL.md 则直接复用不再自动生成", async () => {
+      const workspaceDir = mkdtempSync(join(tmpdir(), "ad-composite-ws-"));
+      const pkgADir = join(workspaceDir, "packages", "pkg-a");
+      const pkgBDir = join(workspaceDir, "packages", "pkg-b");
+
+      try {
+        initProject(pkgADir, { id: "test.pkg-a", name: "Pkg A" });
+        initProject(pkgBDir, { id: "test.pkg-b", name: "Pkg B" });
+
+        // 在工作区目录下创建定制的 SKILL.md
+        const wsSkillDir = join(workspaceDir, "skills", "my-custom-suite");
+        mkdirSync(wsSkillDir, { recursive: true });
+        const customSkillContent = `# Pre-existing Workspace Composite Skill\n\nTailored agent instructions.`;
+        writeFileSync(join(wsSkillDir, "SKILL.md"), customSkillContent, "utf-8");
+
+        const res = await exportCompositeSkill({
+          bundleName: "my-custom-suite",
+          projectRoots: [pkgADir, pkgBDir],
+          outDir: join(workspaceDir, "dist", "my-custom-suite"),
+          workspaceRoot: workspaceDir,
+        });
+
+        expect(res.usedExistingSkillMd).toBe(join(wsSkillDir, "SKILL.md"));
+        expect(existsSync(join(res.skillDir, "SKILL.md"))).toBe(true);
+        const copiedContent = readFileSync(join(res.skillDir, "SKILL.md"), "utf-8");
+        expect(copiedContent).toBe(customSkillContent);
+        // 内部子包不生成 SKILL.md
+        expect(existsSync(join(res.skillDir, "packages", "pkg-a", "SKILL.md"))).toBe(false);
+        expect(existsSync(join(res.skillDir, "packages", "pkg-b", "SKILL.md"))).toBe(false);
+      } finally {
+        rmSync(workspaceDir, { recursive: true, force: true });
+      }
+    });
   });
 });

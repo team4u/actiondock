@@ -233,6 +233,8 @@ export interface SkillExporterOptions {
   manifest?: ActionDockManifest;
   /** 是否跳过生成 SKILL.md（多包聚合时避免子包重复生成，对外保持唯一定义） */
   skipSkillMd?: boolean;
+  /** 显式指定的已有 SKILL.md 文件路径（若提供或存在则直接使用，不再动态生成） */
+  skillMdPath?: string;
 }
 
 /**
@@ -261,6 +263,8 @@ export interface SkillExportResult {
   playbooks: string[];
   /** 导出的文件相对路径清单 */
   files: string[];
+  /** 若复用了已有的 SKILL.md 文件，返回该文件的绝对路径 */
+  usedExistingSkillMd?: string;
 }
 
 /**
@@ -301,6 +305,10 @@ export interface CompositeSkillExportOptions {
   archive?: boolean | ArchiveFormat;
   /** 归档压缩格式（zip 或 tar.gz） */
   archiveFormat?: ArchiveFormat;
+  /** 工作区根目录（用于检索工作区现有的 SKILL.md 等资产，默认基于 cwd 与项目目录推导） */
+  workspaceRoot?: string;
+  /** 显式指定的已有 SKILL.md 文件路径（若存在则直接使用，不再动态生成） */
+  skillMdPath?: string;
 }
 
 /**
@@ -323,5 +331,7 @@ export interface CompositeSkillExportResult {
   packages: Array<{ packageId: string; actions: string[]; playbooks: string[] }>;
   /** 生成的文件清单 */
   files: string[];
+  /** 若复用了已有的 SKILL.md 文件，返回该文件的绝对路径 */
+  usedExistingSkillMd?: string;
 }
 

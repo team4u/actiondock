@@ -36,6 +36,7 @@ export function registerExportCommand(program: Command): void {
     .option("--bytecode", "Compile JavaScript to bytecode in standalone mode (default: true)", true)
     .option("--no-bytecode", "Disable bytecode compilation in standalone mode")
     .option("-z, --archive", "Create a .zip archive of the exported skill")
+    .option("--skill-md <path>", "Use specified existing SKILL.md file instead of auto-generating")
     .action(async (options) => {
       const isStandalone = Boolean(options.standalone);
 
@@ -107,6 +108,8 @@ export function registerExportCommand(program: Command): void {
             projectRoots: roots,
             outDir: options.out,
             archive: options.archive,
+            workspaceRoot: options.workspace ? process.cwd() : undefined,
+            skillMdPath: options.skillMd,
           });
 
           console.log(`[OK] Successfully exported Composite Skill: ${result.bundleName}`);
@@ -114,6 +117,9 @@ export function registerExportCommand(program: Command): void {
           console.log(`  Actions:    ${result.actionsCount}`);
           console.log(`  Playbooks:  ${result.playbooksCount}`);
           console.log(`  Skill Dir:  ${result.skillDir}`);
+          if (result.usedExistingSkillMd) {
+            console.log(`  SKILL.md:   Reused existing file from ${result.usedExistingSkillMd}`);
+          }
           if (result.archivePath) {
             console.log(`  Archive:    ${result.archivePath}`);
           }
@@ -133,6 +139,7 @@ export function registerExportCommand(program: Command): void {
             actions: options.actions,
             minify: options.minify,
             bytecode: options.bytecode,
+            skillMdPath: options.skillMd,
           });
 
           console.log(`[OK] Successfully batch exported ${batchRes.results.length} Skill packages to: ${batchRes.outDir}`);
@@ -157,6 +164,7 @@ export function registerExportCommand(program: Command): void {
           actions: options.actions,
           minify: options.minify,
           bytecode: options.bytecode,
+          skillMdPath: options.skillMd,
         });
 
         console.log(`[OK] Successfully exported ${result.mode === "standalone" ? "Standalone" : "Source"} Skill: ${result.packageId} (v${result.version})`);
@@ -164,6 +172,9 @@ export function registerExportCommand(program: Command): void {
         console.log(`  Actions:    ${result.actionsCount}`);
         console.log(`  Playbooks:  ${result.playbooksCount}`);
         console.log(`  Skill Dir:  ${result.skillDir}`);
+        if (result.usedExistingSkillMd) {
+          console.log(`  SKILL.md:   Reused existing file from ${result.usedExistingSkillMd}`);
+        }
         if (result.archivePath) {
           console.log(`  Archive:    ${result.archivePath}`);
         }

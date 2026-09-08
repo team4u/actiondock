@@ -78,6 +78,105 @@ function createArchive(
 }
 
 /**
+ * 检索单个 Action 项目目录中已存在的 SKILL.md 文件。
+ */
+export function findExistingSingleSkillMd(
+  projectRoot: string,
+  explicitPath?: string,
+  pkgSlug?: string
+): string | undefined {
+  if (explicitPath && existsSync(explicitPath)) {
+    try {
+      if (statSync(explicitPath).isFile()) return resolve(explicitPath);
+    } catch {
+      // 忽略文件属性读取异常
+    }
+  }
+
+  const candidates = [
+    join(projectRoot, "SKILL.md"),
+    join(projectRoot, "skill.md"),
+    join(projectRoot, "skills", "SKILL.md"),
+    join(projectRoot, "skills", "skill.md"),
+  ];
+
+  if (pkgSlug) {
+    candidates.push(
+      join(projectRoot, "skills", pkgSlug, "SKILL.md"),
+      join(projectRoot, "skills", pkgSlug, "skill.md")
+    );
+  }
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      try {
+        if (statSync(candidate).isFile()) return resolve(candidate);
+      } catch {
+        // 忽略
+      }
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * 检索复合套件工作区中已存在的 SKILL.md 文件。
+ */
+export function findExistingCompositeSkillMd(
+  options: CompositeSkillExportOptions
+): string | undefined {
+  if (options.skillMdPath && existsSync(options.skillMdPath)) {
+    try {
+      if (statSync(options.skillMdPath).isFile()) return resolve(options.skillMdPath);
+    } catch {
+      // 忽略
+    }
+  }
+
+  const bundleSlug = getPackageSlug(options.bundleName);
+  const searchDirs = new Set<string>();
+
+  if (options.workspaceRoot && existsSync(options.workspaceRoot)) {
+    searchDirs.add(resolve(options.workspaceRoot));
+  }
+  searchDirs.add(process.cwd());
+
+  for (const root of options.projectRoots) {
+    const absRoot = resolve(root);
+    const parentDir = dirname(absRoot);
+    searchDirs.add(parentDir);
+    searchDirs.add(dirname(parentDir));
+  }
+
+  const candidateRelativePaths = [
+    join("skills", options.bundleName, "SKILL.md"),
+    join("skills", bundleSlug, "SKILL.md"),
+    join("skills", "SKILL.md"),
+    "SKILL.md",
+    join("skills", options.bundleName, "skill.md"),
+    join("skills", bundleSlug, "skill.md"),
+    join("skills", "skill.md"),
+    "skill.md",
+  ];
+
+  for (const dir of searchDirs) {
+    for (const rel of candidateRelativePaths) {
+      const fullPath = join(dir, rel);
+      if (existsSync(fullPath)) {
+        try {
+          if (statSync(fullPath).isFile()) return fullPath;
+        } catch {
+          // 忽略
+        }
+      }
+    }
+  }
+
+  return undefined;
+}
+
+/**
  * Agent Skill 导出器。
  * 负责源码型 Skill 与独立二进制型 Skill 的构建、打包与归档分发。
  */
@@ -127,11 +226,23 @@ export class SkillExporter {
       config: plan.configDefs as any,
     };
 
+    let usedExistingSkillMd: string | undefined;
+
     if (mode === "source") {
       // ----------------------------------------------------
       // 源码 Skill 导出 (Source Skill Export)
-      // - 生成 SKILL.md（若未显式跳过）
-      if (!options.skipSkillMd) {
+      // 优先复用当前动作目录下已有的 SKILL.md；若不存在且未显式跳过，则动态生成
+      const existingSkill = !options.skipSkillMd
+        ? findExistingSingleSkillMd(root, options.skillMdPath, pkgSlug)
+        : undefined;
+
+      if (existingSkill) {
+        usedExistingSkillMd = existingSkill;
+        const destSkillMd = join(skillDir, "SKILL.md");
+        if (resolve(existingSkill) !== resolve(destSkillMd)) {
+          copyFileSync(existingSkill, destSkillMd);
+        }
+      } else if (!options.skipSkillMd) {
         const skillMd = generateSourceSkillMd(
           configForTemplates,
           plan.actions as any,
@@ -301,7 +412,17 @@ export class SkillExporter {
       const actualBinaryName = basename(compileRes.executablePath);
 
       // - 生成独立模式 SKILL.md（若未显式跳过）
-      if (!options.skipSkillMd) {
+      const existingSkill = !options.skipSkillMd
+        ? findExistingSingleSkillMd(root, options.skillMdPath, pkgSlug)
+        : undefined;
+
+      if (existingSkill) {
+        usedExistingSkillMd = existingSkill;
+        const destSkillMd = join(skillDir, "SKILL.md");
+        if (resolve(existingSkill) !== resolve(destSkillMd)) {
+          copyFileSync(existingSkill, destSkillMd);
+        }
+      } else if (!options.skipSkillMd) {
         const skillMd = generateStandaloneSkillMd(
           configForTemplates,
           plan.actions as any,
@@ -355,6 +476,7 @@ export class SkillExporter {
       actions: plan.actions.map((a) => a.id),
       playbooks: plan.playbooks.map((p) => p.id),
       files,
+      usedExistingSkillMd,
     };
   }
 
@@ -470,11 +592,19 @@ export class SkillExporter {
       });
     }
 
-    const description =
-      options.description ||
-      `ActionDock 复合技能套件，聚合 ${packageInfos.map((p) => p.config.name).join("、")}`;
-    const compositeSkillMd = generateCompositeSkillMd(options.bundleName, description, packageInfos);
-    writeFileSync(join(skillDir, "SKILL.md"), compositeSkillMd, "utf-8");
+    const existingSkillPath = findExistingCompositeSkillMd(options);
+    if (existingSkillPath) {
+      const destSkillMdPath = join(skillDir, "SKILL.md");
+      if (resolve(existingSkillPath) !== resolve(destSkillMdPath)) {
+        copyFileSync(existingSkillPath, destSkillMdPath);
+      }
+    } else {
+      const description =
+        options.description ||
+        `ActionDock 复合技能套件，聚合 ${packageInfos.map((p) => p.config.name).join("、")}`;
+      const compositeSkillMd = generateCompositeSkillMd(options.bundleName, description, packageInfos);
+      writeFileSync(join(skillDir, "SKILL.md"), compositeSkillMd, "utf-8");
+    }
 
     let archivePath: string | undefined;
     if (options.archive) {
@@ -500,6 +630,7 @@ export class SkillExporter {
       playbooksCount: totalPlaybooks,
       packages: packageSummaries,
       files,
+      usedExistingSkillMd: existingSkillPath,
     };
   }
 

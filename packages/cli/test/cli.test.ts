@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 // Windows 下端到端流程会多次冷启动 Bun 子进程，默认 5s 超时不够
 setDefaultTimeout(120000);
-import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import pkg from "../package.json";
@@ -388,6 +388,20 @@ describe("CLI End-to-End", () => {
     const conflictSourceProc = runCli(["export", "skill", "--all", "--workspace"], tempDir);
     expect(conflictSourceProc.exitCode).not.toBe(0);
     expect(conflictSourceProc.stderr.toString()).toContain("mutually exclusive");
+
+    // 10f. export skill with pre-existing SKILL.md reuse
+    const preExistingSkillPath = join(tempDir, "SKILL.md");
+    writeFileSync(preExistingSkillPath, "# Custom Pre-existing CLI Skill\n", "utf-8");
+    try {
+      const reuseOut = join(tempDir, "dist", "reuse-skill");
+      const reuseProc = runCli(["export", "skill", "-o", reuseOut], tempDir);
+      expect(reuseProc.exitCode).toBe(0);
+      expect(reuseProc.stdout.toString()).toContain("Reused existing file from");
+      const content = readFileSync(join(reuseOut, "SKILL.md"), "utf-8");
+      expect(content).toContain("Custom Pre-existing CLI Skill");
+    } finally {
+      rmSync(preExistingSkillPath, { force: true });
+    }
 
     // 11. link package and execute from outside directory
     const linkProc = runCli(["link"], tempDir);
