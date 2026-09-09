@@ -71,12 +71,21 @@ bun --version
 
 如果您需要从源码参与 ActionDock 核心框架的开发，或者在外部项目中联合调试本地修改的 ActionDock 源码，请遵循以下工作区链接规范。
 
+### 贡献者开发环境准备
+参与 ActionDock 框架核心开发时，除 Node.js 22.13.0 或更高版本外，开发机还需预先安装 Bun 1.2.0 或更高版本，作为 Monorepo 多包构建与测试执行器。
+
 ### 克隆仓库与依赖安装
 克隆官方代码仓库并安装 Monorepo 工作区依赖：
 ```bash
 git clone https://github.com/team4u/actiondock.git
 cd actiondock
-npm install
+bun install
+```
+
+### 全量构建子包产物
+在注册全局命令前，必须先执行全量构建生成全部子包的运行产物与类型声明：
+```bash
+bun run build
 ```
 
 ### 注册本地全局命令行工具
@@ -85,7 +94,7 @@ npm install
 cd packages/cli
 npm link
 ```
-完成链接后，全局执行 `ad` 将直接运行本地仓库中的最新源码。
+完成链接后，全局执行 `ad` 将直接调用本地仓库中生成的最新产物。若后续修改了核心子包代码，需重新执行 `bun run build` 刷新编译产物。
 
 ### 在外部项目中链接本地 SDK
 当在独立的 Action 业务项目中调试尚未发布至公共仓库的本地 `@actiondock/sdk` 修改时，可执行依赖链接：

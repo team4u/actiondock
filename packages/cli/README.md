@@ -33,6 +33,19 @@ npm install -g @actiondock/cli
 npx ad --help
 ```
 
+### 从源码安装本地开发版
+
+若需从仓库源码调试最新开发版本：
+
+```bash
+git clone https://github.com/team4u/actiondock.git
+cd actiondock
+bun install
+bun run build
+cd packages/cli
+npm link
+```
+
 ---
 
 ## 快速上手流程

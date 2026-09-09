@@ -623,7 +623,8 @@ ad doctor --json
 
 - 本地贡献与源码开发模式（若在 ActionDock 源码仓库中开发）：
   ```bash
-  # 本地源码开发态链接全局 CLI
+  # 本地源码开发态构建产物并链接全局 CLI
+  bun run build
   cd packages/cli && npm link
 
   # Action 项目接入开发态 SDK
