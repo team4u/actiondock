@@ -63,6 +63,10 @@ export interface RuntimeCliContext {
   stdout?: (msg: string) => void;
   /** 自定义标准错误写入函数 */
   stderr?: (msg: string) => void;
+  /** 自定义标准输入流 */
+  stdin?: NodeJS.ReadableStream;
+  /** 自定义交互式输入提示函数（用于测试或外部调用重定向） */
+  promptInput?: (promptText: string, options?: { secret?: boolean; mask?: string }) => Promise<string>;
 }
 
 /**

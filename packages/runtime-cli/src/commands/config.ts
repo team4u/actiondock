@@ -21,9 +21,11 @@ import {
   renderConfigList,
   renderResult,
   writeStdout,
+  writeStderr,
 } from "../renderer";
 import type { EnvCheckItem, RuntimeCliContext } from "../types";
 import { getEffectiveOptions, resolveIntent } from "../utils";
+import { resolveConfigValueInput } from "../prompt";
 
 /**
  * 注册 config 配置管理命令（get、set、list、delete、env）。
@@ -526,25 +528,61 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
 
   // config set
   configCmd
-    .command("set <key> <value>")
+    .command("set <key> [value]")
     .description("Set a configuration value (Global by default outside project, or use -g for global)")
     .option("-P, --package <id>", "Target package ID or path")
     .option("-g, --global", "Set globally across all packages")
     .option("-p, --profile <name>", "Set config on a remote target")
     .option("-s, --server <url>", "Remote server URL")
     .option("-t, --token <token>", "Auth token for remote server")
+    .option("--secret", "Treat the value as sensitive/secret (masked prompt)")
+    .option("--stdin", "Read value from standard input")
     .option("--data-dir <path>", "Custom database storage directory")
-    .action(async (key: string, rawValue: string, rawOptions: any, cmd: any) => {
+    .action(async (key: string, rawValue: string | undefined, rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
-      if (!key || rawValue === undefined) {
-        throw new ArgumentError("Both key and value are required for config set");
+      if (!key) {
+        throw new ArgumentError("Configuration key is required for config set");
+      }
+      if (rawValue !== undefined && options.stdin) {
+        throw new ArgumentError("Cannot specify both a value argument and --stdin");
       }
 
-      let parsed: unknown = rawValue;
+      // 预判目标配置项是否为敏感项
+      let isSecret = Boolean(options.secret);
+      if (context?.standalone) {
+        isSecret = isSecret || isSecretConfigKey(key, context.standalone.configDefs?.[key]);
+      } else if (!options.profile && !options.server) {
+        const projectRoot = !options.global ? resolvePackageRoot(options.package) : null;
+        if (projectRoot) {
+          try {
+            const projConfig = loadProjectConfig(projectRoot);
+            isSecret = isSecret || isSecretConfigKey(key, projConfig.config?.[key]);
+          } catch {
+            // 忽略工程加载失败
+          }
+        }
+      }
+
+      let effectiveRawValue = rawValue;
+      if (effectiveRawValue === undefined) {
+        effectiveRawValue = await resolveConfigValueInput({
+          promptText: `Enter value for '${key}': `,
+          secret: isSecret,
+          context,
+          useStdin: Boolean(options.stdin),
+        });
+      } else if (isSecret) {
+        writeStderr(
+          "Warning: Passing secrets as command-line arguments exposes them in shell history and process lists. Omit the value to enter it securely.",
+          context
+        );
+      }
+
+      let parsed: unknown = effectiveRawValue;
       try {
-        parsed = JSON.parse(rawValue);
+        parsed = JSON.parse(effectiveRawValue);
       } catch {
-        parsed = rawValue;
+        parsed = effectiveRawValue;
       }
 
       // 1. 独立运行模式
@@ -554,8 +592,8 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
         storage.setConfig(key, parsed);
         storage.close();
 
-        const isSecret = isSecretConfigKey(key, sa.configDefs?.[key]);
-        const displayVal = isSecret ? maskSecretValue(parsed) : JSON.stringify(parsed);
+        const itemSecret = isSecret || isSecretConfigKey(key, sa.configDefs?.[key]);
+        const displayVal = itemSecret ? maskSecretValue(parsed) : JSON.stringify(parsed);
         writeStdout(`[OK] Config '${key}' set to ${displayVal} in ${sa.packageId}`, context);
         return;
       }
@@ -569,6 +607,7 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
 
       if (target.type === "remote") {
         await setRemoteConfig(target.serverUrl!, key, parsed, target.token, options.package);
+        const displayVal = isSecret ? maskSecretValue(parsed) : JSON.stringify(parsed);
         writeStdout(`[OK] Remote config '${key}' updated on ${target.serverUrl}`, context);
         return;
       }
@@ -592,8 +631,8 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
           // 忽略工程加载失败
         }
       }
-      const isSecret = isSecretConfigKey(key, declaredItem);
-      const displayVal = isSecret ? maskSecretValue(parsed) : JSON.stringify(parsed);
+      const itemSecret = isSecret || isSecretConfigKey(key, declaredItem);
+      const displayVal = itemSecret ? maskSecretValue(parsed) : JSON.stringify(parsed);
 
       if (options.global || !projectRoot) {
         const globalStorage = createGlobalStorage({ dataDir: options.dataDir || context?.dataDir, customHome: context?.customHome });

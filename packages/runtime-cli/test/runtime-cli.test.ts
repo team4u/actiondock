@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Readable } from "node:stream";
 import { createGlobalStorage } from "@actiondock/core";
 import { defineAction } from "@actiondock/sdk";
 import rootPkg from "../../../package.json";
@@ -16,6 +17,9 @@ import {
   formatJson,
   parseByteSize,
   parseListOption,
+  promptPassword,
+  promptText,
+  readEntireStdin,
   renderActionDetail,
   renderActionList,
   renderActionValidation,
@@ -25,6 +29,7 @@ import {
   renderRegistryTree,
   renderRunsList,
   renderStateList,
+  resolveConfigValueInput,
   resolveIntent,
   runRuntimeCli,
   SigintError,
@@ -736,3 +741,186 @@ describe("@actiondock/runtime-cli - Standalone Binary Runtime Mode", () => {
     expect(parsed.data.val).toBe("jay.wu");
   });
 });
+
+describe("@actiondock/runtime-cli - Interactive & Secret Config Inputs", () => {
+  const tempDir = join(tmpdir(), `ad-test-secret-config-${Date.now()}`);
+  const secretStandaloneOptions = {
+    packageId: "standalone-secret-test",
+    version: "1.0.0",
+    configDefs: {
+      MY_PASSWORD: {
+        description: "User password",
+        secret: true,
+      },
+      NORMAL_USER: {
+        description: "Username",
+        secret: false,
+      },
+    },
+    actions: [],
+  };
+
+  it("interactively prompts with mask for secret configurations when value is omitted", async () => {
+    let capturedOptions: { secret?: boolean; mask?: string } | undefined;
+    let promptCalled = false;
+
+    const setLogs: string[] = [];
+    const setCode = await runRuntimeCli(
+      ["node", "app", "config", "set", "MY_PASSWORD"],
+      {
+        standalone: secretStandaloneOptions,
+        dataDir: tempDir,
+        stdout: (msg) => setLogs.push(msg),
+        promptInput: async (prompt, opts) => {
+          promptCalled = true;
+          capturedOptions = opts;
+          return "supersecret123";
+        },
+      }
+    );
+
+    expect(setCode).toBe(ExitCode.SUCCESS);
+    expect(promptCalled).toBe(true);
+    expect(capturedOptions?.secret).toBe(true);
+    expect(capturedOptions?.mask).toBe("*");
+    expect(setLogs.some((l) => l.includes("********"))).toBe(true);
+
+    // Verify stored correctly and revealed with --reveal
+    const revealLogs: string[] = [];
+    await runRuntimeCli(
+      ["node", "app", "config", "get", "MY_PASSWORD", "--reveal", "--json"],
+      {
+        standalone: secretStandaloneOptions,
+        dataDir: tempDir,
+        stdout: (msg) => revealLogs.push(msg),
+      }
+    );
+    const parsedReveal = JSON.parse(revealLogs.join(""));
+    expect(parsedReveal.value).toBe("supersecret123");
+  });
+
+  it("interactively prompts in plain text for non-secret configurations when value is omitted", async () => {
+    let capturedOptions: { secret?: boolean; mask?: string } | undefined;
+    let promptCalled = false;
+
+    const setLogs: string[] = [];
+    const setCode = await runRuntimeCli(
+      ["node", "app", "config", "set", "NORMAL_USER"],
+      {
+        standalone: secretStandaloneOptions,
+        dataDir: tempDir,
+        stdout: (msg) => setLogs.push(msg),
+        promptInput: async (prompt, opts) => {
+          promptCalled = true;
+          capturedOptions = opts;
+          return "alice_dev";
+        },
+      }
+    );
+
+    expect(setCode).toBe(ExitCode.SUCCESS);
+    expect(promptCalled).toBe(true);
+    expect(capturedOptions?.secret).toBe(false);
+    expect(setLogs.some((l) => l.includes('"alice_dev"'))).toBe(true);
+  });
+
+  it("treats undeclared key as secret when --secret flag is explicitly passed", async () => {
+    let capturedOptions: { secret?: boolean; mask?: string } | undefined;
+
+    const setLogs: string[] = [];
+    const setCode = await runRuntimeCli(
+      ["node", "app", "config", "set", "UNDECLARED_PASS", "--secret"],
+      {
+        standalone: secretStandaloneOptions,
+        dataDir: tempDir,
+        stdout: (msg) => setLogs.push(msg),
+        promptInput: async (prompt, opts) => {
+          capturedOptions = opts;
+          return "dynamic123";
+        },
+      }
+    );
+
+    expect(setCode).toBe(ExitCode.SUCCESS);
+    expect(capturedOptions?.secret).toBe(true);
+    expect(setLogs.some((l) => l.includes("********"))).toBe(true);
+  });
+
+  it("reads config value from standard input via context.stdin / --stdin", async () => {
+    const inputContent = "piped_secret_456\n";
+    const stdinStream = Readable.from([Buffer.from(inputContent)]);
+
+    const setLogs: string[] = [];
+    const setCode = await runRuntimeCli(
+      ["node", "app", "config", "set", "MY_PASSWORD", "--stdin"],
+      {
+        standalone: secretStandaloneOptions,
+        dataDir: tempDir,
+        stdin: stdinStream,
+        stdout: (msg) => setLogs.push(msg),
+      }
+    );
+
+    expect(setCode).toBe(ExitCode.SUCCESS);
+
+    const revealLogs: string[] = [];
+    await runRuntimeCli(
+      ["node", "app", "config", "get", "MY_PASSWORD", "--reveal", "--json"],
+      {
+        standalone: secretStandaloneOptions,
+        dataDir: tempDir,
+        stdout: (msg) => revealLogs.push(msg),
+      }
+    );
+    const parsed = JSON.parse(revealLogs.join(""));
+    expect(parsed.value).toBe("piped_secret_456");
+  });
+
+  it("warns on stderr when passing secrets as command-line arguments", async () => {
+    const stderrLogs: string[] = [];
+    const setCode = await runRuntimeCli(
+      ["node", "app", "config", "set", "MY_PASSWORD", "plain_in_args"],
+      {
+        standalone: secretStandaloneOptions,
+        dataDir: tempDir,
+        stderr: (msg) => stderrLogs.push(msg),
+      }
+    );
+
+    expect(setCode).toBe(ExitCode.SUCCESS);
+    expect(stderrLogs.some((l) => l.includes("Warning: Passing secrets as command-line arguments"))).toBe(true);
+  });
+
+  it("fails with ArgumentError when both value argument and --stdin are specified", async () => {
+    const setCode = await runRuntimeCli(
+      ["node", "app", "config", "set", "MY_PASSWORD", "argValue", "--stdin"],
+      {
+        standalone: secretStandaloneOptions,
+        dataDir: tempDir,
+      }
+    );
+
+    expect(setCode).toBe(ExitCode.INVALID_ARGUMENT);
+  });
+
+  it("readEntireStdin strips trailing newlines cleanly", async () => {
+    const stream = Readable.from(["first_line\r\n"]);
+    const res = await readEntireStdin(stream);
+    expect(res).toBe("first_line");
+  });
+
+  it("resolveConfigValueInput throws ArgumentError when no value or stdin is provided in non-TTY", async () => {
+    const emptyStream = Readable.from([]);
+    let error: any;
+    try {
+      await resolveConfigValueInput({
+        promptText: "Enter value: ",
+        context: { stdin: emptyStream },
+      });
+    } catch (err) {
+      error = err;
+    }
+    expect(error).toBeInstanceOf(ArgumentError);
+  });
+});
+
