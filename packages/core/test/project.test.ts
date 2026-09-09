@@ -4,9 +4,11 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { initProject } from "../src/project/init";
 import {
+  ALLOWED_INSTALLERS,
   computeDependencyFingerprint,
   discoverActionFiles,
   ensureProjectDependencies,
+  getInstallCommand,
   loadActions,
   loadPlaybooks,
   loadProjectConfig,
@@ -206,6 +208,55 @@ Follow these steps carefully.
       } else {
         process.env.ACTIONDOCK_AUTO_INSTALL = oldEnv;
       }
+    }
+  });
+
+  it("converges allowed installers strictly to npm and bun", () => {
+    expect(ALLOWED_INSTALLERS.has("npm")).toBe(true);
+    expect(ALLOWED_INSTALLERS.has("bun")).toBe(true);
+    expect(ALLOWED_INSTALLERS.has("pnpm")).toBe(false);
+    expect(ALLOWED_INSTALLERS.has("yarn")).toBe(false);
+  });
+
+  it("resolves install commands respecting npm and bun priority and lockfiles", () => {
+    const pkgDir = mkdtempSync(join(tmpdir(), "installer-test-"));
+    const origEnv = process.env.ACTIONDOCK_INSTALLER;
+    try {
+      // 1. Explicit ACTIONDOCK_INSTALLER
+      process.env.ACTIONDOCK_INSTALLER = "bun";
+      expect(getInstallCommand(pkgDir)).toEqual(["bun", "install"]);
+
+      process.env.ACTIONDOCK_INSTALLER = "npm";
+      expect(getInstallCommand(pkgDir)).toEqual(["npm", "install"]);
+
+      // Disallowed installers should be ignored and fall back
+      process.env.ACTIONDOCK_INSTALLER = "pnpm";
+      const pnpmFallback = getInstallCommand(pkgDir);
+      expect(["npm", "bun"]).toContain(pnpmFallback[0]);
+
+      delete process.env.ACTIONDOCK_INSTALLER;
+
+      // 2. Lockfile matching
+      // pnpm-lock.yaml and yarn.lock are ignored
+      writeFileSync(join(pkgDir, "pnpm-lock.yaml"), "lockfileVersion: 5.4");
+      const ignoredLock = getInstallCommand(pkgDir);
+      expect(ignoredLock[0]).not.toBe("pnpm");
+
+      // bun.lock / bun.lockb matches bun
+      writeFileSync(join(pkgDir, "bun.lockb"), "");
+      expect(getInstallCommand(pkgDir)).toEqual(["bun", "install"]);
+
+      // package-lock.json matches npm
+      rmSync(join(pkgDir, "bun.lockb"), { force: true });
+      writeFileSync(join(pkgDir, "package-lock.json"), "{}");
+      expect(getInstallCommand(pkgDir)).toEqual(["npm", "install"]);
+    } finally {
+      if (origEnv === undefined) {
+        delete process.env.ACTIONDOCK_INSTALLER;
+      } else {
+        process.env.ACTIONDOCK_INSTALLER = origEnv;
+      }
+      rmSync(pkgDir, { recursive: true, force: true });
     }
   });
 

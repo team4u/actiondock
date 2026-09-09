@@ -95,32 +95,30 @@ export function loadProjectConfig(projectRoot: string): ProjectConfig {
   }
 }
 
-const ALLOWED_INSTALLERS = new Set(["pnpm", "npm", "yarn", "bun"]);
+export const ALLOWED_INSTALLERS = new Set(["npm", "bun"]);
 
 /**
  * 探测宿主系统中可用的包管理工具。
  * 优先级：
- * 1. 环境变量 ACTIONDOCK_INSTALLER 显式指定（严格白名单校验：pnpm, npm, yarn, bun）；
- * 2. 依据项目根目录下现存的锁文件进行精确匹配（pnpm-lock.yaml -> pnpm, bun.lock/bun.lockb -> bun, yarn.lock -> yarn, package-lock.json -> npm）；
- * 3. 候选回退优先级探测（pnpm > npm > yarn > bun）。
+ * - 环境变量 ACTIONDOCK_INSTALLER 显式指定（严格白名单校验：npm, bun）；
+ * - 依据项目根目录下现存的锁文件进行精确匹配（bun.lock/bun.lockb -> bun, package-lock.json/npm-shrinkwrap.json -> npm）；
+ * - 候选回退优先级探测（npm > bun）。
  */
-function getInstallCommand(projectRoot?: string): string[] {
+export function getInstallCommand(projectRoot?: string): string[] {
   const preferred = process.env.ACTIONDOCK_INSTALLER?.trim();
   if (preferred) {
     if (ALLOWED_INSTALLERS.has(preferred)) {
       return [preferred, "install"];
     }
     process.stderr.write(
-      `[actiondock] Warning: Ignored unsupported or invalid ACTIONDOCK_INSTALLER '${preferred}'. Allowed values: pnpm, npm, yarn, bun.\n`
+      `[actiondock] Warning: Ignored unsupported or invalid ACTIONDOCK_INSTALLER '${preferred}'. Allowed values: npm, bun.\n`
     );
   }
 
   if (projectRoot) {
     const lockfileMap: [string, string][] = [
-      ["pnpm-lock.yaml", "pnpm"],
       ["bun.lockb", "bun"],
       ["bun.lock", "bun"],
-      ["yarn.lock", "yarn"],
       ["package-lock.json", "npm"],
       ["npm-shrinkwrap.json", "npm"],
     ];
@@ -142,9 +140,7 @@ function getInstallCommand(projectRoot?: string): string[] {
   }
 
   const candidates: [string, string][] = [
-    ["pnpm", "install"],
     ["npm", "install"],
-    ["yarn", "install"],
     ["bun", "install"],
   ];
   for (const [pm, action] of candidates) {
@@ -263,7 +259,6 @@ export function computeDependencyFingerprint(projectRoot: string): string | null
       optionalDependencies: pkg.optionalDependencies || {},
       overrides: pkg.overrides || {},
       resolutions: pkg.resolutions || {},
-      pnpm: pkg.pnpm || {},
     };
 
     const hash = createHash("sha256");
@@ -273,8 +268,6 @@ export function computeDependencyFingerprint(projectRoot: string): string | null
     const lockFiles = [
       "package-lock.json",
       "npm-shrinkwrap.json",
-      "pnpm-lock.yaml",
-      "yarn.lock",
       "bun.lockb",
       "bun.lock",
     ];
