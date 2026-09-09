@@ -5,10 +5,10 @@
     "": {
       "name": "actiondock-monorepo",
       "dependencies": {
-        "@actiondock/cli": "^2.0.11",
-        "@actiondock/core": "^2.0.11",
-        "@actiondock/mcp": "^2.0.11",
-        "@actiondock/sdk": "^2.0.11",
+        "@actiondock/cli": "^2.0.12",
+        "@actiondock/core": "^2.0.12",
+        "@actiondock/mcp": "^2.0.12",
+        "@actiondock/sdk": "^2.0.12",
         "@modelcontextprotocol/server": "2.0.0",
         "@types/node": "^22.13.0",
       },
@@ -34,7 +34,7 @@
     },
     "packages/builder": {
       "name": "@actiondock/builder",
-      "version": "2.0.11",
+      "version": "2.0.12",
       "dependencies": {
         "@actiondock/core": "^2.0.11",
         "@actiondock/sdk": "^2.0.11",
@@ -44,7 +44,7 @@
     },
     "packages/cli": {
       "name": "@actiondock/cli",
-      "version": "2.0.11",
+      "version": "2.0.12",
       "bin": {
         "ad": "./bin/ad.js",
         "actiondock": "./bin/ad.js",
@@ -65,7 +65,7 @@
     },
     "packages/core": {
       "name": "@actiondock/core",
-      "version": "2.0.11",
+      "version": "2.0.12",
       "dependencies": {
         "@actiondock/sdk": "^2.0.11",
         "ajv": "^8.17.1",
@@ -78,7 +78,7 @@
     },
     "packages/mcp": {
       "name": "@actiondock/mcp",
-      "version": "2.0.11",
+      "version": "2.0.12",
       "dependencies": {
         "@actiondock/core": "^2.0.11",
         "@actiondock/sdk": "^2.0.11",
@@ -90,7 +90,7 @@
     },
     "packages/runtime-bun": {
       "name": "@actiondock/runtime-bun",
-      "version": "2.0.11",
+      "version": "2.0.12",
       "dependencies": {
         "@actiondock/core": "^2.0.11",
         "@actiondock/sdk": "^2.0.11",
@@ -102,7 +102,7 @@
     },
     "packages/runtime-cli": {
       "name": "@actiondock/runtime-cli",
-      "version": "2.0.11",
+      "version": "2.0.12",
       "dependencies": {
         "@actiondock/core": "^2.0.11",
         "@actiondock/mcp": "^2.0.11",
@@ -116,7 +116,7 @@
     },
     "packages/runtime-node": {
       "name": "@actiondock/runtime-node",
-      "version": "2.0.11",
+      "version": "2.0.12",
       "dependencies": {
         "@actiondock/core": "^2.0.11",
         "@actiondock/sdk": "^2.0.11",
@@ -130,11 +130,11 @@
     },
     "packages/sdk": {
       "name": "@actiondock/sdk",
-      "version": "2.0.11",
+      "version": "2.0.12",
     },
     "packages/testing": {
       "name": "@actiondock/testing",
-      "version": "2.0.11",
+      "version": "2.0.12",
       "dependencies": {
         "@actiondock/core": "^2.0.11",
         "@actiondock/sdk": "^2.0.11",
