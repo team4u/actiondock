@@ -3,7 +3,7 @@ import type { ActionDefinition } from "@actiondock/sdk";
 import { DefaultExecutionService } from "../execution/service";
 import { filterWithFallbackInfo } from "../filter";
 import type { ConfigItemDefinition } from "../project/types";
-import { createStorage } from "../storage";
+import { createGlobalStorage, createStorage } from "../storage";
 import { parseDuration } from "../utils";
 
 /**
@@ -80,9 +80,11 @@ export class StandaloneRuntime {
     const subArgs = filteredArgs.slice(1);
 
     const storage = createStorage(this.packageId, { dataDir });
+    const globalStorage = createGlobalStorage({ dataDir });
     const executionService = new DefaultExecutionService({
       packageId: this.packageId,
       storage,
+      globalStorage,
       configOverrides,
       projectConfig: {
         id: this.packageId,
@@ -417,7 +419,11 @@ export class StandaloneRuntime {
         }
       }
     } finally {
-      storage.close();
+      try {
+        storage.close();
+      } finally {
+        globalStorage.close();
+      }
     }
   }
 }

@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { linkPackage } from "@actiondock/core";
+import { linkPackage, ServerRuntimeRegistry } from "@actiondock/core";
 import { defineAction } from "@actiondock/sdk";
 import { InMemoryTransport } from "@modelcontextprotocol/server";
 import { createActionDockMcpServer, toMcpResult } from "../src/adapter";
@@ -997,6 +997,79 @@ describe("@actiondock/mcp Adapter", () => {
 
     await server.close();
   });
+
+  it("preserves external runtimeRegistry and its storages upon server.close()", async () => {
+    const fakeHome = join(process.cwd(), "tmp", `test-mcp-home-${Date.now()}`);
+    const externalRegistry = new ServerRuntimeRegistry(fakeHome);
+
+    const server = await createActionDockMcpServer({
+      projectRoot: tmpDir,
+      runtimeRegistry: externalRegistry,
+    });
+
+    const storage = externalRegistry.getStorage("test.mcp-pkg", tmpDir);
+    expect(storage.listRuns().length).toBeGreaterThanOrEqual(0);
+
+    await server.close();
+
+    expect(() => storage.listRuns()).not.toThrow();
+    const storageAfter = externalRegistry.getStorage("test.mcp-pkg", tmpDir);
+    expect(() => storageAfter.listRuns()).not.toThrow();
+
+    await externalRegistry.close();
+    rmSync(fakeHome, { recursive: true, force: true });
+  });
+
+  it("preserves external runtimeRegistry on startMcpHttpServer stop()", async () => {
+    const externalRegistry = new ServerRuntimeRegistry();
+    const storage = externalRegistry.getStorage("test.mcp-pkg", tmpDir);
+
+    const httpServer = await startMcpHttpServer({
+      projectRoot: tmpDir,
+      runtimeRegistry: externalRegistry,
+      port: 0,
+      host: "127.0.0.1",
+    });
+
+    await httpServer.stop();
+
+    expect(() => storage.listRuns()).not.toThrow();
+    await externalRegistry.close();
+  });
+
+  it("passes customHome to ServerRuntimeRegistry correctly", async () => {
+    const fakeHome = join(process.cwd(), "tmp", `test-mcp-custom-home-${Date.now()}`);
+    mkdirSync(fakeHome, { recursive: true });
+
+    linkPackage(tmpDir, fakeHome);
+
+    const server = await createActionDockMcpServer({
+      packageId: "test.mcp-pkg",
+      customHome: fakeHome,
+    });
+    expect(server).toBeDefined();
+    await server.close();
+
+    rmSync(fakeHome, { recursive: true, force: true });
+  });
+
+  it("startMcpHttpServer stop() transparently propagates runtimeRegistry.close errors", async () => {
+    const originalClose = ServerRuntimeRegistry.prototype.close;
+    ServerRuntimeRegistry.prototype.close = async function () {
+      await originalClose.call(this);
+      throw new Error("Simulated Registry Close Failure");
+    };
+
+    try {
+      const httpServer = await startMcpHttpServer({
+        projectRoot: tmpDir,
+        port: 0,
+        host: "127.0.0.1",
+      });
+
+      await expect(httpServer.stop()).rejects.toThrow("Simulated Registry Close Failure");
+    } finally {
+      ServerRuntimeRegistry.prototype.close = originalClose;
+    }
+  });
 });
-
-

@@ -1194,6 +1194,75 @@ describe("CLI Review & Machine Contract Regression", () => {
       }
     }
   });
+
+  it("enforces project boundary on --file for action create and playbook create and verifies playbook template format", () => {
+    // Initialize project
+    const initProc = runCli(["init", "--id", "test.boundary-app", "."], tempDir);
+    expect(initProc.exitCode).toBe(0);
+
+    // Action create rejects absolute path
+    const absPath = resolve(tempDir, "outside-action.ts");
+    const absActionProc = runCli(["action", "create", "test.abs-action", "--file", absPath], tempDir);
+    expect(absActionProc.exitCode).not.toBe(0);
+    expect(absActionProc.stderr.toString()).toContain("relative path");
+
+    // Action create rejects path traversal
+    const traversalActionProc = runCli(["action", "create", "test.traversal-action", "--file", "../outside.ts"], tempDir);
+    expect(traversalActionProc.exitCode).not.toBe(0);
+
+    // Playbook create rejects absolute path
+    const absPbProc = runCli(["playbook", "create", "test.abs-playbook", "--file", absPath], tempDir);
+    expect(absPbProc.exitCode).not.toBe(0);
+    expect(absPbProc.stderr.toString()).toContain("relative path");
+
+    // Playbook create rejects path traversal
+    const traversalPbProc = runCli(["playbook", "create", "test.traversal-playbook", "--file", "../outside.md"], tempDir);
+    expect(traversalPbProc.exitCode).not.toBe(0);
+
+    // Valid playbook create produces unordered list in instructions
+    const validPbProc = runCli(["playbook", "create", "test.valid-pb", "--desc", "Test SOP"], tempDir);
+    expect(validPbProc.exitCode).toBe(0);
+
+    const pbFilePath = join(tempDir, "playbooks", "test-valid-pb.md");
+    expect(existsSync(pbFilePath)).toBe(true);
+    const pbContent = readFileSync(pbFilePath, "utf-8");
+
+    // Must contain unordered list bullet points
+    expect(pbContent).toContain("- Inspect available actions with `<binary> list --json`.");
+    expect(pbContent).toContain("- Follow the required steps to complete the task.");
+
+    // Must NOT contain ordered list numbers
+    expect(pbContent).not.toMatch(/^\s*\d+\.\s/m);
+  });
+
+  it("resolves global configuration in ad run via ctx.config.get fallback", () => {
+    // 1. 设置全局配置: ad config set SAMPLE_GREETING Nihao --global
+    const setGlobalProc = runCli(
+      ["config", "set", "SAMPLE_GREETING", "Nihao", "--global"],
+      tempDir,
+      env
+    );
+    expect(setGlobalProc.exitCode).toBe(0);
+
+    // 2. 验证全局配置存在: ad config get SAMPLE_GREETING --global --json
+    const getGlobalProc = runCli(
+      ["config", "get", "SAMPLE_GREETING", "--global", "--json"],
+      tempDir,
+      env
+    );
+    expect(getGlobalProc.exitCode).toBe(0);
+    const getGlobalData = JSON.parse(getGlobalProc.stdout.toString());
+    expect(getGlobalData.value).toBe("Nihao");
+
+    // 3. 执行 ad run，验证 ctx.config.get 回退到全局配置
+    const runProc = runCli(
+      ["run", "sample.greet", "--input", '{"name": "Beijing"}'],
+      tempDir,
+      env
+    );
+    expect(runProc.exitCode).toBe(0);
+    const runRes = JSON.parse(runProc.stdout.toString());
+    expect(runRes.ok).toBe(true);
+    expect(runRes.data.message).toBe("Nihao, Beijing!");
+  });
 });
-
-

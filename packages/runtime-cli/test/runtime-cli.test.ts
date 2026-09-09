@@ -1,4 +1,7 @@
 import { describe, expect, it } from "bun:test";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createGlobalStorage } from "@actiondock/core";
 import { defineAction } from "@actiondock/sdk";
 import rootPkg from "../../../package.json";
 import {
@@ -537,6 +540,61 @@ describe("@actiondock/runtime-cli - Standalone Binary Runtime Mode", () => {
     expect(clearParsed.clearedCount).toBeGreaterThanOrEqual(1);
   });
 
+  it("correctly roundtrips escaped colon state keys in standalone mode", async () => {
+    // 1. Set key with escaped colon in namespace: a\:b:c -> ns="a:b", key="c"
+    const setLogs1: string[] = [];
+    const setCode1 = await runRuntimeCli(
+      ["node", "app", "state", "set", "a\\:b:c", "hello-escaped"],
+      {
+        standalone: standaloneOptions,
+        stdout: (msg) => setLogs1.push(msg),
+      }
+    );
+    expect(setCode1).toBe(ExitCode.SUCCESS);
+    expect(setLogs1.join("")).toContain("a\\:b:c");
+
+    // 2. Get key with escaped colon: a\:b:c
+    const getLogs1: string[] = [];
+    const getCode1 = await runRuntimeCli(
+      ["node", "app", "state", "get", "a\\:b:c", "--json"],
+      {
+        standalone: standaloneOptions,
+        stdout: (msg) => getLogs1.push(msg),
+      }
+    );
+    expect(getCode1).toBe(ExitCode.SUCCESS);
+    const getParsed1 = JSON.parse(getLogs1.join(""));
+    expect(getParsed1.value).toBe("hello-escaped");
+    expect(getParsed1.namespace).toBe("a:b");
+    expect(getParsed1.key).toBe("c");
+
+    // 3. Set key with escaped colon in key: a:b\:c -> ns="a", key="b:c"
+    const setLogs2: string[] = [];
+    const setCode2 = await runRuntimeCli(
+      ["node", "app", "state", "set", "a:b\\:c", "val-key-escaped"],
+      {
+        standalone: standaloneOptions,
+        stdout: (msg) => setLogs2.push(msg),
+      }
+    );
+    expect(setCode2).toBe(ExitCode.SUCCESS);
+    expect(setLogs2.join("")).toContain("a:b\\:c");
+
+    const getLogs2: string[] = [];
+    const getCode2 = await runRuntimeCli(
+      ["node", "app", "state", "get", "a:b\\:c", "--json"],
+      {
+        standalone: standaloneOptions,
+        stdout: (msg) => getLogs2.push(msg),
+      }
+    );
+    expect(getCode2).toBe(ExitCode.SUCCESS);
+    const getParsed2 = JSON.parse(getLogs2.join(""));
+    expect(getParsed2.value).toBe("val-key-escaped");
+    expect(getParsed2.namespace).toBe("a");
+    expect(getParsed2.key).toBe("b:c");
+  });
+
   it("manages execution runs history in standalone mode", async () => {
     // 之前运行过 action run，已有历史记录
     const listLogs: string[] = [];
@@ -575,5 +633,89 @@ describe("@actiondock/runtime-cli - Standalone Binary Runtime Mode", () => {
       }
     );
     expect(clearCode).toBe(ExitCode.SUCCESS);
+  });
+
+  it("resolves global config via ctx.config.get during action run", async () => {
+    const tempHome = join(tmpdir(), `ad-test-global-${Date.now()}`);
+    const globalStorage = createGlobalStorage({ customHome: tempHome });
+    globalStorage.setConfig("SHARED_GLOBAL_KEY", "hello-from-global");
+    globalStorage.close();
+
+    const actionWithConfig = defineAction({
+      id: "read-global-config",
+      description: "Reads global config",
+      async run(_input, ctx) {
+        return {
+          globalVal: ctx.config.get("SHARED_GLOBAL_KEY"),
+        };
+      },
+    });
+
+    const standaloneWithConfig = {
+      packageId: "standalone-config-test",
+      version: "1.0.0",
+      actions: [actionWithConfig],
+    };
+
+    const logs: string[] = [];
+    const code = await runRuntimeCli(
+      ["node", "app", "run", "read-global-config", "--json"],
+      {
+        standalone: standaloneWithConfig,
+        customHome: tempHome,
+        stdout: (msg) => logs.push(msg),
+      }
+    );
+
+    expect(code).toBe(ExitCode.SUCCESS);
+    const parsed = JSON.parse(logs.join(""));
+    expect(parsed.ok).toBe(true);
+    expect(parsed.data.globalVal).toBe("hello-from-global");
+  });
+
+  it("global ad config set K V allows ad run to access ctx.config.get(K)", async () => {
+    const tempHome = join(tmpdir(), `ad-test-global-cli-${Date.now()}`);
+    const actionWithConfig = defineAction({
+      id: "check-global-cli-config",
+      description: "Check global config from CLI",
+      async run(_input, ctx) {
+        return {
+          val: ctx.config.get("OA_USERNAME"),
+        };
+      },
+    });
+
+    const standaloneWithConfig = {
+      packageId: "standalone-oa-test",
+      version: "1.0.0",
+      actions: [actionWithConfig],
+    };
+
+    // 1. 全局配置写入：ad config set OA_USERNAME jay.wu --global
+    const setLogs: string[] = [];
+    const setCode = await runRuntimeCli(
+      ["node", "app", "config", "set", "OA_USERNAME", "jay.wu", "--global"],
+      {
+        standalone: standaloneWithConfig,
+        customHome: tempHome,
+        stdout: (msg) => setLogs.push(msg),
+      }
+    );
+    expect(setCode).toBe(ExitCode.SUCCESS);
+
+    // 2. 运行 action：ad run check-global-cli-config
+    const runLogs: string[] = [];
+    const runCode = await runRuntimeCli(
+      ["node", "app", "run", "check-global-cli-config", "--json"],
+      {
+        standalone: standaloneWithConfig,
+        customHome: tempHome,
+        stdout: (msg) => runLogs.push(msg),
+      }
+    );
+    expect(runCode).toBe(ExitCode.SUCCESS);
+    const parsed = JSON.parse(runLogs.join(""));
+    expect(parsed.ok).toBe(true);
+    expect(parsed.data.val).toBe("jay.wu");
   });
 });

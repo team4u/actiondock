@@ -19,10 +19,16 @@ export function setupBunRuntime(): void {
       port: options.port,
       hostname: options.host,
       fetch: options.fetch,
+      autoStart: true,
     });
     return {
-      port: server.port,
-      stop: (closeActive?: boolean) => server.stop(closeActive),
+      get port() {
+        return server.port;
+      },
+      ready: Promise.resolve(),
+      stop: async (closeActive?: boolean) => {
+        server.stop(closeActive);
+      },
     };
   });
 }

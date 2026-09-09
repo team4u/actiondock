@@ -65,7 +65,7 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
         const declared = projConfig.config || {};
         const declaredKeys = Object.keys(declared);
 
-        const globalStorage = createGlobalStorage(options.dataDir);
+        const globalStorage = createGlobalStorage({ dataDir: options.dataDir || context?.dataDir, customHome: context?.customHome });
         const globalConfig = globalStorage.listConfig();
         globalStorage.close();
 
@@ -287,7 +287,7 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
         }
       }
 
-      const globalStorage = createGlobalStorage(options.dataDir || context?.dataDir);
+      const globalStorage = createGlobalStorage({ dataDir: options.dataDir || context?.dataDir, customHome: context?.customHome });
       const globalConfig = globalStorage.listConfig();
       globalStorage.close();
 
@@ -451,7 +451,7 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
         }
       }
 
-      const globalStorage = createGlobalStorage(options.dataDir || context?.dataDir);
+      const globalStorage = createGlobalStorage({ dataDir: options.dataDir || context?.dataDir, customHome: context?.customHome });
       const globalVal = globalStorage.getConfig(key);
       globalStorage.close();
 
@@ -586,7 +586,7 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
       const displayVal = isSecret ? maskSecretValue(parsed) : JSON.stringify(parsed);
 
       if (options.global || !projectRoot) {
-        const globalStorage = createGlobalStorage(options.dataDir || context?.dataDir);
+        const globalStorage = createGlobalStorage({ dataDir: options.dataDir || context?.dataDir, customHome: context?.customHome });
         globalStorage.setConfig(key, parsed);
         globalStorage.close();
         writeStdout(`[OK] Global config '${key}' set to ${displayVal}`, context);
@@ -662,7 +662,7 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
       const projectRoot = !options.global ? resolvePackageRoot(options.package) : null;
 
       if (options.global || !projectRoot) {
-        const globalStorage = createGlobalStorage(options.dataDir || context?.dataDir);
+        const globalStorage = createGlobalStorage({ dataDir: options.dataDir || context?.dataDir, customHome: context?.customHome });
         const deleted = globalStorage.deleteConfig(key);
         globalStorage.close();
         if (deleted) {

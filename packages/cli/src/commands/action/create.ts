@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import {
+  assertPathWithinRoot,
   findProjectRoot,
   getPackageSlug,
   loadManifest,
@@ -29,9 +30,14 @@ export function registerActionCreateCommand(actionCmd: Command): void {
           mkdirSync(actionsDir, { recursive: true });
         }
 
+        if (options.file && isAbsolute(options.file)) {
+          throw new ExecutionError(`--file option must be a relative path, received: ${options.file}`);
+        }
+
         const cleanName = getPackageSlug(id);
         const targetRelFile = options.file || `${cleanName}.ts`;
         const targetFullFile = resolve(actionsDir, targetRelFile);
+        assertPathWithinRoot(actionsDir, targetFullFile, "action file");
 
         if (existsSync(targetFullFile)) {
           throw new ExecutionError(`Target action file already exists at ${targetFullFile}`);

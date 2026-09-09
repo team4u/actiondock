@@ -3,6 +3,10 @@ export { execCli, findExecutable, spawnDetached } from "./cli";
 export {
   ActionRuntimeError,
   createTestRuntime,
+  decodeStateKey,
+  encodeStateKey,
+  escapeStateSegment,
+  unescapeStateSegment,
   MemoryConfig,
   MemoryStateStore,
   MemoryLogger,

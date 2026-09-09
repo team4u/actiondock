@@ -35,11 +35,22 @@ function moveDirAtomic(src: string, dest: string): void {
 }
 
 /**
+ * 获取内部 @actiondock/* 依赖的版本号规则。
+ * 若为主干预发布版本（包含破折号如 -beta / -rc），直接对齐精确版本；普通正式版采用 ^ 范围约束。
+ */
+export function getInternalDependencyVersion(version: string = ACTIONDOCK_VERSION): string {
+  if (version.includes("-")) {
+    return version;
+  }
+  return `^${version}`;
+}
+
+/**
  * 解析 workspace: 依赖的真实版本号。
  */
 function resolveWorkspaceDepVersion(root: string, depName: string, ver: string): string {
   if (depName.startsWith("@actiondock/")) {
-    return `^${ACTIONDOCK_VERSION}`;
+    return getInternalDependencyVersion();
   }
 
   const stripped = ver.replace(/^workspace:/, "").trim();
@@ -73,7 +84,9 @@ function resolveWorkspaceDepVersion(root: string, depName: string, ver: string):
     }
   }
 
-  return "*";
+  throw new BuilderError(
+    `Failed to resolve workspace dependency '${depName}' (${ver}) in '${root}'. Target package version could not be found.`
+  );
 }
 
 import type {
@@ -243,7 +256,7 @@ export function findExistingCompositeSkillMd(
 export class SkillExporter {
   /**
    * 导出 Skill 产物包。
-   * 
+   *
    * @param options 导出配置
    * @returns 导出产物详细描述
    */
@@ -375,12 +388,14 @@ export class SkillExporter {
         if (deps && typeof deps === "object") {
           for (const [k, v] of Object.entries(deps)) {
             const verStr = String(v);
-            // 排除 file: 依赖
+            // 拒绝 file: 依赖
             if (verStr.startsWith("file:")) {
-              continue;
+              throw new BuilderError(
+                `Unsupported file: dependency for '${k}'. Runtime dependencies must not use file: protocol in exported skill packages.`
+              );
             }
             if (k.startsWith("@actiondock/")) {
-              result[k] = `^${ACTIONDOCK_VERSION}`;
+              result[k] = getInternalDependencyVersion();
             } else if (verStr.startsWith("workspace:")) {
               result[k] = resolveWorkspaceDepVersion(root, k, verStr);
             } else {
@@ -389,7 +404,7 @@ export class SkillExporter {
           }
         }
         if (!result["@actiondock/sdk"]) {
-          result["@actiondock/sdk"] = `^${ACTIONDOCK_VERSION}`;
+          result["@actiondock/sdk"] = getInternalDependencyVersion();
         }
         return result;
       };
@@ -406,13 +421,16 @@ export class SkillExporter {
             type: "module",
             dependencies: sanitizeDependencies(parsed.dependencies),
           };
-        } catch {
+        } catch (err) {
+          if (err instanceof BuilderError) {
+            throw err;
+          }
           exportedPkg = {
             name: pkgSlug,
             version: plan.version,
             description: plan.description,
             type: "module",
-            dependencies: { "@actiondock/sdk": `^${ACTIONDOCK_VERSION}` },
+            dependencies: { "@actiondock/sdk": getInternalDependencyVersion() },
           };
         }
       } else {
@@ -421,7 +439,7 @@ export class SkillExporter {
           version: plan.version,
           description: plan.description,
           type: "module",
-          dependencies: { "@actiondock/sdk": `^${ACTIONDOCK_VERSION}` },
+          dependencies: { "@actiondock/sdk": getInternalDependencyVersion() },
         };
       }
       writeFileSync(
@@ -733,7 +751,7 @@ export class SkillExporter {
 
       // 聚合所有子包依赖生成复合根目录 package.json
       const aggregatedDeps: Record<string, string> = {
-        "@actiondock/sdk": `^${ACTIONDOCK_VERSION}`,
+        "@actiondock/sdk": getInternalDependencyVersion(),
       };
       for (const info of packageInfos) {
         const pkgJsonPath = join(packagesDestDir, info.packageDir, "package.json");
@@ -745,10 +763,12 @@ export class SkillExporter {
               for (const [dep, ver] of Object.entries(parsed.dependencies)) {
                 const verStr = String(ver);
                 if (verStr.startsWith("file:")) {
-                  continue;
+                  throw new BuilderError(
+                    `Unsupported file: dependency for '${dep}'. Runtime dependencies must not use file: protocol in exported skill packages.`
+                  );
                 }
                 if (dep.startsWith("@actiondock/")) {
-                  aggregatedDeps[dep] = `^${ACTIONDOCK_VERSION}`;
+                  aggregatedDeps[dep] = getInternalDependencyVersion();
                 } else if (verStr.startsWith("workspace:")) {
                   aggregatedDeps[dep] = resolveWorkspaceDepVersion(join(packagesDestDir, info.packageDir), dep, verStr);
                 } else {
@@ -756,7 +776,9 @@ export class SkillExporter {
                 }
               }
             }
-          } catch {}
+          } catch (err) {
+            if (err instanceof BuilderError) throw err;
+          }
         }
       }
       writeFileSync(

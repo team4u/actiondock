@@ -85,6 +85,61 @@ export interface MemoryStateEntry {
 }
 
 /**
+ * 转义状态键分段中的特殊字符（\ 和 :）。
+ */
+export function escapeStateSegment(segment: string): string {
+  return segment.replace(/\\/g, "\\\\").replace(/:/g, "\\:");
+}
+
+/**
+ * 反转义状态键分段。
+ */
+export function unescapeStateSegment(segment: string): string {
+  return segment.replace(/\\(:|\\)/g, "$1");
+}
+
+/**
+ * 将 namespace 与 key 编码为无歧义的复合状态键名。
+ */
+export function encodeStateKey(namespace: string, key: string): string {
+  if (!namespace) {
+    return escapeStateSegment(key);
+  }
+  return `${escapeStateSegment(namespace)}:${escapeStateSegment(key)}`;
+}
+
+/**
+ * 解析复合状态键名。若复合键存在歧义（多个未转义冒号），抛出错误。
+ */
+export function decodeStateKey(fullKey: string): { namespace: string; key: string } {
+  const unescapedColonIndices: number[] = [];
+  for (let i = 0; i < fullKey.length; i++) {
+    if (fullKey[i] === ":") {
+      let backslashes = 0;
+      for (let j = i - 1; j >= 0 && fullKey[j] === "\\"; j--) {
+        backslashes++;
+      }
+      if (backslashes % 2 === 0) {
+        unescapedColonIndices.push(i);
+      }
+    }
+  }
+
+  if (unescapedColonIndices.length === 0) {
+    return { namespace: "", key: unescapeStateSegment(fullKey) };
+  }
+  if (unescapedColonIndices.length === 1) {
+    const idx = unescapedColonIndices[0];
+    return {
+      namespace: unescapeStateSegment(fullKey.slice(0, idx)),
+      key: unescapeStateSegment(fullKey.slice(idx + 1)),
+    };
+  }
+
+  throw new Error(`Ambiguous state key '${fullKey}': contains multiple unescaped colon delimiters`);
+}
+
+/**
  * 基于内存 Map 的状态存储实现，支持命名空间隔离与 TTL 自动失效，专供单元测试使用。
  */
 export class MemoryStateStore implements StateStore {
@@ -100,7 +155,7 @@ export class MemoryStateStore implements StateStore {
   }
 
   private qualify(key: string): string {
-    return this.namespace ? `${this.namespace}:${key}` : key;
+    return encodeStateKey(this.namespace, key);
   }
 
   private extractEntry(raw: unknown): MemoryStateEntry {
@@ -161,24 +216,25 @@ export class MemoryStateStore implements StateStore {
   }
 
   async keys(prefix = ""): Promise<string[]> {
-    const fullPrefix = this.qualify(prefix);
     const now = Date.now();
     const result: string[] = [];
     for (const [k, raw] of this.store.entries()) {
-      if (k.startsWith(fullPrefix)) {
+      let decoded: { namespace: string; key: string };
+      try {
+        decoded = decodeStateKey(k);
+      } catch {
+        continue;
+      }
+      if (decoded.namespace === this.namespace) {
+        if (prefix && !decoded.key.startsWith(prefix)) {
+          continue;
+        }
         const entry = this.extractEntry(raw);
         if (entry.expiresAt !== undefined && entry.expiresAt <= now) {
           this.store.delete(k);
           continue;
         }
-        if (this.namespace) {
-          result.push(k.slice(this.namespace.length + 1));
-        } else {
-          if (!prefix.includes(":") && k.includes(":")) {
-            continue;
-          }
-          result.push(k);
-        }
+        result.push(decoded.key);
       }
     }
     return result;

@@ -2,7 +2,9 @@ import { existsSync } from "node:fs";
 import {
   clearRemoteState,
   createStorage,
+  decodeStateKey,
   deleteRemoteStateKey,
+  encodeStateKey,
   fetchRemoteStateList,
   filterWithFallbackInfo,
   findProjectRoot,
@@ -353,6 +355,7 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
         let val: unknown;
         let entryNs = options.namespace || "";
 
+        let entryKey = rawKey;
         if (options.namespace !== undefined) {
           val = await storage.getState(options.namespace, rawKey);
         } else {
@@ -360,6 +363,7 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
           if (entry) {
             val = entry.value;
             entryNs = entry.namespace;
+            entryKey = entry.key;
           }
         }
         storage.close();
@@ -369,7 +373,7 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
         }
 
         const payload = {
-          key: rawKey,
+          key: entryKey,
           packageId: sa.packageId,
           namespace: entryNs,
           value: val,
@@ -415,6 +419,7 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
 
       let val: unknown;
       let entryNamespace = options.namespace || "";
+      let entryKey = key;
 
       if (options.namespace !== undefined) {
         val = await storage.getState(options.namespace, key);
@@ -423,6 +428,7 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
         if (entry) {
           val = entry.value;
           entryNamespace = entry.namespace;
+          entryKey = entry.key;
         }
       }
       storage.close();
@@ -432,7 +438,7 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
       }
 
       const payload = {
-        key,
+        key: entryKey,
         packageId: projConfig.id,
         namespace: entryNamespace,
         value: val,
@@ -477,16 +483,16 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
         let ns = options.namespace || "";
         let actualKey = rawKey;
 
-        if (options.namespace === undefined && rawKey.includes(":")) {
-          const colonIdx = rawKey.indexOf(":");
-          ns = rawKey.slice(0, colonIdx);
-          actualKey = rawKey.slice(colonIdx + 1);
+        if (options.namespace === undefined) {
+          const decoded = decodeStateKey(rawKey);
+          ns = decoded.namespace;
+          actualKey = decoded.key;
         }
 
         await storage.setState(ns, actualKey, parsed, options.ttl);
         storage.close();
 
-        const displayKey = ns ? `${ns}:${actualKey}` : actualKey;
+        const displayKey = encodeStateKey(ns, actualKey);
         writeStdout(
           `[OK] State '${displayKey}' set to ${JSON.stringify(parsed)}${options.ttl ? ` (TTL: ${options.ttl}s)` : ""} in ${sa.packageId}`,
           context
@@ -525,16 +531,16 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
       if (options.namespace !== undefined) {
         ns = options.namespace;
         actualKey = key;
-      } else if (key.includes(":")) {
-        const colonIdx = key.indexOf(":");
-        ns = key.slice(0, colonIdx);
-        actualKey = key.slice(colonIdx + 1);
+      } else {
+        const decoded = decodeStateKey(key);
+        ns = decoded.namespace;
+        actualKey = decoded.key;
       }
 
       await storage.setState(ns, actualKey, parsed, options.ttl);
       storage.close();
 
-      const displayKey = ns ? `${ns}:${actualKey}` : actualKey;
+      const displayKey = encodeStateKey(ns, actualKey);
       writeStdout(
         `[OK] State '${displayKey}' set to ${JSON.stringify(parsed)}${options.ttl ? ` (TTL: ${options.ttl}s)` : ""} in ${projConfig.id}`,
         context

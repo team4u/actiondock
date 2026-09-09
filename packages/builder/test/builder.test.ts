@@ -31,6 +31,7 @@ import {
   exportSkill,
   exportSkillBatch,
   exportCompositeSkill,
+  getInternalDependencyVersion,
   PlannerError,
   SkillExporter,
   createTarGzArchive,
@@ -444,6 +445,35 @@ export default defineAction({
       const paths = modules.map((m) => m.path.replace(/\\/g, "/"));
       expect(paths).toContain("src/helpers/calc.ts");
     });
+
+    it("walkDirectory 扫描 assets 时忽略跳过指向项目根目录外部的软链接", () => {
+      // 内部资产目录与内部资产
+      const assetsDir = join(tempDir, "assets");
+      mkdirSync(assetsDir, { recursive: true });
+      writeFileSync(join(assetsDir, "local-asset.txt"), "local asset content", "utf-8");
+
+      // 项目外部的真实文件并软链接到 assets 目录中
+      const externalDir = mkdtempSync(join(tmpdir(), "ad-external-"));
+      const externalFile = join(externalDir, "secret.txt");
+      writeFileSync(externalFile, "sensitive data", "utf-8");
+
+      try {
+        symlinkSync(externalFile, join(assetsDir, "escaped-link.txt"));
+
+        // 构建全量构建计划
+        const plan = buildPlan({ projectRoot: tempDir });
+
+        const assetDeps = plan.dependencies.modulesAndAssets.filter((d) => d.type === "asset");
+        const assetPaths = assetDeps.map((d) => d.path.replace(/\\/g, "/"));
+
+        // 内部资产应被纳入
+        expect(assetPaths).toContain("assets/local-asset.txt");
+        // 逃逸外部的软链接应被忽略并跳过
+        expect(assetPaths).not.toContain("assets/escaped-link.txt");
+      } finally {
+        rmSync(externalDir, { recursive: true, force: true });
+      }
+    });
   });
 
   describe("BunCompiler: 独立二进制编译器", () => {
@@ -646,7 +676,6 @@ process.exit(0);
               "@actiondock/core": "workspace:*",
               "custom-helper": "workspace:*",
               "explicit-dep": "workspace:^2.1.0",
-              "file-dep": "file:../local-folder",
               "external-dep": "^1.0.0",
             },
             devDependencies: {
@@ -671,24 +700,74 @@ process.exit(0);
 
       const exportedPkg = JSON.parse(readFileSync(exportedPkgPath, "utf-8"));
 
-      // 1. @actiondock/* workspace:* resolves to ^ACTIONDOCK_VERSION
-      expect(exportedPkg.dependencies["@actiondock/core"]).toMatch(/^\^2\./);
-      expect(exportedPkg.dependencies["@actiondock/sdk"]).toMatch(/^\^2\./);
+      // @actiondock/* workspace:* resolves to internal dependency version
+      expect(exportedPkg.dependencies["@actiondock/core"]).toBeDefined();
+      expect(exportedPkg.dependencies["@actiondock/sdk"]).toBeDefined();
 
-      // 2. Non-actiondock workspace:* resolves to actual package version
+      // Non-actiondock workspace:* resolves to actual package version
       expect(exportedPkg.dependencies["custom-helper"]).toBe("^3.4.5");
 
-      // 3. Explicit workspace constraint is stripped cleanly
+      // Explicit workspace constraint is stripped cleanly
       expect(exportedPkg.dependencies["explicit-dep"]).toBe("^2.1.0");
 
-      // 4. file: dependencies are strictly excluded
-      expect(exportedPkg.dependencies["file-dep"]).toBeUndefined();
-
-      // 5. Normal dependencies are preserved
+      // Normal dependencies are preserved
       expect(exportedPkg.dependencies["external-dep"]).toBe("^1.0.0");
 
-      // 6. devDependencies are omitted entirely
+      // devDependencies are omitted entirely
       expect(exportedPkg.devDependencies).toBeUndefined();
+    });
+
+    it("exportSkill 对 file: runtime dependencies 严格校验并抛出 BuilderError", async () => {
+      writeFileSync(
+        join(tempDir, "package.json"),
+        JSON.stringify({
+          name: "test-pkg-file-dep",
+          version: "1.0.0",
+          dependencies: {
+            "local-file-dep": "file:../some-local-folder",
+          },
+        })
+      );
+
+      const outDir = join(tempDir, "dist", "exported-file-dep-skill");
+      await expect(
+        exportSkill({
+          projectRoot: tempDir,
+          mode: "source",
+          outDir,
+        })
+      ).rejects.toThrow(BuilderError);
+    });
+
+    it("exportSkill 当 workspace:* 依赖无法解析目标版本时抛出 BuilderError", async () => {
+      writeFileSync(
+        join(tempDir, "package.json"),
+        JSON.stringify({
+          name: "test-pkg-unresolvable",
+          version: "1.0.0",
+          dependencies: {
+            "non-existent-workspace-pkg": "workspace:*",
+          },
+        })
+      );
+
+      const outDir = join(tempDir, "dist", "exported-unresolvable-skill");
+      await expect(
+        exportSkill({
+          projectRoot: tempDir,
+          mode: "source",
+          outDir,
+        })
+      ).rejects.toThrow(BuilderError);
+    });
+
+    it("getInternalDependencyVersion 正确对齐预发布版本与正式版本", () => {
+      // 预发布版本对齐为精确版本
+      expect(getInternalDependencyVersion("2.0.0-beta.1")).toBe("2.0.0-beta.1");
+      expect(getInternalDependencyVersion("2.0.0-rc.3")).toBe("2.0.0-rc.3");
+      // 正式发布版本采用 ^ 语义范围
+      expect(getInternalDependencyVersion("2.0.0")).toBe("^2.0.0");
+      expect(getInternalDependencyVersion("2.1.3")).toBe("^2.1.3");
     });
 
     it("导出独立二进制 Skill 包并验证可执行性", async () => {

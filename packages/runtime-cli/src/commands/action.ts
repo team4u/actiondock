@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import {
   DefaultExecutionService,
+  createGlobalStorage,
   createStorage,
   ensureDependencyClosure,
   executeRemoteAction,
@@ -100,12 +101,17 @@ export async function executeAction(
           : new Map(sa.actions.map((a) => [a.id, a]));
 
       const storage = createStorage(sa.packageId, {
-        dataDir: options.dataDir || context.dataDir,
+        dataDir: options.dataDir || context?.dataDir,
+      });
+      const globalStorage = createGlobalStorage({
+        customHome: context?.customHome,
+        dataDir: options.dataDir || context?.dataDir,
       });
 
       const executionService = new DefaultExecutionService({
         packageId: sa.packageId,
         storage,
+        globalStorage,
         configOverrides,
         projectConfig: {
           id: sa.packageId,
@@ -134,7 +140,11 @@ export async function executeAction(
         }
         return;
       } finally {
-        storage.close();
+        try {
+          storage.close();
+        } finally {
+          globalStorage.close();
+        }
       }
     }
 
@@ -201,12 +211,17 @@ export async function executeAction(
       projectRoot: resolved.projectRoot,
       dataDir: options.dataDir || context?.dataDir,
     });
+    const globalStorage = createGlobalStorage({
+      customHome: context?.customHome,
+      dataDir: options.dataDir || context?.dataDir,
+    });
 
     try {
       const executionService = new DefaultExecutionService({
         packageId: config.id,
         projectRoot: resolved.projectRoot,
         storage,
+        globalStorage,
         projectConfig: config,
         configOverrides,
         actions,
@@ -248,7 +263,11 @@ export async function executeAction(
         );
       }
     } finally {
-      storage.close();
+      try {
+        storage.close();
+      } finally {
+        globalStorage.close();
+      }
     }
   } catch (err: any) {
     if (receivedSigint || err?.name === "AbortError" || err?.message?.includes("SIGINT")) {

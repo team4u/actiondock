@@ -407,25 +407,6 @@ export class ActionRunner {
       return runner;
     }
 
-    if (this.getStorageForPackage) {
-      const storage = this.getStorageForPackage(targetPackageId);
-      const runner = new ActionRunner({
-        packageId: targetPackageId,
-        storage,
-        globalStorage: this.globalStorage,
-        actions: new Map(),
-        process: this.process,
-        clock: this.clock,
-        maxCallDepth: this.maxCallDepth,
-        maxSubRuns: this.maxSubRuns,
-        actionResolver: this.actionResolver,
-        getStorageForPackage: this.getStorageForPackage,
-        packageContextResolver: this.packageContextResolver,
-      });
-      this.packageRunners.set(targetPackageId, runner);
-      return runner;
-    }
-
     return undefined;
   }
 

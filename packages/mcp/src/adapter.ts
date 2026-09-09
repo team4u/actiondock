@@ -195,7 +195,8 @@ export async function createActionDockMcpServer(
     }
   }
 
-  const runtimeRegistry = options.runtimeRegistry ?? new ServerRuntimeRegistry();
+  const isInternalRegistry = !options.runtimeRegistry;
+  const runtimeRegistry = options.runtimeRegistry ?? new ServerRuntimeRegistry(options.customHome);
   const executionManager = options.executionManager ?? runtimeRegistry.executionManager;
   const targets: ResolvedTarget[] = [];
 
@@ -417,17 +418,17 @@ export async function createActionDockMcpServer(
 
     process.removeListener("exit", onProcessExit);
 
-    for (const target of targets) {
-      if (target.storage !== options.storage) {
-        try {
-          target.storage.close();
-        } catch {
-          // ignore
+    if (isInternalRegistry) {
+      for (const target of targets) {
+        if (target.storage !== options.storage) {
+          try {
+            target.storage.close();
+          } catch {
+            // ignore
+          }
         }
       }
-    }
 
-    if (!options.runtimeRegistry) {
       try {
         await runtimeRegistry.close();
       } catch {
@@ -444,16 +445,16 @@ export async function createActionDockMcpServer(
 
   const onProcessExit = () => {
     // 同步尽力清理内部资源
-    for (const target of targets) {
-      if (target.storage !== options.storage) {
-        try {
-          target.storage.close();
-        } catch {
-          // ignore
+    if (isInternalRegistry) {
+      for (const target of targets) {
+        if (target.storage !== options.storage) {
+          try {
+            target.storage.close();
+          } catch {
+            // ignore
+          }
         }
       }
-    }
-    if (!options.runtimeRegistry) {
       try {
         runtimeRegistry.close();
       } catch {

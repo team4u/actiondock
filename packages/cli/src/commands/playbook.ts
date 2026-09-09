@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { findProjectRoot, loadProjectConfig } from "@actiondock/core";
+import { dirname, isAbsolute, resolve } from "node:path";
+import { assertPathWithinRoot, findProjectRoot, loadProjectConfig } from "@actiondock/core";
 import { Command } from "commander";
 import {
   CliError,
@@ -41,9 +41,14 @@ export function registerPlaybookCommands(program: Command): void {
           mkdirSync(pbDir, { recursive: true });
         }
 
+        if (options.file && isAbsolute(options.file)) {
+          throw new ExecutionError(`--file option must be a relative path, received: ${options.file}`);
+        }
+
         const cleanName = id.replace(/[^a-zA-Z0-9-_]/g, "-");
         const targetRelFile = options.file || `${cleanName}.md`;
         const targetFullFile = resolve(pbDir, targetRelFile);
+        assertPathWithinRoot(pbDir, targetFullFile, "playbook file");
 
         if (existsSync(targetFullFile)) {
           throw new ExecutionError(`File '${targetFullFile}' already exists`);
@@ -69,8 +74,8 @@ This playbook provides task execution guidance for AI Agents.
 
 ## Instructions
 
-1. Inspect available actions with \`<binary> list --json\`.
-2. Follow the required steps to complete the task.
+- Inspect available actions with \`<binary> list --json\`.
+- Follow the required steps to complete the task.
 `;
 
         writeFileSync(targetFullFile, template, "utf-8");

@@ -153,35 +153,37 @@ describe("InMemoryEventSink", () => {
     expect(controller.signal.aborted).toBe(true);
   });
 
-  it("evictOldestRun strictly protects active non-terminal runs and only evicts terminal runs", () => {
+  it("evictOldestRun strictly enforces maxRuns by evicting terminal runs first or oldest active run", () => {
     const sink = new InMemoryEventSink({ maxRuns: 2 });
 
     // Both run-1 and run-2 are active (non-terminal)
     sink.emit({ runId: "run-1", rootRunId: "run-1", sequence: 0, timestamp: "t0", type: "status", status: "running" });
     sink.emit({ runId: "run-2", rootRunId: "run-2", sequence: 0, timestamp: "t0", type: "status", status: "running" });
+    expect(sink.getRunCount()).toBe(2);
 
-    // Emit run-3 (also active) - since neither run-1 nor run-2 is terminal, neither is evicted!
+    // Emit run-3 (also active) - since neither run-1 nor run-2 is terminal, oldest active run (run-1) is evicted
     sink.emit({ runId: "run-3", rootRunId: "run-3", sequence: 0, timestamp: "t0", type: "status", status: "running" });
 
-    expect(sink.getRunStats("run-1")).toBeDefined();
+    expect(sink.getRunCount()).toBe(2);
+    expect(sink.getRunStats("run-1")).toBeUndefined();
     expect(sink.getRunStats("run-2")).toBeDefined();
     expect(sink.getRunStats("run-3")).toBeDefined();
 
-    // Now mark run-1 as terminal (finish)
+    // Now mark run-2 as terminal (finish)
     sink.emit({
-      runId: "run-1",
-      rootRunId: "run-1",
+      runId: "run-2",
+      rootRunId: "run-2",
       sequence: 1,
       timestamp: "t1",
       type: "finish",
-      result: { ok: true, runId: "run-1", data: null },
+      result: { ok: true, runId: "run-2", data: null },
     });
 
-    // Emitting run-4 should evict the terminal run-1, preserving active run-2 and run-3
+    // Emitting run-4 should evict the terminal run-2, preserving active run-3
     sink.emit({ runId: "run-4", rootRunId: "run-4", sequence: 0, timestamp: "t0", type: "status", status: "running" });
 
-    expect(sink.getRunStats("run-1")).toBeUndefined();
-    expect(sink.getRunStats("run-2")).toBeDefined();
+    expect(sink.getRunCount()).toBe(2);
+    expect(sink.getRunStats("run-2")).toBeUndefined();
     expect(sink.getRunStats("run-3")).toBeDefined();
     expect(sink.getRunStats("run-4")).toBeDefined();
   });
@@ -270,5 +272,191 @@ describe("InMemoryEventSink", () => {
     expect(tinyStats).toBeDefined();
     expect(tinyStats!.count).toBe(0);
     expect(tinyStats!.bytes).toBe(0);
+  });
+
+  it("delivers finish event even after terminal status event during live subscription", async () => {
+    const sink = new InMemoryEventSink();
+    const runId = "run-terminal-status-then-finish";
+
+    const received: ExecutionEvent[] = [];
+    const consumer = (async () => {
+      for await (const evt of sink.subscribe(runId)) {
+        received.push(evt);
+      }
+    })();
+
+    sink.emit({ runId, rootRunId: runId, sequence: 0, timestamp: "t0", type: "status", status: "running" });
+    sink.emit({ runId, rootRunId: runId, sequence: 1, timestamp: "t1", type: "status", status: "failed" });
+    sink.emit({
+      runId,
+      rootRunId: runId,
+      sequence: 2,
+      timestamp: "t2",
+      type: "finish",
+      result: { ok: false, runId, error: { code: "SOME_ERR", message: "failed" } },
+    });
+
+    await consumer;
+    expect(received.length).toBe(3);
+    expect(received.map((e) => e.type)).toEqual(["status", "status", "finish"]);
+    expect(received[2].type).toBe("finish");
+  });
+
+  it("late subscriber terminates cleanly when run is terminal even if finish was dropped due to quota", async () => {
+    const sink = new InMemoryEventSink({ maxBytesPerRun: 50 });
+    const runId = "run-dropped-finish";
+
+    sink.emit({ runId, rootRunId: runId, sequence: 0, timestamp: "t0", type: "status", status: "running" });
+    sink.emit({
+      runId,
+      rootRunId: runId,
+      sequence: 1,
+      timestamp: "t1",
+      type: "finish",
+      result: { ok: true, runId, data: { huge: "x".repeat(500) } },
+    });
+
+    const stats = sink.getRunStats(runId);
+    expect(stats?.isTerminal).toBe(true);
+    expect(stats?.count).toBe(0);
+
+    const received: ExecutionEvent[] = [];
+    for await (const evt of sink.subscribe(runId)) {
+      received.push(evt);
+    }
+
+    expect(received.length).toBe(0);
+  });
+
+  it("delivers finish event when subscription starts between terminal status and finish", async () => {
+    const sink = new InMemoryEventSink();
+    const runId = "run-sub-between-status-and-finish";
+
+    sink.emit({ runId, rootRunId: runId, sequence: 0, timestamp: "t0", type: "status", status: "running" });
+    sink.emit({ runId, rootRunId: runId, sequence: 1, timestamp: "t1", type: "status", status: "failed" });
+
+    const received: ExecutionEvent[] = [];
+    const consumer = (async () => {
+      for await (const evt of sink.subscribe(runId)) {
+        received.push(evt);
+      }
+    })();
+
+    // 等待微任务让订阅者完成历史快照回放并挂载监听器
+    await new Promise((r) => setTimeout(r, 20));
+
+    sink.emit({
+      runId,
+      rootRunId: runId,
+      sequence: 2,
+      timestamp: "t2",
+      type: "finish",
+      result: { ok: false, runId, error: { code: "SOME_ERR", message: "failed" } },
+    });
+
+    await consumer;
+    expect(received.length).toBe(3);
+    expect(received.map((e) => e.type)).toEqual(["status", "status", "finish"]);
+    expect(received[2].type).toBe("finish");
+  });
+
+  it("paused subscriber terminates cleanly when active run is evicted by maxRuns", async () => {
+    const sink = new InMemoryEventSink({ maxRuns: 2 });
+    const runId1 = "run-active-1";
+
+    sink.emit({ runId: runId1, rootRunId: runId1, sequence: 0, timestamp: "t0", type: "status", status: "running" });
+
+    const received: ExecutionEvent[] = [];
+    let completed = false;
+
+    const consumer = (async () => {
+      for await (const evt of sink.subscribe(runId1)) {
+        received.push(evt);
+        // 模拟订阅者在消费事件之间暂停异步操作
+        await new Promise((r) => setTimeout(r, 60));
+      }
+      completed = true;
+    })();
+
+    // 等待消费第一个事件并进入暂停中
+    await new Promise((r) => setTimeout(r, 20));
+
+    // 此时触发全局淘汰：连续发射新运行使活跃运行被淘汰出集合
+    sink.emit({ runId: "run-2", rootRunId: "run-2", sequence: 0, timestamp: "t0", type: "status", status: "running" });
+    sink.emit({ runId: "run-3", rootRunId: "run-3", sequence: 0, timestamp: "t0", type: "status", status: "running" });
+
+    // 等待暂停消费的订阅者恢复并正常终止，设置超时保护验证不会死等
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout: subscriber hung")), 500));
+    await Promise.race([consumer, timeoutPromise]);
+
+    expect(completed).toBe(true);
+    expect(received.length).toBe(1);
+  });
+
+  it("strictly enforces maxBytesPerRun without finish breaching memory quota", async () => {
+    const sink = new InMemoryEventSink({ maxBytesPerRun: 32 });
+    const runId = "run-strict-32-bytes";
+
+    sink.emit({
+      runId,
+      rootRunId: runId,
+      sequence: 0,
+      timestamp: "t0",
+      type: "finish",
+      result: { ok: true, runId, data: null },
+    });
+
+    const stats = sink.getRunStats(runId);
+    expect(stats).toBeDefined();
+    // 32 字节配额下，最小完成事件无法入队，缓存字节数严禁突破 32 字节
+    expect(stats!.bytes).toBeLessThanOrEqual(32);
+    expect(stats!.isTerminal).toBe(true);
+
+    // 晚到订阅者能够正常终止退出，避免挂起死等
+    const received: ExecutionEvent[] = [];
+    for await (const evt of sink.subscribe(runId)) {
+      received.push(evt);
+    }
+    expect(received.length).toBe(0);
+  });
+
+  it("safely truncates oversized finish error payload and terminates subscription cleanly without dropping finish", async () => {
+    const sink = new InMemoryEventSink({ maxBytesPerRun: 400 });
+    const runId = "run-oversized-finish-err";
+
+    const received: ExecutionEvent[] = [];
+    const consumer = (async () => {
+      for await (const evt of sink.subscribe(runId)) {
+        received.push(evt);
+      }
+    })();
+
+    sink.emit({ runId, rootRunId: runId, sequence: 0, timestamp: "t0", type: "status", status: "running" });
+    sink.emit({
+      runId,
+      rootRunId: runId,
+      sequence: 1,
+      timestamp: "t1",
+      type: "finish",
+      result: {
+        ok: false,
+        runId,
+        error: {
+          code: "HUGE_ERR",
+          message: "E".repeat(2000),
+        },
+      },
+    });
+
+    await consumer;
+    expect(received.length).toBe(2);
+    const finishEvt = received[1];
+    expect(finishEvt.type).toBe("finish");
+    if (finishEvt.type === "finish") {
+      expect(finishEvt.result.ok).toBe(false);
+      if (!finishEvt.result.ok) {
+        expect(finishEvt.result.error.message).toContain("[TRUNCATED]");
+      }
+    }
   });
 });

@@ -720,6 +720,46 @@ Follow these steps to greet a user.
       expect(clearStateRes.clearedCount).toBeGreaterThanOrEqual(2);
     });
 
+    test("State Endpoints > correctly roundtrips escaped colon keys and rejects ambiguous keys", async () => {
+      // 1. Set key with escaped colon in namespace: "a\:b:c" -> namespace="a:b", key="c"
+      const setRes1 = await setRemoteStateKey(serverUrl, "a\\:b:c", "val1", SECRET_TOKEN);
+      expect(setRes1.ok).toBe(true);
+      expect(setRes1.namespace).toBe("a:b");
+      expect(setRes1.key).toBe("c");
+
+      // Get via escaped composite key
+      const getRes1 = await getRemoteStateKey(serverUrl, "a\\:b:c", SECRET_TOKEN);
+      expect(getRes1.value).toBe("val1");
+      expect(getRes1.namespace).toBe("a:b");
+      expect(getRes1.key).toBe("c");
+
+      // 2. Set key with escaped colon in key: "a:b\:c" -> namespace="a", key="b:c"
+      const setRes2 = await setRemoteStateKey(serverUrl, "a:b\\:c", "val2", SECRET_TOKEN);
+      expect(setRes2.ok).toBe(true);
+      expect(setRes2.namespace).toBe("a");
+      expect(setRes2.key).toBe("b:c");
+
+      // Get via escaped composite key
+      const getRes2 = await getRemoteStateKey(serverUrl, "a:b\\:c", SECRET_TOKEN);
+      expect(getRes2.value).toBe("val2");
+      expect(getRes2.namespace).toBe("a");
+      expect(getRes2.key).toBe("b:c");
+
+      // 3. Ambiguous key without escaping returns 400
+      const ambiguousRes = await fetch(`${serverUrl}/api/v1/state/a:b:c`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${SECRET_TOKEN}`,
+        },
+        body: JSON.stringify({ value: "bad" }),
+      });
+      expect(ambiguousRes.status).toBe(400);
+      const ambiguousData = await ambiguousRes.json();
+      expect(ambiguousData.ok).toBe(false);
+      expect(ambiguousData.error.code).toBe("INVALID_ARGUMENT");
+    });
+
     test("Config Endpoints > supports list, set, delete, and env verification", async () => {
       // 1. Set config
       const setConf = await setRemoteConfig(

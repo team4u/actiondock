@@ -4,8 +4,10 @@ import {
   BunProcessExecutor,
   BunSqliteDriver,
   createBunSqliteDriver,
+  setupBunRuntime,
   startBunHttpServer,
 } from "../src";
+import { startActionDockServer } from "@actiondock/core";
 
 describe("BunSqliteDriver", () => {
   test("基础读写操作与多种参数传递方式", () => {
@@ -355,5 +357,22 @@ describe("BunHttpServer", () => {
     expect(await resAfterRestart.text()).toBe("started automatically");
 
     server.stop();
+  });
+
+  test("setupBunRuntime 注入后通过 startActionDockServer({ port: 0 }) 正常分配可用端口并响应与终止", async () => {
+    setupBunRuntime();
+    const server = await startActionDockServer({ port: 0 });
+
+    expect(server.port).toBeGreaterThan(0);
+    expect(server.url).toContain(`:${server.port}`);
+
+    const res = await fetch(`${server.url}/health`);
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.status).toBe("ok");
+
+    await server.stop();
+
+    await expect(fetch(`${server.url}/health`)).rejects.toThrow();
   });
 });

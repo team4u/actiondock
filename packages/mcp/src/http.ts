@@ -28,7 +28,8 @@ export function startMcpHttpServer(
   }
 
   return (async () => {
-    const runtimeRegistry = options.runtimeRegistry ?? new ServerRuntimeRegistry();
+    const isInternalRegistry = !options.runtimeRegistry;
+    const runtimeRegistry = options.runtimeRegistry ?? new ServerRuntimeRegistry(options.customHome);
 
     const handler = createMcpHandler(
       () => {
@@ -155,15 +156,27 @@ export function startMcpHttpServer(
       port: server.port ?? port,
       host,
       url,
-      stop: () => {
-        if (!options.runtimeRegistry) {
+      stop: async () => {
+        let registryError: unknown;
+        if (isInternalRegistry) {
           try {
-            runtimeRegistry.close();
-          } catch {}
+            await runtimeRegistry.close();
+          } catch (err) {
+            registryError = err;
+          }
         }
-        server.stop(true);
+        try {
+          await server.stop(true);
+        } catch (serverErr) {
+          if (registryError) {
+            throw new AggregateError([registryError, serverErr], "Failed to stop MCP HTTP server and runtime registry");
+          }
+          throw serverErr;
+        }
+        if (registryError) {
+          throw registryError;
+        }
       },
     };
   })();
 }
-

@@ -55,6 +55,8 @@ export interface RuntimeCliContext {
   standalone?: StandaloneOptions;
   /** 自定义数据目录 */
   dataDir?: string;
+  /** 自定义 ActionDock 用户家目录（用于测试隔离与多租户环境） */
+  customHome?: string;
   /** 默认信封包装输出模式 */
   defaultEnvelope?: boolean;
   /** 自定义标准输出写入函数 */

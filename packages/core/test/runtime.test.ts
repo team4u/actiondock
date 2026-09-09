@@ -948,4 +948,89 @@ export default {
       rmSync(fakeHome, { recursive: true, force: true });
     }
   });
+
+  it("DefaultExecutionService unifies cross-package string and object ref resolution and storage attribution", async () => {
+    const storageA = new SqliteRuntimeStorage({ packageId: "pkg-a", dbPath: ":memory:" });
+    const storageB = new SqliteRuntimeStorage({ packageId: "pkg-b", dbPath: ":memory:" });
+
+    const workAction = defineAction({
+      id: "work",
+      async run(input: { task: string }) {
+        return { done: true, task: input.task, fromPkg: "pkg-b" };
+      },
+    });
+
+    const runnerB = new ActionRunner({
+      packageId: "pkg-b",
+      storage: storageB,
+      actions: new Map([["work", workAction]]),
+    });
+
+    const serviceA = new DefaultExecutionService({
+      packageId: "pkg-a",
+      storage: storageA,
+      packageContextResolver: (targetPkgId) => {
+        if (targetPkgId === "pkg-b") {
+          return {
+            storage: storageB,
+            actions: new Map([["work", workAction]]),
+          };
+        }
+        return undefined;
+      },
+    });
+
+    // 字符串形式："pkg-b/work"
+    const stringRes = await serviceA.execute("pkg-b/work", { task: "clean" });
+    expect(stringRes.ok).toBe(true);
+    expect((stringRes as any).data).toEqual({ done: true, task: "clean", fromPkg: "pkg-b" });
+
+    // 校验运行记录归属：写入目标包存储（storageB），而非源包（storageA）
+    expect(storageB.listRuns().length).toBe(1);
+    expect(storageB.listRuns()[0].actionId).toBe("work");
+    expect(storageB.listRuns()[0].packageId).toBe("pkg-b");
+    expect(storageA.listRuns().length).toBe(0);
+
+    // 对象形式：{ packageId: "pkg-b", actionId: "work" }
+    const objRes = await serviceA.execute({ packageId: "pkg-b", actionId: "work" }, { task: "build" });
+    expect(objRes.ok).toBe(true);
+    expect((objRes as any).data).toEqual({ done: true, task: "build", fromPkg: "pkg-b" });
+    expect(storageB.listRuns().length).toBe(2);
+    expect(storageA.listRuns().length).toBe(0);
+  });
+
+  it("DefaultExecutionService and ActionRunner strictly reject non-existent package without borrowing local actions or creating ghost storage", async () => {
+    const storageA = new SqliteRuntimeStorage({ packageId: "pkg-a", dbPath: ":memory:" });
+    let ghostStorageCreated = false;
+
+    const localAction = defineAction({
+      id: "secret",
+      async run() {
+        return { executed: "local-pkg-a" };
+      },
+    });
+
+    const serviceA = new DefaultExecutionService({
+      packageId: "pkg-a",
+      storage: storageA,
+      actions: new Map([["secret", localAction]]),
+      getStorageForPackage: (pkgId) => {
+        if (pkgId === "ghost-pkg") {
+          ghostStorageCreated = true;
+        }
+        return new SqliteRuntimeStorage({ packageId: pkgId, dbPath: ":memory:" });
+      },
+    });
+
+    // Calling non-existent ghost-pkg/secret must NOT execute pkg-a's secret action
+    const result = await serviceA.execute("ghost-pkg/secret", {});
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("ACTION_NOT_FOUND");
+      expect(result.error.message).toContain("ghost-pkg");
+    }
+
+    // Must not create empty runner in ghost storage
+    expect(ghostStorageCreated).toBe(false);
+  });
 });

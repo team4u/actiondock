@@ -331,5 +331,21 @@ describe("SqliteRuntimeStorage", () => {
       expect(p2).toBe("/tmp/actiondock-test/my-org/my-pkg/runtime.db");
     });
   });
+
+  describe("State Key Single Source of Truth", () => {
+    it("shares identical state key codec implementation with @actiondock/sdk", () => {
+      const coreStorage = require("../src/storage");
+      const sdk = require("@actiondock/sdk");
+
+      expect(coreStorage.encodeStateKey).toBe(sdk.encodeStateKey);
+      expect(coreStorage.decodeStateKey).toBe(sdk.decodeStateKey);
+      expect(coreStorage.escapeStateSegment).toBe(sdk.escapeStateSegment);
+      expect(coreStorage.unescapeStateSegment).toBe(sdk.unescapeStateSegment);
+
+      const encoded = coreStorage.encodeStateKey("ns:sub", "k:1");
+      expect(encoded).toBe("ns\\:sub:k\\:1");
+      expect(coreStorage.decodeStateKey(encoded)).toEqual({ namespace: "ns:sub", key: "k:1" });
+    });
+  });
 });
 

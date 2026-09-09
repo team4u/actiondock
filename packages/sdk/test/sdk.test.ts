@@ -125,6 +125,42 @@ describe("@actiondock/sdk", () => {
     expect(await userScope.keys()).toEqual([]);
   });
 
+  it("supports MemoryStateStore with colon-containing keys and nested scopes", async () => {
+    const store = new MemoryStateStore();
+
+    // Root keys with colons
+    await store.set("key:with:colon", "value-colon");
+    expect(await store.get<string>("key:with:colon")).toBe("value-colon");
+    expect(await store.keys()).toContain("key:with:colon");
+
+    // Scoped keys with colons
+    const scoped = store.scope("sub:ns");
+    await scoped.set("another:colon:key", "value-nested");
+    expect(await scoped.get<string>("another:colon:key")).toBe("value-nested");
+    expect(await scoped.keys()).toEqual(["another:colon:key"]);
+
+    // Root store should not expose scoped keys
+    expect(await store.get("another:colon:key")).toBeUndefined();
+    expect(await store.keys()).not.toContain("another:colon:key");
+
+    // Clear with colon key
+    const deleted = await scoped.delete("another:colon:key");
+    expect(deleted).toBe(true);
+    expect(await scoped.get("another:colon:key")).toBeUndefined();
+    expect(await scoped.keys()).toEqual([]);
+
+    // Namespace collision test: namespace a:b + key c vs namespace a + key b:c
+    const storeAB = store.scope("a:b");
+    const storeA = store.scope("a");
+    await storeAB.set("c", "val-ab-c");
+    await storeA.set("b:c", "val-a-bc");
+
+    expect(await storeAB.get<string>("c")).toBe("val-ab-c");
+    expect(await storeA.get<string>("b:c")).toBe("val-a-bc");
+    expect(await storeAB.get("b:c")).toBeUndefined();
+    expect(await storeA.get("c")).toBeUndefined();
+  });
+
   it("supports MemoryLogger debug, info, warn, and error levels with data", () => {
     const logger = new MemoryLogger();
     logger.debug("debug message", { d: 1 });

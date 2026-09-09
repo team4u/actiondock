@@ -1,4 +1,5 @@
-import type { ActionDefinition } from "@actiondock/sdk";
+import type { ActionDefinition, ActionRef } from "@actiondock/sdk";
+import { ActionResolver } from "../catalog/action-resolver";
 import { DefaultExecutionService } from "../execution/service";
 import { loadActions, loadProjectConfig } from "../project/loader";
 import type { ProjectConfig } from "../project/types";
@@ -105,8 +106,11 @@ export class ServerRuntimeRegistry {
         projectConfig,
         configOverrides: options?.configOverrides,
         actions: options?.actions,
-        actionResolver: (ref) => {
-          const parsed = typeof ref === "string" ? { actionId: ref } : ref;
+        actionResolver: (ref: ActionRef | string) => {
+          const parsed = typeof ref === "string" ? ActionResolver.parseRef(ref) : ref;
+          if (parsed.packageId && parsed.packageId !== packageId) {
+            return undefined;
+          }
           if (options?.actions?.has(parsed.actionId)) {
             return options.actions.get(parsed.actionId);
           }

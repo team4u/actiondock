@@ -51,11 +51,14 @@ function estimateEventBytes(event: ExecutionEvent): number {
  */
 export class InMemoryEventSink implements EventSink {
   private runs = new Map<string, RunBuffer>();
-  private listeners = new Map<string, Set<(event: ExecutionEvent) => void>>();
+  private listeners = new Map<string, Set<(evt: ExecutionEvent) => void>>();
   private wakeups = new Map<string, Set<() => void>>();
-  private readonly maxEventsPerRun: number;
-  private readonly maxBytesPerRun: number;
-  private readonly maxRuns: number;
+  private evictions = new Map<string, Set<() => void>>();
+  private evictedRuns = new Set<string>();
+
+  private maxEventsPerRun: number;
+  private maxBytesPerRun: number;
+  private maxRuns: number;
 
   constructor(options: InMemoryEventSinkOptions = {}) {
     this.maxEventsPerRun = options.maxEventsPerRun ?? 1024;
@@ -80,6 +83,7 @@ export class InMemoryEventSink implements EventSink {
         isTerminal: false,
       };
       this.runs.set(runId, run);
+      this.evictedRuns.delete(runId);
     } else {
       run.lastAccessedAt = now;
     }
@@ -98,21 +102,39 @@ export class InMemoryEventSink implements EventSink {
         };
         eventBytes = estimateEventBytes(processedEvent);
       } else if (processedEvent.type === "finish" && processedEvent.result) {
-        processedEvent = {
-          ...processedEvent,
-          result: processedEvent.result.ok
-            ? {
-                ok: true,
-                runId: processedEvent.result.runId,
-                data: { _truncated: true, message: "Output exceeded maximum quota" },
-              }
-            : processedEvent.result,
-        };
+        if (processedEvent.result.ok) {
+          processedEvent = {
+            ...processedEvent,
+            result: {
+              ok: true,
+              runId: processedEvent.result.runId,
+              data: { _truncated: true, message: "Output exceeded maximum quota" },
+            },
+          };
+        } else {
+          const err = processedEvent.result.error;
+          const keepChars = Math.max(0, Math.min(200, Math.floor(this.maxBytesPerRun / 2)));
+          const truncatedMsg =
+            typeof err?.message === "string"
+              ? `${err.message.slice(0, keepChars)}... [TRUNCATED]`
+              : "Error exceeded maximum quota";
+          processedEvent = {
+            ...processedEvent,
+            result: {
+              ok: false,
+              runId: processedEvent.result.runId,
+              error: {
+                code: err?.code || "EXECUTION_ERROR",
+                message: truncatedMsg,
+              },
+            },
+          };
+        }
         eventBytes = estimateEventBytes(processedEvent);
       }
     }
 
-    // 若单条事件在截断后仍超标，则拒绝入队缓冲以保护内存
+    // 严格限制单运行缓存字节配额，超标事件不可入队，杜绝突破 maxBytesPerRun
     if (eventBytes <= this.maxBytesPerRun) {
       // 检查是否超出单运行条数或字节配额，按优先级淘汰
       while (
@@ -135,20 +157,20 @@ export class InMemoryEventSink implements EventSink {
             const removed = run.entries.splice(nonTerminalIndex, 1)[0];
             run.totalBytes -= removed.bytes;
           } else {
-            // 只剩 finish 事件，强行中断淘汰以避免死循环
-            break;
+            const removed = run.entries.shift()!;
+            run.totalBytes -= removed.bytes;
           }
         }
       }
 
-      run.entries.push({ event: processedEvent, bytes: eventBytes });
-      run.totalBytes += eventBytes;
+      if (run.totalBytes + eventBytes <= this.maxBytesPerRun) {
+        run.entries.push({ event: processedEvent, bytes: eventBytes });
+        run.totalBytes += eventBytes;
+      }
     }
 
-    if (
-      processedEvent.type === "finish" ||
-      (processedEvent.type === "status" && processedEvent.status !== "running")
-    ) {
+    // 仅在接收到 finish 事件时才标记已终态，防止在终态 status 与 finish 之间的窗口内订阅过早结束
+    if (processedEvent.type === "finish") {
       run.isTerminal = true;
     }
 
@@ -172,7 +194,7 @@ export class InMemoryEventSink implements EventSink {
     const after = options.after ?? -1;
     let lastYieldedSequence = after;
 
-    if (options.signal?.aborted) {
+    if (options.signal?.aborted || this.evictedRuns.has(runId)) {
       return;
     }
 
@@ -187,11 +209,16 @@ export class InMemoryEventSink implements EventSink {
         notify();
         notify = null;
       }
-      if (
-        evt.type === "finish" ||
-        (evt.type === "status" && evt.status !== "running")
-      ) {
+      if (evt.type === "finish") {
         done = true;
+      }
+    };
+
+    const onEvict = () => {
+      done = true;
+      if (notify) {
+        notify();
+        notify = null;
       }
     };
 
@@ -202,6 +229,13 @@ export class InMemoryEventSink implements EventSink {
       this.listeners.set(runId, subs);
     }
     subs.add(listener);
+
+    let evictSet = this.evictions.get(runId);
+    if (!evictSet) {
+      evictSet = new Set();
+      this.evictions.set(runId, evictSet);
+    }
+    evictSet.add(onEvict);
 
     const onAbort = () => {
       done = true;
@@ -224,6 +258,10 @@ export class InMemoryEventSink implements EventSink {
       if (subs && subs.size === 0) {
         this.listeners.delete(runId);
       }
+      evictSet?.delete(onEvict);
+      if (evictSet && evictSet.size === 0) {
+        this.evictions.delete(runId);
+      }
       if (options.signal) {
         options.signal.removeEventListener("abort", onAbort);
       }
@@ -240,22 +278,27 @@ export class InMemoryEventSink implements EventSink {
           if (evt.sequence > lastYieldedSequence) {
             lastYieldedSequence = evt.sequence;
             yield evt;
-            if (
-              evt.type === "finish" ||
-              (evt.type === "status" && evt.status !== "running")
-            ) {
+            if (evt.type === "finish") {
               done = true;
               return;
             }
           }
         }
 
-        const lastHist = historySnapshot[historySnapshot.length - 1];
-        if (
-          lastHist &&
-          (lastHist.type === "finish" ||
-            (lastHist.type === "status" && lastHist.status !== "running"))
-        ) {
+        // 若该运行已终态且历史中已无 finish 事件，先排空实时队列已到达的事件
+        if (run.isTerminal) {
+          while (liveQueue.length > 0) {
+            const evt = liveQueue.shift()!;
+            if (evt.sequence > lastYieldedSequence) {
+              lastYieldedSequence = evt.sequence;
+              yield evt;
+              if (evt.type === "finish") {
+                done = true;
+                return;
+              }
+            }
+          }
+          // 历史回放完毕且队列排空后，若已终态则直接结束订阅，避免因丢弃 finish 造成永久挂起
           done = true;
           return;
         }
@@ -263,20 +306,25 @@ export class InMemoryEventSink implements EventSink {
 
       // 第三步：无缝衔接消费实时队列中的事件
       while (!done && !options.signal?.aborted) {
+        if (this.evictedRuns.has(runId)) {
+          done = true;
+          break;
+        }
         if (liveQueue.length > 0) {
           const evt = liveQueue.shift()!;
           if (evt.sequence > lastYieldedSequence) {
             lastYieldedSequence = evt.sequence;
             yield evt;
-            if (
-              evt.type === "finish" ||
-              (evt.type === "status" && evt.status !== "running")
-            ) {
+            if (evt.type === "finish") {
               done = true;
               return;
             }
           }
         } else {
+          if (this.evictedRuns.has(runId)) {
+            done = true;
+            break;
+          }
           await new Promise<void>((resolve) => {
             let runWakeups = this.wakeups.get(runId);
             if (!runWakeups) {
@@ -311,10 +359,7 @@ export class InMemoryEventSink implements EventSink {
         if (evt.sequence > lastYieldedSequence) {
           lastYieldedSequence = evt.sequence;
           yield evt;
-          if (
-            evt.type === "finish" ||
-            (evt.type === "status" && evt.status !== "running")
-          ) {
+          if (evt.type === "finish") {
             return;
           }
         }
@@ -325,8 +370,26 @@ export class InMemoryEventSink implements EventSink {
   }
 
   clear(runId: string): void {
+    this.evictedRuns.add(runId);
+    if (this.evictedRuns.size > 2000) {
+      const first = this.evictedRuns.values().next().value;
+      if (first) {
+        this.evictedRuns.delete(first);
+      }
+    }
     this.runs.delete(runId);
     this.listeners.delete(runId);
+    const evictCbs = this.evictions.get(runId);
+    if (evictCbs) {
+      this.evictions.delete(runId);
+      for (const cb of Array.from(evictCbs)) {
+        try {
+          cb();
+        } catch {
+          // ignore
+        }
+      }
+    }
     const waiting = this.wakeups.get(runId);
     if (waiting) {
       const cbs = Array.from(waiting);
@@ -362,23 +425,33 @@ export class InMemoryEventSink implements EventSink {
   }
 
   /**
-   * 淘汰最久未活跃的运行记录（严格只淘汰已终态运行，保护活跃运行）。
+   * 淘汰最久未活跃的运行记录。
+   * 优先淘汰已终态运行；若无终态运行则淘汰最旧活动运行，严格保证 runs.size <= maxRuns。
    */
   private evictOldestRun(): void {
-    let oldestTerminalRunId: string | null = null;
-    let oldestTerminalAccess = Infinity;
+    let candidateRunId: string | null = null;
+    let candidateAccess = Infinity;
 
     for (const [id, buffer] of this.runs.entries()) {
       if (buffer.isTerminal) {
-        if (buffer.lastAccessedAt < oldestTerminalAccess) {
-          oldestTerminalAccess = buffer.lastAccessedAt;
-          oldestTerminalRunId = id;
+        if (buffer.lastAccessedAt < candidateAccess) {
+          candidateAccess = buffer.lastAccessedAt;
+          candidateRunId = id;
         }
       }
     }
 
-    if (oldestTerminalRunId) {
-      this.clear(oldestTerminalRunId);
+    if (!candidateRunId) {
+      for (const [id, buffer] of this.runs.entries()) {
+        if (buffer.lastAccessedAt < candidateAccess) {
+          candidateAccess = buffer.lastAccessedAt;
+          candidateRunId = id;
+        }
+      }
+    }
+
+    if (candidateRunId) {
+      this.clear(candidateRunId);
     }
   }
 }
@@ -392,4 +465,3 @@ export function getDefaultEventSink(): EventSink {
 export function setDefaultEventSink(sink: EventSink): void {
   defaultEventSink = sink;
 }
-

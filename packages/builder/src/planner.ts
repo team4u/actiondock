@@ -1,8 +1,9 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import ts from "typescript";
 import YAML from "yaml";
 import {
+  assertPathWithinRoot,
   type ActionDockManifest,
   type ActionManifestEntry,
   loadManifest,
@@ -25,18 +26,49 @@ import type {
 
 /**
  * 递归扫描指定目录下的文件，返回绝对路径列表。
+ * 通过安全路径边界能力校验，阻止越界并避免符号链接逃逸。
  */
-function walkDirectory(dir: string): string[] {
+function walkDirectory(dir: string, rootDir: string = dir, visited = new Set<string>()): string[] {
   if (!existsSync(dir)) return [];
   const results: string[] = [];
   const entries = readdirSync(dir);
   for (const entry of entries) {
     const fullPath = join(dir, entry);
-    const stat = statSync(fullPath);
-    if (stat.isDirectory()) {
-      results.push(...walkDirectory(fullPath));
-    } else if (stat.isFile()) {
-      results.push(fullPath);
+    if (rootDir) {
+      try {
+        assertPathWithinRoot(rootDir, fullPath, "planner path");
+      } catch {
+        continue;
+      }
+    }
+    let real: string;
+    try {
+      real = existsSync(fullPath) ? realpathSync(fullPath) : fullPath;
+    } catch {
+      continue;
+    }
+    if (rootDir) {
+      try {
+        assertPathWithinRoot(rootDir, real, "planner path");
+      } catch {
+        // 忽略并跳过指向项目根目录外部的软链接
+        continue;
+      }
+    }
+    if (visited.has(real)) {
+      continue;
+    }
+    visited.add(real);
+    try {
+      const stat = statSync(fullPath);
+      if (stat.isDirectory()) {
+        results.push(...walkDirectory(fullPath, rootDir, visited));
+      } else if (stat.isFile()) {
+        results.push(fullPath);
+      }
+    } catch {
+      // 忽略无法访问或损坏的文件/符号链接
+      continue;
     }
   }
   return results;
@@ -373,7 +405,7 @@ function loadProjectPlaybooks(projectRoot: string, playbooksDir = "playbooks"): 
   const dir = join(projectRoot, playbooksDir);
   if (!existsSync(dir)) return map;
 
-  const files = walkDirectory(dir).filter((f) => f.endsWith(".md"));
+  const files = walkDirectory(dir, projectRoot).filter((f) => f.endsWith(".md"));
   for (const file of files) {
     const pb = parsePlaybookFile(file);
     if (pb) {
@@ -391,7 +423,7 @@ function generateStaticManifest(projectRoot: string, actionsDir = "actions"): Ac
   const actions: Record<string, ActionManifestEntry> = {};
 
   if (existsSync(dir)) {
-    const files = walkDirectory(dir).filter(
+    const files = walkDirectory(dir, projectRoot).filter(
       (f) =>
         (f.endsWith(".ts") || f.endsWith(".js")) &&
         !f.endsWith(".d.ts") &&
@@ -721,7 +753,7 @@ export class BuildPlanner {
     if (!isSelective) {
       const defaultLibDir = join(root, "lib");
       if (existsSync(defaultLibDir)) {
-        const libFiles = walkDirectory(defaultLibDir);
+        const libFiles = walkDirectory(defaultLibDir, root);
         for (const file of libFiles) {
           const rel = relative(root, file).replace(/\\/g, "/");
           if (!isIgnoredModulePath(rel) && !actionPathSet.has(file) && !modulePathSet.has(rel)) {
@@ -739,11 +771,13 @@ export class BuildPlanner {
     // 清单声明资产
     if (manifest.assets && Array.isArray(manifest.assets)) {
       for (const assetRel of manifest.assets) {
+        const resolvedAsset = resolve(root, assetRel);
+        assertPathWithinRoot(root, resolvedAsset, "asset");
         if (!assetPathSet.has(assetRel)) {
           assetPathSet.add(assetRel);
           modulesAndAssets.push({
             path: assetRel,
-            resolvedPath: resolve(root, assetRel),
+            resolvedPath: resolvedAsset,
             type: "asset",
           });
         }
@@ -753,7 +787,7 @@ export class BuildPlanner {
     // 默认 assets 目录资产扫描
     const defaultAssetsDir = join(root, "assets");
     if (existsSync(defaultAssetsDir)) {
-      const assetFiles = walkDirectory(defaultAssetsDir);
+      const assetFiles = walkDirectory(defaultAssetsDir, root);
       for (const file of assetFiles) {
         const rel = relative(root, file);
         if (!assetPathSet.has(rel)) {

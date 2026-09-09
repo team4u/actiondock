@@ -1,5 +1,6 @@
 import { readJsonBody } from "../body";
 import { type RouteContext, jsonResponse, resolveStorageForPackage } from "./common";
+import { decodeStateKey } from "../../storage";
 
 /**
  * 处理状态键名列表、读取、写入、删除及清空接口。
@@ -101,14 +102,14 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
         const body = await readJsonBody(req, { maxBytes: options.maxBodyBytes });
         const val = body.value !== undefined ? body.value : body;
         const ttl = typeof body.ttl === "number" ? body.ttl : undefined;
-        const namespace = body.namespace || nsParam || "";
+        const explicitNs = body.namespace || nsParam;
 
         let actualKey = key;
-        let ns = namespace;
-        if (!ns && key.includes(":")) {
-          const idx = key.indexOf(":");
-          ns = key.slice(0, idx);
-          actualKey = key.slice(idx + 1);
+        let ns = explicitNs || "";
+        if (!explicitNs) {
+          const decoded = decodeStateKey(key);
+          ns = decoded.namespace;
+          actualKey = decoded.key;
         }
 
         await storage.setState(ns, actualKey, val, ttl);
@@ -131,7 +132,11 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
         return jsonResponse({ ok: true, packageId, key, deleted: true }, 200, corsHeaders);
       }
     } catch (err: any) {
-      const isClient = err.message?.includes("Unknown or unregistered package") || err.message?.includes("Invalid packageId") || err.message?.includes("escapes boundary");
+      const isClient =
+        err.message?.includes("Unknown or unregistered package") ||
+        err.message?.includes("Invalid packageId") ||
+        err.message?.includes("escapes boundary") ||
+        err.message?.includes("Ambiguous state key");
       return jsonResponse(
         { ok: false, error: { code: isClient ? "INVALID_ARGUMENT" : "STATE_KEY_ERROR", message: err.message } },
         isClient ? 400 : 500,

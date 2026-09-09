@@ -12,6 +12,7 @@ import type {
   RunStatus,
   RuntimeError,
 } from "@actiondock/sdk";
+import { ActionResolver } from "../catalog/action-resolver";
 import type { ProjectConfig } from "../project/types";
 import type { Clock } from "../runtime/clock";
 import { type EventSink, getDefaultEventSink } from "../runtime/events";
@@ -104,8 +105,14 @@ export class DefaultExecutionService implements ExecutionService {
       clock: options.clock,
       maxCallDepth: options.maxCallDepth,
       maxSubRuns: options.maxSubRuns,
-      actionResolver: (ref) => {
-        const parsed = typeof ref === "string" ? { actionId: ref } : ref;
+      actionResolver: (ref, currentPkgId) => {
+        const parsed = typeof ref === "string" ? ActionResolver.parseRef(ref) : ref;
+        if (parsed.packageId && parsed.packageId !== this.packageId) {
+          return undefined;
+        }
+        if (currentPkgId && currentPkgId !== this.packageId) {
+          return undefined;
+        }
         return this.actionResolver ? this.actionResolver(parsed) : undefined;
       },
       getStorageForPackage: options.getStorageForPackage,
@@ -135,11 +142,19 @@ export class DefaultExecutionService implements ExecutionService {
   }
 
   private async resolveTargetAction(ref: ActionRef | string): Promise<ActionDefinition | undefined> {
-    const actionId = typeof ref === "string" ? ref : ("actionId" in ref && ref.actionId ? ref.actionId : (ref as any).id);
-    const fromRunner = this._runner.getAction(actionId);
+    const parsed = typeof ref === "string" ? ActionResolver.parseRef(ref) : ref;
+    const actionId = parsed.actionId;
+    const targetPackageId = parsed.packageId || this.packageId;
+    let runner = this._runner;
+    if (targetPackageId !== this.packageId) {
+      const targetRunner = await this._runner.resolveTargetPackageRunner(targetPackageId);
+      if (!targetRunner) return undefined;
+      runner = targetRunner;
+    }
+    const fromRunner = runner.getAction(actionId);
     if (fromRunner) return fromRunner;
-    if (this.actionResolver) {
-      return this.actionResolver(ref);
+    if (this.actionResolver && targetPackageId === this.packageId) {
+      return this.actionResolver(parsed);
     }
     return undefined;
   }
@@ -150,22 +165,10 @@ export class DefaultExecutionService implements ExecutionService {
     options: ExecuteOptions = {}
   ): Promise<ExecutionResult> {
     const ticket = await this.start(ref, input, options);
-    const active = this.activeRuns.get(ticket.runId);
-    if (!active) {
-      const record = await this.get(ticket.runId);
-      if (record && record.status === "success") {
-        return { ok: true, runId: ticket.runId, data: record.output ?? null };
-      }
-      return {
-        ok: false,
-        runId: ticket.runId,
-        error: record?.error || {
-          code: "RUN_TERMINATED_EARLY",
-          message: `Run ${ticket.runId} terminated without result`,
-        },
-      };
+    if (!ticket.result) {
+      throw new Error(`Execution ticket for run '${ticket.runId}' has no result Promise`);
     }
-    return active.handle.result;
+    return ticket.result;
   }
 
   async start(
@@ -183,56 +186,71 @@ export class DefaultExecutionService implements ExecutionService {
       );
     }
 
-    const targetActionId = typeof ref === "string" ? ref : ("actionId" in ref && ref.actionId ? ref.actionId : (ref as any).id);
-    const targetPackageId = typeof ref === "object" && ref.packageId ? ref.packageId : this.packageId;
+    let parsedRef: ActionRef;
+    try {
+      parsedRef = ActionResolver.parseRef(ref);
+    } catch {
+      parsedRef = typeof ref === "object" ? ref : { actionId: ref };
+    }
+    const targetActionId = parsedRef.actionId;
+    const targetPackageId = parsedRef.packageId || this.packageId;
 
     let runnerToUse: ActionRunner = this._runner;
+    let resolveError: RuntimeError | undefined;
+
     if (targetPackageId && targetPackageId !== this.packageId) {
       const targetRunner = await this._runner.resolveTargetPackageRunner(targetPackageId);
       if (targetRunner) {
         runnerToUse = targetRunner;
+      } else {
+        resolveError = {
+          code: "ACTION_NOT_FOUND",
+          message: `Target package '${targetPackageId}' not found or unresolvable`,
+        };
       }
     }
 
-    let action = runnerToUse.getAction(targetActionId) || runnerToUse.getAction(`${targetPackageId}/${targetActionId}`);
-    let resolveError: RuntimeError | undefined;
+    let action: ActionDefinition | undefined;
+    if (!resolveError) {
+      action = runnerToUse.getAction(targetActionId) || runnerToUse.getAction(`${targetPackageId}/${targetActionId}`);
 
-    if (!action) {
-      const resolution = await runnerToUse.resolveAction(ref);
-      if (resolution.status === "found") {
-        action = resolution.action;
-      } else if (resolution.status === "load_failed") {
-        const cause = resolution.error;
-        const causeMsg = cause?.message || String(cause);
-        const isMissingModule =
-          causeMsg.includes("Cannot find package") ||
-          causeMsg.includes("Cannot find module") ||
-          causeMsg.includes("ERR_MODULE_NOT_FOUND") ||
-          causeMsg.includes("Could not resolve");
-        const hint = isMissingModule
-          ? `依赖未安装，在 '${resolution.projectRoot}' 执行 npm install 或先执行 'ad run ${resolution.packageId}/${targetActionId}'`
-          : undefined;
+      if (!action) {
+        const resolution = await runnerToUse.resolveAction(parsedRef);
+        if (resolution.status === "found") {
+          action = resolution.action;
+        } else if (resolution.status === "load_failed") {
+          const cause = resolution.error;
+          const causeMsg = cause?.message || String(cause);
+          const isMissingModule =
+            causeMsg.includes("Cannot find package") ||
+            causeMsg.includes("Cannot find module") ||
+            causeMsg.includes("ERR_MODULE_NOT_FOUND") ||
+            causeMsg.includes("Could not resolve");
+          const hint = isMissingModule
+            ? `依赖未安装，在 '${resolution.projectRoot}' 执行 npm install 或先执行 'ad run ${resolution.packageId}/${targetActionId}'`
+            : undefined;
 
-        resolveError = {
-          code: "ACTION_LOAD_FAILED",
-          message: `Failed to load action '${targetActionId}' from package '${resolution.packageId}' (${resolution.projectRoot}): ${causeMsg}`,
-          details: {
-            packageId: resolution.packageId,
-            projectRoot: resolution.projectRoot,
-            rootCause: causeMsg,
-            hint,
-          },
-        };
-      } else {
-        const targetAction = await this.resolveTargetAction(ref);
-        if (targetAction) {
-          action = targetAction;
-        } else {
           resolveError = {
-            code: "ACTION_NOT_FOUND",
-            message: `Action '${targetActionId}' not found in package '${targetPackageId}'`,
-            details: resolution.reason ? { reason: resolution.reason } : undefined,
+            code: "ACTION_LOAD_FAILED",
+            message: `Failed to load action '${targetActionId}' from package '${resolution.packageId}' (${resolution.projectRoot}): ${causeMsg}`,
+            details: {
+              packageId: resolution.packageId,
+              projectRoot: resolution.projectRoot,
+              rootCause: causeMsg,
+              hint,
+            },
           };
+        } else {
+          const targetAction = await this.resolveTargetAction(parsedRef);
+          if (targetAction) {
+            action = targetAction;
+          } else {
+            resolveError = {
+              code: "ACTION_NOT_FOUND",
+              message: `Action '${targetActionId}' not found in package '${targetPackageId}'`,
+              details: resolution.reason ? { reason: resolution.reason } : undefined,
+            };
+          }
         }
       }
     }

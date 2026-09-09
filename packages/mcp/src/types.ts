@@ -102,6 +102,5 @@ export interface ActionDockMcpHttpServerInstance {
   port: number;
   host: string;
   url: string;
-  stop: () => void;
+  stop: () => Promise<void>;
 }
-
