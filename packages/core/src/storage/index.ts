@@ -12,17 +12,16 @@ export * from "./types";
  * 解析并计算目标 SQLite 数据库文件的绝对路径。
  * 
  * 优先级规则：
- * 1. inMemory: true -> 返回 ":memory:"
- * 2. 显式指定 dataDir -> 返回 `<dataDir>/<packageId>/runtime.db`
- * 3. 显式指定 projectRoot（开发态项目） -> 返回 `<projectRoot>/.actiondock/runtime.db`
- * 4. 默认独立二进制存储路径 -> 返回 `~/.actiondock/data/<packageId>/runtime.db`
+ * - inMemory: true -> 返回 ":memory:"
+ * - 显式指定 dataDir -> 返回 `<dataDir>/<packageId>/runtime.db`
+ * - 默认统一数据存储路径 -> 返回 `~/.actiondock/data/<packageId>/runtime.db`
  * 
  * @param packageId 所属 Package ID
  * @param options 路径解析选项
  */
 export function resolveDatabasePath(
   packageId: string,
-  options: { projectRoot?: string; dataDir?: string; inMemory?: boolean } = {}
+  options: { projectRoot?: string; dataDir?: string; inMemory?: boolean; customHome?: string } = {}
 ): string {
   if (options.inMemory) {
     return ":memory:";
@@ -38,15 +37,9 @@ export function resolveDatabasePath(
     assertPathWithinRoot(rootDir, dbPath, "database dataDir path");
     return dbPath;
   }
-  if (options.projectRoot) {
-    const rootDir = options.projectRoot;
-    const dbPath = join(rootDir, ".actiondock", "runtime.db");
-    assertPathWithinRoot(rootDir, dbPath, "database projectRoot path");
-    return dbPath;
-  }
 
-  // 独立执行二进制默认存储路径: ~/.actiondock/data/<package-id>/runtime.db
-  const rootDir = join(getActionDockHome(), ".actiondock", "data");
+  // 统一数据存储路径: ~/.actiondock/data/<package-id>/runtime.db
+  const rootDir = join(getActionDockHome(options.customHome), ".actiondock", "data");
   const dbPath = join(rootDir, safePkgPath, "runtime.db");
   assertPathWithinRoot(rootDir, dbPath, "database storage path");
   return dbPath;
@@ -56,11 +49,11 @@ export function resolveDatabasePath(
  * 工厂函数：为指定 Package 创建或连接 RuntimeStorage 实例。
  * 
  * @param packageId 目标 Package ID
- * @param options 存储配置参数（支持 projectRoot, dataDir, inMemory）
+ * @param options 存储配置参数（支持 dataDir, inMemory, customHome）
  */
 export function createStorage(
   packageId: string,
-  options: { projectRoot?: string; dataDir?: string; inMemory?: boolean } = {}
+  options: { projectRoot?: string; dataDir?: string; inMemory?: boolean; customHome?: string } = {}
 ): RuntimeStorage {
   const dbPath = resolveDatabasePath(packageId, options);
   return new SqliteRuntimeStorage({ dbPath, packageId });

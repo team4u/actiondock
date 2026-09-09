@@ -41,7 +41,10 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
     // 1. 独立运行模式
     if (context?.standalone) {
       const sa = context.standalone;
-      const storage = createStorage(sa.packageId, { dataDir: options.dataDir || context.dataDir });
+      const storage = createStorage(sa.packageId, {
+        customHome: context?.customHome,
+        dataDir: options.dataDir || context.dataDir,
+      });
       try {
         if (options.detail && options.json) {
           const entries = await storage.listStateEntries({
@@ -128,7 +131,7 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
     if (targetRoot) {
       const projConfig = loadProjectConfig(targetRoot);
       const storage = createStorage(projConfig.id, {
-        projectRoot: targetRoot,
+        customHome: context?.customHome,
         dataDir: options.dataDir || context?.dataDir,
       });
       try {
@@ -204,7 +207,7 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
       try {
         const projConfig = loadProjectConfig(pkg.path);
         const storage = createStorage(projConfig.id, {
-          projectRoot: pkg.path,
+          customHome: context?.customHome,
           dataDir: options.dataDir || context?.dataDir,
         });
 
@@ -351,7 +354,10 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
       // 1. 独立运行模式
       if (context?.standalone) {
         const sa = context.standalone;
-        const storage = createStorage(sa.packageId, { dataDir: options.dataDir || context.dataDir });
+        const storage = createStorage(sa.packageId, {
+          customHome: context?.customHome,
+          dataDir: options.dataDir || context.dataDir,
+        });
         let val: unknown;
         let entryNs = options.namespace || "";
 
@@ -413,7 +419,7 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
       const { root, key } = getTargetRoot(options.package, rawKey);
       const projConfig = loadProjectConfig(root);
       const storage = createStorage(projConfig.id, {
-        projectRoot: root,
+        customHome: context?.customHome,
         dataDir: options.dataDir || context?.dataDir,
       });
 
@@ -479,7 +485,10 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
       // 1. 独立运行模式
       if (context?.standalone) {
         const sa = context.standalone;
-        const storage = createStorage(sa.packageId, { dataDir: options.dataDir || context.dataDir });
+        const storage = createStorage(sa.packageId, {
+          customHome: context?.customHome,
+          dataDir: options.dataDir || context.dataDir,
+        });
         let ns = options.namespace || "";
         let actualKey = rawKey;
 
@@ -521,7 +530,7 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
       const { root, key } = getTargetRoot(options.package, rawKey);
       const projConfig = loadProjectConfig(root);
       const storage = createStorage(projConfig.id, {
-        projectRoot: root,
+        customHome: context?.customHome,
         dataDir: options.dataDir || context?.dataDir,
       });
 
@@ -568,7 +577,10 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
       // 1. 独立运行模式
       if (context?.standalone) {
         const sa = context.standalone;
-        const storage = createStorage(sa.packageId, { dataDir: options.dataDir || context.dataDir });
+        const storage = createStorage(sa.packageId, {
+          customHome: context?.customHome,
+          dataDir: options.dataDir || context.dataDir,
+        });
         const deleted = await storage.deleteStateSmart(rawKey, options.namespace);
         storage.close();
 
@@ -600,7 +612,7 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
       const { root, key } = getTargetRoot(options.package, rawKey);
       const projConfig = loadProjectConfig(root);
       const storage = createStorage(projConfig.id, {
-        projectRoot: root,
+        customHome: context?.customHome,
         dataDir: options.dataDir || context?.dataDir,
       });
       const deleted = await storage.deleteStateSmart(key, options.namespace);
@@ -632,7 +644,10 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
       // 1. 独立运行模式
       if (context?.standalone) {
         const sa = context.standalone;
-        const storage = createStorage(sa.packageId, { dataDir: options.dataDir || context.dataDir });
+        const storage = createStorage(sa.packageId, {
+          customHome: context?.customHome,
+          dataDir: options.dataDir || context.dataDir,
+        });
         const count = await storage.clearState({
           namespace: options.namespace,
           all: options.all,
@@ -679,7 +694,7 @@ export function registerStateCommands(program: Command, context?: RuntimeCliCont
       const { root } = getTargetRoot(options.package);
       const projConfig = loadProjectConfig(root);
       const storage = createStorage(projConfig.id, {
-        projectRoot: root,
+        customHome: context?.customHome,
         dataDir: options.dataDir || context?.dataDir,
       });
       const count = await storage.clearState({

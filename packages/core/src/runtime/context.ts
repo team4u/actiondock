@@ -20,7 +20,7 @@ import { getProcessExecutor } from "./process";
  * 生产级配置解析器实现。
  * 严格践行 5 层配置解析优先级链：
  * 1. CLI 临时参数覆写 (Overrides)
- * 2. 本地项目持久化存储 (Local SQLite: .actiondock/runtime.db)
+ * 2. 包级持久化存储 (Package SQLite: ~/.actiondock/data/<package-id>/runtime.db)
  * 3. 全局共享持久化存储 (Global SQLite: ~/.actiondock/global.db)
  * 4. 操作系统环境变量 (process.env: 显式绑定 / 包名前缀 / SNAKE_CASE / 类型转换)
  * 5. 项目默认配置 (actiondock.json 中的 default 字段)

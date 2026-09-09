@@ -13,17 +13,17 @@ ActionDock 提供了强类型、多层级回退的配置管理机制，使得 Ac
         CLI: --config API_KEY=xxx
         HTTP: body.config = { API_KEY: "xxx" }
         ↓
-项目级 SQLite 持久化配置 (.actiondock/storage.db)
-        在项目目录下通过 ad config set API_KEY xxx 写入（仅当前项目生效）
+包级 SQLite 持久化配置 (~/.actiondock/data/<package-id>/runtime.db)
+        通过 ad config set API_KEY xxx 写入（当前包独享）
         ↓
 全局级 SQLite 持久化配置 (~/.actiondock/global.db)
         通过 ad config set -g API_KEY xxx 写入（跨所有 Action Package 共享）
         ↓
 环境变量
         依序查找：
-        a. actiondock.json 中声明的 env 映射
-        b. 包命名空间环境变量：<PACKAGE_ID>__<KEY>
-        c. 全局环境变量：<KEY>
+        - actiondock.json 中声明的 env 映射
+        - 包命名空间环境变量：<PACKAGE_ID>__<KEY>
+        - 全局环境变量：<KEY>
         ↓
 项目默认配置
         actiondock.json -> config.<KEY>.default
@@ -36,10 +36,10 @@ ActionDock 提供了强类型、多层级回退的配置管理机制，使得 Ac
 
 ## CLI 配置作用域规则 (`ad config set`)
 
-- **项目内执行（默认）**：若当前目录或父级存在 `actiondock.json`，`ad config set <KEY> <VALUE>` 默认写入当前项目的本地存储（`.actiondock/storage.db`）。
+- **包内执行（默认）**：若当前目录或父级存在 `actiondock.json`，`ad config set <KEY> <VALUE>` 默认写入当前包的持久化存储（`~/.actiondock/data/<package-id>/runtime.db`）。
 - **全局配置（-g / --global）**：使用 `ad config set -g <KEY> <VALUE>` 写入全局存储（`~/.actiondock/global.db`），跨所有包共享。
 - **项目外执行**：在任意非 ActionDock 项目目录下执行 `ad config set`，将自动回退并写入全局存储。
-- **查看配置**：`ad config list`（默认展示当前项目合并视图），`ad config list -g`（仅查看全局配置）。
+- **查看配置**：`ad config list`（默认展示当前包合并视图），`ad config list -g`（仅查看全局配置）。
 
 ---
 

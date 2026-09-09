@@ -64,17 +64,17 @@ export class ServerRuntimeRegistry {
   }
 
   /**
-   * 获取或懒加载指定 Package 和 projectRoot 的缓存 RuntimeStorage 实例。
+   * 获取或懒加载指定 Package 的缓存 RuntimeStorage 实例。
    * 
    * @param packageId 所属 Package ID
-   * @param projectRoot 项目根目录（可选）
+   * @param _projectRoot 项目根目录（保持签名兼容）
    * @returns 缓存或新创建的 RuntimeStorage 实例
    */
-  public getStorage(packageId: string, projectRoot?: string): RuntimeStorage {
-    const key = `${projectRoot || ""}:${packageId}`;
+  public getStorage(packageId: string, _projectRoot?: string): RuntimeStorage {
+    const key = packageId;
     let storage = this.storages.get(key);
     if (!storage) {
-      storage = createStorage(packageId, { projectRoot });
+      storage = createStorage(packageId, { customHome: this.customHome });
       this.storages.set(key, storage);
     }
     return storage;

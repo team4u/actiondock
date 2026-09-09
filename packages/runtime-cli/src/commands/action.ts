@@ -101,6 +101,7 @@ export async function executeAction(
           : new Map(sa.actions.map((a) => [a.id, a]));
 
       const storage = createStorage(sa.packageId, {
+        customHome: context?.customHome,
         dataDir: options.dataDir || context?.dataDir,
       });
       const globalStorage = createGlobalStorage({
@@ -208,7 +209,7 @@ export async function executeAction(
     const config = loadProjectConfig(resolved.projectRoot);
     const actions = await loadActions(resolved.projectRoot, config.actionsDir);
     const storage = createStorage(config.id, {
-      projectRoot: resolved.projectRoot,
+      customHome: context?.customHome,
       dataDir: options.dataDir || context?.dataDir,
     });
     const globalStorage = createGlobalStorage({
@@ -225,9 +226,9 @@ export async function executeAction(
         projectConfig: config,
         configOverrides,
         actions,
-        getStorageForPackage: (targetPkgId, targetRoot) => {
+        getStorageForPackage: (targetPkgId) => {
           return createStorage(targetPkgId, {
-            projectRoot: targetRoot,
+            customHome: context?.customHome,
             dataDir: options.dataDir || context?.dataDir,
           });
         },
@@ -237,7 +238,7 @@ export async function executeAction(
           const targetConfig = loadProjectConfig(targetRoot);
           const targetActions = await loadActions(targetRoot, targetConfig.actionsDir);
           const targetStorage = createStorage(targetConfig.id, {
-            projectRoot: targetRoot,
+            customHome: context?.customHome,
             dataDir: options.dataDir || context?.dataDir,
           });
           return {

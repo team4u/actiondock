@@ -53,7 +53,10 @@ export function registerRunsCommands(program: Command, context?: RuntimeCliConte
       // 1. 独立运行模式
       if (context?.standalone) {
         const sa = context.standalone;
-        const storage = createStorage(sa.packageId, { dataDir: options.dataDir || context.dataDir });
+        const storage = createStorage(sa.packageId, {
+          customHome: context?.customHome,
+          dataDir: options.dataDir || context.dataDir,
+        });
         const records = storage.listRuns({
           actionId: options.action,
           limit,
@@ -124,7 +127,7 @@ export function registerRunsCommands(program: Command, context?: RuntimeCliConte
       if (targetRoot) {
         const projConfig = loadProjectConfig(targetRoot);
         const storage = createStorage(projConfig.id, {
-          projectRoot: targetRoot,
+          customHome: context?.customHome,
           dataDir: options.dataDir || context?.dataDir,
         });
         const records = storage.listRuns({
@@ -174,7 +177,7 @@ export function registerRunsCommands(program: Command, context?: RuntimeCliConte
         try {
           const projConfig = loadProjectConfig(pkg.path);
           const storage = createStorage(projConfig.id, {
-            projectRoot: pkg.path,
+            customHome: context?.customHome,
             dataDir: options.dataDir || context?.dataDir,
           });
           const records = storage.listRuns({
@@ -234,7 +237,10 @@ export function registerRunsCommands(program: Command, context?: RuntimeCliConte
       // 1. 独立运行模式
       if (context?.standalone) {
         const sa = context.standalone;
-        const storage = createStorage(sa.packageId, { dataDir: options.dataDir || context.dataDir });
+        const storage = createStorage(sa.packageId, {
+          customHome: context?.customHome,
+          dataDir: options.dataDir || context.dataDir,
+        });
         const run = storage.getRun(id);
         storage.close();
 
@@ -279,7 +285,7 @@ export function registerRunsCommands(program: Command, context?: RuntimeCliConte
         }
         const projConfig = loadProjectConfig(targetRoot);
         const storage = createStorage(projConfig.id, {
-          projectRoot: targetRoot,
+          customHome: context?.customHome,
           dataDir: options.dataDir || context?.dataDir,
         });
         foundRun = storage.getRun(id);
@@ -293,7 +299,7 @@ export function registerRunsCommands(program: Command, context?: RuntimeCliConte
           try {
             const projConfig = loadProjectConfig(currentRoot);
             const storage = createStorage(projConfig.id, {
-              projectRoot: currentRoot,
+              customHome: context?.customHome,
               dataDir: options.dataDir || context?.dataDir,
             });
             foundRun = storage.getRun(id);
@@ -311,7 +317,7 @@ export function registerRunsCommands(program: Command, context?: RuntimeCliConte
             try {
               const projConfig = loadProjectConfig(pkg.path);
               const storage = createStorage(projConfig.id, {
-                projectRoot: pkg.path,
+                customHome: context?.customHome,
                 dataDir: options.dataDir || context?.dataDir,
               });
               const r = storage.getRun(id);
@@ -397,7 +403,10 @@ export function registerRunsCommands(program: Command, context?: RuntimeCliConte
       // 1. 独立运行模式
       if (context?.standalone) {
         const sa = context.standalone;
-        const storage = createStorage(sa.packageId, { dataDir: options.dataDir || context.dataDir });
+        const storage = createStorage(sa.packageId, {
+          customHome: context?.customHome,
+          dataDir: options.dataDir || context.dataDir,
+        });
         const count = storage.clearRuns({ actionId: options.action });
         storage.close();
 
@@ -445,7 +454,7 @@ export function registerRunsCommands(program: Command, context?: RuntimeCliConte
       if (targetRoot) {
         const projConfig = loadProjectConfig(targetRoot);
         const storage = createStorage(projConfig.id, {
-          projectRoot: targetRoot,
+          customHome: context?.customHome,
           dataDir: options.dataDir || context?.dataDir,
         });
         const count = storage.clearRuns({ actionId: options.action });

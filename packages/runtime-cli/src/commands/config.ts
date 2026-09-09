@@ -72,8 +72,8 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
         globalStorage.close();
 
         const projectStorage = createStorage(projConfig.id, {
-          projectRoot: root,
-          dataDir: options.dataDir,
+          customHome: context?.customHome,
+          dataDir: options.dataDir || context?.dataDir,
         });
         const projectConfig = projectStorage.listConfig();
         projectStorage.close();
@@ -191,7 +191,10 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
       // 1. 独立运行模式
       if (context?.standalone) {
         const sa = context.standalone;
-        const storage = createStorage(sa.packageId, { dataDir: options.dataDir || context.dataDir });
+        const storage = createStorage(sa.packageId, {
+          customHome: context?.customHome,
+          dataDir: options.dataDir || context?.dataDir,
+        });
         const stored = storage.listConfig();
         storage.close();
 
@@ -303,7 +306,7 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
           const projConfig = loadProjectConfig(projectRoot);
           packageId = projConfig.id;
           const projectStorage = createStorage(projConfig.id, {
-            projectRoot,
+            customHome: context?.customHome,
             dataDir: options.dataDir || context?.dataDir,
           });
           projectStored = projectStorage.listConfig();
@@ -393,7 +396,10 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
       // 1. 独立运行模式
       if (context?.standalone) {
         const sa = context.standalone;
-        const storage = createStorage(sa.packageId, { dataDir: options.dataDir || context.dataDir });
+        const storage = createStorage(sa.packageId, {
+          customHome: context?.customHome,
+          dataDir: options.dataDir || context.dataDir,
+        });
         const val = storage.getConfig(key);
         storage.close();
 
@@ -469,7 +475,7 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
           packageId = projConfig.id;
           declaredItem = projConfig.config?.[key];
           const projectStorage = createStorage(projConfig.id, {
-            projectRoot,
+            customHome: context?.customHome,
             dataDir: options.dataDir || context?.dataDir,
           });
           projVal = projectStorage.getConfig(key);
@@ -588,7 +594,10 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
       // 1. 独立运行模式
       if (context?.standalone) {
         const sa = context.standalone;
-        const storage = createStorage(sa.packageId, { dataDir: options.dataDir || context.dataDir });
+        const storage = createStorage(sa.packageId, {
+          customHome: context?.customHome,
+          dataDir: options.dataDir || context.dataDir,
+        });
         storage.setConfig(key, parsed);
         storage.close();
 
@@ -607,7 +616,6 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
 
       if (target.type === "remote") {
         await setRemoteConfig(target.serverUrl!, key, parsed, target.token, options.package);
-        const displayVal = isSecret ? maskSecretValue(parsed) : JSON.stringify(parsed);
         writeStdout(`[OK] Remote config '${key}' updated on ${target.serverUrl}`, context);
         return;
       }
@@ -641,7 +649,7 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
         writeStdout(`[OK] Global config '${key}' set to ${displayVal}`, context);
       } else {
         const storage = createStorage(projConfig.id, {
-          projectRoot,
+          customHome: context?.customHome,
           dataDir: options.dataDir || context?.dataDir,
         });
         storage.setConfig(key, parsed);
@@ -670,7 +678,10 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
       // 1. 独立运行模式
       if (context?.standalone) {
         const sa = context.standalone;
-        const storage = createStorage(sa.packageId, { dataDir: options.dataDir || context.dataDir });
+        const storage = createStorage(sa.packageId, {
+          customHome: context?.customHome,
+          dataDir: options.dataDir || context.dataDir,
+        });
         const deleted = storage.deleteConfig(key);
         storage.close();
 
@@ -721,7 +732,7 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
       } else {
         const projConfig = loadProjectConfig(projectRoot);
         const storage = createStorage(projConfig.id, {
-          projectRoot,
+          customHome: context?.customHome,
           dataDir: options.dataDir || context?.dataDir,
         });
         const deleted = storage.deleteConfig(key);

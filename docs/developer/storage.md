@@ -6,9 +6,8 @@ ActionDock 2.0 采用内嵌式 SQLite（在 Node.js 环境下基于 `node:sqlite
 
 ## 存储文件路径规则
 
-- **开发态项目级**：存储于项目根目录下的 `.actiondock/runtime.db`，跟随项目物理隔离。
-- **全局共享级**：存储于用户主目录下的 `~/.actiondock/global.db`，跨所有 Action Package 共享公共配置（如全局 API Token）。
-- **独立编译态**：独立二进制在目标机器运行时，默认存储于 `~/.actiondock/data/<package-id>/runtime.db`。
+- **包级存储**：无论处于源码开发模式还是独立二进制执行模式，包内数据统一存储于 `~/.actiondock/data/<package-id>/runtime.db`（若显式指定 `--data-dir <path>` 则为 `<path>/<package-id>/runtime.db`）。
+- **全局共享存储**：存储于用户主目录下的 `~/.actiondock/global.db`，跨所有 Action Package 共享公共配置（如全局 API Token）。
 
 ---
 
@@ -75,7 +74,7 @@ const clearedCount = await authState.clear();
 
 ### 配置管理 (`ad config`)
 ```bash
-# 项目级配置（默认写入当前项目的 .actiondock/runtime.db）
+# 包级配置（默认写入 ~/.actiondock/data/<package-id>/runtime.db）
 ad config set GITHUB_TOKEN "ghp_xxx"
 ad config get GITHUB_TOKEN
 ad config list

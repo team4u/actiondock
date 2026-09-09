@@ -87,6 +87,11 @@ export default defineAction({
     expect(manifestCheck?.message).toContain("doctor-act.ts");
     expect(manifestCheck?.fix).toContain("ad action sync");
 
+    const storageProjectCheck = report.checks.find((c) => c.id === "project.storage");
+    expect(storageProjectCheck).toBeDefined();
+    expect(storageProjectCheck?.status).toBe("ok");
+    expect(storageProjectCheck?.message).toContain(fakeHome);
+
     // Config readiness check should detect missing REQ_API_KEY as a warning
     const configCheck = report.checks.find((c) => c.id === "project.config_readiness");
     expect(configCheck).toBeDefined();

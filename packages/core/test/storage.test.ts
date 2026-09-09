@@ -332,6 +332,26 @@ describe("SqliteRuntimeStorage", () => {
       const p2 = resolveDatabasePath("@my-org/my-pkg", { dataDir });
       expect(p2).toBe(join(dataDir, "my-org/my-pkg", "runtime.db"));
     });
+
+    it("统一存储路径规则：项目根目录不再改变路径，统一存放于全局数据目录", () => {
+      const { resolveDatabasePath } = require("../src/storage");
+      const customHome = "/tmp/actiondock-custom-home";
+
+      // 默认路径
+      const p1 = resolveDatabasePath("sample-pkg", { customHome });
+      expect(p1).toBe(join(customHome, ".actiondock", "data", "sample-pkg", "runtime.db"));
+
+      // 即使传入 projectRoot，亦统一返回二进制模式全局数据路径
+      const p2 = resolveDatabasePath("sample-pkg", { projectRoot: "/workspace/project", customHome });
+      expect(p2).toBe(join(customHome, ".actiondock", "data", "sample-pkg", "runtime.db"));
+
+      // 带 scope 的包标识符
+      const p3 = resolveDatabasePath("@team/my-pkg", { projectRoot: "/workspace/project", customHome });
+      expect(p3).toBe(join(customHome, ".actiondock", "data", "team/my-pkg", "runtime.db"));
+
+      // inMemory 模式始终最高优先级返回 :memory:
+      expect(resolveDatabasePath("sample-pkg", { inMemory: true })).toBe(":memory:");
+    });
   });
 
   describe("State Key Single Source of Truth", () => {

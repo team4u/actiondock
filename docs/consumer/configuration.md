@@ -61,8 +61,8 @@ ad config set GITHUB_TOKEN ghp_xxxxxxxxxxxxxxxxxxxx -g
 ```
 > 全局配置安全保存在 `~/.actiondock/global.db` SQLite 数据库中。
 
-### 项目本地 SQLite 配置
-在特定 Action Package 目录下执行 `ad config set`，配置将安全存入当前项目目录下的 `.actiondock/runtime.db` 中（已被 `.gitignore` 忽略，绝不泄露到 Git）：
+### 包级本地 SQLite 配置
+在特定 Action Package 目录下执行 `ad config set`，配置将安全存入当前包对应的 `~/.actiondock/data/<package-id>/runtime.db` 中：
 
 ```bash
 cd examples/github-tools

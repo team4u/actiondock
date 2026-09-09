@@ -1,11 +1,11 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { delimiter, join, relative } from "node:path";
+import { delimiter, dirname, join, relative } from "node:path";
 import type { ActionRef } from "@actiondock/sdk";
 import { ActionResolver } from "../catalog/action-resolver";
 import { discoverActionFiles, findProjectRoot, loadActions, loadPlaybooks, loadProjectConfig } from "../project/loader";
 import { loadManifest, MANIFEST_FILE_NAME } from "../project/manifest";
 import { getRegistryStatus, listLinkedPackages, resolvePackageRoot } from "../registry/registry";
-import { createGlobalStorage, createStorage } from "../storage";
+import { createGlobalStorage, createStorage, resolveDatabasePath } from "../storage";
 import { findExecutable, getActionDockHome } from "../utils";
 import type { DoctorCheckItem, DoctorReport } from "./types";
 
@@ -308,8 +308,9 @@ export async function runDoctorChecks(options?: {
       }
 
       // Project Runtime Database Check
+      const dbPath = resolveDatabasePath(config.id, { customHome: options?.customHome });
       try {
-        const projectStorage = createStorage(config.id, { projectRoot });
+        const projectStorage = createStorage(config.id, { customHome: options?.customHome });
         await projectStorage.setConfig("_doctor_probe_", "ok");
         await projectStorage.deleteConfig("_doctor_probe_");
         projectStorage.close();
@@ -319,7 +320,7 @@ export async function runDoctorChecks(options?: {
           category: "project",
           name: "Project Database",
           status: "ok",
-          message: `Database writable at ${join(projectRoot, ".actiondock", "runtime.db")}`,
+          message: `Database writable at ${dbPath}`,
         });
       } catch (err: any) {
         checks.push({
@@ -328,7 +329,7 @@ export async function runDoctorChecks(options?: {
           name: "Project Database",
           status: "error",
           message: `Failed to write project runtime database: ${err.message}`,
-          fix: `Check write permissions for '${join(projectRoot, ".actiondock")}'`,
+          fix: `Check write permissions for '${dirname(dbPath)}'`,
         });
       }
 
@@ -476,7 +477,7 @@ export async function runDoctorChecks(options?: {
       // Config readiness check
       if (config.config && Object.keys(config.config).length > 0) {
         const missingKeys: string[] = [];
-        const projectStorage = createStorage(config.id, { projectRoot });
+        const projectStorage = createStorage(config.id, { customHome: options?.customHome });
         for (const [key, def] of Object.entries(config.config)) {
           const inStorage = await projectStorage.getConfig(key);
           const envNames = Array.isArray(def.env) ? def.env : def.env ? [def.env] : [key];
