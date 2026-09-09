@@ -20,6 +20,7 @@ import { resolveActionProject, resolvePackageRoot } from "../registry/registry";
 import { validateSchema } from "../schema/validator";
 import type { RuntimeStorage, TerminalRunStatus } from "../storage/types";
 import type { Clock } from "./clock";
+import type { RuntimePlatform } from "../platform/types";
 import { createActionContext, StderrLogger } from "./context";
 
 /**
@@ -29,7 +30,7 @@ export interface RunnerOptions {
   /** 运行所属的 Package ID */
   packageId: string;
   /** 持久化运行时存储实例（SQLite） */
-  storage: RuntimeStorage;
+  storage?: RuntimeStorage;
   /** 全局共享持久化存储实例（SQLite，用于单例池化避免泄漏） */
   globalStorage?: RuntimeStorage;
   /** 项目根目录绝对路径 */
@@ -44,6 +45,8 @@ export interface RunnerOptions {
   process?: ProcessAPI;
   /** 可选的时间与时钟源（默认使用存储内嵌时钟或系统时间） */
   clock?: Clock;
+  /** 可选的底层运行时平台契约 */
+  platform?: RuntimePlatform;
   /** 动态解析跨包或未注册 Action 的委托函数 */
   actionResolver?: (
     ref: ActionRef | string,
@@ -100,6 +103,8 @@ export interface ExecutionStartOptions {
   maxCallDepth?: number;
   /** 外部注入的进程执行器 */
   process?: ProcessAPI;
+  /** 可选的底层运行时平台契约 */
+  platform?: RuntimePlatform;
   /** 外部注入的进度报告器 */
   progress?: ProgressReporter;
   /** 外部注入的日志记录器 */
@@ -152,6 +157,7 @@ export class ActionRunner {
   private actions: Map<string, ActionDefinition>;
   private clock?: Clock;
   private process?: ProcessAPI;
+  private platform?: RuntimePlatform;
   private maxCallDepth: number;
   private maxSubRuns: number;
   private activeSubRuns = 0;
@@ -176,20 +182,38 @@ export class ActionRunner {
 
   constructor(options: RunnerOptions) {
     this.packageId = options.packageId;
-    this.storage = options.storage;
-    this.globalStorage = options.globalStorage;
     this.projectRoot = options.projectRoot;
     this.projectConfig = options.projectConfig;
     this.configOverrides = options.configOverrides || {};
     this.actions = options.actions || new Map();
-    this.process = options.process;
-    this.clock = options.clock;
+    this.customHome = options.customHome;
+    this.platform = options.platform;
+
+    if (options.platform) {
+      this.clock = options.platform.clock;
+      this.process = options.platform.process;
+      this.storage = options.storage ?? options.platform.storage.createStorage(this.packageId, {
+        projectRoot: this.projectRoot,
+        customHome: this.customHome,
+      });
+      this.globalStorage = options.globalStorage ?? options.platform.storage.createGlobalStorage({
+        customHome: this.customHome,
+      });
+    } else {
+      if (!options.storage) {
+        throw new Error("ActionRunner requires either 'storage' or 'platform' option");
+      }
+      this.storage = options.storage;
+      this.globalStorage = options.globalStorage;
+      this.process = options.process;
+      this.clock = options.clock;
+    }
+
     this.maxCallDepth = options.maxCallDepth ?? 16;
     this.maxSubRuns = options.maxSubRuns ?? 64;
     this.actionResolver = options.actionResolver;
     this.getStorageForPackage = options.getStorageForPackage;
     this.packageContextResolver = options.packageContextResolver;
-    this.customHome = options.customHome;
   }
 
   public getStorage(): RuntimeStorage {
@@ -310,6 +334,7 @@ export class ActionRunner {
     try {
       actionsMap = await loadActions(resolved.projectRoot, config.actionsDir, {
         autoInstall: false,
+        loader: this.platform?.modules,
       });
     } catch (err: any) {
       return {
@@ -344,6 +369,25 @@ export class ActionRunner {
   }
 
   /**
+   * 注入或更新跨包运行上下文解析委托。
+   */
+  public setPackageContextResolver(
+    resolver: (packageId: string) => Promise<{
+      projectRoot?: string;
+      projectConfig?: ProjectConfig;
+      storage: RuntimeStorage;
+      actions?: Map<string, ActionDefinition>;
+    } | undefined> | {
+      projectRoot?: string;
+      projectConfig?: ProjectConfig;
+      storage: RuntimeStorage;
+      actions?: Map<string, ActionDefinition>;
+    } | undefined
+  ): void {
+    this.packageContextResolver = resolver;
+  }
+
+  /**
    * 跨包运行时解析与获取（确保跨包执行具备独立的配置、存储、状态与 Action 注册表）。
    */
   public async resolveTargetPackageRunner(targetPackageId: string): Promise<ActionRunner | undefined> {
@@ -363,6 +407,7 @@ export class ActionRunner {
           actions: resolved.actions,
           process: this.process,
           clock: this.clock,
+          platform: this.platform,
           maxCallDepth: this.maxCallDepth,
           maxSubRuns: this.maxSubRuns,
           actionResolver: this.actionResolver,
@@ -380,13 +425,21 @@ export class ActionRunner {
       let storage: RuntimeStorage;
       if (this.getStorageForPackage) {
         storage = this.getStorageForPackage(targetPackageId, root);
+      } else if (this.platform) {
+        storage = this.platform.storage.createStorage(targetPackageId, {
+          projectRoot: root,
+          customHome: this.customHome,
+        });
       } else {
         const sqlitePath = (config as any).storage?.sqlitePath || ".actiondock/storage.db";
         const dbPath = join(root, sqlitePath);
         const { SqliteRuntimeStorage } = await import("../storage/sqlite");
-        storage = new SqliteRuntimeStorage({ dbPath, packageId: targetPackageId });
+        storage = new SqliteRuntimeStorage({ dbPath, packageId: targetPackageId, clock: this.clock });
       }
-      const actionsMap = await loadActions(root, config.actionsDir, { autoInstall: false });
+      const actionsMap = await loadActions(root, config.actionsDir, {
+        autoInstall: false,
+        loader: this.platform?.modules,
+      });
       const runner = new ActionRunner({
         packageId: targetPackageId,
         storage,
@@ -396,6 +449,7 @@ export class ActionRunner {
         actions: actionsMap,
         process: this.process,
         clock: this.clock,
+        platform: this.platform,
         maxCallDepth: this.maxCallDepth,
         maxSubRuns: this.maxSubRuns,
         actionResolver: this.actionResolver,
@@ -424,8 +478,10 @@ export class ActionRunner {
     options: ExecutionStartOptions = {}
   ): ExecutionHandle {
     const runId = options.runId || randomUUID();
+    const effectiveClock = options.platform?.clock ?? this.clock;
+    const effectiveProcess = options.process || options.platform?.process || this.process;
     const startedAt =
-      this.clock?.now().toISOString() ||
+      effectiveClock?.now().toISOString() ||
       (typeof (this.storage as any).clock?.now === "function"
         ? (this.storage as any).clock.now().toISOString()
         : new Date().toISOString());
@@ -579,7 +635,7 @@ export class ActionRunner {
       rootRunId: initialRun.rootRunId,
       parentRunId: options.parentRunId,
       signal: controller.signal,
-      process: options.process || this.process,
+      process: effectiveProcess,
       progress: options.progress,
       logger: options.logger || new StderrLogger(action?.id || targetActionId),
       onActionInvoke: async (childAction, childInput, parentRunId) => {
@@ -597,6 +653,32 @@ export class ActionRunner {
           const parsed = ActionResolver.parseRef(childAction as ActionRef | string);
           if (parsed.packageId) {
             childPackageId = parsed.packageId;
+          }
+        }
+
+        if (childPackageId && childPackageId !== this.packageId && Array.isArray(action?.uses)) {
+          const childActionId =
+            typeof childAction === "string"
+              ? ActionResolver.parseRef(childAction).actionId
+              : typeof childAction === "object" && !("run" in childAction)
+              ? (childAction as ActionRef).actionId
+              : (childAction as ActionDefinition).id;
+          const targetRef = `${childPackageId}/${childActionId}`;
+          const declaredUses = action?.uses || [];
+          const isAllowed = declaredUses.some(
+            (u) => u === targetRef || u === `${childPackageId}/*` || u === childPackageId
+          );
+          if (!isAllowed) {
+            const err = new Error(
+              `Undeclared cross-package dependency: Action '${this.packageId}/${action?.id}' does not declare '${targetRef}' in 'uses'`
+            );
+            (err as any).code = "UNDECLARED_ACTION_DEPENDENCY";
+            (err as any).details = {
+              caller: `${this.packageId}/${action?.id}`,
+              target: targetRef,
+              declaredUses,
+            };
+            throw err;
           }
         }
 
@@ -619,7 +701,8 @@ export class ActionRunner {
             parentRunId,
             callStack,
             signal: controller.signal,
-            process: options.process || this.process,
+            process: effectiveProcess,
+            platform: options.platform || this.platform,
             progress: options.progress,
             logger: options.logger,
             configOverrides: options.configOverrides,

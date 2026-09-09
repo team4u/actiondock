@@ -6,7 +6,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from "node:pat
 import { pathToFileURL } from "node:url";
 import YAML from "yaml";
 import type { ActionDefinition } from "@actiondock/sdk";
-import { getModuleLoader } from "../runtime/module-loader";
+import { DefaultModuleLoader, type ModuleLoader } from "../runtime/module-loader";
 import type { PlaybookDefinition, PlaybookFrontmatter, ProjectConfig } from "./types";
 
 /**
@@ -453,7 +453,7 @@ export function discoverActionFiles(
 export async function loadActions(
   projectRoot: string,
   actionsDir = "actions",
-  options: { autoInstall?: boolean } = { autoInstall: true }
+  options: { autoInstall?: boolean; loader?: ModuleLoader } = { autoInstall: true }
 ): Promise<Map<string, ActionDefinition>> {
   if (options.autoInstall !== false) {
     ensureProjectDependencies(projectRoot);
@@ -461,7 +461,7 @@ export async function loadActions(
 
   const files = discoverActionFiles(projectRoot, actionsDir);
   const actions = new Map<string, ActionDefinition>();
-  const loader = getModuleLoader();
+  const loader = options.loader || new DefaultModuleLoader();
 
   for (const file of files) {
     try {
@@ -530,7 +530,7 @@ export interface ActionFileEntry {
 export async function loadActionFileMap(
   projectRoot: string,
   actionsDir = "actions",
-  options: { autoInstall?: boolean; strict?: boolean } = { autoInstall: true, strict: false }
+  options: { autoInstall?: boolean; strict?: boolean; loader?: ModuleLoader } = { autoInstall: true, strict: false }
 ): Promise<Map<string, ActionFileEntry>> {
   if (options.autoInstall !== false) {
     ensureProjectDependencies(projectRoot);
@@ -538,7 +538,7 @@ export async function loadActionFileMap(
 
   const files = discoverActionFiles(projectRoot, actionsDir);
   const map = new Map<string, ActionFileEntry>();
-  const loader = getModuleLoader();
+  const loader = options.loader || new DefaultModuleLoader();
 
   for (const file of files) {
     try {

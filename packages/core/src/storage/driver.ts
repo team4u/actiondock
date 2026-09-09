@@ -6,30 +6,11 @@ export type SqliteDriverFactory = (dbPath: string) => SqliteDriver;
 /** ESM 环境下可用的 CommonJS require，用于动态加载 node:sqlite / bun:sqlite */
 const cjsRequire = createRequire(import.meta.url);
 
-let customDriverFactory: SqliteDriverFactory | undefined;
-
-/**
- * 获取当前注册的全局默认 SQLite 驱动工厂。
- */
-export function getSqliteDriverFactory(): SqliteDriverFactory | undefined {
-  return customDriverFactory;
-}
-
-/**
- * 注册全局默认 SQLite 驱动工厂。
- */
-export function setSqliteDriverFactory(factory: SqliteDriverFactory): void {
-  customDriverFactory = factory;
-}
-
 /**
  * 创建默认 SQLite 驱动实例。
- * 优先使用外部注册的工厂，其次根据当前运行时环境自动适配。
+ * 根据当前运行时环境（Bun / Node.js）自动适配原生 SQLite 驱动。
  */
 export function createDefaultSqliteDriver(dbPath: string): SqliteDriver {
-  if (customDriverFactory) {
-    return customDriverFactory(dbPath);
-  }
 
   // 检查是否在 Bun 运行时环境
   if (typeof (globalThis as any).Bun !== "undefined") {

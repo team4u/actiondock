@@ -15,47 +15,19 @@ import type {
 import { ActionResolver } from "../catalog/action-resolver";
 import type { ProjectConfig } from "../project/types";
 import type { Clock } from "../runtime/clock";
-import { type EventSink, getDefaultEventSink } from "../runtime/events";
+import { type EventSink, InMemoryEventSink } from "../runtime/events";
 import { ActionRunner, type ExecutionHandle } from "../runtime/runner";
 import type { RuntimeStorage } from "../storage/types";
+import type { RuntimePlatform } from "../platform/types";
 import type {
   CancelResult,
   ExecuteOptions,
   ExecutionService,
+  ExecutionServiceOptions,
   ExecutionTicket,
 } from "./types";
 
-export interface ExecutionServiceOptions {
-  packageId: string;
-  storage: RuntimeStorage;
-  globalStorage?: RuntimeStorage;
-  projectRoot?: string;
-  projectConfig?: ProjectConfig;
-  configOverrides?: Record<string, unknown>;
-  actions?: Map<string, ActionDefinition>;
-  process?: ProcessAPI;
-  clock?: Clock;
-  logger?: Logger;
-  eventSink?: EventSink;
-  maxActiveRuns?: number;
-  maxCallDepth?: number;
-  maxSubRuns?: number;
-  ownerId?: string;
-  actionResolver?: (ref: ActionRef | string) => ActionDefinition | undefined | Promise<ActionDefinition | undefined>;
-  getStorageForPackage?: (packageId: string, projectRoot?: string) => RuntimeStorage;
-  packageContextResolver?: (packageId: string) => Promise<{
-    projectRoot?: string;
-    projectConfig?: ProjectConfig;
-    storage: RuntimeStorage;
-    actions?: Map<string, ActionDefinition>;
-  } | undefined> | {
-    projectRoot?: string;
-    projectConfig?: ProjectConfig;
-    storage: RuntimeStorage;
-    actions?: Map<string, ActionDefinition>;
-  } | undefined;
-  customHome?: string;
-}
+export type { ExecutionServiceOptions };
 
 interface ActiveRun {
   runId: string;
@@ -78,31 +50,55 @@ export class DefaultExecutionService implements ExecutionService {
   private _runner: ActionRunner;
   private logger?: Logger;
   private clock?: Clock;
+  private process?: ProcessAPI;
+  private platform?: RuntimePlatform;
   private actionResolver?: (ref: ActionRef | string) => ActionDefinition | undefined | Promise<ActionDefinition | undefined>;
   private activeRuns = new Map<string, ActiveRun>();
   private isClosing = false;
 
   constructor(options: ExecutionServiceOptions) {
+    this.platform = options.platform;
     this.packageId = options.packageId;
-    this.storage = options.storage;
     this.projectConfig = options.projectConfig;
-    this.eventSink = options.eventSink || getDefaultEventSink();
+    this.eventSink = options.eventSink || (options.platform as any)?.eventSink || new InMemoryEventSink();
     this.maxActiveRuns = options.maxActiveRuns || 32;
     this.ownerId = options.ownerId || `host-${randomUUID().slice(0, 8)}`;
     this.actionResolver = options.actionResolver;
     this.logger = options.logger;
-    this.clock = options.clock;
+
+    if (options.platform) {
+      this.clock = options.platform.clock;
+      this.process = options.platform.process;
+      this.storage =
+        options.storage ??
+        options.platform.storage.createStorage(this.packageId, {
+          projectRoot: options.projectRoot,
+          customHome: options.customHome,
+        });
+    } else {
+      this.clock = options.clock;
+      this.process = options.process;
+      if (!options.storage) {
+        throw new Error("ExecutionService requires either 'storage' or 'platform' option");
+      }
+      this.storage = options.storage;
+    }
+
+    const globalStorage = options.platform
+      ? (options.globalStorage ?? options.platform.storage.createGlobalStorage({ customHome: options.customHome }))
+      : options.globalStorage;
 
     this._runner = new ActionRunner({
       packageId: this.packageId,
       storage: this.storage,
-      globalStorage: options.globalStorage,
+      globalStorage,
       projectRoot: options.projectRoot,
       projectConfig: this.projectConfig,
       configOverrides: options.configOverrides,
       actions: options.actions,
-      process: options.process,
-      clock: options.clock,
+      process: this.process,
+      clock: this.clock,
+      platform: options.platform,
       maxCallDepth: options.maxCallDepth,
       maxSubRuns: options.maxSubRuns,
       actionResolver: (ref, currentPkgId) => {
@@ -139,6 +135,10 @@ export class DefaultExecutionService implements ExecutionService {
 
   public getActiveHandle(runId: string): ExecutionHandle | undefined {
     return this.activeRuns.get(runId)?.handle;
+  }
+
+  public setPackageContextResolver(resolver: any): void {
+    this._runner.setPackageContextResolver(resolver);
   }
 
   private async resolveTargetAction(ref: ActionRef | string): Promise<ActionDefinition | undefined> {
@@ -255,9 +255,11 @@ export class DefaultExecutionService implements ExecutionService {
       }
     }
 
+    const effectiveClock = options.platform?.clock ?? this.clock;
+
     if (!action) {
       const runId = randomUUID();
-      const now = (this.clock?.now() ?? new Date()).toISOString();
+      const now = (effectiveClock?.now() ?? new Date()).toISOString();
       const error: RuntimeError = resolveError || {
         code: "ACTION_NOT_FOUND",
         message: `Action '${targetActionId}' not found in package '${targetPackageId}'`,
@@ -338,7 +340,7 @@ export class DefaultExecutionService implements ExecutionService {
         runId,
         rootRunId: options.rootRunId || options.parentRunId || runId,
         sequence: sequence++,
-        timestamp: (this.clock?.now() ?? new Date()).toISOString(),
+        timestamp: (effectiveClock?.now() ?? new Date()).toISOString(),
       };
       this.eventSink.emit(evt);
     };
@@ -408,7 +410,8 @@ export class DefaultExecutionService implements ExecutionService {
       timeoutMs: options.timeoutMs,
       progress: progressReporter,
       logger: executionLogger,
-      process: options.process,
+      process: options.process || options.platform?.process || this.process,
+      platform: options.platform || this.platform,
     });
 
     const activeItem: ActiveRun = {
@@ -416,7 +419,7 @@ export class DefaultExecutionService implements ExecutionService {
       handle,
       controller,
       status: "running",
-      startedAt: (this.clock?.now() ?? new Date()).toISOString(),
+      startedAt: (effectiveClock?.now() ?? new Date()).toISOString(),
     };
 
     this.activeRuns.set(handle.runId, activeItem);

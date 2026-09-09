@@ -19,16 +19,8 @@ import {
 } from "./routes";
 import { ServerRuntimeRegistry } from "./runtime-registry";
 import { isLoopbackHost, resolveCorsHeaders, verifyBearerToken } from "./security";
+import type { ActionDockHost } from "../host/types";
 import type { ActionDockServerInstance, CoreHttpServerFactory, CoreHttpServerInstance, ServerOptions } from "./types";
-
-let customHttpServerFactory: CoreHttpServerFactory | undefined;
-
-/**
- * 注册自定义 HTTP 服务端工厂（用于 Node.js / Bun 运行时环境适配）。
- */
-export function setHttpServerFactory(factory: CoreHttpServerFactory): void {
-  customHttpServerFactory = factory;
-}
 
 /**
  * 根据当前运行时环境启动标准 Web Request/Response 兼容的 HTTP 服务。
@@ -38,13 +30,6 @@ export async function launchHttpServer(
   host: string,
   fetchHandler: (req: Request) => Promise<Response>
 ): Promise<CoreHttpServerInstance> {
-  if (customHttpServerFactory) {
-    const srv = await customHttpServerFactory({ port, host, fetch: fetchHandler });
-    if (srv.ready) {
-      await srv.ready;
-    }
-    return srv;
-  }
 
   // 若处于原生 Bun 运行时
   if (typeof (globalThis as any).Bun !== "undefined" && typeof (globalThis as any).Bun.serve === "function") {
@@ -144,8 +129,18 @@ export async function launchHttpServer(
 export async function startActionDockServer(
   options: ServerOptions = {}
 ): Promise<ActionDockServerInstance> {
+  const hostInstance: ActionDockHost | undefined =
+    options.host && typeof options.host === "object" && typeof (options.host as any).listActions === "function"
+      ? (options.host as ActionDockHost)
+      : undefined;
+
+  const hostString =
+    typeof options.host === "string"
+      ? options.host
+      : (options.hostname ?? "127.0.0.1");
+
   const port = options.port ?? 5177;
-  const host = options.host ?? "127.0.0.1";
+  const host = hostString;
   const token = options.token;
   const customHome = options.customHome;
   const projectRoot = options.projectRoot
@@ -184,7 +179,7 @@ export async function startActionDockServer(
     await ensureDependencyClosure(roots, { customHome });
   }
 
-  const server = await launchHttpServer(port, host, async (req) => {
+  const fetchHandler = async (req: Request): Promise<Response> => {
     const origin = req.headers.get("origin");
     const corsHeaders = resolveCorsHeaders(origin, options.corsOrigins);
 
@@ -279,7 +274,17 @@ export async function startActionDockServer(
       404,
       corsHeaders
     );
-  });
+  };
+
+  let server: CoreHttpServerInstance;
+  if (options.platform?.http) {
+    server = await options.platform.http.launchHttpServer({ port, host, fetch: fetchHandler });
+    if (server.ready) {
+      await server.ready;
+    }
+  } else {
+    server = await launchHttpServer(port, host, fetchHandler);
+  }
 
   const actualHost = host === "0.0.0.0" ? "127.0.0.1" : host;
 
@@ -290,13 +295,20 @@ export async function startActionDockServer(
     set port(val: number) {
       server.port = val;
     },
-    host,
+    host: hostInstance,
     get url() {
       return `http://${actualHost}:${this.port}`;
     },
     runtimeRegistry,
     ready: Promise.resolve(),
     stop: async (stopOptions?: { graceMs?: number }) => {
+      if (hostInstance) {
+        try {
+          await hostInstance.close(stopOptions);
+        } catch {
+          // 忽略宿主关闭异常
+        }
+      }
       await runtimeRegistry.close(stopOptions);
       await server.stop(true);
     },

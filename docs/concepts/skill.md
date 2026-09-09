@@ -97,6 +97,6 @@ ad export skill -P team4u.github-tools team4u.k8s-ops --bundle devops-suite --ou
 - **全局安装**：执行 `npx skills add team4u/actiondock -g -y` 全局装载。
 - **Claude Code**：放置在 `~/.claude/skills/<skill-name>` 或项目根目录 `.claude/skills/`
 - **Antigravity**：放置在 `~/.gemini/antigravity-cli/skills/<skill-name>`
-- **通用智能体客户端**：解析 `SKILL.md` 注入系统提示词与规程，通过 `ad action show <id>` 动态查验参数契约并调度执行。
+- **通用智能体客户端**：解析 `SKILL.md` 注入系统提示词与规程，通过 `ad describe <id>`（或 `ad show <id>`）动态查验参数契约并调度执行。
 
 详细使用方法请查阅 [使用者指南：Agent Skill 使用指南](../consumer/use-as-skill.md) 与 [开发者指南：构建、打包与 Skill 导出](../developer/build-and-export.md)。

@@ -47,21 +47,4 @@ export class DefaultModuleLoader implements ModuleLoader {
   }
 }
 
-let globalModuleLoader: ModuleLoader | undefined;
 
-/**
- * 注册全局模块加载器实现。
- */
-export function setModuleLoader(loader: ModuleLoader): void {
-  globalModuleLoader = loader;
-}
-
-/**
- * 获取当前全局模块加载器，若未显式注册则回退使用 DefaultModuleLoader。
- */
-export function getModuleLoader(): ModuleLoader {
-  if (!globalModuleLoader) {
-    globalModuleLoader = new DefaultModuleLoader();
-  }
-  return globalModuleLoader;
-}

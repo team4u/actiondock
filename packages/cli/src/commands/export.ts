@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { basename } from "node:path";
 import { exportCompositeSkill, exportSkill, exportSkillBatch } from "@actiondock/builder";
 import { discoverProjects, findProjectRoot, listLinkedPackages, resolvePackageRoot } from "@actiondock/core";
-import { ExecutionError } from "@actiondock/runtime-cli";
+import { ExecutionError } from "../errors";
 import { Command } from "commander";
 
 function parseListOption(val: string, prev: string[] = []): string[] {

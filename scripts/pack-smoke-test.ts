@@ -13,7 +13,6 @@ const packages = [
   "mcp",
   "builder",
   "runtime-node",
-  "runtime-cli",
   "cli",
   "testing",
   "runtime-bun",
@@ -101,7 +100,6 @@ try {
       "@actiondock/mcp": `file:${tarballPaths.mcp}`,
       "@actiondock/builder": `file:${tarballPaths.builder}`,
       "@actiondock/runtime-node": `file:${tarballPaths["runtime-node"]}`,
-      "@actiondock/runtime-cli": `file:${tarballPaths["runtime-cli"]}`,
       "@actiondock/cli": `file:${tarballPaths.cli}`,
       "@actiondock/testing": `file:${tarballPaths.testing}`,
       "@actiondock/runtime-bun": `file:${tarballPaths["runtime-bun"]}`,
@@ -112,7 +110,6 @@ try {
       "@actiondock/mcp": `file:${tarballPaths.mcp}`,
       "@actiondock/builder": `file:${tarballPaths.builder}`,
       "@actiondock/runtime-node": `file:${tarballPaths["runtime-node"]}`,
-      "@actiondock/runtime-cli": `file:${tarballPaths["runtime-cli"]}`,
       "@actiondock/cli": `file:${tarballPaths.cli}`,
       "@actiondock/testing": `file:${tarballPaths.testing}`,
       "@actiondock/runtime-bun": `file:${tarballPaths["runtime-bun"]}`,
@@ -137,14 +134,13 @@ try {
   console.log("[TEST] Testing module imports and runtime execution via native Node.js...");
   const testScriptContent = `
 import { defineAction, createTestRuntime } from "@actiondock/sdk";
-import { ActionRunner, ExecutionService, SqliteRuntimeStorage, createStorage, getSqliteDriverFactory, ACTIONDOCK_VERSION } from "@actiondock/core";
+import { ActionRunner, ExecutionService, SqliteRuntimeStorage, createStorage, ACTIONDOCK_VERSION } from "@actiondock/core";
 import { createActionDockMcpServer, toMcpResult } from "@actiondock/mcp";
 import { BuildPlanner, BunCompiler, SkillExporter, buildProject } from "@actiondock/builder";
-import { setupNodeRuntime, NodeSqliteDriver, NodeHttpServer } from "@actiondock/runtime-node";
-import { createRuntimeProgram, runRuntimeCli, formatError } from "@actiondock/runtime-cli";
-import { main, createCliProgram } from "@actiondock/cli";
+import { createNodePlatform, NodeSqliteDriver, NodeHttpServer } from "@actiondock/runtime-node";
+import { main, createCliProgram, formatError, runStandaloneCli } from "@actiondock/cli";
 import { FakeClock, MemoryStorage, createTestRuntime as createTestingRuntime } from "@actiondock/testing";
-import { BunSqliteDriver, setupBunRuntime } from "@actiondock/runtime-bun";
+import { BunSqliteDriver, createBunPlatform } from "@actiondock/runtime-bun";
 
 // Verify SDK
 const greetAction = defineAction({
@@ -199,22 +195,16 @@ if (typeof BuildPlanner?.plan !== "function" || typeof SkillExporter?.export !==
 console.log("[OK] Builder BuildPlanner, SkillExporter, and buildProject verified");
 
 // Verify Runtime Node
-if (typeof setupNodeRuntime !== "function" || typeof NodeSqliteDriver !== "function" || typeof NodeHttpServer !== "function") {
+if (typeof createNodePlatform !== "function" || typeof NodeSqliteDriver !== "function" || typeof NodeHttpServer !== "function") {
   throw new Error("Runtime Node exports missing key components");
 }
-console.log("[OK] Runtime Node setupNodeRuntime, NodeSqliteDriver, and NodeHttpServer verified");
-
-// Verify Runtime CLI
-if (typeof createRuntimeProgram !== "function" || typeof runRuntimeCli !== "function" || typeof formatError !== "function") {
-  throw new Error("Runtime CLI exports missing createRuntimeProgram, runRuntimeCli, or formatError");
-}
-console.log("[OK] Runtime CLI createRuntimeProgram, runRuntimeCli, and formatError verified");
+console.log("[OK] Runtime Node createNodePlatform, NodeSqliteDriver, and NodeHttpServer verified");
 
 // Verify CLI
-if (typeof main !== "function" || typeof createCliProgram !== "function") {
-  throw new Error("CLI exports missing main or createCliProgram");
+if (typeof main !== "function" || typeof createCliProgram !== "function" || typeof formatError !== "function" || typeof runStandaloneCli !== "function") {
+  throw new Error("CLI exports missing main, createCliProgram, formatError, or runStandaloneCli");
 }
-console.log("[OK] CLI main and createCliProgram verified");
+console.log("[OK] CLI main, createCliProgram, formatError, and runStandaloneCli verified");
 
 // Verify Testing
 if (typeof FakeClock !== "function" || typeof MemoryStorage !== "function" || typeof createTestingRuntime !== "function") {
@@ -223,22 +213,17 @@ if (typeof FakeClock !== "function" || typeof MemoryStorage !== "function" || ty
 console.log("[OK] Testing FakeClock, MemoryStorage, and createTestRuntime verified");
 
 // Verify Runtime Bun (loadable in Node without throwing)
-if (typeof BunSqliteDriver !== "function" || typeof setupBunRuntime !== "function") {
-  throw new Error("Runtime Bun exports missing BunSqliteDriver or setupBunRuntime");
+if (typeof BunSqliteDriver !== "function" || typeof createBunPlatform !== "function") {
+  throw new Error("Runtime Bun exports missing BunSqliteDriver or createBunPlatform");
 }
-console.log("[OK] Runtime Bun BunSqliteDriver and setupBunRuntime loadable in native Node verified");
+console.log("[OK] Runtime Bun BunSqliteDriver and createBunPlatform loadable in native Node verified");
 
-// Verify Core Execution Service with Node SQLite Storage
-if (typeof getSqliteDriverFactory === "function" && getSqliteDriverFactory() !== undefined) {
-  throw new Error("Core unexpectedly had driver factory registered before setupNodeRuntime");
-}
-setupNodeRuntime();
-if (typeof getSqliteDriverFactory === "function" && getSqliteDriverFactory() === undefined) {
-  throw new Error("setupNodeRuntime failed to register driver factory in imported Core");
-}
-const nodeStorage = createStorage("smoke-test-pkg", { inMemory: true });
+// Verify Core Execution Service with Node Platform
+const nodePlatform = createNodePlatform();
+const nodeStorage = nodePlatform.storage.createStorage("smoke-test-pkg", { inMemory: true });
 const execService = new ExecutionService({
   packageId: "smoke-test-pkg",
+  platform: nodePlatform,
   storage: nodeStorage,
   actionResolver: (ref) => {
     const actionId = typeof ref === "string" ? ref : ref.actionId;
@@ -316,7 +301,7 @@ console.log("[OK] Core ExecutionService with NodeSqliteDriver executed and verif
   rmSync(testDir, { recursive: true, force: true });
   console.log("[CLEANUP] Cleaned up temporary test environment");
 
-  console.log("\n[SUCCESS] All Pack Smoke Tests Passed Successfully Across All 9 Packages!");
+  console.log(`\n[SUCCESS] All Pack Smoke Tests Passed Successfully Across All ${packages.length} Packages!`);
 } finally {
   // Always remove generated tarball files
   for (const tgz of Object.values(tarballPaths)) {

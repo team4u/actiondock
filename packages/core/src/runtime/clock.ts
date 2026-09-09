@@ -30,12 +30,3 @@ export class SystemClock implements Clock {
   }
 }
 
-let defaultClock: Clock = new SystemClock();
-
-export function getSystemClock(): Clock {
-  return defaultClock;
-}
-
-export function setSystemClock(clock: Clock): void {
-  defaultClock = clock;
-}

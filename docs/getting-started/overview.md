@@ -63,14 +63,13 @@ flowchart TD
 
 ## 面向 Node.js 的分层解耦体系
 
-ActionDock 2.0 全面以 Node.js 22.13.0 或更高版本为生产级运行基座，将系统解耦拆分为 9 个职责明确的独立子包。各层之间通过强类型契约与接口抽象进行交互，杜绝跨层耦合。
+ActionDock 2.0 全面以 Node.js 22.13.0 或更高版本为生产级运行基座，将系统解耦拆分为 8 个职责明确的独立子包。各层之间通过强类型契约与接口抽象进行交互，杜绝跨层耦合。
 
 ```mermaid
 graph TD
-    CLI["@actiondock/cli 门面工具链"]
+    CLI["@actiondock/cli 门面工具链与独立分发"]
     BUILDER["@actiondock/builder 构建与编排层"]
     MCP["@actiondock/mcp 协议适配层"]
-    RUNTIME_CLI["@actiondock/runtime-cli 共享命令与渲染层"]
     RUNTIME_NODE["@actiondock/runtime-node 生产环境适配层"]
     RUNTIME_BUN["@actiondock/runtime-bun 独立二进制适配层"]
     TESTING["@actiondock/testing 测试沙箱层"]
@@ -79,7 +78,6 @@ graph TD
 
     CLI --> BUILDER
     CLI --> MCP
-    CLI --> RUNTIME_CLI
     CLI --> RUNTIME_NODE
     CLI --> CORE
     CLI --> SDK
@@ -89,10 +87,6 @@ graph TD
 
     MCP --> CORE
     MCP --> SDK
-
-    RUNTIME_CLI --> CORE
-    RUNTIME_CLI --> MCP
-    RUNTIME_CLI --> SDK
 
     RUNTIME_NODE --> CORE
     RUNTIME_NODE --> SDK
@@ -106,7 +100,7 @@ graph TD
     CORE --> SDK
 ```
 
-### 9 个子包的分工与定位
+### 8 个子包的分工与定位
 
 - **契约规范层**：
   - `@actiondock/sdk`：极简纯契约层，零外部运行时依赖。仅提供动作声明函数（`defineAction`）、运行时上下文接口（`ActionContext`）、进程调度抽象（`ProcessAPI`）、日志接口（`Logger`）与配置状态定义。工具包编写者仅需引入该包，即可获得完整的类型约束与代码提示。
@@ -115,13 +109,12 @@ graph TD
 - **运行时适配层**：
   - `@actiondock/runtime-node`：Node.js 生产环境适配驱动。针对 Node.js 22.13.0 或更高版本原生环境提供实体驱动实现，包括基于 `node:sqlite` 的同步事务存储驱动、基于 `execa` 的进程调度器、基于 `tsx` 的 TypeScript 源码无编译动态加载器，以及基于 `node:http` 和 Web Streams 的流式服务转换器。
   - `@actiondock/runtime-bun`：Bun 独立二进制适配驱动。专为独立二进制产物提供适配实现，包含针对 `bun:sqlite`、`Bun.serve` 与 `Bun.spawn` 的专属驱动封装。
-  - `@actiondock/runtime-cli`：共享运行时命令与渲染层。提取 CLI 门面与独立二进制产物共用的命令组织结构、参数解析体系与标准输出信封格式化渲染能力。
 - **构建与编排层**：
   - `@actiondock/builder`：构建编排规划器与导出器。负责构建计划生成、依赖拓扑分析、独立单文件二进制编译调用，以及依据 Playbook 规程将项目裁剪导出为轻量化 Agent Skill 资产。
 - **协议适配层**：
   - `@actiondock/mcp`：Model Context Protocol 协议适配层。负责将 Action 自动映射为标准 MCP 工具，支持 STDIO 与 HTTP 两种传输通道，并负责双向取消信号传递与输出流纯净性保障。
-- **门面工具链**：
-  - `@actiondock/cli`：命令行顶层门面工具包。聚合所有子包能力，向终端用户与智能体暴露统一的 `ad` 命令行工具，提供初始化、运行、测试、服务管理、配置查询与构建导出等全量操作能力。
+- **门面与工具链层**：
+  - `@actiondock/cli`：命令行顶层门面工具与独立运行分发器。聚合所有子包能力，向终端用户与智能体暴露统一的 `ad` 命令行工具，内置标准化信封输出渲染与轻量独立分发调度，提供初始化、运行、测试、服务管理、配置查询与构建导出等全量操作能力。
 - **测试沙箱层**：
   - `@actiondock/testing`：单元测试与集成测试沙箱。提供纯内存存储、可推进模拟时钟、模拟进程调度器与事件捕获器，在无需任何真实外设的场景下，完整复用生产环境核心执行语义。
 

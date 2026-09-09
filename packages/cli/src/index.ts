@@ -1,8 +1,13 @@
-import { formatError } from "@actiondock/runtime-cli";
-import { setupNodeRuntime } from "@actiondock/runtime-node";
 import { CommanderError } from "commander";
 import { createCliProgram } from "./commands";
+import { formatError } from "./errors";
 
+export * from "./types";
+export * from "./errors";
+export * from "./renderer";
+export * from "./prompt";
+export * from "./standalone";
+export * from "./utils";
 export * from "./commands";
 
 /**
@@ -12,7 +17,6 @@ export * from "./commands";
  * @returns 进程退出码
  */
 export async function main(argv: string[] = process.argv): Promise<number> {
-  setupNodeRuntime();
   const program = createCliProgram();
 
   const isMachine = argv.includes("--json") || argv.includes("--envelope");

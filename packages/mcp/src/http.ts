@@ -16,8 +16,14 @@ import type { ActionDockMcpHttpOptions, ActionDockMcpHttpServerInstance } from "
 export function startMcpHttpServer(
   options: ActionDockMcpHttpOptions = {}
 ): Promise<ActionDockMcpHttpServerInstance> {
+  const hostInstance =
+    typeof options.host === "object" && options.host !== null
+      ? options.host
+      : undefined;
+  const hostString =
+    typeof options.host === "string" ? options.host : "127.0.0.1";
   const port = options.port ?? 5178;
-  const host = options.host ?? "127.0.0.1";
+  const host = hostString;
   const token = options.token;
 
   // Non-loopback address requires token authentication by default
@@ -35,6 +41,7 @@ export function startMcpHttpServer(
       () => {
         return createActionDockMcpServer({
           ...options,
+          host: hostInstance,
           runtimeRegistry,
           executionManager: runtimeRegistry.executionManager,
         });
@@ -148,6 +155,10 @@ export function startMcpHttpServer(
         }
       );
     });
+
+    if (server.ready) {
+      await server.ready;
+    }
 
     const actualHost = host === "0.0.0.0" ? "127.0.0.1" : host;
     const url = `http://${actualHost}:${server.port}`;

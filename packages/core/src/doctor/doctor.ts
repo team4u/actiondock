@@ -386,7 +386,7 @@ export async function runDoctorChecks(options?: {
               name: "Action Manifest",
               status: "warn",
               message: `${MANIFEST_FILE_NAME} not found (${actionFiles.length} action source file(s) exist)`,
-              fix: "Run 'ad action sync' to generate manifest",
+              fix: "Run 'ad validate' to generate or check manifest",
             });
           }
         } else if (manifest && manifest.actions) {
@@ -408,7 +408,7 @@ export async function runDoctorChecks(options?: {
               name: "Action Manifest",
               status: "warn",
               message: `${missingFiles.length} action(s) in manifest point to missing files: ${missingFiles.join(", ")}`,
-              fix: "Run 'ad action sync' to synchronize manifest",
+              fix: "Run 'ad validate' to check or update actiondock.manifest.json",
             });
           } else if (untracked.length > 0) {
             checks.push({
@@ -417,7 +417,7 @@ export async function runDoctorChecks(options?: {
               name: "Action Manifest",
               status: "warn",
               message: `${untracked.length} action file(s) not declared in manifest: ${untracked.join(", ")}`,
-              fix: "Run 'ad action sync' to synchronize manifest",
+              fix: "Run 'ad validate' to check or update actiondock.manifest.json",
             });
           } else {
             const manifestStat = statSync(manifestPath);
@@ -430,7 +430,7 @@ export async function runDoctorChecks(options?: {
                 category: "project",
                 name: "Action Manifest",
                 status: "ok",
-                message: `Manifest valid (Note: ${newerFiles.length} action file(s) modified after manifest; run 'ad action sync' if definitions changed)`,
+                message: `Manifest valid (Note: ${newerFiles.length} action file(s) modified after manifest; run 'ad validate' if definitions changed)`,
               });
             } else {
               checks.push({

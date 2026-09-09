@@ -1,9 +1,8 @@
 import { readFileSync } from "node:fs";
 import type { ActionDefinition } from "@actiondock/sdk";
-import { DefaultExecutionService } from "../execution/service";
+import { createActionDockApp, type ActionSpec } from "../app";
 import { filterWithFallbackInfo } from "../filter";
 import type { ConfigItemDefinition } from "../project/types";
-import { createGlobalStorage, createStorage } from "../storage";
 import { parseDuration } from "../utils";
 
 /**
@@ -79,13 +78,7 @@ export class StandaloneRuntime {
     const command = filteredArgs[0] || "help";
     const subArgs = filteredArgs.slice(1);
 
-    const storage = createStorage(this.packageId, { dataDir });
-    const globalStorage = createGlobalStorage({ dataDir });
-    const executionService = new DefaultExecutionService({
-      packageId: this.packageId,
-      storage,
-      globalStorage,
-      configOverrides,
+    const app = await createActionDockApp({
       projectConfig: {
         id: this.packageId,
         name: this.packageId,
@@ -94,6 +87,8 @@ export class StandaloneRuntime {
         config: this.configDefs,
       },
       actions: this.actionsMap,
+      dataDir,
+      configOverrides,
     });
 
     try {
@@ -123,7 +118,8 @@ export class StandaloneRuntime {
               ? positionalPatterns.join("|")
               : undefined);
 
-          const list = executionService.listActions().map((a) => ({
+          const actions = await app.listActions();
+          const list = actions.map((a) => ({
             id: a.id,
             description: a.description || "",
           }));
@@ -155,8 +151,10 @@ export class StandaloneRuntime {
             console.error("Error: Action ID is required for describe");
             process.exit(1);
           }
-          const action = executionService.getAction(id);
-          if (!action) {
+          let action: ActionSpec | undefined;
+          try {
+            action = await app.describeAction(id);
+          } catch {
             console.error(`Error: Action '${id}' not found`);
             process.exit(1);
           }
@@ -240,7 +238,7 @@ export class StandaloneRuntime {
           process.once("SIGINT", sigintHandler);
 
           try {
-            const result = await executionService.execute(id, input as any, {
+            const result = await app.runAction(id, input as any, {
               signal: controller.signal,
               timeoutMs,
             });
@@ -258,7 +256,7 @@ export class StandaloneRuntime {
         case "config": {
           const sub = subArgs[0] || "list";
           if (sub === "list") {
-            const all = storage.listConfig();
+            const all = app.storage.listConfig();
             console.log(JSON.stringify(all, null, 2));
           } else if (sub === "get") {
             const key = subArgs[1];
@@ -266,7 +264,7 @@ export class StandaloneRuntime {
               console.error("Error: config key required");
               process.exit(1);
             }
-            const val = storage.getConfig(key);
+            const val = (await app.getConfig(key)) ?? app.storage.getConfig(key);
             console.log(val !== undefined ? JSON.stringify(val) : "undefined");
           } else if (sub === "set") {
             const key = subArgs[1];
@@ -281,7 +279,7 @@ export class StandaloneRuntime {
             } catch {
               parsed = rawVal;
             }
-            storage.setConfig(key, parsed);
+            await app.setConfig(key, parsed as any);
             console.log(`Config '${key}' updated`);
           } else if (sub === "delete") {
             const key = subArgs[1];
@@ -289,7 +287,7 @@ export class StandaloneRuntime {
               console.error("Error: config key required");
               process.exit(1);
             }
-            storage.deleteConfig(key);
+            app.storage.deleteConfig(key);
             console.log(`Config '${key}' deleted`);
           }
           break;
@@ -315,7 +313,7 @@ export class StandaloneRuntime {
 
           if (sub === "list") {
             const prefix = subArgs[1] && !subArgs[1].startsWith("-") ? subArgs[1] : "";
-            const keys = await storage.listStateKeys(namespace !== undefined ? namespace : null, prefix);
+            const keys = await app.storage.listStateKeys(namespace !== undefined ? namespace : null, prefix);
             console.log(JSON.stringify(keys, null, 2));
           } else if (sub === "get") {
             const key = subArgs[1] && !subArgs[1].startsWith("-") ? subArgs[1] : subArgs[2];
@@ -325,10 +323,9 @@ export class StandaloneRuntime {
             }
             let val: unknown;
             if (namespace !== undefined) {
-              val = await storage.getState(namespace, key);
+              val = await app.getState(key, { namespace });
             } else {
-              const entry = await storage.findState(key);
-              val = entry?.value;
+              val = await app.getState(key);
             }
             if (isJson) {
               console.log(JSON.stringify({ key, value: val }, null, 2));
@@ -367,7 +364,7 @@ export class StandaloneRuntime {
               }
             }
 
-            await storage.setState(ns, actualKey, parsed, ttl);
+            await app.setState(actualKey, parsed as any, { namespace: ns, ttl });
             const displayKey = ns ? `${ns}:${actualKey}` : actualKey;
             console.log(`State '${displayKey}' updated`);
           } else if (sub === "delete" || sub === "rm") {
@@ -376,7 +373,7 @@ export class StandaloneRuntime {
               console.error("Error: state key required");
               process.exit(1);
             }
-            const deleted = await storage.deleteStateSmart(key, namespace);
+            const deleted = await app.storage.deleteStateSmart(key, namespace);
             if (deleted) {
               console.log(`State '${key}' deleted`);
             } else {
@@ -385,7 +382,7 @@ export class StandaloneRuntime {
             }
           } else if (sub === "clear" || sub === "clean") {
             const prefix = subArgs[1] && !subArgs[1].startsWith("-") ? subArgs[1] : "";
-            const count = await storage.clearState({
+            const count = await app.storage.clearState({
               namespace,
               all: isAll,
               prefix: prefix || undefined,
@@ -419,11 +416,7 @@ export class StandaloneRuntime {
         }
       }
     } finally {
-      try {
-        storage.close();
-      } finally {
-        globalStorage.close();
-      }
+      await app.close();
     }
   }
 }

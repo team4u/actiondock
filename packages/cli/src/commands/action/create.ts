@@ -8,7 +8,7 @@ import {
   loadProjectConfig,
   saveManifest,
 } from "@actiondock/core";
-import { ExecutionError } from "@actiondock/runtime-cli";
+import { ExecutionError } from "../../errors";
 import type { Command } from "commander";
 
 export function registerActionCreateCommand(actionCmd: Command): void {
@@ -126,7 +126,7 @@ export default defineAction<Input, Output>({
 
         console.log(`[OK] Created Action '${id}' at ${targetFullFile}`);
         console.log(`\nTo run this action:`);
-        console.log(`  ad action run ${id} --input '{"exampleParam": "hello"}'`);
+        console.log(`  ad run ${id} --input '{"exampleParam": "hello"}'`);
       } catch (err: any) {
         if (err instanceof ExecutionError) throw err;
         throw new ExecutionError(err.message);

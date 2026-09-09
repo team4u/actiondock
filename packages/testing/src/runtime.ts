@@ -7,6 +7,7 @@ import {
   type ProjectConfig,
   RuntimeConfig,
   RuntimeStateStore,
+  type RuntimePlatform,
 } from "@actiondock/core";
 import {
   type ActionDefinition,
@@ -162,6 +163,8 @@ export interface TestRuntimeOptions {
   projectConfig?: ProjectConfig;
   /** 预注册的 Action 动作列表 */
   actions?: ActionDefinition[] | Record<string, ActionDefinition> | Map<string, ActionDefinition>;
+  /** 可选注入的标准运行时平台实例 */
+  platform?: RuntimePlatform;
 }
 
 /**
@@ -224,14 +227,22 @@ export interface TestRuntime {
  */
 export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime {
   const packageId = options.packageId || "test-pkg";
-  const clock = options.clock ?? new FakeClock();
-  const process = options.process ?? new MockProcessExecutor();
+  const clock =
+    options.clock ??
+    (options.platform?.clock instanceof FakeClock ? options.platform.clock : new FakeClock());
+  const process =
+    options.process ??
+    (options.platform?.process instanceof MockProcessExecutor
+      ? options.platform.process
+      : new MockProcessExecutor());
   const storage =
     options.storage ??
-    new MemoryStorage({
-      packageId,
-      clock,
-    });
+    (options.platform?.storage
+      ? (options.platform.storage.createStorage(packageId) as MemoryStorage)
+      : new MemoryStorage({
+          packageId,
+          clock,
+        }));
 
   // 初始化配置数据
   if (options.config) {
@@ -278,6 +289,7 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
     clock,
     logger: memoryLogger,
     eventSink: events,
+    platform: options.platform,
   });
 
   const testConfig = new TestConfigStore(

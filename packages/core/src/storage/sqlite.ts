@@ -9,7 +9,7 @@ import {
   type RuntimeError,
   type RunRecord,
 } from "@actiondock/sdk";
-import { type Clock, getSystemClock } from "../runtime/clock";
+import { type Clock, SystemClock } from "../runtime/clock";
 import { createDefaultSqliteDriver } from "./driver";
 import type {
   RuntimeStorage,
@@ -48,7 +48,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
 
   constructor(options: StorageOptions) {
     this.packageId = options.packageId;
-    this.clock = options.clock ?? getSystemClock();
+    this.clock = options.clock ?? new SystemClock();
     const dbPath = options.dbPath || ":memory:";
 
     if (dbPath !== ":memory:") {

@@ -1,4 +1,5 @@
 import type {
+  ActionDefinition,
   ActionRef,
   ExecutionEvent,
   ExecutionResult,
@@ -9,6 +10,11 @@ import type {
   RunRecord,
   RunStatus,
 } from "@actiondock/sdk";
+import type { ProjectConfig } from "../project/types";
+import type { Clock } from "../runtime/clock";
+import type { EventSink } from "../runtime/events";
+import type { RuntimeStorage } from "../storage/types";
+import type { RuntimePlatform } from "../platform/types";
 
 /**
  * 执行参数选项。
@@ -32,6 +38,44 @@ export interface ExecuteOptions {
   progress?: ProgressReporter;
   /** 外部进程执行器注入 */
   process?: ProcessAPI;
+  /** 可选的底层运行平台契约 */
+  platform?: RuntimePlatform;
+}
+
+/**
+ * 统一执行协调服务配置选项。
+ */
+export interface ExecutionServiceOptions {
+  packageId: string;
+  storage?: RuntimeStorage;
+  globalStorage?: RuntimeStorage;
+  projectRoot?: string;
+  projectConfig?: ProjectConfig;
+  configOverrides?: Record<string, unknown>;
+  actions?: Map<string, ActionDefinition>;
+  process?: ProcessAPI;
+  clock?: Clock;
+  logger?: Logger;
+  eventSink?: EventSink;
+  maxActiveRuns?: number;
+  maxCallDepth?: number;
+  maxSubRuns?: number;
+  ownerId?: string;
+  actionResolver?: (ref: ActionRef | string) => ActionDefinition | undefined | Promise<ActionDefinition | undefined>;
+  getStorageForPackage?: (packageId: string, projectRoot?: string) => RuntimeStorage;
+  packageContextResolver?: (packageId: string) => Promise<{
+    projectRoot?: string;
+    projectConfig?: ProjectConfig;
+    storage: RuntimeStorage;
+    actions?: Map<string, ActionDefinition>;
+  } | undefined> | {
+    projectRoot?: string;
+    projectConfig?: ProjectConfig;
+    storage: RuntimeStorage;
+    actions?: Map<string, ActionDefinition>;
+  } | undefined;
+  customHome?: string;
+  platform?: RuntimePlatform;
 }
 
 /**

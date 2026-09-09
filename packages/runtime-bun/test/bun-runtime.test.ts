@@ -3,8 +3,8 @@ import {
   BunHttpServer,
   BunProcessExecutor,
   BunSqliteDriver,
+  createBunPlatform,
   createBunSqliteDriver,
-  setupBunRuntime,
   startBunHttpServer,
 } from "../src";
 import { startActionDockServer } from "@actiondock/core";
@@ -359,9 +359,9 @@ describe("BunHttpServer", () => {
     server.stop();
   });
 
-  test("setupBunRuntime 注入后通过 startActionDockServer({ port: 0 }) 正常分配可用端口并响应与终止", async () => {
-    setupBunRuntime();
-    const server = await startActionDockServer({ port: 0 });
+  test("createBunPlatform 注入后通过 startActionDockServer({ port: 0, platform }) 正常分配可用端口并响应与终止", async () => {
+    const platform = createBunPlatform();
+    const server = await startActionDockServer({ port: 0, platform });
 
     expect(server.port).toBeGreaterThan(0);
     expect(server.url).toContain(`:${server.port}`);

@@ -17,10 +17,9 @@ import {
   ArgumentError,
   CliError,
   ExecutionError,
-  getEffectiveOptions,
-  renderResult,
-} from "@actiondock/runtime-cli";
-import { resolveIntent } from "../utils/filter";
+} from "../errors";
+import { renderResult } from "../renderer";
+import { getEffectiveOptions, resolveIntent } from "../utils";
 
 export function registerProfileCommands(program: Command): void {
   const profileCmd = program

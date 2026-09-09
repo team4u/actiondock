@@ -4,6 +4,7 @@ export * from "./doctor";
 export * from "./execution";
 export * from "./export";
 export * from "./filter";
+export * from "./platform";
 export * from "./profile";
 export * from "./project";
 export * from "./registry";
@@ -13,5 +14,8 @@ export * from "./server";
 export * from "./storage";
 export * from "./utils";
 export * from "./version";
+export * from "./app";
+export * from "./host";
+export * from "./target";
 export type { ModuleLoader } from "./runtime";
 

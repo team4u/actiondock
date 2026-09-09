@@ -1,3 +1,4 @@
+import type { ActionDockHost } from "../host/types";
 import type { ServerRuntimeRegistry } from "./runtime-registry";
 
 export interface CoreHttpServerInstance {
@@ -18,8 +19,10 @@ export type CoreHttpServerFactory = (options: {
 export interface ServerOptions {
   /** 监听端口号（默认 5177） */
   port?: number;
-  /** 绑定监听的主机地址（默认 "127.0.0.1"） */
-  host?: string;
+  /** 绑定监听的主机地址（默认 "127.0.0.1"），或关联的 ActionDockHost 宿主实例 */
+  host?: string | ActionDockHost;
+  /** 显式绑定的主机地址（当 host 传入 ActionDockHost 时的可选覆盖项） */
+  hostname?: string;
   /** 用于 HTTP Bearer Token 鉴权的密钥令牌 */
   token?: string;
   /** 服务的项目根目录（可选，若未指定则自动向上查找或进入全局 Registry 模式） */
@@ -40,6 +43,8 @@ export interface ServerOptions {
   enableMcp?: boolean;
   /** 自定义 MCP 请求处理器钩子（若挂载则 /mcp 路由交由其处理） */
   mcpHandler?: (req: Request) => Promise<Response | null | undefined> | Response | null | undefined;
+  /** 可选注入的统一运行时底层平台 */
+  platform?: import("../platform/types").RuntimePlatform;
 }
 
 /**
@@ -48,8 +53,8 @@ export interface ServerOptions {
 export interface ActionDockServerInstance {
   /** 实际监听的端口号 */
   port: number;
-  /** 实际绑定的主机地址 */
-  host: string;
+  /** 关联的 ActionDockHost 宿主实例（若启动时传入） */
+  host?: ActionDockHost;
   /** 服务端可访问的基础 URL（如 "http://127.0.0.1:5177"） */
   url: string;
   /** 关联的 ServerRuntimeRegistry 运行时注册表 */

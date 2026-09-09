@@ -153,7 +153,7 @@ ad link "<skill_root>"
 在调用未知参数的 Action 前，可在终端执行命令按需查阅该 Action 的输入输出模式与详细说明：
 
 \`\`\`bash
-ad action show ${pkgId}/${firstAction}
+ad describe ${pkgId}/${firstAction}
 \`\`\`
 
 ### 执行 Action
@@ -458,7 +458,7 @@ ad link "<skill_root>"
 为节省上下文开销，各 Action 的详细参数结构不静态内嵌在说明书中。在调用未知参数的 Action 前，可在终端执行命令查阅输入输出约束：
 
 \`\`\`bash
-ad action show ${sampleActionId}
+ad describe ${sampleActionId}
 \`\`\`
 
 ## 可用 Action 工具清单

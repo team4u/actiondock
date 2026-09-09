@@ -452,9 +452,8 @@ describe("@actiondock/testing", () => {
       });
     });
 
-    it("验证 @actiondock/sdk 与 @actiondock/testing 的 createTestRuntime 等价性与委托及回退模式", async () => {
-      const { createTestRuntime: createSdkRuntime, registerTestRuntimeProvider } = await import("@actiondock/sdk");
-      const { createTestRuntime: createTestingRuntime, registerTestingAsSdkProvider } = await import("../src");
+    it("验证 @actiondock/testing 的 createTestRuntime 独立运行与动作执行", async () => {
+      const { createTestRuntime: createTestingRuntime, createTestPlatform } = await import("../src");
 
       const testAction = defineAction({
         id: "calc.add",
@@ -473,49 +472,25 @@ describe("@actiondock/testing", () => {
       const testingOut = await testingRuntime.run(testAction, { a: 10, b: 20 });
       expect(testingOut).toEqual({ sum: 30 });
 
-      // 2. 模块加载后自动注册 provider 模式：createSdkRuntime 自动委托到 testing runtime
-      registerTestingAsSdkProvider();
-      const delegatedRuntime = createSdkRuntime();
-      expect(delegatedRuntime.executionService).toBeDefined();
-      const delegatedOut = await delegatedRuntime.run(testAction, { a: 15, b: 25 });
-      expect(delegatedOut).toEqual({ sum: 40 });
+      // 2. 显式结合 createTestPlatform 执行
+      const platform = createTestPlatform();
+      const platformRuntime = createTestingRuntime({ platform });
+      expect(platformRuntime.executionService).toBeDefined();
+      const platformOut = await platformRuntime.run(testAction, { a: 15, b: 25 });
+      expect(platformOut).toEqual({ sum: 40 });
 
-      // 3. 未加载/已注销 provider 模式：sdk 独立回退运行时工作完整并对齐方法
-      try {
-        registerTestRuntimeProvider(null);
-        const standaloneSdkRuntime = createSdkRuntime({ config: { initialKey: "val1" } });
-        expect(standaloneSdkRuntime.executionService).toBeUndefined();
+      // 3. 对齐的 config 与状态管理
+      expect(testingRuntime.config.get("non_existent", "default")).toBe("default");
+      testingRuntime.config.set("newKey", "val2");
+      expect(testingRuntime.config.get<string>("newKey")).toBe("val2");
+      expect(testingRuntime.config.delete("newKey")).toBe(true);
+      expect(testingRuntime.config.has("newKey")).toBe(false);
 
-        // 对齐的 config.list 与 config.delete
-        expect(standaloneSdkRuntime.config.list()).toEqual({ initialKey: "val1" });
-        standaloneSdkRuntime.config.set("newKey", "val2");
-        expect(standaloneSdkRuntime.config.get<string>("newKey")).toBe("val2");
-        expect(standaloneSdkRuntime.config.delete("initialKey")).toBe(true);
-        expect(standaloneSdkRuntime.config.has("initialKey")).toBe(false);
-
-        // 对齐的 registerAction, getAction, listActions
-        standaloneSdkRuntime.registerAction(testAction);
-        expect(standaloneSdkRuntime.getAction("calc.add")?.id).toBe("calc.add");
-        expect(standaloneSdkRuntime.listActions().length).toBe(1);
-
-        // 对齐的 run 与 execute
-        const sdkRunOut = await standaloneSdkRuntime.run(testAction, { a: 10, b: 20 });
-        expect(sdkRunOut).toEqual({ sum: 30 });
-
-        const sdkExecOut = await standaloneSdkRuntime.execute(testAction, { a: 10, b: 20 });
-        expect(sdkExecOut.ok).toBe(true);
-        if (sdkExecOut.ok) {
-          expect(sdkExecOut.data).toEqual({ sum: 30 });
-        }
-
-        const sdkExecFail = await standaloneSdkRuntime.execute(testAction, { a: "invalid" as any, b: 20 });
-        expect(sdkExecFail.ok).toBe(false);
-        if (!sdkExecFail.ok) {
-          expect(sdkExecFail.error?.code).toBe("INPUT_VALIDATION_FAILED");
-        }
-      } finally {
-        // 恢复全局 testing provider
-        registerTestingAsSdkProvider();
+      // 4. 对齐的 execute 错误校验
+      const execFail = await testingRuntime.execute(testAction, { a: "invalid" as any, b: 20 });
+      expect(execFail.ok).toBe(false);
+      if (!execFail.ok) {
+        expect(execFail.error?.code).toBe("INPUT_VALIDATION_FAILED");
       }
     });
   });

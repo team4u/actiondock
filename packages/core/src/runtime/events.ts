@@ -456,12 +456,3 @@ export class InMemoryEventSink implements EventSink {
   }
 }
 
-let defaultEventSink: EventSink = new InMemoryEventSink();
-
-export function getDefaultEventSink(): EventSink {
-  return defaultEventSink;
-}
-
-export function setDefaultEventSink(sink: EventSink): void {
-  defaultEventSink = sink;
-}

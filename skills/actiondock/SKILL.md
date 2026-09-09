@@ -29,7 +29,7 @@ ActionDock 支持**源码型**与**独立便携型**双模交付形态，让开�
 | **执行复合业务任务** | 规程优先原则，阅读规程后依序调度 | `ad playbook show <id>`，依步骤调度对应 Action |
 | **调用单点原子工具** | 使用文件传参，避免终端转义问题 | `ad run <pkg>/<action> --input-file <path>` |
 | **新建 Action 工具** | 脚手架生成并实现标准输入输出契约 | `ad action create <id>`，编写 `actions/<name>.ts` |
-| **更新 Action 元数据** | 源码或模式修改后同步刷新声明式清单 | `ad action sync`（或 `--check` 门禁检查） |
+| **校验 Action 契约** | 校验清单完整性与模式规范有效性 | `ad validate [id]` |
 | **编排业务操作规程** | 规范编写多步骤操作引导文档 | `ad playbook create <id>`，编写 `playbooks/<id>.md` |
 | **单元测试与逻辑验证** | 纯内存沙箱测试，验证多步与状态逻辑 | `ad test`，结合 `createTestRuntime` |
 | **交付导出为 Skill** | 单包/多包/复合导出：源码型或独立预编译便携型 | `ad export skill [-P <ids...>] [--bundle <name>]` |
@@ -139,28 +139,19 @@ ad playbook validate [id]
 ad action create <action-id> --desc "功能简要描述" [--file <filename.ts>]
 ```
 
-### 代码修改与元数据同步 (`ad action sync`)
+### 校验 Action 契约规范 (`ad validate`)
 
-在开发与迭代 Action 时，TypeScript 源码是开发态的实现事实源，而 `actiondock.manifest.json` 则是外部检索、MCP 协议映射与构建规划的声明式清单事实源。
+在开发与迭代 Action 时，`actiondock.manifest.json` 是外部检索、MCP 协议映射与构建规划的声明式清单事实源。可通过 `ad validate` 校验清单完整性与 Schema 规范：
 
-当完成以下任一代码调整时，必须执行 `ad action sync` 将最新的代码定义同步刷新至清单：
-- **修改模式契约**：在 Action 源码中更新了 `inputSchema` 或 `outputSchema` 字段结构或参数说明。
-- **调整功能描述**：修改了 Action 的 `description` 描述文本。
-- **更新依赖与标签**：调整了 `uses` 静态依赖项或 `tags` 分类标签。
-- **手动增删文件**：在 `actions/` 目录下手工新增了 `.ts` 动作文件，或物理删除了废弃动作。
+- 模式有效性：校验所有 Action 的输入与输出 Schema 是否符合 JSON Schema 规范。
+- 依赖完整性：校验清单中的入口文件与依赖配置是否完备有效。
 
 ```bash
-# 全量扫描 actions/ 目录并自动增量同步清单文件
-ad action sync
+# 全量校验当前包或目标包的 Action 清单与 Schema 规范
+ad validate
 
-# 仅检查清单是否与代码保持一致，不覆写文件（适合持续集成门禁检查）
-ad action sync --check
-
-# 同步清单，但保留物理上已删除的 Action 声明
-ad action sync --no-prune
-
-# 输出机器可读的 JSON 结构
-ad action sync --json
+# 校验指定 Action 的契约规范
+ad validate <action-id>
 ```
 
 ### Action 契约定义与标准实现
@@ -480,7 +471,7 @@ ad export skill --playbook deploy-service -o ./dist/deploy-skill
 导出的源码型目录结构：
 ```text
 dist/my-skill/
-├── SKILL.md                  # 面向智能体的唯一标准调用说明文档（参数通过 ad action show 动态调阅）
+├── SKILL.md                  # 面向智能体的唯一标准调用说明文档（参数通过 ad describe 动态调阅）
 ├── actiondock.manifest.json  # 声明式清单事实源
 ├── actiondock.json           # 项目配置元数据定义
 ├── package.json              # 依赖声明
@@ -547,7 +538,7 @@ ad build -t windows-x64 -o ./dist/bin/my-tools-windows.exe
 在任意目录下执行命令时，通过 `-P, --package <id|path>` 精确定位目标包，无需切换当前工作目录：
 - 目标解析机制：严格区分物理路径与包标识符。如果传入的是相对路径或绝对路径，严格校验对应目录存在且包含 `actiondock.json`；如果传入的是包标识符，严格在当前项目与全局注册表中精确查找。
 - 拒绝静默回退：若目标包或路径不存在，系统坚决不会向当前工程目录或父级目录静默回退，而是抛出参数校验异常并以退出码 2 严格终止。
-- 机器检索契约：在执行多目标检索（如 `ad info <keywords>` 或 `ad action list`）时，若无任何匹配项，在机器输出模式下始终输出空集合（如 `{ linkedPackages: [], matchedCount: 0, isFallback: false }`）并保持退出码 0。
+- 机器检索契约：在执行多目标检索（如 `ad info <keywords>` 或 `ad list`）时，若无任何匹配项，在机器输出模式下始终输出空集合（如 `{ linkedPackages: [], matchedCount: 0, isFallback: false }`）并保持退出码 0。
 - 读取目标包配置：`ad config get GITHUB_TOKEN -P team4u.github-tools`
 - 写入目标包配置：`ad config set GITHUB_TOKEN "ghp_xxx" -P team4u.github-tools`
 - 查看目标包状态：`ad state list -P team4u.github-tools`
@@ -589,11 +580,11 @@ ad unlink --prune
 | :--- | :--- | :--- |
 | `ACTION_NOT_FOUND` 或找不到包 | 全局路由表中未注册该包，或挂载路径已移动失效 | 执行 `ad info --tree` 确认挂载状态；若路径失效执行 `ad unlink -p` 清理软链，随后在包目录下重新执行 `ad link` |
 | `ACTION_LOAD_FAILED` | Action 源码导入失败或项目依赖缺失 | 依赖未安装，在目标项目根目录下执行 `npm install`（或 `bun install`），或先执行 `ad run <pkg>/<action>` 一次触发自动补全 |
-| `INPUT_VALIDATION_FAILED` | 输入参数未满足 Action 声明的 `inputSchema` 约束 | 执行 `ad action show <id>` 查看完整的参数定义与必填字段要求，核对数据类型与字段名称 |
+| `INPUT_VALIDATION_FAILED` | 输入参数未满足 Action 声明的 `inputSchema` 约束 | 执行 `ad describe <id>` 查看完整的参数定义与必填字段要求，核对数据类型与字段名称 |
 | `OUTPUT_VALIDATION_FAILED` | Action `run` 方法返回的对象不匹配 `outputSchema` | 检查 Action 代码返回字段是否包含所有必须属性 |
 | `CONFIG_VALIDATION_FAILED` | 未注入当前 Action 依赖的必填配置项 | 执行 `ad config list` 查看缺失的配置项，通过 `ad config set <key> <val>` 补全配置 |
 | `ACTION_TIMEOUT` | 执行时间超过预设阈值 | 优化底层调用耗时，或在调用时添加 `--timeout 60s` 增大超时时间 |
-| 元数据清单与代码脱节或缺少新增 Action | 源码修改后未同步更新清单文件 | 在项目根目录下执行 `ad action sync` 同步刷新清单 |
+| 元数据清单与代码脱节或缺少新增 Action | 源码修改后未同步更新清单文件 | 在项目根目录下执行 `ad validate` 校验清单并补全契约定义 |
 | `ad` 命令行工具未找到 | 宿主未安装 ActionDock CLI，或 PATH 未生效 | 执行 `npm install -g @actiondock/cli` 或本地链接（详见下方冷启动安装指引） |
 | 外部命令提示找不到 | 宿主未安装对应工具，或 PATH 未生效 | 使用绝对路径调用，或检查系统环境变量 PATH 中是否包含该可执行文件 |
 
@@ -642,7 +633,7 @@ ad doctor --json
 
 - **规程优先原则**：面对业务编排任务，必须优先检索并遵循现成的 Playbook，严禁无视既有规程擅自拼凑 Action 调度次序。
 - **按需排查原则**：严禁在每次任务执行前盲目进行前置环境检查、依赖重装或运行 `ad doctor` 体检；默认环境完备就绪，仅在实际遇到报错时按需修复。
-- **元数据同步原则**：在修改 Action 源码（包括参数模式、描述、依赖）或新增与删除 Action 文件后，必须执行 `ad action sync` 保持清单一致性。
+- **元数据规范原则**：在修改 Action 源码（包括参数模式、描述、依赖）或新增与删除 Action 文件后，执行 `ad validate` 确保清单与 Schema 严格匹配。
 - **通道隔离原则**：严禁在 Action 内部调用 `console.log`，所有日志一律使用 `ctx.log`（输出至 `stderr`），确保 `stdout` 仅输出标准 JSON 信封。
 - **严格契约原则**：必须为每个 Action 定义完备的 `inputSchema` 与 `outputSchema`。
 - **响应式取消原则**：对于网络通信与耗时循环，始终绑定并检测 `ctx.signal`。

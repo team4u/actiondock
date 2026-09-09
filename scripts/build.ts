@@ -10,13 +10,12 @@ const PACKAGES = [
   "mcp",
   "builder",
   "runtime-node",
-  "runtime-cli",
   "cli",
   "testing",
   "runtime-bun",
 ] as const;
 
-console.log("[BUILD] Building all 9 ActionDock packages...");
+console.log(`[BUILD] Building all ${PACKAGES.length} ActionDock packages...`);
 
 // 1. Bundle JavaScript for each package
 for (const pkg of PACKAGES) {
@@ -135,4 +134,4 @@ if (failed) {
   process.exit(1);
 }
 
-console.log("[SUCCESS] All 9 ActionDock packages built successfully!");
+console.log(`[SUCCESS] All ${PACKAGES.length} ActionDock packages built successfully!`);

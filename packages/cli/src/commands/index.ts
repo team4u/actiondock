@@ -2,18 +2,22 @@ import { Command } from "commander";
 import { registerActionCommands } from "./action";
 import { registerBuildCommand } from "./build";
 import { registerConfigCommands } from "./config";
+import { registerDescribeCommand } from "./describe";
 import { registerDoctorCommand } from "./doctor";
 import { registerExportCommand } from "./export";
 import { registerInfoCommand } from "./info";
 import { registerInitCommand } from "./init";
 import { registerLinkCommands } from "./link";
+import { registerListCommand } from "./list";
 import { registerMcpCommands } from "./mcp";
 import { registerPlaybookCommands } from "./playbook";
 import { registerProfileCommands } from "./profile";
+import { registerRunCommand } from "./run";
 import { registerRunsCommands } from "./runs";
 import { registerServeCommand } from "./serve";
 import { registerStateCommands } from "./state";
 import { registerTestCommand } from "./test";
+import { registerValidateCommand } from "./validate";
 
 function applyCommonOptions(cmd: Command): void {
   const hasOpt = (flagName: string) =>
@@ -56,6 +60,10 @@ export function createCliProgram(): Command {
   registerInitCommand(program);
   registerInfoCommand(program);
   registerDoctorCommand(program);
+  registerListCommand(program);
+  registerDescribeCommand(program);
+  registerRunCommand(program);
+  registerValidateCommand(program);
   registerActionCommands(program);
   registerPlaybookCommands(program);
   registerConfigCommands(program);
@@ -73,3 +81,25 @@ export function createCliProgram(): Command {
 
   return program;
 }
+
+export {
+  registerActionCommands,
+  registerBuildCommand,
+  registerConfigCommands,
+  registerDescribeCommand,
+  registerDoctorCommand,
+  registerExportCommand,
+  registerInfoCommand,
+  registerInitCommand,
+  registerLinkCommands,
+  registerListCommand,
+  registerMcpCommands,
+  registerPlaybookCommands,
+  registerProfileCommands,
+  registerRunCommand,
+  registerRunsCommands,
+  registerServeCommand,
+  registerStateCommands,
+  registerTestCommand,
+  registerValidateCommand,
+};

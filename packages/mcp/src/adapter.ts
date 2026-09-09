@@ -13,7 +13,13 @@ import {
   resolvePackageRoot,
   ServerRuntimeRegistry,
 } from "@actiondock/core";
-import type { ExecutionService, ProjectConfig, RuntimeStorage } from "@actiondock/core";
+import type {
+  ActionDockApp,
+  ActionDockHost,
+  ExecutionService,
+  ProjectConfig,
+  RuntimeStorage,
+} from "@actiondock/core";
 import type { ActionDefinition, ExecutionResult, RunRecord } from "@actiondock/sdk";
 import { McpServer } from "@modelcontextprotocol/server";
 import { toMcpSchema } from "./schemas";
@@ -126,6 +132,9 @@ function createMcpToolCallback(
 
 export type ActionDockMcpServer = McpServer & {
   close: () => Promise<void>;
+  host?: ActionDockHost;
+  app?: ActionDockApp;
+  events?: (runId: string, options?: { after?: number; signal?: AbortSignal }) => AsyncIterable<any>;
 };
 
 /**
@@ -134,6 +143,224 @@ export type ActionDockMcpServer = McpServer & {
 export async function createActionDockMcpServer(
   options: ActionDockMcpOptions = {}
 ): Promise<ActionDockMcpServer> {
+  const isHostOrApp = (target: unknown): target is ActionDockHost | ActionDockApp =>
+    typeof target === "object" &&
+    target !== null &&
+    typeof (target as any).listActions === "function";
+
+  const hostTarget = isHostOrApp(options.host)
+    ? options.host
+    : isHostOrApp(options.app)
+      ? options.app
+      : undefined;
+  if (hostTarget) {
+    let serverName = "actiondock";
+    let serverVersion = ACTIONDOCK_VERSION;
+    if (options.app) {
+      try {
+        const info = await options.app.info();
+        serverName = info.id || info.name || "actiondock";
+        serverVersion = info.version || ACTIONDOCK_VERSION;
+      } catch {}
+    } else if (options.host) {
+      try {
+        const infos = await options.host.info();
+        if (infos.length === 1) {
+          serverName = infos[0].id || infos[0].name || "actiondock";
+          serverVersion = infos[0].version || ACTIONDOCK_VERSION;
+        }
+      } catch {}
+    }
+
+    const server = new McpServer({
+      name: serverName,
+      version: serverVersion,
+    });
+
+    (server.server as any).registerCapabilities({
+      tasks: {
+        listChanged: true,
+        cancel: {},
+      },
+    });
+
+    // 1. 直接通过 host.listActions() / app.listActions() 注册工具
+    const actionSummaries = await hostTarget.listActions();
+    for (const action of actionSummaries) {
+      server.registerTool(
+        action.id,
+        {
+          description: action.description,
+          inputSchema: toMcpSchema(action.inputSchema),
+          outputSchema: action.outputSchema ? toMcpSchema(action.outputSchema) : undefined,
+        },
+        async (input: any, ctx: any) => {
+          const isAsync = Boolean(
+            input &&
+              typeof input === "object" &&
+              (input.execution?.mode === "async" ||
+                input.__async === true ||
+                input.async === true)
+          );
+          const signal = ctx.mcpReq?.signal;
+
+          // 分发前剥离执行控制字段，防止污染输入导致 Schema 校验失败
+          let cleanInput = input;
+          if (input && typeof input === "object" && !Array.isArray(input)) {
+            const { execution, __async, async: _async, ...rest } = input;
+            cleanInput = rest;
+          }
+
+          if (isAsync) {
+            const ticket = await hostTarget.startAction(action.id, cleanInput, {
+              signal,
+              timeoutMs: options.timeoutMs,
+            });
+
+            return {
+              content: [
+                {
+                  type: "text" as const,
+                  text: JSON.stringify({
+                    ok: true,
+                    runId: ticket.runId,
+                    taskId: ticket.runId,
+                    status: "running",
+                  }),
+                },
+              ],
+            };
+          }
+
+          const result = await hostTarget.runAction(action.id, cleanInput, {
+            signal,
+            timeoutMs: options.timeoutMs,
+          });
+          return toMcpResult(result);
+        }
+      );
+    }
+
+    // 2. Register Tasks extension endpoints: tasks/get
+    (server.server as any).setRequestHandler("tasks/get", async (req: any) => {
+      const taskId = req.params?.taskId;
+      if (!taskId) {
+        throw new Error("taskId parameter is required for tasks/get");
+      }
+      const run = await hostTarget.getRun(taskId);
+      if (run) {
+        return {
+          task: toMcpTaskPayload(run),
+        };
+      }
+      throw new Error(`Task '${taskId}' not found`);
+    });
+
+    // 3. Register Tasks extension endpoints: tasks/cancel
+    (server.server as any).setRequestHandler("tasks/cancel", async (req: any) => {
+      const taskId = req.params?.taskId;
+      if (!taskId) {
+        throw new Error("taskId parameter is required for tasks/cancel");
+      }
+      const cancelRes = await hostTarget.cancelRun(
+        taskId,
+        req.params?.reason || "Cancelled via MCP tasks/cancel"
+      );
+      if (cancelRes.outcome === "requested") {
+        return {
+          taskId,
+          status: "cancelled",
+        };
+      }
+      if (cancelRes.outcome === "already_terminal") {
+        return {
+          taskId,
+          status: toMcpTaskStatus(cancelRes.status),
+        };
+      }
+      const run = await hostTarget.getRun(taskId);
+      if (run) {
+        if (run.status === "running") {
+          const apps = options.app
+            ? [options.app]
+            : options.host
+              ? options.host.listApps()
+              : [];
+          for (const app of apps) {
+            try {
+              app.storage.updateRun(taskId, "cancelled", undefined, {
+                code: "ACTION_CANCELLED",
+                message: req.params?.reason || "Cancelled via MCP tasks/cancel",
+              });
+            } catch {}
+          }
+          return {
+            taskId,
+            status: "cancelled",
+          };
+        }
+        return {
+          taskId,
+          status: toMcpTaskStatus(run.status),
+        };
+      }
+      throw new Error(`Task '${taskId}' not found`);
+    });
+
+    // 4. Register Tasks extension endpoints: tasks/list
+    (server.server as any).setRequestHandler("tasks/list", async (req: any) => {
+      const limit = typeof req.params?.limit === "number" ? req.params.limit : 50;
+      const actionId = req.params?.actionId;
+      const allRuns: RunRecord[] = [];
+      const apps = options.app
+        ? [options.app]
+        : options.host
+          ? options.host.listApps()
+          : [];
+      for (const a of apps) {
+        if ((a as any).storage?.listRuns) {
+          const runs = (a as any).storage.listRuns({ limit, actionId });
+          allRuns.push(...runs);
+        }
+      }
+      allRuns.sort(
+        (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
+      );
+      const trimmed = allRuns.slice(0, limit);
+      return {
+        tasks: trimmed.map(toMcpTaskPayload),
+      };
+    });
+
+
+    const originalClose = server.close.bind(server);
+    let isClosed = false;
+
+    const closeFn = async (): Promise<void> => {
+      if (isClosed) return;
+      isClosed = true;
+
+      try {
+        await hostTarget.close();
+      } catch {
+        // 忽略关闭异常
+      }
+
+      try {
+        await originalClose();
+      } catch {
+        // 忽略关闭异常
+      }
+    };
+
+    (server as any).close = closeFn;
+    (server as any).host = options.host;
+    (server as any).app = options.app;
+    (server as any).events = (runId: string, opts?: any) => hostTarget.events(runId, opts);
+
+    return server as ActionDockMcpServer;
+  }
+
   const targetRoots: string[] = [];
   if (options.projectRoot) {
     targetRoots.push(options.projectRoot);

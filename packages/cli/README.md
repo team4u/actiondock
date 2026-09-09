@@ -97,7 +97,7 @@ ad build
 ### 精确目标解析机制
 
 - **严格目标定位**：通过 `-P, --package <id|path>` 指定目标包。系统严格区分物理路径与注册表包标识符，若目标不存在则坚决不向当前目录或父级目录隐式回退，直接以参数校验错误退出（状态码 2）。
-- **多目标检索契约**：在执行多目标检索（如 `ad info [keywords]` 或 `ad action list [keywords]`）时，若无任何匹配项，在机器模式下始终返回确定性空数组结构并以状态码 0 退出，绝不因空搜索产生异常中断。
+- **多目标检索契约**：在执行多目标检索（如 `ad info [keywords]` 或 `ad list [keywords]`）时，若无任何匹配项，在机器模式下始终返回确定性空数组结构并以状态码 0 退出，绝不因空搜索产生异常中断。
 
 ---
 
@@ -107,9 +107,12 @@ ad build
 |---|---|
 | `ad init [dir]` | 初始化 Action Package 项目脚手架 |
 | `ad info [patterns...]` | 检索包元数据与能力清单，支持模式匹配与树形展示 |
+| `ad list [patterns...]` | 列出包内所有已注册的 Action |
+| `ad describe <id>` | 查看 Action 的详情、参数与模式规范（别名 `ad show`） |
+| `ad run <id>` | 本地或远程执行指定 Action 并输出标准信封结果 |
+| `ad validate [id]` | 校验 Action 清单与模式规范 |
 | `ad doctor` | 执行运行环境与项目结构健康诊断 |
-| `ad run <id>` | 本地执行指定 Action 并输出标准信封结果 |
-| `ad action list` | 列出包内所有已注册的 Action |
+| `ad action create <id>` | 脚手架创建新 Action 源码与清单契约（别名 `ad action new`） |
 | `ad playbook list` / `show` | 查看智能体操作规程 Playbook |
 | `ad config list` / `get` / `set` | 管理包运行时配置与环境变量绑定 |
 | `ad state list` / `get` / `set` / `delete` / `clear` | 查看与维护 SQLite 持久化状态 |
@@ -126,10 +129,10 @@ ad build
 
 ## 架构集成
 
-作为顶层门面，`@actiondock/cli` 串联以下子包：
+作为顶层门面与独立运行分发器，`@actiondock/cli` 串联以下子包：
 
 - 运行时适配：依赖 `@actiondock/runtime-node`，在启动时自动注入基于 Node.js 原生能力的驱动实现。
-- 共享命令集：复用 `@actiondock/runtime-cli` 的命令处理器与标准信封输出渲染器。
+- 命令分发与渲染：内置标准化信封输出渲染器与统一命令调度，并在独立模式下提供轻量分发器。
 - 构建与打包：调用 `@actiondock/builder` 完成依赖闭包分析与产物装配。
 - 协议服务：通过 `@actiondock/mcp` 与 `@actiondock/core` 启动协议监听。
 

@@ -16,7 +16,6 @@
       "@actiondock/runtime-bun": ["./packages/runtime-bun/src/index.ts"],
       "@actiondock/testing": ["./packages/testing/src/index.ts"],
       "@actiondock/mcp": ["./packages/mcp/src/index.ts"],
-      "@actiondock/runtime-cli": ["./packages/runtime-cli/src/index.ts"],
       "@actiondock/builder": ["./packages/builder/src/index.ts"],
       "@actiondock/cli": ["./packages/cli/src/index.ts"]
     }

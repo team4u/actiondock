@@ -9,6 +9,8 @@ export interface ResolvedEnv {
   value: unknown;
   /** 命中的具体环境变量键名 */
   envKey: string;
+  /** 命中的具体环境变量键名（别名） */
+  matchedKey: string;
   /** 数据来源标识 */
   source: "env";
 }
@@ -176,6 +178,7 @@ export function resolveEnvValue(
       return {
         value: coerced,
         envKey,
+        matchedKey: envKey,
         source: "env",
       };
     }

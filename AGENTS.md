@@ -8,10 +8,9 @@
   - `packages/builder`：`@actiondock/builder`（依赖规划与编译器调度：`BuildPlanner`、`BunCompiler`、`SkillExporter`）。
   - `packages/runtime-node`：`@actiondock/runtime-node`（Node.js 运行时适配层：`NodeSqliteDriver`、`ExecaProcessExecutor`、`NodeHttpServer`）。
   - `packages/runtime-bun`：`@actiondock/runtime-bun`（Bun 运行时适配层：`BunSqliteDriver`、`BunProcessExecutor`、`BunHttpServer`）。
-  - `packages/runtime-cli`：`@actiondock/runtime-cli`（轻量级无依赖通用 CLI 命令集合与渲染管道）。
   - `packages/testing`：`@actiondock/testing`（确定性测试工具框架：`FakeClock`、`MockProcessExecutor`、`MemoryStorage`）。
   - `packages/mcp`：`@actiondock/mcp`（Model Context Protocol 适配器：STDIO/HTTP Transport、Tool 映射、取消链路）。
-  - `packages/cli`：`@actiondock/cli`（CLI 门面工具链：`init`、`info`、`action`、`mcp`、`playbook`、`config`、`state`、`runs`、`test`、`build`、`export skill`）。
+  - `packages/cli`：`@actiondock/cli`（CLI 工具链与独立运行分发器：`init`、`info`、`list`、`describe`、`run`、`validate`、`config`、`state`、`runs`、`serve`、`mcp`、`build`、`test`、`export skill`）。
   - `examples/*`：官方示例 Action Packages。
 - **常用验证命令**：
   - 执行所有单元与集成测试：`bun test`

@@ -85,7 +85,7 @@ export default defineAction({
     expect(manifestCheck).toBeDefined();
     expect(manifestCheck?.status).toBe("warn");
     expect(manifestCheck?.message).toContain("doctor-act.ts");
-    expect(manifestCheck?.fix).toContain("ad action sync");
+    expect(manifestCheck?.fix).toContain("ad validate");
 
     const storageProjectCheck = report.checks.find((c) => c.id === "project.storage");
     expect(storageProjectCheck).toBeDefined();

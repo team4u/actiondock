@@ -17,6 +17,8 @@ export interface ConfigItemDefinition {
   type?: ConfigValueType;
   /** 显式绑定的外部环境变量名（支持单个或优先级数组） */
   env?: string | string[];
+  /** 是否为必填项 */
+  required?: boolean;
 }
 
 /**

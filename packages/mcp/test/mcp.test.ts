@@ -401,18 +401,20 @@ describe("@actiondock/mcp Adapter", () => {
     // Start with loopback default
     const serverInstance = await startMcpHttpServer({
       host: "127.0.0.1",
-      port: 6189,
+      port: 0,
       token: "mcp-secret-123",
       projectRoot: tmpDir,
     });
 
     try {
+      const baseUrl = serverInstance.url;
+
       // 1. Unauthorized health check
-      const unauthHealth = await fetch(`http://127.0.0.1:6189/health`);
+      const unauthHealth = await fetch(`${baseUrl}/health`);
       expect(unauthHealth.status).toBe(401);
 
       // 2. Authorized health check
-      const authHealth = await fetch(`http://127.0.0.1:6189/health`, {
+      const authHealth = await fetch(`${baseUrl}/health`, {
         headers: { Authorization: "Bearer mcp-secret-123" },
       });
       expect(authHealth.status).toBe(200);
@@ -421,7 +423,7 @@ describe("@actiondock/mcp Adapter", () => {
       expect(healthData.protocol).toBe("mcp");
 
       // 3. Unauthorized MCP POST
-      const unauthMcp = await fetch(`http://127.0.0.1:6189/mcp`, {
+      const unauthMcp = await fetch(`${baseUrl}/mcp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
@@ -429,7 +431,7 @@ describe("@actiondock/mcp Adapter", () => {
       expect(unauthMcp.status).toBe(401);
 
       // 4. Authorized MCP POST
-      const authMcp = await fetch(`http://127.0.0.1:6189/mcp`, {
+      const authMcp = await fetch(`${baseUrl}/mcp`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

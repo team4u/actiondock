@@ -14,7 +14,7 @@ import type { ProjectConfig } from "../project/types";
 import { createGlobalStorage } from "../storage";
 import type { RuntimeStorage } from "../storage/types";
 import { resolveEnvValue } from "./env";
-import { getProcessExecutor } from "./process";
+import { DefaultProcessExecutor } from "./process";
 
 /**
  * 生产级配置解析器实现。
@@ -239,7 +239,7 @@ export function createActionContext(options: ContextOptions): ActionContext {
     },
   };
 
-  const processApi = options.process || getProcessExecutor();
+  const processApi = options.process || new DefaultProcessExecutor();
   const progressApi: ProgressReporter = options.progress || {
     report() {},
   };

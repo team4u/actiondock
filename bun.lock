@@ -35,8 +35,8 @@
       "name": "@actiondock/builder",
       "version": "2.0.12",
       "dependencies": {
-        "@actiondock/core": "^2.0.11",
-        "@actiondock/sdk": "^2.0.11",
+        "@actiondock/core": "^2.0.12",
+        "@actiondock/sdk": "^2.0.12",
         "typescript": "^5.7.0",
         "yaml": "^2.7.0",
       },
@@ -49,12 +49,11 @@
         "actiondock": "./bin/ad.js",
       },
       "dependencies": {
-        "@actiondock/builder": "^2.0.11",
-        "@actiondock/core": "^2.0.11",
-        "@actiondock/mcp": "^2.0.11",
-        "@actiondock/runtime-cli": "^2.0.11",
-        "@actiondock/runtime-node": "^2.0.11",
-        "@actiondock/sdk": "^2.0.11",
+        "@actiondock/builder": "^2.0.12",
+        "@actiondock/core": "^2.0.12",
+        "@actiondock/mcp": "^2.0.12",
+        "@actiondock/runtime-node": "^2.0.12",
+        "@actiondock/sdk": "^2.0.12",
         "commander": "^13.1.0",
         "tsx": "^4.19.3",
       },
@@ -79,8 +78,8 @@
       "name": "@actiondock/mcp",
       "version": "2.0.12",
       "dependencies": {
-        "@actiondock/core": "^2.0.11",
-        "@actiondock/sdk": "^2.0.11",
+        "@actiondock/core": "^2.0.12",
+        "@actiondock/sdk": "^2.0.12",
         "@modelcontextprotocol/server": "^2.0.0",
       },
       "devDependencies": {
@@ -105,26 +104,12 @@
         "@types/bun",
       ],
     },
-    "packages/runtime-cli": {
-      "name": "@actiondock/runtime-cli",
-      "version": "2.0.12",
-      "dependencies": {
-        "@actiondock/core": "^2.0.11",
-        "@actiondock/mcp": "^2.0.11",
-        "@actiondock/sdk": "^2.0.11",
-        "@modelcontextprotocol/server": "^2.0.0",
-        "commander": "^13.1.0",
-      },
-      "devDependencies": {
-        "typescript": "^5.7.0",
-      },
-    },
     "packages/runtime-node": {
       "name": "@actiondock/runtime-node",
       "version": "2.0.12",
       "dependencies": {
-        "@actiondock/core": "^2.0.11",
-        "@actiondock/sdk": "^2.0.11",
+        "@actiondock/core": "^2.0.12",
+        "@actiondock/sdk": "^2.0.12",
         "execa": "^9.5.2",
         "tsx": "^4.19.3",
       },
@@ -159,8 +144,6 @@
     "@actiondock/mcp": ["@actiondock/mcp@workspace:packages/mcp"],
 
     "@actiondock/runtime-bun": ["@actiondock/runtime-bun@workspace:packages/runtime-bun"],
-
-    "@actiondock/runtime-cli": ["@actiondock/runtime-cli@workspace:packages/runtime-cli"],
 
     "@actiondock/runtime-node": ["@actiondock/runtime-node@workspace:packages/runtime-node"],
 

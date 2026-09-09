@@ -10,7 +10,6 @@ const subPackages = [
   "builder",
   "runtime-node",
   "runtime-bun",
-  "runtime-cli",
   "testing",
   "mcp",
   "cli",
@@ -123,27 +122,7 @@ function main() {
   writeFileSync(cliIndexTsPath, cliIndexTs);
   console.log("Updated packages/cli/src/commands/index.ts");
 
-  // 3.3 packages/runtime-cli/src/commands/version-help.ts
-  const versionHelpTsPath = join(rootDir, "packages", "runtime-cli", "src", "commands", "version-help.ts");
-  let versionHelpTs = readFileSync(versionHelpTsPath, "utf8");
-  versionHelpTs = versionHelpTs.replace(
-    /const ver = program\.version\(\) \|\| "[^"]+";/,
-    `const ver = program.version() || "${targetVersion}";`
-  );
-  writeFileSync(versionHelpTsPath, versionHelpTs);
-  console.log("Updated packages/runtime-cli/src/commands/version-help.ts");
-
-  // 3.4 packages/runtime-cli/src/program.ts
-  const programTsPath = join(rootDir, "packages", "runtime-cli", "src", "program.ts");
-  let programTs = readFileSync(programTsPath, "utf8");
-  programTs = programTs.replace(
-    /const version = options\?\.version \|\| \(isStandalone \? options!\.standalone!\.version : "[^"]+"\);/,
-    `const version = options?.version || (isStandalone ? options!.standalone!.version : "${targetVersion}");`
-  );
-  writeFileSync(programTsPath, programTs);
-  console.log("Updated packages/runtime-cli/src/program.ts");
-
-  // 3.5 packages/core/src/version.ts
+  // 3.3 packages/core/src/version.ts
   const coreVersionTsPath = join(rootDir, "packages", "core", "src", "version.ts");
   writeFileSync(
     coreVersionTsPath,

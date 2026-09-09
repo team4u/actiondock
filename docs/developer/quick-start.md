@@ -75,24 +75,24 @@ my-action/
 ### 开发期静态发现原则
 
 ActionDock 遵循**开发期静态发现原则**：
-- **静态发现与能力暴露**：在执行 `ad info`、`ad action list`、`ad playbook list` 以及启动 MCP 协议映射时，框架直接读取解析静态清单快照，无需也严禁动态执行 Action 的 TypeScript 业务代码，杜绝开发期的副作用与安全风险。
+- **静态发现与能力暴露**：在执行 `ad info`、`ad list`、`ad playbook list` 以及启动 MCP 协议映射时，框架直接读取解析静态清单快照，无需也严禁动态执行 Action 的 TypeScript 业务代码，杜绝开发期的副作用与安全风险。
 - **构建规划与依赖裁剪**：在执行 `ad build` 或 `ad export skill` 时，构建引擎基于清单中的声明分析依赖闭包并完成代码静态裁剪。
 - **契约定义同步**：通过 `ad action create <id>` 脚手架创建新动作时，会自动在 `actions/` 生成模板源码并向 `actiondock.manifest.json` 注册契约项。
 
-### 清单同步流程与脱节后果
+### 清单校验与契约规范 (`ad validate`)
 
-当在源码中调整了 Action 属性（如修改了 `inputSchema`、`outputSchema`、`description` 或新增/删除了动作源码文件）后，必须使用 `ad action sync` 保持清单快照一致：
+当在源码中调整了 Action 属性（如修改了 `inputSchema`、`outputSchema`、`description` 或新增/删除了动作源码文件）后，可通过 `ad validate` 校验清单与契约规范的一致性：
 
-- **同步清单快照**：
+- **校验清单契约**：
   ```bash
-  ad action sync
+  ad validate
   ```
-  该命令扫描 `actions/` 目录，解析所有 Action 的最新模式与元数据，自动增量更新 `actiondock.manifest.json` 并移除物理上已删除的动作条目。
-- **门禁校验检查**：
+  该命令校验当前包中所有 Action 的清单契约、入口文件与模式规范。
+- **校验指定 Action**：
   ```bash
-  ad action sync --check
+  ad validate <id>
   ```
-  在代码提交与 CI/CD 自动化流水线中，通过 `--check` 选项核对清单与源码是否一致。若检测到脱节，命令以非零状态码退出并报告差异，不会篡改文件。
+  在代码提交与持续集成自动化流水线中，通过指定 Action 标识符进行精确校验。
 
 #### 源码与清单脱节的潜在后果
 
@@ -154,7 +154,7 @@ export default defineAction({
 
 ## 本地执行与调试
 
-使用 `ad run`（或 `ad action run`）在本地调用并测试 Action：
+使用 `ad run` 在本地调用并测试 Action：
 
 ```bash
 ad run sample.greet --input '{"name": "ActionDock"}'

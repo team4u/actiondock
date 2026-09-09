@@ -56,29 +56,28 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
   ad action new <id> [--desc <description>] [--file <filePath>]
   ```
   在 `actions/` 创建代码模板，并自动向 `actiondock.manifest.json` 注册元数据契约。
-- **同步 Action 元数据清单**：
-  ```bash
-  ad action sync [--check] [--no-prune] [--data-dir <path>] [--json] [--envelope]
-  ```
-  扫描动作源码目录（`actions/`），动态加载 Action 定义并自动增量更新 `actiondock.manifest.json` 清单。传入 `--check` 时仅校验清单是否已与代码同步而不覆写文件。
 - **列出 Action 清单**：
   ```bash
-  ad action list [patterns...] [-i, --intent <pattern>] [--fallback] [--no-fallback] [-P, --package <id>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--data-dir <path>] [--json] [--envelope]
+  ad list [patterns...] [-i, --intent <pattern>] [--fallback] [--no-fallback] [-P, --package <id>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--data-dir <path>] [--json] [--envelope]
   ```
+  检索并列出当前包、工作区或远程服务器中已注册的 Action 清单。
 - **查看 Action 详情与模式规范**：
   ```bash
-  ad action show <id> [-P, --package <id>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--data-dir <path>] [--json] [--envelope]
+  ad describe <id> [-P, --package <id>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--data-dir <path>] [--json] [--envelope]
+  # 或使用别名
+  ad show <id> [-P, --package <id>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--data-dir <path>] [--json] [--envelope]
   ```
+  查询指定 Action 的输入输出模式规范与详细文档。
 - **校验 Action 模式与语法**：
   ```bash
-  ad action validate [id] [-P, --package <id>] [--data-dir <path>] [--json] [--envelope]
+  ad validate [id] [-P, --package <id>] [--data-dir <path>] [--json] [--envelope]
   ```
+  校验指定包或动作的元数据清单规范与输入输出 Schema 定义。
 - **执行 Action（核心命令）**：
   ```bash
-  ad action run <id> [-P, --package <id>] [-i, --input <json>] [-f, --input-file <path>] [-c, --config <k=v...>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--timeout <duration>] [--async] [--data-dir <path>] [--json] [--envelope]
-  # 顶层快速别名
   ad run <id> [-P, --package <id>] [-i, --input <json>] [-f, --input-file <path>] [-c, --config <k=v...>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--timeout <duration>] [--async] [--data-dir <path>] [--json] [--envelope]
   ```
+  本地或远程执行指定 Action，支持同步执行与异步启动，输出标准信封结果。
 - **运行单元测试套件**：
   ```bash
   ad test [pattern]

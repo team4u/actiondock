@@ -34,8 +34,8 @@ ActionDock 2.0 采用清晰的代码库分层结构，严格划分包职责，�
   负责 Model Context Protocol 协议适配，支持 STDIO 与 HTTP 微服务两种通信传输通道。
 - **运行时适配层**：`@actiondock/runtime-node` 与 `@actiondock/runtime-bun`
   抹平操作系统信号、进程管道与底层驱动差异的适配层。
-- **命令行门面层**：`@actiondock/runtime-cli` 与 `@actiondock/cli`
-  统一的 CLI 工具门面，负责参数解析、标准信封格式渲染以及严谨的退出码管控。
+- **命令行门面层**：`@actiondock/cli`
+  统一的 CLI 工具门面与独立分发器，负责参数解析、标准信封格式渲染以及严谨的退出码管控。
 
 ### 静态清单事实源机制
 

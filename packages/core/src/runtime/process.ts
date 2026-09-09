@@ -10,18 +10,6 @@ import type {
 
 export type ProcessExecutor = ProcessAPI;
 
-let globalProcessExecutor: ProcessExecutor | undefined;
-
-export function setProcessExecutor(executor: ProcessExecutor): void {
-  globalProcessExecutor = executor;
-}
-
-export function getProcessExecutor(): ProcessExecutor {
-  if (!globalProcessExecutor) {
-    globalProcessExecutor = new DefaultProcessExecutor();
-  }
-  return globalProcessExecutor;
-}
 
 /**
  * 基于 Node.js 标准 child_process 实现的基础进程执行器。

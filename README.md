@@ -242,25 +242,19 @@ When greeting a new user in the conversation:
 
 ## Architecture and Layering
 
-ActionDock 2.0 adopts a 9-package modular architecture:
+ActionDock 2.0 adopts an 8-package modular architecture:
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
 │                      @actiondock/cli                        │
-│                 Node.js >= 22.13.0 Facade CLI                │
-└──────────────┬──────────────────────────────┬───────────────┘
-               │                              │
-               ▼                              ▼
+│   Node.js Facade CLI, Standalone Dispatcher & Envelopes     │
+└──────────────┬──────────────┬───────────────┬───────────────┘
+               │              │               │
+               ▼              ▼               ▼
 ┌─────────────────────────────┐┌──────────────────────────────┐
-│  @actiondock/runtime-cli    ││    @actiondock/builder       │
-│ Shared Runtime & Envelopes  ││ Dependency Closure & Build   │
+│     @actiondock/mcp         ││    @actiondock/builder       │
+│  MCP Protocol & Async Tasks ││ Dependency Closure & Build   │
 └──────────────┬──────────────┘└──────────────┬───────────────┘
-               │                              │
-               ▼                              │
-┌─────────────────────────────┐               │
-│     @actiondock/mcp         │               │
-│  MCP Protocol & Async Tasks │               │
-└──────────────┬──────────────┘               │
                │                              │
                ▼                              ▼
 ┌─────────────────────────────────────────────────────────────┐
@@ -276,9 +270,8 @@ ActionDock 2.0 adopts a 9-package modular architecture:
 └──────────────┘└──────────────┘└─────────────┘└──────────────┘
 ```
 
-- `@actiondock/cli`: The command line facade running on Node.js 22.13.0 or higher, coordinating project initialization, testing, building, and exporting.
+- `@actiondock/cli`: The command line toolchain and standalone dispatcher running on Node.js 22.13.0 or higher, coordinating project initialization, execution, testing, building, and exporting with structured envelope rendering.
 - `@actiondock/builder`: Build planning and compiler scheduling package, including `BuildPlanner` dependency closure calculation, `BunCompiler` external compiler driver, and `SkillExporter`.
-- `@actiondock/runtime-cli`: Shared runtime commands and envelope formatters, implementing `info`, `action`, `playbook`, `config`, `state`, `runs`, `serve`, and `mcp`.
 - `@actiondock/mcp`: MCP adapter providing STDIO and HTTP protocol transports, fully supporting the Tasks asynchronous task extension.
 - `@actiondock/core`: Core domain kernel providing project configuration loading, `actiondock.manifest.json` parsing, `SqliteDriver` interface, `ProcessExecutor` interface, `DefaultExecutionService`, and `ActionRunner` state machine.
 - `@actiondock/runtime-node`: Node.js runtime adapter providing `node:sqlite` database driver, `execa` process executor, `tsx` module loader, and `node:http` streaming server.

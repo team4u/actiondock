@@ -1,6 +1,6 @@
 import { buildProject } from "@actiondock/builder";
 import { findProjectRoot, resolvePackageRoot } from "@actiondock/core";
-import { ExecutionError } from "@actiondock/runtime-cli";
+import { ExecutionError } from "../errors";
 import { Command } from "commander";
 
 export function registerBuildCommand(program: Command): void {

@@ -8,11 +8,14 @@ import pkg from "../package.json";
 
 const cliPath = resolve(__dirname, "../bin/ad.js");
 
+let tempHome: string | undefined;
+
 function runCli(args: string[], cwd?: string, env?: Record<string, string>) {
   return Bun.spawnSync(["bun", cliPath, ...args], {
     cwd,
     env: {
       ...process.env,
+      ...(tempHome ? { ACTIONDOCK_HOME: tempHome } : {}),
       ...env,
     },
     stdout: "pipe",
@@ -25,6 +28,7 @@ describe("CLI End-to-End", () => {
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), "actiondock-cli-e2e-"));
+    tempHome = mkdtempSync(join(tmpdir(), "actiondock-cli-e2e-home-"));
     // Link root node_modules so @actiondock/sdk is available
     const rootNodeModules = resolve(__dirname, "../../../node_modules");
     if (existsSync(rootNodeModules)) {
@@ -33,6 +37,12 @@ describe("CLI End-to-End", () => {
   });
 
   afterEach(async () => {
+    if (tempHome && existsSync(tempHome)) {
+      try {
+        rmSync(tempHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      } catch {}
+      tempHome = undefined;
+    }
     if (existsSync(tempDir)) {
       try {
         rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
@@ -62,30 +72,30 @@ describe("CLI End-to-End", () => {
     expect(info.id).toBe("team.github-ops");
     expect(info.actions).toContain("sample.greet");
 
-    // 3. action list & show & validate (including intent fuzzy search and fallback)
-    const listProc = runCli(["action", "list", "--json"], tempDir);
+    // 3. list & describe & validate (including intent fuzzy search and fallback)
+    const listProc = runCli(["list", "--json"], tempDir);
     expect(listProc.exitCode).toBe(0);
     const actionsList = JSON.parse(listProc.stdout.toString());
     expect(actionsList.length).toBe(1);
     expect(actionsList[0].id).toBe("sample.greet");
 
-    // 3b. Test action list with --intent and positional fuzzy search
-    const listIntentProc = runCli(["action", "list", "--intent", "greet|hello", "--json"], tempDir);
+    // 3b. Test list with --intent and positional fuzzy search
+    const listIntentProc = runCli(["list", "--intent", "greet|hello", "--json"], tempDir);
     expect(listIntentProc.exitCode).toBe(0);
     expect(JSON.parse(listIntentProc.stdout.toString()).length).toBe(1);
 
-    const listPositionalProc = runCli(["action", "list", "greet", "--json"], tempDir);
+    const listPositionalProc = runCli(["list", "greet", "--json"], tempDir);
     expect(listPositionalProc.exitCode).toBe(0);
     expect(JSON.parse(listPositionalProc.stdout.toString()).length).toBe(1);
 
     // In machine mode (--json / --envelope), no fallback by default when no match: returns empty array
-    const listNoMatchProc = runCli(["action", "list", "--intent", "nomatch", "--json"], tempDir);
+    const listNoMatchProc = runCli(["list", "--intent", "nomatch", "--json"], tempDir);
     expect(listNoMatchProc.exitCode).toBe(0);
     expect(JSON.parse(listNoMatchProc.stdout.toString()).length).toBe(0);
 
     // Fallback only when explicitly requested via --fallback in machine mode
     const listFallbackProc = runCli(
-      ["action", "list", "--intent", "nomatch", "--fallback", "--json"],
+      ["list", "--intent", "nomatch", "--fallback", "--json"],
       tempDir
     );
     expect(listFallbackProc.exitCode).toBe(0);
@@ -95,27 +105,27 @@ describe("CLI End-to-End", () => {
 
     // No fallback when --no-fallback is specified
     const listNoFallbackProc = runCli(
-      ["action", "list", "--intent", "nomatch", "--no-fallback", "--json"],
+      ["list", "--intent", "nomatch", "--no-fallback", "--json"],
       tempDir
     );
     expect(listNoFallbackProc.exitCode).toBe(0);
     expect(JSON.parse(listNoFallbackProc.stdout.toString()).length).toBe(0);
 
-    const showProc = runCli(["action", "show", "sample.greet", "--json"], tempDir);
+    const showProc = runCli(["describe", "sample.greet", "--json"], tempDir);
 
     expect(showProc.exitCode).toBe(0);
     const show = JSON.parse(showProc.stdout.toString());
     expect(show.id).toBe("sample.greet");
     expect(show.inputSchema).toBeDefined();
 
-    const valProc = runCli(["action", "validate", "--json"], tempDir);
+    const valProc = runCli(["validate", "--json"], tempDir);
     expect(valProc.exitCode).toBe(0);
     const val = JSON.parse(valProc.stdout.toString());
     expect(val.valid).toBe(true);
 
-    // 4. action run
+    // 4. run
     const runProc = runCli(
-      ["action", "run", "sample.greet", "--input", '{"name": "Developer"}', "--timeout", "5s"],
+      ["run", "sample.greet", "--input", '{"name": "Developer"}', "--timeout", "5s"],
       tempDir
     );
     expect(runProc.exitCode).toBe(0);
@@ -125,7 +135,7 @@ describe("CLI End-to-End", () => {
 
     // Local async is rejected
     const localAsyncProc = runCli(
-      ["action", "run", "sample.greet", "--input", '{"name": "Developer"}', "--async"],
+      ["run", "sample.greet", "--input", '{"name": "Developer"}', "--async"],
       tempDir
     );
     expect(localAsyncProc.exitCode).toBe(1);
@@ -569,11 +579,16 @@ describe("CLI End-to-End", () => {
     const SECRET = "auth-token-xyz-987";
     const port = 5199;
     const serverUrl = `http://127.0.0.1:${port}`;
+    const serverHome = mkdtempSync(join(tmpdir(), "actiondock-server-home-"));
 
     const serveProc = Bun.spawn(
       ["bun", cliPath, "serve", "--port", String(port), "--host", "127.0.0.1", "--token", SECRET],
       {
         cwd: tempDir,
+        env: {
+          ...process.env,
+          ACTIONDOCK_HOME: serverHome,
+        },
         stdout: "pipe",
         stderr: "pipe",
       }
@@ -651,13 +666,13 @@ describe("CLI End-to-End", () => {
       const remoteInfo = JSON.parse(remoteInfoProc.stdout.toString());
       expect(remoteInfo.id).toBe("cloud.remote-node");
 
-      const remoteListProc = runCli(["action", "list", "--profile", "cloud-aliyun", "--json"], tmpdir(), env);
+      const remoteListProc = runCli(["list", "--profile", "cloud-aliyun", "--json"], tmpdir(), env);
       expect(remoteListProc.exitCode).toBe(0);
       const remoteActions = JSON.parse(remoteListProc.stdout.toString());
       expect(remoteActions.some((a: any) => a.id === "sample.greet")).toBe(true);
 
       const remoteListIntentProc = runCli(
-        ["action", "list", "--profile", "cloud-aliyun", "--intent", "sample\\.greet", "--json"],
+        ["list", "--profile", "cloud-aliyun", "--intent", "sample\\.greet", "--json"],
         tmpdir(),
         env
       );
@@ -732,6 +747,13 @@ describe("CLI End-to-End", () => {
     } finally {
       serveProc.kill();
       await serveProc.exited.catch(() => {});
+      if (existsSync(serverHome)) {
+        try {
+          rmSync(serverHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+        } catch {
+          // Ignore
+        }
+      }
       if (existsSync(clientHome)) {
         try {
           rmSync(clientHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
@@ -861,7 +883,7 @@ describe("CLI End-to-End", () => {
       expect(info.actions.length).toBe(0);
       expect(existsSync(join(noManifestDir, "node_modules"))).toBe(false);
 
-      const actionListProc = runCli(["action", "list", "--json"], noManifestDir);
+      const actionListProc = runCli(["list", "--json"], noManifestDir);
       expect(actionListProc.exitCode).toBe(0);
       const actionList = JSON.parse(actionListProc.stdout.toString());
       expect(actionList.length).toBe(0);
@@ -894,14 +916,14 @@ describe("CLI End-to-End", () => {
       expect(infoWithManifest.actions).toEqual(["team.foo"]);
       expect(existsSync(join(noManifestDir, "node_modules"))).toBe(false);
 
-      const actionListWithManifestProc = runCli(["action", "list", "--json"], noManifestDir);
+      const actionListWithManifestProc = runCli(["list", "--json"], noManifestDir);
       expect(actionListWithManifestProc.exitCode).toBe(0);
       const actionListWithManifest = JSON.parse(actionListWithManifestProc.stdout.toString());
       expect(actionListWithManifest.length).toBe(1);
       expect(actionListWithManifest[0].id).toBe("team.foo");
       expect(existsSync(join(noManifestDir, "node_modules"))).toBe(false);
 
-      const actionShowProc = runCli(["action", "show", "team.foo", "--json"], noManifestDir);
+      const actionShowProc = runCli(["describe", "team.foo", "--json"], noManifestDir);
       expect(actionShowProc.exitCode).toBe(0);
       const actionShow = JSON.parse(actionShowProc.stdout.toString());
       expect(actionShow.id).toBe("team.foo");
@@ -916,75 +938,6 @@ describe("CLI End-to-End", () => {
         rmSync(noManifestDir, { recursive: true, force: true });
       }
     }
-  });
-
-  it("synchronizes action manifest when source code changes (ad action sync)", () => {
-    // 1. Initialize project
-    const initProc = runCli(
-      ["init", "--id", "team.sync-cli", "--name", "Sync CLI", "."],
-      tempDir
-    );
-    expect(initProc.exitCode).toBe(0);
-
-    // 2. action sync --check should pass initially
-    const checkInitProc = runCli(["action", "sync", "--check"], tempDir);
-    expect(checkInitProc.exitCode).toBe(0);
-    expect(checkInitProc.stdout.toString()).toContain("is up to date");
-
-    // 3. Modify action file
-    const greetPath = join(tempDir, "actions", "greet.ts");
-    const updatedCode = `import { defineAction } from "@actiondock/sdk";
-
-export default defineAction({
-  id: "sample.greet",
-  description: "Synchronized greeting action description",
-  tags: ["sample", "v2"],
-  inputSchema: {
-    type: "object",
-    properties: {
-      name: { type: "string" },
-      role: { type: "string" },
-    },
-    required: ["name"],
-  },
-  outputSchema: {
-    type: "object",
-    properties: {
-      message: { type: "string" },
-    },
-    required: ["message"],
-  },
-  async run(input: any) {
-    return { message: "Hello " + input.name };
-  },
-});
-`;
-    writeFileSync(greetPath, updatedCode, "utf-8");
-
-    // 4. action sync --check should fail now
-    const checkFailProc = runCli(["action", "sync", "--check"], tempDir);
-    expect(checkFailProc.exitCode).toBe(1);
-    expect(checkFailProc.stdout.toString()).toContain("out of sync");
-    expect(checkFailProc.stdout.toString()).toContain("Updated actions: sample.greet");
-
-    // 5. Execute action sync to write changes
-    const syncProc = runCli(["action", "sync"], tempDir);
-    expect(syncProc.exitCode).toBe(0);
-    expect(syncProc.stdout.toString()).toContain("Successfully synchronized");
-    expect(syncProc.stdout.toString()).toContain("- Updated: sample.greet");
-
-    // 6. Verify with action show and action sync --check
-    const showProc = runCli(["action", "show", "sample.greet", "--json"], tempDir);
-    expect(showProc.exitCode).toBe(0);
-    const showRes = JSON.parse(showProc.stdout.toString());
-    expect(showRes.description).toBe("Synchronized greeting action description");
-    expect(showRes.inputSchema.properties.role).toBeDefined();
-
-    const checkPassProc = runCli(["action", "sync", "--check", "--json"], tempDir);
-    expect(checkPassProc.exitCode).toBe(0);
-    const checkJson = JSON.parse(checkPassProc.stdout.toString());
-    expect(checkJson.inSync).toBe(true);
-    expect(checkJson.unchanged).toContain("sample.greet");
   });
 });
 
@@ -1045,15 +998,15 @@ describe("CLI Review & Machine Contract Regression", () => {
     expect(infoJson.error.code).toBe("INVALID_ARGUMENT");
     expect(infoJson.error.message).toContain(`Package '${nonExistentId}' not found`);
 
-    // 2. ad action list -P
-    const actListProc = runCli(["action", "list", "-P", nonExistentId, "--json"], tempDir, env);
+    // 2. ad list -P
+    const actListProc = runCli(["list", "-P", nonExistentId, "--json"], tempDir, env);
     expect(actListProc.exitCode).toBe(2);
     const actListJson = JSON.parse(actListProc.stdout.toString());
     expect(actListJson.ok).toBe(false);
     expect(actListJson.error.code).toBe("INVALID_ARGUMENT");
 
-    // 3. ad action run -P
-    const actRunProc = runCli(["action", "run", "greet", "-P", nonExistentId, "--json"], tempDir, env);
+    // 3. ad run -P
+    const actRunProc = runCli(["run", "greet", "-P", nonExistentId, "--json"], tempDir, env);
     expect(actRunProc.exitCode).toBe(2);
     const actRunJson = JSON.parse(actRunProc.stdout.toString());
     expect(actRunJson.ok).toBe(false);
@@ -1127,33 +1080,33 @@ describe("CLI Review & Machine Contract Regression", () => {
     expect(noMatchIntentJson.isFallback).toBe(false);
 
     // Unmatched action list
-    const noMatchActionProc = runCli(["action", "list", "--intent", "nonexistent-act-9999", "--json"], tempDir, env);
+    const noMatchActionProc = runCli(["list", "--intent", "nonexistent-act-9999", "--json"], tempDir, env);
     expect(noMatchActionProc.exitCode).toBe(0);
     expect(JSON.parse(noMatchActionProc.stdout.toString())).toEqual([]);
   });
 
   it("supports common options passed before or after subcommands and envelope formatting", () => {
-    // Before subcommand: ad --json action list
-    const preJson = runCli(["--json", "action", "list"], tempDir, env);
+    // Before subcommand: ad --json list
+    const preJson = runCli(["--json", "list"], tempDir, env);
     expect(preJson.exitCode).toBe(0);
     const preJsonList = JSON.parse(preJson.stdout.toString());
     expect(Array.isArray(preJsonList)).toBe(true);
 
-    // After subcommand: ad action list --json
-    const postJson = runCli(["action", "list", "--json"], tempDir, env);
+    // After subcommand: ad list --json
+    const postJson = runCli(["list", "--json"], tempDir, env);
     expect(postJson.exitCode).toBe(0);
     const postJsonList = JSON.parse(postJson.stdout.toString());
     expect(Array.isArray(postJsonList)).toBe(true);
 
-    // Independent --envelope mode (without explicit --json): ad --envelope action list
-    const preEnv = runCli(["--envelope", "action", "list"], tempDir, env);
+    // Independent --envelope mode (without explicit --json): ad --envelope list
+    const preEnv = runCli(["--envelope", "list"], tempDir, env);
     expect(preEnv.exitCode).toBe(0);
     const preEnvData = JSON.parse(preEnv.stdout.toString());
     expect(preEnvData.ok).toBe(true);
     expect(Array.isArray(preEnvData.data)).toBe(true);
 
-    // After subcommand: ad action list --envelope
-    const postEnv = runCli(["action", "list", "--envelope"], tempDir, env);
+    // After subcommand: ad list --envelope
+    const postEnv = runCli(["list", "--envelope"], tempDir, env);
     expect(postEnv.exitCode).toBe(0);
     const postEnvData = JSON.parse(postEnv.stdout.toString());
     expect(postEnvData.ok).toBe(true);

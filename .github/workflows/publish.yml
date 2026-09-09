@@ -93,10 +93,6 @@ jobs:
         working-directory: packages/mcp
         run: npm publish --access public --tag ${{ steps.dist-tag.outputs.tag }}
 
-      - name: Publish Runtime CLI
-        working-directory: packages/runtime-cli
-        run: npm publish --access public --tag ${{ steps.dist-tag.outputs.tag }}
-
       - name: Publish CLI
         working-directory: packages/cli
         run: npm publish --access public --tag ${{ steps.dist-tag.outputs.tag }}

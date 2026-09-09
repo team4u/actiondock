@@ -1,2 +1,1 @@
-export { resolveIntent } from "@actiondock/runtime-cli";
-
+export { resolveIntent } from "./utils";

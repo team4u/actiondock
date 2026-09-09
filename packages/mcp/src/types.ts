@@ -1,4 +1,10 @@
-import type { ExecutionManager, RuntimeStorage, ServerRuntimeRegistry } from "@actiondock/core";
+import type {
+  ActionDockApp,
+  ActionDockHost,
+  ExecutionManager,
+  RuntimeStorage,
+  ServerRuntimeRegistry,
+} from "@actiondock/core";
 import type { ActionDefinition, ExecutionResult, RunRecord, RunStatus } from "@actiondock/sdk";
 
 /**
@@ -58,6 +64,10 @@ export function toMcpTaskPayload(run: RunRecord): McpTaskPayload {
  * ActionDock MCP 适配层初始化选项。
  */
 export interface ActionDockMcpOptions {
+  /** 目标 ActionDockHost 宿主实例 */
+  host?: ActionDockHost;
+  /** 目标 ActionDockApp 应用实例 */
+  app?: ActionDockApp;
   /** 单个目标项目根目录 */
   projectRoot?: string;
   /** 多个项目根目录（用于多包聚合提供） */
@@ -96,7 +106,11 @@ export interface HttpSecurityOptions {
   maxBodyBytes?: number;
 }
 
-export interface ActionDockMcpHttpOptions extends ActionDockMcpOptions, HttpSecurityOptions {}
+export interface ActionDockMcpHttpOptions
+  extends Omit<ActionDockMcpOptions, "host">,
+    Omit<HttpSecurityOptions, "host"> {
+  host?: string | ActionDockHost;
+}
 
 export interface ActionDockMcpHttpServerInstance {
   port: number;

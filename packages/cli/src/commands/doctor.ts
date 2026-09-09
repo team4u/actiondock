@@ -1,6 +1,8 @@
 import { fetchRemoteDoctor, resolveTarget, runDoctorChecks } from "@actiondock/core";
-import { ExecutionError, getEffectiveOptions, renderResult } from "@actiondock/runtime-cli";
 import { Command } from "commander";
+import { ExecutionError } from "../errors";
+import { renderResult } from "../renderer";
+import { getEffectiveOptions } from "../utils";
 
 export function registerDoctorCommand(program: Command): void {
   program
