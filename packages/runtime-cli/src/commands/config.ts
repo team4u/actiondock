@@ -36,6 +36,135 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
     .command("config")
     .description("Manage runtime configuration store (Global & Project-level)");
 
+  // config schema / check
+  configCmd
+    .command("schema [identifier]")
+    .alias("check")
+    .description("Inspect declared configuration requirements and check resolution status")
+    .option("-P, --package <id>", "Target package ID or path")
+    .option("--data-dir <path>", "Custom database storage directory")
+    .option("--json", "Output as JSON")
+    .option("--envelope", "Wrap JSON output in standard envelope")
+    .action((identifier: string | undefined, rawOptions: any, cmd: any) => {
+      try {
+        const options = getEffectiveOptions(rawOptions, cmd);
+        const targetPkg = identifier || options.package;
+        const root = resolvePackageRoot(targetPkg);
+        if (!root) {
+          if (targetPkg) {
+            throw new ArgumentError(
+              `Package '${targetPkg}' not found in linked packages or path`
+            );
+          }
+          throw new ArgumentError(
+            "Not in an ActionDock project.\nUsage: ad config schema [package-id] or cd into a project directory."
+          );
+        }
+
+        const projConfig = loadProjectConfig(root);
+        const declared = projConfig.config || {};
+        const declaredKeys = Object.keys(declared);
+
+        const globalStorage = createGlobalStorage(options.dataDir);
+        const globalConfig = globalStorage.listConfig();
+        globalStorage.close();
+
+        const projectStorage = createStorage(projConfig.id, {
+          projectRoot: root,
+          dataDir: options.dataDir,
+        });
+        const projectConfig = projectStorage.listConfig();
+        projectStorage.close();
+
+        const items = declaredKeys.map((key) => {
+          const itemDef = declared[key];
+          const isSecret = isSecretConfigKey(key, itemDef);
+
+          let resolvedValue: unknown;
+          let source: "project" | "global" | "env" | "default" | "missing" = "missing";
+          let status: "SET" | "DEFAULT" | "MISSING" = "MISSING";
+          const envResolved = resolveEnvValue(key, itemDef, projConfig.id);
+
+          if (projectConfig[key] !== undefined) {
+            resolvedValue = projectConfig[key];
+            source = "project";
+            status = "SET";
+          } else if (globalConfig[key] !== undefined) {
+            resolvedValue = globalConfig[key];
+            source = "global";
+            status = "SET";
+          } else if (envResolved !== undefined) {
+            resolvedValue = envResolved.value;
+            source = "env";
+            status = "SET";
+          } else if (itemDef.default !== undefined) {
+            resolvedValue = itemDef.default;
+            source = "default";
+            status = "DEFAULT";
+          }
+
+          const displayValue = isSecret && resolvedValue !== undefined ? maskSecretValue(resolvedValue) : resolvedValue;
+
+          return {
+            key,
+            value: displayValue,
+            status,
+            source,
+            secret: isSecret,
+            description: itemDef.description || "",
+            required: itemDef.default === undefined,
+          };
+        });
+
+        const missingRequired = items.filter((i) => i.status === "MISSING");
+        const payload = {
+          packageId: projConfig.id,
+          projectRoot: root,
+          allReady: missingRequired.length === 0,
+          configs: items,
+        };
+
+        if (options.json || options.envelope) {
+          renderResult(payload, { json: options.json, envelope: options.envelope, context });
+        } else {
+          writeStdout(`Configuration Requirements for ${projConfig.id} (${root}):\n`, context);
+          if (items.length === 0) {
+            writeStdout("  (No configuration dependencies declared for this package)\n", context);
+            return;
+          }
+
+          writeStdout(
+            `  ${"KEY".padEnd(24)} ${"STATUS".padEnd(12)} ${"SOURCE".padEnd(10)} ${"SECRET".padEnd(8)} DESCRIPTION\n`,
+            context
+          );
+          writeStdout("  " + "-".repeat(85) + "\n", context);
+
+          for (const item of items) {
+            const statusLabel = item.status === "SET" ? "[SET]" : item.status === "DEFAULT" ? "[DEFAULT]" : "[MISSING]";
+            const secretLabel = item.secret ? "yes" : "no";
+            writeStdout(
+              `  ${item.key.padEnd(24)} ${statusLabel.padEnd(12)} ${item.source.padEnd(10)} ${secretLabel.padEnd(8)} ${item.description}\n`,
+              context
+            );
+          }
+
+          if (missingRequired.length > 0) {
+            writeStdout(`\n[WARNING] ${missingRequired.length} required config(s) not set:\n`, context);
+            for (const m of missingRequired) {
+              writeStdout(`  - ${m.key}: Run 'ad config set ${m.key} <value>' to configure.\n`, context);
+            }
+          } else {
+            writeStdout("\n[OK] All configuration dependencies are satisfied.\n", context);
+          }
+        }
+      } catch (err: any) {
+        if (err instanceof ArgumentError || err instanceof ExecutionError) {
+          throw err;
+        }
+        throw new ExecutionError(err.message);
+      }
+    });
+
   // config list
   configCmd
     .command("list [patterns...]")

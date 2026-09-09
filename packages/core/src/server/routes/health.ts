@@ -1,3 +1,4 @@
+import { ACTIONDOCK_VERSION } from "../../version";
 import { verifyBearerToken } from "../security";
 import { type RouteContext, jsonResponse } from "./common";
 
@@ -27,7 +28,7 @@ export async function handleHealthRoute(ctx: RouteContext): Promise<Response | n
 
   const healthData: Record<string, unknown> = {
     status: "ok",
-    version: "2.0.0",
+    version: ACTIONDOCK_VERSION,
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
   };

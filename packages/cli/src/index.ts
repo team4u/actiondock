@@ -49,7 +49,14 @@ export async function main(argv: string[] = process.argv): Promise<number> {
   }
 }
 
-if ((import.meta as any).main) {
+import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
+
+const isDirectRun =
+  Boolean(process.argv[1]) &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (isDirectRun) {
   main().catch((err) => {
     console.error("Fatal error:", err);
     process.exitCode = 1;

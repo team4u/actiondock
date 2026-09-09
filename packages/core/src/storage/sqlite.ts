@@ -13,6 +13,61 @@ import type {
 } from "./types";
 
 /**
+ * 转义状态键分段中的特殊字符（\ 和 :）。
+ */
+export function escapeStateSegment(segment: string): string {
+  return segment.replace(/\\/g, "\\\\").replace(/:/g, "\\:");
+}
+
+/**
+ * 反转义状态键分段。
+ */
+export function unescapeStateSegment(segment: string): string {
+  return segment.replace(/\\(:|\\)/g, "$1");
+}
+
+/**
+ * 将 namespace 与 key 编码为无歧义的复合状态键名。
+ */
+export function encodeStateKey(namespace: string, key: string): string {
+  if (!namespace) {
+    return escapeStateSegment(key);
+  }
+  return `${escapeStateSegment(namespace)}:${escapeStateSegment(key)}`;
+}
+
+/**
+ * 解析复合状态键名。若复合键存在歧义（多个未转义冒号），抛出错误。
+ */
+export function decodeStateKey(fullKey: string): { namespace: string; key: string } {
+  const unescapedColonIndices: number[] = [];
+  for (let i = 0; i < fullKey.length; i++) {
+    if (fullKey[i] === ":") {
+      let backslashes = 0;
+      for (let j = i - 1; j >= 0 && fullKey[j] === "\\"; j--) {
+        backslashes++;
+      }
+      if (backslashes % 2 === 0) {
+        unescapedColonIndices.push(i);
+      }
+    }
+  }
+
+  if (unescapedColonIndices.length === 0) {
+    return { namespace: "", key: unescapeStateSegment(fullKey) };
+  }
+  if (unescapedColonIndices.length === 1) {
+    const idx = unescapedColonIndices[0];
+    return {
+      namespace: unescapeStateSegment(fullKey.slice(0, idx)),
+      key: unescapeStateSegment(fullKey.slice(idx + 1)),
+    };
+  }
+
+  throw new Error(`Ambiguous state key '${fullKey}': contains multiple unescaped colon delimiters`);
+}
+
+/**
  * 统一 SQLite 运行时存储实现。
  * 通过 SqliteDriver 抽象驱动，解耦底层具体运行时引擎（Node.js / Bun）。
  */
@@ -172,6 +227,30 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
         this.driver.exec("PRAGMA user_version = 3;");
       });
     }
+
+    // 重启恢复：将未正常结算的 running 状态自动收敛为 interrupted
+    this.recoverRunningRuns();
+  }
+
+  /**
+   * 重启恢复：将未正常结算的 running 状态自动收敛为 interrupted
+   */
+  public recoverRunningRuns(): number {
+    if (this.isClosed) return 0;
+    try {
+      const now = this.clock.now().toISOString();
+      const stmt = this.getStatement(`
+        UPDATE runs
+        SET status = 'interrupted',
+            finished_at = ?,
+            error_json = '{"code":"RUN_INTERRUPTED","message":"Execution interrupted by system shutdown or restart"}'
+        WHERE status = 'running'
+      `);
+      const res = stmt.run(now);
+      return res.changes;
+    } catch {
+      return 0;
+    }
   }
 
   /**
@@ -270,21 +349,63 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     }
   }
 
+  private findMatchingStateRows(targetKey: string): Array<{
+    namespace: string;
+    key: string;
+    value_json: string;
+    updated_at: string;
+    expires_at?: string;
+  }> {
+    let decoded: { namespace: string; key: string } | undefined;
+    try {
+      decoded = decodeStateKey(targetKey);
+    } catch {
+      // 键名包含多个未转义冒号
+    }
+
+    const candidateStmt = this.getStatement(`
+      SELECT namespace, key, value_json, updated_at, expires_at FROM state
+      WHERE package_id = ? AND (
+        (CASE WHEN ? IS NOT NULL THEN (namespace = ? AND key = ?) ELSE 0 END)
+        OR (CASE WHEN namespace = '' THEN key ELSE namespace || ':' || key END) = ?
+        OR key = ?
+      )
+    `);
+
+    const rawRows = candidateStmt.all<{
+      namespace: string;
+      key: string;
+      value_json: string;
+      updated_at: string;
+      expires_at?: string;
+    }>(
+      this.packageId,
+      decoded ? 1 : null,
+      decoded?.namespace ?? "",
+      decoded?.key ?? "",
+      targetKey,
+      targetKey
+    );
+
+    const now = this.clock.now().getTime();
+    const uniqueMap = new Map<string, (typeof rawRows)[0]>();
+    for (const r of rawRows) {
+      if (r.expires_at && now >= new Date(r.expires_at).getTime()) {
+        this.deleteState(r.namespace, r.key).catch(() => {});
+        continue;
+      }
+      uniqueMap.set(`${r.namespace}\0${r.key}`, r);
+    }
+
+    return Array.from(uniqueMap.values());
+  }
+
   async findState<T = unknown>(
     targetKey: string,
     namespace?: string
   ): Promise<StateEntry | undefined> {
-    let ns = namespace;
-    let actualKey = targetKey;
-
-    if (!ns && targetKey.includes(":")) {
-      const parts = targetKey.split(":");
-      ns = parts[0];
-      actualKey = parts.slice(1).join(":");
-    }
-
-    if (ns) {
-      const val = await this.getState<T>(ns, actualKey);
+    if (namespace !== undefined) {
+      const val = await this.getState<T>(namespace, targetKey);
       if (val === undefined) return undefined;
 
       const stmt = this.getStatement(
@@ -292,76 +413,47 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       );
       const row = stmt.get<{ updated_at: string; expires_at?: string }>(
         this.packageId,
-        ns,
-        actualKey
+        namespace,
+        targetKey
       );
 
       return {
         packageId: this.packageId,
-        namespace: ns,
-        key: actualKey,
-        fullKey: targetKey,
+        namespace,
+        key: targetKey,
+        fullKey: encodeStateKey(namespace, targetKey),
         value: val,
         updatedAt: row?.updated_at || this.clock.now().toISOString(),
         expiresAt: row?.expires_at,
       };
     }
 
-    const val = await this.getState<T>("", actualKey);
-    if (val !== undefined) {
-      const stmt = this.getStatement(
-        "SELECT updated_at, expires_at FROM state WHERE package_id = ? AND namespace = ? AND key = ?"
+    const matchingRows = this.findMatchingStateRows(targetKey);
+    if (matchingRows.length > 1) {
+      throw new Error(
+        `Ambiguous state key '${targetKey}': matches ${matchingRows.length} entries (${matchingRows.map((r) => `${r.namespace}:${r.key}`).join(", ")})`
       );
-      const row = stmt.get<{ updated_at: string; expires_at?: string }>(
-        this.packageId,
-        "",
-        actualKey
-      );
-      return {
-        packageId: this.packageId,
-        namespace: "",
-        key: actualKey,
-        fullKey: actualKey,
-        value: val,
-        updatedAt: row?.updated_at || this.clock.now().toISOString(),
-        expiresAt: row?.expires_at,
-      };
+    }
+    if (matchingRows.length === 0) {
+      return undefined;
     }
 
-    const stmt = this.getStatement(
-      "SELECT namespace, key, value_json, updated_at, expires_at FROM state WHERE package_id = ? AND key = ?"
-    );
-    const rows = stmt.all<{
-      namespace: string;
-      key: string;
-      value_json: string;
-      updated_at: string;
-      expires_at?: string;
-    }>(this.packageId, actualKey);
-
-    const now = this.clock.now().getTime();
-    for (const row of rows) {
-      if (row.expires_at && now >= new Date(row.expires_at).getTime()) {
-        continue;
-      }
-      let parsedVal: unknown;
-      try {
-        parsedVal = JSON.parse(row.value_json);
-      } catch {
-        parsedVal = row.value_json;
-      }
-      return {
-        packageId: this.packageId,
-        namespace: row.namespace,
-        key: row.key,
-        fullKey: row.namespace ? `${row.namespace}:${row.key}` : row.key,
-        value: parsedVal,
-        updatedAt: row.updated_at,
-        expiresAt: row.expires_at,
-      };
+    const row = matchingRows[0];
+    let parsedVal: unknown;
+    try {
+      parsedVal = JSON.parse(row.value_json);
+    } catch {
+      parsedVal = row.value_json;
     }
-
-    return undefined;
+    return {
+      packageId: this.packageId,
+      namespace: row.namespace,
+      key: row.key,
+      fullKey: encodeStateKey(row.namespace, row.key),
+      value: parsedVal as T,
+      updatedAt: row.updated_at,
+      expiresAt: row.expires_at,
+    };
   }
 
   async setState<T = unknown>(
@@ -399,27 +491,38 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
   }
 
   async deleteStateSmart(targetKey: string, namespace?: string): Promise<boolean> {
-    let ns = namespace;
-    let actualKey = targetKey;
-
-    if (!ns && targetKey.includes(":")) {
-      const parts = targetKey.split(":");
-      ns = parts[0];
-      actualKey = parts.slice(1).join(":");
+    if (namespace !== undefined) {
+      return this.deleteState(namespace, targetKey);
     }
 
-    if (ns !== undefined) {
-      return this.deleteState(ns, actualKey);
+    const matchingRows = this.findMatchingStateRows(targetKey);
+    if (matchingRows.length > 1) {
+      throw new Error(
+        `Ambiguous state key '${targetKey}': matches ${matchingRows.length} entries for deletion (${matchingRows.map((r) => `${r.namespace}:${r.key}`).join(", ")})`
+      );
+    }
+    if (matchingRows.length === 1) {
+      return this.deleteState(matchingRows[0].namespace, matchingRows[0].key);
     }
 
-    const deletedRoot = await this.deleteState("", actualKey);
-    if (deletedRoot) return true;
+    return this.deleteState("", targetKey);
+  }
 
-    const stmt = this.getStatement(
-      "DELETE FROM state WHERE package_id = ? AND key = ?"
-    );
-    const res = stmt.run(this.packageId, actualKey);
-    return res.changes > 0;
+  /**
+   * 清理已过期的状态记录
+   */
+  async cleanExpiredState(): Promise<number> {
+    if (this.isClosed) return 0;
+    try {
+      const now = this.clock.now().toISOString();
+      const stmt = this.getStatement(
+        "DELETE FROM state WHERE package_id = ? AND expires_at IS NOT NULL AND expires_at <= ?"
+      );
+      const res = stmt.run(this.packageId, now);
+      return res.changes;
+    } catch {
+      return 0;
+    }
   }
 
   async clearState(
@@ -448,6 +551,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     namespace?: string | null,
     prefix?: string
   ): Promise<string[]> {
+    await this.cleanExpiredState();
     let sql = "SELECT namespace, key, expires_at FROM state WHERE package_id = ?";
     const params: any[] = [this.packageId];
 
@@ -479,7 +583,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       if (namespace !== null && namespace !== undefined) {
         result.push(row.key);
       } else {
-        result.push(row.namespace ? `${row.namespace}:${row.key}` : row.key);
+        result.push(encodeStateKey(row.namespace, row.key));
       }
     }
 
@@ -489,6 +593,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
   async listStateEntries(
     options: { namespace?: string; prefix?: string } = {}
   ): Promise<StateEntry[]> {
+    await this.cleanExpiredState();
     let sql = "SELECT namespace, key, value_json, updated_at, expires_at FROM state WHERE package_id = ?";
     const params: any[] = [this.packageId];
 
@@ -531,7 +636,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
         packageId: this.packageId,
         namespace: row.namespace,
         key: row.key,
-        fullKey: row.namespace ? `${row.namespace}:${row.key}` : row.key,
+        fullKey: encodeStateKey(row.namespace, row.key),
         value: parsedVal,
         updatedAt: row.updated_at,
         expiresAt: row.expires_at,
@@ -570,14 +675,14 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       parentRunId,
       record.packageId || this.packageId,
       packageInstanceId,
-      record.actionId,
+      record.actionId ?? "",
       generationId,
       ownerId,
       record.status,
       inputJson,
       outputJson,
       errorJson,
-      record.startedAt,
+      record.startedAt || new Date().toISOString(),
       finishedAt,
       durationMs
     );
@@ -600,7 +705,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
               WHEN started_at IS NOT NULL THEN MAX(0, CAST(ROUND((julianday(?) - julianday(started_at)) * 86400000) AS INTEGER))
               ELSE NULL
             END
-        WHERE id = ?
+        WHERE id = ? AND status = 'running'
       `);
       stmt.run(
         status,

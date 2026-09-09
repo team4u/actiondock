@@ -1,8 +1,8 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import YAML from "yaml";
 import type { ActionDefinition } from "@actiondock/sdk";
@@ -49,6 +49,16 @@ export function findProjectRoot(cwd?: string): string | null {
   return null;
 }
 
+import {
+  PACKAGE_ID_REGEX,
+  assertPathWithinRoot,
+  assertWithinProjectRoot,
+  assertValidPackageId,
+} from "../utils";
+
+export const ACTION_ID_REGEX = /^[a-zA-Z0-9_.-]+$/;
+export const PLAYBOOK_ID_REGEX = /^[a-zA-Z0-9_.-]+$/;
+
 /**
  * 加载并校验指定目录下的 `actiondock.json` 配置文件。
  * 
@@ -64,8 +74,8 @@ export function loadProjectConfig(projectRoot: string): ProjectConfig {
   const content = readFileSync(configPath, "utf-8");
   try {
     const parsed = JSON.parse(content);
-    if (!parsed.id || typeof parsed.id !== "string") {
-      throw new Error("actiondock.json missing required 'id' field");
+    if (!parsed.id || typeof parsed.id !== "string" || !PACKAGE_ID_REGEX.test(parsed.id)) {
+      throw new Error(`actiondock.json invalid or missing 'id': '${parsed?.id}' (must match ${PACKAGE_ID_REGEX})`);
     }
     if (!parsed.name || typeof parsed.name !== "string") {
       parsed.name = parsed.id;
@@ -75,26 +85,34 @@ export function loadProjectConfig(projectRoot: string): ProjectConfig {
     }
     parsed.actionsDir = parsed.actionsDir || "actions";
     parsed.playbooksDir = parsed.playbooksDir || "playbooks";
+
+    assertWithinProjectRoot(projectRoot, parsed.actionsDir, "actionsDir");
+    assertWithinProjectRoot(projectRoot, parsed.playbooksDir, "playbooksDir");
+
     return parsed as ProjectConfig;
   } catch (err: any) {
     throw new Error(`Failed to parse actiondock.json: ${err.message}`);
   }
 }
 
+const ALLOWED_INSTALLERS = new Set(["pnpm", "npm", "yarn", "bun"]);
+
 /**
  * 探测宿主系统中可用的包管理工具。
  * 优先级：
- * 1. 环境变量 ACTIONDOCK_INSTALLER 显式指定；
+ * 1. 环境变量 ACTIONDOCK_INSTALLER 显式指定（严格白名单校验：pnpm, npm, yarn, bun）；
  * 2. 依据项目根目录下现存的锁文件进行精确匹配（pnpm-lock.yaml -> pnpm, bun.lock/bun.lockb -> bun, yarn.lock -> yarn, package-lock.json -> npm）；
  * 3. 候选回退优先级探测（pnpm > npm > yarn > bun）。
- *
- * 探测必须经 shell 执行：Windows 下 npm/pnpm/yarn 均为 .cmd 垫片，
- * 不经 shell 的 spawnSync 无法解析，将错误地回退到原生 exe 的 bun。
  */
 function getInstallCommand(projectRoot?: string): string[] {
   const preferred = process.env.ACTIONDOCK_INSTALLER?.trim();
   if (preferred) {
-    return [preferred, "install"];
+    if (ALLOWED_INSTALLERS.has(preferred)) {
+      return [preferred, "install"];
+    }
+    process.stderr.write(
+      `[actiondock] Warning: Ignored unsupported or invalid ACTIONDOCK_INSTALLER '${preferred}'. Allowed values: pnpm, npm, yarn, bun.\n`
+    );
   }
 
   if (projectRoot) {
@@ -109,9 +127,9 @@ function getInstallCommand(projectRoot?: string): string[] {
     for (const [lockFile, pm] of lockfileMap) {
       if (existsSync(join(projectRoot, lockFile))) {
         try {
-          const check = spawnSync(`${pm} --version`, {
+          const check = spawnSync(pm, ["--version"], {
             stdio: "pipe",
-            shell: true,
+            shell: false,
           });
           if (check.status === 0) {
             return [pm, "install"];
@@ -131,9 +149,9 @@ function getInstallCommand(projectRoot?: string): string[] {
   ];
   for (const [pm, action] of candidates) {
     try {
-      const check = spawnSync(`${pm} --version`, {
+      const check = spawnSync(pm, ["--version"], {
         stdio: "pipe",
-        shell: true,
+        shell: false,
       });
       if (check.status === 0) {
         return [pm, action];
@@ -348,11 +366,11 @@ export function ensureProjectDependencies(projectRoot: string, force = false): b
       childEnv.NODE_TLS_REJECT_UNAUTHORIZED = "0";
     }
 
-    // shell 模式下须传入单一命令字符串；候选命令均来自内置白名单，无注入面
-    const proc = spawnSync(installCmd.join(" "), {
+    // 严禁 shell 字符串拼接，直接传入指令与参数数组，Windows 下按需开启平台兼容 shell
+    const proc = spawnSync(installCmd[0], installCmd.slice(1), {
       cwd: projectRoot,
       stdio: "pipe",
-      shell: true,
+      shell: process.platform === "win32",
       env: childEnv,
     });
 
@@ -480,6 +498,11 @@ export async function loadActions(
 
       const action = imported.default || imported.action;
       if (action && typeof action === "object" && typeof action.id === "string") {
+        if (!ACTION_ID_REGEX.test(action.id)) {
+          throw new Error(
+            `Invalid action ID '${action.id}' found in ${file}. Action IDs must match ${ACTION_ID_REGEX}`
+          );
+        }
         if (actions.has(action.id)) {
           throw new Error(
             `Duplicate action ID '${action.id}' found in ${file} (previously loaded)`
@@ -551,6 +574,11 @@ export async function loadActionFileMap(
 
       const act = imported.default || imported.action;
       if (act && typeof act === "object" && typeof act.id === "string") {
+        if (!ACTION_ID_REGEX.test(act.id)) {
+          throw new Error(
+            `Invalid action ID '${act.id}' found in ${file}. Action IDs must match ${ACTION_ID_REGEX}`
+          );
+        }
         if (map.has(act.id)) {
           throw new Error(
             `Duplicate action ID '${act.id}' found in ${file} (previously loaded from ${map.get(act.id)!.filePath})`
@@ -612,9 +640,13 @@ export function parsePlaybookContent(
 
   const filename = basename(filePath.replace(/\\/g, "/"));
   const defaultId = filename.replace(/\.md$/, "");
+  const playbookId = frontmatter.id || defaultId;
+  if (!PLAYBOOK_ID_REGEX.test(playbookId)) {
+    throw new Error(`Invalid playbook ID '${playbookId}' found in ${filePath}. Playbook IDs must match ${PLAYBOOK_ID_REGEX}`);
+  }
 
   return {
-    id: frontmatter.id || defaultId,
+    id: playbookId,
     description: frontmatter.description,
     actions: Array.isArray(frontmatter.actions) ? frontmatter.actions : [],
     content: body.trim(),

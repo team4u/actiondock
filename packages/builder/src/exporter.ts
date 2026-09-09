@@ -1,6 +1,7 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import {
+  ACTIONDOCK_VERSION,
   generateCompositeSkillMd,
   generateSourceSkillMd,
   generateStandaloneEntrypoint,
@@ -12,10 +13,69 @@ import {
   type CompositeSkillPackageInfo,
   type ProjectConfig,
 } from "@actiondock/core";
-import { createTarGzArchive, createZipArchive } from "./archive";
+import { createTarGzArchiveAsync, createZipArchiveAsync } from "./archive";
 import { BunCompiler } from "./compiler";
 import { BuilderError } from "./errors";
 import { BuildPlanner } from "./planner";
+
+/**
+ * 跨文件系统/分区的原子移动目录辅助函数（处理 EXDEV 错误）。
+ */
+function moveDirAtomic(src: string, dest: string): void {
+  try {
+    renameSync(src, dest);
+  } catch (err: any) {
+    if (err?.code === "EXDEV") {
+      cpSync(src, dest, { recursive: true });
+      rmSync(src, { recursive: true, force: true });
+    } else {
+      throw err;
+    }
+  }
+}
+
+/**
+ * 解析 workspace: 依赖的真实版本号。
+ */
+function resolveWorkspaceDepVersion(root: string, depName: string, ver: string): string {
+  if (depName.startsWith("@actiondock/")) {
+    return `^${ACTIONDOCK_VERSION}`;
+  }
+
+  const stripped = ver.replace(/^workspace:/, "").trim();
+  // 若已指定明确版本号前缀约束（如 workspace:^1.2.0, workspace:~2.0.0, workspace:1.0.0）
+  if (stripped && stripped !== "*" && stripped !== "^" && stripped !== "~") {
+    return stripped;
+  }
+
+  // 尝试从 node_modules 或父工作区包中检索真实版本号
+  const candidates = [
+    resolve(root, "node_modules", depName, "package.json"),
+    resolve(root, "packages", depName, "package.json"),
+    resolve(root, "packages", depName.split("/").pop()!, "package.json"),
+    resolve(root, "..", depName, "package.json"),
+    resolve(root, "..", depName.split("/").pop()!, "package.json"),
+    resolve(root, "..", "packages", depName, "package.json"),
+    resolve(root, "..", "packages", depName.split("/").pop()!, "package.json"),
+    resolve(root, "..", "..", "packages", depName, "package.json"),
+    resolve(root, "..", "..", "packages", depName.split("/").pop()!, "package.json"),
+  ];
+
+  for (const cand of candidates) {
+    if (existsSync(cand)) {
+      try {
+        const pkgData = JSON.parse(readFileSync(cand, "utf-8"));
+        if (pkgData.version) {
+          const prefix = stripped === "~" ? "~" : "^";
+          return `${prefix}${pkgData.version}`;
+        }
+      } catch {}
+    }
+  }
+
+  return "*";
+}
+
 import type {
   ArchiveFormat,
   BatchSkillExportOptions,
@@ -48,13 +108,13 @@ function scanRelativeFiles(dir: string, baseDir = dir): string[] {
 /**
  * 执行归档压缩操作（支持 .zip 与 .tar.gz）。
  *
- * 归档在进程内完成（见 archive.ts），不依赖宿主机的 zip / tar 命令行工具，
+ * 归档在进程内流式完成（见 archive.ts），不依赖宿主机的 zip / tar 命令行工具，
  * 保证 Windows 与最小化 Linux 环境下行为一致。
  */
-function createArchive(
+async function createArchive(
   skillDir: string,
   format: ArchiveFormat
-): string {
+): Promise<string> {
   const parentDir = dirname(skillDir);
   const folderName = basename(skillDir);
   const archiveName = `${folderName}.${format === "tar.gz" ? "tar.gz" : "zip"}`;
@@ -66,9 +126,9 @@ function createArchive(
 
   try {
     if (format === "tar.gz") {
-      createTarGzArchive(skillDir, archivePath);
+      await createTarGzArchiveAsync(skillDir, archivePath);
     } else {
-      createZipArchive(skillDir, archivePath);
+      await createZipArchiveAsync(skillDir, archivePath);
     }
   } catch (err: any) {
     throw new BuilderError(`Failed to create ${format} archive: ${err?.message || String(err)}`);
@@ -207,16 +267,24 @@ export class SkillExporter {
     const targetSuffix = mode === "standalone" && target !== "host" && target !== "bun" ? `-${target}` : "";
     const defaultFolderName = `${pkgSlug}-skill${targetSuffix}`;
     const defaultSkillDir = join(root, "dist", defaultFolderName);
-    const skillDir = resolve(options.outDir || defaultSkillDir);
+    const targetSkillDir = resolve(options.outDir || defaultSkillDir);
+    const parentDir = dirname(targetSkillDir);
+    mkdirSync(parentDir, { recursive: true });
 
-    mkdirSync(skillDir, { recursive: true });
+    const stagingDir = join(
+      parentDir,
+      `.tmp-${basename(targetSkillDir)}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    );
+    mkdirSync(stagingDir, { recursive: true });
 
     const actionsDir = plan.actionsDir || "actions";
     const playbooksDir = plan.playbooksDir || "playbooks";
-    const playbooksDestDir = join(skillDir, playbooksDir);
+    const playbooksDestDir = join(stagingDir, playbooksDir);
     if (plan.playbooks.length > 0) {
       mkdirSync(playbooksDestDir, { recursive: true });
     }
+
+    const skillDir = stagingDir;
 
     const configForTemplates: ProjectConfig = {
       id: plan.packageId,
@@ -230,7 +298,8 @@ export class SkillExporter {
 
     let usedExistingSkillMd: string | undefined;
 
-    if (mode === "source") {
+    try {
+      if (mode === "source") {
       // ----------------------------------------------------
       // 源码 Skill 导出 (Source Skill Export)
       // 优先复用当前动作目录下已有的 SKILL.md；若不存在且未显式跳过，则动态生成
@@ -301,6 +370,30 @@ export class SkillExporter {
 
       // - 导出 package.json
       const projectPkgPath = join(root, "package.json");
+      const sanitizeDependencies = (deps?: Record<string, string>): Record<string, string> => {
+        const result: Record<string, string> = {};
+        if (deps && typeof deps === "object") {
+          for (const [k, v] of Object.entries(deps)) {
+            const verStr = String(v);
+            // 排除 file: 依赖
+            if (verStr.startsWith("file:")) {
+              continue;
+            }
+            if (k.startsWith("@actiondock/")) {
+              result[k] = `^${ACTIONDOCK_VERSION}`;
+            } else if (verStr.startsWith("workspace:")) {
+              result[k] = resolveWorkspaceDepVersion(root, k, verStr);
+            } else {
+              result[k] = verStr;
+            }
+          }
+        }
+        if (!result["@actiondock/sdk"]) {
+          result["@actiondock/sdk"] = `^${ACTIONDOCK_VERSION}`;
+        }
+        return result;
+      };
+
       let exportedPkg: any;
       if (existsSync(projectPkgPath)) {
         try {
@@ -311,10 +404,7 @@ export class SkillExporter {
             version: plan.version || parsed.version || "0.1.0",
             description: plan.description || parsed.description,
             type: "module",
-            dependencies: parsed.dependencies || {
-              "@actiondock/sdk": "^2.0.0",
-            },
-            devDependencies: parsed.devDependencies,
+            dependencies: sanitizeDependencies(parsed.dependencies),
           };
         } catch {
           exportedPkg = {
@@ -322,7 +412,7 @@ export class SkillExporter {
             version: plan.version,
             description: plan.description,
             type: "module",
-            dependencies: { "@actiondock/sdk": "^2.0.0" },
+            dependencies: { "@actiondock/sdk": `^${ACTIONDOCK_VERSION}` },
           };
         }
       } else {
@@ -331,7 +421,7 @@ export class SkillExporter {
           version: plan.version,
           description: plan.description,
           type: "module",
-          dependencies: { "@actiondock/sdk": "^2.0.0" },
+          dependencies: { "@actiondock/sdk": `^${ACTIONDOCK_VERSION}` },
         };
       }
       writeFileSync(
@@ -456,6 +546,26 @@ export class SkillExporter {
           copyFileSync(dep.resolvedPath, destAsset);
         }
       }
+      }
+
+      // 原子替换目标目录
+      if (existsSync(targetSkillDir)) {
+        const backupDir = `${targetSkillDir}.old-${Date.now()}`;
+        try {
+          moveDirAtomic(targetSkillDir, backupDir);
+          moveDirAtomic(stagingDir, targetSkillDir);
+          rmSync(backupDir, { recursive: true, force: true });
+        } catch {
+          rmSync(targetSkillDir, { recursive: true, force: true });
+          moveDirAtomic(stagingDir, targetSkillDir);
+        }
+      } else {
+        moveDirAtomic(stagingDir, targetSkillDir);
+      }
+    } finally {
+      if (existsSync(stagingDir)) {
+        rmSync(stagingDir, { recursive: true, force: true });
+      }
     }
 
     // 归档压缩处理
@@ -467,17 +577,17 @@ export class SkillExporter {
       } else if (options.archiveFormat === "zip" || options.archive === "zip") {
         format = "zip";
       }
-      archivePath = createArchive(skillDir, format);
+      archivePath = await createArchive(targetSkillDir, format);
     }
 
-    const files = scanRelativeFiles(skillDir);
+    const files = scanRelativeFiles(targetSkillDir);
 
     return {
       packageId: plan.packageId,
       version: plan.version,
       mode,
       target,
-      skillDir,
+      skillDir: targetSkillDir,
       archivePath,
       actionsCount: plan.actions.length,
       playbooksCount: plan.playbooks.length,
@@ -551,67 +661,138 @@ export class SkillExporter {
 
     const bundleSlug = getPackageSlug(options.bundleName);
     const defaultSkillDir = join(process.cwd(), "dist", `${bundleSlug}-skill`);
-    const skillDir = resolve(options.outDir || defaultSkillDir);
+    const targetSkillDir = resolve(options.outDir || defaultSkillDir);
+    const parentDir = dirname(targetSkillDir);
+    mkdirSync(parentDir, { recursive: true });
 
-    mkdirSync(skillDir, { recursive: true });
-    const packagesDestDir = join(skillDir, "packages");
+    const stagingDir = join(
+      parentDir,
+      `.tmp-composite-${bundleSlug}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    );
+    mkdirSync(stagingDir, { recursive: true });
+    const packagesDestDir = join(stagingDir, "packages");
     mkdirSync(packagesDestDir, { recursive: true });
 
     const packageInfos: CompositeSkillPackageInfo[] = [];
     const packageSummaries: Array<{ packageId: string; actions: string[]; playbooks: string[] }> = [];
 
-    const usedDirNames = new Set<string>();
-    for (const projectRoot of options.projectRoots) {
-      const config = loadProjectConfig(projectRoot);
-      let pkgSlug = getPackageSlug(config.id);
-      if (usedDirNames.has(pkgSlug)) {
-        pkgSlug = config.id.replace(/[^a-zA-Z0-9-_]/g, "-").replace(/^-+|-+$/g, "");
+    try {
+      const usedDirNames = new Set<string>();
+      for (const projectRoot of options.projectRoots) {
+        const config = loadProjectConfig(projectRoot);
+        let pkgSlug = getPackageSlug(config.id);
+        if (usedDirNames.has(pkgSlug)) {
+          pkgSlug = config.id.replace(/[^a-zA-Z0-9-_]/g, "-").replace(/^-+|-+$/g, "");
+        }
+        usedDirNames.add(pkgSlug);
+
+        const destPkgDir = join(packagesDestDir, pkgSlug);
+
+        const singleExport = await this.export({
+          projectRoot,
+          outDir: destPkgDir,
+          archive: false,
+          skipSkillMd: true,
+        });
+
+        const manifest = loadManifest(destPkgDir) || loadManifest(projectRoot);
+        const playbooks = loadPlaybooks(projectRoot, config.playbooksDir);
+
+        const actionEntries = singleExport.actions.map((actId) => ({
+          id: actId,
+          description: manifest?.actions?.[actId]?.description,
+        }));
+
+        packageInfos.push({
+          config,
+          actions: actionEntries,
+          playbooks: Array.from(playbooks.values()),
+          packageDir: pkgSlug,
+        });
+
+        packageSummaries.push({
+          packageId: config.id,
+          actions: singleExport.actions,
+          playbooks: singleExport.playbooks,
+        });
       }
-      usedDirNames.add(pkgSlug);
 
-      const destPkgDir = join(packagesDestDir, pkgSlug);
-
-      const singleExport = await this.export({
-        projectRoot,
-        outDir: destPkgDir,
-        archive: false,
-        skipSkillMd: true,
-      });
-
-      const manifest = loadManifest(destPkgDir) || loadManifest(projectRoot);
-      const playbooks = loadPlaybooks(projectRoot, config.playbooksDir);
-
-      const actionEntries = singleExport.actions.map((actId) => ({
-        id: actId,
-        description: manifest?.actions?.[actId]?.description,
-      }));
-
-      packageInfos.push({
-        config,
-        actions: actionEntries,
-        playbooks: Array.from(playbooks.values()),
-        packageDir: pkgSlug,
-      });
-
-      packageSummaries.push({
-        packageId: config.id,
-        actions: singleExport.actions,
-        playbooks: singleExport.playbooks,
-      });
-    }
-
-    const existingSkillPath = findExistingCompositeSkillMd(options);
-    if (existingSkillPath) {
-      const destSkillMdPath = join(skillDir, "SKILL.md");
-      if (resolve(existingSkillPath) !== resolve(destSkillMdPath)) {
-        copyFileSync(existingSkillPath, destSkillMdPath);
+      const existingSkillPath = findExistingCompositeSkillMd(options);
+      if (existingSkillPath) {
+        const destSkillMdPath = join(stagingDir, "SKILL.md");
+        if (resolve(existingSkillPath) !== resolve(destSkillMdPath)) {
+          copyFileSync(existingSkillPath, destSkillMdPath);
+        }
+      } else {
+        const description =
+          options.description ||
+          `ActionDock 复合技能套件，聚合 ${packageInfos.map((p) => p.config.name).join("、")}`;
+        const compositeSkillMd = generateCompositeSkillMd(options.bundleName, description, packageInfos);
+        writeFileSync(join(stagingDir, "SKILL.md"), compositeSkillMd, "utf-8");
       }
-    } else {
-      const description =
-        options.description ||
-        `ActionDock 复合技能套件，聚合 ${packageInfos.map((p) => p.config.name).join("、")}`;
-      const compositeSkillMd = generateCompositeSkillMd(options.bundleName, description, packageInfos);
-      writeFileSync(join(skillDir, "SKILL.md"), compositeSkillMd, "utf-8");
+
+      // 聚合所有子包依赖生成复合根目录 package.json
+      const aggregatedDeps: Record<string, string> = {
+        "@actiondock/sdk": `^${ACTIONDOCK_VERSION}`,
+      };
+      for (const info of packageInfos) {
+        const pkgJsonPath = join(packagesDestDir, info.packageDir, "package.json");
+        if (existsSync(pkgJsonPath)) {
+          try {
+            const raw = readFileSync(pkgJsonPath, "utf-8");
+            const parsed = JSON.parse(raw);
+            if (parsed.dependencies && typeof parsed.dependencies === "object") {
+              for (const [dep, ver] of Object.entries(parsed.dependencies)) {
+                const verStr = String(ver);
+                if (verStr.startsWith("file:")) {
+                  continue;
+                }
+                if (dep.startsWith("@actiondock/")) {
+                  aggregatedDeps[dep] = `^${ACTIONDOCK_VERSION}`;
+                } else if (verStr.startsWith("workspace:")) {
+                  aggregatedDeps[dep] = resolveWorkspaceDepVersion(join(packagesDestDir, info.packageDir), dep, verStr);
+                } else {
+                  aggregatedDeps[dep] = verStr;
+                }
+              }
+            }
+          } catch {}
+        }
+      }
+      writeFileSync(
+        join(stagingDir, "package.json"),
+        JSON.stringify(
+          {
+            name: bundleSlug,
+            version: "1.0.0",
+            description: options.description || "Composite ActionDock Skill bundle",
+            type: "module",
+            dependencies: aggregatedDeps,
+          },
+          null,
+          2
+        ) + "\n",
+        "utf-8"
+      );
+
+      // 原子替换目标目录
+      if (existsSync(targetSkillDir)) {
+        const backupDir = `${targetSkillDir}.old-${Date.now()}`;
+        try {
+          moveDirAtomic(targetSkillDir, backupDir);
+          moveDirAtomic(stagingDir, targetSkillDir);
+          rmSync(backupDir, { recursive: true, force: true });
+        } catch {
+          rmSync(targetSkillDir, { recursive: true, force: true });
+          moveDirAtomic(stagingDir, targetSkillDir);
+        }
+      } else {
+        moveDirAtomic(stagingDir, targetSkillDir);
+      }
+    } finally {
+      if (existsSync(stagingDir)) {
+        rmSync(stagingDir, { recursive: true, force: true });
+      }
     }
 
     let archivePath: string | undefined;
@@ -622,23 +803,23 @@ export class SkillExporter {
       } else if (options.archiveFormat === "zip" || options.archive === "zip") {
         format = "zip";
       }
-      archivePath = createArchive(skillDir, format);
+      archivePath = await createArchive(targetSkillDir, format);
     }
 
-    const files = scanRelativeFiles(skillDir);
+    const files = scanRelativeFiles(targetSkillDir);
     const totalActions = packageSummaries.reduce((sum, p) => sum + p.actions.length, 0);
     const totalPlaybooks = packageSummaries.reduce((sum, p) => sum + p.playbooks.length, 0);
 
     return {
       bundleName: options.bundleName,
-      skillDir,
+      skillDir: targetSkillDir,
       archivePath,
       packagesCount: packageInfos.length,
       actionsCount: totalActions,
       playbooksCount: totalPlaybooks,
       packages: packageSummaries,
       files,
-      usedExistingSkillMd: existingSkillPath,
+      usedExistingSkillMd: findExistingCompositeSkillMd(options),
     };
   }
 

@@ -2,7 +2,9 @@ import { createServer as createNodeHttpServer, type IncomingMessage, type Server
 import { resolve } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { ensureDependencyClosure } from "../project/closure";
 import { findProjectRoot } from "../project/loader";
+import { listLinkedPackages, resolvePackageRoot } from "../registry/registry";
 import {
   handleActionsRoutes,
   handleConfigRoutes,
@@ -31,13 +33,17 @@ export function setHttpServerFactory(factory: CoreHttpServerFactory): void {
 /**
  * 根据当前运行时环境启动标准 Web Request/Response 兼容的 HTTP 服务。
  */
-export function launchHttpServer(
+export async function launchHttpServer(
   port: number,
   host: string,
   fetchHandler: (req: Request) => Promise<Response>
-): CoreHttpServerInstance {
+): Promise<CoreHttpServerInstance> {
   if (customHttpServerFactory) {
-    return customHttpServerFactory({ port, host, fetch: fetchHandler }) as CoreHttpServerInstance;
+    const srv = await customHttpServerFactory({ port, host, fetch: fetchHandler });
+    if (srv.ready) {
+      await srv.ready;
+    }
+    return srv;
   }
 
   // 若处于原生 Bun 运行时
@@ -49,7 +55,10 @@ export function launchHttpServer(
     });
     return {
       port: bunServer.port,
-      stop: (closeActive?: boolean) => bunServer.stop(closeActive),
+      ready: Promise.resolve(),
+      stop: async (closeActive?: boolean) => {
+        bunServer.stop(closeActive);
+      },
     };
   }
 
@@ -100,17 +109,31 @@ export function launchHttpServer(
     }
   });
 
-  srv.listen(port, host);
-  const addr = srv.address();
-  const actualPort = typeof addr === "object" && addr ? addr.port : port;
-
-  return {
-    port: actualPort,
-    stop: () => {
-      srv.close();
-      (srv as any).closeAllConnections?.();
+  const instance: CoreHttpServerInstance = {
+    port,
+    stop: async () => {
+      await new Promise<void>((resolve) => {
+        srv.close(() => resolve());
+        (srv as any).closeAllConnections?.();
+      });
     },
   };
+
+  await new Promise<void>((resolve, reject) => {
+    srv.once("error", (err) => {
+      reject(err);
+    });
+    srv.listen(port, host, () => {
+      const addr = srv.address();
+      if (typeof addr === "object" && addr) {
+        instance.port = addr.port;
+      }
+      resolve();
+    });
+  });
+
+  instance.ready = Promise.resolve();
+  return instance;
 }
 
 /**
@@ -118,9 +141,9 @@ export function launchHttpServer(
  * 
  * 仅负责中间件流转、认证拦截、路由分发与服务生命周期管理。
  */
-export function startActionDockServer(
+export async function startActionDockServer(
   options: ServerOptions = {}
-): ActionDockServerInstance {
+): Promise<ActionDockServerInstance> {
   const port = options.port ?? 5177;
   const host = options.host ?? "127.0.0.1";
   const token = options.token;
@@ -136,9 +159,32 @@ export function startActionDockServer(
     );
   }
 
-  const runtimeRegistry = new ServerRuntimeRegistry();
+  const runtimeRegistry = new ServerRuntimeRegistry(customHome);
 
-  const server = launchHttpServer(port, host, async (req) => {
+  const roots: string[] = [];
+  if (projectRoot) {
+    roots.push(projectRoot);
+  }
+  if (options.packageAllowlist && options.packageAllowlist.length > 0) {
+    for (const pkgId of options.packageAllowlist) {
+      const r = resolvePackageRoot(pkgId, projectRoot || undefined, customHome);
+      if (r && !roots.includes(r)) {
+        roots.push(r);
+      }
+    }
+  } else if (!projectRoot) {
+    for (const pkg of listLinkedPackages(customHome)) {
+      if (!roots.includes(pkg.path)) {
+        roots.push(pkg.path);
+      }
+    }
+  }
+
+  if (roots.length > 0) {
+    await ensureDependencyClosure(roots, { customHome });
+  }
+
+  const server = await launchHttpServer(port, host, async (req) => {
     const origin = req.headers.get("origin");
     const corsHeaders = resolveCorsHeaders(origin, options.corsOrigins);
 
@@ -236,16 +282,25 @@ export function startActionDockServer(
   });
 
   const actualHost = host === "0.0.0.0" ? "127.0.0.1" : host;
-  const url = `http://${actualHost}:${server.port}`;
 
-  return {
-    port: server.port ?? port,
+  const instance: ActionDockServerInstance = {
+    get port() {
+      return server.port ?? port;
+    },
+    set port(val: number) {
+      server.port = val;
+    },
     host,
-    url,
+    get url() {
+      return `http://${actualHost}:${this.port}`;
+    },
     runtimeRegistry,
-    stop: () => {
-      runtimeRegistry.close();
-      server.stop(true);
+    ready: Promise.resolve(),
+    stop: async (stopOptions?: { graceMs?: number }) => {
+      await runtimeRegistry.close(stopOptions);
+      await server.stop(true);
     },
   };
+
+  return instance;
 }

@@ -12,7 +12,12 @@ export class ActionIndex {
 
   private indexSnapshot(snapshot: CatalogSnapshot): void {
     for (const [packageId, pkg] of snapshot.packages) {
-      const manifest = loadManifest(pkg.projectRoot);
+      let manifest = null;
+      try {
+        manifest = loadManifest(pkg.projectRoot);
+      } catch {
+        // Skip invalid manifest during catalog indexing
+      }
       if (manifest && manifest.actions) {
         for (const [actionId, item] of Object.entries(manifest.actions)) {
           const indexed: IndexedAction = {

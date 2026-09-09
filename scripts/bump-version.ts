@@ -143,6 +143,14 @@ function main() {
   writeFileSync(programTsPath, programTs);
   console.log("Updated packages/runtime-cli/src/program.ts");
 
+  // 3.5 packages/core/src/version.ts
+  const coreVersionTsPath = join(rootDir, "packages", "core", "src", "version.ts");
+  writeFileSync(
+    coreVersionTsPath,
+    `/**\n * ActionDock 核心版本号单一事实源。\n */\nexport const ACTIONDOCK_VERSION = "${targetVersion}";\n`
+  );
+  console.log("Updated packages/core/src/version.ts");
+
   // 4. Update lockfile
   console.log("Updating lockfile via bun install...");
   const installRes = spawnSync("bun", ["install"], {

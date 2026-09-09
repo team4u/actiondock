@@ -24,7 +24,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
 
       if (projectRoot) {
         const config = loadProjectConfig(projectRoot);
-        const actions = await loadActions(projectRoot, config.actionsDir);
+        const actions = await loadActions(projectRoot, config.actionsDir, { autoInstall: false });
         for (const [id, a] of actions.entries()) {
           actionList.push({
             id,
@@ -40,7 +40,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
         if (!existsSync(pkg.path)) continue;
         try {
           const config = loadProjectConfig(pkg.path);
-          const actions = await loadActions(pkg.path, config.actionsDir);
+          const actions = await loadActions(pkg.path, config.actionsDir, { autoInstall: false });
           for (const [id, a] of actions.entries()) {
             actionList.push({
               id,
@@ -93,7 +93,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
         customHome
       );
       const config = loadProjectConfig(resolved.projectRoot);
-      const actions = await loadActions(resolved.projectRoot, config.actionsDir);
+      const actions = await loadActions(resolved.projectRoot, config.actionsDir, { autoInstall: false });
       const action = actions.get(resolved.actionId);
       if (!action) {
         return jsonResponse(
@@ -180,18 +180,30 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
         customHome
       );
       const config = loadProjectConfig(resolved.projectRoot);
-      const actions = await loadActions(resolved.projectRoot, config.actionsDir);
-      const storage = runtimeRegistry.getStorage(config.id, resolved.projectRoot);
 
-      const runner = new ActionRunner({
-        packageId: config.id,
-        projectRoot: resolved.projectRoot,
-        storage,
-        globalStorage: runtimeRegistry.getGlobalStorage(customHome),
-        projectConfig: config,
-        configOverrides: body?.config || {},
-        actions,
-      });
+      // 校验 Package 允许列表（若配置白名单限制）
+      if (options.packageAllowlist && options.packageAllowlist.length > 0) {
+        if (!options.packageAllowlist.includes(config.id)) {
+          return jsonResponse(
+            {
+              ok: false,
+              runId: randomUUID(),
+              error: {
+                code: "PACKAGE_FORBIDDEN",
+                message: `Package '${config.id}' is not in the allowed package list`,
+              },
+            },
+            403,
+            corsHeaders
+          );
+        }
+      }
+
+      const actions = await loadActions(resolved.projectRoot, config.actionsDir, { autoInstall: false });
+      const executionService = runtimeRegistry.getExecutionService(config.id, resolved.projectRoot, config);
+      for (const a of actions.values()) {
+        executionService.registerAction(a);
+      }
 
       const isAsync = body?.execution?.mode === "async" || body?.async === true;
       const timeoutMs =
@@ -199,36 +211,23 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
           ? body.execution.timeoutMs
           : undefined;
 
-      if (isAsync) {
-        const handle = runner.start(resolved.actionId, body?.input || {}, {
-          timeoutMs,
-        });
-        runtimeRegistry.executionManager.register(handle);
+      // 严格保留 body.input 为 false、0、"" 或 null 的合法值，仅在 undefined 时使用空对象
+      const input = body && "input" in body ? body.input : {};
+      const configOverrides = body?.config;
 
-        // 监听结算以广播 SSE 完成事件
-        handle.result
-          .then((res) => {
-            runtimeRegistry.emit(handle.runId, { type: "finish", data: res });
-          })
-          .catch((err) => {
-            runtimeRegistry.emit(handle.runId, {
-              type: "finish",
-              data: {
-                ok: false,
-                error: {
-                  code: "ACTION_EXECUTION_ERROR",
-                  message: err?.message || String(err),
-                },
-              },
-            });
-          });
+      if (isAsync) {
+        const ticket = await executionService.start(
+          { packageId: config.id, actionId: resolved.actionId },
+          input,
+          { timeoutMs, config: configOverrides }
+        );
 
         return jsonResponse(
           {
             ok: true,
-            runId: handle.runId,
-            status: "running",
-            streamUrl: `/api/v1/runs/${handle.runId}/stream`,
+            runId: ticket.runId,
+            status: ticket.status,
+            streamUrl: `/api/v1/runs/${ticket.runId}/stream`,
           },
           202,
           corsHeaders
@@ -236,12 +235,15 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
       }
 
       // 同步执行模式
-      const handle = runner.start(resolved.actionId, body?.input || {}, {
-        signal: req.signal,
-        timeoutMs,
-      });
-      runtimeRegistry.executionManager.register(handle);
-      const result = await handle.result;
+      const result = await executionService.execute(
+        { packageId: config.id, actionId: resolved.actionId },
+        input,
+        {
+          signal: req.signal,
+          timeoutMs,
+          config: configOverrides,
+        }
+      );
 
       return jsonResponse(result, 200, corsHeaders);
     } catch (err: any) {

@@ -39,6 +39,11 @@ if (!isBun && !hasTsx) {
   process.exit(res.status ?? (res.signal ? 1 : 0));
 }
 
-const { main } = await import("../src/index.ts");
+let main;
+try {
+  ({ main } = await import("../dist/index.js"));
+} catch {
+  ({ main } = await import("../src/index.ts"));
+}
 await main(process.argv);
 

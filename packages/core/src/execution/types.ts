@@ -3,6 +3,9 @@ import type {
   ExecutionEvent,
   ExecutionResult,
   JsonValue,
+  Logger,
+  ProcessAPI,
+  ProgressReporter,
   RunRecord,
   RunStatus,
 } from "@actiondock/sdk";
@@ -17,6 +20,18 @@ export interface ExecuteOptions {
   timeoutMs?: number;
   /** 配置临时覆盖字典 */
   config?: Record<string, JsonValue>;
+  /** 父运行 ID */
+  parentRunId?: string;
+  /** 根运行 ID */
+  rootRunId?: string;
+  /** 最大调用嵌套深度限制 */
+  maxCallDepth?: number;
+  /** 外部日志注入 */
+  logger?: Logger;
+  /** 外部进度报告器注入 */
+  progress?: ProgressReporter;
+  /** 外部进程执行器注入 */
+  process?: ProcessAPI;
 }
 
 /**
@@ -27,6 +42,8 @@ export interface ExecutionTicket {
   runId: string;
   /** 当前状态 */
   status: RunStatus;
+  /** 任务终态结果 Promise（用于需要异步等待执行结果的场景） */
+  result?: Promise<ExecutionResult>;
 }
 
 /**
@@ -44,14 +61,14 @@ export type CancelResult =
 export interface ExecutionService {
   /** 同步执行 Action 并等待终态结果 */
   execute(
-    ref: ActionRef,
+    ref: ActionRef | string,
     input: JsonValue,
     options?: ExecuteOptions
   ): Promise<ExecutionResult>;
 
   /** 异步启动 Action 并立即返回任务票据 */
   start(
-    ref: ActionRef,
+    ref: ActionRef | string,
     input: JsonValue,
     options?: ExecuteOptions
   ): Promise<ExecutionTicket>;

@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import ts from "typescript";
 import YAML from "yaml";
 import {
   type ActionDockManifest,
@@ -65,46 +66,57 @@ function isIgnoredModulePath(relPath: string): boolean {
 }
 
 /**
- * 提取源码文本中的所有相对路径模块引用说明符（如 ./... 与 ../...）。
- * 采用纯正则静态提取，杜绝动态 import 与代码执行。
+ * 采用 TypeScript 官方 AST 静态遍历解析源码文件中的所有导入说明符。
+ * 覆盖 import、export ... from、动态 import() 以及 require() 调用。
  */
-function extractRelativeImports(source: string): string[] {
-  // 移除多行注释与单行注释，避免注释中的无效相对路径被误提取
-  const stripped = source
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/\/\/[^\n]*/g, "");
+function extractImportsUsingAst(source: string, fileName: string): string[] {
+  try {
+    const sourceFile = ts.createSourceFile(
+      fileName,
+      source,
+      ts.ScriptTarget.Latest,
+      true
+    );
+    const specifiers = new Set<string>();
 
-  const specifiers = new Set<string>();
-
-  // 匹配 from "..."、from '...'、from `...`
-  const fromRegex = /\bfrom\s*["'`]([^"'`]+)["'`]/g;
-  let match: RegExpExecArray | null;
-  while ((match = fromRegex.exec(stripped)) !== null) {
-    const spec = match[1].trim();
-    if (spec.startsWith("./") || spec.startsWith("../")) {
-      specifiers.add(spec);
+    function visit(node: ts.Node) {
+      if (ts.isImportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
+        specifiers.add(node.moduleSpecifier.text);
+      } else if (ts.isExportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
+        specifiers.add(node.moduleSpecifier.text);
+      } else if (ts.isCallExpression(node)) {
+        if (node.expression.kind === ts.SyntaxKind.ImportKeyword && node.arguments.length > 0 && ts.isStringLiteral(node.arguments[0])) {
+          specifiers.add((node.arguments[0] as ts.StringLiteral).text);
+        } else if (ts.isIdentifier(node.expression) && node.expression.text === "require" && node.arguments.length > 0 && ts.isStringLiteral(node.arguments[0])) {
+          specifiers.add((node.arguments[0] as ts.StringLiteral).text);
+        }
+      }
+      ts.forEachChild(node, visit);
     }
-  }
 
-  // 匹配 import(...) 或 import "..."
-  const importRegex = /\bimport\s*(?:\(\s*)?["'`]([^"'`]+)["'`]/g;
-  while ((match = importRegex.exec(stripped)) !== null) {
-    const spec = match[1].trim();
-    if (spec.startsWith("./") || spec.startsWith("../")) {
-      specifiers.add(spec);
+    visit(sourceFile);
+    return Array.from(specifiers);
+  } catch {
+    // AST 解析异常时回退至正则提取
+    const stripped = source
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/[^\n]*/g, "");
+    const specifiers = new Set<string>();
+    const fromRegex = /\bfrom\s*["'`]([^"'`]+)["'`]/g;
+    let match: RegExpExecArray | null;
+    while ((match = fromRegex.exec(stripped)) !== null) {
+      specifiers.add(match[1].trim());
     }
-  }
-
-  // 匹配 require(...)
-  const requireRegex = /\brequire\s*\(\s*["'`]([^"'`]+)["'`]/g;
-  while ((match = requireRegex.exec(stripped)) !== null) {
-    const spec = match[1].trim();
-    if (spec.startsWith("./") || spec.startsWith("../")) {
-      specifiers.add(spec);
+    const importRegex = /\bimport\s*(?:\(\s*)?["'`]([^"'`]+)["'`]/g;
+    while ((match = importRegex.exec(stripped)) !== null) {
+      specifiers.add(match[1].trim());
     }
+    const requireRegex = /\brequire\s*\(\s*["'`]([^"'`]+)["'`]/g;
+    while ((match = requireRegex.exec(stripped)) !== null) {
+      specifiers.add(match[1].trim());
+    }
+    return Array.from(specifiers);
   }
-
-  return Array.from(specifiers);
 }
 
 const CANDIDATE_EXTENSIONS = [
@@ -186,8 +198,100 @@ function resolveLocalModulePath(baseDir: string, specifier: string): string | nu
   return null;
 }
 
+interface TsConfigPathsInfo {
+  baseUrl: string;
+  paths: Record<string, string[]>;
+  options: ts.CompilerOptions;
+}
+
+function loadTsConfigInfo(projectRoot: string): TsConfigPathsInfo | null {
+  const tsconfigPath = join(projectRoot, "tsconfig.json");
+  if (!existsSync(tsconfigPath)) return null;
+  try {
+    const configFile = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
+    if (configFile.error) return null;
+    const parsed = ts.parseJsonConfigFileContent(configFile.config, ts.sys, projectRoot);
+    return {
+      baseUrl: parsed.options.baseUrl || projectRoot,
+      paths: parsed.options.paths || {},
+      options: parsed.options,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function resolveModulePathWithAliases(
+  currentFile: string,
+  specifier: string,
+  projectRoot: string,
+  tsconfigInfo: TsConfigPathsInfo | null
+): string | null {
+  const dir = dirname(currentFile);
+
+  // 1. 相对路径导入
+  if (specifier.startsWith("./") || specifier.startsWith("../")) {
+    return resolveLocalModulePath(dir, specifier);
+  }
+
+  // 2. 若存在 tsconfig.json paths 配置，优先尝试标准 ts.resolveModuleName
+  if (tsconfigInfo && Object.keys(tsconfigInfo.paths).length > 0) {
+    const host: ts.ModuleResolutionHost = {
+      fileExists: ts.sys.fileExists,
+      readFile: ts.sys.readFile,
+      directoryExists: ts.sys.directoryExists,
+      getCurrentDirectory: () => projectRoot,
+      getDirectories: ts.sys.getDirectories,
+    };
+    try {
+      const resolved = ts.resolveModuleName(
+        specifier,
+        currentFile,
+        tsconfigInfo.options,
+        host
+      );
+      if (resolved.resolvedModule && !resolved.resolvedModule.isExternalLibraryImport) {
+        const found = resolve(resolved.resolvedModule.resolvedFileName);
+        if (existsSync(found)) {
+          return found;
+        }
+      }
+    } catch {}
+
+    // 手动别名模式匹配备选
+    for (const [pattern, targets] of Object.entries(tsconfigInfo.paths)) {
+      let matched = false;
+      let star = "";
+      if (pattern.endsWith("*")) {
+        const prefix = pattern.slice(0, -1);
+        if (specifier.startsWith(prefix)) {
+          matched = true;
+          star = specifier.slice(prefix.length);
+        }
+      } else if (pattern === specifier) {
+        matched = true;
+      }
+
+      if (matched) {
+        for (const target of targets) {
+          const replaced = target.endsWith("*")
+            ? target.slice(0, -1) + star
+            : target;
+          const candidate = resolve(tsconfigInfo.baseUrl, replaced);
+          const resolved = resolveLocalModulePath(dirname(candidate), `./${basename(candidate)}`);
+          if (resolved) {
+            return resolved;
+          }
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
 /**
- * 从一组入口文件出发，静态深度追踪所有相对路径引用的本地源码模块闭包。
+ * 从一组入口文件出发，静态深度追踪所有相对路径与别名引用的本地源码模块闭包。
  */
 function traceLocalModuleDependencies(
   entryFiles: string[],
@@ -196,6 +300,7 @@ function traceLocalModuleDependencies(
   const visited = new Set<string>();
   const modules = new Set<string>();
   const queue = [...entryFiles];
+  const tsconfigInfo = loadTsConfigInfo(projectRoot);
 
   while (queue.length > 0) {
     const current = queue.shift()!;
@@ -214,11 +319,10 @@ function traceLocalModuleDependencies(
       continue;
     }
 
-    const specifiers = extractRelativeImports(content);
-    const dir = dirname(current);
+    const specifiers = extractImportsUsingAst(content, current);
 
     for (const spec of specifiers) {
-      const resolved = resolveLocalModulePath(dir, spec);
+      const resolved = resolveModulePathWithAliases(current, spec, projectRoot, tsconfigInfo);
       if (resolved) {
         const rel = relative(projectRoot, resolved);
         if (!rel.startsWith("..") && !isAbsolute(rel) && !isIgnoredModulePath(rel)) {
@@ -419,7 +523,7 @@ export class BuildPlanner {
       }
     }
 
-    const validation = validateManifest(manifest);
+    const validation = validateManifest(manifest, { projectRoot: root });
     if (!validation.valid) {
       throw new PlannerError(
         `Invalid actiondock.manifest.json: ${(validation.errors || []).join("; ")}`,

@@ -397,5 +397,47 @@ export default defineAction({
       rmSync(currentDir, { recursive: true, force: true });
     }
   });
+
+  it("converges LocationRegistry and GlobalRegistry formats and migrates links seamlessly", async () => {
+    const { LocationRegistry } = await import("../src/catalog/location-registry");
+    const locReg = new LocationRegistry(fakeHome);
+
+    // 1. Link packages using standard linkPackage
+    linkPackage(pkgADir, fakeHome);
+    linkPackage(pkgBDir, fakeHome);
+
+    // 2. Load via LocationRegistry: should reflect both packages as links
+    const locData = locReg.load();
+    expect(locData.schemaVersion).toBe(1);
+    expect(locData.links.length).toBe(2);
+    expect(locData.links.some((l) => l.path === pkgADir)).toBe(true);
+    expect(locData.links.some((l) => l.path === pkgBDir)).toBe(true);
+
+    // 3. Save modified links via LocationRegistry
+    locReg.removeLink(pkgADir);
+    const updatedLoc = locReg.load();
+    expect(updatedLoc.links.length).toBe(1);
+    expect(updatedLoc.links[0].path).toBe(pkgBDir);
+
+    // 4. Verify GlobalRegistry data reflects the update
+    const globalData = loadRegistry(fakeHome);
+    expect(globalData.packages["team.pkg-a"]).toBeUndefined();
+    expect(globalData.packages["team.pkg-b"]).toBeDefined();
+
+    // 5. Test raw migration when registry file contains ONLY schemaVersion 1 links
+    const filePath = locReg.getFilePath();
+    writeFileSync(
+      filePath,
+      JSON.stringify({
+        schemaVersion: 1,
+        links: [{ type: "package", path: pkgADir, linkedAt: new Date().toISOString() }],
+      }),
+      "utf-8"
+    );
+
+    const migrated = loadRegistry(fakeHome);
+    expect(migrated.packages["team.pkg-a"]).toBeDefined();
+    expect(migrated.packages["team.pkg-a"].path).toBe(pkgADir);
+  });
 });
 

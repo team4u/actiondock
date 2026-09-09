@@ -39,9 +39,10 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
       }
       return jsonResponse({ ok: true, packageId, envChecks }, 200, corsHeaders);
     } catch (err: any) {
+      const isClient = err.message?.includes("Unknown or unregistered package") || err.message?.includes("Invalid packageId") || err.message?.includes("escapes boundary");
       return jsonResponse(
-        { ok: false, error: { code: "CONFIG_ENV_ERROR", message: err.message } },
-        500,
+        { ok: false, error: { code: isClient ? "INVALID_ARGUMENT" : "CONFIG_ENV_ERROR", message: err.message } },
+        isClient ? 400 : 500,
         corsHeaders
       );
     }
@@ -79,9 +80,10 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
         corsHeaders
       );
     } catch (err: any) {
+      const isClient = err.message?.includes("Unknown or unregistered package") || err.message?.includes("Invalid packageId") || err.message?.includes("escapes boundary");
       return jsonResponse(
-        { ok: false, error: { code: "CONFIG_LIST_ERROR", message: err.message } },
-        500,
+        { ok: false, error: { code: isClient ? "INVALID_ARGUMENT" : "CONFIG_LIST_ERROR", message: err.message } },
+        isClient ? 400 : 500,
         corsHeaders
       );
     }
@@ -109,9 +111,10 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
       storage.setConfig(key, body.value);
       return jsonResponse({ ok: true, packageId, key, message: "updated" }, 200, corsHeaders);
     } catch (err: any) {
+      const isClient = err.message?.includes("Unknown or unregistered package") || err.message?.includes("Invalid packageId") || err.message?.includes("escapes boundary");
       return jsonResponse(
-        { ok: false, error: { code: "CONFIG_SET_ERROR", message: err.message } },
-        500,
+        { ok: false, error: { code: isClient ? "INVALID_ARGUMENT" : "CONFIG_SET_ERROR", message: err.message } },
+        isClient ? 400 : 500,
         corsHeaders
       );
     }
@@ -132,9 +135,10 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
       const deleted = storage.deleteConfig(key);
       return jsonResponse({ ok: true, packageId, key, deleted }, 200, corsHeaders);
     } catch (err: any) {
+      const isClient = err.message?.includes("Unknown or unregistered package") || err.message?.includes("Invalid packageId") || err.message?.includes("escapes boundary");
       return jsonResponse(
-        { ok: false, error: { code: "CONFIG_DELETE_ERROR", message: err.message } },
-        500,
+        { ok: false, error: { code: isClient ? "INVALID_ARGUMENT" : "CONFIG_DELETE_ERROR", message: err.message } },
+        isClient ? 400 : 500,
         corsHeaders
       );
     }

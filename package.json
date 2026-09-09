@@ -14,7 +14,7 @@
     "test": "bun test",
     "test:pack": "bun run ./scripts/pack-smoke-test.ts",
     "typecheck": "tsc --noEmit",
-    "build": "bun run --filter '@actiondock/*' build",
+    "build": "bun run ./scripts/build.ts",
     "bump": "bun run ./scripts/bump-version.ts",
     "docs:serve": "bunx docsify-cli serve docs"
   },

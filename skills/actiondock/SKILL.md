@@ -588,6 +588,7 @@ ad unlink --prune
 | 报错现象或错误码 | 根本原因分析 | 标准自愈修复步骤 |
 | :--- | :--- | :--- |
 | `ACTION_NOT_FOUND` 或找不到包 | 全局路由表中未注册该包，或挂载路径已移动失效 | 执行 `ad info --tree` 确认挂载状态；若路径失效执行 `ad unlink -p` 清理软链，随后在包目录下重新执行 `ad link` |
+| `ACTION_LOAD_FAILED` | Action 源码导入失败或项目依赖缺失 | 依赖未安装，在目标项目根目录下执行 `npm install`（或 `bun install`），或先执行 `ad run <pkg>/<action>` 一次触发自动补全 |
 | `INPUT_VALIDATION_FAILED` | 输入参数未满足 Action 声明的 `inputSchema` 约束 | 执行 `ad action show <id>` 查看完整的参数定义与必填字段要求，核对数据类型与字段名称 |
 | `OUTPUT_VALIDATION_FAILED` | Action `run` 方法返回的对象不匹配 `outputSchema` | 检查 Action 代码返回字段是否包含所有必须属性 |
 | `CONFIG_VALIDATION_FAILED` | 未注入当前 Action 依赖的必填配置项 | 执行 `ad config list` 查看缺失的配置项，通过 `ad config set <key> <val>` 补全配置 |

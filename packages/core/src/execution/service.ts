@@ -6,11 +6,14 @@ import type {
   ExecutionResult,
   JsonValue,
   Logger,
+  ProcessAPI,
   ProgressReporter,
   RunRecord,
   RunStatus,
+  RuntimeError,
 } from "@actiondock/sdk";
 import type { ProjectConfig } from "../project/types";
+import type { Clock } from "../runtime/clock";
 import { type EventSink, getDefaultEventSink } from "../runtime/events";
 import { ActionRunner, type ExecutionHandle } from "../runtime/runner";
 import type { RuntimeStorage } from "../storage/types";
@@ -24,11 +27,33 @@ import type {
 export interface ExecutionServiceOptions {
   packageId: string;
   storage: RuntimeStorage;
+  globalStorage?: RuntimeStorage;
+  projectRoot?: string;
   projectConfig?: ProjectConfig;
+  configOverrides?: Record<string, unknown>;
+  actions?: Map<string, ActionDefinition>;
+  process?: ProcessAPI;
+  clock?: Clock;
+  logger?: Logger;
   eventSink?: EventSink;
   maxActiveRuns?: number;
+  maxCallDepth?: number;
+  maxSubRuns?: number;
   ownerId?: string;
-  actionResolver?: (ref: ActionRef) => ActionDefinition | undefined | Promise<ActionDefinition | undefined>;
+  actionResolver?: (ref: ActionRef | string) => ActionDefinition | undefined | Promise<ActionDefinition | undefined>;
+  getStorageForPackage?: (packageId: string, projectRoot?: string) => RuntimeStorage;
+  packageContextResolver?: (packageId: string) => Promise<{
+    projectRoot?: string;
+    projectConfig?: ProjectConfig;
+    storage: RuntimeStorage;
+    actions?: Map<string, ActionDefinition>;
+  } | undefined> | {
+    projectRoot?: string;
+    projectConfig?: ProjectConfig;
+    storage: RuntimeStorage;
+    actions?: Map<string, ActionDefinition>;
+  } | undefined;
+  customHome?: string;
 }
 
 interface ActiveRun {
@@ -49,8 +74,10 @@ export class DefaultExecutionService implements ExecutionService {
   private eventSink: EventSink;
   private maxActiveRuns: number;
   private ownerId: string;
-  private runner: ActionRunner;
-  private actionResolver?: (ref: ActionRef) => ActionDefinition | undefined | Promise<ActionDefinition | undefined>;
+  private _runner: ActionRunner;
+  private logger?: Logger;
+  private clock?: Clock;
+  private actionResolver?: (ref: ActionRef | string) => ActionDefinition | undefined | Promise<ActionDefinition | undefined>;
   private activeRuns = new Map<string, ActiveRun>();
   private isClosing = false;
 
@@ -62,20 +89,54 @@ export class DefaultExecutionService implements ExecutionService {
     this.maxActiveRuns = options.maxActiveRuns || 32;
     this.ownerId = options.ownerId || `host-${randomUUID().slice(0, 8)}`;
     this.actionResolver = options.actionResolver;
+    this.logger = options.logger;
+    this.clock = options.clock;
 
-    this.runner = new ActionRunner({
+    this._runner = new ActionRunner({
       packageId: this.packageId,
       storage: this.storage,
+      globalStorage: options.globalStorage,
+      projectRoot: options.projectRoot,
       projectConfig: this.projectConfig,
+      configOverrides: options.configOverrides,
+      actions: options.actions,
+      process: options.process,
+      clock: options.clock,
+      maxCallDepth: options.maxCallDepth,
+      maxSubRuns: options.maxSubRuns,
+      actionResolver: (ref) => {
+        const parsed = typeof ref === "string" ? { actionId: ref } : ref;
+        return this.actionResolver ? this.actionResolver(parsed) : undefined;
+      },
+      getStorageForPackage: options.getStorageForPackage,
+      packageContextResolver: options.packageContextResolver,
+      customHome: options.customHome,
     });
   }
 
-  public registerAction(action: ActionDefinition): void {
-    this.runner.registerAction(action);
+  public get runner(): ActionRunner {
+    return this._runner;
   }
 
-  private async resolveTargetAction(ref: ActionRef): Promise<ActionDefinition | undefined> {
-    const fromRunner = this.runner.getAction(ref.actionId);
+  public registerAction(action: ActionDefinition): void {
+    this._runner.registerAction(action);
+  }
+
+  public getAction(id: string): ActionDefinition | undefined {
+    return this._runner.getAction(id);
+  }
+
+  public listActions(): ActionDefinition[] {
+    return this._runner.listActions();
+  }
+
+  public getActiveHandle(runId: string): ExecutionHandle | undefined {
+    return this.activeRuns.get(runId)?.handle;
+  }
+
+  private async resolveTargetAction(ref: ActionRef | string): Promise<ActionDefinition | undefined> {
+    const actionId = typeof ref === "string" ? ref : ("actionId" in ref && ref.actionId ? ref.actionId : (ref as any).id);
+    const fromRunner = this._runner.getAction(actionId);
     if (fromRunner) return fromRunner;
     if (this.actionResolver) {
       return this.actionResolver(ref);
@@ -84,7 +145,7 @@ export class DefaultExecutionService implements ExecutionService {
   }
 
   async execute(
-    ref: ActionRef,
+    ref: ActionRef | string,
     input: JsonValue,
     options: ExecuteOptions = {}
   ): Promise<ExecutionResult> {
@@ -108,7 +169,7 @@ export class DefaultExecutionService implements ExecutionService {
   }
 
   async start(
-    ref: ActionRef,
+    ref: ActionRef | string,
     input: JsonValue,
     options: ExecuteOptions = {}
   ): Promise<ExecutionTicket> {
@@ -122,28 +183,113 @@ export class DefaultExecutionService implements ExecutionService {
       );
     }
 
-    const action = await this.resolveTargetAction(ref);
+    const targetActionId = typeof ref === "string" ? ref : ("actionId" in ref && ref.actionId ? ref.actionId : (ref as any).id);
+    const targetPackageId = typeof ref === "object" && ref.packageId ? ref.packageId : this.packageId;
+
+    let runnerToUse: ActionRunner = this._runner;
+    if (targetPackageId && targetPackageId !== this.packageId) {
+      const targetRunner = await this._runner.resolveTargetPackageRunner(targetPackageId);
+      if (targetRunner) {
+        runnerToUse = targetRunner;
+      }
+    }
+
+    let action = runnerToUse.getAction(targetActionId) || runnerToUse.getAction(`${targetPackageId}/${targetActionId}`);
+    let resolveError: RuntimeError | undefined;
+
+    if (!action) {
+      const resolution = await runnerToUse.resolveAction(ref);
+      if (resolution.status === "found") {
+        action = resolution.action;
+      } else if (resolution.status === "load_failed") {
+        const cause = resolution.error;
+        const causeMsg = cause?.message || String(cause);
+        const isMissingModule =
+          causeMsg.includes("Cannot find package") ||
+          causeMsg.includes("Cannot find module") ||
+          causeMsg.includes("ERR_MODULE_NOT_FOUND") ||
+          causeMsg.includes("Could not resolve");
+        const hint = isMissingModule
+          ? `依赖未安装，在 '${resolution.projectRoot}' 执行 npm install 或先执行 'ad run ${resolution.packageId}/${targetActionId}'`
+          : undefined;
+
+        resolveError = {
+          code: "ACTION_LOAD_FAILED",
+          message: `Failed to load action '${targetActionId}' from package '${resolution.packageId}' (${resolution.projectRoot}): ${causeMsg}`,
+          details: {
+            packageId: resolution.packageId,
+            projectRoot: resolution.projectRoot,
+            rootCause: causeMsg,
+            hint,
+          },
+        };
+      } else {
+        const targetAction = await this.resolveTargetAction(ref);
+        if (targetAction) {
+          action = targetAction;
+        } else {
+          resolveError = {
+            code: "ACTION_NOT_FOUND",
+            message: `Action '${targetActionId}' not found in package '${targetPackageId}'`,
+            details: resolution.reason ? { reason: resolution.reason } : undefined,
+          };
+        }
+      }
+    }
+
     if (!action) {
       const runId = randomUUID();
+      const now = (this.clock?.now() ?? new Date()).toISOString();
+      const error: RuntimeError = resolveError || {
+        code: "ACTION_NOT_FOUND",
+        message: `Action '${targetActionId}' not found in package '${targetPackageId}'`,
+      };
+      const initialRun: RunRecord = {
+        id: runId,
+        rootRunId: options.rootRunId || options.parentRunId || runId,
+        parentRunId: options.parentRunId,
+        packageId: targetPackageId,
+        packageInstanceId: targetPackageId,
+        actionId: targetActionId,
+        generationId: "1",
+        ownerId: this.ownerId,
+        status: "failed",
+        input,
+        error,
+        startedAt: now,
+        finishedAt: now,
+      };
+      runnerToUse.getStorage().createRun(initialRun);
+
+      this.eventSink.emit({
+        runId,
+        rootRunId: initialRun.rootRunId,
+        sequence: 0,
+        timestamp: now,
+        type: "status",
+        status: "failed",
+      });
       const errEvt: ExecutionEvent = {
         runId,
-        rootRunId: runId,
-        sequence: 0,
-        timestamp: new Date().toISOString(),
+        rootRunId: initialRun.rootRunId,
+        sequence: 1,
+        timestamp: now,
         type: "finish",
         result: {
           ok: false,
           runId,
-          error: {
-            code: "ACTION_NOT_FOUND",
-            message: `Action '${ref.actionId}' not found in package '${ref.packageId || this.packageId}'`,
-          },
+          error,
         },
       };
       this.eventSink.emit(errEvt);
       return {
         runId,
         status: "failed",
+        result: Promise.resolve({
+          ok: false,
+          runId,
+          error,
+        }),
       };
     }
 
@@ -172,15 +318,16 @@ export class DefaultExecutionService implements ExecutionService {
       const evt: ExecutionEvent = {
         ...payload,
         runId,
-        rootRunId: runId,
+        rootRunId: options.rootRunId || options.parentRunId || runId,
         sequence: sequence++,
-        timestamp: new Date().toISOString(),
+        timestamp: (this.clock?.now() ?? new Date()).toISOString(),
       };
       this.eventSink.emit(evt);
     };
 
     const progressReporter: ProgressReporter = {
       report(current: number, total?: number, message?: string) {
+        options.progress?.report(current, total, message);
         emitEvent({
           type: "progress",
           current,
@@ -191,7 +338,9 @@ export class DefaultExecutionService implements ExecutionService {
     };
 
     const executionLogger: Logger = {
-      debug(message: string, data?: unknown) {
+      debug: (message: string, data?: unknown) => {
+        this.logger?.debug(message, data);
+        options.logger?.debug(message, data);
         emitEvent({
           type: "log",
           level: "debug",
@@ -199,7 +348,9 @@ export class DefaultExecutionService implements ExecutionService {
           data: data as JsonValue | undefined,
         });
       },
-      info(message: string, data?: unknown) {
+      info: (message: string, data?: unknown) => {
+        this.logger?.info(message, data);
+        options.logger?.info(message, data);
         emitEvent({
           type: "log",
           level: "info",
@@ -207,7 +358,9 @@ export class DefaultExecutionService implements ExecutionService {
           data: data as JsonValue | undefined,
         });
       },
-      warn(message: string, data?: unknown) {
+      warn: (message: string, data?: unknown) => {
+        this.logger?.warn(message, data);
+        options.logger?.warn(message, data);
         emitEvent({
           type: "log",
           level: "warn",
@@ -215,7 +368,9 @@ export class DefaultExecutionService implements ExecutionService {
           data: data as JsonValue | undefined,
         });
       },
-      error(message: string, data?: unknown) {
+      error: (message: string, data?: unknown) => {
+        this.logger?.error(message, data);
+        options.logger?.error(message, data);
         emitEvent({
           type: "log",
           level: "error",
@@ -225,12 +380,17 @@ export class DefaultExecutionService implements ExecutionService {
       },
     };
 
-    const handle = this.runner.start(action, input, {
+    const handle = runnerToUse.start(action, input, {
       runId,
+      rootRunId: options.rootRunId,
+      parentRunId: options.parentRunId,
+      maxCallDepth: options.maxCallDepth,
+      configOverrides: options.config as Record<string, unknown> | undefined,
       signal: controller.signal,
       timeoutMs: options.timeoutMs,
       progress: progressReporter,
       logger: executionLogger,
+      process: options.process,
     });
 
     const activeItem: ActiveRun = {
@@ -238,7 +398,7 @@ export class DefaultExecutionService implements ExecutionService {
       handle,
       controller,
       status: "running",
-      startedAt: new Date().toISOString(),
+      startedAt: (this.clock?.now() ?? new Date()).toISOString(),
     };
 
     this.activeRuns.set(handle.runId, activeItem);
@@ -246,11 +406,20 @@ export class DefaultExecutionService implements ExecutionService {
 
     handle.result
       .then((result: ExecutionResult) => {
-        activeItem.status = result.ok ? "success" : "failed";
+        const finalStatus: RunStatus = result.ok
+          ? "success"
+          : result.error?.code === "ACTION_TIMEOUT"
+          ? "timed_out"
+          : result.error?.code === "ACTION_CANCELLED"
+          ? "cancelled"
+          : "failed";
+        activeItem.status = finalStatus;
+        emitEvent({ type: "status", status: finalStatus });
         emitEvent({ type: "finish", result });
       })
       .catch((err: any) => {
         activeItem.status = "failed";
+        emitEvent({ type: "status", status: "failed" });
         emitEvent({
           type: "finish",
           result: {
@@ -270,12 +439,32 @@ export class DefaultExecutionService implements ExecutionService {
     return {
       runId: handle.runId,
       status: "running",
+      result: handle.result,
     };
   }
 
   async get(runId: string): Promise<RunRecord | undefined> {
     const record = this.storage.getRun(runId);
-    return record || undefined;
+    if (record) return record;
+
+    // 检查所有已解析的目标包 Runner 存储
+    const visited = new Set<ActionRunner>([this._runner]);
+    const queue: ActionRunner[] = [this._runner];
+    while (queue.length > 0) {
+      const runner = queue.shift()!;
+      for (const [_, childRunner] of runner.getPackageRunners()) {
+        if (!visited.has(childRunner)) {
+          visited.add(childRunner);
+          queue.push(childRunner);
+          const childRecord = childRunner.getStorage().getRun(runId);
+          if (childRecord) {
+            return childRecord;
+          }
+        }
+      }
+    }
+
+    return undefined;
   }
 
   async cancel(runId: string, reason?: string): Promise<CancelResult> {
@@ -320,3 +509,5 @@ export class DefaultExecutionService implements ExecutionService {
     this.activeRuns.clear();
   }
 }
+
+export { DefaultExecutionService as ExecutionService };

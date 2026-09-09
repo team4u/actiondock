@@ -143,10 +143,15 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
       );
     }
 
+    let closed = false;
+    let finishSent = false;
+    let unsubscribe: (() => void) | undefined;
+
     const stream = new ReadableStream({
       start(controller) {
         const encoder = new TextEncoder();
         const sendEvent = (event: string, data: any) => {
+          if (closed) return;
           try {
             controller.enqueue(
               encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
@@ -154,36 +159,61 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
           } catch {}
         };
 
+        const cleanup = () => {
+          if (closed) return;
+          closed = true;
+          if (unsubscribe) {
+            unsubscribe();
+            unsubscribe = undefined;
+          }
+          try {
+            controller.close();
+          } catch {}
+        };
+
+        const sendFinish = (payload: any) => {
+          if (finishSent || closed) return;
+          finishSent = true;
+          sendEvent("finish", payload);
+          cleanup();
+        };
+
+        req.signal.addEventListener("abort", cleanup, { once: true });
+
         if (activeHandle) {
           sendEvent("status", { runId, status: "running" });
-          const unsubscribe = runtimeRegistry.subscribe(runId, (evt) => {
-            sendEvent(evt.type, evt.data);
+          unsubscribe = runtimeRegistry.subscribe(runId, (evt) => {
             if (evt.type === "finish") {
-              try { controller.close(); } catch {}
+              sendFinish(evt.data);
+            } else {
+              sendEvent(evt.type, evt.data);
             }
           });
 
           activeHandle.result.then(
             (res) => {
-              sendEvent("finish", res);
-              try { controller.close(); } catch {}
+              sendFinish(res);
             },
             (err) => {
-              sendEvent("finish", {
+              sendFinish({
                 ok: false,
                 error: { message: err?.message || String(err) },
               });
-              try { controller.close(); } catch {}
             }
           );
-
-          req.signal.addEventListener("abort", () => {
-            unsubscribe();
-            try { controller.close(); } catch {}
-          });
         } else if (found) {
-          sendEvent("finish", found.run);
-          controller.close();
+          sendFinish(found.run);
+        } else {
+          cleanup();
+        }
+      },
+      cancel() {
+        if (!closed) {
+          closed = true;
+          if (unsubscribe) {
+            unsubscribe();
+            unsubscribe = undefined;
+          }
         }
       },
     });

@@ -34,6 +34,7 @@ ActionDock 采用确定性的结构化错误体系，所有失败均通过 JSON 
 | `INPUT_VALIDATION_FAILED` | 422 | 传入的 input 违反了 Action 的 `inputSchema` 约束（如缺少必填字段、类型错误）。 | 检查调用传参，参照 Action 的 Schema 修正字段。 |
 | `OUTPUT_VALIDATION_FAILED` | 500 | Action 函数返回值违反了 `outputSchema` 约束。 | 检查 Action 内部实现，确保返回值符合出参契约。 |
 | `ACTION_NOT_FOUND` | 404 | 指定的 Action ID 不存在于当前包或注册表中。 | 检查 Action ID 拼写，或执行 `ad info` 查看已注册的 Action 列表。 |
+| `ACTION_LOAD_FAILED` | 500 | Action 源码动态导入失败（通常为缺少依赖或代码语法错误）。 | 检查 details.hint，在对应项目根目录下执行 npm install 或检查源码语法。 |
 | `ACTION_TIMEOUT` | 504 | Action 执行耗时超过了设定的最大超时阈值。 | 检查网络 I/O 是否卡住，或在调用时调大 `--timeout`。 |
 | `ACTION_CYCLE_DETECTED` | 508 | 级联调用中检测到递归循环依赖（A -> B -> A）。 | 检查 Action 级联逻辑，消除相互循环调用。 |
 | `ACTION_EXECUTION_FAILED` | 500 | Action 内部抛出了未捕获的运行时异常（如网络异常、语法错误）。 | 查看 `stderr` 输出的日志与堆栈定位报错代码。 |

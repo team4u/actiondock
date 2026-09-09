@@ -1,22 +1,24 @@
 import {
   ActionRunner,
+  DefaultExecutionService,
+  type ExecutionService,
   type ExecutionStartOptions,
   InMemoryEventSink,
   type ProjectConfig,
   RuntimeConfig,
   RuntimeStateStore,
-  setDefaultEventSink,
-  setProcessExecutor,
 } from "@actiondock/core";
-import type {
-  ActionDefinition,
-  Config,
-  ExecutionEvent,
-  ExecutionResult,
-  JsonValue,
-  ProgressReporter,
-  RuntimeError,
-  StateStore,
+import {
+  type ActionDefinition,
+  type Config,
+  type ExecutionEvent,
+  type ExecutionResult,
+  type JsonValue,
+  type Logger,
+  MemoryLogger,
+  type ProgressReporter,
+  type RuntimeError,
+  type StateStore,
 } from "@actiondock/sdk";
 import { FakeClock } from "./clock";
 import { MockProcessExecutor } from "./process";
@@ -152,12 +154,14 @@ export interface TestRuntimeOptions {
   clock?: FakeClock;
   /** 可选注入的模拟进程执行器 */
   process?: MockProcessExecutor;
+  /** 可选注入的日志记录器（默认使用 MemoryLogger） */
+  logger?: Logger;
   /** 可选注入的底层存储实例 */
   storage?: MemoryStorage;
   /** 项目静态配置元数据 */
   projectConfig?: ProjectConfig;
   /** 预注册的 Action 动作列表 */
-  actions?: ActionDefinition[];
+  actions?: ActionDefinition[] | Record<string, ActionDefinition> | Map<string, ActionDefinition>;
 }
 
 /**
@@ -174,9 +178,13 @@ export interface TestRuntime {
   process: MockProcessExecutor;
   /** 调试执行事件捕获接口 */
   events: TestEventSink;
+  /** 调试日志记录捕获接口 */
+  logger: MemoryLogger;
   /** 底层存储引擎 */
   storage: MemoryStorage;
-  /** 核心执行器引擎 */
+  /** 统一执行服务 */
+  executionService: ExecutionService;
+  /** 核心执行器引擎（向后兼容保留） */
   runner: ActionRunner;
   /** 注册 Action 动作定义 */
   registerAction(action: ActionDefinition): void;
@@ -210,7 +218,7 @@ export interface TestRuntime {
 
 /**
  * 创建全功能测试运行时实例。
- * 复用真实的 ActionRunner 执行全生命周期，并暴露配置、状态、时钟、进程与事件等调试接口。
+ * 基于统一 ExecutionService 协调执行全生命周期，并暴露配置、状态、时钟、进程与事件等调试接口。
  *
  * @param options 测试运行时选项
  */
@@ -224,9 +232,6 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
       packageId,
       clock,
     });
-
-  // 全局注入测试进程执行器
-  setProcessExecutor(process);
 
   // 初始化配置数据
   if (options.config) {
@@ -243,22 +248,36 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
   }
 
   const events = new TestEventSink();
-  setDefaultEventSink(events);
+  const memoryLogger =
+    options.logger instanceof MemoryLogger ? options.logger : new MemoryLogger();
 
   const actionsMap = new Map<string, ActionDefinition>();
   if (options.actions) {
-    for (const act of options.actions) {
-      actionsMap.set(act.id, act);
+    if (Array.isArray(options.actions)) {
+      for (const act of options.actions) {
+        actionsMap.set(act.id, act);
+      }
+    } else if (options.actions instanceof Map) {
+      for (const [k, v] of options.actions) {
+        actionsMap.set(k, v);
+      }
+    } else if (typeof options.actions === "object") {
+      for (const [k, v] of Object.entries(options.actions)) {
+        actionsMap.set(k, v as ActionDefinition);
+      }
     }
   }
 
-  const runner = new ActionRunner({
+  const executionService = new DefaultExecutionService({
     packageId,
     storage,
     projectConfig: options.projectConfig,
     configOverrides: options.configOverrides,
     actions: actionsMap,
     process,
+    clock,
+    logger: memoryLogger,
+    eventSink: events,
   });
 
   const testConfig = new TestConfigStore(
@@ -270,15 +289,15 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
   const testState = new RuntimeStateStore(storage);
 
   const registerAction = (action: ActionDefinition): void => {
-    runner.registerAction(action);
+    executionService.registerAction(action);
   };
 
   const getAction = (id: string): ActionDefinition | undefined => {
-    return runner.getAction(id);
+    return executionService.getAction(id);
   };
 
   const listActions = (): ActionDefinition[] => {
-    return runner.listActions();
+    return executionService.listActions();
   };
 
   const execute = async <I = unknown, O = unknown>(
@@ -287,68 +306,28 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
     execOptions: ExecutionStartOptions = {}
   ): Promise<ExecutionResult<O>> => {
     if (typeof action !== "string") {
-      runner.registerAction(action as ActionDefinition);
+      executionService.registerAction(action as ActionDefinition);
     }
 
-    const actionId = typeof action === "string" ? action : action.id;
+    const actionRef = typeof action === "string" ? action : action.id;
 
-    // 组合进度报告器以发射执行事件
-    const originalProgress = execOptions.progress;
-    const progressReporter: ProgressReporter = {
-      report(current: number, total?: number, message?: string) {
-        if (originalProgress) {
-          originalProgress.report(current, total, message);
-        }
-        events.emit({
-          runId: handle.runId,
-          rootRunId: execOptions.rootRunId || handle.runId,
-          sequence: events.nextSequence(),
-          timestamp: clock.now().toISOString(),
-          type: "progress",
-          current,
-          total,
-          message,
-        });
-      },
-    };
+    const ticket = await executionService.start(
+      actionRef,
+      input as JsonValue,
+      {
+        signal: execOptions.signal,
+        timeoutMs: execOptions.timeoutMs,
+        config: execOptions.configOverrides as Record<string, JsonValue> | undefined,
+        parentRunId: execOptions.parentRunId,
+        rootRunId: execOptions.rootRunId,
+        maxCallDepth: execOptions.maxCallDepth,
+        logger: execOptions.logger,
+        progress: execOptions.progress,
+        process: execOptions.process || process,
+      }
+    );
 
-    const startOptions: ExecutionStartOptions = {
-      ...execOptions,
-      process: execOptions.process || process,
-      progress: progressReporter,
-    };
-
-    const handle = runner.start(action, input, startOptions);
-
-    events.emit({
-      runId: handle.runId,
-      rootRunId: execOptions.rootRunId || handle.runId,
-      sequence: events.nextSequence(),
-      timestamp: clock.now().toISOString(),
-      type: "status",
-      status: "running",
-    });
-
-    const result = (await handle.result) as ExecutionResult<O>;
-
-    events.emit({
-      runId: handle.runId,
-      rootRunId: execOptions.rootRunId || handle.runId,
-      sequence: events.nextSequence(),
-      timestamp: clock.now().toISOString(),
-      type: "finish",
-      result: result as ExecutionResult<JsonValue>,
-    });
-
-    events.emit({
-      runId: handle.runId,
-      rootRunId: execOptions.rootRunId || handle.runId,
-      sequence: events.nextSequence(),
-      timestamp: clock.now().toISOString(),
-      type: "status",
-      status: result.ok ? "success" : "failed",
-    });
-
+    const result = (await ticket.result) as ExecutionResult<O>;
     return result;
   };
 
@@ -369,8 +348,10 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
     clock,
     process,
     events,
+    logger: memoryLogger,
     storage,
-    runner,
+    executionService,
+    runner: (executionService as any).runner,
     registerAction,
     getAction,
     listActions,

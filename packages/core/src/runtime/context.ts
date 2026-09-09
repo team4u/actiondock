@@ -41,7 +41,7 @@ export class RuntimeConfig implements Config {
     this.storage = storage;
     this.overrides = new Map(Object.entries(overrides));
     this.projectConfig = projectConfig;
-    this.globalStorage = globalStorage !== undefined ? globalStorage : createGlobalStorage();
+    this.globalStorage = globalStorage;
   }
 
   get<T = unknown>(key: string): T | undefined;

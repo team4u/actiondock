@@ -29,11 +29,13 @@ export function toMcpTaskStatus(status: RunStatus): McpTaskStatus {
     case "success":
       return "completed";
     case "failed":
+    case "timed_out":
+    case "interrupted":
       return "failed";
     case "cancelled":
       return "cancelled";
     default:
-      return "working";
+      return "failed";
   }
 }
 

@@ -1,8 +1,10 @@
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { delimiter, join, relative } from "node:path";
+import type { ActionRef } from "@actiondock/sdk";
+import { ActionResolver } from "../catalog/action-resolver";
 import { discoverActionFiles, findProjectRoot, loadActions, loadPlaybooks, loadProjectConfig } from "../project/loader";
 import { loadManifest, MANIFEST_FILE_NAME } from "../project/manifest";
-import { getRegistryStatus } from "../registry/registry";
+import { getRegistryStatus, listLinkedPackages, resolvePackageRoot } from "../registry/registry";
 import { createGlobalStorage, createStorage } from "../storage";
 import { findExecutable, getActionDockHome } from "../utils";
 import type { DoctorCheckItem, DoctorReport } from "./types";
@@ -140,7 +142,124 @@ export async function runDoctorChecks(options?: {
     });
   }
 
-  // 5. Check Project Context
+  // 5. Check Linked Package Dependencies (node_modules completeness)
+  try {
+    const linkedList = listLinkedPackages(options?.customHome);
+    const missingNodeModules: string[] = [];
+
+    for (const pkg of linkedList) {
+      if (!existsSync(pkg.path)) continue;
+      const pkgJsonPath = join(pkg.path, "package.json");
+      if (!existsSync(pkgJsonPath)) continue;
+      try {
+        const pkgJson = JSON.parse(readFileSync(pkgJsonPath, "utf-8"));
+        const hasDeps =
+          (pkgJson.dependencies && Object.keys(pkgJson.dependencies).length > 0) ||
+          (pkgJson.devDependencies && Object.keys(pkgJson.devDependencies).length > 0);
+        if (hasDeps && !existsSync(join(pkg.path, "node_modules"))) {
+          missingNodeModules.push(pkg.id);
+        }
+      } catch {
+        // 忽略异常 JSON
+      }
+    }
+
+    if (missingNodeModules.length > 0) {
+      checks.push({
+        id: "registry.dependencies",
+        category: "registry",
+        name: "Linked Package Dependencies",
+        status: "warn",
+        message: `${missingNodeModules.length} linked package(s) declare dependencies but miss node_modules: ${missingNodeModules.join(", ")}`,
+        fix: "Run 'npm install' or 'bun install' in the affected package directories, or execute 'ad run' to auto-install",
+      });
+    } else {
+      checks.push({
+        id: "registry.dependencies",
+        category: "registry",
+        name: "Linked Package Dependencies",
+        status: "ok",
+        message: linkedList.length > 0
+          ? "All linked packages have dependencies installed"
+          : "No linked packages requiring dependency verification",
+      });
+    }
+  } catch {
+    // 忽略依赖检查异常
+  }
+
+  // 6. Check Cross-Package Uses Dependency Closure
+  try {
+    const linkedList = listLinkedPackages(options?.customHome);
+    const packagesToCheck: Array<{ id: string; root: string }> = linkedList.map((p) => ({
+      id: p.id,
+      root: p.path,
+    }));
+
+    const curProjectRoot = options?.packageIdOrPath
+      ? findProjectRoot(options.packageIdOrPath)
+      : findProjectRoot(cwd);
+    if (curProjectRoot && !packagesToCheck.some((p) => p.root === curProjectRoot)) {
+      try {
+        const cfg = loadProjectConfig(curProjectRoot);
+        packagesToCheck.push({ id: cfg.id, root: curProjectRoot });
+      } catch {
+        // 忽略配置异常
+      }
+    }
+
+    const unresolvableUses: string[] = [];
+
+    for (const pkg of packagesToCheck) {
+      if (!existsSync(pkg.root)) continue;
+      const manifest = loadManifest(pkg.root);
+      if (!manifest || !manifest.actions) continue;
+
+      for (const [actionId, actionEntry] of Object.entries(manifest.actions)) {
+        if (!Array.isArray(actionEntry.uses)) continue;
+        for (const rawRef of actionEntry.uses) {
+          if (typeof rawRef !== "string" || !rawRef.trim()) continue;
+          let parsed: ActionRef;
+          try {
+            parsed = ActionResolver.parseRef(rawRef);
+          } catch {
+            unresolvableUses.push(`${pkg.id}/${actionId} -> '${rawRef}'`);
+            continue;
+          }
+
+          if (parsed.packageId) {
+            const depRoot = resolvePackageRoot(parsed.packageId, pkg.root, options?.customHome);
+            if (!depRoot || !existsSync(depRoot)) {
+              unresolvableUses.push(`${pkg.id}/${actionId} -> '${rawRef}'`);
+            }
+          }
+        }
+      }
+    }
+
+    if (unresolvableUses.length > 0) {
+      checks.push({
+        id: "registry.uses_closure",
+        category: "registry",
+        name: "Cross-Package Uses Dependencies",
+        status: "warn",
+        message: `${unresolvableUses.length} unresolvable cross-package dependency reference(s) found in manifest uses: ${unresolvableUses.join(", ")}`,
+        fix: "Link missing packages with 'ad link', or correct unresolvable uses declarations",
+      });
+    } else {
+      checks.push({
+        id: "registry.uses_closure",
+        category: "registry",
+        name: "Cross-Package Uses Dependencies",
+        status: "ok",
+        message: "All cross-package uses declarations in manifests resolved successfully",
+      });
+    }
+  } catch {
+    // 忽略闭包检查异常
+  }
+
+  // 7. Check Project Context
   let projectRoot: string | null = null;
   if (options?.packageIdOrPath) {
     projectRoot = findProjectRoot(options.packageIdOrPath);

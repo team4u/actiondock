@@ -1,6 +1,7 @@
-import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { deflateRawSync, gzipSync } from "node:zlib";
+import { closeSync, createReadStream, createWriteStream, openSync, readdirSync, readFileSync, statSync, writeFileSync, writeSync } from "node:fs";
+import { deflateRawSync, gzipSync, createGzip } from "node:zlib";
 import { basename, dirname, join, relative, sep } from "node:path";
+import { pipeline } from "node:stream/promises";
 
 /**
  * 纯 Node 实现的归档压缩模块。
@@ -76,6 +77,7 @@ interface ZipCentralRecord {
 
 /**
  * 将目录打包为标准 zip 归档（PKZIP APPNOTE 结构）。
+ * 直接流式分块写入磁盘，避免在内存中积压全量归档内容。
  *
  * @param dir 待打包目录（目录名即归档内根文件夹名）
  * @param outPath 输出 zip 文件路径
@@ -83,95 +85,109 @@ interface ZipCentralRecord {
 export function createZipArchive(dir: string, outPath: string): void {
   const rootName = basename(dir);
   const entries = collectEntries(dir);
-  const chunks: Buffer[] = [];
+  const fd = openSync(outPath, "w");
   const centralRecords: ZipCentralRecord[] = [];
   let offset = 0;
 
-  for (const entry of entries) {
-    // 归档内路径带根目录前缀；目录条目名以 / 结尾
-    const name = `${rootName}/${entry.relPath}${entry.isDir ? "/" : ""}`;
-    const nameBuf = Buffer.from(name, "utf8");
-    const stat = statSync(join(dir, entry.relPath));
-    const { date, time } = dosDateTime(stat.mtimeMs);
-    const content = entry.isDir ? Buffer.alloc(0) : readFileSync(join(dir, entry.relPath));
+  try {
+    for (const entry of entries) {
+      // 归档内路径带根目录前缀；目录条目名以 / 结尾
+      const name = `${rootName}/${entry.relPath}${entry.isDir ? "/" : ""}`;
+      const nameBuf = Buffer.from(name, "utf8");
+      const stat = statSync(join(dir, entry.relPath));
+      const { date, time } = dosDateTime(stat.mtimeMs);
+      const content = entry.isDir ? Buffer.alloc(0) : readFileSync(join(dir, entry.relPath));
 
-    let method = 0;
-    let payload = content;
-    if (!entry.isDir && content.length > 0) {
-      const deflated = deflateRawSync(content, { level: 9 });
-      if (deflated.length < content.length) {
-        method = 8;
-        payload = deflated;
+      let method = 0;
+      let payload = content;
+      if (!entry.isDir && content.length > 0) {
+        const deflated = deflateRawSync(content, { level: 9 });
+        if (deflated.length < content.length) {
+          method = 8;
+          payload = deflated;
+        }
       }
+
+      const crc = crc32(content);
+
+      // Local File Header（30 字节 + 文件名）
+      const local = Buffer.alloc(30);
+      local.writeUInt32LE(0x04034b50, 0);
+      local.writeUInt16LE(20, 4);
+      local.writeUInt16LE(0x0800, 6); // UTF-8 文件名标志
+      local.writeUInt16LE(method, 8);
+      local.writeUInt16LE(time, 10);
+      local.writeUInt16LE(date, 12);
+      local.writeUInt32LE(crc, 14);
+      local.writeUInt32LE(payload.length, 18);
+      local.writeUInt32LE(content.length, 22);
+      local.writeUInt16LE(nameBuf.length, 26);
+      local.writeUInt16LE(0, 28);
+
+      writeSync(fd, local);
+      writeSync(fd, nameBuf);
+      if (payload.length > 0) {
+        writeSync(fd, payload);
+      }
+
+      // Central Directory Header（46 字节 + 文件名）
+      const central = Buffer.alloc(46);
+      central.writeUInt32LE(0x02014b50, 0);
+      central.writeUInt16LE((3 << 8) | 20, 4); // version made by: Unix + ZIP 2.0
+      central.writeUInt16LE(20, 6); // version needed
+      central.writeUInt16LE(0x0800, 8);
+      central.writeUInt16LE(method, 10);
+      central.writeUInt16LE(time, 12);
+      central.writeUInt16LE(date, 14);
+      central.writeUInt32LE(crc, 16);
+      central.writeUInt32LE(payload.length, 20);
+      central.writeUInt32LE(content.length, 24);
+      central.writeUInt16LE(nameBuf.length, 28);
+      central.writeUInt16LE(0, 30); // extra len
+      central.writeUInt16LE(0, 32); // comment len
+      central.writeUInt16LE(0, 34); // disk start
+      central.writeUInt16LE(0, 36); // internal attrs
+      // 外部属性：Unix 权限左移 16 位，目录附加 MS-DOS 目录位
+      const isExec =
+        !entry.isDir &&
+        (Boolean(stat.mode & 0o111) || entry.relPath.includes("bin/") || entry.relPath.startsWith("bin/"));
+      const fileMode = isExec ? 0o100755 : 0o100644;
+      const extAttrs = ((entry.isDir ? 0o40755 : fileMode) << 16) | (entry.isDir ? 0x10 : 0);
+      central.writeUInt32LE(extAttrs >>> 0, 38);
+      central.writeUInt32LE(offset, 42);
+      centralRecords.push({ header: Buffer.concat([central, nameBuf]), localOffset: offset });
+
+      offset += local.length + nameBuf.length + payload.length;
     }
 
-    const crc = crc32(content);
+    const centralDirOffset = offset;
+    let centralDirSize = 0;
+    for (const record of centralRecords) {
+      writeSync(fd, record.header);
+      centralDirSize += record.header.length;
+    }
 
-    // Local File Header（30 字节 + 文件名）
-    const local = Buffer.alloc(30);
-    local.writeUInt32LE(0x04034b50, 0);
-    local.writeUInt16LE(20, 4);
-    local.writeUInt16LE(0x0800, 6); // UTF-8 文件名标志
-    local.writeUInt16LE(method, 8);
-    local.writeUInt16LE(time, 10);
-    local.writeUInt16LE(date, 12);
-    local.writeUInt32LE(crc, 14);
-    local.writeUInt32LE(payload.length, 18);
-    local.writeUInt32LE(content.length, 22);
-    local.writeUInt16LE(nameBuf.length, 26);
-    local.writeUInt16LE(0, 28);
-    chunks.push(local, nameBuf, payload);
-
-    // Central Directory Header（46 字节 + 文件名）
-    const central = Buffer.alloc(46);
-    central.writeUInt32LE(0x02014b50, 0);
-    central.writeUInt16LE((3 << 8) | 20, 4); // version made by: Unix + ZIP 2.0
-    central.writeUInt16LE(20, 6); // version needed
-    central.writeUInt16LE(0x0800, 8);
-    central.writeUInt16LE(method, 10);
-    central.writeUInt16LE(time, 12);
-    central.writeUInt16LE(date, 14);
-    central.writeUInt32LE(crc, 16);
-    central.writeUInt32LE(payload.length, 20);
-    central.writeUInt32LE(content.length, 24);
-    central.writeUInt16LE(nameBuf.length, 28);
-    central.writeUInt16LE(0, 30); // extra len
-    central.writeUInt16LE(0, 32); // comment len
-    central.writeUInt16LE(0, 34); // disk start
-    central.writeUInt16LE(0, 36); // internal attrs
-    // 外部属性：Unix 权限左移 16 位，目录附加 MS-DOS 目录位
-    const isExec =
-      !entry.isDir &&
-      (Boolean(stat.mode & 0o111) || entry.relPath.includes("bin/") || entry.relPath.startsWith("bin/"));
-    const fileMode = isExec ? 0o100755 : 0o100644;
-    const extAttrs = ((entry.isDir ? 0o40755 : fileMode) << 16) | (entry.isDir ? 0x10 : 0);
-    central.writeUInt32LE(extAttrs >>> 0, 38);
-    central.writeUInt32LE(offset, 42);
-    centralRecords.push({ header: Buffer.concat([central, nameBuf]), localOffset: offset });
-
-    offset += local.length + nameBuf.length + payload.length;
+    // End of Central Directory Record（22 字节）
+    const eocd = Buffer.alloc(22);
+    eocd.writeUInt32LE(0x06054b50, 0);
+    eocd.writeUInt16LE(0, 4);
+    eocd.writeUInt16LE(0, 6);
+    eocd.writeUInt16LE(centralRecords.length, 8);
+    eocd.writeUInt16LE(centralRecords.length, 10);
+    eocd.writeUInt32LE(centralDirSize, 12);
+    eocd.writeUInt32LE(centralDirOffset, 16);
+    eocd.writeUInt16LE(0, 20); // comment len
+    writeSync(fd, eocd);
+  } finally {
+    closeSync(fd);
   }
+}
 
-  const centralDirOffset = offset;
-  let centralDirSize = 0;
-  for (const record of centralRecords) {
-    chunks.push(record.header);
-    centralDirSize += record.header.length;
-  }
-
-  // End of Central Directory Record（22 字节）
-  const eocd = Buffer.alloc(22);
-  eocd.writeUInt32LE(0x06054b50, 0);
-  eocd.writeUInt16LE(0, 4);
-  eocd.writeUInt16LE(0, 6);
-  eocd.writeUInt16LE(centralRecords.length, 8);
-  eocd.writeUInt16LE(centralRecords.length, 10);
-  eocd.writeUInt32LE(centralDirSize, 12);
-  eocd.writeUInt32LE(centralDirOffset, 16);
-  eocd.writeUInt16LE(0, 20); // comment len
-  chunks.push(eocd);
-
-  writeFileSync(outPath, Buffer.concat(chunks));
+/**
+ * 异步标准 zip 归档。
+ */
+export async function createZipArchiveAsync(dir: string, outPath: string): Promise<void> {
+  createZipArchive(dir, outPath);
 }
 
 /* ------------------------------------------------------------------ */
@@ -274,4 +290,55 @@ export function createTarGzArchive(dir: string, outPath: string): void {
   chunks.push(Buffer.alloc(1024));
 
   writeFileSync(outPath, gzipSync(Buffer.concat(chunks), { level: 9 }));
+}
+
+/**
+ * 将目录异步流式打包为标准 tar.gz 归档（USTAR + gzip 流），避免把超大二进制和归档缓冲在内存中。
+ *
+ * @param dir 待打包目录
+ * @param outPath 输出 tar.gz 文件路径
+ */
+export async function createTarGzArchiveAsync(dir: string, outPath: string): Promise<void> {
+  const rootName = basename(dir);
+  const entries = collectEntries(dir);
+  const gzip = createGzip({ level: 9 });
+  const writeStream = createWriteStream(outPath);
+  const pipePromise = pipeline(gzip, writeStream);
+
+  for (const entry of entries) {
+    const path = `${rootName}/${entry.relPath}${entry.isDir ? "/" : ""}`;
+    const fullPath = join(dir, entry.relPath);
+    const stat = statSync(fullPath);
+    const isExec =
+      !entry.isDir &&
+      (Boolean(stat.mode & 0o111) || entry.relPath.includes("bin/") || entry.relPath.startsWith("bin/"));
+
+    const header = tarHeader(
+      path,
+      entry.isDir ? 0 : stat.size,
+      Math.floor(stat.mtimeMs / 1000),
+      entry.isDir,
+      isExec
+    );
+    gzip.write(header);
+
+    if (!entry.isDir && stat.size > 0) {
+      await new Promise<void>((resolve, reject) => {
+        const fileStream = createReadStream(fullPath);
+        fileStream.on("data", (chunk) => gzip.write(chunk));
+        fileStream.on("end", () => {
+          const rem = stat.size % 512;
+          if (rem !== 0) {
+            gzip.write(Buffer.alloc(512 - rem));
+          }
+          resolve();
+        });
+        fileStream.on("error", reject);
+      });
+    }
+  }
+
+  gzip.write(Buffer.alloc(1024));
+  gzip.end();
+  await pipePromise;
 }

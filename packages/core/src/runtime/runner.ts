@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type {
   ActionContext,
@@ -15,7 +16,7 @@ import type {
 import { ActionResolver } from "../catalog/action-resolver";
 import { loadActions, loadProjectConfig } from "../project/loader";
 import type { ProjectConfig } from "../project/types";
-import { resolveActionProject } from "../registry/registry";
+import { resolveActionProject, resolvePackageRoot } from "../registry/registry";
 import { validateSchema } from "../schema/validator";
 import type { RuntimeStorage, TerminalRunStatus } from "../storage/types";
 import type { Clock } from "./clock";
@@ -48,6 +49,26 @@ export interface RunnerOptions {
     ref: ActionRef | string,
     currentPackageId?: string
   ) => ActionDefinition | undefined | Promise<ActionDefinition | undefined>;
+  /** 最大调用嵌套深度限制（防死循环/过深调用链，默认 16） */
+  maxCallDepth?: number;
+  /** 最大并发子任务数限制（默认 64） */
+  maxSubRuns?: number;
+  /** 跨包存储工厂 */
+  getStorageForPackage?: (packageId: string, projectRoot?: string) => RuntimeStorage;
+  /** 跨包运行上下文解析委托函数 */
+  packageContextResolver?: (packageId: string) => Promise<{
+    projectRoot?: string;
+    projectConfig?: ProjectConfig;
+    storage: RuntimeStorage;
+    actions?: Map<string, ActionDefinition>;
+  } | undefined> | {
+    projectRoot?: string;
+    projectConfig?: ProjectConfig;
+    storage: RuntimeStorage;
+    actions?: Map<string, ActionDefinition>;
+  } | undefined;
+  /** 自定义 ActionDock 用户家目录（用于测试隔离与多租户环境） */
+  customHome?: string;
 }
 
 /** ActionRunnerOptions 别名兼容 */
@@ -75,12 +96,16 @@ export interface ExecutionStartOptions {
   signal?: AbortSignal;
   /** 最大超时时间（毫秒），超时将自动中止执行并标记为 ACTION_TIMEOUT */
   timeoutMs?: number;
+  /** 最大调用深度覆盖 */
+  maxCallDepth?: number;
   /** 外部注入的进程执行器 */
   process?: ProcessAPI;
   /** 外部注入的进度报告器 */
   progress?: ProgressReporter;
   /** 外部注入的日志记录器 */
   logger?: Logger;
+  /** 执行级临时配置覆盖项 */
+  configOverrides?: Record<string, unknown>;
 }
 
 /**
@@ -98,6 +123,14 @@ export interface ExecutionHandle {
    */
   cancel(reason?: string): boolean;
 }
+
+/**
+ * Action 解析结果判别联合类型。
+ */
+export type ActionResolution =
+  | { status: "found"; action: ActionDefinition }
+  | { status: "not_found"; reason?: string }
+  | { status: "load_failed"; error: Error; packageId: string; projectRoot: string };
 
 /**
  * ActionDock 核心执行引擎（ActionRunner）。
@@ -118,10 +151,28 @@ export class ActionRunner {
   private configOverrides: Record<string, unknown>;
   private actions: Map<string, ActionDefinition>;
   private clock?: Clock;
+  private process?: ProcessAPI;
+  private maxCallDepth: number;
+  private maxSubRuns: number;
+  private activeSubRuns = 0;
+  private packageRunners = new Map<string, ActionRunner>();
   private actionResolver?: (
     ref: ActionRef | string,
     currentPackageId?: string
   ) => ActionDefinition | undefined | Promise<ActionDefinition | undefined>;
+  private getStorageForPackage?: (packageId: string, projectRoot?: string) => RuntimeStorage;
+  private packageContextResolver?: (packageId: string) => Promise<{
+    projectRoot?: string;
+    projectConfig?: ProjectConfig;
+    storage: RuntimeStorage;
+    actions?: Map<string, ActionDefinition>;
+  } | undefined> | {
+    projectRoot?: string;
+    projectConfig?: ProjectConfig;
+    storage: RuntimeStorage;
+    actions?: Map<string, ActionDefinition>;
+  } | undefined;
+  private customHome?: string;
 
   constructor(options: RunnerOptions) {
     this.packageId = options.packageId;
@@ -131,8 +182,22 @@ export class ActionRunner {
     this.projectConfig = options.projectConfig;
     this.configOverrides = options.configOverrides || {};
     this.actions = options.actions || new Map();
+    this.process = options.process;
     this.clock = options.clock;
+    this.maxCallDepth = options.maxCallDepth ?? 16;
+    this.maxSubRuns = options.maxSubRuns ?? 64;
     this.actionResolver = options.actionResolver;
+    this.getStorageForPackage = options.getStorageForPackage;
+    this.packageContextResolver = options.packageContextResolver;
+    this.customHome = options.customHome;
+  }
+
+  public getStorage(): RuntimeStorage {
+    return this.storage;
+  }
+
+  public getPackageRunners(): Map<string, ActionRunner> {
+    return this.packageRunners;
   }
 
   /**
@@ -153,80 +218,122 @@ export class ActionRunner {
    * 动态解析 Action（支持本地注册表、自定义解析器委托与已链接包目录索引检索）。
    * 
    * @param actionOrRef Action 定义对象、引用或标识符
-   * @returns 解析出的 ActionDefinition，若未找到则返回 undefined
+   * @returns 解析判别联合结果（found | not_found | load_failed）
    */
   public async resolveAction(
     actionOrRef: ActionDefinition | ActionRef | string
-  ): Promise<ActionDefinition | undefined> {
+  ): Promise<ActionResolution> {
     if (
       typeof actionOrRef === "object" &&
       "run" in actionOrRef &&
       typeof (actionOrRef as any).run === "function"
     ) {
-      return actionOrRef as ActionDefinition;
+      return { status: "found", action: actionOrRef as ActionDefinition };
     }
 
     const ref = actionOrRef as ActionRef | string;
-    const parsed = ActionResolver.parseRef(ref);
+    let parsed: ActionRef;
+    try {
+      parsed = ActionResolver.parseRef(ref);
+    } catch (err: any) {
+      return { status: "not_found", reason: err.message };
+    }
     const targetActionId = parsed.actionId;
     const targetPackageId = parsed.packageId;
 
     // 1. 本地 actions 映射表优先检索
     if (targetPackageId && targetPackageId !== this.packageId) {
       if (this.actions.has(`${targetPackageId}/${targetActionId}`)) {
-        return this.actions.get(`${targetPackageId}/${targetActionId}`);
+        return { status: "found", action: this.actions.get(`${targetPackageId}/${targetActionId}`)! };
       }
     } else {
       if (this.actions.has(targetActionId)) {
-        return this.actions.get(targetActionId);
+        return { status: "found", action: this.actions.get(targetActionId)! };
       }
       if (this.packageId && this.actions.has(`${this.packageId}/${targetActionId}`)) {
-        return this.actions.get(`${this.packageId}/${targetActionId}`);
+        return { status: "found", action: this.actions.get(`${this.packageId}/${targetActionId}`)! };
       }
     }
 
     // 2. 外部注入的自定义 actionResolver 调度
     if (this.actionResolver) {
-      const customResolved = await this.actionResolver(ref, this.packageId);
-      if (customResolved) {
-        if (targetPackageId && targetPackageId !== this.packageId) {
-          this.actions.set(`${targetPackageId}/${targetActionId}`, customResolved);
-        } else {
-          this.actions.set(targetActionId, customResolved);
-          if (this.packageId) {
-            this.actions.set(`${this.packageId}/${targetActionId}`, customResolved);
+      try {
+        const customResolved = await this.actionResolver(ref, this.packageId);
+        if (customResolved) {
+          if (targetPackageId && targetPackageId !== this.packageId) {
+            this.actions.set(`${targetPackageId}/${targetActionId}`, customResolved);
+          } else {
+            this.actions.set(targetActionId, customResolved);
+            if (this.packageId) {
+              this.actions.set(`${this.packageId}/${targetActionId}`, customResolved);
+            }
           }
+          return { status: "found", action: customResolved };
         }
-        return customResolved;
+      } catch (err: any) {
+        return { status: "not_found", reason: err.message };
       }
     }
 
     // 3. 基于全局链接注册表与目录索引的动态寻址与按需加载
+    const identifier = targetPackageId
+      ? `${targetPackageId}/${targetActionId}`
+      : targetActionId;
+
+    let resolved;
     try {
-      const identifier = targetPackageId
-        ? `${targetPackageId}/${targetActionId}`
-        : targetActionId;
-      const resolved = await resolveActionProject(identifier, this.projectRoot);
-      if (resolved && existsSync(resolved.projectRoot)) {
-        const config = loadProjectConfig(resolved.projectRoot);
-        const actionsMap = await loadActions(resolved.projectRoot, config.actionsDir, {
-          autoInstall: false,
-        });
-        const matched = actionsMap.get(resolved.actionId);
-        if (matched) {
-          this.actions.set(`${resolved.packageId}/${resolved.actionId}`, matched);
-          // 仅当目标包就是当前项目时才注册短标识符，避免跨包动态载入污染全局短标识符
-          if (!targetPackageId || resolved.packageId === this.packageId) {
-            this.actions.set(resolved.actionId, matched);
-          }
-          return matched;
-        }
-      }
-    } catch {
-      // 忽略寻址异常并返回 undefined
+      resolved = await resolveActionProject(identifier, this.projectRoot, this.customHome);
+    } catch (err: any) {
+      return { status: "not_found", reason: err.message };
     }
 
-    return undefined;
+    if (!resolved || !existsSync(resolved.projectRoot)) {
+      return {
+        status: "not_found",
+        reason: `Project root not found for action '${identifier}'`,
+      };
+    }
+
+    let config;
+    try {
+      config = loadProjectConfig(resolved.projectRoot);
+    } catch (err: any) {
+      return {
+        status: "load_failed",
+        error: err instanceof Error ? err : new Error(String(err)),
+        packageId: resolved.packageId,
+        projectRoot: resolved.projectRoot,
+      };
+    }
+
+    let actionsMap: Map<string, ActionDefinition>;
+    try {
+      actionsMap = await loadActions(resolved.projectRoot, config.actionsDir, {
+        autoInstall: false,
+      });
+    } catch (err: any) {
+      return {
+        status: "load_failed",
+        error: err instanceof Error ? err : new Error(String(err)),
+        packageId: resolved.packageId,
+        projectRoot: resolved.projectRoot,
+      };
+    }
+
+    const matched = actionsMap.get(resolved.actionId);
+    if (matched) {
+      this.actions.set(`${resolved.packageId}/${resolved.actionId}`, matched);
+      // 仅当目标包就是当前项目时才注册短标识符，避免跨包动态载入污染全局短标识符
+      if (!targetPackageId || resolved.packageId === this.packageId) {
+        this.actions.set(resolved.actionId, matched);
+      }
+      return { status: "found", action: matched };
+    }
+
+    return {
+      status: "not_found",
+      reason: `Action '${resolved.actionId}' not found in package '${resolved.packageId}' (${resolved.projectRoot})`,
+    };
   }
 
   /**
@@ -234,6 +341,92 @@ export class ActionRunner {
    */
   public listActions(): ActionDefinition[] {
     return Array.from(this.actions.values());
+  }
+
+  /**
+   * 跨包运行时解析与获取（确保跨包执行具备独立的配置、存储、状态与 Action 注册表）。
+   */
+  public async resolveTargetPackageRunner(targetPackageId: string): Promise<ActionRunner | undefined> {
+    if (this.packageRunners.has(targetPackageId)) {
+      return this.packageRunners.get(targetPackageId);
+    }
+
+    if (this.packageContextResolver) {
+      const resolved = await this.packageContextResolver(targetPackageId);
+      if (resolved) {
+        const runner = new ActionRunner({
+          packageId: targetPackageId,
+          storage: resolved.storage,
+          globalStorage: this.globalStorage,
+          projectRoot: resolved.projectRoot,
+          projectConfig: resolved.projectConfig,
+          actions: resolved.actions,
+          process: this.process,
+          clock: this.clock,
+          maxCallDepth: this.maxCallDepth,
+          maxSubRuns: this.maxSubRuns,
+          actionResolver: this.actionResolver,
+          getStorageForPackage: this.getStorageForPackage,
+          packageContextResolver: this.packageContextResolver,
+        });
+        this.packageRunners.set(targetPackageId, runner);
+        return runner;
+      }
+    }
+
+    const root = resolvePackageRoot(targetPackageId, this.projectRoot, this.customHome);
+    if (root && existsSync(root)) {
+      const config = loadProjectConfig(root);
+      let storage: RuntimeStorage;
+      if (this.getStorageForPackage) {
+        storage = this.getStorageForPackage(targetPackageId, root);
+      } else {
+        const sqlitePath = (config as any).storage?.sqlitePath || ".actiondock/storage.db";
+        const dbPath = join(root, sqlitePath);
+        const { SqliteRuntimeStorage } = await import("../storage/sqlite");
+        storage = new SqliteRuntimeStorage({ dbPath, packageId: targetPackageId });
+      }
+      const actionsMap = await loadActions(root, config.actionsDir, { autoInstall: false });
+      const runner = new ActionRunner({
+        packageId: targetPackageId,
+        storage,
+        globalStorage: this.globalStorage,
+        projectRoot: root,
+        projectConfig: config,
+        actions: actionsMap,
+        process: this.process,
+        clock: this.clock,
+        maxCallDepth: this.maxCallDepth,
+        maxSubRuns: this.maxSubRuns,
+        actionResolver: this.actionResolver,
+        getStorageForPackage: this.getStorageForPackage,
+        packageContextResolver: this.packageContextResolver,
+        customHome: this.customHome,
+      });
+      this.packageRunners.set(targetPackageId, runner);
+      return runner;
+    }
+
+    if (this.getStorageForPackage) {
+      const storage = this.getStorageForPackage(targetPackageId);
+      const runner = new ActionRunner({
+        packageId: targetPackageId,
+        storage,
+        globalStorage: this.globalStorage,
+        actions: new Map(),
+        process: this.process,
+        clock: this.clock,
+        maxCallDepth: this.maxCallDepth,
+        maxSubRuns: this.maxSubRuns,
+        actionResolver: this.actionResolver,
+        getStorageForPackage: this.getStorageForPackage,
+        packageContextResolver: this.packageContextResolver,
+      });
+      this.packageRunners.set(targetPackageId, runner);
+      return runner;
+    }
+
+    return undefined;
   }
 
   /**
@@ -284,47 +477,7 @@ export class ActionRunner {
       }
     }
 
-    // 1. 环路死锁检测 (Cycle Detection)
-    const isExternal = Boolean(targetPackageId && targetPackageId !== this.packageId);
-    const callKey = isExternal
-      ? `${targetPackageId}/${targetActionId}`
-      : targetActionId;
-
-    const hasCycle = isExternal
-      ? callStack.includes(callKey)
-      : (callStack.includes(callKey) || (this.packageId ? callStack.includes(`${this.packageId}/${targetActionId}`) : false));
-
-    if (hasCycle) {
-      const error: RuntimeError = {
-        code: "ACTION_CYCLE_DETECTED",
-        message: `Cycle detected in action invocation: ${callStack.join(" -> ")} -> ${callKey}`,
-      };
-      return {
-        runId,
-        result: Promise.resolve({ ok: false, runId, error }),
-        cancel: () => false,
-      };
-    }
-    callStack.push(callKey);
-
-    // 2. 输入参数 JSON Schema 校验（若 action 已就绪）
-    if (action?.inputSchema) {
-      const val = validateSchema(action.inputSchema, input);
-      if (!val.valid) {
-        const error: RuntimeError = {
-          code: "INPUT_VALIDATION_FAILED",
-          message: `Input schema validation failed for action '${action.id}'`,
-          details: val.errors,
-        };
-        return {
-          runId,
-          result: Promise.resolve({ ok: false, runId, error }),
-          cancel: () => false,
-        };
-      }
-    }
-
-    // 3. 插入初始运行记录 (状态: running)
+    // 1. 始终优先将执行尝试持久化到存储中（确保任意异常与终态都可追溯）
     const initialRun: RunRecord = {
       id: runId,
       rootRunId: options.rootRunId || options.parentRunId || runId,
@@ -340,30 +493,8 @@ export class ActionRunner {
     };
     this.storage.createRun(initialRun);
 
-    // 4. 初始化 AbortController 与超时定时器
-    const controller = new AbortController();
-    if (options.signal) {
-      if (options.signal.aborted) {
-        controller.abort(options.signal.reason);
-      } else {
-        options.signal.addEventListener(
-          "abort",
-          () => controller.abort(options.signal?.reason),
-          { once: true }
-        );
-      }
-    }
-
-    let isTimeout = false;
-    let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
-    if (typeof options.timeoutMs === "number" && options.timeoutMs > 0) {
-      timeoutTimer = setTimeout(() => {
-        isTimeout = true;
-        controller.abort(new Error(`Action exceeded timeout of ${options.timeoutMs}ms`));
-      }, options.timeoutMs);
-    }
-
     let finalized = false;
+    let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
     const finalizeRun = (
       status: TerminalRunStatus,
       output?: unknown,
@@ -378,40 +509,155 @@ export class ActionRunner {
       this.storage.updateRun(runId, status, output, error);
     };
 
-    // 5. 构建 ActionContext 运行时上下文
+    // 2. 调用嵌套深度限制检测 (Max Call Depth Check)
+    const maxDepth = options.maxCallDepth ?? this.maxCallDepth;
+    if (callStack.length >= maxDepth) {
+      const error: RuntimeError = {
+        code: "ACTION_MAX_DEPTH_EXCEEDED",
+        message: `Maximum call depth of ${maxDepth} exceeded: ${callStack.join(" -> ")} -> ${targetActionId}`,
+      };
+      finalizeRun("failed", undefined, error);
+      return {
+        runId,
+        result: Promise.resolve({ ok: false, runId, error }),
+        cancel: () => false,
+      };
+    }
+
+    // 3. 环路死锁检测 (Cycle Detection)
+    const isExternal = Boolean(targetPackageId && targetPackageId !== this.packageId);
+    const callKey = isExternal
+      ? `${targetPackageId}/${targetActionId}`
+      : targetActionId;
+
+    const hasCycle = isExternal
+      ? callStack.includes(callKey)
+      : (callStack.includes(callKey) || (this.packageId ? callStack.includes(`${this.packageId}/${targetActionId}`) : false));
+
+    if (hasCycle) {
+      const error: RuntimeError = {
+        code: "ACTION_CYCLE_DETECTED",
+        message: `Cycle detected in action invocation: ${callStack.join(" -> ")} -> ${callKey}`,
+      };
+      finalizeRun("failed", undefined, error);
+      return {
+        runId,
+        result: Promise.resolve({ ok: false, runId, error }),
+        cancel: () => false,
+      };
+    }
+    callStack.push(callKey);
+
+    // 4. 输入参数 JSON Schema 校验（若 action 已就绪）
+    if (action?.inputSchema) {
+      const val = validateSchema(action.inputSchema, input);
+      if (!val.valid) {
+        const error: RuntimeError = {
+          code: "INPUT_VALIDATION_FAILED",
+          message: `Input schema validation failed for action '${action.id}'`,
+          details: val.errors,
+        };
+        finalizeRun("failed", undefined, error);
+        return {
+          runId,
+          result: Promise.resolve({ ok: false, runId, error }),
+          cancel: () => false,
+        };
+      }
+    }
+
+    // 5. 初始化 AbortController 与超时定时器
+    const controller = new AbortController();
+    if (options.signal) {
+      if (options.signal.aborted) {
+        controller.abort(options.signal.reason);
+      } else {
+        options.signal.addEventListener(
+          "abort",
+          () => controller.abort(options.signal?.reason),
+          { once: true }
+        );
+      }
+    }
+
+    let isTimeout = false;
+    if (typeof options.timeoutMs === "number" && options.timeoutMs > 0) {
+      timeoutTimer = setTimeout(() => {
+        isTimeout = true;
+        controller.abort(new Error(`Action exceeded timeout of ${options.timeoutMs}ms`));
+      }, options.timeoutMs);
+    }
+
+    // 6. 构建 ActionContext 运行时上下文
     const ctx = createActionContext({
       storage: this.storage,
       globalStorage: this.globalStorage,
-      overrides: this.configOverrides,
+      overrides: { ...this.configOverrides, ...(options.configOverrides || {}) },
       projectConfig: this.projectConfig,
       runId,
       rootRunId: initialRun.rootRunId,
       parentRunId: options.parentRunId,
       signal: controller.signal,
-      process: options.process,
+      process: options.process || this.process,
       progress: options.progress,
       logger: options.logger || new StderrLogger(action?.id || targetActionId),
       onActionInvoke: async (childAction, childInput, parentRunId) => {
-        const childResult = await this.execute(childAction, childInput, {
-          rootRunId: initialRun.rootRunId,
-          parentRunId,
-          callStack,
-          signal: controller.signal,
-          process: options.process,
-          progress: options.progress,
-          logger: options.logger,
-        });
-        if (!childResult.ok) {
-          const err = new Error(childResult.error.message);
-          (err as any).code = childResult.error.code;
-          (err as any).details = childResult.error.details;
+        if (this.activeSubRuns >= this.maxSubRuns) {
+          const err = new Error(`Maximum concurrent sub-runs (${this.maxSubRuns}) reached`);
+          (err as any).code = "MAX_SUBRUNS_REACHED";
           throw err;
         }
-        return childResult.data;
+
+        let childPackageId = this.packageId;
+        if (
+          typeof childAction === "string" ||
+          (typeof childAction === "object" && !("run" in childAction))
+        ) {
+          const parsed = ActionResolver.parseRef(childAction as ActionRef | string);
+          if (parsed.packageId) {
+            childPackageId = parsed.packageId;
+          }
+        }
+
+        this.activeSubRuns++;
+        try {
+          let runnerToUse: ActionRunner = this;
+          if (childPackageId && childPackageId !== this.packageId) {
+            const targetRunner = await this.resolveTargetPackageRunner(childPackageId);
+            if (targetRunner) {
+              runnerToUse = targetRunner;
+            } else if (!this.actionResolver) {
+              const err = new Error(`Package '${childPackageId}' could not be resolved`);
+              (err as any).code = "PACKAGE_NOT_FOUND";
+              throw err;
+            }
+          }
+
+          const childResult = await runnerToUse.execute(childAction, childInput, {
+            rootRunId: initialRun.rootRunId,
+            parentRunId,
+            callStack,
+            signal: controller.signal,
+            process: options.process || this.process,
+            progress: options.progress,
+            logger: options.logger,
+            configOverrides: options.configOverrides,
+            maxCallDepth: options.maxCallDepth ?? this.maxCallDepth,
+          });
+          if (!childResult.ok) {
+            const err = new Error(childResult.error.message);
+            (err as any).code = childResult.error.code;
+            (err as any).details = childResult.error.details;
+            throw err;
+          }
+          return childResult.data;
+        } finally {
+          this.activeSubRuns--;
+        }
       },
     });
 
-    // 6. 执行 Action 业务逻辑并与取消/超时信号进行竞态
+    // 7. 执行 Action 业务逻辑并与取消/超时信号进行竞态
     const abortPromise = new Promise<never>((_, reject) => {
       if (controller.signal.aborted) {
         reject(controller.signal.reason || new Error("Action execution was cancelled"));
@@ -428,11 +674,38 @@ export class ActionRunner {
       try {
         let currentAction = action;
         if (!currentAction) {
-          currentAction = await this.resolveAction(actionOrId);
-          if (!currentAction) {
+          const resolution = await this.resolveAction(actionOrId);
+          if (resolution.status === "found") {
+            currentAction = resolution.action;
+          } else if (resolution.status === "load_failed") {
+            const cause = resolution.error;
+            const causeMsg = cause?.message || String(cause);
+            const isMissingModule =
+              causeMsg.includes("Cannot find package") ||
+              causeMsg.includes("Cannot find module") ||
+              causeMsg.includes("ERR_MODULE_NOT_FOUND") ||
+              causeMsg.includes("Could not resolve");
+            const hint = isMissingModule
+              ? `依赖未安装，在 '${resolution.projectRoot}' 执行 npm install 或先执行 'ad run ${resolution.packageId}/${targetActionId}'`
+              : undefined;
+
+            const error: RuntimeError = {
+              code: "ACTION_LOAD_FAILED",
+              message: `Failed to load action '${targetActionId}' from package '${resolution.packageId}' (${resolution.projectRoot}): ${causeMsg}`,
+              details: {
+                packageId: resolution.packageId,
+                projectRoot: resolution.projectRoot,
+                rootCause: causeMsg,
+                hint,
+              },
+            };
+            finalizeRun("failed", undefined, error);
+            return { ok: false, runId, error };
+          } else {
             const error: RuntimeError = {
               code: "ACTION_NOT_FOUND",
               message: `Action '${targetActionId}' not found in registry or linked packages`,
+              details: resolution.reason ? { reason: resolution.reason } : undefined,
             };
             finalizeRun("failed", undefined, error);
             return { ok: false, runId, error };
@@ -483,7 +756,7 @@ export class ActionRunner {
             code: "ACTION_TIMEOUT",
             message: `Action exceeded timeout of ${options.timeoutMs}ms`,
           };
-          finalizeRun("failed", undefined, error);
+          finalizeRun("timed_out", undefined, error);
           return { ok: false, runId, error };
         }
 

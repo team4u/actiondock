@@ -1,10 +1,10 @@
 import { readFileSync } from "node:fs";
 import type { ActionDefinition } from "@actiondock/sdk";
+import { DefaultExecutionService } from "../execution/service";
 import { filterWithFallbackInfo } from "../filter";
 import type { ConfigItemDefinition } from "../project/types";
 import { createStorage } from "../storage";
 import { parseDuration } from "../utils";
-import { ActionRunner } from "./runner";
 
 /**
  * 独立编译可执行文件运行时的初始化选项。
@@ -80,7 +80,7 @@ export class StandaloneRuntime {
     const subArgs = filteredArgs.slice(1);
 
     const storage = createStorage(this.packageId, { dataDir });
-    const runner = new ActionRunner({
+    const executionService = new DefaultExecutionService({
       packageId: this.packageId,
       storage,
       configOverrides,
@@ -121,7 +121,7 @@ export class StandaloneRuntime {
               ? positionalPatterns.join("|")
               : undefined);
 
-          const list = runner.listActions().map((a) => ({
+          const list = executionService.listActions().map((a) => ({
             id: a.id,
             description: a.description || "",
           }));
@@ -153,7 +153,7 @@ export class StandaloneRuntime {
             console.error("Error: Action ID is required for describe");
             process.exit(1);
           }
-          const action = runner.getAction(id);
+          const action = executionService.getAction(id);
           if (!action) {
             console.error(`Error: Action '${id}' not found`);
             process.exit(1);
@@ -238,7 +238,7 @@ export class StandaloneRuntime {
           process.once("SIGINT", sigintHandler);
 
           try {
-            const result = await runner.execute(id, input, {
+            const result = await executionService.execute(id, input as any, {
               signal: controller.signal,
               timeoutMs,
             });

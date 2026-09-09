@@ -37,6 +37,8 @@ export function jsonResponse(
   });
 }
 
+import { assertValidPackageId } from "../../utils";
+
 /**
  * 依据 package 参数或项目上下文解析目标 Storage 实例与根目录。
  */
@@ -47,6 +49,8 @@ export function resolveStorageForPackage(
   customHome?: string
 ): { packageId: string; storage: RuntimeStorage; projectRoot?: string } {
   if (packageIdOrPath) {
+    assertValidPackageId(packageIdOrPath);
+
     const root = resolvePackageRoot(packageIdOrPath, projectRoot || undefined, customHome);
     if (root) {
       const config = loadProjectConfig(root);
@@ -56,10 +60,31 @@ export function resolveStorageForPackage(
         projectRoot: root,
       };
     }
-    return {
-      packageId: packageIdOrPath,
-      storage: runtimeRegistry.getStorage(packageIdOrPath),
-    };
+
+    if (projectRoot) {
+      try {
+        const config = loadProjectConfig(projectRoot);
+        if (config.id === packageIdOrPath) {
+          return {
+            packageId: config.id,
+            storage: runtimeRegistry.getStorage(config.id, projectRoot),
+            projectRoot,
+          };
+        }
+      } catch {}
+    }
+
+    const linked = listLinkedPackages(customHome);
+    const matchedLinked = linked.find((p) => p.id === packageIdOrPath);
+    if (matchedLinked && existsSync(matchedLinked.path)) {
+      return {
+        packageId: matchedLinked.id,
+        storage: runtimeRegistry.getStorage(matchedLinked.id, matchedLinked.path),
+        projectRoot: matchedLinked.path,
+      };
+    }
+
+    throw new Error(`Unknown or unregistered package: '${packageIdOrPath}'`);
   }
 
   if (projectRoot) {

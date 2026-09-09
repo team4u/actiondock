@@ -59,6 +59,9 @@ jobs:
       - name: Test
         run: bun test
 
+      - name: Build Packages
+        run: bun run build
+
       - name: Pack Smoke Test
         run: bun run test:pack
 

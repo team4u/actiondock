@@ -399,6 +399,51 @@ export default defineAction({
       expect(fullPaths).toContain("lib/utils/sanitize.ts");
       expect(fullPaths).toContain("lib/unused.ts");
     });
+
+    it("基于 AST 解析并支持 tsconfig.json 路径别名 (@/*) 本地模块解析", () => {
+      writeFileSync(
+        join(tempDir, "tsconfig.json"),
+        JSON.stringify({
+          compilerOptions: {
+            baseUrl: ".",
+            paths: {
+              "@/*": ["src/*"],
+            },
+          },
+        }),
+        "utf-8"
+      );
+
+      mkdirSync(join(tempDir, "src", "helpers"), { recursive: true });
+      writeFileSync(join(tempDir, "src", "helpers", "calc.ts"), "export const add = (a: number, b: number) => a + b;", "utf-8");
+
+      const actionFile = join(tempDir, "actions", "alias-action.ts");
+      writeFileSync(
+        actionFile,
+        `import { add } from "@/helpers/calc";\nexport default { id: "sample.alias-action", run: () => add(1, 2) };`,
+        "utf-8"
+      );
+
+      const manifest: ActionDockManifest = {
+        schemaVersion: 1,
+        actions: {
+          "sample.alias-action": {
+            entry: "actions/alias-action.ts",
+            description: "Alias test action",
+          },
+        },
+      };
+      saveManifest(tempDir, manifest);
+
+      const plan = buildPlan({
+        projectRoot: tempDir,
+        actions: ["sample.alias-action"],
+      });
+
+      const modules = plan.dependencies.modulesAndAssets.filter((d) => d.type === "module");
+      const paths = modules.map((m) => m.path.replace(/\\/g, "/"));
+      expect(paths).toContain("src/helpers/calc.ts");
+    });
   });
 
   describe("BunCompiler: 独立二进制编译器", () => {
@@ -579,6 +624,71 @@ process.exit(0);
       // 8. 验证 Playbook 文件
       const pbPath = join(exportRes.skillDir, "playbooks", "greet-user.md");
       expect(existsSync(pbPath)).toBe(true);
+    });
+
+    it("sanitizes dependencies: resolves workspace:* actual versions, excludes file: dependencies, and omits devDependencies", async () => {
+      // Create a local sibling package to simulate a monorepo workspace dependency
+      const siblingPkgDir = join(tempDir, "packages", "custom-helper");
+      mkdirSync(siblingPkgDir, { recursive: true });
+      writeFileSync(
+        join(siblingPkgDir, "package.json"),
+        JSON.stringify({ name: "custom-helper", version: "3.4.5" })
+      );
+
+      // Write package.json with various dependency formats in project root
+      writeFileSync(
+        join(tempDir, "package.json"),
+        JSON.stringify(
+          {
+            name: "test-pkg",
+            version: "1.0.0",
+            dependencies: {
+              "@actiondock/core": "workspace:*",
+              "custom-helper": "workspace:*",
+              "explicit-dep": "workspace:^2.1.0",
+              "file-dep": "file:../local-folder",
+              "external-dep": "^1.0.0",
+            },
+            devDependencies: {
+              typescript: "^5.0.0",
+              vitest: "^1.0.0",
+            },
+          },
+          null,
+          2
+        )
+      );
+
+      const outDir = join(tempDir, "dist", "exported-sanitized-skill");
+      const exportRes = await exportSkill({
+        projectRoot: tempDir,
+        mode: "source",
+        outDir,
+      });
+
+      const exportedPkgPath = join(exportRes.skillDir, "package.json");
+      expect(existsSync(exportedPkgPath)).toBe(true);
+
+      const exportedPkg = JSON.parse(readFileSync(exportedPkgPath, "utf-8"));
+
+      // 1. @actiondock/* workspace:* resolves to ^ACTIONDOCK_VERSION
+      expect(exportedPkg.dependencies["@actiondock/core"]).toMatch(/^\^2\./);
+      expect(exportedPkg.dependencies["@actiondock/sdk"]).toMatch(/^\^2\./);
+
+      // 2. Non-actiondock workspace:* resolves to actual package version
+      expect(exportedPkg.dependencies["custom-helper"]).toBe("^3.4.5");
+
+      // 3. Explicit workspace constraint is stripped cleanly
+      expect(exportedPkg.dependencies["explicit-dep"]).toBe("^2.1.0");
+
+      // 4. file: dependencies are strictly excluded
+      expect(exportedPkg.dependencies["file-dep"]).toBeUndefined();
+
+      // 5. Normal dependencies are preserved
+      expect(exportedPkg.dependencies["external-dep"]).toBe("^1.0.0");
+
+      // 6. devDependencies are omitted entirely
+      expect(exportedPkg.devDependencies).toBeUndefined();
     });
 
     it("导出独立二进制 Skill 包并验证可执行性", async () => {

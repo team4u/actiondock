@@ -5,11 +5,15 @@ import {
   filterWithFallbackInfo,
   findProjectRoot,
   listLinkedPackages,
+  loadActions,
+  loadManifest,
   loadPlaybooks,
   loadProjectConfig,
+  resolveActionProject,
   resolvePackageRoot,
   resolvePlaybookProject,
   resolveTarget,
+  type PlaybookDefinition,
 } from "@actiondock/core";
 import { Command } from "commander";
 import { ArgumentError, ExecutionError } from "../errors";
@@ -329,5 +333,165 @@ export function registerPlaybookCommands(program: Command, context?: RuntimeCliC
           }),
         context,
       });
+    });
+
+  // playbook validate
+  pbCmd
+    .command("validate [id]")
+    .description("Validate playbook format and action references (in current project or linked packages)")
+    .option("-P, --package <id>", "Target package ID or path")
+    .option("--json", "Output as JSON")
+    .option("--envelope", "Wrap JSON output in standard envelope")
+    .action(async (id: string | undefined, rawOptions: any, cmd: any) => {
+      const options = getEffectiveOptions(rawOptions, cmd);
+      if (context?.standalone) {
+        renderResult(
+          { valid: true, results: [] },
+          {
+            json: options.json,
+            envelope: options.envelope,
+            humanFormatter: () => "No playbooks to validate in standalone mode.",
+            context,
+          }
+        );
+        return;
+      }
+
+      let root: string | null = null;
+      if (options.package) {
+        root = resolvePackageRoot(options.package);
+        if (!root) {
+          throw new ArgumentError(
+            `Package '${options.package}' not found in linked packages or path`
+          );
+        }
+      } else {
+        root = findProjectRoot();
+      }
+
+      const targets: Array<{ root: string; packageId: string; playbooks: PlaybookDefinition[] }> = [];
+
+      if (root) {
+        const config = loadProjectConfig(root);
+        const playbooks = loadPlaybooks(root, config.playbooksDir);
+        if (id) {
+          const pb = playbooks.get(id);
+          if (!pb) {
+            throw new ArgumentError(`Playbook '${id}' not found in package '${config.id}'`);
+          }
+          targets.push({ root, packageId: config.id, playbooks: [pb] });
+        } else {
+          targets.push({ root, packageId: config.id, playbooks: Array.from(playbooks.values()) });
+        }
+      } else if (id) {
+        let resolved;
+        try {
+          resolved = resolvePlaybookProject(id);
+        } catch (err: any) {
+          throw new ArgumentError(err.message);
+        }
+        targets.push({
+          root: resolved.projectRoot,
+          packageId: resolved.packageId,
+          playbooks: [resolved.playbook],
+        });
+      } else {
+        // Outside project: validate all linked packages
+        const linkedList = listLinkedPackages();
+        if (linkedList.length === 0) {
+          throw new ArgumentError("Not in an ActionDock project, and no packages linked.");
+        }
+        for (const pkg of linkedList) {
+          if (!existsSync(pkg.path)) continue;
+          try {
+            const config = loadProjectConfig(pkg.path);
+            const playbooks = loadPlaybooks(pkg.path, config.playbooksDir);
+            targets.push({
+              root: pkg.path,
+              packageId: pkg.id,
+              playbooks: Array.from(playbooks.values()),
+            });
+          } catch {}
+        }
+      }
+
+      const results: Array<{ id: string; packageId: string; valid: boolean; warnings: string[]; errors: string[] }> = [];
+
+      for (const target of targets) {
+        const config = loadProjectConfig(target.root);
+        let actionIds = new Set<string>();
+        let manifest = null;
+        try {
+          manifest = loadManifest(target.root);
+        } catch {
+          // Ignore invalid manifest and fall back to loadActions
+        }
+        if (manifest?.actions) {
+          actionIds = new Set(Object.keys(manifest.actions));
+        } else {
+          try {
+            const actions = await loadActions(target.root, config.actionsDir, { autoInstall: false });
+            actionIds = new Set(actions.keys());
+          } catch {
+            // Ignore action loading failure during validation
+          }
+        }
+
+        for (const pb of target.playbooks) {
+          if (!pb) continue;
+          const errors: string[] = [];
+          const warnings: string[] = [];
+
+          if (!pb.id) errors.push("Missing playbook id");
+          if (!pb.content) warnings.push("Playbook content is empty");
+
+          if (pb.actions) {
+            for (const actId of pb.actions) {
+              if (actionIds.has(actId)) {
+                continue;
+              }
+              try {
+                await resolveActionProject(actId, target.root);
+              } catch (err: any) {
+                warnings.push(err.message);
+              }
+            }
+          }
+
+          results.push({
+            id: pb.id,
+            packageId: target.packageId,
+            valid: errors.length === 0,
+            warnings,
+            errors,
+          });
+        }
+      }
+
+      const allValid = results.every((r) => r.valid);
+      renderResult(
+        { valid: allValid, results },
+        {
+          json: options.json,
+          envelope: options.envelope,
+          humanFormatter: () => {
+            const lines: string[] = [];
+            for (const r of results) {
+              const prefix = targets.length > 1 || !root ? `[${r.packageId}] ` : "";
+              if (r.valid) {
+                const warn = r.warnings.length > 0 ? ` (Warnings: ${r.warnings.join("; ")})` : "";
+                lines.push(`[OK] ${prefix}${r.id}: Valid${warn}`);
+              } else {
+                lines.push(`[FAIL] ${prefix}${r.id}: ${r.errors.join("; ")}`);
+              }
+            }
+            return lines.join("\n");
+          },
+          context,
+        }
+      );
+      if (!allValid) {
+        process.exitCode = 1;
+      }
     });
 }

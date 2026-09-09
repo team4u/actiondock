@@ -89,6 +89,38 @@ describe("SqliteRuntimeStorage", () => {
       expect(notFoundSmart).toBe(false);
     });
 
+    it("正确支持多段嵌套命名空间（a:b:c:key）的精确匹配与删除", async () => {
+      // 场景：namespace 自身包含多层冒号，如 'app:sub:cache'，key 为 'user:123'
+      // 组合全名是 'app:sub:cache:user:123'
+      await storage.setState("app:sub:cache", "user:123", { name: "Bob" });
+
+      // 另一条 namespace 为 'app'，key 为 'sub:cache:user:123'
+      // 其组合全名也是 'app:sub:cache:user:123'，但两者在此处属于不同条目
+      await storage.setState("app:sub", "config", "nested-value");
+
+      // 精确 getState
+      const val1 = await storage.getState<{ name: string }>("app:sub:cache", "user:123");
+      expect(val1).toEqual({ name: "Bob" });
+
+      // findState 支持多层冒号全名查找
+      const found = await storage.findState("app:sub:config");
+      expect(found).toBeDefined();
+      expect(found?.namespace).toBe("app:sub");
+      expect(found?.key).toBe("config");
+      expect(found?.value).toBe("nested-value");
+
+      // deleteStateSmart 依据多层冒号全名删除
+      const deleted = await storage.deleteStateSmart("app:sub:config");
+      expect(deleted).toBe(true);
+      expect(await storage.getState("app:sub", "config")).toBeUndefined();
+
+      // 验证未被误删的嵌套条目
+      expect(await storage.getState<{ name: string }>("app:sub:cache", "user:123")).toEqual({ name: "Bob" });
+      const del2 = await storage.deleteStateSmart("app:sub:cache:user:123");
+      expect(del2).toBe(true);
+      expect(await storage.getState("app:sub:cache", "user:123")).toBeUndefined();
+    });
+
     it("should clear state by namespace, prefix, or all", async () => {
       await storage.setState("", "k1", "v1");
       await storage.setState("", "k2", "v2");
@@ -207,6 +239,46 @@ describe("SqliteRuntimeStorage", () => {
         unlinkSync(tempDbPath);
       } catch {}
     });
+
+    it("unambiguous colon key encoding and ambiguity detection", async () => {
+      const memStorage = new SqliteRuntimeStorage({ packageId: "colon-test-pkg" });
+      try {
+        // Encode and decode tests
+        const { encodeStateKey, decodeStateKey } = await import("../src/storage/sqlite");
+        expect(encodeStateKey("a:b", "c")).toBe("a\\:b:c");
+        expect(encodeStateKey("a", "b:c")).toBe("a:b\\:c");
+        expect(decodeStateKey("a\\:b:c")).toEqual({ namespace: "a:b", key: "c" });
+        expect(decodeStateKey("a:b\\:c")).toEqual({ namespace: "a", key: "b:c" });
+        expect(() => decodeStateKey("a:b:c")).toThrow("Ambiguous state key");
+
+        // Insert conflicting rows: namespace "a:b", key "c" and namespace "a", key "b:c"
+        await memStorage.setState("a:b", "c", { source: "a:b / c" });
+        await memStorage.setState("a", "b:c", { source: "a / b:c" });
+
+        // Unambiguous query using encoded fullKey
+        const res1 = await memStorage.findState("a\\:b:c");
+        expect(res1?.value).toEqual({ source: "a:b / c" });
+        expect(res1?.fullKey).toBe("a\\:b:c");
+
+        const res2 = await memStorage.findState("a:b\\:c");
+        expect(res2?.value).toEqual({ source: "a / b:c" });
+        expect(res2?.fullKey).toBe("a:b\\:c");
+
+        // Ambiguous query with unescaped composite key throws error
+        await expect(memStorage.findState("a:b:c")).rejects.toThrow("Ambiguous state key 'a:b:c': matches 2 entries");
+        await expect(memStorage.deleteStateSmart("a:b:c")).rejects.toThrow("Ambiguous state key 'a:b:c': matches 2 entries for deletion");
+
+        // Delete unambiguously
+        const deleted = await memStorage.deleteStateSmart("a\\:b:c");
+        expect(deleted).toBe(true);
+
+        // Now only 1 entry remains, so legacy query "a:b:c" resolves without error
+        const remaining = await memStorage.findState("a:b:c");
+        expect(remaining?.value).toEqual({ source: "a / b:c" });
+      } finally {
+        memStorage.close();
+      }
+    });
   });
 
   describe("Runs", () => {
@@ -238,4 +310,26 @@ describe("SqliteRuntimeStorage", () => {
       expect(list[0].id).toBe("run-1");
     });
   });
+
+  describe("Database Path Security", () => {
+    it("严格拦截包含路径遍历与非法字符的 packageId", () => {
+      const { resolveDatabasePath } = require("../src/storage");
+      expect(() => resolveDatabasePath("../malicious")).toThrow();
+      expect(() => resolveDatabasePath("../../etc/passwd")).toThrow();
+      expect(() => resolveDatabasePath("pkg/../../../outside")).toThrow();
+      expect(() => resolveDatabasePath("pkg:invalid")).toThrow();
+      expect(() => resolveDatabasePath("pkg$hack")).toThrow();
+      expect(() => resolveDatabasePath("")).toThrow();
+    });
+
+    it("支持合法普通标识符与带 scope 标识符并保持在目标目录下", () => {
+      const { resolveDatabasePath } = require("../src/storage");
+      const p1 = resolveDatabasePath("my-pkg", { dataDir: "/tmp/actiondock-test" });
+      expect(p1).toBe("/tmp/actiondock-test/my-pkg/runtime.db");
+
+      const p2 = resolveDatabasePath("@my-org/my-pkg", { dataDir: "/tmp/actiondock-test" });
+      expect(p2).toBe("/tmp/actiondock-test/my-org/my-pkg/runtime.db");
+    });
+  });
 });
+

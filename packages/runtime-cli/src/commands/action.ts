@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import {
-  ActionRunner,
+  DefaultExecutionService,
   createStorage,
+  ensureDependencyClosure,
   executeRemoteAction,
   fetchRemoteActions,
   fetchRemoteActionShow,
@@ -17,6 +18,7 @@ import {
   resolveTarget,
   validateSchema,
 } from "@actiondock/core";
+import type { JsonValue } from "@actiondock/sdk";
 import { Command } from "commander";
 import { ArgumentError, ExecutionError, SigintError } from "../errors";
 import {
@@ -101,7 +103,7 @@ export async function executeAction(
         dataDir: options.dataDir || context.dataDir,
       });
 
-      const runner = new ActionRunner({
+      const executionService = new DefaultExecutionService({
         packageId: sa.packageId,
         storage,
         configOverrides,
@@ -116,7 +118,7 @@ export async function executeAction(
       });
 
       try {
-        const result = await runner.execute(id, input, {
+        const result = await executionService.execute(id, input as JsonValue, {
           signal: controller.signal,
           timeoutMs,
         });
@@ -165,7 +167,7 @@ export async function executeAction(
 
     // 3. 本地环境执行分支
     if (options.async) {
-      throw new ArgumentError(
+      throw new ExecutionError(
         "Async execution requires a long-running ActionDock server.\nUse --profile, --server, or start 'ad serve'."
       );
     }
@@ -191,6 +193,8 @@ export async function executeAction(
       throw new ExecutionError(err.message);
     }
 
+    await ensureDependencyClosure([resolved.projectRoot]);
+
     const config = loadProjectConfig(resolved.projectRoot);
     const actions = await loadActions(resolved.projectRoot, config.actionsDir);
     const storage = createStorage(config.id, {
@@ -199,16 +203,38 @@ export async function executeAction(
     });
 
     try {
-      const runner = new ActionRunner({
+      const executionService = new DefaultExecutionService({
         packageId: config.id,
         projectRoot: resolved.projectRoot,
         storage,
         projectConfig: config,
         configOverrides,
         actions,
+        getStorageForPackage: (targetPkgId, targetRoot) => {
+          return createStorage(targetPkgId, {
+            projectRoot: targetRoot,
+            dataDir: options.dataDir || context?.dataDir,
+          });
+        },
+        packageContextResolver: async (targetPkgId) => {
+          const targetRoot = resolvePackageRoot(targetPkgId);
+          if (!targetRoot) return undefined;
+          const targetConfig = loadProjectConfig(targetRoot);
+          const targetActions = await loadActions(targetRoot, targetConfig.actionsDir);
+          const targetStorage = createStorage(targetConfig.id, {
+            projectRoot: targetRoot,
+            dataDir: options.dataDir || context?.dataDir,
+          });
+          return {
+            projectRoot: targetRoot,
+            projectConfig: targetConfig,
+            storage: targetStorage,
+            actions: targetActions,
+          };
+        },
       });
 
-      const result = await runner.execute(resolved.actionId, input, {
+      const result = await executionService.execute(resolved.actionId, input as JsonValue, {
         signal: controller.signal,
         timeoutMs,
       });

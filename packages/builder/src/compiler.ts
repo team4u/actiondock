@@ -1,9 +1,74 @@
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { createReadStream, existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import { CompilerError, CompilerValidationError } from "./errors";
 import type { BunCompilerOptions, BunCompilerResult } from "./types";
+
+/**
+ * 异步执行子进程命令，收集标准输出与错误输出。
+ */
+async function execCommandAsync(
+  command: string,
+  args: string[],
+  options: { cwd: string; env: NodeJS.ProcessEnv }
+): Promise<{ status: number | null; stdout: string; stderr: string; error?: Error }> {
+  return new Promise((res) => {
+    const child = spawn(command, args, {
+      cwd: options.cwd,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: options.env,
+    });
+    const stdoutChunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
+    child.stdout?.on("data", (chunk) => stdoutChunks.push(Buffer.from(chunk)));
+    child.stderr?.on("data", (chunk) => stderrChunks.push(Buffer.from(chunk)));
+    child.on("error", (err) => {
+      res({
+        status: null,
+        stdout: Buffer.concat(stdoutChunks).toString("utf-8"),
+        stderr: Buffer.concat(stderrChunks).toString("utf-8"),
+        error: err,
+      });
+    });
+    child.on("close", (code) => {
+      res({
+        status: code,
+        stdout: Buffer.concat(stdoutChunks).toString("utf-8"),
+        stderr: Buffer.concat(stderrChunks).toString("utf-8"),
+      });
+    });
+  });
+}
+
+/**
+ * 流式计算文件的 SHA-256 校验和，杜绝大文件直接读入内存。
+ */
+async function computeFileSha256(filePath: string): Promise<string> {
+  return new Promise((res, rej) => {
+    const hash = createHash("sha256");
+    const stream = createReadStream(filePath);
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.on("end", () => res(hash.digest("hex")));
+    stream.on("error", rej);
+  });
+}
+
+/**
+ * 异步探测 Bun 版本。
+ */
+async function getBunVersion(): Promise<string> {
+  if (typeof (globalThis as any).Bun !== "undefined" && (globalThis as any).Bun.version) {
+    return (globalThis as any).Bun.version;
+  }
+  try {
+    const res = await execCommandAsync("bun", ["--version"], { cwd: process.cwd(), env: process.env });
+    if (res.status === 0) {
+      return res.stdout.trim();
+    }
+  } catch {}
+  return "unknown";
+}
 
 /**
  * 官方支持的 Bun 独立二进制编译目标列表。
@@ -176,9 +241,8 @@ export class BunCompiler {
 
     // 5. 执行外部编译器进程
     const cwd = options.cwd ? resolve(options.cwd) : dirname(resolvedEntry);
-    const proc = spawnSync(args[0], args.slice(1), {
+    const proc = await execCommandAsync(args[0], args.slice(1), {
       cwd,
-      stdio: "pipe",
       env: {
         ...process.env,
         ...options.env,
@@ -206,9 +270,7 @@ export class BunCompiler {
     }
 
     if (proc.status !== 0) {
-      const rawStderr = proc.stderr?.toString("utf-8") || "";
-      const rawStdout = proc.stdout?.toString("utf-8") || "";
-      throw normalizeCompilerError(rawStderr, rawStdout, proc.status ?? 1, options.target);
+      throw normalizeCompilerError(proc.stderr, proc.stdout, proc.status ?? 1, options.target);
     }
 
     // 6. 解析生成的可执行二进制物理路径（适配 Windows .exe 后缀特性）
@@ -232,28 +294,19 @@ export class BunCompiler {
       );
     }
 
-    // 7. 计算二进制大小与校验和
-    const binaryBuffer = readFileSync(actualExecutablePath);
+    // 7. 计算二进制大小与流式校验和
     const sizeBytes = statSync(actualExecutablePath).size;
-    const sha256 = createHash("sha256").update(binaryBuffer).digest("hex");
+    const sha256 = await computeFileSha256(actualExecutablePath);
     const durationMs = Date.now() - startTime;
     const compiledAt = new Date().toISOString();
 
     // 8. 写入 metadata 产物文件
     let metadataPath: string | undefined;
     if (options.emitMetadata !== false) {
+      const targetSlug = (options.target || "host").replace(/[^a-zA-Z0-9_-]/g, "-");
+      const targetMetadataPath = resolve(outDir, `artifact.${targetSlug}.json`);
       metadataPath = resolve(outDir, "artifact.json");
-      const bunVersion =
-        (typeof (globalThis as any).Bun !== "undefined" && (globalThis as any).Bun.version) ||
-        (() => {
-          try {
-            const vProc = spawnSync("bun", ["--version"], { stdio: "pipe" });
-            if (vProc.status === 0) {
-              return vProc.stdout.toString().trim();
-            }
-          } catch {}
-          return "unknown";
-        })();
+      const bunVersion = await getBunVersion();
 
       const metadata = {
         packageId: options.packageId,
@@ -268,7 +321,10 @@ export class BunCompiler {
         actions: options.actions || [],
         compiledAt,
       };
-      writeFileSync(metadataPath, JSON.stringify(metadata, null, 2) + "\n", "utf-8");
+      const metadataContent = JSON.stringify(metadata, null, 2) + "\n";
+      writeFileSync(targetMetadataPath, metadataContent, "utf-8");
+      writeFileSync(metadataPath, metadataContent, "utf-8");
+      metadataPath = targetMetadataPath;
     }
 
     return {

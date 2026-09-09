@@ -1,14 +1,31 @@
 import { DatabaseSync } from "node:sqlite";
 import type { SqliteDriver, SqliteStatement } from "@actiondock/core";
 
+function normalizeValue(val: any): any {
+  return val === undefined ? null : val;
+}
+
 /**
- * 参数规范化：若传入单个数组参数则自动展开，否则直接透传位置或具名参数。
+ * 参数规范化：展开数组并将 undefined 参数替换为 null，适配 node:sqlite 的强类型绑定要求。
  */
 function normalizeParams(args: any[]): any[] {
   if (args.length === 1 && Array.isArray(args[0])) {
-    return args[0];
+    return args[0].map(normalizeValue);
   }
-  return args;
+  if (
+    args.length === 1 &&
+    typeof args[0] === "object" &&
+    args[0] !== null &&
+    !Buffer.isBuffer(args[0]) &&
+    !(args[0] instanceof Uint8Array)
+  ) {
+    const cleaned: Record<string, any> = {};
+    for (const [k, v] of Object.entries(args[0])) {
+      cleaned[k] = normalizeValue(v);
+    }
+    return [cleaned];
+  }
+  return args.map(normalizeValue);
 }
 
 /**

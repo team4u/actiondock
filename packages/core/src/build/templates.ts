@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import { resolve } from "node:path";
 
 /**
@@ -26,8 +28,20 @@ export function generateStandaloneEntrypoint(
   actions: ActionImport[],
   configDefs?: Record<string, unknown>
 ): string {
-  // Resolve path to standalone runtime inside @actiondock/cli
-  const standaloneRuntimePath = resolve(import.meta.dirname, "../runtime/standalone");
+  // 优先解析 @actiondock/core 的真实路径，若失败则回退到源码相对路径或裸包名
+  let standaloneRuntimePath = "@actiondock/core";
+  try {
+    const req = createRequire(import.meta.url);
+    const resolved = req.resolve("@actiondock/core");
+    if (resolved && existsSync(resolved)) {
+      standaloneRuntimePath = resolved;
+    }
+  } catch {
+    const candidate = resolve(import.meta.dirname, "../runtime/standalone");
+    if (existsSync(`${candidate}.ts`) || existsSync(`${candidate}.js`) || existsSync(candidate)) {
+      standaloneRuntimePath = candidate;
+    }
+  }
 
   const imports = actions
     .map((a, idx) => `import action_${idx} from ${JSON.stringify(a.filePath)};`)

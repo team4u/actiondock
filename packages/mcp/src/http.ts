@@ -1,4 +1,5 @@
 import {
+  ACTIONDOCK_VERSION,
   isLoopbackHost,
   launchHttpServer,
   resolveCorsHeaders,
@@ -14,7 +15,7 @@ import type { ActionDockMcpHttpOptions, ActionDockMcpHttpServerInstance } from "
  */
 export function startMcpHttpServer(
   options: ActionDockMcpHttpOptions = {}
-): ActionDockMcpHttpServerInstance {
+): Promise<ActionDockMcpHttpServerInstance> {
   const port = options.port ?? 5178;
   const host = options.host ?? "127.0.0.1";
   const token = options.token;
@@ -26,24 +27,25 @@ export function startMcpHttpServer(
     );
   }
 
-  const runtimeRegistry = new ServerRuntimeRegistry();
+  return (async () => {
+    const runtimeRegistry = options.runtimeRegistry ?? new ServerRuntimeRegistry();
 
-  const handler = createMcpHandler(
-    () => {
-      return createActionDockMcpServer({
-        ...options,
-        runtimeRegistry,
-        executionManager: runtimeRegistry.executionManager,
-      });
-    },
-    {
-      onerror: (err) => {
-        process.stderr.write(`[MCP HTTP Error] ${err?.message || String(err)}\n`);
+    const handler = createMcpHandler(
+      () => {
+        return createActionDockMcpServer({
+          ...options,
+          runtimeRegistry,
+          executionManager: runtimeRegistry.executionManager,
+        });
       },
-    }
-  );
+      {
+        onerror: (err) => {
+          process.stderr.write(`[MCP HTTP Error] ${err?.message || String(err)}\n`);
+        },
+      }
+    );
 
-  const server = launchHttpServer(port, host, async (req) => {
+    const server = await launchHttpServer(port, host, async (req) => {
       const origin = req.headers.get("origin");
       const corsHeaders = resolveCorsHeaders(origin, options.corsOrigins);
 
@@ -81,7 +83,7 @@ export function startMcpHttpServer(
           JSON.stringify({
             status: "ok",
             protocol: "mcp",
-            version: "2.0.0",
+            version: ACTIONDOCK_VERSION,
             timestamp: new Date().toISOString(),
           }),
           {
@@ -144,20 +146,24 @@ export function startMcpHttpServer(
           },
         }
       );
-    }
-  );
+    });
 
-  const actualHost = host === "0.0.0.0" ? "127.0.0.1" : host;
-  const url = `http://${actualHost}:${server.port}`;
+    const actualHost = host === "0.0.0.0" ? "127.0.0.1" : host;
+    const url = `http://${actualHost}:${server.port}`;
 
-  return {
-    port: server.port ?? port,
-    host,
-    url,
-    stop: () => {
-      runtimeRegistry.close();
-      server.stop(true);
-    },
-  };
+    return {
+      port: server.port ?? port,
+      host,
+      url,
+      stop: () => {
+        if (!options.runtimeRegistry) {
+          try {
+            runtimeRegistry.close();
+          } catch {}
+        }
+        server.stop(true);
+      },
+    };
+  })();
 }
 

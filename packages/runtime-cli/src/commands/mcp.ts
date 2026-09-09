@@ -173,7 +173,7 @@ export function registerMcpCommands(program: Command, context?: RuntimeCliContex
       }
 
       try {
-        const server = startMcpHttpServer({
+        const server = await startMcpHttpServer({
           port,
           host,
           token,

@@ -28,9 +28,12 @@ export function setupNodeRuntime(): void {
       host: options.host,
       fetch: options.fetch,
     });
-    server.listen();
+    const ready = server.listen(options.port, options.host).then(() => {});
     return {
-      port: server.port,
+      get port() {
+        return server.port;
+      },
+      ready,
       stop: () => server.stop(),
     };
   });

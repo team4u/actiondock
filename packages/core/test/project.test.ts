@@ -14,6 +14,7 @@ import {
   readStoredDependencyFingerprint,
   saveDependencyFingerprint,
 } from "../src/project/loader";
+import { assertPathWithinRoot } from "../src/utils";
 
 describe("Project Loader & Init", () => {
   let tempDir: string;
@@ -206,5 +207,62 @@ Follow these steps carefully.
         process.env.ACTIONDOCK_AUTO_INSTALL = oldEnv;
       }
     }
+  });
+
+  describe("Security & Path Boundaries", () => {
+    it("rejects absolute paths and dot-dot traversal in actionsDir and playbooksDir", () => {
+      // 绝对路径
+      writeFileSync(
+        join(tempDir, "actiondock.json"),
+        JSON.stringify({ id: "safe-pkg", actionsDir: "/etc/passwd" })
+      );
+      expect(() => loadProjectConfig(tempDir)).toThrow(/cannot be an absolute path/);
+
+      // 相对路径越界 ..
+      writeFileSync(
+        join(tempDir, "actiondock.json"),
+        JSON.stringify({ id: "safe-pkg", actionsDir: "../secret" })
+      );
+      expect(() => loadProjectConfig(tempDir)).toThrow(/escapes boundary/);
+
+      // playbooksDir 越界
+      writeFileSync(
+        join(tempDir, "actiondock.json"),
+        JSON.stringify({ id: "safe-pkg", playbooksDir: "../../outside" })
+      );
+      expect(() => loadProjectConfig(tempDir)).toThrow(/escapes boundary/);
+    });
+
+    it("rejects symlinks that resolve outside of project boundary", () => {
+      const outsideDir = mkdtempSync(join(tmpdir(), "actiondock-outside-"));
+      try {
+        const symlinkActions = join(tempDir, "symlink-actions");
+        symlinkSync(outsideDir, symlinkActions, "dir");
+
+        writeFileSync(
+          join(tempDir, "actiondock.json"),
+          JSON.stringify({ id: "safe-pkg", actionsDir: "symlink-actions" })
+        );
+        expect(() => loadProjectConfig(tempDir)).toThrow(/symlink resolves outside boundary/);
+      } finally {
+        rmSync(outsideDir, { recursive: true, force: true });
+      }
+    });
+
+    it("rejects non-existent targets inside a symlink directory that resolves outside root", () => {
+      const outsideDir = mkdtempSync(join(tmpdir(), "actiondock-outside-"));
+      try {
+        const symlinkDir = join(tempDir, "external-link");
+        symlinkSync(outsideDir, symlinkDir, "dir");
+
+        // The target file does not exist yet, but its parent directory is a symlink pointing outside
+        const nonExistentTarget = join(symlinkDir, "sub", "deep", "nonexistent.ts");
+        expect(() =>
+          assertPathWithinRoot(tempDir, nonExistentTarget, "testFile")
+        ).toThrow(/symlink resolves outside boundary/);
+      } finally {
+        rmSync(outsideDir, { recursive: true, force: true });
+      }
+    });
   });
 });

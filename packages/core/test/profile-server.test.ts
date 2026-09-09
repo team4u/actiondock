@@ -37,6 +37,7 @@ import {
   startActionDockServer,
   useProfile,
   verifyBearerToken,
+  ACTIONDOCK_VERSION,
 } from "../src";
 
 describe("Profile Management & Remote Server", () => {
@@ -108,7 +109,7 @@ Follow these steps to greet a user.
     }
 
     // 2. Start ActionDock server on a random port with token
-    serverInstance = startActionDockServer({
+    serverInstance = await startActionDockServer({
       port: 0, // OS assigns open port
       host: "127.0.0.1",
       token: SECRET_TOKEN,
@@ -284,7 +285,7 @@ Follow these steps to greet a user.
     expect(t4.type).toBe("local");
   });
 
-  test("Security > Loopback host detection and non-loopback auth requirement", () => {
+  test("Security > Loopback host detection and non-loopback auth requirement", async () => {
     expect(isLoopbackHost("127.0.0.1")).toBe(true);
     expect(isLoopbackHost("localhost")).toBe(true);
     expect(isLoopbackHost("::1")).toBe(true);
@@ -292,30 +293,30 @@ Follow these steps to greet a user.
     expect(isLoopbackHost("192.168.1.100")).toBe(false);
 
     // Binding to 0.0.0.0 without token and without allowInsecureNoAuth should throw
-    expect(() => {
+    expect(
       startActionDockServer({
         port: 0,
         host: "0.0.0.0",
-      });
-    }).toThrow("Authentication token is required when binding to a non-loopback address");
+      })
+    ).rejects.toThrow("Authentication token is required when binding to a non-loopback address");
 
     // Binding to 0.0.0.0 with allowInsecureNoAuth succeeds
-    const insecureServer = startActionDockServer({
+    const insecureServer = await startActionDockServer({
       port: 0,
       host: "0.0.0.0",
       allowInsecureNoAuth: true,
     });
     expect(insecureServer.port).toBeGreaterThan(0);
-    insecureServer.stop();
+    await insecureServer.stop();
 
     // Binding to 0.0.0.0 with token succeeds
-    const secureServer = startActionDockServer({
+    const secureServer = await startActionDockServer({
       port: 0,
       host: "0.0.0.0",
       token: "secret-token-for-public",
     });
     expect(secureServer.port).toBeGreaterThan(0);
-    secureServer.stop();
+    await secureServer.stop();
   });
 
   test("Security > constant-time string comparison and token verification", () => {
@@ -344,7 +345,7 @@ Follow these steps to greet a user.
     const healthAuth = await checkRemoteHealth(serverUrl, SECRET_TOKEN);
     expect(healthAuth.ok).toBe(true);
     expect(healthAuth.status).toBe("ok");
-    expect(healthAuth.version).toBe("2.0.0");
+    expect(healthAuth.version).toBe(ACTIONDOCK_VERSION);
     expect(healthAuth.latencyMs).toBeGreaterThanOrEqual(0);
 
     // Direct HTTP GET with query token
@@ -366,7 +367,7 @@ Follow these steps to greet a user.
     expect(jsonDefault.projectRoot).toBeUndefined();
 
     // Server with exposeDebugInfo: true reveals projectRoot
-    const debugServer = startActionDockServer({
+    const debugServer = await startActionDockServer({
       port: 0,
       host: "127.0.0.1",
       token: SECRET_TOKEN,
@@ -382,7 +383,7 @@ Follow these steps to greet a user.
     expect(jsonDebug.ok).toBe(true);
     expect(jsonDebug.projectRoot).toBe(projectDir);
 
-    debugServer.stop();
+    await debugServer.stop();
   });
 
   test("Security > CORS is disabled by default and respects whitelist when configured", async () => {
@@ -396,7 +397,7 @@ Follow these steps to greet a user.
     expect(resDefault.headers.get("access-control-allow-origin")).toBeNull();
 
     // Server with CORS whitelist
-    const corsServer = startActionDockServer({
+    const corsServer = await startActionDockServer({
       port: 0,
       host: "127.0.0.1",
       token: SECRET_TOKEN,
@@ -430,12 +431,12 @@ Follow these steps to greet a user.
     expect(resOptions.status).toBe(204);
     expect(resOptions.headers.get("access-control-allow-origin")).toBe("http://allowed.local:3000");
 
-    corsServer.stop();
+    await corsServer.stop();
   });
 
   test("Security > Request body size limit rejects oversized payloads with 413", async () => {
     // Start server with 100 bytes max body
-    const smallBodyServer = startActionDockServer({
+    const smallBodyServer = await startActionDockServer({
       port: 0,
       host: "127.0.0.1",
       token: SECRET_TOKEN,
@@ -463,7 +464,7 @@ Follow these steps to greet a user.
     expect(json.ok).toBe(false);
     expect(json.error.code).toBe("REQUEST_TOO_LARGE");
 
-    smallBodyServer.stop();
+    await smallBodyServer.stop();
   });
 
   test("Remote Server & Client > queries remote info and actions", async () => {
@@ -786,6 +787,35 @@ Follow these steps to greet a user.
         reader.cancel();
       }
       await new Promise((r) => setTimeout(r, 150));
+    });
+
+    test("Security & Boundary > rejects unknown packages and path traversal in routes", async () => {
+      // 1. Unknown package on /api/v1/config returns 400
+      const unknownPkgRes = await fetch(`${serverUrl}/api/v1/config?package=nonexistent-package`, {
+        headers: { Authorization: `Bearer ${SECRET_TOKEN}` },
+      });
+      expect(unknownPkgRes.status).toBe(400);
+      const unknownData = await unknownPkgRes.json();
+      expect(unknownData.ok).toBe(false);
+      expect(unknownData.error.message).toContain("Unknown or unregistered package");
+
+      // 2. Path traversal in package parameter returns 400
+      const traversalRes = await fetch(`${serverUrl}/api/v1/config?package=../../etc`, {
+        headers: { Authorization: `Bearer ${SECRET_TOKEN}` },
+      });
+      expect(traversalRes.status).toBe(400);
+      const traversalData = await traversalRes.json();
+      expect(traversalData.ok).toBe(false);
+      expect(traversalData.error.message).toContain("Invalid packageId");
+
+      // 3. Unknown package on /api/v1/state returns 400
+      const stateUnknownRes = await fetch(`${serverUrl}/api/v1/state?package=nonexistent-package`, {
+        headers: { Authorization: `Bearer ${SECRET_TOKEN}` },
+      });
+      expect(stateUnknownRes.status).toBe(400);
+      const stateData = await stateUnknownRes.json();
+      expect(stateData.ok).toBe(false);
+      expect(stateData.error.message).toContain("Unknown or unregistered package");
     });
   });
 });

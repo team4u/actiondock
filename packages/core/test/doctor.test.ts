@@ -109,4 +109,50 @@ export default defineAction({
     expect(regCheck?.status).toBe("warn");
     expect(regCheck?.message).toContain("stale");
   });
+
+  it("detects linked packages declaring dependencies with missing node_modules", async () => {
+    const depPkg = mkdtempSync(join(tmpdir(), "doctor-dep-pkg-"));
+    initProject(depPkg, { id: "team.missing-deps", name: "Missing Deps" });
+    writeFileSync(
+      join(depPkg, "package.json"),
+      JSON.stringify({
+        name: "team.missing-deps",
+        dependencies: { "some-lib": "^1.0.0" },
+      })
+    );
+    linkPackage(depPkg, fakeHome);
+
+    const report = await runDoctorChecks({ cwd: fakeHome, customHome: fakeHome });
+    const depCheck = report.checks.find((c) => c.id === "registry.dependencies");
+    expect(depCheck).toBeDefined();
+    expect(depCheck?.status).toBe("warn");
+    expect(depCheck?.message).toContain("team.missing-deps");
+    expect(depCheck?.message).toContain("miss node_modules");
+
+    rmSync(depPkg, { recursive: true, force: true });
+  });
+
+  it("detects unresolvable cross-package references in manifest uses", async () => {
+    const usesPkg = mkdtempSync(join(tmpdir(), "doctor-uses-pkg-"));
+    initProject(usesPkg, { id: "team.uses-pkg", name: "Uses Pkg" });
+    const manifest = {
+      schemaVersion: 1,
+      actions: {
+        "call-external": {
+          entry: "actions/call.ts",
+          uses: ["unresolved.remote/service"],
+        },
+      },
+    };
+    writeFileSync(join(usesPkg, "actiondock.manifest.json"), JSON.stringify(manifest, null, 2));
+    linkPackage(usesPkg, fakeHome);
+
+    const report = await runDoctorChecks({ cwd: fakeHome, customHome: fakeHome });
+    const usesCheck = report.checks.find((c) => c.id === "registry.uses_closure");
+    expect(usesCheck).toBeDefined();
+    expect(usesCheck?.status).toBe("warn");
+    expect(usesCheck?.message).toContain("unresolved.remote/service");
+
+    rmSync(usesPkg, { recursive: true, force: true });
+  });
 });

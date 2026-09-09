@@ -158,4 +158,24 @@ export default defineAction({
     expect(manifest?.actions["sample.greet"]).toBeDefined();
     expect(manifest?.actions["sample.greet"].entry).toBe("actions/greet.ts");
   });
+
+  it("loadManifest 在文件不存在时返回 null，在 JSON 损坏或 schemaVersion 不合法时抛出异常", () => {
+    const nonExistentDir = join(tempDir, "non-existent-sub");
+    expect(loadManifest(nonExistentDir)).toBeNull();
+
+    // 损坏的 JSON
+    writeFileSync(join(tempDir, "actiondock.manifest.json"), "{ invalid json: here");
+    expect(() => loadManifest(tempDir)).toThrow(/Corrupted JSON/);
+
+    // 非法 schemaVersion
+    writeFileSync(
+      join(tempDir, "actiondock.manifest.json"),
+      JSON.stringify({ schemaVersion: 999, actions: {} })
+    );
+    expect(() => loadManifest(tempDir)).toThrow(/Unsupported manifest schemaVersion/);
+
+    // 不是对象
+    writeFileSync(join(tempDir, "actiondock.manifest.json"), JSON.stringify(["not", "an", "object"]));
+    expect(() => loadManifest(tempDir)).toThrow(/Invalid manifest format/);
+  });
 });

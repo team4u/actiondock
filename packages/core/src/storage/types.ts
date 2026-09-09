@@ -118,6 +118,7 @@ export interface RuntimeStorage {
   deleteState(namespace: string, key: string): Promise<boolean>;
   deleteStateSmart(targetKey: string, namespace?: string): Promise<boolean>;
   clearState(options?: { namespace?: string; all?: boolean; prefix?: string }): Promise<number>;
+  cleanExpiredState?(): Promise<number>;
   listStateKeys(namespace?: string | null, prefix?: string): Promise<string[]>;
   listStateEntries(options?: { namespace?: string; prefix?: string }): Promise<StateEntry[]>;
 

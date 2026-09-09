@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { getActionDockHome } from "../utils";
+import { assertPathWithinRoot, assertValidPackageId, getActionDockHome } from "../utils";
 import { SqliteRuntimeStorage } from "./sqlite";
 import type { RuntimeStorage, StorageOptions } from "./types";
 
@@ -27,14 +27,29 @@ export function resolveDatabasePath(
   if (options.inMemory) {
     return ":memory:";
   }
+  assertValidPackageId(packageId);
+
+  // 安全子路径（支持 @scope/pkg 规范，拒绝非法字符与相对回退）
+  const safePkgPath = packageId.startsWith("@") ? packageId.slice(1) : packageId;
+
   if (options.dataDir) {
-    return join(options.dataDir, packageId, "runtime.db");
+    const rootDir = options.dataDir;
+    const dbPath = join(rootDir, safePkgPath, "runtime.db");
+    assertPathWithinRoot(rootDir, dbPath, "database dataDir path");
+    return dbPath;
   }
   if (options.projectRoot) {
-    return join(options.projectRoot, ".actiondock", "runtime.db");
+    const rootDir = options.projectRoot;
+    const dbPath = join(rootDir, ".actiondock", "runtime.db");
+    assertPathWithinRoot(rootDir, dbPath, "database projectRoot path");
+    return dbPath;
   }
+
   // 独立执行二进制默认存储路径: ~/.actiondock/data/<package-id>/runtime.db
-  return join(getActionDockHome(), ".actiondock", "data", packageId, "runtime.db");
+  const rootDir = join(getActionDockHome(), ".actiondock", "data");
+  const dbPath = join(rootDir, safePkgPath, "runtime.db");
+  assertPathWithinRoot(rootDir, dbPath, "database storage path");
+  return dbPath;
 }
 
 /**

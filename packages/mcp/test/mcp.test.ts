@@ -399,7 +399,7 @@ describe("@actiondock/mcp Adapter", () => {
     }).toThrow("Authentication token is required when binding to a non-loopback address");
 
     // Start with loopback default
-    const serverInstance = startMcpHttpServer({
+    const serverInstance = await startMcpHttpServer({
       host: "127.0.0.1",
       port: 6189,
       token: "mcp-secret-123",
@@ -773,7 +773,7 @@ describe("@actiondock/mcp Adapter", () => {
     expect(errResult.structuredContent).toBeUndefined();
   });
 
-  it("M22: server.close() releases underlying storage resources", async () => {
+  it("M22: server.close() preserves external storage and closes internal storage", async () => {
     let storageClosed = false;
     const mockStorage: any = {
       getRun: () => undefined,
@@ -791,7 +791,14 @@ describe("@actiondock/mcp Adapter", () => {
 
     expect(typeof server.close).toBe("function");
     await server.close();
-    expect(storageClosed).toBe(true);
+    // External storage provided by caller must NOT be closed
+    expect(storageClosed).toBe(false);
+
+    // Internal storage created by server should be closed cleanly
+    const internalServer = await createActionDockMcpServer({
+      projectRoot: tmpDir,
+    });
+    await expect(internalServer.close()).resolves.toBeUndefined();
   });
 
   it("M23: sanitizes scoped package names and enforces 64-character limit on MCP tool names", async () => {
@@ -869,6 +876,124 @@ describe("@actiondock/mcp Adapter", () => {
     expect(longTool.name).not.toContain("/");
     // Must be <= 64 characters
     expect(longTool.name.length).toBeLessThanOrEqual(64);
+
+    await server.close();
+  });
+
+  it("M24: tasks/cancel returns true terminal status when already finished, and maps timed_out/interrupted to failed", async () => {
+    const mockStorage: any = {
+      runs: new Map<string, any>(),
+      getRun(id: string) {
+        return this.runs.get(id);
+      },
+      listRuns() {
+        return Array.from(this.runs.values());
+      },
+      updateRun(id: string, status: any) {
+        const r = this.runs.get(id);
+        if (r) r.status = status;
+      },
+      close() {},
+    };
+
+    mockStorage.runs.set("task-success", {
+      id: "task-success",
+      status: "success",
+      startedAt: new Date().toISOString(),
+      finishedAt: new Date().toISOString(),
+    });
+    mockStorage.runs.set("task-timed-out", {
+      id: "task-timed-out",
+      status: "timed_out",
+      startedAt: new Date().toISOString(),
+      finishedAt: new Date().toISOString(),
+    });
+
+    const server = await createActionDockMcpServer({
+      actions: new Map(),
+      storage: mockStorage,
+    });
+
+    // tasks/get for timed_out should map to failed
+    const reqHandler = (server.server as any)._requestHandlers.get("tasks/get");
+    const getRes = await reqHandler({ method: "tasks/get", params: { taskId: "task-timed-out" } });
+    expect(getRes.task.status).toBe("failed");
+
+    // tasks/cancel on already success task should return completed, not cancelled
+    const cancelHandler = (server.server as any)._requestHandlers.get("tasks/cancel");
+    const cancelRes = await cancelHandler({ method: "tasks/cancel", params: { taskId: "task-success" } });
+    expect(cancelRes.status).toBe("completed");
+
+    await server.close();
+  });
+
+  it("M25: strips execution control fields (__async, execution) before passing to action", async () => {
+    let receivedInput: any = null;
+    const strictAction = defineAction({
+      id: "strict-action",
+      inputSchema: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          query: { type: "string" },
+        },
+      },
+      run(input) {
+        receivedInput = input;
+        return { matched: true };
+      },
+    });
+
+    const server = await createActionDockMcpServer({
+      actions: new Map([[strictAction.id, strictAction]]),
+      storage: {
+        getRun: () => undefined,
+        listRuns: () => [],
+        updateRun: () => {},
+        createRun: () => {},
+        close: () => {},
+      } as any,
+    });
+
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverTransport);
+
+    let callResult: any = null;
+    clientTransport.onmessage = (msg: any) => {
+      if (msg.id === 1) {
+        clientTransport.send({ jsonrpc: "2.0", method: "notifications/initialized" });
+        clientTransport.send({
+          jsonrpc: "2.0",
+          id: 2,
+          method: "tools/call",
+          params: {
+            name: "strict-action",
+            arguments: {
+              query: "test",
+              __async: false,
+              execution: { mode: "sync" },
+            },
+          },
+        });
+      } else if (msg.id === 2) {
+        callResult = msg.result;
+      }
+    };
+
+    clientTransport.send({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: { protocolVersion: "2026-07-28", capabilities: {}, clientInfo: { name: "client", version: "1.0" } },
+    });
+
+    await new Promise((r) => setTimeout(r, 150));
+
+    expect(callResult).toBeDefined();
+    expect(callResult.isError).toBeFalsy();
+    expect(receivedInput).toEqual({ query: "test" });
+    expect(receivedInput.execution).toBeUndefined();
+    expect(receivedInput.__async).toBeUndefined();
 
     await server.close();
   });

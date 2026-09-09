@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { loadActionFileMap, loadProjectConfig } from "./loader";
 import type {
   ActionDockManifest,
@@ -43,16 +43,31 @@ export function loadManifest(projectRoot: string): ActionDockManifest | null {
   if (!existsSync(filePath)) {
     return null;
   }
+  let raw: string;
   try {
-    const raw = readFileSync(filePath, "utf-8");
-    const parsed = JSON.parse(raw) as ActionDockManifest;
-    if (!parsed || typeof parsed !== "object" || parsed.schemaVersion !== 1) {
-      return null;
-    }
-    return parsed;
-  } catch {
-    return null;
+    raw = readFileSync(filePath, "utf-8");
+  } catch (err: any) {
+    throw new Error(`Failed to read manifest at ${filePath}: ${err.message}`);
   }
+
+  let parsed: any;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err: any) {
+    throw new Error(`Corrupted JSON in manifest at ${filePath}: ${err.message}`);
+  }
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`Invalid manifest format in ${filePath}: expected a JSON object`);
+  }
+
+  if (parsed.schemaVersion !== 1) {
+    throw new Error(
+      `Unsupported manifest schemaVersion in ${filePath}: received '${parsed.schemaVersion}', expected 1`
+    );
+  }
+
+  return parsed as ActionDockManifest;
 }
 
 /**
@@ -63,10 +78,15 @@ export function saveManifest(projectRoot: string, manifest: ActionDockManifest):
   writeFileSync(filePath, JSON.stringify(manifest, null, 2) + "\n", "utf-8");
 }
 
+const ACTION_ID_REGEX = /^[a-zA-Z0-9_.-]+$/;
+
 /**
- * 校验清单数据结构的合法性。
+ * 校验清单数据结构的合法性与安全性。
  */
-export function validateManifest(manifest: unknown): { valid: boolean; errors?: string[] } {
+export function validateManifest(
+  manifest: unknown,
+  options?: { projectRoot?: string }
+): { valid: boolean; errors?: string[] } {
   if (!manifest || typeof manifest !== "object") {
     return { valid: false, errors: ["Manifest must be an object"] };
   }
@@ -80,18 +100,77 @@ export function validateManifest(manifest: unknown): { valid: boolean; errors?: 
     errors.push("Manifest 'actions' must be an object");
   } else {
     for (const [actionId, item] of Object.entries(m.actions)) {
+      if (!ACTION_ID_REGEX.test(actionId)) {
+        errors.push(`Invalid action ID '${actionId}' in manifest. Action IDs must match ${ACTION_ID_REGEX}`);
+      }
       if (!item || typeof item !== "object") {
         errors.push(`Action entry '${actionId}' must be an object`);
         continue;
       }
       if (!item.entry || typeof item.entry !== "string") {
         errors.push(`Action '${actionId}' must specify string 'entry'`);
+      } else {
+        if (isAbsolute(item.entry)) {
+          errors.push(`Action '${actionId}' entry cannot be an absolute path: ${item.entry}`);
+        } else if (item.entry.split("/").some((part) => part === ".." || part === "\\..")) {
+          errors.push(`Action '${actionId}' entry cannot contain path traversal: ${item.entry}`);
+        } else if (options?.projectRoot) {
+          const resolvedPath = resolve(options.projectRoot, item.entry);
+          const rel = relative(options.projectRoot, resolvedPath);
+          if (rel.startsWith("..") || isAbsolute(rel)) {
+            errors.push(`Action '${actionId}' entry escapes project root: ${item.entry}`);
+          } else if (existsSync(resolvedPath)) {
+            try {
+              const realEntry = realpathSync(resolvedPath);
+              const realRoot = realpathSync(options.projectRoot);
+              const relReal = relative(realRoot, realEntry);
+              if (relReal.startsWith("..") || isAbsolute(relReal)) {
+                errors.push(`Action '${actionId}' entry symlink resolves outside project root: ${item.entry}`);
+              }
+            } catch (err: any) {
+              errors.push(`Failed to resolve real path for Action '${actionId}': ${err.message}`);
+            }
+          }
+        }
       }
       if (item.uses && !Array.isArray(item.uses)) {
         errors.push(`Action '${actionId}' property 'uses' must be an array`);
       }
       if (item.tags && !Array.isArray(item.tags)) {
         errors.push(`Action '${actionId}' property 'tags' must be an array`);
+      }
+    }
+  }
+
+  if (m.assets) {
+    if (!Array.isArray(m.assets)) {
+      errors.push("Manifest 'assets' must be an array");
+    } else {
+      for (const asset of m.assets) {
+        if (typeof asset !== "string") {
+          errors.push("Asset entry must be a string");
+        } else if (isAbsolute(asset)) {
+          errors.push(`Asset path cannot be an absolute path: ${asset}`);
+        } else if (asset.split("/").some((part) => part === ".." || part === "\\..")) {
+          errors.push(`Asset path cannot contain path traversal: ${asset}`);
+        } else if (options?.projectRoot) {
+          const resolvedPath = resolve(options.projectRoot, asset);
+          const rel = relative(options.projectRoot, resolvedPath);
+          if (rel.startsWith("..") || isAbsolute(rel)) {
+            errors.push(`Asset path escapes project root: ${asset}`);
+          } else if (existsSync(resolvedPath)) {
+            try {
+              const realAsset = realpathSync(resolvedPath);
+              const realRoot = realpathSync(options.projectRoot);
+              const relReal = relative(realRoot, realAsset);
+              if (relReal.startsWith("..") || isAbsolute(relReal)) {
+                errors.push(`Asset symlink resolves outside project root: ${asset}`);
+              }
+            } catch (err: any) {
+              errors.push(`Failed to resolve real path for asset '${asset}': ${err.message}`);
+            }
+          }
+        }
       }
     }
   }

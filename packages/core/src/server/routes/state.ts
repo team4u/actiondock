@@ -23,9 +23,10 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
       const keys = await storage.listStateKeys(nsParam !== undefined ? nsParam : null, prefix);
       return jsonResponse({ ok: true, packageId, keys }, 200, corsHeaders);
     } catch (err: any) {
+      const isClient = err.message?.includes("Unknown or unregistered package") || err.message?.includes("Invalid packageId") || err.message?.includes("escapes boundary");
       return jsonResponse(
-        { ok: false, error: { code: "STATE_LIST_ERROR", message: err.message } },
-        500,
+        { ok: false, error: { code: isClient ? "INVALID_ARGUMENT" : "STATE_LIST_ERROR", message: err.message } },
+        isClient ? 400 : 500,
         corsHeaders
       );
     }
@@ -49,9 +50,10 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
       });
       return jsonResponse({ ok: true, packageId, clearedCount }, 200, corsHeaders);
     } catch (err: any) {
+      const isClient = err.message?.includes("Unknown or unregistered package") || err.message?.includes("Invalid packageId") || err.message?.includes("escapes boundary");
       return jsonResponse(
-        { ok: false, error: { code: "STATE_CLEAR_ERROR", message: err.message } },
-        500,
+        { ok: false, error: { code: isClient ? "INVALID_ARGUMENT" : "STATE_CLEAR_ERROR", message: err.message } },
+        isClient ? 400 : 500,
         corsHeaders
       );
     }
@@ -60,72 +62,81 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
   // 3. State Key CRUD: GET / PUT / POST / DELETE /api/v1/state/:key
   const stateKeyMatch = pathname.match(/^\/api\/v1\/state\/([^/]+)$/);
   if (stateKeyMatch) {
-    const key = decodeURIComponent(stateKeyMatch[1]);
-    const pkgParam = url.searchParams.get("package") || undefined;
-    const nsParam = url.searchParams.get("namespace") || undefined;
+    try {
+      const key = decodeURIComponent(stateKeyMatch[1]);
+      const pkgParam = url.searchParams.get("package") || undefined;
+      const nsParam = url.searchParams.get("namespace") || undefined;
 
-    const { packageId, storage } = resolveStorageForPackage(
-      pkgParam,
-      runtimeRegistry,
-      projectRoot,
-      customHome
-    );
+      const { packageId, storage } = resolveStorageForPackage(
+        pkgParam,
+        runtimeRegistry,
+        projectRoot,
+        customHome
+      );
 
-    if (req.method === "GET") {
-      const entry = await storage.findState(key, nsParam);
-      if (!entry || entry.value === undefined) {
+      if (req.method === "GET") {
+        const entry = await storage.findState(key, nsParam);
+        if (!entry || entry.value === undefined) {
+          return jsonResponse(
+            { ok: false, error: { code: "STATE_KEY_NOT_FOUND", message: `State key '${key}' not found` } },
+            404,
+            corsHeaders
+          );
+        }
         return jsonResponse(
-          { ok: false, error: { code: "STATE_KEY_NOT_FOUND", message: `State key '${key}' not found` } },
-          404,
+          {
+            ok: true,
+            packageId,
+            key: entry.key,
+            namespace: entry.namespace,
+            value: entry.value,
+            expiresAt: entry.expiresAt,
+          },
+          200,
           corsHeaders
         );
       }
-      return jsonResponse(
-        {
-          ok: true,
-          packageId,
-          key: entry.key,
-          namespace: entry.namespace,
-          value: entry.value,
-          expiresAt: entry.expiresAt,
-        },
-        200,
-        corsHeaders
-      );
-    }
 
-    if (req.method === "PUT" || req.method === "POST") {
-      const body = await readJsonBody(req, { maxBytes: options.maxBodyBytes });
-      const val = body.value !== undefined ? body.value : body;
-      const ttl = typeof body.ttl === "number" ? body.ttl : undefined;
-      const namespace = body.namespace || nsParam || "";
+      if (req.method === "PUT" || req.method === "POST") {
+        const body = await readJsonBody(req, { maxBytes: options.maxBodyBytes });
+        const val = body.value !== undefined ? body.value : body;
+        const ttl = typeof body.ttl === "number" ? body.ttl : undefined;
+        const namespace = body.namespace || nsParam || "";
 
-      let actualKey = key;
-      let ns = namespace;
-      if (!ns && key.includes(":")) {
-        const idx = key.indexOf(":");
-        ns = key.slice(0, idx);
-        actualKey = key.slice(idx + 1);
-      }
+        let actualKey = key;
+        let ns = namespace;
+        if (!ns && key.includes(":")) {
+          const idx = key.indexOf(":");
+          ns = key.slice(0, idx);
+          actualKey = key.slice(idx + 1);
+        }
 
-      await storage.setState(ns, actualKey, val, ttl);
-      return jsonResponse(
-        { ok: true, packageId, key: actualKey, namespace: ns, message: "updated" },
-        200,
-        corsHeaders
-      );
-    }
-
-    if (req.method === "DELETE") {
-      const deleted = await storage.deleteStateSmart(key, nsParam);
-      if (!deleted) {
+        await storage.setState(ns, actualKey, val, ttl);
         return jsonResponse(
-          { ok: false, error: { code: "STATE_KEY_NOT_FOUND", message: `State key '${key}' not found` } },
-          404,
+          { ok: true, packageId, key: actualKey, namespace: ns, message: "updated" },
+          200,
           corsHeaders
         );
       }
-      return jsonResponse({ ok: true, packageId, key, deleted: true }, 200, corsHeaders);
+
+      if (req.method === "DELETE") {
+        const deleted = await storage.deleteStateSmart(key, nsParam);
+        if (!deleted) {
+          return jsonResponse(
+            { ok: false, error: { code: "STATE_KEY_NOT_FOUND", message: `State key '${key}' not found` } },
+            404,
+            corsHeaders
+          );
+        }
+        return jsonResponse({ ok: true, packageId, key, deleted: true }, 200, corsHeaders);
+      }
+    } catch (err: any) {
+      const isClient = err.message?.includes("Unknown or unregistered package") || err.message?.includes("Invalid packageId") || err.message?.includes("escapes boundary");
+      return jsonResponse(
+        { ok: false, error: { code: isClient ? "INVALID_ARGUMENT" : "STATE_KEY_ERROR", message: err.message } },
+        isClient ? 400 : 500,
+        corsHeaders
+      );
     }
   }
 

@@ -3,6 +3,7 @@ import type { ServerRuntimeRegistry } from "./runtime-registry";
 export interface CoreHttpServerInstance {
   port: number;
   stop: (closeActiveConnections?: boolean) => void | Promise<void>;
+  ready?: Promise<void>;
 }
 
 export type CoreHttpServerFactory = (options: {
@@ -29,6 +30,8 @@ export interface ServerOptions {
   allowInsecureNoAuth?: boolean;
   /** 允许跨域请求的 CORS Origin 白名单列表 */
   corsOrigins?: string[];
+  /** 允许访问执行的 Package ID 白名单列表（为空允许全部） */
+  packageAllowlist?: string[];
   /** 最大允许的请求体字节限制（默认 1MB，防 DoS） */
   maxBodyBytes?: number;
   /** 是否在 health 和 info 接口中透传本地 projectRoot 等调试路径 */
@@ -51,7 +54,9 @@ export interface ActionDockServerInstance {
   url: string;
   /** 关联的 ServerRuntimeRegistry 运行时注册表 */
   runtimeRegistry?: ServerRuntimeRegistry;
+  /** 服务就绪 Promise（可等待端口解析与监听建立） */
+  ready?: Promise<void>;
   /** 优雅关闭服务端并释放所有存储连接 */
-  stop: () => Promise<void> | void;
+  stop: (options?: { graceMs?: number }) => Promise<void> | void;
 }
 

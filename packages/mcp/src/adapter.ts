@@ -2,9 +2,10 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import {
-  ActionRunner,
+  ACTIONDOCK_VERSION,
   createStorage,
-  ExecutionManager,
+  DefaultExecutionService,
+  ensureDependencyClosure,
   findProjectRoot,
   listLinkedPackages,
   loadActions,
@@ -12,11 +13,11 @@ import {
   resolvePackageRoot,
   ServerRuntimeRegistry,
 } from "@actiondock/core";
-import type { ProjectConfig, RuntimeStorage } from "@actiondock/core";
+import type { ExecutionService, ProjectConfig, RuntimeStorage } from "@actiondock/core";
 import type { ActionDefinition, ExecutionResult, RunRecord } from "@actiondock/sdk";
 import { McpServer } from "@modelcontextprotocol/server";
 import { toMcpSchema } from "./schemas";
-import { toMcpTaskPayload, type ActionDockMcpOptions } from "./types";
+import { toMcpTaskPayload, toMcpTaskStatus, type ActionDockMcpOptions } from "./types";
 
 /**
  * 判断目标值是否为普通对象（Plain Object）。
@@ -69,13 +70,12 @@ interface ResolvedTarget {
   config: ProjectConfig;
   actions: Map<string, ActionDefinition>;
   storage: RuntimeStorage;
-  runner: ActionRunner;
+  executionService: ExecutionService;
 }
 
 function createMcpToolCallback(
-  runner: ActionRunner,
+  executionService: ExecutionService,
   actionId: string,
-  executionManager: ExecutionManager,
   timeoutMs?: number
 ) {
   return async (input: any, ctx: any) => {
@@ -88,12 +88,18 @@ function createMcpToolCallback(
     );
     const signal = ctx.mcpReq?.signal;
 
+    // 分发前剥离执行控制字段，防止污染输入导致 Schema 校验失败
+    let cleanInput = input;
+    if (input && typeof input === "object" && !Array.isArray(input)) {
+      const { execution, __async, async: _async, ...rest } = input;
+      cleanInput = rest;
+    }
+
     if (isAsync) {
-      const handle = runner.start(actionId, input, {
+      const ticket = await executionService.start(actionId, cleanInput, {
         signal,
         timeoutMs,
       });
-      executionManager.register(handle);
 
       return {
         content: [
@@ -101,8 +107,8 @@ function createMcpToolCallback(
             type: "text" as const,
             text: JSON.stringify({
               ok: true,
-              runId: handle.runId,
-              taskId: handle.runId,
+              runId: ticket.runId,
+              taskId: ticket.runId,
               status: "running",
             }),
           },
@@ -110,12 +116,10 @@ function createMcpToolCallback(
       };
     }
 
-    const handle = runner.start(actionId, input, {
+    const result = await executionService.execute(actionId, cleanInput, {
       signal,
       timeoutMs,
     });
-    executionManager.register(handle);
-    const result = await handle.result;
     return toMcpResult(result);
   };
 }
@@ -200,26 +204,23 @@ export async function createActionDockMcpServer(
     const dummyConfig: ProjectConfig = {
       id: "virtual",
       name: "Virtual Package",
-      version: "2.0.0",
+      version: ACTIONDOCK_VERSION,
       description: "In-memory virtual package",
       actionsDir: "actions",
       playbooksDir: "playbooks",
     };
     const storage = options.storage ?? runtimeRegistry.getStorage("virtual");
-    const runner = new ActionRunner({
-      packageId: dummyConfig.id,
+    const executionService = runtimeRegistry.getExecutionService("virtual", undefined, dummyConfig, {
       storage,
-      globalStorage: runtimeRegistry.getGlobalStorage(options.customHome),
-      projectConfig: dummyConfig,
-      configOverrides: options.configOverrides,
       actions: options.actions,
+      configOverrides: options.configOverrides,
     });
     targets.push({
       projectRoot: "virtual",
       config: dummyConfig,
       actions: options.actions,
       storage,
-      runner,
+      executionService,
     });
   } else {
     if (resolvedRoots.size === 0) {
@@ -228,34 +229,39 @@ export async function createActionDockMcpServer(
       );
     }
 
+    await ensureDependencyClosure(Array.from(resolvedRoots), {
+      customHome: options.customHome,
+    });
+
     for (const root of resolvedRoots) {
       const projectConfig = loadProjectConfig(root);
       const actions =
         options.actions && resolvedRoots.size === 1
           ? options.actions
-          : await loadActions(root, projectConfig.actionsDir);
+          : await loadActions(root, projectConfig.actionsDir, { autoInstall: false });
 
       const storage =
         options.storage && resolvedRoots.size === 1
           ? options.storage
           : runtimeRegistry.getStorage(projectConfig.id, root);
 
-      const runner = new ActionRunner({
-        packageId: projectConfig.id,
-        projectRoot: root,
-        storage,
-        globalStorage: runtimeRegistry.getGlobalStorage(options.customHome),
+      const executionService = runtimeRegistry.getExecutionService(
+        projectConfig.id,
+        root,
         projectConfig,
-        configOverrides: options.configOverrides,
-        actions,
-      });
+        {
+          storage,
+          actions,
+          configOverrides: options.configOverrides,
+        }
+      );
 
       targets.push({
         projectRoot: root,
         config: projectConfig,
         actions,
         storage,
-        runner,
+        executionService,
       });
     }
   }
@@ -275,7 +281,7 @@ export async function createActionDockMcpServer(
       ? targets[0].config.id || targets[0].config.name || "actiondock"
       : "actiondock";
   const serverVersion =
-    targets.length === 1 ? targets[0].config.version || "2.0.0" : "2.0.0";
+    targets.length === 1 ? targets[0].config.version || ACTIONDOCK_VERSION : ACTIONDOCK_VERSION;
 
   const server = new McpServer({
     name: serverName,
@@ -311,9 +317,8 @@ export async function createActionDockMcpServer(
           outputSchema: action.outputSchema ? toMcpSchema(action.outputSchema) : undefined,
         },
         createMcpToolCallback(
-          target.runner,
+          target.executionService,
           action.id,
-          executionManager,
           options.timeoutMs
         )
       );
@@ -345,13 +350,23 @@ export async function createActionDockMcpServer(
     if (!taskId) {
       throw new Error("taskId parameter is required for tasks/cancel");
     }
-    const activeHandle = executionManager.get(taskId);
-    if (activeHandle) {
-      executionManager.cancel(taskId, req.params?.reason || "Cancelled via MCP tasks/cancel");
-      return {
+    for (const target of targets) {
+      const cancelRes = await target.executionService.cancel(
         taskId,
-        status: "cancelled",
-      };
+        req.params?.reason || "Cancelled via MCP tasks/cancel"
+      );
+      if (cancelRes.outcome === "requested") {
+        return {
+          taskId,
+          status: "cancelled",
+        };
+      }
+      if (cancelRes.outcome === "already_terminal") {
+        return {
+          taskId,
+          status: toMcpTaskStatus(cancelRes.status),
+        };
+      }
     }
     for (const storage of storages) {
       const run = storage.getRun(taskId);
@@ -361,10 +376,14 @@ export async function createActionDockMcpServer(
             code: "ACTION_CANCELLED",
             message: req.params?.reason || "Cancelled via MCP tasks/cancel",
           });
+          return {
+            taskId,
+            status: "cancelled",
+          };
         }
         return {
           taskId,
-          status: "cancelled",
+          status: toMcpTaskStatus(run.status),
         };
       }
     }
@@ -398,17 +417,19 @@ export async function createActionDockMcpServer(
 
     process.removeListener("exit", onProcessExit);
 
-    for (const storage of storages) {
-      try {
-        storage.close();
-      } catch {
-        // ignore
+    for (const target of targets) {
+      if (target.storage !== options.storage) {
+        try {
+          target.storage.close();
+        } catch {
+          // ignore
+        }
       }
     }
 
     if (!options.runtimeRegistry) {
       try {
-        runtimeRegistry.close();
+        await runtimeRegistry.close();
       } catch {
         // ignore
       }
@@ -422,11 +443,14 @@ export async function createActionDockMcpServer(
   };
 
   const onProcessExit = () => {
-    for (const storage of storages) {
-      try {
-        storage.close();
-      } catch {
-        // ignore
+    // 同步尽力清理内部资源
+    for (const target of targets) {
+      if (target.storage !== options.storage) {
+        try {
+          target.storage.close();
+        } catch {
+          // ignore
+        }
       }
     }
     if (!options.runtimeRegistry) {

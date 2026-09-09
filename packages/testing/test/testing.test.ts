@@ -417,5 +417,106 @@ describe("@actiondock/testing", () => {
       expect(runtime.process.hasCalled("docker")).toBe(true);
       expect(runtime.process.getLastCall()?.args).toEqual(["ps"]);
     });
+
+    it("支持测试捕获 ctx.log 输出日志", async () => {
+      const runtime = createTestRuntime();
+
+      const loggingAction = defineAction({
+        id: "test.logging",
+        async run(_input, ctx) {
+          ctx.log.info("Process started", { step: 1 });
+          ctx.log.warn("High memory notice");
+          ctx.log.error("Recoverable issue", { code: 500 });
+          return { success: true };
+        },
+      });
+
+      const res = await runtime.run(loggingAction, {});
+      expect(res.success).toBe(true);
+
+      expect(runtime.logger.logs.length).toBe(3);
+      expect(runtime.logger.logs[0]).toEqual({
+        level: "info",
+        message: "Process started",
+        data: { step: 1 },
+      });
+      expect(runtime.logger.logs[1]).toEqual({
+        level: "warn",
+        message: "High memory notice",
+        data: undefined,
+      });
+      expect(runtime.logger.logs[2]).toEqual({
+        level: "error",
+        message: "Recoverable issue",
+        data: { code: 500 },
+      });
+    });
+
+    it("验证 @actiondock/sdk 与 @actiondock/testing 的 createTestRuntime 等价性与委托及回退模式", async () => {
+      const { createTestRuntime: createSdkRuntime, registerTestRuntimeProvider } = await import("@actiondock/sdk");
+      const { createTestRuntime: createTestingRuntime, registerTestingAsSdkProvider } = await import("../src");
+
+      const testAction = defineAction({
+        id: "calc.add",
+        inputSchema: {
+          type: "object",
+          properties: { a: { type: "number" }, b: { type: "number" } },
+          required: ["a", "b"],
+        },
+        run(input: { a: number; b: number }) {
+          return { sum: input.a + input.b };
+        },
+      });
+
+      // 1. testing 生产运行时执行
+      const testingRuntime = createTestingRuntime();
+      const testingOut = await testingRuntime.run(testAction, { a: 10, b: 20 });
+      expect(testingOut).toEqual({ sum: 30 });
+
+      // 2. 模块加载后自动注册 provider 模式：createSdkRuntime 自动委托到 testing runtime
+      registerTestingAsSdkProvider();
+      const delegatedRuntime = createSdkRuntime();
+      expect(delegatedRuntime.executionService).toBeDefined();
+      const delegatedOut = await delegatedRuntime.run(testAction, { a: 15, b: 25 });
+      expect(delegatedOut).toEqual({ sum: 40 });
+
+      // 3. 未加载/已注销 provider 模式：sdk 独立回退运行时工作完整并对齐方法
+      try {
+        registerTestRuntimeProvider(null);
+        const standaloneSdkRuntime = createSdkRuntime({ config: { initialKey: "val1" } });
+        expect(standaloneSdkRuntime.executionService).toBeUndefined();
+
+        // 对齐的 config.list 与 config.delete
+        expect(standaloneSdkRuntime.config.list()).toEqual({ initialKey: "val1" });
+        standaloneSdkRuntime.config.set("newKey", "val2");
+        expect(standaloneSdkRuntime.config.get<string>("newKey")).toBe("val2");
+        expect(standaloneSdkRuntime.config.delete("initialKey")).toBe(true);
+        expect(standaloneSdkRuntime.config.has("initialKey")).toBe(false);
+
+        // 对齐的 registerAction, getAction, listActions
+        standaloneSdkRuntime.registerAction(testAction);
+        expect(standaloneSdkRuntime.getAction("calc.add")?.id).toBe("calc.add");
+        expect(standaloneSdkRuntime.listActions().length).toBe(1);
+
+        // 对齐的 run 与 execute
+        const sdkRunOut = await standaloneSdkRuntime.run(testAction, { a: 10, b: 20 });
+        expect(sdkRunOut).toEqual({ sum: 30 });
+
+        const sdkExecOut = await standaloneSdkRuntime.execute(testAction, { a: 10, b: 20 });
+        expect(sdkExecOut.ok).toBe(true);
+        if (sdkExecOut.ok) {
+          expect(sdkExecOut.data).toEqual({ sum: 30 });
+        }
+
+        const sdkExecFail = await standaloneSdkRuntime.execute(testAction, { a: "invalid" as any, b: 20 });
+        expect(sdkExecFail.ok).toBe(false);
+        if (!sdkExecFail.ok) {
+          expect(sdkExecFail.error?.code).toBe("INPUT_VALIDATION_FAILED");
+        }
+      } finally {
+        // 恢复全局 testing provider
+        registerTestingAsSdkProvider();
+      }
+    });
   });
 });

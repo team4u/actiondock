@@ -1,13 +1,17 @@
-import { describe, expect, it } from "bun:test";
+import { beforeEach, describe, expect, it } from "bun:test";
 import {
   createTestRuntime,
   defineAction,
   MemoryConfig,
   MemoryLogger,
   MemoryStateStore,
+  registerTestRuntimeProvider,
 } from "../src";
 
 describe("@actiondock/sdk", () => {
+  beforeEach(() => {
+    registerTestRuntimeProvider(null);
+  });
   it("defines an action with validation", () => {
     const action = defineAction({
       id: "test.greet",
@@ -462,6 +466,103 @@ describe("@actiondock/sdk", () => {
       probe: () => false,
     });
     expect(timedOutRes.ready).toBe(false);
+  });
+
+  it("enforces input and output schema validation throwing ActionRuntimeError", async () => {
+    const runtime = createTestRuntime();
+
+    const strictAction = defineAction({
+      id: "test.strict",
+      inputSchema: {
+        type: "object",
+        properties: { count: { type: "number" } },
+        required: ["count"],
+      },
+      outputSchema: {
+        type: "object",
+        properties: { valid: { type: "boolean" } },
+        required: ["valid"],
+      },
+      run(input: any) {
+        if (input.count === -1) {
+          return { valid: "not-a-bool" as any };
+        }
+        return { valid: true };
+      },
+    });
+
+    // Input validation failure
+    try {
+      await runtime.run(strictAction, { count: "not-a-number" } as any);
+      expect(true).toBe(false);
+    } catch (err: any) {
+      expect(err.code).toBe("INPUT_VALIDATION_FAILED");
+    }
+
+    // Output validation failure
+    try {
+      await runtime.run(strictAction, { count: -1 });
+      expect(true).toBe(false);
+    } catch (err: any) {
+      expect(err.code).toBe("OUTPUT_VALIDATION_FAILED");
+    }
+
+    // Successful run
+    const res = await runtime.run(strictAction, { count: 10 });
+    expect(res).toEqual({ valid: true });
+  });
+
+  it("detects cyclic action invocations and throws ACTION_CYCLE_DETECTED", async () => {
+    let loopA: any;
+    let loopB: any;
+
+    loopA = defineAction({
+      id: "test.loop-a",
+      async run(_input: any, ctx) {
+        return ctx.actions.invoke(loopB, {});
+      },
+    });
+
+    loopB = defineAction({
+      id: "test.loop-b",
+      async run(_input: any, ctx) {
+        return ctx.actions.invoke(loopA, {});
+      },
+    });
+
+    const runtime = createTestRuntime({
+      actions: [loopA, loopB],
+    });
+
+    try {
+      await runtime.run(loopA, {});
+      expect(true).toBe(false);
+    } catch (err: any) {
+      expect(err.code).toBe("ACTION_CYCLE_DETECTED");
+    }
+  });
+
+  it("guarantees isolation and TTL expiry between separate test runtimes", async () => {
+    const runtime1 = createTestRuntime({
+      config: { KEY: "value1" },
+      state: { item: "state1" },
+    });
+    const runtime2 = createTestRuntime({
+      config: { KEY: "value2" },
+      state: { item: "state2" },
+    });
+
+    expect(runtime1.config.get<string>("KEY")).toBe("value1");
+    expect(runtime2.config.get<string>("KEY")).toBe("value2");
+
+    await runtime1.state.set("item", "updated1");
+    expect(await runtime1.state.get<string>("item")).toBe("updated1");
+    expect(await runtime2.state.get<string>("item")).toBe("state2");
+
+    // TTL expiry test
+    await runtime1.state.set("temp", "expiring", 0.001); // 1 millisecond
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(await runtime1.state.get("temp")).toBeUndefined();
   });
 });
 

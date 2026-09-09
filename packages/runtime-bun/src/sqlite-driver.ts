@@ -1,4 +1,5 @@
-import { Database } from "bun:sqlite";
+import { createRequire } from "node:module";
+import type { Database } from "bun:sqlite";
 import type { SqliteDriver, SqliteStatement } from "@actiondock/core";
 
 /**
@@ -19,6 +20,29 @@ export interface BunSqliteDriverOptions {
   safeintegers?: boolean;
 }
 
+let BunDatabaseClass: any;
+
+function getBunDatabaseClass(): any {
+  if (!BunDatabaseClass) {
+    if (typeof (globalThis as any).Bun === "undefined") {
+      throw new Error(
+        "BunSqliteDriver requires Bun runtime environment. It cannot be instantiated directly in Node.js."
+      );
+    }
+    try {
+      const require = createRequire(import.meta.url);
+      const bunSqlite = require("bun:sqlite");
+      BunDatabaseClass = bunSqlite.Database || bunSqlite.default;
+      if (!BunDatabaseClass) {
+        throw new Error("Cannot find Database constructor in 'bun:sqlite'");
+      }
+    } catch (err: any) {
+      throw new Error(`Failed to load 'bun:sqlite': ${err.message}`);
+    }
+  }
+  return BunDatabaseClass;
+}
+
 /**
  * 基于 bun:sqlite 的 SQLite 驱动实现。
  */
@@ -33,7 +57,8 @@ export class BunSqliteDriver implements SqliteDriver {
     options?: BunSqliteDriverOptions
   ) {
     if (typeof dbOrPath === "string") {
-      this.db = new Database(dbOrPath, options);
+      const DB = getBunDatabaseClass();
+      this.db = new DB(dbOrPath, options);
     } else {
       this.db = dbOrPath;
     }

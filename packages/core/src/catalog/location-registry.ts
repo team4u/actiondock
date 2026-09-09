@@ -1,14 +1,26 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { getActionDockHome } from "../utils";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
+import {
+  getRegistryFilePath,
+  linkPackage,
+  loadRegistry,
+  pruneRegistry,
+  saveRegistry,
+  unlinkPackage,
+  withRegistryLock,
+} from "../registry/registry";
+import type { LinkedPackageEntry, LinkedWorkspaceEntry } from "../registry/types";
+import { loadProjectConfig } from "../project/loader";
+import { ACTIONDOCK_VERSION } from "../version";
 import type { LocationLink, LocationRegistryData } from "./types";
 
 export class LocationRegistry {
+  private customHome?: string;
   private filePath: string;
 
   constructor(customHome?: string) {
-    const baseDir = getActionDockHome(customHome);
-    this.filePath = join(baseDir, ".actiondock", "registry.json");
+    this.customHome = customHome;
+    this.filePath = getRegistryFilePath(customHome);
   }
 
   public getFilePath(): string {
@@ -16,119 +28,124 @@ export class LocationRegistry {
   }
 
   public load(): LocationRegistryData {
-    if (!existsSync(this.filePath)) {
-      return { schemaVersion: 1, links: [] };
+    const reg = loadRegistry(this.customHome);
+    const links: LocationLink[] = [];
+    if (reg.workspaces) {
+      for (const [wsPath, ws] of Object.entries(reg.workspaces)) {
+        links.push({
+          type: "workspace",
+          path: resolve(ws.path || wsPath),
+          linkedAt: ws.linkedAt || new Date().toISOString(),
+          depth: 3,
+        });
+      }
     }
-    try {
-      const raw = readFileSync(this.filePath, "utf-8");
-      const parsed = JSON.parse(raw);
-      if (!parsed || typeof parsed !== "object") {
-        return { schemaVersion: 1, links: [] };
-      }
-
-      // 处理 2.0 旧格式向 1 迁移
-      if (parsed.schemaVersion === 1 && Array.isArray(parsed.links)) {
-        return parsed as LocationRegistryData;
-      }
-
-      const links: LocationLink[] = [];
-      if (parsed.workspaces && typeof parsed.workspaces === "object") {
-        for (const [wsPath, ws] of Object.entries(parsed.workspaces as Record<string, any>)) {
+    if (reg.packages) {
+      for (const pkg of Object.values(reg.packages)) {
+        if (!pkg.workspaceRoot && pkg.path) {
           links.push({
-            type: "workspace",
-            path: resolve(wsPath),
-            linkedAt: ws.linkedAt || new Date().toISOString(),
-            depth: 3,
+            type: "package",
+            path: resolve(pkg.path),
+            linkedAt: pkg.linkedAt || new Date().toISOString(),
           });
         }
       }
-
-      if (parsed.packages && typeof parsed.packages === "object") {
-        for (const [_, pkg] of Object.entries(parsed.packages as Record<string, any>)) {
-          if (!pkg.workspaceRoot && pkg.path) {
-            links.push({
-              type: "package",
-              path: resolve(pkg.path),
-              linkedAt: pkg.linkedAt || new Date().toISOString(),
-            });
-          }
-        }
-      }
-
-      return { schemaVersion: 1, links };
-    } catch {
-      return { schemaVersion: 1, links: [] };
     }
+    return { schemaVersion: 1, links };
   }
 
   public save(data: LocationRegistryData): void {
-    const dir = dirname(this.filePath);
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
-    }
-    const tempPath = `${this.filePath}.${process.pid}.${Date.now()}.tmp`;
-    writeFileSync(tempPath, JSON.stringify(data, null, 2) + "\n", "utf-8");
-    renameSync(tempPath, this.filePath);
-  }
+    withRegistryLock(this.filePath, () => {
+      const current = loadRegistry(this.customHome);
+      const newPackages: Record<string, LinkedPackageEntry> = {};
+      const newWorkspaces: Record<string, LinkedWorkspaceEntry> = {};
 
-  public addLink(path: string, options: { type?: "package" | "workspace"; depth?: number } = {}): LocationLink {
-    const absPath = resolve(path);
-    const registry = this.load();
-    const type = options.type || "package";
-    const depth = options.depth ?? (type === "workspace" ? 3 : undefined);
-
-    const existingIndex = registry.links.findIndex((l) => l.path === absPath);
-    const link: LocationLink = {
-      type,
-      path: absPath,
-      linkedAt: new Date().toISOString(),
-      depth,
-    };
-
-    if (existingIndex >= 0) {
-      registry.links[existingIndex] = link;
-    } else {
-      registry.links.push(link);
-    }
-
-    this.save(registry);
-    return link;
-  }
-
-  public removeLink(targetPathOrId: string): LocationLink | null {
-    const registry = this.load();
-    const absPath = resolve(targetPathOrId);
-
-    const idx = registry.links.findIndex(
-      (l) => l.path === absPath || l.path.endsWith(`/${targetPathOrId}`)
-    );
-
-    if (idx >= 0) {
-      const [removed] = registry.links.splice(idx, 1);
-      this.save(registry);
-      return removed;
-    }
-    return null;
-  }
-
-  public prune(): LocationLink[] {
-    const registry = this.load();
-    const valid: LocationLink[] = [];
-    const removed: LocationLink[] = [];
-
-    for (const link of registry.links) {
-      if (existsSync(link.path)) {
-        valid.push(link);
+    for (const link of data.links) {
+      const absPath = resolve(link.path);
+      if (link.type === "workspace") {
+        newWorkspaces[absPath] = {
+          path: absPath,
+          linkedAt: link.linkedAt || new Date().toISOString(),
+        };
       } else {
-        removed.push(link);
+        const existing = Object.values(current.packages || {}).find((p) => resolve(p.path) === absPath);
+        if (existing) {
+          newPackages[existing.id] = existing;
+        } else if (existsSync(absPath)) {
+          try {
+            const config = loadProjectConfig(absPath);
+            newPackages[config.id] = {
+              id: config.id,
+              name: config.name,
+              version: config.version,
+              path: absPath,
+              linkedAt: link.linkedAt || new Date().toISOString(),
+            };
+          } catch {}
+        }
       }
     }
 
-    if (removed.length > 0) {
-      registry.links = valid;
-      this.save(registry);
-    }
+      saveRegistry(
+        {
+          version: ACTIONDOCK_VERSION,
+          packages: newPackages,
+          workspaces: newWorkspaces,
+        },
+        this.customHome
+      );
+    });
+  }
 
+  public addLink(path: string, options: { type?: "package" | "workspace"; depth?: number } = {}): LocationLink {
+    const type = options.type || "package";
+    if (type === "workspace") {
+      const res = linkPackage(path, this.customHome, { recursive: true });
+      return {
+        type: "workspace",
+        path: resolve(path),
+        linkedAt: res.linkedAt,
+        depth: options.depth ?? 3,
+      };
+    } else {
+      const res = linkPackage(path, this.customHome, { recursive: false });
+      return {
+        type: "package",
+        path: resolve(path),
+        linkedAt: res.linkedAt,
+      };
+    }
+  }
+
+  public removeLink(targetPathOrId: string): LocationLink | null {
+    const unres = unlinkPackage(targetPathOrId, this.customHome);
+    if (!unres || (!unres.removedPackage && !unres.packagesCount)) {
+      return null;
+    }
+    return {
+      type: unres.type,
+      path: unres.path,
+      linkedAt: new Date().toISOString(),
+    };
+  }
+
+  public prune(): LocationLink[] {
+    const pruneRes = pruneRegistry(this.customHome);
+    const removed: LocationLink[] = [];
+    for (const pkg of pruneRes.prunedPackages) {
+      removed.push({
+        type: "package",
+        path: pkg.path,
+        linkedAt: pkg.linkedAt,
+      });
+    }
+    for (const ws of pruneRes.prunedWorkspaces) {
+      removed.push({
+        type: "workspace",
+        path: ws.path,
+        linkedAt: ws.linkedAt,
+      });
+    }
     return removed;
   }
 }

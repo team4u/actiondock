@@ -30,7 +30,7 @@ export interface LinkedWorkspaceEntry {
  * 全局 Registry 数据结构（~/.actiondock/registry.json）。
  */
 export interface GlobalRegistryData {
-  version: "2.0.0";
+  version: string;
   packages: Record<string, LinkedPackageEntry>;
   workspaces?: Record<string, LinkedWorkspaceEntry>;
 }

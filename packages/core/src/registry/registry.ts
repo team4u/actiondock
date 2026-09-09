@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { findProjectRoot, loadActions, loadPlaybooks, loadProjectConfig } from "../project/loader";
 import { loadManifest } from "../project/manifest";
@@ -27,6 +27,51 @@ const IGNORED_SCAN_DIRS = new Set([
   ".idea",
   ".vscode",
 ]);
+
+/**
+ * 跨平台注册表写锁控制函数（防止多进程并发读写导致 registry.json 损坏）。
+ */
+export function withRegistryLock<T>(filePath: string, fn: () => T): T {
+  const lockDir = `${filePath}.lock`;
+  const timeoutMs = 5000;
+  const startTime = Date.now();
+
+  while (true) {
+    try {
+      mkdirSync(lockDir);
+      break;
+    } catch (err: any) {
+      if (err.code === "EEXIST") {
+        try {
+          const stat = statSync(lockDir);
+          if (Date.now() - stat.mtimeMs > 10000) {
+            rmSync(lockDir, { recursive: true, force: true });
+            continue;
+          }
+        } catch {}
+
+        if (Date.now() - startTime > timeoutMs) {
+          rmSync(lockDir, { recursive: true, force: true });
+          mkdirSync(lockDir);
+          break;
+        }
+
+        const waitTill = Date.now() + 25;
+        while (Date.now() < waitTill) {}
+      } else {
+        throw err;
+      }
+    }
+  }
+
+  try {
+    return fn();
+  } finally {
+    try {
+      rmSync(lockDir, { recursive: true, force: true });
+    } catch {}
+  }
+}
 
 /**
  * 递归扫描包含 actiondock.json 的子项目根目录
@@ -73,13 +118,41 @@ export function loadRegistry(customHome?: string): GlobalRegistryData {
   try {
     const raw = readFileSync(filePath, "utf-8");
     const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object" || !parsed.packages) {
+    if (!parsed || typeof parsed !== "object") {
       return { version: "2.0.0", packages: {}, workspaces: {} };
     }
+
+    const packages: Record<string, LinkedPackageEntry> = parsed.packages || {};
+    const workspaces: Record<string, LinkedWorkspaceEntry> = parsed.workspaces || {};
+
+    // 格式兼容与迁移：如果包含 schemaVersion: 1 的 links 但缺少 packages/workspaces
+    if (Array.isArray(parsed.links) && Object.keys(packages).length === 0 && Object.keys(workspaces).length === 0) {
+      for (const link of parsed.links) {
+        if (!link.path || !existsSync(link.path)) continue;
+        if (link.type === "workspace") {
+          workspaces[link.path] = {
+            path: resolve(link.path),
+            linkedAt: link.linkedAt || new Date().toISOString(),
+          };
+        } else {
+          try {
+            const config = loadProjectConfig(link.path);
+            packages[config.id] = {
+              id: config.id,
+              name: config.name,
+              version: config.version,
+              path: resolve(link.path),
+              linkedAt: link.linkedAt || new Date().toISOString(),
+            };
+          } catch {}
+        }
+      }
+    }
+
     return {
       version: "2.0.0",
-      packages: parsed.packages || {},
-      workspaces: parsed.workspaces || {},
+      packages,
+      workspaces,
     };
   } catch {
     return { version: "2.0.0", packages: {}, workspaces: {} };
@@ -88,8 +161,48 @@ export function loadRegistry(customHome?: string): GlobalRegistryData {
 
 export function saveRegistry(data: GlobalRegistryData, customHome?: string): void {
   const filePath = getRegistryFilePath(customHome);
-  mkdirSync(dirname(filePath), { recursive: true });
-  writeFileSync(filePath, JSON.stringify(data, null, 2) + "\n", "utf-8");
+  const dir = dirname(filePath);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+
+  // 统一输出包含 schemaVersion: 1 与 links 的复合格式，保障双向兼容
+  const links: Array<{ type: "package" | "workspace"; path: string; linkedAt: string; depth?: number }> = [];
+  if (data.workspaces) {
+    for (const [wsPath, ws] of Object.entries(data.workspaces)) {
+      links.push({
+        type: "workspace",
+        path: resolve(ws.path || wsPath),
+        linkedAt: ws.linkedAt || new Date().toISOString(),
+        depth: 3,
+      });
+    }
+  }
+  if (data.packages) {
+    for (const pkg of Object.values(data.packages)) {
+      if (!pkg.workspaceRoot && pkg.path) {
+        links.push({
+          type: "package",
+          path: resolve(pkg.path),
+          linkedAt: pkg.linkedAt || new Date().toISOString(),
+        });
+      }
+    }
+  }
+
+  const unifiedData = {
+    version: "2.0.0",
+    schemaVersion: 1,
+    packages: data.packages || {},
+    workspaces: data.workspaces || {},
+    links,
+  };
+
+  withRegistryLock(filePath, () => {
+    const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+    writeFileSync(tempPath, JSON.stringify(unifiedData, null, 2) + "\n", "utf-8");
+    renameSync(tempPath, filePath);
+  });
 }
 
 export function linkPackage(

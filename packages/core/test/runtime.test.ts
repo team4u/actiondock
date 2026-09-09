@@ -1,7 +1,12 @@
 import { describe, expect, it } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { type ActionDefinition, defineAction } from "@actiondock/sdk";
 import { ActionResolver } from "../src/catalog/action-resolver";
 import { DefaultExecutionService } from "../src/execution/service";
+import { initProject } from "../src/project/init";
+import { linkPackage } from "../src/registry/registry";
 import { ActionRunner } from "../src/runtime/runner";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
 
@@ -551,7 +556,7 @@ describe("ActionRunner", () => {
 
     const runs = storage.listRuns();
     expect(runs.length).toBe(1);
-    expect(runs[0].status).toBe("failed");
+    expect(runs[0].status).toBe("timed_out");
     expect(runs[0].error?.code).toBe("ACTION_TIMEOUT");
   });
 
@@ -652,5 +657,295 @@ describe("ActionRunner", () => {
     expect(progressEvents[0].total).toBe(100);
     expect(progressEvents[0].message).toBe("halfway done");
     expect(progressEvents[1].current).toBe(100);
+  });
+
+  it("persists runs in storage even when validation, cycle, or max depth fails", async () => {
+    const storage = new SqliteRuntimeStorage({
+      packageId: "test-pkg",
+      dbPath: ":memory:",
+    });
+
+    const schemaAction = defineAction({
+      id: "test.schema-action",
+      inputSchema: {
+        type: "object",
+        required: ["username"],
+        properties: { username: { type: "string" } },
+      },
+      run() {
+        return "ok";
+      },
+    });
+
+    const runner = new ActionRunner({
+      packageId: "test-pkg",
+      storage,
+      actions: new Map([[schemaAction.id, schemaAction]]),
+      maxCallDepth: 3,
+    });
+
+    // 1. Validation failure should be persisted
+    const valResult = await runner.execute(schemaAction, { username: 123 as any });
+    expect(valResult.ok).toBe(false);
+    const valRun = storage.getRun(valResult.runId);
+    expect(valRun).toBeDefined();
+    expect(valRun?.status).toBe("failed");
+    expect(valRun?.error?.code).toBe("INPUT_VALIDATION_FAILED");
+
+    // 2. Cycle detection failure should be persisted
+    const cycleAction = defineAction({
+      id: "test.cycle-action",
+      async run(_, ctx) {
+        return ctx.actions.invoke("test.cycle-action");
+      },
+    });
+    runner.registerAction(cycleAction);
+
+    const cycleResult = await runner.execute(cycleAction, {});
+    expect(cycleResult.ok).toBe(false);
+    const runs = storage.listRuns();
+    const cycleRun = runs.find((r) => r.error?.code === "ACTION_CYCLE_DETECTED");
+    expect(cycleRun).toBeDefined();
+    expect(cycleRun?.status).toBe("failed");
+
+    // 3. Max call depth failure should be persisted
+    const recursiveActionA = defineAction({
+      id: "test.rec-a",
+      async run(_, ctx) {
+        return ctx.actions.invoke("test.rec-b");
+      },
+    });
+    const recursiveActionB = defineAction({
+      id: "test.rec-b",
+      async run(_, ctx) {
+        return ctx.actions.invoke("test.rec-c");
+      },
+    });
+    const recursiveActionC = defineAction({
+      id: "test.rec-c",
+      async run(_, ctx) {
+        return ctx.actions.invoke("test.rec-d");
+      },
+    });
+    const recursiveActionD = defineAction({
+      id: "test.rec-d",
+      async run() {
+        return "done";
+      },
+    });
+
+    runner.registerAction(recursiveActionA);
+    runner.registerAction(recursiveActionB);
+    runner.registerAction(recursiveActionC);
+    runner.registerAction(recursiveActionD);
+
+    const depthResult = await runner.execute(recursiveActionA, {}, { maxCallDepth: 3 });
+    expect(depthResult.ok).toBe(false);
+    const depthRun = storage.listRuns().find((r) => r.error?.code === "ACTION_MAX_DEPTH_EXCEEDED");
+    expect(depthRun).toBeDefined();
+    expect(depthRun?.status).toBe("failed");
+  });
+
+  it("handles cross-package execution switching to target package storage and context", async () => {
+    const pkgAStorage = new SqliteRuntimeStorage({
+      packageId: "pkg-a",
+      dbPath: ":memory:",
+    });
+    const pkgBStorage = new SqliteRuntimeStorage({
+      packageId: "pkg-b",
+      dbPath: ":memory:",
+    });
+
+    // pkg-b has an action that writes to its state and reads its config
+    const pkgBAction = defineAction({
+      id: "b.worker",
+      async run(input: any, ctx) {
+        await ctx.state.set("from_worker", "worker_val");
+        const greeting = ctx.config.get("greeting", "default_greet");
+        return { greeting, echoed: input };
+      },
+    });
+
+    const pkgBRunner = new ActionRunner({
+      packageId: "pkg-b",
+      storage: pkgBStorage,
+      projectConfig: {
+        id: "pkg-b",
+        name: "Package B",
+        version: "1.0.0",
+        config: { greeting: { default: "hello from B" } },
+      },
+      actions: new Map([[pkgBAction.id, pkgBAction]]),
+    });
+
+    // pkg-a has a caller action that invokes pkg-b/b.worker
+    const pkgAAction = defineAction({
+      id: "a.caller",
+      async run(input: any, ctx) {
+        return ctx.actions.invoke({ packageId: "pkg-b", actionId: "b.worker" }, input);
+      },
+    });
+
+    const pkgARunner = new ActionRunner({
+      packageId: "pkg-a",
+      storage: pkgAStorage,
+      actions: new Map([[pkgAAction.id, pkgAAction]]),
+      packageContextResolver: async (packageId) => {
+        if (packageId === "pkg-b") {
+          return {
+            storage: pkgBStorage,
+            projectConfig: {
+              id: "pkg-b",
+              name: "Package B",
+              version: "1.0.0",
+              config: { greeting: { default: "hello from B" } },
+            },
+            actions: new Map([[pkgBAction.id, pkgBAction]]),
+          };
+        }
+        return undefined;
+      },
+    });
+
+    const result = await pkgARunner.execute(pkgAAction, { foo: "bar" });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data).toEqual({ greeting: "hello from B", echoed: { foo: "bar" } });
+    }
+
+    // Verify pkg-b storage has the child run!
+    const pkgBRuns = pkgBStorage.listRuns();
+    expect(pkgBRuns.length).toBe(1);
+    expect(pkgBRuns[0].packageId).toBe("pkg-b");
+    expect(pkgBRuns[0].actionId).toBe("b.worker");
+    expect(pkgBRuns[0].status).toBe("success");
+
+    // Verify pkg-b state was written in pkg-b storage!
+    const stateVal = await pkgBStorage.getState("", "from_worker");
+    expect(stateVal).toBe("worker_val");
+  });
+
+  it("handles unregistered or unresolvable cross-package invocation with clear error", async () => {
+    const pkgStorage = new SqliteRuntimeStorage({
+      packageId: "pkg-caller",
+      dbPath: ":memory:",
+    });
+
+    const callerAction = defineAction({
+      id: "caller.test",
+      async run(input: any, ctx) {
+        return ctx.actions.invoke({ packageId: "unregistered-remote-pkg", actionId: "some.action" }, input);
+      },
+    });
+
+    const runner = new ActionRunner({
+      packageId: "pkg-caller",
+      storage: pkgStorage,
+      actions: new Map([[callerAction.id, callerAction]]),
+      packageContextResolver: async () => undefined,
+    });
+
+    const result = await runner.execute(callerAction, {});
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("PACKAGE_NOT_FOUND");
+    }
+  });
+
+  it("DefaultExecutionService persists ACTION_NOT_FOUND and preserves error code", async () => {
+    const storage = new SqliteRuntimeStorage({
+      packageId: "test-pkg",
+      dbPath: ":memory:",
+    });
+
+    const service = new DefaultExecutionService({
+      packageId: "test-pkg",
+      storage,
+    });
+
+    const result = await service.execute({ actionId: "nonexistent.action" }, {});
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("ACTION_NOT_FOUND");
+    }
+
+    const record = await service.get(result.runId);
+    expect(record).toBeDefined();
+    expect(record?.status).toBe("failed");
+    expect(record?.error?.code).toBe("ACTION_NOT_FOUND");
+  });
+
+  it("returns ACTION_LOAD_FAILED when action source import fails in linked package", async () => {
+    const fakeHome = mkdtempSync(join(tmpdir(), "runner-home-"));
+    const pkgDir = mkdtempSync(join(tmpdir(), "runner-pkg-"));
+    try {
+      initProject(pkgDir, {
+        id: "team.broken-pkg",
+        name: "Broken Package",
+      });
+      linkPackage(pkgDir, fakeHome);
+
+      const brokenActionCode = `
+import { nonexistentModule } from "completely-nonexistent-package-123456";
+export default {
+  id: "broken.act",
+  run() { return { ok: true }; }
+};
+`;
+      writeFileSync(join(pkgDir, "actions", "broken.act.ts"), brokenActionCode);
+
+      const storage = new SqliteRuntimeStorage({
+        packageId: "caller-pkg",
+        dbPath: ":memory:",
+      });
+
+      const runner = new ActionRunner({
+        packageId: "caller-pkg",
+        storage,
+        customHome: fakeHome,
+      });
+
+      const result = await runner.execute("team.broken-pkg/broken.act", {});
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe("ACTION_LOAD_FAILED");
+        expect(result.error.message).toContain("broken.act");
+        expect(result.error.message).toContain("team.broken-pkg");
+        expect(result.error.details).toBeDefined();
+        const details = result.error.details as any;
+        expect(details.packageId).toBe("team.broken-pkg");
+        expect(details.projectRoot).toBe(pkgDir);
+        expect(details.rootCause).toMatch(/Cannot find package|Cannot find module|Could not resolve/);
+        expect(details.hint).toContain("依赖未安装");
+      }
+    } finally {
+      rmSync(fakeHome, { recursive: true, force: true });
+      rmSync(pkgDir, { recursive: true, force: true });
+    }
+  });
+
+  it("returns ACTION_NOT_FOUND with resolver reason when package is not linked", async () => {
+    const fakeHome = mkdtempSync(join(tmpdir(), "runner-home-"));
+    try {
+      const storage = new SqliteRuntimeStorage({
+        packageId: "caller-pkg",
+        dbPath: ":memory:",
+      });
+
+      const runner = new ActionRunner({
+        packageId: "caller-pkg",
+        storage,
+        customHome: fakeHome,
+      });
+
+      const result = await runner.execute("unlinked.pkg/some.action", {});
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe("ACTION_NOT_FOUND");
+        expect((result.error.details as any)?.reason).toMatch(/Linked package 'unlinked\.pkg' not found|ad link/);
+      }
+    } finally {
+      rmSync(fakeHome, { recursive: true, force: true });
+    }
   });
 });

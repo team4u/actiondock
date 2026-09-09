@@ -92,7 +92,7 @@ export function registerServeCommand(program: Command, context?: RuntimeCliConte
       }
 
       try {
-        const server = startActionDockServer({
+        const server = await startActionDockServer({
           port,
           host,
           token,

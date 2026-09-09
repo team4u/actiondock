@@ -5,8 +5,10 @@ import type {
   ActionInvoker,
   ActionRef,
   Config,
+  ExecutionResult,
   Logger,
   ProcessResult,
+  RuntimeError,
   StateStore,
 } from "./types";
 
@@ -56,6 +58,21 @@ export class MemoryConfig implements Config {
    */
   set(key: string, value: unknown): void {
     this.store.set(key, value);
+  }
+
+  /**
+   * 删除指定配置项。
+   * @param key 配置键名
+   */
+  delete(key: string): boolean {
+    return this.store.delete(key);
+  }
+
+  /**
+   * 列出所有已存储配置项。
+   */
+  list(): Record<string, unknown> {
+    return Object.fromEntries(this.store.entries());
   }
 }
 
@@ -199,6 +216,90 @@ export class MemoryLogger implements Logger {
 }
 
 /**
+ * 规范化运行时错误异常类。
+ * 当 run 方法执行失败时抛出，完整实现 RuntimeError 契约。
+ */
+export class ActionRuntimeError extends Error implements RuntimeError {
+  public code: string;
+  public details?: unknown;
+  public cause?: unknown;
+
+  constructor(error: RuntimeError) {
+    super(error.message);
+    this.name = "ActionRuntimeError";
+    this.code = error.code;
+    this.details = error.details;
+    this.cause = error.cause;
+    Object.setPrototypeOf(this, ActionRuntimeError.prototype);
+  }
+}
+
+export type TestRuntimeProvider = (options?: TestRuntimeOptions) => any;
+let _provider: TestRuntimeProvider | null | undefined;
+
+/**
+ * 注册测试运行时提供者（由 @actiondock/testing 在加载时注册为单一事实源）。
+ */
+export function registerTestRuntimeProvider(provider: TestRuntimeProvider | null | undefined): void {
+  _provider = provider;
+}
+
+function validateData(schema: unknown, data: unknown, isInput: boolean): void {
+  if (schema === false) {
+    throw new ActionRuntimeError({
+      code: isInput ? "INPUT_VALIDATION_FAILED" : "OUTPUT_VALIDATION_FAILED",
+      message: `${isInput ? "Input" : "Output"} schema rejects all values (schema is false)`,
+    });
+  }
+  if (!schema || typeof schema !== "object") return;
+  const s = schema as Record<string, unknown>;
+  if (s.type === "object") {
+    if (data === null || typeof data !== "object" || Array.isArray(data)) {
+      throw new ActionRuntimeError({
+        code: isInput ? "INPUT_VALIDATION_FAILED" : "OUTPUT_VALIDATION_FAILED",
+        message: `${isInput ? "Input" : "Output"} must be an object`,
+      });
+    }
+    const d = data as Record<string, unknown>;
+    if (Array.isArray(s.required)) {
+      for (const req of s.required) {
+        if (!(req in d) || d[req] === undefined) {
+          throw new ActionRuntimeError({
+            code: isInput ? "INPUT_VALIDATION_FAILED" : "OUTPUT_VALIDATION_FAILED",
+            message: `Missing required property: ${req}`,
+          });
+        }
+      }
+    }
+    if (s.properties && typeof s.properties === "object") {
+      for (const [key, propDef] of Object.entries(s.properties as Record<string, any>)) {
+        if (key in d && d[key] !== undefined) {
+          const val = d[key];
+          if (propDef.type === "number" && typeof val !== "number") {
+            throw new ActionRuntimeError({
+              code: isInput ? "INPUT_VALIDATION_FAILED" : "OUTPUT_VALIDATION_FAILED",
+              message: `Property '${key}' must be a number`,
+            });
+          }
+          if (propDef.type === "string" && typeof val !== "string") {
+            throw new ActionRuntimeError({
+              code: isInput ? "INPUT_VALIDATION_FAILED" : "OUTPUT_VALIDATION_FAILED",
+              message: `Property '${key}' must be a string`,
+            });
+          }
+          if (propDef.type === "boolean" && typeof val !== "boolean") {
+            throw new ActionRuntimeError({
+              code: isInput ? "INPUT_VALIDATION_FAILED" : "OUTPUT_VALIDATION_FAILED",
+              message: `Property '${key}' must be a boolean`,
+            });
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
  * 测试运行时接口，提供对内存配置、状态和日志的直接访问及便捷的 Action 执行方法。
  */
 export interface TestRuntime {
@@ -208,6 +309,20 @@ export interface TestRuntime {
   state: MemoryStateStore;
   /** 内存日志记录器 */
   logger: MemoryLogger;
+  /** 统一执行服务（由高级测试运行时提供） */
+  executionService?: any;
+  /**
+   * 注册 Action 动作定义
+   */
+  registerAction(action: ActionDefinition): void;
+  /**
+   * 获取已注册的 Action 动作定义
+   */
+  getAction(id: string): ActionDefinition | undefined;
+  /**
+   * 列出已注册的所有 Action 动作定义
+   */
+  listActions(): ActionDefinition[];
   /**
    * 执行指定的 Action 并返回最终输出结果
    * @param action 目标 Action 定义对象、引用或标识符
@@ -217,29 +332,32 @@ export interface TestRuntime {
     action: ActionDefinition<I, O> | ActionRef | string,
     input?: I
   ): Promise<O>;
+  /**
+   * 执行指定的 Action 并返回 ExecutionResult 信封包装
+   * @param action 目标 Action 定义对象或标识符
+   * @param input 输入参数
+   * @param options 可选执行控制参数
+   */
+  execute<I = unknown, O = unknown>(
+    action: ActionDefinition<I, O> | string,
+    input?: I,
+    options?: any
+  ): Promise<ExecutionResult<O>>;
+  [key: string]: any;
 }
 
 /**
- * 创建用于单元测试的轻量级内存测试运行时（TestRuntime）。
- * 
- * 特点：
- * 1. 零外部依赖：无需依赖 SQLite 或本地文件系统，即开即用。
- * 2. 真实语义：完整支持状态持久化、TTL 过期、命名空间隔离、Action 相互调用与环路死锁检测。
- * 
+ * @deprecated 建议优先使用 `@actiondock/testing` 中的 `createTestRuntime`，具备完整的 ExecutionService 协调、Schema 校验、FakeClock 与独立持久化语义。
+ * 本 SDK 入口为无外部依赖的轻量测试运行时兼容层。
+ *
  * @param options 初始化选项（可选初始 config, state, logger, signal）
  * @returns TestRuntime 实例
- * 
- * @example
- * ```ts
- * const runtime = createTestRuntime({
- *   config: { API_KEY: "test_key" }
- * });
- * const result = await runtime.run(myAction, { foo: "bar" });
- * expect(result.success).toBe(true);
- * expect(await runtime.state.get("some_key")).toBe(1);
- * ```
  */
 export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime {
+  if (_provider) {
+    return _provider(options);
+  }
+
   const config = new MemoryConfig(options.config || {});
   const memoryMap = new Map<string, unknown>(
     Object.entries(options.state || {})
@@ -297,16 +415,24 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
           }
           const found = actionsMap.get(fullId) || actionsMap.get(pureId);
           if (!found) {
-            throw new Error(`Action '${fullId}' not found in TestRuntime actions registry`);
+            throw new ActionRuntimeError({
+              code: "ACTION_NOT_FOUND",
+              message: `Action '${fullId}' not found in TestRuntime actions registry`,
+            });
           }
           target = found as ActionDefinition<I, O>;
           targetCallKey = actionsMap.has(fullId) ? fullId : target.id;
         }
 
+        if (target.inputSchema) {
+          validateData(target.inputSchema, input, true);
+        }
+
         if (currentCallStack.includes(targetCallKey)) {
-          throw new Error(
-            `Cycle detected in action invocation: ${[...currentCallStack, targetCallKey].join(" -> ")}`
-          );
+          throw new ActionRuntimeError({
+            code: "ACTION_CYCLE_DETECTED",
+            message: `Cycle detected in action invocation: ${[...currentCallStack, targetCallKey].join(" -> ")}`,
+          });
         }
 
         const nextCallStack = [...currentCallStack, targetCallKey];
@@ -383,7 +509,11 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
             parentId: parentRunId,
           },
         };
-        return (await target.run(input as I, ctx)) as O;
+        const output = (await target.run(input as I, ctx)) as O;
+        if (target.outputSchema) {
+          validateData(target.outputSchema, output, false);
+        }
+        return output;
       },
     };
     return invoker;
@@ -395,11 +525,44 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
     config,
     state,
     logger,
+    registerAction(action: ActionDefinition): void {
+      actionsMap.set(action.id, action);
+    },
+    getAction(id: string): ActionDefinition | undefined {
+      return actionsMap.get(id);
+    },
+    listActions(): ActionDefinition[] {
+      return Array.from(actionsMap.values());
+    },
     async run<I = unknown, O = unknown>(
       action: ActionDefinition<I, O> | ActionRef | string,
       input?: I
     ): Promise<O> {
       return rootInvoker.invoke(action, input);
+    },
+    async execute<I = unknown, O = unknown>(
+      action: ActionDefinition<I, O> | string,
+      input?: I,
+      options?: any
+    ): Promise<ExecutionResult<O>> {
+      try {
+        const data = await rootInvoker.invoke(action, input);
+        return {
+          ok: true,
+          runId: "test-" + Math.random().toString(36).slice(2, 10),
+          data,
+        };
+      } catch (err: any) {
+        return {
+          ok: false,
+          runId: "test-" + Math.random().toString(36).slice(2, 10),
+          error: {
+            code: err.code || "ACTION_FAILED",
+            message: err.message || String(err),
+            details: err.details,
+          },
+        };
+      }
     },
   };
 }

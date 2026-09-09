@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { filterWithFallbackInfo } from "../../filter";
 import { loadActions, loadPlaybooks, loadProjectConfig } from "../../project/loader";
 import { getRegistryStatus, listLinkedPackages } from "../../registry/registry";
+import { ACTIONDOCK_VERSION } from "../../version";
 import { type RouteContext, jsonResponse } from "./common";
 
 /**
@@ -34,7 +35,7 @@ export async function handleInfoRoute(ctx: RouteContext): Promise<Response | nul
     if (projectRoot) {
       try {
         const config = loadProjectConfig(projectRoot);
-        const actions = await loadActions(projectRoot, config.actionsDir);
+        const actions = await loadActions(projectRoot, config.actionsDir, { autoInstall: false });
         const playbooks = loadPlaybooks(projectRoot, config.playbooksDir);
         aggregatedPackages.push({
           id: config.id,
@@ -66,7 +67,7 @@ export async function handleInfoRoute(ctx: RouteContext): Promise<Response | nul
         if (!existsSync(pkg.path)) continue;
         try {
           const config = loadProjectConfig(pkg.path);
-          const actions = await loadActions(pkg.path, config.actionsDir);
+          const actions = await loadActions(pkg.path, config.actionsDir, { autoInstall: false });
           const playbooks = loadPlaybooks(pkg.path, config.playbooksDir);
           aggregatedPackages.push({
             id: config.id,
@@ -201,7 +202,7 @@ export async function handleInfoRoute(ctx: RouteContext): Promise<Response | nul
       {
         ok: true,
         type: "package_list",
-        version: "2.0.0",
+        version: ACTIONDOCK_VERSION,
         packages: aggregatedPackages,
         linkedPackages: listLinkedPackages(customHome),
       },

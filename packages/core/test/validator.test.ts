@@ -90,4 +90,93 @@ describe("JSON Schema Validator 测试套件", () => {
     expect(res3.errors).toBeDefined();
     expect(res3.errors?.some((e) => e.includes("email"))).toBe(true);
   });
+
+  it("支持布尔 Schema 校验：false 拒绝所有数据，true 允许合法数据", () => {
+    const resFalse = validateSchema(false, { any: "data" });
+    expect(resFalse.valid).toBe(false);
+    expect(resFalse.errors?.[0]).toContain("Schema is false");
+
+    const resTrue = validateSchema(true, { key: 42 });
+    expect(resTrue.valid).toBe(true);
+
+    const resTrueDangerous = validateSchema(true, JSON.parse('{"__proto__": {"polluted": true}}'));
+    expect(resTrueDangerous.valid).toBe(false);
+  });
+
+  it("相同 $id 但具有不同规则的 Schema 互不污染", () => {
+    const sharedId = "https://actiondock.dev/schemas/dynamic.json";
+    const stringSchema = {
+      $id: sharedId,
+      type: "object",
+      properties: {
+        val: { type: "string" },
+      },
+      required: ["val"],
+    };
+    const numberSchema = {
+      $id: sharedId,
+      type: "object",
+      properties: {
+        val: { type: "number" },
+      },
+      required: ["val"],
+    };
+
+    const res1 = validateSchema(stringSchema, { val: "hello" });
+    expect(res1.valid).toBe(true);
+
+    const res2 = validateSchema(numberSchema, { val: 123 });
+    expect(res2.valid).toBe(true);
+
+    const res3 = validateSchema(stringSchema, { val: 123 });
+    expect(res3.valid).toBe(false);
+
+    const res4 = validateSchema(numberSchema, { val: "hello" });
+    expect(res4.valid).toBe(false);
+  });
+
+  it("深度递归拦截原型污染属性键名（__proto__、constructor、prototype）", () => {
+    const nestedProto = {
+      level1: {
+        level2: JSON.parse('{"__proto__": "attack"}'),
+      },
+    };
+    expect(validateSchema({}, nestedProto).valid).toBe(false);
+
+    const arrayConstructor = [
+      { ok: 1 },
+      { level2: [JSON.parse('{"constructor": "attack"}')] },
+    ];
+    expect(validateSchema({}, arrayConstructor).valid).toBe(false);
+
+    const deepPrototype = {
+      items: [
+        {
+          meta: JSON.parse('{"prototype": "attack"}'),
+        },
+      ],
+    };
+    expect(validateSchema({}, deepPrototype).valid).toBe(false);
+  });
+
+  it("完全支持 Object.create(null) 无原型对象的数据校验", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        foo: { type: "string" },
+      },
+      required: ["foo"],
+    };
+
+    const nullProtoObj = Object.create(null);
+    nullProtoObj.foo = "bar";
+
+    const res = validateSchema(schema, nullProtoObj);
+    expect(res.valid).toBe(true);
+
+    const nullProtoFail = Object.create(null);
+    nullProtoFail.foo = 123;
+    const resFail = validateSchema(schema, nullProtoFail);
+    expect(resFail.valid).toBe(false);
+  });
 });
