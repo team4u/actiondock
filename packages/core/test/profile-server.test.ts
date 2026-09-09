@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
@@ -54,6 +54,15 @@ describe("Profile Management & Remote Server", () => {
       name: "Profile Test App",
       description: "App for testing profile and remote runner",
     });
+
+    const cfgPath = join(projectDir, "actiondock.json");
+    const cfgData = JSON.parse(readFileSync(cfgPath, "utf-8"));
+    cfgData.config = cfgData.config || {};
+    cfgData.config.MY_SECRET_TOKEN = {
+      description: "Declared secret token",
+      secret: true,
+    };
+    writeFileSync(cfgPath, JSON.stringify(cfgData, null, 2) + "\n");
 
     // Add a long running action for timeout and cancel testing
     writeFileSync(
@@ -761,7 +770,7 @@ Follow these steps to greet a user.
     });
 
     test("Config Endpoints > supports list, set, delete, and env verification", async () => {
-      // 1. Set config
+      // 1. Set config (regular and sensitive keys)
       const setConf = await setRemoteConfig(
         serverUrl,
         "TEST_API_URL",
@@ -770,13 +779,35 @@ Follow these steps to greet a user.
       );
       expect(setConf.ok).toBe(true);
 
-      // 2. List config
+      const setSecretToken = await setRemoteConfig(
+        serverUrl,
+        "MY_SECRET_TOKEN",
+        "super_secret_value",
+        SECRET_TOKEN
+      );
+      expect(setSecretToken.ok).toBe(true);
+
+      const setSecretPass = await setRemoteConfig(
+        serverUrl,
+        "DB_PASSWORD",
+        "p@ssw0rd",
+        SECRET_TOKEN
+      );
+      expect(setSecretPass.ok).toBe(true);
+
+      // 2. List config: strictly declared secret: true is masked; undeclared is not
       const confList = await fetchRemoteConfig(serverUrl, SECRET_TOKEN);
       expect(confList.values["TEST_API_URL"]).toBe("https://api.example.com");
+      expect(confList.values["MY_SECRET_TOKEN"]).toBe("********");
+      expect(confList.values["DB_PASSWORD"]).toBe("p@ssw0rd");
 
       // 3. Delete config
       const delConf = await deleteRemoteConfig(serverUrl, "TEST_API_URL", SECRET_TOKEN);
       expect(delConf.deleted).toBe(true);
+      const delSecretToken = await deleteRemoteConfig(serverUrl, "MY_SECRET_TOKEN", SECRET_TOKEN);
+      expect(delSecretToken.deleted).toBe(true);
+      const delSecretPass = await deleteRemoteConfig(serverUrl, "DB_PASSWORD", SECRET_TOKEN);
+      expect(delSecretPass.deleted).toBe(true);
 
       // 4. Env status check
       const envRes = await fetchRemoteConfigEnv(serverUrl, SECRET_TOKEN);

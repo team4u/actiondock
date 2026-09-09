@@ -316,6 +316,10 @@ describe("@actiondock/runtime-cli - Standalone Binary Runtime Mode", () => {
         description: "Default fallback name",
         default: "World",
       },
+      MY_SECRET_TOKEN: {
+        description: "Secret token for tests",
+        secret: true,
+      },
     },
     actions: [sampleAction],
   };
@@ -454,7 +458,20 @@ describe("@actiondock/runtime-cli - Standalone Binary Runtime Mode", () => {
     const revealParsed = JSON.parse(revealLogs.join(""));
     expect(revealParsed.value).toBe("secret123");
 
-    // 3. config env --json and environment variable resolution
+    // 4. non-secret key with sensitive naming is NOT masked without explicit secret: true attribute
+    await runRuntimeCli(
+      ["node", "app", "config", "set", "UNMARKED_PASSWORD", "plain123"],
+      { standalone: standaloneOptions, stdout: () => {} }
+    );
+    const unmarkedLogs: string[] = [];
+    await runRuntimeCli(
+      ["node", "app", "config", "get", "UNMARKED_PASSWORD", "--json"],
+      { standalone: standaloneOptions, stdout: (msg) => unmarkedLogs.push(msg) }
+    );
+    const unmarkedParsed = JSON.parse(unmarkedLogs.join(""));
+    expect(unmarkedParsed.value).toBe("plain123");
+
+    // 5. config env --json and environment variable resolution
     process.env.ACTIONDOCK_STANDALONE_GREETING_DEFAULT_NAME = "AliceEnv";
     try {
       const envLogs: string[] = [];

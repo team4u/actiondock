@@ -259,8 +259,8 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
           key: k,
           value: v,
           source: "remote",
-          secret: isSecretConfigKey(k),
-          description: "",
+          secret: isSecretConfigKey(k, res.declared?.[k]),
+          description: res.declared?.[k]?.description || "",
         }));
 
         renderResult(entries, {
@@ -582,7 +582,17 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
       }
 
       const projectRoot = !options.global ? resolvePackageRoot(options.package) : null;
-      const isSecret = isSecretConfigKey(key);
+      let declaredItem: ConfigItemDefinition | undefined;
+      let projConfig: any;
+      if (projectRoot) {
+        try {
+          projConfig = loadProjectConfig(projectRoot);
+          declaredItem = projConfig.config?.[key];
+        } catch {
+          // 忽略工程加载失败
+        }
+      }
+      const isSecret = isSecretConfigKey(key, declaredItem);
       const displayVal = isSecret ? maskSecretValue(parsed) : JSON.stringify(parsed);
 
       if (options.global || !projectRoot) {
@@ -591,7 +601,6 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
         globalStorage.close();
         writeStdout(`[OK] Global config '${key}' set to ${displayVal}`, context);
       } else {
-        const projConfig = loadProjectConfig(projectRoot);
         const storage = createStorage(projConfig.id, {
           projectRoot,
           dataDir: options.dataDir || context?.dataDir,
@@ -712,7 +721,7 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
             satisfied: Boolean(envResolved !== undefined || def.default !== undefined),
             matchedEnv: envResolved?.envKey || null,
             hasDefault: def.default !== undefined,
-            secret: Boolean(def.secret),
+            secret: isSecretConfigKey(k, def),
           });
         }
 
@@ -767,7 +776,7 @@ export function registerConfigCommands(program: Command, context?: RuntimeCliCon
           satisfied: Boolean(envResolved !== undefined || def.default !== undefined),
           matchedEnv: envResolved?.envKey || null,
           hasDefault: def.default !== undefined,
-          secret: Boolean(def.secret),
+          secret: isSecretConfigKey(k, def),
         });
       }
 

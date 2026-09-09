@@ -1,5 +1,6 @@
 import { loadProjectConfig } from "../../project/loader";
 import { resolveEnvValue } from "../../runtime";
+import { isSecretConfigKey, maskSecretValue } from "../../storage";
 import { readJsonBody } from "../body";
 import { type RouteContext, jsonResponse, resolveStorageForPackage } from "./common";
 
@@ -34,7 +35,7 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
           satisfied: Boolean(resolved !== undefined || def.default !== undefined),
           matchedEnv,
           hasDefault: def.default !== undefined,
-          secret: Boolean(def.secret),
+          secret: isSecretConfigKey(k, def),
         });
       }
       return jsonResponse({ ok: true, packageId, envChecks }, 200, corsHeaders);
@@ -68,8 +69,8 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
       }
       const maskedValues: Record<string, any> = {};
       for (const [k, v] of Object.entries(stored)) {
-        if (declared[k]?.secret) {
-          maskedValues[k] = "******";
+        if (isSecretConfigKey(k, declared[k])) {
+          maskedValues[k] = maskSecretValue(v);
         } else {
           maskedValues[k] = v;
         }
