@@ -41,9 +41,6 @@
         "typescript": "^5.7.0",
         "yaml": "^2.7.0",
       },
-      "devDependencies": {
-        "typescript": "^5.7.0",
-      },
     },
     "packages/cli": {
       "name": "@actiondock/cli",
