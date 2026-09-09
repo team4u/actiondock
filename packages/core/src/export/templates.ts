@@ -244,7 +244,7 @@ ad state get KEY --package ${pkgId}
 
 若宿主环境未安装 \`ad\` 命令行工具，请依次按如下步骤完成安装：
 
-- **环境要求**：Node.js 版本大于等于 22.12.0（执行 \`node -v\` 确认）。
+- **环境要求**：Node.js 版本大于等于 22.13.0（执行 \`node -v\` 确认）。
 - **全局安装 ActionDock 命令行工具**：
   \`\`\`bash
   npm install -g @actiondock/cli

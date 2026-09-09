@@ -29,9 +29,15 @@ if (!isBun && !hasTsx) {
     }
   }
 
+  const extraArgs = [];
+  const [major, minor] = (process.versions.node || "").split(".").map(Number);
+  if (major === 22 && minor < 13) {
+    extraArgs.push("--experimental-sqlite");
+  }
+
   const res = spawnSync(
     process.execPath,
-    ["--import", tsxSpecifier, fileURLToPath(import.meta.url), ...process.argv.slice(2)],
+    ["--import", tsxSpecifier, ...extraArgs, fileURLToPath(import.meta.url), ...process.argv.slice(2)],
     {
       stdio: "inherit",
     }

@@ -1,7 +1,7 @@
 # Agent 开发协作指引 - ActionDock 2.0
 
 - **核心定位**：ActionDock 2.0 是面向 AI Agent Action 与 Skill 的开发、测试、构建与分发工具链。
-- **运行时与引擎**：默认运行时为 Node.js（版本大于等于 22.12.0，基于 node:sqlite、node:http 与 tsx 提供驱动）；Bun 作为可选的单文件独立二进制编译器（Bun.build）以及独立二进制内嵌驱动（@actiondock/runtime-bun）。
+- **运行时与引擎**：默认运行时为 Node.js（版本大于等于 22.13.0，基于 node:sqlite、node:http 与 tsx 提供驱动）；Bun 作为可选的单文件独立二进制编译器（Bun.build）以及独立二进制内嵌驱动（@actiondock/runtime-bun）。
 - **代码库分层结构**：
   - `packages/sdk`：`@actiondock/sdk`（极简公共 SDK：`defineAction`、`ActionContext`、`Config`、`StateStore`、`ActionInvoker`、`Logger`、`createTestRuntime`）。
   - `packages/core`：`@actiondock/core`（公共领域内核：`project`、`runtime`、`storage`、`schema`、`catalog`、`execution`、`server`）。

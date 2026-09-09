@@ -52,7 +52,7 @@ graph TD
 
 ## 生产环境适配层：`@actiondock/runtime-node`
 
-在 Node.js 22.12.0 或更高版本生产环境中，`@actiondock/runtime-node` 将 Core 层的抽象接口绑定至 Node.js 原生及企业级驱动：
+在 Node.js 22.13.0 或更高版本生产环境中，`@actiondock/runtime-node` 将 Core 层的抽象接口绑定至 Node.js 原生及企业级驱动：
 
 - `NodeSqliteDriver` 驱动：基于 Node.js 原生内置模块 `node:sqlite`（`DatabaseSync`）构建。提供严格的同步事务保证，在事务执行期间严格禁止并拦截异步 Promise 返回，杜绝异步穿插导致的数据库连接死锁与状态不一致。
 - `ExecaProcessExecutor` 驱动：基于 `execa` 驱动系统外部命令执行。设置 10MB 输出缓冲区上限（`maxBuffer`），当进程输出超过限制时主动终止并返回错误码 `PROCESS_OUTPUT_LIMIT`，防止畸形输出耗尽内存，同时精准处理超时、取消信号与子进程异常。

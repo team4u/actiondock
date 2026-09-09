@@ -63,7 +63,7 @@ flowchart TD
 
 ## 面向 Node.js 的分层解耦体系
 
-ActionDock 2.0 全面以 Node.js 22.12.0 或更高版本为生产级运行基座，将系统解耦拆分为 9 个职责明确的独立子包。各层之间通过强类型契约与接口抽象进行交互，杜绝跨层耦合。
+ActionDock 2.0 全面以 Node.js 22.13.0 或更高版本为生产级运行基座，将系统解耦拆分为 9 个职责明确的独立子包。各层之间通过强类型契约与接口抽象进行交互，杜绝跨层耦合。
 
 ```mermaid
 graph TD
@@ -113,7 +113,7 @@ graph TD
 - **核心领域层**：
   - `@actiondock/core`：框架的核心业务领域层。封装项目配置解析、Schema 校验、运行记录存储抽象、事件汇聚总线、核心执行引擎（`ActionRunner`）以及统一调度协调服务（`DefaultExecutionService`）。本层完全平台无关，通过接口与具体的操作系统底层能力解耦。
 - **运行时适配层**：
-  - `@actiondock/runtime-node`：Node.js 生产环境适配驱动。针对 Node.js 22.12.0 或更高版本原生环境提供实体驱动实现，包括基于 `node:sqlite` 的同步事务存储驱动、基于 `execa` 的进程调度器、基于 `tsx` 的 TypeScript 源码无编译动态加载器，以及基于 `node:http` 和 Web Streams 的流式服务转换器。
+  - `@actiondock/runtime-node`：Node.js 生产环境适配驱动。针对 Node.js 22.13.0 或更高版本原生环境提供实体驱动实现，包括基于 `node:sqlite` 的同步事务存储驱动、基于 `execa` 的进程调度器、基于 `tsx` 的 TypeScript 源码无编译动态加载器，以及基于 `node:http` 和 Web Streams 的流式服务转换器。
   - `@actiondock/runtime-bun`：Bun 独立二进制适配驱动。专为独立二进制产物提供适配实现，包含针对 `bun:sqlite`、`Bun.serve` 与 `Bun.spawn` 的专属驱动封装。
   - `@actiondock/runtime-cli`：共享运行时命令与渲染层。提取 CLI 门面与独立二进制产物共用的命令组织结构、参数解析体系与标准输出信封格式化渲染能力。
 - **构建与编排层**：
