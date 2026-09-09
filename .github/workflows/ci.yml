@@ -21,6 +21,9 @@ jobs:
       - name: TypeScript Typecheck
         run: bun run typecheck
 
+      - name: Build Packages
+        run: bun run build
+
       - name: Run Monorepo Tests
         run: bun test
 

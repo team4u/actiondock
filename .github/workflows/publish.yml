@@ -53,14 +53,14 @@ jobs:
       - name: Sync Monorepo Versions from Tag
         run: bun run ./scripts/bump-version.ts --from-git-tag
 
+      - name: Build Packages
+        run: bun run build
+
       - name: Typecheck
         run: bun run typecheck
 
       - name: Test
         run: bun test
-
-      - name: Build Packages
-        run: bun run build
 
       - name: Pack Smoke Test
         run: bun run test:pack
