@@ -33,7 +33,6 @@
     "@actiondock/sdk": "^2.0.11"
   },
   "devDependencies": {
-    "@types/bun": "latest",
     "typescript": "^5.7.0"
   },
   "keywords": [

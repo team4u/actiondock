@@ -44,7 +44,6 @@
     "tsx": "^4.19.3"
   },
   "devDependencies": {
-    "@types/bun": "latest",
     "typescript": "^5.7.0"
   },
   "keywords": [
