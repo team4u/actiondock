@@ -139,8 +139,8 @@ export function loadRegistry(customHome?: string): GlobalRegistryData {
             const config = loadProjectConfig(link.path);
             packages[config.id] = {
               id: config.id,
-              name: config.name,
-              version: config.version,
+              name: config.name || config.id,
+              version: config.version || "0.0.0",
               path: resolve(link.path),
               linkedAt: link.linkedAt || new Date().toISOString(),
             };
@@ -218,10 +218,12 @@ export function linkPackage(
     const config = loadProjectConfig(absPath);
     const registry = loadRegistry(customHome);
 
+    const pkgName = config.name || config.id;
+    const pkgVersion = config.version || "0.0.0";
     const entry: LinkedPackageEntry = {
       id: config.id,
-      name: config.name,
-      version: config.version,
+      name: pkgName,
+      version: pkgVersion,
       path: absPath,
       linkedAt: new Date().toISOString(),
     };
@@ -231,8 +233,8 @@ export function linkPackage(
 
     return {
       id: config.id,
-      name: config.name,
-      version: config.version,
+      name: pkgName,
+      version: pkgVersion,
       path: absPath,
       linkedAt: entry.linkedAt,
       isWorkspace: false,
@@ -261,8 +263,8 @@ export function linkPackage(
         const config = loadProjectConfig(root);
         const entry: LinkedPackageEntry = {
           id: config.id,
-          name: config.name,
-          version: config.version,
+          name: config.name || config.id,
+          version: config.version || "0.0.0",
           path: root,
           linkedAt: now,
           workspaceRoot: absPath,
@@ -295,10 +297,12 @@ export function linkPackage(
     const config = loadProjectConfig(parentRoot);
     const registry = loadRegistry(customHome);
 
+    const pkgName = config.name || config.id;
+    const pkgVersion = config.version || "0.0.0";
     const entry: LinkedPackageEntry = {
       id: config.id,
-      name: config.name,
-      version: config.version,
+      name: pkgName,
+      version: pkgVersion,
       path: parentRoot,
       linkedAt: new Date().toISOString(),
     };
@@ -308,8 +312,8 @@ export function linkPackage(
 
     return {
       id: config.id,
-      name: config.name,
-      version: config.version,
+      name: pkgName,
+      version: pkgVersion,
       path: parentRoot,
       linkedAt: entry.linkedAt,
       isWorkspace: false,
@@ -422,8 +426,8 @@ export function listLinkedPackages(customHome?: string): LinkedPackageEntry[] {
           if (!result[config.id] || result[config.id].workspaceRoot === ws.path) {
             result[config.id] = {
               id: config.id,
-              name: config.name,
-              version: config.version,
+              name: config.name || config.id,
+              version: config.version || "0.0.0",
               path: root,
               linkedAt: ws.linkedAt,
               workspaceRoot: ws.path,
@@ -970,8 +974,8 @@ export function getRegistryStatus(customHome?: string): RegistryStatusReport {
           seenPackageIds.add(config.id);
           children.push({
             id: config.id,
-            name: config.name,
-            version: config.version,
+            name: config.name || config.id,
+            version: config.version || "0.0.0",
             path: root,
             status: "active",
           });

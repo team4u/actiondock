@@ -38,8 +38,8 @@ async function getProjectDetailInfo(root: string): Promise<ProjectDetailInfo> {
 
   return {
     id: config.id,
-    name: config.name,
-    version: config.version,
+    name: config.name || config.id,
+    version: config.version || "0.0.0",
     description: config.description,
     projectRoot: root,
     actionsDir: config.actionsDir || "actions",
@@ -58,8 +58,8 @@ async function getProjectDetailInfo(root: string): Promise<ProjectDetailInfo> {
 function projectDetailToJson(info: ProjectDetailInfo) {
   return {
     id: info.id,
-    name: info.name,
-    version: info.version,
+    name: info.name || info.id,
+    version: info.version || "0.0.0",
     description: info.description,
     projectRoot: info.projectRoot,
     actionsDir: info.actionsDir,
@@ -212,8 +212,8 @@ export function registerInfoCommand(program: Command, context?: CliContext): voi
           const playbooks = loadPlaybooks(currentRoot, config.playbooksDir);
           aggregated.push({
             id: config.id,
-            name: config.name,
-            version: config.version,
+            name: config.name || config.id,
+            version: config.version || "0.0.0",
             description: config.description,
             path: currentRoot,
             actionsCount: manifestActionIds.length,
@@ -239,8 +239,8 @@ export function registerInfoCommand(program: Command, context?: CliContext): voi
 
           aggregated.push({
             id: config.id,
-            name: config.name,
-            version: config.version,
+            name: config.name || config.id,
+            version: config.version || "0.0.0",
             description: config.description,
             path: pkg.path,
             actionsCount: manifestActionIds.length,

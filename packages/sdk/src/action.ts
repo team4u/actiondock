@@ -1,38 +1,55 @@
-import type { ActionDefinition } from "./types";
+import type { ActionContext, ActionDefinition } from "./types";
+
+/**
+ * Action 核心业务执行函数签名。
+ */
+export type ActionHandler<I = unknown, O = unknown> = (
+  input: I,
+  ctx: ActionContext
+) => Promise<O> | O;
 
 /**
  * 辅助函数：声明并定义一个强类型的 Action 动作。
  * 
  * 职责：
  * 1. 提供 TypeScript 泛型推导支持（入参类型 `I` 与出参类型 `O`）。
- * 2. 在声明期进行防御性基础结构校验，确保包含非空的字符串 `id` 和可执行的 `run` 函数。
+ * 2. 支持直接传入执行 Handler 函数：`defineAction(async (input, ctx) => { ... })`。
+ * 3. 支持传入包含 `run` 执行函数的 ActionDefinition 对象。
  * 
- * @param definition 包含 id, description, inputSchema, outputSchema, run 的 Action 定义对象
- * @returns 经过校验的 ActionDefinition 原对象
- * @throws {Error} 若 definition 不是对象、缺失 id 或缺失 run 函数
- * 
- * @example
- * ```ts
- * export default defineAction({
- *   id: "sample.greet",
- *   description: "向指定用户打招呼",
- *   async run(input: { name: string }, ctx) {
- *     return { message: `Hello, ${input.name}!` };
- *   }
- * });
- * ```
+ * @param handlerOrDefinition Action 执行函数或 Action 定义对象
+ * @returns 经过标准化的 ActionDefinition 对象
  */
 export function defineAction<I = unknown, O = unknown>(
-  definition: ActionDefinition<I, O>
+  handler: ActionHandler<I, O>
+): ActionDefinition<I, O>;
+export function defineAction<I = unknown, O = unknown>(
+  definition: Partial<ActionDefinition<I, O>> & { run: ActionHandler<I, O> }
+): ActionDefinition<I, O>;
+export function defineAction<I = unknown, O = unknown>(
+  arg: ActionHandler<I, O> | (Partial<ActionDefinition<I, O>> & { run: ActionHandler<I, O> })
 ): ActionDefinition<I, O> {
-  if (!definition || typeof definition !== "object") {
-    throw new Error("Action definition must be an object");
+  if (typeof arg === "function") {
+    const def: ActionDefinition<I, O> = {
+      id: "",
+      run: arg,
+    };
+    (arg as any).run = arg;
+    (arg as any).id = "";
+    return def;
   }
-  if (!definition.id || typeof definition.id !== "string") {
-    throw new Error("Action definition must have a string 'id'");
+  if (!arg || typeof arg !== "object") {
+    throw new Error("Action definition must be a function or an object");
   }
-  if (typeof definition.run !== "function") {
-    throw new Error(`Action '${definition.id}' must have a 'run' function`);
+  if (typeof (arg as any).id !== "undefined") {
+    if (typeof (arg as any).id !== "string" || (arg as any).id.trim() === "") {
+      throw new Error("Action definition must have a non-empty string 'id'");
+    }
   }
-  return definition;
+  if (typeof arg.run !== "function") {
+    throw new Error("Action definition must have a 'run' function");
+  }
+  return {
+    ...arg,
+    id: arg.id || "",
+  } as ActionDefinition<I, O>;
 }

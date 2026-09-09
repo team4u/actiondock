@@ -62,6 +62,23 @@ describe("Profile Management & Remote Server", () => {
       description: "Declared secret token",
       secret: true,
     };
+    cfgData.actions = cfgData.actions || {};
+    cfgData.actions["sample.long-task"] = {
+      entry: "actions/long-task.ts",
+      description: "Long running action for testing timeout and cancel",
+      inputSchema: {
+        type: "object",
+        properties: {
+          delayMs: { type: "number" },
+        },
+      },
+    };
+    cfgData.playbooks = cfgData.playbooks || {};
+    cfgData.playbooks["sample.sample-sop"] = {
+      entry: "playbooks/sample-sop.md",
+      description: "SOP for greeting and executing tasks",
+      actions: ["sample.greet"],
+    };
     writeFileSync(cfgPath, JSON.stringify(cfgData, null, 2) + "\n");
 
     // Add a long running action for timeout and cancel testing
@@ -99,14 +116,7 @@ export default defineAction({
     mkdirSync(join(projectDir, "playbooks"), { recursive: true });
     writeFileSync(
       join(projectDir, "playbooks", "sample-sop.md"),
-      `---
-id: sample.sample-sop
-description: SOP for greeting and executing tasks
-actions:
-  - sample.greet
----
-
-# Greeting SOP
+      `# Greeting SOP
 Follow these steps to greet a user.
 `
     );

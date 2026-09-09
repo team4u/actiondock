@@ -16,13 +16,12 @@ export interface InitOptions {
 /**
  * 在目标目录初始化一个完整的 ActionDock 2.0 Action Package 脚手架。
  * 生成内容包括：
- * - actiondock.json（项目元数据与配置声明）
- * - actiondock.manifest.json（声明式元数据清单事实源）
+ * - actiondock.json（项目元数据、Action 与 Playbook 声明的单一事实源）
  * - package.json（Node.js 标准脚本与依赖声明）
  * - tsconfig.json（现代 NodeNext 模块规范）
  * - .gitignore（排除持久化 db、node_modules、dist）
- * - actions/greet.ts（标准示例 Action，演示 config、state、log 使用）
- * - playbooks/greet-user.md（标准 SOP Playbook 演示）
+ * - actions/greet.ts（标准示例 Action 执行 Handler，演示 config、state、log 使用）
+ * - playbooks/greet-user.md（纯 Markdown 标准 SOP Playbook 演示）
  * - tests/greet.test.ts（基于 node:test 与 @actiondock/testing 的测试用例）
  * 
  * @param targetDir 目标项目目录
@@ -39,29 +38,20 @@ export function initProject(targetDir: string, options: InitOptions = {}): void 
   const name = options.name || dirName.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   const description = options.description || "ActionDock AI Agent Actions";
 
-  // 1. actiondock.json
+  // 1. actiondock.json（单一事实源）
   const actiondockJson = {
+    $schema: "https://actiondock.dev/schema/v2.json",
+    schemaVersion: 2,
     id,
     name,
     version: "0.1.0",
     description,
-    actionsDir: "actions",
-    playbooksDir: "playbooks",
     config: {
       SAMPLE_GREETING: {
         description: "Default greeting message",
         default: "Hello",
       },
     },
-  };
-  writeFileSync(
-    join(root, "actiondock.json"),
-    JSON.stringify(actiondockJson, null, 2) + "\n"
-  );
-
-  // 2. actiondock.manifest.json
-  const manifestJson = {
-    schemaVersion: 1,
     actions: {
       "sample.greet": {
         entry: "actions/greet.ts",
@@ -84,18 +74,24 @@ export function initProject(targetDir: string, options: InitOptions = {}): void 
           },
           required: ["message", "timesGreeted"],
         },
-        uses: [],
         tags: ["sample"],
+        uses: [],
       },
     },
-    assets: [],
+    playbooks: {
+      "greet-user": {
+        entry: "playbooks/greet-user.md",
+        description: "SOP for greeting a new user and verifying system health",
+        actions: ["sample.greet"],
+      },
+    },
   };
   writeFileSync(
-    join(root, "actiondock.manifest.json"),
-    JSON.stringify(manifestJson, null, 2) + "\n"
+    join(root, "actiondock.json"),
+    JSON.stringify(actiondockJson, null, 2) + "\n"
   );
 
-  // 3. package.json
+  // 2. package.json
   const packageJson = {
     name: id,
     version: "0.1.0",
@@ -122,7 +118,7 @@ export function initProject(targetDir: string, options: InitOptions = {}): void 
     JSON.stringify(packageJson, null, 2) + "\n"
   );
 
-  // 4. tsconfig.json
+  // 3. tsconfig.json
   const tsconfigJson = {
     compilerOptions: {
       target: "ES2022",
@@ -138,7 +134,7 @@ export function initProject(targetDir: string, options: InitOptions = {}): void 
     JSON.stringify(tsconfigJson, null, 2) + "\n"
   );
 
-  // 5. .gitignore
+  // 4. .gitignore
   const gitignore = `.actiondock/
 node_modules/
 dist/
@@ -148,72 +144,39 @@ build/
 `;
   writeFileSync(join(root, ".gitignore"), gitignore);
 
-  // 6. actions/
+  // 5. actions/
   const actionsDir = join(root, "actions");
   mkdirSync(actionsDir, { recursive: true });
 
   const sampleAction = `import { defineAction } from "@actiondock/sdk";
 
-export default defineAction({
-  id: "sample.greet",
-  description: "Greeting action demonstrating basic input, config, and state usage",
-  tags: ["sample"],
+export default defineAction(async (input: { name: string }, ctx) => {
+  const greeting = ctx.config.get("SAMPLE_GREETING", "Hello");
+  const count = ((await ctx.state.get<number>("greet_count")) || 0) + 1;
+  await ctx.state.set("greet_count", count);
 
-  inputSchema: {
-    type: "object",
-    properties: {
-      name: {
-        type: "string",
-        description: "Name of the person to greet",
-      },
-    },
-    required: ["name"],
-  },
+  ctx.log.info(\`Greeting \${input.name} (times greeted: \${count})\`);
 
-  outputSchema: {
-    type: "object",
-    properties: {
-      message: { type: "string" },
-      timesGreeted: { type: "number" },
-    },
-    required: ["message", "timesGreeted"],
-  },
-
-  async run(input: { name: string }, ctx) {
-    const greeting = ctx.config.get("SAMPLE_GREETING", "Hello");
-    const count = ((await ctx.state.get<number>("greet_count")) || 0) + 1;
-    await ctx.state.set("greet_count", count);
-
-    ctx.log.info(\`Greeting \${input.name} (times greeted: \${count})\`);
-
-    return {
-      message: \`\${greeting}, \${input.name}!\`,
-      timesGreeted: count,
-    };
-  },
+  return {
+    message: \`\${greeting}, \${input.name}!\`,
+    timesGreeted: count,
+  };
 });
 `;
   writeFileSync(join(actionsDir, "greet.ts"), sampleAction);
 
-  // 7. playbooks/
+  // 6. playbooks/
   const playbooksDir = join(root, "playbooks");
   mkdirSync(playbooksDir, { recursive: true });
 
-  const samplePlaybook = `---
-id: greet-user
-description: SOP for greeting a new user and verifying system health
-actions:
-  - sample.greet
----
-
-# Greeting SOP
+  const samplePlaybook = `# Greeting SOP
 
 - Call \`sample.greet\` with the user's name.
 - Confirm the returned greeting message.
 `;
   writeFileSync(join(playbooksDir, "greet-user.md"), samplePlaybook);
 
-  // 8. tests/
+  // 7. tests/
   const testsDir = join(root, "tests");
   mkdirSync(testsDir, { recursive: true });
 

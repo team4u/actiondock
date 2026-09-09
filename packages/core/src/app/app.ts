@@ -190,7 +190,7 @@ export class DefaultActionDockApp implements ActionDockApp {
   private getStaticActionMap(): Map<string, ActionSpec> {
     const map = new Map<string, ActionSpec>();
 
-    // 1. 读取静态清单文件 (actiondock.manifest.json)
+    // 1. 读取声明式清单文件 (actiondock.json)
     if (this.packageRoot) {
       try {
         const manifest = loadManifest(this.packageRoot);

@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 import { generateStandaloneEntrypoint, getPackageSlug } from "@actiondock/core";
 import { BunCompiler } from "./compiler";
 import { BuilderError } from "./errors";
-import { BuildPlanner } from "./planner";
+import { BuildPlanner, SelectionPlanner } from "./planner";
 
 /**
  * 独立二进制可执行文件构建选项。
@@ -49,7 +49,7 @@ export interface BuildResult {
  */
 export async function buildProject(options: BuildOptions): Promise<BuildResult> {
   const root = resolve(options.projectRoot);
-  const plan = BuildPlanner.plan({
+  const plan = SelectionPlanner.plan({
     projectRoot: root,
     actions: options.actions,
   });
@@ -65,7 +65,15 @@ export async function buildProject(options: BuildOptions): Promise<BuildResult> 
     plan.packageId,
     plan.version,
     plan.description,
-    plan.actions.map((a) => ({ id: a.id, filePath: a.resolvedPath })),
+    plan.actions.map((a) => ({
+      id: a.id,
+      filePath: a.resolvedPath,
+      description: a.description,
+      inputSchema: a.inputSchema,
+      outputSchema: a.outputSchema,
+      tags: a.tags,
+      annotations: a.annotations,
+    })),
     plan.configDefs
   );
 

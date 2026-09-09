@@ -141,7 +141,8 @@ export default defineAction({
     const usesPkg = mkdtempSync(join(tmpdir(), "doctor-uses-pkg-"));
     initProject(usesPkg, { id: "team.uses-pkg", name: "Uses Pkg" });
     const manifest = {
-      schemaVersion: 1,
+      id: "team.uses-pkg",
+      schemaVersion: 2,
       actions: {
         "call-external": {
           entry: "actions/call.ts",
@@ -149,7 +150,7 @@ export default defineAction({
         },
       },
     };
-    writeFileSync(join(usesPkg, "actiondock.manifest.json"), JSON.stringify(manifest, null, 2));
+    writeFileSync(join(usesPkg, "actiondock.json"), JSON.stringify(manifest, null, 2));
     linkPackage(usesPkg, fakeHome);
 
     const report = await runDoctorChecks({ cwd: fakeHome, customHome: fakeHome });

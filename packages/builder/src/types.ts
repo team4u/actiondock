@@ -32,8 +32,8 @@ export interface AssetDependency {
   path: string;
   /** 资产绝对物理路径 */
   resolvedPath: string;
-  /** 资产类型：静态资产、规程文档、配置文件或模块源码 */
-  type: "asset" | "playbook" | "config" | "module";
+  /** 资产类型：静态资产、规程文档、配置文件或代码文件/模块 */
+  type: "asset" | "playbook" | "config" | "module" | "file";
 }
 
 /**
@@ -46,6 +46,18 @@ export interface ExternalDependency {
   versionRange?: string;
   /** 是否为开发期依赖 */
   isDev?: boolean;
+}
+
+/**
+ * 锁文件元数据描述。
+ */
+export interface LockfileInfo {
+  /** 锁文件名（如 package-lock.json, bun.lock） */
+  name: string;
+  /** 锁文件物理绝对路径 */
+  path: string;
+  /** 锁文件内容的 SHA-256 校验摘要 */
+  sha256: string;
 }
 
 /**
@@ -96,16 +108,26 @@ export interface BuildPlan {
   dependencies: BuildPlanDependencies;
   /** 资产路径列表 */
   assets: string[];
+  /** 显式声明的代码文件列表 */
+  files?: string[];
   /** 声明的配置定义字典 */
   configDefs?: Record<string, unknown>;
+  /** 检测到的锁文件信息 */
+  lockfile?: LockfileInfo;
   /** 规划元数据 */
   metadata: {
     plannedAt: string;
     schemaVersion: number;
     actionCount: number;
     playbookCount: number;
+    lockfileDigest?: string;
   };
 }
+
+/**
+ * 声明式选择规划产物类型别名。
+ */
+export type SelectionPlan = BuildPlan;
 
 /**
  * 构建规划器配置选项。
@@ -114,14 +136,27 @@ export interface BuildPlannerOptions {
   /** 项目根目录绝对路径 */
   projectRoot: string;
   /** 显式传入的项目配置（若未提供则从 actiondock.json 读取） */
-  config?: ProjectConfig;
+  config?: ProjectConfig & { files?: string[]; assets?: string[]; uses?: string[]; actions?: Record<string, unknown> };
   /** 显式传入的声明式清单（若未提供则从 actiondock.manifest.json 读取） */
-  manifest?: ActionDockManifest;
+  manifest?: ActionDockManifest & { files?: string[] };
   /** 挑选的 Action ID 列表（用于依赖闭包裁剪） */
   actions?: string[];
   /** 挑选的 Playbook ID 列表（用于 Playbook 驱动的依赖闭包裁剪） */
   playbooks?: string[];
+  /** 显式声明包含的代码文件或目录列表 */
+  files?: string[];
+  /** 显式声明包含的资产文件或目录列表 */
+  assets?: string[];
+  /** 指定的锁文件路径（可选） */
+  lockfile?: string;
+  /** 期望的锁文件 SHA-256 摘要（若指定且不一致将报错拒绝） */
+  expectedLockfileDigest?: string;
 }
+
+/**
+ * 声明式选择规划器配置选项别名。
+ */
+export type SelectionPlannerOptions = BuildPlannerOptions;
 
 /**
  * 支持的 Bun 独立编译目标平台。

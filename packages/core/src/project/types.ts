@@ -19,52 +19,12 @@ export interface ConfigItemDefinition {
   env?: string | string[];
   /** 是否为必填项 */
   required?: boolean;
+  /** 是否允许单次调用覆盖 */
+  allowInvocationOverride?: boolean;
 }
 
 /**
- * ActionDock 项目根配置文件契约（对应 actiondock.json）。
- */
-export interface ProjectConfig {
-  /** 项目全局唯一 ID（例如 "team4u.github-tools"） */
-  id: string;
-  /** 项目展示名称（例如 "GitHub Tools"） */
-  name: string;
-  /** 项目版本号（遵循语义化版本 Semantic Versioning，如 "1.0.0"） */
-  version: string;
-  /** 项目描述信息 */
-  description?: string;
-  /** Action 脚本文件存放目录（相对于项目根目录，默认为 "actions"） */
-  actionsDir?: string;
-  /** Playbook SOP 文档存放目录（相对于项目根目录，默认为 "playbooks"） */
-  playbooksDir?: string;
-  /** 声明的项目依赖配置项清单 */
-  config?: Record<string, ConfigItemDefinition>;
-}
-
-/**
- * Playbook Markdown 文档头部 YAML Frontmatter 元数据。
- */
-export interface PlaybookFrontmatter {
-  /** Playbook 唯一标识符（例如 "review-pr"） */
-  id: string;
-  /** Playbook 任务描述 */
-  description?: string;
-  /** 该 Playbook SOP 所依赖/调用的 Action ID 列表（用于最小化构建与 Tree-shaking 导出） */
-  actions?: string[];
-}
-
-/**
- * 解析后的完整 Playbook 定义对象。
- */
-export interface PlaybookDefinition extends PlaybookFrontmatter {
-  /** Markdown 正文内容（去除了头部 YAML Frontmatter 后的 SOP 指南内容） */
-  content: string;
-  /** Playbook 源文件的绝对物理路径 */
-  filePath: string;
-}
-
-/**
- * 单个 Action 在清单中的声明项。
+ * 单个 Action 在 actiondock.json 清单中的声明项。
  */
 export interface ActionManifestEntry {
   /** Action 入口文件相对路径（如 "actions/greet.ts"） */
@@ -84,60 +44,75 @@ export interface ActionManifestEntry {
 }
 
 /**
- * ActionDock 声明式清单（actiondock.manifest.json）规范。
- * 作为元数据的单一事实源，实现无副作用的模块发现与构建规划。
+ * 单个 Playbook 在 actiondock.json 清单中的声明项。
+ */
+export interface PlaybookManifestEntry {
+  /** Playbook Markdown 入口文件相对路径（如 "playbooks/greet-user.md"） */
+  entry: string;
+  /** Playbook 任务描述 */
+  description?: string;
+  /** 该 Playbook 所依赖/调用的 Action ID 列表 */
+  actions?: string[];
+}
+
+/**
+ * ActionDock 声明式元数据清单契约（actiondock.json 为唯一事实源）。
  */
 export interface ActionDockManifest {
-  schemaVersion: number;
-  actions: Record<string, ActionManifestEntry>;
+  /** JSON Schema 声明 URL */
+  $schema?: string;
+  /** 清单规范版本号（默认 2） */
+  schemaVersion?: number;
+  /** 项目全局唯一逻辑 ID（例如 "team4u.github-tools"） */
+  id: string;
+  /** 项目展示名称（例如 "GitHub Tools"） */
+  name?: string;
+  /** 项目版本号（如 "1.0.0"） */
+  version?: string;
+  /** 项目描述信息 */
+  description?: string;
+  /** 声明的项目依赖配置项清单 */
+  config?: Record<string, ConfigItemDefinition>;
+  /** 声明的 Actions 集合（唯一事实源） */
+  actions?: Record<string, ActionManifestEntry>;
+  /** 声明的 Playbooks 集合（唯一事实源） */
+  playbooks?: Record<string, PlaybookManifestEntry>;
+  /** 跨包外部依赖映射（逻辑包 ID 到 npm 包名） */
+  dependencies?: Record<string, string>;
+  /** 框架导出与分发边界文件列表 */
+  files?: string[];
+  /** 静态资产列表 */
   assets?: string[];
-}
-
-/**
- * 清单同步操作选项。
- */
-export interface SyncManifestOptions {
-  /** 自定义 actions 源码目录（默认为工程配置中的 actionsDir 或 "actions"） */
+  /** Action 源码存放目录（向后兼容过渡配置） */
   actionsDir?: string;
-  /** 是否仅检查同步状态而不保存写入文件（默认 false） */
-  check?: boolean;
-  /** 是否自动移除源码中已不存在的 Action（默认 true） */
-  prune?: boolean;
-  /** 缺失依赖时是否自动执行安装（默认 true） */
-  autoInstall?: boolean;
+  /** Playbook 规程文档存放目录（向后兼容过渡配置） */
+  playbooksDir?: string;
 }
 
 /**
- * 单个 Action 的清单同步变更项。
+ * ActionDock 项目根配置文件契约（等同于 ActionDockManifest，actiondock.json 为单一事实源）。
  */
-export interface ManifestSyncChange {
-  /** Action 标识符 */
-  actionId: string;
-  /** 变更类型：新增、更新、删除或未变 */
-  type: "added" | "updated" | "removed" | "unchanged";
-  /** 源码入口文件相对路径 */
-  entry?: string;
-  /** 发生变更的字段列表（例如 ["description", "inputSchema"]） */
-  changedFields?: string[];
+export type ProjectConfig = ActionDockManifest;
+
+/**
+ * 解析后的完整 Playbook 定义对象。
+ */
+export interface PlaybookDefinition {
+  /** Playbook 唯一标识符（例如 "review-pr"） */
+  id: string;
+  /** Playbook 任务描述 */
+  description?: string;
+  /** 该 Playbook 所依赖/调用的 Action ID 列表 */
+  actions: string[];
+  /** Markdown 正文内容（纯 Markdown 规程内容） */
+  content: string;
+  /** Playbook 源文件的绝对物理路径 */
+  filePath: string;
 }
 
 /**
- * 清单同步执行结果。
+ * Playbook 声明元数据（向后兼容别名）。
  */
-export interface ManifestSyncResult {
-  /** 清单当前是否已与源码完全一致 */
-  inSync: boolean;
-  /** 清单文件的物理绝对路径 */
-  manifestPath: string;
-  /** 所有 Action 的变更详情列表 */
-  changes: ManifestSyncChange[];
-  /** 新增的 Action 标识列表 */
-  added: string[];
-  /** 更新的 Action 标识列表 */
-  updated: string[];
-  /** 移除的 Action 标识列表 */
-  removed: string[];
-  /** 未改变的 Action 标识列表 */
-  unchanged: string[];
-}
+export type PlaybookFrontmatter = PlaybookManifestEntry;
+
 

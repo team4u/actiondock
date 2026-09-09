@@ -894,9 +894,13 @@ describe("CLI End-to-End", () => {
       expect(existsSync(join(noManifestDir, "node_modules"))).toBe(false);
 
       writeFileSync(
-        join(noManifestDir, "actiondock.manifest.json"),
+        join(noManifestDir, "actiondock.json"),
         JSON.stringify({
-          schemaVersion: 1,
+          $schema: "https://actiondock.dev/schema/v2/actiondock.json",
+          id: "team.no-manifest",
+          name: "No Manifest",
+          version: "1.0.0",
+          actionsDir: "actions",
           actions: {
             "team.foo": {
               entry: "actions/foo.ts",

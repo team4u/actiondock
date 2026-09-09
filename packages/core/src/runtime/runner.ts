@@ -228,7 +228,9 @@ export class ActionRunner {
    * 注册单个 Action 到当前 Runner。
    */
   public registerAction(action: ActionDefinition): void {
-    this.actions.set(action.id, action);
+    const id = action.id || "anonymous-action";
+    action.id = id;
+    this.actions.set(id, action);
   }
 
   /**
@@ -497,7 +499,9 @@ export class ActionRunner {
       typeof (actionOrId as any).run === "function"
     ) {
       action = actionOrId as ActionDefinition;
-      targetActionId = action.id;
+      targetActionId = action.id || "anonymous-action";
+      action.id = targetActionId;
+      this.actions.set(targetActionId, action);
     } else {
       const parsed = ActionResolver.parseRef(actionOrId as ActionRef | string);
       targetActionId = parsed.actionId;

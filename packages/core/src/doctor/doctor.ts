@@ -408,7 +408,7 @@ export async function runDoctorChecks(options?: {
               name: "Action Manifest",
               status: "warn",
               message: `${missingFiles.length} action(s) in manifest point to missing files: ${missingFiles.join(", ")}`,
-              fix: "Run 'ad validate' to check or update actiondock.manifest.json",
+              fix: "Run 'ad validate' to check or update actiondock.json",
             });
           } else if (untracked.length > 0) {
             checks.push({
@@ -417,7 +417,7 @@ export async function runDoctorChecks(options?: {
               name: "Action Manifest",
               status: "warn",
               message: `${untracked.length} action file(s) not declared in manifest: ${untracked.join(", ")}`,
-              fix: "Run 'ad validate' to check or update actiondock.manifest.json",
+              fix: "Run 'ad validate' to check or update actiondock.json",
             });
           } else {
             const manifestStat = statSync(manifestPath);

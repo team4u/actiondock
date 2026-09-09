@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { initProject } from "../src/project/init";
@@ -48,14 +48,30 @@ export default defineAction({
 `;
     writeFileSync(join(pkgADir, "actions", "common.ts"), actionAContent);
 
+    const cfgAPath = join(pkgADir, "actiondock.json");
+    const cfgA = JSON.parse(readFileSync(cfgAPath, "utf-8"));
+    cfgA.playbooks = {
+      "common-sop": {
+        entry: "playbooks/common-sop.md",
+        description: "Common SOP in A",
+        actions: ["common.action"],
+      },
+      "unique-a-sop": {
+        entry: "playbooks/unique-a-sop.md",
+        description: "Unique SOP in A",
+        actions: ["common.action"],
+      },
+    };
+    writeFileSync(cfgAPath, JSON.stringify(cfgA, null, 2) + "\n");
+
     mkdirSync(join(pkgADir, "playbooks"), { recursive: true });
     writeFileSync(
       join(pkgADir, "playbooks", "common-sop.md"),
-      "---\nid: common-sop\ndescription: Common SOP in A\nactions:\n  - common.action\n---\n# Common SOP A"
+      "# Common SOP A"
     );
     writeFileSync(
       join(pkgADir, "playbooks", "unique-a-sop.md"),
-      "---\nid: unique-a-sop\ndescription: Unique SOP in A\nactions:\n  - common.action\n---\n# Unique SOP A"
+      "# Unique SOP A"
     );
 
     // Init Package B with action 'common.action' and 'unique.b'
@@ -84,14 +100,30 @@ export default defineAction({
 `;
     writeFileSync(join(pkgBDir, "actions", "unique-b.ts"), actionUniqueBContent);
 
+    const cfgBPath = join(pkgBDir, "actiondock.json");
+    const cfgB = JSON.parse(readFileSync(cfgBPath, "utf-8"));
+    cfgB.playbooks = {
+      "common-sop": {
+        entry: "playbooks/common-sop.md",
+        description: "Common SOP in B",
+        actions: ["common.action"],
+      },
+      "unique-b-sop": {
+        entry: "playbooks/unique-b-sop.md",
+        description: "Unique SOP in B",
+        actions: ["unique.b"],
+      },
+    };
+    writeFileSync(cfgBPath, JSON.stringify(cfgB, null, 2) + "\n");
+
     mkdirSync(join(pkgBDir, "playbooks"), { recursive: true });
     writeFileSync(
       join(pkgBDir, "playbooks", "common-sop.md"),
-      "---\nid: common-sop\ndescription: Common SOP in B\nactions:\n  - common.action\n---\n# Common SOP B"
+      "# Common SOP B"
     );
     writeFileSync(
       join(pkgBDir, "playbooks", "unique-b-sop.md"),
-      "---\nid: unique-b-sop\ndescription: Unique SOP in B\nactions:\n  - unique.b\n---\n# Unique SOP B"
+      "# Unique SOP B"
     );
   });
 
@@ -321,9 +353,20 @@ export default defineAction({
 });
 `;
       writeFileSync(join(scopedDir, "actions", "greet.ts"), actionContent);
+      const scopedCfgPath = join(scopedDir, "actiondock.json");
+      const scopedCfg = JSON.parse(readFileSync(scopedCfgPath, "utf-8"));
+      scopedCfg.playbooks = {
+        deploy: {
+          entry: "playbooks/deploy.md",
+          description: "Scoped Deploy Playbook",
+          actions: ["greet"],
+        },
+      };
+      writeFileSync(scopedCfgPath, JSON.stringify(scopedCfg, null, 2) + "\n");
+
       writeFileSync(
         join(scopedDir, "playbooks", "deploy.md"),
-        `---\nid: deploy\ndescription: Scoped Deploy Playbook\nactions:\n  - greet\n---\nRun greet\n`
+        `# Scoped Deploy Playbook\nRun greet\n`
       );
 
       linkPackage(scopedDir, fakeHome);
@@ -336,6 +379,7 @@ export default defineAction({
       const pbRes = resolvePlaybookProject("@team/tools/deploy", fakeHome, fakeHome);
       expect(pbRes.packageId).toBe("@team/tools");
       expect(pbRes.playbookId).toBe("deploy");
+      expect(pbRes.playbook.description).toBe("Scoped Deploy Playbook");
       expect(pbRes.projectRoot).toBe(scopedDir);
 
       // 3. resolveActionProject should resolve @team/tools/greet
@@ -356,6 +400,26 @@ export default defineAction({
       initProject(oldDir, { id: "team.shared", name: "Old Copy" });
       initProject(currentDir, { id: "team.shared", name: "Current Working Copy" });
 
+      const oldCfgPath = join(oldDir, "actiondock.json");
+      const oldCfg = JSON.parse(readFileSync(oldCfgPath, "utf-8"));
+      oldCfg.playbooks = {
+        sop: {
+          entry: "playbooks/sop.md",
+          description: "Old SOP",
+        },
+      };
+      writeFileSync(oldCfgPath, JSON.stringify(oldCfg, null, 2) + "\n");
+
+      const curCfgPath = join(currentDir, "actiondock.json");
+      const curCfg = JSON.parse(readFileSync(curCfgPath, "utf-8"));
+      curCfg.playbooks = {
+        sop: {
+          entry: "playbooks/sop.md",
+          description: "Current SOP",
+        },
+      };
+      writeFileSync(curCfgPath, JSON.stringify(curCfg, null, 2) + "\n");
+
       writeFileSync(
         join(oldDir, "actions", "echo.ts"),
         `import { defineAction } from "@actiondock/sdk"; export default defineAction({ id: "echo", run: () => "old" });`
@@ -366,11 +430,11 @@ export default defineAction({
       );
       writeFileSync(
         join(oldDir, "playbooks", "sop.md"),
-        `---\nid: sop\ndescription: Old SOP\n---\nOld\n`
+        `# Old SOP\n`
       );
       writeFileSync(
         join(currentDir, "playbooks", "sop.md"),
-        `---\nid: sop\ndescription: Current SOP\n---\nCurrent\n`
+        `# Current SOP\n`
       );
 
       // Link the old directory in registry

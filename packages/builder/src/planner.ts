@@ -1,6 +1,6 @@
+import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
-import ts from "typescript";
 import YAML from "yaml";
 import {
   assertPathWithinRoot,
@@ -21,7 +21,10 @@ import type {
   BuildPlanDependencies,
   BuildPlannerOptions,
   ExternalDependency,
+  LockfileInfo,
   PlaybookPlanEntry,
+  SelectionPlan,
+  SelectionPlannerOptions,
 } from "./types";
 
 /**
@@ -75,9 +78,9 @@ function walkDirectory(dir: string, rootDir: string = dir, visited = new Set<str
 }
 
 /**
- * 忽略的模块路径与文件模式判断（排除测试文件、类型声明文件以及构建/版本控制等私有目录）。
+ * 忽略的文件模式判断（排除测试文件、类型声明文件以及构建/版本控制等私有目录）。
  */
-function isIgnoredModulePath(relPath: string): boolean {
+function isIgnoredPath(relPath: string): boolean {
   const normalized = relPath.replace(/\\/g, "/");
   return (
     normalized.startsWith("node_modules/") ||
@@ -98,276 +101,59 @@ function isIgnoredModulePath(relPath: string): boolean {
 }
 
 /**
- * 采用 TypeScript 官方 AST 静态遍历解析源码文件中的所有导入说明符。
- * 覆盖 import、export ... from、动态 import() 以及 require() 调用。
+ * 支持的包管理器锁文件候选列表。
  */
-function extractImportsUsingAst(source: string, fileName: string): string[] {
-  try {
-    const sourceFile = ts.createSourceFile(
-      fileName,
-      source,
-      ts.ScriptTarget.Latest,
-      true
-    );
-    const specifiers = new Set<string>();
-
-    function visit(node: ts.Node) {
-      if (ts.isImportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
-        specifiers.add(node.moduleSpecifier.text);
-      } else if (ts.isExportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
-        specifiers.add(node.moduleSpecifier.text);
-      } else if (ts.isCallExpression(node)) {
-        if (node.expression.kind === ts.SyntaxKind.ImportKeyword && node.arguments.length > 0 && ts.isStringLiteral(node.arguments[0])) {
-          specifiers.add((node.arguments[0] as ts.StringLiteral).text);
-        } else if (ts.isIdentifier(node.expression) && node.expression.text === "require" && node.arguments.length > 0 && ts.isStringLiteral(node.arguments[0])) {
-          specifiers.add((node.arguments[0] as ts.StringLiteral).text);
-        }
-      }
-      ts.forEachChild(node, visit);
-    }
-
-    visit(sourceFile);
-    return Array.from(specifiers);
-  } catch {
-    // AST 解析异常时回退至正则提取
-    const stripped = source
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/\/\/[^\n]*/g, "");
-    const specifiers = new Set<string>();
-    const fromRegex = /\bfrom\s*["'`]([^"'`]+)["'`]/g;
-    let match: RegExpExecArray | null;
-    while ((match = fromRegex.exec(stripped)) !== null) {
-      specifiers.add(match[1].trim());
-    }
-    const importRegex = /\bimport\s*(?:\(\s*)?["'`]([^"'`]+)["'`]/g;
-    while ((match = importRegex.exec(stripped)) !== null) {
-      specifiers.add(match[1].trim());
-    }
-    const requireRegex = /\brequire\s*\(\s*["'`]([^"'`]+)["'`]/g;
-    while ((match = requireRegex.exec(stripped)) !== null) {
-      specifiers.add(match[1].trim());
-    }
-    return Array.from(specifiers);
-  }
-}
-
-const CANDIDATE_EXTENSIONS = [
-  "",
-  ".ts",
-  ".tsx",
-  ".js",
-  ".jsx",
-  ".mjs",
-  ".cjs",
-  ".mts",
-  ".cts",
-  ".json",
+const KNOWN_LOCKFILES = [
+  "package-lock.json",
+  "npm-shrinkwrap.json",
+  "bun.lockb",
+  "bun.lock",
+  "pnpm-lock.yaml",
+  "yarn.lock",
 ];
 
 /**
- * 在文件系统上探测解析相对导入说明符所对应的物理源文件。
- * 兼容 NodeNext 规范中将 .js / .mjs / .cjs 说明符解析映射到 .ts / .mts / .cts 源文件。
+ * 读取并计算项目锁文件元数据及 SHA-256 摘要。
  */
-function resolveLocalModulePath(baseDir: string, specifier: string): string | null {
-  const candidate = resolve(baseDir, specifier);
-
-  // 1. 若候选路径直接存在且为文件
-  if (existsSync(candidate)) {
-    try {
-      if (statSync(candidate).isFile()) {
-        return candidate;
-      }
-    } catch {
-      // 忽略文件属性读取异常
+function computeLockfileInfo(projectRoot: string, preferredLockfile?: string): LockfileInfo | undefined {
+  if (preferredLockfile) {
+    const lockPath = resolve(projectRoot, preferredLockfile);
+    assertPathWithinRoot(projectRoot, lockPath, "lockfile");
+    if (existsSync(lockPath) && statSync(lockPath).isFile()) {
+      const content = readFileSync(lockPath);
+      const sha256 = createHash("sha256").update(content).digest("hex");
+      return {
+        name: basename(lockPath),
+        path: lockPath,
+        sha256,
+      };
     }
+    throw new PlannerError(
+      `Specified lockfile not found on disk: ${preferredLockfile}`,
+      "LOCKFILE_NOT_FOUND"
+    );
   }
 
-  // 2. NodeNext / ESM 规范映射：若导入说明符以 .js / .mjs / .cjs 结尾，优先尝试对应 TypeScript 源码文件
-  if (candidate.endsWith(".js")) {
-    const tsPath = candidate.slice(0, -3) + ".ts";
-    if (existsSync(tsPath)) return tsPath;
-    const tsxPath = candidate.slice(0, -3) + ".tsx";
-    if (existsSync(tsxPath)) return tsxPath;
-  } else if (candidate.endsWith(".mjs")) {
-    const mtsPath = candidate.slice(0, -4) + ".mts";
-    if (existsSync(mtsPath)) return mtsPath;
-  } else if (candidate.endsWith(".cjs")) {
-    const ctsPath = candidate.slice(0, -4) + ".cts";
-    if (existsSync(ctsPath)) return ctsPath;
-  }
-
-  // 3. 尝试追加常见扩展名
-  for (const ext of CANDIDATE_EXTENSIONS) {
-    if (!ext) continue;
-    const withExt = candidate + ext;
-    if (existsSync(withExt)) {
+  for (const lockFileName of KNOWN_LOCKFILES) {
+    const lockPath = join(projectRoot, lockFileName);
+    if (existsSync(lockPath)) {
       try {
-        if (statSync(withExt).isFile()) {
-          return withExt;
+        if (statSync(lockPath).isFile()) {
+          const content = readFileSync(lockPath);
+          const sha256 = createHash("sha256").update(content).digest("hex");
+          return {
+            name: lockFileName,
+            path: lockPath,
+            sha256,
+          };
         }
       } catch {
-        // 忽略
+        continue;
       }
     }
   }
 
-  // 4. 若为目录，尝试 index 文件
-  if (existsSync(candidate)) {
-    try {
-      if (statSync(candidate).isDirectory()) {
-        for (const ext of [".ts", ".tsx", ".js", ".mjs", ".json"]) {
-          const indexFile = join(candidate, `index${ext}`);
-          if (existsSync(indexFile)) {
-            return indexFile;
-          }
-        }
-      }
-    } catch {
-      // 忽略
-    }
-  }
-
-  return null;
-}
-
-interface TsConfigPathsInfo {
-  baseUrl: string;
-  paths: Record<string, string[]>;
-  options: ts.CompilerOptions;
-}
-
-function loadTsConfigInfo(projectRoot: string): TsConfigPathsInfo | null {
-  const tsconfigPath = join(projectRoot, "tsconfig.json");
-  if (!existsSync(tsconfigPath)) return null;
-  try {
-    const configFile = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
-    if (configFile.error) return null;
-    const parsed = ts.parseJsonConfigFileContent(configFile.config, ts.sys, projectRoot);
-    return {
-      baseUrl: parsed.options.baseUrl || projectRoot,
-      paths: parsed.options.paths || {},
-      options: parsed.options,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function resolveModulePathWithAliases(
-  currentFile: string,
-  specifier: string,
-  projectRoot: string,
-  tsconfigInfo: TsConfigPathsInfo | null
-): string | null {
-  const dir = dirname(currentFile);
-
-  // 1. 相对路径导入
-  if (specifier.startsWith("./") || specifier.startsWith("../")) {
-    return resolveLocalModulePath(dir, specifier);
-  }
-
-  // 2. 若存在 tsconfig.json paths 配置，优先尝试标准 ts.resolveModuleName
-  if (tsconfigInfo && Object.keys(tsconfigInfo.paths).length > 0) {
-    const host: ts.ModuleResolutionHost = {
-      fileExists: ts.sys.fileExists,
-      readFile: ts.sys.readFile,
-      directoryExists: ts.sys.directoryExists,
-      getCurrentDirectory: () => projectRoot,
-      getDirectories: ts.sys.getDirectories,
-    };
-    try {
-      const resolved = ts.resolveModuleName(
-        specifier,
-        currentFile,
-        tsconfigInfo.options,
-        host
-      );
-      if (resolved.resolvedModule && !resolved.resolvedModule.isExternalLibraryImport) {
-        const found = resolve(resolved.resolvedModule.resolvedFileName);
-        if (existsSync(found)) {
-          return found;
-        }
-      }
-    } catch {}
-
-    // 手动别名模式匹配备选
-    for (const [pattern, targets] of Object.entries(tsconfigInfo.paths)) {
-      let matched = false;
-      let star = "";
-      if (pattern.endsWith("*")) {
-        const prefix = pattern.slice(0, -1);
-        if (specifier.startsWith(prefix)) {
-          matched = true;
-          star = specifier.slice(prefix.length);
-        }
-      } else if (pattern === specifier) {
-        matched = true;
-      }
-
-      if (matched) {
-        for (const target of targets) {
-          const replaced = target.endsWith("*")
-            ? target.slice(0, -1) + star
-            : target;
-          const candidate = resolve(tsconfigInfo.baseUrl, replaced);
-          const resolved = resolveLocalModulePath(dirname(candidate), `./${basename(candidate)}`);
-          if (resolved) {
-            return resolved;
-          }
-        }
-      }
-    }
-  }
-
-  return null;
-}
-
-/**
- * 从一组入口文件出发，静态深度追踪所有相对路径与别名引用的本地源码模块闭包。
- */
-function traceLocalModuleDependencies(
-  entryFiles: string[],
-  projectRoot: string
-): string[] {
-  const visited = new Set<string>();
-  const modules = new Set<string>();
-  const queue = [...entryFiles];
-  const tsconfigInfo = loadTsConfigInfo(projectRoot);
-
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    if (visited.has(current)) continue;
-    visited.add(current);
-
-    const relToRoot = relative(projectRoot, current);
-    if (relToRoot.startsWith("..") || isAbsolute(relToRoot)) {
-      continue;
-    }
-
-    let content = "";
-    try {
-      content = readFileSync(current, "utf-8");
-    } catch {
-      continue;
-    }
-
-    const specifiers = extractImportsUsingAst(content, current);
-
-    for (const spec of specifiers) {
-      const resolved = resolveModulePathWithAliases(current, spec, projectRoot, tsconfigInfo);
-      if (resolved) {
-        const rel = relative(projectRoot, resolved);
-        if (!rel.startsWith("..") && !isAbsolute(rel) && !isIgnoredModulePath(rel)) {
-          modules.add(resolved);
-          if (!visited.has(resolved)) {
-            queue.push(resolved);
-          }
-        }
-      }
-    }
-  }
-
-  return Array.from(modules);
+  return undefined;
 }
 
 /**
@@ -398,30 +184,89 @@ function parsePlaybookFile(filePath: string): PlaybookPlanEntry | null {
 }
 
 /**
- * 静态加载项目目录下的 Playbook 列表。
+ * 静态加载项目目录下的 Playbook 列表并合并 actiondock.json 声明。
  */
-function loadProjectPlaybooks(projectRoot: string, playbooksDir = "playbooks"): Map<string, PlaybookPlanEntry> {
+function loadProjectPlaybooks(
+  projectRoot: string,
+  playbooksDir = "playbooks",
+  config?: ProjectConfig,
+  manifest?: ActionDockManifest
+): Map<string, PlaybookPlanEntry> {
   const map = new Map<string, PlaybookPlanEntry>();
   const dir = join(projectRoot, playbooksDir);
-  if (!existsSync(dir)) return map;
-
-  const files = walkDirectory(dir, projectRoot).filter((f) => f.endsWith(".md"));
-  for (const file of files) {
-    const pb = parsePlaybookFile(file);
-    if (pb) {
-      map.set(pb.id, pb);
+  if (existsSync(dir)) {
+    const files = walkDirectory(dir, projectRoot).filter((f) => f.endsWith(".md"));
+    for (const file of files) {
+      const pb = parsePlaybookFile(file);
+      if (pb) {
+        map.set(pb.id, pb);
+      }
     }
   }
+
+  // 合并 actiondock.json / manifest / config 中声明的 playbooks
+  const declaredPlaybooks: Record<string, any> = {
+    ...((config as any)?.playbooks || {}),
+    ...((manifest as any)?.playbooks || {}),
+  };
+
+  for (const [id, rawPb] of Object.entries(declaredPlaybooks)) {
+    if (typeof rawPb === "object" && rawPb !== null) {
+      const existing = map.get(id);
+      const filePath = rawPb.entry
+        ? resolve(projectRoot, rawPb.entry)
+        : existing?.filePath || join(dir, `${id}.md`);
+      const actions = Array.from(
+        new Set([
+          ...(existing?.actions || []),
+          ...(Array.isArray(rawPb.actions) ? rawPb.actions : []),
+        ])
+      );
+      const description = rawPb.description || existing?.description;
+
+      map.set(id, {
+        id,
+        filePath,
+        actions,
+        description,
+      });
+    }
+  }
+
   return map;
 }
 
 /**
- * 静态扫描 actions 目录生成备用清单，杜绝动态 import 与代码执行。
+ * 构造备用清单映射，仅读取文件系统条目与配置声明，杜绝 AST 源码分析与动态代码执行。
  */
-function generateStaticManifest(projectRoot: string, actionsDir = "actions"): ActionDockManifest {
+function generateFallbackManifest(
+  projectRoot: string,
+  actionsDir = "actions",
+  config?: ProjectConfig
+): ActionDockManifest {
   const dir = join(projectRoot, actionsDir);
   const actions: Record<string, ActionManifestEntry> = {};
 
+  // 1. 若 actiondock.json 中声明了 actions 字典，读取显式声明
+  const configActions = (config as any)?.actions;
+  if (configActions && typeof configActions === "object") {
+    for (const [id, rawEntry] of Object.entries(configActions)) {
+      if (typeof rawEntry === "object" && rawEntry !== null) {
+        const entry = rawEntry as Partial<ActionManifestEntry>;
+        actions[id] = {
+          entry: entry.entry || join(actionsDir, `${id}.ts`).replace(/\\/g, "/"),
+          description: entry.description || `Action ${id}`,
+          uses: Array.isArray(entry.uses) ? entry.uses : [],
+          inputSchema: entry.inputSchema,
+          outputSchema: entry.outputSchema,
+          tags: entry.tags,
+          annotations: entry.annotations,
+        };
+      }
+    }
+  }
+
+  // 2. 若 actions 目录存在，基于文件名建立默认映射
   if (existsSync(dir)) {
     const files = walkDirectory(dir, projectRoot).filter(
       (f) =>
@@ -432,43 +277,22 @@ function generateStaticManifest(projectRoot: string, actionsDir = "actions"): Ac
     );
 
     for (const file of files) {
-      const relPath = relative(projectRoot, file);
+      const relPath = relative(projectRoot, file).replace(/\\/g, "/");
       const filename = basename(file);
       const actionId = filename.replace(/\.(ts|js)$/, "");
-
-      // 静态正则提取 id 与 uses，不执行模块代码
-      let parsedId = actionId;
-      const uses: string[] = [];
-      try {
-        const source = readFileSync(file, "utf-8");
-        const idMatch = source.match(/id\s*:\s*["'`]([^"'`]+)["'`]/);
-        if (idMatch && idMatch[1]) {
-          parsedId = idMatch[1];
-        }
-        const usesMatch = source.match(/uses\s*:\s*\[([^\]]*)\]/);
-        if (usesMatch && usesMatch[1]) {
-          const rawItems = usesMatch[1].split(",");
-          for (const raw of rawItems) {
-            const clean = raw.trim().replace(/^["'`]|["'`]$/g, "");
-            if (clean) {
-              uses.push(clean);
-            }
-          }
-        }
-      } catch {
-        // 忽略文件读取异常
+      if (!actions[actionId]) {
+        actions[actionId] = {
+          entry: relPath,
+          description: `Action ${actionId}`,
+          uses: [],
+        };
       }
-
-      actions[parsedId] = {
-        entry: relPath,
-        description: `Action ${parsedId}`,
-        uses,
-      };
     }
   }
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    id: config?.id || basename(projectRoot),
     actions,
   };
 }
@@ -512,10 +336,10 @@ function extractExternalDependencies(projectRoot: string): ExternalDependency[] 
 }
 
 /**
- * 构建规划器。
- * 纯声明式解析 actiondock.manifest.json 与配置，绝不执行 Action 业务代码。
+ * 声明式选择集与构建规划器 (SelectionPlanner)。
+ * 仅读取 actiondock.json、锁文件与显式构建参数，彻底移除 TypeScript AST 源码扫描。
  */
-export class BuildPlanner {
+export class SelectionPlanner {
   private projectRoot: string;
 
   constructor(options?: { projectRoot?: string }) {
@@ -524,11 +348,11 @@ export class BuildPlanner {
 
   /**
    * 执行依赖闭包裁剪与构建规划。
-   * 
+   *
    * @param options 规划参数
-   * @returns 完整的 BuildPlan 结构
+   * @returns 完整的 SelectionPlan / BuildPlan 结构
    */
-  public plan(options?: BuildPlannerOptions): BuildPlan {
+  public plan(options?: SelectionPlannerOptions): SelectionPlan {
     const root = resolve(options?.projectRoot || this.projectRoot);
 
     // 1. 获取项目配置（优先使用传入对象，缺失则读取 actiondock.json）
@@ -544,14 +368,14 @@ export class BuildPlanner {
       }
     }
 
-    // 2. 获取声明式清单（优先使用传入清单，缺失则读取 actiondock.manifest.json，未提供则采用安全静态扫描回退）
+    // 2. 获取声明式清单（优先使用传入清单，缺失则读取 actiondock.manifest.json，未提供则采用安全备用清单）
     let manifest = options?.manifest;
     if (!manifest) {
       const loaded = loadManifest(root);
       if (loaded) {
         manifest = loaded;
       } else {
-        manifest = generateStaticManifest(root, config.actionsDir || "actions");
+        manifest = generateFallbackManifest(root, config.actionsDir || "actions", config);
       }
     }
 
@@ -564,7 +388,12 @@ export class BuildPlanner {
     }
 
     // 3. 静态读取 Playbook 规程定义
-    const playbooksMap = loadProjectPlaybooks(root, config.playbooksDir || "playbooks");
+    const playbooksMap = loadProjectPlaybooks(
+      root,
+      config.playbooksDir || "playbooks",
+      config,
+      manifest
+    );
 
     // 4. 计算初始 Action 与 Playbook 集合
     const initialActionIds = new Set<string>();
@@ -591,10 +420,12 @@ export class BuildPlanner {
       selectedPlaybooks = Array.from(playbooksMap.values());
     }
 
+    const manifestActions: Record<string, ActionManifestEntry> = manifest.actions || {};
+
     // 若显式指定了 Action 列表，加入集合
     if (options?.actions && options.actions.length > 0) {
       for (const actId of options.actions) {
-        if (!manifest.actions[actId]) {
+        if (!manifestActions[actId]) {
           throw new PlannerError(
             `Action '${actId}' specified in build options was not found in manifest`,
             "ACTION_NOT_FOUND"
@@ -604,10 +435,20 @@ export class BuildPlanner {
       }
     }
 
-    // 若均未显式指定，默认打包清单中的全部 Action
+    // 若均未显式指定，默认包含清单中的全部 Action
     if ((!options?.actions || options.actions.length === 0) && (!options?.playbooks || options.playbooks.length === 0)) {
-      for (const actId of Object.keys(manifest.actions)) {
+      for (const actId of Object.keys(manifestActions)) {
         initialActionIds.add(actId);
+      }
+    }
+
+    // 当前包在 actiondock.json 中声明的顶层 uses 直接依赖
+    const currentPkgUses = (config as any)?.uses;
+    if (Array.isArray(currentPkgUses)) {
+      for (const depId of currentPkgUses) {
+        if (typeof depId === "string" && depId.trim()) {
+          initialActionIds.add(depId.trim());
+        }
       }
     }
 
@@ -623,26 +464,49 @@ export class BuildPlanner {
         continue;
       }
 
-      let entry = manifest.actions[currentId];
+      let entry = manifestActions[currentId] || (config as any)?.actions?.[currentId];
       let entryRoot = root;
 
       if (!entry) {
         try {
           const resolvedExternal = resolveActionProjectSync(currentId, root);
           if (resolvedExternal && existsSync(resolvedExternal.projectRoot)) {
-            let externalManifest = loadManifest(resolvedExternal.projectRoot);
-            let externalEntry = externalManifest?.actions?.[resolvedExternal.actionId];
+            const extRoot = resolvedExternal.projectRoot;
+            let extConfig: ProjectConfig;
+            try {
+              extConfig = loadProjectConfig(extRoot);
+            } catch {
+              extConfig = {
+                id: resolvedExternal.packageId,
+                name: resolvedExternal.packageId,
+                version: "0.1.0",
+              };
+            }
+            const externalManifest = loadManifest(extRoot);
+            let externalEntry =
+              externalManifest?.actions?.[resolvedExternal.actionId] ||
+              (extConfig as any)?.actions?.[resolvedExternal.actionId];
             if (!externalEntry) {
-              const extConfig = loadProjectConfig(resolvedExternal.projectRoot);
-              const staticManifest = generateStaticManifest(
-                resolvedExternal.projectRoot,
-                extConfig.actionsDir || "actions"
+              const staticManifest = generateFallbackManifest(
+                extRoot,
+                extConfig.actionsDir || "actions",
+                extConfig
               );
-              externalEntry = staticManifest.actions[resolvedExternal.actionId];
+              externalEntry = staticManifest.actions?.[resolvedExternal.actionId];
             }
             if (externalEntry) {
               entry = externalEntry;
-              entryRoot = resolvedExternal.projectRoot;
+              entryRoot = extRoot;
+
+              // 依赖包 actiondock.json 中声明的传递依赖闭包
+              const extPkgUses = (extConfig as any)?.uses;
+              if (Array.isArray(extPkgUses)) {
+                for (const u of extPkgUses) {
+                  if (typeof u === "string" && u.trim() && !resolvedActionIds.has(u.trim())) {
+                    queue.push(u.trim());
+                  }
+                }
+              }
             }
           }
         } catch {
@@ -684,7 +548,7 @@ export class BuildPlanner {
     // 7. 构造 Action 依赖结构
     const actionDependencies: ActionDependency[] = [];
     for (const actId of resolvedActionIds) {
-      const entry = manifest.actions[actId] || externalActionEntries.get(actId);
+      const entry = manifestActions[actId] || externalActionEntries.get(actId);
       const entryRoot = externalActionRoots.get(actId) || root;
       if (!entry) {
         throw new PlannerError(
@@ -712,71 +576,118 @@ export class BuildPlanner {
       });
     }
 
-    // 8. 构造模块与资产依赖结构
+    // 8. 收集锁文件信息并执行校验
+    const lockfileInfo = computeLockfileInfo(root, options?.lockfile);
+    if (options?.expectedLockfileDigest) {
+      if (!lockfileInfo) {
+        throw new PlannerError(
+          `Lockfile not found in project but expected digest was specified: ${options.expectedLockfileDigest}`,
+          "LOCKFILE_NOT_FOUND"
+        );
+      }
+      if (lockfileInfo.sha256 !== options.expectedLockfileDigest) {
+        throw new PlannerError(
+          `Lockfile digest mismatch: expected ${options.expectedLockfileDigest} but got ${lockfileInfo.sha256}`,
+          "LOCKFILE_DIGEST_MISMATCH"
+        );
+      }
+    }
+
+    // 9. 构造声明式文件与资产依赖结构（仅依据显式声明，杜绝 AST 依赖扫描与未声明模块猜测）
     const modulesAndAssets: AssetDependency[] = [];
     const assetPathSet = new Set<string>();
-    const modulePathSet = new Set<string>();
+    const filePathSet = new Set<string>();
     const actionPathSet = new Set(actionDependencies.map((a) => a.resolvedPath));
 
-    // 静态递归追踪 Action 源码引用的本地模块代码（如 lib/、辅助工具等）
-    const rootActionsMap = new Map<string, string[]>();
-    for (const act of actionDependencies) {
-      const actRoot = externalActionRoots.get(act.id) || root;
-      if (!rootActionsMap.has(actRoot)) {
-        rootActionsMap.set(actRoot, []);
-      }
-      rootActionsMap.get(actRoot)!.push(act.resolvedPath);
+    // 收集 files 声明（来源：options.files、manifest.files、config.files）
+    const declaredFiles = new Set<string>();
+    if (options?.files && Array.isArray(options.files)) {
+      for (const f of options.files) declaredFiles.add(f);
+    }
+    if ((manifest as any)?.files && Array.isArray((manifest as any).files)) {
+      for (const f of (manifest as any).files) declaredFiles.add(f);
+    }
+    if ((config as any)?.files && Array.isArray((config as any).files)) {
+      for (const f of (config as any).files) declaredFiles.add(f);
     }
 
-    for (const [actRoot, files] of rootActionsMap) {
-      const tracedModulePaths = traceLocalModuleDependencies(files, actRoot);
-      for (const modPath of tracedModulePaths) {
-        if (!actionPathSet.has(modPath)) {
-          const rel = relative(actRoot, modPath).replace(/\\/g, "/");
-          if (!modulePathSet.has(rel) && !isIgnoredModulePath(rel)) {
-            modulePathSet.add(rel);
+    for (const declaredRel of declaredFiles) {
+      const resolvedFile = resolve(root, declaredRel);
+      assertPathWithinRoot(root, resolvedFile, "files");
+      if (!existsSync(resolvedFile)) {
+        throw new PlannerError(
+          `File or directory declared in 'files' not found: ${declaredRel}`,
+          "FILE_NOT_FOUND"
+        );
+      }
+      const stat = statSync(resolvedFile);
+      if (stat.isDirectory()) {
+        const walked = walkDirectory(resolvedFile, root);
+        for (const f of walked) {
+          const rel = relative(root, f).replace(/\\/g, "/");
+          if (!isIgnoredPath(rel) && !actionPathSet.has(f) && !filePathSet.has(rel)) {
+            filePathSet.add(rel);
             modulesAndAssets.push({
               path: rel,
-              resolvedPath: modPath,
+              resolvedPath: f,
               type: "module",
             });
           }
         }
-      }
-    }
-
-    // 若未显式过滤 Action 与 Playbook（全量构建模式），且存在根目录 lib 目录，自动全量扫描 lib 源码
-    const isSelective =
-      Boolean(options?.actions && options.actions.length > 0) ||
-      Boolean(options?.playbooks && options.playbooks.length > 0);
-
-    if (!isSelective) {
-      const defaultLibDir = join(root, "lib");
-      if (existsSync(defaultLibDir)) {
-        const libFiles = walkDirectory(defaultLibDir, root);
-        for (const file of libFiles) {
-          const rel = relative(root, file).replace(/\\/g, "/");
-          if (!isIgnoredModulePath(rel) && !actionPathSet.has(file) && !modulePathSet.has(rel)) {
-            modulePathSet.add(rel);
-            modulesAndAssets.push({
-              path: rel,
-              resolvedPath: file,
-              type: "module",
-            });
-          }
-        }
-      }
-    }
-
-    // 清单声明资产
-    if (manifest.assets && Array.isArray(manifest.assets)) {
-      for (const assetRel of manifest.assets) {
-        const resolvedAsset = resolve(root, assetRel);
-        assertPathWithinRoot(root, resolvedAsset, "asset");
-        if (!assetPathSet.has(assetRel)) {
-          assetPathSet.add(assetRel);
+      } else if (stat.isFile()) {
+        const rel = relative(root, resolvedFile).replace(/\\/g, "/");
+        if (!actionPathSet.has(resolvedFile) && !filePathSet.has(rel)) {
+          filePathSet.add(rel);
           modulesAndAssets.push({
-            path: assetRel,
+            path: rel,
+            resolvedPath: resolvedFile,
+            type: "module",
+          });
+        }
+      }
+    }
+
+    // 收集 assets 声明（来源：options.assets、manifest.assets、config.assets）
+    const declaredAssets = new Set<string>();
+    if (options?.assets && Array.isArray(options.assets)) {
+      for (const a of options.assets) declaredAssets.add(a);
+    }
+    if (manifest.assets && Array.isArray(manifest.assets)) {
+      for (const a of manifest.assets) declaredAssets.add(a);
+    }
+    if ((config as any)?.assets && Array.isArray((config as any).assets)) {
+      for (const a of (config as any).assets) declaredAssets.add(a);
+    }
+
+    for (const declaredRel of declaredAssets) {
+      const resolvedAsset = resolve(root, declaredRel);
+      assertPathWithinRoot(root, resolvedAsset, "assets");
+      if (!existsSync(resolvedAsset)) {
+        throw new PlannerError(
+          `Asset declared in 'assets' not found: ${declaredRel}`,
+          "ASSET_NOT_FOUND"
+        );
+      }
+      const stat = statSync(resolvedAsset);
+      if (stat.isDirectory()) {
+        const walked = walkDirectory(resolvedAsset, root);
+        for (const f of walked) {
+          const rel = relative(root, f).replace(/\\/g, "/");
+          if (!assetPathSet.has(rel)) {
+            assetPathSet.add(rel);
+            modulesAndAssets.push({
+              path: rel,
+              resolvedPath: f,
+              type: "asset",
+            });
+          }
+        }
+      } else if (stat.isFile()) {
+        const rel = relative(root, resolvedAsset).replace(/\\/g, "/");
+        if (!assetPathSet.has(rel)) {
+          assetPathSet.add(rel);
+          modulesAndAssets.push({
+            path: rel,
             resolvedPath: resolvedAsset,
             type: "asset",
           });
@@ -784,12 +695,12 @@ export class BuildPlanner {
       }
     }
 
-    // 默认 assets 目录资产扫描
+    // 默认 assets 目录扫描
     const defaultAssetsDir = join(root, "assets");
     if (existsSync(defaultAssetsDir)) {
       const assetFiles = walkDirectory(defaultAssetsDir, root);
       for (const file of assetFiles) {
-        const rel = relative(root, file);
+        const rel = relative(root, file).replace(/\\/g, "/");
         if (!assetPathSet.has(rel)) {
           assetPathSet.add(rel);
           modulesAndAssets.push({
@@ -803,7 +714,7 @@ export class BuildPlanner {
 
     // Playbook 规程文档依赖
     for (const pb of selectedPlaybooks) {
-      const rel = relative(root, pb.filePath);
+      const rel = relative(root, pb.filePath).replace(/\\/g, "/");
       modulesAndAssets.push({
         path: rel,
         resolvedPath: pb.filePath,
@@ -830,10 +741,10 @@ export class BuildPlanner {
       });
     }
 
-    // 9. 外部 npm 依赖解析
+    // 10. 外部 npm 依赖解析
     const externalDependencies = extractExternalDependencies(root);
 
-    // 10. 生成最终 BuildPlan
+    // 11. 生成最终 SelectionPlan / BuildPlan
     const dependencies: BuildPlanDependencies = {
       actions: actionDependencies,
       modulesAndAssets,
@@ -852,12 +763,15 @@ export class BuildPlanner {
       playbooks: selectedPlaybooks,
       dependencies,
       assets: Array.from(assetPathSet),
+      files: Array.from(filePathSet),
       configDefs: config.config,
+      lockfile: lockfileInfo,
       metadata: {
         plannedAt: new Date().toISOString(),
         schemaVersion: 1,
         actionCount: actionDependencies.length,
         playbookCount: selectedPlaybooks.length,
+        lockfileDigest: lockfileInfo?.sha256,
       },
     };
   }
@@ -865,15 +779,26 @@ export class BuildPlanner {
   /**
    * 静态辅助调用方法。
    */
-  public static plan(options: BuildPlannerOptions): BuildPlan {
-    const planner = new BuildPlanner({ projectRoot: options.projectRoot });
+  public static plan(options: SelectionPlannerOptions): SelectionPlan {
+    const planner = new SelectionPlanner({ projectRoot: options.projectRoot });
     return planner.plan(options);
   }
 }
 
 /**
- * 快捷构建规划函数。
+ * 兼容旧版本的别名导出。
  */
-export function buildPlan(options: BuildPlannerOptions): BuildPlan {
-  return BuildPlanner.plan(options);
+export const BuildPlanner = SelectionPlanner;
+export type BuildPlanner = SelectionPlanner;
+
+/**
+ * 快捷选择规划函数。
+ */
+export function selectionPlan(options: SelectionPlannerOptions): SelectionPlan {
+  return SelectionPlanner.plan(options);
 }
+
+/**
+ * 兼容旧版本的快捷规划函数别名。
+ */
+export const buildPlan = selectionPlan;

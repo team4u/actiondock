@@ -1,41 +1,19 @@
 import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
-import { isAbsolute, join, relative, resolve } from "node:path";
-import { loadActionFileMap, loadProjectConfig } from "./loader";
+import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import type {
   ActionDockManifest,
   ActionManifestEntry,
-  ManifestSyncChange,
-  ManifestSyncResult,
-  SyncManifestOptions,
+  PlaybookManifestEntry,
 } from "./types";
+import { PACKAGE_ID_REGEX } from "../utils";
 
-export const MANIFEST_FILE_NAME = "actiondock.manifest.json";
+export const MANIFEST_FILE_NAME = "actiondock.json";
 
-function deepEqual(a: unknown, b: unknown): boolean {
-  if (a === b) return true;
-  if (a == null || b == null) return a === b;
-  if (typeof a !== "object" || typeof b !== "object") return false;
-  if (Array.isArray(a) !== Array.isArray(b)) return false;
-  if (Array.isArray(a)) {
-    const arrB = b as unknown[];
-    if (a.length !== arrB.length) return false;
-    for (let i = 0; i < a.length; i++) {
-      if (!deepEqual(a[i], arrB[i])) return false;
-    }
-    return true;
-  }
-  const keysA = Object.keys(a as Record<string, unknown>);
-  const keysB = Object.keys(b as Record<string, unknown>);
-  if (keysA.length !== keysB.length) return false;
-  for (const k of keysA) {
-    if (!Object.prototype.hasOwnProperty.call(b, k)) return false;
-    if (!deepEqual((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k])) return false;
-  }
-  return true;
-}
+export const ACTION_ID_REGEX = /^[a-zA-Z0-9_.-]+$/;
+export const PLAYBOOK_ID_REGEX = /^[a-zA-Z0-9_.-]+$/;
 
 /**
- * 读取并解析项目的声明式清单文件。
+ * 读取并解析项目的声明式清单文件（actiondock.json 为唯一事实源）。
  * 若文件不存在则返回 null。
  */
 export function loadManifest(projectRoot: string): ActionDockManifest | null {
@@ -61,24 +39,29 @@ export function loadManifest(projectRoot: string): ActionDockManifest | null {
     throw new Error(`Invalid manifest format in ${filePath}: expected a JSON object`);
   }
 
-  if (parsed.schemaVersion !== 1) {
+  if (
+    parsed.schemaVersion !== undefined &&
+    (typeof parsed.schemaVersion !== "number" || parsed.schemaVersion < 1 || parsed.schemaVersion > 2)
+  ) {
     throw new Error(
-      `Unsupported manifest schemaVersion in ${filePath}: received '${parsed.schemaVersion}', expected 1`
+      `Unsupported manifest schemaVersion in ${filePath}: received '${parsed.schemaVersion}', expected 2`
     );
+  }
+
+  if (!parsed.id) {
+    parsed.id = basename(projectRoot);
   }
 
   return parsed as ActionDockManifest;
 }
 
 /**
- * 保存声明式清单文件至项目根目录。
+ * 保存声明式清单文件至项目根目录（actiondock.json）。
  */
 export function saveManifest(projectRoot: string, manifest: ActionDockManifest): void {
   const filePath = join(projectRoot, MANIFEST_FILE_NAME);
   writeFileSync(filePath, JSON.stringify(manifest, null, 2) + "\n", "utf-8");
 }
-
-const ACTION_ID_REGEX = /^[a-zA-Z0-9_.-]+$/;
 
 /**
  * 校验清单数据结构的合法性与安全性。
@@ -93,56 +76,119 @@ export function validateManifest(
   const m = manifest as ActionDockManifest;
   const errors: string[] = [];
 
-  if (m.schemaVersion !== 1) {
-    errors.push("Manifest 'schemaVersion' must be 1");
+  if (
+    m.schemaVersion !== undefined &&
+    (typeof m.schemaVersion !== "number" || m.schemaVersion < 1 || m.schemaVersion > 2)
+  ) {
+    errors.push(`Manifest 'schemaVersion' must be 1 or 2 (received '${m.schemaVersion}')`);
   }
-  if (!m.actions || typeof m.actions !== "object") {
-    errors.push("Manifest 'actions' must be an object");
-  } else {
-    for (const [actionId, item] of Object.entries(m.actions)) {
-      if (!ACTION_ID_REGEX.test(actionId)) {
-        errors.push(`Invalid action ID '${actionId}' in manifest. Action IDs must match ${ACTION_ID_REGEX}`);
-      }
-      if (!item || typeof item !== "object") {
-        errors.push(`Action entry '${actionId}' must be an object`);
-        continue;
-      }
-      if (!item.entry || typeof item.entry !== "string") {
-        errors.push(`Action '${actionId}' must specify string 'entry'`);
-      } else {
-        if (isAbsolute(item.entry)) {
-          errors.push(`Action '${actionId}' entry cannot be an absolute path: ${item.entry}`);
-        } else if (item.entry.split("/").some((part) => part === ".." || part === "\\..")) {
-          errors.push(`Action '${actionId}' entry cannot contain path traversal: ${item.entry}`);
-        } else if (options?.projectRoot) {
-          const resolvedPath = resolve(options.projectRoot, item.entry);
-          const rel = relative(options.projectRoot, resolvedPath);
-          if (rel.startsWith("..") || isAbsolute(rel)) {
-            errors.push(`Action '${actionId}' entry escapes project root: ${item.entry}`);
-          } else if (existsSync(resolvedPath)) {
-            try {
-              const realEntry = realpathSync(resolvedPath);
-              const realRoot = realpathSync(options.projectRoot);
-              const relReal = relative(realRoot, realEntry);
-              if (relReal.startsWith("..") || isAbsolute(relReal)) {
-                errors.push(`Action '${actionId}' entry symlink resolves outside project root: ${item.entry}`);
+
+  if (m.id !== undefined) {
+    if (typeof m.id !== "string" || !PACKAGE_ID_REGEX.test(m.id)) {
+      errors.push(`Manifest 'id' is invalid: '${m.id}' (must match ${PACKAGE_ID_REGEX})`);
+    }
+  }
+
+  if (m.actions !== undefined) {
+    if (!m.actions || typeof m.actions !== "object" || Array.isArray(m.actions)) {
+      errors.push("Manifest 'actions' must be an object");
+    } else {
+      for (const [actionId, item] of Object.entries(m.actions)) {
+        if (!ACTION_ID_REGEX.test(actionId)) {
+          errors.push(`Invalid action ID '${actionId}' in manifest. Action IDs must match ${ACTION_ID_REGEX}`);
+        }
+        if (!item || typeof item !== "object") {
+          errors.push(`Action entry '${actionId}' must be an object`);
+          continue;
+        }
+        if (!item.entry || typeof item.entry !== "string") {
+          errors.push(`Action '${actionId}' must specify string 'entry'`);
+        } else {
+          if (isAbsolute(item.entry)) {
+            errors.push(`Action '${actionId}' entry cannot be an absolute path: ${item.entry}`);
+          } else if (item.entry.split("/").some((part) => part === ".." || part === "\\..")) {
+            errors.push(`Action '${actionId}' entry cannot contain path traversal: ${item.entry}`);
+          } else if (options?.projectRoot) {
+            const resolvedPath = resolve(options.projectRoot, item.entry);
+            const rel = relative(options.projectRoot, resolvedPath);
+            if (rel.startsWith("..") || isAbsolute(rel)) {
+              errors.push(`Action '${actionId}' entry escapes project root: ${item.entry}`);
+            } else if (existsSync(resolvedPath)) {
+              try {
+                const realEntry = realpathSync(resolvedPath);
+                const realRoot = realpathSync(options.projectRoot);
+                const relReal = relative(realRoot, realEntry);
+                if (relReal.startsWith("..") || isAbsolute(relReal)) {
+                  errors.push(`Action '${actionId}' entry symlink resolves outside project root: ${item.entry}`);
+                }
+              } catch (err: any) {
+                errors.push(`Failed to resolve real path for Action '${actionId}': ${err.message}`);
               }
-            } catch (err: any) {
-              errors.push(`Failed to resolve real path for Action '${actionId}': ${err.message}`);
             }
           }
         }
-      }
-      if (item.uses && !Array.isArray(item.uses)) {
-        errors.push(`Action '${actionId}' property 'uses' must be an array`);
-      }
-      if (item.tags && !Array.isArray(item.tags)) {
-        errors.push(`Action '${actionId}' property 'tags' must be an array`);
+        if (item.uses && !Array.isArray(item.uses)) {
+          errors.push(`Action '${actionId}' property 'uses' must be an array`);
+        }
+        if (item.tags && !Array.isArray(item.tags)) {
+          errors.push(`Action '${actionId}' property 'tags' must be an array`);
+        }
       }
     }
   }
 
-  if (m.assets) {
+  if (m.playbooks !== undefined) {
+    if (!m.playbooks || typeof m.playbooks !== "object" || Array.isArray(m.playbooks)) {
+      errors.push("Manifest 'playbooks' must be an object");
+    } else {
+      for (const [playbookId, item] of Object.entries(m.playbooks)) {
+        if (!PLAYBOOK_ID_REGEX.test(playbookId)) {
+          errors.push(`Invalid playbook ID '${playbookId}' in manifest. Playbook IDs must match ${PLAYBOOK_ID_REGEX}`);
+        }
+        if (!item || typeof item !== "object") {
+          errors.push(`Playbook entry '${playbookId}' must be an object`);
+          continue;
+        }
+        if (!item.entry || typeof item.entry !== "string") {
+          errors.push(`Playbook '${playbookId}' must specify string 'entry'`);
+        } else {
+          if (isAbsolute(item.entry)) {
+            errors.push(`Playbook '${playbookId}' entry cannot be an absolute path: ${item.entry}`);
+          } else if (item.entry.split("/").some((part) => part === ".." || part === "\\..")) {
+            errors.push(`Playbook '${playbookId}' entry cannot contain path traversal: ${item.entry}`);
+          } else if (options?.projectRoot) {
+            const resolvedPath = resolve(options.projectRoot, item.entry);
+            const rel = relative(options.projectRoot, resolvedPath);
+            if (rel.startsWith("..") || isAbsolute(rel)) {
+              errors.push(`Playbook '${playbookId}' entry escapes project root: ${item.entry}`);
+            } else if (existsSync(resolvedPath)) {
+              try {
+                const realEntry = realpathSync(resolvedPath);
+                const realRoot = realpathSync(options.projectRoot);
+                const relReal = relative(realRoot, realEntry);
+                if (relReal.startsWith("..") || isAbsolute(relReal)) {
+                  errors.push(`Playbook '${playbookId}' entry symlink resolves outside project root: ${item.entry}`);
+                }
+              } catch (err: any) {
+                errors.push(`Failed to resolve real path for Playbook '${playbookId}': ${err.message}`);
+              }
+            }
+          }
+        }
+        if (item.actions && !Array.isArray(item.actions)) {
+          errors.push(`Playbook '${playbookId}' property 'actions' must be an array`);
+        }
+      }
+    }
+  }
+
+  if (m.dependencies !== undefined) {
+    if (!m.dependencies || typeof m.dependencies !== "object" || Array.isArray(m.dependencies)) {
+      errors.push("Manifest 'dependencies' must be an object");
+    }
+  }
+
+  if (m.assets !== undefined) {
     if (!Array.isArray(m.assets)) {
       errors.push("Manifest 'assets' must be an array");
     } else {
@@ -175,204 +221,14 @@ export function validateManifest(
     }
   }
 
+  if (m.files !== undefined && !Array.isArray(m.files)) {
+    errors.push("Manifest 'files' must be an array");
+  }
+
   return {
     valid: errors.length === 0,
     errors: errors.length > 0 ? errors : undefined,
   };
 }
 
-/**
- * 为单个 Action 构建清单项。
- */
-export function createManifestEntry(options: {
-  entry: string;
-  description?: string;
-  inputSchema?: Record<string, unknown> | boolean;
-  outputSchema?: Record<string, unknown> | boolean;
-  uses?: string[];
-  tags?: string[];
-  annotations?: Record<string, unknown>;
-}): ActionManifestEntry {
-  return {
-    entry: options.entry,
-    description: options.description,
-    inputSchema: options.inputSchema,
-    outputSchema: options.outputSchema,
-    uses: options.uses || [],
-    tags: options.tags || [],
-    annotations: options.annotations,
-  };
-}
-
-/**
- * 依据动作源码目录中的 Action 定义，增量同步或校验 actiondock.manifest.json 文件。
- * 
- * @param projectRoot 项目根目录绝对路径
- * @param options 同步选项（包括 actionsDir、check、prune、autoInstall）
- * @returns 同步变更结果报告
- */
-export async function syncManifest(
-  projectRoot: string,
-  options: SyncManifestOptions = {}
-): Promise<ManifestSyncResult> {
-  const manifestPath = join(projectRoot, MANIFEST_FILE_NAME);
-
-  // 1. 确定 actions 目录
-  let actionsDir = options.actionsDir;
-  if (!actionsDir) {
-    try {
-      const config = loadProjectConfig(projectRoot);
-      actionsDir = config.actionsDir || "actions";
-    } catch {
-      actionsDir = "actions";
-    }
-  }
-
-  // 2. 加载现有清单，不存在则初始化基准结构
-  const existingManifest = loadManifest(projectRoot);
-  const manifest: ActionDockManifest = existingManifest
-    ? {
-        schemaVersion: existingManifest.schemaVersion || 1,
-        actions: { ...existingManifest.actions },
-        assets: existingManifest.assets ? [...existingManifest.assets] : [],
-      }
-    : {
-        schemaVersion: 1,
-        actions: {},
-        assets: [],
-      };
-
-  // 3. 动态加载所有 Action 源码定义
-  const actionFileMap = await loadActionFileMap(projectRoot, actionsDir, {
-    autoInstall: options.autoInstall !== false,
-    strict: true,
-  });
-
-  const changes: ManifestSyncChange[] = [];
-  const added: string[] = [];
-  const updated: string[] = [];
-  const removed: string[] = [];
-  const unchanged: string[] = [];
-
-  const scannedActionIds = new Set<string>();
-
-  // 4. 比对源码中的每个 Action 与现有清单项
-  for (const [actionId, fileEntry] of actionFileMap.entries()) {
-    scannedActionIds.add(actionId);
-    const relEntry = relative(projectRoot, fileEntry.filePath).replace(/\\/g, "/");
-    const act = fileEntry.action;
-
-    const newManifestEntry: ActionManifestEntry = {
-      entry: relEntry,
-      description: act.description ?? "",
-      inputSchema: act.inputSchema ?? {},
-      outputSchema: act.outputSchema ?? {},
-      uses: Array.isArray(act.uses) ? [...act.uses] : [],
-      tags: Array.isArray(act.tags) ? [...act.tags] : [],
-    };
-    if (act.annotations && typeof act.annotations === "object") {
-      newManifestEntry.annotations = act.annotations;
-    }
-
-    const oldManifestEntry = manifest.actions[actionId];
-
-    if (!oldManifestEntry) {
-      changes.push({
-        actionId,
-        type: "added",
-        entry: relEntry,
-      });
-      added.push(actionId);
-      if (!options.check) {
-        manifest.actions[actionId] = newManifestEntry;
-      }
-    } else {
-      const changedFields: string[] = [];
-
-      if (oldManifestEntry.entry !== newManifestEntry.entry) {
-        changedFields.push("entry");
-      }
-      if ((oldManifestEntry.description ?? "") !== (newManifestEntry.description ?? "")) {
-        changedFields.push("description");
-      }
-      if (!deepEqual(oldManifestEntry.inputSchema ?? {}, newManifestEntry.inputSchema ?? {})) {
-        changedFields.push("inputSchema");
-      }
-      if (!deepEqual(oldManifestEntry.outputSchema ?? {}, newManifestEntry.outputSchema ?? {})) {
-        changedFields.push("outputSchema");
-      }
-      if (!deepEqual(oldManifestEntry.uses ?? [], newManifestEntry.uses ?? [])) {
-        changedFields.push("uses");
-      }
-      if (!deepEqual(oldManifestEntry.tags ?? [], newManifestEntry.tags ?? [])) {
-        changedFields.push("tags");
-      }
-      if (!deepEqual(oldManifestEntry.annotations ?? {}, newManifestEntry.annotations ?? {})) {
-        changedFields.push("annotations");
-      }
-
-      if (changedFields.length > 0) {
-        changes.push({
-          actionId,
-          type: "updated",
-          entry: relEntry,
-          changedFields,
-        });
-        updated.push(actionId);
-        if (!options.check) {
-          manifest.actions[actionId] = newManifestEntry;
-        }
-      } else {
-        changes.push({
-          actionId,
-          type: "unchanged",
-          entry: relEntry,
-        });
-        unchanged.push(actionId);
-      }
-    }
-  }
-
-  // 5. 检查清单中存在但源码中已不存在的废弃动作
-  for (const [actionId, item] of Object.entries(manifest.actions)) {
-    if (!scannedActionIds.has(actionId)) {
-      changes.push({
-        actionId,
-        type: "removed",
-        entry: item.entry,
-      });
-      removed.push(actionId);
-      if (!options.check && options.prune !== false) {
-        delete manifest.actions[actionId];
-      }
-    }
-  }
-
-  const inSync = added.length === 0 && updated.length === 0 && removed.length === 0;
-
-  // 6. 如果存在变更且非仅检查模式，保存清单文件
-  if (!options.check && !inSync) {
-    saveManifest(projectRoot, manifest);
-  }
-
-  return {
-    inSync,
-    manifestPath,
-    changes,
-    added,
-    updated,
-    removed,
-    unchanged,
-  };
-}
-
-/**
- * 校验当前 actiondock.manifest.json 是否与动作源码定义保持一致（只读检查）。
- */
-export async function checkManifestSync(
-  projectRoot: string,
-  options: Omit<SyncManifestOptions, "check"> = {}
-): Promise<ManifestSyncResult> {
-  return syncManifest(projectRoot, { ...options, check: true });
-}
 

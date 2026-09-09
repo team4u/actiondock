@@ -55,48 +55,29 @@ export interface Output {
   result?: unknown;
 }
 
-export default defineAction<Input, Output>({
-  id: "${id}",
-  description: "${desc}",
+export default defineAction<Input, Output>(async (input, ctx) => {
+  ctx.log.info("Running ${id}", input);
 
-  inputSchema: {
-    type: "object",
-    properties: {
-      exampleParam: {
-        type: "string",
-        description: "Example parameter description",
-      },
-    },
-    required: [],
-  },
+  // Access config: ctx.config.get("MY_CONFIG")
+  // Access state:  await ctx.state.get("my_key") / await ctx.state.set("my_key", val)
+  // Call action:   await ctx.actions.invoke(otherAction, input)
 
-  outputSchema: {
-    type: "object",
-    properties: {
-      success: { type: "boolean" },
-      result: {},
-    },
-    required: ["success"],
-  },
-
-  async run(input, ctx) {
-    ctx.log.info("Running ${id}", input);
-
-    // Access config: ctx.config.get("MY_CONFIG")
-    // Access state:  await ctx.state.get("my_key") / await ctx.state.set("my_key", val)
-    // Call action:   await ctx.actions.invoke(otherAction, input)
-
-    return {
-      success: true,
-      result: input.exampleParam || "done",
-    };
-  },
+  return {
+    success: true,
+    result: input.exampleParam || "done",
+  };
 });
 `;
 
         writeFileSync(targetFullFile, template, "utf-8");
 
-        const manifest = loadManifest(root) || { schemaVersion: 1, actions: {}, assets: [] };
+        const manifest = loadManifest(root) || {
+          $schema: "https://actiondock.dev/schema/v2/actiondock.json",
+          id: config.id,
+          name: config.name,
+          version: config.version,
+          actions: {},
+        };
         manifest.actions = manifest.actions || {};
         manifest.actions[id] = {
           entry: join(config.actionsDir || "actions", targetRelFile).replace(/\\/g, "/"),

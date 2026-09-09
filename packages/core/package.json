@@ -31,8 +31,7 @@
   "dependencies": {
     "@actiondock/sdk": "^2.0.12",
     "ajv": "^8.17.1",
-    "ajv-formats": "^3.0.1",
-    "yaml": "^2.7.0"
+    "ajv-formats": "^3.0.1"
   },
   "devDependencies": {
     "typescript": "^5.7.0"

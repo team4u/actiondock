@@ -76,8 +76,8 @@ export class LocationRegistry {
             const config = loadProjectConfig(absPath);
             newPackages[config.id] = {
               id: config.id,
-              name: config.name,
-              version: config.version,
+              name: config.name || config.id,
+              version: config.version || "0.0.0",
               path: absPath,
               linkedAt: link.linkedAt || new Date().toISOString(),
             };

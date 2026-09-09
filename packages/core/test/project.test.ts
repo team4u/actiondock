@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { initProject } from "../src/project/init";
@@ -44,6 +44,7 @@ describe("Project Loader & Init", () => {
     });
 
     expect(existsSync(join(tempDir, "actiondock.json"))).toBe(true);
+    expect(existsSync(join(tempDir, "actiondock.manifest.json"))).toBe(false);
     expect(existsSync(join(tempDir, "package.json"))).toBe(true);
     expect(existsSync(join(tempDir, "actions", "greet.ts"))).toBe(true);
     expect(existsSync(join(tempDir, "playbooks", "greet-user.md"))).toBe(true);
@@ -51,6 +52,9 @@ describe("Project Loader & Init", () => {
     const config = loadProjectConfig(tempDir);
     expect(config.id).toBe("org.test-project");
     expect(config.name).toBe("Test Project");
+    expect(config.schemaVersion).toBe(2);
+    expect(config.actions?.["sample.greet"]).toBeDefined();
+    expect(config.playbooks?.["greet-user"]).toBeDefined();
 
     const actionFiles = discoverActionFiles(tempDir, config.actionsDir);
     expect(actionFiles.length).toBe(1);
@@ -58,35 +62,71 @@ describe("Project Loader & Init", () => {
     const actions = await loadActions(tempDir, config.actionsDir);
     expect(actions.size).toBe(1);
     expect(actions.has("sample.greet")).toBe(true);
+    const greetAction = actions.get("sample.greet");
+    expect(greetAction?.description).toBe("Greeting action demonstrating basic input, config, and state usage");
+    expect(greetAction?.inputSchema).toBeDefined();
 
     const playbooks = loadPlaybooks(tempDir, config.playbooksDir);
     expect(playbooks.size).toBe(1);
     expect(playbooks.has("greet-user")).toBe(true);
     expect(playbooks.get("greet-user")?.actions).toEqual(["sample.greet"]);
+    expect(playbooks.get("greet-user")?.content).toContain("# Greeting SOP");
   });
 
-  it("parses playbook markdown frontmatter correctly", () => {
-    const raw = `---
-id: deploy-service
-description: Deploy service to production
-actions:
-  - k8s.apply
-  - health.check
----
-
-# Deploy Service SOP
+  it("parses pure markdown playbook correctly without YAML frontmatter", () => {
+    const raw = `# Deploy Service SOP
 
 Follow these steps carefully.
 `;
-    const pb = parsePlaybookContent(raw, "/path/deploy-service.md");
+    const pb = parsePlaybookContent(raw, "/path/deploy-service.md", {
+      description: "Deploy service to production",
+      actions: ["k8s.apply", "health.check"],
+    });
     expect(pb.id).toBe("deploy-service");
     expect(pb.description).toBe("Deploy service to production");
     expect(pb.actions).toEqual(["k8s.apply", "health.check"]);
-    expect(pb.content).toContain("# Deploy Service SOP");
+    expect(pb.content).toBe("# Deploy Service SOP\n\nFollow these steps carefully.");
 
     // Windows backslash path fallback test
     const winPb = parsePlaybookContent("# Just content", "C:\\Users\\dev\\playbooks\\quick-start.md");
     expect(winPb.id).toBe("quick-start");
+    expect(winPb.content).toBe("# Just content");
+    expect(winPb.actions).toEqual([]);
+  });
+
+  it("loads action metadata strictly from actiondock.json as single source of truth", async () => {
+    writeFileSync(
+      join(tempDir, "actiondock.json"),
+      JSON.stringify({
+        id: "test.single-source",
+        schemaVersion: 2,
+        actions: {
+          "calc.add": {
+            entry: "actions/add.ts",
+            description: "Add numbers (from actiondock.json)",
+            inputSchema: { type: "object", properties: { a: { type: "number" } } },
+            tags: ["math", "fast"],
+            uses: ["other.pkg/act"],
+          },
+        },
+      })
+    );
+    mkdirSync(join(tempDir, "actions"), { recursive: true });
+    writeFileSync(
+      join(tempDir, "actions", "add.ts"),
+      `export default async function(input: any) { return { sum: input.a + 1 }; };`
+    );
+
+    const loadedActions = await loadActions(tempDir);
+    expect(loadedActions.size).toBe(1);
+    const addAction = loadedActions.get("calc.add");
+    expect(addAction).toBeDefined();
+    expect(addAction?.id).toBe("calc.add");
+    expect(addAction?.description).toBe("Add numbers (from actiondock.json)");
+    expect(addAction?.tags).toEqual(["math", "fast"]);
+    expect(addAction?.uses).toEqual(["other.pkg/act"]);
+    expect(addAction?.inputSchema).toEqual({ type: "object", properties: { a: { type: "number" } } });
+    expect(typeof addAction?.run).toBe("function");
   });
 
   it("handles ensureProjectDependencies correctly", () => {

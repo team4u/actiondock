@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 import {
   assertPathWithinRoot,
   fetchRemotePlaybooks,
@@ -15,6 +15,7 @@ import {
   resolvePackageRoot,
   resolvePlaybookProject,
   resolveTarget,
+  saveManifest,
   type PlaybookDefinition,
 } from "@actiondock/core";
 import { Command } from "commander";
@@ -390,17 +391,17 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
           const errors: string[] = [];
 
           if (!pb.id) {
-            errors.push("Missing id in frontmatter");
+            errors.push("Missing id in playbook");
           }
           if (!pb.description) {
-            warnings.push("Missing description in frontmatter");
+            warnings.push("Missing description in actiondock.json");
           }
 
           if (pb.actions && Array.isArray(pb.actions)) {
             for (const actRef of pb.actions) {
               if (actRef.includes("/")) {
                 try {
-                  resolveActionProject(actRef);
+                  await resolveActionProject(actRef);
                 } catch (e: any) {
                   errors.push(`Referenced cross-package action '${actRef}' not resolvable: ${e.message}`);
                 }
@@ -491,17 +492,8 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
 
         const desc = options.desc || `SOP guide for ${id}`;
         const actionsList = Array.isArray(options.actions) ? options.actions : [];
-        const actionsYaml =
-          actionsList.length > 0
-            ? `actions:\n${actionsList.map((a: string) => `  - ${a}`).join("\n")}\n`
-            : "actions: []\n";
 
-        const template = `---
-id: ${id}
-description: ${desc}
-${actionsYaml}---
-
-# ${id.replace(/[-_]/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())} SOP
+        const template = `# ${id.replace(/[-_]/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())} SOP
 
 This playbook provides task execution guidance for AI Agents.
 
@@ -512,6 +504,23 @@ This playbook provides task execution guidance for AI Agents.
 `;
 
         writeFileSync(targetFullFile, template, "utf-8");
+
+        const manifest = loadManifest(root) || {
+          $schema: "https://actiondock.dev/schema/v2/actiondock.json",
+          id: config.id,
+          name: config.name,
+          version: config.version,
+          playbooks: {},
+        };
+        manifest.playbooks = manifest.playbooks || {};
+        const relEntry = relative(root, targetFullFile).replace(/\\/g, "/");
+        manifest.playbooks[id] = {
+          entry: relEntry,
+          description: desc,
+          actions: actionsList,
+        };
+        saveManifest(root, manifest);
+
         console.log(`[OK] Created Playbook '${id}' at ${targetFullFile}`);
       } catch (err: any) {
         if (err instanceof CliError) {

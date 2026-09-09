@@ -317,11 +317,17 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
     input: I = {} as I,
     execOptions: ExecutionStartOptions = {}
   ): Promise<ExecutionResult<O>> => {
+    let actionRef: string;
     if (typeof action !== "string") {
-      executionService.registerAction(action as ActionDefinition);
+      const act = action as ActionDefinition;
+      if (!act.id) {
+        act.id = "test-action";
+      }
+      executionService.registerAction(act);
+      actionRef = act.id;
+    } else {
+      actionRef = action;
     }
-
-    const actionRef = typeof action === "string" ? action : action.id;
 
     const ticket = await executionService.start(
       actionRef,

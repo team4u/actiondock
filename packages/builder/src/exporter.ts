@@ -16,7 +16,7 @@ import {
 import { createTarGzArchiveAsync, createZipArchiveAsync } from "./archive";
 import { BunCompiler } from "./compiler";
 import { BuilderError } from "./errors";
-import { BuildPlanner } from "./planner";
+import { BuildPlanner, SelectionPlanner } from "./planner";
 
 /**
  * 跨文件系统/分区的原子移动目录辅助函数。
@@ -276,8 +276,8 @@ export class SkillExporter {
       options.standalone || options.mode === "standalone" ? "standalone" : "source";
     const target = options.target ? String(options.target) : "host";
 
-    // 1. 调用 BuildPlanner 执行纯声明式构建规划与依赖闭包裁剪
-    const planner = new BuildPlanner({ projectRoot: root });
+    // 1. 调用 SelectionPlanner 执行纯声明式构建规划与依赖闭包裁剪
+    const planner = new SelectionPlanner({ projectRoot: root });
     const plan = planner.plan({
       projectRoot: root,
       config: options.config,
@@ -368,6 +368,7 @@ export class SkillExporter {
         schemaVersion: 1,
         actions: manifestActions,
         assets: plan.assets,
+        ...(plan.files && plan.files.length > 0 ? { files: plan.files } : {}),
       };
       writeFileSync(
         join(skillDir, "actiondock.manifest.json"),
@@ -384,6 +385,8 @@ export class SkillExporter {
         actionsDir,
         playbooksDir,
         config: plan.configDefs,
+        ...(plan.files && plan.files.length > 0 ? { files: plan.files } : {}),
+        ...(plan.assets && plan.assets.length > 0 ? { assets: plan.assets } : {}),
       };
       writeFileSync(
         join(skillDir, "actiondock.json"),
@@ -475,7 +478,7 @@ export class SkillExporter {
 
       // - 拷贝静态资产与代码模块文件，完整保留相对路径
       for (const dep of plan.dependencies.modulesAndAssets) {
-        if ((dep.type === "asset" || dep.type === "module") && existsSync(dep.resolvedPath)) {
+        if ((dep.type === "asset" || dep.type === "module" || dep.type === "file") && existsSync(dep.resolvedPath)) {
           const destAsset = join(skillDir, dep.path);
           mkdirSync(dirname(destAsset), { recursive: true });
           copyFileSync(dep.resolvedPath, destAsset);
@@ -508,7 +511,15 @@ export class SkillExporter {
         plan.packageId,
         plan.version,
         plan.description,
-        plan.actions.map((a) => ({ id: a.id, filePath: a.resolvedPath })),
+        plan.actions.map((a) => ({
+          id: a.id,
+          filePath: a.resolvedPath,
+          description: a.description,
+          inputSchema: a.inputSchema,
+          outputSchema: a.outputSchema,
+          tags: a.tags,
+          annotations: a.annotations,
+        })),
         plan.configDefs
       );
 

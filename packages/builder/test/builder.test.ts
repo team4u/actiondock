@@ -33,6 +33,8 @@ import {
   exportCompositeSkill,
   getInternalDependencyVersion,
   PlannerError,
+  selectionPlan,
+  SelectionPlanner,
   SkillExporter,
   createTarGzArchive,
   createZipArchive,
@@ -103,6 +105,7 @@ describe("@actiondock/builder 测试套件", () => {
       // 写入声明式清单
       const manifest: ActionDockManifest = {
         schemaVersion: 1,
+        id: "test.builder-fixture",
         actions: {
           "sample.greet": {
             entry: "actions/greet.ts",
@@ -134,7 +137,6 @@ describe("@actiondock/builder 测试套件", () => {
       const assetDeps = plan.dependencies.modulesAndAssets;
       expect(assetDeps.some((a) => a.path === "assets/template.txt" && a.type === "asset")).toBe(true);
       expect(assetDeps.some((a) => a.path === "actiondock.json" && a.type === "config")).toBe(true);
-      expect(assetDeps.some((a) => a.path === "actiondock.manifest.json" && a.type === "config")).toBe(true);
 
       // 验证外部依赖解析
       expect(Array.isArray(plan.dependencies.external)).toBe(true);
@@ -156,6 +158,7 @@ export default {
 
       const manifest: ActionDockManifest = {
         schemaVersion: 1,
+        id: "test.builder-fixture",
         actions: {
           "sample.bomb": {
             entry: "actions/bomb.ts",
@@ -185,6 +188,7 @@ export default {
 
       const manifest: ActionDockManifest = {
         schemaVersion: 1,
+        id: "test.builder-fixture",
         actions: {
           "action.a": {
             entry: "actions/a.ts",
@@ -230,6 +234,7 @@ export default {
 
       const manifest: ActionDockManifest = {
         schemaVersion: 1,
+        id: "test.builder-fixture",
         actions: {
           "loop.a": {
             entry: "actions/loop-a.ts",
@@ -263,6 +268,7 @@ export default {
 
       const manifest: ActionDockManifest = {
         schemaVersion: 1,
+        id: "test.builder-fixture",
         actions: {
           "task.main": {
             entry: "actions/task-main.ts",
@@ -322,6 +328,7 @@ actions:
     it("当依赖闭包中引用的下游 Action 不存在时报错", () => {
       const manifest: ActionDockManifest = {
         schemaVersion: 1,
+        id: "test.builder-fixture",
         actions: {
           "broken.action": {
             entry: "actions/greet.ts",
@@ -340,110 +347,139 @@ actions:
       }).toThrowError(/missing\.dependency/);
     });
 
-    it("静态解析 Action 源码引用的本地模块闭包（lib 与辅助文件）并正确标记为 module", () => {
-      // 创建 lib 源码目录与多级依赖
+    it("通过 actiondock.json 或构建参数中的 files 声明收集模块文件，杜绝未声明导入猜测与 AST 扫描", () => {
+      // 创建 lib 源码目录与辅助文件
       mkdirSync(join(tempDir, "lib", "utils"), { recursive: true });
       writeFileSync(join(tempDir, "lib", "utils", "sanitize.ts"), "export const sanitize = (s: string) => s.trim();", "utf-8");
       writeFileSync(
         join(tempDir, "lib", "format.ts"),
-        'import { sanitize } from "./utils/sanitize.js";\nexport const format = (s: string) => sanitize(s).toUpperCase();',
+        'export const format = (s: string) => s.toUpperCase();',
         "utf-8"
       );
-      // 未被引用的额外 lib 文件
+      // 未声明的额外文件
       writeFileSync(join(tempDir, "lib", "unused.ts"), "export const unused = 42;", "utf-8");
 
-      // Action 源码显式引用 lib/format.js
-      const actionWithLibCode = `
+      const actionCode = `
 import { defineAction } from "@actiondock/sdk";
-import { format } from "../lib/format.js";
-
 export default defineAction({
   id: "sample.custom-greet",
-  description: "Greet using helper",
-  run: async (input: { name: string }) => ({ message: format(input.name) }),
+  description: "Greet action",
+  run: async () => ({ message: "hello" }),
 });
 `;
-      writeFileSync(join(tempDir, "actions", "custom-greet.ts"), actionWithLibCode, "utf-8");
+      writeFileSync(join(tempDir, "actions", "custom-greet.ts"), actionCode, "utf-8");
 
       const manifest: ActionDockManifest = {
         schemaVersion: 1,
+        id: "test.builder-fixture",
         actions: {
           "sample.custom-greet": {
             entry: "actions/custom-greet.ts",
-            description: "Greet using helper",
+            description: "Greet action",
             uses: [],
           },
         },
       };
       saveManifest(tempDir, manifest);
 
-      // 1. 按需选择 Action 规划：仅闭包内的 lib/format.ts 与 lib/utils/sanitize.ts 应当被收集，unused.ts 不在其中
-      const selectivePlan = buildPlan({
+      // 1. 显式构建参数 files 仅指定部分文件，未声明的 unused.ts 绝不猜测纳入
+      const selectivePlan = selectionPlan({
         projectRoot: tempDir,
         actions: ["sample.custom-greet"],
+        files: ["lib/format.ts", "lib/utils/sanitize.ts"],
       });
 
       const selectiveModules = selectivePlan.dependencies.modulesAndAssets.filter((d) => d.type === "module");
-      const selectivePaths = selectiveModules.map((m) => m.path);
+      const selectivePaths = selectiveModules.map((m) => m.path.replace(/\\/g, "/"));
       expect(selectivePaths).toContain("lib/format.ts");
       expect(selectivePaths).toContain("lib/utils/sanitize.ts");
       expect(selectivePaths).not.toContain("lib/unused.ts");
 
-      // 2. 全量包构建规划：lib 下全部有效源码（含 unused.ts）均被纳入
-      const fullPlan = buildPlan({
+      // 2. actiondock.json 声明 files 为目录，目录内有效文件全部收集
+      const configPath = join(tempDir, "actiondock.json");
+      const cfg = JSON.parse(readFileSync(configPath, "utf-8"));
+      cfg.files = ["lib"];
+      writeFileSync(configPath, JSON.stringify(cfg, null, 2), "utf-8");
+
+      const dirPlan = SelectionPlanner.plan({
         projectRoot: tempDir,
       });
 
-      const fullModules = fullPlan.dependencies.modulesAndAssets.filter((d) => d.type === "module");
-      const fullPaths = fullModules.map((m) => m.path);
-      expect(fullPaths).toContain("lib/format.ts");
-      expect(fullPaths).toContain("lib/utils/sanitize.ts");
-      expect(fullPaths).toContain("lib/unused.ts");
+      const dirModules = dirPlan.dependencies.modulesAndAssets.filter((d) => d.type === "module");
+      const dirPaths = dirModules.map((m) => m.path.replace(/\\/g, "/"));
+      expect(dirPaths).toContain("lib/format.ts");
+      expect(dirPaths).toContain("lib/utils/sanitize.ts");
+      expect(dirPaths).toContain("lib/unused.ts");
     });
 
-    it("基于 AST 解析并支持 tsconfig.json 路径别名 (@/*) 本地模块解析", () => {
-      writeFileSync(
-        join(tempDir, "tsconfig.json"),
-        JSON.stringify({
-          compilerOptions: {
-            baseUrl: ".",
-            paths: {
-              "@/*": ["src/*"],
-            },
-          },
-        }),
-        "utf-8"
-      );
+    it("支持锁文件探测、SHA-256 摘要计算及指纹一致性校验", () => {
+      const lockContent = JSON.stringify({ name: "test", lockfileVersion: 3 });
+      writeFileSync(join(tempDir, "package-lock.json"), lockContent, "utf-8");
 
-      mkdirSync(join(tempDir, "src", "helpers"), { recursive: true });
-      writeFileSync(join(tempDir, "src", "helpers", "calc.ts"), "export const add = (a: number, b: number) => a + b;", "utf-8");
-
-      const actionFile = join(tempDir, "actions", "alias-action.ts");
-      writeFileSync(
-        actionFile,
-        `import { add } from "@/helpers/calc";\nexport default { id: "sample.alias-action", run: () => add(1, 2) };`,
-        "utf-8"
-      );
-
-      const manifest: ActionDockManifest = {
-        schemaVersion: 1,
-        actions: {
-          "sample.alias-action": {
-            entry: "actions/alias-action.ts",
-            description: "Alias test action",
-          },
-        },
-      };
-      saveManifest(tempDir, manifest);
-
-      const plan = buildPlan({
+      const plan = SelectionPlanner.plan({
         projectRoot: tempDir,
-        actions: ["sample.alias-action"],
       });
 
-      const modules = plan.dependencies.modulesAndAssets.filter((d) => d.type === "module");
-      const paths = modules.map((m) => m.path.replace(/\\/g, "/"));
-      expect(paths).toContain("src/helpers/calc.ts");
+      expect(plan.lockfile).toBeDefined();
+      expect(plan.lockfile?.name).toBe("package-lock.json");
+      expect(plan.lockfile?.sha256).toMatch(/^[a-f0-9]{64}$/);
+      expect(plan.metadata.lockfileDigest).toBe(plan.lockfile?.sha256);
+
+      // 验证校验失败场景：期望摘要不匹配抛错
+      expect(() => {
+        SelectionPlanner.plan({
+          projectRoot: tempDir,
+          expectedLockfileDigest: "invalid-digest-value",
+        });
+      }).toThrowError(/Lockfile digest mismatch/);
+    });
+
+    it("支持跨包 actiondock.json 声明传递依赖闭包的递归展开", () => {
+      const extDir = mkdtempSync(join(tmpdir(), "ad-dep-closure-"));
+      try {
+        initProject(extDir, {
+          id: "test.closure-dep",
+          name: "Closure Dep",
+        });
+        writeFileSync(
+          join(extDir, "actions", "dep-action.ts"),
+          `export default { id: "dep-action", run: () => "ok" };`
+        );
+        const extConfigPath = join(extDir, "actiondock.json");
+        const extCfg = JSON.parse(readFileSync(extConfigPath, "utf-8"));
+        extCfg.actions = {
+          "dep-action": {
+            entry: "actions/dep-action.ts",
+            uses: [],
+          },
+        };
+        writeFileSync(extConfigPath, JSON.stringify(extCfg, null, 2), "utf-8");
+        linkPackage(extDir);
+
+        const manifest: ActionDockManifest = {
+          schemaVersion: 1,
+          id: "test.builder-fixture",
+          actions: {
+            "root.caller": {
+              entry: "actions/greet.ts",
+              description: "Root caller action",
+              uses: ["test.closure-dep/dep-action"],
+            },
+          },
+        };
+        saveManifest(tempDir, manifest);
+
+        const plan = SelectionPlanner.plan({
+          projectRoot: tempDir,
+          actions: ["root.caller"],
+        });
+
+        const actionIds = plan.actions.map((a) => a.id);
+        expect(actionIds).toContain("root.caller");
+        expect(actionIds).toContain("test.closure-dep/dep-action");
+      } finally {
+        rmSync(extDir, { recursive: true, force: true });
+      }
     });
 
     it("walkDirectory 扫描 assets 时忽略跳过指向项目根目录外部的软链接", () => {
@@ -586,6 +622,7 @@ process.exit(0);
 
       const manifest: ActionDockManifest = {
         schemaVersion: 1,
+        id: "test.builder-fixture",
         actions: {
           "sample.greet": {
             entry: "actions/greet.ts",
@@ -773,6 +810,7 @@ process.exit(0);
     it("导出独立二进制 Skill 包并验证可执行性", async () => {
       const manifest: ActionDockManifest = {
         schemaVersion: 1,
+        id: "test.builder-fixture",
         actions: {
           "sample.greet": {
             entry: "actions/greet.ts",
@@ -814,6 +852,7 @@ process.exit(0);
     it("支持 .zip 与 .tar.gz 两种归档压缩格式", async () => {
       const manifest: ActionDockManifest = {
         schemaVersion: 1,
+        id: "test.builder-fixture",
         actions: {
           "sample.greet": {
             entry: "actions/greet.ts",
@@ -1061,6 +1100,7 @@ process.exit(0);
           projectRoot: tempDir,
           manifest: {
             schemaVersion: 1,
+            id: "test.builder-fixture",
             actions: {
               "sample.greet": {
                 entry: "actions/greet.ts",

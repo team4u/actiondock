@@ -44,7 +44,7 @@ describe("ActionDockApp", () => {
     const tempDir = mkdtempSync(join(tmpdir(), "actiondock-app-test-"));
 
     try {
-      // 准备 actiondock.json 与 actiondock.manifest.json
+      // 准备 actiondock.json (Manifest v2 唯一事实源)
       writeFileSync(
         join(tempDir, "actiondock.json"),
         JSON.stringify(
@@ -52,18 +52,7 @@ describe("ActionDockApp", () => {
             id: "pkg.tools",
             name: "Tools Package",
             version: "1.0.0",
-            actionsDir: "actions",
-          },
-          null,
-          2
-        )
-      );
-
-      writeFileSync(
-        join(tempDir, "actiondock.manifest.json"),
-        JSON.stringify(
-          {
-            schemaVersion: 1,
+            schemaVersion: 2,
             actions: {
               "calc.add": {
                 entry: "actions/calc-add.ts",
@@ -164,6 +153,13 @@ describe("ActionDockApp", () => {
             name: "SOP Package",
             version: "1.0.0",
             playbooksDir: "playbooks",
+            playbooks: {
+              deploy: {
+                entry: "playbooks/deploy.md",
+                description: "Deploy application to staging or production",
+                actions: ["build-binary", "upload-artifact"],
+              },
+            },
           },
           null,
           2
@@ -172,15 +168,7 @@ describe("ActionDockApp", () => {
 
       writeFileSync(
         join(playbooksDir, "deploy.md"),
-        `---
-id: deploy
-description: Deploy application to staging or production
-actions:
-  - build-binary
-  - upload-artifact
----
-
-# Deploy Procedure
+        `# Deploy Procedure
 
 Execute build and then deploy artifact.
 `

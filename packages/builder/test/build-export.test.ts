@@ -259,6 +259,12 @@ export default defineAction({
 `;
     fs.writeFileSync(join(tempDir, "actions", "greet.ts"), greetActionCode, "utf-8");
 
+    // 在 actiondock.json 中声明 files 包含 lib 目录
+    const configPath = join(tempDir, "actiondock.json");
+    const cfg = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    cfg.files = ["lib"];
+    fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2), "utf-8");
+
     const exportRes = await exportSkill({
       projectRoot: tempDir,
     });

@@ -38,8 +38,9 @@ describe("Dependency Closure Pre-installation", () => {
 
   it("traverses uses dependency closure and ensures dependencies across packages", async () => {
     // Package A uses Package B
-    const manifestA = {
-      schemaVersion: 1,
+    const configA = {
+      id: "team.pkg-a",
+      schemaVersion: 2,
       actions: {
         "a-act": {
           entry: "actions/a-act.ts",
@@ -47,17 +48,18 @@ describe("Dependency Closure Pre-installation", () => {
         },
       },
     };
-    writeFileSync(join(pkgADir, "actiondock.manifest.json"), JSON.stringify(manifestA, null, 2));
+    writeFileSync(join(pkgADir, "actiondock.json"), JSON.stringify(configA, null, 2));
 
-    const manifestB = {
-      schemaVersion: 1,
+    const configB = {
+      id: "team.pkg-b",
+      schemaVersion: 2,
       actions: {
         "b-act": {
           entry: "actions/b-act.ts",
         },
       },
     };
-    writeFileSync(join(pkgBDir, "actiondock.manifest.json"), JSON.stringify(manifestB, null, 2));
+    writeFileSync(join(pkgBDir, "actiondock.json"), JSON.stringify(configB, null, 2));
 
     const visitedRoots: string[] = [];
     const mockEnsure = (root: string) => {
@@ -79,8 +81,9 @@ describe("Dependency Closure Pre-installation", () => {
 
   it("prevents infinite recursion when circular dependencies exist between packages", async () => {
     // A uses B, and B uses A
-    const manifestA = {
-      schemaVersion: 1,
+    const configA = {
+      id: "team.pkg-a",
+      schemaVersion: 2,
       actions: {
         "a-act": {
           entry: "actions/a-act.ts",
@@ -88,10 +91,11 @@ describe("Dependency Closure Pre-installation", () => {
         },
       },
     };
-    writeFileSync(join(pkgADir, "actiondock.manifest.json"), JSON.stringify(manifestA, null, 2));
+    writeFileSync(join(pkgADir, "actiondock.json"), JSON.stringify(configA, null, 2));
 
-    const manifestB = {
-      schemaVersion: 1,
+    const configB = {
+      id: "team.pkg-b",
+      schemaVersion: 2,
       actions: {
         "b-act": {
           entry: "actions/b-act.ts",
@@ -99,7 +103,7 @@ describe("Dependency Closure Pre-installation", () => {
         },
       },
     };
-    writeFileSync(join(pkgBDir, "actiondock.manifest.json"), JSON.stringify(manifestB, null, 2));
+    writeFileSync(join(pkgBDir, "actiondock.json"), JSON.stringify(configB, null, 2));
 
     const visitedRoots: string[] = [];
     const mockEnsure = (root: string) => {
@@ -118,8 +122,9 @@ describe("Dependency Closure Pre-installation", () => {
   });
 
   it("records warnings for unresolvable package references in manifest uses", async () => {
-    const manifestA = {
-      schemaVersion: 1,
+    const configA = {
+      id: "team.pkg-a",
+      schemaVersion: 2,
       actions: {
         "a-act": {
           entry: "actions/a-act.ts",
@@ -127,7 +132,7 @@ describe("Dependency Closure Pre-installation", () => {
         },
       },
     };
-    writeFileSync(join(pkgADir, "actiondock.manifest.json"), JSON.stringify(manifestA, null, 2));
+    writeFileSync(join(pkgADir, "actiondock.json"), JSON.stringify(configA, null, 2));
 
     const result = await ensureDependencyClosure([pkgADir], {
       ensure: () => false,

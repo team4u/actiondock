@@ -10,6 +10,16 @@ export interface ActionImport {
   id: string;
   /** Action 源码文件物理路径 */
   filePath: string;
+  /** Action 功能描述 */
+  description?: string;
+  /** 入参校验模式 */
+  inputSchema?: Record<string, unknown> | boolean;
+  /** 出参校验模式 */
+  outputSchema?: Record<string, unknown> | boolean;
+  /** 标签列表 */
+  tags?: string[];
+  /** 扩展注解 */
+  annotations?: Record<string, unknown>;
 }
 
 /**
@@ -48,7 +58,10 @@ export function generateStandaloneEntrypoint(
     .join("\n");
 
   const actionArray = actions
-    .map((_, idx) => `action_${idx}`)
+    .map(
+      (a, idx) =>
+        `({ ...(typeof action_${idx} === "function" ? { run: action_${idx} } : action_${idx}), id: action_${idx}?.id || ${JSON.stringify(a.id)}, description: action_${idx}?.description || ${JSON.stringify(a.description || "")}, inputSchema: action_${idx}?.inputSchema ?? ${JSON.stringify(a.inputSchema ?? null)}, outputSchema: action_${idx}?.outputSchema ?? ${JSON.stringify(a.outputSchema ?? null)}, tags: action_${idx}?.tags || ${JSON.stringify(a.tags || [])}, annotations: action_${idx}?.annotations || ${JSON.stringify(a.annotations || {})} })`
+    )
     .join(",\n    ");
 
   return `// AUTO-GENERATED ENTRYPOINT BY ACTIONDOCK BUILDER. DO NOT EDIT.
