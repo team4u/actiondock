@@ -32,8 +32,16 @@
     "@actiondock/core": "^2.0.12",
     "@actiondock/sdk": "^2.0.12"
   },
+  "peerDependencies": {
+    "@types/bun": ">=1.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@types/bun": {
+      "optional": true
+    }
+  },
   "devDependencies": {
-    "@types/bun": "^1.2.4",
+    "@types/bun": ">=1.2.0",
     "typescript": "^5.7.0"
   },
   "keywords": [

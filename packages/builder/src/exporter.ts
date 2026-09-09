@@ -19,19 +19,29 @@ import { BuilderError } from "./errors";
 import { BuildPlanner } from "./planner";
 
 /**
- * 跨文件系统/分区的原子移动目录辅助函数（处理 EXDEV 错误）。
+ * 跨文件系统/分区的原子移动目录辅助函数。
+ *
+ * Windows 下目录重命名可能因杀毒软件或索引服务短暂持有句柄而报
+ * EPERM / EBUSY / EACCES，先做有限次退避重试；重试耗尽或跨分区（EXDEV）时
+ * 回退为复制加删除，保证目标目录最终一致。
  */
-function moveDirAtomic(src: string, dest: string): void {
-  try {
-    renameSync(src, dest);
-  } catch (err: any) {
-    if (err?.code === "EXDEV") {
-      cpSync(src, dest, { recursive: true });
-      rmSync(src, { recursive: true, force: true });
-    } else {
-      throw err;
+const TRANSIENT_MOVE_ERROR_CODES = new Set(["EXDEV", "EPERM", "EBUSY", "EACCES", "ENOTEMPTY"]);
+const MOVE_RETRY_ATTEMPTS = 5;
+
+async function moveDirAtomic(src: string, dest: string): Promise<void> {
+  for (let attempt = 1; attempt <= MOVE_RETRY_ATTEMPTS; attempt++) {
+    try {
+      renameSync(src, dest);
+      return;
+    } catch (err: any) {
+      if (!TRANSIENT_MOVE_ERROR_CODES.has(err?.code)) {
+        throw err;
+      }
+      await new Promise((r) => setTimeout(r, 50 * attempt));
     }
   }
+  cpSync(src, dest, { recursive: true });
+  rmSync(src, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }
 
 /**
@@ -112,7 +122,7 @@ function scanRelativeFiles(dir: string, baseDir = dir): string[] {
     if (stat.isDirectory()) {
       results.push(...scanRelativeFiles(fullPath, baseDir));
     } else if (stat.isFile()) {
-      results.push(relative(baseDir, fullPath));
+      results.push(relative(baseDir, fullPath).replace(/\\/g, "/"));
     }
   }
   return results;
@@ -570,19 +580,19 @@ export class SkillExporter {
       if (existsSync(targetSkillDir)) {
         const backupDir = `${targetSkillDir}.old-${Date.now()}`;
         try {
-          moveDirAtomic(targetSkillDir, backupDir);
-          moveDirAtomic(stagingDir, targetSkillDir);
-          rmSync(backupDir, { recursive: true, force: true });
+          await moveDirAtomic(targetSkillDir, backupDir);
+          await moveDirAtomic(stagingDir, targetSkillDir);
+          rmSync(backupDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
         } catch {
-          rmSync(targetSkillDir, { recursive: true, force: true });
-          moveDirAtomic(stagingDir, targetSkillDir);
+          rmSync(targetSkillDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+          await moveDirAtomic(stagingDir, targetSkillDir);
         }
       } else {
-        moveDirAtomic(stagingDir, targetSkillDir);
+        await moveDirAtomic(stagingDir, targetSkillDir);
       }
     } finally {
       if (existsSync(stagingDir)) {
-        rmSync(stagingDir, { recursive: true, force: true });
+        rmSync(stagingDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
       }
     }
 
@@ -801,19 +811,19 @@ export class SkillExporter {
       if (existsSync(targetSkillDir)) {
         const backupDir = `${targetSkillDir}.old-${Date.now()}`;
         try {
-          moveDirAtomic(targetSkillDir, backupDir);
-          moveDirAtomic(stagingDir, targetSkillDir);
-          rmSync(backupDir, { recursive: true, force: true });
+          await moveDirAtomic(targetSkillDir, backupDir);
+          await moveDirAtomic(stagingDir, targetSkillDir);
+          rmSync(backupDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
         } catch {
-          rmSync(targetSkillDir, { recursive: true, force: true });
-          moveDirAtomic(stagingDir, targetSkillDir);
+          rmSync(targetSkillDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+          await moveDirAtomic(stagingDir, targetSkillDir);
         }
       } else {
-        moveDirAtomic(stagingDir, targetSkillDir);
+        await moveDirAtomic(stagingDir, targetSkillDir);
       }
     } finally {
       if (existsSync(stagingDir)) {
-        rmSync(stagingDir, { recursive: true, force: true });
+        rmSync(stagingDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
       }
     }
 

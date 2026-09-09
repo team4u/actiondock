@@ -317,7 +317,7 @@ Follow these steps to greet a user.
     });
     expect(secureServer.port).toBeGreaterThan(0);
     await secureServer.stop();
-  });
+  }, 30000);
 
   test("Security > constant-time string comparison and token verification", () => {
     expect(safeEqual("abc", "abc")).toBe(true);

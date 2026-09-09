@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { unlinkSync } from "node:fs";
+import { join } from "node:path";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
 
 describe("SqliteRuntimeStorage", () => {
@@ -324,11 +325,12 @@ describe("SqliteRuntimeStorage", () => {
 
     it("支持合法普通标识符与带 scope 标识符并保持在目标目录下", () => {
       const { resolveDatabasePath } = require("../src/storage");
-      const p1 = resolveDatabasePath("my-pkg", { dataDir: "/tmp/actiondock-test" });
-      expect(p1).toBe("/tmp/actiondock-test/my-pkg/runtime.db");
+      const dataDir = "/tmp/actiondock-test";
+      const p1 = resolveDatabasePath("my-pkg", { dataDir });
+      expect(p1).toBe(join(dataDir, "my-pkg", "runtime.db"));
 
-      const p2 = resolveDatabasePath("@my-org/my-pkg", { dataDir: "/tmp/actiondock-test" });
-      expect(p2).toBe("/tmp/actiondock-test/my-org/my-pkg/runtime.db");
+      const p2 = resolveDatabasePath("@my-org/my-pkg", { dataDir });
+      expect(p2).toBe(join(dataDir, "my-org/my-pkg", "runtime.db"));
     });
   });
 

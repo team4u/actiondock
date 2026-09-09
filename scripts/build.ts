@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -81,6 +81,26 @@ for (const pkg of PACKAGES) {
     console.log(`[OK] Copied declaration files for @actiondock/${pkg}`);
   } else {
     console.warn(`[WARN] Declaration dir not found for @actiondock/${pkg}: ${pkgDtsDir}`);
+  }
+
+  // Bundle self-contained ambient fallback definitions for @actiondock/runtime-bun
+  if (pkg === "runtime-bun") {
+    const ambientSrc = join(rootDir, "packages", "runtime-bun", "types", "bun-ambient.d.ts");
+    const ambientDest = join(destDistDir, "bun-ambient.d.ts");
+    if (existsSync(ambientSrc)) {
+      cpSync(ambientSrc, ambientDest);
+      const indexDtsPath = join(destDistDir, "index.d.ts");
+      if (existsSync(indexDtsPath)) {
+        const indexDtsContent = readFileSync(indexDtsPath, "utf-8");
+        if (!indexDtsContent.includes("bun-ambient.d.ts")) {
+          writeFileSync(
+            indexDtsPath,
+            '/// <reference path="./bun-ambient.d.ts" />\n' + indexDtsContent
+          );
+        }
+      }
+      console.log(`[OK] Injected self-contained bun-ambient.d.ts for @actiondock/runtime-bun`);
+    }
   }
 }
 
