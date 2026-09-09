@@ -623,7 +623,11 @@ ad doctor --json
 
 - 本地贡献与源码开发模式（若在 ActionDock 源码仓库中开发）：
   ```bash
-  # 本地源码开发态构建产物并链接全局 CLI
+  # 若未安装 Bun 构建器，可通过 npm 全局安装
+  npm install -g bun
+
+  # 本地源码开发态安装依赖、构建产物并链接全局 CLI
+  bun install
   bun run build
   cd packages/cli && npm link
 
