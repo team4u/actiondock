@@ -134,14 +134,14 @@ export default defineAction(async () => ({ pkg: "B-unique" }));
     rmSync(pkgBDir, { recursive: true, force: true });
   });
 
-  it("links, lists, and unlinks packages in global registry", () => {
+  it("links, lists, and unlinks packages in global registry", async () => {
     // 1. Link pkg A
-    const entryA = linkPackage(pkgADir, fakeHome);
+    const entryA = await linkPackage(pkgADir, fakeHome);
     expect(entryA.id).toBe("team.pkg-a");
     expect(entryA.path).toBe(pkgADir);
 
     // 2. Link pkg B
-    const entryB = linkPackage(pkgBDir, fakeHome);
+    const entryB = await linkPackage(pkgBDir, fakeHome);
     expect(entryB.id).toBe("team.pkg-b");
 
     // 3. List
@@ -151,7 +151,7 @@ export default defineAction(async () => ({ pkg: "B-unique" }));
     expect(list.map((p) => p.id)).toContain("team.pkg-b");
 
     // 4. Unlink
-    const unlinked = unlinkPackage("team.pkg-a", fakeHome);
+    const unlinked = await unlinkPackage("team.pkg-a", fakeHome);
     expect(unlinked?.id).toBe("team.pkg-a");
 
     const afterList = listLinkedPackages(fakeHome);
@@ -160,7 +160,7 @@ export default defineAction(async () => ({ pkg: "B-unique" }));
   });
 
   it("resolves action from current project first", async () => {
-    linkPackage(pkgBDir, fakeHome);
+    await linkPackage(pkgBDir, fakeHome);
 
     // When running inside pkgADir, resolving common.action should resolve to pkg A
     const res = await resolveActionProject("common.action", pkgADir, fakeHome);
@@ -169,7 +169,7 @@ export default defineAction(async () => ({ pkg: "B-unique" }));
   });
 
   it("resolves unique action from linked packages when outside of project", async () => {
-    linkPackage(pkgBDir, fakeHome);
+    await linkPackage(pkgBDir, fakeHome);
 
     const outsideDir = fakeHome; // empty dir with no actiondock.json
     const res = await resolveActionProject("unique.b", outsideDir, fakeHome);
@@ -178,13 +178,14 @@ export default defineAction(async () => ({ pkg: "B-unique" }));
   });
 
   it("detects conflict and allows scoped package resolution", async () => {
-    linkPackage(pkgADir, fakeHome);
-    linkPackage(pkgBDir, fakeHome);
+    await linkPackage(pkgADir, fakeHome);
+    await linkPackage(pkgBDir, fakeHome);
 
     const outsideDir = fakeHome;
 
     // Unscoped common.action should throw error because both A and B provide it
-    expect(
+    // 拒绝断言需显式 await，避免未处理的 Promise 拒绝泄漏
+    await expect(
       resolveActionProject("common.action", outsideDir, fakeHome)
     ).rejects.toThrow("provided by multiple linked packages");
 
@@ -196,9 +197,9 @@ export default defineAction(async () => ({ pkg: "B-unique" }));
     expect(resB.packageId).toBe("team.pkg-b");
   });
 
-  it("resolves playbook from current project and linked packages", () => {
-    linkPackage(pkgADir, fakeHome);
-    linkPackage(pkgBDir, fakeHome);
+  it("resolves playbook from current project and linked packages", async () => {
+    await linkPackage(pkgADir, fakeHome);
+    await linkPackage(pkgBDir, fakeHome);
 
     // 1. Inside pkgADir
     const localRes = resolvePlaybookProject("common-sop", pkgADir, fakeHome);
@@ -222,7 +223,7 @@ export default defineAction(async () => ({ pkg: "B-unique" }));
     expect(scopedRes.playbook.id).toBe("common-sop");
   });
 
-  it("links workspace directory and auto-discovers subprojects", () => {
+  it("links workspace directory and auto-discovers subprojects", async () => {
     // Create a workspace root containing pkg-sub1 and pkg-sub2
     const wsDir = mkdtempSync(join(tmpdir(), "ws-root-"));
     const sub1 = join(wsDir, "packages", "sub1");
@@ -232,7 +233,7 @@ export default defineAction(async () => ({ pkg: "B-unique" }));
     initProject(sub2, { id: "team.sub-2", name: "Sub 2" });
 
     // Link the workspace root (which does NOT have actiondock.json itself)
-    const result = linkPackage(wsDir, fakeHome);
+    const result = await linkPackage(wsDir, fakeHome);
     expect(result.isWorkspace).toBe(true);
     expect(result.entries.length).toBe(2);
     expect(result.entries.map((e) => e.id)).toContain("team.sub-1");
@@ -244,7 +245,7 @@ export default defineAction(async () => ({ pkg: "B-unique" }));
     expect(linked.map((p) => p.id)).toContain("team.sub-2");
 
     // Unlink workspace
-    const unlinked = unlinkPackage(wsDir, fakeHome);
+    const unlinked = await unlinkPackage(wsDir, fakeHome);
     expect(unlinked?.type).toBe("workspace");
     expect(unlinked?.packagesCount).toBe(2);
 
@@ -278,7 +279,7 @@ export default defineAction(async () => ({ ok: true }));
     writeFileSync(cfg1Path, JSON.stringify(cfg1, null, 2) + "\n");
 
     // 2. Link workspace
-    const res = linkPackage(wsDir, fakeHome);
+    const res = await linkPackage(wsDir, fakeHome);
     expect(res.isWorkspace).toBe(true);
     expect(res.entries.length).toBe(1);
 
@@ -314,14 +315,14 @@ export default defineAction(async () => ({ fromDyn2: true }));
     rmSync(wsDir, { recursive: true, force: true });
   });
 
-  it("reports registry status and prunes stale links", () => {
+  it("reports registry status and prunes stale links", async () => {
     // 1. Link a valid package A
-    linkPackage(pkgADir, fakeHome);
+    await linkPackage(pkgADir, fakeHome);
 
     // 2. Link a temporary package that will be deleted
     const tempDir = mkdtempSync(join(tmpdir(), "temp-stale-"));
     initProject(tempDir, { id: "team.will-delete", name: "Will Delete" });
-    linkPackage(tempDir, fakeHome);
+    await linkPackage(tempDir, fakeHome);
 
     // Delete tempDir to simulate stale link
     rmSync(tempDir, { recursive: true, force: true });
@@ -333,7 +334,7 @@ export default defineAction(async () => ({ fromDyn2: true }));
     expect(statusBefore.packages.some((p: any) => p.id === "team.will-delete" && p.status === "stale")).toBe(true);
 
     // 4. pruneRegistry should remove the stale entry
-    const pruneRes = pruneRegistry(fakeHome);
+    const pruneRes = await pruneRegistry(fakeHome);
     expect(pruneRes.prunedPackages.length).toBe(1);
     expect(pruneRes.prunedPackages[0].id).toBe("team.will-delete");
 
@@ -382,7 +383,7 @@ export default defineAction({
         `# Scoped Deploy Playbook\nRun greet\n`
       );
 
-      linkPackage(scopedDir, fakeHome);
+      await linkPackage(scopedDir, fakeHome);
 
       // 1. resolvePackageRoot should resolve @team/tools without being treated as an invalid explicit file path
       const root = resolvePackageRoot("@team/tools", fakeHome, fakeHome);
@@ -468,7 +469,7 @@ export default defineAction({
       );
 
       // Link the old directory in registry
-      linkPackage(oldDir, fakeHome);
+      await linkPackage(oldDir, fakeHome);
 
       // When executing inside currentDir:
       // 1. resolvePackageRoot should return currentDir, NOT oldDir
@@ -497,8 +498,8 @@ export default defineAction({
     const locReg = new LocationRegistry(fakeHome);
 
     // 1. Link packages using standard linkPackage
-    linkPackage(pkgADir, fakeHome);
-    linkPackage(pkgBDir, fakeHome);
+    await linkPackage(pkgADir, fakeHome);
+    await linkPackage(pkgBDir, fakeHome);
 
     // 2. Load via LocationRegistry: should reflect both packages as links
     const locData = locReg.load();
@@ -508,7 +509,7 @@ export default defineAction({
     expect(locData.links.some((l) => l.path === pkgBDir)).toBe(true);
 
     // 3. Save modified links via LocationRegistry
-    locReg.removeLink(pkgADir);
+    await locReg.removeLink(pkgADir);
     const updatedLoc = locReg.load();
     expect(updatedLoc.links.length).toBe(1);
     expect(updatedLoc.links[0].path).toBe(pkgBDir);

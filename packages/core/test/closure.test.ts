@@ -11,7 +11,7 @@ describe("Dependency Closure Pre-installation", () => {
   let pkgADir: string;
   let pkgBDir: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     fakeHome = mkdtempSync(join(tmpdir(), "closure-home-"));
     pkgADir = mkdtempSync(join(tmpdir(), "closure-pkg-a-"));
     pkgBDir = mkdtempSync(join(tmpdir(), "closure-pkg-b-"));
@@ -26,8 +26,8 @@ describe("Dependency Closure Pre-installation", () => {
       name: "Package B",
     });
 
-    linkPackage(pkgADir, fakeHome);
-    linkPackage(pkgBDir, fakeHome);
+    await linkPackage(pkgADir, fakeHome);
+    await linkPackage(pkgBDir, fakeHome);
   });
 
   afterEach(() => {

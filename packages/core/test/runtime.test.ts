@@ -870,7 +870,7 @@ describe("ActionRunner", () => {
         id: "team.broken-pkg",
         name: "Broken Package",
       });
-      linkPackage(pkgDir, fakeHome);
+      await linkPackage(pkgDir, fakeHome);
 
       const brokenActionCode = `
 import { nonexistentModule } from "completely-nonexistent-package-123456";

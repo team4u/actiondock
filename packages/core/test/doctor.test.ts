@@ -108,7 +108,7 @@ export default defineAction({
     // Link a directory, then delete that directory
     const tempPkg = mkdtempSync(join(tmpdir(), "temp-pkg-"));
     initProject(tempPkg, { id: "team.temp-stale", name: "Temp Stale" });
-    linkPackage(tempPkg, fakeHome);
+    await linkPackage(tempPkg, fakeHome);
 
     // Delete directory to make link stale
     rmSync(tempPkg, { recursive: true, force: true });
@@ -130,7 +130,7 @@ export default defineAction({
         dependencies: { "some-lib": "^1.0.0" },
       })
     );
-    linkPackage(depPkg, fakeHome);
+    await linkPackage(depPkg, fakeHome);
 
     const report = await runDoctorChecks({ cwd: fakeHome, customHome: fakeHome });
     const depCheck = report.checks.find((c) => c.id === "registry.dependencies");
@@ -158,7 +158,7 @@ export default defineAction({
       },
     };
     writeFileSync(join(usesPkg, "actiondock.json"), JSON.stringify(manifest, null, 2));
-    linkPackage(usesPkg, fakeHome);
+    await linkPackage(usesPkg, fakeHome);
 
     const report = await runDoctorChecks({ cwd: fakeHome, customHome: fakeHome });
     const usesCheck = report.checks.find((c) => c.id === "registry.uses_closure");

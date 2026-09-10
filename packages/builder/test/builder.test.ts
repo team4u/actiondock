@@ -428,7 +428,7 @@ export default defineAction({
       }).toThrowError(/Lockfile digest mismatch/);
     });
 
-    it("支持跨包 actiondock.json 声明传递依赖闭包的递归展开", () => {
+    it("支持跨包 actiondock.json 声明传递依赖闭包的递归展开", async () => {
       const extDir = mkdtempSync(join(tmpdir(), "ad-dep-closure-"));
       try {
         initProject(extDir, {
@@ -448,7 +448,7 @@ export default defineAction({
           },
         };
         writeFileSync(extConfigPath, JSON.stringify(extCfg, null, 2), "utf-8");
-        linkPackage(extDir);
+        await linkPackage(extDir);
 
         const manifest: ActionDockManifest = {
           schemaVersion: 1,
@@ -1162,7 +1162,7 @@ export default defineAction({
       }
     });
 
-    it("resolves external linked action in BuildPlanner when linked package has default actiondock.json", () => {
+    it("resolves external linked action in BuildPlanner when linked package has default actiondock.json", async () => {
       const extDir = mkdtempSync(join(tmpdir(), "ext-pkg-"));
       try {
         initProject(extDir, { id: "test.ext-tools", name: "External Tools" });
@@ -1170,7 +1170,7 @@ export default defineAction({
           join(extDir, "actions", "calc.ts"),
           `import { defineAction } from "@actiondock/sdk"; export default defineAction({ id: "calc", uses: [], run: () => 42 });`
         );
-        linkPackage(extDir);
+        await linkPackage(extDir);
 
         const planner = new BuildPlanner({ projectRoot: tempDir });
         const plan = planner.plan({

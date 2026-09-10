@@ -1,8 +1,24 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync } from "node:fs";
+import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import { findProjectRoot, loadActions, loadPlaybooks, loadProjectConfig } from "../project/loader";
-import { loadManifest } from "../project/manifest";
+import { findProjectRoot, loadProjectConfig } from "../project/loader";
 import { getActionDockHome, getPackageSlug } from "../utils";
+import { withRegistryLock } from "./lock";
+import {
+  buildLinkedPackageEntry,
+  discoverProjectConfigs,
+  discoverProjectConfigsAsync,
+  discoverProjects,
+  pathExistsAsync,
+} from "./scan";
+import {
+  probeActionAsync,
+  probeActionSync,
+  probePlaybook,
+  resolveEntityFlow,
+  runFlowAsync,
+  runFlowSync,
+} from "./resolve";
 import type {
   GlobalRegistryData,
   LinkedPackageEntry,
@@ -16,93 +32,69 @@ import type {
   UnlinkResult,
 } from "./types";
 
-const IGNORED_SCAN_DIRS = new Set([
-  "node_modules",
-  ".git",
-  "dist",
-  "build",
-  ".gemini",
-  ".actiondock",
-  ".claude",
-  ".idea",
-  ".vscode",
-]);
-
 /**
- * 跨平台注册表写锁控制函数（防止多进程并发读写导致 registry.json 损坏）。
+ * 空注册表初始结构。
  */
-export function withRegistryLock<T>(filePath: string, fn: () => T): T {
-  const lockDir = `${filePath}.lock`;
-  const timeoutMs = 5000;
-  const startTime = Date.now();
-
-  while (true) {
-    try {
-      mkdirSync(lockDir);
-      break;
-    } catch (err: any) {
-      if (err.code === "EEXIST") {
-        try {
-          const stat = statSync(lockDir);
-          if (Date.now() - stat.mtimeMs > 10000) {
-            rmSync(lockDir, { recursive: true, force: true });
-            continue;
-          }
-        } catch {}
-
-        if (Date.now() - startTime > timeoutMs) {
-          rmSync(lockDir, { recursive: true, force: true });
-          mkdirSync(lockDir);
-          break;
-        }
-
-        const waitTill = Date.now() + 25;
-        while (Date.now() < waitTill) {}
-      } else {
-        throw err;
-      }
-    }
-  }
-
-  try {
-    return fn();
-  } finally {
-    try {
-      rmSync(lockDir, { recursive: true, force: true });
-    } catch {}
-  }
+function emptyRegistry(): GlobalRegistryData {
+  return { version: "2.0.0", packages: {}, workspaces: {} };
 }
 
 /**
- * 递归扫描包含 actiondock.json 的子项目根目录
+ * 注册表内容解析与 links 迁移（纯函数，同步与异步加载共享的唯一事实源）。
+ *
+ * @param raw 文件原始文本
+ * @param filePath 注册表文件路径（用于错误信息定位）
+ * @returns 解析后的注册表数据
+ * @throws JSON 非法或顶层非对象时抛出带恢复指引的错误（调用方负责留档原文件）
  */
-export function discoverProjects(dir: string, maxDepth: number = 3): string[] {
-  const results: string[] = [];
-  const resolvedDir = resolve(dir);
+export function parseRegistryContent(raw: string, filePath: string): GlobalRegistryData {
+  let parsed: any;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err: any) {
+    throw new Error(
+      `Registry file '${filePath}' is corrupted (invalid JSON: ${err.message}). ` +
+        `The original data has been preserved as '${filePath}.corrupt' and can be restored manually. ` +
+        `Fix or restore the file, or remove it to start with an empty registry.`
+    );
+  }
 
-  function walk(currentDir: string, currentDepth: number) {
-    if (currentDepth > maxDepth) return;
-    try {
-      const entries = readdirSync(currentDir, { withFileTypes: true });
-      const hasActiondock = entries.some((e) => e.isFile() && e.name === "actiondock.json");
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error(
+      `Registry file '${filePath}' is corrupted (top-level value is not an object). ` +
+        `The original data has been preserved as '${filePath}.corrupt' and can be restored manually. ` +
+        `Fix or restore the file, or remove it to start with an empty registry.`
+    );
+  }
 
-      if (hasActiondock && currentDir !== resolvedDir) {
-        results.push(currentDir);
-        return; // 不再向项目内部子目录递归
-      }
+  const packages: Record<string, LinkedPackageEntry> = parsed.packages || {};
+  const workspaces: Record<string, LinkedWorkspaceEntry> = parsed.workspaces || {};
 
-      for (const entry of entries) {
-        if (entry.isDirectory() && !IGNORED_SCAN_DIRS.has(entry.name)) {
-          walk(join(currentDir, entry.name), currentDepth + 1);
+  // 格式兼容与迁移：如果包含 schemaVersion: 1 的 links 但缺少 packages/workspaces
+  if (Array.isArray(parsed.links) && Object.keys(packages).length === 0 && Object.keys(workspaces).length === 0) {
+    for (const link of parsed.links) {
+      if (!link.path || !existsSync(link.path)) continue;
+      if (link.type === "workspace") {
+        workspaces[link.path] = {
+          path: resolve(link.path),
+          linkedAt: link.linkedAt || new Date().toISOString(),
+        };
+      } else {
+        try {
+          const config = loadProjectConfig(link.path);
+          packages[config.id] = buildLinkedPackageEntry(config, resolve(link.path), link.linkedAt || new Date().toISOString());
+        } catch {
+          // 迁移时项目已损坏或配置非法：跳过该条 link，避免迁移整体失败
         }
       }
-    } catch {
-      // 忽略无法读取的目录
     }
   }
 
-  walk(resolvedDir, 1);
-  return results;
+  return {
+    version: "2.0.0",
+    packages,
+    workspaces,
+  };
 }
 
 export function getRegistryFilePath(customHome?: string): string {
@@ -110,63 +102,77 @@ export function getRegistryFilePath(customHome?: string): string {
   return join(baseDir, ".actiondock", "registry.json");
 }
 
+/**
+ * 同步加载注册表（保留同步签名供 CLI 与诊断路径使用）。
+ *
+ * @throws 注册表文件损坏时抛出带恢复指引的错误，绝不静默返回空表，
+ * 否则下次 save 会用空数据覆盖原文件导致全部链接记录丢失
+ */
 export function loadRegistry(customHome?: string): GlobalRegistryData {
   const filePath = getRegistryFilePath(customHome);
   if (!existsSync(filePath)) {
-    return { version: "2.0.0", packages: {}, workspaces: {} };
+    return emptyRegistry();
   }
+
+  let raw: string;
   try {
-    const raw = readFileSync(filePath, "utf-8");
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object") {
-      return { version: "2.0.0", packages: {}, workspaces: {} };
+    raw = readFileSync(filePath, "utf-8");
+  } catch (err: any) {
+    if (err.code === "ENOENT") {
+      return emptyRegistry();
     }
+    throw err;
+  }
 
-    const packages: Record<string, LinkedPackageEntry> = parsed.packages || {};
-    const workspaces: Record<string, LinkedWorkspaceEntry> = parsed.workspaces || {};
-
-    // 格式兼容与迁移：如果包含 schemaVersion: 1 的 links 但缺少 packages/workspaces
-    if (Array.isArray(parsed.links) && Object.keys(packages).length === 0 && Object.keys(workspaces).length === 0) {
-      for (const link of parsed.links) {
-        if (!link.path || !existsSync(link.path)) continue;
-        if (link.type === "workspace") {
-          workspaces[link.path] = {
-            path: resolve(link.path),
-            linkedAt: link.linkedAt || new Date().toISOString(),
-          };
-        } else {
-          try {
-            const config = loadProjectConfig(link.path);
-            packages[config.id] = {
-              id: config.id,
-              name: config.name || config.id,
-              version: config.version || "0.0.0",
-              path: resolve(link.path),
-              linkedAt: link.linkedAt || new Date().toISOString(),
-            };
-          } catch {}
-        }
-      }
-    }
-
-    return {
-      version: "2.0.0",
-      packages,
-      workspaces,
-    };
-  } catch {
-    return { version: "2.0.0", packages: {}, workspaces: {} };
+  try {
+    return parseRegistryContent(raw, filePath);
+  } catch (err) {
+    archiveCorruptFile(filePath);
+    throw err;
   }
 }
 
-export function saveRegistry(data: GlobalRegistryData, customHome?: string): void {
+/**
+ * 异步加载注册表（损坏语义与同步版一致：留档后抛错，不静默清空）。
+ */
+export async function loadRegistryAsync(customHome?: string): Promise<GlobalRegistryData> {
   const filePath = getRegistryFilePath(customHome);
-  const dir = dirname(filePath);
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
+
+  let raw: string;
+  try {
+    raw = await readFile(filePath, "utf-8");
+  } catch (err: any) {
+    if (err.code === "ENOENT") {
+      return emptyRegistry();
+    }
+    throw err;
   }
 
-  // 统一输出包含 schemaVersion: 1 与 links 的复合格式，保障双向兼容
+  try {
+    return parseRegistryContent(raw, filePath);
+  } catch (err) {
+    archiveCorruptFile(filePath);
+    throw err;
+  }
+}
+
+/**
+ * 将损坏的注册表文件原子留档为 `${filePath}.corrupt`，
+ * 后续 save 的临时文件 rename 不会覆盖留档（文件名不同）。
+ */
+function archiveCorruptFile(filePath: string): void {
+  try {
+    renameSync(filePath, `${filePath}.corrupt`);
+  } catch {
+    // 留档失败（如文件被其他进程先行移动）时仅放弃留档：错误仍会向上抛出，
+    // 不会出现静默清空
+  }
+}
+
+/**
+ * 由结构化数据构造统一落盘载荷（schemaVersion 1 复合格式，保障双向兼容）。
+ */
+function buildUnifiedPayload(data: GlobalRegistryData): object {
   const links: Array<{ type: "package" | "workspace"; path: string; linkedAt: string; depth?: number }> = [];
   if (data.workspaces) {
     for (const [wsPath, ws] of Object.entries(data.workspaces)) {
@@ -190,51 +196,82 @@ export function saveRegistry(data: GlobalRegistryData, customHome?: string): voi
     }
   }
 
-  const unifiedData = {
+  return {
     version: "2.0.0",
     schemaVersion: 1,
     packages: data.packages || {},
     workspaces: data.workspaces || {},
     links,
   };
+}
 
-  withRegistryLock(filePath, () => {
-    const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
-    writeFileSync(tempPath, JSON.stringify(unifiedData, null, 2) + "\n", "utf-8");
-    renameSync(tempPath, filePath);
+let tmpFileSeq = 0;
+
+/**
+ * 原子写入注册表：临时文件写盘后 rename，持锁执行，避免并发撕裂。
+ */
+export async function saveRegistry(data: GlobalRegistryData, customHome?: string): Promise<void> {
+  const filePath = getRegistryFilePath(customHome);
+  ensureRegistryDir(filePath);
+
+  const unifiedData = buildUnifiedPayload(data);
+  const payload = JSON.stringify(unifiedData, null, 2) + "\n";
+
+  await withRegistryLock(filePath, async () => {
+    await writeRegistryPayloadLocked(filePath, payload);
   });
 }
 
-export function linkPackage(
+/**
+ * 在已持有注册表锁的上下文中直接原子落盘（供复合读改写流程使用，
+ * 避免与 saveRegistry 的锁重入死等）；调用方必须已持有对应锁。
+ */
+export async function writeRegistryLocked(data: GlobalRegistryData, customHome?: string): Promise<void> {
+  const filePath = getRegistryFilePath(customHome);
+  ensureRegistryDir(filePath);
+  const payload = JSON.stringify(buildUnifiedPayload(data), null, 2) + "\n";
+  await writeRegistryPayloadLocked(filePath, payload);
+}
+
+/**
+ * 原子落盘单次写入：临时文件写盘后 rename；文件名含进程号与自增序号，
+ * 确保同一进程内多次保存也不会冲突。
+ */
+async function writeRegistryPayloadLocked(filePath: string, payload: string): Promise<void> {
+  const tempPath = `${filePath}.${process.pid}.${++tmpFileSeq}.tmp`;
+  await writeFile(tempPath, payload, "utf-8");
+  await rename(tempPath, filePath);
+}
+
+function ensureRegistryDir(filePath: string): void {
+  const dir = dirname(filePath);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+}
+
+export async function linkPackage(
   targetPath: string = process.cwd(),
   customHome?: string,
   options?: { recursive?: boolean }
-): LinkResult {
+): Promise<LinkResult> {
   const absPath = resolve(targetPath);
   const directHasConfig = existsSync(join(absPath, "actiondock.json"));
 
-  // 1. 如果当前目录直接包含 actiondock.json 且未强制递归，按单包链接
+  // 如果当前目录直接包含 actiondock.json 且未强制递归，按单包链接
   if (directHasConfig && !options?.recursive) {
     const config = loadProjectConfig(absPath);
-    const registry = loadRegistry(customHome);
+    const registry = await loadRegistryAsync(customHome);
 
-    const pkgName = config.name || config.id;
-    const pkgVersion = config.version || "0.0.0";
-    const entry: LinkedPackageEntry = {
-      id: config.id,
-      name: pkgName,
-      version: pkgVersion,
-      path: absPath,
-      linkedAt: new Date().toISOString(),
-    };
+    const entry = buildLinkedPackageEntry(config, absPath, new Date().toISOString());
 
     registry.packages[config.id] = entry;
-    saveRegistry(registry, customHome);
+    await saveRegistry(registry, customHome);
 
     return {
       id: config.id,
-      name: pkgName,
-      version: pkgVersion,
+      name: entry.name,
+      version: entry.version,
       path: absPath,
       linkedAt: entry.linkedAt,
       isWorkspace: false,
@@ -242,11 +279,13 @@ export function linkPackage(
     };
   }
 
-  // 2. 尝试扫描子目录发现多个 ActionDock 子项目（Workspace 模式）
+  // 尝试扫描子目录发现多个 ActionDock 子项目（Workspace 模式）；
+  // 门槛以「发现子项目根目录」为准而非「配置可加载」，即使全部子项目配置损坏
+  // 也仍注册 workspace（与旧版行为一致，避免边缘场景下静默落入父级回退分支）
   const discoveredRoots = discoverProjects(absPath);
 
   if (discoveredRoots.length > 0) {
-    const registry = loadRegistry(customHome);
+    const registry = await loadRegistryAsync(customHome);
     const now = new Date().toISOString();
     const wsEntry: LinkedWorkspaceEntry = {
       path: absPath,
@@ -257,26 +296,18 @@ export function linkPackage(
     registry.workspaces[absPath] = wsEntry;
 
     const linkedEntries: LinkedPackageEntry[] = [];
-
     for (const root of discoveredRoots) {
       try {
         const config = loadProjectConfig(root);
-        const entry: LinkedPackageEntry = {
-          id: config.id,
-          name: config.name || config.id,
-          version: config.version || "0.0.0",
-          path: root,
-          linkedAt: now,
-          workspaceRoot: absPath,
-        };
+        const entry = buildLinkedPackageEntry(config, root, now, absPath);
         registry.packages[config.id] = entry;
         linkedEntries.push(entry);
       } catch {
-        // 忽略异常项目
+        // 子项目配置损坏：跳过该子项目条目，不影响 workspace 注册本身
       }
     }
 
-    saveRegistry(registry, customHome);
+    await saveRegistry(registry, customHome);
 
     const wsName = basename(absPath);
     return {
@@ -291,29 +322,21 @@ export function linkPackage(
     };
   }
 
-  // 3. 回退检查：如果在子目录执行（例如在 package 的 actions/ 目录下），查找父级项目根目录
+  // 回退检查：如果在子目录执行（例如在 package 的 actions/ 目录下），查找父级项目根目录
   const parentRoot = findProjectRoot(absPath);
   if (parentRoot) {
     const config = loadProjectConfig(parentRoot);
-    const registry = loadRegistry(customHome);
+    const registry = await loadRegistryAsync(customHome);
 
-    const pkgName = config.name || config.id;
-    const pkgVersion = config.version || "0.0.0";
-    const entry: LinkedPackageEntry = {
-      id: config.id,
-      name: pkgName,
-      version: pkgVersion,
-      path: parentRoot,
-      linkedAt: new Date().toISOString(),
-    };
+    const entry = buildLinkedPackageEntry(config, parentRoot, new Date().toISOString());
 
     registry.packages[config.id] = entry;
-    saveRegistry(registry, customHome);
+    await saveRegistry(registry, customHome);
 
     return {
       id: config.id,
-      name: pkgName,
-      version: pkgVersion,
+      name: entry.name,
+      version: entry.version,
       path: parentRoot,
       linkedAt: entry.linkedAt,
       isWorkspace: false,
@@ -324,14 +347,14 @@ export function linkPackage(
   throw new Error(`Cannot link: actiondock.json not found in '${absPath}' or its subdirectories`);
 }
 
-export function unlinkPackage(
+export async function unlinkPackage(
   identifier: string = process.cwd(),
   customHome?: string
-): UnlinkResult | null {
-  const registry = loadRegistry(customHome);
+): Promise<UnlinkResult | null> {
+  const registry = await loadRegistryAsync(customHome);
   const absPath = resolve(identifier);
 
-  // 1. 检查是否匹配 Workspace 绝对路径
+  // 检查是否匹配 Workspace 绝对路径
   if (registry.workspaces && registry.workspaces[absPath]) {
     const removedWs = registry.workspaces[absPath];
     delete registry.workspaces[absPath];
@@ -343,7 +366,7 @@ export function unlinkPackage(
         removedCount++;
       }
     }
-    saveRegistry(registry, customHome);
+    await saveRegistry(registry, customHome);
     return {
       type: "workspace",
       id: basename(absPath),
@@ -353,7 +376,7 @@ export function unlinkPackage(
     };
   }
 
-  // 2. 检查是否匹配 Workspace 目录别名
+  // 检查是否匹配 Workspace 目录别名
   if (registry.workspaces) {
     for (const [wsPath, wsEntry] of Object.entries(registry.workspaces)) {
       if (basename(wsPath) === identifier) {
@@ -365,7 +388,7 @@ export function unlinkPackage(
             removedCount++;
           }
         }
-        saveRegistry(registry, customHome);
+        await saveRegistry(registry, customHome);
         return {
           type: "workspace",
           id: basename(wsPath),
@@ -377,7 +400,7 @@ export function unlinkPackage(
     }
   }
 
-  // 3. 检查是否直接匹配 Package ID
+  // 检查是否直接匹配 Package ID
   let targetKey: string | undefined;
   if (registry.packages[identifier]) {
     targetKey = identifier;
@@ -401,7 +424,7 @@ export function unlinkPackage(
 
   const removed = registry.packages[targetKey];
   delete registry.packages[targetKey];
-  saveRegistry(registry, customHome);
+  await saveRegistry(registry, customHome);
   return {
     type: "package",
     id: removed.id,
@@ -419,22 +442,27 @@ export function listLinkedPackages(customHome?: string): LinkedPackageEntry[] {
   if (registry.workspaces) {
     for (const ws of Object.values(registry.workspaces)) {
       if (!existsSync(ws.path)) continue;
-      const discovered = discoverProjects(ws.path);
-      for (const root of discovered) {
-        try {
-          const config = loadProjectConfig(root);
-          if (!result[config.id] || result[config.id].workspaceRoot === ws.path) {
-            result[config.id] = {
-              id: config.id,
-              name: config.name || config.id,
-              version: config.version || "0.0.0",
-              path: root,
-              linkedAt: ws.linkedAt,
-              workspaceRoot: ws.path,
-            };
-          }
-        } catch {
-          // 忽略异常项目
+      for (const { root, config } of discoverProjectConfigs(ws.path)) {
+        if (!result[config.id] || result[config.id].workspaceRoot === ws.path) {
+          result[config.id] = buildLinkedPackageEntry(config, root, ws.linkedAt, ws.path);
+        }
+      }
+    }
+  }
+
+  return Object.values(result);
+}
+
+export async function listLinkedPackagesAsync(customHome?: string): Promise<LinkedPackageEntry[]> {
+  const registry = await loadRegistryAsync(customHome);
+  const result: Record<string, LinkedPackageEntry> = { ...registry.packages };
+
+  if (registry.workspaces) {
+    for (const ws of Object.values(registry.workspaces)) {
+      if (!(await pathExistsAsync(ws.path))) continue;
+      for (const { root, config } of await discoverProjectConfigsAsync(ws.path)) {
+        if (!result[config.id] || result[config.id].workspaceRoot === ws.path) {
+          result[config.id] = buildLinkedPackageEntry(config, root, ws.linkedAt, ws.path);
         }
       }
     }
@@ -448,169 +476,21 @@ export function listLinkedWorkspaces(customHome?: string): LinkedWorkspaceEntry[
   return Object.values(registry.workspaces || {});
 }
 
-async function projectHasAction(
-  projectRoot: string,
-  actionsDir: string | undefined,
-  actionId: string
-): Promise<boolean> {
-  const manifest = loadManifest(projectRoot);
-  if (manifest?.actions && actionId in manifest.actions) {
-    return true;
-  }
-  try {
-    const actions = await loadActions(projectRoot, actionsDir, { autoInstall: false });
-    return actions.has(actionId);
-  } catch {
-    return projectHasActionSync(projectRoot, actionsDir, actionId);
-  }
-}
-
-function projectHasActionSync(
-  projectRoot: string,
-  actionsDir: string | undefined,
-  actionId: string
-): boolean {
-  const manifest = loadManifest(projectRoot);
-  if (manifest?.actions && actionId in manifest.actions) {
-    return true;
-  }
-  const dir = join(projectRoot, actionsDir || "actions");
-  if (!existsSync(dir)) {
-    return false;
-  }
-  if (actionId.includes("..") || actionId.startsWith("/") || actionId.startsWith("\\")) {
-    return false;
-  }
-  if (existsSync(join(dir, `${actionId}.ts`)) || existsSync(join(dir, `${actionId}.js`))) {
-    return true;
-  }
-  const relFile = actionId.replace(/\./g, "/");
-  if (existsSync(join(dir, `${relFile}.ts`)) || existsSync(join(dir, `${relFile}.js`))) {
-    return true;
-  }
-  return false;
-}
-
 export function resolveActionProjectSync(
   actionIdentifier: string,
   cwd: string = process.cwd(),
   customHome?: string
 ): ResolvedActionProject {
-  // 1. Check current directory / parent project
-  const currentRoot = findProjectRoot(cwd);
-  if (currentRoot) {
-    try {
-      const config = loadProjectConfig(currentRoot);
-      if (projectHasActionSync(currentRoot, config.actionsDir, actionIdentifier)) {
-        return {
-          projectRoot: currentRoot,
-          packageId: config.id,
-          actionId: actionIdentifier,
-        };
-      }
-    } catch {
-      // Ignore and proceed to registry lookup
-    }
-  }
-
-  // 2. Check if scoped format: <package-id>/<action-id> or <package-id>:<action-id>
-  let targetPackage: string | undefined;
-  let pureActionId = actionIdentifier;
-
-  if (actionIdentifier.includes("/")) {
-    const slashIdx = actionIdentifier.lastIndexOf("/");
-    targetPackage = actionIdentifier.slice(0, slashIdx);
-    pureActionId = actionIdentifier.slice(slashIdx + 1);
-  } else if (actionIdentifier.includes(":")) {
-    const colonIdx = actionIdentifier.lastIndexOf(":");
-    targetPackage = actionIdentifier.slice(0, colonIdx);
-    pureActionId = actionIdentifier.slice(colonIdx + 1);
-  }
-
-  const linkedList = listLinkedPackages(customHome);
-
-  if (targetPackage) {
-    let targetRoot: string | undefined;
-    let targetPkgId = targetPackage;
-
-    if (currentRoot) {
-      try {
-        const config = loadProjectConfig(currentRoot);
-        if (config.id === targetPackage || getPackageSlug(config.id) === targetPackage) {
-          targetRoot = currentRoot;
-          targetPkgId = config.id;
-        }
-      } catch {
-        // Ignore
-      }
-    }
-
-    let pkg: LinkedPackageEntry | undefined;
-    if (!targetRoot) {
-      pkg = linkedList.find(
-        (p) => p.id === targetPackage || getPackageSlug(p.id) === targetPackage
-      );
-      if (pkg && existsSync(pkg.path)) {
-        targetRoot = pkg.path;
-        targetPkgId = pkg.id;
-      }
-    }
-
-    if (!targetRoot || !existsSync(targetRoot)) {
-      throw new Error(
-        `Linked package '${targetPackage}' not found or path no longer exists (${pkg?.path || "unregistered"}). Run 'ad link' in the package directory.`
-      );
-    }
-
-    const config = loadProjectConfig(targetRoot);
-    if (!projectHasActionSync(targetRoot, config.actionsDir, pureActionId)) {
-      throw new Error(`Action '${pureActionId}' not found in package '${targetPkgId}' (${targetRoot})`);
-    }
-
-    return {
-      projectRoot: targetRoot,
-      packageId: targetPkgId,
-      actionId: pureActionId,
-    };
-  }
-
-  // 3. Search across all linked packages
-  const matches: Array<{ entry: LinkedPackageEntry; actionId: string }> = [];
-
-  for (const pkg of linkedList) {
-    if (!existsSync(pkg.path)) continue;
-    try {
-      const config = loadProjectConfig(pkg.path);
-      if (projectHasActionSync(pkg.path, config.actionsDir, actionIdentifier)) {
-        matches.push({ entry: pkg, actionId: actionIdentifier });
-      }
-    } catch {
-      // Ignore invalid linked package
-    }
-  }
-
-  if (matches.length === 1) {
-    return {
-      projectRoot: matches[0].entry.path,
-      packageId: matches[0].entry.id,
-      actionId: matches[0].actionId,
-    };
-  }
-
-  if (matches.length > 1) {
-    const pkgList = matches.map((m) => `'${m.entry.id}'`).join(", ");
-    throw new Error(
-      `Action '${actionIdentifier}' is provided by multiple linked packages: ${pkgList}. Please specify using '<package-id>/${actionIdentifier}'.`
-    );
-  }
-
-  if (currentRoot) {
-    throw new Error(`Action '${actionIdentifier}' not found in current project or any linked packages`);
-  } else {
-    throw new Error(
-      `Action '${actionIdentifier}' not found. You are not in an ActionDock project, and no linked package provides '${actionIdentifier}'. Use 'ad link' to register your package.`
-    );
-  }
+  return runFlowSync(
+    resolveEntityFlow<true, ResolvedActionProject>({
+      identifier: actionIdentifier,
+      cwd,
+      entityNoun: "Action",
+      listLinkedPackages: () => listLinkedPackages(customHome),
+      probe: (root, config, id) => probeActionSync(root, config, id) as true,
+      buildResult: (projectRoot, packageId, actionId) => ({ projectRoot, packageId, actionId }),
+    })
+  );
 }
 
 export async function resolveActionProject(
@@ -618,121 +498,38 @@ export async function resolveActionProject(
   cwd: string = process.cwd(),
   customHome?: string
 ): Promise<ResolvedActionProject> {
-  // 1. Check current directory / parent project
-  const currentRoot = findProjectRoot(cwd);
-  if (currentRoot) {
-    try {
-      const config = loadProjectConfig(currentRoot);
-      if (await projectHasAction(currentRoot, config.actionsDir, actionIdentifier)) {
-        return {
-          projectRoot: currentRoot,
-          packageId: config.id,
-          actionId: actionIdentifier,
-        };
-      }
-    } catch {
-      // Ignore and proceed to registry lookup
-    }
-  }
+  return runFlowAsync(
+    resolveEntityFlow<true, ResolvedActionProject>({
+      identifier: actionIdentifier,
+      cwd,
+      entityNoun: "Action",
+      listLinkedPackages: () => listLinkedPackagesAsync(customHome) as any,
+      probe: (root, config, id) => probeActionAsync(root, config, id) as any,
+      buildResult: (projectRoot, packageId, actionId) => ({ projectRoot, packageId, actionId }),
+    })
+  );
+}
 
-  // 2. Check if scoped format: <package-id>/<action-id> or <package-id>:<action-id>
-  let targetPackage: string | undefined;
-  let pureActionId = actionIdentifier;
-
-  if (actionIdentifier.includes("/")) {
-    const slashIdx = actionIdentifier.lastIndexOf("/");
-    targetPackage = actionIdentifier.slice(0, slashIdx);
-    pureActionId = actionIdentifier.slice(slashIdx + 1);
-  } else if (actionIdentifier.includes(":")) {
-    const colonIdx = actionIdentifier.lastIndexOf(":");
-    targetPackage = actionIdentifier.slice(0, colonIdx);
-    pureActionId = actionIdentifier.slice(colonIdx + 1);
-  }
-
-  const linkedList = listLinkedPackages(customHome);
-
-  if (targetPackage) {
-    let targetRoot: string | undefined;
-    let targetPkgId = targetPackage;
-
-    if (currentRoot) {
-      try {
-        const config = loadProjectConfig(currentRoot);
-        if (config.id === targetPackage || getPackageSlug(config.id) === targetPackage) {
-          targetRoot = currentRoot;
-          targetPkgId = config.id;
-        }
-      } catch {
-        // Ignore
-      }
-    }
-
-    let pkg: LinkedPackageEntry | undefined;
-    if (!targetRoot) {
-      pkg = linkedList.find(
-        (p) => p.id === targetPackage || getPackageSlug(p.id) === targetPackage
-      );
-      if (pkg && existsSync(pkg.path)) {
-        targetRoot = pkg.path;
-        targetPkgId = pkg.id;
-      }
-    }
-
-    if (!targetRoot || !existsSync(targetRoot)) {
-      throw new Error(
-        `Linked package '${targetPackage}' not found or path no longer exists (${pkg?.path || "unregistered"}). Run 'ad link' in the package directory.`
-      );
-    }
-
-    const config = loadProjectConfig(targetRoot);
-    if (!(await projectHasAction(targetRoot, config.actionsDir, pureActionId))) {
-      throw new Error(`Action '${pureActionId}' not found in package '${targetPkgId}' (${targetRoot})`);
-    }
-
-    return {
-      projectRoot: targetRoot,
-      packageId: targetPkgId,
-      actionId: pureActionId,
-    };
-  }
-
-  // 3. Search across all linked packages
-  const matches: Array<{ entry: LinkedPackageEntry; actionId: string }> = [];
-
-  for (const pkg of linkedList) {
-    if (!existsSync(pkg.path)) continue;
-    try {
-      const config = loadProjectConfig(pkg.path);
-      if (await projectHasAction(pkg.path, config.actionsDir, actionIdentifier)) {
-        matches.push({ entry: pkg, actionId: actionIdentifier });
-      }
-    } catch {
-      // Ignore invalid linked package
-    }
-  }
-
-  if (matches.length === 1) {
-    return {
-      projectRoot: matches[0].entry.path,
-      packageId: matches[0].entry.id,
-      actionId: matches[0].actionId,
-    };
-  }
-
-  if (matches.length > 1) {
-    const pkgList = matches.map((m) => `'${m.entry.id}'`).join(", ");
-    throw new Error(
-      `Action '${actionIdentifier}' is provided by multiple linked packages: ${pkgList}. Please specify using '<package-id>/${actionIdentifier}'.`
-    );
-  }
-
-  if (currentRoot) {
-    throw new Error(`Action '${actionIdentifier}' not found in current project or any linked packages`);
-  } else {
-    throw new Error(
-      `Action '${actionIdentifier}' not found. You are not in an ActionDock project, and no linked package provides '${actionIdentifier}'. Use 'ad link' to register your package.`
-    );
-  }
+export function resolvePlaybookProject(
+  playbookIdentifier: string,
+  cwd: string = process.cwd(),
+  customHome?: string
+): ResolvedPlaybookProject {
+  return runFlowSync(
+    resolveEntityFlow<import("../project/types").PlaybookDefinition, ResolvedPlaybookProject>({
+      identifier: playbookIdentifier,
+      cwd,
+      entityNoun: "Playbook",
+      listLinkedPackages: () => listLinkedPackages(customHome),
+      probe: (root, config, id) => probePlaybook(root, config, id) as import("../project/types").PlaybookDefinition,
+      buildResult: (projectRoot, packageId, playbookId, playbook) => ({
+        projectRoot,
+        packageId,
+        playbookId,
+        playbook,
+      }),
+    })
+  );
 }
 
 export function resolvePackageRoot(
@@ -747,11 +544,11 @@ export function resolvePackageRoot(
   const baseDir = cwd || process.cwd();
   const resolvedPath = resolve(baseDir, packageIdOrPath);
 
-  // 1. Check if packageIdOrPath is an existing directory or file path on disk
+  // 检查 packageIdOrPath 是否为磁盘上现存的目录或文件路径
   if (existsSync(resolvedPath)) {
     try {
-      const stat = statSync(resolvedPath);
-      const targetDir = stat.isDirectory() ? resolvedPath : dirname(resolvedPath);
+      const info = statSync(resolvedPath);
+      const targetDir = info.isDirectory() ? resolvedPath : dirname(resolvedPath);
       if (existsSync(join(targetDir, "actiondock.json"))) {
         return targetDir;
       }
@@ -760,12 +557,12 @@ export function resolvePackageRoot(
         return parentRoot;
       }
     } catch {
-      // ignore
+      // stat 失败（如并发删除）：忽略并继续走标识符解析路径
     }
   }
 
-  // If it was explicitly a path (starts with . or / or ~ or contains / or \), and did not resolve above:
-  // Scoped package identifiers (e.g. @team/tools) contain '/' but are package IDs, not file paths.
+  // 显式路径形态但未解析成功的场景：
+  // scoped package 标识符（如 @team/tools）虽含 '/' 但属于包 ID 而非文件路径
   const isScopedPackage = packageIdOrPath.startsWith("@");
   const isExplicitPath =
     !isScopedPackage &&
@@ -776,11 +573,11 @@ export function resolvePackageRoot(
       packageIdOrPath.includes("\\"));
 
   if (isExplicitPath) {
-    // An explicit path that does not exist or is not an ActionDock project must fail
+    // 显式路径不存在或不是 ActionDock 项目时必须失败，禁止静默回退
     return null;
   }
 
-  // 2. Check current project (from cwd)
+  // 检查当前项目（自 cwd 向上探测）
   const currentRoot = findProjectRoot(cwd);
   if (currentRoot) {
     try {
@@ -789,11 +586,11 @@ export function resolvePackageRoot(
         return currentRoot;
       }
     } catch {
-      // ignore broken config
+      // 当前项目配置损坏：忽略，继续注册表匹配
     }
   }
 
-  // 3. Check linked packages in registry
+  // 检查注册表中的链接包
   const linkedList = listLinkedPackages(customHome);
   const found = linkedList.find(
     (p) =>
@@ -808,139 +605,6 @@ export function resolvePackageRoot(
   return null;
 }
 
-export function resolvePlaybookProject(
-  playbookIdentifier: string,
-  cwd: string = process.cwd(),
-  customHome?: string
-): ResolvedPlaybookProject {
-  // 1. Check current directory / parent project
-  const currentRoot = findProjectRoot(cwd);
-  if (currentRoot) {
-    try {
-      const config = loadProjectConfig(currentRoot);
-      const playbooks = loadPlaybooks(currentRoot, config.playbooksDir);
-      if (playbooks.has(playbookIdentifier)) {
-        return {
-          projectRoot: currentRoot,
-          packageId: config.id,
-          playbookId: playbookIdentifier,
-          playbook: playbooks.get(playbookIdentifier)!,
-        };
-      }
-    } catch {
-      // Ignore and proceed to registry lookup
-    }
-  }
-
-  // 2. Check if scoped format: <package-id>/<playbook-id> or <package-id>:<playbook-id>
-  let targetPackage: string | undefined;
-  let purePlaybookId = playbookIdentifier;
-
-  if (playbookIdentifier.includes("/")) {
-    const slashIdx = playbookIdentifier.lastIndexOf("/");
-    targetPackage = playbookIdentifier.slice(0, slashIdx);
-    purePlaybookId = playbookIdentifier.slice(slashIdx + 1);
-  } else if (playbookIdentifier.includes(":")) {
-    const colonIdx = playbookIdentifier.lastIndexOf(":");
-    targetPackage = playbookIdentifier.slice(0, colonIdx);
-    purePlaybookId = playbookIdentifier.slice(colonIdx + 1);
-  }
-
-  const linkedList = listLinkedPackages(customHome);
-
-  if (targetPackage) {
-    let targetRoot: string | undefined;
-    let targetPkgId = targetPackage;
-
-    if (currentRoot) {
-      try {
-        const config = loadProjectConfig(currentRoot);
-        if (config.id === targetPackage || getPackageSlug(config.id) === targetPackage) {
-          targetRoot = currentRoot;
-          targetPkgId = config.id;
-        }
-      } catch {
-        // Ignore
-      }
-    }
-
-    let pkg: LinkedPackageEntry | undefined;
-    if (!targetRoot) {
-      pkg = linkedList.find(
-        (p) => p.id === targetPackage || getPackageSlug(p.id) === targetPackage
-      );
-      if (pkg && existsSync(pkg.path)) {
-        targetRoot = pkg.path;
-        targetPkgId = pkg.id;
-      }
-    }
-
-    if (!targetRoot || !existsSync(targetRoot)) {
-      throw new Error(
-        `Linked package '${targetPackage}' not found or path no longer exists (${pkg?.path || "unregistered"}). Run 'ad link' in the package directory.`
-      );
-    }
-
-    const config = loadProjectConfig(targetRoot);
-    const playbooks = loadPlaybooks(targetRoot, config.playbooksDir);
-    const pb = playbooks.get(purePlaybookId);
-    if (!pb) {
-      throw new Error(`Playbook '${purePlaybookId}' not found in package '${targetPkgId}' (${targetRoot})`);
-    }
-
-    return {
-      projectRoot: targetRoot,
-      packageId: targetPkgId,
-      playbookId: purePlaybookId,
-      playbook: pb,
-    };
-  }
-
-  // 3. Search across all linked packages
-  const matches: Array<{ entry: LinkedPackageEntry; playbookId: string; playbook: import("../project/types").PlaybookDefinition }> = [];
-
-  for (const pkg of linkedList) {
-    if (!existsSync(pkg.path)) continue;
-    try {
-      const config = loadProjectConfig(pkg.path);
-      const playbooks = loadPlaybooks(pkg.path, config.playbooksDir);
-      if (playbooks.has(playbookIdentifier)) {
-        matches.push({
-          entry: pkg,
-          playbookId: playbookIdentifier,
-          playbook: playbooks.get(playbookIdentifier)!,
-        });
-      }
-    } catch {
-      // Ignore invalid linked package
-    }
-  }
-
-  if (matches.length === 1) {
-    return {
-      projectRoot: matches[0].entry.path,
-      packageId: matches[0].entry.id,
-      playbookId: matches[0].playbookId,
-      playbook: matches[0].playbook,
-    };
-  }
-
-  if (matches.length > 1) {
-    const pkgList = matches.map((m) => `'${m.entry.id}'`).join(", ");
-    throw new Error(
-      `Playbook '${playbookIdentifier}' is provided by multiple linked packages: ${pkgList}. Please specify using '<package-id>/${playbookIdentifier}'.`
-    );
-  }
-
-  if (currentRoot) {
-    throw new Error(`Playbook '${playbookIdentifier}' not found in current project or any linked packages`);
-  } else {
-    throw new Error(
-      `Playbook '${playbookIdentifier}' not found. You are not in an ActionDock project, and no linked package provides '${playbookIdentifier}'. Use 'ad link' to register your package.`
-    );
-  }
-}
-
 export function getRegistryStatus(customHome?: string): RegistryStatusReport {
   const registry = loadRegistry(customHome);
   const workspaces: RegistryTreeItem[] = [];
@@ -948,11 +612,10 @@ export function getRegistryStatus(customHome?: string): RegistryStatusReport {
   let staleCount = 0;
   const seenPackageIds = new Set<string>();
 
-  // 1. Process workspaces
+  // 处理 Workspace：目录存活则动态扫描子项目，缺失则标记 stale
   if (registry.workspaces) {
     for (const wsPath of Object.keys(registry.workspaces)) {
-      const isWsActive = existsSync(wsPath);
-      if (!isWsActive) {
+      if (!existsSync(wsPath)) {
         staleCount++;
         workspaces.push({
           type: "workspace",
@@ -965,23 +628,16 @@ export function getRegistryStatus(customHome?: string): RegistryStatusReport {
         continue;
       }
 
-      const discoveredRoots = discoverProjects(wsPath);
       const children: NonNullable<RegistryTreeItem["children"]> = [];
-
-      for (const root of discoveredRoots) {
-        try {
-          const config = loadProjectConfig(root);
-          seenPackageIds.add(config.id);
-          children.push({
-            id: config.id,
-            name: config.name || config.id,
-            version: config.version || "0.0.0",
-            path: root,
-            status: "active",
-          });
-        } catch {
-          // ignore broken project
-        }
+      for (const { root, config } of discoverProjectConfigs(wsPath)) {
+        seenPackageIds.add(config.id);
+        children.push({
+          id: config.id,
+          name: config.name || config.id,
+          version: config.version || "0.0.0",
+          path: root,
+          status: "active",
+        });
       }
 
       workspaces.push({
@@ -995,7 +651,7 @@ export function getRegistryStatus(customHome?: string): RegistryStatusReport {
     }
   }
 
-  // 2. Process standalone packages (not part of an active workspace)
+  // 处理独立包（不属于任何存活 Workspace 且未被动态扫描覆盖）
   for (const [pkgId, pkgEntry] of Object.entries(registry.packages)) {
     if (pkgEntry.workspaceRoot && registry.workspaces && registry.workspaces[pkgEntry.workspaceRoot]) {
       continue;
@@ -1007,24 +663,15 @@ export function getRegistryStatus(customHome?: string): RegistryStatusReport {
     const isPkgActive = existsSync(pkgEntry.path);
     if (!isPkgActive) {
       staleCount++;
-      packages.push({
-        type: "package",
-        id: pkgEntry.id,
-        name: pkgEntry.name,
-        version: pkgEntry.version,
-        path: pkgEntry.path,
-        status: "stale",
-      });
-    } else {
-      packages.push({
-        type: "package",
-        id: pkgEntry.id,
-        name: pkgEntry.name,
-        version: pkgEntry.version,
-        path: pkgEntry.path,
-        status: "active",
-      });
     }
+    packages.push({
+      type: "package",
+      id: pkgEntry.id,
+      name: pkgEntry.name,
+      version: pkgEntry.version,
+      path: pkgEntry.path,
+      status: isPkgActive ? "active" : "stale",
+    });
   }
 
   const totalPackagesCount =
@@ -1039,12 +686,12 @@ export function getRegistryStatus(customHome?: string): RegistryStatusReport {
   };
 }
 
-export function pruneRegistry(customHome?: string): PruneResult {
-  const registry = loadRegistry(customHome);
+export async function pruneRegistry(customHome?: string): Promise<PruneResult> {
+  const registry = await loadRegistryAsync(customHome);
   const prunedWorkspaces: LinkedWorkspaceEntry[] = [];
   const prunedPackages: LinkedPackageEntry[] = [];
 
-  // 1. Prune workspaces
+  // 清理目录已缺失的 Workspace 链接
   if (registry.workspaces) {
     for (const [wsPath, wsEntry] of Object.entries(registry.workspaces)) {
       if (!existsSync(wsPath)) {
@@ -1054,7 +701,7 @@ export function pruneRegistry(customHome?: string): PruneResult {
     }
   }
 
-  // 2. Prune packages
+  // 清理路径已缺失的 Package 链接
   for (const [pkgId, pkgEntry] of Object.entries(registry.packages)) {
     if (!existsSync(pkgEntry.path)) {
       prunedPackages.push(pkgEntry);
@@ -1063,7 +710,7 @@ export function pruneRegistry(customHome?: string): PruneResult {
   }
 
   if (prunedWorkspaces.length > 0 || prunedPackages.length > 0) {
-    saveRegistry(registry, customHome);
+    await saveRegistry(registry, customHome);
   }
 
   return {
@@ -1072,4 +719,5 @@ export function pruneRegistry(customHome?: string): PruneResult {
   };
 }
 
-
+// 重新导出扫描辅助，保持既有从 registry 模块的导入路径可用
+export { discoverProjects, IGNORED_SCAN_DIRS } from "./scan";

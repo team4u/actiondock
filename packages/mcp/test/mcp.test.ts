@@ -745,8 +745,8 @@ describe("@actiondock/mcp Adapter", () => {
     const pkg1Dir = join(tmpDir, "pkg1");
     const pkg2Dir = join(tmpDir, "pkg2");
 
-    linkPackage(pkg1Dir, customHome);
-    linkPackage(pkg2Dir, customHome);
+    await linkPackage(pkg1Dir, customHome);
+    await linkPackage(pkg2Dir, customHome);
 
     const server = await createActionDockMcpServer({
       all: true,
@@ -1115,7 +1115,7 @@ describe("@actiondock/mcp Adapter", () => {
     const fakeHome = join(process.cwd(), "tmp", `test-mcp-custom-home-${Date.now()}`);
     mkdirSync(fakeHome, { recursive: true });
 
-    linkPackage(tmpDir, fakeHome);
+    await linkPackage(tmpDir, fakeHome);
 
     const server = await createActionDockMcpServer({
       packageId: "test.mcp-pkg",
