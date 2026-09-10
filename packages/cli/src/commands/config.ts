@@ -16,9 +16,9 @@ import { ArgumentError, ExecutionError } from "../errors";
 import {
   renderConfigEnv,
   renderConfigList,
+  renderConfigSchema,
   renderResult,
   writeStdout,
-  writeStderr,
 } from "../renderer";
 import type { CliContext, EnvCheckItem } from "../types";
 import { getEffectiveOptions, resolveIntent } from "../utils";
@@ -143,40 +143,7 @@ export function registerConfigCommands(program: Command, context?: CliContext): 
             context,
           });
         } else {
-          writeStdout(`Configuration Requirements for ${projConfig.id} (${root}):\n`, context);
-          if (items.length === 0) {
-            writeStdout("  (No configuration dependencies declared for this package)\n", context);
-            return;
-          }
-
-          writeStdout(
-            `  ${"KEY".padEnd(24)} ${"STATUS".padEnd(12)} ${"SOURCE".padEnd(10)} ${"SECRET".padEnd(8)} DESCRIPTION\n`,
-            context
-          );
-          writeStdout(`  ${"-".repeat(85)}\n`, context);
-
-          for (const item of items) {
-            const statusLabel =
-              item.status === "SET"
-                ? "[SET]"
-                : item.status === "DEFAULT"
-                ? "[DEFAULT]"
-                : "[MISSING]";
-            const secretLabel = item.secret ? "yes" : "no";
-            writeStdout(
-              `  ${item.key.padEnd(24)} ${statusLabel.padEnd(12)} ${item.source.padEnd(10)} ${secretLabel.padEnd(8)} ${item.description}\n`,
-              context
-            );
-          }
-
-          if (missingRequired.length > 0) {
-            writeStdout(`\n[WARNING] ${missingRequired.length} required config(s) not set:\n`, context);
-            for (const m of missingRequired) {
-              writeStdout(`  - ${m.key}: Run 'ad config set ${m.key} <value>' to configure.\n`, context);
-            }
-          } else {
-            writeStdout("\n[OK] All configuration dependencies are satisfied.\n", context);
-          }
+          writeStdout(renderConfigSchema(items, projConfig.id, root) + "\n", context);
         }
       } catch (err: any) {
         if (err instanceof ArgumentError || err instanceof ExecutionError) {

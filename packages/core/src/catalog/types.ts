@@ -1,4 +1,4 @@
-import type { ActionContract, ActionDefinition, ActionRef, ResolvedActionRef } from "@actiondock/sdk";
+import type { ActionContract } from "@actiondock/sdk";
 import type { ProjectConfig } from "../project/types";
 
 /**

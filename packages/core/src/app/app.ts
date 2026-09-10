@@ -2,7 +2,6 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type {
   ActionDefinition,
-  ActionRef,
   ExecutionEvent,
   ExecutionResult,
   JsonValue,
@@ -15,7 +14,7 @@ import type {
   ExecutionService,
   ExecutionTicket,
 } from "../execution/types";
-import { createDefaultPlatform, type RuntimePlatform, type StorageFactory } from "../platform";
+import { createDefaultPlatform, type RuntimePlatform } from "../platform";
 import { findProjectRoot, loadPlaybooks, loadProjectConfig } from "../project/loader";
 import { loadManifest } from "../project/manifest";
 import type { ProjectConfig } from "../project/types";

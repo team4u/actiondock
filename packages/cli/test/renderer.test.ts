@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
   ArgumentError,
-  CliError,
   ExecutionError,
   formatError,
   SigintError,
@@ -9,14 +8,11 @@ import {
 import {
   createErrorEnvelope,
   createSuccessEnvelope,
-  formatJson,
   renderActionDetail,
   renderActionList,
   renderActionValidation,
   renderConfigList,
   renderError,
-  renderProjectDetail,
-  renderRegistryTree,
   renderResult,
   renderRunsList,
   renderStateList,

@@ -1,9 +1,8 @@
 import {
-  ExitCode as CoreExitCode,
   StandaloneDispatcher as CoreStandaloneDispatcher,
   type StandaloneDispatcherOptions,
 } from "@actiondock/core";
-import { ExitCode, type StandaloneOptions } from "../types";
+import type { StandaloneOptions } from "../types";
 
 /**
  * 独立二进制轻量参数解析分发器（委托 Core 统一实现，消除重复逻辑）。

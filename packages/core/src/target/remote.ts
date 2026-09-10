@@ -50,7 +50,6 @@ import {
   type StateScopeOptions,
   type TargetInfo,
   TargetError,
-  CloseTimeoutError,
   TARGET_PROTOCOL_UNSUPPORTED,
   TARGET_CAPABILITY_UNAVAILABLE,
   TARGET_RESULT_UNKNOWN,

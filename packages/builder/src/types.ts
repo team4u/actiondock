@@ -1,4 +1,4 @@
-import type { ActionDockManifest, ActionManifestEntry, PlaybookDefinition, ProjectConfig } from "@actiondock/core";
+import type { ActionDockManifest, ProjectConfig } from "@actiondock/core";
 
 /**
  * Action 依赖描述。

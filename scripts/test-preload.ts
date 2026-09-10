@@ -1,7 +1,6 @@
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
-import * as nodeModule from "node:module";
 import { pathToFileURL } from "node:url";
 
 const rootDir = resolve(import.meta.dirname, "..");

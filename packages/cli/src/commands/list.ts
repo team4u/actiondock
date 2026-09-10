@@ -2,7 +2,6 @@ import {
   createActionDockTarget,
   filterWithFallbackInfo,
   findProjectRoot,
-  listLinkedPackages,
   resolvePackageRoot,
   resolveTarget,
 } from "@actiondock/core";

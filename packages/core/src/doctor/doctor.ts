@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { delimiter, dirname, join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
 import type { ActionRef } from "@actiondock/sdk";
 import { ActionResolver } from "../catalog/action-resolver";
 import { discoverActionFiles, findProjectRoot, loadActions, loadPlaybooks, loadProjectConfig } from "../project/loader";

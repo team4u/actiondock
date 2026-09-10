@@ -17,7 +17,6 @@ import type {
 import type { ConfigItemDefinition, ProjectConfig } from "../project/types";
 import type { Clock } from "../runtime/clock";
 import type { EventSink } from "../runtime/events";
-import type { ModuleLoader } from "../runtime/module-loader";
 import type { RuntimePlatform, StorageFactory, StorageFactoryOptions } from "../platform/types";
 import type { RuntimeStorage } from "../storage/types";
 import type { ConfigValueView, StateScopeOptions } from "../target/types";

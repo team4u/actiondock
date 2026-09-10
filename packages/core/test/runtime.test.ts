@@ -766,17 +766,6 @@ describe("ActionRunner", () => {
       },
     });
 
-    const pkgBRunner = new ActionRunner({
-      packageId: "pkg-b",
-      storage: pkgBStorage,
-      projectConfig: {
-        id: "pkg-b",
-        name: "Package B",
-        version: "1.0.0",
-        config: { greeting: { default: "hello from B" } },
-      },
-      actions: new Map([["b.worker", pkgBAction]]),
-    });
 
     // pkg-a has a caller action that invokes pkg-b/b.worker
     const pkgAAction = defineAction({
@@ -965,11 +954,6 @@ export default {
       },
     });
 
-    const runnerB = new ActionRunner({
-      packageId: "pkg-b",
-      storage: storageB,
-      actions: new Map([["work", workAction]]),
-    });
 
     const serviceA = new DefaultExecutionService({
       packageId: "pkg-a",

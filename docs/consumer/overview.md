@@ -65,6 +65,8 @@ npx skills add <owner/repo> -g -y
 
 安装后，Claude Code、Cursor、Antigravity 等智能体将在启动时自动读取规程索引并按需调度底层原子 Action。
 
+若以独立的源码目录或离线包形式获取技能资产，在目标环境中只需确保具备 Node.js 并安装 `@actiondock/cli`，进入技能目录执行 `npm install --omit=dev` 安装依赖并执行 `ad link .`，智能体即可无缝识别与全局寻址调用。完整步骤请参阅 [Agent Skill 使用指南](use-as-skill.md)。
+
 ### 路径三：克隆源码并全局注册（本地体验与免工程调试）
 
 如果手头没有创建工程，仅希望下载官方仓库或第三方源码并快速体验调用：

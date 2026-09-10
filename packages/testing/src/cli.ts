@@ -1,6 +1,8 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { delimiter, join } from "node:path";
+import { findExecutable } from "@actiondock/core";
+
+export { findExecutable };
 
 /**
  * CLI 执行选项配置。
@@ -26,44 +28,6 @@ export interface ExecCliResult {
   raw: Uint8Array;
   timedOut?: boolean;
   durationMs: number;
-}
-
-/**
- * 跨运行时安全查找可执行文件绝对物理路径。
- */
-export function findExecutable(command: string): string | null {
-  if (typeof (globalThis as any).Bun !== "undefined" && typeof (globalThis as any).Bun.which === "function") {
-    try {
-      const bPath = (globalThis as any).Bun.which(command);
-      if (bPath) return bPath;
-    } catch {
-      // 忽略 Bun.which 异常，进入通用解析
-    }
-  }
-
-  const hasPathSep = command.includes("/") || command.includes("\\");
-  if (hasPathSep) {
-    return existsSync(command) ? command : null;
-  }
-
-  const pathEnv = process.env.PATH || "";
-  const dirs = pathEnv.split(delimiter);
-  const isWindows = process.platform === "win32";
-  const pathext = isWindows
-    ? (process.env.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";")
-    : [""];
-
-  for (const dir of dirs) {
-    if (!dir) continue;
-    for (const ext of pathext) {
-      const candidate = join(dir, isWindows && !command.includes(".") ? command + ext : command);
-      if (existsSync(candidate)) {
-        return candidate;
-      }
-    }
-  }
-
-  return null;
 }
 
 export function execCli(

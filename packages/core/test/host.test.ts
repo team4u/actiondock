@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type ActionContext, defineAction } from "@actiondock/sdk";
-import { createActionDockApp, DefaultActionDockApp } from "../src/app";
+import { createActionDockApp } from "../src/app";
 import { createActionDockHost, DefaultActionDockHost } from "../src/host";
 
 describe("ActionDockHost 多包宿主容器", () => {
@@ -231,6 +231,40 @@ actions:
 
 # 备份操作指南
 `
+      );
+
+      writeFileSync(
+        join(tempDirA, "actiondock.json"),
+        JSON.stringify({
+          schemaVersion: 2,
+          id: "ops.deploy",
+          name: "部署包",
+          version: "1.0.0",
+          playbooks: {
+            deploy: {
+              entry: "playbooks/deploy.md",
+              description: "部署生产环境",
+              actions: ["build"],
+            },
+          },
+        })
+      );
+
+      writeFileSync(
+        join(tempDirB, "actiondock.json"),
+        JSON.stringify({
+          schemaVersion: 2,
+          id: "ops.backup",
+          name: "备份包",
+          version: "1.0.0",
+          playbooks: {
+            backup: {
+              entry: "playbooks/backup.md",
+              description: "备份数据库",
+              actions: ["dump"],
+            },
+          },
+        })
       );
 
       const host = await createActionDockHost({

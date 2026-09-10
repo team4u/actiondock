@@ -1,4 +1,4 @@
-import type { JsonValue, RuntimeError, RunRecord } from "@actiondock/sdk";
+import type { RuntimeError, RunRecord } from "@actiondock/sdk";
 import type { Clock } from "../runtime/clock";
 
 /**

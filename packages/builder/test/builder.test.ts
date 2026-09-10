@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import {
   chmodSync,
-  copyFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -30,7 +29,6 @@ import {
   exportSkillBatch,
   exportCompositeSkill,
   getInternalDependencyVersion,
-  PlannerError,
   selectionPlan,
   SelectionPlanner,
   SkillExporter,
@@ -1236,6 +1234,7 @@ export default defineAction({
           projectRoot: customDir,
           outDir,
         });
+        expect(expResult.skillDir).toBe(outDir);
 
         const exportedConfig = JSON.parse(readFileSync(join(outDir, "actiondock.json"), "utf-8"));
         expect(exportedConfig.actionsDir).toBe("src/my-actions");

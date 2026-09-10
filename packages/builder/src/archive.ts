@@ -1,6 +1,6 @@
 import { closeSync, createReadStream, createWriteStream, openSync, readdirSync, readFileSync, statSync, writeFileSync, writeSync } from "node:fs";
 import { deflateRawSync, gzipSync, createGzip } from "node:zlib";
-import { basename, dirname, join, relative, sep } from "node:path";
+import { basename, join, relative, sep } from "node:path";
 import { pipeline } from "node:stream/promises";
 
 /**

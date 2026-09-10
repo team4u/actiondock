@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { unlinkSync } from "node:fs";
 import { join } from "node:path";
-import { DatabaseSync as Database } from "node:sqlite";
 import * as sdk from "@actiondock/sdk";
 import * as coreStorage from "../src/storage";
 import { resolveDatabasePath } from "../src/storage";

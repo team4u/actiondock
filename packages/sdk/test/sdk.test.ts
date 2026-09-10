@@ -506,6 +506,7 @@ describe("@actiondock/sdk", () => {
       await runtime.run(strictAction, { count: "not-a-number" } as any);
       expect(true).toBe(false);
     } catch (err: any) {
+      expect(err).toBeInstanceOf(ActionRuntimeError);
       expect(err.code).toBe("INPUT_VALIDATION_FAILED");
     }
 
@@ -514,6 +515,7 @@ describe("@actiondock/sdk", () => {
       await runtime.run(strictAction, { count: -1 });
       expect(true).toBe(false);
     } catch (err: any) {
+      expect(err).toBeInstanceOf(ActionRuntimeError);
       expect(err.code).toBe("OUTPUT_VALIDATION_FAILED");
     }
 

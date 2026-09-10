@@ -1,8 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { computeManifestDigest } from "@actiondock/core";
+import { join } from "node:path";
 import { createCliProgram } from "../../src/commands";
 
 describe("CLI 依赖管理命令 (ad add / ad remove)", () => {

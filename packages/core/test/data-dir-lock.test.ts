@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createActionDockApp } from "../src/app";
 import { createActionDockHost } from "../src/host";
-import { DataDirLock } from "../src/storage/data-dir-lock";
 import { createDefaultSqliteDriver } from "../src/storage/driver";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
 import { STORAGE_SCHEMA_VERSION } from "../src/storage/types";

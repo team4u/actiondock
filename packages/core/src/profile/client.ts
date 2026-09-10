@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { ExecutionResult, RuntimeError, RunRecord } from "@actiondock/sdk";
+import type { ExecutionResult, RunRecord } from "@actiondock/sdk";
 import { normalizeServerUrl } from "./manager";
 import type { RemoteHealthResult } from "./types";
 

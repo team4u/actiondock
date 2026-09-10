@@ -20,8 +20,7 @@ import type {
   ExecutionTicket,
 } from "../execution/types";
 import type { ActionDockHost } from "../host/types";
-import { resolveEnvValue } from "../runtime/env";
-import { createGlobalStorage, decodeStateKey, isSecretConfigKey } from "../storage";
+import { createGlobalStorage, isSecretConfigKey } from "../storage";
 import type { RuntimeStorage, StateEntry } from "../storage/types";
 import {
   ACTIONDOCK_PROTOCOL_VERSION,
@@ -32,9 +31,7 @@ import {
   type TargetInfo,
   TargetError,
   CloseTimeoutError,
-  TARGET_PROTOCOL_UNSUPPORTED,
   TARGET_CAPABILITY_UNAVAILABLE,
-  TARGET_RESULT_UNKNOWN,
 } from "./types";
 
 /**

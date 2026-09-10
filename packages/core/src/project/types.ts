@@ -112,9 +112,3 @@ export interface PlaybookDefinition {
   filePath: string;
 }
 
-/**
- * Playbook 声明元数据（向后兼容别名）。
- */
-export type PlaybookFrontmatter = PlaybookManifestEntry;
-
-

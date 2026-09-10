@@ -11,7 +11,6 @@ import type {
 import { DefaultActionDockApp } from "../app/app";
 import type {
   ActionDockApp,
-  ActionDockAppOptions,
   ActionSpec,
   ActionSummary,
   ListActionsOptions,

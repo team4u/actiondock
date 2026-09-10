@@ -950,7 +950,7 @@ export function getRegistryStatus(customHome?: string): RegistryStatusReport {
 
   // 1. Process workspaces
   if (registry.workspaces) {
-    for (const [wsPath, wsEntry] of Object.entries(registry.workspaces)) {
+    for (const wsPath of Object.keys(registry.workspaces)) {
       const isWsActive = existsSync(wsPath);
       if (!isWsActive) {
         staleCount++;

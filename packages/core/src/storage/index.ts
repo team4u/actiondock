@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { assertPathWithinRoot, assertValidPackageId, getActionDockHome } from "../utils";
 import { SqliteRuntimeStorage } from "./sqlite";
-import type { RuntimeStorage, StorageOptions } from "./types";
+import type { RuntimeStorage } from "./types";
 
 export * from "./data-dir-lock";
 export * from "./driver";

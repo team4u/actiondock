@@ -4,7 +4,7 @@ import type {
   ActionDockTarget,
   RuntimeStorage,
 } from "@actiondock/core";
-import type { ActionDefinition, ExecutionResult, RunRecord, RunStatus } from "@actiondock/sdk";
+import type { ActionDefinition, RunRecord, RunStatus } from "@actiondock/sdk";
 
 /**
  * MCP 任务状态枚举（兼容 Model Context Protocol Task 规范）。

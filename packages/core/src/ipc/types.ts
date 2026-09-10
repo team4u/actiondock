@@ -1,8 +1,3 @@
-import type { ActionRef, JsonValue } from "@actiondock/sdk";
-import type { ListActionsOptions } from "../app/types";
-import type { ExecuteOptions } from "../execution/types";
-import type { StateScopeOptions } from "../target/types";
-
 /**
  * 监督进程与宿主子进程间调用的 IPC 请求消息。
  */

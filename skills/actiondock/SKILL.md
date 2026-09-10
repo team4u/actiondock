@@ -110,6 +110,7 @@ ad describe team4u.github-tools/list-issues
   - 步骤四：依赖安全移除。若不再需要该依赖，执行 `ad remove <package>`。系统会自动检测反向引用，若当前 Action 的 `uses` 仍在调用则拦截报错，保护工程完整性。
 - 智能体 Skill 技能装载（面向智能体环境）：
   - 官方或开源技能一键安装：执行 `npx skills add <owner/repo> -g -y` 直接从 GitHub 全局安装技能。
+  - 源码技能目录冷启动：若获取到的是包含源码的独立技能目录且宿主未预装环境，在具备 Node.js 底座后执行 `npm install -g @actiondock/cli`，并在技能目录下执行 `npm install --omit=dev` 物化本地依赖，随后执行 `ad link .` 完成全局注册挂载。
   - 智能体自动激活：智能体启动时自动识别加载的 `SKILL.md` 与 Playbook 规程，遵循规程优先原则调度底层工具。
 - 本地源码快速试跑与多包联调（面向本地未发布源码）：
   - 在待测试源码包根目录执行 `ad link`（或在多包工作区根目录执行 `ad link -r`），将包挂载至本机全局路由表（`~/.actiondock/registry.json`）。

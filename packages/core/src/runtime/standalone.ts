@@ -63,15 +63,9 @@ export interface StandaloneDispatcherOptions {
  */
 export class StandaloneDispatcher {
   private options: StandaloneDispatcherOptions;
-  private target?: ActionDockTarget;
-  private ownsTarget = false;
 
   constructor(options: StandaloneDispatcherOptions) {
     this.options = options;
-    if (options.target) {
-      this.target = options.target;
-      this.ownsTarget = false;
-    }
   }
 
   private writeOut(msg: string): void {

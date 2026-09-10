@@ -13,7 +13,6 @@ import {
 import { ExecutionError } from "../../errors";
 import { writeStdout } from "../../renderer";
 import type { CliContext } from "../../types";
-import type { Command } from "commander";
 
 export async function handleActionCreate(
   id: string,

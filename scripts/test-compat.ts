@@ -79,6 +79,10 @@ if (typeof (globalThis as any).Bun === "undefined") {
       if (bin === "bun") {
         bin = process.execPath;
       }
+      if (bin.endsWith(".js") || bin.endsWith(".mjs") || bin.endsWith(".cjs")) {
+        args = [bin, ...args];
+        bin = process.execPath;
+      }
       const res = spawnSync(bin, args, {
         cwd: options.cwd,
         env: options.env,
@@ -95,6 +99,10 @@ if (typeof (globalThis as any).Bun === "undefined") {
     spawn(cmdArray: string[], options: any = {}) {
       let [bin, ...args] = cmdArray;
       if (bin === "bun") {
+        bin = process.execPath;
+      }
+      if (bin.endsWith(".js") || bin.endsWith(".mjs") || bin.endsWith(".cjs")) {
+        args = [bin, ...args];
         bin = process.execPath;
       }
       const proc = spawn(bin, args, {

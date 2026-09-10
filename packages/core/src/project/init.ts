@@ -101,7 +101,7 @@ export function initProject(targetDir: string, options: InitOptions = {}): void 
       test: "node --import tsx --test tests/*.test.ts",
     },
     engines: {
-      node: ">=22.13.0",
+      node: ">=24.12.0",
     },
     dependencies: {
       "@actiondock/sdk": "^2.1.0",

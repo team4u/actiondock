@@ -13,7 +13,7 @@ import {
 } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { getPackageSlug, loadProjectConfig } from "@actiondock/core";
 import { BuilderError } from "./errors";
 import { SelectionPlanner } from "./planner";
@@ -323,7 +323,7 @@ export async function packProject(options: PackOptions): Promise<PackResult> {
         : {}),
     };
     if (!currentEngines.node) {
-      currentEngines.node = ">=22.13.0";
+      currentEngines.node = ">=24.12.0";
     }
     normalizedPkg.engines = currentEngines;
 

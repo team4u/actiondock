@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type {
   ActionContext,
-  ActionDefinition,
   ActionInvoker,
   ActionRef,
   Config,
@@ -11,7 +10,6 @@ import type {
   StateStore,
 } from "@actiondock/sdk";
 import type { ProjectConfig } from "../project/types";
-import { createGlobalStorage } from "../storage";
 import type { RuntimeStorage } from "../storage/types";
 import { resolveEnvValue } from "./env";
 import { DefaultProcessExecutor } from "./process";

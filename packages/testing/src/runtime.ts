@@ -16,7 +16,6 @@ import type {
   ExecutionResult,
   JsonValue,
   Logger,
-  ProgressReporter,
   RuntimeError,
   StateStore,
 } from "@actiondock/sdk";

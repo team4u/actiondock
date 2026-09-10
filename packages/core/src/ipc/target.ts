@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { fork, type ChildProcess } from "node:child_process";
-import type { Writable } from "node:stream";
 import type {
   ActionRef,
   ExecutionEvent,
@@ -116,7 +115,7 @@ export class IpcActionDockTarget implements ActionDockTarget {
       this.isClosed = true;
 
       // 快速失败所有待处理调用
-      for (const [id, pending] of this.pendingCalls.entries()) {
+      for (const pending of this.pendingCalls.values()) {
         if (pending.method === "runAction") {
           pending.resolve({
             ok: false,

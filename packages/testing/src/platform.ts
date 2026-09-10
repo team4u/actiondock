@@ -4,7 +4,6 @@ import {
   type EventSink,
   type FileSystem,
   type GlobalStorageFactoryOptions,
-  type HttpServerFactory,
   type ModuleLoader,
   type RuntimePlatform,
   type RuntimeStorage,

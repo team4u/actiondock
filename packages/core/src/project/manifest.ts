@@ -1,10 +1,6 @@
 import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
-import type {
-  ActionDockManifest,
-  ActionManifestEntry,
-  PlaybookManifestEntry,
-} from "./types";
+import type { ActionDockManifest } from "./types";
 import { PACKAGE_ID_REGEX } from "../utils";
 
 export const MANIFEST_FILE_NAME = "actiondock.json";

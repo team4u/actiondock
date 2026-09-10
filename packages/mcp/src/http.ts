@@ -34,7 +34,7 @@ export function startMcpHttpServer(
 
   return (async () => {
     const hostTarget = hostInstance ?? (typeof options.host === "object" ? options.host : undefined);
-    const { target, ownsTarget } = await resolveTarget({
+    const { target } = await resolveTarget({
       ...options,
       host: hostTarget,
     });

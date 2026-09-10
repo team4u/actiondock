@@ -2,7 +2,6 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type {
-  ActionContext,
   ActionDefinition,
   ActionRef,
   ExecutionResult,
@@ -64,7 +63,7 @@ export function validateJsonValue(
       }
       return { valid: true };
     }
-    for (const [k, v] of Object.entries(val as Record<string, unknown>)) {
+    for (const v of Object.values(val as Record<string, unknown>)) {
       if (v !== undefined) {
         const res = validateJsonValue(v, seen);
         if (!res.valid) return res;

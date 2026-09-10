@@ -503,7 +503,6 @@ describe("@actiondock/mcp Adapter", () => {
 
     let asyncCallResult: any = null;
     let taskGetWorkingResult: any = null;
-    let taskGetCompletedResult: any = null;
     let taskCancelResult: any = null;
     let taskListResult: any = null;
 
