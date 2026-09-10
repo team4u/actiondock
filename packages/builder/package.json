@@ -1,7 +1,7 @@
 {
   "name": "@actiondock/builder",
   "version": "2.1.0",
-  "description": "ActionDock Build Planner, Bun standalone compiler, and Skill exporter",
+  "description": "ActionDock Build Planner, distribution packaging, and Skill exporter",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
