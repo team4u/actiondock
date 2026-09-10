@@ -172,28 +172,38 @@ describe("@actiondock/testing", () => {
 
   describe("createTestRuntime 核心生命周期", () => {
     it("正常运行 Action 并完成 Schema 校验", async () => {
-      const runtime = createTestRuntime();
-
       const sumAction = defineAction({
-        id: "calc.sum",
-        inputSchema: {
-          type: "object",
-          properties: {
-            x: { type: "number" },
-            y: { type: "number" },
-          },
-          required: ["x", "y"],
-        },
-        outputSchema: {
-          type: "object",
-          properties: {
-            total: { type: "number" },
-          },
-          required: ["total"],
-        },
         run(input: { x: number; y: number }) {
           return { total: input.x + input.y };
         },
+      });
+
+      const runtime = createTestRuntime({
+        projectConfig: {
+          id: "test-pkg",
+          name: "Test Package",
+          actions: {
+            "calc.sum": {
+              entry: "",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  x: { type: "number" },
+                  y: { type: "number" },
+                },
+                required: ["x", "y"],
+              },
+              outputSchema: {
+                type: "object",
+                properties: {
+                  total: { type: "number" },
+                },
+                required: ["total"],
+              },
+            },
+          },
+        },
+        actions: { "calc.sum": sumAction },
       });
 
       // 验证 run 方法直接返回解包后的业务结果
@@ -215,31 +225,41 @@ describe("@actiondock/testing", () => {
     });
 
     it("输入参数校验失败与输出结果校验失败抛出规范异常", async () => {
-      const runtime = createTestRuntime();
-
       const strictAction = defineAction({
-        id: "check.strict",
-        inputSchema: {
-          type: "object",
-          properties: {
-            requiredKey: { type: "string" },
-          },
-          required: ["requiredKey"],
-        },
-        outputSchema: {
-          type: "object",
-          properties: {
-            count: { type: "number" },
-          },
-          required: ["count"],
-        },
         run() {
           // 故意返回错误输出以测试输出校验
           return { count: "not-a-number" as unknown as number };
         },
       });
 
-      // 1. 输入校验失败
+      const runtime = createTestRuntime({
+        projectConfig: {
+          id: "test-pkg",
+          name: "Test Package",
+          actions: {
+            "check.strict": {
+              entry: "",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  requiredKey: { type: "string" },
+                },
+                required: ["requiredKey"],
+              },
+              outputSchema: {
+                type: "object",
+                properties: {
+                  count: { type: "number" },
+                },
+                required: ["count"],
+              },
+            },
+          },
+        },
+        actions: { "check.strict": strictAction },
+      });
+
+      // 输入校验失败
       const inputFailEnvelope = await runtime.execute(strictAction, { invalidKey: 123 } as any);
       expect(inputFailEnvelope.ok).toBe(false);
       if (!inputFailEnvelope.ok) {
@@ -254,7 +274,7 @@ describe("@actiondock/testing", () => {
         expect(err.code).toBe("INPUT_VALIDATION_FAILED");
       }
 
-      // 2. 输出校验失败
+      // 输出校验失败
       const outputFailEnvelope = await runtime.execute(strictAction, { requiredKey: "ok" });
       expect(outputFailEnvelope.ok).toBe(false);
       if (!outputFailEnvelope.ok) {
@@ -286,7 +306,6 @@ describe("@actiondock/testing", () => {
       expect(runtime.config.has("CUSTOM_KEY")).toBe(true);
 
       const stateAction = defineAction({
-        id: "state.manipulator",
         async run(_input, ctx) {
           const cfg = ctx.config.get<string>("CUSTOM_KEY");
           await ctx.state.set("session", { active: true, cfg }, 5);
@@ -311,44 +330,40 @@ describe("@actiondock/testing", () => {
       const runtime = createTestRuntime();
 
       const leafAction = defineAction({
-        id: "chain.leaf",
         run(input: { val: number }) {
           return { doubled: input.val * 2 };
         },
       });
 
       const parentAction = defineAction({
-        id: "chain.parent",
         async run(input: { val: number }, ctx) {
-          const res = await ctx.actions.invoke(leafAction, { val: input.val });
+          const res = await ctx.actions.invoke<{ val: number }, { doubled: number }>("chain.leaf", { val: input.val });
           return { final: res.doubled + 1 };
         },
       });
 
-      runtime.registerAction(leafAction);
-      runtime.registerAction(parentAction);
+      runtime.registerAction("chain.leaf", leafAction);
+      runtime.registerAction("chain.parent", parentAction);
 
       // 正常嵌套互调
-      const result = await runtime.run(parentAction, { val: 10 });
+      const result = await runtime.run<{ val: number }, { final: number }>(parentAction, { val: 10 });
       expect(result).toEqual({ final: 21 });
 
       // 环路死锁检测 A -> B -> A
       const loopA: ActionDefinition = defineAction({
-        id: "loop.a",
         async run(_input: unknown, ctx): Promise<unknown> {
-          return ctx.actions.invoke(loopB, {});
+          return ctx.actions.invoke("loop.b", {});
         },
       });
 
       const loopB: ActionDefinition = defineAction({
-        id: "loop.b",
         async run(_input: unknown, ctx): Promise<unknown> {
-          return ctx.actions.invoke(loopA, {});
+          return ctx.actions.invoke("loop.a", {});
         },
       });
 
-      runtime.registerAction(loopA);
-      runtime.registerAction(loopB);
+      runtime.registerAction("loop.a", loopA);
+      runtime.registerAction("loop.b", loopB);
 
       const loopRes = await runtime.execute(loopA, {});
       expect(loopRes.ok).toBe(false);
@@ -362,7 +377,6 @@ describe("@actiondock/testing", () => {
       const runtime = createTestRuntime();
 
       const hangingAction = defineAction({
-        id: "async.hang",
         async run(_input, ctx) {
           return new Promise((resolve, reject) => {
             const timer = setTimeout(() => resolve({ done: true }), 1000);
@@ -374,14 +388,14 @@ describe("@actiondock/testing", () => {
         },
       });
 
-      // 1. 超时控制
+      // 超时控制
       const timeoutRes = await runtime.execute(hangingAction, {}, { timeoutMs: 50 });
       expect(timeoutRes.ok).toBe(false);
       if (!timeoutRes.ok) {
         expect(timeoutRes.error.code).toBe("ACTION_TIMEOUT");
       }
 
-      // 2. 外部 AbortSignal 取消
+      // 外部 AbortSignal 取消
       const controller = new AbortController();
       setTimeout(() => controller.abort("manual abort"), 30);
 
@@ -400,7 +414,6 @@ describe("@actiondock/testing", () => {
       });
 
       const cliAction = defineAction({
-        id: "cli.inspect",
         async run(_input, ctx) {
           const res = await ctx.process.exec("docker", ["ps"]);
           return {
@@ -410,7 +423,7 @@ describe("@actiondock/testing", () => {
         },
       });
 
-      const out = await runtime.run(cliAction, {});
+      const out = await runtime.run<unknown, { stdout: string; hasNginx: boolean }>(cliAction, {});
       expect(out.hasNginx).toBe(true);
       expect(out.stdout).toContain("123abc456");
 
@@ -422,7 +435,6 @@ describe("@actiondock/testing", () => {
       const runtime = createTestRuntime();
 
       const loggingAction = defineAction({
-        id: "test.logging",
         async run(_input, ctx) {
           ctx.log.info("Process started", { step: 1 });
           ctx.log.warn("High memory notice");
@@ -431,7 +443,7 @@ describe("@actiondock/testing", () => {
         },
       });
 
-      const res = await runtime.run(loggingAction, {});
+      const res = await runtime.run<unknown, { success: boolean }>(loggingAction, {});
       expect(res.success).toBe(true);
 
       expect(runtime.logger.logs.length).toBe(3);
@@ -456,37 +468,64 @@ describe("@actiondock/testing", () => {
       const { createTestRuntime: createTestingRuntime, createTestPlatform } = await import("../src");
 
       const testAction = defineAction({
-        id: "calc.add",
-        inputSchema: {
-          type: "object",
-          properties: { a: { type: "number" }, b: { type: "number" } },
-          required: ["a", "b"],
-        },
         run(input: { a: number; b: number }) {
           return { sum: input.a + input.b };
         },
       });
 
-      // 1. testing 生产运行时执行
-      const testingRuntime = createTestingRuntime();
-      const testingOut = await testingRuntime.run(testAction, { a: 10, b: 20 });
+      // testing 生产运行时执行
+      const testingRuntime = createTestingRuntime({
+        projectConfig: {
+          id: "test-pkg",
+          name: "Test Package",
+          actions: {
+            "calc.add": {
+              entry: "",
+              inputSchema: {
+                type: "object",
+                properties: { a: { type: "number" }, b: { type: "number" } },
+                required: ["a", "b"],
+              },
+            },
+          },
+        },
+        actions: { "calc.add": testAction },
+      });
+      const testingOut = await testingRuntime.run<{ a: number; b: number }, { sum: number }>(testAction, { a: 10, b: 20 });
       expect(testingOut).toEqual({ sum: 30 });
 
-      // 2. 显式结合 createTestPlatform 执行
+      // 显式结合 createTestPlatform 执行
       const platform = createTestPlatform();
-      const platformRuntime = createTestingRuntime({ platform });
+      const platformRuntime = createTestingRuntime({
+        platform,
+        projectConfig: {
+          id: "test-pkg",
+          name: "Test Package",
+          actions: {
+            "calc.add": {
+              entry: "",
+              inputSchema: {
+                type: "object",
+                properties: { a: { type: "number" }, b: { type: "number" } },
+                required: ["a", "b"],
+              },
+            },
+          },
+        },
+        actions: { "calc.add": testAction },
+      });
       expect(platformRuntime.executionService).toBeDefined();
-      const platformOut = await platformRuntime.run(testAction, { a: 15, b: 25 });
+      const platformOut = await platformRuntime.run<{ a: number; b: number }, { sum: number }>(testAction, { a: 15, b: 25 });
       expect(platformOut).toEqual({ sum: 40 });
 
-      // 3. 对齐的 config 与状态管理
+      // 对齐的 config 与状态管理
       expect(testingRuntime.config.get("non_existent", "default")).toBe("default");
       testingRuntime.config.set("newKey", "val2");
       expect(testingRuntime.config.get<string>("newKey")).toBe("val2");
       expect(testingRuntime.config.delete("newKey")).toBe(true);
       expect(testingRuntime.config.has("newKey")).toBe(false);
 
-      // 4. 对齐的 execute 错误校验
+      // 对齐的 execute 错误校验
       const execFail = await testingRuntime.execute(testAction, { a: "invalid" as any, b: 20 });
       expect(execFail.ok).toBe(false);
       if (!execFail.ok) {

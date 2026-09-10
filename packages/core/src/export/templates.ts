@@ -1,6 +1,10 @@
 import { basename } from "node:path";
-import type { ActionDefinition } from "@actiondock/sdk";
+import type { ActionSpec } from "../app/types";
 import type { PlaybookDefinition, ProjectConfig } from "../project/types";
+
+export type SkillActionItem =
+  | ActionSpec
+  | { id: string; description?: string; inputSchema?: any; outputSchema?: any; annotations?: any };
 
 function getCleanSkillMetadata(config: ProjectConfig) {
   const cleanName = config.id.replace(/[^a-zA-Z0-9-_]/g, "-").toLowerCase();
@@ -9,7 +13,7 @@ function getCleanSkillMetadata(config: ProjectConfig) {
 }
 
 function renderActionListMarkdown(
-  actions: ActionDefinition[],
+  actions: SkillActionItem[],
   options: { packageId?: string } = {}
 ): string {
   return actions
@@ -115,7 +119,7 @@ ${list}
 
 export function generateSourceSkillMd(
   config: ProjectConfig,
-  actions: ActionDefinition[],
+  actions: SkillActionItem[],
   playbooks: PlaybookDefinition[]
 ): string {
   const { cleanName, desc } = getCleanSkillMetadata(config);
@@ -267,7 +271,7 @@ ad state get KEY --package ${pkgId}
 
 export function generateStandaloneSkillMd(
   config: ProjectConfig,
-  actions: ActionDefinition[],
+  actions: SkillActionItem[],
   playbooks: PlaybookDefinition[],
   binaryRelPath = "./bin/action-bin"
 ): string {
@@ -286,22 +290,6 @@ description: ${desc}
 
 ${desc}
 
-## 如何调用 Action
-
-使用技能目录中自带的独立可执行程序 \`${binaryRelPath}\` 即可完成工具发现与调用。
-**该工具无需在系统预先安装任何依赖**（无需安装 Node.js、Bun、Python 或 Java）。
-
-### 发现可用 Action 清单
-
-\`\`\`bash
-${binaryRelPath} list --json
-\`\`\`
-
-### 查看 Action 结构与入参规范
-
-\`\`\`bash
-${binaryRelPath} describe <action-id> --json
-\`\`\`
 
 ### 执行 Action
 
@@ -375,7 +363,7 @@ ${binaryRelPath} state get KEY
 
 export function generateSkillMd(
   config: ProjectConfig,
-  actions: ActionDefinition[],
+  actions: SkillActionItem[],
   playbooks: PlaybookDefinition[],
   optionsOrBinaryPath: string | { mode?: "source" | "standalone"; binaryRelPath?: string } = "./bin/action-bin"
 ): string {
@@ -516,7 +504,7 @@ export interface GenerateSkillJsonOptions {
 
 export function generateSkillJson(
   config: ProjectConfig,
-  actions: ActionDefinition[],
+  actions: SkillActionItem[],
   binaryNameOrOptions?: string | GenerateSkillJsonOptions,
   target = "host",
   playbooksList: PlaybookDefinition[] = []

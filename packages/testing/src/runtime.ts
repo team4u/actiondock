@@ -162,7 +162,10 @@ export interface TestRuntimeOptions {
   /** 项目静态配置元数据 */
   projectConfig?: ProjectConfig;
   /** 预注册的 Action 动作列表 */
-  actions?: ActionDefinition[] | Record<string, ActionDefinition> | Map<string, ActionDefinition>;
+  actions?:
+    | Array<{ id: string; action: ActionDefinition } | (ActionDefinition & { id: string })>
+    | Record<string, ActionDefinition>
+    | Map<string, ActionDefinition>;
   /** 可选注入的标准运行时平台实例 */
   platform?: RuntimePlatform;
 }
@@ -190,7 +193,8 @@ export interface TestRuntime {
   /** 核心执行器引擎（向后兼容保留） */
   runner: ActionRunner;
   /** 注册 Action 动作定义 */
-  registerAction(action: ActionDefinition): void;
+  registerAction(id: string, action: ActionDefinition): void;
+  registerAction(action: ({ id: string; action?: ActionDefinition } & Partial<ActionDefinition>) | ActionDefinition): void;
   /** 获取已注册的 Action 动作定义 */
   getAction(id: string): ActionDefinition | undefined;
   /** 列出已注册的所有 Action 动作定义 */
@@ -268,8 +272,12 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
   const actionsMap = new Map<string, ActionDefinition>();
   if (options.actions) {
     if (Array.isArray(options.actions)) {
-      for (const act of options.actions) {
-        actionsMap.set(act.id, act);
+      for (const item of options.actions as any[]) {
+        const id = item.id;
+        const act = item.action ?? item;
+        if (id) {
+          actionsMap.set(id, act);
+        }
       }
     } else if (options.actions instanceof Map) {
       for (const [k, v] of options.actions) {
@@ -303,8 +311,24 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
 
   const testState = new RuntimeStateStore(storage);
 
-  const registerAction = (action: ActionDefinition): void => {
-    executionService.registerAction(action);
+  const registerAction = (
+    idOrAction: string | (({ id: string; action?: ActionDefinition } & Partial<ActionDefinition>) | ActionDefinition),
+    maybeAction?: ActionDefinition
+  ): void => {
+    if (typeof idOrAction === "string") {
+      executionService.registerAction(idOrAction, maybeAction!);
+      if (maybeAction) {
+        actionsMap.set(idOrAction, maybeAction);
+      }
+    } else {
+      const actObj = idOrAction as any;
+      const id = actObj.id;
+      const act = actObj.action || (actObj.run ? actObj : undefined);
+      if (id && act) {
+        actionsMap.set(id, act);
+      }
+      executionService.registerAction(idOrAction);
+    }
   };
 
   const getAction = (id: string): ActionDefinition | undefined => {
@@ -323,19 +347,31 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
     let actionRef: string;
     if (typeof action !== "string") {
       const act = action as ActionDefinition;
-      if (!act.id) {
+      const actObj = act as any;
+      let targetId = actObj.id;
+      if (!targetId) {
+        for (const [registeredId, registeredAct] of actionsMap) {
+          if (registeredAct === act) {
+            targetId = registeredId;
+            break;
+          }
+        }
+      }
+      if (!targetId) {
         let anonId = anonymousTestActions.get(act);
         if (!anonId) {
           anonymousTestActionCounter++;
           anonId = `test-action-${anonymousTestActionCounter}`;
           anonymousTestActions.set(act, anonId);
         }
+        targetId = anonId;
         try {
-          act.id = anonId;
+          actObj.id = targetId;
         } catch {}
       }
-      executionService.registerAction(act);
-      actionRef = act.id;
+      executionService.registerAction(targetId, act);
+      actionsMap.set(targetId, act);
+      actionRef = targetId;
     } else {
       actionRef = action;
     }

@@ -87,7 +87,10 @@ export interface ActionDockMcpOptions {
   /** 单个 Tool 执行超时时间（毫秒） */
   timeoutMs?: number;
   /** 预加载的 Action 集合（单元测试或内存模式使用） */
-  actions?: Map<string, ActionDefinition> | ActionDefinition[];
+  actions?:
+    | Map<string, ActionDefinition>
+    | Array<{ id: string; action: ActionDefinition } | (ActionDefinition & { id: string })>
+    | Record<string, ActionDefinition>;
   /** 底层存储实例（单元测试或特定场景注入） */
   storage?: RuntimeStorage;
 }

@@ -12,41 +12,31 @@ describe("@actiondock/sdk", () => {
   beforeEach(() => {
     registerTestRuntimeProvider(null);
   });
-  it("defines an action with validation", () => {
+
+  it("defines an action with run handler", () => {
     const action = defineAction({
-      id: "test.greet",
-      description: "Greet a user",
-      inputSchema: {
-        type: "object",
-        properties: { name: { type: "string" } },
-        required: ["name"],
-      },
       run: (input: { name: string }) => `Hello, ${input.name}!`,
     });
 
-    expect(action.id).toBe("test.greet");
-    expect(action.description).toBe("Greet a user");
     expect(typeof action.run).toBe("function");
+
+    const directAction = defineAction((input: { name: string }) => `Hello, ${input.name}!`);
+    expect(typeof directAction.run).toBe("function");
   });
 
   it("throws error for invalid action definition", () => {
     expect(() => defineAction({} as any)).toThrow();
-    expect(() => defineAction({ id: "test" } as any)).toThrow();
     expect(() => defineAction(null as any)).toThrow();
-    expect(() => defineAction({ id: "", run: () => {} } as any)).toThrow();
   });
 
   it("executes an action in test runtime with config and state", async () => {
-    const counterAction = defineAction({
-      id: "test.counter",
-      async run(_input: unknown, ctx) {
-        const prefix = ctx.config.get("PREFIX", "Count:");
-        const current = (await ctx.state.get<number>("count")) || 0;
-        const next = current + 1;
-        await ctx.state.set("count", next);
-        ctx.log.info(`Updated count to ${next}`);
-        return `${prefix} ${next}`;
-      },
+    const counterAction = defineAction(async (_input: unknown, ctx) => {
+      const prefix = ctx.config.get("PREFIX", "Count:");
+      const current = (await ctx.state.get<number>("count")) || 0;
+      const next = current + 1;
+      await ctx.state.set("count", next);
+      ctx.log.info(`Updated count to ${next}`);
+      return `${prefix} ${next}`;
     });
 
     const runtime = createTestRuntime({
@@ -88,19 +78,19 @@ describe("@actiondock/sdk", () => {
     await userScope.set("alice", { age: 30 });
     await userScope.set("bob", { age: 25 });
 
-    // Isolation check
+    // 隔离性检查
     expect(await store.get<string>("global_k1")).toBe("v1");
     expect(await userScope.get<{ age: number }>("alice")).toEqual({ age: 30 });
     expect(await store.get("alice")).toBeUndefined();
 
-    // Deep copy verification (structuredClone)
+    // 深拷贝验证 (structuredClone)
     const obj = { nested: { val: 100 } };
     await store.set("nested_obj", obj);
     obj.nested.val = 200;
     const fetched = await store.get<{ nested: { val: number } }>("nested_obj");
     expect(fetched?.nested.val).toBe(100);
 
-    // Keys listing with prefix
+    // 带前缀的键列表检索
     const rootKeys = await store.keys();
     expect(rootKeys.sort()).toEqual(["global_k1", "global_k2", "nested_obj"]);
 
@@ -110,7 +100,7 @@ describe("@actiondock/sdk", () => {
     const userKeysFiltered = await userScope.keys("al");
     expect(userKeysFiltered).toEqual(["alice"]);
 
-    // Deletion (returns boolean)
+    // 删除状态项
     const deleted = await userScope.delete("alice");
     expect(deleted).toBe(true);
     expect(await userScope.get("alice")).toBeUndefined();
@@ -119,37 +109,37 @@ describe("@actiondock/sdk", () => {
     const deleteNonExistent = await userScope.delete("alice");
     expect(deleteNonExistent).toBe(false);
 
-    // Clear
+    // 清空状态项
     const cleared = await userScope.clear();
-    expect(cleared).toBe(1); // bob
+    expect(cleared).toBe(1);
     expect(await userScope.keys()).toEqual([]);
   });
 
   it("supports MemoryStateStore with colon-containing keys and nested scopes", async () => {
     const store = new MemoryStateStore();
 
-    // Root keys with colons
+    // 包含冒号的根键
     await store.set("key:with:colon", "value-colon");
     expect(await store.get<string>("key:with:colon")).toBe("value-colon");
     expect(await store.keys()).toContain("key:with:colon");
 
-    // Scoped keys with colons
+    // 包含冒号的作用域键
     const scoped = store.scope("sub:ns");
     await scoped.set("another:colon:key", "value-nested");
     expect(await scoped.get<string>("another:colon:key")).toBe("value-nested");
     expect(await scoped.keys()).toEqual(["another:colon:key"]);
 
-    // Root store should not expose scoped keys
+    // 根存储不暴露作用域键
     expect(await store.get("another:colon:key")).toBeUndefined();
     expect(await store.keys()).not.toContain("another:colon:key");
 
-    // Clear with colon key
+    // 删除包含冒号的键
     const deleted = await scoped.delete("another:colon:key");
     expect(deleted).toBe(true);
     expect(await scoped.get("another:colon:key")).toBeUndefined();
     expect(await scoped.keys()).toEqual([]);
 
-    // Namespace collision test: namespace a:b + key c vs namespace a + key b:c
+    // 命名空间碰撞测试：命名空间 a:b + 键 c 与命名空间 a + 键 b:c 隔离
     const storeAB = store.scope("a:b");
     const storeA = store.scope("a");
     await storeAB.set("c", "val-ab-c");
@@ -175,33 +165,58 @@ describe("@actiondock/sdk", () => {
     expect(logger.logs[3]).toEqual({ level: "error", message: "error message", data: { e: 4 } });
   });
 
-  it("supports action-to-action invocation", async () => {
+  it("supports action-to-action invocation by identifier or ActionRef", async () => {
     const childAction = defineAction({
-      id: "test.child",
       run: (input: { val: number }) => input.val * 2,
     });
 
     const parentAction = defineAction({
-      id: "test.parent",
       async run(input: { val: number }, ctx) {
-        const doubled = await ctx.actions.invoke(childAction, { val: input.val });
+        const doubled = await ctx.actions.invoke<unknown, number>("test.child", { val: input.val });
         return { result: doubled + 1 };
       },
     });
 
-    const runtime = createTestRuntime();
+    const runtime = createTestRuntime({
+      actions: {
+        "test.child": childAction,
+      },
+    });
     const res = await runtime.run(parentAction, { val: 10 });
     expect(res).toEqual({ result: 21 });
   });
 
+  it("strictly prohibits passing ActionDefinition to ctx.actions.invoke", async () => {
+    const childAction = defineAction({
+      run: () => 42,
+    });
+
+    const invalidCaller = defineAction({
+      async run(_input, ctx) {
+        return (ctx.actions.invoke as any)(childAction, {});
+      },
+    });
+
+    const runtime = createTestRuntime({
+      actions: {
+        child: childAction,
+      },
+    });
+
+    try {
+      await runtime.run(invalidCaller, {});
+      expect(true).toBe(false);
+    } catch (err: any) {
+      expect(err.code).toBe("INVALID_ACTION_REF");
+    }
+  });
+
   it("supports action invocation by string ID and ActionRef", async () => {
     const childAction = defineAction({
-      id: "child",
       run: (input: { val: number }) => input.val * 3,
     });
 
     const parentAction = defineAction({
-      id: "parent",
       async run(input: { val: number }, ctx) {
         const res1 = await ctx.actions.invoke<{ val: number }, number>("child", { val: input.val });
         const res2 = await ctx.actions.invoke<{ val: number }, number>({ actionId: "child" }, { val: input.val });
@@ -212,7 +227,6 @@ describe("@actiondock/sdk", () => {
     });
 
     const scopedWorker = defineAction({
-      id: "worker",
       run: (input: { msg: string }) => `processed: ${input.msg}`,
     });
 
@@ -227,7 +241,6 @@ describe("@actiondock/sdk", () => {
 
     // 验证以结构化 ActionRef 指定 packageId 调用以完全限定键名注册的 Action
     const scopedCaller = defineAction({
-      id: "caller",
       async run(_input, ctx) {
         return ctx.actions.invoke({ packageId: "shared-pkg", actionId: "worker" }, { msg: "hello" });
       },
@@ -237,15 +250,18 @@ describe("@actiondock/sdk", () => {
   });
 
   it("detects recursion/cycle in action invocation", async () => {
-    const cycleAction: any = defineAction({
-      id: "test.cycle",
+    const cycleAction = defineAction({
       async run(_input: unknown, ctx) {
-        return ctx.actions.invoke(cycleAction, {});
+        return ctx.actions.invoke("test.cycle", {});
       },
     });
 
-    const runtime = createTestRuntime();
-    expect(runtime.run(cycleAction, {})).rejects.toThrow("Cycle detected");
+    const runtime = createTestRuntime({
+      actions: {
+        "test.cycle": cycleAction,
+      },
+    });
+    expect(runtime.run("test.cycle", {})).rejects.toThrow("Cycle detected");
   });
 
   it("supports full-trace run context (rootId, parentId) in nested action invocation", async () => {
@@ -253,7 +269,6 @@ describe("@actiondock/sdk", () => {
     let capturedChildRun: any;
 
     const childAction = defineAction({
-      id: "child-worker",
       run(_input: unknown, ctx) {
         capturedChildRun = { ...ctx.run };
         return "child-ok";
@@ -261,16 +276,15 @@ describe("@actiondock/sdk", () => {
     });
 
     const parentAction = defineAction({
-      id: "parent-caller",
       async run(_input: unknown, ctx) {
         capturedParentRun = { ...ctx.run };
-        await ctx.actions.invoke(childAction, {});
+        await ctx.actions.invoke("child-worker", {});
         return "parent-ok";
       },
     });
 
     const runtime = createTestRuntime({
-      actions: [childAction],
+      actions: [{ id: "child-worker", action: childAction }],
     });
 
     await runtime.run(parentAction, {});
@@ -278,12 +292,10 @@ describe("@actiondock/sdk", () => {
     expect(capturedParentRun).toBeDefined();
     expect(capturedChildRun).toBeDefined();
 
-    // Parent is root, so rootId equals id and parentId is undefined
     expect(capturedParentRun.id).toBeTruthy();
     expect(capturedParentRun.rootId).toBe(capturedParentRun.id);
     expect(capturedParentRun.parentId).toBeUndefined();
 
-    // Child inherits parent's rootId and sets parentId to parent's id
     expect(capturedChildRun.id).toBeTruthy();
     expect(capturedChildRun.id).not.toBe(capturedParentRun.id);
     expect(capturedChildRun.rootId).toBe(capturedParentRun.rootId);
@@ -292,17 +304,14 @@ describe("@actiondock/sdk", () => {
 
   it("handles cross-package same-name action invocation in test runtime without cycle false positive", async () => {
     const localCalc = defineAction({
-      id: "calc",
       run: (input: { x: number }) => input.x + 1,
     });
 
     const extCalc = defineAction({
-      id: "calc",
       run: (input: { x: number }) => input.x * 10,
     });
 
     const caller = defineAction({
-      id: "caller",
       async run(input: { x: number }, ctx) {
         const local = await ctx.actions.invoke("calc", { x: input.x });
         const ext = await ctx.actions.invoke({ packageId: "ext-pkg", actionId: "calc" }, { x: input.x });
@@ -323,7 +332,6 @@ describe("@actiondock/sdk", () => {
 
   it("supports concurrent sub-action invocations without call stack race conditions", async () => {
     const workerAction = defineAction({
-      id: "async-worker",
       async run(input: { val: number }) {
         await new Promise((resolve) => setTimeout(resolve, 10));
         return input.val * 2;
@@ -331,19 +339,18 @@ describe("@actiondock/sdk", () => {
     });
 
     const concurrentCaller = defineAction({
-      id: "concurrent-caller",
       async run(_input: unknown, ctx) {
         const results = await Promise.all([
-          ctx.actions.invoke(workerAction, { val: 1 }),
-          ctx.actions.invoke(workerAction, { val: 2 }),
-          ctx.actions.invoke(workerAction, { val: 3 }),
+          ctx.actions.invoke("async-worker", { val: 1 }),
+          ctx.actions.invoke("async-worker", { val: 2 }),
+          ctx.actions.invoke("async-worker", { val: 3 }),
         ]);
         return results;
       },
     });
 
     const runtime = createTestRuntime({
-      actions: [workerAction],
+      actions: [{ id: "async-worker", action: workerAction }],
     });
 
     const results = await runtime.run(concurrentCaller, {});
@@ -353,15 +360,12 @@ describe("@actiondock/sdk", () => {
   it("handles state expiration with TTL in MemoryStateStore", async () => {
     const runtime = createTestRuntime();
 
-    // 1. Set key with TTL (in seconds, 0.05s = 50ms)
     await runtime.state.set("temp-key", "hello", 0.05);
     expect(await runtime.state.get<string>("temp-key")).toBe("hello");
     expect(await runtime.state.keys()).toContain("temp-key");
 
-    // 2. Permanent key
     await runtime.state.set("permanent", "keep-me");
 
-    // Wait for 70ms to allow expiration
     await new Promise((resolve) => setTimeout(resolve, 70));
 
     expect(await runtime.state.get("temp-key")).toBeUndefined();
@@ -374,13 +378,12 @@ describe("@actiondock/sdk", () => {
   it("executes CLI command safely using ctx.process.exec", async () => {
     const runtime = createTestRuntime();
     const execAction = defineAction({
-      id: "test.exec",
       async run(input: { command: string; args?: string[]; options?: any }, ctx) {
         return await ctx.process.exec(input.command, input.args, input.options);
       },
     });
 
-    // 1. Successful execution
+    // 1. 成功执行
     const res = await runtime.run(execAction, { command: "bun", args: ["--version"] });
     expect(res.ok).toBe(true);
     expect(res.exitCode).toBe(0);
@@ -388,7 +391,7 @@ describe("@actiondock/sdk", () => {
     expect(res.raw.length).toBeGreaterThan(0);
     expect(res.durationMs).toBeGreaterThanOrEqual(0);
 
-    // 2. Stdin piping support (string input)
+    // 2. 标准输入支持（字符串）
     const stdinRes = await runtime.run(execAction, {
       command: "cat",
       args: [],
@@ -397,7 +400,7 @@ describe("@actiondock/sdk", () => {
     expect(stdinRes.ok).toBe(true);
     expect(stdinRes.stdout).toBe("Hello ActionDock Stdin");
 
-    // 3. Stdin piping support (Uint8Array input)
+    // 3. 标准输入支持（字节流）
     const u8Input = new TextEncoder().encode("Binary Stdin");
     const u8Res = await runtime.run(execAction, {
       command: "cat",
@@ -407,7 +410,7 @@ describe("@actiondock/sdk", () => {
     expect(u8Res.ok).toBe(true);
     expect(u8Res.stdout).toBe("Binary Stdin");
 
-    // 4. Custom env & cwd
+    // 4. 自定义环境变量与工作目录
     const envRes = await runtime.run(execAction, {
       command: "sh",
       args: ["-c", "echo $MY_CUSTOM_VAR"],
@@ -416,7 +419,7 @@ describe("@actiondock/sdk", () => {
     expect(envRes.ok).toBe(true);
     expect(envRes.stdout).toBe("actiondock_val");
 
-    // 5. Timeout and timedOut flag
+    // 5. 超时控制
     const timedOutRes = await runtime.run(execAction, {
       command: "sleep",
       args: ["2"],
@@ -427,7 +430,7 @@ describe("@actiondock/sdk", () => {
     expect(timedOutRes.exitCode).toBe(-1);
     expect(timedOutRes.stderr).toContain("timed out");
 
-    // 6. Non-existent command
+    // 6. 不存在的命令
     const notFound = await runtime.run(execAction, {
       command: "__non_existent_binary_xyz_123__",
     });
@@ -435,7 +438,7 @@ describe("@actiondock/sdk", () => {
     expect(notFound.exitCode).toBe(-1);
     expect(notFound.stderr).toContain("not found in PATH");
 
-    // 7. throwOnError support
+    // 7. throwOnError 选项支持
     await expect(
       runtime.run(execAction, {
         command: "__non_existent_binary_xyz_123__",
@@ -443,7 +446,7 @@ describe("@actiondock/sdk", () => {
       })
     ).rejects.toThrow();
 
-    // 8. Aborted signal
+    // 8. 取消信号支持
     const controller = new AbortController();
     controller.abort();
     const aborted = await runtime.run(execAction, {
@@ -459,13 +462,11 @@ describe("@actiondock/sdk", () => {
   it("executes daemon-spawning CLI safely using ctx.process.spawnDetached", async () => {
     const runtime = createTestRuntime();
     const spawnAction = defineAction({
-      id: "test.spawn-detached",
       async run(input: any, ctx) {
         return await ctx.process.spawnDetached(input);
       },
     });
 
-    // 1. Successful execution and immediate probe success
     let probeCount = 0;
     const okRes = await runtime.run(spawnAction, {
       command: "bun",
@@ -478,7 +479,6 @@ describe("@actiondock/sdk", () => {
     expect(okRes.ready).toBe(true);
     expect(probeCount).toBe(1);
 
-    // 2. Multi-step polling until probe becomes true
     let pollCount = 0;
     const polledRes = await runtime.run(spawnAction, {
       command: "bun",
@@ -493,7 +493,6 @@ describe("@actiondock/sdk", () => {
     expect(polledRes.ready).toBe(true);
     expect(pollCount).toBe(3);
 
-    // 3. Timeout when probe never succeeds
     const timedOutRes = await runtime.run(spawnAction, {
       command: "bun",
       args: ["--version"],
@@ -507,27 +506,29 @@ describe("@actiondock/sdk", () => {
   it("enforces input and output schema validation throwing ActionRuntimeError", async () => {
     const runtime = createTestRuntime();
 
-    const strictAction = defineAction({
-      id: "test.strict",
-      inputSchema: {
-        type: "object",
-        properties: { count: { type: "number" } },
-        required: ["count"],
-      },
-      outputSchema: {
-        type: "object",
-        properties: { valid: { type: "boolean" } },
-        required: ["valid"],
-      },
-      run(input: any) {
+    const strictAction = Object.assign(
+      defineAction((input: any) => {
         if (input.count === -1) {
           return { valid: "not-a-bool" as any };
         }
         return { valid: true };
-      },
-    });
+      }),
+      {
+        id: "test.strict",
+        inputSchema: {
+          type: "object",
+          properties: { count: { type: "number" } },
+          required: ["count"],
+        },
+        outputSchema: {
+          type: "object",
+          properties: { valid: { type: "boolean" } },
+          required: ["valid"],
+        },
+      }
+    );
 
-    // Input validation failure
+    // 输入参数校验失败
     try {
       await runtime.run(strictAction, { count: "not-a-number" } as any);
       expect(true).toBe(false);
@@ -535,7 +536,7 @@ describe("@actiondock/sdk", () => {
       expect(err.code).toBe("INPUT_VALIDATION_FAILED");
     }
 
-    // Output validation failure
+    // 输出参数校验失败
     try {
       await runtime.run(strictAction, { count: -1 });
       expect(true).toBe(false);
@@ -543,31 +544,29 @@ describe("@actiondock/sdk", () => {
       expect(err.code).toBe("OUTPUT_VALIDATION_FAILED");
     }
 
-    // Successful run
+    // 校验成功通过
     const res = await runtime.run(strictAction, { count: 10 });
     expect(res).toEqual({ valid: true });
   });
 
   it("detects cyclic action invocations and throws ACTION_CYCLE_DETECTED", async () => {
-    let loopA: any;
-    let loopB: any;
-
-    loopA = defineAction({
-      id: "test.loop-a",
+    const loopA = defineAction({
       async run(_input: any, ctx) {
-        return ctx.actions.invoke(loopB, {});
+        return ctx.actions.invoke("test.loop-b", {});
       },
     });
 
-    loopB = defineAction({
-      id: "test.loop-b",
+    const loopB = defineAction({
       async run(_input: any, ctx) {
-        return ctx.actions.invoke(loopA, {});
+        return ctx.actions.invoke("test.loop-a", {});
       },
     });
 
     const runtime = createTestRuntime({
-      actions: [loopA, loopB],
+      actions: {
+        "test.loop-a": loopA,
+        "test.loop-b": loopB,
+      },
     });
 
     try {
@@ -595,10 +594,8 @@ describe("@actiondock/sdk", () => {
     expect(await runtime1.state.get<string>("item")).toBe("updated1");
     expect(await runtime2.state.get<string>("item")).toBe("state2");
 
-    // TTL expiry test
-    await runtime1.state.set("temp", "expiring", 0.001); // 1 millisecond
+    await runtime1.state.set("temp", "expiring", 0.001);
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(await runtime1.state.get("temp")).toBeUndefined();
   });
 });
-

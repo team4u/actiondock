@@ -9,8 +9,6 @@ import { createActionDockHost, DefaultActionDockHost } from "../src/host";
 describe("ActionDockHost 多包宿主容器", () => {
   it("初始化并支持 ActionDockApp 实例与 ActionDockAppOptions 配置混合注册", async () => {
     const mathAddAction = defineAction({
-      id: "add",
-      description: "加法计算",
       run: (input: { a: number; b: number }) => ({ sum: input.a + input.b }),
     });
 
@@ -20,7 +18,7 @@ describe("ActionDockHost 多包宿主容器", () => {
         name: "数学计算包",
         version: "1.0.0",
       },
-      actions: [mathAddAction],
+      actions: { add: mathAddAction },
       inMemory: true,
     });
 
@@ -33,13 +31,11 @@ describe("ActionDockHost 多包宿主容器", () => {
             name: "字符串工具包",
             version: "1.0.0",
           },
-          actions: [
-            defineAction({
-              id: "concat",
-              description: "字符串拼接",
+          actions: {
+            concat: defineAction({
               run: (input: { a: string; b: string }) => ({ result: `${input.a}${input.b}` }),
             }),
-          ],
+          },
           inMemory: true,
         },
       ],
@@ -122,36 +118,42 @@ describe("ActionDockHost 多包宿主容器", () => {
 
   it("静态列出全量 Actions 与条件过滤，支持短名与完全限定引用查询", async () => {
     const actionA = defineAction({
-      id: "search",
-      description: "搜索资源",
-      tags: ["query", "index"],
       run: () => ({ found: true }),
     });
 
     const actionB = defineAction({
-      id: "create",
-      description: "创建资源",
-      tags: ["mutation"],
       run: () => ({ created: true }),
     });
 
     const actionC = defineAction({
-      id: "search",
-      description: "用户搜索",
-      tags: ["user", "query"],
       run: () => ({ users: [] }),
     });
 
     const host = await createActionDockHost({
       packages: [
         {
-          projectConfig: { id: "pkg.items", name: "资源包", version: "1.0.0" },
-          actions: [actionA, actionB],
+          projectConfig: {
+            id: "pkg.items",
+            name: "资源包",
+            version: "1.0.0",
+            actions: {
+              search: { entry: "", description: "搜索资源", tags: ["query", "index"] },
+              create: { entry: "", description: "创建资源", tags: ["mutation"] },
+            },
+          },
+          actions: { search: actionA, create: actionB },
           inMemory: true,
         },
         {
-          projectConfig: { id: "pkg.users", name: "用户包", version: "1.0.0" },
-          actions: [actionC],
+          projectConfig: {
+            id: "pkg.users",
+            name: "用户包",
+            version: "1.0.0",
+            actions: {
+              search: { entry: "", description: "用户搜索", tags: ["user", "query"] },
+            },
+          },
+          actions: { search: actionC },
           inMemory: true,
         },
       ],
@@ -271,7 +273,6 @@ actions:
 
   it("支持跨包完全限定引用路由执行与异步票据启动", async () => {
     const calcAction = defineAction({
-      id: "multiply",
       run: (input: { x: number; y: number }) => ({ val: input.x * input.y }),
     });
 
@@ -279,7 +280,7 @@ actions:
       packages: [
         {
           projectConfig: { id: "service.math", name: "计算服务", version: "1.0.0" },
-          actions: [calcAction],
+          actions: { multiply: calcAction },
           inMemory: true,
         },
       ],
@@ -331,14 +332,11 @@ actions:
   it("声明 uses 时跨包调用成功执行，未声明 uses 时返回 UNDECLARED_ACTION_DEPENDENCY", async () => {
     // 目标工作服务
     const workerAction = defineAction({
-      id: "worker-task",
       run: (input: { num: number }) => ({ result: input.num * 10 }),
     });
 
     // 声明了 uses 的调用者动作
     const declaredCallerAction = defineAction({
-      id: "declared-caller",
-      uses: ["service.worker/worker-task"],
       run: async (input: { val: number }, ctx: ActionContext) => {
         const res = await ctx.actions.invoke("service.worker/worker-task", { num: input.val });
         return { callerOutput: res };
@@ -347,8 +345,6 @@ actions:
 
     // 未声明 uses 的调用者动作
     const undeclaredCallerAction = defineAction({
-      id: "undeclared-caller",
-      uses: [], // 未声明任何依赖
       run: async (input: { val: number }, ctx: ActionContext) => {
         const res = await ctx.actions.invoke("service.worker/worker-task", { num: input.val });
         return { callerOutput: res };
@@ -359,12 +355,29 @@ actions:
       packages: [
         {
           projectConfig: { id: "service.worker", name: "工作服务", version: "1.0.0" },
-          actions: [workerAction],
+          actions: { "worker-task": workerAction },
           inMemory: true,
         },
         {
-          projectConfig: { id: "service.caller", name: "调用者服务", version: "1.0.0" },
-          actions: [declaredCallerAction, undeclaredCallerAction],
+          projectConfig: {
+            id: "service.caller",
+            name: "调用者服务",
+            version: "1.0.0",
+            actions: {
+              "declared-caller": {
+                entry: "",
+                uses: ["service.worker/worker-task"],
+              },
+              "undeclared-caller": {
+                entry: "",
+                uses: [],
+              },
+            },
+          },
+          actions: {
+            "declared-caller": declaredCallerAction,
+            "undeclared-caller": undeclaredCallerAction,
+          },
           inMemory: true,
         },
       ],
@@ -419,12 +432,11 @@ actions:
       packages: [
         {
           projectConfig: { id: "pkg.depth", name: "深度测试包", version: "1.0.0" },
-          actions: [
-            defineAction({
-              id: "step",
+          actions: {
+            step: defineAction({
               run: () => ({ done: true }),
             }),
-          ],
+          },
           inMemory: true,
         },
       ],
@@ -489,13 +501,12 @@ actions:
     // 2. 测试子任务数限额 (maxSubRuns: 2)
     // 启动长时间运行的动作
     const slowAction = defineAction({
-      id: "slow",
       run: async () => {
         await new Promise((resolve) => setTimeout(resolve, 150));
         return { finished: true };
       },
     });
-    (app.executionService as any).registerAction(slowAction);
+    (app.executionService as any).registerAction("slow", slowAction);
 
     const rootRunId = "root-limit-test";
     app.storage.createRun({
@@ -528,7 +539,6 @@ actions:
   it("支持 cancelRun 任务取消、events 事件流订阅与 close 优雅收尾", async () => {
     let cancelled = false;
     const longAction = defineAction({
-      id: "long-task",
       run: async (_input: unknown, ctx: ActionContext) => {
         ctx.log.info("long task running");
         ctx.signal.addEventListener("abort", () => {
@@ -549,7 +559,7 @@ actions:
       packages: [
         {
           projectConfig: { id: "pkg.lifecycle", name: "生命周期包", version: "1.0.0" },
-          actions: [longAction],
+          actions: { "long-task": longAction },
           inMemory: true,
         },
       ],

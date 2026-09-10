@@ -41,7 +41,15 @@ import {
 } from "../profile/client";
 import { normalizeServerUrl } from "../profile/manager";
 import type { StateEntry } from "../storage/types";
-import type { ActionDockTarget, ListRunsOptions, RemoteTargetOptions } from "./types";
+import {
+  ACTIONDOCK_PROTOCOL_VERSION,
+  type ActionDockTarget,
+  type ConfigValueView,
+  type ListRunsOptions,
+  type RemoteTargetOptions,
+  type StateScopeOptions,
+  type TargetInfo,
+} from "./types";
 
 /**
  * 读取并解析远端 SSE 事件流。
@@ -165,13 +173,33 @@ export class RemoteActionDockTarget implements ActionDockTarget {
     this.timeoutMs = options.timeoutMs;
   }
 
-  async info(): Promise<PackageInfo | PackageInfo[]> {
+  async info(): Promise<TargetInfo> {
     const raw = await fetchRemoteInfo(this.serverUrl, this.token);
-    if (Array.isArray(raw)) return raw;
-    if (raw && typeof raw === "object" && "packages" in raw) {
-      return Object.values(raw.packages);
+    let packages: PackageInfo[] = [];
+    if (Array.isArray(raw)) {
+      packages = raw;
+    } else if (raw && typeof raw === "object") {
+      if (Array.isArray(raw.packages)) {
+        packages = raw.packages;
+      } else if (raw.packages && typeof raw.packages === "object") {
+        packages = Object.values(raw.packages);
+      }
     }
-    return raw;
+    return {
+      id: (raw && typeof raw === "object" && raw.id) || "remote-target",
+      name: (raw && typeof raw === "object" && raw.name) || "Remote ActionDock Server",
+      protocolVersion: (raw && typeof raw === "object" && raw.protocolVersion) || ACTIONDOCK_PROTOCOL_VERSION,
+      packages,
+      capabilities: (raw && typeof raw === "object" && Array.isArray(raw.capabilities))
+        ? raw.capabilities
+        : ["actions", "playbooks", "runs", "events", "management.config", "management.state"],
+      idempotencyPolicy: raw && typeof raw === "object" ? raw.idempotencyPolicy : undefined,
+    };
+  }
+
+  async listPackages(): Promise<PackageInfo[]> {
+    const info = await this.info();
+    return info.packages;
   }
 
   async listActions(options?: ListActionsOptions): Promise<ActionSummary[]> {
@@ -445,10 +473,20 @@ export class RemoteActionDockTarget implements ActionDockTarget {
     yield* streamRemoteEvents(this.serverUrl, runId, this.token, options);
   }
 
-  async getConfig(packageId: string, key: string): Promise<any> {
+  async getConfig(packageId: string, key: string): Promise<ConfigValueView> {
     try {
-      const res = await fetchRemoteConfig(this.serverUrl, this.token, packageId || undefined);
-      return res?.values?.[key];
+      const list = await this.listConfig(packageId);
+      const found = list.find((c) => c.key === key);
+      if (found) {
+        return found;
+      }
+      return {
+        key,
+        configured: false,
+        secret: false,
+        source: "default",
+        value: undefined,
+      };
     } catch (err: any) {
       wrapRemoteError(err);
     }
@@ -471,23 +509,37 @@ export class RemoteActionDockTarget implements ActionDockTarget {
     }
   }
 
-  async listConfig(packageId: string): Promise<Record<string, any>> {
+  async listConfig(packageId: string): Promise<ConfigValueView[]> {
     try {
       const res = await fetchRemoteConfig(this.serverUrl, this.token, packageId || undefined);
-      return res?.values || {};
+      if (Array.isArray(res)) return res;
+      if (Array.isArray(res?.items)) return res.items;
+      if (Array.isArray(res?.config)) return res.config;
+      const values = res?.values || {};
+      const declared = res?.declared || {};
+      const defaultSource: "global" | "package" = packageId === "global" ? "global" : "package";
+      return Object.entries(values).map(([k, v]) => ({
+        key: k,
+        configured: v !== undefined,
+        secret: Boolean(declared[k]?.secret),
+        source: defaultSource,
+        value: v as JsonValue,
+      }));
     } catch (err: any) {
       wrapRemoteError(err);
     }
   }
 
-  async getState<T = JsonValue>(
+  async getState<T extends JsonValue = JsonValue>(
     packageId: string,
+    actionId: string,
     key: string,
-    options?: any
+    options?: StateScopeOptions
   ): Promise<T | undefined> {
     try {
       const res = await getRemoteStateKey(this.serverUrl, key, this.token, {
         package: packageId || undefined,
+        action: actionId || undefined,
         namespace: options?.namespace,
       });
       if (res === undefined) return undefined;
@@ -504,15 +556,17 @@ export class RemoteActionDockTarget implements ActionDockTarget {
     }
   }
 
-  async setState<T = JsonValue>(
+  async setState<T extends JsonValue = JsonValue>(
     packageId: string,
+    actionId: string,
     key: string,
     value: T,
-    options?: any
+    options?: StateScopeOptions
   ): Promise<void> {
     try {
       await setRemoteStateKey(this.serverUrl, key, value, this.token, {
         package: packageId || undefined,
+        action: actionId || undefined,
         namespace: options?.namespace,
         ttl: options?.ttl,
       });
@@ -523,12 +577,14 @@ export class RemoteActionDockTarget implements ActionDockTarget {
 
   async deleteState(
     packageId: string,
+    actionId: string,
     key: string,
-    options?: any
+    options?: StateScopeOptions
   ): Promise<boolean> {
     try {
       const res = await deleteRemoteStateKey(this.serverUrl, key, this.token, {
         package: packageId || undefined,
+        action: actionId || undefined,
         namespace: options?.namespace,
       });
       return Boolean(res?.deleted ?? true);
@@ -543,11 +599,13 @@ export class RemoteActionDockTarget implements ActionDockTarget {
 
   async listStateKeys(
     packageId: string,
-    options?: any
+    actionId: string,
+    options?: StateScopeOptions
   ): Promise<string[]> {
     try {
       const res = await fetchRemoteStateList(this.serverUrl, this.token, {
         package: packageId || undefined,
+        action: actionId || undefined,
         namespace: options?.namespace,
         prefix: options?.prefix,
       });
@@ -559,11 +617,13 @@ export class RemoteActionDockTarget implements ActionDockTarget {
 
   async clearState(
     packageId: string,
-    options?: any
+    actionId: string,
+    options?: StateScopeOptions
   ): Promise<number> {
     try {
       const res = await clearRemoteState(this.serverUrl, this.token, {
         package: packageId || undefined,
+        action: actionId || undefined,
         namespace: options?.namespace,
         prefix: options?.prefix,
         all: options?.all,

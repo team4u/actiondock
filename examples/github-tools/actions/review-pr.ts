@@ -1,5 +1,5 @@
 import { defineAction } from "@actiondock/sdk";
-import getPrAction, { type GetPrInput, type GetPrOutput } from "./get-pr";
+import type { GetPrInput, GetPrOutput } from "./get-pr.ts";
 
 /**
  * 审查 Pull Request 的输入参数接口。
@@ -30,7 +30,7 @@ export default defineAction(async (input: ReviewPrInput, ctx): Promise<ReviewPrO
   ctx.log.info(`Initiating review for ${input.repo}#${input.pullNumber}`);
 
   // Action 组合：调用 get-pr 动作
-  const pr = await ctx.actions.invoke(getPrAction, {
+  const pr = await ctx.actions.invoke<GetPrInput, GetPrOutput>("get-pr", {
     repo: input.repo,
     pullNumber: input.pullNumber,
   });

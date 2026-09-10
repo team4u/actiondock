@@ -208,22 +208,6 @@ Execute build and then deploy artifact.
 
   it("支持 runAction 同步执行与 startAction 异步执行及任务票据", async () => {
     const sumAction = defineAction({
-      id: "math.sum",
-      description: "Sum numbers",
-      inputSchema: {
-        type: "object",
-        properties: {
-          x: { type: "number" },
-          y: { type: "number" },
-        },
-        required: ["x", "y"],
-      },
-      outputSchema: {
-        type: "object",
-        properties: {
-          result: { type: "number" },
-        },
-      },
       run(input: { x: number; y: number }) {
         return { result: input.x + input.y };
       },
@@ -234,8 +218,30 @@ Execute build and then deploy artifact.
         id: "test.app",
         name: "Test App",
         version: "1.0.0",
+        actions: {
+          "math.sum": {
+            entry: "",
+            description: "Sum numbers",
+            inputSchema: {
+              type: "object",
+              properties: {
+                x: { type: "number" },
+                y: { type: "number" },
+              },
+              required: ["x", "y"],
+            },
+            outputSchema: {
+              type: "object",
+              properties: {
+                result: { type: "number" },
+              },
+            },
+          },
+        },
       },
-      actions: [sumAction],
+      actions: {
+        "math.sum": sumAction,
+      },
       inMemory: true,
     });
 
@@ -279,7 +285,6 @@ Execute build and then deploy artifact.
   it("支持 cancelRun 取消执行与 events 事件流订阅", async () => {
     let cancelled = false;
     const longRunningAction = defineAction({
-      id: "test.long",
       async run(_input: unknown, ctx: ActionContext) {
         ctx.log.info("task starting");
         ctx.signal.addEventListener("abort", () => {
@@ -302,7 +307,9 @@ Execute build and then deploy artifact.
         name: "Cancel App",
         version: "1.0.0",
       },
-      actions: [longRunningAction],
+      actions: {
+        "test.long": longRunningAction,
+      },
       inMemory: true,
     });
 
@@ -435,7 +442,6 @@ Execute build and then deploy artifact.
     };
 
     const dummyAction = defineAction({
-      id: "dummy",
       run: async () => ({ success: true }),
     });
 
@@ -446,7 +452,7 @@ Execute build and then deploy artifact.
         version: "1.0.0",
       },
       storage,
-      actions: [dummyAction],
+      actions: { dummy: dummyAction },
       inMemory: true,
     });
 

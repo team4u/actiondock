@@ -253,11 +253,11 @@ export interface ProcessAPI {
 export interface ActionInvoker {
   /**
    * 调用指定的 Action 并传入参数，返回其执行结果
-   * @param action 目标 Action 定义对象、引用或标识符
+   * @param action 目标 Action 引用或标识符（严格只接受 ActionRef 或 string）
    * @param input 传递给目标 Action 的输入参数
    */
   invoke<I = unknown, O = unknown>(
-    action: ActionDefinition<I, O> | ActionRef | string,
+    action: ActionRef | string,
     input?: I
   ): Promise<O>;
 }
@@ -290,11 +290,12 @@ export interface ActionContext {
 
 /**
  * Action 动作定义契约。
+ * 剥离 ActionContract 冗余属性，仅保留核心执行处理函数。
  */
-export interface ActionDefinition<I = unknown, O = unknown> extends ActionContract {
+export interface ActionDefinition<I = unknown, O = unknown> {
   /**
    * Action 的核心业务执行函数
-   * @param input 符合 inputSchema 契约的输入数据
+   * @param input 输入参数数据
    * @param ctx 运行时上下文对象
    */
   run(input: I, ctx: ActionContext): Promise<O> | O;

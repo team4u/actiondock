@@ -25,12 +25,83 @@ import type { RuntimePlatform } from "../platform/types";
 import type { StateEntry } from "../storage/types";
 
 /**
+ * 统一协议版本常量。
+ */
+export const ACTIONDOCK_PROTOCOL_VERSION = "2.0";
+
+/**
+ * 幂等性保留策略。
+ */
+export interface IdempotencyPolicy {
+  /** 去重记录保留时长（毫秒） */
+  retentionMs?: number;
+  /** 去重请求头标识字段名 */
+  header?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * 统一目标自省元数据信息。
+ */
+export interface TargetInfo {
+  /** 目标宿主唯一标识 */
+  id: string;
+  /** 目标宿主名称 */
+  name: string;
+  /** 统一通信协议版本 */
+  protocolVersion: string;
+  /** 已加载或已发现的包清单 */
+  packages: PackageInfo[];
+  /** 服务端声明的能力集合 */
+  capabilities: string[];
+  /** 去重记录保留与幂等策略 */
+  idempotencyPolicy?: IdempotencyPolicy;
+  [key: string]: unknown;
+}
+
+/**
+ * 配置项安全视图契约。
+ * 屏蔽敏感配置原文，仅暴露是否已配置、是否为秘密及实际解析来源。
+ */
+export interface ConfigValueView {
+  /** 配置项键名 */
+  key: string;
+  /** 是否已显式配置或存在有效值 */
+  configured: boolean;
+  /** 是否为秘密敏感配置 */
+  secret: boolean;
+  /** 配置值实际解析来源 */
+  source: string;
+  /** 非秘密配置的实际数据值 */
+  value?: JsonValue;
+}
+
+/**
+ * 状态作用域与筛选控制选项。
+ */
+export interface StateScopeOptions {
+  /** 显式子命名空间（相对于 Action 根命名空间） */
+  namespace?: string;
+  /** 存活有效期（秒），仅在写入状态时生效 */
+  ttl?: number;
+  /** 键名前缀过滤匹配 */
+  prefix?: string;
+  /** 是否清空所有条目 */
+  all?: boolean;
+  /** 是否返回完整条目详情 */
+  detail?: boolean;
+}
+
+/**
  * ActionDockTarget 统一调用门面契约。
  * 为 CLI、SDK 及扩展系统屏蔽本地执行与远程调用的物理拓扑差异。
  */
 export interface ActionDockTarget {
-  /** 获取目标包或集群的元数据信息 */
-  info(): Promise<PackageInfo | PackageInfo[]>;
+  /** 获取统一目标自省元数据信息 */
+  info(): Promise<TargetInfo>;
+
+  /** 列出目标所有已加载的包清单 */
+  listPackages(): Promise<PackageInfo[]>;
 
   /** 静态列出目标所有可用的 Action 摘要 */
   listActions(options?: ListActionsOptions): Promise<ActionSummary[]>;
@@ -76,8 +147,8 @@ export interface ActionDockTarget {
     options?: { after?: number; signal?: AbortSignal }
   ): AsyncIterable<ExecutionEvent>;
 
-  /** 获取指定包的单项配置值 */
-  getConfig(packageId: string, key: string): Promise<any>;
+  /** 获取指定包的单项配置安全视图 */
+  getConfig(packageId: string, key: string): Promise<ConfigValueView>;
 
   /** 写入或覆盖指定包的配置项 */
   setConfig(packageId: string, key: string, value: JsonValue): Promise<void>;
@@ -85,23 +156,47 @@ export interface ActionDockTarget {
   /** 删除指定包的指定配置项 */
   deleteConfig(packageId: string, key: string): Promise<boolean>;
 
-  /** 列出指定包所有已配置的键值字典 */
-  listConfig(packageId: string): Promise<Record<string, any>>;
+  /** 列出指定包所有配置项的安全视图列表 */
+  listConfig(packageId: string): Promise<ConfigValueView[]>;
 
-  /** 获取指定包的状态项值 */
-  getState<T = JsonValue>(packageId: string, key: string, options?: any): Promise<T | undefined>;
+  /** 获取指定包指定动作的作用域状态值 */
+  getState<T extends JsonValue = JsonValue>(
+    packageId: string,
+    actionId: string,
+    key: string,
+    options?: StateScopeOptions
+  ): Promise<T | undefined>;
 
-  /** 写入指定包的状态项值 */
-  setState<T = JsonValue>(packageId: string, key: string, value: T, options?: any): Promise<void>;
+  /** 写入指定包指定动作的作用域状态值 */
+  setState<T extends JsonValue = JsonValue>(
+    packageId: string,
+    actionId: string,
+    key: string,
+    value: T,
+    options?: StateScopeOptions
+  ): Promise<void>;
 
-  /** 删除指定包的状态项 */
-  deleteState(packageId: string, key: string, options?: any): Promise<boolean>;
+  /** 删除指定包指定动作的作用域状态项 */
+  deleteState(
+    packageId: string,
+    actionId: string,
+    key: string,
+    options?: StateScopeOptions
+  ): Promise<boolean>;
 
-  /** 列出指定包在存储中的状态键名列表 */
-  listStateKeys?(packageId: string, options?: any): Promise<string[]>;
+  /** 列出指定包指定动作在存储中的状态键名列表 */
+  listStateKeys(
+    packageId: string,
+    actionId: string,
+    options?: StateScopeOptions
+  ): Promise<string[]>;
 
-  /** 清空指定包在存储中的状态条目 */
-  clearState?(packageId: string, options?: any): Promise<number>;
+  /** 清空指定包指定动作在存储中的状态条目 */
+  clearState(
+    packageId: string,
+    actionId: string,
+    options?: StateScopeOptions
+  ): Promise<number>;
 
   /** 列出指定包在存储中的状态条目（含完整元数据） */
   listStateEntries?(packageId: string, options?: any): Promise<StateEntry[]>;

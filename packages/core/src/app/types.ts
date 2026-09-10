@@ -180,7 +180,10 @@ export interface ActionDockAppOptions {
   /** 是否采用纯内存运行模式 */
   inMemory?: boolean;
   /** 显式注入或预注册的 Action 集合 */
-  actions?: Map<string, ActionDefinition> | ActionDefinition[];
+  actions?:
+    | Map<string, ActionDefinition>
+    | Array<{ id: string; action: ActionDefinition } | (ActionDefinition & { id: string })>
+    | Record<string, ActionDefinition>;
   /** 跨包或动态 Action 解析器 */
   actionResolver?: (ref: ActionRef | string) => ActionDefinition | undefined | Promise<ActionDefinition | undefined>;
   /** 跨包运行上下文解析委托函数 */

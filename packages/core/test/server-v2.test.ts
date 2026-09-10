@@ -14,30 +14,10 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
 
   beforeAll(async () => {
     const calcAction = defineAction({
-      id: "calc",
-      description: "算术计算动作",
-      tags: ["math", "core"],
-      inputSchema: {
-        type: "object",
-        properties: {
-          x: { type: "number" },
-          y: { type: "number" },
-        },
-        required: ["x", "y"],
-      },
-      outputSchema: {
-        type: "object",
-        properties: {
-          result: { type: "number" },
-        },
-      },
       run: (input: { x: number; y: number }) => ({ result: input.x + input.y }),
     });
 
     const longTaskAction = defineAction({
-      id: "long-task",
-      description: "异步长时间任务",
-      tags: ["task"],
       run: async (_input: unknown, ctx: ActionContext) => {
         for (let i = 0; i < 20; i++) {
           if (ctx.signal.aborted) {
@@ -55,6 +35,32 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         name: "Math Package",
         version: "2.0.0",
         description: "Math utilities package",
+        actions: {
+          calc: {
+            entry: "",
+            description: "算术计算动作",
+            tags: ["math", "core"],
+            inputSchema: {
+              type: "object",
+              properties: {
+                x: { type: "number" },
+                y: { type: "number" },
+              },
+              required: ["x", "y"],
+            },
+            outputSchema: {
+              type: "object",
+              properties: {
+                result: { type: "number" },
+              },
+            },
+          },
+          "long-task": {
+            entry: "",
+            description: "异步长时间任务",
+            tags: ["task"],
+          },
+        },
         playbooks: {
           "calc-sop": {
             description: "计算规程",
@@ -63,7 +69,10 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
           },
         } as any,
       },
-      actions: [calcAction, longTaskAction],
+      actions: {
+        calc: calcAction,
+        "long-task": longTaskAction,
+      },
       inMemory: true,
     });
 

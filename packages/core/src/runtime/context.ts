@@ -198,7 +198,7 @@ export interface ContextOptions {
   progress?: ProgressReporter;
   logger?: Logger;
   onActionInvoke?: (
-    action: ActionDefinition | ActionRef | string,
+    action: ActionRef | string,
     input: unknown,
     parentRunId?: string
   ) => Promise<unknown>;
@@ -225,12 +225,22 @@ export function createActionContext(options: ContextOptions): ActionContext {
 
   const invoker: ActionInvoker = {
     async invoke<I, O>(
-      action: ActionDefinition<I, O> | ActionRef | string,
+      action: ActionRef | string,
       input?: I
     ): Promise<O> {
+      if (
+        typeof action !== "string" &&
+        (!action || typeof action !== "object" || typeof (action as any).run === "function" || !("actionId" in action))
+      ) {
+        const err = new Error(
+          "INVALID_ACTION_REF: ctx.actions.invoke strictly accepts only ActionRef or string, passing ActionDefinition or function is prohibited"
+        );
+        (err as any).code = "INVALID_ACTION_REF";
+        throw err;
+      }
       if (options.onActionInvoke) {
         return (await options.onActionInvoke(
-          action as any,
+          action,
           input,
           currentRunId
         )) as O;

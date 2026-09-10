@@ -18,7 +18,13 @@ export interface StandaloneRuntimeOptions {
   /** 声明的配置依赖定义 */
   config?: Record<string, ConfigItemDefinition>;
   /** 打包内置的 Action 动作定义列表 */
-  actions: ActionDefinition[];
+  actions:
+    | Map<string, ActionDefinition>
+    | Array<
+        | ({ id: string; action: ActionDefinition } & Partial<ActionSpec>)
+        | (ActionDefinition & { id: string })
+      >
+    | Record<string, ActionDefinition>;
 }
 
 /**
@@ -35,13 +41,51 @@ export class StandaloneRuntime {
   private description?: string;
   private configDefs?: Record<string, ConfigItemDefinition>;
   private actionsMap: Map<string, ActionDefinition>;
+  private actionSpecs: Record<string, ActionSpec>;
 
   constructor(options: StandaloneRuntimeOptions) {
     this.packageId = options.packageId;
     this.version = options.version;
     this.description = options.description;
     this.configDefs = options.config;
-    this.actionsMap = new Map(options.actions.map((a) => [a.id, a]));
+    this.actionsMap = new Map();
+    this.actionSpecs = {};
+
+    if (options.actions instanceof Map) {
+      for (const [k, v] of options.actions) {
+        this.actionsMap.set(k, v);
+        this.actionSpecs[k] = {
+          id: k,
+          description: (v as any).description,
+          inputSchema: (v as any).inputSchema,
+          outputSchema: (v as any).outputSchema,
+        };
+      }
+    } else if (Array.isArray(options.actions)) {
+      for (const item of options.actions as any[]) {
+        const id = item.id;
+        const act = item.action ?? item;
+        if (id) {
+          this.actionsMap.set(id, act);
+          this.actionSpecs[id] = {
+            id,
+            description: item.description ?? act.description,
+            inputSchema: item.inputSchema ?? act.inputSchema,
+            outputSchema: item.outputSchema ?? act.outputSchema,
+          };
+        }
+      }
+    } else {
+      for (const [k, v] of Object.entries(options.actions || {})) {
+        this.actionsMap.set(k, v);
+        this.actionSpecs[k] = {
+          id: k,
+          description: (v as any).description,
+          inputSchema: (v as any).inputSchema,
+          outputSchema: (v as any).outputSchema,
+        };
+      }
+    }
   }
 
   /**
@@ -85,6 +129,7 @@ export class StandaloneRuntime {
         version: this.version,
         description: this.description,
         config: this.configDefs,
+        actions: this.actionSpecs as any,
       },
       actions: this.actionsMap,
       dataDir,

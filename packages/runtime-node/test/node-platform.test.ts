@@ -90,12 +90,13 @@ describe("createNodePlatform 平台工厂测试", () => {
       expect(result.stdout.trim()).toBe("hello from node");
     });
 
-    it("模块加载驱动能够基于 TsxModuleLoader 正常解析", async () => {
+    it("模块加载驱动能够基于 NodeModuleLoader 正常解析带扩展名模块并拒绝无扩展名", async () => {
       const platform = createNodePlatform({ rootDir: tempDir });
       const fooFile = join(tempDir, "foo.ts");
       await platform.files.writeFile(fooFile, "export const val = 42;");
-      const resolved = platform.modules.resolve?.("./foo", join(tempDir, "index.ts"));
+      const resolved = platform.modules.resolve?.("./foo.ts", join(tempDir, "index.ts"));
       expect(resolved).toBe(fooFile);
+      expect(() => platform.modules.resolve?.("./foo", join(tempDir, "index.ts"))).toThrow();
     });
   });
 
@@ -179,8 +180,6 @@ describe("createNodePlatform 平台工厂测试", () => {
         customHome: tempDir,
       });
       const testAction = defineAction({
-        id: "echo-action",
-        description: "Node 平台测试动作",
         run: async (_input, ctx) => {
           await ctx.state.set("executed", true);
           return {
@@ -195,7 +194,7 @@ describe("createNodePlatform 平台工厂测试", () => {
         platform,
       });
 
-      service.registerAction(testAction);
+      service.registerAction("echo-action", testAction);
 
       const ticket = await service.start("echo-action", {});
       const result = await ticket.result!;

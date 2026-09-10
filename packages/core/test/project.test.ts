@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, 
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { initProject } from "../src/project/init";
+import { loadManifest } from "../src/project/manifest";
 import {
   ALLOWED_INSTALLERS,
   computeDependencyFingerprint,
@@ -63,8 +64,12 @@ describe("Project Loader & Init", () => {
     expect(actions.size).toBe(1);
     expect(actions.has("sample.greet")).toBe(true);
     const greetAction = actions.get("sample.greet");
-    expect(greetAction?.description).toBe("Greeting action demonstrating basic input, config, and state usage");
-    expect(greetAction?.inputSchema).toBeDefined();
+    expect(greetAction).toBeDefined();
+    expect(typeof greetAction?.run).toBe("function");
+
+    const greetSpec = config.actions?.["sample.greet"];
+    expect(greetSpec?.description).toBe("Greeting action demonstrating basic input, config, and state usage");
+    expect(greetSpec?.inputSchema).toBeDefined();
 
     const playbooks = loadPlaybooks(tempDir, config.playbooksDir);
     expect(playbooks.size).toBe(1);
@@ -121,12 +126,14 @@ Follow these steps carefully.
     expect(loadedActions.size).toBe(1);
     const addAction = loadedActions.get("calc.add");
     expect(addAction).toBeDefined();
-    expect(addAction?.id).toBe("calc.add");
-    expect(addAction?.description).toBe("Add numbers (from actiondock.json)");
-    expect(addAction?.tags).toEqual(["math", "fast"]);
-    expect(addAction?.uses).toEqual(["other.pkg/act"]);
-    expect(addAction?.inputSchema).toEqual({ type: "object", properties: { a: { type: "number" } } });
     expect(typeof addAction?.run).toBe("function");
+
+    const manifest = loadManifest(tempDir);
+    const addSpec = manifest?.actions?.["calc.add"];
+    expect(addSpec?.description).toBe("Add numbers (from actiondock.json)");
+    expect(addSpec?.tags).toEqual(["math", "fast"]);
+    expect(addSpec?.uses).toEqual(["other.pkg/act"]);
+    expect(addSpec?.inputSchema).toEqual({ type: "object", properties: { a: { type: "number" } } });
   });
 
   it("handles ensureProjectDependencies correctly", () => {

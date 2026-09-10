@@ -21,23 +21,23 @@ ActionDock 2.0 原生 Node.js 运行时适配器包。
 - 提供同步事务处理，在回调函数抛出异常时自动回滚。
 - 事务执行过程中严格拦截并拒绝异步 Promise，防止底层锁泄漏。
 
-### ExecaProcessExecutor
+### NodeProcessExecutor
 
-基于 `execa` 封装的统一进程执行器：
+基于 Node.js 原生 `node:child_process` 实现的统一进程执行器：
 
 - 完整实现 `@actiondock/core` 定义的 `ProcessExecutor` 接口。
 - 支持指定工作目录、环境变量合并以及向子进程标准输入流写入数据。
-- 完整支持执行超时定时器与基于 `AbortSignal` 的外部信号取消。
+- 完整支持执行超时定时器与基于 `AbortSignal` 的外部信号取消，并采用进程树终止策略杜绝孤儿进程。
 - 内置标准输出缓冲区阈值保护，超过指定字节数时安全截断并强行终止子进程，防止内存溢出。
 - 支持启动后台守护进程，解耦标准输入输出并基于就绪探针函数轮询运行状态。
 
-### TsxModuleLoader
+### NodeModuleLoader
 
-基于 `tsx` 的 TypeScript 动态模块加载器：
+基于 Node.js 原生 ESM 动态 `import()` 的源码模块加载器：
 
-- 原生支持按需加载未编译的 TypeScript 模块（`.ts`、`.tsx`、`.mts`）。
-- 自动解析相对路径、候选文件扩展名与目录索引入口。
-- 智能提取模块导出，自动解包 CommonJS 与 ES Module 混合规范下的默认导出。
+- 严格要求显式入口扩展名（支持 `.ts`、`.mts`、`.js`、`.mjs`）。
+- 彻底拒绝无扩展名自动补全与 CommonJS 目录索引解析。
+- 智能提取模块导出，自动解包框架约定的默认导出。
 
 ### NodeHttpServer
 

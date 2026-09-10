@@ -301,7 +301,7 @@ CLI、HTTP、MCP 和独立入口都不能绕过 Host 的依赖检查和 App 的�
 | `@actiondock/core` | Manifest 模型、包解析契约、`ActionDockApp`、`ActionDockHost`、执行内核、存储接口、Schema 校验和错误模型 | Node 具体 API、命令解析、HTTP/MCP 协议、构建产物编译 |
 | `@actiondock/runtime-node` | Node SQLite、`node:child_process`、原生模块加载、Node HTTP 服务器和 Node 平台组合器 | 业务执行、包发现和 CLI 命令 |
 | `@actiondock/testing` | `MemoryStorage`、`FakeClock`、Mock Process、测试平台和测试断言辅助 | 生产默认实现、全局测试注入器 |
-| `@actiondock/builder` | npm Action 包打包、声明式 `SelectionPlanner`、Node 目录型构建、轻量入口模板和 Skill 导出 | TypeScript AST 模块扫描、单文件可执行程序编译、运行时执行、交互式 CLI 命令注册 |
+| `@actiondock/builder` | `ad pack` 的 npm Action 包打包、声明式 `SelectionPlanner`、Node 目录型构建、轻量入口模板和 Skill 导出 | TypeScript AST 模块扫描、单文件可执行程序编译、运行时执行、交互式 CLI 命令注册 |
 | `@actiondock/mcp` | 将 `ActionDockTarget` 映射为 MCP Tool、Task、Resource 和取消处理 | 项目发现、存储、Action 加载器、`ExecutionService` 初始化 |
 | `@actiondock/cli` | `ad` 命令、Profile、开发链接、HTTP 客户端和服务器适配、构建与导出命令、渲染 | 重新实现 Action 执行语义 |
 
@@ -456,6 +456,7 @@ Builder 在构建期生成不依赖 Commander 的轻量监督入口和 Host 子�
 - `dependencies` 只声明外部 Action 包的逻辑 ID 到 npm 包名的映射。允许的版本范围来自 `package.json`，精确版本和完整性摘要分别由包管理器锁文件与 `actiondock.lock.json` 保存。
 - `package.json.engines.node` 描述必要的 Node 版本约束，`package.json.type` 和 `exports` 描述模块格式与发布入口。发布的 Action 包还必须通过 `exports` 暴露 `./actiondock.json`，让解析器使用标准 Node 解析找到 Manifest，而不是遍历猜测 `node_modules` 物理布局。Host 在导入 Action 前校验这些约束。
 - `config.<key>.allowInvocationOverride` 默认为 `false`。只有显式允许的键才能被单次调用覆盖；网络调用还必须具有对应执行权限。秘密配置不能仅凭请求参数覆盖。
+- `secret: true` 的配置项不得声明 `default`，因为 Manifest 会随 npm 包、构建目录和 Skill 分发。秘密值只能来自显式环境变量、持久化配置存储或获授权的单次覆盖，不能写入可分发元数据。
 
 ### Action 实现
 
@@ -511,7 +512,9 @@ Playbook 文件是没有 frontmatter 的 Markdown。其元数据、入口和 Act
 - 包管理器锁文件和 `actiondock.lock.json` 共同指定的精确实例、来源和完整性摘要。
 - 仅在开发命令显式启用时使用 `ad link` 的本地覆盖。链接信息属于开发状态，不写入可移植产物，也不能替代发布依赖。
 
-索引包含完整传递依赖闭包，但不会自动把闭包中的每个包暴露为 Target 能力。当前包、`actiondock.json.dependencies` 中的直接依赖和宿主显式配置的公开包可以被列出和根调用。可见 Playbook 在 `actions` 中引用的传递 Action 也作为精确的委托能力对外可见，使 Agent 能实际执行该规程；这只公开被点名的 Action，不公开目标包的其他能力。除此之外，仅作为传递依赖进入索引的包默认只能承接已声明的 `uses`。需要任意直接运行某个传递包时，用户通过 `ad add` 把它提升为当前项目的直接依赖。
+索引包含完整传递依赖闭包，但不会自动把闭包中的每个包暴露为 Target 能力。当前包、`actiondock.json.dependencies` 中的直接依赖和宿主显式配置的公开包可以被列出和根调用。只有这些公开包声明的 Playbook 才是可见 Playbook；仅作为传递依赖进入索引的包，其 Playbook 不会自行出现在能力列表中。
+
+可见 Playbook 在 `actions` 中引用的传递 Action 作为精确的委托能力对外可见，使 Agent 能实际执行该规程。委托只公开 Playbook 直接点名的 Action，不公开目标包的其他 Action，也不递归公开被委托 Action 的 `uses`。除此之外，仅作为传递依赖进入索引的包默认只能承接已声明的级联调用。需要任意直接运行某个传递包时，用户通过 `ad add` 把它提升为当前项目的直接依赖。
 
 运行期间不根据 `uses` 自动从网络下载包。缺少安装包时，解析器返回可诊断错误并提示安装入口，例如 `ad add @someone/actiondock-github-actions`；它不会静默使用全局目录或旧版本。
 
@@ -523,7 +526,7 @@ ad validate
 ad run someone.github-actions/get-pr --input '{"repo":"team4u/action-dock","pullNumber":42}'
 ```
 
-`ad add <npm-package>` 获取并校验依赖包的 `actiondock.json`，确认 npm 包名、逻辑包 ID 和版本范围后，再调用项目选定的包管理器安装依赖。安装脚本默认禁用；只有用户显式传入 `--allow-install-scripts` 时才允许执行，并在确认信息和项目操作日志中显示即将执行第三方代码。Action 包必须发布可直接加载的 JavaScript，不能把安装脚本当作必要编译步骤。
+`ad add <npm-package>` 获取并校验依赖包的 `actiondock.json`，确认 npm 包名、逻辑包 ID 和版本范围后，再调用项目选定的包管理器安装依赖。安装脚本默认禁用；只有用户显式传入 `--allow-install-scripts` 时才允许执行。执行前必须列出解析闭包中将运行脚本的包名、版本和脚本阶段，确认信息与项目操作日志都要记录这次第三方代码执行。Action 包必须发布可直接加载的 JavaScript，不能把安装脚本当作必要编译步骤。
 
 `ad add` 同时更新 `package.json.dependencies`、`actiondock.json.dependencies`、包管理器锁文件和 `actiondock.lock.json`。根项目的 `actiondock.lock.json` 记录完整 Action 包闭包，不依赖外部包自带的锁文件决定最终版本；传递包的 Manifest 与 `package.json` 只提供逻辑映射和版本范围。解析器按依赖图收敛版本，无法为同一逻辑包 ID 选出唯一版本时在写文件前失败。
 
@@ -887,7 +890,7 @@ await serveParentIpc(target);
 
 `ad pack` 面向要通过 npm 共享并被 `ad add` 安装的 Action 包，与面向直接部署的 `ad build`、面向 Agent 的 `ad export skill` 分开。它打包整个逻辑包，不接受按 Action 裁剪，避免同一个 npm 包名和版本因选择参数不同而对应不同内容。
 
-命令在临时目录复制 `package.json`、Manifest 声明的文件与资产，使用项目声明的 TypeScript `>=5.8` 编译源码，生成只指向 JavaScript 的临时 `actiondock.json`，并校验生产依赖、`engines.node` 和 `exports["./actiondock.json"]`。JavaScript 项目跳过编译，Builder 自身不内置另一份 TypeScript 编译器。随后由 `npm pack` 生成标准 npm 压缩包，并输出文件清单、包摘要和 Manifest 摘要。临时目录和压缩包都不得包含开发配置、事务日志、运行数据或未声明文件；命令结束后删除临时目录，压缩包保留给调用方审阅或交给其发布流水线。
+命令在临时目录复制 `package.json`、Manifest 声明的文件与资产，使用项目声明的 TypeScript `>=5.8` 编译源码，生成只指向 JavaScript 的临时 `actiondock.json`，并校验生产依赖、`engines.node` 和 `exports["./actiondock.json"]`。JavaScript 项目跳过编译，Builder 自身不内置另一份 TypeScript 编译器。随后通过禁用生命周期脚本的 `npm pack` 生成标准 npm 压缩包，并输出文件清单、包摘要和 Manifest 摘要；需要预生成的文件必须在调用 `ad pack` 前已经存在并被 Manifest 声明，打包过程不隐式执行项目脚本。临时目录和压缩包都不得包含开发配置、事务日志、运行数据或未声明文件；命令结束后删除临时目录，压缩包保留给调用方审阅或交给其发布流水线。
 
 ### SelectionPlanner
 
@@ -929,7 +932,9 @@ Node.js 可运行交付物
 
 构建结果包含 Node 启动入口、裁剪后的 Manifest、包管理器锁文件、`actiondock.lock.json`、选中的包、业务文件和生产依赖声明。ActionDock 自身包和第三方 Action 包使用已发布的 JavaScript 入口；当前项目中满足 Node 类型擦除约束的 `.ts` Action 可以原样保留。Builder 在临时暂存目录根据选择集和锁定版本生成独立的部署 `package.json`，其中所有部署依赖都固定到已解析的精确版本；随后从已校验的源锁文件裁剪支持的锁格式。无法安全裁剪时，调用项目选定的包管理器显式生成新锁文件，并逐项核对版本与完整性摘要。最后在另一个干净目录执行冻结安装，确认安装过程不再修改锁文件。不能直接复制含 workspace 链接或未选依赖的仓库根锁文件，也不能把联网解析伪装成冻结安装。
 
-默认目录不复制当前机器的 `node_modules`。目标机器安装满足 `package.json.engines.node` 约束的 Node.js 后，先执行构建元数据中记录的冻结安装命令，例如 npm 项目使用 `npm ci --omit=dev --ignore-scripts`，再运行生成入口。需要安装脚本的生产依赖必须在构建时显式声明并经过信任确认，不能由部署端悄悄放开。`ad build --vendor-deps` 可以从干净暂存目录物化已经锁定的生产依赖，使目标机器不再执行安装；它不能复制 workspace 软链接或未锁定的本地目录。如果依赖树包含原生扩展，该模式必须记录构建操作系统、架构和 Node ABI，并拒绝在不匹配的目标上启动。两种模式都不需要 Bun、`tsx` 或全局 ActionDock CLI。
+默认目录不复制当前机器的 `node_modules`。目标机器安装满足 `package.json.engines.node` 约束的 Node.js 后，先执行构建元数据中记录的冻结安装命令，例如 npm 项目使用 `npm ci --omit=dev --ignore-scripts`，再运行生成入口。依赖必须在禁用安装脚本时即可使用；确实需要脚本生成平台相关文件的依赖只能通过内置依赖模式交付，不能由部署端悄悄放开脚本。
+
+`ad build --vendor-deps` 可以从干净暂存目录物化已经锁定的生产依赖，使目标机器不再执行安装；它不能复制 workspace 软链接或未锁定的本地目录。该过程默认继续禁用安装脚本。只有显式传入 `--allow-install-scripts`，并确认将执行脚本的包名、版本和脚本阶段后，才允许在暂存目录中执行；该信任决定同时写入操作日志和构建元数据。若依赖树包含原生扩展，该模式必须记录构建操作系统、架构和 Node ABI，并拒绝在不匹配的目标上启动。两种模式都不需要 Bun、`tsx` 或全局 ActionDock CLI。
 
 生成入口可以装载多个包，但每个包的 Manifest、配置定义、状态工厂和 Action 路由保持独立。该入口必须调用同一个 App 或 Host，不能在 Builder 中复制执行逻辑。
 
@@ -937,9 +942,9 @@ Node.js 可运行交付物
 
 ### 构建输出与校验
 
-构建目录内的元数据必须记录：选择的包和 Action、Manifest 摘要、锁文件摘要、Node.js 版本约束、是否内置依赖、是否执行安装脚本，以及内置依赖模式下的操作系统、架构与 Node ABI。实际生成时间只出现在命令运行报告中，不写入默认产物；显式提供 `SOURCE_DATE_EPOCH` 时，归档文件时间统一使用该值。目录遍历顺序、JSON 键序、文件权限、符号链接处理和压缩参数必须规范化，使相同输入得到相同摘要。
+构建目录内的元数据必须记录：选择的包和 Action、Manifest 摘要、锁文件摘要、Node.js 版本约束、是否内置依赖、是否执行安装脚本、实际执行脚本的包与阶段，以及内置依赖模式下的操作系统、架构与 Node ABI。实际生成时间只出现在命令运行报告中，不写入默认产物；显式提供 `SOURCE_DATE_EPOCH` 时，归档文件时间统一使用该值。目录遍历顺序、JSON 键序、文件权限、符号链接处理和压缩参数必须规范化，使相同输入得到相同摘要。
 
-显式允许的第三方安装脚本可能生成与时间或机器有关的文件，ActionDock 无法把它们描述为可复现输入。执行过安装脚本的构建必须在元数据中标记 `reproducible: false`；调用方要求 `--require-reproducible` 时直接失败。未执行安装脚本且输入与 `SOURCE_DATE_EPOCH` 相同的目录和归档才承诺摘要一致。
+显式允许的第三方安装脚本可能生成与时间或机器有关的文件，ActionDock 无法把它们描述为可复现输入。执行过安装脚本的构建必须在元数据中标记 `reproducible: false`；调用方同时要求 `--require-reproducible` 时，规划阶段必须在执行脚本和创建最终输出前失败。未执行安装脚本且输入与 `SOURCE_DATE_EPOCH` 相同的目录和归档才承诺摘要一致。
 
 导出前执行 Manifest 校验、入口存在性校验、依赖完整性校验和路径边界校验；构建结果中不包含未声明的密钥、测试目录或开发链接。Builder 输出最终 SHA-256，但不能只用摘要替代对锁文件与文件清单的逐项验证。
 
@@ -973,6 +978,7 @@ ActionDock 2.0 允许 Node 原生加载 `.ts`，但把运行时限制写成 `ad 
 ### 凭据、日志和状态
 
 - 框架生成的 `info`、`describe`、运行事件、错误详情和导出 Manifest 不返回 `secret` 原值，并对已知秘密执行结构化脱敏。Action 与第三方依赖和宿主进程拥有相同权限，仍可能自行读取、变换或输出秘密；脱敏机制不能被描述为阻止恶意代码外传。
+- `secret` 是访问和脱敏标记，不表示持久化值已经加密。2.0 不内置跨平台密钥管理器；数据目录、数据库和备份必须由操作系统访问控制保护。高敏感值应通过环境变量或部署平台的秘密注入机制提供，CLI 在把秘密写入本地持久化存储前必须提示这一边界。
 - Action 输入、输出和进程环境遵循宿主的日志和大小限制；超过上限返回结构化错误，不截断后伪装成功。
 - 每个包使用独立状态命名空间。跨包调用只能通过输入输出传递数据，不能借用对方的 Storage 句柄。
 - HTTP 和基于网络的 MCP 默认只监听回环地址。绑定非回环地址时若未配置鉴权，服务器拒绝启动；执行、查询和管理能力使用不同权限范围，并在进入 Host 前完成鉴权、来源限制和请求大小限制。本地 STDIO MCP 沿用父进程边界的信任模型。服务器端错误只返回稳定错误码和经过筛选的详情。
@@ -1036,6 +1042,7 @@ Action 代码、直接模块导入和 `ctx.process` 都在宿主权限下运行�
 | Node TypeScript | 使用无扩展名导入、`enum`、路径别名和未编译第三方 TS | 校验拒绝这些项目；带明确扩展名的可擦除语法项目可由 Node 原生加载 |
 | 配置和状态隔离 | 父包调用子包并分别读写同名状态键，再通过管理接口读取秘密配置 | 两个包的值互不覆盖；秘密接口只返回设置状态，原值不出现在响应、事件和运行记录 |
 | 配置与状态边界 | 写入未声明或类型错误的配置、超限状态和不存在的 Action 命名空间 | 在持久化前返回对应结构化错误；删除配置后来源正确回落，不产生越界状态 |
+| 包移除后的数据 | 为依赖包写入配置和状态后执行 `ad remove`，再使用管理权限清理对应孤立命名空间 | 移除依赖时配置和状态保持不变并被明确报告；普通查询不能越过已删除 Manifest，显式孤立数据清理只影响给定完整 ID，秘密原值不可读取 |
 | 运行持久化失败 | 分别在初始运行事务和终态事务注入存储错误 | 初始失败不返回票据也不执行 Action；终态失败不报告成功，返回既有 `runId`，后续会话将遗留记录转为中断 |
 | 存储线程退出 | 在状态写入和事件追加期间强制结束 SQLite 存储线程，再启动新 Host | 所有未完成请求以 `STORAGE_WORKER_EXITED` 失败，新请求被拒绝；新 Host 将遗留非终态运行转为中断，无请求无限等待 |
 | 存储非阻塞 | 批量写入状态和运行事件，同时运行主事件循环延迟探针 | 同步 SQLite 只在存储线程执行，主线程仍能处理取消和事件通知 |
@@ -1047,12 +1054,14 @@ Action 代码、直接模块导入和 `ctx.process` 都在宿主权限下运行�
 | 独立入口限制 | 在 Node 目录型产物中传入 `--async` | 返回 `STANDALONE_ASYNC_UNSUPPORTED`，不遗留后台任务或虚假票据 |
 | npm Action 包打包 | 对 TypeScript Action 项目执行 `ad pack`，检查压缩包后从中安装并运行 | 源项目不被改写；压缩包导出 Manifest，入口全部为 JavaScript，未包含事务、运行数据或未声明文件 |
 | 源码型 Skill 导出 | 选择 Action、Playbook 和外部包，包含本地 link 依赖 | 只复制 Manifest 声明的文件；不可移植 link 被拒绝或在 `--vendor-deps` 下被固化 |
+| Node 目录型 Skill 导出 | 对同一选择集执行 `ad export skill --mode node` 并在没有全局 CLI 的环境调用 | 复用 Node 目录型构建结果，`SKILL.md` 指向生成入口，只要求兼容 Node.js 和已声明的依赖安装步骤 |
 | 安全边界 | 尝试入口穿越、锁摘要篡改、重复包 ID 和超大进程输出 | 请求在加载或执行前失败，错误可诊断且不会扩大文件、凭据或进程访问范围 |
 | 不支持的数据 | 用目标态打开旧 Schema 数据库 | 在写事务前返回不支持错误，数据库内容保持不变 |
 | 新存储初始化 | 在空数据目录创建 Schema 时注入事务失败 | Host 拒绝启动且不存在部分可用 Schema；不触发旧数据库升级逻辑 |
 | Node 构建 | 在没有 Bun 的干净环境运行 `ad build` 和生成的启动入口 | 构建成功；目录或压缩包只要求目标 Node.js，不解析已删除的 Bun 包 |
 | 内置原生依赖 | 使用 `--vendor-deps` 构建含原生扩展的目录，再改变操作系统、架构或 Node ABI 启动 | 匹配环境可运行，不匹配环境在加载 Action 前拒绝启动 |
-| 构建可复现性 | 对相同输入构建两次目录和归档，并固定 `SOURCE_DATE_EPOCH` | 文件清单、规范化元数据与最终 SHA-256 相同，不受遍历顺序或实际生成时间影响 |
+| 构建可复现性 | 在不执行任何依赖安装脚本的前提下，对相同输入构建两次目录和归档，并固定 `SOURCE_DATE_EPOCH` | 文件清单、规范化元数据与最终 SHA-256 相同，不受遍历顺序或实际生成时间影响 |
+| 安装脚本与构建标记 | 对需要生命周期脚本的依赖执行 `ad build --vendor-deps --allow-install-scripts`，再增加 `--require-reproducible` 重试 | 显式允许时只在暂存目录执行并记录包与阶段，构建元数据标记 `reproducible: false`；要求可复现时在执行脚本和输出构建目录前失败 |
 | 打包烟雾 | 在干净目录安装所有发布包并用原生 Node 导入，再运行跨包 Action | 包入口、依赖版本、CLI 可执行文件和运行记录均可用；不依赖工作区源码路径 |
 | 发布标签隔离 | 在模拟 npm 注册表中制造中途发布失败和分发标签更新失败 | 部分版本不进入公共标签；重试校验既有摘要，标签更新失败时恢复原指针，预发布版本不覆盖 `latest` |
 
@@ -1071,7 +1080,7 @@ Action 代码、直接模块导入和 `ctx.process` 都在宿主权限下运行�
 - 先在 Core 中落地 `RuntimePlatform`、`ActionDockApp`、`ActionDockHost` 和完整执行生命周期，并把现有 CLI、测试和独立入口接到同一 App。
 - 再落地 Manifest v2、锁文件和静态校验，不提供迁移命令，删除同步机制和全量动态发现。
 - 将 Node 具体实现改为显式平台包，移除全局 Setter、`tsx` 和 `execa` 的生产路径；删除 `runtime-cli` 和 `runtime-bun`，把命令能力归还 CLI。
-- 重写 Builder 为 npm Action 包打包、声明式 SelectionPlanner、Skill 导出和 Node 目录型构建，保留跨包传递依赖闭包，删除 AST 模块扫描和 Bun 编译器。
+- 重写 Builder，实现 `ad pack` 的 npm Action 包打包、声明式 SelectionPlanner、Skill 导出和 Node 目录型构建，保留跨包传递依赖闭包，删除 AST 模块扫描和 Bun 编译器。
 - 让 HTTP、MCP、远程 Target 和独立入口完成薄适配，补齐取消、事件、鉴权和关闭路径。
 - 完成包版本、Node 构建脚本、CI、打包烟雾和发布工作流的目标包清单调整，使用统一 Git 标签发布，不实现项目迁移逻辑。
 

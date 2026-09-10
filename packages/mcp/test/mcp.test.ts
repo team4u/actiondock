@@ -360,8 +360,6 @@ describe("@actiondock/mcp Adapter", () => {
   it("M14: MCP client cancellation propagates to ActionRunner signal", async () => {
     let actionSignalAborted = false;
     const testCancelAction = defineAction({
-      id: "task.test-cancel",
-      description: "Action for testing cancel",
       async run(_input, ctx) {
         return new Promise((resolve, reject) => {
           const timer = setTimeout(() => resolve({ done: true }), 2000);
@@ -376,7 +374,7 @@ describe("@actiondock/mcp Adapter", () => {
 
     const server = await createActionDockMcpServer({
       projectRoot: tmpDir,
-      actions: new Map([[testCancelAction.id, testCancelAction]]),
+      actions: new Map([["task.test-cancel", testCancelAction]]),
     });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await server.connect(serverTransport);
@@ -1018,14 +1016,6 @@ describe("@actiondock/mcp Adapter", () => {
   it("M25: strips execution control fields (__async, execution) before passing to action", async () => {
     let receivedInput: any = null;
     const strictAction = defineAction({
-      id: "strict-action",
-      inputSchema: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          query: { type: "string" },
-        },
-      },
       run(input) {
         receivedInput = input;
         return { matched: true };
@@ -1033,7 +1023,7 @@ describe("@actiondock/mcp Adapter", () => {
     });
 
     const server = await createActionDockMcpServer({
-      actions: new Map([[strictAction.id, strictAction]]),
+      actions: new Map([["strict-action", strictAction]]),
       storage: {
         getRun: () => undefined,
         listRuns: () => [],

@@ -18,8 +18,8 @@ import {
   type StorageFactoryOptions,
 } from "@actiondock/core";
 import { NodeHttpServer } from "./http-server";
-import { TsxModuleLoader } from "./module-loader";
-import { ExecaProcessExecutor } from "./process-executor";
+import { NodeModuleLoader, TsxModuleLoader } from "./module-loader";
+import { ExecaProcessExecutor, NodeProcessExecutor } from "./process-executor";
 import { NodeSqliteDriver } from "./sqlite-driver";
 
 /**
@@ -53,9 +53,9 @@ function ensureDirectoryForDb(dbPath: string): void {
  * 创建 Node 运行时平台实例。
  * 组装 Node 原生核心组件：
  * - NodeSqliteDriver 持久化存储驱动
- * - ExecaProcessExecutor 进程执行器
+ * - NodeProcessExecutor 原生进程执行器
  * - NodeHttpServer 网络服务驱动
- * - TsxModuleLoader 源码加载器
+ * - NodeModuleLoader 原生源码加载器
  * - NodeFileSystem 文件系统
  * - SystemClock 系统时钟
  *
@@ -64,8 +64,8 @@ function ensureDirectoryForDb(dbPath: string): void {
 export function createNodePlatform(options: NodePlatformOptions = {}): RuntimePlatform {
   const clock: Clock = new SystemClock();
   const files: FileSystem = new NodeFileSystem({ rootDir: options.rootDir });
-  const modules: ModuleLoader = new TsxModuleLoader();
-  const process = new ExecaProcessExecutor();
+  const modules: ModuleLoader = new NodeModuleLoader();
+  const process = new NodeProcessExecutor();
 
   const createDriver = options.driverFactory ?? ((dbPath: string) => new NodeSqliteDriver(dbPath));
 

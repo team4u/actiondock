@@ -14,8 +14,7 @@ export async function handleInfoRoute(ctx: RouteContext): Promise<Response | nul
   // 1. Packages List: GET /api/v2/packages, /packages
   if ((subpath === "/packages" || pathname === "/api/v2/packages" || pathname === "/packages") && req.method === "GET") {
     try {
-      const raw = host ? await host.info() : await target.info();
-      const packages = Array.isArray(raw) ? raw : [raw];
+      const packages = target ? await target.listPackages() : (host ? await host.info() : []);
       return jsonResponse(
         {
           ok: true,
@@ -43,8 +42,8 @@ export async function handleInfoRoute(ctx: RouteContext): Promise<Response | nul
       const intent = url.searchParams.get("intent") || undefined;
       const targetPkg = url.searchParams.get("package") || url.searchParams.get("packageId") || undefined;
 
-      const raw = await target.info();
-      const packages = Array.isArray(raw) ? raw : [raw];
+      const targetInfo = await target.info();
+      const packages = targetInfo.packages || [];
 
       if (isTree) {
         return jsonResponse(

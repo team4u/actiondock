@@ -40,16 +40,17 @@ describe("Registry and Linking Mechanism", () => {
 
     const actionAContent = `
 import { defineAction } from "@actiondock/sdk";
-export default defineAction({
-  id: "common.action",
-  inputSchema: { type: "object" },
-  async run() { return { pkg: "A" }; }
-});
+export default defineAction(async () => ({ pkg: "A" }));
 `;
     writeFileSync(join(pkgADir, "actions", "common.ts"), actionAContent);
 
     const cfgAPath = join(pkgADir, "actiondock.json");
     const cfgA = JSON.parse(readFileSync(cfgAPath, "utf-8"));
+    cfgA.actions = {
+      "common.action": {
+        entry: "actions/common.ts",
+      },
+    };
     cfgA.playbooks = {
       "common-sop": {
         entry: "playbooks/common-sop.md",
@@ -82,26 +83,26 @@ export default defineAction({
 
     const actionBContent = `
 import { defineAction } from "@actiondock/sdk";
-export default defineAction({
-  id: "common.action",
-  inputSchema: { type: "object" },
-  async run() { return { pkg: "B" }; }
-});
+export default defineAction(async () => ({ pkg: "B" }));
 `;
     writeFileSync(join(pkgBDir, "actions", "common.ts"), actionBContent);
 
     const actionUniqueBContent = `
 import { defineAction } from "@actiondock/sdk";
-export default defineAction({
-  id: "unique.b",
-  inputSchema: { type: "object" },
-  async run() { return { pkg: "B-unique" }; }
-});
+export default defineAction(async () => ({ pkg: "B-unique" }));
 `;
     writeFileSync(join(pkgBDir, "actions", "unique-b.ts"), actionUniqueBContent);
 
     const cfgBPath = join(pkgBDir, "actiondock.json");
     const cfgB = JSON.parse(readFileSync(cfgBPath, "utf-8"));
+    cfgB.actions = {
+      "common.action": {
+        entry: "actions/common.ts",
+      },
+      "unique.b": {
+        entry: "actions/unique-b.ts",
+      },
+    };
     cfgB.playbooks = {
       "common-sop": {
         entry: "playbooks/common-sop.md",
@@ -267,13 +268,14 @@ export default defineAction({
 
     const action1Content = `
 import { defineAction } from "@actiondock/sdk";
-export default defineAction({
-  id: "dyn.action1",
-  inputSchema: { type: "object" },
-  async run() { return { ok: true }; }
-});
+export default defineAction(async () => ({ ok: true }));
 `;
     writeFileSync(join(sub1, "actions", "dyn1.ts"), action1Content);
+
+    const cfg1Path = join(sub1, "actiondock.json");
+    const cfg1 = JSON.parse(readFileSync(cfg1Path, "utf-8"));
+    cfg1.actions = { "dyn.action1": { entry: "actions/dyn1.ts" } };
+    writeFileSync(cfg1Path, JSON.stringify(cfg1, null, 2) + "\n");
 
     // 2. Link workspace
     const res = linkPackage(wsDir, fakeHome);
@@ -289,13 +291,14 @@ export default defineAction({
 
     const action2Content = `
 import { defineAction } from "@actiondock/sdk";
-export default defineAction({
-  id: "dyn.action2",
-  inputSchema: { type: "object" },
-  async run() { return { fromDyn2: true }; }
-});
+export default defineAction(async () => ({ fromDyn2: true }));
 `;
     writeFileSync(join(sub2, "actions", "dyn2.ts"), action2Content);
+
+    const cfg2Path = join(sub2, "actiondock.json");
+    const cfg2 = JSON.parse(readFileSync(cfg2Path, "utf-8"));
+    cfg2.actions = { "dyn.action2": { entry: "actions/dyn2.ts" } };
+    writeFileSync(cfg2Path, JSON.stringify(cfg2, null, 2) + "\n");
 
     // 4. listLinkedPackages should automatically include newly added sub2!
     const allLinked = listLinkedPackages(fakeHome);

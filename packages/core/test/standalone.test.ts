@@ -9,25 +9,12 @@ describe("StandaloneRuntime 独立二进制运行时委托 ActionDockApp", () =>
   const tmpDir = mkdtempSync(join(tmpdir(), "standalone-test-"));
 
   const greetAction = defineAction({
-    id: "greet",
-    description: "打招呼动作",
-    inputSchema: {
-      type: "object",
-      properties: { name: { type: "string" } },
-      required: ["name"],
-    },
-    outputSchema: {
-      type: "object",
-      properties: { greeting: { type: "string" } },
-    },
     run(input: { name: string }) {
       return { greeting: `Hello, ${input.name}!` };
     },
   });
 
   const failAction = defineAction({
-    id: "fail",
-    description: "失败动作",
     run() {
       throw new Error("Deliberate failure");
     },
@@ -37,7 +24,27 @@ describe("StandaloneRuntime 独立二进制运行时委托 ActionDockApp", () =>
     packageId: "pkg.standalone",
     version: "1.2.3",
     description: "测试用独立二进制运行时包",
-    actions: [greetAction, failAction],
+    actions: [
+      {
+        id: "greet",
+        action: greetAction,
+        description: "打招呼动作",
+        inputSchema: {
+          type: "object",
+          properties: { name: { type: "string" } },
+          required: ["name"],
+        },
+        outputSchema: {
+          type: "object",
+          properties: { greeting: { type: "string" } },
+        },
+      },
+      {
+        id: "fail",
+        action: failAction,
+        description: "失败动作",
+      },
+    ],
   });
 
   it("支持 list 子命令输出 Action 列表文本与 JSON 格式", async () => {

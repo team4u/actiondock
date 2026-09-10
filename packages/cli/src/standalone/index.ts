@@ -89,11 +89,45 @@ export class StandaloneDispatcher {
       return ExitCode.SUCCESS;
     }
 
-    // 3. 构建 ActionDockApp 实例
-    const actionsMap =
-      this.options.actions instanceof Map
-        ? this.options.actions
-        : new Map(this.options.actions.map((a) => [a.id, a]));
+    // 构建 ActionDockApp 实例
+    const actionSpecs: Record<string, any> = {};
+    const actionsMap = new Map<string, ActionDefinition>();
+
+    if (this.options.actions instanceof Map) {
+      for (const [k, v] of this.options.actions) {
+        actionsMap.set(k, v);
+        actionSpecs[k] = {
+          id: k,
+          description: (v as any).description,
+          inputSchema: (v as any).inputSchema,
+          outputSchema: (v as any).outputSchema,
+        };
+      }
+    } else if (Array.isArray(this.options.actions)) {
+      for (const item of this.options.actions as any[]) {
+        const id = item.id;
+        const act = item.action ?? item;
+        if (id) {
+          actionsMap.set(id, act);
+          actionSpecs[id] = {
+            id,
+            description: item.description ?? act.description,
+            inputSchema: item.inputSchema ?? act.inputSchema,
+            outputSchema: item.outputSchema ?? act.outputSchema,
+          };
+        }
+      }
+    } else if (typeof this.options.actions === "object") {
+      for (const [k, v] of Object.entries(this.options.actions)) {
+        actionsMap.set(k, v);
+        actionSpecs[k] = {
+          id: k,
+          description: (v as any).description,
+          inputSchema: (v as any).inputSchema,
+          outputSchema: (v as any).outputSchema,
+        };
+      }
+    }
 
     let app: ActionDockApp;
     try {
@@ -104,6 +138,7 @@ export class StandaloneDispatcher {
           version: this.options.version,
           description: this.options.description,
           config: this.options.configDefs,
+          actions: actionSpecs,
         },
         actions: actionsMap,
         dataDir: dataDir || this.options.dataDir,

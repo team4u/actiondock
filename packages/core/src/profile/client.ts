@@ -441,10 +441,11 @@ export async function clearRemoteRuns(
 export async function fetchRemoteStateList(
   serverUrl: string,
   token?: string,
-  options?: { package?: string; namespace?: string; prefix?: string }
+  options?: { package?: string; action?: string; namespace?: string; prefix?: string }
 ): Promise<{ ok: boolean; packageId: string; keys: string[] }> {
   const params = new URLSearchParams();
   if (options?.package) params.set("package", options.package);
+  if (options?.action) params.set("action", options.action);
   if (options?.namespace !== undefined) params.set("namespace", options.namespace);
   if (options?.prefix) params.set("prefix", options.prefix);
   const qs = params.toString() ? `?${params.toString()}` : "";
@@ -460,10 +461,11 @@ export async function getRemoteStateKey(
   serverUrl: string,
   key: string,
   token?: string,
-  options?: { package?: string; namespace?: string }
+  options?: { package?: string; action?: string; namespace?: string }
 ): Promise<any> {
   const params = new URLSearchParams();
   if (options?.package) params.set("package", options.package);
+  if (options?.action) params.set("action", options.action);
   if (options?.namespace !== undefined) params.set("namespace", options.namespace);
   const qs = params.toString() ? `?${params.toString()}` : "";
   return fetchRemoteJson(
@@ -479,7 +481,7 @@ export async function setRemoteStateKey(
   key: string,
   value: unknown,
   token?: string,
-  options?: { package?: string; namespace?: string; ttl?: number }
+  options?: { package?: string; action?: string; namespace?: string; ttl?: number }
 ): Promise<any> {
   return fetchRemoteJson(
     serverUrl,
@@ -490,6 +492,7 @@ export async function setRemoteStateKey(
       body: {
         value,
         package: options?.package,
+        action: options?.action,
         namespace: options?.namespace,
         ttl: options?.ttl,
       },
@@ -502,10 +505,11 @@ export async function deleteRemoteStateKey(
   serverUrl: string,
   key: string,
   token?: string,
-  options?: { package?: string; namespace?: string }
+  options?: { package?: string; action?: string; namespace?: string }
 ): Promise<any> {
   const params = new URLSearchParams();
   if (options?.package) params.set("package", options.package);
+  if (options?.action) params.set("action", options.action);
   if (options?.namespace !== undefined) params.set("namespace", options.namespace);
   const qs = params.toString() ? `?${params.toString()}` : "";
   return fetchRemoteJson(
@@ -522,7 +526,7 @@ export async function deleteRemoteStateKey(
 export async function clearRemoteState(
   serverUrl: string,
   token?: string,
-  options?: { package?: string; namespace?: string; prefix?: string; all?: boolean }
+  options?: { package?: string; action?: string; namespace?: string; prefix?: string; all?: boolean }
 ): Promise<{ ok: boolean; packageId: string; clearedCount: number }> {
   return fetchRemoteJson(
     serverUrl,

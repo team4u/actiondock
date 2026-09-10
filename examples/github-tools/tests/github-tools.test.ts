@@ -41,7 +41,9 @@ describe("GitHub Tools Action Package", () => {
     });
 
     it("executes review-pr composite action and saves state", async () => {
-      const runtime = createTestRuntime();
+      const runtime = createTestRuntime({
+        actions: { "get-pr": getPrAction },
+      });
       const review = await runtime.run(reviewPrAction, {
         repo: "team4u/actiondock",
         pullNumber: 42,

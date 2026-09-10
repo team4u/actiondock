@@ -46,8 +46,9 @@ export function registerStateCommands(program: Command, context?: CliContext): v
         token: resolved.token,
       });
 
+      const actionId = options.action || "";
       try {
-        const keys = await target.listStateKeys!(options.package || "", {
+        const keys = await target.listStateKeys(options.package || "", actionId, {
           namespace: options.namespace,
           prefix,
         });
@@ -88,14 +89,30 @@ export function registerStateCommands(program: Command, context?: CliContext): v
       dataDir: options.dataDir || context?.dataDir,
     });
 
+    const actionId = options.action || "";
     try {
       if (targetRoot) {
         const projConfig = loadProjectConfig(targetRoot);
+        const allKeys = await target.listStateKeys(
+          projConfig.id,
+          actionId,
+          {
+            namespace: options.namespace !== undefined ? options.namespace : null,
+            prefix,
+          }
+        );
+
         if (options.detail && options.json) {
-          const entries = await target.listStateEntries!(projConfig.id, {
-            namespace: options.namespace,
-            prefix: prefix || undefined,
-          });
+          const entries: Array<{ key: string; namespace?: string; fullKey?: string; value: unknown }> = [];
+          for (const k of allKeys) {
+            const entry = await target.getState(projConfig.id, actionId, k, {
+              namespace: options.namespace,
+              detail: true,
+            });
+            if (entry) {
+              entries.push(entry as any);
+            }
+          }
           const filterRes = filterWithFallbackInfo(
             entries,
             effectiveIntent,
@@ -109,14 +126,6 @@ export function registerStateCommands(program: Command, context?: CliContext): v
           });
           return;
         }
-
-        const allKeys = await target.listStateKeys!(
-          projConfig.id,
-          {
-            namespace: options.namespace !== undefined ? options.namespace : null,
-            prefix,
-          }
-        );
 
         const filterRes = filterWithFallbackInfo(allKeys, effectiveIntent, [(k) => k], shouldFallback);
 
@@ -155,8 +164,9 @@ export function registerStateCommands(program: Command, context?: CliContext): v
         if (!existsSync(pkg.path)) continue;
         try {
           const config = loadProjectConfig(pkg.path);
-          const keys = await target.listStateKeys!(
+          const keys = await target.listStateKeys(
             config.id,
+            actionId,
             {
               namespace: options.namespace !== undefined ? options.namespace : null,
               prefix,
@@ -197,6 +207,7 @@ export function registerStateCommands(program: Command, context?: CliContext): v
     .command("list [prefix]")
     .description("List state keys in current project or linked packages")
     .option("-P, --package <id>", "Target package ID or path")
+    .option("-a, --action <id>", "Action identifier scope")
     .option("-n, --namespace <ns>", "Filter keys under specific namespace (omit to list all namespaces)")
     .option("-p, --profile <name>", "Query state on a remote target")
     .option("-s, --server <url>", "Remote server URL")
@@ -214,6 +225,7 @@ export function registerStateCommands(program: Command, context?: CliContext): v
     .command("keys [prefix]")
     .description("Alias for 'ad state list [prefix]'")
     .option("-P, --package <id>", "Target package ID or path")
+    .option("-a, --action <id>", "Action identifier scope")
     .option("-n, --namespace <ns>", "Filter keys under specific namespace")
     .option("-p, --profile <name>", "Query state on a remote target")
     .option("-s, --server <url>", "Remote server URL")
@@ -229,8 +241,9 @@ export function registerStateCommands(program: Command, context?: CliContext): v
   // state get <key>
   stateCmd
     .command("get <key>")
-    .description("Get state value for key (supports composite key 'ns:key' or -n flag)")
+    .description("Get state value by key (supports composite 'ns:key' and detail mode)")
     .option("-P, --package <id>", "Target package ID or path")
+    .option("-a, --action <id>", "Action identifier scope")
     .option("-n, --namespace <ns>", "Explicit namespace scope for key")
     .option("-p, --profile <name>", "Query state on a remote target")
     .option("-s, --server <url>", "Remote server URL")
@@ -266,13 +279,14 @@ export function registerStateCommands(program: Command, context?: CliContext): v
             }
       );
 
+      const actionId = options.action || "";
       try {
         if (resolved.type === "remote") {
           const decoded = decodeStateKey(rawKey);
           const effectiveNamespace = options.namespace || (decoded.namespace || undefined);
           const actualKey = options.namespace ? rawKey : decoded.key;
 
-          const entry = await target.getState(options.package || "", actualKey, {
+          const entry = await target.getState(options.package || "", actionId, actualKey, {
             namespace: effectiveNamespace,
             detail: true,
           });
@@ -307,7 +321,7 @@ export function registerStateCommands(program: Command, context?: CliContext): v
         const { root, key: effectiveKey } = getTargetRoot(options.package, rawKey);
         const projConfig = loadProjectConfig(root);
 
-        const entry = await target.getState(projConfig.id, effectiveKey, {
+        const entry = await target.getState(projConfig.id, actionId, effectiveKey, {
           namespace: options.namespace,
           detail: true,
         });
@@ -347,6 +361,7 @@ export function registerStateCommands(program: Command, context?: CliContext): v
     .command("set <key> <value>")
     .description("Set state key-value (supports JSON value, composite 'ns:key', and --ttl)")
     .option("-P, --package <id>", "Target package ID or path")
+    .option("-a, --action <id>", "Action identifier scope")
     .option("-n, --namespace <ns>", "Explicit namespace scope for key")
     .option("--ttl <seconds>", "Time-To-Live expiration in seconds")
     .option("-p, --profile <name>", "Set state on a remote target")
@@ -393,13 +408,14 @@ export function registerStateCommands(program: Command, context?: CliContext): v
             }
       );
 
+      const actionId = options.action || "";
       try {
         if (resolved.type === "remote") {
           const decoded = decodeStateKey(rawKey);
           const effectiveNamespace = options.namespace || (decoded.namespace || undefined);
           const actualKey = options.namespace ? rawKey : decoded.key;
 
-          await target.setState(options.package || "", actualKey, parsedVal as any, {
+          await target.setState(options.package || "", actionId, actualKey, parsedVal as any, {
             namespace: effectiveNamespace,
             ttl: ttlSec,
           });
@@ -421,7 +437,7 @@ export function registerStateCommands(program: Command, context?: CliContext): v
           finalKey = decoded.key;
         }
 
-        await target.setState(projConfig.id, finalKey, parsedVal as any, {
+        await target.setState(projConfig.id, actionId, finalKey, parsedVal as any, {
           namespace: actualNamespace,
           ttl: ttlSec,
         });
@@ -439,6 +455,7 @@ export function registerStateCommands(program: Command, context?: CliContext): v
     .alias("rm")
     .description("Delete state key entry")
     .option("-P, --package <id>", "Target package ID or path")
+    .option("-a, --action <id>", "Action identifier scope")
     .option("-n, --namespace <ns>", "Explicit namespace scope for key")
     .option("-p, --profile <name>", "Delete state on a remote target")
     .option("-s, --server <url>", "Remote server URL")
@@ -472,13 +489,14 @@ export function registerStateCommands(program: Command, context?: CliContext): v
             }
       );
 
+      const actionId = options.action || "";
       try {
         if (resolved.type === "remote") {
           const decoded = decodeStateKey(rawKey);
           const effectiveNamespace = options.namespace || (decoded.namespace || undefined);
           const actualKey = options.namespace ? rawKey : decoded.key;
 
-          const deleted = await target.deleteState(options.package || "", actualKey, {
+          const deleted = await target.deleteState(options.package || "", actionId, actualKey, {
             namespace: effectiveNamespace,
           });
 
@@ -494,7 +512,7 @@ export function registerStateCommands(program: Command, context?: CliContext): v
         const { root, key: effectiveKey } = getTargetRoot(options.package, rawKey);
         const projConfig = loadProjectConfig(root);
 
-        const deleted = await target.deleteState(projConfig.id, effectiveKey, {
+        const deleted = await target.deleteState(projConfig.id, actionId, effectiveKey, {
           namespace: options.namespace,
         });
         if (!deleted) {
@@ -512,6 +530,7 @@ export function registerStateCommands(program: Command, context?: CliContext): v
     .alias("clean")
     .description("Clear state entries (supports namespace cleanup or global wipe via --all)")
     .option("-P, --package <id>", "Target package ID or path")
+    .option("--action <id>", "Action identifier scope")
     .option("-n, --namespace <ns>", "Target namespace to clear (required unless --all is specified)")
     .option("-a, --all", "Dangerously clear all state namespaces for the package")
     .option("-p, --profile <name>", "Clear state on a remote target")
@@ -548,9 +567,10 @@ export function registerStateCommands(program: Command, context?: CliContext): v
             }
       );
 
+      const actionId = options.action || "";
       try {
         if (resolved.type === "remote") {
-          const count = await target.clearState!(options.package || "", {
+          const count = await target.clearState(options.package || "", actionId, {
             namespace: options.namespace,
             all: Boolean(options.all),
           });
@@ -562,7 +582,7 @@ export function registerStateCommands(program: Command, context?: CliContext): v
         const { root } = getTargetRoot(options.package);
         const projConfig = loadProjectConfig(root);
 
-        const count = await target.clearState!(projConfig.id, {
+        const count = await target.clearState(projConfig.id, actionId, {
           namespace: options.namespace,
           all: Boolean(options.all),
         });

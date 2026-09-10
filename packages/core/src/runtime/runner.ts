@@ -230,10 +230,24 @@ export class ActionRunner {
   /**
    * 注册单个 Action 到当前 Runner。
    */
-  public registerAction(action: ActionDefinition): void {
-    const id = action.id || "anonymous-action";
-    action.id = id;
-    this.actions.set(id, action);
+  public registerAction(id: string, action: ActionDefinition): void;
+  public registerAction(action: ({ id: string; action?: ActionDefinition } & Partial<ActionDefinition>) | ActionDefinition): void;
+  public registerAction(
+    idOrAction: string | (({ id: string; action?: ActionDefinition } & Partial<ActionDefinition>) | ActionDefinition),
+    actionDef?: ActionDefinition
+  ): void {
+    if (typeof idOrAction === "string") {
+      if (actionDef) {
+        this.actions.set(idOrAction, actionDef);
+      }
+    } else {
+      const actObj = idOrAction as any;
+      const id = actObj.id || "anonymous-action";
+      const act = actObj.action || (actObj.run ? actObj : undefined);
+      if (act) {
+        this.actions.set(id, act);
+      }
+    }
   }
 
   /**
@@ -502,19 +516,31 @@ export class ActionRunner {
       typeof (actionOrId as any).run === "function"
     ) {
       action = actionOrId as ActionDefinition;
-      if (action.id) {
-        targetActionId = action.id;
+      const actObj = action as any;
+      if (actObj.id) {
+        targetActionId = actObj.id;
       } else {
-        let anonId = anonymousRunnerActionIds.get(action);
-        if (!anonId) {
-          anonymousRunnerActionCounter++;
-          anonId = `anonymous-action-${anonymousRunnerActionCounter}`;
-          anonymousRunnerActionIds.set(action, anonId);
+        let foundId: string | undefined;
+        for (const [id, a] of this.actions) {
+          if (a === action) {
+            foundId = id;
+            break;
+          }
         }
-        targetActionId = anonId;
-        try {
-          action.id = targetActionId;
-        } catch {}
+        if (foundId) {
+          targetActionId = foundId;
+        } else {
+          let anonId = anonymousRunnerActionIds.get(action);
+          if (!anonId) {
+            anonymousRunnerActionCounter++;
+            anonId = `anonymous-action-${anonymousRunnerActionCounter}`;
+            anonymousRunnerActionIds.set(action, anonId);
+          }
+          targetActionId = anonId;
+          try {
+            actObj.id = targetActionId;
+          } catch {}
+        }
       }
       this.actions.set(targetActionId, action);
     } else {
@@ -605,12 +631,14 @@ export class ActionRunner {
     callStack.push(callKey);
 
     // 4. 输入参数 JSON Schema 校验（若 action 已就绪）
-    if (action?.inputSchema) {
-      const val = validateSchema(action.inputSchema, input);
+    const targetInputSchema =
+      (action as any)?.inputSchema ?? this.projectConfig?.actions?.[targetActionId]?.inputSchema;
+    if (targetInputSchema) {
+      const val = validateSchema(targetInputSchema, input);
       if (!val.valid) {
         const error: RuntimeError = {
           code: "INPUT_VALIDATION_FAILED",
-          message: `Input schema validation failed for action '${action.id}'`,
+          message: `Input schema validation failed for action '${targetActionId}'`,
           details: val.errors,
         };
         finalizeRun("failed", undefined, error);
@@ -656,7 +684,7 @@ export class ActionRunner {
       signal: controller.signal,
       process: effectiveProcess,
       progress: options.progress,
-      logger: options.logger || new StderrLogger(action?.id || targetActionId),
+      logger: options.logger || new StderrLogger(targetActionId),
       onActionInvoke: async (childAction, childInput, parentRunId) => {
         if (this.activeSubRuns >= this.maxSubRuns) {
           const err = new Error(`Maximum concurrent sub-runs (${this.maxSubRuns}) reached`);
@@ -665,35 +693,29 @@ export class ActionRunner {
         }
 
         let childPackageId = this.packageId;
-        if (
-          typeof childAction === "string" ||
-          (typeof childAction === "object" && !("run" in childAction))
-        ) {
-          const parsed = ActionResolver.parseRef(childAction as ActionRef | string);
-          if (parsed.packageId) {
-            childPackageId = parsed.packageId;
-          }
+        const parsed = ActionResolver.parseRef(childAction as ActionRef | string);
+        if (parsed.packageId) {
+          childPackageId = parsed.packageId;
         }
 
-        if (childPackageId && childPackageId !== this.packageId && Array.isArray(action?.uses)) {
+        const actionConfig = this.projectConfig?.actions?.[targetActionId] as any;
+        const declaredUses = actionConfig?.uses ?? (action as any)?.uses;
+        if (childPackageId && childPackageId !== this.packageId && Array.isArray(declaredUses)) {
           const childActionId =
             typeof childAction === "string"
               ? ActionResolver.parseRef(childAction).actionId
-              : typeof childAction === "object" && !("run" in childAction)
-              ? (childAction as ActionRef).actionId
-              : (childAction as ActionDefinition).id;
+              : (childAction as ActionRef).actionId;
           const targetRef = `${childPackageId}/${childActionId}`;
-          const declaredUses = action?.uses || [];
           const isAllowed = declaredUses.some(
-            (u) => u === targetRef || u === `${childPackageId}/*` || u === childPackageId
+            (u: string) => u === targetRef || u === `${childPackageId}/*` || u === childPackageId
           );
           if (!isAllowed) {
             const err = new Error(
-              `Undeclared cross-package dependency: Action '${this.packageId}/${action?.id}' does not declare '${targetRef}' in 'uses'`
+              `Undeclared cross-package dependency: Action '${this.packageId}/${targetActionId}' does not declare '${targetRef}' in 'uses'`
             );
             (err as any).code = "UNDECLARED_ACTION_DEPENDENCY";
             (err as any).details = {
-              caller: `${this.packageId}/${action?.id}`,
+              caller: `${this.packageId}/${targetActionId}`,
               target: targetRef,
               declaredUses,
             };
@@ -794,12 +816,12 @@ export class ActionRunner {
             return { ok: false, runId, error };
           }
 
-          if (currentAction.inputSchema) {
-            const val = validateSchema(currentAction.inputSchema, input);
+          if ((currentAction as any).inputSchema) {
+            const val = validateSchema((currentAction as any).inputSchema, input);
             if (!val.valid) {
               const error: RuntimeError = {
                 code: "INPUT_VALIDATION_FAILED",
-                message: `Input schema validation failed for action '${currentAction.id}'`,
+                message: `Input schema validation failed for action '${targetActionId}'`,
                 details: val.errors,
               };
               finalizeRun("failed", undefined, error);
@@ -814,12 +836,14 @@ export class ActionRunner {
         ]);
 
         // 输出结果 Schema 校验
-        if (currentAction.outputSchema) {
-          const outVal = validateSchema(currentAction.outputSchema, rawOutput);
+        const targetOutputSchema =
+          (currentAction as any)?.outputSchema ?? this.projectConfig?.actions?.[targetActionId]?.outputSchema;
+        if (targetOutputSchema) {
+          const outVal = validateSchema(targetOutputSchema, rawOutput);
           if (!outVal.valid) {
             const error: RuntimeError = {
               code: "OUTPUT_VALIDATION_FAILED",
-              message: `Output schema validation failed for action '${currentAction.id}'`,
+              message: `Output schema validation failed for action '${targetActionId}'`,
               details: outVal.errors,
             };
             finalizeRun("failed", undefined, error);

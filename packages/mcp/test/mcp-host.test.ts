@@ -14,37 +14,12 @@ describe("@actiondock/mcp Host Integration", () => {
 
     // 1. 定义测试用 Action
     const addAction = defineAction({
-      id: "calc.add",
-      description: "加法计算动作",
-      inputSchema: {
-        type: "object",
-        properties: {
-          a: { type: "number" },
-          b: { type: "number" },
-        },
-        required: ["a", "b"],
-      },
-      outputSchema: {
-        type: "object",
-        properties: {
-          sum: { type: "number" },
-        },
-        required: ["sum"],
-      },
       run(input: { a: number; b: number }) {
         return { sum: input.a + input.b };
       },
     });
 
     const slowAction = defineAction({
-      id: "task.slow",
-      description: "慢速动作用于异步与取消测试",
-      inputSchema: {
-        type: "object",
-        properties: {
-          durationMs: { type: "number" },
-        },
-      },
       async run(input: { durationMs?: number }, ctx: ActionContext) {
         const delay = input.durationMs || 1000;
         return new Promise((resolve, reject) => {
@@ -68,8 +43,42 @@ describe("@actiondock/mcp Host Integration", () => {
         name: "MCP Host Test App",
         version: "1.0.0",
         description: "Package for testing ActionDockHost with MCP",
+        actions: {
+          "calc.add": {
+            entry: "",
+            description: "加法计算动作",
+            inputSchema: {
+              type: "object",
+              properties: {
+                a: { type: "number" },
+                b: { type: "number" },
+              },
+              required: ["a", "b"],
+            },
+            outputSchema: {
+              type: "object",
+              properties: {
+                sum: { type: "number" },
+              },
+              required: ["sum"],
+            },
+          },
+          "task.slow": {
+            entry: "",
+            description: "慢速动作用于异步与取消测试",
+            inputSchema: {
+              type: "object",
+              properties: {
+                durationMs: { type: "number" },
+              },
+            },
+          },
+        },
       },
-      actions: [addAction, slowAction],
+      actions: {
+        "calc.add": addAction,
+        "task.slow": slowAction,
+      },
       inMemory: true,
     });
 
@@ -263,31 +272,12 @@ describe("@actiondock/mcp Host Integration", () => {
     let slowTaskCancelled = false;
 
     const addAction = defineAction({
-      id: "calc.add",
-      description: "加法计算动作",
-      inputSchema: {
-        type: "object",
-        properties: {
-          a: { type: "number" },
-          b: { type: "number" },
-        },
-        required: ["a", "b"],
-      },
-      outputSchema: {
-        type: "object",
-        properties: {
-          sum: { type: "number" },
-        },
-        required: ["sum"],
-      },
       run(input: { a: number; b: number }) {
         return { sum: input.a + input.b };
       },
     });
 
     const slowAction = defineAction({
-      id: "task.slow",
-      description: "慢速动作",
       async run(input: { durationMs?: number }, ctx: ActionContext) {
         const delay = input.durationMs || 1000;
         return new Promise((resolve, reject) => {
@@ -309,8 +299,42 @@ describe("@actiondock/mcp Host Integration", () => {
         id: "test.mcp-target-app",
         name: "MCP Target Test App",
         version: "1.0.0",
+        actions: {
+          "calc.add": {
+            entry: "",
+            description: "加法计算动作",
+            inputSchema: {
+              type: "object",
+              properties: {
+                a: { type: "number" },
+                b: { type: "number" },
+              },
+              required: ["a", "b"],
+            },
+            outputSchema: {
+              type: "object",
+              properties: {
+                sum: { type: "number" },
+              },
+              required: ["sum"],
+            },
+          },
+          "task.slow": {
+            entry: "",
+            description: "慢速动作",
+            inputSchema: {
+              type: "object",
+              properties: {
+                durationMs: { type: "number" },
+              },
+            },
+          },
+        },
       },
-      actions: [addAction, slowAction],
+      actions: {
+        "calc.add": addAction,
+        "task.slow": slowAction,
+      },
       inMemory: true,
     });
 

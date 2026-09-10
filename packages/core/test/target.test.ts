@@ -17,14 +17,10 @@ describe("ActionDockTarget 统一调用门面", () => {
     it("包装 ActionDockApp 并透明转发全部操作", async () => {
       let cancelled = false;
       const echoAction = defineAction({
-        id: "echo",
-        description: "回声动作",
-        tags: ["util"],
         run: (input: { msg: string }) => ({ echo: input.msg }),
       });
 
       const slowAction = defineAction({
-        id: "slow",
         run: async (_input: unknown, ctx: ActionContext) => {
           ctx.signal.addEventListener("abort", () => {
             cancelled = true;
@@ -46,34 +42,42 @@ describe("ActionDockTarget 统一调用门面", () => {
           name: "本地应用包",
           version: "1.0.0",
         },
-        actions: [echoAction, slowAction],
+        actions: [
+          { id: "echo", action: echoAction },
+          { id: "slow", action: slowAction },
+        ],
         inMemory: true,
       });
 
       const target = new LocalActionDockTarget(app);
 
-      // 1. info()
-      const info = (await target.info()) as any;
+      // 1. info() 返回 TargetInfo 对象
+      const info = await target.info();
       expect(info.id).toBe("pkg.local-app");
+      expect(info.protocolVersion).toBeDefined();
 
-      // 2. listActions()
+      // 2. listPackages() 返回 PackageInfo 数组
+      const pkgs = await target.listPackages();
+      expect(pkgs.length).toBe(1);
+      expect(pkgs[0].id).toBe("pkg.local-app");
+
+      // 3. listActions()
       const actions = await target.listActions();
       expect(actions.length).toBe(2);
       expect(actions.map((a) => a.id).sort()).toEqual(["echo", "slow"]);
 
-      // 3. describeAction()
+      // 4. describeAction()
       const spec = await target.describeAction("echo");
       expect(spec.id).toBe("echo");
-      expect(spec.description).toBe("回声动作");
 
-      // 4. runAction()
+      // 5. runAction()
       const syncRes = await target.runAction("echo", { msg: "hello target" });
       expect(syncRes.ok).toBe(true);
       if (syncRes.ok) {
         expect(syncRes.data).toEqual({ echo: "hello target" });
       }
 
-      // 5. startAction(), cancelRun() 与 events()
+      // 6. startAction(), cancelRun() 与 events()
       const ticket = await target.startAction("slow", {});
       expect(ticket.runId).toBeDefined();
 
@@ -97,19 +101,18 @@ describe("ActionDockTarget 统一调用门面", () => {
       expect(receivedEvents.some((e) => e.type === "status")).toBe(true);
       expect(receivedEvents.some((e) => e.type === "finish")).toBe(true);
 
-      // 6. getRun()
+      // 7. getRun()
       const runRecord = await target.getRun(ticket.runId);
       expect(runRecord).toBeDefined();
       expect(runRecord?.id).toBe(ticket.runId);
       expect(runRecord?.status).toBe("cancelled");
 
-      // 7. close()
+      // 8. close()
       await target.close();
     });
 
     it("LocalActionDockTarget 提供完整的配置、状态与运行历史管理能力", async () => {
       const pingAction = defineAction({
-        id: "ping",
         run: () => ({ pong: true }),
       });
 
@@ -119,7 +122,7 @@ describe("ActionDockTarget 统一调用门面", () => {
           name: "管理测试包",
           version: "1.0.0",
         },
-        actions: [pingAction],
+        actions: [{ id: "ping", action: pingAction }],
         inMemory: true,
       });
 
@@ -128,50 +131,47 @@ describe("ActionDockTarget 统一调用门面", () => {
       // 1. Config 管理能力
       await target.setConfig("pkg.mgmt-test", "DB_HOST", "localhost");
       const hostVal = await target.getConfig("pkg.mgmt-test", "DB_HOST");
-      expect(hostVal).toBe("localhost");
+      expect(hostVal.value).toBe("localhost");
+      expect(hostVal.configured).toBe(true);
 
       const pkgConfig = await target.listConfig("pkg.mgmt-test");
-      expect(pkgConfig.DB_HOST).toBe("localhost");
+      expect(pkgConfig.find((c) => c.key === "DB_HOST")?.value).toBe("localhost");
 
       const deletedConf = await target.deleteConfig("pkg.mgmt-test", "DB_HOST");
       expect(deletedConf).toBe(true);
       const confAfterDel = await target.getConfig("pkg.mgmt-test", "DB_HOST");
-      expect(confAfterDel).toBeUndefined();
+      expect(confAfterDel.configured).toBe(false);
 
       // 全局配置测试
       await target.setConfig("global", "GLOBAL_SETTING", 999);
       const globalVal = await target.getConfig("global", "GLOBAL_SETTING");
-      expect(globalVal).toBe(999);
+      expect(globalVal.value).toBe(999);
       const globalList = await target.listConfig("global");
-      expect(globalList.GLOBAL_SETTING).toBe(999);
+      expect(globalList.find((c) => c.key === "GLOBAL_SETTING")?.value).toBe(999);
       await target.deleteConfig("global", "GLOBAL_SETTING");
 
-      // 2. State 管理能力
-      await target.setState("pkg.mgmt-test", "counter", 10);
-      const countVal = await target.getState<number>("pkg.mgmt-test", "counter");
+      // 2. State 管理能力（增加 actionId 级作用域）
+      await target.setState("pkg.mgmt-test", "ping", "counter", 10);
+      const countVal = await target.getState<number>("pkg.mgmt-test", "ping", "counter");
       expect(countVal).toBe(10);
 
-      const countDetail = await target.getState<any>("pkg.mgmt-test", "counter", { detail: true });
+      const countDetail = await target.getState<any>("pkg.mgmt-test", "ping", "counter", { detail: true });
       expect(countDetail).toBeDefined();
       expect(countDetail.value).toBe(10);
       expect(countDetail.key).toBe("counter");
 
       // 命名空间状态写入与读取
-      await target.setState("pkg.mgmt-test", "auth:token", "tok_secret");
-      const authDetail = await target.getState<any>("pkg.mgmt-test", "auth:token", { detail: true });
+      await target.setState("pkg.mgmt-test", "ping", "auth:token", "tok_secret");
+      const authDetail = await target.getState<any>("pkg.mgmt-test", "ping", "auth:token", { detail: true });
       expect(authDetail.value).toBe("tok_secret");
-      expect(authDetail.namespace).toBe("auth");
 
-      const keys = await target.listStateKeys!("pkg.mgmt-test");
+      const keys = await target.listStateKeys("pkg.mgmt-test", "ping");
       expect(keys).toContain("counter");
 
-      const entries = await target.listStateEntries!("pkg.mgmt-test");
-      expect(entries.some((e) => e.key === "counter" && e.value === 10)).toBe(true);
-
-      const deletedState = await target.deleteState("pkg.mgmt-test", "counter");
+      const deletedState = await target.deleteState("pkg.mgmt-test", "ping", "counter");
       expect(deletedState).toBe(true);
 
-      const clearedCount = await target.clearState!("pkg.mgmt-test", { all: true });
+      const clearedCount = await target.clearState("pkg.mgmt-test", "ping", { all: true });
       expect(clearedCount).toBeGreaterThanOrEqual(1);
 
       // 3. Runs 运行管理能力
@@ -191,7 +191,6 @@ describe("ActionDockTarget 统一调用门面", () => {
 
     it("包装 ActionDockHost 并提供多包统一路由", async () => {
       const mathAction = defineAction({
-        id: "square",
         run: (input: { n: number }) => ({ val: input.n * input.n }),
       });
 
@@ -199,7 +198,7 @@ describe("ActionDockTarget 统一调用门面", () => {
         packages: [
           {
             projectConfig: { id: "pkg.math", name: "数学包", version: "1.0.0" },
-            actions: [mathAction],
+            actions: [{ id: "square", action: mathAction }],
             inMemory: true,
           },
           {
@@ -212,10 +211,10 @@ describe("ActionDockTarget 统一调用门面", () => {
 
       const target = new LocalActionDockTarget(host);
 
-      // 1. info() 返回多包数组
-      const infoList = (await target.info()) as any[];
-      expect(Array.isArray(infoList)).toBe(true);
-      expect(infoList.length).toBe(2);
+      // 1. info() 返回 TargetInfo 对象，packages 包含多包
+      const info = await target.info();
+      expect(info.packages).toBeDefined();
+      expect(info.packages.length).toBe(2);
 
       // 2. describeAction()
       const spec = await target.describeAction("pkg.math/square");
@@ -299,38 +298,23 @@ describe("ActionDockTarget 统一调用门面", () => {
         )
       );
 
-      // 加法计算动作
       writeFileSync(
         join(projectDir, "actions", "add.ts"),
-        `import { defineAction } from "@actiondock/sdk";
-export default defineAction({
-  id: "add",
-  description: "远程加法",
-  inputSchema: {
-    type: "object",
-    properties: { a: { type: "number" }, b: { type: "number" } },
-    required: ["a", "b"],
-  },
-  run: (input: any) => ({ sum: input.a + input.b }),
-});
+        `export default async function(input: { a: number; b: number }) {
+  return { sum: input.a + input.b };
+};
 `
       );
 
-      // 软链接根 node_modules 保证 SDK 解析
-      const rootNodeModules = resolve(__dirname, "../../../node_modules");
-      if (existsSync(rootNodeModules)) {
-        symlinkSync(rootNodeModules, join(projectDir, "node_modules"), "dir");
-      }
-
-      // 2. 启动 ActionDock 服务端实例
+      // 2. 启动标准 HTTP 服务（启用 Token 鉴权，未开启管理能力）
       serverInstance = await startActionDockServer({
         port: 0,
         host: "127.0.0.1",
         token: AUTH_TOKEN,
         projectRoot: projectDir,
         customHome: tempDir,
+        enableManagement: false,
       });
-
       serverUrl = `http://127.0.0.1:${serverInstance.port}`;
     });
 
@@ -338,25 +322,22 @@ export default defineAction({
       if (serverInstance) {
         serverInstance.stop();
       }
-      if (existsSync(tempDir)) {
-        try {
-          rmSync(tempDir, { recursive: true, force: true });
-        } catch {}
-      }
+      try {
+        rmSync(tempDir, { recursive: true, force: true });
+      } catch {}
     });
 
-    it("通过 RemoteActionDockTarget 查询元数据、检索动作与执行远程任务", async () => {
+    it("通过 RemoteActionDockTarget 正常调用执行与自省能力", async () => {
       const target = await createActionDockTarget({
         type: "remote",
         serverUrl,
         token: AUTH_TOKEN,
       });
 
-      expect(target).toBeInstanceOf(RemoteActionDockTarget);
-
-      // 1. info() 远程查询
+      // 1. info() 远程查询返回 TargetInfo
       const info = await target.info();
-      expect(info).toBeDefined();
+      expect(info.protocolVersion).toBeDefined();
+      expect(info.packages.length).toBeGreaterThan(0);
 
       // 2. listActions() 远程列出动作
       const actions = await target.listActions();
@@ -426,22 +407,14 @@ export default defineAction({
 
       // 2. setState / listStateKeys 抛出 TARGET_CAPABILITY_UNAVAILABLE
       try {
-        await target.setState("remote.service", "KEY", "VAL");
+        await target.setState("remote.service", "add", "KEY", "VAL");
         expect(true).toBe(false);
       } catch (err: any) {
         expect(err.code).toBe("TARGET_CAPABILITY_UNAVAILABLE");
       }
 
       try {
-        await target.listStateKeys!("remote.service");
-        expect(true).toBe(false);
-      } catch (err: any) {
-        expect(err.code).toBe("TARGET_CAPABILITY_UNAVAILABLE");
-      }
-
-      // 3. listStateEntries 远端不支持抛出 TARGET_CAPABILITY_UNAVAILABLE
-      try {
-        await target.listStateEntries!("remote.service");
+        await target.listStateKeys("remote.service", "add");
         expect(true).toBe(false);
       } catch (err: any) {
         expect(err.code).toBe("TARGET_CAPABILITY_UNAVAILABLE");
@@ -471,27 +444,28 @@ export default defineAction({
         // 1. 远程配置管理
         await target.setConfig("remote.service", "REMOTE_CONF", "val123");
         const confVal = await target.getConfig("remote.service", "REMOTE_CONF");
-        expect(confVal).toBe("val123");
+        expect(confVal.value).toBe("val123");
+        expect(confVal.configured).toBe(true);
 
         const allConf = await target.listConfig("remote.service");
-        expect(allConf.REMOTE_CONF).toBe("val123");
+        expect(allConf.find((c) => c.key === "REMOTE_CONF")?.value).toBe("val123");
 
         const deletedConf = await target.deleteConfig("remote.service", "REMOTE_CONF");
         expect(deletedConf).toBe(true);
 
-        // 2. 远程状态管理
-        await target.setState("remote.service", "remote_count", 99);
-        const stateVal = await target.getState("remote.service", "remote_count");
+        // 2. 远程状态管理（增加 actionId 级作用域）
+        await target.setState("remote.service", "add", "remote_count", 99);
+        const stateVal = await target.getState("remote.service", "add", "remote_count");
         expect(stateVal).toBe(99);
 
-        const stateDetail = await target.getState<any>("remote.service", "remote_count", { detail: true });
+        const stateDetail = await target.getState<any>("remote.service", "add", "remote_count", { detail: true });
         expect(stateDetail).toBeDefined();
         expect(stateDetail.value).toBe(99);
 
-        const keys = await target.listStateKeys!("remote.service");
+        const keys = await target.listStateKeys("remote.service", "add");
         expect(keys).toContain("remote_count");
 
-        const deletedState = await target.deleteState("remote.service", "remote_count");
+        const deletedState = await target.deleteState("remote.service", "add", "remote_count");
         expect(deletedState).toBe(true);
 
         // 3. 远程运行记录管理

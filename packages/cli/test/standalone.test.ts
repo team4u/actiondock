@@ -5,17 +5,6 @@ import { runStandaloneCli } from "../src/standalone";
 
 describe("CLI - Standalone Mode Dispatcher", () => {
   const greetAction = defineAction({
-    id: "greet",
-    description: "Greet someone warmly",
-    inputSchema: {
-      type: "object",
-      properties: { name: { type: "string" } },
-      required: ["name"],
-    },
-    outputSchema: {
-      type: "object",
-      properties: { message: { type: "string" } },
-    },
     async run(input: any, ctx) {
       const greeting = ctx.config.get("GREETING", "Hello");
       return { message: `${greeting}, ${input.name}!` };
@@ -23,8 +12,6 @@ describe("CLI - Standalone Mode Dispatcher", () => {
   });
 
   const failAction = defineAction({
-    id: "fail",
-    description: "Always fail",
     run: async () => {
       throw new Error("Intentional failure");
     },
@@ -34,7 +21,27 @@ describe("CLI - Standalone Mode Dispatcher", () => {
     packageId: "test.standalone",
     version: "1.2.3",
     description: "Standalone test package",
-    actions: [greetAction, failAction],
+    actions: [
+      {
+        id: "greet",
+        action: greetAction,
+        description: "Greet someone warmly",
+        inputSchema: {
+          type: "object",
+          properties: { name: { type: "string" } },
+          required: ["name"],
+        },
+        outputSchema: {
+          type: "object",
+          properties: { message: { type: "string" } },
+        },
+      },
+      {
+        id: "fail",
+        action: failAction,
+        description: "Always fail",
+      },
+    ],
     configDefs: {
       GREETING: {
         type: "string" as const,

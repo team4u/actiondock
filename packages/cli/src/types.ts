@@ -44,7 +44,10 @@ export interface StandaloneOptions {
   /** 声明的配置依赖字典 */
   configDefs?: Record<string, ConfigItemDefinition>;
   /** 内置动作定义映射或数组 */
-  actions: Map<string, ActionDefinition> | ActionDefinition[];
+  actions:
+    | Map<string, ActionDefinition>
+    | Array<{ id: string; action: ActionDefinition } | (ActionDefinition & { id: string })>
+    | Record<string, ActionDefinition>;
   /** 自定义数据目录 */
   dataDir?: string;
   /** 自定义 ActionDock 用户家目录 */
@@ -96,7 +99,7 @@ export interface RuntimeProgramOptions extends CliContext {
 }
 
 /**
- * 项目详情元数据结构。
+ * 工程自省详情信息结构。
  */
 export interface ProjectDetailInfo {
   id: string;
@@ -112,7 +115,7 @@ export interface ProjectDetailInfo {
   playbooks: string[];
   configDeclared: string[];
   configDef?: Record<string, ConfigItemDefinition>;
-  actionsMap?: Map<string, ActionDefinition | { id: string; description?: string }>;
+  actionsMap?: Map<string, { id?: string; description?: string }>;
   playbooksMap?: Map<string, any>;
 }
 

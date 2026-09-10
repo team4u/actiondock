@@ -92,13 +92,6 @@ export async function resolveTarget(
   const packages: ActionDockAppOptions[] = [];
 
   if (options.actions) {
-    const actionsList =
-      options.actions instanceof Map
-        ? Array.from(options.actions.values())
-        : Array.isArray(options.actions)
-          ? options.actions
-          : [];
-
     const appStorage = options.storage
       ? Object.assign(Object.create(options.storage), { close: () => {} })
       : undefined;
@@ -109,7 +102,7 @@ export async function resolveTarget(
         name: options.packageId || "default",
         version: ACTIONDOCK_VERSION,
       },
-      actions: actionsList,
+      actions: options.actions,
       storage: appStorage,
       inMemory: true,
       customHome: options.customHome,
@@ -229,14 +222,13 @@ export async function createActionDockMcpServer(
 
   try {
     const info = await target.info();
-    if (Array.isArray(info)) {
-      if (info.length === 1) {
-        serverName = info[0].id || info[0].name || "actiondock";
-        serverVersion = info[0].version || ACTIONDOCK_VERSION;
+    if (info) {
+      serverName = info.name || info.id || "actiondock";
+      serverVersion = info.protocolVersion || ACTIONDOCK_VERSION;
+      if (info.packages && info.packages.length === 1) {
+        serverName = info.packages[0].name || info.packages[0].id || serverName;
+        serverVersion = info.packages[0].version || serverVersion;
       }
-    } else if (info) {
-      serverName = info.id || info.name || "actiondock";
-      serverVersion = info.version || ACTIONDOCK_VERSION;
     }
   } catch {
     // 忽略元数据读取失败，使用默认值

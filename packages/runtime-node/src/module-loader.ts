@@ -1,35 +1,17 @@
 import { existsSync, statSync } from "node:fs";
-import { createRequire } from "node:module";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { dirname, extname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { ModuleLoader } from "@actiondock/core";
 
-/** ESM 环境下可用的 CommonJS require，用于动态加载 tsx/cjs/api */
-const cjsRequire = createRequire(import.meta.url);
-
-const CANDIDATE_EXTENSIONS = [
-  "",
-  ".ts",
-  ".tsx",
-  ".mts",
-  ".cts",
-  ".js",
-  ".mjs",
-  ".cjs",
-];
-
-const INDEX_CANDIDATES = [
-  "index.ts",
-  "index.tsx",
-  "index.mts",
-  "index.cts",
-  "index.js",
-  "index.mjs",
-  "index.cjs",
-];
+/**
+ * Node 原生 TypeScript 与 ESM 模块支持的扩展名集合。
+ */
+const ALLOWED_EXTENSIONS = new Set([".ts", ".mts", ".js", ".mjs"]);
 
 /**
  * 解包模块的默认导出对象，优先获取 default 或 action，自动解开嵌套互操作对象。
+ *
+ * @param moduleExports 待解包的模块导出对象
  */
 export function unwrapDefaultExport<T = any>(moduleExports: any): T {
   if (moduleExports === null || moduleExports === undefined) {
@@ -56,12 +38,18 @@ export function unwrapDefaultExport<T = any>(moduleExports: any): T {
 }
 
 /**
- * 基于 tsx 的 TypeScript 源码模块加载器。
- * 支持 .ts、.tsx、.mts、.cts 等 TypeScript 文件在 Node.js 与 Bun 环境下的无缝加载。
+ * 基于 Node.js 原生 ESM 动态 import 的源码模块加载器。
+ * 遵循 Node 原生模块规范：
+ * - 严格要求显式入口扩展名（.ts, .mts, .js, .mjs）
+ * - 彻底拒绝无扩展名自动推断与 CommonJS 目录索引解析
+ * - 完全移除第三方转译运行时依赖
  */
-export class TsxModuleLoader implements ModuleLoader {
+export class NodeModuleLoader implements ModuleLoader {
   /**
-   * 解析模块标识符与路径，支持相对路径、文件后缀省略以及目录索引文件补全。
+   * 解析模块标识符与路径，严格要求显式扩展名且拒绝目录补全。
+   *
+   * @param specifier 模块规范说明符或相对/绝对物理路径
+   * @param parentPath 发起解析的父级文件或目录路径
    */
   resolve(specifier: string, parentPath?: string): string {
     let target = specifier;
@@ -89,100 +77,61 @@ export class TsxModuleLoader implements ModuleLoader {
 
     const candidateBasePath = isAbsolute(target) ? target : resolve(baseDir, target);
 
-    // 1. 尝试直接匹配或补齐候选扩展名
-    for (const ext of CANDIDATE_EXTENSIONS) {
-      const fullPath = ext ? `${candidateBasePath}${ext}` : candidateBasePath;
-      if (existsSync(fullPath)) {
-        try {
-          if (statSync(fullPath).isFile()) {
-            return fullPath;
-          }
-        } catch {
-          // 忽略访问异常
-        }
-      }
+    const ext = extname(candidateBasePath);
+    if (!ext) {
+      throw new Error(
+        `Cannot resolve module '${specifier}' from '${parentPath || process.cwd()}': missing file extension. Explicit .ts, .mts, .js, or .mjs extension is required.`
+      );
     }
 
-    // 2. 若目标为目录，尝试匹配目录下的 index.* 文件
-    if (existsSync(candidateBasePath)) {
-      try {
-        if (statSync(candidateBasePath).isDirectory()) {
-          for (const indexName of INDEX_CANDIDATES) {
-            const indexFilePath = join(candidateBasePath, indexName);
-            if (existsSync(indexFilePath) && statSync(indexFilePath).isFile()) {
-              return indexFilePath;
-            }
-          }
-        }
-      } catch {
-        // 忽略访问异常
-      }
+    if (!ALLOWED_EXTENSIONS.has(ext)) {
+      throw new Error(
+        `Cannot resolve module '${specifier}' from '${parentPath || process.cwd()}': unsupported extension '${ext}'. Only .ts, .mts, .js, and .mjs are supported.`
+      );
     }
 
-    // 3. 尝试使用 tsx 的 require.resolve 机制解析
+    if (!existsSync(candidateBasePath)) {
+      throw new Error(
+        `Cannot resolve module '${specifier}' from '${parentPath || process.cwd()}': file not found`
+      );
+    }
+
     try {
-      const { require: tsxRequire } = cjsRequire("tsx/cjs/api");
-      const resolved = tsxRequire.resolve(target, { paths: [baseDir] });
-      if (resolved) {
-        return resolved;
+      const stat = statSync(candidateBasePath);
+      if (!stat.isFile()) {
+        throw new Error(
+          `Cannot resolve module '${specifier}' from '${parentPath || process.cwd()}': path is not a file`
+        );
       }
-    } catch {
-      // 忽略 tsx 解析失败
+    } catch (err: any) {
+      if (err.message.startsWith("Cannot resolve module")) {
+        throw err;
+      }
+      throw new Error(
+        `Cannot resolve module '${specifier}' from '${parentPath || process.cwd()}': ${err.message}`
+      );
     }
 
-    throw new Error(
-      `Cannot resolve TypeScript module '${specifier}' from '${parentPath || process.cwd()}'`
-    );
+    return candidateBasePath;
   }
 
   /**
-   * 动态加载 TypeScript 模块并返回其全量导出对象。
+   * 基于 Node 原生 ESM 动态 import 加载模块并返回其全量导出对象。
+   *
+   * @param specifier 模块规范说明符或物理路径
+   * @param parentPath 发起加载的父级文件或目录路径
    */
   async load<T = any>(specifier: string, parentPath?: string): Promise<T> {
     const resolvedPath = this.resolve(specifier, parentPath);
-    const parentUrl = parentPath
-      ? parentPath.startsWith("file://")
-        ? parentPath
-        : pathToFileURL(resolve(parentPath)).href
-      : pathToFileURL(join(process.cwd(), "index.js")).href;
-
-    const isBun = typeof (globalThis as any).Bun !== "undefined";
-
-    if (isBun) {
-      try {
-        return (await import(pathToFileURL(resolvedPath).href)) as T;
-      } catch (bunImportErr) {
-        try {
-          const { require: tsxRequire } = cjsRequire("tsx/cjs/api");
-          return tsxRequire(resolvedPath, parentUrl) as T;
-        } catch {
-          throw bunImportErr;
-        }
-      }
-    }
-
-    // Node.js 环境下优先使用 tsx 的 ESM 动态导入。
-    // tsImport 的首参按 URL 解析，Windows 绝对路径（D:\...）会被误判为 "d:" 协议，
-    // 必须转换为 file:// URL；POSIX 路径转换后行为一致。
-    try {
-      const { tsImport } = await import("tsx/esm/api");
-      return (await tsImport(pathToFileURL(resolvedPath).href, parentUrl)) as T;
-    } catch (esmErr) {
-      try {
-        const { require: tsxRequire } = cjsRequire("tsx/cjs/api");
-        return tsxRequire(resolvedPath, parentUrl) as T;
-      } catch {
-        try {
-          return (await import(pathToFileURL(resolvedPath).href)) as T;
-        } catch {
-          throw esmErr;
-        }
-      }
-    }
+    const fileUrl = pathToFileURL(resolvedPath).href;
+    return (await import(fileUrl)) as T;
   }
 
   /**
-   * 加载 TypeScript 模块并解包其默认导出（default 或 action）。
+   * 加载模块并解包其默认导出（default 或 action）。
+   *
+   * @param specifier 模块规范说明符或物理路径
+   * @param parentPath 发起加载的父级文件或目录路径
    */
   async loadDefault<T = any>(specifier: string, parentPath?: string): Promise<T> {
     const mod = await this.load(specifier, parentPath);
@@ -193,20 +142,25 @@ export class TsxModuleLoader implements ModuleLoader {
    * 静态快捷方法：解析模块路径。
    */
   static resolve(specifier: string, parentPath?: string): string {
-    return new TsxModuleLoader().resolve(specifier, parentPath);
+    return new NodeModuleLoader().resolve(specifier, parentPath);
   }
 
   /**
    * 静态快捷方法：动态加载模块。
    */
   static async load<T = any>(specifier: string, parentPath?: string): Promise<T> {
-    return new TsxModuleLoader().load<T>(specifier, parentPath);
+    return new NodeModuleLoader().load<T>(specifier, parentPath);
   }
 
   /**
    * 静态快捷方法：动态加载模块默认导出。
    */
   static async loadDefault<T = any>(specifier: string, parentPath?: string): Promise<T> {
-    return new TsxModuleLoader().loadDefault<T>(specifier, parentPath);
+    return new NodeModuleLoader().loadDefault<T>(specifier, parentPath);
   }
 }
+
+/**
+ * 兼容原有类名导出。
+ */
+export { NodeModuleLoader as TsxModuleLoader };

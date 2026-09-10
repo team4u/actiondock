@@ -18,23 +18,6 @@ describe("ActionRunner", () => {
     });
 
     const addAction = defineAction({
-      id: "math.add",
-      description: "Add two numbers",
-      inputSchema: {
-        type: "object",
-        properties: {
-          a: { type: "number" },
-          b: { type: "number" },
-        },
-        required: ["a", "b"],
-      },
-      outputSchema: {
-        type: "object",
-        properties: {
-          sum: { type: "number" },
-        },
-        required: ["sum"],
-      },
       run(input: { a: number; b: number }) {
         return { sum: input.a + input.b };
       },
@@ -43,10 +26,34 @@ describe("ActionRunner", () => {
     const runner = new ActionRunner({
       packageId: "test-pkg",
       storage,
-      actions: new Map([[addAction.id, addAction]]),
+      projectConfig: {
+        id: "test-pkg",
+        actions: {
+          "math.add": {
+            entry: "",
+            description: "Add two numbers",
+            inputSchema: {
+              type: "object",
+              properties: {
+                a: { type: "number" },
+                b: { type: "number" },
+              },
+              required: ["a", "b"],
+            },
+            outputSchema: {
+              type: "object",
+              properties: {
+                sum: { type: "number" },
+              },
+              required: ["sum"],
+            },
+          },
+        },
+      },
+      actions: new Map([["math.add", addAction]]),
     });
 
-    const res = await runner.execute(addAction, { a: 10, b: 20 });
+    const res = await runner.execute("math.add", { a: 10, b: 20 });
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.data).toEqual({ sum: 30 });
@@ -65,14 +72,6 @@ describe("ActionRunner", () => {
     });
 
     const strictAction = defineAction({
-      id: "test.strict",
-      inputSchema: {
-        type: "object",
-        properties: {
-          email: { type: "string" },
-        },
-        required: ["email"],
-      },
       run(input: any) {
         return { ok: true };
       },
@@ -81,10 +80,25 @@ describe("ActionRunner", () => {
     const runner = new ActionRunner({
       packageId: "test-pkg",
       storage,
-      actions: new Map([[strictAction.id, strictAction]]),
+      projectConfig: {
+        id: "test-pkg",
+        actions: {
+          "test.strict": {
+            entry: "",
+            inputSchema: {
+              type: "object",
+              properties: {
+                email: { type: "string" },
+              },
+              required: ["email"],
+            },
+          },
+        },
+      },
+      actions: new Map([["test.strict", strictAction]]),
     });
 
-    const res = await runner.execute(strictAction, { wrong: "field" });
+    const res = await runner.execute("test.strict", { wrong: "field" });
     expect(res.ok).toBe(false);
     if (!res.ok) {
       expect(res.error.code).toBe("INPUT_VALIDATION_FAILED");
@@ -111,7 +125,6 @@ describe("ActionRunner", () => {
     };
 
     const action = defineAction({
-      id: "test.config",
       run(_input, ctx) {
         return {
           endpoint: ctx.config.get("ENDPOINT"),
@@ -130,10 +143,10 @@ describe("ActionRunner", () => {
         ENDPOINT: "http://override.internal",
         OVERRIDE_ONLY: "from-override",
       },
-      actions: new Map([[action.id, action]]),
+      actions: new Map([["test.config", action]]),
     });
 
-    const res = await runner.execute(action, {});
+    const res = await runner.execute("test.config", {});
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.data).toEqual({
@@ -152,14 +165,12 @@ describe("ActionRunner", () => {
     });
 
     const step1 = defineAction({
-      id: "chain.step1",
       run: (input: { n: number }) => input.n * 2,
     });
 
     const step2 = defineAction({
-      id: "chain.step2",
       async run(input: { n: number }, ctx) {
-        const doubled = await ctx.actions.invoke(step1, { n: input.n });
+        const doubled = (await ctx.actions.invoke("chain.step1", { n: input.n })) as number;
         return { final: doubled + 10 };
       },
     });
@@ -168,12 +179,12 @@ describe("ActionRunner", () => {
       packageId: "test-pkg",
       storage,
       actions: new Map<string, ActionDefinition<any, any>>([
-        [step1.id, step1],
-        [step2.id, step2],
+        ["chain.step1", step1],
+        ["chain.step2", step2],
       ]),
     });
 
-    const res = await runner.execute(step2, { n: 5 });
+    const res = await runner.execute("chain.step2", { n: 5 });
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.data).toEqual({ final: 20 });
@@ -190,24 +201,21 @@ describe("ActionRunner", () => {
     });
 
     const localStep = defineAction({
-      id: "local.calc",
       run: (input: { x: number }) => input.x * 2,
     });
 
     const extAction = defineAction({
-      id: "greet",
       run: (input: { name: string }) => `Hello, ${input.name}!`,
     });
 
     const orchestrator = defineAction({
-      id: "orchestrator",
       async run(input: { val: number }, ctx) {
         // 1. 调用本地动作（通过字符串 ID）
-        const calcRes = await ctx.actions.invoke("local.calc", { x: input.val });
+        const calcRes = await ctx.actions.invoke<any, number>("local.calc", { x: input.val });
         // 2. 调用本地动作（通过 ActionRef）
-        const refRes = await ctx.actions.invoke({ actionId: "local.calc" }, { x: calcRes });
+        const refRes = await ctx.actions.invoke<any, number>({ actionId: "local.calc" }, { x: calcRes });
         // 3. 跨包显式调用外部动作（通过 package/action 字符串）
-        const extRes = await ctx.actions.invoke("ext-pkg/greet", { name: "ActionDock" });
+        const extRes = await ctx.actions.invoke<any, string>("ext-pkg/greet", { name: "ActionDock" });
         return { calcRes, refRes, extRes };
       },
     });
@@ -216,8 +224,8 @@ describe("ActionRunner", () => {
       packageId: "local-pkg",
       storage,
       actions: new Map<string, ActionDefinition<any, any>>([
-        [localStep.id, localStep],
-        [orchestrator.id, orchestrator],
+        ["local.calc", localStep],
+        ["orchestrator", orchestrator],
       ]),
       actionResolver: async (ref) => {
         const id = typeof ref === "string" ? ref : ref.actionId;
@@ -228,7 +236,7 @@ describe("ActionRunner", () => {
       },
     });
 
-    const res = await runner.execute(orchestrator, { val: 5 });
+    const res = await runner.execute("orchestrator", { val: 5 });
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.data).toEqual({
@@ -246,24 +254,21 @@ describe("ActionRunner", () => {
     });
 
     const localCalc = defineAction({
-      id: "calc",
       run: (input: { x: number }) => input.x + 1,
     });
 
     const extCalc = defineAction({
-      id: "calc",
       run: (input: { x: number }) => input.x * 10,
     });
 
     const caller = defineAction({
-      id: "caller",
       async run(input: { x: number }, ctx) {
         // 1. 调用本地动作
-        const local = await ctx.actions.invoke("calc", { x: input.x });
+        const local = await ctx.actions.invoke<any, number>("calc", { x: input.x });
         // 2. 跨包调用同名外部动作（字符串限定标识符），严禁被本地动作截断抢占
-        const extStr = await ctx.actions.invoke("ext-pkg/calc", { x: input.x });
+        const extStr = await ctx.actions.invoke<any, number>("ext-pkg/calc", { x: input.x });
         // 3. 跨包调用同名外部动作（结构化 ActionRef 对象）
-        const extRef = await ctx.actions.invoke({ packageId: "ext-pkg", actionId: "calc" }, { x: input.x });
+        const extRef = await ctx.actions.invoke<any, number>({ packageId: "ext-pkg", actionId: "calc" }, { x: input.x });
         return { local, extStr, extRef };
       },
     });
@@ -272,8 +277,8 @@ describe("ActionRunner", () => {
       packageId: "local-pkg",
       storage,
       actions: new Map<string, ActionDefinition<any, any>>([
-        [localCalc.id, localCalc],
-        [caller.id, caller],
+        ["calc", localCalc],
+        ["caller", caller],
       ]),
       actionResolver: async (ref) => {
         const id = typeof ref === "string" ? ref : `${ref.packageId}/${ref.actionId}`;
@@ -284,7 +289,7 @@ describe("ActionRunner", () => {
       },
     });
 
-    const res = await runner.execute(caller, { x: 5 });
+    const res = await runner.execute("caller", { x: 5 });
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.data).toEqual({
@@ -351,7 +356,6 @@ describe("ActionRunner", () => {
 
     try {
       const action = defineAction({
-        id: "demo.env-test",
         run(_input, ctx) {
           return {
             token: ctx.config.get("apiToken"),
@@ -368,10 +372,10 @@ describe("ActionRunner", () => {
         packageId: "team.demo-service",
         storage,
         projectConfig,
-        actions: new Map([[action.id, action]]),
+        actions: new Map([["demo.env-test", action]]),
       });
 
-      const res = await runner.execute(action, {});
+      const res = await runner.execute("demo.env-test", {});
       expect(res.ok).toBe(true);
       if (res.ok) {
         expect(res.data).toEqual({
@@ -419,7 +423,6 @@ describe("ActionRunner", () => {
 
     try {
       const action = defineAction({
-        id: "env-test",
         run(_input, ctx) {
           return {
             apiKey: ctx.config.get("apiKey"),
@@ -433,10 +436,10 @@ describe("ActionRunner", () => {
         packageId: "@scope/my-service",
         storage,
         projectConfig,
-        actions: new Map([[action.id, action]]),
+        actions: new Map([["env-test", action]]),
       });
 
-      const res = await runner.execute(action, {});
+      const res = await runner.execute("env-test", {});
       expect(res.ok).toBe(true);
       if (res.ok) {
         expect(res.data).toEqual({
@@ -482,7 +485,6 @@ describe("ActionRunner", () => {
 
     try {
       const action = defineAction({
-        id: "tier.check",
         run(_input, ctx) {
           return {
             override: ctx.config.get("KEY_OVERRIDE"),
@@ -502,10 +504,10 @@ describe("ActionRunner", () => {
         configOverrides: {
           KEY_OVERRIDE: "val_override",
         },
-        actions: new Map([[action.id, action]]),
+        actions: new Map([["tier.check", action]]),
       });
 
-      const res = await runner.execute(action, {});
+      const res = await runner.execute("tier.check", {});
       expect(res.ok).toBe(true);
       if (res.ok) {
         expect(res.data).toEqual({
@@ -530,7 +532,6 @@ describe("ActionRunner", () => {
     });
 
     const sleepAction = defineAction({
-      id: "test.sleep",
       async run(_input, ctx) {
         return new Promise((resolve, reject) => {
           const timer = setTimeout(() => resolve({ done: true }), 1000);
@@ -545,10 +546,10 @@ describe("ActionRunner", () => {
     const runner = new ActionRunner({
       packageId: "test-pkg",
       storage,
-      actions: new Map([[sleepAction.id, sleepAction]]),
+      actions: new Map([["test.sleep", sleepAction]]),
     });
 
-    const result = await runner.execute(sleepAction, {}, { timeoutMs: 50 });
+    const result = await runner.execute("test.sleep", {}, { timeoutMs: 50 });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe("ACTION_TIMEOUT");
@@ -567,7 +568,6 @@ describe("ActionRunner", () => {
     });
 
     const cancellableAction = defineAction({
-      id: "test.cancellable",
       async run(_input, ctx) {
         return new Promise((resolve, reject) => {
           const timer = setTimeout(() => resolve({ completed: true }), 2000);
@@ -582,10 +582,10 @@ describe("ActionRunner", () => {
     const runner = new ActionRunner({
       packageId: "test-pkg",
       storage,
-      actions: new Map([[cancellableAction.id, cancellableAction]]),
+      actions: new Map([["test.cancellable", cancellableAction]]),
     });
 
-    const handle = runner.start(cancellableAction, {});
+    const handle = runner.start("test.cancellable", {});
     expect(handle.runId).toBeDefined();
 
     // Cancel execution after 30ms
@@ -613,7 +613,6 @@ describe("ActionRunner", () => {
     });
 
     const progressAndLogAction = defineAction({
-      id: "test.progress-log",
       async run(_input, ctx) {
         ctx.log.info("Starting task", { step: 1 });
         ctx.progress.report(50, 100, "halfway done");
@@ -638,7 +637,7 @@ describe("ActionRunner", () => {
       storage,
       eventSink: eventSink as any,
     });
-    service.registerAction(progressAndLogAction);
+    service.registerAction("test.progress-log", progressAndLogAction);
 
     const result = await service.execute({ actionId: "test.progress-log" }, {});
     expect(result.ok).toBe(true);
@@ -666,12 +665,6 @@ describe("ActionRunner", () => {
     });
 
     const schemaAction = defineAction({
-      id: "test.schema-action",
-      inputSchema: {
-        type: "object",
-        required: ["username"],
-        properties: { username: { type: "string" } },
-      },
       run() {
         return "ok";
       },
@@ -680,12 +673,25 @@ describe("ActionRunner", () => {
     const runner = new ActionRunner({
       packageId: "test-pkg",
       storage,
-      actions: new Map([[schemaAction.id, schemaAction]]),
+      projectConfig: {
+        id: "test-pkg",
+        actions: {
+          "test.schema-action": {
+            entry: "",
+            inputSchema: {
+              type: "object",
+              required: ["username"],
+              properties: { username: { type: "string" } },
+            },
+          },
+        },
+      },
+      actions: new Map([["test.schema-action", schemaAction]]),
       maxCallDepth: 3,
     });
 
     // 1. Validation failure should be persisted
-    const valResult = await runner.execute(schemaAction, { username: 123 as any });
+    const valResult = await runner.execute("test.schema-action", { username: 123 as any });
     expect(valResult.ok).toBe(false);
     const valRun = storage.getRun(valResult.runId);
     expect(valRun).toBeDefined();
@@ -694,14 +700,13 @@ describe("ActionRunner", () => {
 
     // 2. Cycle detection failure should be persisted
     const cycleAction = defineAction({
-      id: "test.cycle-action",
       async run(_, ctx) {
         return ctx.actions.invoke("test.cycle-action");
       },
     });
-    runner.registerAction(cycleAction);
+    runner.registerAction("test.cycle-action", cycleAction);
 
-    const cycleResult = await runner.execute(cycleAction, {});
+    const cycleResult = await runner.execute("test.cycle-action", {});
     expect(cycleResult.ok).toBe(false);
     const runs = storage.listRuns();
     const cycleRun = runs.find((r) => r.error?.code === "ACTION_CYCLE_DETECTED");
@@ -710,36 +715,32 @@ describe("ActionRunner", () => {
 
     // 3. Max call depth failure should be persisted
     const recursiveActionA = defineAction({
-      id: "test.rec-a",
       async run(_, ctx) {
         return ctx.actions.invoke("test.rec-b");
       },
     });
     const recursiveActionB = defineAction({
-      id: "test.rec-b",
       async run(_, ctx) {
         return ctx.actions.invoke("test.rec-c");
       },
     });
     const recursiveActionC = defineAction({
-      id: "test.rec-c",
       async run(_, ctx) {
         return ctx.actions.invoke("test.rec-d");
       },
     });
     const recursiveActionD = defineAction({
-      id: "test.rec-d",
       async run() {
         return "done";
       },
     });
 
-    runner.registerAction(recursiveActionA);
-    runner.registerAction(recursiveActionB);
-    runner.registerAction(recursiveActionC);
-    runner.registerAction(recursiveActionD);
+    runner.registerAction("test.rec-a", recursiveActionA);
+    runner.registerAction("test.rec-b", recursiveActionB);
+    runner.registerAction("test.rec-c", recursiveActionC);
+    runner.registerAction("test.rec-d", recursiveActionD);
 
-    const depthResult = await runner.execute(recursiveActionA, {}, { maxCallDepth: 3 });
+    const depthResult = await runner.execute("test.rec-a", {}, { maxCallDepth: 3 });
     expect(depthResult.ok).toBe(false);
     const depthRun = storage.listRuns().find((r) => r.error?.code === "ACTION_MAX_DEPTH_EXCEEDED");
     expect(depthRun).toBeDefined();
@@ -758,7 +759,6 @@ describe("ActionRunner", () => {
 
     // pkg-b has an action that writes to its state and reads its config
     const pkgBAction = defineAction({
-      id: "b.worker",
       async run(input: any, ctx) {
         await ctx.state.set("from_worker", "worker_val");
         const greeting = ctx.config.get("greeting", "default_greet");
@@ -775,12 +775,11 @@ describe("ActionRunner", () => {
         version: "1.0.0",
         config: { greeting: { default: "hello from B" } },
       },
-      actions: new Map([[pkgBAction.id, pkgBAction]]),
+      actions: new Map([["b.worker", pkgBAction]]),
     });
 
     // pkg-a has a caller action that invokes pkg-b/b.worker
     const pkgAAction = defineAction({
-      id: "a.caller",
       async run(input: any, ctx) {
         return ctx.actions.invoke({ packageId: "pkg-b", actionId: "b.worker" }, input);
       },
@@ -789,7 +788,7 @@ describe("ActionRunner", () => {
     const pkgARunner = new ActionRunner({
       packageId: "pkg-a",
       storage: pkgAStorage,
-      actions: new Map([[pkgAAction.id, pkgAAction]]),
+      actions: new Map([["a.caller", pkgAAction]]),
       packageContextResolver: async (packageId) => {
         if (packageId === "pkg-b") {
           return {
@@ -800,14 +799,14 @@ describe("ActionRunner", () => {
               version: "1.0.0",
               config: { greeting: { default: "hello from B" } },
             },
-            actions: new Map([[pkgBAction.id, pkgBAction]]),
+            actions: new Map([["b.worker", pkgBAction]]),
           };
         }
         return undefined;
       },
     });
 
-    const result = await pkgARunner.execute(pkgAAction, { foo: "bar" });
+    const result = await pkgARunner.execute("a.caller", { foo: "bar" });
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.data).toEqual({ greeting: "hello from B", echoed: { foo: "bar" } });
@@ -832,7 +831,6 @@ describe("ActionRunner", () => {
     });
 
     const callerAction = defineAction({
-      id: "caller.test",
       async run(input: any, ctx) {
         return ctx.actions.invoke({ packageId: "unregistered-remote-pkg", actionId: "some.action" }, input);
       },
@@ -841,11 +839,11 @@ describe("ActionRunner", () => {
     const runner = new ActionRunner({
       packageId: "pkg-caller",
       storage: pkgStorage,
-      actions: new Map([[callerAction.id, callerAction]]),
+      actions: new Map([["caller.test", callerAction]]),
       packageContextResolver: async () => undefined,
     });
 
-    const result = await runner.execute(callerAction, {});
+    const result = await runner.execute("caller.test", {});
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe("PACKAGE_NOT_FOUND");
@@ -954,7 +952,6 @@ export default {
     const storageB = new SqliteRuntimeStorage({ packageId: "pkg-b", dbPath: ":memory:" });
 
     const workAction = defineAction({
-      id: "work",
       async run(input: { task: string }) {
         return { done: true, task: input.task, fromPkg: "pkg-b" };
       },
@@ -1004,7 +1001,6 @@ export default {
     let ghostStorageCreated = false;
 
     const localAction = defineAction({
-      id: "secret",
       async run() {
         return { executed: "local-pkg-a" };
       },

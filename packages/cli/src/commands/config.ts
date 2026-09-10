@@ -71,14 +71,17 @@ export function registerConfigCommands(program: Command, context?: CliContext): 
           dataDir: options.dataDir || context?.dataDir,
         });
 
-        let globalConfig: Record<string, any> = {};
-        let projectConfig: Record<string, any> = {};
+        let globalConfig: import("@actiondock/core").ConfigValueView[] = [];
+        let projectConfig: import("@actiondock/core").ConfigValueView[] = [];
         try {
           globalConfig = await target.listConfig("global");
           projectConfig = await target.listConfig(projConfig.id);
         } finally {
           await target.close();
         }
+
+        const projectConfigMap = new Map(projectConfig.map((c) => [c.key, c]));
+        const globalConfigMap = new Map(globalConfig.map((c) => [c.key, c]));
 
         const items = declaredKeys.map((key) => {
           const itemDef = declared[key];
@@ -89,12 +92,15 @@ export function registerConfigCommands(program: Command, context?: CliContext): 
           let status: "SET" | "DEFAULT" | "MISSING" = "MISSING";
           const envResolved = resolveEnvValue(key, itemDef, projConfig.id);
 
-          if (projectConfig[key] !== undefined) {
-            resolvedValue = projectConfig[key];
+          const projItem = projectConfigMap.get(key);
+          const globItem = globalConfigMap.get(key);
+
+          if (projItem && projItem.configured && projItem.source === "package") {
+            resolvedValue = projItem.value;
             source = "project";
             status = "SET";
-          } else if (globalConfig[key] !== undefined) {
-            resolvedValue = globalConfig[key];
+          } else if (globItem && globItem.configured) {
+            resolvedValue = globItem.value;
             source = "global";
             status = "SET";
           } else if (envResolved !== undefined) {
@@ -246,11 +252,11 @@ export function registerConfigCommands(program: Command, context?: CliContext): 
       try {
         if (options.global) {
           const all = await localTarget.listConfig("global");
-          const entries = Object.entries(all).map(([k, v]) => {
-            const isSecret = isSecretConfigKey(k);
-            const displayValue = !reveal && isSecret ? maskSecretValue(v) : v;
+          const entries = all.map((item) => {
+            const isSecret = item.secret || isSecretConfigKey(item.key);
+            const displayValue = !reveal && isSecret ? maskSecretValue(item.value) : item.value;
             return {
-              key: k,
+              key: item.key,
               value: displayValue,
               source: "global",
               secret: isSecret,
@@ -286,11 +292,11 @@ export function registerConfigCommands(program: Command, context?: CliContext): 
           }
 
           const all = await localTarget.listConfig("global");
-          const entries = Object.entries(all).map(([k, v]) => {
-            const isSecret = isSecretConfigKey(k);
-            const displayValue = !reveal && isSecret ? maskSecretValue(v) : v;
+          const entries = all.map((item) => {
+            const isSecret = item.secret || isSecretConfigKey(item.key);
+            const displayValue = !reveal && isSecret ? maskSecretValue(item.value) : item.value;
             return {
-              key: k,
+              key: item.key,
               value: displayValue,
               source: "global",
               secret: isSecret,
@@ -323,25 +329,30 @@ export function registerConfigCommands(program: Command, context?: CliContext): 
         const projConfig = loadProjectConfig(root);
         const declared = projConfig.config || {};
 
-        const globalConfig = await localTarget.listConfig("global");
-        const projectConfig = await localTarget.listConfig(projConfig.id);
+        const globalConfigList = await localTarget.listConfig("global");
+        const projectConfigList = await localTarget.listConfig(projConfig.id);
+
+        const projectConfigMap = new Map(projectConfigList.map((c) => [c.key, c]));
+        const globalConfigMap = new Map(globalConfigList.map((c) => [c.key, c]));
 
         const allKeys = new Set([
           ...Object.keys(declared),
-          ...Object.keys(projectConfig),
-          ...Object.keys(globalConfig),
+          ...projectConfigList.map((c) => c.key),
+          ...globalConfigList.map((c) => c.key),
         ]);
 
       const merged = Array.from(allKeys).map((k) => {
         let rawValue: unknown;
         let source = "default";
         const envResolved = resolveEnvValue(k, declared[k], projConfig.id);
+        const projItem = projectConfigMap.get(k);
+        const globItem = globalConfigMap.get(k);
 
-        if (projectConfig[k] !== undefined) {
-          rawValue = projectConfig[k];
+        if (projItem && projItem.configured && projItem.source === "package") {
+          rawValue = projItem.value;
           source = "project";
-        } else if (globalConfig[k] !== undefined) {
-          rawValue = globalConfig[k];
+        } else if (globItem && globItem.configured) {
+          rawValue = globItem.value;
           source = "global";
         } else if (envResolved !== undefined) {
           rawValue = envResolved.value;
@@ -464,8 +475,9 @@ export function registerConfigCommands(program: Command, context?: CliContext): 
             throw new ArgumentError(`Package '${options.package}' not found in linked packages or path`);
           }
 
-          const val = await localTarget.getConfig("global", key);
-          const isSecret = isSecretConfigKey(key);
+          const confView = await localTarget.getConfig("global", key);
+          const val = confView?.value;
+          const isSecret = confView?.secret ?? isSecretConfigKey(key);
           const displayValue = !reveal && isSecret && val !== undefined ? maskSecretValue(val) : val;
 
           const payload = {
@@ -486,22 +498,15 @@ export function registerConfigCommands(program: Command, context?: CliContext): 
 
         const projConfig = loadProjectConfig(root);
         const declaredItem = projConfig.config?.[key];
+        const confView = await localTarget.getConfig(projConfig.id, key);
 
-        const projectConfig = await localTarget.listConfig(projConfig.id);
-        const projectVal = projectConfig[key];
-        const globalConfig = await localTarget.listConfig("global");
-        const globalVal = globalConfig[key];
-
-        let resolvedVal: unknown;
-        let source = "default";
+        let resolvedVal: unknown = confView?.value;
+        let source: string = confView?.source === "package" ? "project" : (confView?.source || "default");
         const envResolved = resolveEnvValue(key, declaredItem, projConfig.id);
 
-        if (projectVal !== undefined) {
-          resolvedVal = projectVal;
-          source = "project";
-        } else if (globalVal !== undefined) {
-          resolvedVal = globalVal;
-          source = "global";
+        if (confView && confView.configured) {
+          resolvedVal = confView.value;
+          source = confView.source === "package" ? "project" : confView.source;
         } else if (envResolved !== undefined) {
           resolvedVal = envResolved.value;
           source = "env";
@@ -510,7 +515,7 @@ export function registerConfigCommands(program: Command, context?: CliContext): 
           source = "default";
         }
 
-        const isSecret = isSecretConfigKey(key, declaredItem);
+        const isSecret = confView?.secret ?? isSecretConfigKey(key, declaredItem);
         const displayValue = !reveal && isSecret && resolvedVal !== undefined ? maskSecretValue(resolvedVal) : resolvedVal;
 
         const payload = {

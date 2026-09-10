@@ -25,7 +25,10 @@ export interface TestRuntimeOptions {
   /** 自定义取消信号（可选，默认使用未中断的 AbortSignal） */
   signal?: AbortSignal;
   /** 预注册的 Action 集合（供跨 Action 调用或按 ID 标识符解析） */
-  actions?: ActionDefinition[] | Record<string, ActionDefinition> | Map<string, ActionDefinition>;
+  actions?:
+    | Array<{ id: string; action: ActionDefinition } | (ActionDefinition & { id: string })>
+    | Record<string, ActionDefinition>
+    | Map<string, ActionDefinition>;
 }
 
 /**
@@ -370,7 +373,8 @@ export interface TestRuntime {
   /**
    * 注册 Action 动作定义
    */
-  registerAction(action: ActionDefinition): void;
+  registerAction(action: ActionDefinition & { id?: string }): void;
+  registerAction(id: string, action: ActionDefinition): void;
   /**
    * 获取已注册的 Action 动作定义
    */
@@ -390,12 +394,12 @@ export interface TestRuntime {
   ): Promise<O>;
   /**
    * 执行指定的 Action 并返回 ExecutionResult 信封包装
-   * @param action 目标 Action 定义对象或标识符
+   * @param action 目标 Action 定义对象、引用或标识符
    * @param input 输入参数
    * @param options 可选执行控制参数
    */
   execute<I = unknown, O = unknown>(
-    action: ActionDefinition<I, O> | string,
+    action: ActionDefinition<I, O> | ActionRef | string,
     input?: I,
     options?: any
   ): Promise<ExecutionResult<O>>;
@@ -425,8 +429,12 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
   const actionsMap = new Map<string, ActionDefinition>();
   if (options.actions) {
     if (Array.isArray(options.actions)) {
-      for (const act of options.actions) {
-        actionsMap.set(act.id, act);
+      for (const item of options.actions as any[]) {
+        const id = item.id;
+        const act = item.action ?? item;
+        if (id) {
+          actionsMap.set(id, act);
+        }
       }
     } else if (options.actions instanceof Map) {
       for (const [k, v] of options.actions) {
@@ -446,42 +454,40 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
   ): ActionInvoker {
     const invoker: ActionInvoker = {
       async invoke<I = unknown, O = unknown>(
-        action: ActionDefinition<I, O> | ActionRef | string,
+        action: ActionRef | string,
         input?: I
       ): Promise<O> {
-        let target: ActionDefinition<I, O>;
-        let targetCallKey: string;
         if (
-          typeof action === "object" &&
-          "run" in action &&
-          typeof (action as any).run === "function"
+          typeof action !== "string" &&
+          (!action || typeof action !== "object" || typeof (action as any).run === "function" || !("actionId" in action))
         ) {
-          target = action as ActionDefinition<I, O>;
-          targetCallKey = target.id;
-        } else {
-          let fullId: string;
-          let pureId: string;
-          if (typeof action === "string") {
-            fullId = action;
-            pureId = action.includes("/") ? action.slice(action.lastIndexOf("/") + 1) : action;
-          } else {
-            const ref = action as ActionRef;
-            pureId = ref.actionId;
-            fullId = ref.packageId ? `${ref.packageId}/${ref.actionId}` : ref.actionId;
-          }
-          const found = actionsMap.get(fullId) || actionsMap.get(pureId);
-          if (!found) {
-            throw new ActionRuntimeError({
-              code: "ACTION_NOT_FOUND",
-              message: `Action '${fullId}' not found in TestRuntime actions registry`,
-            });
-          }
-          target = found as ActionDefinition<I, O>;
-          targetCallKey = actionsMap.has(fullId) ? fullId : target.id;
+          throw new ActionRuntimeError({
+            code: "INVALID_ACTION_REF",
+            message: "ctx.actions.invoke strictly accepts only ActionRef or string, passing ActionDefinition or function is prohibited",
+          });
         }
+        let fullId: string;
+        let pureId: string;
+        if (typeof action === "string") {
+          fullId = action;
+          pureId = action.includes("/") ? action.slice(action.lastIndexOf("/") + 1) : action;
+        } else {
+          const ref = action as ActionRef;
+          pureId = ref.actionId;
+          fullId = ref.packageId ? `${ref.packageId}/${ref.actionId}` : ref.actionId;
+        }
+        const found = actionsMap.get(fullId) || actionsMap.get(pureId);
+        if (!found) {
+          throw new ActionRuntimeError({
+            code: "ACTION_NOT_FOUND",
+            message: `Action '${fullId}' not found in TestRuntime actions registry`,
+          });
+        }
+        const target = found as ActionDefinition<I, O>;
+        const targetCallKey = actionsMap.has(fullId) ? fullId : (found as any).id || pureId;
 
-        if (target.inputSchema) {
-          validateData(target.inputSchema, input, true);
+        if ((target as any).inputSchema) {
+          validateData((target as any).inputSchema, input, true);
         }
 
         if (currentCallStack.includes(targetCallKey)) {
@@ -566,8 +572,8 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
           },
         };
         const output = (await target.run(input as I, ctx)) as O;
-        if (target.outputSchema) {
-          validateData(target.outputSchema, output, false);
+        if ((target as any).outputSchema) {
+          validateData((target as any).outputSchema, output, false);
         }
         return output;
       },
@@ -577,12 +583,108 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
 
   const rootInvoker = createInvoker();
 
+  async function executeDirectAction<I = unknown, O = unknown>(
+    action: ActionDefinition<I, O> | ActionRef | string,
+    input?: I
+  ): Promise<O> {
+    if (typeof action === "object" && action && "run" in action && typeof (action as any).run === "function") {
+      const runId = "test-" + Math.random().toString(36).slice(2, 10);
+      const ctx: ActionContext = {
+        config,
+        state,
+        actions: createInvoker(runId, runId),
+        process: {
+          async exec(command, args, options) {
+            const res = await execCli(command, args, {
+              cwd: options?.cwd,
+              env: options?.env,
+              input: options?.input,
+              timeout: options?.timeoutMs,
+              throwOnError: options?.throwOnError,
+              signal: options?.signal,
+            });
+            return {
+              ok: res.ok,
+              exitCode: res.exitCode,
+              stdout: res.stdout,
+              stderr: res.stderr,
+              raw: res.raw,
+              timedOut: res.timedOut ?? false,
+              cancelled: Boolean(options?.signal?.aborted),
+              durationMs: res.durationMs,
+            };
+          },
+          async spawnDetached(options) {
+            const probeFn = options.probe
+              ? async () => {
+                  const fakeRes: ProcessResult = {
+                    ok: true,
+                    exitCode: 0,
+                    stdout: "",
+                    stderr: "",
+                    raw: new Uint8Array(),
+                    timedOut: false,
+                    cancelled: false,
+                    durationMs: 0,
+                  };
+                  return options.probe!(fakeRes);
+                }
+              : () => true;
+
+            const ready = await spawnDetached({
+              command: options.command,
+              args: options.args,
+              cwd: options.cwd,
+              env: options.env,
+              timeoutMs: options.timeoutMs ?? options.probeTimeoutMs,
+              intervalMs: options.probeIntervalMs,
+              signal: options.signal,
+              probe: probeFn,
+            });
+
+            return {
+              ok: ready,
+              ready,
+              durationMs: 0,
+            };
+          },
+        },
+        log: logger,
+        progress: {
+          report() {},
+        },
+        signal,
+        run: {
+          id: runId,
+          rootId: runId,
+        },
+      };
+      if ((action as any).inputSchema) {
+        validateData((action as any).inputSchema, input, true);
+      }
+      const output = (await action.run(input as I, ctx)) as O;
+      if ((action as any).outputSchema) {
+        validateData((action as any).outputSchema, output, false);
+      }
+      return output;
+    }
+    return rootInvoker.invoke(action as ActionRef | string, input);
+  }
+
   return {
     config,
     state,
     logger,
-    registerAction(action: ActionDefinition): void {
-      actionsMap.set(action.id, action);
+    registerAction(
+      idOrAction: string | (ActionDefinition & { id?: string }),
+      action?: ActionDefinition
+    ): void {
+      if (typeof idOrAction === "string" && action) {
+        actionsMap.set(idOrAction, action);
+      } else if (typeof idOrAction === "object" && idOrAction) {
+        const id = (idOrAction as any).id || "anonymous";
+        actionsMap.set(id, idOrAction as ActionDefinition);
+      }
     },
     getAction(id: string): ActionDefinition | undefined {
       return actionsMap.get(id);
@@ -594,15 +696,15 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
       action: ActionDefinition<I, O> | ActionRef | string,
       input?: I
     ): Promise<O> {
-      return rootInvoker.invoke(action, input);
+      return executeDirectAction(action, input);
     },
     async execute<I = unknown, O = unknown>(
-      action: ActionDefinition<I, O> | string,
+      action: ActionDefinition<I, O> | ActionRef | string,
       input?: I,
       options?: any
     ): Promise<ExecutionResult<O>> {
       try {
-        const data = await rootInvoker.invoke(action, input);
+        const data = await executeDirectAction(action, input);
         return {
           ok: true,
           runId: "test-" + Math.random().toString(36).slice(2, 10),

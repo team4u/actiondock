@@ -118,8 +118,6 @@ describe("createTestPlatform 测试平台工厂测试", () => {
       platform.process.register("ad-cli whoami", { stdout: "agent-user" });
 
       const testAction = defineAction({
-        id: "test-echo",
-        description: "测试动作",
         run: async (_input, ctx) => {
           const procRes = await ctx.process.exec("ad-cli whoami");
           await ctx.state.set("user", procRes.stdout.trim());
@@ -136,7 +134,7 @@ describe("createTestPlatform 测试平台工厂测试", () => {
         eventSink: platform.eventSink,
       });
 
-      service.registerAction(testAction);
+      service.registerAction("test-echo", testAction);
 
       const ticket = await service.start("test-echo", {});
       const result: any = await ticket.result!;
@@ -165,8 +163,6 @@ describe("createTestPlatform 测试平台工厂测试", () => {
       });
 
       const action = defineAction({
-        id: "runtime-action",
-        description: "运行时动作",
         run: async (_input, ctx) => {
           const res = await ctx.process.exec("test-cmd");
           return { out: res.stdout };

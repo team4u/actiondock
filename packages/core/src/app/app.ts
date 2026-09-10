@@ -96,8 +96,16 @@ export class DefaultActionDockApp implements ActionDockApp {
           this.actionsMap.set(k, v);
         }
       } else if (Array.isArray(options.actions)) {
-        for (const act of options.actions) {
-          this.actionsMap.set(act.id, act);
+        for (const item of options.actions as any[]) {
+          const id = item.id;
+          const act = item.action ?? item;
+          if (id) {
+            this.actionsMap.set(id, act);
+          }
+        }
+      } else if (typeof options.actions === "object") {
+        for (const [k, v] of Object.entries(options.actions)) {
+          this.actionsMap.set(k, v);
         }
       }
     }
@@ -240,14 +248,15 @@ export class DefaultActionDockApp implements ActionDockApp {
     // 3. 读取内存显式注入的 Action 定义
     for (const [id, act] of this.actionsMap) {
       const existing = map.get(id);
+      const actObj = act as any;
       map.set(id, {
         id,
-        description: act.description ?? existing?.description,
-        inputSchema: act.inputSchema ?? existing?.inputSchema,
-        outputSchema: act.outputSchema ?? existing?.outputSchema,
-        tags: act.tags ? [...act.tags] : existing?.tags,
-        annotations: act.annotations ?? existing?.annotations,
-        uses: act.uses ? [...act.uses] : existing?.uses,
+        description: actObj.description ?? existing?.description,
+        inputSchema: actObj.inputSchema ?? existing?.inputSchema,
+        outputSchema: actObj.outputSchema ?? existing?.outputSchema,
+        tags: actObj.tags ? [...actObj.tags] : existing?.tags,
+        annotations: actObj.annotations ?? existing?.annotations,
+        uses: actObj.uses ? [...actObj.uses] : existing?.uses,
         entry: existing?.entry,
         filePath: existing?.filePath,
       });
@@ -408,14 +417,15 @@ export class DefaultActionDockApp implements ActionDockApp {
     }
 
     if (liveAction) {
+      const actObj = liveAction as any;
       return {
-        id: liveAction.id,
-        description: liveAction.description ?? spec?.description,
-        inputSchema: liveAction.inputSchema ?? spec?.inputSchema,
-        outputSchema: liveAction.outputSchema ?? spec?.outputSchema,
-        tags: liveAction.tags ? [...liveAction.tags] : spec?.tags,
-        annotations: liveAction.annotations ?? spec?.annotations,
-        uses: liveAction.uses ? [...liveAction.uses] : spec?.uses,
+        id: actObj.id || id,
+        description: actObj.description ?? spec?.description,
+        inputSchema: actObj.inputSchema ?? spec?.inputSchema,
+        outputSchema: actObj.outputSchema ?? spec?.outputSchema,
+        tags: actObj.tags ? [...actObj.tags] : spec?.tags,
+        annotations: actObj.annotations ?? spec?.annotations,
+        uses: actObj.uses ? [...actObj.uses] : spec?.uses,
         entry: spec?.entry,
         filePath: spec?.filePath,
       };

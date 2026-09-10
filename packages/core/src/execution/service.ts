@@ -121,8 +121,17 @@ export class DefaultExecutionService implements ExecutionService {
     return this._runner;
   }
 
-  public registerAction(action: ActionDefinition): void {
-    this._runner.registerAction(action);
+  public registerAction(id: string, action: ActionDefinition): void;
+  public registerAction(action: ({ id: string; action?: ActionDefinition } & Partial<ActionDefinition>) | ActionDefinition): void;
+  public registerAction(
+    idOrAction: string | (({ id: string; action?: ActionDefinition } & Partial<ActionDefinition>) | ActionDefinition),
+    actionDef?: ActionDefinition
+  ): void {
+    if (typeof idOrAction === "string") {
+      this._runner.registerAction(idOrAction, actionDef!);
+    } else {
+      this._runner.registerAction(idOrAction);
+    }
   }
 
   public getAction(id: string): ActionDefinition | undefined {
@@ -400,7 +409,8 @@ export class DefaultExecutionService implements ExecutionService {
       },
     };
 
-    const handle = runnerToUse.start(action, input, {
+    runnerToUse.registerAction(targetActionId, action);
+    const handle = runnerToUse.start(targetActionId, input, {
       runId,
       rootRunId: options.rootRunId,
       parentRunId: options.parentRunId,

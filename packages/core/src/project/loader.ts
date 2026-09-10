@@ -529,13 +529,6 @@ export async function loadActions(
       }
 
       const def: ActionDefinition = {
-        id: actionId,
-        description: item.description ?? (typeof exported === "object" ? exported?.description : undefined),
-        inputSchema: item.inputSchema ?? (typeof exported === "object" ? exported?.inputSchema : undefined),
-        outputSchema: item.outputSchema ?? (typeof exported === "object" ? exported?.outputSchema : undefined),
-        tags: item.tags ? [...item.tags] : (Array.isArray(exported?.tags) ? [...exported.tags] : []),
-        annotations: item.annotations ?? (typeof exported === "object" ? exported?.annotations : undefined),
-        uses: item.uses ? [...item.uses] : (Array.isArray(exported?.uses) ? [...exported.uses] : []),
         run: runFn,
       };
 
@@ -595,13 +588,6 @@ export async function loadActions(
           continue;
         }
         actions.set(actionId, {
-          id: actionId,
-          description: typeof exported === "object" ? exported.description : undefined,
-          inputSchema: typeof exported === "object" ? exported.inputSchema : undefined,
-          outputSchema: typeof exported === "object" ? exported.outputSchema : undefined,
-          tags: Array.isArray(exported?.tags) ? [...exported.tags] : [],
-          annotations: typeof exported === "object" ? exported.annotations : undefined,
-          uses: Array.isArray(exported?.uses) ? [...exported.uses] : [],
           run: runFn,
         });
       } else {

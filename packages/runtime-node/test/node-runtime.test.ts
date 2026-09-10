@@ -7,6 +7,8 @@ import {
   createWebRequest,
   ExecaProcessExecutor,
   NodeHttpServer,
+  NodeModuleLoader,
+  NodeProcessExecutor,
   NodeSqliteDriver,
   sendWebResponse,
   TsxModuleLoader,
@@ -261,7 +263,7 @@ describe("ExecaProcessExecutor 单元测试", () => {
   });
 });
 
-describe("TsxModuleLoader 单元测试", () => {
+describe("NodeModuleLoader 与 TsxModuleLoader 单元测试", () => {
   const testDir = join(process.cwd(), "tmp", "test-loader-" + Date.now());
 
   beforeAll(() => {
@@ -279,11 +281,7 @@ describe("TsxModuleLoader 单元测试", () => {
       join(testDir, "component.tsx"),
       `
       export const tag = "button";
-      export default {
-        render(label: string) {
-          return "<" + tag + ">" + label + "</" + tag + ">";
-        }
-      };
+      export default { render() { return tag; } };
       `
     );
     writeFileSync(
@@ -291,6 +289,12 @@ describe("TsxModuleLoader 单元测试", () => {
       `
       export const magicNumber: number = 42;
       export default { magicNumber };
+      `
+    );
+    writeFileSync(
+      join(testDir, "legacy.cjs"),
+      `
+      module.exports = { legacy: true };
       `
     );
   });
@@ -304,7 +308,7 @@ describe("TsxModuleLoader 单元测试", () => {
   });
 
   it("支持加载 .ts 源码模块并提取命名与默认导出", async () => {
-    const loader = new TsxModuleLoader();
+    const loader = new NodeModuleLoader();
     const filePath = join(testDir, "service.ts");
 
     const mod = await loader.load(filePath);
@@ -315,19 +319,22 @@ describe("TsxModuleLoader 单元测试", () => {
     expect(calculate(10, 20)).toBe(30);
   });
 
-  it("支持加载 .tsx 源码模块", async () => {
-    const loader = new TsxModuleLoader();
+  it("严格拒绝不受支持的 .tsx 扩展名", async () => {
+    const loader = new NodeModuleLoader();
     const filePath = join(testDir, "component.tsx");
 
-    const mod = await loader.load(filePath);
-    expect(mod.tag).toBe("button");
+    await expect(loader.load(filePath)).rejects.toThrow("unsupported extension '.tsx'");
+  });
 
-    const comp = await loader.loadDefault<{ render: (label: string) => string }>(filePath);
-    expect(comp.render("Submit")).toBe("<button>Submit</button>");
+  it("严格拒绝不受支持的 .cjs 扩展名", async () => {
+    const loader = new NodeModuleLoader();
+    const filePath = join(testDir, "legacy.cjs");
+
+    await expect(loader.load(filePath)).rejects.toThrow("unsupported extension '.cjs'");
   });
 
   it("支持加载 .mts 源码模块", async () => {
-    const loader = new TsxModuleLoader();
+    const loader = new NodeModuleLoader();
     const filePath = join(testDir, "module.mts");
 
     const mod = await loader.load(filePath);
@@ -337,13 +344,20 @@ describe("TsxModuleLoader 单元测试", () => {
     expect(def.magicNumber).toBe(42);
   });
 
-  it("支持相对路径解析与后缀自动补齐", async () => {
-    const loader = new TsxModuleLoader();
-    const resolved = loader.resolve("./service", join(testDir, "dummy.js"));
+  it("支持显式相对路径解析与加载，并严格拒绝无扩展名解析", async () => {
+    const loader = new NodeModuleLoader();
+
+    // 显式扩展名解析成功
+    const resolved = loader.resolve("./service.ts", join(testDir, "dummy.js"));
     expect(resolved.endsWith("service.ts")).toBe(true);
 
-    const mod = await loader.load("./service", join(testDir, "dummy.js"));
+    const mod = await loader.load("./service.ts", join(testDir, "dummy.js"));
     expect(mod.serviceName).toBe("auth-service");
+
+    // 无扩展名解析严格拒绝
+    expect(() => loader.resolve("./service", join(testDir, "dummy.js"))).toThrow(
+      "missing file extension"
+    );
   });
 
   it("解包辅助函数 unwrapDefaultExport 支持多层嵌套与 action 属性回退", () => {

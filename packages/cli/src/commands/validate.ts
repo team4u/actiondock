@@ -48,31 +48,37 @@ export function registerValidateCommand(program: Command, context?: CliContext):
       const config = loadProjectConfig(root);
       const actions = await loadActions(root, config.actionsDir);
 
-      let toValidate: any[] = [];
+      let toValidate: Array<{ id: string; act: any; spec?: any }> = [];
       if (id) {
         const act = actions.get(id);
         if (!act) {
           throw new ArgumentError(`Action '${id}' not found in project '${config.id}'`);
         }
-        toValidate = [act];
+        toValidate = [{ id, act, spec: config.actions?.[id] }];
       } else {
-        toValidate = Array.from(actions.values());
+        toValidate = Array.from(actions.entries()).map(([actId, act]) => ({
+          id: actId,
+          act,
+          spec: config.actions?.[actId],
+        }));
       }
 
       const results: Array<{ id: string; valid: boolean; errors: string[] }> = [];
 
-      for (const act of toValidate) {
+      for (const item of toValidate) {
         const errors: string[] = [];
-        if (!act.id) errors.push("Missing id property");
-        if (!act.run || typeof act.run !== "function") errors.push("Missing run method");
-        if (act.inputSchema && typeof act.inputSchema !== "object") {
+        if (!item.id) errors.push("Missing id property");
+        if (!item.act?.run || typeof item.act.run !== "function") errors.push("Missing run method");
+        const inSchema = item.spec?.inputSchema ?? (item.act as any).inputSchema;
+        if (inSchema && typeof inSchema !== "object") {
           errors.push("Invalid inputSchema object");
         }
-        if (act.outputSchema && typeof act.outputSchema !== "object") {
+        const outSchema = item.spec?.outputSchema ?? (item.act as any).outputSchema;
+        if (outSchema && typeof outSchema !== "object") {
           errors.push("Invalid outputSchema object");
         }
         results.push({
-          id: act.id,
+          id: item.id,
           valid: errors.length === 0,
           errors,
         });

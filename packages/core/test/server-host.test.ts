@@ -7,8 +7,6 @@ import { startActionDockServer } from "../src/server";
 describe("startActionDockServer 扩展支持 ActionDockHost 绑定与生命周期自动协调", () => {
   it("传入 host 时暴露 server.host 并在 server.stop() 中自动协调 host.close()", async () => {
     const pingAction = defineAction({
-      id: "ping",
-      description: "健康探测动作",
       run: () => ({ pong: true }),
     });
 
@@ -18,7 +16,7 @@ describe("startActionDockServer 扩展支持 ActionDockHost 绑定与生命周�
         name: "Server Host App",
         version: "1.0.0",
       },
-      actions: [pingAction],
+      actions: [{ id: "ping", action: pingAction }],
       inMemory: true,
     });
 
