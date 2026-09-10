@@ -69,7 +69,7 @@ curl http://localhost:5177/api/v2/health
 ```json
 {
   "status": "ok",
-  "version": "2.0.12",
+  "version": "2.1.0",
   "timestamp": "2026-09-10T08:00:00.000Z",
   "uptime": 12.34
 }
