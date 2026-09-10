@@ -7,5 +7,4 @@ export * from "./clock";
 export * from "./process";
 export * from "./events";
 export * from "./module-loader";
-export * from "./legacy-registry";
 

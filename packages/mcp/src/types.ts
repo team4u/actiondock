@@ -1,9 +1,8 @@
 import type {
   ActionDockApp,
   ActionDockHost,
-  ExecutionManager,
+  ActionDockTarget,
   RuntimeStorage,
-  ServerRuntimeRegistry,
 } from "@actiondock/core";
 import type { ActionDefinition, ExecutionResult, RunRecord, RunStatus } from "@actiondock/sdk";
 
@@ -62,8 +61,11 @@ export function toMcpTaskPayload(run: RunRecord): McpTaskPayload {
 
 /**
  * ActionDock MCP 适配层初始化选项。
+ * 统一以 target（及可选 host, app）为核心。
  */
 export interface ActionDockMcpOptions {
+  /** 目标 ActionDockTarget 门面实例（最高优先级） */
+  target?: ActionDockTarget;
   /** 目标 ActionDockHost 宿主实例 */
   host?: ActionDockHost;
   /** 目标 ActionDockApp 应用实例 */
@@ -84,14 +86,10 @@ export interface ActionDockMcpOptions {
   configOverrides?: Record<string, unknown>;
   /** 单个 Tool 执行超时时间（毫秒） */
   timeoutMs?: number;
-  /** 预加载的 Action 映射表 */
-  actions?: Map<string, ActionDefinition>;
-  /** 底层存储实例 */
+  /** 预加载的 Action 集合（单元测试或内存模式使用） */
+  actions?: Map<string, ActionDefinition> | ActionDefinition[];
+  /** 底层存储实例（单元测试或特定场景注入） */
   storage?: RuntimeStorage;
-  /** 服务端运行时注册表 */
-  runtimeRegistry?: ServerRuntimeRegistry;
-  /** 活跃执行任务管理器 */
-  executionManager?: ExecutionManager;
 }
 
 /**
@@ -116,5 +114,7 @@ export interface ActionDockMcpHttpServerInstance {
   port: number;
   host: string;
   url: string;
+  target?: ActionDockTarget;
   stop: () => Promise<void>;
 }
+

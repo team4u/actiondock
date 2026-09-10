@@ -2,6 +2,7 @@ import { afterAll, describe, expect, it } from "bun:test";
 import {
   createActionDockApp,
   createActionDockHost,
+  createActionDockTarget,
 } from "@actiondock/core";
 import { defineAction, type ActionContext } from "@actiondock/sdk";
 import { InMemoryTransport } from "@modelcontextprotocol/server";
@@ -257,4 +258,133 @@ describe("@actiondock/mcp Host Integration", () => {
       host.runAction("test.mcp-host-app/calc.add", { a: 1, b: 2 })
     ).rejects.toThrow("ActionDockHost is closed");
   });
+
+  it("injects ActionDockTarget directly, verifying tools list discovery, sync call, async task, and cancellation", async () => {
+    let slowTaskCancelled = false;
+
+    const addAction = defineAction({
+      id: "calc.add",
+      description: "加法计算动作",
+      inputSchema: {
+        type: "object",
+        properties: {
+          a: { type: "number" },
+          b: { type: "number" },
+        },
+        required: ["a", "b"],
+      },
+      outputSchema: {
+        type: "object",
+        properties: {
+          sum: { type: "number" },
+        },
+        required: ["sum"],
+      },
+      run(input: { a: number; b: number }) {
+        return { sum: input.a + input.b };
+      },
+    });
+
+    const slowAction = defineAction({
+      id: "task.slow",
+      description: "慢速动作",
+      async run(input: { durationMs?: number }, ctx: ActionContext) {
+        const delay = input.durationMs || 1000;
+        return new Promise((resolve, reject) => {
+          const timer = setTimeout(() => {
+            resolve({ completed: true });
+          }, delay);
+
+          ctx.signal.addEventListener("abort", () => {
+            slowTaskCancelled = true;
+            clearTimeout(timer);
+            reject(new Error("Action execution was cancelled"));
+          });
+        });
+      },
+    });
+
+    const app = await createActionDockApp({
+      projectConfig: {
+        id: "test.mcp-target-app",
+        name: "MCP Target Test App",
+        version: "1.0.0",
+      },
+      actions: [addAction, slowAction],
+      inMemory: true,
+    });
+
+    const target = await createActionDockTarget({ app });
+    const server = await createActionDockMcpServer({ target });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverTransport);
+
+    let toolsListResult: any = null;
+    let syncCallResult: any = null;
+    let asyncCallResult: any = null;
+    let cancelResult: any = null;
+
+    let resolveDone: () => void;
+    const donePromise = new Promise<void>((r) => {
+      resolveDone = r;
+    });
+
+    clientTransport.onmessage = (msg: any) => {
+      if (msg.id === 1) {
+        clientTransport.send({ jsonrpc: "2.0", method: "notifications/initialized" });
+        clientTransport.send({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });
+      } else if (msg.id === 2) {
+        toolsListResult = msg.result;
+        clientTransport.send({
+          jsonrpc: "2.0",
+          id: 3,
+          method: "tools/call",
+          params: { name: "calc.add", arguments: { a: 10, b: 20 } },
+        });
+      } else if (msg.id === 3) {
+        syncCallResult = msg.result;
+        clientTransport.send({
+          jsonrpc: "2.0",
+          id: 4,
+          method: "tools/call",
+          params: { name: "task.slow", arguments: { durationMs: 2000, execution: { mode: "async" } } },
+        });
+      } else if (msg.id === 4) {
+        asyncCallResult = JSON.parse(msg.result.content[0].text);
+        const taskId = asyncCallResult.taskId || asyncCallResult.runId;
+        clientTransport.send({
+          jsonrpc: "2.0",
+          id: 5,
+          method: "tasks/cancel",
+          params: { taskId, reason: "Cancel target task" },
+        });
+      } else if (msg.id === 5) {
+        cancelResult = msg.result;
+        resolveDone();
+      }
+    };
+
+    clientTransport.send({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2026-07-28",
+        capabilities: {},
+        clientInfo: { name: "test-client", version: "1.0.0" },
+      },
+    });
+
+    await donePromise;
+
+    expect(toolsListResult.tools.length).toBe(2);
+    expect(syncCallResult.structuredContent).toEqual({ sum: 30 });
+    expect(asyncCallResult.status).toBe("running");
+    expect(cancelResult.status).toBe("cancelled");
+    expect(slowTaskCancelled).toBe(true);
+
+    await server.close();
+    await expect(target.runAction("calc.add", { a: 1, b: 2 })).rejects.toThrow();
+  });
 });
+

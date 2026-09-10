@@ -3,11 +3,10 @@ import {
   isLoopbackHost,
   launchHttpServer,
   resolveCorsHeaders,
-  ServerRuntimeRegistry,
   verifyBearerToken,
 } from "@actiondock/core";
 import { createMcpHandler } from "@modelcontextprotocol/server";
-import { createActionDockMcpServer } from "./adapter";
+import { createActionDockMcpServer, resolveTarget } from "./adapter";
 import type { ActionDockMcpHttpOptions, ActionDockMcpHttpServerInstance } from "./types";
 
 /**
@@ -34,16 +33,19 @@ export function startMcpHttpServer(
   }
 
   return (async () => {
-    const isInternalRegistry = !options.runtimeRegistry;
-    const runtimeRegistry = options.runtimeRegistry ?? new ServerRuntimeRegistry(options.customHome);
+    const hostTarget = hostInstance ?? (typeof options.host === "object" ? options.host : undefined);
+    const { target, ownsTarget } = await resolveTarget({
+      ...options,
+      host: hostTarget,
+    });
 
     const handler = createMcpHandler(
       () => {
+        const { host: _httpHost, ...restOptions } = options;
         return createActionDockMcpServer({
-          ...options,
-          host: hostInstance,
-          runtimeRegistry,
-          executionManager: runtimeRegistry.executionManager,
+          ...restOptions,
+          host: hostTarget,
+          target,
         });
       },
       {
@@ -167,25 +169,24 @@ export function startMcpHttpServer(
       port: server.port ?? port,
       host,
       url,
+      target,
       stop: async () => {
-        let registryError: unknown;
-        if (isInternalRegistry) {
-          try {
-            await runtimeRegistry.close();
-          } catch (err) {
-            registryError = err;
-          }
+        let targetError: unknown;
+        try {
+          await target.close();
+        } catch (err) {
+          targetError = err;
         }
         try {
           await server.stop(true);
         } catch (serverErr) {
-          if (registryError) {
-            throw new AggregateError([registryError, serverErr], "Failed to stop MCP HTTP server and runtime registry");
+          if (targetError) {
+            throw new AggregateError([targetError, serverErr], "Failed to stop MCP HTTP server and target");
           }
           throw serverErr;
         }
-        if (registryError) {
-          throw registryError;
+        if (targetError) {
+          throw targetError;
         }
       },
     };

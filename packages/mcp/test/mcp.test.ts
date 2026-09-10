@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { linkPackage, ServerRuntimeRegistry } from "@actiondock/core";
+import { createActionDockTarget, linkPackage } from "@actiondock/core";
 import { defineAction } from "@actiondock/sdk";
 import { InMemoryTransport } from "@modelcontextprotocol/server";
 import { createActionDockMcpServer, toMcpResult } from "../src/adapter";
@@ -19,6 +19,42 @@ function setupTestProject(tmpDir: string) {
         name: "MCP Test Package",
         version: "1.0.0",
         description: "Package for testing MCP adapter",
+        schemaVersion: 2,
+        actions: {
+          "calc.multiply": {
+            entry: "actions/calc.ts",
+            description: "Multiply two numbers",
+            inputSchema: {
+              type: "object",
+              properties: {
+                a: { type: "number" },
+                b: { type: "number" },
+              },
+              required: ["a", "b"],
+            },
+            outputSchema: {
+              type: "object",
+              properties: {
+                result: { type: "number" },
+              },
+              required: ["result"],
+            },
+          },
+          "task.slow": {
+            entry: "actions/slow.ts",
+            description: "Slow running action for cancellation test",
+            inputSchema: {
+              type: "object",
+              properties: {
+                durationMs: { type: "number" },
+              },
+            },
+          },
+          "task.fail": {
+            entry: "actions/error.ts",
+            description: "Action that intentionally throws",
+          },
+        },
       },
       null,
       2
@@ -585,7 +621,26 @@ describe("@actiondock/mcp Adapter", () => {
 
     writeFileSync(
       join(pkg1Dir, "actiondock.json"),
-      JSON.stringify({ id: "pkg-one", name: "Package One", version: "1.0.0" }, null, 2)
+      JSON.stringify(
+        {
+          id: "pkg-one",
+          name: "Package One",
+          version: "1.0.0",
+          schemaVersion: 2,
+          actions: {
+            echo: {
+              entry: "actions/echo.ts",
+              description: "Echo 1",
+            },
+            unique1: {
+              entry: "actions/unique1.ts",
+              description: "Unique 1",
+            },
+          },
+        },
+        null,
+        2
+      )
     );
     writeFileSync(
       join(pkg1Dir, "actions", "echo.ts"),
@@ -598,7 +653,26 @@ describe("@actiondock/mcp Adapter", () => {
 
     writeFileSync(
       join(pkg2Dir, "actiondock.json"),
-      JSON.stringify({ id: "pkg-two", name: "Package Two", version: "1.0.0" }, null, 2)
+      JSON.stringify(
+        {
+          id: "pkg-two",
+          name: "Package Two",
+          version: "1.0.0",
+          schemaVersion: 2,
+          actions: {
+            echo: {
+              entry: "actions/echo.ts",
+              description: "Echo 2",
+            },
+            unique2: {
+              entry: "actions/unique2.ts",
+              description: "Unique 2",
+            },
+          },
+        },
+        null,
+        2
+      )
     );
     writeFileSync(
       join(pkg2Dir, "actions", "echo.ts"),
@@ -816,6 +890,12 @@ describe("@actiondock/mcp Adapter", () => {
         id: "@enterprise-scope/super-long-subsystem-management-tools-package",
         name: "Enterprise Long Tools",
         version: "1.0.0",
+        schemaVersion: 2,
+        actions: {
+          reconcile: {
+            entry: "actions/reconcile.ts",
+          },
+        },
       })
     );
     mkdirSync(join(pkg1Dir, "actions"), { recursive: true });
@@ -831,6 +911,12 @@ describe("@actiondock/mcp Adapter", () => {
         id: "simple-pkg",
         name: "Simple Pkg",
         version: "1.0.0",
+        schemaVersion: 2,
+        actions: {
+          reconcile: {
+            entry: "actions/reconcile.ts",
+          },
+        },
       })
     );
     mkdirSync(join(pkg2Dir, "actions"), { recursive: true });
@@ -1000,46 +1086,43 @@ describe("@actiondock/mcp Adapter", () => {
     await server.close();
   });
 
-  it("preserves external runtimeRegistry and its storages upon server.close()", async () => {
-    const fakeHome = join(process.cwd(), "tmp", `test-mcp-home-${Date.now()}`);
-    const externalRegistry = new ServerRuntimeRegistry(fakeHome);
+  it("coordinates target.close() upon server.close()", async () => {
+    let targetClosed = false;
+    const dummyTarget = await createActionDockTarget({ projectRoot: tmpDir });
+    const originalTargetClose = dummyTarget.close.bind(dummyTarget);
+    dummyTarget.close = async () => {
+      targetClosed = true;
+      return originalTargetClose();
+    };
 
     const server = await createActionDockMcpServer({
-      projectRoot: tmpDir,
-      runtimeRegistry: externalRegistry,
+      target: dummyTarget,
     });
 
-    const storage = externalRegistry.getStorage("test.mcp-pkg", tmpDir);
-    expect(storage.listRuns().length).toBeGreaterThanOrEqual(0);
-
     await server.close();
-
-    expect(() => storage.listRuns()).not.toThrow();
-    const storageAfter = externalRegistry.getStorage("test.mcp-pkg", tmpDir);
-    expect(() => storageAfter.listRuns()).not.toThrow();
-
-    await externalRegistry.close();
-    rmSync(fakeHome, { recursive: true, force: true });
+    expect(targetClosed).toBe(true);
   });
 
-  it("preserves external runtimeRegistry on startMcpHttpServer stop()", async () => {
-    const externalRegistry = new ServerRuntimeRegistry();
-    const storage = externalRegistry.getStorage("test.mcp-pkg", tmpDir);
+  it("coordinates target.close() on startMcpHttpServer stop()", async () => {
+    let targetClosed = false;
+    const dummyTarget = await createActionDockTarget({ projectRoot: tmpDir });
+    const originalTargetClose = dummyTarget.close.bind(dummyTarget);
+    dummyTarget.close = async () => {
+      targetClosed = true;
+      return originalTargetClose();
+    };
 
     const httpServer = await startMcpHttpServer({
-      projectRoot: tmpDir,
-      runtimeRegistry: externalRegistry,
+      target: dummyTarget,
       port: 0,
       host: "127.0.0.1",
     });
 
     await httpServer.stop();
-
-    expect(() => storage.listRuns()).not.toThrow();
-    await externalRegistry.close();
+    expect(targetClosed).toBe(true);
   });
 
-  it("passes customHome to ServerRuntimeRegistry correctly", async () => {
+  it("passes customHome to target resolution correctly", async () => {
     const fakeHome = join(process.cwd(), "tmp", `test-mcp-custom-home-${Date.now()}`);
     mkdirSync(fakeHome, { recursive: true });
 
@@ -1055,23 +1138,79 @@ describe("@actiondock/mcp Adapter", () => {
     rmSync(fakeHome, { recursive: true, force: true });
   });
 
-  it("startMcpHttpServer stop() transparently propagates runtimeRegistry.close errors", async () => {
-    const originalClose = ServerRuntimeRegistry.prototype.close;
-    ServerRuntimeRegistry.prototype.close = async function () {
-      await originalClose.call(this);
-      throw new Error("Simulated Registry Close Failure");
+  it("startMcpHttpServer stop() transparently propagates target.close errors", async () => {
+    const dummyTarget: any = {
+      info: async () => ({ id: "test", version: "1.0.0" }),
+      listActions: async () => [],
+      listPlaybooks: async () => [],
+      close: async () => {
+        throw new Error("Simulated Target Close Failure");
+      },
     };
 
-    try {
-      const httpServer = await startMcpHttpServer({
-        projectRoot: tmpDir,
-        port: 0,
-        host: "127.0.0.1",
-      });
+    const httpServer = await startMcpHttpServer({
+      target: dummyTarget,
+      port: 0,
+      host: "127.0.0.1",
+    });
 
-      await expect(httpServer.stop()).rejects.toThrow("Simulated Registry Close Failure");
-    } finally {
-      ServerRuntimeRegistry.prototype.close = originalClose;
-    }
+    await expect(httpServer.stop()).rejects.toThrow("Simulated Target Close Failure");
+  });
+
+  it("maps playbooks to read-only MCP Resource and Prompt", async () => {
+    mkdirSync(join(tmpDir, "playbooks"), { recursive: true });
+    writeFileSync(
+      join(tmpDir, "playbooks", "guide.md"),
+      `---\nid: test.guide\ndescription: A test guide playbook\n---\n# Step 1\nRun test.`
+    );
+
+    const server = await createActionDockMcpServer({ projectRoot: tmpDir });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverTransport);
+
+    let resourcesList: any = null;
+    let resourceRead: any = null;
+    let promptsList: any = null;
+    let promptGet: any = null;
+
+    let resolvePb: () => void;
+    const pbPromise = new Promise<void>((r) => {
+      resolvePb = r;
+    });
+
+    clientTransport.onmessage = (msg: any) => {
+      if (msg.id === 1) {
+        clientTransport.send({ jsonrpc: "2.0", method: "notifications/initialized" });
+        clientTransport.send({ jsonrpc: "2.0", id: 2, method: "resources/list", params: {} });
+      } else if (msg.id === 2) {
+        resourcesList = msg.result;
+        clientTransport.send({ jsonrpc: "2.0", id: 3, method: "resources/read", params: { uri: "playbook://test.guide" } });
+      } else if (msg.id === 3) {
+        resourceRead = msg.result;
+        clientTransport.send({ jsonrpc: "2.0", id: 4, method: "prompts/list", params: {} });
+      } else if (msg.id === 4) {
+        promptsList = msg.result;
+        clientTransport.send({ jsonrpc: "2.0", id: 5, method: "prompts/get", params: { name: "test.guide" } });
+      } else if (msg.id === 5) {
+        promptGet = msg.result;
+        resolvePb();
+      }
+    };
+
+    clientTransport.send({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: { protocolVersion: "2026-07-28", capabilities: {}, clientInfo: { name: "test", version: "1.0" } },
+    });
+
+    await pbPromise;
+
+    expect(resourcesList.resources.some((r: any) => r.uri === "playbook://test.guide")).toBe(true);
+    expect(resourceRead.contents[0].text).toContain("Step 1");
+    expect(promptsList.prompts.some((p: any) => p.name === "test.guide")).toBe(true);
+    expect(promptGet.messages[0].content.text).toContain("Step 1");
+
+    await server.close();
   });
 });

@@ -3,27 +3,25 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   ACTIONDOCK_VERSION,
-  createStorage,
-  DefaultExecutionService,
-  ensureDependencyClosure,
+  ActionResolver,
+  createActionDockTarget,
   findProjectRoot,
-  listLinkedPackages,
-  loadActions,
-  loadProjectConfig,
   resolvePackageRoot,
-  ServerRuntimeRegistry,
 } from "@actiondock/core";
 import type {
   ActionDockApp,
+  ActionDockAppOptions,
   ActionDockHost,
-  ExecutionService,
-  ProjectConfig,
-  RuntimeStorage,
+  ActionDockTarget,
 } from "@actiondock/core";
-import type { ActionDefinition, ExecutionResult, RunRecord } from "@actiondock/sdk";
+import type { ExecutionResult, RunRecord } from "@actiondock/sdk";
 import { McpServer } from "@modelcontextprotocol/server";
 import { toMcpSchema } from "./schemas";
-import { toMcpTaskPayload, toMcpTaskStatus, type ActionDockMcpOptions } from "./types";
+import {
+  toMcpTaskPayload,
+  toMcpTaskStatus,
+  type ActionDockMcpOptions,
+} from "./types";
 
 /**
  * 判断目标值是否为普通对象（Plain Object）。
@@ -71,445 +69,178 @@ export function toMcpResult(result: ExecutionResult) {
   };
 }
 
-interface ResolvedTarget {
-  projectRoot: string;
-  config: ProjectConfig;
-  actions: Map<string, ActionDefinition>;
-  storage: RuntimeStorage;
-  executionService: ExecutionService;
-}
+/**
+ * 解析或基于选项创建底层 ActionDockTarget 统一门面。
+ */
+export async function resolveTarget(
+  options: ActionDockMcpOptions
+): Promise<{ target: ActionDockTarget; ownsTarget: boolean }> {
+  if (options.target) {
+    return { target: options.target, ownsTarget: false };
+  }
 
-function createMcpToolCallback(
-  executionService: ExecutionService,
-  actionId: string,
-  timeoutMs?: number
-) {
-  return async (input: any, ctx: any) => {
-    const isAsync = Boolean(
-      input &&
-        typeof input === "object" &&
-        (input.execution?.mode === "async" ||
-          input.__async === true ||
-          input.async === true)
-    );
-    const signal = ctx.mcpReq?.signal;
+  if (options.host) {
+    const target = await createActionDockTarget({ type: "local", host: options.host });
+    return { target, ownsTarget: false };
+  }
 
-    // 分发前剥离执行控制字段，防止污染输入导致 Schema 校验失败
-    let cleanInput = input;
-    if (input && typeof input === "object" && !Array.isArray(input)) {
-      const { execution, __async, async: _async, ...rest } = input;
-      cleanInput = rest;
-    }
+  if (options.app) {
+    const target = await createActionDockTarget({ type: "local", app: options.app });
+    return { target, ownsTarget: false };
+  }
 
-    if (isAsync) {
-      const ticket = await executionService.start(actionId, cleanInput, {
-        signal,
-        timeoutMs,
-      });
+  const packages: ActionDockAppOptions[] = [];
 
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: JSON.stringify({
-              ok: true,
-              runId: ticket.runId,
-              taskId: ticket.runId,
-              status: "running",
-            }),
-          },
-        ],
-      };
-    }
+  if (options.actions) {
+    const actionsList =
+      options.actions instanceof Map
+        ? Array.from(options.actions.values())
+        : Array.isArray(options.actions)
+          ? options.actions
+          : [];
 
-    const result = await executionService.execute(actionId, cleanInput, {
-      signal,
-      timeoutMs,
+    const appStorage = options.storage
+      ? Object.assign(Object.create(options.storage), { close: () => {} })
+      : undefined;
+
+    packages.push({
+      projectConfig: {
+        id: options.packageId || "default",
+        name: options.packageId || "default",
+        version: ACTIONDOCK_VERSION,
+      },
+      actions: actionsList,
+      storage: appStorage,
+      inMemory: true,
+      customHome: options.customHome,
+      configOverrides: options.configOverrides,
     });
-    return toMcpResult(result);
-  };
+  }
+
+  const appStorage = options.storage
+    ? Object.assign(Object.create(options.storage), { close: () => {} })
+    : undefined;
+
+  if (options.projectRoots && options.projectRoots.length > 0) {
+    for (const root of options.projectRoots) {
+      const abs = resolve(root);
+      const detected = findProjectRoot(abs);
+      if (!detected) {
+        throw new Error(
+          `Project root '${root}' is not a valid ActionDock package (actiondock.json not found)`
+        );
+      }
+      packages.push({
+        packageRoot: detected,
+        storage: appStorage,
+        customHome: options.customHome,
+        configOverrides: options.configOverrides,
+      });
+    }
+  }
+
+  if (options.packageIds && options.packageIds.length > 0) {
+    for (const pkgId of options.packageIds) {
+      const root = resolvePackageRoot(pkgId, undefined, options.customHome);
+      if (!root || !existsSync(root)) {
+        throw new Error(`Package '${pkgId}' not found in registry`);
+      }
+      packages.push({
+        packageRoot: root,
+        storage: appStorage,
+        customHome: options.customHome,
+        configOverrides: options.configOverrides,
+      });
+    }
+  }
+
+  let projectRoot = options.projectRoot;
+  if (options.projectRoot) {
+    const abs = resolve(options.projectRoot);
+    const detected = findProjectRoot(abs);
+    if (!detected) {
+      throw new Error(
+        `Project root '${options.projectRoot}' is not a valid ActionDock package (actiondock.json not found)`
+      );
+    }
+    projectRoot = detected;
+  }
+
+  if (
+    !projectRoot &&
+    packages.length === 0 &&
+    !options.all &&
+    !options.packageId
+  ) {
+    const currentRoot = findProjectRoot(process.cwd());
+    if (!currentRoot) {
+      throw new Error(
+        "No ActionDock project root found. Run inside an ActionDock package or specify --dir / --package / --all."
+      );
+    }
+    projectRoot = currentRoot;
+  }
+
+  if (options.packageId && !options.actions && packages.length === 0) {
+    const root = resolvePackageRoot(options.packageId, undefined, options.customHome);
+    if (!root || !existsSync(root)) {
+      throw new Error(`Package '${options.packageId}' not found in registry`);
+    }
+    packages.push({
+      packageRoot: root,
+      storage: options.storage,
+      customHome: options.customHome,
+      configOverrides: options.configOverrides,
+    });
+  }
+
+  const target = await createActionDockTarget({
+    type: "local",
+    projectRoot,
+    packages: packages.length > 0 ? packages : undefined,
+    scanLinkedPackages: Boolean(options.all),
+    hostOptions: {
+      autoLoadCurrentProject: packages.length === 0,
+    },
+    customHome: options.customHome,
+  });
+
+  return { target, ownsTarget: true };
 }
 
 export type ActionDockMcpServer = McpServer & {
   close: () => Promise<void>;
+  target: ActionDockTarget;
   host?: ActionDockHost;
   app?: ActionDockApp;
   events?: (runId: string, options?: { after?: number; signal?: AbortSignal }) => AsyncIterable<any>;
 };
 
 /**
- * Creates and configures an McpServer instance bound to one or more ActionDock packages with Tasks extension support.
+ * 创建并配置基于 ActionDockTarget 的 McpServer 适配层实例。
  */
 export async function createActionDockMcpServer(
   options: ActionDockMcpOptions = {}
 ): Promise<ActionDockMcpServer> {
-  const isHostOrApp = (target: unknown): target is ActionDockHost | ActionDockApp =>
-    typeof target === "object" &&
-    target !== null &&
-    typeof (target as any).listActions === "function";
+  const { target } = await resolveTarget(options);
 
-  const hostTarget = isHostOrApp(options.host)
-    ? options.host
-    : isHostOrApp(options.app)
-      ? options.app
-      : undefined;
-  if (hostTarget) {
-    let serverName = "actiondock";
-    let serverVersion = ACTIONDOCK_VERSION;
-    if (options.app) {
-      try {
-        const info = await options.app.info();
-        serverName = info.id || info.name || "actiondock";
-        serverVersion = info.version || ACTIONDOCK_VERSION;
-      } catch {}
-    } else if (options.host) {
-      try {
-        const infos = await options.host.info();
-        if (infos.length === 1) {
-          serverName = infos[0].id || infos[0].name || "actiondock";
-          serverVersion = infos[0].version || ACTIONDOCK_VERSION;
-        }
-      } catch {}
-    }
+  let serverName = "actiondock";
+  let serverVersion = ACTIONDOCK_VERSION;
 
-    const server = new McpServer({
-      name: serverName,
-      version: serverVersion,
-    });
-
-    (server.server as any).registerCapabilities({
-      tasks: {
-        listChanged: true,
-        cancel: {},
-      },
-    });
-
-    // 1. 直接通过 host.listActions() / app.listActions() 注册工具
-    const actionSummaries = await hostTarget.listActions();
-    for (const action of actionSummaries) {
-      server.registerTool(
-        action.id,
-        {
-          description: action.description,
-          inputSchema: toMcpSchema(action.inputSchema),
-          outputSchema: action.outputSchema ? toMcpSchema(action.outputSchema) : undefined,
-        },
-        async (input: any, ctx: any) => {
-          const isAsync = Boolean(
-            input &&
-              typeof input === "object" &&
-              (input.execution?.mode === "async" ||
-                input.__async === true ||
-                input.async === true)
-          );
-          const signal = ctx.mcpReq?.signal;
-
-          // 分发前剥离执行控制字段，防止污染输入导致 Schema 校验失败
-          let cleanInput = input;
-          if (input && typeof input === "object" && !Array.isArray(input)) {
-            const { execution, __async, async: _async, ...rest } = input;
-            cleanInput = rest;
-          }
-
-          if (isAsync) {
-            const ticket = await hostTarget.startAction(action.id, cleanInput, {
-              signal,
-              timeoutMs: options.timeoutMs,
-            });
-
-            return {
-              content: [
-                {
-                  type: "text" as const,
-                  text: JSON.stringify({
-                    ok: true,
-                    runId: ticket.runId,
-                    taskId: ticket.runId,
-                    status: "running",
-                  }),
-                },
-              ],
-            };
-          }
-
-          const result = await hostTarget.runAction(action.id, cleanInput, {
-            signal,
-            timeoutMs: options.timeoutMs,
-          });
-          return toMcpResult(result);
-        }
-      );
-    }
-
-    // 2. Register Tasks extension endpoints: tasks/get
-    (server.server as any).setRequestHandler("tasks/get", async (req: any) => {
-      const taskId = req.params?.taskId;
-      if (!taskId) {
-        throw new Error("taskId parameter is required for tasks/get");
+  try {
+    const info = await target.info();
+    if (Array.isArray(info)) {
+      if (info.length === 1) {
+        serverName = info[0].id || info[0].name || "actiondock";
+        serverVersion = info[0].version || ACTIONDOCK_VERSION;
       }
-      const run = await hostTarget.getRun(taskId);
-      if (run) {
-        return {
-          task: toMcpTaskPayload(run),
-        };
-      }
-      throw new Error(`Task '${taskId}' not found`);
-    });
-
-    // 3. Register Tasks extension endpoints: tasks/cancel
-    (server.server as any).setRequestHandler("tasks/cancel", async (req: any) => {
-      const taskId = req.params?.taskId;
-      if (!taskId) {
-        throw new Error("taskId parameter is required for tasks/cancel");
-      }
-      const cancelRes = await hostTarget.cancelRun(
-        taskId,
-        req.params?.reason || "Cancelled via MCP tasks/cancel"
-      );
-      if (cancelRes.outcome === "requested") {
-        return {
-          taskId,
-          status: "cancelled",
-        };
-      }
-      if (cancelRes.outcome === "already_terminal") {
-        return {
-          taskId,
-          status: toMcpTaskStatus(cancelRes.status),
-        };
-      }
-      const run = await hostTarget.getRun(taskId);
-      if (run) {
-        if (run.status === "running") {
-          const apps = options.app
-            ? [options.app]
-            : options.host
-              ? options.host.listApps()
-              : [];
-          for (const app of apps) {
-            try {
-              app.storage.updateRun(taskId, "cancelled", undefined, {
-                code: "ACTION_CANCELLED",
-                message: req.params?.reason || "Cancelled via MCP tasks/cancel",
-              });
-            } catch {}
-          }
-          return {
-            taskId,
-            status: "cancelled",
-          };
-        }
-        return {
-          taskId,
-          status: toMcpTaskStatus(run.status),
-        };
-      }
-      throw new Error(`Task '${taskId}' not found`);
-    });
-
-    // 4. Register Tasks extension endpoints: tasks/list
-    (server.server as any).setRequestHandler("tasks/list", async (req: any) => {
-      const limit = typeof req.params?.limit === "number" ? req.params.limit : 50;
-      const actionId = req.params?.actionId;
-      const allRuns: RunRecord[] = [];
-      const apps = options.app
-        ? [options.app]
-        : options.host
-          ? options.host.listApps()
-          : [];
-      for (const a of apps) {
-        if ((a as any).storage?.listRuns) {
-          const runs = (a as any).storage.listRuns({ limit, actionId });
-          allRuns.push(...runs);
-        }
-      }
-      allRuns.sort(
-        (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
-      );
-      const trimmed = allRuns.slice(0, limit);
-      return {
-        tasks: trimmed.map(toMcpTaskPayload),
-      };
-    });
-
-
-    const originalClose = server.close.bind(server);
-    let isClosed = false;
-
-    const closeFn = async (): Promise<void> => {
-      if (isClosed) return;
-      isClosed = true;
-
-      try {
-        await hostTarget.close();
-      } catch {
-        // 忽略关闭异常
-      }
-
-      try {
-        await originalClose();
-      } catch {
-        // 忽略关闭异常
-      }
-    };
-
-    (server as any).close = closeFn;
-    (server as any).host = options.host;
-    (server as any).app = options.app;
-    (server as any).events = (runId: string, opts?: any) => hostTarget.events(runId, opts);
-
-    return server as ActionDockMcpServer;
-  }
-
-  const targetRoots: string[] = [];
-  if (options.projectRoot) {
-    targetRoots.push(options.projectRoot);
-  }
-  if (options.projectRoots) {
-    targetRoots.push(...options.projectRoots);
-  }
-
-  const targetPackages: string[] = [];
-  if (options.packageId) {
-    targetPackages.push(options.packageId);
-  }
-  if (options.packageIds) {
-    targetPackages.push(...options.packageIds);
-  }
-
-  const resolvedRoots = new Set<string>();
-
-  // 1. Handle --all: discover all linked packages from registry
-  if (options.all) {
-    const linked = listLinkedPackages(options.customHome);
-    for (const pkg of linked) {
-      if (existsSync(pkg.path)) {
-        resolvedRoots.add(resolve(pkg.path));
-      }
+    } else if (info) {
+      serverName = info.id || info.name || "actiondock";
+      serverVersion = info.version || ACTIONDOCK_VERSION;
     }
-    const currentRoot = findProjectRoot(process.cwd());
-    if (currentRoot) {
-      resolvedRoots.add(resolve(currentRoot));
-    }
+  } catch {
+    // 忽略元数据读取失败，使用默认值
   }
-
-  // 2. Handle specific package IDs
-  for (const pkgId of targetPackages) {
-    const root = resolvePackageRoot(pkgId, undefined, options.customHome);
-    if (!root || !existsSync(root)) {
-      throw new Error(`Package '${pkgId}' not found in registry`);
-    }
-    resolvedRoots.add(resolve(root));
-  }
-
-  // 3. Handle specific directory paths
-  for (const dir of targetRoots) {
-    const absPath = resolve(dir);
-    const root = findProjectRoot(absPath);
-    if (!root) {
-      throw new Error(
-        `Project root '${dir}' is not a valid ActionDock package (actiondock.json not found)`
-      );
-    }
-    resolvedRoots.add(resolve(root));
-  }
-
-  // 4. Default fallback: current working directory
-  if (resolvedRoots.size === 0 && !options.all) {
-    const currentRoot = findProjectRoot(process.cwd());
-    if (currentRoot) {
-      resolvedRoots.add(resolve(currentRoot));
-    }
-  }
-
-  const isInternalRegistry = !options.runtimeRegistry;
-  const runtimeRegistry = options.runtimeRegistry ?? new ServerRuntimeRegistry(options.customHome);
-  const executionManager = options.executionManager ?? runtimeRegistry.executionManager;
-  const targets: ResolvedTarget[] = [];
-
-  // Handle case where options.actions is provided directly (e.g. unit tests or virtual packages)
-  if (resolvedRoots.size === 0 && options.actions) {
-    const dummyConfig: ProjectConfig = {
-      id: "virtual",
-      name: "Virtual Package",
-      version: ACTIONDOCK_VERSION,
-      description: "In-memory virtual package",
-      actionsDir: "actions",
-      playbooksDir: "playbooks",
-    };
-    const storage = options.storage ?? runtimeRegistry.getStorage("virtual");
-    const executionService = runtimeRegistry.getExecutionService("virtual", undefined, dummyConfig, {
-      storage,
-      actions: options.actions,
-      configOverrides: options.configOverrides,
-    });
-    targets.push({
-      projectRoot: "virtual",
-      config: dummyConfig,
-      actions: options.actions,
-      storage,
-      executionService,
-    });
-  } else {
-    if (resolvedRoots.size === 0) {
-      throw new Error(
-        "No ActionDock project root found. Run inside an ActionDock package or specify --dir / --package / --all."
-      );
-    }
-
-    await ensureDependencyClosure(Array.from(resolvedRoots), {
-      customHome: options.customHome,
-    });
-
-    for (const root of resolvedRoots) {
-      const projectConfig = loadProjectConfig(root);
-      const actions =
-        options.actions && resolvedRoots.size === 1
-          ? options.actions
-          : await loadActions(root, projectConfig.actionsDir, { autoInstall: false });
-
-      const storage =
-        options.storage && resolvedRoots.size === 1
-          ? options.storage
-          : runtimeRegistry.getStorage(projectConfig.id, root);
-
-      const executionService = runtimeRegistry.getExecutionService(
-        projectConfig.id,
-        root,
-        projectConfig,
-        {
-          storage,
-          actions,
-          configOverrides: options.configOverrides,
-        }
-      );
-
-      targets.push({
-        projectRoot: root,
-        config: projectConfig,
-        actions,
-        storage,
-        executionService,
-      });
-    }
-  }
-
-  const isMultiPackage = targets.length > 1;
-
-  // Check action ID collision across packages
-  const actionIdCounts = new Map<string, number>();
-  for (const target of targets) {
-    for (const actionId of target.actions.keys()) {
-      actionIdCounts.set(actionId, (actionIdCounts.get(actionId) || 0) + 1);
-    }
-  }
-
-  const serverName =
-    targets.length === 1
-      ? targets[0].config.id || targets[0].config.name || "actiondock"
-      : "actiondock";
-  const serverVersion =
-    targets.length === 1 ? targets[0].config.version || ACTIONDOCK_VERSION : ACTIONDOCK_VERSION;
 
   const server = new McpServer({
     name: serverName,
@@ -523,119 +254,259 @@ export async function createActionDockMcpServer(
     },
   });
 
-  // 1. Register Action Tools across all targets
-  for (const target of targets) {
-    for (const action of target.actions.values()) {
-      const count = actionIdCounts.get(action.id) || 1;
-      const cleanPkgId = target.config.id.replace(/^@/, "").replace(/[^a-zA-Z0-9_-]+/g, "_");
-      let toolName = count > 1 ? `${cleanPkgId}_${action.id}` : action.id;
-      if (toolName.length > 64) {
-        const hash = createHash("sha256").update(toolName).digest("hex").slice(0, 8);
-        toolName = `${toolName.slice(0, 55)}_${hash}`;
-      }
-      const description = isMultiPackage
-        ? `[${target.config.id}] ${action.description || ""}`
-        : action.description;
+  // 1. 工具注册与模式映射：tools/list 纯粹委托 target.listActions()
+  const actions = await target.listActions();
 
-      server.registerTool(
-        toolName,
-        {
-          description,
-          inputSchema: toMcpSchema(action.inputSchema),
-          outputSchema: action.outputSchema ? toMcpSchema(action.outputSchema) : undefined,
-        },
-        createMcpToolCallback(
-          target.executionService,
-          action.id,
-          options.timeoutMs
-        )
-      );
+  // 统计 Action 基础 ID 出现频次，用于同名冲突命名空间隔离
+  const baseCounts = new Map<string, number>();
+  for (const act of actions) {
+    let baseId = act.id;
+    if (act.id.includes("/")) {
+      try {
+        const parsed = ActionResolver.parseRef(act.id);
+        baseId = parsed.actionId;
+      } catch {
+        const idx = act.id.lastIndexOf("/");
+        baseId = act.id.slice(idx + 1);
+      }
     }
+    baseCounts.set(baseId, (baseCounts.get(baseId) || 0) + 1);
   }
 
-  const storages = targets.map((t) => t.storage);
+  const registeredToolNames = new Set<string>();
 
-  // 2. Register Tasks extension endpoints: tasks/get
+  for (const action of actions) {
+    let baseId = action.id;
+    let packageId = action.packageId;
+    if (action.id.includes("/")) {
+      try {
+        const parsed = ActionResolver.parseRef(action.id);
+        packageId = parsed.packageId || packageId;
+        baseId = parsed.actionId;
+      } catch {
+        const idx = action.id.lastIndexOf("/");
+        packageId = packageId || action.id.slice(0, idx);
+        baseId = action.id.slice(idx + 1);
+      }
+    }
+
+    const count = baseCounts.get(baseId) || 1;
+    let toolName = baseId;
+    if (count > 1 && packageId) {
+      const cleanPkgId = packageId.replace(/^@/, "").replace(/[^a-zA-Z0-9_-]+/g, "_");
+      toolName = `${cleanPkgId}_${baseId}`;
+    } else if (toolName.includes("/") && packageId) {
+      const cleanPkgId = packageId.replace(/^@/, "").replace(/[^a-zA-Z0-9_-]+/g, "_");
+      toolName = `${cleanPkgId}_${baseId}`;
+    }
+
+    if (toolName.length > 64) {
+      const hash = createHash("sha256").update(toolName).digest("hex").slice(0, 8);
+      toolName = `${toolName.slice(0, 55)}_${hash}`;
+    }
+
+    if (registeredToolNames.has(toolName)) {
+      const err = new Error(`MCP tool name collision detected for tool '${toolName}'`);
+      (err as any).code = "MCP_TOOL_NAME_COLLISION";
+      throw err;
+    }
+    registeredToolNames.add(toolName);
+
+    const isMultiPackage = actions.some(
+      (a) => a.id.includes("/") || (a.packageId && a.packageId !== actions[0].packageId)
+    );
+    const description = isMultiPackage
+      ? `[${action.id}] ${action.description || ""}`.trim()
+      : action.description;
+
+    // 工具执行：tools/call 委托 target.runAction() 或 target.startAction()
+    server.registerTool(
+      toolName,
+      {
+        description,
+        inputSchema: toMcpSchema(action.inputSchema),
+        outputSchema: action.outputSchema ? toMcpSchema(action.outputSchema) : undefined,
+      },
+      async (input: any, ctx: any) => {
+        const isAsync = Boolean(
+          input &&
+            typeof input === "object" &&
+            (input.execution?.mode === "async" ||
+              input.__async === true ||
+              input.async === true)
+        );
+        const signal = ctx.mcpReq?.signal;
+
+        // 分发前剥离执行控制字段，防止污染输入导致模式校验失败
+        let cleanInput = input;
+        if (input && typeof input === "object" && !Array.isArray(input)) {
+          const { execution, __async, async: _async, ...rest } = input;
+          cleanInput = rest;
+        }
+
+        if (isAsync) {
+          const ticket = await target.startAction(action.id, cleanInput, {
+            signal,
+            timeoutMs: options.timeoutMs,
+          });
+
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: JSON.stringify({
+                  ok: true,
+                  runId: ticket.runId,
+                  taskId: ticket.runId,
+                  status: "running",
+                }),
+              },
+            ],
+          };
+        }
+
+        const result = await target.runAction(action.id, cleanInput, {
+          signal,
+          timeoutMs: options.timeoutMs,
+        });
+        return toMcpResult(result);
+      }
+    );
+  }
+
+  // 2. 任务规范映射：tasks/get 委托 target.getRun()
   (server.server as any).setRequestHandler("tasks/get", async (req: any) => {
     const taskId = req.params?.taskId;
     if (!taskId) {
       throw new Error("taskId parameter is required for tasks/get");
     }
-    for (const storage of storages) {
-      const run = storage.getRun(taskId);
-      if (run) {
-        return {
-          task: toMcpTaskPayload(run),
-        };
-      }
+    const run = await target.getRun(taskId);
+    if (run) {
+      return {
+        task: toMcpTaskPayload(run),
+      };
     }
     throw new Error(`Task '${taskId}' not found`);
   });
 
-  // 3. Register Tasks extension endpoints: tasks/cancel
+  // 3. 任务规范映射：tasks/cancel 委托 target.cancelRun()
   (server.server as any).setRequestHandler("tasks/cancel", async (req: any) => {
     const taskId = req.params?.taskId;
     if (!taskId) {
       throw new Error("taskId parameter is required for tasks/cancel");
     }
-    for (const target of targets) {
-      const cancelRes = await target.executionService.cancel(
+    const reason = req.params?.reason || "Cancelled via MCP tasks/cancel";
+    const cancelRes = await target.cancelRun(taskId, reason);
+    if (cancelRes.outcome === "requested") {
+      return {
         taskId,
-        req.params?.reason || "Cancelled via MCP tasks/cancel"
-      );
-      if (cancelRes.outcome === "requested") {
-        return {
-          taskId,
-          status: "cancelled",
-        };
-      }
-      if (cancelRes.outcome === "already_terminal") {
-        return {
-          taskId,
-          status: toMcpTaskStatus(cancelRes.status),
-        };
-      }
+        status: "cancelled",
+      };
     }
-    for (const storage of storages) {
-      const run = storage.getRun(taskId);
-      if (run) {
-        if (run.status === "running") {
-          storage.updateRun(taskId, "cancelled", undefined, {
-            code: "ACTION_CANCELLED",
-            message: req.params?.reason || "Cancelled via MCP tasks/cancel",
-          });
-          return {
-            taskId,
-            status: "cancelled",
-          };
-        }
-        return {
-          taskId,
-          status: toMcpTaskStatus(run.status),
-        };
-      }
+    if (cancelRes.outcome === "already_terminal") {
+      return {
+        taskId,
+        status: toMcpTaskStatus(cancelRes.status),
+      };
+    }
+    const run = await target.getRun(taskId);
+    if (run) {
+      return {
+        taskId,
+        status: toMcpTaskStatus(run.status),
+      };
     }
     throw new Error(`Task '${taskId}' not found`);
   });
 
-  // 4. Register Tasks extension endpoints: tasks/list
+  // 4. 任务规范映射：tasks/list 委托 target 历史列表
   (server.server as any).setRequestHandler("tasks/list", async (req: any) => {
     const limit = typeof req.params?.limit === "number" ? req.params.limit : 50;
     const actionId = req.params?.actionId;
-    const allRuns: RunRecord[] = [];
-    for (const storage of storages) {
-      const runs = storage.listRuns({ limit, actionId });
-      allRuns.push(...runs);
+    if (typeof (target as any).listRuns === "function") {
+      const runs = await (target as any).listRuns({ limit, actionId });
+      return {
+        tasks: runs.map(toMcpTaskPayload),
+      };
     }
-    allRuns.sort(
-      (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
-    );
-    const trimmed = allRuns.slice(0, limit);
-    return {
-      tasks: trimmed.map(toMcpTaskPayload),
-    };
+    const host = (target as any).target ?? (target as any).host;
+    if (host && typeof host.listApps === "function") {
+      const allRuns: RunRecord[] = [];
+      for (const a of host.listApps()) {
+        if (a.storage?.listRuns) {
+          allRuns.push(...a.storage.listRuns({ limit, actionId }));
+        }
+      }
+      allRuns.sort(
+        (a: any, b: any) =>
+          new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
+      );
+      return {
+        tasks: allRuns.slice(0, limit).map(toMcpTaskPayload),
+      };
+    }
+    if (host && host.storage?.listRuns) {
+      const runs = host.storage.listRuns({ limit, actionId });
+      return {
+        tasks: runs.map(toMcpTaskPayload),
+      };
+    }
+    return { tasks: [] };
   });
 
+  // 5. 资源与规程映射：规程映射为只读 MCP Resource 与 Prompt
+  try {
+    const playbooks = await target.listPlaybooks();
+    for (const pb of playbooks) {
+      server.registerResource(
+        pb.id,
+        `playbook://${pb.id}`,
+        {
+          title: pb.id,
+          description: pb.description,
+          mimeType: "text/markdown",
+        },
+        async (uri: URL) => {
+          const spec = await target.describePlaybook(pb.id);
+          return {
+            contents: [
+              {
+                uri: uri.href,
+                text: spec.content,
+                mimeType: "text/markdown",
+              },
+            ],
+          };
+        }
+      );
+
+      server.registerPrompt(
+        pb.id,
+        {
+          title: pb.id,
+          description: pb.description,
+        },
+        async () => {
+          const spec = await target.describePlaybook(pb.id);
+          return {
+            messages: [
+              {
+                role: "user" as const,
+                content: {
+                  type: "text" as const,
+                  text: spec.content,
+                },
+              },
+            ],
+          };
+        }
+      );
+    }
+  } catch {
+    // 忽略规程获取或注册异常
+  }
+
+  // 6. 服务生命周期：server.close() 纯粹协调 target.close()
   const originalClose = server.close.bind(server);
   let isClosed = false;
 
@@ -643,56 +514,25 @@ export async function createActionDockMcpServer(
     if (isClosed) return;
     isClosed = true;
 
-    process.removeListener("exit", onProcessExit);
-
-    if (isInternalRegistry) {
-      for (const target of targets) {
-        if (target.storage !== options.storage) {
-          try {
-            target.storage.close();
-          } catch {
-            // ignore
-          }
-        }
-      }
-
-      try {
-        await runtimeRegistry.close();
-      } catch {
-        // ignore
-      }
+    try {
+      await target.close();
+    } catch {
+      // 忽略目标关闭异常
     }
 
     try {
       await originalClose();
     } catch {
-      // ignore
+      // 忽略服务关闭异常
     }
   };
-
-  const onProcessExit = () => {
-    // 同步尽力清理内部资源
-    if (isInternalRegistry) {
-      for (const target of targets) {
-        if (target.storage !== options.storage) {
-          try {
-            target.storage.close();
-          } catch {
-            // ignore
-          }
-        }
-      }
-      try {
-        runtimeRegistry.close();
-      } catch {
-        // ignore
-      }
-    }
-  };
-
-  process.once("exit", onProcessExit);
 
   (server as any).close = closeFn;
+  (server as any).target = target;
+  (server as any).host = options.host;
+  (server as any).app = options.app;
+  (server as any).events = (runId: string, opts?: any) => target.events(runId, opts);
 
   return server as ActionDockMcpServer;
 }
+
