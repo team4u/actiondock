@@ -71,7 +71,6 @@ graph TD
     BUILDER["@actiondock/builder 构建与编排层"]
     MCP["@actiondock/mcp 协议适配层"]
     RUNTIME_NODE["@actiondock/runtime-node 生产环境适配层"]
-    RUNTIME_BUN["@actiondock/runtime-bun 独立二进制适配层"]
     TESTING["@actiondock/testing 测试沙箱层"]
     CORE["@actiondock/core 核心领域层"]
     SDK["@actiondock/sdk 纯契约层"]
@@ -91,16 +90,13 @@ graph TD
     RUNTIME_NODE --> CORE
     RUNTIME_NODE --> SDK
 
-    RUNTIME_BUN --> CORE
-    RUNTIME_BUN --> SDK
-
     TESTING --> CORE
     TESTING --> SDK
 
     CORE --> SDK
 ```
 
-### 8 个子包的分工与定位
+### 7 个子包的分工与定位
 
 - **契约规范层**：
   - `@actiondock/sdk`：极简纯契约层，零外部运行时依赖。仅提供动作声明函数（`defineAction`）、运行时上下文接口（`ActionContext`）、进程调度抽象（`ProcessAPI`）、日志接口（`Logger`）与配置状态定义。工具包编写者仅需引入该包，即可获得完整的类型约束与代码提示。
@@ -108,7 +104,6 @@ graph TD
   - `@actiondock/core`：框架的核心业务领域层。封装项目配置解析、Schema 校验、运行记录存储抽象、事件汇聚总线、核心执行引擎（`ActionRunner`）以及统一调度协调服务（`DefaultExecutionService`）。本层完全平台无关，通过接口与具体的操作系统底层能力解耦。
 - **运行时适配层**：
   - `@actiondock/runtime-node`：Node.js 生产环境适配驱动。针对 Node.js 22.13.0 或更高版本原生环境提供实体驱动实现，包括基于 `node:sqlite` 的同步事务存储驱动、基于 `execa` 的进程调度器、基于 `tsx` 的 TypeScript 源码无编译动态加载器，以及基于 `node:http` 和 Web Streams 的流式服务转换器。
-  - `@actiondock/runtime-bun`：Bun 独立二进制适配驱动。专为独立二进制产物提供适配实现，包含针对 `bun:sqlite`、`Bun.serve` 与 `Bun.spawn` 的专属驱动封装。
 - **构建与编排层**：
   - `@actiondock/builder`：构建编排规划器与导出器。负责构建计划生成、依赖拓扑分析、独立单文件二进制编译调用，以及依据 Playbook 规程将项目裁剪导出为轻量化 Agent Skill 资产。
 - **协议适配层**：

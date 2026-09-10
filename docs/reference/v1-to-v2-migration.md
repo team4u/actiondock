@@ -15,7 +15,7 @@ ActionDock 1.0 采用中心化服务架构，依赖常驻后台进程、关系�
 在 2.0 架构演进中，运行时底座经历了一次重要演进：
 
 - **生产底座对齐**：早期的轻量化探索深度依赖特定运行时。为了满足企业生产环境对长期支持、生态稳定性和跨平台兼容性的要求，ActionDock 2.0 将默认生产底座与标准测试套件全面对齐至 Node.js 22.13.0 或更高版本。
-- **运行时驱动解耦**：底层通过 `@actiondock/runtime-node` 与 `@actiondock/runtime-bun` 适配器抹平运行时差异。开发者既可以在日常开发中使用标准的 Node.js 环境，也可以在兼容环境下利用 Bun 获得极速冷启动体验。
+- **运行时驱动解耦**：底层通过 `@actiondock/runtime-node` 适配器封装平台底层差异，将 Node.js 原生基础设施隔离在平台边界内。
 - **外部编译器解耦**：构建单文件独立二进制（`ad build`）与独立 Skill 产物时，框架不再要求日常开发环境强绑定编译器，而是将单文件编译任务交由外部编译器组件 `BunCompiler` 独立调用，实现开发、测试底座与产物编译交付的完全解耦。
 
 ### 代码库分层解耦体系
@@ -32,7 +32,7 @@ ActionDock 2.0 采用清晰的代码库分层结构，严格划分包职责，�
   负责构建规划与双模态产物导出。包含纯声明式静态依赖裁剪器 `BuildPlanner`、外部二进制编译器 `BunCompiler` 以及 Skill 打包器 `SkillExporter`。
 - **协议适配层**：`@actiondock/mcp`
   负责 Model Context Protocol 协议适配，支持 STDIO 与 HTTP 微服务两种通信传输通道。
-- **运行时适配层**：`@actiondock/runtime-node` 与 `@actiondock/runtime-bun`
+- **运行时适配层**：`@actiondock/runtime-node`
   抹平操作系统信号、进程管道与底层驱动差异的适配层。
 - **命令行门面层**：`@actiondock/cli`
   统一的 CLI 工具门面与独立分发器，负责参数解析、标准信封格式渲染以及严谨的退出码管控。

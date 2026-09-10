@@ -260,14 +260,14 @@ ActionDock 2.0 adopts an 8-package modular architecture:
 ┌─────────────────────────────────────────────────────────────┐
 │                      @actiondock/core                       │
 │    Domain Model, ActionRunner, Manifest & Driver Contracts  │
-└───────┬──────────────┬──────────────┬───────────────┬───────┘
-        │              │              │               │
-        ▼              ▼              ▼               ▼
-┌──────────────┐┌──────────────┐┌─────────────┐┌──────────────┐
-│ runtime-node ││ runtime-bun  ││   testing   ││     sdk      │
-│Node.js Driver││Bun Assembly  ││Deterministic││Zero-Dep Dev  │
-│& tsx Loader  ││for Binaries  ││Test Harness ││Contract      │
-└──────────────┘└──────────────┘└─────────────┘└──────────────┘
+└───────┬─────────────────────────────┬───────────────┬───────┘
+        │                             │               │
+        ▼                             ▼               ▼
+┌──────────────┐               ┌─────────────┐┌──────────────┐
+│ runtime-node │               │   testing   ││     sdk      │
+│Node.js Driver│               │Deterministic││Zero-Dep Dev  │
+│& tsx Loader  │               │Test Harness ││Contract      │
+└──────────────┘               └─────────────┘└──────────────┘
 ```
 
 - `@actiondock/cli`: The command line toolchain and standalone dispatcher running on Node.js 22.13.0 or higher, coordinating project initialization, execution, testing, building, and exporting with structured envelope rendering.
@@ -275,7 +275,6 @@ ActionDock 2.0 adopts an 8-package modular architecture:
 - `@actiondock/mcp`: MCP adapter providing STDIO and HTTP protocol transports, fully supporting the Tasks asynchronous task extension.
 - `@actiondock/core`: Core domain kernel providing project configuration loading, `actiondock.manifest.json` parsing, `SqliteDriver` interface, `ProcessExecutor` interface, `DefaultExecutionService`, and `ActionRunner` state machine.
 - `@actiondock/runtime-node`: Node.js runtime adapter providing `node:sqlite` database driver, `execa` process executor, `tsx` module loader, and `node:http` streaming server.
-- `@actiondock/runtime-bun`: Bun runtime adapter providing `bun:sqlite` driver, `Bun.spawn` executor, and `Bun.serve` server, designed specifically for standalone binary assembly.
 - `@actiondock/testing`: Standalone deterministic test framework offering `FakeClock`, `MockProcessExecutor`, `MemoryStorage`, and the `createTestRuntime` harness.
 - `@actiondock/sdk`: Minimal zero-dependency developer contract exporting `defineAction`, `ActionContext`, and core types.
 

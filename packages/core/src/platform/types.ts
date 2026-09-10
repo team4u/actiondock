@@ -92,7 +92,7 @@ export interface HttpServerFactory {
  */
 export interface RuntimePlatform {
   /** 运行时平台名称标识 */
-  readonly name: "node" | "bun" | "test";
+  readonly name: "node" | "test";
   /** 统一时间与时钟驱动 */
   readonly clock: Clock;
   /** 统一文件系统操作驱动 */

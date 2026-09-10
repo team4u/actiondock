@@ -22,8 +22,8 @@ import type {
  * 默认运行时平台构建选项。
  */
 export interface DefaultPlatformOptions {
-  /** 平台名称覆盖（默认根据当前执行环境自动探测为 node 或 bun） */
-  name?: "node" | "bun" | "test";
+  /** 平台名称覆盖（默认使用 node） */
+  name?: "node" | "test";
   /** 自定义文件系统实现（默认使用 NodeFileSystem） */
   files?: FileSystem;
   /** 自定义时间与时钟驱动（默认使用 SystemClock） */
@@ -49,8 +49,7 @@ export interface DefaultPlatformOptions {
  * 直接基于 Node 原生与 Core 内核能力组装平台，禁止任何全局单例状态。
  */
 export function createDefaultPlatform(options: DefaultPlatformOptions = {}): RuntimePlatform {
-  const platformName: "node" | "bun" | "test" =
-    options.name ?? (typeof (globalThis as any).Bun !== "undefined" ? "bun" : "node");
+  const platformName: "node" | "test" = options.name ?? "node";
 
   const clock: Clock = options.clock ?? new SystemClock();
   const files: FileSystem = options.files ?? new NodeFileSystem({ rootDir: options.rootDir });

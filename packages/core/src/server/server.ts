@@ -31,23 +31,7 @@ export async function launchHttpServer(
   fetchHandler: (req: Request) => Promise<Response>
 ): Promise<CoreHttpServerInstance> {
 
-  // 若处于原生 Bun 运行时
-  if (typeof (globalThis as any).Bun !== "undefined" && typeof (globalThis as any).Bun.serve === "function") {
-    const bunServer = (globalThis as any).Bun.serve({
-      port,
-      hostname: host,
-      fetch: fetchHandler,
-    });
-    return {
-      port: bunServer.port,
-      ready: Promise.resolve(),
-      stop: async (closeActive?: boolean) => {
-        bunServer.stop(closeActive);
-      },
-    };
-  }
-
-  // Node.js 原生 node:http 兜底实现
+  // Node.js 原生 node:http 服务驱动实现
   const srv = createNodeHttpServer(async (req: IncomingMessage, res: ServerResponse) => {
     try {
       const protocol = (req.socket as any)?.encrypted ? "https" : "http";

@@ -13,7 +13,6 @@
       "@actiondock/sdk": ["./packages/sdk/src/index.ts"],
       "@actiondock/core": ["./packages/core/src/index.ts"],
       "@actiondock/runtime-node": ["./packages/runtime-node/src/index.ts"],
-      "@actiondock/runtime-bun": ["./packages/runtime-bun/src/index.ts"],
       "@actiondock/testing": ["./packages/testing/src/index.ts"],
       "@actiondock/mcp": ["./packages/mcp/src/index.ts"],
       "@actiondock/builder": ["./packages/builder/src/index.ts"],

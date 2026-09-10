@@ -1,13 +1,12 @@
 # Agent 开发协作指引 - ActionDock 2.0
 
 - **核心定位**：ActionDock 2.0 是面向 AI Agent Action 与 Skill 的开发、测试、构建与分发工具链。
-- **运行时与引擎**：默认运行时为 Node.js（版本大于等于 22.13.0，基于 node:sqlite、node:http 与 tsx 提供驱动）；Bun 作为可选的单文件独立二进制编译器（Bun.build）以及独立二进制内嵌驱动（@actiondock/runtime-bun）。
+- **运行时与引擎**：默认运行时为 Node.js（版本大于等于 22.13.0，基于 node:sqlite、node:http 与 tsx 提供驱动）；Bun 作为单文件独立二进制编译器（Bun.build）与开发测试运行环境。
 - **代码库分层结构**：
   - `packages/sdk`：`@actiondock/sdk`（极简公共 SDK：`defineAction`、`ActionContext`、`Config`、`StateStore`、`ActionInvoker`、`Logger`、`createTestRuntime`）。
   - `packages/core`：`@actiondock/core`（公共领域内核：`project`、`runtime`、`storage`、`schema`、`catalog`、`execution`、`server`）。
   - `packages/builder`：`@actiondock/builder`（依赖规划与编译器调度：`BuildPlanner`、`BunCompiler`、`SkillExporter`）。
   - `packages/runtime-node`：`@actiondock/runtime-node`（Node.js 运行时适配层：`NodeSqliteDriver`、`ExecaProcessExecutor`、`NodeHttpServer`）。
-  - `packages/runtime-bun`：`@actiondock/runtime-bun`（Bun 运行时适配层：`BunSqliteDriver`、`BunProcessExecutor`、`BunHttpServer`）。
   - `packages/testing`：`@actiondock/testing`（确定性测试工具框架：`FakeClock`、`MockProcessExecutor`、`MemoryStorage`）。
   - `packages/mcp`：`@actiondock/mcp`（Model Context Protocol 适配器：STDIO/HTTP Transport、Tool 映射、取消链路）。
   - `packages/cli`：`@actiondock/cli`（CLI 工具链与独立运行分发器：`init`、`info`、`list`、`describe`、`run`、`validate`、`config`、`state`、`runs`、`serve`、`mcp`、`build`、`test`、`export skill`）。

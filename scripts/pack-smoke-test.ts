@@ -15,7 +15,6 @@ const packages = [
   "runtime-node",
   "cli",
   "testing",
-  "runtime-bun",
 ] as const;
 
 console.log("[START] Starting ActionDock Pack Smoke Test...");
@@ -102,7 +101,6 @@ try {
       "@actiondock/runtime-node": `file:${tarballPaths["runtime-node"]}`,
       "@actiondock/cli": `file:${tarballPaths.cli}`,
       "@actiondock/testing": `file:${tarballPaths.testing}`,
-      "@actiondock/runtime-bun": `file:${tarballPaths["runtime-bun"]}`,
     },
     overrides: {
       "@actiondock/sdk": `file:${tarballPaths.sdk}`,
@@ -112,7 +110,6 @@ try {
       "@actiondock/runtime-node": `file:${tarballPaths["runtime-node"]}`,
       "@actiondock/cli": `file:${tarballPaths.cli}`,
       "@actiondock/testing": `file:${tarballPaths.testing}`,
-      "@actiondock/runtime-bun": `file:${tarballPaths["runtime-bun"]}`,
     },
   };
 
@@ -130,7 +127,7 @@ try {
   }
   console.log("[OK] Dependencies installed cleanly");
 
-  // Write Node.js test script covering all 9 packages
+  // Write Node.js test script covering all 7 packages
   console.log("[TEST] Testing module imports and runtime execution via native Node.js...");
   const testScriptContent = `
 import { defineAction, createTestRuntime } from "@actiondock/sdk";
@@ -140,7 +137,6 @@ import { BuildPlanner, BunCompiler, SkillExporter, buildProject } from "@actiond
 import { createNodePlatform, NodeSqliteDriver, NodeHttpServer } from "@actiondock/runtime-node";
 import { main, createCliProgram, formatError, runStandaloneCli } from "@actiondock/cli";
 import { FakeClock, MemoryStorage, createTestRuntime as createTestingRuntime } from "@actiondock/testing";
-import { BunSqliteDriver, createBunPlatform } from "@actiondock/runtime-bun";
 
 // Verify SDK
 const greetAction = defineAction({
@@ -211,12 +207,6 @@ if (typeof FakeClock !== "function" || typeof MemoryStorage !== "function" || ty
   throw new Error("Testing exports missing FakeClock, MemoryStorage, or createTestRuntime");
 }
 console.log("[OK] Testing FakeClock, MemoryStorage, and createTestRuntime verified");
-
-// Verify Runtime Bun (loadable in Node without throwing)
-if (typeof BunSqliteDriver !== "function" || typeof createBunPlatform !== "function") {
-  throw new Error("Runtime Bun exports missing BunSqliteDriver or createBunPlatform");
-}
-console.log("[OK] Runtime Bun BunSqliteDriver and createBunPlatform loadable in native Node verified");
 
 // Verify Core Execution Service with Node Platform
 const nodePlatform = createNodePlatform();

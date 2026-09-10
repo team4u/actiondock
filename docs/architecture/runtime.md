@@ -13,7 +13,6 @@ graph TD
     SDK["@actiondock/sdk (纯契约层，零基础设施依赖)"]
     CORE["@actiondock/core (核心领域层，抽象解耦存储/进程/时钟/事件)"]
     NODE["@actiondock/runtime-node (Node.js 生产环境适配驱动)"]
-    BUN["@actiondock/runtime-bun (Bun 独立二进制适配驱动)"]
     TEST["@actiondock/testing (测试沙箱层，100% 复用生产 Runner)"]
     SERVICE["DefaultExecutionService (统一协调中心与并发配额)"]
     RUNNER["ActionRunner (核心执行引擎与单一终态状态机)"]
@@ -22,7 +21,6 @@ graph TD
     RUNNER --> CORE
     RUNNER --> SDK
     NODE --> CORE
-    BUN --> CORE
     TEST --> CORE
     TEST --> RUNNER
 ```
@@ -58,17 +56,6 @@ graph TD
 - `ExecaProcessExecutor` 驱动：基于 `execa` 驱动系统外部命令执行。设置 10MB 输出缓冲区上限（`maxBuffer`），当进程输出超过限制时主动终止并返回错误码 `PROCESS_OUTPUT_LIMIT`，防止畸形输出耗尽内存，同时精准处理超时、取消信号与子进程异常。
 - `TsxModuleLoader` 加载器：基于 `tsx` 动态加载 TypeScript 源码，兼容 ESM 与 CommonJS 模块规范，无缝支持 `.ts`、`.tsx`、`.mts` 等源码文件加载与目录索引自动解析，免去日常开发态的前置编译环节。
 - `NodeHttpServer` 服务端：基于 Node.js 原生 `node:http` 实现，将底层的请求与响应对象转化为标准的 Web Request 与 Response 规范，并通过 Web Streams 实现高效流式数据传输与管道转发。
-
----
-
-## 独立二进制适配层：`@actiondock/runtime-bun`
-
-专为 `ad build` 生成的单文件零依赖原生二进制产物设计：
-
-- `BunSqliteDriver` 驱动：绑定 Bun 原生内置的高性能 `bun:sqlite`。
-- `BunProcessExecutor` 驱动：绑定原生高性能进程派生机制 `Bun.spawn`。
-- `BunHttpServer` 驱动：绑定原生 Web 标准服务器 `Bun.serve`。
-- **独立二进制内部自激活**：在编译生成的独立二进制产物启动时，通过内部自动注入该适配层，无需外部 Node.js 运行时即可独立运行。
 
 ---
 

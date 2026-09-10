@@ -81,10 +81,6 @@ jobs:
         working-directory: packages/runtime-node
         run: npm publish --access public --tag ${{ steps.dist-tag.outputs.tag }}
 
-      - name: Publish Runtime Bun
-        working-directory: packages/runtime-bun
-        run: npm publish --access public --tag ${{ steps.dist-tag.outputs.tag }}
-
       - name: Publish Builder
         working-directory: packages/builder
         run: npm publish --access public --tag ${{ steps.dist-tag.outputs.tag }}

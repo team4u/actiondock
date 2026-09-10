@@ -72,7 +72,6 @@ ActionDock 2.0 核心领域模型与调度引擎。
 `@actiondock/core` 保持平台中立，不绑定任何特定运行环境：
 
 - 在日常使用与 Node.js 运行时中，通过 `@actiondock/runtime-node` 注入基于 `node:sqlite` 与 `execa` 的驱动。
-- 在独立二进制编译产物中，通过 `@actiondock/runtime-bun` 注入基于 `bun:sqlite` 与 `Bun.spawn` 的驱动。
 - 在自动化测试中，通过 `@actiondock/testing` 注入纯内存存储驱动与模拟进程执行器。
 
 ---
