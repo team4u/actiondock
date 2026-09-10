@@ -49,18 +49,32 @@ export async function checkRemoteHealth(
   timeoutMs: number = 5000
 ): Promise<RemoteHealthResult> {
   const base = normalizeServerUrl(serverUrl);
-  const url = `${base}/api/v1/health`;
+  const v2Url = `${base}/api/v2/health`;
   const startTime = Date.now();
 
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-    const res = await fetch(url, {
+    let res = await fetch(v2Url, {
       method: "GET",
       headers: buildHeaders(token),
       signal: controller.signal,
     });
+
+    if (res.status === 404) {
+      try {
+        const v1Res = await fetch(`${base}/api/v1/health`, {
+          method: "GET",
+          headers: buildHeaders(token),
+          signal: controller.signal,
+        });
+        if (v1Res.ok || v1Res.status !== 404) {
+          res = v1Res;
+        }
+      } catch {}
+    }
+
     clearTimeout(timer);
 
     const latencyMs = Date.now() - startTime;
@@ -77,7 +91,7 @@ export async function checkRemoteHealth(
     const data = (await res.json().catch(() => ({}))) as any;
     return {
       ok: true,
-      status: data.status || "ok",
+      status: data.status || "healthy",
       version: data.version,
       uptime: data.uptime,
       latencyMs,
@@ -100,7 +114,7 @@ export async function executeRemoteAction<T = unknown>(
   tokenArg?: string
 ): Promise<RemoteExecutionResult<T>> {
   const base = normalizeServerUrl(serverUrl);
-  const url = `${base}/api/v1/actions/${encodeURIComponent(actionId)}/run`;
+  const v2Url = `${base}/api/v2/actions/${encodeURIComponent(actionId)}/run`;
 
   // Parse options / backwards compatibility
   let configOverrides: Record<string, unknown> | undefined;
@@ -142,16 +156,32 @@ export async function executeRemoteAction<T = unknown>(
       "Content-Type": "application/json",
     };
 
-    const res = await fetch(url, {
+    const reqBody = JSON.stringify({
+      input,
+      config: configOverrides,
+      execution: Object.keys(executionPayload).length > 0 ? executionPayload : undefined,
+    });
+
+    let res = await fetch(v2Url, {
       method: "POST",
       headers,
-      body: JSON.stringify({
-        input,
-        config: configOverrides,
-        execution: Object.keys(executionPayload).length > 0 ? executionPayload : undefined,
-      }),
+      body: reqBody,
       signal,
     });
+
+    if (res.status === 404) {
+      try {
+        const v1Res = await fetch(`${base}/api/v1/actions/${encodeURIComponent(actionId)}/run`, {
+          method: "POST",
+          headers,
+          body: reqBody,
+          signal,
+        });
+        if (v1Res.ok || v1Res.status !== 404) {
+          res = v1Res;
+        }
+      } catch {}
+    }
 
     const data = (await res.json().catch(() => null)) as any;
 
@@ -205,7 +235,8 @@ async function fetchRemoteJson<T = any>(
   options: { method?: string; body?: unknown; errorPrefix?: string } = {}
 ): Promise<T> {
   const base = normalizeServerUrl(serverUrl);
-  const url = `${base}${path.startsWith("/") ? path : `/${path}`}`;
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const url = `${base}${normalizedPath}`;
   const method = options.method || "GET";
   const headers: Record<string, string> = {
     ...buildHeaders(token),
@@ -214,11 +245,25 @@ async function fetchRemoteJson<T = any>(
     headers["Content-Type"] = "application/json";
   }
 
-  const res = await fetch(url, {
+  let res = await fetch(url, {
     method,
     headers,
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
   });
+
+  if (res.status === 404 && normalizedPath.startsWith("/api/v2/")) {
+    const v1Path = normalizedPath.replace("/api/v2/", "/api/v1/");
+    try {
+      const v1Res = await fetch(`${base}${v1Path}`, {
+        method,
+        headers,
+        body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      });
+      if (v1Res.ok || v1Res.status !== 404) {
+        res = v1Res;
+      }
+    } catch {}
+  }
 
   const data = (await res.json().catch(() => ({}))) as any;
 
@@ -238,7 +283,7 @@ export async function fetchRemoteRun(
 ): Promise<RunRecord> {
   return fetchRemoteJson<RunRecord>(
     serverUrl,
-    `/api/v1/runs/${encodeURIComponent(runId)}`,
+    `/api/v2/runs/${encodeURIComponent(runId)}`,
     token,
     { errorPrefix: `Failed to fetch remote run '${runId}'` }
   );
@@ -252,7 +297,7 @@ export async function cancelRemoteRun(
 ): Promise<{ ok: boolean; runId: string; status: string }> {
   return fetchRemoteJson(
     serverUrl,
-    `/api/v1/runs/${encodeURIComponent(runId)}/cancel`,
+    `/api/v2/runs/${encodeURIComponent(runId)}/cancel`,
     token,
     {
       method: "POST",
@@ -270,7 +315,7 @@ export async function fetchRemoteActions(
   const query = intent ? `?intent=${encodeURIComponent(intent)}` : "";
   return fetchRemoteJson(
     serverUrl,
-    `/api/v1/actions${query}`,
+    `/api/v2/actions${query}`,
     token,
     { errorPrefix: "Failed to fetch remote actions" }
   );
@@ -283,7 +328,7 @@ export async function fetchRemoteActionShow(
 ): Promise<any> {
   return fetchRemoteJson(
     serverUrl,
-    `/api/v1/actions/${encodeURIComponent(actionId)}`,
+    `/api/v2/actions/${encodeURIComponent(actionId)}`,
     token,
     { errorPrefix: `Failed to fetch remote action '${actionId}'` }
   );
@@ -301,7 +346,7 @@ export async function fetchRemoteInfo(
   const qs = params.toString() ? `?${params.toString()}` : "";
   return fetchRemoteJson(
     serverUrl,
-    `/api/v1/info${qs}`,
+    `/api/v2/info${qs}`,
     token,
     { errorPrefix: "Failed to fetch remote info" }
   );
@@ -315,7 +360,7 @@ export async function fetchRemoteDoctor(
   const query = targetPackage ? `?package=${encodeURIComponent(targetPackage)}` : "";
   return fetchRemoteJson(
     serverUrl,
-    `/api/v1/doctor${query}`,
+    `/api/v2/doctor${query}`,
     token,
     { errorPrefix: "Failed to fetch remote doctor report" }
   );
@@ -332,7 +377,7 @@ export async function fetchRemotePlaybooks(
   const qs = params.toString() ? `?${params.toString()}` : "";
   return fetchRemoteJson(
     serverUrl,
-    `/api/v1/playbooks${qs}`,
+    `/api/v2/playbooks${qs}`,
     token,
     { errorPrefix: "Failed to fetch remote playbooks" }
   );
@@ -345,7 +390,7 @@ export async function fetchRemotePlaybookShow(
 ): Promise<any> {
   return fetchRemoteJson(
     serverUrl,
-    `/api/v1/playbooks/${encodeURIComponent(playbookId)}`,
+    `/api/v2/playbooks/${encodeURIComponent(playbookId)}`,
     token,
     { errorPrefix: `Failed to fetch remote playbook '${playbookId}'` }
   );
@@ -365,7 +410,7 @@ export async function fetchRemoteRuns(
   const qs = params.toString() ? `?${params.toString()}` : "";
   return fetchRemoteJson(
     serverUrl,
-    `/api/v1/runs${qs}`,
+    `/api/v2/runs${qs}`,
     token,
     { errorPrefix: "Failed to fetch remote runs" }
   );
@@ -378,7 +423,7 @@ export async function clearRemoteRuns(
 ): Promise<{ ok: boolean; clearedCount: number }> {
   return fetchRemoteJson(
     serverUrl,
-    "/api/v1/runs/clear",
+    "/api/v2/runs/clear",
     token,
     {
       method: "POST",
@@ -400,7 +445,7 @@ export async function fetchRemoteStateList(
   const qs = params.toString() ? `?${params.toString()}` : "";
   return fetchRemoteJson(
     serverUrl,
-    `/api/v1/state${qs}`,
+    `/api/v2/state${qs}`,
     token,
     { errorPrefix: "Failed to list remote state keys" }
   );
@@ -418,7 +463,7 @@ export async function getRemoteStateKey(
   const qs = params.toString() ? `?${params.toString()}` : "";
   return fetchRemoteJson(
     serverUrl,
-    `/api/v1/state/${encodeURIComponent(key)}${qs}`,
+    `/api/v2/state/${encodeURIComponent(key)}${qs}`,
     token,
     { errorPrefix: `Failed to fetch remote state key '${key}'` }
   );
@@ -433,7 +478,7 @@ export async function setRemoteStateKey(
 ): Promise<any> {
   return fetchRemoteJson(
     serverUrl,
-    `/api/v1/state/${encodeURIComponent(key)}`,
+    `/api/v2/state/${encodeURIComponent(key)}`,
     token,
     {
       method: "PUT",
@@ -460,7 +505,7 @@ export async function deleteRemoteStateKey(
   const qs = params.toString() ? `?${params.toString()}` : "";
   return fetchRemoteJson(
     serverUrl,
-    `/api/v1/state/${encodeURIComponent(key)}${qs}`,
+    `/api/v2/state/${encodeURIComponent(key)}${qs}`,
     token,
     {
       method: "DELETE",
@@ -476,7 +521,7 @@ export async function clearRemoteState(
 ): Promise<{ ok: boolean; packageId: string; clearedCount: number }> {
   return fetchRemoteJson(
     serverUrl,
-    "/api/v1/state/clear",
+    "/api/v2/state/clear",
     token,
     {
       method: "POST",
@@ -494,7 +539,7 @@ export async function fetchRemoteConfig(
   const query = packageId ? `?package=${encodeURIComponent(packageId)}` : "";
   return fetchRemoteJson(
     serverUrl,
-    `/api/v1/config${query}`,
+    `/api/v2/config${query}`,
     token,
     { errorPrefix: "Failed to fetch remote config" }
   );
@@ -509,7 +554,7 @@ export async function setRemoteConfig(
 ): Promise<any> {
   return fetchRemoteJson(
     serverUrl,
-    "/api/v1/config",
+    "/api/v2/config",
     token,
     {
       method: "PUT",
@@ -528,7 +573,7 @@ export async function deleteRemoteConfig(
   const query = packageId ? `?package=${encodeURIComponent(packageId)}` : "";
   return fetchRemoteJson(
     serverUrl,
-    `/api/v1/config/${encodeURIComponent(key)}${query}`,
+    `/api/v2/config/${encodeURIComponent(key)}${query}`,
     token,
     {
       method: "DELETE",
@@ -545,7 +590,7 @@ export async function fetchRemoteConfigEnv(
   const query = packageId ? `?package=${encodeURIComponent(packageId)}` : "";
   return fetchRemoteJson(
     serverUrl,
-    `/api/v1/config/env${query}`,
+    `/api/v2/config/env${query}`,
     token,
     { errorPrefix: "Failed to fetch remote config env checks" }
   );

@@ -2,15 +2,15 @@
 
 ActionDock 2.0 已经具备 Action 执行、持久化运行记录、跨包依赖、HTTP、MCP、Skill 导出和独立二进制等能力，但这些能力分散在多个入口和多个运行时实现中。继续在现有边界上叠加功能，会让相同语义在不同入口中继续分叉。ActionDock 2.0 仍处于开发阶段，本次直接重构 2.0 目标态，不升级为 3.0，也不为开发中的旧结构设计迁移流程或兼容层。
 
-当前实现中最直接的问题包括：
+重构起点和原版方案中最直接的问题包括：
 
 - `packages/core/src/runtime/standalone.ts:52` 与 `packages/cli/src/standalone/index.ts:52` 分别维护独立入口的参数解析、App 创建和 `list`、`describe`、`run`、`config`、`state` 等业务路径，`packages/cli/src/commands/run.ts:69` 又单独组合本地与远程 Target。相同 Action 在不同入口仍可能得到不同的初始化、错误和资源关闭行为。
 - 完整的执行契约实际已经由 `packages/core/src/execution/types.ts:61` 定义，包含同步执行、异步启动、运行查询、取消、事件订阅和优雅关闭。任何只保留 `runAction` 的新门面都会丢失长任务和运维能力。
 - `packages/core/src/runtime/process.ts`、`packages/core/src/runtime/module-loader.ts`、`packages/core/src/storage/driver.ts`、`packages/core/src/server/server.ts`、`packages/core/src/runtime/events.ts` 和 `packages/sdk/src/test-runtime.ts` 都存在全局默认实现或全局测试提供器。`packages/runtime-node/src/index.ts` 和 `packages/runtime-bun/src/index.ts` 通过 Setter 修改这些全局变量，导致并行测试、同进程多运行时和嵌入式调用相互污染。
-- `packages/core/src/server/runtime-registry.ts:1`、`packages/core/src/server/routes/actions.ts:1` 和 `packages/mcp/src/adapter.ts:1` 分别维护项目发现、加载、存储、执行服务和运行管理，Transport 层实际上重复实现了 Engine 的职责。
-- `packages/core/src/project/loader.ts` 会按目录发现并动态加载 Action；`packages/core/src/project/manifest.ts` 同时维护 Manifest 与源码定义的同步关系。Action 的标识、描述、Schema、标签、注解和 `uses` 在多个位置重复声明，必须通过 `action sync` 修复漂移。
-- `packages/builder/src/planner.ts:518` 以后既读取 Manifest，又通过 TypeScript 源码做静态扫描；`packages/builder/src/planner.ts:614` 以后还要自行计算 `uses` 闭包。构建器因此承担了一个不完整的模块打包器，同时把 TypeScript 作为生产依赖。
-- `scripts/build.ts`、`scripts/pack-smoke-test.ts`、`.github/workflows/ci.yml` 和 `.github/workflows/publish.yml` 把九个包和 Bun 命令硬编码在流程中。包边界变化时，构建、打包、发布和验证必须同步修改。
+- `packages/core/src/server/runtime-registry.ts:1`、`packages/core/src/server/routes/actions.ts:1` 和 `packages/mcp/src/adapter.ts:1` 分别维护项目发现、加载、存储、执行服务和运行管理，协议适配层实际上重复实现了执行内核的职责。
+- `packages/core/src/project/loader.ts:438` 以后仍会按目录发现并动态加载未登记的 Action，`packages/sdk/src/action.ts` 仍接受源码中的 `id` 等元数据，示例和开发文档又同时出现 `actiondock.json` 与 `actiondock.manifest.json`。Action 的标识、描述、Schema、标签、注解和 `uses` 因而缺少唯一事实源。
+- 原版 Builder 方案同时读取 Manifest 和 TypeScript AST，自行维护模块图与 `uses` 闭包。当前 `packages/builder/src/planner.ts:340` 已开始删除 AST 扫描，但 `packages/builder/src/planner.ts:371` 以后仍允许缺少 Manifest 时回退目录发现，并从开发链接解析外部包；目标设计需要完成声明式边界，避免以后重新引入不完整的模块打包器。
+- `scripts/build.ts`、`scripts/pack-smoke-test.ts`、`.github/workflows/ci.yml` 和 `.github/workflows/publish.yml` 仍把包清单和 Bun 命令硬编码在流程中，构建矩阵甚至没有覆盖仓库中的 `runtime-bun`。包边界变化时，构建、打包、发布和验证容易产生不同集合。
 - `examples/github-tools/actions/review-pr.ts:2` 使用没有扩展名的相对导入，在原生 Node 执行时触发 `ERR_MODULE_NOT_FOUND`。如果 2.0 采用 Node 原生 TypeScript，必须把这类限制变成校验规则，而不是依赖运行时偶然成功。
 
 本次设计的目标是：
@@ -33,7 +33,7 @@ ActionDock 2.0 已经具备 Action 执行、持久化运行记录、跨包依赖
 
 ### 运行环境
 
-ActionDock 2.0 的开发、测试、构建和生产运行统一使用 Node.js，Bun 不再是运行、构建或发布依赖。Action 源码允许使用 Node 原生 TypeScript，但必须限制为可擦除语法，并要求用户项目使用 Node.js `>=24.12.0` 和 TypeScript `>=5.8`。Node.js 从 `v24.12.0` 起将类型擦除标记为稳定；本设计据此把类型擦除、NodeNext 模块解析和带扩展名的 TypeScript 导入定义为运行时契约，具体限制以 [Node.js TypeScript 文档](https://nodejs.org/docs/latest-v24.x/api/typescript.html) 为准。
+ActionDock 2.0 的开发、测试、构建和生产运行统一使用 Node.js，Bun 不再是运行、构建或发布依赖。Action 源码允许使用 Node 原生 TypeScript，但必须限制为可擦除语法，并要求用户项目使用 Node.js `>=24.12.0` 和 TypeScript `>=5.8`。Node.js `v24.12.0` 已提供稳定的类型擦除能力；本设计把该版本选为统一支持下限，并将类型擦除、NodeNext 模块解析和带扩展名的 TypeScript 导入定义为运行时契约，具体限制以 [Node.js TypeScript 文档](https://nodejs.org/docs/latest-v24.x/api/typescript.html) 为准。
 
 仓库当前仍大量使用 `bun:test`、`Bun.spawn` 和 Bun 脚本，这是需要删除的现状依赖。重构后的仓库默认脚本切换到 Node.js 与 npm 工作流，测试使用 `node:test`，生产代码、构建脚本和发布流水线不再调用 `Bun.*` 或 `bun` 命令。
 
@@ -67,7 +67,7 @@ interface ExecutionService {
 
 2.0 目标态不改变执行结果信封的基本形状。成功结果仍返回 `ok`、`runId` 和 `data`，失败结果仍返回 `ok`、`runId` 和结构化 `RuntimeError`。新增的包、实例、代次和父子运行信息写入已有运行记录与事件字段，不通过另一个入口定义一套新的结果格式。
 
-Host 收到格式合法的 Action 引用后先分配 `runId` 并记录请求的包和 Action，再执行包解析，因此 `PACKAGE_NOT_FOUND`、`ACTION_NOT_FOUND`、依赖声明失败、输入失败和 Handler 失败都返回带运行记录的 `ExecutionResult`。解析前发生的网络不可达、鉴权失败、协议版本不兼容或 Target 能力缺失属于 Target 错误，方法直接抛出结构化 `TargetError`，不伪造 Action 运行记录。CLI 和协议适配器必须分别渲染这两类错误并返回失败状态。
+Host 收到格式合法的 Action 引用并完成去重判断后，分配 `runId`、记录请求的包和 Action，再解析具体入口，因此 `PACKAGE_NOT_FOUND`、`ACTION_NOT_FOUND`、依赖声明失败、输入失败和处理函数失败都返回带运行记录的 `ExecutionResult`。解析前发生的网络不可达、鉴权失败、协议版本不兼容、Target 能力缺失或 Host 包索引初始化失败属于 Target 错误，方法直接抛出结构化 `TargetError`，不伪造 Action 运行记录。CLI 和协议适配器必须分别渲染这两类错误并返回失败状态。
 
 对外 `RuntimeError` 只包含稳定的 `code`、安全 `message` 和经过筛选的 `details`。原始异常和堆栈只进入受日志策略保护的诊断记录，不通过 SDK 结果、HTTP 或 MCP 序列化；当前公开类型中的 `cause` 在目标态删除。
 
@@ -174,6 +174,7 @@ App 的 `runAction` 和 `startAction` 只接受本包短 ID。Action 内部需�
 
 - 从当前项目 Manifest、锁文件和显式开发覆盖解析已声明的包，建立包 ID 到包实例的索引；不遍历并暴露 `node_modules` 中所有可见包。
 - 校验包 ID 冲突、锁文件完整性、Manifest 摘要和运行时兼容性。
+- 区分对外可见包与仅供依赖闭包使用的内部包；Target 只能发现和根调用当前包、直接依赖或宿主显式公开的包。
 - 按完全限定引用路由到目标 App，并在调用前验证调用者的 `uses` 声明。
 - 管理根运行、父子运行、跨包事件关联、全局并发配额、调用深度和子任务数量。
 - 持有 Host 级 `RunRepository` 和事件序列，为全局唯一的 `runId` 建立包、Action 与父子关系索引。
@@ -246,13 +247,15 @@ interface ActionDockTarget {
 }
 ```
 
-`TargetInfo` 包含 Target 身份、Package 清单和服务端声明的能力集合。远程端没有启用管理能力时，配置或状态方法返回 `TARGET_CAPABILITY_UNAVAILABLE`，而不是由 CLI 猜测或绕过远程 Target 访问本地数据。本地 Target 内部调用 Host，远程 Target 只负责编码协议、鉴权、超时和连接关闭。CLI 命令不再判断某个目标是否应该创建存储或执行服务。
+`TargetInfo` 包含 Target 身份、协议版本、Package 清单、服务端声明的能力集合和去重记录保留策略。远程端没有启用管理能力时，配置或状态方法返回 `TARGET_CAPABILITY_UNAVAILABLE`，而不是由 CLI 猜测或绕过远程 Target 访问本地数据。本地 Target 内部调用 Host，远程 Target 只负责编码协议、鉴权、超时和连接关闭。CLI 命令不再判断某个目标是否应该创建存储或执行服务。
 
 `ConfigValueView` 返回键是否已配置、是否为秘密以及实际来源。非秘密值可以包含 `value`；秘密值无论通过本地还是远程管理接口读取都不返回原文，只允许覆盖或删除。
 
 远程 Target 在其他调用前读取 `TargetInfo.protocolVersion` 和能力集合。主版本不兼容时返回 `TARGET_PROTOCOL_UNSUPPORTED`；同一主版本缺少某项可选能力时只禁用对应命令。客户端不能根据服务器产品版本猜测路由，也不能在握手失败后回退到另一套旧协议。
 
 Action 引用语法、协议版本、鉴权和 Target 能力在进入 Host 前校验。引用格式非法时返回 `INVALID_ACTION_REF`，不创建运行记录；格式合法但包或 Action 无法解析时，Host 创建并终结失败运行，分别返回 `PACKAGE_NOT_FOUND` 或 `ACTION_NOT_FOUND`。短 ID 只有在 Target 已显式选定默认 Package 时才合法，多包 Target 不根据“唯一匹配”猜测默认包。
+
+`listRuns` 支持按包、Action、根运行、状态、`requestId` 和时间范围筛选。远程 Target 只能返回当前鉴权主体有权查询的运行；`getRun`、`cancelRun` 和 `events` 使用相同的数据权限检查，未知运行与无权查看的运行都不泄露其他主体的存在性。
 
 ### 统一执行流
 
@@ -263,7 +266,7 @@ sequenceDiagram
   participant Host as ActionDockHost
   participant Resolver as ActionPackageResolver
   participant App as ActionDockApp
-  participant Engine as Execution Engine
+  participant Engine as 执行内核
   participant Action as Action 实现
 
   Caller->>Target: runAction(ref, input, options)
@@ -273,10 +276,10 @@ sequenceDiagram
   Host->>Host: persist initial run and event atomically
   Host->>Resolver: resolve package and manifest entry
   Resolver-->>Host: package instance and action spec
-  Host->>Host: validate uses, quotas and run lineage
+  Host->>Host: validate caller uses for subruns, quotas and lineage
   Host->>App: startAction(shortId, input, RunContext)
   App->>Engine: start(action, context)
-  Engine->>Action: handler(input, ActionContext)
+  Engine->>Action: run(input, ActionContext)
   Action-->>Engine: result or error
   Engine-->>App: ExecutionResult and events
   App-->>Host: result
@@ -341,6 +344,7 @@ Core 只公开高层构造和稳定契约：
 import {
   createActionDockApp,
   createActionDockHost,
+  createActionDockTarget,
   openProject,
 } from "@actiondock/core";
 
@@ -424,7 +428,7 @@ Builder 在构建期生成不依赖 Commander 的轻量监督入口和 Host 子�
   "version": "1.0.0",
   "description": "GitHub tools for AI agents",
   "type": "module",
-  "packageManager": "npm@11.6.2",
+  "packageManager": "npm@11.17.0",
   "engines": {
     "node": ">=24.12.0"
   },
@@ -462,16 +466,24 @@ export default defineAction<
   ActionOutput<"get-pr">
 >(async (input, ctx) => {
   const token = ctx.config.get<string>("GITHUB_TOKEN");
-  ctx.log.info("loading pull request", { repo: input.repo, pullNumber: input.pullNumber });
+  ctx.log.info("loading pull request", {
+    repo: input.repo,
+    pullNumber: input.pullNumber,
+    authenticated: Boolean(token),
+  });
+  await ctx.actions.invoke("someone.github-actions/check-diff", {
+    repo: input.repo,
+    pullNumber: input.pullNumber,
+  });
   return { title: "..." };
 });
 ```
 
-`defineAction` 只负责类型约束和 Handler 标准化，不接受 `id`、`description`、Schema、标签、注解或 `uses`。运行时使用 Manifest 的 Action ID 和契约，模块默认导出必须是可执行 Handler。
+`defineAction` 只负责类型约束和处理函数标准化，不接受 `id`、`description`、Schema、标签、注解或 `uses`。运行时使用 Manifest 的 Action ID 和契约，模块默认导出必须是可执行处理函数。
 
 ### 类型生成
 
-Manifest 的 JSON Schema 是运行时契约的唯一事实源。`ad generate types` 根据它生成 `.actiondock/generated/actions.d.ts`，文件头记录 Manifest 摘要；生成过程只从 Manifest 到类型，不读取生成文件反向修改 Manifest。`ad new action` 在同一项目修改事务中增加 Manifest 条目并刷新类型。项目存在生成文件或显式启用类型生成时，`ad validate` 只读比较摘要并在类型过期时失败，不在校验过程中写文件；没有启用类型生成且不存在生成文件的项目不因文件缺失失败。
+Manifest 的 JSON Schema 是运行时契约的唯一事实源。`ad generate types` 根据它生成 `.actiondock/generated/actions.d.ts`，文件头记录 Manifest 摘要；生成过程只从 Manifest 到类型，不读取生成文件反向修改 Manifest。生成文件的存在表示项目启用了类型生成；`ad new action` 在同一项目修改事务中增加 Manifest 条目，并在该文件已经存在时刷新类型。`ad validate` 只读比较已有文件的摘要并在类型过期时失败，不在校验过程中写文件；不存在生成文件的项目不因文件缺失失败。
 
 生成类型只供 TypeScript 编译和编辑器使用，不进入运行时元数据。开发者可以不用生成类型并显式把输入声明为 `unknown`，但不能另行声明会被框架当作 Schema 的 `Input` 或 `Output` 元数据。这样即使类型文件缺失或过期，运行时仍只按 Manifest 校验，不会出现两个互相竞争的行为来源。
 
@@ -492,6 +504,8 @@ Playbook 文件是没有 frontmatter 的 Markdown。其元数据、入口和 Act
 - 包管理器锁文件和 `actiondock.lock.json` 共同指定的精确实例、来源和完整性摘要。
 - 仅在开发命令显式启用时使用 `ad link` 的本地覆盖。链接信息属于开发状态，不写入可移植产物，也不能替代发布依赖。
 
+索引包含完整传递依赖闭包，但不会自动把闭包中的每个包暴露为 Target 能力。当前包、`actiondock.json.dependencies` 中的直接依赖和宿主显式配置的公开包可以被列出和根调用；仅作为传递依赖进入索引的包默认只能承接已声明的 `uses`。需要直接运行某个传递包时，用户通过 `ad add` 把它提升为当前项目的直接依赖。
+
 运行期间不根据 `uses` 自动从网络下载包。缺少安装包时，解析器返回可诊断错误并提示安装入口，例如 `ad add @someone/actiondock-github-actions`；它不会静默使用全局目录或旧版本。
 
 使用共享 Action 的标准流程是先安装并锁定包，再由 `ad add` 在调用项目中声明直接包依赖，最后使用完全限定 ID 调用：
@@ -506,7 +520,9 @@ ad run someone.github-actions/get-pr --input '{"repo":"team4u/action-dock","pull
 
 `ad add` 同时更新 `package.json.dependencies`、`actiondock.json.dependencies`、包管理器锁文件和 `actiondock.lock.json`。根项目的 `actiondock.lock.json` 记录完整 Action Package 闭包，不依赖外部包自带的锁文件决定最终版本；传递包的 Manifest 与 `package.json` 只提供逻辑映射和版本范围。解析器按依赖图收敛版本，无法为同一逻辑包 ID 选出唯一版本时在写文件前失败。
 
-跨多个文件和 `node_modules` 的变更无法由一次文件重命名保证原子性。`ad add` 和 `ad remove` 必须获取项目级修改锁，并在 `.actiondock/transactions/<id>/` 写入操作日志和 `package.json`、包管理器锁文件、`actiondock.json`、`actiondock.lock.json` 的快照。各文件在临时路径校验后逐个替换，全部完成才写提交标记；失败或进程异常退出后，下一次 ActionDock 命令先依据日志恢复快照或完成提交。包管理器留下但未被 Manifest 与 ActionDock 锁文件共同引用的目录不得进入 Host 索引。
+跨多个文件和 `node_modules` 的变更无法由一次文件重命名保证原子性。`ad add` 和 `ad remove` 必须获取项目级修改锁，并在 `.actiondock/transactions/<id>/` 写入操作日志和 `package.json`、包管理器锁文件、`actiondock.json`、`actiondock.lock.json` 的快照。各文件在临时路径校验后逐个替换，全部完成才写提交标记；失败或进程异常退出后，下一次修改命令或 Host 启动先依据日志恢复快照或完成提交，只读命令则报告待恢复状态而不写文件。恢复旧快照后必须用恢复后的锁文件执行禁用安装脚本的冻结安装，使 `node_modules` 与声明重新一致，再清理事务目录。冻结安装仍失败时返回 `PROJECT_RECOVERY_REQUIRED` 并阻止 Host 启动和后续修改，保留日志供人工处理。包管理器留下但未被 Manifest 与 ActionDock 锁文件共同引用的目录不得进入 Host 索引。
+
+`ad new action` 和 `ad new playbook` 复用同一项目修改锁与文件事务，使源码或正文、Manifest 和已有生成类型一起提交；任何一步失败都恢复原文件。`ad generate types` 先在临时文件完成生成与类型检查，再原子替换目标文件。`ad validate` 始终只读，不借校验之名修复或同步项目。
 
 `ad remove` 在修改前检查反向 `uses` 和 Playbook 引用；仍有调用者时返回依赖冲突，不提供静默级联删除。同一 Host 对一个逻辑包 ID 只允许一个解析版本。直接或传递版本范围无法收敛时返回 `ACTION_PACKAGE_VERSION_CONFLICT`，不能依赖 `node_modules` 的嵌套结构随机选择一个实例。
 
@@ -551,7 +567,7 @@ const result = await ctx.actions.invoke("someone.github-actions/get-pr", input);
 
 外部调用与 Action 内部级联调用采用不同的授权依据：
 
-- 用户通过 CLI、HTTP 或 MCP 发起的根调用没有“调用者 Action”，因此不要求某个本地 Action 的 `uses`。目标包必须已经通过当前项目依赖、构建选择集或宿主显式配置进入 Host 索引，并且调用方具有该 Target 的执行权限。
+- 用户通过 CLI、HTTP 或 MCP 发起的根调用没有“调用者 Action”，因此不要求某个本地 Action 的 `uses`。目标包必须是当前包、当前项目的直接依赖、构建选择集的公开根或宿主显式公开包，并且调用方具有该 Target 的执行权限；仅因传递依赖而进入内部索引并不足以获得根调用权限。
 - Action 通过 `ctx.actions.invoke` 发起级联调用时，Host 必须检查当前调用者 Action 自己的 `uses`。即使目标包已经安装，未声明的级联调用也不能执行。
 - Playbook 的 `actions` 是规程级依赖。校验器要求外部包已经进入依赖闭包，并逐项验证引用；Agent 按规程发起的每个调用仍是受 Target 权限控制的根调用，不借用无关 Action 的 `uses`。
 - Host 注入的内置系统 Action 只能由明确的宿主策略授权并出现在 `TargetInfo` 能力中，不能靠保留名称绕过普通包解析。
@@ -577,13 +593,13 @@ await ctx.actions.invoke(
 - 本包调用使用短 ID 或本包的完全限定 ID；跨包调用必须使用完全限定 ID。
 - `uses` 只接受精确 Action ID，不支持包级通配符；需要新增能力时必须显式修改调用者 Manifest 和锁文件。
 - Host 在调用前检查调用者 Action 的 `uses`。未声明时返回 `UNDECLARED_ACTION_DEPENDENCY`。
-- 包 ID 不存在时返回 `PACKAGE_NOT_FOUND`；目标 Action 不存在时返回 `ACTION_NOT_FOUND`；入口导入失败时返回 `ACTION_LOAD_FAILED`；同一 Host 出现逻辑 ID 冲突时返回 `PACKAGE_ID_CONFLICT`。
+- 包 ID 不存在时返回 `PACKAGE_NOT_FOUND`；目标 Action 不存在时返回 `ACTION_NOT_FOUND`；入口导入失败时返回 `ACTION_LOAD_FAILED`。逻辑 ID 冲突在 Host 接受请求前由包索引构建发现，以 `PACKAGE_ID_CONFLICT` 拒绝 Target 初始化，不创建运行记录。
 - 调用者只声明直接 `uses`；构建和导出规划器递归展开目标 Action 自己声明的直接依赖，形成传递闭包。目标包自身的 Manifest 仍然保留，不把多个包扁平合并。
 - 解析失败必须保留包 ID、Action ID、入口路径、根因和可执行修复提示。不得把所有失败折叠成“Action not found”。
 
 ### 子运行语义
 
-跨包调用创建子运行，但不创建新的根任务：
+所有通过 `ctx.actions.invoke` 发起的本包或跨包级联调用都创建子运行，但不创建新的根任务。跨包调用额外经过 Host 路由到目标 App：
 
 - 子运行继承取消信号、根运行 ID、调用链追踪信息和 Host 的配额。
 - `parentRunId` 指向直接调用者；`rootRunId` 在整个调用树中保持不变。
@@ -631,13 +647,13 @@ const result = await app.runAction("get-pr", input, {
 
 ### 契约校验
 
-App 打开时按 Manifest 摘要编译并缓存输入输出 Schema，但不导入 Action 模块。运行开始后先创建可查询的运行记录，再校验输入；失败时记录 `INPUT_VALIDATION_FAILED` 并且不加载或调用 Handler。校验器默认不执行类型转换、删除额外字段或写入默认值，传给 Handler 的值与调用者提交的 JSON 保持一致。
+App 打开时按 Manifest 摘要编译并缓存输入输出 Schema，但不导入 Action 模块。运行开始后先创建可查询的运行记录，再校验输入；失败时记录 `INPUT_VALIDATION_FAILED` 并且不加载或调用处理函数。校验器默认不执行类型转换、删除额外字段或写入默认值，传给处理函数的值与调用者提交的 JSON 保持一致。
 
-Handler 返回后、状态进入成功前校验输出。输出不符合契约时记录 `OUTPUT_VALIDATION_FAILED`，原始无效输出不写入持久化记录，也不通过 HTTP 或 MCP 返回。错误详情只包含稳定的 Schema 路径、关键字和安全消息，不回显可能包含秘密的完整输入或输出。所有入口共用这两个校验点和错误码。
+处理函数返回后、状态进入成功前校验输出。输出不符合契约时记录 `OUTPUT_VALIDATION_FAILED`，原始无效输出不写入持久化记录，也不通过 HTTP 或 MCP 返回。错误详情只包含稳定的 Schema 路径、关键字和安全消息，不回显可能包含秘密的完整输入或输出。所有入口共用这两个校验点和错误码。
 
 ### 提交去重与远程重试
 
-`ExecuteOptions` 支持调用方生成的 `requestId`。Host 在自己的存储命名空间内，以鉴权主体、完全限定 Action ID 和 `requestId` 建立唯一约束；无鉴权的本地调用使用宿主配置的本地主体 ID。Host 保存输入、允许覆盖的配置以及会改变执行行为的选项摘要，`AbortSignal` 和客户端等待时限不进入摘要。摘要使用确定性 JSON 编码并计算 SHA-256，不依赖调用方原始文本的空格或对象键顺序。
+`ExecuteOptions` 支持调用方生成的 `requestId`。Host 在自己的存储命名空间内，以鉴权主体、完全限定 Action ID 和 `requestId` 建立唯一约束；无鉴权的本地调用使用宿主配置的本地主体 ID。Host 保存输入、允许覆盖的配置以及会改变 Action 行为的选项摘要，执行超时进入摘要，`AbortSignal` 和远程客户端自身的连接或等待时限不进入摘要。摘要使用确定性 JSON 编码并计算 SHA-256，不依赖调用方原始文本的空格或对象键顺序。
 
 去重检查与初始运行记录写入在同一事务中完成。并发提交相同键和相同摘要时，只有一个请求创建运行，其余请求读取并返回原有票据或结果；相同键对应不同摘要时返回 `IDEMPOTENCY_CONFLICT`。去重索引与运行记录使用相同保留期，`TargetInfo` 公布服务端保留策略；记录清理后同一 `requestId` 可以再次使用，客户端不能把它当作永久业务唯一键。
 
@@ -652,7 +668,7 @@ Handler 返回后、状态进入成功前校验输出。输出不符合契约时
 - 输入摘要或受策略限制的输入内容、开始时间、结束时间和状态。
 - 成功数据或结构化错误；敏感配置值不得写入记录。
 
-状态只能沿合法路径变化：等待调度、运行中、成功、失败、超时、取消或中断。终态记录不可再次进入运行中。Host 启动时把同一数据目录中遗留的等待调度或运行中记录一次性转为中断，并写入 `HOST_RESTARTED` 事件；它不会假装恢复已经丢失的内存调用栈。`cancel` 对已经终态的运行返回 `already_terminal`，对未知 ID 返回 `not_found`；跨 Host 或非所有者取消返回 `not_owner`。
+状态只能沿合法路径变化：等待调度、运行中、成功、失败、超时、取消或中断。终态记录不可再次进入运行中。Host 启动时把同一数据目录中遗留的等待调度或运行中记录一次性转为中断，并写入 `HOST_RESTARTED` 事件；它不会假装恢复已经丢失的内存调用栈。`cancel` 对已经终态的运行返回 `already_terminal`。本地 App 试图操作由同一 Host 中其他 App 拥有的运行时可以返回 `not_owner`；对外 Target 将未知和无权访问的运行统一返回 `not_found`，避免泄露运行是否存在。
 
 事件通过 `AsyncIterable` 订阅，支持 `after` 事件 ID 和 `AbortSignal`。每个事件同时具有运行内 `sequence` 和 Host 级持久化 `eventId`；`eventId` 表示提交顺序，不宣称等于并行任务的真实发生顺序。订阅根运行会返回整棵调用树的事件，订阅子运行只返回该子树；断线重连使用最后确认的 `eventId` 续传。长任务的消费者不需要轮询运行表；HTTP、MCP 和 CLI 适配器可以将事件映射为 SSE、MCP Task 更新或终端进度。
 
@@ -664,6 +680,8 @@ Handler 返回后、状态进入成功前校验输出。输出不符合契约时
 
 持久化状态以逻辑 `packageId` 和 Action 命名空间隔离；`packageInstanceId`、`generationId` 只用于运行记录、事件关联和模块缓存，不作为持久化键的一部分，避免包目录移动或重新安装后丢失状态。`ActionContext.state` 自动限定到当前包和当前 Action，`ctx.state.scope` 只能创建更深的子命名空间，不能访问其他 Action 或包的根空间。管理端状态 API 必须显式提供 `packageId` 与 `actionId`，不存在隐式的“当前 Action”。
 
+同一逻辑包升级后会继续看到原状态命名空间，ActionDock 不推断或迁移第三方状态结构。包作者需要保持值格式兼容或使用带版本的状态键；不兼容更新必须在执行前由操作者备份并通过 `ad state clear` 清理明确的包与 Action 范围，不能在首次运行时静默重写未知状态。
+
 Host 禁止同一逻辑 ID 的不同物理包实例同时注册；开发态同一实例的代次排空不视为两个可路由实例。若未来需要并存不同版本，必须引入显式实例别名并单独处理状态。包级 StateStore 和 Host 级 RunRepository 可以共享一个 SQLite 连接池，但必须保持不同的逻辑 Schema 和事务入口；Host 关闭时先停止新任务，再等待状态与运行记录写入完成并关闭连接。
 
 状态写入的 TTL 使用秒作为公开单位并在写入时转换为绝对过期时间；非正数 TTL 被拒绝。读取遇到过期项时按不存在处理并在同一存储队列中删除。后台清理查询下一条过期时间并注册一次性定时器，新写入更早的过期项时重设定时器，不使用固定间隔轮询。并发写同一个完整键时以 SQLite 最后提交者为准，本次不承诺比较并交换语义。
@@ -674,7 +692,7 @@ Host 禁止同一逻辑 ID 的不同物理包实例同时注册；开发态同�
 
 Action 代码需要主动检查 `ctx.signal.aborted`；宿主不会把无法响应取消的同步 CPU 代码伪装成可取消。直接使用 Node API 启动且未向 Host 注册的进程，或主动脱离受管进程组的后代，不受 `ctx.process` 生命周期保证，这也是第三方 Action 不属于安全沙箱的组成部分。
 
-超时或取消进入终态后，Context 中的状态写入、子 Action 调用和新进程启动都拒绝继续执行，迟到的 Handler 结果被丢弃且不能覆盖终态。尚未真正结束的 Handler 仍占用活跃配额，直到 Promise 收敛或宿主进程退出；其通过 Node API 直接产生的外部副作用无法回滚。需要强制终止不可信或同步计算任务时，部署方必须使用独立进程边界，本次不把 `Promise.race` 描述为强制停止机制。
+超时或取消进入终态后，Context 中的状态写入、子 Action 调用和新进程启动都拒绝继续执行，迟到的处理函数结果被丢弃且不能覆盖终态。尚未真正结束的处理函数仍占用活跃配额，直到 Promise 收敛或宿主进程退出；其通过 Node API 直接产生的外部副作用无法回滚。需要强制终止不可信或同步计算任务时，部署方必须使用独立进程边界，本次不把 `Promise.race` 描述为强制停止机制。
 
 ### 资源和关闭
 
@@ -719,7 +737,7 @@ const platform = createNodePlatform({ dataDir });
 const app = await createActionDockApp({ manifest, platform });
 ```
 
-存储线程启动、响应、错误和退出都通过事件或消息推进。每个请求携带 ID，线程异常退出时所有未完成请求以 `STORAGE_WORKER_EXITED` 失败，存储实例进入不可用状态并拒绝新请求，Host 将仍在执行的运行标记为中断后进入关闭流程；嵌入式 App 把故障返回调用方，监督模式由监督进程启动新的 Host 代次。存储层不在原对象内静默重建线程，因为无法证明退出前事务是否已经提交。正常 `close` 等待已提交事务完成，拒绝新请求，然后关闭数据库并终止线程。测试必须包含主事件循环延迟探针，证明批量状态与运行记录操作不会在主线程直接执行同步 SQLite 调用。
+存储线程启动、响应、错误和退出都通过事件或消息推进。每个请求携带 ID，线程异常退出时所有未完成请求以 `STORAGE_WORKER_EXITED` 失败，存储实例进入不可用状态并拒绝新请求，Host 在内存中取消活跃运行并进入关闭流程；嵌入式 App 把故障返回调用方，监督模式由监督进程启动新的 Host 代次。由于原存储线程已经不可用，当前 Host 不声称已经写回中断终态；新 Host 必须先把持久化中遗留的非终态记录转为中断，再接受请求。存储层不在原对象内静默重建线程，因为无法证明退出前事务是否已经提交。正常 `close` 等待已提交事务完成，拒绝新请求，然后关闭数据库并终止线程。测试必须包含主事件循环延迟探针，证明批量状态与运行记录操作不会在主线程直接执行同步 SQLite 调用。
 
 ### 仓库工具链
 
@@ -769,7 +787,9 @@ Profile、开发链接、持久化注册表和远程端点属于 CLI 工具链�
 
 框架产生的结果只写标准输出，结构化日志、进度和诊断只写标准错误。这个约定无法约束任意第三方代码直接调用 `console.log` 或 `process.stdout.write`；在同一进程中临时替换全局输出方法还会使并行运行互相污染，因此不作为解决方案。
 
-`ad mcp` 的 STDIO 模式、`ad run --json` 和独立入口的机器模式使用一个只负责协议的监督进程。监督进程独占标准输入与标准输出，通过 Node IPC 调用承载 App 和 Host 的子进程；子进程的标准输出与标准错误都由监督进程捕获并转发到诊断通道，只有经过 Schema 校验的结果信封或 MCP 报文能够进入监督进程的标准输出。监督进程退出时关闭 IPC、取消活跃运行并终止子进程；子进程异常退出时，调用返回 `HOST_PROCESS_EXITED`，持久化中的活跃记录按中断语义收尾。
+`ad mcp` 的 STDIO 模式、`ad run --json` 和独立入口的机器模式使用一个只负责协议的监督进程。监督进程独占标准输入与标准输出，通过 Node IPC 调用承载 App 和 Host 的子进程；子进程的标准输出与标准错误都由监督进程捕获并转发到诊断通道，只有经过 Schema 校验的结果信封或 MCP 报文能够进入监督进程的标准输出。诊断转发按流处理并设置字节与速率上限，超限后停止转发并记录截断事件，不能无限缓冲第三方输出。
+
+监督进程退出时关闭 IPC、取消活跃运行并终止子进程。子进程异常退出时，当前调用返回 `HOST_PROCESS_EXITED`；监督模式启动新的 Host 代次，或下一次命令打开同一数据目录时，必须先按 Host 重启规则把遗留的活跃记录转为中断，再接受新任务。死去的子进程不能被描述为已经自行完成持久化收尾。
 
 该子进程仍以同一操作系统用户运行，只解决协议通道纯净性和故障边界，不是安全沙箱。直接把 App 嵌入第三方进程的库调用方自行拥有输出通道，ActionDock 不能对其全局标准输出作保证。
 
@@ -781,9 +801,12 @@ HTTP Server 由 CLI 或独立宿主创建，路由层只做鉴权、输入解析
 GET  /info                                                    -> target.info()
 GET  /packages                                                -> target.listPackages()
 GET  /actions                                                 -> target.listActions()
+GET  /actions/:actionId                                       -> target.describeAction()
 GET  /playbooks                                               -> target.listPlaybooks()
+GET  /playbooks/:playbookId                                   -> target.describePlaybook()
 POST /actions/:actionId/run                                  -> target.runAction()
 POST /actions/:actionId/start                                -> target.startAction()
+GET  /packages/:packageId/actions/:actionId                    -> target.describeAction()
 POST /packages/:packageId/actions/:actionId/run               -> target.runAction()
 POST /packages/:packageId/actions/:actionId/start             -> target.startAction()
 GET  /packages/:packageId/playbooks/:playbookId               -> target.describePlaybook()
@@ -820,19 +843,23 @@ MCP 包只负责将 Action Summary 转换为 Tool 定义，将输入输出 Schem
 独立入口由 Builder 生成，使用 `@actiondock/runtime-node` 的平台实现创建嵌入式 App 或 Host。这里的“独立”只表示不依赖全局 ActionDock CLI，不表示内嵌 Node 运行时。默认输出是包含监督入口、Host 子进程入口、`package.json`、锁文件和业务文件的 Node.js 目录或压缩包：
 
 ```ts
-import { createEmbeddedHost } from "@actiondock/core";
+import {
+  createActionDockHost,
+  createActionDockTarget,
+} from "@actiondock/core";
 import { createNodePlatform } from "@actiondock/runtime-node";
 import { serveParentIpc } from "./actiondock-runtime/ipc-host.mjs";
 
-const host = await createEmbeddedHost({
+const host = await createActionDockHost({
   packages: embeddedPackages,
   platform: createNodePlatform(),
 });
+const target = await createActionDockTarget({ type: "local", host });
 
-await serveParentIpc(host);
+await serveParentIpc(target);
 ```
 
-监督入口负责轻量参数解析、输出渲染和子进程生命周期，Host 入口只通过 Node IPC 暴露 Target。参数解析器可以与 CLI 不同，但 `list`、`describe`、`run`、`config`、`state`、`version` 和 `help` 最终都调用 App 或 Host。生成代码不创建第二个执行服务，也不把 CLI 工具链带入部署依赖。
+监督入口负责轻量参数解析、输出渲染和子进程生命周期，Host 入口只通过 Node IPC 暴露 Target。参数解析器可以与 CLI 不同，但 `list`、`describe`、`run`、`config` 和 `state` 都调用同一 Target；`version` 与 `help` 只读取生成时写入的静态元数据。生成代码不创建第二个执行服务，也不把 CLI 工具链带入部署依赖。
 
 独立输出默认拒绝 `--async`，返回 `STANDALONE_ASYNC_UNSUPPORTED`。用户需要异步启动、运行查询或跨进程取消时，必须使用 `ad serve` 或远程 Target；不能让单次进程把未持久化的后台任务当作成功。
 
@@ -843,7 +870,7 @@ await serveParentIpc(host);
 `@actiondock/builder` 保留声明式 `SelectionPlanner`，删除 TypeScript AST 依赖扫描、路径别名推断和自建模块图。规划器只读取 Manifest、锁文件和显式构建参数：
 
 - 选中的 Action 或 Playbook。
-- 当前包的 `uses` 直接依赖。
+- 被选 Action 的 `uses` 和被选 Playbook 的 `actions` 直接依赖。
 - 依赖包 Manifest 中继续声明的传递依赖。
 - `files`、`assets` 和导出模式。
 
@@ -851,7 +878,7 @@ await serveParentIpc(host);
 
 ### 源码型 Skill
 
-`ad export skill` 等价于 `ad export skill --mode source`。流程为读取 Manifest、校验锁文件、复制声明的文件和资产、生成裁剪后的 `actiondock.json`、生成 `SKILL.md`、`package.json`、对应的包管理器锁文件和 `actiondock.lock.json`。导出的 Manifest 只保留被选中的 Action、Playbook 和依赖声明；外部包默认保留为 npm 依赖，锁文件只保留该选择集的依赖闭包。
+`ad export skill` 等价于 `ad export skill --mode source`。流程为读取 Manifest、校验锁文件、复制声明的文件和资产、生成裁剪后的 `actiondock.json`、刷新启用的生成类型，并生成 `SKILL.md`、`package.json`、对应的包管理器锁文件和 `actiondock.lock.json`。导出的 Manifest 只保留被选中的 Action、Playbook 和依赖声明；外部包默认保留为 npm 依赖，锁文件只保留该选择集的依赖闭包。
 
 本地 `link`、`file:` 和未发布的路径依赖默认标记为不可移植并拒绝导出。`--vendor-deps` 可以把已锁定的外部 Action Package 复制到导出目录，同时保留每个包自己的 Manifest 和状态命名空间。源码型 Skill 不承诺把 `lib` 中未使用的模块做 AST 级裁剪。
 
@@ -873,7 +900,7 @@ SelectionPlanner
 Node.js 可运行交付物
 ```
 
-构建结果包含 Node 启动入口、裁剪后的 Manifest、包管理器锁文件、`actiondock.lock.json`、选中的包、业务文件和生产依赖声明。ActionDock 自身包和第三方 Action Package 使用已发布的 JavaScript 入口；当前项目中满足 Node 类型擦除约束的 `.ts` Action 可以原样保留。Builder 在临时暂存目录根据选择集生成独立的部署 `package.json`，再调用项目选定的包管理器以冻结模式生成并校验对应锁文件；不能直接复制含 workspace 链接或未选依赖的仓库根锁文件。
+构建结果包含 Node 启动入口、裁剪后的 Manifest、包管理器锁文件、`actiondock.lock.json`、选中的包、业务文件和生产依赖声明。ActionDock 自身包和第三方 Action Package 使用已发布的 JavaScript 入口；当前项目中满足 Node 类型擦除约束的 `.ts` Action 可以原样保留。Builder 在临时暂存目录根据选择集和锁定版本生成独立的部署 `package.json`，其中所有部署依赖都固定到已解析的精确版本；随后从已校验的源锁文件裁剪支持的锁格式。无法安全裁剪时，调用项目选定的包管理器显式生成新锁文件，并逐项核对版本与完整性摘要。最后在另一个干净目录执行冻结安装，确认安装过程不再修改锁文件。不能直接复制含 workspace 链接或未选依赖的仓库根锁文件，也不能把联网解析伪装成冻结安装。
 
 默认目录不复制当前机器的 `node_modules`。目标机器安装满足 `package.json.engines.node` 约束的 Node.js 后，先执行构建元数据中记录的冻结安装命令，例如 npm 项目使用 `npm ci --omit=dev --ignore-scripts`，再运行生成入口。需要安装脚本的生产依赖必须在构建时显式声明并经过信任确认，不能由部署端悄悄放开。`ad build --vendor-deps` 可以从干净暂存目录物化已经锁定的生产依赖，使目标机器不再执行安装；它不能复制 workspace 软链接或未锁定的本地目录。如果依赖树包含原生扩展，该模式必须记录构建操作系统、架构和 Node ABI，并拒绝在不匹配的目标上启动。两种模式都不需要 Bun、`tsx` 或全局 ActionDock CLI。
 
@@ -900,7 +927,7 @@ ActionDock 2.0 允许 Node 原生加载 `.ts`，但把运行时限制写成 `ad 
 - Manifest 入口和框架控制的包解析路径必须位于对应包根目录内，不能通过绝对路径、`..` 或符号链接逃逸。Action 代码自行执行的动态 `import()` 与直接文件访问属于普通 Node 权限，框架无法靠加载器把它们限制为沙箱。
 - `module`、`moduleResolution` 使用 NodeNext 规则；模板启用 `erasableSyntaxOnly`、`verbatimModuleSyntax`、`rewriteRelativeImportExtensions` 和严格类型检查。
 
-`ad validate` 使用项目声明的 TypeScript `>=5.8` 执行 `tsc --noEmit`，并检查 Node 入口扩展名、发布依赖入口和禁止语法；它不临时联网下载编译器。缺少兼容 TypeScript 开发依赖时返回可诊断错误。当前示例中的无扩展名导入必须在新项目模板中修正，或改为执行编译后的 JavaScript 入口。`tsx` 和 `execa` 不再是 ActionDock 默认生产运行时依赖；用户项目和仓库默认运行路径都不要求 Bun。
+项目包含 `.ts` 或 `.mts` 入口时，`ad validate` 使用项目声明的 TypeScript `>=5.8` 执行 `tsc --noEmit`，并检查 Node 入口扩展名、发布依赖入口和禁止语法；它不临时联网下载编译器。此类项目缺少兼容 TypeScript 开发依赖时返回可诊断错误，只有 `.js` 或 `.mjs` 入口的项目不需要安装 TypeScript。当前示例中的无扩展名导入必须在新项目模板中修正，或改为执行编译后的 JavaScript 入口。`tsx` 和 `execa` 不再是 ActionDock 默认生产运行时依赖；用户项目和仓库默认运行路径都不要求 Bun。
 
 ## 安全边界
 
@@ -908,7 +935,7 @@ ActionDock 2.0 允许 Node 原生加载 `.ts`，但把运行时限制写成 `ad 
 
 - Manifest、锁文件和包元数据来自用户明确安装或显式链接的来源；运行时不根据 Action 输入安装代码。
 - 解析器拒绝包 ID 冲突、路径穿越、绝对入口、符号链接逃逸和锁文件摘要不一致。
-- `uses` 是 Host 路由的强制声明检查。未声明的跨包调用不会因为目标包已经安装或全局可见而通过 `ctx.actions.invoke` 放行，但它不是 JavaScript 权限沙箱；任意业务代码仍可能直接访问网络、文件系统或导入可见模块。
+- `uses` 是 Host 路由的强制声明检查。未声明的本包或跨包级联调用不会因为目标 Action 已经可见而通过 `ctx.actions.invoke` 放行，但它不是 JavaScript 权限沙箱；任意业务代码仍可能直接访问网络、文件系统或导入可见模块。
 - 包安装默认禁用生命周期脚本。允许安装脚本和首次执行 Action 都属于执行第三方代码的信任决定，必须由用户显式触发并可追踪。
 - 第三方描述、Schema 文本、Playbook 和日志都按不可信内容处理。Manifest 对字符串、集合和 Schema 深度设置上限，终端渲染移除控制字符；MCP 和 Skill 导出保留来源包 ID 与版本，不能把外部 Playbook 当作框架内置指令自动执行。
 - 开发链接显示来源路径、覆盖的版本和不可移植状态；发布和导出必须明确拒绝或使用 `--vendor-deps` 固化。
@@ -939,6 +966,7 @@ Action 代码、直接模块导入和 `ctx.process` 都在宿主权限下运行�
 ### 发布和恢复
 
 - 所有公开包以同一 Git 版本标签发布，包间依赖版本必须与目标版本一致。正式版本使用 `2.0.x` 或 `v2.0.x` 标签并发布到 npm `latest`；预发布版本使用 `2.0.x-beta.n`、`2.0.x-alpha.n` 或对应的 `v` 前缀，并发布到匹配的 npm 分发标签，不能覆盖 `latest`。
+- Git 标签推送是发布的唯一触发来源。本地命令只负责版本更新、验证、提交和打标签，不能绕过流水线直接发布。流水线发布前把所有子包互引依赖和脚手架模板中的 ActionDock 版本对齐到目标版本；预发布依赖必须包含完整预发布后缀，不能回退解析旧稳定版。
 - 发布前执行 `npm test`、`npm run typecheck`、`npm run test:pack`，并增加 Node 原生加载、跨包安装和 Node 目录型构建烟雾测试。整个流程不能调用 Bun。
 - 发布流水线按依赖拓扑顺序发布 `sdk`、`core`、`runtime-node` 和测试包，再发布 `builder`、`mcp` 和 `cli`。任一包验证失败时停止后续发布，不发布混合版本。
 - 发布后发现运行错误时，先停止进一步放量或移动预发布分发标签，再回退 CLI/Host 到上一稳定版本。已发布的包版本不删除；通过新的修复标签恢复 `latest` 或对应预发布分发标签。由于本次不提供数据兼容或迁移，旧运行时只能配合与其匹配的数据目录快照或新的空数据目录使用，不能直接打开目标态数据库。
@@ -950,29 +978,42 @@ Action 代码、直接模块导入和 `ctx.process` 都在宿主权限下运行�
 
 | 场景 | 前置条件与操作 | 可观察结果 |
 | --- | --- | --- |
-| 单包同步执行 | 使用 Node 平台运行带输入 Schema 的 Action | CLI、HTTP、MCP 和 Standalone 得到相同 `ExecutionResult` 形状、错误码和状态 |
+| 单包同步执行 | 使用 Node 平台运行带输入 Schema 的 Action | CLI、HTTP、MCP 和独立入口得到相同 `ExecutionResult` 形状、错误码和状态 |
+| 第三方根调用 | 使用 `ad add` 安装并锁定共享包，再从 CLI 直接运行其完全限定 Action ID | 不要求任意本地 Action 声明 `uses`；Target 权限和依赖索引有效时执行共享 Action |
 | 异步生命周期 | 通过长期 Host 调用 `startAction`，订阅事件并查询运行 | 先返回票据，事件序号连续，`getRun` 与终态一致，`close` 等待活跃任务收尾 |
 | 提交去重 | 使用同一 `requestId` 重发相同和不同输入，并模拟提交后断线 | 相同摘要返回同一 `runId`，不同摘要返回 `IDEMPOTENCY_CONFLICT`；无去重键的请求不被自动重放 |
-| 取消和超时 | 在 Action 和外部进程中触发取消或超时 | `AbortSignal` 传递到子 Action 和进程，最终状态分别为 `cancelled` 或 `timed_out`，无孤儿进程 |
-| 声明的跨包调用 | 安装并锁定 `someone.github-actions`，在 `uses` 中声明并调用 FQID | 目标包按自己的配置和状态空间执行，父子运行 ID 和事件链路可关联 |
+| 事件背压与续传 | 阻塞订阅者直到队列溢出，再从最后已消费游标重连 | 原运行不被慢消费者阻塞；旧订阅以 `EVENT_BACKPRESSURE_LIMIT` 结束，续传不重不漏 |
+| 事件游标过期 | 清理已超过保留期的终态事件，再使用更早游标订阅 | 返回 `EVENT_CURSOR_EXPIRED` 与最早可用游标，不伪造连续事件流 |
+| 取消和超时 | 在 Action 和受管外部进程树中触发取消或超时 | `AbortSignal` 传递到子 Action 和进程，最终状态分别为 `cancelled` 或 `timed_out`，受管进程树完成收尾 |
+| 声明的跨包调用 | 安装并锁定 `someone.github-actions`，在 `uses` 中声明并调用完全限定 ID | 目标包按自己的配置和状态空间执行，父子运行 ID 和事件链路可关联 |
 | 未声明跨包调用 | 目标包已安装但删除调用者的 `uses` | 返回 `UNDECLARED_ACTION_DEPENDENCY`，目标 Action 不执行 |
-| 解析失败分类 | 分别制造缺包、缺 Action、入口导入异常和包 ID 冲突 | 分别得到 `PACKAGE_NOT_FOUND`、`ACTION_NOT_FOUND`、`ACTION_LOAD_FAILED` 和 `PACKAGE_ID_CONFLICT`，且每次都有可查询的失败运行记录 |
-| Target 失败 | 制造远程不可达、鉴权失败和能力缺失 | 抛出对应 `TargetError`，不创建虚假的 Action 运行记录，CLI 与协议返回失败状态 |
+| 解析失败分类 | 分别制造缺包、缺 Action 和入口导入异常 | 分别得到 `PACKAGE_NOT_FOUND`、`ACTION_NOT_FOUND` 和 `ACTION_LOAD_FAILED`，且有可查询的失败运行记录 |
+| Target 失败 | 制造远程不可达、鉴权失败、能力缺失和包 ID 冲突 | 抛出对应 `TargetError`，不创建虚假的 Action 运行记录，CLI 与协议返回失败状态 |
 | 传递依赖闭包 | A 使用 B，B 使用 C，规划 A 的构建 | 选择集包含 B、C；三个包的 Manifest 和状态边界不被扁平合并 |
+| 传递包可见性 | C 只因 A 到 B 到 C 的传递依赖进入 Host，再从 Target 直接查询和运行 C | C 不出现在对外能力列表且根调用被拒绝；把 C 显式加入直接依赖后才可根调用 |
+| 依赖版本冲突 | 让直接或传递依赖对同一逻辑包 ID 提出不可收敛的版本范围 | `ad add`、Host 初始化和构建均以 `ACTION_PACKAGE_VERSION_CONFLICT` 失败，不随机采用嵌套版本 |
+| 项目修改恢复 | 在 `ad add` 和 `ad remove` 替换各文件的中途终止进程，再分别运行只读校验和修改命令 | 项目锁阻止并发写；只读命令只报告待恢复，修改命令恢复完整旧快照或完成同一提交，不留下双锁文件分歧 |
+| 安装脚本边界 | 安装带生命周期脚本的第三方包，并分别使用默认设置和显式允许选项 | 默认不执行脚本；显式允许时显示来源并记录信任决定，包不能依赖脚本才能加载 |
 | 懒加载 | 在未执行 Action 时让入口模块包含可观测导入副作用 | `list`、`describe` 和 `info` 不触发入口导入；首次运行才加载目标模块 |
+| 开发热更新 | 在旧代次仍有运行时修改 Action，并让新代次健康检查失败或成功 | 失败时继续把新请求交给旧代次；成功时只把新请求切到新代次，旧运行排空且记录保留代次 ID |
 | Manifest 校验 | 修改入口、Schema、包 ID、锁摘要或声明非法语法 | `ad validate` 在执行前失败，指出文件、字段和修复建议 |
+| 生成类型过期 | 修改 Manifest Schema 后不刷新已有生成类型，再执行校验 | `ad validate` 根据摘要失败且不写文件；重新生成后 TypeScript 类型与 Manifest 单向一致 |
 | Node TypeScript | 使用无扩展名导入、`enum`、路径别名和未编译第三方 TS | 校验拒绝这些项目；带明确扩展名的可擦除语法项目可由 Node 原生加载 |
-| 配置和状态隔离 | 父包调用子包并分别读写同名状态键 | 两个包的值互不覆盖；秘密配置不会出现在事件和运行记录 |
+| 配置和状态隔离 | 父包调用子包并分别读写同名状态键，再通过管理接口读取秘密配置 | 两个包的值互不覆盖；秘密接口只返回设置状态，原值不出现在响应、事件和运行记录 |
+| 存储线程退出 | 在状态写入和事件追加期间强制结束 SQLite 存储线程，再启动新 Host | 所有未完成请求以 `STORAGE_WORKER_EXITED` 失败，新请求被拒绝；新 Host 将遗留非终态运行转为中断，无请求无限等待 |
+| 存储非阻塞 | 批量写入状态和运行事件，同时运行主事件循环延迟探针 | 同步 SQLite 只在存储线程执行，主线程仍能处理取消和事件通知 |
 | 多实例并行 | 同一进程创建两个不同平台和数据目录的 Host 并并行运行 | 无全局 Setter 污染，事件、Storage、模块缓存和进程执行器彼此隔离 |
-| HTTP 适配 | 通过 HTTP 发起运行、查询、事件订阅和取消 | 路由不创建第二个执行服务，协议状态映射不改变 Core 错误码和运行状态 |
-| MCP 适配 | 通过 Target 将同一 Host 暴露为 Tool 和 Task | Tool 输入输出 Schema 与 Manifest 一致，`tasks/cancel` 传播到根运行 |
+| HTTP 适配 | 通过 HTTP 发起运行、查询、事件订阅、取消和授权后的管理请求 | 路由不创建第二个执行服务；SSE 可续传，HTTP 状态映射不改变 Core 错误码和运行状态 |
+| MCP 适配 | 通过 Target 将同一 Host 暴露为 Tool 和 Task，并制造编码后名称冲突 | Tool Schema 与 Manifest 一致，`tasks/cancel` 传播到根运行；名称冲突在启动时失败而非覆盖 |
 | 输出隔离 | Action 直接写标准输出，并分别通过 `ad run --json` 与 MCP STDIO 调用 | 协议标准输出仍可完整解析；Action 输出进入诊断通道，子进程退出转换为结构化错误 |
 | 独立入口限制 | 在 Node 目录型产物中传入 `--async` | 返回 `STANDALONE_ASYNC_UNSUPPORTED`，不遗留后台任务或虚假票据 |
 | 源码型 Skill 导出 | 选择 Action、Playbook 和外部包，包含本地 link 依赖 | 只复制 Manifest 声明的文件；不可移植 link 被拒绝或在 `--vendor-deps` 下被固化 |
 | 安全边界 | 尝试入口穿越、锁摘要篡改、重复包 ID 和超大进程输出 | 请求在加载或执行前失败，错误可诊断且不会扩大文件、凭据或进程访问范围 |
 | 不支持的数据 | 用目标态打开旧 Schema 数据库 | 在写事务前返回不支持错误，数据库内容保持不变 |
-| 新存储恢复 | 模拟目标态数据库 Schema 变更失败 | SQLite 事务完整回滚，原有文件和终态运行记录保持不变 |
+| 新存储初始化 | 在空数据目录创建 Schema 时注入事务失败 | Host 拒绝启动且不存在部分可用 Schema；不触发旧数据库升级逻辑 |
 | Node 构建 | 在没有 Bun 的干净环境运行 `ad build` 和生成的启动入口 | 构建成功；目录或压缩包只要求目标 Node.js，不解析已删除的 Bun 包 |
+| 内置原生依赖 | 使用 `--vendor-deps` 构建含原生扩展的目录，再改变操作系统、架构或 Node ABI 启动 | 匹配环境可运行，不匹配环境在加载 Action 前拒绝启动 |
+| 构建可复现性 | 对相同输入构建两次目录和归档，并固定 `SOURCE_DATE_EPOCH` | 文件清单、规范化元数据与最终 SHA-256 相同，不受遍历顺序或实际生成时间影响 |
 | 打包烟雾 | 在干净目录安装所有发布包并用原生 Node 导入，再运行跨包 Action | 包入口、依赖版本、CLI 可执行文件和运行记录均可用；不依赖工作区源码路径 |
 
 实现验收至少包括：
@@ -987,11 +1028,11 @@ Action 代码、直接模块导入和 `ctx.process` 都在宿主权限下运行�
 
 实现按职责推进，每个阶段都以可运行的共享契约为结束条件：
 
-- 先在 Core 中落地 `RuntimePlatform`、`ActionDockApp`、`ActionDockHost` 和完整执行生命周期，并把现有 CLI、测试和 Standalone 接到同一 App。
+- 先在 Core 中落地 `RuntimePlatform`、`ActionDockApp`、`ActionDockHost` 和完整执行生命周期，并把现有 CLI、测试和独立入口接到同一 App。
 - 再落地 Manifest v2、锁文件和静态校验，不提供迁移命令，删除同步机制和全量动态发现。
 - 将 Node 具体实现改为显式平台包，移除全局 Setter、`tsx` 和 `execa` 的生产路径；删除 `runtime-cli` 和 `runtime-bun`，把命令能力归还 CLI。
 - 重写 Builder 为声明式 SelectionPlanner、Skill 导出和 Node 目录型构建，保留跨包传递依赖闭包，删除 AST 模块扫描和 Bun 编译器。
-- 让 HTTP、MCP、远程 Target 和 Standalone 完成薄适配，补齐取消、事件、鉴权和关闭路径。
+- 让 HTTP、MCP、远程 Target 和独立入口完成薄适配，补齐取消、事件、鉴权和关闭路径。
 - 完成包版本、Node 构建脚本、CI、打包烟雾和发布工作流的目标包清单调整，使用统一 Git 标签发布，不实现项目迁移逻辑。
 
 任何阶段都不能引入第二个执行内核、第二份 Manifest 事实源或新的全局运行时状态。若某个适配器无法调用 App 或 Host 的现有契约，应先扩展共享契约，再实现适配器，而不是在适配器内复制逻辑。

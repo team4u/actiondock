@@ -11,6 +11,8 @@ import type {
   ActionSummary,
   ListActionsOptions,
   PackageInfo,
+  PlaybookSpec,
+  PlaybookSummary,
 } from "../app/types";
 import type {
   CancelResult,
@@ -46,6 +48,14 @@ export class LocalActionDockTarget implements ActionDockTarget {
       const actionId = typeof ref === "string" ? ref : ref.actionId;
       return this.target.describeAction(actionId);
     }
+  }
+
+  async listPlaybooks(): Promise<PlaybookSummary[]> {
+    return this.target.listPlaybooks();
+  }
+
+  async describePlaybook(id: string): Promise<PlaybookSpec> {
+    return this.target.describePlaybook(id);
   }
 
   async runAction(

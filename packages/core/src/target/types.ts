@@ -12,6 +12,8 @@ import type {
   ActionSummary,
   ListActionsOptions,
   PackageInfo,
+  PlaybookSpec,
+  PlaybookSummary,
 } from "../app/types";
 import type {
   CancelResult,
@@ -34,6 +36,12 @@ export interface ActionDockTarget {
 
   /** 静态查询并返回指定 Action 的规范结构与模式定义 */
   describeAction(ref: ActionRef | string): Promise<ActionSpec>;
+
+  /** 静态列出目标所有可用的 Playbook 规程摘要 */
+  listPlaybooks(options?: { intent?: string; package?: string }): Promise<PlaybookSummary[]>;
+
+  /** 静态查询并返回指定 Playbook 的规范内容与操作指南 */
+  describePlaybook(id: string): Promise<PlaybookSpec>;
 
   /** 同步执行指定 Action 并等待终态结果 */
   runAction(

@@ -10,6 +10,8 @@ import type {
   ActionSummary,
   ListActionsOptions,
   PackageInfo,
+  PlaybookSpec,
+  PlaybookSummary,
 } from "../app/types";
 import { ActionResolver } from "../catalog/action-resolver";
 import type {
@@ -23,6 +25,8 @@ import {
   fetchRemoteActionShow,
   fetchRemoteActions,
   fetchRemoteInfo,
+  fetchRemotePlaybookShow,
+  fetchRemotePlaybooks,
   fetchRemoteRun,
 } from "../profile/client";
 import { normalizeServerUrl } from "../profile/manager";
@@ -38,7 +42,11 @@ export async function* streamRemoteEvents(
   options?: { signal?: AbortSignal }
 ): AsyncIterable<ExecutionEvent> {
   const base = normalizeServerUrl(serverUrl);
-  const url = `${base}/api/v1/runs/${encodeURIComponent(runId)}/stream`;
+  const candidateUrls = [
+    `${base}/api/v2/runs/${encodeURIComponent(runId)}/events`,
+    `${base}/api/v2/runs/${encodeURIComponent(runId)}/stream`,
+    `${base}/api/v1/runs/${encodeURIComponent(runId)}/stream`,
+  ];
   const headers: Record<string, string> = {
     Accept: "text/event-stream",
   };
@@ -46,17 +54,27 @@ export async function* streamRemoteEvents(
     headers.Authorization = `Bearer ${token.trim()}`;
   }
 
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      headers,
-      signal: options?.signal,
-    });
-  } catch {
-    return;
+  let res: Response | undefined;
+  for (const url of candidateUrls) {
+    try {
+      const resp = await fetch(url, {
+        headers,
+        signal: options?.signal,
+      });
+      if (resp.ok && resp.body) {
+        res = resp;
+        break;
+      }
+      if (resp.status !== 404) {
+        res = resp;
+        break;
+      }
+    } catch {
+      // 忽略单次网络连接异常并尝试备选路由
+    }
   }
 
-  if (!res.ok || !res.body) {
+  if (!res || !res.ok || !res.body) {
     return;
   }
 
@@ -190,6 +208,28 @@ export class RemoteActionDockTarget implements ActionDockTarget {
       uses: raw.uses,
       entry: raw.entry,
       filePath: raw.filePath,
+    };
+  }
+
+  async listPlaybooks(options?: { intent?: string; package?: string }): Promise<PlaybookSummary[]> {
+    const rawList = await fetchRemotePlaybooks(this.serverUrl, this.token, options);
+    return rawList.map((item: any) => ({
+      id: item.id,
+      description: item.description,
+      actions: item.actions,
+      packageId: item.packageId,
+      filePath: item.filePath,
+    }));
+  }
+
+  async describePlaybook(id: string): Promise<PlaybookSpec> {
+    const raw = await fetchRemotePlaybookShow(this.serverUrl, id, this.token);
+    return {
+      id: raw.id,
+      description: raw.description,
+      actions: raw.actions,
+      filePath: raw.filePath,
+      content: raw.content,
     };
   }
 

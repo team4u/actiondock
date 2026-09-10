@@ -1,13 +1,14 @@
 import { runDoctorChecks } from "../../doctor/doctor";
-import { type RouteContext, jsonResponse } from "./common";
+import { getSubPath, jsonResponse, type RouteContext } from "./common";
 
 /**
- * 处理环境与依赖诊断接口（GET /api/v1/doctor）。
+ * 处理环境与依赖诊断接口（GET /api/v2/doctor、/doctor 与兼容别名 /api/v1/doctor）。
  */
 export async function handleDoctorRoute(ctx: RouteContext): Promise<Response | null> {
   const { req, url, pathname, corsHeaders, projectRoot, customHome } = ctx;
+  const subpath = getSubPath(pathname);
 
-  if (pathname !== "/api/v1/doctor" || req.method !== "GET") {
+  if (subpath !== "/doctor" || req.method !== "GET") {
     return null;
   }
 

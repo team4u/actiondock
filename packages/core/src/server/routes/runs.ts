@@ -1,19 +1,17 @@
-import { existsSync } from "node:fs";
 import { filterByIntent } from "../../filter";
-import { loadProjectConfig } from "../../project/loader";
-import { listLinkedPackages } from "../../registry/registry";
-import type { RuntimeStorage } from "../../storage/types";
+import type { RunRecord } from "@actiondock/sdk";
 import { readJsonBody } from "../body";
-import { type RouteContext, findRunAcrossStorages, jsonResponse } from "./common";
+import { getSubPath, jsonResponse, type RouteContext } from "./common";
 
 /**
- * 处理历史运行记录检索、清理、详情及 SSE 流式日志接口。
+ * 处理历史运行记录查询、清理、详情及 SSE 流式日志接口。
  */
 export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | null> {
-  const { req, url, pathname, corsHeaders, projectRoot, customHome, runtimeRegistry, options } = ctx;
+  const { req, url, pathname, corsHeaders, options, target, host } = ctx;
+  const subpath = getSubPath(pathname);
 
-  // 1. Runs List: GET /api/v1/runs
-  if (pathname === "/api/v1/runs" && req.method === "GET") {
+  // 1. Runs List: GET /api/v2/runs, GET /runs
+  if (subpath === "/runs" && req.method === "GET") {
     try {
       const status = url.searchParams.get("status") || undefined;
       const actionId = url.searchParams.get("actionId") || undefined;
@@ -21,41 +19,30 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
       const intent = url.searchParams.get("intent") || undefined;
       const limit = parseInt(url.searchParams.get("limit") || "50", 10);
 
-      const allRuns: any[] = [];
+      const allRuns: RunRecord[] = [];
       const seenRunIds = new Set<string>();
 
-      const candidateStorages: Array<{ packageId: string; storage: RuntimeStorage }> = [];
-      if (projectRoot) {
-        try {
-          const cfg = loadProjectConfig(projectRoot);
-          candidateStorages.push({
-            packageId: cfg.id,
-            storage: runtimeRegistry.getStorage(cfg.id, projectRoot),
-          });
-        } catch {}
-      }
-      const linked = listLinkedPackages(customHome);
-      for (const pkg of linked) {
-        if (projectRoot && pkg.path === projectRoot) continue;
-        if (!existsSync(pkg.path)) continue;
-        candidateStorages.push({
-          packageId: pkg.id,
-          storage: runtimeRegistry.getStorage(pkg.id, pkg.path),
-        });
-      }
+      const apps = host
+        ? host.listApps()
+        : (target as any)?.target?.listApps
+        ? (target as any).target.listApps()
+        : [(target as any)?.target].filter(Boolean);
 
-      for (const item of candidateStorages) {
-        if (packageId && item.packageId !== packageId) continue;
-        try {
-          const records = item.storage.listRuns({ actionId, limit });
-          for (const r of records) {
-            if (!seenRunIds.has(r.id)) {
-              seenRunIds.add(r.id);
-              if (status && r.status !== status) continue;
-              allRuns.push(r);
+      for (const app of apps) {
+        if (!app) continue;
+        if (packageId && app.packageId !== packageId) continue;
+        if (app.storage && typeof app.storage.listRuns === "function") {
+          try {
+            const records = app.storage.listRuns({ actionId, limit });
+            for (const r of records) {
+              if (!seenRunIds.has(r.id)) {
+                seenRunIds.add(r.id);
+                if (status && r.status !== status) continue;
+                allRuns.push(r);
+              }
             }
-          }
-        } catch {}
+          } catch {}
+        }
       }
 
       allRuns.sort((a, b) => (b.startedAt || "").localeCompare(a.startedAt || ""));
@@ -84,10 +71,10 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
     }
   }
 
-  // 2. Runs Clear: POST /api/v1/runs/clear or DELETE /api/v1/runs
+  // 2. Runs Clear: POST /api/v2/runs/clear, DELETE /api/v2/runs, etc.
   if (
-    (pathname === "/api/v1/runs/clear" && req.method === "POST") ||
-    (pathname === "/api/v1/runs" && req.method === "DELETE")
+    (subpath === "/runs/clear" && req.method === "POST") ||
+    (subpath === "/runs" && req.method === "DELETE")
   ) {
     try {
       let body: any = {};
@@ -99,23 +86,18 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
       const status = url.searchParams.get("status") || body.status || undefined;
 
       let clearedCount = 0;
-      const candidateStorages: RuntimeStorage[] = [];
-      if (projectRoot) {
-        try {
-          const cfg = loadProjectConfig(projectRoot);
-          candidateStorages.push(runtimeRegistry.getStorage(cfg.id, projectRoot));
-        } catch {}
-      }
-      const linked = listLinkedPackages(customHome);
-      for (const pkg of linked) {
-        if (projectRoot && pkg.path === projectRoot) continue;
-        if (!existsSync(pkg.path)) continue;
-        if (packageId && pkg.id !== packageId) continue;
-        candidateStorages.push(runtimeRegistry.getStorage(pkg.id, pkg.path));
-      }
+      const apps = host
+        ? host.listApps()
+        : (target as any)?.target?.listApps
+        ? (target as any).target.listApps()
+        : [(target as any)?.target].filter(Boolean);
 
-      for (const storage of candidateStorages) {
-        clearedCount += storage.clearRuns({ actionId, status });
+      for (const app of apps) {
+        if (!app) continue;
+        if (packageId && app.packageId !== packageId) continue;
+        if (app.storage && typeof app.storage.clearRuns === "function") {
+          clearedCount += app.storage.clearRuns({ actionId, status });
+        }
       }
 
       return jsonResponse({ ok: true, clearedCount }, 200, corsHeaders);
@@ -128,14 +110,13 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
     }
   }
 
-  // 3. Run Stream (SSE): GET /api/v1/runs/:runId/stream
-  const runStreamMatch = pathname.match(/^\/api\/v1\/runs\/([^/]+)\/stream$/);
-  if (runStreamMatch && req.method === "GET") {
-    const runId = decodeURIComponent(runStreamMatch[1]);
-    const found = findRunAcrossStorages(runId, runtimeRegistry, projectRoot, customHome);
-    const activeHandle = runtimeRegistry.executionManager.get(runId);
+  // 3. Run Events SSE: GET /api/v2/runs/:runId/events (and stream alias)
+  const runEventsMatch = subpath.match(/^\/runs\/([^/]+)\/(events|stream)$/);
+  if (runEventsMatch && req.method === "GET") {
+    const runId = decodeURIComponent(runEventsMatch[1]);
+    const run = await target.getRun(runId);
 
-    if (!found && !activeHandle) {
+    if (!run) {
       return jsonResponse(
         { ok: false, error: { code: "RUN_NOT_FOUND", message: `Run '${runId}' not found` } },
         404,
@@ -143,79 +124,56 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
       );
     }
 
-    let closed = false;
-    let finishSent = false;
-    let unsubscribe: (() => void) | undefined;
+    const eventStream = target.events(runId, { signal: req.signal });
 
     const stream = new ReadableStream({
-      start(controller) {
+      async start(controller) {
         const encoder = new TextEncoder();
-        const sendEvent = (event: string, data: any) => {
-          if (closed) return;
-          try {
+        let eventsCount = 0;
+        try {
+          for await (const evt of eventStream) {
+            if (req.signal.aborted) break;
+            eventsCount++;
+            const eventType = evt.type || "message";
             controller.enqueue(
-              encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+              encoder.encode(`event: ${eventType}\ndata: ${JSON.stringify(evt)}\n\n`)
             );
-          } catch {}
-        };
-
-        const cleanup = () => {
-          if (closed) return;
-          closed = true;
-          if (unsubscribe) {
-            unsubscribe();
-            unsubscribe = undefined;
           }
+
+          if (
+            eventsCount === 0 &&
+            run &&
+            (run.status === "success" || run.status === "failed" || run.status === "cancelled")
+          ) {
+            const finishEvt = {
+              type: "finish",
+              runId,
+              timestamp: run.finishedAt || new Date().toISOString(),
+              result:
+                run.status === "success"
+                  ? { ok: true, runId, data: run.output ?? null }
+                  : {
+                      ok: false,
+                      runId,
+                      error: run.error || {
+                        code: "EXECUTION_FAILED",
+                        message: `Run finished with status ${run.status}`,
+                      },
+                    },
+            };
+            controller.enqueue(
+              encoder.encode(`event: finish\ndata: ${JSON.stringify(finishEvt)}\n\n`)
+            );
+          }
+        } catch {
+          // 忽略中断
+        } finally {
           try {
             controller.close();
           } catch {}
-        };
-
-        const sendFinish = (payload: any) => {
-          if (finishSent || closed) return;
-          finishSent = true;
-          sendEvent("finish", payload);
-          cleanup();
-        };
-
-        req.signal.addEventListener("abort", cleanup, { once: true });
-
-        if (activeHandle) {
-          sendEvent("status", { runId, status: "running" });
-          unsubscribe = runtimeRegistry.subscribe(runId, (evt) => {
-            if (evt.type === "finish") {
-              sendFinish(evt.data);
-            } else {
-              sendEvent(evt.type, evt.data);
-            }
-          });
-
-          activeHandle.result.then(
-            (res) => {
-              sendFinish(res);
-            },
-            (err) => {
-              sendFinish({
-                ok: false,
-                error: { message: err?.message || String(err) },
-              });
-            }
-          );
-        } else if (found) {
-          sendFinish(found.run);
-        } else {
-          cleanup();
         }
       },
-      cancel() {
-        if (!closed) {
-          closed = true;
-          if (unsubscribe) {
-            unsubscribe();
-            unsubscribe = undefined;
-          }
-        }
-      },
+      cancel() {},
     });
 
     return new Response(stream, {
@@ -229,13 +187,13 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
     });
   }
 
-  // 4. Run Show: GET /api/v1/runs/:runId
-  const runShowMatch = pathname.match(/^\/api\/v1\/runs\/([^/]+)$/);
+  // 4. Run Show: GET /api/v2/runs/:runId, GET /runs/:runId
+  const runShowMatch = subpath.match(/^\/runs\/([^/]+)$/);
   if (runShowMatch && req.method === "GET") {
     const runId = decodeURIComponent(runShowMatch[1]);
-    const found = findRunAcrossStorages(runId, runtimeRegistry, projectRoot, customHome);
+    const run = await target.getRun(runId);
 
-    if (!found) {
+    if (!run) {
       return jsonResponse(
         {
           ok: false,
@@ -249,40 +207,22 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
       );
     }
 
-    return jsonResponse(found.run, 200, corsHeaders);
+    return jsonResponse(run, 200, corsHeaders);
   }
 
-  // 5. Run Cancel: POST /api/v1/runs/:runId/cancel
-  const runCancelMatch = pathname.match(/^\/api\/v1\/runs\/([^/]+)\/cancel$/);
+  // 5. Run Cancel: POST /api/v2/runs/:runId/cancel, POST /runs/:runId/cancel
+  const runCancelMatch = subpath.match(/^\/runs\/([^/]+)\/cancel$/);
   if (runCancelMatch && req.method === "POST") {
     const runId = decodeURIComponent(runCancelMatch[1]);
     let body: any = {};
     try {
       body = await readJsonBody(req, { maxBytes: options.maxBodyBytes });
-    } catch {
-      // Body is optional
-    }
+    } catch {}
 
     const reason = body?.reason || "Cancelled by client request";
+    const cancelResult = await target.cancelRun(runId, reason);
 
-    const activeHandle = runtimeRegistry.executionManager.get(runId);
-    if (activeHandle) {
-      const cancelled = runtimeRegistry.executionManager.cancel(runId, reason);
-      if (cancelled) {
-        return jsonResponse(
-          {
-            ok: true,
-            runId,
-            status: "cancelled",
-          },
-          200,
-          corsHeaders
-        );
-      }
-    }
-
-    const found = findRunAcrossStorages(runId, runtimeRegistry, projectRoot, customHome);
-    if (!found) {
+    if (cancelResult.outcome === "not_found") {
       return jsonResponse(
         {
           ok: false,
@@ -296,25 +236,19 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
       );
     }
 
-    const { storage, run } = found;
-    if (run.status === "success" || run.status === "failed" || run.status === "cancelled") {
+    if (cancelResult.outcome === "already_terminal") {
       return jsonResponse(
         {
           ok: false,
           error: {
             code: "RUN_ALREADY_FINISHED",
-            message: `Run '${runId}' has already finished with status '${run.status}'`,
+            message: `Run '${runId}' has already finished with status '${cancelResult.status}'`,
           },
         },
         409,
         corsHeaders
       );
     }
-
-    storage.updateRun(runId, "cancelled", undefined, {
-      code: "ACTION_CANCELLED",
-      message: reason,
-    });
 
     return jsonResponse(
       {

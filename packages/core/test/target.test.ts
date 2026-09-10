@@ -200,6 +200,17 @@ describe("ActionDockTarget 统一调用门面", () => {
             name: "远程服务测试包",
             version: "2.0.0",
             actionsDir: "actions",
+            actions: {
+              add: {
+                entry: "actions/add.ts",
+                description: "远程加法",
+                inputSchema: {
+                  type: "object",
+                  properties: { a: { type: "number" }, b: { type: "number" } },
+                  required: ["a", "b"],
+                },
+              },
+            },
           },
           null,
           2

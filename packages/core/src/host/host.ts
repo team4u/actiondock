@@ -278,10 +278,14 @@ export class DefaultActionDockHost implements ActionDockHost {
 
   async listPlaybooks(): Promise<PlaybookSummary[]> {
     const results: PlaybookSummary[] = [];
-    for (const app of this.listApps()) {
+    const apps = this.listApps();
+    for (const app of apps) {
       const appPlaybooks = await app.listPlaybooks();
       for (const item of appPlaybooks) {
-        const qualifiedId = item.id.includes("/") ? item.id : `${app.packageId}/${item.id}`;
+        const qualifiedId =
+          apps.length > 1 && !item.id.includes("/")
+            ? `${app.packageId}/${item.id}`
+            : item.id;
         results.push({
           ...item,
           id: qualifiedId,

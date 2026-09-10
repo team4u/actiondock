@@ -43,6 +43,14 @@ export interface PackageInfo {
   playbooksDir?: string;
   /** 声明的项目依赖配置项清单 */
   config?: Record<string, ConfigItemDefinition>;
+  /** 动作总数统计 */
+  actionsCount?: number;
+  /** 规程总数统计 */
+  playbooksCount?: number;
+  /** 动作标识符列表 */
+  actions?: string[];
+  /** 规程标识符列表 */
+  playbooks?: string[];
 }
 
 /**

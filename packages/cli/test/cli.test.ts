@@ -658,7 +658,7 @@ describe("CLI End-to-End", () => {
       expect(testProc.exitCode).toBe(0);
       const testResult = JSON.parse(testProc.stdout.toString());
       expect(testResult.ok).toBe(true);
-      expect(testResult.status).toBe("ok");
+      expect(["ok", "healthy"]).toContain(testResult.status);
 
       // 5. Query remote actions and info via --profile
       const remoteInfoProc = runCli(["info", "--profile", "cloud-aliyun", "--json"], tmpdir(), env);

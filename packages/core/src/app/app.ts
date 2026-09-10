@@ -318,6 +318,11 @@ export class DefaultActionDockApp implements ActionDockApp {
   }
 
   async info(): Promise<PackageInfo> {
+    const actionsMap = this.getStaticActionMap();
+    const playbooksMap = this.getStaticPlaybookMap();
+    const actions = Array.from(actionsMap.keys());
+    const playbooks = Array.from(playbooksMap.keys());
+
     return {
       id: this.packageId,
       name: this.projectConfig.name || this.packageId,
@@ -327,6 +332,10 @@ export class DefaultActionDockApp implements ActionDockApp {
       actionsDir: this.projectConfig.actionsDir,
       playbooksDir: this.projectConfig.playbooksDir,
       config: this.projectConfig.config,
+      actions,
+      actionsCount: actions.length,
+      playbooks,
+      playbooksCount: playbooks.length,
     };
   }
 
@@ -379,6 +388,37 @@ export class DefaultActionDockApp implements ActionDockApp {
           break;
         }
       }
+    }
+
+    let liveAction = this.actionsMap.get(id) || (spec ? this.actionsMap.get(spec.id) : undefined);
+    if (!liveAction && (this.executionService as any).getAction) {
+      liveAction =
+        (this.executionService as any).getAction(id) ||
+        (spec ? (this.executionService as any).getAction(spec.id) : undefined);
+    }
+    if (!liveAction && (this.executionService as any).runner?.resolveAction) {
+      try {
+        const resolution = await (this.executionService as any).runner.resolveAction(id);
+        if (resolution.status === "found") {
+          liveAction = resolution.action;
+        }
+      } catch {
+        // 忽略动态解析异常
+      }
+    }
+
+    if (liveAction) {
+      return {
+        id: liveAction.id,
+        description: liveAction.description ?? spec?.description,
+        inputSchema: liveAction.inputSchema ?? spec?.inputSchema,
+        outputSchema: liveAction.outputSchema ?? spec?.outputSchema,
+        tags: liveAction.tags ? [...liveAction.tags] : spec?.tags,
+        annotations: liveAction.annotations ?? spec?.annotations,
+        uses: liveAction.uses ? [...liveAction.uses] : spec?.uses,
+        entry: spec?.entry,
+        filePath: spec?.filePath,
+      };
     }
 
     if (!spec) {

@@ -134,6 +134,7 @@ Follow these steps to greet a user.
       token: SECRET_TOKEN,
       projectRoot: projectDir,
       customHome: tempDir,
+      enableManagement: true,
     });
     serverUrl = `http://127.0.0.1:${serverInstance.port}`;
   });
@@ -363,7 +364,7 @@ Follow these steps to greet a user.
     // Health with valid Bearer token should succeed
     const healthAuth = await checkRemoteHealth(serverUrl, SECRET_TOKEN);
     expect(healthAuth.ok).toBe(true);
-    expect(healthAuth.status).toBe("ok");
+    expect(healthAuth.status).toBe("healthy");
     expect(healthAuth.version).toBe(ACTIONDOCK_VERSION);
     expect(healthAuth.latencyMs).toBeGreaterThanOrEqual(0);
 
@@ -371,7 +372,7 @@ Follow these steps to greet a user.
     const resQuery = await fetch(`${serverUrl}/api/v1/health?token=${SECRET_TOKEN}`);
     expect(resQuery.status).toBe(200);
     const queryJson = await resQuery.json();
-    expect(queryJson.status).toBe("ok");
+    expect(queryJson.status).toBe("healthy");
     // Default: projectRoot should be hidden
     expect(queryJson.projectRoot).toBeUndefined();
   });

@@ -1,9 +1,7 @@
-import { existsSync } from "node:fs";
-import { loadProjectConfig } from "../../project/loader";
-import { listLinkedPackages, resolvePackageRoot } from "../../registry/registry";
-import type { RuntimeStorage } from "../../storage/types";
-import type { RunRecord } from "@actiondock/sdk";
-import type { ServerRuntimeRegistry } from "../runtime-registry";
+import type { ActionDockApp } from "../../app/types";
+import type { ActionDockHost } from "../../host/types";
+import type { ActionDockTarget } from "../../target/types";
+import { assertValidPackageId } from "../../utils";
 import type { ServerOptions } from "../types";
 
 /**
@@ -16,12 +14,13 @@ export interface RouteContext {
   corsHeaders: Record<string, string>;
   projectRoot: string | null;
   customHome?: string;
-  runtimeRegistry: ServerRuntimeRegistry;
+  host?: ActionDockHost;
+  target: ActionDockTarget;
   options: ServerOptions;
 }
 
 /**
- * 辅助函数：构造带 CORS 头的标准 JSON HTTP 响应。
+ * 构造带 CORS 头的标准 JSON HTTP 响应。
  */
 export function jsonResponse(
   data: unknown,
@@ -37,115 +36,57 @@ export function jsonResponse(
   });
 }
 
-import { assertValidPackageId } from "../../utils";
-
 /**
- * 依据 package 参数或项目上下文解析目标 Storage 实例与根目录。
+ * 剥离标准版本前缀 (/api/v2/ 与兼容的 /api/v1/)，获取相对路由子路径。
  */
-export function resolveStorageForPackage(
-  packageIdOrPath: string | undefined,
-  runtimeRegistry: ServerRuntimeRegistry,
-  projectRoot?: string | null,
-  customHome?: string
-): { packageId: string; storage: RuntimeStorage; projectRoot?: string } {
-  if (packageIdOrPath) {
-    assertValidPackageId(packageIdOrPath);
-
-    const root = resolvePackageRoot(packageIdOrPath, projectRoot || undefined, customHome);
-    if (root) {
-      const config = loadProjectConfig(root);
-      return {
-        packageId: config.id,
-        storage: runtimeRegistry.getStorage(config.id, root),
-        projectRoot: root,
-      };
-    }
-
-    if (projectRoot) {
-      try {
-        const config = loadProjectConfig(projectRoot);
-        if (config.id === packageIdOrPath) {
-          return {
-            packageId: config.id,
-            storage: runtimeRegistry.getStorage(config.id, projectRoot),
-            projectRoot,
-          };
-        }
-      } catch {}
-    }
-
-    const linked = listLinkedPackages(customHome);
-    const matchedLinked = linked.find((p) => p.id === packageIdOrPath);
-    if (matchedLinked && existsSync(matchedLinked.path)) {
-      return {
-        packageId: matchedLinked.id,
-        storage: runtimeRegistry.getStorage(matchedLinked.id, matchedLinked.path),
-        projectRoot: matchedLinked.path,
-      };
-    }
-
-    throw new Error(`Unknown or unregistered package: '${packageIdOrPath}'`);
+export function getSubPath(pathname: string): string {
+  if (pathname.startsWith("/api/v2/")) {
+    return pathname.slice(7);
   }
-
-  if (projectRoot) {
-    const config = loadProjectConfig(projectRoot);
-    return {
-      packageId: config.id,
-      storage: runtimeRegistry.getStorage(config.id, projectRoot),
-      projectRoot,
-    };
+  if (pathname.startsWith("/api/v1/")) {
+    return pathname.slice(7);
   }
-
-  const linked = listLinkedPackages(customHome);
-  if (linked.length > 0) {
-    const first = linked[0];
-    return {
-      packageId: first.id,
-      storage: runtimeRegistry.getStorage(first.id, first.path),
-      projectRoot: first.path,
-    };
-  }
-
-  return {
-    packageId: "default",
-    storage: runtimeRegistry.getStorage("default"),
-  };
+  return pathname;
 }
 
 /**
- * 跨活跃连接与所有已知持久化存储全局检索指定 runId 的运行记录。
+ * 从 Host 或 Target 中依据 packageId 解析对应的 ActionDockApp 实例。
  */
-export function findRunAcrossStorages(
-  runId: string,
-  runtimeRegistry: ServerRuntimeRegistry,
-  projectRoot?: string | null,
-  customHome?: string
-): { storage: RuntimeStorage; run: RunRecord } | null {
-  const inMemory = runtimeRegistry.findRun(runId);
-  if (inMemory) return inMemory as { storage: RuntimeStorage; run: RunRecord };
-
-  if (projectRoot) {
-    try {
-      const config = loadProjectConfig(projectRoot);
-      const storage = runtimeRegistry.getStorage(config.id, projectRoot);
-      const run = storage.getRun(runId);
-      if (run) return { storage, run };
-    } catch {
-      // 忽略读取错误
+export function resolveAppForPackage(
+  packageIdOrPath: string | undefined,
+  host?: ActionDockHost,
+  target?: ActionDockTarget
+): ActionDockApp {
+  if (packageIdOrPath) {
+    assertValidPackageId(packageIdOrPath);
+    if (host) {
+      const app = host.getApp(packageIdOrPath);
+      if (app) return app;
     }
+    const innerTarget = (target as any)?.target;
+    if (innerTarget && "packageId" in innerTarget && innerTarget.packageId === packageIdOrPath) {
+      return innerTarget;
+    }
+    if (innerTarget && typeof innerTarget.getApp === "function") {
+      const app = innerTarget.getApp(packageIdOrPath);
+      if (app) return app;
+    }
+    throw new Error(`Unknown or unregistered package: '${packageIdOrPath}'`);
   }
 
-  try {
-    const linked = listLinkedPackages(customHome);
-    for (const pkg of linked) {
-      if (!existsSync(pkg.path)) continue;
-      const storage = runtimeRegistry.getStorage(pkg.id, pkg.path);
-      const run = storage.getRun(runId);
-      if (run) return { storage, run };
-    }
-  } catch {
-    // 忽略读取错误
+  if (host) {
+    const apps = host.listApps();
+    if (apps.length > 0) return apps[0];
   }
 
-  return null;
+  const innerTarget = (target as any)?.target;
+  if (innerTarget && typeof innerTarget.listApps === "function") {
+    const apps = innerTarget.listApps();
+    if (apps.length > 0) return apps[0];
+  }
+  if (innerTarget && "packageId" in innerTarget) {
+    return innerTarget;
+  }
+
+  throw new Error("No registered package found in host or target");
 }

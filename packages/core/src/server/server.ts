@@ -2,9 +2,13 @@ import { createServer as createNodeHttpServer, type IncomingMessage, type Server
 import { resolve } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { createActionDockHost } from "../host/host";
+import type { ActionDockHost } from "../host/types";
 import { ensureDependencyClosure } from "../project/closure";
 import { findProjectRoot } from "../project/loader";
 import { listLinkedPackages, resolvePackageRoot } from "../registry/registry";
+import { LocalActionDockTarget } from "../target/local";
+import type { ActionDockTarget } from "../target/types";
 import {
   handleActionsRoutes,
   handleConfigRoutes,
@@ -17,10 +21,8 @@ import {
   jsonResponse,
   type RouteContext,
 } from "./routes";
-import { ServerRuntimeRegistry } from "./runtime-registry";
 import { isLoopbackHost, resolveCorsHeaders, verifyBearerToken } from "./security";
-import type { ActionDockHost } from "../host/types";
-import type { ActionDockServerInstance, CoreHttpServerFactory, CoreHttpServerInstance, ServerOptions } from "./types";
+import type { ActionDockServerInstance, CoreHttpServerInstance, ServerOptions } from "./types";
 
 /**
  * 根据当前运行时环境启动标准 Web Request/Response 兼容的 HTTP 服务。
@@ -30,8 +32,6 @@ export async function launchHttpServer(
   host: string,
   fetchHandler: (req: Request) => Promise<Response>
 ): Promise<CoreHttpServerInstance> {
-
-  // Node.js 原生 node:http 服务驱动实现
   const srv = createNodeHttpServer(async (req: IncomingMessage, res: ServerResponse) => {
     try {
       const protocol = (req.socket as any)?.encrypted ? "https" : "http";
@@ -106,17 +106,18 @@ export async function launchHttpServer(
 }
 
 /**
- * 启动 ActionDock 2.0 原生轻量级 HTTP 服务装配中枢。
- * 
- * 仅负责中间件流转、认证拦截、路由分发与服务生命周期管理。
+ * 启动 ActionDock 2.0 原生轻量级 HTTP 服务端。
+ * 作为 ActionDockHost 与 ActionDockTarget 的薄适配层，负责中间件流转、认证拦截与路由分发。
  */
 export async function startActionDockServer(
   options: ServerOptions = {}
 ): Promise<ActionDockServerInstance> {
-  const hostInstance: ActionDockHost | undefined =
+  let hostInstance: ActionDockHost | undefined =
     options.host && typeof options.host === "object" && typeof (options.host as any).listActions === "function"
       ? (options.host as ActionDockHost)
       : undefined;
+
+  let targetInstance: ActionDockTarget | undefined = options.target;
 
   const hostString =
     typeof options.host === "string"
@@ -138,7 +139,28 @@ export async function startActionDockServer(
     );
   }
 
-  const runtimeRegistry = new ServerRuntimeRegistry(customHome);
+  // 若调用方未传入 host 或 target，通过 projectRoot、customHome、platform 等直接创建宿主
+  if (!targetInstance && !hostInstance) {
+    const scanLinkedPackages = options.scanLinkedPackages ?? !projectRoot;
+    hostInstance = await createActionDockHost({
+      projectRoot: projectRoot || undefined,
+      customHome,
+      platform: options.platform,
+      dataDir: options.dataDir,
+      inMemory: options.inMemory,
+      scanLinkedPackages,
+      autoLoadCurrentProject: true,
+    });
+  }
+
+  if (!targetInstance && hostInstance) {
+    targetInstance = new LocalActionDockTarget(hostInstance);
+  } else if (targetInstance && !hostInstance) {
+    const inner = (targetInstance as any).target;
+    if (inner && typeof inner.listApps === "function") {
+      hostInstance = inner;
+    }
+  }
 
   const roots: string[] = [];
   if (projectRoot) {
@@ -184,7 +206,8 @@ export async function startActionDockServer(
       corsHeaders,
       projectRoot,
       customHome,
-      runtimeRegistry,
+      host: hostInstance,
+      target: targetInstance!,
       options,
     };
 
@@ -232,7 +255,7 @@ export async function startActionDockServer(
       );
     }
 
-    // 4. 业务领域路由分发
+    // 4. 业务领域路由分发（完全委托 Target / Host）
     const routeResponse =
       (await handleInfoRoute(ctx)) ||
       (await handleDoctorRoute(ctx)) ||
@@ -280,20 +303,26 @@ export async function startActionDockServer(
       server.port = val;
     },
     host: hostInstance,
+    target: targetInstance,
     get url() {
       return `http://${actualHost}:${this.port}`;
     },
-    runtimeRegistry,
     ready: Promise.resolve(),
     stop: async (stopOptions?: { graceMs?: number }) => {
-      if (hostInstance) {
+      if (targetInstance) {
+        try {
+          await targetInstance.close();
+        } catch {
+          // 忽略关闭异常
+        }
+      }
+      if (hostInstance && hostInstance !== (targetInstance as any)?.target) {
         try {
           await hostInstance.close(stopOptions);
         } catch {
           // 忽略宿主关闭异常
         }
       }
-      await runtimeRegistry.close(stopOptions);
       await server.stop(true);
     },
   };

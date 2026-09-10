@@ -1,75 +1,46 @@
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
 import { filterByIntent } from "../../filter";
-import { loadActions, loadProjectConfig } from "../../project/loader";
-import { listLinkedPackages, resolveActionProject } from "../../registry/registry";
-import { ActionRunner } from "../../runtime/runner";
 import { InvalidJsonError, readJsonBody, RequestTooLargeError } from "../body";
-import { type RouteContext, jsonResponse } from "./common";
+import { getSubPath, jsonResponse, type RouteContext } from "./common";
 
 /**
- * 处理 Action 列表、详情查询及同步/异步运行接口。
+ * 处理 Action 相关的 HTTP 路由（列表、规范查询、同步执行与异步启动）。
  */
 export async function handleActionsRoutes(ctx: RouteContext): Promise<Response | null> {
-  const { req, url, pathname, corsHeaders, projectRoot, customHome, runtimeRegistry, options } = ctx;
+  const { req, url, pathname, corsHeaders, options, target } = ctx;
+  const subpath = getSubPath(pathname);
 
-  // 1. Actions List: GET /api/v1/actions
-  if (pathname === "/api/v1/actions" && req.method === "GET") {
+  // 1. Actions List: GET /api/v2/actions, GET /actions
+  if (subpath === "/actions" && req.method === "GET") {
     try {
-      const actionList: Array<{
-        id: string;
-        description: string;
-        packageId?: string;
-      }> = [];
+      const intent = url.searchParams.get("intent") || undefined;
+      const query = url.searchParams.get("query") || intent;
+      const targetPkg = url.searchParams.get("package") || url.searchParams.get("packageId") || undefined;
+      const prefix = url.searchParams.get("prefix") || undefined;
+      const tags = url.searchParams.getAll("tag");
 
-      if (projectRoot) {
-        const config = loadProjectConfig(projectRoot);
-        const actions = await loadActions(projectRoot, config.actionsDir, { autoInstall: false });
-        for (const [id, a] of actions.entries()) {
-          actionList.push({
-            id,
-            description: a.description || "",
-            packageId: config.id,
-          });
-        }
+      let actions = await target.listActions({
+        query,
+        prefix,
+        tags: tags.length > 0 ? tags : undefined,
+      });
+
+      if (targetPkg) {
+        actions = actions.filter(
+          (a) => a.packageId === targetPkg || a.id.startsWith(`${targetPkg}/`)
+        );
       }
-
-      const linked = listLinkedPackages(customHome);
-      for (const pkg of linked) {
-        if (projectRoot && pkg.path === projectRoot) continue;
-        if (!existsSync(pkg.path)) continue;
-        try {
-          const config = loadProjectConfig(pkg.path);
-          const actions = await loadActions(pkg.path, config.actionsDir, { autoInstall: false });
-          for (const [id, a] of actions.entries()) {
-            actionList.push({
-              id,
-              description: a.description || "",
-              packageId: pkg.id,
-            });
-          }
-        } catch {
-          // 忽略故障包
-        }
-      }
-
-      const intent = url.searchParams.get("intent");
-      const targetPkg = url.searchParams.get("package");
-
-      let filtered = targetPkg
-        ? actionList.filter((a) => a.packageId === targetPkg)
-        : actionList;
 
       if (intent) {
-        filtered = filterByIntent(
-          filtered,
+        actions = filterByIntent(
+          actions,
           intent,
-          [(a) => a.id, (a) => a.description, (a) => a.packageId],
+          [(a) => a.id, (a) => a.description || "", (a) => a.packageId || ""],
           false
         );
       }
 
-      return jsonResponse(filtered, 200, corsHeaders);
+      return jsonResponse(actions, 200, corsHeaders);
     } catch (err: any) {
       return jsonResponse(
         {
@@ -82,49 +53,23 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
     }
   }
 
-  // 2. Action Show: GET /api/v1/actions/:id
-  const actionShowMatch = pathname.match(/^\/api\/v1\/actions\/([^/]+)$/);
-  if (actionShowMatch && req.method === "GET") {
-    const actionId = decodeURIComponent(actionShowMatch[1]);
+  // 2. Multi-package Action Show: GET /api/v2/packages/:packageId/actions/:actionId
+  const pkgActionShowMatch = subpath.match(/^\/packages\/([^/]+)\/actions\/([^/]+)$/);
+  if (pkgActionShowMatch && req.method === "GET") {
+    const packageId = decodeURIComponent(pkgActionShowMatch[1]);
+    const actionId = decodeURIComponent(pkgActionShowMatch[2]);
+    const ref = `${packageId}/${actionId}`;
     try {
-      const resolved = await resolveActionProject(
-        actionId,
-        projectRoot || process.cwd(),
-        customHome
-      );
-      const config = loadProjectConfig(resolved.projectRoot);
-      const actions = await loadActions(resolved.projectRoot, config.actionsDir, { autoInstall: false });
-      const action = actions.get(resolved.actionId);
-      if (!action) {
-        return jsonResponse(
-          {
-            ok: false,
-            error: {
-              code: "ACTION_NOT_FOUND",
-              message: `Action '${resolved.actionId}' not found in package '${resolved.packageId}'`,
-            },
-          },
-          404,
-          corsHeaders
-        );
-      }
-
-      return jsonResponse(
-        {
-          id: action.id,
-          packageId: resolved.packageId,
-          description: action.description || "",
-          inputSchema: action.inputSchema || null,
-          outputSchema: action.outputSchema || null,
-        },
-        200,
-        corsHeaders
-      );
+      const spec = await target.describeAction(ref);
+      return jsonResponse(spec, 200, corsHeaders);
     } catch (err: any) {
       return jsonResponse(
         {
           ok: false,
-          error: { code: "ACTION_NOT_FOUND", message: err.message },
+          error: {
+            code: "ACTION_NOT_FOUND",
+            message: err.message || `Action '${actionId}' not found in package '${packageId}'`,
+          },
         },
         404,
         corsHeaders
@@ -132,10 +77,73 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
     }
   }
 
-  // 3. Action Run: POST /api/v1/actions/:id/run
-  const actionRunMatch = pathname.match(/^\/api\/v1\/actions\/([^/]+)\/run$/);
-  if (actionRunMatch && req.method === "POST") {
-    const actionId = decodeURIComponent(actionRunMatch[1]);
+  // 3. Short Action Show: GET /api/v2/actions/:actionId, GET /actions/:actionId
+  const actionShowMatch = subpath.match(/^\/actions\/(.+)$/);
+  if (actionShowMatch && req.method === "GET") {
+    const actionId = decodeURIComponent(actionShowMatch[1]);
+    try {
+      const spec = await target.describeAction(actionId);
+      return jsonResponse(spec, 200, corsHeaders);
+    } catch (err: any) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: {
+            code: "ACTION_NOT_FOUND",
+            message: err.message || `Action '${actionId}' not found`,
+          },
+        },
+        404,
+        corsHeaders
+      );
+    }
+  }
+
+  // 4. Execution Routes (Run & Start)
+  // Match patterns:
+  // - /packages/:packageId/actions/:actionId/run
+  // - /packages/:packageId/actions/:actionId/start
+  // - /actions/:actionId/run
+  // - /actions/:actionId/start
+  const pkgRunMatch = subpath.match(/^\/packages\/([^/]+)\/actions\/([^/]+)\/(run|start)$/);
+  const shortRunMatch = subpath.match(/^\/actions\/(.+)\/(run|start)$/);
+
+  if ((pkgRunMatch || shortRunMatch) && req.method === "POST") {
+    let actionRef: string;
+    let endpointMode: "run" | "start";
+    let pkgId: string | undefined;
+
+    if (pkgRunMatch) {
+      pkgId = decodeURIComponent(pkgRunMatch[1]);
+      const actId = decodeURIComponent(pkgRunMatch[2]);
+      endpointMode = pkgRunMatch[3] as "run" | "start";
+      actionRef = `${pkgId}/${actId}`;
+    } else {
+      actionRef = decodeURIComponent(shortRunMatch![1]);
+      endpointMode = shortRunMatch![2] as "run" | "start";
+      if (actionRef.includes("/")) {
+        pkgId = actionRef.split("/")[0];
+      }
+    }
+
+    // 校验 Package 允许白名单
+    if (pkgId && options.packageAllowlist && options.packageAllowlist.length > 0) {
+      if (!options.packageAllowlist.includes(pkgId)) {
+        return jsonResponse(
+          {
+            ok: false,
+            runId: randomUUID(),
+            error: {
+              code: "PACKAGE_FORBIDDEN",
+              message: `Package '${pkgId}' is not in the allowed package list`,
+            },
+          },
+          403,
+          corsHeaders
+        );
+      }
+    }
+
     let body: any = {};
     try {
       body = await readJsonBody(req, { maxBytes: options.maxBodyBytes });
@@ -173,79 +181,82 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
       );
     }
 
-    try {
-      const resolved = await resolveActionProject(
-        actionId,
-        projectRoot || process.cwd(),
-        customHome
-      );
-      const config = loadProjectConfig(resolved.projectRoot);
+    const isAsync =
+      endpointMode === "start" ||
+      body?.execution?.mode === "async" ||
+      body?.async === true;
 
-      // 校验 Package 允许列表（若配置白名单限制）
-      if (options.packageAllowlist && options.packageAllowlist.length > 0) {
-        if (!options.packageAllowlist.includes(config.id)) {
-          return jsonResponse(
-            {
-              ok: false,
-              runId: randomUUID(),
-              error: {
-                code: "PACKAGE_FORBIDDEN",
-                message: `Package '${config.id}' is not in the allowed package list`,
-              },
-            },
-            403,
-            corsHeaders
-          );
+    const timeoutMs =
+      typeof body?.execution?.timeoutMs === "number" && body.execution.timeoutMs > 0
+        ? body.execution.timeoutMs
+        : undefined;
+
+    const input = body && "input" in body ? body.input : {};
+    const configOverrides = body?.config;
+
+    if (isAsync) {
+      try {
+        const ticket = await target.startAction(actionRef, input, {
+          timeoutMs,
+          config: configOverrides,
+        });
+
+        if (ticket.status === "failed") {
+          const res = await ticket.result!;
+          return jsonResponse(res, 400, corsHeaders);
         }
-      }
-
-      const actions = await loadActions(resolved.projectRoot, config.actionsDir, { autoInstall: false });
-      const executionService = runtimeRegistry.getExecutionService(config.id, resolved.projectRoot, config);
-      for (const a of actions.values()) {
-        executionService.registerAction(a);
-      }
-
-      const isAsync = body?.execution?.mode === "async" || body?.async === true;
-      const timeoutMs =
-        typeof body?.execution?.timeoutMs === "number" && body.execution.timeoutMs > 0
-          ? body.execution.timeoutMs
-          : undefined;
-
-      // 严格保留 body.input 为 false、0、"" 或 null 的合法值，仅在 undefined 时使用空对象
-      const input = body && "input" in body ? body.input : {};
-      const configOverrides = body?.config;
-
-      if (isAsync) {
-        const ticket = await executionService.start(
-          { packageId: config.id, actionId: resolved.actionId },
-          input,
-          { timeoutMs, config: configOverrides }
-        );
 
         return jsonResponse(
           {
             ok: true,
             runId: ticket.runId,
-            status: ticket.status,
-            streamUrl: `/api/v1/runs/${ticket.runId}/stream`,
+            status: ticket.status || "running",
+            streamUrl: `/api/v2/runs/${ticket.runId}/events`,
           },
           202,
           corsHeaders
         );
+      } catch (err: any) {
+        return jsonResponse(
+          {
+            ok: false,
+            runId: randomUUID(),
+            error: {
+              code: "ACTION_START_FAILED",
+              message: err.message || String(err),
+            },
+          },
+          500,
+          corsHeaders
+        );
+      }
+    }
+
+    // 同步执行模式
+    try {
+      const result = await target.runAction(actionRef, input, {
+        signal: req.signal,
+        timeoutMs,
+        config: configOverrides,
+      });
+
+      let status = 200;
+      if (!result.ok) {
+        if (result.error?.code === "INPUT_VALIDATION_FAILED") {
+          status = 400;
+        } else if (
+          result.error?.code === "ACTION_NOT_FOUND" ||
+          result.error?.code === "PACKAGE_NOT_FOUND"
+        ) {
+          status = 404;
+        } else if (result.error?.code === "ACTION_TIMEOUT") {
+          status = 504;
+        } else {
+          status = 500;
+        }
       }
 
-      // 同步执行模式
-      const result = await executionService.execute(
-        { packageId: config.id, actionId: resolved.actionId },
-        input,
-        {
-          signal: req.signal,
-          timeoutMs,
-          config: configOverrides,
-        }
-      );
-
-      return jsonResponse(result, 200, corsHeaders);
+      return jsonResponse(result, status, corsHeaders);
     } catch (err: any) {
       return jsonResponse(
         {
