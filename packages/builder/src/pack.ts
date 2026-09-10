@@ -366,12 +366,14 @@ export async function packProject(options: PackOptions): Promise<PackResult> {
     }
 
     // 在暂存目录调用带有 --ignore-scripts 的 npm pack 生成标准 npm 压缩包（.tgz）
+    // Windows 兼容：npm 是 .cmd 脚本，无 shell 直接 spawn 会 ENOENT/EINVAL
     const packOutput = execFileSync(
       "npm",
       ["pack", "--ignore-scripts", "--pack-destination", tempBase],
       {
         cwd: stagingPkgDir,
         encoding: "utf-8",
+        shell: process.platform === "win32",
       }
     );
 

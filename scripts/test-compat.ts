@@ -79,7 +79,9 @@ if (typeof (globalThis as any).Bun === "undefined") {
       if (bin === "bun") {
         bin = process.execPath;
       }
-      if (bin.endsWith(".js") || bin.endsWith(".mjs") || bin.endsWith(".cjs")) {
+      // Windows 兼容：CreateProcess 无法直接执行 .mjs/.js/.ts 脚本（shebang 也不生效），
+      // 统一降级为 node <script> 调用
+      if (/\.(mjs|cjs|js|ts)$/i.test(bin)) {
         args = [bin, ...args];
         bin = process.execPath;
       }
@@ -90,7 +92,9 @@ if (typeof (globalThis as any).Bun === "undefined") {
         timeout: options.timeout,
       });
       return {
-        exitCode: res.status ?? (res.signal ? 1 : 0),
+        // 启动失败（res.error）时 status/signal 均为 null，必须显式置为失败，
+        // 否则错误被掩码成 exitCode 0 + 空 stdout
+        exitCode: res.error ? 1 : res.status ?? (res.signal ? 1 : 0),
         stdout: Buffer.isBuffer(res.stdout) ? res.stdout : Buffer.from(res.stdout || ""),
         stderr: Buffer.isBuffer(res.stderr) ? res.stderr : Buffer.from(res.stderr || ""),
         signalCode: res.signal,
@@ -101,7 +105,7 @@ if (typeof (globalThis as any).Bun === "undefined") {
       if (bin === "bun") {
         bin = process.execPath;
       }
-      if (bin.endsWith(".js") || bin.endsWith(".mjs") || bin.endsWith(".cjs")) {
+      if (/\.(mjs|cjs|js|ts)$/i.test(bin)) {
         args = [bin, ...args];
         bin = process.execPath;
       }

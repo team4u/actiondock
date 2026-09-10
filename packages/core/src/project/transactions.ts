@@ -141,7 +141,12 @@ export function runFrozenInstall(projectRoot: string): void {
   }
 
   try {
-    const check = spawnSync(cmd, ["--version"], { stdio: "pipe", shell: false });
+    const check = spawnSync(cmd, ["--version"], {
+      stdio: "pipe",
+      // Windows 兼容：npm 为 .cmd 脚本，无 shell 直接 spawn 必然 ENOENT，
+      // 会误判 npm 缺失而把冻结安装降级为普通 install
+      shell: process.platform === "win32",
+    });
     if (check.status !== 0) {
       cmd = "npm";
       args = ["install", "--ignore-scripts"];

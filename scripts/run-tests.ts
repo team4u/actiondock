@@ -1,6 +1,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawn } from "node:child_process";
+import { pathToFileURL } from "node:url";
 
 const rootDir = resolve(import.meta.dirname, "..");
 const preloadScript = join(rootDir, "scripts", "test-preload.ts");
@@ -100,7 +101,9 @@ async function main() {
   const nodeArgs = [
     "--no-deprecation",
     "--import",
-    preloadScript,
+    // Windows 兼容：--import 说明符按 URL 解析，裸绝对路径（D:\...）会被当成
+    // "d:" 协议导致 ERR_UNSUPPORTED_ESM_URL_SCHEME，必须转为 file:// URL
+    pathToFileURL(preloadScript).href,
     "--test",
     ...targetFiles,
   ];

@@ -1,8 +1,34 @@
 import { afterAll, beforeEach, describe, expect, it } from "bun:test";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+
+/**
+ * 终止 ad mcp 子进程并等待其退出。
+ *
+ * Windows 兼容：Node 的 child.kill("SIGTERM") 仅硬杀直接子进程（supervisor），
+ * 其派生的 worker 进程会成为孤儿并继续持有 tempDir 工作目录句柄——Windows
+ * 禁止删除任何进程的 cwd，afterAll 清理将永久 EPERM。因此 Windows 下必须用
+ * taskkill /T /F 按进程树整棵终止；POSIX 下保持 SIGTERM 语义。
+ */
+async function killMcpChild(child: ChildProcess): Promise<void> {
+  if (process.platform === "win32") {
+    if (child.pid) {
+      spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+    }
+  } else {
+    child.kill("SIGTERM");
+  }
+  await new Promise<void>((resolve) => {
+    if (child.exitCode !== null || child.signalCode !== null) return resolve();
+    const timer = setTimeout(resolve, 3000);
+    child.once("exit", () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}
 
 describe("MCP STDIO Protocol Process Isolation", () => {
   let tempDir: string;
@@ -98,7 +124,8 @@ export default defineAction({
 
   afterAll(() => {
     if (tempDir && existsSync(tempDir)) {
-      rmSync(tempDir, { recursive: true, force: true });
+      // Windows 兼容：ad mcp 子进程退出与句柄释放存在竞态，EPERM/EBUSY 需重试
+      rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -179,7 +206,7 @@ export default defineAction({
       }, 50);
     });
 
-    child.kill("SIGTERM");
+    await killMcpChild(child);
 
     expect(receivedLines.length).toBeGreaterThanOrEqual(2);
     for (const line of receivedLines) {
@@ -273,7 +300,7 @@ export default defineAction({
       }, 50);
     });
 
-    child.kill("SIGTERM");
+    await killMcpChild(child);
 
     // 校验：即使子进程崩溃，监督进程仍返回标准的 JSON-RPC 错误，未破坏通信协议
     const crashRespLine = receivedLines.find((l) => l.includes(`"id":20`));

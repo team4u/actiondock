@@ -39,6 +39,7 @@ export function registerTestCommand(program: Command): void {
       const proc = spawnSync(testCmd, testArgs, {
         cwd,
         stdio: "inherit",
+        shell: process.platform === "win32",
       });
 
       if (proc.status !== 0) {

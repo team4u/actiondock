@@ -129,7 +129,9 @@ export function getInstallCommand(projectRoot?: string): string[] {
     try {
       const check = spawnSync(pm, ["--version"], {
         stdio: "pipe",
-        shell: false,
+        // Windows 兼容：npm 是 .cmd 脚本，无 shell 直接 spawn 必然 ENOENT，
+        // 会导致探测误判 npm 缺失而错误回退选择 bun
+        shell: process.platform === "win32",
       });
       if (check.status === 0) {
         return [pm, action];
