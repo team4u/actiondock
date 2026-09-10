@@ -1,7 +1,5 @@
 import {
-  createGlobalStorage,
-  createStorage,
-  deleteRemoteConfig,
+  createActionDockTarget,
   fetchRemoteConfig,
   fetchRemoteConfigEnv,
   filterWithFallbackInfo,
@@ -10,7 +8,6 @@ import {
   maskSecretValue,
   resolvePackageRoot,
   resolveTarget,
-  setRemoteConfig,
   resolveEnvValue,
   type ConfigItemDefinition,
 } from "@actiondock/core";
@@ -47,7 +44,7 @@ export function registerConfigCommands(program: Command, context?: CliContext): 
     .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
     .option("--envelope", "Wrap JSON output in standard envelope")
-    .action((identifier: string | undefined, rawOptions: any, cmd: any) => {
+    .action(async (identifier: string | undefined, rawOptions: any, cmd: any) => {
       try {
         const options = getEffectiveOptions(rawOptions, cmd);
         const targetPkg = identifier || options.package;
@@ -67,16 +64,21 @@ export function registerConfigCommands(program: Command, context?: CliContext): 
         const declared = projConfig.config || {};
         const declaredKeys = Object.keys(declared);
 
-        const globalStorage = createGlobalStorage({ dataDir: options.dataDir || context?.dataDir, customHome: context?.customHome });
-        const globalConfig = globalStorage.listConfig();
-        globalStorage.close();
-
-        const projectStorage = createStorage(projConfig.id, {
+        const target = await createActionDockTarget({
+          type: "local",
+          projectRoot: root,
           customHome: context?.customHome,
           dataDir: options.dataDir || context?.dataDir,
         });
-        const projectConfig = projectStorage.listConfig();
-        projectStorage.close();
+
+        let globalConfig: Record<string, any> = {};
+        let projectConfig: Record<string, any> = {};
+        try {
+          globalConfig = await target.listConfig("global");
+          projectConfig = await target.listConfig(projConfig.id);
+        } finally {
+          await target.close();
+        }
 
         const items = declaredKeys.map((key) => {
           const itemDef = declared[key];
@@ -232,110 +234,103 @@ export function registerConfigCommands(program: Command, context?: CliContext): 
         return;
       }
 
-      // 2. 本地全局分支
-      if (options.global) {
-        const storage = createGlobalStorage({ dataDir: options.dataDir || context?.dataDir, customHome: context?.customHome });
-        const all = storage.listConfig();
-        storage.close();
-
-        const entries = Object.entries(all).map(([k, v]) => {
-          const isSecret = isSecretConfigKey(k);
-          const displayValue = !reveal && isSecret ? maskSecretValue(v) : v;
-          return {
-            key: k,
-            value: displayValue,
-            source: "global",
-            secret: isSecret,
-          };
-        });
-
-        const filterRes = filterWithFallbackInfo(
-          entries,
-          effectiveIntent,
-          [(c) => c.key, (c) => c.value],
-          shouldFallback
-        );
-
-        renderResult(filterRes.items, {
-          json: options.json,
-          envelope: options.envelope,
-          humanFormatter: () =>
-            renderConfigList(
-              filterRes.items,
-              "Global Scope",
-              filterRes.isFallback,
-              effectiveIntent,
-              reveal
-            ),
-          context,
-        });
-        return;
-      }
-
-      // 3. 本地项目分支
+      // 2. 本地分支（通过 Target 门面统一访问）
       const root = resolvePackageRoot(options.package);
-      if (!root) {
-        if (options.package) {
-          throw new ArgumentError(`Package '${options.package}' not found in linked packages or path`);
-        }
-
-        const globalStorage = createGlobalStorage({ dataDir: options.dataDir || context?.dataDir, customHome: context?.customHome });
-        const all = globalStorage.listConfig();
-        globalStorage.close();
-
-        const entries = Object.entries(all).map(([k, v]) => {
-          const isSecret = isSecretConfigKey(k);
-          const displayValue = !reveal && isSecret ? maskSecretValue(v) : v;
-          return {
-            key: k,
-            value: displayValue,
-            source: "global",
-            secret: isSecret,
-          };
-        });
-
-        const filterRes = filterWithFallbackInfo(
-          entries,
-          effectiveIntent,
-          [(c) => c.key, (c) => c.value],
-          shouldFallback
-        );
-
-        renderResult(filterRes.items, {
-          json: options.json,
-          envelope: options.envelope,
-          humanFormatter: () =>
-            renderConfigList(
-              filterRes.items,
-              "Global Scope (No project found)",
-              filterRes.isFallback,
-              effectiveIntent,
-              reveal
-            ),
-          context,
-        });
-        return;
-      }
-
-      const projConfig = loadProjectConfig(root);
-      const declared = projConfig.config || {};
-
-      const globalStorage = createGlobalStorage({ dataDir: options.dataDir || context?.dataDir, customHome: context?.customHome });
-      const globalConfig = globalStorage.listConfig();
-      globalStorage.close();
-
-      const projectStorage = createStorage(projConfig.id, {
+      const localTarget = await createActionDockTarget({
+        type: "local",
+        projectRoot: root || undefined,
         customHome: context?.customHome,
         dataDir: options.dataDir || context?.dataDir,
       });
-      const projectConfig = projectStorage.listConfig();
-      projectStorage.close();
 
-      const allKeys = new Set([
-        ...Object.keys(declared),
-        ...Object.keys(projectConfig),
-        ...Object.keys(globalConfig),
-      ]);
+      try {
+        if (options.global) {
+          const all = await localTarget.listConfig("global");
+          const entries = Object.entries(all).map(([k, v]) => {
+            const isSecret = isSecretConfigKey(k);
+            const displayValue = !reveal && isSecret ? maskSecretValue(v) : v;
+            return {
+              key: k,
+              value: displayValue,
+              source: "global",
+              secret: isSecret,
+            };
+          });
+
+          const filterRes = filterWithFallbackInfo(
+            entries,
+            effectiveIntent,
+            [(c) => c.key, (c) => c.value],
+            shouldFallback
+          );
+
+          renderResult(filterRes.items, {
+            json: options.json,
+            envelope: options.envelope,
+            humanFormatter: () =>
+              renderConfigList(
+                filterRes.items,
+                "Global Scope",
+                filterRes.isFallback,
+                effectiveIntent,
+                reveal
+              ),
+            context,
+          });
+          return;
+        }
+
+        if (!root) {
+          if (options.package) {
+            throw new ArgumentError(`Package '${options.package}' not found in linked packages or path`);
+          }
+
+          const all = await localTarget.listConfig("global");
+          const entries = Object.entries(all).map(([k, v]) => {
+            const isSecret = isSecretConfigKey(k);
+            const displayValue = !reveal && isSecret ? maskSecretValue(v) : v;
+            return {
+              key: k,
+              value: displayValue,
+              source: "global",
+              secret: isSecret,
+            };
+          });
+
+          const filterRes = filterWithFallbackInfo(
+            entries,
+            effectiveIntent,
+            [(c) => c.key, (c) => c.value],
+            shouldFallback
+          );
+
+          renderResult(filterRes.items, {
+            json: options.json,
+            envelope: options.envelope,
+            humanFormatter: () =>
+              renderConfigList(
+                filterRes.items,
+                "Global Scope (No project found)",
+                filterRes.isFallback,
+                effectiveIntent,
+                reveal
+              ),
+            context,
+          });
+          return;
+        }
+
+        const projConfig = loadProjectConfig(root);
+        const declared = projConfig.config || {};
+
+        const globalConfig = await localTarget.listConfig("global");
+        const projectConfig = await localTarget.listConfig(projConfig.id);
+
+        const allKeys = new Set([
+          ...Object.keys(declared),
+          ...Object.keys(projectConfig),
+          ...Object.keys(globalConfig),
+        ]);
 
       const merged = Array.from(allKeys).map((k) => {
         let rawValue: unknown;
@@ -388,7 +383,10 @@ export function registerConfigCommands(program: Command, context?: CliContext): 
           ),
         context,
       });
-    });
+    } finally {
+      await localTarget.close();
+    }
+  });
 
   // config get <key>
   configCmd
@@ -411,137 +409,126 @@ export function registerConfigCommands(program: Command, context?: CliContext): 
       const reveal = Boolean(options.reveal || options.showSecrets);
 
       // 1. 远端服务分支
-      const target = resolveTarget({
-        profile: options.profile,
-        server: options.server,
-        token: options.token,
-      }, context?.customHome);
+      const target = resolveTarget(
+        {
+          profile: options.profile,
+          server: options.server,
+          token: options.token,
+        },
+        context?.customHome
+      );
 
       if (target.type === "remote") {
-        const res = await fetchRemoteConfig(target.serverUrl!, target.token, options.package);
-        const val = res.values?.[key];
-        const isSecret = isSecretConfigKey(key, res.declared?.[key]);
-        const displayValue = !reveal && isSecret && val !== undefined ? maskSecretValue(val) : val;
-
-        const payload = {
-          key,
-          value: displayValue,
-          source: "remote",
-          secret: isSecret,
-        };
-
-        renderResult(payload, {
-          json: options.json,
-          envelope: options.envelope,
-          humanFormatter: () => (displayValue !== undefined ? String(displayValue) : ""),
-          context,
+        const remoteTarget = await createActionDockTarget({
+          type: "remote",
+          serverUrl: target.serverUrl!,
+          token: target.token,
         });
-        return;
-      }
+        try {
+          const res = await fetchRemoteConfig(target.serverUrl!, target.token, options.package);
+          const val = res.values?.[key];
+          const isSecret = isSecretConfigKey(key, res.declared?.[key]);
+          const displayValue = !reveal && isSecret && val !== undefined ? maskSecretValue(val) : val;
 
-      // 2. 本地全局分支
-      if (options.global) {
-        const storage = createGlobalStorage({ dataDir: options.dataDir || context?.dataDir, customHome: context?.customHome });
-        const val = storage.getConfig(key);
-        storage.close();
+          const payload = {
+            key,
+            value: displayValue,
+            source: "remote",
+            secret: isSecret,
+          };
 
-        const isSecret = isSecretConfigKey(key);
-        const displayValue = !reveal && isSecret && val !== undefined ? maskSecretValue(val) : val;
-
-        const payload = {
-          key,
-          value: displayValue,
-          source: "global",
-          secret: isSecret,
-        };
-
-        renderResult(payload, {
-          json: options.json,
-          envelope: options.envelope,
-          humanFormatter: () => (displayValue !== undefined ? String(displayValue) : ""),
-          context,
-        });
-        return;
-      }
-
-      // 3. 本地项目分支
-      const root = resolvePackageRoot(options.package);
-      if (!root) {
-        if (options.package) {
-          throw new ArgumentError(`Package '${options.package}' not found in linked packages or path`);
+          renderResult(payload, {
+            json: options.json,
+            envelope: options.envelope,
+            humanFormatter: () => (displayValue !== undefined ? String(displayValue) : ""),
+            context,
+          });
+          return;
+        } finally {
+          await remoteTarget.close();
         }
-
-        const globalStorage = createGlobalStorage({ dataDir: options.dataDir || context?.dataDir, customHome: context?.customHome });
-        const val = globalStorage.getConfig(key);
-        globalStorage.close();
-
-        const isSecret = isSecretConfigKey(key);
-        const displayValue = !reveal && isSecret && val !== undefined ? maskSecretValue(val) : val;
-
-        const payload = {
-          key,
-          value: displayValue,
-          source: "global",
-          secret: isSecret,
-        };
-
-        renderResult(payload, {
-          json: options.json,
-          envelope: options.envelope,
-          humanFormatter: () => (displayValue !== undefined ? String(displayValue) : ""),
-          context,
-        });
-        return;
       }
 
-      const projConfig = loadProjectConfig(root);
-      const declaredItem = projConfig.config?.[key];
-
-      const projectStorage = createStorage(projConfig.id, {
+      // 2. 本地分支
+      const root = resolvePackageRoot(options.package);
+      const localTarget = await createActionDockTarget({
+        type: "local",
+        projectRoot: root || undefined,
         customHome: context?.customHome,
         dataDir: options.dataDir || context?.dataDir,
       });
-      const projectVal = projectStorage.getConfig(key);
-      projectStorage.close();
 
-      const globalStorage = createGlobalStorage({ dataDir: options.dataDir || context?.dataDir, customHome: context?.customHome });
-      const globalVal = globalStorage.getConfig(key);
-      globalStorage.close();
+      try {
+        if (options.global || !root) {
+          if (!options.global && options.package && !root) {
+            throw new ArgumentError(`Package '${options.package}' not found in linked packages or path`);
+          }
 
-      let resolvedVal: unknown;
-      let source = "default";
-      const envResolved = resolveEnvValue(key, declaredItem, projConfig.id);
+          const val = await localTarget.getConfig("global", key);
+          const isSecret = isSecretConfigKey(key);
+          const displayValue = !reveal && isSecret && val !== undefined ? maskSecretValue(val) : val;
 
-      if (projectVal !== undefined) {
-        resolvedVal = projectVal;
-        source = "project";
-      } else if (globalVal !== undefined) {
-        resolvedVal = globalVal;
-        source = "global";
-      } else if (envResolved !== undefined) {
-        resolvedVal = envResolved.value;
-        source = "env";
-      } else {
-        resolvedVal = declaredItem?.default;
-        source = "default";
+          const payload = {
+            key,
+            value: displayValue,
+            source: "global",
+            secret: isSecret,
+          };
+
+          renderResult(payload, {
+            json: options.json,
+            envelope: options.envelope,
+            humanFormatter: () => (displayValue !== undefined ? String(displayValue) : ""),
+            context,
+          });
+          return;
+        }
+
+        const projConfig = loadProjectConfig(root);
+        const declaredItem = projConfig.config?.[key];
+
+        const projectConfig = await localTarget.listConfig(projConfig.id);
+        const projectVal = projectConfig[key];
+        const globalConfig = await localTarget.listConfig("global");
+        const globalVal = globalConfig[key];
+
+        let resolvedVal: unknown;
+        let source = "default";
+        const envResolved = resolveEnvValue(key, declaredItem, projConfig.id);
+
+        if (projectVal !== undefined) {
+          resolvedVal = projectVal;
+          source = "project";
+        } else if (globalVal !== undefined) {
+          resolvedVal = globalVal;
+          source = "global";
+        } else if (envResolved !== undefined) {
+          resolvedVal = envResolved.value;
+          source = "env";
+        } else {
+          resolvedVal = declaredItem?.default;
+          source = "default";
+        }
+
+        const isSecret = isSecretConfigKey(key, declaredItem);
+        const displayValue = !reveal && isSecret && resolvedVal !== undefined ? maskSecretValue(resolvedVal) : resolvedVal;
+
+        const payload = {
+          key,
+          value: displayValue,
+          source,
+          secret: isSecret,
+        };
+
+        renderResult(payload, {
+          json: options.json,
+          envelope: options.envelope,
+          humanFormatter: () => (displayValue !== undefined ? String(displayValue) : ""),
+          context,
+        });
+      } finally {
+        await localTarget.close();
       }
-
-      const isSecret = isSecretConfigKey(key, declaredItem);
-      const displayValue = !reveal && isSecret && resolvedVal !== undefined ? maskSecretValue(resolvedVal) : resolvedVal;
-
-      const payload = {
-        key,
-        value: displayValue,
-        source,
-        secret: isSecret,
-      };
-
-      renderResult(payload, {
-        json: options.json,
-        envelope: options.envelope,
-        humanFormatter: () => (displayValue !== undefined ? String(displayValue) : ""),
-        context,
-      });
     });
 
   // config set <key> [value]
@@ -594,47 +581,58 @@ export function registerConfigCommands(program: Command, context?: CliContext): 
         parsedVal = effectiveValueStr;
       }
 
-      // 1. 远端服务分支
-      const target = resolveTarget({
-        profile: options.profile,
-        server: options.server,
-        token: options.token,
-      }, context?.customHome);
+      // 1. 目标解析与 Target 创建
+      const resolved = resolveTarget(
+        {
+          profile: options.profile,
+          server: options.server,
+          token: options.token,
+        },
+        context?.customHome
+      );
 
-      if (target.type === "remote") {
-        await setRemoteConfig(target.serverUrl!, key, parsedVal, target.token, options.package);
-        writeStdout(`[OK] Configuration '${key}' updated on remote server`, context);
-        return;
-      }
+      const target = await createActionDockTarget(
+        resolved.type === "remote"
+          ? {
+              type: "remote",
+              serverUrl: resolved.serverUrl!,
+              token: resolved.token,
+            }
+          : {
+              type: "local",
+              projectRoot: root || undefined,
+              customHome: context?.customHome,
+              dataDir: options.dataDir || context?.dataDir,
+            }
+      );
 
-      // 2. 本地全局分支
-      if (options.global) {
-        const storage = createGlobalStorage({ dataDir: options.dataDir || context?.dataDir, customHome: context?.customHome });
-        storage.setConfig(key, parsedVal);
-        storage.close();
-        writeStdout(`[OK] Global configuration '${key}' updated`, context);
-        return;
-      }
-
-      // 3. 本地项目分支
-      if (!root) {
-        if (options.package) {
-          throw new ArgumentError(`Package '${options.package}' not found in linked packages or path`);
+      try {
+        if (resolved.type === "remote") {
+          await target.setConfig(options.package || "", key, parsedVal as any);
+          writeStdout(`[OK] Configuration '${key}' updated on remote server`, context);
+          return;
         }
-        const storage = createGlobalStorage({ dataDir: options.dataDir || context?.dataDir, customHome: context?.customHome });
-        storage.setConfig(key, parsedVal);
-        storage.close();
-        writeStdout(`[OK] Global configuration '${key}' updated (no project in current directory)`, context);
-        return;
-      }
 
-      const storage = createStorage(projConfig.id, {
-        customHome: context?.customHome,
-        dataDir: options.dataDir || context?.dataDir,
-      });
-      storage.setConfig(key, parsedVal);
-      storage.close();
-      writeStdout(`[OK] Configuration '${key}' updated for package '${projConfig.id}'`, context);
+        if (options.global) {
+          await target.setConfig("global", key, parsedVal as any);
+          writeStdout(`[OK] Global configuration '${key}' updated`, context);
+          return;
+        }
+
+        if (!root) {
+          if (options.package) {
+            throw new ArgumentError(`Package '${options.package}' not found in linked packages or path`);
+          }
+          await target.setConfig("global", key, parsedVal as any);
+          writeStdout(`[OK] Global configuration '${key}' updated (no project in current directory)`, context);
+          return;
+        }
+
+        await target.setConfig(projConfig.id, key, parsedVal as any);
+        writeStdout(`[OK] Configuration '${key}' updated for package '${projConfig.id}'`, context);
+      } finally {
+        await target.close();
+      }
     });
 
   // config delete <key>
@@ -654,49 +652,60 @@ export function registerConfigCommands(program: Command, context?: CliContext): 
         throw new ArgumentError("Configuration key is required");
       }
 
-      // 1. 远端服务分支
-      const target = resolveTarget({
-        profile: options.profile,
-        server: options.server,
-        token: options.token,
-      }, context?.customHome);
-
-      if (target.type === "remote") {
-        await deleteRemoteConfig(target.serverUrl!, key, target.token, options.package);
-        writeStdout(`[OK] Configuration '${key}' deleted from remote server`, context);
-        return;
-      }
-
-      // 2. 本地全局分支
-      if (options.global) {
-        const storage = createGlobalStorage({ dataDir: options.dataDir || context?.dataDir, customHome: context?.customHome });
-        storage.deleteConfig(key);
-        storage.close();
-        writeStdout(`[OK] Global configuration '${key}' deleted`, context);
-        return;
-      }
-
-      // 3. 本地项目分支
       const root = resolvePackageRoot(options.package);
-      if (!root) {
-        if (options.package) {
-          throw new ArgumentError(`Package '${options.package}' not found in linked packages or path`);
-        }
-        const storage = createGlobalStorage({ dataDir: options.dataDir || context?.dataDir, customHome: context?.customHome });
-        storage.deleteConfig(key);
-        storage.close();
-        writeStdout(`[OK] Global configuration '${key}' deleted`, context);
-        return;
-      }
 
-      const projConfig = loadProjectConfig(root);
-      const storage = createStorage(projConfig.id, {
-        customHome: context?.customHome,
-        dataDir: options.dataDir || context?.dataDir,
-      });
-      storage.deleteConfig(key);
-      storage.close();
-      writeStdout(`[OK] Configuration '${key}' deleted for package '${projConfig.id}'`, context);
+      const resolved = resolveTarget(
+        {
+          profile: options.profile,
+          server: options.server,
+          token: options.token,
+        },
+        context?.customHome
+      );
+
+      const target = await createActionDockTarget(
+        resolved.type === "remote"
+          ? {
+              type: "remote",
+              serverUrl: resolved.serverUrl!,
+              token: resolved.token,
+            }
+          : {
+              type: "local",
+              projectRoot: root || undefined,
+              customHome: context?.customHome,
+              dataDir: options.dataDir || context?.dataDir,
+            }
+      );
+
+      try {
+        if (resolved.type === "remote") {
+          await target.deleteConfig(options.package || "", key);
+          writeStdout(`[OK] Configuration '${key}' deleted from remote server`, context);
+          return;
+        }
+
+        if (options.global) {
+          await target.deleteConfig("global", key);
+          writeStdout(`[OK] Global configuration '${key}' deleted`, context);
+          return;
+        }
+
+        if (!root) {
+          if (options.package) {
+            throw new ArgumentError(`Package '${options.package}' not found in linked packages or path`);
+          }
+          await target.deleteConfig("global", key);
+          writeStdout(`[OK] Global configuration '${key}' deleted`, context);
+          return;
+        }
+
+        const projConfig = loadProjectConfig(root);
+        await target.deleteConfig(projConfig.id, key);
+        writeStdout(`[OK] Configuration '${key}' deleted for package '${projConfig.id}'`, context);
+      } finally {
+        await target.close();
+      }
     });
 
   // config env

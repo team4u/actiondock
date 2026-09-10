@@ -10,6 +10,7 @@ import { registerInitCommand } from "./init";
 import { registerLinkCommands } from "./link";
 import { registerListCommand } from "./list";
 import { registerMcpCommands } from "./mcp";
+import { registerNewCommands } from "./new";
 import { registerPlaybookCommands } from "./playbook";
 import { registerProfileCommands } from "./profile";
 import { registerRunCommand } from "./run";
@@ -58,6 +59,7 @@ export function createCliProgram(): Command {
   });
 
   registerInitCommand(program);
+  registerNewCommands(program);
   registerInfoCommand(program);
   registerDoctorCommand(program);
   registerListCommand(program);
@@ -94,6 +96,7 @@ export {
   registerLinkCommands,
   registerListCommand,
   registerMcpCommands,
+  registerNewCommands,
   registerPlaybookCommands,
   registerProfileCommands,
   registerRunCommand,

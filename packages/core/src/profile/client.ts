@@ -270,7 +270,12 @@ async function fetchRemoteJson<T = any>(
   if (!res.ok || (options.method === "POST" && data && data.ok === false)) {
     const errorPrefix = options.errorPrefix || "Remote request failed";
     const msg = data?.error?.message || `${errorPrefix} (${res.status}): ${res.statusText}`;
-    throw new Error(msg);
+    const err = new Error(msg);
+    if (data?.error?.code) {
+      (err as any).code = data.error.code;
+    }
+    (err as any).status = res.status;
+    throw err;
   }
 
   return data as T;

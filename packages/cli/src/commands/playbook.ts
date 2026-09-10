@@ -24,6 +24,7 @@ import {
   renderPlaybookDetail,
   renderPlaybookList,
   renderResult,
+  writeStdout,
 } from "../renderer";
 import type { CliContext } from "../types";
 import { getEffectiveOptions, resolveIntent } from "../utils";
@@ -464,36 +465,45 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
     .option("-a, --actions <actions...>", "Referenced action IDs")
     .option("-f, --file <filePath>", "Target file path relative to playbooks dir")
     .action((id, options) => {
-      const root = findProjectRoot();
-      if (!root) {
-        throw new ExecutionError("Not in an ActionDock project (actiondock.json not found)");
-      }
-      try {
-        const config = loadProjectConfig(root);
-        const pbDir = resolve(root, config.playbooksDir || "playbooks");
-        if (!existsSync(pbDir)) {
-          mkdirSync(pbDir, { recursive: true });
-        }
+      handlePlaybookCreate(id, options, context);
+    });
+}
 
-        if (options.file && isAbsolute(options.file)) {
-          throw new ExecutionError(`--file option must be a relative path, received: ${options.file}`);
-        }
+export function handlePlaybookCreate(
+  id: string,
+  options: any,
+  context?: CliContext
+): void {
+  const root = findProjectRoot();
+  if (!root) {
+    throw new ExecutionError("Not in an ActionDock project (actiondock.json not found)");
+  }
+  try {
+    const config = loadProjectConfig(root);
+    const pbDir = resolve(root, config.playbooksDir || "playbooks");
+    if (!existsSync(pbDir)) {
+      mkdirSync(pbDir, { recursive: true });
+    }
 
-        const cleanName = id.replace(/[^a-zA-Z0-9-_]/g, "-");
-        const targetRelFile = options.file || `${cleanName}.md`;
-        const targetFullFile = resolve(pbDir, targetRelFile);
-        assertPathWithinRoot(pbDir, targetFullFile, "playbook file");
+    if (options.file && isAbsolute(options.file)) {
+      throw new ExecutionError(`--file option must be a relative path, received: ${options.file}`);
+    }
 
-        if (existsSync(targetFullFile)) {
-          throw new ExecutionError(`File '${targetFullFile}' already exists`);
-        }
+    const cleanName = id.replace(/[^a-zA-Z0-9-_]/g, "-");
+    const targetRelFile = options.file || `${cleanName}.md`;
+    const targetFullFile = resolve(pbDir, targetRelFile);
+    assertPathWithinRoot(pbDir, targetFullFile, "playbook file");
 
-        mkdirSync(dirname(targetFullFile), { recursive: true });
+    if (existsSync(targetFullFile)) {
+      throw new ExecutionError(`File '${targetFullFile}' already exists`);
+    }
 
-        const desc = options.desc || `SOP guide for ${id}`;
-        const actionsList = Array.isArray(options.actions) ? options.actions : [];
+    mkdirSync(dirname(targetFullFile), { recursive: true });
 
-        const template = `# ${id.replace(/[-_]/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())} SOP
+    const desc = options.desc || `SOP guide for ${id}`;
+    const actionsList = Array.isArray(options.actions) ? options.actions : [];
+
+    const template = `# ${id.replace(/[-_]/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())} SOP
 
 This playbook provides task execution guidance for AI Agents.
 
@@ -503,30 +513,29 @@ This playbook provides task execution guidance for AI Agents.
 - Follow the required steps to complete the task.
 `;
 
-        writeFileSync(targetFullFile, template, "utf-8");
+    writeFileSync(targetFullFile, template, "utf-8");
 
-        const manifest = loadManifest(root) || {
-          $schema: "https://actiondock.dev/schema/v2/actiondock.json",
-          id: config.id,
-          name: config.name,
-          version: config.version,
-          playbooks: {},
-        };
-        manifest.playbooks = manifest.playbooks || {};
-        const relEntry = relative(root, targetFullFile).replace(/\\/g, "/");
-        manifest.playbooks[id] = {
-          entry: relEntry,
-          description: desc,
-          actions: actionsList,
-        };
-        saveManifest(root, manifest);
+    const manifest = loadManifest(root) || {
+      $schema: "https://actiondock.dev/schema/v2/actiondock.json",
+      id: config.id,
+      name: config.name,
+      version: config.version,
+      playbooks: {},
+    };
+    manifest.playbooks = manifest.playbooks || {};
+    const relEntry = relative(root, targetFullFile).replace(/\\/g, "/");
+    manifest.playbooks[id] = {
+      entry: relEntry,
+      description: desc,
+      actions: actionsList,
+    };
+    saveManifest(root, manifest);
 
-        console.log(`[OK] Created Playbook '${id}' at ${targetFullFile}`);
-      } catch (err: any) {
-        if (err instanceof CliError) {
-          throw err;
-        }
-        throw new ExecutionError(err.message);
-      }
-    });
+    writeStdout(`[OK] Created Playbook '${id}' at ${targetFullFile}`, context);
+  } catch (err: any) {
+    if (err instanceof CliError) {
+      throw err;
+    }
+    throw new ExecutionError(err.message);
+  }
 }

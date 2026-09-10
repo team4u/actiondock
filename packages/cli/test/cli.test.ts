@@ -346,7 +346,14 @@ describe("CLI End-to-End", () => {
     expect(cancelLocalProc.exitCode).toBe(2);
     expect(cancelLocalProc.stderr.toString()).toContain("'ad runs cancel' is only supported for remote execution targets");
 
+    // 8b. runs clear
+    const clearRunsProc = runCli(["runs", "clear"], tempDir);
+    expect(clearRunsProc.exitCode).toBe(0);
+    expect(clearRunsProc.stdout.toString()).toContain("Cleared");
 
+    const runsListAfterClear = runCli(["runs", "list", "--json"], tempDir);
+    expect(runsListAfterClear.exitCode).toBe(0);
+    expect(JSON.parse(runsListAfterClear.stdout.toString()).length).toBe(0);
 
     // 9. build
     const buildProc = runCli(["build"], tempDir);
@@ -1221,5 +1228,33 @@ describe("CLI Review & Machine Contract Regression", () => {
     const runRes = JSON.parse(runProc.stdout.toString());
     expect(runRes.ok).toBe(true);
     expect(runRes.data.message).toBe("Nihao, Beijing!");
+  });
+
+  it("scaffolds new actions and playbooks via ad new and updates actiondock.json", () => {
+    runCli(["init", "--id", "test.scaffold", "."], tempDir);
+
+    const newActionProc = runCli(
+      ["new", "action", "calculator", "--desc", "Perform calculations", "--file", "calc.ts"],
+      tempDir
+    );
+    expect(newActionProc.exitCode).toBe(0);
+    expect(existsSync(join(tempDir, "actions", "calc.ts"))).toBe(true);
+
+    const manifestAfterAction = JSON.parse(readFileSync(join(tempDir, "actiondock.json"), "utf-8"));
+    expect(manifestAfterAction.actions.calculator).toBeDefined();
+    expect(manifestAfterAction.actions.calculator.description).toBe("Perform calculations");
+    expect(manifestAfterAction.actions.calculator.entry).toBe("actions/calc.ts");
+
+    const newPlaybookProc = runCli(
+      ["new", "playbook", "deploy-flow", "--desc", "Deployment flow SOP", "--actions", "calculator"],
+      tempDir
+    );
+    expect(newPlaybookProc.exitCode).toBe(0);
+    expect(existsSync(join(tempDir, "playbooks", "deploy-flow.md"))).toBe(true);
+
+    const manifestAfterPb = JSON.parse(readFileSync(join(tempDir, "actiondock.json"), "utf-8"));
+    expect(manifestAfterPb.playbooks["deploy-flow"]).toBeDefined();
+    expect(manifestAfterPb.playbooks["deploy-flow"].description).toBe("Deployment flow SOP");
+    expect(manifestAfterPb.playbooks["deploy-flow"].actions).toEqual(["calculator"]);
   });
 });

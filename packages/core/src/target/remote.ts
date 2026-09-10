@@ -21,16 +21,27 @@ import type {
 } from "../execution/types";
 import {
   cancelRemoteRun,
+  clearRemoteRuns,
+  clearRemoteState,
+  deleteRemoteConfig,
+  deleteRemoteStateKey,
   executeRemoteAction,
   fetchRemoteActionShow,
   fetchRemoteActions,
+  fetchRemoteConfig,
   fetchRemoteInfo,
   fetchRemotePlaybookShow,
   fetchRemotePlaybooks,
   fetchRemoteRun,
+  fetchRemoteRuns,
+  fetchRemoteStateList,
+  getRemoteStateKey,
+  setRemoteConfig,
+  setRemoteStateKey,
 } from "../profile/client";
 import { normalizeServerUrl } from "../profile/manager";
-import type { ActionDockTarget, RemoteTargetOptions } from "./types";
+import type { StateEntry } from "../storage/types";
+import type { ActionDockTarget, ListRunsOptions, RemoteTargetOptions } from "./types";
 
 /**
  * 读取并解析远端 SSE 事件流。
@@ -375,6 +386,30 @@ export class RemoteActionDockTarget implements ActionDockTarget {
     };
   }
 
+  async listRuns(options?: ListRunsOptions): Promise<RunRecord[]> {
+    try {
+      const res = await fetchRemoteRuns(this.serverUrl, this.token, {
+        packageId: options?.packageId,
+        actionId: options?.actionId,
+        status: options?.status,
+        intent: options?.intent,
+        limit: options?.limit,
+      });
+      return res.items || [];
+    } catch (err: any) {
+      wrapRemoteError(err);
+    }
+  }
+
+  async clearRuns(options?: { packageId?: string; actionId?: string; status?: string }): Promise<number> {
+    try {
+      const res = await clearRemoteRuns(this.serverUrl, this.token, options);
+      return res.clearedCount ?? 0;
+    } catch (err: any) {
+      wrapRemoteError(err);
+    }
+  }
+
   async getRun(runId: string): Promise<RunRecord | undefined> {
     try {
       return await fetchRemoteRun(this.serverUrl, runId, this.token);
@@ -410,7 +445,164 @@ export class RemoteActionDockTarget implements ActionDockTarget {
     yield* streamRemoteEvents(this.serverUrl, runId, this.token, options);
   }
 
+  async getConfig(packageId: string, key: string): Promise<any> {
+    try {
+      const res = await fetchRemoteConfig(this.serverUrl, this.token, packageId || undefined);
+      return res?.values?.[key];
+    } catch (err: any) {
+      wrapRemoteError(err);
+    }
+  }
+
+  async setConfig(packageId: string, key: string, value: JsonValue): Promise<void> {
+    try {
+      await setRemoteConfig(this.serverUrl, key, value, this.token, packageId || undefined);
+    } catch (err: any) {
+      wrapRemoteError(err);
+    }
+  }
+
+  async deleteConfig(packageId: string, key: string): Promise<boolean> {
+    try {
+      const res = await deleteRemoteConfig(this.serverUrl, key, this.token, packageId || undefined);
+      return Boolean(res?.deleted ?? true);
+    } catch (err: any) {
+      wrapRemoteError(err);
+    }
+  }
+
+  async listConfig(packageId: string): Promise<Record<string, any>> {
+    try {
+      const res = await fetchRemoteConfig(this.serverUrl, this.token, packageId || undefined);
+      return res?.values || {};
+    } catch (err: any) {
+      wrapRemoteError(err);
+    }
+  }
+
+  async getState<T = JsonValue>(
+    packageId: string,
+    key: string,
+    options?: any
+  ): Promise<T | undefined> {
+    try {
+      const res = await getRemoteStateKey(this.serverUrl, key, this.token, {
+        package: packageId || undefined,
+        namespace: options?.namespace,
+      });
+      if (res === undefined) return undefined;
+      if (options?.detail) {
+        return res as T;
+      }
+      return (res?.value !== undefined ? res.value : res) as T;
+    } catch (err: any) {
+      const msg = String(err?.message || "");
+      if (msg.includes("404") || msg.includes("not found") || msg.includes("STATE_KEY_NOT_FOUND")) {
+        return undefined;
+      }
+      wrapRemoteError(err);
+    }
+  }
+
+  async setState<T = JsonValue>(
+    packageId: string,
+    key: string,
+    value: T,
+    options?: any
+  ): Promise<void> {
+    try {
+      await setRemoteStateKey(this.serverUrl, key, value, this.token, {
+        package: packageId || undefined,
+        namespace: options?.namespace,
+        ttl: options?.ttl,
+      });
+    } catch (err: any) {
+      wrapRemoteError(err);
+    }
+  }
+
+  async deleteState(
+    packageId: string,
+    key: string,
+    options?: any
+  ): Promise<boolean> {
+    try {
+      const res = await deleteRemoteStateKey(this.serverUrl, key, this.token, {
+        package: packageId || undefined,
+        namespace: options?.namespace,
+      });
+      return Boolean(res?.deleted ?? true);
+    } catch (err: any) {
+      const msg = String(err?.message || "");
+      if (msg.includes("404") || msg.includes("not found") || msg.includes("STATE_KEY_NOT_FOUND")) {
+        return false;
+      }
+      wrapRemoteError(err);
+    }
+  }
+
+  async listStateKeys(
+    packageId: string,
+    options?: any
+  ): Promise<string[]> {
+    try {
+      const res = await fetchRemoteStateList(this.serverUrl, this.token, {
+        package: packageId || undefined,
+        namespace: options?.namespace,
+        prefix: options?.prefix,
+      });
+      return res.keys || [];
+    } catch (err: any) {
+      wrapRemoteError(err);
+    }
+  }
+
+  async clearState(
+    packageId: string,
+    options?: any
+  ): Promise<number> {
+    try {
+      const res = await clearRemoteState(this.serverUrl, this.token, {
+        package: packageId || undefined,
+        namespace: options?.namespace,
+        prefix: options?.prefix,
+        all: options?.all,
+      });
+      return res.clearedCount ?? 0;
+    } catch (err: any) {
+      wrapRemoteError(err);
+    }
+  }
+
+  async listStateEntries(
+    packageId: string,
+    options?: any
+  ): Promise<StateEntry[]> {
+    wrapRemoteError(
+      new Error("CAPABILITY_UNAVAILABLE: listStateEntries is not supported on remote target")
+    );
+  }
+
   async close(): Promise<void> {
     // 远程 Target 无本地资源需要释放
   }
+}
+
+function wrapRemoteError(err: any): never {
+  const msg = String(err?.message || "");
+  const code = err?.code || "";
+  if (
+    code === "CAPABILITY_UNAVAILABLE" ||
+    code === "TARGET_CAPABILITY_UNAVAILABLE" ||
+    msg.includes("CAPABILITY_UNAVAILABLE") ||
+    msg.includes("TARGET_CAPABILITY_UNAVAILABLE") ||
+    msg.includes("Management APIs are not enabled") ||
+    err?.status === 403 ||
+    msg.includes("(403)")
+  ) {
+    const error = new Error(`TARGET_CAPABILITY_UNAVAILABLE: Management APIs are not enabled on remote target`);
+    (error as any).code = "TARGET_CAPABILITY_UNAVAILABLE";
+    throw error;
+  }
+  throw err;
 }
