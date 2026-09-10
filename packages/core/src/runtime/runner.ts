@@ -72,6 +72,8 @@ export interface RunnerOptions {
   } | undefined;
   /** 自定义 ActionDock 用户家目录（用于测试隔离与多租户环境） */
   customHome?: string;
+  /** 执行宿主会话标识 */
+  hostSessionId?: string;
 }
 
 /** ActionRunnerOptions 别名兼容 */
@@ -93,6 +95,8 @@ export interface ExecutionStartOptions {
   generationId?: string;
   /** 执行所有者标识 */
   ownerId?: string;
+  /** 执行宿主会话标识 */
+  hostSessionId?: string;
   /** 调用栈数组（用于检测 A -> B -> A 环路死锁） */
   callStack?: string[];
   /** 外部传入的 AbortSignal 取消信号 */
@@ -182,9 +186,11 @@ export class ActionRunner {
     actions?: Map<string, ActionDefinition>;
   } | undefined;
   private customHome?: string;
+  private hostSessionId?: string;
 
   constructor(options: RunnerOptions) {
     this.packageId = options.packageId;
+    this.hostSessionId = options.hostSessionId;
     this.projectRoot = options.projectRoot;
     this.projectConfig = options.projectConfig;
     this.configOverrides = options.configOverrides || {};
@@ -569,6 +575,7 @@ export class ActionRunner {
       actionId: targetActionId,
       generationId: options.generationId || "1",
       ownerId: options.ownerId || "local",
+      hostSessionId: options.hostSessionId || this.hostSessionId,
       status: "running",
       input: input as JsonValue | undefined,
       startedAt,
@@ -674,6 +681,7 @@ export class ActionRunner {
 
     // 6. 构建 ActionContext 运行时上下文
     const ctx = createActionContext({
+      actionId: targetActionId,
       storage: this.storage,
       globalStorage: this.globalStorage,
       overrides: { ...this.configOverrides, ...(options.configOverrides || {}) },

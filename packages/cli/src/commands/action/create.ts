@@ -2,11 +2,13 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import {
   assertPathWithinRoot,
+  checkGeneratedTypes,
   findProjectRoot,
   getPackageSlug,
   loadManifest,
   loadProjectConfig,
   saveManifest,
+  writeActionTypes,
 } from "@actiondock/core";
 import { ExecutionError } from "../../errors";
 import { writeStdout } from "../../renderer";
@@ -104,6 +106,12 @@ export default defineAction<Input, Output>(async (input, ctx) => {
     };
     saveManifest(root, manifest);
 
+    // 若当前项目已存在类型生成文件，则同步自动刷新类型声明
+    const typeCheck = checkGeneratedTypes(root, manifest);
+    if (typeCheck.exists) {
+      writeActionTypes(root, manifest);
+    }
+
     writeStdout(`[OK] Created Action '${id}' at ${targetFullFile}`, context);
     writeStdout(`\nTo run this action:`, context);
     writeStdout(`  ad run ${id} --input '{"exampleParam": "hello"}'`, context);
@@ -111,16 +119,4 @@ export default defineAction<Input, Output>(async (input, ctx) => {
     if (err instanceof ExecutionError) throw err;
     throw new ExecutionError(err.message);
   }
-}
-
-export function registerActionCreateCommand(actionCmd: Command, context?: CliContext): void {
-  actionCmd
-    .command("create <id>")
-    .alias("new")
-    .description("Scaffold a new Action definition file")
-    .option("-d, --desc <description>", "Action description")
-    .option("-f, --file <filePath>", "Target file path relative to actions dir")
-    .action(async (id, options) => {
-      await handleActionCreate(id, options, context);
-    });
 }

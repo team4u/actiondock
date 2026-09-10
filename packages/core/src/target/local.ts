@@ -109,7 +109,11 @@ export class LocalActionDockTarget implements ActionDockTarget {
     input: JsonValue,
     options?: ExecuteOptions
   ): Promise<ExecutionResult> {
-    return this.target.runAction(ref, input, options);
+    if ("listApps" in this.target) {
+      return (this.target as ActionDockHost).runAction(ref, input, options);
+    }
+    const actionId = typeof ref === "string" ? (ref.includes(":") ? ref.split(":").pop()! : ref) : ref.actionId;
+    return (this.target as ActionDockApp).runAction(actionId, input, options);
   }
 
   async startAction(
@@ -117,7 +121,11 @@ export class LocalActionDockTarget implements ActionDockTarget {
     input: JsonValue,
     options?: ExecuteOptions
   ): Promise<ExecutionTicket> {
-    return this.target.startAction(ref, input, options);
+    if ("listApps" in this.target) {
+      return (this.target as ActionDockHost).startAction(ref, input, options);
+    }
+    const actionId = typeof ref === "string" ? (ref.includes(":") ? ref.split(":").pop()! : ref) : ref.actionId;
+    return (this.target as ActionDockApp).startAction(actionId, input, options);
   }
 
   async listRuns(options?: ListRunsOptions): Promise<RunRecord[]> {
@@ -250,58 +258,7 @@ export class LocalActionDockTarget implements ActionDockTarget {
     if (!app) {
       throw new Error(`Package '${packageId}' not found in target`);
     }
-    const itemDef = (app as any).projectConfig?.config?.[key];
-    const isSecret = isSecretConfigKey(key, itemDef);
-
-    let source: "package" | "global" | "env" | "default" = "default";
-    let resolvedVal: unknown = undefined;
-    let configured = false;
-
-    const overrides = (app as any).runtimeConfig?.overrides || (app as any).options?.configOverrides;
-    if (overrides && (overrides.has ? overrides.has(key) : key in overrides)) {
-      source = "package";
-      resolvedVal = overrides.get ? overrides.get(key) : overrides[key];
-      configured = true;
-    } else {
-      const storedVal = app.storage.getConfig(key);
-      if (storedVal !== undefined) {
-        source = "package";
-        resolvedVal = storedVal;
-        configured = true;
-      } else {
-        const globalStorage = this.getGlobalStorage();
-        let globalVal: unknown = undefined;
-        try {
-          globalVal = globalStorage?.getConfig(key);
-        } catch {
-          // 忽略全局存储读取异常
-        }
-        if (globalVal !== undefined) {
-          source = "global";
-          resolvedVal = globalVal;
-          configured = true;
-        } else {
-          const envResolved = resolveEnvValue(key, itemDef, app.packageId);
-          if (envResolved !== undefined) {
-            source = "env";
-            resolvedVal = envResolved.value;
-            configured = true;
-          } else if (itemDef?.default !== undefined) {
-            source = "default";
-            resolvedVal = itemDef.default;
-            configured = false;
-          }
-        }
-      }
-    }
-
-    return {
-      key,
-      configured,
-      secret: isSecret,
-      source,
-      value: isSecret ? undefined : (resolvedVal as JsonValue),
-    };
+    return app.getConfig(key);
   }
 
   async setConfig(packageId: string, key: string, value: JsonValue): Promise<void> {
@@ -324,7 +281,7 @@ export class LocalActionDockTarget implements ActionDockTarget {
     if (!app) {
       throw new Error(`Package '${packageId}' not found in target`);
     }
-    return app.storage.deleteConfig(key);
+    return app.deleteConfig(key);
   }
 
   async listConfig(packageId: string): Promise<ConfigValueView[]> {
@@ -346,17 +303,7 @@ export class LocalActionDockTarget implements ActionDockTarget {
     if (!app) {
       throw new Error(`Package '${packageId}' not found in target`);
     }
-    const declared = (app as any).projectConfig?.config || {};
-    const stored = app.storage.listConfig();
-    const allKeys = Array.from(new Set([...Object.keys(declared), ...Object.keys(stored)]));
-    const views: ConfigValueView[] = [];
-    for (const key of allKeys) {
-      const item = await this.getConfig(packageId, key);
-      if (item) {
-        views.push(item);
-      }
-    }
-    return views;
+    return app.listConfig();
   }
 
   async getState<T extends JsonValue = JsonValue>(
@@ -369,19 +316,7 @@ export class LocalActionDockTarget implements ActionDockTarget {
     if (!app) {
       throw new Error(`Package '${packageId}' not found in target`);
     }
-    const ns = actionId
-      ? (options?.namespace ? `${actionId}:${options.namespace}` : actionId)
-      : (options?.namespace ?? "");
-
-    if (options?.detail) {
-      const entry = await app.storage.findState(key, ns || undefined);
-      return entry as unknown as T;
-    }
-    if (ns) {
-      return app.storage.getState<T>(ns, key);
-    }
-    const entry = await app.storage.findState<T>(key);
-    return entry?.value as T | undefined;
+    return app.getState<T>(actionId, key, options);
   }
 
   async setState<T extends JsonValue = JsonValue>(
@@ -395,25 +330,7 @@ export class LocalActionDockTarget implements ActionDockTarget {
     if (!app) {
       throw new Error(`Package '${packageId}' not found in target`);
     }
-    const ns = actionId
-      ? (options?.namespace ? `${actionId}:${options.namespace}` : actionId)
-      : (options?.namespace ?? "");
-
-    if (ns) {
-      await app.storage.setState<T>(ns, key, value, options?.ttl);
-      return;
-    }
-
-    let targetKey = key;
-    let targetNs = "";
-    try {
-      const decoded = decodeStateKey(key);
-      targetNs = decoded.namespace;
-      targetKey = decoded.key;
-    } catch {
-      targetNs = "";
-    }
-    await app.storage.setState<T>(targetNs, targetKey, value, options?.ttl);
+    await app.setState<T>(actionId, key, value, options);
   }
 
   async deleteState(
@@ -426,14 +343,7 @@ export class LocalActionDockTarget implements ActionDockTarget {
     if (!app) {
       throw new Error(`Package '${packageId}' not found in target`);
     }
-    const ns = actionId
-      ? (options?.namespace ? `${actionId}:${options.namespace}` : actionId)
-      : (options?.namespace ?? "");
-
-    if (ns) {
-      return app.storage.deleteState(ns, key);
-    }
-    return app.storage.deleteStateSmart(key);
+    return app.deleteState(actionId, key, options);
   }
 
   async listStateKeys(
@@ -441,34 +351,11 @@ export class LocalActionDockTarget implements ActionDockTarget {
     actionId: string,
     options?: StateScopeOptions
   ): Promise<string[]> {
-    if (!packageId && "listApps" in this.target) {
-      const apps = this.target.listApps();
-      if (apps.length === 1) {
-        const ns = actionId
-          ? (options?.namespace ? `${actionId}:${options.namespace}` : actionId)
-          : (options?.namespace ?? null);
-        return apps[0].storage.listStateKeys(ns, options?.prefix);
-      }
-      const aggregated: string[] = [];
-      for (const app of apps) {
-        const ns = actionId
-          ? (options?.namespace ? `${actionId}:${options.namespace}` : actionId)
-          : (options?.namespace ?? null);
-        const keys = await app.storage.listStateKeys(ns, options?.prefix);
-        for (const k of keys) {
-          aggregated.push(`${app.packageId}/${k}`);
-        }
-      }
-      return aggregated;
-    }
     const app = this.resolveApp(packageId);
     if (!app) {
       throw new Error(`Package '${packageId}' not found in target`);
     }
-    const ns = actionId
-      ? (options?.namespace ? `${actionId}:${options.namespace}` : actionId)
-      : (options?.namespace ?? null);
-    return app.storage.listStateKeys(ns, options?.prefix);
+    return app.listStateKeys(actionId, options);
   }
 
   async clearState(
@@ -480,14 +367,7 @@ export class LocalActionDockTarget implements ActionDockTarget {
     if (!app) {
       throw new Error(`Package '${packageId}' not found in target`);
     }
-    const ns = actionId
-      ? (options?.namespace ? `${actionId}:${options.namespace}` : actionId)
-      : options?.namespace;
-    return app.storage.clearState({
-      namespace: ns,
-      prefix: options?.prefix,
-      all: options?.all,
-    });
+    return app.clearState(actionId, options);
   }
 
   async listStateEntries(

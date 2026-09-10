@@ -17,5 +17,6 @@ export * from "./version";
 export * from "./app";
 export * from "./host";
 export * from "./target";
+export * from "./ipc";
 export type { ModuleLoader } from "./runtime";
 

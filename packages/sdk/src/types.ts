@@ -25,8 +25,6 @@ export interface RuntimeError {
   message: string;
   /** 结构化的附加错误详情 */
   details?: unknown;
-  /** 导致此错误的底层原始异常或原因 */
-  cause?: unknown;
 }
 
 /**
@@ -332,6 +330,8 @@ export interface RunRecord {
   generationId: string;
   /** 执行宿主所有者标识 */
   ownerId: string;
+  /** 执行宿主会话标识 */
+  hostSessionId?: string;
   /** 运行生命周期状态 */
   status: RunStatus;
   /** 输入参数快照 */

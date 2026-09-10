@@ -126,6 +126,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
             action_id TEXT NOT NULL,
             generation_id TEXT NOT NULL,
             owner_id TEXT NOT NULL,
+            host_session_id TEXT,
             status TEXT NOT NULL,
             input_json TEXT,
             output_json TEXT,
@@ -138,6 +139,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
           CREATE INDEX IF NOT EXISTS idx_runs_action ON runs(package_id, action_id);
           CREATE INDEX IF NOT EXISTS idx_runs_root ON runs(root_run_id);
           CREATE INDEX IF NOT EXISTS idx_runs_started ON runs(started_at DESC);
+          CREATE INDEX IF NOT EXISTS idx_runs_host_session ON runs(host_session_id);
           CREATE INDEX IF NOT EXISTS idx_state_expires ON state(expires_at);
 
           CREATE TABLE IF NOT EXISTS idempotency_keys (
@@ -162,25 +164,51 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       throw err;
     }
 
+    // 确保已有历史数据库补充迁移 host_session_id 列
+    if (version !== 0) {
+      try {
+        const columns = this.driver.prepare("PRAGMA table_info(runs);").all<{ name: string }>();
+        if (Array.isArray(columns) && !columns.some((c) => c.name === "host_session_id")) {
+          this.driver.exec("ALTER TABLE runs ADD COLUMN host_session_id TEXT;");
+        }
+      } catch {
+        // 忽略非结构化表或兼容驱动异常
+      }
+    }
+
     // 重启恢复：将未正常结算的 running 与 pending 状态自动收敛为 interrupted
     this.recoverRunningRuns();
   }
 
   /**
-   * 重启恢复：将未正常结算的非终态（running/pending）记录自动收敛为 interrupted
+   * 重启恢复：将未正常结算的非终态（running/pending）记录自动收敛为 interrupted。
+   * 若指定了当前新 Host 会话标识，将收敛不属于该会话（包括旧会话或空会话）的死亡任务。
    */
-  public recoverRunningRuns(): number {
+  public recoverRunningRuns(currentHostSessionId?: string): number {
+    return this.recoverDeadSessionRuns(currentHostSessionId);
+  }
+
+  /**
+   * 收敛死亡会话遗留的非终态运行任务。
+   */
+  public recoverDeadSessionRuns(currentHostSessionId?: string): number {
     if (this.isClosed) return 0;
     try {
       const now = this.clock.now().toISOString();
-      const stmt = this.getStatement(`
+      let sql = `
         UPDATE runs
         SET status = 'interrupted',
             finished_at = ?,
             error_json = '{"code":"RUN_INTERRUPTED","message":"Execution interrupted by system shutdown or restart"}'
         WHERE status IN ('running', 'pending')
-      `);
-      const res = stmt.run(now);
+      `;
+      const params: any[] = [now];
+      if (currentHostSessionId) {
+        sql += " AND (host_session_id IS NULL OR host_session_id != ?)";
+        params.push(currentHostSessionId);
+      }
+      const stmt = this.getStatement(sql);
+      const res = stmt.run(...params);
       return res.changes;
     } catch {
       return 0;
@@ -586,10 +614,10 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     const stmt = this.getStatement(`
       INSERT INTO runs (
         id, root_run_id, parent_run_id, package_id, package_instance_id,
-        action_id, generation_id, owner_id, status, input_json, output_json,
+        action_id, generation_id, owner_id, host_session_id, status, input_json, output_json,
         error_json, started_at, finished_at, duration_ms
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const rootRunId = record.rootRunId || record.id;
@@ -597,6 +625,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     const packageInstanceId = record.packageInstanceId || record.packageId || this.packageId;
     const generationId = record.generationId || "1";
     const ownerId = record.ownerId || "local";
+    const hostSessionId = record.hostSessionId || null;
     const inputJson = record.input !== undefined ? JSON.stringify(record.input) : null;
     const outputJson = record.output !== undefined ? JSON.stringify(record.output) : null;
     const errorJson = record.error ? JSON.stringify(record.error) : null;
@@ -612,6 +641,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       record.actionId ?? "",
       generationId,
       ownerId,
+      hostSessionId,
       record.status,
       inputJson,
       outputJson,
@@ -815,6 +845,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       actionId: row.action_id,
       generationId: row.generation_id || "1",
       ownerId: row.owner_id || "local",
+      hostSessionId: row.host_session_id || undefined,
       status: row.status,
       input,
       output,

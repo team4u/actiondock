@@ -1,5 +1,7 @@
 import {
+  checkGeneratedTypes,
   findProjectRoot,
+  GENERATED_TYPES_OUTDATED_CODE,
   loadActions,
   loadProjectConfig,
   resolvePackageRoot,
@@ -96,6 +98,19 @@ export function registerValidateCommand(program: Command, context?: CliContext):
 
       if (!allValid) {
         throw new ExecutionError("Action schema validation failed", results);
+      }
+
+      // 只读校验已生成的类型文件摘要是否过期
+      const typeCheck = checkGeneratedTypes(root);
+      if (typeCheck.exists && typeCheck.outdated) {
+        throw new ExecutionError(
+          `Generated types in ${typeCheck.filePath} are outdated. Expected manifest digest '${typeCheck.expectedDigest}', but got '${typeCheck.actualDigest || "none"}'. Run 'ad generate types' to update.`,
+          {
+            expectedDigest: typeCheck.expectedDigest,
+            actualDigest: typeCheck.actualDigest,
+          },
+          GENERATED_TYPES_OUTDATED_CODE
+        );
       }
     });
 }

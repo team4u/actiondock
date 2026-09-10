@@ -31,6 +31,7 @@ for (const pkg of PACKAGES) {
     [
       "build",
       join(pkgDir, "src", "index.ts"),
+      ...(pkg === "mcp" ? [join(pkgDir, "src", "stdio-host.ts")] : []),
       "--outdir",
       distDir,
       "--target",

@@ -1,11 +1,11 @@
 import { Command } from "commander";
-import { registerActionCommands } from "./action";
 import { registerAddCommand } from "./add";
 import { registerBuildCommand } from "./build";
 import { registerConfigCommands } from "./config";
 import { registerDescribeCommand } from "./describe";
 import { registerDoctorCommand } from "./doctor";
 import { registerExportCommand } from "./export";
+import { registerGenerateCommands } from "./generate";
 import { registerInfoCommand } from "./info";
 import { registerInitCommand } from "./init";
 import { registerLinkCommands } from "./link";
@@ -71,7 +71,7 @@ export function createCliProgram(): Command {
   registerDescribeCommand(program);
   registerRunCommand(program);
   registerValidateCommand(program);
-  registerActionCommands(program);
+  registerGenerateCommands(program);
   registerPlaybookCommands(program);
   registerConfigCommands(program);
   registerStateCommands(program);
@@ -91,13 +91,13 @@ export function createCliProgram(): Command {
 }
 
 export {
-  registerActionCommands,
   registerAddCommand,
   registerBuildCommand,
   registerConfigCommands,
   registerDescribeCommand,
   registerDoctorCommand,
   registerExportCommand,
+  registerGenerateCommands,
   registerInfoCommand,
   registerInitCommand,
   registerLinkCommands,

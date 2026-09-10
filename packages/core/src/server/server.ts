@@ -283,14 +283,9 @@ export async function startActionDockServer(
     );
   };
 
-  let server: CoreHttpServerInstance;
-  if (options.platform?.http) {
-    server = await options.platform.http.launchHttpServer({ port, host, fetch: fetchHandler });
-    if (server.ready) {
-      await server.ready;
-    }
-  } else {
-    server = await launchHttpServer(port, host, fetchHandler);
+  const server: CoreHttpServerInstance = await launchHttpServer(port, host, fetchHandler);
+  if (server.ready) {
+    await server.ready;
   }
 
   const actualHost = host === "0.0.0.0" ? "127.0.0.1" : host;

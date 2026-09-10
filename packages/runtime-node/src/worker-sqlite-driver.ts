@@ -39,6 +39,17 @@ interface RecordedStatement {
 const WORKER_SCRIPT = `
 const { parentPort, workerData } = require("node:worker_threads");
 const { DatabaseSync } = require("node:sqlite");
+const { existsSync, mkdirSync } = require("node:fs");
+const { dirname } = require("node:path");
+
+if (workerData.dbPath && workerData.dbPath !== ":memory:") {
+  const dir = dirname(workerData.dbPath);
+  if (!existsSync(dir)) {
+    try {
+      mkdirSync(dir, { recursive: true, mode: 0o700 });
+    } catch (_) {}
+  }
+}
 
 const db = workerData.options !== undefined
   ? new DatabaseSync(workerData.dbPath || ":memory:", workerData.options)

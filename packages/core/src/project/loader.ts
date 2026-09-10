@@ -348,56 +348,8 @@ export function ensureProjectDependencies(projectRoot: string, force = false): b
     }
   }
 
-  try {
-    const installCmd = getInstallCommand(projectRoot);
-    const actionText = !force && nodeModulesExists ? "Updating" : "Installing";
-    process.stderr.write(
-      `[actiondock] ${actionText} dependencies using ${installCmd[0]} for '${pkg.name || basename(projectRoot)}'...\n`
-    );
-
-    // bun 不读取 .npmrc 的 strict-ssl 配置；当 npm 侧已声明 strict-ssl=false 时，
-    // 桥接为 bun 子进程的 NODE_TLS_REJECT_UNAUTHORIZED=0，保证内网自签名证书源下行为一致
-    const childEnv = { ...process.env };
-    if (installCmd[0] === "bun" && resolveNpmStrictSsl(projectRoot) === false) {
-      childEnv.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-    }
-
-    // 严禁 shell 字符串拼接，直接传入指令与参数数组，Windows 下按需开启平台兼容 shell
-    const proc = spawnSync(installCmd[0], installCmd.slice(1), {
-      cwd: projectRoot,
-      stdio: "pipe",
-      shell: process.platform === "win32",
-      env: childEnv,
-    });
-
-    if (proc.status !== 0) {
-      const errText = proc.stderr?.toString() || `Unknown error during ${installCmd[0]} install`;
-      process.stderr.write(`[actiondock] Warning: Dependency installation failed: ${errText}\n`);
-      if (installCmd[0] === "bun" && /SELF_SIGNED_CERT|CERT_|UNABLE_TO_VERIFY|ERR_TLS/i.test(errText)) {
-        process.stderr.write(
-          `[actiondock] Hint: bun ignores 'strict-ssl=false' from .npmrc. ` +
-            `Add 'strict-ssl=false' to the project or user .npmrc, or set ACTIONDOCK_INSTALLER=npm.\n`
-        );
-      }
-      return false;
-    }
-
-    // 安装成功后刷新指纹记录（以安装完成后最终生成的锁文件为准）
-    const finalFingerprint = computeDependencyFingerprint(projectRoot) || currentFingerprint;
-    if (finalFingerprint) {
-      saveDependencyFingerprint(projectRoot, finalFingerprint);
-    }
-
-    const successText =
-      !force && nodeModulesExists
-        ? "Dependencies updated successfully.\n"
-        : "Dependencies installed successfully.\n";
-    process.stderr.write(`[actiondock] ${successText}`);
-    return true;
-  } catch (err: any) {
-    process.stderr.write(`[actiondock] Warning: Failed to run auto-install: ${err.message}\n`);
-    return false;
-  }
+  // ActionDock 2.0 彻底移除运行时静默在线安装依赖逻辑，严禁静默联网安装
+  return false;
 }
 
 /**
@@ -452,31 +404,26 @@ export function discoverActionFiles(
  * 
  * @param projectRoot 项目根目录
  * @param actionsDir actions 子目录（向后兼容回退参数）
+ * @param _actionsDir actions 子目录（向后兼容回退参数）
  * @param options 控制是否允许自动安装依赖等选项
  * @returns Map<ActionId, ActionDefinition> 映射
  */
 export async function loadActions(
   projectRoot: string,
-  actionsDir = "actions",
-  options: { autoInstall?: boolean; loader?: ModuleLoader } = { autoInstall: true }
+  _actionsDir = "actions",
+  options: { autoInstall?: boolean; loader?: ModuleLoader } = {}
 ): Promise<Map<string, ActionDefinition>> {
-  if (options.autoInstall !== false) {
-    ensureProjectDependencies(projectRoot);
-  }
-
   const actions = new Map<string, ActionDefinition>();
   const loader = options.loader || new DefaultModuleLoader();
 
   let manifest: ActionDockManifest | null = null;
   try {
     manifest = loadManifest(projectRoot);
-  } catch {
-    // 忽略清单加载异常，回退至文件扫描
+  } catch (err: any) {
+    throw new Error(`Failed to load manifest in ${projectRoot}: ${err.message}`);
   }
 
-  const loadedEntries = new Set<string>();
-
-  // 1. 若 actiondock.json 声明了 actions，以清单为唯一事实源
+  // 以 actiondock.json 为唯一事实源读取 Action 的元数据契约与入口
   if (manifest?.actions && Object.keys(manifest.actions).length > 0) {
     for (const [actionId, item] of Object.entries(manifest.actions)) {
       if (!ACTION_ID_REGEX.test(actionId)) {
@@ -487,31 +434,42 @@ export async function loadActions(
       const entryPath = resolve(projectRoot, item.entry);
       assertPathWithinRoot(projectRoot, entryPath, `action entry '${item.entry}'`);
       if (!existsSync(entryPath)) {
-        throw new Error(`Action '${actionId}' entry file not found: ${item.entry}`);
+        const error: any = new Error(`Action '${actionId}' entry file not found: ${item.entry}`);
+        error.code = "ACTION_LOAD_FAILED";
+        error.details = {
+          actionId,
+          entry: item.entry,
+          entryPath,
+          hint: `请检查 actiondock.json 中 action '${actionId}' 的 entry 配置 '${item.entry}' 是否正确。`,
+        };
+        throw error;
       }
-      loadedEntries.add(entryPath);
 
       let imported: any;
       try {
         imported = await loader.load(entryPath);
       } catch (err: any) {
         const msg = String(err.message || "");
-        if (
-          options.autoInstall !== false &&
-          (msg.includes("Cannot find package") ||
-            msg.includes("Cannot find module") ||
-            msg.includes("ERR_MODULE_NOT_FOUND") ||
-            msg.includes("Could not resolve"))
-        ) {
-          const installed = ensureProjectDependencies(projectRoot, true);
-          if (installed) {
-            imported = await loader.load(entryPath);
-          } else {
-            throw err;
-          }
-        } else {
-          throw err;
-        }
+        const isMissingModule =
+          msg.includes("Cannot find package") ||
+          msg.includes("Cannot find module") ||
+          msg.includes("ERR_MODULE_NOT_FOUND") ||
+          msg.includes("Could not resolve");
+
+        const error: any = new Error(
+          `Failed to load action '${actionId}' from '${item.entry}': ${msg}`
+        );
+        error.code = "ACTION_LOAD_FAILED";
+        error.details = {
+          actionId,
+          entry: item.entry,
+          entryPath,
+          rootCause: msg,
+          hint: isMissingModule
+            ? `项目依赖缺失，请在 '${projectRoot}' 目录下运行 npm install 安装依赖。`
+            : undefined,
+        };
+        throw error;
       }
 
       const exported = imported?.default ?? imported?.action ?? imported;
@@ -523,9 +481,17 @@ export async function loadActions(
       }
 
       if (!runFn) {
-        throw new Error(
+        const error: any = new Error(
           `Action '${actionId}' in '${item.entry}' does not export a runnable handler`
         );
+        error.code = "ACTION_LOAD_FAILED";
+        error.details = {
+          actionId,
+          entry: item.entry,
+          entryPath,
+          hint: `确保 '${item.entry}' 使用 export default defineAction(...) 导出了可执行处理函数。`,
+        };
+        throw error;
       }
 
       const def: ActionDefinition = {
@@ -533,70 +499,6 @@ export async function loadActions(
       };
 
       actions.set(actionId, def);
-    }
-  }
-
-  // 2. 扫描 actions 目录补充加载未在清单中显式声明的 Action
-  const files = discoverActionFiles(projectRoot, actionsDir);
-  for (const file of files) {
-    if (loadedEntries.has(file)) continue;
-    try {
-      let imported: any;
-      try {
-        imported = await loader.load(file);
-      } catch (err: any) {
-        const msg = String(err.message || "");
-        if (
-          options.autoInstall !== false &&
-          (msg.includes("Cannot find package") ||
-            msg.includes("Cannot find module") ||
-            msg.includes("ERR_MODULE_NOT_FOUND") ||
-            msg.includes("Could not resolve"))
-        ) {
-          const installed = ensureProjectDependencies(projectRoot, true);
-          if (installed) {
-            imported = await loader.load(file);
-          } else {
-            throw err;
-          }
-        } else {
-          throw err;
-        }
-      }
-
-      const exported = imported?.default ?? imported?.action ?? imported;
-      let actionId: string | undefined;
-      let runFn: ((input: any, ctx: any) => any) | undefined;
-
-      if (typeof exported === "function") {
-        runFn = exported;
-        actionId = basename(file).replace(/\.(ts|js)$/, "");
-      } else if (exported && typeof exported === "object") {
-        actionId = exported.id || basename(file).replace(/\.(ts|js)$/, "");
-        if (typeof exported.run === "function") {
-          runFn = exported.run.bind(exported);
-        }
-      }
-
-      if (actionId && runFn) {
-        if (!ACTION_ID_REGEX.test(actionId)) {
-          throw new Error(
-            `Invalid action ID '${actionId}' found in ${file}. Action IDs must match ${ACTION_ID_REGEX}`
-          );
-        }
-        if (actions.has(actionId)) {
-          continue;
-        }
-        actions.set(actionId, {
-          run: runFn,
-        });
-      } else {
-        console.warn(
-          `[WARN] File ${file} does not export a valid default ActionDefinition`
-        );
-      }
-    } catch (err: any) {
-      throw new Error(`Failed to load action from ${file}: ${err.message}`);
     }
   }
 
@@ -615,91 +517,76 @@ export function discoverPlaybookFiles(
 }
 
 /**
- * 纯文本快速解析 Playbook 头部 YAML Frontmatter，提取基础元数据，不引入重型依赖。
- */
-function parseSimpleFrontmatter(raw: string): { id?: string; description?: string; actions?: string[] } {
-  const res: { id?: string; description?: string; actions?: string[] } = {};
-  const lines = raw.split(/\r?\n/);
-  let currentListKey: string | null = null;
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-
-    if (trimmed.startsWith("- ") && currentListKey) {
-      const val = trimmed.slice(2).trim().replace(/^['"](.*)['"]$/, "$1");
-      if (currentListKey === "actions") {
-        res.actions = res.actions || [];
-        res.actions.push(val);
-      }
-      continue;
-    }
-
-    const colonIdx = line.indexOf(":");
-    if (colonIdx !== -1) {
-      const key = line.slice(0, colonIdx).trim();
-      const val = line.slice(colonIdx + 1).trim().replace(/^['"](.*)['"]$/, "$1");
-      currentListKey = null;
-
-      if (key === "id") {
-        res.id = val;
-      } else if (key === "description") {
-        res.description = val;
-      } else if (key === "actions") {
-        if (val.startsWith("[") && val.endsWith("]")) {
-          res.actions = val
-            .slice(1, -1)
-            .split(",")
-            .map((s) => s.trim().replace(/^['"](.*)['"]$/, "$1"))
-            .filter(Boolean);
-        } else {
-          res.actions = [];
-          currentListKey = "actions";
-        }
-      }
-    }
-  }
-
-  return res;
-}
-
-/**
  * 解析单个 Playbook Markdown 文件的内容与元数据。
- * 优先以 actiondock.json 中的声明为事实源，若未声明则自动回退解析头部 Frontmatter。
+ * Playbook 规程正文为纯 Markdown，其元数据（id, description, actions）直接由调用方传入（源自 actiondock.json）。
  * 
  * @param content 文件 Markdown 文本内容
  * @param filePath 物理文件路径
- * @param metadata 可选的 Playbook 清单元数据
+ * @param metadata Playbook 清单元数据
  * @returns PlaybookDefinition 对象
  */
 export function parsePlaybookContent(
   content: string,
   filePath: string,
-  metadata?: Partial<PlaybookManifestEntry> & { id?: string }
+  metadata?: Partial<PlaybookManifestEntry> & { id?: string; name?: string }
 ): PlaybookDefinition {
-  let frontmatter: { id?: string; description?: string; actions?: string[] } = {};
-  let body = content;
-
-  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
-  if (match) {
-    frontmatter = parseSimpleFrontmatter(match[1]);
-    body = match[2];
-  }
-
   const filename = basename(filePath.replace(/\\/g, "/"));
   const defaultId = filename.replace(/\.md$/, "");
-  const playbookId = metadata?.id || frontmatter.id || defaultId;
+
+  let playbookId = metadata?.id;
+  let name = (metadata as any)?.name;
+  let description = metadata?.description;
+  let actions = Array.isArray(metadata?.actions) ? [...metadata.actions] : [];
+  let body = content;
+
+  // 零依赖纯文本兼容提取（不依赖 yaml 库，兼容包含旧式 Frontmatter 的夹具文件）
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+  if (match) {
+    body = match[2];
+    const frontmatterLines = match[1].split(/\r?\n/);
+    let inActionsList = false;
+    for (const line of frontmatterLines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      if (trimmed.startsWith("- ") && inActionsList) {
+        actions.push(trimmed.slice(2).trim().replace(/^['"](.*)['"]$/, "$1"));
+        continue;
+      }
+      const colonIdx = line.indexOf(":");
+      if (colonIdx !== -1) {
+        const key = line.slice(0, colonIdx).trim();
+        const val = line.slice(colonIdx + 1).trim().replace(/^['"](.*)['"]$/, "$1");
+        inActionsList = false;
+        if (key === "id" && !playbookId) {
+          playbookId = val;
+        } else if (key === "name" && !name) {
+          name = val;
+        } else if (key === "description" && !description) {
+          description = val;
+        } else if (key === "actions") {
+          if (val.startsWith("[") && val.endsWith("]")) {
+            const items = val
+              .slice(1, -1)
+              .split(",")
+              .map((s) => s.trim().replace(/^['"](.*)['"]$/, "$1"))
+              .filter(Boolean);
+            actions.push(...items);
+          } else {
+            inActionsList = true;
+          }
+        }
+      }
+    }
+  }
+
+  playbookId = playbookId || defaultId;
   if (!PLAYBOOK_ID_REGEX.test(playbookId)) {
     throw new Error(`Invalid playbook ID '${playbookId}' found in ${filePath}. Playbook IDs must match ${PLAYBOOK_ID_REGEX}`);
   }
 
-  const description = metadata?.description || frontmatter.description;
-  const actions = Array.isArray(metadata?.actions) && metadata.actions.length > 0
-    ? [...metadata.actions]
-    : (Array.isArray(frontmatter.actions) ? [...frontmatter.actions] : []);
-
   return {
     id: playbookId,
+    name,
     description,
     actions,
     content: body.trim(),
@@ -708,8 +595,8 @@ export function parsePlaybookContent(
 }
 
 /**
- * 加载项目 playbooks 目录下的所有 Playbook SOP 文档。
- * 优先以 actiondock.json 中的 playbooks 声明作为唯一事实源，纯 Markdown 读取文档内容。
+ * 加载项目声明的 Playbook SOP 规程文档。
+ * 优先以 actiondock.json 中的 playbooks 声明作为事实源；若未声明则自动回退至零依赖纯 Markdown 兼容读取。
  * 
  * @param projectRoot 项目根目录
  * @param playbooksDir playbooks 子目录（默认 "playbooks"）
@@ -730,7 +617,7 @@ export function loadPlaybooks(
 
   const loadedPlaybookEntries = new Set<string>();
 
-  // 1. 若 actiondock.json 中声明了 playbooks，以清单为唯一事实源
+  // 1. 若 actiondock.json 中声明了 playbooks，以清单为事实源
   if (manifest?.playbooks && Object.keys(manifest.playbooks).length > 0) {
     for (const [playbookId, pbEntry] of Object.entries(manifest.playbooks)) {
       if (!PLAYBOOK_ID_REGEX.test(playbookId)) {
@@ -747,6 +634,7 @@ export function loadPlaybooks(
       const content = readFileSync(fullPath, "utf-8");
       const def = parsePlaybookContent(content, fullPath, {
         id: playbookId,
+        name: (pbEntry as any)?.name,
         description: pbEntry.description,
         actions: pbEntry.actions,
       });
@@ -754,19 +642,18 @@ export function loadPlaybooks(
     }
   }
 
-  // 2. 扫描 playbooks 目录补充未在清单中显式声明的 Playbook
+  // 2. 磁盘扫描回退：若存在额外或未在清单中显式声明的 .md 文档，进行零依赖纯 Markdown 兼容解析
   const files = discoverPlaybookFiles(projectRoot, playbooksDir);
   for (const file of files) {
     if (loadedPlaybookEntries.has(file)) continue;
     try {
       const content = readFileSync(file, "utf-8");
       const playbook = parsePlaybookContent(content, file);
-      if (playbooks.has(playbook.id)) {
-        continue;
+      if (!playbooks.has(playbook.id)) {
+        playbooks.set(playbook.id, playbook);
       }
-      playbooks.set(playbook.id, playbook);
-    } catch (err: any) {
-      throw new Error(`Failed to load playbook from ${file}: ${err.message}`);
+    } catch {
+      // 忽略单个文件解析异常
     }
   }
 

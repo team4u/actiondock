@@ -34,8 +34,6 @@ export interface TestPlatformOptions {
   files?: FileSystem;
   /** 可选注入的源码模块加载器 */
   modules?: ModuleLoader;
-  /** 可选注入的 HTTP 服务工厂 */
-  http?: HttpServerFactory;
 }
 
 /**
@@ -49,7 +47,6 @@ export interface TestPlatform extends RuntimePlatform {
   readonly modules: ModuleLoader;
   readonly process: MockProcessExecutor;
   readonly storage: StorageFactory;
-  readonly http?: HttpServerFactory;
   readonly eventSink: EventSink;
 }
 
@@ -102,24 +99,6 @@ export function createTestPlatform(options: TestPlatformOptions = {}): TestPlatf
     },
   };
 
-  const http: HttpServerFactory = options.http ?? {
-    async launchHttpServer(opts: any): Promise<any> {
-      const port =
-        typeof opts === "object" && opts !== null && opts.port !== undefined ? opts.port : 0;
-      let running = true;
-      return {
-        port,
-        ready: Promise.resolve(),
-        stop: async () => {
-          running = false;
-        },
-        get isRunning() {
-          return running;
-        },
-      };
-    },
-  };
-
   return {
     name: "test",
     clock,
@@ -127,7 +106,6 @@ export function createTestPlatform(options: TestPlatformOptions = {}): TestPlatf
     modules,
     process,
     storage: storageFactory,
-    http,
     eventSink,
   };
 }

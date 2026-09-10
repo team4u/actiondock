@@ -31,8 +31,6 @@ describe("createTestPlatform 测试平台工厂测试", () => {
       expect(platform.storage).toBeDefined();
       expect(typeof platform.storage.createStorage).toBe("function");
       expect(typeof platform.storage.createGlobalStorage).toBe("function");
-      expect(platform.http).toBeDefined();
-      expect(typeof platform.http?.launchHttpServer).toBe("function");
 
       // 验证赋值给通用 RuntimePlatform 接口完全兼容
       const genericPlatform: RuntimePlatform = platform;
@@ -95,20 +93,6 @@ describe("createTestPlatform 测试平台工厂测试", () => {
 
       customStorage.close();
       customGlobal.close();
-    });
-  });
-
-  describe("网络服务模拟工厂", () => {
-    it("默认提供轻量级安全模拟 HTTP 服务驱动", async () => {
-      const platform = createTestPlatform();
-      const server = await platform.http?.launchHttpServer({ port: 8080 });
-
-      expect(server).toBeDefined();
-      expect(server.port).toBe(8080);
-      expect(server.isRunning).toBe(true);
-
-      await server.stop();
-      expect(server.isRunning).toBe(false);
     });
   });
 

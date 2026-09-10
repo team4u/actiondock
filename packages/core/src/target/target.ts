@@ -16,6 +16,11 @@ import type {
 export async function createActionDockTarget(
   options: TargetOptions = {}
 ): Promise<ActionDockTarget> {
+  if (options.type === "ipc") {
+    const { IpcActionDockTarget } = await import("../ipc/target");
+    return new IpcActionDockTarget(options as any);
+  }
+
   if (
     options.type === "remote" ||
     ("serverUrl" in options && Boolean((options as RemoteTargetOptions).serverUrl))

@@ -48,6 +48,7 @@ export class DefaultExecutionService implements ExecutionService {
   public readonly eventSink: EventSink;
   private maxActiveRuns: number;
   private ownerId: string;
+  public hostSessionId?: string;
   private _runner: ActionRunner;
   private logger?: Logger;
   private clock?: Clock;
@@ -60,6 +61,7 @@ export class DefaultExecutionService implements ExecutionService {
   constructor(options: ExecutionServiceOptions) {
     this.platform = options.platform;
     this.packageId = options.packageId;
+    this.hostSessionId = options.hostSessionId;
     this.projectConfig = options.projectConfig;
     this.eventSink = options.eventSink || (options.platform as any)?.eventSink || new InMemoryEventSink();
     this.maxActiveRuns = options.maxActiveRuns || 32;
@@ -91,6 +93,7 @@ export class DefaultExecutionService implements ExecutionService {
 
     this._runner = new ActionRunner({
       packageId: this.packageId,
+      hostSessionId: this.hostSessionId,
       storage: this.storage,
       globalStorage,
       projectRoot: options.projectRoot,
@@ -357,6 +360,7 @@ export class DefaultExecutionService implements ExecutionService {
         actionId: targetActionId,
         generationId: "1",
         ownerId: this.ownerId,
+        hostSessionId: options.hostSessionId || this.hostSessionId,
         status: "failed",
         input,
         error,
@@ -398,7 +402,7 @@ export class DefaultExecutionService implements ExecutionService {
     }
 
     const controller = new AbortController();
-    if (options.signal) {
+    if (options.signal && typeof options.signal.addEventListener === "function") {
       if (options.signal.aborted) {
         controller.abort(options.signal.reason);
       } else {
@@ -489,6 +493,7 @@ export class DefaultExecutionService implements ExecutionService {
       runId,
       rootRunId: options.rootRunId,
       parentRunId: options.parentRunId,
+      hostSessionId: options.hostSessionId || this.hostSessionId,
       maxCallDepth: options.maxCallDepth,
       configOverrides: options.config as Record<string, unknown> | undefined,
       signal: controller.signal,

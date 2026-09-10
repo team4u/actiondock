@@ -103,6 +103,4 @@ export interface RuntimePlatform {
   readonly process: ProcessAPI;
   /** 持久化数据库存储驱动工厂 */
   readonly storage: StorageFactory;
-  /** 可选的 HTTP 服务监听驱动工厂 */
-  readonly http?: HttpServerFactory;
 }

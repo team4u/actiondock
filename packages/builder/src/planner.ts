@@ -1,14 +1,12 @@
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
-import YAML from "yaml";
 import {
   assertPathWithinRoot,
   type ActionDockManifest,
   type ActionManifestEntry,
   loadManifest,
   loadProjectConfig,
-  type PlaybookDefinition,
   type ProjectConfig,
   resolveActionProjectSync,
   validateManifest,
@@ -157,14 +155,52 @@ function computeLockfileInfo(projectRoot: string, preferredLockfile?: string): L
 }
 
 /**
- * 纯文本解析 Playbook Markdown 文件，提取 YAML Frontmatter，不执行任何业务代码。
+ * 纯 TypeScript 解析轻量 Frontmatter 元数据，杜绝第三方 yaml 依赖。
+ */
+function parseSimpleFrontmatter(raw: string): Record<string, any> {
+  const result: Record<string, any> = {};
+  const lines = raw.split(/\r?\n/);
+  let currentListKey: string | null = null;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+
+    if (trimmed.startsWith("- ") && currentListKey) {
+      const item = trimmed.slice(2).trim().replace(/^["']|["']$/g, "");
+      if (!Array.isArray(result[currentListKey])) {
+        result[currentListKey] = [];
+      }
+      result[currentListKey].push(item);
+      continue;
+    }
+
+    const colonIdx = line.indexOf(":");
+    if (colonIdx !== -1) {
+      const key = line.slice(0, colonIdx).trim();
+      const value = line.slice(colonIdx + 1).trim().replace(/^["']|["']$/g, "");
+      if (value === "") {
+        currentListKey = key;
+        result[key] = [];
+      } else {
+        currentListKey = null;
+        result[key] = value;
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * 纯文本解析 Playbook Markdown 文件，提取轻量 Frontmatter，不执行任何业务代码。
  */
 function parsePlaybookFile(filePath: string): PlaybookPlanEntry | null {
   try {
     const content = readFileSync(filePath, "utf-8");
     const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
     if (match) {
-      const parsed = YAML.parse(match[1]) || {};
+      const parsed = parseSimpleFrontmatter(match[1]);
       const id = parsed.id || basename(filePath.replace(/\\/g, "/"), ".md");
       return {
         id,

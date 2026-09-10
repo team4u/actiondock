@@ -1174,25 +1174,25 @@ describe("CLI Review & Machine Contract Regression", () => {
 
     // Action create rejects absolute path
     const absPath = resolve(tempDir, "outside-action.ts");
-    const absActionProc = runCli(["action", "create", "test.abs-action", "--file", absPath], tempDir);
+    const absActionProc = runCli(["new", "action", "test.abs-action", "--file", absPath], tempDir);
     expect(absActionProc.exitCode).not.toBe(0);
     expect(absActionProc.stderr.toString()).toContain("relative path");
 
     // Action create rejects path traversal
-    const traversalActionProc = runCli(["action", "create", "test.traversal-action", "--file", "../outside.ts"], tempDir);
+    const traversalActionProc = runCli(["new", "action", "test.traversal-action", "--file", "../outside.ts"], tempDir);
     expect(traversalActionProc.exitCode).not.toBe(0);
 
     // Playbook create rejects absolute path
-    const absPbProc = runCli(["playbook", "create", "test.abs-playbook", "--file", absPath], tempDir);
+    const absPbProc = runCli(["new", "playbook", "test.abs-playbook", "--file", absPath], tempDir);
     expect(absPbProc.exitCode).not.toBe(0);
     expect(absPbProc.stderr.toString()).toContain("relative path");
 
     // Playbook create rejects path traversal
-    const traversalPbProc = runCli(["playbook", "create", "test.traversal-playbook", "--file", "../outside.md"], tempDir);
+    const traversalPbProc = runCli(["new", "playbook", "test.traversal-playbook", "--file", "../outside.md"], tempDir);
     expect(traversalPbProc.exitCode).not.toBe(0);
 
     // Valid playbook create produces unordered list in instructions
-    const validPbProc = runCli(["playbook", "create", "test.valid-pb", "--desc", "Test SOP"], tempDir);
+    const validPbProc = runCli(["new", "playbook", "test.valid-pb", "--desc", "Test SOP"], tempDir);
     expect(validPbProc.exitCode).toBe(0);
 
     const pbFilePath = join(tempDir, "playbooks", "test-valid-pb.md");

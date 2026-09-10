@@ -1,18 +1,71 @@
+import { spawn, type ChildProcess } from "node:child_process";
+import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { IpcActionDockTarget, type ActionDockTarget } from "@actiondock/core";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { createActionDockMcpServer, type ActionDockMcpServer } from "./adapter";
 import type { ActionDockMcpOptions } from "./types";
 
 /**
- * Starts an ActionDock MCP server over STDIO transport.
+ * 启动 ActionDock MCP STDIO 协议服务。
+ * 建立监督进程物理边界：
+ * 1. 监督父进程独占标准输入/输出通道，专用于承载 JSON-RPC 协议；
+ * 2. 子进程承载 Action 运行时，通过 Node IPC 通信；
+ * 3. 子进程输出被重定向并进行限流排空（转入受控诊断流 stderr），彻底杜绝业务 console.log 破坏 MCP STDIO 流；
+ * 4. 子进程异常退出时，转换为结构化 JSON-RPC 错误，保障协议稳定性。
  */
 export async function startMcpStdio(
   options: ActionDockMcpOptions = {}
 ): Promise<void> {
   let activeServer: ActionDockMcpServer | undefined;
+  let targetToUse: ActionDockTarget | undefined;
+  let childProcess: ChildProcess | undefined;
+
+  // 若显式传入了已构造的 target 或不可序列化的内存对象，直接复用
+  if (options.target || options.actions || options.storage || options.app || options.host) {
+    targetToUse = options.target;
+  } else {
+    // 建立隔离的监督子进程
+    const currentDir = dirname(fileURLToPath(import.meta.url));
+    const hostScript = resolve(
+      currentDir,
+      existsSync(join(currentDir, "stdio-host.ts")) ? "stdio-host.ts" : "stdio-host.js"
+    );
+
+    childProcess = spawn(process.execPath, [hostScript], {
+      cwd: options.projectRoot || process.cwd(),
+      env: {
+        ...process.env,
+        ACTIONDOCK_MCP_OPTIONS: JSON.stringify({
+          projectRoot: options.projectRoot,
+          projectRoots: options.projectRoots,
+          packageId: options.packageId,
+          packageIds: options.packageIds,
+          all: options.all,
+          customHome: options.customHome,
+          configOverrides: options.configOverrides,
+          timeoutMs: options.timeoutMs,
+        }),
+      },
+      stdio: ["pipe", "pipe", "pipe", "ipc"],
+    });
+
+    // 标准输出物理隔离与受控限流排空转入 stderr 诊断流
+    targetToUse = new IpcActionDockTarget({
+      childProcess,
+      maxDiagnosticBytes: 512 * 1024,
+      maxDiagnosticRate: 64 * 1024,
+      diagnosticTarget: process.stderr,
+    });
+  }
 
   const stdioHandler = serveStdio(
     async () => {
-      const server = await createActionDockMcpServer(options);
+      const server = await createActionDockMcpServer({
+        ...options,
+        target: targetToUse,
+      });
       activeServer = server;
       return server;
     },
@@ -27,9 +80,12 @@ export async function startMcpStdio(
     if (activeServer) {
       try {
         await activeServer.close();
-      } catch {
-        // ignore
-      }
+      } catch {}
+    }
+    if (targetToUse) {
+      try {
+        await targetToUse.close();
+      } catch {}
     }
   };
 

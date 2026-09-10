@@ -99,7 +99,6 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
       expect(platform.modules).toBeDefined();
       expect(platform.process).toBeDefined();
       expect(platform.storage).toBeDefined();
-      expect(platform.http).toBeDefined();
     });
 
     it("支持显式注入自定义时钟 clock", () => {
@@ -155,30 +154,6 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
       const mod = await platform.modules.load<any>("virtual:module");
       expect(loadedSpecifier).toBe("virtual:module");
       expect(mod.customModule).toBe(true);
-    });
-
-    it("支持显式注入自定义 HTTP 服务工厂 http", async () => {
-      let launchedWithPort = 0;
-      const customHttp = {
-        async launchHttpServer(opts: any) {
-          launchedWithPort = opts.port;
-          return {
-            port: opts.port,
-            stop: () => {},
-            ready: Promise.resolve(),
-          };
-        },
-      };
-
-      const platform = createDefaultPlatform({ http: customHttp });
-      const server = await platform.http?.launchHttpServer({
-        port: 9876,
-        host: "127.0.0.1",
-        fetch: async () => new Response("ok"),
-      });
-
-      expect(launchedWithPort).toBe(9876);
-      expect(server.port).toBe(9876);
     });
 
     it("storage 工厂正确创建独立 SQLite 存储实例", () => {

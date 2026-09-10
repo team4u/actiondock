@@ -124,7 +124,7 @@ describe("GitHub Tools Action Package", () => {
       assert.equal(reviewData.pullNumber, 42);
       assert.equal(reviewData.verdict, "APPROVE");
 
-      const savedState = await app.getState<{ verdict: string }>("review:team4u/actiondock:42");
+      const savedState = await app.getState<{ verdict: string }>("review-pr", "review:team4u/actiondock:42");
       assert.ok(savedState);
       assert.equal(savedState.verdict, "APPROVE");
 

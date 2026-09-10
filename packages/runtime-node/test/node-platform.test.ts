@@ -15,6 +15,7 @@ import {
   NodeHttpServer,
   NodeSqliteDriver,
   TsxModuleLoader,
+  WorkerSqliteDriver,
 } from "../src";
 
 describe("createNodePlatform 平台工厂测试", () => {
@@ -44,8 +45,6 @@ describe("createNodePlatform 平台工厂测试", () => {
       expect(platform.storage).toBeDefined();
       expect(typeof platform.storage.createStorage).toBe("function");
       expect(typeof platform.storage.createGlobalStorage).toBe("function");
-      expect(platform.http).toBeDefined();
-      expect(typeof platform.http?.launchHttpServer).toBe("function");
     });
 
     it("时钟驱动正常工作并提供时间服务", async () => {
@@ -102,7 +101,7 @@ describe("createNodePlatform 平台工厂测试", () => {
 
   describe("存储工厂与驱动支持", () => {
     it("基于 NodeSqliteDriver 创建内存数据库并读写配置与状态", async () => {
-      const platform = createNodePlatform();
+      const platform = createNodePlatform({ useWorker: false });
       const storage = platform.storage.createStorage("test-pkg", { inMemory: true });
 
       expect(storage).toBeInstanceOf(SqliteRuntimeStorage);
@@ -119,7 +118,7 @@ describe("createNodePlatform 平台工厂测试", () => {
 
     it("支持自定义 dataDir 与 customHome 路径配置", () => {
       const dataDir = join(tempDir, "custom-data");
-      const platform = createNodePlatform({ dataDir, customHome: tempDir });
+      const platform = createNodePlatform({ dataDir, customHome: tempDir, useWorker: false });
 
       const storage = platform.storage.createStorage("scoped-pkg");
       expect(storage.isOpen).toBe(true);
@@ -148,28 +147,35 @@ describe("createNodePlatform 平台工厂测试", () => {
       expect(storage.isOpen).toBe(true);
       storage.close();
     });
+
+    it("默认启用 WorkerSqliteDriver 工作线程存储驱动", () => {
+      const platform = createNodePlatform();
+      const storage = platform.storage.createStorage("worker-default-test", { inMemory: true });
+      expect(storage).toBeInstanceOf(SqliteRuntimeStorage);
+      expect((storage as any).driver).toBeInstanceOf(WorkerSqliteDriver);
+      storage.close();
+    });
   });
 
-  describe("网络服务启动工厂", () => {
+  describe("网络服务启动", () => {
     it("基于 NodeHttpServer 启动 HTTP 服务并响应请求", async () => {
-      const platform = createNodePlatform();
-      const serverInstance = await platform.http?.launchHttpServer({
+      const server = new NodeHttpServer({
         port: 0,
         host: "127.0.0.1",
         fetch: async () => new Response(JSON.stringify({ status: "ok" }), {
           headers: { "Content-Type": "application/json" },
         }),
       });
+      await server.listen(0, "127.0.0.1");
 
-      expect(serverInstance).toBeDefined();
-      expect(serverInstance.port).toBeGreaterThan(0);
+      expect(server.port).toBeGreaterThan(0);
 
-      const res = await fetch(`http://127.0.0.1:${serverInstance.port}/`);
+      const res = await fetch(`http://127.0.0.1:${server.port}/`);
       expect(res.status).toBe(200);
       const json = await res.json();
       expect(json).toEqual({ status: "ok" });
 
-      await serverInstance.stop();
+      await server.stop();
     });
   });
 

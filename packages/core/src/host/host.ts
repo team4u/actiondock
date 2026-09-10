@@ -81,6 +81,7 @@ export class DefaultActionDockHost implements ActionDockHost {
         } else {
           const app = new DefaultActionDockApp({
             ...item,
+            hostSessionId: this.hostSessionId,
             platform: item.platform ?? options.platform,
             inMemory: item.inMemory ?? options.inMemory,
             customHome: item.customHome ?? options.customHome,
@@ -137,6 +138,7 @@ export class DefaultActionDockHost implements ActionDockHost {
               const app = new DefaultActionDockApp({
                 packageRoot: pkg.packageRoot,
                 projectConfig: pkg.manifest,
+                hostSessionId: this.hostSessionId,
                 platform: options.platform,
                 inMemory: options.inMemory,
                 customHome: options.customHome,
@@ -174,6 +176,7 @@ export class DefaultActionDockHost implements ActionDockHost {
             const app = new DefaultActionDockApp({
               packageRoot: linked.path,
               projectConfig: config,
+              hostSessionId: this.hostSessionId,
               platform: options.platform,
               inMemory: options.inMemory,
               customHome: options.customHome,
@@ -237,11 +240,17 @@ export class DefaultActionDockHost implements ActionDockHost {
     }
     this.bindApp(app);
 
-    // 接管与恢复：自动将遗留非终态运行收敛为 interrupted
+    // 接管与恢复：自动将死亡会话或遗留非终态运行收敛为 interrupted
     const st = (app as any).storage;
-    if (st && typeof st.recoverRunningRuns === "function") {
+    if (st && typeof st.recoverDeadSessionRuns === "function") {
       try {
-        st.recoverRunningRuns();
+        st.recoverDeadSessionRuns(this.hostSessionId);
+      } catch {
+        // 忽略单包恢复异常
+      }
+    } else if (st && typeof st.recoverRunningRuns === "function") {
+      try {
+        st.recoverRunningRuns(this.hostSessionId);
       } catch {
         // 忽略单包恢复异常
       }
@@ -618,6 +627,7 @@ export class DefaultActionDockHost implements ActionDockHost {
       ...options,
       rootRunId: effectiveRootRunId,
       parentRunId,
+      hostSessionId: this.hostSessionId,
       maxCallDepth: options.maxCallDepth ?? this.maxCallDepth,
     };
 

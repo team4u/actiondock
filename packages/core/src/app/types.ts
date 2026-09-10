@@ -20,8 +20,9 @@ import type { EventSink } from "../runtime/events";
 import type { ModuleLoader } from "../runtime/module-loader";
 import type { RuntimePlatform, StorageFactory, StorageFactoryOptions } from "../platform/types";
 import type { RuntimeStorage } from "../storage/types";
+import type { ConfigValueView, StateScopeOptions } from "../target/types";
 
-export type { RuntimePlatform, StorageFactory, StorageFactoryOptions };
+export type { ConfigValueView, RuntimePlatform, StateScopeOptions, StorageFactory, StorageFactoryOptions };
 
 /**
  * 宏包信息契约。
@@ -208,6 +209,8 @@ export interface ActionDockAppOptions {
   maxCallDepth?: number;
   /** 最大子任务数限制 */
   maxSubRuns?: number;
+  /** 执行宿主会话标识 */
+  hostSessionId?: string;
   /** 日志记录器 */
   logger?: Logger;
   /** 时钟源 */
@@ -249,16 +252,16 @@ export interface ActionDockApp {
   /** 静态查询并返回指定 Playbook 的规范内容与操作指南 */
   describePlaybook(id: string): Promise<PlaybookSpec>;
 
-  /** 同步执行指定 Action 并等待终态结果 */
+  /** 同步执行指定 Action 并等待终态结果（仅接受本包短标识） */
   runAction(
-    ref: ActionRef | string,
+    id: string,
     input: JsonValue,
     options?: ExecuteOptions
   ): Promise<ExecutionResult>;
 
-  /** 异步启动指定 Action 并立即返回任务执行票据 */
+  /** 异步启动指定 Action 并立即返回任务执行票据（仅接受本包短标识） */
   startAction(
-    ref: ActionRef | string,
+    id: string,
     input: JsonValue,
     options?: ExecuteOptions
   ): Promise<ExecutionTicket>;
@@ -275,20 +278,70 @@ export interface ActionDockApp {
     options?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number }
   ): AsyncIterable<ExecutionEvent>;
 
-  /** 获取指定配置项的值（按五层优先级链解析） */
-  getConfig(key: string): Promise<unknown>;
+  /** 列出当前包的所有配置安全视图 */
+  listConfig(): Promise<ConfigValueView[]>;
+
+  /** 获取指定配置项的安全视图（按五层优先级链解析） */
+  getConfig(key: string): Promise<ConfigValueView>;
 
   /** 写入持久化配置项 */
   setConfig(key: string, value: JsonValue): Promise<void>;
 
-  /** 获取持久化状态值 */
-  getState<T = JsonValue>(key: string, options?: StateOptions): Promise<T | undefined>;
+  /** 删除持久化配置项 */
+  deleteConfig(key: string): Promise<boolean>;
 
-  /** 写入持久化状态值 */
-  setState<T = JsonValue>(key: string, value: T, options?: StateOptions): Promise<void>;
+  /** 获取指定持久化状态值 */
+  getState<T extends JsonValue = JsonValue>(
+    key: string,
+    options?: StateScopeOptions
+  ): Promise<T | undefined>;
+  getState<T extends JsonValue = JsonValue>(
+    actionId: string,
+    key: string,
+    options?: StateScopeOptions
+  ): Promise<T | undefined>;
 
-  /** 删除持久化状态项 */
-  deleteState(key: string, options?: StateOptions): Promise<boolean>;
+  /** 写入指定持久化状态值 */
+  setState<T extends JsonValue = JsonValue>(
+    key: string,
+    value: T,
+    options?: StateScopeOptions
+  ): Promise<void>;
+  setState<T extends JsonValue = JsonValue>(
+    actionId: string,
+    key: string,
+    value: T,
+    options?: StateScopeOptions
+  ): Promise<void>;
+
+  /** 删除指定持久化状态项 */
+  deleteState(
+    key: string,
+    options?: StateScopeOptions
+  ): Promise<boolean>;
+  deleteState(
+    actionId: string,
+    key: string,
+    options?: StateScopeOptions
+  ): Promise<boolean>;
+
+  /** 列出所有状态键 */
+  listStateKeys(
+    options?: StateScopeOptions
+  ): Promise<string[]>;
+  listStateKeys(
+    actionId: string,
+    options?: StateScopeOptions
+  ): Promise<string[]>;
+
+  /** 清空指定持久化状态项 */
+  clearState(
+    options?: StateScopeOptions
+  ): Promise<number>;
+  clearState(
+    actionId: string,
+    options?: StateScopeOptions
+  ): Promise<number>;
 
   /** 优雅关闭应用并收尾清理所有底层资源 */
   close(options?: { graceMs?: number }): Promise<void>;

@@ -135,9 +135,9 @@ function calculateDirectoryDigest(dir: string): string {
 }
 
 /**
- * 生成独立 Node.js 启动入口脚本源码。
+ * 生成 Host 子进程入口脚本源码（负责运行 ActionDockHost，通过 Node IPC 暴露 Target）。
  */
-function generateNodeEntrySource(
+function generateNodeHostEntrySource(
   plan: ReturnType<typeof SelectionPlanner.prototype.plan>,
   relativeActionPaths: string[]
 ): string {
@@ -161,13 +161,91 @@ function generateNodeEntrySource(
     .join(",\n    ");
 
   return `#!/usr/bin/env node
-// AUTO-GENERATED ENTRYPOINT BY ACTIONDOCK BUILDER. DO NOT EDIT.
-import { createStandaloneRuntime } from "@actiondock/core";
+// AUTO-GENERATED HOST ENTRYPOINT BY ACTIONDOCK BUILDER. DO NOT EDIT.
+import {
+  createActionDockHost,
+  createActionDockTarget,
+  serveParentIpc,
+} from "@actiondock/core";
+import { createNodePlatform } from "@actiondock/runtime-node";
 ${imports}
 
-// 独立入口拒绝异步启动语义
-if (process.argv.includes("--async")) {
-  const isJson = process.argv.includes("--json");
+let dataDir;
+const configOverrides = {};
+const args = process.argv.slice(2);
+for (let i = 0; i < args.length; i++) {
+  if (args[i] === "--data-dir" && i + 1 < args.length) {
+    dataDir = args[++i];
+  } else if (args[i].startsWith("--data-dir=")) {
+    dataDir = args[i].slice(11);
+  } else if (args[i] === "--config" && i + 1 < args.length) {
+    const raw = args[++i];
+    const [k, ...v] = raw.split("=");
+    if (k) configOverrides[k] = v.join("=");
+  } else if (args[i].startsWith("--config=")) {
+    const raw = args[i].slice(9);
+    const [k, ...v] = raw.split("=");
+    if (k) configOverrides[k] = v.join("=");
+  }
+}
+
+const host = await createActionDockHost({
+  dataDir,
+  packages: [
+    {
+      dataDir,
+      configOverrides,
+      projectConfig: {
+        id: ${JSON.stringify(plan.packageId)},
+        name: ${JSON.stringify(plan.packageName)},
+        version: ${JSON.stringify(plan.version)},
+        description: ${JSON.stringify(plan.description || "")},
+        config: ${JSON.stringify(plan.configDefs || {})},
+      },
+      actions: [
+        ${actionItems}
+      ],
+    },
+  ],
+  platform: createNodePlatform({ dataDir }),
+});
+
+const target = await createActionDockTarget({ type: "local", host });
+await serveParentIpc(target);
+`;
+}
+
+/**
+ * 生成轻量监督父进程脚本源码（负责参数解析、诊断日志限流、退出码管理与标准输出隔离）。
+ */
+function generateNodeSupervisorEntrySource(
+  plan: ReturnType<typeof SelectionPlanner.prototype.plan>
+): string {
+  return `#!/usr/bin/env node
+// AUTO-GENERATED SUPERVISOR ENTRYPOINT BY ACTIONDOCK BUILDER. DO NOT EDIT.
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+import {
+  IpcActionDockTarget,
+  StandaloneDispatcher,
+  ExitCode,
+} from "@actiondock/core";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const METADATA = {
+  packageId: ${JSON.stringify(plan.packageId)},
+  version: ${JSON.stringify(plan.version)},
+  description: ${JSON.stringify(plan.description || "")},
+};
+
+const argv = process.argv.slice(2);
+
+// 1. 监督进程接管参数校验，明确拒绝 --async
+if (argv.includes("--async")) {
+  const isJson = argv.includes("--json") || argv.includes("--envelope");
   if (isJson) {
     console.log(
       JSON.stringify(
@@ -188,23 +266,85 @@ if (process.argv.includes("--async")) {
       "Error [STANDALONE_ASYNC_UNSUPPORTED]: Async execution is not supported in standalone single-execution binaries."
     );
   }
-  process.exit(1);
+  process.exit(ExitCode.FAILURE);
 }
 
-const app = createStandaloneRuntime({
-  packageId: ${JSON.stringify(plan.packageId)},
-  version: ${JSON.stringify(plan.version)},
-  description: ${JSON.stringify(plan.description || "")},
-  config: ${JSON.stringify(plan.configDefs || {})},
-  actions: [
-    ${actionItems}
-  ],
+// 2. 静态元数据快速返回
+if (argv.includes("-v") || argv.includes("-V") || argv.includes("--version") || argv[0] === "version") {
+  console.log(\`\${METADATA.packageId} v\${METADATA.version}\`);
+  process.exit(ExitCode.SUCCESS);
+}
+
+if (argv.includes("-h") || argv.includes("--help") || argv[0] === "help") {
+  console.log(\`\${METADATA.packageId} (v\${METADATA.version})\`);
+  if (METADATA.description) console.log(METADATA.description + "\\n");
+  console.log("Usage:");
+  console.log("  <cmd> list [--json]                         List available actions");
+  console.log("  <cmd> describe <id> [--json]                Show action details and schemas");
+  console.log("  <cmd> run <id> [--input '<json>']           Execute action with JSON input");
+  console.log("  <cmd> config list/get/set/delete            Manage package configuration");
+  console.log("  <cmd> state list/get/set/delete             Manage shared state store");
+  console.log("\\nGlobal options:");
+  console.log("  --data-dir <path>                           Custom runtime database directory");
+  console.log("  --config <KEY=val>                          Temporary config override");
+  process.exit(ExitCode.SUCCESS);
+}
+
+// 3. 建立物理隔离监督边界，启动运行 ActionDockHost 的独立子进程
+const hostScript = join(__dirname, "entry-host.js");
+const child = spawn(process.execPath, [hostScript, ...argv], {
+  cwd: process.cwd(),
+  env: process.env,
+  stdio: ["pipe", "pipe", "pipe", "ipc"],
 });
 
-app.run(process.argv.slice(2)).catch((err) => {
-  console.error(err);
-  process.exit(1);
+// 4. 标准输出通道物理隔离与受控限流排空
+const target = new IpcActionDockTarget({
+  childProcess: child,
+  maxDiagnosticBytes: 512 * 1024,
+  maxRateBytesPerSec: 64 * 1024,
+  diagnosticTarget: process.stderr,
 });
+
+let cleanedUp = false;
+const cleanup = async () => {
+  if (cleanedUp) return;
+  cleanedUp = true;
+  try {
+    await target.close();
+  } catch {}
+};
+
+process.once("SIGINT", async () => {
+  await cleanup();
+  process.exit(ExitCode.SIGINT);
+});
+
+process.once("SIGTERM", async () => {
+  await cleanup();
+  process.exit(143);
+});
+
+const dispatcher = new StandaloneDispatcher({
+  packageId: METADATA.packageId,
+  version: METADATA.version,
+  description: METADATA.description,
+  target,
+});
+
+try {
+  const exitCode = await dispatcher.dispatch(argv);
+  await cleanup();
+  process.exit(exitCode);
+} catch (err) {
+  if (err?.code === "HOST_PROCESS_EXITED") {
+    console.error("[Supervisor] Host process exited unexpectedly:", err.message);
+  } else {
+    console.error("[Supervisor] Error:", err?.message || err);
+  }
+  await cleanup();
+  process.exit(ExitCode.FAILURE);
+}
 `;
 }
 
@@ -362,6 +502,7 @@ export async function buildProject(options: BuildOptions): Promise<BuildResult> 
     // 准备锁定的生产依赖
     const productionDependencies: Record<string, string> = {
       "@actiondock/core": getInternalDepVersion(),
+      "@actiondock/runtime-node": getInternalDepVersion(),
     };
     for (const ext of plan.dependencies.external) {
       if (!ext.isDev) {
@@ -369,15 +510,15 @@ export async function buildProject(options: BuildOptions): Promise<BuildResult> 
       }
     }
 
-    // 生成部署用 package.json
+    // 生成部署用 package.json（指向监督父进程双入口体系）
     const deploymentPkg: Record<string, unknown> = {
       name: pkgSlug,
       version: plan.version,
       description: plan.description,
       type: "module",
-      main: "./entry.mjs",
+      main: "./entry-supervisor.js",
       bin: {
-        [pkgSlug]: "./entry.mjs",
+        [pkgSlug]: "./entry-supervisor.js",
       },
       engines: {
         node: ">=22.13.0",
@@ -399,12 +540,25 @@ export async function buildProject(options: BuildOptions): Promise<BuildResult> 
       copyFileSync(actiondockLock, join(stagingDir, "actiondock.lock.json"));
     }
 
-    // 生成启动入口 entry.mjs
-    const entryCode = generateNodeEntrySource(plan, relativeActionImports);
-    const entryPath = join(stagingDir, "entry.mjs");
-    writeFileSync(entryPath, entryCode, "utf-8");
+    // 生成 Host 子进程入口 entry-host.js
+    const hostCode = generateNodeHostEntrySource(plan, relativeActionImports);
+    const hostPath = join(stagingDir, "entry-host.js");
+    writeFileSync(hostPath, hostCode, "utf-8");
+
+    // 生成轻量监督父进程入口 entry-supervisor.js
+    const supervisorCode = generateNodeSupervisorEntrySource(plan);
+    const supervisorPath = join(stagingDir, "entry-supervisor.js");
+    writeFileSync(supervisorPath, supervisorCode, "utf-8");
+
+    // 生成兼容代理入口 entry.mjs，转接到 entry-supervisor.js
+    const forwarderCode = `#!/usr/bin/env node\n// AUTO-GENERATED ENTRYPOINT FORWARDER BY ACTIONDOCK BUILDER. DO NOT EDIT.\nimport "./entry-supervisor.js";\n`;
+    const forwarderPath = join(stagingDir, "entry.mjs");
+    writeFileSync(forwarderPath, forwarderCode, "utf-8");
+
     try {
-      chmodSync(entryPath, 0o755);
+      chmodSync(hostPath, 0o755);
+      chmodSync(supervisorPath, 0o755);
+      chmodSync(forwarderPath, 0o755);
     } catch {
       // 忽略部分平台权限设置异常
     }
@@ -495,6 +649,9 @@ export async function buildProject(options: BuildOptions): Promise<BuildResult> 
       engines: {
         node: ">=22.13.0",
       },
+      entrypoint: "entry-supervisor.js",
+      supervisorEntry: "entry-supervisor.js",
+      hostEntry: "entry-host.js",
       vendorDeps: Boolean(options.vendorDeps),
       allowInstallScripts: Boolean(options.allowInstallScripts),
       installScriptsRun: options.allowInstallScripts ? lifecycleScripts : [],
@@ -543,7 +700,7 @@ export async function buildProject(options: BuildOptions): Promise<BuildResult> 
   }
 
   const sha256 = calculateDirectoryDigest(outputDir);
-  const finalEntrypoint = join(outputDir, "entry.mjs");
+  const finalEntrypoint = join(outputDir, "entry-supervisor.js");
   const finalMetadata = join(outputDir, "artifact.json");
 
   return {

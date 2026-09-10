@@ -281,14 +281,12 @@ export class MemoryLogger implements Logger {
 export class ActionRuntimeError extends Error implements RuntimeError {
   public code: string;
   public details?: unknown;
-  public cause?: unknown;
 
   constructor(error: RuntimeError) {
     super(error.message);
     this.name = "ActionRuntimeError";
     this.code = error.code;
     this.details = error.details;
-    this.cause = error.cause;
     Object.setPrototypeOf(this, ActionRuntimeError.prototype);
   }
 }

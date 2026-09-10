@@ -264,6 +264,29 @@ export interface RemoteTargetOptions {
 }
 
 /**
+ * 监督进程 IPC 目标初始化选项。
+ */
+export interface IpcTargetOptions {
+  type?: "ipc";
+  /** 已启动的子进程实例（需具备 IPC 通道） */
+  childProcess?: any;
+  /** 待启动的脚本物理路径 */
+  scriptPath?: string;
+  /** 启动参数 */
+  scriptArgs?: string[];
+  /** 工作目录 */
+  cwd?: string;
+  /** 环境变量 */
+  env?: Record<string, string | undefined>;
+  /** 诊断流单流最大转发字节数 */
+  maxDiagnosticBytes?: number;
+  /** 诊断流每秒最大字节速率 */
+  maxDiagnosticRate?: number;
+  /** 诊断流目标输出 */
+  diagnosticTarget?: any;
+}
+
+/**
  * Target 统一工厂选项参数。
  */
-export type TargetOptions = LocalTargetOptions | RemoteTargetOptions;
+export type TargetOptions = LocalTargetOptions | RemoteTargetOptions | IpcTargetOptions;

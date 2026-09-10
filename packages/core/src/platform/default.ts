@@ -2,7 +2,6 @@ import type { ProcessAPI } from "@actiondock/sdk";
 import { type Clock, SystemClock } from "../runtime/clock";
 import { DefaultModuleLoader, type ModuleLoader } from "../runtime/module-loader";
 import { DefaultProcessExecutor } from "../runtime/process";
-import { launchHttpServer as coreLaunchHttpServer } from "../server/server";
 import {
   createGlobalStorage as coreCreateGlobalStorage,
   createStorage as coreCreateStorage,
@@ -12,7 +11,6 @@ import { NodeFileSystem } from "./node-fs";
 import type {
   FileSystem,
   GlobalStorageFactoryOptions,
-  HttpServerFactory,
   RuntimePlatform,
   StorageFactory,
   StorageFactoryOptions,
@@ -34,8 +32,6 @@ export interface DefaultPlatformOptions {
   modules?: ModuleLoader;
   /** 自定义存储工厂（默认基于 core/storage 构造） */
   storage?: StorageFactory;
-  /** 自定义 HTTP 服务工厂（默认使用 core/server launchHttpServer） */
-  http?: HttpServerFactory;
   /** 自定义 ActionDock 家目录 */
   customHome?: string;
   /** 自定义全局数据存储目录 */
@@ -78,23 +74,6 @@ export function createDefaultPlatform(options: DefaultPlatformOptions = {}): Run
     },
   };
 
-  const http: HttpServerFactory = options.http ?? {
-    launchHttpServer(serverOptions: any, ...rest: any[]): Promise<any> {
-      if (
-        typeof serverOptions === "object" &&
-        serverOptions !== null &&
-        !Array.isArray(serverOptions) &&
-        ("port" in serverOptions || "host" in serverOptions || "fetch" in serverOptions || "fetchHandler" in serverOptions)
-      ) {
-        const port = serverOptions.port ?? 5177;
-        const host = serverOptions.host ?? "127.0.0.1";
-        const fetchHandler = serverOptions.fetch || serverOptions.fetchHandler;
-        return coreLaunchHttpServer(port, host, fetchHandler);
-      }
-      return (coreLaunchHttpServer as any)(serverOptions, ...rest);
-    },
-  };
-
   return {
     name: platformName,
     clock,
@@ -102,6 +81,5 @@ export function createDefaultPlatform(options: DefaultPlatformOptions = {}): Run
     modules,
     process,
     storage,
-    http,
   };
 }

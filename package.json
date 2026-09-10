@@ -19,9 +19,11 @@
     "docs:serve": "bunx docsify-cli serve docs"
   },
   "dependencies": {
+    "@actiondock/builder": "^2.0.12",
     "@actiondock/cli": "^2.0.12",
     "@actiondock/core": "^2.0.12",
     "@actiondock/mcp": "^2.0.12",
+    "@actiondock/runtime-node": "^2.0.12",
     "@actiondock/sdk": "^2.0.12",
     "@modelcontextprotocol/server": "2.0.0",
     "@types/node": "^22.13.0"

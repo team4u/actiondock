@@ -375,16 +375,22 @@ Execute build and then deploy artifact.
 
     // 1. 读取默认配置
     const host = await app.getConfig("HOST");
-    expect(host).toBe("localhost");
+    expect(host.value).toBe("localhost");
+    expect(host.configured).toBe(false);
+    expect(host.source).toBe("default");
 
     // 2. 覆盖项优先于默认值
     const port = await app.getConfig("PORT");
-    expect(port).toBe(9000);
+    expect(port.value).toBe(9000);
+    expect(port.configured).toBe(true);
+    expect(port.source).toBe("package");
 
     // 3. 通过 setConfig 写入持久化配置
     await app.setConfig("DB_NAME", "actiondock_test");
     const dbName = await app.getConfig("DB_NAME");
-    expect(dbName).toBe("actiondock_test");
+    expect(dbName.value).toBe("actiondock_test");
+    expect(dbName.configured).toBe(true);
+    expect(dbName.source).toBe("package");
 
     await app.close();
   });
@@ -399,30 +405,26 @@ Execute build and then deploy artifact.
       inMemory: true,
     });
 
-    // 1. 根命名空间状态读写
-    await app.setState("counter", 42);
-    const val = await app.getState<number>("counter");
+    // 1. Action 命名空间状态读写
+    await app.setState("test-action", "counter", 42);
+    const val = await app.getState<number>("test-action", "counter");
     expect(val).toBe(42);
 
-    // 2. 指定命名空间状态读写
-    await app.setState("token", "secret-xyz", { namespace: "auth" });
-    const authVal = await app.getState<string>("token", { namespace: "auth" });
+    // 2. 指定子命名空间状态读写
+    await app.setState("test-action", "token", "secret-xyz", { namespace: "auth" });
+    const authVal = await app.getState<string>("test-action", "token", { namespace: "auth" });
     expect(authVal).toBe("secret-xyz");
 
-    // 3. 命名空间智能检索 (auth:token)
-    const smartVal = await app.getState<string>("auth:token");
-    expect(smartVal).toBe("secret-xyz");
-
-    // 4. 删除状态
-    const deletedAuth = await app.deleteState("token", { namespace: "auth" });
+    // 3. 删除子命名空间状态
+    const deletedAuth = await app.deleteState("test-action", "token", { namespace: "auth" });
     expect(deletedAuth).toBe(true);
-    const checkDeleted = await app.getState("token", { namespace: "auth" });
+    const checkDeleted = await app.getState("test-action", "token", { namespace: "auth" });
     expect(checkDeleted).toBeUndefined();
 
-    // 5. 智能删除
-    const deletedRoot = await app.deleteState("counter");
+    // 4. 删除 Action 根状态
+    const deletedRoot = await app.deleteState("test-action", "counter");
     expect(deletedRoot).toBe(true);
-    const checkRoot = await app.getState("counter");
+    const checkRoot = await app.getState("test-action", "counter");
     expect(checkRoot).toBeUndefined();
 
     await app.close();

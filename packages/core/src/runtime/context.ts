@@ -110,7 +110,15 @@ export class RuntimeStateStore implements StateStore {
   }
 
   async get<T = unknown>(key: string): Promise<T | undefined> {
-    return this.storage.getState<T>(this.namespace, key);
+    if (this.namespace) {
+      return this.storage.getState<T>(this.namespace, key);
+    }
+    const val = await this.storage.getState<T>("", key);
+    if (val !== undefined) {
+      return val;
+    }
+    const found = await this.storage.findState<T>(key);
+    return found?.value as T | undefined;
   }
 
   async set<T = unknown>(
@@ -185,6 +193,7 @@ export class StderrLogger implements Logger {
  * 创建 ActionContext 上下文所需的选项集合。
  */
 export interface ContextOptions {
+  actionId?: string;
   storage: RuntimeStorage;
   globalStorage?: RuntimeStorage;
   overrides?: Record<string, unknown>;

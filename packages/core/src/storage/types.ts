@@ -167,7 +167,10 @@ export interface RuntimeStorage {
   clearRuns(options?: { actionId?: string; status?: string }): number;
 
   /** 故障重启恢复：将遗留非终态运行收敛为 interrupted */
-  recoverRunningRuns?(): number | Promise<number>;
+  recoverRunningRuns?(currentHostSessionId?: string): number | Promise<number>;
+
+  /** 收敛死亡会话遗留的非终态运行任务 */
+  recoverDeadSessionRuns?(currentHostSessionId?: string): number | Promise<number>;
 
   /** 确保底层存储与 Schema 初始化完成 */
   ensureInitialized?(): Promise<void>;

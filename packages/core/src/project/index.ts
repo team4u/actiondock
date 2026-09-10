@@ -7,3 +7,4 @@ export * from "./manifest";
 export * from "./resolver";
 export * from "./transactions";
 export * from "./types";
+export * from "./types-generator";

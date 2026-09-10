@@ -1,73 +1,128 @@
 import { readFileSync } from "node:fs";
-import type { ActionDefinition } from "@actiondock/sdk";
-import { createActionDockApp, type ActionSpec } from "../app";
+import type { ActionDefinition, JsonValue } from "@actiondock/sdk";
+import type { ActionSpec } from "../app/types";
 import { filterWithFallbackInfo } from "../filter";
 import type { ConfigItemDefinition } from "../project/types";
+import { createActionDockTarget } from "../target/target";
+import type { ActionDockTarget } from "../target/types";
 import { parseDuration } from "../utils";
 
 /**
- * 独立编译可执行文件运行时的初始化选项。
+ * 退出状态码常量。
  */
-export interface StandaloneRuntimeOptions {
+export const ExitCode = {
+  SUCCESS: 0,
+  FAILURE: 1,
+  INVALID_ARGUMENT: 2,
+  SIGINT: 130,
+} as const;
+
+/**
+ * 独立二进制运行分发器配置选项。
+ */
+export interface StandaloneDispatcherOptions {
   /** 所属 Package ID */
   packageId: string;
   /** 版本号 */
   version: string;
   /** 描述信息 */
   description?: string;
-  /** 声明的配置依赖定义 */
+  /** 已构造的 ActionDockTarget 门面（若未传入则依据 actions/config 自动创建） */
+  target?: ActionDockTarget;
+  /** 声明的配置依赖定义（兼容选项） */
+  configDefs?: Record<string, ConfigItemDefinition>;
   config?: Record<string, ConfigItemDefinition>;
-  /** 打包内置的 Action 动作定义列表 */
-  actions:
+  /** 打包内置的 Action 动作定义列表（兼容选项） */
+  actions?:
     | Map<string, ActionDefinition>
     | Array<
         | ({ id: string; action: ActionDefinition } & Partial<ActionSpec>)
         | (ActionDefinition & { id: string })
       >
     | Record<string, ActionDefinition>;
+  /** 标准输出自定义拦截器 */
+  stdout?: (msg: string) => void;
+  /** 标准错误自定义拦截器 */
+  stderr?: (msg: string) => void;
+  /** 持久化数据库目录 */
+  dataDir?: string;
+  /** 自定义主目录 */
+  customHome?: string;
+  /** 是否使用纯内存存储 */
+  inMemory?: boolean;
 }
 
 /**
- * 独立二进制可执行文件运行时（Standalone Runtime）。
+ * 统一独立入口轻量参数解析分发器（StandaloneDispatcher）。
  * 
  * 职责：
- * 1. 作为由 `ad build` 编译生成的单文件独立可执行文件（Standalone Binary）的运行时入口。
- * 2. 保证与开发态（`ad run` / `ad action`）在输出信封、配置优先级、状态存储等方面的 100% 行为一致性。
- * 3. 自带轻量 CLI 分发器，支持 `list`, `describe`, `run`, `config`, `state`, `version`, `help` 子命令。
+ * 1. 负责轻量参数解析、诊断输出渲染与统一退出码管理。
+ * 2. 统一面向 ActionDockTarget 门面调用能力（支持本地 LocalTarget 与 IPC 监督隔离 Target）。
+ * 3. 严格遵循 ActionDock 2.0 输出协议约定：结果数据专走 stdout，日志与错误专走 stderr。
+ * 4. 独立入口拒绝异步启动语义，显式拦截并返回 STANDALONE_ASYNC_UNSUPPORTED。
  */
-export class StandaloneRuntime {
-  private packageId: string;
-  private version: string;
-  private description?: string;
-  private configDefs?: Record<string, ConfigItemDefinition>;
-  private actionsMap: Map<string, ActionDefinition>;
-  private actionSpecs: Record<string, ActionSpec>;
+export class StandaloneDispatcher {
+  private options: StandaloneDispatcherOptions;
+  private target?: ActionDockTarget;
+  private ownsTarget = false;
 
-  constructor(options: StandaloneRuntimeOptions) {
-    this.packageId = options.packageId;
-    this.version = options.version;
-    this.description = options.description;
-    this.configDefs = options.config;
-    this.actionsMap = new Map();
-    this.actionSpecs = {};
+  constructor(options: StandaloneDispatcherOptions) {
+    this.options = options;
+    if (options.target) {
+      this.target = options.target;
+      this.ownsTarget = false;
+    }
+  }
 
-    if (options.actions instanceof Map) {
-      for (const [k, v] of options.actions) {
-        this.actionsMap.set(k, v);
-        this.actionSpecs[k] = {
+  private writeOut(msg: string): void {
+    if (this.options.stdout) {
+      this.options.stdout(msg);
+    } else {
+      console.log(msg);
+    }
+  }
+
+  private writeErr(msg: string): void {
+    if (this.options.stderr) {
+      this.options.stderr(msg);
+    } else {
+      console.error(msg);
+    }
+  }
+
+  private async createLocalTarget(
+    dataDir?: string,
+    configOverrides: Record<string, unknown> = {}
+  ): Promise<{ target: ActionDockTarget; ownsTarget: boolean }> {
+    if (this.options.target) {
+      return { target: this.options.target, ownsTarget: false };
+    }
+
+    if (this.options.inMemory && (this.options as any)._sharedTarget) {
+      return { target: (this.options as any)._sharedTarget, ownsTarget: false };
+    }
+
+    const actionSpecs: Record<string, any> = {};
+    const actionsMap = new Map<string, ActionDefinition>();
+
+    const rawActions = this.options.actions;
+    if (rawActions instanceof Map) {
+      for (const [k, v] of rawActions) {
+        actionsMap.set(k, v);
+        actionSpecs[k] = {
           id: k,
           description: (v as any).description,
           inputSchema: (v as any).inputSchema,
           outputSchema: (v as any).outputSchema,
         };
       }
-    } else if (Array.isArray(options.actions)) {
-      for (const item of options.actions as any[]) {
+    } else if (Array.isArray(rawActions)) {
+      for (const item of rawActions as any[]) {
         const id = item.id;
         const act = item.action ?? item;
         if (id) {
-          this.actionsMap.set(id, act);
-          this.actionSpecs[id] = {
+          actionsMap.set(id, act);
+          actionSpecs[id] = {
             id,
             description: item.description ?? act.description,
             inputSchema: item.inputSchema ?? act.inputSchema,
@@ -75,10 +130,10 @@ export class StandaloneRuntime {
           };
         }
       }
-    } else {
-      for (const [k, v] of Object.entries(options.actions || {})) {
-        this.actionsMap.set(k, v);
-        this.actionSpecs[k] = {
+    } else if (typeof rawActions === "object" && rawActions !== null) {
+      for (const [k, v] of Object.entries(rawActions)) {
+        actionsMap.set(k, v);
+        actionSpecs[k] = {
           id: k,
           description: (v as any).description,
           inputSchema: (v as any).inputSchema,
@@ -86,26 +141,55 @@ export class StandaloneRuntime {
         };
       }
     }
+
+    const appOptions = {
+      projectConfig: {
+        id: this.options.packageId,
+        name: this.options.packageId,
+        version: this.options.version,
+        description: this.options.description,
+        config: this.options.config || this.options.configDefs,
+        actions: actionSpecs,
+      },
+      actions: actionsMap,
+      dataDir: dataDir || this.options.dataDir,
+      configOverrides,
+      customHome: this.options.customHome,
+      inMemory: this.options.inMemory,
+    };
+
+    const target = await createActionDockTarget({
+      type: "local",
+      appOptions,
+    });
+
+    if (this.options.inMemory) {
+      (this.options as any)._sharedTarget = target;
+      return { target, ownsTarget: false };
+    }
+
+    return { target, ownsTarget: true };
   }
 
   /**
-   * 解析命令行参数并执行对应的独立二进制子命令。
+   * 解析命令行参数并分发执行对应子命令。
    * 
-   * @param argv 命令行参数数组（通常为 process.argv.slice(2)）
+   * @param argv 命令行参数数组（如 process.argv.slice(2)）
+   * @returns 退出状态码（0: 成功, 1: 失败, 2: 参数错误, 130: 中断）
    */
-  async run(argv: string[]): Promise<void> {
+  async dispatch(argv: string[]): Promise<number> {
     const args = [...argv];
     let dataDir: string | undefined;
     const configOverrides: Record<string, unknown> = {};
 
-    // 提取全局参数（--data-dir 与 --config）
+    // 1. 提取全局参数（--data-dir, --config）
     const filteredArgs: string[] = [];
     for (let i = 0; i < args.length; i++) {
       const arg = args[i];
       if (arg === "--data-dir" && i + 1 < args.length) {
         dataDir = args[++i];
       } else if (arg.startsWith("--data-dir=")) {
-        dataDir = arg.split("=")[1];
+        dataDir = arg.slice(11);
       } else if (arg === "--config" && i + 1 < args.length) {
         const pair = args[++i];
         const [k, ...v] = pair.split("=");
@@ -122,352 +206,465 @@ export class StandaloneRuntime {
     const command = filteredArgs[0] || "help";
     const subArgs = filteredArgs.slice(1);
 
-    const app = await createActionDockApp({
-      projectConfig: {
-        id: this.packageId,
-        name: this.packageId,
-        version: this.version,
-        description: this.description,
-        config: this.configDefs,
-        actions: this.actionSpecs as any,
-      },
-      actions: this.actionsMap,
-      dataDir,
-      configOverrides,
-    });
+    // 2. 独立入口拒绝异步启动语义
+    if (args.includes("--async")) {
+      const isJson = args.includes("--json") || args.includes("--envelope");
+      if (isJson) {
+        this.writeOut(
+          JSON.stringify(
+            {
+              ok: false,
+              error: {
+                code: "STANDALONE_ASYNC_UNSUPPORTED",
+                message:
+                  "Async execution is not supported in standalone single-execution binaries. Use 'ad serve' or remote target.",
+              },
+            },
+            null,
+            2
+          )
+        );
+      } else {
+        this.writeErr(
+          "Error [STANDALONE_ASYNC_UNSUPPORTED]: Async execution is not supported in standalone single-execution binaries."
+        );
+      }
+      return ExitCode.FAILURE;
+    }
+
+    // 3. 版本与帮助快速处理（无需初始化 Host / Storage）
+    if (command === "-v" || command === "-V" || command === "--version" || command === "version") {
+      this.writeOut(`${this.options.packageId} v${this.options.version}`);
+      return ExitCode.SUCCESS;
+    }
+
+    if (command === "-h" || command === "--help" || command === "help") {
+      this.printHelp();
+      return ExitCode.SUCCESS;
+    }
+
+    let target: ActionDockTarget;
+    let ownsTarget = false;
+    try {
+      const targetRes = await this.createLocalTarget(dataDir, configOverrides);
+      target = targetRes.target;
+      ownsTarget = targetRes.ownsTarget;
+    } catch (err: any) {
+      this.writeErr(`Error initializing standalone target: ${err?.message || err}`);
+      return ExitCode.FAILURE;
+    }
+
+    const controller = new AbortController();
+    const sigintHandler = () => {
+      controller.abort(new Error("Interrupted by SIGINT"));
+    };
+    process.once("SIGINT", sigintHandler);
 
     try {
       switch (command) {
-        case "list": {
-          const json = subArgs.includes("--json");
-          const noFallback = subArgs.includes("--no-fallback");
-          let intent: string | undefined;
-          const positionalPatterns: string[] = [];
-
-          for (let i = 0; i < subArgs.length; i++) {
-            const arg = subArgs[i];
-            if (arg === "--intent" || arg === "-i") {
-              if (i + 1 < subArgs.length) intent = subArgs[++i];
-            } else if (arg.startsWith("--intent=")) {
-              intent = arg.slice(9);
-            } else if (arg.startsWith("-i=")) {
-              intent = arg.slice(3);
-            } else if (!arg.startsWith("-")) {
-              positionalPatterns.push(arg);
-            }
-          }
-
-          const effectiveIntent =
-            intent ||
-            (positionalPatterns.length > 0
-              ? positionalPatterns.join("|")
-              : undefined);
-
-          const actions = await app.listActions();
-          const list = actions.map((a) => ({
-            id: a.id,
-            description: a.description || "",
-          }));
-
-          const filterRes = filterWithFallbackInfo(
-            list,
-            effectiveIntent,
-            [(a) => a.id, (a) => a.description],
-            !noFallback
-          );
-
-          if (json) {
-            console.log(JSON.stringify(filterRes.items, null, 2));
-          } else {
-            console.log(`Actions in ${this.packageId} (v${this.version}):\n`);
-            for (const a of filterRes.items) {
-              console.log(`  ${a.id.padEnd(28)} ${a.description}`);
-            }
-          }
-          break;
-        }
-
+        case "list":
+          return await this.handleList(target, subArgs);
 
         case "describe":
-        case "show": {
-          const id = subArgs.find((a) => !a.startsWith("-"));
-          const json = subArgs.includes("--json");
-          if (!id) {
-            console.error("Error: Action ID is required for describe");
-            process.exit(1);
-          }
-          let action: ActionSpec | undefined;
-          try {
-            action = await app.describeAction(id);
-          } catch {
-            console.error(`Error: Action '${id}' not found`);
-            process.exit(1);
-          }
-          if (json) {
-            console.log(
-              JSON.stringify(
-                {
-                  id: action.id,
-                  description: action.description,
-                  inputSchema: action.inputSchema,
-                  outputSchema: action.outputSchema,
-                },
-                null,
-                2
-              )
-            );
-          } else {
-            console.log(`Action: ${action.id}`);
-            if (action.description) console.log(`Description: ${action.description}`);
-            if (action.inputSchema) {
-              console.log("\nInput Schema:");
-              console.log(JSON.stringify(action.inputSchema, null, 2));
-            }
-            if (action.outputSchema) {
-              console.log("\nOutput Schema:");
-              console.log(JSON.stringify(action.outputSchema, null, 2));
-            }
-          }
-          break;
+        case "show":
+          return await this.handleDescribe(target, subArgs);
+
+        case "run":
+          return await this.handleRun(target, subArgs, controller.signal);
+
+        case "config":
+          return await this.handleConfig(target, subArgs);
+
+        case "state":
+          return await this.handleState(target, subArgs);
+
+        default:
+          this.writeErr(`Unknown command: '${command}'`);
+          this.printHelp();
+          return ExitCode.INVALID_ARGUMENT;
+      }
+    } catch (err: any) {
+      if (err?.name === "AbortError" || controller.signal.aborted) {
+        return ExitCode.SIGINT;
+      }
+      this.writeErr(`Error: ${err?.message || err}`);
+      return ExitCode.FAILURE;
+    } finally {
+      process.removeListener("SIGINT", sigintHandler);
+      if (ownsTarget) {
+        await target.close();
+      }
+    }
+  }
+
+  private async handleList(target: ActionDockTarget, subArgs: string[]): Promise<number> {
+    const isJson = subArgs.includes("--json") || subArgs.includes("--envelope");
+    const useEnvelope = subArgs.includes("--envelope");
+    const noFallback = subArgs.includes("--no-fallback");
+    let intent: string | undefined;
+    const positionalPatterns: string[] = [];
+
+    for (let i = 0; i < subArgs.length; i++) {
+      const arg = subArgs[i];
+      if (arg === "--intent" || arg === "-i") {
+        if (i + 1 < subArgs.length) intent = subArgs[++i];
+      } else if (arg.startsWith("--intent=")) {
+        intent = arg.slice(9);
+      } else if (arg.startsWith("-i=")) {
+        intent = arg.slice(3);
+      } else if (!arg.startsWith("-")) {
+        positionalPatterns.push(arg);
+      }
+    }
+
+    const effectiveIntent =
+      intent || (positionalPatterns.length > 0 ? positionalPatterns.join("|") : undefined);
+
+    const actions = await target.listActions();
+    const list = actions.map((a) => ({
+      id: a.id,
+      description: a.description || "",
+    }));
+
+    const filterRes = filterWithFallbackInfo(
+      list,
+      effectiveIntent,
+      [(a) => a.id, (a) => a.description],
+      !noFallback
+    );
+
+    if (isJson) {
+      const payload = useEnvelope
+        ? { ok: true, data: filterRes.items }
+        : filterRes.items;
+      this.writeOut(JSON.stringify(payload, null, 2));
+    } else {
+      let text = `Actions in ${this.options.packageId} (v${this.options.version}):\n\n`;
+      for (const a of filterRes.items) {
+        text += `  ${a.id.padEnd(28)} ${a.description}\n`;
+      }
+      this.writeOut(text.trimEnd());
+    }
+    return ExitCode.SUCCESS;
+  }
+
+  private async handleDescribe(target: ActionDockTarget, subArgs: string[]): Promise<number> {
+    const id = subArgs.find((a) => !a.startsWith("-"));
+    const isJson = subArgs.includes("--json") || subArgs.includes("--envelope");
+    const useEnvelope = subArgs.includes("--envelope");
+
+    if (!id) {
+      this.writeErr("Error: Action ID is required for describe");
+      return ExitCode.INVALID_ARGUMENT;
+    }
+
+    let action: ActionSpec | undefined;
+    try {
+      action = await target.describeAction(id);
+    } catch {
+      this.writeErr(`Error: Action '${id}' not found`);
+      return ExitCode.INVALID_ARGUMENT;
+    }
+
+    const detail = {
+      id: action.id,
+      packageId: this.options.packageId,
+      description: action.description,
+      inputSchema: action.inputSchema,
+      outputSchema: action.outputSchema,
+    };
+
+    if (isJson) {
+      const payload = useEnvelope ? { ok: true, data: detail } : detail;
+      this.writeOut(JSON.stringify(payload, null, 2));
+    } else {
+      let text = `Action: ${action.id}\n`;
+      if (action.description) text += `Description: ${action.description}\n`;
+      if (action.inputSchema) {
+        text += `\nInput Schema:\n${JSON.stringify(action.inputSchema, null, 2)}\n`;
+      }
+      if (action.outputSchema) {
+        text += `\nOutput Schema:\n${JSON.stringify(action.outputSchema, null, 2)}\n`;
+      }
+      this.writeOut(text.trimEnd());
+    }
+    return ExitCode.SUCCESS;
+  }
+
+  private async handleRun(
+    target: ActionDockTarget,
+    subArgs: string[],
+    signal: AbortSignal
+  ): Promise<number> {
+    const id = subArgs.find((a) => !a.startsWith("-"));
+    if (!id) {
+      this.writeErr("Error: Action ID is required for run");
+      return ExitCode.INVALID_ARGUMENT;
+    }
+
+    let input: unknown = {};
+    let timeoutMs: number | undefined;
+
+    for (let i = 0; i < subArgs.length; i++) {
+      const arg = subArgs[i];
+      if (arg === "--timeout" && i + 1 < subArgs.length) {
+        timeoutMs = parseDuration(subArgs[++i]);
+      } else if (arg.startsWith("--timeout=")) {
+        timeoutMs = parseDuration(arg.slice(10));
+      } else if (arg === "--input" && i + 1 < subArgs.length) {
+        try {
+          input = JSON.parse(subArgs[++i]);
+        } catch (e: any) {
+          this.writeErr(`Error parsing --input JSON: ${e.message}`);
+          return ExitCode.INVALID_ARGUMENT;
         }
-
-        case "run": {
-          const id = subArgs.find((a) => !a.startsWith("-"));
-          if (!id) {
-            console.error("Error: Action ID is required for run");
-            process.exit(1);
-          }
-
-          let input: unknown = {};
-          let timeoutMs: number | undefined;
-
-          for (let i = 0; i < subArgs.length; i++) {
-            if (subArgs[i] === "--async") {
-              console.error(
-                "Error: Async execution is not supported in standalone single-execution binaries."
-              );
-              process.exit(1);
-            } else if (subArgs[i] === "--timeout" && i + 1 < subArgs.length) {
-              const raw = subArgs[++i];
-              timeoutMs = parseDuration(raw);
-            } else if (subArgs[i].startsWith("--timeout=")) {
-              timeoutMs = parseDuration(subArgs[i].slice(10));
-            } else if (subArgs[i] === "--input" && i + 1 < subArgs.length) {
-              try {
-                input = JSON.parse(subArgs[++i]);
-              } catch (e: any) {
-                console.error(`Error parsing --input JSON: ${e.message}`);
-                process.exit(1);
-              }
-            } else if (subArgs[i].startsWith("--input=")) {
-              try {
-                input = JSON.parse(subArgs[i].slice(8));
-              } catch (e: any) {
-                console.error(`Error parsing --input JSON: ${e.message}`);
-                process.exit(1);
-              }
-            } else if (subArgs[i] === "--input-file" && i + 1 < subArgs.length) {
-              try {
-                input = JSON.parse(readFileSync(subArgs[++i], "utf-8"));
-              } catch (e: any) {
-                console.error(`Error reading --input-file: ${e.message}`);
-                process.exit(1);
-              }
-            }
-          }
-
-          const controller = new AbortController();
-          const sigintHandler = () => {
-            controller.abort(new Error("Interrupted by SIGINT"));
-          };
-          process.once("SIGINT", sigintHandler);
-
-          try {
-            const result = await app.runAction(id, input as any, {
-              signal: controller.signal,
-              timeoutMs,
-            });
-            // Standard stdout JSON envelope
-            console.log(JSON.stringify(result, null, 2));
-            if (!result.ok) {
-              process.exit(1);
-            }
-          } finally {
-            process.removeListener("SIGINT", sigintHandler);
-          }
-          break;
+      } else if (arg.startsWith("--input=")) {
+        try {
+          input = JSON.parse(arg.slice(8));
+        } catch (e: any) {
+          this.writeErr(`Error parsing --input JSON: ${e.message}`);
+          return ExitCode.INVALID_ARGUMENT;
         }
-
-        case "config": {
-          const sub = subArgs[0] || "list";
-          if (sub === "list") {
-            const all = app.storage.listConfig();
-            console.log(JSON.stringify(all, null, 2));
-          } else if (sub === "get") {
-            const key = subArgs[1];
-            if (!key) {
-              console.error("Error: config key required");
-              process.exit(1);
-            }
-            const val = (await app.getConfig(key)) ?? app.storage.getConfig(key);
-            console.log(val !== undefined ? JSON.stringify(val) : "undefined");
-          } else if (sub === "set") {
-            const key = subArgs[1];
-            const rawVal = subArgs[2];
-            if (!key || rawVal === undefined) {
-              console.error("Error: key and value required");
-              process.exit(1);
-            }
-            let parsed: unknown = rawVal;
-            try {
-              parsed = JSON.parse(rawVal);
-            } catch {
-              parsed = rawVal;
-            }
-            await app.setConfig(key, parsed as any);
-            console.log(`Config '${key}' updated`);
-          } else if (sub === "delete") {
-            const key = subArgs[1];
-            if (!key) {
-              console.error("Error: config key required");
-              process.exit(1);
-            }
-            app.storage.deleteConfig(key);
-            console.log(`Config '${key}' deleted`);
-          }
-          break;
-        }
-
-        case "state": {
-          const sub = subArgs[0] || "list";
-          let namespace: string | undefined;
-          let isAll = false;
-          let isJson = false;
-
-          for (let i = 1; i < subArgs.length; i++) {
-            if ((subArgs[i] === "-n" || subArgs[i] === "--namespace") && i + 1 < subArgs.length) {
-              namespace = subArgs[++i];
-            } else if (subArgs[i].startsWith("--namespace=")) {
-              namespace = subArgs[i].slice(12);
-            } else if (subArgs[i] === "-a" || subArgs[i] === "--all") {
-              isAll = true;
-            } else if (subArgs[i] === "--json") {
-              isJson = true;
-            }
-          }
-
-          if (sub === "list") {
-            const prefix = subArgs[1] && !subArgs[1].startsWith("-") ? subArgs[1] : "";
-            const keys = await app.storage.listStateKeys(namespace !== undefined ? namespace : null, prefix);
-            console.log(JSON.stringify(keys, null, 2));
-          } else if (sub === "get") {
-            const key = subArgs[1] && !subArgs[1].startsWith("-") ? subArgs[1] : subArgs[2];
-            if (!key) {
-              console.error("Error: state key required");
-              process.exit(1);
-            }
-            let val: unknown;
-            if (namespace !== undefined) {
-              val = await app.getState(key, { namespace });
-            } else {
-              val = await app.getState(key);
-            }
-            if (isJson) {
-              console.log(JSON.stringify({ key, value: val }, null, 2));
-            } else {
-              console.log(val !== undefined ? JSON.stringify(val) : "undefined");
-            }
-          } else if (sub === "set") {
-            const key = subArgs[1];
-            const rawVal = subArgs[2];
-            if (!key || rawVal === undefined) {
-              console.error("Error: key and value required");
-              process.exit(1);
-            }
-
-            let ns = namespace || "";
-            let actualKey = key;
-            if (namespace === undefined && key.includes(":")) {
-              const colonIdx = key.indexOf(":");
-              ns = key.slice(0, colonIdx);
-              actualKey = key.slice(colonIdx + 1);
-            }
-
-            let parsed: unknown = rawVal;
-            try {
-              parsed = JSON.parse(rawVal);
-            } catch {
-              parsed = rawVal;
-            }
-
-            let ttl: number | undefined;
-            for (let i = 3; i < subArgs.length; i++) {
-              if (subArgs[i] === "--ttl" && i + 1 < subArgs.length) {
-                ttl = parseInt(subArgs[++i], 10);
-              } else if (subArgs[i].startsWith("--ttl=")) {
-                ttl = parseInt(subArgs[i].slice(6), 10);
-              }
-            }
-
-            await app.setState(actualKey, parsed as any, { namespace: ns, ttl });
-            const displayKey = ns ? `${ns}:${actualKey}` : actualKey;
-            console.log(`State '${displayKey}' updated`);
-          } else if (sub === "delete" || sub === "rm") {
-            const key = subArgs[1] && !subArgs[1].startsWith("-") ? subArgs[1] : subArgs[2];
-            if (!key) {
-              console.error("Error: state key required");
-              process.exit(1);
-            }
-            const deleted = await app.storage.deleteStateSmart(key, namespace);
-            if (deleted) {
-              console.log(`State '${key}' deleted`);
-            } else {
-              console.error(`Error: State key '${key}' not found`);
-              process.exit(1);
-            }
-          } else if (sub === "clear" || sub === "clean") {
-            const prefix = subArgs[1] && !subArgs[1].startsWith("-") ? subArgs[1] : "";
-            const count = await app.storage.clearState({
-              namespace,
-              all: isAll,
-              prefix: prefix || undefined,
-            });
-            console.log(`Cleared ${count} state entry(s)`);
-          }
-          break;
-        }
-
-        case "version":
-        case "-v":
-        case "--version": {
-          console.log(`${this.packageId} v${this.version}`);
-          break;
-        }
-
-        case "help":
-        default: {
-          console.log(`${this.packageId} (v${this.version})`);
-          if (this.description) console.log(`${this.description}\n`);
-          console.log("Usage:");
-          console.log("  <cmd> list [--json]                         List available actions");
-          console.log("  <cmd> describe <id> [--json]                Show action details and schemas");
-          console.log("  <cmd> run <id> [--input '<json>']           Execute action with JSON input");
-          console.log("  <cmd> config list/get/set/delete            Manage package configuration");
-          console.log("  <cmd> state list/get/set/delete             Manage shared state store");
-          console.log("\nGlobal options:");
-          console.log("  --data-dir <path>                           Custom runtime database directory");
-          console.log("  --config <KEY=val>                          Temporary config override");
-          break;
+      } else if (arg === "--input-file" && i + 1 < subArgs.length) {
+        try {
+          input = JSON.parse(readFileSync(subArgs[++i], "utf-8"));
+        } catch (e: any) {
+          this.writeErr(`Error reading --input-file: ${e.message}`);
+          return ExitCode.INVALID_ARGUMENT;
         }
       }
-    } finally {
-      await app.close();
+    }
+
+    const result = await target.runAction(id, input as JsonValue, {
+      signal,
+      timeoutMs,
+    });
+
+    this.writeOut(JSON.stringify(result, null, 2));
+    return result.ok ? ExitCode.SUCCESS : ExitCode.FAILURE;
+  }
+
+  private async handleConfig(target: ActionDockTarget, subArgs: string[]): Promise<number> {
+    const sub = subArgs[0] || "list";
+
+    if (sub === "list") {
+      const views = await target.listConfig(this.options.packageId);
+      const dict: Record<string, unknown> = {};
+      for (const v of views) {
+        if (v.configured && v.value !== undefined) {
+          dict[v.key] = v.value;
+        }
+      }
+      this.writeOut(JSON.stringify(dict, null, 2));
+      return ExitCode.SUCCESS;
+    }
+
+    if (sub === "get") {
+      const key = subArgs[1];
+      if (!key) {
+        this.writeErr("Error: config key required");
+        return ExitCode.INVALID_ARGUMENT;
+      }
+      try {
+        const item = await target.getConfig(this.options.packageId, key);
+        this.writeOut(item.configured ? JSON.stringify(item.value) : "undefined");
+        return ExitCode.SUCCESS;
+      } catch {
+        this.writeOut("undefined");
+        return ExitCode.SUCCESS;
+      }
+    }
+
+    if (sub === "set") {
+      const key = subArgs[1];
+      const rawVal = subArgs[2];
+      if (!key || rawVal === undefined) {
+        this.writeErr("Error: key and value required");
+        return ExitCode.INVALID_ARGUMENT;
+      }
+      let parsed: unknown = rawVal;
+      try {
+        parsed = JSON.parse(rawVal);
+      } catch {
+        parsed = rawVal;
+      }
+      await target.setConfig(this.options.packageId, key, parsed as any);
+      this.writeOut(`Config '${key}' updated`);
+      return ExitCode.SUCCESS;
+    }
+
+    if (sub === "delete") {
+      const key = subArgs[1];
+      if (!key) {
+        this.writeErr("Error: config key required");
+        return ExitCode.INVALID_ARGUMENT;
+      }
+      await target.deleteConfig(this.options.packageId, key);
+      this.writeOut(`Config '${key}' deleted`);
+      return ExitCode.SUCCESS;
+    }
+
+    this.writeErr(`Unknown config subcommand: '${sub}'`);
+    return ExitCode.INVALID_ARGUMENT;
+  }
+
+  private async handleState(target: ActionDockTarget, subArgs: string[]): Promise<number> {
+    const sub = subArgs[0] || "list";
+    let namespace: string | undefined;
+    let isAll = false;
+    let isJson = false;
+
+    for (let i = 1; i < subArgs.length; i++) {
+      if ((subArgs[i] === "-n" || subArgs[i] === "--namespace") && i + 1 < subArgs.length) {
+        namespace = subArgs[++i];
+      } else if (subArgs[i].startsWith("--namespace=")) {
+        namespace = subArgs[i].slice(12);
+      } else if (subArgs[i] === "-a" || subArgs[i] === "--all") {
+        isAll = true;
+      } else if (subArgs[i] === "--json") {
+        isJson = true;
+      }
+    }
+
+    if (sub === "list") {
+      const prefix = subArgs[1] && !subArgs[1].startsWith("-") ? subArgs[1] : "";
+      const keys = await target.listStateKeys(this.options.packageId, "", {
+        namespace,
+        prefix: prefix || undefined,
+        all: isAll,
+      });
+      this.writeOut(JSON.stringify(keys, null, 2));
+      return ExitCode.SUCCESS;
+    }
+
+    if (sub === "get") {
+      const key = subArgs[1] && !subArgs[1].startsWith("-") ? subArgs[1] : subArgs[2];
+      if (!key) {
+        this.writeErr("Error: state key required");
+        return ExitCode.INVALID_ARGUMENT;
+      }
+      let ns = namespace;
+      let actualKey = key;
+      if (ns === undefined && key.includes(":")) {
+        const colonIdx = key.indexOf(":");
+        ns = key.slice(0, colonIdx);
+        actualKey = key.slice(colonIdx + 1);
+      }
+      const val = await target.getState(this.options.packageId, "", actualKey, { namespace: ns });
+      if (isJson) {
+        this.writeOut(JSON.stringify({ key, value: val }, null, 2));
+      } else {
+        this.writeOut(val !== undefined ? JSON.stringify(val) : "undefined");
+      }
+      return ExitCode.SUCCESS;
+    }
+
+    if (sub === "set") {
+      const key = subArgs[1];
+      const rawVal = subArgs[2];
+      if (!key || rawVal === undefined) {
+        this.writeErr("Error: key and value required");
+        return ExitCode.INVALID_ARGUMENT;
+      }
+
+      let ns = namespace || "";
+      let actualKey = key;
+      if (namespace === undefined && key.includes(":")) {
+        const colonIdx = key.indexOf(":");
+        ns = key.slice(0, colonIdx);
+        actualKey = key.slice(colonIdx + 1);
+      }
+
+      let parsed: unknown = rawVal;
+      try {
+        parsed = JSON.parse(rawVal);
+      } catch {
+        parsed = rawVal;
+      }
+
+      let ttl: number | undefined;
+      for (let i = 3; i < subArgs.length; i++) {
+        if (subArgs[i] === "--ttl" && i + 1 < subArgs.length) {
+          ttl = parseInt(subArgs[++i], 10);
+        } else if (subArgs[i].startsWith("--ttl=")) {
+          ttl = parseInt(subArgs[i].slice(6), 10);
+        }
+      }
+
+      await target.setState(this.options.packageId, "", actualKey, parsed as any, { namespace: ns, ttl });
+      const displayKey = ns ? `${ns}:${actualKey}` : actualKey;
+      this.writeOut(`State '${displayKey}' updated`);
+      return ExitCode.SUCCESS;
+    }
+
+    if (sub === "delete" || sub === "rm") {
+      const key = subArgs[1] && !subArgs[1].startsWith("-") ? subArgs[1] : subArgs[2];
+      if (!key) {
+        this.writeErr("Error: state key required");
+        return ExitCode.INVALID_ARGUMENT;
+      }
+      const deleted = await target.deleteState(this.options.packageId, "", key, { namespace });
+      if (deleted) {
+        this.writeOut(`State '${key}' deleted`);
+        return ExitCode.SUCCESS;
+      }
+      this.writeErr(`Error: State key '${key}' not found`);
+      return ExitCode.FAILURE;
+    }
+
+    if (sub === "clear" || sub === "clean") {
+      const prefix = subArgs[1] && !subArgs[1].startsWith("-") ? subArgs[1] : "";
+      const count = await target.clearState(this.options.packageId, "", {
+        namespace,
+        all: isAll,
+        prefix: prefix || undefined,
+      });
+      this.writeOut(`Cleared ${count} state entry(s)`);
+      return ExitCode.SUCCESS;
+    }
+
+    this.writeErr(`Unknown state subcommand: '${sub}'`);
+    return ExitCode.INVALID_ARGUMENT;
+  }
+
+  private printHelp(): void {
+    this.writeOut(`${this.options.packageId} (v${this.options.version})`);
+    if (this.options.description) this.writeOut(`${this.options.description}\n`);
+    this.writeOut("Usage:");
+    this.writeOut("  <cmd> list [--json]                         List available actions");
+    this.writeOut("  <cmd> describe <id> [--json]                Show action details and schemas");
+    this.writeOut("  <cmd> run <id> [--input '<json>']           Execute action with JSON input");
+    this.writeOut("  <cmd> config list/get/set/delete            Manage package configuration");
+    this.writeOut("  <cmd> state list/get/set/delete             Manage shared state store");
+    this.writeOut("\nGlobal options:");
+    this.writeOut("  --data-dir <path>                           Custom runtime database directory");
+    this.writeOut("  --config <KEY=val>                          Temporary config override");
+  }
+}
+
+/**
+ * 独立二进制可执行文件运行时（兼容门面包装）。
+ */
+export interface StandaloneRuntimeOptions extends StandaloneDispatcherOptions {}
+
+export class StandaloneRuntime {
+  private dispatcher: StandaloneDispatcher;
+
+  constructor(options: StandaloneRuntimeOptions) {
+    this.dispatcher = new StandaloneDispatcher(options);
+  }
+
+  async run(argv: string[]): Promise<void> {
+    const code = await this.dispatcher.dispatch(argv);
+    if (code !== ExitCode.SUCCESS && code !== ExitCode.FAILURE) {
+      process.exit(code);
     }
   }
 }
 
-export function createStandaloneRuntime(
-  options: StandaloneRuntimeOptions
-): StandaloneRuntime {
+/**
+ * 工厂函数：创建独立运行时实例。
+ */
+export function createStandaloneRuntime(options: StandaloneRuntimeOptions): StandaloneRuntime {
   return new StandaloneRuntime(options);
 }

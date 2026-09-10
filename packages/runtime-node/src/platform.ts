@@ -9,7 +9,6 @@ import {
   type Clock,
   type FileSystem,
   type GlobalStorageFactoryOptions,
-  type HttpServerFactory,
   type ModuleLoader,
   type RuntimePlatform,
   type RuntimeStorage,
@@ -17,7 +16,6 @@ import {
   type StorageFactory,
   type StorageFactoryOptions,
 } from "@actiondock/core";
-import { NodeHttpServer } from "./http-server";
 import { NodeModuleLoader, TsxModuleLoader } from "./module-loader";
 import { ExecaProcessExecutor, NodeProcessExecutor } from "./process-executor";
 import { NodeSqliteDriver, WorkerSqliteDriver } from "./sqlite-driver";
@@ -32,7 +30,7 @@ export interface NodePlatformOptions {
   customHome?: string;
   /** 文件系统安全沙箱根路径 */
   rootDir?: string;
-  /** 是否启用专用工作线程存储驱动（默认为 false，可在生产环境启用 worker_threads 非阻塞存储） */
+  /** 是否启用专用工作线程存储驱动（默认为 true，可在生产环境启用 worker_threads 非阻塞存储） */
   useWorker?: boolean;
   /** 自定义 SQLite 驱动工厂函数（默认实例化 NodeSqliteDriver 或 WorkerSqliteDriver） */
   driverFactory?: (dbPath: string) => SqliteDriver;
@@ -69,10 +67,11 @@ export function createNodePlatform(options: NodePlatformOptions = {}): RuntimePl
   const modules: ModuleLoader = new NodeModuleLoader();
   const process = new NodeProcessExecutor();
 
+  const useWorker = options.useWorker ?? true;
   const createDriver =
     options.driverFactory ??
     ((dbPath: string) =>
-      options.useWorker ? new WorkerSqliteDriver(dbPath) : new NodeSqliteDriver(dbPath));
+      useWorker ? new WorkerSqliteDriver(dbPath) : new NodeSqliteDriver(dbPath));
 
   const storage: StorageFactory = {
     createStorage(packageId: string, opts?: StorageFactoryOptions): RuntimeStorage {
@@ -111,43 +110,6 @@ export function createNodePlatform(options: NodePlatformOptions = {}): RuntimePl
     },
   };
 
-  const http: HttpServerFactory = {
-    async launchHttpServer(serverOptions: any, ...rest: any[]): Promise<any> {
-      let port = 5177;
-      let host = "127.0.0.1";
-      let fetchHandler: (req: Request) => Promise<Response> | Response;
-
-      if (
-        typeof serverOptions === "object" &&
-        serverOptions !== null &&
-        !Array.isArray(serverOptions)
-      ) {
-        port = serverOptions.port ?? 5177;
-        host = serverOptions.host ?? "127.0.0.1";
-        fetchHandler = serverOptions.fetch || serverOptions.fetchHandler;
-      } else {
-        port = typeof serverOptions === "number" ? serverOptions : 5177;
-        host = typeof rest[0] === "string" ? rest[0] : "127.0.0.1";
-        fetchHandler = typeof rest[1] === "function" ? rest[1] : rest[0];
-      }
-
-      const server = new NodeHttpServer({
-        port,
-        host,
-        fetch: fetchHandler,
-      });
-      await server.listen(port, host);
-      return {
-        get port() {
-          return server.port;
-        },
-        ready: Promise.resolve(),
-        stop: () => server.stop(),
-        rawServer: server.rawServer,
-      };
-    },
-  };
-
   return {
     name: "node",
     clock,
@@ -155,6 +117,5 @@ export function createNodePlatform(options: NodePlatformOptions = {}): RuntimePl
     modules,
     process,
     storage,
-    http,
   };
 }

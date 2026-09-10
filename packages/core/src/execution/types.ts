@@ -42,6 +42,8 @@ export interface ExecuteOptions {
   process?: ProcessAPI;
   /** 可选的底层运行平台契约 */
   platform?: RuntimePlatform;
+  /** 执行宿主会话标识 */
+  hostSessionId?: string;
 }
 
 /**
@@ -49,6 +51,7 @@ export interface ExecuteOptions {
  */
 export interface ExecutionServiceOptions {
   packageId: string;
+  hostSessionId?: string;
   storage?: RuntimeStorage;
   globalStorage?: RuntimeStorage;
   projectRoot?: string;

@@ -100,6 +100,8 @@ export type ProjectConfig = ActionDockManifest;
 export interface PlaybookDefinition {
   /** Playbook 唯一标识符（例如 "review-pr"） */
   id: string;
+  /** Playbook 显示名称 */
+  name?: string;
   /** Playbook 任务描述 */
   description?: string;
   /** 该 Playbook 所依赖/调用的 Action ID 列表 */

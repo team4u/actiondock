@@ -21,18 +21,21 @@ import { loadManifest } from "../project/manifest";
 import type { ProjectConfig } from "../project/types";
 import { RuntimeConfig } from "../runtime/context";
 import { createGlobalStorage, createStorage } from "../storage";
+import { isSecretConfigKey } from "../storage/mask";
 import { decodeStateKey, SqliteRuntimeStorage } from "../storage/sqlite";
 import type { RuntimeStorage } from "../storage/types";
+import { resolveEnvValue } from "../runtime/env";
 import type {
   ActionDockApp,
   ActionDockAppOptions,
   ActionSpec,
   ActionSummary,
+  ConfigValueView,
   ListActionsOptions,
   PackageInfo,
   PlaybookSpec,
   PlaybookSummary,
-  StateOptions,
+  StateScopeOptions,
   StorageFactoryOptions,
 } from "./types";
 
@@ -162,6 +165,7 @@ export class DefaultActionDockApp implements ActionDockApp {
     // 6. 初始化唯一执行协调服务
     this.executionService = new DefaultExecutionService({
       packageId: this.packageId,
+      hostSessionId: options.hostSessionId,
       storage: this.storage,
       globalStorage: this.globalStorage,
       projectRoot: this.packageRoot,
@@ -461,19 +465,39 @@ export class DefaultActionDockApp implements ActionDockApp {
   }
 
   async runAction(
-    ref: ActionRef | string,
+    id: string,
     input: JsonValue,
     options?: ExecuteOptions
   ): Promise<ExecutionResult> {
-    return this.executionService.execute(ref, input, options);
+    let actionId = id;
+    if (actionId.includes("/")) {
+      if (actionId.startsWith(`${this.packageId}/`)) {
+        actionId = actionId.slice(this.packageId.length + 1);
+      } else {
+        throw new Error(
+          `ActionDockApp only accepts local action short ID '${id}'. Cross-package invocations must be dispatched via Host invoker.`
+        );
+      }
+    }
+    return this.executionService.execute(actionId, input, options);
   }
 
   async startAction(
-    ref: ActionRef | string,
+    id: string,
     input: JsonValue,
     options?: ExecuteOptions
   ): Promise<ExecutionTicket> {
-    return this.executionService.start(ref, input, options);
+    let actionId = id;
+    if (actionId.includes("/")) {
+      if (actionId.startsWith(`${this.packageId}/`)) {
+        actionId = actionId.slice(this.packageId.length + 1);
+      } else {
+        throw new Error(
+          `ActionDockApp only accepts local action short ID '${id}'. Cross-package invocations must be dispatched via Host invoker.`
+        );
+      }
+    }
+    return this.executionService.start(actionId, input, options);
   }
 
   async getRun(runId: string): Promise<RunRecord | undefined> {
@@ -491,42 +515,245 @@ export class DefaultActionDockApp implements ActionDockApp {
     return this.executionService.events(runId, options);
   }
 
-  async getConfig(key: string): Promise<unknown> {
-    return this.runtimeConfig.get(key);
+  async listConfig(): Promise<ConfigValueView[]> {
+    const declared = this.projectConfig.config || {};
+    const stored = this.storage.listConfig();
+    const allKeys = Array.from(new Set([...Object.keys(declared), ...Object.keys(stored)]));
+    const views: ConfigValueView[] = [];
+    for (const key of allKeys) {
+      const item = await this.getConfig(key);
+      if (item) {
+        views.push(item);
+      }
+    }
+    return views;
+  }
+
+  async getConfig(key: string): Promise<ConfigValueView> {
+    const itemDef = this.projectConfig.config?.[key];
+    const isSecret = isSecretConfigKey(key, itemDef);
+
+    let source = "default";
+    let resolvedVal: unknown = undefined;
+    let configured = false;
+
+    const overrides = (this.runtimeConfig as any)?.overrides || (this as any).options?.configOverrides;
+    if (overrides && (overrides.has ? overrides.has(key) : key in overrides)) {
+      source = "package";
+      resolvedVal = overrides.get ? overrides.get(key) : overrides[key];
+      configured = true;
+    } else {
+      const storedVal = this.storage.getConfig(key);
+      if (storedVal !== undefined) {
+        source = "package";
+        resolvedVal = storedVal;
+        configured = true;
+      } else {
+        let globalVal: unknown = undefined;
+        try {
+          globalVal = this.globalStorage?.getConfig(key);
+        } catch {
+          // 忽略全局存储读取异常
+        }
+        if (globalVal !== undefined) {
+          source = "global";
+          resolvedVal = globalVal;
+          configured = true;
+        } else {
+          const envResolved = resolveEnvValue(key, itemDef, this.packageId);
+          if (envResolved !== undefined) {
+            source = "env";
+            resolvedVal = envResolved.value;
+            configured = true;
+          } else if (itemDef?.default !== undefined) {
+            source = "default";
+            resolvedVal = itemDef.default;
+            configured = false;
+          }
+        }
+      }
+    }
+
+    return {
+      key,
+      configured,
+      secret: isSecret,
+      source,
+      value: isSecret ? undefined : (resolvedVal as JsonValue),
+    };
   }
 
   async setConfig(key: string, value: JsonValue): Promise<void> {
     this.storage.setConfig(key, value);
   }
 
-  async getState<T = JsonValue>(key: string, options?: StateOptions): Promise<T | undefined> {
-    if (options?.namespace !== undefined) {
-      return this.storage.getState<T>(options.namespace, key);
+  async deleteConfig(key: string): Promise<boolean> {
+    return this.storage.deleteConfig(key);
+  }
+
+  async getState<T extends JsonValue = JsonValue>(
+    actionIdOrKey: string,
+    keyOrOptions?: string | StateScopeOptions,
+    options?: StateScopeOptions
+  ): Promise<T | undefined> {
+    let actionId: string;
+    let key: string;
+    let opts: StateScopeOptions | undefined;
+
+    if (typeof keyOrOptions === "string") {
+      actionId = actionIdOrKey;
+      key = keyOrOptions;
+      opts = options;
+    } else {
+      actionId = "";
+      key = actionIdOrKey;
+      opts = keyOrOptions;
+    }
+
+    const ns = actionId
+      ? (opts?.namespace ? `${actionId}:${opts.namespace}` : actionId)
+      : (opts?.namespace ?? "");
+
+    if (opts?.detail) {
+      const entry = await this.storage.findState(key, ns || undefined);
+      return entry as unknown as T;
+    }
+    if (ns) {
+      const val = await this.storage.getState<T>(ns, key);
+      if (val !== undefined) return val;
+      const rootVal = await this.storage.getState<T>("", key);
+      if (rootVal !== undefined) return rootVal;
+      const entry = await this.storage.findState<T>(key);
+      return entry?.value as T | undefined;
     }
     const entry = await this.storage.findState<T>(key);
     return entry?.value as T | undefined;
   }
 
-  async setState<T = JsonValue>(key: string, value: T, options?: StateOptions): Promise<void> {
-    let namespace = options?.namespace;
-    let targetKey = key;
-    if (namespace === undefined) {
-      try {
-        const decoded = decodeStateKey(key);
-        namespace = decoded.namespace;
-        targetKey = decoded.key;
-      } catch {
-        namespace = "";
-      }
+  async setState<T extends JsonValue = JsonValue>(
+    actionIdOrKey: string,
+    keyOrValue: any,
+    valueOrOptions?: any,
+    options?: StateScopeOptions
+  ): Promise<void> {
+    let actionId: string;
+    let key: string;
+    let value: T;
+    let opts: StateScopeOptions | undefined;
+
+    if (typeof keyOrValue === "string" && options !== undefined) {
+      actionId = actionIdOrKey;
+      key = keyOrValue;
+      value = valueOrOptions;
+      opts = options;
+    } else if (typeof keyOrValue === "string" && valueOrOptions !== undefined && (typeof valueOrOptions !== "object" || valueOrOptions === null || Array.isArray(valueOrOptions) || !("namespace" in valueOrOptions || "ttl" in valueOrOptions))) {
+      actionId = actionIdOrKey;
+      key = keyOrValue;
+      value = valueOrOptions;
+      opts = options;
+    } else {
+      actionId = "";
+      key = actionIdOrKey;
+      value = keyOrValue;
+      opts = valueOrOptions;
     }
-    await this.storage.setState<T>(namespace, targetKey, value, options?.ttl);
+
+    const ns = actionId
+      ? (opts?.namespace ? `${actionId}:${opts.namespace}` : actionId)
+      : (opts?.namespace ?? "");
+
+    if (ns) {
+      await this.storage.setState<T>(ns, key, value, opts?.ttl);
+      return;
+    }
+
+    let targetKey = key;
+    let targetNs = "";
+    try {
+      const decoded = decodeStateKey(key);
+      targetNs = decoded.namespace;
+      targetKey = decoded.key;
+    } catch {
+      targetNs = "";
+    }
+    await this.storage.setState<T>(targetNs, targetKey, value, opts?.ttl);
   }
 
-  async deleteState(key: string, options?: StateOptions): Promise<boolean> {
-    if (options?.namespace !== undefined) {
-      return this.storage.deleteState(options.namespace, key);
+  async deleteState(
+    actionIdOrKey: string,
+    keyOrOptions?: string | StateScopeOptions,
+    options?: StateScopeOptions
+  ): Promise<boolean> {
+    let actionId: string;
+    let key: string;
+    let opts: StateScopeOptions | undefined;
+
+    if (typeof keyOrOptions === "string") {
+      actionId = actionIdOrKey;
+      key = keyOrOptions;
+      opts = options;
+    } else {
+      actionId = "";
+      key = actionIdOrKey;
+      opts = keyOrOptions;
+    }
+
+    const ns = actionId
+      ? (opts?.namespace ? `${actionId}:${opts.namespace}` : actionId)
+      : (opts?.namespace ?? "");
+
+    if (ns) {
+      const deleted = await this.storage.deleteState(ns, key);
+      if (deleted) return true;
+      return this.storage.deleteStateSmart(key);
     }
     return this.storage.deleteStateSmart(key);
+  }
+
+  async listStateKeys(
+    actionIdOrOptions?: string | StateScopeOptions,
+    options?: StateScopeOptions
+  ): Promise<string[]> {
+    let actionId: string;
+    let opts: StateScopeOptions | undefined;
+
+    if (typeof actionIdOrOptions === "string") {
+      actionId = actionIdOrOptions;
+      opts = options;
+    } else {
+      actionId = "";
+      opts = actionIdOrOptions;
+    }
+
+    const ns = actionId
+      ? (opts?.namespace ? `${actionId}:${opts.namespace}` : actionId)
+      : (opts?.namespace ?? null);
+    return this.storage.listStateKeys(ns, opts?.prefix);
+  }
+
+  async clearState(
+    actionIdOrOptions?: string | StateScopeOptions,
+    options?: StateScopeOptions
+  ): Promise<number> {
+    let actionId: string;
+    let opts: StateScopeOptions | undefined;
+
+    if (typeof actionIdOrOptions === "string") {
+      actionId = actionIdOrOptions;
+      opts = options;
+    } else {
+      actionId = "";
+      opts = actionIdOrOptions;
+    }
+
+    const ns = actionId
+      ? (opts?.namespace ? `${actionId}:${opts.namespace}` : actionId)
+      : (opts?.namespace ?? undefined);
+    return this.storage.clearState({
+      namespace: ns,
+      prefix: opts?.prefix,
+      all: opts?.all,
+    });
   }
 
   async close(options?: { graceMs?: number }): Promise<void> {
