@@ -385,7 +385,7 @@ describe("@actiondock/sdk", () => {
     });
 
     // 1. 成功执行
-    const res = await runtime.run(execAction, { command: "bun", args: ["--version"] });
+    const res = await runtime.run(execAction, { command: "node", args: ["--version"] });
     expect(res.ok).toBe(true);
     expect(res.exitCode).toBe(0);
     expect(res.stdout.length).toBeGreaterThan(0);
@@ -451,7 +451,7 @@ describe("@actiondock/sdk", () => {
     const controller = new AbortController();
     controller.abort();
     const aborted = await runtime.run(execAction, {
-      command: "bun",
+      command: "node",
       args: ["--version"],
       options: { signal: controller.signal },
     });

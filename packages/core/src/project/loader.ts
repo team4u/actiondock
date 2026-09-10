@@ -129,17 +129,7 @@ export function getInstallCommand(projectRoot?: string): string[] {
     ];
     for (const [lockFile, pm] of lockfileMap) {
       if (existsSync(join(projectRoot, lockFile))) {
-        try {
-          const check = spawnSync(pm, ["--version"], {
-            stdio: "pipe",
-            shell: false,
-          });
-          if (check.status === 0) {
-            return [pm, "install"];
-          }
-        } catch {
-          // 忽略并继续检查下一个候选
-        }
+        return [pm, "install"];
       }
     }
   }
