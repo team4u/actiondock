@@ -174,7 +174,7 @@ App 的 `runAction` 和 `startAction` 只接受本包短 ID。Action 内部需�
 
 - 从当前项目 Manifest、锁文件和显式开发覆盖解析已声明的包，建立包 ID 到包实例的索引；不遍历并暴露 `node_modules` 中所有可见包。
 - 校验包 ID 冲突、锁文件完整性、Manifest 摘要和运行时兼容性。
-- 区分对外可见包与仅供依赖闭包使用的内部包；Target 只能发现和根调用当前包、直接依赖或宿主显式公开的包。
+- 区分对外可见包、由可见 Playbook 委托的精确 Action 与仅供依赖闭包使用的内部能力；Target 只能发现和根调用明确落入这些范围的能力。
 - 按完全限定引用路由到目标 App，并在调用前验证调用者的 `uses` 声明。
 - 管理根运行、父子运行、跨包事件关联、全局并发配额、调用深度和子任务数量。
 - 持有 Host 级 `RunRepository` 和事件序列，为全局唯一的 `runId` 建立包、Action 与父子关系索引。
@@ -511,7 +511,7 @@ Playbook 文件是没有 frontmatter 的 Markdown。其元数据、入口和 Act
 - 包管理器锁文件和 `actiondock.lock.json` 共同指定的精确实例、来源和完整性摘要。
 - 仅在开发命令显式启用时使用 `ad link` 的本地覆盖。链接信息属于开发状态，不写入可移植产物，也不能替代发布依赖。
 
-索引包含完整传递依赖闭包，但不会自动把闭包中的每个包暴露为 Target 能力。当前包、`actiondock.json.dependencies` 中的直接依赖和宿主显式配置的公开包可以被列出和根调用；仅作为传递依赖进入索引的包默认只能承接已声明的 `uses`。需要直接运行某个传递包时，用户通过 `ad add` 把它提升为当前项目的直接依赖。
+索引包含完整传递依赖闭包，但不会自动把闭包中的每个包暴露为 Target 能力。当前包、`actiondock.json.dependencies` 中的直接依赖和宿主显式配置的公开包可以被列出和根调用。可见 Playbook 在 `actions` 中引用的传递 Action 也作为精确的委托能力对外可见，使 Agent 能实际执行该规程；这只公开被点名的 Action，不公开目标包的其他能力。除此之外，仅作为传递依赖进入索引的包默认只能承接已声明的 `uses`。需要任意直接运行某个传递包时，用户通过 `ad add` 把它提升为当前项目的直接依赖。
 
 运行期间不根据 `uses` 自动从网络下载包。缺少安装包时，解析器返回可诊断错误并提示安装入口，例如 `ad add @someone/actiondock-github-actions`；它不会静默使用全局目录或旧版本。
 
@@ -531,7 +531,7 @@ ad run someone.github-actions/get-pr --input '{"repo":"team4u/action-dock","pull
 
 `ad new action` 和 `ad new playbook` 复用同一项目修改锁与文件事务，使源码或正文、Manifest 和已有生成类型一起提交；任何一步失败都恢复原文件。`ad generate types` 先在临时文件完成生成与类型检查，再原子替换目标文件。`ad validate` 始终只读，不借校验之名修复或同步项目。
 
-`ad remove` 在修改前检查反向 `uses` 和 Playbook 引用；仍有调用者时返回依赖冲突，不提供静默级联删除。同一 Host 对一个逻辑包 ID 只允许一个解析版本。直接或传递版本范围无法收敛时返回 `ACTION_PACKAGE_VERSION_CONFLICT`，不能依赖 `node_modules` 的嵌套结构随机选择一个实例。
+`ad remove` 在修改前检查反向 `uses` 和 Playbook 引用；仍有调用者时返回依赖冲突，不提供静默级联删除。命令报告将保留的包配置和状态命名空间，但不在依赖删除事务中顺带清理它们。同一 Host 对一个逻辑包 ID 只允许一个解析版本。直接或传递版本范围无法收敛时返回 `ACTION_PACKAGE_VERSION_CONFLICT`，不能依赖 `node_modules` 的嵌套结构随机选择一个实例。
 
 Action 内部级联调用使用相同的完全限定 ID：
 
@@ -574,9 +574,9 @@ const result = await ctx.actions.invoke("someone.github-actions/get-pr", input);
 
 外部调用与 Action 内部级联调用采用不同的授权依据：
 
-- 用户通过 CLI、HTTP 或 MCP 发起的根调用没有“调用者 Action”，因此不要求某个本地 Action 的 `uses`。目标包必须是当前包、当前项目的直接依赖、构建选择集的公开根或宿主显式公开包，并且调用方具有该 Target 的执行权限；仅因传递依赖而进入内部索引并不足以获得根调用权限。
+- 用户通过 CLI、HTTP 或 MCP 发起的根调用没有“调用者 Action”，因此不要求某个本地 Action 的 `uses`。目标必须属于当前包、当前项目的直接依赖、构建选择集的公开根、宿主显式公开包，或可见 Playbook 点名委托的精确 Action，并且调用方具有该 Target 的执行权限；仅因传递依赖而进入内部索引并不足以获得根调用权限。
 - Action 通过 `ctx.actions.invoke` 发起级联调用时，Host 必须检查当前调用者 Action 自己的 `uses`。即使目标包已经安装，未声明的级联调用也不能执行。
-- Playbook 的 `actions` 是规程级依赖。校验器要求外部包已经进入依赖闭包，并逐项验证引用；Agent 按规程发起的每个调用仍是受 Target 权限控制的根调用，不借用无关 Action 的 `uses`。
+- Playbook 的 `actions` 是规程级依赖。校验器要求外部包已经进入依赖闭包并逐项验证引用；可见 Playbook 点名的 Action 成为 Target 的精确委托能力。Agent 按规程发起的每个调用仍是受 Target 权限控制的根调用，不借用无关 Action 的 `uses`，也不能调用同一传递包中未被规程声明的其他 Action。
 - Host 注入的内置系统 Action 只能由明确的宿主策略授权并出现在 `TargetInfo` 能力中，不能靠保留名称绕过普通包解析。
 
 这意味着第三方作者可以把 Action 发布为 npm 包，使用者通过 `ad add` 安装后直接运行；只有在自己的 Action 代码中继续调用它时，才需要把完全限定 ID 写入该 Action 的 `uses`。
@@ -691,11 +691,11 @@ App 打开时按 Manifest 摘要编译并缓存输入输出 Schema，但不导�
 
 配置定义来自 Manifest。对于明确允许单次覆盖的键，解析优先级固定为调用临时覆盖、包级持久化配置、显式环境变量、默认值；其他键忽略调用覆盖并记录拒绝原因。目标态不保留无包归属的全局配置键，持久化配置始终以逻辑 `packageId` 隔离。Profile 或远程服务的凭据由 Target 在建立连接时处理，不注入到无关包。`ActionContext.config` 只读；`setConfig` 仅供本地 CLI 或具有管理权限的宿主操作使用。`secret: true` 的值在框架控制的 `info`、错误详情和事件中默认脱敏。
 
-配置写入只接受 Manifest 已声明的键和符合其类型约束的 JSON 值，未知键或类型错误在提交前失败。删除持久化值后，读取会重新落到显式环境变量或默认值，`ConfigValueView.source` 必须反映这一变化。远程调用对秘密项的单次覆盖除 `allowInvocationOverride` 外还需要独立权限，普通执行权限不能注入秘密。
+配置写入只接受 Manifest 已声明的键和符合其类型约束的 JSON 值，未知键或类型错误在提交前失败。删除持久化值后，读取会重新落到显式环境变量或默认值，`ConfigValueView.source` 必须反映这一变化。移除包不会自动删除其持久化配置；具有管理权限的 `deleteConfig` 可以按完整包 ID 和键名删除孤立值，但不能读取已经失去秘密定义的原值。远程调用对秘密项的单次覆盖除 `allowInvocationOverride` 外还需要独立权限，普通执行权限不能注入秘密。
 
 持久化状态以逻辑 `packageId` 和 Action 命名空间隔离；`packageInstanceId`、`generationId` 只用于运行记录、事件关联和模块缓存，不作为持久化键的一部分，避免包目录移动或重新安装后丢失状态。`ActionContext.state` 自动限定到当前包和当前 Action，`ctx.state.scope` 只能创建更深的子命名空间，不能访问其他 Action 或包的根空间。管理端状态 API 必须显式提供 `packageId` 与 `actionId`，不存在隐式的“当前 Action”。
 
-状态值限定为 `JsonValue`，键、作用域深度和序列化字节数受 Host 配额约束；超过限制时在进入 SQLite 前返回结构化错误。管理端只能操作 Manifest 中存在的 Action 命名空间，删除包不会默认删除状态，避免一次依赖修改造成不可恢复的数据丢失。
+状态值限定为 `JsonValue`，键、作用域深度和序列化字节数受 Host 配额约束；超过限制时在进入 SQLite 前返回结构化错误。常规管理操作只能访问 Manifest 中存在的 Action 命名空间。删除包不会默认删除状态，避免一次依赖修改造成不可恢复的数据丢失；具有管理权限的调用方可以通过 `clearState` 的显式孤立命名空间选项清理已经不存在的包与 Action，但必须给出完整 ID，且当同名包仍处于注册状态时拒绝执行。CLI 先显示将删除的键数并要求明确确认，机器模式必须提供确认参数。
 
 同一逻辑包升级后会继续看到原状态命名空间，ActionDock 不推断或迁移第三方状态结构。包作者需要保持值格式兼容或使用带版本的状态键；不兼容更新必须在执行前由操作者备份并通过 `ad state clear` 清理明确的包与 Action 范围，不能在首次运行时静默重写未知状态。
 
@@ -907,7 +907,7 @@ await serveParentIpc(target);
 
 `ad export skill` 等价于 `ad export skill --mode source`。流程为读取 Manifest、校验锁文件、复制声明的文件和资产、生成裁剪后的 `actiondock.json`、刷新启用的生成类型，并生成 `SKILL.md`、`package.json`、对应的包管理器锁文件和 `actiondock.lock.json`。导出的 Manifest 只保留被选中的 Action、Playbook 和依赖声明；外部包默认保留为 npm 依赖，锁文件只保留该选择集的依赖闭包。已有生成类型是框架生成的开发文件，即使 `files` 未显式包含 `.actiondock`，导出器也会按裁剪后的 Manifest 重新生成；事务日志、运行数据和其他 `.actiondock` 内容永不复制。
 
-本地 `link`、`file:` 和未发布的路径依赖默认标记为不可移植并拒绝导出。`--vendor-deps` 可以把已锁定的外部 Action 包复制到导出目录，同时保留每个包自己的 Manifest 和状态命名空间。源码型 Skill 不承诺把 `lib` 中未使用的模块做 AST 级裁剪。
+本地 `link`、`file:` 和未发布的路径依赖默认标记为不可移植并拒绝导出。`--vendor-deps` 可以把已锁定的外部 Action 包复制到导出目录，同时保留每个包自己的 Manifest 和状态命名空间；依赖物化、安装脚本策略及原生扩展的操作系统、架构和 Node ABI 校验与 Node 目录型构建完全相同。源码型 Skill 不承诺把 `lib` 中未使用的模块做 AST 级裁剪。
 
 `ad export skill --mode node` 复用后文的 Node 目录型构建，并在 Skill 内生成调用该入口的 `SKILL.md`。两种模式都要求消费端具有兼容的 Node.js；区别是源码模式保留便于审阅和继续开发的项目结构，Node 模式不依赖全局 ActionDock CLI。原有 `--standalone` 单文件语义删除，传入该选项时返回替代命令提示而不是调用 Bun。
 
@@ -937,7 +937,9 @@ Node.js 可运行交付物
 
 ### 构建输出与校验
 
-构建目录内的元数据必须记录：选择的包和 Action、Manifest 摘要、锁文件摘要、Node.js 版本约束、是否内置依赖，以及内置依赖模式下的操作系统、架构与 Node ABI。实际生成时间只出现在命令运行报告中，不写入默认产物；显式提供 `SOURCE_DATE_EPOCH` 时，归档文件时间统一使用该值。目录遍历顺序、JSON 键序、文件权限、符号链接处理和压缩参数必须规范化，使相同输入得到相同摘要。
+构建目录内的元数据必须记录：选择的包和 Action、Manifest 摘要、锁文件摘要、Node.js 版本约束、是否内置依赖、是否执行安装脚本，以及内置依赖模式下的操作系统、架构与 Node ABI。实际生成时间只出现在命令运行报告中，不写入默认产物；显式提供 `SOURCE_DATE_EPOCH` 时，归档文件时间统一使用该值。目录遍历顺序、JSON 键序、文件权限、符号链接处理和压缩参数必须规范化，使相同输入得到相同摘要。
+
+显式允许的第三方安装脚本可能生成与时间或机器有关的文件，ActionDock 无法把它们描述为可复现输入。执行过安装脚本的构建必须在元数据中标记 `reproducible: false`；调用方要求 `--require-reproducible` 时直接失败。未执行安装脚本且输入与 `SOURCE_DATE_EPOCH` 相同的目录和归档才承诺摘要一致。
 
 导出前执行 Manifest 校验、入口存在性校验、依赖完整性校验和路径边界校验；构建结果中不包含未声明的密钥、测试目录或开发链接。Builder 输出最终 SHA-256，但不能只用摘要替代对锁文件与文件清单的逐项验证。
 
@@ -1021,7 +1023,8 @@ Action 代码、直接模块导入和 `ctx.process` 都在宿主权限下运行�
 | 解析失败分类 | 分别制造缺包、缺 Action 和入口导入异常 | 分别得到 `PACKAGE_NOT_FOUND`、`ACTION_NOT_FOUND` 和 `ACTION_LOAD_FAILED`，且有可查询的失败运行记录 |
 | Target 失败 | 制造远程不可达、鉴权失败、能力缺失和包 ID 冲突 | 抛出对应 `TargetError`，不创建虚假的 Action 运行记录，CLI 与协议返回失败状态 |
 | 传递依赖闭包 | A 使用 B，B 使用 C，规划 A 的构建 | 选择集包含 B、C；三个包的 Manifest 和状态边界不被扁平合并 |
-| 传递包可见性 | C 只因 A 到 B 到 C 的传递依赖进入 Host，再从 Target 直接查询和运行 C | C 不出现在对外能力列表且根调用被拒绝；把 C 显式加入直接依赖后才可根调用 |
+| 传递包可见性 | C 只因 B 的 `uses` 进入 A 的传递闭包，且没有可见 Playbook 委托，再从 Target 查询和运行 C | C 不出现在对外能力列表且根调用被拒绝；把 C 加为直接依赖或由可见 Playbook 点名后，仅相应范围可根调用 |
+| Playbook 委托 | 可见 Playbook 只声明传递包 C 的 `check` Action，再查询和调用 C 的 `check` 与其他 Action | `check` 可被发现和根调用，C 的其他 Action 仍保持内部可见性，不因同包关系一并暴露 |
 | 依赖版本冲突 | 让直接或传递依赖对同一逻辑包 ID 提出不可收敛的版本范围 | `ad add`、Host 初始化和构建均以 `ACTION_PACKAGE_VERSION_CONFLICT` 失败，不随机采用嵌套版本 |
 | 项目修改恢复 | 在 `ad add` 和 `ad remove` 替换各文件的中途终止进程，再分别运行只读校验和修改命令 | 项目锁阻止并发写；只读命令只报告待恢复，修改命令恢复完整旧快照或完成同一提交，不留下双锁文件分歧 |
 | 安装脚本边界 | 安装带生命周期脚本的第三方包，并分别使用默认设置和显式允许选项 | 默认不执行脚本；显式允许时显示来源并记录信任决定，包不能依赖脚本才能加载 |

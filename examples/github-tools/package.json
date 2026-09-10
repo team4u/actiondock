@@ -11,6 +11,7 @@
     "@actiondock/testing": "^2.0.0"
   },
   "devDependencies": {
+    "@actiondock/core": "^2.0.0",
     "@types/node": "^22.13.0",
     "tsx": "^4.19.3",
     "typescript": "^5.7.0"

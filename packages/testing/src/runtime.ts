@@ -219,6 +219,9 @@ export interface TestRuntime {
   ): Promise<ExecutionResult<O>>;
 }
 
+const anonymousTestActions = new WeakMap<object, string>();
+let anonymousTestActionCounter = 0;
+
 /**
  * 创建全功能测试运行时实例。
  * 基于统一 ExecutionService 协调执行全生命周期，并暴露配置、状态、时钟、进程与事件等调试接口。
@@ -321,7 +324,15 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
     if (typeof action !== "string") {
       const act = action as ActionDefinition;
       if (!act.id) {
-        act.id = "test-action";
+        let anonId = anonymousTestActions.get(act);
+        if (!anonId) {
+          anonymousTestActionCounter++;
+          anonId = `test-action-${anonymousTestActionCounter}`;
+          anonymousTestActions.set(act, anonId);
+        }
+        try {
+          act.id = anonId;
+        } catch {}
       }
       executionService.registerAction(act);
       actionRef = act.id;

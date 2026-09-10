@@ -137,6 +137,9 @@ export type ActionResolution =
   | { status: "not_found"; reason?: string }
   | { status: "load_failed"; error: Error; packageId: string; projectRoot: string };
 
+const anonymousRunnerActionIds = new WeakMap<object, string>();
+let anonymousRunnerActionCounter = 0;
+
 /**
  * ActionDock 核心执行引擎（ActionRunner）。
  * 
@@ -499,8 +502,20 @@ export class ActionRunner {
       typeof (actionOrId as any).run === "function"
     ) {
       action = actionOrId as ActionDefinition;
-      targetActionId = action.id || "anonymous-action";
-      action.id = targetActionId;
+      if (action.id) {
+        targetActionId = action.id;
+      } else {
+        let anonId = anonymousRunnerActionIds.get(action);
+        if (!anonId) {
+          anonymousRunnerActionCounter++;
+          anonId = `anonymous-action-${anonymousRunnerActionCounter}`;
+          anonymousRunnerActionIds.set(action, anonId);
+        }
+        targetActionId = anonId;
+        try {
+          action.id = targetActionId;
+        } catch {}
+      }
       this.actions.set(targetActionId, action);
     } else {
       const parsed = ActionResolver.parseRef(actionOrId as ActionRef | string);
