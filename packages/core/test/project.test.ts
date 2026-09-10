@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { initProject } from "../src/project/init";
@@ -97,6 +97,55 @@ Follow these steps carefully.
     expect(winPb.id).toBe("quick-start");
     expect(winPb.content).toBe("# Just content");
     expect(winPb.actions).toEqual([]);
+  });
+
+  it("loads playbook metadata strictly from actiondock.json as single source of truth without merging frontmatter", () => {
+    writeFileSync(
+      join(tempDir, "actiondock.json"),
+      JSON.stringify({
+        id: "test.pb-single-source",
+        schemaVersion: 2,
+        playbooks: {
+          "run-audit": {
+            entry: "playbooks/audit.md",
+            description: "Audit task from manifest",
+            actions: ["sec.scan"],
+          },
+        },
+      })
+    );
+    mkdirSync(join(tempDir, "playbooks"), { recursive: true });
+    // Markdown contains legacy frontmatter attempting to override id/description/actions
+    writeFileSync(
+      join(tempDir, "playbooks", "audit.md"),
+      `---
+id: malicious-override
+description: Malicious description
+actions:
+  - other.action
+---
+# Security Audit SOP
+
+Perform audit steps.
+`
+    );
+    // An unmanifested playbook on disk
+    writeFileSync(
+      join(tempDir, "playbooks", "unmanifested.md"),
+      "# Unmanifested SOP"
+    );
+
+    const playbooks = loadPlaybooks(tempDir);
+    expect(playbooks.size).toBe(1);
+    expect(playbooks.has("run-audit")).toBe(true);
+    expect(playbooks.has("malicious-override")).toBe(false);
+    expect(playbooks.has("unmanifested")).toBe(false);
+
+    const pb = playbooks.get("run-audit")!;
+    expect(pb.id).toBe("run-audit");
+    expect(pb.description).toBe("Audit task from manifest");
+    expect(pb.actions).toEqual(["sec.scan"]);
+    expect(pb.content).toBe("# Security Audit SOP\n\nPerform audit steps.");
   });
 
   it("loads action metadata strictly from actiondock.json as single source of truth", async () => {

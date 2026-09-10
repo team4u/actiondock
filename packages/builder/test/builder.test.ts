@@ -284,26 +284,24 @@ export default {
             uses: [],
           },
         },
+        playbooks: {
+          "workflow-main": {
+            entry: "playbooks/workflow-main.md",
+            description: "Main workflow SOP",
+            actions: ["task.main"],
+          },
+          "workflow-other": {
+            entry: "playbooks/workflow-other.md",
+            description: "Other workflow SOP",
+            actions: ["task.other"],
+          },
+        },
       };
       saveManifest(tempDir, manifest);
 
-      // 创建两份规程文档
-      const pb1Content = `---
-id: workflow-main
-description: Main workflow SOP
-actions:
-  - task.main
----
-# Main Workflow
-`;
-      const pb2Content = `---
-id: workflow-other
-description: Other workflow SOP
-actions:
-  - task.other
----
-# Other Workflow
-`;
+      // 创建两份纯 Markdown 规程文档
+      const pb1Content = `# Main Workflow\n`;
+      const pb2Content = `# Other Workflow\n`;
       writeFileSync(join(tempDir, "playbooks", "workflow-main.md"), pb1Content, "utf-8");
       writeFileSync(join(tempDir, "playbooks", "workflow-other.md"), pb2Content, "utf-8");
 
@@ -685,6 +683,13 @@ export default defineAction({
             uses: [],
           },
         },
+        playbooks: {
+          "greet-user": {
+            entry: "playbooks/greet-user.md",
+            description: "SOP for greeting a new user and verifying system health",
+            actions: ["sample.greet"],
+          },
+        },
         assets: ["assets/nested/data.json"],
       };
       saveManifest(tempDir, manifest);
@@ -1054,9 +1059,17 @@ export default defineAction({
         mkdirSync(join(pkg2Dir, "playbooks"), { recursive: true });
         writeFileSync(
           join(pkg2Dir, "playbooks", "deploy.md"),
-          `---\nid: deploy\nname: 部署规程\ndescription: 自动化部署标准流程\n---\n# 部署规程`,
+          `# 部署规程`,
           "utf-8"
         );
+        const pkg2Manifest = JSON.parse(readFileSync(join(pkg2Dir, "actiondock.json"), "utf-8"));
+        pkg2Manifest.playbooks = {
+          deploy: {
+            entry: "playbooks/deploy.md",
+            description: "自动化部署标准流程",
+          },
+        };
+        writeFileSync(join(pkg2Dir, "actiondock.json"), JSON.stringify(pkg2Manifest, null, 2));
 
         const compositeRes = await exportCompositeSkill({
           bundleName: "test-composite-suite",
@@ -1086,6 +1099,8 @@ export default defineAction({
         expect(skillMd).toContain("test.second-package");
         expect(skillMd).toContain("packages/second-package/playbooks/deploy.md");
         expect(skillMd).toContain("ad link");
+        expect(skillMd).toContain("故障排查与环境安装指引");
+        expect(skillMd).toContain("npm install --omit=dev");
 
         // 验证归档产物
         expect(compositeRes.archivePath).toBeDefined();
@@ -1186,11 +1201,18 @@ export default defineAction({
         writeFileSync(
           join(customDir, "actiondock.json"),
           JSON.stringify({
+            schemaVersion: 2,
             id: "custom-dirs-pkg",
             name: "Custom Dirs",
             version: "1.0.0",
             actionsDir: "src/my-actions",
             playbooksDir: "docs/my-playbooks",
+            actions: {
+              task: { entry: "src/my-actions/task.ts" },
+            },
+            playbooks: {
+              guide: { entry: "docs/my-playbooks/guide.md" },
+            },
           })
         );
         mkdirSync(join(customDir, "src", "my-actions"), { recursive: true });
@@ -1201,7 +1223,7 @@ export default defineAction({
         );
         writeFileSync(
           join(customDir, "docs", "my-playbooks", "guide.md"),
-          `---\nid: guide\n---\n# Guide`
+          `# Guide\n`
         );
 
         const planner = new BuildPlanner({ projectRoot: customDir });

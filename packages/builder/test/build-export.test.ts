@@ -228,6 +228,7 @@ describe("Build & Skill Export Contract", () => {
     expect(skillMd).toContain("Playbook SOPs");
     expect(skillMd).toContain("故障排查与环境安装指引");
     expect(skillMd).toContain("npm install -g @actiondock/cli");
+    expect(skillMd).toContain("npm install --omit=dev");
     expect(skillMd).toContain("ad doctor");
   });
 
@@ -330,15 +331,21 @@ export default defineAction({
 `;
     fs.writeFileSync(join(tempDir, "actions", "farewell.ts"), action2Code, "utf-8");
 
-    // Add a second playbook that only references sample.farewell
-    const pb2Content = `---
-id: farewell-sop
-description: SOP for saying farewell
-actions:
-  - sample.farewell
----
-# Farewell SOP
-`;
+    // Add a second action and playbook in actiondock.json
+    const manifestPath = join(tempDir, "actiondock.json");
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
+    manifest.actions["sample.farewell"] = {
+      entry: "actions/farewell.ts",
+      description: "Say farewell to user",
+    };
+    manifest.playbooks["farewell-sop"] = {
+      entry: "playbooks/farewell-sop.md",
+      description: "SOP for saying farewell",
+      actions: ["sample.farewell"],
+    };
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+
+    const pb2Content = `# Farewell SOP\n`;
     fs.writeFileSync(join(tempDir, "playbooks", "farewell-sop.md"), pb2Content, "utf-8");
 
     // 1. Export source skill for greet-user playbook only
@@ -354,6 +361,11 @@ actions:
     // Only greet-user.md should be in playbooks dir, farewell-sop.md must NOT exist
     expect(existsSync(join(exportRes.skillDir, "playbooks", "greet-user.md"))).toBe(true);
     expect(existsSync(join(exportRes.skillDir, "playbooks", "farewell-sop.md"))).toBe(false);
+
+    // actiondock.json should contain greet-user playbook and exclude farewell-sop
+    const exportedManifest = JSON.parse(fs.readFileSync(join(exportRes.skillDir, "actiondock.json"), "utf-8"));
+    expect(exportedManifest.playbooks?.["greet-user"]).toBeDefined();
+    expect(exportedManifest.playbooks?.["farewell-sop"]).toBeUndefined();
 
     // Only greet.ts should be in actions dir, farewell.ts must NOT exist
     expect(existsSync(join(exportRes.skillDir, "actions", "greet.ts"))).toBe(true);

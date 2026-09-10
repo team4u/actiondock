@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "bun:test";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createActionDockTarget, linkPackage } from "@actiondock/core";
 import { defineAction } from "@actiondock/sdk";
@@ -1148,10 +1148,20 @@ describe("@actiondock/mcp Adapter", () => {
   });
 
   it("maps playbooks to read-only MCP Resource and Prompt", async () => {
+    const manifestPath = join(tmpDir, "actiondock.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
+    manifest.playbooks = {
+      "test.guide": {
+        entry: "playbooks/guide.md",
+        description: "A test guide playbook",
+      },
+    };
+    writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+
     mkdirSync(join(tmpDir, "playbooks"), { recursive: true });
     writeFileSync(
       join(tmpDir, "playbooks", "guide.md"),
-      `---\nid: test.guide\ndescription: A test guide playbook\n---\n# Step 1\nRun test.`
+      "# Step 1\nRun test."
     );
 
     const server = await createActionDockMcpServer({ projectRoot: tmpDir });

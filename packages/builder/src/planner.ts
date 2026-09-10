@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, join, relative, resolve } from "node:path";
 import {
   assertPathWithinRoot,
   type ActionDockManifest,
   type ActionManifestEntry,
   loadManifest,
+  loadPlaybooks,
   loadProjectConfig,
   type ProjectConfig,
   resolveActionProjectSync,
@@ -15,9 +16,7 @@ import { PlannerError } from "./errors";
 import type {
   ActionDependency,
   AssetDependency,
-  BuildPlan,
   BuildPlanDependencies,
-  BuildPlannerOptions,
   ExternalDependency,
   LockfileInfo,
   PlaybookPlanEntry,
@@ -154,123 +153,6 @@ function computeLockfileInfo(projectRoot: string, preferredLockfile?: string): L
   return undefined;
 }
 
-/**
- * 纯 TypeScript 解析轻量 Frontmatter 元数据，杜绝第三方 yaml 依赖。
- */
-function parseSimpleFrontmatter(raw: string): Record<string, any> {
-  const result: Record<string, any> = {};
-  const lines = raw.split(/\r?\n/);
-  let currentListKey: string | null = null;
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-
-    if (trimmed.startsWith("- ") && currentListKey) {
-      const item = trimmed.slice(2).trim().replace(/^["']|["']$/g, "");
-      if (!Array.isArray(result[currentListKey])) {
-        result[currentListKey] = [];
-      }
-      result[currentListKey].push(item);
-      continue;
-    }
-
-    const colonIdx = line.indexOf(":");
-    if (colonIdx !== -1) {
-      const key = line.slice(0, colonIdx).trim();
-      const value = line.slice(colonIdx + 1).trim().replace(/^["']|["']$/g, "");
-      if (value === "") {
-        currentListKey = key;
-        result[key] = [];
-      } else {
-        currentListKey = null;
-        result[key] = value;
-      }
-    }
-  }
-
-  return result;
-}
-
-/**
- * 纯文本解析 Playbook Markdown 文件，提取轻量 Frontmatter，不执行任何业务代码。
- */
-function parsePlaybookFile(filePath: string): PlaybookPlanEntry | null {
-  try {
-    const content = readFileSync(filePath, "utf-8");
-    const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-    if (match) {
-      const parsed = parseSimpleFrontmatter(match[1]);
-      const id = parsed.id || basename(filePath.replace(/\\/g, "/"), ".md");
-      return {
-        id,
-        filePath,
-        actions: Array.isArray(parsed.actions) ? parsed.actions : [],
-        description: parsed.description,
-      };
-    }
-    return {
-      id: basename(filePath.replace(/\\/g, "/"), ".md"),
-      filePath,
-      actions: [],
-    };
-  } catch {
-    return null;
-  }
-}
-
-/**
- * 静态加载项目目录下的 Playbook 列表并合并 actiondock.json 声明。
- */
-function loadProjectPlaybooks(
-  projectRoot: string,
-  playbooksDir = "playbooks",
-  config?: ProjectConfig,
-  manifest?: ActionDockManifest
-): Map<string, PlaybookPlanEntry> {
-  const map = new Map<string, PlaybookPlanEntry>();
-  const dir = join(projectRoot, playbooksDir);
-  if (existsSync(dir)) {
-    const files = walkDirectory(dir, projectRoot).filter((f) => f.endsWith(".md"));
-    for (const file of files) {
-      const pb = parsePlaybookFile(file);
-      if (pb) {
-        map.set(pb.id, pb);
-      }
-    }
-  }
-
-  // 合并 actiondock.json / manifest / config 中声明的 playbooks
-  const declaredPlaybooks: Record<string, any> = {
-    ...((config as any)?.playbooks || {}),
-    ...((manifest as any)?.playbooks || {}),
-  };
-
-  for (const [id, rawPb] of Object.entries(declaredPlaybooks)) {
-    if (typeof rawPb === "object" && rawPb !== null) {
-      const existing = map.get(id);
-      const filePath = rawPb.entry
-        ? resolve(projectRoot, rawPb.entry)
-        : existing?.filePath || join(dir, `${id}.md`);
-      const actions = Array.from(
-        new Set([
-          ...(existing?.actions || []),
-          ...(Array.isArray(rawPb.actions) ? rawPb.actions : []),
-        ])
-      );
-      const description = rawPb.description || existing?.description;
-
-      map.set(id, {
-        id,
-        filePath,
-        actions,
-        description,
-      });
-    }
-  }
-
-  return map;
-}
 
 /**
  * 构造备用清单映射，仅读取文件系统条目与配置声明，杜绝 AST 源码分析与动态代码执行。
@@ -423,13 +305,30 @@ export class SelectionPlanner {
       );
     }
 
-    // 3. 静态读取 Playbook 规程定义
-    const playbooksMap = loadProjectPlaybooks(
+    // 3. 读取 Playbook 规程定义（统一复用 core 的 loadPlaybooks，清单为唯一事实源）
+    const effectiveManifest = {
+      ...(config || {}),
+      ...(manifest || {}),
+      playbooks: {
+        ...((config as any)?.playbooks || {}),
+        ...((manifest as any)?.playbooks || {}),
+      },
+    } as ActionDockManifest;
+
+    const playbooksDefinitions = loadPlaybooks(
       root,
-      config.playbooksDir || "playbooks",
-      config,
-      manifest
+      config.playbooksDir || manifest?.playbooksDir || "playbooks",
+      effectiveManifest
     );
+    const playbooksMap = new Map<string, PlaybookPlanEntry>();
+    for (const [id, def] of playbooksDefinitions.entries()) {
+      playbooksMap.set(id, {
+        id: def.id,
+        filePath: def.filePath,
+        actions: def.actions,
+        description: def.description,
+      });
+    }
 
     // 4. 计算初始 Action 与 Playbook 集合
     const initialActionIds = new Set<string>();
@@ -796,7 +695,7 @@ export class SelectionPlanner {
       lockfile: lockfileInfo,
       metadata: {
         plannedAt: new Date().toISOString(),
-        schemaVersion: 1,
+        schemaVersion: 2,
         actionCount: actionDependencies.length,
         playbookCount: selectedPlaybooks.length,
         lockfileDigest: lockfileInfo?.sha256,

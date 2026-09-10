@@ -23,6 +23,16 @@ describe("Host 多包依赖可见性与锁文件加载集成", () => {
     actionHandlers?: Record<string, string>,
     playbooks?: Record<string, { actions: string[]; content: string }>
   ) {
+    if (playbooks) {
+      manifest.playbooks = manifest.playbooks || {};
+      for (const [name, pb] of Object.entries(playbooks)) {
+        manifest.playbooks[name] = {
+          entry: `playbooks/${name}.md`,
+          actions: pb.actions,
+        };
+      }
+    }
+
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, MANIFEST_FILE_NAME), JSON.stringify(manifest, null, 2));
     writeFileSync(
@@ -46,7 +56,7 @@ describe("Host 多包依赖可见性与锁文件加载集成", () => {
       for (const [name, pb] of Object.entries(playbooks)) {
         writeFileSync(
           join(pbDir, `${name}.md`),
-          `---\nid: ${name}\nactions:\n${pb.actions.map((a) => `  - "${a}"`).join("\n")}\n---\n${pb.content}`
+          pb.content
         );
       }
     }

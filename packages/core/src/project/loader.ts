@@ -487,62 +487,19 @@ export function parsePlaybookContent(
   const filename = basename(filePath.replace(/\\/g, "/"));
   const defaultId = filename.replace(/\.md$/, "");
 
-  let playbookId = metadata?.id;
-  let name = (metadata as any)?.name;
-  let description = metadata?.description;
-  let actions = Array.isArray(metadata?.actions) ? [...metadata.actions] : [];
-  let body = content;
-
-  // 零依赖纯文本兼容提取（不依赖 yaml 库，兼容包含旧式 Frontmatter 的夹具文件）
-  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
-  if (match) {
-    body = match[2];
-    const frontmatterLines = match[1].split(/\r?\n/);
-    let inActionsList = false;
-    for (const line of frontmatterLines) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith("#")) continue;
-      if (trimmed.startsWith("- ") && inActionsList) {
-        actions.push(trimmed.slice(2).trim().replace(/^['"](.*)['"]$/, "$1"));
-        continue;
-      }
-      const colonIdx = line.indexOf(":");
-      if (colonIdx !== -1) {
-        const key = line.slice(0, colonIdx).trim();
-        const val = line.slice(colonIdx + 1).trim().replace(/^['"](.*)['"]$/, "$1");
-        inActionsList = false;
-        if (key === "id" && !playbookId) {
-          playbookId = val;
-        } else if (key === "name" && !name) {
-          name = val;
-        } else if (key === "description" && !description) {
-          description = val;
-        } else if (key === "actions") {
-          if (val.startsWith("[") && val.endsWith("]")) {
-            const items = val
-              .slice(1, -1)
-              .split(",")
-              .map((s) => s.trim().replace(/^['"](.*)['"]$/, "$1"))
-              .filter(Boolean);
-            actions.push(...items);
-          } else {
-            inActionsList = true;
-          }
-        }
-      }
-    }
-  }
-
-  playbookId = playbookId || defaultId;
+  const playbookId = metadata?.id || defaultId;
   if (!PLAYBOOK_ID_REGEX.test(playbookId)) {
     throw new Error(`Invalid playbook ID '${playbookId}' found in ${filePath}. Playbook IDs must match ${PLAYBOOK_ID_REGEX}`);
   }
 
+  // 规程正文为纯 Markdown，剔除可能残存的旧式 Frontmatter 包裹块
+  const body = content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "");
+
   return {
     id: playbookId,
-    name,
-    description,
-    actions,
+    name: (metadata as any)?.name,
+    description: metadata?.description,
+    actions: Array.isArray(metadata?.actions) ? [...metadata.actions] : [],
     content: body.trim(),
     filePath,
   };
@@ -550,28 +507,32 @@ export function parsePlaybookContent(
 
 /**
  * 加载项目声明的 Playbook SOP 规程文档。
- * 优先以 actiondock.json 中的 playbooks 声明作为事实源；若未声明则自动回退至零依赖纯 Markdown 兼容读取。
+ * 以 actiondock.json 中的 playbooks 声明作为唯一事实源。
  * 
  * @param projectRoot 项目根目录
- * @param playbooksDir playbooks 子目录（默认 "playbooks"）
+ * @param _playbooksDir playbooks 子目录（向后兼容保留参数）
+ * @param customManifest 可选的显式清单对象（若未提供则从磁盘加载）
  * @returns Map<PlaybookId, PlaybookDefinition> 映射
  */
 export function loadPlaybooks(
   projectRoot: string,
-  playbooksDir = "playbooks"
+  _playbooksDir = "playbooks",
+  customManifest?: ActionDockManifest | null
 ): Map<string, PlaybookDefinition> {
   const playbooks = new Map<string, PlaybookDefinition>();
 
   let manifest: ActionDockManifest | null = null;
-  try {
-    manifest = loadManifest(projectRoot);
-  } catch {
-    // 忽略清单加载异常
+  if (customManifest !== undefined) {
+    manifest = customManifest;
+  } else {
+    try {
+      manifest = loadManifest(projectRoot);
+    } catch {
+      return playbooks;
+    }
   }
 
-  const loadedPlaybookEntries = new Set<string>();
-
-  // 1. 若 actiondock.json 中声明了 playbooks，以清单为事实源
+  // 以 actiondock.json 为唯一事实源
   if (manifest?.playbooks && Object.keys(manifest.playbooks).length > 0) {
     for (const [playbookId, pbEntry] of Object.entries(manifest.playbooks)) {
       if (!PLAYBOOK_ID_REGEX.test(playbookId)) {
@@ -584,7 +545,6 @@ export function loadPlaybooks(
       if (!existsSync(fullPath)) {
         throw new Error(`Playbook file '${pbEntry.entry}' for '${playbookId}' not found in ${projectRoot}`);
       }
-      loadedPlaybookEntries.add(fullPath);
       const content = readFileSync(fullPath, "utf-8");
       const def = parsePlaybookContent(content, fullPath, {
         id: playbookId,
@@ -593,21 +553,6 @@ export function loadPlaybooks(
         actions: pbEntry.actions,
       });
       playbooks.set(playbookId, def);
-    }
-  }
-
-  // 2. 磁盘扫描回退：若存在额外或未在清单中显式声明的 .md 文档，进行零依赖纯 Markdown 兼容解析
-  const files = discoverPlaybookFiles(projectRoot, playbooksDir);
-  for (const file of files) {
-    if (loadedPlaybookEntries.has(file)) continue;
-    try {
-      const content = readFileSync(file, "utf-8");
-      const playbook = parsePlaybookContent(content, file);
-      if (!playbooks.has(playbook.id)) {
-        playbooks.set(playbook.id, playbook);
-      }
-    } catch {
-      // 忽略单个文件解析异常
     }
   }
 

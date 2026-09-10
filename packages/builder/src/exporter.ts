@@ -306,7 +306,7 @@ export class SkillExporter {
       // Node 目录型 Skill 导出 (Node Directory Skill Export)
       // 复用 Node 目录型构建，并在 Skill 内生成调用该入口的 SKILL.md
       // ----------------------------------------------------
-      const buildResult = await buildProject({
+      await buildProject({
         projectRoot: root,
         outDir: targetSkillDir,
         actions: options.actions,
@@ -443,6 +443,15 @@ export class SkillExporter {
           }
         }
       }
+      const manifestPlaybooks: Record<string, unknown> = {};
+      for (const pb of plan.playbooks) {
+        manifestPlaybooks[pb.id] = {
+          entry: `${playbooksDir}/${basename(pb.filePath)}`,
+          ...(pb.description ? { description: pb.description } : {}),
+          ...(pb.actions && pb.actions.length > 0 ? { actions: pb.actions } : {}),
+        };
+      }
+
       const exportedConfig = {
         schemaVersion: 2,
         id: plan.packageId,
@@ -452,6 +461,7 @@ export class SkillExporter {
         ...(actionsDir ? { actionsDir } : {}),
         ...(playbooksDir ? { playbooksDir } : {}),
         actions: manifestActions,
+        ...(Object.keys(manifestPlaybooks).length > 0 ? { playbooks: manifestPlaybooks } : {}),
         config: plan.configDefs,
         ...(plan.files && plan.files.length > 0 ? { files: plan.files } : {}),
         ...(plan.assets && plan.assets.length > 0 ? { assets: plan.assets } : {}),

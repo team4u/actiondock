@@ -16,7 +16,6 @@ import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import {
   ACTIONDOCK_VERSION,
   getPackageSlug,
-  type ProjectConfig,
 } from "@actiondock/core";
 import { createZipArchiveAsync } from "./archive";
 import { BuilderError } from "./errors";
@@ -459,6 +458,17 @@ export async function buildProject(options: BuildOptions): Promise<BuildResult> 
         annotations: act.annotations,
       };
     }
+
+    const manifestPlaybooks: Record<string, unknown> = {};
+    const playbooksDir = plan.playbooksDir || "playbooks";
+    for (const pb of plan.playbooks) {
+      manifestPlaybooks[pb.id] = {
+        entry: `${playbooksDir}/${basename(pb.filePath)}`,
+        ...(pb.description ? { description: pb.description } : {}),
+        ...(pb.actions && pb.actions.length > 0 ? { actions: pb.actions } : {}),
+      };
+    }
+
     const exportedConfig: Record<string, unknown> = {
       schemaVersion: 2,
       id: plan.packageId,
@@ -466,14 +476,9 @@ export async function buildProject(options: BuildOptions): Promise<BuildResult> 
       version: plan.version,
       description: plan.description,
       actions: manifestActions,
+      ...(Object.keys(manifestPlaybooks).length > 0 ? { playbooks: manifestPlaybooks } : {}),
       config: plan.configDefs || {},
     };
-    if (plan.actionsDir) {
-      exportedConfig.actionsDir = plan.actionsDir;
-    }
-    if (plan.playbooksDir) {
-      exportedConfig.playbooksDir = plan.playbooksDir;
-    }
     if (plan.files && plan.files.length > 0) {
       exportedConfig.files = plan.files;
     }
@@ -508,7 +513,7 @@ export async function buildProject(options: BuildOptions): Promise<BuildResult> 
         [pkgSlug]: "./entry-supervisor.js",
       },
       engines: {
-        node: ">=22.13.0",
+        node: ">=24.12.0",
       },
       dependencies: productionDependencies,
     };
@@ -634,7 +639,7 @@ export async function buildProject(options: BuildOptions): Promise<BuildResult> 
       actions: plan.actions.map((a) => a.id),
       playbooks: plan.playbooks.map((p) => p.id),
       engines: {
-        node: ">=22.13.0",
+        node: ">=24.12.0",
       },
       entrypoint: "entry-supervisor.js",
       supervisorEntry: "entry-supervisor.js",

@@ -26,6 +26,15 @@ describe("依赖解析器 ActionPackageResolver", () => {
     manifest: any,
     playbooks?: Record<string, { actions: string[]; content: string }>
   ) {
+    if (playbooks) {
+      manifest.playbooks = manifest.playbooks || {};
+      for (const [name, pb] of Object.entries(playbooks)) {
+        manifest.playbooks[name] = {
+          entry: `playbooks/${name}.md`,
+          actions: pb.actions,
+        };
+      }
+    }
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, MANIFEST_FILE_NAME), JSON.stringify(manifest, null, 2));
 
@@ -35,7 +44,7 @@ describe("依赖解析器 ActionPackageResolver", () => {
       for (const [name, pb] of Object.entries(playbooks)) {
         writeFileSync(
           join(pbDir, `${name}.md`),
-          `---\nid: ${name}\nactions:\n${pb.actions.map((a) => `  - "${a}"`).join("\n")}\n---\n${pb.content}`
+          pb.content
         );
       }
     }
