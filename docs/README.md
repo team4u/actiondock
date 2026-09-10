@@ -50,7 +50,7 @@ ActionDock 文档中心遵循使用者与开发者角色双轨制设计：
 
 ### 使用者指南
 面向从仓库拉取项目源码、获取导出的 Skill 包或使用交付产物的使用者与智能体操作者：
-- [消费与接入总览](file:///root/code/action-dock/docs/consumer/overview.md)：消费姿态对比速查与克隆极速跑通。
+- [消费与接入总览](file:///root/code/action-dock/docs/consumer/overview.md)：工程依赖消费、智能体技能装载与三种接入路径对比选型。
 - [Agent Skill 使用指南](file:///root/code/action-dock/docs/consumer/use-as-skill.md)：通过 npx skills 一键安装 GitHub 技能、智能体装载路径与规程优先调用规范。
 - [接入开发工具 MCP 服务](file:///root/code/action-dock/docs/consumer/use-as-mcp.md)：作为 MCP STDIO 服务直连 Cursor 与 Windsurf 等工具库。
 - [Node 交付产物与运行](file:///root/code/action-dock/docs/consumer/standalone-run.md)：运行自包含 Node.js 目录交付产物与离线依赖。

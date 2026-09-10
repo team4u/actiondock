@@ -233,11 +233,41 @@ ad test
 
 ---
 
+## 引入与复用跨包依赖
+
+在实际开发中，开发者常常需要复用生态中已发布的公共 Action（例如 GitHub 工具集或数据处理工具）。ActionDock 提供受原子事务保护的依赖管理命令：
+
+```bash
+ad add @actiondock/example-tools
+```
+
+执行该命令后，框架会自动完成以下动作：
+- 调用包管理器安装目标依赖至 `node_modules`。
+- 校验目标包的 `actiondock.json` 清单规范，并将依赖关系自动记录在当前工程的 `actiondock.json` 中的 `dependencies` 字段。
+- 更新单一事实源锁文件 `actiondock.lock.json`，固化依赖包的精确版本与完整性散列。
+- 若安装或模式校验失败，底层原子事务机制会自动回滚所有更改，杜绝配置文件损坏。
+
+安装完成后，可以在当前项目的 `actiondock.json` 的 `actions.<id>.uses` 声明依赖项，并在 Action 源码中通过 `ctx.actions.invoke` 安全调度该跨包能力。
+
+若项目后续需要移除该依赖，执行：
+
+```bash
+# 支持传入 npm 包名或逻辑包标识符
+ad remove @actiondock/example-tools
+```
+
+执行移除时，框架具备以下安全保护：
+- 反向引用拦截：若当前项目的 Action 的 `uses` 声明或 Playbook 规程仍在调用该依赖，命令将主动拒绝移除并抛出依赖冲突错误，防止误删导致业务故障。
+- 契约与锁文件同步：从 `package.json`、`actiondock.json` 与 `actiondock.lock.json` 中同步清理依赖项。
+- 历史数据保护：保留该包的历史持久化配置与状态存储命名空间，避免误删导致业务数据丢失。
+
+---
+
 ## 打包与交付产物构建
 
 ActionDock 2.0 提供了标准的目录型构建、npm Action 包打包与智能体 Skill 导出工具链：
 
-- **Node 目录型交付产物构建**（ad build）：
+- Node 目录型交付产物构建（ad build）：
   ```bash
   # 构建标准可运行 Node.js 目录产物
   ad build
@@ -246,7 +276,7 @@ ActionDock 2.0 提供了标准的目录型构建、npm Action 包打包与智能
   ad build --archive --vendor-deps
   ```
   生成包含独立入口、配置隔离和依赖闭包的 Node.js 运行目录或归档文件，方便在任何安装有 Node.js 的服务器或容器环境中部署运行。
-- **标准 npm Action 包打包**（ad pack）：
+- 标准 npm Action 包打包（ad pack）：
   ```bash
   # 生成用于 npm 发布的标准 tarball (.tgz)
   ad pack
@@ -254,7 +284,7 @@ ActionDock 2.0 提供了标准的目录型构建、npm Action 包打包与智能
   # 执行打包预检
   ad pack --dry-run
   ```
-- **导出为 Agent Skill 资产**（ad export skill）：
+- 导出为 Agent Skill 资产（ad export skill）：
   ```bash
   # 导出源码型 Skill 资产
   ad export skill --mode source

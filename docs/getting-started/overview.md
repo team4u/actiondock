@@ -173,10 +173,11 @@ ActionDock 2.0 采用 `actiondock.lock.json`（规范版本 lockfileVersion: 1�
 ### 使用者与智能体操作者
 > 目标：将现有的 Action Package 或 Skill 快速接入到工作流、IDE 或智能体中。
 
-- [消费与接入总览](file:///root/code/action-dock/docs/consumer/overview.md)：了解多种接入方式的适用场景与选型。
+- [消费与接入总览](file:///root/code/action-dock/docs/consumer/overview.md)：工程依赖消费、智能体技能装载与三种接入路径对比选型。
 - [Agent Skill 使用指南](file:///root/code/action-dock/docs/consumer/use-as-skill.md)：通过技能管理工具快速安装并供智能体自主调用。
-- [接入开发工具 MCP 服务](file:///root/code/action-dock/docs/consumer/use-as-mcp.md)：将 Action 作为 MCP 服务接入主流智能体编辑器。
+- [接入开发工具 MCP 服务](file:///root/code/action-dock/docs/consumer/use-as-mcp.md)：将工程依赖与 Action 作为 MCP 服务接入主流编辑器。
 - [Node 交付产物与运行](file:///root/code/action-dock/docs/consumer/standalone-run.md)：运行自包含 Node.js 目录交付产物与离线依赖。
+- [HTTP 远程微服务与 API 调度](file:///root/code/action-dock/docs/consumer/http-service.md)：单工程微服务与全局路由远程网络调度。
 - [消费端配置与凭证注入](file:///root/code/action-dock/docs/consumer/configuration.md)：配置凭据、环境变量与存储参数。
 
 ---

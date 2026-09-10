@@ -75,12 +75,12 @@ GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
 ```
 或者在执行命令时直接作为系统环境变量传入：
 ```bash
-GITHUB_TOKEN=ghp_xxxx ad run github-tools/github.list-prs --input '{"repo":"team4u/actiondock"}'
+GITHUB_TOKEN=ghp_xxxx ad run team4u.github-tools/list-prs --input '{"repo":"team4u/actiondock"}'
 ```
 
 ### 命令行单次临时覆盖
 ```bash
-ad run github-tools/github.get-pr --config GITHUB_TOKEN=ghp_temp_token --input '{"repo":"team4u/actiondock","pullNumber":1}'
+ad run team4u.github-tools/get-pr --config GITHUB_TOKEN=ghp_temp_token --input '{"repo":"team4u/actiondock","pullNumber":101}'
 ```
 
 ---

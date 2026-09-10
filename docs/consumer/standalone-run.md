@@ -22,7 +22,7 @@ ad build --out ./dist/app.zip --archive
 ```
 
 构建完成后，输出目录下将包含：
-- `entry.js`：统一的独立运行入口分发器脚本。
+- `entry.mjs`：统一的独立运行入口分发器脚本。
 - `actions/`：编译转换后的 JavaScript 动作代码。
 - `actiondock.json`：项目元数据与契约规范清单。
 - `node_modules/`：固化的生产依赖（指定 `--vendor-deps` 时）。
@@ -35,13 +35,13 @@ ad build --out ./dist/app.zip --archive
 
 ```bash
 # 查看内置 Actions 列表与元数据
-node ./dist/app/entry.js info
+node ./dist/app/entry.mjs info
 
 # 列出可用动作
-node ./dist/app/entry.js list
+node ./dist/app/entry.mjs list
 
 # 查看帮助信息
-node ./dist/app/entry.js --help
+node ./dist/app/entry.mjs --help
 ```
 
 ---
@@ -52,10 +52,10 @@ node ./dist/app/entry.js --help
 
 ```bash
 # 行内 JSON 字符串传参
-node ./dist/app/entry.js run github.list-prs --input '{"repo": "team4u/actiondock"}'
+node ./dist/app/entry.mjs run list-prs --input '{"repo": "team4u/actiondock"}'
 
 # 指定输入文件传参
-node ./dist/app/entry.js run github.get-pr --input-file ./input.json
+node ./dist/app/entry.mjs run get-pr --input-file ./input.json
 ```
 
 ### 标准 JSON 信封输出
@@ -94,13 +94,13 @@ node ./dist/app/entry.js run github.get-pr --input-file ./input.json
 
 ```bash
 # 设置凭据
-node ./dist/app/entry.js config set GITHUB_TOKEN ghp_xxxxxxxxx
+node ./dist/app/entry.mjs config set GITHUB_TOKEN ghp_xxxxxxxxx
 
 # 查看配置需求清单
-node ./dist/app/entry.js config schema
+node ./dist/app/entry.mjs config schema
 ```
 
 亦可直接通过操作系统环境变量传入配置：
 ```bash
-GITHUB_TOKEN=ghp_xxxxxxxxx node ./dist/app/entry.js run github.list-prs --input '{"repo": "team4u/actiondock"}'
+GITHUB_TOKEN=ghp_xxxxxxxxx node ./dist/app/entry.mjs run list-prs --input '{"repo": "team4u/actiondock"}'
 ```

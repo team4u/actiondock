@@ -95,15 +95,15 @@ ad info --profile prod
 
 ActionDock 支持三种服务化与宿主接入运行形态，分别针对不同架构层次：
 
-- **HTTP 远程调度服务**（ad serve）：
+- HTTP 远程调度服务（`ad serve`）：
   - 核心协议：原生 RESTful JSON API。
   - 服务能力：提供完整的动作调度、参数校验、状态历史查询（`/runs`）、健康体检（`/health`）与异步任务生命周期管理。
   - 适用场景：团队共享的云端执行节点、持续集成自动化流水线调度端点、分布式任务集群。
-- **MCP HTTP 与 SSE 微服务**（ad mcp serve）：
+- MCP HTTP 与 SSE 微服务（`ad mcp serve`）：
   - 核心协议：Model Context Protocol 规范（基于 HTTP POST 与 Server-Sent Events 流式传输）。
   - 服务能力：将包内声明的 Action 与 Playbook 自动化转换为标准 MCP 工具与提示词模板。
   - 适用场景：通过网络为远程 AI 智能体平台、低代码编排平台提供标准化的工具发现与调用接口。
-- **STDIO 管道运行形态**（ad mcp）：
+- STDIO 管道运行形态（`ad mcp`）：
   - 核心协议：基于标准输入输出流（stdin 与 stdout）的 MCP JSON-RPC 协议。
   - 服务能力：无端口监听与网络暴露，零配置启动；诊断日志一律输出到 stderr，确保管道专供协议帧通信。
   - 适用场景：本地桌面智能体客户端、IDE 扩展插件或无网络权限沙箱内的直连集成。

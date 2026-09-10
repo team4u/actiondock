@@ -106,7 +106,9 @@ github-tools/
 }
 ```
 
-配套的 `actiondock.lock.json` 作为依赖锁定事实源，记录已解析依赖的精确版本与完整性校验摘要。
+配套的 `actiondock.lock.json` 作为依赖锁定单一事实源，记录已解析依赖的精确版本与完整性校验摘要。
+- 依赖添加：使用 `ad add <package>` 安装公共包，自动更新 `actiondock.json` 与 `actiondock.lock.json` 并受原子事务保护。
+- 依赖移除：使用 `ad remove <package>` 移除不需要的依赖并同步清理锁文件。
 
 ---
 

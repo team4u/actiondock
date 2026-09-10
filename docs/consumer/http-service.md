@@ -10,27 +10,28 @@
 
 `ad serve` 具备高度灵活性，支持多种启动姿态：
 
-### 全局路由模式（推荐，任意目录直接启动）
-在系统的任意终端路径直接执行 `ad serve`。服务端自动启动为全局路由模式，动态感知并通过全局注册表聚合所有通过 `ad link` 注册的包与工作区：
+### 单工程项目模式（推荐用于生产部署与独立微服务）
+在包含 `actiondock.json` 的项目目录内运行。服务端自动加载当前项目自身，以及通过 `ad add` 安装并锁定的全部依赖 Action 包：
 
 ```bash
 # 生产或云端远程微服务启动（监听非回环地址 0.0.0.0，强制要求令牌鉴权）
+cd my-project
 ad serve --host 0.0.0.0 --port 5177 --token "sk-actiondock-secret"
 
 # 本地单机调试（默认绑定 127.0.0.1 回环地址）
+cd my-project
 ad serve --port 5177 --token "sk-actiondock-secret"
 ```
 
-### 单包项目模式（在包项目目录内）
-在包含 `actiondock.json` 的项目目录内运行：
+### 全局路由模式（适用于本地免工程聚合与开发调试）
+在系统的任意非工程路径直接执行 `ad serve`。服务端自动启动为全局路由模式，动态感知并通过全局注册表聚合所有通过 `ad link` 注册的本地包与工作区：
 
 ```bash
-cd examples/github-tools
-ad serve --host 0.0.0.0 --port 8080 --token "sk-actiondock-secret"
+ad serve --port 5177 --token "sk-actiondock-secret"
 ```
 
 ### 跨目录指定路径
-无需切换目录，在任意路径通过 `-d, --dir` 参数指定目标包目录：
+无需切换目录，在任意路径通过 `-d, --dir` 参数指定目标工程目录：
 
 ```bash
 ad serve -d ./examples/github-tools --host 0.0.0.0 --port 8080 --token "sk-actiondock-secret"
@@ -104,11 +105,11 @@ curl http://localhost:5177/api/v2/actions \
   -H "Authorization: Bearer sk-actiondock-secret"
 
 # 查询特定 Action 契约定义与模式规范
-curl http://localhost:5177/api/v2/actions/github.list-prs \
+curl http://localhost:5177/api/v2/actions/list-prs \
   -H "Authorization: Bearer sk-actiondock-secret"
 
 # 多包环境下查询指定包内的 Action 详情
-curl http://localhost:5177/api/v2/packages/team4u.github-tools/actions/github.list-prs \
+curl http://localhost:5177/api/v2/packages/team4u.github-tools/actions/list-prs \
   -H "Authorization: Bearer sk-actiondock-secret"
 ```
 
@@ -123,7 +124,7 @@ ActionDock 2.0 支持同步阻塞执行与异步后台启动两种模式：
 直接执行目标 Action，执行完毕后返回完整的标准执行信封：
 
 ```bash
-curl -X POST http://localhost:5177/api/v2/actions/github.list-prs/run \
+curl -X POST http://localhost:5177/api/v2/actions/list-prs/run \
   -H "Authorization: Bearer sk-actiondock-secret" \
   -H "Content-Type: application/json" \
   -d '{
@@ -145,7 +146,7 @@ curl -X POST http://localhost:5177/api/v2/actions/github.list-prs/run \
 #### 多包模式同步执行 (`POST /api/v2/packages/:packageId/actions/:actionId/run`)
 
 ```bash
-curl -X POST http://localhost:5177/api/v2/packages/team4u.github-tools/actions/github.list-prs/run \
+curl -X POST http://localhost:5177/api/v2/packages/team4u.github-tools/actions/list-prs/run \
   -H "Authorization: Bearer sk-actiondock-secret" \
   -H "Content-Type: application/json" \
   -d '{
@@ -158,7 +159,7 @@ curl -X POST http://localhost:5177/api/v2/packages/team4u.github-tools/actions/g
 针对长耗时任务，使用异步启动接口。服务端立即返回 202 Accepted 与执行票据，并在后台继续执行：
 
 ```bash
-curl -X POST http://localhost:5177/api/v2/actions/github.list-prs/start \
+curl -X POST http://localhost:5177/api/v2/actions/list-prs/start \
   -H "Authorization: Bearer sk-actiondock-secret" \
   -H "Content-Type: application/json" \
   -d '{

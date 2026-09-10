@@ -37,6 +37,18 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
   ```
   初始化生成包含 `actiondock.json`、`actions/`、`playbooks/` 与 `tests/` 的标准工程。
 
+- 生成新 Action 模板代码 (`ad new action`)：
+  ```bash
+  ad new action <id> [-d, --desc <description>] [-f, --file <filePath>]
+  ```
+  在当前工程中脚手架生成新 Action 模板源码并在 `actiondock.json` 中自动注册。
+
+- 生成新 Playbook 规程模板 (`ad new playbook`)：
+  ```bash
+  ad new playbook <id> [-d, --desc <description>] [-a, --actions <actions...>] [-f, --file <filePath>]
+  ```
+  在当前工程中脚手架生成新 Playbook 规程 Markdown 文件并在 `actiondock.json` 中自动注册。
+
 - 能力检索与意图发现 (`ad info`)：
   ```bash
   ad info [patterns...] [-i, --intent <pattern>] [--tree] [--fallback] [--no-fallback] [-P, --package <id>] [--profile <name>] [--server <url>] [--token <token>] [--data-dir <path>] [--json] [--envelope]
@@ -76,6 +88,12 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
   ad validate [id] [-P, --package <id>] [--data-dir <path>] [--json] [--envelope]
   ```
   校验指定包或动作的元数据清单规范与输入输出 Schema 定义。
+
+- 自动生成 TypeScript 类型声明 (`ad generate types`)：
+  ```bash
+  ad generate types [--json] [--envelope]
+  ```
+  基于 `actiondock.json` 中声明的 `inputSchema` 与 `outputSchema` 自动生成强类型 TypeScript 声明文件（`.actiondock/generated/actions.d.ts`）。
 
 - 运行测试套件 (`ad test`)：
   ```bash
@@ -139,6 +157,12 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
   ```bash
   ad playbook validate [id] [-P, --package <id>] [--data-dir <path>] [--json] [--envelope]
   ```
+
+- 创建新规程模板 (`ad playbook create`)：
+  ```bash
+  ad playbook create <id> [-d, --desc <description>] [-a, --actions <actions...>] [-f, --file <filePath>]
+  ```
+  在当前工程中创建新 Playbook 规程模板（功能等同于 `ad new playbook <id>`）。
 
 ---
 
