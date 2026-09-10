@@ -39,6 +39,8 @@ export function registerExportCommand(program: Command): void {
     .option("-a, --actions <actions...>", "Only export specific action(s)", parseListOption)
     .option("-z, --archive", "Create a .zip archive of the exported skill")
     .option("--skill-md <path>", "Use specified existing SKILL.md file instead of auto-generating")
+    .option("--custom-md <path>", "Custom skill declaration (SKILL.custom.md) with slot-marked sections and optional frontmatter description for composite bundles (auto-discovered at workspace root when omitted)")
+    .option("--skill-md-only", "Bundle mode only: regenerate only the composite SKILL.md in place (always regenerates, ignores any existing SKILL.md)")
     .option("--vendor-deps", "Materialize locked production dependencies into the exported skill")
     .option("--allow-install-scripts", "Allow lifecycle install scripts to run during dependency materialization")
     .option("--require-reproducible", "Require reproducible build and fail if install scripts must run")
@@ -57,6 +59,12 @@ export function registerExportCommand(program: Command): void {
       if (options.bundle && mode === "node") {
         throw new ExecutionError(
           "Composite Skill export (--bundle) currently only supports source mode. Please use '--mode source' to export as a composite workspace Skill."
+        );
+      }
+
+      if (options.skillMdOnly && options.bundle === undefined) {
+        throw new ExecutionError(
+          "Option --skill-md-only requires composite bundle mode (--bundle)."
         );
       }
 
@@ -132,6 +140,8 @@ export function registerExportCommand(program: Command): void {
             archive: options.archive,
             workspaceRoot: options.workspace ? process.cwd() : undefined,
             skillMdPath: options.skillMd,
+            customMdPath: options.customMd,
+            skillMdOnly: options.skillMdOnly,
           });
 
           if (isJson) {
@@ -144,6 +154,9 @@ export function registerExportCommand(program: Command): void {
           console.log(`  Actions:    ${result.actionsCount}`);
           console.log(`  Playbooks:  ${result.playbooksCount}`);
           console.log(`  Skill Dir:  ${result.skillDir}`);
+          if (result.skillMdFile) {
+            console.log(`  SKILL.md:   Regenerated ${result.skillMdFile}`);
+          }
           if (result.usedExistingSkillMd) {
             console.log(`  SKILL.md:   Reused existing file from ${result.usedExistingSkillMd}`);
           }

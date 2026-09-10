@@ -135,9 +135,10 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
 
 - 导出智能体技能 (`ad export skill`)：
   ```bash
-  ad export skill [-P, --package <id...>] [--workspace] [--all] [--bundle [name]] [-m, --mode <mode>] [-o, --out <path>] [-p, --playbook <playbooks...>] [-a, --actions <actions...>] [-z, --archive] [--skill-md <path>] [--vendor-deps] [--allow-install-scripts] [--require-reproducible]
+  ad export skill [-P, --package <id...>] [--workspace] [--all] [--bundle [name]] [-m, --mode <mode>] [-o, --out <path>] [-p, --playbook <playbooks...>] [-a, --actions <actions...>] [-z, --archive] [--skill-md <path>] [--custom-md <path>] [--skill-md-only] [--vendor-deps] [--allow-install-scripts] [--require-reproducible]
   ```
   导出面向智能体的 Agent Skill 目录。支持 `-m, --mode source`（默认源码型）与 `-m, --mode node`（自包含 Node.js 目录型）；已废弃并移除 `--standalone`、`--target` 与 `--bytecode` 选项（传入将返回 `UNSUPPORTED_BUILD_MODE` 错误）。
+  复合导出（`--bundle`）支持 `--custom-md <path>` 指定自定义说明书（`SKILL.custom.md`，含槽位段落与可选 description 覆盖；缺省时自动发现工作区根目录/当前目录下的同名文件），以及 `--skill-md-only` 就地仅重生成复合 SKILL.md（始终重新生成，忽略已有 SKILL.md，不拷贝子包产物）。
 
 ---
 

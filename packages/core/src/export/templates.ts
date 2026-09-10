@@ -389,12 +389,113 @@ export interface CompositeSkillPackageInfo {
 }
 
 /**
+ * 复合技能自定义说明书（SKILL.custom.md）的槽位，
+ * 决定自定义段落插入到官方模板生成结果中的位置。
+ */
+export type CompositeCustomSlot =
+  | "intro"
+  | "after-init"
+  | "after-describe"
+  | "after-actions"
+  | "after-playbooks"
+  | "after-invoke"
+  | "append";
+
+export const COMPOSITE_CUSTOM_SLOTS: readonly CompositeCustomSlot[] = [
+  "intro",
+  "after-init",
+  "after-describe",
+  "after-actions",
+  "after-playbooks",
+  "after-invoke",
+  "append",
+];
+
+/** 工作区内约定俗成的复合技能自定义说明书文件名。 */
+export const COMPOSITE_CUSTOM_DECLARATION_FILE = "SKILL.custom.md";
+
+export interface CompositeCustomSection {
+  slot: CompositeCustomSlot;
+  content: string;
+}
+
+export interface CompositeCustomDeclaration {
+  /** 自定义说明书 frontmatter 中声明的 description 覆盖值 */
+  description?: string;
+  sections: CompositeCustomSection[];
+}
+
+const CUSTOM_SLOT_MARKER_PATTERN = /^\s*<!--\s*actiondock:slot\s+([a-zA-Z][a-zA-Z0-9-]*)\s*-->\s*$/;
+
+/**
+ * 解析自定义说明书正文：以 `<!-- actiondock:slot <name> -->` 标记行分段。
+ * 首个标记之前的内容归入 `append` 槽位；未知槽位名直接抛错，避免拼写错误被静默吞掉。
+ */
+export function parseCustomSections(source: string): CompositeCustomSection[] {
+  const sections: CompositeCustomSection[] = [];
+  let currentSlot: CompositeCustomSlot = "append";
+  let buffer: string[] = [];
+
+  const flush = () => {
+    const content = buffer.join("\n").trim();
+    buffer = [];
+    if (content) {
+      sections.push({ slot: currentSlot, content });
+    }
+  };
+
+  for (const line of source.split(/\r?\n/)) {
+    const match = line.match(CUSTOM_SLOT_MARKER_PATTERN);
+    if (match) {
+      flush();
+      const slot = match[1] as CompositeCustomSlot;
+      if (!COMPOSITE_CUSTOM_SLOTS.includes(slot)) {
+        throw new Error(
+          `Unknown ActionDock custom slot '${match[1]}'. Valid slots: ${COMPOSITE_CUSTOM_SLOTS.join(", ")}`
+        );
+      }
+      currentSlot = slot;
+      continue;
+    }
+    buffer.push(line);
+  }
+  flush();
+
+  return sections;
+}
+
+/**
+ * 解析复合技能自定义说明书文件：支持 YAML frontmatter 中的 `description` 覆盖，
+ * 正文按槽位标记解析为自定义段落。
+ */
+export function parseCustomSkillDeclaration(source: string): CompositeCustomDeclaration {
+  let body = source;
+  let description: string | undefined;
+
+  const frontmatter = source.match(/^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/);
+  if (frontmatter) {
+    body = source.slice(frontmatter[0].length);
+    const descLine = frontmatter[1].match(/^description:[ \t]*(.+?)[ \t]*$/m);
+    if (descLine) {
+      description = descLine[1].replace(/^["']|["']$/g, "");
+    }
+  }
+
+  return { description, sections: parseCustomSections(body) };
+}
+
+/**
  * 生成多包聚合的复合模式 SKILL.md 文档。
  */
 export function generateCompositeSkillMd(
   bundleName: string,
   description: string,
-  packages: CompositeSkillPackageInfo[]
+  packages: CompositeSkillPackageInfo[],
+  options?: {
+    customSections?: CompositeCustomSection[];
+    /** 规程链接的子包目录前缀：导出布局为 "packages"（默认）；就地生成时传 "." 使用工作区实际目录 */
+    packagesBaseDir?: string;
+  }
 ): string {
   const cleanName = bundleName.replace(/[^a-zA-Z0-9-_]/g, "-").toLowerCase();
   const samplePkg = packages.find((p) => p.actions && p.actions.length > 0);
@@ -415,28 +516,27 @@ export function generateCompositeSkillMd(
     .join("\n\n");
 
   const playbookEntries: string[] = [];
+  const packagesBaseDir = options?.packagesBaseDir ?? "packages";
   for (const pkg of packages) {
     for (const pb of pkg.playbooks) {
-      const relPath = `packages/${pkg.packageDir}/playbooks/${basename(pb.filePath)}`;
+      const relPath =
+        packagesBaseDir === "."
+          ? `./${pkg.packageDir}/playbooks/${basename(pb.filePath)}`
+          : `packages/${pkg.packageDir}/playbooks/${basename(pb.filePath)}`;
       playbookEntries.push(`- [${pb.name || pb.id}](${relPath}): ${pb.description || "标准操作规程"}`);
     }
   }
 
-  const playbookSection =
-    playbookEntries.length > 0
-      ? `## 推荐操作规程\n\n涉及多步骤或业务流程时，优先遵循以下原位规程：\n\n${playbookEntries.join("\n")}\n\n---\n`
-      : "";
-
-  return `---
+  const sIntro = `---
 name: ${cleanName}
 description: ${description}
 ---
 
 # ${bundleName} 复合技能套件
 
-${description}
+${description}`;
 
-## ActionDock 运行时初始化
+  const sInit = `## ActionDock 运行时初始化
 
 本技能为 **ActionDock 复合工作区技能包**，聚合了多个功能包。智能体在初次调用或初始化时，在当前技能根目录执行注册命令：
 
@@ -444,24 +544,34 @@ ${description}
 ad link "<skill_root>"
 \`\`\`
 
-> \`ad link\` 会自动识别并注册工作区下的所有子包，使其中的 Action 随时可以通过完全限定标识调用。若初次运行提示依赖缺失，可在 \`<skill_root>\` 目录下执行 \`npm install --omit=dev\` 安装聚合依赖。
+> \`ad link\` 会自动识别并注册工作区下的所有子包，使其中的 Action 随时可以通过完全限定标识调用。若初次运行提示依赖缺失，可在 \`<skill_root>\` 目录下执行 \`npm install --omit=dev\` 安装聚合依赖。`;
 
-## 动作参数契约按需调阅
+  const sDescribe = `## 动作参数契约按需调阅
 
 为节省上下文开销，各 Action 的详细参数结构不静态内嵌在说明书中。在调用未知参数的 Action 前，可在终端执行命令查阅输入输出约束：
 
 \`\`\`bash
 ad describe ${sampleActionId}
-\`\`\`
+\`\`\``;
 
-## 可用 Action 工具清单
+  const sActions = `## 可用 Action 工具清单
 
 ${actionSections}
 
----
+---`;
 
-${playbookSection}
-## 标准调用命令
+  const sPlaybooks =
+    playbookEntries.length > 0
+      ? `## 推荐操作规程
+
+涉及多步骤或业务流程时，优先遵循以下原位规程：
+
+${playbookEntries.join("\n")}
+
+---`
+      : "";
+
+  const sInvoke = `## 标准调用命令
 
 推荐使用参数文件传递内容，杜绝终端引号转义问题：
 
@@ -495,9 +605,9 @@ ad run ${sampleActionId} --input-file /tmp/input.json
     "message": "错误详细描述信息"
   }
 }
-\`\`\`
+\`\`\``;
 
----
+  const sTroubleshooting = `---
 
 ## 故障排查与环境安装指引（按需查阅）
 
@@ -530,8 +640,31 @@ ad run ${sampleActionId} --input-file /tmp/input.json
 - **完成安装后重新链接复合技能**：
   \`\`\`bash
   ad link "<skill_root>"
-  \`\`\`
-`;
+  \`\`\``;
+
+  const parts: Array<{ slot: CompositeCustomSlot; text: string }> = [
+    { slot: "intro", text: sIntro },
+    { slot: "after-init", text: sInit },
+    { slot: "after-describe", text: sDescribe },
+    { slot: "after-actions", text: sActions },
+    { slot: "after-playbooks", text: sPlaybooks },
+    { slot: "after-invoke", text: sInvoke },
+    { slot: "append", text: sTroubleshooting },
+  ];
+
+  // 自定义段落按文件顺序插入到对应槽位（倒序插入保证同槽位多段保持先后）
+  const customSections = options?.customSections ?? [];
+  for (const section of [...customSections].reverse()) {
+    const anchorIndex = parts.findIndex((p) => p.slot === section.slot);
+    parts.splice(anchorIndex + 1, 0, { slot: section.slot, text: section.content });
+  }
+
+  return (
+    parts
+      .filter((p) => p.text.trim().length > 0)
+      .map((p) => p.text.trim())
+      .join("\n\n") + "\n"
+  );
 }
 
 

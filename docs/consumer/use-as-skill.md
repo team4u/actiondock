@@ -143,6 +143,53 @@ ad export skill -P team4u.github-tools --mode node --vendor-deps --out ./dist/gi
 ad export skill -P team4u.github-tools --playbook review-pr --out ~/.claude/skills/review-pr
 ```
 
+### 自定义复合技能说明书（SKILL.custom.md）
+
+复合技能套件的 SKILL.md 默认由官方模板依据各子包清单自动生成。若需注入宿主或团队特有的内容（如环境初始化步骤、凭据配置约定），无需手写整份说明书——在工作区根目录放置 `SKILL.custom.md` 自定义说明书，导出时会按槽位自动拼入官方模板：
+
+```markdown
+---
+description: 覆盖复合套件的 description 元数据（可选）
+---
+
+<!-- actiondock:slot after-init -->
+### 数据目录持久化软链（OpenClaw 宿主专用）
+
+（宿主相关的初始化说明……）
+
+<!-- actiondock:slot append -->
+## 参考文档
+
+- [团队 Wiki](https://wiki.example.com)
+```
+
+可用槽位决定自定义段落的插入位置：
+
+| 槽位 | 插入位置 |
+| :--- | :--- |
+| `intro` | 标题与简介之后、运行时初始化之前 |
+| `after-init` | 运行时初始化之后 |
+| `after-describe` | 参数契约调阅之后 |
+| `after-actions` | Action 工具清单之后 |
+| `after-playbooks` | 推荐操作规程之后 |
+| `after-invoke` | 标准调用命令之后 |
+| `append` | 文档末尾 |
+
+- 标记行之前的内容自动归入 `append` 槽位；未知槽位名会直接报错。
+- frontmatter 的 `description` 仅在导出命令未显式传入描述时生效。
+
+复合导出（`ad export skill --bundle ...`）会自动发现工作区根目录或当前目录下的 `SKILL.custom.md`，亦可通过 `--custom-md <path>` 显式指定：
+
+```bash
+ad export skill --bundle vip-agent-tools --out ./dist/vip-agent-tools-skill
+```
+
+日常维护中，Action 目录与规程索引随清单变化，可就地仅重生成 SKILL.md（始终重新生成，不拷贝子包产物）：
+
+```bash
+ad export skill --bundle vip-agent-tools --skill-md-only
+```
+
 ---
 
 ## 主流智能体客户端装载路径

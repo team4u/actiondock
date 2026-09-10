@@ -396,6 +396,10 @@ export interface CompositeSkillExportOptions {
   workspaceRoot?: string;
   /** 显式指定的已有 SKILL.md 文件路径 */
   skillMdPath?: string;
+  /** 显式指定的自定义说明书（SKILL.custom.md）路径；缺省时自动发现工作区/当前目录下的同名文件 */
+  customMdPath?: string;
+  /** 仅生成复合 SKILL.md（始终重新生成，忽略已有 SKILL.md，不拷贝子包产物） */
+  skillMdOnly?: boolean;
 }
 
 /**
@@ -420,4 +424,6 @@ export interface CompositeSkillExportResult {
   files: string[];
   /** 若复用了已有的 SKILL.md 文件，返回该文件的绝对路径 */
   usedExistingSkillMd?: string;
+  /** skillMdOnly 模式下实际写出的 SKILL.md 文件绝对路径 */
+  skillMdFile?: string;
 }
