@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { registerActionCommands } from "./action";
+import { registerAddCommand } from "./add";
 import { registerBuildCommand } from "./build";
 import { registerConfigCommands } from "./config";
 import { registerDescribeCommand } from "./describe";
@@ -11,8 +12,10 @@ import { registerLinkCommands } from "./link";
 import { registerListCommand } from "./list";
 import { registerMcpCommands } from "./mcp";
 import { registerNewCommands } from "./new";
+import { registerPackCommand } from "./pack";
 import { registerPlaybookCommands } from "./playbook";
 import { registerProfileCommands } from "./profile";
+import { registerRemoveCommand } from "./remove";
 import { registerRunCommand } from "./run";
 import { registerRunsCommands } from "./runs";
 import { registerServeCommand } from "./serve";
@@ -59,6 +62,8 @@ export function createCliProgram(): Command {
   });
 
   registerInitCommand(program);
+  registerAddCommand(program);
+  registerRemoveCommand(program);
   registerNewCommands(program);
   registerInfoCommand(program);
   registerDoctorCommand(program);
@@ -73,6 +78,7 @@ export function createCliProgram(): Command {
   registerRunsCommands(program);
   registerTestCommand(program);
   registerBuildCommand(program);
+  registerPackCommand(program);
   registerExportCommand(program);
   registerLinkCommands(program);
   registerProfileCommands(program);
@@ -86,6 +92,7 @@ export function createCliProgram(): Command {
 
 export {
   registerActionCommands,
+  registerAddCommand,
   registerBuildCommand,
   registerConfigCommands,
   registerDescribeCommand,
@@ -97,8 +104,10 @@ export {
   registerListCommand,
   registerMcpCommands,
   registerNewCommands,
+  registerPackCommand,
   registerPlaybookCommands,
   registerProfileCommands,
+  registerRemoveCommand,
   registerRunCommand,
   registerRunsCommands,
   registerServeCommand,

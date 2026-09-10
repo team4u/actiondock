@@ -358,8 +358,14 @@ describe("CLI End-to-End", () => {
     // 9. build
     const buildProc = runCli(["build"], tempDir);
     expect(buildProc.exitCode).toBe(0);
-    const expectedGithubOpsBin = process.platform === "win32" ? "github-ops.exe" : "github-ops";
-    expect(existsSync(join(tempDir, "dist", expectedGithubOpsBin))).toBe(true);
+    expect(existsSync(join(tempDir, "dist", "github-ops-build", "entry.mjs"))).toBe(true);
+    expect(existsSync(join(tempDir, "dist", "github-ops-build", "package.json"))).toBe(true);
+    expect(existsSync(join(tempDir, "dist", "github-ops-build", "artifact.json"))).toBe(true);
+
+    // 9b. pack
+    const packProc = runCli(["pack"], tempDir);
+    expect(packProc.exitCode).toBe(0);
+    expect(existsSync(join(tempDir, "dist", "github-ops-0.1.0.tgz"))).toBe(true);
 
     // 10. export skill (default: source skill)
     const exportProc = runCli(["export", "skill"], tempDir);
@@ -377,17 +383,18 @@ describe("CLI End-to-End", () => {
       existsSync(join(tempDir, "dist", "github-ops-skill", "actions", "greet.ts"))
     ).toBe(true);
 
-    // 10b. export skill --standalone
-    const exportStandaloneProc = runCli(["export", "skill", "--standalone"], tempDir);
-    expect(exportStandaloneProc.exitCode).toBe(0);
+    // 10b. export skill --mode node
+    const exportNodeProc = runCli(["export", "skill", "--mode", "node"], tempDir);
+    expect(exportNodeProc.exitCode).toBe(0);
     expect(
-      existsSync(join(tempDir, "dist", "github-ops-skill", "bin", expectedGithubOpsBin))
+      existsSync(join(tempDir, "dist", "github-ops-skill", "entry.mjs"))
     ).toBe(true);
-    expect(
-      existsSync(join(tempDir, "dist", "github-ops-skill", "actiondock.skill.json"))
-    ).toBe(false);
 
-    // 10c. export skill with --playbook selective flag
+    // 10c. export skill rejects --standalone
+    const exportStandaloneProc = runCli(["export", "skill", "--standalone"], tempDir);
+    expect(exportStandaloneProc.exitCode).not.toBe(0);
+
+    // 10d. export skill with --playbook selective flag
     const selectiveOut = join(tempDir, "dist", "custom-skill");
     const exportSelectiveProc = runCli(
       ["export", "skill", "--playbook", "greet-user", "-o", selectiveOut],
@@ -411,7 +418,7 @@ describe("CLI End-to-End", () => {
     expect(existsSync(join(bundleOut, "packages", "github-ops", "SKILL.md"))).toBe(false);
 
     // 10e. export skill validation tests: conflict rejection
-    const conflictProc = runCli(["export", "skill", "--bundle", "suite", "--standalone"], tempDir);
+    const conflictProc = runCli(["export", "skill", "--bundle", "suite", "--mode", "node"], tempDir);
     expect(conflictProc.exitCode).not.toBe(0);
     expect(conflictProc.stderr.toString()).toContain("Composite Skill export (--bundle) currently only supports source mode");
 
@@ -528,6 +535,7 @@ describe("CLI End-to-End", () => {
     const outsideBuildOut = join(tmpdir(), "dist-outside-bin");
     const outsideBuild = runCli(["build", "-P", "team.github-ops", "-o", outsideBuildOut], tmpdir());
     expect(outsideBuild.exitCode).toBe(0);
+    expect(existsSync(join(outsideBuildOut, "entry.mjs"))).toBe(true);
 
     // Export with -P from outside directory
     const outsideExportDir = join(tmpdir(), "dist-outside-skill");
@@ -1256,5 +1264,25 @@ describe("CLI Review & Machine Contract Regression", () => {
     expect(manifestAfterPb.playbooks["deploy-flow"]).toBeDefined();
     expect(manifestAfterPb.playbooks["deploy-flow"].description).toBe("Deployment flow SOP");
     expect(manifestAfterPb.playbooks["deploy-flow"].actions).toEqual(["calculator"]);
+  });
+
+  it("enforces UNSUPPORTED_BUILD_MODE on ad build with --target or --bytecode and validates ad pack --dry-run", () => {
+    runCli(["init", "--id", "test.build-modes", "."], tempDir);
+
+    const targetProc = runCli(["build", "--target", "linux-x64", "--json"], tempDir);
+    expect(targetProc.exitCode).not.toBe(0);
+    const targetErr = JSON.parse(targetProc.stdout.toString() || targetProc.stderr.toString());
+    expect(targetErr.error?.code || targetErr.code).toBe("UNSUPPORTED_BUILD_MODE");
+
+    const byteProc = runCli(["build", "--bytecode", "--json"], tempDir);
+    expect(byteProc.exitCode).not.toBe(0);
+    const byteErr = JSON.parse(byteProc.stdout.toString() || byteProc.stderr.toString());
+    expect(byteErr.error?.code || byteErr.code).toBe("UNSUPPORTED_BUILD_MODE");
+
+    const packDryProc = runCli(["pack", "--dry-run", "--json"], tempDir);
+    expect(packDryProc.exitCode).toBe(0);
+    const packDryRes = JSON.parse(packDryProc.stdout.toString());
+    expect(packDryRes.packageId).toBe("test.build-modes");
+    expect(packDryRes.tarballPath).toBeUndefined();
   });
 });

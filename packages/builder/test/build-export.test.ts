@@ -278,28 +278,34 @@ export default defineAction({
     expect(exportRes.files).toContain("lib/utils/formatter.ts");
   });
 
-  it("exports standalone binary Skill package when standalone is true", async () => {
+  it("exports Node directory Skill package when mode is node and rejects standalone", async () => {
+    // 验证传入 standalone 选项时严格拒绝
+    await expect(
+      exportSkill({
+        projectRoot: tempDir,
+        standalone: true,
+      })
+    ).rejects.toThrow();
+
     const exportRes = await exportSkill({
       projectRoot: tempDir,
-      standalone: true,
+      mode: "node",
     });
 
-    const expectedBinName = process.platform === "win32" ? "sample-tools.exe" : "sample-tools";
-    expect(exportRes.mode).toBe("standalone");
+    expect(exportRes.mode).toBe("node");
     expect(existsSync(exportRes.skillDir)).toBe(true);
     expect(existsSync(join(exportRes.skillDir, "SKILL.md"))).toBe(true);
-    expect(existsSync(join(exportRes.skillDir, "actiondock.skill.json"))).toBe(false);
-    expect(existsSync(join(exportRes.skillDir, "bin", expectedBinName))).toBe(true);
+    expect(existsSync(join(exportRes.skillDir, "entry.mjs"))).toBe(true);
     expect(existsSync(join(exportRes.skillDir, "playbooks", "greet-user.md"))).toBe(true);
 
     const skillMd = readFileSync(join(exportRes.skillDir, "SKILL.md"), "utf-8");
-    expect(skillMd).toContain(`./bin/${expectedBinName}`);
+    expect(skillMd).toContain("node ./entry.mjs");
     expect(skillMd).toContain("sample.greet");
 
-    // Execute exported binary directly
-    const exportedBin = join(exportRes.skillDir, "bin", expectedBinName);
+    // Execute exported entrypoint directly
+    const exportedEntry = join(exportRes.skillDir, "entry.mjs");
     const binProc = Bun.spawnSync(
-      [exportedBin, "run", "sample.greet", "--input", '{"name": "Agent"}'],
+      [exportedEntry, "run", "sample.greet", "--input", '{"name": "Agent"}'],
       {
         stdout: "pipe",
         stderr: "pipe",
@@ -360,17 +366,16 @@ actions:
     expect(skillMd).toContain("greet-user");
     expect(skillMd).not.toContain("farewell-sop");
 
-    // 2. Export standalone binary skill for greet-user playbook only
-    const exportStandaloneRes = await exportSkill({
+    // 2. Export node directory skill for greet-user playbook only
+    const exportNodeRes = await exportSkill({
       projectRoot: tempDir,
-      standalone: true,
+      mode: "node",
       playbooks: ["greet-user"],
-      outDir: join(tempDir, "dist", "selective-standalone-skill"),
+      outDir: join(tempDir, "dist", "selective-node-skill"),
     });
 
-    const expectedBinName = process.platform === "win32" ? "sample-tools.exe" : "sample-tools";
-    const selectiveBin = join(exportStandaloneRes.skillDir, "bin", expectedBinName);
-    const listProc = Bun.spawnSync([selectiveBin, "list", "--json"], {
+    const selectiveEntry = join(exportNodeRes.skillDir, "entry.mjs");
+    const listProc = Bun.spawnSync([selectiveEntry, "list", "--json"], {
       stdout: "pipe",
       stderr: "pipe",
     });
@@ -380,25 +385,18 @@ actions:
     expect(listData[0].id).toBe("sample.greet");
   }, 30000);
 
-  it("supports customizing --bytecode and --minify options when building", async () => {
-    const unminifiedOut = join(tempDir, "dist", "unminified-bin");
-    const buildRes = await buildProject({
-      projectRoot: tempDir,
-      outfile: unminifiedOut,
-      bytecode: false,
-      minify: false,
-    });
-
-    expect(existsSync(buildRes.executablePath)).toBe(true);
-
-    const runProc = Bun.spawnSync(
-      [buildRes.executablePath, "run", "sample.greet", "--input", '{"name": "NoMinify"}'],
-      { cwd: tempDir, stdout: "pipe", stderr: "pipe" }
-    );
-    expect(runProc.exitCode).toBe(0);
-    const res = JSON.parse(runProc.stdout.toString());
-    expect(res.ok).toBe(true);
-    expect(res.data.message).toBe("Hello, NoMinify!");
-  }, 30000);
+  it("throws BuilderError with UNSUPPORTED_BUILD_MODE when target or bytecode is passed", async () => {
+    let err: any;
+    try {
+      await buildProject({
+        projectRoot: tempDir,
+        bytecode: true,
+      });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeDefined();
+    expect(err.code).toBe("UNSUPPORTED_BUILD_MODE");
+  });
 });
 

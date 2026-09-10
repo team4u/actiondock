@@ -26,6 +26,8 @@ import type {
   ExecutionTicket,
 } from "../execution/types";
 import { findProjectRoot, loadProjectConfig } from "../project/loader";
+import { ActionPackageResolver } from "../project/resolver";
+import { hasPendingTransactions, recoverPendingTransactions } from "../project/transactions";
 import { listLinkedPackages } from "../registry/registry";
 import { InMemoryEventSink, type EventSink } from "../runtime/events";
 import type { ActionDockHost, ActionDockHostOptions } from "./types";
@@ -48,6 +50,8 @@ function isActionDockApp(item: unknown): item is ActionDockApp {
 export class DefaultActionDockHost implements ActionDockHost {
   private apps = new Map<string, ActionDockApp>();
   private activeSubRunsPerRoot = new Map<string, number>();
+  private hostPublicPackageIds = new Set<string>();
+  private resolver?: ActionPackageResolver;
   private maxCallDepth: number;
   private maxSubRuns: number;
   private eventSink: EventSink;
@@ -58,11 +62,11 @@ export class DefaultActionDockHost implements ActionDockHost {
     this.maxSubRuns = options.maxSubRuns ?? 64;
     this.eventSink = options.eventSink ?? (options.platform as any)?.eventSink ?? new InMemoryEventSink();
 
-    // 1. 注册显式传入的 packages 列表
+    // 注册显式传入的 packages 列表
     if (options.packages && Array.isArray(options.packages)) {
       for (const item of options.packages) {
         if (isActionDockApp(item)) {
-          this.registerApp(item);
+          this.registerAppInternal(item, true);
         } else {
           const app = new DefaultActionDockApp({
             ...item,
@@ -78,12 +82,12 @@ export class DefaultActionDockHost implements ActionDockHost {
             maxSubRuns: item.maxSubRuns ?? this.maxSubRuns,
             packageContextResolver: this.resolvePackageContext.bind(this),
           });
-          this.registerApp(app);
+          this.registerAppInternal(app, true);
         }
       }
     }
 
-    // 2. 自动加载当前工程（若发现工程根目录且未显式禁用）
+    // 自动加载当前工程（若发现工程根目录且未显式禁用）
     if (options.autoLoadCurrentProject !== false) {
       let root = options.projectRoot;
       if (!root) {
@@ -94,11 +98,70 @@ export class DefaultActionDockHost implements ActionDockHost {
       }
 
       if (root && existsSync(root)) {
+        // 依据事务日志恢复未完成提交的悬空事务
+        if (hasPendingTransactions(root)) {
+          recoverPendingTransactions(root);
+        }
+
         try {
           const config = loadProjectConfig(root);
-          if (!this.apps.has(config.id)) {
-            const mainApp = new DefaultActionDockApp({
-              packageRoot: root,
+          this.hostPublicPackageIds.add(config.id);
+
+          this.resolver = new ActionPackageResolver({
+            projectRoot: root,
+            manifest: config,
+            allowDevLinks: options.scanLinkedPackages,
+            customHome: options.customHome,
+          });
+
+          const graph = this.resolver.resolveSync();
+          this.hostPublicPackageIds.add(graph.rootPackageId);
+          for (const depId of graph.directDependencyIds) {
+            this.hostPublicPackageIds.add(depId);
+          }
+
+          for (const pkg of graph.packages.values()) {
+            if (!this.apps.has(pkg.packageId)) {
+              const isDirectOrRoot = this.hostPublicPackageIds.has(pkg.packageId);
+              const app = new DefaultActionDockApp({
+                packageRoot: pkg.packageRoot,
+                projectConfig: pkg.manifest,
+                platform: options.platform,
+                inMemory: options.inMemory,
+                customHome: options.customHome,
+                dataDir: options.dataDir,
+                clock: options.clock,
+                process: options.process,
+                logger: options.logger,
+                eventSink: this.eventSink,
+                maxCallDepth: this.maxCallDepth,
+                maxSubRuns: this.maxSubRuns,
+                packageContextResolver: this.resolvePackageContext.bind(this),
+              });
+              this.registerAppInternal(app, isDirectOrRoot);
+            }
+          }
+        } catch (err: any) {
+          if (
+            err?.code === "ACTION_PACKAGE_VERSION_CONFLICT" ||
+            err?.code === "PROJECT_RECOVERY_REQUIRED"
+          ) {
+            throw err;
+          }
+          // 忽略非 ActionDock 工程目录解析异常
+        }
+      }
+    }
+
+    // 扫描已软链接的外部包并注册至 Host
+    if (options.scanLinkedPackages) {
+      for (const linked of listLinkedPackages(options.customHome)) {
+        if (existsSync(linked.path) && !this.apps.has(linked.id)) {
+          try {
+            const config = loadProjectConfig(linked.path);
+            this.hostPublicPackageIds.add(linked.id);
+            const app = new DefaultActionDockApp({
+              packageRoot: linked.path,
               projectConfig: config,
               platform: options.platform,
               inMemory: options.inMemory,
@@ -112,43 +175,11 @@ export class DefaultActionDockHost implements ActionDockHost {
               maxSubRuns: this.maxSubRuns,
               packageContextResolver: this.resolvePackageContext.bind(this),
             });
-            this.registerApp(mainApp);
-          }
-        } catch {
-          // 忽略非 ActionDock 工程目录解析异常
-        }
-      }
-    }
-
-    // 3. 扫描已软链接的外部包
-    if (options.scanLinkedPackages) {
-      try {
-        const linked = listLinkedPackages(options.customHome);
-        for (const entry of linked) {
-          if (!this.apps.has(entry.id) && existsSync(entry.path)) {
-            try {
-              const linkedApp = new DefaultActionDockApp({
-                packageRoot: entry.path,
-                platform: options.platform,
-                inMemory: options.inMemory,
-                customHome: options.customHome,
-                dataDir: options.dataDir,
-                clock: options.clock,
-                process: options.process,
-                logger: options.logger,
-                eventSink: this.eventSink,
-                maxCallDepth: this.maxCallDepth,
-                maxSubRuns: this.maxSubRuns,
-                packageContextResolver: this.resolvePackageContext.bind(this),
-              });
-              this.registerApp(linkedApp);
-            } catch {
-              // 忽略损坏的外部链接包
-            }
+            this.registerAppInternal(app, true);
+          } catch {
+            // 忽略非正常链接包
           }
         }
-      } catch {
-        // 忽略扫描外部链接包异常
       }
     }
   }
@@ -179,7 +210,7 @@ export class DefaultActionDockHost implements ActionDockHost {
     return Array.from(this.apps.values());
   }
 
-  registerApp(app: ActionDockApp): void {
+  private registerAppInternal(app: ActionDockApp, isPublic: boolean): void {
     if (this.apps.has(app.packageId)) {
       const existing = this.apps.get(app.packageId)!;
       if (existing === app) {
@@ -190,7 +221,14 @@ export class DefaultActionDockHost implements ActionDockHost {
       );
     }
     this.apps.set(app.packageId, app);
+    if (isPublic) {
+      this.hostPublicPackageIds.add(app.packageId);
+    }
     this.bindApp(app);
+  }
+
+  registerApp(app: ActionDockApp): void {
+    this.registerAppInternal(app, true);
   }
 
   async info(): Promise<PackageInfo[]> {
@@ -201,8 +239,12 @@ export class DefaultActionDockHost implements ActionDockHost {
     let results: ActionSummary[] = [];
     const apps = this.listApps();
     for (const app of apps) {
+      const isPublic = this.hostPublicPackageIds.has(app.packageId);
       const appSummaries = await app.listActions();
       for (const item of appSummaries) {
+        if (!isPublic && this.resolver && !this.resolver.canRootCall(app.packageId, item.id)) {
+          continue;
+        }
         const qualifiedId =
           apps.length > 1 && !item.id.includes("/")
             ? `${app.packageId}/${item.id}`
@@ -246,6 +288,12 @@ export class DefaultActionDockHost implements ActionDockHost {
     }
 
     if (parsed.packageId) {
+      const isPublic = this.hostPublicPackageIds.has(parsed.packageId);
+      if (!isPublic && this.resolver && !this.resolver.canRootCall(parsed.packageId, parsed.actionId)) {
+        throw new Error(
+          `UNDECLARED_ACTION_DEPENDENCY: Action '${parsed.packageId}/${parsed.actionId}' is not declared as a direct dependency in actiondock.json and is not delegated by a visible playbook`
+        );
+      }
       const app = this.getApp(parsed.packageId);
       if (!app) {
         throw new Error(`Package '${parsed.packageId}' not found in host`);
@@ -256,6 +304,10 @@ export class DefaultActionDockHost implements ActionDockHost {
     const matches: Array<{ app: ActionDockApp; spec: ActionSpec }> = [];
     for (const app of this.listApps()) {
       try {
+        const isPublic = this.hostPublicPackageIds.has(app.packageId);
+        if (!isPublic && this.resolver && !this.resolver.canRootCall(app.packageId, parsed.actionId)) {
+          continue;
+        }
         const spec = await app.describeAction(parsed.actionId);
         matches.push({ app, spec });
       } catch {
@@ -280,6 +332,13 @@ export class DefaultActionDockHost implements ActionDockHost {
     const results: PlaybookSummary[] = [];
     const apps = this.listApps();
     for (const app of apps) {
+      const isPublic = this.hostPublicPackageIds.has(app.packageId);
+      if (!isPublic && this.resolver) {
+        const graph = this.resolver.resolveSync();
+        if (!graph.directDependencyIds.has(app.packageId)) {
+          continue;
+        }
+      }
       const appPlaybooks = await app.listPlaybooks();
       for (const item of appPlaybooks) {
         const qualifiedId =
@@ -301,6 +360,15 @@ export class DefaultActionDockHost implements ActionDockHost {
       const lastSlashIndex = id.lastIndexOf("/");
       const packageId = id.slice(0, lastSlashIndex);
       const playbookId = id.slice(lastSlashIndex + 1);
+      const isPublic = this.hostPublicPackageIds.has(packageId);
+      if (!isPublic && this.resolver) {
+        const graph = this.resolver.resolveSync();
+        if (!graph.directDependencyIds.has(packageId)) {
+          throw new Error(
+            `UNDECLARED_ACTION_DEPENDENCY: Playbook '${id}' belongs to undeclared transitive package '${packageId}'`
+          );
+        }
+      }
       const app = this.getApp(packageId);
       if (!app) {
         throw new Error(`Package '${packageId}' not found in host`);
@@ -310,6 +378,13 @@ export class DefaultActionDockHost implements ActionDockHost {
 
     for (const app of this.listApps()) {
       try {
+        const isPublic = this.hostPublicPackageIds.has(app.packageId);
+        if (!isPublic && this.resolver) {
+          const graph = this.resolver.resolveSync();
+          if (!graph.directDependencyIds.has(app.packageId)) {
+            continue;
+          }
+        }
         return await app.describePlaybook(id);
       } catch {
         // 忽略未匹配的包
@@ -340,7 +415,7 @@ export class DefaultActionDockHost implements ActionDockHost {
       throw new Error("ActionDockHost is closed: new tasks rejected");
     }
 
-    // 1. 解析目标包与 Action 动作标识
+    // - 解析目标包与 Action 动作标识
     let parsed: ActionRef;
     try {
       parsed = ActionResolver.parseRef(ref);
@@ -370,6 +445,10 @@ export class DefaultActionDockHost implements ActionDockHost {
       const matches: ActionDockApp[] = [];
       for (const app of this.listApps()) {
         try {
+          const isPublic = this.hostPublicPackageIds.has(app.packageId);
+          if (!isPublic && this.resolver && !this.resolver.canRootCall(app.packageId, targetActionId)) {
+            continue;
+          }
           await app.describeAction(targetActionId);
           matches.push(app);
         } catch {
@@ -406,9 +485,29 @@ export class DefaultActionDockHost implements ActionDockHost {
       }
     }
 
-    // 2. 父子任务血缘关系、调用配额与跨包 uses 声明依赖校验
-    let effectiveRootRunId = options.rootRunId;
+    // 根调用可见性鉴权
     const parentRunId = options.parentRunId;
+    if (!parentRunId && targetPackageId) {
+      const isPublic = this.hostPublicPackageIds.has(targetPackageId);
+      if (!isPublic && this.resolver && !this.resolver.canRootCall(targetPackageId, targetActionId)) {
+        const runId = randomUUID();
+        const error: RuntimeError = {
+          code: "UNDECLARED_ACTION_DEPENDENCY",
+          message: `Root call to action '${targetPackageId}/${targetActionId}' is not allowed: package '${targetPackageId}' is not declared as a direct dependency in actiondock.json and is not delegated by a visible playbook`,
+          details: {
+            target: `${targetPackageId}/${targetActionId}`,
+          },
+        };
+        return {
+          runId,
+          status: "failed",
+          result: Promise.resolve({ ok: false, runId, error }),
+        };
+      }
+    }
+
+    // - 父子任务血缘关系、调用配额与跨包 uses 声明依赖校验
+    let effectiveRootRunId = options.rootRunId;
 
     if (parentRunId) {
       const parentRun = await this.getRun(parentRunId);
@@ -425,9 +524,11 @@ export class DefaultActionDockHost implements ActionDockHost {
               const callerSpec = await callerApp.describeAction(callerActionId);
               const usesList = callerSpec.uses || [];
               const targetRef = `${targetPackageId}/${targetActionId}`;
-              const isAllowed = usesList.some(
-                (u) => u === targetRef || u === `${targetPackageId}/*` || u === targetPackageId
-              );
+              const isAllowed = this.resolver
+                ? this.resolver.canCascadeCall(callerPackageId, callerActionId, targetPackageId, targetActionId)
+                : usesList.some(
+                    (u) => u === targetRef || u === `${targetPackageId}/*` || u === targetPackageId
+                  );
               if (!isAllowed) {
                 const runId = randomUUID();
                 const error: RuntimeError = {
@@ -491,7 +592,7 @@ export class DefaultActionDockHost implements ActionDockHost {
       }
     }
 
-    // 3. 构造子运行参数并调度至目标 App 执行
+    // - 构造子运行参数并调度至目标 App 执行
     const execOptions: ExecuteOptions = {
       ...options,
       rootRunId: effectiveRootRunId,

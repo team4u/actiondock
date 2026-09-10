@@ -23,11 +23,9 @@ import {
 import {
   buildPlan,
   BuildPlanner,
-  BunCompiler,
+  buildProject,
+  packProject,
   BuilderError,
-  compileBinary,
-  CompilerError,
-  CompilerValidationError,
   exportSkill,
   exportSkillBatch,
   exportCompositeSkill,
@@ -512,106 +510,157 @@ export default defineAction({
     });
   });
 
-  describe("BunCompiler: 独立二进制编译器", () => {
-    it("对不支持的目标平台架构提前校验报错", async () => {
-      const invalidTargets = ["linux-x86", "node", "browser", "windows-arm64", "freebsd"];
-
-      for (const target of invalidTargets) {
-        let error: any;
-        try {
-          await BunCompiler.compile({
-            entrypoint: join(tempDir, "actions", "greet.ts"),
-            outfile: join(tempDir, "dist", "out-bin"),
-            target,
-          });
-        } catch (err) {
-          error = err;
-        }
-
-        expect(error).toBeDefined();
-        expect(error).toBeInstanceOf(CompilerValidationError);
-        expect(error.code).toBe("UNSUPPORTED_TARGET");
-      }
-    });
-
-    it("对不存在的入口文件校验报错", async () => {
-      let error: any;
+  describe("buildProject: Node.js 目录型交付产物生成", () => {
+    it("传入 target 或 bytecode 时必须抛出带有 UNSUPPORTED_BUILD_MODE 的 BuilderError", async () => {
+      let errorTarget: any;
       try {
-        await compileBinary({
-          entrypoint: join(tempDir, "actions", "non-existent.ts"),
-          outfile: join(tempDir, "dist", "bin"),
+        await buildProject({
+          projectRoot: tempDir,
+          target: "linux-x64",
         });
       } catch (err) {
-        error = err;
+        errorTarget = err;
       }
+      expect(errorTarget).toBeInstanceOf(BuilderError);
+      expect(errorTarget.code).toBe("UNSUPPORTED_BUILD_MODE");
 
-      expect(error).toBeInstanceOf(CompilerValidationError);
-      expect(error.code).toBe("ENTRYPOINT_NOT_FOUND");
-    });
-
-    it("对编译代码语法错误能够规范化报错", async () => {
-      const badEntry = join(tempDir, "bad-syntax.ts");
-      writeFileSync(badEntry, "const a = ; // syntax error", "utf-8");
-
-      let error: any;
+      let errorBytecode: any;
       try {
-        await compileBinary({
-          entrypoint: badEntry,
-          outfile: join(tempDir, "dist", "bad-bin"),
+        await buildProject({
+          projectRoot: tempDir,
+          bytecode: true,
         });
       } catch (err) {
-        error = err;
+        errorBytecode = err;
       }
-
-      expect(error).toBeInstanceOf(CompilerError);
-      expect(error.exitCode).not.toBe(0);
-      expect(error.code).toBe("SYNTAX_ERROR");
-      expect(error.details.length).toBeGreaterThan(0);
+      expect(errorBytecode).toBeInstanceOf(BuilderError);
+      expect(errorBytecode.code).toBe("UNSUPPORTED_BUILD_MODE");
     });
 
-    it("成功编译独立可执行二进制并正确传递 minify 与 bytecode 选项", async () => {
-      const entryCode = `
-console.log(JSON.stringify({ ok: true, message: "Hello From Standalone Binary" }));
-process.exit(0);
-`;
-      const entryPath = join(tempDir, "test-entry.ts");
-      writeFileSync(entryPath, entryCode, "utf-8");
-
-      const outfile = join(tempDir, "dist", "my-standalone");
-      const res = await compileBinary({
-        entrypoint: entryPath,
-        outfile,
-        minify: true,
-        bytecode: true,
-        packageId: "test.builder-fixture",
-        version: "1.0.0",
-        actions: ["sample.greet"],
+    it("成功构建 Node.js 目录交付产物并生成可执行启动入口与元数据", async () => {
+      const buildRes = await buildProject({
+        projectRoot: tempDir,
       });
 
-      expect(existsSync(res.executablePath)).toBe(true);
-      expect(res.sizeBytes).toBeGreaterThan(0);
-      expect(res.sha256).toMatch(/^[a-f0-9]{64}$/);
-      expect(res.minify).toBe(true);
-      expect(res.bytecode).toBe(true);
-      expect(res.metadataPath).toBeDefined();
-      expect(existsSync(res.metadataPath!)).toBe(true);
+      expect(existsSync(buildRes.outputDir)).toBe(true);
+      expect(existsSync(buildRes.entrypointPath)).toBe(true);
+      expect(existsSync(buildRes.metadataPath)).toBe(true);
+      expect(existsSync(join(buildRes.outputDir, "actiondock.json"))).toBe(true);
+      expect(existsSync(join(buildRes.outputDir, "package.json"))).toBe(true);
+      expect(buildRes.reproducible).toBe(true);
 
-      // 验证生成的元数据内容
-      const meta = JSON.parse(readFileSync(res.metadataPath!, "utf-8"));
-      expect(meta.packageId).toBe("test.builder-fixture");
-      expect(meta.actions).toEqual(["sample.greet"]);
-      expect(meta.sha256).toBe(res.sha256);
+      const metadata = JSON.parse(readFileSync(buildRes.metadataPath, "utf-8"));
+      expect(metadata.packageId).toBe("test.builder-fixture");
+      expect(metadata.actions).toEqual(["sample.greet"]);
 
-      // 实际执行编译生成的单文件二进制，验证其可执行性与输出
-      const runProc = Bun.spawnSync([res.executablePath], {
+      // 执行生成的启动入口测试 list 与 describe
+      const listProc = Bun.spawnSync([buildRes.entrypointPath, "list", "--json"], {
+        cwd: tempDir,
         stdout: "pipe",
         stderr: "pipe",
       });
-      expect(runProc.exitCode).toBe(0);
-      const output = JSON.parse(runProc.stdout.toString().trim());
-      expect(output.ok).toBe(true);
-      expect(output.message).toBe("Hello From Standalone Binary");
-    }, 30000);
+      expect(listProc.exitCode).toBe(0);
+      const listJson = JSON.parse(listProc.stdout.toString());
+      expect(listJson.length).toBe(1);
+      expect(listJson[0].id).toBe("sample.greet");
+    });
+
+    it("支持 options.archive 生成标准 zip 压缩归档交付产物", async () => {
+      const buildRes = await buildProject({
+        projectRoot: tempDir,
+        archive: true,
+      });
+
+      expect(buildRes.archivePath).toBeDefined();
+      expect(existsSync(buildRes.archivePath!)).toBe(true);
+      expect(buildRes.archivePath!.endsWith(".zip")).toBe(true);
+      const stat = statSync(buildRes.archivePath!);
+      expect(stat.size).toBeGreaterThan(0);
+    });
+
+    it("支持 options.vendorDeps 在干净暂存目录中物化依赖", async () => {
+      const buildRes = await buildProject({
+        projectRoot: tempDir,
+        vendorDeps: true,
+      });
+
+      expect(buildRes.vendorDeps).toBe(true);
+      expect(existsSync(join(buildRes.outputDir, "node_modules"))).toBe(true);
+    });
+
+    it("生命周期脚本与可复现性检查：要求可复现且必须执行安装脚本时报错拒绝", async () => {
+      // 模拟包含安装脚本的外部依赖
+      const fakeDepDir = join(tempDir, "node_modules", "lifecycle-dep");
+      mkdirSync(fakeDepDir, { recursive: true });
+      writeFileSync(
+        join(fakeDepDir, "package.json"),
+        JSON.stringify({
+          name: "lifecycle-dep",
+          version: "1.0.0",
+          scripts: {
+            postinstall: "node install.js",
+          },
+        }),
+        "utf-8"
+      );
+
+      // 在项目 package.json 中加入该依赖
+      const pkgPath = join(tempDir, "package.json");
+      const pkgData = JSON.parse(readFileSync(pkgPath, "utf-8"));
+      pkgData.dependencies = {
+        ...pkgData.dependencies,
+        "lifecycle-dep": "^1.0.0",
+      };
+      writeFileSync(pkgPath, JSON.stringify(pkgData, null, 2), "utf-8");
+
+      let error: any;
+      try {
+        await buildProject({
+          projectRoot: tempDir,
+          vendorDeps: true,
+          allowInstallScripts: true,
+          requireReproducible: true,
+        });
+      } catch (err) {
+        error = err;
+      }
+
+      expect(error).toBeInstanceOf(BuilderError);
+      expect(error.code).toBe("REPRODUCIBLE_BUILD_VIOLATION");
+    });
+  });
+
+  describe("packProject: npm Action 包打包", () => {
+    it("支持 dry-run 模式进行预检与清单生成而不生成最终压缩包", async () => {
+      const dryResult = await packProject({
+        projectRoot: tempDir,
+        dryRun: true,
+      });
+
+      expect(dryResult.packageId).toBe("test.builder-fixture");
+      expect(dryResult.manifestSummary.actionsCount).toBe(1);
+      expect(dryResult.manifestSummary.actions).toContain("sample.greet");
+      expect(dryResult.tarballPath).toBeUndefined();
+    });
+
+    it("将 TypeScript Action 项目打包为标准 tgz 压缩包且不修改源工程", async () => {
+      const sourcePkgJson = readFileSync(join(tempDir, "package.json"), "utf-8");
+      const sourceGreetCode = readFileSync(join(tempDir, "actions", "greet.ts"), "utf-8");
+
+      const packResult = await packProject({
+        projectRoot: tempDir,
+      });
+
+      expect(packResult.tarballPath).toBeDefined();
+      expect(existsSync(packResult.tarballPath!)).toBe(true);
+      expect(packResult.tarballName.endsWith(".tgz")).toBe(true);
+      expect(packResult.sizeBytes).toBeGreaterThan(0);
+      expect(packResult.sha256).toMatch(/^[a-f0-9]{64}$/);
+
+      // 验证源工程文件未被改写
+      expect(readFileSync(join(tempDir, "package.json"), "utf-8")).toBe(sourcePkgJson);
+      expect(readFileSync(join(tempDir, "actions", "greet.ts"), "utf-8")).toBe(sourceGreetCode);
+    });
   });
 
   describe("SkillExporter: Agent Skill 导出与归档", () => {
@@ -807,7 +856,23 @@ process.exit(0);
       expect(getInternalDependencyVersion("2.1.3")).toBe("^2.1.3");
     });
 
-    it("导出独立二进制 Skill 包并验证可执行性", async () => {
+    it("传入 standalone 模式时严格拒绝并抛出提示替代方案的 BuilderError", async () => {
+      let error: any;
+      try {
+        await SkillExporter.export({
+          projectRoot: tempDir,
+          standalone: true,
+        });
+      } catch (err) {
+        error = err;
+      }
+
+      expect(error).toBeInstanceOf(BuilderError);
+      expect(error.code).toBe("UNSUPPORTED_BUILD_MODE");
+      expect(error.message).toContain("--mode node");
+    });
+
+    it("导出 Node 目录型 Skill 包并验证可执行性", async () => {
       const manifest: ActionDockManifest = {
         schemaVersion: 1,
         id: "test.builder-fixture",
@@ -821,25 +886,25 @@ process.exit(0);
       };
       saveManifest(tempDir, manifest);
 
-      const outDir = join(tempDir, "dist", "exported-standalone-skill");
+      const outDir = join(tempDir, "dist", "exported-node-skill");
       const exportRes = await SkillExporter.export({
         projectRoot: tempDir,
-        standalone: true,
+        mode: "node",
         outDir,
       });
 
-      expect(exportRes.mode).toBe("standalone");
+      expect(exportRes.mode).toBe("node");
       expect(existsSync(exportRes.skillDir)).toBe(true);
 
-      const expectedBin = process.platform === "win32" ? "builder-fixture.exe" : "builder-fixture";
-      const binPath = join(exportRes.skillDir, "bin", expectedBin);
-      expect(existsSync(binPath)).toBe(true);
+      const entryPath = join(exportRes.skillDir, "entry.mjs");
+      expect(existsSync(entryPath)).toBe(true);
 
-      // 验证不再生成 actiondock.skill.json
-      expect(existsSync(join(exportRes.skillDir, "actiondock.skill.json"))).toBe(false);
+      // 验证生成的 SKILL.md 包含 node 执行说明
+      const skillMd = readFileSync(join(exportRes.skillDir, "SKILL.md"), "utf-8");
+      expect(skillMd).toContain("node ./entry.mjs");
 
-      // 直接执行导出的独立二进制
-      const runProc = Bun.spawnSync([binPath, "run", "sample.greet", "--input", '{"name": "SkillUser"}'], {
+      // 直接执行导出的 Node 入口
+      const runProc = Bun.spawnSync([entryPath, "run", "sample.greet", "--input", '{"name": "SkillUser"}'], {
         stdout: "pipe",
         stderr: "pipe",
       });

@@ -2,8 +2,8 @@ import { existsSync } from "node:fs";
 import { basename } from "node:path";
 import { exportCompositeSkill, exportSkill, exportSkillBatch } from "@actiondock/builder";
 import { discoverProjects, findProjectRoot, listLinkedPackages, resolvePackageRoot } from "@actiondock/core";
-import { ExecutionError } from "../errors";
 import { Command } from "commander";
+import { ExecutionError } from "../errors";
 
 function parseListOption(val: string, prev: string[] = []): string[] {
   const parts = val.split(",").map((s) => s.trim()).filter(Boolean);
@@ -17,7 +17,7 @@ export function registerExportCommand(program: Command): void {
 
   exportCmd
     .command("skill")
-    .description("Export Skill directory for AI Agents (default: source skill; use -s/--standalone for pre-built standalone binary)")
+    .description("Export Skill directory for AI Agents (default: source; use -m/--mode node for self-contained Node.js directory)")
     .option(
       "-P, --package <id...>",
       "Target package ID(s) or path(s) (can be specified multiple times or comma-separated)",
@@ -30,23 +30,33 @@ export function registerExportCommand(program: Command): void {
       "--bundle [name]",
       "Export multiple packages as a unified composite Skill bundle (defaults to workspace directory name if omitted)"
     )
-    .option("-s, --standalone", "Export pre-compiled standalone binary skill (for environments without ActionDock runtime)")
-    .option("-t, --target <target>", "Target compilation platform for standalone mode (e.g. host, linux-x64, darwin-arm64, windows-x64)")
+    .option("-m, --mode <mode>", "Skill export mode ('source' or 'node')", "source")
+    .option("-s, --standalone", "Export standalone binary skill (removed)")
+    .option("-t, --target <target>", "Target compilation platform (removed)")
+    .option("--bytecode", "Bytecode compilation (removed)")
     .option("-o, --out <path>", "Output skill directory")
-    .option("-p, --playbook <playbooks...>", "Only export specific playbook(s) and their dependent actions (Playbook-driven minimal export)")
-    .option("-a, --actions <actions...>", "Only export specific action(s)")
-    .option("-m, --minify", "Minify bundled JavaScript in standalone mode (default: true)", true)
-    .option("--no-minify", "Disable JavaScript minification in standalone mode")
-    .option("--bytecode", "Compile JavaScript to bytecode in standalone mode (default: true)", true)
-    .option("--no-bytecode", "Disable bytecode compilation in standalone mode")
+    .option("-p, --playbook <playbooks...>", "Only export specific playbook(s) and their dependent actions", parseListOption)
+    .option("-a, --actions <actions...>", "Only export specific action(s)", parseListOption)
     .option("-z, --archive", "Create a .zip archive of the exported skill")
     .option("--skill-md <path>", "Use specified existing SKILL.md file instead of auto-generating")
+    .option("--vendor-deps", "Materialize locked production dependencies into the exported skill")
+    .option("--allow-install-scripts", "Allow lifecycle install scripts to run during dependency materialization")
+    .option("--require-reproducible", "Require reproducible build and fail if install scripts must run")
     .action(async (options) => {
-      const isStandalone = Boolean(options.standalone);
-
-      if (options.bundle && isStandalone) {
+      // 彻底删除 --standalone 单文件编译选项
+      if (options.standalone || options.target !== undefined || options.bytecode !== undefined) {
         throw new ExecutionError(
-          "Composite Skill export (--bundle) currently only supports source mode. Please remove --standalone to export as a composite workspace Skill."
+          "The '--standalone' option and binary target flags have been removed in ActionDock 2.0. Please use '--mode node' for self-contained Node.js directory skills, or '--mode source' for source-based skills.",
+          undefined,
+          "UNSUPPORTED_BUILD_MODE"
+        );
+      }
+
+      const mode = options.mode === "node" ? "node" : "source";
+
+      if (options.bundle && mode === "node") {
+        throw new ExecutionError(
+          "Composite Skill export (--bundle) currently only supports source mode. Please use '--mode source' to export as a composite workspace Skill."
         );
       }
 
@@ -104,13 +114,17 @@ export function registerExportCommand(program: Command): void {
         );
       }
 
+      const isJson = Boolean(options.json);
+
       try {
         if (options.bundle !== undefined) {
           const bundleName =
             typeof options.bundle === "string" && options.bundle.trim()
               ? options.bundle.trim()
               : basename(process.cwd());
-          console.log(`Exporting composite Skill bundle '${bundleName}' (${roots.length} package${roots.length > 1 ? "s" : ""})...`);
+          if (!isJson) {
+            console.log(`Exporting composite Skill bundle '${bundleName}' (${roots.length} package${roots.length > 1 ? "s" : ""})...`);
+          }
           const result = await exportCompositeSkill({
             bundleName,
             projectRoots: roots,
@@ -119,6 +133,11 @@ export function registerExportCommand(program: Command): void {
             workspaceRoot: options.workspace ? process.cwd() : undefined,
             skillMdPath: options.skillMd,
           });
+
+          if (isJson) {
+            console.log(JSON.stringify(result, null, 2));
+            return;
+          }
 
           console.log(`[OK] Successfully exported Composite Skill: ${result.bundleName}`);
           console.log(`  Packages:   ${result.packagesCount}`);
@@ -135,20 +154,26 @@ export function registerExportCommand(program: Command): void {
         }
 
         if (roots.length > 1) {
-          console.log(`Batch exporting ${roots.length} Skill packages...`);
+          if (!isJson) {
+            console.log(`Batch exporting ${roots.length} Skill packages...`);
+          }
           const batchRes = await exportSkillBatch({
             projectRoots: roots,
-            mode: isStandalone ? "standalone" : "source",
-            standalone: isStandalone,
-            target: options.target,
+            mode,
             outDir: options.out,
             archive: options.archive,
             playbooks: options.playbook,
             actions: options.actions,
-            minify: options.minify,
-            bytecode: options.bytecode,
             skillMdPath: options.skillMd,
+            vendorDeps: options.vendorDeps,
+            allowInstallScripts: options.allowInstallScripts,
+            requireReproducible: options.requireReproducible,
           });
+
+          if (isJson) {
+            console.log(JSON.stringify(batchRes, null, 2));
+            return;
+          }
 
           console.log(`[OK] Successfully batch exported ${batchRes.results.length} Skill packages to: ${batchRes.outDir}`);
           for (const res of batchRes.results) {
@@ -160,23 +185,29 @@ export function registerExportCommand(program: Command): void {
         }
 
         const root = roots[0];
-        console.log(`Exporting ${isStandalone ? "standalone binary" : "source"} Skill artifact...`);
+        if (!isJson) {
+          console.log(`Exporting ${mode === "node" ? "Node.js directory" : "source"} Skill artifact...`);
+        }
         const result = await exportSkill({
           projectRoot: root,
-          mode: isStandalone ? "standalone" : "source",
-          standalone: isStandalone,
-          target: options.target,
+          mode,
           outDir: options.out,
           archive: options.archive,
           playbooks: options.playbook,
           actions: options.actions,
-          minify: options.minify,
-          bytecode: options.bytecode,
           skillMdPath: options.skillMd,
+          vendorDeps: options.vendorDeps,
+          allowInstallScripts: options.allowInstallScripts,
+          requireReproducible: options.requireReproducible,
         });
 
-        console.log(`[OK] Successfully exported ${result.mode === "standalone" ? "Standalone" : "Source"} Skill: ${result.packageId} (v${result.version})`);
-        console.log(`  Mode:       ${result.mode}${result.mode === "standalone" ? ` (target: ${result.target})` : ""}`);
+        if (isJson) {
+          console.log(JSON.stringify(result, null, 2));
+          return;
+        }
+
+        console.log(`[OK] Successfully exported ${result.mode === "node" ? "Node Directory" : "Source"} Skill: ${result.packageId} (v${result.version})`);
+        console.log(`  Mode:       ${result.mode}`);
         console.log(`  Actions:    ${result.actionsCount}`);
         console.log(`  Playbooks:  ${result.playbooksCount}`);
         console.log(`  Skill Dir:  ${result.skillDir}`);
@@ -187,10 +218,10 @@ export function registerExportCommand(program: Command): void {
           console.log(`  Archive:    ${result.archivePath}`);
         }
       } catch (err: any) {
+        if (err?.code === "UNSUPPORTED_BUILD_MODE") {
+          throw new ExecutionError(err.message, undefined, "UNSUPPORTED_BUILD_MODE");
+        }
         throw new ExecutionError(`Export failed: ${err.message}`);
       }
     });
 }
-
-
-
