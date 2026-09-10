@@ -1,12 +1,19 @@
 import type { ExecutionEvent } from "@actiondock/sdk";
 
+export interface EventSinkSubscribeOptions {
+  after?: number | string;
+  signal?: AbortSignal;
+  maxQueueSize?: number;
+}
+
 export interface EventSink {
   emit(event: ExecutionEvent): void;
   subscribe(
     runId: string,
-    options?: { after?: number; signal?: AbortSignal }
+    options?: EventSinkSubscribeOptions
   ): AsyncIterable<ExecutionEvent>;
   clear(runId: string): void;
+  close?(): void;
 }
 
 export interface InMemoryEventSinkOptions {
@@ -16,6 +23,8 @@ export interface InMemoryEventSinkOptions {
   maxBytesPerRun?: number;
   /** 全局最大缓存运行数（默认 500） */
   maxRuns?: number;
+  /** 慢订阅者事件队列背压有界上限（默认 1024） */
+  maxSubscriberQueueSize?: number;
 }
 
 interface RunEventEntry {
@@ -28,6 +37,8 @@ interface RunBuffer {
   totalBytes: number;
   lastAccessedAt: number;
   isTerminal: boolean;
+  earliestRetainedSequence?: number;
+  earliestRetainedEventId?: string;
 }
 
 /**
@@ -44,10 +55,12 @@ function estimateEventBytes(event: ExecutionEvent): number {
 /**
  * 进程内有界事件缓冲区实现。
  * 遵循设计规范：
- * 1. 单运行双配额保护：上限 1024 条事件或 1MiB 字节数，优先淘汰日志与进度，保护终态。
- * 2. 全局有界回收：限制最大运行数（默认 500），溢出时优先淘汰已完成运行。
- * 3. 原子订阅衔接：先注册实时队列再回放历史快照，去重并杜绝并发丢事件窗口。
- * 4. 严格生命周期清理：迭代退出或中断时彻底注销监听器与 AbortSignal 事件。
+ * - 单运行双配额保护：上限 1024 条事件或 1MiB 字节数，优先淘汰日志与进度，保护终态。
+ * - 全局有界回收：限制最大运行数（默认 500），溢出时优先淘汰已完成运行。
+ * - 原子订阅衔接：先注册实时队列再回放历史快照，去重并杜绝并发丢事件窗口。
+ * - 严格生命周期清理：迭代退出或中断时彻底注销监听器与 AbortSignal 事件。
+ * - 慢订阅者背压保护：队列超出上限时推送终止事件并切断通道，主运行不受阻。
+ * - 游标断点续传：支持全局持久化 eventId 与序列号，过期游标返回 EVENT_CURSOR_EXPIRED。
  */
 export class InMemoryEventSink implements EventSink {
   private runs = new Map<string, RunBuffer>();
@@ -55,21 +68,32 @@ export class InMemoryEventSink implements EventSink {
   private wakeups = new Map<string, Set<() => void>>();
   private evictions = new Map<string, Set<() => void>>();
   private evictedRuns = new Set<string>();
+  private globalEventSeq = 0;
 
   private maxEventsPerRun: number;
   private maxBytesPerRun: number;
   private maxRuns: number;
+  private maxSubscriberQueueSize: number;
 
   constructor(options: InMemoryEventSinkOptions = {}) {
     this.maxEventsPerRun = options.maxEventsPerRun ?? 1024;
     this.maxBytesPerRun = options.maxBytesPerRun ?? 1024 * 1024; // 1 MiB
     this.maxRuns = options.maxRuns ?? 500;
+    this.maxSubscriberQueueSize = options.maxSubscriberQueueSize ?? 1024;
   }
 
   emit(event: ExecutionEvent): void {
     const runId = event.runId;
     const now = Date.now();
     let run = this.runs.get(runId);
+
+    let processedEvent = event;
+    if (!processedEvent.eventId) {
+      processedEvent = {
+        ...processedEvent,
+        eventId: String(++this.globalEventSeq),
+      };
+    }
 
     if (!run) {
       // 全局有界淘汰
@@ -81,14 +105,19 @@ export class InMemoryEventSink implements EventSink {
         totalBytes: 0,
         lastAccessedAt: now,
         isTerminal: false,
+        earliestRetainedSequence: processedEvent.sequence,
+        earliestRetainedEventId: processedEvent.eventId,
       };
       this.runs.set(runId, run);
       this.evictedRuns.delete(runId);
     } else {
       run.lastAccessedAt = now;
+      if (run.earliestRetainedSequence === undefined) {
+        run.earliestRetainedSequence = processedEvent.sequence;
+        run.earliestRetainedEventId = processedEvent.eventId;
+      }
     }
 
-    let processedEvent = event;
     let eventBytes = estimateEventBytes(processedEvent);
 
     // 如果单条事件本身超过单运行最大字节限制，尝试截断 log / finish 数据
@@ -163,6 +192,11 @@ export class InMemoryEventSink implements EventSink {
         }
       }
 
+      if (run.entries.length > 0) {
+        run.earliestRetainedSequence = run.entries[0].event.sequence;
+        run.earliestRetainedEventId = run.entries[0].event.eventId;
+      }
+
       if (run.totalBytes + eventBytes <= this.maxBytesPerRun) {
         run.entries.push({ event: processedEvent, bytes: eventBytes });
         run.totalBytes += eventBytes;
@@ -189,21 +223,112 @@ export class InMemoryEventSink implements EventSink {
 
   async *subscribe(
     runId: string,
-    options: { after?: number; signal?: AbortSignal } = {}
+    options: EventSinkSubscribeOptions = {}
   ): AsyncIterable<ExecutionEvent> {
-    const after = options.after ?? -1;
-    let lastYieldedSequence = after;
+    let afterSequence: number | undefined;
+    let afterEventId: string | undefined;
+
+    if (options.after !== undefined) {
+      if (typeof options.after === "number") {
+        afterSequence = options.after;
+      } else {
+        const trimmed = String(options.after).trim();
+        if (/^-?\d+$/.test(trimmed)) {
+          afterSequence = parseInt(trimmed, 10);
+        }
+        afterEventId = trimmed;
+      }
+    }
+
+    const effectiveAfter = afterSequence ?? -1;
+    let lastYieldedSequence = effectiveAfter;
+    let lastConfirmedEventId: string | undefined = afterEventId;
+    let lastConfirmedSequence = effectiveAfter;
 
     if (options.signal?.aborted || this.evictedRuns.has(runId)) {
       return;
     }
 
+    // 检查游标是否在请求前已过期被清理
+    const run = this.runs.get(runId);
+    if (run && options.after !== undefined) {
+      const earliestSeq = run.earliestRetainedSequence ?? 0;
+      if (afterSequence !== undefined && afterSequence >= 0 && afterSequence < earliestSeq - 1) {
+        const earliestCursor = run.earliestRetainedEventId ?? String(earliestSeq);
+        const expiredErr = new Error(
+          `Event cursor '${options.after}' has expired; earliest available cursor is '${earliestCursor}'`
+        );
+        (expiredErr as any).code = "EVENT_CURSOR_EXPIRED";
+        (expiredErr as any).details = {
+          cursor: options.after,
+          earliestCursor,
+          earliestRetainedCursor: earliestCursor,
+          earliestSequence: earliestSeq,
+          earliestEventId: run.earliestRetainedEventId,
+        };
+        throw expiredErr;
+      }
+    }
+
+    const maxQueueSize = options.maxQueueSize ?? this.maxSubscriberQueueSize;
     const liveQueue: ExecutionEvent[] = [];
     let notify: (() => void) | null = null;
     let done = false;
+    let isBackpressureTerminated = false;
 
-    // 第一步：先挂载实时监听器，防止历史回放与监听注册之间的竞态丢事件
+    let subs = this.listeners.get(runId);
+    if (!subs) {
+      subs = new Set();
+      this.listeners.set(runId, subs);
+    }
+
+    const cleanupListener = () => {
+      subs?.delete(listener);
+      if (subs && subs.size === 0) {
+        this.listeners.delete(runId);
+      }
+    };
+
+    // 先挂载实时监听器，防止历史回放与监听注册之间的竞态丢事件
     const listener = (evt: ExecutionEvent) => {
+      if (isBackpressureTerminated || done) {
+        return;
+      }
+
+      if (liveQueue.length >= maxQueueSize) {
+        // 慢订阅者导致队列溢出：向该慢订阅者推送终止事件并切断通道，主运行不受反向阻塞
+        isBackpressureTerminated = true;
+        cleanupListener();
+
+        const termEvt: ExecutionEvent = {
+          runId,
+          rootRunId: evt.rootRunId || runId,
+          sequence: evt.sequence + 1,
+          eventId: String(++this.globalEventSeq),
+          timestamp: new Date().toISOString(),
+          type: "error",
+          error: {
+            code: "EVENT_BACKPRESSURE_LIMIT",
+            message: `Event subscription queue exceeded limit of ${maxQueueSize} items due to slow subscriber`,
+            details: {
+              lastConfirmedCursor:
+                lastConfirmedEventId ??
+                (lastConfirmedSequence >= 0 ? String(lastConfirmedSequence) : "0"),
+              lastConfirmedEventId,
+              lastConfirmedSequence,
+            },
+          },
+        };
+
+        liveQueue.length = 0;
+        liveQueue.push(termEvt);
+        if (notify) {
+          notify();
+          notify = null;
+        }
+        return;
+      }
+
       liveQueue.push(evt);
       if (notify) {
         notify();
@@ -223,11 +348,6 @@ export class InMemoryEventSink implements EventSink {
     };
 
     let currentWakeupCleanup: (() => void) | null = null;
-    let subs = this.listeners.get(runId);
-    if (!subs) {
-      subs = new Set();
-      this.listeners.set(runId, subs);
-    }
     subs.add(listener);
 
     let evictSet = this.evictions.get(runId);
@@ -254,10 +374,7 @@ export class InMemoryEventSink implements EventSink {
         currentWakeupCleanup();
         currentWakeupCleanup = null;
       }
-      subs?.delete(listener);
-      if (subs && subs.size === 0) {
-        this.listeners.delete(runId);
-      }
+      cleanupListener();
       evictSet?.delete(onEvict);
       if (evictSet && evictSet.size === 0) {
         this.evictions.delete(runId);
@@ -268,8 +385,7 @@ export class InMemoryEventSink implements EventSink {
     };
 
     try {
-      // 第二步：回放历史快照
-      const run = this.runs.get(runId);
+      // 回放历史快照
       if (run) {
         run.lastAccessedAt = Date.now();
         const historySnapshot = run.entries.map((e) => e.event);
@@ -277,6 +393,8 @@ export class InMemoryEventSink implements EventSink {
           if (options.signal?.aborted) return;
           if (evt.sequence > lastYieldedSequence) {
             lastYieldedSequence = evt.sequence;
+            lastConfirmedSequence = evt.sequence;
+            if (evt.eventId) lastConfirmedEventId = evt.eventId;
             yield evt;
             if (evt.type === "finish") {
               done = true;
@@ -289,33 +407,42 @@ export class InMemoryEventSink implements EventSink {
         if (run.isTerminal) {
           while (liveQueue.length > 0) {
             const evt = liveQueue.shift()!;
-            if (evt.sequence > lastYieldedSequence) {
+            if (evt.sequence > lastYieldedSequence || evt.type === "error") {
               lastYieldedSequence = evt.sequence;
+              lastConfirmedSequence = evt.sequence;
+              if (evt.eventId) lastConfirmedEventId = evt.eventId;
               yield evt;
-              if (evt.type === "finish") {
+              if (
+                evt.type === "finish" ||
+                (evt.type === "error" && (evt as any).error?.code === "EVENT_BACKPRESSURE_LIMIT")
+              ) {
                 done = true;
                 return;
               }
             }
           }
-          // 历史回放完毕且队列排空后，若已终态则直接结束订阅，避免因丢弃 finish 造成永久挂起
           done = true;
           return;
         }
       }
 
-      // 第三步：无缝衔接消费实时队列中的事件
-      while (!done && !options.signal?.aborted) {
+      // 无缝衔接消费实时队列中的事件
+      while ((liveQueue.length > 0 || !done) && !options.signal?.aborted) {
         if (this.evictedRuns.has(runId)) {
           done = true;
           break;
         }
         if (liveQueue.length > 0) {
           const evt = liveQueue.shift()!;
-          if (evt.sequence > lastYieldedSequence) {
+          if (evt.sequence > lastYieldedSequence || evt.type === "error") {
             lastYieldedSequence = evt.sequence;
+            lastConfirmedSequence = evt.sequence;
+            if (evt.eventId) lastConfirmedEventId = evt.eventId;
             yield evt;
-            if (evt.type === "finish") {
+            if (
+              evt.type === "finish" ||
+              (evt.type === "error" && (evt as any).error?.code === "EVENT_BACKPRESSURE_LIMIT")
+            ) {
               done = true;
               return;
             }
@@ -356,16 +483,46 @@ export class InMemoryEventSink implements EventSink {
       // 消费中止或完成瞬间积压在 liveQueue 中的剩余事件
       while (liveQueue.length > 0) {
         const evt = liveQueue.shift()!;
-        if (evt.sequence > lastYieldedSequence) {
+        if (evt.sequence > lastYieldedSequence || evt.type === "error") {
           lastYieldedSequence = evt.sequence;
+          lastConfirmedSequence = evt.sequence;
+          if (evt.eventId) lastConfirmedEventId = evt.eventId;
           yield evt;
-          if (evt.type === "finish") {
+          if (
+            evt.type === "finish" ||
+            (evt.type === "error" && (evt as any).error?.code === "EVENT_BACKPRESSURE_LIMIT")
+          ) {
             return;
           }
         }
       }
     } finally {
       cleanup();
+    }
+  }
+
+  /**
+   * 手动修剪已终态运行中早于指定序列号的历史事件（用于模拟过期清理）。
+   */
+  pruneEvents(runId: string, upToSequence: number): void {
+    const run = this.runs.get(runId);
+    if (!run) return;
+    const idx = run.entries.findIndex((e) => e.event.sequence > upToSequence);
+    if (idx > 0) {
+      const removed = run.entries.splice(0, idx);
+      for (const r of removed) {
+        run.totalBytes -= r.bytes;
+      }
+    } else if (idx === -1 && run.entries.length > 0) {
+      run.entries = [];
+      run.totalBytes = 0;
+    }
+    if (run.entries.length > 0) {
+      run.earliestRetainedSequence = run.entries[0].event.sequence;
+      run.earliestRetainedEventId = run.entries[0].event.eventId;
+    } else {
+      run.earliestRetainedSequence = upToSequence + 1;
+      run.earliestRetainedEventId = undefined;
     }
   }
 
@@ -453,6 +610,19 @@ export class InMemoryEventSink implements EventSink {
     if (candidateRunId) {
       this.clear(candidateRunId);
     }
+  }
+
+  /**
+   * 关闭事件接收器并唤醒所有活跃订阅者退出。
+   */
+  close(): void {
+    for (const wakeups of this.wakeups.values()) {
+      for (const onWakeup of wakeups) {
+        onWakeup();
+      }
+    }
+    this.wakeups.clear();
+    this.listeners.clear();
   }
 }
 

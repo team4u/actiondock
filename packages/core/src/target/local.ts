@@ -198,7 +198,7 @@ export class LocalActionDockTarget implements ActionDockTarget {
 
   events(
     runId: string,
-    options?: { after?: number; signal?: AbortSignal }
+    options?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number }
   ): AsyncIterable<ExecutionEvent> {
     return this.target.events(runId, options);
   }

@@ -13,6 +13,7 @@ import type {
   RuntimeError,
 } from "@actiondock/sdk";
 import { ActionResolver } from "../catalog/action-resolver";
+import { computeDigest } from "../project/digest";
 import type { ProjectConfig } from "../project/types";
 import type { Clock } from "../runtime/clock";
 import { type EventSink, InMemoryEventSink } from "../runtime/events";
@@ -44,7 +45,7 @@ export class DefaultExecutionService implements ExecutionService {
   private packageId: string;
   private storage: RuntimeStorage;
   private projectConfig?: ProjectConfig;
-  private eventSink: EventSink;
+  public readonly eventSink: EventSink;
   private maxActiveRuns: number;
   private ownerId: string;
   private _runner: ActionRunner;
@@ -203,6 +204,82 @@ export class DefaultExecutionService implements ExecutionService {
     }
     const targetActionId = parsedRef.actionId;
     const targetPackageId = parsedRef.packageId || this.packageId;
+    const actionRef = `${targetPackageId}/${targetActionId}`;
+    const effectiveClock = options.platform?.clock ?? this.clock;
+
+    // requestId 幂等检查与去重处理
+    let designatedRunId: string | undefined;
+
+    if (options.requestId) {
+      const digestPayload = {
+        input,
+        config: options.config,
+        timeoutMs: options.timeoutMs,
+      };
+      const inputDigest = computeDigest(digestPayload);
+      const provisionalRunId = randomUUID();
+
+      if (this.storage.checkAndRecordIdempotency) {
+        const idemp = this.storage.checkAndRecordIdempotency({
+          ownerId: this.ownerId,
+          actionRef,
+          requestId: options.requestId,
+          inputDigest,
+          runId: provisionalRunId,
+          createdAt: (effectiveClock?.now() ?? new Date()).toISOString(),
+        });
+
+        if (idemp.outcome === "conflict") {
+          const conflictError: RuntimeError = {
+            code: "IDEMPOTENCY_CONFLICT",
+            message: `Idempotency conflict for requestId '${options.requestId}': input parameters digest mismatch`,
+            details: {
+              requestId: options.requestId,
+              actionRef,
+              expectedDigest: idemp.existingDigest,
+              actualDigest: inputDigest,
+            },
+          };
+          const err = new Error(conflictError.message);
+          (err as any).code = conflictError.code;
+          (err as any).details = conflictError.details;
+          throw err;
+        }
+
+        if (idemp.outcome === "duplicate") {
+          const existingRunId = idemp.runId;
+          const active = this.activeRuns.get(existingRunId);
+          if (active) {
+            return {
+              runId: existingRunId,
+              status: active.status,
+              result: active.handle.result,
+            };
+          }
+          const record = await this.get(existingRunId);
+          if (record) {
+            const execRes: ExecutionResult =
+              record.status === "success"
+                ? { ok: true, runId: existingRunId, data: record.output ?? null }
+                : {
+                    ok: false,
+                    runId: existingRunId,
+                    error: record.error || {
+                      code: "EXECUTION_FAILED",
+                      message: `Run terminated with status '${record.status}'`,
+                    },
+                  };
+            return {
+              runId: existingRunId,
+              status: record.status,
+              result: Promise.resolve(execRes),
+            };
+          }
+        }
+
+        designatedRunId = provisionalRunId;
+      }
+    }
 
     let runnerToUse: ActionRunner = this._runner;
     let resolveError: RuntimeError | undefined;
@@ -264,10 +341,8 @@ export class DefaultExecutionService implements ExecutionService {
       }
     }
 
-    const effectiveClock = options.platform?.clock ?? this.clock;
-
     if (!action) {
-      const runId = randomUUID();
+      const runId = designatedRunId || randomUUID();
       const now = (effectiveClock?.now() ?? new Date()).toISOString();
       const error: RuntimeError = resolveError || {
         code: "ACTION_NOT_FOUND",
@@ -335,7 +410,7 @@ export class DefaultExecutionService implements ExecutionService {
       }
     }
 
-    const runId = randomUUID();
+    const runId = designatedRunId || randomUUID();
     let sequence = 0;
     type EventPayload =
       | { type: "log"; level: "debug" | "info" | "warn" | "error"; message: string; data?: JsonValue }
@@ -515,7 +590,7 @@ export class DefaultExecutionService implements ExecutionService {
 
   events(
     runId: string,
-    options: { after?: number; signal?: AbortSignal } = {}
+    options: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number } = {}
   ): AsyncIterable<ExecutionEvent> {
     return this.eventSink.subscribe(runId, options);
   }

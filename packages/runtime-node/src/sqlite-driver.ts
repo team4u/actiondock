@@ -1,6 +1,8 @@
 import { DatabaseSync } from "node:sqlite";
 import type { SqliteDriver, SqliteStatement } from "@actiondock/core";
 
+export * from "./worker-sqlite-driver";
+
 function normalizeValue(val: any): any {
   return val === undefined ? null : val;
 }

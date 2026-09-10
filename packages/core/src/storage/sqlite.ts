@@ -11,11 +11,14 @@ import {
 } from "@actiondock/sdk";
 import { type Clock, SystemClock } from "../runtime/clock";
 import { createDefaultSqliteDriver } from "./driver";
-import type {
+import {
+  IdempotencyCheckResult,
+  IdempotencyRecord,
   RuntimeStorage,
   SqliteDriver,
   SqliteStatement,
   StateEntry,
+  STORAGE_SCHEMA_VERSION,
   StorageOptions,
   TerminalRunStatus,
 } from "./types";
@@ -76,7 +79,12 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
   }
 
   /**
-   * 初始化数据库结构并执行无损版本升级。
+   * 初始化数据库结构并执行严格版本校验。
+   *
+   * 规则：
+   * - 空数据目录首次初始化在单个事务中完成完整 Schema 构建。
+   * - 若创建事务失败则拒绝启动且不留下残缺表。
+   * - 打开旧版本或不兼容版本的数据库时，在写事务前直接抛出 UNSUPPORTED_STORAGE_SCHEMA 异常并拒绝启动。
    */
   private init(): void {
     this.driver.exec("PRAGMA journal_mode = WAL;");
@@ -86,7 +94,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     const versionRes = this.driver.prepare("PRAGMA user_version;").get<{
       user_version: number;
     }>();
-    const version = versionRes?.user_version ?? 0;
+    const version = Number(versionRes?.user_version ?? 0);
 
     if (version === 0) {
       this.driver.transaction(() => {
@@ -132,68 +140,34 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
           CREATE INDEX IF NOT EXISTS idx_runs_started ON runs(started_at DESC);
           CREATE INDEX IF NOT EXISTS idx_state_expires ON state(expires_at);
 
-          PRAGMA user_version = 3;
+          CREATE TABLE IF NOT EXISTS idempotency_keys (
+            owner_id TEXT NOT NULL,
+            action_ref TEXT NOT NULL,
+            request_id TEXT NOT NULL,
+            input_digest TEXT NOT NULL,
+            run_id TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (owner_id, action_ref, request_id)
+          );
+          CREATE INDEX IF NOT EXISTS idx_idemp_run ON idempotency_keys(run_id);
+
+          PRAGMA user_version = ${STORAGE_SCHEMA_VERSION};
         `);
       });
-    } else if (version < 2) {
-      this.driver.transaction(() => {
-        try {
-          const columns = this.driver
-            .prepare("PRAGMA table_info(state);")
-            .all<{ name: string }>();
-          const hasExpiresAt = columns.some((c) => c.name === "expires_at");
-          if (!hasExpiresAt) {
-            this.driver.exec("ALTER TABLE state ADD COLUMN expires_at TEXT;");
-          }
-        } catch {
-          // 忽略表已存在或字段已添加
-        }
-        this.driver.exec(
-          "CREATE INDEX IF NOT EXISTS idx_state_expires ON state(expires_at);"
-        );
-        this.driver.exec("PRAGMA user_version = 2;");
-      });
+    } else if (version !== STORAGE_SCHEMA_VERSION) {
+      const err: any = new Error(
+        `UNSUPPORTED_STORAGE_SCHEMA: Database schema version ${version} is incompatible (expected ${STORAGE_SCHEMA_VERSION}). Silent upgrade and database overwriting are strictly prohibited.`
+      );
+      err.code = "UNSUPPORTED_STORAGE_SCHEMA";
+      throw err;
     }
 
-    // 升级至版本 3：补齐运行记录调用链与实例字段
-    if (version < 3) {
-      this.driver.transaction(() => {
-        try {
-          const columns = this.driver
-            .prepare("PRAGMA table_info(runs);")
-            .all<{ name: string }>();
-          const columnNames = new Set(columns.map((c) => c.name));
-
-          if (!columnNames.has("root_run_id")) {
-            this.driver.exec("ALTER TABLE runs ADD COLUMN root_run_id TEXT DEFAULT '';");
-            this.driver.exec("UPDATE runs SET root_run_id = id WHERE root_run_id = '' OR root_run_id IS NULL;");
-          }
-          if (!columnNames.has("package_instance_id")) {
-            this.driver.exec("ALTER TABLE runs ADD COLUMN package_instance_id TEXT DEFAULT '';");
-          }
-          if (!columnNames.has("generation_id")) {
-            this.driver.exec("ALTER TABLE runs ADD COLUMN generation_id TEXT DEFAULT '1';");
-          }
-          if (!columnNames.has("owner_id")) {
-            this.driver.exec("ALTER TABLE runs ADD COLUMN owner_id TEXT DEFAULT 'local';");
-          }
-          if (!columnNames.has("duration_ms")) {
-            this.driver.exec("ALTER TABLE runs ADD COLUMN duration_ms INTEGER;");
-          }
-        } catch {
-          // 忽略已存在的字段
-        }
-        this.driver.exec("CREATE INDEX IF NOT EXISTS idx_runs_root ON runs(root_run_id);");
-        this.driver.exec("PRAGMA user_version = 3;");
-      });
-    }
-
-    // 重启恢复：将未正常结算的 running 状态自动收敛为 interrupted
+    // 重启恢复：将未正常结算的 running 与 pending 状态自动收敛为 interrupted
     this.recoverRunningRuns();
   }
 
   /**
-   * 重启恢复：将未正常结算的 running 状态自动收敛为 interrupted
+   * 重启恢复：将未正常结算的非终态（running/pending）记录自动收敛为 interrupted
    */
   public recoverRunningRuns(): number {
     if (this.isClosed) return 0;
@@ -204,7 +178,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
         SET status = 'interrupted',
             finished_at = ?,
             error_json = '{"code":"RUN_INTERRUPTED","message":"Execution interrupted by system shutdown or restart"}'
-        WHERE status = 'running'
+        WHERE status IN ('running', 'pending')
       `);
       const res = stmt.run(now);
       return res.changes;
@@ -727,7 +701,86 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     }
     const stmt = this.getStatement(sql);
     const res = stmt.run(...params);
+
+    // 运行记录清理后，级联清理已无对应运行的孤立去重索引记录
+    try {
+      this.getStatement("DELETE FROM idempotency_keys WHERE run_id NOT IN (SELECT id FROM runs)").run();
+    } catch {}
+
     return res.changes;
+  }
+
+  // --- Idempotency 幂等去重管理 ---
+
+  checkAndRecordIdempotency(record: IdempotencyRecord): IdempotencyCheckResult {
+    if (this.isClosed) {
+      throw new Error("SqliteRuntimeStorage is closed");
+    }
+    return this.driver.transaction(() => {
+      const checkStmt = this.getStatement(`
+        SELECT input_digest, run_id FROM idempotency_keys
+        WHERE owner_id = ? AND action_ref = ? AND request_id = ?
+      `);
+      const existing = checkStmt.get<{ input_digest: string; run_id: string }>(
+        record.ownerId,
+        record.actionRef,
+        record.requestId
+      );
+
+      if (existing) {
+        // 检查关联的运行记录是否仍存在于运行表中
+        const runStmt = this.getStatement("SELECT id FROM runs WHERE id = ?");
+        const runExists = runStmt.get<{ id: string }>(existing.run_id);
+        if (!runExists) {
+          // 原运行记录已被清理淘汰，允许复用该 requestId
+          const delStmt = this.getStatement(`
+            DELETE FROM idempotency_keys
+            WHERE owner_id = ? AND action_ref = ? AND request_id = ?
+          `);
+          delStmt.run(record.ownerId, record.actionRef, record.requestId);
+        } else {
+          if (existing.input_digest !== record.inputDigest) {
+            return { outcome: "conflict", existingDigest: existing.input_digest };
+          }
+          return { outcome: "duplicate", runId: existing.run_id };
+        }
+      }
+
+      const insertStmt = this.getStatement(`
+        INSERT INTO idempotency_keys (owner_id, action_ref, request_id, input_digest, run_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `);
+      const createdAt = record.createdAt || this.clock.now().toISOString();
+      insertStmt.run(
+        record.ownerId,
+        record.actionRef,
+        record.requestId,
+        record.inputDigest,
+        record.runId,
+        createdAt
+      );
+
+      return { outcome: "new" };
+    });
+  }
+
+  getIdempotencyRecord(ownerId: string, actionRef: string, requestId: string): IdempotencyRecord | undefined {
+    if (this.isClosed) return undefined;
+    const stmt = this.getStatement(`
+      SELECT owner_id, action_ref, request_id, input_digest, run_id, created_at
+      FROM idempotency_keys
+      WHERE owner_id = ? AND action_ref = ? AND request_id = ?
+    `);
+    const row = stmt.get<any>(ownerId, actionRef, requestId);
+    if (!row) return undefined;
+    return {
+      ownerId: row.owner_id,
+      actionRef: row.action_ref,
+      requestId: row.request_id,
+      inputDigest: row.input_digest,
+      runId: row.run_id,
+      createdAt: row.created_at,
+    };
   }
 
   private mapRunRecord(row: any): RunRecord {

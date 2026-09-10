@@ -2,6 +2,11 @@ import type { JsonValue, RuntimeError, RunRecord } from "@actiondock/sdk";
 import type { Clock } from "../runtime/clock";
 
 /**
+ * 固定的存储 Schema 目标版本常量。
+ */
+export const STORAGE_SCHEMA_VERSION = 2;
+
+/**
  * SQLite 基础参数值类型。
  */
 export type SqlValue = null | number | string | Uint8Array;
@@ -73,10 +78,36 @@ export interface StorageOptions {
   /** 所绑定的 Package ID */
   packageId: string;
   /** 显式注入的 SQLite 底层驱动 */
-  driver?: SqliteDriver;
+  driver?: SqliteDriver | any;
   /** 可选注入的时间提供器，便于与模拟时钟联动 */
   clock?: Clock;
 }
+
+/**
+ * 数据库中存储的幂等请求去重记录实体。
+ */
+export interface IdempotencyRecord {
+  /** 鉴权主体标识 */
+  ownerId: string;
+  /** 完全限定动作标识 */
+  actionRef: string;
+  /** 客户端幂等请求标识 */
+  requestId: string;
+  /** 输入参数与选项的 SHA-256 规范化摘要 */
+  inputDigest: string;
+  /** 关联的运行记录标识 */
+  runId: string;
+  /** 创建时间戳（ISO 8601 格式） */
+  createdAt?: string;
+}
+
+/**
+ * 幂等检查与登记结果。
+ */
+export type IdempotencyCheckResult =
+  | { outcome: "new" }
+  | { outcome: "duplicate"; runId: string }
+  | { outcome: "conflict"; existingDigest: string };
 
 /**
  * Action 执行终态枚举。
@@ -135,6 +166,17 @@ export interface RuntimeStorage {
   listRuns(options?: { actionId?: string; limit?: number }): RunRecord[];
   clearRuns(options?: { actionId?: string; status?: string }): number;
 
+  /** 故障重启恢复：将遗留非终态运行收敛为 interrupted */
+  recoverRunningRuns?(): number | Promise<number>;
+
+  /** 确保底层存储与 Schema 初始化完成 */
+  ensureInitialized?(): Promise<void>;
+
+  // --- Idempotency 幂等去重管理 ---
+  checkAndRecordIdempotency?(record: IdempotencyRecord): IdempotencyCheckResult;
+  getIdempotencyRecord?(ownerId: string, actionRef: string, requestId: string): IdempotencyRecord | undefined;
+
   /** 关闭底层 SQLite 数据库连接并释放句柄 */
-  close(): void;
+  close(): void | Promise<void>;
 }
+

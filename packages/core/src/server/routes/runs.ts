@@ -1,5 +1,5 @@
 import { filterByIntent } from "../../filter";
-import type { RunRecord } from "@actiondock/sdk";
+import type { ExecutionEvent, RunRecord } from "@actiondock/sdk";
 import { readJsonBody } from "../body";
 import { getSubPath, jsonResponse, type RouteContext } from "./common";
 
@@ -124,20 +124,85 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
       );
     }
 
-    const eventStream = target.events(runId, { signal: req.signal });
+    // 解析 Last-Event-ID 请求头或 query 参数 after 游标
+    const lastEventIdHeader =
+      req.headers.get("Last-Event-ID") ||
+      req.headers.get("last-event-id") ||
+      url.searchParams.get("after") ||
+      undefined;
+
+    let afterCursor: number | string | undefined = undefined;
+    if (lastEventIdHeader !== undefined && lastEventIdHeader.trim() !== "") {
+      const trimmed = lastEventIdHeader.trim();
+      if (/^-?\d+$/.test(trimmed)) {
+        afterCursor = parseInt(trimmed, 10);
+      } else {
+        afterCursor = trimmed;
+      }
+    }
+
+    const eventStream = target.events(runId, { after: afterCursor, signal: req.signal });
+    const iterator = eventStream[Symbol.asyncIterator]();
+
+    // 检查游标是否在建流前已过期：拉取首个事件，若抛出 EVENT_CURSOR_EXPIRED 直接返回 410
+    let firstResult: IteratorResult<ExecutionEvent>;
+    try {
+      firstResult = await iterator.next();
+    } catch (err: any) {
+      if (err?.code === "EVENT_CURSOR_EXPIRED") {
+        return jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: "EVENT_CURSOR_EXPIRED",
+              message: err.message || "Event cursor has expired",
+              details: err.details,
+            },
+          },
+          410,
+          corsHeaders
+        );
+      }
+      throw err;
+    }
 
     const stream = new ReadableStream({
       async start(controller) {
         const encoder = new TextEncoder();
         let eventsCount = 0;
         try {
-          for await (const evt of eventStream) {
-            if (req.signal.aborted) break;
+          // 先消费首个事件结果
+          if (!firstResult.done) {
             eventsCount++;
+            const evt = firstResult.value;
             const eventType = evt.type || "message";
+            const idField = evt.eventId ? `id: ${evt.eventId}\n` : `id: ${evt.sequence}\n`;
             controller.enqueue(
-              encoder.encode(`event: ${eventType}\ndata: ${JSON.stringify(evt)}\n\n`)
+              encoder.encode(`${idField}event: ${eventType}\ndata: ${JSON.stringify(evt)}\n\n`)
             );
+            // 若首条事件为背压终止事件，立即关闭通道
+            if (evt.type === "error" && (evt as any).error?.code === "EVENT_BACKPRESSURE_LIMIT") {
+              controller.close();
+              return;
+            }
+          }
+
+          // 循环消费后续实时或队列事件
+          while (!req.signal.aborted) {
+            const nextResult = await iterator.next();
+            if (nextResult.done) break;
+            eventsCount++;
+            const evt = nextResult.value;
+            const eventType = evt.type || "message";
+            const idField = evt.eventId ? `id: ${evt.eventId}\n` : `id: ${evt.sequence}\n`;
+            controller.enqueue(
+              encoder.encode(`${idField}event: ${eventType}\ndata: ${JSON.stringify(evt)}\n\n`)
+            );
+
+            // 若收到背压截断终止事件，正常关闭流通道
+            if (evt.type === "error" && (evt as any).error?.code === "EVENT_BACKPRESSURE_LIMIT") {
+              break;
+            }
           }
 
           if (

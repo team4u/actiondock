@@ -194,11 +194,21 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
     const input = body && "input" in body ? body.input : {};
     const configOverrides = body?.config;
 
+    const requestId =
+      req.headers.get("Idempotency-Key") ||
+      req.headers.get("idempotency-key") ||
+      req.headers.get("X-Request-Id") ||
+      req.headers.get("x-request-id") ||
+      body?.requestId ||
+      body?.execution?.requestId ||
+      undefined;
+
     if (isAsync) {
       try {
         const ticket = await target.startAction(actionRef, input, {
           timeoutMs,
           config: configOverrides,
+          requestId,
         });
 
         if (ticket.status === "failed") {
@@ -217,6 +227,20 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
           corsHeaders
         );
       } catch (err: any) {
+        if (err?.code === "IDEMPOTENCY_CONFLICT") {
+          return jsonResponse(
+            {
+              ok: false,
+              error: {
+                code: "IDEMPOTENCY_CONFLICT",
+                message: err.message,
+                details: err.details,
+              },
+            },
+            409,
+            corsHeaders
+          );
+        }
         return jsonResponse(
           {
             ok: false,
@@ -238,12 +262,15 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
         signal: req.signal,
         timeoutMs,
         config: configOverrides,
+        requestId,
       });
 
       let status = 200;
       if (!result.ok) {
         if (result.error?.code === "INPUT_VALIDATION_FAILED") {
           status = 400;
+        } else if (result.error?.code === "IDEMPOTENCY_CONFLICT") {
+          status = 409;
         } else if (
           result.error?.code === "ACTION_NOT_FOUND" ||
           result.error?.code === "PACKAGE_NOT_FOUND"
@@ -258,6 +285,20 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
 
       return jsonResponse(result, status, corsHeaders);
     } catch (err: any) {
+      if (err?.code === "IDEMPOTENCY_CONFLICT") {
+        return jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: "IDEMPOTENCY_CONFLICT",
+              message: err.message,
+              details: err.details,
+            },
+          },
+          409,
+          corsHeaders
+        );
+      }
       return jsonResponse(
         {
           ok: false,

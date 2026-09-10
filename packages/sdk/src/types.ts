@@ -352,6 +352,7 @@ export interface RunRecord {
  * 执行生命周期事件。
  */
 export type ExecutionEvent = {
+  eventId?: string;
   runId: string;
   rootRunId: string;
   sequence: number;
@@ -361,4 +362,6 @@ export type ExecutionEvent = {
   | { type: "progress"; current?: number; total?: number; message?: string }
   | { type: "status"; status: RunStatus }
   | { type: "finish"; result: ExecutionResult }
+  | { type: "error"; error: RuntimeError }
 );
+

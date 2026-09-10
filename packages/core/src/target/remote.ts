@@ -58,7 +58,7 @@ export async function* streamRemoteEvents(
   serverUrl: string,
   runId: string,
   token?: string,
-  options?: { signal?: AbortSignal }
+  options?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number }
 ): AsyncIterable<ExecutionEvent> {
   const base = normalizeServerUrl(serverUrl);
   const candidateUrls = [
@@ -72,6 +72,9 @@ export async function* streamRemoteEvents(
   if (token && token.trim()) {
     headers.Authorization = `Bearer ${token.trim()}`;
   }
+  if (options?.after !== undefined) {
+    headers["Last-Event-ID"] = String(options.after);
+  }
 
   let res: Response | undefined;
   for (const url of candidateUrls) {
@@ -80,6 +83,16 @@ export async function* streamRemoteEvents(
         headers,
         signal: options?.signal,
       });
+      if (resp.status === 410) {
+        let errJson: any;
+        try {
+          errJson = await resp.json();
+        } catch {}
+        const err = new Error(errJson?.error?.message || "Event cursor has expired");
+        (err as any).code = errJson?.error?.code || "EVENT_CURSOR_EXPIRED";
+        (err as any).details = errJson?.error?.details;
+        throw err;
+      }
       if (resp.ok && resp.body) {
         res = resp;
         break;
@@ -88,7 +101,10 @@ export async function* streamRemoteEvents(
         res = resp;
         break;
       }
-    } catch {
+    } catch (err: any) {
+      if (err?.code === "EVENT_CURSOR_EXPIRED") {
+        throw err;
+      }
       // 忽略单次网络连接异常并尝试备选路由
     }
   }
@@ -114,10 +130,13 @@ export async function* streamRemoteEvents(
       for (const part of parts) {
         if (!part.trim()) continue;
         let eventType = "message";
+        let eventId: string | undefined;
         let dataStr = "";
         for (const line of part.split("\n")) {
           if (line.startsWith("event:")) {
             eventType = line.slice(6).trim();
+          } else if (line.startsWith("id:")) {
+            eventId = line.slice(3).trim();
           } else if (line.startsWith("data:")) {
             dataStr += line.slice(5).trim();
           }
@@ -127,6 +146,7 @@ export async function* streamRemoteEvents(
             const data = JSON.parse(dataStr);
             if (eventType === "finish") {
               yield {
+                eventId: eventId ?? data.eventId,
                 type: "finish",
                 runId,
                 timestamp: new Date().toISOString(),
@@ -134,6 +154,7 @@ export async function* streamRemoteEvents(
               } as ExecutionEvent;
             } else {
               yield {
+                eventId: eventId ?? data.eventId,
                 type: eventType as any,
                 runId,
                 timestamp: new Date().toISOString(),
@@ -297,6 +318,7 @@ export class RemoteActionDockTarget implements ActionDockTarget {
         token: this.token,
         timeoutMs: options?.timeoutMs ?? this.timeoutMs,
         signal: options?.signal,
+        requestId: options?.requestId,
         async: false,
       }
     );
@@ -327,6 +349,7 @@ export class RemoteActionDockTarget implements ActionDockTarget {
         token: this.token,
         timeoutMs: options?.timeoutMs ?? this.timeoutMs,
         signal: options?.signal,
+        requestId: options?.requestId,
         async: true,
       }
     );
@@ -468,7 +491,7 @@ export class RemoteActionDockTarget implements ActionDockTarget {
 
   async *events(
     runId: string,
-    options?: { after?: number; signal?: AbortSignal }
+    options?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number }
   ): AsyncIterable<ExecutionEvent> {
     yield* streamRemoteEvents(this.serverUrl, runId, this.token, options);
   }

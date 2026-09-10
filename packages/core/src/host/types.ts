@@ -105,7 +105,7 @@ export interface ActionDockHost {
   /** 订阅指定运行的事件流 */
   events(
     runId: string,
-    options?: { after?: number; signal?: AbortSignal }
+    options?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number }
   ): AsyncIterable<ExecutionEvent>;
 
   /** 根据包唯一标识获取指定 App 实例 */

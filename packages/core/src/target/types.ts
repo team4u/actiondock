@@ -144,7 +144,7 @@ export interface ActionDockTarget {
   /** 订阅指定运行的事件流 */
   events(
     runId: string,
-    options?: { after?: number; signal?: AbortSignal }
+    options?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number }
   ): AsyncIterable<ExecutionEvent>;
 
   /** 获取指定包的单项配置安全视图 */

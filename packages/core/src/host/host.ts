@@ -30,6 +30,7 @@ import { ActionPackageResolver } from "../project/resolver";
 import { hasPendingTransactions, recoverPendingTransactions } from "../project/transactions";
 import { listLinkedPackages } from "../registry/registry";
 import { InMemoryEventSink, type EventSink } from "../runtime/events";
+import { DataDirLock } from "../storage/data-dir-lock";
 import type { ActionDockHost, ActionDockHostOptions } from "./types";
 
 function isActionDockApp(item: unknown): item is ActionDockApp {
@@ -48,6 +49,7 @@ function isActionDockApp(item: unknown): item is ActionDockApp {
  * 负责聚合与调度多个 ActionDockApp 实例，提供跨包引用路由、依赖声明校验与资源配额控制。
  */
 export class DefaultActionDockHost implements ActionDockHost {
+  public readonly hostSessionId: string;
   private apps = new Map<string, ActionDockApp>();
   private activeSubRunsPerRoot = new Map<string, number>();
   private hostPublicPackageIds = new Set<string>();
@@ -56,11 +58,20 @@ export class DefaultActionDockHost implements ActionDockHost {
   private maxSubRuns: number;
   private eventSink: EventSink;
   private isClosed = false;
+  private dataDirLock?: DataDirLock;
 
   constructor(options: ActionDockHostOptions = {}) {
+    this.hostSessionId = randomUUID();
     this.maxCallDepth = options.maxCallDepth ?? 16;
     this.maxSubRuns = options.maxSubRuns ?? 64;
     this.eventSink = options.eventSink ?? (options.platform as any)?.eventSink ?? new InMemoryEventSink();
+
+    // 当指定非内存 dataDir 时获取排他目录锁，防止并发冲突
+    if (options.dataDir && !options.inMemory) {
+      this.dataDirLock = DataDirLock.acquire(options.dataDir, {
+        hostSessionId: this.hostSessionId,
+      });
+    }
 
     // 注册显式传入的 packages 列表
     if (options.packages && Array.isArray(options.packages)) {
@@ -225,6 +236,16 @@ export class DefaultActionDockHost implements ActionDockHost {
       this.hostPublicPackageIds.add(app.packageId);
     }
     this.bindApp(app);
+
+    // 接管与恢复：自动将遗留非终态运行收敛为 interrupted
+    const st = (app as any).storage;
+    if (st && typeof st.recoverRunningRuns === "function") {
+      try {
+        st.recoverRunningRuns();
+      } catch {
+        // 忽略单包恢复异常
+      }
+    }
   }
 
   registerApp(app: ActionDockApp): void {
@@ -644,7 +665,7 @@ export class DefaultActionDockHost implements ActionDockHost {
 
   events(
     runId: string,
-    options?: { after?: number; signal?: AbortSignal }
+    options?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number }
   ): AsyncIterable<ExecutionEvent> {
     for (const app of this.listApps()) {
       if ((app as any).executionService?.getActiveHandle?.(runId)) {
@@ -678,6 +699,12 @@ export class DefaultActionDockHost implements ActionDockHost {
         }
       })
     );
+
+    try {
+      this.dataDirLock?.release();
+    } catch {
+      // 忽略目录排他锁释放异常
+    }
   }
 }
 

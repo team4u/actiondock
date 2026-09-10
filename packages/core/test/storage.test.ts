@@ -187,11 +187,11 @@ describe("SqliteRuntimeStorage", () => {
       }
     });
 
-    it("should migrate database from version 1 schema and support expires_at", () => {
+    it("打开旧版本（例如版本 1）Schema 数据库时直接抛出 UNSUPPORTED_STORAGE_SCHEMA 异常并拒绝启动", () => {
       const { Database } = require("bun:sqlite");
-      const tempDbPath = `/tmp/test-migration-${Date.now()}.db`;
-      
-      // Manually create v1 schema
+      const tempDbPath = `/tmp/test-old-version-${Date.now()}.db`;
+
+      // 创建版本 1 旧结构数据库
       const rawDb = new Database(tempDbPath);
       rawDb.exec(`
         CREATE TABLE IF NOT EXISTS config (
@@ -201,41 +201,61 @@ describe("SqliteRuntimeStorage", () => {
           updated_at TEXT NOT NULL,
           PRIMARY KEY (package_id, key)
         );
-        CREATE TABLE IF NOT EXISTS state (
-          package_id TEXT NOT NULL,
-          namespace TEXT NOT NULL,
-          key TEXT NOT NULL,
-          value_json TEXT,
-          updated_at TEXT NOT NULL,
-          PRIMARY KEY (package_id, namespace, key)
-        );
-        CREATE TABLE IF NOT EXISTS runs (
-          id TEXT PRIMARY KEY,
-          package_id TEXT NOT NULL,
-          action_id TEXT NOT NULL,
-          parent_run_id TEXT,
-          status TEXT NOT NULL,
-          input_json TEXT,
-          output_json TEXT,
-          error_json TEXT,
-          started_at TEXT NOT NULL,
-          finished_at TEXT
-        );
         PRAGMA user_version = 1;
       `);
       rawDb.close();
 
-      // Open with SqliteRuntimeStorage (should trigger migration to v2)
-      const migratedStorage = new SqliteRuntimeStorage({
-        packageId: "migrated-pkg",
-        dbPath: tempDbPath,
-      });
+      // 打开旧版本数据库，验证在写事务前直接抛出 UNSUPPORTED_STORAGE_SCHEMA 异常并拒绝启动
+      expect(() => {
+        new SqliteRuntimeStorage({
+          packageId: "old-pkg",
+          dbPath: tempDbPath,
+        });
+      }).toThrow(/UNSUPPORTED_STORAGE_SCHEMA/);
 
-      // Verify setting and getting state with TTL works after migration
-      migratedStorage.setState("", "migrated-key", "ok", 100);
-      expect(migratedStorage.getState("", "migrated-key")).resolves.toBe("ok");
+      // 验证原数据库未被修改且保留原版本号
+      const checkDb = new Database(tempDbPath);
+      const row = checkDb.prepare("PRAGMA user_version;").get() as any;
+      expect(row.user_version).toBe(1);
+      checkDb.close();
 
-      migratedStorage.close();
+      try {
+        unlinkSync(tempDbPath);
+      } catch {}
+    });
+
+    it("打开未来不兼容版本 Schema 数据库时抛出 UNSUPPORTED_STORAGE_SCHEMA 异常并拒绝启动", () => {
+      const { Database } = require("bun:sqlite");
+      const tempDbPath = `/tmp/test-incompatible-${Date.now()}.db`;
+
+      // 手动创建未来不兼容版本数据库
+      const rawDb = new Database(tempDbPath);
+      rawDb.exec(`
+        CREATE TABLE config (
+          package_id TEXT NOT NULL,
+          key TEXT NOT NULL,
+          value_json TEXT,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (package_id, key)
+        );
+        PRAGMA user_version = 999;
+      `);
+      rawDb.close();
+
+      // 打开未来版本数据库，验证直接抛出不支持异常并拒绝启动
+      expect(() => {
+        new SqliteRuntimeStorage({
+          packageId: "incompatible-pkg",
+          dbPath: tempDbPath,
+        });
+      }).toThrow(/UNSUPPORTED_STORAGE_SCHEMA/);
+
+      // 验证原数据库文件与 user_version 保持未修改
+      const checkDb = new Database(tempDbPath);
+      const row = checkDb.prepare("PRAGMA user_version;").get() as any;
+      expect(row.user_version).toBe(999);
+      checkDb.close();
+
       try {
         unlinkSync(tempDbPath);
       } catch {}

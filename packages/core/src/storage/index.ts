@@ -3,6 +3,7 @@ import { assertPathWithinRoot, assertValidPackageId, getActionDockHome } from ".
 import { SqliteRuntimeStorage } from "./sqlite";
 import type { RuntimeStorage, StorageOptions } from "./types";
 
+export * from "./data-dir-lock";
 export * from "./driver";
 export * from "./mask";
 export * from "./sqlite";
@@ -67,18 +68,24 @@ export function createStorage(
  * @param dataDirArg 自定义数据存储目录（可选）
  */
 export function createGlobalStorage(
-  customHomeOrOptions?: string | { customHome?: string; dataDir?: string },
+  customHomeOrOptions?: string | { customHome?: string; dataDir?: string; inMemory?: boolean },
   dataDirArg?: string
 ): RuntimeStorage {
   let customHome: string | undefined;
   let dataDir: string | undefined;
+  let inMemory = false;
 
   if (typeof customHomeOrOptions === "object" && customHomeOrOptions !== null) {
     customHome = customHomeOrOptions.customHome;
     dataDir = customHomeOrOptions.dataDir;
+    inMemory = Boolean(customHomeOrOptions.inMemory);
   } else {
     customHome = customHomeOrOptions;
     dataDir = dataDirArg;
+  }
+
+  if (inMemory) {
+    return new SqliteRuntimeStorage({ dbPath: ":memory:", packageId: "__global__" });
   }
 
   const dbPath = dataDir

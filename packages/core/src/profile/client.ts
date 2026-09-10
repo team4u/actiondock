@@ -25,6 +25,8 @@ export interface RemoteExecuteOptions {
   timeoutMs?: number;
   /** 中断信号 */
   signal?: AbortSignal;
+  /** 幂等请求去重标识 */
+  requestId?: string;
   /** 是否异步触发（202 Accepted 立即返回 runId） */
   async?: boolean;
 }
@@ -122,6 +124,7 @@ export async function executeRemoteAction<T = unknown>(
   let timeoutMs: number | undefined;
   let signal: AbortSignal | undefined;
   let isAsync = false;
+  let requestId: string | undefined;
 
   if (configOverridesOrOptions && typeof configOverridesOrOptions === "object") {
     if (
@@ -129,6 +132,7 @@ export async function executeRemoteAction<T = unknown>(
       "timeoutMs" in configOverridesOrOptions ||
       "signal" in configOverridesOrOptions ||
       "async" in configOverridesOrOptions ||
+      "requestId" in configOverridesOrOptions ||
       "configOverrides" in configOverridesOrOptions
     ) {
       const opts = configOverridesOrOptions as RemoteExecuteOptions;
@@ -137,6 +141,7 @@ export async function executeRemoteAction<T = unknown>(
       timeoutMs = opts.timeoutMs;
       signal = opts.signal;
       isAsync = Boolean(opts.async);
+      requestId = opts.requestId;
     } else {
       configOverrides = configOverridesOrOptions as Record<string, unknown>;
     }
@@ -149,12 +154,19 @@ export async function executeRemoteAction<T = unknown>(
   if (typeof timeoutMs === "number" && timeoutMs > 0) {
     executionPayload.timeoutMs = timeoutMs;
   }
+  if (requestId) {
+    executionPayload.requestId = requestId;
+  }
 
   try {
-    const headers = {
+    const headers: Record<string, string> = {
       ...buildHeaders(token),
       "Content-Type": "application/json",
     };
+    if (requestId) {
+      headers["Idempotency-Key"] = requestId;
+      headers["x-request-id"] = requestId;
+    }
 
     const reqBody = JSON.stringify({
       input,

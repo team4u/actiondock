@@ -128,6 +128,7 @@ export async function executeAction(
           signal: controller.signal,
           timeoutMs,
           config: configOverrides,
+          requestId: options.requestId,
         });
 
         const asyncOutput = {
@@ -145,6 +146,7 @@ export async function executeAction(
           signal: controller.signal,
           timeoutMs,
           config: configOverrides,
+          requestId: options.requestId,
         });
 
         writeStdout(JSON.stringify(result, null, 2), context);
@@ -187,6 +189,7 @@ export function registerRunCommand(program: Command, context?: CliContext): void
     .option("-s, --server <url>", "Remote server URL")
     .option("-t, --token <token>", "Auth token for remote server")
     .option("--timeout <duration>", "Execution timeout (e.g. 30s, 5m, 500ms)")
+    .option("--request-id <id>", "Idempotency request ID for deduplication")
     .option("--async", "Execute asynchronously in background (requires remote server or profile)")
     .option("--data-dir <path>", "Custom database directory")
     .option("--json", "Output as JSON")

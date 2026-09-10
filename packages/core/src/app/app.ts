@@ -486,7 +486,7 @@ export class DefaultActionDockApp implements ActionDockApp {
 
   events(
     runId: string,
-    options?: { after?: number; signal?: AbortSignal }
+    options?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number }
   ): AsyncIterable<ExecutionEvent> {
     return this.executionService.events(runId, options);
   }

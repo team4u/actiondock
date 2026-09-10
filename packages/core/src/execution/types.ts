@@ -26,6 +26,8 @@ export interface ExecuteOptions {
   timeoutMs?: number;
   /** 配置临时覆盖字典 */
   config?: Record<string, JsonValue>;
+  /** 幂等请求去重标识 */
+  requestId?: string;
   /** 父运行 ID */
   parentRunId?: string;
   /** 根运行 ID */
@@ -126,7 +128,7 @@ export interface ExecutionService {
   /** 订阅执行事件流 */
   events(
     runId: string,
-    options?: { after?: number; signal?: AbortSignal }
+    options?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number }
   ): AsyncIterable<ExecutionEvent>;
 
   /** 优雅关闭服务并等待活跃任务收尾 */

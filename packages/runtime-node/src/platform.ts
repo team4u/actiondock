@@ -20,7 +20,7 @@ import {
 import { NodeHttpServer } from "./http-server";
 import { NodeModuleLoader, TsxModuleLoader } from "./module-loader";
 import { ExecaProcessExecutor, NodeProcessExecutor } from "./process-executor";
-import { NodeSqliteDriver } from "./sqlite-driver";
+import { NodeSqliteDriver, WorkerSqliteDriver } from "./sqlite-driver";
 
 /**
  * Node 平台构建配置选项。
@@ -32,7 +32,9 @@ export interface NodePlatformOptions {
   customHome?: string;
   /** 文件系统安全沙箱根路径 */
   rootDir?: string;
-  /** 自定义 SQLite 驱动工厂函数（默认实例化 NodeSqliteDriver） */
+  /** 是否启用专用工作线程存储驱动（默认为 false，可在生产环境启用 worker_threads 非阻塞存储） */
+  useWorker?: boolean;
+  /** 自定义 SQLite 驱动工厂函数（默认实例化 NodeSqliteDriver 或 WorkerSqliteDriver） */
   driverFactory?: (dbPath: string) => SqliteDriver;
 }
 
@@ -67,7 +69,10 @@ export function createNodePlatform(options: NodePlatformOptions = {}): RuntimePl
   const modules: ModuleLoader = new NodeModuleLoader();
   const process = new NodeProcessExecutor();
 
-  const createDriver = options.driverFactory ?? ((dbPath: string) => new NodeSqliteDriver(dbPath));
+  const createDriver =
+    options.driverFactory ??
+    ((dbPath: string) =>
+      options.useWorker ? new WorkerSqliteDriver(dbPath) : new NodeSqliteDriver(dbPath));
 
   const storage: StorageFactory = {
     createStorage(packageId: string, opts?: StorageFactoryOptions): RuntimeStorage {
