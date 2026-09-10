@@ -19,547 +19,86 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 
 ---
 
-## 智能体场景与决策路由
+## 智能体场景与决策路由表
 
-当接收到具体任务时，参考下表快速索引对应的执行范式与命令：
+当接收到具体任务时，参考下表快速索引对应的执行范式、核心命令与专项参考手册：
 
-| 业务意图与需求 | 执行范式与决策建议 | 核心命令与操作路径 |
-| :--- | :--- | :--- |
-| **新建工程项目** | 生成标准工程骨架，包含清单、配置、代码与规程目录 | `ad init [directory] -i <id> -n <name>` |
-| **新建 Action 工具** | 脚手架生成并实现标准输入输出契约 | `ad new action <id> [-d <desc>] [-f <file>]` |
-| **新建 Playbook 规程** | 脚手架生成任务操作规程 Markdown 模板 | `ad new playbook <id> [-d <desc>] [-a <actions...>]` |
-| **探索可用能力** | 模糊意图检索，优先检查规程与工具清单 | `ad info <patterns...>` 或 `ad info -i <pattern>` |
-| **列出可用 Action** | 按包或关键词列出已注册的所有 Action | `ad list [patterns...] [-P <pkg>]` |
-| **查看 Action 详情** | 查看指定 Action 的 Schema 模式、入参要求与依赖 | `ad describe <id> [-P <pkg>]` |
-| **调用原子 Action** | 执行动作逻辑，推荐通过文件传递复杂参数 | `ad run <action> --input-file <path>` |
-| **异步长任务调用** | 提交异步执行任务并获取凭据，追踪执行进度与结果 | `ad run <action> --async`，结合 `ad runs` 追踪 |
-| **执行复合业务任务** | 规程优先原则，阅读规程后依序调度 | `ad playbook show <id>`，依步骤调度对应 Action |
-| **校验清单与契约** | 校验 Action 清单完整性与 Schema 规范有效性 | `ad validate [id] [-P <pkg>]` |
-| **校验 Playbook 规程** | 校验 Playbook 引用 Action 的合法性与完整性 | `ad playbook validate [id] [-P <pkg>]` |
-| **生成 TypeScript 类型** | 基于清单 Schema 自动生成强类型声明文件 | `ad generate types` |
-| **安装与锁定依赖** | 正式项目引入外部 Action 包并生成版本锁定，支持原子事务保护 | `ad add <package>`，更新 `actiondock.lock.json` |
-| **移除外部依赖** | 从清单与锁文件中安全移除依赖包，保留数据命名空间 | `ad remove <package>` |
-| **单元测试与验证** | 内存沙箱测试，验证业务逻辑与持久化状态 | `ad test [pattern]`，结合 `createTestRuntime` |
-| **打包 npm 分发包** | 打包为标准 npm 压缩包用于共享与发布 | `ad pack [-P <id>] [-o <path>] [--dry-run]` |
-| **构建交付目录** | 构建为 Node.js 运行时交付目录或归档 | `ad build [-P <id>] [-o <path>] [--vendor-deps]` |
-| **导出 Agent Skill** | 导出源码型或 Node.js 目录型技能资产 | `ad export skill [-P <ids...>] [-m <mode>]` |
-| **管理运行配置项** | 读取、设置、列出或校验项目与全局配置 | `ad config list`、`ad config get`、`ad config set` |
-| **管理持久化状态** | 跨执行生命周期读写状态键与清理命名空间 | `ad state list`、`ad state get`、`ad state set` |
-| **查询与取消运行历史** | 检索历史任务记录、查看执行详情或取消运行 | `ad runs list`、`ad runs show`、`ad runs cancel` |
-| **配置远程执行环境** | 管理远端 Runner 服务的连接凭证与当前切换目标 | `ad profile list`、`ad profile add`、`ad profile use` |
-| **启动 HTTP 服务** | 启动轻量级 HTTP 运行服务，提供 REST 与 SSE 接口 | `ad serve [-p <port>] [-H <host>] [-t <token>]` |
-| **启动 MCP 协议服务** | 启动标准 Model Context Protocol 服务供智能体直连 | `ad mcp`（STDIO 模式）或 `ad mcp serve`（HTTP 模式） |
-| **本地开发软链挂载** | 本地源码快速试跑或多包联调，登记至本机全局路由表 | `ad link [path]`、`ad unlink [id|path]` |
-| **排查错误与自愈体检** | 检查挂载树、清理失效软链、执行系统体检 | `ad info --tree` -> `ad unlink --prune` -> `ad doctor` |
+| 业务意图与需求 | 核心推荐命令 | 决策建议与关键原则 | 详尽参考手册 |
+| :--- | :--- | :--- | :--- |
+| **新建工程项目** | `ad init [directory] -i <id> -n <name>` | 生成标准工程骨架，包含清单、配置、代码与规程目录 | [developer.md](file:///root/code/action-dock/skills/actiondock/references/developer.md) |
+| **新建 Action 工具** | `ad new action <id> [-d <desc>] [-f <file>]` | 脚手架自动注册清单契约，实现标准输入输出接口 | [developer.md](file:///root/code/action-dock/skills/actiondock/references/developer.md) |
+| **新建 Playbook 规程** | `ad new playbook <id> [-d <desc>] [-a <actions...>]` | 脚手架生成规程 Markdown 模板并在清单中登记 | [developer.md](file:///root/code/action-dock/skills/actiondock/references/developer.md) |
+| **探索可用能力** | `ad info <patterns...>` 或 `ad info -i <pattern>` | 模糊意图检索，优先检查规程与工具清单 | [cli.md](file:///root/code/action-dock/skills/actiondock/references/cli.md) |
+| **列出可用 Action** | `ad list [patterns...] [-P <pkg>]` | 按包或关键词列出当前包、工作区或远端的所有 Action | [cli.md](file:///root/code/action-dock/skills/actiondock/references/cli.md) |
+| **查看 Action 详情** | `ad describe <id> [-P <pkg>]` | 查看指定 Action 的 Schema 模式、入参要求与依赖 | [cli.md](file:///root/code/action-dock/skills/actiondock/references/cli.md) |
+| **执行原子 Action** | `ad run <action> --input-file <path>` | 复杂对象推荐通过参数文件传递，杜绝引号转义损坏 | [cli.md](file:///root/code/action-dock/skills/actiondock/references/cli.md) |
+| **异步长任务调用** | `ad run <action> --async`，结合 `ad runs` 追踪 | 提交异步执行任务并获取凭据，追踪执行进度与结果 | [cli.md](file:///root/code/action-dock/skills/actiondock/references/cli.md) |
+| **执行复合业务任务** | `ad playbook show <id>`，依步骤调度对应 Action | 规程优先原则，阅读规程正文后依步骤编排调度 | [developer.md](file:///root/code/action-dock/skills/actiondock/references/developer.md) |
+| **校验清单与规程** | `ad validate` 与 `ad playbook validate` | 校验 Action 清单完整性与规程引用合法性 | [developer.md](file:///root/code/action-dock/skills/actiondock/references/developer.md) |
+| **生成 TypeScript 类型** | `ad generate types` | 基于清单 Schema 自动生成强类型声明文件 | [developer.md](file:///root/code/action-dock/skills/actiondock/references/developer.md) |
+| **安装与锁定依赖** | `ad add <package>` | 正式项目引入外部 Action 包，受原子事务保护 | [cli.md](file:///root/code/action-dock/skills/actiondock/references/cli.md) |
+| **移除外部依赖** | `ad remove <package>` | 自动检查反向引用，安全移除依赖包 | [cli.md](file:///root/code/action-dock/skills/actiondock/references/cli.md) |
+| **单元测试与验证** | `ad test [pattern]` | 内存沙箱测试，验证业务逻辑与持久化状态 | [developer.md](file:///root/code/action-dock/skills/actiondock/references/developer.md) |
+| **打包 npm 分发包** | `ad pack [-P <id>] [-o <path>] [--dry-run]` | 打包为标准 npm 压缩包用于共享与发布 | [build-and-export.md](file:///root/code/action-dock/skills/actiondock/references/build-and-export.md) |
+| **构建交付目录** | `ad build [-P <id>] [-o <path>] [--vendor-deps]` | 构建为包含生产依赖的 Node.js 运行时交付目录 | [build-and-export.md](file:///root/code/action-dock/skills/actiondock/references/build-and-export.md) |
+| **导出 Agent Skill** | `ad export skill [-P <ids...>] [-m <mode>] [--bundle]` | 导出自包含的源码型、Node 目录型或复合套件技能 | [build-and-export.md](file:///root/code/action-dock/skills/actiondock/references/build-and-export.md) |
+| **重生成复合说明书** | `ad export skill --bundle [name] --skill-md-only` | 结合自定义模板与最新清单，就地仅刷新 SKILL.md | [build-and-export.md](file:///root/code/action-dock/skills/actiondock/references/build-and-export.md) |
+| **管理运行配置项** | `ad config list`、`ad config get`、`ad config set` | 读取、设置、列出或校验项目与全局持久化配置 | [cli.md](file:///root/code/action-dock/skills/actiondock/references/cli.md) |
+| **管理持久化状态** | `ad state list`、`ad state get`、`ad state set` | 跨执行生命周期读写状态键与清理命名空间 | [cli.md](file:///root/code/action-dock/skills/actiondock/references/cli.md) |
+| **配置远程执行环境** | `ad profile list`、`ad profile add`、`ad profile use` | 管理远端 Runner 服务的连接凭证与当前切换目标 | [cli.md](file:///root/code/action-dock/skills/actiondock/references/cli.md) |
+| **启动微服务或协议** | `ad serve` 与 `ad mcp` | 暴露轻量 HTTP 运行服务或标准 MCP 协议接口 | [cli.md](file:///root/code/action-dock/skills/actiondock/references/cli.md) |
+| **本地开发软链挂载** | `ad link [path]`、`ad unlink [id|path]` | 本地源码快速试跑或多包联调，登记至本机全局路由表 | [cli.md](file:///root/code/action-dock/skills/actiondock/references/cli.md) |
+| **排查错误与自愈修复** | 遇到报错时按错误码检索决策表并自愈 | 仅在报错时查阅，严禁在执行前盲目体检 | [troubleshooting.md](file:///root/code/action-dock/skills/actiondock/references/troubleshooting.md) |
 
 ---
 
 ## 核心调度流：能力发现与规程优先决议
 
 > [!IMPORTANT]
-> **智能体关键行动指引**：当用户需要进行某项业务操作、探索可用工具，或不确定有哪些组件契合任务时，必须遵循以下行动准则：
+> **智能体关键行动准则**：
 > - **按需排查原则**：默认运行环境、命令行工具与依赖均已就绪，严禁在任务启动前习惯性运行安装检查或 `ad doctor` 体检；仅在实际调用报错时按需排查。
 > - **先查后用原则**：首先使用 `ad info <patterns...>` 或 `ad list [patterns...]` 搜索相关包、Action 与规程。
 > - **规程优先决议**：在命中目标包后，**优先检查输出中是否存在匹配的 Playbook**。若存在规程，必须执行 `ad playbook show <id>` 读取标准操作规程，依规程步骤调用 Action；严禁擅自跳过规程自行拼凑调用顺序。仅当无匹配规程或用户明确指定单点操作时，方可直接调用单一 Action。
 
-### 意图模糊探索与包检索
-```bash
-# 模糊搜索（唯一匹配时直接自动展开完整包详情、Action 清单与规程列表）
-ad info browser
-ad info github pr
+---
 
-# 正则意图过滤
-ad info -i "github|gitlab"
+## 智能体三大核心作业流
 
-# 查看当前工作区注册树与挂载结构
-ad info --tree
+### 作业流一：作为消费者使用 Action
 
-# 查看指定包详情（支持包标识或物理路径）
-ad info <package-id>
-ad info -P <package-id>
-```
+- 项目依赖消费：在工程根目录下执行 `ad add <package>` 安装并锁定依赖，执行 `ad list` 检索可用动作，通过终端 `ad run` 调用或在源码中通过 `ctx.actions.invoke` 调度。
+- 智能体技能装载：官方或开源技能执行 `npx skills add <owner/repo> -g -y` 安装；源码技能目录冷启动安装环境依赖后执行 `ad link .` 完成全局注册挂载。
+- 本地未发布源码试跑：在源码包根目录执行 `ad link` 挂载至本机全局路由表（`~/.actiondock/registry.json`），联调完毕后通过 `ad unlink [id]` 卸载。
+- 集成工具 MCP 服务挂载：在 Cursor 或 Claude Desktop 配置文件中配置命令 `"ad"`、参数 `["mcp"]`（单项目）或 `["mcp", "--all"]`（全局挂载）。
 
-### Action 清单与模式检索
-```bash
-# 列出当前项目、已链接包或远端服务中的所有 Action
-ad list
+### 作业流二：作为开发者创建与扩展 Action
 
-# 支持模糊意图过滤 Action
-ad list github issue
-ad list -i "create|update"
+- 步骤一：工程初始化。执行 `ad init [directory] -i <package-id> -n <name>` 生成标准工程骨架。
+- 步骤二：新建模板代码。执行 `ad new action <action-id> -d "描述"` 脚手架生成源码并在清单中注册。
+- 步骤三：完善清单契约。在 `actiondock.json` 中定义 `inputSchema`、`outputSchema` 与必填属性。
+- 步骤四：生成强类型。执行 `ad generate types` 生成强类型声明文件 `.actiondock/generated/actions.d.ts`。
+- 步骤五：编写业务逻辑。在 `actions/<action-id>.ts` 中使用 [`defineAction`](file:///root/code/action-dock/packages/sdk/src/action.ts) 编写纯业务逻辑，调阅 [developer.md](file:///root/code/action-dock/skills/actiondock/references/developer.md) 了解上下文 API。
+- 步骤六：契约门禁校验。执行 `ad validate`，确保模式合法与引用存在。
+- 步骤七：沙箱单元测试。在 `tests/<action-id>.test.ts` 中使用 [`createTestRuntime`](file:///root/code/action-dock/packages/testing/src/runtime.ts) 进行纯内存测试，执行 `ad test`。
+- 步骤八：编排业务规程。执行 `ad new playbook <playbook-id>` 编写标准作业规程，执行 `ad playbook validate` 校验。
+- 步骤九：构建交付与导出。执行 `ad build` 构建交付目录，执行 `ad pack` 打包 npm 分发包，或执行 `ad export skill` 导出技能资产。多包复合套件可配合 `SKILL.custom.md` 或 `--skill-md-only` 使用，详见 [build-and-export.md](file:///root/code/action-dock/skills/actiondock/references/build-and-export.md)。
 
-# 查看指定 Action 的完整描述、Schema 定义与调用依赖
-ad describe github.list-issues
-ad describe team4u.github-tools/list-issues
-```
+### 作业流三：安全执行与长任务追踪
+
+- 传参安全规范：复杂对象推荐写入临时 JSON 文件，使用 `--input-file <path>` 传参，杜绝 Shell 引号转义损坏。
+- 异步长任务管理：长耗时任务添加 `--async` 提交并获取凭据，通过 `ad runs show <runId>` 追踪事件流，通过 `ad runs cancel <runId>` 中途取消。
+- 配置覆盖：调试时使用 `-c KEY=VALUE` 临时覆盖配置；生产使用 `ad config set <KEY> <VALUE>` 持久化注入。
 
 ---
 
-## 智能体三大核心作业流：消费、开发与执行
+## 参考文档按需调阅索引
 
-智能体在协助用户处理 ActionDock 任务时，主要涵盖消费外部能力、开发全新能力与执行调用任务三种作业流。请根据具体任务场景依序推进：
+不同业务场景下，智能体应按需查阅 `references/` 目录下的专项参考手册：
 
-### 作业流一：作为消费者使用 Action（依赖安装、技能装载与 MCP 挂载）
-
-当用户需要复用已有的 Action 工具，或将能力接入各类智能体环境时：
-
-- 项目依赖消费（面向正式工程）：
-  - 步骤一：安装并锁定依赖。在工程根目录下执行 `ad add <package>`。底层自动从 npm 安装依赖包至 `node_modules`，校验清单规范，并更新单一事实源锁文件 [`actiondock.lock.json`](file:///root/code/action-dock/packages/core/src/project/lockfile.ts)（受原子事务保护）。
-  - 步骤二：检索能力与模式契约。执行 `ad list` 列出工程及依赖包含的所有 Action，执行 `ad describe <package-id>/<action-id>` 查验入参 Schema 与必填属性。
-  - 步骤三：直接调度或代码级联调用。在终端通过 `ad run <package-id>/<action-id> --input '{"key": "val"}'` 调用；若在当前包代码中复用，需在 `actiondock.json` 的 `uses` 列表中声明该 Action，并在源码中通过 `ctx.actions.invoke("<package-id>/<action-id>", input)` 调度。
-  - 步骤四：依赖安全移除。若不再需要该依赖，执行 `ad remove <package>`。系统会自动检测反向引用，若当前 Action 的 `uses` 仍在调用则拦截报错，保护工程完整性。
-- 智能体 Skill 技能装载（面向智能体环境）：
-  - 官方或开源技能一键安装：执行 `npx skills add <owner/repo> -g -y` 直接从 GitHub 全局安装技能。
-  - 源码技能目录冷启动：若获取到的是包含源码的独立技能目录且宿主未预装环境，在具备 Node.js 底座后执行 `npm install -g @actiondock/cli`，并在技能目录下执行 `npm install --omit=dev` 物化本地依赖，随后执行 `ad link .` 完成全局注册挂载。
-  - 智能体自动激活：智能体启动时自动识别加载的 `SKILL.md` 与 Playbook 规程，遵循规程优先原则调度底层工具。
-- 本地源码快速试跑与多包联调（面向本地未发布源码）：
-  - 在待测试源码包根目录执行 `ad link`（或在多包工作区根目录执行 `ad link -r`），将包挂载至本机全局路由表（`~/.actiondock/registry.json`）。
-  - 挂载后即可在任意目录直接通过完全限定标识符调用该包能力。
-  - 联调结束后执行 `ad unlink [id]` 卸载，或使用 `ad unlink --prune` 批量清理失效软链。
-- 集成开发环境 MCP 服务挂载：
-  - 在 Cursor 或 Claude Desktop 配置文件中添加 ActionDock MCP 服务配置。
-  - 挂载当前项目已锁定依赖：`"command": "ad", "args": ["mcp"], "cwd": "/path/to/project"`。
-  - 挂载本机全局所有已链接包：`"command": "ad", "args": ["mcp", "--all"]`。
-
-### 作业流二：作为开发者创建与扩展 Action（端到端标准工序）
-
-当用户要求创建新 ActionDock 工程、新增 Action 工具或编写业务规程时：
-
-- 步骤一：工程初始化。若在全新目录下，执行 `ad init [directory] -i <package-id> -n <name>` 生成标准工程骨架，并执行 `npm install`。
-- 步骤二：新建 Action 模板。在工程根目录下执行 `ad new action <action-id> -d "功能描述"`，系统自动在 `actions/<action-id>.ts` 生成模板代码并在 `actiondock.json` 中自动注册契约项。
-- 步骤三：完善清单模式契约。在 `actiondock.json` 的 `actions.<action-id>` 节点下，完善 `inputSchema`、`outputSchema` 与必填字段 `required`。
-- 步骤四：自动生成强类型声明。执行 `ad generate types`，系统根据清单 Schema 自动生成强类型声明文件 `.actiondock/generated/actions.d.ts`。
-- 步骤五：编写业务执行代码。在 `actions/<action-id>.ts` 中使用 [`defineAction`](file:///root/code/action-dock/packages/sdk/src/action.ts) 编写纯业务逻辑：
-  - 读取配置：`ctx.config.get<string>("KEY")`（自动遵循 5 级优先级）。
-  - 持久化状态：`await ctx.state.set("key", value, ttl)` 与 `await ctx.state.get("key")`。
-  - 受管子进程：`await ctx.process.exec("cmd", ["arg1", "arg2"])`。
-  - 结构化日志：`ctx.log.info("...")`（严格物理定向至标准错误流，严禁使用 `console.log`）。
-  - 响应取消：绑定并检测 `ctx.signal`。
-- 步骤六：契约门禁校验。执行 `ad validate`，确保入参出参 Schema 合法、引用的入口文件存在、依赖闭包可解析。
-- 步骤七：编写纯内存单元测试。在 `tests/<action-id>.test.ts` 中使用 [`@actiondock/testing`](file:///root/code/action-dock/packages/testing/src/runtime.ts) 的 [`createTestRuntime`](file:///root/code/action-dock/packages/testing/src/runtime.ts)，无需外部数据库或网络，执行 `ad test` 或 `npm test` 验证。
-- 步骤八：创建与校验 Playbook 规程。执行 `ad new playbook <playbook-id> -d "描述" -a <action-ids...>` 创建规程，在 Markdown 正文中编写 SOP 操作步骤与安全红线，执行 `ad playbook validate` 校验。
-- 步骤九：构建交付与技能导出。执行 `ad build` 构建 Node.js 目录交付产物，执行 `ad pack` 打包为 npm 压缩包，或执行 `ad export skill` 导出为 Agent Skill 资产。
-
-### 作业流三：安全执行与长任务追踪（传参、配置与异步）
-
-当调用 Action 执行具体任务时：
-
-- 传参安全规范：
-  - 简单标量参数：可使用行内参数 `--input '{"key": "value"}'`。
-  - 复杂对象或包含引号与多行文本的参数：推荐将参数写入本地临时 JSON 文件，使用 `--input-file <path>` 传参，杜绝 Shell 引号转义损坏 JSON 结构。
-- 异步长任务生命周期管理：
-  - 启动后台异步任务：添加 `--async` 参数（如 `ad run <action> --input-file <path> --async`），系统立即返回包含 `runId` 的票据信封。
-  - 查询执行详情与进度：执行 `ad runs show <runId>` 查看入参快照、返回值、耗时与事件流。
-  - 主动取消任务：若需中途终止任务，执行 `ad runs cancel <runId> --reason "原因"`。
-- 配置覆盖与凭据就绪：
-  - 调试时临时覆盖配置项：使用 `-c KEY=VALUE`（如 `ad run <action> -c TIMEOUT_MS=10000`）。
-  - 持久化配置设置：使用 `ad config set <KEY> <VALUE>`，敏感配置项自动脱敏掩码。
-
----
-
-## 完整命令行工具手册
-
-### 工程初始化与代码脚手架 (`ad init`, `ad new`)
-
-- `ad init [directory]`：初始化新的 ActionDock 项目工程。
-  - `-i, --id <id>`：指定项目唯一逻辑标识符（如 `team4u.deploy-tools`）。
-  - `-n, --name <name>`：指定项目人类可读显示名称。
-  - `-d, --desc <description>`：指定项目描述信息。
-- `ad new action <id>`：在当前工程中脚手架生成新 Action 模板源码并在 `actiondock.json` 中注册。
-  - `-d, --desc <description>`：指定 Action 描述。
-  - `-f, --file <filePath>`：指定相对于动作目录的目标文件路径（默认 `<id>.ts`）。
-- `ad new playbook <id>`：在当前工程中脚手架生成新 Playbook 规程并在 `actiondock.json` 中注册。
-  - `-d, --desc <description>`：指定 Playbook 描述。
-  - `-a, --actions <actions...>`：声明规程引用的 Action 标识符列表。
-  - `-f, --file <filePath>`：指定相对于规程目录的目标 Markdown 文件路径。
-
-### Action 契约校验与类型生成 (`ad validate`, `ad generate`)
-
-- `ad validate [id]`：校验 Action 清单完整性与 Schema 格式规范。
-  - `-P, --package <id>`：指定目标包路径或标识符。
-  - 校验内容包括：Schema 合法性、必填字段存在性、引用文件物理存在性、`uses` 依赖闭包可解析性。
-- `ad generate types`：根据 `actiondock.json` 中声明的 `inputSchema` 与 `outputSchema` 自动生成强类型 TypeScript 声明文件。
-  - 产物输出路径为 `.actiondock/generated/actions.d.ts`。
-  - 当清单变更时，运行此命令即可获得强类型开发补全。
-
-### Action 运行与长任务追踪 (`ad run`, `ad runs`)
-
-- `ad run <action>`：调用并执行指定 Action。
-  - `-i, --input <json>`：行内传入 JSON 格式参数。
-  - `-f, --input-file <path>`：从指定 JSON 文件读取输入参数（推荐复杂结构使用）。
-  - `-c, --config <key=value>`：临时覆盖配置项，支持多次指定。
-  - `-t, --timeout <duration>`：设置单次调用超时时长（如 `30s`、`5m`、`500ms`）。
-  - `--async`：异步提交任务并立即返回凭据对象（包含 `runId`），适用于后台长周期作业。
-  - `-P, --package <id>`：跨目录指定执行的目标包。
-  - `-p, --profile <name>`：在指定的远端执行配置环境下执行。
-  - `-s, --server <url>`：直接指定远端 HTTP Runner 地址执行。
-  - `--token <token>`：远端服务认证凭证。
-  - `--json` / `--envelope`：输出机器可读的标准 JSON 信封。
-- `ad runs list [patterns...]`：列出历史执行记录。
-  - `-a, --action <actionId>`：按 Action 标识符过滤。
-  - `-n, --limit <count>`：限制返回条数（默认 20 条）。
-  - `-P, --package <id>`：按包标识符过滤。
-- `ad runs show <id>`：查看指定执行记录的完整细节（入参快照、返回值、报错堆栈、耗时与事件流）。
-- `ad runs cancel <id>`：取消指定正在运行的异步任务（仅针对远端服务或后台执行环境）。
-  - `-r, --reason <reason>`：指定取消原因。
-- `ad runs clear`：清理历史运行记录。
-  - `-a, --action <actionId>`：按 Action 标识符清理。
-
-### Playbook 规程管理 (`ad playbook`)
-
-- `ad playbook list [patterns...]`：列出当前工程或已链接包中的任务操作规程。
-  - `-i, --intent <pattern>`：按意图正则过滤。
-  - `-P, --package <id>`：限定目标包。
-- `ad playbook show <id>`：查看规程完整 Markdown 正文内容与关联 Action 清单。
-- `ad playbook validate [id]`：校验规程格式合法性，检查其引用的所有 Action 是否在本地工程或依赖包中真实存在。
-- `ad playbook create <id>`：创建新规程（功能等同于 `ad new playbook <id>`）。
-
-### 运行时配置管理 (`ad config`)
-
-ActionDock 提供 5 级优先级配置解析（命令行参数覆盖 > 本地存储 > 环境变量 > 默认配置）：
-
-- `ad config list [patterns...]`：列出当前包或全局的所有配置项与当前生效值（敏感项自动掩码）。
-- `ad config get <key>`：获取指定配置项的解密真实值。
-- `ad config set <key> [value]`：写入配置项至持久化数据库存储。
-- `ad config delete <key>`：删除指定配置项。
-- `ad config schema [identifier]`：查看包声明的配置需求（类型、必填性、环境变量映射及解析就绪状态）。
-- `ad config env [identifier]`：输出可直接注入当前 Shell 环境的配置导出语句。
-
-### 持久化状态管理 (`ad state`)
-
-Action 状态在多次执行生命周期之间保持持久化，支持命名空间隔离与秒级过期存活时间（TTL）：
-
-- `ad state list [prefix]`：列出当前命名空间或指定前缀下的所有状态项及其值。
-- `ad state keys [prefix]`：仅列出所有状态键名列表。
-- `ad state get <key>`：读取指定状态键的值。
-- `ad state set <key> <value>`：写入状态数据。
-  - `--ttl <seconds>`：设置过期存活时间（单位秒）。
-- `ad state delete <key>`：删除指定状态键。
-- `ad state clear`：清空当前命名空间或指定前缀下的所有状态。
-  - `--prefix <prefix>`：仅清空指定前缀匹配的状态。
-
-### 远端执行配置环境管理 (`ad profile`)
-
-Profile 用于管理多个远端 ActionDock HTTP Runner 服务的连接信息：
-
-- `ad profile list`：列出所有已保存的远端环境配置。
-- `ad profile add <name> --server <url> [--token <token>]`：添加或更新远端环境配置。
-- `ad profile use <name>`：切换当前默认执行环境。
-- `ad profile show [name]`：查看指定或当前环境的详细连接参数。
-- `ad profile rm <name>`：删除指定远端环境。
-- `ad profile test [name]`：测试远端服务的连通性与认证有效性。
-
-### 轻量 HTTP 服务启动 (`ad serve`)
-
-将本地 ActionDock 项目作为轻量级微服务暴露，供远程智能体或外部系统通过 HTTP/SSE 调度：
-
-- `ad serve`：启动 HTTP 服务。
-  - `-p, --port <port>`：监听端口（默认 5177）。
-  - `-H, --host <host>`：绑定主机地址（默认 127.0.0.1）。
-  - `-t, --token <token>`：设置 API 认证 Token。
-  - `--allow-insecure-no-auth`：允许非本地环回地址在无 Token 情况下启动（不安全）。
-  - `--cors-origin <origin>`：允许的跨域来源。
-  - `--max-body <size>`：允许的最大请求体积（如 `1mb`、`500kb`）。
-  - `--no-mcp`：禁用内嵌在 `/mcp` 端点的 MCP 协议服务。
-  - `-d, --dir <path>`：指定要托管的项目根目录。
-
-### Model Context Protocol 适配服务 (`ad mcp`)
-
-为 Claude Desktop、Cursor 等支持 MCP 协议的智能体宿主提供标准协议接口：
-
-- `ad mcp`：以标准输入输出（STDIO）模式启动 MCP 服务（默认模式）。
-  - `-d, --dir <path>`：指定一个或多个项目根目录。
-  - `--package <package-id>`：指定暴露的一个或多个包标识符。
-  - `--all`：暴露全局路由表中挂载的所有包。
-  - `--timeout <duration>`：工具执行超时时间。
-- `ad mcp serve`：以基于 HTTP 与 Server-Sent Events（SSE）模式启动 MCP 服务。
-  - `-p, --port <port>`：服务监听端口。
-  - `-H, --host <host>`：绑定主机地址。
-  - `-t, --token <token>`：访问令牌。
-
-### 依赖管理与锁定文件 (`ad add`, `ad remove`)
-
-- `ad add <package>`：安装并锁定外部 Action 包依赖（面向正式项目）。
-  - 必须在 ActionDock 项目根目录（包含 `actiondock.json`）中运行。
-  - 从 npm 或本地包归档安装依赖包至 `node_modules`，并自动读取目标包的 `actiondock.json` 清单规范。
-  - 自动更新当前项目的 `package.json`、`actiondock.json` 中的 `dependencies` 映射与单一事实源锁文件 `actiondock.lock.json`（`lockfileVersion: 1`）。
-  - 写入过程受 `.actiondock/transactions/` 原子事务保护，安装或校验失败自动原子回滚。
-  - 依赖关系受版本图冲突检测，确保同一逻辑包收敛到唯一确定版本。
-  - 选项支持：`-D, --dev`（开发依赖）、`--allow-install-scripts`（显式允许执行生命周期安装脚本）、`-P, --package <path>`（指定项目路径）。
-- `ad remove <package>`：安全移除指定的依赖包。
-  - 自动检测反向引用，若当前包的 Action 的 `uses` 声明正在引用该依赖，命令将拦截并报错。
-  - 成功移除后，从 `actiondock.json` 与 `actiondock.lock.json` 中清理依赖声明，保留该包历史配置与状态命名空间，支持显式安全清理。
-
-### 项目构建、打包与 Skill 导出 (`ad build`, `ad pack`, `ad export skill`)
-
-- `ad build`：构建为 Node.js 运行时交付目录。
-  - `-P, --package <id>`：指定构建目标包。
-  - `-o, --out <path>`：输出目录路径。
-  - `-z, --archive`：生成标准 zip 压缩归档包。
-  - `--vendor-deps`：固化并物化锁定依赖至交付目录内。
-  - `--require-reproducible`：可复现性构建校验。
-  - `--allow-install-scripts`：允许生命周期安装脚本运行。
-- `ad pack`：将 Action 包打包为标准 npm 压缩包（`.tgz`），用于发布与共享。
-  - `-P, --package <id>`：指定打包目标包。
-  - `-o, --out <path>`：输出压缩包目录。
-  - `--dry-run`：预检打包清单与文件完整性，不实际生成文件。
-- `ad export skill`：导出自包含的 Agent Skill 资产。
-  - `-m, --mode <mode>`：导出模式，支持 `source`（源码型，默认）与 `node`（包含运行依赖的独立目录型）。
-  - `-P, --package <ids...>`：指定导出的包。
-  - `-p, --playbook <playbooks...>`：规程驱动裁剪导出，仅打包规程及其依赖的 Action 闭包。
-  - `--workspace`：批量独立导出当前工作区所有子包。
-  - `--bundle [name]`：多包复合套件聚合导出，融合成统一的复合工作区技能。
-  - `-z, --archive`：输出为 zip 归档包。
-
-### 全局路由注册与环境体检 (`ad link`, `ad doctor`)
-
-- `ad link [path]`：将本地未发布的 Action 包或工作区注册到本机开发者的全局路由表中（面向本地开发调试）。
-  - 仅写入本机用户的全局路由注册表（`~/.actiondock/registry.json`），不修改任何项目的 `package.json`、`actiondock.json` 或锁文件。
-  - 不具有跨机器可移植性，不能替代通过 `ad add` 安装的正式项目依赖。
-  - 支持传入工作区根目录，通过 `-r, --recursive` 自动递归扫描并挂载所有子工程。
-  - 适用于：源码克隆后的快速试跑、本地多包联合开发与调试。
-- `ad unlink [id|path]`：解除全局路由表中的包或工作区挂载。
-  - `--prune`：一键自动扫描并清理所有物理路径已不存在的失效悬空软链。
-- `ad doctor`：对当前运行环境、数据库完整性、路由表有效性与工程清单执行全量健康诊断。
-  - `--json` / `--envelope`：输出机器可读诊断报告。
-
-### 单元测试运行 (`ad test`)
-
-- `ad test [pattern]`：执行当前工程单元测试。
-  - 原生支持 Node.js `node:test` 测试运行器，同时兼容 `bun test`。
-  - 支持传入文件或用例匹配模式执行过滤测试。
-
----
-
-## Action 编写规范与上下文 API
-
-每个 Action 的元数据与契约在 `actiondock.json` 中统一维护，业务代码在 `actions/<name>.ts` 中通过 [`defineAction`](file:///root/code/action-dock/packages/sdk/src/action.ts) 导出。
-
-### 清单契约声明 (`actiondock.json`)
-
-```json
-{
-  "schemaVersion": 2,
-  "id": "team4u.github-tools",
-  "name": "GitHub Tools",
-  "version": "2.0.0",
-  "config": {
-    "GITHUB_TOKEN": {
-      "type": "string",
-      "description": "GitHub 个人访问令牌",
-      "secret": true,
-      "required": true,
-      "env": "GITHUB_TOKEN"
-    }
-  },
-  "actions": {
-    "list-issues": {
-      "entry": "actions/list-issues.ts",
-      "description": "获取指定 GitHub 仓库的 Issues 清单",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "repo": { "type": "string", "description": "仓库名称" },
-          "maxCount": { "type": "number", "default": 10 }
-        },
-        "required": ["repo"]
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "items": { "type": "array" },
-          "total": { "type": "number" }
-        },
-        "required": ["items", "total"]
-      },
-      "uses": ["auth-check"]
-    }
-  }
-}
-```
-
-### Action 业务代码标准实现
-
-```typescript
-import { defineAction } from "@actiondock/sdk";
-
-export interface Input {
-  repo: string;
-  maxCount?: number;
-}
-
-export interface Output {
-  items: Array<{ id: string; title: string }>;
-  total: number;
-}
-
-export default defineAction<Input, Output>(async (input, ctx) => {
-  // 配置读取：自动遵循 5 级优先级解析
-  const token = ctx.config.get<string>("GITHUB_TOKEN");
-
-  // 状态读写：跨执行生命周期的持久化存储（支持秒级过期存活时间）
-  const lastSync = await ctx.state.get<string>("last_sync");
-  await ctx.state.set("last_sync", new Date().toISOString(), 3600);
-
-  // 日志记录：输出至标准错误流，严禁调用 console.log 污染标准输出
-  ctx.log.info(`正在抓取仓库数据: ${input.repo}`);
-
-  // 进度报告：向上层调用者汇报执行进度
-  ctx.progress.report(1, 10, "正在连接服务接口");
-
-  // 协作式取消：响应外部取消信号与超时中断
-  if (ctx.signal.aborted) {
-    throw new Error("任务已被调用方中止");
-  }
-
-  // 受管外部进程调度（仅支持 exec 与 spawn）
-  // const procRes = await ctx.process.exec("git", ["status", "--porcelain"], { cwd: process.cwd() });
-
-  // 动作级联调用：严格仅接受动作标识符或 ActionRef，严禁传入动作定义对象
-  // await ctx.actions.invoke("auth-check", { token });
-
-  return {
-    items: [],
-    total: 0,
-  };
-});
-```
-
-### 内部 Action 与外部 Action 的声明与级联调用
-
-Action 之间的相互调度必须通过 `ctx.actions.invoke` 进行，严禁使用文件系统相对路径直接导入其他 Action 源码：
-
-- **内部 Action 调用（同包内互调）**：
-  - 清单声明：在发起方 Action 的 `uses` 列表中填入同包 Action 的短标识符。
-  - 清单示例（`actiondock.json`）：
-    ```json
-    {
-      "actions": {
-        "sync-data": {
-          "entry": "actions/sync-data.ts",
-          "uses": ["validate-token"]
-        },
-        "validate-token": {
-          "entry": "actions/validate-token.ts"
-        }
-      }
-    }
-    ```
-  - 源码调用示例：
-    ```typescript
-    // 使用短标识符调度同包 Action
-    const auth = await ctx.actions.invoke("validate-token", { token });
-    ```
-
-- **外部 Action 导入与调用（跨包能力复用）**：
-  - 安装并锁定依赖：在项目根目录运行 `ad add <npm-pkg>`（例如 `ad add @actiondock/github-tools`），系统将依赖写入 `dependencies` 并生成 `actiondock.lock.json`。
-  - 清单声明：在调用方 Action 的 `uses` 列表中填入完全限定标识符。
-  - 清单示例（`actiondock.json`）：
-    ```json
-    {
-      "dependencies": {
-        "gh": "@actiondock/github-tools"
-      },
-      "actions": {
-        "my-workflow": {
-          "entry": "actions/my-workflow.ts",
-          "uses": ["gh/get-pr"]
-        }
-      }
-    }
-    ```
-  - 源码调用示例：
-    ```typescript
-    // 方式一：使用完全限定标识符字符串
-    const pr = await ctx.actions.invoke("gh/get-pr", { repo: "team4u/actiondock", prNumber: 1 });
-
-    // 方式二：使用结构化 ActionRef 引用对象
-    const detail = await ctx.actions.invoke({
-      packageId: "gh",
-      actionId: "get-pr",
-    }, { repo: "team4u/actiondock", prNumber: 1 });
-    ```
-
-- **调用原则与安全约束**：
-  - 显式声明要求：未在 `uses` 中声明的级联调用，即使目标 Action 代码物理可见，执行时也会被拦截并返回 `UNDECLARED_ACTION_DEPENDENCY` 错误。
-  - 参数契约约束：`ctx.actions.invoke` 严格仅接受标识符字符串或 `ActionRef` 对象，严禁传入 Action 定义对象或裸函数，违规将抛出 `INVALID_ACTION_REF` 错误。
-  - 环路死锁保护：运行时具备递归环路检测，调用形成回路时抛出 `ACTION_CALL_CYCLE`，单次执行子任务超额抛出 `ACTION_SUBRUN_LIMIT`。
-
-### 运行时上下文方法速查表
-
-传递给 Action 的 [`ActionContext`](file:///root/code/action-dock/packages/sdk/src/types.ts) 包含以下核心能力：
-
-| 上下文模块 | 核心方法签名 | 职责说明 |
-| :--- | :--- | :--- |
-| `ctx.config` | `get<T>(key: string, defaultValue?: T): T` | 读取配置，自动遵循 5 级优先级解析 |
-| | `has(key: string): boolean` | 检查指定配置项是否存在 |
-| `ctx.state` | `get<T>(key: string): Promise<T \| undefined>` | 读取持久化状态数据 |
-| | `set<T>(key: string, value: T, ttl?: number): Promise<void>` | 写入状态数据，`ttl` 单位为秒 |
-| | `delete(key: string): Promise<boolean>` | 删除指定状态键 |
-| | `clear(prefix?: string): Promise<number>` | 清空命名空间或指定前缀下的所有状态 |
-| | `keys(prefix?: string): Promise<string[]>` | 列出指定前缀下的所有状态键 |
-| | `scope(namespace: string): StateStore` | 派生出隔离命名的子状态存储 |
-| `ctx.process` | `exec(command: string, args?: string[], options?: ProcessExecOptions): Promise<ProcessResult>` | 执行外部命令，具备超时、取消与缓冲区超限保护 |
-| | `spawn(command: string, args?: string[], options?: ProcessExecOptions): Promise<ProcessResult>` | 启动外部命令进程，返回标准化结果 |
-| `ctx.actions` | `invoke<I, O>(action: ActionRef \| string, input?: I): Promise<O>` | 级联调用其他 Action，严格仅接受字符串 ID 或 ActionRef |
-| `ctx.log` | `info / warn / error / debug(msg: string, data?: unknown): void` | 结构化诊断日志，强制定向至标准错误流 |
-| `ctx.progress` | `report(current: number, total?: number, message?: string): void` | 汇报当前执行进度 |
-| `ctx.signal` | `signal: AbortSignal` | 协作式中断信号，用于长操作与耗时循环终止 |
-| `ctx.run` | `{ id: string; rootId: string; parentId?: string }` | 当前执行任务追踪标识 |
-
----
-
-## 单元测试编写规范
-
-ActionDock 独立测试框架 [`@actiondock/testing`](file:///root/code/action-dock/packages/testing/src/runtime.ts) 提供了纯内存测试沙箱 `createTestRuntime`，可结合 Node 原生测试运行器进行验证：
-
-```typescript
-import { describe, it } from "node:test";
-import assert from "node:assert/strict";
-import { createTestRuntime } from "@actiondock/testing";
-import listIssuesAction from "../actions/list-issues.ts";
-
-describe("github.list-issues", () => {
-  it("使用模拟配置与内存状态正常执行", async () => {
-    const runtime = createTestRuntime({
-      config: { GITHUB_TOKEN: "mock-token-value" },
-      state: { last_sync: "2026-01-01T00:00:00Z" },
-    });
-
-    const result = await runtime.run(listIssuesAction, {
-      repo: "team4u/actiondock",
-    });
-
-    assert.equal(result.total, 0);
-  });
-});
-```
-
----
-
-## 故障排查与自愈决策表（仅遇异常时查阅）
-
-> [!NOTE]
-> 本节属于排错手册，**正常执行流程中严禁前置运行本节命令**。仅在遇到明确报错时，依循对应链路进行针对性自愈修复。
-
-| 报错现象或错误码 | 根本原因分析 | 标准自愈修复步骤 |
-| :--- | :--- | :--- |
-| `ACTION_NOT_FOUND` 或找不到包 | 当前项目缺少对应的外部依赖包，或全局路由表中未登记本地包，或软链路径失效 | 若在 ActionDock 工程中缺少外部依赖包，执行 `ad add <package>` 安装并锁定；若为本地未发布的源码包，执行 `ad info --tree` 确认挂载状态，若路径失效执行 `ad unlink --prune` 清理软链并在包目录下重新执行 `ad link` |
-| `INPUT_NOT_JSON` | 传入参数包含非有限数、循环引用或不可序列化类型 | 检查调用参数，确保传入合法的纯 JSON 数据 |
-| `OUTPUT_NOT_JSON` | Action 业务返回值包含不可序列化的非 JSON 结构 | 检查 Action 代码返回值，剔除非有限数与循环引用 |
-| `ACTION_INPUT_INVALID` | 输入参数未满足声明的 `inputSchema` 约束 | 执行 `ad describe <id>` 查看参数定义与必填要求，核对数据类型与字段名称 |
-| `ACTION_OUTPUT_INVALID` | Action 返回的对象不匹配 `outputSchema` 约束 | 检查 Action 返回数据是否包含所有必须属性且类型匹配 |
-| `INVALID_ACTION_REF` | 引用标识非法、跨包短 ID 歧义冲突，或向 invoke 传入了对象 | 使用完全限定标识符 `<pkg>/<action>`，或确保 invoke 仅传入字符串 ID 或 ActionRef |
-| `UNDECLARED_ACTION_DEPENDENCY` | 调用了未在清单 uses 中声明的依赖 Action | 在 `actiondock.json` 的 `uses` 列表中添加对应 Action 声明 |
-| `ACTION_CALL_CYCLE` | 级联调用发生循环成环或超深递归 | 检查调用链路，消除 Action 间的相互调用循环 |
-| `ACTION_SUBRUN_LIMIT` | 子任务并发数或累计调用数超出配额 | 优化业务逻辑，避免无节制并发派生子任务 |
-| `STORAGE_WORKER_EXITED` | SQLite 存储工作线程异常退出 | 查看存储日志并重启 Host 或当前命令进程 |
-| `DATA_DIR_IN_USE` | 数据目录已被其他活跃进程占用锁定 | 停止冲突进程，或通过 `--data-dir <path>` 指定独立的存储目录 |
-| `DATA_DIR_RECOVERY_REQUIRED` | 上次异常退出遗留未决事务或孤儿租约 | 等待旧进程完全退出后重新执行命令触发自愈接管 |
-| `TARGET_PROTOCOL_UNSUPPORTED` | 远端目标服务协议大版本不匹配 | 升级本地 CLI 或远端 ActionDock 服务至相同主版本 |
-| `UNSUPPORTED_BUILD_MODE` | 传入了废弃的编译选项（--target、--bytecode、--standalone） | 移除废弃参数，使用标准的 Node.js 目录构建或 `--mode node` 导出 |
-| `CONFIG_VALIDATION_FAILED` | 未注入当前 Action 依赖的必填配置项 | 执行 `ad config list` 查看缺失项，通过 `ad config set <key> <val>` 补全 |
-| `ACTION_TIMEOUT` | 执行时间超过预设阈值 | 优化底层调用耗时，或在调用时添加 `-t, --timeout 60s` 增大超时时间 |
+- [cli.md](file:///root/code/action-dock/skills/actiondock/references/cli.md)：**命令行全量参考手册**。当需要查询特定命令的完整参数标志、退出码规范、全局选项或 JSON 输出信封格式时查阅。
+- [developer.md](file:///root/code/action-dock/skills/actiondock/references/developer.md)：**Action 与规程开发指南**。当创建、编写、修改 Action 业务代码、声明元数据契约、使用运行时上下文 API（配置、状态、子进程、级联调用、日志）、编写 Playbook 规程或编写内存单元测试时查阅。
+- [build-and-export.md](file:///root/code/action-dock/skills/actiondock/references/build-and-export.md)：**构建打包与 Skill 导出指南**。当执行交付产物构建、npm 打包、Agent Skill 单包或复合套件导出、配置 `SKILL.custom.md` 自定义说明书模板插槽、或执行 `--skill-md-only` 原位刷新时查阅。
+- [troubleshooting.md](file:///root/code/action-dock/skills/actiondock/references/troubleshooting.md)：**故障排查与自愈决策指南**。仅在命令执行报错、发生异常或测试失败时定向查阅，依据错误代码对照表进行自愈修复。
 
 ---
 
