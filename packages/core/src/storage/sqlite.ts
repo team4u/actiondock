@@ -32,7 +32,7 @@ export {
 
 /**
  * 统一 SQLite 运行时存储实现。
- * 通过 SqliteDriver 抽象驱动，解耦底层具体运行时引擎（Node.js / Bun）。
+ * 通过 SqliteDriver 抽象驱动，解耦底层具体运行时引擎。
  */
 export class SqliteRuntimeStorage implements RuntimeStorage {
   private driver: SqliteDriver;

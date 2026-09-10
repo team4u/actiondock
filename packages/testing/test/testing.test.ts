@@ -92,24 +92,6 @@ describe("@actiondock/testing", () => {
       expect(cancelRes.cancelled).toBe(true);
       expect(cancelRes.error?.code).toBe("PROCESS_CANCELLED");
     });
-
-    it("支持启动后台脱离进程与就绪状态探测", async () => {
-      const proc = new MockProcessExecutor();
-      let probeCount = 0;
-
-      const res = await proc.spawnDetached({
-        command: "redis-server",
-        probe: async () => {
-          probeCount++;
-          return probeCount >= 1;
-        },
-      });
-
-      expect(res.ok).toBe(true);
-      expect(res.ready).toBe(true);
-      expect(res.pid).toBeDefined();
-      expect(proc.detachedCalls.length).toBe(1);
-    });
   });
 
   describe("MemoryStorage", () => {

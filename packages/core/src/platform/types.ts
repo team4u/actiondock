@@ -88,7 +88,7 @@ export interface HttpServerFactory {
 
 /**
  * 运行时底层环境核心标准契约。
- * 屏蔽 Node.js、Bun 与测试沙箱环境的差异。
+ * 提供统一的运行时契约，屏蔽宿主平台与测试沙箱环境的实现差异。
  */
 export interface RuntimePlatform {
   /** 运行时平台名称标识 */

@@ -814,7 +814,7 @@ export class SelectionPlanner {
 }
 
 /**
- * 兼容旧版本的别名导出。
+ * 构建规划器标准导出。
  */
 export const BuildPlanner = SelectionPlanner;
 export type BuildPlanner = SelectionPlanner;
@@ -827,6 +827,6 @@ export function selectionPlan(options: SelectionPlannerOptions): SelectionPlan {
 }
 
 /**
- * 兼容旧版本的快捷规划函数别名。
+ * 快捷构建规划函数标准导出。
  */
 export const buildPlan = selectionPlan;

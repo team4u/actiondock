@@ -13,8 +13,6 @@ export type {
   ActionInvoker,
   ActionRef,
   Config,
-  DetachedProcessOptions,
-  DetachedProcessResult,
   ExecutionEvent,
   ExecutionResult,
   JsonSchema,

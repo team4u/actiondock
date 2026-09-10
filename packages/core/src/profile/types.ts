@@ -40,7 +40,7 @@ export type TokenResolutionSource =
  * 经过解析后确定的最终执行目标环境。
  */
 export interface ResolvedTarget {
-  /** 执行环境类型：local (本地 Bun 进程) 或 remote (远端 HTTP Server) */
+  /** 执行环境类型：local (本地 Node.js 进程) 或 remote (远端 HTTP Server) */
   type: "local" | "remote";
   /** 命中的 Profile 名称 */
   profileName?: string;

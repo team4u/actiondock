@@ -1,8 +1,6 @@
 import type { ProcessExecutor } from "@actiondock/core";
 import { execCli } from "./cli";
 import type {
-  DetachedProcessOptions,
-  DetachedProcessResult,
   ProcessExecOptions,
   ProcessResult,
   RuntimeError,
@@ -70,16 +68,6 @@ export interface ProcessCall {
   timestamp: number;
 }
 
-/**
- * 已记录的后台守护进程调用历史条目。
- */
-export interface DetachedProcessCall {
-  /** 启动参数选项 */
-  options: DetachedProcessOptions;
-  /** 调用发生时的时间戳 */
-  timestamp: number;
-}
-
 interface RegisteredMock {
   matcher: CommandMatcher;
   handler: MockProcessHandler | MockProcessResultOptions;
@@ -92,7 +80,6 @@ interface RegisteredMock {
 export class MockProcessExecutor implements ProcessExecutor {
   private mocks: RegisteredMock[] = [];
   public calls: ProcessCall[] = [];
-  public detachedCalls: DetachedProcessCall[] = [];
   public defaultPid = 10001;
 
   /**
@@ -265,60 +252,6 @@ export class MockProcessExecutor implements ProcessExecutor {
   }
 
   /**
-   * 启动模拟脱离父进程的后台进程。
-   *
-   * @param options 守护进程启动选项
-   */
-  async spawnDetached(
-    options: DetachedProcessOptions
-  ): Promise<DetachedProcessResult> {
-    const startTime = Date.now();
-    this.detachedCalls.push({
-      options: { ...options },
-      timestamp: startTime,
-    });
-
-    if (options.signal?.aborted) {
-      return {
-        ok: false,
-        ready: false,
-        durationMs: 0,
-        error: {
-          code: "PROCESS_CANCELLED",
-          message: "Process was cancelled by AbortSignal",
-        },
-      };
-    }
-
-    if (options.probe) {
-      const fakeResult: ProcessResult = {
-        ok: true,
-        exitCode: 0,
-        stdout: "ready",
-        stderr: "",
-        raw: new TextEncoder().encode("ready"),
-        timedOut: false,
-        cancelled: false,
-        durationMs: 0,
-      };
-      const isReady = await options.probe(fakeResult);
-      return {
-        ok: isReady,
-        pid: this.defaultPid++,
-        ready: isReady,
-        durationMs: Date.now() - startTime,
-      };
-    }
-
-    return {
-      ok: true,
-      pid: this.defaultPid++,
-      ready: true,
-      durationMs: Date.now() - startTime,
-    };
-  }
-
-  /**
    * 获取指定命令的历史调用记录。
    *
    * @param command 可选命令筛选
@@ -351,7 +284,6 @@ export class MockProcessExecutor implements ProcessExecutor {
    */
   clearHistory(): void {
     this.calls = [];
-    this.detachedCalls = [];
   }
 
   /**
@@ -360,7 +292,6 @@ export class MockProcessExecutor implements ProcessExecutor {
   reset(): void {
     this.mocks = [];
     this.calls = [];
-    this.detachedCalls = [];
   }
 
   private findMock(

@@ -1,7 +1,5 @@
 import { spawn } from "node:child_process";
 import type {
-  DetachedProcessOptions,
-  DetachedProcessResult,
   ProcessAPI,
   ProcessExecOptions,
   ProcessResult,
@@ -154,88 +152,5 @@ export class DefaultProcessExecutor implements ProcessExecutor {
     options: ProcessExecOptions = {}
   ): Promise<ProcessResult> {
     return this.exec(command, args, options);
-  }
-
-  async spawnDetached(options: DetachedProcessOptions): Promise<DetachedProcessResult> {
-    const startTime = Date.now();
-    try {
-      const child = spawn(options.command, options.args || [], {
-        cwd: options.cwd,
-        env: options.env ? { ...process.env, ...options.env } : process.env,
-        detached: true,
-        stdio: "ignore",
-      });
-
-      child.unref();
-
-      if (!options.probe) {
-        return {
-          ok: true,
-          pid: child.pid,
-          ready: true,
-          durationMs: Date.now() - startTime,
-        };
-      }
-
-      const probeInterval = options.probeIntervalMs ?? 200;
-      const probeTimeout = options.probeTimeoutMs ?? 5000;
-      const deadline = Date.now() + probeTimeout;
-
-      while (Date.now() < deadline) {
-        if (options.signal?.aborted) {
-          return {
-            ok: false,
-            pid: child.pid,
-            ready: false,
-            durationMs: Date.now() - startTime,
-            error: {
-              code: "PROCESS_CANCELLED",
-              message: "Probe was cancelled by AbortSignal",
-            },
-          };
-        }
-
-        try {
-          const res: DetachedProcessResult = {
-            ok: true,
-            pid: child.pid,
-            ready: true,
-            durationMs: Date.now() - startTime,
-          };
-          const isReady = await options.probe(res as any);
-          if (isReady) {
-            return res;
-          }
-        } catch {
-          // 探测失败继续轮询
-        }
-
-        const remaining = deadline - Date.now();
-        if (remaining <= 0) break;
-        const sleepTime = Math.min(probeInterval, remaining);
-        await new Promise((r) => setTimeout(r, sleepTime));
-      }
-
-      return {
-        ok: false,
-        pid: child.pid,
-        ready: false,
-        durationMs: Date.now() - startTime,
-        error: {
-          code: "PROCESS_PROBE_TIMEOUT",
-          message: `Process probe timed out after ${probeTimeout}ms`,
-        },
-      };
-    } catch (err: any) {
-      return {
-        ok: false,
-        ready: false,
-        durationMs: Date.now() - startTime,
-        error: {
-          code: "PROCESS_DETACHED_FAILED",
-          message: err.message,
-        },
-      };
-    }
   }
 }

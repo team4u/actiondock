@@ -58,6 +58,11 @@ export default defineAction({
     expect(report.hasProject).toBe(false);
     expect(report.checks.length).toBeGreaterThanOrEqual(4);
 
+    const nodeCheck = report.checks.find((c) => c.id === "runtime.node");
+    expect(nodeCheck).toBeDefined();
+    expect(nodeCheck?.status).toBe("ok");
+    expect(nodeCheck?.message).toContain(">= 24.12.0 supported");
+
     const bunCheck = report.checks.find((c) => c.id === "runtime.bun");
     expect(bunCheck).toBeDefined();
     expect(bunCheck?.status).toBe("ok");
@@ -133,6 +138,8 @@ export default defineAction({
     expect(depCheck?.status).toBe("warn");
     expect(depCheck?.message).toContain("team.missing-deps");
     expect(depCheck?.message).toContain("miss node_modules");
+    expect(depCheck?.fix).toContain("npm install");
+    expect(depCheck?.fix).not.toContain("bun install");
 
     rmSync(depPkg, { recursive: true, force: true });
   });

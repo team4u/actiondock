@@ -32,18 +32,18 @@ export async function runDoctorChecks(options?: {
   // 1. Check Node.js Runtime
   const nodeVersion = process.versions.node;
   if (nodeVersion) {
-    const isGte22 = compareSemver(nodeVersion, "22.13.0") >= 0;
+    const isGte24 = compareSemver(nodeVersion, "24.12.0") >= 0;
     checks.push({
       id: "runtime.node",
       category: "runtime",
       name: "Node.js Runtime",
-      status: isGte22 ? "ok" : "warn",
-      message: `v${nodeVersion} (${isGte22 ? ">= 22.13.0 supported" : ">= 22.13.0 recommended"})`,
-      fix: isGte22 ? undefined : "Upgrade Node.js to v22.13.0 or higher",
+      status: isGte24 ? "ok" : "warn",
+      message: `v${nodeVersion} (${isGte24 ? ">= 24.12.0 supported" : ">= 24.12.0 recommended"})`,
+      fix: isGte24 ? undefined : "Upgrade Node.js to v24.12.0 or higher",
     });
   }
 
-  // 2. Check Bun Runtime (Optional compiler for standalone binaries)
+  // 2. Check Bun Runtime (Optional environment for cross-runtime compatibility testing)
   const bunVersion = (typeof (globalThis as any).Bun !== "undefined" && (globalThis as any).Bun.version) || (process.versions as any).bun;
   if (bunVersion) {
     checks.push({
@@ -51,7 +51,7 @@ export async function runDoctorChecks(options?: {
       category: "runtime",
       name: "Bun Runtime",
       status: "ok",
-      message: `v${bunVersion} (available for standalone binary compilation)`,
+      message: `v${bunVersion} (available for cross-environment testing)`,
     });
   } else {
     checks.push({
@@ -59,7 +59,7 @@ export async function runDoctorChecks(options?: {
       category: "runtime",
       name: "Bun Runtime",
       status: "ok",
-      message: "Bun compiler not detected (optional, required only for 'ad build' standalone binaries)",
+      message: "Bun runtime not detected (optional, used for cross-environment compatibility testing)",
     });
   }
 
@@ -171,7 +171,7 @@ export async function runDoctorChecks(options?: {
         name: "Linked Package Dependencies",
         status: "warn",
         message: `${missingNodeModules.length} linked package(s) declare dependencies but miss node_modules: ${missingNodeModules.join(", ")}`,
-        fix: "Run 'npm install' or 'bun install' in the affected package directories, or execute 'ad run' to auto-install",
+        fix: "Run 'npm install' in the affected package directories, or execute 'ad run' to auto-install",
       });
     } else {
       checks.push({
@@ -303,7 +303,7 @@ export async function runDoctorChecks(options?: {
           name: "SDK Dependency",
           status: "warn",
           message: "@actiondock/sdk not found in project node_modules",
-          fix: "Run 'bun link @actiondock/sdk' or 'bun install' in project directory",
+          fix: "Run 'npm link @actiondock/sdk' or 'npm install' in project directory",
         });
       }
 

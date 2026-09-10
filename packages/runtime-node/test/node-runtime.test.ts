@@ -223,44 +223,6 @@ describe("ExecaProcessExecutor 单元测试", () => {
       })
     ).rejects.toThrow();
   });
-
-  it("支持 spawnDetached 启动与就绪探测", async () => {
-    // 1. 无探测器启动
-    const detachedRes = await executor.spawnDetached({
-      command: "sleep",
-      args: ["0.2"],
-    });
-    expect(detachedRes.ok).toBe(true);
-    expect(detachedRes.ready).toBe(true);
-    expect(detachedRes.pid).toBeDefined();
-
-    // 2. 具备就绪探测器并成功通过
-    let probeCalls = 0;
-    const probedRes = await executor.spawnDetached({
-      command: "sleep",
-      args: ["0.5"],
-      probeIntervalMs: 50,
-      probeTimeoutMs: 1000,
-      probe: () => {
-        probeCalls++;
-        return probeCalls >= 2;
-      },
-    });
-    expect(probedRes.ok).toBe(true);
-    expect(probedRes.ready).toBe(true);
-
-    // 3. 探测器超时
-    const timeoutRes = await executor.spawnDetached({
-      command: "sleep",
-      args: ["0.5"],
-      probeIntervalMs: 50,
-      probeTimeoutMs: 150,
-      probe: () => false,
-    });
-    expect(timeoutRes.ok).toBe(false);
-    expect(timeoutRes.ready).toBe(false);
-    expect(timeoutRes.error?.code).toBe("PROCESS_PROBE_TIMEOUT");
-  });
 });
 
 describe("NodeModuleLoader 与 TsxModuleLoader 单元测试", () => {

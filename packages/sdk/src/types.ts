@@ -209,31 +209,6 @@ export interface ProcessResult {
   error?: RuntimeError;
 }
 
-/**
- * 后台守护进程启动选项。
- */
-export interface DetachedProcessOptions {
-  command: string;
-  args?: string[];
-  cwd?: string;
-  env?: Record<string, string>;
-  timeoutMs?: number;
-  signal?: AbortSignal;
-  probeIntervalMs?: number;
-  probeTimeoutMs?: number;
-  probe?: (result: ProcessResult) => boolean | Promise<boolean>;
-}
-
-/**
- * 后台守护进程启动结果。
- */
-export interface DetachedProcessResult {
-  ok: boolean;
-  pid?: number;
-  ready: boolean;
-  durationMs: number;
-  error?: RuntimeError;
-}
 
 /**
  * 统一进程操作接口。

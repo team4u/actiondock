@@ -11,7 +11,6 @@ if (existsSync(distEntry)) {
   const { main } = await import(pathToFileURL(distEntry).href);
   await main(process.argv);
 } else {
-  // 开发调试态（源码仓库且未预先构建 dist 时）
   const isBun = typeof process.versions.bun !== "undefined";
   const hasTsx =
     process.execArgv.some((arg, i) => arg === "--import" && process.execArgv[i + 1]?.includes("tsx")) ||
@@ -23,13 +22,7 @@ if (existsSync(distEntry)) {
     try {
       tsxSpecifier = pathToFileURL(require.resolve("tsx")).href;
     } catch {
-      try {
-        const runtimeNodePkg = require.resolve("@actiondock/runtime-node/package.json");
-        const runtimeReq = createRequire(runtimeNodePkg);
-        tsxSpecifier = pathToFileURL(runtimeReq.resolve("tsx")).href;
-      } catch {
-        // 无可用 tsx 模块
-      }
+      // 未检测到 tsx 模块
     }
 
     if (tsxSpecifier) {
