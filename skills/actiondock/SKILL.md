@@ -425,6 +425,66 @@ export default defineAction<Input, Output>(async (input, ctx) => {
 });
 ```
 
+### 内部 Action 与外部 Action 的声明与级联调用
+
+Action 之间的相互调度必须通过 `ctx.actions.invoke` 进行，严禁使用文件系统相对路径直接导入其他 Action 源码：
+
+- **内部 Action 调用（同包内互调）**：
+  - 清单声明：在发起方 Action 的 `uses` 列表中填入同包 Action 的短标识符。
+  - 清单示例（`actiondock.json`）：
+    ```json
+    {
+      "actions": {
+        "sync-data": {
+          "entry": "actions/sync-data.ts",
+          "uses": ["validate-token"]
+        },
+        "validate-token": {
+          "entry": "actions/validate-token.ts"
+        }
+      }
+    }
+    ```
+  - 源码调用示例：
+    ```typescript
+    // 使用短标识符调度同包 Action
+    const auth = await ctx.actions.invoke("validate-token", { token });
+    ```
+
+- **外部 Action 导入与调用（跨包能力复用）**：
+  - 安装并锁定依赖：在项目根目录运行 `ad add <npm-pkg>`（例如 `ad add @actiondock/github-tools`），系统将依赖写入 `dependencies` 并生成 `actiondock.lock.json`。
+  - 清单声明：在调用方 Action 的 `uses` 列表中填入完全限定标识符。
+  - 清单示例（`actiondock.json`）：
+    ```json
+    {
+      "dependencies": {
+        "gh": "@actiondock/github-tools"
+      },
+      "actions": {
+        "my-workflow": {
+          "entry": "actions/my-workflow.ts",
+          "uses": ["gh/get-pr"]
+        }
+      }
+    }
+    ```
+  - 源码调用示例：
+    ```typescript
+    // 方式一：使用完全限定标识符字符串
+    const pr = await ctx.actions.invoke("gh/get-pr", { repo: "team4u/actiondock", prNumber: 1 });
+
+    // 方式二：使用结构化 ActionRef 引用对象
+    const detail = await ctx.actions.invoke({
+      packageId: "gh",
+      actionId: "get-pr",
+    }, { repo: "team4u/actiondock", prNumber: 1 });
+    ```
+
+- **调用原则与安全约束**：
+  - 显式声明要求：未在 `uses` 中声明的级联调用，即使目标 Action 代码物理可见，执行时也会被拦截并返回 `UNDECLARED_ACTION_DEPENDENCY` 错误。
+  - 参数契约约束：`ctx.actions.invoke` 严格仅接受标识符字符串或 `ActionRef` 对象，严禁传入 Action 定义对象或裸函数，违规将抛出 `INVALID_ACTION_REF` 错误。
+  - 环路死锁保护：运行时具备递归环路检测，调用形成回路时抛出 `ACTION_CALL_CYCLE`，单次执行子任务超额抛出 `ACTION_SUBRUN_LIMIT`。
+
 ### 运行时上下文方法速查表
 
 传递给 Action 的 [`ActionContext`](file:///root/code/action-dock/packages/sdk/src/types.ts) 包含以下核心能力：
