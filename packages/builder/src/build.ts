@@ -90,7 +90,7 @@ function detectLifecycleScripts(
 
     const candidates = [
       join(root, "node_modules", dep.name, "package.json"),
-      resolve(__dirname, "../../../node_modules", dep.name, "package.json"),
+      resolve(import.meta.dirname, "../../../node_modules", dep.name, "package.json"),
     ];
 
     for (const cand of candidates) {
@@ -224,16 +224,12 @@ function generateNodeSupervisorEntrySource(
   return `#!/usr/bin/env node
 // AUTO-GENERATED SUPERVISOR ENTRYPOINT BY ACTIONDOCK BUILDER. DO NOT EDIT.
 import { spawn } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import {
   IpcActionDockTarget,
   StandaloneDispatcher,
   ExitCode,
 } from "@actiondock/core";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 const METADATA = {
   packageId: ${JSON.stringify(plan.packageId)},
@@ -291,7 +287,7 @@ if (argv.includes("-h") || argv.includes("--help") || argv[0] === "help") {
 }
 
 // 3. 建立物理隔离监督边界，启动运行 ActionDockHost 的独立子进程
-const hostScript = join(__dirname, "entry-host.js");
+const hostScript = join(import.meta.dirname, "entry-host.js");
 const child = spawn(process.execPath, [hostScript, ...argv], {
   cwd: process.cwd(),
   env: process.env,
@@ -450,29 +446,7 @@ export async function buildProject(options: BuildOptions): Promise<BuildResult> 
       }
     }
 
-    // 生成裁剪后的 actiondock.json
-    const exportedConfig: Record<string, unknown> = {
-      id: plan.packageId,
-      name: plan.packageName,
-      version: plan.version,
-      description: plan.description,
-      actionsDir: plan.actionsDir || "actions",
-      playbooksDir: plan.playbooksDir || "playbooks",
-      config: plan.configDefs || {},
-    };
-    if (plan.files && plan.files.length > 0) {
-      exportedConfig.files = plan.files;
-    }
-    if (plan.assets && plan.assets.length > 0) {
-      exportedConfig.assets = plan.assets;
-    }
-    writeFileSync(
-      join(stagingDir, "actiondock.json"),
-      JSON.stringify(exportedConfig, null, 2) + "\n",
-      "utf-8"
-    );
-
-    // 生成裁剪后的 actiondock.manifest.json
+    // 生成裁剪后的 actiondock.json（项目元数据与清单的单一事实源）
     const manifestActions: Record<string, unknown> = {};
     for (const act of plan.actions) {
       manifestActions[act.id] = {
@@ -485,17 +459,30 @@ export async function buildProject(options: BuildOptions): Promise<BuildResult> 
         annotations: act.annotations,
       };
     }
-    const exportedManifest: Record<string, unknown> = {
-      schemaVersion: 1,
+    const exportedConfig: Record<string, unknown> = {
+      schemaVersion: 2,
+      id: plan.packageId,
+      name: plan.packageName,
+      version: plan.version,
+      description: plan.description,
       actions: manifestActions,
-      assets: plan.assets,
+      config: plan.configDefs || {},
     };
+    if (plan.actionsDir) {
+      exportedConfig.actionsDir = plan.actionsDir;
+    }
+    if (plan.playbooksDir) {
+      exportedConfig.playbooksDir = plan.playbooksDir;
+    }
     if (plan.files && plan.files.length > 0) {
-      exportedManifest.files = plan.files;
+      exportedConfig.files = plan.files;
+    }
+    if (plan.assets && plan.assets.length > 0) {
+      exportedConfig.assets = plan.assets;
     }
     writeFileSync(
-      join(stagingDir, "actiondock.manifest.json"),
-      JSON.stringify(exportedManifest, null, 2) + "\n",
+      join(stagingDir, "actiondock.json"),
+      JSON.stringify(exportedConfig, null, 2) + "\n",
       "utf-8"
     );
 
@@ -578,7 +565,7 @@ export async function buildProject(options: BuildOptions): Promise<BuildResult> 
       // 尝试复制本地已解析的生产依赖
       const sourceCandidates = [
         join(root, "node_modules"),
-        resolve(__dirname, "../../../node_modules"),
+        resolve(import.meta.dirname, "../../../node_modules"),
       ];
 
       const copyVendorPackage = (srcDir: string, destDir: string): void => {

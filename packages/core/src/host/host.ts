@@ -350,9 +350,12 @@ export class DefaultActionDockHost implements ActionDockHost {
     }
     if (matches.length > 1) {
       const candidates = matches.map((m) => `${m.app.packageId}/${parsed.actionId}`).join(", ");
-      throw new Error(
-        `AMBIGUOUS_ACTION_REF: Action '${parsed.actionId}' is provided by multiple packages: ${candidates}. Please specify '<package-id>/${parsed.actionId}'.`
+      const err = new Error(
+        `INVALID_ACTION_REF: Action '${parsed.actionId}' is ambiguous and provided by multiple packages: ${candidates}. Please specify '<package-id>/${parsed.actionId}'. (AMBIGUOUS_ACTION_REF)`
       );
+      (err as any).code = "INVALID_ACTION_REF";
+      (err as any).details = { alias: "AMBIGUOUS_ACTION_REF", candidates: matches.map((m) => m.app.packageId) };
+      throw err;
     }
 
     throw new Error(`ACTION_NOT_FOUND: Action '${parsed.actionId}' not found in any registered package`);
@@ -493,8 +496,9 @@ export class DefaultActionDockHost implements ActionDockHost {
         const candidates = matches.map((m) => `${m.packageId}/${targetActionId}`).join(", ");
         const runId = randomUUID();
         const error: RuntimeError = {
-          code: "AMBIGUOUS_ACTION_REF",
-          message: `Action '${targetActionId}' is provided by multiple packages: ${candidates}. Please specify '<package-id>/${targetActionId}'.`,
+          code: "INVALID_ACTION_REF",
+          message: `Action '${targetActionId}' is ambiguous and provided by multiple packages: ${candidates}. Please specify '<package-id>/${targetActionId}'.`,
+          details: { alias: "AMBIGUOUS_ACTION_REF", candidates: matches.map((m) => m.packageId) },
         };
         return {
           runId,
@@ -593,8 +597,9 @@ export class DefaultActionDockHost implements ActionDockHost {
         if (depth >= this.maxCallDepth) {
           const runId = randomUUID();
           const error: RuntimeError = {
-            code: "ACTION_MAX_DEPTH_EXCEEDED",
+            code: "ACTION_CALL_CYCLE",
             message: `Maximum call depth of ${this.maxCallDepth} exceeded`,
+            details: { alias: "ACTION_MAX_DEPTH_EXCEEDED", reason: "depth_exceeded", maxDepth: this.maxCallDepth },
           };
           return {
             runId,
@@ -609,8 +614,9 @@ export class DefaultActionDockHost implements ActionDockHost {
           if (currentSubRuns >= this.maxSubRuns) {
             const runId = randomUUID();
             const error: RuntimeError = {
-              code: "MAX_SUBRUNS_REACHED",
+              code: "ACTION_SUBRUN_LIMIT",
               message: `Maximum concurrent sub-runs (${this.maxSubRuns}) reached for root run '${effectiveRootRunId}'`,
+              details: { alias: "MAX_SUBRUNS_REACHED", limit: this.maxSubRuns },
             };
             return {
               runId,

@@ -66,19 +66,15 @@ describe("依赖解析器 ActionPackageResolver", () => {
     setupPackage(rootDir, rootManifest);
 
     const lockfile: ActionDockLockfile = {
-      lockfileVersion: 2,
+      lockfileVersion: 1,
       packages: {
         "pkg-b": {
-          packageId: "pkg-b",
-          npmPackage: "pkg-b",
-          version: "1.0.0",
+          package: "pkg-b",
           resolved: "1.0.0",
           manifestDigest: computeManifestDigest(manifestB),
         },
         "pkg-c": {
-          packageId: "pkg-c",
-          npmPackage: "pkg-c",
-          version: "1.0.0",
+          package: "pkg-c",
           resolved: "1.0.0",
           manifestDigest: computeManifestDigest(manifestC),
         },

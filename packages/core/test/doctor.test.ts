@@ -14,7 +14,7 @@ describe("Doctor Diagnostics Module", () => {
     fakeHome = mkdtempSync(join(tmpdir(), "doctor-home-"));
     pkgDir = mkdtempSync(join(tmpdir(), "doctor-pkg-"));
 
-    const rootNodeModules = resolve(__dirname, "../../../node_modules");
+    const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
     if (existsSync(rootNodeModules)) {
       symlinkSync(rootNodeModules, join(pkgDir, "node_modules"), "dir");
     }

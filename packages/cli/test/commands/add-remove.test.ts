@@ -50,12 +50,10 @@ describe("CLI 依赖管理命令 (ad add / ad remove)", () => {
       join(tempDir, "actiondock.lock.json"),
       JSON.stringify(
         {
-          lockfileVersion: 2,
+          lockfileVersion: 1,
           packages: {
             "pkg.tool": {
-              packageId: "pkg.tool",
-              npmPackage: "pkg.tool",
-              version: "1.0.0",
+              package: "pkg.tool",
               resolved: "1.0.0",
               manifestDigest: "sha256-mock",
             },
@@ -96,12 +94,10 @@ describe("CLI 依赖管理命令 (ad add / ad remove)", () => {
       join(tempDir, "actiondock.lock.json"),
       JSON.stringify(
         {
-          lockfileVersion: 2,
+          lockfileVersion: 1,
           packages: {
             "pkg.unused": {
-              packageId: "pkg.unused",
-              npmPackage: "pkg.unused",
-              version: "1.0.0",
+              package: "pkg.unused",
               resolved: "1.0.0",
               manifestDigest: "sha256-mock",
             },

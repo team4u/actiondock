@@ -232,31 +232,32 @@ export function createActionContext(options: ContextOptions): ActionContext {
   const currentRunId = options.runId || randomUUID();
   const currentRootRunId = options.rootRunId || options.parentRunId || currentRunId;
 
-  const invoker: ActionInvoker = {
-    async invoke<I, O>(
-      action: ActionRef | string,
-      input?: I
-    ): Promise<O> {
-      if (
-        typeof action !== "string" &&
-        (!action || typeof action !== "object" || typeof (action as any).run === "function" || !("actionId" in action))
-      ) {
-        const err = new Error(
-          "INVALID_ACTION_REF: ctx.actions.invoke strictly accepts only ActionRef or string, passing ActionDefinition or function is prohibited"
-        );
-        (err as any).code = "INVALID_ACTION_REF";
-        throw err;
-      }
-      if (options.onActionInvoke) {
-        return (await options.onActionInvoke(
-          action,
-          input,
-          currentRunId
-        )) as O;
-      }
-      throw new Error("ActionInvoker not configured with an invocation delegate");
-    },
+  const invoke = async <I, O>(
+    action: ActionRef | string,
+    input?: I
+  ): Promise<O> => {
+    if (
+      typeof action !== "string" &&
+      (!action || typeof action !== "object" || typeof (action as any).run === "function" || !("actionId" in action))
+    ) {
+      const err = new Error(
+        "INVALID_ACTION_REF: ctx.actions.invoke strictly accepts only ActionRef or string, passing ActionDefinition or function is prohibited"
+      );
+      (err as any).code = "INVALID_ACTION_REF";
+      throw err;
+    }
+    if (options.onActionInvoke) {
+      return (await options.onActionInvoke(
+        action,
+        input,
+        currentRunId
+      )) as O;
+    }
+    throw new Error("ActionInvoker not configured with an invocation delegate");
   };
+
+  const invokerFn = (ref: string | ActionRef, input?: unknown) => invoke(ref, input);
+  const invoker: ActionInvoker = Object.assign(invokerFn, { invoke });
 
   const processApi = options.process || new DefaultProcessExecutor();
   const progressApi: ProgressReporter = options.progress || {

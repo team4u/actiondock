@@ -16,15 +16,15 @@
       "@actiondock/testing": ["./packages/testing/src/index.ts"],
       "@actiondock/mcp": ["./packages/mcp/src/index.ts"],
       "@actiondock/builder": ["./packages/builder/src/index.ts"],
-      "@actiondock/cli": ["./packages/cli/src/index.ts"]
+      "@actiondock/cli": ["./packages/cli/src/index.ts"],
+      "bun:test": ["./scripts/test-compat.ts"]
     }
   },
   "include": [
     "packages/*/src/**/*",
     "packages/*/test/**/*",
     "examples/**/*",
-    "scripts/**/*",
-    "types/**/*"
+    "scripts/**/*"
   ],
   "exclude": [
     "**/node_modules/**",

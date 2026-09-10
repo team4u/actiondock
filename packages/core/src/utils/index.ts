@@ -1,6 +1,44 @@
+import { existsSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
+import { basename, delimiter, dirname, isAbsolute, join, relative, resolve } from "node:path";
 
-export { findExecutable } from "@actiondock/sdk";
+/**
+ * 跨运行时安全查找可执行文件绝对物理路径。
+ */
+export function findExecutable(command: string): string | null {
+  if (typeof (globalThis as any).Bun !== "undefined" && typeof (globalThis as any).Bun.which === "function") {
+    try {
+      const bPath = (globalThis as any).Bun.which(command);
+      if (bPath) return bPath;
+    } catch {
+      // ignore
+    }
+  }
+
+  const hasPathSep = command.includes("/") || command.includes("\\");
+  if (hasPathSep) {
+    return existsSync(command) ? command : null;
+  }
+
+  const pathEnv = process.env.PATH || "";
+  const dirs = pathEnv.split(delimiter);
+  const isWindows = process.platform === "win32";
+  const pathext = isWindows
+    ? (process.env.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";")
+    : [""];
+
+  for (const dir of dirs) {
+    if (!dir) continue;
+    for (const ext of pathext) {
+      const candidate = join(dir, isWindows && !command.includes(".") ? command + ext : command);
+      if (existsSync(candidate)) {
+        return candidate;
+      }
+    }
+  }
+
+  return null;
+}
 
 /**
  * Parses duration strings like "500ms", "30s", "5m", "1h", "1d" or pure numbers into milliseconds.
@@ -61,10 +99,7 @@ export function getActionDockHome(customHome?: string): string {
   return customHome || process.env.ACTIONDOCK_HOME || homedir();
 }
 
-import { existsSync, realpathSync } from "node:fs";
-import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
-
-export const PACKAGE_ID_REGEX = /^(@[a-zA-Z0-9_.-]+\/)?[a-zA-Z0-9_.-]+$/;
+export const PACKAGE_ID_REGEX = /^[a-z0-9][a-z0-9.-]*$/;
 
 /**
  * Validates packageId to ensure it adheres to valid naming conventions and prevents path traversal.
@@ -73,11 +108,12 @@ export function assertValidPackageId(packageId: string): void {
   if (packageId === "__global__" || packageId === ":memory:") {
     return;
   }
+  const isScopedLegacy = /^@[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(packageId);
   if (
     !packageId ||
     typeof packageId !== "string" ||
     packageId.includes("..") ||
-    !PACKAGE_ID_REGEX.test(packageId)
+    (!PACKAGE_ID_REGEX.test(packageId) && !isScopedLegacy)
   ) {
     throw new Error(
       `Invalid packageId '${packageId}': must match ${PACKAGE_ID_REGEX} and not contain path traversal characters`

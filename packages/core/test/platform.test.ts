@@ -130,8 +130,8 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
             raw: new Uint8Array(),
           };
         },
-        async spawnDetached() {
-          return { ok: true, durationMs: 0, ready: true };
+        async spawn() {
+          return { ok: true, exitCode: 0, stdout: "", stderr: "", raw: new Uint8Array(), durationMs: 0, timedOut: false, cancelled: false };
         },
       };
 
@@ -156,7 +156,7 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
       expect(mod.customModule).toBe(true);
     });
 
-    it("storage 工厂正确创建独立 SQLite 存储实例", () => {
+    it("storage 工厂正确创建独立 SQLite 存储实例", async () => {
       const platform = createDefaultPlatform();
       const storage = platform.storage.createStorage("test-pkg", { inMemory: true });
       expect(storage).toBeDefined();
@@ -164,12 +164,12 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
 
       storage.setConfig("FOO", "BAR");
       expect(storage.getConfig<string>("FOO")).toBe("BAR");
-      storage.close();
+      await storage.close();
 
       const globalStorage = platform.storage.createGlobalStorage({ inMemory: true });
       expect(globalStorage).toBeDefined();
       expect(globalStorage.isOpen).toBe(true);
-      globalStorage.close();
+      await globalStorage.close();
     });
   });
 
@@ -190,8 +190,8 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
             durationMs: 0,
           };
         },
-        async spawnDetached() {
-          return { ok: true, durationMs: 0, ready: true };
+        async spawn() {
+          return { ok: true, exitCode: 0, stdout: "", stderr: "", raw: new Uint8Array(), durationMs: 0, timedOut: false, cancelled: false };
         },
       };
 
@@ -271,8 +271,8 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
               durationMs: 0,
             };
           },
-          async spawnDetached() {
-            return { ok: true, durationMs: 0, ready: true };
+          async spawn() {
+            return { ok: true, exitCode: 0, stdout: "", stderr: "", raw: new Uint8Array(), durationMs: 0, timedOut: false, cancelled: false };
           },
         },
         storage: {

@@ -23,6 +23,58 @@ import type { Clock } from "./clock";
 import type { RuntimePlatform } from "../platform/types";
 import { createActionContext, StderrLogger } from "./context";
 
+export const RUN_REPOSITORY_UNAVAILABLE = "RUN_REPOSITORY_UNAVAILABLE";
+export const RUN_PERSISTENCE_FAILED = "RUN_PERSISTENCE_FAILED";
+export const INPUT_NOT_JSON = "INPUT_NOT_JSON";
+export const OUTPUT_NOT_JSON = "OUTPUT_NOT_JSON";
+export const ACTION_SUBRUN_LIMIT = "ACTION_SUBRUN_LIMIT";
+export const MAX_SUBRUNS_REACHED = "MAX_SUBRUNS_REACHED";
+export const ACTION_CALL_CYCLE = "ACTION_CALL_CYCLE";
+export const ACTION_CYCLE_DETECTED = "ACTION_CYCLE_DETECTED";
+export const ACTION_MAX_DEPTH_EXCEEDED = "ACTION_MAX_DEPTH_EXCEEDED";
+
+/**
+ * 校验值是否为合法的 JSON 兼容结构，严禁 NaN、Infinity、循环引用及不可序列化类型。
+ */
+export function validateJsonValue(
+  val: unknown,
+  seen = new WeakSet<object>()
+): { valid: true } | { valid: false; reason: string } {
+  if (val === null || typeof val === "boolean" || typeof val === "string") {
+    return { valid: true };
+  }
+  if (typeof val === "number") {
+    if (!Number.isFinite(val) || Number.isNaN(val)) {
+      return { valid: false, reason: `Number is non-finite or NaN (${val})` };
+    }
+    return { valid: true };
+  }
+  if (typeof val === "undefined" || typeof val === "function" || typeof val === "symbol" || typeof val === "bigint") {
+    return { valid: false, reason: `Unsupported JSON type '${typeof val}'` };
+  }
+  if (typeof val === "object") {
+    if (seen.has(val as object)) {
+      return { valid: false, reason: "Circular reference detected in object structure" };
+    }
+    seen.add(val as object);
+    if (Array.isArray(val)) {
+      for (const item of val) {
+        const res = validateJsonValue(item, seen);
+        if (!res.valid) return res;
+      }
+      return { valid: true };
+    }
+    for (const [k, v] of Object.entries(val as Record<string, unknown>)) {
+      if (v !== undefined) {
+        const res = validateJsonValue(v, seen);
+        if (!res.valid) return res;
+      }
+    }
+    return { valid: true };
+  }
+  return { valid: true };
+}
+
 /**
  * ActionRunner 初始化配置选项。
  */
@@ -565,6 +617,39 @@ export class ActionRunner {
       }
     }
 
+    // 0. 输入参数 JSON 格式与合法性防御校验（拦截 NaN/Infinity/循环引用等非 JSON 类型）
+    const inputCheck = validateJsonValue(input);
+    if (!inputCheck.valid) {
+      const error: RuntimeError = {
+        code: INPUT_NOT_JSON,
+        message: `Input validation failed for action '${targetActionId}': ${inputCheck.reason}`,
+      };
+      // 安全记录 failed 状态（不可序列化的非法 input 严禁直接写入持久化存储）
+      const initialRun: RunRecord = {
+        id: runId,
+        rootRunId: options.rootRunId || options.parentRunId || runId,
+        parentRunId: options.parentRunId,
+        packageId: targetPackageId,
+        packageInstanceId: options.packageInstanceId || targetPackageId,
+        actionId: targetActionId,
+        generationId: options.generationId || "1",
+        ownerId: options.ownerId || "local",
+        hostSessionId: options.hostSessionId || this.hostSessionId,
+        status: "failed",
+        error,
+        startedAt,
+        finishedAt: startedAt,
+      };
+      try {
+        this.storage.createRun(initialRun);
+      } catch {}
+      return {
+        runId,
+        result: Promise.resolve({ ok: false, runId, error }),
+        cancel: () => false,
+      };
+    }
+
     // 1. 始终优先将执行尝试持久化到存储中（确保任意异常与终态都可追溯）
     const initialRun: RunRecord = {
       id: runId,
@@ -580,10 +665,18 @@ export class ActionRunner {
       input: input as JsonValue | undefined,
       startedAt,
     };
-    this.storage.createRun(initialRun);
+    try {
+      this.storage.createRun(initialRun);
+    } catch (err: any) {
+      const error = new Error(`RUN_REPOSITORY_UNAVAILABLE: Failed to initialize run record in repository: ${err?.message || String(err)}`);
+      (error as any).code = RUN_REPOSITORY_UNAVAILABLE;
+      (error as any).details = { originalError: err?.message };
+      throw error;
+    }
 
     let finalized = false;
     let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
+    let persistError: RuntimeError | undefined;
     const finalizeRun = (
       status: TerminalRunStatus,
       output?: unknown,
@@ -595,15 +688,24 @@ export class ActionRunner {
       }
       if (finalized) return;
       finalized = true;
-      this.storage.updateRun(runId, status, output, error);
+      try {
+        this.storage.updateRun(runId, status, output, error);
+      } catch (persistErr: any) {
+        persistError = {
+          code: RUN_PERSISTENCE_FAILED,
+          message: `RUN_PERSISTENCE_FAILED: Failed to persist run state: ${persistErr?.message || String(persistErr)}`,
+          details: { originalError: persistErr?.message },
+        };
+      }
     };
 
     // 2. 调用嵌套深度限制检测 (Max Call Depth Check)
     const maxDepth = options.maxCallDepth ?? this.maxCallDepth;
     if (callStack.length >= maxDepth) {
       const error: RuntimeError = {
-        code: "ACTION_MAX_DEPTH_EXCEEDED",
+        code: ACTION_CALL_CYCLE,
         message: `Maximum call depth of ${maxDepth} exceeded: ${callStack.join(" -> ")} -> ${targetActionId}`,
+        details: { alias: ACTION_MAX_DEPTH_EXCEEDED, reason: "depth_exceeded", maxDepth, callStack: [...callStack] },
       };
       finalizeRun("failed", undefined, error);
       return {
@@ -625,8 +727,9 @@ export class ActionRunner {
 
     if (hasCycle) {
       const error: RuntimeError = {
-        code: "ACTION_CYCLE_DETECTED",
+        code: ACTION_CALL_CYCLE,
         message: `Cycle detected in action invocation: ${callStack.join(" -> ")} -> ${callKey}`,
+        details: { alias: ACTION_CYCLE_DETECTED, reason: "cycle_detected", callStack: [...callStack], target: callKey },
       };
       finalizeRun("failed", undefined, error);
       return {
@@ -637,7 +740,9 @@ export class ActionRunner {
     }
     callStack.push(callKey);
 
-    // 4. 输入参数 JSON Schema 校验（若 action 已就绪）
+
+
+    // 5. 输入参数 JSON Schema 校验（若 action 已就绪）
     const targetInputSchema =
       (action as any)?.inputSchema ?? this.projectConfig?.actions?.[targetActionId]?.inputSchema;
     if (targetInputSchema) {
@@ -696,7 +801,8 @@ export class ActionRunner {
       onActionInvoke: async (childAction, childInput, parentRunId) => {
         if (this.activeSubRuns >= this.maxSubRuns) {
           const err = new Error(`Maximum concurrent sub-runs (${this.maxSubRuns}) reached`);
-          (err as any).code = "MAX_SUBRUNS_REACHED";
+          (err as any).code = ACTION_SUBRUN_LIMIT;
+          (err as any).details = { alias: MAX_SUBRUNS_REACHED, limit: this.maxSubRuns };
           throw err;
         }
 
@@ -705,14 +811,11 @@ export class ActionRunner {
         if (parsed.packageId) {
           childPackageId = parsed.packageId;
         }
+        const childActionId = parsed.actionId;
 
         const actionConfig = this.projectConfig?.actions?.[targetActionId] as any;
         const declaredUses = actionConfig?.uses ?? (action as any)?.uses;
         if (childPackageId && childPackageId !== this.packageId && Array.isArray(declaredUses)) {
-          const childActionId =
-            typeof childAction === "string"
-              ? ActionResolver.parseRef(childAction).actionId
-              : (childAction as ActionRef).actionId;
           const targetRef = `${childPackageId}/${childActionId}`;
           const isAllowed = declaredUses.some(
             (u: string) => u === targetRef || u === `${childPackageId}/*` || u === childPackageId
@@ -735,13 +838,17 @@ export class ActionRunner {
         try {
           let runnerToUse: ActionRunner = this;
           if (childPackageId && childPackageId !== this.packageId) {
-            const targetRunner = await this.resolveTargetPackageRunner(childPackageId);
-            if (targetRunner) {
-              runnerToUse = targetRunner;
-            } else if (!this.actionResolver) {
-              const err = new Error(`Package '${childPackageId}' could not be resolved`);
-              (err as any).code = "PACKAGE_NOT_FOUND";
-              throw err;
+            if (this.actions.has(`${childPackageId}/${childActionId}`)) {
+              runnerToUse = this;
+            } else {
+              const targetRunner = await this.resolveTargetPackageRunner(childPackageId);
+              if (targetRunner) {
+                runnerToUse = targetRunner;
+              } else if (!this.actionResolver) {
+                const err = new Error(`Package '${childPackageId}' could not be resolved`);
+                (err as any).code = "PACKAGE_NOT_FOUND";
+                throw err;
+              }
             }
           }
 
@@ -824,6 +931,16 @@ export class ActionRunner {
             return { ok: false, runId, error };
           }
 
+          const inputCheck = validateJsonValue(input);
+          if (!inputCheck.valid) {
+            const error: RuntimeError = {
+              code: INPUT_NOT_JSON,
+              message: `Input validation failed for action '${targetActionId}': ${inputCheck.reason}`,
+            };
+            finalizeRun("failed", undefined, error);
+            return { ok: false, runId, error };
+          }
+
           if ((currentAction as any).inputSchema) {
             const val = validateSchema((currentAction as any).inputSchema, input);
             if (!val.valid) {
@@ -843,6 +960,17 @@ export class ActionRunner {
           abortPromise,
         ]);
 
+        // 输出结果非 JSON 格式与合法性校验（拦截 NaN/Infinity/循环引用等）
+        const outputCheck = validateJsonValue(rawOutput);
+        if (!outputCheck.valid) {
+          const error: RuntimeError = {
+            code: OUTPUT_NOT_JSON,
+            message: `Output validation failed for action '${targetActionId}': ${outputCheck.reason}`,
+          };
+          finalizeRun("failed", undefined, error);
+          return { ok: false, runId, error };
+        }
+
         // 输出结果 Schema 校验
         const targetOutputSchema =
           (currentAction as any)?.outputSchema ?? this.projectConfig?.actions?.[targetActionId]?.outputSchema;
@@ -860,6 +988,9 @@ export class ActionRunner {
         }
 
         finalizeRun("success", rawOutput);
+        if (persistError) {
+          return { ok: false, runId, error: persistError };
+        }
         return {
           ok: true,
           runId,
@@ -872,7 +1003,7 @@ export class ActionRunner {
             message: `Action exceeded timeout of ${options.timeoutMs}ms`,
           };
           finalizeRun("timed_out", undefined, error);
-          return { ok: false, runId, error };
+          return { ok: false, runId, error: persistError || error };
         }
 
         if (controller.signal.aborted) {
@@ -889,7 +1020,7 @@ export class ActionRunner {
             details: reasonMsg ? { reason: reasonMsg } : undefined,
           };
           finalizeRun("cancelled", undefined, error);
-          return { ok: false, runId, error };
+          return { ok: false, runId, error: persistError || error };
         }
 
         const error: RuntimeError = {
@@ -901,7 +1032,7 @@ export class ActionRunner {
         return {
           ok: false,
           runId,
-          error,
+          error: persistError || error,
         };
       }
     })();

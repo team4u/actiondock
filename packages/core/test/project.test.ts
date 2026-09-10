@@ -25,7 +25,7 @@ describe("Project Loader & Init", () => {
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), "actiondock-test-"));
     // Link root node_modules so @actiondock/sdk is resolvable
-    const rootNodeModules = resolve(__dirname, "../../../node_modules");
+    const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
     if (existsSync(rootNodeModules)) {
       symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "dir");
     }

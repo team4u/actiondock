@@ -294,6 +294,14 @@ export class NodeProcessExecutor implements ProcessExecutor {
     });
   }
 
+  async spawn(
+    command: string,
+    args: string[] = [],
+    options: ProcessExecOptions = {}
+  ): Promise<ProcessResult> {
+    return this.exec(command, args, options);
+  }
+
   /**
    * 启动脱离当前会话的后台守护进程，并基于探测器函数进行就绪轮询与超时管理。
    */

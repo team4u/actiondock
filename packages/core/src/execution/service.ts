@@ -57,6 +57,9 @@ export class DefaultExecutionService implements ExecutionService {
   private actionResolver?: (ref: ActionRef | string) => ActionDefinition | undefined | Promise<ActionDefinition | undefined>;
   private activeRuns = new Map<string, ActiveRun>();
   private isClosing = false;
+  private ownsStorage: boolean;
+  private ownsGlobalStorage: boolean;
+  private globalStorage?: RuntimeStorage;
 
   constructor(options: ExecutionServiceOptions) {
     this.platform = options.platform;
@@ -90,6 +93,10 @@ export class DefaultExecutionService implements ExecutionService {
     const globalStorage = options.platform
       ? (options.globalStorage ?? options.platform.storage.createGlobalStorage({ customHome: options.customHome }))
       : options.globalStorage;
+
+    this.ownsStorage = !options.storage;
+    this.ownsGlobalStorage = !options.globalStorage && !!options.platform;
+    this.globalStorage = globalStorage;
 
     this._runner = new ActionRunner({
       packageId: this.packageId,
@@ -367,7 +374,14 @@ export class DefaultExecutionService implements ExecutionService {
         startedAt: now,
         finishedAt: now,
       };
-      runnerToUse.getStorage().createRun(initialRun);
+      try {
+        runnerToUse.getStorage().createRun(initialRun);
+      } catch (err: any) {
+        const repErr = new Error(`RUN_REPOSITORY_UNAVAILABLE: Failed to initialize run record in repository: ${err?.message || String(err)}`);
+        (repErr as any).code = "RUN_REPOSITORY_UNAVAILABLE";
+        (repErr as any).details = { originalError: err?.message };
+        throw repErr;
+      }
 
       this.eventSink.emit({
         runId,
@@ -618,6 +632,13 @@ export class DefaultExecutionService implements ExecutionService {
     }
 
     this.activeRuns.clear();
+
+    if (this.ownsStorage && this.storage && typeof (this.storage as any).close === "function") {
+      await (this.storage as any).close();
+    }
+    if (this.ownsGlobalStorage && this.globalStorage && typeof (this.globalStorage as any).close === "function") {
+      await (this.globalStorage as any).close();
+    }
   }
 }
 

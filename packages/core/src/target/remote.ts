@@ -49,6 +49,11 @@ import {
   type RemoteTargetOptions,
   type StateScopeOptions,
   type TargetInfo,
+  TargetError,
+  CloseTimeoutError,
+  TARGET_PROTOCOL_UNSUPPORTED,
+  TARGET_CAPABILITY_UNAVAILABLE,
+  TARGET_RESULT_UNKNOWN,
 } from "./types";
 
 /**
@@ -195,7 +200,25 @@ export class RemoteActionDockTarget implements ActionDockTarget {
   }
 
   async info(): Promise<TargetInfo> {
-    const raw = await fetchRemoteInfo(this.serverUrl, this.token);
+    let raw: any;
+    try {
+      raw = await fetchRemoteInfo(this.serverUrl, this.token);
+    } catch (err: any) {
+      wrapRemoteError(err);
+    }
+
+    const protocolVersion = (raw && typeof raw === "object" && raw.protocolVersion) || ACTIONDOCK_PROTOCOL_VERSION;
+    if (protocolVersion && typeof protocolVersion === "string") {
+      const [remoteMajor] = protocolVersion.split(".");
+      const [currentMajor] = ACTIONDOCK_PROTOCOL_VERSION.split(".");
+      if (remoteMajor !== currentMajor) {
+        throw new TargetError(
+          TARGET_PROTOCOL_UNSUPPORTED,
+          `TARGET_PROTOCOL_UNSUPPORTED: Remote server protocol version '${protocolVersion}' is incompatible with expected '${ACTIONDOCK_PROTOCOL_VERSION}'`
+        );
+      }
+    }
+
     let packages: PackageInfo[] = [];
     if (Array.isArray(raw)) {
       packages = raw;
@@ -209,7 +232,7 @@ export class RemoteActionDockTarget implements ActionDockTarget {
     return {
       id: (raw && typeof raw === "object" && raw.id) || "remote-target",
       name: (raw && typeof raw === "object" && raw.name) || "Remote ActionDock Server",
-      protocolVersion: (raw && typeof raw === "object" && raw.protocolVersion) || ACTIONDOCK_PROTOCOL_VERSION,
+      protocolVersion,
       packages,
       capabilities: (raw && typeof raw === "object" && Array.isArray(raw.capabilities))
         ? raw.capabilities
@@ -661,12 +684,13 @@ export class RemoteActionDockTarget implements ActionDockTarget {
     packageId: string,
     options?: any
   ): Promise<StateEntry[]> {
-    wrapRemoteError(
-      new Error("CAPABILITY_UNAVAILABLE: listStateEntries is not supported on remote target")
+    throw new TargetError(
+      TARGET_CAPABILITY_UNAVAILABLE,
+      "TARGET_CAPABILITY_UNAVAILABLE: listStateEntries is not supported on remote target"
     );
   }
 
-  async close(): Promise<void> {
+  async close(_options?: { timeoutMs?: number }): Promise<void> {
     // 远程 Target 无本地资源需要释放
   }
 }
@@ -683,9 +707,34 @@ function wrapRemoteError(err: any): never {
     err?.status === 403 ||
     msg.includes("(403)")
   ) {
-    const error = new Error(`TARGET_CAPABILITY_UNAVAILABLE: Management APIs are not enabled on remote target`);
-    (error as any).code = "TARGET_CAPABILITY_UNAVAILABLE";
-    throw error;
+    throw new TargetError(
+      TARGET_CAPABILITY_UNAVAILABLE,
+      `TARGET_CAPABILITY_UNAVAILABLE: Management APIs are not enabled on remote target`,
+      { originalMessage: msg }
+    );
+  }
+  if (
+    code === "PROTOCOL_UNSUPPORTED" ||
+    code === "TARGET_PROTOCOL_UNSUPPORTED" ||
+    msg.includes("PROTOCOL_UNSUPPORTED") ||
+    msg.includes("TARGET_PROTOCOL_UNSUPPORTED")
+  ) {
+    throw new TargetError(
+      TARGET_PROTOCOL_UNSUPPORTED,
+      `TARGET_PROTOCOL_UNSUPPORTED: ${msg}`,
+      { originalMessage: msg }
+    );
+  }
+  if (
+    code === "TARGET_RESULT_UNKNOWN" ||
+    code === "RESULT_UNKNOWN" ||
+    msg.includes("TARGET_RESULT_UNKNOWN")
+  ) {
+    throw new TargetError(
+      TARGET_RESULT_UNKNOWN,
+      `TARGET_RESULT_UNKNOWN: ${msg}`,
+      { originalMessage: msg }
+    );
   }
   throw err;
 }

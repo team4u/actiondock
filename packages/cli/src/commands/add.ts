@@ -137,17 +137,19 @@ export function registerAddCommand(program: Command, context?: CliContext): void
 
         // 更新 actiondock.lock.json
         const lockfile: ActionDockLockfile = loadLockfile(root) || {
-          lockfileVersion: 2,
+          lockfileVersion: 1,
           packages: {},
         };
 
         for (const pkg of graph.packages.values()) {
           if (!pkg.isRoot) {
             lockfile.packages[pkg.packageId] = {
+              package: pkg.npmPackage,
+              resolved: pkg.version,
+              source: "npm",
               packageId: pkg.packageId,
               npmPackage: pkg.npmPackage,
               version: pkg.version,
-              resolved: pkg.version,
               manifestDigest: pkg.manifestDigest,
               dependencies: pkg.manifest.dependencies || {},
             };

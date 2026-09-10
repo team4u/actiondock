@@ -1,117 +1,194 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
 const rootDir = resolve(import.meta.dirname, "..");
+const tscBin = join(rootDir, "node_modules", "typescript", "bin", "tsc");
 
-const PACKAGES = [
-  "sdk",
-  "core",
-  "mcp",
-  "builder",
-  "runtime-node",
-  "cli",
-  "testing",
-] as const;
-
-console.log(`[BUILD] Building all ${PACKAGES.length} ActionDock packages...`);
-
-// 1. Bundle JavaScript for each package
-for (const pkg of PACKAGES) {
-  const pkgDir = join(rootDir, "packages", pkg);
-  const distDir = join(pkgDir, "dist");
-  if (existsSync(distDir)) {
-    rmSync(distDir, { recursive: true, force: true });
-  }
-  mkdirSync(distDir, { recursive: true });
-
-  console.log(`[BUILD] Bundling JS for @actiondock/${pkg}...`);
-  const buildProc = spawnSync(
-    "bun",
-    [
-      "build",
-      join(pkgDir, "src", "index.ts"),
-      ...(pkg === "mcp" ? [join(pkgDir, "src", "stdio-host.ts")] : []),
-      "--outdir",
-      distDir,
-      "--target",
-      "node",
-      "--format",
-      "esm",
-      "--packages=external",
-      "--external",
-      "@actiondock/*",
-      ...PACKAGES.flatMap((p) => ["--external", `@actiondock/${p}`]),
-    ],
-    { stdio: "inherit", cwd: rootDir }
-  );
-
-  if (buildProc.status !== 0) {
-    console.error(`[ERROR] Failed to bundle @actiondock/${pkg}`);
-    process.exit(1);
-  }
+interface PackageMeta {
+  name: string;
+  shortName: string;
+  dir: string;
+  dependencies: string[];
 }
 
-// 2. Emit declaration files via tsc
-const dtsStaging = join(rootDir, ".dist-dts-staging");
-if (existsSync(dtsStaging)) {
-  rmSync(dtsStaging, { recursive: true, force: true });
+function discoverPackages(): PackageMeta[] {
+  const rootPkg = JSON.parse(readFileSync(join(rootDir, "package.json"), "utf-8"));
+  const workspaces: string[] = rootPkg.workspaces || ["packages/*"];
+  const packages: PackageMeta[] = [];
+
+  for (const pattern of workspaces) {
+    if (pattern.endsWith("/*")) {
+      const baseDir = join(rootDir, pattern.slice(0, -2));
+      if (!existsSync(baseDir)) continue;
+      for (const entry of readdirSync(baseDir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        const pkgDir = join(baseDir, entry.name);
+        const pkgJsonPath = join(pkgDir, "package.json");
+        if (existsSync(pkgJsonPath)) {
+          const pkgJson = JSON.parse(readFileSync(pkgJsonPath, "utf-8"));
+          if (pkgJson.name && pkgJson.name.startsWith("@actiondock/")) {
+            const deps = Object.keys(pkgJson.dependencies || {}).filter((d) => d.startsWith("@actiondock/"));
+            packages.push({
+              name: pkgJson.name,
+              shortName: entry.name,
+              dir: pkgDir,
+              dependencies: deps,
+            });
+          }
+        }
+      }
+    }
+  }
+  return packages;
 }
 
-console.log("[BUILD] Emitting declaration files via tsc...");
-const tscProc = spawnSync(
-  "bun",
-  ["x", "tsc", "-p", "tsconfig.json", "--emitDeclarationOnly", "--outDir", dtsStaging],
-  { stdio: "inherit", cwd: rootDir }
-);
+function topologicalSort(packages: PackageMeta[]): PackageMeta[] {
+  const packageMap = new Map<string, PackageMeta>(packages.map((p) => [p.name, p]));
+  const visited = new Set<string>();
+  const sorted: PackageMeta[] = [];
 
-if (tscProc.status !== 0) {
-  console.error("[ERROR] Failed to emit declaration files via tsc");
-  process.exit(1);
+  function visit(pkgName: string, path: Set<string>) {
+    if (path.has(pkgName)) {
+      throw new Error(`Circular dependency detected: ${Array.from(path).join(" -> ")} -> ${pkgName}`);
+    }
+    if (visited.has(pkgName)) return;
+    path.add(pkgName);
+    const pkg = packageMap.get(pkgName);
+    if (pkg) {
+      for (const dep of pkg.dependencies) {
+        if (packageMap.has(dep)) {
+          visit(dep, new Set(path));
+        }
+      }
+      visited.add(pkgName);
+      sorted.push(pkg);
+    }
+    path.delete(pkgName);
+  }
+
+  for (const pkg of packages) {
+    if (!visited.has(pkg.name)) {
+      visit(pkg.name, new Set());
+    }
+  }
+
+  return sorted;
 }
 
-// 3. Copy declarations to respective package dist directories
-for (const pkg of PACKAGES) {
-  const pkgDtsDir = join(dtsStaging, "packages", pkg, "src");
-  const destDistDir = join(rootDir, "packages", pkg, "dist");
+function rewriteDistImports(dir: string): void {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      rewriteDistImports(full);
+    } else if (entry.name.endsWith(".js") || entry.name.endsWith(".d.ts")) {
+      let code = readFileSync(full, "utf-8");
 
-  if (existsSync(pkgDtsDir)) {
-    cpSync(pkgDtsDir, destDistDir, { recursive: true });
-    console.log(`[OK] Copied declaration files for @actiondock/${pkg}`);
-  } else {
-    console.warn(`[WARN] Declaration dir not found for @actiondock/${pkg}: ${pkgDtsDir}`);
-  }
-}
+      // Rewrite static `from "./foo"` / `export from "./foo"`
+      code = code.replace(
+        /((?:import|export)\s+[\s\S]*?from\s+["\'])(\.\.?\/[^"\']+)(["\'])/g,
+        (_m, prefix, relPath, suffix) => {
+          if (relPath.endsWith(".js") || relPath.endsWith(".json")) return _m;
+          const target = resolve(dir, relPath);
+          if (existsSync(target) && statSync(target).isDirectory()) {
+            return `${prefix}${relPath}/index.js${suffix}`;
+          }
+          return `${prefix}${relPath}.js${suffix}`;
+        }
+      );
 
-// 4. Cleanup staging
-rmSync(dtsStaging, { recursive: true, force: true });
+      // Rewrite side-effect `import "./foo"`
+      code = code.replace(
+        /(import\s+["\'])(\.\.?\/[^"\']+)(["\'])/g,
+        (_m, prefix, relPath, suffix) => {
+          if (relPath.endsWith(".js") || relPath.endsWith(".json")) return _m;
+          const target = resolve(dir, relPath);
+          if (existsSync(target) && statSync(target).isDirectory()) {
+            return `${prefix}${relPath}/index.js${suffix}`;
+          }
+          return `${prefix}${relPath}.js${suffix}`;
+        }
+      );
 
-// 5. Verification
-let failed = false;
-for (const pkg of PACKAGES) {
-  const jsPath = join(rootDir, "packages", pkg, "dist", "index.js");
-  const dtsPath = join(rootDir, "packages", pkg, "dist", "index.d.ts");
+      // Rewrite dynamic `import("./foo")`
+      code = code.replace(
+        /(import\s*\(\s*["\'])(\.\.?\/[^"\']+)(["\']\s*\))/g,
+        (_m, prefix, relPath, suffix) => {
+          if (relPath.endsWith(".js") || relPath.endsWith(".json")) return _m;
+          const target = resolve(dir, relPath);
+          if (existsSync(target) && statSync(target).isDirectory()) {
+            return `${prefix}${relPath}/index.js${suffix}`;
+          }
+          return `${prefix}${relPath}.js${suffix}`;
+        }
+      );
 
-  if (!existsSync(jsPath)) {
-    console.error(`[ERROR] Missing dist/index.js in @actiondock/${pkg}`);
-    failed = true;
-  }
-  if (!existsSync(dtsPath)) {
-    console.error(`[ERROR] Missing dist/index.d.ts in @actiondock/${pkg}`);
-    failed = true;
-  }
-
-  if (pkg !== "core" && existsSync(jsPath)) {
-    const content = readFileSync(jsPath, "utf-8");
-    if (content.includes("packages/core/src")) {
-      console.error(`[ERROR] Package @actiondock/${pkg} dist embedded packages/core/src!`);
-      failed = true;
+      writeFileSync(full, code, "utf-8");
     }
   }
 }
 
-if (failed) {
-  process.exit(1);
+function buildAll(): void {
+  const discovered = discoverPackages();
+  const sortedPackages = topologicalSort(discovered);
+
+  console.log(`[BUILD] Discovered and topologically sorted ${sortedPackages.length} packages:`);
+  for (const p of sortedPackages) {
+    console.log(` - ${p.name}`);
+  }
+
+  for (const pkg of sortedPackages) {
+    const distDir = join(pkg.dir, "dist");
+    if (existsSync(distDir)) {
+      rmSync(distDir, { recursive: true, force: true });
+    }
+    mkdirSync(distDir, { recursive: true });
+
+    console.log(`[BUILD] Compiling ${pkg.name}...`);
+    const tsconfigPath = join(pkg.dir, "tsconfig.json");
+    const tscProc = spawnSync(process.execPath, [tscBin, "-p", tsconfigPath], {
+      cwd: rootDir,
+      stdio: "inherit",
+    });
+
+    if (tscProc.status !== 0) {
+      console.error(`[ERROR] Failed to compile ${pkg.name}`);
+      process.exit(1);
+    }
+
+    rewriteDistImports(distDir);
+    console.log(`[OK] Built ${pkg.name}`);
+  }
+
+  // Verification
+  let failed = false;
+  for (const pkg of sortedPackages) {
+    const jsPath = join(pkg.dir, "dist", "index.js");
+    const dtsPath = join(pkg.dir, "dist", "index.d.ts");
+
+    if (!existsSync(jsPath)) {
+      console.error(`[ERROR] Missing dist/index.js in ${pkg.name}`);
+      failed = true;
+    }
+    if (!existsSync(dtsPath)) {
+      console.error(`[ERROR] Missing dist/index.d.ts in ${pkg.name}`);
+      failed = true;
+    }
+
+    if (pkg.shortName !== "core" && existsSync(jsPath)) {
+      const content = readFileSync(jsPath, "utf-8");
+      if (content.includes("packages/core/src")) {
+        console.error(`[ERROR] Package ${pkg.name} dist embedded packages/core/src!`);
+        failed = true;
+      }
+    }
+  }
+
+  if (failed) {
+    process.exit(1);
+  }
+
+  console.log(`[SUCCESS] All ${sortedPackages.length} ActionDock packages built successfully!`);
 }
 
-console.log(`[SUCCESS] All ${PACKAGES.length} ActionDock packages built successfully!`);
+buildAll();

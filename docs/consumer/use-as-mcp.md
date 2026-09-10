@@ -1,15 +1,15 @@
-# 接入 Cursor / Windsurf / IDE (MCP 服务)
+# 接入集成开发环境 MCP 服务
 
-ActionDock 原生支持 [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) 标准，可以直接将 Action Package 挂载为本地 IDE 的 MCP STDIO Server，让 Cursor、Windsurf 或 Claude 获得调用该工具包的能力。
+ActionDock 原生支持 Model Context Protocol 协议规范，可以直接将 Action Package 挂载为集成开发环境的本地 STDIO 服务，让 Cursor、Windsurf 或 Claude Code 获得调用工具包的能力。
 
 ---
 
 ## 快速配置
 
-在 IDE 的 MCP 配置文件（如 `~/.cursor/mcp.json` 或 Claude Desktop 的 `claude_desktop_config.json`）中添加配置：
+在对应工具的配置文件（如 `~/.cursor/mcp.json` 或 Claude Desktop 的 `claude_desktop_config.json`）中添加配置：
 
-### 推荐：全局一键挂载所有已 link 包（最简方式）
-如果在仓库根目录执行过 `ad link`，可直接使用 `--all` 参数将所有已注册包（包括官方示例包）一次性暴露给 IDE：
+### 全局一键挂载所有已链接包
+在工作区执行过 `ad link` 后，可直接使用 `--all` 参数将所有已注册包一次性暴露给集成开发环境：
 
 ```json
 {
@@ -24,8 +24,8 @@ ActionDock 原生支持 [Model Context Protocol (MCP)](https://modelcontextproto
 
 ---
 
-### 方式二：指定具体示例包源码目录
-也可以通过 `cwd` 参数精确挂载特定的示例包目录（首次调用时 ActionDock 会自动检测并静默补齐依赖）：
+### 指定具体包源码目录挂载
+通过 `--dir` 或指定工作目录挂载特定的工具包：
 
 ```json
 {
@@ -41,15 +41,15 @@ ActionDock 原生支持 [Model Context Protocol (MCP)](https://modelcontextproto
 
 ---
 
-### 方式三：基于独立单文件二进制运行（零环境依赖）
-如果目标开发机未安装 Node.js、Bun 或 `ad`，直接指向编译后的独立可执行文件（如通过 `ad build` 生成的二进制）：
+### 基于已构建交付目录挂载
+使用构建出的交付目录中的独立入口脚本启动：
 
 ```json
 {
   "mcpServers": {
     "github-tools": {
-      "command": "/usr/local/bin/github-tools",
-      "args": ["mcp"]
+      "command": "node",
+      "args": ["/absolute/path/to/dist/delivery/entry.js", "mcp"]
     }
   }
 }
@@ -57,9 +57,9 @@ ActionDock 原生支持 [Model Context Protocol (MCP)](https://modelcontextproto
 
 ---
 
-## 常用 IDE 配置文件路径速查
+## 常用工具配置文件路径速查
 
-| IDE / 客户端 | 配置文件路径 |
+| 客户端 | 配置文件路径 |
 | :--- | :--- |
 | **Claude Code** | `~/.claude.json` 或项目根目录 `.claude.json` |
 | **Claude Desktop (macOS)** | `~/Library/Application Support/Claude/claude_desktop_config.json` |
@@ -75,7 +75,7 @@ ActionDock 原生支持 [Model Context Protocol (MCP)](https://modelcontextproto
 `ad mcp` 支持一次性挂载多个工具包目录，重名 Action 会自动附加包名命名空间：
 
 ```bash
-ad mcp ./examples/github-tools ./packages/my-custom-tools
+ad mcp -d ./examples/github-tools -d ./packages/my-custom-tools
 ```
 
 ### 挂载全局所有注册包
@@ -85,8 +85,8 @@ ad mcp --all
 
 ---
 
-## MCP Tasks 异步长任务支持
+## 异步长任务支持
 
-对于耗时较长的 Action（如大规模数据同步、编译、长时审查），ActionDock MCP 适配器原生支持 MCP Tasks 规范：
-- 客户端发起长任务后立即获得任务句柄并进入非阻塞流式等待。
-- 支持客户端发送取消信号（直接触发服务端的 `ctx.signal` 中止任务）。
+对于耗时较长的 Action（如大规模数据同步、编译、长时代码审查），ActionDock MCP 适配器原生支持长任务机制：
+- 客户端发起长任务后立即获得任务句柄并进入流式等待。
+- 客户端发送取消请求时直接触发服务端的 `ctx.signal` 中止底层任务。

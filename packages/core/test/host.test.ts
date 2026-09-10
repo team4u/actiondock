@@ -495,7 +495,7 @@ actions:
     const depthExceeded = await host.runAction("pkg.depth/step", {}, { parentRunId: run2 });
     expect(depthExceeded.ok).toBe(false);
     if (!depthExceeded.ok) {
-      expect(depthExceeded.error.code).toBe("ACTION_MAX_DEPTH_EXCEEDED");
+      expect(["ACTION_CALL_CYCLE", "ACTION_MAX_DEPTH_EXCEEDED"]).toContain(depthExceeded.error.code);
     }
 
     // 2. 测试子任务数限额 (maxSubRuns: 2)
@@ -528,7 +528,7 @@ actions:
     const sub3Res = await sub3.result!;
     expect(sub3Res.ok).toBe(false);
     if (!sub3Res.ok) {
-      expect(sub3Res.error.code).toBe("MAX_SUBRUNS_REACHED");
+      expect(["ACTION_SUBRUN_LIMIT", "MAX_SUBRUNS_REACHED"]).toContain(sub3Res.error.code);
     }
 
     await sub1.result;

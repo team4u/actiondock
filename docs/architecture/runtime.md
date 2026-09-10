@@ -1,6 +1,6 @@
 # 底层架构：Runtime 执行引擎与分层架构
 
-ActionDock 2.0 围绕执行的确定性、强类型安全与环境解耦构建，保证任何形式的调用（CLI、MCP、HTTP、测试沙箱或独立二进制）均收敛至一致的核心执行语义。
+ActionDock 2.0 围绕执行的确定性、强类型安全与环境解耦构建，保证任何形式的调用（CLI、MCP、HTTP、测试沙箱或目录型构建运行）均收敛至一致的核心执行语义。
 
 ---
 
@@ -32,7 +32,7 @@ graph TD
 `@actiondock/sdk` 是面向 Action 编写者的纯契约层，设计遵循以下规范：
 
 - **零外部运行时依赖**：该包的依赖列表完全为空，不引入任何重型运行时库或底层基础设施。
-- **纯粹契约与抽象定义**：仅导出类型定义与基础辅助声明函数，包括 `defineAction`、`ActionContext`、`ProcessAPI`、`Logger`、`Config`、`StateStore` 与执行结果结构。
+- **纯粹契约与抽象定义**：仅导出类型定义与基础辅助声明函数，包括 `defineAction`、`ActionContext`、`ProcessAPI`、`Logger`、`Config`、`StateStore` 与执行结果信封结构。
 - **杜绝依赖污染**：业务 Action 仅需依赖 `@actiondock/sdk`，保持极小体积与跨环境可移植性，免受底层驱动或工具链升级的影响。
 
 ---
@@ -42,7 +42,7 @@ graph TD
 `@actiondock/core` 承载 ActionDock 的核心领域逻辑，完全平台无关。该层通过四组抽象接口将领域内核与操作系统底层能力彻底解耦：
 
 - **存储抽象**：定义 `RuntimeStorage` 与 `SqliteDriver` 接口，解耦底层数据库引擎实现，规范参数化查询、结果集映射与事务边界。
-- **进程抽象**：定义 `ProcessExecutor` 接口（实现 `ProcessAPI`），解耦系统命令派生、输入输出管道、信号传递与后台守护进程管理。
+- **进程抽象**：定义 `ProcessExecutor` 接口（实现 `ProcessAPI`），解耦系统命令派生、输入输出管道、信号传递与受管子进程生命周期管理。
 - **时钟抽象**：定义 `Clock` 接口与默认的 `SystemClock`，解耦系统墙上时间与单调时钟获取，使得时间推进与超时控制在测试环境中完全可控。
 - **事件抽象**：定义 `EventSink` 接口与默认的 `InMemoryEventSink`，解耦生命周期事件的发射、有界缓冲（单运行上限 1024 条或 1MB 事件）与异步迭代订阅流。
 
@@ -50,22 +50,37 @@ graph TD
 
 ## 生产环境适配层：`@actiondock/runtime-node`
 
-在 Node.js 22.13.0 或更高版本生产环境中，`@actiondock/runtime-node` 将 Core 层的抽象接口绑定至 Node.js 原生及企业级驱动：
+在 Node.js 生产环境中，`@actiondock/runtime-node` 将 Core 层的抽象接口绑定至 Node.js 企业级驱动：
 
-- `NodeSqliteDriver` 驱动：基于 Node.js 原生内置模块 `node:sqlite`（`DatabaseSync`）构建。提供严格的同步事务保证，在事务执行期间严格禁止并拦截异步 Promise 返回，杜绝异步穿插导致的数据库连接死锁与状态不一致。
-- `ExecaProcessExecutor` 驱动：基于 `execa` 驱动系统外部命令执行。设置 10MB 输出缓冲区上限（`maxBuffer`），当进程输出超过限制时主动终止并返回错误码 `PROCESS_OUTPUT_LIMIT`，防止畸形输出耗尽内存，同时精准处理超时、取消信号与子进程异常。
-- `TsxModuleLoader` 加载器：基于 `tsx` 动态加载 TypeScript 源码，兼容 ESM 与 CommonJS 模块规范，无缝支持 `.ts`、`.tsx`、`.mts` 等源码文件加载与目录索引自动解析，免去日常开发态的前置编译环节。
-- `NodeHttpServer` 服务端：基于 Node.js 原生 `node:http` 实现，将底层的请求与响应对象转化为标准的 Web Request 与 Response 规范，并通过 Web Streams 实现高效流式数据传输与管道转发。
+- **异步存储驱动：WorkerSqliteDriver**
+  基于 Node.js 原生内置模块 `node:sqlite`（`DatabaseSync`）与 `node:worker_threads` 构建。将所有同步 SQLite 磁盘操作转移至专用后台工作线程中执行，主事件循环零阻塞，对外暴露异步接口（`WorkerSqliteStatement` 提供 `run`、`get`、`all` 异步方法）。默认配置开启预写日志模式（`PRAGMA journal_mode = WAL;`）、外键约束检查（`PRAGMA foreign_keys = ON;`）以及忙等待超时（`PRAGMA busy_timeout = 5000;`），确保长时间查询或锁等待绝不阻塞主线程的取消信号分发与网络通信。
+- **原生进程执行器：NodeProcessExecutor**
+  基于 Node.js 原生 `node:child_process` 实现外部系统命令执行。标准输入输出实施物理管道隔离（`stdio: ["pipe", "pipe", "pipe"]`），设置 10MB 输出缓冲区上限（`maxOutputBytes`），防止畸形输出耗尽系统内存。通过独立进程组与跨平台信号分发（POSIX 负数 PID 与 Windows 进程树）精准管理子进程，杜绝孤儿进程。
+- **模块加载器：NodeModuleLoader**
+  基于 Node.js 现代模块解析机制加载 Action 源码，原生支持 TypeScript 类型擦除与 ESM 规范，免去日常开发态的前置编译等待。
+- **HTTP 服务端：NodeHttpServer**
+  基于 Node.js 原生 `node:http` 实现，将底层请求与响应转化为标准的 Web Request 与 Response 规范，并通过 Web Streams 实现流式数据传输与管道转发。
+
+---
+
+## 数据目录排他租约锁与崩溃自愈机制
+
+为了防止多个无协调的 ActionDock 宿主进程并发操作同一数据目录导致数据库损坏，Core 层在数据目录下维护 `.actiondock.data.lock` 排他锁文件：
+
+- **排他锁元数据**：锁文件记录宿主进程 PID、主机名、会话令牌、创建时间与关联受管子进程列表（`childPids`）。
+- **活跃进程冲突防护（DATA_DIR_IN_USE）**：当检测到锁文件已存在且持有者进程仍存活时，系统抛出 `DATA_DIR_IN_USE` 错误拒绝并发启动，保障数据单写安全。
+- **孤儿进程保护（DATA_DIR_RECOVERY_REQUIRED）**：当旧宿主进程已死亡但关联受管子进程仍在运行时，抛出 `DATA_DIR_RECOVERY_REQUIRED` 错误，阻止脏写并等待子进程回收。
+- **崩溃自动恢复**：当旧宿主进程与所有子进程均已死亡（代表进程异常崩溃或断电），当前宿主自动接管排他锁并安全清理残留会话，实现免人工介入的故障自愈。
 
 ---
 
 ## 测试沙箱层：`@actiondock/testing` 与生产 Runner 的复用
 
-在自动化测试体系中，传统的 Mock 方案往往脱离真实执行逻辑，容易产生测试通过但生产失败的隐患。ActionDock 坚持**生产 Runner 逻辑 100% 真实复用**的原则：
+在自动化测试体系中，传统的 Mock 方案往往脱离真实执行逻辑，容易产生测试通过但生产失败的隐患。ActionDock 坚持生产 Runner 逻辑 100% 真实复用的原则：
 
 - **全内存测试驱动**：`createTestRuntime` 提供全套轻量化内存驱动：
   - `MemoryStorage`：纯内存模拟 SQLite 行为，支持配置、状态与运行记录存储。
-  - `FakeClock`：支持手动推进毫秒级时间的模拟时钟。
+  - `FakeClock`：支持手动推进毫秒级时间的确定性模拟时钟。
   - `MockProcessExecutor`：支持拦截、断言与预设输出的模拟进程执行器。
   - `TestEventSink`：全量捕获生命周期事件并支持历史追溯。
 - **真实复用核心执行器**：沙箱内部直接实例化真实的 `ActionRunner`。所有的入参出参模式严格校验、调用环路死锁检测、单一终态状态机流转与记录落库逻辑在测试中均得到真实执行，确保测试环境与生产环境语义完全一致。
@@ -127,6 +142,7 @@ stateDiagram-v2
 - **32 层调用深度限制**：限制 Action 级联调用的最大嵌套深度不超过 32 层，彻底防范深层嵌套调用耗尽系统资源与调用栈溢出。
 
 ### 优雅停机保证
+
 当服务接收到关闭信号时，协调服务将按序执行收尾：
 - 立即将服务标记为关闭状态，拒绝接收任何新任务提交。
 - 向当前所有活跃任务的执行句柄广播取消信号，通知业务协作退出。

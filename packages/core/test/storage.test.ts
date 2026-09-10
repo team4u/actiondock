@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { unlinkSync } from "node:fs";
 import { join } from "node:path";
+import { DatabaseSync as Database } from "node:sqlite";
+import * as sdk from "@actiondock/sdk";
+import * as coreStorage from "../src/storage";
+import { resolveDatabasePath } from "../src/storage";
+import { createDefaultSqliteDriver } from "../src/storage/driver";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
 
 describe("SqliteRuntimeStorage", () => {
@@ -13,8 +18,8 @@ describe("SqliteRuntimeStorage", () => {
     });
   });
 
-  afterEach(() => {
-    storage.close();
+  afterEach(async () => {
+    await storage.close();
   });
 
   describe("Config", () => {
@@ -188,11 +193,10 @@ describe("SqliteRuntimeStorage", () => {
     });
 
     it("打开旧版本（例如版本 1）Schema 数据库时直接抛出 UNSUPPORTED_STORAGE_SCHEMA 异常并拒绝启动", () => {
-      const { Database } = require("bun:sqlite");
       const tempDbPath = `/tmp/test-old-version-${Date.now()}.db`;
 
       // 创建版本 1 旧结构数据库
-      const rawDb = new Database(tempDbPath);
+      const rawDb = createDefaultSqliteDriver(tempDbPath);
       rawDb.exec(`
         CREATE TABLE IF NOT EXISTS config (
           package_id TEXT NOT NULL,
@@ -214,7 +218,7 @@ describe("SqliteRuntimeStorage", () => {
       }).toThrow(/UNSUPPORTED_STORAGE_SCHEMA/);
 
       // 验证原数据库未被修改且保留原版本号
-      const checkDb = new Database(tempDbPath);
+      const checkDb = createDefaultSqliteDriver(tempDbPath);
       const row = checkDb.prepare("PRAGMA user_version;").get() as any;
       expect(row.user_version).toBe(1);
       checkDb.close();
@@ -225,11 +229,10 @@ describe("SqliteRuntimeStorage", () => {
     });
 
     it("打开未来不兼容版本 Schema 数据库时抛出 UNSUPPORTED_STORAGE_SCHEMA 异常并拒绝启动", () => {
-      const { Database } = require("bun:sqlite");
       const tempDbPath = `/tmp/test-incompatible-${Date.now()}.db`;
 
       // 手动创建未来不兼容版本数据库
-      const rawDb = new Database(tempDbPath);
+      const rawDb = createDefaultSqliteDriver(tempDbPath);
       rawDb.exec(`
         CREATE TABLE config (
           package_id TEXT NOT NULL,
@@ -251,7 +254,7 @@ describe("SqliteRuntimeStorage", () => {
       }).toThrow(/UNSUPPORTED_STORAGE_SCHEMA/);
 
       // 验证原数据库文件与 user_version 保持未修改
-      const checkDb = new Database(tempDbPath);
+      const checkDb = createDefaultSqliteDriver(tempDbPath);
       const row = checkDb.prepare("PRAGMA user_version;").get() as any;
       expect(row.user_version).toBe(999);
       checkDb.close();
@@ -334,7 +337,6 @@ describe("SqliteRuntimeStorage", () => {
 
   describe("Database Path Security", () => {
     it("严格拦截包含路径遍历与非法字符的 packageId", () => {
-      const { resolveDatabasePath } = require("../src/storage");
       expect(() => resolveDatabasePath("../malicious")).toThrow();
       expect(() => resolveDatabasePath("../../etc/passwd")).toThrow();
       expect(() => resolveDatabasePath("pkg/../../../outside")).toThrow();
@@ -344,7 +346,6 @@ describe("SqliteRuntimeStorage", () => {
     });
 
     it("支持合法普通标识符与带 scope 标识符并保持在目标目录下", () => {
-      const { resolveDatabasePath } = require("../src/storage");
       const dataDir = "/tmp/actiondock-test";
       const p1 = resolveDatabasePath("my-pkg", { dataDir });
       expect(p1).toBe(join(dataDir, "my-pkg", "runtime.db"));
@@ -354,7 +355,6 @@ describe("SqliteRuntimeStorage", () => {
     });
 
     it("统一存储路径规则：项目根目录不再改变路径，统一存放于全局数据目录", () => {
-      const { resolveDatabasePath } = require("../src/storage");
       const customHome = "/tmp/actiondock-custom-home";
 
       // 默认路径
@@ -376,9 +376,6 @@ describe("SqliteRuntimeStorage", () => {
 
   describe("State Key Single Source of Truth", () => {
     it("shares identical state key codec implementation with @actiondock/sdk", () => {
-      const coreStorage = require("../src/storage");
-      const sdk = require("@actiondock/sdk");
-
       expect(coreStorage.encodeStateKey).toBe(sdk.encodeStateKey);
       expect(coreStorage.decodeStateKey).toBe(sdk.decodeStateKey);
       expect(coreStorage.escapeStateSegment).toBe(sdk.escapeStateSegment);

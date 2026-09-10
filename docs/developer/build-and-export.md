@@ -1,21 +1,23 @@
 # 构建规划与产物导出
 
-ActionDock 2.0 提供了完整的构建规划与双模态产物导出工具链。构建与导出核心由 `@actiondock/builder` 驱动，包含基于声明式清单的依赖规划器 `BuildPlanner` 与外部独立二进制编译器 `BunCompiler`，支持按需依赖闭包裁剪、全平台跨平台交叉编译与智能体资产分发。
+ActionDock 2.0 提供了面向生产交付与智能体消费的现代构建与导出工具链。构建与导出核心由 `@actiondock/builder` 驱动，包含基于声明式清单的依赖闭包规划器 `BuildPlanner`（`SelectionPlanner`）、Node 目录型交付产物构建器、npm Action 标准打包器与双模态 Skill 导出器。
+
+在 ActionDock 2.0 中，彻底废除了原有的外部单文件二进制编译器 `BunCompiler` 以及 `--target` 与 `--bytecode` 选项。工具链全面转向标准、透明且易于容器化部署的 Node 目录型交付产物体系。
 
 ---
 
-## 构建规划与静态依赖裁剪
+## 声明式构建规划与依赖闭包裁剪
 
-在传统工具链中，打包前往往需要动态导入全部源码以提取元数据，这会带来副作用执行、环境污染和跨平台解析失败的风险。ActionDock 2.0 的 `BuildPlanner` 规划器采用纯声明式解析机制。
+构建规划器采用纯声明式静态解析机制，确保在规划阶段绝不执行任何 Action 源码，杜绝模块加载副作用。
 
 ### 纯声明式解析机制
 
-- **静态元数据驱动**：`BuildPlanner` 仅读取静态的 `actiondock.manifest.json` 与 `actiondock.json`，在整个规划阶段绝对不执行任何 Action 源码，杜绝一切模块导入副作用。
-- **纯文本规程提取**：对于 `playbooks/` 目录下的 Markdown 规程，规划器仅使用纯文本流解析其顶部的 YAML 元数据段，提取其声明关联的 Action 标识列表。
+- **静态元数据驱动**：规划器仅读取静态的 `actiondock.json` 清单文件，在整个规划与依赖分析阶段绝对不执行任何 Action 源码，杜绝运行时污染。
+- **纯文本规程提取**：对于 `playbooks/` 目录下的 Markdown 规程文档，规划器仅解析其关联的 Action 标识列表，杜绝不必要的动态探测。
 
 ### 基于清单与 `uses` 的静态依赖闭包裁剪
 
-Action 在清单中可以通过 `uses` 数组显式声明其静态依赖的下游 Action 列表：
+Action 在 `actiondock.json` 中可以通过 `uses` 数组显式声明其依赖的下游 Action 列表：
 
 ```json
 {
@@ -28,160 +30,171 @@ Action 在清单中可以通过 `uses` 数组显式声明其静态依赖的下�
 }
 ```
 
-当执行构建或导出时，可以通过参数指定目标范围：
+当执行构建或导出时，可以通过参数指定目标裁剪范围：
 
-- **通过 Action 驱动裁剪**：指定 `--actions <ids...>`，规划器以指定的 Action 作为起始根节点。
-- **通过 Playbook 驱动裁剪**：指定 `--playbook <ids...>`，规划器提取指定规程引用的所有 Action 作为起始根节点。
+- **通过 Action 驱动裁剪**：指定 `--actions <ids...>`，规划器以指定的 Action 作为起始根节点进行闭包分析。
+- **通过 Playbook 驱动裁剪**：指定 `--playbooks <ids...>`，规划器提取指定规程引用的所有 Action 作为起始根节点。
 
-依赖闭包计算过程如下：
+依赖闭包计算遵循以下原则：
 
-- **广度优先闭包扩展**：从起始根节点出发，依照各 Action 清单中声明的 `uses` 关系进行图遍历，自动解析所有直接依赖与间接传递依赖，并安全处理环形引用。
-- **孤立文件自动剔除**：未被闭包覆盖的 Action 源码文件、无关的静态资产将完全被排除在构建产物之外。
+- **广度优先闭包扩展**：从起始根节点出发，依照各 Action 清单中声明的 `uses` 关系进行图遍历，自动解析所有直接依赖与传递依赖，并安全处理环形引用。
+- **孤立文件自动剔除**：未被闭包覆盖的 Action 源码文件与无关静态资产将被完全排除在构建产物之外。
 - **规程反向约束裁剪**：当显式挑选了 Action 集合时，规划器会自动反向审查规程；如果某个 Playbook 依赖了闭包之外的 Action，该 Playbook 将被自动从导出产物中排除，防止智能体在消费时调用失效规程。
 
 ---
 
-## 外部编译器机制与构建参数
+## Node 目录型交付产物构建 (`ad build`)
 
-ActionDock 2.0 的日常开发、调试与自动化测试全面运行在标准 Node.js 22.13.0 或更高版本生产底座上。当需要交付单个零外部依赖的独立可执行文件时，工具链通过 `BunCompiler` 调用外部编译引擎完成单文件打包。
+`ad build` 命令将项目及其依赖闭包构建为标准的可运行 Node.js 目录型交付产物。
 
-### 编译器工作机制
+### 构建机制
 
-`BunCompiler` 负责调度外部编译命令。编译器将运行时轻量调度器、内嵌 SQLite 引擎、依赖闭包内的业务代码以及入口分发逻辑完全内联，编译为单个原生系统可执行二进制文件。目标服务器或容器运行该二进制文件时，无需预先安装 Node.js、Bun、npm 依赖或任何系统动态库。
+构建引擎在目标输出目录中生成自包含的运行环境：
+- 保留经过闭包裁剪的 Action 源码、Playbook 文档与静态资产。
+- 生成规范的入口启动脚本与元数据声明文件。
+- 支持直接通过标准 Node.js 命令启动执行，无需全局安装 ActionDock CLI。
 
-### 核心构建参数
+### 核心参数说明
 
-- **编译目标平台**：`-t, --target <target>`
-  指定生成二进制的目标操作系统与 CPU 架构。默认使用宿主环境架构 `host`。支持全平台交叉编译，开发者可以在 Linux 开发机或 CI 上直接为不同操作系统编译产物：
-  - `linux-x64`：适用于主流 x86_64 架构 Linux 服务器与容器。
-  - `linux-arm64`：适用于 ARM64 架构 Linux 服务器或嵌入式设备。
-  - `darwin-x64`：适用于 Intel 架构 macOS 系统。
-  - `darwin-arm64`：适用于 Apple Silicon 架构 macOS 系统。
-  - `windows-x64`：适用于 Windows x86_64 平台，自动输出 `.exe` 可执行文件。
-- **代码混淆压缩**：`-m, --minify` 与 `--no-minify`
-  默认开启（`true`）。启用时将压缩并混淆 JavaScript 源码、缩短局部变量名、剔除冗余空格与注释，大幅缩减最终独立二进制文件的体积。若需排查底层堆栈，可传入 `--no-minify` 关闭压缩。
-- **字节码预编译**：`--bytecode` 与 `--no-bytecode`
-  默认开启（`true`）。启用时将在编译期直接将 JavaScript 源码编译为虚拟机字节码，省去运行时的语法解析与编译开销，实现毫秒级瞬间冷启动，同时能够有效保护商业源码逻辑不被逆向分析。可通过 `--no-bytecode` 禁用字节码生成。
+- **指定输出目录**：`-o, --out <path>`，指定产物生成的目标路径（默认为 `dist` 目录）。
+- **生成归档压缩包**：`-z, --archive`，将构建输出目录打包为标准的 `.zip` 格式压缩文件，便于网络传输与分发。
+- **物化锁定生产依赖**：`--vendor-deps`，在干净的暂存目录中物化锁定的生产依赖，将所需的 `node_modules` 完整内嵌至交付产物中，使目标服务器在离线无网络环境下亦可直接运行。
+- **安装脚本安全门禁**：`--allow-install-scripts`，默认禁用（`false`）。防止依赖包中的生命周期脚本在物化期间隐式执行恶意系统命令。
+- **强制可复现性校验**：`--require-reproducible`，强制要求构建结果可复现。如果检测到外部依赖存在必须执行的生命周期安装脚本，构建将立即报错中止。
+- **废弃参数拦截**：若传入已废弃的 `--target` 或 `--bytecode` 参数，系统将抛出 `UNSUPPORTED_BUILD_MODE` 错误，提示开发者单文件二进制编译已被废除。
 
----
+### 构建示例
 
-## 两类 Skill 产物导出规范
-
-使用 `ad export skill` 可以将 Action Package 导出为供 AI 智能体（如 Claude Code、Cursor、Windsurf、Antigravity）理解与消费的自包含 Skill 资产。ActionDock 提供两类导出形态以满足不同运行环境。
-
-### 源码型 Skill
-
-源码型 Skill 属于默认导出模式，适用于目标运行环境中已具备 Node.js、Bun 或 ActionDock 运行底座的场景。
-
-#### 导出命令
 ```bash
-ad export skill
-# 结合规程裁剪并打包为压缩文件
-ad export skill --playbook deploy-sop --archive
+# 全量构建 Node 目录型交付产物
+ad build
+
+# 挑选指定 Action 构建，生成 zip 归档并物化锁定依赖
+ad build --actions sample.greet,calc.sum --archive --vendor-deps
+
+# 结合严格安全与可复现性门禁构建
+ad build --archive --vendor-deps --require-reproducible
 ```
 
-#### 文件目录结构
-```text
-<package-slug>-skill/
-├── SKILL.md                  # 智能体指令说明书，包含 YAML 模式说明与源码模式调用规范
-├── actiondock.manifest.json  # 经过闭包裁剪后的精简版声明式清单
-├── actiondock.json           # 项目配置元数据定义
-├── package.json              # 依赖声明文件
-├── tsconfig.json             # TypeScript 配置（若原项目存在）
-├── actions/                  # 闭包裁剪后的 Action 源码文件（完整保留相对目录层级）
-├── playbooks/                # 闭包裁剪后的 Playbook 规程 Markdown 文件
-└── assets/                   # 关联引用的静态资产文件
-```
+---
 
-### 独立二进制型 Skill
+## npm Action 包标准打包 (`ad pack`)
 
-独立二进制型 Skill 是 ActionDock 2.0 的特色交付模式。它将预编译的单文件零依赖可执行程序与 Agent Skill 说明书无缝结合，专门用于目标机未安装任何前端或脚本运行时的极简环境。
+`ad pack` 命令用于将当前 Action Package 打包为符合 npm 规范的标准分发压缩包（`.tgz`），专供模块发布与跨项目引用。
 
-#### 导出命令
+### 打包机制与核心选项
+
+- **清单与边界严审**：打包器基于 `actiondock.json` 的声明审查包含的文件列表，确保没有未受控的私有文件泄露。
+- **完整性摘要生成**：自动计算包内所有文件的 SHA-256 校验哈希与归档包体大小。
+- **预检模式**：`--dry-run`，仅执行元数据验证与打包文件清单预览，不实际写入磁盘压缩包，适合在持续集成部署前进行健康体检。
+- **JSON 结果输出**：`--json`，将打包结果（包名、版本、文件列表、SHA-256 哈希、字节大小）以机器可读的 JSON 格式输出，便于自动化发布流水线对接。
+
+### 打包示例
+
 ```bash
-# 为当前宿主平台导出独立二进制 Skill
-ad export skill --standalone
+# 标准打包并生成 .tgz 文件
+ad pack
 
-# 跨平台交叉编译为 Linux ARM64 二进制 Skill 并打包
-ad export skill --standalone --target linux-arm64 --archive
+# 指定输出目录
+ad pack --out ./artifacts
+
+# 仅执行打包预检
+ad pack --dry-run
 ```
-
-#### 文件目录结构
-```text
-<package-slug>-skill-<target>/
-├── SKILL.md                  # 智能体指令说明书，包含 ./bin/<binary> run <action> 命令行调用规范
-├── bin/
-│   └── <package-slug>        # 预编译生成的单文件零依赖独立可执行文件
-├── playbooks/                # 闭包裁剪后的 Playbook 规程 Markdown 文件
-└── assets/                   # 关联引用的静态资产文件
-```
-
-### 核心差异对比
-
-- **环境依赖差异**：源码 Skill 要求消费端机器具备执行 TypeScript 或 JavaScript 的宿主底座；独立二进制 Skill 目标机无需安装 Node.js、Bun 或任何包管理器，开箱即用。
-- **包含内容差异**：源码 Skill 包含 `actions/` 源码目录、`actiondock.manifest.json`、`package.json` 与 `tsconfig.json`；独立二进制 Skill 将所有源码、引擎与依赖完整封装在 `bin/` 目录下的单个可执行程序中，不再散落源码文件。
-- **智能体调用路径**：在生成的 `SKILL.md` 中，源码 Skill 指导智能体通过环境中的运行时调用 Action；独立二进制 Skill 则指导智能体直接以子进程方式运行 `./bin/<binary> run <action> --input '<json>'`。
 
 ---
 
-## 多包与工作区技能导出
+## AI Agent Skill 资产导出 (`ad export skill`)
 
-当工程中包含多个原子包时，ActionDock 支持批量独立导出与复合套件导出两种范式：
+`ad export skill` 命令将 Action Package 导出为供各类 AI 智能体（如 Claude Code、Cursor、Windsurf、Antigravity）理解与消费的自包含 Skill 资产。
 
-- **批量独立导出**：
-  将指定的多个包或当前工作区内的所有包，分别导出为独立的技能目录：
+ActionDock 2.0 提供了两种清晰的 Skill 导出模式：
+
+### 源码型 Skill 模式 (`--mode source`)
+
+源码型 Skill 是默认的导出模式，适用于目标运行环境中已具备 Node.js 底座的场景。
+
+- **导出命令**：
   ```bash
-  # 批量导出指定包至目标目录
-  ad export skill -P team4u.github-tools,team4u.gitlab-tools --out ./dist/skills
+  # 导出默认源码型 Skill
+  ad export skill --mode source
 
-  # 一键导出当前工作区内所有子包
-  ad export skill --workspace --out ./dist/skills
+  # 结合规程裁剪并打包为 zip 归档
+  ad export skill --mode source --playbook review-pr --archive
   ```
-- **复合套件导出**：
-  将多个功能包聚合为一个统一的复合技能包，原位保留各包代码与就近规程，对外仅生成单一统领全局的 `SKILL.md`，内部子包不再重复生成 `SKILL.md`，确保消费端智能体识别为单一整体技能：
+- **生成文件结构**：
+  ```text
+  <package-slug>-skill/
+  ├── SKILL.md                  # 智能体说明书，包含工具列表与输入输出调用模式
+  ├── actiondock.json           # 经过闭包裁剪后的精简声明式清单
+  ├── package.json              # 依赖声明文件
+  ├── tsconfig.json             # TypeScript 模块配置
+  ├── actions/                  # 闭包裁剪后的 Action 业务执行函数
+  ├── playbooks/                # 闭包裁剪后的 Playbook 规程文档
+  └── assets/                   # 关联引用的静态资产文件
+  ```
+
+### Node 目录型 Skill 模式 (`--mode node`)
+
+Node 目录型 Skill 将 ActionDock 运行时启动胶水层与依赖闭包完整内嵌于导出的 Skill 目录中，生成自包含的执行环境。
+
+- **导出命令**：
   ```bash
-  # 指定包聚合复合导出
-  ad export skill -P team4u.github-tools team4u.k8s-ops --bundle devops-suite --out ./dist/devops-suite
+  # 导出自包含的 Node 目录型 Skill
+  ad export skill --mode node --vendor-deps
 
-  # 一键导出当前工作区内所有子包为单一复合技能套件
-  ad export skill --workspace --bundle devops-suite --out ./dist/devops-suite
+  # 导出并生成 zip 归档
+  ad export skill --mode node --vendor-deps --archive
   ```
-- **已有技能说明书复用机制**：
-  无论单包导出还是复合导出，若当前动作目录或工作区根目录下已存在现成的 `SKILL.md` 文件（如人工精心维护的业务说明书），导出器将自动识别并直接复用该文件，避免被动态模板覆盖；亦可通过 `--skill-md <path>` 选项显式指定自定义说明书路径。
+- **核心特点**：目标机仅需安装通用 Node.js，无需全局预装 ActionDock 工具链，智能体可直接依据 `SKILL.md` 中的指引执行入口命令。
+
+### 导出参数速查
+
+- `--mode <source|node>`：选择导出模式，默认为 `source`。
+- `--archive`（`-z`）：生成 `.zip` 归档文件。
+- `--vendor-deps`：在导出目录中物化锁定的依赖库。
+- `--playbook <playbooks...>`：仅导出指定规程及其依赖闭包内的动作。
+- `--actions <actions...>`：仅导出指定的 Action 及其依赖闭包。
+- `--skill-md <path>`：显式指定现有的自定义 `SKILL.md` 说明书，避免被默认模板覆盖。
+- `--bundle [name]`：在源码模式下将工作区内多个包聚合导出为单一复合技能套件。
 
 ---
 
-## 常用操作速查
+## 常用操作命令速查
 
-- **全量独立二进制构建**：
+- **Node 目录型标准构建**：
   ```bash
   ad build
   ```
-- **指定目标平台与输出路径构建**：
+- **带依赖物化与归档构建**：
   ```bash
-  ad build --target linux-x64 --out ./dist/bin/server-tools
+  ad build --archive --vendor-deps
   ```
-- **指定部分 Action 构建**：
+- **可复现性门禁构建**：
   ```bash
-  ad build --actions sample.greet,calc.sum
+  ad build --archive --vendor-deps --require-reproducible
+  ```
+- **npm Action 标准打包**：
+  ```bash
+  ad pack
+  ```
+- **npm Action 打包预检**：
+  ```bash
+  ad pack --dry-run
   ```
 - **导出默认源码型 Skill**：
   ```bash
-  ad export skill
+  ad export skill --mode source
   ```
-- **导出独立二进制型 Skill 并归档为压缩包**：
+- **导出自包含 Node 目录型 Skill**：
   ```bash
-  ad export skill --standalone --target linux-x64 --archive
+  ad export skill --mode node --vendor-deps
   ```
-- **按 Playbook 最小依赖闭包导出**：
+- **按 Playbook 闭包导出 Skill 并生成压缩包**：
   ```bash
-  ad export skill --playbook greet-user --out ./dist/greet-skill
+  ad export skill --playbook review-pr --archive
   ```
-- **批量导出多个包**：
+- **工作区多包复合导出**：
   ```bash
-  ad export skill -P pkg1,pkg2 --out ./dist/skills
-  ```
-- **多包复合模式导出**：
-  ```bash
-  ad export skill -P pkg1 pkg2 --bundle my-suite --out ./dist/my-suite
+  ad export skill --workspace --bundle devops-suite --out ./dist/devops-suite
   ```

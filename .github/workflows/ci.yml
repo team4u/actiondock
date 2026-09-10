@@ -7,50 +7,46 @@ on:
 
 jobs:
   test:
-    name: Typecheck & Test (Bun)
+    name: Typecheck & Test (Node 24)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          bun-version: latest
+          node-version: "24.x"
 
       - name: Install Dependencies
-        run: bun install
+        run: npm ci || npm install
 
       - name: TypeScript Typecheck
-        run: bun run typecheck
+        run: npm run typecheck
 
       - name: Build Packages
-        run: bun run build
+        run: npm run build
 
       - name: Run Monorepo Tests
-        run: bun test
+        run: npm test
 
   pack-smoke:
-    name: Pack Smoke Test (Node ${{ matrix.node-version }})
+    name: Pack Smoke Test (Node 24)
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        node-version: ["22.13.0", "24"]
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-      - uses: oven-sh/setup-bun@v2
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          bun-version: latest
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
+          node-version: "24.x"
 
       - name: Install Dependencies
-        run: bun install
+        run: npm ci || npm install
 
       - name: Build Packages
-        run: bun run build
+        run: npm run build
 
       - name: Run Pack Smoke Test
-        run: bun run test:pack
-
+        run: npm run test:pack

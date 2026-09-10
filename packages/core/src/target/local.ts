@@ -30,6 +30,11 @@ import {
   type ListRunsOptions,
   type StateScopeOptions,
   type TargetInfo,
+  TargetError,
+  CloseTimeoutError,
+  TARGET_PROTOCOL_UNSUPPORTED,
+  TARGET_CAPABILITY_UNAVAILABLE,
+  TARGET_RESULT_UNKNOWN,
 } from "./types";
 
 /**
@@ -263,7 +268,7 @@ export class LocalActionDockTarget implements ActionDockTarget {
 
   async setConfig(packageId: string, key: string, value: JsonValue): Promise<void> {
     if (packageId === "global") {
-      this.getGlobalStorage().setConfig(key, value);
+      await this.getGlobalStorage().setConfig(key, value);
       return;
     }
     const app = this.resolveApp(packageId);
@@ -275,13 +280,13 @@ export class LocalActionDockTarget implements ActionDockTarget {
 
   async deleteConfig(packageId: string, key: string): Promise<boolean> {
     if (packageId === "global") {
-      return this.getGlobalStorage().deleteConfig(key);
+      return await this.getGlobalStorage().deleteConfig(key);
     }
     const app = this.resolveApp(packageId);
     if (!app) {
       throw new Error(`Package '${packageId}' not found in target`);
     }
-    return app.deleteConfig(key);
+    return await app.deleteConfig(key);
   }
 
   async listConfig(packageId: string): Promise<ConfigValueView[]> {
@@ -376,12 +381,35 @@ export class LocalActionDockTarget implements ActionDockTarget {
   ): Promise<StateEntry[]> {
     const app = this.resolveApp(packageId);
     if (!app) {
-      throw new Error(`Package '${packageId}' not found in target`);
+      throw new TargetError(
+        TARGET_CAPABILITY_UNAVAILABLE,
+        `TARGET_CAPABILITY_UNAVAILABLE: Package '${packageId}' not found in target`
+      );
+    }
+    if (!app.storage || typeof (app.storage as any).listStateEntries !== "function") {
+      throw new TargetError(
+        TARGET_CAPABILITY_UNAVAILABLE,
+        `TARGET_CAPABILITY_UNAVAILABLE: listStateEntries is not supported by package '${packageId}' storage`
+      );
     }
     return app.storage.listStateEntries(options);
   }
 
-  async close(): Promise<void> {
+  async close(options?: { timeoutMs?: number }): Promise<void> {
+    if (options?.timeoutMs && options.timeoutMs > 0) {
+      let timer: any;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new CloseTimeoutError(`Target close operation timed out after ${options.timeoutMs}ms`));
+        }, options.timeoutMs);
+      });
+      try {
+        await Promise.race([this.target.close(), timeoutPromise]);
+      } finally {
+        clearTimeout(timer);
+      }
+      return;
+    }
     return this.target.close();
   }
 }

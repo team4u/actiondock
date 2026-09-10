@@ -122,7 +122,7 @@ Follow these steps to greet a user.
     );
 
     // Link root node_modules so @actiondock/sdk is resolvable
-    const rootNodeModules = resolve(__dirname, "../../../node_modules");
+    const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
     if (existsSync(rootNodeModules)) {
       symlinkSync(rootNodeModules, join(projectDir, "node_modules"), "dir");
     }

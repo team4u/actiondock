@@ -1,16 +1,15 @@
 # ActionDock
 
-[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22-green?logo=node.js)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D24.12.0-green?logo=node.js)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![MCP](https://img.shields.io/badge/MCP-Protocol%20Compliant-purple)](https://modelcontextprotocol.io/)
-[![Tests](https://img.shields.io/badge/tests-173%20passed-brightgreen.svg)](https://github.com/team4u/actiondock)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-English | [简体中文](README.zh-CN.md)
+English | [简体中文](file:///root/code/action-dock/README.zh-CN.md)
 
 Build Agent Tools once. Run them anywhere.
 
-A TypeScript toolchain for building, testing, and shipping AI Agent tools as MCP servers, Agent Skills, HTTP services, or standalone binaries.
+A TypeScript toolchain for building, testing, and shipping AI Agent tools as MCP servers, Agent Skills, HTTP services, or Node.js delivery directories.
 
 ```text
 TypeScript Action
@@ -19,10 +18,11 @@ TypeScript Action
        ├── ad test         # In-memory fast testing
        ├── ad mcp          # STDIO / HTTP MCP server
        ├── ad serve        # Remote HTTP service
-       ├── ad export skill # Self-contained Agent Skill
-       └── ad build        # Zero-dependency standalone binary
+       ├── ad export skill # Self-contained Agent Skill (--mode source or --mode node)
+       ├── ad pack         # npm tarball packaging (.tgz)
+       └── ad build        # Node.js delivery directory build
               ↓
-         executable binary
+      runnable package
 ```
 
 ---
@@ -35,61 +35,31 @@ Ad-hoc scripts easily break due to missing dependencies, unpinned runtimes, or o
 
 ActionDock establishes Agent Tools as industrial-grade software assets:
 
-- **Humans Define SOPs, Agents Write Implementation**: Humans establish operational boundaries, sequence constraints, and safety guardrails in Playbooks; AI agents write the deterministic Action implementations against contracts.
-- **In-Memory Sandbox and Self-Healing Loop**: Test Actions in an in-memory sandbox with deterministic clocks in milliseconds. When AI generates code, it can run automated tests and self-heal autonomously based on structured errors.
-- **Zero-Dependency Standalone Distribution**: Compile an Action Package into a single standalone binary. Target machines need neither Node.js nor Bun—just copy and run.
-- **Build Once, Deliver Everywhere**: The exact same Action runs seamlessly across CLI, MCP servers, HTTP microservices, and Agent Skills.
-- **Code and Contract in Sync**: The declarative manifest acts as the single source of truth for zero-side-effect static analysis, dependency closure computation, and pruning.
-- **Git-Native Plain Text Assets**: Actions and Playbooks are plain text files designed for version control, code reviews, and CI/CD pipelines.
+- Humans Define SOPs, Agents Write Implementation: Humans establish operational boundaries, sequence constraints, and safety guardrails in Playbooks; AI agents write the deterministic Action implementations against contracts.
+- In-Memory Sandbox and Self-Healing Loop: Test Actions in an in-memory sandbox with deterministic clocks in milliseconds. When AI generates code, it can run automated tests and self-heal autonomously based on structured errors.
+- Standard Node.js Delivery Format: Build an Action Package into a self-contained, runnable Node.js delivery directory with locked production dependencies or pack into standard npm packages.
+- Build Once, Deliver Everywhere: The exact same Action runs seamlessly across CLI, MCP servers, HTTP microservices, and Agent Skills.
+- Git-Native Plain Text Assets: Actions and Playbooks are plain text files designed for version control, code reviews, and CI/CD pipelines.
+- Deterministic Lockfile and Atomic Dependency Management: Project dependencies are locked via actiondock.lock.json with atomic transaction rollbacks for ad add and ad remove.
 
 ---
 
 ## Runtime and Dependencies
 
-ActionDock 2.0 provides an upgraded runtime architecture:
+ActionDock 2.0 provides an upgraded native runtime architecture:
 
-- **Daily Development and Runtime**: Natively runs on Node.js 22.13.0 or higher. Standard authoring, testing, CLI execution, MCP servers, and HTTP services run directly on Node.js, supporting npm, pnpm, and yarn. Daily execution is completely independent of Bun.
-- **Standalone Binary Compilation**: When compiling an Action Package into a zero-dependency standalone binary using `ad build`, the system schedules the external Bun compiler to generate the standalone executable.
+- Native Node 24 Runtime: Natively runs on Node.js >=24.12.0, utilizing node:sqlite, node:http, and native type stripping. Standard authoring, testing, CLI execution, MCP servers, and HTTP services run directly on Node.js.
+- Standard npm Workflow: Daily development, testing, building, and publishing use the standard npm workflow (npm test, npm run typecheck, npm run build, npm run test:pack).
+- Cross-Environment Verification: Retains bun test as a cross-environment compatibility test.
 
 ---
 
-## Declarative Metadata Manifest Specification
+## Deterministic Dependency Management
 
-ActionDock 2.0 establishes `actiondock.manifest.json` as the declarative single source of truth for tool metadata:
+ActionDock 2.0 establishes [actiondock.lock.json](file:///root/code/action-dock/packages/core/src/project/lockfile.ts) (lockfileVersion: 1) as the deterministic lockfile for tool dependencies:
 
-```json
-{
-  "schemaVersion": 1,
-  "actions": {
-    "sample.greet": {
-      "entry": "actions/greet.ts",
-      "description": "Greeting action demonstrating input, config, and state",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "name": { "type": "string", "description": "Name of the person to greet" }
-        },
-        "required": ["name"]
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "message": { "type": "string" },
-          "count": { "type": "number" }
-        },
-        "required": ["message", "count"]
-      },
-      "uses": [],
-      "tags": ["sample"]
-    }
-  },
-  "assets": []
-}
-```
-
-- **Zero Side-Effect Discovery**: Tool discovery and metadata parsing require no execution of user TypeScript code, preventing initialization side effects.
-- **Static Dependency Closure**: The build planner statically computes dependency closures across Actions and Playbooks, enabling tree-shaking and minimal bundle packaging.
-- **Consistent Contracts**: CLI commands, MCP tool endpoints, and documentation generators consume the exact same manifest schema.
+- Atomic Transactions: The `ad add` and `ad remove` commands take snapshot backups of `package.json`, `actiondock.json`, and `actiondock.lock.json`. If installation fails, changes are automatically rolled back.
+- Elimination of Manifest Side Effects: The deprecated `actiondock.manifest.json` and standalone single-file binary compiler (`BunCompiler`) have been removed in favor of direct Node.js directory builds and npm distribution.
 
 ---
 
@@ -125,6 +95,11 @@ cd hello-tools
 npm install
 ```
 
+- Add a dependency with atomic lockfile management:
+```bash
+ad add @actiondock/example-tools
+```
+
 - Run unit tests:
 ```bash
 npm test
@@ -142,12 +117,21 @@ ad mcp
 
 - Export as an Agent Skill:
 ```bash
+# Export source-mode skill
 ad export skill
+
+# Export self-contained Node.js directory skill
+ad export skill --mode node
 ```
 
-- Compile into a standalone binary (requires external Bun compiler):
+- Build a runnable Node.js delivery directory:
 ```bash
 ad build
+```
+
+- Pack into a standard npm tarball:
+```bash
+ad pack
 ```
 
 ---
@@ -175,29 +159,25 @@ In `actions/greet.ts`:
 ```ts
 import { defineAction } from "@actiondock/sdk";
 
-export default defineAction({
-  id: "sample.greet",
-  description: "Greet a user and track greeting count in persistent state",
+export interface GreetInput {
+  name: string;
+}
 
-  inputSchema: {
-    type: "object",
-    properties: {
-      name: { type: "string", description: "Name of the person" },
-    },
-    required: ["name"],
-  },
+export interface GreetOutput {
+  message: string;
+  count: number;
+}
 
-  async run(input, ctx) {
-    const prefix = ctx.config.get("GREETING_PREFIX", "Hello");
-    const count = ((await ctx.state.get<number>(`greet:${input.name}`)) || 0) + 1;
-    await ctx.state.set(`greet:${input.name}`, count);
-    ctx.log.info(`User ${input.name} greeted ${count} time(s)`);
+export default defineAction(async (input: GreetInput, ctx): Promise<GreetOutput> => {
+  const prefix = ctx.config.get("GREETING_PREFIX", "Hello");
+  const count = ((await ctx.state.get<number>(`greet:${input.name}`)) || 0) + 1;
+  await ctx.state.set(`greet:${input.name}`, count);
+  ctx.log.info(`User ${input.name} greeted ${count} time(s)`);
 
-    return {
-      message: `${prefix}, ${input.name}!`,
-      count,
-    };
-  },
+  return {
+    message: `${prefix}, ${input.name}!`,
+    count,
+  };
 });
 ```
 
@@ -217,7 +197,7 @@ actions:
 
 When greeting a new user in the conversation:
 
-- Verify the user's name; never assume unverified nicknames.
+- Verify the user name; never assume unverified nicknames.
 - Execute `sample.greet` to perform the greeting and read the count.
 - If the count exceeds 1, acknowledge the returning user.
 ```
@@ -228,11 +208,11 @@ When greeting a new user in the conversation:
 
 | Capability / Dimension | ActionDock | mcp-use | FastMCP | Arcade MCP |
 | :--- | :---: | :---: | :---: | :---: |
-| Zero-Dependency Standalone Binary | Supported | — | — | — |
+| Self-Contained Node Directory Build | Supported | — | — | — |
 | In-Memory Sandbox & Self-Healing Testing | Supported | Supported | Supported | Supported |
 | Procedure & Guardrail Decoupling (Playbook) | Supported | — | — | — |
 | Self-Contained Agent Skill Export | Supported | — | — | — |
-| Declarative Manifest & Dependency Pruning | Supported | — | — | — |
+| Atomic Lockfile Dependency Management | Supported | — | — | — |
 | Multimodal Delivery (CLI, MCP, HTTP, Skill) | Supported | Partial | Partial | Partial |
 | MCP Protocol Native (STDIO & HTTP) | Supported | Supported | Supported | Supported |
 | Remote HTTP Service Dispatch | Supported | Supported | Supported | Supported |
@@ -242,7 +222,7 @@ When greeting a new user in the conversation:
 
 ## Architecture and Layering
 
-ActionDock 2.0 adopts an 8-package modular architecture:
+ActionDock 2.0 adopts a 7-package modular architecture:
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
@@ -253,41 +233,50 @@ ActionDock 2.0 adopts an 8-package modular architecture:
                ▼              ▼               ▼
 ┌─────────────────────────────┐┌──────────────────────────────┐
 │     @actiondock/mcp         ││    @actiondock/builder       │
-│  MCP Protocol & Async Tasks ││ Dependency Closure & Build   │
+│  MCP Protocol & Async Tasks ││ Node Build, Pack & Exporter  │
 └──────────────┬──────────────┘└──────────────┬───────────────┘
                │                              │
                ▼                              ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                      @actiondock/core                       │
-│    Domain Model, ActionRunner, Manifest & Driver Contracts  │
+│    Domain Model, ActionRunner, Lockfile & Target Facades    │
 └───────┬─────────────────────────────┬───────────────┬───────┘
         │                             │               │
         ▼                             ▼               ▼
 ┌──────────────┐               ┌─────────────┐┌──────────────┐
 │ runtime-node │               │   testing   ││     sdk      │
-│Node.js Driver│               │Deterministic││Zero-Dep Dev  │
-│& tsx Loader  │               │Test Harness ││Contract      │
+│Worker SQLite │               │Deterministic││Zero-Dep Dev  │
+│& Node 24 ESM │               │Test Harness ││Contract      │
 └──────────────┘               └─────────────┘└──────────────┘
 ```
 
-- `@actiondock/cli`: The command line toolchain and standalone dispatcher running on Node.js 22.13.0 or higher, coordinating project initialization, execution, testing, building, and exporting with structured envelope rendering.
-- `@actiondock/builder`: Build planning and compiler scheduling package, including `BuildPlanner` dependency closure calculation, `BunCompiler` external compiler driver, and `SkillExporter`.
-- `@actiondock/mcp`: MCP adapter providing STDIO and HTTP protocol transports, fully supporting the Tasks asynchronous task extension.
-- `@actiondock/core`: Core domain kernel providing project configuration loading, `actiondock.manifest.json` parsing, `SqliteDriver` interface, `ProcessExecutor` interface, `DefaultExecutionService`, and `ActionRunner` state machine.
-- `@actiondock/runtime-node`: Node.js runtime adapter providing `node:sqlite` database driver, `execa` process executor, `tsx` module loader, and `node:http` streaming server.
-- `@actiondock/testing`: Standalone deterministic test framework offering `FakeClock`, `MockProcessExecutor`, `MemoryStorage`, and the `createTestRuntime` harness.
-- `@actiondock/sdk`: Minimal zero-dependency developer contract exporting `defineAction`, `ActionContext`, and core types.
+- [@actiondock/cli](file:///root/code/action-dock/packages/cli/README.md): The command line toolchain running on Node.js >=24.12.0, coordinating project initialization, dependencies, execution, testing, building, and exporting with structured envelope rendering.
+- [@actiondock/builder](file:///root/code/action-dock/packages/builder/README.md): Build planning and delivery package, providing Node.js directory builds (`ad build`), npm packaging (`ad pack`), and skill export (`ad export skill` supporting `--mode source` and `--mode node`).
+- [@actiondock/mcp](file:///root/code/action-dock/packages/mcp/README.md): MCP adapter providing STDIO and HTTP protocol transports, supporting collaborative cancellation and Tasks extensions.
+- [@actiondock/core](file:///root/code/action-dock/packages/core/README.md): Core domain kernel providing [ActionDockTarget](file:///root/code/action-dock/packages/core/src/target/types.ts) unified invocation facade, data directory locks ([DataDirLock](file:///root/code/action-dock/packages/core/src/storage/data-dir-lock.ts)), and transaction management.
+- [@actiondock/runtime-node](file:///root/code/action-dock/packages/runtime-node/README.md): Node.js runtime adapter providing non-blocking [WorkerSqliteDriver](file:///root/code/action-dock/packages/runtime-node/src/worker-sqlite-driver.ts), process execution, native type stripping loader, and HTTP servers.
+- [@actiondock/testing](file:///root/code/action-dock/packages/testing/README.md): Standalone deterministic test framework offering [FakeClock](file:///root/code/action-dock/packages/testing/src/clock.ts), [MockProcessExecutor](file:///root/code/action-dock/packages/testing/src/process.ts), [MemoryStorage](file:///root/code/action-dock/packages/testing/src/storage.ts), and [createTestRuntime](file:///root/code/action-dock/packages/testing/src/runtime.ts).
+- [@actiondock/sdk](file:///root/code/action-dock/packages/sdk/README.md): Minimal zero-dependency developer contract exporting `defineAction`, `ActionContext`, and core types.
 
 ---
 
 ## Verification and Testing
 
 ```bash
-# Run all unit and integration tests (173 tests passing)
-bun test
+# Run all unit and integration tests
+npm test
 
 # Run full TypeScript type checks
-bun run typecheck
+npm run typecheck
+
+# Build all packages
+npm run build
+
+# Run pack smoke test
+npm run test:pack
+
+# Cross-environment compatibility verification
+bun test
 ```
 
 ---

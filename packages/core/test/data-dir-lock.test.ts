@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { createActionDockApp } from "../src/app";
 import { createActionDockHost } from "../src/host";
 import { DataDirLock } from "../src/storage/data-dir-lock";
+import { createDefaultSqliteDriver } from "../src/storage/driver";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
 import { STORAGE_SCHEMA_VERSION } from "../src/storage/types";
 
@@ -124,7 +125,7 @@ describe("数据目录排他锁与 Schema 版本保护测试", () => {
       finishedAt: now,
     });
 
-    storage.close();
+    await storage.close();
 
     // 2. 构造模拟崩溃残留锁文件：主进程与子进程 PID 均已死亡
     const lockFile = join(tempDir, ".actiondock.data.lock");
@@ -173,7 +174,7 @@ describe("数据目录排他锁与 Schema 版本保护测试", () => {
     await host.close();
   });
 
-  it("存储 Schema 版本严格保护与单事务初始化失败原子回滚", () => {
+  it("存储 Schema 版本严格保护与单事务初始化失败原子回滚", async () => {
     expect(STORAGE_SCHEMA_VERSION).toBe(2);
 
     const dbPath = join(tempDir, "schema-test.db");
@@ -184,11 +185,10 @@ describe("数据目录排他锁与 Schema 版本保护测试", () => {
       dbPath,
     });
     expect(storage1.isOpen).toBe(true);
-    storage1.close();
+    await storage1.close();
 
     // 验证 user_version 精确为 STORAGE_SCHEMA_VERSION (2)
-    const { Database } = require("bun:sqlite");
-    const dbCheck = new Database(dbPath);
+    const dbCheck = createDefaultSqliteDriver(dbPath);
     const row = dbCheck.prepare("PRAGMA user_version;").get() as any;
     expect(row.user_version).toBe(2);
 

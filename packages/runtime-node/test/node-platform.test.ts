@@ -113,10 +113,10 @@ describe("createNodePlatform 平台工厂测试", () => {
       storage.setState("test-run", "progress", { step: 1 });
       expect(await storage.getState<any>("test-run", "progress")).toEqual({ step: 1 });
 
-      storage.close();
+      await storage.close();
     });
 
-    it("支持自定义 dataDir 与 customHome 路径配置", () => {
+    it("支持自定义 dataDir 与 customHome 路径配置", async () => {
       const dataDir = join(tempDir, "custom-data");
       const platform = createNodePlatform({ dataDir, customHome: tempDir, useWorker: false });
 
@@ -124,16 +124,16 @@ describe("createNodePlatform 平台工厂测试", () => {
       expect(storage.isOpen).toBe(true);
       storage.setConfig("KEY", "VALUE");
       expect(storage.getConfig<string>("KEY")).toBe("VALUE");
-      storage.close();
+      await storage.close();
 
       const globalStorage = platform.storage.createGlobalStorage();
       expect(globalStorage.isOpen).toBe(true);
       globalStorage.setConfig("GLOBAL_KEY", "GLOBAL_VAL");
       expect(globalStorage.getConfig<string>("GLOBAL_KEY")).toBe("GLOBAL_VAL");
-      globalStorage.close();
+      await globalStorage.close();
     });
 
-    it("支持自定义 driverFactory 参数覆盖默认驱动生成", () => {
+    it("支持自定义 driverFactory 参数覆盖默认驱动生成", async () => {
       let customFactoryCalled = false;
       const platform = createNodePlatform({
         driverFactory: (dbPath: string) => {
@@ -145,15 +145,15 @@ describe("createNodePlatform 平台工厂测试", () => {
       const storage = platform.storage.createStorage("pkg-driver-test", { inMemory: true });
       expect(customFactoryCalled).toBe(true);
       expect(storage.isOpen).toBe(true);
-      storage.close();
+      await storage.close();
     });
 
-    it("默认启用 WorkerSqliteDriver 工作线程存储驱动", () => {
+    it("默认启用 WorkerSqliteDriver 工作线程存储驱动", async () => {
       const platform = createNodePlatform();
       const storage = platform.storage.createStorage("worker-default-test", { inMemory: true });
       expect(storage).toBeInstanceOf(SqliteRuntimeStorage);
       expect((storage as any).driver).toBeInstanceOf(WorkerSqliteDriver);
-      storage.close();
+      await storage.close();
     });
   });
 

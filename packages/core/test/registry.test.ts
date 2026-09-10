@@ -26,7 +26,7 @@ describe("Registry and Linking Mechanism", () => {
     pkgADir = mkdtempSync(join(tmpdir(), "pkg-a-"));
     pkgBDir = mkdtempSync(join(tmpdir(), "pkg-b-"));
 
-    const rootNodeModules = resolve(__dirname, "../../../node_modules");
+    const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
     if (existsSync(rootNodeModules)) {
       symlinkSync(rootNodeModules, join(pkgADir, "node_modules"), "dir");
       symlinkSync(rootNodeModules, join(pkgBDir, "node_modules"), "dir");
@@ -256,7 +256,7 @@ export default defineAction(async () => ({ pkg: "B-unique" }));
   });
 
   it("dynamically discovers newly added subprojects in linked workspace without re-linking", async () => {
-    const rootNodeModules = resolve(__dirname, "../../../node_modules");
+    const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
 
     // 1. Create workspace with initial sub1
     const wsDir = mkdtempSync(join(tmpdir(), "ws-dynamic-"));
@@ -346,6 +346,10 @@ export default defineAction(async () => ({ fromDyn2: true }));
 
   it("resolves scoped package IDs, package root, and playbooks (@scope/pkg)", async () => {
     const scopedDir = mkdtempSync(join(tmpdir(), "scoped-pkg-"));
+    const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
+    if (existsSync(rootNodeModules)) {
+      symlinkSync(rootNodeModules, join(scopedDir, "node_modules"), "dir");
+    }
     try {
       initProject(scopedDir, { id: "@team/tools", name: "Scoped Tools" });
       const actionContent = `
@@ -358,6 +362,12 @@ export default defineAction({
       writeFileSync(join(scopedDir, "actions", "greet.ts"), actionContent);
       const scopedCfgPath = join(scopedDir, "actiondock.json");
       const scopedCfg = JSON.parse(readFileSync(scopedCfgPath, "utf-8"));
+      scopedCfg.actions = {
+        greet: {
+          entry: "actions/greet.ts",
+          description: "Scoped Greet Action",
+        },
+      };
       scopedCfg.playbooks = {
         deploy: {
           entry: "playbooks/deploy.md",
@@ -399,12 +409,23 @@ export default defineAction({
     // Simulate an old linked copy in global registry
     const oldDir = mkdtempSync(join(tmpdir(), "old-pkg-"));
     const currentDir = mkdtempSync(join(tmpdir(), "current-pkg-"));
+    const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
+    if (existsSync(rootNodeModules)) {
+      symlinkSync(rootNodeModules, join(oldDir, "node_modules"), "dir");
+      symlinkSync(rootNodeModules, join(currentDir, "node_modules"), "dir");
+    }
     try {
       initProject(oldDir, { id: "team.shared", name: "Old Copy" });
       initProject(currentDir, { id: "team.shared", name: "Current Working Copy" });
 
       const oldCfgPath = join(oldDir, "actiondock.json");
       const oldCfg = JSON.parse(readFileSync(oldCfgPath, "utf-8"));
+      oldCfg.actions = {
+        echo: {
+          entry: "actions/echo.ts",
+          description: "Old Echo Action",
+        },
+      };
       oldCfg.playbooks = {
         sop: {
           entry: "playbooks/sop.md",
@@ -415,6 +436,12 @@ export default defineAction({
 
       const curCfgPath = join(currentDir, "actiondock.json");
       const curCfg = JSON.parse(readFileSync(curCfgPath, "utf-8"));
+      curCfg.actions = {
+        echo: {
+          entry: "actions/echo.ts",
+          description: "Current Echo Action",
+        },
+      };
       curCfg.playbooks = {
         sop: {
           entry: "playbooks/sop.md",

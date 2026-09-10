@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import pkg from "../package.json";
 
-const cliPath = resolve(__dirname, "../bin/ad.js");
+const cliPath = resolve(import.meta.dirname, "../bin/ad.js");
 
 let tempHome: string | undefined;
 
@@ -30,7 +30,7 @@ describe("CLI End-to-End", () => {
     tempDir = mkdtempSync(join(tmpdir(), "actiondock-cli-e2e-"));
     tempHome = mkdtempSync(join(tmpdir(), "actiondock-cli-e2e-home-"));
     // Link root node_modules so @actiondock/sdk is available
-    const rootNodeModules = resolve(__dirname, "../../../node_modules");
+    const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
     if (existsSync(rootNodeModules)) {
       symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "dir");
     }
@@ -556,7 +556,7 @@ describe("CLI End-to-End", () => {
     // 12. Validate cross-package action in playbook
     const pkgBDir = join(tmpdir(), `test-ad-pkgb-${Date.now()}`);
     mkdirSync(pkgBDir, { recursive: true });
-    const rootNodeModules = resolve(__dirname, "../../../node_modules");
+    const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
     if (existsSync(rootNodeModules)) {
       symlinkSync(rootNodeModules, join(pkgBDir, "node_modules"), "dir");
     }
@@ -760,7 +760,9 @@ describe("CLI End-to-End", () => {
       expect(rmProc.stdout.toString()).toContain("[OK] Profile 'cloud-aliyun' removed");
 
     } finally {
-      serveProc.kill();
+      try {
+        serveProc.kill("SIGKILL");
+      } catch {}
       await serveProc.exited.catch(() => {});
       if (existsSync(serverHome)) {
         try {
@@ -783,7 +785,7 @@ describe("CLI End-to-End", () => {
     const wsHome = mkdtempSync(join(tmpdir(), "actiondock-link-home-"));
     const wsDir = mkdtempSync(join(tmpdir(), "actiondock-ws-"));
     const env = { ACTIONDOCK_HOME: wsHome, HOME: wsHome };
-    const rootNodeModules = resolve(__dirname, "../../../node_modules");
+    const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
 
     try {
       const sub1 = join(wsDir, "packages", "pkg1");
@@ -972,7 +974,7 @@ describe("CLI Review & Machine Contract Regression", () => {
     customDataDir = mkdtempSync(join(tmpdir(), "actiondock-regression-data-"));
     env = { ACTIONDOCK_HOME: customHome };
 
-    const rootNodeModules = resolve(__dirname, "../../../node_modules");
+    const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
     if (existsSync(rootNodeModules)) {
       symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "dir");
     }

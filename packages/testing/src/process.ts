@@ -1,4 +1,5 @@
 import type { ProcessExecutor } from "@actiondock/core";
+import { execCli } from "./cli";
 import type {
   DetachedProcessOptions,
   DetachedProcessResult,
@@ -132,10 +133,10 @@ export class MockProcessExecutor implements ProcessExecutor {
     if (options.signal?.aborted) {
       const res: ProcessResult = {
         ok: false,
-        exitCode: null,
+        exitCode: -1,
         signal: "SIGTERM",
         stdout: "",
-        stderr: "Process was cancelled by AbortSignal",
+        stderr: "Command aborted before execution by signal",
         raw: new Uint8Array(),
         timedOut: false,
         cancelled: true,
@@ -155,12 +156,34 @@ export class MockProcessExecutor implements ProcessExecutor {
     let resolved: MockProcessResultOptions | ProcessResult;
 
     if (!matchedMock) {
-      resolved = {
-        ok: true,
-        exitCode: 0,
-        stdout: "",
-        stderr: "",
-      };
+      try {
+        const cliRes = execCli(command, args, {
+          cwd: options.cwd,
+          env: options.env,
+          signal: options.signal,
+          timeout: options.timeoutMs,
+          input: options.input,
+          encoding: options.encoding,
+        });
+        resolved = {
+          ok: cliRes.ok,
+          exitCode: cliRes.exitCode,
+          stdout: cliRes.stdout,
+          stderr: cliRes.stderr,
+          raw: cliRes.raw,
+          timedOut: cliRes.timedOut,
+          durationMs: cliRes.durationMs,
+        };
+      } catch (err: any) {
+        resolved = {
+          ok: false,
+          exitCode: -1,
+          stdout: "",
+          stderr: err?.message || String(err),
+          raw: new Uint8Array(),
+          durationMs: Date.now() - startTime,
+        };
+      }
     } else if (typeof matchedMock.handler === "function") {
       resolved = await matchedMock.handler(command, args, options);
     } else {
@@ -231,6 +254,14 @@ export class MockProcessExecutor implements ProcessExecutor {
     }
 
     return finalResult;
+  }
+
+  async spawn(
+    command: string,
+    args: string[] = [],
+    options: ProcessExecOptions = {}
+  ): Promise<ProcessResult> {
+    return this.exec(command, args, options);
   }
 
   /**

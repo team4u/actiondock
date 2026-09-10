@@ -9,8 +9,8 @@ import { PACKAGE_ID_REGEX } from "../utils";
 
 export const MANIFEST_FILE_NAME = "actiondock.json";
 
-export const ACTION_ID_REGEX = /^[a-zA-Z0-9_.-]+$/;
-export const PLAYBOOK_ID_REGEX = /^[a-zA-Z0-9_.-]+$/;
+export const ACTION_ID_REGEX = /^[a-z0-9][a-z0-9._-]*$/;
+export const PLAYBOOK_ID_REGEX = /^[a-z0-9][a-z0-9._-]*$/;
 
 /**
  * 读取并解析项目的声明式清单文件（actiondock.json 为唯一事实源）。

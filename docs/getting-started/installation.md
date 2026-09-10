@@ -1,25 +1,25 @@
 # 安装与环境准备
 
-ActionDock 2.0 基础运行环境全面基于 Node.js 22.13.0 或更高版本构建，提供企业级长效支持与运行时稳定性，支持 npm、pnpm、yarn 等标准包管理工具。
+ActionDock 2.0 基础运行环境全面升级为 Node.js >=24.12.0，基于原生类型擦除、内置 SQLite 与原生 HTTP，支持 npm、pnpm、yarn 等标准包管理工具。
 
 ---
 
 ## 基础运行环境准备
 
-ActionDock 核心工具链与运行时需要 Node.js 22.13.0 或更高版本环境，以利用其原生内置的 SQLite 同步事务存储能力与标准 Web 流式处理引擎。
+ActionDock 核心工具链与运行时需要 Node.js >=24.12.0 环境，以利用其原生类型擦除、内置 SQLite 驱动与标准流式处理能力。
 
 ### 验证 Node.js 环境
 在终端执行以下命令确认运行环境版本：
 ```bash
 node --version
-# 输出需满足 v22.13.0 或更高版本
+# 输出需满足 v24.12.0 或更高版本
 ```
 
 ---
 
 ## 全局安装 ActionDock 命令行工具
 
-通过标准包管理工具全局安装 `@actiondock/cli` 门面工具包。该包将向操作系统注册全局命令 `ad` 与别名 `actiondock`。
+通过标准包管理工具全局安装 [@actiondock/cli](file:///root/code/action-dock/packages/cli/README.md) 门面工具包。该包将向操作系统注册全局命令 `ad` 与别名 `actiondock`。
 
 ### 全局安装方式
 使用 npm 进行全局安装：
@@ -45,47 +45,55 @@ ad --help
 
 ---
 
-## 独立二进制编译时的可选 Bun 编译器安装
+## 依赖管理与锁定文件
 
-在 ActionDock 架构中，请明确以下运行边界：
+ActionDock 2.0 采用标准的包依赖管理与锁定机制，无需安装任何外部专用编译器：
 
-- **日常开发与消费完全无需 Bun**：编写 Action 逻辑、本地调试执行、运行单元测试、启动 MCP 服务、部署 HTTP 远程微服务，以及作为 Agent Skill 消费，均完全基于 Node.js 运行，无需在开发机或部署服务器上安装 Bun。
-- **构建独立二进制的可选编译器**：仅当需要使用 `ad build` 命令将 Action Package 编译为单个零依赖的原生独立可执行二进制文件时，底层编译管线才需要调用 Bun 作为轻量打包编译引擎。
-
-### 安装 Bun 编译器（仅构建独立二进制需要）
-若需要执行独立二进制编译，可在开发机器上安装 Bun：
-```bash
-# 通过 npm 安装 Bun
-npm install -g bun
-
-# 验证编译器安装
-bun --version
-```
-
-### 目标环境免依赖部署说明
-由 `ad build` 编译生成的独立二进制程序为完全自包含的单一可执行文件。在目标生产服务器、精简容器镜像或 CI 沙箱中分发与运行该产物时，**无需安装 Node.js、无需安装 Bun，亦无需安装任何外部依赖包**，直接运行即可。
+- 依赖锁定：通过 [actiondock.lock.json](file:///root/code/action-dock/packages/core/src/project/lockfile.ts)（规范版本 lockfileVersion: 1）严格锁定依赖树版本与完整性散列。
+- 原子事务保护：使用 `ad add` 与 `ad remove` 命令安装或卸载依赖时，框架自动创建磁盘快照，在安装失败时自动回滚，杜绝依赖配置损坏。
+- 交付产物构建：使用 `ad build` 命令将项目构建为自包含的 Node.js 目录交付产物，或使用 `ad pack` 打包为标准 npm tarball。
 
 ---
 
 ## 贡献者本地开发模式与多包链接规范
 
-如果您需要从源码参与 ActionDock 核心框架的开发，或者在外部项目中联合调试本地修改的 ActionDock 源码，请遵循以下工作区链接规范。
+如果您需要从源码参与 ActionDock 核心框架的开发，或者在外部项目中联合调试本地修改的 ActionDock 源码，请遵循以下开发规范。
 
 ### 贡献者开发环境准备
-参与 ActionDock 框架核心开发时，除 Node.js 22.13.0 或更高版本外，开发机还需预先安装 Bun 1.2.0 或更高版本，作为 Monorepo 多包构建与测试执行器。
+参与 ActionDock 框架核心开发时，本地开发机需满足 Node.js >=24.12.0，推荐使用 npm 11 作为包管理器。日常开发、测试、构建与发布使用标准 npm 工作流；同时保留 `bun test` 作为跨环境兼容性验证。
 
 ### 克隆仓库与依赖安装
 克隆官方代码仓库并安装 Monorepo 工作区依赖：
 ```bash
 git clone https://github.com/team4u/actiondock.git
 cd actiondock
-bun install
+npm install
 ```
 
-### 全量构建子包产物
-在注册全局命令前，必须先执行全量构建生成全部子包的运行产物与类型声明：
+### 常用验证与构建命令
+- 执行全量单元测试与集成测试：
 ```bash
-bun run build
+npm test
+```
+
+- 执行全量 TypeScript 类型检查：
+```bash
+npm run typecheck
+```
+
+- 执行多包产物全量构建：
+```bash
+npm run build
+```
+
+- 执行发布打包冒烟测试：
+```bash
+npm run test:pack
+```
+
+- 执行跨环境兼容性验证测试：
+```bash
+bun test
 ```
 
 ### 注册本地全局命令行工具
@@ -94,10 +102,10 @@ bun run build
 cd packages/cli
 npm link
 ```
-完成链接后，全局执行 `ad` 将直接调用本地仓库中生成的最新产物。若后续修改了核心子包代码，需重新执行 `bun run build` 刷新编译产物。
+完成链接后，全局执行 `ad` 将直接调用本地仓库中生成的最新产物。若后续修改了核心子包代码，需重新执行 `npm run build` 刷新编译产物。
 
 ### 在外部项目中链接本地 SDK
-当在独立的 Action 业务项目中调试尚未发布至公共仓库的本地 `@actiondock/sdk` 修改时，可执行依赖链接：
+当在独立的 Action 业务项目中调试本地修改的 [@actiondock/sdk](file:///root/code/action-dock/packages/sdk/README.md) 时，可执行依赖链接：
 ```bash
 # 在 SDK 源码目录注册本地包链接
 cd /path/to/actiondock/packages/sdk
@@ -108,9 +116,9 @@ cd /path/to/my-action-project
 npm link @actiondock/sdk
 ```
 
-此时业务项目中的 `import { defineAction } from "@actiondock/sdk"` 将直接解析至本地 SDK 源码目录，获得即时生效的调试体验。
+此时业务项目中的引用将直接解析至本地 SDK 源码目录，获得即时生效的调试体验。
 
 ### 依赖链接规范与原则
 
-- **契约规范**：业务项目的 `package.json` 中应始终显式声明规范版本范围（例如 `"@actiondock/sdk": "^2.0.0"`），严禁改写为本地物理路径或本地相对路径，以确保团队协作、持续集成与独立构建产物的一致性。
-- **职责隔离**：系统包管理器链接用于解决本地开发态的代码寻址；ActionDock 内置的包注册机制（`ad link`）用于解决跨目录 Action 资产的定位与发现。两套机制职责独立，互不冲突。
+- 契约规范：业务项目的 `package.json` 中应始终显式声明规范版本范围（例如 `"@actiondock/sdk": "^2.0.0"`），严禁改写为本地物理路径或本地相对路径，以确保团队协作与持续集成的一致性。
+- 职责隔离：系统包管理器链接用于解决本地开发态的代码寻址；ActionDock 内置的包注册机制（`ad link`）用于解决跨目录 Action 资产的定位与发现。两套机制职责独立，互不冲突。

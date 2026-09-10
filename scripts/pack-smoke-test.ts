@@ -21,7 +21,7 @@ console.log("[START] Starting ActionDock Pack Smoke Test...");
 
 // Build all packages before packaging
 console.log("[BUILD] Building all packages via build script...");
-const preBuild = spawnSync("bun", ["run", "./scripts/build.ts"], {
+const preBuild = spawnSync(process.execPath, [join(rootDir, "scripts", "build.ts")], {
   cwd: rootDir,
   stdio: "inherit",
 });
@@ -37,7 +37,7 @@ try {
     const pkgDir = join(rootDir, "packages", pkg);
     console.log(`[PACK] Packing @actiondock/${pkg}...`);
 
-    const packProc = spawnSync("bun", ["pm", "pack"], {
+    const packProc = spawnSync("npm", ["pack"], {
       cwd: pkgDir,
       encoding: "utf8",
     });
@@ -46,9 +46,8 @@ try {
       throw new Error(`Failed to pack @actiondock/${pkg}: ${packProc.stderr}`);
     }
 
-    const output = (packProc.stdout || "") + (packProc.stderr || "");
-    const tgzMatch = output.match(/actiondock-[a-z0-9\-\.]+\.tgz/i);
-    const tgzFilename = tgzMatch ? tgzMatch[0] : `actiondock-${pkg}-${currentVersion}.tgz`;
+    const lines = packProc.stdout.trim().split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const tgzFilename = lines[lines.length - 1];
     const tgzPath = join(pkgDir, tgzFilename);
 
     if (!existsSync(tgzPath)) {
@@ -117,7 +116,7 @@ try {
 
   // Install packed tarballs into test environment
   console.log("[INSTALL] Installing packed tarballs into test environment...");
-  const installProc = spawnSync("bun", ["install"], {
+  const installProc = spawnSync("npm", ["install", "--no-audit", "--no-fund"], {
     cwd: testDir,
     encoding: "utf8",
   });
@@ -130,13 +129,13 @@ try {
   // Write Node.js test script covering all 7 packages
   console.log("[TEST] Testing module imports and runtime execution via native Node.js...");
   const testScriptContent = `
-import { defineAction, createTestRuntime } from "@actiondock/sdk";
+import { defineAction } from "@actiondock/sdk";
 import { ActionRunner, ExecutionService, SqliteRuntimeStorage, createStorage, ACTIONDOCK_VERSION } from "@actiondock/core";
 import { createActionDockMcpServer, toMcpResult } from "@actiondock/mcp";
-import { BuildPlanner, BunCompiler, SkillExporter, buildProject } from "@actiondock/builder";
+import { BuildPlanner, SkillExporter, buildProject } from "@actiondock/builder";
 import { createNodePlatform, NodeSqliteDriver, NodeHttpServer } from "@actiondock/runtime-node";
 import { main, createCliProgram, formatError, runStandaloneCli } from "@actiondock/cli";
-import { FakeClock, MemoryStorage, createTestRuntime as createTestingRuntime } from "@actiondock/testing";
+import { FakeClock, MemoryStorage, createTestRuntime } from "@actiondock/testing";
 
 // Verify SDK
 const greetAction = defineAction({
@@ -203,7 +202,7 @@ if (typeof main !== "function" || typeof createCliProgram !== "function" || type
 console.log("[OK] CLI main, createCliProgram, formatError, and runStandaloneCli verified");
 
 // Verify Testing
-if (typeof FakeClock !== "function" || typeof MemoryStorage !== "function" || typeof createTestingRuntime !== "function") {
+if (typeof FakeClock !== "function" || typeof MemoryStorage !== "function" || typeof createTestRuntime !== "function") {
   throw new Error("Testing exports missing FakeClock, MemoryStorage, or createTestRuntime");
 }
 console.log("[OK] Testing FakeClock, MemoryStorage, and createTestRuntime verified");
@@ -240,6 +239,7 @@ if (runs.length === 0 || runs[0].id !== execResult.runId || runs[0].status !== "
 await execService.close();
 await nodeStorage.close();
 console.log("[OK] Core ExecutionService with NodeSqliteDriver executed and verified");
+process.exit(0);
 `;
 
   writeFileSync(join(testDir, "test-runtime.mjs"), testScriptContent);
@@ -248,6 +248,7 @@ console.log("[OK] Core ExecutionService with NodeSqliteDriver executed and verif
   const nodeProc = spawnSync("node", ["test-runtime.mjs"], {
     cwd: testDir,
     encoding: "utf8",
+    timeout: 60000,
   });
 
   if (nodeProc.status !== 0) {

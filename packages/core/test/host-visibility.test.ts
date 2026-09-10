@@ -25,12 +25,18 @@ describe("Host 多包依赖可见性与锁文件加载集成", () => {
   ) {
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, MANIFEST_FILE_NAME), JSON.stringify(manifest, null, 2));
+    writeFileSync(
+      join(dir, "package.json"),
+      JSON.stringify({ name: manifest.id, version: manifest.version, type: "module" }, null, 2)
+    );
 
     if (actionHandlers) {
       const actDir = join(dir, "actions");
       mkdirSync(actDir, { recursive: true });
       for (const [name, code] of Object.entries(actionHandlers)) {
-        writeFileSync(join(actDir, `${name}.ts`), code);
+        const isDep = dir.includes("node_modules");
+        const filename = isDep ? `${name}.js` : `${name}.ts`;
+        writeFileSync(join(actDir, filename), code);
       }
     }
 
@@ -51,33 +57,33 @@ describe("Host 多包依赖可见性与锁文件加载集成", () => {
     const depBDir = join(rootDir, "node_modules", "pkg-b");
     const depCDir = join(rootDir, "node_modules", "pkg-c");
 
-    // 传递依赖包 pkg-c
+    // 传递依赖包 pkg-c（作为已打包安装在 node_modules 的包，暴露 .js 产物）
     const manifestC = {
       id: "pkg-c",
       version: "1.0.0",
       actions: {
-        "c-echo": { entry: "actions/c-echo.ts" },
-        "c-secret": { entry: "actions/c-secret.ts" },
+        "c-echo": { entry: "actions/c-echo.js" },
+        "c-secret": { entry: "actions/c-secret.js" },
       },
     };
     setupPackage(depCDir, manifestC, {
-      "c-echo": "export default function run(input: any) { return { echo: input?.text || 'hello' }; }",
+      "c-echo": "export default function run(input) { return { echo: input?.text || 'hello' }; }",
       "c-secret": "export default function run() { return { secret: '42' }; }",
     });
 
-    // 直接依赖包 pkg-b
+    // 直接依赖包 pkg-b（作为已打包安装在 node_modules 的包，暴露 .js 产物）
     const manifestB = {
       id: "pkg-b",
       version: "1.0.0",
       dependencies: { "pkg-c": "^1.0.0" },
       actions: {
-        "b-action": { entry: "actions/b-action.ts" },
+        "b-action": { entry: "actions/b-action.js" },
         "b-cascade-declared": {
-          entry: "actions/b-cascade-declared.ts",
+          entry: "actions/b-cascade-declared.js",
           uses: ["pkg-c/c-echo"],
         },
         "b-cascade-undeclared": {
-          entry: "actions/b-cascade-undeclared.ts",
+          entry: "actions/b-cascade-undeclared.js",
           uses: [],
         },
       },
@@ -85,9 +91,9 @@ describe("Host 多包依赖可见性与锁文件加载集成", () => {
     setupPackage(depBDir, manifestB, {
       "b-action": "export default function run() { return { ok: true }; }",
       "b-cascade-declared":
-        "export default async function run(input: any, ctx: any) { return ctx.actions.invoke('pkg-c/c-echo', { text: 'cascaded' }); }",
+        "export default async function run(input, ctx) { return ctx.actions.invoke('pkg-c/c-echo', { text: 'cascaded' }); }",
       "b-cascade-undeclared":
-        "export default async function run(input: any, ctx: any) { return ctx.actions.invoke('pkg-c/c-echo', { text: 'illegal' }); }",
+        "export default async function run(input, ctx) { return ctx.actions.invoke('pkg-c/c-echo', { text: 'illegal' }); }",
     });
 
     // 根工程 root-app，在 Playbook 中点名委托 pkg-c/c-echo
@@ -121,19 +127,15 @@ describe("Host 多包依赖可见性与锁文件加载集成", () => {
 
     // 写入锁文件
     const lockfile: ActionDockLockfile = {
-      lockfileVersion: 2,
+      lockfileVersion: 1,
       packages: {
         "pkg-b": {
-          packageId: "pkg-b",
-          npmPackage: "pkg-b",
-          version: "1.0.0",
+          package: "pkg-b",
           resolved: "1.0.0",
           manifestDigest: computeManifestDigest(manifestB),
         },
         "pkg-c": {
-          packageId: "pkg-c",
-          npmPackage: "pkg-c",
-          version: "1.0.0",
+          package: "pkg-c",
           resolved: "1.0.0",
           manifestDigest: computeManifestDigest(manifestC),
         },

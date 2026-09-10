@@ -1,6 +1,6 @@
 # 快速上手
 
-本指南面向工具创作者，介绍 Action Package 的初始化、编写规范、清单契约复用、本地测试与打包交付流程。
+本指南面向工具开发者，介绍 Action Package 的初始化、编写规范、单一事实源契约、本地测试与打包交付流程。
 
 ---
 
@@ -18,13 +18,12 @@ npm install
 
 ```text
 my-action/
-├── actiondock.json           # 项目元数据与配置声明
-├── actiondock.manifest.json  # 声明式元数据清单事实源
+├── actiondock.json           # 项目元数据、配置声明与动作清单唯一事实源
 ├── package.json              # 依赖管理与标准测试脚本
 ├── tsconfig.json             # TypeScript 现代模块规范配置
 ├── .gitignore                # 版本管理忽略规则
 ├── actions/                  # 原子 Action 源码目录
-│   └── greet.ts              # 脚手架示例 Action 源码
+│   └── greet.ts              # 示例 Action 业务执行函数源码
 ├── playbooks/                # 规程目录
 │   └── greet-user.md         # 示例 Playbook 规程
 └── tests/                    # 单元测试目录
@@ -59,94 +58,116 @@ my-action/
 
 ---
 
-## 编写 Action 与清单契约复用
+## 编写 Action 与单一事实源契约
 
 ### `actions/` 目录编写规范
 
 - **原子单一职责**：每个 Action 源码文件独立存放于 `actions/` 目录下，负责一项明确具体的工具能力。
-- **契约默认导出**：每个文件通过 `defineAction` 定义并作为默认导出对象。
-- **唯一标识命名**：Action 的 `id` 必须保持唯一，并推荐使用命名空间前缀（例如 `sample.greet` 或 `github.get-pr`）。
+- **纯粹执行函数**：源码仅通过 `defineAction` 定义纯粹的 `run` 执行函数与必要的输入输出逻辑，动作的标识、模式定义、标签与依赖声明统一交由 `actiondock.json` 管理。
 - **纯粹物理通道**：业务数据仅通过 `run` 方法返回值输出至标准输出；过程日志一律使用 `ctx.log` 写入标准错误输出，严禁使用 `console.log` 混杂输出流。
 
-### 源码唯一事实源与静态清单快照
+### `actiondock.json` 单一事实源
 
-在 ActionDock 体系中，TypeScript 源码中的 `defineAction` 声明是**唯一事实源**，负责强类型推导、运行时模式校验与实际业务执行。`actiondock.manifest.json` 清单文件则是面向编译构建、协议暴露与能力检索的**编译期静态快照**。
+在 ActionDock 2.0 中，`actiondock.json`（规范版本 `schemaVersion: 2`）是动作清单、配置项声明与跨包依赖的**唯一事实源**。彻底移除旧版清单，源码不再承载冗余的元数据定义。
+
+示例 `actiondock.json` 清单结构如下：
+
+```json
+{
+  "$schema": "https://actiondock.dev/schema/v2/actiondock.json",
+  "schemaVersion": 2,
+  "id": "my-action",
+  "name": "My Action Package",
+  "version": "0.1.0",
+  "description": "问候与演示示例包",
+  "config": {
+    "SAMPLE_GREETING": {
+      "description": "自定义问候语前缀",
+      "default": "Hello",
+      "type": "string"
+    }
+  },
+  "actions": {
+    "sample.greet": {
+      "entry": "actions/greet.ts",
+      "description": "问候用户的示例动作，演示入参、配置与状态的基本用法",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "被问候者的姓名"
+          }
+        },
+        "required": ["name"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "message": { "type": "string" },
+          "timesGreeted": { "type": "number" }
+        },
+        "required": ["message", "timesGreeted"]
+      },
+      "tags": ["sample"]
+    }
+  }
+}
+```
 
 ### 开发期静态发现原则
 
-ActionDock 遵循**开发期静态发现原则**：
-- **静态发现与能力暴露**：在执行 `ad info`、`ad list`、`ad playbook list` 以及启动 MCP 协议映射时，框架直接读取解析静态清单快照，无需也严禁动态执行 Action 的 TypeScript 业务代码，杜绝开发期的副作用与安全风险。
-- **构建规划与依赖裁剪**：在执行 `ad build` 或 `ad export skill` 时，构建引擎基于清单中的声明分析依赖闭包并完成代码静态裁剪。
-- **契约定义同步**：通过 `ad action create <id>` 脚手架创建新动作时，会自动在 `actions/` 生成模板源码并向 `actiondock.manifest.json` 注册契约项。
+ActionDock 遵循开发期静态发现原则：
+- **静态发现与能力暴露**：在执行 `ad info`、`ad list`、`ad playbook list` 以及启动 MCP 协议映射时，框架直接读取解析 `actiondock.json` 静态清单，无需也严禁动态执行 Action 的 TypeScript 业务代码，杜绝开发期的副作用与安全风险。
+- **构建规划与依赖裁剪**：在执行 `ad build`、`ad pack` 或 `ad export skill` 时，构建引擎基于 `actiondock.json` 中的声明分析依赖闭包并完成静态裁剪。
+- **统一模式校验**：外部调用输入与 Action 返回数据均依照 `actiondock.json` 中声明的 JSON Schema 严格校验，杜绝非法入参进入业务执行函数。
 
-### 清单校验与契约规范 (`ad validate`)
+### 清单与契约校验 (`ad validate`)
 
-当在源码中调整了 Action 属性（如修改了 `inputSchema`、`outputSchema`、`description` 或新增/删除了动作源码文件）后，可通过 `ad validate` 校验清单与契约规范的一致性：
+当在项目中调整了配置、新增或修改了 Action 声明与源码入口时，可通过 `ad validate` 校验配置清单的一致性与完整性：
 
-- **校验清单契约**：
+- **校验全量清单契约**：
   ```bash
   ad validate
   ```
-  该命令校验当前包中所有 Action 的清单契约、入口文件与模式规范。
+  该命令校验当前包中所有 Action 的入口文件存在性、Schema 规范与配置契约。
 - **校验指定 Action**：
   ```bash
-  ad validate <id>
+  ad validate sample.greet
   ```
-  在代码提交与持续集成自动化流水线中，通过指定 Action 标识符进行精确校验。
+  在持续集成流水线中针对具体动作进行精准校验。
 
-#### 源码与清单脱节的潜在后果
+### Action 源码实现
 
-若代码发生变更但未执行同步，会引发严重的运行期与构建期异常：
-- **运行期后果**：外部协议层（如 MCP 工具列表、智能体工具发现）依赖清单提供能力目录。若新增 Action 未入清单，智能体无法感知该能力；若接口模式脱节，智能体按旧清单构造的输入数据将在运行时被 `defineAction` 模式校验拦截而报错。
-- **构建期后果**：`ad build` 与 `ad export skill` 的静态裁剪器完全依据清单闭包进行打包。未在清单中声明的 Action 及其关联模块将被判定为冗余代码而直接丢弃，导致构建产物缺失核心能力。
-
-### Action 源码示例
-
-在 `actions/greet.ts` 中实现动作逻辑：
+在 `actions/greet.ts` 中仅定义纯粹的执行处理函数：
 
 ```ts
 import { defineAction } from "@actiondock/sdk";
 
-export default defineAction({
-  id: "sample.greet",
-  description: "问候用户的示例动作，演示入参、配置与状态的基本用法",
+interface GreetInput {
+  name: string;
+}
 
-  inputSchema: {
-    type: "object",
-    properties: {
-      name: {
-        type: "string",
-        description: "被问候者的姓名",
-      },
-    },
-    required: ["name"],
-  },
+interface GreetOutput {
+  message: string;
+  timesGreeted: number;
+}
 
-  outputSchema: {
-    type: "object",
-    properties: {
-      message: { type: "string" },
-      timesGreeted: { type: "number" },
-    },
-    required: ["message", "timesGreeted"],
-  },
+export default defineAction<GreetInput, GreetOutput>(async (input, ctx) => {
+  // 读取配置项（具备多级回退）
+  const greeting = ctx.config.get<string>("SAMPLE_GREETING", "Hello");
 
-  async run(input: { name: string }, ctx) {
-    // 读取配置项（多级回退）
-    const greeting = ctx.config.get("SAMPLE_GREETING", "Hello");
+  // 读取并自增状态计数
+  const count = ((await ctx.state.get<number>("greet_count")) || 0) + 1;
+  await ctx.state.set("greet_count", count);
 
-    // 读取并自增状态计数
-    const count = ((await ctx.state.get<number>("greet_count")) || 0) + 1;
-    await ctx.state.set("greet_count", count);
+  // 记录结构化诊断日志（输出至 stderr）
+  ctx.log.info(`问候 ${input.name}，累计问候次数：${count}`);
 
-    // 记录结构化诊断日志（输出至 stderr）
-    ctx.log.info(`问候 ${input.name}，累计问候次数：${count}`);
-
-    return {
-      message: `${greeting}, ${input.name}!`,
-      timesGreeted: count,
-    };
-  },
+  return {
+    message: `${greeting}, ${input.name}!`,
+    timesGreeted: count,
+  };
 });
 ```
 
@@ -177,7 +198,7 @@ ad run sample.greet --input '{"name": "ActionDock"}'
 
 ## 运行单元测试
 
-在 `tests/greet.test.ts` 中使用 `@actiondock/testing` 验证 Action 行为：
+在 `tests/greet.test.ts` 中从 `@actiondock/testing` 导入 `createTestRuntime`，验证 Action 行为：
 
 ```ts
 import { describe, it } from "node:test";
@@ -206,30 +227,48 @@ describe("greet action", () => {
 
 ```bash
 npm test
-# 或使用 CLI 命令
+# 或使用 CLI 门面命令
 ad test
 ```
 
 ---
 
-## 打包与产物交付
+## 打包与交付产物构建
 
-- **导出为 Agent Skill 产物**：
+ActionDock 2.0 提供了标准的目录型构建、npm Action 包打包与智能体 Skill 导出工具链：
+
+- **Node 目录型交付产物构建**（ad build）：
   ```bash
-  ad export skill
-  ```
-  产物生成在 `./dist/my-action-skill/` 目录下，包含标准 `SKILL.md` 与精简清单，可直接交付给各类 AI 智能体使用。
-- **编译为独立二进制产物**：
-  ```bash
+  # 构建标准可运行 Node.js 目录产物
   ad build
+
+  # 生成标准 zip 归档压缩包并物化锁定生产依赖
+  ad build --archive --vendor-deps
   ```
-  调用外部编译器生成单个零外部依赖的可执行文件，方便在容器或生产服务器上免环境运行。
+  生成包含独立入口、配置隔离和依赖闭包的 Node.js 运行目录或归档文件，方便在任何安装有 Node.js 的服务器或容器环境中部署运行。
+- **标准 npm Action 包打包**（ad pack）：
+  ```bash
+  # 生成用于 npm 发布的标准 tarball (.tgz)
+  ad pack
+
+  # 执行打包预检
+  ad pack --dry-run
+  ```
+- **导出为 Agent Skill 资产**（ad export skill）：
+  ```bash
+  # 导出源码型 Skill 资产
+  ad export skill --mode source
+
+  # 导出自包含 Node 目录型 Skill 资产
+  ad export skill --mode node --vendor-deps
+  ```
+  生成包含标准化 `SKILL.md` 的技能目录，便于消费端智能体快速加载使用。
 
 ---
 
 ## 下一步导引
 
-- 阅读 [深入业务 Action 开发](first-action.md) 了解真实 API 调用、进程管理与持久化。
-- 阅读 [编写 Playbook 规程](playbooks.md) 掌握面向 Agent 的标准化规程沉淀。
-- 阅读 [单元测试与沙箱验证](testing.md) 深入探索时钟推进与命令模拟。
-- 阅读 [构建、打包与 Skill 导出](build-and-export.md) 了解依赖裁剪与多目标平台交叉编译。
+- 阅读 [深入业务 Action 开发](file:///root/code/action-dock/docs/developer/first-action.md) 了解真实外部请求、进程管理与持久化。
+- 阅读 [编写 Playbook 规程](file:///root/code/action-dock/docs/developer/playbooks.md) 掌握面向智能体的标准化规程沉淀。
+- 阅读 [单元测试与沙箱验证](file:///root/code/action-dock/docs/developer/testing.md) 深入探索确定性时钟推进、进程执行模拟与内存存储。
+- 阅读 [构建规划与产物导出](file:///root/code/action-dock/docs/developer/build-and-export.md) 了解依赖闭包裁剪、依赖物化与可复现性校验。

@@ -27,19 +27,15 @@ describe("锁文件 actiondock.lock.json 读写与校验", () => {
 
   it("正确保存并读取锁文件且 packages 保持字母排序", () => {
     const lockfile: ActionDockLockfile = {
-      lockfileVersion: 2,
+      lockfileVersion: 1,
       packages: {
         "z-package": {
-          packageId: "z-package",
-          npmPackage: "@org/z-package",
-          version: "1.0.0",
+          package: "@org/z-package",
           resolved: "1.0.0",
           manifestDigest: "sha256-abc",
         },
         "a-package": {
-          packageId: "a-package",
-          npmPackage: "@org/a-package",
-          version: "2.1.0",
+          package: "@org/a-package",
           resolved: "2.1.0",
           manifestDigest: "sha256-def",
           dependencies: {
@@ -53,7 +49,7 @@ describe("锁文件 actiondock.lock.json 读写与校验", () => {
     saveLockfile(tempDir, lockfile);
     const loaded = loadLockfile(tempDir);
     expect(loaded).not.toBeNull();
-    expect(loaded?.lockfileVersion).toBe(2);
+    expect(loaded?.lockfileVersion).toBe(1);
 
     const keys = Object.keys(loaded?.packages || {});
     expect(keys).toEqual(["a-package", "z-package"]);
@@ -64,12 +60,10 @@ describe("锁文件 actiondock.lock.json 读写与校验", () => {
 
   it("校验锁文件格式合法性", () => {
     const validLock: ActionDockLockfile = {
-      lockfileVersion: 2,
+      lockfileVersion: 1,
       packages: {
         "my.package": {
-          packageId: "my.package",
-          npmPackage: "@scope/my.package",
-          version: "1.0.0",
+          package: "@scope/my.package",
           resolved: "1.0.0",
           manifestDigest: "sha256-123456",
         },
@@ -80,10 +74,127 @@ describe("锁文件 actiondock.lock.json 读写与校验", () => {
     expect(res.valid).toBe(true);
     expect(res.errors).toBeUndefined();
 
-    const invalidVersion = { ...validLock, lockfileVersion: 1 };
+    const invalidVersion = { ...validLock, lockfileVersion: 99 as any };
     const resInvalid = validateLockfile(invalidVersion);
     expect(resInvalid.valid).toBe(false);
     expect(resInvalid.errors?.[0]).toContain("lockfileVersion");
+  });
+
+  it("validateLockfile 严格校验非对象根结构与 packages 字段", () => {
+    expect(validateLockfile(null).valid).toBe(false);
+    expect(validateLockfile(undefined).valid).toBe(false);
+    expect(validateLockfile("string").valid).toBe(false);
+    expect(validateLockfile([]).valid).toBe(false);
+    expect(validateLockfile(123).valid).toBe(false);
+
+    const noPackages = validateLockfile({ lockfileVersion: 1 });
+    expect(noPackages.valid).toBe(false);
+    expect(noPackages.errors?.some((e) => e.includes("'packages' must be an object"))).toBe(true);
+
+    const arrayPackages = validateLockfile({ lockfileVersion: 1, packages: [] });
+    expect(arrayPackages.valid).toBe(false);
+    expect(arrayPackages.errors?.some((e) => e.includes("'packages' must be an object"))).toBe(true);
+
+    const nullPackages = validateLockfile({ lockfileVersion: 1, packages: null });
+    expect(nullPackages.valid).toBe(false);
+    expect(nullPackages.errors?.some((e) => e.includes("'packages' must be an object"))).toBe(true);
+  });
+
+  it("validateLockfile 严格校验 package、resolved 与 manifestDigest 必填字段及条目类型", () => {
+    // 条目不是对象
+    const nonObjectEntry = validateLockfile({
+      lockfileVersion: 1,
+      packages: {
+        "pkg-a": "not-an-object" as any,
+        "pkg-b": null as any,
+      },
+    });
+    expect(nonObjectEntry.valid).toBe(false);
+    expect(nonObjectEntry.errors?.some((e) => e.includes("Package entry 'pkg-a' must be an object"))).toBe(true);
+    expect(nonObjectEntry.errors?.some((e) => e.includes("Package entry 'pkg-b' must be an object"))).toBe(true);
+
+    // 缺少 package 字段
+    const missingPackage = validateLockfile({
+      lockfileVersion: 1,
+      packages: {
+        "pkg-a": {
+          resolved: "1.0.0",
+          manifestDigest: "sha256-abc",
+        } as any,
+      },
+    });
+    expect(missingPackage.valid).toBe(false);
+    expect(missingPackage.errors?.some((e) => e.includes("missing required string property 'package'"))).toBe(true);
+
+    // 缺少 resolved 字段
+    const missingResolved = validateLockfile({
+      lockfileVersion: 1,
+      packages: {
+        "pkg-a": {
+          package: "@org/pkg-a",
+          manifestDigest: "sha256-abc",
+        } as any,
+      },
+    });
+    expect(missingResolved.valid).toBe(false);
+    expect(missingResolved.errors?.some((e) => e.includes("missing required string property 'resolved'"))).toBe(true);
+
+    // 缺少 manifestDigest 字段
+    const missingDigest = validateLockfile({
+      lockfileVersion: 1,
+      packages: {
+        "pkg-a": {
+          package: "@org/pkg-a",
+          resolved: "1.0.0",
+        } as any,
+      },
+    });
+    expect(missingDigest.valid).toBe(false);
+    expect(missingDigest.errors?.some((e) => e.includes("missing required string property 'manifestDigest'"))).toBe(true);
+  });
+
+  it("loadLockfile 在文件损坏、版本不支持或结构非法时抛出明确异常", () => {
+    const lockfilePath = join(tempDir, "actiondock.lock.json");
+
+    // 1. JSON 格式损坏
+    writeFileSync(lockfilePath, "{ invalid json content ...", "utf-8");
+    expect(() => loadLockfile(tempDir)).toThrow(/Corrupted or duplicate keys in lockfile/);
+
+    // 2. JSON 包含重复键
+    writeFileSync(
+      lockfilePath,
+      JSON.stringify({ lockfileVersion: 1, packages: {} })
+        .replace("}", ', "lockfileVersion": 1}'),
+      "utf-8"
+    );
+    expect(() => loadLockfile(tempDir)).toThrow(/Corrupted or duplicate keys in lockfile/);
+
+    // 3. 根结构不是对象（例如 JSON 数组）
+    writeFileSync(lockfilePath, JSON.stringify([1, 2, 3]), "utf-8");
+    expect(() => loadLockfile(tempDir)).toThrow(/Invalid lockfile format.*expected a JSON object/);
+
+    // 4. lockfileVersion 不是 1（例如版本 2 或 99）
+    writeFileSync(
+      lockfilePath,
+      JSON.stringify({ lockfileVersion: 2, packages: {} }),
+      "utf-8"
+    );
+    expect(() => loadLockfile(tempDir)).toThrow(/Unsupported lockfileVersion.*received '2', expected 1/);
+
+    // 5. packages 字段缺失或非对象
+    writeFileSync(
+      lockfilePath,
+      JSON.stringify({ lockfileVersion: 1, packages: [1, 2, 3] }),
+      "utf-8"
+    );
+    expect(() => loadLockfile(tempDir)).toThrow(/Invalid lockfile format.*'packages' must be an object/);
+
+    writeFileSync(
+      lockfilePath,
+      JSON.stringify({ lockfileVersion: 1 }),
+      "utf-8"
+    );
+    expect(() => loadLockfile(tempDir)).toThrow(/Invalid lockfile format.*'packages' must be an object/);
   });
 
   it("当 actiondock.json 清单变更导致与记录的 manifestDigest 不匹配时校验失败", () => {
@@ -101,12 +212,10 @@ describe("锁文件 actiondock.lock.json 读写与校验", () => {
     const digestV1 = computeManifestDigest(manifestV1);
 
     const lockfile: ActionDockLockfile = {
-      lockfileVersion: 2,
+      lockfileVersion: 1,
       packages: {
         "someone.github-actions": {
-          packageId: "someone.github-actions",
-          npmPackage: "@someone/github-actions",
-          version: "1.0.0",
+          package: "@someone/github-actions",
           resolved: "1.0.0",
           manifestDigest: digestV1,
         },

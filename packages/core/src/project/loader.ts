@@ -77,7 +77,8 @@ export function loadProjectConfig(projectRoot: string): ProjectConfig {
   const content = readFileSync(configPath, "utf-8");
   try {
     const parsed = JSON.parse(content);
-    if (!parsed.id || typeof parsed.id !== "string" || !PACKAGE_ID_REGEX.test(parsed.id)) {
+    const isScoped = /^@[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(parsed.id);
+    if (!parsed.id || typeof parsed.id !== "string" || (!PACKAGE_ID_REGEX.test(parsed.id) && !isScoped)) {
       throw new Error(`actiondock.json invalid or missing 'id': '${parsed?.id}' (must match ${PACKAGE_ID_REGEX})`);
     }
     if (!parsed.name || typeof parsed.name !== "string") {
@@ -86,11 +87,12 @@ export function loadProjectConfig(projectRoot: string): ProjectConfig {
     if (!parsed.version || typeof parsed.version !== "string") {
       parsed.version = "0.1.0";
     }
-    parsed.actionsDir = parsed.actionsDir || "actions";
-    parsed.playbooksDir = parsed.playbooksDir || "playbooks";
-
-    assertWithinProjectRoot(projectRoot, parsed.actionsDir, "actionsDir");
-    assertWithinProjectRoot(projectRoot, parsed.playbooksDir, "playbooksDir");
+    if (parsed.actionsDir) {
+      assertWithinProjectRoot(projectRoot, parsed.actionsDir, "actionsDir");
+    }
+    if (parsed.playbooksDir) {
+      assertWithinProjectRoot(projectRoot, parsed.playbooksDir, "playbooksDir");
+    }
 
     return parsed as ProjectConfig;
   } catch (err: any) {

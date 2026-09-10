@@ -18,15 +18,15 @@
     "README.md"
   ],
   "engines": {
-    "node": ">=22.13.0"
+    "node": ">=24.12.0"
   },
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
-    "build": "bun run ../../scripts/build.ts",
-    "test": "bun test"
+    "build": "node ../../scripts/build.ts",
+    "test": "node ../../scripts/run-tests.ts"
   },
   "keywords": [
     "actiondock",

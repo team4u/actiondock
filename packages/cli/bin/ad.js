@@ -1,55 +1,49 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
+import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-const isBun = typeof process.versions.bun !== "undefined";
+const distEntry = resolve(import.meta.dirname, "../dist/index.js");
 
-// 本进程是否已挂载 tsx 引导器。execArgv 不会被子进程继承，必须逐进程检测；
-// 严禁改用环境变量判断：Action 内嵌套调度的 ad 子进程会继承父进程环境变量，
-// 却不继承 --import，误判为已引导后会直接 import node_modules 下的 TS 源码，
-// 触发 ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING。
-// 注意也不能依赖 Node 原生类型剥离：它拒绝 node_modules 下的文件，且不支持源码中的目录导入。
-const hasTsx =
-  process.execArgv.some((arg, i) => arg === "--import" && process.execArgv[i + 1]?.includes("tsx")) ||
-  process.execArgv.some((arg) => arg.includes("tsx"));
+if (existsSync(distEntry)) {
+  const { main } = await import(pathToFileURL(distEntry).href);
+  await main(process.argv);
+} else {
+  // 开发调试态（源码仓库且未预先构建 dist 时）
+  const isBun = typeof process.versions.bun !== "undefined";
+  const hasTsx =
+    process.execArgv.some((arg, i) => arg === "--import" && process.execArgv[i + 1]?.includes("tsx")) ||
+    process.execArgv.some((arg) => arg.includes("tsx"));
 
-if (!isBun && !hasTsx) {
-  const require = createRequire(import.meta.url);
-  let tsxSpecifier = "tsx";
-  try {
-    tsxSpecifier = pathToFileURL(require.resolve("tsx")).href;
-  } catch {
+  if (!isBun && !hasTsx) {
+    const require = createRequire(import.meta.url);
+    let tsxSpecifier = null;
     try {
-      const runtimeNodePkg = require.resolve("@actiondock/runtime-node/package.json");
-      const runtimeReq = createRequire(runtimeNodePkg);
-      tsxSpecifier = pathToFileURL(runtimeReq.resolve("tsx")).href;
+      tsxSpecifier = pathToFileURL(require.resolve("tsx")).href;
     } catch {
-      // 回退为裸模块名
+      try {
+        const runtimeNodePkg = require.resolve("@actiondock/runtime-node/package.json");
+        const runtimeReq = createRequire(runtimeNodePkg);
+        tsxSpecifier = pathToFileURL(runtimeReq.resolve("tsx")).href;
+      } catch {
+        // 无可用 tsx 模块
+      }
+    }
+
+    if (tsxSpecifier) {
+      const res = spawnSync(
+        process.execPath,
+        ["--import", tsxSpecifier, fileURLToPath(import.meta.url), ...process.argv.slice(2)],
+        {
+          stdio: "inherit",
+        }
+      );
+      process.exit(res.status ?? (res.signal ? 1 : 0));
     }
   }
 
-  const extraArgs = [];
-  const [major, minor] = (process.versions.node || "").split(".").map(Number);
-  if (major === 22 && minor < 13) {
-    extraArgs.push("--experimental-sqlite");
-  }
-
-  const res = spawnSync(
-    process.execPath,
-    ["--import", tsxSpecifier, ...extraArgs, fileURLToPath(import.meta.url), ...process.argv.slice(2)],
-    {
-      stdio: "inherit",
-    }
-  );
-  process.exit(res.status ?? (res.signal ? 1 : 0));
+  const { main } = await import("../src/index.ts");
+  await main(process.argv);
 }
-
-let main;
-try {
-  ({ main } = await import("../dist/index.js"));
-} catch {
-  ({ main } = await import("../src/index.ts"));
-}
-await main(process.argv);
-

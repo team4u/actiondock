@@ -23,15 +23,15 @@
     "README.md"
   ],
   "engines": {
-    "node": ">=22.13.0"
+    "node": ">=24.12.0"
   },
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
-    "build": "bun run ../../scripts/build.ts",
-    "test": "bun test"
+    "build": "node ../../scripts/build.ts",
+    "test": "node ../../scripts/run-tests.ts"
   },
   "dependencies": {
     "@actiondock/builder": "^2.0.12",
@@ -39,8 +39,7 @@
     "@actiondock/mcp": "^2.0.12",
     "@actiondock/runtime-node": "^2.0.12",
     "@actiondock/sdk": "^2.0.12",
-    "commander": "^13.1.0",
-    "tsx": "^4.19.3"
+    "commander": "^13.1.0"
   },
   "devDependencies": {
     "typescript": "^5.7.0"

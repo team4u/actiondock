@@ -191,7 +191,7 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
       const check2 = storage.checkAndRecordIdempotency(record);
       expect(check2.outcome).toBe("new");
 
-      storage.close();
+      await storage.close();
     });
   });
 

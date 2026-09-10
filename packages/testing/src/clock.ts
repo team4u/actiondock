@@ -28,14 +28,20 @@ export interface FakeClockOptions {
 export class FakeClock implements Clock {
   private currentNow: number;
   private currentMonotonic: number;
+  private initialRealNow: number;
+  private advancedMs = 0;
+  private isFixed = false;
   private nextTimerId = 1;
   private pendingSleeps: ScheduledSleep[] = [];
 
   constructor(options: FakeClockOptions = {}) {
     if (options.now !== undefined) {
       this.currentNow = new Date(options.now).getTime();
+      this.isFixed = true;
+      this.initialRealNow = this.currentNow;
     } else {
       this.currentNow = Date.now();
+      this.initialRealNow = Date.now();
     }
     this.currentMonotonic = options.startMonotonic ?? 0;
   }
@@ -44,7 +50,11 @@ export class FakeClock implements Clock {
    * 获取当前模拟墙上时间。
    */
   now(): Date {
-    return new Date(this.currentNow);
+    if (this.isFixed) {
+      return new Date(this.currentNow);
+    }
+    const realElapsed = Date.now() - this.initialRealNow;
+    return new Date(this.initialRealNow + Math.max(this.advancedMs, realElapsed));
   }
 
   /**
@@ -96,6 +106,7 @@ export class FakeClock implements Clock {
 
     const destinationMonotonic = this.currentMonotonic + ms;
     const destinationNow = this.currentNow + ms;
+    this.advancedMs += ms;
 
     while (this.pendingSleeps.length > 0) {
       const nextSleep = this.pendingSleeps[0];

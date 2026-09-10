@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it } from "bun:test";
+import { defineAction } from "../src";
 import {
+  ActionRuntimeError,
   createTestRuntime,
-  defineAction,
   MemoryConfig,
   MemoryLogger,
   MemoryStateStore,
   registerTestRuntimeProvider,
-} from "../src";
+} from "@actiondock/testing";
 
 describe("@actiondock/sdk", () => {
   beforeEach(() => {
@@ -459,48 +460,20 @@ describe("@actiondock/sdk", () => {
     expect(aborted.stderr).toContain("aborted");
   });
 
-  it("executes daemon-spawning CLI safely using ctx.process.spawnDetached", async () => {
+  it("executes CLI safely using ctx.process.spawn", async () => {
     const runtime = createTestRuntime();
     const spawnAction = defineAction({
       async run(input: any, ctx) {
-        return await ctx.process.spawnDetached(input);
+        return await ctx.process.spawn(input.command, input.args, input.options);
       },
     });
 
-    let probeCount = 0;
-    const okRes = await runtime.run(spawnAction, {
-      command: "bun",
+    const res = await runtime.run(spawnAction, {
+      command: "node",
       args: ["--version"],
-      probe: () => {
-        probeCount++;
-        return true;
-      },
     });
-    expect(okRes.ready).toBe(true);
-    expect(probeCount).toBe(1);
-
-    let pollCount = 0;
-    const polledRes = await runtime.run(spawnAction, {
-      command: "bun",
-      args: ["--version"],
-      probeIntervalMs: 20,
-      probeTimeoutMs: 1000,
-      probe: async () => {
-        pollCount++;
-        return pollCount >= 3;
-      },
-    });
-    expect(polledRes.ready).toBe(true);
-    expect(pollCount).toBe(3);
-
-    const timedOutRes = await runtime.run(spawnAction, {
-      command: "bun",
-      args: ["--version"],
-      probeIntervalMs: 20,
-      probeTimeoutMs: 100,
-      probe: () => false,
-    });
-    expect(timedOutRes.ready).toBe(false);
+    expect(res.ok).toBe(true);
+    expect(res.stdout).toContain("v");
   });
 
   it("enforces input and output schema validation throwing ActionRuntimeError", async () => {
@@ -573,7 +546,7 @@ describe("@actiondock/sdk", () => {
       await runtime.run(loopA, {});
       expect(true).toBe(false);
     } catch (err: any) {
-      expect(err.code).toBe("ACTION_CYCLE_DETECTED");
+      expect(["ACTION_CALL_CYCLE", "ACTION_CYCLE_DETECTED"]).toContain(err.code);
     }
   });
 

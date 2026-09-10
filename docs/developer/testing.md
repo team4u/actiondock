@@ -1,41 +1,42 @@
 # 实践指南：单元测试与沙箱验证
 
-ActionDock 倡导开箱即测试与确定性验证理念。在 ActionDock 2.0 中，测试基础设施由 `@actiondock/testing` 独立测试包提供，与标准 Node.js 测试框架（`node:test`、`node:assert/strict`）及 `tsx` 原生对齐，无需启动任何外部依赖、真实后台服务或真实数据库，即可在内存中完成全生命周期的精确验证。
+ActionDock 倡导开箱即测试与确定性验证理念。在 ActionDock 2.0 中，测试基础设施下沉至 `@actiondock/testing` 独立测试包，与标准 Node.js 测试框架（`node:test`、`node:assert/strict`）及 `tsx` 原生对齐，无需启动任何外部依赖、真实后台服务或真实数据库，即可在内存中完成全生命周期的精确验证。
 
 ---
 
 ## 核心测试组件
 
-`@actiondock/testing` 包含三大确定性基础设施组件，分别用于掌控时间、拦截外部进程与隔离持久化存储。
+`@actiondock/testing` 包含三大确定性基础设施组件，分别用于掌控时间、拦截外部进程与隔离持久化存储：
 
-- **时间调度**：`FakeClock`
-  提供对虚拟时间和单调时间的完全控制。支持通过 `clock.monotonic()` 获取单调时间戳，通过 `clock.now()` 获取虚拟墙上时间。调用 `await clock.advance(ms)` 可以瞬间推进虚拟时间，并按预设时刻精确触发所有到期的休眠计时器，无需真实等待，彻底解决异步测试缓慢和偶发不稳定的问题。
-- **进程模拟**：`MockProcessExecutor`
-  遵循进程执行器契约，用于在单元测试中拦截外部命令行调用（如 `git`、`docker`、`curl` 或无头浏览器 CLI）。支持通过字符串、正则表达式或判定函数注册匹配规则，支持预设命令的输出文本、错误文本、退出码、超时标记以及取消标记，并自动记录完整的调用历史，便于进行断言检查。
-- **内存存储**：`MemoryStorage`
-  基于内存 SQLite 构建，提供与生产环境完全一致的配置多级解析、状态命名空间隔离、基于虚拟时钟的键值生存时间自动失效机制，以及运行记录的终态落库契约。
+- **确定性时钟：FakeClock**
+  提供对虚拟时间和单调时间的完全控制。支持通过 `clock.monotonic()` 获取单调时间戳，通过 `clock.now()` 获取虚拟墙上时间。调用 `await clock.advance(ms)` 瞬间推进虚拟时间，并按预设时刻精确触发所有到期的定时任务，无需真实等待，彻底解决异步测试缓慢和偶发不稳定的问题。
+- **进程执行模拟：MockProcessExecutor**
+  遵循标准进程执行器契约，用于在单元测试中拦截外部命令行调用（如 `git`、`docker`、`curl` 或无头浏览器）。支持通过命令字符串、正则表达式或判定函数注册匹配规则，支持预设输出文本、错误文本、退出码、超时标记与取消标记，并自动记录完整的调用历史，便于进行断言检查。
+- **内存存储引擎：MemoryStorage**
+  基于内存构建，提供与生产环境完全一致的配置多级解析、状态命名空间隔离、基于虚拟时钟的键值生存时间自动失效机制，以及运行记录的终态落库契约。
 
 ---
 
-## 全功能测试运行时 `createTestRuntime`
+## 全功能测试运行时：createTestRuntime
 
-`createTestRuntime` 深度复用内核执行引擎 `ActionRunner`，为测试提供完整的 Action 执行生命周期。
+`createTestRuntime` 从 `@actiondock/testing` 导出，深度复用内核执行引擎 `ActionRunner`，为测试提供完整的 Action 执行生命周期。
 
-### 核心方法对比
+### 核心方法说明
 
-- **直接返回结果**：`runtime.run(action, input)`
+- **直接返回业务数据**：`runtime.run(action, input)`
   执行指定的 Action 并直接解包返回业务数据。如果执行期间发生模式校验失败、超时、取消或业务异常，该方法会直接抛出规范化的 `ActionRuntimeError` 异常（包含错误码 `code`、描述信息 `message` 与详细信息 `details`），非常适合进行常规业务逻辑与成功路径断言。
-- **返回执行信封**：`runtime.execute(action, input, options)`
+- **返回标准执行信封**：`runtime.execute(action, input, options)`
   执行指定的 Action 并返回结构完整的 `ExecutionResult` 执行信封。无论成功还是失败均不抛出异常，而是返回带有 `ok: true` 及业务数据 `data`，或者带有 `ok: false` 及结构化错误对象 `error` 的信封对象，适合用于验证错误码、运行标识 `runId` 以及超时或取消控制。
 
-### 运行时调试接口
+### 运行时调试与插桩接口
 
 `createTestRuntime` 创建的运行时实例暴露了丰富的调试与插桩接口：
 
 - **配置管理器**：`runtime.config`，支持调用 `set(key, value)` 动态注入测试配置，调用 `get(key)` 读取配置，调用 `list()` 列出当前配置。
 - **状态存储库**：`runtime.state`，支持调用 `get(key)`、`set(key, value, ttl)`、`keys()`、`scope(namespace)` 等方法断言和预置状态数据。
-- **虚拟时钟**：`runtime.clock`，即绑定的 `FakeClock` 实例，可直接调用 `await runtime.clock.advance(ms)` 推进测试时间。
-- **进程执行器**：`runtime.process`，即绑定的 `MockProcessExecutor` 实例，可注册命令规则并检查调用记录。
+- **确定性时钟**：`runtime.clock`，即绑定的 `FakeClock` 实例，可直接调用 `await runtime.clock.advance(ms)` 推进测试时间。
+- **进程模拟器**：`runtime.process`，即绑定的 `MockProcessExecutor` 实例，可注册命令规则并检查调用记录。
+- **存储引擎**：`runtime.storage`，即底层的 `MemoryStorage` 实例，支持直接审查内存中的持久化数据。
 - **事件总线**：`runtime.events`，记录 Action 执行生命周期产生的所有事件（包含启动、进度报告、状态变更与完成事件）。
 
 ---
@@ -54,23 +55,7 @@ import assert from "node:assert/strict";
 import { defineAction } from "@actiondock/sdk";
 import { ActionRuntimeError, createTestRuntime } from "@actiondock/testing";
 
-const validateAction = defineAction({
-  id: "math.divide",
-  inputSchema: {
-    type: "object",
-    properties: {
-      dividend: { type: "number" },
-      divisor: { type: "number" },
-    },
-    required: ["dividend", "divisor"],
-  },
-  outputSchema: {
-    type: "object",
-    properties: {
-      quotient: { type: "number" },
-    },
-    required: ["quotient"],
-  },
+const divideAction = defineAction({
   run(input: { dividend: number; divisor: number }) {
     return { quotient: input.dividend / input.divisor };
   },
@@ -78,10 +63,37 @@ const validateAction = defineAction({
 
 describe("模式校验测试", () => {
   it("输入参数校验不通过时应当拒绝执行", async () => {
-    const runtime = createTestRuntime();
+    const runtime = createTestRuntime({
+      projectConfig: {
+        id: "math-pkg",
+        actions: {
+          "math.divide": {
+            entry: "actions/divide.ts",
+            inputSchema: {
+              type: "object",
+              properties: {
+                dividend: { type: "number" },
+                divisor: { type: "number" },
+              },
+              required: ["dividend", "divisor"],
+            },
+            outputSchema: {
+              type: "object",
+              properties: {
+                quotient: { type: "number" },
+              },
+              required: ["quotient"],
+            },
+          },
+        },
+      },
+      actions: {
+        "math.divide": divideAction,
+      },
+    });
 
     // 缺少必填参数 divisor
-    const envelope = await runtime.execute(validateAction, { dividend: 10 } as any);
+    const envelope = await runtime.execute("math.divide", { dividend: 10 } as any);
     assert.equal(envelope.ok, false);
     if (!envelope.ok) {
       assert.equal(envelope.error.code, "INPUT_VALIDATION_FAILED");
@@ -90,7 +102,7 @@ describe("模式校验测试", () => {
     // 使用 runtime.run 断言抛出规范化异常
     await assert.rejects(
       async () => {
-        await runtime.run(validateAction, { dividend: 10 } as any);
+        await runtime.run("math.divide", { dividend: 10 } as any);
       },
       (err: any) => {
         assert.ok(err instanceof ActionRuntimeError);
@@ -112,13 +124,10 @@ import assert from "node:assert/strict";
 import { defineAction } from "@actiondock/sdk";
 import { createTestRuntime } from "@actiondock/testing";
 
-const configAction = defineAction({
-  id: "service.fetch-data",
-  run(_input, ctx) {
-    const endpoint = ctx.config.get<string>("ENDPOINT_URL", "https://default.api");
-    const timeout = ctx.config.get<number>("TIMEOUT_MS", 3000);
-    return { endpoint, timeout };
-  },
+const configAction = defineAction((_input, ctx) => {
+  const endpoint = ctx.config.get<string>("ENDPOINT_URL", "https://default.api");
+  const timeout = ctx.config.get<number>("TIMEOUT_MS", 3000);
+  return { endpoint, timeout };
 });
 
 describe("配置优先级测试", () => {
@@ -147,7 +156,7 @@ describe("配置优先级测试", () => {
 });
 ```
 
-### 状态持久化与虚拟时间失效测试
+### 状态持久化与虚拟时钟失效测试
 
 验证状态存取、命名空间隔离以及基于 `FakeClock` 瞬间推进时间的自动过期机制，无需真实等待：
 
@@ -157,14 +166,11 @@ import assert from "node:assert/strict";
 import { defineAction } from "@actiondock/sdk";
 import { createTestRuntime, FakeClock } from "@actiondock/testing";
 
-const sessionAction = defineAction({
-  id: "auth.create-session",
-  async run(input: { userId: string }, ctx) {
-    const token = `token-${input.userId}`;
-    // 写入具有 10 秒生存时间的状态
-    await ctx.state.set(`token:${input.userId}`, token, 10);
-    return { token };
-  },
+const sessionAction = defineAction(async (input: { userId: string }, ctx) => {
+  const token = `token-${input.userId}`;
+  // 写入具有 10 秒生存时间的状态
+  await ctx.state.set(`token:${input.userId}`, token, 10);
+  return { token };
 });
 
 describe("状态生命周期与失效测试", () => {
@@ -199,17 +205,14 @@ import assert from "node:assert/strict";
 import { defineAction } from "@actiondock/sdk";
 import { createTestRuntime } from "@actiondock/testing";
 
-const longRunningAction = defineAction({
-  id: "job.sleep",
-  async run(_input, ctx) {
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => resolve({ finished: true }), 1000);
-      ctx.signal.addEventListener("abort", () => {
-        clearTimeout(timer);
-        reject(new Error("aborted"));
-      });
+const longRunningAction = defineAction(async (_input, ctx) => {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => resolve({ finished: true }), 1000);
+    ctx.signal.addEventListener("abort", () => {
+      clearTimeout(timer);
+      reject(new Error("aborted"));
     });
-  },
+  });
 });
 
 describe("超时与信号取消测试", () => {
@@ -244,75 +247,9 @@ describe("超时与信号取消测试", () => {
 });
 ```
 
-### Action 嵌套互调与环路检测测试
-
-验证通过 `ctx.actions.invoke` 进行下游 Action 互调，以及循环调用死锁的自动检测拦截：
-
-```ts
-import { describe, it } from "node:test";
-import assert from "node:assert/strict";
-import { defineAction, type ActionDefinition } from "@actiondock/sdk";
-import { createTestRuntime } from "@actiondock/testing";
-
-const multiplyAction = defineAction({
-  id: "math.multiply",
-  run(input: { a: number; b: number }) {
-    return { result: input.a * input.b };
-  },
-});
-
-const calculateAction = defineAction({
-  id: "math.square-plus-one",
-  async run(input: { val: number }, ctx) {
-    // 互调下游 Action
-    const mult = await ctx.actions.invoke(multiplyAction, { a: input.val, b: input.val });
-    return { final: mult.result + 1 };
-  },
-});
-
-describe("Action 嵌套与环路测试", () => {
-  it("正常执行嵌套调用", async () => {
-    const runtime = createTestRuntime({
-      actions: [multiplyAction, calculateAction],
-    });
-
-    const result = await runtime.run(calculateAction, { val: 4 });
-    assert.equal(result.final, 17);
-  });
-
-  it("循环调用触发 ACTION_CYCLE_DETECTED 错误", async () => {
-    const runtime = createTestRuntime();
-
-    const cycleA: ActionDefinition = defineAction({
-      id: "cycle.a",
-      async run(_input: unknown, ctx): Promise<unknown> {
-        return ctx.actions.invoke(cycleB, {});
-      },
-    });
-
-    const cycleB: ActionDefinition = defineAction({
-      id: "cycle.b",
-      async run(_input: unknown, ctx): Promise<unknown> {
-        return ctx.actions.invoke(cycleA, {});
-      },
-    });
-
-    runtime.registerAction(cycleA);
-    runtime.registerAction(cycleB);
-
-    const envelope = await runtime.execute(cycleA, {});
-    assert.equal(envelope.ok, false);
-    if (!envelope.ok) {
-      assert.equal(envelope.error.code, "ACTION_CYCLE_DETECTED");
-      assert.ok(envelope.error.message.includes("cycle.a"));
-    }
-  });
-});
-```
-
 ### 外部命令行模拟测试
 
-验证通过 `MockProcessExecutor` 预设外部 CLI 返回结果与命令历史核查：
+验证通过 `MockProcessExecutor` 预设外部 CLI 返回结果与命令调用记录核查：
 
 ```ts
 import { describe, it } from "node:test";
@@ -320,13 +257,10 @@ import assert from "node:assert/strict";
 import { defineAction } from "@actiondock/sdk";
 import { createTestRuntime } from "@actiondock/testing";
 
-const gitStatusAction = defineAction({
-  id: "vcs.git-status",
-  async run(_input, ctx) {
-    const proc = await ctx.process.exec("git", ["status", "--porcelain"]);
-    const isClean = proc.stdout.trim() === "";
-    return { isClean, raw: proc.stdout };
-  },
+const gitStatusAction = defineAction(async (_input, ctx) => {
+  const proc = await ctx.process.exec("git", ["status", "--porcelain"]);
+  const isClean = proc.stdout.trim() === "";
+  return { isClean, raw: proc.stdout };
 });
 
 describe("外部命令模拟测试", () => {

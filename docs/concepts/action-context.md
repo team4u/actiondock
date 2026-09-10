@@ -3,9 +3,11 @@
 `ActionContext` 是 Action 执行期间接收的运行时上下文对象，为 Action 提供标准化的环境访问能力。
 
 ```ts
-async run(input: TInput, ctx: ActionContext): Promise<TOutput> {
-  // 使用 ctx.config, ctx.state, ctx.actions, ctx.log, ctx.signal
-}
+import type { ActionContext } from "@actiondock/sdk";
+
+export default defineAction(async (input, ctx: ActionContext) => {
+  // 使用 ctx.config, ctx.state, ctx.actions, ctx.process, ctx.log, ctx.progress, ctx.signal, ctx.run
+});
 ```
 
 ---
@@ -15,51 +17,54 @@ async run(input: TInput, ctx: ActionContext): Promise<TOutput> {
 ```text
 ActionContext
   │
-  ├── ctx.config   → 5 级优先级配置读取 (只读)
-  ├── ctx.state    → SQLite 状态持久化与 TTL 管理 (读写)
+  ├── ctx.config   → 5 级优先级配置读取（只读）
+  ├── ctx.state    → SQLite 状态持久化与生存时间管理（读写）
   ├── ctx.actions  → Action 间安全级联调用与循环检测
-  ├── ctx.log      → 结构化日志记录器 (强制输出至 stderr)
-  └── ctx.signal   → Web 标准 AbortSignal 取消传播链路
+  ├── ctx.process  → 统一受管外部进程操作接口（exec 与 spawn）
+  ├── ctx.log      → 结构化日志记录器（强制输出至标准错误流）
+  ├── ctx.progress → 阶段进度汇报接口
+  ├── ctx.signal   → 标准 AbortSignal 取消传播链路
+  └── ctx.run      → 当前任务运行元数据与调用链路追溯
 ```
 
 ---
 
-## `ctx.config`：5 级配置解析机制
+## `ctx.config`：多级配置解析机制
 
-ActionDock 实现了业界最严格的 5 级配置回退优先级模型：
+ActionDock 实现了严格的 5 级配置回退优先级模型：
 
 ```text
-调用参数覆盖 (--config k=v)                          [最高]
+单次调用参数覆盖 (--config KEY=VALUE)                    [最高]
        ↓
-SQLite 持久化配置库 (ad config set KEY val)
+包级持久化配置数据库 (ad config set KEY VALUE)
        ↓
-环境变量 (PACKAGE__KEY / KEY)
+操作系统环境变量与环境文件映射 (PACKAGE__KEY / KEY)
        ↓
-项目默认配置 (actiondock.json -> defaultConfig)
+项目清单默认配置 (actiondock.json -> config.<KEY>.default)
        ↓
-代码内联兜底 (ctx.config.get("KEY", "fallback"))     [最低]
+代码内联默认回退 (ctx.config.get("KEY", "fallback"))     [最低]
 ```
 
 ### 环境变量解析规则
-- **显式映射**：`actiondock.json` 中声明的 `env` 映射。
-- **包前缀转换**：包标识符转大写下划线前缀（例如 `TEAM4U_GITHUB_TOOLS__API_TOKEN`）。
-- **全局匹配**：直接读取 `API_TOKEN`。
-- **类型强转**：环境变量中的 `"true"`/`"false"` 转为布尔型，数字字符串转为数值型。
+- 显式映射：`actiondock.json` 中配置项声明的 `env` 字段映射。
+- 包前缀转换：包标识符转为大写下划线前缀匹配环境变量。
+- 全局匹配：直接读取同名大写环境变量。
+- 类型自动转换：环境变量中的 `"true"` 与 `"false"` 转为布尔型，数字字符串转为数值型，JSON 字符串转为对象或数组。
 
 ---
 
-## `ctx.state`：持久化状态与 TTL
+## `ctx.state`：持久化状态与生存时间
 
-Action 经常需要记录运行状态（例如上次同步的 offset、游标、缓存数据或限流计数器）。ActionDock 内置基于 SQLite 的轻量状态持久化机制。
+Action 在执行过程中常需要持久化状态（如分页游标、增量同步位点、缓存或限流计数）。ActionDock 为每个包提供独立的 SQLite 状态存储空间：
 
 ```ts
-// 写入状态（支持 TTL 过期时间，单位：秒）
+// 写入状态（支持存活时间，单位：秒）
 await ctx.state.set("last_sync_time", new Date().toISOString(), 3600);
 
 // 读取状态（不存在或已过期返回 undefined）
 const lastSync = await ctx.state.get<string>("last_sync_time");
 
-// 作用域隔离 (Namespace)
+// 命名空间隔离
 const cacheState = ctx.state.scope("cache");
 await cacheState.set("user_101", { name: "Alice" });
 ```
@@ -68,77 +73,112 @@ await cacheState.set("user_101", { name: "Alice" });
 
 ## `ctx.actions`：级联调用、跨包寻址与防循环机制
 
-Action 之间可以互相安全调用，支持直接对象引用、短标识符以及跨包动态寻址，同时保留完整的入参校验与日志链路：
+Action 之间可以通过 [`ActionInvoker`](file:///root/code/action-dock/packages/sdk/src/types.ts) 互相安全调用。
+
+### 调用规范与入参约束
+
+`ctx.actions.invoke` 严格仅接受动作标识符字符串或 [`ActionRef`](file:///root/code/action-dock/packages/sdk/src/types.ts) 引用对象，**严禁传入动作定义对象或裸函数**。传入定义对象会绕过清单声明、模式校验与运行记录持久化，系统将抛出 `INVALID_ACTION_REF` 错误。
 
 ```ts
-import getUserAction from "./get-user";
-
-// 方式一：直接通过定义对象调用（适用于同包已导入模块，具备静态类型推导）
-const user = await ctx.actions.invoke(getUserAction, {
-  username: "octocat",
-});
-
-// 方式二：通过短标识符调用（适用于同包或自包含导出的下游动作）
+// 短标识符调用（本包或已声明依赖的动作）
 const profile = await ctx.actions.invoke("get-user", {
   username: "octocat",
 });
 
-// 方式三：通过完全限定标识符跨包调用（适用于 ad link 挂载的外部共享包动作）
+// 完全限定标识符调用（调用已声明依赖的外部包动作）
 const stats = await ctx.actions.invoke("shared-pkg/get-stats", {
   username: "octocat",
 });
 
-// 方式四：通过 ActionRef 引用对象调用
-const repo = await ctx.actions.invoke({ packageId: "team4u.github-tools", actionId: "get-repo" }, {
+// ActionRef 引用对象调用
+const repo = await ctx.actions.invoke({
+  packageId: "team4u.github-tools",
+  actionId: "get-repo",
+}, {
   repo: "team4u/actiondock",
 });
 ```
 
-### 动态寻址与调用机制
+### 依赖声明与可见性校验
 
-- **短标识符与自包含模式**：
-  - 在动作契约中声明 `uses: ["get-user"]`，代码中调用 `ctx.actions.invoke("get-user", input)`。
-  - 构建导出时，[`BuildPlanner`](file:///root/code/action-dock/packages/builder/src/planner.ts) 自动将依赖闭包抽取并打包为自包含的独立技能资产。
-  - 消费者挂载多个包含同名依赖的自包含包时，各包在内部封闭运行，互不干扰。
-- **完全限定标识符与外部共享包模式**：
-  - 在动作契约中声明 `uses: ["shared-pkg/get-stats"]`，代码中调用 `ctx.actions.invoke("shared-pkg/get-stats", input)`。
-  - 运行时通过全局注册表动态查找已通过 `ad link` 挂载的目标包并执行。
-  - 所有调用方共享目标包的单一实例与底层状态存储，避免代码拷贝并保障状态一致。
+- 所有级联调用必须在 `actiondock.json` 中显式声明：本包调用在 `actions.<id>.uses` 中声明依赖短 ID，跨包调用必须声明完全限定 ID。
+- 未在 `uses` 中声明的级联调用，即使目标 Action 物理可见，执行时也会被拦截并返回 `UNDECLARED_ACTION_DEPENDENCY` 错误。
 
-### 循环调用防御
-当 Action A 调用 Action B，Action B 又调用 Action A 时，执行引擎会自动检测调用链中的重复 ID，并在达到阈值时立即抛出 `ACTION_CYCLE_DETECTED` 错误，防止死循环耗尽资源。
+### 循环调用与配额防护
+
+- 执行引擎在整个调用链路上自动追踪调用关系栈。当检测到 Action A 调用 Action B、Action B 又调用 Action A 的循环成环时，立即终止并返回 `ACTION_CALL_CYCLE` 错误。
+- 宿主对单个根运行的调用深度和子运行总数设有限额，超出配额限制时返回 `ACTION_SUBRUN_LIMIT`。
 
 ---
 
-## `ctx.log`：强制 stderr 隔离日志
+## `ctx.process`：统一进程操作接口
 
-所有通过 `ctx.log` 打印的日志均被格式化并输出到 `stderr`：
+针对外部命令调度，[`ProcessAPI`](file:///root/code/action-dock/packages/sdk/src/types.ts) 仅提供 `exec` 与 `spawn` 两个受管方法：
+
+```ts
+// 执行外部命令并获取结果
+const result = await ctx.process.exec("git", ["status", "--porcelain"], {
+  cwd: process.cwd(),
+  timeoutMs: 5000,
+  signal: ctx.signal,
+});
+
+if (!result.ok) {
+  ctx.log.error(`Git 执行异常: ${result.stderr}`);
+}
+```
+
+- 进程生命周期与根任务取消信号绑定，超时或取消时自动清理受管进程树。
+- 标准输出与标准错误设置缓冲区字节上限，超限自动温和终止后强杀。
+
+---
+
+## `ctx.log`：标准错误流日志隔离
+
+所有通过 `ctx.log` 打印的日志均输出至标准错误流：
 
 ```ts
 ctx.log.debug("内部调试信息", { rawPayload });
 ctx.log.info(`开始处理任务: ${taskId}`);
-ctx.log.warn("API 频率接近限额");
-ctx.log.error("处理失败", err);
+ctx.log.warn("接口请求频率接近阈值");
+ctx.log.error("执行失败", err);
 ```
 
-终端输出效果：
-```text
-[12:00:00] [INFO] [github.get-pr] 开始处理任务: 101
+标准输出通道仅保留纯净的机器可解析 JSON 信封，杜绝日志混入数据流污染大模型或自动化脚本。
+
+---
+
+## `ctx.progress`：执行进度汇报
+
+长耗时任务通过 `ctx.progress.report` 汇报阶段进度：
+
+```ts
+ctx.progress.report(50, 100, "数据转换完成，正在写入数据库");
 ```
 
-由于 `stdout` 仅用于传输机器格式的 JSON Envelope，大模型与自动化流水线不会受到任何控制台日志的干扰。
+进度事件会通过事件总线向订阅者推送。
 
 ---
 
 ## `ctx.signal`：协同式取消链路
 
-`ctx.signal` 是标准的 Web API `AbortSignal` 实例：
+`ctx.signal` 为标准 Web API 的 `AbortSignal` 实例：
 
 ```ts
-// 将 signal 透传给 fetch 或子进程
 const res = await fetch("https://api.example.com/long-task", {
   signal: ctx.signal,
 });
 ```
 
-当客户端通过 MCP 取消请求、用户在 CLI 按下 `Ctrl+C`、或触发了超时上限（`timeout`）时，`ctx.signal` 会被触发，确保底层网络连接与 I/O 资源立即释放。
+当客户端通过协议发起取消、用户按下 Ctrl+C 或触发超时时，`ctx.signal` 立即触发中止事件，确保资源快速释放。
+
+---
+
+## `ctx.run`：任务追溯元数据
+
+提供当前任务的运行标识、根任务标识与父级标识：
+
+```ts
+const { id, rootId, parentId } = ctx.run;
+ctx.log.info(`当前执行标识: ${id}, 根任务标识: ${rootId}`);
+```

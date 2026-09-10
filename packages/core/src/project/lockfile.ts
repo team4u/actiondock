@@ -4,34 +4,39 @@ import { computeManifestDigest, parseJsonWithoutDuplicates } from "./digest";
 import { MANIFEST_FILE_NAME } from "./manifest";
 
 export const LOCKFILE_NAME = "actiondock.lock.json";
-export const LOCKFILE_VERSION = 2;
+export const LOCKFILE_VERSION = 1;
 
 /**
  * 锁文件中记录的单一被锁定的 Action 包元数据。
  */
 export interface LockedPackage {
-  /** 逻辑包标识（如 someone.github-actions） */
-  packageId: string;
   /** npm 包名（如 @someone/actiondock-github-actions） */
-  npmPackage: string;
-  /** 语义化版本号 */
-  version: string;
+  package: string;
   /** 解析版本或来源 */
   resolved: string;
+  /** 依赖来源，标准为 "npm" */
+  source?: "npm" | string;
   /** 完整性校验摘要（可选） */
   integrity?: string;
   /** 基于 RFC 8785 计算的清单确定性摘要 */
   manifestDigest: string;
   /** 该包声明的下级依赖映射 */
   dependencies?: Record<string, string>;
+
+  /** 逻辑包标识（可选兼容别名） */
+  packageId?: string;
+  /** npm 包名别名（向前兼容） */
+  npmPackage?: string;
+  /** 语义化版本别名（向前兼容） */
+  version?: string;
 }
 
 /**
  * ActionDock 锁文件契约（actiondock.lock.json）。
  */
 export interface ActionDockLockfile {
-  /** 锁文件规范版本（固定为 2） */
-  lockfileVersion: 2;
+  /** 锁文件规范版本（固定为 1） */
+  lockfileVersion: 1;
   /** 已锁定解析的包字典映射 */
   packages: Record<string, LockedPackage>;
 }
@@ -74,6 +79,21 @@ export function loadLockfile(projectRoot: string): ActionDockLockfile | null {
     throw new Error(`Invalid lockfile format in ${filePath}: 'packages' must be an object`);
   }
 
+  // 规范化并注入兼容字段
+  for (const [key, item] of Object.entries(parsed.packages)) {
+    if (item && typeof item === "object") {
+      const locked = item as any;
+      const npmPkg = locked.package || locked.npmPackage || key;
+      const resVer = locked.resolved || locked.version || "0.0.0";
+      locked.package = npmPkg;
+      locked.npmPackage = npmPkg;
+      locked.resolved = resVer;
+      locked.version = resVer;
+      locked.packageId = locked.packageId || key;
+      locked.source = locked.source || "npm";
+    }
+  }
+
   return parsed as ActionDockLockfile;
 }
 
@@ -88,6 +108,8 @@ export function saveLockfile(projectRoot: string, lockfile: ActionDockLockfile):
   const sortedKeys = Object.keys(lockfile.packages || {}).sort();
   for (const key of sortedKeys) {
     const pkg = lockfile.packages[key];
+    const npmPackage = pkg.package || pkg.npmPackage || key;
+    const resolvedVersion = pkg.resolved || pkg.version || "0.0.0";
     const sortedDeps: Record<string, string> | undefined = pkg.dependencies
       ? Object.keys(pkg.dependencies)
           .sort()
@@ -97,15 +119,18 @@ export function saveLockfile(projectRoot: string, lockfile: ActionDockLockfile):
           }, {} as Record<string, string>)
       : undefined;
 
-    sortedPackages[key] = {
-      packageId: pkg.packageId,
-      npmPackage: pkg.npmPackage,
-      version: pkg.version,
-      resolved: pkg.resolved,
+    const entry: LockedPackage = {
+      package: npmPackage,
+      resolved: resolvedVersion,
+      source: pkg.source || "npm",
       integrity: pkg.integrity,
       manifestDigest: pkg.manifestDigest,
       dependencies: sortedDeps,
+      packageId: pkg.packageId || key,
+      npmPackage: npmPackage,
+      version: resolvedVersion,
     };
+    sortedPackages[key] = entry;
   }
 
   const payload: ActionDockLockfile = {
@@ -147,16 +172,14 @@ export function validateLockfile(
       continue;
     }
 
-    if (!item.packageId || typeof item.packageId !== "string") {
-      errors.push(`Package '${key}' missing required string property 'packageId'`);
+    const pkgName = item.package || item.npmPackage;
+    if (!pkgName || typeof pkgName !== "string") {
+      errors.push(`Package '${key}' missing required string property 'package'`);
     }
 
-    if (!item.npmPackage || typeof item.npmPackage !== "string") {
-      errors.push(`Package '${key}' missing required string property 'npmPackage'`);
-    }
-
-    if (!item.version || typeof item.version !== "string") {
-      errors.push(`Package '${key}' missing required string property 'version'`);
+    const resolved = item.resolved || item.version;
+    if (!resolved || typeof resolved !== "string") {
+      errors.push(`Package '${key}' missing required string property 'resolved'`);
     }
 
     if (!item.manifestDigest || typeof item.manifestDigest !== "string") {
@@ -173,7 +196,7 @@ export function validateLockfile(
         try {
           const rootRaw = readFileSync(rootManifestPath, "utf-8");
           const rootParsed = parseJsonWithoutDuplicates<any>(rootRaw);
-          if (rootParsed.id === item.packageId) {
+          if (rootParsed.id === (item.packageId || key)) {
             manifestPath = rootManifestPath;
           }
         } catch {
@@ -182,9 +205,9 @@ export function validateLockfile(
       }
 
       // 若为外部依赖包，从 node_modules 探测
-      if (!manifestPath) {
-        const candidateNpm = join(options.projectRoot, "node_modules", item.npmPackage, MANIFEST_FILE_NAME);
-        const candidateId = join(options.projectRoot, "node_modules", item.packageId, MANIFEST_FILE_NAME);
+      if (!manifestPath && pkgName) {
+        const candidateNpm = join(options.projectRoot, "node_modules", pkgName, MANIFEST_FILE_NAME);
+        const candidateId = join(options.projectRoot, "node_modules", key, MANIFEST_FILE_NAME);
         if (existsSync(candidateNpm)) {
           manifestPath = candidateNpm;
         } else if (existsSync(candidateId)) {
@@ -199,12 +222,12 @@ export function validateLockfile(
           const actualDigest = computeManifestDigest(actualParsed);
           if (actualDigest !== item.manifestDigest) {
             errors.push(
-              `Manifest digest mismatch for package '${item.packageId}': expected '${item.manifestDigest}', got '${actualDigest}'. Re-resolution required.`
+              `Manifest digest mismatch for package '${item.packageId || key}': expected '${item.manifestDigest}', got '${actualDigest}'. Re-resolution required.`
             );
           }
         } catch (err: any) {
           errors.push(
-            `Failed to verify manifest digest for package '${item.packageId}': ${err.message}`
+            `Failed to verify manifest digest for package '${item.packageId || key}': ${err.message}`
           );
         }
       }

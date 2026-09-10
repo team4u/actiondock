@@ -584,11 +584,11 @@ export class DefaultActionDockApp implements ActionDockApp {
   }
 
   async setConfig(key: string, value: JsonValue): Promise<void> {
-    this.storage.setConfig(key, value);
+    await this.storage.setConfig(key, value);
   }
 
   async deleteConfig(key: string): Promise<boolean> {
-    return this.storage.deleteConfig(key);
+    return await this.storage.deleteConfig(key);
   }
 
   async getState<T extends JsonValue = JsonValue>(

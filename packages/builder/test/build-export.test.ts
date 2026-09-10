@@ -21,7 +21,7 @@ describe("Build & Skill Export Contract", () => {
     }
 
     // Link root node_modules so @actiondock/sdk is resolvable during build
-    const rootNodeModules = resolve(__dirname, "../../../node_modules");
+    const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
     if (existsSync(rootNodeModules)) {
       symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "dir");
     }

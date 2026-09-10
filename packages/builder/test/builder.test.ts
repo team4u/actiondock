@@ -70,7 +70,7 @@ describe("@actiondock/builder 测试套件", () => {
     tempDir = mkdtempSync(join(tmpdir(), "ad-builder-test-"));
 
     // 软链接根 node_modules 保证测试期间依赖解析
-    const rootNodeModules = resolve(__dirname, "../../../node_modules");
+    const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
     if (existsSync(rootNodeModules)) {
       symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "dir");
     }
@@ -546,6 +546,7 @@ export default defineAction({
       expect(existsSync(buildRes.entrypointPath)).toBe(true);
       expect(existsSync(buildRes.metadataPath)).toBe(true);
       expect(existsSync(join(buildRes.outputDir, "actiondock.json"))).toBe(true);
+      expect(existsSync(join(buildRes.outputDir, "actiondock.manifest.json"))).toBe(false);
       expect(existsSync(join(buildRes.outputDir, "package.json"))).toBe(true);
       expect(buildRes.reproducible).toBe(true);
 
@@ -711,18 +712,17 @@ export default defineAction({
       const skillJsonPath = join(exportRes.skillDir, "actiondock.skill.json");
       expect(existsSync(skillJsonPath)).toBe(false);
 
-      // 3. 验证 actiondock.manifest.json 清单
+      // 3. 验证不再生成已废弃的 actiondock.manifest.json 清单
       const manifestPath = join(exportRes.skillDir, "actiondock.manifest.json");
-      expect(existsSync(manifestPath)).toBe(true);
-      const exportedManifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
-      expect(exportedManifest.schemaVersion).toBe(1);
-      expect(exportedManifest.actions["sample.greet"]).toBeDefined();
+      expect(existsSync(manifestPath)).toBe(false);
 
-      // 4. 验证 actiondock.json 配置
+      // 4. 验证 actiondock.json 配置（单一事实源）
       const configPath = join(exportRes.skillDir, "actiondock.json");
       expect(existsSync(configPath)).toBe(true);
       const exportedConfig = JSON.parse(readFileSync(configPath, "utf-8"));
       expect(exportedConfig.id).toBe("test.builder-fixture");
+      expect(exportedConfig.schemaVersion).toBe(2);
+      expect(exportedConfig.actions["sample.greet"]).toBeDefined();
 
       // 5. 验证 package.json
       const pkgPath = join(exportRes.skillDir, "package.json");
@@ -1149,7 +1149,7 @@ export default defineAction({
       }
     });
 
-    it("resolves external linked action in BuildPlanner when linked package has no actiondock.manifest.json", () => {
+    it("resolves external linked action in BuildPlanner when linked package has default actiondock.json", () => {
       const extDir = mkdtempSync(join(tmpdir(), "ext-pkg-"));
       try {
         initProject(extDir, { id: "test.ext-tools", name: "External Tools" });
@@ -1157,7 +1157,6 @@ export default defineAction({
           join(extDir, "actions", "calc.ts"),
           `import { defineAction } from "@actiondock/sdk"; export default defineAction({ id: "calc", uses: [], run: () => 42 });`
         );
-        // extDir does NOT have actiondock.manifest.json!
         linkPackage(extDir);
 
         const planner = new BuildPlanner({ projectRoot: tempDir });

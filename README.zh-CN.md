@@ -1,16 +1,15 @@
 # ActionDock
 
-[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22-green?logo=node.js)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D24.12.0-green?logo=node.js)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![MCP](https://img.shields.io/badge/MCP-Protocol%20Compliant-purple)](https://modelcontextprotocol.io/)
-[![Tests](https://img.shields.io/badge/tests-173%20passed-brightgreen.svg)](https://github.com/team4u/actiondock)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-[English](README.md) | 简体中文
+[English](file:///root/code/action-dock/README.md) | 简体中文
 
 一次编写，全模态交付。
 
-面向 AI 智能体工具与技能的 TypeScript 研发工具链，支持将工具交付为 MCP 服务、Agent Skill、HTTP 微服务或单文件独立二进制产物。
+面向 AI 智能体工具与技能的 TypeScript 研发工具链，支持将工具交付为 MCP 服务、Agent Skill、HTTP 微服务或 Node.js 目录交付产物。
 
 ```text
 TypeScript Action
@@ -19,10 +18,11 @@ TypeScript Action
        ├── ad test         # 毫秒级沙箱单测
        ├── ad mcp          # STDIO / HTTP MCP 服务
        ├── ad serve        # 远程 HTTP 微服务
-       ├── ad export skill # 自包含 Agent Skill 技能包
-       └── ad build        # 零依赖单文件独立二进制产物
+       ├── ad export skill # 自包含 Agent Skill 技能包（--mode source 或 --mode node）
+       ├── ad pack         # 标准 npm tarball 打包（.tgz）
+       └── ad build        # Node.js 目录交付产物构建
               ↓
-          可执行文件
+           运行产物
 ```
 
 ---
@@ -35,61 +35,31 @@ TypeScript Action
 
 ActionDock 将智能体工具确立为工业级标准化软件资产：
 
-- **人定规程，智能体写实现**：人负责在操作规程中划定业务边界、调用时序与安全红线；智能体根据契约编写具体的原子动作实现。
-- **纯内存沙箱与自愈闭环**：基于纯内存沙箱测试环境与确定性时钟，无需启动外部网络与数据库，毫秒级验证逻辑；智能体生成代码后可自主执行测试并依据报错闭环自愈。
-- **零依赖单文件交付**：支持将工具包编译为无任何外部依赖的单文件独立二进制产物，脱离环境泥潭，目标机器无需安装 Node.js 或 Bun 即可直接运行。
-- **一次编写，全模态复用**：同一份动作源代码无缝运行于本地命令行、MCP 协议服务、远程 HTTP 微服务与智能体技能包。
-- **代码与元数据契约一致**：静态声明式清单作为单一事实源，零副作用提取元数据，在编译期实现依赖闭包裁剪与按需打包。
-- **纯文本资产与工作流融合**：动作与规程均为纯文本文件，天然适配代码评审、分支协作与持续集成流水线。
+- 人定规程，智能体写实现：人负责在操作规程 Playbook 中划定业务边界、调用时序与安全红线；智能体根据契约编写具体的原子动作实现。
+- 纯内存沙箱与自愈闭环：基于纯内存沙箱测试环境与确定性时钟，无需启动外部网络与数据库，毫秒级验证逻辑；智能体生成代码后可自主执行测试并依据报错闭环自愈。
+- 标准 Node 目录交付产物：支持将工具包构建为自包含可运行的 Node.js 目录交付产物，锁定生产依赖，或打包为标准 npm 压缩包。
+- 一次编写，全模态复用：同一份动作源代码无缝运行于本地命令行、MCP 协议服务、远程 HTTP 微服务与智能体技能包。
+- 依赖锁定与原子事务：基于 actiondock.lock.json 锁定依赖，ad add 与 ad remove 命令具备原子事务快照保护与自动回滚机制。
+- 纯文本资产与工作流融合：动作与规程均为纯文本文件，天然适配代码评审、分支协作与持续集成流水线。
 
 ---
 
 ## 运行环境与依赖说明
 
-ActionDock 2.0 针对生产环境与开发者工作流进行了架构升级：
+ActionDock 2.0 针对生产环境与开发者工作流进行了原生架构升级：
 
-- **日常运行与开发环境**：原生运行于 Node.js 22.13.0 或更高版本。日常的工具开发、单测执行、本地命令行交互、MCP 协议通信以及 HTTP 微服务部署完全依托 Node.js 环境，全面支持 npm、pnpm 与 yarn 包管理器，日常运行完全脱离 Bun。
-- **独立二进制产物编译**：当且仅当执行 `ad build` 将项目编译为零外部依赖的单文件独立二进制产物时，系统需要安装外部 Bun 编译器，由构建模块调度其编译器管线完成可执行文件的打包。
+- 原生 Node 24 运行环境：原生运行于 Node.js >=24.12.0。日常的工具开发、单测执行、本地命令行交互、MCP 协议通信以及 HTTP 微服务部署完全依托 Node.js 环境，基于原生类型擦除、内置 SQLite 与原生 HTTP，日常运行完全脱离外部编译器。
+- 标准 npm 工作流：日常开发、测试、构建与发布使用标准 npm 工作流（npm test、npm run typecheck、npm run build、npm run test:pack）。
+- 跨环境兼容验证：保留 bun test 作为跨环境兼容性验证。
 
 ---
 
-## 声明式元数据事实源规范
+## 依赖管理与锁定规范
 
-ActionDock 2.0 引入 `actiondock.manifest.json` 规范，作为整个包内 Action 工具元数据的单一事实源：
+ActionDock 2.0 引入 [actiondock.lock.json](file:///root/code/action-dock/packages/core/src/project/lockfile.ts)（规范版本 lockfileVersion: 1），作为工具依赖锁定的事实源：
 
-```json
-{
-  "schemaVersion": 1,
-  "actions": {
-    "sample.greet": {
-      "entry": "actions/greet.ts",
-      "description": "问候用户示例工具",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "name": { "type": "string", "description": "被问候者的姓名" }
-        },
-        "required": ["name"]
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "message": { "type": "string" },
-          "count": { "type": "number" }
-        },
-        "required": ["message", "count"]
-      },
-      "uses": [],
-      "tags": ["sample"]
-    }
-  },
-  "assets": []
-}
-```
-
-- **零副作用分析**：静态构建与元数据发现无需动态加载或执行任何 TypeScript 业务代码，避免代码预加载引发的副作用或性能损耗。
-- **闭包计算与按需打包**：构建规划器基于清单精确分析 Action 与 Playbook 的静态依赖闭包，实现依赖剪枝与最小化分发打包。
-- **统一事实源**：CLI 提示、MCP 协议暴露与文档生成统一读取该清单，保证所有交付通道契约严格一致。
+- 原子事务保障：执行 `ad add` 与 `ad remove` 时，系统自动备份 package.json、actiondock.json 与 actiondock.lock.json 快照。若安装或校验流程失败，自动执行原子回滚恢复。
+- 架构彻底简化：已废弃旧版清单机制与单文件独立二进制编译器 BunCompiler，统一采用标准 Node.js 目录交付格式与 npm 打包体系。
 
 ---
 
@@ -103,7 +73,7 @@ ActionDock 是专为 AI 智能体设计的工具底座。支持通过智能体�
 # 全局安装 ActionDock 官方技能
 npx skills add team4u/actiondock -g -y
 
-# 或安装 GitHub 上任意开源仓库的技能
+# 或安装 GitHub 上开源仓库的技能
 npx skills add <owner/repo> -g -y
 ```
 
@@ -125,6 +95,11 @@ cd hello-tools
 npm install
 ```
 
+- 安装并锁定依赖：
+```bash
+ad add @actiondock/example-tools
+```
+
 - 运行测试：
 ```bash
 npm test
@@ -142,12 +117,21 @@ ad mcp
 
 - 导出为便携式 Agent Skill：
 ```bash
+# 导出源码模式技能
 ad export skill
+
+# 导出自包含 Node.js 目录模式技能
+ad export skill --mode node
 ```
 
-- 编译为独立二进制产物（需要系统安装外部 Bun 编译器）：
+- 构建 Node.js 目录交付产物：
 ```bash
 ad build
+```
+
+- 打包为标准 npm 压缩包：
+```bash
+ad pack
 ```
 
 ---
@@ -156,8 +140,8 @@ ad build
 
 在代码大部分由智能体生成的研发范式下，人与智能体形成了全新的分工默契：
 
-- 人负责编写操作规程（Playbook），沉淀领域专家的作业流程、判断分支与不可逾越的安全红线。
-- 智能体负责依据契约编写确定性的原子能力（Action），并通过单元测试完成自愈闭环。
+- 人负责编写操作规程 Playbook，沉淀领域专家的作业流程、判断分支与不可逾越的安全红线。
+- 智能体负责依据契约编写确定性的原子能力 Action，并通过单元测试完成自愈闭环。
 
 ```text
 Playbook = 人制定规程（流程时序、安全红线、分支逻辑）
@@ -175,29 +159,25 @@ Action   = 智能体写实现（强类型、确定性原子能力）
 ```ts
 import { defineAction } from "@actiondock/sdk";
 
-export default defineAction({
-  id: "sample.greet",
-  description: "向指定用户问候并记录累计交互次数",
+export interface GreetInput {
+  name: string;
+}
 
-  inputSchema: {
-    type: "object",
-    properties: {
-      name: { type: "string", description: "被问候者的名字" },
-    },
-    required: ["name"],
-  },
+export interface GreetOutput {
+  message: string;
+  count: number;
+}
 
-  async run(input, ctx) {
-    const prefix = ctx.config.get("GREETING_PREFIX", "Hello");
-    const count = ((await ctx.state.get<number>(`greet:${input.name}`)) || 0) + 1;
-    await ctx.state.set(`greet:${input.name}`, count);
-    ctx.log.info(`用户 ${input.name} 已问候 ${count} 次`);
+export default defineAction(async (input: GreetInput, ctx): Promise<GreetOutput> => {
+  const prefix = ctx.config.get("GREETING_PREFIX", "Hello");
+  const count = ((await ctx.state.get<number>(`greet:${input.name}`)) || 0) + 1;
+  await ctx.state.set(`greet:${input.name}`, count);
+  ctx.log.info(`用户 ${input.name} 已问候 ${count} 次`);
 
-    return {
-      message: `${prefix}, ${input.name}!`,
-      count,
-    };
-  },
+  return {
+    message: `${prefix}, ${input.name}!`,
+    count,
+  };
 });
 ```
 
@@ -228,11 +208,11 @@ actions:
 
 | 功能与评估维度 | ActionDock | mcp-use | FastMCP | Arcade MCP |
 | :--- | :---: | :---: | :---: | :---: |
-| 零依赖单文件独立二进制产物 | 支持 | — | — | — |
+| 自包含 Node 目录交付产物构建 | 支持 | — | — | — |
 | 纯内存沙箱与确定性测试自愈 | 支持 | 支持 | 支持 | 支持 |
-| 操作规程与安全红线解耦（Playbook） | 支持 | — | — | — |
+| 操作规程与安全红线解耦 Playbook | 支持 | — | — | — |
 | 自包含 Agent Skill 规范导出 | 支持 | — | — | — |
-| 声明式清单事实源与静态依赖剪枝 | 支持 | — | — | — |
+| 依赖锁定与原子事务管理 | 支持 | — | — | — |
 | 全模态交付（命令行、MCP、HTTP、技能包） | 支持 | 部分 | 部分 | 部分 |
 | MCP 协议原生支持（STDIO 与 HTTP） | 支持 | 支持 | 支持 | 支持 |
 | 远程 HTTP 微服务调度 | 支持 | 支持 | 支持 | 支持 |
@@ -242,51 +222,61 @@ actions:
 
 ## 架构体系与分层设计
 
-ActionDock 2.0 采用 8 个职责专注的子包分层架构：
+ActionDock 2.0 采用 7 个职责专注的子包分层架构：
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
 │                      @actiondock/cli                        │
-│          Node.js 命令行门面、独立分发器与信封输出渲染器           │
+│          Node.js 命令行门面、分发器与信封输出渲染器           │
 └──────────────┬──────────────┬───────────────┬───────────────┘
                │              │               │
                ▼              ▼               ▼
 ┌─────────────────────────────┐┌──────────────────────────────┐
 │     @actiondock/mcp         ││    @actiondock/builder       │
-│   MCP 协议与异步任务适配器    ││  依赖闭包计算、编译器与技能导出 │
+│   MCP 协议与异步任务适配器    ││  Node 构建、npm 打包与技能导出 │
 └──────────────┬──────────────┘└──────────────┬───────────────┘
                │                              │
                ▼                              ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                      @actiondock/core                       │
-│         领域模型、执行器状态机、清单与可插拔驱动契约           │
+│       领域模型、执行器状态机、目录锁与统一调用门面契约         │
 └───────┬─────────────────────────────┬───────────────┬───────┘
         │                             │               │
         ▼                             ▼               ▼
 ┌──────────────┐               ┌─────────────┐┌──────────────┐
 │ runtime-node │               │   testing   ││     sdk      │
-│Node 原生适配器│               │沙箱与模拟时钟││极简核心开发者契约│
+│Worker SQLite │               │沙箱与模拟时钟││极简核心开发者契约│
+│与 Node 24 ESM│               │与测试运行时  ││              │
 └──────────────┘               └─────────────┘└──────────────┘
 ```
 
-- `@actiondock/cli`：命令行工具链与独立运行分发器，基于 Node.js 22.13.0 或更高版本运行，提供全量命令分发、标准化信封渲染、项目初始化、运行、测试与构建导出。
-- `@actiondock/builder`：构建规划与编译器调度包，包含 `BuildPlanner` 依赖闭包计算、`BunCompiler` 外部编译器调用与 `SkillExporter` 技能打包。
-- `@actiondock/mcp`：MCP 协议适配器，提供 STDIO 与 HTTP 双协议通道，并完整支持 Tasks 异步任务映射。
-- `@actiondock/core`：公共领域内核，提供项目配置加载、`actiondock.manifest.json` 清单管理、`SqliteDriver` 抽象、`ProcessExecutor` 抽象、`DefaultExecutionService` 与 `ActionRunner` 状态机。
-- `@actiondock/runtime-node`：Node.js 运行时适配器，提供基于 `node:sqlite` 的数据库驱动、`execa` 进程执行器、`tsx` 模块加载器与基于 `node:http` 的服务监听。
-- `@actiondock/testing`：独立测试框架包，提供 `FakeClock` 确定性时钟、`MockProcessExecutor` 进程模拟、`MemoryStorage` 内存存储以及 `createTestRuntime` 测试运行时。
-- `@actiondock/sdk`：极简纯净开发者契约，零外部依赖，提供 `defineAction`、`ActionContext` 及核心接口类型。
+- [@actiondock/cli](file:///root/code/action-dock/packages/cli/README.md)：命令行工具链与运行分发器，基于 Node.js >=24.12.0 运行，提供全量命令分发、标准化信封渲染、项目初始化、运行、测试、依赖管理与构建导出。
+- [@actiondock/builder](file:///root/code/action-dock/packages/builder/README.md)：构建规划与交付包，提供 Node.js 目录交付产物构建（`ad build`）、npm 打包（`ad pack`）与 Agent Skill 导出（`ad export skill` 支持 `--mode source` 与 `--mode node`）。
+- [@actiondock/mcp](file:///root/code/action-dock/packages/mcp/README.md)：MCP 协议适配器，提供 STDIO 与 HTTP 双协议通道，并完整支持 Tasks 异步任务映射与取消信号链路。
+- [@actiondock/core](file:///root/code/action-dock/packages/core/README.md)：公共领域内核，提供项目配置加载、统一调用门面 [ActionDockTarget](file:///root/code/action-dock/packages/core/src/target/types.ts)、数据目录排他锁 [DataDirLock](file:///root/code/action-dock/packages/core/src/storage/data-dir-lock.ts)、依赖原子事务 [beginTransaction](file:///root/code/action-dock/packages/core/src/project/transactions.ts) 以及执行状态机。
+- [@actiondock/runtime-node](file:///root/code/action-dock/packages/runtime-node/README.md)：Node.js 运行时适配器，提供基于 worker_threads 的非阻塞存储驱动 [WorkerSqliteDriver](file:///root/code/action-dock/packages/runtime-node/src/worker-sqlite-driver.ts)、原生类型擦除模块加载器与基于 `node:http` 的服务监听。
+- [@actiondock/testing](file:///root/code/action-dock/packages/testing/README.md)：独立测试框架包，全面收敛 [FakeClock](file:///root/code/action-dock/packages/testing/src/clock.ts) 确定性时钟、[MockProcessExecutor](file:///root/code/action-dock/packages/testing/src/process.ts) 进程模拟、[MemoryStorage](file:///root/code/action-dock/packages/testing/src/storage.ts) 内存存储以及 [createTestRuntime](file:///root/code/action-dock/packages/testing/src/runtime.ts) 测试运行时。
+- [@actiondock/sdk](file:///root/code/action-dock/packages/sdk/README.md)：极简纯净开发者契约，零生产依赖，仅提供 `defineAction`、`ActionContext`、`Config`、`StateStore`、`ActionInvoker`、`Logger` 与 `ProcessAPI`。
 
 ---
 
 ## 验证与测试
 
 ```bash
-# 执行全量单元测试与集成测试（173 项测试全部通过）
-bun test
+# 执行全量单元测试与集成测试
+npm test
 
 # 执行全量 TypeScript 类型检查
-bun run typecheck
+npm run typecheck
+
+# 执行多包产物全量构建
+npm run build
+
+# 执行发布打包冒烟测试
+npm run test:pack
+
+# 执行跨环境兼容性验证测试
+bun test
 ```
 
 ---

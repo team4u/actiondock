@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { createServer } from "node:http";
 import { type ActionContext, defineAction } from "@actiondock/sdk";
 import { createActionDockApp } from "../src/app";
 import { createActionDockHost } from "../src/host";
@@ -9,6 +10,10 @@ import {
   createActionDockTarget,
   LocalActionDockTarget,
   RemoteActionDockTarget,
+  TargetError,
+  CloseTimeoutError,
+  TARGET_PROTOCOL_UNSUPPORTED,
+  TARGET_CAPABILITY_UNAVAILABLE,
 } from "../src/target";
 import { startActionDockServer } from "../src/server";
 
@@ -479,6 +484,89 @@ describe("ActionDockTarget 统一调用门面", () => {
         await target.close();
         mgmtServer.stop();
       }
+    });
+  });
+
+  describe("TargetError, CloseTimeoutError, TARGET_PROTOCOL_UNSUPPORTED 场景覆盖", () => {
+    it("LocalActionDockTarget.close 发生超时时抛出 CloseTimeoutError", async () => {
+      const slowApp = {
+        close: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        },
+      } as any;
+      const target = new LocalActionDockTarget(slowApp);
+      try {
+        await target.close({ timeoutMs: 20 });
+        expect(true).toBe(false);
+      } catch (err: any) {
+        expect(err).toBeInstanceOf(CloseTimeoutError);
+        expect(err.name).toBe("CloseTimeoutError");
+        expect(err.message).toContain("timed out");
+      }
+    });
+
+    it("RemoteActionDockTarget.info 遇到不兼容的协议版本时抛出 TargetError 且 code 为 TARGET_PROTOCOL_UNSUPPORTED", async () => {
+      const server = createServer((req, res) => {
+        if (req.url === "/api/v2/info") {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({
+            id: "incompatible-remote",
+            protocolVersion: "99.0",
+            packages: [],
+          }));
+          return;
+        }
+        res.writeHead(404);
+        res.end();
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+      const port = (server.address() as any).port;
+      try {
+        const target = new RemoteActionDockTarget({
+          serverUrl: `http://127.0.0.1:${port}`,
+        });
+        try {
+          await target.info();
+          expect(true).toBe(false);
+        } catch (err: any) {
+          expect(err).toBeInstanceOf(TargetError);
+          expect(err.name).toBe("TargetError");
+          expect(err.code).toBe(TARGET_PROTOCOL_UNSUPPORTED);
+          expect(err.message).toContain("TARGET_PROTOCOL_UNSUPPORTED");
+        }
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    });
+
+    it("RemoteActionDockTarget 调用 listStateEntries 抛出 TargetError 且 code 为 TARGET_CAPABILITY_UNAVAILABLE", async () => {
+      const target = new RemoteActionDockTarget({
+        serverUrl: "http://127.0.0.1:9999",
+      });
+      try {
+        await target.listStateEntries("test.pkg");
+        expect(true).toBe(false);
+      } catch (err: any) {
+        expect(err).toBeInstanceOf(TargetError);
+        expect(err.code).toBe(TARGET_CAPABILITY_UNAVAILABLE);
+      }
+    });
+
+    it("LocalActionDockTarget.listStateEntries 针对未知包抛出 TargetError 且 code 为 TARGET_CAPABILITY_UNAVAILABLE", async () => {
+      const app = await createActionDockApp({
+        projectConfig: { id: "pkg.test" },
+        actions: [],
+        inMemory: true,
+      });
+      const target = new LocalActionDockTarget(app);
+      try {
+        await target.listStateEntries("pkg.unknown");
+        expect(true).toBe(false);
+      } catch (err: any) {
+        expect(err).toBeInstanceOf(TargetError);
+        expect(err.code).toBe(TARGET_CAPABILITY_UNAVAILABLE);
+      }
+      await target.close();
     });
   });
 });

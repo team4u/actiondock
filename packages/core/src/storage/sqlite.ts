@@ -12,15 +12,15 @@ import {
 import { type Clock, SystemClock } from "../runtime/clock";
 import { createDefaultSqliteDriver } from "./driver";
 import {
-  IdempotencyCheckResult,
-  IdempotencyRecord,
-  RuntimeStorage,
-  SqliteDriver,
-  SqliteStatement,
-  StateEntry,
   STORAGE_SCHEMA_VERSION,
-  StorageOptions,
-  TerminalRunStatus,
+  type IdempotencyCheckResult,
+  type IdempotencyRecord,
+  type RuntimeStorage,
+  type SqliteDriver,
+  type SqliteStatement,
+  type StateEntry,
+  type StorageOptions,
+  type TerminalRunStatus,
 } from "./types";
 
 export {
@@ -40,6 +40,8 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
   private clock: Clock;
   private isClosed = false;
   private statementCache = new Map<string, SqliteStatement>();
+  private dbPath: string;
+  private syncReader?: SqliteDriver;
 
   get isOpen(): boolean {
     return !this.isClosed;
@@ -53,6 +55,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     this.packageId = options.packageId;
     this.clock = options.clock ?? new SystemClock();
     const dbPath = options.dbPath || ":memory:";
+    this.dbPath = dbPath;
 
     if (dbPath !== ":memory:") {
       const dir = dirname(dbPath);
@@ -233,7 +236,21 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     const stmt = this.getStatement(
       "SELECT value_json FROM config WHERE package_id = ? AND key = ?"
     );
-    const row = stmt.get<{ value_json: string }>(this.packageId, key);
+    let row: any = stmt.get<{ value_json: string }>(this.packageId, key);
+    if (row && typeof row.then === "function") {
+      if (this.dbPath && this.dbPath !== ":memory:" && existsSync(this.dbPath)) {
+        try {
+          if (!this.syncReader) {
+            this.syncReader = createDefaultSqliteDriver(this.dbPath);
+          }
+          row = this.syncReader.prepare(
+            "SELECT value_json FROM config WHERE package_id = ? AND key = ?"
+          ).get(this.packageId, key);
+        } catch {
+          // ignore fallback error
+        }
+      }
+    }
     if (!row || row.value_json === undefined || row.value_json === null) {
       return undefined;
     }
@@ -248,7 +265,22 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     const stmt = this.getStatement(
       "SELECT key, value_json FROM config WHERE package_id = ?"
     );
-    const rows = stmt.all<{ key: string; value_json: string }>(this.packageId);
+    let rawRows: any = stmt.all<{ key: string; value_json: string }>(this.packageId);
+    if (rawRows && typeof rawRows.then === "function") {
+      if (this.dbPath && this.dbPath !== ":memory:" && existsSync(this.dbPath)) {
+        try {
+          if (!this.syncReader) {
+            this.syncReader = createDefaultSqliteDriver(this.dbPath);
+          }
+          rawRows = this.syncReader.prepare(
+            "SELECT key, value_json FROM config WHERE package_id = ?"
+          ).all(this.packageId);
+        } catch {
+          // ignore fallback error
+        }
+      }
+    }
+    const rows = Array.isArray(rawRows) ? rawRows : [];
     const result: Record<string, unknown> = {};
     for (const row of rows) {
       try {
@@ -260,7 +292,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     return result;
   }
 
-  setConfig(key: string, value: unknown): void {
+  setConfig(key: string, value: unknown): void | Promise<void> {
     const stmt = this.getStatement(`
       INSERT INTO config (package_id, key, value_json, updated_at)
       VALUES (?, ?, ?, ?)
@@ -270,14 +302,20 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     `);
     const valJson = JSON.stringify(value);
     const now = this.clock.now().toISOString();
-    stmt.run(this.packageId, key, valJson, now);
+    const res = stmt.run(this.packageId, key, valJson, now);
+    if (res && typeof (res as any).then === "function") {
+      return (res as unknown) as Promise<void>;
+    }
   }
 
-  deleteConfig(key: string): boolean {
+  deleteConfig(key: string): boolean | Promise<boolean> {
     const stmt = this.getStatement(
       "DELETE FROM config WHERE package_id = ? AND key = ?"
     );
     const res = stmt.run(this.packageId, key);
+    if (res && typeof (res as any).then === "function") {
+      return (res as any).then((r: any) => r.changes > 0);
+    }
     return res.changes > 0;
   }
 
@@ -311,13 +349,13 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     }
   }
 
-  private findMatchingStateRows(targetKey: string): Array<{
+  private async findMatchingStateRows(targetKey: string): Promise<Array<{
     namespace: string;
     key: string;
     value_json: string;
     updated_at: string;
     expires_at?: string;
-  }> {
+  }>> {
     let decoded: { namespace: string; key: string } | undefined;
     try {
       decoded = decodeStateKey(targetKey);
@@ -334,7 +372,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       )
     `);
 
-    const rawRows = candidateStmt.all<{
+    const rawResult = candidateStmt.all<{
       namespace: string;
       key: string;
       value_json: string;
@@ -348,6 +386,16 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       targetKey,
       targetKey
     );
+
+    const rawRows: Array<{
+      namespace: string;
+      key: string;
+      value_json: string;
+      updated_at: string;
+      expires_at?: string;
+    }> = (rawResult instanceof Promise || typeof (rawResult as any)?.then === "function")
+      ? await rawResult
+      : (Array.isArray(rawResult) ? rawResult : []);
 
     const now = this.clock.now().getTime();
     const uniqueMap = new Map<string, (typeof rawRows)[0]>();
@@ -390,7 +438,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       };
     }
 
-    const matchingRows = this.findMatchingStateRows(targetKey);
+    const matchingRows = await this.findMatchingStateRows(targetKey);
     if (matchingRows.length > 1) {
       throw new Error(
         `Ambiguous state key '${targetKey}': matches ${matchingRows.length} entries (${matchingRows.map((r) => `${r.namespace}:${r.key}`).join(", ")})`
@@ -457,7 +505,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       return this.deleteState(namespace, targetKey);
     }
 
-    const matchingRows = this.findMatchingStateRows(targetKey);
+    const matchingRows = await this.findMatchingStateRows(targetKey);
     if (matchingRows.length > 1) {
       throw new Error(
         `Ambiguous state key '${targetKey}': matches ${matchingRows.length} entries for deletion (${matchingRows.map((r) => `${r.namespace}:${r.key}`).join(", ")})`
@@ -529,11 +577,14 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     }
 
     const stmt = this.getStatement(sql);
-    const rows = stmt.all<{
+    const rawResult = stmt.all<{
       namespace: string;
       key: string;
       expires_at?: string;
     }>(...params);
+    const rows = (rawResult instanceof Promise || typeof (rawResult as any)?.then === "function")
+      ? await rawResult
+      : (Array.isArray(rawResult) ? rawResult : []);
 
     const now = this.clock.now().getTime();
     const result: string[] = [];
@@ -571,13 +622,16 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     }
 
     const stmt = this.getStatement(sql);
-    const rows = stmt.all<{
+    const rawResult = stmt.all<{
       namespace: string;
       key: string;
       value_json: string;
       updated_at: string;
       expires_at?: string;
     }>(...params);
+    const rows = (rawResult instanceof Promise || typeof (rawResult as any)?.then === "function")
+      ? await rawResult
+      : (Array.isArray(rawResult) ? rawResult : []);
 
     const now = this.clock.now().getTime();
     const results: StateEntry[] = [];
@@ -714,6 +768,9 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
         LIMIT ?
       `);
       rows = stmt.all(this.packageId, limit);
+    }
+    if (rows && typeof (rows as any).then === "function") {
+      return (rows as any).then((r: any[]) => r.map((item: any) => this.mapRunRecord(item)));
     }
     return rows.map((r) => this.mapRunRecord(r));
   }
@@ -856,12 +913,21 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     };
   }
 
-  close(): void {
+  async close(): Promise<void> {
     if (this.isClosed) return;
     this.isClosed = true;
     this.statementCache.clear();
+    if (this.syncReader) {
+      try {
+        this.syncReader.close();
+      } catch {}
+      this.syncReader = undefined;
+    }
     try {
-      this.driver.close();
+      const res: any = this.driver.close();
+      if (res && typeof res.then === "function") {
+        await res;
+      }
     } catch {
       // 忽略重复关闭异常
     }

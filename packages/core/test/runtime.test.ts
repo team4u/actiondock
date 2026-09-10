@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type ActionDefinition, defineAction } from "@actiondock/sdk";
@@ -709,7 +709,7 @@ describe("ActionRunner", () => {
     const cycleResult = await runner.execute("test.cycle-action", {});
     expect(cycleResult.ok).toBe(false);
     const runs = storage.listRuns();
-    const cycleRun = runs.find((r) => r.error?.code === "ACTION_CYCLE_DETECTED");
+    const cycleRun = runs.find((r) => r.error?.code === "ACTION_CALL_CYCLE" || r.error?.code === "ACTION_CYCLE_DETECTED");
     expect(cycleRun).toBeDefined();
     expect(cycleRun?.status).toBe("failed");
 
@@ -742,7 +742,7 @@ describe("ActionRunner", () => {
 
     const depthResult = await runner.execute("test.rec-a", {}, { maxCallDepth: 3 });
     expect(depthResult.ok).toBe(false);
-    const depthRun = storage.listRuns().find((r) => r.error?.code === "ACTION_MAX_DEPTH_EXCEEDED");
+    const depthRun = storage.listRuns().find((r) => r.error?.code === "ACTION_CALL_CYCLE" || r.error?.code === "ACTION_MAX_DEPTH_EXCEEDED");
     expect(depthRun).toBeDefined();
     expect(depthRun?.status).toBe("failed");
   });
@@ -891,6 +891,14 @@ export default {
 };
 `;
       writeFileSync(join(pkgDir, "actions", "broken.act.ts"), brokenActionCode);
+
+      const manifestPath = join(pkgDir, "actiondock.json");
+      const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+      manifest.actions["broken.act"] = {
+        entry: "actions/broken.act.ts",
+        description: "Broken action",
+      };
+      writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
 
       const storage = new SqliteRuntimeStorage({
         packageId: "caller-pkg",

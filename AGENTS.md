@@ -1,19 +1,19 @@
 # Agent 开发协作指引 - ActionDock 2.0
 
 - **核心定位**：ActionDock 2.0 是面向 AI Agent Action 与 Skill 的开发、测试、构建与分发工具链。
-- **运行时与引擎**：默认运行时为 Node.js（版本大于等于 22.13.0，基于 node:sqlite、node:http 与 tsx 提供驱动）；Bun 作为单文件独立二进制编译器（Bun.build）与开发测试运行环境。
+- **运行时与引擎**：默认运行时为 Node.js（版本大于等于 24.12.0，基于 node:sqlite、node:http 与类型擦除提供原生驱动）；Bun 作为跨环境兼容性测试运行环境。
 - **代码库分层结构**：
-  - `packages/sdk`：`@actiondock/sdk`（极简公共 SDK：`defineAction`、`ActionContext`、`Config`、`StateStore`、`ActionInvoker`、`Logger`、`createTestRuntime`）。
-  - `packages/core`：`@actiondock/core`（公共领域内核：`project`、`runtime`、`storage`、`schema`、`catalog`、`execution`、`server`）。
-  - `packages/builder`：`@actiondock/builder`（依赖规划与编译器调度：`BuildPlanner`、`BunCompiler`、`SkillExporter`）。
-  - `packages/runtime-node`：`@actiondock/runtime-node`（Node.js 运行时适配层：`NodeSqliteDriver`、`ExecaProcessExecutor`、`NodeHttpServer`）。
-  - `packages/testing`：`@actiondock/testing`（确定性测试工具框架：`FakeClock`、`MockProcessExecutor`、`MemoryStorage`）。
+  - `packages/sdk`：`@actiondock/sdk`（极简公共 SDK：`defineAction`、`ActionContext`、`Config`、`StateStore`、`ActionInvoker`、`Logger`、`ProcessAPI`）。
+  - `packages/core`：`@actiondock/core`（公共领域内核：`project`、`runtime`、`storage`、`schema`、`catalog`、`execution`、`server`、`target`）。
+  - `packages/builder`：`@actiondock/builder`（依赖规划与分发构建：`BuildPlanner`、`SkillExporter`、目录型构建与 npm 打包）。
+  - `packages/runtime-node`：`@actiondock/runtime-node`（Node.js 运行时适配层：`WorkerSqliteDriver`、`NodeSqliteDriver`、`ExecaProcessExecutor`、`NodeHttpServer`）。
+  - `packages/testing`：`@actiondock/testing`（确定性测试工具框架：`createTestRuntime`、`FakeClock`、`MockProcessExecutor`、`MemoryStorage`）。
   - `packages/mcp`：`@actiondock/mcp`（Model Context Protocol 适配器：STDIO/HTTP Transport、Tool 映射、取消链路）。
-  - `packages/cli`：`@actiondock/cli`（CLI 工具链与独立运行分发器：`init`、`info`、`list`、`describe`、`run`、`validate`、`config`、`state`、`runs`、`serve`、`mcp`、`build`、`test`、`export skill`）。
+  - `packages/cli`：`@actiondock/cli`（CLI 工具链与独立运行分发器：`init`、`info`、`list`、`describe`、`run`、`validate`、`config`、`state`、`runs`、`serve`、`mcp`、`build`、`test`、`add`、`remove`、`pack`、`doctor`、`link`、`unlink`、`export skill`）。
   - `examples/*`：官方示例 Action Packages。
 - **常用验证命令**：
-  - 执行所有单元与集成测试：`bun test`
-  - 执行全量 TypeScript 类型检查：`bun run typecheck`
+  - 执行所有单元与集成测试：`npm test`（或 `bun test`）
+  - 执行全量 TypeScript 类型检查：`npm run typecheck`
 - **核心工程设计原则**：
   - **解耦优先**：核心业务与外部环境及底层实现解耦，保持平台中立。
   - **单一职责**：模块保持职责单一明确，杜绝逻辑复杂混杂与过度膨胀。

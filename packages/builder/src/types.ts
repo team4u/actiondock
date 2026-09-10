@@ -137,7 +137,7 @@ export interface BuildPlannerOptions {
   projectRoot: string;
   /** 显式传入的项目配置（若未提供则从 actiondock.json 读取） */
   config?: ProjectConfig & { files?: string[]; assets?: string[]; uses?: string[]; actions?: Record<string, unknown> };
-  /** 显式传入的声明式清单（若未提供则从 actiondock.manifest.json 读取） */
+  /** 显式传入的声明式清单（若未提供则从 actiondock.json 读取） */
   manifest?: ActionDockManifest & { files?: string[] };
   /** 挑选的 Action ID 列表（用于依赖闭包裁剪） */
   actions?: string[];

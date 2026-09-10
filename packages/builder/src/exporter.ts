@@ -424,7 +424,7 @@ export class SkillExporter {
         writeFileSync(join(skillDir, "SKILL.md"), skillMd, "utf-8");
       }
 
-      // 导出精简后的 actiondock.manifest.json 清单
+      // 导出精简后的 actiondock.json 项目配置（项目元数据与清单的单一事实源）
       const manifestActions: Record<string, unknown> = {};
       for (const a of plan.actions) {
         manifestActions[a.id] = {
@@ -443,26 +443,15 @@ export class SkillExporter {
           }
         }
       }
-      const exportedManifest = {
-        schemaVersion: 1,
-        actions: manifestActions,
-        assets: plan.assets,
-        ...(plan.files && plan.files.length > 0 ? { files: plan.files } : {}),
-      };
-      writeFileSync(
-        join(skillDir, "actiondock.manifest.json"),
-        JSON.stringify(exportedManifest, null, 2) + "\n",
-        "utf-8"
-      );
-
-      // 导出精简后的 actiondock.json 项目配置
       const exportedConfig = {
+        schemaVersion: 2,
         id: plan.packageId,
         name: plan.packageName,
         version: plan.version,
         description: plan.description,
-        actionsDir,
-        playbooksDir,
+        ...(actionsDir ? { actionsDir } : {}),
+        ...(playbooksDir ? { playbooksDir } : {}),
+        actions: manifestActions,
         config: plan.configDefs,
         ...(plan.files && plan.files.length > 0 ? { files: plan.files } : {}),
         ...(plan.assets && plan.assets.length > 0 ? { assets: plan.assets } : {}),

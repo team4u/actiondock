@@ -9,21 +9,272 @@ import {
   RuntimeStateStore,
   type RuntimePlatform,
 } from "@actiondock/core";
-import {
-  type ActionDefinition,
-  type Config,
-  type ExecutionEvent,
-  type ExecutionResult,
-  type JsonValue,
-  type Logger,
-  MemoryLogger,
-  type ProgressReporter,
-  type RuntimeError,
-  type StateStore,
+import type {
+  ActionDefinition,
+  Config,
+  ExecutionEvent,
+  ExecutionResult,
+  JsonValue,
+  Logger,
+  ProgressReporter,
+  RuntimeError,
+  StateStore,
 } from "@actiondock/sdk";
 import { FakeClock } from "./clock";
 import { MockProcessExecutor } from "./process";
 import { MemoryStorage } from "./storage";
+
+/**
+ * 基于内存 Map 的只读/可写配置实现，专供单元测试使用。
+ */
+export class MemoryConfig implements Config {
+  private store: Map<string, unknown>;
+
+  constructor(initial: Record<string, unknown> = {}) {
+    this.store = new Map(Object.entries(initial));
+  }
+
+  get<T = unknown>(key: string): T | undefined;
+  get<T = unknown>(key: string, defaultValue: T): T;
+  get<T = unknown>(key: string, defaultValue?: T): T | undefined {
+    if (this.store.has(key)) {
+      return this.store.get(key) as T;
+    }
+    return defaultValue;
+  }
+
+  has(key: string): boolean {
+    return this.store.has(key);
+  }
+
+  /**
+   * 在测试期间动态更新或插入配置值。
+   * @param key 配置键名
+   * @param value 配置值
+   */
+  set(key: string, value: unknown): void {
+    this.store.set(key, value);
+  }
+
+  /**
+   * 删除指定配置项。
+   * @param key 配置键名
+   */
+  delete(key: string): boolean {
+    return this.store.delete(key);
+  }
+
+  /**
+   * 列出所有已存储配置项。
+   */
+  list(): Record<string, unknown> {
+    return Object.fromEntries(this.store.entries());
+  }
+}
+
+/**
+ * 内存状态条目结构体，包含数据值与可选的过期时间戳。
+ */
+export interface MemoryStateEntry {
+  value: unknown;
+  expiresAt?: number;
+}
+
+/**
+ * 转义状态键分段中的特殊字符（\ 和 :）。
+ */
+export function escapeStateSegment(segment: string): string {
+  return segment.replace(/\\/g, "\\\\").replace(/:/g, "\\:");
+}
+
+/**
+ * 反转义状态键分段。
+ */
+export function unescapeStateSegment(segment: string): string {
+  return segment.replace(/\\(:|\\)/g, "$1");
+}
+
+/**
+ * 将 namespace 与 key 编码为无歧义的复合状态键名。
+ */
+export function encodeStateKey(namespace: string, key: string): string {
+  if (!namespace) {
+    return escapeStateSegment(key);
+  }
+  return `${escapeStateSegment(namespace)}:${escapeStateSegment(key)}`;
+}
+
+/**
+ * 解析复合状态键名。若复合键存在歧义（多个未转义冒号），抛出错误。
+ */
+export function decodeStateKey(fullKey: string): { namespace: string; key: string } {
+  const unescapedColonIndices: number[] = [];
+  for (let i = 0; i < fullKey.length; i++) {
+    if (fullKey[i] === ":") {
+      let backslashes = 0;
+      for (let j = i - 1; j >= 0 && fullKey[j] === "\\"; j--) {
+        backslashes++;
+      }
+      if (backslashes % 2 === 0) {
+        unescapedColonIndices.push(i);
+      }
+    }
+  }
+
+  if (unescapedColonIndices.length === 0) {
+    return { namespace: "", key: unescapeStateSegment(fullKey) };
+  }
+  if (unescapedColonIndices.length === 1) {
+    const idx = unescapedColonIndices[0];
+    return {
+      namespace: unescapeStateSegment(fullKey.slice(0, idx)),
+      key: unescapeStateSegment(fullKey.slice(idx + 1)),
+    };
+  }
+
+  throw new Error(`Ambiguous state key '${fullKey}': contains multiple unescaped colon delimiters`);
+}
+
+/**
+ * 基于内存 Map 的状态存储实现，支持命名空间隔离与 TTL 自动失效，专供单元测试使用。
+ */
+export class MemoryStateStore implements StateStore {
+  private store: Map<string, any>;
+  private namespace: string;
+
+  constructor(
+    store?: Map<string, any>,
+    namespace = ""
+  ) {
+    this.store = store || new Map();
+    this.namespace = namespace;
+  }
+
+  private qualify(key: string): string {
+    return encodeStateKey(this.namespace, key);
+  }
+
+  private extractEntry(raw: unknown): MemoryStateEntry {
+    if (
+      raw !== null &&
+      typeof raw === "object" &&
+      ("__actiondock_entry__" in (raw as Record<string, unknown>) ||
+        "expiresAt" in (raw as Record<string, unknown>))
+    ) {
+      return raw as MemoryStateEntry;
+    }
+    return { value: raw };
+  }
+
+  async get<T = unknown>(key: string): Promise<T | undefined> {
+    const qKey = this.qualify(key);
+    const raw = this.store.get(qKey);
+    if (raw === undefined) return undefined;
+    const entry = this.extractEntry(raw);
+    if (entry.expiresAt !== undefined && entry.expiresAt <= Date.now()) {
+      this.store.delete(qKey);
+      return undefined;
+    }
+    return (entry.value !== undefined ? structuredClone(entry.value) : undefined) as T;
+  }
+
+  async set<T = unknown>(
+    key: string,
+    value: T,
+    ttl?: number
+  ): Promise<void> {
+    const qKey = this.qualify(key);
+    const expiresAt =
+      typeof ttl === "number" && ttl > 0 ? Date.now() + ttl * 1000 : undefined;
+
+    const entry: MemoryStateEntry = {
+      value: structuredClone(value),
+      expiresAt,
+    };
+    (entry as any).__actiondock_entry__ = true;
+    this.store.set(qKey, entry);
+  }
+
+  async delete(key: string): Promise<boolean> {
+    const qKey = this.qualify(key);
+    return this.store.delete(qKey);
+  }
+
+  async clear(prefix = ""): Promise<number> {
+    const keysToDelete = await this.keys(prefix);
+    let count = 0;
+    for (const k of keysToDelete) {
+      if (this.store.delete(this.qualify(k))) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  async keys(prefix = ""): Promise<string[]> {
+    const now = Date.now();
+    const result: string[] = [];
+    for (const [k, raw] of this.store.entries()) {
+      let decoded: { namespace: string; key: string };
+      try {
+        decoded = decodeStateKey(k);
+      } catch {
+        continue;
+      }
+      if (decoded.namespace === this.namespace) {
+        if (prefix && !decoded.key.startsWith(prefix)) {
+          continue;
+        }
+        const entry = this.extractEntry(raw);
+        if (entry.expiresAt !== undefined && entry.expiresAt <= now) {
+          this.store.delete(k);
+          continue;
+        }
+        result.push(decoded.key);
+      }
+    }
+    return result;
+  }
+
+  scope(namespace: string): StateStore {
+    const nextNs = this.namespace
+      ? `${this.namespace}:${namespace}`
+      : namespace;
+    return new MemoryStateStore(this.store, nextNs);
+  }
+}
+
+/**
+ * 内存日志记录器实现，将所有日志记录在数组中以便在测试断言中检索。
+ */
+export class MemoryLogger implements Logger {
+  public logs: Array<{ level: string; message: string; data?: unknown }> = [];
+
+  debug(message: string, data?: unknown): void {
+    this.logs.push({ level: "debug", message, data });
+  }
+
+  info(message: string, data?: unknown): void {
+    this.logs.push({ level: "info", message, data });
+  }
+
+  warn(message: string, data?: unknown): void {
+    this.logs.push({ level: "warn", message, data });
+  }
+
+  error(message: string, data?: unknown): void {
+    this.logs.push({ level: "error", message, data });
+  }
+}
+
+export type TestRuntimeProvider = (options?: TestRuntimeOptions) => TestRuntime;
+let _globalProvider: TestRuntimeProvider | null = null;
+export function registerTestRuntimeProvider(provider: TestRuntimeProvider | null): void {
+  _globalProvider = provider;
+}
+export function getTestRuntimeProvider(): TestRuntimeProvider | null {
+  return _globalProvider;
+}
 
 /**
  * 规范化运行时错误异常类。
@@ -90,7 +341,8 @@ export class TestConfigStore implements TestConfig {
   }
 
   delete(key: string): boolean {
-    return this.storage.deleteConfig(key);
+    const res = this.storage.deleteConfig(key);
+    return typeof res === "boolean" ? res : true;
   }
 
   list(): Record<string, unknown> {
@@ -231,7 +483,7 @@ let anonymousTestActionCounter = 0;
  * @param options 测试运行时选项
  */
 export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime {
-  const packageId = options.packageId || "test-pkg";
+  const packageId = options.packageId || "my-pkg";
   const clock =
     options.clock ??
     (options.platform?.clock instanceof FakeClock ? options.platform.clock : new FakeClock());
@@ -275,15 +527,24 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
         const act = item.action ?? item;
         if (id) {
           actionsMap.set(id, act);
+          if (!id.includes("/")) {
+            actionsMap.set(`${packageId}/${id}`, act);
+          }
         }
       }
     } else if (options.actions instanceof Map) {
       for (const [k, v] of options.actions) {
         actionsMap.set(k, v);
+        if (!k.includes("/")) {
+          actionsMap.set(`${packageId}/${k}`, v);
+        }
       }
     } else if (typeof options.actions === "object") {
       for (const [k, v] of Object.entries(options.actions)) {
         actionsMap.set(k, v as ActionDefinition);
+        if (!k.includes("/")) {
+          actionsMap.set(`${packageId}/${k}`, v as ActionDefinition);
+        }
       }
     }
   }
@@ -317,6 +578,9 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
       executionService.registerAction(idOrAction, maybeAction!);
       if (maybeAction) {
         actionsMap.set(idOrAction, maybeAction);
+        if (!idOrAction.includes("/")) {
+          actionsMap.set(`${packageId}/${idOrAction}`, maybeAction);
+        }
       }
     } else {
       const actObj = idOrAction as any;
@@ -324,6 +588,9 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
       const act = actObj.action || (actObj.run ? actObj : undefined);
       if (id && act) {
         actionsMap.set(id, act);
+        if (!id.includes("/")) {
+          actionsMap.set(`${packageId}/${id}`, act);
+        }
       }
       executionService.registerAction(idOrAction);
     }

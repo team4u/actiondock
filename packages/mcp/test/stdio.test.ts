@@ -1,14 +1,20 @@
 import { afterAll, beforeEach, describe, expect, it } from "bun:test";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 describe("MCP STDIO Protocol Process Isolation", () => {
   let tempDir: string;
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), "mcp-stdio-test-"));
+
+    const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
+    if (existsSync(rootNodeModules)) {
+      symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "dir");
+    }
+
     mkdirSync(join(tempDir, "actions"), { recursive: true });
 
     writeFileSync(
@@ -97,7 +103,7 @@ export default defineAction({
   });
 
   it("physically isolates child process stdout and protects MCP JSON-RPC protocol framing", async () => {
-    const cliScript = join(__dirname, "../../cli/dist/index.js");
+    const cliScript = resolve(import.meta.dirname, "../../cli/dist/index.js");
 
     const child = spawn(process.execPath, [cliScript, "mcp", "-d", tempDir], {
       cwd: tempDir,
@@ -193,7 +199,7 @@ export default defineAction({
   }, 10000);
 
   it("converts child process sudden exit into structured JSON-RPC error without corrupting transport framing", async () => {
-    const cliScript = join(__dirname, "../../cli/dist/index.js");
+    const cliScript = resolve(import.meta.dirname, "../../cli/dist/index.js");
 
     const child = spawn(process.execPath, [cliScript, "mcp", "-d", tempDir], {
       cwd: tempDir,

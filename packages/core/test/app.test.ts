@@ -438,9 +438,9 @@ Execute build and then deploy artifact.
     });
 
     const originalClose = storage.close.bind(storage);
-    storage.close = () => {
+    storage.close = async () => {
       customStorageClosed = true;
-      originalClose();
+      await originalClose();
     };
 
     const dummyAction = defineAction({

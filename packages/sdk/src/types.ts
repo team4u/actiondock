@@ -241,14 +241,21 @@ export interface DetachedProcessResult {
 export interface ProcessAPI {
   /** 执行外部命令 */
   exec(command: string, args?: string[], options?: ProcessExecOptions): Promise<ProcessResult>;
-  /** 启动脱离父进程的后台进程并探测就绪状态 */
-  spawnDetached(options: DetachedProcessOptions): Promise<DetachedProcessResult>;
+  /** 启动外部命令进程 */
+  spawn(command: string, args?: string[], options?: ProcessExecOptions): Promise<ProcessResult>;
 }
 
 /**
  * Action 间相互调用的执行器接口。
  */
 export interface ActionInvoker {
+  /**
+   * 直接调用指定的 Action
+   * @param ref 目标 Action 引用或标识符（严格只接受 ActionRef 或 string）
+   * @param input 传递给目标 Action 的输入参数
+   */
+  (ref: string | ActionRef, input?: unknown): Promise<unknown>;
+
   /**
    * 调用指定的 Action 并传入参数，返回其执行结果
    * @param action 目标 Action 引用或标识符（严格只接受 ActionRef 或 string）

@@ -57,7 +57,7 @@ describe("原子事务快照与崩溃恢复", () => {
 
     // 修改旧文件并新建文件
     writeFileSync(join(tempDir, "actiondock.json"), JSON.stringify({ id: "test", version: "2.0.0" }));
-    writeFileSync(join(tempDir, "actiondock.lock.json"), JSON.stringify({ lockfileVersion: 2 }));
+    writeFileSync(join(tempDir, "actiondock.lock.json"), JSON.stringify({ lockfileVersion: 1 }));
 
     // 回滚（单测中禁用外部网络安装 frozenInstall: false）
     await tx.rollback({ frozenInstall: false });

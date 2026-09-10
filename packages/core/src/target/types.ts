@@ -30,6 +30,39 @@ import type { StateEntry } from "../storage/types";
 export const ACTIONDOCK_PROTOCOL_VERSION = "2.0";
 
 /**
+ * Target 错误码常量。
+ */
+export const TARGET_PROTOCOL_UNSUPPORTED = "TARGET_PROTOCOL_UNSUPPORTED";
+export const TARGET_CAPABILITY_UNAVAILABLE = "TARGET_CAPABILITY_UNAVAILABLE";
+export const TARGET_RESULT_UNKNOWN = "TARGET_RESULT_UNKNOWN";
+
+/**
+ * 结构化 Target 异常类。
+ */
+export class TargetError extends Error {
+  readonly code: string;
+  readonly details?: Record<string, unknown>;
+  constructor(code: string, message: string, details?: Record<string, unknown>) {
+    super(message);
+    this.name = "TargetError";
+    this.code = code;
+    this.details = details;
+  }
+}
+
+/**
+ * 关闭超时异常类。
+ */
+export class CloseTimeoutError extends Error {
+  readonly runIds?: string[];
+  constructor(message = "Target close operation timed out", runIds?: string[]) {
+    super(message);
+    this.name = "CloseTimeoutError";
+    this.runIds = runIds;
+  }
+}
+
+/**
  * 幂等性保留策略。
  */
 export interface IdempotencyPolicy {
@@ -202,7 +235,7 @@ export interface ActionDockTarget {
   listStateEntries?(packageId: string, options?: any): Promise<StateEntry[]>;
 
   /** 关闭目标连接并清理底层资源 */
-  close(): Promise<void>;
+  close(options?: { timeoutMs?: number }): Promise<void>;
 }
 
 /**

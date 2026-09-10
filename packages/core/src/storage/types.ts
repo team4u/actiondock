@@ -131,8 +131,8 @@ export interface RuntimeStorage {
   // --- Config 配置管理 ---
   getConfig<T = unknown>(key: string): T | undefined;
   listConfig(): Record<string, unknown>;
-  setConfig(key: string, value: unknown): void;
-  deleteConfig(key: string): boolean;
+  setConfig(key: string, value: unknown): void | Promise<void>;
+  deleteConfig(key: string): boolean | Promise<boolean>;
 
   // --- State 状态管理 ---
   getState<T = unknown>(namespace: string, key: string): Promise<T | undefined>;

@@ -100,9 +100,12 @@ export class ActionResolver {
 
     if (allMatches.length > 1) {
       const candidates = allMatches.map((m) => `${m.packageId}/${m.actionId}`).join(", ");
-      throw new Error(
-        `AMBIGUOUS_ACTION_REF: Action '${ref.actionId}' is provided by multiple packages: ${candidates}. Please specify the package name.`
+      const err = new Error(
+        `INVALID_ACTION_REF: Action '${ref.actionId}' is ambiguous and provided by multiple packages: ${candidates}. Please specify the package name. (AMBIGUOUS_ACTION_REF)`
       );
+      (err as any).code = "INVALID_ACTION_REF";
+      (err as any).details = { alias: "AMBIGUOUS_ACTION_REF" };
+      throw err;
     }
 
     const matched = allMatches[0];

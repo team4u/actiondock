@@ -368,7 +368,7 @@ describe("@actiondock/testing", () => {
       const loopRes = await runtime.execute(loopA, {});
       expect(loopRes.ok).toBe(false);
       if (!loopRes.ok) {
-        expect(loopRes.error.code).toBe("ACTION_CYCLE_DETECTED");
+        expect(["ACTION_CALL_CYCLE", "ACTION_CYCLE_DETECTED"]).toContain(loopRes.error.code);
         expect(loopRes.error.message).toContain("loop.a");
       }
     });

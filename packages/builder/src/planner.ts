@@ -404,7 +404,7 @@ export class SelectionPlanner {
       }
     }
 
-    // 2. 获取声明式清单（优先使用传入清单，缺失则读取 actiondock.manifest.json，未提供则采用安全备用清单）
+    // 2. 获取声明式清单（优先使用传入清单，缺失则读取 actiondock.json，未提供则采用安全备用清单）
     let manifest = options?.manifest;
     if (!manifest) {
       const loaded = loadManifest(root);
@@ -418,7 +418,7 @@ export class SelectionPlanner {
     const validation = validateManifest(manifest, { projectRoot: root });
     if (!validation.valid) {
       throw new PlannerError(
-        `Invalid actiondock.manifest.json: ${(validation.errors || []).join("; ")}`,
+        `Invalid actiondock.json: ${(validation.errors || []).join("; ")}`,
         "INVALID_MANIFEST"
       );
     }
@@ -768,14 +768,6 @@ export class SelectionPlanner {
       });
     }
 
-    const manifestPath = join(root, "actiondock.manifest.json");
-    if (existsSync(manifestPath)) {
-      modulesAndAssets.push({
-        path: "actiondock.manifest.json",
-        resolvedPath: manifestPath,
-        type: "config",
-      });
-    }
 
     // 10. 外部 npm 依赖解析
     const externalDependencies = extractExternalDependencies(root);

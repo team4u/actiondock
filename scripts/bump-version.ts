@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
-const rootDir = resolve(__dirname, "..");
+const rootDir = resolve(import.meta.dirname, "..");
 
 const subPackages = [
   "sdk",
@@ -31,7 +31,7 @@ function getTargetVersion(): string {
   }
 
   if (!rawVersion) {
-    console.error("Usage: bun run ./scripts/bump-version.ts <version | --from-git-tag>");
+    console.error("Usage: node ./scripts/bump-version.ts <version | --from-git-tag>");
     process.exit(1);
   }
 
@@ -130,8 +130,8 @@ function main() {
   console.log("Updated packages/core/src/version.ts");
 
   // 4. Update lockfile
-  console.log("Updating lockfile via bun install...");
-  const installRes = spawnSync("bun", ["install"], {
+  console.log("Updating lockfile via npm install...");
+  const installRes = spawnSync("npm", ["install"], {
     cwd: rootDir,
     stdio: "inherit",
   });
@@ -140,13 +140,14 @@ function main() {
     process.exit(1);
   }
 
-  // 5. Rebuild CLI dist
-  console.log("Rebuilding @actiondock/cli dist bundle...");
-  const buildRes = spawnSync("bun", ["run", "--cwd", join(rootDir, "packages", "cli"), "build"], {
+  // 5. Rebuild packages dist
+  console.log("Rebuilding monorepo packages dist...");
+  const buildRes = spawnSync("node", [join(rootDir, "scripts", "build.ts")], {
+    cwd: rootDir,
     stdio: "inherit",
   });
   if (buildRes.status !== 0) {
-    console.error("Failed to build CLI dist");
+    console.error("Failed to build monorepo packages dist");
     process.exit(1);
   }
 

@@ -148,6 +148,14 @@ export class DefaultProcessExecutor implements ProcessExecutor {
     });
   }
 
+  async spawn(
+    command: string,
+    args: string[] = [],
+    options: ProcessExecOptions = {}
+  ): Promise<ProcessResult> {
+    return this.exec(command, args, options);
+  }
+
   async spawnDetached(options: DetachedProcessOptions): Promise<DetachedProcessResult> {
     const startTime = Date.now();
     try {
