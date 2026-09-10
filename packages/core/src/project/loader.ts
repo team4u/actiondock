@@ -1,28 +1,16 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 import type { ActionDefinition } from "@actiondock/sdk";
 import { DefaultModuleLoader, type ModuleLoader } from "../runtime/module-loader";
 import { loadManifest, ACTION_ID_REGEX, PLAYBOOK_ID_REGEX } from "./manifest";
 import type {
   ActionDockManifest,
-  ActionManifestEntry,
   PlaybookDefinition,
   PlaybookManifestEntry,
   ProjectConfig,
 } from "./types";
-
-/**
- * 将绝对路径规范化为 ESM 动态导入可用的 file:// URL 标识符。
- * Windows 绝对路径（如 D:\a\b.ts）不是合法的 ESM 标识符，会被解析为 "d:" 协议导致
- * 加载失败；POSIX 绝对路径虽可直接导入，统一转换后跨平台行为一致。
- */
-function toImportSpecifier(filePath: string): string {
-  return pathToFileURL(filePath).href;
-}
 
 /**
  * 从指定目录开始向上逐级递归查找包含 `actiondock.json` 的项目根目录。
@@ -59,7 +47,6 @@ import {
   PACKAGE_ID_REGEX,
   assertPathWithinRoot,
   assertWithinProjectRoot,
-  assertValidPackageId,
 } from "../utils";
 
 /**
@@ -152,30 +139,6 @@ export function getInstallCommand(projectRoot?: string): string[] {
     }
   }
   return ["npm", "install"];
-}
-
-/**
- * 解析 npm 风格 .npmrc 中的 strict-ssl 配置（项目级优先于用户级）。
- * 返回 undefined 表示各级配置均未声明该键。
- */
-function resolveNpmStrictSsl(projectRoot: string): boolean | undefined {
-  const configPaths = [join(projectRoot, ".npmrc"), join(homedir(), ".npmrc")];
-  for (const configPath of configPaths) {
-    try {
-      if (!existsSync(configPath)) continue;
-      const raw = readFileSync(configPath, "utf-8");
-      for (const line of raw.split(/\r?\n/)) {
-        const matched = line.match(/^\s*strict-ssl\s*=\s*(\S+)\s*$/i);
-        if (matched) {
-          const falsy = ["false", "0", "no", "off"];
-          return !falsy.includes(matched[1].toLowerCase());
-        }
-      }
-    } catch {
-      // 配置不可读时继续检查下一级
-    }
-  }
-  return undefined;
 }
 
 /**
@@ -395,9 +358,8 @@ export function discoverActionFiles(
  * 源码文件仅提供执行 Handler。
  * 
  * @param projectRoot 项目根目录
- * @param actionsDir actions 子目录（向后兼容回退参数）
- * @param _actionsDir actions 子目录（向后兼容回退参数）
- * @param options 控制是否允许自动安装依赖等选项
+ * @param _actionsDir actions 子目录（向后兼容保留参数）
+ * @param options 模块加载器等选项
  * @returns Map<ActionId, ActionDefinition> 映射
  */
 export async function loadActions(

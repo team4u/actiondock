@@ -5,8 +5,6 @@
   "name": "GitHub Tools",
   "version": "1.0.0",
   "description": "GitHub Actions for AI Agents",
-  "actionsDir": "actions",
-  "playbooksDir": "playbooks",
   "files": [
     "actions",
     "playbooks"
