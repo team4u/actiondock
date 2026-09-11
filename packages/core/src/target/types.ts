@@ -297,6 +297,8 @@ export interface RemoteTargetOptions {
   token?: string;
   /** 请求超时时间（毫秒） */
   timeoutMs?: number;
+  /** 轮询等待基准底线超时时间（毫秒，默认 60000ms） */
+  baseTimeoutMs?: number;
 }
 
 /**

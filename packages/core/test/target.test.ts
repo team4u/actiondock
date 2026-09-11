@@ -541,6 +541,7 @@ describe("ActionDockTarget 统一调用门面", () => {
       const target = await createActionDockTarget({
         type: "remote",
         serverUrl,
+        baseTimeoutMs: 120,
       });
 
       // 直接对不存在的 runId 走 waitForRunCompletion 兜底路径（经 startAction 票据）
@@ -559,12 +560,13 @@ describe("ActionDockTarget 统一调用门面", () => {
       expect(res.error?.message).toMatch(/after \d+ms/);
       await ticket.result;
       await target.close();
-    }, 90000);
+    });
 
-    it("timeoutMs 传入较小值时等待上限仍不小于 60000ms 基准", async () => {
+    it("timeoutMs 传入较小值时等待上限仍不小于 baseTimeoutMs 基准", async () => {
       const target = await createActionDockTarget({
         type: "remote",
         serverUrl,
+        baseTimeoutMs: 120,
       });
       const startedAt = Date.now();
       const res = await (target as any).waitForRunCompletion(
@@ -575,10 +577,10 @@ describe("ActionDockTarget 统一调用门面", () => {
       const elapsed = Date.now() - startedAt;
       expect(res.ok).toBe(false);
       expect(res.error?.code).toBe("TIMEOUT");
-      // 等待上限取 max(60000, timeoutMs)，传入 1ms 也不应提前超时
-      expect(elapsed).toBeGreaterThanOrEqual(59000);
+      // 等待上限取 max(baseTimeoutMs, timeoutMs)，传入 1ms 也不应提前超时（至少等待基准 120ms 的绝大部分）
+      expect(elapsed).toBeGreaterThanOrEqual(100);
       await target.close();
-    }, 90000);
+    });
   });
 
   describe("TargetError, CloseTimeoutError, TARGET_PROTOCOL_UNSUPPORTED 场景覆盖", () => {

@@ -192,11 +192,13 @@ export class RemoteActionDockTarget implements ActionDockTarget {
   public readonly serverUrl: string;
   public readonly token?: string;
   public readonly timeoutMs?: number;
+  public readonly baseTimeoutMs: number;
 
   constructor(options: RemoteTargetOptions) {
     this.serverUrl = options.serverUrl;
     this.token = options.token;
     this.timeoutMs = options.timeoutMs;
+    this.baseTimeoutMs = options.baseTimeoutMs ?? 60000;
   }
 
   async info(): Promise<TargetInfo> {
@@ -437,9 +439,10 @@ export class RemoteActionDockTarget implements ActionDockTarget {
     timeoutMs?: number
   ): Promise<ExecutionResult> {
     const startTime = Date.now();
-    // 等待上限与运行自身 timeoutMs 对齐（取二者较大值，默认 60000ms）
-    const maxWaitMs = Math.max(60000, timeoutMs ?? 0);
-    let delayMs = 150;
+    // 等待上限与运行自身 timeoutMs 对齐（取二者较大值，默认 baseTimeoutMs = 60000ms）
+    const baseWait = this.baseTimeoutMs;
+    const maxWaitMs = Math.max(baseWait, timeoutMs ?? 0);
+    let delayMs = Math.min(150, Math.max(10, Math.floor(maxWaitMs / 4)));
     const maxDelayMs = 2000;
 
     while (Date.now() - startTime < maxWaitMs) {

@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
@@ -79,8 +79,13 @@ async function main() {
     // If user passed specific files or patterns
     const all = discoverAllTests();
     for (const arg of userArgs) {
-      if (existsSync(resolve(arg))) {
-        targetFiles.push(resolve(arg));
+      const resolved = resolve(arg);
+      if (existsSync(resolved)) {
+        if (statSync(resolved).isDirectory()) {
+          targetFiles.push(...scanTestFiles(resolved));
+        } else {
+          targetFiles.push(resolved);
+        }
       } else {
         const filtered = all.filter((f) => f.includes(arg));
         targetFiles.push(...filtered);
