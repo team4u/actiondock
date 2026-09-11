@@ -5,6 +5,8 @@
 [![MCP](https://img.shields.io/badge/MCP-Protocol%20Compliant-purple)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
+[官网文档](https://team4u.github.io/actiondock/)
+
 > **一次编写，全模态交付。**
 > 面向 AI 智能体的 Action 与 Skill 开发、测试、构建与分发工具链。
 > 用 TypeScript 编写原子工具，毫秒级纯内存单测，一键构建 Node 目录交付产物，原生直连 MCP 与 Agent Skill。
