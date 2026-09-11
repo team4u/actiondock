@@ -2,17 +2,15 @@ import { createHash } from "node:crypto";
 import {
   chmodSync,
   copyFileSync,
-  cpSync,
   existsSync,
   mkdirSync,
   readFileSync,
   readdirSync,
-  renameSync,
   rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
-import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import {
   ACTIONDOCK_VERSION,
   getPackageSlug,
@@ -20,59 +18,10 @@ import {
 import { createZipArchiveAsync } from "./archive";
 import { STANDALONE_ASYNC_UNSUPPORTED } from "@actiondock/core";
 import { BuilderError } from "./errors";
+import { collectRelativeFiles, getInternalDependencyVersion, moveDirAtomic } from "./fs-utils";
+import { serializePlanManifest } from "./manifest";
 import { SelectionPlanner } from "./planner";
-import type { BuildOptions, BuildResult, ExternalDependency } from "./types";
-
-/**
- * 跨文件系统/分区的原子移动目录辅助函数。
- */
-const TRANSIENT_MOVE_ERROR_CODES = new Set(["EXDEV", "EPERM", "EBUSY", "EACCES", "ENOTEMPTY"]);
-const MOVE_RETRY_ATTEMPTS = 5;
-
-async function moveDirAtomic(src: string, dest: string): Promise<void> {
-  for (let attempt = 1; attempt <= MOVE_RETRY_ATTEMPTS; attempt++) {
-    try {
-      renameSync(src, dest);
-      return;
-    } catch (err: any) {
-      if (!TRANSIENT_MOVE_ERROR_CODES.has(err?.code)) {
-        throw err;
-      }
-      await new Promise((r) => setTimeout(r, 50 * attempt));
-    }
-  }
-  cpSync(src, dest, { recursive: true });
-  rmSync(src, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-}
-
-/**
- * 递归收集目录内全部文件的相对路径（正斜杠分隔，名称排序）。
- */
-function collectRelativeFiles(dir: string, baseDir = dir): string[] {
-  if (!existsSync(dir)) return [];
-  const results: string[] = [];
-  const entries = readdirSync(dir).sort();
-  for (const entry of entries) {
-    const fullPath = join(dir, entry);
-    const stat = statSync(fullPath);
-    if (stat.isDirectory()) {
-      results.push(...collectRelativeFiles(fullPath, baseDir));
-    } else if (stat.isFile()) {
-      results.push(relative(baseDir, fullPath).split(sep).join("/"));
-    }
-  }
-  return results;
-}
-
-/**
- * 获取内部依赖版本约束。
- */
-function getInternalDepVersion(): string {
-  if (ACTIONDOCK_VERSION.includes("-")) {
-    return ACTIONDOCK_VERSION;
-  }
-  return `^${ACTIONDOCK_VERSION}`;
-}
+import type { BuildOptions, BuildResult, ExternalDependency, SelectionPlan } from "./types";
 
 /**
  * 检查外部依赖中声明的生命周期安装脚本。
@@ -138,7 +87,7 @@ function calculateDirectoryDigest(dir: string): string {
  * 生成 Host 子进程入口脚本源码（负责运行 ActionDockHost，通过 Node IPC 暴露 Target）。
  */
 function generateNodeHostEntrySource(
-  plan: ReturnType<typeof SelectionPlanner.prototype.plan>,
+  plan: SelectionPlan,
   relativeActionPaths: string[]
 ): string {
   const imports = relativeActionPaths
@@ -218,9 +167,7 @@ await serveParentIpc(target);
 /**
  * 生成轻量监督父进程脚本源码（负责参数解析、诊断日志限流、退出码管理与标准输出隔离）。
  */
-function generateNodeSupervisorEntrySource(
-  plan: ReturnType<typeof SelectionPlanner.prototype.plan>
-): string {
+function generateNodeSupervisorEntrySource(plan: SelectionPlan): string {
   return `#!/usr/bin/env node
 // AUTO-GENERATED SUPERVISOR ENTRYPOINT BY ACTIONDOCK BUILDER. DO NOT EDIT.
 import { spawn } from "node:child_process";
@@ -346,7 +293,215 @@ try {
 }
 
 /**
+ * 拷贝 Action 源码、Playbook 规程与声明的代码文件/静态资产到暂存目录。
+ */
+function stageSources(root: string, stagingDir: string, plan: SelectionPlan): string[] {
+  // 拷贝 Action 源码文件，保留相对路径
+  const relativeActionImports: string[] = [];
+  for (const act of plan.actions) {
+    if (existsSync(act.resolvedPath)) {
+      const destFile = join(stagingDir, act.entry);
+      mkdirSync(dirname(destFile), { recursive: true });
+      copyFileSync(act.resolvedPath, destFile);
+      relativeActionImports.push(`./${act.entry.replace(/\\/g, "/")}`);
+    }
+  }
+
+  // 拷贝 Playbook 规程文件
+  if (plan.playbooks.length > 0) {
+    const playbooksDir = plan.playbooksDir || "playbooks";
+    const playbooksDestDir = join(stagingDir, playbooksDir);
+    mkdirSync(playbooksDestDir, { recursive: true });
+    for (const pb of plan.playbooks) {
+      if (existsSync(pb.filePath)) {
+        const destPb = join(playbooksDestDir, basename(pb.filePath));
+        copyFileSync(pb.filePath, destPb);
+      }
+    }
+  }
+
+  // 拷贝声明的代码文件与静态资产
+  for (const dep of plan.dependencies.modulesAndAssets) {
+    if (
+      (dep.type === "asset" || dep.type === "module" || dep.type === "file") &&
+      existsSync(dep.resolvedPath)
+    ) {
+      const destPath = join(stagingDir, dep.path);
+      mkdirSync(dirname(destPath), { recursive: true });
+      copyFileSync(dep.resolvedPath, destPath);
+    }
+  }
+
+  return relativeActionImports;
+}
+
+/**
+ * 生成裁剪后的 actiondock.json（项目元数据与清单的单一事实源）。
+ */
+function writeManifest(stagingDir: string, plan: SelectionPlan): void {
+  const exportedConfig = serializePlanManifest(plan);
+  writeFileSync(
+    join(stagingDir, "actiondock.json"),
+    JSON.stringify(exportedConfig, null, 2) + "\n",
+    "utf-8"
+  );
+}
+
+/**
+ * 生成部署用 package.json（指向监督父进程双入口体系）并复制锁文件。
+ */
+function writePkgJsonAndLockfiles(
+  root: string,
+  stagingDir: string,
+  plan: SelectionPlan,
+  pkgSlug: string
+): void {
+  // 准备锁定的生产依赖
+  const productionDependencies: Record<string, string> = {
+    "@actiondock/core": getInternalDependencyVersion(),
+    "@actiondock/runtime-node": getInternalDependencyVersion(),
+  };
+  for (const ext of plan.dependencies.external) {
+    if (!ext.isDev) {
+      productionDependencies[ext.name] = ext.versionRange || "*";
+    }
+  }
+
+  const deploymentPkg: Record<string, unknown> = {
+    name: pkgSlug,
+    version: plan.version,
+    description: plan.description,
+    type: "module",
+    main: "./entry-supervisor.js",
+    bin: {
+      [pkgSlug]: "./entry-supervisor.js",
+    },
+    engines: {
+      node: ">=24.12.0",
+    },
+    dependencies: productionDependencies,
+  };
+  writeFileSync(
+    join(stagingDir, "package.json"),
+    JSON.stringify(deploymentPkg, null, 2) + "\n",
+    "utf-8"
+  );
+
+  // 复制锁文件（若存在）
+  if (plan.lockfile && existsSync(plan.lockfile.path)) {
+    copyFileSync(plan.lockfile.path, join(stagingDir, plan.lockfile.name));
+  }
+  const actiondockLock = join(root, "actiondock.lock.json");
+  if (existsSync(actiondockLock)) {
+    copyFileSync(actiondockLock, join(stagingDir, "actiondock.lock.json"));
+  }
+}
+
+/**
+ * 生成三个入口脚本（Host 子进程、监督父进程与兼容代理转发入口）并设置可执行权限。
+ */
+function writeEntrypoints(
+  stagingDir: string,
+  plan: SelectionPlan,
+  relativeActionImports: string[]
+): void {
+  const hostCode = generateNodeHostEntrySource(plan, relativeActionImports);
+  const hostPath = join(stagingDir, "entry-host.js");
+  writeFileSync(hostPath, hostCode, "utf-8");
+
+  const supervisorCode = generateNodeSupervisorEntrySource(plan);
+  const supervisorPath = join(stagingDir, "entry-supervisor.js");
+  writeFileSync(supervisorPath, supervisorCode, "utf-8");
+
+  const forwarderCode = `#!/usr/bin/env node\n// AUTO-GENERATED ENTRYPOINT FORWARDER BY ACTIONDOCK BUILDER. DO NOT EDIT.\nimport "./entry-supervisor.js";\n`;
+  const forwarderPath = join(stagingDir, "entry.mjs");
+  writeFileSync(forwarderPath, forwarderCode, "utf-8");
+
+  try {
+    chmodSync(hostPath, 0o755);
+    chmodSync(supervisorPath, 0o755);
+    chmodSync(forwarderPath, 0o755);
+  } catch {
+    // 忽略部分平台权限设置异常
+  }
+}
+
+/**
+ * 物化锁定生产依赖到产物 node_modules 目录（vendorDeps 开启时）。
+ */
+function vendorDependencies(
+  root: string,
+  stagingDir: string,
+  plan: SelectionPlan
+): void {
+  const destNodeModules = join(stagingDir, "node_modules");
+  mkdirSync(destNodeModules, { recursive: true });
+
+  // 尝试复制本地已解析的生产依赖
+  const sourceCandidates = [
+    join(root, "node_modules"),
+    resolve(import.meta.dirname, "../../../node_modules"),
+  ];
+
+  const copyVendorPackage = (srcDir: string, destDir: string): void => {
+    if (!existsSync(srcDir)) return;
+    mkdirSync(destDir, { recursive: true });
+    const entries = readdirSync(srcDir);
+    for (const entry of entries) {
+      if (
+        entry === "node_modules" ||
+        entry === ".git" ||
+        entry === ".actiondock" ||
+        entry === "test" ||
+        entry === "tests"
+      ) {
+        continue;
+      }
+      const srcPath = join(srcDir, entry);
+      const destPath = join(destDir, entry);
+      try {
+        const stat = statSync(srcPath);
+        if (stat.isDirectory()) {
+          copyVendorPackage(srcPath, destPath);
+        } else if (stat.isFile()) {
+          copyFileSync(srcPath, destPath);
+        }
+      } catch {
+        // 忽略无法读取的文件或死链接
+      }
+    }
+  };
+
+  for (const dep of plan.dependencies.external) {
+    if (dep.isDev) continue;
+    for (const baseModules of sourceCandidates) {
+      const srcDep = join(baseModules, dep.name);
+      if (existsSync(srcDep)) {
+        const targetDep = join(destNodeModules, dep.name);
+        mkdirSync(dirname(targetDep), { recursive: true });
+        copyVendorPackage(srcDep, targetDep);
+        break;
+      }
+    }
+  }
+
+  // 复制 ActionDock 内部依赖
+  for (const internalPkg of ["@actiondock/core", "@actiondock/sdk", "@actiondock/runtime-node"]) {
+    for (const baseModules of sourceCandidates) {
+      const srcDep = join(baseModules, internalPkg);
+      if (existsSync(srcDep)) {
+        const targetDep = join(destNodeModules, internalPkg);
+        mkdirSync(dirname(targetDep), { recursive: true });
+        copyVendorPackage(srcDep, targetDep);
+        break;
+      }
+    }
+  }
+}
+
+/**
  * 构建 Node.js 目录型交付产物。
+ * 主流程仅做编排，各阶段职责由独立函数承担。
  *
  * @param options 构建选项
  * @returns 构建产物结果描述
@@ -410,225 +565,22 @@ export async function buildProject(options: BuildOptions): Promise<BuildResult> 
   );
   mkdirSync(stagingDir, { recursive: true });
 
+  let platformInfo: { os: string; arch: string; nodeAbi: string } | undefined;
+
   try {
-    // 拷贝 Action 源码文件，保留相对路径
-    const relativeActionImports: string[] = [];
-    for (const act of plan.actions) {
-      if (existsSync(act.resolvedPath)) {
-        const destFile = join(stagingDir, act.entry);
-        mkdirSync(dirname(destFile), { recursive: true });
-        copyFileSync(act.resolvedPath, destFile);
-        relativeActionImports.push(`./${act.entry.replace(/\\/g, "/")}`);
-      }
-    }
-
-    // 拷贝 Playbook 规程文件
-    if (plan.playbooks.length > 0) {
-      const playbooksDir = plan.playbooksDir || "playbooks";
-      const playbooksDestDir = join(stagingDir, playbooksDir);
-      mkdirSync(playbooksDestDir, { recursive: true });
-      for (const pb of plan.playbooks) {
-        if (existsSync(pb.filePath)) {
-          const destPb = join(playbooksDestDir, basename(pb.filePath));
-          copyFileSync(pb.filePath, destPb);
-        }
-      }
-    }
-
-    // 拷贝声明的代码文件与静态资产
-    for (const dep of plan.dependencies.modulesAndAssets) {
-      if (
-        (dep.type === "asset" || dep.type === "module" || dep.type === "file") &&
-        existsSync(dep.resolvedPath)
-      ) {
-        const destPath = join(stagingDir, dep.path);
-        mkdirSync(dirname(destPath), { recursive: true });
-        copyFileSync(dep.resolvedPath, destPath);
-      }
-    }
-
-    // 生成裁剪后的 actiondock.json（项目元数据与清单的单一事实源）
-    const manifestActions: Record<string, unknown> = {};
-    for (const act of plan.actions) {
-      manifestActions[act.id] = {
-        entry: act.entry,
-        description: act.description,
-        inputSchema: act.inputSchema,
-        outputSchema: act.outputSchema,
-        uses: act.uses,
-        tags: act.tags,
-        annotations: act.annotations,
-      };
-    }
-
-    const manifestPlaybooks: Record<string, unknown> = {};
-    const playbooksDir = plan.playbooksDir || "playbooks";
-    for (const pb of plan.playbooks) {
-      manifestPlaybooks[pb.id] = {
-        entry: `${playbooksDir}/${basename(pb.filePath)}`,
-        ...(pb.description ? { description: pb.description } : {}),
-        ...(pb.actions && pb.actions.length > 0 ? { actions: pb.actions } : {}),
-      };
-    }
-
-    const exportedConfig: Record<string, unknown> = {
-      schemaVersion: 2,
-      id: plan.packageId,
-      name: plan.packageName,
-      version: plan.version,
-      description: plan.description,
-      actions: manifestActions,
-      ...(Object.keys(manifestPlaybooks).length > 0 ? { playbooks: manifestPlaybooks } : {}),
-      config: plan.configDefs || {},
-    };
-    if (plan.files && plan.files.length > 0) {
-      exportedConfig.files = plan.files;
-    }
-    if (plan.assets && plan.assets.length > 0) {
-      exportedConfig.assets = plan.assets;
-    }
-    writeFileSync(
-      join(stagingDir, "actiondock.json"),
-      JSON.stringify(exportedConfig, null, 2) + "\n",
-      "utf-8"
-    );
-
-    // 准备锁定的生产依赖
-    const productionDependencies: Record<string, string> = {
-      "@actiondock/core": getInternalDepVersion(),
-      "@actiondock/runtime-node": getInternalDepVersion(),
-    };
-    for (const ext of plan.dependencies.external) {
-      if (!ext.isDev) {
-        productionDependencies[ext.name] = ext.versionRange || "*";
-      }
-    }
-
-    // 生成部署用 package.json（指向监督父进程双入口体系）
-    const deploymentPkg: Record<string, unknown> = {
-      name: pkgSlug,
-      version: plan.version,
-      description: plan.description,
-      type: "module",
-      main: "./entry-supervisor.js",
-      bin: {
-        [pkgSlug]: "./entry-supervisor.js",
-      },
-      engines: {
-        node: ">=24.12.0",
-      },
-      dependencies: productionDependencies,
-    };
-    writeFileSync(
-      join(stagingDir, "package.json"),
-      JSON.stringify(deploymentPkg, null, 2) + "\n",
-      "utf-8"
-    );
-
-    // 复制锁文件（若存在）
-    if (plan.lockfile && existsSync(plan.lockfile.path)) {
-      copyFileSync(plan.lockfile.path, join(stagingDir, plan.lockfile.name));
-    }
-    const actiondockLock = join(root, "actiondock.lock.json");
-    if (existsSync(actiondockLock)) {
-      copyFileSync(actiondockLock, join(stagingDir, "actiondock.lock.json"));
-    }
-
-    // 生成 Host 子进程入口 entry-host.js
-    const hostCode = generateNodeHostEntrySource(plan, relativeActionImports);
-    const hostPath = join(stagingDir, "entry-host.js");
-    writeFileSync(hostPath, hostCode, "utf-8");
-
-    // 生成轻量监督父进程入口 entry-supervisor.js
-    const supervisorCode = generateNodeSupervisorEntrySource(plan);
-    const supervisorPath = join(stagingDir, "entry-supervisor.js");
-    writeFileSync(supervisorPath, supervisorCode, "utf-8");
-
-    // 生成兼容代理入口 entry.mjs，转接到 entry-supervisor.js
-    const forwarderCode = `#!/usr/bin/env node\n// AUTO-GENERATED ENTRYPOINT FORWARDER BY ACTIONDOCK BUILDER. DO NOT EDIT.\nimport "./entry-supervisor.js";\n`;
-    const forwarderPath = join(stagingDir, "entry.mjs");
-    writeFileSync(forwarderPath, forwarderCode, "utf-8");
-
-    try {
-      chmodSync(hostPath, 0o755);
-      chmodSync(supervisorPath, 0o755);
-      chmodSync(forwarderPath, 0o755);
-    } catch {
-      // 忽略部分平台权限设置异常
-    }
+    const relativeActionImports = stageSources(root, stagingDir, plan);
+    writeManifest(stagingDir, plan);
+    writePkgJsonAndLockfiles(root, stagingDir, plan, pkgSlug);
+    writeEntrypoints(stagingDir, plan, relativeActionImports);
 
     // 若开启 options.vendorDeps，物化锁定生产依赖
-    let platformInfo: { os: string; arch: string; nodeAbi: string } | undefined;
     if (options.vendorDeps) {
       platformInfo = {
         os: process.platform,
         arch: process.arch,
         nodeAbi: process.versions.modules,
       };
-
-      const destNodeModules = join(stagingDir, "node_modules");
-      mkdirSync(destNodeModules, { recursive: true });
-
-      // 尝试复制本地已解析的生产依赖
-      const sourceCandidates = [
-        join(root, "node_modules"),
-        resolve(import.meta.dirname, "../../../node_modules"),
-      ];
-
-      const copyVendorPackage = (srcDir: string, destDir: string): void => {
-        if (!existsSync(srcDir)) return;
-        mkdirSync(destDir, { recursive: true });
-        const entries = readdirSync(srcDir);
-        for (const entry of entries) {
-          if (
-            entry === "node_modules" ||
-            entry === ".git" ||
-            entry === ".actiondock" ||
-            entry === "test" ||
-            entry === "tests"
-          ) {
-            continue;
-          }
-          const srcPath = join(srcDir, entry);
-          const destPath = join(destDir, entry);
-          try {
-            const stat = statSync(srcPath);
-            if (stat.isDirectory()) {
-              copyVendorPackage(srcPath, destPath);
-            } else if (stat.isFile()) {
-              copyFileSync(srcPath, destPath);
-            }
-          } catch {
-            // 忽略无法读取的文件或死链接
-          }
-        }
-      };
-
-      for (const dep of plan.dependencies.external) {
-        if (dep.isDev) continue;
-        for (const baseModules of sourceCandidates) {
-          const srcDep = join(baseModules, dep.name);
-          if (existsSync(srcDep)) {
-            const targetDep = join(destNodeModules, dep.name);
-            mkdirSync(dirname(targetDep), { recursive: true });
-            copyVendorPackage(srcDep, targetDep);
-            break;
-          }
-        }
-      }
-
-      // 复制 ActionDock 内部依赖
-      for (const internalPkg of ["@actiondock/core", "@actiondock/sdk", "@actiondock/runtime-node"]) {
-        for (const baseModules of sourceCandidates) {
-          const srcDep = join(baseModules, internalPkg);
-          if (existsSync(srcDep)) {
-            const targetDep = join(destNodeModules, internalPkg);
-            mkdirSync(dirname(targetDep), { recursive: true });
-            copyVendorPackage(srcDep, targetDep);
-            break;
-          }
-        }
-      }
+      vendorDependencies(root, stagingDir, plan);
     }
 
     // 生成构建元数据 artifact.json

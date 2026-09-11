@@ -1,5 +1,5 @@
 import { closeSync, createReadStream, createWriteStream, openSync, readdirSync, readFileSync, statSync, writeFileSync, writeSync } from "node:fs";
-import { deflateRawSync, gzipSync, createGzip } from "node:zlib";
+import { createDeflateRaw, deflateRawSync, gzipSync, createGzip } from "node:zlib";
 import { basename, join, relative, sep } from "node:path";
 import { pipeline } from "node:stream/promises";
 
@@ -184,10 +184,156 @@ export function createZipArchive(dir: string, outPath: string): void {
 }
 
 /**
- * 异步标准 zip 归档。
+ * 异步流式 zip 归档：与同步版结构对称，逐文件流式读取与异步 deflate，
+ * 避免全量读入内存；压缩输出与同步版字节级一致。
  */
 export async function createZipArchiveAsync(dir: string, outPath: string): Promise<void> {
-  createZipArchive(dir, outPath);
+  const rootName = basename(dir);
+  const entries = collectEntries(dir);
+  const out = createWriteStream(outPath, { highWaterMark: 1024 * 1024 });
+
+  // 本地片段（头 + 内容）逐段写入，同步计算 central directory 记录所需的偏移
+  interface PendingCentral {
+    header: Buffer;
+  }
+  const centralRecords: PendingCentral[] = [];
+  let offset = 0;
+
+  const writeChunk = async (chunk: Buffer): Promise<void> => {
+    offset += chunk.length;
+    if (!out.write(chunk)) {
+      await new Promise<void>((resolve, reject) => {
+        out.once("drain", resolve);
+        out.once("error", reject);
+      });
+    }
+  };
+
+  try {
+    for (const entry of entries) {
+      const name = `${rootName}/${entry.relPath}${entry.isDir ? "/" : ""}`;
+      const nameBuf = Buffer.from(name, "utf8");
+      const fullPath = join(dir, entry.relPath);
+      const stat = statSync(fullPath);
+      const { date, time } = dosDateTime(stat.mtimeMs);
+
+      // 流式读取并异步 deflate；未压缩时 payload 与 content 同源仅读取一次
+      let content: Buffer = Buffer.alloc(0);
+      let payload: Buffer = Buffer.alloc(0);
+      let method = 0;
+      if (!entry.isDir && stat.size > 0) {
+        const deflated = await deflateStream(fullPath, { level: 9 });
+        content = await readFileAsync(fullPath);
+        if (deflated.length < content.length) {
+          method = 8;
+          payload = deflated;
+        } else {
+          payload = content;
+        }
+      }
+      const crc = crc32(content);
+
+      // Local File Header（30 字节 + 文件名）
+      const local = Buffer.alloc(30);
+      local.writeUInt32LE(0x04034b50, 0);
+      local.writeUInt16LE(20, 4);
+      local.writeUInt16LE(0x0800, 6); // UTF-8 文件名标志
+      local.writeUInt16LE(method, 8);
+      local.writeUInt16LE(time, 10);
+      local.writeUInt16LE(date, 12);
+      local.writeUInt32LE(crc, 14);
+      local.writeUInt32LE(payload.length, 18);
+      local.writeUInt32LE(content.length, 22);
+      local.writeUInt16LE(nameBuf.length, 26);
+      local.writeUInt16LE(0, 28);
+
+      const localOffset = offset;
+      await writeChunk(local);
+      await writeChunk(nameBuf);
+      if (payload.length > 0) {
+        await writeChunk(payload);
+      }
+
+      // Central Directory Header（46 字节 + 文件名）
+      const central = Buffer.alloc(46);
+      central.writeUInt32LE(0x02014b50, 0);
+      central.writeUInt16LE((3 << 8) | 20, 4); // version made by: Unix + ZIP 2.0
+      central.writeUInt16LE(20, 6); // version needed
+      central.writeUInt16LE(0x0800, 8);
+      central.writeUInt16LE(method, 10);
+      central.writeUInt16LE(time, 12);
+      central.writeUInt16LE(date, 14);
+      central.writeUInt32LE(crc, 16);
+      central.writeUInt32LE(payload.length, 20);
+      central.writeUInt32LE(content.length, 24);
+      central.writeUInt16LE(nameBuf.length, 28);
+      central.writeUInt16LE(0, 30); // extra len
+      central.writeUInt16LE(0, 32); // comment len
+      central.writeUInt16LE(0, 34); // disk start
+      central.writeUInt16LE(0, 36); // internal attrs
+      // 外部属性：Unix 权限左移 16 位，目录附加 MS-DOS 目录位
+      const isExec =
+        !entry.isDir &&
+        (Boolean(stat.mode & 0o111) || entry.relPath.includes("bin/") || entry.relPath.startsWith("bin/"));
+      const fileMode = isExec ? 0o100755 : 0o100644;
+      const extAttrs = ((entry.isDir ? 0o40755 : fileMode) << 16) | (entry.isDir ? 0x10 : 0);
+      central.writeUInt32LE(extAttrs >>> 0, 38);
+      central.writeUInt32LE(localOffset, 42);
+      centralRecords.push({ header: Buffer.concat([central, nameBuf]) });
+    }
+
+    const centralDirOffset = offset;
+    let centralDirSize = 0;
+    for (const record of centralRecords) {
+      await writeChunk(record.header);
+      centralDirSize += record.header.length;
+    }
+
+    // End of Central Directory Record（22 字节）
+    const eocd = Buffer.alloc(22);
+    eocd.writeUInt32LE(0x06054b50, 0);
+    eocd.writeUInt16LE(0, 4);
+    eocd.writeUInt16LE(0, 6);
+    eocd.writeUInt16LE(centralRecords.length, 8);
+    eocd.writeUInt16LE(centralRecords.length, 10);
+    eocd.writeUInt32LE(centralDirSize, 12);
+    eocd.writeUInt32LE(centralDirOffset, 16);
+    eocd.writeUInt16LE(0, 20); // comment len
+    await writeChunk(eocd);
+
+    await new Promise<void>((resolve, reject) => {
+      out.end(() => resolve());
+      out.once("error", reject);
+    });
+  } catch (err) {
+    out.destroy();
+    throw err;
+  }
+}
+
+/** 异步读取整个文件 */
+function readFileAsync(fullPath: string): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    const stream = createReadStream(fullPath);
+    stream.on("data", (c) => chunks.push(c as Buffer));
+    stream.on("end", () => resolve(Buffer.concat(chunks)));
+    stream.on("error", reject);
+  });
+}
+
+/** 异步 deflateRaw 压缩整个文件流 */
+function deflateStream(fullPath: string, options: { level: number }): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    const source = createReadStream(fullPath);
+    const deflater = createDeflateRaw(options);
+    source.on("error", reject);
+    deflater.on("error", reject);
+    deflater.on("data", (c) => chunks.push(c as Buffer));
+    deflater.on("end", () => resolve(Buffer.concat(chunks)));
+    source.pipe(deflater);
+  });
 }
 
 /* ------------------------------------------------------------------ */

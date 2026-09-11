@@ -8,6 +8,7 @@ import {
   loadManifest,
   loadPlaybooks,
   loadProjectConfig,
+  type PlaybookDefinition,
   type ProjectConfig,
   resolveActionProjectSync,
   validateManifest,
@@ -23,6 +24,7 @@ import type {
   SelectionPlan,
   SelectionPlannerOptions,
 } from "./types";
+import type { ProjectConfigWithDeclarations } from "./types";
 
 /**
  * 递归扫描指定目录下的文件，返回绝对路径列表。
@@ -153,20 +155,19 @@ function computeLockfileInfo(projectRoot: string, preferredLockfile?: string): L
   return undefined;
 }
 
-
 /**
  * 构造备用清单映射，仅读取文件系统条目与配置声明，杜绝 AST 源码分析与动态代码执行。
  */
 function generateFallbackManifest(
   projectRoot: string,
   actionsDir = "actions",
-  config?: ProjectConfig
+  config?: ProjectConfigWithDeclarations
 ): ActionDockManifest {
   const dir = join(projectRoot, actionsDir);
   const actions: Record<string, ActionManifestEntry> = {};
 
-  // 1. 若 actiondock.json 中声明了 actions 字典，读取显式声明
-  const configActions = (config as any)?.actions;
+  // 若 actiondock.json 中声明了 actions 字典，读取显式声明
+  const configActions = config?.actions;
   if (configActions && typeof configActions === "object") {
     for (const [id, rawEntry] of Object.entries(configActions)) {
       if (typeof rawEntry === "object" && rawEntry !== null) {
@@ -184,7 +185,7 @@ function generateFallbackManifest(
     }
   }
 
-  // 2. 若 actions 目录存在，基于文件名建立默认映射
+  // 若 actions 目录存在，基于文件名建立默认映射
   if (existsSync(dir)) {
     const files = walkDirectory(dir, projectRoot).filter(
       (f) =>
@@ -254,6 +255,25 @@ function extractExternalDependencies(projectRoot: string): ExternalDependency[] 
 }
 
 /**
+ * 依赖闭包解析的中间产物。
+ */
+interface ClosureResult {
+  /** 闭包内全部 Action ID（按解析顺序） */
+  resolvedActionIds: Set<string>;
+  /** 来自外部已链接包的 Action 根目录映射 */
+  externalActionRoots: Map<string, string>;
+  /** 来自外部已链接包的 Action 清单条目映射 */
+  externalActionEntries: Map<string, ActionManifestEntry>;
+}
+
+/** 声明文件与资产收集的中间产物 */
+interface DeclaredFilesResult {
+  modulesAndAssets: AssetDependency[];
+  assets: string[];
+  files: string[];
+}
+
+/**
  * 声明式选择集与构建规划器 (SelectionPlanner)。
  * 仅读取 actiondock.json、锁文件与显式构建参数，彻底移除 TypeScript AST 源码扫描。
  */
@@ -265,53 +285,54 @@ export class SelectionPlanner {
   }
 
   /**
-   * 执行依赖闭包裁剪与构建规划。
-   *
-   * @param options 规划参数
-   * @returns 完整的 SelectionPlan / BuildPlan 结构
+   * 解析项目配置：优先使用传入对象，缺失则读取 actiondock.json。
    */
-  public plan(options?: SelectionPlannerOptions): SelectionPlan {
-    const root = resolve(options?.projectRoot || this.projectRoot);
-
-    // 1. 获取项目配置（优先使用传入对象，缺失则读取 actiondock.json）
-    let config = options?.config;
-    if (!config) {
-      try {
-        config = loadProjectConfig(root);
-      } catch (err: any) {
-        throw new PlannerError(
-          `Failed to load project config: ${err.message}`,
-          "CONFIG_LOAD_ERROR"
-        );
-      }
+  private resolveConfig(root: string, options?: SelectionPlannerOptions): ProjectConfigWithDeclarations {
+    if (options?.config) {
+      return options.config;
     }
-
-    // 2. 获取声明式清单（优先使用传入清单，缺失则读取 actiondock.json，未提供则采用安全备用清单）
-    let manifest = options?.manifest;
-    if (!manifest) {
-      const loaded = loadManifest(root);
-      if (loaded) {
-        manifest = loaded;
-      } else {
-        manifest = generateFallbackManifest(root, config.actionsDir || "actions", config);
-      }
-    }
-
-    const validation = validateManifest(manifest, { projectRoot: root });
-    if (!validation.valid) {
+    try {
+      return loadProjectConfig(root) as ProjectConfigWithDeclarations;
+    } catch (err: any) {
       throw new PlannerError(
-        `Invalid actiondock.json: ${(validation.errors || []).join("; ")}`,
-        "INVALID_MANIFEST"
+        `Failed to load project config: ${err.message}`,
+        "CONFIG_LOAD_ERROR"
       );
     }
+  }
 
-    // 3. 读取 Playbook 规程定义（统一复用 core 的 loadPlaybooks，清单为唯一事实源）
+  /**
+   * 解析声明式清单：优先使用传入清单，缺失则读取 actiondock.json，仍未提供则采用安全备用清单。
+   */
+  private resolveManifest(
+    root: string,
+    config: ProjectConfigWithDeclarations,
+    manifest?: ActionDockManifest
+  ): ActionDockManifest {
+    if (manifest) {
+      return manifest;
+    }
+    const loaded = loadManifest(root);
+    if (loaded) {
+      return loaded;
+    }
+    return generateFallbackManifest(root, config.actionsDir || "actions", config);
+  }
+
+  /**
+   * 收集 Playbook 规程定义（统一复用 core 的 loadPlaybooks，清单为唯一事实源）。
+   */
+  private collectPlaybooks(
+    root: string,
+    config: ProjectConfigWithDeclarations,
+    manifest: ActionDockManifest
+  ): Map<string, PlaybookPlanEntry> {
     const effectiveManifest = {
       ...(config || {}),
       ...(manifest || {}),
       playbooks: {
-        ...((config as any)?.playbooks || {}),
-        ...((manifest as any)?.playbooks || {}),
+        ...(config?.playbooks || {}),
+        ...(manifest?.playbooks || {}),
       },
     } as ActionDockManifest;
 
@@ -329,8 +350,18 @@ export class SelectionPlanner {
         description: def.description,
       });
     }
+    return playbooksMap;
+  }
 
-    // 4. 计算初始 Action 与 Playbook 集合
+  /**
+   * 计算初始 Action 与 Playbook 集合（显式声明过滤、uses 顶层依赖与默认全集）。
+   */
+  private resolveInitialSelection(
+    options: SelectionPlannerOptions | undefined,
+    manifest: ActionDockManifest,
+    config: ProjectConfigWithDeclarations,
+    playbooksMap: Map<string, PlaybookPlanEntry>
+  ): { initialActionIds: Set<string>; selectedPlaybooks: PlaybookPlanEntry[] } {
     const initialActionIds = new Set<string>();
     let selectedPlaybooks: PlaybookPlanEntry[] = [];
 
@@ -355,7 +386,7 @@ export class SelectionPlanner {
       selectedPlaybooks = Array.from(playbooksMap.values());
     }
 
-    const manifestActions: Record<string, ActionManifestEntry> = manifest.actions || {};
+    const manifestActions = manifest.actions || {};
 
     // 若显式指定了 Action 列表，加入集合
     if (options?.actions && options.actions.length > 0) {
@@ -378,7 +409,7 @@ export class SelectionPlanner {
     }
 
     // 当前包在 actiondock.json 中声明的顶层 uses 直接依赖
-    const currentPkgUses = (config as any)?.uses;
+    const currentPkgUses = config?.uses;
     if (Array.isArray(currentPkgUses)) {
       for (const depId of currentPkgUses) {
         if (typeof depId === "string" && depId.trim()) {
@@ -387,11 +418,23 @@ export class SelectionPlanner {
       }
     }
 
-    // 5. 进行依赖闭包（uses）解析计算，自动处理环形依赖与传递依赖（支持当前清单与已链接外部包）
+    return { initialActionIds, selectedPlaybooks };
+  }
+
+  /**
+   * 进行依赖闭包（uses）解析计算，自动处理环形依赖与传递依赖（支持当前清单与已链接外部包）。
+   */
+  private resolveClosure(
+    root: string,
+    manifest: ActionDockManifest,
+    config: ProjectConfigWithDeclarations,
+    initialActionIds: Set<string>
+  ): ClosureResult {
     const resolvedActionIds = new Set<string>();
     const queue = Array.from(initialActionIds);
     const externalActionRoots = new Map<string, string>();
     const externalActionEntries = new Map<string, ActionManifestEntry>();
+    const manifestActions = manifest.actions || {};
 
     while (queue.length > 0) {
       const currentId = queue.shift()!;
@@ -399,7 +442,7 @@ export class SelectionPlanner {
         continue;
       }
 
-      let entry = manifestActions[currentId] || (config as any)?.actions?.[currentId];
+      let entry = manifestActions[currentId] || config?.actions?.[currentId];
       let entryRoot = root;
 
       if (!entry) {
@@ -407,9 +450,9 @@ export class SelectionPlanner {
           const resolvedExternal = resolveActionProjectSync(currentId, root);
           if (resolvedExternal && existsSync(resolvedExternal.projectRoot)) {
             const extRoot = resolvedExternal.projectRoot;
-            let extConfig: ProjectConfig;
+            let extConfig: ProjectConfigWithDeclarations;
             try {
-              extConfig = loadProjectConfig(extRoot);
+              extConfig = loadProjectConfig(extRoot) as ProjectConfigWithDeclarations;
             } catch {
               extConfig = {
                 id: resolvedExternal.packageId,
@@ -420,7 +463,7 @@ export class SelectionPlanner {
             const externalManifest = loadManifest(extRoot);
             let externalEntry =
               externalManifest?.actions?.[resolvedExternal.actionId] ||
-              (extConfig as any)?.actions?.[resolvedExternal.actionId];
+              extConfig?.actions?.[resolvedExternal.actionId];
             if (!externalEntry) {
               const staticManifest = generateFallbackManifest(
                 extRoot,
@@ -434,7 +477,7 @@ export class SelectionPlanner {
               entryRoot = extRoot;
 
               // 依赖包 actiondock.json 中声明的传递依赖闭包
-              const extPkgUses = (extConfig as any)?.uses;
+              const extPkgUses = extConfig?.uses;
               if (Array.isArray(extPkgUses)) {
                 for (const u of extPkgUses) {
                   if (typeof u === "string" && u.trim() && !resolvedActionIds.has(u.trim())) {
@@ -472,19 +515,22 @@ export class SelectionPlanner {
       }
     }
 
-    // 6. 若指定了 Action 但未指定 Playbook，反向裁剪排除无法满足依赖的 Playbook
-    if (options?.actions && options.actions.length > 0 && (!options.playbooks || options.playbooks.length === 0)) {
-      selectedPlaybooks = selectedPlaybooks.filter((pb) => {
-        if (!pb.actions || pb.actions.length === 0) return true;
-        return pb.actions.every((a) => resolvedActionIds.has(a));
-      });
-    }
+    return { resolvedActionIds, externalActionRoots, externalActionEntries };
+  }
 
-    // 7. 构造 Action 依赖结构
+  /**
+   * 构造 Action 依赖结构（闭包结果物化为 ActionDependency 列表）。
+   */
+  private buildActionDependencies(
+    root: string,
+    closure: ClosureResult,
+    manifest: ActionDockManifest
+  ): ActionDependency[] {
+    const manifestActions = manifest.actions || {};
     const actionDependencies: ActionDependency[] = [];
-    for (const actId of resolvedActionIds) {
-      const entry = manifestActions[actId] || externalActionEntries.get(actId);
-      const entryRoot = externalActionRoots.get(actId) || root;
+    for (const actId of closure.resolvedActionIds) {
+      const entry = manifestActions[actId] || closure.externalActionEntries.get(actId);
+      const entryRoot = closure.externalActionRoots.get(actId) || root;
       if (!entry) {
         throw new PlannerError(
           `Action '${actId}' entry not found`,
@@ -510,25 +556,20 @@ export class SelectionPlanner {
         annotations: entry.annotations,
       });
     }
+    return actionDependencies;
+  }
 
-    // 8. 收集锁文件信息并执行校验
-    const lockfileInfo = computeLockfileInfo(root, options?.lockfile);
-    if (options?.expectedLockfileDigest) {
-      if (!lockfileInfo) {
-        throw new PlannerError(
-          `Lockfile not found in project but expected digest was specified: ${options.expectedLockfileDigest}`,
-          "LOCKFILE_NOT_FOUND"
-        );
-      }
-      if (lockfileInfo.sha256 !== options.expectedLockfileDigest) {
-        throw new PlannerError(
-          `Lockfile digest mismatch: expected ${options.expectedLockfileDigest} but got ${lockfileInfo.sha256}`,
-          "LOCKFILE_DIGEST_MISMATCH"
-        );
-      }
-    }
-
-    // 9. 构造声明式文件与资产依赖结构（仅依据显式声明，杜绝 AST 依赖扫描与未声明模块猜测）
+  /**
+   * 收集声明式文件与资产依赖结构（仅依据显式声明，杜绝 AST 依赖扫描与未声明模块猜测）。
+   */
+  private collectDeclaredFilesAndAssets(
+    root: string,
+    options: SelectionPlannerOptions | undefined,
+    manifest: ActionDockManifest,
+    config: ProjectConfigWithDeclarations,
+    actionDependencies: ActionDependency[],
+    selectedPlaybooks: PlaybookPlanEntry[]
+  ): DeclaredFilesResult {
     const modulesAndAssets: AssetDependency[] = [];
     const assetPathSet = new Set<string>();
     const filePathSet = new Set<string>();
@@ -539,11 +580,11 @@ export class SelectionPlanner {
     if (options?.files && Array.isArray(options.files)) {
       for (const f of options.files) declaredFiles.add(f);
     }
-    if ((manifest as any)?.files && Array.isArray((manifest as any).files)) {
-      for (const f of (manifest as any).files) declaredFiles.add(f);
+    if (manifest?.files && Array.isArray(manifest.files)) {
+      for (const f of manifest.files) declaredFiles.add(f);
     }
-    if ((config as any)?.files && Array.isArray((config as any).files)) {
-      for (const f of (config as any).files) declaredFiles.add(f);
+    if (config?.files && Array.isArray(config.files)) {
+      for (const f of config.files) declaredFiles.add(f);
     }
 
     for (const declaredRel of declaredFiles) {
@@ -590,8 +631,8 @@ export class SelectionPlanner {
     if (manifest.assets && Array.isArray(manifest.assets)) {
       for (const a of manifest.assets) declaredAssets.add(a);
     }
-    if ((config as any)?.assets && Array.isArray((config as any).assets)) {
-      for (const a of (config as any).assets) declaredAssets.add(a);
+    if (config?.assets && Array.isArray(config.assets)) {
+      for (const a of config.assets) declaredAssets.add(a);
     }
 
     for (const declaredRel of declaredAssets) {
@@ -667,14 +708,91 @@ export class SelectionPlanner {
       });
     }
 
+    return {
+      modulesAndAssets,
+      assets: Array.from(assetPathSet),
+      files: Array.from(filePathSet),
+    };
+  }
 
-    // 10. 外部 npm 依赖解析
+  /**
+   * 执行依赖闭包裁剪与构建规划。
+   * 主流程仅做编排，各阶段职责由私有方法承担。
+   *
+   * @param options 规划参数
+   * @returns 完整的 SelectionPlan / BuildPlan 结构
+   */
+  public plan(options?: SelectionPlannerOptions): SelectionPlan {
+    const root = resolve(options?.projectRoot || this.projectRoot);
+
+    // 解析项目配置与声明式清单
+    const config = this.resolveConfig(root, options);
+    const manifest = this.resolveManifest(root, config, options?.manifest);
+
+    const validation = validateManifest(manifest, { projectRoot: root });
+    if (!validation.valid) {
+      throw new PlannerError(
+        `Invalid actiondock.json: ${(validation.errors || []).join("; ")}`,
+        "INVALID_MANIFEST"
+      );
+    }
+
+    // 读取 Playbook 规程定义并计算初始选择集
+    const playbooksMap = this.collectPlaybooks(root, config, manifest);
+    const { initialActionIds, selectedPlaybooks } = this.resolveInitialSelection(
+      options,
+      manifest,
+      config,
+      playbooksMap
+    );
+
+    // 依赖闭包解析与 Action 依赖结构物化
+    const closure = this.resolveClosure(root, manifest, config, initialActionIds);
+    let finalPlaybooks = selectedPlaybooks;
+
+    // 若指定了 Action 但未指定 Playbook，反向裁剪排除无法满足依赖的 Playbook
+    if (options?.actions && options.actions.length > 0 && (!options.playbooks || options.playbooks.length === 0)) {
+      finalPlaybooks = selectedPlaybooks.filter((pb) => {
+        if (!pb.actions || pb.actions.length === 0) return true;
+        return pb.actions.every((a) => closure.resolvedActionIds.has(a));
+      });
+    }
+
+    const actionDependencies = this.buildActionDependencies(root, closure, manifest);
+
+    // 收集锁文件信息并执行校验
+    const lockfileInfo = computeLockfileInfo(root, options?.lockfile);
+    if (options?.expectedLockfileDigest) {
+      if (!lockfileInfo) {
+        throw new PlannerError(
+          `Lockfile not found in project but expected digest was specified: ${options.expectedLockfileDigest}`,
+          "LOCKFILE_NOT_FOUND"
+        );
+      }
+      if (lockfileInfo.sha256 !== options.expectedLockfileDigest) {
+        throw new PlannerError(
+          `Lockfile digest mismatch: expected ${options.expectedLockfileDigest} but got ${lockfileInfo.sha256}`,
+          "LOCKFILE_DIGEST_MISMATCH"
+        );
+      }
+    }
+
+    // 收集声明式文件与资产依赖
+    const declaredFiles = this.collectDeclaredFilesAndAssets(
+      root,
+      options,
+      manifest,
+      config,
+      actionDependencies,
+      finalPlaybooks
+    );
+
+    // 外部 npm 依赖解析与最终规划产物组装
     const externalDependencies = extractExternalDependencies(root);
 
-    // 11. 生成最终 SelectionPlan / BuildPlan
     const dependencies: BuildPlanDependencies = {
       actions: actionDependencies,
-      modulesAndAssets,
+      modulesAndAssets: declaredFiles.modulesAndAssets,
       external: externalDependencies,
     };
 
@@ -687,17 +805,17 @@ export class SelectionPlanner {
       actionsDir: config.actionsDir || "actions",
       playbooksDir: config.playbooksDir || "playbooks",
       actions: actionDependencies,
-      playbooks: selectedPlaybooks,
+      playbooks: finalPlaybooks,
       dependencies,
-      assets: Array.from(assetPathSet),
-      files: Array.from(filePathSet),
+      assets: declaredFiles.assets,
+      files: declaredFiles.files,
       configDefs: config.config,
       lockfile: lockfileInfo,
       metadata: {
         plannedAt: new Date().toISOString(),
         schemaVersion: 2,
         actionCount: actionDependencies.length,
-        playbookCount: selectedPlaybooks.length,
+        playbookCount: finalPlaybooks.length,
         lockfileDigest: lockfileInfo?.sha256,
       },
     };
@@ -714,12 +832,15 @@ export class SelectionPlanner {
 
 /**
  * 构建规划器标准导出。
+ * @deprecated SelectionPlanner 的历史别名，请直接使用 SelectionPlanner，将在两个版本后移除。
  */
 export const BuildPlanner = SelectionPlanner;
+/** @deprecated SelectionPlanner 类型的历史别名，请直接使用 SelectionPlanner 类型。 */
 export type BuildPlanner = SelectionPlanner;
 
 /**
  * 快捷选择规划函数。
+ * @deprecated 便捷快捷函数，请直接使用 SelectionPlanner.plan，将在两个版本后移除。
  */
 export function selectionPlan(options: SelectionPlannerOptions): SelectionPlan {
   return SelectionPlanner.plan(options);
@@ -727,5 +848,6 @@ export function selectionPlan(options: SelectionPlannerOptions): SelectionPlan {
 
 /**
  * 快捷构建规划函数标准导出。
+ * @deprecated selectionPlan 的历史别名，请改用 SelectionPlanner.plan，将在两个版本后移除。
  */
 export const buildPlan = selectionPlan;

@@ -1,6 +1,20 @@
 import type { ActionDockManifest, ProjectConfig } from "@actiondock/core";
 
 /**
+ * 规划输入侧的项目配置扩展字段。
+ * actiondock.json 实际承载 uses、files、assets 等扩展声明，
+ * ProjectConfig 契约未显式列出的部分在此正式声明，替代类型擦除访问。
+ */
+export interface ProjectConfigWithDeclarations extends ProjectConfig {
+  /** 当前包在清单中声明的顶层 uses 跨包依赖 */
+  uses?: string[];
+  /** 框架导出与分发边界文件列表 */
+  files?: string[];
+  /** 静态资产列表 */
+  assets?: string[];
+}
+
+/**
  * Action 依赖描述。
  */
 export interface ActionDependency {
@@ -136,7 +150,7 @@ export interface BuildPlannerOptions {
   /** 项目根目录绝对路径 */
   projectRoot: string;
   /** 显式传入的项目配置（若未提供则从 actiondock.json 读取） */
-  config?: ProjectConfig & { files?: string[]; assets?: string[]; uses?: string[]; actions?: Record<string, unknown> };
+  config?: ProjectConfigWithDeclarations;
   /** 显式传入的声明式清单（若未提供则从 actiondock.json 读取） */
   manifest?: ActionDockManifest & { files?: string[] };
   /** 挑选的 Action ID 列表（用于依赖闭包裁剪） */
@@ -203,7 +217,7 @@ export interface BuildOptions {
   bytecode?: boolean;
 
   /**
-   * 代码混淆选项。
+   * 代码混淆选项（历史遗留占位字段，目录型构建不再读取）。
    */
   minify?: boolean;
 }
@@ -222,7 +236,10 @@ export interface BuildResult {
   archivePath?: string;
   /** 生成的 Node.js 启动入口绝对路径 */
   entrypointPath: string;
-  /** 启动入口可执行文件绝对路径（entrypointPath 的等价别名） */
+  /**
+   * 启动入口可执行文件绝对路径（entrypointPath 的等价别名）。
+   * @deprecated 历史兼容别名，请改用 entrypointPath，将在后续版本移除。
+   */
   executablePath: string;
   /** 生成的元数据文件路径 */
   metadataPath: string;
