@@ -402,7 +402,10 @@ export class DefaultActionDockApp implements ActionDockApp {
     }
     if (!liveAction && this.executionService.runner?.resolveAction) {
       try {
-        const resolution = await this.executionService.runner.resolveAction(id);
+        // 仅在本包范围内解析动态动作：限定 packageId 前缀，避免全局兜底搜索把
+        // 其他包的动作误计为本包提供者（host 层据此统计候选导致 AMBIGUOUS_ACTION_REF 误报）。
+        const qualifiedId = id.includes("/") ? id : `${this.packageId}/${id}`;
+        const resolution = await this.executionService.runner.resolveAction(qualifiedId);
         if (resolution.status === "found") {
           liveAction = resolution.action;
         }
