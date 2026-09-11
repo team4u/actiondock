@@ -1,15 +1,11 @@
 import {
-  closeSync,
   existsSync,
   mkdirSync,
-  openSync,
   readFileSync,
   renameSync,
   rmSync,
   statSync,
-  unlinkSync,
   writeFileSync,
-  writeSync,
 } from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";
@@ -276,7 +272,7 @@ export class DataDirLock {
    * - 若锁目录已存在，通过宽限期机制防止将并发写入中的元数据误判为锁死亡。
    * - 若主进程仍处于存活状态，抛出 DATA_DIR_IN_USE 错误拒绝并发启动。
    * - 若主进程已退出但仍有子进程存活，抛出 DATA_DIR_RECOVERY_REQUIRED 错误。
-   * - 若主进程与所有子进程均已退出（或超过宽限期的陈旧损坏锁），通过接管协调安全移除并接管。
+   * - 若主进程与所有子进程均已退出（或超过宽限期的陈旧损坏锁），通过原子隔离安全移除并接管。
    *
    * @param dataDir 目标数据存储目录物理绝对路径
    * @param options 锁配置参数
@@ -290,7 +286,6 @@ export class DataDirLock {
     }
 
     const lockDirPath = join(dataDir, ".actiondock.data.lock");
-    const takeoverPath = `${lockDirPath}.takeover`;
     const currentPid = process.pid;
     const currentHost = hostname();
     const token = options.sessionToken || randomUUID();
@@ -316,7 +311,7 @@ export class DataDirLock {
         renameSync(tmpPath, metaPath);
         return new DataDirLock(lockDirPath, newLockInfo);
       } catch (err: any) {
-        if (err && err.code === "EEXIST") {
+        if (err && (err.code === "EEXIST" || err.code === "ENOENT")) {
           const lockState = readLockWithGracePeriod(lockDirPath, 3000);
 
           if (!lockState.exists) {
@@ -355,65 +350,61 @@ export class DataDirLock {
             }
           }
 
-          // 主进程与所有子进程均已退出（或超过宽限期的损坏锁），确认陈旧锁后通过接管锁协调清理并重试
-          let takeoverFd: number | null = null;
+          const recheckState = readLockWithGracePeriod(lockDirPath, 1000);
+          if (!recheckState.exists) {
+            continue;
+          }
+          if (recheckState.inGracePeriod) {
+            sleepSync(50);
+            continue;
+          }
+          if (
+            recheckState.info &&
+            typeof recheckState.info.pid === "number" &&
+            isProcessAlive(recheckState.info.pid)
+          ) {
+            const inUseErr: any = new Error(
+              `DATA_DIR_IN_USE: Data directory '${dataDir}' is in use by another active Host process (PID ${recheckState.info.pid})`
+            );
+            inUseErr.code = "DATA_DIR_IN_USE";
+            throw inUseErr;
+          }
+
+          // 主进程与所有子进程均已退出（或超过宽限期的损坏锁），使用原子检疫隔离移除陈旧锁
+          const quarantinePath = `${lockDirPath}.quarantine.${currentPid}.${Date.now()}.${randomUUID().slice(0, 8)}`;
           try {
-            takeoverFd = openSync(takeoverPath, "wx", 0o600);
-          } catch (takeoverErr: any) {
-            if (takeoverErr && takeoverErr.code === "EEXIST") {
-              try {
-                const raw = readFileSync(takeoverPath, "utf8");
-                if (raw.trim().length > 0) {
-                  const info = JSON.parse(raw);
-                  if (info && typeof info.pid === "number" && !isProcessAlive(info.pid)) {
-                    unlinkSync(takeoverPath);
-                  }
-                }
-              } catch {
-                // 忽略陈旧接管锁读取或解绑异常
-              }
-            }
+            renameSync(lockDirPath, quarantinePath);
+          } catch {
+            // 若 renameSync 捕获异常（如已被其他并发者移走或改动），直接 continue 进入下一轮重试循环
             continue;
           }
 
-          try {
+          // 校验隔离目录元数据，若包含存活进程所有权或处于宽限期内则说明并发竞争下移走了活跃进程新锁，执行恢复
+          const quarantinedState = readLockWithGracePeriod(quarantinePath, 500);
+          if (
+            quarantinedState.inGracePeriod ||
+            (quarantinedState.info &&
+              typeof quarantinedState.info.pid === "number" &&
+              isProcessAlive(quarantinedState.info.pid))
+          ) {
             try {
-              writeSync(takeoverFd, JSON.stringify({ pid: currentPid, createdAt: Date.now() }));
+              renameSync(quarantinePath, lockDirPath);
             } catch {
-              // 忽略接管标记写入异常
+              rmSync(quarantinePath, { recursive: true, force: true });
             }
-
-            const recheckState = readLockWithGracePeriod(lockDirPath, 1000);
-            if (recheckState.inGracePeriod) {
-              continue;
-            }
-
-            if (
-              recheckState.info &&
-              typeof recheckState.info.pid === "number" &&
-              isProcessAlive(recheckState.info.pid)
-            ) {
-              const inUseErr: any = new Error(
-                `DATA_DIR_IN_USE: Data directory '${dataDir}' is in use by another active Host process (PID ${recheckState.info.pid})`
-              );
-              inUseErr.code = "DATA_DIR_IN_USE";
-              throw inUseErr;
-            }
-
-            try {
-              rmSync(lockDirPath, { recursive: true, force: true });
-            } catch {
-              // 忽略解绑异常
-            }
-          } finally {
-            try {
-              unlinkSync(takeoverPath);
-            } catch {
-              // 忽略接管锁解绑异常
-            }
-            closeSync(takeoverFd);
+            const holderPid = quarantinedState.info?.pid ?? "active";
+            const inUseErr: any = new Error(
+              `DATA_DIR_IN_USE: Data directory '${dataDir}' is in use by another active Host process (PID ${holderPid})`
+            );
+            inUseErr.code = "DATA_DIR_IN_USE";
+            throw inUseErr;
           }
 
+          try {
+            rmSync(quarantinePath, { recursive: true, force: true });
+          } catch {
+            // 忽略隔离区清理异常
+          }
           continue;
         }
         throw err;

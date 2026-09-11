@@ -38,6 +38,7 @@ import {
   INVALID_ACTION_REF,
   MAX_SUBRUNS_REACHED,
   PACKAGE_NOT_FOUND,
+  PROJECT_BUSY,
   UNDECLARED_ACTION_DEPENDENCY,
 } from "../errors";
 import { DataDirLock } from "../storage/data-dir-lock";
@@ -121,6 +122,13 @@ export class DefaultActionDockHost implements ActionDockHost {
       }
 
       if (root && existsSync(root)) {
+        if (isProjectLockHeld(root)) {
+          const err: any = new Error(
+            "PROJECT_BUSY: Project directory is locked by another active process holding project.lock"
+          );
+          err.code = PROJECT_BUSY;
+          throw err;
+        }
         try {
           const config = loadProjectConfig(root);
           this.hostPublicPackageIds.add(config.id);
@@ -163,7 +171,8 @@ export class DefaultActionDockHost implements ActionDockHost {
         } catch (err: any) {
           if (
             err?.code === ACTION_PACKAGE_VERSION_CONFLICT ||
-            err?.code === "PROJECT_RECOVERY_REQUIRED"
+            err?.code === "PROJECT_RECOVERY_REQUIRED" ||
+            err?.code === PROJECT_BUSY
           ) {
             throw err;
           }
@@ -773,8 +782,15 @@ export async function createActionDockHost(
     }
 
     if (root && existsSync(root)) {
+      if (isProjectLockHeld(root)) {
+        const err: any = new Error(
+          "PROJECT_BUSY: Project directory is locked by another active process holding project.lock"
+        );
+        err.code = PROJECT_BUSY;
+        throw err;
+      }
       // 依据事务日志恢复未完成提交的悬空事务（锁持有者存活时严禁判定为崩溃事务并禁止自动恢复）
-      if (!isProjectLockHeld(root) && hasPendingTransactions(root)) {
+      if (hasPendingTransactions(root)) {
         await recoverPendingTransactions(root, { frozenInstall: true });
       }
     }

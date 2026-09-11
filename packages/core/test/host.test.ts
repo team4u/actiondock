@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -834,4 +835,71 @@ actions:
       rmSync(tempDir, { recursive: true, force: true });
     }
   });
+
+  it("当 project.lock 被活跃 PID 持有时，createActionDockHost 与 new DefaultActionDockHost 均抛出 PROJECT_BUSY 异常", async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "ad-host-lock-busy-"));
+    const dummyChild = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+      stdio: "ignore",
+    });
+
+    try {
+      writeFileSync(
+        join(tempDir, "actiondock.json"),
+        JSON.stringify({
+          id: "pkg.busy-test",
+          name: "并发锁测试工程",
+          version: "1.0.0",
+        })
+      );
+
+      const lockDir = join(tempDir, ".actiondock", "project.lock");
+      mkdirSync(lockDir, { recursive: true });
+      const lockInfo = {
+        pid: dummyChild.pid,
+        sessionToken: "active-holder-token",
+        createdAt: Date.now(),
+      };
+      writeFileSync(join(lockDir, "metadata.json"), JSON.stringify(lockInfo, null, 2), "utf-8");
+
+      // 1. 验证 createActionDockHost 抛出 PROJECT_BUSY 异常
+      let createErr: any;
+      try {
+        await createActionDockHost({
+          projectRoot: tempDir,
+          autoLoadCurrentProject: true,
+        });
+      } catch (err) {
+        createErr = err;
+      }
+
+      expect(createErr).toBeDefined();
+      expect(createErr?.code).toBe("PROJECT_BUSY");
+      expect(createErr?.message).toContain(
+        "PROJECT_BUSY: Project directory is locked by another active process holding project.lock"
+      );
+
+      // 2. 验证 new DefaultActionDockHost 抛出 PROJECT_BUSY 异常
+      let constructErr: any;
+      try {
+        new DefaultActionDockHost({
+          projectRoot: tempDir,
+          autoLoadCurrentProject: true,
+        });
+      } catch (err) {
+        constructErr = err;
+      }
+
+      expect(constructErr).toBeDefined();
+      expect(constructErr?.code).toBe("PROJECT_BUSY");
+      expect(constructErr?.message).toContain(
+        "PROJECT_BUSY: Project directory is locked by another active process holding project.lock"
+      );
+    } finally {
+      try {
+        dummyChild.kill("SIGKILL");
+      } catch {}
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
 });
+

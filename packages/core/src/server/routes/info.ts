@@ -4,12 +4,17 @@ import { ACTIONDOCK_VERSION } from "../../version";
 import { sanitizeConfigDefinitions } from "../../storage";
 import { assertPackageAllowed, getSubPath, jsonResponse, type RouteContext } from "./common";
 
-function sanitizePackage<T extends { config?: any }>(pkg: T): T {
-  if (!pkg || !pkg.config) return pkg;
-  return {
+function sanitizePackage<T extends { config?: any }>(pkg: T, exposeDebugInfo?: boolean): T {
+  if (!pkg) return pkg;
+  const sanitized: any = {
     ...pkg,
-    config: sanitizeConfigDefinitions(pkg.config),
+    ...(pkg.config ? { config: sanitizeConfigDefinitions(pkg.config) } : {}),
   };
+  if (exposeDebugInfo !== true) {
+    delete sanitized.packageRoot;
+    delete sanitized.path;
+  }
+  return sanitized;
 }
 
 /**
@@ -30,8 +35,8 @@ export async function handleInfoRoute(ctx: RouteContext): Promise<Response | nul
       }
 
       const rawPackages = target ? await target.listPackages() : (host ? await host.info() : []);
-      let packages = rawPackages.map(sanitizePackage);
-      if (options.packageAllowlist && Array.isArray(options.packageAllowlist)) {
+      let packages = rawPackages.map((p) => sanitizePackage(p, options.exposeDebugInfo));
+      if (options.packageAllowlist && Array.isArray(options.packageAllowlist) && options.packageAllowlist.length > 0) {
         packages = packages.filter((p) => p.id && options.packageAllowlist!.includes(p.id));
       }
       return jsonResponse(
@@ -80,8 +85,8 @@ export async function handleInfoRoute(ctx: RouteContext): Promise<Response | nul
 
       const targetInfo = await target.info();
       const rawPackages = targetInfo.packages || [];
-      let packages = rawPackages.map(sanitizePackage);
-      if (options.packageAllowlist && Array.isArray(options.packageAllowlist)) {
+      let packages = rawPackages.map((p) => sanitizePackage(p, options.exposeDebugInfo));
+      if (options.packageAllowlist && Array.isArray(options.packageAllowlist) && options.packageAllowlist.length > 0) {
         packages = packages.filter((p) => p.id && options.packageAllowlist!.includes(p.id));
       }
 

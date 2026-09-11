@@ -52,10 +52,12 @@ export class DefaultActionDockApp implements ActionDockApp {
   public readonly executionService: ExecutionService;
 
   public readonly actionsMap: Map<string, ActionDefinition>;
+  private readonly options: ActionDockAppOptions;
   private runtimeConfig: RuntimeConfig;
   private isClosed = false;
 
   constructor(options: ActionDockAppOptions = {}) {
+    this.options = options;
     // 1. 确定项目根路径与配置对象
     let packageRoot = options.packageRoot;
     let projectConfig = options.projectConfig;
@@ -324,18 +326,19 @@ export class DefaultActionDockApp implements ActionDockApp {
     return map;
   }
 
-  async info(): Promise<PackageInfo> {
+  async info(options?: { exposeDebugInfo?: boolean }): Promise<PackageInfo> {
     const actionsMap = this.getStaticActionMap();
     const playbooksMap = this.getStaticPlaybookMap();
     const actions = Array.from(actionsMap.keys());
     const playbooks = Array.from(playbooksMap.keys());
+    const showPackageRoot = (options?.exposeDebugInfo ?? this.options.exposeDebugInfo) !== false;
 
     return {
       id: this.packageId,
       name: this.projectConfig.name || this.packageId,
       version: this.projectConfig.version || "0.1.0",
       description: this.projectConfig.description,
-      packageRoot: this.packageRoot,
+      ...(showPackageRoot ? { packageRoot: this.packageRoot } : {}),
       actionsDir: this.projectConfig.actionsDir,
       playbooksDir: this.projectConfig.playbooksDir,
       config: sanitizeConfigDefinitions(this.projectConfig.config),

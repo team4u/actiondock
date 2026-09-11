@@ -620,5 +620,286 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         await emptyAllowedServer.stop();
       }
     });
+
+    it("开启 packageAllowlist 时未指定包的全局 doctor 请求返回 403", async () => {
+      const globalDocRes = await fetch(`${allowlistUrl}/api/v2/doctor`, {
+        headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+      });
+      expect(globalDocRes.status).toBe(403);
+      const globalDocData = await globalDocRes.json();
+      expect(globalDocData.ok).toBe(false);
+      expect(globalDocData.error.code).toBe("PACKAGE_NOT_ALLOWED");
+    });
+  });
+
+  describe("packageAllowlist: [] 空数组白名单放行契约验证", () => {
+    let emptyListServer: any;
+    let emptyListUrl: string;
+
+    beforeAll(async () => {
+      const calcAction = defineAction({
+        run: (input: { x: number; y: number }) => ({ result: input.x + input.y }),
+      });
+
+      const emptyAppA = await createActionDockApp({
+        projectConfig: {
+          id: "pkg.math",
+          name: "Math Package",
+          version: "2.0.0",
+          description: "Math utilities package",
+          actions: {
+            calc: {
+              entry: "",
+              description: "算术计算动作",
+              tags: ["math", "core"],
+              inputSchema: {
+                type: "object",
+                properties: {
+                  x: { type: "number" },
+                  y: { type: "number" },
+                },
+                required: ["x", "y"],
+              },
+              outputSchema: {
+                type: "object",
+                properties: {
+                  result: { type: "number" },
+                },
+              },
+            },
+          },
+          playbooks: {
+            "calc-sop": {
+              description: "计算规程",
+              actions: ["calc"],
+              content: "# Calc SOP\nStep 1: calculate numbers",
+            },
+          } as any,
+        },
+        actions: {
+          calc: calcAction,
+        },
+        inMemory: true,
+      });
+
+      const emptyAppB = await createActionDockApp({
+        projectConfig: {
+          id: "pkg.extra",
+          name: "Extra Package",
+          version: "1.0.0",
+          description: "Extra utilities package",
+        },
+        inMemory: true,
+      });
+
+      const emptyHost = await createActionDockHost({
+        packages: [emptyAppA, emptyAppB],
+        autoLoadCurrentProject: false,
+        inMemory: true,
+      });
+
+      const emptyTarget = await createActionDockTarget({ host: emptyHost });
+
+      emptyListServer = await startActionDockServer({
+        port: 0,
+        host: "127.0.0.1",
+        token: AUTH_TOKEN,
+        target: emptyTarget,
+        hostInstance: emptyHost,
+        enableManagement: true,
+        packageAllowlist: [],
+      });
+      emptyListUrl = `http://127.0.0.1:${emptyListServer.port}`;
+    });
+
+    afterAll(async () => {
+      if (emptyListServer) {
+        await emptyListServer.stop();
+      }
+    });
+
+    it("空数组白名单时不拦截任何包，所有包的 /packages、/info、/playbooks、Action 运行与全局 doctor 均可正常访问", async () => {
+      // 1. GET /packages 返回所有包
+      const pkgsRes = await fetch(`${emptyListUrl}/api/v2/packages`, {
+        headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+      });
+      expect(pkgsRes.status).toBe(200);
+      const pkgsData = await pkgsRes.json();
+      expect(pkgsData.packages.length).toBe(2);
+
+      // 2. GET /info 返回所有包
+      const infoRes = await fetch(`${emptyListUrl}/api/v2/info`, {
+        headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+      });
+      expect(infoRes.status).toBe(200);
+      const infoData = await infoRes.json();
+      expect(infoData.packages.length).toBe(2);
+
+      // 3. GET /playbooks 正常返回规程
+      const pbsRes = await fetch(`${emptyListUrl}/api/v2/playbooks`, {
+        headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+      });
+      expect(pbsRes.status).toBe(200);
+      const pbsData = await pbsRes.json();
+      expect(Array.isArray(pbsData)).toBe(true);
+      expect(pbsData.some((p: any) => p.id.endsWith("calc-sop"))).toBe(true);
+
+      // 4. Action 运行正常放行
+      const runRes = await fetch(`${emptyListUrl}/api/v2/actions/pkg.math/calc/run`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${AUTH_TOKEN}`,
+        },
+        body: JSON.stringify({ input: { x: 2, y: 3 } }),
+      });
+      expect(runRes.status).toBe(200);
+      const runData = await runRes.json();
+      expect(runData.ok).toBe(true);
+      expect(runData.data).toEqual({ result: 5 });
+
+      // 5. 全局 doctor 正常放行
+      const docRes = await fetch(`${emptyListUrl}/api/v2/doctor`, {
+        headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+      });
+      expect(docRes.status).toBe(200);
+      const docData = await docRes.json();
+      expect(docData.ok).toBe(true);
+    });
+  });
+
+  describe("exposeDebugInfo 调试与物理路径信息安全收敛验证", () => {
+    it("DefaultActionDockApp.info() 契约在 exposeDebugInfo 为 false 时不暴露 packageRoot", async () => {
+      const debugApp = await createActionDockApp({
+        packageRoot: "/root/code/test-pkg",
+        projectConfig: {
+          id: "pkg.debug-test",
+          name: "Debug Test App",
+          version: "1.0.0",
+        },
+        exposeDebugInfo: false,
+        inMemory: true,
+      });
+
+      const infoWithoutDebug = await debugApp.info();
+      expect(infoWithoutDebug.packageRoot).toBeUndefined();
+
+      // 运行时动态传入覆盖
+      const infoWithOverride = await debugApp.info({ exposeDebugInfo: true });
+      expect(infoWithOverride.packageRoot).toBe("/root/code/test-pkg");
+
+      const defaultApp = await createActionDockApp({
+        packageRoot: "/root/code/test-pkg-default",
+        projectConfig: {
+          id: "pkg.debug-default",
+          name: "Debug Default App",
+          version: "1.0.0",
+        },
+        inMemory: true,
+      });
+      const defaultInfo = await defaultApp.info();
+      expect(defaultInfo.packageRoot).toBe("/root/code/test-pkg-default");
+
+      const infoExplicitFalse = await defaultApp.info({ exposeDebugInfo: false });
+      expect(infoExplicitFalse.packageRoot).toBeUndefined();
+    });
+
+    it("HTTP Server 在 exposeDebugInfo: false 时彻底脱敏 packageRoot 与 path", async () => {
+      const noDebugServer = await startActionDockServer({
+        port: 0,
+        host: "127.0.0.1",
+        token: AUTH_TOKEN,
+        target,
+        hostInstance: host,
+        enableManagement: false,
+        exposeDebugInfo: false,
+      });
+      const noDebugUrl = `http://127.0.0.1:${noDebugServer.port}`;
+
+      try {
+        // GET /api/v2/packages
+        const pkgsRes = await fetch(`${noDebugUrl}/api/v2/packages`, {
+          headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+        });
+        expect(pkgsRes.status).toBe(200);
+        const pkgsData = await pkgsRes.json();
+        for (const pkg of pkgsData.packages) {
+          expect(pkg.packageRoot).toBeUndefined();
+          expect(pkg.path).toBeUndefined();
+        }
+
+        // GET /api/v2/info
+        const infoRes = await fetch(`${noDebugUrl}/api/v2/info`, {
+          headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+        });
+        expect(infoRes.status).toBe(200);
+        const infoData = await infoRes.json();
+        expect(infoData.projectRoot).toBeUndefined();
+        for (const pkg of infoData.packages) {
+          expect(pkg.packageRoot).toBeUndefined();
+          expect(pkg.path).toBeUndefined();
+        }
+      } finally {
+        await noDebugServer.stop();
+      }
+    });
+  });
+
+  describe("CORS 支持 PUT 与 DELETE 预检测试", () => {
+    let corsServer: any;
+    let corsUrl: string;
+
+    beforeAll(async () => {
+      corsServer = await startActionDockServer({
+        port: 0,
+        host: "127.0.0.1",
+        token: AUTH_TOKEN,
+        target,
+        hostInstance: host,
+        enableManagement: true,
+        corsOrigins: ["http://localhost:3000", "https://app.actiondock.com"],
+      });
+      corsUrl = `http://127.0.0.1:${corsServer.port}`;
+    });
+
+    afterAll(async () => {
+      if (corsServer) {
+        await corsServer.stop();
+      }
+    });
+
+    it("OPTIONS 预检请求针对 PUT 方法返回允许方法头", async () => {
+      const res = await fetch(`${corsUrl}/api/v2/state/test_key`, {
+        method: "OPTIONS",
+        headers: {
+          Origin: "http://localhost:3000",
+          "Access-Control-Request-Method": "PUT",
+          "Access-Control-Request-Headers": "Content-Type, Authorization",
+        },
+      });
+      expect(res.status).toBe(204);
+      expect(res.headers.get("access-control-allow-origin")).toBe("http://localhost:3000");
+      const allowMethods = res.headers.get("access-control-allow-methods");
+      expect(allowMethods).toBeDefined();
+      expect(allowMethods).toContain("PUT");
+      expect(allowMethods).toBe("GET, POST, PUT, DELETE, OPTIONS");
+    });
+
+    it("OPTIONS 预检请求针对 DELETE 方法返回允许方法头", async () => {
+      const res = await fetch(`${corsUrl}/api/v2/config/test_key`, {
+        method: "OPTIONS",
+        headers: {
+          Origin: "https://app.actiondock.com",
+          "Access-Control-Request-Method": "DELETE",
+          "Access-Control-Request-Headers": "Authorization",
+        },
+      });
+      expect(res.status).toBe(204);
+      expect(res.headers.get("access-control-allow-origin")).toBe("https://app.actiondock.com");
+      const allowMethods = res.headers.get("access-control-allow-methods");
+      expect(allowMethods).toBeDefined();
+      expect(allowMethods).toContain("DELETE");
+      expect(allowMethods).toBe("GET, POST, PUT, DELETE, OPTIONS");
+    });
   });
 });

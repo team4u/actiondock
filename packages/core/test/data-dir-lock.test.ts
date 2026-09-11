@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -431,6 +431,10 @@ rl.on("line", (cmd) => {
     );
 
     expect(existsSync(lockFile)).toBe(false);
+    const remainingQuarantines = readdirSync(tempDir).filter((name) =>
+      name.includes(".quarantine.")
+    );
+    expect(remainingQuarantines.length).toBe(0);
   });
 
   it("覆盖元数据写入过程中并发读取与锁竞争保护，验证不会因元数据临时缺失而误判锁死亡", async () => {
@@ -471,5 +475,158 @@ rl.on("line", (cmd) => {
     expect(existsSync(lockDir)).toBe(true);
     expect(caughtError).toBeDefined();
     expect(caughtError?.code).toBe("DATA_DIR_IN_USE");
+  });
+
+  it("真实多进程并发争抢陈旧目录锁时，通过原子检疫隔离接管，验证无死锁且其余进程均捕获 DATA_DIR_IN_USE", async () => {
+    const lockDir = join(tempDir, ".actiondock.data.lock");
+    mkdirSync(lockDir, { mode: 0o700 });
+    const staleLockInfo = {
+      pid: 99999998,
+      hostname: "stale-dir-host",
+      sessionToken: "stale-dir-token",
+      createdAt: new Date().toISOString(),
+      childPids: [],
+    };
+    writeFileSync(
+      join(lockDir, "metadata.json"),
+      JSON.stringify(staleLockInfo, null, 2),
+      { mode: 0o600 }
+    );
+
+    const lockModulePath = resolve(import.meta.dirname, "../src/storage/data-dir-lock.ts");
+    const workerScript = join(tempDir, "lock-dir-worker.mjs");
+    const workerContent = `
+import { DataDirLock } from ${JSON.stringify(pathToFileURL(lockModulePath).href)};
+import readline from "node:readline";
+
+const dataDir = process.argv[2];
+const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+let lock = null;
+
+process.stdout.write("READY\\n");
+
+rl.on("line", (cmd) => {
+  const action = cmd.trim();
+  if (action === "START") {
+    try {
+      lock = DataDirLock.acquire(dataDir);
+      process.stdout.write("RESULT:SUCCESS\\n");
+    } catch (err) {
+      process.stdout.write("RESULT:" + (err?.code || err?.message) + "\\n");
+      process.exit(0);
+    }
+  } else if (action === "RELEASE") {
+    if (lock) {
+      lock.release();
+    }
+    process.exit(0);
+  }
+});
+`;
+    writeFileSync(workerScript, workerContent, "utf-8");
+
+    const isBun = Boolean((process as any).isBun || process.versions?.bun);
+    const repoRoot = resolve(import.meta.dirname, "../../..");
+    const preloadScript = join(repoRoot, "scripts", "test-preload.ts");
+    const preloadUrl = pathToFileURL(preloadScript).href;
+
+    const childArgs = isBun
+      ? [workerScript, tempDir]
+      : ["--no-deprecation", "--import", preloadUrl, workerScript, tempDir];
+
+    const concurrency = 6;
+    const procs: ReturnType<typeof spawn>[] = [];
+    const results: string[] = [];
+
+    for (let i = 0; i < concurrency; i++) {
+      const child = spawn(process.execPath, childArgs, {
+        stdio: ["pipe", "pipe", "inherit"],
+      });
+      procs.push(child);
+    }
+
+    let winnerProc: ReturnType<typeof spawn> | null = null;
+    let readyCount = 0;
+
+    await new Promise<void>((resolvePromise, rejectPromise) => {
+      const timeout = setTimeout(() => {
+        for (const p of procs) {
+          try {
+            p.kill("SIGKILL");
+          } catch {}
+        }
+        rejectPromise(
+          new Error(
+            `Test timed out waiting for children results (got ${results.length}/${concurrency})`
+          )
+        );
+      }, 10000);
+
+      for (const child of procs) {
+        let buffer = "";
+        child.stdout?.on("data", (chunk) => {
+          buffer += chunk.toString();
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed === "READY") {
+              readyCount++;
+              if (readyCount === concurrency) {
+                for (const p of procs) {
+                  p.stdin?.write("START\n");
+                }
+              }
+            } else if (trimmed.startsWith("RESULT:")) {
+              const res = trimmed.replace("RESULT:", "");
+              results.push(res);
+              if (res === "SUCCESS") {
+                winnerProc = child;
+              }
+              if (results.length === concurrency) {
+                clearTimeout(timeout);
+                resolvePromise();
+              }
+            }
+          }
+        });
+
+        child.on("error", (err) => {
+          clearTimeout(timeout);
+          rejectPromise(err);
+        });
+      }
+    });
+
+    const successCount = results.filter((r) => r === "SUCCESS").length;
+    const inUseCount = results.filter((r) => r === "DATA_DIR_IN_USE").length;
+
+    expect(successCount).toBe(1);
+    expect(inUseCount).toBe(concurrency - 1);
+    expect(results.length).toBe(concurrency);
+
+    if (winnerProc) {
+      (winnerProc as any).stdin?.write("RELEASE\n");
+    }
+
+    await Promise.all(
+      procs.map(
+        (p) =>
+          new Promise<void>((res) => {
+            if (p.exitCode !== null) {
+              res();
+            } else {
+              p.on("exit", () => res());
+            }
+          })
+      )
+    );
+
+    expect(existsSync(lockDir)).toBe(false);
+    const remainingQuarantines = readdirSync(tempDir).filter((name) =>
+      name.includes(".quarantine.")
+    );
+    expect(remainingQuarantines.length).toBe(0);
   });
 });

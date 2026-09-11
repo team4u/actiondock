@@ -71,7 +71,11 @@ export function assertPackageAllowed(
   packageId: string | undefined | null,
   options?: { packageAllowlist?: string[] }
 ): void {
-  if (options?.packageAllowlist && Array.isArray(options.packageAllowlist)) {
+  if (
+    options?.packageAllowlist &&
+    Array.isArray(options.packageAllowlist) &&
+    options.packageAllowlist.length > 0
+  ) {
     if (!packageId || !options.packageAllowlist.includes(packageId)) {
       throw new PackageNotAllowedError(packageId || "");
     }
@@ -108,7 +112,11 @@ export function resolveAppForPackage(
 
   if (host) {
     const apps = host.listApps();
-    if (options?.packageAllowlist && Array.isArray(options.packageAllowlist)) {
+    if (
+      options?.packageAllowlist &&
+      Array.isArray(options.packageAllowlist) &&
+      options.packageAllowlist.length > 0
+    ) {
       const allowedApp = apps.find((a) => options.packageAllowlist!.includes(a.packageId));
       if (allowedApp) return allowedApp;
     }
@@ -118,7 +126,11 @@ export function resolveAppForPackage(
   const innerTarget = target?.unwrap?.();
   if (innerTarget && "listApps" in innerTarget) {
     const apps = innerTarget.listApps();
-    if (options?.packageAllowlist && Array.isArray(options.packageAllowlist)) {
+    if (
+      options?.packageAllowlist &&
+      Array.isArray(options.packageAllowlist) &&
+      options.packageAllowlist.length > 0
+    ) {
       const allowedApp = apps.find((a: any) => options.packageAllowlist!.includes(a.packageId));
       if (allowedApp) return allowedApp;
     }

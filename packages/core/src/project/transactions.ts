@@ -1,11 +1,9 @@
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import {
-  closeSync,
   copyFileSync,
   existsSync,
   mkdirSync,
-  openSync,
   readdirSync,
   readFileSync,
   renameSync,
@@ -13,7 +11,6 @@ import {
   statSync,
   unlinkSync,
   writeFileSync,
-  writeSync,
 } from "node:fs";
 import { join } from "node:path";
 
@@ -222,7 +219,6 @@ export function acquireProjectLock(
   }
 
   const lockPath = join(metaDir, "project.lock");
-  const takeoverPath = `${lockPath}.takeover`;
   const sessionToken = options.sessionToken || randomUUID();
   const currentPid = process.pid;
   const lockData = {
@@ -244,7 +240,7 @@ export function acquireProjectLock(
       renameSync(tmpFile, metaFile);
       break;
     } catch (err: any) {
-      if (err && err.code === "EEXIST") {
+      if (err && (err.code === "EEXIST" || err.code === "ENOENT")) {
         const lockState = readProjectLockWithGracePeriod(lockPath, 3000);
 
         if (!lockState.exists) {
@@ -264,63 +260,57 @@ export function acquireProjectLock(
           }
         }
 
-        // 持有者 PID 已死亡（或超过宽限期的损坏锁），属于陈旧锁，进行原子接管竞争
-        let takeoverFd: number | null = null;
+        const recheckState = readProjectLockWithGracePeriod(lockPath, 1000);
+        if (!recheckState.exists) {
+          continue;
+        }
+        if (recheckState.inGracePeriod) {
+          sleepSync(50);
+          continue;
+        }
+        if (
+          recheckState.info &&
+          typeof recheckState.info.pid === "number" &&
+          isPidAlive(recheckState.info.pid)
+        ) {
+          throw new Error(
+            `Project modification lock is held by PID ${recheckState.info.pid}. Another command is running in ${projectRoot}.`
+          );
+        }
+
+        // 持有者 PID 已死亡（或超过宽限期的损坏锁），属于陈旧锁，采用原子 renameSync(lockPath, quarantinePath) 检疫隔离后再 rmSync，竞争失败者 continue 重试
+        const quarantinePath = `${lockPath}.quarantine.${currentPid}.${Date.now()}.${randomUUID().slice(0, 8)}`;
         try {
-          takeoverFd = openSync(takeoverPath, "wx", 0o600);
-        } catch (takeoverErr: any) {
-          if (takeoverErr && takeoverErr.code === "EEXIST") {
-            try {
-              const raw = readFileSync(takeoverPath, "utf-8");
-              if (raw.trim().length > 0) {
-                const info = JSON.parse(raw);
-                if (info && typeof info.pid === "number" && !isPidAlive(info.pid)) {
-                  unlinkSync(takeoverPath);
-                }
-              }
-            } catch {
-              // 忽略陈旧接管锁清理异常
-            }
-          }
+          renameSync(lockPath, quarantinePath);
+        } catch {
+          // 竞争失败者 continue 重试
           continue;
         }
 
-        try {
+        // 校验隔离目录元数据，若包含存活进程所有权或处于宽限期内则说明并发竞争下移走了活跃进程新锁，执行恢复
+        const quarantinedState = readProjectLockWithGracePeriod(quarantinePath, 500);
+        if (
+          quarantinedState.inGracePeriod ||
+          (quarantinedState.info &&
+            typeof quarantinedState.info.pid === "number" &&
+            isPidAlive(quarantinedState.info.pid))
+        ) {
           try {
-            writeSync(takeoverFd, JSON.stringify({ pid: currentPid, createdAt: Date.now() }));
+            renameSync(quarantinePath, lockPath);
           } catch {
-            // 忽略写入异常
+            rmSync(quarantinePath, { recursive: true, force: true });
           }
-
-          const recheckState = readProjectLockWithGracePeriod(lockPath, 1000);
-          if (recheckState.inGracePeriod) {
-            continue;
-          }
-
-          if (
-            recheckState.info &&
-            typeof recheckState.info.pid === "number" &&
-            isPidAlive(recheckState.info.pid)
-          ) {
-            throw new Error(
-              `Project modification lock is held by PID ${recheckState.info.pid}. Another command is running in ${projectRoot}.`
-            );
-          }
-
-          try {
-            rmSync(lockPath, { recursive: true, force: true });
-          } catch {
-            // 忽略解绑异常
-          }
-        } finally {
-          try {
-            unlinkSync(takeoverPath);
-          } catch {
-            // 忽略解绑异常
-          }
-          closeSync(takeoverFd);
+          const holderPid = quarantinedState.info?.pid ?? "active";
+          throw new Error(
+            `Project modification lock is held by PID ${holderPid}. Another command is running in ${projectRoot}.`
+          );
         }
 
+        try {
+          rmSync(quarantinePath, { recursive: true, force: true });
+        } catch {
+          // 忽略隔离区清理异常
+        }
         continue;
       }
       throw err;

@@ -37,6 +37,7 @@ interface RecordedStatement {
 interface TransactionContext {
   recorder: RecordedStatement[];
   aborted?: boolean;
+  sealed?: boolean;
 }
 
 /**
@@ -291,10 +292,10 @@ export class WorkerSqliteDriver {
    */
   exec(sql: string): Promise<void> {
     const store = this.txStorage.getStore();
-    if (store?.aborted) {
+    if (store?.aborted || store?.sealed) {
       return Promise.reject(
         new Error(
-          "WORKER_TRANSACTION_ASYNC_FORBIDDEN: functional transactions in WorkerSqliteDriver must be synchronous; async callbacks are not allowed"
+          "WORKER_TRANSACTION_ASYNC_FORBIDDEN: functional transactions in WorkerSqliteDriver must be synchronous; async callbacks or deferred continuations are not allowed"
         )
       );
     }
@@ -313,10 +314,10 @@ export class WorkerSqliteDriver {
     ...params: any[]
   ): Promise<{ changes: number; lastInsertRowid?: number | bigint }> {
     const store = this.txStorage.getStore();
-    if (store?.aborted) {
+    if (store?.aborted || store?.sealed) {
       return Promise.reject(
         new Error(
-          "WORKER_TRANSACTION_ASYNC_FORBIDDEN: functional transactions in WorkerSqliteDriver must be synchronous; async callbacks are not allowed"
+          "WORKER_TRANSACTION_ASYNC_FORBIDDEN: functional transactions in WorkerSqliteDriver must be synchronous; async callbacks or deferred continuations are not allowed"
         )
       );
     }
@@ -335,10 +336,10 @@ export class WorkerSqliteDriver {
    */
   get<T = any>(sql: string, ...params: any[]): Promise<T | undefined> {
     const store = this.txStorage.getStore();
-    if (store?.aborted) {
+    if (store?.aborted || store?.sealed) {
       return Promise.reject(
         new Error(
-          "WORKER_TRANSACTION_ASYNC_FORBIDDEN: functional transactions in WorkerSqliteDriver must be synchronous; async callbacks are not allowed"
+          "WORKER_TRANSACTION_ASYNC_FORBIDDEN: functional transactions in WorkerSqliteDriver must be synchronous; async callbacks or deferred continuations are not allowed"
         )
       );
     }
@@ -360,10 +361,10 @@ export class WorkerSqliteDriver {
    */
   all<T = any>(sql: string, ...params: any[]): Promise<T[]> {
     const store = this.txStorage.getStore();
-    if (store?.aborted) {
+    if (store?.aborted || store?.sealed) {
       return Promise.reject(
         new Error(
-          "WORKER_TRANSACTION_ASYNC_FORBIDDEN: functional transactions in WorkerSqliteDriver must be synchronous; async callbacks are not allowed"
+          "WORKER_TRANSACTION_ASYNC_FORBIDDEN: functional transactions in WorkerSqliteDriver must be synchronous; async callbacks or deferred continuations are not allowed"
         )
       );
     }
@@ -409,6 +410,7 @@ export class WorkerSqliteDriver {
       const context: TransactionContext = {
         recorder: [],
         aborted: false,
+        sealed: false,
       };
 
       let fnResult: T;
@@ -419,6 +421,8 @@ export class WorkerSqliteDriver {
       } catch (err) {
         context.aborted = true;
         throw err;
+      } finally {
+        context.sealed = true;
       }
 
       const result = fnResult as any;
@@ -433,8 +437,9 @@ export class WorkerSqliteDriver {
         );
       }
 
+      const statements = [...context.recorder];
       try {
-        await this.request("transaction", { statements: context.recorder });
+        await this.request("transaction", { statements });
       } finally {
         context.aborted = true;
       }

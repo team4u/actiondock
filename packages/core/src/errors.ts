@@ -98,6 +98,9 @@ export const STATE_KEY_NOT_FOUND = "STATE_KEY_NOT_FOUND";
 /** SQLite 数据库忙或锁定 */
 export const STORAGE_BUSY = "STORAGE_BUSY";
 
+/** 工程事务锁被其他活跃进程持有 */
+export const PROJECT_BUSY = "PROJECT_BUSY";
+
 /** SQLite 工作线程已退出 */
 export const STORAGE_WORKER_EXITED = "STORAGE_WORKER_EXITED";
 

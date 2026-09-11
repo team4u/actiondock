@@ -216,6 +216,8 @@ export interface ActionDockAppOptions {
   clock?: Clock;
   /** 进程执行器 */
   process?: ProcessAPI;
+  /** 是否暴露调试与物理路径信息 */
+  exposeDebugInfo?: boolean;
 }
 
 /**
@@ -241,7 +243,7 @@ export interface ActionDockApp {
   readonly actionsMap: Map<string, ActionDefinition>;
 
   /** 获取当前包元数据信息 */
-  info(): Promise<PackageInfo>;
+  info(options?: { exposeDebugInfo?: boolean }): Promise<PackageInfo>;
 
   /** 静态列出当前包中所有可用的 Action 摘要 */
   listActions(options?: ListActionsOptions): Promise<ActionSummary[]>;

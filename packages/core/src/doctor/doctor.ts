@@ -25,6 +25,7 @@ export async function runDoctorChecks(options?: {
   cwd?: string;
   packageIdOrPath?: string;
   customHome?: string;
+  packageAllowlist?: string[];
 }): Promise<DoctorReport> {
   const cwd = options?.cwd || process.cwd();
   const checks: DoctorCheckItem[] = [];
@@ -144,7 +145,10 @@ export async function runDoctorChecks(options?: {
 
   // 5. Check Linked Package Dependencies (node_modules completeness)
   try {
-    const linkedList = listLinkedPackages(options?.customHome);
+    let linkedList = listLinkedPackages(options?.customHome);
+    if (options?.packageAllowlist && options.packageAllowlist.length > 0) {
+      linkedList = linkedList.filter((pkg) => options.packageAllowlist!.includes(pkg.id));
+    }
     const missingNodeModules: string[] = [];
 
     for (const pkg of linkedList) {
@@ -190,8 +194,11 @@ export async function runDoctorChecks(options?: {
 
   // 6. Check Cross-Package Uses Dependency Closure
   try {
-    const linkedList = listLinkedPackages(options?.customHome);
-    const packagesToCheck: Array<{ id: string; root: string }> = linkedList.map((p) => ({
+    let linkedList = listLinkedPackages(options?.customHome);
+    if (options?.packageAllowlist && options.packageAllowlist.length > 0) {
+      linkedList = linkedList.filter((pkg) => options.packageAllowlist!.includes(pkg.id));
+    }
+    let packagesToCheck: Array<{ id: string; root: string }> = linkedList.map((p) => ({
       id: p.id,
       root: p.path,
     }));
@@ -206,6 +213,10 @@ export async function runDoctorChecks(options?: {
       } catch {
         // 忽略配置异常
       }
+    }
+
+    if (options?.packageAllowlist && options.packageAllowlist.length > 0) {
+      packagesToCheck = packagesToCheck.filter((p) => options.packageAllowlist!.includes(p.id));
     }
 
     const unresolvableUses: string[] = [];

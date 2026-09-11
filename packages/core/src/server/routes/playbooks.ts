@@ -24,7 +24,7 @@ export async function handlePlaybooksRoutes(ctx: RouteContext): Promise<Response
         pbs = pbs.filter((p) => p.packageId === targetPkg);
       }
 
-      if (options.packageAllowlist && Array.isArray(options.packageAllowlist)) {
+      if (options.packageAllowlist && Array.isArray(options.packageAllowlist) && options.packageAllowlist.length > 0) {
         pbs = pbs.filter((p) => p.packageId && options.packageAllowlist!.includes(p.packageId));
       }
 

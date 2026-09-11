@@ -261,5 +261,56 @@ describe("WorkerSqliteDriver 工作线程驱动测试", () => {
 
     await driver.close();
   });
+
+  it("函数式事务在同步回调中调用 driver.run(...).then(() => driver.run(...)) 逃逸写被彻底拦截", async () => {
+    const dbPath = join(tempDir, "worker-microtask-escape.db");
+    const driver = new WorkerSqliteDriver(dbPath);
+
+    await driver.exec(`
+      CREATE TABLE escape_continuation_test (
+        id TEXT PRIMARY KEY,
+        val TEXT NOT NULL
+      );
+    `);
+
+    let deferredError: any = null;
+
+    // 在同步回调中调用 driver.run(...).then(() => driver.run(...))
+    await driver.transaction(() => {
+      driver
+        .run("INSERT INTO escape_continuation_test (id, val) VALUES (?, ?)", "id-sync", "val-sync")
+        .then(() => {
+          return driver.run(
+            "INSERT INTO escape_continuation_test (id, val) VALUES (?, ?)",
+            "id-escape",
+            "val-escape"
+          );
+        })
+        .catch((err) => {
+          deferredError = err;
+        });
+    });
+
+    // 等待微任务与潜在异步链路完全结算
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // 验证其微任务延迟写被拦截并抛出 WORKER_TRANSACTION_ASYNC_FORBIDDEN
+    expect(deferredError).toBeDefined();
+    expect(deferredError.message).toMatch(/WORKER_TRANSACTION_ASYNC_FORBIDDEN/);
+
+    // 验证数据库中未被写入逃逸记录
+    const escapeRows = await driver.all("SELECT * FROM escape_continuation_test WHERE id = ?", "id-escape");
+    expect(escapeRows.length).toBe(0);
+
+    // 验证同步合法记录正常写入
+    const syncRows = await driver.all<{ id: string; val: string }>(
+      "SELECT * FROM escape_continuation_test WHERE id = ?",
+      "id-sync"
+    );
+    expect(syncRows.length).toBe(1);
+    expect(syncRows[0].val).toBe("val-sync");
+
+    await driver.close();
+  });
 });
 

@@ -14,6 +14,21 @@ export async function handleDoctorRoute(ctx: RouteContext): Promise<Response | n
 
   try {
     const targetPkg = url.searchParams.get("package") || url.searchParams.get("packageId") || undefined;
+    if (options.packageAllowlist && options.packageAllowlist.length > 0) {
+      if (!targetPkg) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: "PACKAGE_NOT_ALLOWED",
+              message: "Global doctor check is forbidden when package allowlist is active. Please specify an allowed package.",
+            },
+          },
+          403,
+          corsHeaders
+        );
+      }
+    }
     if (targetPkg) {
       assertPackageAllowed(targetPkg, options);
     }
@@ -21,6 +36,7 @@ export async function handleDoctorRoute(ctx: RouteContext): Promise<Response | n
       cwd: projectRoot || process.cwd(),
       packageIdOrPath: targetPkg,
       customHome,
+      packageAllowlist: options.packageAllowlist,
     });
     return jsonResponse({ ok: true, report }, 200, corsHeaders);
   } catch (err: any) {
