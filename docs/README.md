@@ -23,7 +23,7 @@ npx skills add team4u/actiondock -g -y
 npx skills add <owner/repo> -g -y
 ```
 
-安装完成后，智能体即可自动识别 SKILL.md 与操作规程，并在执行任务时自主调度原子能力。详见 [Agent Skill 使用指南](file:///root/code/action-dock/docs/consumer/use-as-skill.md)。
+安装完成后，智能体即可自动识别 SKILL.md 与操作规程，并在执行任务时自主调度原子能力。详见 [Agent Skill 使用指南](consumer/use-as-skill.md)。
 
 ---
 
@@ -43,53 +43,53 @@ ActionDock 文档中心遵循使用者与开发者角色双轨制设计：
 ---
 
 ### 快速概览
-- [环境安装与准备](file:///root/code/action-dock/docs/getting-started/installation.md)：Node.js 运行环境、ad CLI 全局安装、依赖锁定与开发工作流。
-- [核心概览与双轨导引](file:///root/code/action-dock/docs/getting-started/overview.md)：系统架构总览、7 个核心子包分层体系、统一调用门面与角色路径选择。
+- [环境安装与准备](getting-started/installation.md)：Node.js 运行环境、ad CLI 全局安装、依赖锁定与开发工作流。
+- [核心概览与双轨导引](getting-started/overview.md)：系统架构总览、7 个核心子包分层体系、统一调用门面与角色路径选择。
 
 ---
 
 ### 使用者指南
 面向从仓库拉取项目源码、获取导出的 Skill 包或使用交付产物的使用者与智能体操作者：
-- [消费与接入总览](file:///root/code/action-dock/docs/consumer/overview.md)：工程依赖消费、智能体技能装载与三种接入路径对比选型。
-- [Agent Skill 使用指南](file:///root/code/action-dock/docs/consumer/use-as-skill.md)：通过 npx skills 一键安装 GitHub 技能、智能体装载路径与规程优先调用规范。
-- [接入开发工具 MCP 服务](file:///root/code/action-dock/docs/consumer/use-as-mcp.md)：作为 MCP STDIO 服务直连 Cursor 与 Windsurf 等工具库。
-- [Node 交付产物与运行](file:///root/code/action-dock/docs/consumer/standalone-run.md)：运行自包含 Node.js 目录交付产物与离线依赖。
-- [HTTP 远程微服务与 API 调度](file:///root/code/action-dock/docs/consumer/http-service.md)：启动持久微服务并通过 REST API 远程调度。
-- [消费端配置与凭证注入](file:///root/code/action-dock/docs/consumer/configuration.md)：API 令牌、环境变量与 SQLite 持久化配置注入。
+- [消费与接入总览](consumer/overview.md)：工程依赖消费、智能体技能装载与三种接入路径对比选型。
+- [Agent Skill 使用指南](consumer/use-as-skill.md)：通过 npx skills 一键安装 GitHub 技能、智能体装载路径与规程优先调用规范。
+- [接入开发工具 MCP 服务](consumer/use-as-mcp.md)：作为 MCP STDIO 服务直连 Cursor 与 Windsurf 等工具库。
+- [Node 交付产物与运行](consumer/standalone-run.md)：运行自包含 Node.js 目录交付产物与离线依赖。
+- [HTTP 远程微服务与 API 调度](consumer/http-service.md)：启动持久微服务并通过 REST API 远程调度。
+- [消费端配置与凭证注入](consumer/configuration.md)：API 令牌、环境变量与 SQLite 持久化配置注入。
 
 ---
 
 ### 开发者指南
 面向从零打造原子能力、编写规程并分发的工具创作者：
-- [快速上手开发](file:///root/code/action-dock/docs/developer/quick-start.md)：初始化、编写 defineAction 与本地试跑。
-- [深入业务 Action 开发](file:///root/code/action-dock/docs/developer/first-action.md)：强类型模式、ctx.state 持久化、ctx.config 读取与外部 API。
-- [编写 Playbook 规程](file:///root/code/action-dock/docs/developer/playbooks.md)：为 AI 智能体编写领域专家的标准作业步骤。
-- [单元测试与沙箱验证](file:///root/code/action-dock/docs/developer/testing.md)：基于 createTestRuntime 的纯内存毫秒级测试。
-- [状态持久化与 SQLite 存储](file:///root/code/action-dock/docs/developer/storage.md)：内嵌 SQLite 数据模型、KV 持久化与 TTL 过期。
-- [多环境 Profile 与远程调度](file:///root/code/action-dock/docs/developer/profiles.md)：多云环境节点管理与安全凭证防护。
-- [构建打包与 Skill 导出](file:///root/code/action-dock/docs/developer/build-and-export.md)：构建 Node 目录交付产物，按 Playbook 裁剪导出 Agent Skill 并发布。
+- [快速上手开发](developer/quick-start.md)：初始化、编写 defineAction 与本地试跑。
+- [深入业务 Action 开发](developer/first-action.md)：强类型模式、ctx.state 持久化、ctx.config 读取与外部 API。
+- [编写 Playbook 规程](developer/playbooks.md)：为 AI 智能体编写领域专家的标准作业步骤。
+- [单元测试与沙箱验证](developer/testing.md)：基于 createTestRuntime 的纯内存毫秒级测试。
+- [状态持久化与 SQLite 存储](developer/storage.md)：内嵌 SQLite 数据模型、KV 持久化与 TTL 过期。
+- [多环境 Profile 与远程调度](developer/profiles.md)：多云环境节点管理与安全凭证防护。
+- [构建打包与 Skill 导出](developer/build-and-export.md)：构建 Node 目录交付产物，按 Playbook 裁剪导出 Agent Skill 并发布。
 
 ---
 
 ### 核心概念
-- [Action Package 核心抽象](file:///root/code/action-dock/docs/concepts/action-package.md)：四大支柱（能力、规程、契约、运行态）。
-- [Action 原子能力契约](file:///root/code/action-dock/docs/concepts/action.md)：defineAction、强类型约束与模式即契约。
-- [ActionContext 运行时上下文](file:///root/code/action-dock/docs/concepts/action-context.md)：配置解析、SQLite 持久化、级联调用、日志隔离与取消链路。
-- [Playbook 规程模型](file:///root/code/action-dock/docs/concepts/playbook.md)：面向 AI 智能体的领域操作规程、流程时序与安全红线。
-- [Agent Skill 技能资产规范](file:///root/code/action-dock/docs/concepts/skill.md)：源码型与 Node 目录型 Skill 双模交付规范。
+- [Action Package 核心抽象](concepts/action-package.md)：四大支柱（能力、规程、契约、运行态）。
+- [Action 原子能力契约](concepts/action.md)：defineAction、强类型约束与模式即契约。
+- [ActionContext 运行时上下文](concepts/action-context.md)：配置解析、SQLite 持久化、级联调用、日志隔离与取消链路。
+- [Playbook 规程模型](concepts/playbook.md)：面向 AI 智能体的领域操作规程、流程时序与安全红线。
+- [Agent Skill 技能资产规范](concepts/skill.md)：源码型与 Node 目录型 Skill 双模交付规范。
 
 ---
 
 ### 参考手册
-- [CLI 命令行速查](file:///root/code/action-dock/docs/reference/cli.md)：全量 ad 命令、选项与参数清单。
-- [配置解析回退机制](file:///root/code/action-dock/docs/reference/config.md)：配置回退规则、环境变量转换与类型强转。
-- [Action SDK API 参考](file:///root/code/action-dock/docs/reference/action-api.md)：@actiondock/sdk 导出接口与函数规范。
-- [错误代码与排错速查](file:///root/code/action-dock/docs/reference/error-codes.md)：标准 JSON 错误信封与修复指南。
-- [1.0 到 2.0 迁移指南](file:///root/code/action-dock/docs/reference/v1-to-v2-migration.md)：架构对比与升级步骤。
+- [CLI 命令行速查](reference/cli.md)：全量 ad 命令、选项与参数清单。
+- [配置解析回退机制](reference/config.md)：配置回退规则、环境变量转换与类型强转。
+- [Action SDK API 参考](reference/action-api.md)：@actiondock/sdk 导出接口与函数规范。
+- [错误代码与排错速查](reference/error-codes.md)：标准 JSON 错误信封与修复指南。
+- [1.0 到 2.0 迁移指南](reference/v1-to-v2-migration.md)：架构对比与升级步骤。
 
 ---
 
 ### 底层架构
-- [Runtime 执行引擎](file:///root/code/action-dock/docs/architecture/runtime.md)：分层解耦体系、ActionRunner 单一终态状态机与并发配额管理。
-- [标准输出与错误通道隔离](file:///root/code/action-dock/docs/architecture/stdout-stderr.md)：数据通道与诊断通道物理隔离，杜绝大模型解析崩溃。
-- [安全加固与防御模型](file:///root/code/action-dock/docs/architecture/security.md)：非回环认证、权限固化、常数时间比对与原型污染防护。
+- [Runtime 执行引擎](architecture/runtime.md)：分层解耦体系、ActionRunner 单一终态状态机与并发配额管理。
+- [标准输出与错误通道隔离](architecture/stdout-stderr.md)：数据通道与诊断通道物理隔离，杜绝大模型解析崩溃。
+- [安全加固与防御模型](architecture/security.md)：非回环认证、权限固化、常数时间比对与原型污染防护。

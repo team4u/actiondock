@@ -5,7 +5,7 @@
 [![MCP](https://img.shields.io/badge/MCP-Protocol%20Compliant-purple)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-English | [简体中文](file:///root/code/action-dock/README.zh-CN.md)
+English | [简体中文](README.zh-CN.md)
 
 Build Agent Tools once. Run them anywhere.
 
@@ -55,7 +55,7 @@ ActionDock 2.0 provides an upgraded native runtime architecture:
 
 ## Deterministic Dependency Management
 
-ActionDock 2.0 establishes [actiondock.lock.json](file:///root/code/action-dock/packages/core/src/project/lockfile.ts) (lockfileVersion: 1) as the deterministic lockfile for tool dependencies:
+ActionDock 2.0 establishes [actiondock.lock.json](packages/core/src/project/lockfile.ts) (lockfileVersion: 1) as the deterministic lockfile for tool dependencies:
 
 - Atomic Transactions: The `ad add` and `ad remove` commands take snapshot backups of `package.json`, `actiondock.json`, and `actiondock.lock.json`. If installation fails, changes are automatically rolled back.
 - Elimination of Manifest Side Effects: The deprecated `actiondock.manifest.json` and standalone single-file binary compilers have been removed in favor of direct Node.js directory builds and npm distribution.
@@ -249,13 +249,13 @@ ActionDock 2.0 adopts a 7-package modular architecture:
 └──────────────┘               └─────────────┘└──────────────┘
 ```
 
-- [@actiondock/cli](file:///root/code/action-dock/packages/cli/README.md): The command line toolchain running on Node.js >=24.12.0, coordinating project initialization, dependencies, execution, testing, building, and exporting with structured envelope rendering.
-- [@actiondock/builder](file:///root/code/action-dock/packages/builder/README.md): Build planning and delivery package, providing Node.js directory builds (`ad build`), npm packaging (`ad pack`), and skill export (`ad export skill` supporting `--mode source` and `--mode node`).
-- [@actiondock/mcp](file:///root/code/action-dock/packages/mcp/README.md): MCP adapter providing STDIO and HTTP protocol transports, supporting collaborative cancellation and Tasks extensions.
-- [@actiondock/core](file:///root/code/action-dock/packages/core/README.md): Core domain kernel providing [ActionDockTarget](file:///root/code/action-dock/packages/core/src/target/types.ts) unified invocation facade, data directory locks ([DataDirLock](file:///root/code/action-dock/packages/core/src/storage/data-dir-lock.ts)), and transaction management.
-- [@actiondock/runtime-node](file:///root/code/action-dock/packages/runtime-node/README.md): Node.js runtime adapter providing the default NodeSqliteDriver (with an optional standalone WorkerSqliteDriver), process execution, native type stripping loader, and HTTP servers.
-- [@actiondock/testing](file:///root/code/action-dock/packages/testing/README.md): Standalone deterministic test framework offering [FakeClock](file:///root/code/action-dock/packages/testing/src/clock.ts), [MockProcessExecutor](file:///root/code/action-dock/packages/testing/src/process.ts), [MemoryStorage](file:///root/code/action-dock/packages/testing/src/storage.ts), and [createTestRuntime](file:///root/code/action-dock/packages/testing/src/runtime.ts).
-- [@actiondock/sdk](file:///root/code/action-dock/packages/sdk/README.md): Minimal zero-dependency developer contract exporting `defineAction`, `ActionContext`, and core types.
+- [@actiondock/cli](packages/cli/README.md): The command line toolchain running on Node.js >=24.12.0, coordinating project initialization, dependencies, execution, testing, building, and exporting with structured envelope rendering.
+- [@actiondock/builder](packages/builder/README.md): Build planning and delivery package, providing Node.js directory builds (`ad build`), npm packaging (`ad pack`), and skill export (`ad export skill` supporting `--mode source` and `--mode node`).
+- [@actiondock/mcp](packages/mcp/README.md): MCP adapter providing STDIO and HTTP protocol transports, supporting collaborative cancellation and Tasks extensions.
+- [@actiondock/core](packages/core/README.md): Core domain kernel providing [ActionDockTarget](packages/core/src/target/types.ts) unified invocation facade, data directory locks ([DataDirLock](packages/core/src/storage/data-dir-lock.ts)), and transaction management.
+- [@actiondock/runtime-node](packages/runtime-node/README.md): Node.js runtime adapter providing the default NodeSqliteDriver (with an optional standalone WorkerSqliteDriver), process execution, native type stripping loader, and HTTP servers.
+- [@actiondock/testing](packages/testing/README.md): Standalone deterministic test framework offering [FakeClock](packages/testing/src/clock.ts), [MockProcessExecutor](packages/testing/src/process.ts), [MemoryStorage](packages/testing/src/storage.ts), and [createTestRuntime](packages/testing/src/runtime.ts).
+- [@actiondock/sdk](packages/sdk/README.md): Minimal zero-dependency developer contract exporting `defineAction`, `ActionContext`, and core types.
 
 ---
 

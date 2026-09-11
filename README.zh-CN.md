@@ -5,7 +5,7 @@
 [![MCP](https://img.shields.io/badge/MCP-Protocol%20Compliant-purple)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-[English](file:///root/code/action-dock/README.md) | 简体中文
+[English](README.md) | 简体中文
 
 一次编写，全模态交付。
 
@@ -55,7 +55,7 @@ ActionDock 2.0 针对生产环境与开发者工作流进行了原生架构升�
 
 ## 依赖管理与锁定规范
 
-ActionDock 2.0 引入 [actiondock.lock.json](file:///root/code/action-dock/packages/core/src/project/lockfile.ts)（规范版本 lockfileVersion: 1），作为工具依赖锁定的事实源：
+ActionDock 2.0 引入 [actiondock.lock.json](packages/core/src/project/lockfile.ts)（规范版本 lockfileVersion: 1），作为工具依赖锁定的事实源：
 
 - 原子事务保障：执行 `ad add` 与 `ad remove` 时，系统自动备份 package.json、actiondock.json 与 actiondock.lock.json 快照。若安装或校验流程失败，自动执行原子回滚恢复。
 - 架构彻底简化：已废弃旧版清单机制与单文件独立二进制编译器，统一采用标准 Node.js 目录交付格式与 npm 打包体系。
@@ -249,13 +249,13 @@ ActionDock 2.0 采用 7 个职责专注的子包分层架构：
 └──────────────┘               └─────────────┘└──────────────┘
 ```
 
-- [@actiondock/cli](file:///root/code/action-dock/packages/cli/README.md)：命令行工具链与运行分发器，基于 Node.js >=24.12.0 运行，提供全量命令分发、标准化信封渲染、项目初始化、运行、测试、依赖管理与构建导出。
-- [@actiondock/builder](file:///root/code/action-dock/packages/builder/README.md)：构建规划与交付包，提供 Node.js 目录交付产物构建（`ad build`）、npm 打包（`ad pack`）与 Agent Skill 导出（`ad export skill` 支持 `--mode source` 与 `--mode node`）。
-- [@actiondock/mcp](file:///root/code/action-dock/packages/mcp/README.md)：MCP 协议适配器，提供 STDIO 与 HTTP 双协议通道，并完整支持 Tasks 异步任务映射与取消信号链路。
-- [@actiondock/core](file:///root/code/action-dock/packages/core/README.md)：公共领域内核，提供项目配置加载、统一调用门面 [ActionDockTarget](file:///root/code/action-dock/packages/core/src/target/types.ts)、数据目录排他锁 [DataDirLock](file:///root/code/action-dock/packages/core/src/storage/data-dir-lock.ts)、依赖原子事务 [beginTransaction](file:///root/code/action-dock/packages/core/src/project/transactions.ts) 以及执行状态机。
-- [@actiondock/runtime-node](file:///root/code/action-dock/packages/runtime-node/README.md)：Node.js 运行时适配器，提供基于 node:sqlite 的默认同步存储驱动（另有独立异步驱动 WorkerSqliteDriver 可选）、原生类型擦除模块加载器与基于 `node:http` 的服务监听。
-- [@actiondock/testing](file:///root/code/action-dock/packages/testing/README.md)：独立测试框架包，全面收敛 [FakeClock](file:///root/code/action-dock/packages/testing/src/clock.ts) 确定性时钟、[MockProcessExecutor](file:///root/code/action-dock/packages/testing/src/process.ts) 进程模拟、[MemoryStorage](file:///root/code/action-dock/packages/testing/src/storage.ts) 内存存储以及 [createTestRuntime](file:///root/code/action-dock/packages/testing/src/runtime.ts) 测试运行时。
-- [@actiondock/sdk](file:///root/code/action-dock/packages/sdk/README.md)：极简纯净开发者契约，零生产依赖，仅提供 `defineAction`、`ActionContext`、`Config`、`StateStore`、`ActionInvoker`、`Logger` 与 `ProcessAPI`。
+- [@actiondock/cli](packages/cli/README.md)：命令行工具链与运行分发器，基于 Node.js >=24.12.0 运行，提供全量命令分发、标准化信封渲染、项目初始化、运行、测试、依赖管理与构建导出。
+- [@actiondock/builder](packages/builder/README.md)：构建规划与交付包，提供 Node.js 目录交付产物构建（`ad build`）、npm 打包（`ad pack`）与 Agent Skill 导出（`ad export skill` 支持 `--mode source` 与 `--mode node`）。
+- [@actiondock/mcp](packages/mcp/README.md)：MCP 协议适配器，提供 STDIO 与 HTTP 双协议通道，并完整支持 Tasks 异步任务映射与取消信号链路。
+- [@actiondock/core](packages/core/README.md)：公共领域内核，提供项目配置加载、统一调用门面 [ActionDockTarget](packages/core/src/target/types.ts)、数据目录排他锁 [DataDirLock](packages/core/src/storage/data-dir-lock.ts)、依赖原子事务 [beginTransaction](packages/core/src/project/transactions.ts) 以及执行状态机。
+- [@actiondock/runtime-node](packages/runtime-node/README.md)：Node.js 运行时适配器，提供基于 node:sqlite 的默认同步存储驱动（另有独立异步驱动 WorkerSqliteDriver 可选）、原生类型擦除模块加载器与基于 `node:http` 的服务监听。
+- [@actiondock/testing](packages/testing/README.md)：独立测试框架包，全面收敛 [FakeClock](packages/testing/src/clock.ts) 确定性时钟、[MockProcessExecutor](packages/testing/src/process.ts) 进程模拟、[MemoryStorage](packages/testing/src/storage.ts) 内存存储以及 [createTestRuntime](packages/testing/src/runtime.ts) 测试运行时。
+- [@actiondock/sdk](packages/sdk/README.md)：极简纯净开发者契约，零生产依赖，仅提供 `defineAction`、`ActionContext`、`Config`、`StateStore`、`ActionInvoker`、`Logger` 与 `ProcessAPI`。
 
 ---
 
