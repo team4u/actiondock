@@ -8,7 +8,10 @@ import {
   RuntimeConfig,
   RuntimeStateStore,
   type RuntimePlatform,
+  SystemClock,
+  normalizeActionCollection,
 } from "@actiondock/core";
+import type { Clock } from "@actiondock/core";
 import type {
   ActionDefinition,
   Config,
@@ -94,13 +97,21 @@ export { decodeStateKey, encodeStateKey, escapeStateSegment, unescapeStateSegmen
 export class MemoryStateStore implements StateStore {
   private store: Map<string, any>;
   private namespace: string;
+  private clock: Clock;
 
   constructor(
     store?: Map<string, any>,
-    namespace = ""
+    namespace = "",
+    clock?: Clock
   ) {
     this.store = store || new Map();
     this.namespace = namespace;
+    this.clock = clock ?? new SystemClock();
+  }
+
+  /** 获取注入时钟的当前时间戳（毫秒），TTL 过期判定单一事实入口 */
+  private nowMs(): number {
+    return this.clock.now().getTime();
   }
 
   private qualify(key: string): string {
@@ -124,7 +135,7 @@ export class MemoryStateStore implements StateStore {
     const raw = this.store.get(qKey);
     if (raw === undefined) return undefined;
     const entry = this.extractEntry(raw);
-    if (entry.expiresAt !== undefined && entry.expiresAt <= Date.now()) {
+    if (entry.expiresAt !== undefined && entry.expiresAt <= this.nowMs()) {
       this.store.delete(qKey);
       return undefined;
     }
@@ -138,7 +149,7 @@ export class MemoryStateStore implements StateStore {
   ): Promise<void> {
     const qKey = this.qualify(key);
     const expiresAt =
-      typeof ttl === "number" && ttl > 0 ? Date.now() + ttl * 1000 : undefined;
+      typeof ttl === "number" && ttl > 0 ? this.nowMs() + ttl * 1000 : undefined;
 
     const entry: MemoryStateEntry = {
       value: structuredClone(value),
@@ -165,7 +176,7 @@ export class MemoryStateStore implements StateStore {
   }
 
   async keys(prefix = ""): Promise<string[]> {
-    const now = Date.now();
+    const now = this.nowMs();
     const result: string[] = [];
     for (const [k, raw] of this.store.entries()) {
       let decoded: { namespace: string; key: string };
@@ -193,7 +204,7 @@ export class MemoryStateStore implements StateStore {
     const nextNs = this.namespace
       ? `${this.namespace}:${namespace}`
       : namespace;
-    return new MemoryStateStore(this.store, nextNs);
+    return new MemoryStateStore(this.store, nextNs, this.clock);
   }
 }
 
@@ -218,15 +229,6 @@ export class MemoryLogger implements Logger {
   error(message: string, data?: unknown): void {
     this.logs.push({ level: "error", message, data });
   }
-}
-
-export type TestRuntimeProvider = (options?: TestRuntimeOptions) => TestRuntime;
-let _globalProvider: TestRuntimeProvider | null = null;
-export function registerTestRuntimeProvider(provider: TestRuntimeProvider | null): void {
-  _globalProvider = provider;
-}
-export function getTestRuntimeProvider(): TestRuntimeProvider | null {
-  return _globalProvider;
 }
 
 // 规范化运行时错误类单一事实源位于 @actiondock/sdk，此处 re-export 维持既有导入路径兼容并供本模块内部复用
@@ -416,6 +418,141 @@ export interface TestRuntime {
 const anonymousTestActions = new WeakMap<object, string>();
 let anonymousTestActionCounter = 0;
 
+/** 测试运行时内部持有的匿名 Action 下一次可用序号 */
+function nextAnonymousTestActionId(): string {
+  anonymousTestActionCounter++;
+  return `test-action-${anonymousTestActionCounter}`;
+}
+
+/**
+ * 将任意形态的 actions 输入归一化为统一映射表。
+ *
+ * 直接复用 core 的 normalizeActionCollection 作为归一化单一事实源，
+ * 避免在 testing 包内重新实现三形态分支造成逻辑拷贝；
+ * 此处无需 actionSpecs 产物，仅取 actionsMap，并额外为不含包前缀的标识补充限定别名。
+ *
+ * @param rawActions 三形态之一的 Action 集合输入
+ * @param packageId 当前 Package 标识，用于补充限定别名
+ */
+function normalizeTestActions(
+  rawActions: TestRuntimeOptions["actions"],
+  packageId: string
+): Map<string, ActionDefinition> {
+  const { actionsMap } = normalizeActionCollection(rawActions as Parameters<typeof normalizeActionCollection>[0]);
+  for (const [id, act] of [...actionsMap]) {
+    if (!id.includes("/")) {
+      actionsMap.set(`${packageId}/${id}`, act);
+    }
+  }
+  return actionsMap;
+}
+
+/**
+ * 测试运行时 Action 注册表。
+ * 统一持有本地 actionsMap 与 executionService 双份注册状态，收敛注册、检索与列举入口。
+ */
+class TestActionRegistry {
+  readonly actionsMap: Map<string, ActionDefinition>;
+  readonly executionService: ExecutionService;
+  private readonly packageId: string;
+
+  constructor(
+    actionsMap: Map<string, ActionDefinition>,
+    executionService: ExecutionService,
+    packageId: string
+  ) {
+    this.actionsMap = actionsMap;
+    this.executionService = executionService;
+    this.packageId = packageId;
+  }
+
+  /** 双签名注册：字符串标识与定义，或携带 id 的定义对象 */
+  register(
+    idOrAction:
+      | string
+      | (({ id: string; action?: ActionDefinition } & Partial<ActionDefinition>) | ActionDefinition),
+    maybeAction?: ActionDefinition
+  ): void {
+    if (typeof idOrAction === "string") {
+      if (!maybeAction) {
+        throw new Error(
+          `registerAction(id, action) 调用缺少 action 定义：id=${idOrAction}`
+        );
+      }
+      this.executionService.registerAction(idOrAction, maybeAction);
+      this.actionsMap.set(idOrAction, maybeAction);
+      if (!idOrAction.includes("/")) {
+        this.actionsMap.set(`${this.packageId}/${idOrAction}`, maybeAction);
+      }
+      return;
+    }
+
+    const actObj = idOrAction as { id?: string; action?: ActionDefinition; run?: unknown };
+    const id = actObj.id;
+    const act = actObj.action ?? (typeof actObj.run === "function" ? (idOrAction as ActionDefinition) : undefined);
+    if (id && act) {
+      this.actionsMap.set(id, act);
+      if (!id.includes("/")) {
+        this.actionsMap.set(`${this.packageId}/${id}`, act);
+      }
+    }
+    this.executionService.registerAction(idOrAction as Parameters<ExecutionService["registerAction"]>[0] as never);
+  }
+
+  /** 按标识检索已注册定义 */
+  get(id: string): ActionDefinition | undefined {
+    return this.executionService.getAction(id);
+  }
+
+  /** 列出已注册的全部定义 */
+  list(): ActionDefinition[] {
+    return this.executionService.listActions();
+  }
+}
+
+/**
+ * 解析 execute 入参的 Action 引用。
+ *
+ * 字符串直接作为引用；对象则依次尝试自身 id、注册表反查、匿名 WeakMap 映射，
+ * 并在首次出现时完成注册。全程不修改调用方传入的对象。
+ *
+ * @param action Action 定义或已注册标识
+ * @param registry 测试运行时 Action 注册表
+ * @returns 可用于 executionService 启动执行的引用标识
+ */
+function resolveActionRef(
+  action: ActionDefinition<any, any> | string,
+  registry: TestActionRegistry
+): string {
+  if (typeof action === "string") {
+    return action;
+  }
+
+  const candidateId = (action as { id?: string }).id;
+  if (candidateId) {
+    registry.executionService.registerAction(candidateId, action);
+    registry.actionsMap.set(candidateId, action);
+    return candidateId;
+  }
+
+  // 反查注册表：同一对象已注册时复用既有标识
+  for (const [registeredId, registeredAct] of registry.actionsMap) {
+    if (registeredAct === action) {
+      return registeredId;
+    }
+  }
+
+  // 匿名对象首次出现：仅记录 WeakMap 映射，不写入调用方对象
+  let anonId = anonymousTestActions.get(action);
+  if (!anonId) {
+    anonId = nextAnonymousTestActionId();
+    anonymousTestActions.set(action, anonId);
+  }
+  registry.executionService.registerAction(anonId, action);
+  registry.actionsMap.set(anonId, action);
+  return anonId;
+}
+
 /**
  * 创建全功能测试运行时实例。
  * 基于统一 ExecutionService 协调执行全生命周期，并暴露配置、状态、时钟、进程与事件等调试接口。
@@ -459,35 +596,7 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
   const memoryLogger =
     options.logger instanceof MemoryLogger ? options.logger : new MemoryLogger();
 
-  const actionsMap = new Map<string, ActionDefinition>();
-  if (options.actions) {
-    if (Array.isArray(options.actions)) {
-      for (const item of options.actions as any[]) {
-        const id = item.id;
-        const act = item.action ?? item;
-        if (id) {
-          actionsMap.set(id, act);
-          if (!id.includes("/")) {
-            actionsMap.set(`${packageId}/${id}`, act);
-          }
-        }
-      }
-    } else if (options.actions instanceof Map) {
-      for (const [k, v] of options.actions) {
-        actionsMap.set(k, v);
-        if (!k.includes("/")) {
-          actionsMap.set(`${packageId}/${k}`, v);
-        }
-      }
-    } else if (typeof options.actions === "object") {
-      for (const [k, v] of Object.entries(options.actions)) {
-        actionsMap.set(k, v as ActionDefinition);
-        if (!k.includes("/")) {
-          actionsMap.set(`${packageId}/${k}`, v as ActionDefinition);
-        }
-      }
-    }
-  }
+  const actionsMap = normalizeTestActions(options.actions, packageId);
 
   const executionService = new DefaultExecutionService({
     packageId,
@@ -502,6 +611,8 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
     platform: options.platform,
   });
 
+  const registry = new TestActionRegistry(actionsMap, executionService, packageId);
+
   const testConfig = new TestConfigStore(
     storage,
     options.projectConfig,
@@ -511,37 +622,12 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
   const testState = new RuntimeStateStore(storage);
 
   const registerAction = (
-    idOrAction: string | (({ id: string; action?: ActionDefinition } & Partial<ActionDefinition>) | ActionDefinition),
+    idOrAction:
+      | string
+      | (({ id: string; action?: ActionDefinition } & Partial<ActionDefinition>) | ActionDefinition),
     maybeAction?: ActionDefinition
   ): void => {
-    if (typeof idOrAction === "string") {
-      executionService.registerAction(idOrAction, maybeAction!);
-      if (maybeAction) {
-        actionsMap.set(idOrAction, maybeAction);
-        if (!idOrAction.includes("/")) {
-          actionsMap.set(`${packageId}/${idOrAction}`, maybeAction);
-        }
-      }
-    } else {
-      const actObj = idOrAction as any;
-      const id = actObj.id;
-      const act = actObj.action || (actObj.run ? actObj : undefined);
-      if (id && act) {
-        actionsMap.set(id, act);
-        if (!id.includes("/")) {
-          actionsMap.set(`${packageId}/${id}`, act);
-        }
-      }
-      executionService.registerAction(idOrAction);
-    }
-  };
-
-  const getAction = (id: string): ActionDefinition | undefined => {
-    return executionService.getAction(id);
-  };
-
-  const listActions = (): ActionDefinition[] => {
-    return executionService.listActions();
+    registry.register(idOrAction, maybeAction);
   };
 
   const execute = async <I = unknown, O = unknown>(
@@ -549,37 +635,7 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
     input: I = {} as I,
     execOptions: ExecutionStartOptions = {}
   ): Promise<ExecutionResult<O>> => {
-    let actionRef: string;
-    if (typeof action !== "string") {
-      const act = action as ActionDefinition;
-      const actObj = act as any;
-      let targetId = actObj.id;
-      if (!targetId) {
-        for (const [registeredId, registeredAct] of actionsMap) {
-          if (registeredAct === act) {
-            targetId = registeredId;
-            break;
-          }
-        }
-      }
-      if (!targetId) {
-        let anonId = anonymousTestActions.get(act);
-        if (!anonId) {
-          anonymousTestActionCounter++;
-          anonId = `test-action-${anonymousTestActionCounter}`;
-          anonymousTestActions.set(act, anonId);
-        }
-        targetId = anonId;
-        try {
-          actObj.id = targetId;
-        } catch {}
-      }
-      executionService.registerAction(targetId, act);
-      actionsMap.set(targetId, act);
-      actionRef = targetId;
-    } else {
-      actionRef = action;
-    }
+    const actionRef = resolveActionRef(action, registry);
 
     const ticket = await executionService.start(
       actionRef,
@@ -621,10 +677,10 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
     logger: memoryLogger,
     storage,
     executionService,
-    runner: (executionService as any).runner,
+    runner: executionService.runner,
     registerAction,
-    getAction,
-    listActions,
+    getAction: (id) => registry.get(id),
+    listActions: () => registry.list(),
     run,
     execute,
   };

@@ -92,6 +92,40 @@ describe("@actiondock/testing", () => {
       expect(cancelRes.cancelled).toBe(true);
       expect(cancelRes.error?.code).toBe("PROCESS_CANCELLED");
     });
+
+    it("未命中模拟规则时默认拒绝执行真实命令并抛出明确错误", async () => {
+      const proc = new MockProcessExecutor();
+      proc.register("git status", { ok: true });
+
+      let err: any;
+      try {
+        await proc.exec("gti", ["status"]);
+      } catch (e) {
+        err = e;
+      }
+
+      expect(err).toBeDefined();
+      expect(err.message).toContain("gti status");
+      expect(err.message).toContain("git status");
+      expect(err.message).toContain("fallbackToReal");
+    });
+
+    it("字符串匹配器不再前缀匹配，避免命令名误命中", async () => {
+      const proc = new MockProcessExecutor();
+      proc.register("git", { stdout: "should-not-hit" });
+
+      await expect(proc.exec("github-cli", ["repo", "list"])).rejects.toThrow(
+        /未命中任何模拟规则/
+      );
+    });
+
+    it("开启 fallbackToReal 后未命中时回退真实异步子进程执行", async () => {
+      const proc = new MockProcessExecutor({ fallbackToReal: true });
+      const res = await proc.exec("node", ["--version"]);
+      expect(res.ok).toBe(true);
+      expect(res.exitCode).toBe(0);
+      expect(res.stdout).toContain("v");
+    });
   });
 
   describe("MemoryStorage", () => {

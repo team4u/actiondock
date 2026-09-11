@@ -74,13 +74,29 @@ interface RegisteredMock {
 }
 
 /**
+ * 模拟进程执行器构造选项。
+ */
+export interface MockProcessExecutorOptions {
+  /** 未命中任何模拟规则时是否回退到真实子进程执行（默认 false，未命中即抛错） */
+  fallbackToReal?: boolean;
+}
+
+/**
  * 模拟进程执行器实现。
  * 遵循 ProcessExecutor 接口契约，支持预设命令响应、跟踪调用历史并模拟超时与取消场景。
+ *
+ * 默认不回退真实子进程执行：未命中任何模拟规则时抛出明确错误，避免测试中的拼写失误穿透到真实系统命令。
+ * 如确需真实回退（例如集成本地 CLI），可显式传入 fallbackToReal: true。
  */
 export class MockProcessExecutor implements ProcessExecutor {
   private mocks: RegisteredMock[] = [];
   public calls: ProcessCall[] = [];
   public defaultPid = 10001;
+  private readonly fallbackToReal: boolean;
+
+  constructor(options: MockProcessExecutorOptions = {}) {
+    this.fallbackToReal = options.fallbackToReal ?? false;
+  }
 
   /**
    * 注册模拟命令匹配与返回结果。
@@ -140,11 +156,17 @@ export class MockProcessExecutor implements ProcessExecutor {
     }
 
     const matchedMock = this.findMock(command, args, options);
+    const fullCommandLine = [command, ...args].join(" ").trim();
     let resolved: MockProcessResultOptions | ProcessResult;
 
     if (!matchedMock) {
+      if (!this.fallbackToReal) {
+        throw new Error(
+          `MockProcessExecutor: 未命中任何模拟规则，且未开启 fallbackToReal，拒绝执行真实命令: ${fullCommandLine}\n已注册匹配器列表:\n${this.describeMatchers()}`
+        );
+      }
       try {
-        const cliRes = execCli(command, args, {
+        const cliRes = await execCli(command, args, {
           cwd: options.cwd,
           env: options.env,
           signal: options.signal,
@@ -294,6 +316,26 @@ export class MockProcessExecutor implements ProcessExecutor {
     this.calls = [];
   }
 
+  /**
+   * 渲染已注册匹配器列表，辅助定位拼写失误。
+   */
+  private describeMatchers(): string {
+    if (this.mocks.length === 0) {
+      return "（无任何已注册匹配器）";
+    }
+    return this.mocks
+      .map((m) => {
+        const desc =
+          typeof m.matcher === "string"
+            ? `"${m.matcher}"`
+            : m.matcher instanceof RegExp
+            ? `/${m.matcher.source}/${m.matcher.flags}`
+            : "[Function]";
+        return `- ${desc}`;
+      })
+      .join("\n");
+  }
+
   private findMock(
     command: string,
     args: string[],
@@ -301,15 +343,11 @@ export class MockProcessExecutor implements ProcessExecutor {
   ): RegisteredMock | undefined {
     const fullCommandLine = [command, ...args].join(" ").trim();
 
-    // 逆序查找，优先匹配最新注册的规则
+    // 逆序查找，优先匹配最新注册的规则；字符串匹配器仅支持命令名精确匹配与全命令行精确匹配
     for (let i = this.mocks.length - 1; i >= 0; i--) {
       const mock = this.mocks[i];
       if (typeof mock.matcher === "string") {
-        if (
-          mock.matcher === command ||
-          mock.matcher === fullCommandLine ||
-          fullCommandLine.startsWith(mock.matcher)
-        ) {
+        if (mock.matcher === command || mock.matcher === fullCommandLine) {
           return mock;
         }
       } else if (mock.matcher instanceof RegExp) {

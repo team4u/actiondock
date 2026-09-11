@@ -6,12 +6,12 @@ import {
   MemoryConfig,
   MemoryLogger,
   MemoryStateStore,
-  registerTestRuntimeProvider,
+  MockProcessExecutor,
 } from "@actiondock/testing";
 
 describe("@actiondock/sdk", () => {
   beforeEach(() => {
-    registerTestRuntimeProvider(null);
+    // 每个用例独立构建运行时，无需全局清理
   });
 
   it("defines an action with run handler", () => {
@@ -377,7 +377,10 @@ describe("@actiondock/sdk", () => {
   });
 
   it("executes CLI command safely using ctx.process.exec", async () => {
-    const runtime = createTestRuntime();
+    // 本用例验证真实子进程的输入管道、环境变量与工作目录语义，需显式开启真实回退
+    const runtime = createTestRuntime({
+      process: new MockProcessExecutor({ fallbackToReal: true }),
+    });
     const execAction = defineAction({
       async run(input: { command: string; args?: string[]; options?: any }, ctx) {
         return await ctx.process.exec(input.command, input.args, input.options);
@@ -461,7 +464,10 @@ describe("@actiondock/sdk", () => {
   });
 
   it("executes CLI safely using ctx.process.spawn", async () => {
-    const runtime = createTestRuntime();
+    // 本用例验证真实子进程 spawn 语义，需显式开启真实回退
+    const runtime = createTestRuntime({
+      process: new MockProcessExecutor({ fallbackToReal: true }),
+    });
     const spawnAction = defineAction({
       async run(input: any, ctx) {
         return await ctx.process.spawn(input.command, input.args, input.options);
