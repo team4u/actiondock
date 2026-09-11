@@ -36,6 +36,12 @@ ad export skill -P team4u.github-tools --mode node --vendor-deps --out ./dist/gi
 ad export skill -P team4u.github-tools --playbook review-pr --out ~/.claude/skills/review-pr
 ```
 
+### 源码导出边界与依赖完整性规范
+
+- **包内公共代码显式纳管**：源码型技能默认仅拷贝在清单中注册的 Action 源码文件与 Playbook 规程。若 Action 引用了包内其他代码目录（如 `src/`、`lib/`）或公共辅助模块，必须在 `actiondock.json` 的 `files` 字段中显式声明该目录（例如 `"files": ["src"]`）。
+- **相对导入完整性强校验**：导出时构建规划器会自动扫描 Action 的相对路径导入。若检测到 Action 引用了未被 `actions` 且未被 `files` 收集的本地文件，将直接报错阻断（错误码 `UNMET_LOCAL_DEPENDENCY`），彻底杜绝交付缺失依赖的损坏产物。
+- **外部依赖冷启动就绪**：源码型技能仅携带源码与依赖清单，消费端在执行前需在技能根目录下执行 `npm install --omit=dev`；若需要免安装、全内嵌的自包含交付，应使用 `--mode node --vendor-deps`。
+
 ### 多包工作区批量导出
 
 ```bash

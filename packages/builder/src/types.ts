@@ -165,6 +165,8 @@ export interface BuildPlannerOptions {
   lockfile?: string;
   /** 期望的锁文件 SHA-256 摘要（若指定且不一致将报错拒绝） */
   expectedLockfileDigest?: string;
+  /** 是否跳过本地相对依赖完整性校验（默认 false） */
+  skipDependencyValidation?: boolean;
 }
 
 /**
@@ -203,6 +205,8 @@ export interface BuildOptions {
   config?: ProjectConfig;
   /** 显式传入的声明式清单（可选） */
   manifest?: ActionDockManifest;
+  /** 是否跳过本地相对依赖完整性校验（默认 false） */
+  skipDependencyValidation?: boolean;
 
   /**
    * 已移除的单文件二进制输出目标平台参数。
@@ -332,6 +336,8 @@ export interface SkillExporterOptions {
   allowInstallScripts?: boolean;
   /** 是否要求可复现 */
   requireReproducible?: boolean;
+  /** 是否跳过本地相对依赖完整性校验（默认 false） */
+  skipDependencyValidation?: boolean;
 
   /**
    * 已废弃的独立单文件编译选项。

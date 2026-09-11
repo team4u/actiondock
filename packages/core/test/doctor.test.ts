@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { runDoctorChecks } from "../src/doctor";
@@ -167,5 +167,38 @@ export default defineAction({
     expect(usesCheck?.message).toContain("unresolved.remote/service");
 
     rmSync(usesPkg, { recursive: true, force: true });
+  });
+
+  it("diagnoses undeclared src module references and missing declared files", async () => {
+    const srcDir = join(pkgDir, "src");
+    mkdirSync(srcDir, { recursive: true });
+    writeFileSync(join(srcDir, "lib.ts"), "export const ok = 1;");
+
+    // Action 引用了 src 但 actiondock.json 未配置 files
+    writeFileSync(
+      join(pkgDir, "actions", "doctor-act.ts"),
+      `import { defineAction } from "@actiondock/sdk";
+import { ok } from "../src/lib.js";
+export default defineAction(async () => ({ ok }));`
+    );
+
+    const reportError = await runDoctorChecks({ cwd: pkgDir, customHome: fakeHome });
+    const filesCheckError = reportError.checks.find((c) => c.id === "project.files");
+    expect(filesCheckError).toBeDefined();
+    expect(filesCheckError?.status).toBe("error");
+    expect(filesCheckError?.message).toContain("Actions import modules from 'src/'");
+    expect(filesCheckError?.fix).toContain('"files": ["src"]');
+
+    // 声明 files: ["src"] 后变为 ok
+    const configPath = join(pkgDir, "actiondock.json");
+    const raw = JSON.parse(readFileSync(configPath, "utf-8"));
+    raw.files = ["src"];
+    writeFileSync(configPath, JSON.stringify(raw, null, 2));
+
+    const reportOk = await runDoctorChecks({ cwd: pkgDir, customHome: fakeHome });
+    const filesCheckOk = reportOk.checks.find((c) => c.id === "project.files");
+    expect(filesCheckOk).toBeDefined();
+    expect(filesCheckOk?.status).toBe("ok");
+    expect(filesCheckOk?.message).toContain("boundaries verified");
   });
 });

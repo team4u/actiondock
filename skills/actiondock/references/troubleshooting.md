@@ -50,6 +50,7 @@ ActionDock 所有失败均输出确定性的结构化错误信封：
 | `ACTION_SUBRUN_LIMIT` | 单个根任务派生的活跃子任务数超出配额限制。 | 优化业务编排逻辑，避免高并发派生大量子任务。 |
 | `ACTION_TIMEOUT` | Action 执行时间超过了设定的超时阈值。 | 优化底层耗时操作，或在调用时添加 `--timeout 60s` 增大超时时间。 |
 | `ACTION_LOAD_FAILED` | Action 源码入口模块加载失败（语法错误或依赖缺失）。 | 检查入口文件物理路径与 TypeScript 语法，并在包目录下执行依赖安装。 |
+| `UNMET_LOCAL_DEPENDENCY` | Action 源码引用了未在 files 字段中声明的本地代码模块。 | 在 `actiondock.json` 中配置 `"files": ["<dir>"]`（例如 `"files": ["src"]`）。 |
 
 ---
 

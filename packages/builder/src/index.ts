@@ -34,6 +34,13 @@ export {
 // 构建规划
 export { BuildPlanner, buildPlan, SelectionPlanner, selectionPlan } from "./planner";
 
+// 相对依赖完整性校验
+export {
+  assertRelativeDependenciesIntegrity,
+  extractRelativeSpecifiers,
+  resolveRelativeModule,
+} from "./dependency-check";
+
 // 目录型构建与 npm 打包
 export { buildProject } from "./build";
 export { packProject } from "./pack";

@@ -85,6 +85,7 @@ export function initProject(targetDir: string, options: InitOptions = {}): void 
         actions: ["sample.greet"],
       },
     },
+    files: [],
   };
   writeFileSync(
     join(root, "actiondock.json"),
@@ -150,6 +151,8 @@ build/
 
   const sampleAction = `import { defineAction } from "@actiondock/sdk";
 
+// 说明：若 Action 需导入包内其他源码目录（如 src/、lib/ 或辅助工具模块），
+// 请务必在 actiondock.json 的 "files" 字段中声明对应目录以确保构建与导出完整。
 export default defineAction(async (input: { name: string }, ctx) => {
   const greeting = ctx.config.get("SAMPLE_GREETING", "Hello");
   const count = ((await ctx.state.get<number>("greet_count")) || 0) + 1;

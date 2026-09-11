@@ -544,6 +544,7 @@ export class SkillExporter {
       manifest: options.manifest,
       actions: options.actions,
       playbooks: options.playbooks,
+      skipDependencyValidation: options.skipDependencyValidation,
     });
 
     const pkgSlug = getPackageSlug(plan.packageId);

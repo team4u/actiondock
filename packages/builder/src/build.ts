@@ -522,6 +522,7 @@ export async function buildProject(options: BuildOptions): Promise<BuildResult> 
     manifest: options.manifest,
     actions: options.actions,
     playbooks: options.playbooks,
+    skipDependencyValidation: options.skipDependencyValidation,
   });
 
   if (plan.actions.length === 0) {

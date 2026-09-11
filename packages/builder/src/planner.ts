@@ -14,6 +14,7 @@ import {
   validateManifest,
 } from "@actiondock/core";
 import { PlannerError } from "./errors";
+import { assertRelativeDependenciesIntegrity } from "./dependency-check";
 import type {
   ActionDependency,
   AssetDependency,
@@ -796,7 +797,7 @@ export class SelectionPlanner {
       external: externalDependencies,
     };
 
-    return {
+    const planResult: SelectionPlan = {
       packageId: config.id,
       packageName: config.name || config.id,
       version: config.version || "0.1.0",
@@ -819,6 +820,12 @@ export class SelectionPlanner {
         lockfileDigest: lockfileInfo?.sha256,
       },
     };
+
+    if (!options?.skipDependencyValidation) {
+      assertRelativeDependenciesIntegrity(root, planResult);
+    }
+
+    return planResult;
   }
 
   /**

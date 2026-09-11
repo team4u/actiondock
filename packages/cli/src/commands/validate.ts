@@ -6,6 +6,7 @@ import {
   loadProjectConfig,
   resolvePackageRoot,
 } from "@actiondock/core";
+import { SelectionPlanner } from "@actiondock/builder";
 import { Command } from "commander";
 import { ArgumentError, ExecutionError } from "../errors";
 import { renderActionValidation, renderResult } from "../renderer";
@@ -98,6 +99,24 @@ export function registerValidateCommand(program: Command, context?: CliContext):
 
       if (!allValid) {
         throw new ExecutionError("Action schema validation failed", results);
+      }
+
+      // 校验 Action 本地相对依赖完整性
+      try {
+        SelectionPlanner.plan({ projectRoot: root, actions: id ? [id] : undefined });
+      } catch (err: any) {
+        if (
+          err?.code === "UNMET_LOCAL_DEPENDENCY" ||
+          err?.code === "EXTERNAL_LOCAL_DEPENDENCY" ||
+          err?.code === "FILE_NOT_FOUND"
+        ) {
+          throw new ExecutionError(
+            `Action dependency integrity validation failed:\n${err.message}`,
+            undefined,
+            err.code
+          );
+        }
+        throw err;
       }
 
       // 只读校验已生成的类型文件摘要是否过期

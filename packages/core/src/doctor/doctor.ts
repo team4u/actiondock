@@ -453,6 +453,70 @@ export async function runDoctorChecks(options?: {
         });
       }
 
+      // Project Declared Files & Source Boundaries Check
+      try {
+        const declaredFiles = config.files || [];
+        const hasSrc = existsSync(join(projectRoot, "src"));
+        const hasLib = existsSync(join(projectRoot, "lib"));
+
+        if (declaredFiles.length > 0) {
+          const missingDeclared = declaredFiles.filter((f) => !existsSync(join(projectRoot, f)));
+          if (missingDeclared.length > 0) {
+            checks.push({
+              id: "project.files",
+              category: "project",
+              name: "Declared Files",
+              status: "error",
+              message: `${missingDeclared.length} path(s) declared in 'files' do not exist: ${missingDeclared.join(", ")}`,
+              fix: `Verify and update 'files' in ${MANIFEST_FILE_NAME}`,
+            });
+          } else {
+            checks.push({
+              id: "project.files",
+              category: "project",
+              name: "Declared Files",
+              status: "ok",
+              message: `All ${declaredFiles.length} declared file/directory boundaries verified`,
+            });
+          }
+        } else if (hasSrc || hasLib) {
+          const actionFiles = discoverActionFiles(projectRoot, config.actionsDir || "actions");
+          let hasReferenceToSrcOrLib = false;
+          for (const actFile of actionFiles) {
+            try {
+              const src = readFileSync(actFile, "utf-8");
+              if (/['"](?:\.\.\/(?:src|lib)|\.\/(?:src|lib))[^'"]*['"]/.test(src)) {
+                hasReferenceToSrcOrLib = true;
+                break;
+              }
+            } catch {
+              // 忽略单个文件读取异常
+            }
+          }
+
+          if (hasReferenceToSrcOrLib) {
+            checks.push({
+              id: "project.files",
+              category: "project",
+              name: "Declared Files",
+              status: "error",
+              message: `Actions import modules from ${hasSrc ? "'src/'" : ""}${hasSrc && hasLib ? " and " : ""}${hasLib ? "'lib/'" : ""}, but 'files' is not declared in ${MANIFEST_FILE_NAME}`,
+              fix: `Add "files": [${hasSrc ? '"src"' : ""}${hasSrc && hasLib ? ', "lib"' : hasLib && !hasSrc ? '"lib"' : ""}] to ${MANIFEST_FILE_NAME}`,
+            });
+          } else {
+            checks.push({
+              id: "project.files",
+              category: "project",
+              name: "Declared Files",
+              status: "ok",
+              message: `Project source directories clean (no undeclared references to ${hasSrc ? "src/" : "lib/"})`,
+            });
+          }
+        }
+      } catch {
+        // 忽略文件边界检测异常
+      }
+
 
       // Playbooks Check
       try {
