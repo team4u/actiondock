@@ -1,5 +1,4 @@
 import {
-  createActionDockTarget,
   filterWithFallbackInfo,
   findProjectRoot,
   listLinkedPackages,
@@ -11,11 +10,44 @@ import { Command } from "commander";
 import { ArgumentError, ExecutionError } from "../errors";
 import { renderResult, renderRunDetail, renderRunsList } from "../renderer";
 import type { CliContext } from "../types";
-import { getEffectiveOptions, resolveIntent } from "../utils";
+import { getEffectiveOptions, resolveIntent, withRemoteTarget, withTarget } from "../utils";
+
+/**
+ * 解析本地目标包根目录与工程配置（仅在 local 分支调用）。
+ * 显式指定包且寻址失败时抛出参数错误；工程清单损坏时降级为链接包视图。
+ */
+function resolveLocalRunScope(packageOption?: string): {
+  targetPackageRoot: string | undefined;
+  projConfig: any;
+} {
+  if (packageOption) {
+    const root = resolvePackageRoot(packageOption);
+    if (!root) {
+      throw new ArgumentError(`Package '${packageOption}' not found in linked packages or path`);
+    }
+    try {
+      return { targetPackageRoot: root, projConfig: loadProjectConfig(root) };
+    } catch {
+      // 工程清单损坏时降级为链接包作用域视图
+      return { targetPackageRoot: root, projConfig: null };
+    }
+  }
+
+  const root = findProjectRoot();
+  if (!root) {
+    return { targetPackageRoot: undefined, projConfig: null };
+  }
+  try {
+    return { targetPackageRoot: root, projConfig: loadProjectConfig(root) };
+  } catch {
+    // 工程清单损坏时降级为链接包作用域视图
+    return { targetPackageRoot: root, projConfig: null };
+  }
+}
 
 /**
  * 注册 runs 动作执行历史管理命令（list、show、clear、cancel）。
- * 
+ *
  * @param program Commander 实例
  * @param context 命令行上下文
  */
@@ -45,102 +77,62 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
       const shouldFallback = options.fallback !== false;
       const limit = Number.parseInt(options.limit, 10) || 20;
 
-      // 1. 目标解析
-      const resolved = resolveTarget(
-        {
-          profile: options.profile,
-          server: options.server,
-          token: options.token,
+      const scope = resolveLocalRunScope(options.package);
+
+      // 通过 Target 门面统一访问
+      await withTarget(
+        options,
+        context,
+        async (target, resolved) => {
+          const records = await target.listRuns({
+            packageId: scope.projConfig?.id || options.package,
+            actionId: options.action,
+            intent: effectiveIntent,
+            limit,
+          });
+
+          // 若处于本地无项目环境且无任何软链接包，则直接输出友好提示
+          if (resolved.type === "local" && !scope.targetPackageRoot) {
+            const linked = listLinkedPackages(context?.customHome);
+            if (linked.length === 0) {
+              renderResult([], {
+                json: options.json,
+                envelope: options.envelope,
+                humanFormatter: () => "No ActionDock project in current directory, and no packages linked.",
+                context,
+              });
+              return;
+            }
+          }
+
+          const filterRes = filterWithFallbackInfo(
+            records,
+            effectiveIntent,
+            [(r) => r.id, (r) => r.actionId, (r) => (r as any).packageId, (r) => r.status, (r) => r.error?.message],
+            shouldFallback
+          );
+
+          const capped = filterRes.items.slice(0, limit);
+
+          renderResult(capped, {
+            json: options.json,
+            envelope: options.envelope,
+            humanFormatter: () => {
+              let title = "Execution Runs";
+              if (resolved.type === "remote") {
+                title = `Execution Runs on remote server ${resolved.serverUrl}${resolved.profileName ? ` (Profile: ${resolved.profileName})` : ""}`;
+              } else if (scope.projConfig) {
+                title = `Execution Runs in ${scope.projConfig.name} (${scope.projConfig.id})`;
+              } else {
+                title = "Execution Runs (Linked Packages)";
+              }
+              return renderRunsList(capped, title, filterRes.isFallback, effectiveIntent);
+            },
+            context,
+          });
         },
-        context?.customHome
+        { localRoot: scope.targetPackageRoot, scanLinkedPackages: true }
       );
-
-      let targetPackageRoot: string | undefined;
-      let projConfig: any = null;
-      if (resolved.type === "local") {
-        if (options.package) {
-          const root = resolvePackageRoot(options.package);
-          if (!root) {
-            throw new ArgumentError(`Package '${options.package}' not found in linked packages or path`);
-          }
-          targetPackageRoot = root;
-        } else {
-          targetPackageRoot = findProjectRoot() || undefined;
-        }
-        if (targetPackageRoot) {
-          try {
-            projConfig = loadProjectConfig(targetPackageRoot);
-          } catch {}
-        }
-      }
-
-      // 2. 通过 Target 门面统一访问
-      const target = await createActionDockTarget(
-        resolved.type === "remote"
-          ? {
-              type: "remote",
-              serverUrl: resolved.serverUrl!,
-              token: resolved.token,
-            }
-          : {
-              type: "local",
-              projectRoot: targetPackageRoot,
-              customHome: context?.customHome,
-              dataDir: options.dataDir || context?.dataDir,
-              scanLinkedPackages: true,
-            }
-      );
-
-      try {
-        const records = await target.listRuns({
-          packageId: projConfig?.id || options.package,
-          actionId: options.action,
-          intent: effectiveIntent,
-          limit,
-        });
-
-        // 若处于本地无项目环境且无任何软链接包，则直接输出友好提示
-        if (resolved.type === "local" && !targetPackageRoot) {
-          const linked = listLinkedPackages(context?.customHome);
-          if (linked.length === 0) {
-            renderResult([], {
-              json: options.json,
-              envelope: options.envelope,
-              humanFormatter: () => "No ActionDock project in current directory, and no packages linked.",
-              context,
-            });
-            return;
-          }
-        }
-
-        const filterRes = filterWithFallbackInfo(
-          records,
-          effectiveIntent,
-          [(r) => r.id, (r) => r.actionId, (r) => (r as any).packageId, (r) => r.status, (r) => r.error?.message],
-          shouldFallback
-        );
-
-        const capped = filterRes.items.slice(0, limit);
-
-        renderResult(capped, {
-          json: options.json,
-          envelope: options.envelope,
-          humanFormatter: () => {
-            let title = "Execution Runs";
-            if (resolved.type === "remote") {
-              title = `Execution Runs on remote server ${resolved.serverUrl}${resolved.profileName ? ` (Profile: ${resolved.profileName})` : ""}`;
-            } else if (projConfig) {
-              title = `Execution Runs in ${projConfig.name} (${projConfig.id})`;
-            } else {
-              title = "Execution Runs (Linked Packages)";
-            }
-            return renderRunsList(capped, title, filterRes.isFallback, effectiveIntent);
-          },
-          context,
-        });
-      } finally {
-        await target.close();
-      }
     });
 
   // runs show <id>
@@ -160,73 +152,33 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
         throw new ArgumentError("Run ID is required");
       }
 
-      // 1. 目标解析
-      const resolved = resolveTarget(
-        {
-          profile: options.profile,
-          server: options.server,
-          token: options.token,
+      const scope = resolveLocalRunScope(options.package);
+
+      // 通过 Target 门面统一查询
+      await withTarget(
+        options,
+        context,
+        async (target, resolved) => {
+          const run = await target.getRun(id);
+          if (!run) {
+            if (resolved.type === "remote") {
+              throw new ExecutionError(`Run record '${id}' not found on remote server`);
+            } else if (options.package) {
+              throw new ExecutionError(`Run record '${id}' not found in package '${scope.projConfig?.id || options.package}'`);
+            } else {
+              throw new ExecutionError(`Run record '${id}' not found in current project or any linked packages`);
+            }
+          }
+
+          renderResult(run, {
+            json: options.json,
+            envelope: options.envelope,
+            humanFormatter: () => renderRunDetail(run),
+            context,
+          });
         },
-        context?.customHome
+        { localRoot: scope.targetPackageRoot, scanLinkedPackages: true }
       );
-
-      let targetPackageRoot: string | undefined;
-      let projConfig: any = null;
-      if (resolved.type === "local") {
-        if (options.package) {
-          const root = resolvePackageRoot(options.package);
-          if (!root) {
-            throw new ArgumentError(`Package '${options.package}' not found in linked packages or path`);
-          }
-          targetPackageRoot = root;
-        } else {
-          targetPackageRoot = findProjectRoot() || undefined;
-        }
-        if (targetPackageRoot) {
-          try {
-            projConfig = loadProjectConfig(targetPackageRoot);
-          } catch {}
-        }
-      }
-
-      // 2. 通过 Target 门面统一查询
-      const target = await createActionDockTarget(
-        resolved.type === "remote"
-          ? {
-              type: "remote",
-              serverUrl: resolved.serverUrl!,
-              token: resolved.token,
-            }
-          : {
-              type: "local",
-              projectRoot: targetPackageRoot,
-              customHome: context?.customHome,
-              dataDir: options.dataDir || context?.dataDir,
-              scanLinkedPackages: true,
-            }
-      );
-
-      try {
-        const run = await target.getRun(id);
-        if (!run) {
-          if (resolved.type === "remote") {
-            throw new ExecutionError(`Run record '${id}' not found on remote server`);
-          } else if (options.package) {
-            throw new ExecutionError(`Run record '${id}' not found in package '${projConfig?.id || options.package}'`);
-          } else {
-            throw new ExecutionError(`Run record '${id}' not found in current project or any linked packages`);
-          }
-        }
-
-        renderResult(run, {
-          json: options.json,
-          envelope: options.envelope,
-          humanFormatter: () => renderRunDetail(run),
-          context,
-        });
-      } finally {
-        await target.close();
-      }
     });
 
   // runs cancel
@@ -260,13 +212,7 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
         );
       }
 
-      const target = await createActionDockTarget({
-        type: "remote",
-        serverUrl: resolved.serverUrl!,
-        token: resolved.token,
-      });
-
-      try {
+      await withRemoteTarget(options, context, async (target) => {
         const result = await target.cancelRun(id, options.reason);
         renderResult(result, {
           json: options.json,
@@ -275,9 +221,7 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
             `Run '${id}' cancellation requested (Status: ${(result as any).status || result.outcome}).`,
           context,
         });
-      } finally {
-        await target.close();
-      }
+      });
     });
 
   // runs clear
@@ -295,18 +239,9 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
     .action(async (rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
 
-      const resolved = resolveTarget(
-        {
-          profile: options.profile,
-          server: options.server,
-          token: options.token,
-        },
-        context?.customHome
-      );
-
       let targetPackageRoot: string | undefined;
       let packageId = options.package;
-      if (resolved.type === "local") {
+      if (!options.profile && !options.server) {
         if (options.package) {
           const root = resolvePackageRoot(options.package);
           if (!root) {
@@ -321,45 +256,33 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
             );
           }
         }
-        if (targetPackageRoot) {
-          try {
-            packageId = loadProjectConfig(targetPackageRoot).id;
-          } catch {}
+        try {
+          packageId = loadProjectConfig(targetPackageRoot).id;
+        } catch {
+          // 清单损坏时保留原始 -P 参数作为包标识
         }
       }
 
-      const target = await createActionDockTarget(
-        resolved.type === "remote"
-          ? {
-              type: "remote",
-              serverUrl: resolved.serverUrl!,
-              token: resolved.token,
-            }
-          : {
-              type: "local",
-              projectRoot: targetPackageRoot,
-              customHome: context?.customHome,
-              dataDir: options.dataDir || context?.dataDir,
-            }
+      await withTarget(
+        options,
+        context,
+        async (target, resolved) => {
+          const count = target.clearRuns
+            ? await target.clearRuns({ packageId, actionId: options.action })
+            : 0;
+
+          const payload = { ok: true, clearedCount: count };
+          renderResult(payload, {
+            json: options.json,
+            envelope: options.envelope,
+            humanFormatter: () =>
+              resolved.type === "remote"
+                ? `Cleared ${count} execution run(s) on remote server.`
+                : `Cleared ${count} execution run(s) in package '${packageId}'.`,
+            context,
+          });
+        },
+        { localRoot: targetPackageRoot }
       );
-
-      try {
-        const count = target.clearRuns
-          ? await target.clearRuns({ packageId, actionId: options.action })
-          : 0;
-
-        const payload = { ok: true, clearedCount: count };
-        renderResult(payload, {
-          json: options.json,
-          envelope: options.envelope,
-          humanFormatter: () =>
-            resolved.type === "remote"
-              ? `Cleared ${count} execution run(s) on remote server.`
-              : `Cleared ${count} execution run(s) in package '${packageId}'.`,
-          context,
-        });
-      } finally {
-        await target.close();
-      }
     });
 }

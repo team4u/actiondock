@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import {
   beginTransaction,
@@ -13,7 +12,7 @@ import { Command } from "commander";
 import { ArgumentError, ExecutionError } from "../errors";
 import { renderResult } from "../renderer";
 import type { CliContext } from "../types";
-import { getEffectiveOptions } from "../utils";
+import { getEffectiveOptions, spawnAsync } from "../utils";
 
 /**
  * 注册 ad remove 依赖移除命令。
@@ -131,11 +130,12 @@ export function registerRemoveCommand(program: Command, context?: CliContext): v
         const pm = installCmd[0];
         const args = pm === "bun" ? ["remove", npmPackageName] : ["uninstall", npmPackageName, "--ignore-scripts"];
 
-        spawnSync(pm, args, {
+        const uninstallProc = await spawnAsync(pm, args, {
           cwd: root,
           stdio: "pipe",
-          shell: process.platform === "win32",
         });
+        // 卸载失败不阻断事务提交（与原同步实现一致：忽略退出码）
+        void uninstallProc;
 
         // 提交事务
         await tx.commit();

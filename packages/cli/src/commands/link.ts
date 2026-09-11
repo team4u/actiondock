@@ -4,6 +4,7 @@ import {
   unlinkPackage,
 } from "@actiondock/core";
 import { ExecutionError } from "../errors";
+import { writeStdout } from "../renderer";
 import { Command } from "commander";
 
 export function registerLinkCommands(program: Command): void {
@@ -19,13 +20,13 @@ export function registerLinkCommands(program: Command): void {
         });
 
         if (result.isWorkspace) {
-          console.log(`[OK] Linked workspace '${result.path}' (${result.entries.length} package${result.entries.length > 1 ? "s" : ""}):`);
+          writeStdout(`[OK] Linked workspace '${result.path}' (${result.entries.length} package${result.entries.length > 1 ? "s" : ""}):`);
           for (const e of result.entries) {
-            console.log(`  - ${e.id} (v${e.version}) -> ${e.path}`);
+            writeStdout(`  - ${e.id} (v${e.version}) -> ${e.path}`);
           }
-          console.log("[INFO] Sub-packages added to this workspace will be automatically discovered.");
+          writeStdout("[INFO] Sub-packages added to this workspace will be automatically discovered.");
         } else {
-          console.log(`[OK] Linked package '${result.id}' (v${result.version}) from ${result.path}`);
+          writeStdout(`[OK] Linked package '${result.id}' (v${result.version}) from ${result.path}`);
         }
       } catch (err: any) {
         throw new ExecutionError(err.message);
@@ -43,14 +44,14 @@ export function registerLinkCommands(program: Command): void {
           const result = await pruneRegistry();
           const totalPruned = result.prunedPackages.length + result.prunedWorkspaces.length;
           if (totalPruned === 0) {
-            console.log("[OK] No stale registry entries found.");
+            writeStdout("[OK] No stale registry entries found.");
           } else {
-            console.log(`[OK] Pruned ${result.prunedWorkspaces.length} workspace(s) and ${result.prunedPackages.length} package(s) from registry.`);
+            writeStdout(`[OK] Pruned ${result.prunedWorkspaces.length} workspace(s) and ${result.prunedPackages.length} package(s) from registry.`);
             for (const ws of result.prunedWorkspaces) {
-              console.log(`  - [workspace] ${ws.path}`);
+              writeStdout(`  - [workspace] ${ws.path}`);
             }
             for (const pkg of result.prunedPackages) {
-              console.log(`  - [package] ${pkg.id} (${pkg.path})`);
+              writeStdout(`  - [package] ${pkg.id} (${pkg.path})`);
             }
           }
           return;
@@ -59,12 +60,12 @@ export function registerLinkCommands(program: Command): void {
         const removed = await unlinkPackage(identifier || process.cwd());
         if (removed) {
           if (removed.type === "workspace") {
-            console.log(`[OK] Unlinked workspace '${removed.path}' (${removed.packagesCount || 0} package${(removed.packagesCount || 0) > 1 ? "s" : ""} unlinked)`);
+            writeStdout(`[OK] Unlinked workspace '${removed.path}' (${removed.packagesCount || 0} package${(removed.packagesCount || 0) > 1 ? "s" : ""} unlinked)`);
           } else {
-            console.log(`[OK] Unlinked package '${removed.id}' (${removed.path})`);
+            writeStdout(`[OK] Unlinked package '${removed.id}' (${removed.path})`);
           }
         } else {
-          console.log(`Package or workspace '${identifier || process.cwd()}' was not linked in registry`);
+          writeStdout(`Package or workspace '${identifier || process.cwd()}' was not linked in registry`);
         }
       } catch (err: any) {
         throw new ExecutionError(err.message);

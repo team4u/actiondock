@@ -78,22 +78,6 @@ export interface CliContext {
   promptInput?: (promptText: string, options?: { secret?: boolean; mask?: string }) => Promise<string>;
 }
 
-export type RuntimeCliContext = CliContext;
-
-/**
- * CLI 程序创建选项。
- */
-export interface RuntimeProgramOptions extends CliContext {
-  /** CLI 工具名称（如 ad 或独立程序名称） */
-  name?: string;
-  /** CLI 工具描述信息 */
-  description?: string;
-  /** CLI 工具版本号 */
-  version?: string;
-  /** 是否同步设置 process.exitCode */
-  setExitCode?: boolean;
-}
-
 /**
  * 工程自省详情信息结构。
  */

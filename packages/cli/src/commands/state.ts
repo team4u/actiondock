@@ -1,23 +1,22 @@
-import { existsSync } from "node:fs";
 import {
-  createActionDockTarget,
   decodeStateKey,
-  filterWithFallbackInfo,
   findProjectRoot,
-  listLinkedPackages,
   loadProjectConfig,
   resolvePackageRoot,
-  resolveTarget,
 } from "@actiondock/core";
 import { Command } from "commander";
 import { ArgumentError, ExecutionError } from "../errors";
 import { renderResult, renderStateList, writeStdout } from "../renderer";
 import type { CliContext } from "../types";
-import { getEffectiveOptions, getTargetRoot, resolveIntent } from "../utils";
+import { getEffectiveOptions, getTargetRoot, resolveIntent, withTarget } from "../utils";
+import {
+  renderLinkedPackagesStateList,
+  renderProjectScopedStateList,
+} from "./state-list";
 
 /**
  * 注册 state 状态管理命令（get、set、delete、clear、keys、list）。
- * 
+ *
  * @param program Commander 实例
  * @param context 命令行上下文
  */
@@ -26,28 +25,17 @@ export function registerStateCommands(program: Command, context?: CliContext): v
     .command("state")
     .description("Inspect and manage Shared State store");
 
-  // 通用 state list / keys 实现
+  // state list / keys 共享实现（远端、本地项目、链接包聚合三分支）
   const handleListKeys = async (prefix: string = "", rawOptions: any, cmd: any) => {
     const options = getEffectiveOptions(rawOptions, cmd);
     const effectiveIntent = resolveIntent(options.intent, prefix ? [prefix] : []);
     const shouldFallback = options.fallback !== false;
 
-    // 1. 远端服务模式
-    const resolved = resolveTarget({
-      profile: options.profile,
-      server: options.server,
-      token: options.token,
-    }, context?.customHome);
-
-    if (resolved.type === "remote") {
-      const target = await createActionDockTarget({
-        type: "remote",
-        serverUrl: resolved.serverUrl!,
-        token: resolved.token,
-      });
-
+    await withTarget(options, context, async (target, resolved) => {
       const actionId = options.action || "";
-      try {
+
+      // 远端服务模式：直接列举远端包作用域键
+      if (resolved.type === "remote") {
         const keys = await target.listStateKeys(options.package || "", actionId, {
           namespace: options.namespace,
           prefix,
@@ -66,140 +54,43 @@ export function registerStateCommands(program: Command, context?: CliContext): v
           context,
         });
         return;
-      } finally {
-        await target.close();
       }
-    }
 
-    // 2. 本地工程与链接包模式
-    let targetRoot: string | null = null;
-    if (options.package) {
-      targetRoot = resolvePackageRoot(options.package);
-      if (!targetRoot) {
-        throw new ArgumentError(`Package '${options.package}' not found in linked packages or path`);
-      }
-    } else {
-      targetRoot = findProjectRoot();
-    }
-
-    const target = await createActionDockTarget({
-      type: "local",
-      projectRoot: targetRoot || undefined,
-      customHome: context?.customHome,
-      dataDir: options.dataDir || context?.dataDir,
-    });
-
-    const actionId = options.action || "";
-    try {
-      if (targetRoot) {
-        const projConfig = loadProjectConfig(targetRoot);
-        const allKeys = await target.listStateKeys(
-          projConfig.id,
-          actionId,
-          {
-            namespace: options.namespace !== undefined ? options.namespace : null,
-            prefix,
-          }
-        );
-
-        if (options.detail && options.json) {
-          const entries: Array<{ key: string; namespace?: string; fullKey?: string; value: unknown }> = [];
-          for (const k of allKeys) {
-            const entry = await target.getState(projConfig.id, actionId, k, {
-              namespace: options.namespace,
-              detail: true,
-            });
-            if (entry) {
-              entries.push(entry as any);
-            }
-          }
-          const filterRes = filterWithFallbackInfo(
-            entries,
-            effectiveIntent,
-            [(e) => e.fullKey, (e) => e.key, (e) => e.namespace],
-            shouldFallback
-          );
-          renderResult(filterRes.items, {
-            json: true,
-            envelope: options.envelope,
-            context,
-          });
-          return;
+      // 本地工程与链接包模式：按目标根目录决策输出范围
+      let targetRoot: string | null = null;
+      if (options.package) {
+        targetRoot = resolvePackageRoot(options.package);
+        if (!targetRoot) {
+          throw new ArgumentError(`Package '${options.package}' not found in linked packages or path`);
         }
+      } else {
+        targetRoot = findProjectRoot();
+      }
 
-        const filterRes = filterWithFallbackInfo(allKeys, effectiveIntent, [(k) => k], shouldFallback);
-
-        renderResult(filterRes.items, {
-          json: options.json,
-          envelope: options.envelope,
-          humanFormatter: () =>
-            renderStateList(
-              filterRes.items,
-              `${projConfig.name} (${projConfig.id})`,
-              filterRes.isFallback,
-              effectiveIntent
-            ),
+      if (targetRoot) {
+        await renderProjectScopedStateList({
+          target,
+          targetRoot,
+          actionId,
+          prefix,
+          options,
+          effectiveIntent,
+          shouldFallback,
           context,
         });
         return;
       }
 
-      // 扫描所有链接的包状态
-      const linked = listLinkedPackages();
-      if (linked.length === 0) {
-        renderResult(
-          [],
-          {
-            json: options.json,
-            envelope: options.envelope,
-            humanFormatter: () => "No ActionDock project in current directory, and no packages linked.",
-            context,
-          }
-        );
-        return;
-      }
-
-      const aggregatedKeys: string[] = [];
-      for (const pkg of linked) {
-        if (!existsSync(pkg.path)) continue;
-        try {
-          const config = loadProjectConfig(pkg.path);
-          const keys = await target.listStateKeys(
-            config.id,
-            actionId,
-            {
-              namespace: options.namespace !== undefined ? options.namespace : null,
-              prefix,
-            }
-          );
-          for (const k of keys) {
-            aggregatedKeys.push(`${config.id}/${k}`);
-          }
-        } catch {}
-      }
-
-      const filterRes = filterWithFallbackInfo(
-        aggregatedKeys,
+      await renderLinkedPackagesStateList({
+        target,
+        actionId,
+        prefix,
+        options,
         effectiveIntent,
-        [(k) => k],
-        shouldFallback
-      );
-
-      renderResult(filterRes.items, {
-        json: options.json,
-        envelope: options.envelope,
-        humanFormatter: () =>
-          renderStateList(
-            filterRes.items,
-            "Linked Packages State Store",
-            filterRes.isFallback,
-            effectiveIntent
-          ),
+        shouldFallback,
         context,
       });
-    } finally {
-      await target.close();
-    }
+    });
   };
 
   // state list
@@ -257,56 +148,57 @@ export function registerStateCommands(program: Command, context?: CliContext): v
         throw new ArgumentError("State key is required");
       }
 
-      // 1. 远端服务模式
-      const resolved = resolveTarget({
-        profile: options.profile,
-        server: options.server,
-        token: options.token,
-      }, context?.customHome);
+      await withTarget(
+        options,
+        context,
+        async (target, resolved) => {
+          const actionId = options.action || "";
 
-      const target = await createActionDockTarget(
-        resolved.type === "remote"
-          ? {
-              type: "remote",
-              serverUrl: resolved.serverUrl!,
-              token: resolved.token,
+          if (resolved.type === "remote") {
+            const decoded = decodeStateKey(rawKey);
+            const effectiveNamespace = options.namespace || (decoded.namespace || undefined);
+            const actualKey = options.namespace ? rawKey : decoded.key;
+
+            const entry = await target.getState(options.package || "", actionId, actualKey, {
+              namespace: effectiveNamespace,
+              detail: true,
+            });
+
+            if (entry === undefined || (entry as any).value === undefined) {
+              throw new ExecutionError(`State key '${rawKey}' not found on remote server`);
             }
-          : {
-              type: "local",
-              projectRoot: getTargetRoot(options.package, rawKey).root,
-              customHome: context?.customHome,
-              dataDir: options.dataDir || context?.dataDir,
-            }
-      );
 
-      const actionId = options.action || "";
-      try {
-        if (resolved.type === "remote") {
-          const decoded = decodeStateKey(rawKey);
-          const effectiveNamespace = options.namespace || (decoded.namespace || undefined);
-          const actualKey = options.namespace ? rawKey : decoded.key;
+            const val = (entry as any).value;
+            renderResult(
+              { key: rawKey, value: val, namespace: (entry as any).namespace || effectiveNamespace },
+              {
+                json: options.json,
+                envelope: options.envelope,
+                humanFormatter: () => (typeof val === "object" ? JSON.stringify(val, null, 2) : String(val)),
+                context,
+              }
+            );
+            return;
+          }
 
-          const entry = await target.getState(options.package || "", actionId, actualKey, {
-            namespace: effectiveNamespace,
+          // 本地项目模式
+          const { root, key: effectiveKey } = getTargetRoot(options.package, rawKey);
+          const projConfig = loadProjectConfig(root);
+
+          const entry = await target.getState(projConfig.id, actionId, effectiveKey, {
+            namespace: options.namespace,
             detail: true,
           });
 
           if (entry === undefined || (entry as any).value === undefined) {
-            renderResult(
-              { key: rawKey, value: undefined },
-              {
-                json: options.json,
-                envelope: options.envelope,
-                humanFormatter: () => "",
-                context,
-              }
-            );
-            throw new ExecutionError(`State key '${rawKey}' not found on remote server`);
+            throw new ExecutionError(`State key '${rawKey}' not found in package '${projConfig.id}'`);
           }
 
           const val = (entry as any).value;
+          const matchedNamespace = (entry as any).namespace;
+
           renderResult(
-            { key: rawKey, value: val, namespace: (entry as any).namespace || effectiveNamespace },
+            { key: rawKey, value: val, namespace: matchedNamespace },
             {
               json: options.json,
               envelope: options.envelope,
@@ -314,46 +206,9 @@ export function registerStateCommands(program: Command, context?: CliContext): v
               context,
             }
           );
-          return;
-        }
-
-        // 2. 本地项目模式
-        const { root, key: effectiveKey } = getTargetRoot(options.package, rawKey);
-        const projConfig = loadProjectConfig(root);
-
-        const entry = await target.getState(projConfig.id, actionId, effectiveKey, {
-          namespace: options.namespace,
-          detail: true,
-        });
-
-        if (entry === undefined || (entry as any).value === undefined) {
-          renderResult(
-            { key: rawKey, value: undefined },
-            {
-              json: options.json,
-              envelope: options.envelope,
-              humanFormatter: () => "",
-              context,
-            }
-          );
-          throw new ExecutionError(`State key '${rawKey}' not found in package '${projConfig.id}'`);
-        }
-
-        const val = (entry as any).value;
-        const matchedNamespace = (entry as any).namespace;
-
-        renderResult(
-          { key: rawKey, value: val, namespace: matchedNamespace },
-          {
-            json: options.json,
-            envelope: options.envelope,
-            humanFormatter: () => (typeof val === "object" ? JSON.stringify(val, null, 2) : String(val)),
-            context,
-          }
-        );
-      } finally {
-        await target.close();
-      }
+        },
+        { localRoot: () => getTargetRoot(options.package, rawKey).root }
+      );
     });
 
   // state set <key> <value>
@@ -386,67 +241,49 @@ export function registerStateCommands(program: Command, context?: CliContext): v
         throw new ArgumentError(`Invalid --ttl value: '${options.ttl}'. Must be a positive integer.`);
       }
 
-      // 1. 远端服务模式
-      const resolved = resolveTarget({
-        profile: options.profile,
-        server: options.server,
-        token: options.token,
-      }, context?.customHome);
+      await withTarget(
+        options,
+        context,
+        async (target, resolved) => {
+          const actionId = options.action || "";
 
-      const target = await createActionDockTarget(
-        resolved.type === "remote"
-          ? {
-              type: "remote",
-              serverUrl: resolved.serverUrl!,
-              token: resolved.token,
-            }
-          : {
-              type: "local",
-              projectRoot: getTargetRoot(options.package, rawKey).root,
-              customHome: context?.customHome,
-              dataDir: options.dataDir || context?.dataDir,
-            }
-      );
+          if (resolved.type === "remote") {
+            const decoded = decodeStateKey(rawKey);
+            const effectiveNamespace = options.namespace || (decoded.namespace || undefined);
+            const actualKey = options.namespace ? rawKey : decoded.key;
 
-      const actionId = options.action || "";
-      try {
-        if (resolved.type === "remote") {
-          const decoded = decodeStateKey(rawKey);
-          const effectiveNamespace = options.namespace || (decoded.namespace || undefined);
-          const actualKey = options.namespace ? rawKey : decoded.key;
+            await target.setState(options.package || "", actionId, actualKey, parsedVal as any, {
+              namespace: effectiveNamespace,
+              ttl: ttlSec,
+            });
 
-          await target.setState(options.package || "", actionId, actualKey, parsedVal as any, {
-            namespace: effectiveNamespace,
+            writeStdout(`[OK] State '${rawKey}' updated on remote server`, context);
+            return;
+          }
+
+          // 本地项目模式
+          const { root, key: effectiveKey } = getTargetRoot(options.package, rawKey);
+          const projConfig = loadProjectConfig(root);
+
+          let actualNamespace = options.namespace;
+          let finalKey = effectiveKey;
+
+          if (options.namespace === undefined && effectiveKey.includes(":")) {
+            const decoded = decodeStateKey(effectiveKey);
+            actualNamespace = decoded.namespace;
+            finalKey = decoded.key;
+          }
+
+          await target.setState(projConfig.id, actionId, finalKey, parsedVal as any, {
+            namespace: actualNamespace,
             ttl: ttlSec,
           });
 
-          writeStdout(`[OK] State '${rawKey}' updated on remote server`, context);
-          return;
-        }
-
-        // 2. 本地项目模式
-        const { root, key: effectiveKey } = getTargetRoot(options.package, rawKey);
-        const projConfig = loadProjectConfig(root);
-
-        let actualNamespace = options.namespace;
-        let finalKey = effectiveKey;
-
-        if (options.namespace === undefined && effectiveKey.includes(":")) {
-          const decoded = decodeStateKey(effectiveKey);
-          actualNamespace = decoded.namespace;
-          finalKey = decoded.key;
-        }
-
-        await target.setState(projConfig.id, actionId, finalKey, parsedVal as any, {
-          namespace: actualNamespace,
-          ttl: ttlSec,
-        });
-
-        const displayKey = actualNamespace ? `${actualNamespace}:${finalKey}` : finalKey;
-        writeStdout(`[OK] State '${displayKey}' updated in package '${projConfig.id}'`, context);
-      } finally {
-        await target.close();
-      }
+          const displayKey = actualNamespace ? `${actualNamespace}:${finalKey}` : finalKey;
+          writeStdout(`[OK] State '${displayKey}' updated in package '${projConfig.id}'`, context);
+        },
+        { localRoot: () => getTargetRoot(options.package, rawKey).root }
+      );
     });
 
   // state delete <key>
@@ -467,61 +304,43 @@ export function registerStateCommands(program: Command, context?: CliContext): v
         throw new ArgumentError("State key is required");
       }
 
-      // 1. 远端服务模式
-      const resolved = resolveTarget({
-        profile: options.profile,
-        server: options.server,
-        token: options.token,
-      }, context?.customHome);
+      await withTarget(
+        options,
+        context,
+        async (target, resolved) => {
+          const actionId = options.action || "";
 
-      const target = await createActionDockTarget(
-        resolved.type === "remote"
-          ? {
-              type: "remote",
-              serverUrl: resolved.serverUrl!,
-              token: resolved.token,
+          if (resolved.type === "remote") {
+            const decoded = decodeStateKey(rawKey);
+            const effectiveNamespace = options.namespace || (decoded.namespace || undefined);
+            const actualKey = options.namespace ? rawKey : decoded.key;
+
+            const deleted = await target.deleteState(options.package || "", actionId, actualKey, {
+              namespace: effectiveNamespace,
+            });
+
+            if (!deleted) {
+              throw new ExecutionError(`State key '${rawKey}' not found on remote server`);
             }
-          : {
-              type: "local",
-              projectRoot: getTargetRoot(options.package, rawKey).root,
-              customHome: context?.customHome,
-              dataDir: options.dataDir || context?.dataDir,
-            }
-      );
 
-      const actionId = options.action || "";
-      try {
-        if (resolved.type === "remote") {
-          const decoded = decodeStateKey(rawKey);
-          const effectiveNamespace = options.namespace || (decoded.namespace || undefined);
-          const actualKey = options.namespace ? rawKey : decoded.key;
-
-          const deleted = await target.deleteState(options.package || "", actionId, actualKey, {
-            namespace: effectiveNamespace,
-          });
-
-          if (!deleted) {
-            throw new ExecutionError(`State key '${rawKey}' not found on remote server`);
+            writeStdout(`[OK] State '${rawKey}' deleted on remote server`, context);
+            return;
           }
 
-          writeStdout(`[OK] State '${rawKey}' deleted on remote server`, context);
-          return;
-        }
+          // 本地项目模式
+          const { root, key: effectiveKey } = getTargetRoot(options.package, rawKey);
+          const projConfig = loadProjectConfig(root);
 
-        // 2. 本地项目模式
-        const { root, key: effectiveKey } = getTargetRoot(options.package, rawKey);
-        const projConfig = loadProjectConfig(root);
-
-        const deleted = await target.deleteState(projConfig.id, actionId, effectiveKey, {
-          namespace: options.namespace,
-        });
-        if (!deleted) {
-          throw new ExecutionError(`State key '${rawKey}' not found in package '${projConfig.id}'`);
-        }
-        writeStdout(`[OK] State '${rawKey}' deleted from package '${projConfig.id}'`, context);
-      } finally {
-        await target.close();
-      }
+          const deleted = await target.deleteState(projConfig.id, actionId, effectiveKey, {
+            namespace: options.namespace,
+          });
+          if (!deleted) {
+            throw new ExecutionError(`State key '${rawKey}' not found in package '${projConfig.id}'`);
+          }
+          writeStdout(`[OK] State '${rawKey}' deleted from package '${projConfig.id}'`, context);
+        },
+        { localRoot: () => getTargetRoot(options.package, rawKey).root }
+      );
     });
 
   // state clear
@@ -545,30 +364,9 @@ export function registerStateCommands(program: Command, context?: CliContext): v
         );
       }
 
-      // 1. 远端服务模式
-      const resolved = resolveTarget({
-        profile: options.profile,
-        server: options.server,
-        token: options.token,
-      }, context?.customHome);
+      await withTarget(options, context, async (target, resolved) => {
+        const actionId = options.action || "";
 
-      const target = await createActionDockTarget(
-        resolved.type === "remote"
-          ? {
-              type: "remote",
-              serverUrl: resolved.serverUrl!,
-              token: resolved.token,
-            }
-          : {
-              type: "local",
-              projectRoot: getTargetRoot(options.package).root,
-              customHome: context?.customHome,
-              dataDir: options.dataDir || context?.dataDir,
-            }
-      );
-
-      const actionId = options.action || "";
-      try {
         if (resolved.type === "remote") {
           const count = await target.clearState(options.package || "", actionId, {
             namespace: options.namespace,
@@ -578,7 +376,7 @@ export function registerStateCommands(program: Command, context?: CliContext): v
           return;
         }
 
-        // 2. 本地项目模式
+        // 本地项目模式
         const { root } = getTargetRoot(options.package);
         const projConfig = loadProjectConfig(root);
 
@@ -591,8 +389,8 @@ export function registerStateCommands(program: Command, context?: CliContext): v
           ? "all namespaces"
           : `namespace '${options.namespace}'`;
         writeStdout(`[OK] Cleared ${count} state entry(s) in ${scopeDesc} for package '${projConfig.id}'`, context);
-      } finally {
-        await target.close();
-      }
+      },
+      { localRoot: () => getTargetRoot(options.package).root });
     });
 }
+

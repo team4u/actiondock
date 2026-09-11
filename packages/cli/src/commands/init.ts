@@ -1,4 +1,5 @@
 import { initProject } from "@actiondock/core";
+import { writeStdout } from "../renderer";
 import { ExecutionError } from "../errors";
 import { Command } from "commander";
 
@@ -16,7 +17,7 @@ export function registerInitCommand(program: Command): void {
           name: options.name,
           description: options.desc,
         });
-        console.log(`Successfully initialized ActionDock project in ${dir}`);
+        writeStdout(`Successfully initialized ActionDock project in ${dir}`);
       } catch (err: any) {
         throw new ExecutionError(err.message);
       }

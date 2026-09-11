@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
@@ -20,7 +19,7 @@ import { Command } from "commander";
 import { ArgumentError, ExecutionError } from "../errors";
 import { renderResult } from "../renderer";
 import type { CliContext } from "../types";
-import { getEffectiveOptions } from "../utils";
+import { getEffectiveOptions, spawnAsync } from "../utils";
 
 /**
  * 从安装说明符中提取基础 npm 包名（去除版本号及前缀范围）。
@@ -97,10 +96,9 @@ export function registerAddCommand(program: Command, context?: CliContext): void
           }
         }
 
-        const installProc = spawnSync(pm, args, {
+        const installProc = await spawnAsync(pm, args, {
           cwd: root,
           stdio: "pipe",
-          shell: process.platform === "win32",
         });
 
         if (installProc.status !== 0) {

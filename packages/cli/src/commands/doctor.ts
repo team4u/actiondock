@@ -2,9 +2,10 @@ import { fetchRemoteDoctor, resolveTarget, runDoctorChecks } from "@actiondock/c
 import { Command } from "commander";
 import { ExecutionError } from "../errors";
 import { renderResult } from "../renderer";
+import type { CliContext } from "../types";
 import { getEffectiveOptions } from "../utils";
 
-export function registerDoctorCommand(program: Command): void {
+export function registerDoctorCommand(program: Command, context?: CliContext): void {
   program
     .command("doctor")
     .description("Check ActionDock environment, registry health, and project diagnostics")
@@ -17,11 +18,14 @@ export function registerDoctorCommand(program: Command): void {
     .action(async (rawOptions, cmd) => {
       try {
         const options = getEffectiveOptions(rawOptions, cmd);
-        const target = resolveTarget({
-          profile: options.profile,
-          server: options.server,
-          token: options.token,
-        });
+        const target = resolveTarget(
+          {
+            profile: options.profile,
+            server: options.server,
+            token: options.token,
+          },
+          context?.customHome
+        );
 
         let report;
         if (target.type === "remote") {
@@ -30,6 +34,7 @@ export function registerDoctorCommand(program: Command): void {
         } else {
           report = await runDoctorChecks({
             packageIdOrPath: options.package,
+            customHome: context?.customHome,
           });
         }
 

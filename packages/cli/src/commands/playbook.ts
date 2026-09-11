@@ -175,7 +175,9 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
             path: pkg.path,
             playbooks: list,
           });
-        } catch {}
+        } catch {
+          // 单个链接包清单损坏或 Playbook 加载失败时跳过，继续聚合其余包
+        }
       }
 
       let filteredPackages: typeof aggregated = [];
@@ -376,7 +378,9 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
               packageId: pkg.id,
               playbooks: Array.from(playbooks.values()),
             });
-          } catch {}
+          } catch {
+            // 单个链接包清单损坏或 Playbook 加载失败时跳过，不阻断整体校验
+          }
         }
       }
 

@@ -1,15 +1,9 @@
-import {
-  createActionDockTarget,
-  filterWithFallbackInfo,
-  findProjectRoot,
-  resolvePackageRoot,
-  resolveTarget,
-} from "@actiondock/core";
 import { Command } from "commander";
+import { filterWithFallbackInfo } from "@actiondock/core";
 import { ArgumentError } from "../errors";
 import { renderActionList, renderResult } from "../renderer";
 import type { CliContext } from "../types";
-import { getEffectiveOptions, resolveIntent } from "../utils";
+import { getEffectiveOptions, resolveFallbackStrategy, resolveIntent, resolveLocalPackageRoot, withTarget } from "../utils";
 
 /**
  * 注册顶层统一 list 命令：列出当前工程、已链接包或远端服务中的可用 Action。
@@ -34,119 +28,85 @@ export function registerListCommand(program: Command, context?: CliContext): voi
     .action(async (patterns: string[] = [], rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
       const effectiveIntent = resolveIntent(options.intent, patterns);
-      const isMachine = Boolean(options.json || options.envelope);
-      const fallbackExplicit =
-        options.fallback === true ||
-        (Array.isArray(process.argv) && process.argv.includes("--fallback"));
-      const shouldFallback = isMachine ? fallbackExplicit : options.fallback !== false;
+      const { isMachine, shouldFallback } = resolveFallbackStrategy(options);
 
-      // 1. 目标拓扑解析
-      const resolved = resolveTarget(
-        {
-          profile: options.profile,
-          server: options.server,
-          token: options.token,
-        },
-        context?.customHome
-      );
+      // 目标拓扑解析（仅 local 分支需要包寻址）
+      const targetPackageRoot = resolveLocalPackageRoot(options.package);
+      if (options.package && !targetPackageRoot) {
+        throw new ArgumentError(
+          `Package '${options.package}' not found in linked packages or path`
+        );
+      }
 
-      let targetPackageRoot: string | undefined;
-      if (resolved.type === "local") {
-        if (options.package) {
-          const root = resolvePackageRoot(options.package);
-          if (!root) {
-            throw new ArgumentError(
-              `Package '${options.package}' not found in linked packages or path`
+      // 通过 Target 门面统一获取 Action 列表
+      await withTarget(
+        options,
+        context,
+        async (target, resolved) => {
+          let rawSummaries = await target.listActions();
+
+          // 若指定了目标包但本地未过滤，则精确匹配包标识
+          if (options.package && !options.profile && !options.server) {
+            rawSummaries = rawSummaries.filter(
+              (s) =>
+                s.id.startsWith(`${options.package}/`) ||
+                (s as any).packageId === options.package ||
+                !s.id.includes("/")
             );
           }
-          targetPackageRoot = root;
-        } else {
-          targetPackageRoot = findProjectRoot() || undefined;
-        }
-      }
 
-      // 2. 通过 Target 门面统一获取 Action 列表
-      const target = await createActionDockTarget(
-        resolved.type === "remote"
-          ? {
-              type: "remote",
-              serverUrl: resolved.serverUrl!,
-              token: resolved.token,
+          const rawList = rawSummaries.map((s) => {
+            let id = s.id;
+            if (targetPackageRoot || options.package) {
+              const pkgId = (s as any).packageId || options.package;
+              if (pkgId && id.startsWith(`${pkgId}/`)) {
+                id = id.slice(pkgId.length + 1);
+              } else if (targetPackageRoot && id.includes("/")) {
+                id = id.slice(id.indexOf("/") + 1);
+              }
             }
-          : {
-              type: "local",
-              projectRoot: targetPackageRoot,
-              customHome: context?.customHome,
-              dataDir: options.dataDir || context?.dataDir,
-              scanLinkedPackages: true,
-            }
-      );
+            return {
+              id,
+              description: s.description || "",
+            };
+          });
 
-      try {
-        let rawSummaries = await target.listActions();
-
-        // 若指定了目标包但本地未过滤，则精确匹配包标识
-        if (options.package && !options.profile && !options.server) {
-          rawSummaries = rawSummaries.filter(
-            (s) =>
-              s.id.startsWith(`${options.package}/`) ||
-              (s as any).packageId === options.package ||
-              !s.id.includes("/")
+          const filterRes = filterWithFallbackInfo(
+            rawList,
+            effectiveIntent,
+            [(a) => a.id, (a) => a.description],
+            shouldFallback
           );
-        }
 
-        const rawList = rawSummaries.map((s) => {
-          let id = s.id;
-          if (targetPackageRoot || options.package) {
-            const pkgId = (s as any).packageId || options.package;
-            if (pkgId && id.startsWith(`${pkgId}/`)) {
-              id = id.slice(pkgId.length + 1);
-            } else if (targetPackageRoot && id.includes("/")) {
-              id = id.slice(id.indexOf("/") + 1);
-            }
+          if (filterRes.isFallback && isMachine) {
+            renderResult(
+              { items: filterRes.items, isFallback: true, matchedCount: 0 },
+              { json: options.json, envelope: options.envelope, context }
+            );
+            return;
           }
-          return {
-            id,
-            description: s.description || "",
-          };
-        });
 
-        const filterRes = filterWithFallbackInfo(
-          rawList,
-          effectiveIntent,
-          [(a) => a.id, (a) => a.description],
-          shouldFallback
-        );
+          const title =
+            resolved.type === "remote"
+              ? `Actions on remote server ${resolved.serverUrl}${resolved.profileName ? ` (Profile: ${resolved.profileName})` : ""}`
+              : targetPackageRoot
+              ? `Actions in ${options.package || "current project"}`
+              : "Available Actions";
 
-        if (filterRes.isFallback && isMachine) {
-          renderResult(
-            { items: filterRes.items, isFallback: true, matchedCount: 0 },
-            { json: options.json, envelope: options.envelope, context }
-          );
-          return;
-        }
-
-        const title =
-          resolved.type === "remote"
-            ? `Actions on remote server ${resolved.serverUrl}${resolved.profileName ? ` (Profile: ${resolved.profileName})` : ""}`
-            : targetPackageRoot
-            ? `Actions in ${options.package || "current project"}`
-            : "Available Actions";
-
-        renderResult(filterRes.items, {
-          json: options.json,
-          envelope: options.envelope,
-          humanFormatter: () =>
-            renderActionList(
-              filterRes.items,
-              title,
-              filterRes.isFallback,
-              effectiveIntent
-            ),
-          context,
-        });
-      } finally {
-        await target.close();
-      }
+          renderResult(filterRes.items, {
+            json: options.json,
+            envelope: options.envelope,
+            humanFormatter: () =>
+              renderActionList(
+                filterRes.items,
+                title,
+                filterRes.isFallback,
+                effectiveIntent
+              ),
+            context,
+          });
+        },
+        { localRoot: targetPackageRoot || undefined, scanLinkedPackages: true }
+      );
     });
 }

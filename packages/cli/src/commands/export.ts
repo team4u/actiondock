@@ -4,11 +4,8 @@ import { exportCompositeSkill, exportSkill, exportSkillBatch } from "@actiondock
 import { discoverProjects, findProjectRoot, listLinkedPackages, resolvePackageRoot } from "@actiondock/core";
 import { Command } from "commander";
 import { ExecutionError } from "../errors";
-
-function parseListOption(val: string, prev: string[] = []): string[] {
-  const parts = val.split(",").map((s) => s.trim()).filter(Boolean);
-  return [...prev, ...parts];
-}
+import { renderResult, writeStdout } from "../renderer";
+import { parseListOption } from "../utils";
 
 export function registerExportCommand(program: Command): void {
   const exportCmd = program
@@ -131,7 +128,7 @@ export function registerExportCommand(program: Command): void {
               ? options.bundle.trim()
               : basename(process.cwd());
           if (!isJson) {
-            console.log(`Exporting composite Skill bundle '${bundleName}' (${roots.length} package${roots.length > 1 ? "s" : ""})...`);
+            writeStdout(`Exporting composite Skill bundle '${bundleName}' (${roots.length} package${roots.length > 1 ? "s" : ""})...`);
           }
           const result = await exportCompositeSkill({
             bundleName,
@@ -144,31 +141,33 @@ export function registerExportCommand(program: Command): void {
             skillMdOnly: options.skillMdOnly,
           });
 
-          if (isJson) {
-            console.log(JSON.stringify(result, null, 2));
-            return;
-          }
-
-          console.log(`[OK] Successfully exported Composite Skill: ${result.bundleName}`);
-          console.log(`  Packages:   ${result.packagesCount}`);
-          console.log(`  Actions:    ${result.actionsCount}`);
-          console.log(`  Playbooks:  ${result.playbooksCount}`);
-          console.log(`  Skill Dir:  ${result.skillDir}`);
-          if (result.skillMdFile) {
-            console.log(`  SKILL.md:   Regenerated ${result.skillMdFile}`);
-          }
-          if (result.usedExistingSkillMd) {
-            console.log(`  SKILL.md:   Reused existing file from ${result.usedExistingSkillMd}`);
-          }
-          if (result.archivePath) {
-            console.log(`  Archive:    ${result.archivePath}`);
-          }
+          renderResult(result, {
+            json: isJson,
+            humanFormatter: () => {
+              const lines: string[] = [];
+              lines.push(`[OK] Successfully exported Composite Skill: ${result.bundleName}`);
+              lines.push(`  Packages:   ${result.packagesCount}`);
+              lines.push(`  Actions:    ${result.actionsCount}`);
+              lines.push(`  Playbooks:   ${result.playbooksCount}`);
+              lines.push(`  Skill Dir:  ${result.skillDir}`);
+              if (result.skillMdFile) {
+                lines.push(`  SKILL.md:   Regenerated ${result.skillMdFile}`);
+              }
+              if (result.usedExistingSkillMd) {
+                lines.push(`  SKILL.md:   Reused existing file from ${result.usedExistingSkillMd}`);
+              }
+              if (result.archivePath) {
+                lines.push(`  Archive:    ${result.archivePath}`);
+              }
+              return lines.join("\n");
+            },
+          });
           return;
         }
 
         if (roots.length > 1) {
           if (!isJson) {
-            console.log(`Batch exporting ${roots.length} Skill packages...`);
+            writeStdout(`Batch exporting ${roots.length} Skill packages...`);
           }
           const batchRes = await exportSkillBatch({
             projectRoots: roots,
@@ -183,23 +182,25 @@ export function registerExportCommand(program: Command): void {
             requireReproducible: options.requireReproducible,
           });
 
-          if (isJson) {
-            console.log(JSON.stringify(batchRes, null, 2));
-            return;
-          }
-
-          console.log(`[OK] Successfully batch exported ${batchRes.results.length} Skill packages to: ${batchRes.outDir}`);
-          for (const res of batchRes.results) {
-            console.log(`  - ${res.packageId} (v${res.version}): ${res.actionsCount} actions, ${res.playbooksCount} playbooks -> ${res.skillDir}`);
-          }
-          console.log(`  Total Actions:   ${batchRes.totalActions}`);
-          console.log(`  Total Playbooks: ${batchRes.totalPlaybooks}`);
+          renderResult(batchRes, {
+            json: isJson,
+            humanFormatter: () => {
+              const lines: string[] = [];
+              lines.push(`[OK] Successfully batch exported ${batchRes.results.length} Skill packages to: ${batchRes.outDir}`);
+              for (const res of batchRes.results) {
+                lines.push(`  - ${res.packageId} (v${res.version}): ${res.actionsCount} actions, ${res.playbooksCount} playbooks -> ${res.skillDir}`);
+              }
+              lines.push(`  Total Actions:   ${batchRes.totalActions}`);
+              lines.push(`  Total Playbooks: ${batchRes.totalPlaybooks}`);
+              return lines.join("\n");
+            },
+          });
           return;
         }
 
         const root = roots[0];
         if (!isJson) {
-          console.log(`Exporting ${mode === "node" ? "Node.js directory" : "source"} Skill artifact...`);
+          writeStdout(`Exporting ${mode === "node" ? "Node.js directory" : "source"} Skill artifact...`);
         }
         const result = await exportSkill({
           projectRoot: root,
@@ -214,22 +215,24 @@ export function registerExportCommand(program: Command): void {
           requireReproducible: options.requireReproducible,
         });
 
-        if (isJson) {
-          console.log(JSON.stringify(result, null, 2));
-          return;
-        }
-
-        console.log(`[OK] Successfully exported ${result.mode === "node" ? "Node Directory" : "Source"} Skill: ${result.packageId} (v${result.version})`);
-        console.log(`  Mode:       ${result.mode}`);
-        console.log(`  Actions:    ${result.actionsCount}`);
-        console.log(`  Playbooks:  ${result.playbooksCount}`);
-        console.log(`  Skill Dir:  ${result.skillDir}`);
-        if (result.usedExistingSkillMd) {
-          console.log(`  SKILL.md:   Reused existing file from ${result.usedExistingSkillMd}`);
-        }
-        if (result.archivePath) {
-          console.log(`  Archive:    ${result.archivePath}`);
-        }
+        renderResult(result, {
+          json: isJson,
+          humanFormatter: () => {
+            const lines: string[] = [];
+            lines.push(`[OK] Successfully exported ${result.mode === "node" ? "Node Directory" : "Source"} Skill: ${result.packageId} (v${result.version})`);
+            lines.push(`  Mode:       ${result.mode}`);
+            lines.push(`  Actions:    ${result.actionsCount}`);
+            lines.push(`  Playbooks:  ${result.playbooksCount}`);
+            lines.push(`  Skill Dir:  ${result.skillDir}`);
+            if (result.usedExistingSkillMd) {
+              lines.push(`  SKILL.md:   Reused existing file from ${result.usedExistingSkillMd}`);
+            }
+            if (result.archivePath) {
+              lines.push(`  Archive:    ${result.archivePath}`);
+            }
+            return lines.join("\n");
+          },
+        });
       } catch (err: any) {
         if (err?.code === "UNSUPPORTED_BUILD_MODE") {
           throw new ExecutionError(err.message, undefined, "UNSUPPORTED_BUILD_MODE");

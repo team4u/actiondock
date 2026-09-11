@@ -67,6 +67,7 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
       let mcpHandler: ((req: Request) => Promise<Response | null | undefined>) | undefined;
       const enableMcp = options.mcp !== false;
       if (enableMcp) {
+        // MCP 处理器创建失败时直接终止启动，避免横幅宣称不存在的端点
         try {
           const handler = createMcpHandler(
             () => {
@@ -83,8 +84,11 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
           mcpHandler = async (req: Request) => {
             return handler.fetch(req);
           };
-        } catch {
-          // 忽略 MCP 初始化异常
+        } catch (err: any) {
+          throw new ExecutionError(
+            `Failed to initialize MCP endpoint: ${err?.message || String(err)}`,
+            err
+          );
         }
       }
 

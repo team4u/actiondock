@@ -2,11 +2,8 @@ import { buildProject } from "@actiondock/builder";
 import { findProjectRoot, resolvePackageRoot } from "@actiondock/core";
 import { Command } from "commander";
 import { ExecutionError } from "../errors";
-
-function parseListOption(val: string, prev: string[] = []): string[] {
-  const parts = val.split(",").map((s) => s.trim()).filter(Boolean);
-  return [...prev, ...parts];
-}
+import { renderResult, writeStdout } from "../renderer";
+import { parseListOption } from "../utils";
 
 export function registerBuildCommand(program: Command): void {
   program
@@ -47,7 +44,7 @@ export function registerBuildCommand(program: Command): void {
 
       const isJson = Boolean(options.json);
       if (!isJson) {
-        console.log("Building Node.js delivery artifact...");
+        writeStdout("Building Node.js delivery artifact...");
       }
 
       let result;
@@ -69,25 +66,27 @@ export function registerBuildCommand(program: Command): void {
         throw new ExecutionError(`Build failed: ${err.message}`);
       }
 
-      if (isJson) {
-        console.log(JSON.stringify(result, null, 2));
-        return;
-      }
-
-      console.log(`[OK] Successfully built ${result.packageId} (v${result.version})`);
-      console.log(`  Output:       ${result.outputDir}`);
-      console.log(`  Entrypoint:   ${result.entrypointPath}`);
-      console.log(`  Actions:      ${result.actions.join(", ")}`);
-      if (result.playbooks.length > 0) {
-        console.log(`  Playbooks:    ${result.playbooks.join(", ")}`);
-      }
-      console.log(`  Vendor Deps:  ${result.vendorDeps}`);
-      console.log(`  Reproducible: ${result.reproducible}`);
-      if (result.archivePath) {
-        console.log(`  Archive:      ${result.archivePath}`);
-      }
-      if (result.metadataPath) {
-        console.log(`  Metadata:     ${result.metadataPath}`);
-      }
+      renderResult(result, {
+        json: isJson,
+        humanFormatter: () => {
+          const lines: string[] = [];
+          lines.push(`[OK] Successfully built ${result.packageId} (v${result.version})`);
+          lines.push(`  Output:       ${result.outputDir}`);
+          lines.push(`  Entrypoint:   ${result.entrypointPath}`);
+          lines.push(`  Actions:      ${result.actions.join(", ")}`);
+          if (result.playbooks.length > 0) {
+            lines.push(`  Playbooks:    ${result.playbooks.join(", ")}`);
+          }
+          lines.push(`  Vendor Deps:  ${result.vendorDeps}`);
+          lines.push(`  Reproducible: ${result.reproducible}`);
+          if (result.archivePath) {
+            lines.push(`  Archive:      ${result.archivePath}`);
+          }
+          if (result.metadataPath) {
+            lines.push(`  Metadata:     ${result.metadataPath}`);
+          }
+          return lines.join("\n");
+        },
+      });
     });
 }

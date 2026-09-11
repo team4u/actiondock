@@ -2,6 +2,7 @@ import { packProject } from "@actiondock/builder";
 import { findProjectRoot, resolvePackageRoot } from "@actiondock/core";
 import { Command } from "commander";
 import { ExecutionError } from "../errors";
+import { renderResult, writeStdout } from "../renderer";
 import { getEffectiveOptions } from "../utils";
 
 export function registerPackCommand(program: Command): void {
@@ -29,7 +30,7 @@ export function registerPackCommand(program: Command): void {
 
       const isJson = Boolean(options.json);
       if (!isJson && !options.dryRun) {
-        console.log("Packing Action package...");
+        writeStdout("Packing Action package...");
       }
 
       let result;
@@ -43,24 +44,26 @@ export function registerPackCommand(program: Command): void {
         throw new ExecutionError(`Pack failed: ${err.message}`);
       }
 
-      if (isJson) {
-        console.log(JSON.stringify(result, null, 2));
-        return;
-      }
+      renderResult(result, {
+        json: isJson,
+        humanFormatter: () => {
+          const lines: string[] = [];
+          if (options.dryRun) {
+            lines.push(`[OK] Pack dry-run passed for ${result.packageId} (v${result.version})`);
+            lines.push(`  Tarball Name: ${result.tarballName}`);
+            lines.push(`  Actions:      ${result.manifestSummary.actions.join(", ")}`);
+            lines.push(`  Files Count:  ${result.manifestSummary.filesCount}`);
+            lines.push("  Notice: Dry-run mode enabled, no tarball was generated.");
+            return lines.join("\n");
+          }
 
-      if (options.dryRun) {
-        console.log(`[OK] Pack dry-run passed for ${result.packageId} (v${result.version})`);
-        console.log(`  Tarball Name: ${result.tarballName}`);
-        console.log(`  Actions:      ${result.manifestSummary.actions.join(", ")}`);
-        console.log(`  Files Count:  ${result.manifestSummary.filesCount}`);
-        console.log("  Notice: Dry-run mode enabled, no tarball was generated.");
-        return;
-      }
-
-      console.log(`[OK] Successfully packed ${result.packageId} (v${result.version})`);
-      console.log(`  Tarball:   ${result.tarballPath}`);
-      console.log(`  Size:      ${result.sizeBytes} bytes`);
-      console.log(`  SHA-256:   ${result.sha256}`);
-      console.log(`  Actions:   ${result.manifestSummary.actions.join(", ")}`);
+          lines.push(`[OK] Successfully packed ${result.packageId} (v${result.version})`);
+          lines.push(`  Tarball:   ${result.tarballPath}`);
+          lines.push(`  Size:      ${result.sizeBytes} bytes`);
+          lines.push(`  SHA-256:   ${result.sha256}`);
+          lines.push(`  Actions:   ${result.manifestSummary.actions.join(", ")}`);
+          return lines.join("\n");
+        },
+      });
     });
 }

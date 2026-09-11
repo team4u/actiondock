@@ -1,6 +1,7 @@
 import { CommanderError } from "commander";
-import { createCliProgram } from "./commands";
+import { createCliProgram, CLI_VERSION } from "./commands";
 import { formatError } from "./errors";
+import { renderError } from "./renderer";
 
 export * from "./types";
 export * from "./errors";
@@ -8,11 +9,12 @@ export * from "./renderer";
 export * from "./prompt";
 export * from "./standalone";
 export * from "./utils";
+export * from "./services";
 export * from "./commands";
 
 /**
  * ActionDock CLI 主执行入口函数。
- * 
+ *
  * @param argv 命令行参数数组（默认使用 process.argv）
  * @returns 进程退出码
  */
@@ -31,25 +33,13 @@ export async function main(argv: string[] = process.argv): Promise<number> {
       }
     }
 
-    const formatted = formatError(err);
-    if (isMachine) {
-      const errorEnv = {
-        ok: false,
-        error: {
-          code: formatted.code,
-          message: formatted.message,
-          ...(formatted.details !== undefined ? { details: formatted.details } : {}),
-        },
-      };
-      console.log(JSON.stringify(errorEnv, null, 2));
-    } else {
-      const msg = formatted.message.startsWith("Error: ")
-        ? formatted.message
-        : `Error: ${formatted.message}`;
-      console.error(msg);
-    }
-    process.exitCode = formatted.exitCode;
-    return formatted.exitCode;
+    // 复用 renderer 的 renderError 统一错误信封，消除手工拼装的双实现
+    renderError(err, {
+      json: isMachine,
+      envelope: isMachine,
+    });
+    process.exitCode = formatError(err).exitCode;
+    return process.exitCode;
   }
 }
 
@@ -66,4 +56,3 @@ if (isDirectRun) {
     process.exitCode = 1;
   });
 }
-

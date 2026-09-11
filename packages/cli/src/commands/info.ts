@@ -1,80 +1,66 @@
-import { existsSync } from "node:fs";
 import {
   fetchRemoteInfo,
   filterWithFallbackInfo,
-  findProjectRoot,
   getRegistryStatus,
-  listLinkedPackages,
-  loadManifest,
-  loadPlaybooks,
-  loadProjectConfig,
   resolvePackageRoot,
   resolveTarget,
 } from "@actiondock/core";
 import { Command } from "commander";
 import { ArgumentError, ExecutionError } from "../errors";
 import {
+  projectDetailToJson,
   renderAggregatedPackages,
   renderProjectDetail,
   renderRegistryTree,
   renderResult,
 } from "../renderer";
-import type { AggregatedPackage, ProjectDetailInfo, CliContext } from "../types";
-import { getEffectiveOptions, resolveIntent } from "../utils";
+import { getProjectDetailInfo, scanLocalAggregatedPackages } from "../services";
+import type { AggregatedPackage, CliContext, ProjectDetailInfo } from "../types";
+import { getEffectiveOptions, resolveFallbackStrategy, resolveIntent } from "../utils";
 
-async function getProjectDetailInfo(root: string): Promise<ProjectDetailInfo> {
-  const config = loadProjectConfig(root);
-  const manifest = loadManifest(root);
-  const actionsMap = new Map<string, { id: string; description?: string }>();
-  if (manifest?.actions) {
-    for (const [id, item] of Object.entries(manifest.actions)) {
-      actionsMap.set(id, {
-        id,
-        description: item.description,
-      });
-    }
-  }
-  const playbooks = loadPlaybooks(root, config.playbooksDir);
-
+/**
+ * 将远端信息响应归一为本地工程详情视图。
+ */
+function remoteInfoToDetail(remoteInfo: any): ProjectDetailInfo {
   return {
-    id: config.id,
-    name: config.name || config.id,
-    version: config.version || "0.0.0",
-    description: config.description,
-    projectRoot: root,
-    actionsDir: config.actionsDir || "actions",
-    playbooksDir: config.playbooksDir || "playbooks",
-    actionsCount: actionsMap.size,
-    playbooksCount: playbooks.size,
-    actions: Array.from(actionsMap.keys()),
-    playbooks: Array.from(playbooks.keys()),
-    configDeclared: config.config ? Object.keys(config.config) : [],
-    configDef: config.config,
-    actionsMap,
-    playbooksMap: playbooks,
-  };
-}
-
-function projectDetailToJson(info: ProjectDetailInfo) {
-  return {
-    id: info.id,
-    name: info.name || info.id,
-    version: info.version || "0.0.0",
-    description: info.description,
-    projectRoot: info.projectRoot,
-    actionsDir: info.actionsDir,
-    playbooksDir: info.playbooksDir,
-    actionsCount: info.actionsCount,
-    playbooksCount: info.playbooksCount,
-    actions: info.actions,
-    playbooks: info.playbooks,
-    configDeclared: info.configDeclared,
+    id: remoteInfo.id,
+    name: remoteInfo.name || remoteInfo.id,
+    version: remoteInfo.version || "unknown",
+    description: remoteInfo.description,
+    projectRoot: remoteInfo.path || remoteInfo.projectRoot || "",
+    actionsDir: "remote",
+    playbooksDir: "remote",
+    actionsCount: remoteInfo.actionsCount || (remoteInfo.actions ? remoteInfo.actions.length : 0),
+    playbooksCount: remoteInfo.playbooksCount || (remoteInfo.playbooks ? remoteInfo.playbooks.length : 0),
+    actions: (remoteInfo.actionsDetail || remoteInfo.actions || []).map((a: any) =>
+      typeof a === "string" ? a : a.id
+    ),
+    playbooks: (remoteInfo.playbooksDetail || remoteInfo.playbooks || []).map((pb: any) =>
+      typeof pb === "string" ? pb : pb.id
+    ),
+    configDeclared: Object.keys(remoteInfo.configDeclared || {}),
+    configDef: remoteInfo.configDeclared,
   };
 }
 
 /**
+ * 渲染工程详情输出（机器模式输出视图转换结果，人类模式渲染详情）。
+ */
+function renderProjectDetailOutput(
+  detail: ProjectDetailInfo,
+  options: { json?: boolean; envelope?: boolean; context?: CliContext }
+): void {
+  renderResult(projectDetailToJson(detail), {
+    json: options.json,
+    envelope: options.envelope,
+    humanFormatter: () => renderProjectDetail(detail),
+    context: options.context,
+  });
+}
+
+/**
  * 注册 info 命令。
- * 
+ *
  * @param program Commander 实例
  * @param context 命令行上下文
  */
@@ -96,11 +82,11 @@ export function registerInfoCommand(program: Command, context?: CliContext): voi
     .action(async (patterns: string[] = [], rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
       const effectiveIntent = resolveIntent(options.intent, patterns);
-      const isMachine = Boolean(options.json || options.envelope);
-      const fallbackExplicit = options.fallback === true || (Array.isArray(process.argv) && process.argv.includes("--fallback"));
-      const shouldFallback = isMachine ? fallbackExplicit : options.fallback !== false;
+      const { isMachine, shouldFallback } = resolveFallbackStrategy(options);
 
-      // 1. 远端服务目标分支
+      const outOpts = { json: options.json, envelope: options.envelope, context };
+
+      // 远端服务目标分支
       const target = resolveTarget({
         profile: options.profile,
         server: options.server,
@@ -119,11 +105,7 @@ export function registerInfoCommand(program: Command, context?: CliContext): voi
         );
 
         if (isMachine) {
-          renderResult(remoteInfo, {
-            json: options.json,
-            envelope: options.envelope,
-            context,
-          });
+          renderResult(remoteInfo, outOpts);
           return;
         }
 
@@ -136,25 +118,7 @@ export function registerInfoCommand(program: Command, context?: CliContext): voi
         }
 
         if (remoteInfo.type === "package_detail" || (remoteInfo.id && !remoteInfo.packages)) {
-          const detail: ProjectDetailInfo = {
-            id: remoteInfo.id,
-            name: remoteInfo.name || remoteInfo.id,
-            version: remoteInfo.version || "unknown",
-            description: remoteInfo.description,
-            projectRoot: remoteInfo.path || remoteInfo.projectRoot || "",
-            actionsDir: "remote",
-            playbooksDir: "remote",
-            actionsCount: remoteInfo.actionsCount || (remoteInfo.actions ? remoteInfo.actions.length : 0),
-            playbooksCount: remoteInfo.playbooksCount || (remoteInfo.playbooks ? remoteInfo.playbooks.length : 0),
-            actions: (remoteInfo.actionsDetail || remoteInfo.actions || []).map((a: any) =>
-              typeof a === "string" ? a : a.id
-            ),
-            playbooks: (remoteInfo.playbooksDetail || remoteInfo.playbooks || []).map((pb: any) =>
-              typeof pb === "string" ? pb : pb.id
-            ),
-            configDeclared: Object.keys(remoteInfo.configDeclared || {}),
-            configDef: remoteInfo.configDeclared,
-          };
+          const detail = remoteInfoToDetail(remoteInfo);
           renderResult(detail, {
             humanFormatter: () => renderProjectDetail(detail),
             context,
@@ -170,7 +134,7 @@ export function registerInfoCommand(program: Command, context?: CliContext): voi
         return;
       }
 
-      // 2. 本地注册表树状图分支
+      // 本地注册表树状图分支
       if (options.tree) {
         const status = getRegistryStatus(context?.customHome);
         renderResult(status, {
@@ -182,89 +146,25 @@ export function registerInfoCommand(program: Command, context?: CliContext): voi
         return;
       }
 
-      // 3. 显式指定 Package 参数分支
+      // 显式指定 Package 参数分支
       if (options.package) {
         const directRoot = resolvePackageRoot(options.package);
         if (directRoot) {
           const detail = await getProjectDetailInfo(directRoot);
-          renderResult(projectDetailToJson(detail), {
-            json: options.json,
-            envelope: options.envelope,
-            humanFormatter: () => renderProjectDetail(detail),
-            context,
-          });
+          renderProjectDetailOutput(detail, outOpts);
           return;
         }
         throw new ArgumentError(`Package '${options.package}' not found in linked packages or path`);
       }
 
-      // 4. 扫描本地候选包（当前工程根目录 + 全局已链接包）
-      const currentRoot = findProjectRoot();
-      const linkedList = listLinkedPackages(context?.customHome);
-      const aggregated: AggregatedPackage[] = [];
-      const seenPaths = new Set<string>();
+      // 扫描本地候选包（当前工程根目录 + 全局已链接包）
+      const { currentRoot, aggregated } = scanLocalAggregatedPackages(context);
 
-      if (currentRoot) {
-        try {
-          const config = loadProjectConfig(currentRoot);
-          const manifest = loadManifest(currentRoot);
-          const manifestActionIds = manifest?.actions ? Object.keys(manifest.actions) : [];
-          const playbooks = loadPlaybooks(currentRoot, config.playbooksDir);
-          aggregated.push({
-            id: config.id,
-            name: config.name || config.id,
-            version: config.version || "0.0.0",
-            description: config.description,
-            path: currentRoot,
-            actionsCount: manifestActionIds.length,
-            playbooksCount: playbooks.size,
-            actions: manifestActionIds,
-            playbooks: Array.from(playbooks.keys()),
-            configDeclared: config.config ? Object.keys(config.config) : [],
-          });
-          seenPaths.add(currentRoot);
-        } catch {
-          // 忽略异常工程根目录
-        }
-      }
-
-      for (const pkg of linkedList) {
-        if (!existsSync(pkg.path)) continue;
-        if (seenPaths.has(pkg.path)) continue;
-        try {
-          const config = loadProjectConfig(pkg.path);
-          const manifest = loadManifest(pkg.path);
-          const manifestActionIds = manifest?.actions ? Object.keys(manifest.actions) : [];
-          const playbooks = loadPlaybooks(pkg.path, config.playbooksDir);
-
-          aggregated.push({
-            id: config.id,
-            name: config.name || config.id,
-            version: config.version || "0.0.0",
-            description: config.description,
-            path: pkg.path,
-            actionsCount: manifestActionIds.length,
-            playbooksCount: playbooks.size,
-            actions: manifestActionIds,
-            playbooks: Array.from(playbooks.keys()),
-            configDeclared: config.config ? Object.keys(config.config) : [],
-          });
-          seenPaths.add(pkg.path);
-        } catch {
-          // 忽略失效链接
-        }
-      }
-
-      // 5. 无关键字过滤场景
+      // 无关键字过滤场景
       if (!effectiveIntent) {
         if (currentRoot) {
           const detail = await getProjectDetailInfo(currentRoot);
-          renderResult(projectDetailToJson(detail), {
-            json: options.json,
-            envelope: options.envelope,
-            humanFormatter: () => renderProjectDetail(detail),
-            context,
-          });
+          renderProjectDetailOutput(detail, outOpts);
           return;
         }
 
@@ -272,11 +172,9 @@ export function registerInfoCommand(program: Command, context?: CliContext): voi
           renderResult(
             { linkedPackages: [] },
             {
-              json: options.json,
-              envelope: options.envelope,
+              ...outOpts,
               humanFormatter: () =>
                 "No ActionDock project in current directory, and no packages linked.\nRun 'ad link' inside an Action package to register it.",
-              context,
             }
           );
           return;
@@ -285,26 +183,19 @@ export function registerInfoCommand(program: Command, context?: CliContext): voi
         renderResult(
           { linkedPackages: aggregated },
           {
-            json: options.json,
-            envelope: options.envelope,
+            ...outOpts,
             humanFormatter: () => renderAggregatedPackages(aggregated),
-            context,
           }
         );
         return;
       }
 
-      // 6. 有关键字过滤场景
+      // 有关键字过滤场景：单一位置参数且非显式 --intent 时优先尝试包寻址
       if (patterns.length === 1 && !options.intent) {
         const directRoot = resolvePackageRoot(patterns[0]);
         if (directRoot) {
           const detail = await getProjectDetailInfo(directRoot);
-          renderResult(projectDetailToJson(detail), {
-            json: options.json,
-            envelope: options.envelope,
-            humanFormatter: () => renderProjectDetail(detail),
-            context,
-          });
+          renderProjectDetailOutput(detail, outOpts);
           return;
         }
       }
@@ -313,7 +204,7 @@ export function registerInfoCommand(program: Command, context?: CliContext): voi
         if (isMachine) {
           renderResult(
             { linkedPackages: [], matchedCount: 0, isFallback: false },
-            { json: options.json, envelope: options.envelope, context }
+            outOpts
           );
           return;
         }
@@ -326,12 +217,12 @@ export function registerInfoCommand(program: Command, context?: CliContext): voi
         aggregated,
         effectiveIntent,
         [
-          (p) => p.id,
-          (p) => p.name,
-          (p) => p.description,
-          (p) => p.path,
-          (p) => p.actions,
-          (p) => p.playbooks,
+          (p: AggregatedPackage) => p.id,
+          (p: AggregatedPackage) => p.name,
+          (p: AggregatedPackage) => p.description,
+          (p: AggregatedPackage) => p.path,
+          (p: AggregatedPackage) => p.actions,
+          (p: AggregatedPackage) => p.playbooks,
         ],
         shouldFallback
       );
@@ -342,18 +233,18 @@ export function registerInfoCommand(program: Command, context?: CliContext): voi
           if (isMachine) {
             renderResult(
               { linkedPackages: [], matchedCount: 0, isFallback: false },
-              { json: options.json, envelope: options.envelope, context }
+              outOpts
             );
             return;
           }
           throw new ExecutionError(`No packages matched intent '${effectiveIntent}'`);
         }
 
-        // Fallback enabled: display all packages with a notice
+        // 回退模式：展示全部包并附带提示
         if (isMachine) {
           renderResult(
             { linkedPackages: filterRes.items, isFallback: true, matchedCount: 0 },
-            { json: options.json, envelope: options.envelope, context }
+            outOpts
           );
           return;
         }
@@ -361,12 +252,10 @@ export function registerInfoCommand(program: Command, context?: CliContext): voi
         renderResult(
           { linkedPackages: filterRes.items, isFallback: true, matchedCount: 0 },
           {
-            json: options.json,
-            envelope: options.envelope,
+            ...outOpts,
             humanFormatter: () =>
               `(No linked packages matched intent '${effectiveIntent}', showing all packages)\n\n` +
               renderAggregatedPackages(filterRes.items),
-            context,
           }
         );
         return;
@@ -376,7 +265,7 @@ export function registerInfoCommand(program: Command, context?: CliContext): voi
       if (isMachine) {
         renderResult(
           { linkedPackages: filterRes.items, matchedCount: filterRes.matchedCount, isFallback: false },
-          { json: options.json, envelope: options.envelope, context }
+          outOpts
         );
         return;
       }
@@ -385,12 +274,7 @@ export function registerInfoCommand(program: Command, context?: CliContext): voi
       if (filterRes.matchedCount === 1) {
         const matchedPkg = filterRes.items[0];
         const detail = await getProjectDetailInfo(matchedPkg.path);
-        renderResult(projectDetailToJson(detail), {
-          json: options.json,
-          envelope: options.envelope,
-          humanFormatter: () => renderProjectDetail(detail),
-          context,
-        });
+        renderProjectDetailOutput(detail, outOpts);
         return;
       }
 
@@ -398,14 +282,12 @@ export function registerInfoCommand(program: Command, context?: CliContext): voi
       renderResult(
         { linkedPackages: filterRes.items },
         {
-          json: options.json,
-          envelope: options.envelope,
+          ...outOpts,
           humanFormatter: () =>
             renderAggregatedPackages(filterRes.items, {
               header: `ActionDock Linked Packages (${filterRes.matchedCount} matches for '${effectiveIntent}'):\n`,
               showTip: true,
             }),
-          context,
         }
       );
     });

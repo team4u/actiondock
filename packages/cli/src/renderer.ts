@@ -1,3 +1,5 @@
+import type { RunRecord } from "@actiondock/sdk";
+import type { RegistryStatusReport } from "@actiondock/core";
 import type { Envelope, ProjectDetailInfo, AggregatedPackage, EnvCheckItem, CliContext } from "./types";
 import { formatError } from "./errors";
 
@@ -136,6 +138,26 @@ export function renderError(
 }
 
 /**
+ * 将工程详情信息转换为机器输出视图（剔除 Map 明细与定义字典）。
+ */
+export function projectDetailToJson(info: ProjectDetailInfo) {
+  return {
+    id: info.id,
+    name: info.name || info.id,
+    version: info.version || "0.0.0",
+    description: info.description,
+    projectRoot: info.projectRoot,
+    actionsDir: info.actionsDir,
+    playbooksDir: info.playbooksDir,
+    actionsCount: info.actionsCount,
+    playbooksCount: info.playbooksCount,
+    actions: info.actions,
+    playbooks: info.playbooks,
+    configDeclared: info.configDeclared,
+  };
+}
+
+/**
  * 格式化渲染单个项目的元数据与详情信息。
  */
 export function renderProjectDetail(info: ProjectDetailInfo): string {
@@ -215,9 +237,25 @@ export function renderAggregatedPackages(
 }
 
 /**
+ * 远端 info 接口返回的注册表树视图（与 RegistryStatusReport 字段兼容的宽松结构）。
+ */
+export type RegistryTreeView = RegistryStatusReport | (Record<string, unknown> & {
+  workspaces?: Array<{
+    id?: string;
+    path: string;
+    status: string;
+    packagesCount?: number;
+    children?: Array<{ id: string; version?: string; path: string }>;
+  }>;
+  packages?: Array<{ id: string; version?: string; path: string; status: string }>;
+  totalPackagesCount?: number;
+  staleCount?: number;
+});
+
+/**
  * 格式化渲染注册表层级树结构。
  */
-export function renderRegistryTree(status: any): string {
+export function renderRegistryTree(status: RegistryTreeView): string {
   const lines: string[] = [];
   const workspaces = status.workspaces || [];
   const packages = status.packages || [];
@@ -238,8 +276,9 @@ export function renderRegistryTree(status: any): string {
       const tag = ws.status === "active" ? "[OK]" : "[STALE]";
       lines.push(`  ${tag} ${ws.path} (${ws.packagesCount} package${ws.packagesCount === 1 ? "" : "s"})`);
       if (ws.children && ws.children.length > 0) {
-        ws.children.forEach((child: any, idx: number) => {
-          const isLast = idx === ws.children.length - 1;
+        const children = ws.children;
+        children.forEach((child, idx) => {
+          const isLast = idx === children.length - 1;
           const prefix = isLast ? "    +-- " : "    |-- ";
           lines.push(`${prefix}${child.id} (v${child.version}) -> ${child.path}`);
         });
@@ -388,13 +427,14 @@ export function renderPlaybookDetail(pb: {
 
 /**
  * 格式化渲染配置项列表。
+ * 掩码决策收敛在命令层（传入的 value 已完成是否打码处理），
+ * 此处仅负责值的字符串格式化：字符串原样输出，其余类型 JSON 序列化。
  */
 export function renderConfigList(
   items: Array<{ key: string; value: unknown; source: string; secret: boolean; description?: string }>,
   scopeLabel: string = "Global Scope",
   isFallback: boolean = false,
-  intent?: string,
-  reveal: boolean = false
+  intent?: string
 ): string {
   const lines: string[] = [];
   lines.push(`Configurations [${scopeLabel}]:\n`);
@@ -405,12 +445,19 @@ export function renderConfigList(
     lines.push("  (No configuration entries found)");
   } else {
     for (const item of items) {
-      const valStr = typeof item.value === "string" && item.secret && !reveal ? item.value : JSON.stringify(item.value);
+      const valStr = formatConfigValue(item.value);
       const secretBadge = item.secret ? ", secret" : "";
       lines.push(`  - ${item.key.padEnd(24)} = ${valStr} (${item.source}${secretBadge})`);
     }
   }
   return lines.join("\n");
+}
+
+/**
+ * 格式化配置值：字符串原样输出，其余类型 JSON 序列化。
+ */
+function formatConfigValue(value: unknown): string {
+  return typeof value === "string" ? value : JSON.stringify(value);
 }
 
 /**
@@ -544,7 +591,7 @@ export function renderRunsList(
 /**
  * 格式化渲染单次执行记录详情。
  */
-export function renderRunDetail(run: any): string {
+export function renderRunDetail(run: RunRecord): string {
   const lines: string[] = [];
   lines.push(`Run:          ${run.id}`);
   lines.push(`Action:       ${run.actionId}`);

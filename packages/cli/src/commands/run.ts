@@ -1,17 +1,11 @@
 import { readFileSync } from "node:fs";
-import {
-  createActionDockTarget,
-  findProjectRoot,
-  parseDuration,
-  resolvePackageRoot,
-  resolveTarget,
-} from "@actiondock/core";
+import { parseDuration, resolveTarget } from "@actiondock/core";
 import type { JsonValue } from "@actiondock/sdk";
 import { Command } from "commander";
 import { ArgumentError, ExecutionError, SigintError } from "../errors";
 import { writeStdout } from "../renderer";
 import type { CliContext } from "../types";
-import { getEffectiveOptions } from "../utils";
+import { getEffectiveOptions, resolveLocalPackageRoot, withTarget } from "../utils";
 
 /**
  * 统一执行 Action 核心逻辑（使用 ActionDockTarget 门面）。
@@ -67,8 +61,8 @@ export async function executeAction(
   process.once("SIGINT", sigintHandler);
 
   try {
-    // 1. 目标拓扑解析
-    const resolved = resolveTarget(
+    // 异步执行仅支持远端目标，本地模式直接拒绝
+    const resolvedTopology = resolveTarget(
       {
         profile: options.profile,
         server: options.server,
@@ -76,91 +70,68 @@ export async function executeAction(
       },
       context?.customHome
     );
-
-    if (resolved.type === "local" && options.async) {
+    if (resolvedTopology.type === "local" && options.async) {
       throw new ExecutionError(
         "Async execution requires a long-running ActionDock server.\nUse --profile, --server, or start 'ad serve'."
       );
     }
 
-    let targetPackageRoot: string | undefined;
-    let targetRef = id;
+    // 目标拓扑解析（仅 local 分支需要包寻址）
+    const targetPackageRoot = resolveLocalPackageRoot(options.package);
+    if (options.package && !targetPackageRoot) {
+      throw new ArgumentError(
+        `Package '${options.package}' not found in linked packages or path`
+      );
+    }
 
-    if (resolved.type === "local") {
-      if (options.package) {
-        const root = resolvePackageRoot(options.package);
-        if (!root) {
-          throw new ArgumentError(
-            `Package '${options.package}' not found in linked packages or path`
-          );
-        }
-        targetPackageRoot = root;
-        if (!id.includes("/") && !id.includes(":")) {
-          targetRef = `${options.package}/${id}`;
-        }
-      } else {
-        targetPackageRoot = findProjectRoot() || undefined;
-      }
-    } else if (options.package && !id.includes("/") && !id.includes(":")) {
+    let targetRef = id;
+    if (options.package && !id.includes("/") && !id.includes(":")) {
       targetRef = `${options.package}/${id}`;
     }
 
-    // 2. 通过 Target 统一执行
-    const target = await createActionDockTarget(
-      resolved.type === "remote"
-        ? {
-            type: "remote",
-            serverUrl: resolved.serverUrl!,
-            token: resolved.token,
+    // 通过 Target 统一执行
+    await withTarget(
+      options,
+      context,
+      async (target) => {
+        if (options.async) {
+          const ticket = await target.startAction(targetRef, input as JsonValue, {
+            signal: controller.signal,
+            timeoutMs,
+            config: configOverrides,
+            requestId: options.requestId,
+          });
+
+          const asyncOutput = {
+            ok: ticket.status !== "failed",
+            runId: ticket.runId,
+            status: ticket.status,
+          };
+          writeStdout(JSON.stringify(asyncOutput, null, 2), context);
+
+          if (ticket.status === "failed") {
+            throw new ExecutionError(`Action '${id}' failed to start`);
           }
-        : {
-            type: "local",
-            projectRoot: targetPackageRoot,
-            customHome: context?.customHome,
-            dataDir: options.dataDir || context?.dataDir,
-            scanLinkedPackages: true,
+        } else {
+          const result = await target.runAction(targetRef, input as JsonValue, {
+            signal: controller.signal,
+            timeoutMs,
+            config: configOverrides,
+            requestId: options.requestId,
+          });
+
+          writeStdout(JSON.stringify(result, null, 2), context);
+
+          if (!result.ok) {
+            throw new ExecutionError(
+              result.error?.message || `Action '${id}' execution failed`,
+              result.error
+            );
           }
+        }
+      },
+      { localRoot: targetPackageRoot || undefined, scanLinkedPackages: true }
     );
-
-    try {
-      if (options.async) {
-        const ticket = await target.startAction(targetRef, input as JsonValue, {
-          signal: controller.signal,
-          timeoutMs,
-          config: configOverrides,
-          requestId: options.requestId,
-        });
-
-        const asyncOutput = {
-          ok: ticket.status !== "failed",
-          runId: ticket.runId,
-          status: ticket.status,
-        };
-        writeStdout(JSON.stringify(asyncOutput, null, 2), context);
-
-        if (ticket.status === "failed") {
-          throw new ExecutionError(`Action '${id}' failed to start`);
-        }
-      } else {
-        const result = await target.runAction(targetRef, input as JsonValue, {
-          signal: controller.signal,
-          timeoutMs,
-          config: configOverrides,
-          requestId: options.requestId,
-        });
-
-        writeStdout(JSON.stringify(result, null, 2), context);
-
-        if (!result.ok) {
-          throw new ExecutionError(
-            result.error?.message || `Action '${id}' execution failed`,
-            result.error
-          );
-        }
-      }
-    } finally {
-      await target.close();
-    }
   } catch (err: any) {
     if (receivedSigint || err?.name === "AbortError" || err?.message?.includes("SIGINT")) {
       throw new SigintError();

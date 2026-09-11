@@ -18,8 +18,8 @@ import {
   CliError,
   ExecutionError,
 } from "../errors";
-import { renderResult } from "../renderer";
-import { getEffectiveOptions, resolveIntent } from "../utils";
+import { renderResult, writeStdout } from "../renderer";
+import { getEffectiveOptions, resolveFallbackStrategy, resolveIntent } from "../utils";
 
 export function registerProfileCommands(program: Command): void {
   const profileCmd = program
@@ -40,9 +40,7 @@ export function registerProfileCommands(program: Command): void {
       try {
         const options = getEffectiveOptions(rawOptions, cmd);
         const effectiveIntent = resolveIntent(options.intent, patterns);
-        const isMachine = Boolean(options.json || options.envelope);
-        const fallbackExplicit = options.fallback === true || (Array.isArray(process.argv) && process.argv.includes("--fallback"));
-        const shouldFallback = isMachine ? fallbackExplicit : options.fallback !== false;
+        const { isMachine, shouldFallback } = resolveFallbackStrategy(options);
         const reveal = Boolean(options.reveal || options.showSecrets);
 
         const list = listProfiles();
@@ -138,7 +136,7 @@ export function registerProfileCommands(program: Command): void {
           tokenEnv: options.tokenEnv,
           description: options.desc,
         });
-        console.log(`[OK] Profile '${name}' configured for server: ${options.server}`);
+        writeStdout(`[OK] Profile '${name}' configured for server: ${options.server}`);
       } catch (err: any) {
         throw new ExecutionError(err.message);
       }
@@ -151,7 +149,7 @@ export function registerProfileCommands(program: Command): void {
     .action((name) => {
       try {
         useProfile(name);
-        console.log(`[OK] Active profile switched to '${name}'`);
+        writeStdout(`[OK] Active profile switched to '${name}'`);
       } catch (err: any) {
         throw new ExecutionError(err.message);
       }
@@ -241,7 +239,7 @@ export function registerProfileCommands(program: Command): void {
         if (!removed) {
           throw new ExecutionError(`Profile '${name}' not found`);
         }
-        console.log(`[OK] Profile '${name}' removed`);
+        writeStdout(`[OK] Profile '${name}' removed`);
       } catch (err: any) {
         if (err instanceof CliError) {
           throw err;

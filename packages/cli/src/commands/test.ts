@@ -1,14 +1,14 @@
-import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { findProjectRoot } from "@actiondock/core";
 import { Command } from "commander";
+import { spawnAsync } from "../utils";
 
 export function registerTestCommand(program: Command): void {
   program
     .command("test [pattern]")
     .description("Run project tests using configured test runner (node:test or bun test)")
-    .action((pattern) => {
+    .action(async (pattern) => {
       const root = findProjectRoot();
       const cwd = root || process.cwd();
 
@@ -24,7 +24,7 @@ export function registerTestCommand(program: Command): void {
             testArgs = ["test"];
           }
         } catch {
-          // ignore
+          // package.json 解析失败时回退 npm test
         }
       }
 
@@ -36,11 +36,11 @@ export function registerTestCommand(program: Command): void {
         }
       }
 
-      const proc = spawnSync(testCmd, testArgs, {
+      // stdio inherit 保持实时输出；进程异常（如命令不存在）时回退退出码 1
+      const proc = await spawnAsync(testCmd, testArgs, {
         cwd,
         stdio: "inherit",
-        shell: process.platform === "win32",
-      });
+      }).catch(() => ({ status: 1, signal: null, stdout: "", stderr: "" }));
 
       if (proc.status !== 0) {
         process.exitCode = proc.status ?? 1;

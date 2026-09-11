@@ -108,3 +108,21 @@ export function getEffectiveOptions(rawOptions: any, cmd?: any): any {
   }
   return rawOptions || {};
 }
+
+/**
+ * 解析意图过滤回退策略。
+ * 机器输出模式（--json/--envelope）仅在显式传 --fallback 时回退，
+ * 人类交互模式默认回退（可被 --no-fallback 关闭）。
+ */
+export function resolveFallbackStrategy(
+  options: { fallback?: boolean; json?: boolean; envelope?: boolean }
+): { isMachine: boolean; shouldFallback: boolean } {
+  const isMachine = Boolean(options.json || options.envelope);
+  const fallbackExplicit =
+    options.fallback === true ||
+    (Array.isArray(process.argv) && process.argv.includes("--fallback"));
+  return {
+    isMachine,
+    shouldFallback: isMachine ? fallbackExplicit : options.fallback !== false,
+  };
+}
