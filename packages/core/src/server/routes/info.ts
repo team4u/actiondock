@@ -2,7 +2,7 @@ import { filterWithFallbackInfo } from "../../filter";
 import { PACKAGE_NOT_FOUND } from "../../errors";
 import { ACTIONDOCK_VERSION } from "../../version";
 import { sanitizeConfigDefinitions } from "../../storage";
-import { getSubPath, jsonResponse, type RouteContext } from "./common";
+import { assertPackageAllowed, getSubPath, jsonResponse, type RouteContext } from "./common";
 
 function sanitizePackage<T extends { config?: any }>(pkg: T): T {
   if (!pkg || !pkg.config) return pkg;
@@ -24,8 +24,16 @@ export async function handleInfoRoute(ctx: RouteContext): Promise<Response | nul
   // 1. Packages List: GET /api/v2/packages, /packages
   if ((subpath === "/packages" || pathname === "/api/v2/packages" || pathname === "/packages") && req.method === "GET") {
     try {
+      const targetPkg = url.searchParams.get("package") || url.searchParams.get("packageId") || undefined;
+      if (targetPkg) {
+        assertPackageAllowed(targetPkg, options);
+      }
+
       const rawPackages = target ? await target.listPackages() : (host ? await host.info() : []);
-      const packages = rawPackages.map(sanitizePackage);
+      let packages = rawPackages.map(sanitizePackage);
+      if (options.packageAllowlist && Array.isArray(options.packageAllowlist)) {
+        packages = packages.filter((p) => p.id && options.packageAllowlist!.includes(p.id));
+      }
       return jsonResponse(
         {
           ok: true,
@@ -35,6 +43,19 @@ export async function handleInfoRoute(ctx: RouteContext): Promise<Response | nul
         corsHeaders
       );
     } catch (err: any) {
+      if (err.code === "PACKAGE_NOT_ALLOWED" || err.status === 403) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: "PACKAGE_NOT_ALLOWED",
+              message: err.message || "Package is not in the allowed package list",
+            },
+          },
+          403,
+          corsHeaders
+        );
+      }
       return jsonResponse(
         {
           ok: false,
@@ -53,9 +74,16 @@ export async function handleInfoRoute(ctx: RouteContext): Promise<Response | nul
       const intent = url.searchParams.get("intent") || undefined;
       const targetPkg = url.searchParams.get("package") || url.searchParams.get("packageId") || undefined;
 
+      if (targetPkg) {
+        assertPackageAllowed(targetPkg, options);
+      }
+
       const targetInfo = await target.info();
       const rawPackages = targetInfo.packages || [];
-      const packages = rawPackages.map(sanitizePackage);
+      let packages = rawPackages.map(sanitizePackage);
+      if (options.packageAllowlist && Array.isArray(options.packageAllowlist)) {
+        packages = packages.filter((p) => p.id && options.packageAllowlist!.includes(p.id));
+      }
 
       if (isTree) {
         return jsonResponse(
@@ -164,6 +192,19 @@ export async function handleInfoRoute(ctx: RouteContext): Promise<Response | nul
         corsHeaders
       );
     } catch (err: any) {
+      if (err.code === "PACKAGE_NOT_ALLOWED" || err.status === 403) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: "PACKAGE_NOT_ALLOWED",
+              message: err.message || "Package is not in the allowed package list",
+            },
+          },
+          403,
+          corsHeaders
+        );
+      }
       return jsonResponse(
         {
           ok: false,

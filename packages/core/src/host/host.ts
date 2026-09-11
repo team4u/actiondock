@@ -121,11 +121,6 @@ export class DefaultActionDockHost implements ActionDockHost {
       }
 
       if (root && existsSync(root)) {
-        // 依据事务日志恢复未完成提交的悬空事务（锁持有者存活时严禁判定为崩溃事务并禁止自动恢复）
-        if (!isProjectLockHeld(root) && hasPendingTransactions(root)) {
-          recoverPendingTransactions(root);
-        }
-
         try {
           const config = loadProjectConfig(root);
           this.hostPublicPackageIds.add(config.id);
@@ -768,5 +763,22 @@ export class DefaultActionDockHost implements ActionDockHost {
 export async function createActionDockHost(
   options: ActionDockHostOptions = {}
 ): Promise<ActionDockHost> {
+  if (options.autoLoadCurrentProject !== false) {
+    let root = options.projectRoot;
+    if (!root) {
+      const detected = findProjectRoot();
+      if (detected) {
+        root = detected;
+      }
+    }
+
+    if (root && existsSync(root)) {
+      // 依据事务日志恢复未完成提交的悬空事务（锁持有者存活时严禁判定为崩溃事务并禁止自动恢复）
+      if (!isProjectLockHeld(root) && hasPendingTransactions(root)) {
+        await recoverPendingTransactions(root, { frozenInstall: true });
+      }
+    }
+  }
+
   return new DefaultActionDockHost(options);
 }

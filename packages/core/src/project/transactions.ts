@@ -8,12 +8,119 @@ import {
   openSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
+  statSync,
   unlinkSync,
   writeFileSync,
   writeSync,
 } from "node:fs";
 import { join } from "node:path";
+
+/**
+ * 同步休眠指定毫秒数。
+ */
+function sleepSync(ms: number): void {
+  try {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  } catch {
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      // 降级忙等待
+    }
+  }
+}
+
+/**
+ * 获取项目排他锁路径最近一次修改时间戳。
+ */
+function getProjectLockMtimeMs(lockPath: string, isDir: boolean): number {
+  try {
+    const stat = statSync(lockPath);
+    let mtime = Math.max(stat.mtimeMs, (stat as any).ctimeMs ?? 0);
+    if (isDir) {
+      const metaPath = join(lockPath, "metadata.json");
+      if (existsSync(metaPath)) {
+        const metaStat = statSync(metaPath);
+        mtime = Math.max(mtime, metaStat.mtimeMs, (metaStat as any).ctimeMs ?? 0);
+      }
+    }
+    return mtime;
+  } catch {
+    return Date.now();
+  }
+}
+
+/**
+ * 读取项目排他锁元数据并执行宽限期检测。
+ */
+function readProjectLockWithGracePeriod(
+  lockPath: string,
+  gracePeriodMs = 3000
+): {
+  exists: boolean;
+  isDir: boolean;
+  info?: { pid?: number; sessionToken?: string; createdAt?: number };
+  inGracePeriod: boolean;
+} {
+  if (!existsSync(lockPath)) {
+    return { exists: false, isDir: false, inGracePeriod: false };
+  }
+
+  let isDir = false;
+  try {
+    isDir = statSync(lockPath).isDirectory();
+  } catch {
+    return { exists: false, isDir: false, inGracePeriod: false };
+  }
+
+  const metaPath = isDir ? join(lockPath, "metadata.json") : lockPath;
+
+  const tryParse = (): { pid?: number; sessionToken?: string; createdAt?: number } | undefined => {
+    try {
+      if (existsSync(metaPath)) {
+        const raw = readFileSync(metaPath, "utf-8");
+        if (raw.trim().length > 0) {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed.pid === "number") {
+            return parsed;
+          }
+        }
+      }
+    } catch {
+      // 损坏或并发写入中
+    }
+    return undefined;
+  };
+
+  const initialInfo = tryParse();
+  if (initialInfo) {
+    return { exists: true, isDir, info: initialInfo, inGracePeriod: false };
+  }
+
+  const mtime = getProjectLockMtimeMs(lockPath, isDir);
+  const age = Date.now() - mtime;
+  if (age < gracePeriodMs) {
+    const maxRetries = 20;
+    for (let i = 0; i < maxRetries; i++) {
+      sleepSync(50);
+      const retriedInfo = tryParse();
+      if (retriedInfo) {
+        return { exists: true, isDir, info: retriedInfo, inGracePeriod: false };
+      }
+      if (!existsSync(lockPath)) {
+        return { exists: false, isDir: false, inGracePeriod: false };
+      }
+    }
+
+    const currentAge = Date.now() - getProjectLockMtimeMs(lockPath, isDir);
+    if (currentAge < gracePeriodMs) {
+      return { exists: true, isDir, inGracePeriod: true };
+    }
+  }
+
+  return { exists: true, isDir, inGracePeriod: false };
+}
 import { LOCKFILE_NAME } from "./lockfile";
 import { MANIFEST_FILE_NAME } from "./manifest";
 
@@ -78,13 +185,18 @@ export function isProjectLockHeld(projectRoot: string, excludeSelf = true): bool
     return false;
   }
   try {
-    const raw = readFileSync(lockPath, "utf-8");
-    const lockData = JSON.parse(raw);
-    if (lockData && typeof lockData.pid === "number") {
-      if (excludeSelf && lockData.pid === process.pid) {
+    const lockState = readProjectLockWithGracePeriod(lockPath, 3000);
+    if (!lockState.exists) {
+      return false;
+    }
+    if (lockState.inGracePeriod) {
+      return true;
+    }
+    if (lockState.info && typeof lockState.info.pid === "number") {
+      if (excludeSelf && lockState.info.pid === process.pid) {
         return false;
       }
-      return isPidAlive(lockData.pid);
+      return isPidAlive(lockState.info.pid);
     }
   } catch {
     // 忽略读取解析异常
@@ -93,9 +205,9 @@ export function isProjectLockHeld(projectRoot: string, excludeSelf = true): bool
 }
 
 /**
- * 获取工程修改排他锁文件（.actiondock/project.lock）。
- * 采用 openSync("wx") 原子排他创建、持有 sessionToken 与 PID、stale 锁检测重试循环与基于 sessionToken 的释放函数。
- * 防止并发命令交叉写文件导致损坏。
+ * 获取工程修改排他锁（.actiondock/project.lock）。
+ * 采用 mkdirSync 原子排他目录创建、renameSync 元数据写入、宽限期重试检测与基于 sessionToken 的释放函数。
+ * 避免空文件窗口与 truncate。
  *
  * @param projectRoot 项目根目录
  * @param options 锁配置参数
@@ -122,34 +234,37 @@ export function acquireProjectLock(
 
   while (true) {
     try {
-      const fd = openSync(lockPath, "wx", 0o600);
-      try {
-        writeSync(fd, content);
-      } finally {
-        closeSync(fd);
-      }
+      mkdirSync(lockPath, { mode: 0o700 });
+      const metaFile = join(lockPath, "metadata.json");
+      const tmpFile = join(
+        lockPath,
+        `metadata.json.tmp.${currentPid}.${randomUUID().slice(0, 8)}`
+      );
+      writeFileSync(tmpFile, content, "utf-8");
+      renameSync(tmpFile, metaFile);
       break;
     } catch (err: any) {
       if (err && err.code === "EEXIST") {
-        let existing: { pid?: number; sessionToken?: string; createdAt?: number } | undefined;
-        try {
-          const raw = readFileSync(lockPath, "utf-8");
-          if (raw.trim().length > 0) {
-            existing = JSON.parse(raw);
-          }
-        } catch {
-          // 损坏或并发写入中的锁文件
+        const lockState = readProjectLockWithGracePeriod(lockPath, 3000);
+
+        if (!lockState.exists) {
+          continue;
         }
 
-        if (existing && typeof existing.pid === "number") {
-          if (isPidAlive(existing.pid)) {
+        if (lockState.inGracePeriod) {
+          sleepSync(50);
+          continue;
+        }
+
+        if (lockState.info && typeof lockState.info.pid === "number") {
+          if (isPidAlive(lockState.info.pid)) {
             throw new Error(
-              `Project modification lock is held by PID ${existing.pid}. Another command is running in ${projectRoot}.`
+              `Project modification lock is held by PID ${lockState.info.pid}. Another command is running in ${projectRoot}.`
             );
           }
         }
 
-        // 持有者 PID 已死亡（或损坏的锁文件），属于陈旧锁，进行原子接管竞争
+        // 持有者 PID 已死亡（或超过宽限期的损坏锁），属于陈旧锁，进行原子接管竞争
         let takeoverFd: number | null = null;
         try {
           takeoverFd = openSync(takeoverPath, "wx", 0o600);
@@ -177,24 +292,23 @@ export function acquireProjectLock(
             // 忽略写入异常
           }
 
-          let recheck: { pid?: number; sessionToken?: string } | undefined;
-          try {
-            const recheckRaw = readFileSync(lockPath, "utf-8");
-            if (recheckRaw.trim().length > 0) {
-              recheck = JSON.parse(recheckRaw);
-            }
-          } catch {
-            // 忽略二次读取异常
+          const recheckState = readProjectLockWithGracePeriod(lockPath, 1000);
+          if (recheckState.inGracePeriod) {
+            continue;
           }
 
-          if (recheck && typeof recheck.pid === "number" && isPidAlive(recheck.pid)) {
+          if (
+            recheckState.info &&
+            typeof recheckState.info.pid === "number" &&
+            isPidAlive(recheckState.info.pid)
+          ) {
             throw new Error(
-              `Project modification lock is held by PID ${recheck.pid}. Another command is running in ${projectRoot}.`
+              `Project modification lock is held by PID ${recheckState.info.pid}. Another command is running in ${projectRoot}.`
             );
           }
 
           try {
-            unlinkSync(lockPath);
+            rmSync(lockPath, { recursive: true, force: true });
           } catch {
             // 忽略解绑异常
           }
@@ -219,10 +333,19 @@ export function acquireProjectLock(
     released = true;
     try {
       if (existsSync(lockPath)) {
-        const raw = readFileSync(lockPath, "utf-8");
-        const onDisk = JSON.parse(raw);
-        if (onDisk && onDisk.sessionToken === sessionToken) {
-          unlinkSync(lockPath);
+        let isDir = false;
+        try {
+          isDir = statSync(lockPath).isDirectory();
+        } catch {
+          isDir = false;
+        }
+        const metaPath = isDir ? join(lockPath, "metadata.json") : lockPath;
+        if (existsSync(metaPath)) {
+          const raw = readFileSync(metaPath, "utf-8");
+          const onDisk = JSON.parse(raw);
+          if (onDisk && onDisk.sessionToken === sessionToken) {
+            rmSync(lockPath, { recursive: true, force: true });
+          }
         }
       }
     } catch {
@@ -331,93 +454,98 @@ export async function beginTransaction(
   description?: string
 ): Promise<ProjectTransaction> {
   const releaseLock = acquireProjectLock(projectRoot);
-  const txId = `${Date.now()}-${randomUUID().slice(0, 8)}`;
-  const txDir = join(projectRoot, ".actiondock", "transactions", txId);
-  const snapshotDir = join(txDir, "snapshot");
+  try {
+    const txId = `${Date.now()}-${randomUUID().slice(0, 8)}`;
+    const txDir = join(projectRoot, ".actiondock", "transactions", txId);
+    const snapshotDir = join(txDir, "snapshot");
 
-  mkdirSync(snapshotDir, { recursive: true });
+    mkdirSync(snapshotDir, { recursive: true });
 
-  const fileRecords: TransactionFileRecord[] = [];
+    const fileRecords: TransactionFileRecord[] = [];
 
-  for (const file of SNAPSHOT_TRACKED_FILES) {
-    const srcPath = join(projectRoot, file);
-    if (existsSync(srcPath)) {
-      const destPath = join(snapshotDir, file);
-      copyFileSync(srcPath, destPath);
-      fileRecords.push({ name: file, existed: true });
-    } else {
-      fileRecords.push({ name: file, existed: false });
+    for (const file of SNAPSHOT_TRACKED_FILES) {
+      const srcPath = join(projectRoot, file);
+      if (existsSync(srcPath)) {
+        const destPath = join(snapshotDir, file);
+        copyFileSync(srcPath, destPath);
+        fileRecords.push({ name: file, existed: true });
+      } else {
+        fileRecords.push({ name: file, existed: false });
+      }
     }
-  }
 
-  const meta: TransactionMetadata = {
-    id: txId,
-    status: "pending",
-    createdAt: Date.now(),
-    description,
-    files: fileRecords,
-  };
+    const meta: TransactionMetadata = {
+      id: txId,
+      status: "pending",
+      createdAt: Date.now(),
+      description,
+      files: fileRecords,
+    };
 
-  writeFileSync(join(txDir, "transaction.json"), JSON.stringify(meta, null, 2) + "\n", "utf-8");
+    writeFileSync(join(txDir, "transaction.json"), JSON.stringify(meta, null, 2) + "\n", "utf-8");
 
-  let isFinalized = false;
+    let isFinalized = false;
 
-  const commit = async (): Promise<void> => {
-    if (isFinalized) return;
-    isFinalized = true;
+    const commit = async (): Promise<void> => {
+      if (isFinalized) return;
+      isFinalized = true;
 
-    meta.status = "committed";
-    try {
-      writeFileSync(join(txDir, "transaction.json"), JSON.stringify(meta, null, 2) + "\n", "utf-8");
-      // 成功提交后清理事务目录
-      rmSync(txDir, { recursive: true, force: true });
-    } finally {
-      releaseLock();
-    }
-  };
+      meta.status = "committed";
+      try {
+        writeFileSync(join(txDir, "transaction.json"), JSON.stringify(meta, null, 2) + "\n", "utf-8");
+        // 成功提交后清理事务目录
+        rmSync(txDir, { recursive: true, force: true });
+      } finally {
+        releaseLock();
+      }
+    };
 
-  const rollback = async (options?: { frozenInstall?: boolean }): Promise<void> => {
-    if (isFinalized) return;
-    isFinalized = true;
+    const rollback = async (options?: { frozenInstall?: boolean }): Promise<void> => {
+      if (isFinalized) return;
+      isFinalized = true;
 
-    try {
-      // 逐个恢复快照文件
-      for (const rec of fileRecords) {
-        const targetPath = join(projectRoot, rec.name);
-        const snapPath = join(snapshotDir, rec.name);
-        if (rec.existed) {
-          if (existsSync(snapPath)) {
-            copyFileSync(snapPath, targetPath);
-          }
-        } else {
-          // 原先不存在的文件若在事务中被创建，予以删除
-          if (existsSync(targetPath)) {
-            unlinkSync(targetPath);
+      try {
+        // 逐个恢复快照文件
+        for (const rec of fileRecords) {
+          const targetPath = join(projectRoot, rec.name);
+          const snapPath = join(snapshotDir, rec.name);
+          if (rec.existed) {
+            if (existsSync(snapPath)) {
+              copyFileSync(snapPath, targetPath);
+            }
+          } else {
+            // 原先不存在的文件若在事务中被创建，予以删除
+            if (existsSync(targetPath)) {
+              unlinkSync(targetPath);
+            }
           }
         }
+
+        // 执行冻结安装使 node_modules 与恢复后的声明重新一致
+        if (options?.frozenInstall !== false) {
+          runFrozenInstall(projectRoot);
+        }
+
+        meta.status = "rolled_back";
+        writeFileSync(join(txDir, "transaction.json"), JSON.stringify(meta, null, 2) + "\n", "utf-8");
+        rmSync(txDir, { recursive: true, force: true });
+      } finally {
+        releaseLock();
       }
+    };
 
-      // 执行冻结安装使 node_modules 与恢复后的声明重新一致
-      if (options?.frozenInstall !== false) {
-        runFrozenInstall(projectRoot);
-      }
-
-      meta.status = "rolled_back";
-      writeFileSync(join(txDir, "transaction.json"), JSON.stringify(meta, null, 2) + "\n", "utf-8");
-      rmSync(txDir, { recursive: true, force: true });
-    } finally {
-      releaseLock();
-    }
-  };
-
-  return {
-    id: txId,
-    projectRoot,
-    description,
-    commit,
-    rollback,
-    releaseLock,
-  };
+    return {
+      id: txId,
+      projectRoot,
+      description,
+      commit,
+      rollback,
+      releaseLock,
+    };
+  } catch (err) {
+    releaseLock();
+    throw err;
+  }
 }
 
 /**

@@ -383,4 +383,242 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       }
     });
   });
+
+  describe("packageAllowlist 服务权限边界拦截验证", () => {
+    let allowlistServer: any;
+    let allowlistUrl: string;
+
+    beforeAll(async () => {
+      allowlistServer = await startActionDockServer({
+        port: 0,
+        host: "127.0.0.1",
+        token: AUTH_TOKEN,
+        target,
+        hostInstance: host,
+        enableManagement: true,
+        packageAllowlist: ["pkg.math"],
+      });
+      allowlistUrl = `http://127.0.0.1:${allowlistServer.port}`;
+    });
+
+    afterAll(async () => {
+      if (allowlistServer) {
+        await allowlistServer.stop();
+      }
+    });
+
+    it("Playbook 路由对非白名单包返回 403 并在列表中过滤", async () => {
+      // 列表接口仅返回白名单包内的规程
+      const listRes = await fetch(`${allowlistUrl}/api/v2/playbooks`, {
+        headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+      });
+      expect(listRes.status).toBe(200);
+      const listData = await listRes.json();
+      expect(Array.isArray(listData)).toBe(true);
+      expect(listData.every((p: any) => p.packageId === "pkg.math")).toBe(true);
+
+      // 显式查询非白名单包的规程列表返回 403
+      const forbiddenListRes = await fetch(`${allowlistUrl}/api/v2/playbooks?package=pkg.extra`, {
+        headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+      });
+      expect(forbiddenListRes.status).toBe(403);
+      const forbiddenListData = await forbiddenListRes.json();
+      expect(forbiddenListData.ok).toBe(false);
+      expect(forbiddenListData.error.code).toBe("PACKAGE_NOT_ALLOWED");
+
+      // 多包路径查询非白名单包返回 403
+      const pkgPbRes = await fetch(`${allowlistUrl}/api/v2/packages/pkg.extra/playbooks/calc-sop`, {
+        headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+      });
+      expect(pkgPbRes.status).toBe(403);
+      const pkgPbData = await pkgPbRes.json();
+      expect(pkgPbData.ok).toBe(false);
+      expect(pkgPbData.error.code).toBe("PACKAGE_NOT_ALLOWED");
+
+      // 短路径带包前缀查询非白名单包返回 403
+      const shortPbRes = await fetch(`${allowlistUrl}/api/v2/playbooks/pkg.extra/calc-sop`, {
+        headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+      });
+      expect(shortPbRes.status).toBe(403);
+      const shortPbData = await shortPbRes.json();
+      expect(shortPbData.ok).toBe(false);
+      expect(shortPbData.error.code).toBe("PACKAGE_NOT_ALLOWED");
+
+      // 白名单包内的规程正常访问
+      const allowedPbRes = await fetch(`${allowlistUrl}/api/v2/playbooks/pkg.math/calc-sop`, {
+        headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+      });
+      expect(allowedPbRes.status).toBe(200);
+    });
+
+    it("Info 路由仅返回白名单包且下钻非白名单包返回 403", async () => {
+      // GET /packages 仅返回白名单包
+      const pkgsRes = await fetch(`${allowlistUrl}/api/v2/packages`, {
+        headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+      });
+      expect(pkgsRes.status).toBe(200);
+      const pkgsData = await pkgsRes.json();
+      expect(pkgsData.packages.length).toBe(1);
+      expect(pkgsData.packages[0].id).toBe("pkg.math");
+
+      // GET /info 仅返回白名单包
+      const infoRes = await fetch(`${allowlistUrl}/api/v2/info`, {
+        headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+      });
+      expect(infoRes.status).toBe(200);
+      const infoData = await infoRes.json();
+      expect(infoData.packages.length).toBe(1);
+      expect(infoData.packages[0].id).toBe("pkg.math");
+
+      // GET /info 下钻非白名单包返回 403
+      const extraInfoRes = await fetch(`${allowlistUrl}/api/v2/info?package=pkg.extra`, {
+        headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+      });
+      expect(extraInfoRes.status).toBe(403);
+      const extraInfoData = await extraInfoRes.json();
+      expect(extraInfoData.ok).toBe(false);
+      expect(extraInfoData.error.code).toBe("PACKAGE_NOT_ALLOWED");
+
+      // GET /info 下钻白名单包正常响应
+      const mathInfoRes = await fetch(`${allowlistUrl}/api/v2/info?package=pkg.math`, {
+        headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+      });
+      expect(mathInfoRes.status).toBe(200);
+      const mathInfoData = await mathInfoRes.json();
+      expect(mathInfoData.id).toBe("pkg.math");
+    });
+
+    it("Doctor 路由对非白名单包返回 403", async () => {
+      const forbiddenDocRes = await fetch(`${allowlistUrl}/api/v2/doctor?package=pkg.extra`, {
+        headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+      });
+      expect(forbiddenDocRes.status).toBe(403);
+      const forbiddenDocData = await forbiddenDocRes.json();
+      expect(forbiddenDocData.ok).toBe(false);
+      expect(forbiddenDocData.error.code).toBe("PACKAGE_NOT_ALLOWED");
+
+      const allowedDocRes = await fetch(`${allowlistUrl}/api/v2/doctor?package=pkg.math`, {
+        headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+      });
+      expect(allowedDocRes.status).toBe(200);
+      const allowedDocData = await allowedDocRes.json();
+      expect(allowedDocData.ok).toBe(true);
+    });
+
+    it("State 路由对非白名单包操作返回 403", async () => {
+      // 列表查询非白名单包
+      const listRes = await fetch(`${allowlistUrl}/api/v2/state?package=pkg.extra`, {
+        headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+      });
+      expect(listRes.status).toBe(403);
+      const listData = await listRes.json();
+      expect(listData.error.code).toBe("PACKAGE_NOT_ALLOWED");
+
+      // 单键查询非白名单包
+      const keyRes = await fetch(`${allowlistUrl}/api/v2/state/any_key?package=pkg.extra`, {
+        headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+      });
+      expect(keyRes.status).toBe(403);
+      const keyData = await keyRes.json();
+      expect(keyData.error.code).toBe("PACKAGE_NOT_ALLOWED");
+
+      // 清空操作非白名单包
+      const clearRes = await fetch(`${allowlistUrl}/api/v2/state/clear?package=pkg.extra`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${AUTH_TOKEN}`,
+        },
+        body: JSON.stringify({}),
+      });
+      expect(clearRes.status).toBe(403);
+      const clearData = await clearRes.json();
+      expect(clearData.error.code).toBe("PACKAGE_NOT_ALLOWED");
+
+      // 默认解析白名单内的包正常放行
+      const defaultRes = await fetch(`${allowlistUrl}/api/v2/state`, {
+        headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+      });
+      expect(defaultRes.status).toBe(200);
+      const defaultData = await defaultRes.json();
+      expect(defaultData.packageId).toBe("pkg.math");
+    });
+
+    it("Config 路由对非白名单包操作返回 403", async () => {
+      // 查询配置非白名单包
+      const queryRes = await fetch(`${allowlistUrl}/api/v2/config?package=pkg.extra`, {
+        headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+      });
+      expect(queryRes.status).toBe(403);
+      const queryData = await queryRes.json();
+      expect(queryData.error.code).toBe("PACKAGE_NOT_ALLOWED");
+
+      // 环境检查非白名单包
+      const envRes = await fetch(`${allowlistUrl}/api/v2/config/env?package=pkg.extra`, {
+        headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+      });
+      expect(envRes.status).toBe(403);
+      const envData = await envRes.json();
+      expect(envData.error.code).toBe("PACKAGE_NOT_ALLOWED");
+
+      // 设置配置非白名单包
+      const setRes = await fetch(`${allowlistUrl}/api/v2/config?package=pkg.extra`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${AUTH_TOKEN}`,
+        },
+        body: JSON.stringify({ key: "k", value: "v" }),
+      });
+      expect(setRes.status).toBe(403);
+      const setData = await setRes.json();
+      expect(setData.error.code).toBe("PACKAGE_NOT_ALLOWED");
+
+      // 删除配置非白名单包
+      const delRes = await fetch(`${allowlistUrl}/api/v2/config/some_key?package=pkg.extra`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+      });
+      expect(delRes.status).toBe(403);
+      const delData = await delRes.json();
+      expect(delData.error.code).toBe("PACKAGE_NOT_ALLOWED");
+
+      // 白名单包正常放行
+      const allowedRes = await fetch(`${allowlistUrl}/api/v2/config?package=pkg.math`, {
+        headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+      });
+      expect(allowedRes.status).toBe(200);
+    });
+
+    it("默认解析包若均不在 packageAllowlist 中时返回 403", async () => {
+      const emptyAllowedServer = await startActionDockServer({
+        port: 0,
+        host: "127.0.0.1",
+        token: AUTH_TOKEN,
+        target,
+        hostInstance: host,
+        enableManagement: true,
+        packageAllowlist: ["pkg.unregistered"],
+      });
+      const emptyUrl = `http://127.0.0.1:${emptyAllowedServer.port}`;
+
+      try {
+        const stateRes = await fetch(`${emptyUrl}/api/v2/state`, {
+          headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+        });
+        expect(stateRes.status).toBe(403);
+        const stateData = await stateRes.json();
+        expect(stateData.error.code).toBe("PACKAGE_NOT_ALLOWED");
+
+        const configRes = await fetch(`${emptyUrl}/api/v2/config`, {
+          headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+        });
+        expect(configRes.status).toBe(403);
+        const configData = await configRes.json();
+        expect(configData.error.code).toBe("PACKAGE_NOT_ALLOWED");
+      } finally {
+        await emptyAllowedServer.stop();
+      }
+    });
+  });
 });

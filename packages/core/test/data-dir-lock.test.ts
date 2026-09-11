@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { Worker } from "node:worker_threads";
 import { createActionDockApp } from "../src/app";
 import { createActionDockHost } from "../src/host";
 import { createDefaultSqliteDriver } from "../src/storage/driver";
@@ -32,11 +33,12 @@ describe("数据目录排他锁与 Schema 版本保护测试", () => {
       autoLoadCurrentProject: false,
     });
 
-    // 验证锁文件已创建
+    // 验证锁目录已创建
     const lockFile = join(tempDir, ".actiondock.data.lock");
     expect(existsSync(lockFile)).toBe(true);
 
-    const lockData = JSON.parse(readFileSync(lockFile, "utf8"));
+    const metaFile = statSync(lockFile).isDirectory() ? join(lockFile, "metadata.json") : lockFile;
+    const lockData = JSON.parse(readFileSync(metaFile, "utf8"));
     expect(lockData.pid).toBe(process.pid);
     expect(lockData.sessionToken).toBeDefined();
 
@@ -276,13 +278,14 @@ describe("数据目录排他锁与 Schema 版本保护测试", () => {
       createdAt: new Date().toISOString(),
       childPids: [],
     };
-    writeFileSync(lockFile, JSON.stringify(otherLockInfo, null, 2), { mode: 0o600 });
+    const metaPath = statSync(lockFile).isDirectory() ? join(lockFile, "metadata.json") : lockFile;
+    writeFileSync(metaPath, JSON.stringify(otherLockInfo, null, 2), { mode: 0o600 });
 
     // 旧锁实例尝试 release，由于 sessionToken 不匹配，磁盘文件不会被删除
     lock.release();
     expect(existsSync(lockFile)).toBe(true);
 
-    const onDisk = JSON.parse(readFileSync(lockFile, "utf8"));
+    const onDisk = JSON.parse(readFileSync(metaPath, "utf8"));
     expect(onDisk.sessionToken).toBe("other-session-token");
   });
 
@@ -428,5 +431,45 @@ rl.on("line", (cmd) => {
     );
 
     expect(existsSync(lockFile)).toBe(false);
+  });
+
+  it("覆盖元数据写入过程中并发读取与锁竞争保护，验证不会因元数据临时缺失而误判锁死亡", async () => {
+    const lockDir = join(tempDir, ".actiondock.data.lock");
+    // 模拟所有者刚刚原子创建锁目录，但尚未完成 metadata.json 写入
+    mkdirSync(lockDir, { mode: 0o700 });
+    expect(existsSync(lockDir)).toBe(true);
+
+    const metaJsonPath = join(lockDir, "metadata.json");
+    const validInfo = {
+      pid: process.pid,
+      hostname: "test-host",
+      sessionToken: "session-active",
+      createdAt: new Date().toISOString(),
+      childPids: [],
+    };
+
+    // 启动工作线程在 60ms 后写入合法元数据，模拟并发所有者完成写入过程
+    const workerScript = `
+      const fs = require("node:fs");
+      setTimeout(() => {
+        fs.writeFileSync(${JSON.stringify(metaJsonPath)}, ${JSON.stringify(JSON.stringify(validInfo, null, 2))}, { mode: 0o600 });
+      }, 60);
+    `;
+    const worker = new Worker(workerScript, { eval: true });
+
+    // 并发方尝试抢锁：应当触发宽限期等待重试，严禁将缺少元数据的目录当成陈旧锁删除
+    let caughtError: any;
+    try {
+      DataDirLock.acquire(tempDir);
+    } catch (err) {
+      caughtError = err;
+    } finally {
+      await worker.terminate();
+    }
+
+    // 验证锁目录未被误删，且在读到合法元数据后正确识别活跃持有者并抛出 DATA_DIR_IN_USE
+    expect(existsSync(lockDir)).toBe(true);
+    expect(caughtError).toBeDefined();
+    expect(caughtError?.code).toBe("DATA_DIR_IN_USE");
   });
 });

@@ -220,5 +220,46 @@ describe("WorkerSqliteDriver 工作线程驱动测试", () => {
 
     await driver.close();
   });
+
+  it("函数式事务在 async callback await 之后调用 run 逃逸写入被彻底拦截", async () => {
+    const dbPath = join(tempDir, "worker-async-escape.db");
+    const driver = new WorkerSqliteDriver(dbPath);
+
+    await driver.exec(`
+      CREATE TABLE escape_test (
+        id TEXT PRIMARY KEY,
+        val TEXT NOT NULL
+      );
+    `);
+
+    let postAwaitError: any = null;
+
+    // 提交包含 await 的 async callback 事务
+    await expect(
+      driver.transaction(async () => {
+        // 先进行 await 延时
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        // 在 await 之后再次调用 driver.run 执行插入
+        try {
+          await driver.run("INSERT INTO escape_test (id, val) VALUES (?, ?)", "id-escape", "val-escape");
+        } catch (err) {
+          postAwaitError = err;
+        }
+      })
+    ).rejects.toThrow(/WORKER_TRANSACTION_ASYNC_FORBIDDEN/);
+
+    // 等待 async callback 中的延时与写操作完全结算
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // 验证 await 后续的写操作被彻底拦截并抛出 WORKER_TRANSACTION_ASYNC_FORBIDDEN 错误
+    expect(postAwaitError).toBeDefined();
+    expect(postAwaitError.message).toMatch(/WORKER_TRANSACTION_ASYNC_FORBIDDEN/);
+
+    // 数据库中绝对没有任何数据被写入
+    const rows = await driver.all("SELECT * FROM escape_test");
+    expect(rows.length).toBe(0);
+
+    await driver.close();
+  });
 });
 

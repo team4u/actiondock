@@ -1,7 +1,121 @@
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync, writeSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+  writeSync,
+} from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+
+/**
+ * 同步休眠指定毫秒数。
+ */
+function sleepSync(ms: number): void {
+  try {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  } catch {
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      // 降级忙等待
+    }
+  }
+}
+
+/**
+ * 获取排他锁路径最近一次修改时间戳。
+ */
+function getLockMtimeMs(lockPath: string, isDir: boolean): number {
+  try {
+    const stat = statSync(lockPath);
+    let mtime = Math.max(stat.mtimeMs, (stat as any).ctimeMs ?? 0);
+    if (isDir) {
+      const metaPath = join(lockPath, "metadata.json");
+      if (existsSync(metaPath)) {
+        const metaStat = statSync(metaPath);
+        mtime = Math.max(mtime, metaStat.mtimeMs, (metaStat as any).ctimeMs ?? 0);
+      }
+    }
+    return mtime;
+  } catch {
+    return Date.now();
+  }
+}
+
+/**
+ * 读取排他锁元数据并执行宽限期检测。
+ */
+function readLockWithGracePeriod(
+  lockPath: string,
+  gracePeriodMs = 3000
+): { exists: boolean; isDir: boolean; info?: DataDirLockInfo; inGracePeriod: boolean } {
+  if (!existsSync(lockPath)) {
+    return { exists: false, isDir: false, inGracePeriod: false };
+  }
+
+  let isDir = false;
+  try {
+    isDir = statSync(lockPath).isDirectory();
+  } catch {
+    return { exists: false, isDir: false, inGracePeriod: false };
+  }
+
+  const metaPath = isDir ? join(lockPath, "metadata.json") : lockPath;
+
+  const tryParse = (): DataDirLockInfo | undefined => {
+    try {
+      if (existsSync(metaPath)) {
+        const raw = readFileSync(metaPath, "utf8");
+        if (raw.trim().length > 0) {
+          const parsed = JSON.parse(raw) as DataDirLockInfo;
+          if (parsed && typeof parsed.pid === "number") {
+            return parsed;
+          }
+        }
+      }
+    } catch {
+      // 损坏或并发写入中
+    }
+    return undefined;
+  };
+
+  const initialInfo = tryParse();
+  if (initialInfo) {
+    return { exists: true, isDir, info: initialInfo, inGracePeriod: false };
+  }
+
+  // 元数据缺失或不可解析，检查修改时间是否在宽限期内
+  const mtime = getLockMtimeMs(lockPath, isDir);
+  const age = Date.now() - mtime;
+  if (age < gracePeriodMs) {
+    // 处于宽限期内，说明并发所有者可能正在写入，进行有限次重试等待
+    const maxRetries = 20;
+    for (let i = 0; i < maxRetries; i++) {
+      sleepSync(50);
+      const retriedInfo = tryParse();
+      if (retriedInfo) {
+        return { exists: true, isDir, info: retriedInfo, inGracePeriod: false };
+      }
+      if (!existsSync(lockPath)) {
+        return { exists: false, isDir: false, inGracePeriod: false };
+      }
+    }
+
+    const currentAge = Date.now() - getLockMtimeMs(lockPath, isDir);
+    if (currentAge < gracePeriodMs) {
+      return { exists: true, isDir, inGracePeriod: true };
+    }
+  }
+
+  return { exists: true, isDir, inGracePeriod: false };
+}
 
 /**
  * 数据目录排他锁元数据契约。
@@ -44,12 +158,12 @@ export function isProcessAlive(pid: number): boolean {
  * 防止多个无协调宿主并发冲突，并在非正常退出时提供故障恢复检测。
  */
 export class DataDirLock {
-  private readonly lockFilePath: string;
+  private readonly lockDirPath: string;
   private readonly info: DataDirLockInfo;
   private released = false;
 
-  constructor(lockFilePath: string, info: DataDirLockInfo) {
-    this.lockFilePath = lockFilePath;
+  constructor(lockDirPath: string, info: DataDirLockInfo) {
+    this.lockDirPath = lockDirPath;
     this.info = info;
   }
 
@@ -94,27 +208,58 @@ export class DataDirLock {
 
   /**
    * 将当前锁元数据刷新持久化至磁盘文件。
+   * 先写入临时文件再通过 renameSync 原子替换，消除 truncate 空文件窗口。
    */
   private flush(): void {
     try {
-      writeFileSync(this.lockFilePath, JSON.stringify(this.info, null, 2), { mode: 0o600 });
+      let isDir = false;
+      try {
+        isDir = existsSync(this.lockDirPath) && statSync(this.lockDirPath).isDirectory();
+      } catch {
+        isDir = false;
+      }
+
+      const content = JSON.stringify(this.info, null, 2);
+      if (isDir) {
+        const metaPath = join(this.lockDirPath, "metadata.json");
+        const tmpPath = join(
+          this.lockDirPath,
+          `metadata.json.tmp.${process.pid}.${randomUUID().slice(0, 8)}`
+        );
+        writeFileSync(tmpPath, content, { mode: 0o600 });
+        renameSync(tmpPath, metaPath);
+      } else {
+        // 兼容单文件模式
+        const tmpPath = `${this.lockDirPath}.tmp.${process.pid}.${randomUUID().slice(0, 8)}`;
+        writeFileSync(tmpPath, content, { mode: 0o600 });
+        renameSync(tmpPath, this.lockDirPath);
+      }
     } catch {
       // 忽略刷新写入异常
     }
   }
 
   /**
-   * 释放排他锁并移除锁文件。
+   * 释放排他锁并移除锁目录或文件。
    */
   release(): void {
     if (this.released) return;
     this.released = true;
     try {
-      if (existsSync(this.lockFilePath)) {
-        const raw = readFileSync(this.lockFilePath, "utf8");
-        const onDisk = JSON.parse(raw) as DataDirLockInfo;
-        if (onDisk && onDisk.sessionToken === this.info.sessionToken) {
-          unlinkSync(this.lockFilePath);
+      if (existsSync(this.lockDirPath)) {
+        let isDir = false;
+        try {
+          isDir = statSync(this.lockDirPath).isDirectory();
+        } catch {
+          isDir = false;
+        }
+        const metaPath = isDir ? join(this.lockDirPath, "metadata.json") : this.lockDirPath;
+        if (existsSync(metaPath)) {
+          const raw = readFileSync(metaPath, "utf8");
+          const onDisk = JSON.parse(raw) as DataDirLockInfo;
+          if (onDisk && onDisk.sessionToken === this.info.sessionToken) {
+            rmSync(this.lockDirPath, { recursive: true, force: true });
+          }
         }
       }
     } catch {
@@ -126,11 +271,12 @@ export class DataDirLock {
    * 尝试获取指定数据目录的排他锁。
    *
    * 仲裁规则：
-   * - 若锁文件不存在，原子创建写入并持有锁。
-   * - 若锁文件已存在（openSync 捕获 EEXIST），解析持有者进程状态：
-   *   - 若主进程仍处于存活状态，抛出 DATA_DIR_IN_USE 错误拒绝并发启动。
-   *   - 若主进程已退出但仍有子进程存活，抛出 DATA_DIR_RECOVERY_REQUIRED 错误。
-   *   - 若主进程与所有子进程均已退出，允许接管覆盖锁并清理残留旧会话。
+   * - 基于原子目录创建 mkdirSync(lockDirPath, { mode: 0o700 }) 确立所有权，并在其下存放 metadata.json。
+   * - 兼容已有常规文件锁（如老版本或测试 mock 场景）。
+   * - 若锁目录已存在，通过宽限期机制防止将并发写入中的元数据误判为锁死亡。
+   * - 若主进程仍处于存活状态，抛出 DATA_DIR_IN_USE 错误拒绝并发启动。
+   * - 若主进程已退出但仍有子进程存活，抛出 DATA_DIR_RECOVERY_REQUIRED 错误。
+   * - 若主进程与所有子进程均已退出（或超过宽限期的陈旧损坏锁），通过接管协调安全移除并接管。
    *
    * @param dataDir 目标数据存储目录物理绝对路径
    * @param options 锁配置参数
@@ -143,8 +289,8 @@ export class DataDirLock {
       mkdirSync(dataDir, { recursive: true, mode: 0o700 });
     }
 
-    const lockFilePath = join(dataDir, ".actiondock.data.lock");
-    const takeoverPath = `${lockFilePath}.takeover`;
+    const lockDirPath = join(dataDir, ".actiondock.data.lock");
+    const takeoverPath = `${lockDirPath}.takeover`;
     const currentPid = process.pid;
     const currentHost = hostname();
     const token = options.sessionToken || randomUUID();
@@ -160,44 +306,47 @@ export class DataDirLock {
 
     while (true) {
       try {
-        const fd = openSync(lockFilePath, "wx", 0o600);
-        try {
-          writeSync(fd, content);
-        } finally {
-          closeSync(fd);
-        }
-        return new DataDirLock(lockFilePath, newLockInfo);
+        mkdirSync(lockDirPath, { mode: 0o700 });
+        const metaPath = join(lockDirPath, "metadata.json");
+        const tmpPath = join(
+          lockDirPath,
+          `metadata.json.tmp.${currentPid}.${randomUUID().slice(0, 8)}`
+        );
+        writeFileSync(tmpPath, content, { mode: 0o600 });
+        renameSync(tmpPath, metaPath);
+        return new DataDirLock(lockDirPath, newLockInfo);
       } catch (err: any) {
         if (err && err.code === "EEXIST") {
-          let existing: DataDirLockInfo | undefined;
-          try {
-            const raw = readFileSync(lockFilePath, "utf8");
-            if (raw.trim().length > 0) {
-              existing = JSON.parse(raw) as DataDirLockInfo;
-            }
-          } catch {
-            // 损坏或并发写入中的锁文件
+          const lockState = readLockWithGracePeriod(lockDirPath, 3000);
+
+          if (!lockState.exists) {
+            continue;
           }
 
-          if (existing && typeof existing.pid === "number") {
-            const parentAlive = isProcessAlive(existing.pid);
+          if (lockState.inGracePeriod) {
+            sleepSync(50);
+            continue;
+          }
+
+          if (lockState.info && typeof lockState.info.pid === "number") {
+            const parentAlive = isProcessAlive(lockState.info.pid);
 
             if (parentAlive) {
               const inUseErr: any = new Error(
-                `DATA_DIR_IN_USE: Data directory '${dataDir}' is in use by another active Host process (PID ${existing.pid})`
+                `DATA_DIR_IN_USE: Data directory '${dataDir}' is in use by another active Host process (PID ${lockState.info.pid})`
               );
               inUseErr.code = "DATA_DIR_IN_USE";
               throw inUseErr;
             }
 
             // 主进程已死亡，检查关联子进程存活状态
-            const activeChildren = (existing.childPids || []).filter((childPid) =>
+            const activeChildren = (lockState.info.childPids || []).filter((childPid) =>
               isProcessAlive(childPid)
             );
 
             if (activeChildren.length > 0) {
               const recoveryErr: any = new Error(
-                `DATA_DIR_RECOVERY_REQUIRED: Data directory recovery required for '${dataDir}': previous host (PID ${existing.pid}) exited but child processes (${activeChildren.join(
+                `DATA_DIR_RECOVERY_REQUIRED: Data directory recovery required for '${dataDir}': previous host (PID ${lockState.info.pid}) exited but child processes (${activeChildren.join(
                   ", "
                 )}) are still running`
               );
@@ -206,7 +355,7 @@ export class DataDirLock {
             }
           }
 
-          // 主进程与所有子进程均已退出（或损坏的锁文件），确认陈旧锁后通过接管锁协调 unlink 并重试 openSync("wx") 循环竞争
+          // 主进程与所有子进程均已退出（或超过宽限期的损坏锁），确认陈旧锁后通过接管锁协调清理并重试
           let takeoverFd: number | null = null;
           try {
             takeoverFd = openSync(takeoverPath, "wx", 0o600);
@@ -234,26 +383,25 @@ export class DataDirLock {
               // 忽略接管标记写入异常
             }
 
-            let recheck: DataDirLockInfo | undefined;
-            try {
-              const recheckRaw = readFileSync(lockFilePath, "utf8");
-              if (recheckRaw.trim().length > 0) {
-                recheck = JSON.parse(recheckRaw) as DataDirLockInfo;
-              }
-            } catch {
-              // 忽略二次读取解析异常
+            const recheckState = readLockWithGracePeriod(lockDirPath, 1000);
+            if (recheckState.inGracePeriod) {
+              continue;
             }
 
-            if (recheck && typeof recheck.pid === "number" && isProcessAlive(recheck.pid)) {
+            if (
+              recheckState.info &&
+              typeof recheckState.info.pid === "number" &&
+              isProcessAlive(recheckState.info.pid)
+            ) {
               const inUseErr: any = new Error(
-                `DATA_DIR_IN_USE: Data directory '${dataDir}' is in use by another active Host process (PID ${recheck.pid})`
+                `DATA_DIR_IN_USE: Data directory '${dataDir}' is in use by another active Host process (PID ${recheckState.info.pid})`
               );
               inUseErr.code = "DATA_DIR_IN_USE";
               throw inUseErr;
             }
 
             try {
-              unlinkSync(lockFilePath);
+              rmSync(lockDirPath, { recursive: true, force: true });
             } catch {
               // 忽略解绑异常
             }

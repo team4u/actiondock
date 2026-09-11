@@ -2,7 +2,7 @@ import { CAPABILITY_UNAVAILABLE } from "../../errors";
 import { resolveEnvValue } from "../../runtime";
 import { isSecretConfigKey, maskSecretValue, sanitizeConfigDefinitions } from "../../storage";
 import { readJsonBody } from "../body";
-import { getSubPath, jsonResponse, resolveAppForPackage, type RouteContext } from "./common";
+import { assertPackageAllowed, getSubPath, jsonResponse, resolveAppForPackage, type RouteContext } from "./common";
 
 /**
  * 处理配置元数据与当前值读取、更新及删除接口。
@@ -40,7 +40,11 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
   if (subpath === "/config/env" && req.method === "GET") {
     try {
       const pkgParam = url.searchParams.get("package") || url.searchParams.get("packageId") || undefined;
-      const app = resolveAppForPackage(pkgParam, host, target);
+      if (pkgParam) {
+        assertPackageAllowed(pkgParam, options);
+      }
+      const app = resolveAppForPackage(pkgParam, host, target, options);
+      assertPackageAllowed(app.packageId, options);
       const declared = app.projectConfig?.config || {};
       const envChecks: any[] = [];
       for (const [k, def] of Object.entries(declared as Record<string, any>)) {
@@ -57,6 +61,19 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
       }
       return jsonResponse({ ok: true, packageId: app.packageId, envChecks }, 200, corsHeaders);
     } catch (err: any) {
+      if (err.code === "PACKAGE_NOT_ALLOWED" || err.status === 403) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: "PACKAGE_NOT_ALLOWED",
+              message: err.message || "Package is not in the allowed package list",
+            },
+          },
+          403,
+          corsHeaders
+        );
+      }
       const isClient =
         err.message?.includes("Unknown or unregistered package") ||
         err.message?.includes("Invalid packageId") ||
@@ -73,7 +90,11 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
   if (subpath === "/config" && req.method === "GET") {
     try {
       const pkgParam = url.searchParams.get("package") || url.searchParams.get("packageId") || undefined;
-      const app = resolveAppForPackage(pkgParam, host, target);
+      if (pkgParam) {
+        assertPackageAllowed(pkgParam, options);
+      }
+      const app = resolveAppForPackage(pkgParam, host, target, options);
+      assertPackageAllowed(app.packageId, options);
       const stored = app.storage.listConfig();
       const rawDeclared = app.projectConfig?.config || {};
       const declared = sanitizeConfigDefinitions(rawDeclared) || {};
@@ -91,6 +112,19 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
         corsHeaders
       );
     } catch (err: any) {
+      if (err.code === "PACKAGE_NOT_ALLOWED" || err.status === 403) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: "PACKAGE_NOT_ALLOWED",
+              message: err.message || "Package is not in the allowed package list",
+            },
+          },
+          403,
+          corsHeaders
+        );
+      }
       const isClient =
         err.message?.includes("Unknown or unregistered package") ||
         err.message?.includes("Invalid packageId") ||
@@ -108,7 +142,11 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
     try {
       const body = await readJsonBody(req, { maxBytes: options.maxBodyBytes });
       const pkgParam = url.searchParams.get("package") || url.searchParams.get("packageId") || body.package || undefined;
-      const app = resolveAppForPackage(pkgParam, host, target);
+      if (pkgParam) {
+        assertPackageAllowed(pkgParam, options);
+      }
+      const app = resolveAppForPackage(pkgParam, host, target, options);
+      assertPackageAllowed(app.packageId, options);
       const key = body.key;
       if (!key) {
         return jsonResponse(
@@ -120,6 +158,19 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
       await app.setConfig(key, body.value);
       return jsonResponse({ ok: true, packageId: app.packageId, key, message: "updated" }, 200, corsHeaders);
     } catch (err: any) {
+      if (err.code === "PACKAGE_NOT_ALLOWED" || err.status === 403) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: "PACKAGE_NOT_ALLOWED",
+              message: err.message || "Package is not in the allowed package list",
+            },
+          },
+          403,
+          corsHeaders
+        );
+      }
       const isClient =
         err.message?.includes("Unknown or unregistered package") ||
         err.message?.includes("Invalid packageId") ||
@@ -138,10 +189,27 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
     try {
       const key = decodeURIComponent(configKeyMatch[1]);
       const pkgParam = url.searchParams.get("package") || url.searchParams.get("packageId") || undefined;
-      const app = resolveAppForPackage(pkgParam, host, target);
+      if (pkgParam) {
+        assertPackageAllowed(pkgParam, options);
+      }
+      const app = resolveAppForPackage(pkgParam, host, target, options);
+      assertPackageAllowed(app.packageId, options);
       const deleted = app.storage.deleteConfig(key);
       return jsonResponse({ ok: true, packageId: app.packageId, key, deleted }, 200, corsHeaders);
     } catch (err: any) {
+      if (err.code === "PACKAGE_NOT_ALLOWED" || err.status === 403) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: "PACKAGE_NOT_ALLOWED",
+              message: err.message || "Package is not in the allowed package list",
+            },
+          },
+          403,
+          corsHeaders
+        );
+      }
       const isClient =
         err.message?.includes("Unknown or unregistered package") ||
         err.message?.includes("Invalid packageId") ||

@@ -765,4 +765,73 @@ actions:
       rmSync(tempBase, { recursive: true, force: true });
     }
   });
+
+  it("当工程存在待恢复事务且恢复失败时，createActionDockHost 抛出异常阻止 Host 启动", async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "ad-host-recovery-fail-"));
+
+    try {
+      writeFileSync(
+        join(tempDir, "actiondock.json"),
+        JSON.stringify({
+          id: "pkg.recovery-fail",
+          name: "事务恢复失败工程",
+          version: "1.0.0",
+        })
+      );
+
+      // 构造待恢复事务
+      const txDir = join(tempDir, ".actiondock", "transactions", "tx-crash-fail");
+      const snapDir = join(txDir, "snapshot");
+      mkdirSync(snapDir, { recursive: true });
+
+      // 快照中包含 package.json
+      writeFileSync(
+        join(snapDir, "package.json"),
+        JSON.stringify({
+          name: "pkg.recovery-fail",
+          dependencies: { "unmatched-dep-xyz": "1.0.0" },
+        })
+      );
+
+      writeFileSync(
+        join(txDir, "transaction.json"),
+        JSON.stringify({
+          id: "tx-crash-fail",
+          status: "pending",
+          createdAt: Date.now(),
+          files: [{ name: "package.json", existed: true }],
+        })
+      );
+
+      // 准备冲突的 package.json 与 package-lock.json，确保冻结安装直接报错
+      writeFileSync(
+        join(tempDir, "package.json"),
+        JSON.stringify({
+          name: "pkg.recovery-fail",
+          dependencies: { "unmatched-dep-xyz": "1.0.0" },
+        })
+      );
+      writeFileSync(
+        join(tempDir, "package-lock.json"),
+        JSON.stringify({ name: "pkg.recovery-fail", lockfileVersion: 3 })
+      );
+
+      // 验证 createActionDockHost 抛出异常并阻止 Host 启动
+      let caughtError: any;
+      try {
+        await createActionDockHost({
+          projectRoot: tempDir,
+          autoLoadCurrentProject: true,
+        });
+      } catch (err) {
+        caughtError = err;
+      }
+
+      expect(caughtError).toBeDefined();
+      expect(caughtError?.code).toBe("PROJECT_RECOVERY_REQUIRED");
+      expect(caughtError?.message).toContain("PROJECT_RECOVERY_REQUIRED");
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
 });

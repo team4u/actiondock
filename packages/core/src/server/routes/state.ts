@@ -1,7 +1,7 @@
 import { decodeStateKey } from "../../storage";
 import { CAPABILITY_UNAVAILABLE, STATE_KEY_NOT_FOUND } from "../../errors";
 import { readJsonBody } from "../body";
-import { getSubPath, jsonResponse, resolveAppForPackage, type RouteContext } from "./common";
+import { assertPackageAllowed, getSubPath, jsonResponse, resolveAppForPackage, type RouteContext } from "./common";
 
 /**
  * 处理状态键名列表、读取、写入、删除及清空接口。
@@ -43,13 +43,30 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
       const nsParam = url.searchParams.get("namespace") ?? undefined;
       const prefix = url.searchParams.get("prefix") || "";
 
-      const app = resolveAppForPackage(pkgParam, host, target);
+      if (pkgParam) {
+        assertPackageAllowed(pkgParam, options);
+      }
+      const app = resolveAppForPackage(pkgParam, host, target, options);
+      assertPackageAllowed(app.packageId, options);
       const effectiveNs = actionParam
         ? (nsParam !== undefined ? `${actionParam}:${nsParam}` : actionParam)
         : (nsParam !== undefined ? nsParam : null);
       const keys = await app.storage.listStateKeys(effectiveNs, prefix);
       return jsonResponse({ ok: true, packageId: app.packageId, keys }, 200, corsHeaders);
     } catch (err: any) {
+      if (err.code === "PACKAGE_NOT_ALLOWED" || err.status === 403) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: "PACKAGE_NOT_ALLOWED",
+              message: err.message || "Package is not in the allowed package list",
+            },
+          },
+          403,
+          corsHeaders
+        );
+      }
       const isClient =
         err.message?.includes("Unknown or unregistered package") ||
         err.message?.includes("Invalid packageId") ||
@@ -71,7 +88,11 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
       const baseNs = body.namespace ?? (url.searchParams.get("namespace") || undefined);
       const effectiveNs = actionParam ? (baseNs ? `${actionParam}:${baseNs}` : actionParam) : baseNs;
 
-      const app = resolveAppForPackage(pkgParam, host, target);
+      if (pkgParam) {
+        assertPackageAllowed(pkgParam, options);
+      }
+      const app = resolveAppForPackage(pkgParam, host, target, options);
+      assertPackageAllowed(app.packageId, options);
       const clearedCount = await app.storage.clearState({
         namespace: effectiveNs,
         all: Boolean(body.all ?? url.searchParams.get("all") === "true"),
@@ -79,6 +100,19 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
       });
       return jsonResponse({ ok: true, packageId: app.packageId, clearedCount }, 200, corsHeaders);
     } catch (err: any) {
+      if (err.code === "PACKAGE_NOT_ALLOWED" || err.status === 403) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: "PACKAGE_NOT_ALLOWED",
+              message: err.message || "Package is not in the allowed package list",
+            },
+          },
+          403,
+          corsHeaders
+        );
+      }
       const isClient =
         err.message?.includes("Unknown or unregistered package") ||
         err.message?.includes("Invalid packageId") ||
@@ -100,7 +134,11 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
       const actionParam = url.searchParams.get("action") || url.searchParams.get("actionId") || "";
       const nsParam = url.searchParams.get("namespace") || undefined;
       const effectiveNs = actionParam ? (nsParam ? `${actionParam}:${nsParam}` : actionParam) : nsParam;
-      const app = resolveAppForPackage(pkgParam, host, target);
+      if (pkgParam) {
+        assertPackageAllowed(pkgParam, options);
+      }
+      const app = resolveAppForPackage(pkgParam, host, target, options);
+      assertPackageAllowed(app.packageId, options);
 
       if (req.method === "GET") {
         const entry = await app.storage.findState(key, effectiveNs);
@@ -161,6 +199,19 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
         return jsonResponse({ ok: true, packageId: app.packageId, key, deleted: true }, 200, corsHeaders);
       }
     } catch (err: any) {
+      if (err.code === "PACKAGE_NOT_ALLOWED" || err.status === 403) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: "PACKAGE_NOT_ALLOWED",
+              message: err.message || "Package is not in the allowed package list",
+            },
+          },
+          403,
+          corsHeaders
+        );
+      }
       const isClient =
         err.message?.includes("Unknown or unregistered package") ||
         err.message?.includes("Invalid packageId") ||
