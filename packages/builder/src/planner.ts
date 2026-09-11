@@ -545,10 +545,12 @@ export class SelectionPlanner {
           "ENTRY_FILE_NOT_FOUND"
         );
       }
+      const isExternal = closure.externalActionRoots.has(actId) || actId.includes("/");
       actionDependencies.push({
         id: actId,
         entry: entry.entry,
         resolvedPath,
+        isExternal,
         uses: entry.uses || [],
         description: entry.description,
         inputSchema: entry.inputSchema,
@@ -797,6 +799,8 @@ export class SelectionPlanner {
       external: externalDependencies,
     };
 
+    const externalRoots = Array.from(new Set(closure.externalActionRoots.values()));
+
     const planResult: SelectionPlan = {
       packageId: config.id,
       packageName: config.name || config.id,
@@ -812,6 +816,7 @@ export class SelectionPlanner {
       files: declaredFiles.files,
       configDefs: config.config,
       lockfile: lockfileInfo,
+      externalProjectRoots: externalRoots,
       metadata: {
         plannedAt: new Date().toISOString(),
         schemaVersion: 2,

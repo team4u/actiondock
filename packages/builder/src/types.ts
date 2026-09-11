@@ -26,6 +26,8 @@ export interface ActionDependency {
   resolvedPath: string;
   /** 静态依赖的下游 Action ID 列表 */
   uses: string[];
+  /** 是否为来自外部依赖包中的 Action */
+  isExternal?: boolean;
   /** Action 功能描述 */
   description?: string;
   /** 入参校验模式 */
@@ -126,6 +128,8 @@ export interface BuildPlan {
   files?: string[];
   /** 声明的配置定义字典 */
   configDefs?: Record<string, unknown>;
+  /** 依赖闭包包含的外部已链接包项目根目录列表（去重） */
+  externalProjectRoots?: string[];
   /** 检测到的锁文件信息 */
   lockfile?: LockfileInfo;
   /** 规划元数据 */
@@ -338,6 +342,12 @@ export interface SkillExporterOptions {
   requireReproducible?: boolean;
   /** 是否跳过本地相对依赖完整性校验（默认 false） */
   skipDependencyValidation?: boolean;
+  /** 内部标识：是否作为复合套件子包导出（避免闭包再次触发嵌套 mini-workspace） */
+  _isSubpackage?: boolean;
+  /** 自定义复合技能说明书文件路径 */
+  customMdPath?: string;
+  /** 所属 Workspace 根目录（可选） */
+  workspaceRoot?: string;
 
   /**
    * 已废弃的独立单文件编译选项。

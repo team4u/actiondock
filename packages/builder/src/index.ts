@@ -17,6 +17,7 @@ export {
 // 清单组装与依赖协议校验
 export {
   assertNoFileProtocolDeps,
+  assertValidManifestActionIds,
   serializeManifestAction,
   serializeManifestPlaybooks,
   serializePlanManifest,

@@ -15,11 +15,14 @@ import { tmpdir } from "node:os";
 import { basename, join, relative, resolve, sep } from "node:path";
 import {
   type ActionDockManifest,
+  ACTION_ID_REGEX,
   initProject,
   linkPackage,
+  loadActions,
   saveManifest,
 } from "@actiondock/core";
 import {
+  assertValidManifestActionIds,
   buildPlan,
   BuildPlanner,
   buildProject,
@@ -31,6 +34,7 @@ import {
   getInternalDependencyVersion,
   selectionPlan,
   SelectionPlanner,
+  serializePlanManifest,
   SkillExporter,
   createTarGzArchive,
   createZipArchive,
@@ -1278,6 +1282,125 @@ export default defineAction({
         expect(entries.get(fileKey!)?.toString("utf-8")).toBe("hello long path");
       } finally {
         rmSync(archiveDir, { recursive: true, force: true });
+      }
+    });
+
+    it("在写入端强制自检：assertValidManifestActionIds 拦截不符合规范的 Action ID", () => {
+      // 合法 ID 校验通过
+      expect(() => {
+        assertValidManifestActionIds({
+          "sample.greet": { entry: "actions/greet.ts" },
+          "valid_action-123": { entry: "actions/valid.ts" },
+        });
+      }).not.toThrow();
+
+      // 拦截包含命名空间分隔符 / 的 Action ID
+      expect(() => {
+        assertValidManifestActionIds({
+          "test.ext-tools/calc": { entry: "actions/calc.ts" },
+        });
+      }).toThrow(BuilderError);
+
+      // 拦截包含大写字母与非法符号的 Action ID
+      expect(() => {
+        assertValidManifestActionIds({
+          "Invalid_Upper": { entry: "actions/test.ts" },
+        });
+      }).toThrow(BuilderError);
+    });
+
+    it("往返测试：export skill --bundle 与单包源码导出对每个导出包运行 loadActions 零错误", async () => {
+      const extDir = mkdtempSync(join(tmpdir(), "ext-roundtrip-"));
+      try {
+        initProject(extDir, { id: "test.ext-tools", name: "External Tools" });
+        writeFileSync(
+          join(extDir, "actions", "calc.ts"),
+          `import { defineAction } from "@actiondock/sdk"; export default defineAction({ id: "calc", run: () => 42 });`
+        );
+        const extManifest = JSON.parse(readFileSync(join(extDir, "actiondock.json"), "utf-8"));
+        extManifest.actions = {
+          calc: { entry: "actions/calc.ts", description: "Calculate action" },
+        };
+        writeFileSync(join(extDir, "actiondock.json"), JSON.stringify(extManifest, null, 2));
+        await linkPackage(extDir);
+
+        // 主包 sample.greet 声明依赖外部包的 test.ext-tools/calc
+        const mainManifestPath = join(tempDir, "actiondock.json");
+        const mainManifest = JSON.parse(readFileSync(mainManifestPath, "utf-8"));
+        mainManifest.actions["sample.greet"] = {
+          entry: "actions/greet.ts",
+          uses: ["test.ext-tools/calc"],
+        };
+        writeFileSync(mainManifestPath, JSON.stringify(mainManifest, null, 2));
+
+        // 1. 测试 exportCompositeSkill (即 export skill --bundle)
+        const bundleOut = join(tempDir, "dist", "roundtrip-bundle");
+        const compositeRes = await exportCompositeSkill({
+          bundleName: "test-roundtrip-suite",
+          projectRoots: [tempDir],
+          outDir: bundleOut,
+        });
+
+        expect(compositeRes.packagesCount).toBe(2);
+        const exportedPkgsDir = join(bundleOut, "packages");
+        expect(existsSync(exportedPkgsDir)).toBe(true);
+
+        const subpkgs = readdirSync(exportedPkgsDir);
+        expect(subpkgs).toContain("builder-fixture");
+        expect(subpkgs).toContain("ext-tools");
+
+        // 验证主包清单只包含自有 Action，跨包依赖不写入主包清单
+        const mainExportedManifest = JSON.parse(
+          readFileSync(join(exportedPkgsDir, "builder-fixture", "actiondock.json"), "utf-8")
+        );
+        expect(Object.keys(mainExportedManifest.actions)).toEqual(["sample.greet"]);
+        expect(mainExportedManifest.actions["test.ext-tools/calc"]).toBeUndefined();
+        expect(mainExportedManifest.actions["calc"]).toBeUndefined();
+
+        // 验证跨包依赖不物化进消费包目录
+        expect(existsSync(join(exportedPkgsDir, "builder-fixture", "actions", "greet.ts"))).toBe(true);
+        expect(existsSync(join(exportedPkgsDir, "builder-fixture", "actions", "calc.ts"))).toBe(false);
+
+        // 验证外部依赖包整包完整保留
+        const extExportedManifest = JSON.parse(
+          readFileSync(join(exportedPkgsDir, "ext-tools", "actiondock.json"), "utf-8")
+        );
+        expect(Object.keys(extExportedManifest.actions)).toEqual(["calc"]);
+        expect(existsSync(join(exportedPkgsDir, "ext-tools", "actions", "calc.ts"))).toBe(true);
+
+        // 往返测试断言：对每个导出包执行 loadActions，必须零错误
+        for (const subpkg of subpkgs) {
+          const subpkgDir = join(exportedPkgsDir, subpkg);
+          const loaded = await loadActions(subpkgDir);
+          expect(loaded.size).toBeGreaterThan(0);
+          for (const [id] of loaded) {
+            expect(ACTION_ID_REGEX.test(id)).toBe(true);
+          }
+        }
+
+        // 2. 测试单包源码导出：如果依赖闭包含外部包，导成 mini-workspace 形态
+        const singleOut = join(tempDir, "dist", "roundtrip-single-ws");
+        const singleRes = await exportSkill({
+          projectRoot: tempDir,
+          mode: "source",
+          outDir: singleOut,
+        });
+
+        expect(existsSync(join(singleOut, "packages", "builder-fixture"))).toBe(true);
+        expect(existsSync(join(singleOut, "packages", "ext-tools"))).toBe(true);
+
+        // 对 mini-workspace 下的每个包执行 loadActions，零错误
+        const singleSubpkgs = readdirSync(join(singleOut, "packages"));
+        for (const subpkg of singleSubpkgs) {
+          const subpkgDir = join(singleOut, "packages", subpkg);
+          const loaded = await loadActions(subpkgDir);
+          expect(loaded.size).toBeGreaterThan(0);
+          for (const [id] of loaded) {
+            expect(ACTION_ID_REGEX.test(id)).toBe(true);
+          }
+        }
+      } finally {
+        rmSync(extDir, { recursive: true, force: true });
       }
     });
   });

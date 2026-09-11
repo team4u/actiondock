@@ -17,6 +17,7 @@ import { getPackageSlug, loadProjectConfig } from "@actiondock/core";
 import { BuilderError } from "./errors";
 import {
   assertNoFileProtocolDeps,
+  assertValidManifestActionIds,
   normalizePkgExportsAndEngines,
   readPackageJson,
   serializePlanManifest,
@@ -337,6 +338,10 @@ function writeManifestAndPkgJson(
     throw new BuilderError(
       "Packed manifest must not contain deprecated fields 'actionsDir' or 'playbooksDir'."
     );
+  }
+
+  if (packedConfig.actions && typeof packedConfig.actions === "object") {
+    assertValidManifestActionIds(packedConfig.actions as Record<string, unknown>);
   }
 
   writeFileSync(

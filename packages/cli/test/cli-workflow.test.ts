@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 setDefaultTimeout(120000);
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { ACTION_ID_REGEX, loadActions } from "@actiondock/core";
 
 const cliPath = resolve(import.meta.dirname, "../bin/ad.js");
 
@@ -52,7 +53,7 @@ describe("CLI Authoring & Build Workflow", () => {
     }
   });
 
-  it("completes full authoring workflow: init -> info -> validate -> run -> config -> state -> runs -> build -> export", () => {
+  it("completes full authoring workflow: init -> info -> validate -> run -> config -> state -> runs -> build -> export", async () => {
     // 1. init
     const initProc = runCli(
       ["init", "--id", "team.github-ops", "--name", "GitHub Ops", "."],
@@ -411,6 +412,21 @@ describe("CLI Authoring & Build Workflow", () => {
     expect(existsSync(join(bundleOut, "actiondock.skill.json"))).toBe(false);
     expect(existsSync(join(bundleOut, "packages", "github-ops"))).toBe(true);
     expect(existsSync(join(bundleOut, "packages", "github-ops", "SKILL.md"))).toBe(false);
+
+    // 往返校验：对每个导出包跑 loadActions 必须零错误
+    const exportedPackagesDir = join(bundleOut, "packages");
+    const subpkgs = readdirSync(exportedPackagesDir);
+    expect(subpkgs.length).toBeGreaterThan(0);
+    for (const subpkg of subpkgs) {
+      const subpkgDir = join(exportedPackagesDir, subpkg);
+      if (statSync(subpkgDir).isDirectory()) {
+        const loaded = await loadActions(subpkgDir);
+        expect(loaded.size).toBeGreaterThan(0);
+        for (const [id] of loaded) {
+          expect(ACTION_ID_REGEX.test(id)).toBe(true);
+        }
+      }
+    }
 
     // 10e. export skill validation tests: conflict rejection
     const conflictProc = runCli(["export", "skill", "--bundle", "suite", "--mode", "node"], tempDir);

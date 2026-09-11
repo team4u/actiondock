@@ -13,13 +13,13 @@ import {
 import { basename, dirname, join, resolve } from "node:path";
 import {
   ACTIONDOCK_VERSION,
+  STANDALONE_ASYNC_UNSUPPORTED,
   getPackageSlug,
 } from "@actiondock/core";
 import { createZipArchiveAsync } from "./archive";
-import { STANDALONE_ASYNC_UNSUPPORTED } from "@actiondock/core";
 import { BuilderError } from "./errors";
 import { collectRelativeFiles, getInternalDependencyVersion, moveDirAtomic } from "./fs-utils";
-import { serializePlanManifest } from "./manifest";
+import { assertValidManifestActionIds, serializePlanManifest } from "./manifest";
 import { SelectionPlanner } from "./planner";
 import type { BuildOptions, BuildResult, ExternalDependency, SelectionPlan } from "./types";
 
@@ -340,6 +340,9 @@ function stageSources(root: string, stagingDir: string, plan: SelectionPlan): st
  */
 function writeManifest(stagingDir: string, plan: SelectionPlan): void {
   const exportedConfig = serializePlanManifest(plan);
+  if (exportedConfig.actions && typeof exportedConfig.actions === "object") {
+    assertValidManifestActionIds(exportedConfig.actions as Record<string, unknown>);
+  }
   writeFileSync(
     join(stagingDir, "actiondock.json"),
     JSON.stringify(exportedConfig, null, 2) + "\n",

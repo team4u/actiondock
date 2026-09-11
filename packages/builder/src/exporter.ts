@@ -34,6 +34,7 @@ import {
 } from "./fs-utils";
 import {
   assertNoFileProtocolDeps,
+  assertValidManifestActionIds,
   resolveWorkspaceDepVersion,
   serializePlanManifest,
 } from "./manifest";
@@ -326,8 +327,10 @@ function stageSourceSkill(
   const exportedConfig = serializePlanManifest(plan, {
     omitEmptyConfig: true,
     includeDirs: { actionsDir, playbooksDir },
-    aliasShortIds: true,
   });
+  if (exportedConfig.actions && typeof exportedConfig.actions === "object") {
+    assertValidManifestActionIds(exportedConfig.actions as Record<string, unknown>);
+  }
   writeFileSync(
     join(skillDir, "actiondock.json"),
     JSON.stringify(exportedConfig, null, 2) + "\n",
@@ -343,8 +346,11 @@ function stageSourceSkill(
     copyFileSync(tsconfigPath, join(skillDir, "tsconfig.json"));
   }
 
-  // 拷贝 Action 源码文件，保留相对路径
+  // 拷贝 Action 源码文件，保留相对路径（仅拷贝自有 Action，跨包依赖不物化进消费包目录）
   for (const act of plan.actions) {
+    if (act.isExternal || act.id.includes("/")) {
+      continue;
+    }
     if (existsSync(act.resolvedPath)) {
       const destFile = join(skillDir, act.entry);
       mkdirSync(dirname(destFile), { recursive: true });
@@ -499,6 +505,7 @@ function writeCompositePkgJson(
     version: "0.1.0",
     description: options.description || `Composite Skill suite: ${options.bundleName}`,
     type: "module",
+    workspaces: ["packages/*"],
     dependencies: aggregatedDeps,
   };
   writeFileSync(
@@ -551,6 +558,41 @@ export class SkillExporter {
     const defaultFolderName = `${pkgSlug}-skill`;
     const defaultSkillDir = join(root, "dist", defaultFolderName);
     const targetSkillDir = resolve(options.outDir || defaultSkillDir);
+
+    const hasExternalDeps = Boolean(
+      plan.externalProjectRoots && plan.externalProjectRoots.length > 0
+    );
+
+    // 单包源码导出如果依赖闭包含外部包，导成 mini-workspace 形态（packages/ 下带齐依赖包），和 bundle 统一成一个交付形状
+    if (mode === "source" && !options._isSubpackage && hasExternalDeps) {
+      const allProjectRoots = Array.from(
+        new Set([root, ...plan.externalProjectRoots!])
+      );
+      const compositeRes = await this.exportComposite({
+        bundleName: plan.packageName || plan.packageId,
+        projectRoots: allProjectRoots,
+        outDir: targetSkillDir,
+        archive: options.archive,
+        archiveFormat: resolveArchiveFormat(options),
+        workspaceRoot: options.workspaceRoot,
+        skillMdPath: options.skillMdPath,
+        customMdPath: options.customMdPath,
+      });
+
+      return {
+        packageId: plan.packageId,
+        version: plan.version,
+        mode: "source",
+        skillDir: compositeRes.skillDir,
+        archivePath: compositeRes.archivePath,
+        actionsCount: compositeRes.actionsCount,
+        playbooksCount: compositeRes.playbooksCount,
+        actions: plan.actions.map((a) => a.id),
+        playbooks: plan.playbooks.map((p) => p.id),
+        files: compositeRes.files,
+        usedExistingSkillMd: compositeRes.usedExistingSkillMd,
+      };
+    }
 
     if (mode === "node") {
       return this.exportNodeSkill(root, targetSkillDir, plan, options, pkgSlug);
@@ -655,15 +697,19 @@ export class SkillExporter {
       archivePath = await createArchive(targetSkillDir, resolveArchiveFormat(options));
     }
 
+    const ownActions = plan.actions.filter(
+      (a) => !a.isExternal && !a.id.includes("/")
+    );
+
     return {
       packageId: plan.packageId,
       version: plan.version,
       mode: "source",
       skillDir: targetSkillDir,
       archivePath,
-      actionsCount: plan.actions.length,
+      actionsCount: ownActions.length,
       playbooksCount: plan.playbooks.length,
-      actions: plan.actions.map((a) => a.id),
+      actions: ownActions.map((a) => a.id),
       playbooks: plan.playbooks.map((p) => p.id),
       files: collectRelativeFiles(targetSkillDir),
       usedExistingSkillMd,
@@ -772,8 +818,26 @@ export class SkillExporter {
     let existingSkillPath: string | undefined;
 
     try {
+      // 收集并展开所有包含在依赖闭包中的外部项目根目录，确保 bundle 整包携带齐全部依赖
+      const effectiveRoots = new Set<string>();
+      for (const r of options.projectRoots) {
+        effectiveRoots.add(resolve(r));
+        if (!skillMdOnly) {
+          try {
+            const p = SelectionPlanner.plan({ projectRoot: r });
+            if (p.externalProjectRoots) {
+              for (const extRoot of p.externalProjectRoots) {
+                effectiveRoots.add(resolve(extRoot));
+              }
+            }
+          } catch {
+            // 忽略规划解析异常，由主循环处理
+          }
+        }
+      }
+
       const usedDirNames = new Set<string>();
-      for (const projectRoot of options.projectRoots) {
+      for (const projectRoot of effectiveRoots) {
         const config = loadProjectConfig(projectRoot);
         let pkgSlug: string;
         if (skillMdOnly) {
@@ -804,7 +868,8 @@ export class SkillExporter {
             archive: false,
             skipSkillMd: true,
             mode: "source",
-          });
+            _isSubpackage: true,
+          } as SkillExporterOptions);
 
           manifest = loadManifest(destPkgDir) || loadManifest(projectRoot);
           actionIds = singleExport.actions;

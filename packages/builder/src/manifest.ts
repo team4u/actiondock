@@ -1,8 +1,24 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { ACTION_ID_REGEX } from "@actiondock/core";
 import { BuilderError } from "./errors";
 import { getInternalDependencyVersion } from "./fs-utils";
 import type { ActionDependency, PlaybookPlanEntry } from "./types";
+
+/**
+ * 校验清单 actions 字典中的所有 Action ID 是否符合规范。
+ * 强制写入端契约自检，杜绝非法 Action ID 落盘。
+ */
+export function assertValidManifestActionIds(actions: Record<string, unknown>): void {
+  for (const actionId of Object.keys(actions)) {
+    if (!ACTION_ID_REGEX.test(actionId)) {
+      throw new BuilderError(
+        `Invalid action ID '${actionId}' in generated manifest. Action IDs must match ${ACTION_ID_REGEX}`,
+        "INVALID_ACTION_ID"
+      );
+    }
+  }
+}
 
 /**
  * actiondock.json 清单组装与依赖协议校验的单一实现。
@@ -56,8 +72,6 @@ export interface SerializePlanManifestOptions {
   includeDirs?: { actionsDir?: string; playbooksDir?: string };
   /** Action 入口改写映射（npm pack 用于指向编译后的 .js/.mjs 入口） */
   actionEntryOverride?: (action: ActionDependency) => string;
-  /** 是否为包含命名空间分隔符的 Action ID 附加短 ID 别名（源码型 Skill 导出需要） */
-  aliasShortIds?: boolean;
   /** 是否省略空 config 键（源码型 Skill 导出保持旧版字节级行为：未声明时省略） */
   omitEmptyConfig?: boolean;
   /** 是否输出 playbooks 声明（npm pack 产物历史行为不输出，需显式关闭） */
@@ -86,18 +100,19 @@ export function serializePlanManifest(
 ): Record<string, unknown> {
   const manifestActions: Record<string, unknown> = {};
   for (const act of plan.actions) {
+    // 仅序列化包自有 Action，跨包依赖不写入包清单
+    if (act.isExternal || act.id.includes("/")) {
+      continue;
+    }
     const serialized = serializeManifestAction(act);
     if (options.actionEntryOverride) {
       serialized.entry = options.actionEntryOverride(act);
     }
     manifestActions[act.id] = serialized;
-    if (options.aliasShortIds && act.id.includes("/")) {
-      const shortId = act.id.slice(act.id.lastIndexOf("/") + 1);
-      if (!manifestActions[shortId]) {
-        manifestActions[shortId] = serialized;
-      }
-    }
   }
+
+  // 写入端契约自检断言：校验所有 Action ID 必须符合规范
+  assertValidManifestActionIds(manifestActions);
 
   const manifestPlaybooks = serializeManifestPlaybooks(
     plan.playbooks,
