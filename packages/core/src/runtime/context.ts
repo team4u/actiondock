@@ -208,7 +208,17 @@ export class StderrLogger implements Logger {
     const time = new Date().toISOString().slice(11, 19);
     const base = `[${time}] [${level.toUpperCase()}] ${this.prefix}${message}`;
     if (data !== undefined) {
-      return `${base} ${typeof data === "object" ? JSON.stringify(data) : data}`;
+      let formattedData: string;
+      try {
+        formattedData = typeof data === "object" && data !== null ? JSON.stringify(data) : String(data);
+      } catch {
+        try {
+          formattedData = String(data);
+        } catch {
+          formattedData = "[Unserializable Data]";
+        }
+      }
+      return `${base} ${formattedData}`;
     }
     return base;
   }

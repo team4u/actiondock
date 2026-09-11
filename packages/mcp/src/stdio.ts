@@ -4,7 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { IpcActionDockTarget, type ActionDockTarget } from "@actiondock/core";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
-import { createActionDockMcpServer, type ActionDockMcpServer } from "./adapter";
+import { createActionDockMcpServer, resolveTarget, type ActionDockMcpServer } from "./adapter";
 import type { ActionDockMcpOptions } from "./types";
 
 /**
@@ -22,9 +22,9 @@ export async function startMcpStdio(
   let targetToUse: ActionDockTarget | undefined;
   let childProcess: ChildProcess | undefined;
 
-  // 若显式传入了已构造的 target 或不可序列化的内存对象，直接复用
+  // 若显式传入了已构造的 target 或不可序列化的内存对象，直接复用或解析目标实例
   if (options.target || options.actions || options.storage || options.app || options.host) {
-    targetToUse = options.target;
+    targetToUse = options.target ?? (await resolveTarget(options)).target;
   } else {
     // 建立隔离的监督子进程
     const currentDir = dirname(fileURLToPath(import.meta.url));
@@ -67,6 +67,7 @@ export async function startMcpStdio(
         target: targetToUse,
       });
       activeServer = server;
+      targetToUse = targetToUse || server.target;
       return server;
     },
     {

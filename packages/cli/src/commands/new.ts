@@ -17,6 +17,7 @@ export function registerNewCommands(program: Command, context?: CliContext): voi
   // new action <id>
   newCmd
     .command("action <id>")
+    .alias("create")
     .description("Scaffold a new Action definition file")
     .option("-d, --desc <description>", "Action description")
     .option("-f, --file <filePath>", "Target file path relative to actions dir")

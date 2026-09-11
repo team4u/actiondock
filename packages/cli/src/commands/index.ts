@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Command } from "commander";
 import type { CliContext } from "../types";
+import { registerActionCommands } from "./action/create";
 import { registerAddCommand } from "./add";
 import { registerBuildCommand } from "./build";
 import { registerConfigCommands } from "./config";
@@ -92,28 +93,29 @@ export function createCliProgram(context?: CliContext): Command {
   });
 
   registerInitCommand(program);
-  registerAddCommand(program);
-  registerRemoveCommand(program);
-  registerNewCommands(program);
+  registerAddCommand(program, context);
+  registerRemoveCommand(program, context);
+  registerNewCommands(program, context);
+  registerActionCommands(program, context);
   registerInfoCommand(program, context);
   registerDoctorCommand(program, context);
-  registerListCommand(program);
-  registerDescribeCommand(program);
-  registerRunCommand(program);
-  registerValidateCommand(program);
-  registerGenerateCommands(program);
-  registerPlaybookCommands(program);
-  registerConfigCommands(program);
-  registerStateCommands(program);
-  registerRunsCommands(program);
+  registerListCommand(program, context);
+  registerDescribeCommand(program, context);
+  registerRunCommand(program, context);
+  registerValidateCommand(program, context);
+  registerGenerateCommands(program, context);
+  registerPlaybookCommands(program, context);
+  registerConfigCommands(program, context);
+  registerStateCommands(program, context);
+  registerRunsCommands(program, context);
   registerTestCommand(program);
-  registerBuildCommand(program);
-  registerPackCommand(program);
-  registerExportCommand(program);
+  registerBuildCommand(program, context);
+  registerPackCommand(program, context);
+  registerExportCommand(program, context);
   registerLinkCommands(program);
   registerProfileCommands(program);
-  registerServeCommand(program);
-  registerMcpCommands(program);
+  registerServeCommand(program, context);
+  registerMcpCommands(program, context);
 
   applyCommonOptions(program);
 
@@ -121,6 +123,7 @@ export function createCliProgram(context?: CliContext): Command {
 }
 
 export {
+  registerActionCommands,
   registerAddCommand,
   registerBuildCommand,
   registerConfigCommands,

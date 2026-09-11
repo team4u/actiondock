@@ -127,6 +127,10 @@ export function registerConfigSchemaCommand(configCmd: Command, context?: CliCon
         } else {
           writeStdout(renderConfigSchema(items, projConfig.id, root) + "\n", context);
         }
+
+        if (!ok) {
+          process.exitCode = 1;
+        }
       } catch (err: any) {
         if (err instanceof ArgumentError || err instanceof ExecutionError) {
           throw err;

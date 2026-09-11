@@ -111,7 +111,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 - 规程优先原则：面对业务编排任务，必须优先检索并遵循现成的 Playbook，严禁无视既有规程擅自拼凑 Action 调度次序。
 - 按需排查原则：严禁在每次任务执行前盲目进行前置环境检查、依赖重装或运行 `ad doctor` 体检；默认环境完备就绪，仅在实际遇到报错时按需修复。
 - 元数据规范原则：在修改 Action 源码（包括参数模式、描述、依赖）或新增 Action 文件后，在 `actiondock.json` 中完整登记并执行 `ad validate` 确保清单与 Schema 严格匹配；需要类型提示时运行 `ad generate types`。
-- 脚手架命令原则：新增 Action 工具必须使用 `ad new action <id>`，新增 Playbook 规程必须使用 `ad new playbook <id>` 或 `ad playbook create <id>`，禁止调用不存在的 `ad action create`。
+- 脚手架命令原则：新增 Action 工具可使用 `ad new action <id>` 或 `ad action create <id>`，新增 Playbook 规程可使用 `ad new playbook <id>` 或 `ad playbook create <id>`。
 - 依赖管理红线：正式项目引入外部 Action 包必须在工程根目录下执行 `ad add <package>` 安装并锁定依赖，严禁使用 `ad link` 替代项目正式依赖；`ad link` 仅限本地未发布源码快速调试与工作区联调。
 - 通道隔离原则：严禁在 Action 内部调用 `console.log`，所有日志一律使用 `ctx.log`（输出至标准错误流），确保标准输出仅输出标准 JSON 信封。
 - 严格契约原则：必须为每个 Action 定义完备的 `inputSchema` 与 `outputSchema`。

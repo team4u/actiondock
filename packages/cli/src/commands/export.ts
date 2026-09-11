@@ -5,9 +5,10 @@ import { discoverProjects, findProjectRoot, listLinkedPackages, resolvePackageRo
 import { Command } from "commander";
 import { ExecutionError } from "../errors";
 import { renderResult, writeStdout } from "../renderer";
-import { parseListOption } from "../utils";
+import type { CliContext } from "../types";
+import { getEffectiveOptions, parseListOption } from "../utils";
 
-export function registerExportCommand(program: Command): void {
+export function registerExportCommand(program: Command, context?: CliContext): void {
   const exportCmd = program
     .command("export")
     .description("Export project artifacts");
@@ -41,7 +42,8 @@ export function registerExportCommand(program: Command): void {
     .option("--vendor-deps", "Materialize locked production dependencies into the exported skill")
     .option("--allow-install-scripts", "Allow lifecycle install scripts to run during dependency materialization")
     .option("--require-reproducible", "Require reproducible build and fail if install scripts must run")
-    .action(async (options) => {
+    .action(async (rawOptions, cmd) => {
+      const options = getEffectiveOptions(rawOptions, cmd);
       // 彻底删除 --standalone 单文件编译选项
       if (options.standalone || options.target !== undefined || options.bytecode !== undefined) {
         throw new ExecutionError(
@@ -119,7 +121,7 @@ export function registerExportCommand(program: Command): void {
         );
       }
 
-      const isJson = Boolean(options.json);
+      const isMachine = Boolean(options.json || options.envelope);
 
       try {
         if (options.bundle !== undefined) {
@@ -127,7 +129,7 @@ export function registerExportCommand(program: Command): void {
             typeof options.bundle === "string" && options.bundle.trim()
               ? options.bundle.trim()
               : basename(process.cwd());
-          if (!isJson) {
+          if (!isMachine) {
             writeStdout(`Exporting composite Skill bundle '${bundleName}' (${roots.length} package${roots.length > 1 ? "s" : ""})...`);
           }
           const result = await exportCompositeSkill({
@@ -142,7 +144,8 @@ export function registerExportCommand(program: Command): void {
           });
 
           renderResult(result, {
-            json: isJson,
+            json: isMachine,
+            envelope: options.envelope,
             humanFormatter: () => {
               const lines: string[] = [];
               lines.push(`[OK] Successfully exported Composite Skill: ${result.bundleName}`);
@@ -161,12 +164,13 @@ export function registerExportCommand(program: Command): void {
               }
               return lines.join("\n");
             },
+            context,
           });
           return;
         }
 
         if (roots.length > 1) {
-          if (!isJson) {
+          if (!isMachine) {
             writeStdout(`Batch exporting ${roots.length} Skill packages...`);
           }
           const batchRes = await exportSkillBatch({
@@ -183,7 +187,8 @@ export function registerExportCommand(program: Command): void {
           });
 
           renderResult(batchRes, {
-            json: isJson,
+            json: isMachine,
+            envelope: options.envelope,
             humanFormatter: () => {
               const lines: string[] = [];
               lines.push(`[OK] Successfully batch exported ${batchRes.results.length} Skill packages to: ${batchRes.outDir}`);
@@ -194,12 +199,13 @@ export function registerExportCommand(program: Command): void {
               lines.push(`  Total Playbooks: ${batchRes.totalPlaybooks}`);
               return lines.join("\n");
             },
+            context,
           });
           return;
         }
 
         const root = roots[0];
-        if (!isJson) {
+        if (!isMachine) {
           writeStdout(`Exporting ${mode === "node" ? "Node.js directory" : "source"} Skill artifact...`);
         }
         const result = await exportSkill({
@@ -216,7 +222,8 @@ export function registerExportCommand(program: Command): void {
         });
 
         renderResult(result, {
-          json: isJson,
+          json: isMachine,
+          envelope: options.envelope,
           humanFormatter: () => {
             const lines: string[] = [];
             lines.push(`[OK] Successfully exported ${result.mode === "node" ? "Node Directory" : "Source"} Skill: ${result.packageId} (v${result.version})`);
@@ -232,6 +239,7 @@ export function registerExportCommand(program: Command): void {
             }
             return lines.join("\n");
           },
+          context,
         });
       } catch (err: any) {
         if (err?.code === "UNSUPPORTED_BUILD_MODE") {

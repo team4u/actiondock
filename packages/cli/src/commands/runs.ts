@@ -214,13 +214,24 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
 
       await withRemoteTarget(options, context, async (target) => {
         const result = await target.cancelRun(id, options.reason);
+        const isErrorOutcome = result.outcome === "not_found" || result.outcome === "not_owner";
         renderResult(result, {
           json: options.json,
           envelope: options.envelope,
-          humanFormatter: () =>
-            `Run '${id}' cancellation requested (Status: ${(result as any).status || result.outcome}).`,
+          humanFormatter: () => {
+            if (result.outcome === "not_found") {
+              return `Error: Run record '${id}' not found on remote server.`;
+            }
+            if (result.outcome === "not_owner") {
+              return `Error: Cannot cancel run '${id}': not the owner.`;
+            }
+            return `Run '${id}' cancellation requested (Status: ${(result as any).status || result.outcome}).`;
+          },
           context,
         });
+        if (isErrorOutcome) {
+          process.exitCode = 1;
+        }
       });
     });
 

@@ -87,7 +87,7 @@ export async function execCli(
     }
   }
 
-  return new Promise<ExecCliResult>((resolve) => {
+  return new Promise<ExecCliResult>((resolve, reject) => {
     let child;
     try {
       child = spawn(binPath, args, {
@@ -105,7 +105,8 @@ export async function execCli(
         durationMs: Math.round(performance.now() - startTime),
       };
       if (options.throwOnError) {
-        throw err;
+        reject(err);
+        return;
       }
       resolve(errRes);
       return;
@@ -164,7 +165,8 @@ export async function execCli(
       };
 
       if (options.throwOnError && !ok) {
-        throw new Error(stderr || `Command '${command}' failed with exit code ${exitCode}`);
+        reject(new Error(stderr || `Command '${command}' failed with exit code ${exitCode}`));
+        return;
       }
       resolve(result);
     };

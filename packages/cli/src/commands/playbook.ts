@@ -456,7 +456,8 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
       );
 
       if (!allValid) {
-        throw new ExecutionError("Playbook validation failed", results);
+        process.exitCode = 1;
+        return;
       }
     });
 

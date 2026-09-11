@@ -178,6 +178,7 @@ async function compileTypeScript(
 
   const tsSourceFiles = new Set<string>();
   for (const act of plan.actions) {
+    if (act.isExternal || act.id.includes("/")) continue;
     if (isTypeScriptSource(act.entry)) {
       tsSourceFiles.add(act.resolvedPath);
     }
@@ -314,6 +315,7 @@ function writeManifestAndPkgJson(
   // 构建编译后的 Action 清单字典并严格校验入口扩展名
   const compiledEntries = new Map<string, string>();
   for (const act of plan.actions) {
+    if (act.isExternal || act.id.includes("/")) continue;
     const destEntry = compiledEntryFor(act);
     if (!destEntry.endsWith(".js") && !destEntry.endsWith(".mjs")) {
       throw new BuilderError(

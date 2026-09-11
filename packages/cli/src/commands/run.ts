@@ -110,7 +110,8 @@ export async function executeAction(
           writeStdout(JSON.stringify(asyncOutput, null, 2), context);
 
           if (ticket.status === "failed") {
-            throw new ExecutionError(`Action '${id}' failed to start`);
+            process.exitCode = 1;
+            return;
           }
         } else {
           const result = await target.runAction(targetRef, input as JsonValue, {
@@ -123,10 +124,8 @@ export async function executeAction(
           writeStdout(JSON.stringify(result, null, 2), context);
 
           if (!result.ok) {
-            throw new ExecutionError(
-              result.error?.message || `Action '${id}' execution failed`,
-              result.error
-            );
+            process.exitCode = 1;
+            return;
           }
         }
       },

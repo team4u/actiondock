@@ -3,9 +3,10 @@ import { findProjectRoot, resolvePackageRoot } from "@actiondock/core";
 import { Command } from "commander";
 import { ExecutionError } from "../errors";
 import { renderResult, writeStdout } from "../renderer";
-import { parseListOption } from "../utils";
+import type { CliContext } from "../types";
+import { getEffectiveOptions, parseListOption } from "../utils";
 
-export function registerBuildCommand(program: Command): void {
+export function registerBuildCommand(program: Command, context?: CliContext): void {
   program
     .command("build")
     .description("Build project actions into a runnable Node.js delivery directory")
@@ -19,7 +20,8 @@ export function registerBuildCommand(program: Command): void {
     .option("--require-reproducible", "Require reproducible build and fail if install scripts must run")
     .option("-t, --target <target>", "Target compilation platform (removed)")
     .option("--bytecode", "Bytecode compilation (removed)")
-    .action(async (options) => {
+    .action(async (rawOptions, cmd) => {
+      const options = getEffectiveOptions(rawOptions, cmd);
       // 彻底删除原有单文件二进制输出语义
       if (options.target !== undefined || options.bytecode !== undefined) {
         throw new ExecutionError(
@@ -42,8 +44,8 @@ export function registerBuildCommand(program: Command): void {
         );
       }
 
-      const isJson = Boolean(options.json);
-      if (!isJson) {
+      const isMachine = Boolean(options.json || options.envelope);
+      if (!isMachine) {
         writeStdout("Building Node.js delivery artifact...");
       }
 
@@ -67,7 +69,8 @@ export function registerBuildCommand(program: Command): void {
       }
 
       renderResult(result, {
-        json: isJson,
+        json: isMachine,
+        envelope: options.envelope,
         humanFormatter: () => {
           const lines: string[] = [];
           lines.push(`[OK] Successfully built ${result.packageId} (v${result.version})`);
@@ -87,6 +90,7 @@ export function registerBuildCommand(program: Command): void {
           }
           return lines.join("\n");
         },
+        context,
       });
     });
 }

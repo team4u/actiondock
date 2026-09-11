@@ -44,11 +44,13 @@ export class DefaultProcessExecutor implements ProcessExecutor {
       }
 
       let timer: ReturnType<typeof setTimeout> | undefined;
+      let forceKillTimer: ReturnType<typeof setTimeout> | undefined;
+
       if (options.timeoutMs && options.timeoutMs > 0) {
         timer = setTimeout(() => {
           timedOut = true;
           cp.kill("SIGTERM");
-          setTimeout(() => {
+          forceKillTimer = setTimeout(() => {
             if (!cp.killed) cp.kill("SIGKILL");
           }, 1000);
         }, options.timeoutMs);
@@ -57,7 +59,7 @@ export class DefaultProcessExecutor implements ProcessExecutor {
       const onAbort = () => {
         cancelled = true;
         cp.kill("SIGTERM");
-        setTimeout(() => {
+        forceKillTimer = setTimeout(() => {
           if (!cp.killed) cp.kill("SIGKILL");
         }, 1000);
       };
@@ -69,6 +71,20 @@ export class DefaultProcessExecutor implements ProcessExecutor {
           options.signal.addEventListener("abort", onAbort, { once: true });
         }
       }
+
+      const cleanup = () => {
+        if (timer) {
+          clearTimeout(timer);
+          timer = undefined;
+        }
+        if (forceKillTimer) {
+          clearTimeout(forceKillTimer);
+          forceKillTimer = undefined;
+        }
+        if (options.signal) {
+          options.signal.removeEventListener("abort", onAbort);
+        }
+      };
 
       cp.stdout?.on("data", (chunk: Buffer) => {
         totalBytes += chunk.length;
@@ -97,7 +113,7 @@ export class DefaultProcessExecutor implements ProcessExecutor {
       });
 
       cp.on("error", (err) => {
-        if (timer) clearTimeout(timer);
+        cleanup();
         const durationMs = Date.now() - startTime;
         const res: ProcessResult = {
           ok: false,
@@ -121,7 +137,7 @@ export class DefaultProcessExecutor implements ProcessExecutor {
       });
 
       cp.on("close", (exitCode, signal) => {
-        if (timer) clearTimeout(timer);
+        cleanup();
         const durationMs = Date.now() - startTime;
         const ok = exitCode === 0 && !timedOut && !cancelled && !error;
 

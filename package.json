@@ -26,6 +26,7 @@
     "@actiondock/mcp": "^2.2.0",
     "@actiondock/runtime-node": "^2.2.0",
     "@actiondock/sdk": "^2.2.0",
+    "@actiondock/testing": "^2.2.0",
     "@modelcontextprotocol/server": "2.0.0"
   },
   "devDependencies": {

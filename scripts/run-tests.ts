@@ -44,7 +44,7 @@ function scanTestFiles(dir: string): string[] {
 function discoverAllTests(): string[] {
   const testFiles: string[] = [];
 
-  // 1. Scan packages/*/test/
+  // Scan packages/*/test/
   const packagesDir = join(rootDir, "packages");
   if (existsSync(packagesDir)) {
     for (const pkg of readdirSync(packagesDir, { withFileTypes: true })) {
@@ -55,7 +55,7 @@ function discoverAllTests(): string[] {
     }
   }
 
-  // 2. Scan examples/*/tests/
+  // Scan examples/*/tests/
   const examplesDir = join(rootDir, "examples");
   if (existsSync(examplesDir)) {
     for (const ex of readdirSync(examplesDir, { withFileTypes: true })) {

@@ -3,6 +3,7 @@ import { defineAction, type ActionDefinition } from "@actiondock/sdk";
 import {
   ActionRuntimeError,
   createTestRuntime,
+  execCli,
   FakeClock,
   MemoryStorage,
   MockProcessExecutor,
@@ -125,6 +126,46 @@ describe("@actiondock/testing", () => {
       expect(res.ok).toBe(true);
       expect(res.exitCode).toBe(0);
       expect(res.stdout).toContain("v");
+    });
+
+    it("带延时控制执行完毕后妥善注销 AbortSignal 监听器", async () => {
+      const proc = new MockProcessExecutor();
+      proc.register("delayed-cmd", { delayMs: 10, ok: true });
+
+      const controller = new AbortController();
+      let listenerCount = 0;
+      const originalAdd = controller.signal.addEventListener.bind(controller.signal);
+      const originalRemove = controller.signal.removeEventListener.bind(controller.signal);
+
+      controller.signal.addEventListener = (type: any, listener: any, opts: any) => {
+        if (type === "abort") listenerCount++;
+        return originalAdd(type, listener, opts);
+      };
+      controller.signal.removeEventListener = (type: any, listener: any, opts?: any) => {
+        if (type === "abort") listenerCount--;
+        return originalRemove(type, listener, opts);
+      };
+
+      const res = await proc.exec("delayed-cmd", [], { signal: controller.signal });
+      expect(res.ok).toBe(true);
+      expect(listenerCount).toBe(0);
+    });
+  });
+
+  describe("execCli", () => {
+    it("执行成功返回标准结果信封", async () => {
+      const res = await execCli("node", ["-e", "process.stdout.write('hello cli')"]);
+      expect(res.ok).toBe(true);
+      expect(res.exitCode).toBe(0);
+      expect(res.stdout).toBe("hello cli");
+    });
+
+    it("开启 throwOnError 时命令失败通过 Promise reject 抛出异常而非未捕获异常", async () => {
+      await expect(
+        execCli("node", ["-e", "process.stderr.write('fatal error'); process.exit(1)"], {
+          throwOnError: true,
+        })
+      ).rejects.toThrow(/fatal error/);
     });
   });
 

@@ -114,7 +114,28 @@ export function createRequestListener(
   options?: { baseOrigin?: string }
 ): (req: IncomingMessage, res: ServerResponse) => void {
   return (req, res) => {
-    const webReq = createWebRequest(req, options);
+    let webReq: Request;
+    try {
+      webReq = createWebRequest(req, options);
+    } catch (err: any) {
+      if (!res.headersSent) {
+        res.statusCode = 400;
+        res.setHeader("Content-Type", "application/json");
+        res.end(
+          JSON.stringify({
+            ok: false,
+            error: {
+              code: "BAD_REQUEST",
+              message: err?.message || String(err),
+            },
+          })
+        );
+      } else {
+        res.destroy(err);
+      }
+      return;
+    }
+
     Promise.resolve()
       .then(() => handler(webReq))
       .then((webRes) => sendWebResponse(webRes, res))

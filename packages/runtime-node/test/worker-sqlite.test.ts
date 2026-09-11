@@ -151,4 +151,31 @@ describe("WorkerSqliteDriver 工作线程驱动测试", () => {
 
     await driver.close();
   });
+
+  it("正常关闭工作线程驱动：妥善结算未决请求并拒绝关闭后的新请求", async () => {
+    const dbPath = join(tempDir, "worker-close.db");
+    const driver = new WorkerSqliteDriver(dbPath);
+
+    await driver.exec("CREATE TABLE items (id INT, val TEXT)");
+
+    // 并发提交请求并立即调用 close
+    const p1 = driver.run("INSERT INTO items VALUES (?, ?)", 1, "a");
+    const closePromise = driver.close();
+    const pPostClose = driver.run("INSERT INTO items VALUES (?, ?)", 2, "b");
+    const postCloseAssertion = expect(pPostClose).rejects.toThrow(/Database connection is closed/);
+
+    await closePromise;
+    expect(driver.isOpen).toBe(false);
+
+    // 验证关闭前已派发的请求与关闭后拒绝的请求
+    await p1.catch(() => {});
+    await postCloseAssertion;
+
+    // 关闭后发起的新请求必须被拒绝
+    await expect(driver.exec("SELECT 1")).rejects.toThrow(/Database connection is closed/);
+
+    // 重复调用 close 不应抛出异常
+    await expect(driver.close()).resolves.toBeUndefined();
+  });
 });
+

@@ -3,9 +3,10 @@ import { findProjectRoot, resolvePackageRoot } from "@actiondock/core";
 import { Command } from "commander";
 import { ExecutionError } from "../errors";
 import { renderResult, writeStdout } from "../renderer";
+import type { CliContext } from "../types";
 import { getEffectiveOptions } from "../utils";
 
-export function registerPackCommand(program: Command): void {
+export function registerPackCommand(program: Command, context?: CliContext): void {
   program
     .command("pack")
     .description("Pack Action package into a standard npm tarball (.tgz) for distribution")
@@ -28,8 +29,8 @@ export function registerPackCommand(program: Command): void {
         );
       }
 
-      const isJson = Boolean(options.json);
-      if (!isJson && !options.dryRun) {
+      const isMachine = Boolean(options.json || options.envelope);
+      if (!isMachine && !options.dryRun) {
         writeStdout("Packing Action package...");
       }
 
@@ -45,7 +46,8 @@ export function registerPackCommand(program: Command): void {
       }
 
       renderResult(result, {
-        json: isJson,
+        json: isMachine,
+        envelope: options.envelope,
         humanFormatter: () => {
           const lines: string[] = [];
           if (options.dryRun) {
@@ -64,6 +66,7 @@ export function registerPackCommand(program: Command): void {
           lines.push(`  Actions:   ${result.manifestSummary.actions.join(", ")}`);
           return lines.join("\n");
         },
+        context,
       });
     });
 }

@@ -98,7 +98,8 @@ export function registerValidateCommand(program: Command, context?: CliContext):
       });
 
       if (!allValid) {
-        throw new ExecutionError("Action schema validation failed", results);
+        process.exitCode = 1;
+        return;
       }
 
       // 校验 Action 本地相对依赖完整性

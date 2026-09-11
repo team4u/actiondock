@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -132,10 +132,37 @@ async function main() {
   console.log(`临时分发标签: ${tempDistTag}`);
   console.log(`模拟运行模式: ${dryRun ? "是" : "否"}`);
 
-  // 1. 预检查与原有 dist-tags 备份
-  console.log("\n[1/5] 备份既有分发标签指针与不可变性校验...");
-  const distTagBackup: Record<string, string | null> = {};
-  const localTarballs: Record<string, { path: string; shasum: string }> = {};
+  try {
+    // 预检查与原有 dist-tags 备份
+    console.log("\n[1/5] 全包版本强一致性校验与既有分发标签指针备份...");
+
+    // 全包版本强一致性断言校验
+    console.log("- 校验根目录与全部 7 个子包版本强一致性...");
+    const versionMismatches: string[] = [];
+    const rootPkgPath = join(rootDir, "package.json");
+    const rootPkg = JSON.parse(readFileSync(rootPkgPath, "utf8"));
+    if (rootPkg.version !== targetVersion) {
+      versionMismatches.push(`根目录 (package.json): 实际 ${rootPkg.version}，预期 ${targetVersion}`);
+    }
+
+    for (const pkg of PUBLISH_PACKAGES) {
+      const pkgJsonPath = join(pkg.dir, "package.json");
+      const pkgJson = JSON.parse(readFileSync(pkgJsonPath, "utf8"));
+      if (pkgJson.version !== targetVersion) {
+        versionMismatches.push(`${pkg.name}: 实际 ${pkgJson.version}，预期 ${targetVersion}`);
+      }
+    }
+
+    if (versionMismatches.length > 0) {
+      const errorMsg = `全包版本强一致性断言校验失败，以下包版本与目标版本 (${targetVersion}) 不一致:\n` +
+        versionMismatches.map((m) => `  - ${m}`).join("\n");
+      console.error(`\n[ERROR] ${errorMsg}`);
+      throw new Error(errorMsg);
+    }
+    console.log(`  [OK] 根目录与全部 7 个子包版本均严格一致 (${targetVersion})`);
+
+    const distTagBackup: Record<string, string | null> = {};
+    const localTarballs: Record<string, { path: string; shasum: string }> = {};
 
   for (const pkg of PUBLISH_PACKAGES) {
     console.log(`- 检查 ${pkg.name}...`);
@@ -161,7 +188,7 @@ async function main() {
     }
   }
 
-  // 2. 临时分发标签隔离发布
+  // 临时分发标签隔离发布
   console.log(`\n[2/5] 使用临时标签 (${tempDistTag}) 按拓扑顺序发布子包...`);
   const publishedPackages: string[] = [];
 
@@ -190,7 +217,7 @@ async function main() {
     throw error;
   }
 
-  // 3. 发布后烟雾验证
+  // 发布后烟雾验证
   if (!skipVerify && !dryRun) {
     console.log(`\n[3/5] 验证临时标签下的包可见性与完整性...`);
     for (const pkg of PUBLISH_PACKAGES) {
@@ -201,13 +228,13 @@ async function main() {
       if (viewRes.status !== 0 || !viewRes.stdout.includes(targetVersion)) {
         throw new Error(`临时标签验证失败: ${pkg.name}@${tempDistTag} 未能正确定位到 ${targetVersion}`);
       }
-      console.log(`  ✔ ${pkg.name}@${tempDistTag} 验证通过`);
+      console.log(`  [OK] ${pkg.name}@${tempDistTag} 验证通过`);
     }
   } else {
     console.log("\n[3/5] 跳过远端临时标签验证");
   }
 
-  // 4. 原子分发指针切换与回滚机制
+  // 原子分发指针切换与回滚机制
   console.log(`\n[4/5] 原子切换正式分发标签 (${targetDistTag} -> ${targetVersion})...`);
   const promotedPackages: string[] = [];
 
@@ -261,6 +288,23 @@ async function main() {
   }
 
   console.log(`\n发布成功！全量 7 个子包已成功发布并推广至 ${targetDistTag} 标签。`);
+  } finally {
+    // 清理可能遗留在子包目录下的 *.tgz 压缩文件
+    for (const pkg of PUBLISH_PACKAGES) {
+      try {
+        if (existsSync(pkg.dir)) {
+          const files = readdirSync(pkg.dir);
+          for (const file of files) {
+            if (file.endsWith(".tgz")) {
+              rmSync(join(pkg.dir, file), { force: true });
+            }
+          }
+        }
+      } catch {
+        // 忽略子包目录清理异常
+      }
+    }
+  }
 }
 
 main().catch((err) => {

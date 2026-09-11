@@ -144,10 +144,20 @@ export class IpcActionDockTarget implements ActionDockTarget {
    */
   public async waitReady(timeoutMs = 5000): Promise<void> {
     if (this.exitError) throw this.exitError;
-    const timeout = new Promise<void>((_, reject) =>
-      setTimeout(() => reject(new Error(`Timeout waiting for host process ready after ${timeoutMs}ms`)), timeoutMs)
-    );
-    await Promise.race([this.readyPromise, timeout]);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<void>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`Timeout waiting for host process ready after ${timeoutMs}ms`)),
+        timeoutMs
+      );
+    });
+    try {
+      await Promise.race([this.readyPromise, timeout]);
+    } finally {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+      }
+    }
   }
 
   /**

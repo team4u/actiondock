@@ -369,18 +369,31 @@ export class MockProcessExecutor implements ProcessExecutor {
   ): Promise<void> {
     return new Promise<void>((resolve) => {
       let timer: ReturnType<typeof setTimeout> | undefined;
+      let onAbort: (() => void) | undefined;
 
       const cleanup = () => {
-        if (timer) clearTimeout(timer);
+        if (timer) {
+          clearTimeout(timer);
+          timer = undefined;
+        }
+        if (options.signal && onAbort) {
+          options.signal.removeEventListener("abort", onAbort);
+          onAbort = undefined;
+        }
       };
 
       if (options.signal) {
+        if (options.signal.aborted) {
+          resolve();
+          return;
+        }
+        onAbort = () => {
+          cleanup();
+          resolve();
+        };
         options.signal.addEventListener(
           "abort",
-          () => {
-            cleanup();
-            resolve();
-          },
+          onAbort,
           { once: true }
         );
       }

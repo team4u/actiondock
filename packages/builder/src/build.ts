@@ -246,7 +246,7 @@ const child = spawn(process.execPath, [hostScript, ...argv], {
 const target = new IpcActionDockTarget({
   childProcess: child,
   maxDiagnosticBytes: 512 * 1024,
-  maxRateBytesPerSec: 64 * 1024,
+  maxDiagnosticRate: 64 * 1024,
   diagnosticTarget: process.stderr,
 });
 
@@ -363,6 +363,7 @@ function writePkgJsonAndLockfiles(
   const productionDependencies: Record<string, string> = {
     "@actiondock/core": getInternalDependencyVersion(),
     "@actiondock/runtime-node": getInternalDependencyVersion(),
+    "@actiondock/sdk": getInternalDependencyVersion(),
   };
   for (const ext of plan.dependencies.external) {
     if (!ext.isDev) {

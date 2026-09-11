@@ -1,6 +1,6 @@
 {
   "name": "github-tools",
-  "version": "1.0.0",
+  "version": "2.2.0",
   "description": "GitHub Actions for AI Agents",
   "type": "module",
   "scripts": {
@@ -12,7 +12,7 @@
   },
   "devDependencies": {
     "@actiondock/core": "^2.2.0",
-    "@types/node": "^22.13.0",
+    "@types/node": "^24.10.0",
     "tsx": "^4.19.3",
     "typescript": "^5.7.0"
   },

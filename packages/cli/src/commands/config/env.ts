@@ -50,6 +50,12 @@ export function registerConfigEnvCommand(configCmd: Command, context?: CliContex
           humanFormatter: () => renderConfigEnv(res.envChecks || [], res.packageId),
           context,
         });
+        const allSatisfied = (res.envChecks || []).every(
+          (c: any) => !c.required || c.satisfied
+        );
+        if (!allSatisfied) {
+          process.exitCode = 1;
+        }
         return;
       }
 

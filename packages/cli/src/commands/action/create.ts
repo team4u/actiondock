@@ -10,9 +10,32 @@ import {
   saveManifest,
   writeActionTypes,
 } from "@actiondock/core";
+import type { Command } from "commander";
 import { ExecutionError } from "../../errors";
 import { writeStdout } from "../../renderer";
 import type { CliContext } from "../../types";
+
+/**
+ * 注册 action 命令组（action create, action new）。
+ *
+ * @param program Commander 根程序对象
+ * @param context 命令行上下文
+ */
+export function registerActionCommands(program: Command, context?: CliContext): void {
+  const actionCmd = program
+    .command("action")
+    .description("Manage Action definitions (create, scaffold)");
+
+  actionCmd
+    .command("create <id>")
+    .alias("new")
+    .description("Scaffold a new Action definition file")
+    .option("-d, --desc <description>", "Action description")
+    .option("-f, --file <filePath>", "Target file path relative to actions dir")
+    .action(async (id, options) => {
+      await handleActionCreate(id, options, context);
+    });
+}
 
 export async function handleActionCreate(
   id: string,

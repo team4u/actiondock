@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -13,6 +13,23 @@ const subPackages = [
   "mcp",
   "cli",
 ];
+
+const examplePackages = [
+  "github-tools",
+];
+
+function getExamplePackages(): string[] {
+  const examplesDir = join(rootDir, "examples");
+  if (!existsSync(examplesDir)) return examplePackages;
+  try {
+    const discovered = readdirSync(examplesDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && existsSync(join(examplesDir, d.name, "package.json")))
+      .map((d) => d.name);
+    return Array.from(new Set([...examplePackages, ...discovered]));
+  } catch {
+    return examplePackages;
+  }
+}
 
 function getTargetVersion(): string {
   const args = process.argv.slice(2);
@@ -61,7 +78,7 @@ function main() {
   const isPrerelease = targetVersion.includes("-");
   console.log(`Synchronizing version to: ${targetVersion} (prerelease: ${isPrerelease})`);
 
-  // 1. Update root package.json
+  // Update root package.json
   const rootPkgPath = join(rootDir, "package.json");
   updateJsonFile(rootPkgPath, (pkg) => {
     pkg.version = targetVersion;
@@ -75,7 +92,7 @@ function main() {
   });
   console.log(`Updated root package.json -> ${targetVersion}`);
 
-  // 2. Update subpackages
+  // Update subpackages
   for (const sub of subPackages) {
     const pkgPath = join(rootDir, "packages", sub, "package.json");
     updateJsonFile(pkgPath, (pkg) => {
@@ -98,8 +115,33 @@ function main() {
     console.log(`Updated packages/${sub}/package.json -> ${targetVersion}`);
   }
 
-  // 3. Update source files
-  // 3.1 packages/core/src/project/init.ts
+  // Update example packages
+  const exampleDirs = getExamplePackages();
+  for (const example of exampleDirs) {
+    const pkgPath = join(rootDir, "examples", example, "package.json");
+    if (existsSync(pkgPath)) {
+      updateJsonFile(pkgPath, (pkg) => {
+        if (pkg.dependencies) {
+          for (const dep of Object.keys(pkg.dependencies)) {
+            if (dep.startsWith("@actiondock/")) {
+              pkg.dependencies[dep] = isPrerelease ? targetVersion : `^${targetVersion}`;
+            }
+          }
+        }
+        if (pkg.devDependencies) {
+          for (const dep of Object.keys(pkg.devDependencies)) {
+            if (dep.startsWith("@actiondock/")) {
+              pkg.devDependencies[dep] = isPrerelease ? targetVersion : `^${targetVersion}`;
+            }
+          }
+        }
+      });
+      console.log(`Updated examples/${example}/package.json`);
+    }
+  }
+
+  // Update source files
+  // packages/core/src/project/init.ts
   const initTsPath = join(rootDir, "packages", "core", "src", "project", "init.ts");
   let initTs = readFileSync(initTsPath, "utf8");
   const depVer = isPrerelease ? targetVersion : `^${targetVersion}`;
@@ -114,14 +156,7 @@ function main() {
   writeFileSync(initTsPath, initTs);
   console.log("Updated packages/core/src/project/init.ts");
 
-  // 3.2 packages/cli/src/commands/index.ts
-  const cliIndexTsPath = join(rootDir, "packages", "cli", "src", "commands", "index.ts");
-  let cliIndexTs = readFileSync(cliIndexTsPath, "utf8");
-  cliIndexTs = cliIndexTs.replace(/\.version\("[^"]+"/, `.version("${targetVersion}"`);
-  writeFileSync(cliIndexTsPath, cliIndexTs);
-  console.log("Updated packages/cli/src/commands/index.ts");
-
-  // 3.3 packages/core/src/version.ts
+  // packages/core/src/version.ts
   const coreVersionTsPath = join(rootDir, "packages", "core", "src", "version.ts");
   writeFileSync(
     coreVersionTsPath,

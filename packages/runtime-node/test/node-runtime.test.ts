@@ -434,4 +434,45 @@ describe("NodeHttpServer 单元测试", () => {
 
     await testServer.close();
   });
+
+  it("当 URL 或 Host 格式异常时优雅返回 400 状态码响应", async () => {
+    let handled = false;
+    const listener = createRequestListener(async () => {
+      handled = true;
+      return new Response("ok");
+    });
+
+    const mockReq: any = {
+      socket: {},
+      headers: { host: "[invalid-host" },
+      url: "/test",
+      method: "GET",
+      on: () => {},
+    };
+
+    let statusCode = 0;
+    let responseBody = "";
+    let headersSent = false;
+    const mockRes: any = {
+      get headersSent() {
+        return headersSent;
+      },
+      set statusCode(code: number) {
+        statusCode = code;
+      },
+      setHeader: () => {},
+      end: (data: string) => {
+        headersSent = true;
+        responseBody = data;
+      },
+      destroy: () => {},
+    };
+
+    listener(mockReq, mockRes);
+    expect(handled).toBe(false);
+    expect(statusCode).toBe(400);
+    const json = JSON.parse(responseBody);
+    expect(json.ok).toBe(false);
+    expect(json.error.code).toBe("BAD_REQUEST");
+  });
 });

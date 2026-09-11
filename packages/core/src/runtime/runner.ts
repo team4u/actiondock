@@ -258,6 +258,10 @@ interface RunFinalizer {
   timeoutTimer: ReturnType<typeof setTimeout> | undefined;
   /** 超时守卫绑定的取消控制器 */
   controller: AbortController | undefined;
+  /** 外部中止信号对象 */
+  signal?: AbortSignal;
+  /** 外部中止信号监听句柄 */
+  onAbort?: () => void;
   /** 绑定取消控制器并启动超时定时器 */
   startTimeout(controller: AbortController, timeoutMs: number): void;
   /** 写入终态（幂等，自动清理超时定时器） */
@@ -681,15 +685,19 @@ export class ActionRunner {
 
     // 初始化 AbortController 与超时定时器
     const controller = new AbortController();
+    let onAbort: (() => void) | undefined;
     if (options.signal) {
       if (options.signal.aborted) {
         controller.abort(options.signal.reason);
       } else {
+        onAbort = () => controller.abort(options.signal?.reason);
         options.signal.addEventListener(
           "abort",
-          () => controller.abort(options.signal?.reason),
+          onAbort,
           { once: true }
         );
+        finalizer.signal = options.signal;
+        finalizer.onAbort = onAbort;
       }
     }
 
@@ -721,6 +729,10 @@ export class ActionRunner {
       cancel: (reason?: string): boolean => {
         if (finalizer.finalized || controller.signal.aborted) {
           return false;
+        }
+        if (options.signal && onAbort) {
+          options.signal.removeEventListener("abort", onAbort);
+          finalizer.onAbort = undefined;
         }
         controller.abort(new Error(reason || "Action execution was cancelled"));
         return true;
@@ -897,6 +909,8 @@ export class ActionRunner {
       persistError: undefined,
       timeoutTimer: undefined,
       controller: undefined,
+      signal: undefined,
+      onAbort: undefined,
       startTimeout: (controller: AbortController, timeoutMs: number) => {
         finalizer.controller = controller;
         finalizer.timeoutTimer = setTimeout(() => {
@@ -908,6 +922,10 @@ export class ActionRunner {
         if (finalizer.timeoutTimer) {
           clearTimeout(finalizer.timeoutTimer);
           finalizer.timeoutTimer = undefined;
+        }
+        if (finalizer.signal && finalizer.onAbort) {
+          finalizer.signal.removeEventListener("abort", finalizer.onAbort);
+          finalizer.onAbort = undefined;
         }
         if (finalizer.finalized) return;
         finalizer.finalized = true;
@@ -1130,12 +1148,12 @@ export class ActionRunner {
     childActionId: string
   ): Promise<ActionRunner> {
     if (childPackageId && childPackageId !== this.packageId) {
-      if (this.actions.has(`${childPackageId}/${childActionId}`)) {
-        return this;
-      }
       const targetRunner = await this.resolveTargetPackageRunner(childPackageId);
       if (targetRunner) {
         return targetRunner;
+      }
+      if (this.actions.has(`${childPackageId}/${childActionId}`)) {
+        return this;
       }
       if (!this.actionResolver) {
         const err = new Error(`Package '${childPackageId}' could not be resolved`);

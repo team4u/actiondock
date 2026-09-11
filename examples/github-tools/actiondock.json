@@ -3,7 +3,7 @@
   "schemaVersion": 2,
   "id": "team4u.github-tools",
   "name": "GitHub Tools",
-  "version": "1.0.0",
+  "version": "2.2.0",
   "description": "GitHub Actions for AI Agents",
   "files": [
     "actions",

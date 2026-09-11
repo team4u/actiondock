@@ -46,6 +46,8 @@ interface ActiveRun {
   controller: AbortController;
   status: RunStatus;
   startedAt: string;
+  signal?: AbortSignal;
+  onAbort?: () => void;
 }
 
 /**
@@ -269,13 +271,15 @@ export class DefaultExecutionService implements ExecutionService {
     }
 
     const controller = new AbortController();
+    let onAbort: (() => void) | undefined;
     if (options.signal && typeof options.signal.addEventListener === "function") {
       if (options.signal.aborted) {
         controller.abort(options.signal.reason);
       } else {
+        onAbort = () => controller.abort(options.signal?.reason);
         options.signal.addEventListener(
           "abort",
-          () => controller.abort(options.signal?.reason),
+          onAbort,
           { once: true }
         );
       }
@@ -306,6 +310,8 @@ export class DefaultExecutionService implements ExecutionService {
       controller,
       status: "running",
       startedAt: (effectiveClock?.now() ?? new Date()).toISOString(),
+      signal: options.signal,
+      onAbort,
     };
 
     this.activeRuns.set(handle.runId, activeItem);
@@ -675,6 +681,10 @@ export class DefaultExecutionService implements ExecutionService {
         });
       })
       .finally(() => {
+        if (activeItem.signal && activeItem.onAbort) {
+          activeItem.signal.removeEventListener("abort", activeItem.onAbort);
+          activeItem.onAbort = undefined;
+        }
         this.activeRuns.delete(handle.runId);
       });
   }
@@ -713,6 +723,10 @@ export class DefaultExecutionService implements ExecutionService {
       return { outcome: "not_found", runId };
     }
 
+    if (active.signal && active.onAbort) {
+      active.signal.removeEventListener("abort", active.onAbort);
+      active.onAbort = undefined;
+    }
     active.controller.abort(new Error(reason || "Execution cancelled"));
     active.handle.cancel(reason);
     return { outcome: "requested", runId };
@@ -738,8 +752,17 @@ export class DefaultExecutionService implements ExecutionService {
       const waitPromise = Promise.all(
         Array.from(this.activeRuns.values()).map((a) => a.handle.result.catch(() => {}))
       );
-      const timeoutPromise = new Promise((resolve) => setTimeout(resolve, graceMs));
-      await Promise.race([waitPromise, timeoutPromise]);
+      let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
+      const timeoutPromise = new Promise((resolve) => {
+        timeoutTimer = setTimeout(resolve, graceMs);
+      });
+      try {
+        await Promise.race([waitPromise, timeoutPromise]);
+      } finally {
+        if (timeoutTimer !== undefined) {
+          clearTimeout(timeoutTimer);
+        }
+      }
     }
 
     this.activeRuns.clear();

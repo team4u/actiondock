@@ -173,6 +173,8 @@ export class WorkerSqliteDriver {
   private worker: Worker;
   private pendingRequests = new Map<string, WorkerRequest>();
   private closed = false;
+  private closing = false;
+  private closePromise?: Promise<void>;
   private exited = false;
   private activeRecorder: RecordedStatement[] | null = null;
 
@@ -215,7 +217,7 @@ export class WorkerSqliteDriver {
     });
 
     this.worker.on("exit", (code) => {
-      if (!this.closed) {
+      if (!this.closed && !this.closing) {
         this.handleWorkerExit(code);
       }
     });
@@ -225,7 +227,7 @@ export class WorkerSqliteDriver {
    * 检查底层工作线程连接是否处于正常开启状态。
    */
   get isOpen(): boolean {
-    return !this.closed && !this.exited;
+    return !this.closed && !this.closing && !this.exited;
   }
 
   /**
@@ -246,7 +248,7 @@ export class WorkerSqliteDriver {
       failureError.code = STORAGE_WORKER_EXITED;
       return Promise.reject(failureError);
     }
-    if (this.closed) {
+    if (this.closed || (this.closing && type !== "close")) {
       return Promise.reject(new Error("Database connection is closed"));
     }
 
@@ -388,27 +390,40 @@ export class WorkerSqliteDriver {
    */
   async close(): Promise<void> {
     if (this.closed) return;
-    this.closed = true;
+    if (this.closing) return this.closePromise;
+    this.closing = true;
 
-    if (!this.exited) {
-      try {
-        await this.request("close", {});
-      } catch {
-        // 忽略关闭请求响应异常
+    this.closePromise = (async () => {
+      if (!this.exited) {
+        try {
+          await this.request("close", {});
+        } catch {
+          // 忽略关闭请求响应异常
+        }
+        try {
+          await this.worker.terminate();
+        } catch {
+          // 忽略终止工作线程异常
+        }
       }
-      try {
-        await this.worker.terminate();
-      } catch {
-        // 忽略终止工作线程异常
+
+      this.closed = true;
+
+      const closeError = new Error("Database connection is closed");
+      for (const [_, pending] of this.pendingRequests) {
+        pending.reject(closeError);
       }
-    }
+      this.pendingRequests.clear();
+    })();
+
+    return this.closePromise;
   }
 
   /**
    * 测试辅助：模拟工作线程异常崩溃退出。
    */
   crashForTest(): void {
-    if (this.exited || this.closed) return;
+    if (this.exited || this.closed || this.closing) return;
     this.worker.postMessage({ id: "crash", type: "crash" });
   }
 

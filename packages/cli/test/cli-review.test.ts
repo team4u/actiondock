@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import pkg from "../package.json";
@@ -381,5 +381,86 @@ describe("CLI Review & Machine Contract Regression", () => {
     expect(describeProc.exitCode).toBe(0);
     const describeData = JSON.parse(describeProc.stdout.toString());
     expect(describeData.id).toBe(firstActionId);
+  });
+
+  it("supports ad action create and ad action new aliases", () => {
+    runCli(["init", "--id", "test.action-cmd", "."], tempDir);
+
+    const createProc = runCli(["action", "create", "worker-task", "--desc", "Worker Task"], tempDir);
+    expect(createProc.exitCode).toBe(0);
+    expect(existsSync(join(tempDir, "actions", "worker-task.ts"))).toBe(true);
+
+    const newProc = runCli(["action", "new", "worker-task2", "--desc", "Worker Task 2"], tempDir);
+    expect(newProc.exitCode).toBe(0);
+    expect(existsSync(join(tempDir, "actions", "worker-task2.ts"))).toBe(true);
+  });
+
+  it("outputs single JSON without duplicate error envelope and sets exit code 1 on execution failure", () => {
+    runCli(["init", "--id", "test.err-double", "."], tempDir);
+
+    // Create an action that throws an error
+    const failActionPath = join(tempDir, "actions", "fail.ts");
+    writeFileSync(
+      failActionPath,
+      `import { defineAction } from "@actiondock/sdk";
+export default defineAction(async () => {
+  throw new Error("Deliberate failure inside action");
+});
+`
+    );
+
+    const manifestPath = join(tempDir, "actiondock.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
+    manifest.actions.fail = {
+      entry: "actions/fail.ts",
+      description: "Failing action",
+    };
+    writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+
+    const runProc = runCli(["run", "fail", "--json"], tempDir);
+    expect(runProc.exitCode).toBe(1);
+
+    const rawOutput = runProc.stdout.toString().trim();
+    // rawOutput must be a single valid JSON object without trailing duplicate envelopes
+    const parsed = JSON.parse(rawOutput);
+    expect(parsed.ok).toBe(false);
+  });
+
+  it("sets exit code 1 on ad config schema when required config is missing", () => {
+    runCli(["init", "--id", "test.cfg-schema", "."], tempDir);
+
+    const manifestPath = join(tempDir, "actiondock.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
+    manifest.config = {
+      API_KEY: {
+        description: "API Key required",
+        required: true,
+      },
+    };
+    writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+
+    const schemaProc = runCli(["config", "schema", "--json"], tempDir);
+    expect(schemaProc.exitCode).toBe(1);
+    const schemaData = JSON.parse(schemaProc.stdout.toString());
+    expect(schemaData.ok).toBe(false);
+    expect(schemaData.missingCount).toBe(1);
+  });
+
+  it("passes envelope option in ad build and ad pack", () => {
+    runCli(["init", "--id", "test.envelope-pass", "."], tempDir);
+
+    const packProc = runCli(["pack", "--dry-run", "--envelope"], tempDir);
+    expect(packProc.exitCode).toBe(0);
+    const packEnvelope = JSON.parse(packProc.stdout.toString());
+    expect(packEnvelope.ok).toBe(true);
+    expect(packEnvelope.data).toBeDefined();
+    expect(packEnvelope.data.packageId).toBe("test.envelope-pass");
+
+    const buildProc = runCli(["build", "--envelope"], tempDir);
+    expect(buildProc.exitCode).toBe(0);
+    const buildEnvelope = JSON.parse(buildProc.stdout.toString());
+    expect(buildEnvelope.ok).toBe(true);
+    expect(buildEnvelope.data).toBeDefined();
+    expect(buildEnvelope.data.packageId).toBe("test.envelope-pass");
   });
 });
