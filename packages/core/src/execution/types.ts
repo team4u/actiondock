@@ -11,6 +11,7 @@ import type {
   RunStatus,
 } from "@actiondock/sdk";
 import type { ProjectConfig } from "../project/types";
+import type { ActionRunner, ExecutionHandle } from "../runtime/runner";
 import type { Clock } from "../runtime/clock";
 import type { EventSink } from "../runtime/events";
 import type { RuntimeStorage } from "../storage/types";
@@ -108,6 +109,9 @@ export type CancelResult =
  * 统一执行协调服务接口。
  */
 export interface ExecutionService {
+  /** 底层 Action 执行引擎（用于跨包上下文注入与动态解析委托） */
+  readonly runner: ActionRunner;
+
   /** 同步执行 Action 并等待终态结果 */
   execute(
     ref: ActionRef | string,
@@ -133,6 +137,15 @@ export interface ExecutionService {
     runId: string,
     options?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number }
   ): AsyncIterable<ExecutionEvent>;
+
+  /** 获取指定运行的活动执行句柄（无活跃执行时返回 undefined） */
+  getActiveHandle(runId: string): ExecutionHandle | undefined;
+
+  /** 注册单个 Action 至执行引擎 */
+  registerAction(id: string, action: ActionDefinition): void;
+
+  /** 按 ID 检索已注册的 Action 定义 */
+  getAction(id: string): ActionDefinition | undefined;
 
   /** 优雅关闭服务并等待活跃任务收尾 */
   close(options?: { graceMs?: number }): Promise<void>;

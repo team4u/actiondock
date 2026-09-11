@@ -487,6 +487,100 @@ describe("ActionDockTarget 统一调用门面", () => {
     });
   });
 
+  describe("RemoteActionDockTarget 轮询退避与超时对齐", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "actiondock-remote-poll-test-"));
+    const projectDir = join(tempDir, "poll-project");
+    let serverInstance: any;
+    let serverUrl: string;
+
+    beforeAll(async () => {
+      mkdirSync(join(projectDir, "actions"), { recursive: true });
+      writeFileSync(
+        join(projectDir, "actiondock.json"),
+        JSON.stringify({
+          id: "remote.poll",
+          name: "轮询退避测试包",
+          version: "2.0.0",
+          actionsDir: "actions",
+          actions: {
+            echo: {
+              entry: "actions/echo.ts",
+              description: "立即返回",
+              inputSchema: { type: "object" },
+            },
+          },
+        })
+      );
+      writeFileSync(
+        join(projectDir, "actions/echo.ts"),
+        `export default async function () {
+  return { done: true };
+};
+`
+      );
+      serverInstance = await startActionDockServer({
+        port: 0,
+        host: "127.0.0.1",
+        projectRoot: projectDir,
+        customHome: tempDir,
+        enableManagement: false,
+      });
+      serverUrl = `http://127.0.0.1:${serverInstance.port}`;
+    });
+
+    afterAll(async () => {
+      if (serverInstance) {
+        serverInstance.stop();
+      }
+      try {
+        rmSync(tempDir, { recursive: true, force: true });
+      } catch {}
+    });
+
+    it("startAction 对不存在的运行等待超时后返回含等待时长的 TIMEOUT 错误", async () => {
+      const target = await createActionDockTarget({
+        type: "remote",
+        serverUrl,
+      });
+
+      // 直接对不存在的 runId 走 waitForRunCompletion 兜底路径（经 startAction 票据）
+      const ticket = await target.startAction("remote.poll/echo", {});
+      // 篡改票据结果为等待一个永不存在的运行，验证超时报文结构
+      const resultPromise = (target as any).waitForRunCompletion(
+        "nonexistent-run-id",
+        undefined,
+        undefined
+      ) as Promise<{ ok: boolean; error?: { code: string; message: string } }>;
+      const res = await resultPromise;
+      expect(res.ok).toBe(false);
+      expect(res.error?.code).toBe("TIMEOUT");
+      // 超时报文必须携带 runId 与已等待毫秒数（锁定行为增强契约）
+      expect(res.error?.message).toContain("nonexistent-run-id");
+      expect(res.error?.message).toMatch(/after \d+ms/);
+      await ticket.result;
+      await target.close();
+    }, 90000);
+
+    it("timeoutMs 传入较小值时等待上限仍不小于 60000ms 基准", async () => {
+      const target = await createActionDockTarget({
+        type: "remote",
+        serverUrl,
+      });
+      const startedAt = Date.now();
+      const res = await (target as any).waitForRunCompletion(
+        "nonexistent-run-id-2",
+        undefined,
+        1
+      );
+      const elapsed = Date.now() - startedAt;
+      expect(res.ok).toBe(false);
+      expect(res.error?.code).toBe("TIMEOUT");
+      // 等待上限取 max(60000, timeoutMs)，传入 1ms 也不应提前超时
+      expect(elapsed).toBeGreaterThanOrEqual(59000);
+      await target.close();
+    }, 90000);
+  });
+
   describe("TargetError, CloseTimeoutError, TARGET_PROTOCOL_UNSUPPORTED 场景覆盖", () => {
     it("LocalActionDockTarget.close 发生超时时抛出 CloseTimeoutError", async () => {
       const slowApp = {

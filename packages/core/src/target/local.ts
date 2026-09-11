@@ -45,6 +45,10 @@ export class LocalActionDockTarget implements ActionDockTarget {
     this.target = target;
   }
 
+  unwrap(): ActionDockHost | ActionDockApp {
+    return this.target;
+  }
+
   async info(): Promise<TargetInfo> {
     const packages = await this.listPackages();
     let id = "local-host";

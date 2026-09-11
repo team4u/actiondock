@@ -4,6 +4,10 @@ import { basename, delimiter, dirname, isAbsolute, join, relative, resolve } fro
 
 /**
  * 跨运行时安全查找可执行文件绝对物理路径。
+ *
+ * 注意：本函数为同步实现，内部同步遍历 PATH 逐个探测物理文件存在性；
+ * 当前全部调用方（doctor 体检与测试 CLI 桥）均为同步链路，serve 链路未使用本函数，
+ * 因此暂不提供异步版本。若后续异步链路需要，应另行新增异步实现而非改造本函数。
  */
 export function findExecutable(command: string): string | null {
   if (typeof (globalThis as any).Bun !== "undefined" && typeof (globalThis as any).Bun.which === "function") {

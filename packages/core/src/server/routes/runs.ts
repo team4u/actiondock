@@ -25,9 +25,10 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
 
       const apps = host
         ? host.listApps()
-        : (target as any)?.target?.listApps
-        ? (target as any).target.listApps()
-        : [(target as any)?.target].filter(Boolean);
+        : (() => {
+            const inner = target?.unwrap?.();
+            return inner && "listApps" in inner ? inner.listApps() : [inner].filter(Boolean);
+          })();
 
       for (const app of apps) {
         if (!app) continue;
@@ -89,9 +90,10 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
       let clearedCount = 0;
       const apps = host
         ? host.listApps()
-        : (target as any)?.target?.listApps
-        ? (target as any).target.listApps()
-        : [(target as any)?.target].filter(Boolean);
+        : (() => {
+            const inner = target?.unwrap?.();
+            return inner && "listApps" in inner ? inner.listApps() : [inner].filter(Boolean);
+          })();
 
       for (const app of apps) {
         if (!app) continue;

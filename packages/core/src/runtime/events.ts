@@ -33,6 +33,120 @@ interface RunEventEntry {
   bytes: number;
 }
 
+/**
+ * 订阅者游标确认状态（用于背压终止事件中的续传信息与去重判断）。
+ */
+interface SubscriberCursor {
+  /** 已交付的最大事件序号 */
+  lastYieldedSequence: number;
+  /** 最后确认的事件 ID（存在时优先作为续传游标） */
+  lastConfirmedEventId?: string;
+  /** 最后确认的事件序号 */
+  lastConfirmedSequence: number;
+}
+
+/**
+ * 订阅者通道：封装实时事件队列、监听器与终止状态。
+ * 职责：
+ * - 接收实时推送事件并入队（超出背压上限时推送终止事件并切断通道）。
+ * - 维护 done 终止标记与唤醒回调，供生成器编排消费。
+ * - 暴露 inactive 注销钩子，供外部在通道切断时注销监听器。
+ */
+class SubscriberChannel {
+  /** 实时事件队列（含背压终止事件） */
+  readonly liveQueue: ExecutionEvent[] = [];
+  /** 是否已收到终止信号（finish、淘汰、中断或唤醒） */
+  done = false;
+  /** 实时监听器（入队与背压终止逻辑入口） */
+  readonly listener: (evt: ExecutionEvent) => void;
+  /** 通道被切断或订阅退出时的注销回调（由订阅方注入） */
+  onInactive: (() => void) | null = null;
+  /** 等待挂起期间的唤醒回调（由等待方注入） */
+  notify: (() => void) | null = null;
+
+  private readonly runId: string;
+  private readonly maxQueueSize: number;
+  private readonly cursor: SubscriberCursor;
+  private readonly allocateEventId: () => string;
+  private backpressureTerminated = false;
+
+  constructor(options: {
+    runId: string;
+    maxQueueSize: number;
+    cursor: SubscriberCursor;
+    allocateEventId: () => string;
+  }) {
+    this.runId = options.runId;
+    this.maxQueueSize = options.maxQueueSize;
+    this.cursor = options.cursor;
+    this.allocateEventId = options.allocateEventId;
+    this.listener = (evt: ExecutionEvent) => this.receive(evt);
+  }
+
+  /**
+   * 接收单条实时事件：队列满时推送背压终止事件并切断通道。
+   */
+  private receive(evt: ExecutionEvent): void {
+    if (this.backpressureTerminated || this.done) {
+      return;
+    }
+
+    if (this.liveQueue.length >= this.maxQueueSize) {
+      // 慢订阅者导致队列溢出：向该慢订阅者推送终止事件并切断通道，主运行不受反向阻塞
+      this.backpressureTerminated = true;
+      this.onInactive?.();
+
+      const termEvt: ExecutionEvent = {
+        runId: this.runId,
+        rootRunId: evt.rootRunId || this.runId,
+        sequence: evt.sequence + 1,
+        eventId: this.allocateEventId(),
+        timestamp: new Date().toISOString(),
+        type: "error",
+        error: {
+          code: EVENT_BACKPRESSURE_LIMIT,
+          message: `Event subscription queue exceeded limit of ${this.maxQueueSize} items due to slow subscriber`,
+          details: {
+            lastConfirmedCursor:
+              this.cursor.lastConfirmedEventId ??
+              (this.cursor.lastConfirmedSequence >= 0 ? String(this.cursor.lastConfirmedSequence) : "0"),
+            lastConfirmedEventId: this.cursor.lastConfirmedEventId,
+            lastConfirmedSequence: this.cursor.lastConfirmedSequence,
+          },
+        },
+      };
+
+      this.liveQueue.length = 0;
+      this.liveQueue.push(termEvt);
+      if (this.notify) {
+        this.notify();
+        this.notify = null;
+      }
+      return;
+    }
+
+    this.liveQueue.push(evt);
+    if (this.notify) {
+      this.notify();
+      this.notify = null;
+    }
+    if (evt.type === "finish") {
+      this.done = true;
+    }
+  }
+
+  /**
+   * 标记通道终止并唤醒挂起的等待方。
+   */
+  terminate(): void {
+    this.done = true;
+    if (this.notify) {
+      this.notify();
+      this.notify = null;
+    }
+  }
+}
+
 interface RunBuffer {
   entries: RunEventEntry[];
   totalBytes: number;
@@ -242,9 +356,11 @@ export class InMemoryEventSink implements EventSink {
     }
 
     const effectiveAfter = afterSequence ?? -1;
-    let lastYieldedSequence = effectiveAfter;
-    let lastConfirmedEventId: string | undefined = afterEventId;
-    let lastConfirmedSequence = effectiveAfter;
+    const cursor: SubscriberCursor = {
+      lastYieldedSequence: effectiveAfter,
+      lastConfirmedEventId: afterEventId,
+      lastConfirmedSequence: effectiveAfter,
+    };
 
     if (options.signal?.aborted || this.evictedRuns.has(runId)) {
       return;
@@ -253,29 +369,15 @@ export class InMemoryEventSink implements EventSink {
     // 检查游标是否在请求前已过期被清理
     const run = this.runs.get(runId);
     if (run && options.after !== undefined) {
-      const earliestSeq = run.earliestRetainedSequence ?? 0;
-      if (afterSequence !== undefined && afterSequence >= 0 && afterSequence < earliestSeq - 1) {
-        const earliestCursor = run.earliestRetainedEventId ?? String(earliestSeq);
-        const expiredErr = new Error(
-          `Event cursor '${options.after}' has expired; earliest available cursor is '${earliestCursor}'`
-        );
-        (expiredErr as any).code = EVENT_CURSOR_EXPIRED;
-        (expiredErr as any).details = {
-          cursor: options.after,
-          earliestCursor,
-          earliestRetainedCursor: earliestCursor,
-          earliestSequence: earliestSeq,
-          earliestEventId: run.earliestRetainedEventId,
-        };
-        throw expiredErr;
-      }
+      this.assertCursorRetained(run, options.after, afterSequence);
     }
 
-    const maxQueueSize = options.maxQueueSize ?? this.maxSubscriberQueueSize;
-    const liveQueue: ExecutionEvent[] = [];
-    let notify: (() => void) | null = null;
-    let done = false;
-    let isBackpressureTerminated = false;
+    const channel = new SubscriberChannel({
+      runId,
+      maxQueueSize: options.maxQueueSize ?? this.maxSubscriberQueueSize,
+      cursor,
+      allocateEventId: () => String(++this.globalEventSeq),
+    });
 
     let subs = this.listeners.get(runId);
     if (!subs) {
@@ -284,88 +386,27 @@ export class InMemoryEventSink implements EventSink {
     }
 
     const cleanupListener = () => {
-      subs?.delete(listener);
+      subs?.delete(channel.listener);
       if (subs && subs.size === 0) {
         this.listeners.delete(runId);
       }
     };
-
-    // 先挂载实时监听器，防止历史回放与监听注册之间的竞态丢事件
-    const listener = (evt: ExecutionEvent) => {
-      if (isBackpressureTerminated || done) {
-        return;
-      }
-
-      if (liveQueue.length >= maxQueueSize) {
-        // 慢订阅者导致队列溢出：向该慢订阅者推送终止事件并切断通道，主运行不受反向阻塞
-        isBackpressureTerminated = true;
-        cleanupListener();
-
-        const termEvt: ExecutionEvent = {
-          runId,
-          rootRunId: evt.rootRunId || runId,
-          sequence: evt.sequence + 1,
-          eventId: String(++this.globalEventSeq),
-          timestamp: new Date().toISOString(),
-          type: "error",
-          error: {
-            code: EVENT_BACKPRESSURE_LIMIT,
-            message: `Event subscription queue exceeded limit of ${maxQueueSize} items due to slow subscriber`,
-            details: {
-              lastConfirmedCursor:
-                lastConfirmedEventId ??
-                (lastConfirmedSequence >= 0 ? String(lastConfirmedSequence) : "0"),
-              lastConfirmedEventId,
-              lastConfirmedSequence,
-            },
-          },
-        };
-
-        liveQueue.length = 0;
-        liveQueue.push(termEvt);
-        if (notify) {
-          notify();
-          notify = null;
-        }
-        return;
-      }
-
-      liveQueue.push(evt);
-      if (notify) {
-        notify();
-        notify = null;
-      }
-      if (evt.type === "finish") {
-        done = true;
-      }
-    };
-
-    const onEvict = () => {
-      done = true;
-      if (notify) {
-        notify();
-        notify = null;
-      }
-    };
-
-    let currentWakeupCleanup: (() => void) | null = null;
-    subs.add(listener);
+    channel.onInactive = cleanupListener;
 
     let evictSet = this.evictions.get(runId);
     if (!evictSet) {
       evictSet = new Set();
       this.evictions.set(runId, evictSet);
     }
+
+    const onEvict = () => channel.terminate();
+    const onAbort = () => channel.terminate();
+
+    let currentWakeupCleanup: (() => void) | null = null;
+
+    // 先挂载实时监听器，防止历史回放与监听注册之间的竞态丢事件
+    subs.add(channel.listener);
     evictSet.add(onEvict);
-
-    const onAbort = () => {
-      done = true;
-      if (notify) {
-        notify();
-        notify = null;
-      }
-    };
-
     if (options.signal) {
       options.signal.addEventListener("abort", onAbort, { once: true });
     }
@@ -392,13 +433,11 @@ export class InMemoryEventSink implements EventSink {
         const historySnapshot = run.entries.map((e) => e.event);
         for (const evt of historySnapshot) {
           if (options.signal?.aborted) return;
-          if (evt.sequence > lastYieldedSequence) {
-            lastYieldedSequence = evt.sequence;
-            lastConfirmedSequence = evt.sequence;
-            if (evt.eventId) lastConfirmedEventId = evt.eventId;
+          if (evt.sequence > cursor.lastYieldedSequence) {
+            this.trackDeliveredEvent(cursor, evt);
             yield evt;
-            if (evt.type === "finish") {
-              done = true;
+            if (this.isTerminalDelivery(evt)) {
+              channel.done = true;
               return;
             }
           }
@@ -406,93 +445,53 @@ export class InMemoryEventSink implements EventSink {
 
         // 若该运行已终态且历史中已无 finish 事件，先排空实时队列已到达的事件
         if (run.isTerminal) {
-          while (liveQueue.length > 0) {
-            const evt = liveQueue.shift()!;
-            if (evt.sequence > lastYieldedSequence || evt.type === "error") {
-              lastYieldedSequence = evt.sequence;
-              lastConfirmedSequence = evt.sequence;
-              if (evt.eventId) lastConfirmedEventId = evt.eventId;
+          while (channel.liveQueue.length > 0) {
+            const evt = this.takeNextDeliverable(channel, cursor);
+            if (evt) {
               yield evt;
-              if (
-                evt.type === "finish" ||
-                (evt.type === "error" && (evt as any).error?.code === "EVENT_BACKPRESSURE_LIMIT")
-              ) {
-                done = true;
+              if (this.isTerminalDelivery(evt)) {
+                channel.done = true;
                 return;
               }
             }
           }
-          done = true;
+          channel.done = true;
           return;
         }
       }
 
       // 无缝衔接消费实时队列中的事件
-      while ((liveQueue.length > 0 || !done) && !options.signal?.aborted) {
+      while ((channel.liveQueue.length > 0 || !channel.done) && !options.signal?.aborted) {
         if (this.evictedRuns.has(runId)) {
-          done = true;
+          channel.done = true;
           break;
         }
-        if (liveQueue.length > 0) {
-          const evt = liveQueue.shift()!;
-          if (evt.sequence > lastYieldedSequence || evt.type === "error") {
-            lastYieldedSequence = evt.sequence;
-            lastConfirmedSequence = evt.sequence;
-            if (evt.eventId) lastConfirmedEventId = evt.eventId;
+        if (channel.liveQueue.length > 0) {
+          const evt = this.takeNextDeliverable(channel, cursor);
+          if (evt) {
             yield evt;
-            if (
-              evt.type === "finish" ||
-              (evt.type === "error" && (evt as any).error?.code === "EVENT_BACKPRESSURE_LIMIT")
-            ) {
-              done = true;
+            if (this.isTerminalDelivery(evt)) {
+              channel.done = true;
               return;
             }
           }
         } else {
           if (this.evictedRuns.has(runId)) {
-            done = true;
+            channel.done = true;
             break;
           }
-          await new Promise<void>((resolve) => {
-            let runWakeups = this.wakeups.get(runId);
-            if (!runWakeups) {
-              runWakeups = new Set();
-              this.wakeups.set(runId, runWakeups);
-            }
-            const unregister = () => {
-              runWakeups?.delete(onWakeup);
-              if (runWakeups && runWakeups.size === 0) {
-                this.wakeups.delete(runId);
-              }
-              currentWakeupCleanup = null;
-            };
-            const onWakeup = () => {
-              done = true;
-              unregister();
-              resolve();
-            };
-            runWakeups.add(onWakeup);
-            currentWakeupCleanup = unregister;
-            notify = () => {
-              unregister();
-              resolve();
-            };
+          await this.waitForNextEvent(runId, channel, (cleanupFn) => {
+            currentWakeupCleanup = cleanupFn;
           });
         }
       }
 
       // 消费中止或完成瞬间积压在 liveQueue 中的剩余事件
-      while (liveQueue.length > 0) {
-        const evt = liveQueue.shift()!;
-        if (evt.sequence > lastYieldedSequence || evt.type === "error") {
-          lastYieldedSequence = evt.sequence;
-          lastConfirmedSequence = evt.sequence;
-          if (evt.eventId) lastConfirmedEventId = evt.eventId;
+      while (channel.liveQueue.length > 0) {
+        const evt = this.takeNextDeliverable(channel, cursor);
+        if (evt) {
           yield evt;
-          if (
-            evt.type === "finish" ||
-            (evt.type === "error" && (evt as any).error?.code === "EVENT_BACKPRESSURE_LIMIT")
-          ) {
+          if (this.isTerminalDelivery(evt)) {
             return;
           }
         }
@@ -502,6 +501,101 @@ export class InMemoryEventSink implements EventSink {
     }
   }
 
+  /**
+   * 断言请求游标仍处于保留窗口内（过期则抛出 EVENT_CURSOR_EXPIRED 错误）。
+   */
+  private assertCursorRetained(
+    run: RunBuffer,
+    after: number | string,
+    afterSequence: number | undefined
+  ): void {
+    const earliestSeq = run.earliestRetainedSequence ?? 0;
+    if (afterSequence !== undefined && afterSequence >= 0 && afterSequence < earliestSeq - 1) {
+      const earliestCursor = run.earliestRetainedEventId ?? String(earliestSeq);
+      const expiredErr = new Error(
+        `Event cursor '${after}' has expired; earliest available cursor is '${earliestCursor}'`
+      );
+      (expiredErr as any).code = EVENT_CURSOR_EXPIRED;
+      (expiredErr as any).details = {
+        cursor: after,
+        earliestCursor,
+        earliestRetainedCursor: earliestCursor,
+        earliestSequence: earliestSeq,
+        earliestEventId: run.earliestRetainedEventId,
+      };
+      throw expiredErr;
+    }
+  }
+
+  /**
+   * 记录已交付事件并推进游标（已交付序号与最后确认游标）。
+   */
+  private trackDeliveredEvent(cursor: SubscriberCursor, evt: ExecutionEvent): void {
+    cursor.lastYieldedSequence = evt.sequence;
+    cursor.lastConfirmedSequence = evt.sequence;
+    if (evt.eventId) cursor.lastConfirmedEventId = evt.eventId;
+  }
+
+  /**
+   * 终止谓词：finish 事件或背压终止事件交付后订阅应立即结束。
+   */
+  private isTerminalDelivery(evt: ExecutionEvent): boolean {
+    return (
+      evt.type === "finish" ||
+      (evt.type === "error" && evt.error?.code === EVENT_BACKPRESSURE_LIMIT)
+    );
+  }
+
+  /**
+   * 从实时队列取出下一条应交付的事件（跳过已交付序号），并同步推进游标。
+   */
+  private takeNextDeliverable(
+    channel: SubscriberChannel,
+    cursor: SubscriberCursor
+  ): ExecutionEvent | undefined {
+    const evt = channel.liveQueue.shift();
+    if (!evt) return undefined;
+    if (evt.sequence > cursor.lastYieldedSequence || evt.type === "error") {
+      this.trackDeliveredEvent(cursor, evt);
+      return evt;
+    }
+    return undefined;
+  }
+
+  /**
+   * 挂起等待下一条实时事件、通道终止或运行淘汰唤醒（严格注销监听避免泄漏）。
+   */
+  private async waitForNextEvent(
+    runId: string,
+    channel: SubscriberChannel,
+    registerCleanup: (cleanup: (() => void) | null) => void
+  ): Promise<void> {
+    await new Promise<void>((resolve) => {
+      let runWakeups = this.wakeups.get(runId);
+      if (!runWakeups) {
+        runWakeups = new Set();
+        this.wakeups.set(runId, runWakeups);
+      }
+      const unregister = () => {
+        runWakeups?.delete(onWakeup);
+        if (runWakeups && runWakeups.size === 0) {
+          this.wakeups.delete(runId);
+        }
+        registerCleanup(null);
+      };
+      const onWakeup = () => {
+        channel.done = true;
+        unregister();
+        resolve();
+      };
+      runWakeups.add(onWakeup);
+      registerCleanup(unregister);
+      channel.notify = () => {
+        unregister();
+        resolve();
+      };
+    });
+  }
   /**
    * 手动修剪已终态运行中早于指定序列号的历史事件（用于模拟过期清理）。
    */

@@ -219,14 +219,60 @@ const anonymousRunnerActionIds = new WeakMap<object, string>();
 let anonymousRunnerActionCounter = 0;
 
 /**
+ * 单次 start 调用的运行期共享上下文对象（收敛原闭包散落状态）。
+ */
+interface RunExecutionContext {
+  /** 本次执行生成的全局唯一运行 ID */
+  runId: string;
+  /** 原始执行控制选项 */
+  options: ExecutionStartOptions;
+  /** 原始输入数据 */
+  input: unknown;
+  /** 原始传入的 Action 对象、引用或标识符 */
+  actionOrId: ActionDefinition | ActionRef | string;
+  /** 预解析出的目标 Action 定义（可能延迟解析） */
+  action: ActionDefinition | undefined;
+  /** 目标 Action 标识 */
+  targetActionId: string;
+  /** 目标 Package 标识 */
+  targetPackageId: string;
+  /** 生效的进程执行器 */
+  effectiveProcess: ProcessAPI | undefined;
+  /** 执行开始时间戳 */
+  startedAt: string;
+  /** 调用栈快照（用于深度与环路检测） */
+  callStack: string[];
+}
+
+/**
+ * 运行终态收敛器（收敛原 finalized、persistError、isTimeout、timeoutTimer 闭包状态）。
+ */
+interface RunFinalizer {
+  /** 是否已写入终态 */
+  finalized: boolean;
+  /** 是否命中超时 */
+  isTimeout: boolean;
+  /** 落库异常错误信息 */
+  persistError: RuntimeError | undefined;
+  /** 超时定时器句柄 */
+  timeoutTimer: ReturnType<typeof setTimeout> | undefined;
+  /** 超时守卫绑定的取消控制器 */
+  controller: AbortController | undefined;
+  /** 绑定取消控制器并启动超时定时器 */
+  startTimeout(controller: AbortController, timeoutMs: number): void;
+  /** 写入终态（幂等，自动清理超时定时器） */
+  finalize(status: TerminalRunStatus, output?: unknown, error?: RuntimeError): void;
+}
+
+/**
  * ActionDock 核心执行引擎（ActionRunner）。
  * 
  * 职责：
- * 1. 负责 Action 执行的全生命周期管理（校验、隔离、跟踪、落库）。
- * 2. 入参 (inputSchema) 与出参 (outputSchema) 的 JSON Schema 严格校验。
- * 3. 嵌套 Action 相互调用的环路检测（Cycle Detection）。
- * 4. 超时 (Timeout) 与中断信号 (AbortSignal) 竞态控制。
- * 5. 自动记录并持久化 RunRecord 运行记录至 SQLite 存储。
+ * - 负责 Action 执行的全生命周期管理（校验、隔离、跟踪、落库）。
+ * - 入参 (inputSchema) 与出参 (outputSchema) 的 JSON Schema 严格校验。
+ * - 嵌套 Action 相互调用的环路检测（Cycle Detection）。
+ * - 超时 (Timeout) 与中断信号 (AbortSignal) 竞态控制。
+ * - 自动记录并持久化 RunRecord 运行记录至 SQLite 存储。
  */
 export class ActionRunner {
   private packageId: string;
@@ -364,7 +410,7 @@ export class ActionRunner {
     const targetActionId = parsed.actionId;
     const targetPackageId = parsed.packageId;
 
-    // 1. 本地 actions 映射表优先检索
+    // 本地 actions 映射表优先检索
     if (targetPackageId && targetPackageId !== this.packageId) {
       if (this.actions.has(`${targetPackageId}/${targetActionId}`)) {
         return { status: "found", action: this.actions.get(`${targetPackageId}/${targetActionId}`)! };
@@ -378,7 +424,7 @@ export class ActionRunner {
       }
     }
 
-    // 2. 外部注入的自定义 actionResolver 调度
+    // 外部注入的自定义 actionResolver 调度
     if (this.actionResolver) {
       try {
         const customResolved = await this.actionResolver(ref, this.packageId);
@@ -398,7 +444,7 @@ export class ActionRunner {
       }
     }
 
-    // 3. 基于全局链接注册表与目录索引的动态寻址与按需加载
+    // 基于全局链接注册表与目录索引的动态寻址与按需加载
     const identifier = targetPackageId
       ? `${targetPackageId}/${targetActionId}`
       : targetActionId;
@@ -576,6 +622,127 @@ export class ActionRunner {
     input: unknown = {},
     options: ExecutionStartOptions = {}
   ): ExecutionHandle {
+    const runCtx = this.prepareRunContext(actionOrId, input, options);
+    const { runId, targetActionId, targetPackageId } = runCtx;
+
+    // 输入参数 JSON 格式与合法性防御校验（拦截 NaN/Infinity/循环引用等非 JSON 类型）
+    const inputCheck = validateJsonValue(input);
+    if (!inputCheck.valid) {
+      const error: RuntimeError = {
+        code: INPUT_NOT_JSON,
+        message: `Input validation failed for action '${targetActionId}': ${inputCheck.reason}`,
+      };
+      // 安全记录 failed 状态（不可序列化的非法 input 严禁直接写入持久化存储）
+      this.tryPersistInitialRun(runCtx, "failed", error);
+      return {
+        runId,
+        result: Promise.resolve({ ok: false, runId, error }),
+        cancel: () => false,
+      };
+    }
+
+    // 始终优先将执行尝试持久化到存储中（确保任意异常与终态都可追溯）
+    this.persistInitialRun(runCtx, "running");
+    const finalizer = this.createRunFinalizer(runCtx);
+
+    // 调用嵌套深度限制检测 (Max Call Depth Check)
+    const depthError = this.checkCallDepth(runCtx.callStack, targetActionId, runCtx.options);
+    if (depthError) {
+      finalizer.finalize("failed", undefined, depthError);
+      return {
+        runId,
+        result: Promise.resolve({ ok: false, runId, error: depthError }),
+        cancel: () => false,
+      };
+    }
+
+    // 环路死锁检测 (Cycle Detection)
+    const cycle = this.computeCallKey(runCtx.callStack, targetActionId, targetPackageId);
+    if (cycle.error) {
+      finalizer.finalize("failed", undefined, cycle.error);
+      return {
+        runId,
+        result: Promise.resolve({ ok: false, runId, error: cycle.error }),
+        cancel: () => false,
+      };
+    }
+    runCtx.callStack.push(cycle.callKey);
+
+    // 输入参数 JSON Schema 校验（若 action 已就绪）
+    const schemaError = this.checkActionInputSchema(runCtx.action, targetActionId, input);
+    if (schemaError) {
+      finalizer.finalize("failed", undefined, schemaError);
+      return {
+        runId,
+        result: Promise.resolve({ ok: false, runId, error: schemaError }),
+        cancel: () => false,
+      };
+    }
+
+    // 初始化 AbortController 与超时定时器
+    const controller = new AbortController();
+    if (options.signal) {
+      if (options.signal.aborted) {
+        controller.abort(options.signal.reason);
+      } else {
+        options.signal.addEventListener(
+          "abort",
+          () => controller.abort(options.signal?.reason),
+          { once: true }
+        );
+      }
+    }
+
+    if (typeof options.timeoutMs === "number" && options.timeoutMs > 0) {
+      finalizer.startTimeout(controller, options.timeoutMs);
+    }
+
+    // 构建 ActionContext 运行时上下文
+    const ctx = this.buildActionContext({
+      runCtx,
+      controller,
+      rootRunId: this.computeRootRunId(runCtx),
+    });
+
+    // 执行 Action 业务逻辑并与取消/超时信号进行竞态
+    const executionPromise = this.raceExecutionAndAbort({
+      runCtx,
+      actionOrId,
+      input,
+      options,
+      controller,
+      finalizer,
+      ctx,
+    });
+
+    return {
+      runId,
+      result: executionPromise,
+      cancel: (reason?: string): boolean => {
+        if (finalizer.finalized || controller.signal.aborted) {
+          return false;
+        }
+        controller.abort(new Error(reason || "Action execution was cancelled"));
+        return true;
+      },
+    };
+  }
+
+  /**
+   * 计算根运行标识（优先显式 rootRunId，其次 parentRunId，最后自身 runId）。
+   */
+  private computeRootRunId(runCtx: RunExecutionContext): string {
+    return runCtx.options.rootRunId || runCtx.options.parentRunId || runCtx.runId;
+  }
+
+  /**
+   * 预解析执行目标并装配运行期共享上下文对象（runId、目标标识、时钟源与调用栈快照）。
+   */
+  private prepareRunContext(
+    actionOrId: ActionDefinition | ActionRef | string,
+    input: unknown,
+    options: ExecutionStartOptions
+  ): RunExecutionContext {
     const runId = options.runId || randomUUID();
     const effectiveClock = options.platform?.clock ?? this.clock;
     const effectiveProcess = options.process || options.platform?.process || this.process;
@@ -600,27 +767,7 @@ export class ActionRunner {
       if (actObj.id) {
         targetActionId = actObj.id;
       } else {
-        let foundId: string | undefined;
-        for (const [id, a] of this.actions) {
-          if (a === action) {
-            foundId = id;
-            break;
-          }
-        }
-        if (foundId) {
-          targetActionId = foundId;
-        } else {
-          let anonId = anonymousRunnerActionIds.get(action);
-          if (!anonId) {
-            anonymousRunnerActionCounter++;
-            anonId = `anonymous-action-${anonymousRunnerActionCounter}`;
-            anonymousRunnerActionIds.set(action, anonId);
-          }
-          targetActionId = anonId;
-          try {
-            actObj.id = targetActionId;
-          } catch {}
-        }
+        targetActionId = this.resolveAnonymousActionId(action);
       }
       this.actions.set(targetActionId, action);
     } else {
@@ -639,54 +786,66 @@ export class ActionRunner {
       }
     }
 
-    // 0. 输入参数 JSON 格式与合法性防御校验（拦截 NaN/Infinity/循环引用等非 JSON 类型）
-    const inputCheck = validateJsonValue(input);
-    if (!inputCheck.valid) {
-      const error: RuntimeError = {
-        code: INPUT_NOT_JSON,
-        message: `Input validation failed for action '${targetActionId}': ${inputCheck.reason}`,
-      };
-      // 安全记录 failed 状态（不可序列化的非法 input 严禁直接写入持久化存储）
-      const initialRun: RunRecord = {
-        id: runId,
-        rootRunId: options.rootRunId || options.parentRunId || runId,
-        parentRunId: options.parentRunId,
-        packageId: targetPackageId,
-        packageInstanceId: options.packageInstanceId || targetPackageId,
-        actionId: targetActionId,
-        generationId: options.generationId || "1",
-        ownerId: options.ownerId || "local",
-        hostSessionId: options.hostSessionId || this.hostSessionId,
-        status: "failed",
-        error,
-        startedAt,
-        finishedAt: startedAt,
-      };
-      try {
-        this.storage.createRun(initialRun);
-      } catch {}
-      return {
-        runId,
-        result: Promise.resolve({ ok: false, runId, error }),
-        cancel: () => false,
-      };
-    }
-
-    // 1. 始终优先将执行尝试持久化到存储中（确保任意异常与终态都可追溯）
-    const initialRun: RunRecord = {
-      id: runId,
-      rootRunId: options.rootRunId || options.parentRunId || runId,
-      parentRunId: options.parentRunId,
-      packageId: targetPackageId,
-      packageInstanceId: options.packageInstanceId || targetPackageId,
-      actionId: targetActionId,
-      generationId: options.generationId || "1",
-      ownerId: options.ownerId || "local",
-      hostSessionId: options.hostSessionId || this.hostSessionId,
-      status: "running",
-      input: input as JsonValue | undefined,
+    return {
+      runId,
+      options,
+      input,
+      action,
+      actionOrId,
+      targetActionId,
+      targetPackageId,
+      effectiveProcess,
       startedAt,
+      callStack,
     };
+  }
+
+  /**
+   * 为匿名传入的 Action 定义对象解析或分配稳定标识。
+   */
+  private resolveAnonymousActionId(action: ActionDefinition): string {
+    const actObj = action as any;
+    let foundId: string | undefined;
+    for (const [id, a] of this.actions) {
+      if (a === action) {
+        foundId = id;
+        break;
+      }
+    }
+    if (foundId) {
+      return foundId;
+    }
+    let anonId = anonymousRunnerActionIds.get(action);
+    if (!anonId) {
+      anonymousRunnerActionCounter++;
+      anonId = `anonymous-action-${anonymousRunnerActionCounter}`;
+      anonymousRunnerActionIds.set(action, anonId);
+    }
+    try {
+      actObj.id = anonId;
+    } catch {}
+    return anonId;
+  }
+
+  /**
+   * 尝试将 failed 终态初始记录写入存储（非法输入场景，存储异常静默忽略）。
+   */
+  private tryPersistInitialRun(
+    runCtx: RunExecutionContext,
+    status: "running" | "failed",
+    error?: RuntimeError
+  ): void {
+    const initialRun = this.buildInitialRunRecord(runCtx, status, error);
+    try {
+      this.storage.createRun(initialRun);
+    } catch {}
+  }
+
+  /**
+   * 构建 running 初始记录并强制写入存储（存储不可用时抛出 RUN_REPOSITORY_UNAVAILABLE）。
+   */
+  private persistInitialRun(runCtx: RunExecutionContext, status: "running"): void {
+    const initialRun = this.buildInitialRunRecord(runCtx, status);
     try {
       this.storage.createRun(initialRun);
     } catch (err: any) {
@@ -695,49 +854,105 @@ export class ActionRunner {
       (error as any).details = { originalError: err?.message };
       throw error;
     }
+  }
 
-    let finalized = false;
-    let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
-    let persistError: RuntimeError | undefined;
-    const finalizeRun = (
-      status: TerminalRunStatus,
-      output?: unknown,
-      error?: RuntimeError
-    ) => {
-      if (timeoutTimer) {
-        clearTimeout(timeoutTimer);
-        timeoutTimer = undefined;
-      }
-      if (finalized) return;
-      finalized = true;
-      try {
-        this.storage.updateRun(runId, status, output, error);
-      } catch (persistErr: any) {
-        persistError = {
-          code: RUN_PERSISTENCE_FAILED,
-          message: `RUN_PERSISTENCE_FAILED: Failed to persist run state: ${persistErr?.message || String(persistErr)}`,
-          details: { originalError: persistErr?.message },
-        };
-      }
+  /**
+   * 依据运行期上下文构造 RunRecord 初始记录。
+   */
+  private buildInitialRunRecord(
+    runCtx: RunExecutionContext,
+    status: "running" | "failed",
+    error?: RuntimeError
+  ): RunRecord {
+    const { runId, options, targetPackageId, targetActionId, startedAt } = runCtx;
+    const record: RunRecord = {
+      id: runId,
+      rootRunId: this.computeRootRunId(runCtx),
+      parentRunId: options.parentRunId,
+      packageId: targetPackageId,
+      packageInstanceId: options.packageInstanceId || targetPackageId,
+      actionId: targetActionId,
+      generationId: options.generationId || "1",
+      ownerId: options.ownerId || "local",
+      hostSessionId: options.hostSessionId || this.hostSessionId,
+      status,
+      error,
+      startedAt,
     };
+    if (status === "running") {
+      record.input = runCtx.input as JsonValue | undefined;
+    } else {
+      record.finishedAt = startedAt;
+    }
+    return record;
+  }
 
-    // 2. 调用嵌套深度限制检测 (Max Call Depth Check)
+  /**
+   * 创建运行终态收敛器：封装终态去重、超时定时器清理与落库异常捕获。
+   */
+  private createRunFinalizer(runCtx: RunExecutionContext): RunFinalizer {
+    const finalizer: RunFinalizer = {
+      finalized: false,
+      isTimeout: false,
+      persistError: undefined,
+      timeoutTimer: undefined,
+      controller: undefined,
+      startTimeout: (controller: AbortController, timeoutMs: number) => {
+        finalizer.controller = controller;
+        finalizer.timeoutTimer = setTimeout(() => {
+          finalizer.isTimeout = true;
+          finalizer.controller?.abort(new Error(`Action exceeded timeout of ${timeoutMs}ms`));
+        }, timeoutMs);
+      },
+      finalize: (status: TerminalRunStatus, output?: unknown, error?: RuntimeError) => {
+        if (finalizer.timeoutTimer) {
+          clearTimeout(finalizer.timeoutTimer);
+          finalizer.timeoutTimer = undefined;
+        }
+        if (finalizer.finalized) return;
+        finalizer.finalized = true;
+        try {
+          this.storage.updateRun(runCtx.runId, status, output, error);
+        } catch (persistErr: any) {
+          finalizer.persistError = {
+            code: RUN_PERSISTENCE_FAILED,
+            message: `RUN_PERSISTENCE_FAILED: Failed to persist run state: ${persistErr?.message || String(persistErr)}`,
+            details: { originalError: persistErr?.message },
+          };
+        }
+      },
+    };
+    return finalizer;
+  }
+
+  /**
+   * 调用嵌套深度限制检测（超限时返回 ACTION_CALL_CYCLE 错误）。
+   */
+  private checkCallDepth(
+    callStack: string[],
+    targetActionId: string,
+    options: ExecutionStartOptions
+  ): RuntimeError | undefined {
+    // 执行级 options.maxCallDepth 可覆盖构造级默认值，保留原覆盖契约
     const maxDepth = options.maxCallDepth ?? this.maxCallDepth;
     if (callStack.length >= maxDepth) {
-      const error: RuntimeError = {
+      return {
         code: ACTION_CALL_CYCLE,
         message: `Maximum call depth of ${maxDepth} exceeded: ${callStack.join(" -> ")} -> ${targetActionId}`,
         details: { alias: ACTION_MAX_DEPTH_EXCEEDED, reason: "depth_exceeded", maxDepth, callStack: [...callStack] },
       };
-      finalizeRun("failed", undefined, error);
-      return {
-        runId,
-        result: Promise.resolve({ ok: false, runId, error }),
-        cancel: () => false,
-      };
     }
+    return undefined;
+  }
 
-    // 3. 环路死锁检测 (Cycle Detection)
+  /**
+   * 计算调用键并执行环路死锁检测（命中时返回携带错误的调用键结果）。
+   */
+  private computeCallKey(
+    callStack: string[],
+    targetActionId: string,
+    targetPackageId: string
+  ): { callKey: string; error?: RuntimeError } {
     const isExternal = Boolean(targetPackageId && targetPackageId !== this.packageId);
     const callKey = isExternal
       ? `${targetPackageId}/${targetActionId}`
@@ -748,158 +963,204 @@ export class ActionRunner {
       : (callStack.includes(callKey) || (this.packageId ? callStack.includes(`${this.packageId}/${targetActionId}`) : false));
 
     if (hasCycle) {
-      const error: RuntimeError = {
-        code: ACTION_CALL_CYCLE,
-        message: `Cycle detected in action invocation: ${callStack.join(" -> ")} -> ${callKey}`,
-        details: { alias: ACTION_CYCLE_DETECTED, reason: "cycle_detected", callStack: [...callStack], target: callKey },
-      };
-      finalizeRun("failed", undefined, error);
       return {
-        runId,
-        result: Promise.resolve({ ok: false, runId, error }),
-        cancel: () => false,
+        callKey,
+        error: {
+          code: ACTION_CALL_CYCLE,
+          message: `Cycle detected in action invocation: ${callStack.join(" -> ")} -> ${callKey}`,
+          details: { alias: ACTION_CYCLE_DETECTED, reason: "cycle_detected", callStack: [...callStack], target: callKey },
+        },
       };
     }
-    callStack.push(callKey);
+    return { callKey };
+  }
 
-
-
-    // 5. 输入参数 JSON Schema 校验（若 action 已就绪）
+  /**
+   * 输入参数 JSON Schema 校验（若 action 已就绪，返回校验错误或 undefined）。
+   */
+  private checkActionInputSchema(
+    action: ActionDefinition | undefined,
+    targetActionId: string,
+    input: unknown
+  ): RuntimeError | undefined {
     const targetInputSchema =
       (action as any)?.inputSchema ?? this.projectConfig?.actions?.[targetActionId]?.inputSchema;
     if (targetInputSchema) {
       const val = validateSchema(targetInputSchema, input);
       if (!val.valid) {
-        const error: RuntimeError = {
+        return {
           code: INPUT_VALIDATION_FAILED,
           message: `Input schema validation failed for action '${targetActionId}'`,
           details: val.errors,
         };
-        finalizeRun("failed", undefined, error);
-        return {
-          runId,
-          result: Promise.resolve({ ok: false, runId, error }),
-          cancel: () => false,
-        };
       }
     }
+    return undefined;
+  }
 
-    // 5. 初始化 AbortController 与超时定时器
-    const controller = new AbortController();
-    if (options.signal) {
-      if (options.signal.aborted) {
-        controller.abort(options.signal.reason);
-      } else {
-        options.signal.addEventListener(
-          "abort",
-          () => controller.abort(options.signal?.reason),
-          { once: true }
-        );
-      }
-    }
-
-    let isTimeout = false;
-    if (typeof options.timeoutMs === "number" && options.timeoutMs > 0) {
-      timeoutTimer = setTimeout(() => {
-        isTimeout = true;
-        controller.abort(new Error(`Action exceeded timeout of ${options.timeoutMs}ms`));
-      }, options.timeoutMs);
-    }
-
-    // 6. 构建 ActionContext 运行时上下文
-    const ctx = createActionContext({
+  /**
+   * 构建 ActionContext 运行时上下文（内嵌子 Action 调用委托提为私有方法）。
+   */
+  private buildActionContext(args: {
+    runCtx: RunExecutionContext;
+    controller: AbortController;
+    rootRunId: string;
+  }) {
+    const { runCtx, controller, rootRunId } = args;
+    const { options, targetActionId, effectiveProcess } = runCtx;
+    return createActionContext({
       actionId: targetActionId,
       storage: this.storage,
       globalStorage: this.globalStorage,
       overrides: { ...this.configOverrides, ...(options.configOverrides || {}) },
       projectConfig: this.projectConfig,
-      runId,
-      rootRunId: initialRun.rootRunId,
+      runId: runCtx.runId,
+      rootRunId,
       parentRunId: options.parentRunId,
       signal: controller.signal,
       process: effectiveProcess,
       progress: options.progress,
       logger: options.logger || new StderrLogger(targetActionId),
-      onActionInvoke: async (childAction, childInput, parentRunId) => {
-        if (this.activeSubRuns >= this.maxSubRuns) {
-          const err = new Error(`Maximum concurrent sub-runs (${this.maxSubRuns}) reached`);
-          (err as any).code = ACTION_SUBRUN_LIMIT;
-          (err as any).details = { alias: MAX_SUBRUNS_REACHED, limit: this.maxSubRuns };
-          throw err;
-        }
-
-        let childPackageId = this.packageId;
-        const parsed = ActionResolver.parseRef(childAction as ActionRef | string);
-        if (parsed.packageId) {
-          childPackageId = parsed.packageId;
-        }
-        const childActionId = parsed.actionId;
-
-        const actionConfig = this.projectConfig?.actions?.[targetActionId] as any;
-        const declaredUses = actionConfig?.uses ?? (action as any)?.uses;
-        if (childPackageId && childPackageId !== this.packageId && Array.isArray(declaredUses)) {
-          const targetRef = `${childPackageId}/${childActionId}`;
-          const isAllowed = declaredUses.some(
-            (u: string) => u === targetRef || u === `${childPackageId}/*` || u === childPackageId
-          );
-          if (!isAllowed) {
-            const err = new Error(
-              `Undeclared cross-package dependency: Action '${this.packageId}/${targetActionId}' does not declare '${targetRef}' in 'uses'`
-            );
-            (err as any).code = UNDECLARED_ACTION_DEPENDENCY;
-            (err as any).details = {
-              caller: `${this.packageId}/${targetActionId}`,
-              target: targetRef,
-              declaredUses,
-            };
-            throw err;
-          }
-        }
-
-        this.activeSubRuns++;
-        try {
-          let runnerToUse: ActionRunner = this;
-          if (childPackageId && childPackageId !== this.packageId) {
-            if (this.actions.has(`${childPackageId}/${childActionId}`)) {
-              runnerToUse = this;
-            } else {
-              const targetRunner = await this.resolveTargetPackageRunner(childPackageId);
-              if (targetRunner) {
-                runnerToUse = targetRunner;
-              } else if (!this.actionResolver) {
-                const err = new Error(`Package '${childPackageId}' could not be resolved`);
-                (err as any).code = PACKAGE_NOT_FOUND;
-                throw err;
-              }
-            }
-          }
-
-          const childResult = await runnerToUse.execute(childAction, childInput, {
-            rootRunId: initialRun.rootRunId,
-            parentRunId,
-            callStack,
-            signal: controller.signal,
-            process: effectiveProcess,
-            platform: options.platform || this.platform,
-            progress: options.progress,
-            logger: options.logger,
-            configOverrides: options.configOverrides,
-            maxCallDepth: options.maxCallDepth ?? this.maxCallDepth,
-          });
-          if (!childResult.ok) {
-            const err = new Error(childResult.error.message);
-            (err as any).code = childResult.error.code;
-            (err as any).details = childResult.error.details;
-            throw err;
-          }
-          return childResult.data;
-        } finally {
-          this.activeSubRuns--;
-        }
-      },
+      onActionInvoke: (childAction, childInput, parentRunId) =>
+        this.invokeChildAction({
+          runCtx,
+          controller,
+          rootRunId,
+          childAction,
+          childInput,
+          parentRunId,
+        }),
     });
+  }
 
-    // 7. 执行 Action 业务逻辑并与取消/超时信号进行竞态
+  /**
+   * 子 Action 调用委托：并发上限守卫、uses 跨包声明校验与子执行派发。
+   */
+  private async invokeChildAction(args: {
+    runCtx: RunExecutionContext;
+    controller: AbortController;
+    rootRunId: string;
+    childAction: ActionRef | string;
+    childInput: unknown;
+    parentRunId?: string;
+  }): Promise<unknown> {
+    const { runCtx, controller, rootRunId, childAction, childInput, parentRunId } = args;
+    const { options, targetActionId, effectiveProcess, callStack } = runCtx;
+
+    if (this.activeSubRuns >= this.maxSubRuns) {
+      const err = new Error(`Maximum concurrent sub-runs (${this.maxSubRuns}) reached`);
+      (err as any).code = ACTION_SUBRUN_LIMIT;
+      (err as any).details = { alias: MAX_SUBRUNS_REACHED, limit: this.maxSubRuns };
+      throw err;
+    }
+
+    let childPackageId = this.packageId;
+    const parsed = ActionResolver.parseRef(childAction as ActionRef | string);
+    if (parsed.packageId) {
+      childPackageId = parsed.packageId;
+    }
+    const childActionId = parsed.actionId;
+
+    this.assertDeclaredUses(runCtx.action, targetActionId, childPackageId, childActionId);
+
+    this.activeSubRuns++;
+    try {
+      const runnerToUse = await this.resolveChildRunner(childPackageId, childActionId);
+
+      const childResult = await runnerToUse.execute(childAction, childInput, {
+        rootRunId,
+        parentRunId,
+        callStack,
+        signal: controller.signal,
+        process: effectiveProcess,
+        platform: options.platform || this.platform,
+        progress: options.progress,
+        logger: options.logger,
+        configOverrides: options.configOverrides,
+        maxCallDepth: options.maxCallDepth ?? this.maxCallDepth,
+      });
+      if (!childResult.ok) {
+        const err = new Error(childResult.error.message);
+        (err as any).code = childResult.error.code;
+        (err as any).details = childResult.error.details;
+        throw err;
+      }
+      return childResult.data;
+    } finally {
+      this.activeSubRuns--;
+    }
+  }
+
+  /**
+   * 校验跨包子调用是否已在 uses 声明中授权（未声明时抛出 UNDECLARED_ACTION_DEPENDENCY）。
+   */
+  private assertDeclaredUses(
+    action: ActionDefinition | undefined,
+    targetActionId: string,
+    childPackageId: string,
+    childActionId: string
+  ): void {
+    const actionConfig = this.projectConfig?.actions?.[targetActionId] as any;
+    const declaredUses = actionConfig?.uses ?? (action as any)?.uses;
+    if (childPackageId && childPackageId !== this.packageId && Array.isArray(declaredUses)) {
+      const targetRef = `${childPackageId}/${childActionId}`;
+      const isAllowed = declaredUses.some(
+        (u: string) => u === targetRef || u === `${childPackageId}/*` || u === childPackageId
+      );
+      if (!isAllowed) {
+        const err = new Error(
+          `Undeclared cross-package dependency: Action '${this.packageId}/${targetActionId}' does not declare '${targetRef}' in 'uses'`
+        );
+        (err as any).code = UNDECLARED_ACTION_DEPENDENCY;
+        (err as any).details = {
+          caller: `${this.packageId}/${targetActionId}`,
+          target: targetRef,
+          declaredUses,
+        };
+        throw err;
+      }
+    }
+  }
+
+  /**
+   * 解析子调用应使用的 Runner（本包或已解析的目标包 Runner）。
+   */
+  private async resolveChildRunner(
+    childPackageId: string,
+    childActionId: string
+  ): Promise<ActionRunner> {
+    if (childPackageId && childPackageId !== this.packageId) {
+      if (this.actions.has(`${childPackageId}/${childActionId}`)) {
+        return this;
+      }
+      const targetRunner = await this.resolveTargetPackageRunner(childPackageId);
+      if (targetRunner) {
+        return targetRunner;
+      }
+      if (!this.actionResolver) {
+        const err = new Error(`Package '${childPackageId}' could not be resolved`);
+        (err as any).code = PACKAGE_NOT_FOUND;
+        throw err;
+      }
+    }
+    return this;
+  }
+
+  /**
+   * 执行 Action 业务逻辑并与取消/超时信号进行竞态，返回执行结果信封 Promise。
+   */
+  private raceExecutionAndAbort(args: {
+    runCtx: RunExecutionContext;
+    actionOrId: ActionDefinition | ActionRef | string;
+    input: unknown;
+    options: ExecutionStartOptions;
+    controller: AbortController;
+    finalizer: RunFinalizer;
+    ctx: ReturnType<ActionRunner["buildActionContext"]>;
+  }): Promise<ExecutionResult> {
+    const { runCtx, actionOrId, input, options, controller, finalizer, ctx } = args;
+    const { runId, targetActionId } = runCtx;
+
     const abortPromise = new Promise<never>((_, reject) => {
       if (controller.signal.aborted) {
         reject(controller.signal.reason || new Error("Action execution was cancelled"));
@@ -912,9 +1173,9 @@ export class ActionRunner {
       }
     });
 
-    const executionPromise = (async (): Promise<ExecutionResult> => {
+    return (async (): Promise<ExecutionResult> => {
       try {
-        let currentAction = action;
+        let currentAction = runCtx.action;
         if (!currentAction) {
           const resolution = await this.resolveAction(actionOrId);
           if (resolution.status === "found") {
@@ -926,7 +1187,7 @@ export class ActionRunner {
               packageId: resolution.packageId,
               projectRoot: resolution.projectRoot,
             });
-            finalizeRun("failed", undefined, error);
+            finalizer.finalize("failed", undefined, error);
             return { ok: false, runId, error };
           } else {
             const error: RuntimeError = {
@@ -934,7 +1195,7 @@ export class ActionRunner {
               message: `Action '${targetActionId}' not found in registry or linked packages`,
               details: resolution.reason ? { reason: resolution.reason } : undefined,
             };
-            finalizeRun("failed", undefined, error);
+            finalizer.finalize("failed", undefined, error);
             return { ok: false, runId, error };
           }
 
@@ -944,7 +1205,7 @@ export class ActionRunner {
               code: INPUT_NOT_JSON,
               message: `Input validation failed for action '${targetActionId}': ${inputCheck.reason}`,
             };
-            finalizeRun("failed", undefined, error);
+            finalizer.finalize("failed", undefined, error);
             return { ok: false, runId, error };
           }
 
@@ -956,7 +1217,7 @@ export class ActionRunner {
                 message: `Input schema validation failed for action '${targetActionId}'`,
                 details: val.errors,
               };
-              finalizeRun("failed", undefined, error);
+              finalizer.finalize("failed", undefined, error);
               return { ok: false, runId, error };
             }
           }
@@ -974,29 +1235,20 @@ export class ActionRunner {
             code: OUTPUT_NOT_JSON,
             message: `Output validation failed for action '${targetActionId}': ${outputCheck.reason}`,
           };
-          finalizeRun("failed", undefined, error);
+          finalizer.finalize("failed", undefined, error);
           return { ok: false, runId, error };
         }
 
         // 输出结果 Schema 校验
-        const targetOutputSchema =
-          (currentAction as any)?.outputSchema ?? this.projectConfig?.actions?.[targetActionId]?.outputSchema;
-        if (targetOutputSchema) {
-          const outVal = validateSchema(targetOutputSchema, rawOutput);
-          if (!outVal.valid) {
-            const error: RuntimeError = {
-              code: OUTPUT_VALIDATION_FAILED,
-              message: `Output schema validation failed for action '${targetActionId}'`,
-              details: outVal.errors,
-            };
-            finalizeRun("failed", undefined, error);
-            return { ok: false, runId, error };
-          }
+        const outputSchemaError = this.checkActionOutputSchema(currentAction, targetActionId, rawOutput);
+        if (outputSchemaError) {
+          finalizer.finalize("failed", undefined, outputSchemaError);
+          return { ok: false, runId, error: outputSchemaError };
         }
 
-        finalizeRun("success", rawOutput);
-        if (persistError) {
-          return { ok: false, runId, error: persistError };
+        finalizer.finalize("success", rawOutput);
+        if (finalizer.persistError) {
+          return { ok: false, runId, error: finalizer.persistError };
         }
         return {
           ok: true,
@@ -1004,56 +1256,81 @@ export class ActionRunner {
           data: rawOutput as JsonValue,
         };
       } catch (err: any) {
-        if (isTimeout) {
-          const error: RuntimeError = {
-            code: ACTION_TIMEOUT,
-            message: `Action exceeded timeout of ${options.timeoutMs}ms`,
-          };
-          finalizeRun("timed_out", undefined, error);
-          return { ok: false, runId, error: persistError || error };
-        }
-
-        if (controller.signal.aborted) {
-          const reason = controller.signal.reason;
-          const reasonMsg =
-            reason instanceof Error
-              ? reason.message
-              : typeof reason === "string"
-              ? reason
-              : undefined;
-          const error: RuntimeError = {
-            code: ACTION_CANCELLED,
-            message: "Action execution was cancelled",
-            details: reasonMsg ? { reason: reasonMsg } : undefined,
-          };
-          finalizeRun("cancelled", undefined, error);
-          return { ok: false, runId, error: persistError || error };
-        }
-
-        const error: RuntimeError = {
-          code: err?.code || ACTION_FAILED,
-          message: err?.message || String(err),
-          details: err?.details,
-        };
-        finalizeRun("failed", undefined, error);
-        return {
-          ok: false,
-          runId,
-          error: persistError || error,
-        };
+        return this.classifyExecutionError(err, runCtx, controller, finalizer);
       }
     })();
+  }
 
+  /**
+   * 输出结果 Schema 校验（返回校验错误或 undefined）。
+   */
+  private checkActionOutputSchema(
+    action: ActionDefinition | undefined,
+    targetActionId: string,
+    rawOutput: unknown
+  ): RuntimeError | undefined {
+    const targetOutputSchema =
+      (action as any)?.outputSchema ?? this.projectConfig?.actions?.[targetActionId]?.outputSchema;
+    if (targetOutputSchema) {
+      const outVal = validateSchema(targetOutputSchema, rawOutput);
+      if (!outVal.valid) {
+        return {
+          code: OUTPUT_VALIDATION_FAILED,
+          message: `Output schema validation failed for action '${targetActionId}'`,
+          details: outVal.errors,
+        };
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * 异常分类收敛：超时、取消与业务失败分别映射为对应终态与错误码。
+   */
+  private classifyExecutionError(
+    err: any,
+    runCtx: RunExecutionContext,
+    controller: AbortController,
+    finalizer: RunFinalizer
+  ): ExecutionResult {
+    const { runId, options } = runCtx;
+
+    if (finalizer.isTimeout) {
+      const error: RuntimeError = {
+        code: ACTION_TIMEOUT,
+        message: `Action exceeded timeout of ${options.timeoutMs}ms`,
+      };
+      finalizer.finalize("timed_out", undefined, error);
+      return { ok: false, runId, error: finalizer.persistError || error };
+    }
+
+    if (controller.signal.aborted) {
+      const reason = controller.signal.reason;
+      const reasonMsg =
+        reason instanceof Error
+          ? reason.message
+          : typeof reason === "string"
+          ? reason
+          : undefined;
+      const error: RuntimeError = {
+        code: ACTION_CANCELLED,
+        message: "Action execution was cancelled",
+        details: reasonMsg ? { reason: reasonMsg } : undefined,
+      };
+      finalizer.finalize("cancelled", undefined, error);
+      return { ok: false, runId, error: finalizer.persistError || error };
+    }
+
+    const error: RuntimeError = {
+      code: err?.code || ACTION_FAILED,
+      message: err?.message || String(err),
+      details: err?.details,
+    };
+    finalizer.finalize("failed", undefined, error);
     return {
+      ok: false,
       runId,
-      result: executionPromise,
-      cancel: (reason?: string): boolean => {
-        if (finalized || controller.signal.aborted) {
-          return false;
-        }
-        controller.abort(new Error(reason || "Action execution was cancelled"));
-        return true;
-      },
+      error: finalizer.persistError || error,
     };
   }
 

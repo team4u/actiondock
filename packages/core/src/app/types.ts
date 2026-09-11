@@ -227,6 +227,8 @@ export interface ActionDockApp {
   readonly packageId: string;
   /** 包根目录绝对物理路径 */
   readonly packageRoot?: string;
+  /** 项目配置对象（actiondock.json 解析结果） */
+  readonly projectConfig: ProjectConfig;
   /** 底层运行平台驱动适配契约 */
   readonly platform: RuntimePlatform;
   /** 当前包持久化存储实例 */
@@ -235,6 +237,8 @@ export interface ActionDockApp {
   readonly globalStorage?: RuntimeStorage;
   /** 统一执行协调服务实例 */
   readonly executionService: ExecutionService;
+  /** 预加载的 Action 定义映射表（短标识至定义） */
+  readonly actionsMap: Map<string, ActionDefinition>;
 
   /** 获取当前包元数据信息 */
   info(): Promise<PackageInfo>;

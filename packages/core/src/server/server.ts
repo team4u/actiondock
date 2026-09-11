@@ -114,8 +114,8 @@ export async function startActionDockServer(
   options: ServerOptions = {}
 ): Promise<ActionDockServerInstance> {
   let hostInstance: ActionDockHost | undefined =
-    options.host && typeof options.host === "object" && typeof (options.host as any).listActions === "function"
-      ? (options.host as ActionDockHost)
+    options.host && typeof options.host === "object" && "listActions" in options.host
+      ? options.host
       : undefined;
 
   let targetInstance: ActionDockTarget | undefined = options.target;
@@ -157,8 +157,8 @@ export async function startActionDockServer(
   if (!targetInstance && hostInstance) {
     targetInstance = new LocalActionDockTarget(hostInstance);
   } else if (targetInstance && !hostInstance) {
-    const inner = (targetInstance as any).target;
-    if (inner && typeof inner.listApps === "function") {
+    const inner = targetInstance?.unwrap?.();
+    if (inner && "listApps" in inner) {
       hostInstance = inner;
     }
   }
@@ -312,7 +312,7 @@ export async function startActionDockServer(
           // 忽略关闭异常
         }
       }
-      if (hostInstance && hostInstance !== (targetInstance as any)?.target) {
+      if (hostInstance && hostInstance !== targetInstance?.unwrap?.()) {
         try {
           await hostInstance.close(stopOptions);
         } catch {

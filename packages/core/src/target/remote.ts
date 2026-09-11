@@ -391,15 +391,23 @@ export class RemoteActionDockTarget implements ActionDockTarget {
     return {
       runId,
       status,
-      result: this.waitForRunCompletion(runId, options?.signal),
+      result: this.waitForRunCompletion(runId, options?.signal, options?.timeoutMs),
     };
   }
 
+  /**
+   * 等待远端运行抵达终态：优先监听 SSE 事件流，失败后按指数退避轮询运行详情。
+   *
+   * @param runId 运行标识
+   * @param signal 外部取消信号
+   * @param timeoutMs 运行自身声明的超时（等待上限取该值与默认上限中的较大者）
+   */
   private async waitForRunCompletion(
     runId: string,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    timeoutMs?: number
   ): Promise<ExecutionResult> {
-    // 1. 优先尝试监听 SSE 事件流终态事件
+    // 优先尝试监听 SSE 事件流终态事件
     try {
       for await (const evt of this.events(runId, { signal })) {
         if (evt.type === "finish") {
@@ -409,13 +417,31 @@ export class RemoteActionDockTarget implements ActionDockTarget {
           }
         }
       }
-    } catch {
-      // 忽略 SSE 异常并自动回退轮询
+    } catch (err: any) {
+      // SSE 通道异常视为不可用：记录后按指数退避进入轮询兜底
+      console.warn(
+        `[ActionDock] SSE event stream unavailable for run '${runId}', falling back to polling: ${err?.message || String(err)}`
+      );
     }
 
-    // 2. 回退短轮询检索运行详情
+    // 回退指数退避轮询检索运行详情（150ms 起步，上限 2000ms）
+    return this.pollRunCompletion(runId, signal, timeoutMs);
+  }
+
+  /**
+   * 指数退避轮询远端运行详情直至终态、取消或超时上限。
+   */
+  private async pollRunCompletion(
+    runId: string,
+    signal?: AbortSignal,
+    timeoutMs?: number
+  ): Promise<ExecutionResult> {
     const startTime = Date.now();
-    const maxWaitMs = 60000;
+    // 等待上限与运行自身 timeoutMs 对齐（取二者较大值，默认 60000ms）
+    const maxWaitMs = Math.max(60000, timeoutMs ?? 0);
+    let delayMs = 150;
+    const maxDelayMs = 2000;
+
     while (Date.now() - startTime < maxWaitMs) {
       if (signal?.aborted) {
         return {
@@ -447,15 +473,17 @@ export class RemoteActionDockTarget implements ActionDockTarget {
           };
         }
       }
-      await new Promise((resolve) => setTimeout(resolve, 150));
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      delayMs = Math.min(delayMs * 2, maxDelayMs);
     }
 
+    const waitedMs = Date.now() - startTime;
     return {
       ok: false,
       runId,
       error: {
         code: TIMEOUT,
-        message: `Timed out waiting for run '${runId}' completion`,
+        message: `Timed out waiting for run '${runId}' completion after ${waitedMs}ms`,
       },
     };
   }

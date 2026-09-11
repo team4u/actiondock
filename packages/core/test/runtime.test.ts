@@ -745,6 +745,16 @@ describe("ActionRunner", () => {
     const depthRun = storage.listRuns().find((r) => r.error?.code === "ACTION_CALL_CYCLE" || r.error?.code === "ACTION_MAX_DEPTH_EXCEEDED");
     expect(depthRun).toBeDefined();
     expect(depthRun?.status).toBe("failed");
+
+    // 执行级 maxCallDepth 覆盖契约：构造级默认 3，执行级 1 应立即拦住嵌套调用
+    const shallowResult = await runner.execute("test.rec-a", {}, { maxCallDepth: 1 });
+    expect(shallowResult.ok).toBe(false);
+    const shallowError = (shallowResult as { ok: false; error?: { code?: string; details?: { alias?: string } } }).error;
+    expect(shallowError?.code).toBe("ACTION_CALL_CYCLE");
+    expect(shallowError?.details?.alias).toBe("ACTION_MAX_DEPTH_EXCEEDED");
+    // 执行级覆盖为更大值时，同样四层链可正常递归完成（覆盖构造级 3）
+    const deepOk = await runner.execute("test.rec-a", {}, { maxCallDepth: 8 });
+    expect(deepOk.ok).toBe(true);
   });
 
   it("handles cross-package execution switching to target package storage and context", async () => {

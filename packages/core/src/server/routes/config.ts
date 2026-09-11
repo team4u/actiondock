@@ -41,7 +41,7 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
     try {
       const pkgParam = url.searchParams.get("package") || url.searchParams.get("packageId") || undefined;
       const app = resolveAppForPackage(pkgParam, host, target);
-      const declared = (app as any).projectConfig?.config || {};
+      const declared = app.projectConfig?.config || {};
       const envChecks: any[] = [];
       for (const [k, def] of Object.entries(declared as Record<string, any>)) {
         const resolved = resolveEnvValue(k, def, app.packageId);
@@ -75,7 +75,7 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
       const pkgParam = url.searchParams.get("package") || url.searchParams.get("packageId") || undefined;
       const app = resolveAppForPackage(pkgParam, host, target);
       const stored = app.storage.listConfig();
-      const declared = (app as any).projectConfig?.config || {};
+      const declared = app.projectConfig?.config || {};
       const maskedValues: Record<string, any> = {};
       for (const [k, v] of Object.entries(stored)) {
         if (isSecretConfigKey(k, declared[k])) {

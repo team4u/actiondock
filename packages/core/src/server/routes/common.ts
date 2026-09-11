@@ -63,11 +63,11 @@ export function resolveAppForPackage(
       const app = host.getApp(packageIdOrPath);
       if (app) return app;
     }
-    const innerTarget = (target as any)?.target;
+    const innerTarget = target?.unwrap?.();
     if (innerTarget && "packageId" in innerTarget && innerTarget.packageId === packageIdOrPath) {
       return innerTarget;
     }
-    if (innerTarget && typeof innerTarget.getApp === "function") {
+    if (innerTarget && "getApp" in innerTarget) {
       const app = innerTarget.getApp(packageIdOrPath);
       if (app) return app;
     }
@@ -79,8 +79,8 @@ export function resolveAppForPackage(
     if (apps.length > 0) return apps[0];
   }
 
-  const innerTarget = (target as any)?.target;
-  if (innerTarget && typeof innerTarget.listApps === "function") {
+  const innerTarget = target?.unwrap?.();
+  if (innerTarget && "listApps" in innerTarget) {
     const apps = innerTarget.listApps();
     if (apps.length > 0) return apps[0];
   }

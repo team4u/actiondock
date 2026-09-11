@@ -49,6 +49,22 @@ interface ActiveRun {
 }
 
 /**
+ * 执行事件桥：单次执行的事件发射、进度报告器与双写日志适配器集合。
+ */
+interface ExecutionEventBridge {
+  /** 发射单条执行生命周期事件（自动分配递增序号与时间戳） */
+  emitEvent(payload:
+    | { type: "log"; level: "debug" | "info" | "warn" | "error"; message: string; data?: JsonValue }
+    | { type: "progress"; current?: number; total?: number; message?: string }
+    | { type: "status"; status: RunStatus }
+    | { type: "finish"; result: ExecutionResult }): void;
+  /** 进度报告器（转发外部进度并发射 progress 事件） */
+  progressReporter: ProgressReporter;
+  /** 双写日志适配器（同时写入外部 logger 与事件流） */
+  executionLogger: Logger;
+}
+
+/**
  * 统一执行协调服务实现。
  */
 export class DefaultExecutionService implements ExecutionService {
@@ -228,79 +244,179 @@ export class DefaultExecutionService implements ExecutionService {
     const effectiveClock = options.platform?.clock ?? this.clock;
 
     // requestId 幂等检查与去重处理
-    let designatedRunId: string | undefined;
+    const gateResult = await this.checkIdempotencyGate(
+      input,
+      options,
+      actionRef,
+      effectiveClock
+    );
+    if (gateResult.ticket) {
+      return gateResult.ticket;
+    }
+    const designatedRunId = gateResult.designatedRunId;
 
-    if (options.requestId) {
-      const digestPayload = {
+    const target = await this.resolveExecutionTarget(parsedRef, targetPackageId, targetActionId);
+    if (!target.action) {
+      return this.failTicketForMissingAction({
+        target,
         input,
-        config: options.config,
-        timeoutMs: options.timeoutMs,
-      };
-      const inputDigest = computeDigest(digestPayload);
-      const provisionalRunId = randomUUID();
+        options,
+        targetPackageId,
+        targetActionId,
+        designatedRunId,
+        effectiveClock,
+      });
+    }
 
-      if (this.storage.checkAndRecordIdempotency) {
-        const idemp = this.storage.checkAndRecordIdempotency({
-          ownerId: this.ownerId,
-          actionRef,
-          requestId: options.requestId,
-          inputDigest,
-          runId: provisionalRunId,
-          createdAt: (effectiveClock?.now() ?? new Date()).toISOString(),
-        });
-
-        if (idemp.outcome === "conflict") {
-          const conflictError: RuntimeError = {
-            code: IDEMPOTENCY_CONFLICT,
-            message: `Idempotency conflict for requestId '${options.requestId}': input parameters digest mismatch`,
-            details: {
-              requestId: options.requestId,
-              actionRef,
-              expectedDigest: idemp.existingDigest,
-              actualDigest: inputDigest,
-            },
-          };
-          const err = new Error(conflictError.message);
-          (err as any).code = conflictError.code;
-          (err as any).details = conflictError.details;
-          throw err;
-        }
-
-        if (idemp.outcome === "duplicate") {
-          const existingRunId = idemp.runId;
-          const active = this.activeRuns.get(existingRunId);
-          if (active) {
-            return {
-              runId: existingRunId,
-              status: active.status,
-              result: active.handle.result,
-            };
-          }
-          const record = await this.get(existingRunId);
-          if (record) {
-            const execRes: ExecutionResult =
-              record.status === "success"
-                ? { ok: true, runId: existingRunId, data: record.output ?? null }
-                : {
-                    ok: false,
-                    runId: existingRunId,
-                    error: record.error || {
-                      code: EXECUTION_FAILED,
-                      message: `Run terminated with status '${record.status}'`,
-                    },
-                  };
-            return {
-              runId: existingRunId,
-              status: record.status,
-              result: Promise.resolve(execRes),
-            };
-          }
-        }
-
-        designatedRunId = provisionalRunId;
+    const controller = new AbortController();
+    if (options.signal && typeof options.signal.addEventListener === "function") {
+      if (options.signal.aborted) {
+        controller.abort(options.signal.reason);
+      } else {
+        options.signal.addEventListener(
+          "abort",
+          () => controller.abort(options.signal?.reason),
+          { once: true }
+        );
       }
     }
 
+    const runId = designatedRunId || randomUUID();
+    const bridge = this.createEventBridge({ runId, options, effectiveClock });
+
+    this.registerResolvedAction(target.runner, targetPackageId, targetActionId, target.action);
+    const handle = target.runner.start(targetActionId, input, {
+      runId,
+      rootRunId: options.rootRunId,
+      parentRunId: options.parentRunId,
+      hostSessionId: options.hostSessionId || this.hostSessionId,
+      maxCallDepth: options.maxCallDepth,
+      configOverrides: options.config as Record<string, unknown> | undefined,
+      signal: controller.signal,
+      timeoutMs: options.timeoutMs,
+      progress: bridge.progressReporter,
+      logger: bridge.executionLogger,
+      process: options.process || options.platform?.process || this.process,
+      platform: options.platform || this.platform,
+    });
+
+    const activeItem: ActiveRun = {
+      runId: handle.runId,
+      handle,
+      controller,
+      status: "running",
+      startedAt: (effectiveClock?.now() ?? new Date()).toISOString(),
+    };
+
+    this.activeRuns.set(handle.runId, activeItem);
+    bridge.emitEvent({ type: "status", status: "running" });
+
+    this.watchHandleCompletion(handle, activeItem, bridge);
+
+    return {
+      runId: handle.runId,
+      status: "running",
+      result: handle.result,
+    };
+  }
+
+  /**
+   * 幂等门检查：digest 计算与冲突/重复分流（重复命中时直接返回已有票据）。
+   */
+  private async checkIdempotencyGate(
+    input: JsonValue,
+    options: ExecuteOptions,
+    actionRef: string,
+    effectiveClock?: Clock
+  ): Promise<{ ticket?: ExecutionTicket; designatedRunId?: string }> {
+    if (!options.requestId) {
+      return {};
+    }
+
+    const digestPayload = {
+      input,
+      config: options.config,
+      timeoutMs: options.timeoutMs,
+    };
+    const inputDigest = computeDigest(digestPayload);
+    const provisionalRunId = randomUUID();
+
+    if (!this.storage.checkAndRecordIdempotency) {
+      return {};
+    }
+
+    const idemp = this.storage.checkAndRecordIdempotency({
+      ownerId: this.ownerId,
+      actionRef,
+      requestId: options.requestId,
+      inputDigest,
+      runId: provisionalRunId,
+      createdAt: (effectiveClock?.now() ?? new Date()).toISOString(),
+    });
+
+    if (idemp.outcome === "conflict") {
+      const conflictError: RuntimeError = {
+        code: IDEMPOTENCY_CONFLICT,
+        message: `Idempotency conflict for requestId '${options.requestId}': input parameters digest mismatch`,
+        details: {
+          requestId: options.requestId,
+          actionRef,
+          expectedDigest: idemp.existingDigest,
+          actualDigest: inputDigest,
+        },
+      };
+      const err = new Error(conflictError.message);
+      (err as any).code = conflictError.code;
+      (err as any).details = conflictError.details;
+      throw err;
+    }
+
+    if (idemp.outcome === "duplicate") {
+      const existingRunId = idemp.runId;
+      const active = this.activeRuns.get(existingRunId);
+      if (active) {
+        return {
+          ticket: {
+            runId: existingRunId,
+            status: active.status,
+            result: active.handle.result,
+          },
+        };
+      }
+      const record = await this.get(existingRunId);
+      if (record) {
+        const execRes: ExecutionResult =
+          record.status === "success"
+            ? { ok: true, runId: existingRunId, data: record.output ?? null }
+            : {
+                ok: false,
+                runId: existingRunId,
+                error: record.error || {
+                  code: EXECUTION_FAILED,
+                  message: `Run terminated with status '${record.status}'`,
+                },
+              };
+        return {
+          ticket: {
+            runId: existingRunId,
+            status: record.status,
+            result: Promise.resolve(execRes),
+          },
+        };
+      }
+    }
+
+    return { designatedRunId: provisionalRunId };
+  }
+
+  /**
+   * 解析执行目标：确定目标 Runner 并解析目标 Action 定义。
+   */
+  private async resolveExecutionTarget(
+    parsedRef: ActionRef,
+    targetPackageId: string,
+    targetActionId: string
+  ): Promise<{ runner: ActionRunner; action?: ActionDefinition; resolveError?: RuntimeError }> {
     let runnerToUse: ActionRunner = this._runner;
     let resolveError: RuntimeError | undefined;
 
@@ -345,84 +461,107 @@ export class DefaultExecutionService implements ExecutionService {
       }
     }
 
-    if (!action) {
-      const runId = designatedRunId || randomUUID();
-      const now = (effectiveClock?.now() ?? new Date()).toISOString();
-      const error: RuntimeError = resolveError || {
-        code: ACTION_NOT_FOUND,
-        message: `Action '${targetActionId}' not found in package '${targetPackageId}'`,
-      };
-      const initialRun: RunRecord = {
-        id: runId,
-        rootRunId: options.rootRunId || options.parentRunId || runId,
-        parentRunId: options.parentRunId,
-        packageId: targetPackageId,
-        packageInstanceId: targetPackageId,
-        actionId: targetActionId,
-        generationId: "1",
-        ownerId: this.ownerId,
-        hostSessionId: options.hostSessionId || this.hostSessionId,
-        status: "failed",
-        input,
-        error,
-        startedAt: now,
-        finishedAt: now,
-      };
-      try {
-        runnerToUse.getStorage().createRun(initialRun);
-      } catch (err: any) {
-        const repErr = new Error(`RUN_REPOSITORY_UNAVAILABLE: Failed to initialize run record in repository: ${err?.message || String(err)}`);
-        (repErr as any).code = RUN_REPOSITORY_UNAVAILABLE;
-        (repErr as any).details = { originalError: err?.message };
-        throw repErr;
-      }
+    return { runner: runnerToUse, action, resolveError };
+  }
 
-      this.eventSink.emit({
-        runId,
-        rootRunId: initialRun.rootRunId,
-        sequence: 0,
-        timestamp: now,
-        type: "status",
-        status: "failed",
-      });
-      const errEvt: ExecutionEvent = {
-        runId,
-        rootRunId: initialRun.rootRunId,
-        sequence: 1,
-        timestamp: now,
-        type: "finish",
-        result: {
-          ok: false,
-          runId,
-          error,
-        },
-      };
-      this.eventSink.emit(errEvt);
-      return {
-        runId,
-        status: "failed",
-        result: Promise.resolve({
-          ok: false,
-          runId,
-          error,
-        }),
-      };
-    }
+  /**
+   * 注册解析成功的目标 Action 至目标 Runner（收敛为单一注册入口）。
+   */
+  private registerResolvedAction(
+    runner: ActionRunner,
+    targetPackageId: string,
+    targetActionId: string,
+    action: ActionDefinition
+  ): void {
+    runner.registerAction(targetActionId, action);
+  }
 
-    const controller = new AbortController();
-    if (options.signal && typeof options.signal.addEventListener === "function") {
-      if (options.signal.aborted) {
-        controller.abort(options.signal.reason);
-      } else {
-        options.signal.addEventListener(
-          "abort",
-          () => controller.abort(options.signal?.reason),
-          { once: true }
-        );
-      }
-    }
-
+  /**
+   * 目标 Action 缺失时的失败票据：落库 failed 记录并补发 status 与 finish 事件。
+   */
+  private failTicketForMissingAction(args: {
+    target: { runner: ActionRunner; resolveError?: RuntimeError };
+    input: JsonValue;
+    options: ExecuteOptions;
+    targetPackageId: string;
+    targetActionId: string;
+    designatedRunId?: string;
+    effectiveClock?: Clock;
+  }): ExecutionTicket {
+    const { target, input, options, targetPackageId, targetActionId, designatedRunId, effectiveClock } = args;
     const runId = designatedRunId || randomUUID();
+    const now = (effectiveClock?.now() ?? new Date()).toISOString();
+    const error: RuntimeError = target.resolveError || {
+      code: ACTION_NOT_FOUND,
+      message: `Action '${targetActionId}' not found in package '${targetPackageId}'`,
+    };
+    const rootRunId = options.rootRunId || options.parentRunId || runId;
+    const initialRun: RunRecord = {
+      id: runId,
+      rootRunId,
+      parentRunId: options.parentRunId,
+      packageId: targetPackageId,
+      packageInstanceId: targetPackageId,
+      actionId: targetActionId,
+      generationId: "1",
+      ownerId: this.ownerId,
+      hostSessionId: options.hostSessionId || this.hostSessionId,
+      status: "failed",
+      input,
+      error,
+      startedAt: now,
+      finishedAt: now,
+    };
+    try {
+      target.runner.getStorage().createRun(initialRun);
+    } catch (err: any) {
+      const repErr = new Error(`RUN_REPOSITORY_UNAVAILABLE: Failed to initialize run record in repository: ${err?.message || String(err)}`);
+      (repErr as any).code = RUN_REPOSITORY_UNAVAILABLE;
+      (repErr as any).details = { originalError: err?.message };
+      throw repErr;
+    }
+
+    this.eventSink.emit({
+      runId,
+      rootRunId,
+      sequence: 0,
+      timestamp: now,
+      type: "status",
+      status: "failed",
+    });
+    const errEvt: ExecutionEvent = {
+      runId,
+      rootRunId,
+      sequence: 1,
+      timestamp: now,
+      type: "finish",
+      result: {
+        ok: false,
+        runId,
+        error,
+      },
+    };
+    this.eventSink.emit(errEvt);
+    return {
+      runId,
+      status: "failed",
+      result: Promise.resolve({
+        ok: false,
+        runId,
+        error,
+      }),
+    };
+  }
+
+  /**
+   * 创建执行事件桥：事件序列号分配、进度报告器与双写日志适配器。
+   */
+  private createEventBridge(args: {
+    runId: string;
+    options: ExecuteOptions;
+    effectiveClock?: Clock;
+  }): ExecutionEventBridge {
+    const { runId, options, effectiveClock } = args;
     let sequence = 0;
     type EventPayload =
       | { type: "log"; level: "debug" | "info" | "warn" | "error"; message: string; data?: JsonValue }
@@ -496,33 +635,17 @@ export class DefaultExecutionService implements ExecutionService {
       },
     };
 
-    runnerToUse.registerAction(targetActionId, action);
-    const handle = runnerToUse.start(targetActionId, input, {
-      runId,
-      rootRunId: options.rootRunId,
-      parentRunId: options.parentRunId,
-      hostSessionId: options.hostSessionId || this.hostSessionId,
-      maxCallDepth: options.maxCallDepth,
-      configOverrides: options.config as Record<string, unknown> | undefined,
-      signal: controller.signal,
-      timeoutMs: options.timeoutMs,
-      progress: progressReporter,
-      logger: executionLogger,
-      process: options.process || options.platform?.process || this.process,
-      platform: options.platform || this.platform,
-    });
+    return { emitEvent, progressReporter, executionLogger };
+  }
 
-    const activeItem: ActiveRun = {
-      runId: handle.runId,
-      handle,
-      controller,
-      status: "running",
-      startedAt: (effectiveClock?.now() ?? new Date()).toISOString(),
-    };
-
-    this.activeRuns.set(handle.runId, activeItem);
-    emitEvent({ type: "status", status: "running" });
-
+  /**
+   * 监听执行句柄终态：映射终态状态、补发 status 与 finish 事件并注销活跃运行。
+   */
+  private watchHandleCompletion(
+    handle: ExecutionHandle,
+    activeItem: ActiveRun,
+    bridge: ExecutionEventBridge
+  ): void {
     handle.result
       .then((result: ExecutionResult) => {
         const finalStatus: RunStatus = result.ok
@@ -533,13 +656,13 @@ export class DefaultExecutionService implements ExecutionService {
           ? "cancelled"
           : "failed";
         activeItem.status = finalStatus;
-        emitEvent({ type: "status", status: finalStatus });
-        emitEvent({ type: "finish", result });
+        bridge.emitEvent({ type: "status", status: finalStatus });
+        bridge.emitEvent({ type: "finish", result });
       })
       .catch((err: any) => {
         activeItem.status = "failed";
-        emitEvent({ type: "status", status: "failed" });
-        emitEvent({
+        bridge.emitEvent({ type: "status", status: "failed" });
+        bridge.emitEvent({
           type: "finish",
           result: {
             ok: false,
@@ -554,12 +677,6 @@ export class DefaultExecutionService implements ExecutionService {
       .finally(() => {
         this.activeRuns.delete(handle.runId);
       });
-
-    return {
-      runId: handle.runId,
-      status: "running",
-      result: handle.result,
-    };
   }
 
   async get(runId: string): Promise<RunRecord | undefined> {

@@ -234,6 +234,9 @@ export interface ActionDockTarget {
   /** 列出指定包在存储中的状态条目（含完整元数据） */
   listStateEntries?(packageId: string, options?: any): Promise<StateEntry[]>;
 
+  /** 解包被包装的内部宿主或应用实例（仅本地包装型目标存在） */
+  unwrap?(): ActionDockHost | ActionDockApp | undefined;
+
   /** 关闭目标连接并清理底层资源 */
   close(options?: { timeoutMs?: number }): Promise<void>;
 }

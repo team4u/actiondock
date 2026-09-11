@@ -212,15 +212,15 @@ export class DefaultActionDockHost implements ActionDockHost {
     const targetApp = this.getApp(packageId);
     if (!targetApp) return undefined;
     return {
-      projectRoot: (targetApp as any).packageRoot,
-      projectConfig: (targetApp as any).projectConfig,
+      projectRoot: targetApp.packageRoot,
+      projectConfig: targetApp.projectConfig,
       storage: targetApp.storage,
-      actions: (targetApp as any).actionsMap,
+      actions: targetApp.actionsMap,
     };
   }
 
   private bindApp(app: ActionDockApp): void {
-    const runner = (app as any).executionService?.runner;
+    const runner = app.executionService?.runner;
     if (runner && typeof runner.setPackageContextResolver === "function") {
       runner.setPackageContextResolver(this.resolvePackageContext.bind(this));
     }
@@ -251,7 +251,7 @@ export class DefaultActionDockHost implements ActionDockHost {
     this.bindApp(app);
 
     // 接管与恢复：自动将死亡会话或遗留非终态运行收敛为 interrupted
-    const st = (app as any).storage;
+    const st = app.storage;
     if (st && typeof st.recoverDeadSessionRuns === "function") {
       try {
         st.recoverDeadSessionRuns(this.hostSessionId);
@@ -694,12 +694,12 @@ export class DefaultActionDockHost implements ActionDockHost {
     options?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number }
   ): AsyncIterable<ExecutionEvent> {
     for (const app of this.listApps()) {
-      if ((app as any).executionService?.getActiveHandle?.(runId)) {
+      if (app.executionService?.getActiveHandle?.(runId)) {
         return app.events(runId, options);
       }
     }
     for (const app of this.listApps()) {
-      const storageRecord = (app as any).storage?.getRun?.(runId);
+      const storageRecord = app.storage?.getRun?.(runId);
       if (storageRecord) {
         return app.events(runId, options);
       }

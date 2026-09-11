@@ -207,8 +207,8 @@ export class DefaultActionDockApp implements ActionDockApp {
     }
 
     // 2. 读取项目配置文件中声明的 actions (Manifest v2 格式)
-    if (this.projectConfig && (this.projectConfig as any).actions) {
-      const rawActions = (this.projectConfig as any).actions;
+    if (this.projectConfig && this.projectConfig.actions) {
+      const rawActions = this.projectConfig.actions;
       if (typeof rawActions === "object" && rawActions !== null) {
         for (const [id, item] of Object.entries(rawActions as Record<string, any>)) {
           const existing = map.get(id);
@@ -278,8 +278,8 @@ export class DefaultActionDockApp implements ActionDockApp {
     }
 
     // 2. 读取项目配置文件中的 playbooks
-    if (this.projectConfig && (this.projectConfig as any).playbooks) {
-      const rawPlaybooks = (this.projectConfig as any).playbooks;
+    if (this.projectConfig && this.projectConfig.playbooks) {
+      const rawPlaybooks = this.projectConfig.playbooks;
       if (typeof rawPlaybooks === "object" && rawPlaybooks !== null) {
         for (const [id, item] of Object.entries(rawPlaybooks as Record<string, any>)) {
           const existing = map.get(id);
@@ -384,14 +384,14 @@ export class DefaultActionDockApp implements ActionDockApp {
     }
 
     let liveAction = this.actionsMap.get(id) || (spec ? this.actionsMap.get(spec.id) : undefined);
-    if (!liveAction && (this.executionService as any).getAction) {
+    if (!liveAction && this.executionService.getAction) {
       liveAction =
-        (this.executionService as any).getAction(id) ||
-        (spec ? (this.executionService as any).getAction(spec.id) : undefined);
+        this.executionService.getAction(id) ||
+        (spec ? this.executionService.getAction(spec.id) : undefined);
     }
-    if (!liveAction && (this.executionService as any).runner?.resolveAction) {
+    if (!liveAction && this.executionService.runner?.resolveAction) {
       try {
-        const resolution = await (this.executionService as any).runner.resolveAction(id);
+        const resolution = await this.executionService.runner.resolveAction(id);
         if (resolution.status === "found") {
           liveAction = resolution.action;
         }
