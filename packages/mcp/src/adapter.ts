@@ -13,15 +13,17 @@ import type {
   ActionDockAppOptions,
   ActionDockHost,
   ActionDockTarget,
+  RuntimeStorage,
 } from "@actiondock/core";
-import type { ExecutionResult, RunRecord } from "@actiondock/sdk";
+import type { ExecutionResult, JsonValue, RunRecord } from "@actiondock/sdk";
 import { McpServer } from "@modelcontextprotocol/server";
+import { registerTasksExtension } from "./register-tasks-extension";
 import { toMcpSchema } from "./schemas";
+import type { ActionDockMcpOptions } from "./types";
 import {
-  toMcpTaskPayload,
-  toMcpTaskStatus,
-  type ActionDockMcpOptions,
-} from "./types";
+  isAsyncExecutionRequested,
+  stripExecutionWrapper,
+} from "./execution-mode";
 
 /**
  * 判断目标值是否为普通对象（Plain Object）。
@@ -69,6 +71,43 @@ export function toMcpResult(result: ExecutionResult) {
   };
 }
 
+/** 适配层统一结构化错误码：MCP 工具名冲突。 */
+const MCP_TOOL_NAME_COLLISION = "MCP_TOOL_NAME_COLLISION";
+
+/**
+ * 构造外部注入 storage 的非接管视图。
+ *
+ * 默认（ownStorageLifecycle 为 false）时外部 storage 生命周期由注入方管理，
+ * 适配层仅委托读写而不接管关闭：所有成员函数与属性原样转发到原始实例并绑定原 this，
+ * 仅 close 收敛为显式声明的无操作边界，确保 target.close() 级联关闭时不会误伤外部实例。
+ *
+ * @param storage 外部注入的存储实例
+ */
+function createExternalStorageView(storage: RuntimeStorage): RuntimeStorage {
+  return new Proxy(storage, {
+    get(target, prop) {
+      if (prop === "close") {
+        return () => undefined;
+      }
+      const value = Reflect.get(target, prop, target);
+      return typeof value === "function" ? (value as (...args: unknown[]) => unknown).bind(target) : value;
+    },
+  });
+}
+
+/**
+ * 构造携带结构化错误码的工具名冲突异常。
+ *
+ * @param toolName 冲突的工具名
+ */
+function toolNameCollisionError(toolName: string): Error & { code: string } {
+  const err = new Error(`MCP tool name collision detected for tool '${toolName}'`) as Error & {
+    code: string;
+  };
+  err.code = MCP_TOOL_NAME_COLLISION;
+  return err;
+}
+
 /**
  * 解析或基于选项创建底层 ActionDockTarget 统一门面。
  */
@@ -91,11 +130,17 @@ export async function resolveTarget(
 
   const packages: ActionDockAppOptions[] = [];
 
-  if (options.actions) {
-    const appStorage = options.storage
-      ? Object.assign(Object.create(options.storage), { close: () => {} })
-      : undefined;
+  // 外部注入的 storage 生命周期默认由注入方管理，适配层不伪造 close 语义；
+  // 仅当显式声明 ownStorageLifecycle 时才向包配置透传原始实例（随 target.close() 级联关闭）
+  // 外部注入的 storage 生命周期默认由注入方管理，适配层仅委托读写不接管关闭；
+  // 显式声明 ownStorageLifecycle 时透传原始实例，随 target.close() 级联关闭
+  const appStorage = options.storage
+    ? options.ownStorageLifecycle
+      ? options.storage
+      : createExternalStorageView(options.storage)
+    : undefined;
 
+  if (options.actions) {
     packages.push({
       projectConfig: {
         id: options.packageId || "default",
@@ -109,10 +154,6 @@ export async function resolveTarget(
       configOverrides: options.configOverrides,
     });
   }
-
-  const appStorage = options.storage
-    ? Object.assign(Object.create(options.storage), { close: () => {} })
-    : undefined;
 
   if (options.projectRoots && options.projectRoots.length > 0) {
     for (const root of options.projectRoots) {
@@ -181,7 +222,6 @@ export async function resolveTarget(
     }
     packages.push({
       packageRoot: root,
-      storage: options.storage,
       customHome: options.customHome,
       configOverrides: options.configOverrides,
     });
@@ -206,7 +246,7 @@ export type ActionDockMcpServer = McpServer & {
   target: ActionDockTarget;
   host?: ActionDockHost;
   app?: ActionDockApp;
-  events?: (runId: string, options?: { after?: number; signal?: AbortSignal }) => AsyncIterable<any>;
+  events?: (runId: string, options?: { after?: number; signal?: AbortSignal }) => AsyncIterable<Record<string, unknown>>;
 };
 
 /**
@@ -239,14 +279,10 @@ export async function createActionDockMcpServer(
     version: serverVersion,
   });
 
-  (server.server as any).registerCapabilities({
-    tasks: {
-      listChanged: true,
-      cancel: {},
-    },
-  });
+  // 任务规范扩展注册集中隔离在独立模块，本层不再直接操作 SDK 内层实例
+  registerTasksExtension(server, target);
 
-  // 1. 工具注册与模式映射：tools/list 纯粹委托 target.listActions()
+  // 工具注册与模式映射：tools/list 纯粹委托 target.listActions()
   const actions = await target.listActions();
 
   // 统计 Action 基础 ID 出现频次，用于同名冲突命名空间隔离
@@ -298,9 +334,7 @@ export async function createActionDockMcpServer(
     }
 
     if (registeredToolNames.has(toolName)) {
-      const err = new Error(`MCP tool name collision detected for tool '${toolName}'`);
-      (err as any).code = "MCP_TOOL_NAME_COLLISION";
-      throw err;
+      throw toolNameCollisionError(toolName);
     }
     registeredToolNames.add(toolName);
 
@@ -319,22 +353,13 @@ export async function createActionDockMcpServer(
         inputSchema: toMcpSchema(action.inputSchema),
         outputSchema: action.outputSchema ? toMcpSchema(action.outputSchema) : undefined,
       },
-      async (input: any, ctx: any) => {
-        const isAsync = Boolean(
-          input &&
-            typeof input === "object" &&
-            (input.execution?.mode === "async" ||
-              input.__async === true ||
-              input.async === true)
-        );
+      async (input: unknown, ctx: { mcpReq?: { signal?: AbortSignal } }) => {
+        // 异步执行模式只认显式约定字段 execution.mode，旧版 __async 仅作只读兼容探测
+        const isAsync = isAsyncExecutionRequested(input);
         const signal = ctx.mcpReq?.signal;
 
-        // 分发前剥离执行控制字段，防止污染输入导致模式校验失败
-        let cleanInput = input;
-        if (input && typeof input === "object" && !Array.isArray(input)) {
-          const { execution, __async, async: _async, ...rest } = input;
-          cleanInput = rest;
-        }
+        // 分发前仅剥离适配层注入的包装字段，业务自有字段（含名为 async 的入参）原样透传
+        const cleanInput = stripExecutionWrapper(input) as JsonValue;
 
         if (isAsync) {
           const ticket = await target.startAction(action.id, cleanInput, {
@@ -366,87 +391,9 @@ export async function createActionDockMcpServer(
     );
   }
 
-  // 2. 任务规范映射：tasks/get 委托 target.getRun()
-  (server.server as any).setRequestHandler("tasks/get", async (req: any) => {
-    const taskId = req.params?.taskId;
-    if (!taskId) {
-      throw new Error("taskId parameter is required for tasks/get");
-    }
-    const run = await target.getRun(taskId);
-    if (run) {
-      return {
-        task: toMcpTaskPayload(run),
-      };
-    }
-    throw new Error(`Task '${taskId}' not found`);
-  });
+  // 任务规范映射（tasks/get、tasks/cancel、tasks/list）已收敛至 registerTasksExtension 隔离模块
 
-  // 3. 任务规范映射：tasks/cancel 委托 target.cancelRun()
-  (server.server as any).setRequestHandler("tasks/cancel", async (req: any) => {
-    const taskId = req.params?.taskId;
-    if (!taskId) {
-      throw new Error("taskId parameter is required for tasks/cancel");
-    }
-    const reason = req.params?.reason || "Cancelled via MCP tasks/cancel";
-    const cancelRes = await target.cancelRun(taskId, reason);
-    if (cancelRes.outcome === "requested") {
-      return {
-        taskId,
-        status: "cancelled",
-      };
-    }
-    if (cancelRes.outcome === "already_terminal") {
-      return {
-        taskId,
-        status: toMcpTaskStatus(cancelRes.status),
-      };
-    }
-    const run = await target.getRun(taskId);
-    if (run) {
-      return {
-        taskId,
-        status: toMcpTaskStatus(run.status),
-      };
-    }
-    throw new Error(`Task '${taskId}' not found`);
-  });
-
-  // 4. 任务规范映射：tasks/list 委托 target 历史列表
-  (server.server as any).setRequestHandler("tasks/list", async (req: any) => {
-    const limit = typeof req.params?.limit === "number" ? req.params.limit : 50;
-    const actionId = req.params?.actionId;
-    if (typeof (target as any).listRuns === "function") {
-      const runs = await (target as any).listRuns({ limit, actionId });
-      return {
-        tasks: runs.map(toMcpTaskPayload),
-      };
-    }
-    const host = (target as any).target ?? (target as any).host;
-    if (host && typeof host.listApps === "function") {
-      const allRuns: RunRecord[] = [];
-      for (const a of host.listApps()) {
-        if (a.storage?.listRuns) {
-          allRuns.push(...a.storage.listRuns({ limit, actionId }));
-        }
-      }
-      allRuns.sort(
-        (a: any, b: any) =>
-          new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
-      );
-      return {
-        tasks: allRuns.slice(0, limit).map(toMcpTaskPayload),
-      };
-    }
-    if (host && host.storage?.listRuns) {
-      const runs = host.storage.listRuns({ limit, actionId });
-      return {
-        tasks: runs.map(toMcpTaskPayload),
-      };
-    }
-    return { tasks: [] };
-  });
-
-  // 5. 资源与规程映射：规程映射为只读 MCP Resource 与 Prompt
+  // 资源与规程映射：规程映射为只读 MCP Resource 与 Prompt
   try {
     const playbooks = await target.listPlaybooks();
     for (const pb of playbooks) {
@@ -498,7 +445,9 @@ export async function createActionDockMcpServer(
     // 忽略规程获取或注册异常
   }
 
-  // 6. 服务生命周期：server.close() 纯粹协调 target.close()
+  // 服务生命周期：默认 close 仅关闭 MCP 服务本身，不级联 target——
+  // SDK 传输层（HTTP 每请求 / stdio 探测回落）会销毁工厂产物，若 close 级联会误杀共享 target；
+  // 需要「一次 close 同时释放 target」的独立持有方显式传 cascadeTargetClose
   const originalClose = server.close.bind(server);
   let isClosed = false;
 
@@ -506,25 +455,36 @@ export async function createActionDockMcpServer(
     if (isClosed) return;
     isClosed = true;
 
-    try {
-      await target.close();
-    } catch {
-      // 忽略目标关闭异常
-    }
-
+    // 清理异常不吞没：先关服务再级联目标，server 关闭失败也继续释放 target 并聚合上抛
+    let closeError: unknown;
     try {
       await originalClose();
-    } catch {
-      // 忽略服务关闭异常
+    } catch (err) {
+      closeError = err;
+    }
+    if (options.cascadeTargetClose) {
+      try {
+        await target.close();
+      } catch (err) {
+        if (closeError !== undefined) {
+          throw new AggregateError([closeError, err], "Failed to close MCP server and target");
+        }
+        throw err;
+      }
+    }
+    if (closeError !== undefined) {
+      throw closeError;
     }
   };
 
-  (server as any).close = closeFn;
-  (server as any).target = target;
-  (server as any).host = options.host;
-  (server as any).app = options.app;
-  (server as any).events = (runId: string, opts?: any) => target.events(runId, opts);
+  const decorated = server as ActionDockMcpServer;
+  decorated.close = closeFn;
+  decorated.target = target;
+  decorated.host = options.host;
+  decorated.app = options.app;
+  decorated.events = (runId: string, opts?: Parameters<ActionDockTarget["events"]>[1]) =>
+    target.events(runId, opts);
 
-  return server as ActionDockMcpServer;
+  return decorated;
 }
 

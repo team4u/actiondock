@@ -89,7 +89,7 @@ describe("@actiondock/mcp Host Integration", () => {
     });
 
     // 3. 传入 host 创建 MCP 服务端
-    const server = await createActionDockMcpServer({ host });
+    const server = await createActionDockMcpServer({ host, cascadeTargetClose: true });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await server.connect(serverTransport);
 
@@ -339,7 +339,7 @@ describe("@actiondock/mcp Host Integration", () => {
     });
 
     const target = await createActionDockTarget({ app });
-    const server = await createActionDockMcpServer({ target });
+    const server = await createActionDockMcpServer({ target, cascadeTargetClose: true });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await server.connect(serverTransport);
 

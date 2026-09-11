@@ -93,6 +93,19 @@ export interface ActionDockMcpOptions {
     | Record<string, ActionDefinition>;
   /** 底层存储实例（单元测试或特定场景注入） */
   storage?: RuntimeStorage;
+  /**
+   * 是否由适配层接管外部注入 storage 的生命周期。
+   * 默认 false：外部注入的 storage 由注入方自行管理，适配层不具各 close 语义；
+   * 置为 true 时透传原始实例，随 target.close() 级联关闭。
+   */
+  ownStorageLifecycle?: boolean;
+  /**
+   * 实例 close 是否级联关闭 target 门面。
+   * 默认 false：适配层产物可能被 SDK 传输层按请求（或按连接）创建与销毁，
+   * 级联语义会误杀共享 target，生命周期统一由外层入口的 stop/cleanup 收敛；
+   * 仅在调用方自行持有实例并需要一次 close 同时释放 target 时置 true。
+   */
+  cascadeTargetClose?: boolean;
 }
 
 /**

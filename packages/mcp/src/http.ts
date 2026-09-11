@@ -34,21 +34,14 @@ export function startMcpHttpServer(
   }
 
   return (async () => {
-    const hostTarget = hostInstance ?? (typeof options.host === "object" ? options.host : undefined);
+    // 先一次性解析 target，工厂闭包直接捕获已解析产物，消除选项重复展开
     const { target } = await resolveTarget({
       ...options,
-      host: hostTarget,
+      host: hostInstance ?? (typeof options.host === "object" ? options.host : undefined),
     });
 
     const handler = createMcpHandler(
-      () => {
-        const { host: _httpHost, ...restOptions } = options;
-        return createActionDockMcpServer({
-          ...restOptions,
-          host: hostTarget,
-          target,
-        });
-      },
+      () => createActionDockMcpServer({ target }),
       {
         onerror: (err) => {
           process.stderr.write(`[MCP HTTP Error] ${err?.message || String(err)}\n`);

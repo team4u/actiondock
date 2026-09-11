@@ -1075,7 +1075,7 @@ describe("@actiondock/mcp Adapter", () => {
     await server.close();
   });
 
-  it("coordinates target.close() upon server.close()", async () => {
+  it("coordinates target.close() upon server.close() when cascadeTargetClose is set", async () => {
     let targetClosed = false;
     const dummyTarget = await createActionDockTarget({ projectRoot: tmpDir });
     const originalTargetClose = dummyTarget.close.bind(dummyTarget);
@@ -1086,6 +1086,8 @@ describe("@actiondock/mcp Adapter", () => {
 
     const server = await createActionDockMcpServer({
       target: dummyTarget,
+      // 独立持有实例：close 级联释放 target
+      cascadeTargetClose: true,
     });
 
     await server.close();

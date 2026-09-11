@@ -76,32 +76,56 @@ export async function startMcpStdio(
     }
   );
 
-  const cleanup = async () => {
+  const cleanup = async (): Promise<void> => {
+    // 清理链路逐层释放，错误不吞没：收集首个异常向上透传，后续层继续尽力释放
+    let firstError: unknown;
+    const swallow = (err: unknown) => {
+      if (firstError === undefined) firstError = err;
+      process.stderr.write(
+        `[MCP Cleanup Error] ${err instanceof Error ? err.message : String(err)}\n`
+      );
+    };
+
     if (activeServer) {
       try {
         await activeServer.close();
-      } catch {}
+      } catch (err) {
+        swallow(err);
+      }
     }
     if (targetToUse) {
       try {
         await targetToUse.close();
-      } catch {}
+      } catch (err) {
+        swallow(err);
+      }
+    }
+    try {
+      await stdioHandler.close();
+    } catch (err) {
+      swallow(err);
+    }
+
+    if (firstError !== undefined) {
+      throw firstError;
     }
   };
 
-  process.once("SIGINT", async () => {
-    await cleanup();
-    try {
-      await stdioHandler.close();
-    } catch {}
-    process.exit(0);
-  });
+  const handleSignal = (signalName: string) => {
+    cleanup()
+      .then(() => {
+        // 正常关闭退出码为 0
+        process.exit(0);
+      })
+      .catch((err) => {
+        // 清理失败退出非零退出码，异常详情已写入 stderr 诊断流
+        process.stderr.write(
+          `[MCP ${signalName} Cleanup Failed] ${err instanceof Error ? err.message : String(err)}\n`
+        );
+        process.exit(1);
+      });
+  };
 
-  process.once("SIGTERM", async () => {
-    await cleanup();
-    try {
-      await stdioHandler.close();
-    } catch {}
-    process.exit(0);
-  });
+  process.once("SIGINT", () => handleSignal("SIGINT"));
+  process.once("SIGTERM", () => handleSignal("SIGTERM"));
 }
