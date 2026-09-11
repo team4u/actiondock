@@ -6,6 +6,7 @@ import type { RuntimeStorage } from "./types";
 export * from "./data-dir-lock";
 export * from "./driver";
 export * from "./mask";
+export * from "./params";
 export * from "./sqlite";
 export * from "./types";
 
@@ -61,6 +62,25 @@ export function createStorage(
 }
 
 /**
+ * 解析全局共享数据库（global.db）文件的绝对路径。
+ *
+ * 单一事实源：core 与各运行时平台适配层（如 runtime-node）
+ * 统一调用本函数计算 global.db 路径，禁止在适配层内重复拼接过
+ * 路径规则，避免双实现漂移。
+ *
+ * 优先级规则：
+ * - 显式指定 dataDir -> 返回 `<dataDir>/global.db`
+ * - 默认路径 -> 返回 `~/.actiondock/global.db`
+ */
+export function resolveGlobalDatabasePath(
+  options: { dataDir?: string; customHome?: string } = {}
+): string {
+  return options.dataDir
+    ? join(options.dataDir, "global.db")
+    : join(getActionDockHome(options.customHome), ".actiondock", "global.db");
+}
+
+/**
  * 工厂函数：创建或连接 ActionDock 全局共享数据库（~/.actiondock/global.db）。
  * 用于跨 Package 共享的全局配置项存储。
  * 
@@ -88,9 +108,7 @@ export function createGlobalStorage(
     return new SqliteRuntimeStorage({ dbPath: ":memory:", packageId: "__global__" });
   }
 
-  const dbPath = dataDir
-    ? join(dataDir, "global.db")
-    : join(getActionDockHome(customHome), ".actiondock", "global.db");
+  const dbPath = resolveGlobalDatabasePath({ dataDir, customHome });
   return new SqliteRuntimeStorage({ dbPath, packageId: "__global__" });
 }
 

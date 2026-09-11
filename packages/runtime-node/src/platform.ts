@@ -1,9 +1,9 @@
 import { existsSync, mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 import {
-  getActionDockHome,
   NodeFileSystem,
   resolveDatabasePath,
+  resolveGlobalDatabasePath,
   SqliteRuntimeStorage,
   SystemClock,
   type Clock,
@@ -18,7 +18,7 @@ import {
 } from "@actiondock/core";
 import { NodeModuleLoader } from "./module-loader";
 import { NodeProcessExecutor } from "./process-executor";
-import { NodeSqliteDriver, WorkerSqliteDriver } from "./sqlite-driver";
+import { NodeSqliteDriver } from "./sqlite-driver";
 
 /**
  * Node 平台构建配置选项。
@@ -30,9 +30,9 @@ export interface NodePlatformOptions {
   customHome?: string;
   /** 文件系统安全沙箱根路径 */
   rootDir?: string;
-  /** 是否启用专用工作线程存储驱动（默认为 true，可在生产环境启用 worker_threads 非阻塞存储） */
+  /** 【已废弃】WorkerSqliteDriver 为异步驱动，不再兼容存储层的同步 SqliteDriver 契约，保留选项仅为兼容旧参数，任何非假值均回落到同步驱动并告警 */
   useWorker?: boolean;
-  /** 自定义 SQLite 驱动工厂函数（默认实例化 NodeSqliteDriver 或 WorkerSqliteDriver） */
+  /** 自定义 SQLite 驱动工厂函数（必须返回满足同步契约的 SqliteDriver，默认实例化 NodeSqliteDriver） */
   driverFactory?: (dbPath: string) => SqliteDriver;
 }
 
@@ -52,7 +52,7 @@ function ensureDirectoryForDb(dbPath: string): void {
 /**
  * 创建 Node 运行时平台实例。
  * 组装 Node 原生核心组件：
- * - NodeSqliteDriver 持久化存储驱动
+ * - NodeSqliteDriver 同步持久化存储驱动
  * - NodeProcessExecutor 原生进程执行器
  * - NodeHttpServer 网络服务驱动
  * - NodeModuleLoader 原生源码加载器
@@ -67,11 +67,15 @@ export function createNodePlatform(options: NodePlatformOptions = {}): RuntimePl
   const modules: ModuleLoader = new NodeModuleLoader();
   const process = new NodeProcessExecutor();
 
-  const useWorker = options.useWorker ?? true;
-  const createDriver =
-    options.driverFactory ??
-    ((dbPath: string) =>
-      useWorker ? new WorkerSqliteDriver(dbPath) : new NodeSqliteDriver(dbPath));
+  const createDriver = options.driverFactory ?? ((dbPath: string) => new NodeSqliteDriver(dbPath));
+
+  // 异步 WorkerSqliteDriver 不再兼容存储层的同步 SqliteDriver 契约：
+  // 传入 useWorker 时回落到同步驱动并告警，避免静默注入造成语义错乱。
+  if (options.useWorker) {
+    console.warn(
+      "[createNodePlatform] useWorker is deprecated: WorkerSqliteDriver is async and no longer satisfies the sync SqliteDriver contract; falling back to NodeSqliteDriver."
+    );
+  }
 
   const storage: StorageFactory = {
     createStorage(packageId: string, opts?: StorageFactoryOptions): RuntimeStorage {
@@ -97,9 +101,7 @@ export function createNodePlatform(options: NodePlatformOptions = {}): RuntimePl
       };
       const dbPath = mergedOpts.inMemory
         ? ":memory:"
-        : mergedOpts.dataDir
-        ? join(mergedOpts.dataDir, "global.db")
-        : join(getActionDockHome(mergedOpts.customHome), ".actiondock", "global.db");
+        : resolveGlobalDatabasePath({ dataDir: mergedOpts.dataDir, customHome: mergedOpts.customHome });
       ensureDirectoryForDb(dbPath);
       return new SqliteRuntimeStorage({
         dbPath,

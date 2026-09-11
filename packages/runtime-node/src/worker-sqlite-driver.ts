@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Worker } from "node:worker_threads";
+import { normalizeSqliteParams } from "@actiondock/core";
 
 /**
  * 编译后的工作线程异步参数化语句接口。
@@ -36,6 +37,11 @@ interface RecordedStatement {
  * 同步 SQLite 调用全部在专用 worker_threads 线程中运行，
  * 绝不阻塞主事件循环与取消信号分发。
  */
+/*
+ * 参数规范化函数从 core 的共享常量模块生成：worker 内联脚本无法直接 import，
+ * 因此通过 Function.prototype.toString 将同一份实现序列化注入，
+ * 保证主线程与工作线程的参数规范化逻辑永远同源，杜绝三份拷贝漂移。
+ */
 const WORKER_SCRIPT = `
 const { parentPort, workerData } = require("node:worker_threads");
 const { DatabaseSync } = require("node:sqlite");
@@ -61,30 +67,7 @@ try {
   db.exec("PRAGMA busy_timeout = 5000;");
 } catch (_) {}
 
-function normalizeValue(val) {
-  return val === undefined ? null : val;
-}
-
-function normalizeParams(args) {
-  if (!args || args.length === 0) return [];
-  if (args.length === 1 && Array.isArray(args[0])) {
-    return args[0].map(normalizeValue);
-  }
-  if (
-    args.length === 1 &&
-    typeof args[0] === "object" &&
-    args[0] !== null &&
-    !Buffer.isBuffer(args[0]) &&
-    !(args[0] instanceof Uint8Array)
-  ) {
-    const cleaned = {};
-    for (const [k, v] of Object.entries(args[0])) {
-      cleaned[k] = normalizeValue(v);
-    }
-    return [cleaned];
-  }
-  return args.map(normalizeValue);
-}
+const normalizeSqliteParams = ${normalizeSqliteParams.toString()};
 
 const statementCache = new Map();
 
@@ -111,7 +94,7 @@ parentPort.on("message", (msg) => {
       parentPort.postMessage({ id, success: true });
     } else if (type === "run") {
       const stmt = getCachedStatement(sql);
-      const res = stmt.run(...normalizeParams(params));
+      const res = stmt.run(...normalizeSqliteParams(params));
       parentPort.postMessage({
         id,
         success: true,
@@ -122,11 +105,11 @@ parentPort.on("message", (msg) => {
       });
     } else if (type === "get") {
       const stmt = getCachedStatement(sql);
-      const res = stmt.get(...normalizeParams(params));
+      const res = stmt.get(...normalizeSqliteParams(params));
       parentPort.postMessage({ id, success: true, result: res });
     } else if (type === "all") {
       const stmt = getCachedStatement(sql);
-      const res = stmt.all(...normalizeParams(params));
+      const res = stmt.all(...normalizeSqliteParams(params));
       parentPort.postMessage({ id, success: true, result: res });
     } else if (type === "transaction") {
       db.exec("BEGIN");
@@ -138,7 +121,7 @@ parentPort.on("message", (msg) => {
             results.push(null);
           } else {
             const stmt = getCachedStatement(item.sql);
-            const res = stmt.run(...normalizeParams(item.params));
+            const res = stmt.run(...normalizeSqliteParams(item.params));
             results.push({
               changes: Number(res.changes),
               lastInsertRowid: res.lastInsertRowid,
@@ -319,15 +302,37 @@ export class WorkerSqliteDriver {
 
   /**
    * 异步执行单行查询。
+   * 函数式事务录制期内调用会直接抛错：录制器仅拦截 exec 与 run，
+   * 读操作无法参与事务原子性，静默绕过会产生悬挂 Promise 与脏读，
+   * 属于严格禁止的用法。
    */
   get<T = any>(sql: string, ...params: any[]): Promise<T | undefined> {
+    if (this.activeRecorder) {
+      return Promise.reject(
+        new Error(
+          "WORKER_TRANSACTION_READ_FORBIDDEN: reads are not allowed inside a functional transaction on WorkerSqliteDriver; " +
+            "pre-read outside the transaction instead, or use explicit BEGIN/COMMIT statements, " +
+            "or use the statements-array transaction form"
+        )
+      );
+    }
     return this.request<T | undefined>("get", { sql, params });
   }
 
   /**
    * 异步执行全量结果集查询。
+   * 函数式事务录制期内调用会直接抛错，理由同 get。
    */
   all<T = any>(sql: string, ...params: any[]): Promise<T[]> {
+    if (this.activeRecorder) {
+      return Promise.reject(
+        new Error(
+          "WORKER_TRANSACTION_READ_FORBIDDEN: reads are not allowed inside a functional transaction on WorkerSqliteDriver; " +
+            "pre-read outside the transaction instead, or use explicit BEGIN/COMMIT statements, " +
+            "or use the statements-array transaction form"
+        )
+      );
+    }
     return this.request<T[]>("all", { sql, params });
   }
 

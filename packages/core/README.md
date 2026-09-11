@@ -103,7 +103,7 @@ ActionDock 2.0 核心领域模型与调度引擎。
 
 `@actiondock/core` 保持平台中立，不绑定任何特定运行环境：
 
-- 在日常生产与 Node.js 运行时中，通过 [@actiondock/runtime-node](file:///root/code/action-dock/packages/runtime-node/README.md) 注入非阻塞存储驱动 WorkerSqliteDriver 与 Node.js 进程执行器。
+- 在日常生产与 Node.js 运行时中，通过 [@actiondock/runtime-node](file:///root/code/action-dock/packages/runtime-node/README.md) 注入默认同步存储驱动与 Node.js 进程执行器（另有独立异步驱动 WorkerSqliteDriver 可选）。
 - 在自动化测试中，通过 [@actiondock/testing](file:///root/code/action-dock/packages/testing/README.md) 注入纯内存存储驱动 MemoryStorage 与模拟进程执行器 MockProcessExecutor。
 
 ---

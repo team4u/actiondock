@@ -102,7 +102,7 @@ graph TD
 - 核心领域层：
   - [@actiondock/core](file:///root/code/action-dock/packages/core/README.md)：框架的核心业务领域内核。提供统一调用门面 [ActionDockTarget](file:///root/code/action-dock/packages/core/src/target/types.ts)（LocalTarget、RemoteTarget、IpcTarget）、数据目录排他锁 [DataDirLock](file:///root/code/action-dock/packages/core/src/storage/data-dir-lock.ts)（提供 `DATA_DIR_IN_USE` 与 `DATA_DIR_RECOVERY_REQUIRED` 冲突保护）、依赖原子事务 [beginTransaction](file:///root/code/action-dock/packages/core/src/project/transactions.ts)、结构化异常 TargetError、核心执行引擎 [ActionRunner](file:///root/code/action-dock/packages/core/src/execution/runner.ts) 与调度协调服务 [DefaultExecutionService](file:///root/code/action-dock/packages/core/src/execution/service.ts)。彻底废弃旧版清单机制。
 - 运行时适配层：
-  - [@actiondock/runtime-node](file:///root/code/action-dock/packages/runtime-node/README.md)：Node.js 生产环境适配驱动。针对 Node.js >=24.12.0 原生环境提供实体驱动实现，包括基于 worker_threads 的非阻塞存储驱动 [WorkerSqliteDriver](file:///root/code/action-dock/packages/runtime-node/src/worker-sqlite-driver.ts)、基于原生 ESM 与原生类型擦除的源码模块加载器 [NodeModuleLoader](file:///root/code/action-dock/packages/runtime-node/src/module-loader.ts)、进程执行器 [ExecaProcessExecutor](file:///root/code/action-dock/packages/runtime-node/src/process-executor.ts) 以及基于 `node:http` 的流式服务容器 [NodeHttpServer](file:///root/code/action-dock/packages/runtime-node/src/http-server.ts)。
+  - [@actiondock/runtime-node](file:///root/code/action-dock/packages/runtime-node/README.md)：Node.js 生产环境适配驱动。针对 Node.js >=24.12.0 原生环境提供实体驱动实现，包括基于 node:sqlite 的同步存储驱动（另有独立异步驱动 WorkerSqliteDriver 可选）、基于原生 ESM 与原生类型擦除的源码模块加载器 [NodeModuleLoader](file:///root/code/action-dock/packages/runtime-node/src/module-loader.ts)、进程执行器 [ExecaProcessExecutor](file:///root/code/action-dock/packages/runtime-node/src/process-executor.ts) 以及基于 `node:http` 的流式服务容器 [NodeHttpServer](file:///root/code/action-dock/packages/runtime-node/src/http-server.ts)。
 - 构建与交付层：
   - [@actiondock/builder](file:///root/code/action-dock/packages/builder/README.md)：构建编排规划器与交付导出器。负责依赖规划 [SelectionPlanner](file:///root/code/action-dock/packages/builder/src/planner.ts)、Node.js 目录交付产物构建（`ad build`）、npm 标准包打包（`ad pack`），以及依据 Playbook 规程将项目导出为轻量化 Agent Skill 资产（`ad export skill`，支持 `--mode source` 与 `--mode node`）。彻底删除原 BunCompiler 外部编译器。
 - 协议适配层：
@@ -125,7 +125,7 @@ sequenceDiagram
     participant Facade as 门面层 (CLI / MCP / HTTP)
     participant ExecService as DefaultExecutionService
     participant Runner as ActionRunner
-    participant Driver as 存储与驱动层 (WorkerSqliteDriver / ProcessExecutor)
+    participant Driver as 存储与驱动层 (SqliteDriver / ProcessExecutor)
     participant Action as Action 业务逻辑
 
     Client->>Facade: 发起执行请求 (输入参数与选项)

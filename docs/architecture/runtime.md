@@ -52,8 +52,8 @@ graph TD
 
 在 Node.js 生产环境中，`@actiondock/runtime-node` 将 Core 层的抽象接口绑定至 Node.js 企业级驱动：
 
-- **异步存储驱动：WorkerSqliteDriver**
-  基于 Node.js 原生内置模块 `node:sqlite`（`DatabaseSync`）与 `node:worker_threads` 构建。将所有同步 SQLite 磁盘操作转移至专用后台工作线程中执行，主事件循环零阻塞，对外暴露异步接口（`WorkerSqliteStatement` 提供 `run`、`get`、`all` 异步方法）。默认配置开启预写日志模式（`PRAGMA journal_mode = WAL;`）、外键约束检查（`PRAGMA foreign_keys = ON;`）以及忙等待超时（`PRAGMA busy_timeout = 5000;`），确保长时间查询或锁等待绝不阻塞主线程的取消信号分发与网络通信。
+- **同步存储驱动（默认）：NodeSqliteDriver**
+  基于 Node.js 原生内置模块 `node:sqlite`（`DatabaseSync`）构建，满足 Core 层的同步驱动契约。默认开启预写日志模式（`PRAGMA journal_mode = WAL;`）、外键约束检查（`PRAGMA foreign_keys = ON;`）以及忙等待超时（`PRAGMA busy_timeout = 5000;`）。另有独立的异步驱动 WorkerSqliteDriver（基于 `node:worker_threads` 将同步操作卸载至后台线程，对外暴露异步接口），作为独立组件提供，不注入同步存储契约。
 - **原生进程执行器：NodeProcessExecutor**
   基于 Node.js 原生 `node:child_process` 实现外部系统命令执行。标准输入输出实施物理管道隔离（`stdio: ["pipe", "pipe", "pipe"]`），设置 10MB 输出缓冲区上限（`maxOutputBytes`），防止畸形输出耗尽系统内存。通过独立进程组与跨平台信号分发（POSIX 负数 PID 与 Windows 进程树）精准管理子进程，杜绝孤儿进程。
 - **模块加载器：NodeModuleLoader**

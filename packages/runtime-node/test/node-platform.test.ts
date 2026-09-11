@@ -15,7 +15,7 @@ import {
   NodeHttpServer,
   NodeSqliteDriver,
   TsxModuleLoader,
-  WorkerSqliteDriver,
+
 } from "../src";
 
 describe("createNodePlatform 平台工厂测试", () => {
@@ -148,12 +148,20 @@ describe("createNodePlatform 平台工厂测试", () => {
       await storage.close();
     });
 
-    it("默认启用 WorkerSqliteDriver 工作线程存储驱动", async () => {
+    it("默认使用 NodeSqliteDriver 同步存储驱动（useWorker 已废弃并回落同步驱动）", async () => {
       const platform = createNodePlatform();
       const storage = platform.storage.createStorage("worker-default-test", { inMemory: true });
       expect(storage).toBeInstanceOf(SqliteRuntimeStorage);
-      expect((storage as any).driver).toBeInstanceOf(WorkerSqliteDriver);
+      expect((storage as any).driver).toBeInstanceOf(NodeSqliteDriver);
       await storage.close();
+
+      // 显式传入 useWorker 时同样回落到同步驱动并保持兼容
+      const warnPlatform = createNodePlatform({ useWorker: true });
+      const warnStorage = warnPlatform.storage.createStorage("worker-fallback-test", {
+        inMemory: true,
+      });
+      expect((warnStorage as any).driver).toBeInstanceOf(NodeSqliteDriver);
+      await warnStorage.close();
     });
   });
 

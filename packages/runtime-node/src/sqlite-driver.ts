@@ -1,34 +1,10 @@
 import { DatabaseSync } from "node:sqlite";
+import { normalizeSqliteParams } from "@actiondock/core";
 import type { SqliteDriver, SqliteStatement } from "@actiondock/core";
 
 export * from "./worker-sqlite-driver";
 
-function normalizeValue(val: any): any {
-  return val === undefined ? null : val;
-}
-
-/**
- * 参数规范化：展开数组并将 undefined 参数替换为 null，适配 node:sqlite 的强类型绑定要求。
- */
-function normalizeParams(args: any[]): any[] {
-  if (args.length === 1 && Array.isArray(args[0])) {
-    return args[0].map(normalizeValue);
-  }
-  if (
-    args.length === 1 &&
-    typeof args[0] === "object" &&
-    args[0] !== null &&
-    !Buffer.isBuffer(args[0]) &&
-    !(args[0] instanceof Uint8Array)
-  ) {
-    const cleaned: Record<string, any> = {};
-    for (const [k, v] of Object.entries(args[0])) {
-      cleaned[k] = normalizeValue(v);
-    }
-    return [cleaned];
-  }
-  return args.map(normalizeValue);
-}
+export { normalizeSqliteParams };
 
 /**
  * 基于 Node.js 内置 node:sqlite 实现的 SQLite 驱动适配器。
@@ -77,7 +53,7 @@ export class NodeSqliteDriver implements SqliteDriver {
     return {
       run: (...args: any[]) => {
         this.assertOpen();
-        const params = normalizeParams(args);
+        const params = normalizeSqliteParams(args);
         const res = stmt.run(...params);
         return {
           changes: Number(res.changes),
@@ -86,12 +62,12 @@ export class NodeSqliteDriver implements SqliteDriver {
       },
       get: <T>(...args: any[]): T | undefined => {
         this.assertOpen();
-        const params = normalizeParams(args);
+        const params = normalizeSqliteParams(args);
         return stmt.get(...params) as T | undefined;
       },
       all: <T>(...args: any[]): T[] => {
         this.assertOpen();
-        const params = normalizeParams(args);
+        const params = normalizeSqliteParams(args);
         return stmt.all(...params) as T[];
       },
     };

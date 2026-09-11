@@ -41,7 +41,6 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
   private isClosed = false;
   private statementCache = new Map<string, SqliteStatement>();
   private dbPath: string;
-  private syncReader?: SqliteDriver;
 
   get isOpen(): boolean {
     return !this.isClosed;
@@ -236,21 +235,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     const stmt = this.getStatement(
       "SELECT value_json FROM config WHERE package_id = ? AND key = ?"
     );
-    let row: any = stmt.get<{ value_json: string }>(this.packageId, key);
-    if (row && typeof row.then === "function") {
-      if (this.dbPath && this.dbPath !== ":memory:" && existsSync(this.dbPath)) {
-        try {
-          if (!this.syncReader) {
-            this.syncReader = createDefaultSqliteDriver(this.dbPath);
-          }
-          row = this.syncReader.prepare(
-            "SELECT value_json FROM config WHERE package_id = ? AND key = ?"
-          ).get(this.packageId, key);
-        } catch {
-          // ignore fallback error
-        }
-      }
-    }
+    const row = stmt.get<{ value_json: string }>(this.packageId, key);
     if (!row || row.value_json === undefined || row.value_json === null) {
       return undefined;
     }
@@ -265,22 +250,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     const stmt = this.getStatement(
       "SELECT key, value_json FROM config WHERE package_id = ?"
     );
-    let rawRows: any = stmt.all<{ key: string; value_json: string }>(this.packageId);
-    if (rawRows && typeof rawRows.then === "function") {
-      if (this.dbPath && this.dbPath !== ":memory:" && existsSync(this.dbPath)) {
-        try {
-          if (!this.syncReader) {
-            this.syncReader = createDefaultSqliteDriver(this.dbPath);
-          }
-          rawRows = this.syncReader.prepare(
-            "SELECT key, value_json FROM config WHERE package_id = ?"
-          ).all(this.packageId);
-        } catch {
-          // ignore fallback error
-        }
-      }
-    }
-    const rows = Array.isArray(rawRows) ? rawRows : [];
+    const rows = stmt.all<{ key: string; value_json: string }>(this.packageId);
     const result: Record<string, unknown> = {};
     for (const row of rows) {
       try {
@@ -292,7 +262,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     return result;
   }
 
-  setConfig(key: string, value: unknown): void | Promise<void> {
+  setConfig(key: string, value: unknown): void {
     const stmt = this.getStatement(`
       INSERT INTO config (package_id, key, value_json, updated_at)
       VALUES (?, ?, ?, ?)
@@ -302,20 +272,14 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     `);
     const valJson = JSON.stringify(value);
     const now = this.clock.now().toISOString();
-    const res = stmt.run(this.packageId, key, valJson, now);
-    if (res && typeof (res as any).then === "function") {
-      return (res as unknown) as Promise<void>;
-    }
+    stmt.run(this.packageId, key, valJson, now);
   }
 
-  deleteConfig(key: string): boolean | Promise<boolean> {
+  deleteConfig(key: string): boolean {
     const stmt = this.getStatement(
       "DELETE FROM config WHERE package_id = ? AND key = ?"
     );
     const res = stmt.run(this.packageId, key);
-    if (res && typeof (res as any).then === "function") {
-      return (res as any).then((r: any) => r.changes > 0);
-    }
     return res.changes > 0;
   }
 
@@ -393,9 +357,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       value_json: string;
       updated_at: string;
       expires_at?: string;
-    }> = (rawResult instanceof Promise || typeof (rawResult as any)?.then === "function")
-      ? await rawResult
-      : (Array.isArray(rawResult) ? rawResult : []);
+    }> = Array.isArray(rawResult) ? rawResult : [];
 
     const now = this.clock.now().getTime();
     const uniqueMap = new Map<string, (typeof rawRows)[0]>();
@@ -582,9 +544,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       key: string;
       expires_at?: string;
     }>(...params);
-    const rows = (rawResult instanceof Promise || typeof (rawResult as any)?.then === "function")
-      ? await rawResult
-      : (Array.isArray(rawResult) ? rawResult : []);
+    const rows = Array.isArray(rawResult) ? rawResult : [];
 
     const now = this.clock.now().getTime();
     const result: string[] = [];
@@ -629,9 +589,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       updated_at: string;
       expires_at?: string;
     }>(...params);
-    const rows = (rawResult instanceof Promise || typeof (rawResult as any)?.then === "function")
-      ? await rawResult
-      : (Array.isArray(rawResult) ? rawResult : []);
+    const rows = Array.isArray(rawResult) ? rawResult : [];
 
     const now = this.clock.now().getTime();
     const results: StateEntry[] = [];
@@ -769,9 +727,6 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       `);
       rows = stmt.all(this.packageId, limit);
     }
-    if (rows && typeof (rows as any).then === "function") {
-      return (rows as any).then((r: any[]) => r.map((item: any) => this.mapRunRecord(item)));
-    }
     return rows.map((r) => this.mapRunRecord(r));
   }
 
@@ -803,36 +758,57 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     if (this.isClosed) {
       throw new Error("SqliteRuntimeStorage is closed");
     }
-    return this.driver.transaction(() => {
-      const checkStmt = this.getStatement(`
-        SELECT input_digest, run_id FROM idempotency_keys
-        WHERE owner_id = ? AND action_ref = ? AND request_id = ?
-      `);
-      const existing = checkStmt.get<{ input_digest: string; run_id: string }>(
-        record.ownerId,
-        record.actionRef,
-        record.requestId
-      );
 
-      if (existing) {
-        // 检查关联的运行记录是否仍存在于运行表中
-        const runStmt = this.getStatement("SELECT id FROM runs WHERE id = ?");
-        const runExists = runStmt.get<{ id: string }>(existing.run_id);
-        if (!runExists) {
-          // 原运行记录已被清理淘汰，允许复用该 requestId
+    // 事务外预读：同步契约下驱动的事务录制器仅允许写语句，
+    // 幂等检查所需的读操作全部前移至事务开始之前执行。
+    // 同步单连接串行执行保证预读与事务提交之间不存在并发窗口。
+    const checkStmt = this.getStatement(`
+      SELECT input_digest, run_id FROM idempotency_keys
+      WHERE owner_id = ? AND action_ref = ? AND request_id = ?
+    `);
+    const existing = checkStmt.get<{ input_digest: string; run_id: string }>(
+      record.ownerId,
+      record.actionRef,
+      record.requestId
+    );
+
+    if (existing) {
+      // 检查关联的运行记录是否仍存在于运行表中
+      const runStmt = this.getStatement("SELECT id FROM runs WHERE id = ?");
+      const runExists = runStmt.get<{ id: string }>(existing.run_id);
+      if (!runExists) {
+        // 原运行记录已被清理淘汰，事务内仅执行删除与重登记写操作
+        this.driver.transaction(() => {
           const delStmt = this.getStatement(`
             DELETE FROM idempotency_keys
             WHERE owner_id = ? AND action_ref = ? AND request_id = ?
           `);
           delStmt.run(record.ownerId, record.actionRef, record.requestId);
-        } else {
-          if (existing.input_digest !== record.inputDigest) {
-            return { outcome: "conflict", existingDigest: existing.input_digest };
-          }
-          return { outcome: "duplicate", runId: existing.run_id };
-        }
+
+          const insertStmt = this.getStatement(`
+            INSERT INTO idempotency_keys (owner_id, action_ref, request_id, input_digest, run_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+          `);
+          const createdAt = record.createdAt || this.clock.now().toISOString();
+          insertStmt.run(
+            record.ownerId,
+            record.actionRef,
+            record.requestId,
+            record.inputDigest,
+            record.runId,
+            createdAt
+          );
+        });
+        return { outcome: "new" };
       }
 
+      if (existing.input_digest !== record.inputDigest) {
+        return { outcome: "conflict", existingDigest: existing.input_digest };
+      }
+      return { outcome: "duplicate", runId: existing.run_id };
+    }
+
+    this.driver.transaction(() => {
       const insertStmt = this.getStatement(`
         INSERT INTO idempotency_keys (owner_id, action_ref, request_id, input_digest, run_id, created_at)
         VALUES (?, ?, ?, ?, ?, ?)
@@ -846,9 +822,9 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
         record.runId,
         createdAt
       );
-
-      return { outcome: "new" };
     });
+
+    return { outcome: "new" };
   }
 
   getIdempotencyRecord(ownerId: string, actionRef: string, requestId: string): IdempotencyRecord | undefined {
@@ -917,17 +893,8 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     if (this.isClosed) return;
     this.isClosed = true;
     this.statementCache.clear();
-    if (this.syncReader) {
-      try {
-        this.syncReader.close();
-      } catch {}
-      this.syncReader = undefined;
-    }
     try {
-      const res: any = this.driver.close();
-      if (res && typeof res.then === "function") {
-        await res;
-      }
+      this.driver.close();
     } catch {
       // 忽略重复关闭异常
     }

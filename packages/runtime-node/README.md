@@ -17,8 +17,8 @@ ActionDock 2.0 原生 Node.js 运行时适配器包。
 [WorkerSqliteDriver](file:///root/code/action-dock/packages/runtime-node/src/worker-sqlite-driver.ts) 基于 Node.js worker_threads 模块构建：
 
 - 工作线程隔离：将 SQLite 同步存储操作隔离在独立工作线程中运行，彻底避免密集数据读写与复杂事务阻塞主事件循环。
-- 平台默认启用：在平台工厂函数 `createNodePlatform` 中默认启用（`useWorker: true`），保障系统高并发下的吞吐与灵敏响应。
-- 完整事务支持：完整支持同步参数化查询与事务原子提交，并在异常时自动回滚。
+- 独立异步驱动：作为独立异步驱动提供，不注入 core 的同步存储契约；平台默认使用同步的 NodeSqliteDriver（`useWorker` 选项仅为兼容保留，传入时会回落同步驱动并告警）。
+- 完整事务支持：完整支持参数化查询与语句清单式事务原子提交，并在异常时自动回滚；函数式事务回调内不允许读操作，违例会收到明确报错。
 - 故障自愈处理：当工作线程异常退出时，未决请求报错并由宿主安全捕获。
 
 ### NodeSqliteDriver 同步数据库驱动
@@ -64,9 +64,8 @@ ActionDock 2.0 原生 Node.js 运行时适配器包。
 ```ts
 import { createNodePlatform } from "@actiondock/runtime-node";
 
-// 创建组装好的 Node 运行时平台实例（默认启用 WorkerSqliteDriver 非阻塞存储）
+// 创建组装好的 Node 运行时平台实例（默认使用同步 NodeSqliteDriver）
 const platform = createNodePlatform({
-  useWorker: true,
   dataDir: "./.actiondock/data",
 });
 ```
