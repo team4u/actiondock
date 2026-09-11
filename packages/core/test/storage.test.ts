@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { unlinkSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import * as sdk from "@actiondock/sdk";
 import * as coreStorage from "../src/storage";
 import { resolveDatabasePath } from "../src/storage";
@@ -347,10 +347,10 @@ describe("SqliteRuntimeStorage", () => {
     it("支持合法普通标识符与带 scope 标识符并保持在目标目录下", () => {
       const dataDir = "/tmp/actiondock-test";
       const p1 = resolveDatabasePath("my-pkg", { dataDir });
-      expect(p1).toBe(join(dataDir, "my-pkg", "runtime.db"));
+      expect(p1).toBe(resolve(dataDir, "my-pkg", "runtime.db"));
 
       const p2 = resolveDatabasePath("@my-org/my-pkg", { dataDir });
-      expect(p2).toBe(join(dataDir, "my-org/my-pkg", "runtime.db"));
+      expect(p2).toBe(resolve(dataDir, "my-org/my-pkg", "runtime.db"));
     });
 
     it("统一存储路径规则：项目根目录不再改变路径，统一存放于全局数据目录", () => {
@@ -358,15 +358,15 @@ describe("SqliteRuntimeStorage", () => {
 
       // 默认路径
       const p1 = resolveDatabasePath("sample-pkg", { customHome });
-      expect(p1).toBe(join(customHome, ".actiondock", "data", "sample-pkg", "runtime.db"));
+      expect(p1).toBe(resolve(customHome, ".actiondock", "data", "sample-pkg", "runtime.db"));
 
       // 即使传入 projectRoot，亦统一返回二进制模式全局数据路径
       const p2 = resolveDatabasePath("sample-pkg", { projectRoot: "/workspace/project", customHome });
-      expect(p2).toBe(join(customHome, ".actiondock", "data", "sample-pkg", "runtime.db"));
+      expect(p2).toBe(resolve(customHome, ".actiondock", "data", "sample-pkg", "runtime.db"));
 
       // 带 scope 的包标识符
       const p3 = resolveDatabasePath("@team/my-pkg", { projectRoot: "/workspace/project", customHome });
-      expect(p3).toBe(join(customHome, ".actiondock", "data", "team/my-pkg", "runtime.db"));
+      expect(p3).toBe(resolve(customHome, ".actiondock", "data", "team/my-pkg", "runtime.db"));
 
       // inMemory 模式始终最高优先级返回 :memory:
       expect(resolveDatabasePath("sample-pkg", { inMemory: true })).toBe(":memory:");

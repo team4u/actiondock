@@ -1133,6 +1133,8 @@ describe("@actiondock/mcp Adapter", () => {
       const server = await createActionDockMcpServer({
         packageId: "test.mcp-pkg",
         customHome: fakeHome,
+        // 测试独立持有实例：close 必须级联释放 target 及其 SQLite 句柄，否则 Windows 下临时目录无法删除
+        cascadeTargetClose: true,
       });
       expect(server).toBeDefined();
       await server.close();
