@@ -5,6 +5,7 @@ import type {
   RuntimeError,
 } from "@actiondock/sdk";
 import type { ProcessExecutor } from "@actiondock/core";
+import { PROCESS_CANCELLED, PROCESS_OUTPUT_LIMIT, PROCESS_SPAWN_ERROR, PROCESS_TIMEOUT } from "@actiondock/core";
 
 /**
  * 跨平台终止进程组，确保不会遗留孤儿进程。
@@ -81,7 +82,7 @@ export class NodeProcessExecutor implements ProcessExecutor {
       } catch (spawnErr: any) {
         const durationMs = Date.now() - startTime;
         const errObj: RuntimeError = {
-          code: "PROCESS_SPAWN_ERROR",
+          code: PROCESS_SPAWN_ERROR,
           message: spawnErr?.message || "Failed to spawn process",
         };
         if (options.throwOnError) {
@@ -138,7 +139,7 @@ export class NodeProcessExecutor implements ProcessExecutor {
           cancelled = true;
           if (!error) {
             error = {
-              code: "PROCESS_CANCELLED",
+              code: PROCESS_CANCELLED,
               message: "Process was cancelled by AbortSignal",
             };
           }
@@ -157,7 +158,7 @@ export class NodeProcessExecutor implements ProcessExecutor {
           timedOut = true;
           if (!error) {
             error = {
-              code: "PROCESS_TIMEOUT",
+              code: PROCESS_TIMEOUT,
               message: `Process timed out after ${options.timeoutMs}ms`,
             };
           }
@@ -188,7 +189,7 @@ export class NodeProcessExecutor implements ProcessExecutor {
           outputLimitExceeded = true;
           if (!error) {
             error = {
-              code: "PROCESS_OUTPUT_LIMIT",
+              code: PROCESS_OUTPUT_LIMIT,
               message: `Process output exceeded limit of ${maxOutputBytes} bytes`,
             };
           }
@@ -206,7 +207,7 @@ export class NodeProcessExecutor implements ProcessExecutor {
           outputLimitExceeded = true;
           if (!error) {
             error = {
-              code: "PROCESS_OUTPUT_LIMIT",
+              code: PROCESS_OUTPUT_LIMIT,
               message: `Process output exceeded limit of ${maxOutputBytes} bytes`,
             };
           }
@@ -224,7 +225,7 @@ export class NodeProcessExecutor implements ProcessExecutor {
 
         const durationMs = Date.now() - startTime;
         const spawnError: RuntimeError = error || {
-          code: "PROCESS_SPAWN_ERROR",
+          code: PROCESS_SPAWN_ERROR,
           message: err.message || "Failed to spawn process",
         };
 

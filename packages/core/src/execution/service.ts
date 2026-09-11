@@ -18,6 +18,16 @@ import type { ProjectConfig } from "../project/types";
 import type { Clock } from "../runtime/clock";
 import { type EventSink, InMemoryEventSink } from "../runtime/events";
 import { ActionRunner, type ExecutionHandle } from "../runtime/runner";
+import {
+  ACTION_CANCELLED,
+  ACTION_NOT_FOUND,
+  ACTION_TIMEOUT,
+  EXECUTION_FAILED,
+  IDEMPOTENCY_CONFLICT,
+  RUN_REPOSITORY_UNAVAILABLE,
+  UNHANDLED_EXECUTION_ERROR,
+  describeActionLoadFailure,
+} from "../errors";
 import type { RuntimeStorage } from "../storage/types";
 import type { RuntimePlatform } from "../platform/types";
 import type {
@@ -241,7 +251,7 @@ export class DefaultExecutionService implements ExecutionService {
 
         if (idemp.outcome === "conflict") {
           const conflictError: RuntimeError = {
-            code: "IDEMPOTENCY_CONFLICT",
+            code: IDEMPOTENCY_CONFLICT,
             message: `Idempotency conflict for requestId '${options.requestId}': input parameters digest mismatch`,
             details: {
               requestId: options.requestId,
@@ -275,7 +285,7 @@ export class DefaultExecutionService implements ExecutionService {
                     ok: false,
                     runId: existingRunId,
                     error: record.error || {
-                      code: "EXECUTION_FAILED",
+                      code: EXECUTION_FAILED,
                       message: `Run terminated with status '${record.status}'`,
                     },
                   };
@@ -300,7 +310,7 @@ export class DefaultExecutionService implements ExecutionService {
         runnerToUse = targetRunner;
       } else {
         resolveError = {
-          code: "ACTION_NOT_FOUND",
+          code: ACTION_NOT_FOUND,
           message: `Target package '${targetPackageId}' not found or unresolvable`,
         };
       }
@@ -315,34 +325,18 @@ export class DefaultExecutionService implements ExecutionService {
         if (resolution.status === "found") {
           action = resolution.action;
         } else if (resolution.status === "load_failed") {
-          const cause = resolution.error;
-          const causeMsg = cause?.message || String(cause);
-          const isMissingModule =
-            causeMsg.includes("Cannot find package") ||
-            causeMsg.includes("Cannot find module") ||
-            causeMsg.includes("ERR_MODULE_NOT_FOUND") ||
-            causeMsg.includes("Could not resolve");
-          const hint = isMissingModule
-            ? `依赖未安装，在 '${resolution.projectRoot}' 执行 npm install 或先执行 'ad run ${resolution.packageId}/${targetActionId}'`
-            : undefined;
-
-          resolveError = {
-            code: "ACTION_LOAD_FAILED",
-            message: `Failed to load action '${targetActionId}' from package '${resolution.packageId}' (${resolution.projectRoot}): ${causeMsg}`,
-            details: {
-              packageId: resolution.packageId,
-              projectRoot: resolution.projectRoot,
-              rootCause: causeMsg,
-              hint,
-            },
-          };
+          resolveError = describeActionLoadFailure(resolution.error, {
+            actionId: targetActionId,
+            packageId: resolution.packageId,
+            projectRoot: resolution.projectRoot,
+          });
         } else {
           const targetAction = await this.resolveTargetAction(parsedRef);
           if (targetAction) {
             action = targetAction;
           } else {
             resolveError = {
-              code: "ACTION_NOT_FOUND",
+              code: ACTION_NOT_FOUND,
               message: `Action '${targetActionId}' not found in package '${targetPackageId}'`,
               details: resolution.reason ? { reason: resolution.reason } : undefined,
             };
@@ -355,7 +349,7 @@ export class DefaultExecutionService implements ExecutionService {
       const runId = designatedRunId || randomUUID();
       const now = (effectiveClock?.now() ?? new Date()).toISOString();
       const error: RuntimeError = resolveError || {
-        code: "ACTION_NOT_FOUND",
+        code: ACTION_NOT_FOUND,
         message: `Action '${targetActionId}' not found in package '${targetPackageId}'`,
       };
       const initialRun: RunRecord = {
@@ -378,7 +372,7 @@ export class DefaultExecutionService implements ExecutionService {
         runnerToUse.getStorage().createRun(initialRun);
       } catch (err: any) {
         const repErr = new Error(`RUN_REPOSITORY_UNAVAILABLE: Failed to initialize run record in repository: ${err?.message || String(err)}`);
-        (repErr as any).code = "RUN_REPOSITORY_UNAVAILABLE";
+        (repErr as any).code = RUN_REPOSITORY_UNAVAILABLE;
         (repErr as any).details = { originalError: err?.message };
         throw repErr;
       }
@@ -533,9 +527,9 @@ export class DefaultExecutionService implements ExecutionService {
       .then((result: ExecutionResult) => {
         const finalStatus: RunStatus = result.ok
           ? "success"
-          : result.error?.code === "ACTION_TIMEOUT"
+          : result.error?.code === ACTION_TIMEOUT
           ? "timed_out"
-          : result.error?.code === "ACTION_CANCELLED"
+          : result.error?.code === ACTION_CANCELLED
           ? "cancelled"
           : "failed";
         activeItem.status = finalStatus;
@@ -551,7 +545,7 @@ export class DefaultExecutionService implements ExecutionService {
             ok: false,
             runId: handle.runId,
             error: {
-              code: "UNHANDLED_EXECUTION_ERROR",
+              code: UNHANDLED_EXECUTION_ERROR,
               message: err?.message || String(err),
             },
           },

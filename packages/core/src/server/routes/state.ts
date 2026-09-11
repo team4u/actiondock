@@ -1,4 +1,5 @@
 import { decodeStateKey } from "../../storage";
+import { CAPABILITY_UNAVAILABLE, STATE_KEY_NOT_FOUND } from "../../errors";
 import { readJsonBody } from "../body";
 import { getSubPath, jsonResponse, resolveAppForPackage, type RouteContext } from "./common";
 
@@ -25,7 +26,7 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
       {
         ok: false,
         error: {
-          code: "CAPABILITY_UNAVAILABLE",
+          code: CAPABILITY_UNAVAILABLE,
           message: "Management APIs are not enabled on this server. Set enableManagement: true to enable.",
         },
       },
@@ -105,7 +106,7 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
         const entry = await app.storage.findState(key, effectiveNs);
         if (!entry || entry.value === undefined) {
           return jsonResponse(
-            { ok: false, error: { code: "STATE_KEY_NOT_FOUND", message: `State key '${key}' not found` } },
+            { ok: false, error: { code: STATE_KEY_NOT_FOUND, message: `State key '${key}' not found` } },
             404,
             corsHeaders
           );
@@ -152,7 +153,7 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
         const deleted = await app.storage.deleteStateSmart(key, effectiveNs);
         if (!deleted) {
           return jsonResponse(
-            { ok: false, error: { code: "STATE_KEY_NOT_FOUND", message: `State key '${key}' not found` } },
+            { ok: false, error: { code: STATE_KEY_NOT_FOUND, message: `State key '${key}' not found` } },
             404,
             corsHeaders
           );

@@ -28,6 +28,7 @@ import type {
   TargetInfo,
 } from "../target/types";
 import { DiagnosticForwarder } from "./diagnostic";
+import { EXECUTION_ABORTED, HOST_PROCESS_EXITED } from "../errors";
 import type { IpcCallMessage, IpcResponseMessage } from "./types";
 
 /**
@@ -121,7 +122,7 @@ export class IpcActionDockTarget implements ActionDockTarget {
             ok: false,
             runId: randomUUID(),
             error: {
-              code: "HOST_PROCESS_EXITED",
+              code: HOST_PROCESS_EXITED,
               message: exitMsg,
             },
           });
@@ -163,7 +164,7 @@ export class IpcActionDockTarget implements ActionDockTarget {
           ok: false,
           runId: randomUUID(),
           error: {
-            code: "HOST_PROCESS_EXITED",
+            code: HOST_PROCESS_EXITED,
             message: this.exitError?.message || "Host process is already closed",
           },
         } as unknown as T;
@@ -230,7 +231,7 @@ export class IpcActionDockTarget implements ActionDockTarget {
         ok: false,
         runId: randomUUID(),
         error: {
-          code: "EXECUTION_ABORTED",
+          code: EXECUTION_ABORTED,
           message: "Execution was aborted before starting",
         },
       };

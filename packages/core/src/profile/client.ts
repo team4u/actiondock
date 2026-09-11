@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { ExecutionResult, RunRecord } from "@actiondock/sdk";
 import { normalizeServerUrl } from "./manager";
 import type { RemoteHealthResult } from "./types";
+import { ACTION_CANCELLED, NETWORK_ERROR } from "../errors";
 
 function buildHeaders(token?: string): Record<string, string> {
   const headers: Record<string, string> = {
@@ -224,7 +225,7 @@ export async function executeRemoteAction<T = unknown>(
         ok: false,
         runId: randomUUID(),
         error: {
-          code: "ACTION_CANCELLED",
+          code: ACTION_CANCELLED,
           message: "Action execution was cancelled",
         },
       };
@@ -233,7 +234,7 @@ export async function executeRemoteAction<T = unknown>(
       ok: false,
       runId: randomUUID(),
       error: {
-        code: "NETWORK_ERROR",
+        code: NETWORK_ERROR,
         message: `Failed to connect to remote ActionDock server at ${serverUrl}: ${err.message}`,
       },
     };

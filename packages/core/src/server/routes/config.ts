@@ -1,3 +1,4 @@
+import { CAPABILITY_UNAVAILABLE } from "../../errors";
 import { resolveEnvValue } from "../../runtime";
 import { isSecretConfigKey, maskSecretValue } from "../../storage";
 import { readJsonBody } from "../body";
@@ -26,7 +27,7 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
       {
         ok: false,
         error: {
-          code: "CAPABILITY_UNAVAILABLE",
+          code: CAPABILITY_UNAVAILABLE,
           message: "Management APIs are not enabled on this server. Set enableManagement: true to enable.",
         },
       },

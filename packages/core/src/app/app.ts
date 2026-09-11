@@ -19,11 +19,11 @@ import { findProjectRoot, loadPlaybooks, loadProjectConfig } from "../project/lo
 import { loadManifest } from "../project/manifest";
 import type { ProjectConfig } from "../project/types";
 import { RuntimeConfig } from "../runtime/context";
+import { normalizeActionCollection } from "../runtime/action-collection";
 import { createGlobalStorage, createStorage } from "../storage";
 import { isSecretConfigKey } from "../storage/mask";
 import { decodeStateKey, SqliteRuntimeStorage } from "../storage/sqlite";
 import type { RuntimeStorage } from "../storage/types";
-import { resolveEnvValue } from "../runtime/env";
 import type {
   ActionDockApp,
   ActionDockAppOptions,
@@ -90,27 +90,8 @@ export class DefaultActionDockApp implements ActionDockApp {
     this.projectConfig = projectConfig;
     this.packageId = projectConfig.id;
 
-    // 2. 转换 Action 集合
-    this.actionsMap = new Map<string, ActionDefinition>();
-    if (options.actions) {
-      if (options.actions instanceof Map) {
-        for (const [k, v] of options.actions) {
-          this.actionsMap.set(k, v);
-        }
-      } else if (Array.isArray(options.actions)) {
-        for (const item of options.actions as any[]) {
-          const id = item.id;
-          const act = item.action ?? item;
-          if (id) {
-            this.actionsMap.set(id, act);
-          }
-        }
-      } else if (typeof options.actions === "object") {
-        for (const [k, v] of Object.entries(options.actions)) {
-          this.actionsMap.set(k, v);
-        }
-      }
-    }
+    // 2. 转换 Action 集合：委托归一化单一入口
+    this.actionsMap = normalizeActionCollection(options.actions).actionsMap;
 
     // 3. 确定平台适配层
     this.platform = options.platform ?? createDefaultPlatform();
@@ -532,53 +513,18 @@ export class DefaultActionDockApp implements ActionDockApp {
     const itemDef = this.projectConfig.config?.[key];
     const isSecret = isSecretConfigKey(key, itemDef);
 
-    let source = "default";
-    let resolvedVal: unknown = undefined;
-    let configured = false;
-
-    const overrides = (this.runtimeConfig as any)?.overrides || (this as any).options?.configOverrides;
-    if (overrides && (overrides.has ? overrides.has(key) : key in overrides)) {
-      source = "package";
-      resolvedVal = overrides.get ? overrides.get(key) : overrides[key];
-      configured = true;
-    } else {
-      const storedVal = this.storage.getConfig(key);
-      if (storedVal !== undefined) {
-        source = "package";
-        resolvedVal = storedVal;
-        configured = true;
-      } else {
-        let globalVal: unknown = undefined;
-        try {
-          globalVal = this.globalStorage?.getConfig(key);
-        } catch {
-          // 忽略全局存储读取异常
-        }
-        if (globalVal !== undefined) {
-          source = "global";
-          resolvedVal = globalVal;
-          configured = true;
-        } else {
-          const envResolved = resolveEnvValue(key, itemDef, this.packageId);
-          if (envResolved !== undefined) {
-            source = "env";
-            resolvedVal = envResolved.value;
-            configured = true;
-          } else if (itemDef?.default !== undefined) {
-            source = "default";
-            resolvedVal = itemDef.default;
-            configured = false;
-          }
-        }
-      }
-    }
+    // 委托 RuntimeConfig 五层优先级链单一事实源，避免重复实现解析链
+    const resolved = this.runtimeConfig.describe(key);
+    // overrides 来源对外统一星现为包级覆盖视角
+    const source = resolved.source === "overrides" ? "package" : resolved.source;
+    const configured = resolved.source !== "default";
 
     return {
       key,
       configured,
       secret: isSecret,
       source,
-      value: isSecret ? undefined : (resolvedVal as JsonValue),
+      value: isSecret ? undefined : (resolved.value as JsonValue),
     };
   }
 

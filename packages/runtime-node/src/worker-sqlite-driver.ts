@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Worker } from "node:worker_threads";
 import { normalizeSqliteParams } from "@actiondock/core";
+import { STORAGE_BUSY, STORAGE_WORKER_EXITED } from "@actiondock/core";
 
 /**
  * 编译后的工作线程异步参数化语句接口。
@@ -44,6 +45,8 @@ interface RecordedStatement {
  */
 const WORKER_SCRIPT = `
 const { parentPort, workerData } = require("node:worker_threads");
+// 错误码常量自主线程同源插值注入：worker 以 eval 模式执行，无模块系统可 import
+const STORAGE_BUSY = ${JSON.stringify(STORAGE_BUSY)};
 const { DatabaseSync } = require("node:sqlite");
 const { existsSync, mkdirSync } = require("node:fs");
 const { dirname } = require("node:path");
@@ -145,7 +148,7 @@ parentPort.on("message", (msg) => {
     let code = err && err.code;
     const msgLower = (err?.message || "").toLowerCase();
     if (msgLower.includes("busy") || msgLower.includes("locked")) {
-      code = "STORAGE_BUSY";
+      code = STORAGE_BUSY;
     }
     parentPort.postMessage({
       id,
@@ -238,9 +241,9 @@ export class WorkerSqliteDriver {
   private request<T>(type: string, payload: any): Promise<T> {
     if (this.exited) {
       const failureError: any = new Error(
-        "STORAGE_WORKER_EXITED: Storage worker thread has exited and cannot process requests"
+        `${STORAGE_WORKER_EXITED}: Storage worker thread has exited and cannot process requests`
       );
-      failureError.code = "STORAGE_WORKER_EXITED";
+      failureError.code = STORAGE_WORKER_EXITED;
       return Promise.reject(failureError);
     }
     if (this.closed) {
@@ -263,11 +266,11 @@ export class WorkerSqliteDriver {
     this.exited = true;
 
     const failureError: any = new Error(
-      `STORAGE_WORKER_EXITED: Storage worker thread exited unexpectedly (${
+      `${STORAGE_WORKER_EXITED}: Storage worker thread exited unexpectedly (${
         err ? err.message : `exit code: ${exitCode}`
       })`
     );
-    failureError.code = "STORAGE_WORKER_EXITED";
+    failureError.code = STORAGE_WORKER_EXITED;
 
     for (const [_, pending] of this.pendingRequests) {
       pending.reject(failureError);

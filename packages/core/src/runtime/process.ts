@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { PROCESS_OUTPUT_LIMIT, PROCESS_SPAWN_ERROR } from "../errors";
 import type {
   ProcessAPI,
   ProcessExecOptions,
@@ -73,7 +74,7 @@ export class DefaultProcessExecutor implements ProcessExecutor {
         totalBytes += chunk.length;
         if (totalBytes > maxOutputBytes) {
           error = {
-            code: "PROCESS_OUTPUT_LIMIT",
+            code: PROCESS_OUTPUT_LIMIT,
             message: `Process output exceeded limit of ${maxOutputBytes} bytes`,
           };
           cp.kill("SIGKILL");
@@ -86,7 +87,7 @@ export class DefaultProcessExecutor implements ProcessExecutor {
         totalBytes += chunk.length;
         if (totalBytes > maxOutputBytes) {
           error = {
-            code: "PROCESS_OUTPUT_LIMIT",
+            code: PROCESS_OUTPUT_LIMIT,
             message: `Process output exceeded limit of ${maxOutputBytes} bytes`,
           };
           cp.kill("SIGKILL");
@@ -108,7 +109,7 @@ export class DefaultProcessExecutor implements ProcessExecutor {
           cancelled,
           durationMs,
           error: error || {
-            code: "PROCESS_SPAWN_ERROR",
+            code: PROCESS_SPAWN_ERROR,
             message: err.message,
           },
         };

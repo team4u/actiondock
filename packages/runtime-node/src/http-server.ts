@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { Readable } from "node:stream";
+import { SERVER_ERROR } from "@actiondock/core";
 import { pipeline } from "node:stream/promises";
 
 /**
@@ -125,7 +126,7 @@ export function createRequestListener(
             JSON.stringify({
               ok: false,
               error: {
-                code: "SERVER_ERROR",
+                code: SERVER_ERROR,
                 message: err?.message || String(err),
               },
             })

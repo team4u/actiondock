@@ -93,6 +93,49 @@ export class RuntimeConfig implements Config {
     if (itemDef?.default !== undefined) return true;
     return false;
   }
+
+  /**
+   * 结构化解析指定配置项的来源与取值视图。
+   *
+   * 作为五层优先级链的唯一事实源读取视图，供 app 层 getConfig 安全视图直接委托，
+   * 避免重复实现解析链导致行为漂移。
+   */
+  describe<T = unknown>(
+    key: string
+  ): { source: "overrides" | "package" | "global" | "env" | "default"; value: T | undefined } {
+    // 1. CLI 临时参数覆写
+    if (this.overrides.has(key)) {
+      return { source: "overrides", value: this.overrides.get(key) as T };
+    }
+
+    // 2. 包级持久化存储
+    const stored = this.storage.getConfig<T>(key);
+    if (stored !== undefined) {
+      return { source: "package", value: stored };
+    }
+
+    // 3. 全局持久化存储
+    if (this.globalStorage) {
+      try {
+        const globalStored = this.globalStorage.getConfig<T>(key);
+        if (globalStored !== undefined) {
+          return { source: "global", value: globalStored };
+        }
+      } catch {
+        // 忽略全局存储读取异常
+      }
+    }
+
+    // 4. 环境变量
+    const itemDef = this.projectConfig?.config?.[key];
+    const envResolved = resolveEnvValue(key, itemDef, this.projectConfig?.id);
+    if (envResolved !== undefined) {
+      return { source: "env", value: envResolved.value as T };
+    }
+
+    // 5. 项目声明的默认值
+    return { source: "default", value: itemDef?.default as T | undefined };
+  }
 }
 
 /**

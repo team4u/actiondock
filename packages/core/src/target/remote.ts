@@ -54,6 +54,7 @@ import {
   TARGET_CAPABILITY_UNAVAILABLE,
   TARGET_RESULT_UNKNOWN,
 } from "./types";
+import { ACTION_CANCELLED, EXECUTION_FAILED, STATE_KEY_NOT_FOUND, TIMEOUT } from "../errors";
 
 /**
  * 读取并解析远端 SSE 事件流。
@@ -421,7 +422,7 @@ export class RemoteActionDockTarget implements ActionDockTarget {
           ok: false,
           runId,
           error: {
-            code: "ACTION_CANCELLED",
+            code: ACTION_CANCELLED,
             message: "Action execution was cancelled",
           },
         };
@@ -440,7 +441,7 @@ export class RemoteActionDockTarget implements ActionDockTarget {
             ok: false,
             runId,
             error: run.error || {
-              code: "EXECUTION_FAILED",
+              code: EXECUTION_FAILED,
               message: `Run finished with status ${run.status}`,
             },
           };
@@ -453,7 +454,7 @@ export class RemoteActionDockTarget implements ActionDockTarget {
       ok: false,
       runId,
       error: {
-        code: "TIMEOUT",
+        code: TIMEOUT,
         message: `Timed out waiting for run '${runId}' completion`,
       },
     };
@@ -593,8 +594,7 @@ export class RemoteActionDockTarget implements ActionDockTarget {
       }
       return (res?.value !== undefined ? res.value : res) as T;
     } catch (err: any) {
-      const msg = String(err?.message || "");
-      if (msg.includes("404") || msg.includes("not found") || msg.includes("STATE_KEY_NOT_FOUND")) {
+      if (isRemoteStateKeyNotFound(err)) {
         return undefined;
       }
       wrapRemoteError(err);
@@ -634,8 +634,7 @@ export class RemoteActionDockTarget implements ActionDockTarget {
       });
       return Boolean(res?.deleted ?? true);
     } catch (err: any) {
-      const msg = String(err?.message || "");
-      if (msg.includes("404") || msg.includes("not found") || msg.includes("STATE_KEY_NOT_FOUND")) {
+      if (isRemoteStateKeyNotFound(err)) {
         return false;
       }
       wrapRemoteError(err);
@@ -692,6 +691,21 @@ export class RemoteActionDockTarget implements ActionDockTarget {
   async close(_options?: { timeoutMs?: number }): Promise<void> {
     // 远程 Target 无本地资源需要释放
   }
+}
+
+/**
+ * 判定远端状态键访问异常是否为键不存在。
+ *
+ * 优先读取传输层透传的结构化错误码（fetchRemoteJson 会将响应体 error.code
+ * 附加到抛出异常的 code 字段），仅当旧版服务器未透传 code 时回退到
+ * HTTP 状态与消息文本兼容嗅探。
+ */
+function isRemoteStateKeyNotFound(err: any): boolean {
+  if (err?.code === STATE_KEY_NOT_FOUND) {
+    return true;
+  }
+  const msg = String(err?.message || "");
+  return err?.status === 404 || msg.includes("404") || msg.includes("not found");
 }
 
 function wrapRemoteError(err: any): never {

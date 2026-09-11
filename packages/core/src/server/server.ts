@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createActionDockHost } from "../host/host";
+import { NOT_FOUND, UNAUTHORIZED } from "../errors";
 import type { ActionDockHost } from "../host/types";
 import { ensureDependencyClosure } from "../project/closure";
 import { findProjectRoot } from "../project/loader";
@@ -228,7 +229,7 @@ export async function startActionDockServer(
           {
             ok: false,
             error: {
-              code: "UNAUTHORIZED",
+              code: UNAUTHORIZED,
               message: "Invalid or missing Bearer token",
             },
           },
@@ -246,7 +247,7 @@ export async function startActionDockServer(
         {
           ok: false,
           error: {
-            code: "UNAUTHORIZED",
+            code: UNAUTHORIZED,
             message: "Invalid or missing Bearer token",
           },
         },
@@ -274,7 +275,7 @@ export async function startActionDockServer(
       {
         ok: false,
         error: {
-          code: "NOT_FOUND",
+          code: NOT_FOUND,
           message: `Route not found: ${req.method} ${pathname}`,
         },
       },

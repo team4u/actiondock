@@ -1,4 +1,5 @@
 import type { ExecutionEvent } from "@actiondock/sdk";
+import { EVENT_BACKPRESSURE_LIMIT, EVENT_CURSOR_EXPIRED } from "../errors";
 
 export interface EventSinkSubscribeOptions {
   after?: number | string;
@@ -258,7 +259,7 @@ export class InMemoryEventSink implements EventSink {
         const expiredErr = new Error(
           `Event cursor '${options.after}' has expired; earliest available cursor is '${earliestCursor}'`
         );
-        (expiredErr as any).code = "EVENT_CURSOR_EXPIRED";
+        (expiredErr as any).code = EVENT_CURSOR_EXPIRED;
         (expiredErr as any).details = {
           cursor: options.after,
           earliestCursor,
@@ -308,7 +309,7 @@ export class InMemoryEventSink implements EventSink {
           timestamp: new Date().toISOString(),
           type: "error",
           error: {
-            code: "EVENT_BACKPRESSURE_LIMIT",
+            code: EVENT_BACKPRESSURE_LIMIT,
             message: `Event subscription queue exceeded limit of ${maxQueueSize} items due to slow subscriber`,
             details: {
               lastConfirmedCursor:

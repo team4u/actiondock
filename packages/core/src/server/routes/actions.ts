@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { filterByIntent } from "../../filter";
+import { ACTION_NOT_FOUND, ACTION_TIMEOUT, IDEMPOTENCY_CONFLICT, INPUT_VALIDATION_FAILED, PACKAGE_NOT_FOUND } from "../../errors";
 import { InvalidJsonError, readJsonBody, RequestTooLargeError } from "../body";
 import { getSubPath, jsonResponse, type RouteContext } from "./common";
 
@@ -67,7 +68,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
         {
           ok: false,
           error: {
-            code: "ACTION_NOT_FOUND",
+            code: ACTION_NOT_FOUND,
             message: err.message || `Action '${actionId}' not found in package '${packageId}'`,
           },
         },
@@ -89,7 +90,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
         {
           ok: false,
           error: {
-            code: "ACTION_NOT_FOUND",
+            code: ACTION_NOT_FOUND,
             message: err.message || `Action '${actionId}' not found`,
           },
         },
@@ -227,12 +228,12 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
           corsHeaders
         );
       } catch (err: any) {
-        if (err?.code === "IDEMPOTENCY_CONFLICT") {
+        if (err?.code === IDEMPOTENCY_CONFLICT) {
           return jsonResponse(
             {
               ok: false,
               error: {
-                code: "IDEMPOTENCY_CONFLICT",
+                code: IDEMPOTENCY_CONFLICT,
                 message: err.message,
                 details: err.details,
               },
@@ -267,16 +268,16 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
 
       let status = 200;
       if (!result.ok) {
-        if (result.error?.code === "INPUT_VALIDATION_FAILED") {
+        if (result.error?.code === INPUT_VALIDATION_FAILED) {
           status = 400;
-        } else if (result.error?.code === "IDEMPOTENCY_CONFLICT") {
+        } else if (result.error?.code === IDEMPOTENCY_CONFLICT) {
           status = 409;
         } else if (
-          result.error?.code === "ACTION_NOT_FOUND" ||
-          result.error?.code === "PACKAGE_NOT_FOUND"
+          result.error?.code === ACTION_NOT_FOUND ||
+          result.error?.code === PACKAGE_NOT_FOUND
         ) {
           status = 404;
-        } else if (result.error?.code === "ACTION_TIMEOUT") {
+        } else if (result.error?.code === ACTION_TIMEOUT) {
           status = 504;
         } else {
           status = 500;
@@ -285,12 +286,12 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
 
       return jsonResponse(result, status, corsHeaders);
     } catch (err: any) {
-      if (err?.code === "IDEMPOTENCY_CONFLICT") {
+      if (err?.code === IDEMPOTENCY_CONFLICT) {
         return jsonResponse(
           {
             ok: false,
             error: {
-              code: "IDEMPOTENCY_CONFLICT",
+              code: IDEMPOTENCY_CONFLICT,
               message: err.message,
               details: err.details,
             },

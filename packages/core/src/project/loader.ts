@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSy
 import { basename, dirname, join, resolve } from "node:path";
 import type { ActionDefinition } from "@actiondock/sdk";
 import { DefaultModuleLoader, type ModuleLoader } from "../runtime/module-loader";
+import { ACTION_LOAD_FAILED, isMissingModuleError } from "../errors";
 import { loadManifest, ACTION_ID_REGEX, PLAYBOOK_ID_REGEX } from "./manifest";
 import type {
   ActionDockManifest,
@@ -391,7 +392,7 @@ export async function loadActions(
       assertPathWithinRoot(projectRoot, entryPath, `action entry '${item.entry}'`);
       if (!existsSync(entryPath)) {
         const error: any = new Error(`Action '${actionId}' entry file not found: ${item.entry}`);
-        error.code = "ACTION_LOAD_FAILED";
+        error.code = ACTION_LOAD_FAILED;
         error.details = {
           actionId,
           entry: item.entry,
@@ -405,23 +406,18 @@ export async function loadActions(
       try {
         imported = await loader.load(entryPath);
       } catch (err: any) {
+        // 复用 errors.ts 的模块缺失判定单一事实源，保留加载器视角的中文修复提示
         const msg = String(err.message || "");
-        const isMissingModule =
-          msg.includes("Cannot find package") ||
-          msg.includes("Cannot find module") ||
-          msg.includes("ERR_MODULE_NOT_FOUND") ||
-          msg.includes("Could not resolve");
-
         const error: any = new Error(
           `Failed to load action '${actionId}' from '${item.entry}': ${msg}`
         );
-        error.code = "ACTION_LOAD_FAILED";
+        error.code = ACTION_LOAD_FAILED;
         error.details = {
           actionId,
           entry: item.entry,
           entryPath,
           rootCause: msg,
-          hint: isMissingModule
+          hint: isMissingModuleError(msg)
             ? `项目依赖缺失，请在 '${projectRoot}' 目录下运行 npm install 安装依赖。`
             : undefined,
         };
@@ -440,7 +436,7 @@ export async function loadActions(
         const error: any = new Error(
           `Action '${actionId}' in '${item.entry}' does not export a runnable handler`
         );
-        error.code = "ACTION_LOAD_FAILED";
+        error.code = ACTION_LOAD_FAILED;
         error.details = {
           actionId,
           entry: item.entry,

@@ -29,6 +29,17 @@ import { ActionPackageResolver } from "../project/resolver";
 import { hasPendingTransactions, recoverPendingTransactions } from "../project/transactions";
 import { listLinkedPackages } from "../registry/registry";
 import { InMemoryEventSink, type EventSink } from "../runtime/events";
+import {
+  ACTION_CALL_CYCLE,
+  ACTION_MAX_DEPTH_EXCEEDED,
+  ACTION_NOT_FOUND,
+  ACTION_PACKAGE_VERSION_CONFLICT,
+  ACTION_SUBRUN_LIMIT,
+  INVALID_ACTION_REF,
+  MAX_SUBRUNS_REACHED,
+  PACKAGE_NOT_FOUND,
+  UNDECLARED_ACTION_DEPENDENCY,
+} from "../errors";
 import { DataDirLock } from "../storage/data-dir-lock";
 import type { ActionDockHost, ActionDockHostOptions } from "./types";
 
@@ -155,7 +166,7 @@ export class DefaultActionDockHost implements ActionDockHost {
           }
         } catch (err: any) {
           if (
-            err?.code === "ACTION_PACKAGE_VERSION_CONFLICT" ||
+            err?.code === ACTION_PACKAGE_VERSION_CONFLICT ||
             err?.code === "PROJECT_RECOVERY_REQUIRED"
           ) {
             throw err;
@@ -464,7 +475,7 @@ export class DefaultActionDockHost implements ActionDockHost {
       if (!targetApp) {
         const runId = randomUUID();
         const error: RuntimeError = {
-          code: "PACKAGE_NOT_FOUND",
+          code: PACKAGE_NOT_FOUND,
           message: `Package '${targetPackageId}' not found in host`,
         };
         return {
@@ -495,7 +506,7 @@ export class DefaultActionDockHost implements ActionDockHost {
         const candidates = matches.map((m) => `${m.packageId}/${targetActionId}`).join(", ");
         const runId = randomUUID();
         const error: RuntimeError = {
-          code: "INVALID_ACTION_REF",
+          code: INVALID_ACTION_REF,
           message: `Action '${targetActionId}' is ambiguous and provided by multiple packages: ${candidates}. Please specify '<package-id>/${targetActionId}'.`,
           details: { alias: "AMBIGUOUS_ACTION_REF", candidates: matches.map((m) => m.packageId) },
         };
@@ -507,7 +518,7 @@ export class DefaultActionDockHost implements ActionDockHost {
       } else {
         const runId = randomUUID();
         const error: RuntimeError = {
-          code: "ACTION_NOT_FOUND",
+          code: ACTION_NOT_FOUND,
           message: `Action '${targetActionId}' not found in any registered package`,
         };
         return {
@@ -525,7 +536,7 @@ export class DefaultActionDockHost implements ActionDockHost {
       if (!isPublic && this.resolver && !this.resolver.canRootCall(targetPackageId, targetActionId)) {
         const runId = randomUUID();
         const error: RuntimeError = {
-          code: "UNDECLARED_ACTION_DEPENDENCY",
+          code: UNDECLARED_ACTION_DEPENDENCY,
           message: `Root call to action '${targetPackageId}/${targetActionId}' is not allowed: package '${targetPackageId}' is not declared as a direct dependency in actiondock.json and is not delegated by a visible playbook`,
           details: {
             target: `${targetPackageId}/${targetActionId}`,
@@ -565,7 +576,7 @@ export class DefaultActionDockHost implements ActionDockHost {
               if (!isAllowed) {
                 const runId = randomUUID();
                 const error: RuntimeError = {
-                  code: "UNDECLARED_ACTION_DEPENDENCY",
+                  code: UNDECLARED_ACTION_DEPENDENCY,
                   message: `Action '${callerPackageId}/${callerActionId}' does not declare dependency on '${targetRef}' in 'uses'`,
                   details: {
                     caller: `${callerPackageId}/${callerActionId}`,
@@ -596,9 +607,9 @@ export class DefaultActionDockHost implements ActionDockHost {
         if (depth >= this.maxCallDepth) {
           const runId = randomUUID();
           const error: RuntimeError = {
-            code: "ACTION_CALL_CYCLE",
+            code: ACTION_CALL_CYCLE,
             message: `Maximum call depth of ${this.maxCallDepth} exceeded`,
-            details: { alias: "ACTION_MAX_DEPTH_EXCEEDED", reason: "depth_exceeded", maxDepth: this.maxCallDepth },
+            details: { alias: ACTION_MAX_DEPTH_EXCEEDED, reason: "depth_exceeded", maxDepth: this.maxCallDepth },
           };
           return {
             runId,
@@ -613,9 +624,9 @@ export class DefaultActionDockHost implements ActionDockHost {
           if (currentSubRuns >= this.maxSubRuns) {
             const runId = randomUUID();
             const error: RuntimeError = {
-              code: "ACTION_SUBRUN_LIMIT",
+              code: ACTION_SUBRUN_LIMIT,
               message: `Maximum concurrent sub-runs (${this.maxSubRuns}) reached for root run '${effectiveRootRunId}'`,
-              details: { alias: "MAX_SUBRUNS_REACHED", limit: this.maxSubRuns },
+              details: { alias: MAX_SUBRUNS_REACHED, limit: this.maxSubRuns },
             };
             return {
               runId,

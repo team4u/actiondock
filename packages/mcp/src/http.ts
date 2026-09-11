@@ -4,6 +4,7 @@ import {
   launchHttpServer,
   resolveCorsHeaders,
   verifyBearerToken,
+  UNAUTHORIZED,
 } from "@actiondock/core";
 import { createMcpHandler } from "@modelcontextprotocol/server";
 import { createActionDockMcpServer, resolveTarget } from "./adapter";
@@ -76,7 +77,7 @@ export function startMcpHttpServer(
             JSON.stringify({
               ok: false,
               error: {
-                code: "UNAUTHORIZED",
+                code: UNAUTHORIZED,
                 message: "Invalid or missing Bearer token",
               },
             }),

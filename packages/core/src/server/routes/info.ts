@@ -1,4 +1,5 @@
 import { filterWithFallbackInfo } from "../../filter";
+import { PACKAGE_NOT_FOUND } from "../../errors";
 import { ACTIONDOCK_VERSION } from "../../version";
 import { getSubPath, jsonResponse, type RouteContext } from "./common";
 
@@ -63,7 +64,7 @@ export async function handleInfoRoute(ctx: RouteContext): Promise<Response | nul
             {
               ok: false,
               error: {
-                code: "PACKAGE_NOT_FOUND",
+                code: PACKAGE_NOT_FOUND,
                 message: `Package '${targetPkg}' not found on remote server`,
               },
             },

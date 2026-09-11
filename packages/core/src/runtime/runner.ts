@@ -16,21 +16,44 @@ import { ActionResolver } from "../catalog/action-resolver";
 import { loadActions, loadProjectConfig } from "../project/loader";
 import type { ProjectConfig } from "../project/types";
 import { resolveActionProject, resolvePackageRoot } from "../registry/registry";
+import {
+  ACTION_CALL_CYCLE,
+  ACTION_CYCLE_DETECTED,
+  ACTION_FAILED,
+  ACTION_MAX_DEPTH_EXCEEDED,
+  ACTION_NOT_FOUND,
+  ACTION_SUBRUN_LIMIT,
+  ACTION_TIMEOUT,
+  describeActionLoadFailure,
+  INPUT_NOT_JSON,
+  MAX_SUBRUNS_REACHED,
+  OUTPUT_NOT_JSON,
+  RUN_PERSISTENCE_FAILED,
+  RUN_REPOSITORY_UNAVAILABLE,
+  UNDECLARED_ACTION_DEPENDENCY,
+  PACKAGE_NOT_FOUND,
+  INPUT_VALIDATION_FAILED,
+  OUTPUT_VALIDATION_FAILED,
+  ACTION_CANCELLED,
+} from "../errors";
 import { validateSchema } from "../schema/validator";
 import type { RuntimeStorage, TerminalRunStatus } from "../storage/types";
 import type { Clock } from "./clock";
 import type { RuntimePlatform } from "../platform/types";
 import { createActionContext, StderrLogger } from "./context";
 
-export const RUN_REPOSITORY_UNAVAILABLE = "RUN_REPOSITORY_UNAVAILABLE";
-export const RUN_PERSISTENCE_FAILED = "RUN_PERSISTENCE_FAILED";
-export const INPUT_NOT_JSON = "INPUT_NOT_JSON";
-export const OUTPUT_NOT_JSON = "OUTPUT_NOT_JSON";
-export const ACTION_SUBRUN_LIMIT = "ACTION_SUBRUN_LIMIT";
-export const MAX_SUBRUNS_REACHED = "MAX_SUBRUNS_REACHED";
-export const ACTION_CALL_CYCLE = "ACTION_CALL_CYCLE";
-export const ACTION_CYCLE_DETECTED = "ACTION_CYCLE_DETECTED";
-export const ACTION_MAX_DEPTH_EXCEEDED = "ACTION_MAX_DEPTH_EXCEEDED";
+// 错误码常量已收敛至 src/errors.ts 单一事实源，此处保留 re-export 以维持既有导入路径兼容。
+export {
+  RUN_REPOSITORY_UNAVAILABLE,
+  RUN_PERSISTENCE_FAILED,
+  INPUT_NOT_JSON,
+  OUTPUT_NOT_JSON,
+  ACTION_SUBRUN_LIMIT,
+  MAX_SUBRUNS_REACHED,
+  ACTION_CALL_CYCLE,
+  ACTION_CYCLE_DETECTED,
+  ACTION_MAX_DEPTH_EXCEEDED,
+} from "../errors";
 
 /**
  * 校验值是否为合法的 JSON 兼容结构，严禁 NaN、Infinity、循环引用及不可序列化类型。
@@ -748,7 +771,7 @@ export class ActionRunner {
       const val = validateSchema(targetInputSchema, input);
       if (!val.valid) {
         const error: RuntimeError = {
-          code: "INPUT_VALIDATION_FAILED",
+          code: INPUT_VALIDATION_FAILED,
           message: `Input schema validation failed for action '${targetActionId}'`,
           details: val.errors,
         };
@@ -823,7 +846,7 @@ export class ActionRunner {
             const err = new Error(
               `Undeclared cross-package dependency: Action '${this.packageId}/${targetActionId}' does not declare '${targetRef}' in 'uses'`
             );
-            (err as any).code = "UNDECLARED_ACTION_DEPENDENCY";
+            (err as any).code = UNDECLARED_ACTION_DEPENDENCY;
             (err as any).details = {
               caller: `${this.packageId}/${targetActionId}`,
               target: targetRef,
@@ -845,7 +868,7 @@ export class ActionRunner {
                 runnerToUse = targetRunner;
               } else if (!this.actionResolver) {
                 const err = new Error(`Package '${childPackageId}' could not be resolved`);
-                (err as any).code = "PACKAGE_NOT_FOUND";
+                (err as any).code = PACKAGE_NOT_FOUND;
                 throw err;
               }
             }
@@ -898,31 +921,16 @@ export class ActionRunner {
             currentAction = resolution.action;
           } else if (resolution.status === "load_failed") {
             const cause = resolution.error;
-            const causeMsg = cause?.message || String(cause);
-            const isMissingModule =
-              causeMsg.includes("Cannot find package") ||
-              causeMsg.includes("Cannot find module") ||
-              causeMsg.includes("ERR_MODULE_NOT_FOUND") ||
-              causeMsg.includes("Could not resolve");
-            const hint = isMissingModule
-              ? `依赖未安装，在 '${resolution.projectRoot}' 执行 npm install 或先执行 'ad run ${resolution.packageId}/${targetActionId}'`
-              : undefined;
-
-            const error: RuntimeError = {
-              code: "ACTION_LOAD_FAILED",
-              message: `Failed to load action '${targetActionId}' from package '${resolution.packageId}' (${resolution.projectRoot}): ${causeMsg}`,
-              details: {
-                packageId: resolution.packageId,
-                projectRoot: resolution.projectRoot,
-                rootCause: causeMsg,
-                hint,
-              },
-            };
+            const error: RuntimeError = describeActionLoadFailure(cause, {
+              actionId: targetActionId,
+              packageId: resolution.packageId,
+              projectRoot: resolution.projectRoot,
+            });
             finalizeRun("failed", undefined, error);
             return { ok: false, runId, error };
           } else {
             const error: RuntimeError = {
-              code: "ACTION_NOT_FOUND",
+              code: ACTION_NOT_FOUND,
               message: `Action '${targetActionId}' not found in registry or linked packages`,
               details: resolution.reason ? { reason: resolution.reason } : undefined,
             };
@@ -944,7 +952,7 @@ export class ActionRunner {
             const val = validateSchema((currentAction as any).inputSchema, input);
             if (!val.valid) {
               const error: RuntimeError = {
-                code: "INPUT_VALIDATION_FAILED",
+                code: INPUT_VALIDATION_FAILED,
                 message: `Input schema validation failed for action '${targetActionId}'`,
                 details: val.errors,
               };
@@ -977,7 +985,7 @@ export class ActionRunner {
           const outVal = validateSchema(targetOutputSchema, rawOutput);
           if (!outVal.valid) {
             const error: RuntimeError = {
-              code: "OUTPUT_VALIDATION_FAILED",
+              code: OUTPUT_VALIDATION_FAILED,
               message: `Output schema validation failed for action '${targetActionId}'`,
               details: outVal.errors,
             };
@@ -998,7 +1006,7 @@ export class ActionRunner {
       } catch (err: any) {
         if (isTimeout) {
           const error: RuntimeError = {
-            code: "ACTION_TIMEOUT",
+            code: ACTION_TIMEOUT,
             message: `Action exceeded timeout of ${options.timeoutMs}ms`,
           };
           finalizeRun("timed_out", undefined, error);
@@ -1014,7 +1022,7 @@ export class ActionRunner {
               ? reason
               : undefined;
           const error: RuntimeError = {
-            code: "ACTION_CANCELLED",
+            code: ACTION_CANCELLED,
             message: "Action execution was cancelled",
             details: reasonMsg ? { reason: reasonMsg } : undefined,
           };
@@ -1023,7 +1031,7 @@ export class ActionRunner {
         }
 
         const error: RuntimeError = {
-          code: err?.code || "ACTION_FAILED",
+          code: err?.code || ACTION_FAILED,
           message: err?.message || String(err),
           details: err?.details,
         };

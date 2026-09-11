@@ -1,6 +1,14 @@
 import { ExitCode, type ExitCodeValue } from "./types";
 
 /**
+ * CLI 信封错误码常量（仅 CLI 输出协议使用，属包内部码，就地常量化管理）。
+ */
+const CLI_CODE_SUCCESS = "SUCCESS";
+const CLI_CODE_INVALID_ARGUMENT = "INVALID_ARGUMENT";
+const CLI_CODE_ERROR = "ERROR";
+const CLI_CODE_UNKNOWN_ERROR = "UNKNOWN_ERROR";
+
+/**
  * 命令行标准错误基类。
  */
 export class CliError extends Error {
@@ -92,7 +100,7 @@ export function formatError(err: unknown): FormattedError {
       code.startsWith("commander.excessArguments")
     ) {
       return {
-        code: "INVALID_ARGUMENT",
+        code: CLI_CODE_INVALID_ARGUMENT,
         message: commanderErr.message,
         exitCode: ExitCode.INVALID_ARGUMENT,
       };
@@ -101,7 +109,7 @@ export function formatError(err: unknown): FormattedError {
     // 正常退出（如 --help 或 --version）
     if (code === "commander.helpDisplayed" || code === "commander.version") {
       return {
-        code: "SUCCESS",
+        code: CLI_CODE_SUCCESS,
         message: commanderErr.message,
         exitCode: ExitCode.SUCCESS,
       };
@@ -110,14 +118,14 @@ export function formatError(err: unknown): FormattedError {
 
   if (err instanceof Error) {
     return {
-      code: "ERROR",
+      code: CLI_CODE_ERROR,
       message: err.message,
       exitCode: ExitCode.FAILURE,
     };
   }
 
   return {
-    code: "UNKNOWN_ERROR",
+    code: CLI_CODE_UNKNOWN_ERROR,
     message: String(err),
     exitCode: ExitCode.FAILURE,
   };

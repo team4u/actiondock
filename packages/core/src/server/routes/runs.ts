@@ -1,4 +1,5 @@
 import { filterByIntent } from "../../filter";
+import { EXECUTION_FAILED } from "../../errors";
 import type { ExecutionEvent, RunRecord } from "@actiondock/sdk";
 import { readJsonBody } from "../body";
 import { getSubPath, jsonResponse, type RouteContext } from "./common";
@@ -221,7 +222,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
                       ok: false,
                       runId,
                       error: run.error || {
-                        code: "EXECUTION_FAILED",
+                        code: EXECUTION_FAILED,
                         message: `Run finished with status ${run.status}`,
                       },
                     },

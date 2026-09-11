@@ -79,60 +79,14 @@ export interface MemoryStateEntry {
   expiresAt?: number;
 }
 
-/**
- * 转义状态键分段中的特殊字符（\ 和 :）。
- */
-export function escapeStateSegment(segment: string): string {
-  return segment.replace(/\\/g, "\\\\").replace(/:/g, "\\:");
-}
-
-/**
- * 反转义状态键分段。
- */
-export function unescapeStateSegment(segment: string): string {
-  return segment.replace(/\\(:|\\)/g, "$1");
-}
-
-/**
- * 将 namespace 与 key 编码为无歧义的复合状态键名。
- */
-export function encodeStateKey(namespace: string, key: string): string {
-  if (!namespace) {
-    return escapeStateSegment(key);
-  }
-  return `${escapeStateSegment(namespace)}:${escapeStateSegment(key)}`;
-}
-
-/**
- * 解析复合状态键名。若复合键存在歧义（多个未转义冒号），抛出错误。
- */
-export function decodeStateKey(fullKey: string): { namespace: string; key: string } {
-  const unescapedColonIndices: number[] = [];
-  for (let i = 0; i < fullKey.length; i++) {
-    if (fullKey[i] === ":") {
-      let backslashes = 0;
-      for (let j = i - 1; j >= 0 && fullKey[j] === "\\"; j--) {
-        backslashes++;
-      }
-      if (backslashes % 2 === 0) {
-        unescapedColonIndices.push(i);
-      }
-    }
-  }
-
-  if (unescapedColonIndices.length === 0) {
-    return { namespace: "", key: unescapeStateSegment(fullKey) };
-  }
-  if (unescapedColonIndices.length === 1) {
-    const idx = unescapedColonIndices[0];
-    return {
-      namespace: unescapeStateSegment(fullKey.slice(0, idx)),
-      key: unescapeStateSegment(fullKey.slice(idx + 1)),
-    };
-  }
-
-  throw new Error(`Ambiguous state key '${fullKey}': contains multiple unescaped colon delimiters`);
-}
+// 状态键编解码能力单一事实源位于 @actiondock/sdk，此处 re-export 维持既有导入路径兼容并供本模块内部复用
+import {
+  decodeStateKey,
+  encodeStateKey,
+  escapeStateSegment,
+  unescapeStateSegment,
+} from "@actiondock/sdk";
+export { decodeStateKey, encodeStateKey, escapeStateSegment, unescapeStateSegment };
 
 /**
  * 基于内存 Map 的状态存储实现，支持命名空间隔离与 TTL 自动失效，专供单元测试使用。
@@ -275,22 +229,9 @@ export function getTestRuntimeProvider(): TestRuntimeProvider | null {
   return _globalProvider;
 }
 
-/**
- * 规范化运行时错误异常类。
- * 当 run 方法执行失败时抛出，完整实现 RuntimeError 契约。
- */
-export class ActionRuntimeError extends Error implements RuntimeError {
-  public code: string;
-  public details?: unknown;
-
-  constructor(error: RuntimeError) {
-    super(error.message);
-    this.name = "ActionRuntimeError";
-    this.code = error.code;
-    this.details = error.details;
-    Object.setPrototypeOf(this, ActionRuntimeError.prototype);
-  }
-}
+// 规范化运行时错误类单一事实源位于 @actiondock/sdk，此处 re-export 维持既有导入路径兼容并供本模块内部复用
+import { ActionRuntimeError } from "@actiondock/sdk";
+export { ActionRuntimeError };
 
 /**
  * 带有写入和调试能力的配置接口。

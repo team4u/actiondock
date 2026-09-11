@@ -1,4 +1,5 @@
 import { ACTIONDOCK_VERSION } from "../../version";
+import { UNAUTHORIZED } from "../../errors";
 import { verifyBearerToken } from "../security";
 import { type RouteContext, jsonResponse } from "./common";
 
@@ -21,7 +22,7 @@ export async function handleHealthRoute(ctx: RouteContext): Promise<Response | n
       {
         ok: false,
         error: {
-          code: "UNAUTHORIZED",
+          code: UNAUTHORIZED,
           message: "Invalid or missing Bearer token",
         },
       },

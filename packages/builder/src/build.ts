@@ -18,6 +18,7 @@ import {
   getPackageSlug,
 } from "@actiondock/core";
 import { createZipArchiveAsync } from "./archive";
+import { STANDALONE_ASYNC_UNSUPPORTED } from "@actiondock/core";
 import { BuilderError } from "./errors";
 import { SelectionPlanner } from "./planner";
 import type { BuildOptions, BuildResult, ExternalDependency } from "./types";
@@ -228,6 +229,7 @@ import {
   IpcActionDockTarget,
   StandaloneDispatcher,
   ExitCode,
+  STANDALONE_ASYNC_UNSUPPORTED,
 } from "@actiondock/core";
 
 const METADATA = {
@@ -247,7 +249,7 @@ if (argv.includes("--async")) {
         {
           ok: false,
           error: {
-            code: "STANDALONE_ASYNC_UNSUPPORTED",
+            code: ${JSON.stringify(STANDALONE_ASYNC_UNSUPPORTED)},
             message:
               "Async execution is not supported in standalone single-execution binaries. Use 'ad serve' or remote target.",
           },
@@ -258,7 +260,7 @@ if (argv.includes("--async")) {
     );
   } else {
     console.error(
-      "Error [STANDALONE_ASYNC_UNSUPPORTED]: Async execution is not supported in standalone single-execution binaries."
+      "Error [" + STANDALONE_ASYNC_UNSUPPORTED + "]: Async execution is not supported in standalone single-execution binaries."
     );
   }
   process.exit(ExitCode.FAILURE);

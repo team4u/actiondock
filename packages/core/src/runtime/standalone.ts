@@ -5,6 +5,8 @@ import { filterWithFallbackInfo } from "../filter";
 import type { ConfigItemDefinition } from "../project/types";
 import { createActionDockTarget } from "../target/target";
 import type { ActionDockTarget } from "../target/types";
+import { STANDALONE_ASYNC_UNSUPPORTED } from "../errors";
+import { normalizeActionCollection } from "./action-collection";
 import { parseDuration } from "../utils";
 
 /**
@@ -96,45 +98,10 @@ export class StandaloneDispatcher {
       return { target: (this.options as any)._sharedTarget, ownsTarget: false };
     }
 
-    const actionSpecs: Record<string, any> = {};
-    const actionsMap = new Map<string, ActionDefinition>();
-
-    const rawActions = this.options.actions;
-    if (rawActions instanceof Map) {
-      for (const [k, v] of rawActions) {
-        actionsMap.set(k, v);
-        actionSpecs[k] = {
-          id: k,
-          description: (v as any).description,
-          inputSchema: (v as any).inputSchema,
-          outputSchema: (v as any).outputSchema,
-        };
-      }
-    } else if (Array.isArray(rawActions)) {
-      for (const item of rawActions as any[]) {
-        const id = item.id;
-        const act = item.action ?? item;
-        if (id) {
-          actionsMap.set(id, act);
-          actionSpecs[id] = {
-            id,
-            description: item.description ?? act.description,
-            inputSchema: item.inputSchema ?? act.inputSchema,
-            outputSchema: item.outputSchema ?? act.outputSchema,
-          };
-        }
-      }
-    } else if (typeof rawActions === "object" && rawActions !== null) {
-      for (const [k, v] of Object.entries(rawActions)) {
-        actionsMap.set(k, v);
-        actionSpecs[k] = {
-          id: k,
-          description: (v as any).description,
-          inputSchema: (v as any).inputSchema,
-          outputSchema: (v as any).outputSchema,
-        };
-      }
-    }
+    // 归一化 Action 集合：单一入口统一三形态输入
+    const { actionsMap, actionSpecs } = normalizeActionCollection(this.options.actions);
+    // projectConfig.actions 要求 manifest 形态，字段语义兼容，此处显式收敛类型
+    const manifestActions = actionSpecs as Record<string, any>;
 
     const appOptions = {
       projectConfig: {
@@ -143,7 +110,7 @@ export class StandaloneDispatcher {
         version: this.options.version,
         description: this.options.description,
         config: this.options.config || this.options.configDefs,
-        actions: actionSpecs,
+        actions: manifestActions,
       },
       actions: actionsMap,
       dataDir: dataDir || this.options.dataDir,
@@ -209,7 +176,7 @@ export class StandaloneDispatcher {
             {
               ok: false,
               error: {
-                code: "STANDALONE_ASYNC_UNSUPPORTED",
+                code: STANDALONE_ASYNC_UNSUPPORTED,
                 message:
                   "Async execution is not supported in standalone single-execution binaries. Use 'ad serve' or remote target.",
               },
@@ -220,7 +187,7 @@ export class StandaloneDispatcher {
         );
       } else {
         this.writeErr(
-          "Error [STANDALONE_ASYNC_UNSUPPORTED]: Async execution is not supported in standalone single-execution binaries."
+          `Error [${STANDALONE_ASYNC_UNSUPPORTED}]: Async execution is not supported in standalone single-execution binaries.`
         );
       }
       return ExitCode.FAILURE;

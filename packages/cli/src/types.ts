@@ -1,19 +1,15 @@
 import type { ActionDefinition } from "@actiondock/sdk";
 import type { ConfigItemDefinition } from "@actiondock/core";
+import { ExitCode as CoreExitCode } from "@actiondock/core";
 
 /**
- * 统一退出码定义。
+ * 统一退出码定义（事实源位于 core 包 StandaloneDispatcher，此处仅 re-export 维持既有导入路径兼容）。
  * - SUCCESS: 执行成功（0）
  * - FAILURE: 业务或框架执行失败（1）
  * - INVALID_ARGUMENT: 命令行参数或选项错误（2）
  * - SIGINT: 进程接收中断信号退出（130）
  */
-export const ExitCode = {
-  SUCCESS: 0,
-  FAILURE: 1,
-  INVALID_ARGUMENT: 2,
-  SIGINT: 130,
-} as const;
+export const ExitCode = CoreExitCode;
 
 export type ExitCodeValue = (typeof ExitCode)[keyof typeof ExitCode];
 
