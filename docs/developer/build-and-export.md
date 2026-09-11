@@ -2,7 +2,7 @@
 
 ActionDock 2.0 提供了面向生产交付与智能体消费的现代构建与导出工具链。构建与导出核心由 `@actiondock/builder` 驱动，包含基于声明式清单的依赖闭包规划器 `BuildPlanner`（`SelectionPlanner`）、Node 目录型交付产物构建器、npm Action 标准打包器与双模态 Skill 导出器。
 
-在 ActionDock 2.0 中，彻底废除了原有的外部单文件二进制编译器 `BunCompiler` 以及 `--target` 与 `--bytecode` 选项。工具链全面转向标准、透明且易于容器化部署的 Node 目录型交付产物体系。
+在 ActionDock 2.0 中，彻底废除了原有的外部单文件二进制编译器以及 `--target` 与 `--bytecode` 选项。工具链全面转向标准、透明且易于容器化部署的 Node 目录型交付产物体系。
 
 ---
 

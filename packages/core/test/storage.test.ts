@@ -385,5 +385,66 @@ describe("SqliteRuntimeStorage", () => {
       expect(coreStorage.decodeStateKey(encoded)).toEqual({ namespace: "ns:sub", key: "k:1" });
     });
   });
+
+  describe("createLazyStorage", () => {
+    it("defers initialization until properties or methods are accessed", () => {
+      let initialized = false;
+      const fakeStorage = {
+        packageId: "lazy-pkg",
+        isOpen: true,
+        closed: false,
+        getConfig: (k: string) => (k === "FOO" ? "BAR" : undefined),
+        close: () => {
+          fakeStorage.isOpen = false;
+          fakeStorage.closed = true;
+        },
+      } as any;
+
+      const lazy = coreStorage.createLazyStorage(() => {
+        initialized = true;
+        return fakeStorage;
+      });
+
+      expect(initialized).toBe(false);
+      expect(lazy.isOpen).toBe(false);
+      expect(initialized).toBe(false);
+
+      // close on uninitialized proxy is a no-op and does not trigger initialization
+      lazy.close();
+      expect(initialized).toBe(false);
+
+      // Calling a method triggers initialization
+      const val = lazy.getConfig("FOO");
+      expect(initialized).toBe(true);
+      expect(val).toBe("BAR");
+      expect(lazy.isOpen).toBe(true);
+
+      lazy.close();
+      expect(fakeStorage.closed).toBe(true);
+    });
+  });
+
+  describe("Symlink support in resolveDatabasePath", () => {
+    it("allows dataDir or customHome with symlinked ancestor without throwing boundary escape error", async () => {
+      const { mkdtempSync, mkdirSync, symlinkSync, rmSync } = await import("node:fs");
+      const { tmpdir } = await import("node:os");
+      const tempBase = mkdtempSync(join(tmpdir(), "ad-symlink-storage-test-"));
+      try {
+        const realTarget = join(tempBase, "openclaw", ".actiondock");
+        mkdirSync(realTarget, { recursive: true });
+
+        const fakeHome = join(tempBase, "fakehome");
+        mkdirSync(fakeHome, { recursive: true });
+        const symlinkHome = join(fakeHome, ".actiondock");
+        symlinkSync(realTarget, symlinkHome);
+
+        // Note: data directory does not exist yet!
+        const resolved = resolveDatabasePath("my-pkg", { customHome: fakeHome });
+        expect(resolved).toBe(join(fakeHome, ".actiondock", "data", "my-pkg", "runtime.db"));
+      } finally {
+        rmSync(tempBase, { recursive: true, force: true });
+      }
+    });
+  });
 });
 

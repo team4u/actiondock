@@ -20,7 +20,7 @@ import { loadManifest } from "../project/manifest";
 import type { ProjectConfig } from "../project/types";
 import { RuntimeConfig } from "../runtime/context";
 import { normalizeActionCollection } from "../runtime/action-collection";
-import { createGlobalStorage, createStorage } from "../storage";
+import { createGlobalStorage, createLazyStorage, createStorage } from "../storage";
 import { isSecretConfigKey } from "../storage/mask";
 import { decodeStateKey, SqliteRuntimeStorage } from "../storage/sqlite";
 import type { RuntimeStorage } from "../storage/types";
@@ -108,20 +108,33 @@ export class DefaultActionDockApp implements ActionDockApp {
       };
 
       const storageFactory = this.platform.storage as any;
-      if (typeof storageFactory === "function") {
-        this.storage = storageFactory(this.packageId, storageOpts);
-      } else if (storageFactory && typeof storageFactory.createStorage === "function") {
-        this.storage = storageFactory.createStorage(this.packageId, storageOpts);
-      } else if (storageFactory && typeof storageFactory.create === "function") {
-        this.storage = storageFactory.create(this.packageId, storageOpts);
+      const initStorage = () => {
+        if (typeof storageFactory === "function") {
+          return storageFactory(this.packageId, storageOpts);
+        } else if (storageFactory && typeof storageFactory.createStorage === "function") {
+          return storageFactory.createStorage(this.packageId, storageOpts);
+        } else if (storageFactory && typeof storageFactory.create === "function") {
+          return storageFactory.create(this.packageId, storageOpts);
+        } else {
+          return createStorage(this.packageId, storageOpts);
+        }
+      };
+
+      if (options.inMemory) {
+        this.storage = initStorage();
       } else {
-        this.storage = createStorage(this.packageId, storageOpts);
+        this.storage = createLazyStorage(initStorage);
       }
     }
 
     // 5. 确定全局存储实例
     if (options.globalStorage) {
       this.globalStorage = options.globalStorage;
+    } else if (options.inMemory) {
+      this.globalStorage = new SqliteRuntimeStorage({
+        dbPath: ":memory:",
+        packageId: "__global__",
+      });
     } else {
       const globalOpts = {
         customHome: options.customHome,
@@ -130,16 +143,14 @@ export class DefaultActionDockApp implements ActionDockApp {
       };
 
       const storageFactory = this.platform.storage as any;
-      if (options.inMemory) {
-        this.globalStorage = new SqliteRuntimeStorage({
-          dbPath: ":memory:",
-          packageId: "__global__",
-        });
-      } else if (storageFactory && typeof storageFactory.createGlobalStorage === "function") {
-        this.globalStorage = storageFactory.createGlobalStorage(globalOpts);
-      } else {
-        this.globalStorage = createGlobalStorage(globalOpts);
-      }
+      const initGlobalStorage = () => {
+        if (storageFactory && typeof storageFactory.createGlobalStorage === "function") {
+          return storageFactory.createGlobalStorage(globalOpts);
+        }
+        return createGlobalStorage(globalOpts);
+      };
+
+      this.globalStorage = createLazyStorage(initGlobalStorage);
     }
 
     // 6. 初始化唯一执行协调服务

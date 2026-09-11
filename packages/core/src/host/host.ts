@@ -69,6 +69,7 @@ export class DefaultActionDockHost implements ActionDockHost {
   private eventSink: EventSink;
   private isClosed = false;
   private dataDirLock?: DataDirLock;
+  private failedLinkedPackages = new Map<string, { path: string; error: string }>();
 
   constructor(options: ActionDockHostOptions = {}) {
     this.hostSessionId = randomUUID();
@@ -179,7 +180,13 @@ export class DefaultActionDockHost implements ActionDockHost {
     // 扫描已软链接的外部包并注册至 Host
     if (options.scanLinkedPackages) {
       for (const linked of listLinkedPackages(options.customHome)) {
-        if (existsSync(linked.path) && !this.apps.has(linked.id)) {
+        if (!this.apps.has(linked.id)) {
+          if (!existsSync(linked.path)) {
+            const err = `Linked package '${linked.id}' path does not exist on disk: '${linked.path}'`;
+            this.failedLinkedPackages.set(linked.id, { path: linked.path, error: err });
+            options.logger?.warn?.(`[Host] ${err}`);
+            continue;
+          }
           try {
             const config = loadProjectConfig(linked.path);
             this.hostPublicPackageIds.add(linked.id);
@@ -200,8 +207,12 @@ export class DefaultActionDockHost implements ActionDockHost {
               packageContextResolver: this.resolvePackageContext.bind(this),
             });
             this.registerAppInternal(app, true);
-          } catch {
-            // 忽略非正常链接包
+          } catch (err: any) {
+            const errDetail = err?.message || String(err);
+            this.failedLinkedPackages.set(linked.id, { path: linked.path, error: errDetail });
+            options.logger?.warn?.(
+              `[Host] Failed to load linked package '${linked.id}' from '${linked.path}': ${errDetail}`
+            );
           }
         }
       }
@@ -336,6 +347,12 @@ export class DefaultActionDockHost implements ActionDockHost {
       }
       const app = this.getApp(parsed.packageId);
       if (!app) {
+        const failed = this.failedLinkedPackages.get(parsed.packageId);
+        if (failed) {
+          throw new Error(
+            `Package '${parsed.packageId}' not found in host (failed to load from '${failed.path}': ${failed.error})`
+          );
+        }
         throw new Error(`Package '${parsed.packageId}' not found in host`);
       }
       return app.describeAction(parsed.actionId);
@@ -474,9 +491,13 @@ export class DefaultActionDockHost implements ActionDockHost {
       targetApp = this.getApp(targetPackageId);
       if (!targetApp) {
         const runId = randomUUID();
+        const failed = this.failedLinkedPackages.get(targetPackageId);
+        const errorMsg = failed
+          ? `Package '${targetPackageId}' not found in host (failed to load from '${failed.path}': ${failed.error})`
+          : `Package '${targetPackageId}' not found in host`;
         const error: RuntimeError = {
           code: PACKAGE_NOT_FOUND,
-          message: `Package '${targetPackageId}' not found in host`,
+          message: errorMsg,
         };
         return {
           runId,

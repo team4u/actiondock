@@ -411,5 +411,29 @@ Perform audit steps.
         rmSync(outsideDir, { recursive: true, force: true });
       }
     });
+
+    it("symmetrically allows non-existent targets when rootDir has a symlink ancestor and target is within boundary", () => {
+      const externalBase = mkdtempSync(join(tmpdir(), "ad-external-base-"));
+      try {
+        const realTarget = join(externalBase, "real-app");
+        mkdirSync(realTarget, { recursive: true });
+
+        const symlinkDir = join(tempDir, "linked-app");
+        symlinkSync(realTarget, symlinkDir, "dir");
+
+        // rootDir has a symlink ancestor (linked-app) and subfolder does not exist yet
+        const rootDir = join(symlinkDir, "data");
+        const targetPath = join(rootDir, "pkg", "runtime.db");
+
+        // Should not throw because canonical target is inside canonical root
+        expect(() => assertPathWithinRoot(rootDir, targetPath, "storagePath")).not.toThrow();
+
+        // But escaping the canonical root should still throw
+        const escapingTarget = join(rootDir, "..", "..", "outside.db");
+        expect(() => assertPathWithinRoot(rootDir, escapingTarget, "storagePath")).toThrow();
+      } finally {
+        rmSync(externalBase, { recursive: true, force: true });
+      }
+    });
   });
 });

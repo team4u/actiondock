@@ -50,7 +50,6 @@ ActionDock 2.0 针对生产环境与开发者工作流进行了原生架构升�
 
 - 原生 Node 24 运行环境：原生运行于 Node.js >=24.12.0。日常的工具开发、单测执行、本地命令行交互、MCP 协议通信以及 HTTP 微服务部署完全依托 Node.js 环境，基于原生类型擦除、内置 SQLite 与原生 HTTP，日常运行完全脱离外部编译器。
 - 标准 npm 工作流：日常开发、测试、构建与发布使用标准 npm 工作流（npm test、npm run typecheck、npm run build、npm run test:pack）。
-- 跨环境兼容验证：保留 bun test 作为跨环境兼容性验证。
 
 ---
 
@@ -59,7 +58,7 @@ ActionDock 2.0 针对生产环境与开发者工作流进行了原生架构升�
 ActionDock 2.0 引入 [actiondock.lock.json](file:///root/code/action-dock/packages/core/src/project/lockfile.ts)（规范版本 lockfileVersion: 1），作为工具依赖锁定的事实源：
 
 - 原子事务保障：执行 `ad add` 与 `ad remove` 时，系统自动备份 package.json、actiondock.json 与 actiondock.lock.json 快照。若安装或校验流程失败，自动执行原子回滚恢复。
-- 架构彻底简化：已废弃旧版清单机制与单文件独立二进制编译器 BunCompiler，统一采用标准 Node.js 目录交付格式与 npm 打包体系。
+- 架构彻底简化：已废弃旧版清单机制与单文件独立二进制编译器，统一采用标准 Node.js 目录交付格式与 npm 打包体系。
 
 ---
 
@@ -274,9 +273,6 @@ npm run build
 
 # 执行发布打包冒烟测试
 npm run test:pack
-
-# 执行跨环境兼容性验证测试
-bun test
 ```
 
 ---

@@ -126,35 +126,13 @@ export function assertValidPackageId(packageId: string): void {
 }
 
 /**
- * Ensures that a given path stays strictly within the specified root boundary,
- * preventing relative directory escape (..) and symlink jailbreak.
- * Traverses upward to the nearest existing ancestor directory to resolve symlinks
- * even for non-existent paths.
+ * Resolves a path to its canonical physical location.
+ * If the path exists, calls realpathSync.
+ * If not, traverses upward to find the nearest existing ancestor, resolves its symlink,
+ * and appends the non-existent relative segments.
  */
-export function assertPathWithinRoot(
-  rootDir: string,
-  targetPath: string,
-  fieldName = "path"
-): void {
-  const resolvedRoot = resolve(rootDir);
-  const resolvedTarget = resolve(rootDir, targetPath);
-  const rel = relative(resolvedRoot, resolvedTarget);
-
-  if (rel.startsWith("..") || isAbsolute(rel)) {
-    throw new Error(`'${fieldName}' escapes boundary '${rootDir}': ${targetPath}`);
-  }
-
-  let realRoot = resolvedRoot;
-  try {
-    if (existsSync(resolvedRoot)) {
-      realRoot = realpathSync(resolvedRoot);
-    }
-  } catch {
-    realRoot = resolvedRoot;
-  }
-
-  // Find nearest existing ancestor directory (or the path itself if it exists)
-  let curr = resolvedTarget;
+export function canonicalizePath(targetPath: string): string {
+  let curr = resolve(targetPath);
   const missingSegments: string[] = [];
 
   while (!existsSync(curr)) {
@@ -169,21 +147,44 @@ export function assertPathWithinRoot(
   if (existsSync(curr)) {
     try {
       const realCurr = realpathSync(curr);
-      const canonicalTarget =
-        missingSegments.length > 0
-          ? resolve(realCurr, ...missingSegments)
-          : realCurr;
-      const relReal = relative(realRoot, canonicalTarget);
-      if (relReal.startsWith("..") || isAbsolute(relReal)) {
-        throw new Error(
-          `'${fieldName}' symlink resolves outside boundary '${rootDir}': ${targetPath}`
-        );
-      }
-    } catch (err: any) {
-      if (err.message?.includes("escapes") || err.message?.includes("outside")) {
-        throw err;
-      }
+      return missingSegments.length > 0
+        ? resolve(realCurr, ...missingSegments)
+        : realCurr;
+    } catch {
+      return resolve(targetPath);
     }
+  }
+
+  return resolve(targetPath);
+}
+
+/**
+ * Ensures that a given path stays strictly within the specified root boundary,
+ * preventing relative directory escape (..) and symlink jailbreak.
+ * Traverses upward to the nearest existing ancestor directory to resolve symlinks
+ * symmetrically for both root and target paths.
+ */
+export function assertPathWithinRoot(
+  rootDir: string,
+  targetPath: string,
+  fieldName = "path"
+): void {
+  const resolvedRoot = resolve(rootDir);
+  const resolvedTarget = resolve(rootDir, targetPath);
+  const rel = relative(resolvedRoot, resolvedTarget);
+
+  if (rel.startsWith("..") || isAbsolute(rel)) {
+    throw new Error(`'${fieldName}' escapes boundary '${rootDir}': ${targetPath}`);
+  }
+
+  const canonicalRoot = canonicalizePath(resolvedRoot);
+  const canonicalTarget = canonicalizePath(resolvedTarget);
+
+  const relReal = relative(canonicalRoot, canonicalTarget);
+  if (relReal.startsWith("..") || isAbsolute(relReal)) {
+    throw new Error(
+      `'${fieldName}' symlink resolves outside boundary '${rootDir}': ${targetPath}`
+    );
   }
 }
 

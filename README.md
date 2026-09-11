@@ -50,7 +50,6 @@ ActionDock 2.0 provides an upgraded native runtime architecture:
 
 - Native Node 24 Runtime: Natively runs on Node.js >=24.12.0, utilizing node:sqlite, node:http, and native type stripping. Standard authoring, testing, CLI execution, MCP servers, and HTTP services run directly on Node.js.
 - Standard npm Workflow: Daily development, testing, building, and publishing use the standard npm workflow (npm test, npm run typecheck, npm run build, npm run test:pack).
-- Cross-Environment Verification: Retains bun test as a cross-environment compatibility test.
 
 ---
 
@@ -59,7 +58,7 @@ ActionDock 2.0 provides an upgraded native runtime architecture:
 ActionDock 2.0 establishes [actiondock.lock.json](file:///root/code/action-dock/packages/core/src/project/lockfile.ts) (lockfileVersion: 1) as the deterministic lockfile for tool dependencies:
 
 - Atomic Transactions: The `ad add` and `ad remove` commands take snapshot backups of `package.json`, `actiondock.json`, and `actiondock.lock.json`. If installation fails, changes are automatically rolled back.
-- Elimination of Manifest Side Effects: The deprecated `actiondock.manifest.json` and standalone single-file binary compiler (`BunCompiler`) have been removed in favor of direct Node.js directory builds and npm distribution.
+- Elimination of Manifest Side Effects: The deprecated `actiondock.manifest.json` and standalone single-file binary compilers have been removed in favor of direct Node.js directory builds and npm distribution.
 
 ---
 
@@ -274,9 +273,6 @@ npm run build
 
 # Run pack smoke test
 npm run test:pack
-
-# Cross-environment compatibility verification
-bun test
 ```
 
 ---

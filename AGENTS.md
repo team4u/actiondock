@@ -1,7 +1,7 @@
 # Agent 开发协作指引 - ActionDock 2.0
 
 - **核心定位**：ActionDock 2.0 是面向 AI Agent Action 与 Skill 的开发、测试、构建与分发工具链。
-- **运行时与引擎**：默认运行时为 Node.js（版本大于等于 24.12.0，基于 node:sqlite、node:http 与类型擦除提供原生驱动）；Bun 作为跨环境兼容性测试运行环境。
+- **运行时与引擎**：默认运行时为 Node.js（版本大于等于 24.12.0，基于 node:sqlite、node:http 与类型擦除提供原生驱动）。
 - **代码库分层结构**：
   - `packages/sdk`：`@actiondock/sdk`（极简公共 SDK：`defineAction`、`ActionContext`、`Config`、`StateStore`、`ActionInvoker`、`Logger`、`ProcessAPI`）。
   - `packages/core`：`@actiondock/core`（公共领域内核：`project`、`runtime`、`storage`、`schema`、`catalog`、`execution`、`server`、`target`）。
@@ -12,7 +12,7 @@
   - `packages/cli`：`@actiondock/cli`（CLI 工具链与独立运行分发器：`init`、`info`、`list`、`describe`、`run`、`validate`、`config`、`state`、`runs`、`serve`、`mcp`、`build`、`test`、`add`、`remove`、`pack`、`doctor`、`link`、`unlink`、`export skill`）。
   - `examples/*`：官方示例 Action Packages。
 - **常用验证命令**：
-  - 执行所有单元与集成测试：`npm test`（或 `bun test`）
+  - 执行所有单元与集成测试：`npm test`
   - 执行全量 TypeScript 类型检查：`npm run typecheck`
 - **核心工程设计原则**：
   - **解耦优先**：核心业务与外部环境及底层实现解耦，保持平台中立。
@@ -35,7 +35,7 @@
     - 测试版本：采用携带预发布后缀的版本号标签，如 `2.0.9-beta.0` 或 `v2.0.9-beta.0`。
   - **多包依赖对齐**：发布测试版本时，全部子包之间以及脚手架模板中的互引依赖必须与目标测试版本号对齐，避免 npm 无法匹配预发布版本而回退加载旧稳定版。
   - **发布验证与执行流**：
-    - 验证流程：发布前必须通过 `bun test`、`bun run typecheck` 与打包烟雾测试 `bun run test:pack`。
+    - 验证流程：发布前必须通过 `npm test`、`npm run typecheck` 与打包烟雾测试 `npm run test:pack`。
     - 提交流程：完成各包版本号更新后创建提交，使用 `git tag <version>` 标记并执行 `git push origin <branch> && git push origin <version>`。
     - 流水线发布：GitHub Actions 监听标签推送，自动解析标签类型并决定 `--tag` 参数，按依赖拓扑顺序执行自动化发布。
 

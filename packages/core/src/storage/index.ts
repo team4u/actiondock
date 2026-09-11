@@ -1,10 +1,11 @@
-import { join } from "node:path";
-import { assertPathWithinRoot, assertValidPackageId, getActionDockHome } from "../utils";
+import { isAbsolute, join, relative, resolve } from "node:path";
+import { assertValidPackageId, getActionDockHome } from "../utils";
 import { SqliteRuntimeStorage } from "./sqlite";
 import type { RuntimeStorage } from "./types";
 
 export * from "./data-dir-lock";
 export * from "./driver";
+export * from "./lazy";
 export * from "./mask";
 export * from "./params";
 export * from "./sqlite";
@@ -34,16 +35,22 @@ export function resolveDatabasePath(
   const safePkgPath = packageId.startsWith("@") ? packageId.slice(1) : packageId;
 
   if (options.dataDir) {
-    const rootDir = options.dataDir;
-    const dbPath = join(rootDir, safePkgPath, "runtime.db");
-    assertPathWithinRoot(rootDir, dbPath, "database dataDir path");
+    const rootDir = resolve(options.dataDir);
+    const dbPath = resolve(rootDir, safePkgPath, "runtime.db");
+    const rel = relative(rootDir, dbPath);
+    if (rel.startsWith("..") || isAbsolute(rel)) {
+      throw new Error(`'database dataDir path' escapes boundary '${rootDir}': ${dbPath}`);
+    }
     return dbPath;
   }
 
   // 统一数据存储路径: ~/.actiondock/data/<package-id>/runtime.db
-  const rootDir = join(getActionDockHome(options.customHome), ".actiondock", "data");
-  const dbPath = join(rootDir, safePkgPath, "runtime.db");
-  assertPathWithinRoot(rootDir, dbPath, "database storage path");
+  const rootDir = resolve(join(getActionDockHome(options.customHome), ".actiondock", "data"));
+  const dbPath = resolve(rootDir, safePkgPath, "runtime.db");
+  const rel = relative(rootDir, dbPath);
+  if (rel.startsWith("..") || isAbsolute(rel)) {
+    throw new Error(`'database storage path' escapes boundary '${rootDir}': ${dbPath}`);
+  }
   return dbPath;
 }
 

@@ -1287,4 +1287,43 @@ describe("CLI Review & Machine Contract Regression", () => {
     expect(packDryRes.packageId).toBe("test.build-modes");
     expect(packDryRes.tarballPath).toBeUndefined();
   });
+
+  it("supports linked package discovery and execution when ~/.actiondock is a symlink (OpenClaw setup)", () => {
+    // 1. Initialize a package in tempDir
+    runCli(["init", "--id", "openclaw.demo", "."], tempDir);
+
+    // 2. Setup fake home where ~/.actiondock is a symlink to an external directory
+    const realActionDockDir = join(tempDir, "real-openclaw-actiondock");
+    mkdirSync(realActionDockDir, { recursive: true });
+
+    const fakeUserHome = join(tempDir, "fake-user-home");
+    mkdirSync(fakeUserHome, { recursive: true });
+    symlinkSync(realActionDockDir, join(fakeUserHome, ".actiondock"), "dir");
+
+    const customEnv = { ACTIONDOCK_HOME: fakeUserHome };
+
+    // 3. Link the package under this symlink home
+    const linkProc = runCli(["link"], tempDir, customEnv);
+    expect(linkProc.exitCode).toBe(0);
+
+    // 4. Test ad info from an outside directory
+    const infoProc = runCli(["info", "openclaw.demo", "--json"], tmpdir(), customEnv);
+    expect(infoProc.exitCode).toBe(0);
+    const infoData = JSON.parse(infoProc.stdout.toString());
+    expect(infoData.id).toBe("openclaw.demo");
+
+    // 5. Test ad list from outside directory (Host-based discovery)
+    const listProc = runCli(["list", "-P", "openclaw.demo", "--json"], tmpdir(), customEnv);
+    expect(listProc.exitCode).toBe(0);
+    const listData = JSON.parse(listProc.stdout.toString());
+    expect(Array.isArray(listData)).toBe(true);
+    expect(listData.length).toBeGreaterThan(0);
+
+    // 6. Test ad describe from outside directory
+    const firstActionId = listData[0].id;
+    const describeProc = runCli(["describe", `openclaw.demo/${firstActionId}`, "--json"], tmpdir(), customEnv);
+    expect(describeProc.exitCode).toBe(0);
+    const describeData = JSON.parse(describeProc.stdout.toString());
+    expect(describeData.id).toBe(firstActionId);
+  });
 });

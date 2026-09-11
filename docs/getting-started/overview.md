@@ -104,7 +104,7 @@ graph TD
 - 运行时适配层：
   - [@actiondock/runtime-node](file:///root/code/action-dock/packages/runtime-node/README.md)：Node.js 生产环境适配驱动。针对 Node.js >=24.12.0 原生环境提供实体驱动实现，包括基于 node:sqlite 的同步存储驱动（另有独立异步驱动 WorkerSqliteDriver 可选）、基于原生 ESM 与原生类型擦除的源码模块加载器 [NodeModuleLoader](file:///root/code/action-dock/packages/runtime-node/src/module-loader.ts)、进程执行器 [ExecaProcessExecutor](file:///root/code/action-dock/packages/runtime-node/src/process-executor.ts) 以及基于 `node:http` 的流式服务容器 [NodeHttpServer](file:///root/code/action-dock/packages/runtime-node/src/http-server.ts)。
 - 构建与交付层：
-  - [@actiondock/builder](file:///root/code/action-dock/packages/builder/README.md)：构建编排规划器与交付导出器。负责依赖规划 [SelectionPlanner](file:///root/code/action-dock/packages/builder/src/planner.ts)、Node.js 目录交付产物构建（`ad build`）、npm 标准包打包（`ad pack`），以及依据 Playbook 规程将项目导出为轻量化 Agent Skill 资产（`ad export skill`，支持 `--mode source` 与 `--mode node`）。彻底删除原 BunCompiler 外部编译器。
+  - [@actiondock/builder](file:///root/code/action-dock/packages/builder/README.md)：构建编排规划器与交付导出器。负责依赖规划 [SelectionPlanner](file:///root/code/action-dock/packages/builder/src/planner.ts)、Node.js 目录交付产物构建（`ad build`）、npm 标准包打包（`ad pack`），以及依据 Playbook 规程将项目导出为轻量化 Agent Skill 资产（`ad export skill`，支持 `--mode source` 与 `--mode node`）。彻底删除原外部单文件编译器。
 - 协议适配层：
   - [@actiondock/mcp](file:///root/code/action-dock/packages/mcp/README.md)：Model Context Protocol 协议适配层。负责将 Action 自动映射为标准 MCP 工具，支持 STDIO 与 HTTP 两种传输通道，并负责双向取消信号传递与输出流纯净性保障。
 - 门面与工具链层：

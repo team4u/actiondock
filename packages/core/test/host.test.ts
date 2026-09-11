@@ -633,4 +633,136 @@ actions:
       "ActionDockHost is closed: new tasks rejected"
     );
   });
+
+  it("支持通过软链接的 ~/.actiondock 目录正常装载链接包并执行 (OpenClaw 软链场景)", async () => {
+    const { symlinkSync } = await import("node:fs");
+    const tempBase = mkdtempSync(join(tmpdir(), "ad-host-symlink-test-"));
+    try {
+      // 真实目标目录
+      const realTarget = join(tempBase, "openclaw", ".actiondock");
+      mkdirSync(realTarget, { recursive: true });
+
+      // 宿主伪造家目录，内建软链: fakeHome/.actiondock -> realTarget
+      const fakeHome = join(tempBase, "fakehome");
+      mkdirSync(fakeHome, { recursive: true });
+      const symlinkHome = join(fakeHome, ".actiondock");
+      symlinkSync(realTarget, symlinkHome);
+
+      // 创建一个外部包工程
+      const pkgDir = join(tempBase, "my-external-pkg");
+      mkdirSync(pkgDir, { recursive: true });
+      writeFileSync(
+        join(pkgDir, "actiondock.json"),
+        JSON.stringify({
+          id: "openclaw.test-tool",
+          name: "OpenClaw 测试工具",
+          version: "1.0.0",
+          actions: {
+            greet: {
+              description: "问候 Action",
+            },
+          },
+        })
+      );
+
+      // 在注册表中登记该链接包
+      const registryPath = join(symlinkHome, "registry.json");
+      writeFileSync(
+        registryPath,
+        JSON.stringify({
+          version: "2.0.0",
+          packages: {
+            "openclaw.test-tool": {
+              id: "openclaw.test-tool",
+              name: "OpenClaw 测试工具",
+              version: "1.0.0",
+              path: pkgDir,
+              linkedAt: new Date().toISOString(),
+            },
+          },
+        })
+      );
+
+      // 启动 Host，开启扫描链接包
+      const host = await createActionDockHost({
+        scanLinkedPackages: true,
+        customHome: fakeHome,
+        autoLoadCurrentProject: false,
+      });
+
+      // 验证 Host 成功装载该链接包（未被静默丢弃）
+      const app = host.getApp("openclaw.test-tool");
+      expect(app).toBeDefined();
+      expect(app?.packageId).toBe("openclaw.test-tool");
+
+      // 验证 describeAction 能够正常调阅
+      const spec = await host.describeAction("openclaw.test-tool/greet");
+      expect(spec.description).toBe("问候 Action");
+
+      await host.close();
+    } finally {
+      rmSync(tempBase, { recursive: true, force: true });
+    }
+  });
+
+  it("当链接包损坏或路径不存在时，输出告警日志并在调阅时透传精准失败原因", async () => {
+    const tempBase = mkdtempSync(join(tmpdir(), "ad-host-failed-link-test-"));
+    try {
+      const fakeHome = join(tempBase, "fakehome");
+      const adHome = join(fakeHome, ".actiondock");
+      mkdirSync(adHome, { recursive: true });
+
+      // 注册表中登记一个物理不存在的路径
+      const nonExistentPath = join(tempBase, "does-not-exist");
+      writeFileSync(
+        join(adHome, "registry.json"),
+        JSON.stringify({
+          version: "2.0.0",
+          packages: {
+            "broken.pkg": {
+              id: "broken.pkg",
+              name: "损坏包",
+              version: "1.0.0",
+              path: nonExistentPath,
+              linkedAt: new Date().toISOString(),
+            },
+          },
+        })
+      );
+
+      const warnings: string[] = [];
+      const mockLogger = {
+        debug: () => {},
+        info: () => {},
+        warn: (msg: string) => warnings.push(msg),
+        error: () => {},
+      };
+
+      const host = await createActionDockHost({
+        scanLinkedPackages: true,
+        customHome: fakeHome,
+        autoLoadCurrentProject: false,
+        logger: mockLogger,
+      });
+
+      // 应该记录了警告日志
+      expect(warnings.some((w) => w.includes("broken.pkg"))).toBe(true);
+
+      // 调用 describeAction 时，错误信息必须携带具体的失败原因与路径
+      await expect(host.describeAction("broken.pkg/any-action")).rejects.toThrow(
+        /broken\.pkg.*failed to load.*does-not-exist/
+      );
+
+      // 调用 runAction 时，错误信息亦必须透传
+      const res = await host.runAction("broken.pkg/any-action", {});
+      expect(res.ok).toBe(false);
+      if (!res.ok) {
+        expect(res.error.message).toMatch(/broken\.pkg.*failed to load.*does-not-exist/);
+      }
+
+      await host.close();
+    } finally {
+      rmSync(tempBase, { recursive: true, force: true });
+    }
+  });
 });
