@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "bun:test";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createActionDockTarget, linkPackage } from "@actiondock/core";
 import { defineAction } from "@actiondock/sdk";
@@ -141,7 +142,17 @@ export default defineAction({
 }
 
 describe("@actiondock/mcp Adapter", () => {
-  const tmpDir = join(process.cwd(), "tmp", `test-mcp-${Date.now()}`);
+  // 夹具统一落在系统临时目录（mkdtemp 随机子目录），避免污染仓库工作区
+  const tmpDir = mkdtempSync(join(tmpdir(), "test-mcp-"));
+
+  // 兜底清理：afterAll 之外再挂进程退出钩子，尽量覆盖中断场景下的残留
+  process.on("exit", () => {
+    try {
+      rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3 });
+    } catch {
+      // 忽略清理异常，避免影响退出流程
+    }
+  });
 
   try {
     setupTestProject(tmpDir);
@@ -1114,19 +1125,20 @@ describe("@actiondock/mcp Adapter", () => {
   });
 
   it("passes customHome to target resolution correctly", async () => {
-    const fakeHome = join(process.cwd(), "tmp", `test-mcp-custom-home-${Date.now()}`);
-    mkdirSync(fakeHome, { recursive: true });
+    // 使用系统临时目录承载伪 Home，测试结束无论成败均兜底清理
+    const fakeHome = mkdtempSync(join(tmpdir(), "test-mcp-custom-home-"));
+    try {
+      await linkPackage(tmpDir, fakeHome);
 
-    await linkPackage(tmpDir, fakeHome);
-
-    const server = await createActionDockMcpServer({
-      packageId: "test.mcp-pkg",
-      customHome: fakeHome,
-    });
-    expect(server).toBeDefined();
-    await server.close();
-
-    rmSync(fakeHome, { recursive: true, force: true });
+      const server = await createActionDockMcpServer({
+        packageId: "test.mcp-pkg",
+        customHome: fakeHome,
+      });
+      expect(server).toBeDefined();
+      await server.close();
+    } finally {
+      rmSync(fakeHome, { recursive: true, force: true, maxRetries: 3 });
+    }
   });
 
   it("startMcpHttpServer stop() transparently propagates target.close errors", async () => {

@@ -1,0 +1,12 @@
+# ActionDock 运行时与本地产物
+.actiondock/
+
+# 依赖与构建产物
+node_modules/
+dist/
+*.tsbuildinfo
+*.tgz
+
+# 本地测试残留与系统文件
+tmp/
+.DS_Store

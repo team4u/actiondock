@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   createRequestListener,
@@ -222,10 +223,11 @@ describe("ExecaProcessExecutor 单元测试", () => {
 });
 
 describe("NodeModuleLoader 与 TsxModuleLoader 单元测试", () => {
-  const testDir = join(process.cwd(), "tmp", "test-loader-" + Date.now());
+  // 夹具统一落在系统临时目录（mkdtemp 随机子目录），避免污染仓库工作区
+  const testDir = mkdtempSync(join(tmpdir(), "test-loader-"));
 
   beforeAll(() => {
-    mkdirSync(testDir, { recursive: true });
+    // mkdtempSync 已在声明处创建目录，此处无需重复创建
     writeFileSync(
       join(testDir, "service.ts"),
       `
