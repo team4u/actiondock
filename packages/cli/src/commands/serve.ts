@@ -31,6 +31,7 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
     .option("--max-body <size>", "Maximum allowed JSON request body size (e.g. 1mb, 500kb)", "1mb")
     .option("--expose-debug-info", "Expose project root path in health and info responses")
     .option("--no-mcp", "Disable unified MCP protocol endpoint at /mcp")
+    .option("--allow-query-token", "Allow passing authentication token via URL query parameter (?token=xxx)")
     .option("-d, --dir <path>", "Project root directory (default: current working directory)")
     .action(async (rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
@@ -38,6 +39,7 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
       const host = options.host || "127.0.0.1";
       const token = options.token || (typeof process !== "undefined" ? process.env?.ACTIONDOCK_TOKEN : undefined);
       const allowInsecureNoAuth = Boolean(options.allowInsecureNoAuth);
+      const allowQueryToken = Boolean(options.allowQueryToken);
       const corsOrigins = options.corsOrigin && options.corsOrigin.length > 0 ? options.corsOrigin : undefined;
       const exposeDebugInfo = Boolean(options.exposeDebugInfo);
 
@@ -98,6 +100,7 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
           host,
           token,
           allowInsecureNoAuth,
+          allowQueryToken,
           corsOrigins,
           maxBodyBytes,
           exposeDebugInfo,
@@ -114,10 +117,10 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
         if (projectRoot && exposeDebugInfo) {
           writeStdout(`  * Root Path:       ${projectRoot}`, context);
         }
-        writeStdout(
-          `  * Authentication:  ${token ? "Bearer Token / Query Token Enabled" : "Disabled (Public/Local)"}`,
-          context
-        );
+        const authDesc = token
+          ? (allowQueryToken ? "Bearer Token / Query Token Enabled" : "Bearer Token Enabled (Query Token Disabled)")
+          : "Disabled (Public/Local)";
+        writeStdout(`  * Authentication:  ${authDesc}`, context);
         writeStdout(`  * CORS Origins:    ${corsOrigins ? corsOrigins.join(", ") : "Disabled (Default)"}`, context);
         writeStdout(`  * Max Body Size:   ${options.maxBody || "1mb"}`, context);
         writeStdout(

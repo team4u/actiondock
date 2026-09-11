@@ -779,6 +779,7 @@ describe("ActionRunner", () => {
 
     // pkg-a has a caller action that invokes pkg-b/b.worker
     const pkgAAction = defineAction({
+      uses: ["pkg-b/b.worker"],
       async run(input: any, ctx) {
         return ctx.actions.invoke({ packageId: "pkg-b", actionId: "b.worker" }, input);
       },
@@ -806,6 +807,9 @@ describe("ActionRunner", () => {
     });
 
     const result = await pkgARunner.execute("a.caller", { foo: "bar" });
+    if (!result.ok) {
+      console.log("RESULT ERROR:", (result as any).error);
+    }
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.data).toEqual({ greeting: "hello from B", echoed: { foo: "bar" } });

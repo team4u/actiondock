@@ -116,6 +116,8 @@ export interface HttpSecurityOptions {
   port?: number;
   token?: string;
   allowInsecureNoAuth?: boolean;
+  allowQueryToken?: boolean;
+  allowInsecureHttp?: boolean;
   corsOrigins?: string[];
   maxBodyBytes?: number;
 }

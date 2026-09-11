@@ -29,6 +29,8 @@ export interface ServerOptions {
   hostname?: string;
   /** 用于 HTTP Bearer Token 鉴权的密钥令牌 */
   token?: string;
+  /** 是否允许通过 URL 查询参数携带 Token 进行鉴权（默认 false，关闭以防泄露） */
+  allowQueryToken?: boolean;
   /** 服务的项目根目录（可选，若未指定则自动向上查找或进入全局 Registry 模式） */
   projectRoot?: string;
   /** 自定义 ActionDock 用户家目录 */

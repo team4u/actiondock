@@ -195,8 +195,12 @@ async function main() {
   try {
     for (const pkg of PUBLISH_PACKAGES) {
       console.log(`- 发布 ${pkg.name}@${targetVersion} [标签: ${tempDistTag}]...`);
+      const publishArgs = ["publish", localTarballs[pkg.name].path, "--access", "public", "--tag", tempDistTag];
+      if (process.env.GITHUB_ACTIONS) {
+        publishArgs.push("--provenance");
+      }
       if (dryRun) {
-        console.log(`  [模拟] 执行: npm publish ${localTarballs[pkg.name].path} --access public --tag ${tempDistTag}`);
+        console.log(`  [模拟] 执行: npm ${publishArgs.join(" ")}`);
       } else {
         const remoteInfo = getRemotePackageInfo(pkg.name, targetVersion);
         if (remoteInfo.exists && remoteInfo.shasum === localTarballs[pkg.name].shasum) {
@@ -205,7 +209,7 @@ async function main() {
             allowFailure: true,
           });
         } else {
-          runCmd("npm", ["publish", localTarballs[pkg.name].path, "--access", "public", "--tag", tempDistTag], {
+          runCmd("npm", publishArgs, {
             cwd: pkg.dir,
           });
         }

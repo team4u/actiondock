@@ -295,6 +295,8 @@ export interface RemoteTargetOptions {
   serverUrl: string;
   /** 鉴权 Bearer Token（可选） */
   token?: string;
+  /** 是否允许向非回环地址发送明文 HTTP 请求（默认 false） */
+  allowInsecureHttp?: boolean;
   /** 请求超时时间（毫秒） */
   timeoutMs?: number;
   /** 轮询等待基准底线超时时间（毫秒，默认 60000ms） */

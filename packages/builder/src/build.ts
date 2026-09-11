@@ -94,6 +94,19 @@ function generateNodeHostEntrySource(
     .map((relPath, idx) => `import action_${idx} from ${JSON.stringify(relPath)};`)
     .join("\n");
 
+  const actionsDict: Record<string, unknown> = {};
+  for (const a of plan.actions) {
+    actionsDict[a.id] = {
+      entry: a.entry,
+      description: a.description || "",
+      inputSchema: a.inputSchema ?? null,
+      outputSchema: a.outputSchema ?? null,
+      uses: a.uses || [],
+      tags: a.tags || [],
+      annotations: a.annotations || {},
+    };
+  }
+
   const actionItems = plan.actions
     .map((a, idx) => {
       const entryObj = `{
@@ -102,6 +115,7 @@ function generateNodeHostEntrySource(
       description: action_${idx}?.description || ${JSON.stringify(a.description || "")},
       inputSchema: action_${idx}?.inputSchema ?? ${JSON.stringify(a.inputSchema ?? null)},
       outputSchema: action_${idx}?.outputSchema ?? ${JSON.stringify(a.outputSchema ?? null)},
+      uses: action_${idx}?.uses || ${JSON.stringify(a.uses || [])},
       tags: action_${idx}?.tags || ${JSON.stringify(a.tags || [])},
       annotations: action_${idx}?.annotations || ${JSON.stringify(a.annotations || {})},
     }`;
@@ -150,6 +164,7 @@ const host = await createActionDockHost({
         version: ${JSON.stringify(plan.version)},
         description: ${JSON.stringify(plan.description || "")},
         config: ${JSON.stringify(plan.configDefs || {})},
+        actions: ${JSON.stringify(actionsDict)},
       },
       actions: [
         ${actionItems}

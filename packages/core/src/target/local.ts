@@ -20,6 +20,7 @@ import type {
   ExecutionTicket,
 } from "../execution/types";
 import type { ActionDockHost } from "../host/types";
+import type { ConfigItemDefinition } from "../project/types";
 import { createGlobalStorage, isSecretConfigKey } from "../storage";
 import type { RuntimeStorage, StateEntry } from "../storage/types";
 import {
@@ -246,12 +247,30 @@ export class LocalActionDockTarget implements ActionDockTarget {
     });
   }
 
+  private findDeclaredConfigItem(key: string): ConfigItemDefinition | undefined {
+    if ("listApps" in this.target) {
+      let foundItem: ConfigItemDefinition | undefined;
+      for (const app of (this.target as ActionDockHost).listApps()) {
+        const item = app.projectConfig?.config?.[key];
+        if (item) {
+          if (item.secret) return item;
+          foundItem = item;
+        }
+      }
+      return foundItem;
+    } else if ("projectConfig" in this.target) {
+      return (this.target as ActionDockApp).projectConfig?.config?.[key];
+    }
+    return undefined;
+  }
+
   async getConfig(packageId: string, key: string): Promise<ConfigValueView> {
     if (packageId === "global") {
       const globalStorage = this.getGlobalStorage();
       const val = globalStorage.getConfig(key);
       const configured = val !== undefined;
-      const isSecret = isSecretConfigKey(key);
+      const declaredItem = this.findDeclaredConfigItem(key);
+      const isSecret = isSecretConfigKey(key, declaredItem);
       return {
         key,
         configured,
@@ -295,7 +314,8 @@ export class LocalActionDockTarget implements ActionDockTarget {
       const globalStorage = this.getGlobalStorage();
       const all = globalStorage.listConfig();
       return Object.entries(all).map(([key, val]) => {
-        const isSecret = isSecretConfigKey(key);
+        const declaredItem = this.findDeclaredConfigItem(key);
+        const isSecret = isSecretConfigKey(key, declaredItem);
         return {
           key,
           configured: true,

@@ -21,7 +21,7 @@ import type { ProjectConfig } from "../project/types";
 import { RuntimeConfig } from "../runtime/context";
 import { normalizeActionCollection } from "../runtime/action-collection";
 import { createGlobalStorage, createLazyStorage, createStorage } from "../storage";
-import { isSecretConfigKey } from "../storage/mask";
+import { isSecretConfigKey, sanitizeConfigDefinitions } from "../storage/mask";
 import { decodeStateKey, SqliteRuntimeStorage } from "../storage/sqlite";
 import type { RuntimeStorage } from "../storage/types";
 import type {
@@ -335,7 +335,7 @@ export class DefaultActionDockApp implements ActionDockApp {
       packageRoot: this.packageRoot,
       actionsDir: this.projectConfig.actionsDir,
       playbooksDir: this.projectConfig.playbooksDir,
-      config: this.projectConfig.config,
+      config: sanitizeConfigDefinitions(this.projectConfig.config),
       actions,
       actionsCount: actions.length,
       playbooks,
@@ -577,13 +577,11 @@ export class DefaultActionDockApp implements ActionDockApp {
       const entry = await this.storage.findState(key, ns || undefined);
       return entry as unknown as T;
     }
+    if (actionId) {
+      return await this.storage.getState<T>(ns, key);
+    }
     if (ns) {
-      const val = await this.storage.getState<T>(ns, key);
-      if (val !== undefined) return val;
-      const rootVal = await this.storage.getState<T>("", key);
-      if (rootVal !== undefined) return rootVal;
-      const entry = await this.storage.findState<T>(key);
-      return entry?.value as T | undefined;
+      return await this.storage.getState<T>(ns, key);
     }
     const entry = await this.storage.findState<T>(key);
     return entry?.value as T | undefined;
@@ -600,21 +598,49 @@ export class DefaultActionDockApp implements ActionDockApp {
     let value: T;
     let opts: StateScopeOptions | undefined;
 
-    if (typeof keyOrValue === "string" && options !== undefined) {
+    if (arguments.length >= 4) {
       actionId = actionIdOrKey;
       key = keyOrValue;
       value = valueOrOptions;
       opts = options;
-    } else if (typeof keyOrValue === "string" && valueOrOptions !== undefined && (typeof valueOrOptions !== "object" || valueOrOptions === null || Array.isArray(valueOrOptions) || !("namespace" in valueOrOptions || "ttl" in valueOrOptions))) {
-      actionId = actionIdOrKey;
-      key = keyOrValue;
-      value = valueOrOptions;
-      opts = options;
-    } else {
+    } else if (arguments.length === 2) {
       actionId = "";
       key = actionIdOrKey;
       value = keyOrValue;
-      opts = valueOrOptions;
+      opts = undefined;
+    } else {
+      const isOpts = (obj: any): obj is StateScopeOptions => {
+        if (!obj || typeof obj !== "object" || Array.isArray(obj)) return false;
+        const validKeys = new Set(["namespace", "ttl", "prefix", "all", "detail"]);
+        const keys = Object.keys(obj);
+        return keys.length > 0 && keys.every((k) => validKeys.has(k));
+      };
+
+      const isKnownAction =
+        this.actionsMap.has(actionIdOrKey) ||
+        Boolean(this.projectConfig?.actions?.[actionIdOrKey]);
+
+      if (isKnownAction && typeof keyOrValue === "string") {
+        actionId = actionIdOrKey;
+        key = keyOrValue;
+        value = valueOrOptions;
+        opts = undefined;
+      } else if (isOpts(valueOrOptions)) {
+        actionId = "";
+        key = actionIdOrKey;
+        value = keyOrValue;
+        opts = valueOrOptions;
+      } else if (typeof keyOrValue === "string") {
+        actionId = actionIdOrKey;
+        key = keyOrValue;
+        value = valueOrOptions;
+        opts = undefined;
+      } else {
+        actionId = "";
+        key = actionIdOrKey;
+        value = keyOrValue;
+        opts = valueOrOptions;
+      }
     }
 
     const ns = actionId
@@ -662,11 +688,19 @@ export class DefaultActionDockApp implements ActionDockApp {
       : (opts?.namespace ?? "");
 
     if (ns) {
-      const deleted = await this.storage.deleteState(ns, key);
-      if (deleted) return true;
-      return this.storage.deleteStateSmart(key);
+      return await this.storage.deleteState(ns, key);
     }
-    return this.storage.deleteStateSmart(key);
+
+    let targetKey = key;
+    let targetNs = "";
+    try {
+      const decoded = decodeStateKey(key);
+      targetNs = decoded.namespace;
+      targetKey = decoded.key;
+    } catch {
+      targetNs = "";
+    }
+    return await this.storage.deleteState(targetNs, targetKey);
   }
 
   async listStateKeys(

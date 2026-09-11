@@ -28,3 +28,26 @@ export function maskSecretValue(value: unknown): string {
   if (value === null) return "null";
   return "********";
 }
+
+/**
+ * 对配置定义字典进行脱敏处理：
+ * 针对声明为 secret: true 的项，剥离其 default 默认值，不返回敏感默认值。
+ *
+ * @param config 声明的配置定义字典
+ */
+export function sanitizeConfigDefinitions(
+  config?: Record<string, ConfigItemDefinition>
+): Record<string, ConfigItemDefinition> | undefined {
+  if (!config) return config;
+  const result: Record<string, ConfigItemDefinition> = {};
+  for (const [key, item] of Object.entries(config)) {
+    if (item?.secret === true) {
+      const copy = { ...item };
+      delete copy.default;
+      result[key] = copy;
+    } else {
+      result[key] = item;
+    }
+  }
+  return result;
+}

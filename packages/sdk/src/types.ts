@@ -279,6 +279,20 @@ export interface ActionDefinition<I = unknown, O = unknown> {
    * @param ctx 运行时上下文对象
    */
   run(input: I, ctx: ActionContext): Promise<O> | O;
+  /** Action 唯一标识 */
+  id?: string;
+  /** Action 功能描述 */
+  description?: string;
+  /** 输入参数模式规范 */
+  inputSchema?: JsonSchema;
+  /** 输出结果模式规范 */
+  outputSchema?: JsonSchema;
+  /** 静态 Action 依赖列表 */
+  uses?: string[];
+  /** 检索与分类标签 */
+  tags?: string[];
+  /** 协议注解元数据 */
+  annotations?: Record<string, JsonValue>;
 }
 
 /**

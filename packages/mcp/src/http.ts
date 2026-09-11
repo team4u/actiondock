@@ -1,5 +1,6 @@
 import {
   ACTIONDOCK_VERSION,
+  DEFAULT_MAX_BODY_BYTES,
   isLoopbackHost,
   launchHttpServer,
   resolveCorsHeaders,
@@ -63,9 +64,94 @@ export function startMcpHttpServer(
       const url = new URL(req.url);
       const pathname = url.pathname;
 
+      // 0. Max body bytes check (Content-Length 预检与流式截断防护)
+      const maxBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
+      const contentLengthHeader = req.headers.get("content-length");
+      if (contentLengthHeader) {
+        const parsedLength = parseInt(contentLengthHeader, 10);
+        if (!isNaN(parsedLength) && parsedLength > maxBytes) {
+          return new Response(
+            JSON.stringify({
+              ok: false,
+              error: {
+                code: "REQUEST_TOO_LARGE",
+                message: "Request body exceeds maximum allowed size",
+              },
+            }),
+            {
+              status: 413,
+              headers: {
+                "Content-Type": "application/json",
+                ...corsHeaders,
+              },
+            }
+          );
+        }
+      }
+
+      let currentReq = req;
+      if (req.body && req.method !== "GET" && req.method !== "HEAD") {
+        const reader = req.body.getReader();
+        const chunks: Uint8Array[] = [];
+        let totalBytes = 0;
+        let tooLarge = false;
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            if (value) {
+              totalBytes += value.byteLength;
+              if (totalBytes > maxBytes) {
+                tooLarge = true;
+                await reader.cancel();
+                break;
+              }
+              chunks.push(value);
+            }
+          }
+        } finally {
+          reader.releaseLock();
+        }
+
+        if (tooLarge) {
+          return new Response(
+            JSON.stringify({
+              ok: false,
+              error: {
+                code: "REQUEST_TOO_LARGE",
+                message: "Request body exceeds maximum allowed size",
+              },
+            }),
+            {
+              status: 413,
+              headers: {
+                "Content-Type": "application/json",
+                ...corsHeaders,
+              },
+            }
+          );
+        }
+
+        const merged = new Uint8Array(totalBytes);
+        let offset = 0;
+        for (const chunk of chunks) {
+          merged.set(chunk, offset);
+          offset += chunk.byteLength;
+        }
+        currentReq = new Request(req.url, {
+          method: req.method,
+          headers: req.headers,
+          body: merged,
+          signal: req.signal,
+        });
+      }
+
+      const verifyOptions = { allowQueryToken: (options as any).allowQueryToken };
+
       // 1. Health check
       if (pathname === "/health" || pathname === "/api/v1/health") {
-        if (!verifyBearerToken(req, token)) {
+        if (!verifyBearerToken(currentReq, token, verifyOptions)) {
           return new Response(
             JSON.stringify({
               ok: false,
@@ -101,7 +187,7 @@ export function startMcpHttpServer(
       }
 
       // 2. Authentication check
-      if (!verifyBearerToken(req, token)) {
+      if (!verifyBearerToken(currentReq, token, verifyOptions)) {
         return new Response(
           JSON.stringify({
             jsonrpc: "2.0",
@@ -123,7 +209,7 @@ export function startMcpHttpServer(
 
       // 3. Delegate MCP endpoint
       if (pathname === "/mcp" || pathname === "/") {
-        const mcpResponse = await handler.fetch(req);
+        const mcpResponse = await handler.fetch(currentReq);
         if (Object.keys(corsHeaders).length > 0) {
           const newHeaders = new Headers(mcpResponse.headers);
           for (const [k, v] of Object.entries(corsHeaders)) {

@@ -1079,11 +1079,12 @@ export class ActionRunner {
     }
     const childActionId = parsed.actionId;
 
-    this.assertDeclaredUses(runCtx.action, targetActionId, childPackageId, childActionId);
-
     this.activeSubRuns++;
     try {
       const runnerToUse = await this.resolveChildRunner(childPackageId, childActionId);
+      if (runnerToUse !== this) {
+        this.assertDeclaredUses(runCtx.action, targetActionId, childPackageId, childActionId);
+      }
 
       const childResult = await runnerToUse.execute(childAction, childInput, {
         rootRunId,
@@ -1118,25 +1119,27 @@ export class ActionRunner {
     childPackageId: string,
     childActionId: string
   ): void {
+    if (!childPackageId || childPackageId === this.packageId) {
+      return;
+    }
     const actionConfig = this.projectConfig?.actions?.[targetActionId] as any;
-    const declaredUses = actionConfig?.uses ?? (action as any)?.uses;
-    if (childPackageId && childPackageId !== this.packageId && Array.isArray(declaredUses)) {
-      const targetRef = `${childPackageId}/${childActionId}`;
-      const isAllowed = declaredUses.some(
-        (u: string) => u === targetRef || u === `${childPackageId}/*` || u === childPackageId
+    const rawUses = actionConfig?.uses ?? (action as any)?.uses;
+    const declaredUses = Array.isArray(rawUses) ? rawUses : [];
+    const targetRef = `${childPackageId}/${childActionId}`;
+    const isAllowed = declaredUses.some(
+      (u: string) => u === targetRef || u === `${childPackageId}/*` || u === childPackageId
+    );
+    if (!isAllowed) {
+      const err = new Error(
+        `Undeclared cross-package dependency: Action '${this.packageId}/${targetActionId}' does not declare '${targetRef}' in 'uses'`
       );
-      if (!isAllowed) {
-        const err = new Error(
-          `Undeclared cross-package dependency: Action '${this.packageId}/${targetActionId}' does not declare '${targetRef}' in 'uses'`
-        );
-        (err as any).code = UNDECLARED_ACTION_DEPENDENCY;
-        (err as any).details = {
-          caller: `${this.packageId}/${targetActionId}`,
-          target: targetRef,
-          declaredUses,
-        };
-        throw err;
-      }
+      (err as any).code = UNDECLARED_ACTION_DEPENDENCY;
+      (err as any).details = {
+        caller: `${this.packageId}/${targetActionId}`,
+        target: targetRef,
+        declaredUses: rawUses,
+      };
+      throw err;
     }
   }
 
@@ -1198,6 +1201,7 @@ export class ActionRunner {
           const resolution = await this.resolveAction(actionOrId);
           if (resolution.status === "found") {
             currentAction = resolution.action;
+            runCtx.action = currentAction;
           } else if (resolution.status === "load_failed") {
             const cause = resolution.error;
             const error: RuntimeError = describeActionLoadFailure(cause, {

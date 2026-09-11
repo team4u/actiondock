@@ -6,6 +6,7 @@ import { createActionDockApp } from "../src/app";
 import { createActionDockHost } from "../src/host";
 import { createDefaultSqliteDriver } from "../src/storage/driver";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
+import { DataDirLock } from "../src/storage/data-dir-lock";
 import { STORAGE_SCHEMA_VERSION } from "../src/storage/types";
 
 describe("数据目录排他锁与 Schema 版本保护测试", () => {
@@ -229,5 +230,57 @@ describe("数据目录排他锁与 Schema 版本保护测试", () => {
         driver: mockDriver,
       });
     }).toThrow("Disk I/O error during schema initialization");
+  });
+
+  it("多实例并发抢锁时严格保证仅有一方成功，其余方均捕获 DATA_DIR_IN_USE 异常", async () => {
+    const concurrency = 10;
+    const results: { success: DataDirLock[]; errors: any[] } = {
+      success: [],
+      errors: [],
+    };
+
+    // 同步并发抢锁
+    for (let i = 0; i < concurrency; i++) {
+      try {
+        const lock = DataDirLock.acquire(tempDir);
+        results.success.push(lock);
+      } catch (err: any) {
+        results.errors.push(err);
+      }
+    }
+
+    expect(results.success.length).toBe(1);
+    expect(results.errors.length).toBe(concurrency - 1);
+    for (const err of results.errors) {
+      expect(err?.code).toBe("DATA_DIR_IN_USE");
+    }
+
+    // 成功持有锁的实例释放锁
+    results.success[0].release();
+    const lockFile = join(tempDir, ".actiondock.data.lock");
+    expect(existsSync(lockFile)).toBe(false);
+  });
+
+  it("释放锁时校验 sessionToken，若磁盘锁文件被覆盖则不删除他人持有的锁文件", () => {
+    const lockFile = join(tempDir, ".actiondock.data.lock");
+    const lock = DataDirLock.acquire(tempDir);
+    expect(existsSync(lockFile)).toBe(true);
+
+    // 模拟锁文件已被其他会话接管覆盖
+    const otherLockInfo = {
+      pid: process.pid,
+      hostname: "other-host",
+      sessionToken: "other-session-token",
+      createdAt: new Date().toISOString(),
+      childPids: [],
+    };
+    writeFileSync(lockFile, JSON.stringify(otherLockInfo, null, 2), { mode: 0o600 });
+
+    // 旧锁实例尝试 release，由于 sessionToken 不匹配，磁盘文件不会被删除
+    lock.release();
+    expect(existsSync(lockFile)).toBe(true);
+
+    const onDisk = JSON.parse(readFileSync(lockFile, "utf8"));
+    expect(onDisk.sessionToken).toBe("other-session-token");
   });
 });

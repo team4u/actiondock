@@ -262,7 +262,10 @@ describe("@actiondock/mcp Adapter", () => {
       },
     });
 
-    await new Promise((r) => setTimeout(r, 100));
+    const startWait = Date.now();
+    while (!callResult && Date.now() - startWait < 2000) {
+      await new Promise((r) => setTimeout(r, 20));
+    }
 
     expect(callResult).toBeDefined();
     expect(callResult.structuredContent).toEqual({ result: 42 });

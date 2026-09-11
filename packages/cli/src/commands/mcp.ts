@@ -31,6 +31,7 @@ export function registerMcpCommands(program: Command, context?: CliContext): voi
     )
     .option("--all", "Serve all linked packages from global registry")
     .option("--timeout <duration>", "Execution timeout (e.g. 30s, 5m, 500ms)")
+    .option("--allow-insecure-http", "Allow insecure HTTP connections with auth token (INSECURE)")
     .action(async (rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
       let timeoutMs: number | undefined;
@@ -72,6 +73,8 @@ export function registerMcpCommands(program: Command, context?: CliContext): voi
     .option("-t, --token <token>", "Authentication token for securing the endpoint (or set ACTIONDOCK_TOKEN)")
     .option("--token-env <env>", "Environment variable name containing the authentication token")
     .option("--allow-insecure-no-auth", "Allow non-loopback host binding without authentication token (INSECURE)")
+    .option("--allow-insecure-http", "Allow insecure HTTP connections with auth token (INSECURE)")
+    .option("--allow-query-token", "Allow passing authentication token via URL query parameter (INSECURE)")
     .option(
       "--cors-origin <origin>",
       "Allowed CORS origin (can be specified multiple times)",
@@ -103,6 +106,8 @@ export function registerMcpCommands(program: Command, context?: CliContext): voi
         (typeof process !== "undefined" ? process.env?.ACTIONDOCK_TOKEN : undefined);
 
       const allowInsecureNoAuth = Boolean(options.allowInsecureNoAuth);
+      const allowInsecureHttp = Boolean(options.allowInsecureHttp);
+      const allowQueryToken = Boolean(options.allowQueryToken);
       const corsOrigins =
         options.corsOrigin && options.corsOrigin.length > 0 ? options.corsOrigin : undefined;
 
@@ -168,6 +173,8 @@ export function registerMcpCommands(program: Command, context?: CliContext): voi
           host,
           token,
           allowInsecureNoAuth,
+          allowInsecureHttp,
+          allowQueryToken,
           corsOrigins,
           maxBodyBytes,
           projectRoots,

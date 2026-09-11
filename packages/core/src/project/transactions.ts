@@ -51,13 +51,42 @@ export interface ProjectTransaction {
 /**
  * 检查当前进程 PID 是否处于活跃运行状态。
  */
-function isPidAlive(pid: number): boolean {
+export function isPidAlive(pid: number): boolean {
+  if (typeof pid !== "number" || isNaN(pid) || pid <= 0) {
+    return false;
+  }
   try {
     process.kill(pid, 0);
     return true;
-  } catch {
+  } catch (err: any) {
+    return err?.code === "EPERM";
+  }
+}
+
+/**
+ * 检查项目修改锁 .actiondock/project.lock 是否存在且持有者 PID 处于存活状态。
+ *
+ * @param projectRoot 项目根目录
+ * @param excludeSelf 是否排除当前进程本身（默认为 true，即仅当其他活跃进程持锁时判定为锁被占用）
+ */
+export function isProjectLockHeld(projectRoot: string, excludeSelf = true): boolean {
+  const lockPath = join(projectRoot, ".actiondock", "project.lock");
+  if (!existsSync(lockPath)) {
     return false;
   }
+  try {
+    const raw = readFileSync(lockPath, "utf-8");
+    const lockData = JSON.parse(raw);
+    if (lockData && typeof lockData.pid === "number") {
+      if (excludeSelf && lockData.pid === process.pid) {
+        return false;
+      }
+      return isPidAlive(lockData.pid);
+    }
+  } catch {
+    // 忽略读取解析异常
+  }
+  return false;
 }
 
 /**
@@ -176,6 +205,10 @@ export function runFrozenInstall(projectRoot: string): void {
  * 检查项目是否存在未完成提交的悬空事务。
  */
 export function hasPendingTransactions(projectRoot: string): boolean {
+  if (isProjectLockHeld(projectRoot)) {
+    return false;
+  }
+
   const txBaseDir = join(projectRoot, ".actiondock", "transactions");
   if (!existsSync(txBaseDir)) {
     return false;
@@ -306,6 +339,10 @@ export async function recoverPendingTransactions(
   projectRoot: string,
   options?: { frozenInstall?: boolean }
 ): Promise<string[]> {
+  if (isProjectLockHeld(projectRoot)) {
+    return [];
+  }
+
   const txBaseDir = join(projectRoot, ".actiondock", "transactions");
   if (!existsSync(txBaseDir)) {
     return [];

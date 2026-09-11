@@ -17,7 +17,7 @@ export async function handleHealthRoute(ctx: RouteContext): Promise<Response | n
     return null;
   }
 
-  if (!verifyBearerToken(req, options.token)) {
+  if (!verifyBearerToken(req, options.token, options)) {
     return jsonResponse(
       {
         ok: false,

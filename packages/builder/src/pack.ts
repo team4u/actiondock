@@ -199,8 +199,6 @@ async function compileTypeScript(
     rootDir: root,
     outDir: stagingPkgDir,
     skipLibCheck: true,
-    strict: false,
-    noImplicitAny: false,
     esModuleInterop: true,
     allowSyntheticDefaultImports: true,
     allowJs: true,
@@ -219,8 +217,6 @@ async function compileTypeScript(
           emitDeclarationOnly: false,
           rewriteRelativeImportExtensions: true,
           noEmit: false,
-          strict: false,
-          noImplicitAny: false,
         });
       }
     } catch {
@@ -232,11 +228,15 @@ async function compileTypeScript(
   const program = ts.createProgram(Array.from(tsSourceFiles), compilerOptions, host);
   const emitResult = program.emit();
 
-  if (emitResult.emitSkipped) {
-    const errors = emitResult.diagnostics.filter(
-      (d: any) => d.category === ts.DiagnosticCategory.Error
-    );
-    const formatted = ts.formatDiagnosticsWithColorAndContext(errors, {
+  const preEmitDiagnostics = ts.getPreEmitDiagnostics(program);
+  const allDiagnostics = [...preEmitDiagnostics, ...emitResult.diagnostics];
+  const errors = allDiagnostics.filter(
+    (d: any) => d.category === ts.DiagnosticCategory.Error
+  );
+
+  if (errors.length > 0 || emitResult.emitSkipped) {
+    const diagnosticsToFormat = errors.length > 0 ? errors : allDiagnostics;
+    const formatted = ts.formatDiagnosticsWithColorAndContext(diagnosticsToFormat, {
       getCanonicalFileName: (f: string) => f,
       getCurrentDirectory: () => root,
       getNewLine: () => "\n",

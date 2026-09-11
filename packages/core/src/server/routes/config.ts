@@ -1,6 +1,6 @@
 import { CAPABILITY_UNAVAILABLE } from "../../errors";
 import { resolveEnvValue } from "../../runtime";
-import { isSecretConfigKey, maskSecretValue } from "../../storage";
+import { isSecretConfigKey, maskSecretValue, sanitizeConfigDefinitions } from "../../storage";
 import { readJsonBody } from "../body";
 import { getSubPath, jsonResponse, resolveAppForPackage, type RouteContext } from "./common";
 
@@ -75,10 +75,11 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
       const pkgParam = url.searchParams.get("package") || url.searchParams.get("packageId") || undefined;
       const app = resolveAppForPackage(pkgParam, host, target);
       const stored = app.storage.listConfig();
-      const declared = app.projectConfig?.config || {};
+      const rawDeclared = app.projectConfig?.config || {};
+      const declared = sanitizeConfigDefinitions(rawDeclared) || {};
       const maskedValues: Record<string, any> = {};
       for (const [k, v] of Object.entries(stored)) {
-        if (isSecretConfigKey(k, declared[k])) {
+        if (isSecretConfigKey(k, rawDeclared[k])) {
           maskedValues[k] = maskSecretValue(v);
         } else {
           maskedValues[k] = v;

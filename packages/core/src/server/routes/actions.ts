@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { ActionResolver } from "../../catalog/action-resolver";
 import { filterByIntent } from "../../filter";
 import { ACTION_NOT_FOUND, ACTION_TIMEOUT, IDEMPOTENCY_CONFLICT, INPUT_VALIDATION_FAILED, PACKAGE_NOT_FOUND } from "../../errors";
 import { InvalidJsonError, readJsonBody, RequestTooLargeError } from "../body";
@@ -32,6 +33,12 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
         );
       }
 
+      if (options.packageAllowlist && options.packageAllowlist.length > 0) {
+        actions = actions.filter(
+          (a) => a.packageId && options.packageAllowlist!.includes(a.packageId)
+        );
+      }
+
       if (intent) {
         actions = filterByIntent(
           actions,
@@ -59,6 +66,21 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
   if (pkgActionShowMatch && req.method === "GET") {
     const packageId = decodeURIComponent(pkgActionShowMatch[1]);
     const actionId = decodeURIComponent(pkgActionShowMatch[2]);
+    if (options.packageAllowlist && options.packageAllowlist.length > 0) {
+      if (!options.packageAllowlist.includes(packageId)) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: "PACKAGE_FORBIDDEN",
+              message: `Package '${packageId}' is not in the allowed package list`,
+            },
+          },
+          403,
+          corsHeaders
+        );
+      }
+    }
     const ref = `${packageId}/${actionId}`;
     try {
       const spec = await target.describeAction(ref);
@@ -83,7 +105,43 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
   if (actionShowMatch && req.method === "GET") {
     const actionId = decodeURIComponent(actionShowMatch[1]);
     try {
+      const parsed = ActionResolver.parseRef(actionId);
+      if (parsed.packageId && options.packageAllowlist && options.packageAllowlist.length > 0) {
+        if (!options.packageAllowlist.includes(parsed.packageId)) {
+          return jsonResponse(
+            {
+              ok: false,
+              error: {
+                code: "PACKAGE_FORBIDDEN",
+                message: `Package '${parsed.packageId}' is not in the allowed package list`,
+              },
+            },
+            403,
+            corsHeaders
+          );
+        }
+      }
+    } catch {}
+
+    try {
       const spec = await target.describeAction(actionId);
+      if (
+        options.packageAllowlist &&
+        options.packageAllowlist.length > 0 &&
+        (!spec.packageId || !options.packageAllowlist.includes(spec.packageId))
+      ) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: "PACKAGE_FORBIDDEN",
+              message: `Package '${spec.packageId}' is not in the allowed package list`,
+            },
+          },
+          403,
+          corsHeaders
+        );
+      }
       return jsonResponse(spec, 200, corsHeaders);
     } catch (err: any) {
       return jsonResponse(
@@ -122,21 +180,31 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
     } else {
       actionRef = decodeURIComponent(shortRunMatch![1]);
       endpointMode = shortRunMatch![2] as "run" | "start";
-      if (actionRef.includes("/")) {
-        pkgId = actionRef.split("/")[0];
-      }
+      try {
+        const parsed = ActionResolver.parseRef(actionRef);
+        pkgId = parsed.packageId;
+      } catch {}
     }
 
     // 校验 Package 允许白名单
-    if (pkgId && options.packageAllowlist && options.packageAllowlist.length > 0) {
-      if (!options.packageAllowlist.includes(pkgId)) {
+    if (options.packageAllowlist && options.packageAllowlist.length > 0) {
+      if (!pkgId) {
+        try {
+          const spec = await target.describeAction(actionRef);
+          pkgId = spec?.packageId;
+        } catch {}
+      }
+
+      if (!pkgId || !options.packageAllowlist.includes(pkgId)) {
         return jsonResponse(
           {
             ok: false,
             runId: randomUUID(),
             error: {
               code: "PACKAGE_FORBIDDEN",
-              message: `Package '${pkgId}' is not in the allowed package list`,
+              message: pkgId
+                ? `Package '${pkgId}' is not in the allowed package list`
+                : `Action '${actionRef}' does not belong to any allowed package`,
             },
           },
           403,

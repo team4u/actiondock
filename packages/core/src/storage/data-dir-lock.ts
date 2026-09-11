@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync, writeSync } from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -111,10 +111,14 @@ export class DataDirLock {
     this.released = true;
     try {
       if (existsSync(this.lockFilePath)) {
-        unlinkSync(this.lockFilePath);
+        const raw = readFileSync(this.lockFilePath, "utf8");
+        const onDisk = JSON.parse(raw) as DataDirLockInfo;
+        if (onDisk && onDisk.sessionToken === this.info.sessionToken) {
+          unlinkSync(this.lockFilePath);
+        }
       }
     } catch {
-      // 忽略文件删除异常
+      // 忽略文件读取与解绑异常
     }
   }
 
@@ -122,11 +126,11 @@ export class DataDirLock {
    * 尝试获取指定数据目录的排他锁。
    *
    * 仲裁规则：
-   * - 若锁文件不存在，原子写入并持有锁。
-   * - 若锁文件已存在，解析持有者进程状态：
+   * - 若锁文件不存在，原子创建写入并持有锁。
+   * - 若锁文件已存在（openSync 捕获 EEXIST），解析持有者进程状态：
    *   - 若主进程仍处于存活状态，抛出 DATA_DIR_IN_USE 错误拒绝并发启动。
    *   - 若主进程已退出但仍有子进程存活，抛出 DATA_DIR_RECOVERY_REQUIRED 错误。
-   *   - 若主进程与所有子进程均已退出，允许接管锁并清理残留旧会话。
+   *   - 若主进程与所有子进程均已退出，允许接管覆盖锁并清理残留旧会话。
    *
    * @param dataDir 目标数据存储目录物理绝对路径
    * @param options 锁配置参数
@@ -151,46 +155,58 @@ export class DataDirLock {
       childPids: [],
       hostSessionId: options.hostSessionId,
     };
+    const content = JSON.stringify(newLockInfo, null, 2);
 
-    if (existsSync(lockFilePath)) {
-      let existing: DataDirLockInfo | undefined;
+    try {
+      const fd = openSync(lockFilePath, "wx", 0o600);
       try {
-        const raw = readFileSync(lockFilePath, "utf8");
-        existing = JSON.parse(raw) as DataDirLockInfo;
-      } catch {
-        // 损坏的锁文件视为待接管或直接覆盖
+        writeSync(fd, content);
+      } finally {
+        closeSync(fd);
       }
-
-      if (existing && typeof existing.pid === "number") {
-        const parentAlive = isProcessAlive(existing.pid);
-
-        if (parentAlive) {
-          const err: any = new Error(
-            `DATA_DIR_IN_USE: Data directory '${dataDir}' is in use by another active Host process (PID ${existing.pid})`
-          );
-          err.code = "DATA_DIR_IN_USE";
-          throw err;
+      return new DataDirLock(lockFilePath, newLockInfo);
+    } catch (err: any) {
+      if (err && err.code === "EEXIST") {
+        let existing: DataDirLockInfo | undefined;
+        try {
+          const raw = readFileSync(lockFilePath, "utf8");
+          existing = JSON.parse(raw) as DataDirLockInfo;
+        } catch {
+          // 损坏的锁文件视为待接管或直接覆盖
         }
 
-        // 主进程已死亡，检查关联子进程存活状态
-        const activeChildren = (existing.childPids || []).filter((childPid) =>
-          isProcessAlive(childPid)
-        );
+        if (existing && typeof existing.pid === "number") {
+          const parentAlive = isProcessAlive(existing.pid);
 
-        if (activeChildren.length > 0) {
-          const err: any = new Error(
-            `DATA_DIR_RECOVERY_REQUIRED: Data directory recovery required for '${dataDir}': previous host (PID ${existing.pid}) exited but child processes (${activeChildren.join(
-              ", "
-            )}) are still running`
+          if (parentAlive) {
+            const inUseErr: any = new Error(
+              `DATA_DIR_IN_USE: Data directory '${dataDir}' is in use by another active Host process (PID ${existing.pid})`
+            );
+            inUseErr.code = "DATA_DIR_IN_USE";
+            throw inUseErr;
+          }
+
+          // 主进程已死亡，检查关联子进程存活状态
+          const activeChildren = (existing.childPids || []).filter((childPid) =>
+            isProcessAlive(childPid)
           );
-          err.code = "DATA_DIR_RECOVERY_REQUIRED";
-          throw err;
+
+          if (activeChildren.length > 0) {
+            const recoveryErr: any = new Error(
+              `DATA_DIR_RECOVERY_REQUIRED: Data directory recovery required for '${dataDir}': previous host (PID ${existing.pid}) exited but child processes (${activeChildren.join(
+                ", "
+              )}) are still running`
+            );
+            recoveryErr.code = "DATA_DIR_RECOVERY_REQUIRED";
+            throw recoveryErr;
+          }
         }
+
+        // 主进程与所有子进程均已退出（或损坏的锁文件），接管覆盖
+        writeFileSync(lockFilePath, content, { mode: 0o600 });
+        return new DataDirLock(lockFilePath, newLockInfo);
       }
+      throw err;
     }
-
-    // 写入锁文件
-    writeFileSync(lockFilePath, JSON.stringify(newLockInfo, null, 2), { mode: 0o600 });
-    return new DataDirLock(lockFilePath, newLockInfo);
   }
 }

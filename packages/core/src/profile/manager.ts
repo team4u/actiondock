@@ -1,6 +1,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { toSnakeUpperCase } from "../runtime/env";
+import { isLoopbackHost } from "../server/security";
 import { getActionDockHome } from "../utils";
 import type {
   ProfileEntry,
@@ -25,12 +26,32 @@ export const DEFAULT_PROFILES_CONFIG: ProfilesConfig = {
 };
 
 /**
- * 格式化并规范化 Server URL 地址（自动补齐 http:// 协议头并移除末尾斜杠）。
+ * 格式化并规范化 Server URL 地址（若未指定协议，本地回环地址默认使用 http://，非本地回环地址默认使用 https://，并移除末尾斜杠）。
  */
 export function normalizeServerUrl(url: string): string {
   let cleaned = url.trim().replace(/\/+$/, "");
-  if (!/^https?:\/\//i.test(cleaned) && cleaned !== "local") {
-    cleaned = `http://${cleaned}`;
+  if (!cleaned || cleaned === "local") {
+    return cleaned;
+  }
+  if (!/^https?:\/\//i.test(cleaned)) {
+    let hostname = cleaned;
+    const slashIdx = hostname.indexOf("/");
+    if (slashIdx !== -1) {
+      hostname = hostname.slice(0, slashIdx);
+    }
+    if (hostname.startsWith("[")) {
+      const endBracket = hostname.indexOf("]");
+      if (endBracket !== -1) {
+        hostname = hostname.slice(1, endBracket);
+      }
+    } else {
+      const colonIdx = hostname.indexOf(":");
+      if (colonIdx !== -1) {
+        hostname = hostname.slice(0, colonIdx);
+      }
+    }
+    const isLoopback = isLoopbackHost(hostname);
+    cleaned = `${isLoopback ? "http" : "https"}://${cleaned}`;
   }
   return cleaned;
 }

@@ -255,28 +255,31 @@ export async function linkPackage(
   customHome?: string,
   options?: { recursive?: boolean }
 ): Promise<LinkResult> {
+  const filePath = getRegistryFilePath(customHome);
+  ensureRegistryDir(filePath);
   const absPath = resolve(targetPath);
   const directHasConfig = existsSync(join(absPath, "actiondock.json"));
 
   // 如果当前目录直接包含 actiondock.json 且未强制递归，按单包链接
   if (directHasConfig && !options?.recursive) {
     const config = loadProjectConfig(absPath);
-    const registry = await loadRegistryAsync(customHome);
+    return await withRegistryLock(filePath, async () => {
+      const registry = await loadRegistryAsync(customHome);
+      const entry = buildLinkedPackageEntry(config, absPath, new Date().toISOString());
 
-    const entry = buildLinkedPackageEntry(config, absPath, new Date().toISOString());
+      registry.packages[config.id] = entry;
+      await writeRegistryLocked(registry, customHome);
 
-    registry.packages[config.id] = entry;
-    await saveRegistry(registry, customHome);
-
-    return {
-      id: config.id,
-      name: entry.name,
-      version: entry.version,
-      path: absPath,
-      linkedAt: entry.linkedAt,
-      isWorkspace: false,
-      entries: [entry],
-    };
+      return {
+        id: config.id,
+        name: entry.name,
+        version: entry.version,
+        path: absPath,
+        linkedAt: entry.linkedAt,
+        isWorkspace: false,
+        entries: [entry],
+      };
+    });
   }
 
   // 尝试扫描子目录发现多个 ActionDock 子项目（Workspace 模式）；
@@ -285,63 +288,66 @@ export async function linkPackage(
   const discoveredRoots = discoverProjects(absPath);
 
   if (discoveredRoots.length > 0) {
-    const registry = await loadRegistryAsync(customHome);
-    const now = new Date().toISOString();
-    const wsEntry: LinkedWorkspaceEntry = {
-      path: absPath,
-      linkedAt: now,
-    };
+    return await withRegistryLock(filePath, async () => {
+      const registry = await loadRegistryAsync(customHome);
+      const now = new Date().toISOString();
+      const wsEntry: LinkedWorkspaceEntry = {
+        path: absPath,
+        linkedAt: now,
+      };
 
-    registry.workspaces = registry.workspaces || {};
-    registry.workspaces[absPath] = wsEntry;
+      registry.workspaces = registry.workspaces || {};
+      registry.workspaces[absPath] = wsEntry;
 
-    const linkedEntries: LinkedPackageEntry[] = [];
-    for (const root of discoveredRoots) {
-      try {
-        const config = loadProjectConfig(root);
-        const entry = buildLinkedPackageEntry(config, root, now, absPath);
-        registry.packages[config.id] = entry;
-        linkedEntries.push(entry);
-      } catch {
-        // 子项目配置损坏：跳过该子项目条目，不影响 workspace 注册本身
+      const linkedEntries: LinkedPackageEntry[] = [];
+      for (const root of discoveredRoots) {
+        try {
+          const config = loadProjectConfig(root);
+          const entry = buildLinkedPackageEntry(config, root, now, absPath);
+          registry.packages[config.id] = entry;
+          linkedEntries.push(entry);
+        } catch {
+          // 子项目配置损坏：跳过该子项目条目，不影响 workspace 注册本身
+        }
       }
-    }
 
-    await saveRegistry(registry, customHome);
+      await writeRegistryLocked(registry, customHome);
 
-    const wsName = basename(absPath);
-    return {
-      id: wsName,
-      name: wsName,
-      version: "2.0.0",
-      path: absPath,
-      linkedAt: now,
-      isWorkspace: true,
-      entries: linkedEntries,
-      workspace: wsEntry,
-    };
+      const wsName = basename(absPath);
+      return {
+        id: wsName,
+        name: wsName,
+        version: "2.0.0",
+        path: absPath,
+        linkedAt: now,
+        isWorkspace: true,
+        entries: linkedEntries,
+        workspace: wsEntry,
+      };
+    });
   }
 
   // 回退检查：如果在子目录执行（例如在 package 的 actions/ 目录下），查找父级项目根目录
   const parentRoot = findProjectRoot(absPath);
   if (parentRoot) {
     const config = loadProjectConfig(parentRoot);
-    const registry = await loadRegistryAsync(customHome);
+    return await withRegistryLock(filePath, async () => {
+      const registry = await loadRegistryAsync(customHome);
+      const entry = buildLinkedPackageEntry(config, parentRoot, new Date().toISOString());
 
-    const entry = buildLinkedPackageEntry(config, parentRoot, new Date().toISOString());
+      registry.packages[config.id] = entry;
+      await writeRegistryLocked(registry, customHome);
 
-    registry.packages[config.id] = entry;
-    await saveRegistry(registry, customHome);
-
-    return {
-      id: config.id,
-      name: entry.name,
-      version: entry.version,
-      path: parentRoot,
-      linkedAt: entry.linkedAt,
-      isWorkspace: false,
-      entries: [entry],
-    };
+      return {
+        id: config.id,
+        name: entry.name,
+        version: entry.version,
+        path: parentRoot,
+        linkedAt: entry.linkedAt,
+        isWorkspace: false,
+        entries: [entry],
+      };
+    });
   }
 
   throw new Error(`Cannot link: actiondock.json not found in '${absPath}' or its subdirectories`);
@@ -351,87 +357,92 @@ export async function unlinkPackage(
   identifier: string = process.cwd(),
   customHome?: string
 ): Promise<UnlinkResult | null> {
-  const registry = await loadRegistryAsync(customHome);
-  const absPath = resolve(identifier);
+  const filePath = getRegistryFilePath(customHome);
+  ensureRegistryDir(filePath);
 
-  // 检查是否匹配 Workspace 绝对路径
-  if (registry.workspaces && registry.workspaces[absPath]) {
-    const removedWs = registry.workspaces[absPath];
-    delete registry.workspaces[absPath];
+  return await withRegistryLock(filePath, async () => {
+    const registry = await loadRegistryAsync(customHome);
+    const absPath = resolve(identifier);
 
-    let removedCount = 0;
-    for (const [id, entry] of Object.entries(registry.packages)) {
-      if (entry.workspaceRoot === absPath || entry.path.startsWith(absPath)) {
-        delete registry.packages[id];
-        removedCount++;
-      }
-    }
-    await saveRegistry(registry, customHome);
-    return {
-      type: "workspace",
-      id: basename(absPath),
-      path: absPath,
-      packagesCount: removedCount,
-      removedWorkspace: removedWs,
-    };
-  }
+    // 检查是否匹配 Workspace 绝对路径
+    if (registry.workspaces && registry.workspaces[absPath]) {
+      const removedWs = registry.workspaces[absPath];
+      delete registry.workspaces[absPath];
 
-  // 检查是否匹配 Workspace 目录别名
-  if (registry.workspaces) {
-    for (const [wsPath, wsEntry] of Object.entries(registry.workspaces)) {
-      if (basename(wsPath) === identifier) {
-        delete registry.workspaces[wsPath];
-        let removedCount = 0;
-        for (const [id, entry] of Object.entries(registry.packages)) {
-          if (entry.workspaceRoot === wsPath || entry.path.startsWith(wsPath)) {
-            delete registry.packages[id];
-            removedCount++;
-          }
+      let removedCount = 0;
+      for (const [id, entry] of Object.entries(registry.packages)) {
+        if (entry.workspaceRoot === absPath || entry.path.startsWith(absPath)) {
+          delete registry.packages[id];
+          removedCount++;
         }
-        await saveRegistry(registry, customHome);
-        return {
-          type: "workspace",
-          id: basename(wsPath),
-          path: wsPath,
-          packagesCount: removedCount,
-          removedWorkspace: wsEntry,
-        };
+      }
+      await writeRegistryLocked(registry, customHome);
+      return {
+        type: "workspace",
+        id: basename(absPath),
+        path: absPath,
+        packagesCount: removedCount,
+        removedWorkspace: removedWs,
+      };
+    }
+
+    // 检查是否匹配 Workspace 目录别名
+    if (registry.workspaces) {
+      for (const [wsPath, wsEntry] of Object.entries(registry.workspaces)) {
+        if (basename(wsPath) === identifier) {
+          delete registry.workspaces[wsPath];
+          let removedCount = 0;
+          for (const [id, entry] of Object.entries(registry.packages)) {
+            if (entry.workspaceRoot === wsPath || entry.path.startsWith(wsPath)) {
+              delete registry.packages[id];
+              removedCount++;
+            }
+          }
+          await writeRegistryLocked(registry, customHome);
+          return {
+            type: "workspace",
+            id: basename(wsPath),
+            path: wsPath,
+            packagesCount: removedCount,
+            removedWorkspace: wsEntry,
+          };
+        }
       }
     }
-  }
 
-  // 检查是否直接匹配 Package ID
-  let targetKey: string | undefined;
-  if (registry.packages[identifier]) {
-    targetKey = identifier;
-  } else {
-    // 匹配路径或短 slug
-    for (const [id, entry] of Object.entries(registry.packages)) {
-      if (
-        entry.path === absPath ||
-        entry.id === identifier ||
-        getPackageSlug(entry.id) === identifier
-      ) {
-        targetKey = id;
-        break;
+    // 检查是否直接匹配 Package ID
+    let targetKey: string | undefined;
+    if (registry.packages[identifier]) {
+      targetKey = identifier;
+    } else {
+      // 匹配路径或短 slug
+      for (const [id, entry] of Object.entries(registry.packages)) {
+        if (
+          entry.path === absPath ||
+          entry.id === identifier ||
+          getPackageSlug(entry.id) === identifier
+        ) {
+          targetKey = id;
+          break;
+        }
       }
     }
-  }
 
-  if (!targetKey) {
-    return null;
-  }
+    if (!targetKey) {
+      return null;
+    }
 
-  const removed = registry.packages[targetKey];
-  delete registry.packages[targetKey];
-  await saveRegistry(registry, customHome);
-  return {
-    type: "package",
-    id: removed.id,
-    path: removed.path,
-    packagesCount: 1,
-    removedPackage: removed,
-  };
+    const removed = registry.packages[targetKey];
+    delete registry.packages[targetKey];
+    await writeRegistryLocked(registry, customHome);
+    return {
+      type: "package",
+      id: removed.id,
+      path: removed.path,
+      packagesCount: 1,
+      removedPackage: removed,
+    };
+  });
 }
 
 export function listLinkedPackages(customHome?: string): LinkedPackageEntry[] {
@@ -687,36 +698,41 @@ export function getRegistryStatus(customHome?: string): RegistryStatusReport {
 }
 
 export async function pruneRegistry(customHome?: string): Promise<PruneResult> {
-  const registry = await loadRegistryAsync(customHome);
-  const prunedWorkspaces: LinkedWorkspaceEntry[] = [];
-  const prunedPackages: LinkedPackageEntry[] = [];
+  const filePath = getRegistryFilePath(customHome);
+  ensureRegistryDir(filePath);
 
-  // 清理目录已缺失的 Workspace 链接
-  if (registry.workspaces) {
-    for (const [wsPath, wsEntry] of Object.entries(registry.workspaces)) {
-      if (!existsSync(wsPath)) {
-        prunedWorkspaces.push(wsEntry);
-        delete registry.workspaces[wsPath];
+  return await withRegistryLock(filePath, async () => {
+    const registry = await loadRegistryAsync(customHome);
+    const prunedWorkspaces: LinkedWorkspaceEntry[] = [];
+    const prunedPackages: LinkedPackageEntry[] = [];
+
+    // 清理目录已缺失的 Workspace 链接
+    if (registry.workspaces) {
+      for (const [wsPath, wsEntry] of Object.entries(registry.workspaces)) {
+        if (!existsSync(wsPath)) {
+          prunedWorkspaces.push(wsEntry);
+          delete registry.workspaces[wsPath];
+        }
       }
     }
-  }
 
-  // 清理路径已缺失的 Package 链接
-  for (const [pkgId, pkgEntry] of Object.entries(registry.packages)) {
-    if (!existsSync(pkgEntry.path)) {
-      prunedPackages.push(pkgEntry);
-      delete registry.packages[pkgId];
+    // 清理路径已缺失的 Package 链接
+    for (const [pkgId, pkgEntry] of Object.entries(registry.packages)) {
+      if (!existsSync(pkgEntry.path)) {
+        prunedPackages.push(pkgEntry);
+        delete registry.packages[pkgId];
+      }
     }
-  }
 
-  if (prunedWorkspaces.length > 0 || prunedPackages.length > 0) {
-    await saveRegistry(registry, customHome);
-  }
+    if (prunedWorkspaces.length > 0 || prunedPackages.length > 0) {
+      await writeRegistryLocked(registry, customHome);
+    }
 
-  return {
-    prunedPackages,
-    prunedWorkspaces,
-  };
+    return {
+      prunedPackages,
+      prunedWorkspaces,
+    };
+  });
 }
 
 // 重新导出扫描辅助，保持既有从 registry 模块的导入路径可用

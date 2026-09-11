@@ -3,6 +3,51 @@ import type { ExecutionResult, RunRecord } from "@actiondock/sdk";
 import { normalizeServerUrl } from "./manager";
 import type { RemoteHealthResult } from "./types";
 import { ACTION_CANCELLED, NETWORK_ERROR } from "../errors";
+import { isLoopbackHost } from "../server/security";
+
+/**
+ * 校验在携带认证 Token 时传输层协议是否安全。
+ * 若请求携带认证 Token 且目标为非本地回环的明文 http://，默认报错拒绝。
+ * 可通过 allowInsecureHttp 选项、ACTIONDOCK_ALLOW_INSECURE_HTTP 环境变量或 --allow-insecure-http 命令行参数豁免。
+ */
+export function assertSecureTransport(
+  serverUrl: string,
+  token?: string,
+  allowInsecureHttp?: boolean
+): void {
+  if (!token || !token.trim()) {
+    return;
+  }
+
+  const allow =
+    allowInsecureHttp === true ||
+    (typeof process !== "undefined" &&
+      (process.env?.ACTIONDOCK_ALLOW_INSECURE_HTTP === "true" ||
+        process.env?.ACTIONDOCK_ALLOW_INSECURE_HTTP === "1" ||
+        process.argv?.includes("--allow-insecure-http")));
+
+  if (allow) {
+    return;
+  }
+
+  const base = normalizeServerUrl(serverUrl);
+  if (base.startsWith("http://")) {
+    try {
+      const parsed = new URL(base);
+      if (!isLoopbackHost(parsed.hostname)) {
+        const err = new Error(
+          `Insecure HTTP connection with authentication token to non-loopback host '${parsed.hostname}' is prohibited. Use HTTPS or pass --allow-insecure-http to override.`
+        );
+        (err as any).code = "INSECURE_TRANSPORT";
+        throw err;
+      }
+    } catch (e: any) {
+      if (e.code === "INSECURE_TRANSPORT") {
+        throw e;
+      }
+    }
+  }
+}
 
 function buildHeaders(token?: string): Record<string, string> {
   const headers: Record<string, string> = {
@@ -30,6 +75,8 @@ export interface RemoteExecuteOptions {
   requestId?: string;
   /** 是否异步触发（202 Accepted 立即返回 runId） */
   async?: boolean;
+  /** 是否允许通过非回环明文 HTTP 发送认证 Token */
+  allowInsecureHttp?: boolean;
 }
 
 /**
@@ -49,8 +96,10 @@ export type RemoteExecutionResult<T = unknown> = ExecutionResult<T> & {
 export async function checkRemoteHealth(
   serverUrl: string,
   token?: string,
-  timeoutMs: number = 5000
+  timeoutMs: number = 5000,
+  options?: { allowInsecureHttp?: boolean }
 ): Promise<RemoteHealthResult> {
+  assertSecureTransport(serverUrl, token, options?.allowInsecureHttp);
   const base = normalizeServerUrl(serverUrl);
   const v2Url = `${base}/api/v2/health`;
   const startTime = Date.now();
@@ -116,9 +165,6 @@ export async function executeRemoteAction<T = unknown>(
   configOverridesOrOptions?: Record<string, unknown> | RemoteExecuteOptions,
   tokenArg?: string
 ): Promise<RemoteExecutionResult<T>> {
-  const base = normalizeServerUrl(serverUrl);
-  const v2Url = `${base}/api/v2/actions/${encodeURIComponent(actionId)}/run`;
-
   // Parse options / backwards compatibility
   let configOverrides: Record<string, unknown> | undefined;
   let token: string | undefined = tokenArg;
@@ -126,6 +172,7 @@ export async function executeRemoteAction<T = unknown>(
   let signal: AbortSignal | undefined;
   let isAsync = false;
   let requestId: string | undefined;
+  let allowInsecureHttp: boolean | undefined;
 
   if (configOverridesOrOptions && typeof configOverridesOrOptions === "object") {
     if (
@@ -134,7 +181,8 @@ export async function executeRemoteAction<T = unknown>(
       "signal" in configOverridesOrOptions ||
       "async" in configOverridesOrOptions ||
       "requestId" in configOverridesOrOptions ||
-      "configOverrides" in configOverridesOrOptions
+      "configOverrides" in configOverridesOrOptions ||
+      "allowInsecureHttp" in configOverridesOrOptions
     ) {
       const opts = configOverridesOrOptions as RemoteExecuteOptions;
       configOverrides = opts.configOverrides;
@@ -143,10 +191,15 @@ export async function executeRemoteAction<T = unknown>(
       signal = opts.signal;
       isAsync = Boolean(opts.async);
       requestId = opts.requestId;
+      allowInsecureHttp = opts.allowInsecureHttp;
     } else {
       configOverrides = configOverridesOrOptions as Record<string, unknown>;
     }
   }
+
+  assertSecureTransport(serverUrl, token, allowInsecureHttp);
+  const base = normalizeServerUrl(serverUrl);
+  const v2Url = `${base}/api/v2/actions/${encodeURIComponent(actionId)}/run`;
 
   const executionPayload: Record<string, unknown> = {};
   if (isAsync) {
@@ -245,8 +298,9 @@ async function fetchRemoteJson<T = any>(
   serverUrl: string,
   path: string,
   token?: string,
-  options: { method?: string; body?: unknown; errorPrefix?: string } = {}
+  options: { method?: string; body?: unknown; errorPrefix?: string; allowInsecureHttp?: boolean } = {}
 ): Promise<T> {
+  assertSecureTransport(serverUrl, token, options.allowInsecureHttp);
   const base = normalizeServerUrl(serverUrl);
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   const url = `${base}${normalizedPath}`;

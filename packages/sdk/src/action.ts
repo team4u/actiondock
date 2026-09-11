@@ -23,10 +23,10 @@ export function defineAction<I = unknown, O = unknown>(
   handler: ActionHandler<I, O>
 ): ActionDefinition<I, O>;
 export function defineAction<I = unknown, O = unknown>(
-  definition: { run: ActionHandler<I, O> }
+  definition: { run: ActionHandler<I, O> } & Record<string, any>
 ): ActionDefinition<I, O>;
 export function defineAction<I = unknown, O = unknown>(
-  arg: ActionHandler<I, O> | { run: ActionHandler<I, O> }
+  arg: ActionHandler<I, O> | ({ run: ActionHandler<I, O> } & Record<string, any>)
 ): ActionDefinition<I, O> {
   if (typeof arg === "function") {
     return {
@@ -37,6 +37,7 @@ export function defineAction<I = unknown, O = unknown>(
     throw new Error("Action definition must be a function or an object with a run function");
   }
   return {
+    ...arg,
     run: arg.run,
   };
 }

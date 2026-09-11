@@ -26,7 +26,7 @@ export function safeEqual(a: string, b: string): boolean {
  * @param host 主机名或 IP 字符串
  */
 export function isLoopbackHost(host: string): boolean {
-  const trimmed = host.trim().toLowerCase();
+  const trimmed = host.trim().toLowerCase().replace(/^\[|\]$/g, "");
   return (
     trimmed === "127.0.0.1" ||
     trimmed === "::1" ||
@@ -36,17 +36,29 @@ export function isLoopbackHost(host: string): boolean {
 }
 
 /**
+ * 校验 HTTP 请求中的鉴权令牌选项。
+ */
+export interface VerifyBearerTokenOptions {
+  /** 是否允许通过 URL 查询参数携带 Token（默认 false） */
+  allowQueryToken?: boolean;
+}
+
+/**
  * 校验 HTTP 请求中的鉴权令牌是否有效。
  * 
- * 支持两种凭证携带模式（均通过恒定时间对比）：
- * 1. HTTP 请求头: `Authorization: Bearer <token>`
- * 2. URL 查询参数: `?token=<token>`（便于浏览器/Web 调试）
+ * 默认仅接受 HTTP 请求头: `Authorization: Bearer <token>`。
+ * 仅当 options.allowQueryToken 为 true 时才允许解析 URL 查询参数 `?token=<token>`。
  * 
  * @param req 传入的 HTTP Request 对象
  * @param expectedToken 服务端预期的正确 Token（若未配置 Token 则默认放行）
+ * @param options 校验选项或布尔值 allowQueryToken 开关
  * @returns 是否鉴权成功
  */
-export function verifyBearerToken(req: Request, expectedToken?: string): boolean {
+export function verifyBearerToken(
+  req: Request,
+  expectedToken?: string,
+  options?: VerifyBearerTokenOptions | boolean
+): boolean {
   if (!expectedToken || !expectedToken.trim()) {
     return true;
   }
@@ -62,15 +74,20 @@ export function verifyBearerToken(req: Request, expectedToken?: string): boolean
     }
   }
 
-  // 2. URL 查询参数: ?token=<token>
-  try {
-    const url = new URL(req.url);
-    const tokenParam = url.searchParams.get("token");
-    if (tokenParam && safeEqual(tokenParam.trim(), trimmedExpected)) {
-      return true;
+  // 2. URL 查询参数: ?token=<token>（仅当显式开启 allowQueryToken 时允许）
+  const allowQuery =
+    typeof options === "boolean" ? options : options?.allowQueryToken === true;
+
+  if (allowQuery) {
+    try {
+      const url = new URL(req.url);
+      const tokenParam = url.searchParams.get("token");
+      if (tokenParam && safeEqual(tokenParam.trim(), trimmedExpected)) {
+        return true;
+      }
+    } catch {
+      // 畸形 URL 视作鉴权失败
     }
-  } catch {
-    // 畸形 URL 视作鉴权失败
   }
 
   return false;

@@ -26,7 +26,7 @@ import type {
 } from "../execution/types";
 import { findProjectRoot, loadProjectConfig } from "../project/loader";
 import { ActionPackageResolver } from "../project/resolver";
-import { hasPendingTransactions, recoverPendingTransactions } from "../project/transactions";
+import { hasPendingTransactions, isProjectLockHeld, recoverPendingTransactions } from "../project/transactions";
 import { listLinkedPackages } from "../registry/registry";
 import { InMemoryEventSink, type EventSink } from "../runtime/events";
 import {
@@ -121,8 +121,8 @@ export class DefaultActionDockHost implements ActionDockHost {
       }
 
       if (root && existsSync(root)) {
-        // 依据事务日志恢复未完成提交的悬空事务
-        if (hasPendingTransactions(root)) {
+        // 依据事务日志恢复未完成提交的悬空事务（锁持有者存活时严禁判定为崩溃事务并禁止自动恢复）
+        if (!isProjectLockHeld(root) && hasPendingTransactions(root)) {
           recoverPendingTransactions(root);
         }
 

@@ -1,7 +1,16 @@
 import { filterWithFallbackInfo } from "../../filter";
 import { PACKAGE_NOT_FOUND } from "../../errors";
 import { ACTIONDOCK_VERSION } from "../../version";
+import { sanitizeConfigDefinitions } from "../../storage";
 import { getSubPath, jsonResponse, type RouteContext } from "./common";
+
+function sanitizePackage<T extends { config?: any }>(pkg: T): T {
+  if (!pkg || !pkg.config) return pkg;
+  return {
+    ...pkg,
+    config: sanitizeConfigDefinitions(pkg.config),
+  };
+}
 
 /**
  * 处理系统自省与包信息接口：
@@ -15,7 +24,8 @@ export async function handleInfoRoute(ctx: RouteContext): Promise<Response | nul
   // 1. Packages List: GET /api/v2/packages, /packages
   if ((subpath === "/packages" || pathname === "/api/v2/packages" || pathname === "/packages") && req.method === "GET") {
     try {
-      const packages = target ? await target.listPackages() : (host ? await host.info() : []);
+      const rawPackages = target ? await target.listPackages() : (host ? await host.info() : []);
+      const packages = rawPackages.map(sanitizePackage);
       return jsonResponse(
         {
           ok: true,
@@ -44,7 +54,8 @@ export async function handleInfoRoute(ctx: RouteContext): Promise<Response | nul
       const targetPkg = url.searchParams.get("package") || url.searchParams.get("packageId") || undefined;
 
       const targetInfo = await target.info();
-      const packages = targetInfo.packages || [];
+      const rawPackages = targetInfo.packages || [];
+      const packages = rawPackages.map(sanitizePackage);
 
       if (isTree) {
         return jsonResponse(

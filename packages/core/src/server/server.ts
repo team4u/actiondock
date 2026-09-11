@@ -22,6 +22,7 @@ import {
   jsonResponse,
   type RouteContext,
 } from "./routes";
+import { DEFAULT_MAX_BODY_BYTES } from "./body";
 import { isLoopbackHost, resolveCorsHeaders, verifyBearerToken } from "./security";
 import type { ActionDockServerInstance, CoreHttpServerInstance, ServerOptions } from "./types";
 
@@ -224,7 +225,7 @@ export async function startActionDockServer(
       options.mcpHandler &&
       (pathname === "/mcp" || pathname.startsWith("/mcp/"))
     ) {
-      if (!verifyBearerToken(req, token)) {
+      if (!verifyBearerToken(req, token, options)) {
         return jsonResponse(
           {
             ok: false,
@@ -237,12 +238,86 @@ export async function startActionDockServer(
           corsHeaders
         );
       }
-      const mcpRes = await options.mcpHandler(req);
+
+      // 请求体体积限制保护
+      const maxBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
+      const contentLengthHeader = req.headers.get("content-length");
+      if (contentLengthHeader) {
+        const parsedLength = parseInt(contentLengthHeader, 10);
+        if (!isNaN(parsedLength) && parsedLength > maxBytes) {
+          return jsonResponse(
+            {
+              ok: false,
+              error: {
+                code: "REQUEST_TOO_LARGE",
+                message: "Request body exceeds maximum allowed size",
+              },
+            },
+            413,
+            corsHeaders
+          );
+        }
+      }
+
+      let mcpReq = req;
+      if (req.body && req.method !== "GET" && req.method !== "HEAD") {
+        const reader = req.body.getReader();
+        const chunks: Uint8Array[] = [];
+        let totalBytes = 0;
+        let tooLarge = false;
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            if (value) {
+              totalBytes += value.byteLength;
+              if (totalBytes > maxBytes) {
+                tooLarge = true;
+                await reader.cancel();
+                break;
+              }
+              chunks.push(value);
+            }
+          }
+        } finally {
+          reader.releaseLock();
+        }
+
+        if (tooLarge) {
+          return jsonResponse(
+            {
+              ok: false,
+              error: {
+                code: "REQUEST_TOO_LARGE",
+                message: "Request body exceeds maximum allowed size",
+              },
+            },
+            413,
+            corsHeaders
+          );
+        }
+
+        const merged = new Uint8Array(totalBytes);
+        let offset = 0;
+        for (const chunk of chunks) {
+          merged.set(chunk, offset);
+          offset += chunk.byteLength;
+        }
+        mcpReq = new Request(req.url, {
+          method: req.method,
+          headers: req.headers,
+          body: merged,
+          signal: req.signal,
+        });
+      }
+
+      const mcpRes = await options.mcpHandler(mcpReq);
       if (mcpRes) return mcpRes;
     }
 
     // 3. 全局 API 认证鉴权拦截
-    if (!verifyBearerToken(req, token)) {
+    if (!verifyBearerToken(req, token, options)) {
       return jsonResponse(
         {
           ok: false,

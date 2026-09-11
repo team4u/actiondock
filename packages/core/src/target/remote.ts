@@ -38,9 +38,10 @@ import {
   getRemoteStateKey,
   setRemoteConfig,
   setRemoteStateKey,
+  assertSecureTransport,
 } from "../profile/client";
 import { normalizeServerUrl } from "../profile/manager";
-import type { StateEntry } from "../storage/types";
+import { type StateEntry, isTerminalRunStatus } from "../storage/types";
 import {
   ACTIONDOCK_PROTOCOL_VERSION,
   type ActionDockTarget,
@@ -63,8 +64,9 @@ export async function* streamRemoteEvents(
   serverUrl: string,
   runId: string,
   token?: string,
-  options?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number }
+  options?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number; allowInsecureHttp?: boolean }
 ): AsyncIterable<ExecutionEvent> {
+  assertSecureTransport(serverUrl, token, options?.allowInsecureHttp);
   const base = normalizeServerUrl(serverUrl);
   const candidateUrls = [
     `${base}/api/v2/runs/${encodeURIComponent(runId)}/events`,
@@ -457,24 +459,28 @@ export class RemoteActionDockTarget implements ActionDockTarget {
         };
       }
       const run = await this.getRun(runId);
-      if (run) {
+      if (run && isTerminalRunStatus(run.status)) {
         if (run.status === "success") {
           return { ok: true, runId, data: run.output ?? null };
         }
-        if (
-          run.status === "failed" ||
-          run.status === "timed_out" ||
-          run.status === "cancelled"
-        ) {
+        if (run.status === "interrupted") {
           return {
             ok: false,
             runId,
             error: run.error || {
-              code: EXECUTION_FAILED,
-              message: `Run finished with status ${run.status}`,
+              code: "RUN_INTERRUPTED",
+              message: `Run '${runId}' was interrupted`,
             },
           };
         }
+        return {
+          ok: false,
+          runId,
+          error: run.error || {
+            code: EXECUTION_FAILED,
+            message: `Run finished with status ${run.status}`,
+          },
+        };
       }
       await new Promise((resolve) => setTimeout(resolve, delayMs));
       delayMs = Math.min(delayMs * 2, maxDelayMs);

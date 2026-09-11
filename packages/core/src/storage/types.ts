@@ -126,6 +126,19 @@ export type TerminalRunStatus =
   | "interrupted";
 
 /**
+ * 判断指定运行状态是否为终态（收敛 success, failed, cancelled, timed_out, interrupted）。
+ */
+export function isTerminalRunStatus(status: string): status is TerminalRunStatus {
+  return (
+    status === "success" ||
+    status === "failed" ||
+    status === "cancelled" ||
+    status === "timed_out" ||
+    status === "interrupted"
+  );
+}
+
+/**
  * 统一运行时存储抽象接口。
  */
 export interface RuntimeStorage {

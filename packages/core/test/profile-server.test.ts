@@ -350,10 +350,11 @@ Follow these steps to greet a user.
     expect(verifyBearerToken(reqWithBearer, "secret-token")).toBe(true);
     expect(verifyBearerToken(reqWithBearer, "wrong-token")).toBe(false);
 
-    // URL Query token support
+    // URL Query token support (disabled by default, enabled when allowQueryToken is true)
     const reqWithQuery = new Request("http://127.0.0.1:5177/api/v1/health?token=secret-token");
-    expect(verifyBearerToken(reqWithQuery, "secret-token")).toBe(true);
-    expect(verifyBearerToken(reqWithQuery, "wrong-token")).toBe(false);
+    expect(verifyBearerToken(reqWithQuery, "secret-token")).toBe(false);
+    expect(verifyBearerToken(reqWithQuery, "secret-token", { allowQueryToken: true })).toBe(true);
+    expect(verifyBearerToken(reqWithQuery, "wrong-token", { allowQueryToken: true })).toBe(false);
   });
 
   test("Remote Server & Client > health check with auth token (Bearer & Query)", async () => {
@@ -368,10 +369,16 @@ Follow these steps to greet a user.
     expect(healthAuth.version).toBe(ACTIONDOCK_VERSION);
     expect(healthAuth.latencyMs).toBeGreaterThanOrEqual(0);
 
-    // Direct HTTP GET with query token
+    // Direct HTTP GET with query token is rejected by default (401)
     const resQuery = await fetch(`${serverUrl}/api/v1/health?token=${SECRET_TOKEN}`);
-    expect(resQuery.status).toBe(200);
-    const queryJson = await resQuery.json();
+    expect(resQuery.status).toBe(401);
+
+    // Direct HTTP GET with Bearer token succeeds
+    const resBearer = await fetch(`${serverUrl}/api/v1/health`, {
+      headers: { authorization: `Bearer ${SECRET_TOKEN}` },
+    });
+    expect(resBearer.status).toBe(200);
+    const queryJson = await resBearer.json();
     expect(queryJson.status).toBe("healthy");
     // Default: projectRoot should be hidden
     expect(queryJson.projectRoot).toBeUndefined();

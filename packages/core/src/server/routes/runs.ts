@@ -1,5 +1,6 @@
 import { filterByIntent } from "../../filter";
 import { EXECUTION_FAILED } from "../../errors";
+import { isTerminalRunStatus } from "../../storage/types";
 import type { ExecutionEvent, RunRecord } from "@actiondock/sdk";
 import { readJsonBody } from "../body";
 import { getSubPath, jsonResponse, type RouteContext } from "./common";
@@ -20,6 +21,25 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
       const intent = url.searchParams.get("intent") || undefined;
       const limit = parseInt(url.searchParams.get("limit") || "50", 10);
 
+      if (
+        packageId &&
+        options.packageAllowlist &&
+        options.packageAllowlist.length > 0 &&
+        !options.packageAllowlist.includes(packageId)
+      ) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: "PACKAGE_FORBIDDEN",
+              message: `Package '${packageId}' is not in the allowed package list`,
+            },
+          },
+          403,
+          corsHeaders
+        );
+      }
+
       const allRuns: RunRecord[] = [];
       const seenRunIds = new Set<string>();
 
@@ -33,6 +53,11 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
       for (const app of apps) {
         if (!app) continue;
         if (packageId && app.packageId !== packageId) continue;
+        if (options.packageAllowlist && options.packageAllowlist.length > 0) {
+          if (!options.packageAllowlist.includes(app.packageId)) {
+            continue;
+          }
+        }
         if (app.storage && typeof app.storage.listRuns === "function") {
           try {
             const records = app.storage.listRuns({ actionId, limit });
@@ -40,6 +65,14 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
               if (!seenRunIds.has(r.id)) {
                 seenRunIds.add(r.id);
                 if (status && r.status !== status) continue;
+                if (
+                  options.packageAllowlist &&
+                  options.packageAllowlist.length > 0 &&
+                  r.packageId &&
+                  !options.packageAllowlist.includes(r.packageId)
+                ) {
+                  continue;
+                }
                 allRuns.push(r);
               }
             }
@@ -87,6 +120,25 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
       const actionId = url.searchParams.get("actionId") || body.actionId || undefined;
       const status = url.searchParams.get("status") || body.status || undefined;
 
+      if (
+        packageId &&
+        options.packageAllowlist &&
+        options.packageAllowlist.length > 0 &&
+        !options.packageAllowlist.includes(packageId)
+      ) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: "PACKAGE_FORBIDDEN",
+              message: `Package '${packageId}' is not in the allowed package list`,
+            },
+          },
+          403,
+          corsHeaders
+        );
+      }
+
       let clearedCount = 0;
       const apps = host
         ? host.listApps()
@@ -98,6 +150,11 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
       for (const app of apps) {
         if (!app) continue;
         if (packageId && app.packageId !== packageId) continue;
+        if (options.packageAllowlist && options.packageAllowlist.length > 0) {
+          if (!options.packageAllowlist.includes(app.packageId)) {
+            continue;
+          }
+        }
         if (app.storage && typeof app.storage.clearRuns === "function") {
           clearedCount += app.storage.clearRuns({ actionId, status });
         }
@@ -123,6 +180,24 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
       return jsonResponse(
         { ok: false, error: { code: "RUN_NOT_FOUND", message: `Run '${runId}' not found` } },
         404,
+        corsHeaders
+      );
+    }
+
+    if (
+      options.packageAllowlist &&
+      options.packageAllowlist.length > 0 &&
+      (!run.packageId || !options.packageAllowlist.includes(run.packageId))
+    ) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: {
+            code: "PACKAGE_FORBIDDEN",
+            message: `Package '${run.packageId}' is not in the allowed package list`,
+          },
+        },
+        403,
         corsHeaders
       );
     }
@@ -191,11 +266,15 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
           }
 
           // 循环消费后续实时或队列事件
+          let sawFinish = false;
           while (!req.signal.aborted) {
             const nextResult = await iterator.next();
             if (nextResult.done) break;
             eventsCount++;
             const evt = nextResult.value;
+            if (evt.type === "finish") {
+              sawFinish = true;
+            }
             const eventType = evt.type || "message";
             const idField = evt.eventId ? `id: ${evt.eventId}\n` : `id: ${evt.sequence}\n`;
             controller.enqueue(
@@ -208,11 +287,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
             }
           }
 
-          if (
-            eventsCount === 0 &&
-            run &&
-            (run.status === "success" || run.status === "failed" || run.status === "cancelled")
-          ) {
+          if (!sawFinish && run && isTerminalRunStatus(run.status)) {
             const finishEvt = {
               type: "finish",
               runId,
@@ -224,7 +299,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
                       ok: false,
                       runId,
                       error: run.error || {
-                        code: EXECUTION_FAILED,
+                        code: run.status === "interrupted" ? "RUN_INTERRUPTED" : EXECUTION_FAILED,
                         message: `Run finished with status ${run.status}`,
                       },
                     },
@@ -275,6 +350,24 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
       );
     }
 
+    if (
+      options.packageAllowlist &&
+      options.packageAllowlist.length > 0 &&
+      (!run.packageId || !options.packageAllowlist.includes(run.packageId))
+    ) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: {
+            code: "PACKAGE_FORBIDDEN",
+            message: `Package '${run.packageId || "unknown"}' is not in the allowed package list`,
+          },
+        },
+        403,
+        corsHeaders
+      );
+    }
+
     return jsonResponse(run, 200, corsHeaders);
   }
 
@@ -282,6 +375,22 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
   const runCancelMatch = subpath.match(/^\/runs\/([^/]+)\/cancel$/);
   if (runCancelMatch && req.method === "POST") {
     const runId = decodeURIComponent(runCancelMatch[1]);
+    if (options.packageAllowlist && options.packageAllowlist.length > 0) {
+      const run = await target.getRun(runId);
+      if (run && (!run.packageId || !options.packageAllowlist.includes(run.packageId))) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: "PACKAGE_FORBIDDEN",
+              message: `Package '${run.packageId}' is not in the allowed package list`,
+            },
+          },
+          403,
+          corsHeaders
+        );
+      }
+    }
     let body: any = {};
     try {
       body = await readJsonBody(req, { maxBytes: options.maxBodyBytes });
