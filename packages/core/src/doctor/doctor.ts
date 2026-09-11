@@ -204,7 +204,7 @@ export async function runDoctorChecks(options?: {
     }));
 
     const curProjectRoot = options?.packageIdOrPath
-      ? findProjectRoot(options.packageIdOrPath)
+      ? resolvePackageRoot(options.packageIdOrPath, cwd, options?.customHome) || findProjectRoot(options.packageIdOrPath)
       : findProjectRoot(cwd);
     if (curProjectRoot && !packagesToCheck.some((p) => p.root === curProjectRoot)) {
       try {
@@ -273,12 +273,30 @@ export async function runDoctorChecks(options?: {
   // 7. Check Project Context
   let projectRoot: string | null = null;
   if (options?.packageIdOrPath) {
-    projectRoot = findProjectRoot(options.packageIdOrPath);
+    projectRoot =
+      resolvePackageRoot(options.packageIdOrPath, cwd, options?.customHome) ||
+      findProjectRoot(options.packageIdOrPath);
   } else {
     projectRoot = findProjectRoot(cwd);
   }
 
   let packageId: string | undefined;
+
+  if (projectRoot) {
+    try {
+      const config = loadProjectConfig(projectRoot);
+      if (
+        options?.packageAllowlist &&
+        Array.isArray(options.packageAllowlist) &&
+        options.packageAllowlist.length > 0 &&
+        !options.packageAllowlist.includes(config.id)
+      ) {
+        projectRoot = null;
+      }
+    } catch {
+      // 忽略预校验异常，交由后续详细诊断处理
+    }
+  }
 
   if (projectRoot) {
     try {

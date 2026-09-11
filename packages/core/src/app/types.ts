@@ -137,6 +137,8 @@ export interface PlaybookSummary {
 export interface PlaybookSpec {
   /** Playbook 唯一标识 */
   id: string;
+  /** 所属包唯一标识 */
+  packageId?: string;
   /** Playbook 描述信息 */
   description?: string;
   /** 规程所依赖或调用的 Action 列表 */

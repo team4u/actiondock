@@ -451,6 +451,54 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       expect(allowedPbRes.status).toBe(200);
     });
 
+    it("target-only 单 App 启动服务并配置白名单，请求短规程路由验证严格受到 packageAllowlist 拦截", async () => {
+      const singleApp = await createActionDockApp({
+        projectConfig: {
+          id: "pkg.standalone",
+          name: "Standalone Package",
+          version: "1.0.0",
+          playbooks: {
+            "sop-single": {
+              description: "单包规程",
+              content: "# SOP",
+            },
+          } as any,
+        },
+        inMemory: true,
+      });
+
+      const singleTarget = await createActionDockTarget({ app: singleApp });
+      const targetOnlyServer = await startActionDockServer({
+        port: 0,
+        host: "127.0.0.1",
+        token: AUTH_TOKEN,
+        target: singleTarget,
+        packageAllowlist: ["pkg.other"],
+      });
+      const targetOnlyUrl = `http://127.0.0.1:${targetOnlyServer.port}`;
+
+      try {
+        const res = await fetch(`${targetOnlyUrl}/api/v2/playbooks/sop-single`, {
+          headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+        });
+        expect(res.status).toBe(403);
+        const data = await res.json();
+        expect(data.ok).toBe(false);
+        expect(data.error.code).toBe("PACKAGE_NOT_ALLOWED");
+
+        const legacyRes = await fetch(`${targetOnlyUrl}/playbooks/sop-single`, {
+          headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+        });
+        expect(legacyRes.status).toBe(403);
+        const legacyData = await legacyRes.json();
+        expect(legacyData.ok).toBe(false);
+        expect(legacyData.error.code).toBe("PACKAGE_NOT_ALLOWED");
+      } finally {
+        await targetOnlyServer.stop();
+        await singleApp.close();
+      }
+    });
+
     it("Info 路由仅返回白名单包且下钻非白名单包返回 403", async () => {
       // GET /packages 仅返回白名单包
       const pkgsRes = await fetch(`${allowlistUrl}/api/v2/packages`, {
@@ -503,6 +551,52 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       expect(allowedDocRes.status).toBe(200);
       const allowedDocData = await allowedDocRes.json();
       expect(allowedDocData.ok).toBe(true);
+    });
+
+    it("Doctor 路由通过 target-only App 解析目标包的真实根目录并执行诊断", async () => {
+      const { mkdtempSync, writeFileSync, rmSync } = await import("node:fs");
+      const { tmpdir } = await import("node:os");
+      const { join } = await import("node:path");
+      const tempDir = mkdtempSync(join(tmpdir(), "doctor-target-"));
+      try {
+        writeFileSync(
+          join(tempDir, "actiondock.json"),
+          JSON.stringify({
+            id: "pkg.doctor-target",
+            name: "Doctor Target Pkg",
+            version: "1.0.0",
+          })
+        );
+        const docApp = await createActionDockApp({
+          packageRoot: tempDir,
+          inMemory: true,
+        });
+        const docTarget = await createActionDockTarget({ app: docApp });
+        const docServer = await startActionDockServer({
+          port: 0,
+          host: "127.0.0.1",
+          token: AUTH_TOKEN,
+          target: docTarget,
+          packageAllowlist: ["pkg.doctor-target"],
+        });
+        const docUrl = `http://127.0.0.1:${docServer.port}`;
+        try {
+          const res = await fetch(`${docUrl}/api/v2/doctor?package=pkg.doctor-target`, {
+            headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+          });
+          expect(res.status).toBe(200);
+          const data = await res.json();
+          expect(data.ok).toBe(true);
+          expect(data.report.hasProject).toBe(true);
+          expect(data.report.packageId).toBe("pkg.doctor-target");
+          expect(data.report.projectRoot).toBe(tempDir);
+        } finally {
+          await docServer.stop();
+          await docApp.close();
+        }
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
     });
 
     it("State 路由对非白名单包操作返回 403", async () => {
@@ -900,6 +994,28 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       expect(allowMethods).toBeDefined();
       expect(allowMethods).toContain("DELETE");
       expect(allowMethods).toBe("GET, POST, PUT, DELETE, OPTIONS");
+    });
+
+    it("OPTIONS 预检请求针对 Idempotency-Key、X-Request-Id 与 Last-Event-ID 返回允许请求头", async () => {
+      const res = await fetch(`${corsUrl}/api/v2/runs`, {
+        method: "OPTIONS",
+        headers: {
+          Origin: "http://localhost:3000",
+          "Access-Control-Request-Method": "POST",
+          "Access-Control-Request-Headers":
+            "Content-Type, Authorization, Idempotency-Key, X-Request-Id, Last-Event-ID",
+        },
+      });
+      expect(res.status).toBe(204);
+      expect(res.headers.get("access-control-allow-origin")).toBe("http://localhost:3000");
+      const allowHeaders = res.headers.get("access-control-allow-headers");
+      expect(allowHeaders).toBeDefined();
+      expect(allowHeaders).toContain("Idempotency-Key");
+      expect(allowHeaders).toContain("X-Request-Id");
+      expect(allowHeaders).toContain("Last-Event-ID");
+      expect(allowHeaders).toBe(
+        "Content-Type, Authorization, Idempotency-Key, X-Request-Id, Last-Event-ID"
+      );
     });
   });
 });

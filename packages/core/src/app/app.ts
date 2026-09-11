@@ -281,6 +281,7 @@ export class DefaultActionDockApp implements ActionDockApp {
           for (const [id, def] of loaded) {
             map.set(id, {
               id: def.id,
+              packageId: this.packageId,
               description: def.description,
               actions: def.actions,
               content: def.content,
@@ -314,6 +315,7 @@ export class DefaultActionDockApp implements ActionDockApp {
 
           map.set(id, {
             id,
+            packageId: this.packageId,
             description: item.description ?? existing?.description,
             actions: item.actions ?? existing?.actions,
             content,
@@ -451,6 +453,7 @@ export class DefaultActionDockApp implements ActionDockApp {
     const map = this.getStaticPlaybookMap();
     return Array.from(map.values()).map((spec) => ({
       id: spec.id,
+      packageId: this.packageId,
       description: spec.description,
       actions: spec.actions,
       filePath: spec.filePath,
@@ -466,7 +469,10 @@ export class DefaultActionDockApp implements ActionDockApp {
       throw new Error(`Playbook '${id}' not found in package '${this.packageId}'`);
     }
 
-    return spec;
+    return {
+      ...spec,
+      packageId: this.packageId,
+    };
   }
 
   async runAction(

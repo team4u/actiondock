@@ -1,11 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import { spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type ActionContext, defineAction } from "@actiondock/sdk";
 import { createActionDockApp } from "../src/app";
 import { createActionDockHost, DefaultActionDockHost } from "../src/host";
+import { PROJECT_RECOVERY_REQUIRED } from "../src/errors";
 
 describe("ActionDockHost 多包宿主容器", () => {
   it("初始化并支持 ActionDockApp 实例与 ActionDockAppOptions 配置混合注册", async () => {
@@ -899,6 +900,190 @@ actions:
         dummyChild.kill("SIGKILL");
       } catch {}
       rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("当 DefaultActionDockHost 构造函数因 PROJECT_BUSY 抛出异常时，妥善释放 dataDirLock 且后续实例可立刻获取该数据目录", async () => {
+    const tempProjDir = mkdtempSync(join(tmpdir(), "ad-host-lock-release-proj-"));
+    const tempDataDir = mkdtempSync(join(tmpdir(), "ad-host-lock-release-data-"));
+    const dummyChild = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+      stdio: "ignore",
+    });
+
+    try {
+      writeFileSync(
+        join(tempProjDir, "actiondock.json"),
+        JSON.stringify({
+          id: "pkg.release-busy-test",
+          name: "释放锁测试工程",
+          version: "1.0.0",
+        })
+      );
+
+      const lockDir = join(tempProjDir, ".actiondock", "project.lock");
+      mkdirSync(lockDir, { recursive: true });
+      const lockInfo = {
+        pid: dummyChild.pid,
+        sessionToken: "active-holder-token",
+        createdAt: Date.now(),
+      };
+      writeFileSync(join(lockDir, "metadata.json"), JSON.stringify(lockInfo, null, 2), "utf-8");
+
+      // 构造 Host 失败（因 project.lock 被占用）
+      let constructErr: any;
+      try {
+        new DefaultActionDockHost({
+          projectRoot: tempProjDir,
+          dataDir: tempDataDir,
+          autoLoadCurrentProject: true,
+        });
+      } catch (err) {
+        constructErr = err;
+      }
+
+      expect(constructErr).toBeDefined();
+      expect(constructErr?.code).toBe("PROJECT_BUSY");
+
+      // 验证 tempDataDir 上的 dataDirLock 已被妥善释放，未在磁盘遗留锁目录
+      const dataLockPath = join(tempDataDir, ".actiondock.data.lock");
+      expect(existsSync(dataLockPath)).toBe(false);
+
+      // 验证后续实例可以立刻获取该数据目录，绝无 DATA_DIR_IN_USE
+      const subsequentHost = new DefaultActionDockHost({
+        dataDir: tempDataDir,
+        autoLoadCurrentProject: false,
+      });
+      expect(subsequentHost).toBeDefined();
+      await subsequentHost.close();
+      expect(existsSync(dataLockPath)).toBe(false);
+    } finally {
+      try {
+        dummyChild.kill("SIGKILL");
+      } catch {}
+      rmSync(tempProjDir, { recursive: true, force: true });
+      rmSync(tempDataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("当 DefaultActionDockHost 构造函数因包加载失败抛出异常时，妥善释放 dataDirLock 并安全关闭已注册子 app", async () => {
+    const tempDataDir = mkdtempSync(join(tmpdir(), "ad-host-fail-load-data-"));
+
+    try {
+      let constructErr: any;
+      try {
+        new DefaultActionDockHost({
+          dataDir: tempDataDir,
+          packages: [
+            {
+              projectConfig: {
+                id: "pkg.good",
+                name: "正常包",
+                version: "1.0.0",
+              },
+              inMemory: true,
+            },
+            {
+              projectConfig: {
+                id: "pkg.good",
+                name: "冲突包",
+                version: "1.0.0",
+              },
+              inMemory: true,
+            },
+          ],
+          autoLoadCurrentProject: false,
+        });
+      } catch (err) {
+        constructErr = err;
+      }
+
+      expect(constructErr).toBeDefined();
+      expect(constructErr?.message).toContain("Package ID conflict");
+
+      // 验证 dataDirLock 已被妥善释放
+      const dataLockPath = join(tempDataDir, ".actiondock.data.lock");
+      expect(existsSync(dataLockPath)).toBe(false);
+
+      // 后续实例可立刻获取该数据目录
+      const hostOk = new DefaultActionDockHost({
+        dataDir: tempDataDir,
+        autoLoadCurrentProject: false,
+      });
+      expect(hostOk).toBeDefined();
+      await hostOk.close();
+    } finally {
+      rmSync(tempDataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("公开的 DefaultActionDockHost constructor 检查崩溃悬挂事务，拦截并抛出 PROJECT_RECOVERY_REQUIRED 错误，且释放 dataDirLock", async () => {
+    const tempProjDir = mkdtempSync(join(tmpdir(), "ad-host-pending-tx-proj-"));
+    const tempDataDir = mkdtempSync(join(tmpdir(), "ad-host-pending-tx-data-"));
+
+    try {
+      writeFileSync(
+        join(tempProjDir, "actiondock.json"),
+        JSON.stringify({
+          id: "pkg.pending-tx",
+          name: "崩溃事务测试工程",
+          version: "1.0.0",
+        })
+      );
+      writeFileSync(
+        join(tempProjDir, "package.json"),
+        JSON.stringify({
+          name: "pkg.pending-tx",
+          version: "1.0.0",
+        })
+      );
+
+      // 写入悬挂事务
+      const txDir = join(tempProjDir, ".actiondock", "transactions", "tx-crash-pending");
+      mkdirSync(txDir, { recursive: true });
+      writeFileSync(
+        join(txDir, "transaction.json"),
+        JSON.stringify({
+          id: "tx-crash-pending",
+          status: "pending",
+          createdAt: Date.now(),
+          files: [{ name: "package.json", existed: true }],
+        })
+      );
+
+      // 1. 直接同步 new DefaultActionDockHost 必须抛出 PROJECT_RECOVERY_REQUIRED 拦截
+      let syncErr: any;
+      try {
+        new DefaultActionDockHost({
+          projectRoot: tempProjDir,
+          dataDir: tempDataDir,
+          autoLoadCurrentProject: true,
+        });
+      } catch (err) {
+        syncErr = err;
+      }
+
+      expect(syncErr).toBeDefined();
+      expect(syncErr?.code).toBe(PROJECT_RECOVERY_REQUIRED);
+      expect(syncErr?.message).toContain("PROJECT_RECOVERY_REQUIRED");
+      expect(syncErr?.message).toContain("createActionDockHost()");
+
+      // 验证同步构造失败后 dataDirLock 正常释放，未发生锁泄漏
+      const dataLockPath = join(tempDataDir, ".actiondock.data.lock");
+      expect(existsSync(dataLockPath)).toBe(false);
+
+      // 2. 验证异步工厂 createActionDockHost() 能够自动完成恢复并正常启动
+      const host = await createActionDockHost({
+        projectRoot: tempProjDir,
+        dataDir: tempDataDir,
+        autoLoadCurrentProject: true,
+      });
+
+      expect(host).toBeDefined();
+      expect(host.getApp("pkg.pending-tx")).toBeDefined();
+      await host.close();
+    } finally {
+      rmSync(tempProjDir, { recursive: true, force: true });
+      rmSync(tempDataDir, { recursive: true, force: true });
     }
   });
 });

@@ -312,5 +312,133 @@ describe("WorkerSqliteDriver 工作线程驱动测试", () => {
 
     await driver.close();
   });
+
+  it("在同步事务回调内部嵌套调用 driver.transaction 被拦截并抛出 WORKER_TRANSACTION_NESTED_FORBIDDEN 且外层回滚后无嵌套数据", async () => {
+    const dbPath = join(tempDir, "worker-nested-tx.db");
+    const driver = new WorkerSqliteDriver(dbPath);
+
+    await driver.exec(`
+      CREATE TABLE nested_tx_test (
+        id TEXT PRIMARY KEY,
+        val TEXT NOT NULL
+      );
+    `);
+
+    let nestedPromise: Promise<any> | null = null;
+
+    // 在同步事务回调内部嵌套调用函数式 driver.transaction(...)
+    await expect(
+      driver.transaction(() => {
+        driver.run("INSERT INTO nested_tx_test (id, val) VALUES (?, ?)", "id-outer", "val-outer");
+
+        nestedPromise = driver.transaction(() => {
+          driver.run("INSERT INTO nested_tx_test (id, val) VALUES (?, ?)", "id-inner", "val-inner");
+        });
+
+        // 抛出异常触发外层事务回滚
+        throw new Error("Outer transaction aborted");
+      })
+    ).rejects.toThrow("Outer transaction aborted");
+
+    // 验证嵌套事务调用被立即拦截并抛出 WORKER_TRANSACTION_NESTED_FORBIDDEN 异常
+    await expect(nestedPromise!).rejects.toThrow(/WORKER_TRANSACTION_NESTED_FORBIDDEN/);
+
+    // 验证外层事务回滚后数据库中无嵌套数据与外层数据
+    const allRows = await driver.all("SELECT * FROM nested_tx_test");
+    expect(allRows.length).toBe(0);
+
+    // 验证在同步事务回调内部嵌套调用语句数组形式的 driver.transaction(...) 同样被拦截
+    let nestedArrayPromise: Promise<any> | null = null;
+    await expect(
+      driver.transaction(() => {
+        driver.run("INSERT INTO nested_tx_test (id, val) VALUES (?, ?)", "id-outer-2", "val-outer-2");
+
+        nestedArrayPromise = driver.transaction([
+          { sql: "INSERT INTO nested_tx_test (id, val) VALUES (?, ?)", params: ["id-inner-2", "val-inner-2"] },
+        ]);
+
+        throw new Error("Outer transaction aborted again");
+      })
+    ).rejects.toThrow("Outer transaction aborted again");
+
+    await expect(nestedArrayPromise!).rejects.toThrow(/WORKER_TRANSACTION_NESTED_FORBIDDEN/);
+
+    const rowsAfterArray = await driver.all("SELECT * FROM nested_tx_test");
+    expect(rowsAfterArray.length).toBe(0);
+
+    await driver.close();
+  });
+
+  it("在事务回调中通过 driver.run(...).then(() => driver.transaction(...)) 延迟触发事务被拦截并抛出 WORKER_TRANSACTION_ASYNC_FORBIDDEN", async () => {
+    const dbPath = join(tempDir, "worker-deferred-tx.db");
+    const driver = new WorkerSqliteDriver(dbPath);
+
+    await driver.exec(`
+      CREATE TABLE deferred_tx_test (
+        id TEXT PRIMARY KEY,
+        val TEXT NOT NULL
+      );
+    `);
+
+    let deferredArrayError: any = null;
+
+    // 在事务回调中通过 driver.run(...).then(() => driver.transaction(...)) 延迟触发数组形式事务
+    await driver.transaction(() => {
+      driver
+        .run("INSERT INTO deferred_tx_test (id, val) VALUES (?, ?)", "id-sync", "val-sync")
+        .then(() => {
+          return driver.transaction([
+            { sql: "INSERT INTO deferred_tx_test (id, val) VALUES (?, ?)", params: ["id-deferred-array", "val-deferred-array"] },
+          ]);
+        })
+        .catch((err) => {
+          deferredArrayError = err;
+        });
+    });
+
+    // 等待微任务与潜在异步链路完全结算
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // 验证延迟触发的事务被拦截并抛出 WORKER_TRANSACTION_ASYNC_FORBIDDEN
+    expect(deferredArrayError).toBeDefined();
+    expect(deferredArrayError.message).toMatch(/WORKER_TRANSACTION_ASYNC_FORBIDDEN/);
+
+    // 验证数据库中未被写入延迟逃逸记录
+    const escapeArrayRows = await driver.all("SELECT * FROM deferred_tx_test WHERE id = ?", "id-deferred-array");
+    expect(escapeArrayRows.length).toBe(0);
+
+    // 验证同步合法记录正常写入
+    const syncRows = await driver.all<{ id: string; val: string }>(
+      "SELECT * FROM deferred_tx_test WHERE id = ?",
+      "id-sync"
+    );
+    expect(syncRows.length).toBe(1);
+    expect(syncRows[0].val).toBe("val-sync");
+
+    // 验证延迟触发函数式事务同样被拦截
+    let deferredFuncError: any = null;
+    await driver.transaction(() => {
+      driver
+        .run("INSERT INTO deferred_tx_test (id, val) VALUES (?, ?)", "id-sync-2", "val-sync-2")
+        .then(() => {
+          return driver.transaction(() => {
+            driver.run("INSERT INTO deferred_tx_test (id, val) VALUES (?, ?)", "id-deferred-func", "val-deferred-func");
+          });
+        })
+        .catch((err) => {
+          deferredFuncError = err;
+        });
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(deferredFuncError).toBeDefined();
+    expect(deferredFuncError.message).toMatch(/WORKER_TRANSACTION_ASYNC_FORBIDDEN/);
+
+    const escapeFuncRows = await driver.all("SELECT * FROM deferred_tx_test WHERE id = ?", "id-deferred-func");
+    expect(escapeFuncRows.length).toBe(0);
+
+    await driver.close();
+  });
 });
 

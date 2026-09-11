@@ -125,7 +125,8 @@ export async function handlePlaybooksRoutes(ctx: RouteContext): Promise<Response
 
     try {
       const pb = await target.describePlaybook(playbookId);
-      let pkgId = (pb as any).packageId;
+      const unwrapped = target.unwrap?.();
+      let pkgId = (pb as any).packageId || (unwrapped && "packageId" in unwrapped ? (unwrapped as any).packageId : undefined);
       if (!pkgId && host) {
         for (const app of host.listApps()) {
           try {
@@ -145,9 +146,7 @@ export async function handlePlaybooksRoutes(ctx: RouteContext): Promise<Response
           pkgId = matched.packageId;
         }
       }
-      if (pkgId) {
-        assertPackageAllowed(pkgId, options);
-      }
+      assertPackageAllowed(pkgId, options);
       return jsonResponse(pb, 200, corsHeaders);
     } catch (err: any) {
       if (err.code === "PACKAGE_NOT_ALLOWED" || err.status === 403) {

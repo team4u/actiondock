@@ -171,6 +171,91 @@ export function isPidAlive(pid: number): boolean {
 }
 
 /**
+ * 检查接管守卫（reclaim guard）目录状态。
+ *
+ * - 若目录不存在：返回非活跃。
+ * - 若处于宽限期内或持有者存活：返回活跃，禁止抢先创建主锁。
+ * - 若持有者已死亡且超过宽限期：返回陈旧，可供安全清理。
+ */
+function checkProjectReclaimGuard(
+  reclaimPath: string,
+  gracePeriodMs = 1000
+): { exists: boolean; active: boolean; isStale: boolean; holderPid?: number } {
+  if (!existsSync(reclaimPath)) {
+    return { exists: false, active: false, isStale: false };
+  }
+
+  let isDir = false;
+  try {
+    isDir = statSync(reclaimPath).isDirectory();
+  } catch {
+    return { exists: false, active: false, isStale: false };
+  }
+
+  const metaPath = isDir ? join(reclaimPath, "metadata.json") : reclaimPath;
+
+  const tryParse = (): { pid?: number; createdAt?: number } | undefined => {
+    try {
+      if (existsSync(metaPath)) {
+        const raw = readFileSync(metaPath, "utf-8");
+        if (raw.trim().length > 0) {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed.pid === "number") {
+            return parsed;
+          }
+        }
+      }
+    } catch {}
+    return undefined;
+  };
+
+  const info = tryParse();
+  if (info && typeof info.pid === "number") {
+    if (isPidAlive(info.pid)) {
+      return { exists: true, active: true, isStale: false, holderPid: info.pid };
+    }
+    const createdAt = typeof info.createdAt === "number" ? info.createdAt : getProjectLockMtimeMs(reclaimPath, isDir);
+    const age = Date.now() - createdAt;
+    if (age < gracePeriodMs) {
+      return { exists: true, active: true, isStale: false, holderPid: info.pid };
+    }
+    return { exists: true, active: false, isStale: true, holderPid: info.pid };
+  }
+
+  const mtime = getProjectLockMtimeMs(reclaimPath, isDir);
+  const age = Date.now() - mtime;
+  if (age < gracePeriodMs) {
+    return { exists: true, active: true, isStale: false };
+  }
+
+  return { exists: true, active: false, isStale: true };
+}
+
+/**
+ * 尝试原子获取接管守卫（reclaim guard）。
+ * 基于 mkdirSync 原子创建目录并写入自身元数据。
+ */
+function tryAcquireProjectReclaimGuard(reclaimPath: string, pid: number): boolean {
+  try {
+    mkdirSync(reclaimPath, { mode: 0o700 });
+    const metaPath = join(reclaimPath, "metadata.json");
+    const tmpPath = join(
+      reclaimPath,
+      `metadata.json.tmp.${pid}.${randomUUID().slice(0, 8)}`
+    );
+    writeFileSync(
+      tmpPath,
+      JSON.stringify({ pid, createdAt: Date.now() }, null, 2),
+      "utf-8"
+    );
+    renameSync(tmpPath, metaPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * 检查项目修改锁 .actiondock/project.lock 是否存在且持有者 PID 处于存活状态。
  *
  * @param projectRoot 项目根目录
@@ -178,6 +263,16 @@ export function isPidAlive(pid: number): boolean {
  */
 export function isProjectLockHeld(projectRoot: string, excludeSelf = true): boolean {
   const lockPath = join(projectRoot, ".actiondock", "project.lock");
+  const reclaimPath = `${lockPath}.reclaim`;
+  if (existsSync(reclaimPath)) {
+    const reclaimState = checkProjectReclaimGuard(reclaimPath, 1000);
+    if (reclaimState.active) {
+      if (!excludeSelf || reclaimState.holderPid !== process.pid) {
+        return true;
+      }
+    }
+  }
+
   if (!existsSync(lockPath)) {
     return false;
   }
@@ -203,6 +298,7 @@ export function isProjectLockHeld(projectRoot: string, excludeSelf = true): bool
 
 /**
  * 获取工程修改排他锁（.actiondock/project.lock）。
+ * 引入所有竞争者均遵守的原子 reclaim guard 机制（project.lock.reclaim）。
  * 采用 mkdirSync 原子排他目录创建、renameSync 元数据写入、宽限期重试检测与基于 sessionToken 的释放函数。
  * 避免空文件窗口与 truncate。
  *
@@ -219,6 +315,7 @@ export function acquireProjectLock(
   }
 
   const lockPath = join(metaDir, "project.lock");
+  const reclaimPath = `${lockPath}.reclaim`;
   const sessionToken = options.sessionToken || randomUUID();
   const currentPid = process.pid;
   const lockData = {
@@ -229,8 +326,33 @@ export function acquireProjectLock(
   const content = JSON.stringify(lockData, null, 2);
 
   while (true) {
+    // 1. 当竞争者尝试创建新主锁时，若检测到 reclaim 目录存在且处于宽限期内或持有者存活，必须等待，禁止在他人正在接管/验证期间抢先创建主锁
+    const reclaimState = checkProjectReclaimGuard(reclaimPath, 1000);
+    if (reclaimState.active) {
+      sleepSync(50);
+      continue;
+    }
+    if (reclaimState.isStale) {
+      // 若 reclaim guard 持有者意外崩溃，其他竞争者在超过宽限期且 PID 已死后清理陈旧 reclaim 目录并推进
+      try {
+        rmSync(reclaimPath, { recursive: true, force: true });
+      } catch {}
+    }
+
+    // 2. 尝试常规获取新主锁
     try {
       mkdirSync(lockPath, { mode: 0o700 });
+
+      // 再次确认在此窗口期内是否有他人持有活跃 reclaim guard
+      const postCheck = checkProjectReclaimGuard(reclaimPath, 1000);
+      if (postCheck.active && postCheck.holderPid !== currentPid) {
+        try {
+          rmSync(lockPath, { recursive: true, force: true });
+        } catch {}
+        sleepSync(50);
+        continue;
+      }
+
       const metaFile = join(lockPath, "metadata.json");
       const tmpFile = join(
         lockPath,
@@ -260,58 +382,82 @@ export function acquireProjectLock(
           }
         }
 
-        const recheckState = readProjectLockWithGracePeriod(lockPath, 1000);
-        if (!recheckState.exists) {
-          continue;
-        }
-        if (recheckState.inGracePeriod) {
+        // 当识别到主锁为陈旧锁时，竞争者必须先原子竞争获取 reclaim guard（基于 mkdirSync 原子创建并写入 PID/时间戳元数据）
+        const acquiredReclaim = tryAcquireProjectReclaimGuard(reclaimPath, currentPid);
+        if (!acquiredReclaim) {
+          // 竞争失败者等待并 continue 重试；若 reclaim guard 持有者意外崩溃，其他竞争者在超过宽限期且 PID 已死后清理陈旧 reclaim 目录并推进
+          const currentReclaim = checkProjectReclaimGuard(reclaimPath, 1000);
+          if (currentReclaim.isStale) {
+            try {
+              rmSync(reclaimPath, { recursive: true, force: true });
+            } catch {}
+          }
           sleepSync(50);
           continue;
         }
-        if (
-          recheckState.info &&
-          typeof recheckState.info.pid === "number" &&
-          isPidAlive(recheckState.info.pid)
-        ) {
-          throw new Error(
-            `Project modification lock is held by PID ${recheckState.info.pid}. Another command is running in ${projectRoot}.`
-          );
-        }
 
-        // 持有者 PID 已死亡（或超过宽限期的损坏锁），属于陈旧锁，采用原子 renameSync(lockPath, quarantinePath) 检疫隔离后再 rmSync，竞争失败者 continue 重试
-        const quarantinePath = `${lockPath}.quarantine.${currentPid}.${Date.now()}.${randomUUID().slice(0, 8)}`;
+        // 仅成功获取 reclaim guard 的唯一胜利者获准执行：
+        // 复核主锁陈旧性 -> 隔离/清理陈旧锁 -> 原子创建新主锁并写入自身元数据 -> 清理 reclaim guard
         try {
-          renameSync(lockPath, quarantinePath);
-        } catch {
-          // 竞争失败者 continue 重试
-          continue;
-        }
+          // 1. 复核主锁陈旧性
+          const recheckState = readProjectLockWithGracePeriod(lockPath, 1000);
+          if (recheckState.exists) {
+            if (recheckState.inGracePeriod) {
+              sleepSync(50);
+              continue;
+            }
+            if (
+              recheckState.info &&
+              typeof recheckState.info.pid === "number" &&
+              isPidAlive(recheckState.info.pid)
+            ) {
+              throw new Error(
+                `Project modification lock is held by PID ${recheckState.info.pid}. Another command is running in ${projectRoot}.`
+              );
+            }
 
-        // 校验隔离目录元数据，若包含存活进程所有权或处于宽限期内则说明并发竞争下移走了活跃进程新锁，执行恢复
-        const quarantinedState = readProjectLockWithGracePeriod(quarantinePath, 500);
-        if (
-          quarantinedState.inGracePeriod ||
-          (quarantinedState.info &&
-            typeof quarantinedState.info.pid === "number" &&
-            isPidAlive(quarantinedState.info.pid))
-        ) {
-          try {
-            renameSync(quarantinePath, lockPath);
-          } catch {
-            rmSync(quarantinePath, { recursive: true, force: true });
+            // 2. 隔离/清理陈旧锁
+            const quarantinePath = `${lockPath}.quarantine.${currentPid}.${Date.now()}.${randomUUID().slice(0, 8)}`;
+            try {
+              renameSync(lockPath, quarantinePath);
+              rmSync(quarantinePath, { recursive: true, force: true });
+            } catch {
+              try {
+                rmSync(lockPath, { recursive: true, force: true });
+              } catch {}
+            }
           }
-          const holderPid = quarantinedState.info?.pid ?? "active";
-          throw new Error(
-            `Project modification lock is held by PID ${holderPid}. Another command is running in ${projectRoot}.`
-          );
-        }
 
-        try {
-          rmSync(quarantinePath, { recursive: true, force: true });
-        } catch {
-          // 忽略隔离区清理异常
+          // 3. 原子创建新主锁并写入自身元数据
+          while (true) {
+            try {
+              mkdirSync(lockPath, { mode: 0o700 });
+              break;
+            } catch (createErr: any) {
+              if (createErr?.code === "EEXIST") {
+                try {
+                  rmSync(lockPath, { recursive: true, force: true });
+                } catch {}
+                continue;
+              }
+              throw createErr;
+            }
+          }
+
+          const metaFile = join(lockPath, "metadata.json");
+          const tmpFile = join(
+            lockPath,
+            `metadata.json.tmp.${currentPid}.${randomUUID().slice(0, 8)}`
+          );
+          writeFileSync(tmpFile, content, "utf-8");
+          renameSync(tmpFile, metaFile);
+          break;
+        } finally {
+          // 4. 清理 reclaim guard
+          try {
+            rmSync(reclaimPath, { recursive: true, force: true });
+          } catch {}
         }
-        continue;
       }
       throw err;
     }

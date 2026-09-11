@@ -625,8 +625,81 @@ rl.on("line", (cmd) => {
 
     expect(existsSync(lockDir)).toBe(false);
     const remainingQuarantines = readdirSync(tempDir).filter((name) =>
-      name.includes(".quarantine.")
+      name.includes(".quarantine.") || name.includes(".reclaim")
     );
     expect(remainingQuarantines.length).toBe(0);
+  });
+
+  it("若 reclaim guard 持有者意外崩溃超期，竞争者能安全清理陈旧 reclaim 目录并成功获取主锁", async () => {
+    const lockDir = join(tempDir, ".actiondock.data.lock");
+    const reclaimDir = `${lockDir}.reclaim`;
+
+    // 模拟前一个接管者创建了 reclaim guard 后崩溃：PID 死亡且创建时间已超过宽限期
+    mkdirSync(reclaimDir, { mode: 0o700 });
+    const staleReclaimInfo = {
+      pid: 99999995,
+      createdAt: Date.now() - 3000,
+    };
+    writeFileSync(
+      join(reclaimDir, "metadata.json"),
+      JSON.stringify(staleReclaimInfo, null, 2),
+      { mode: 0o600 }
+    );
+
+    // 竞争者执行 acquire：应当自动识别并清理陈旧 reclaim 目录，成功获取主锁
+    const lock = DataDirLock.acquire(tempDir);
+    expect(lock).toBeDefined();
+    expect(existsSync(lockDir)).toBe(true);
+    expect(existsSync(reclaimDir)).toBe(false);
+
+    lock.release();
+    expect(existsSync(lockDir)).toBe(false);
+  });
+
+  it("当检测到 reclaim guard 存在且持有者存活时，竞争者必须等待禁止抢先创建主锁", async () => {
+    const lockDir = join(tempDir, ".actiondock.data.lock");
+    const reclaimDir = `${lockDir}.reclaim`;
+
+    // 启动存活的假子进程模拟活跃的接管者
+    const dummyHolder = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+      stdio: "ignore",
+    });
+
+    mkdirSync(reclaimDir, { mode: 0o700 });
+    writeFileSync(
+      join(reclaimDir, "metadata.json"),
+      JSON.stringify({ pid: dummyHolder.pid, createdAt: Date.now() }, null, 2),
+      { mode: 0o600 }
+    );
+
+    // 启动后台工作线程，在 60ms 后清理 reclaim guard 并结束假接管者
+    const workerScript = `
+      const fs = require("node:fs");
+      setTimeout(() => {
+        try {
+          process.kill(${dummyHolder.pid}, "SIGKILL");
+        } catch {}
+        try {
+          fs.rmSync(${JSON.stringify(reclaimDir)}, { recursive: true, force: true });
+        } catch {}
+      }, 60);
+    `;
+    const worker = new Worker(workerScript, { eval: true });
+
+    try {
+      // 竞争者尝试获取锁：由于感知到活跃 reclaim guard，不会强行抢锁破坏，而是等待其释放后成功创建主锁
+      const lock = DataDirLock.acquire(tempDir);
+      expect(lock).toBeDefined();
+      expect(existsSync(lockDir)).toBe(true);
+      expect(existsSync(reclaimDir)).toBe(false);
+
+      lock.release();
+      expect(existsSync(lockDir)).toBe(false);
+    } finally {
+      await worker.terminate();
+      try {
+        dummyHolder.kill("SIGKILL");
+      } catch {}
+    }
   });
 });

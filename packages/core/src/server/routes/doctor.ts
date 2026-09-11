@@ -5,7 +5,7 @@ import { assertPackageAllowed, getSubPath, jsonResponse, type RouteContext } fro
  * 处理环境与依赖诊断接口（GET /api/v2/doctor、/doctor 与兼容别名 /api/v1/doctor）。
  */
 export async function handleDoctorRoute(ctx: RouteContext): Promise<Response | null> {
-  const { req, url, pathname, corsHeaders, projectRoot, customHome, options } = ctx;
+  const { req, url, pathname, corsHeaders, projectRoot, customHome, host, target, options } = ctx;
   const subpath = getSubPath(pathname);
 
   if (subpath !== "/doctor" || req.method !== "GET") {
@@ -32,9 +32,25 @@ export async function handleDoctorRoute(ctx: RouteContext): Promise<Response | n
     if (targetPkg) {
       assertPackageAllowed(targetPkg, options);
     }
+
+    let packageRoot: string | undefined;
+    if (targetPkg) {
+      if (host) {
+        packageRoot = host.getApp(targetPkg)?.packageRoot;
+      }
+      if (!packageRoot && target?.unwrap) {
+        const inner = target.unwrap();
+        if (inner && "getApp" in inner && typeof (inner as any).getApp === "function") {
+          packageRoot = (inner as any).getApp(targetPkg)?.packageRoot;
+        } else if (inner && "packageId" in inner && (inner as any).packageId === targetPkg) {
+          packageRoot = (inner as any).packageRoot;
+        }
+      }
+    }
+
     const report = await runDoctorChecks({
-      cwd: projectRoot || process.cwd(),
-      packageIdOrPath: targetPkg,
+      cwd: packageRoot || projectRoot || process.cwd(),
+      packageIdOrPath: packageRoot || targetPkg,
       customHome,
       packageAllowlist: options.packageAllowlist,
     });

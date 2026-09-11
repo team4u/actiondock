@@ -101,6 +101,9 @@ export const STORAGE_BUSY = "STORAGE_BUSY";
 /** 工程事务锁被其他活跃进程持有 */
 export const PROJECT_BUSY = "PROJECT_BUSY";
 
+/** 工程存在未恢复的崩溃事务，需要执行恢复流程 */
+export const PROJECT_RECOVERY_REQUIRED = "PROJECT_RECOVERY_REQUIRED";
+
 /** SQLite 工作线程已退出 */
 export const STORAGE_WORKER_EXITED = "STORAGE_WORKER_EXITED";
 

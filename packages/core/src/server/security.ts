@@ -114,7 +114,8 @@ export function resolveCorsHeaders(
     return {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      "Access-Control-Allow-Headers":
+        "Content-Type, Authorization, Idempotency-Key, X-Request-Id, Last-Event-ID",
       Vary: "Origin",
     };
   }
@@ -123,7 +124,8 @@ export function resolveCorsHeaders(
     return {
       "Access-Control-Allow-Origin": origin,
       "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      "Access-Control-Allow-Headers":
+        "Content-Type, Authorization, Idempotency-Key, X-Request-Id, Last-Event-ID",
       Vary: "Origin",
     };
   }

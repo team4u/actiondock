@@ -39,6 +39,7 @@ import {
   MAX_SUBRUNS_REACHED,
   PACKAGE_NOT_FOUND,
   PROJECT_BUSY,
+  PROJECT_RECOVERY_REQUIRED,
   UNDECLARED_ACTION_DEPENDENCY,
 } from "../errors";
 import { DataDirLock } from "../storage/data-dir-lock";
@@ -85,73 +86,126 @@ export class DefaultActionDockHost implements ActionDockHost {
       });
     }
 
-    // 注册显式传入的 packages 列表
-    if (options.packages && Array.isArray(options.packages)) {
-      for (const item of options.packages) {
-        if (isActionDockApp(item)) {
-          this.registerAppInternal(item, true);
-        } else {
-          const app = new DefaultActionDockApp({
-            ...item,
-            hostSessionId: this.hostSessionId,
-            platform: item.platform ?? options.platform,
-            inMemory: item.inMemory ?? options.inMemory,
-            customHome: item.customHome ?? options.customHome,
-            dataDir: item.dataDir ?? options.dataDir,
-            clock: item.clock ?? options.clock,
-            process: item.process ?? options.process,
-            logger: item.logger ?? options.logger,
-            eventSink: item.eventSink ?? this.eventSink,
-            maxCallDepth: item.maxCallDepth ?? this.maxCallDepth,
-            maxSubRuns: item.maxSubRuns ?? this.maxSubRuns,
-            packageContextResolver: this.resolvePackageContext.bind(this),
-          });
-          this.registerAppInternal(app, true);
-        }
-      }
-    }
-
-    // 自动加载当前工程（若发现工程根目录且未显式禁用）
-    if (options.autoLoadCurrentProject !== false) {
-      let root = options.projectRoot;
-      if (!root) {
-        const detected = findProjectRoot();
-        if (detected) {
-          root = detected;
-        }
-      }
-
-      if (root && existsSync(root)) {
-        if (isProjectLockHeld(root)) {
-          const err: any = new Error(
-            "PROJECT_BUSY: Project directory is locked by another active process holding project.lock"
-          );
-          err.code = PROJECT_BUSY;
-          throw err;
-        }
-        try {
-          const config = loadProjectConfig(root);
-          this.hostPublicPackageIds.add(config.id);
-
-          this.resolver = new ActionPackageResolver({
-            projectRoot: root,
-            manifest: config,
-            allowDevLinks: options.scanLinkedPackages,
-            customHome: options.customHome,
-          });
-
-          const graph = this.resolver.resolveSync();
-          this.hostPublicPackageIds.add(graph.rootPackageId);
-          for (const depId of graph.directDependencyIds) {
-            this.hostPublicPackageIds.add(depId);
+    try {
+      // 注册显式传入的 packages 列表
+      if (options.packages && Array.isArray(options.packages)) {
+        for (const item of options.packages) {
+          if (isActionDockApp(item)) {
+            this.registerAppInternal(item, true);
+          } else {
+            const app = new DefaultActionDockApp({
+              ...item,
+              hostSessionId: this.hostSessionId,
+              platform: item.platform ?? options.platform,
+              inMemory: item.inMemory ?? options.inMemory,
+              customHome: item.customHome ?? options.customHome,
+              dataDir: item.dataDir ?? options.dataDir,
+              clock: item.clock ?? options.clock,
+              process: item.process ?? options.process,
+              logger: item.logger ?? options.logger,
+              eventSink: item.eventSink ?? this.eventSink,
+              maxCallDepth: item.maxCallDepth ?? this.maxCallDepth,
+              maxSubRuns: item.maxSubRuns ?? this.maxSubRuns,
+              packageContextResolver: this.resolvePackageContext.bind(this),
+            });
+            this.registerAppInternal(app, true);
           }
+        }
+      }
 
-          for (const pkg of graph.packages.values()) {
-            if (!this.apps.has(pkg.packageId)) {
-              const isDirectOrRoot = this.hostPublicPackageIds.has(pkg.packageId);
+      // 自动加载当前工程（若发现工程根目录且未显式禁用）
+      if (options.autoLoadCurrentProject !== false) {
+        let root = options.projectRoot;
+        if (!root) {
+          const detected = findProjectRoot();
+          if (detected) {
+            root = detected;
+          }
+        }
+
+        if (root && existsSync(root)) {
+          if (isProjectLockHeld(root)) {
+            const err: any = new Error(
+              "PROJECT_BUSY: Project directory is locked by another active process holding project.lock"
+            );
+            err.code = PROJECT_BUSY;
+            throw err;
+          }
+          if (hasPendingTransactions(root)) {
+            const err: any = new Error(
+              `PROJECT_RECOVERY_REQUIRED: Project directory '${root}' has pending transactions requiring recovery; use async createActionDockHost() to recover automatically`
+            );
+            err.code = PROJECT_RECOVERY_REQUIRED;
+            throw err;
+          }
+          try {
+            const config = loadProjectConfig(root);
+            this.hostPublicPackageIds.add(config.id);
+
+            this.resolver = new ActionPackageResolver({
+              projectRoot: root,
+              manifest: config,
+              allowDevLinks: options.scanLinkedPackages,
+              customHome: options.customHome,
+            });
+
+            const graph = this.resolver.resolveSync();
+            this.hostPublicPackageIds.add(graph.rootPackageId);
+            for (const depId of graph.directDependencyIds) {
+              this.hostPublicPackageIds.add(depId);
+            }
+
+            for (const pkg of graph.packages.values()) {
+              if (!this.apps.has(pkg.packageId)) {
+                const isDirectOrRoot = this.hostPublicPackageIds.has(pkg.packageId);
+                const app = new DefaultActionDockApp({
+                  packageRoot: pkg.packageRoot,
+                  projectConfig: pkg.manifest,
+                  hostSessionId: this.hostSessionId,
+                  platform: options.platform,
+                  inMemory: options.inMemory,
+                  customHome: options.customHome,
+                  dataDir: options.dataDir,
+                  clock: options.clock,
+                  process: options.process,
+                  logger: options.logger,
+                  eventSink: this.eventSink,
+                  maxCallDepth: this.maxCallDepth,
+                  maxSubRuns: this.maxSubRuns,
+                  packageContextResolver: this.resolvePackageContext.bind(this),
+                });
+                this.registerAppInternal(app, isDirectOrRoot);
+              }
+            }
+          } catch (err: any) {
+            if (
+              err?.code === ACTION_PACKAGE_VERSION_CONFLICT ||
+              err?.code === PROJECT_RECOVERY_REQUIRED ||
+              err?.code === PROJECT_BUSY
+            ) {
+              throw err;
+            }
+            // 忽略非 ActionDock 工程目录解析异常
+          }
+        }
+      }
+
+      // 扫描已软链接的外部包并注册至 Host
+      if (options.scanLinkedPackages) {
+        for (const linked of listLinkedPackages(options.customHome)) {
+          if (!this.apps.has(linked.id)) {
+            if (!existsSync(linked.path)) {
+              const err = `Linked package '${linked.id}' path does not exist on disk: '${linked.path}'`;
+              this.failedLinkedPackages.set(linked.id, { path: linked.path, error: err });
+              options.logger?.warn?.(`[Host] ${err}`);
+              continue;
+            }
+            try {
+              const config = loadProjectConfig(linked.path);
+              this.hostPublicPackageIds.add(linked.id);
               const app = new DefaultActionDockApp({
-                packageRoot: pkg.packageRoot,
-                projectConfig: pkg.manifest,
+                packageRoot: linked.path,
+                projectConfig: config,
                 hostSessionId: this.hostSessionId,
                 platform: options.platform,
                 inMemory: options.inMemory,
@@ -165,61 +219,38 @@ export class DefaultActionDockHost implements ActionDockHost {
                 maxSubRuns: this.maxSubRuns,
                 packageContextResolver: this.resolvePackageContext.bind(this),
               });
-              this.registerAppInternal(app, isDirectOrRoot);
+              this.registerAppInternal(app, true);
+            } catch (err: any) {
+              const errDetail = err?.message || String(err);
+              this.failedLinkedPackages.set(linked.id, { path: linked.path, error: errDetail });
+              options.logger?.warn?.(
+                `[Host] Failed to load linked package '${linked.id}' from '${linked.path}': ${errDetail}`
+              );
             }
           }
-        } catch (err: any) {
-          if (
-            err?.code === ACTION_PACKAGE_VERSION_CONFLICT ||
-            err?.code === "PROJECT_RECOVERY_REQUIRED" ||
-            err?.code === PROJECT_BUSY
-          ) {
-            throw err;
-          }
-          // 忽略非 ActionDock 工程目录解析异常
         }
       }
-    }
+    } catch (err) {
+      try {
+        this.dataDirLock?.release();
+      } catch {
+        // 忽略排他锁释放异常
+      }
+      this.dataDirLock = undefined;
 
-    // 扫描已软链接的外部包并注册至 Host
-    if (options.scanLinkedPackages) {
-      for (const linked of listLinkedPackages(options.customHome)) {
-        if (!this.apps.has(linked.id)) {
-          if (!existsSync(linked.path)) {
-            const err = `Linked package '${linked.id}' path does not exist on disk: '${linked.path}'`;
-            this.failedLinkedPackages.set(linked.id, { path: linked.path, error: err });
-            options.logger?.warn?.(`[Host] ${err}`);
-            continue;
+      // 安全关闭已注册的子 app
+      for (const app of this.apps.values()) {
+        try {
+          const closePromise = app.close();
+          if (closePromise && typeof (closePromise as any).catch === "function") {
+            (closePromise as any).catch(() => {});
           }
-          try {
-            const config = loadProjectConfig(linked.path);
-            this.hostPublicPackageIds.add(linked.id);
-            const app = new DefaultActionDockApp({
-              packageRoot: linked.path,
-              projectConfig: config,
-              hostSessionId: this.hostSessionId,
-              platform: options.platform,
-              inMemory: options.inMemory,
-              customHome: options.customHome,
-              dataDir: options.dataDir,
-              clock: options.clock,
-              process: options.process,
-              logger: options.logger,
-              eventSink: this.eventSink,
-              maxCallDepth: this.maxCallDepth,
-              maxSubRuns: this.maxSubRuns,
-              packageContextResolver: this.resolvePackageContext.bind(this),
-            });
-            this.registerAppInternal(app, true);
-          } catch (err: any) {
-            const errDetail = err?.message || String(err);
-            this.failedLinkedPackages.set(linked.id, { path: linked.path, error: errDetail });
-            options.logger?.warn?.(
-              `[Host] Failed to load linked package '${linked.id}' from '${linked.path}': ${errDetail}`
-            );
-          }
+        } catch {
+          // 忽略 app 关闭异常
         }
       }
+      this.apps.clear();
+      throw err;
     }
   }
 
@@ -772,29 +803,53 @@ export class DefaultActionDockHost implements ActionDockHost {
 export async function createActionDockHost(
   options: ActionDockHostOptions = {}
 ): Promise<ActionDockHost> {
-  if (options.autoLoadCurrentProject !== false) {
-    let root = options.projectRoot;
-    if (!root) {
-      const detected = findProjectRoot();
-      if (detected) {
-        root = detected;
+  let createdHost: DefaultActionDockHost | undefined;
+  try {
+    if (options.autoLoadCurrentProject !== false) {
+      let root = options.projectRoot;
+      if (!root) {
+        const detected = findProjectRoot();
+        if (detected) {
+          root = detected;
+        }
+      }
+
+      if (root && existsSync(root)) {
+        if (isProjectLockHeld(root)) {
+          const err: any = new Error(
+            "PROJECT_BUSY: Project directory is locked by another active process holding project.lock"
+          );
+          err.code = PROJECT_BUSY;
+          throw err;
+        }
+        // 依据事务日志恢复未完成提交的悬空事务（锁持有者存活时严禁判定为崩溃事务并禁止自动恢复）
+        if (hasPendingTransactions(root)) {
+          await recoverPendingTransactions(root, { frozenInstall: true });
+        }
       }
     }
 
-    if (root && existsSync(root)) {
-      if (isProjectLockHeld(root)) {
-        const err: any = new Error(
-          "PROJECT_BUSY: Project directory is locked by another active process holding project.lock"
-        );
-        err.code = PROJECT_BUSY;
-        throw err;
-      }
-      // 依据事务日志恢复未完成提交的悬空事务（锁持有者存活时严禁判定为崩溃事务并禁止自动恢复）
-      if (hasPendingTransactions(root)) {
-        await recoverPendingTransactions(root, { frozenInstall: true });
+    createdHost = new DefaultActionDockHost(options);
+    return createdHost;
+  } catch (err) {
+    if (createdHost) {
+      try {
+        await createdHost.close();
+      } catch {
+        // 忽略宿主关闭异常
       }
     }
+    if (options.packages && Array.isArray(options.packages)) {
+      for (const item of options.packages) {
+        if (isActionDockApp(item)) {
+          try {
+            await item.close();
+          } catch {
+            // 忽略子应用关闭异常
+          }
+        }
+      }
+    }
+    throw err;
   }
-
-  return new DefaultActionDockHost(options);
 }

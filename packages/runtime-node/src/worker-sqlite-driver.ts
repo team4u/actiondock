@@ -399,6 +399,22 @@ export class WorkerSqliteDriver {
   async transaction<T>(
     fnOrStatements: (() => T) | Array<{ sql: string; params?: any[]; type?: "exec" | "run" } | string>
   ): Promise<any> {
+    const store = this.txStorage.getStore();
+    if (store) {
+      if (store.aborted || store.sealed) {
+        return Promise.reject(
+          new Error(
+            "WORKER_TRANSACTION_ASYNC_FORBIDDEN: functional transactions in WorkerSqliteDriver must be synchronous; async callbacks or deferred continuations are not allowed"
+          )
+        );
+      }
+      return Promise.reject(
+        new Error(
+          "WORKER_TRANSACTION_NESTED_FORBIDDEN: nested transactions are not supported in WorkerSqliteDriver"
+        )
+      );
+    }
+
     if (Array.isArray(fnOrStatements)) {
       const stmts = fnOrStatements.map((item) =>
         typeof item === "string" ? { type: "exec" as const, sql: item } : item
