@@ -144,6 +144,7 @@ export class DataDirLock {
     }
 
     const lockFilePath = join(dataDir, ".actiondock.data.lock");
+    const takeoverPath = `${lockFilePath}.takeover`;
     const currentPid = process.pid;
     const currentHost = hostname();
     const token = options.sessionToken || randomUUID();
@@ -157,56 +158,118 @@ export class DataDirLock {
     };
     const content = JSON.stringify(newLockInfo, null, 2);
 
-    try {
-      const fd = openSync(lockFilePath, "wx", 0o600);
+    while (true) {
       try {
-        writeSync(fd, content);
-      } finally {
-        closeSync(fd);
-      }
-      return new DataDirLock(lockFilePath, newLockInfo);
-    } catch (err: any) {
-      if (err && err.code === "EEXIST") {
-        let existing: DataDirLockInfo | undefined;
+        const fd = openSync(lockFilePath, "wx", 0o600);
         try {
-          const raw = readFileSync(lockFilePath, "utf8");
-          existing = JSON.parse(raw) as DataDirLockInfo;
-        } catch {
-          // 损坏的锁文件视为待接管或直接覆盖
+          writeSync(fd, content);
+        } finally {
+          closeSync(fd);
         }
-
-        if (existing && typeof existing.pid === "number") {
-          const parentAlive = isProcessAlive(existing.pid);
-
-          if (parentAlive) {
-            const inUseErr: any = new Error(
-              `DATA_DIR_IN_USE: Data directory '${dataDir}' is in use by another active Host process (PID ${existing.pid})`
-            );
-            inUseErr.code = "DATA_DIR_IN_USE";
-            throw inUseErr;
-          }
-
-          // 主进程已死亡，检查关联子进程存活状态
-          const activeChildren = (existing.childPids || []).filter((childPid) =>
-            isProcessAlive(childPid)
-          );
-
-          if (activeChildren.length > 0) {
-            const recoveryErr: any = new Error(
-              `DATA_DIR_RECOVERY_REQUIRED: Data directory recovery required for '${dataDir}': previous host (PID ${existing.pid}) exited but child processes (${activeChildren.join(
-                ", "
-              )}) are still running`
-            );
-            recoveryErr.code = "DATA_DIR_RECOVERY_REQUIRED";
-            throw recoveryErr;
-          }
-        }
-
-        // 主进程与所有子进程均已退出（或损坏的锁文件），接管覆盖
-        writeFileSync(lockFilePath, content, { mode: 0o600 });
         return new DataDirLock(lockFilePath, newLockInfo);
+      } catch (err: any) {
+        if (err && err.code === "EEXIST") {
+          let existing: DataDirLockInfo | undefined;
+          try {
+            const raw = readFileSync(lockFilePath, "utf8");
+            if (raw.trim().length > 0) {
+              existing = JSON.parse(raw) as DataDirLockInfo;
+            }
+          } catch {
+            // 损坏或并发写入中的锁文件
+          }
+
+          if (existing && typeof existing.pid === "number") {
+            const parentAlive = isProcessAlive(existing.pid);
+
+            if (parentAlive) {
+              const inUseErr: any = new Error(
+                `DATA_DIR_IN_USE: Data directory '${dataDir}' is in use by another active Host process (PID ${existing.pid})`
+              );
+              inUseErr.code = "DATA_DIR_IN_USE";
+              throw inUseErr;
+            }
+
+            // 主进程已死亡，检查关联子进程存活状态
+            const activeChildren = (existing.childPids || []).filter((childPid) =>
+              isProcessAlive(childPid)
+            );
+
+            if (activeChildren.length > 0) {
+              const recoveryErr: any = new Error(
+                `DATA_DIR_RECOVERY_REQUIRED: Data directory recovery required for '${dataDir}': previous host (PID ${existing.pid}) exited but child processes (${activeChildren.join(
+                  ", "
+                )}) are still running`
+              );
+              recoveryErr.code = "DATA_DIR_RECOVERY_REQUIRED";
+              throw recoveryErr;
+            }
+          }
+
+          // 主进程与所有子进程均已退出（或损坏的锁文件），确认陈旧锁后通过接管锁协调 unlink 并重试 openSync("wx") 循环竞争
+          let takeoverFd: number | null = null;
+          try {
+            takeoverFd = openSync(takeoverPath, "wx", 0o600);
+          } catch (takeoverErr: any) {
+            if (takeoverErr && takeoverErr.code === "EEXIST") {
+              try {
+                const raw = readFileSync(takeoverPath, "utf8");
+                if (raw.trim().length > 0) {
+                  const info = JSON.parse(raw);
+                  if (info && typeof info.pid === "number" && !isProcessAlive(info.pid)) {
+                    unlinkSync(takeoverPath);
+                  }
+                }
+              } catch {
+                // 忽略陈旧接管锁读取或解绑异常
+              }
+            }
+            continue;
+          }
+
+          try {
+            try {
+              writeSync(takeoverFd, JSON.stringify({ pid: currentPid, createdAt: Date.now() }));
+            } catch {
+              // 忽略接管标记写入异常
+            }
+
+            let recheck: DataDirLockInfo | undefined;
+            try {
+              const recheckRaw = readFileSync(lockFilePath, "utf8");
+              if (recheckRaw.trim().length > 0) {
+                recheck = JSON.parse(recheckRaw) as DataDirLockInfo;
+              }
+            } catch {
+              // 忽略二次读取解析异常
+            }
+
+            if (recheck && typeof recheck.pid === "number" && isProcessAlive(recheck.pid)) {
+              const inUseErr: any = new Error(
+                `DATA_DIR_IN_USE: Data directory '${dataDir}' is in use by another active Host process (PID ${recheck.pid})`
+              );
+              inUseErr.code = "DATA_DIR_IN_USE";
+              throw inUseErr;
+            }
+
+            try {
+              unlinkSync(lockFilePath);
+            } catch {
+              // 忽略解绑异常
+            }
+          } finally {
+            try {
+              unlinkSync(takeoverPath);
+            } catch {
+              // 忽略接管锁解绑异常
+            }
+            closeSync(takeoverFd);
+          }
+
+          continue;
+        }
+        throw err;
       }
-      throw err;
     }
   }
 }

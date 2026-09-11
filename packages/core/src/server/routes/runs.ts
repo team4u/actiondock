@@ -247,12 +247,17 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
     const stream = new ReadableStream({
       async start(controller) {
         const encoder = new TextEncoder();
+        let sawFinish = false;
         let eventsCount = 0;
+
         try {
           // 先消费首个事件结果
           if (!firstResult.done) {
             eventsCount++;
             const evt = firstResult.value;
+            if (evt.type === "finish") {
+              sawFinish = true;
+            }
             const eventType = evt.type || "message";
             const idField = evt.eventId ? `id: ${evt.eventId}\n` : `id: ${evt.sequence}\n`;
             controller.enqueue(
@@ -266,7 +271,6 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
           }
 
           // 循环消费后续实时或队列事件
-          let sawFinish = false;
           while (!req.signal.aborted) {
             const nextResult = await iterator.next();
             if (nextResult.done) break;

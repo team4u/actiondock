@@ -201,6 +201,7 @@ export class DefaultActionDockApp implements ActionDockApp {
           for (const [id, item] of Object.entries(manifest.actions)) {
             map.set(id, {
               id,
+              packageId: this.packageId,
               description: item.description,
               inputSchema: item.inputSchema,
               outputSchema: item.outputSchema,
@@ -225,6 +226,7 @@ export class DefaultActionDockApp implements ActionDockApp {
           const existing = map.get(id);
           map.set(id, {
             id,
+            packageId: this.packageId,
             description: item.description ?? existing?.description,
             inputSchema: item.inputSchema ?? existing?.inputSchema,
             outputSchema: item.outputSchema ?? existing?.outputSchema,
@@ -246,6 +248,7 @@ export class DefaultActionDockApp implements ActionDockApp {
       const actObj = act as any;
       map.set(id, {
         id,
+        packageId: this.packageId,
         description: actObj.description ?? existing?.description,
         inputSchema: actObj.inputSchema ?? existing?.inputSchema,
         outputSchema: actObj.outputSchema ?? existing?.outputSchema,
@@ -347,6 +350,7 @@ export class DefaultActionDockApp implements ActionDockApp {
     const map = this.getStaticActionMap();
     let summaries: ActionSummary[] = Array.from(map.values()).map((spec) => ({
       id: spec.id,
+      packageId: this.packageId,
       description: spec.description,
       tags: spec.tags,
       entry: spec.entry,
@@ -418,6 +422,7 @@ export class DefaultActionDockApp implements ActionDockApp {
       const actObj = liveAction as any;
       return {
         id: actObj.id || id,
+        packageId: this.packageId,
         description: actObj.description ?? spec?.description,
         inputSchema: actObj.inputSchema ?? spec?.inputSchema,
         outputSchema: actObj.outputSchema ?? spec?.outputSchema,
@@ -433,7 +438,10 @@ export class DefaultActionDockApp implements ActionDockApp {
       throw new Error(`Action '${id}' not found in package '${this.packageId}'`);
     }
 
-    return spec;
+    return {
+      ...spec,
+      packageId: this.packageId,
+    };
   }
 
   async listPlaybooks(): Promise<PlaybookSummary[]> {

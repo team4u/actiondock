@@ -378,6 +378,17 @@ export class WorkerSqliteDriver {
         this.activeRecorder = prevRecorder;
       }
 
+      const result = fnResult as any;
+      if (
+        result !== null &&
+        (typeof result === "object" || typeof result === "function") &&
+        typeof result.then === "function"
+      ) {
+        throw new Error(
+          "WORKER_TRANSACTION_ASYNC_FORBIDDEN: functional transactions in WorkerSqliteDriver must be synchronous; async callbacks are not allowed"
+        );
+      }
+
       await this.request("transaction", { statements: recorded });
       return fnResult;
     }

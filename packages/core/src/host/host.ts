@@ -355,7 +355,11 @@ export class DefaultActionDockHost implements ActionDockHost {
         }
         throw new Error(`Package '${parsed.packageId}' not found in host`);
       }
-      return app.describeAction(parsed.actionId);
+      const spec = await app.describeAction(parsed.actionId);
+      return {
+        ...spec,
+        packageId: app.packageId,
+      };
     }
 
     const matches: Array<{ app: ActionDockApp; spec: ActionSpec }> = [];
@@ -366,14 +370,17 @@ export class DefaultActionDockHost implements ActionDockHost {
           continue;
         }
         const spec = await app.describeAction(parsed.actionId);
-        matches.push({ app, spec });
+        matches.push({ app, spec: { ...spec, packageId: app.packageId } });
       } catch {
         // 忽略未匹配的包
       }
     }
 
     if (matches.length === 1) {
-      return matches[0].spec;
+      return {
+        ...matches[0].spec,
+        packageId: matches[0].app.packageId,
+      };
     }
     if (matches.length > 1) {
       const candidates = matches.map((m) => `${m.app.packageId}/${parsed.actionId}`).join(", ");

@@ -1,14 +1,17 @@
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import {
+  closeSync,
   copyFileSync,
   existsSync,
   mkdirSync,
+  openSync,
   readdirSync,
   readFileSync,
   rmSync,
   unlinkSync,
   writeFileSync,
+  writeSync,
 } from "node:fs";
 import { join } from "node:path";
 import { LOCKFILE_NAME } from "./lockfile";
@@ -91,42 +94,124 @@ export function isProjectLockHeld(projectRoot: string, excludeSelf = true): bool
 
 /**
  * 获取工程修改排他锁文件（.actiondock/project.lock）。
+ * 采用 openSync("wx") 原子排他创建、持有 sessionToken 与 PID、stale 锁检测重试循环与基于 sessionToken 的释放函数。
  * 防止并发命令交叉写文件导致损坏。
+ *
+ * @param projectRoot 项目根目录
+ * @param options 锁配置参数
  */
-export function acquireProjectLock(projectRoot: string): () => void {
+export function acquireProjectLock(
+  projectRoot: string,
+  options: { sessionToken?: string } = {}
+): () => void {
   const metaDir = join(projectRoot, ".actiondock");
   if (!existsSync(metaDir)) {
     mkdirSync(metaDir, { recursive: true });
   }
 
   const lockPath = join(metaDir, "project.lock");
+  const takeoverPath = `${lockPath}.takeover`;
+  const sessionToken = options.sessionToken || randomUUID();
+  const currentPid = process.pid;
+  const lockData = {
+    pid: currentPid,
+    sessionToken,
+    createdAt: Date.now(),
+  };
+  const content = JSON.stringify(lockData, null, 2);
 
-  if (existsSync(lockPath)) {
+  while (true) {
     try {
-      const lockData = JSON.parse(readFileSync(lockPath, "utf-8"));
-      if (lockData.pid && isPidAlive(lockData.pid)) {
-        throw new Error(
-          `Project modification lock is held by PID ${lockData.pid}. Another command is running in ${projectRoot}.`
-        );
+      const fd = openSync(lockPath, "wx", 0o600);
+      try {
+        writeSync(fd, content);
+      } finally {
+        closeSync(fd);
       }
+      break;
     } catch (err: any) {
-      if (err.message?.includes("held by PID")) {
-        throw err;
+      if (err && err.code === "EEXIST") {
+        let existing: { pid?: number; sessionToken?: string; createdAt?: number } | undefined;
+        try {
+          const raw = readFileSync(lockPath, "utf-8");
+          if (raw.trim().length > 0) {
+            existing = JSON.parse(raw);
+          }
+        } catch {
+          // 损坏或并发写入中的锁文件
+        }
+
+        if (existing && typeof existing.pid === "number") {
+          if (isPidAlive(existing.pid)) {
+            throw new Error(
+              `Project modification lock is held by PID ${existing.pid}. Another command is running in ${projectRoot}.`
+            );
+          }
+        }
+
+        // 持有者 PID 已死亡（或损坏的锁文件），属于陈旧锁，进行原子接管竞争
+        let takeoverFd: number | null = null;
+        try {
+          takeoverFd = openSync(takeoverPath, "wx", 0o600);
+        } catch (takeoverErr: any) {
+          if (takeoverErr && takeoverErr.code === "EEXIST") {
+            try {
+              const raw = readFileSync(takeoverPath, "utf-8");
+              if (raw.trim().length > 0) {
+                const info = JSON.parse(raw);
+                if (info && typeof info.pid === "number" && !isPidAlive(info.pid)) {
+                  unlinkSync(takeoverPath);
+                }
+              }
+            } catch {
+              // 忽略陈旧接管锁清理异常
+            }
+          }
+          continue;
+        }
+
+        try {
+          try {
+            writeSync(takeoverFd, JSON.stringify({ pid: currentPid, createdAt: Date.now() }));
+          } catch {
+            // 忽略写入异常
+          }
+
+          let recheck: { pid?: number; sessionToken?: string } | undefined;
+          try {
+            const recheckRaw = readFileSync(lockPath, "utf-8");
+            if (recheckRaw.trim().length > 0) {
+              recheck = JSON.parse(recheckRaw);
+            }
+          } catch {
+            // 忽略二次读取异常
+          }
+
+          if (recheck && typeof recheck.pid === "number" && isPidAlive(recheck.pid)) {
+            throw new Error(
+              `Project modification lock is held by PID ${recheck.pid}. Another command is running in ${projectRoot}.`
+            );
+          }
+
+          try {
+            unlinkSync(lockPath);
+          } catch {
+            // 忽略解绑异常
+          }
+        } finally {
+          try {
+            unlinkSync(takeoverPath);
+          } catch {
+            // 忽略解绑异常
+          }
+          closeSync(takeoverFd);
+        }
+
+        continue;
       }
-    }
-    // 旧进程已终止，安全清理过期残留锁
-    try {
-      unlinkSync(lockPath);
-    } catch {
-      // 忽略解绑异常
+      throw err;
     }
   }
-
-  writeFileSync(
-    lockPath,
-    JSON.stringify({ pid: process.pid, createdAt: Date.now() }, null, 2),
-    "utf-8"
-  );
 
   let released = false;
   return () => {
@@ -134,7 +219,11 @@ export function acquireProjectLock(projectRoot: string): () => void {
     released = true;
     try {
       if (existsSync(lockPath)) {
-        unlinkSync(lockPath);
+        const raw = readFileSync(lockPath, "utf-8");
+        const onDisk = JSON.parse(raw);
+        if (onDisk && onDisk.sessionToken === sessionToken) {
+          unlinkSync(lockPath);
+        }
       }
     } catch {
       // 忽略释放异常
@@ -333,77 +422,77 @@ export async function beginTransaction(
 
 /**
  * 依据事务日志恢复所有待恢复的悬空事务快照，并在成功后执行冻结安装。
+ * 进入恢复前通过 acquireProjectLock 原子获取排他锁，持有锁执行恢复，完成后通过释放函数安全释放锁。
+ * 若获取锁失败（已有活跃进程正在执行）则安全退出并返回空数组，杜绝 TOCTOU 竞争。
  * 若冻结安装失败则抛出 PROJECT_RECOVERY_REQUIRED 并阻止 Host 启动。
  */
 export async function recoverPendingTransactions(
   projectRoot: string,
   options?: { frozenInstall?: boolean }
 ): Promise<string[]> {
-  if (isProjectLockHeld(projectRoot)) {
-    return [];
-  }
-
   const txBaseDir = join(projectRoot, ".actiondock", "transactions");
   if (!existsSync(txBaseDir)) {
     return [];
   }
 
-  const recoveredIds: string[] = [];
-  const entries = readdirSync(txBaseDir);
+  let releaseLock: (() => void) | undefined;
+  try {
+    releaseLock = acquireProjectLock(projectRoot);
+  } catch {
+    // 获取失败（有活跃进程在执行），安全退出并返回空数组
+    return [];
+  }
 
-  for (const entry of entries) {
-    const txDir = join(txBaseDir, entry);
-    const metaPath = join(txDir, "transaction.json");
-    if (!existsSync(metaPath)) continue;
+  try {
+    const recoveredIds: string[] = [];
+    const entries = readdirSync(txBaseDir);
 
-    let meta: TransactionMetadata;
-    try {
-      meta = JSON.parse(readFileSync(metaPath, "utf-8"));
-    } catch {
-      continue;
-    }
+    for (const entry of entries) {
+      const txDir = join(txBaseDir, entry);
+      const metaPath = join(txDir, "transaction.json");
+      if (!existsSync(metaPath)) continue;
 
-    if (meta.status === "pending") {
-      const snapshotDir = join(txDir, "snapshot");
-      // 逐个恢复快照文件
-      for (const rec of meta.files) {
-        const targetPath = join(projectRoot, rec.name);
-        const snapPath = join(snapshotDir, rec.name);
-        if (rec.existed) {
-          if (existsSync(snapPath)) {
-            copyFileSync(snapPath, targetPath);
-          }
-        } else {
-          if (existsSync(targetPath)) {
-            unlinkSync(targetPath);
+      let meta: TransactionMetadata;
+      try {
+        meta = JSON.parse(readFileSync(metaPath, "utf-8"));
+      } catch {
+        continue;
+      }
+
+      if (meta.status === "pending") {
+        const snapshotDir = join(txDir, "snapshot");
+        // 逐个恢复快照文件
+        for (const rec of meta.files) {
+          const targetPath = join(projectRoot, rec.name);
+          const snapPath = join(snapshotDir, rec.name);
+          if (rec.existed) {
+            if (existsSync(snapPath)) {
+              copyFileSync(snapPath, targetPath);
+            }
+          } else {
+            if (existsSync(targetPath)) {
+              unlinkSync(targetPath);
+            }
           }
         }
-      }
 
-      if (options?.frozenInstall !== false) {
-        runFrozenInstall(projectRoot);
-      }
+        if (options?.frozenInstall !== false) {
+          runFrozenInstall(projectRoot);
+        }
 
-      meta.status = "rolled_back";
-      try {
-        writeFileSync(metaPath, JSON.stringify(meta, null, 2) + "\n", "utf-8");
-      } catch {
-        // 忽略写入异常
+        meta.status = "rolled_back";
+        try {
+          writeFileSync(metaPath, JSON.stringify(meta, null, 2) + "\n", "utf-8");
+        } catch {
+          // 忽略写入异常
+        }
+        rmSync(txDir, { recursive: true, force: true });
+        recoveredIds.push(meta.id);
       }
-      rmSync(txDir, { recursive: true, force: true });
-      recoveredIds.push(meta.id);
     }
-  }
 
-  // 清理可能遗留的工程排他锁
-  const lockPath = join(projectRoot, ".actiondock", "project.lock");
-  if (existsSync(lockPath)) {
-    try {
-      unlinkSync(lockPath);
-    } catch {
-      // 忽略解绑异常
-    }
+    return recoveredIds;
+  } finally {
+    releaseLock();
   }
-
-  return recoveredIds;
 }

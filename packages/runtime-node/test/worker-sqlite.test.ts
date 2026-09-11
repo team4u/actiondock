@@ -177,5 +177,48 @@ describe("WorkerSqliteDriver 工作线程驱动测试", () => {
     // 重复调用 close 不应抛出异常
     await expect(driver.close()).resolves.toBeUndefined();
   });
+
+  it("函数式事务严格拒绝 async callback 并阻止向工作线程派发未完整录制事务", async () => {
+    const dbPath = join(tempDir, "worker-async-tx.db");
+    const driver = new WorkerSqliteDriver(dbPath);
+
+    await driver.exec(`
+      CREATE TABLE tx_test (
+        id TEXT PRIMARY KEY,
+        val TEXT NOT NULL
+      );
+    `);
+
+    // 提交非法异步 callback 事务，必须被拒绝并抛出明确错误
+    await expect(
+      driver.transaction(async () => {
+        driver.run("INSERT INTO tx_test (id, val) VALUES (?, ?)", "id-1", "val-1");
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      })
+    ).rejects.toThrow(/WORKER_TRANSACTION_ASYNC_FORBIDDEN/);
+
+    // 提交返回 thenable 对象的函数式事务，同样必须被严格拒绝
+    await expect(
+      driver.transaction(() => ({
+        then(resolve: () => void) {
+          resolve();
+        },
+      }))
+    ).rejects.toThrow(/WORKER_TRANSACTION_ASYNC_FORBIDDEN/);
+
+    // 数据库中不应残留任何数据，工作线程未收到未完整录制的事务请求
+    const rows = await driver.all("SELECT * FROM tx_test");
+    expect(rows.length).toBe(0);
+
+    // 验证正常的同步函数式事务仍可成功执行
+    await driver.transaction(() => {
+      driver.run("INSERT INTO tx_test (id, val) VALUES (?, ?)", "id-sync", "val-sync");
+    });
+    const syncedRows = await driver.all<{ id: string; val: string }>("SELECT * FROM tx_test");
+    expect(syncedRows.length).toBe(1);
+    expect(syncedRows[0].val).toBe("val-sync");
+
+    await driver.close();
+  });
 });
 
