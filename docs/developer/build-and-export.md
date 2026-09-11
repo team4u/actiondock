@@ -157,6 +157,18 @@ Node 目录型 Skill 将 ActionDock 运行时启动胶水层与依赖闭包完�
 - `--actions <actions...>`：仅导出指定的 Action 及其依赖闭包。
 - `--skill-md <path>`：显式指定现有的自定义 `SKILL.md` 说明书，避免被默认模板覆盖。
 - `--bundle [name]`：在源码模式下将工作区内多个包聚合导出为单一复合技能套件。
+- `--custom-md <path>`：复合导出时指定自定义说明书模板（`SKILL.custom.md`），支持通过插槽（`intro`、`after-init`、`after-describe`、`after-actions`、`after-playbooks`、`after-invoke`、`append`）注入定制段落与覆盖描述。
+- `--skill-md-only`：仅就地重生成复合 `SKILL.md` 说明书，不重复拷贝子包代码与文件资产。
+
+---
+
+## 本地相对依赖与 `files` 声明规范
+
+为了防止导出的 Skill 或交付目录丢失非入口引用的辅助模块，ActionDock 建立了严格的本地依赖完整性校验机制：
+
+- 单文件推荐：原子 Action 推荐保持单一职责与高内聚，尽量以独立单文件形式编写。
+- 包内共享模块声明：若 Action 依赖包内公共源码或工具目录（如 `src/utils`、`lib/`），必须在 `actiondock.json` 清单的 `files` 数组中显式声明该目录（例如 `"files": ["src", "lib"]`）。
+- 完整性自动拦截：构建规划器与导出器在执行导出及 `ad validate` 时，会自动静态解析相对路径导入。若检测到 Action 引用了未包含在 `actions` 且未在 `files` 声明的文件，工具链将直接报错阻断，防止交付损坏产物。
 
 ---
 
@@ -197,4 +209,8 @@ Node 目录型 Skill 将 ActionDock 运行时启动胶水层与依赖闭包完�
 - **工作区多包复合导出**：
   ```bash
   ad export skill --workspace --bundle devops-suite --out ./dist/devops-suite
+  ```
+- **就地仅刷新复合说明书**：
+  ```bash
+  ad export skill --bundle devops-suite --skill-md-only
   ```

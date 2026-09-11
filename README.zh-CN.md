@@ -277,6 +277,46 @@ npm run test:pack
 
 ---
 
+## 技术文档中心
+
+更详细的架构解析、开发教程与参考手册请查阅 [在线官方文档](https://team4u.github.io/actiondock/) 或本地文档目录：
+
+- 快速概览：
+  - [环境安装与准备](docs/getting-started/installation.md)：Node.js 运行底座、命令行全局安装与开发工作流。
+  - [核心概览与双轨导引](docs/getting-started/overview.md)：系统架构总览、子包分层体系与角色路径选择。
+- 使用者指南：
+  - [消费与接入总览](docs/consumer/overview.md)：工程依赖消费、智能体技能装载与接入选型。
+  - [Agent Skill 使用指南](docs/consumer/use-as-skill.md)：通过 npx skills 一键安装、装载路径与规程调用。
+  - [开发工具 MCP 接入](docs/consumer/use-as-mcp.md)：STDIO 服务直连 Cursor 与 Windsurf。
+  - [Node 交付产物运行](docs/consumer/standalone-run.md)：自包含 Node.js 目录交付产物运行与离线依赖。
+  - [HTTP 微服务与 API 调度](docs/consumer/http-service.md)：微服务启动与 REST API 远程调度。
+  - [消费端配置与凭证注入](docs/consumer/configuration.md)：API 令牌、环境变量与持久化配置注入。
+- 开发者指南：
+  - [快速上手开发](docs/developer/quick-start.md)：工程初始化、编写 Action 与本地调试。
+  - [深入业务 Action 开发](docs/developer/first-action.md)：强类型模式、状态持久化与外部 API 调用。
+  - [编写 Playbook 规程](docs/developer/playbooks.md)：领域专家标准作业规程编排与安全红线。
+  - [单元测试与沙箱验证](docs/developer/testing.md)：纯内存毫秒级单元测试与确定性时钟。
+  - [状态持久化与 SQLite 存储](docs/developer/storage.md)：内嵌 SQLite 数据模型、KV 存储与过期策略。
+  - [多环境 Profile 与远程调度](docs/developer/profiles.md)：多云环境节点管理与凭证保护。
+  - [构建打包与 Skill 导出](docs/developer/build-and-export.md)：目录交付产物构建、npm 打包与技能资产导出。
+- 核心概念：
+  - [Action Package 核心抽象](docs/concepts/action-package.md)：包能力、操作规程、接口契约与运行态。
+  - [Action 原子能力契约](docs/concepts/action.md)：动作定义函数与模式即契约设计哲学。
+  - [ActionContext 运行时上下文](docs/concepts/action-context.md)：配置解析回退、持久化状态、级联调用与取消链路。
+  - [Playbook 规程模型](docs/concepts/playbook.md)：面向智能体的标准作业规程与安全边界。
+  - [Agent Skill 技能资产规范](docs/concepts/skill.md)：源码型与 Node 目录型双模导出交付规范。
+- 参考手册与底层架构：
+  - [CLI 命令行速查](docs/reference/cli.md)：全量 ad 命令、选项标志与退出码规范。
+  - [配置解析回退机制](docs/reference/config.md)：配置多级回退链与环境变量解析。
+  - [Action SDK API 参考](docs/reference/action-api.md)：公共 SDK 核心导出函数与接口契约。
+  - [错误代码速查手册](docs/reference/error-codes.md)：标准 JSON 错误信封与自愈决策表。
+  - [版本迁移参考指南](docs/reference/v1-to-v2-migration.md)：旧版架构升级对比与平滑演进步骤。
+  - [Runtime 执行引擎架构](docs/architecture/runtime.md)：单一终态状态机与并发管控。
+  - [输出通道物理隔离设计](docs/architecture/stdout-stderr.md)：数据信封与诊断日志物理隔离。
+  - [安全加固与防御模型](docs/architecture/security.md)：非回环鉴权、常数时间比对与原型污染防护。
+
+---
+
 ## 开源协议
 
 本项目采用 Apache-2.0 开源协议。

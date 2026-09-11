@@ -77,7 +77,7 @@
 
 ## Action 业务实现标准
 
-Action 业务代码必须通过 [`defineAction`](file:///root/code/action-dock/packages/sdk/src/action.ts) 默认导出，显式声明输入与输出类型契约：
+Action 业务代码必须通过 `defineAction` 默认导出，显式声明输入与输出类型契约：
 
 ```typescript
 import { defineAction } from "@actiondock/sdk";
@@ -93,7 +93,7 @@ export interface Output {
 }
 
 export default defineAction<Input, Output>(async (input, ctx) => {
-  // 配置读取：自动遵循 5 级优先级解析
+  // 配置读取：自动遵循 6 级优先级解析
   const token = ctx.config.get<string>("GITHUB_TOKEN");
 
   // 持久化状态：跨生命周期持久化存储（支持秒级过期 TTL）
@@ -125,11 +125,11 @@ export default defineAction<Input, Output>(async (input, ctx) => {
 
 ## 运行时上下文 API 速查
 
-传递给 Action 执行函数的 [`ActionContext`](file:///root/code/action-dock/packages/sdk/src/types.ts) 包含以下环境模块：
+传递给 Action 执行函数的 `ActionContext` 包含以下环境模块：
 
 | 模块名称 | 核心方法签名 | 职责说明 |
 | :--- | :--- | :--- |
-| `ctx.config` | `get<T>(key: string, defaultValue?: T): T` | 读取配置，自动遵循 5 级优先级解析 |
+| `ctx.config` | `get<T>(key: string, defaultValue?: T): T` | 读取配置，自动遵循 6 级优先级解析 |
 | | `has(key: string): boolean` | 检查指定配置项是否存在 |
 | `ctx.state` | `get<T>(key: string): Promise<T \| undefined>` | 读取持久化状态数据 |
 | | `set<T>(key: string, value: T, ttl?: number): Promise<void>` | 写入状态数据，`ttl` 单位为秒 |
@@ -202,7 +202,7 @@ Playbook 用于将分散的原子 Action 编排为针对特定业务场景的标
 
 ## 单元测试与沙箱验证规范
 
-ActionDock 提供了纯内存测试沙箱 [`createTestRuntime`](file:///root/code/action-dock/packages/testing/src/runtime.ts)，测试执行无需真实网络或外部数据库：
+ActionDock 提供了纯内存测试沙箱 `createTestRuntime`，测试执行无需真实网络或外部数据库：
 
 ```typescript
 import { describe, it } from "node:test";

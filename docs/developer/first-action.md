@@ -15,40 +15,15 @@
 
 ---
 
-## 脚手架与目录规范
+## 脚手架创建 Action
 
-通过初始化命令构建项目：
+在已有 ActionDock 工程中，使用命令行工具脚手架生成动作源码骨架：
 
 ```bash
-ad init my-action
-cd my-action
-npm install
+ad new action github.get-pr --desc "获取 GitHub Pull Request 详情与状态"
 ```
 
-生成的项目目录结构如下：
-
-```text
-my-action/
-├── actiondock.json           # 项目元数据、配置声明与动作清单唯一事实源
-├── package.json              # 依赖与标准测试脚本
-├── tsconfig.json             # TypeScript 配置
-├── .gitignore                # 忽略文件列表
-├── actions/                  # Action 源码目录
-│   └── get-pr.ts             # 业务执行函数源码
-├── playbooks/                # 规程目录
-└── tests/                    # 单元测试目录
-    └── get-pr.test.ts        # 业务测试用例
-```
-
-其中 `package.json` 包含 Node.js 标准测试脚本：
-
-```json
-{
-  "scripts": {
-    "test": "node --import tsx --test tests/*.test.ts"
-  }
-}
-```
+该命令会在 `actions/get-pr.ts` 生成动作执行函数模板，并在 `actiondock.json` 中自动注册动作条目。
 
 ---
 

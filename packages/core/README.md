@@ -14,7 +14,7 @@ ActionDock 2.0 核心领域模型与调度引擎。
 
 ### ActionDockTarget 统一调用门面
 
-[ActionDockTarget](file:///root/code/action-dock/packages/core/src/target/types.ts) 为命令行工具、上层服务与应用集成屏蔽本地执行、远程服务与跨进程通信的物理拓扑差异：
+[ActionDockTarget](./src/target/types.ts) 为命令行工具、上层服务与应用集成屏蔽本地执行、远程服务与跨进程通信的物理拓扑差异：
 
 - 本地门面 LocalTarget：直接调用本地加载的 ActionDockApp 或 ActionDockHost 实例，在同进程内高效执行。
 - 远程门面 RemoteTarget：通过 HTTP 协议与远程 ActionDock 服务通信，支持鉴权令牌与请求超时控制。
@@ -22,7 +22,7 @@ ActionDock 2.0 核心领域模型与调度引擎。
 
 ### TargetError 结构化异常
 
-[TargetError](file:///root/code/action-dock/packages/core/src/target/types.ts) 继承标准 Error，提供机器可读的结构化错误码与附加详情：
+[TargetError](./src/target/types.ts) 继承标准 Error，提供机器可读的结构化错误码与附加详情：
 
 - `TARGET_PROTOCOL_UNSUPPORTED`：协议版本或特性不受支持。
 - `TARGET_CAPABILITY_UNAVAILABLE`：目标端未启用或缺失所需能力。
@@ -32,7 +32,7 @@ ActionDock 2.0 核心领域模型与调度引擎。
 
 ## 数据目录锁与故障恢复
 
-[DataDirLock](file:///root/code/action-dock/packages/core/src/storage/data-dir-lock.ts) 在数据目录下维护 `.actiondock.data.lock` 排他文件锁，记录宿主主进程与受管子进程状态，防止多实例并发冲突：
+[DataDirLock](./src/storage/data-dir-lock.ts) 在数据目录下维护 `.actiondock.data.lock` 排他文件锁，记录宿主主进程与受管子进程状态，防止多实例并发冲突：
 
 - `DATA_DIR_IN_USE`：检测到已有活跃宿主主进程正在持有该数据目录，拒绝并发启动。
 - `DATA_DIR_RECOVERY_REQUIRED`：检测到前序宿主主进程异常退出，但仍有关联受管子进程处于运行状态，触发故障恢复拦截。
@@ -44,8 +44,8 @@ ActionDock 2.0 核心领域模型与调度引擎。
 
 基于 `actiondock.lock.json`（规范版本 `lockfileVersion: 1`）提供严格的依赖版本锁定与原子事务保护：
 
-- 依赖解析：[ActionPackageResolver](file:///root/code/action-dock/packages/core/src/project/resolver.ts) 递归解析本地包依赖与符号链接，避免重复加载。
-- 原子事务：[beginTransaction](file:///root/code/action-dock/packages/core/src/project/transactions.ts) 在执行依赖增删（如 `ad add` 与 `ad remove`）前为 `package.json`、`actiondock.json` 与 `actiondock.lock.json` 创建磁盘快照。若安装或校验流程失败，自动执行原子回滚并恢复原始状态。
+- 依赖解析：[ActionPackageResolver](./src/project/resolver.ts) 递归解析本地包依赖与符号链接，避免重复加载。
+- 原子事务：[beginTransaction](./src/project/transactions.ts) 在执行依赖增删（如 `ad add` 与 `ad remove`）前为 `package.json`、`actiondock.json` 与 `actiondock.lock.json` 创建磁盘快照。若安装或校验流程失败，自动执行原子回滚并恢复原始状态。
 
 ---
 
@@ -80,7 +80,7 @@ ActionDock 2.0 核心领域模型与调度引擎。
 
 ### ActionRunner 执行状态机
 
-[ActionRunner](file:///root/code/action-dock/packages/core/src/execution/runner.ts) 是单个 Action 执行的核心引擎，负责完整的生命周期状态流转与契约保障：
+[ActionRunner](./src/execution/runner.ts) 是单个 Action 执行的核心引擎，负责完整的生命周期状态流转与契约保障：
 
 - 调用链环路检测：基于调用栈跟踪，当检测到依赖循环调用时立即拦截并返回错误信封。
 - 模式严格校验：在 Action 执行前校验输入数据是否满足模式规范，校验失败时直接阻断并生成结构化诊断信息。
@@ -90,7 +90,7 @@ ActionDock 2.0 核心领域模型与调度引擎。
 
 ### DefaultExecutionService 统一执行服务
 
-[DefaultExecutionService](file:///root/code/action-dock/packages/core/src/execution/service.ts) 负责系统层面的并发控制、任务追踪与生命周期协同：
+[DefaultExecutionService](./src/execution/service.ts) 负责系统层面的并发控制、任务追踪与生命周期协同：
 
 - 并发度控制：维护活跃任务表，支持配置系统最大并发上限，超限时排队或拒绝。
 - 全链路追踪：为每次执行分配全局唯一的根运行标识与父子调用关联。
@@ -103,8 +103,8 @@ ActionDock 2.0 核心领域模型与调度引擎。
 
 `@actiondock/core` 保持平台中立，不绑定任何特定运行环境：
 
-- 在日常生产与 Node.js 运行时中，通过 [@actiondock/runtime-node](file:///root/code/action-dock/packages/runtime-node/README.md) 注入默认同步存储驱动与 Node.js 进程执行器（另有独立异步驱动 WorkerSqliteDriver 可选）。
-- 在自动化测试中，通过 [@actiondock/testing](file:///root/code/action-dock/packages/testing/README.md) 注入纯内存存储驱动 MemoryStorage 与模拟进程执行器 MockProcessExecutor。
+- 在日常生产与 Node.js 运行时中，通过 [@actiondock/runtime-node](../runtime-node/README.md) 注入默认同步存储驱动与 Node.js 进程执行器（另有独立异步驱动 WorkerSqliteDriver 可选）。
+- 在自动化测试中，通过 [@actiondock/testing](../testing/README.md) 注入纯内存存储驱动 MemoryStorage 与模拟进程执行器 MockProcessExecutor。
 
 ---
 

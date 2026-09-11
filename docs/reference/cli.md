@@ -239,6 +239,45 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
 
 ---
 
+### 多环境与远程 Profile 管理
+
+- 列出所有环境配置 (`ad profile list`)：
+  ```bash
+  ad profile list [patterns...] [-i, --intent <pattern>] [--reveal] [--fallback] [--no-fallback] [--json] [--envelope]
+  ```
+  列出所有已配置的远程环境节点，支持通过 `--reveal` 明文展示敏感 Token。
+
+- 查看环境配置详情 (`ad profile get` 或 `ad profile show`)：
+  ```bash
+  ad profile get <name> [--reveal] [--json] [--envelope]
+  ad profile show <name> [--reveal] [--json] [--envelope]
+  ```
+
+- 添加或更新环境配置 (`ad profile add`)：
+  ```bash
+  ad profile add <name> --server <url> [--token <token>] [--token-env <envVar>] [-d, --desc <description>]
+  ```
+  注册远端环境节点，推荐使用 `--token-env` 引用环境变量以提升安全性。
+
+- 切换当前默认环境 (`ad profile use`)：
+  ```bash
+  ad profile use <name>
+  # 切换回本地执行模式
+  ad profile use local
+  ```
+
+- 探测远端环境连通性 (`ad profile test`)：
+  ```bash
+  ad profile test <name> [--json] [--envelope]
+  ```
+
+- 移除环境配置 (`ad profile remove`)：
+  ```bash
+  ad profile remove <name>
+  ```
+
+---
+
 ### 协议集成与微服务
 
 - 启动 MCP 服务 (`ad mcp`)：

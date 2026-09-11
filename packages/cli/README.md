@@ -135,10 +135,10 @@ ad pack
 
 作为顶层门面与独立运行分发器，`@actiondock/cli` 串联以下子包：
 
-- 运行时适配：依赖 [@actiondock/runtime-node](file:///root/code/action-dock/packages/runtime-node/README.md)，在启动时自动注入基于 Node.js 原生能力的驱动实现。
-- 领域内核：依赖 [@actiondock/core](file:///root/code/action-dock/packages/core/README.md)，调度统一调用门面 ActionDockTarget、数据目录锁 DataDirLock 与依赖事务管理器。
-- 构建与打包：依赖 [@actiondock/builder](file:///root/code/action-dock/packages/builder/README.md)，完成目录交付构建、npm 打包与技能导出。
-- 协议服务：通过 [@actiondock/mcp](file:///root/code/action-dock/packages/mcp/README.md) 启动协议监听。
+- 运行时适配：依赖 [@actiondock/runtime-node](../runtime-node/README.md)，在启动时自动注入基于 Node.js 原生能力的驱动实现。
+- 领域内核：依赖 [@actiondock/core](../core/README.md)，调度统一调用门面 ActionDockTarget、数据目录锁 DataDirLock 与依赖事务管理器。
+- 构建与打包：依赖 [@actiondock/builder](../builder/README.md)，完成目录交付构建、npm 打包与技能导出。
+- 协议服务：通过 [@actiondock/mcp](../mcp/README.md) 启动协议监听。
 
 ---
 

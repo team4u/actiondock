@@ -1,6 +1,6 @@
 # 参考手册：Action SDK API
 
-[`@actiondock/sdk`](file:///root/code/action-dock/packages/sdk/src/index.ts) 是编写 ActionDock Action 的基础核心包，提供 Action 定义方法、契约接口与运行时上下文环境。
+[`@actiondock/sdk`](../../packages/sdk/README.md) 是编写 ActionDock Action 的基础核心包，提供 Action 定义方法、契约接口与运行时上下文环境。
 
 ---
 
@@ -43,7 +43,7 @@ export interface ActionDefinition<I = unknown, O = unknown> {
 
 ## `ActionContext` 运行时上下文
 
-每次执行 Action 时，底层运行时引擎均向 `run` 方法传入全新的 [`ActionContext`](file:///root/code/action-dock/packages/sdk/src/types.ts) 实例：
+每次执行 Action 时，底层运行时引擎均向 `run` 方法传入全新的 `ActionContext` 实例：
 
 ```ts
 export interface ActionContext {
@@ -196,7 +196,7 @@ export interface ActionRef {
 
 ### 统一受管外部进程接口 `ProcessAPI`
 
-ActionDock 2.0 严格规范受管进程调用，[`ProcessAPI`](file:///root/code/action-dock/packages/sdk/src/types.ts) 仅提供 `exec` 与 `spawn` 两个方法（彻底移除了旧版的 `spawnDetached`、`execCli` 与 `findExecutable`）：
+ActionDock 2.0 严格规范受管进程调用，`ProcessAPI` 仅提供 `exec` 与 `spawn` 两个方法（彻底移除了旧版的 `spawnDetached`、`execCli` 与 `findExecutable`）：
 
 ```ts
 export interface ProcessAPI {

@@ -34,19 +34,13 @@ Action 执行 ───┤
 
 ---
 
-## 子进程标准输出物理隔离与受管生命周期
+## 子进程输出的物理管道解耦
 
-Action 在执行系统命令时（如调用 `ctx.process.exec` 执行 `git`、`docker` 等外部 CLI），外部工具的输出极易通过控制台隐式透传至宿主标准输出中，造成致命的通道污染。ActionDock 通过底层的物理隔离与受管生命周期彻底消除此隐患：
+当 Action 内部通过 `ctx.process.exec` 调用外部命令行工具（如 `git`、`docker` 等 CLI）时，外部进程的打印极易穿透至宿主控制台，破坏大模型的 JSON 信封解析。ActionDock 通过底层的物理管道解耦消除了此隐患：
 
-### 物理管道解耦机制
-
-- **独立物理管道配置**：底层进程执行器（`NodeProcessExecutor`）在派生外部子进程时，严格配置 `stdio: ["pipe", "pipe", "pipe"]`，完全切断子进程标准流与宿主进程标准流之间的直接连接。
-- **结构化内存汇集**：子进程的标准输出与标准错误分别流向独立的内存数据流管道，汇集为结构化的 `ProcessResult` 对象（包含 `stdout`、`stderr`、`exitCode` 与 `durationMs`），并仅作为业务返回值交付给 Action 逻辑。子进程的任何打印输出均不可能直接穿透至宿主标准输出中。
-
-### 受管执行生命周期
-
-- **缓冲区安全熔断**：为防止失控的子进程产生海量输出导致宿主内存溢出，系统默认设置 10MB 严格容量上限（`maxOutputBytes`）。管道接收字节数超限时即刻截断并终止进程，返回 `PROCESS_OUTPUT_LIMIT` 错误。
-- **独立进程组与信号升级**：在 POSIX 平台配置 `detached: true` 并在 Windows 平台配合进程树管理，执行器在检测到超时或接收到 `ctx.signal` 取消信号时，通过 `killProcessGroup` 跨平台统一终止整个子进程树。先发送 `SIGTERM` 并在宽限期后升级为 `SIGKILL`，杜绝孤儿进程泄漏。
+- 独立物理管道配置：底层进程执行器（`NodeProcessExecutor`）在派生外部子进程时，严格配置 `stdio: ["pipe", "pipe", "pipe"]`，切断子进程与宿主标准流之间的直接贯通。
+- 内存流结构化汇集：子进程的输出被重定向至内部内存管道，汇集为结构化的 `ProcessResult` 对象（包含 `stdout`、`stderr`、`exitCode` 与 `durationMs`），作为返回值交付给 Action 业务逻辑。外部命令行的任何字符均无法直接溢出至宿主标准输出中。
+- 关于子进程输出容量熔断、独立进程树终止与孤儿进程治理的完整机制，请参阅 [安全加固与防御模型](security.md)。
 
 ---
 

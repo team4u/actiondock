@@ -277,6 +277,46 @@ npm run test:pack
 
 ---
 
+## Documentation Center
+
+For comprehensive architectural deep-dives, developer tutorials, and reference manuals, visit the [Online Documentation](https://team4u.github.io/actiondock/) or explore the local documentation:
+
+- Getting Started:
+  - [Installation and Setup](docs/getting-started/installation.md): Node.js baseline, global ad CLI installation, and setup workflows.
+  - [Overview and Dual-Track Guide](docs/getting-started/overview.md): Architecture overview, multi-package layers, and consumer vs developer paths.
+- Consumer Guides:
+  - [Consumption Overview](docs/consumer/overview.md): Project dependency consumption, skill installation, and integration options.
+  - [Agent Skill Usage Guide](docs/consumer/use-as-skill.md): Installation via npx skills, loading paths, and playbook resolution.
+  - [Developer Tool MCP Integration](docs/consumer/use-as-mcp.md): Connecting Cursor, Windsurf, and Claude via STDIO MCP.
+  - [Running Node Delivery Builds](docs/consumer/standalone-run.md): Executing standalone Node.js builds and offline dependencies.
+  - [Remote HTTP Microservices](docs/consumer/http-service.md): Daemon microservices and remote REST API invocations.
+  - [Configuration and Credentials](docs/consumer/configuration.md): API tokens, environment variables, and SQLite configuration injection.
+- Developer Guides:
+  - [Quick Start](docs/developer/quick-start.md): Initialization, writing defineAction, and local testing.
+  - [Building Real-World Actions](docs/developer/first-action.md): Strict schema validation, persistent state, and external APIs.
+  - [Authoring Playbooks](docs/developer/playbooks.md): Standard operating procedures and safety boundaries for AI agents.
+  - [Unit Testing and Sandbox Verification](docs/developer/testing.md): In-memory testing with createTestRuntime and FakeClock.
+  - [State Persistence with SQLite](docs/developer/storage.md): Embedded SQLite storage, KV persistence, and TTL expiration.
+  - [Remote Profiles and Multi-Environment](docs/developer/profiles.md): Managing cloud runner profiles and credential protection.
+  - [Building and Skill Exporting](docs/developer/build-and-export.md): Packaging Node.js delivery directories, npm tarballs, and skills.
+- Core Concepts:
+  - [Action Package Abstraction](docs/concepts/action-package.md): The four pillars (actions, playbooks, contracts, and runtime).
+  - [Atomic Action Contracts](docs/concepts/action.md): Action definition functions and schema-as-contract principles.
+  - [ActionContext Runtime Context](docs/concepts/action-context.md): Configuration resolution fallback, state persistence, and cancellation.
+  - [Playbook Model](docs/concepts/playbook.md): Agent-oriented operating procedures and execution sequences.
+  - [Agent Skill Specification](docs/concepts/skill.md): Source-mode and Node-mode export specifications.
+- Reference and Architecture:
+  - [CLI Reference](docs/reference/cli.md): Complete ad commands, options, and exit codes.
+  - [Configuration Resolution](docs/reference/config.md): Multi-tier fallback hierarchy and environment variable resolution.
+  - [Action SDK API Reference](docs/reference/action-api.md): Core SDK exports, functions, and contract interfaces.
+  - [Error Codes Reference](docs/reference/error-codes.md): Standard JSON error envelopes and recovery decision tables.
+  - [Migration from 1.0 to 2.0](docs/reference/v1-to-v2-migration.md): Architectural comparison and migration guide.
+  - [Runtime Execution Engine](docs/architecture/runtime.md): ActionRunner state machine and concurrency governance.
+  - [Standard Output and Diagnostics Isolation](docs/architecture/stdout-stderr.md): Physical stream separation for LLM stability.
+  - [Security and Hardening Model](docs/architecture/security.md): Non-loopback authentication, constant-time comparison, and prototype pollution defense.
+
+---
+
 ## License
 
-Apache-2.0 License.
+This project is licensed under the Apache-2.0 License.

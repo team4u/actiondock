@@ -17,7 +17,7 @@ export default defineAction(async (input, ctx: ActionContext) => {
 ```text
 ActionContext
   │
-  ├── ctx.config   → 5 级优先级配置读取（只读）
+  ├── ctx.config   → 6 级优先级配置读取（只读）
   ├── ctx.state    → SQLite 状态持久化与生存时间管理（读写）
   ├── ctx.actions  → Action 间安全级联调用与循环检测
   ├── ctx.process  → 统一受管外部进程操作接口（exec 与 spawn）
@@ -31,12 +31,14 @@ ActionContext
 
 ## `ctx.config`：多级配置解析机制
 
-ActionDock 实现了严格的 5 级配置回退优先级模型：
+ActionDock 实现了严格的 6 级配置回退优先级模型：
 
 ```text
 单次调用参数覆盖 (--config KEY=VALUE)                    [最高]
        ↓
-包级持久化配置数据库 (ad config set KEY VALUE)
+包级 SQLite 持久化配置数据库 (ad config set KEY VALUE)
+       ↓
+全局 SQLite 持久化配置数据库 (ad config set -g KEY VALUE)
        ↓
 操作系统环境变量与环境文件映射 (PACKAGE__KEY / KEY)
        ↓
@@ -73,11 +75,11 @@ await cacheState.set("user_101", { name: "Alice" });
 
 ## `ctx.actions`：级联调用、跨包寻址与防循环机制
 
-Action 之间可以通过 [`ActionInvoker`](file:///root/code/action-dock/packages/sdk/src/types.ts) 互相安全调用。
+Action 之间可以通过 [`ActionInvoker`](../reference/action-api.md#actioninvoker) 互相安全调用。
 
 ### 调用规范与入参约束
 
-`ctx.actions.invoke` 严格仅接受动作标识符字符串或 [`ActionRef`](file:///root/code/action-dock/packages/sdk/src/types.ts) 引用对象，**严禁传入动作定义对象或裸函数**。传入定义对象会绕过清单声明、模式校验与运行记录持久化，系统将抛出 `INVALID_ACTION_REF` 错误。
+`ctx.actions.invoke` 严格仅接受动作标识符字符串或 [`ActionRef`](../reference/action-api.md#actionref) 引用对象，**严禁传入动作定义对象或裸函数**。传入定义对象会绕过清单声明、模式校验与运行记录持久化，系统将抛出 `INVALID_ACTION_REF` 错误。
 
 ```ts
 // 短标识符调用（本包或已声明依赖的动作）
@@ -113,7 +115,7 @@ const repo = await ctx.actions.invoke({
 
 ## `ctx.process`：统一进程操作接口
 
-针对外部命令调度，[`ProcessAPI`](file:///root/code/action-dock/packages/sdk/src/types.ts) 仅提供 `exec` 与 `spawn` 两个受管方法：
+针对外部命令调度，[`ProcessAPI`](../reference/action-api.md#processapi) 仅提供 `exec` 与 `spawn` 两个受管方法：
 
 ```ts
 // 执行外部命令并获取结果

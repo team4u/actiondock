@@ -12,7 +12,7 @@
 
 ### 动作实现代码
 
-使用 [`@actiondock/sdk`](file:///root/code/action-dock/packages/sdk/src/index.ts) 的 [`defineAction`](file:///root/code/action-dock/packages/sdk/src/action.ts) 声明业务执行函数：
+使用 [`@actiondock/sdk`](../reference/action-api.md) 的 [`defineAction`](../reference/action-api.md#defineaction) 声明业务执行函数：
 
 ```ts
 import { defineAction } from "@actiondock/sdk";
@@ -93,16 +93,16 @@ export default defineAction({
 
 ### 内存沙箱与智能体自测自愈
 - Action 天然支持纯内存沙箱测试。
-- 通过 [`createTestRuntime`](file:///root/code/action-dock/packages/sdk/src/test-runtime.ts) 可在毫秒级内注入模拟配置、预填状态并进行断言。
+- 通过 [`createTestRuntime`](../developer/testing.md) 可在毫秒级内注入模拟配置、预填状态并进行断言。
 - 当智能体生成 Action 实现代码后，能够依靠这一纯内存测试底座实现本地自治验证；遇到边界失败时，依据精确的错误结构自主修正代码，实现闭环自愈。
 
 ### 级联调用与循环检测
-- Action 可通过 [`ctx.actions.invoke`](file:///root/code/action-dock/packages/sdk/src/types.ts) 调度下游 Action。
-- 严格参数约束：`ctx.actions.invoke` 仅接受动作标识符字符串（短标识符如 `"greet"`、完全限定标识符如 `"shared-pkg/b"`）或 [`ActionRef`](file:///root/code/action-dock/packages/sdk/src/types.ts) 引用对象，严禁传入动作定义对象或函数，防止绕开清单声明、模式校验与运行追踪。
+- Action 可通过 [`ctx.actions.invoke`](../reference/action-api.md#actioninvoker) 调度下游 Action。
+- 严格参数约束：`ctx.actions.invoke` 仅接受动作标识符字符串（短标识符如 `"greet"`、完全限定标识符如 `"shared-pkg/b"`）或 [`ActionRef`](../reference/action-api.md#actionref) 引用对象，严禁传入动作定义对象或函数，防止绕开清单声明、模式校验与运行追踪。
 - 依赖声明检查：跨包或本包级联调用必须在清单的 `uses` 字段中显式声明；未声明调用将返回 `UNDECLARED_ACTION_DEPENDENCY`。
 - 循环与递归保护：运行时内置防死循环递归检测机制，检测到循环调用时返回 `ACTION_CALL_CYCLE`，超过子运行配额限制时返回 `ACTION_SUBRUN_LIMIT`。
 
 ### 外部命令执行与进程治理
-- 统一进程接口：通过 [`ctx.process`](file:///root/code/action-dock/packages/sdk/src/types.ts) 调度外部命令，仅提供 `exec` 与 `spawn` 方法，受管子进程统一继承根任务的取消信号与超时控制。
+- 统一进程接口：通过 [`ctx.process`](../reference/action-api.md#processapi) 调度外部命令，仅提供 `exec` 与 `spawn` 方法，受管子进程统一继承根任务的取消信号与超时控制。
 - 防管道死锁：`ctx.process.exec` 一次性异步排空管道，避免子进程继承句柄导致的挂起。
 - 缓冲区与取消保护：平台层对标准输出和标准错误设置字节上限，超时或取消时先发送终止信号，宽限期后强制终止受管进程组。

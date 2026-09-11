@@ -6,7 +6,7 @@ ActionDock 2.0 纯净核心开发者接口契约包。
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-`@actiondock/sdk` 为开发者编写原子 Action 提供零生产依赖的纯净类型定义与核心契约。测试工具（[createTestRuntime](file:///root/code/action-dock/packages/testing/src/runtime.ts)、[FakeClock](file:///root/code/action-dock/packages/testing/src/clock.ts)、[MockProcessExecutor](file:///root/code/action-dock/packages/testing/src/process.ts)、[MemoryStorage](file:///root/code/action-dock/packages/testing/src/storage.ts)）已全面收敛至 [@actiondock/testing](file:///root/code/action-dock/packages/testing/README.md)。
+`@actiondock/sdk` 为开发者编写原子 Action 提供零生产依赖的纯净类型定义与核心契约。测试工具（`createTestRuntime`、`FakeClock`、`MockProcessExecutor`、`MemoryStorage`）已全面收敛至 [@actiondock/testing](../testing/README.md)。
 
 ---
 
@@ -77,7 +77,7 @@ export default defineAction({
 
 ## 单元测试支持
 
-测试工具已全面收敛至 [@actiondock/testing](file:///root/code/action-dock/packages/testing/README.md)。在测试中使用 [createTestRuntime](file:///root/code/action-dock/packages/testing/src/runtime.ts) 进行纯内存毫秒级验证：
+测试工具已全面收敛至 [@actiondock/testing](../testing/README.md)。在测试中使用 `createTestRuntime` 进行纯内存毫秒级验证：
 
 ```ts
 import { describe, it } from "node:test";

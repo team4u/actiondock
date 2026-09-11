@@ -16,14 +16,14 @@ ActionDock 2.0 构建规划、目录交付与技能导出包。
 
 通过静态分析依赖关系与 Playbook 规程，无需执行任何业务代码，杜绝模块加载过程中的副作用：
 
-- 规划模型：[SelectionPlanner](file:///root/code/action-dock/packages/builder/src/planner.ts)（别名 BuildPlanner）读取 `actiondock.json` 与 Playbook 的 YAML 头部，提取 Actions 与 Playbooks 映射。
+- 规划模型：[SelectionPlanner](./src/planner.ts)（别名 BuildPlanner）读取 `actiondock.json` 与 Playbook 的 YAML 头部，提取 Actions 与 Playbooks 映射。
 - 递归依赖闭包：自顶向下递归解析 Action 的 `uses` 声明列表，构建完整的静态调用图。
 - 规程驱动按需剪枝：支持针对特定 Playbook 进行定向打包，自动计算并仅保留该 Playbook 直接或间接调用的最小 Action 集合，实现依赖按需裁剪。
 - 静态资产收集：自动识别并关联声明的静态资产文件。
 
 ### buildProject 目录交付产物构建
 
-[buildProject](file:///root/code/action-dock/packages/builder/src/build.ts) 将 Action Package 构建为包含运行入口、依赖闭包与静态资产的 Node.js 目录交付产物：
+[buildProject](./src/build.ts) 将 Action Package 构建为包含运行入口、依赖闭包与静态资产的 Node.js 目录交付产物：
 
 - 目录交付格式：生成标准 Node.js 可执行目录，无需单文件二进制编译器，天然跨平台兼容。
 - 预置生产依赖：支持 `--vendor-deps` 选项，将锁定的生产依赖物化至产物目录内，实现离线自包含运行。
@@ -33,7 +33,7 @@ ActionDock 2.0 构建规划、目录交付与技能导出包。
 
 ### packProject npm 包打包
 
-[packProject](file:///root/code/action-dock/packages/builder/src/pack.ts) 将 Action Package 打包为符合 npm 规范的 `.tgz` 压缩包：
+[packProject](./src/pack.ts) 将 Action Package 打包为符合 npm 规范的 `.tgz` 压缩包：
 
 - 标准分发包生成：生成可直接发布至 npm 注册表或通过包管理器安装的 tarball 产物。
 - 预检模式：支持 `--dry-run` 选项，完整校验打包清单、动作列表与文件总数，无需实际写入磁盘。
@@ -41,7 +41,7 @@ ActionDock 2.0 构建规划、目录交付与技能导出包。
 
 ### SkillExporter 技能导出器
 
-[SkillExporter](file:///root/code/action-dock/packages/builder/src/exporter.ts) 将原子 Action 与操作规程 Playbook 打包导出为面向主流 AI 智能体生态的标准 Agent Skill 资产：
+[SkillExporter](./src/exporter.ts) 将原子 Action 与操作规程 Playbook 打包导出为面向主流 AI 智能体生态的标准 Agent Skill 资产：
 
 - 生成 SKILL.md 指令：提取 Playbook 规程内容与工具元数据，合成符合智能体规范的操作指南文档与声明头部。
 - 源码模式技能导出：使用 `--mode source`（默认模式），保留 TypeScript 源码与依赖声明，适合具备 Node.js 运行环境的智能体容器直接运行。

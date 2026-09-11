@@ -43,18 +43,18 @@ my-action/
     "test": "node --import tsx --test tests/*.test.ts"
   },
   "dependencies": {
-    "@actiondock/sdk": "^2.0.2"
+    "@actiondock/sdk": "^2.2.0"
   },
   "devDependencies": {
-    "@actiondock/testing": "^2.0.2",
-    "@types/node": "^22.13.0",
+    "@actiondock/testing": "^2.2.0",
+    "@types/node": "^24.10.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0"
   }
 }
 ```
 
-在 Node.js 22.13.0 或更高版本底座下，项目默认利用原生 `node:test` 运行器配合 `tsx` 直接加载执行 TypeScript 测试文件，实现零编译等待的亚秒级测试反馈。
+在 Node.js 24.12.0 或更高版本底座下，项目默认利用原生类型擦除与测试运行器配合 `tsx` 直接加载执行 TypeScript 测试文件，实现零编译等待的亚秒级测试反馈。
 
 ---
 
@@ -298,7 +298,7 @@ ActionDock 2.0 提供了标准的目录型构建、npm Action 包打包与智能
 
 ## 下一步导引
 
-- 阅读 [深入业务 Action 开发](file:///root/code/action-dock/docs/developer/first-action.md) 了解真实外部请求、进程管理与持久化。
-- 阅读 [编写 Playbook 规程](file:///root/code/action-dock/docs/developer/playbooks.md) 掌握面向智能体的标准化规程沉淀。
-- 阅读 [单元测试与沙箱验证](file:///root/code/action-dock/docs/developer/testing.md) 深入探索确定性时钟推进、进程执行模拟与内存存储。
-- 阅读 [构建规划与产物导出](file:///root/code/action-dock/docs/developer/build-and-export.md) 了解依赖闭包裁剪、依赖物化与可复现性校验。
+- 阅读 [深入业务 Action 开发](first-action.md) 了解真实外部请求、进程管理与持久化。
+- 阅读 [编写 Playbook 规程](playbooks.md) 掌握面向智能体的标准化规程沉淀。
+- 阅读 [单元测试与沙箱验证](testing.md) 深入探索确定性时钟推进、进程执行模拟与内存存储。
+- 阅读 [构建规划与产物导出](build-and-export.md) 了解依赖闭包裁剪、依赖物化与可复现性校验。

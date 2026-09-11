@@ -116,7 +116,7 @@ npx skills remove <skill-name>
 - **第五阶段：信封结果校验与错误处置**：
   - 统一解析终端输出的标准 JSON 信封：
     - `ok: true`：提取 `data` 节点获取业务执行结果。
-    - `ok: false`：提取 `error.code` 与 `error.message`。遇到报错时查阅 [troubleshooting.md](file:///root/code/action-dock/skills/actiondock/references/troubleshooting.md) 定向自愈。
+    - `ok: false`：提取 `error.code` 与 `error.message`。遇到报错时查阅 [troubleshooting.md](troubleshooting.md) 定向自愈。
 - **第六阶段：跨生命周期状态与运行追踪**：
   - 异步任务执行 `ad runs show <runId>` 追踪执行进度与事件流；必要时执行 `ad runs cancel <runId>` 取消。
   - Action 持久化状态自动跨多次执行保持，支持通过 `ad state get` 查验上下文延续。

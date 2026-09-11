@@ -19,7 +19,7 @@ node --version
 
 ## 全局安装 ActionDock 命令行工具
 
-通过标准包管理工具全局安装 [@actiondock/cli](file:///root/code/action-dock/packages/cli/README.md) 门面工具包。该包将向操作系统注册全局命令 `ad` 与别名 `actiondock`。
+通过标准包管理工具全局安装 [@actiondock/cli](../reference/cli.md) 门面工具包。该包将向操作系统注册全局命令 `ad` 与别名 `actiondock`。
 
 ### 全局安装方式
 使用 npm 进行全局安装：
@@ -49,7 +49,7 @@ ad --help
 
 ActionDock 2.0 采用标准的包依赖管理与锁定机制，无需安装任何外部专用编译器：
 
-- 依赖锁定：通过 [actiondock.lock.json](file:///root/code/action-dock/packages/core/src/project/lockfile.ts)（规范版本 lockfileVersion: 1）严格锁定依赖树版本与完整性散列。
+- 依赖锁定：通过 `actiondock.lock.json`（规范版本 lockfileVersion: 1）严格锁定依赖树版本与完整性散列。
 - 原子事务保护：使用 `ad add` 与 `ad remove` 命令安装或卸载依赖时，框架自动创建磁盘快照，在安装失败时自动回滚，杜绝依赖配置损坏。
 - 交付产物构建：使用 `ad build` 命令将项目构建为自包含的 Node.js 目录交付产物，或使用 `ad pack` 打包为标准 npm tarball。
 
@@ -100,7 +100,7 @@ npm link
 完成链接后，全局执行 `ad` 将直接调用本地仓库中生成的最新产物。若后续修改了核心子包代码，需重新执行 `npm run build` 刷新编译产物。
 
 ### 在外部项目中链接本地 SDK
-当在独立的 Action 业务项目中调试本地修改的 [@actiondock/sdk](file:///root/code/action-dock/packages/sdk/README.md) 时，可执行依赖链接：
+当在独立的 Action 业务项目中调试本地修改的 [@actiondock/sdk](../reference/action-api.md) 时，可执行依赖链接：
 ```bash
 # 在 SDK 源码目录注册本地包链接
 cd /path/to/actiondock/packages/sdk

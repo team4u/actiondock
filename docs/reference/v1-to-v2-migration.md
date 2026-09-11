@@ -22,19 +22,19 @@ ActionDock 1.0 采用中心化服务架构，依赖常驻后台进程、关系�
 
 ActionDock 2.0 采用清晰的代码库分层结构，严格划分包职责：
 
-- 极简公共契约层：[`@actiondock/sdk`](file:///root/code/action-dock/packages/sdk/src/index.ts)
+- 极简公共契约层：`@actiondock/sdk`
   纯净轻量的公共契约包，零重型外部依赖。仅定义 `defineAction`、`ActionContext`、`ProcessAPI`、`Config`、`StateStore` 等核心抽象与 TypeScript 类型契约。
-- 确定性测试框架层：[`@actiondock/testing`](file:///root/code/action-dock/packages/testing/src/index.ts)
+- 确定性测试框架层：`@actiondock/testing`
   独立的测试运行框架。提供纯内存测试底座、虚拟时钟、命令模拟以及内存持久化存储。
-- 公共领域内核层：[`@actiondock/core`](file:///root/code/action-dock/packages/core/src/index.ts)
+- 公共领域内核层：`@actiondock/core`
   承载公共领域逻辑，包括项目元数据管理、Action 调度执行、SQLite 存储驱动、清单校验与独立运行入口。
-- 构建规划与导出层：[`@actiondock/builder`](file:///root/code/action-dock/packages/builder/src/index.ts)
+- 构建规划与导出层：`@actiondock/builder`
   负责声明式依赖选择规划、npm 打包（`ad pack`）、Node.js 交付构建与技能导出。
-- 协议适配层：[`@actiondock/mcp`](file:///root/code/action-dock/packages/mcp/src/index.ts)
+- 协议适配层：`@actiondock/mcp`
   负责 Model Context Protocol 协议适配，支持 STDIO 与 HTTP 两种通信传输通道。
-- 运行时适配层：[`@actiondock/runtime-node`](file:///root/code/action-dock/packages/runtime-node/src/index.ts)
+- 运行时适配层：`@actiondock/runtime-node`
   提供基于专用存储工作线程的 SQLite 驱动、受管外部子进程执行器及异步文件系统。
-- 命令行门面层：[`@actiondock/cli`](file:///root/code/action-dock/packages/cli/src/index.ts)
+- 命令行门面层：`@actiondock/cli`
   统一的 CLI 工具门面，负责参数解析、标准信封格式渲染以及严谨的退出码管控。
 
 ### 声明式单一事实源机制

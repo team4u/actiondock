@@ -14,7 +14,7 @@ ActionDock 2.0 原生 Node.js 运行时适配器包。
 
 ### WorkerSqliteDriver 非阻塞工作线程存储驱动
 
-[WorkerSqliteDriver](file:///root/code/action-dock/packages/runtime-node/src/worker-sqlite-driver.ts) 基于 Node.js worker_threads 模块构建：
+[WorkerSqliteDriver](./src/worker-sqlite-driver.ts) 基于 Node.js worker_threads 模块构建：
 
 - 工作线程隔离：将 SQLite 同步存储操作隔离在独立工作线程中运行，彻底避免密集数据读写与复杂事务阻塞主事件循环。
 - 独立异步驱动：作为独立异步驱动提供，不注入 core 的同步存储契约；平台默认使用同步的 NodeSqliteDriver（`useWorker` 选项仅为兼容保留，传入时会回落同步驱动并告警）。
@@ -23,7 +23,7 @@ ActionDock 2.0 原生 Node.js 运行时适配器包。
 
 ### NodeSqliteDriver 同步数据库驱动
 
-[NodeSqliteDriver](file:///root/code/action-dock/packages/runtime-node/src/sqlite-driver.ts) 基于 Node.js 内置模块 `node:sqlite` 的 DatabaseSync 实现：
+[NodeSqliteDriver](./src/sqlite-driver.ts) 基于 Node.js 内置模块 `node:sqlite` 的 DatabaseSync 实现：
 
 - 完整实现核心层定义的 SqliteDriver 接口。
 - 支持单值、展开参数与数组形式的位置参数化绑定查询，防御 SQL 注入。
@@ -32,7 +32,7 @@ ActionDock 2.0 原生 Node.js 运行时适配器包。
 
 ### NodeProcessExecutor 与 ExecaProcessExecutor 进程执行器
 
-统一进程执行器基于 Node.js 原生能力与 [ExecaProcessExecutor](file:///root/code/action-dock/packages/runtime-node/src/process-executor.ts) 实现：
+统一进程执行器基于 Node.js 原生能力与 [ExecaProcessExecutor](./src/process-executor.ts) 实现：
 
 - 完整实现核心层定义的 ProcessExecutor 接口。
 - 支持指定工作目录、环境变量合并以及向子进程标准输入流写入数据。
@@ -41,7 +41,7 @@ ActionDock 2.0 原生 Node.js 运行时适配器包。
 
 ### NodeModuleLoader 原生类型擦除源码加载器
 
-[NodeModuleLoader](file:///root/code/action-dock/packages/runtime-node/src/module-loader.ts) 充分利用 Node.js 24 原生类型擦除特性：
+[NodeModuleLoader](./src/module-loader.ts) 充分利用 Node.js 24 原生类型擦除特性：
 
 - 原生加载 TypeScript：依托 Node.js 24 原生类型擦除与 ESM 动态加载，无需额外编译步骤即可直接导入 `.ts` 与 `.mts` 源码。
 - 严格扩展名规范：严格要求显式入口扩展名，彻底拒绝无扩展名隐式补全与 CommonJS 目录索引解析。
@@ -49,7 +49,7 @@ ActionDock 2.0 原生 Node.js 运行时适配器包。
 
 ### NodeHttpServer 流式网络服务容器
 
-[NodeHttpServer](file:///root/code/action-dock/packages/runtime-node/src/http-server.ts) 基于 Node.js 原生 `node:http` 模块实现：
+[NodeHttpServer](./src/http-server.ts) 基于 Node.js 原生 `node:http` 模块实现：
 
 - 双向转换标准 Web Request 与 Web Response 流式传输。
 - 挂载路由请求处理回调，为 CLI 的 `ad serve` 与 HTTP 模式的 MCP 传输通道提供网络层支持。
@@ -59,7 +59,7 @@ ActionDock 2.0 原生 Node.js 运行时适配器包。
 
 ## 平台组装与初始化
 
-通过 [createNodePlatform](file:///root/code/action-dock/packages/runtime-node/src/platform.ts) 平台工厂函数，一键组装全套 Node.js 原生运行时实例：
+通过 [createNodePlatform](./src/platform.ts) 平台工厂函数，一键组装全套 Node.js 原生运行时实例：
 
 ```ts
 import { createNodePlatform } from "@actiondock/runtime-node";

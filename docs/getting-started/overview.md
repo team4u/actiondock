@@ -98,19 +98,19 @@ graph TD
 ### 7 个子包的分工与定位
 
 - 契约规范层：
-  - [@actiondock/sdk](file:///root/code/action-dock/packages/sdk/README.md)：极简纯契约层，零生产依赖。仅提供动作声明函数（`defineAction`）、运行时上下文接口（`ActionContext`）、配置读取接口（`Config`）、持久化状态接口（`StateStore`）、动作互调接口（`ActionInvoker`）、结构化日志接口（`Logger`）与统一进程调度接口（`ProcessAPI`，仅含 `exec` 与 `spawn` 方法）。测试工具已全面收敛至测试包。
+  - [@actiondock/sdk](../../packages/sdk/README.md)：极简纯契约层，零生产依赖。仅提供动作声明函数（`defineAction`）、运行时上下文接口（`ActionContext`）、配置读取接口（`Config`）、持久化状态接口（`StateStore`）、动作互调接口（`ActionInvoker`）、结构化日志接口（`Logger`）与统一进程调度接口（`ProcessAPI`，仅含 `exec` 与 `spawn` 方法）。测试工具已全面收敛至测试包。
 - 核心领域层：
-  - [@actiondock/core](file:///root/code/action-dock/packages/core/README.md)：框架的核心业务领域内核。提供统一调用门面 [ActionDockTarget](file:///root/code/action-dock/packages/core/src/target/types.ts)（LocalTarget、RemoteTarget、IpcTarget）、数据目录排他锁 [DataDirLock](file:///root/code/action-dock/packages/core/src/storage/data-dir-lock.ts)（提供 `DATA_DIR_IN_USE` 与 `DATA_DIR_RECOVERY_REQUIRED` 冲突保护）、依赖原子事务 [beginTransaction](file:///root/code/action-dock/packages/core/src/project/transactions.ts)、结构化异常 TargetError、核心执行引擎 [ActionRunner](file:///root/code/action-dock/packages/core/src/execution/runner.ts) 与调度协调服务 [DefaultExecutionService](file:///root/code/action-dock/packages/core/src/execution/service.ts)。彻底废弃旧版清单机制。
+  - [@actiondock/core](../../packages/core/README.md)：框架的核心业务领域内核。提供统一调用门面 `ActionDockTarget`（LocalTarget、RemoteTarget、IpcTarget）、数据目录排他锁 `DataDirLock`（提供 `DATA_DIR_IN_USE` 与 `DATA_DIR_RECOVERY_REQUIRED` 冲突保护）、依赖原子事务 `beginTransaction`、结构化异常 TargetError、核心执行引擎 `ActionRunner` 与调度协调服务 `DefaultExecutionService`。彻底废弃旧版清单机制。
 - 运行时适配层：
-  - [@actiondock/runtime-node](file:///root/code/action-dock/packages/runtime-node/README.md)：Node.js 生产环境适配驱动。针对 Node.js >=24.12.0 原生环境提供实体驱动实现，包括基于 node:sqlite 的同步存储驱动（另有独立异步驱动 WorkerSqliteDriver 可选）、基于原生 ESM 与原生类型擦除的源码模块加载器 [NodeModuleLoader](file:///root/code/action-dock/packages/runtime-node/src/module-loader.ts)、进程执行器 [ExecaProcessExecutor](file:///root/code/action-dock/packages/runtime-node/src/process-executor.ts) 以及基于 `node:http` 的流式服务容器 [NodeHttpServer](file:///root/code/action-dock/packages/runtime-node/src/http-server.ts)。
+  - [@actiondock/runtime-node](../../packages/runtime-node/README.md)：Node.js 生产环境适配驱动。针对 Node.js >=24.12.0 原生环境提供实体驱动实现，包括基于 node:sqlite 的同步存储驱动（另有独立异步驱动 WorkerSqliteDriver 可选）、基于原生 ESM 与原生类型擦除的源码模块加载器 `NodeModuleLoader`、进程执行器 `ExecaProcessExecutor` 以及基于 `node:http` 的流式服务容器 `NodeHttpServer`。
 - 构建与交付层：
-  - [@actiondock/builder](file:///root/code/action-dock/packages/builder/README.md)：构建编排规划器与交付导出器。负责依赖规划 [SelectionPlanner](file:///root/code/action-dock/packages/builder/src/planner.ts)、Node.js 目录交付产物构建（`ad build`）、npm 标准包打包（`ad pack`），以及依据 Playbook 规程将项目导出为轻量化 Agent Skill 资产（`ad export skill`，支持 `--mode source` 与 `--mode node`）。彻底删除原外部单文件编译器。
+  - [@actiondock/builder](../../packages/builder/README.md)：构建编排规划器与交付导出器。负责依赖规划 `SelectionPlanner`、Node.js 目录交付产物构建（`ad build`）、npm 标准包打包（`ad pack`），以及依据 Playbook 规程将项目导出为轻量化 Agent Skill 资产（`ad export skill`，支持 `--mode source` 与 `--mode node`）。彻底删除原外部单文件编译器。
 - 协议适配层：
-  - [@actiondock/mcp](file:///root/code/action-dock/packages/mcp/README.md)：Model Context Protocol 协议适配层。负责将 Action 自动映射为标准 MCP 工具，支持 STDIO 与 HTTP 两种传输通道，并负责双向取消信号传递与输出流纯净性保障。
+  - [@actiondock/mcp](../../packages/mcp/README.md)：Model Context Protocol 协议适配层。负责将 Action 自动映射为标准 MCP 工具，支持 STDIO 与 HTTP 两种传输通道，并负责双向取消信号传递与输出流纯净性保障。
 - 门面与工具链层：
-  - [@actiondock/cli](file:///root/code/action-dock/packages/cli/README.md)：命令行顶层门面工具与分发器。聚合所有子包能力，向终端用户与智能体暴露统一的 `ad` 命令行工具，内置标准化信封输出渲染与统一调度，提供初始化、运行、测试、服务管理、配置查询、依赖增删与构建导出等全量操作能力。
+  - [@actiondock/cli](../../packages/cli/README.md)：命令行顶层门面工具与分发器。聚合所有子包能力，向终端用户与智能体暴露统一的 `ad` 命令行工具，内置标准化信封输出渲染与统一调度，提供初始化、运行、测试、服务管理、配置查询、依赖增删与构建导出等全量操作能力。
 - 测试沙箱层：
-  - [@actiondock/testing](file:///root/code/action-dock/packages/testing/README.md)：单元测试与集成测试沙箱框架。全面收敛 [createTestRuntime](file:///root/code/action-dock/packages/testing/src/runtime.ts) 测试运行时、[FakeClock](file:///root/code/action-dock/packages/testing/src/clock.ts) 确定性虚拟时钟、[MockProcessExecutor](file:///root/code/action-dock/packages/testing/src/process.ts) 进程模拟器与 [MemoryStorage](file:///root/code/action-dock/packages/testing/src/storage.ts) 纯内存存储，在无需任何真实外设的场景下，完整复用生产环境核心执行语义。
+  - [@actiondock/testing](../../packages/testing/README.md)：单元测试与集成测试沙箱框架。全面收敛 `createTestRuntime` 测试运行时、`FakeClock` 确定性虚拟时钟、`MockProcessExecutor` 进程模拟器与 `MemoryStorage` 纯内存存储，在无需任何真实外设的场景下，完整复用生产环境核心执行语义。
 
 ---
 
@@ -173,20 +173,20 @@ ActionDock 2.0 采用 `actiondock.lock.json`（规范版本 lockfileVersion: 1�
 ### 使用者与智能体操作者
 > 目标：将现有的 Action Package 或 Skill 快速接入到工作流、IDE 或智能体中。
 
-- [消费与接入总览](file:///root/code/action-dock/docs/consumer/overview.md)：工程依赖消费、智能体技能装载与三种接入路径对比选型。
-- [Agent Skill 使用指南](file:///root/code/action-dock/docs/consumer/use-as-skill.md)：通过技能管理工具快速安装并供智能体自主调用。
-- [接入开发工具 MCP 服务](file:///root/code/action-dock/docs/consumer/use-as-mcp.md)：将工程依赖与 Action 作为 MCP 服务接入主流编辑器。
-- [Node 交付产物与运行](file:///root/code/action-dock/docs/consumer/standalone-run.md)：运行自包含 Node.js 目录交付产物与离线依赖。
-- [HTTP 远程微服务与 API 调度](file:///root/code/action-dock/docs/consumer/http-service.md)：单工程微服务与全局路由远程网络调度。
-- [消费端配置与凭证注入](file:///root/code/action-dock/docs/consumer/configuration.md)：配置凭据、环境变量与存储参数。
+- [消费与接入总览](../consumer/overview.md)：工程依赖消费、智能体技能装载与三种接入路径对比选型。
+- [Agent Skill 使用指南](../consumer/use-as-skill.md)：通过技能管理工具快速安装并供智能体自主调用。
+- [接入开发工具 MCP 服务](../consumer/use-as-mcp.md)：将工程依赖与 Action 作为 MCP 服务接入主流编辑器。
+- [Node 交付产物与运行](../consumer/standalone-run.md)：运行自包含 Node.js 目录交付产物与离线依赖。
+- [HTTP 远程微服务与 API 调度](../consumer/http-service.md)：单工程微服务与全局路由远程网络调度。
+- [消费端配置与凭证注入](../consumer/configuration.md)：配置凭据、环境变量与存储参数。
 
 ---
 
 ### 工具创作者与开发者
 > 目标：编写高质量、类型安全、带操作规程的 Action Package 并发布分发。
 
-- [快速上手开发](file:///root/code/action-dock/docs/developer/quick-start.md)：从零初始化项目并实现首个 Action。
-- [深入业务 Action 开发](file:///root/code/action-dock/docs/developer/first-action.md)：状态持久化、配置读取与外部系统集成。
-- [编写 Playbook 规程](file:///root/code/action-dock/docs/developer/playbooks.md)：为智能体编写标准化作业指导书与安全红线。
-- [单元测试与沙箱验证](file:///root/code/action-dock/docs/developer/testing.md)：利用测试沙箱进行纯内存毫秒级验证。
-- [构建打包与 Skill 导出](file:///root/code/action-dock/docs/developer/build-and-export.md)：构建 Node 目录交付产物与 npm 打包，导出适配主流智能体的技能资产。
+- [快速上手开发](../developer/quick-start.md)：从零初始化项目并实现首个 Action。
+- [深入业务 Action 开发](../developer/first-action.md)：状态持久化、配置读取与外部系统集成。
+- [编写 Playbook 规程](../developer/playbooks.md)：为智能体编写标准化作业指导书与安全红线。
+- [单元测试与沙箱验证](../developer/testing.md)：利用测试沙箱进行纯内存毫秒级验证。
+- [构建打包与 Skill 导出](../developer/build-and-export.md)：构建 Node 目录交付产物与 npm 打包，导出适配主流智能体的技能资产。

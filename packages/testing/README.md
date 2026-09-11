@@ -14,7 +14,7 @@ ActionDock 2.0 确定性测试框架与测试运行时。
 
 ### createTestRuntime 测试运行时工厂
 
-[createTestRuntime](file:///root/code/action-dock/packages/testing/src/runtime.ts) 是深度复用核心执行引擎的测试脚手架：
+[createTestRuntime](./src/runtime.ts) 是深度复用核心执行引擎的测试脚手架：
 
 - 真实生命周期校验：在纯内存测试中同步执行输入输出模式校验、调用环路死锁检测与超时控制。
 - 双模态执行接口：支持通过 `run` 直接获取业务结果（失败时抛出 ActionRuntimeError 规范异常），或通过 `execute` 获取包含运行标识与元数据的完整信封。
@@ -22,7 +22,7 @@ ActionDock 2.0 确定性测试框架与测试运行时。
 
 ### FakeClock 确定性时钟
 
-[FakeClock](file:///root/code/action-dock/packages/testing/src/clock.ts) 解耦物理系统时钟，消除异步定时器测试中的偶发性等待与竞态：
+[FakeClock](./src/clock.ts) 解耦物理系统时钟，消除异步定时器测试中的偶发性等待与竞态：
 
 - 模拟墙上时间与单调递增时间戳。
 - 通过 `advance(ms)` 瞬间推进模拟时间，并以确定性顺序依次唤醒挂起的计时器与延迟任务。
@@ -30,7 +30,7 @@ ActionDock 2.0 确定性测试框架与测试运行时。
 
 ### MockProcessExecutor 模拟进程执行器
 
-[MockProcessExecutor](file:///root/code/action-dock/packages/testing/src/process.ts) 在沙箱中拦截并伪造所有外部系统命令与子进程调用：
+[MockProcessExecutor](./src/process.ts) 在沙箱中拦截并伪造所有外部系统命令与子进程调用：
 
 - 灵活规则匹配：通过 `onCommand` 注册匹配器，支持字符串完全匹配、正则表达式匹配或自定义断言谓词函数。
 - 丰富的响应定义：支持模拟标准输出、标准错误流、非零退出码、二进制字节流以及执行耗时。
@@ -39,7 +39,7 @@ ActionDock 2.0 确定性测试框架与测试运行时。
 
 ### MemoryStorage 纯内存存储
 
-[MemoryStorage](file:///root/code/action-dock/packages/testing/src/storage.ts) 基于纯内存构建的无磁盘运行时存储实现：
+[MemoryStorage](./src/storage.ts) 基于纯内存构建的无磁盘运行时存储实现：
 
 - 具备与生产环境持久化存储完全相同的配置优先级解析规则与事务边界。
 - 完整支持状态数据的命名空间隔离、前缀检索与基于存活时间的自动过期判定。

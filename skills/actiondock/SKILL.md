@@ -25,33 +25,33 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 
 | 业务意图与需求 | 核心推荐命令 | 决策建议与关键原则 | 详尽参考手册 |
 | :--- | :--- | :--- | :--- |
-| **新建工程项目** | `ad init [directory] -i <id> -n <name>` | 生成标准工程骨架，包含清单、配置、代码与规程目录 | [developer.md](file:///root/code/action-dock/skills/actiondock/references/developer.md) |
-| **新建 Action 工具** | `ad new action <id> [-d <desc>] [-f <file>]` | 脚手架自动注册清单契约，实现标准输入输出接口 | [developer.md](file:///root/code/action-dock/skills/actiondock/references/developer.md) |
-| **新建 Playbook 规程** | `ad new playbook <id> [-d <desc>] [-a <actions...>]` | 脚手架生成规程 Markdown 模板并在清单中登记 | [developer.md](file:///root/code/action-dock/skills/actiondock/references/developer.md) |
-| **探索可用能力** | `ad info <patterns...>` 或 `ad info -i <pattern>` | 模糊意图检索，优先检查规程与工具清单 | [cli.md](file:///root/code/action-dock/skills/actiondock/references/cli.md) |
-| **列出可用 Action** | `ad list [patterns...] [-P <pkg>]` | 按包或关键词列出当前包、工作区或远端的所有 Action | [cli.md](file:///root/code/action-dock/skills/actiondock/references/cli.md) |
-| **查看 Action 详情** | `ad describe <id> [-P <pkg>]` | 查看指定 Action 的 Schema 模式、入参要求与依赖 | [cli.md](file:///root/code/action-dock/skills/actiondock/references/cli.md) |
-| **执行原子 Action** | `ad run <action> --input-file <path>` | 复杂对象推荐通过参数文件传递，杜绝引号转义损坏 | [cli.md](file:///root/code/action-dock/skills/actiondock/references/cli.md) |
-| **异步长任务调用** | `ad run <action> --async`，结合 `ad runs` 追踪 | 提交异步执行任务并获取凭据，追踪执行进度与结果 | [cli.md](file:///root/code/action-dock/skills/actiondock/references/cli.md) |
-| **执行复合业务任务** | `ad playbook show <id>`，依步骤调度对应 Action | 规程优先原则，阅读规程正文后依步骤编排调度 | [developer.md](file:///root/code/action-dock/skills/actiondock/references/developer.md) |
-| **校验清单与规程** | `ad validate` 与 `ad playbook validate` | 校验 Action 清单完整性与规程引用合法性 | [developer.md](file:///root/code/action-dock/skills/actiondock/references/developer.md) |
-| **生成 TypeScript 类型** | `ad generate types` | 基于清单 Schema 自动生成强类型声明文件 | [developer.md](file:///root/code/action-dock/skills/actiondock/references/developer.md) |
-| **安装与锁定依赖** | `ad add <package>` | 正式项目引入外部 Action 包，受原子事务保护 | [cli.md](file:///root/code/action-dock/skills/actiondock/references/cli.md) |
-| **移除外部依赖** | `ad remove <package>` | 自动检查反向引用，安全移除依赖包 | [cli.md](file:///root/code/action-dock/skills/actiondock/references/cli.md) |
-| **单元测试与验证** | `ad test [pattern]` | 内存沙箱测试，验证业务逻辑与持久化状态 | [developer.md](file:///root/code/action-dock/skills/actiondock/references/developer.md) |
-| **打包 npm 分发包** | `ad pack [-P <id>] [-o <path>] [--dry-run]` | 打包为标准 npm 压缩包用于共享与发布 | [build-and-export.md](file:///root/code/action-dock/skills/actiondock/references/build-and-export.md) |
-| **构建交付目录** | `ad build [-P <id>] [-o <path>] [--vendor-deps]` | 构建为包含生产依赖的 Node.js 运行时交付目录 | [build-and-export.md](file:///root/code/action-dock/skills/actiondock/references/build-and-export.md) |
-| **导出 Agent Skill** | `ad export skill [-P <ids...>] [-m <mode>] [--bundle]` | 导出自包含的源码型、Node 目录型或复合套件技能 | [build-and-export.md](file:///root/code/action-dock/skills/actiondock/references/build-and-export.md) |
-| **重生成复合说明书** | `ad export skill --bundle [name] --skill-md-only` | 结合自定义模板与最新清单，就地仅刷新 SKILL.md | [build-and-export.md](file:///root/code/action-dock/skills/actiondock/references/build-and-export.md) |
-| **安装与装载 Skill** | `npx skills add <repo>` 或放置于客户端目录 | 智能体技能获取、安装与主流客户端装载路径配置 | [consumer.md](file:///root/code/action-dock/skills/actiondock/references/consumer.md) |
-| **技能冷启动与挂载** | `npm install --omit=dev && ad link .` | 源码或离线技能底座就绪、依赖物化与全局挂载 | [consumer.md](file:///root/code/action-dock/skills/actiondock/references/consumer.md) |
-| **调度已装载技能** | 意图匹配 -> 规程决议 -> 查验契约 -> 执行调用 | 引导智能体调度底层能力的标准化全生命周期流 | [consumer.md](file:///root/code/action-dock/skills/actiondock/references/consumer.md) |
-| **管理运行配置项** | `ad config list`、`ad config get`、`ad config set` | 读取、设置、列出或校验项目与全局持久化配置 | [cli.md](file:///root/code/action-dock/skills/actiondock/references/cli.md) |
-| **管理持久化状态** | `ad state list`、`ad state get`、`ad state set` | 跨执行生命周期读写状态键与清理命名空间 | [cli.md](file:///root/code/action-dock/skills/actiondock/references/cli.md) |
-| **配置远程执行环境** | `ad profile list`、`ad profile add`、`ad profile use` | 管理远端 Runner 服务的连接凭证与当前切换目标 | [cli.md](file:///root/code/action-dock/skills/actiondock/references/cli.md) |
-| **启动微服务或协议** | `ad serve` 与 `ad mcp` | 暴露轻量 HTTP 运行服务或标准 MCP 协议接口 | [cli.md](file:///root/code/action-dock/skills/actiondock/references/cli.md) |
-| **本地开发软链挂载** | `ad link [path]`、`ad unlink [id|path]` | 本地源码快速试跑或多包联调，登记至本机全局路由表 | [cli.md](file:///root/code/action-dock/skills/actiondock/references/cli.md) |
-| **排查错误与自愈修复** | 遇到报错时按错误码检索决策表并自愈 | 仅在报错时查阅，严禁在执行前盲目体检 | [troubleshooting.md](file:///root/code/action-dock/skills/actiondock/references/troubleshooting.md) |
+| **新建工程项目** | `ad init [directory] -i <id> -n <name>` | 生成标准工程骨架，包含清单、配置、代码与规程目录 | [developer.md](references/developer.md) |
+| **新建 Action 工具** | `ad new action <id> [-d <desc>] [-f <file>]` | 脚手架自动注册清单契约，实现标准输入输出接口 | [developer.md](references/developer.md) |
+| **新建 Playbook 规程** | `ad new playbook <id> [-d <desc>] [-a <actions...>]` | 脚手架生成规程 Markdown 模板并在清单中登记 | [developer.md](references/developer.md) |
+| **探索可用能力** | `ad info <patterns...>` 或 `ad info -i <pattern>` | 模糊意图检索，优先检查规程与工具清单 | [cli.md](references/cli.md) |
+| **列出可用 Action** | `ad list [patterns...] [-P <pkg>]` | 按包或关键词列出当前包、工作区或远端的所有 Action | [cli.md](references/cli.md) |
+| **查看 Action 详情** | `ad describe <id> [-P <pkg>]` | 查看指定 Action 的 Schema 模式、入参要求与依赖 | [cli.md](references/cli.md) |
+| **执行原子 Action** | `ad run <action> --input-file <path>` | 复杂对象推荐通过参数文件传递，杜绝引号转义损坏 | [cli.md](references/cli.md) |
+| **异步长任务调用** | `ad run <action> --async`，结合 `ad runs` 追踪 | 提交异步执行任务并获取凭据，追踪执行进度与结果 | [cli.md](references/cli.md) |
+| **执行复合业务任务** | `ad playbook show <id>`，依步骤调度对应 Action | 规程优先原则，阅读规程正文后依步骤编排调度 | [developer.md](references/developer.md) |
+| **校验清单与规程** | `ad validate` 与 `ad playbook validate` | 校验 Action 清单完整性与规程引用合法性 | [developer.md](references/developer.md) |
+| **生成 TypeScript 类型** | `ad generate types` | 基于清单 Schema 自动生成强类型声明文件 | [developer.md](references/developer.md) |
+| **安装与锁定依赖** | `ad add <package>` | 正式项目引入外部 Action 包，受原子事务保护 | [cli.md](references/cli.md) |
+| **移除外部依赖** | `ad remove <package>` | 自动检查反向引用，安全移除依赖包 | [cli.md](references/cli.md) |
+| **单元测试与验证** | `ad test [pattern]` | 内存沙箱测试，验证业务逻辑与持久化状态 | [developer.md](references/developer.md) |
+| **打包 npm 分发包** | `ad pack [-P <id>] [-o <path>] [--dry-run]` | 打包为标准 npm 压缩包用于共享与发布 | [build-and-export.md](references/build-and-export.md) |
+| **构建交付目录** | `ad build [-P <id>] [-o <path>] [--vendor-deps]` | 构建为包含生产依赖的 Node.js 运行时交付目录 | [build-and-export.md](references/build-and-export.md) |
+| **导出 Agent Skill** | `ad export skill [-P <ids...>] [-m <mode>] [--bundle]` | 导出自包含的源码型、Node 目录型或复合套件技能 | [build-and-export.md](references/build-and-export.md) |
+| **重生成复合说明书** | `ad export skill --bundle [name] --skill-md-only` | 结合自定义模板与最新清单，就地仅刷新 SKILL.md | [build-and-export.md](references/build-and-export.md) |
+| **安装与装载 Skill** | `npx skills add <repo>` 或放置于客户端目录 | 智能体技能获取、安装与主流客户端装载路径配置 | [consumer.md](references/consumer.md) |
+| **技能冷启动与挂载** | `npm install --omit=dev && ad link .` | 源码或离线技能底座就绪、依赖物化与全局挂载 | [consumer.md](references/consumer.md) |
+| **调度已装载技能** | 意图匹配 -> 规程决议 -> 查验契约 -> 执行调用 | 引导智能体调度底层能力的标准化全生命周期流 | [consumer.md](references/consumer.md) |
+| **管理运行配置项** | `ad config list`、`ad config get`、`ad config set` | 读取、设置、列出或校验项目与全局持久化配置 | [cli.md](references/cli.md) |
+| **管理持久化状态** | `ad state list`、`ad state get`、`ad state set` | 跨执行生命周期读写状态键与清理命名空间 | [cli.md](references/cli.md) |
+| **配置远程执行环境** | `ad profile list`、`ad profile add`、`ad profile use` | 管理远端 Runner 服务的连接凭证与当前切换目标 | [cli.md](references/cli.md) |
+| **启动微服务或协议** | `ad serve` 与 `ad mcp` | 暴露轻量 HTTP 运行服务或标准 MCP 协议接口 | [cli.md](references/cli.md) |
+| **本地开发软链挂载** | `ad link [path]`、`ad unlink [id|path]` | 本地源码快速试跑或多包联调，登记至本机全局路由表 | [cli.md](references/cli.md) |
+| **排查错误与自愈修复** | 遇到报错时按错误码检索决策表并自愈 | 仅在报错时查阅，严禁在执行前盲目体检 | [troubleshooting.md](references/troubleshooting.md) |
 
 ---
 
@@ -70,7 +70,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 ### 作业流一：作为消费者使用 Action 与 Skill
 
 - 智能体技能装载与冷启动：通过 `npx skills add` 安装或放置于客户端目录，进入目录执行 `npm install --omit=dev` 物化依赖并执行 `ad link .` 全局挂载。
-- 智能体调度引导生命周期：意图匹配激活 -> 规程优先决议（`ad playbook show`） -> 参数契约按需查验（`ad describe` 杜绝幻觉） -> 确定性调用（`ad run --input-file`） -> JSON 信封结果校验。详细调度指引参见 [consumer.md](file:///root/code/action-dock/skills/actiondock/references/consumer.md)。
+- 智能体调度引导生命周期：意图匹配激活 -> 规程优先决议（`ad playbook show`） -> 参数契约按需查验（`ad describe` 杜绝幻觉） -> 确定性调用（`ad run --input-file`） -> JSON 信封结果校验。详细调度指引参见 [consumer.md](references/consumer.md)。
 - 项目工程依赖消费：在工程根目录下执行 `ad add <package>` 安装并锁定依赖，通过终端 `ad run` 调用或在源码中通过 `ctx.actions.invoke` 调度。
 - 集成工具 MCP 服务挂载：在 Cursor 或 Claude Desktop 配置文件中配置命令 `"ad"`、参数 `["mcp"]`（单项目）或 `["mcp", "--all"]`（全局挂载）。
 
@@ -80,11 +80,11 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 - 步骤二：新建模板代码。执行 `ad new action <action-id> -d "描述"` 脚手架生成源码并在清单中注册。
 - 步骤三：完善清单契约。在 `actiondock.json` 中定义 `inputSchema`、`outputSchema` 与必填属性。
 - 步骤四：生成强类型。执行 `ad generate types` 生成强类型声明文件 `.actiondock/generated/actions.d.ts`。
-- 步骤五：编写业务逻辑。在 `actions/<action-id>.ts` 中使用 [`defineAction`](file:///root/code/action-dock/packages/sdk/src/action.ts) 编写纯业务逻辑，调阅 [developer.md](file:///root/code/action-dock/skills/actiondock/references/developer.md) 了解上下文 API。
+- 步骤五：编写业务逻辑。在 `actions/<action-id>.ts` 中使用 `defineAction` 编写纯业务逻辑，调阅 [developer.md](references/developer.md) 了解上下文 API。
 - 步骤六：契约门禁校验。执行 `ad validate`，确保模式合法与引用存在。
-- 步骤七：沙箱单元测试。在 `tests/<action-id>.test.ts` 中使用 [`createTestRuntime`](file:///root/code/action-dock/packages/testing/src/runtime.ts) 进行纯内存测试，执行 `ad test`。
+- 步骤七：沙箱单元测试。在 `tests/<action-id>.test.ts` 中使用 `createTestRuntime` 进行纯内存测试，执行 `ad test`。
 - 步骤八：编排业务规程。执行 `ad new playbook <playbook-id>` 编写标准作业规程，执行 `ad playbook validate` 校验。
-- 步骤九：构建交付与导出。执行 `ad build` 构建交付目录，执行 `ad pack` 打包 npm 分发包，或执行 `ad export skill` 导出技能资产。多包复合套件可配合 `SKILL.custom.md` 或 `--skill-md-only` 使用，详见 [build-and-export.md](file:///root/code/action-dock/skills/actiondock/references/build-and-export.md)。
+- 步骤九：构建交付与导出。执行 `ad build` 构建交付目录，执行 `ad pack` 打包 npm 分发包，或执行 `ad export skill` 导出技能资产。多包复合套件可配合 `SKILL.custom.md` 或 `--skill-md-only` 使用，详见 [build-and-export.md](references/build-and-export.md)。
 
 ### 作业流三：安全执行与长任务追踪
 
@@ -98,11 +98,11 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 
 不同业务场景下，智能体应按需查阅 `references/` 目录下的专项参考手册：
 
-- [consumer.md](file:///root/code/action-dock/skills/actiondock/references/consumer.md)：**Agent Skill 消费与使用指南**。当智能体装载已安装的技能、执行冷启动依赖就绪、进行意图与规程优先决议、动态查阅 `ad describe` 契约规范、执行调用及接入 MCP 时查阅。
-- [developer.md](file:///root/code/action-dock/skills/actiondock/references/developer.md)：**Action 与规程开发指南**。当创建、编写、修改 Action 业务代码、声明元数据契约、使用运行时上下文 API（配置、状态、子进程、级联调用、日志）、编写 Playbook 规程或编写内存单元测试时查阅。
-- [build-and-export.md](file:///root/code/action-dock/skills/actiondock/references/build-and-export.md)：**构建打包与 Skill 导出指南**。当执行交付产物构建、npm 打包、Agent Skill 单包或复合套件导出、配置 `SKILL.custom.md` 自定义说明书模板插槽、或执行 `--skill-md-only` 原位刷新时查阅。
-- [cli.md](file:///root/code/action-dock/skills/actiondock/references/cli.md)：**命令行全量参考手册**。当需要查询特定命令的完整参数标志、退出码规范、全局选项或 JSON 输出信封格式时查阅。
-- [troubleshooting.md](file:///root/code/action-dock/skills/actiondock/references/troubleshooting.md)：**故障排查与自愈决策指南**。仅在命令执行报错、发生异常或测试失败时定向查阅，依据错误代码对照表进行自愈修复。
+- [consumer.md](references/consumer.md)：**Agent Skill 消费与使用指南**。当智能体装载已安装的技能、执行冷启动依赖就绪、进行意图与规程优先决议、动态查阅 `ad describe` 契约规范、执行调用及接入 MCP 时查阅。
+- [developer.md](references/developer.md)：**Action 与规程开发指南**。当创建、编写、修改 Action 业务代码、声明元数据契约、使用运行时上下文 API（配置、状态、子进程、级联调用、日志）、编写 Playbook 规程或编写内存单元测试时查阅。
+- [build-and-export.md](references/build-and-export.md)：**构建打包与 Skill 导出指南**。当执行交付产物构建、npm 打包、Agent Skill 单包或复合套件导出、配置 `SKILL.custom.md` 自定义说明书模板插槽、或执行 `--skill-md-only` 原位刷新时查阅。
+- [cli.md](references/cli.md)：**命令行全量参考手册**。当需要查询特定命令的完整参数标志、退出码规范、全局选项或 JSON 输出信封格式时查阅。
+- [troubleshooting.md](references/troubleshooting.md)：**故障排查与自愈决策指南**。仅在命令执行报错、发生异常或测试失败时定向查阅，依据错误代码对照表进行自愈修复。
 
 ---
 

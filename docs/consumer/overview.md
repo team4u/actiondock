@@ -243,8 +243,8 @@ ad describe team4u.github-tools/list-prs
 
 ## 各消费姿态深入指南
 
-- [接入集成开发环境 MCP 服务](file:///root/code/action-dock/docs/consumer/use-as-mcp.md)：配置文件中添加 STDIO MCP 服务与项目工程挂载。
-- [Agent Skill 使用指南](file:///root/code/action-dock/docs/consumer/use-as-skill.md)：通过技能工具安装与规程优先调用规范。
-- [Node.js 目录独立运行指南](file:///root/code/action-dock/docs/consumer/standalone-run.md)：在生产服务器或容器中免脚手架独立运行。
-- [HTTP 远程微服务与网络调度](file:///root/code/action-dock/docs/consumer/http-service.md)：启动 HTTP 服务并通过网络接口远程调用。
-- [消费端配置与凭证注入](file:///root/code/action-dock/docs/consumer/configuration.md)：配置覆盖、环境变量与安全令牌管理。
+- [接入集成开发环境 MCP 服务](use-as-mcp.md)：配置文件中添加 STDIO MCP 服务与项目工程挂载。
+- [Agent Skill 使用指南](use-as-skill.md)：通过技能工具安装与规程优先调用规范。
+- [Node.js 目录独立运行指南](standalone-run.md)：在生产服务器或容器中免脚手架独立运行。
+- [HTTP 远程微服务与网络调度](http-service.md)：启动 HTTP 服务并通过网络接口远程调用。
+- [消费端配置与凭证注入](configuration.md)：配置覆盖、环境变量与安全令牌管理。
