@@ -213,12 +213,30 @@ async function main() {
             allowFailure: true,
           });
         } else {
-          runCmd("npm", publishArgs, {
-            cwd: pkg.dir,
-          });
+          let published = false;
+          const maxPublishRetries = 3;
+          for (let pAttempt = 1; pAttempt <= maxPublishRetries; pAttempt++) {
+            try {
+              runCmd("npm", publishArgs, {
+                cwd: pkg.dir,
+              });
+              published = true;
+              break;
+            } catch (publishErr) {
+              if (pAttempt < maxPublishRetries) {
+                console.log(`  [重试] ${pkg.name} 发布失败，等待 5 秒后执行第 ${pAttempt + 1}/${maxPublishRetries} 次重试...`);
+                await sleepMs(5000);
+              } else {
+                throw publishErr;
+              }
+            }
+          }
         }
       }
       publishedPackages.push(pkg.name);
+      if (!dryRun) {
+        await sleepMs(2000);
+      }
     }
   } catch (error) {
     console.error("\n发布阶段发生异常，由于使用临时标签隔离，外部使用者未受影响。");
