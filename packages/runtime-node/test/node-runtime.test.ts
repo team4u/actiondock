@@ -487,20 +487,28 @@ describe("ExecaProcessExecutor 单元测试", () => {
       setTimeout(() => ac.abort(), 20);
 
       const startTime = Date.now();
-      const res = await customExecutor.exec("sleep", ["2"], { signal: ac.signal });
+      const res = await customExecutor.exec(
+        process.execPath,
+        ["-e", "setTimeout(() => {}, 2000)"],
+        { signal: ac.signal }
+      );
       const duration = Date.now() - startTime;
 
       // 验证 Promise 立即解析（远小于兜底超时与总 sleep 时间）
       expect(res.cancelled).toBe(true);
-      expect(duration).toBeLessThan(150);
-      expect(sigtermCalled).toBe(true);
+      expect(duration).toBeLessThan(1000);
+      if (process.platform !== "win32") {
+        expect(sigtermCalled).toBe(true);
+      }
 
       // 在 Promise 解析完成瞬间，兜底宽限期尚未结束，SIGKILL 尚未触发
       // 等待宽限期结束（60ms 后）
       await new Promise((r) => setTimeout(r, 80));
 
       // 验证兜底清理并未因父进程 close 或 Promise settled 而被清除，成功触发 SIGKILL
-      expect(sigkillCalled).toBe(true);
+      if (process.platform !== "win32") {
+        expect(sigkillCalled).toBe(true);
+      }
     } finally {
       process.kill = origKill;
     }

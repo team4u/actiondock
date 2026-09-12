@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { unlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import * as sdk from "@actiondock/sdk";
 import * as coreStorage from "../src/storage";
@@ -192,7 +193,7 @@ describe("SqliteRuntimeStorage", () => {
     });
 
     it("打开旧版本（例如版本 1）Schema 数据库时直接抛出 UNSUPPORTED_STORAGE_SCHEMA 异常并拒绝启动", () => {
-      const tempDbPath = `/tmp/test-old-version-${Date.now()}.db`;
+      const tempDbPath = join(tmpdir(), `test-old-version-${Date.now()}.db`);
 
       // 创建版本 1 旧结构数据库
       const rawDb = createDefaultSqliteDriver(tempDbPath);
@@ -228,7 +229,7 @@ describe("SqliteRuntimeStorage", () => {
     });
 
     it("打开未来不兼容版本 Schema 数据库时抛出 UNSUPPORTED_STORAGE_SCHEMA 异常并拒绝启动", () => {
-      const tempDbPath = `/tmp/test-incompatible-${Date.now()}.db`;
+      const tempDbPath = join(tmpdir(), `test-incompatible-${Date.now()}.db`);
 
       // 手动创建未来不兼容版本数据库
       const rawDb = createDefaultSqliteDriver(tempDbPath);
