@@ -124,54 +124,151 @@ export async function* streamRemoteEvents(
   const decoder = new TextDecoder();
   let buffer = "";
 
+  let eventType = "message";
+  let eventId: string | undefined;
+  let dataLines: string[] = [];
+
+  function dispatchCurrentEvent(): ExecutionEvent | undefined {
+    if (dataLines.length === 0) {
+      eventType = "message";
+      eventId = undefined;
+      dataLines = [];
+      return undefined;
+    }
+
+    const dataStr = dataLines.join("\n");
+    const currentType = eventType;
+    const currentId = eventId;
+
+    eventType = "message";
+    eventId = undefined;
+    dataLines = [];
+
+    if (!dataStr) {
+      return undefined;
+    }
+
+    try {
+      const data = JSON.parse(dataStr);
+      if (currentType === "finish") {
+        return {
+          eventId: currentId ?? data.eventId,
+          type: "finish",
+          runId,
+          timestamp: new Date().toISOString(),
+          result: data.result || data,
+        } as ExecutionEvent;
+      } else {
+        return {
+          eventId: currentId ?? data.eventId,
+          type: (currentType || "message") as any,
+          runId,
+          timestamp: new Date().toISOString(),
+          ...data,
+        } as ExecutionEvent;
+      }
+    } catch {
+      // 忽略非 JSON 数据行
+      return undefined;
+    }
+  }
+
+  function processLine(line: string): ExecutionEvent | undefined {
+    // 遇到空行分发事件
+    if (line === "") {
+      return dispatchCurrentEvent();
+    }
+
+    // 以冒号开头的为注释忽略
+    if (line.startsWith(":")) {
+      return undefined;
+    }
+
+    let field = line;
+    let value = "";
+    const colonIdx = line.indexOf(":");
+    if (colonIdx !== -1) {
+      field = line.slice(0, colonIdx);
+      const rawVal = line.slice(colonIdx + 1);
+      value = rawVal.startsWith(" ") ? rawVal.slice(1) : rawVal;
+    }
+
+    if (field === "event") {
+      eventType = value;
+    } else if (field === "data") {
+      dataLines.push(value);
+    } else if (field === "id") {
+      if (!value.includes("\0")) {
+        eventId = value;
+      }
+    }
+
+    return undefined;
+  }
+
+
+
   try {
     while (true) {
       if (options?.signal?.aborted) break;
       const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
+      if (value) {
+        buffer += decoder.decode(value, { stream: !done });
+      } else if (done) {
+        buffer += decoder.decode();
+      }
 
-      const parts = buffer.split("\n\n");
-      buffer = parts.pop() || "";
+      let pos = 0;
+      while (pos < buffer.length) {
+        const cr = buffer.indexOf("\r", pos);
+        const lf = buffer.indexOf("\n", pos);
 
-      for (const part of parts) {
-        if (!part.trim()) continue;
-        let eventType = "message";
-        let eventId: string | undefined;
-        let dataStr = "";
-        for (const line of part.split("\n")) {
-          if (line.startsWith("event:")) {
-            eventType = line.slice(6).trim();
-          } else if (line.startsWith("id:")) {
-            eventId = line.slice(3).trim();
-          } else if (line.startsWith("data:")) {
-            dataStr += line.slice(5).trim();
-          }
-        }
-        if (dataStr) {
-          try {
-            const data = JSON.parse(dataStr);
-            if (eventType === "finish") {
-              yield {
-                eventId: eventId ?? data.eventId,
-                type: "finish",
-                runId,
-                timestamp: new Date().toISOString(),
-                result: data.result || data,
-              } as ExecutionEvent;
+        let nextSepPos = -1;
+        let sepLen = 0;
+
+        if (cr !== -1 && (lf === -1 || cr < lf)) {
+          if (cr === buffer.length - 1) {
+            if (!done) {
+              // 遇到未完结的 \r 暂存等待下个 chunk
+              break;
             } else {
-              yield {
-                eventId: eventId ?? data.eventId,
-                type: eventType as any,
-                runId,
-                timestamp: new Date().toISOString(),
-                ...data,
-              } as ExecutionEvent;
+              nextSepPos = cr;
+              sepLen = 1;
             }
-          } catch {
-            // 忽略非 JSON 数据行
+          } else {
+            if (buffer[cr + 1] === "\n") {
+              nextSepPos = cr;
+              sepLen = 2;
+            } else {
+              nextSepPos = cr;
+              sepLen = 1;
+            }
           }
+        } else if (lf !== -1 && (cr === -1 || lf < cr)) {
+          nextSepPos = lf;
+          sepLen = 1;
+        } else {
+          break;
         }
+
+        const line = buffer.slice(pos, nextSepPos);
+        pos = nextSepPos + sepLen;
+        const evt = processLine(line);
+        if (evt) yield evt;
+      }
+      buffer = buffer.slice(pos);
+
+      if (done) {
+        if (buffer.length > 0) {
+          const line = buffer;
+          buffer = "";
+          const evt = processLine(line);
+          if (evt) yield evt;
+        }
+        // 流读取完成时若有剩余待分发事件则进行分发
+        const remainingEvt = dispatchCurrentEvent();
+        if (remainingEvt) yield remainingEvt;
+        break;
       }
     }
   } catch (err: any) {
@@ -429,9 +526,41 @@ export class RemoteActionDockTarget implements ActionDockTarget {
     signal?: AbortSignal,
     timeoutMs?: number
   ): Promise<ExecutionResult> {
+    const startTime = Date.now();
+    const maxWaitMs = Math.max(this.baseTimeoutMs, timeoutMs ?? 0);
+
+    if (signal?.aborted) {
+      return {
+        ok: false,
+        runId,
+        error: {
+          code: ACTION_CANCELLED,
+          message: "Action execution was cancelled",
+        },
+      };
+    }
+
+    const internalController = new AbortController();
+    let sseTimedOut = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    if (maxWaitMs > 0 && maxWaitMs !== Infinity) {
+      timer = setTimeout(() => {
+        sseTimedOut = true;
+        internalController.abort();
+      }, maxWaitMs);
+    }
+
+    const onAbort = () => {
+      internalController.abort();
+    };
+    if (signal) {
+      signal.addEventListener("abort", onAbort, { once: true });
+    }
+
     // 优先尝试监听 SSE 事件流终态事件
     try {
-      for await (const evt of this.events(runId, { signal })) {
+      for await (const evt of this.events(runId, { signal: internalController.signal })) {
         if (evt.type === "finish") {
           const res = (evt as any).result || (evt as any).data || evt;
           if (typeof res?.ok === "boolean") {
@@ -440,14 +569,51 @@ export class RemoteActionDockTarget implements ActionDockTarget {
         }
       }
     } catch (err: any) {
-      // SSE 通道异常视为不可用：记录后按指数退避进入轮询兜底
-      console.warn(
-        `[ActionDock] SSE event stream unavailable for run '${runId}', falling back to polling: ${err?.message || String(err)}`
-      );
+      if (!signal?.aborted && !sseTimedOut) {
+        // SSE 通道异常视为不可用：记录后按指数退避进入轮询兜底
+        console.warn(
+          `[ActionDock] SSE event stream unavailable for run '${runId}', falling back to polling: ${err?.message || String(err)}`
+        );
+      }
+    } finally {
+      if (timer) {
+        clearTimeout(timer);
+      }
+      if (signal) {
+        signal.removeEventListener("abort", onAbort);
+      }
     }
 
-    // 回退指数退避轮询检索运行详情（150ms 起步，上限 2000ms）
-    return this.pollRunCompletion(runId, signal, timeoutMs);
+    if (signal?.aborted) {
+      return {
+        ok: false,
+        runId,
+        error: {
+          code: ACTION_CANCELLED,
+          message: "Action execution was cancelled",
+        },
+      };
+    }
+
+    const remainingWaitMs = Math.max(0, maxWaitMs - (Date.now() - startTime));
+    if (remainingWaitMs <= 0) {
+      const run = await this.getRun(runId);
+      if (run && isTerminalRunStatus(run.status)) {
+        return this.formatTerminalRunResult(run, runId);
+      }
+      const waitedMs = Date.now() - startTime;
+      return {
+        ok: false,
+        runId,
+        error: {
+          code: TIMEOUT,
+          message: `Timed out waiting for run '${runId}' completion after ${waitedMs}ms`,
+        },
+      };
+    }
+
+    // 剩余时间继续通过 pollRunCompletion 进行轮询兜底
+    return this.pollRunCompletion(runId, signal, remainingWaitMs, startTime, maxWaitMs);
   }
 
   /**
@@ -456,13 +622,13 @@ export class RemoteActionDockTarget implements ActionDockTarget {
   private async pollRunCompletion(
     runId: string,
     signal?: AbortSignal,
-    timeoutMs?: number
+    timeoutMs?: number,
+    startTime: number = Date.now(),
+    totalMaxWaitMs?: number
   ): Promise<ExecutionResult> {
-    const startTime = Date.now();
-    // 等待上限与运行自身 timeoutMs 对齐（取二者较大值，默认 baseTimeoutMs = 60000ms）
-    const baseWait = this.baseTimeoutMs;
-    const maxWaitMs = Math.max(baseWait, timeoutMs ?? 0);
-    let delayMs = Math.min(150, Math.max(10, Math.floor(maxWaitMs / 4)));
+    const maxWaitMs = totalMaxWaitMs ?? Math.max(this.baseTimeoutMs, timeoutMs ?? 0);
+    const remainingWaitMs = Math.max(0, maxWaitMs - (Date.now() - startTime));
+    let delayMs = Math.min(150, Math.max(10, Math.floor((remainingWaitMs || maxWaitMs) / 4)));
     const maxDelayMs = 2000;
 
     while (Date.now() - startTime < maxWaitMs) {
@@ -478,27 +644,7 @@ export class RemoteActionDockTarget implements ActionDockTarget {
       }
       const run = await this.getRun(runId);
       if (run && isTerminalRunStatus(run.status)) {
-        if (run.status === "success") {
-          return { ok: true, runId, data: run.output ?? null };
-        }
-        if (run.status === "interrupted") {
-          return {
-            ok: false,
-            runId,
-            error: run.error || {
-              code: "RUN_INTERRUPTED",
-              message: `Run '${runId}' was interrupted`,
-            },
-          };
-        }
-        return {
-          ok: false,
-          runId,
-          error: run.error || {
-            code: EXECUTION_FAILED,
-            message: `Run finished with status ${run.status}`,
-          },
-        };
+        return this.formatTerminalRunResult(run, runId);
       }
       await new Promise((resolve) => setTimeout(resolve, delayMs));
       delayMs = Math.min(delayMs * 2, maxDelayMs);
@@ -511,6 +657,30 @@ export class RemoteActionDockTarget implements ActionDockTarget {
       error: {
         code: TIMEOUT,
         message: `Timed out waiting for run '${runId}' completion after ${waitedMs}ms`,
+      },
+    };
+  }
+
+  private formatTerminalRunResult(run: RunRecord, runId: string): ExecutionResult {
+    if (run.status === "success") {
+      return { ok: true, runId, data: run.output ?? null };
+    }
+    if (run.status === "interrupted") {
+      return {
+        ok: false,
+        runId,
+        error: run.error || {
+          code: "RUN_INTERRUPTED",
+          message: `Run '${runId}' was interrupted`,
+        },
+      };
+    }
+    return {
+      ok: false,
+      runId,
+      error: run.error || {
+        code: EXECUTION_FAILED,
+        message: `Run finished with status ${run.status}`,
       },
     };
   }

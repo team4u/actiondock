@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import {
   chmodSync,
+  createReadStream,
+  createWriteStream,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -11,6 +13,8 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
+import { Readable, Writable } from "node:stream";
+import { createGzip } from "node:zlib";
 import { tmpdir } from "node:os";
 import { basename, join, relative, resolve, sep } from "node:path";
 import {
@@ -37,8 +41,10 @@ import {
   serializePlanManifest,
   SkillExporter,
   createTarGzArchive,
+  createTarGzArchiveAsync,
   createZipArchive,
   createZipArchiveAsync,
+  writeToStream,
   replaceDirAtomic,
   moveDirAtomic,
 } from "../src";
@@ -1140,6 +1146,417 @@ export default defineAction({
           }
 
           ptr += 46 + nameLen + extraLen + commentLen;
+        }
+      } finally {
+        rmSync(archiveTestDir, { recursive: true, force: true });
+      }
+    });
+
+    it("createTarGzArchiveAsync: 真正流式打包、大文件与 USTAR 规范归档内容及权限一致性验证", async () => {
+      const archiveTestDir = mkdtempSync(join(tmpdir(), "ad-archive-tar-stream-test-"));
+      try {
+        const binDir = join(archiveTestDir, "bin");
+        mkdirSync(binDir, { recursive: true });
+        const subDir = join(archiveTestDir, "subdir");
+        mkdirSync(subDir, { recursive: true });
+
+        // 空文件
+        const emptyFile = join(archiveTestDir, "empty.txt");
+        writeFileSync(emptyFile, "");
+
+        // 普通文本文件
+        const normalFile = join(archiveTestDir, "readme.txt");
+        writeFileSync(normalFile, "Hello Streaming TarGz Archive\n");
+        chmodSync(normalFile, 0o644);
+
+        // 可执行脚本
+        const execScript = join(binDir, "run.sh");
+        writeFileSync(execScript, "#!/bin/sh\necho streamed-tar-ok\n");
+        chmodSync(execScript, 0o755);
+
+        // 大文件（2MB，包含非 512 对齐字节数以检验块对齐与跨块流式写入）
+        const largeContent = Buffer.alloc(2 * 1024 * 1024 + 123, "ActionDock-Streaming-TarGz-USTAR-2026\n");
+        const largeFile = join(subDir, "large.dat");
+        writeFileSync(largeFile, largeContent);
+
+        const tarOut = join(tempDir, "stream-test.tar.gz");
+        await createTarGzArchiveAsync(archiveTestDir, tarOut);
+
+        expect(existsSync(tarOut)).toBe(true);
+        const rootName = basename(archiveTestDir);
+
+        // 解包并验证各条目内容与尺寸一致性
+        const tarEntries = readTarGzEntries(tarOut);
+        expect(tarEntries.get(`${rootName}/empty.txt`)?.length).toBe(0);
+        expect(tarEntries.get(`${rootName}/readme.txt`)?.toString("utf8")).toBe("Hello Streaming TarGz Archive\n");
+        expect(tarEntries.get(`${rootName}/bin/run.sh`)?.toString("utf8")).toBe("#!/bin/sh\necho streamed-tar-ok\n");
+        const readLarge = tarEntries.get(`${rootName}/subdir/large.dat`);
+        expect(readLarge).toBeDefined();
+        expect(readLarge!.equals(largeContent)).toBe(true);
+
+        // 验证权限属性一致性
+        const tarModes = readTarGzEntryModes(tarOut);
+        expect(tarModes.get(`${rootName}/bin/run.sh`)).toBe(0o755);
+        expect(tarModes.get(`${rootName}/readme.txt`)).toBe(0o644);
+        expect(tarModes.get(`${rootName}/bin`)).toBe(0o755);
+      } finally {
+        rmSync(archiveTestDir, { recursive: true, force: true });
+      }
+    });
+
+    it("createTarGzArchiveAsync: 下游写入发生背压时背压等待逻辑生效并平稳完成归档", async () => {
+      const archiveTestDir = mkdtempSync(join(tmpdir(), "ad-archive-backpressure-test-"));
+      try {
+        const payload = Buffer.alloc(512 * 1024 + 321, "BACKPRESSURE-PIPELINE-TEST-CHUNK\n");
+        writeFileSync(join(archiveTestDir, "payload.bin"), payload);
+
+        const tarOut = join(tempDir, "backpressure-test.tar.gz");
+
+        let gzipDrainEventCount = 0;
+        let gzipBackpressureCount = 0;
+
+        // 构造具备低块尺寸（1KB）并统计背压事件的 gzip 实例
+        const customGzipFactory = () => {
+          const gz = createGzip({ level: 9, chunkSize: 1024 });
+          const originalWrite = gz.write.bind(gz);
+          gz.write = function (chunk: any, ...args: any[]) {
+            const accepted = originalWrite(chunk, ...args);
+            if (!accepted) {
+              gzipBackpressureCount++;
+            }
+            return accepted;
+          };
+          gz.on("drain", () => {
+            gzipDrainEventCount++;
+          });
+          return gz;
+        };
+
+        // 构造限速下游写入流，每次写入注入微小延迟以持续产生背压
+        const realWriteStream = createWriteStream(tarOut);
+        const throttledWriteStream = () => {
+          return new Writable({
+            highWaterMark: 1024,
+            write(chunk, _encoding, callback) {
+              const ok = realWriteStream.write(chunk);
+              if (!ok) {
+                realWriteStream.once("drain", () => {
+                  callback();
+                });
+              } else {
+                setTimeout(callback, 2);
+              }
+            },
+            final(callback) {
+              realWriteStream.end(callback);
+            },
+            destroy(err, callback) {
+              realWriteStream.destroy(err ?? undefined);
+              callback(err);
+            },
+          });
+        };
+
+        await createTarGzArchiveAsync(archiveTestDir, tarOut, {
+          createGzip: customGzipFactory,
+          createWriteStream: throttledWriteStream,
+        });
+
+        // 确认背压事件切实触发并被安全等待与恢复
+        expect(gzipBackpressureCount).toBeGreaterThan(0);
+        expect(gzipDrainEventCount).toBeGreaterThan(0);
+
+        // 验证归档内容在背压等待恢复后无损完整
+        const rootName = basename(archiveTestDir);
+        const tarEntries = readTarGzEntries(tarOut);
+        const archivedPayload = tarEntries.get(`${rootName}/payload.bin`);
+        expect(archivedPayload).toBeDefined();
+        expect(archivedPayload!.equals(payload)).toBe(true);
+      } finally {
+        rmSync(archiveTestDir, { recursive: true, force: true });
+      }
+    });
+
+    it("createTarGzArchiveAsync: 遇到可读流异常时 Promise 正确捕获并拒绝", async () => {
+      const archiveTestDir = mkdtempSync(join(tmpdir(), "ad-archive-read-error-test-"));
+      try {
+        const normalFile = join(archiveTestDir, "normal.txt");
+        writeFileSync(normalFile, "normal preamble content", "utf-8");
+        const corruptFile = join(archiveTestDir, "corrupt.txt");
+        writeFileSync(corruptFile, "will fail during read", "utf-8");
+
+        const tarOut = join(tempDir, "read-error-test.tar.gz");
+        const simulatedReadError = new Error("SIMULATED_DISK_IO_READ_FAILURE");
+
+        // 模拟读取至故障文件时抛出异常的可读流
+        const failingReadStreamFactory = (filePath: string) => {
+          if (filePath.endsWith("corrupt.txt")) {
+            return new Readable({
+              read() {
+                process.nextTick(() => {
+                  this.destroy(simulatedReadError);
+                });
+              },
+            });
+          }
+          return createReadStream(filePath);
+        };
+
+        let caughtError: Error | null = null;
+        try {
+          await createTarGzArchiveAsync(archiveTestDir, tarOut, {
+            createReadStream: failingReadStreamFactory,
+          });
+        } catch (err) {
+          caughtError = err as Error;
+        }
+
+        expect(caughtError).toBeDefined();
+        expect(caughtError?.message).toBe("SIMULATED_DISK_IO_READ_FAILURE");
+      } finally {
+        rmSync(archiveTestDir, { recursive: true, force: true });
+      }
+    });
+
+    it("createTarGzArchiveAsync: 遇到下游可写流异常时 Promise 正确捕获并拒绝", async () => {
+      const archiveTestDir = mkdtempSync(join(tmpdir(), "ad-archive-write-error-test-"));
+      try {
+        const dataFile = join(archiveTestDir, "data.txt");
+        writeFileSync(dataFile, "content for write failure test", "utf-8");
+
+        const tarOut = join(tempDir, "write-error-test.tar.gz");
+        const simulatedWriteError = new Error("SIMULATED_DISK_FULL_WRITE_FAILURE");
+
+        // 模拟写入端故障的可写流
+        const failingWriteStreamFactory = () => {
+          return new Writable({
+            write(_chunk, _encoding, callback) {
+              callback(simulatedWriteError);
+            },
+          });
+        };
+
+        let caughtError: Error | null = null;
+        try {
+          await createTarGzArchiveAsync(archiveTestDir, tarOut, {
+            createWriteStream: failingWriteStreamFactory,
+          });
+        } catch (err) {
+          caughtError = err as Error;
+        }
+
+        expect(caughtError).toBeDefined();
+        expect(caughtError?.message).toBe("SIMULATED_DISK_FULL_WRITE_FAILURE");
+      } finally {
+        rmSync(archiveTestDir, { recursive: true, force: true });
+      }
+    });
+
+    it("writeToStream: 背压等待、流销毁与异常拦截边界校验", async () => {
+      // 校验正常非背压写入
+      const stream = new Writable({
+        highWaterMark: 1024,
+        write(_chunk, _encoding, callback) {
+          callback();
+        },
+      });
+      await expect(writeToStream(stream, Buffer.from("quick chunk"))).resolves.toBeUndefined();
+
+      // 校验已销毁流直接拒绝
+      stream.destroy();
+      await expect(writeToStream(stream, Buffer.from("fail chunk"))).rejects.toThrow("Target stream has been destroyed");
+
+      // 校验背压挂起并在 drain 后成功恢复
+      const callbacks: (() => void)[] = [];
+      const backpressuredStream = new Writable({
+        highWaterMark: 10,
+        write(_chunk, _encoding, callback) {
+          callbacks.push(callback);
+        },
+      });
+
+      // 填满缓冲区促使下一次写入返回 false
+      backpressuredStream.write(Buffer.alloc(10));
+
+      let writePromiseResolved = false;
+      const writePromise = writeToStream(backpressuredStream, Buffer.alloc(10)).then(() => {
+        writePromiseResolved = true;
+      });
+
+      // 验证在 drain 事件触发前 Promise 保持挂起
+      expect(writePromiseResolved).toBe(false);
+
+      // 消费底层缓冲区触发 drain
+      callbacks[0]();
+      callbacks[1]();
+      await writePromise;
+      expect(writePromiseResolved).toBe(true);
+
+      // 校验在等待 drain 期间流发生错误时安全拒绝
+      const failingStream = new Writable({
+        highWaterMark: 10,
+        write(_chunk, _encoding, _callback) {},
+      });
+      failingStream.write(Buffer.alloc(10));
+      const testError = new Error("STREAM_ASYNC_ERROR");
+      const failingPromise = writeToStream(failingStream, Buffer.alloc(10));
+      failingStream.destroy(testError);
+      await expect(failingPromise).rejects.toThrow("STREAM_ASYNC_ERROR");
+    });
+
+    it("指向归档目录外部的软链接不会被打包进归档 (zip 与 tar.gz)", async () => {
+      const archiveTestDir = mkdtempSync(join(tmpdir(), "ad-archive-escape-test-"));
+      const outsideDir = mkdtempSync(join(tmpdir(), "ad-archive-outside-"));
+      try {
+        const secretFile = join(outsideDir, "secret.txt");
+        writeFileSync(secretFile, "sensitive data outside boundary", "utf-8");
+
+        const normalFile = join(archiveTestDir, "normal.txt");
+        writeFileSync(normalFile, "safe normal content", "utf-8");
+
+        // 创建指向外部敏感文件的软链接
+        const linkToOutsideFile = join(archiveTestDir, "escaped-link.txt");
+        symlinkSync(secretFile, linkToOutsideFile);
+
+        // 创建指向外部目录的软链接
+        const linkToOutsideDir = join(archiveTestDir, "escaped-dir");
+        symlinkSync(outsideDir, linkToOutsideDir, "dir");
+
+        const zipOut = join(tempDir, "escape-test.zip");
+        const tarOut = join(tempDir, "escape-test.tar.gz");
+        const zipAsyncOut = join(tempDir, "escape-test-async.zip");
+        const tarAsyncOut = join(tempDir, "escape-test-async.tar.gz");
+
+        createZipArchive(archiveTestDir, zipOut);
+        createTarGzArchive(archiveTestDir, tarOut);
+        await createZipArchiveAsync(archiveTestDir, zipAsyncOut);
+        await createTarGzArchiveAsync(archiveTestDir, tarAsyncOut);
+
+        const rootName = basename(archiveTestDir);
+
+        for (const out of [zipOut, zipAsyncOut]) {
+          const zipEntries = readZipEntries(out);
+          expect(zipEntries.has(`${rootName}/normal.txt`)).toBe(true);
+          expect(zipEntries.get(`${rootName}/normal.txt`)?.toString("utf-8")).toBe("safe normal content");
+          expect(zipEntries.has(`${rootName}/escaped-link.txt`)).toBe(false);
+          expect(zipEntries.has(`${rootName}/escaped-dir`)).toBe(false);
+          expect(zipEntries.has(`${rootName}/escaped-dir/secret.txt`)).toBe(false);
+        }
+
+        for (const out of [tarOut, tarAsyncOut]) {
+          const tarEntries = readTarGzEntries(out);
+          expect(tarEntries.has(`${rootName}/normal.txt`)).toBe(true);
+          expect(tarEntries.get(`${rootName}/normal.txt`)?.toString("utf-8")).toBe("safe normal content");
+          expect(tarEntries.has(`${rootName}/escaped-link.txt`)).toBe(false);
+          expect(tarEntries.has(`${rootName}/escaped-dir`)).toBe(false);
+          expect(tarEntries.has(`${rootName}/escaped-dir/secret.txt`)).toBe(false);
+        }
+      } finally {
+        rmSync(archiveTestDir, { recursive: true, force: true });
+        rmSync(outsideDir, { recursive: true, force: true });
+      }
+    });
+
+    it("存在循环软链接时不会无限递归并能安全完成打包 (zip 与 tar.gz)", async () => {
+      const archiveTestDir = mkdtempSync(join(tmpdir(), "ad-archive-cycle-test-"));
+      try {
+        const rootFile = join(archiveTestDir, "root-file.txt");
+        writeFileSync(rootFile, "root file content", "utf-8");
+
+        const subDir = join(archiveTestDir, "subdir");
+        mkdirSync(subDir, { recursive: true });
+        const subFile = join(subDir, "sub-file.txt");
+        writeFileSync(subFile, "sub file content", "utf-8");
+
+        // 指向根目录的循环软链接
+        symlinkSync(archiveTestDir, join(subDir, "loop-to-root"), "dir");
+        // 指向当前子目录自身的循环软链接
+        symlinkSync(subDir, join(subDir, "loop-to-self"), "dir");
+
+        const zipOut = join(tempDir, "cycle-test.zip");
+        const tarOut = join(tempDir, "cycle-test.tar.gz");
+        const zipAsyncOut = join(tempDir, "cycle-test-async.zip");
+        const tarAsyncOut = join(tempDir, "cycle-test-async.tar.gz");
+
+        // 验证同步与异步四种打包接口均能安全完成且不会出现无限递归与栈溢出
+        createZipArchive(archiveTestDir, zipOut);
+        createTarGzArchive(archiveTestDir, tarOut);
+        await createZipArchiveAsync(archiveTestDir, zipAsyncOut);
+        await createTarGzArchiveAsync(archiveTestDir, tarAsyncOut);
+
+        const rootName = basename(archiveTestDir);
+
+        for (const out of [zipOut, zipAsyncOut]) {
+          const zipEntries = readZipEntries(out);
+          expect(zipEntries.has(`${rootName}/root-file.txt`)).toBe(true);
+          expect(zipEntries.get(`${rootName}/root-file.txt`)?.toString("utf-8")).toBe("root file content");
+          expect(zipEntries.has(`${rootName}/subdir/sub-file.txt`)).toBe(true);
+          expect(zipEntries.get(`${rootName}/subdir/sub-file.txt`)?.toString("utf-8")).toBe("sub file content");
+        }
+
+        for (const out of [tarOut, tarAsyncOut]) {
+          const tarEntries = readTarGzEntries(out);
+          expect(tarEntries.has(`${rootName}/root-file.txt`)).toBe(true);
+          expect(tarEntries.get(`${rootName}/root-file.txt`)?.toString("utf-8")).toBe("root file content");
+          expect(tarEntries.has(`${rootName}/subdir/sub-file.txt`)).toBe(true);
+          expect(tarEntries.get(`${rootName}/subdir/sub-file.txt`)?.toString("utf-8")).toBe("sub file content");
+        }
+      } finally {
+        rmSync(archiveTestDir, { recursive: true, force: true });
+      }
+    });
+
+    it("正常的软链接与普通文件能够正常打包 (zip 与 tar.gz)", async () => {
+      const archiveTestDir = mkdtempSync(join(tmpdir(), "ad-archive-valid-test-"));
+      try {
+        // 普通文件
+        const normalFile = join(archiveTestDir, "normal.txt");
+        writeFileSync(normalFile, "normal content", "utf-8");
+
+        // 子目录及其内部普通文件
+        const subDir = join(archiveTestDir, "nested");
+        mkdirSync(subDir, { recursive: true });
+        const nestedFile = join(subDir, "nested-file.txt");
+        writeFileSync(nestedFile, "nested content", "utf-8");
+
+        // 指向同一归档目录内目标文件的软链接
+        const targetFile = join(archiveTestDir, "target.txt");
+        writeFileSync(targetFile, "target content", "utf-8");
+        const linkFile = join(archiveTestDir, "link-to-target.txt");
+        symlinkSync(targetFile, linkFile);
+
+        const zipOut = join(tempDir, "valid-test.zip");
+        const tarOut = join(tempDir, "valid-test.tar.gz");
+        const zipAsyncOut = join(tempDir, "valid-test-async.zip");
+        const tarAsyncOut = join(tempDir, "valid-test-async.tar.gz");
+
+        createZipArchive(archiveTestDir, zipOut);
+        createTarGzArchive(archiveTestDir, tarOut);
+        await createZipArchiveAsync(archiveTestDir, zipAsyncOut);
+        await createTarGzArchiveAsync(archiveTestDir, tarAsyncOut);
+
+        const rootName = basename(archiveTestDir);
+
+        for (const out of [zipOut, zipAsyncOut]) {
+          const zipEntries = readZipEntries(out);
+          expect(zipEntries.has(`${rootName}/normal.txt`)).toBe(true);
+          expect(zipEntries.get(`${rootName}/normal.txt`)?.toString("utf-8")).toBe("normal content");
+          expect(zipEntries.has(`${rootName}/nested/nested-file.txt`)).toBe(true);
+          expect(zipEntries.get(`${rootName}/nested/nested-file.txt`)?.toString("utf-8")).toBe("nested content");
+          // 验证指向内部文件的软链接能够成功打包且内容解析正确
+          expect(zipEntries.has(`${rootName}/link-to-target.txt`)).toBe(true);
+          expect(zipEntries.get(`${rootName}/link-to-target.txt`)?.toString("utf-8")).toBe("target content");
+        }
+
+        for (const out of [tarOut, tarAsyncOut]) {
+          const tarEntries = readTarGzEntries(out);
+          expect(tarEntries.has(`${rootName}/normal.txt`)).toBe(true);
+          expect(tarEntries.get(`${rootName}/normal.txt`)?.toString("utf-8")).toBe("normal content");
+          expect(tarEntries.has(`${rootName}/nested/nested-file.txt`)).toBe(true);
+          expect(tarEntries.get(`${rootName}/nested/nested-file.txt`)?.toString("utf-8")).toBe("nested content");
+          // 验证指向内部文件的软链接能够成功打包且内容解析正确
+          expect(tarEntries.has(`${rootName}/link-to-target.txt`)).toBe(true);
+          expect(tarEntries.get(`${rootName}/link-to-target.txt`)?.toString("utf-8")).toBe("target content");
         }
       } finally {
         rmSync(archiveTestDir, { recursive: true, force: true });

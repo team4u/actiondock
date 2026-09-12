@@ -499,7 +499,101 @@ describe("@actiondock/mcp Adapter", () => {
       });
       expect(authMcp.status).toBe(200);
     } finally {
-      serverInstance.stop();
+      await serverInstance.stop();
+    }
+  });
+
+  it("HTTP Transport: enforces authentication prior to request body reading and payload size validation", async () => {
+    const serverInstance = await startMcpHttpServer({
+      host: "127.0.0.1",
+      port: 0,
+      token: "mcp-secret-123",
+      maxBodyBytes: 1024,
+      projectRoot: tmpDir,
+    });
+
+    try {
+      const baseUrl = serverInstance.url;
+      const oversizedPayload = JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/list",
+        padding: "x".repeat(2048),
+      });
+
+      // 验证未认证请求即使携带超过 maxBodyBytes 的超大请求体，依然优先被 401 拦截（而不是 413）
+      const unauthOversizedRes = await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: oversizedPayload,
+      });
+      expect(unauthOversizedRes.status).toBe(401);
+      const unauthData = await unauthOversizedRes.json();
+      expect(unauthData.error?.code).toBe(-32000);
+
+      // 验证未认证请求访问健康检查端点携带超大请求体，同样优先被 401 拦截
+      const unauthHealthRes = await fetch(`${baseUrl}/health`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: oversizedPayload,
+      });
+      expect(unauthHealthRes.status).toBe(401);
+
+      // 验证已认证请求若携带超过 maxBodyBytes 的超大请求体，则如期返回 413 REQUEST_TOO_LARGE
+      const authOversizedRes = await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer mcp-secret-123",
+        },
+        body: oversizedPayload,
+      });
+      expect(authOversizedRes.status).toBe(413);
+      const authOversizedData = await authOversizedRes.json();
+      expect(authOversizedData.error?.code).toBe("REQUEST_TOO_LARGE");
+
+      // 验证已认证请求通过流式传输超过 maxBodyBytes 时同样被流式截断并返回 413
+      const chunkedStream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("x".repeat(2048)));
+          controller.close();
+        },
+      });
+      const authStreamRes = await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer mcp-secret-123",
+        },
+        body: chunkedStream,
+        // @ts-ignore
+        duplex: "half",
+      });
+      expect(authStreamRes.status).toBe(413);
+
+      // 验证已认证且体积正常的请求正常交互
+      const normalPayload = JSON.stringify({
+        jsonrpc: "2.0",
+        id: 2,
+        method: "initialize",
+        params: {
+          protocolVersion: "2026-07-28",
+          capabilities: {},
+          clientInfo: { name: "test", version: "1.0" },
+        },
+      });
+      const authNormalRes = await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer mcp-secret-123",
+          Accept: "application/json, text/event-stream",
+        },
+        body: normalPayload,
+      });
+      expect(authNormalRes.status).toBe(200);
+    } finally {
+      await serverInstance.stop();
     }
   });
 

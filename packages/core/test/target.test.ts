@@ -14,6 +14,7 @@ import {
   CloseTimeoutError,
   TARGET_PROTOCOL_UNSUPPORTED,
   TARGET_CAPABILITY_UNAVAILABLE,
+  streamRemoteEvents,
 } from "../src/target";
 import { startActionDockServer } from "../src/server";
 
@@ -766,6 +767,284 @@ actions:
         }
       } finally {
         await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    });
+  });
+
+  describe("RemoteActionDockTarget SSE 解析与超时控制", () => {
+    it("streamRemoteEvents 正确解析换行与回车分隔的流并保留多行数据与前后空格", async () => {
+      const server = createServer((req, res) => {
+        if (req.url?.includes("/events")) {
+          res.writeHead(200, {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            "Connection": "close",
+          });
+
+          // 测试换行分隔与多行数据拼接并保留换行
+          res.write(
+            ": comment line\r\n" +
+            "id: evt-1\r\n" +
+            "event: custom\r\n" +
+            "data: {\r\n" +
+            "data:   \"line1\": \"hello\",\r\n" +
+            "data:   \"line2\": \"world\"\r\n" +
+            "data: }\r\n\r\n"
+          );
+
+          // 测试合法空格保留（冒号后单空格剔除，后续空格与末尾空格保留）
+          res.write(
+            "event: formatted\r\n" +
+            "data:  {\"text\": \"  spaced text  \"} \r\n\r\n"
+          );
+
+          // 测试双回车分隔与空行分发
+          res.write(
+            "id: evt-3\r" +
+            "event: finish\r" +
+            "data: {\"ok\": true, \"summary\": \"done\"}\r\r"
+          );
+
+          // 测试标识包含空字符时被忽略
+          res.write(
+            "id: invalid\0id\r\n" +
+            "event: note\r\n" +
+            "data: {\"eventId\": \"fallback-id\", \"msg\": \"null byte ignored\"}\r\n\r\n"
+          );
+
+          res.end();
+        } else {
+          res.writeHead(404);
+          res.end();
+        }
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+      const port = (server.address() as any).port;
+      const serverUrl = `http://127.0.0.1:${port}`;
+
+      try {
+        const events: any[] = [];
+        for await (const evt of streamRemoteEvents(serverUrl, "run-100", undefined, { allowInsecureHttp: true })) {
+          events.push(evt);
+        }
+
+        expect(events.length).toBe(4);
+
+        // 校验首个多行数据事件
+        expect(events[0].type).toBe("custom");
+        expect(events[0].eventId).toBe("evt-1");
+        expect(events[0].line1).toBe("hello");
+        expect(events[0].line2).toBe("world");
+
+        // 校验前后空格保留事件
+        expect(events[1].type).toBe("formatted");
+        expect(events[1].text).toBe("  spaced text  ");
+
+        // 校验回车分隔的终态事件
+        expect(events[2].type).toBe("finish");
+        expect(events[2].eventId).toBe("evt-3");
+        expect(events[2].result?.ok).toBe(true);
+        expect(events[2].result?.summary).toBe("done");
+
+        // 校验空字符标识过滤事件
+        expect(events[3].type).toBe("note");
+        expect(events[3].eventId).toBe("fallback-id");
+        expect(events[3].msg).toBe("null byte ignored");
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    });
+
+    it("streamRemoteEvents 在数据流分片且回车处于分片边界时正确安全缓冲并分发事件", async () => {
+      const server = createServer((req, res) => {
+        if (req.url?.includes("/events")) {
+          res.writeHead(200, {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+          });
+          // 分片以回车结尾，等待后续分片拼接换行
+          res.write("event: chunked\r\ndata: {\"part\": 1}\r");
+          setTimeout(() => {
+            res.write("\n\r\n");
+            res.end();
+          }, 30);
+        } else {
+          res.writeHead(404);
+          res.end();
+        }
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+      const port = (server.address() as any).port;
+      const serverUrl = `http://127.0.0.1:${port}`;
+
+      try {
+        const events: any[] = [];
+        for await (const evt of streamRemoteEvents(serverUrl, "run-chunk", undefined, { allowInsecureHttp: true })) {
+          events.push(evt);
+        }
+        expect(events.length).toBe(1);
+        expect(events[0].type).toBe("chunked");
+        expect(events[0].part).toBe(1);
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    });
+
+    it("streamRemoteEvents 在流读取完成时若有剩余待分发事件则进行分发", async () => {
+      const server = createServer((req, res) => {
+        if (req.url?.includes("/events")) {
+          res.writeHead(200, {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+          });
+          // 数据流末尾无多余空行，连接直接结束
+          res.end("event: finish\r\ndata: {\"ok\": true, \"closedEarly\": true}");
+        } else {
+          res.writeHead(404);
+          res.end();
+        }
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+      const port = (server.address() as any).port;
+      const serverUrl = `http://127.0.0.1:${port}`;
+
+      try {
+        const events: any[] = [];
+        for await (const evt of streamRemoteEvents(serverUrl, "run-early-close", undefined, { allowInsecureHttp: true })) {
+          events.push(evt);
+        }
+        expect(events.length).toBe(1);
+        expect(events[0].type).toBe("finish");
+        expect(events[0].result?.ok).toBe(true);
+        expect(events[0].result?.closedEarly).toBe(true);
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    });
+
+    it("当服务端保持连接但不发送终态事件时 waitForRunCompletion 在超时到期后安全退出并返回超时错误", async () => {
+      const sockets = new Set<any>();
+      const server = createServer((req, res) => {
+        if (req.url?.includes("/events")) {
+          res.writeHead(200, {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+          });
+          // 发送一条阶段状态事件后持续保持连接，不发送 finish
+          res.write("event: status\ndata: {\"running\": true}\n\n");
+        } else if (req.url?.startsWith("/api/v2/runs/")) {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ id: "hang-run", status: "running" }));
+        } else {
+          res.writeHead(404);
+          res.end();
+        }
+      });
+      server.on("connection", (sock) => {
+        sockets.add(sock);
+        sock.on("close", () => sockets.delete(sock));
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+      const port = (server.address() as any).port;
+      const target = new RemoteActionDockTarget({
+        serverUrl: `http://127.0.0.1:${port}`,
+        baseTimeoutMs: 120,
+        allowInsecureHttp: true,
+      });
+
+      try {
+        const start = Date.now();
+        const res = await (target as any).waitForRunCompletion("hang-run", undefined, 100);
+        const elapsed = Date.now() - start;
+        expect(res.ok).toBe(false);
+        expect(res.error?.code).toBe("TIMEOUT");
+        expect(res.error?.message).toContain("hang-run");
+        expect(res.error?.message).toMatch(/after \d+ms/);
+        expect(elapsed).toBeGreaterThanOrEqual(100);
+        expect(elapsed).toBeLessThan(1000);
+      } finally {
+        for (const s of sockets) s.destroy();
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+        await target.close();
+      }
+    });
+
+    it("当外部信号取消时 waitForRunCompletion 同步取消内部监听并返回取消错误", async () => {
+      const sockets = new Set<any>();
+      const server = createServer((req, res) => {
+        if (req.url?.includes("/events")) {
+          res.writeHead(200, {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+          });
+          res.write(": keep alive\n\n");
+        } else {
+          res.writeHead(404);
+          res.end();
+        }
+      });
+      server.on("connection", (sock) => {
+        sockets.add(sock);
+        sock.on("close", () => sockets.delete(sock));
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+      const port = (server.address() as any).port;
+      const target = new RemoteActionDockTarget({
+        serverUrl: `http://127.0.0.1:${port}`,
+        baseTimeoutMs: 5000,
+        allowInsecureHttp: true,
+      });
+
+      try {
+        const abortController = new AbortController();
+        setTimeout(() => abortController.abort(), 40);
+        const start = Date.now();
+        const res = await (target as any).waitForRunCompletion("cancel-run", abortController.signal, 5000);
+        const elapsed = Date.now() - start;
+        expect(res.ok).toBe(false);
+        expect(res.error?.code).toBe("ACTION_CANCELLED");
+        expect(elapsed).toBeLessThan(1000);
+      } finally {
+        for (const s of sockets) s.destroy();
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+        await target.close();
+      }
+    });
+
+    it("当流通道异常中断且仍有超时预算时继续通过轮询兜底直至终态", async () => {
+      const server = createServer((req, res) => {
+        if (req.url?.includes("/events")) {
+          res.writeHead(500);
+          res.end("server error");
+        } else if (req.url?.startsWith("/api/v2/runs/")) {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({
+            id: "fallback-run",
+            status: "success",
+            output: { answer: 42 },
+          }));
+        } else {
+          res.writeHead(404);
+          res.end();
+        }
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+      const port = (server.address() as any).port;
+      const target = new RemoteActionDockTarget({
+        serverUrl: `http://127.0.0.1:${port}`,
+        baseTimeoutMs: 500,
+        allowInsecureHttp: true,
+      });
+
+      try {
+        const res = await (target as any).waitForRunCompletion("fallback-run", undefined, 500);
+        expect(res.ok).toBe(true);
+        expect(res.data).toEqual({ answer: 42 });
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+        await target.close();
       }
     });
   });

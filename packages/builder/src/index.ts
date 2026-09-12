@@ -30,7 +30,9 @@ export {
   createTarGzArchiveAsync,
   createZipArchive,
   createZipArchiveAsync,
+  writeToStream,
 } from "./archive";
+export type { TarGzArchiveOptions } from "./archive";
 
 // 构建规划
 export { BuildPlanner, buildPlan, SelectionPlanner, selectionPlan } from "./planner";

@@ -1,8 +1,9 @@
-import { closeSync, createReadStream, createWriteStream, openSync, readdirSync, readFileSync, statSync, writeFileSync, writeSync } from "node:fs";
+import { closeSync, createReadStream, createWriteStream, existsSync, openSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync, writeSync } from "node:fs";
 import { createDeflateRaw, deflateRawSync, gzipSync, createGzip } from "node:zlib";
 import { basename, join, relative, sep } from "node:path";
-import { Transform, Writable } from "node:stream";
+import { Readable, Transform, Writable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { assertPathWithinRoot } from "@actiondock/core";
 
 /**
  * 纯 Node 实现的归档压缩模块。
@@ -20,17 +21,61 @@ interface ArchiveEntry {
   isDir: boolean;
 }
 
-/** 递归收集目录内全部条目 */
-function collectEntries(dir: string, baseDir = dir): ArchiveEntry[] {
+/** 递归收集目录内全部条目，执行安全路径边界校验与符号链接循环拦截 */
+function collectEntries(dir: string, baseDir = dir, visited = new Set<string>()): ArchiveEntry[] {
+  if (!existsSync(dir)) return [];
+  if (visited.size === 0) {
+    try {
+      visited.add(existsSync(baseDir) ? realpathSync(baseDir) : baseDir);
+    } catch {
+      // 忽略
+    }
+  }
   const entries: ArchiveEntry[] = [];
-  for (const name of readdirSync(dir).sort()) {
+  let names: string[];
+  try {
+    names = readdirSync(dir).sort();
+  } catch {
+    return [];
+  }
+  for (const name of names) {
     const fullPath = join(dir, name);
-    const stat = statSync(fullPath);
-    if (stat.isDirectory()) {
-      entries.push({ relPath: relative(baseDir, fullPath).split(sep).join("/"), isDir: true });
-      entries.push(...collectEntries(fullPath, baseDir));
-    } else if (stat.isFile()) {
-      entries.push({ relPath: relative(baseDir, fullPath).split(sep).join("/"), isDir: false });
+    try {
+      assertPathWithinRoot(baseDir, fullPath, "archive path");
+    } catch {
+      continue;
+    }
+
+    let real: string;
+    try {
+      real = existsSync(fullPath) ? realpathSync(fullPath) : fullPath;
+    } catch {
+      continue;
+    }
+
+    try {
+      assertPathWithinRoot(baseDir, real, "archive path");
+    } catch {
+      // 忽略并跳过指向 baseDir 外部的软链接
+      continue;
+    }
+
+    if (visited.has(real)) {
+      continue;
+    }
+    visited.add(real);
+
+    try {
+      const stat = statSync(fullPath);
+      if (stat.isDirectory()) {
+        entries.push({ relPath: relative(baseDir, fullPath).split(sep).join("/"), isDir: true });
+        entries.push(...collectEntries(fullPath, baseDir, visited));
+      } else if (stat.isFile()) {
+        entries.push({ relPath: relative(baseDir, fullPath).split(sep).join("/"), isDir: false });
+      }
+    } catch {
+      // 忽略无法访问或损坏的文件/符号链接
+      continue;
     }
   }
   return entries;
@@ -188,6 +233,49 @@ export function createZipArchive(dir: string, outPath: string): void {
 }
 
 /**
+ * 向可写流安全写入数据块，严格处理背压与流异常。
+ * 当 stream.write 返回 false 时挂起等待 drain 事件触发；
+ * 若流销毁或出错则安全拒绝。
+ */
+export async function writeToStream(stream: Writable, chunk: Buffer): Promise<void> {
+  if (stream.destroyed || (stream as { errored?: Error | null }).errored) {
+    throw (stream as { errored?: Error | null }).errored ?? new Error("Target stream has been destroyed");
+  }
+  const canWrite = stream.write(chunk);
+  if (!canWrite) {
+    if (stream.destroyed || (stream as { errored?: Error | null }).errored) {
+      throw (stream as { errored?: Error | null }).errored ?? new Error("Target stream has been destroyed");
+    }
+    await new Promise<void>((resolve, reject) => {
+      const onDrain = () => {
+        cleanup();
+        resolve();
+      };
+      const onError = (err: unknown) => {
+        cleanup();
+        reject(err);
+      };
+      const onClose = () => {
+        cleanup();
+        if (stream.destroyed && !stream.writableEnded) {
+          reject((stream as { errored?: Error | null }).errored ?? new Error("Target stream closed prematurely"));
+        } else {
+          resolve();
+        }
+      };
+      const cleanup = () => {
+        stream.off("drain", onDrain);
+        stream.off("error", onError);
+        stream.off("close", onClose);
+      };
+      stream.once("drain", onDrain);
+      stream.once("error", onError);
+      stream.once("close", onClose);
+    });
+  }
+}
+
+/**
  * 异步流式 zip 归档：基于 PKZIP Data Descriptor 规范实现真正流式打包，
  * 逐文件流式读取与增量压缩写入磁盘，避免在内存中积压全量原文件与压缩内容。
  */
@@ -204,24 +292,8 @@ export async function createZipArchiveAsync(dir: string, outPath: string): Promi
   let offset = 0;
 
   const writeChunk = async (chunk: Buffer): Promise<void> => {
-    if (out.destroyed) {
-      throw new Error("Output stream has been destroyed");
-    }
     offset += chunk.length;
-    if (!out.write(chunk)) {
-      await new Promise<void>((resolve, reject) => {
-        const onDrain = () => {
-          out.off("error", onError);
-          resolve();
-        };
-        const onError = (err: Error) => {
-          out.off("drain", onDrain);
-          reject(err);
-        };
-        out.once("drain", onDrain);
-        out.once("error", onError);
-      });
-    }
+    await writeToStream(out, chunk);
   };
 
   try {
@@ -463,53 +535,92 @@ export function createTarGzArchive(dir: string, outPath: string): void {
   writeFileSync(outPath, gzipSync(Buffer.concat(chunks), { level: 9 }));
 }
 
+/** tar.gz 异步流式归档配置选项 */
+export interface TarGzArchiveOptions {
+  /** 自定义可读流创建器，默认使用 node:fs 的 createReadStream */
+  createReadStream?: (path: string) => Readable;
+  /** 自定义可写流创建器，默认使用 node:fs 的 createWriteStream */
+  createWriteStream?: (path: string) => Writable;
+  /** 自定义 gzip 转换流创建器，默认使用 node:zlib 的 createGzip */
+  createGzip?: () => Transform;
+  /** 自定义 gzip 压缩级别，默认值为 9 */
+  level?: number;
+}
+
 /**
- * 将目录异步流式打包为标准 tar.gz 归档（USTAR + gzip 流），避免把超大二进制和归档缓冲在内存中。
+ * 将目录异步流式打包为标准 tar.gz 归档（USTAR 与 gzip 流），避免在内存中积压全量原文件与压缩内容。
+ * 严格基于 Node.js 异步流背压机制与错误传播链路实现。
  *
  * @param dir 待打包目录
  * @param outPath 输出 tar.gz 文件路径
+ * @param options 归档配置选项
  */
-export async function createTarGzArchiveAsync(dir: string, outPath: string): Promise<void> {
+export async function createTarGzArchiveAsync(
+  dir: string,
+  outPath: string,
+  options?: TarGzArchiveOptions
+): Promise<void> {
   const rootName = basename(dir);
   const entries = collectEntries(dir);
-  const gzip = createGzip({ level: 9 });
-  const writeStream = createWriteStream(outPath);
+  const gzip = options?.createGzip ? options.createGzip() : createGzip({ level: options?.level ?? 9 });
+  const getWriteStream = options?.createWriteStream ?? createWriteStream;
+  const getReadStream = options?.createReadStream ?? createReadStream;
+  const writeStream = getWriteStream(outPath);
   const pipePromise = pipeline(gzip, writeStream);
+  pipePromise.catch(() => {});
 
-  for (const entry of entries) {
-    const path = `${rootName}/${entry.relPath}${entry.isDir ? "/" : ""}`;
-    const fullPath = join(dir, entry.relPath);
-    const stat = statSync(fullPath);
-    const isExec =
-      !entry.isDir &&
-      (Boolean(stat.mode & 0o111) || entry.relPath.includes("bin/") || entry.relPath.startsWith("bin/"));
+  try {
+    for (const entry of entries) {
+      const path = `${rootName}/${entry.relPath}${entry.isDir ? "/" : ""}`;
+      const fullPath = join(dir, entry.relPath);
+      const stat = statSync(fullPath);
+      const isExec =
+        !entry.isDir &&
+        (Boolean(stat.mode & 0o111) || entry.relPath.includes("bin/") || entry.relPath.startsWith("bin/"));
 
-    const header = tarHeader(
-      path,
-      entry.isDir ? 0 : stat.size,
-      Math.floor(stat.mtimeMs / 1000),
-      entry.isDir,
-      isExec
-    );
-    gzip.write(header);
+      const header = tarHeader(
+        path,
+        entry.isDir ? 0 : stat.size,
+        Math.floor(stat.mtimeMs / 1000),
+        entry.isDir,
+        isExec
+      );
+      await writeToStream(gzip, header);
 
-    if (!entry.isDir && stat.size > 0) {
-      await new Promise<void>((resolve, reject) => {
-        const fileStream = createReadStream(fullPath);
-        fileStream.on("data", (chunk) => gzip.write(chunk));
-        fileStream.on("end", () => {
-          const rem = stat.size % 512;
-          if (rem !== 0) {
-            gzip.write(Buffer.alloc(512 - rem));
+      if (!entry.isDir && stat.size > 0) {
+        const fileStream = getReadStream(fullPath);
+        const onGzipError = (err: Error) => {
+          if ("destroy" in fileStream && typeof fileStream.destroy === "function") {
+            fileStream.destroy(err);
           }
-          resolve();
-        });
-        fileStream.on("error", reject);
-      });
-    }
-  }
+        };
+        gzip.once("error", onGzipError);
+        try {
+          for await (const chunk of fileStream) {
+            const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+            await writeToStream(gzip, buf);
+          }
+        } finally {
+          gzip.off("error", onGzipError);
+        }
 
-  gzip.write(Buffer.alloc(1024));
-  gzip.end();
-  await pipePromise;
+        const rem = stat.size % 512;
+        if (rem !== 0) {
+          await writeToStream(gzip, Buffer.alloc(512 - rem));
+        }
+      }
+    }
+
+    await writeToStream(gzip, Buffer.alloc(1024));
+    gzip.end();
+    await pipePromise;
+  } catch (err) {
+    gzip.destroy(err as Error);
+    if ("destroy" in writeStream && typeof writeStream.destroy === "function") {
+      writeStream.destroy(err as Error);
+    }
+    await pipePromise.catch(() => {});
+    throw err;
+  }
 }
+
