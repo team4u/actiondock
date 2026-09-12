@@ -50,7 +50,7 @@ ActionDock 2.0 模型上下文协议适配器。
 ad mcp
 
 # 以 HTTP 协议启动并在指定端口监听
-ad mcp --transport http --port 8080
+ad mcp serve --port 8080
 ```
 
 也可以在代码中通过编程方式创建适配器服务：
