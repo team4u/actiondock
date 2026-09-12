@@ -382,12 +382,46 @@ export function parseProjectQuarantineTimestamp(entryName: string): {
 export const parseQuarantineTimestamp = parseProjectQuarantineTimestamp;
 
 /**
+ * 读取目标规范路径（工程主锁目录或 reclaim 目录）中记录的当前有效令牌凭据。
+ */
+function readCanonicalProjectToken(targetPath: string): string | undefined {
+  try {
+    if (!existsSync(targetPath)) {
+      return undefined;
+    }
+    let isDir = false;
+    try {
+      isDir = statSync(targetPath).isDirectory();
+    } catch {
+      return undefined;
+    }
+    const metaPath = isDir ? join(targetPath, "metadata.json") : targetPath;
+    if (!existsSync(metaPath)) {
+      return undefined;
+    }
+    const raw = readFileSync(metaPath, "utf-8");
+    if (raw.trim().length === 0) {
+      return undefined;
+    }
+    const parsed = JSON.parse(raw);
+    if (typeof parsed?.guardToken === "string" && parsed.guardToken.length > 0) {
+      return parsed.guardToken;
+    }
+    if (typeof parsed?.lockToken === "string" && parsed.lockToken.length > 0) {
+      return parsed.lockToken;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * 清理过期的工程锁隔离目录（GC 回收机制）。
- * 实施双重存活 fencing 校验，防止并发竞争者误删活跃持锁者或正处于回滚保护中的目录：
- * - 检查操作者 PID：若正在操作该目录的 operatorPid 仍处于存活状态，绝对不得清理。
- * - 检查存活年龄：若未超过 maxAgeMs，不得清理。
- * - 检查隔离目录内 metadata.json：若记录的锁持有者 pid 存活，绝对不得清理。
- * - 仅当操作者已死、已超过 maxAgeMs、且内部 metadata.json 记录的持有者均已死或无存活 owner 时，才安全删除。
+ * 实施分流存活校验，防止误删活跃持锁者与回滚中目录，同时防止孤儿目录无限泄漏：
+ * - 共同前置条件：存活年龄必须超过 maxAgeMs（默认 10000ms），未超期前严禁清理（保持宽限期）。
+ * - 活跃隔离目录（quarantine / rollback / release）：若 operatorPid 存活或内部 metadata.json 记录的 pid 与 childPids 存活，跳过不予清理。
+ * - 孤儿脱离目录（orphan）：内部旧 metadata.pid 不再作为续命依据；提取其内部 orphanToken，仅当当前规范主路径（主锁目录与 reclaim 目录）依然持有该凭证时保守跳过；规范路径不存在或已变更凭据时直接安全清理。
  */
 export function cleanStaleProjectQuarantines(
   parentDir: string,
@@ -399,6 +433,11 @@ export function cleanStaleProjectQuarantines(
     if (!existsSync(parentDir)) return;
     const entries = readdirSync(parentDir);
     const now = Date.now();
+    const canonicalPrimaryLockPath = basePrefix.endsWith(".reclaim")
+      ? join(parentDir, basePrefix.slice(0, -".reclaim".length))
+      : join(parentDir, basePrefix);
+    const canonicalReclaimPath = `${canonicalPrimaryLockPath}.reclaim`;
+
     for (const entry of entries) {
       if (deadline !== undefined && Date.now() >= deadline) {
         break;
@@ -416,12 +455,7 @@ export function cleanStaleProjectQuarantines(
       try {
         const { operatorPid, timestamp } = parseProjectQuarantineTimestamp(entry);
 
-        // 检查操作者 PID：若正在操作该目录的 operatorPid 仍处于存活状态（isPidAlive），绝对不得清理，直接跳过
-        if (operatorPid !== undefined && isPidAlive(operatorPid)) {
-          continue;
-        }
-
-        // 检查存活年龄：若未超过 maxAgeMs（默认 10000ms），直接跳过
+        // a. 共同前置条件：存活年龄必须超过 maxAgeMs（默认 10000ms），未超期前严禁清理（保持宽限期）
         let age: number;
         if (timestamp !== undefined) {
           age = now - timestamp;
@@ -433,35 +467,63 @@ export function cleanStaleProjectQuarantines(
           continue;
         }
 
-        // 检查隔离目录内 metadata.json：若 metadata 中记录的锁持有者 pid 存活（或 childPids 存在存活子进程），绝对不得清理，直接跳过
-        let isDir = false;
-        try {
-          isDir = statSync(fullPath).isDirectory();
-        } catch {
+        const isOrphan = entry.includes(".orphan.");
+        if (!isOrphan) {
+          // b. 若不是 .orphan.（即活跃的 quarantine / rollback / release 目录）：
+          // - 若 operatorPid 存活，continue；
+          if (operatorPid !== undefined && isPidAlive(operatorPid)) {
+            continue;
+          }
+
+          // - 若内部 metadata.json 记录的 pid 或 childPids 存活，continue；
+          let isDir = false;
+          try {
+            isDir = statSync(fullPath).isDirectory();
+          } catch {
+            continue;
+          }
+          const metaPath = isDir ? join(fullPath, "metadata.json") : fullPath;
+          if (existsSync(metaPath)) {
+            try {
+              const raw = readFileSync(metaPath, "utf-8");
+              if (raw.trim().length > 0) {
+                const meta = JSON.parse(raw);
+                if (typeof meta?.pid === "number" && isPidAlive(meta.pid)) {
+                  continue;
+                }
+                if (
+                  Array.isArray(meta?.childPids) &&
+                  meta.childPids.some((childPid: any) => typeof childPid === "number" && isPidAlive(childPid))
+                ) {
+                  continue;
+                }
+              }
+            } catch {
+              // 元数据损坏或不可读，不视为存在存活持有者
+            }
+          }
+
+          rmSync(fullPath, { recursive: true, force: true });
           continue;
         }
-        const metaPath = isDir ? join(fullPath, "metadata.json") : fullPath;
-        if (existsSync(metaPath)) {
-          try {
-            const raw = readFileSync(metaPath, "utf-8");
-            if (raw.trim().length > 0) {
-              const meta = JSON.parse(raw);
-              if (typeof meta?.pid === "number" && isPidAlive(meta.pid)) {
-                continue;
-              }
-              if (
-                Array.isArray(meta?.childPids) &&
-                meta.childPids.some((childPid: any) => typeof childPid === "number" && isPidAlive(childPid))
-              ) {
-                continue;
-              }
-            }
-          } catch {
-            // 元数据损坏或不可读，不视为存在存活持有者
-          }
+
+        // c. 若是 .orphan. 目录（已脱离规范路径）：
+        // 严禁再用内部旧 metadata.pid 存活为由无限续命！
+        // 提取 orphan 内部记录的 orphanToken（guardToken ?? lockToken）
+        const orphanToken = readCanonicalProjectToken(fullPath);
+
+        // 核对当前 canonical 规范主路径（主锁目录与 reclaim 目录）的当前凭证：
+        // 仅当当前规范路径依然持有该 orphanToken 时保守跳过；若规范路径不存在或已切换为其他 token，直接执行 rmSync 安全清理！
+        const primaryToken = readCanonicalProjectToken(canonicalPrimaryLockPath);
+        const reclaimToken = readCanonicalProjectToken(canonicalReclaimPath);
+
+        if (
+          orphanToken !== undefined &&
+          (orphanToken === primaryToken || orphanToken === reclaimToken)
+        ) {
+          continue;
         }
 
-        // 仅当操作者已死、已超过 maxAgeMs、且内部 metadata.json 记录的持有者（及子进程）均已死或无存活 owner 时，才执行 rmSync 安全清理
         rmSync(fullPath, { recursive: true, force: true });
       } catch {}
     }

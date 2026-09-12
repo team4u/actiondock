@@ -601,18 +601,19 @@ rl.on("line", (cmd) => {
     release();
   });
 
-  it("safeRemoveStaleProjectReclaimGuard 在 token 不匹配时安全转换为 .orphan.* 脱离态，持有者死亡超 10 秒后即使创建者存活 GC 依然顺利清理", () => {
+  it("safeRemoveStaleProjectReclaimGuard 在 token 不匹配时安全转换为 .orphan.* 脱离态，即使内部持有者 PID 仍存活超 10 秒后 GC 依然顺利清理", () => {
     const metaDir = join(tempDir, ".actiondock");
     mkdirSync(metaDir, { recursive: true });
     const lockDir = join(metaDir, "project.lock");
     const reclaimDir = `${lockDir}.reclaim`;
     mkdirSync(reclaimDir, { recursive: true });
 
-    // - 写入陈旧守卫，持有者为已死亡进程，带有实际 guardToken
-    const deadPid = 99999999;
+    // - 写入守卫，持有者明确设置为当前存活的 process.pid（活 PID），带有实际 guardToken
+    const livePid = process.pid;
+    expect(isPidAlive(livePid)).toBe(true);
     writeFileSync(
       join(reclaimDir, "metadata.json"),
-      JSON.stringify({ pid: deadPid, guardToken: "actual-token-rival", createdAt: Date.now() - 5000 }, null, 2),
+      JSON.stringify({ pid: livePid, guardToken: "actual-token-rival", createdAt: Date.now() - 5000 }, null, 2),
       "utf-8"
     );
 
@@ -629,7 +630,12 @@ rl.on("line", (cmd) => {
     expect(parsed.operatorPid).toBeUndefined();
     expect(parsed.timestamp).toBeDefined();
 
-    // - 未超 10 秒时 GC 完好保留
+    // - 确认 orphan 内部 metadata.json 中记录的持有者确实为当前存活进程 PID
+    const metaInOrphan = JSON.parse(readFileSync(join(orphanPath, "metadata.json"), "utf-8"));
+    expect(metaInOrphan.pid).toBe(livePid);
+    expect(isPidAlive(metaInOrphan.pid)).toBe(true);
+
+    // - 未超 10 秒时 GC 完好保留（保持宽限期）
     cleanStaleProjectQuarantines(metaDir, "project.lock");
     expect(existsSync(orphanPath)).toBe(true);
 
@@ -638,8 +644,49 @@ rl.on("line", (cmd) => {
     const expiredOrphanPath = join(metaDir, expiredOrphanName);
     fs.renameSync(orphanPath, expiredOrphanPath);
 
-    // - 当前进程依然存活，但由于 orphan 目录已脱离创建者 Host 的 PID 约束，且持有者已死超期，GC 顺利清理
-    expect(isPidAlive(process.pid)).toBe(true);
+    // - 即使内部 metadata.pid 依然处于存活状态，因已超期且规范路径未持有该凭据，GC 顺利安全清理
+    expect(isPidAlive(livePid)).toBe(true);
+    cleanStaleProjectQuarantines(metaDir, "project.lock");
+    expect(existsSync(expiredOrphanPath)).toBe(false);
+  });
+
+  it("工程锁 orphan 目录超期后，若当前规范主路径依然持有该 orphanToken 则保守跳过不予清理", () => {
+    const metaDir = join(tempDir, ".actiondock");
+    mkdirSync(metaDir, { recursive: true });
+    const lockDir = join(metaDir, "project.lock");
+    const reclaimDir = `${lockDir}.reclaim`;
+    mkdirSync(reclaimDir, { recursive: true });
+
+    const sharedToken = "shared-orphan-token-123";
+    const livePid = process.pid;
+
+    // - 规范 reclaim 路径持有 sharedToken
+    writeFileSync(
+      join(reclaimDir, "metadata.json"),
+      JSON.stringify({ pid: livePid, guardToken: sharedToken, createdAt: Date.now() }, null, 2),
+      "utf-8"
+    );
+
+    // - 创建超期的 orphan 目录，内部也记录 sharedToken
+    const expiredOrphanName = `project.lock.reclaim.orphan.${Date.now() - 20000}.uuid8888`;
+    const expiredOrphanPath = join(metaDir, expiredOrphanName);
+    mkdirSync(expiredOrphanPath, { recursive: true });
+    writeFileSync(
+      join(expiredOrphanPath, "metadata.json"),
+      JSON.stringify({ pid: livePid, guardToken: sharedToken }, null, 2),
+      "utf-8"
+    );
+
+    // - 执行 GC：因为当前规范路径依然持有该 token，保守跳过
+    cleanStaleProjectQuarantines(metaDir, "project.lock");
+    expect(existsSync(expiredOrphanPath)).toBe(true);
+
+    // - 当规范路径释放或切换为不同 token 后，GC 顺利安全清理该 orphan 目录
+    writeFileSync(
+      join(reclaimDir, "metadata.json"),
+      JSON.stringify({ pid: livePid, guardToken: "different-new-token", createdAt: Date.now() }, null, 2),
+      "utf-8"
+    );
     cleanStaleProjectQuarantines(metaDir, "project.lock");
     expect(existsSync(expiredOrphanPath)).toBe(false);
   });
