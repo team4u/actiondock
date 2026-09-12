@@ -1086,5 +1086,95 @@ actions:
       rmSync(tempDataDir, { recursive: true, force: true });
     }
   });
+
+  it("当 Host 初始化失败时，外部传入的 ActionDockApp 实例不被 close() 并可继续使用", async () => {
+    let appClosed = false;
+    const externalApp = await createActionDockApp({
+      projectConfig: { id: "pkg.external", name: "外部包", version: "1.0.0" },
+      actions: [
+        {
+          id: "ping",
+          action: defineAction({
+            run: () => ({ pong: true }),
+          }),
+        },
+      ],
+      inMemory: true,
+    });
+    const origClose = externalApp.close.bind(externalApp);
+    externalApp.close = async (opts) => {
+      appClosed = true;
+      return origClose(opts);
+    };
+
+    const tempDir = mkdtempSync(join(tmpdir(), "ad-host-external-app-test-"));
+    const dummyChild = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+      stdio: "ignore",
+    });
+
+    try {
+      writeFileSync(
+        join(tempDir, "actiondock.json"),
+        JSON.stringify({
+          id: "pkg.busy-project",
+          name: "繁忙工程",
+          version: "1.0.0",
+        })
+      );
+
+      const lockDir = join(tempDir, ".actiondock", "project.lock");
+      mkdirSync(lockDir, { recursive: true });
+      writeFileSync(
+        join(lockDir, "metadata.json"),
+        JSON.stringify({
+          pid: dummyChild.pid,
+          sessionToken: "active-token",
+          createdAt: Date.now(),
+        })
+      );
+
+      // 1. 测试 createActionDockHost 抛错时 externalApp 未被关闭
+      let createErr: any;
+      try {
+        await createActionDockHost({
+          projectRoot: tempDir,
+          packages: [externalApp],
+          autoLoadCurrentProject: true,
+        });
+      } catch (err) {
+        createErr = err;
+      }
+      expect(createErr?.code).toBe("PROJECT_BUSY");
+      expect(appClosed).toBe(false);
+
+      // 外部 App 依然处于打开状态，可正常执行动作
+      const execRes1 = await externalApp.runAction("ping", {});
+      expect(execRes1.ok).toBe(true);
+
+      // 2. 测试 new DefaultActionDockHost 抛错时 externalApp 未被关闭
+      let constructErr: any;
+      try {
+        new DefaultActionDockHost({
+          projectRoot: tempDir,
+          packages: [externalApp],
+          autoLoadCurrentProject: true,
+        });
+      } catch (err) {
+        constructErr = err;
+      }
+      expect(constructErr?.code).toBe("PROJECT_BUSY");
+      expect(appClosed).toBe(false);
+
+      const execRes2 = await externalApp.runAction("ping", {});
+      expect(execRes2.ok).toBe(true);
+    } finally {
+      try {
+        dummyChild.kill("SIGKILL");
+      } catch {}
+      rmSync(tempDir, { recursive: true, force: true });
+      await externalApp.close();
+      expect(appClosed).toBe(true);
+    }
+  });
 });
 

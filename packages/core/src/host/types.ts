@@ -30,7 +30,7 @@ import type { RuntimePlatform } from "../platform/types";
  * ActionDock 宿主容器初始化配置选项。
  */
 export interface ActionDockHostOptions {
-  /** 显式预注册的包列表（现成 ActionDockApp 实例或 ActionDockAppOptions 配置） */
+  /** 显式预注册的包列表（现成 ActionDockApp 实例或 ActionDockAppOptions 配置）。外部传入的实例生命周期与所有权归调用方所有，宿主初始化失败时不会关闭外部实例。 */
   packages?: Array<ActionDockApp | ActionDockAppOptions>;
   /** 当前工程根目录绝对物理路径 */
   projectRoot?: string;

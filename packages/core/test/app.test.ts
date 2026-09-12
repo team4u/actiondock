@@ -430,6 +430,40 @@ Execute build and then deploy artifact.
     await app.close();
   });
 
+  it("setState/getState/deleteState 支持 StateScopeOptions 中 actionId 参数并消歧三参数调用", async () => {
+    const app = await createActionDockApp({
+      projectConfig: {
+        id: "test.state.scope",
+        name: "State Scope App",
+        version: "1.0.0",
+      },
+      inMemory: true,
+    });
+
+    // 1. 通过 options 显式传入 actionId 写入状态
+    await app.setState("cache_key", "cached_data", { actionId: "dynamic_worker" });
+    const cached = await app.getState<string>("cache_key", { actionId: "dynamic_worker" });
+    expect(cached).toBe("cached_data");
+
+    // 2. 动态未注册 actionId，value 恰好是类似 StateScopeOptions 的对象：通过 4 参数调用消除歧义
+    const stateObj = { ttl: 60, namespace: "meta" };
+    await app.setState("unregistered_action", "item_key", stateObj, {});
+    const retrievedObj = await app.getState<any>("unregistered_action", "item_key");
+    expect(retrievedObj).toEqual({ ttl: 60, namespace: "meta" });
+
+    // 3. deleteState 与 listStateKeys 支持 opts.actionId
+    const keys = await app.listStateKeys({ actionId: "dynamic_worker" });
+    expect(keys).toContain("cache_key");
+
+    const deleted = await app.deleteState("cache_key", { actionId: "dynamic_worker" });
+    expect(deleted).toBe(true);
+
+    const check = await app.getState("cache_key", { actionId: "dynamic_worker" });
+    expect(check).toBeUndefined();
+
+    await app.close();
+  });
+
   it("优雅关机 close() 协调执行服务关机与底层存储安全关闭", async () => {
     let customStorageClosed = false;
     const storage = new SqliteRuntimeStorage({

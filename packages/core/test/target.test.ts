@@ -277,6 +277,7 @@ describe("ActionDockTarget 统一调用门面", () => {
     beforeAll(async () => {
       // 1. 脚手架测试工程与 Action 动作文件
       mkdirSync(join(projectDir, "actions"), { recursive: true });
+      mkdirSync(join(projectDir, "playbooks"), { recursive: true });
 
       writeFileSync(
         join(projectDir, "actiondock.json"),
@@ -297,10 +298,25 @@ describe("ActionDockTarget 统一调用门面", () => {
                 },
               },
             },
+            playbooks: {
+              calc: {
+                entry: "playbooks/calc.yml",
+                description: "计算剧本",
+                actions: ["add"],
+              },
+            },
           },
           null,
           2
         )
+      );
+
+      writeFileSync(
+        join(projectDir, "playbooks", "calc.yml"),
+        `description: "计算剧本"
+actions:
+  - add
+`
       );
 
       writeFileSync(
@@ -354,6 +370,13 @@ describe("ActionDockTarget 统一调用门面", () => {
       const spec = await target.describeAction("remote.service/add");
       expect(spec.id).toBe("add");
       expect(spec.description).toBe("远程加法");
+      expect(spec.packageId).toBe("remote.service");
+
+      // 3.1 describePlaybook() 远程查询剧本规范并携带 packageId
+      const pb = await target.describePlaybook("calc");
+      expect(pb.id).toBe("calc");
+      expect(pb.description).toBe("计算剧本");
+      expect(pb.packageId).toBe("remote.service");
 
       // 4. runAction() 同步远程调用
       const syncRes = await target.runAction("remote.service/add", { a: 12, b: 30 });
@@ -378,14 +401,53 @@ describe("ActionDockTarget 统一调用门面", () => {
       expect(run?.id).toBe(ticket.runId);
       expect(run?.status).toBe("success");
 
-      // 7. cancelRun() 远程任务取消
+      // 7. cancelRun() 远程任务取消并校验已完成终态真实 status
       const cancelRes = await target.cancelRun(ticket.runId);
       expect(cancelRes.outcome).toBe("already_terminal");
+      if (cancelRes.outcome === "already_terminal") {
+        expect(cancelRes.status).toBe("success");
+      }
 
       const notFoundCancel = await target.cancelRun("missing-run-id");
       expect(notFoundCancel.outcome).toBe("not_found");
 
       await target.close();
+    });
+
+    it("RemoteActionDockTarget 正确保存与透传 allowInsecureHttp 选项", async () => {
+      const dummyServer = createServer((req, res) => {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ id: "mock-remote", protocolVersion: "2.0", packages: [] }));
+      });
+      await new Promise<void>((resolve) => dummyServer.listen(0, "127.0.0.1", () => resolve()));
+      const port = (dummyServer.address() as any).port;
+
+      try {
+        // 1. 默认未开启 allowInsecureHttp 时，访问非 loopback 明文 HTTP (0.0.0.0) 携带 token 被安全阻断
+        const insecureTarget = new RemoteActionDockTarget({
+          serverUrl: `http://0.0.0.0:${port}`,
+          token: "secret-token",
+        });
+        expect(insecureTarget.allowInsecureHttp).toBeUndefined();
+        try {
+          await insecureTarget.info();
+          expect(true).toBe(false);
+        } catch (err: any) {
+          expect(err.code).toBe("INSECURE_TRANSPORT");
+        }
+
+        // 2. 显式开启 allowInsecureHttp 时，安全断言放行且请求成功处理
+        const allowedTarget = new RemoteActionDockTarget({
+          serverUrl: `http://0.0.0.0:${port}`,
+          token: "secret-token",
+          allowInsecureHttp: true,
+        });
+        expect(allowedTarget.allowInsecureHttp).toBe(true);
+        const info = await allowedTarget.info();
+        expect(info.id).toBe("mock-remote");
+      } finally {
+        await new Promise<void>((resolve) => dummyServer.close(() => resolve()));
+      }
     });
 
     it("服务端未开启管理能力时调用管理方法抛出规范 TARGET_CAPABILITY_UNAVAILABLE 错误", async () => {

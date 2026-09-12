@@ -342,6 +342,8 @@ async function fetchRemoteJson<T = any>(
       (err as any).code = data.error.code;
     }
     (err as any).status = res.status;
+    (err as any).errorData = data?.error;
+    (err as any).details = data?.error?.details ?? data?.error;
     throw err;
   }
 
@@ -351,13 +353,17 @@ async function fetchRemoteJson<T = any>(
 export async function fetchRemoteRun(
   serverUrl: string,
   runId: string,
-  token?: string
+  token?: string,
+  options?: { allowInsecureHttp?: boolean }
 ): Promise<RunRecord> {
   return fetchRemoteJson<RunRecord>(
     serverUrl,
     `/api/v2/runs/${encodeURIComponent(runId)}`,
     token,
-    { errorPrefix: `Failed to fetch remote run '${runId}'` }
+    {
+      errorPrefix: `Failed to fetch remote run '${runId}'`,
+      allowInsecureHttp: options?.allowInsecureHttp,
+    }
   );
 }
 
@@ -365,7 +371,8 @@ export async function cancelRemoteRun(
   serverUrl: string,
   runId: string,
   token?: string,
-  reason?: string
+  reason?: string,
+  options?: { allowInsecureHttp?: boolean }
 ): Promise<{ ok: boolean; runId: string; status: string }> {
   return fetchRemoteJson(
     serverUrl,
@@ -375,6 +382,7 @@ export async function cancelRemoteRun(
       method: "POST",
       body: { reason },
       errorPrefix: `Failed to cancel remote run '${runId}'`,
+      allowInsecureHttp: options?.allowInsecureHttp,
     }
   );
 }
@@ -382,34 +390,42 @@ export async function cancelRemoteRun(
 export async function fetchRemoteActions(
   serverUrl: string,
   token?: string,
-  intent?: string
+  intent?: string,
+  options?: { allowInsecureHttp?: boolean }
 ): Promise<Array<{ id: string; description: string; packageId?: string }>> {
   const query = intent ? `?intent=${encodeURIComponent(intent)}` : "";
   return fetchRemoteJson(
     serverUrl,
     `/api/v2/actions${query}`,
     token,
-    { errorPrefix: "Failed to fetch remote actions" }
+    {
+      errorPrefix: "Failed to fetch remote actions",
+      allowInsecureHttp: options?.allowInsecureHttp,
+    }
   );
 }
 
 export async function fetchRemoteActionShow(
   serverUrl: string,
   actionId: string,
-  token?: string
+  token?: string,
+  options?: { allowInsecureHttp?: boolean }
 ): Promise<any> {
   return fetchRemoteJson(
     serverUrl,
     `/api/v2/actions/${encodeURIComponent(actionId)}`,
     token,
-    { errorPrefix: `Failed to fetch remote action '${actionId}'` }
+    {
+      errorPrefix: `Failed to fetch remote action '${actionId}'`,
+      allowInsecureHttp: options?.allowInsecureHttp,
+    }
   );
 }
 
 export async function fetchRemoteInfo(
   serverUrl: string,
   token?: string,
-  options?: { intent?: string; package?: string; tree?: boolean }
+  options?: { intent?: string; package?: string; tree?: boolean; allowInsecureHttp?: boolean }
 ): Promise<any> {
   const params = new URLSearchParams();
   if (options?.intent) params.set("intent", options.intent);
@@ -420,28 +436,35 @@ export async function fetchRemoteInfo(
     serverUrl,
     `/api/v2/info${qs}`,
     token,
-    { errorPrefix: "Failed to fetch remote info" }
+    {
+      errorPrefix: "Failed to fetch remote info",
+      allowInsecureHttp: options?.allowInsecureHttp,
+    }
   );
 }
 
 export async function fetchRemoteDoctor(
   serverUrl: string,
   token?: string,
-  targetPackage?: string
+  targetPackage?: string,
+  options?: { allowInsecureHttp?: boolean }
 ): Promise<any> {
   const query = targetPackage ? `?package=${encodeURIComponent(targetPackage)}` : "";
   return fetchRemoteJson(
     serverUrl,
     `/api/v2/doctor${query}`,
     token,
-    { errorPrefix: "Failed to fetch remote doctor report" }
+    {
+      errorPrefix: "Failed to fetch remote doctor report",
+      allowInsecureHttp: options?.allowInsecureHttp,
+    }
   );
 }
 
 export async function fetchRemotePlaybooks(
   serverUrl: string,
   token?: string,
-  options?: { intent?: string; package?: string }
+  options?: { intent?: string; package?: string; allowInsecureHttp?: boolean }
 ): Promise<Array<{ id: string; description: string; actions: string[]; packageId: string; filePath: string }>> {
   const params = new URLSearchParams();
   if (options?.intent) params.set("intent", options.intent);
@@ -451,27 +474,34 @@ export async function fetchRemotePlaybooks(
     serverUrl,
     `/api/v2/playbooks${qs}`,
     token,
-    { errorPrefix: "Failed to fetch remote playbooks" }
+    {
+      errorPrefix: "Failed to fetch remote playbooks",
+      allowInsecureHttp: options?.allowInsecureHttp,
+    }
   );
 }
 
 export async function fetchRemotePlaybookShow(
   serverUrl: string,
   playbookId: string,
-  token?: string
+  token?: string,
+  options?: { allowInsecureHttp?: boolean }
 ): Promise<any> {
   return fetchRemoteJson(
     serverUrl,
     `/api/v2/playbooks/${encodeURIComponent(playbookId)}`,
     token,
-    { errorPrefix: `Failed to fetch remote playbook '${playbookId}'` }
+    {
+      errorPrefix: `Failed to fetch remote playbook '${playbookId}'`,
+      allowInsecureHttp: options?.allowInsecureHttp,
+    }
   );
 }
 
 export async function fetchRemoteRuns(
   serverUrl: string,
   token?: string,
-  options?: { status?: string; actionId?: string; packageId?: string; intent?: string; limit?: number }
+  options?: { status?: string; actionId?: string; packageId?: string; intent?: string; limit?: number; allowInsecureHttp?: boolean }
 ): Promise<{ ok: boolean; total: number; items: RunRecord[] }> {
   const params = new URLSearchParams();
   if (options?.status) params.set("status", options.status);
@@ -484,14 +514,17 @@ export async function fetchRemoteRuns(
     serverUrl,
     `/api/v2/runs${qs}`,
     token,
-    { errorPrefix: "Failed to fetch remote runs" }
+    {
+      errorPrefix: "Failed to fetch remote runs",
+      allowInsecureHttp: options?.allowInsecureHttp,
+    }
   );
 }
 
 export async function clearRemoteRuns(
   serverUrl: string,
   token?: string,
-  options?: { packageId?: string; actionId?: string; status?: string }
+  options?: { packageId?: string; actionId?: string; status?: string; allowInsecureHttp?: boolean }
 ): Promise<{ ok: boolean; clearedCount: number }> {
   return fetchRemoteJson(
     serverUrl,
@@ -501,6 +534,7 @@ export async function clearRemoteRuns(
       method: "POST",
       body: options || {},
       errorPrefix: "Failed to clear remote runs",
+      allowInsecureHttp: options?.allowInsecureHttp,
     }
   );
 }
@@ -508,7 +542,7 @@ export async function clearRemoteRuns(
 export async function fetchRemoteStateList(
   serverUrl: string,
   token?: string,
-  options?: { package?: string; action?: string; namespace?: string; prefix?: string }
+  options?: { package?: string; action?: string; namespace?: string; prefix?: string; allowInsecureHttp?: boolean }
 ): Promise<{ ok: boolean; packageId: string; keys: string[] }> {
   const params = new URLSearchParams();
   if (options?.package) params.set("package", options.package);
@@ -520,7 +554,10 @@ export async function fetchRemoteStateList(
     serverUrl,
     `/api/v2/state${qs}`,
     token,
-    { errorPrefix: "Failed to list remote state keys" }
+    {
+      errorPrefix: "Failed to list remote state keys",
+      allowInsecureHttp: options?.allowInsecureHttp,
+    }
   );
 }
 
@@ -528,7 +565,7 @@ export async function getRemoteStateKey(
   serverUrl: string,
   key: string,
   token?: string,
-  options?: { package?: string; action?: string; namespace?: string }
+  options?: { package?: string; action?: string; namespace?: string; allowInsecureHttp?: boolean }
 ): Promise<any> {
   const params = new URLSearchParams();
   if (options?.package) params.set("package", options.package);
@@ -539,7 +576,10 @@ export async function getRemoteStateKey(
     serverUrl,
     `/api/v2/state/${encodeURIComponent(key)}${qs}`,
     token,
-    { errorPrefix: `Failed to fetch remote state key '${key}'` }
+    {
+      errorPrefix: `Failed to fetch remote state key '${key}'`,
+      allowInsecureHttp: options?.allowInsecureHttp,
+    }
   );
 }
 
@@ -548,7 +588,7 @@ export async function setRemoteStateKey(
   key: string,
   value: unknown,
   token?: string,
-  options?: { package?: string; action?: string; namespace?: string; ttl?: number }
+  options?: { package?: string; action?: string; namespace?: string; ttl?: number; allowInsecureHttp?: boolean }
 ): Promise<any> {
   return fetchRemoteJson(
     serverUrl,
@@ -564,6 +604,7 @@ export async function setRemoteStateKey(
         ttl: options?.ttl,
       },
       errorPrefix: `Failed to set remote state key '${key}'`,
+      allowInsecureHttp: options?.allowInsecureHttp,
     }
   );
 }
@@ -572,7 +613,7 @@ export async function deleteRemoteStateKey(
   serverUrl: string,
   key: string,
   token?: string,
-  options?: { package?: string; action?: string; namespace?: string }
+  options?: { package?: string; action?: string; namespace?: string; allowInsecureHttp?: boolean }
 ): Promise<any> {
   const params = new URLSearchParams();
   if (options?.package) params.set("package", options.package);
@@ -586,6 +627,7 @@ export async function deleteRemoteStateKey(
     {
       method: "DELETE",
       errorPrefix: `Failed to delete remote state key '${key}'`,
+      allowInsecureHttp: options?.allowInsecureHttp,
     }
   );
 }
@@ -593,7 +635,7 @@ export async function deleteRemoteStateKey(
 export async function clearRemoteState(
   serverUrl: string,
   token?: string,
-  options?: { package?: string; action?: string; namespace?: string; prefix?: string; all?: boolean }
+  options?: { package?: string; action?: string; namespace?: string; prefix?: string; all?: boolean; allowInsecureHttp?: boolean }
 ): Promise<{ ok: boolean; packageId: string; clearedCount: number }> {
   return fetchRemoteJson(
     serverUrl,
@@ -603,6 +645,7 @@ export async function clearRemoteState(
       method: "POST",
       body: options || {},
       errorPrefix: "Failed to clear remote state",
+      allowInsecureHttp: options?.allowInsecureHttp,
     }
   );
 }
@@ -610,14 +653,18 @@ export async function clearRemoteState(
 export async function fetchRemoteConfig(
   serverUrl: string,
   token?: string,
-  packageId?: string
+  packageId?: string,
+  options?: { allowInsecureHttp?: boolean }
 ): Promise<any> {
   const query = packageId ? `?package=${encodeURIComponent(packageId)}` : "";
   return fetchRemoteJson(
     serverUrl,
     `/api/v2/config${query}`,
     token,
-    { errorPrefix: "Failed to fetch remote config" }
+    {
+      errorPrefix: "Failed to fetch remote config",
+      allowInsecureHttp: options?.allowInsecureHttp,
+    }
   );
 }
 
@@ -626,7 +673,8 @@ export async function setRemoteConfig(
   key: string,
   value: unknown,
   token?: string,
-  packageId?: string
+  packageId?: string,
+  options?: { allowInsecureHttp?: boolean }
 ): Promise<any> {
   return fetchRemoteJson(
     serverUrl,
@@ -636,6 +684,7 @@ export async function setRemoteConfig(
       method: "PUT",
       body: { key, value, package: packageId },
       errorPrefix: `Failed to set remote config '${key}'`,
+      allowInsecureHttp: options?.allowInsecureHttp,
     }
   );
 }
@@ -644,7 +693,8 @@ export async function deleteRemoteConfig(
   serverUrl: string,
   key: string,
   token?: string,
-  packageId?: string
+  packageId?: string,
+  options?: { allowInsecureHttp?: boolean }
 ): Promise<any> {
   const query = packageId ? `?package=${encodeURIComponent(packageId)}` : "";
   return fetchRemoteJson(
@@ -654,6 +704,7 @@ export async function deleteRemoteConfig(
     {
       method: "DELETE",
       errorPrefix: `Failed to delete remote config '${key}'`,
+      allowInsecureHttp: options?.allowInsecureHttp,
     }
   );
 }
@@ -661,13 +712,17 @@ export async function deleteRemoteConfig(
 export async function fetchRemoteConfigEnv(
   serverUrl: string,
   token?: string,
-  packageId?: string
+  packageId?: string,
+  options?: { allowInsecureHttp?: boolean }
 ): Promise<any> {
   const query = packageId ? `?package=${encodeURIComponent(packageId)}` : "";
   return fetchRemoteJson(
     serverUrl,
     `/api/v2/config/env${query}`,
     token,
-    { errorPrefix: "Failed to fetch remote config env checks" }
+    {
+      errorPrefix: "Failed to fetch remote config env checks",
+      allowInsecureHttp: options?.allowInsecureHttp,
+    }
   );
 }

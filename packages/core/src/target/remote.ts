@@ -195,18 +195,22 @@ export class RemoteActionDockTarget implements ActionDockTarget {
   public readonly token?: string;
   public readonly timeoutMs?: number;
   public readonly baseTimeoutMs: number;
+  public readonly allowInsecureHttp?: boolean;
 
   constructor(options: RemoteTargetOptions) {
     this.serverUrl = options.serverUrl;
     this.token = options.token;
     this.timeoutMs = options.timeoutMs;
     this.baseTimeoutMs = options.baseTimeoutMs ?? 60000;
+    this.allowInsecureHttp = options.allowInsecureHttp;
   }
 
   async info(): Promise<TargetInfo> {
     let raw: any;
     try {
-      raw = await fetchRemoteInfo(this.serverUrl, this.token);
+      raw = await fetchRemoteInfo(this.serverUrl, this.token, {
+        allowInsecureHttp: this.allowInsecureHttp,
+      });
     } catch (err: any) {
       wrapRemoteError(err);
     }
@@ -251,7 +255,9 @@ export class RemoteActionDockTarget implements ActionDockTarget {
   }
 
   async listActions(options?: ListActionsOptions): Promise<ActionSummary[]> {
-    const rawList = await fetchRemoteActions(this.serverUrl, this.token, options?.query);
+    const rawList = await fetchRemoteActions(this.serverUrl, this.token, options?.query, {
+      allowInsecureHttp: this.allowInsecureHttp,
+    });
     let summaries: ActionSummary[] = rawList.map((item: any) => ({
       id: item.id,
       description: item.description,
@@ -283,7 +289,9 @@ export class RemoteActionDockTarget implements ActionDockTarget {
     const actionId = parsed.packageId
       ? `${parsed.packageId}/${parsed.actionId}`
       : parsed.actionId;
-    const raw = await fetchRemoteActionShow(this.serverUrl, actionId, this.token);
+    const raw = await fetchRemoteActionShow(this.serverUrl, actionId, this.token, {
+      allowInsecureHttp: this.allowInsecureHttp,
+    });
 
     return {
       id: raw.id,
@@ -295,11 +303,15 @@ export class RemoteActionDockTarget implements ActionDockTarget {
       uses: raw.uses,
       entry: raw.entry,
       filePath: raw.filePath,
+      packageId: raw.packageId ?? parsed.packageId,
     };
   }
 
   async listPlaybooks(options?: { intent?: string; package?: string }): Promise<PlaybookSummary[]> {
-    const rawList = await fetchRemotePlaybooks(this.serverUrl, this.token, options);
+    const rawList = await fetchRemotePlaybooks(this.serverUrl, this.token, {
+      ...options,
+      allowInsecureHttp: this.allowInsecureHttp,
+    });
     return rawList.map((item: any) => ({
       id: item.id,
       description: item.description,
@@ -310,13 +322,16 @@ export class RemoteActionDockTarget implements ActionDockTarget {
   }
 
   async describePlaybook(id: string): Promise<PlaybookSpec> {
-    const raw = await fetchRemotePlaybookShow(this.serverUrl, id, this.token);
+    const raw = await fetchRemotePlaybookShow(this.serverUrl, id, this.token, {
+      allowInsecureHttp: this.allowInsecureHttp,
+    });
     return {
       id: raw.id,
       description: raw.description,
       actions: raw.actions,
       filePath: raw.filePath,
       content: raw.content,
+      packageId: raw.packageId,
     };
   }
 
@@ -347,6 +362,7 @@ export class RemoteActionDockTarget implements ActionDockTarget {
         signal: options?.signal,
         requestId: options?.requestId,
         async: false,
+        allowInsecureHttp: this.allowInsecureHttp,
       }
     );
   }
@@ -378,6 +394,7 @@ export class RemoteActionDockTarget implements ActionDockTarget {
         signal: options?.signal,
         requestId: options?.requestId,
         async: true,
+        allowInsecureHttp: this.allowInsecureHttp,
       }
     );
 
@@ -505,6 +522,7 @@ export class RemoteActionDockTarget implements ActionDockTarget {
         status: options?.status,
         intent: options?.intent,
         limit: options?.limit,
+        allowInsecureHttp: this.allowInsecureHttp,
       });
       return res.items || [];
     } catch (err: any) {
@@ -514,7 +532,10 @@ export class RemoteActionDockTarget implements ActionDockTarget {
 
   async clearRuns(options?: { packageId?: string; actionId?: string; status?: string }): Promise<number> {
     try {
-      const res = await clearRemoteRuns(this.serverUrl, this.token, options);
+      const res = await clearRemoteRuns(this.serverUrl, this.token, {
+        ...options,
+        allowInsecureHttp: this.allowInsecureHttp,
+      });
       return res.clearedCount ?? 0;
     } catch (err: any) {
       wrapRemoteError(err);
@@ -523,7 +544,9 @@ export class RemoteActionDockTarget implements ActionDockTarget {
 
   async getRun(runId: string): Promise<RunRecord | undefined> {
     try {
-      return await fetchRemoteRun(this.serverUrl, runId, this.token);
+      return await fetchRemoteRun(this.serverUrl, runId, this.token, {
+        allowInsecureHttp: this.allowInsecureHttp,
+      });
     } catch (err: any) {
       const msg = String(err?.message || "");
       if (msg.includes("404") || msg.includes("not found") || msg.includes("RUN_NOT_FOUND")) {
@@ -535,12 +558,23 @@ export class RemoteActionDockTarget implements ActionDockTarget {
 
   async cancelRun(runId: string, reason?: string): Promise<CancelResult> {
     try {
-      const res = await cancelRemoteRun(this.serverUrl, runId, this.token, reason);
+      const res = await cancelRemoteRun(this.serverUrl, runId, this.token, reason, {
+        allowInsecureHttp: this.allowInsecureHttp,
+      });
       return { outcome: "requested", runId: res.runId };
     } catch (err: any) {
       const msg = String(err?.message || "");
       if (msg.includes("already finished") || msg.includes("RUN_ALREADY_FINISHED")) {
-        return { outcome: "already_terminal", runId, status: "failed" };
+        let status = (err as any)?.errorData?.status || (err as any)?.details?.status;
+        if (!status) {
+          try {
+            const run = await this.getRun(runId);
+            if (run?.status) {
+              status = run.status;
+            }
+          } catch {}
+        }
+        return { outcome: "already_terminal", runId, status: (status as any) || "failed" };
       }
       if (msg.includes("not found") || msg.includes("RUN_NOT_FOUND") || msg.includes("404")) {
         return { outcome: "not_found", runId };
@@ -553,7 +587,10 @@ export class RemoteActionDockTarget implements ActionDockTarget {
     runId: string,
     options?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number }
   ): AsyncIterable<ExecutionEvent> {
-    yield* streamRemoteEvents(this.serverUrl, runId, this.token, options);
+    yield* streamRemoteEvents(this.serverUrl, runId, this.token, {
+      ...options,
+      allowInsecureHttp: this.allowInsecureHttp,
+    });
   }
 
   async getConfig(packageId: string, key: string): Promise<ConfigValueView> {
@@ -577,7 +614,9 @@ export class RemoteActionDockTarget implements ActionDockTarget {
 
   async setConfig(packageId: string, key: string, value: JsonValue): Promise<void> {
     try {
-      await setRemoteConfig(this.serverUrl, key, value, this.token, packageId || undefined);
+      await setRemoteConfig(this.serverUrl, key, value, this.token, packageId || undefined, {
+        allowInsecureHttp: this.allowInsecureHttp,
+      });
     } catch (err: any) {
       wrapRemoteError(err);
     }
@@ -585,7 +624,9 @@ export class RemoteActionDockTarget implements ActionDockTarget {
 
   async deleteConfig(packageId: string, key: string): Promise<boolean> {
     try {
-      const res = await deleteRemoteConfig(this.serverUrl, key, this.token, packageId || undefined);
+      const res = await deleteRemoteConfig(this.serverUrl, key, this.token, packageId || undefined, {
+        allowInsecureHttp: this.allowInsecureHttp,
+      });
       return Boolean(res?.deleted ?? true);
     } catch (err: any) {
       wrapRemoteError(err);
@@ -594,7 +635,9 @@ export class RemoteActionDockTarget implements ActionDockTarget {
 
   async listConfig(packageId: string): Promise<ConfigValueView[]> {
     try {
-      const res = await fetchRemoteConfig(this.serverUrl, this.token, packageId || undefined);
+      const res = await fetchRemoteConfig(this.serverUrl, this.token, packageId || undefined, {
+        allowInsecureHttp: this.allowInsecureHttp,
+      });
       if (Array.isArray(res)) return res;
       if (Array.isArray(res?.items)) return res.items;
       if (Array.isArray(res?.config)) return res.config;
@@ -624,6 +667,7 @@ export class RemoteActionDockTarget implements ActionDockTarget {
         package: packageId || undefined,
         action: actionId || undefined,
         namespace: options?.namespace,
+        allowInsecureHttp: this.allowInsecureHttp,
       });
       if (res === undefined) return undefined;
       if (options?.detail) {
@@ -651,6 +695,7 @@ export class RemoteActionDockTarget implements ActionDockTarget {
         action: actionId || undefined,
         namespace: options?.namespace,
         ttl: options?.ttl,
+        allowInsecureHttp: this.allowInsecureHttp,
       });
     } catch (err: any) {
       wrapRemoteError(err);
@@ -668,6 +713,7 @@ export class RemoteActionDockTarget implements ActionDockTarget {
         package: packageId || undefined,
         action: actionId || undefined,
         namespace: options?.namespace,
+        allowInsecureHttp: this.allowInsecureHttp,
       });
       return Boolean(res?.deleted ?? true);
     } catch (err: any) {
@@ -689,6 +735,7 @@ export class RemoteActionDockTarget implements ActionDockTarget {
         action: actionId || undefined,
         namespace: options?.namespace,
         prefix: options?.prefix,
+        allowInsecureHttp: this.allowInsecureHttp,
       });
       return res.keys || [];
     } catch (err: any) {
@@ -708,6 +755,7 @@ export class RemoteActionDockTarget implements ActionDockTarget {
         namespace: options?.namespace,
         prefix: options?.prefix,
         all: options?.all,
+        allowInsecureHttp: this.allowInsecureHttp,
       });
       return res.clearedCount ?? 0;
     } catch (err: any) {

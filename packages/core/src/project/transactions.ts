@@ -180,7 +180,7 @@ export function isPidAlive(pid: number): boolean {
 function checkProjectReclaimGuard(
   reclaimPath: string,
   gracePeriodMs = 1000
-): { exists: boolean; active: boolean; isStale: boolean; holderPid?: number } {
+): { exists: boolean; active: boolean; isStale: boolean; holderPid?: number; guardToken?: string } {
   if (!existsSync(reclaimPath)) {
     return { exists: false, active: false, isStale: false };
   }
@@ -194,7 +194,7 @@ function checkProjectReclaimGuard(
 
   const metaPath = isDir ? join(reclaimPath, "metadata.json") : reclaimPath;
 
-  const tryParse = (): { pid?: number; createdAt?: number } | undefined => {
+  const tryParse = (): { pid?: number; guardToken?: string; createdAt?: number } | undefined => {
     try {
       if (existsSync(metaPath)) {
         const raw = readFileSync(metaPath, "utf-8");
@@ -211,15 +211,16 @@ function checkProjectReclaimGuard(
 
   const info = tryParse();
   if (info && typeof info.pid === "number") {
+    const guardToken = typeof info.guardToken === "string" ? info.guardToken : undefined;
     if (isPidAlive(info.pid)) {
-      return { exists: true, active: true, isStale: false, holderPid: info.pid };
+      return { exists: true, active: true, isStale: false, holderPid: info.pid, guardToken };
     }
     const createdAt = typeof info.createdAt === "number" ? info.createdAt : getProjectLockMtimeMs(reclaimPath, isDir);
     const age = Date.now() - createdAt;
     if (age < gracePeriodMs) {
-      return { exists: true, active: true, isStale: false, holderPid: info.pid };
+      return { exists: true, active: true, isStale: false, holderPid: info.pid, guardToken };
     }
-    return { exists: true, active: false, isStale: true, holderPid: info.pid };
+    return { exists: true, active: false, isStale: true, holderPid: info.pid, guardToken };
   }
 
   const mtime = getProjectLockMtimeMs(reclaimPath, isDir);
@@ -233,9 +234,9 @@ function checkProjectReclaimGuard(
 
 /**
  * 尝试原子获取接管守卫（reclaim guard）。
- * 基于 mkdirSync 原子创建目录并写入自身元数据。
+ * 基于 mkdirSync 原子创建目录并写入自身元数据与唯一 guardToken。
  */
-function tryAcquireProjectReclaimGuard(reclaimPath: string, pid: number): boolean {
+function tryAcquireProjectReclaimGuard(reclaimPath: string, pid: number, guardToken: string): boolean {
   try {
     mkdirSync(reclaimPath, { mode: 0o700 });
     const metaPath = join(reclaimPath, "metadata.json");
@@ -245,13 +246,208 @@ function tryAcquireProjectReclaimGuard(reclaimPath: string, pid: number): boolea
     );
     writeFileSync(
       tmpPath,
-      JSON.stringify({ pid, createdAt: Date.now() }, null, 2),
+      JSON.stringify({ pid, guardToken, createdAt: Date.now() }, null, 2),
       "utf-8"
     );
     renameSync(tmpPath, metaPath);
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * 安全清理陈旧接管守卫（reclaim guard）。
+ * 采用原子重命名检疫并核对 guardToken，确保仅删除目标陈旧 guard，严禁误删并发新守卫。
+ */
+function safeRemoveStaleProjectReclaimGuard(
+  reclaimPath: string,
+  expectedGuardToken?: string
+): void {
+  if (!existsSync(reclaimPath)) return;
+  const quarantinePath = `${reclaimPath}.quarantine.${process.pid}.${Date.now()}.${randomUUID().slice(0, 8)}`;
+  try {
+    renameSync(reclaimPath, quarantinePath);
+  } catch {
+    return;
+  }
+
+  try {
+    const metaPath = join(quarantinePath, "metadata.json");
+    let actualGuardToken: string | undefined;
+    if (existsSync(metaPath)) {
+      try {
+        const raw = readFileSync(metaPath, "utf-8");
+        const parsed = JSON.parse(raw);
+        actualGuardToken = parsed?.guardToken;
+      } catch {}
+    }
+
+    if (expectedGuardToken && actualGuardToken !== expectedGuardToken) {
+      // 并非此前检查的陈旧 guard（已被并发者替换），立即恢复原位！
+      try {
+        renameSync(quarantinePath, reclaimPath);
+      } catch {}
+      return;
+    }
+
+    rmSync(quarantinePath, { recursive: true, force: true });
+  } catch {
+    try {
+      rmSync(quarantinePath, { recursive: true, force: true });
+    } catch {}
+  }
+}
+
+/**
+ * 安全回滚当前进程创建的工程修改锁。
+ * 仅当锁目录中的 sessionToken 与自身一致时才删除，防止误删接管者或并发新锁。
+ */
+function safeRollbackProjectLock(lockPath: string, expectedSessionToken: string): void {
+  if (!existsSync(lockPath)) return;
+  const quarantinePath = `${lockPath}.rollback.${process.pid}.${Date.now()}.${randomUUID().slice(0, 8)}`;
+  try {
+    renameSync(lockPath, quarantinePath);
+  } catch {
+    return;
+  }
+
+  try {
+    let isDir = false;
+    try {
+      isDir = statSync(quarantinePath).isDirectory();
+    } catch {
+      isDir = false;
+    }
+    const metaPath = isDir ? join(quarantinePath, "metadata.json") : quarantinePath;
+    let actualSessionToken: string | undefined;
+    if (existsSync(metaPath)) {
+      try {
+        const raw = readFileSync(metaPath, "utf-8");
+        const parsed = JSON.parse(raw);
+        actualSessionToken = parsed?.sessionToken;
+      } catch {}
+    }
+
+    if (actualSessionToken !== expectedSessionToken) {
+      // 并非自身刚才创建的锁目录，立即恢复原位！
+      try {
+        renameSync(quarantinePath, lockPath);
+      } catch {}
+      return;
+    }
+
+    rmSync(quarantinePath, { recursive: true, force: true });
+  } catch {
+    try {
+      rmSync(quarantinePath, { recursive: true, force: true });
+    } catch {}
+  }
+}
+
+/**
+ * 安全隔离并清理陈旧工程主锁。
+ * 隔离后复核元数据，确保仅删除目标陈旧锁，若已被更新或仍有存活所有者则恢复原位。
+ */
+function safeQuarantineStaleProjectLock(
+  lockPath: string,
+  expectedSessionToken?: string
+): boolean {
+  if (!existsSync(lockPath)) return true;
+  const quarantinePath = `${lockPath}.quarantine.${process.pid}.${Date.now()}.${randomUUID().slice(0, 8)}`;
+  try {
+    renameSync(lockPath, quarantinePath);
+  } catch {
+    return false;
+  }
+
+  try {
+    let isDir = false;
+    try {
+      isDir = statSync(quarantinePath).isDirectory();
+    } catch {
+      isDir = false;
+    }
+    const metaPath = isDir ? join(quarantinePath, "metadata.json") : quarantinePath;
+    let actualSessionToken: string | undefined;
+    let actualPid: number | undefined;
+    if (existsSync(metaPath)) {
+      try {
+        const raw = readFileSync(metaPath, "utf-8");
+        const parsed = JSON.parse(raw);
+        actualSessionToken = parsed?.sessionToken;
+        actualPid = parsed?.pid;
+      } catch {}
+    }
+
+    if (expectedSessionToken && actualSessionToken && actualSessionToken !== expectedSessionToken) {
+      // 锁已被其他竞争者接管并写入新 token，绝不可删除！立即恢复原位
+      try {
+        renameSync(quarantinePath, lockPath);
+      } catch {}
+      return false;
+    }
+
+    if (typeof actualPid === "number" && isPidAlive(actualPid)) {
+      // 持有者实际仍存活，恢复原位
+      try {
+        renameSync(quarantinePath, lockPath);
+      } catch {}
+      return false;
+    }
+
+    rmSync(quarantinePath, { recursive: true, force: true });
+    return true;
+  } catch {
+    try {
+      rmSync(quarantinePath, { recursive: true, force: true });
+    } catch {}
+    return true;
+  }
+}
+
+/**
+ * 安全释放工程主锁。
+ * 仅当锁目录中持有当前 sessionToken 时才删除，杜绝删除他人新锁。
+ */
+function safeReleaseProjectLock(lockPath: string, expectedSessionToken: string): void {
+  if (!existsSync(lockPath)) return;
+  const quarantinePath = `${lockPath}.release.${process.pid}.${Date.now()}.${randomUUID().slice(0, 8)}`;
+  try {
+    renameSync(lockPath, quarantinePath);
+  } catch {
+    return;
+  }
+
+  try {
+    let isDir = false;
+    try {
+      isDir = statSync(quarantinePath).isDirectory();
+    } catch {
+      isDir = false;
+    }
+    const metaPath = isDir ? join(quarantinePath, "metadata.json") : quarantinePath;
+    let actualSessionToken: string | undefined;
+    if (existsSync(metaPath)) {
+      try {
+        const raw = readFileSync(metaPath, "utf-8");
+        const parsed = JSON.parse(raw);
+        actualSessionToken = parsed?.sessionToken;
+      } catch {}
+    }
+
+    if (actualSessionToken === expectedSessionToken) {
+      rmSync(quarantinePath, { recursive: true, force: true });
+    } else {
+      // 并非当前会话持有的锁，恢复原位
+      try {
+        renameSync(quarantinePath, lockPath);
+      } catch {}
+    }
+  } catch {
+    try {
+      rmSync(quarantinePath, { recursive: true, force: true });
+    } catch {}
   }
 }
 
@@ -333,25 +529,13 @@ export function acquireProjectLock(
       continue;
     }
     if (reclaimState.isStale) {
-      // 若 reclaim guard 持有者意外崩溃，其他竞争者在超过宽限期且 PID 已死后清理陈旧 reclaim 目录并推进
-      try {
-        rmSync(reclaimPath, { recursive: true, force: true });
-      } catch {}
+      // 若 reclaim guard 持有者意外崩溃，其他竞争者核对此前检查的 guardToken 安全清理
+      safeRemoveStaleProjectReclaimGuard(reclaimPath, reclaimState.guardToken);
     }
 
     // 2. 尝试常规获取新主锁
     try {
       mkdirSync(lockPath, { mode: 0o700 });
-
-      // 再次确认在此窗口期内是否有他人持有活跃 reclaim guard
-      const postCheck = checkProjectReclaimGuard(reclaimPath, 1000);
-      if (postCheck.active && postCheck.holderPid !== currentPid) {
-        try {
-          rmSync(lockPath, { recursive: true, force: true });
-        } catch {}
-        sleepSync(50);
-        continue;
-      }
 
       const metaFile = join(lockPath, "metadata.json");
       const tmpFile = join(
@@ -360,6 +544,16 @@ export function acquireProjectLock(
       );
       writeFileSync(tmpFile, content, "utf-8");
       renameSync(tmpFile, metaFile);
+
+      // 再次确认在此窗口期内是否有他人持有活跃 reclaim guard
+      const postCheck = checkProjectReclaimGuard(reclaimPath, 1000);
+      if (postCheck.active && postCheck.holderPid !== currentPid) {
+        // 仅当锁目录中包含自身创建的 sessionToken 时安全回滚，杜绝误删他人新锁
+        safeRollbackProjectLock(lockPath, sessionToken);
+        sleepSync(50);
+        continue;
+      }
+
       break;
     } catch (err: any) {
       if (err && (err.code === "EEXIST" || err.code === "ENOENT")) {
@@ -382,15 +576,14 @@ export function acquireProjectLock(
           }
         }
 
-        // 当识别到主锁为陈旧锁时，竞争者必须先原子竞争获取 reclaim guard（基于 mkdirSync 原子创建并写入 PID/时间戳元数据）
-        const acquiredReclaim = tryAcquireProjectReclaimGuard(reclaimPath, currentPid);
+        const staleSessionToken = lockState.info?.sessionToken;
+        const guardToken = randomUUID();
+        // 当识别到主锁为陈旧锁时，竞争者必须先原子竞争获取 reclaim guard
+        const acquiredReclaim = tryAcquireProjectReclaimGuard(reclaimPath, currentPid, guardToken);
         if (!acquiredReclaim) {
-          // 竞争失败者等待并 continue 重试；若 reclaim guard 持有者意外崩溃，其他竞争者在超过宽限期且 PID 已死后清理陈旧 reclaim 目录并推进
           const currentReclaim = checkProjectReclaimGuard(reclaimPath, 1000);
           if (currentReclaim.isStale) {
-            try {
-              rmSync(reclaimPath, { recursive: true, force: true });
-            } catch {}
+            safeRemoveStaleProjectReclaimGuard(reclaimPath, currentReclaim.guardToken);
           }
           sleepSync(50);
           continue;
@@ -416,32 +609,34 @@ export function acquireProjectLock(
               );
             }
 
-            // 2. 隔离/清理陈旧锁
-            const quarantinePath = `${lockPath}.quarantine.${currentPid}.${Date.now()}.${randomUUID().slice(0, 8)}`;
-            try {
-              renameSync(lockPath, quarantinePath);
-              rmSync(quarantinePath, { recursive: true, force: true });
-            } catch {
-              try {
-                rmSync(lockPath, { recursive: true, force: true });
-              } catch {}
+            // 2. 隔离并核验清理陈旧主锁（验证 sessionToken 一致，若已被他人占用则恢复原位）
+            const cleaned = safeQuarantineStaleProjectLock(
+              lockPath,
+              recheckState.info?.sessionToken ?? staleSessionToken
+            );
+            if (!cleaned) {
+              continue;
             }
           }
 
-          // 3. 原子创建新主锁并写入自身元数据
-          while (true) {
+          // 3. 原子创建新主锁并写入自身元数据（严禁在遇到 EEXIST 时盲目 rmSync，等待并发者安全回滚）
+          let created = false;
+          for (let attempt = 0; attempt < 40; attempt++) {
             try {
               mkdirSync(lockPath, { mode: 0o700 });
+              created = true;
               break;
             } catch (createErr: any) {
               if (createErr?.code === "EEXIST") {
-                try {
-                  rmSync(lockPath, { recursive: true, force: true });
-                } catch {}
+                sleepSync(25);
                 continue;
               }
               throw createErr;
             }
+          }
+
+          if (!created) {
+            continue;
           }
 
           const metaFile = join(lockPath, "metadata.json");
@@ -453,10 +648,8 @@ export function acquireProjectLock(
           renameSync(tmpFile, metaFile);
           break;
         } finally {
-          // 4. 清理 reclaim guard
-          try {
-            rmSync(reclaimPath, { recursive: true, force: true });
-          } catch {}
+          // 4. 清理 reclaim guard（必须核对自身 guardToken）
+          safeRemoveStaleProjectReclaimGuard(reclaimPath, guardToken);
         }
       }
       throw err;
@@ -467,26 +660,7 @@ export function acquireProjectLock(
   return () => {
     if (released) return;
     released = true;
-    try {
-      if (existsSync(lockPath)) {
-        let isDir = false;
-        try {
-          isDir = statSync(lockPath).isDirectory();
-        } catch {
-          isDir = false;
-        }
-        const metaPath = isDir ? join(lockPath, "metadata.json") : lockPath;
-        if (existsSync(metaPath)) {
-          const raw = readFileSync(metaPath, "utf-8");
-          const onDisk = JSON.parse(raw);
-          if (onDisk && onDisk.sessionToken === sessionToken) {
-            rmSync(lockPath, { recursive: true, force: true });
-          }
-        }
-      }
-    } catch {
-      // 忽略释放异常
-    }
+    safeReleaseProjectLock(lockPath, sessionToken);
   };
 }
 

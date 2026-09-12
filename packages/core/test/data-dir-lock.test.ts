@@ -702,4 +702,136 @@ rl.on("line", (cmd) => {
       } catch {}
     }
   });
+
+  it("交错抢锁竞态：B 先创建目录后发现活跃 reclaim guard 仅安全回滚自身锁，不误删 A 的新锁", async () => {
+    const lockDir = join(tempDir, ".actiondock.data.lock");
+    const reclaimDir = `${lockDir}.reclaim`;
+
+    // 1. 模拟初始存在一个陈旧的主锁
+    mkdirSync(lockDir, { mode: 0o700 });
+    const staleLockInfo = {
+      pid: 99999991,
+      hostname: "stale-host",
+      sessionToken: "stale-session-1",
+      createdAt: new Date(Date.now() - 5000).toISOString(),
+    };
+    writeFileSync(join(lockDir, "metadata.json"), JSON.stringify(staleLockInfo, null, 2), { mode: 0o600 });
+
+    // 2. 模拟接管者 A 获得了 reclaim guard
+    mkdirSync(reclaimDir, { mode: 0o700 });
+    const guardTokenA = "guard-token-A";
+    writeFileSync(
+      join(reclaimDir, "metadata.json"),
+      JSON.stringify({ pid: process.pid, guardToken: guardTokenA, createdAt: Date.now() }, null, 2),
+      { mode: 0o600 }
+    );
+
+    // 3. 启动异步并发者 B：执行 acquire。由于检测到活跃 reclaim guard，B 将等待；
+    // 我们模拟 B 已经提前通过了 pre-check，直接向 lockDir 执行 mkdir 并写入 B 的 sessionToken，
+    // 随后 B 执行 postCheck 发现 A 的 reclaim guard，执行 safeRollbackLock
+    const bSessionToken = "session-token-B";
+    // 先由 A 清理 staleLock
+    rmSync(lockDir, { recursive: true, force: true });
+
+    // B 抢先 mkdir
+    mkdirSync(lockDir, { mode: 0o700 });
+    writeFileSync(
+      join(lockDir, "metadata.json"),
+      JSON.stringify({ pid: process.pid, sessionToken: bSessionToken, createdAt: new Date().toISOString() }, null, 2),
+      { mode: 0o600 }
+    );
+
+    // 4. 使用后台 Worker 线程模拟 B 在 40ms 后执行安全回滚并释放 A 的 reclaim guard
+    const workerScript1 = `
+      const fs = require("node:fs");
+      setTimeout(() => {
+        const rollbackQuarantine = ${JSON.stringify(lockDir)} + ".rollback." + process.pid + "." + Date.now() + ".b";
+        try {
+          fs.renameSync(${JSON.stringify(lockDir)}, rollbackQuarantine);
+          const meta = JSON.parse(fs.readFileSync(rollbackQuarantine + "/metadata.json", "utf8"));
+          if (meta.sessionToken === ${JSON.stringify(bSessionToken)}) {
+            fs.rmSync(rollbackQuarantine, { recursive: true, force: true });
+          }
+        } catch (e) {}
+        try {
+          fs.rmSync(${JSON.stringify(reclaimDir)}, { recursive: true, force: true });
+        } catch (e) {}
+      }, 40);
+    `;
+    const worker1 = new Worker(workerScript1, { eval: true });
+
+    try {
+      // 接管者 A 执行 acquire，应当等待 B 安全回滚自身锁，随后 A 原子获得主锁并返回
+      const lockA = DataDirLock.acquire(tempDir);
+      expect(lockA).toBeDefined();
+      expect(existsSync(lockDir)).toBe(true);
+
+      // 验证锁目录里的 sessionToken 是 A 的，而不是 B 的，且 A 的锁未被删除
+      const currentMeta = JSON.parse(readFileSync(join(lockDir, "metadata.json"), "utf8"));
+      expect(currentMeta.sessionToken).toBe(lockA.lockInfo.sessionToken);
+
+      lockA.release();
+      expect(existsSync(lockDir)).toBe(false);
+    } finally {
+      await worker1.terminate();
+    }
+  });
+
+  it("陈旧接管守卫并发清理竞态：A 清理陈旧 guard 时若已被 B 替换为新 guard，A 绝不误删 B 的新 guard", async () => {
+    const lockDir = join(tempDir, ".actiondock.data.lock");
+    const reclaimDir = `${lockDir}.reclaim`;
+
+    // 模拟陈旧 guard (PID 99999990, guardToken: old-token)
+    mkdirSync(reclaimDir, { mode: 0o700 });
+    writeFileSync(
+      join(reclaimDir, "metadata.json"),
+      JSON.stringify({ pid: 99999990, guardToken: "old-token", createdAt: Date.now() - 5000 }, null, 2),
+      { mode: 0o600 }
+    );
+
+    // 模拟竞争者 B 抢先清理了 old-token 并建立了新活跃 guard (PID: 当前存活 PID, guardToken: new-token-B)
+    rmSync(reclaimDir, { recursive: true, force: true });
+    mkdirSync(reclaimDir, { mode: 0o700 });
+    writeFileSync(
+      join(reclaimDir, "metadata.json"),
+      JSON.stringify({ pid: process.pid, guardToken: "new-token-B", createdAt: Date.now() }, null, 2),
+      { mode: 0o600 }
+    );
+
+    // 竞争者 C 启动 acquire：由于 B 的 reclaim guard 处于活跃状态，C 必须等待而不是删掉 B 的 guard
+    // 50ms 后使用 Worker 模拟 B 正常完成主锁创建并释放 reclaim guard
+    const workerScript2 = `
+      const fs = require("node:fs");
+      setTimeout(() => {
+        try {
+          fs.mkdirSync(${JSON.stringify(lockDir)}, { mode: 0o700 });
+          fs.writeFileSync(
+            ${JSON.stringify(join(lockDir, "metadata.json"))},
+            JSON.stringify({ pid: ${process.pid}, sessionToken: "token-b", createdAt: new Date().toISOString() }, null, 2),
+            { mode: 0o600 }
+          );
+          fs.rmSync(${JSON.stringify(reclaimDir)}, { recursive: true, force: true });
+        } catch (e) {}
+      }, 50);
+    `;
+    const worker2 = new Worker(workerScript2, { eval: true });
+
+    try {
+      // C 执行 acquire：检测到锁被占用，抛出 DATA_DIR_IN_USE（因为 B 的主锁持有人是当前存活进程）
+      let caughtErr: any;
+      try {
+        DataDirLock.acquire(tempDir);
+      } catch (err) {
+        caughtErr = err;
+      }
+
+      expect(caughtErr).toBeDefined();
+      expect(caughtErr?.code).toBe("DATA_DIR_IN_USE");
+
+      // 清理 B 的主锁
+      rmSync(lockDir, { recursive: true, force: true });
+    } finally {
+      await worker2.terminate();
+    }
+  });
 });

@@ -63,6 +63,7 @@ function isActionDockApp(item: unknown): item is ActionDockApp {
 export class DefaultActionDockHost implements ActionDockHost {
   public readonly hostSessionId: string;
   private apps = new Map<string, ActionDockApp>();
+  private readonly internallyCreatedApps = new Set<ActionDockApp>();
   private activeSubRunsPerRoot = new Map<string, number>();
   private hostPublicPackageIds = new Set<string>();
   private resolver?: ActionPackageResolver;
@@ -108,6 +109,7 @@ export class DefaultActionDockHost implements ActionDockHost {
               maxSubRuns: item.maxSubRuns ?? this.maxSubRuns,
               packageContextResolver: this.resolvePackageContext.bind(this),
             });
+            this.internallyCreatedApps.add(app);
             this.registerAppInternal(app, true);
           }
         }
@@ -174,6 +176,7 @@ export class DefaultActionDockHost implements ActionDockHost {
                   maxSubRuns: this.maxSubRuns,
                   packageContextResolver: this.resolvePackageContext.bind(this),
                 });
+                this.internallyCreatedApps.add(app);
                 this.registerAppInternal(app, isDirectOrRoot);
               }
             }
@@ -219,6 +222,7 @@ export class DefaultActionDockHost implements ActionDockHost {
                 maxSubRuns: this.maxSubRuns,
                 packageContextResolver: this.resolvePackageContext.bind(this),
               });
+              this.internallyCreatedApps.add(app);
               this.registerAppInternal(app, true);
             } catch (err: any) {
               const errDetail = err?.message || String(err);
@@ -238,8 +242,8 @@ export class DefaultActionDockHost implements ActionDockHost {
       }
       this.dataDirLock = undefined;
 
-      // 安全关闭已注册的子 app
-      for (const app of this.apps.values()) {
+      // 仅安全关闭宿主内部创建的子 app，外部传入的 app 保持调用方生命周期与所有权
+      for (const app of this.internallyCreatedApps) {
         try {
           const closePromise = app.close();
           if (closePromise && typeof (closePromise as any).catch === "function") {
@@ -249,6 +253,7 @@ export class DefaultActionDockHost implements ActionDockHost {
           // 忽略 app 关闭异常
         }
       }
+      this.internallyCreatedApps.clear();
       this.apps.clear();
       throw err;
     }
@@ -837,17 +842,6 @@ export async function createActionDockHost(
         await createdHost.close();
       } catch {
         // 忽略宿主关闭异常
-      }
-    }
-    if (options.packages && Array.isArray(options.packages)) {
-      for (const item of options.packages) {
-        if (isActionDockApp(item)) {
-          try {
-            await item.close();
-          } catch {
-            // 忽略子应用关闭异常
-          }
-        }
       }
     }
     throw err;

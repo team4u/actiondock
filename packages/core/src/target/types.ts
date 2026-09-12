@@ -113,6 +113,8 @@ export interface ConfigValueView {
  * 状态作用域与筛选控制选项。
  */
 export interface StateScopeOptions {
+  /** 显式绑定的 Action 标识（可选，用于在扁平调用时直接定位 Action 命名空间） */
+  actionId?: string;
   /** 显式子命名空间（相对于 Action 根命名空间） */
   namespace?: string;
   /** 存活有效期（秒），仅在写入状态时生效 */

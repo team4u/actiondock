@@ -424,6 +424,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
           error: {
             code: "RUN_ALREADY_FINISHED",
             message: `Run '${runId}' has already finished with status '${cancelResult.status}'`,
+            status: cancelResult.status,
           },
         },
         409,

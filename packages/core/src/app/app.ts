@@ -585,6 +585,9 @@ export class DefaultActionDockApp implements ActionDockApp {
       key = actionIdOrKey;
       opts = keyOrOptions;
     }
+    if (!actionId && opts?.actionId) {
+      actionId = opts.actionId;
+    }
 
     const ns = actionId
       ? (opts?.namespace ? `${actionId}:${opts.namespace}` : actionId)
@@ -616,7 +619,7 @@ export class DefaultActionDockApp implements ActionDockApp {
     let opts: StateScopeOptions | undefined;
 
     if (arguments.length >= 4) {
-      actionId = actionIdOrKey;
+      actionId = options?.actionId || actionIdOrKey;
       key = keyOrValue;
       value = valueOrOptions;
       opts = options;
@@ -628,7 +631,7 @@ export class DefaultActionDockApp implements ActionDockApp {
     } else {
       const isOpts = (obj: any): obj is StateScopeOptions => {
         if (!obj || typeof obj !== "object" || Array.isArray(obj)) return false;
-        const validKeys = new Set(["namespace", "ttl", "prefix", "all", "detail"]);
+        const validKeys = new Set(["actionId", "namespace", "ttl", "prefix", "all", "detail"]);
         const keys = Object.keys(obj);
         return keys.length > 0 && keys.every((k) => validKeys.has(k));
       };
@@ -637,26 +640,31 @@ export class DefaultActionDockApp implements ActionDockApp {
         this.actionsMap.has(actionIdOrKey) ||
         Boolean(this.projectConfig?.actions?.[actionIdOrKey]);
 
-      if (isKnownAction && typeof keyOrValue === "string") {
+      if (valueOrOptions && typeof valueOrOptions === "object" && typeof valueOrOptions.actionId === "string") {
+        actionId = valueOrOptions.actionId;
+        key = actionIdOrKey;
+        value = keyOrValue as T;
+        opts = valueOrOptions;
+      } else if (isKnownAction && typeof keyOrValue === "string") {
         actionId = actionIdOrKey;
         key = keyOrValue;
-        value = valueOrOptions;
+        value = valueOrOptions as T;
         opts = undefined;
+      } else if (typeof keyOrValue !== "string") {
+        actionId = "";
+        key = actionIdOrKey;
+        value = keyOrValue as T;
+        opts = isOpts(valueOrOptions) ? valueOrOptions : undefined;
       } else if (isOpts(valueOrOptions)) {
-        actionId = "";
+        actionId = valueOrOptions.actionId || "";
         key = actionIdOrKey;
-        value = keyOrValue;
+        value = keyOrValue as T;
         opts = valueOrOptions;
-      } else if (typeof keyOrValue === "string") {
+      } else {
         actionId = actionIdOrKey;
         key = keyOrValue;
-        value = valueOrOptions;
+        value = valueOrOptions as T;
         opts = undefined;
-      } else {
-        actionId = "";
-        key = actionIdOrKey;
-        value = keyOrValue;
-        opts = valueOrOptions;
       }
     }
 
@@ -699,6 +707,9 @@ export class DefaultActionDockApp implements ActionDockApp {
       key = actionIdOrKey;
       opts = keyOrOptions;
     }
+    if (!actionId && opts?.actionId) {
+      actionId = opts.actionId;
+    }
 
     const ns = actionId
       ? (opts?.namespace ? `${actionId}:${opts.namespace}` : actionId)
@@ -734,6 +745,9 @@ export class DefaultActionDockApp implements ActionDockApp {
       actionId = "";
       opts = actionIdOrOptions;
     }
+    if (!actionId && opts?.actionId) {
+      actionId = opts.actionId;
+    }
 
     const ns = actionId
       ? (opts?.namespace ? `${actionId}:${opts.namespace}` : actionId)
@@ -754,6 +768,9 @@ export class DefaultActionDockApp implements ActionDockApp {
     } else {
       actionId = "";
       opts = actionIdOrOptions;
+    }
+    if (!actionId && opts?.actionId) {
+      actionId = opts.actionId;
     }
 
     const ns = actionId
