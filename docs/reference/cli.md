@@ -17,13 +17,13 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
 
 ## 全局通用选项
 
-绝大多数 CLI 子命令均支持以下通用控制选项：
+CLI 顶层调度器对所有子命令统一注入通用控制选项：
 
 - `-v, -V, --version`：打印 CLI 工具版本号并退出。
 - `-h, --help`：打印命令帮助说明并退出。
-- `--json`：以标准 JSON 格式输出结果。
+- `--json`：以标准 JSON 格式输出结果。支持机器渲染的查询与执行命令（如 `list`、`describe`、`run`、`info`、`doctor`、`playbook show`、`validate` 等）会消费该选项；未实现机器输出的交互命令（如 `init`、`test`、`link`、`serve`、`mcp` 等）将其作为无操作选项忽略，不影响人类可读输出；发生异常时无论何种命令均统一由顶层错误处理器输出 JSON 错误信封。
 - `--envelope`：将 JSON 输出包装为标准信封结构对象（包含 `ok: true, data: T` 或 `ok: false, error: { code, message, details }`）。
-- `--data-dir <path>`：指定自定义数据存储目录（覆盖默认的 `.actiondock/` 存储路径）。
+- `--data-dir <path>`：指定自定义数据存储目录（覆盖默认存储路径）。由涉及 SQLite 持久化与状态存储的命令消费，在纯静态解析命令中作为无操作选项忽略。
 
 ---
 
@@ -283,9 +283,9 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
 - 启动 MCP 服务 (`ad mcp`)：
   ```bash
   # STDIO 传输模式（默认）
-  ad mcp [-d, --dir <dir...>] [--package <id...>] [--all] [--timeout <duration>]
+  ad mcp [-d, --dir <path>] [--package <package-id>] [--all] [--timeout <duration>] [--allow-insecure-http]
   # HTTP 传输微服务模式
-  ad mcp serve [-H, --host <host>] [-p, --port <port>] [-t, --token <token>] [--cors-origin <origin>] [--max-body <size>]
+  ad mcp serve [-p, --port <port>] [-H, --host <host>] [-t, --token <token>] [--token-env <env>] [--allow-insecure-no-auth] [--allow-insecure-http] [--allow-query-token] [--cors-origin <origin>] [--max-body <size>] [-d, --dir <path>] [--package <package-id>] [--all] [--timeout <duration>]
   ```
 
 - 启动远程调度 HTTP 微服务 (`ad serve`)：

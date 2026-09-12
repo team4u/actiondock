@@ -24,9 +24,9 @@ export default defineAction<TInput, TOutput>({
 });
 ```
 
-### `ActionDefinition` 契约规范
+### ActionDefinition 契约规范
 
-在 ActionDock 2.0 中，Action 的元数据（标识、描述、输入与输出模式规范、依赖声明等）统一在 `actiondock.json` 清单中维护，代码层面的 `ActionDefinition` 仅包含核心执行函数：
+在 ActionDock 2.0 中，`actiondock.json` 是元数据的权威事实源。`ActionDefinition` 仍保留代码内元数据字段用于兼容和编程式调用场景，新项目推荐将元数据统一声明在清单中：
 
 ```ts
 export interface ActionDefinition<I = unknown, O = unknown> {
@@ -36,6 +36,20 @@ export interface ActionDefinition<I = unknown, O = unknown> {
    * @param ctx 运行时上下文对象
    */
   run(input: I, ctx: ActionContext): Promise<O> | O;
+  /** Action 唯一标识 */
+  id?: string;
+  /** Action 功能描述 */
+  description?: string;
+  /** 输入参数模式规范 */
+  inputSchema?: JsonSchema;
+  /** 输出结果模式规范 */
+  outputSchema?: JsonSchema;
+  /** 静态 Action 依赖列表 */
+  uses?: string[];
+  /** 检索与分类标签 */
+  tags?: string[];
+  /** 协议注解元数据 */
+  annotations?: Record<string, JsonValue>;
 }
 ```
 

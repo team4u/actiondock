@@ -143,16 +143,9 @@ export default defineAction(async (input: GreetInput, ctx): Promise<GreetOutput>
 
 ### 编写操作规程 Playbook
 
-在 `playbooks/greet-user.md` 中定义结构化的标准作业规程：
+在 `playbooks/greet-user.md` 中编写纯 Markdown 格式的标准作业规程：
 
 ```markdown
----
-id: greet-user
-description: 用户问候标准作业规程
-actions:
-  - sample.greet
----
-
 # 用户问候标准作业规程
 
 当会话中有新用户进入时，执行以下规程步骤：
@@ -160,6 +153,22 @@ actions:
 - 验证用户真实姓名，严禁使用未经核实的昵称。
 - 调用 sample.greet 执行问候并获取历史问候频次。
 - 若计数大于 1，在回答中体现老用户关怀。
+```
+
+在 `actiondock.json` 中显式登记规程元数据及其关联动作：
+
+```json
+{
+  "playbooks": {
+    "greet-user": {
+      "entry": "playbooks/greet-user.md",
+      "description": "用户问候标准作业规程",
+      "actions": [
+        "sample.greet"
+      ]
+    }
+  }
+}
 ```
 
 ---

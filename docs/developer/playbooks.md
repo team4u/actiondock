@@ -24,12 +24,12 @@ Playbook 将运维手册、业务流程与专家经验沉淀为结构化 Markdow
 
 ```json
 {
-  "$schema": "https://actiondock.dev/schema/v2/actiondock.json",
+  "$schema": "https://actiondock.dev/schema/v2.json",
   "schemaVersion": 2,
   "id": "team4u.github-tools",
   "playbooks": {
     "review-pr": {
-      "file": "playbooks/review-pr.md",
+      "entry": "playbooks/review-pr.md",
       "description": "自动化拉取 GitHub Pull Request、分析差异并提交标准化审查意见",
       "actions": [
         "github.get-pr",
@@ -42,7 +42,7 @@ Playbook 将运维手册、业务流程与专家经验沉淀为结构化 Markdow
 
 配置属性说明：
 
-- `file`：Playbook Markdown 文件的相对路径。
+- `entry`：Playbook Markdown 文件的相对路径。
 - `description`：规程功能描述与意图匹配提示。
 - `actions`：该 Playbook 所依赖或调用的 Action 标识列表（支持当前包动作或 `<package-id>/<action-id>` 跨包完全限定标识符）。
 
@@ -50,7 +50,7 @@ Playbook 将运维手册、业务流程与专家经验沉淀为结构化 Markdow
 
 ## Playbook Markdown 文档编写规范
 
-规程文档存放在项目根目录的 `playbooks/` 文件夹下，采用纯 Markdown 格式。正文用于指导智能体按照规范逻辑执行：
+规程文档存放在项目根目录的 `playbooks/` 文件夹下，采用纯 Markdown 格式。正文严禁编写 YAML Frontmatter，所有元数据统一在 `actiondock.json` 中配置。正文用于指导智能体按照规范逻辑执行：
 
 ```markdown
 # PR 自动化审查操作规程

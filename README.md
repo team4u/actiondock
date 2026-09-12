@@ -142,17 +142,10 @@ export default defineAction(async (input: GreetInput, ctx): Promise<GreetOutput>
 ```
 
 ### Writing an Operational Playbook
-
-Define structured operational procedures in `playbooks/greet-user.md`:
+ 
+Define standard operating procedures in pure Markdown within `playbooks/greet-user.md`:
 
 ```markdown
----
-id: greet-user
-description: User Greeting Standard Operating Procedure
-actions:
-  - sample.greet
----
-
 # User Greeting Standard Operating Procedure
 
 When greeting a user entering the session, follow these steps:
@@ -160,6 +153,22 @@ When greeting a user entering the session, follow these steps:
 - Verify the user's name; do not use unverified nicknames.
 - Invoke sample.greet to perform the greeting and retrieve historical visit counts.
 - If visit count is greater than 1, add a warm welcome-back remark.
+```
+
+Declare playbook metadata and its associated actions in `actiondock.json`:
+
+```json
+{
+  "playbooks": {
+    "greet-user": {
+      "entry": "playbooks/greet-user.md",
+      "description": "User Greeting Standard Operating Procedure",
+      "actions": [
+        "sample.greet"
+      ]
+    }
+  }
+}
 ```
 
 ---

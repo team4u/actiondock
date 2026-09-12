@@ -167,7 +167,7 @@ stateDiagram-v2
 ### 执行生命周期全流程
 
 - **解析 Action 动作定义**：定位并获取目标 Action，合并全局、环境变量与项目级配置。
-- **调用环路死锁检测**：维护执行调用栈数组。若检测到 A 动作直接或间接递归调用自身（例如 A -> B -> A），立即阻断并返回错误码 `ACTION_CYCLE_DETECTED`。
+- **调用环路死锁检测**：维护执行调用栈数组。若检测到 A 动作直接或间接递归调用自身（例如 A -> B -> A），立即阻断并返回错误码 `ACTION_CALL_CYCLE`（附带 `details.alias: "ACTION_CYCLE_DETECTED"` 标记）。
 - **入参模式严格校验**：基于 Ajv 验证器对输入数据进行校验。若不满足 `inputSchema` 约束，立即返回错误码 `INPUT_VALIDATION_FAILED`。
 - **记录初始化并落库**：在存储引擎中创建运行记录，初始状态标记为 `running`。
 - **构建运行时上下文**：组装注入 `RuntimeConfig`、`RuntimeStateStore`、`ProcessAPI`、重定向至标准错误的 `Logger`、级联调用器与 `AbortSignal`。

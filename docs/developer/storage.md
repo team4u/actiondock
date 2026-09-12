@@ -51,37 +51,66 @@ ActionDock 2.0 采用内嵌式 SQLite（基于 Node.js 原生 `node:sqlite`）�
 
 ## 核心数据模型
 
-SQLite 数据库内维护三张核心表：
+SQLite 数据库在初始化时原子创建四张核心表与关联索引：
 
 ```sql
 -- 持久化配置表
 CREATE TABLE IF NOT EXISTS config (
-  key TEXT PRIMARY KEY,
-  value TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  package_id TEXT NOT NULL,
+  key TEXT NOT NULL,
+  value_json TEXT,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (package_id, key)
 );
 
 -- 状态持久化表 (支持命名空间与 TTL 过期)
 CREATE TABLE IF NOT EXISTS state (
+  package_id TEXT NOT NULL,
   namespace TEXT NOT NULL,
   key TEXT NOT NULL,
-  value TEXT NOT NULL,
+  value_json TEXT,
   updated_at TEXT NOT NULL,
   expires_at TEXT,
-  PRIMARY KEY (namespace, key)
+  PRIMARY KEY (package_id, namespace, key)
 );
 
--- 运行历史表
+-- 运行历史记录表
 CREATE TABLE IF NOT EXISTS runs (
   id TEXT PRIMARY KEY,
+  root_run_id TEXT NOT NULL,
+  parent_run_id TEXT,
+  package_id TEXT NOT NULL,
+  package_instance_id TEXT NOT NULL,
   action_id TEXT NOT NULL,
+  generation_id TEXT NOT NULL,
+  owner_id TEXT NOT NULL,
+  host_session_id TEXT,
   status TEXT NOT NULL,
-  input TEXT,
-  output TEXT,
-  error TEXT,
-  duration_ms INTEGER NOT NULL,
-  created_at TEXT NOT NULL
+  input_json TEXT,
+  output_json TEXT,
+  error_json TEXT,
+  started_at TEXT NOT NULL,
+  finished_at TEXT,
+  duration_ms INTEGER
 );
+
+CREATE INDEX IF NOT EXISTS idx_runs_action ON runs(package_id, action_id);
+CREATE INDEX IF NOT EXISTS idx_runs_root ON runs(root_run_id);
+CREATE INDEX IF NOT EXISTS idx_runs_started ON runs(started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_runs_host_session ON runs(host_session_id);
+CREATE INDEX IF NOT EXISTS idx_state_expires ON state(expires_at);
+
+-- 幂等去重键表
+CREATE TABLE IF NOT EXISTS idempotency_keys (
+  owner_id TEXT NOT NULL,
+  action_ref TEXT NOT NULL,
+  request_id TEXT NOT NULL,
+  input_digest TEXT NOT NULL,
+  run_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (owner_id, action_ref, request_id)
+);
+CREATE INDEX IF NOT EXISTS idx_idemp_run ON idempotency_keys(run_id);
 ```
 
 ---

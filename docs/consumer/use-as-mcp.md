@@ -56,21 +56,6 @@ ActionDock 原生支持 Model Context Protocol 协议规范，可以直接将 Ac
 }
 ```
 
----
-
-### 基于已构建交付目录挂载
-使用构建出的自包含交付目录中的独立入口脚本启动，无需宿主安装 `ad` 命令行工具：
-
-```json
-{
-  "mcpServers": {
-    "github-tools": {
-      "command": "node",
-      "args": ["/absolute/path/to/dist/delivery/entry.mjs", "mcp"]
-    }
-  }
-}
-```
 
 ---
 
