@@ -374,16 +374,21 @@ describe("ExecaProcessExecutor 单元测试", () => {
     }
   });
 
-  it("Windows 平台环境下调用 killProcessGroup 递归调用 taskkill 终止进程树", () => {
+  it("Windows 平台环境下调用 killProcessGroup 优先执行 taskkill 并在成功后不抢先执行 process.kill", async () => {
     const origPlatform = process.platform;
     const origKill = process.kill;
     try {
       Object.defineProperty(process, "platform", { value: "win32", configurable: true });
 
       const spawnedCommands: { command: string; args: string[] }[] = [];
+      let closeCallback: ((code: number) => void) | undefined;
       const mockSpawn = ((cmd: string, args: string[]) => {
-        spawnedCommands.push({ command: cmd, args: args });
-        return { on: () => {} } as any;
+        spawnedCommands.push({ command: cmd, args });
+        return {
+          on: (event: string, cb: any) => {
+            if (event === "close") closeCallback = cb;
+          },
+        } as any;
       }) as typeof cp.spawn;
 
       const killedSignals: { pid: number; signal: string }[] = [];
@@ -392,23 +397,72 @@ describe("ExecaProcessExecutor 单元测试", () => {
         return true;
       }) as any;
 
-      // SIGTERM 时必须直接执行 taskkill /T /F 递归终止进程树，防止父进程退出后子进程孤儿化
-      killProcessGroup(99999, "SIGTERM", mockSpawn);
+      // 启动 killProcessGroup：必须触发 taskkill，且在 taskkill 完成前严禁执行 process.kill，避免子进程孤儿化
+      const killPromise = killProcessGroup(99999, "SIGTERM", mockSpawn);
       expect(spawnedCommands.length).toBe(1);
       expect(spawnedCommands[0].command).toBe("taskkill");
       expect(spawnedCommands[0].args).toEqual(["/pid", "99999", "/T", "/F"]);
-      expect(killedSignals.length).toBe(1);
-      expect(killedSignals[0]).toEqual({ pid: 99999, signal: "SIGTERM" });
+      expect(killedSignals.length).toBe(0);
 
-      // SIGKILL 时同样执行 taskkill /T /F
-      spawnedCommands.length = 0;
-      killedSignals.length = 0;
-      killProcessGroup(88888, "SIGKILL", mockSpawn);
-      expect(spawnedCommands.length).toBe(1);
-      expect(spawnedCommands[0].command).toBe("taskkill");
-      expect(spawnedCommands[0].args).toEqual(["/pid", "88888", "/T", "/F"]);
+      // taskkill 成功完成（exit 0）
+      closeCallback?.(0);
+      await killPromise;
+      // taskkill 已成功销毁整棵进程树，process.kill 不应被调用
+      expect(killedSignals.length).toBe(0);
+    } finally {
+      Object.defineProperty(process, "platform", { value: origPlatform, configurable: true });
+      process.kill = origKill;
+    }
+  });
+
+  it("Windows 平台环境下 taskkill 失败或退出码异常时回退调用 process.kill", async () => {
+    const origPlatform = process.platform;
+    const origKill = process.kill;
+    try {
+      Object.defineProperty(process, "platform", { value: "win32", configurable: true });
+
+      let errorCallback: (() => void) | undefined;
+      let closeCallback: ((code: number) => void) | undefined;
+      const mockSpawn = ((cmd: string, args: string[]) => {
+        return {
+          on: (event: string, cb: any) => {
+            if (event === "error") errorCallback = cb;
+            if (event === "close") closeCallback = cb;
+          },
+        } as any;
+      }) as typeof cp.spawn;
+
+      const killedSignals: { pid: number; signal: string }[] = [];
+      process.kill = ((pid: number, sig?: string | number) => {
+        killedSignals.push({ pid, signal: String(sig) });
+        return true;
+      }) as any;
+
+      // 1. taskkill 触发 error 事件时回退至 process.kill
+      const errPromise = killProcessGroup(77777, "SIGTERM", mockSpawn);
+      expect(killedSignals.length).toBe(0);
+      errorCallback?.();
+      await errPromise;
       expect(killedSignals.length).toBe(1);
-      expect(killedSignals[0]).toEqual({ pid: 88888, signal: "SIGKILL" });
+      expect(killedSignals[0]).toEqual({ pid: 77777, signal: "SIGTERM" });
+
+      // 2. taskkill 退出码非 0 时回退至 process.kill
+      killedSignals.length = 0;
+      const nonZeroPromise = killProcessGroup(66666, "SIGKILL", mockSpawn);
+      expect(killedSignals.length).toBe(0);
+      closeCallback?.(1);
+      await nonZeroPromise;
+      expect(killedSignals.length).toBe(1);
+      expect(killedSignals[0]).toEqual({ pid: 66666, signal: "SIGKILL" });
+
+      // 3. spawn 抛出同步异常时直接回退至 process.kill
+      killedSignals.length = 0;
+      const throwingSpawn = (() => {
+        throw new Error("spawn failed");
+      }) as unknown as typeof cp.spawn;
+      await killProcessGroup(55555, "SIGTERM", throwingSpawn);
+      expect(killedSignals.length).toBe(1);
+      expect(killedSignals[0]).toEqual({ pid: 55555, signal: "SIGTERM" });
     } finally {
       Object.defineProperty(process, "platform", { value: origPlatform, configurable: true });
       process.kill = origKill;

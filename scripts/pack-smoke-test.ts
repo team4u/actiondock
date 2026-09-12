@@ -30,6 +30,7 @@ if (preBuild.status !== 0) {
 }
 
 const tarballPaths: Record<string, string> = {};
+const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
 
 try {
   // Pack each package
@@ -37,7 +38,7 @@ try {
     const pkgDir = join(rootDir, "packages", pkg);
     console.log(`[PACK] Packing @actiondock/${pkg}...`);
 
-    const packProc = spawnSync("npm", ["pack"], {
+    const packProc = spawnSync(npmCmd, ["pack"], {
       cwd: pkgDir,
       encoding: "utf8",
     });
@@ -116,7 +117,7 @@ try {
 
   // Install packed tarballs into test environment
   console.log("[INSTALL] Installing packed tarballs into test environment...");
-  const installProc = spawnSync("npm", ["install", "--no-audit", "--no-fund"], {
+  const installProc = spawnSync(npmCmd, ["install", "--no-audit", "--no-fund"], {
     cwd: testDir,
     encoding: "utf8",
   });

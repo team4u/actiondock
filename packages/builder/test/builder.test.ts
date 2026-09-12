@@ -39,6 +39,8 @@ import {
   createTarGzArchive,
   createZipArchive,
   createZipArchiveAsync,
+  replaceDirAtomic,
+  moveDirAtomic,
 } from "../src";
 import {
   readTarGzEntries,
@@ -1527,6 +1529,83 @@ export default defineAction({
         }
       } finally {
         rmSync(extDir, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe("replaceDirAtomic & moveDirAtomic rollback and atomic behavior", () => {
+    it("successfully replaces existing target directory and removes backup", async () => {
+      const testRoot = mkdtempSync(join(tmpdir(), "replace-test-"));
+      try {
+        const target = join(testRoot, "target");
+        const staging = join(testRoot, "staging");
+
+        mkdirSync(target, { recursive: true });
+        writeFileSync(join(target, "old.txt"), "old content", "utf-8");
+
+        mkdirSync(staging, { recursive: true });
+        writeFileSync(join(staging, "new.txt"), "new content", "utf-8");
+
+        await replaceDirAtomic(staging, target);
+
+        expect(existsSync(join(target, "new.txt"))).toBe(true);
+        expect(readFileSync(join(target, "new.txt"), "utf-8")).toBe("new content");
+        expect(existsSync(join(target, "old.txt"))).toBe(false);
+
+        // Check no backup directories remain
+        const leftoverOld = readdirSync(testRoot).filter((name) => name.includes(".old-"));
+        expect(leftoverOld.length).toBe(0);
+      } finally {
+        rmSync(testRoot, { recursive: true, force: true });
+      }
+    });
+
+    it("rolls back to original target directory if staging promotion fails", async () => {
+      const testRoot = mkdtempSync(join(tmpdir(), "rollback-test-"));
+      try {
+        const target = join(testRoot, "target");
+        mkdirSync(target, { recursive: true });
+        writeFileSync(join(target, "preserve.txt"), "must survive rollback", "utf-8");
+
+        const nonExistentStaging = join(testRoot, "does-not-exist");
+
+        // Attempt replaceDirAtomic with non-existent staging:
+        // target is backed up, but promotion fails and must roll back
+        let failed = false;
+        try {
+          await replaceDirAtomic(nonExistentStaging, target);
+        } catch {
+          failed = true;
+        }
+
+        expect(failed).toBe(true);
+        expect(existsSync(target)).toBe(true);
+        expect(existsSync(join(target, "preserve.txt"))).toBe(true);
+        expect(readFileSync(join(target, "preserve.txt"), "utf-8")).toBe("must survive rollback");
+
+        // Ensure backup directory was moved back and cleaned up
+        const leftoverOld = readdirSync(testRoot).filter((name) => name.includes(".old-"));
+        expect(leftoverOld.length).toBe(0);
+      } finally {
+        rmSync(testRoot, { recursive: true, force: true });
+      }
+    });
+
+    it("creates target directory directly when target does not exist", async () => {
+      const testRoot = mkdtempSync(join(tmpdir(), "create-test-"));
+      try {
+        const target = join(testRoot, "fresh-target");
+        const staging = join(testRoot, "staging");
+
+        mkdirSync(staging, { recursive: true });
+        writeFileSync(join(staging, "data.json"), JSON.stringify({ ok: true }), "utf-8");
+
+        await replaceDirAtomic(staging, target);
+
+        expect(existsSync(target)).toBe(true);
+        expect(existsSync(join(target, "data.json"))).toBe(true);
+      } finally {
+        rmSync(testRoot, { recursive: true, force: true });
       }
     });
   });

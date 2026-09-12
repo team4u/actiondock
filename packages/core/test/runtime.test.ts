@@ -1035,4 +1035,67 @@ export default {
     // Must not create empty runner in ghost storage
     expect(ghostStorageCreated).toBe(false);
   });
+
+  it("DefaultExecutionService enforces maxActiveRuns without concurrency race conditions under simultaneous parallel requests", async () => {
+    const storage = new SqliteRuntimeStorage({ packageId: "concurrency-pkg", dbPath: ":memory:" });
+    const maxActive = 3;
+
+    let resolvePendingAction: (() => void) | undefined;
+    const pendingPromise = new Promise<void>((resolve) => {
+      resolvePendingAction = resolve;
+    });
+
+    const slowAction = defineAction({
+      async run() {
+        await pendingPromise;
+        return { ok: true };
+      },
+    });
+
+    const service = new DefaultExecutionService({
+      packageId: "concurrency-pkg",
+      storage,
+      maxActiveRuns: maxActive,
+      actions: new Map([["slow", slowAction]]),
+    });
+
+    try {
+      // Fire 10 concurrent requests synchronously in the same tick
+      const totalRequests = 10;
+      const startPromises = Array.from({ length: totalRequests }).map(async (_, idx) => {
+        try {
+          const ticket = await service.start("slow", { index: idx });
+          return { success: true, ticket };
+        } catch (err: any) {
+          return { success: false, error: err };
+        }
+      });
+
+      const results = await Promise.all(startPromises);
+      const successes = results.filter((r) => r.success);
+      const failures = results.filter((r) => !r.success);
+
+      expect(successes.length).toBe(maxActive);
+      expect(failures.length).toBe(totalRequests - maxActive);
+      for (const failure of failures) {
+        expect(failure.error.message).toContain(`Concurrency limit reached: ${maxActive}/${maxActive} active runs`);
+      }
+
+      // Finish pending runs
+      resolvePendingAction!();
+      for (const item of successes) {
+        const res = await (item as any).ticket.result;
+        expect(res.ok).toBe(true);
+      }
+
+      // After completions, new requests can succeed
+      const followUpTicket = await service.start("slow", {});
+      expect(followUpTicket.status).toBe("running");
+      expect(followUpTicket.result).toBeDefined();
+      const followUpRes = await followUpTicket.result!;
+      expect(followUpRes.ok).toBe(true);
+    } finally {
+      await service.close();
+    }
+  });
 });

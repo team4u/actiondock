@@ -18,7 +18,7 @@ import {
 } from "@actiondock/core";
 import { createZipArchiveAsync } from "./archive";
 import { BuilderError } from "./errors";
-import { collectRelativeFiles, getInternalDependencyVersion, moveDirAtomic } from "./fs-utils";
+import { collectRelativeFiles, getInternalDependencyVersion, replaceDirAtomic } from "./fs-utils";
 import { assertValidManifestActionIds, serializePlanManifest } from "./manifest";
 import { SelectionPlanner } from "./planner";
 import type { BuildOptions, BuildResult, ExternalDependency, SelectionPlan } from "./types";
@@ -635,19 +635,7 @@ export async function buildProject(options: BuildOptions): Promise<BuildResult> 
     );
 
     // 原子移动至目标产物目录
-    if (existsSync(outputDir)) {
-      const backupDir = `${outputDir}.old-${Date.now()}`;
-      try {
-        await moveDirAtomic(outputDir, backupDir);
-        await moveDirAtomic(stagingDir, outputDir);
-        rmSync(backupDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-      } catch {
-        rmSync(outputDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-        await moveDirAtomic(stagingDir, outputDir);
-      }
-    } else {
-      await moveDirAtomic(stagingDir, outputDir);
-    }
+    await replaceDirAtomic(stagingDir, outputDir);
   } finally {
     if (existsSync(stagingDir)) {
       rmSync(stagingDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });

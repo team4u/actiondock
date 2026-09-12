@@ -11,7 +11,7 @@ import { PROCESS_CANCELLED, PROCESS_OUTPUT_LIMIT, PROCESS_SPAWN_ERROR, PROCESS_T
  * 跨平台终止进程组，确保不会遗留孤儿进程。
  *
  * - 在 POSIX 环境下通过负数进程标识终止整个进程组
- * - 在 Windows 环境下通过 taskkill 命令终止整个进程树
+ * - 在 Windows 环境下优先通过 taskkill 递归终止整棵进程树，等待其完成后将 process.kill 作为失败或超时 fallback
  *
  * @param pid 目标子进程标识
  * @param signal 发送的系统信号
@@ -21,30 +21,57 @@ export function killProcessGroup(
   pid: number,
   signal: "SIGTERM" | "SIGKILL" = "SIGTERM",
   spawnFn: typeof spawn = childProcess.spawn
-): void {
+): Promise<void> {
   if (process.platform === "win32") {
-    // Windows 环境下优先通过 taskkill /T /F 递归终止整棵进程树，防止父进程退出后子孙进程孤儿化
-    try {
-      const killer = spawnFn("taskkill", ["/pid", String(pid), "/T", "/F"], { stdio: "ignore" });
-      killer.on?.("error", () => {
+    return new Promise<void>((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (!settled) {
+          settled = true;
+          resolve();
+        }
+      };
+
+      const fallbackToProcessKill = () => {
         try {
           process.kill(pid, signal);
         } catch {
           // 忽略已退出状态
         }
-      });
-    } catch {
+        finish();
+      };
+
       try {
-        process.kill(pid, signal);
+        const killer = spawnFn("taskkill", ["/pid", String(pid), "/T", "/F"], { stdio: "ignore" });
+
+        // 超时保底 fallback：若 taskkill 超过 2000ms 仍未退出，执行 process.kill 强行兜底
+        const timer = setTimeout(() => {
+          try {
+            killer.kill?.();
+          } catch {
+            // 忽略终止失败异常
+          }
+          fallbackToProcessKill();
+        }, 2000);
+        timer.unref?.();
+
+        killer.on?.("error", () => {
+          clearTimeout(timer);
+          fallbackToProcessKill();
+        });
+
+        killer.on?.("close", (code) => {
+          clearTimeout(timer);
+          if (code !== 0) {
+            fallbackToProcessKill();
+          } else {
+            finish();
+          }
+        });
       } catch {
-        // 忽略已退出状态
+        fallbackToProcessKill();
       }
-    }
-    try {
-      process.kill(pid, signal);
-    } catch {
-      // 忽略已退出状态
-    }
+    });
   } else {
     try {
       process.kill(-pid, signal);
@@ -55,6 +82,7 @@ export function killProcessGroup(
         // 忽略已退出状态
       }
     }
+    return Promise.resolve();
   }
 }
 

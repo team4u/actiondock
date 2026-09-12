@@ -84,6 +84,7 @@ export class DefaultExecutionService implements ExecutionService {
   private platform?: RuntimePlatform;
   private actionResolver?: (ref: ActionRef | string) => ActionDefinition | undefined | Promise<ActionDefinition | undefined>;
   private activeRuns = new Map<string, ActiveRun>();
+  private reservedSlots = 0;
   private isClosing = false;
   private ownsStorage: boolean;
   private ownsGlobalStorage: boolean;
@@ -219,6 +220,10 @@ export class DefaultExecutionService implements ExecutionService {
     return ticket.result;
   }
 
+  public get activeRunsCount(): number {
+    return this.activeRuns.size + this.reservedSlots;
+  }
+
   async start(
     ref: ActionRef | string,
     input: JsonValue,
@@ -228,102 +233,124 @@ export class DefaultExecutionService implements ExecutionService {
       throw new Error("ExecutionService is closing: new tasks rejected");
     }
 
-    if (this.activeRuns.size >= this.maxActiveRuns) {
+    const currentTotal = this.activeRuns.size + this.reservedSlots;
+    if (currentTotal >= this.maxActiveRuns) {
       throw new Error(
-        `Concurrency limit reached: ${this.activeRuns.size}/${this.maxActiveRuns} active runs`
+        `Concurrency limit reached: ${currentTotal}/${this.maxActiveRuns} active runs`
       );
     }
 
-    let parsedRef: ActionRef;
+    this.reservedSlots++;
+    let hasReservedSlot = true;
+    const releaseSlot = () => {
+      if (hasReservedSlot) {
+        this.reservedSlots--;
+        hasReservedSlot = false;
+      }
+    };
+
     try {
-      parsedRef = ActionResolver.parseRef(ref);
-    } catch {
-      parsedRef = typeof ref === "object" ? ref : { actionId: ref };
-    }
-    const targetActionId = parsedRef.actionId;
-    const targetPackageId = parsedRef.packageId || this.packageId;
-    const actionRef = `${targetPackageId}/${targetActionId}`;
-    const effectiveClock = options.platform?.clock ?? this.clock;
+      let parsedRef: ActionRef;
+      try {
+        parsedRef = ActionResolver.parseRef(ref);
+      } catch {
+        parsedRef = typeof ref === "object" ? ref : { actionId: ref };
+      }
+      const targetActionId = parsedRef.actionId;
+      const targetPackageId = parsedRef.packageId || this.packageId;
+      const actionRef = `${targetPackageId}/${targetActionId}`;
+      const effectiveClock = options.platform?.clock ?? this.clock;
 
-    // requestId 幂等检查与去重处理
-    const gateResult = await this.checkIdempotencyGate(
-      input,
-      options,
-      actionRef,
-      effectiveClock
-    );
-    if (gateResult.ticket) {
-      return gateResult.ticket;
-    }
-    const designatedRunId = gateResult.designatedRunId;
-
-    const target = await this.resolveExecutionTarget(parsedRef, targetPackageId, targetActionId);
-    if (!target.action) {
-      return this.failTicketForMissingAction({
-        target,
+      // requestId 幂等检查与去重处理
+      const gateResult = await this.checkIdempotencyGate(
         input,
         options,
-        targetPackageId,
-        targetActionId,
-        designatedRunId,
-        effectiveClock,
-      });
-    }
-
-    const controller = new AbortController();
-    let onAbort: (() => void) | undefined;
-    if (options.signal && typeof options.signal.addEventListener === "function") {
-      if (options.signal.aborted) {
-        controller.abort(options.signal.reason);
-      } else {
-        onAbort = () => controller.abort(options.signal?.reason);
-        options.signal.addEventListener(
-          "abort",
-          onAbort,
-          { once: true }
-        );
+        actionRef,
+        effectiveClock
+      );
+      if (gateResult.ticket) {
+        releaseSlot();
+        return gateResult.ticket;
       }
+      const designatedRunId = gateResult.designatedRunId;
+
+      const target = await this.resolveExecutionTarget(parsedRef, targetPackageId, targetActionId);
+      if (!target.action) {
+        releaseSlot();
+        return this.failTicketForMissingAction({
+          target,
+          input,
+          options,
+          targetPackageId,
+          targetActionId,
+          designatedRunId,
+          effectiveClock,
+        });
+      }
+
+      if (this.isClosing) {
+        throw new Error("ExecutionService is closing: new tasks rejected");
+      }
+
+      const controller = new AbortController();
+      let onAbort: (() => void) | undefined;
+      if (options.signal && typeof options.signal.addEventListener === "function") {
+        if (options.signal.aborted) {
+          controller.abort(options.signal.reason);
+        } else {
+          onAbort = () => controller.abort(options.signal?.reason);
+          options.signal.addEventListener(
+            "abort",
+            onAbort,
+            { once: true }
+          );
+        }
+      }
+
+      const runId = designatedRunId || randomUUID();
+      const bridge = this.createEventBridge({ runId, options, effectiveClock });
+
+      this.registerResolvedAction(target.runner, targetPackageId, targetActionId, target.action);
+      const handle = target.runner.start(targetActionId, input, {
+        runId,
+        rootRunId: options.rootRunId,
+        parentRunId: options.parentRunId,
+        hostSessionId: options.hostSessionId || this.hostSessionId,
+        maxCallDepth: options.maxCallDepth,
+        configOverrides: options.config as Record<string, unknown> | undefined,
+        signal: controller.signal,
+        timeoutMs: options.timeoutMs,
+        progress: bridge.progressReporter,
+        logger: bridge.executionLogger,
+        process: options.process || options.platform?.process || this.process,
+        platform: options.platform || this.platform,
+      });
+
+      const activeItem: ActiveRun = {
+        runId: handle.runId,
+        handle,
+        controller,
+        status: "running",
+        startedAt: (effectiveClock?.now() ?? new Date()).toISOString(),
+        signal: options.signal,
+        onAbort,
+      };
+
+      this.activeRuns.set(handle.runId, activeItem);
+      releaseSlot();
+      bridge.emitEvent({ type: "status", status: "running" });
+
+      this.watchHandleCompletion(handle, activeItem, bridge);
+
+      return {
+        runId: handle.runId,
+        status: "running",
+        result: handle.result,
+      };
+    } catch (err) {
+      releaseSlot();
+      throw err;
     }
-
-    const runId = designatedRunId || randomUUID();
-    const bridge = this.createEventBridge({ runId, options, effectiveClock });
-
-    this.registerResolvedAction(target.runner, targetPackageId, targetActionId, target.action);
-    const handle = target.runner.start(targetActionId, input, {
-      runId,
-      rootRunId: options.rootRunId,
-      parentRunId: options.parentRunId,
-      hostSessionId: options.hostSessionId || this.hostSessionId,
-      maxCallDepth: options.maxCallDepth,
-      configOverrides: options.config as Record<string, unknown> | undefined,
-      signal: controller.signal,
-      timeoutMs: options.timeoutMs,
-      progress: bridge.progressReporter,
-      logger: bridge.executionLogger,
-      process: options.process || options.platform?.process || this.process,
-      platform: options.platform || this.platform,
-    });
-
-    const activeItem: ActiveRun = {
-      runId: handle.runId,
-      handle,
-      controller,
-      status: "running",
-      startedAt: (effectiveClock?.now() ?? new Date()).toISOString(),
-      signal: options.signal,
-      onAbort,
-    };
-
-    this.activeRuns.set(handle.runId, activeItem);
-    bridge.emitEvent({ type: "status", status: "running" });
-
-    this.watchHandleCompletion(handle, activeItem, bridge);
-
-    return {
-      runId: handle.runId,
-      status: "running",
-      result: handle.result,
-    };
   }
 
   /**
@@ -741,6 +768,7 @@ export class DefaultExecutionService implements ExecutionService {
 
   async close(options: { graceMs?: number } = {}): Promise<void> {
     this.isClosing = true;
+    this.reservedSlots = 0;
     const graceMs = options.graceMs ?? 5000;
 
     for (const [_, active] of this.activeRuns) {

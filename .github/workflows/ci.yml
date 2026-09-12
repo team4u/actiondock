@@ -7,8 +7,12 @@ on:
 
 jobs:
   test:
-    name: Typecheck & Test (Node 24)
-    runs-on: ubuntu-latest
+    name: Typecheck & Test (Node 24, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
