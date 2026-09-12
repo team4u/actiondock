@@ -325,13 +325,14 @@ export class RemoteActionDockTarget implements ActionDockTarget {
     const raw = await fetchRemotePlaybookShow(this.serverUrl, id, this.token, {
       allowInsecureHttp: this.allowInsecureHttp,
     });
+    const parsedPkgId = id.includes("/") ? id.slice(0, id.lastIndexOf("/")) : undefined;
     return {
       id: raw.id,
       description: raw.description,
       actions: raw.actions,
       filePath: raw.filePath,
       content: raw.content,
-      packageId: raw.packageId,
+      packageId: raw.packageId ?? parsedPkgId,
     };
   }
 
@@ -564,7 +565,12 @@ export class RemoteActionDockTarget implements ActionDockTarget {
       return { outcome: "requested", runId: res.runId };
     } catch (err: any) {
       const msg = String(err?.message || "");
-      if (msg.includes("already finished") || msg.includes("RUN_ALREADY_FINISHED")) {
+      const code = String(err?.code || "");
+      if (
+        code === "RUN_ALREADY_FINISHED" ||
+        msg.includes("already finished") ||
+        msg.includes("RUN_ALREADY_FINISHED")
+      ) {
         let status = (err as any)?.errorData?.status || (err as any)?.details?.status;
         if (!status) {
           try {
@@ -576,7 +582,12 @@ export class RemoteActionDockTarget implements ActionDockTarget {
         }
         return { outcome: "already_terminal", runId, status: (status as any) || "failed" };
       }
-      if (msg.includes("not found") || msg.includes("RUN_NOT_FOUND") || msg.includes("404")) {
+      if (
+        code === "RUN_NOT_FOUND" ||
+        msg.includes("not found") ||
+        msg.includes("RUN_NOT_FOUND") ||
+        msg.includes("404")
+      ) {
         return { outcome: "not_found", runId };
       }
       throw err;

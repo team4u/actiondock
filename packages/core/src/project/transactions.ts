@@ -283,7 +283,7 @@ function safeRemoveStaleProjectReclaimGuard(
       } catch {}
     }
 
-    if (expectedGuardToken && actualGuardToken !== expectedGuardToken) {
+    if (expectedGuardToken !== actualGuardToken) {
       // 并非此前检查的陈旧 guard（已被并发者替换），立即恢复原位！
       try {
         renameSync(quarantinePath, reclaimPath);
@@ -294,8 +294,12 @@ function safeRemoveStaleProjectReclaimGuard(
     rmSync(quarantinePath, { recursive: true, force: true });
   } catch {
     try {
-      rmSync(quarantinePath, { recursive: true, force: true });
-    } catch {}
+      renameSync(quarantinePath, reclaimPath);
+    } catch {
+      try {
+        rmSync(quarantinePath, { recursive: true, force: true });
+      } catch {}
+    }
   }
 }
 
@@ -380,7 +384,10 @@ function safeQuarantineStaleProjectLock(
       } catch {}
     }
 
-    if (expectedSessionToken && actualSessionToken && actualSessionToken !== expectedSessionToken) {
+    if (
+      (expectedSessionToken && actualSessionToken !== expectedSessionToken) ||
+      (!expectedSessionToken && actualSessionToken)
+    ) {
       // 锁已被其他竞争者接管并写入新 token，绝不可删除！立即恢复原位
       try {
         renameSync(quarantinePath, lockPath);
@@ -400,9 +407,13 @@ function safeQuarantineStaleProjectLock(
     return true;
   } catch {
     try {
-      rmSync(quarantinePath, { recursive: true, force: true });
-    } catch {}
-    return true;
+      renameSync(quarantinePath, lockPath);
+    } catch {
+      try {
+        rmSync(quarantinePath, { recursive: true, force: true });
+      } catch {}
+    }
+    return false;
   }
 }
 
