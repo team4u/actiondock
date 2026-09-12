@@ -1,13 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { spawn } from "node:child_process";
-import fs, { existsSync, mkdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import fs, { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   acquireProjectLock,
   beginTransaction,
+  cleanStaleProjectQuarantines,
   hasPendingTransactions,
+  isPidAlive,
+  parseProjectQuarantineTimestamp,
   recoverPendingTransactions,
+  safeReleaseProjectLock,
   safeRemoveStaleProjectReclaimGuard,
   safeRollbackProjectLock,
 } from "../src/project/transactions";
@@ -595,5 +599,91 @@ rl.on("line", (cmd) => {
     const release = acquireProjectLock(tempDir);
     expect(existsSync(liveOperatorQuarantine)).toBe(true);
     release();
+  });
+
+  it("safeRemoveStaleProjectReclaimGuard 在 token 不匹配时安全转换为 .orphan.* 脱离态，持有者死亡超 10 秒后即使创建者存活 GC 依然顺利清理", () => {
+    const metaDir = join(tempDir, ".actiondock");
+    mkdirSync(metaDir, { recursive: true });
+    const lockDir = join(metaDir, "project.lock");
+    const reclaimDir = `${lockDir}.reclaim`;
+    mkdirSync(reclaimDir, { recursive: true });
+
+    // - 写入陈旧守卫，持有者为已死亡进程，带有实际 guardToken
+    const deadPid = 99999999;
+    writeFileSync(
+      join(reclaimDir, "metadata.json"),
+      JSON.stringify({ pid: deadPid, guardToken: "actual-token-rival", createdAt: Date.now() - 5000 }, null, 2),
+      "utf-8"
+    );
+
+    // - safeRemoveStaleProjectReclaimGuard 检出 token 不匹配并安全转换为 orphan 目录
+    safeRemoveStaleProjectReclaimGuard(reclaimDir);
+    expect(existsSync(reclaimDir)).toBe(false);
+
+    const entries = readdirSync(metaDir);
+    const orphanEntry = entries.find((e) => e.startsWith("project.lock.reclaim.orphan."));
+    expect(orphanEntry).toBeDefined();
+
+    const orphanPath = join(metaDir, orphanEntry!);
+    const parsed = parseProjectQuarantineTimestamp(orphanEntry!);
+    expect(parsed.operatorPid).toBeUndefined();
+    expect(parsed.timestamp).toBeDefined();
+
+    // - 未超 10 秒时 GC 完好保留
+    cleanStaleProjectQuarantines(metaDir, "project.lock");
+    expect(existsSync(orphanPath)).toBe(true);
+
+    // - 模拟孤儿目录超期（超过 10 秒）
+    const expiredOrphanName = `project.lock.reclaim.orphan.${Date.now() - 20000}.uuid9999`;
+    const expiredOrphanPath = join(metaDir, expiredOrphanName);
+    fs.renameSync(orphanPath, expiredOrphanPath);
+
+    // - 当前进程依然存活，但由于 orphan 目录已脱离创建者 Host 的 PID 约束，且持有者已死超期，GC 顺利清理
+    expect(isPidAlive(process.pid)).toBe(true);
+    cleanStaleProjectQuarantines(metaDir, "project.lock");
+    expect(existsSync(expiredOrphanPath)).toBe(false);
+  });
+
+  it("内部 lockToken 存在时，即使并发竞争者伪造了相同的外部 sessionToken，由于 lockToken 不匹配 safeRollbackProjectLock 与 safeReleaseProjectLock 拒绝误删", () => {
+    const metaDir = join(tempDir, ".actiondock");
+    mkdirSync(metaDir, { recursive: true });
+    const lockDir = join(metaDir, "project.lock");
+    mkdirSync(lockDir, { recursive: true });
+
+    const sharedSessionToken = "shared-session-token-1234";
+    const rivalLockToken = "rival-lock-token-aaaa";
+    const myLockToken = "my-lock-token-bbbb";
+
+    // - 写入竞争者锁元数据：伪造了相同的外部 sessionToken，但内部持有不同的 lockToken
+    writeFileSync(
+      join(lockDir, "metadata.json"),
+      JSON.stringify(
+        {
+          pid: process.pid,
+          sessionToken: sharedSessionToken,
+          lockToken: rivalLockToken,
+          createdAt: Date.now(),
+        },
+        null,
+        2
+      ),
+      "utf-8"
+    );
+
+    // - safeRollbackProjectLock 核验：虽 sessionToken 相同但 lockToken 不匹配，拒绝删除并完整保留
+    safeRollbackProjectLock(lockDir, sharedSessionToken, myLockToken);
+    expect(existsSync(lockDir)).toBe(true);
+    let meta = JSON.parse(readFileSync(join(lockDir, "metadata.json"), "utf-8"));
+    expect(meta.lockToken).toBe(rivalLockToken);
+
+    // - safeReleaseProjectLock 核验：虽 sessionToken 相同但 lockToken 不匹配，拒绝删除并完整保留
+    safeReleaseProjectLock(lockDir, sharedSessionToken, myLockToken);
+    expect(existsSync(lockDir)).toBe(true);
+    meta = JSON.parse(readFileSync(join(lockDir, "metadata.json"), "utf-8"));
+    expect(meta.lockToken).toBe(rivalLockToken);
+
+    // - 当传入匹配的 rivalLockToken 时，安全删除
+    safeReleaseProjectLock(lockDir, sharedSessionToken, rivalLockToken);
+    expect(existsSync(lockDir)).toBe(false);
   });
 });

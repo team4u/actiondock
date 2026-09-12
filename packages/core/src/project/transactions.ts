@@ -58,7 +58,7 @@ function readProjectLockWithGracePeriod(
 ): {
   exists: boolean;
   isDir: boolean;
-  info?: { pid?: number; sessionToken?: string; createdAt?: number };
+  info?: { pid?: number; sessionToken?: string; lockToken?: string; createdAt?: number };
   inGracePeriod: boolean;
 } {
   if (!existsSync(lockPath)) {
@@ -74,7 +74,7 @@ function readProjectLockWithGracePeriod(
 
   const metaPath = isDir ? join(lockPath, "metadata.json") : lockPath;
 
-  const tryParse = (): { pid?: number; sessionToken?: string; createdAt?: number } | undefined => {
+  const tryParse = (): { pid?: number; sessionToken?: string; lockToken?: string; createdAt?: number } | undefined => {
     try {
       if (existsSync(metaPath)) {
         const raw = readFileSync(metaPath, "utf-8");
@@ -325,26 +325,41 @@ export function safeRemoveStaleProjectReclaimGuard(
 
     if (expectedGuardToken !== actualGuardToken) {
       // 并非此前检查的陈旧 guard（已被并发者替换为新活跃 guard）
-      // 保持隔离状态，严禁逆向恢复至主路径（防止并发接管者退出后残留守卫死锁主路径）
-      // 活跃接管者在后置核验中会感知守卫失窃并安全回滚，隔离目录由独立 GC 机制清理
+      // 保持隔离状态，转换为 .orphan 脱离态，脱离创建者 Host PID 的存活保护，由 GC 基于真实持有者存活与时间清理
+      const orphanPath = `${reclaimPath}.orphan.${Date.now()}.${randomUUID().slice(0, 8)}`;
+      try {
+        fs.renameSync(quarantinePath, orphanPath);
+      } catch {}
       return;
     }
 
     // 确认正是目标陈旧 guard，安全清理
     fs.rmSync(quarantinePath, { recursive: true, force: true });
   } catch {
-    // 发生异常，保持隔离状态，严禁误删或盲目恢复
+    // 发生异常，保持隔离状态，转换为 .orphan 脱离态
+    const orphanPath = `${reclaimPath}.orphan.${Date.now()}.${randomUUID().slice(0, 8)}`;
+    try {
+      fs.renameSync(quarantinePath, orphanPath);
+    } catch {}
   }
 }
 
 /**
  * 从工程锁隔离或回滚临时目录名称中解析操作者 PID 与隔离生成时间戳。
- * 命名规范：*.(quarantine|rollback|release).<pid>.<timestamp>.<uuid>
+ * 命名规范：*.(quarantine|rollback|release).<pid>.<timestamp>.<uuid> 或 *.orphan.<timestamp>.<uuid>
  */
 export function parseProjectQuarantineTimestamp(entryName: string): {
   operatorPid?: number;
   timestamp?: number;
 } {
+  const orphanMatch = entryName.match(/\.orphan\.(\d+)(?:\.|$)/);
+  if (orphanMatch && orphanMatch[1]) {
+    const ts = parseInt(orphanMatch[1], 10);
+    return {
+      timestamp: !Number.isNaN(ts) && ts > 0 ? ts : undefined,
+    };
+  }
+
   const match = entryName.match(/\.(?:quarantine|rollback|release)\.(\d+)\.(\d+)(?:\.|$)/);
   if (match && match[1] && match[2]) {
     const pid = parseInt(match[1], 10);
@@ -389,7 +404,14 @@ export function cleanStaleProjectQuarantines(
         break;
       }
       if (!entry.startsWith(basePrefix)) continue;
-      if (!entry.includes(".quarantine.") && !entry.includes(".rollback.") && !entry.includes(".release.")) continue;
+      if (
+        !entry.includes(".quarantine.") &&
+        !entry.includes(".rollback.") &&
+        !entry.includes(".release.") &&
+        !entry.includes(".orphan.")
+      ) {
+        continue;
+      }
       const fullPath = join(parentDir, entry);
       try {
         const { operatorPid, timestamp } = parseProjectQuarantineTimestamp(entry);
@@ -448,9 +470,13 @@ export function cleanStaleProjectQuarantines(
 
 /**
  * 安全回滚当前进程创建的工程修改锁。
- * 仅当锁目录中的 sessionToken 与自身一致时才删除，防止误删接管者或并发新锁。
+ * 优先核对 lockToken，回退核对 sessionToken，防止误删接管者或并发新锁。
  */
-export function safeRollbackProjectLock(lockPath: string, expectedSessionToken: string): void {
+export function safeRollbackProjectLock(
+  lockPath: string,
+  expectedSessionToken: string,
+  expectedLockToken?: string
+): void {
   if (!existsSync(lockPath)) return;
   const quarantinePath = `${lockPath}.rollback.${process.pid}.${Date.now()}.${randomUUID().slice(0, 8)}`;
   try {
@@ -468,19 +494,29 @@ export function safeRollbackProjectLock(lockPath: string, expectedSessionToken: 
     }
     const metaPath = isDir ? join(quarantinePath, "metadata.json") : quarantinePath;
     let actualSessionToken: string | undefined;
+    let actualLockToken: string | undefined;
     if (existsSync(metaPath)) {
       try {
         const raw = readFileSync(metaPath, "utf-8");
         const parsed = JSON.parse(raw);
         actualSessionToken = parsed?.sessionToken;
+        actualLockToken = parsed?.lockToken;
       } catch {}
     }
 
-    if (actualSessionToken !== expectedSessionToken) {
+    const isMatch = expectedLockToken
+      ? (actualLockToken === expectedLockToken && actualSessionToken === expectedSessionToken)
+      : (actualSessionToken === expectedSessionToken);
+
+    if (!isMatch) {
       // 并非自身刚才创建的锁目录，立即恢复原位！
       try {
         renameSync(quarantinePath, lockPath);
-      } catch {}
+      } catch {
+        try {
+          renameSync(quarantinePath, `${lockPath}.orphan.${Date.now()}.${randomUUID().slice(0, 8)}`);
+        } catch {}
+      }
       return;
     }
 
@@ -488,7 +524,11 @@ export function safeRollbackProjectLock(lockPath: string, expectedSessionToken: 
   } catch {
     try {
       renameSync(quarantinePath, lockPath);
-    } catch {}
+    } catch {
+      try {
+        renameSync(quarantinePath, `${lockPath}.orphan.${Date.now()}.${randomUUID().slice(0, 8)}`);
+      } catch {}
+    }
   }
 }
 
@@ -498,7 +538,8 @@ export function safeRollbackProjectLock(lockPath: string, expectedSessionToken: 
  */
 function safeQuarantineStaleProjectLock(
   lockPath: string,
-  expectedSessionToken?: string
+  expectedSessionToken?: string,
+  expectedLockToken?: string
 ): boolean {
   if (!existsSync(lockPath)) return true;
   const quarantinePath = `${lockPath}.quarantine.${process.pid}.${Date.now()}.${randomUUID().slice(0, 8)}`;
@@ -517,24 +558,31 @@ function safeQuarantineStaleProjectLock(
     }
     const metaPath = isDir ? join(quarantinePath, "metadata.json") : quarantinePath;
     let actualSessionToken: string | undefined;
+    let actualLockToken: string | undefined;
     let actualPid: number | undefined;
     if (existsSync(metaPath)) {
       try {
         const raw = readFileSync(metaPath, "utf-8");
         const parsed = JSON.parse(raw);
         actualSessionToken = parsed?.sessionToken;
+        actualLockToken = parsed?.lockToken;
         actualPid = parsed?.pid;
       } catch {}
     }
 
-    if (
-      (expectedSessionToken && actualSessionToken !== expectedSessionToken) ||
-      (!expectedSessionToken && actualSessionToken)
-    ) {
+    const tokenMismatch = expectedLockToken
+      ? (actualLockToken !== expectedLockToken || (expectedSessionToken && actualSessionToken !== expectedSessionToken))
+      : ((expectedSessionToken && actualSessionToken !== expectedSessionToken) || (!expectedSessionToken && actualSessionToken));
+
+    if (tokenMismatch) {
       // 锁已被其他竞争者接管并写入新 token，绝不可删除！立即恢复原位
       try {
         renameSync(quarantinePath, lockPath);
-      } catch {}
+      } catch {
+        try {
+          renameSync(quarantinePath, `${lockPath}.orphan.${Date.now()}.${randomUUID().slice(0, 8)}`);
+        } catch {}
+      }
       return false;
     }
 
@@ -542,7 +590,11 @@ function safeQuarantineStaleProjectLock(
       // 持有者实际仍存活，恢复原位
       try {
         renameSync(quarantinePath, lockPath);
-      } catch {}
+      } catch {
+        try {
+          renameSync(quarantinePath, `${lockPath}.orphan.${Date.now()}.${randomUUID().slice(0, 8)}`);
+        } catch {}
+      }
       return false;
     }
 
@@ -551,16 +603,24 @@ function safeQuarantineStaleProjectLock(
   } catch {
     try {
       renameSync(quarantinePath, lockPath);
-    } catch {}
+    } catch {
+      try {
+        renameSync(quarantinePath, `${lockPath}.orphan.${Date.now()}.${randomUUID().slice(0, 8)}`);
+      } catch {}
+    }
     return false;
   }
 }
 
 /**
  * 安全释放工程主锁。
- * 仅当锁目录中持有当前 sessionToken 时才删除，杜绝删除他人新锁。
+ * 仅当锁目录中持有当前 lockToken / sessionToken 时才删除，杜绝删除他人新锁。
  */
-function safeReleaseProjectLock(lockPath: string, expectedSessionToken: string): void {
+export function safeReleaseProjectLock(
+  lockPath: string,
+  expectedSessionToken: string,
+  expectedLockToken?: string
+): void {
   if (!existsSync(lockPath)) return;
   const quarantinePath = `${lockPath}.release.${process.pid}.${Date.now()}.${randomUUID().slice(0, 8)}`;
   try {
@@ -578,26 +638,40 @@ function safeReleaseProjectLock(lockPath: string, expectedSessionToken: string):
     }
     const metaPath = isDir ? join(quarantinePath, "metadata.json") : quarantinePath;
     let actualSessionToken: string | undefined;
+    let actualLockToken: string | undefined;
     if (existsSync(metaPath)) {
       try {
         const raw = readFileSync(metaPath, "utf-8");
         const parsed = JSON.parse(raw);
         actualSessionToken = parsed?.sessionToken;
+        actualLockToken = parsed?.lockToken;
       } catch {}
     }
 
-    if (actualSessionToken === expectedSessionToken) {
+    const isMatch = expectedLockToken
+      ? (actualLockToken === expectedLockToken && actualSessionToken === expectedSessionToken)
+      : (actualSessionToken === expectedSessionToken);
+
+    if (isMatch) {
       rmSync(quarantinePath, { recursive: true, force: true });
     } else {
       // 并非当前会话持有的锁，恢复原位
       try {
         renameSync(quarantinePath, lockPath);
-      } catch {}
+      } catch {
+        try {
+          renameSync(quarantinePath, `${lockPath}.orphan.${Date.now()}.${randomUUID().slice(0, 8)}`);
+        } catch {}
+      }
     }
   } catch {
     try {
       renameSync(quarantinePath, lockPath);
-    } catch {}
+    } catch {
+      try {
+        renameSync(quarantinePath, `${lockPath}.orphan.${Date.now()}.${randomUUID().slice(0, 8)}`);
+      } catch {}
+    }
   }
   cleanStaleProjectQuarantines(dirname(lockPath), "project.lock");
 }
@@ -667,10 +741,12 @@ export function acquireProjectLock(
   const lockPath = join(metaDir, "project.lock");
   const reclaimPath = `${lockPath}.reclaim`;
   const sessionToken = options.sessionToken || randomUUID();
+  const lockToken = randomUUID();
   const currentPid = process.pid;
   const lockData = {
     pid: currentPid,
     sessionToken,
+    lockToken,
     createdAt: Date.now(),
   };
   const content = JSON.stringify(lockData, null, 2);
@@ -709,8 +785,8 @@ export function acquireProjectLock(
       // 再次确认在此窗口期内是否有他人持有活跃 reclaim guard
       const postCheck = checkProjectReclaimGuard(reclaimPath, 1000);
       if (postCheck.active && postCheck.holderPid !== currentPid) {
-        // 仅当锁目录中包含自身创建的 sessionToken 时安全回滚，杜绝误删他人新锁
-        safeRollbackProjectLock(lockPath, sessionToken);
+        // 仅当锁目录中包含自身创建的 sessionToken 与 lockToken 时安全回滚，杜绝误删他人新锁
+        safeRollbackProjectLock(lockPath, sessionToken, lockToken);
         if (Date.now() >= deadline) {
           const busyErr: any = new Error(
             `PROJECT_BUSY: Timeout acquiring project lock on '${projectRoot}' due to active reclaim guard (PID ${postCheck.holderPid}) after ${timeoutMs}ms`
@@ -761,6 +837,7 @@ export function acquireProjectLock(
         }
 
         const staleSessionToken = lockState.info?.sessionToken;
+        const staleLockToken = lockState.info?.lockToken;
         const guardToken = randomUUID();
         // 当识别到主锁为陈旧锁时，竞争者必须先原子竞争获取 reclaim guard
         const acquiredReclaim = tryAcquireProjectReclaimGuard(reclaimPath, currentPid, guardToken);
@@ -835,7 +912,8 @@ export function acquireProjectLock(
             // 2. 隔离并核验清理陈旧主锁（验证 sessionToken 一致，若已被他人占用则恢复原位）
             const cleaned = safeQuarantineStaleProjectLock(
               lockPath,
-              recheckState.info?.sessionToken ?? staleSessionToken
+              recheckState.info?.sessionToken ?? staleSessionToken,
+              recheckState.info?.lockToken ?? staleLockToken
             );
             if (!cleaned) {
               if (Date.now() >= deadline) {
@@ -908,7 +986,7 @@ export function acquireProjectLock(
           // 后置复核 2：新主锁创建完成后、返回之前再次核验 reclaim guard 所有权
           // 若守卫在创建新主锁期间失窃，说明存在并发仲裁漂移，严禁生效并安全回滚自身主锁
           if (!verifyProjectReclaimOwnership()) {
-            safeRollbackProjectLock(lockPath, sessionToken);
+            safeRollbackProjectLock(lockPath, sessionToken, lockToken);
             if (Date.now() >= deadline) {
               const busyErr: any = new Error(
                 `PROJECT_BUSY: Timeout acquiring project lock on '${projectRoot}' after ${timeoutMs}ms`
@@ -934,7 +1012,7 @@ export function acquireProjectLock(
   return () => {
     if (released) return;
     released = true;
-    safeReleaseProjectLock(lockPath, sessionToken);
+    safeReleaseProjectLock(lockPath, sessionToken, lockToken);
     cleanStaleProjectQuarantines(metaDir, "project.lock");
   };
 }

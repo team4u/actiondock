@@ -9,7 +9,15 @@ import { createActionDockApp } from "../src/app";
 import { createActionDockHost } from "../src/host";
 import { createDefaultSqliteDriver } from "../src/storage/driver";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
-import { DataDirLock, safeRemoveStaleReclaimGuard, safeRollbackLock } from "../src/storage/data-dir-lock";
+import {
+  DataDirLock,
+  cleanStaleQuarantines,
+  isProcessAlive,
+  parseQuarantineTimestamp,
+  safeReleaseLock,
+  safeRemoveStaleReclaimGuard,
+  safeRollbackLock,
+} from "../src/storage/data-dir-lock";
 import { STORAGE_SCHEMA_VERSION } from "../src/storage/types";
 
 describe("数据目录排他锁与 Schema 版本保护测试", () => {
@@ -1145,5 +1153,89 @@ rl.on("line", (cmd) => {
     const lock = DataDirLock.acquire(tempDir);
     expect(existsSync(liveOperatorQuarantine)).toBe(true);
     lock.release();
+  });
+
+  it("safeRemoveStaleReclaimGuard 在 token 不匹配时安全转换为 .orphan.* 脱离态，持有者死亡超 10 秒后即使创建者存活 GC 依然顺利清理", () => {
+    const lockDir = join(tempDir, ".actiondock.data.lock");
+    const reclaimDir = `${lockDir}.reclaim`;
+    mkdirSync(reclaimDir, { recursive: true });
+
+    // - 写入陈旧守卫，持有者为已死亡进程，带有实际 guardToken
+    const deadPid = 99999999;
+    writeFileSync(
+      join(reclaimDir, "metadata.json"),
+      JSON.stringify({ pid: deadPid, guardToken: "actual-token-rival", createdAt: Date.now() - 5000 }, null, 2),
+      "utf8"
+    );
+
+    // - safeRemoveStaleReclaimGuard 检出 token 不匹配并安全转换为 orphan 目录
+    safeRemoveStaleReclaimGuard(reclaimDir);
+    expect(existsSync(reclaimDir)).toBe(false);
+
+    const entries = readdirSync(tempDir);
+    const orphanEntry = entries.find((e) => e.startsWith(".actiondock.data.lock.reclaim.orphan."));
+    expect(orphanEntry).toBeDefined();
+
+    const orphanPath = join(tempDir, orphanEntry!);
+    const parsed = parseQuarantineTimestamp(orphanEntry!);
+    expect(parsed.operatorPid).toBeUndefined();
+    expect(parsed.timestamp).toBeDefined();
+
+    // - 未超 10 秒时 GC 完好保留
+    cleanStaleQuarantines(tempDir, ".actiondock.data.lock");
+    expect(existsSync(orphanPath)).toBe(true);
+
+    // - 模拟孤儿目录超期（超过 10 秒）
+    const expiredOrphanName = `.actiondock.data.lock.reclaim.orphan.${Date.now() - 20000}.uuid9999`;
+    const expiredOrphanPath = join(tempDir, expiredOrphanName);
+    fs.renameSync(orphanPath, expiredOrphanPath);
+
+    // - 当前进程依然存活，但由于 orphan 目录已脱离创建者 Host 的 PID 约束，且持有者已死超期，GC 顺利清理
+    expect(isProcessAlive(process.pid)).toBe(true);
+    cleanStaleQuarantines(tempDir, ".actiondock.data.lock");
+    expect(existsSync(expiredOrphanPath)).toBe(false);
+  });
+
+  it("内部 lockToken 存在时，即使并发竞争者伪造了相同的外部 sessionToken，由于 lockToken 不匹配 safeRollbackLock 与 safeReleaseLock 拒绝误删", () => {
+    const lockDir = join(tempDir, ".actiondock.data.lock");
+    mkdirSync(lockDir, { recursive: true });
+
+    const sharedSessionToken = "shared-session-token-1234";
+    const rivalLockToken = "rival-lock-token-aaaa";
+    const myLockToken = "my-lock-token-bbbb";
+
+    // - 写入竞争者锁元数据：伪造了相同的外部 sessionToken，但内部持有不同的 lockToken
+    writeFileSync(
+      join(lockDir, "metadata.json"),
+      JSON.stringify(
+        {
+          pid: process.pid,
+          hostname: hostname(),
+          sessionToken: sharedSessionToken,
+          lockToken: rivalLockToken,
+          createdAt: new Date().toISOString(),
+        },
+        null,
+        2
+      ),
+      "utf8"
+    );
+
+    // - safeRollbackLock 核验：虽 sessionToken 相同但 lockToken 不匹配，拒绝删除并完整保留
+    safeRollbackLock(lockDir, sharedSessionToken, myLockToken);
+    expect(existsSync(lockDir)).toBe(true);
+    expect(existsSync(join(lockDir, "metadata.json"))).toBe(true);
+    let meta = JSON.parse(readFileSync(join(lockDir, "metadata.json"), "utf8"));
+    expect(meta.lockToken).toBe(rivalLockToken);
+
+    // - safeReleaseLock 核验：虽 sessionToken 相同但 lockToken 不匹配，拒绝删除并完整保留
+    safeReleaseLock(lockDir, sharedSessionToken, myLockToken);
+    expect(existsSync(lockDir)).toBe(true);
+    meta = JSON.parse(readFileSync(join(lockDir, "metadata.json"), "utf8"));
+    expect(meta.lockToken).toBe(rivalLockToken);
+
+    // - 当传入匹配的 rivalLockToken 时，安全删除
+    safeReleaseLock(lockDir, sharedSessionToken, rivalLockToken);
+    expect(existsSync(lockDir)).toBe(false);
   });
 });
