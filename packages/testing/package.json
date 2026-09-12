@@ -1,6 +1,6 @@
 {
   "name": "@actiondock/testing",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "description": "ActionDock Test Runtime for testing Actions with real Core execution semantics",
   "type": "module",
   "main": "./dist/index.js",
@@ -29,8 +29,8 @@
     "test": "node ../../scripts/run-tests.ts"
   },
   "dependencies": {
-    "@actiondock/core": "^2.2.0",
-    "@actiondock/sdk": "^2.2.0"
+    "@actiondock/core": "^2.2.1",
+    "@actiondock/sdk": "^2.2.1"
   },
   "devDependencies": {
     "typescript": "^5.7.0"

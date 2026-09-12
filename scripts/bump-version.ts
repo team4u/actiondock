@@ -121,6 +121,7 @@ function main() {
     const pkgPath = join(rootDir, "examples", example, "package.json");
     if (existsSync(pkgPath)) {
       updateJsonFile(pkgPath, (pkg) => {
+        pkg.version = targetVersion;
         if (pkg.dependencies) {
           for (const dep of Object.keys(pkg.dependencies)) {
             if (dep.startsWith("@actiondock/")) {
@@ -137,6 +138,14 @@ function main() {
         }
       });
       console.log(`Updated examples/${example}/package.json`);
+    }
+
+    const actiondockJsonPath = join(rootDir, "examples", example, "actiondock.json");
+    if (existsSync(actiondockJsonPath)) {
+      updateJsonFile(actiondockJsonPath, (adJson) => {
+        adJson.version = targetVersion;
+      });
+      console.log(`Updated examples/${example}/actiondock.json`);
     }
   }
 
