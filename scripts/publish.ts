@@ -111,6 +111,10 @@ function computeLocalTarballShasum(pkgDir: string): { tarballPath: string; shasu
   return { tarballPath, shasum };
 }
 
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const dryRun = args.includes("--dry-run");
@@ -221,15 +225,28 @@ async function main() {
     throw error;
   }
 
-  // 发布后烟雾验证
+  // 3. 发布后烟雾验证（增加轮询重试机制以应对 npm 镜像多副本最终一致性延迟）
   if (!skipVerify && !dryRun) {
     console.log(`\n[3/5] 验证临时标签下的包可见性与完整性...`);
+    const maxRetries = 15;
+    const retryIntervalMs = 3000;
     for (const pkg of PUBLISH_PACKAGES) {
-      const viewRes = runCmd("npm", ["view", `${pkg.name}@${tempDistTag}`, "version"], {
-        captureOutput: true,
-        allowFailure: true,
-      });
-      if (viewRes.status !== 0 || !viewRes.stdout.includes(targetVersion)) {
+      let verified = false;
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        const viewRes = runCmd("npm", ["view", `${pkg.name}@${tempDistTag}`, "version"], {
+          captureOutput: true,
+          allowFailure: true,
+        });
+        if (viewRes.status === 0 && viewRes.stdout.includes(targetVersion)) {
+          verified = true;
+          break;
+        }
+        if (attempt < maxRetries) {
+          console.log(`  [等待] ${pkg.name}@${tempDistTag} 远端副本同步中，第 ${attempt}/${maxRetries} 次等待重试...`);
+          await sleepMs(retryIntervalMs);
+        }
+      }
+      if (!verified) {
         throw new Error(`临时标签验证失败: ${pkg.name}@${tempDistTag} 未能正确定位到 ${targetVersion}`);
       }
       console.log(`  [OK] ${pkg.name}@${tempDistTag} 验证通过`);
@@ -238,7 +255,7 @@ async function main() {
     console.log("\n[3/5] 跳过远端临时标签验证");
   }
 
-  // 原子分发指针切换与回滚机制
+  // 4. 原子分发指针切换与回滚机制
   console.log(`\n[4/5] 原子切换正式分发标签 (${targetDistTag} -> ${targetVersion})...`);
   const promotedPackages: string[] = [];
 
@@ -248,7 +265,26 @@ async function main() {
       if (dryRun) {
         console.log(`  [模拟] 执行: npm dist-tag add ${pkg.name}@${targetVersion} ${targetDistTag}`);
       } else {
-        runCmd("npm", ["dist-tag", "add", `${pkg.name}@${targetVersion}`, targetDistTag]);
+        let switched = false;
+        const maxRetries = 5;
+        const retryIntervalMs = 2000;
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          const res = runCmd("npm", ["dist-tag", "add", `${pkg.name}@${targetVersion}`, targetDistTag], {
+            allowFailure: true,
+            captureOutput: true,
+          });
+          if (res.status === 0) {
+            switched = true;
+            break;
+          }
+          if (attempt < maxRetries) {
+            console.log(`  [等待] ${pkg.name} 切换 ${targetDistTag} 失败，第 ${attempt}/${maxRetries} 次重试...`);
+            await sleepMs(retryIntervalMs);
+          } else {
+            const errorMsg = (res.stderr || res.stdout || "").trim();
+            throw new Error(`指针切换失败: ${pkg.name}@${targetVersion} ${targetDistTag}\n${errorMsg}`);
+          }
+        }
       }
       promotedPackages.push(pkg.name);
     }
@@ -288,6 +324,19 @@ async function main() {
       runCmd("npm", ["dist-tag", "rm", pkg.name, tempDistTag], {
         allowFailure: true,
       });
+      // 级联清理可能遗留的历史临时标签
+      try {
+        const remoteTags = getRemoteDistTags(pkg.name);
+        for (const tag of Object.keys(remoteTags)) {
+          if (tag.startsWith(`temp-${targetVersion}-`)) {
+            runCmd("npm", ["dist-tag", "rm", pkg.name, tag], {
+              allowFailure: true,
+            });
+          }
+        }
+      } catch {
+        // 忽略历史临时标签清理异常
+      }
     }
   }
 
