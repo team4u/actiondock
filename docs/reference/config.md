@@ -10,9 +10,8 @@ ActionDock 提供了强类型、多层级回退的配置管理机制，使得 Ac
 
 ```text
 单次调用参数覆盖
-        CLI: --config API_KEY=xxx
-        HTTP: body.config = { API_KEY: "xxx" }
-        （需配置项声明 allowInvocationOverride: true 或未显式禁止）
+        CLI: --config KEY=xxx
+        HTTP: body.config = { KEY: "xxx" }
         ↓
 包级 SQLite 持久化配置数据库
         通过 ad config set API_KEY xxx 写入（当前包独享）
@@ -114,4 +113,4 @@ ActionDock 提供了强类型、多层级回退的配置管理机制，使得 Ac
 - `secret`：是否为敏感信息。若为 true，在日志与 CLI 输出中默认进行掩码遮蔽，自省与导出接口不返回明文。
 - `env`：显式绑定的外部环境变量名（支持单个字符串或优先级字符串数组）。
 - `required`：是否为必填项。若缺失且无默认值，调用前校验返回配置缺失异常。
-- `allowInvocationOverride`：是否允许在单次调用中通过调用参数临时覆盖。
+- `allowInvocationOverride`：元数据声明字段，用于标识配置项是否设计为允许调用级参数临时覆盖。

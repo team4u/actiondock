@@ -59,7 +59,7 @@ ActionDock 采用确定性的结构化错误体系。所有失败均通过标准
 | `ACTION_TIMEOUT` | 504 | Action 执行耗时超过了设定的超时阈值。 | 优化底层耗时操作，或在调用时通过 `--timeout` 调大超时时间。 |
 | `ACTION_CANCELLED` | 499 / 500 | Action 执行被客户端取消信号主动中断。 | 确认取消意图，若非主动取消请检查网络或调用方超时配置。 |
 | `EXECUTION_ABORTED` | 400 | 调用在真正启动执行前已被中止信号取消。 | 检查请求发起时的取消信号时序。 |
-| `ACTION_SUBRUN_LIMIT` | 429 | 单个根任务发起的并发子任务数超出配额上限（上限为 16）。附带 `details.alias: "MAX_SUBRUNS_REACHED"` 标记。 | 检查级联调用规模，避免无节制并发派生过多子任务。 |
+| `ACTION_SUBRUN_LIMIT` | 429 | 单个根任务发起的并发子任务数超出配额上限（默认上限为 64）。附带 `details.alias: "MAX_SUBRUNS_REACHED"` 标记。 | 检查级联调用规模，避免无节制并发派生过多子任务。 |
 | `ACTION_CALL_CYCLE` | 508 | Action 级联调用检测到成环（如 A 调用 B，B 又调用 A）或超出调用深度上限。附带 `details.alias: "ACTION_CYCLE_DETECTED"` 或 `ACTION_MAX_DEPTH_EXCEEDED` 标记。 | 检查 Action 级联逻辑，消除相互循环调用或深层递归。 |
 | `INVALID_ACTION_REF` | 400 | Action 引用格式非法；多包环境下短 ID 冲突存在歧义；或向 `ctx.actions.invoke` 传入了函数或非规范对象。 | 检查引用标识拼写；多包时使用完整标识符；仅传入字符串标识或规范引用。 |
 | `UNDECLARED_ACTION_DEPENDENCY` | 403 | 尝试直接调用传递包内部动作，或级联调用未在 `actiondock.json` 的 `uses` 中显式声明的目标动作。 | 在 `actiondock.json` 中添加直接依赖或在 `uses` 列表中补充声明。 |

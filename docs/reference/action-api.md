@@ -93,7 +93,7 @@ export interface ActionContext {
 
 ### 配置读取接口 `Config`
 
-支持多级回退机制（单次调用覆盖 > 包级持久存储 > 环境变量与配置文件 > 清单默认声明 > 内联默认值）：
+支持多级回退机制（单次调用覆盖 > 包级持久存储 > 环境变量 `process.env` > 清单默认声明 > 内联默认值）：
 
 ```ts
 export interface Config {

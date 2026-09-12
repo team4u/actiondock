@@ -28,14 +28,16 @@ const runtime = createTestRuntime(options?: TestRuntimeOptions);
   传入自定义的 `MockProcessExecutor` 实例。缺省时自动创建全新实例。
 - 初始配置字典：`config`
   初始化注入的配置键值映射。
+- 运行级临时配置覆写：`configOverrides`
+  用于模拟单次执行时传入的配置覆写字典。
 - 初始状态字典：`state`
   初始化预置的状态键值映射。
 - 底层存储引擎：`storage`
   可选注入的自定义内存存储实例（默认使用 `MemoryStorage`）。
 - 日志记录器：`logger`
   可选注入的日志记录器实例（默认使用 `MemoryLogger`）。
-- 事件流：`events`
-  可选注入的事件流管理器实例。
+- 运行时平台实例：`platform`
+  可选注入的标准运行时平台实例。
 
 ---
 
