@@ -280,6 +280,7 @@ For comprehensive architectural deep-dives, developer tutorials, and API referen
   - [Testing and Sandbox](docs/developer/testing.md)
   - [Storage and Persistence](docs/developer/storage.md)
   - [Build and Export Specification](docs/developer/build-and-export.md)
+  - [Contributing Guide](docs/developer/contributing.md)
 - Scenario Practices:
   - [High-Availability External APIs](docs/practices/external-apis.md)
   - [Controlled Process Execution](docs/practices/process-execution.md)
@@ -298,6 +299,7 @@ For comprehensive architectural deep-dives, developer tutorials, and API referen
   - [actiondock.json Schema Specification](docs/reference/schema.md)
   - [Action SDK API Reference](docs/reference/action-api.md)
   - [Testing API Reference](docs/reference/testing-api.md)
+  - [HTTP API Reference](docs/reference/http-api.md)
   - [Config Resolution](docs/reference/config.md)
   - [Error Codes](docs/reference/error-codes.md)
 - Architecture:

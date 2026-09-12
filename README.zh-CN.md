@@ -272,7 +272,7 @@ npm run test:pack
 
 - 快速入门：
   - [系统概览与心智模型](docs/getting-started/overview.md)：痛点解析、设计理念与角色双轨路径。
-  - [运行环境准备与安装](docs/getting-started/installation.md)：Node.js 24 基础环境、全局命令与贡献者工作流。
+  - [运行环境准备与安装](docs/getting-started/installation.md)：Node.js 24 基础环境与 CLI 工具链安装。
   - [快速上手指南](docs/getting-started/quick-start.md)：从零构建第一个 Action 并全模态运行。
 - 开发者指南：
   - [Action 核心模型与开发指南](docs/developer/first-action.md)：强类型契约、ActionContext 上下文、状态持久化与外部 API 调用。
@@ -280,6 +280,7 @@ npm run test:pack
   - [单元测试与沙箱验证](docs/developer/testing.md)：纯内存毫秒级单元测试与确定性时钟。
   - [状态持久化与 SQLite 存储](docs/developer/storage.md)：内嵌 SQLite 数据模型、键值存储与过期策略。
   - [构建打包与 Skill 导出规范](docs/developer/build-and-export.md)：目录交付产物构建、npm 打包与技能资产导出。
+  - [核心仓库贡献指南](docs/developer/contributing.md)：源码克隆、本地多包联调与贡献者验证流程。
 - 场景实战：
   - [高可用外部 API 接入](docs/practices/external-apis.md)：网络请求、密钥防护、指数退避重试与取消响应。
   - [受控系统命令与子进程执行](docs/practices/process-execution.md)：物理管道隔离、输出容量防御性截断与进程树跨平台清理。
@@ -287,17 +288,18 @@ npm run test:pack
   - [多 Action 组合编排与防死锁](docs/practices/composing-actions.md)：级联调用深度限制与环路死锁阻断。
   - [智能体协同开发与自愈闭环](docs/practices/ai-agent-development.md)：大模型自主阅读规程、编写代码与闭环自愈指南。
 - 消费接入指南：
-  - [消费与接入总览](docs/consumer/overview.md)：工程依赖消费、智能体技能装载与接入选型。
+  - [消费与接入总览](docs/consumer/overview.md)：四大接入选型入口（Agent Skill、MCP 服务、独立 Node/HTTP 微服务、工程依赖）与接入指南。
   - [Agent Skill 使用指南](docs/consumer/use-as-skill.md)：通过技能管理器一键安装、智能体装载路径与规程调用。
   - [开发工具 MCP 接入](docs/consumer/use-as-mcp.md)：STDIO 服务直连 Cursor、Windsurf 与 Claude Code。
   - [Node 交付产物运行](docs/consumer/standalone-run.md)：自包含 Node.js 目录交付产物运行与离线依赖。
-  - [HTTP 微服务与 API 调度](docs/consumer/http-service.md)：微服务启动与 REST API 远程调度。
+  - [HTTP 微服务与 API 调度](docs/consumer/http-service.md)：微服务启动与 RESTful API 远程调度。
   - [配置注入与多环境管理](docs/consumer/configuration.md)：API 令牌、环境变量、SQLite 持久化与多环境 Profile 调度。
 - 权威参考手册：
   - [CLI 命令行速查](docs/reference/cli.md)：全量子命令、参数选项与退出码规范。
   - [actiondock.json 清单规范权威手册](docs/reference/schema.md)：项目清单全量字段、类型约束与示例。
   - [Action SDK API 参考](docs/reference/action-api.md)：公共 SDK 核心导出函数与接口契约。
   - [Testing 测试框架 API 参考](docs/reference/testing-api.md)：测试运行时、虚拟时钟与模拟组件接口参考。
+  - [HTTP API 接口契约](docs/reference/http-api.md)：RESTful API 端点规范、请求响应 Schema、SSE 流与错误码。
   - [配置解析回退机制](docs/reference/config.md)：配置多级回退链与环境变量解析。
   - [错误代码速查手册](docs/reference/error-codes.md)：标准 JSON 错误信封与自愈决策表。
 - 底层架构解密：

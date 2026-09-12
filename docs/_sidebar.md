@@ -11,6 +11,7 @@
   - [单元测试与沙箱验证](/developer/testing.md)
   - [状态持久化与 SQLite 存储](/developer/storage.md)
   - [构建打包与 Skill 导出规范](/developer/build-and-export.md)
+  - [核心仓库贡献指南](/developer/contributing.md)
 
 - **场景实战**
   - [高可用外部 API 接入](/practices/external-apis.md)
@@ -32,6 +33,7 @@
   - [actiondock.json 清单规范权威手册](/reference/schema.md)
   - [Action SDK API 参考](/reference/action-api.md)
   - [Testing 测试框架 API 参考](/reference/testing-api.md)
+  - [HTTP API 接口契约](/reference/http-api.md)
   - [配置解析回退机制](/reference/config.md)
   - [错误代码速查手册](/reference/error-codes.md)
 

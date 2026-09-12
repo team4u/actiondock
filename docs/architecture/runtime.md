@@ -4,25 +4,81 @@ ActionDock 2.0 围绕执行的确定性、强类型安全与环境解耦构建�
 
 ---
 
-## 架构总览与分层设计原则
+## 架构总览与 7 个核心子包体系
 
-ActionDock 采用四层解耦架构设计，从上至下严格单向依赖：
+ActionDock 采用分层解耦架构设计，整个体系划分为 7 个职责单一的核心子包：
 
 ```mermaid
 graph TD
-    SDK["@actiondock/sdk (纯契约层，零基础设施依赖)"]
-    CORE["@actiondock/core (核心领域层，抽象解耦存储/进程/时钟/事件)"]
-    NODE["@actiondock/runtime-node (Node.js 生产环境适配驱动)"]
-    TEST["@actiondock/testing (测试沙箱层，100% 复用生产 Runner)"]
-    SERVICE["DefaultExecutionService (统一协调中心与并发配额)"]
-    RUNNER["ActionRunner (核心执行引擎与单一终态状态机)"]
+    CLI["@actiondock/cli 门面工具链与统一分发"]
+    BUILDER["@actiondock/builder 目录构建与技能导出"]
+    MCP["@actiondock/mcp 协议适配层"]
+    RUNTIME_NODE["@actiondock/runtime-node 生产环境适配层"]
+    TESTING["@actiondock/testing 测试沙箱层"]
+    CORE["@actiondock/core 核心领域内核"]
+    SDK["@actiondock/sdk 纯契约层"]
 
-    SERVICE --> RUNNER
-    RUNNER --> CORE
-    RUNNER --> SDK
-    NODE --> CORE
-    TEST --> CORE
-    TEST --> RUNNER
+    CLI --> BUILDER
+    CLI --> MCP
+    CLI --> RUNTIME_NODE
+    CLI --> CORE
+    CLI --> SDK
+
+    BUILDER --> CORE
+    BUILDER --> SDK
+
+    MCP --> CORE
+    MCP --> SDK
+
+    RUNTIME_NODE --> CORE
+    RUNTIME_NODE --> SDK
+
+    TESTING --> CORE
+    TESTING --> SDK
+
+    CORE --> SDK
+```
+
+- `@actiondock/sdk`：极简纯契约层，零生产依赖，仅导出 `defineAction`、`ActionContext`、`ProcessAPI`、`Logger`、`Config` 与 `StateStore`。
+- `@actiondock/core`：框架业务领域内核，提供统一调用门面 `ActionDockTarget`、数据目录排他锁 `DataDirLock`、依赖原子事务 `beginTransaction`、核心执行引擎 `ActionRunner` 与调度协调服务 `DefaultExecutionService`。
+- `@actiondock/runtime-node`：Node.js 生产环境适配驱动，提供基于 `node:sqlite` 的数据库驱动、原生进程执行器、类型擦除加载器与原生 HTTP 容器。
+- `@actiondock/builder`：构建规划器与导出器，负责依赖闭包规划、Node.js 目录交付构建（`ad build`）、npm 打包（`ad pack`）与 Agent Skill 导出。
+- `@actiondock/mcp`：MCP 协议适配层，负责将 Action 映射为标准 MCP 工具，支持 STDIO 与 HTTP 通道及取消信号链路。
+- `@actiondock/cli`：命令行门面与运行分发器，向用户与智能体暴露统一的 `ad` 命令行工具及标准信封渲染。
+- `@actiondock/testing`：确定性测试沙箱框架，收敛 `createTestRuntime` 测试运行时、`FakeClock` 虚拟时钟、`MockProcessExecutor` 与 `MemoryStorage`。
+
+---
+
+## 全链路执行时序与数据流
+
+ActionDock 内部采用统一的执行通道，无论通过 CLI、MCP、HTTP 还是测试沙箱发起调用，均遵循严格确定的数据流向：
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Client as 客户端 / 智能体
+    participant Facade as 门面层 (CLI / MCP / HTTP)
+    participant ExecService as DefaultExecutionService
+    participant Runner as ActionRunner
+    participant Driver as 存储与驱动层 (SqliteDriver / ProcessExecutor)
+    participant Action as Action 业务逻辑
+
+    Client->>Facade: 发起执行请求 (入参数据与选项)
+    Facade->>ExecService: 提交 ActionRef 与输入数据
+    ExecService->>ExecService: 检查并发配额 (32 根任务配额)
+    ExecService->>Runner: 启动执行管线 (runner.start)
+    Runner->>Runner: 环路死锁检测与入参模式校验
+    Runner->>Driver: 插入初始运行记录 (状态为 running)
+    Runner->>Action: 注入 ActionContext 并触发 run(input, ctx)
+    alt 内部级联调用
+        Action->>Runner: ctx.actions.invoke (受子任务配额与深度限制)
+    end
+    Action-->>Runner: 返回业务结果数据
+    Runner->>Runner: 出参模式校验
+    Runner->>Driver: 原子更新运行记录为终态 (success / failed)
+    Runner-->>ExecService: 产出 ExecutionResult 信封
+    ExecService-->>Facade: 返回最终结算数据
+    Facade-->>Client: stdout 交付纯净 JSON 信封 / stderr 打印诊断日志
 ```
 
 ---

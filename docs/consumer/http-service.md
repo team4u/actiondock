@@ -1,127 +1,49 @@
-# HTTP 远程微服务与 API 调度
+# HTTP 微服务与 API 调度
 
-当需要将 ActionDock 部署为微服务，供远程 AI 智能体、Webhook、持续集成流水线或前端业务系统调度时，可以使用 `ad serve` 启动轻量级 HTTP 调度微服务。
+当需要将 ActionDock 作为微服务部署，供远程 AI 智能体、持续集成流水线、自动化网关或外部前端系统通过网络调度时，可以使用 `ad serve` 启动轻量级 HTTP 服务。
 
-服务端基于 Node.js 原生模块构建，全面对齐 CLI 的全套能力，包括能力自省、动作执行、规程检索、任务流、状态管理、配置治理、深度体检以及一体化 Model Context Protocol 协议网关。
+服务端原生基于 Node.js 模块构建，提供能力自省、同步调用、异步任务生命周期管理以及实时事件流推送能力。
 
 ---
 
-## 启动姿态
+## 启动服务
 
-`ad serve` 具备高度灵活性，支持多种启动姿态：
+### 单工程项目模式（推荐）
 
-### 单工程项目模式（推荐用于生产部署与独立微服务）
-在包含 `actiondock.json` 的项目目录内运行。服务端自动加载当前项目自身，以及通过 `ad add` 安装并锁定的全部依赖 Action 包：
+在包含 `actiondock.json` 的工程目录中运行，服务端会自动加载本项目及其声明锁定的全部 Action 依赖：
 
 ```bash
-# 生产或云端远程微服务启动（监听非回环地址 0.0.0.0，强制要求令牌鉴权）
-cd my-project
+# 生产与远程微服务（监听所有网卡，强制要求令牌鉴权）
 ad serve --host 0.0.0.0 --port 5177 --token "sk-actiondock-secret"
 
-# 本地单机调试（默认绑定 127.0.0.1 回环地址）
-cd my-project
+# 本地单机调试（默认绑定 127.0.0.1 本地回环）
 ad serve --port 5177 --token "sk-actiondock-secret"
 ```
 
-### 全局路由模式（适用于本地免工程聚合与开发调试）
-在系统的任意非工程路径直接执行 `ad serve`。服务端自动启动为全局路由模式，动态感知并通过全局注册表聚合所有通过 `ad link` 注册的本地包与工作区：
+### 指定工程目录路径
+
+无需切换工作目录，通过 `-d, --dir` 参数指定目标工程路径：
 
 ```bash
-ad serve --port 5177 --token "sk-actiondock-secret"
-```
-
-### 跨目录指定路径
-无需切换目录，在任意路径通过 `-d, --dir` 参数指定目标工程目录：
-
-```bash
-ad serve -d ./examples/github-tools --host 0.0.0.0 --port 8080 --token "sk-actiondock-secret"
+ad serve -d ./my-project --host 0.0.0.0 --port 5177 --token "sk-actiondock-secret"
 ```
 
 ---
 
-## 网络监听与安全防御机制
+## 安全机制与身份鉴权
 
-- 非回环地址强制令牌认证：默认 `--host 127.0.0.1` 仅允许本机回环访问。当监听在非回环地址（如 `--host 0.0.0.0` 或服务器公网与局域网 IP）供远程调度时，执行引擎强制要求传入 `--token`（或通过环境变量 `ACTIONDOCK_TOKEN` 注入），未配置鉴权凭证将直接拒绝启动。
-- 防时序攻击校验：内置基于常数时间对比的令牌校验，彻底阻断旁路分析。
-- 请求体大小防护：默认限制单个 JSON 请求体上限为 1MB（可通过 `--max-body 10mb` 调整），超限直接返回 413 状态码。
-- 跨域资源共享策略：默认关闭跨域，可通过 `--cors-origin <origin>` 显式添加白名单源。
-- 敏感信息自动脱敏：在配置查询接口中，被标记为密码、密钥等敏感字段的配置内容默认以掩码遮蔽，杜绝数据泄露。
-
----
-
-## 标准 RESTful API 调度规范
-
-所有受保护接口均支持通过请求头 `Authorization: Bearer <token>` 或 URL 查询参数 `?token=<token>` 进行身份鉴权。
-
-ActionDock 2.0 统一采用 `/api/v2/` 路由前缀（兼容根路径路由）。
+- 非回环强制令牌鉴权：当 `--host` 设置为非回环地址（如 `0.0.0.0` 或物理网卡 IP）时，框架强制要求配置鉴权令牌（通过 `--token` 参数或环境变量 `ACTIONDOCK_TOKEN` 注入），否则服务端拒绝启动。
+- 常数时间对比：内置常数时间比对算法验证请求令牌，防范时序侧信道攻击。
+- 请求体上限防御：默认限制单个 JSON 请求体大小为 1MB（可通过 `--max-body 10mb` 调整），超限自动拦截并返回 413 状态码。
+- 鉴权传参方式：受保护接口均支持在 HTTP 请求头中携带 `Authorization: Bearer <token>`，或在 URL 查询参数中附加 `?token=<token>`。
 
 ---
 
-### 系统健康探查 (`GET /api/v2/health`)
+## 核心调用范式示例
 
-用于容器健康探针与负载均衡存活检测（无需鉴权）：
+### 同步阻塞执行
 
-```bash
-curl http://localhost:5177/api/v2/health
-```
-
-响应数据：
-```json
-{
-  "status": "ok",
-  "version": "2.1.0",
-  "timestamp": "2026-09-10T08:00:00.000Z",
-  "uptime": 12.34
-}
-```
-
----
-
-### 全局能力自省与包列表 (`GET /api/v2/info` 与 `GET /api/v2/packages`)
-
-支持全局能力大纲、包层级下钻、模糊意图探索与拓扑树形查询。
-
-```bash
-# 获取全量自省信息
-curl http://localhost:5177/api/v2/info \
-  -H "Authorization: Bearer sk-actiondock-secret"
-
-# 意图探索与模糊检索
-curl "http://localhost:5177/api/v2/info?intent=github" \
-  -H "Authorization: Bearer sk-actiondock-secret"
-
-# 获取已加载包清单
-curl http://localhost:5177/api/v2/packages \
-  -H "Authorization: Bearer sk-actiondock-secret"
-```
-
----
-
-### Action 发现与详情查询
-
-```bash
-# 列出所有可用 Action 清单
-curl http://localhost:5177/api/v2/actions \
-  -H "Authorization: Bearer sk-actiondock-secret"
-
-# 查询特定 Action 契约定义与模式规范
-curl http://localhost:5177/api/v2/actions/list-prs \
-  -H "Authorization: Bearer sk-actiondock-secret"
-
-# 多包环境下查询指定包内的 Action 详情
-curl http://localhost:5177/api/v2/packages/team4u.github-tools/actions/list-prs \
-  -H "Authorization: Bearer sk-actiondock-secret"
-```
-
----
-
-### Action 执行与调度
-
-ActionDock 2.0 支持同步阻塞执行与异步后台启动两种模式：
-
-#### 同步执行 (`POST /api/v2/actions/:actionId/run`)
-
-直接执行目标 Action，执行完毕后返回完整的标准执行信封：
+适用于耗时较短的即时计算或查询任务，服务端在 Action 执行完毕后直接返回完整的标准 JSON 信封：
 
 ```bash
 curl -X POST http://localhost:5177/api/v2/actions/list-prs/run \
@@ -132,98 +54,91 @@ curl -X POST http://localhost:5177/api/v2/actions/list-prs/run \
   }'
 ```
 
-响应状态码：成功返回 200，校验失败返回 422，运行时错误返回 500。响应结构体保持不变：
+返回数据：
 ```json
 {
   "ok": true,
   "runId": "01JMB394...",
   "data": {
-    "items": []
+    "items": [
+      {
+        "number": 101,
+        "title": "feat: optimize http api layout"
+      }
+    ]
   }
 }
 ```
 
-#### 多包模式同步执行 (`POST /api/v2/packages/:packageId/actions/:actionId/run`)
+### 异步启动与任务流
+
+针对长耗时任务，使用异步启动端点。服务端立即响应并返回执行标识（Run ID）与事件流订阅地址：
+
+#### 发起异步执行
 
 ```bash
-curl -X POST http://localhost:5177/api/v2/packages/team4u.github-tools/actions/list-prs/run \
+curl -X POST http://localhost:5177/api/v2/actions/build-task/start \
   -H "Authorization: Bearer sk-actiondock-secret" \
   -H "Content-Type: application/json" \
   -d '{
-    "input": { "repo": "team4u/actiondock" }
+    "input": { "target": "release" }
   }'
 ```
 
-#### 异步启动与票据返回 (`POST /api/v2/actions/:actionId/start`)
-
-针对长耗时任务，使用异步启动接口。服务端立即返回 202 Accepted 与执行票据，并在后台继续执行：
-
-```bash
-curl -X POST http://localhost:5177/api/v2/actions/list-prs/start \
-  -H "Authorization: Bearer sk-actiondock-secret" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "input": { "repo": "team4u/actiondock" }
-  }'
-```
-
-响应数据：
+返回票据：
 ```json
 {
   "ok": true,
-  "runId": "01JMB394...",
-  "streamUrl": "/api/v2/runs/01JMB394.../events"
+  "runId": "01JMB394XYZ...",
+  "streamUrl": "/api/v2/runs/01JMB394XYZ.../events"
 }
 ```
 
----
+#### 订阅实时事件流（Server-Sent Events）
 
-### 执行记录追溯、取消与事件流
+通过标准 SSE 接口监听执行过程中的进度更新与日志：
 
 ```bash
-# 查询执行历史记录列表
-curl http://localhost:5177/api/v2/runs \
+curl -N http://localhost:5177/api/v2/runs/01JMB394XYZ.../events \
   -H "Authorization: Bearer sk-actiondock-secret"
+```
 
-# 查询单次执行详情
-curl http://localhost:5177/api/v2/runs/01JMB394... \
-  -H "Authorization: Bearer sk-actiondock-secret"
+#### 手动中止任务
 
-# 取消正在执行的任务
-curl -X POST http://localhost:5177/api/v2/runs/01JMB394.../cancel \
+若任务需要提前取消，向取消端点发送请求，服务端将向底层 Action 传播中断信号并回收受管子进程树：
+
+```bash
+curl -X POST http://localhost:5177/api/v2/runs/01JMB394XYZ.../cancel \
   -H "Authorization: Bearer sk-actiondock-secret" \
   -H "Content-Type: application/json" \
-  -d '{ "reason": "用户手动中止" }'
-
-# 订阅执行事件流（Server-Sent Events）
-curl -N http://localhost:5177/api/v2/runs/01JMB394.../events \
-  -H "Authorization: Bearer sk-actiondock-secret"
-```
-
-#### 事件断点续传与背压处理
-- 事件流使用 Server-Sent Events 标准的 `id` 承载事件序号，支持通过请求头 `Last-Event-ID` 进行断点续传。
-- 若游标已过期被清理，服务端返回 HTTP 410 与 `EVENT_CURSOR_EXPIRED` 错误。
-- 若订阅端消费过慢导致队列溢出，服务端推送带有 `EVENT_BACKPRESSURE_LIMIT` 错误码的末尾事件并关闭连接。
-
----
-
-### Playbook 规程查询
-
-```bash
-# 列出可用规程清单
-curl http://localhost:5177/api/v2/playbooks \
-  -H "Authorization: Bearer sk-actiondock-secret"
-
-# 查看规程详情
-curl http://localhost:5177/api/v2/playbooks/review-pr \
-  -H "Authorization: Bearer sk-actiondock-secret"
+  -d '{ "reason": "用户主动取消操作" }'
 ```
 
 ---
 
-### 环境体检诊断 (`GET /api/v2/doctor`)
+## 端点能力与接口总览
 
-```bash
-curl http://localhost:5177/api/v2/doctor \
-  -H "Authorization: Bearer sk-actiondock-secret"
-```
+ActionDock HTTP 微服务提供了一整套标准端点：
+
+| 能力分类 | 主要端点 | 核心用途 |
+| :--- | :--- | :--- |
+| **系统探针** | `GET /api/v2/health` | 容器健康探查与负载均衡存活检测（免鉴权） |
+| **环境诊断** | `GET /api/v2/doctor` | 查看宿主运行时状态与存储驱动健康度 |
+| **全局自省** | `GET /api/v2/info` | 调阅已加载包大纲、Action 列表与意图检索 |
+| **Action 清单** | `GET /api/v2/actions` | 列出当前全部可用 Action 摘要 |
+| **契约规范** | `GET /api/v2/actions/:id` | 调阅指定 Action 的输入输出模式与依赖规范 |
+| **同步执行** | `POST /api/v2/actions/:id/run` | 阻塞调用 Action 并获取最终结果信封 |
+| **异步启动** | `POST /api/v2/actions/:id/start` | 启动后台长任务并返回票据与订阅地址 |
+| **运行历史** | `GET /api/v2/runs` | 查询历史任务执行记录与状态 |
+| **任务详情** | `GET /api/v2/runs/:id` | 获取单次任务终态数据与耗时统计 |
+| **任务取消** | `POST /api/v2/runs/:id/cancel` | 中止正在执行的任务并清理子进程树 |
+| **事件推送** | `GET /api/v2/runs/:id/events` | 基于 SSE 订阅实时日志与状态流（支持断点续传） |
+| **规程查询** | `GET /api/v2/playbooks` | 列出推荐的操作规程与关联 Action |
+
+---
+
+## 完整接口契约参考
+
+关于完整的请求响应 JSON Schema、URL 参数、多包路由模式（`/packages/:pkg/actions/:id/...`）以及全量错误码定义，请参阅：
+
+- [HTTP API 接口契约](../reference/http-api.md)

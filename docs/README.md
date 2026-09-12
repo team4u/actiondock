@@ -36,10 +36,10 @@ ActionDock 文档中心采用紧凑、权威且零冗余的六大模块设计：
 ```text
 文档中心架构
 ├── 快速入门     # 系统总览、运行环境准备与快速上手指南
-├── 开发者指南   # Action 模型开发、规程编写、沙箱单测、状态存储与构建导出
+├── 开发者指南   # Action 模型开发、规程编写、沙箱单测、状态存储、构建导出与贡献指南
 ├── 场景实战     # 外部 API、系统命令、异步长任务、级联调用与智能体协同自愈
-├── 消费接入指南 # 技能装载、MCP 工具挂载、独立目录运行与配置多环境管理
-├── 权威参考手册 # CLI 速查、清单规范、SDK API、测试 API 与错误码
+├── 消费接入指南 # 四大选型入口、技能装载、MCP 工具挂载、独立目录运行与配置管理
+├── 权威参考手册 # CLI 速查、清单规范、SDK API、测试 API、HTTP 契约与错误码
 └── 底层架构解密 # 状态机模型、物理通道隔离与生产安全防御
 ```
 
@@ -50,7 +50,7 @@ ActionDock 文档中心采用紧凑、权威且零冗余的六大模块设计：
 ### 快速入门
 
 - [系统概览与心智模型](getting-started/overview.md)：痛点剖析、设计理念与角色双轨路径。
-- [运行环境准备与安装](getting-started/installation.md)：Node.js 24 基础环境、全局命令与贡献者开发流程。
+- [运行环境准备与安装](getting-started/installation.md)：Node.js 24 基础环境准备与 CLI 工具链安装。
 - [快速上手指南](getting-started/quick-start.md)：从零构建第一个 Action 并全模态运行。
 
 ---
@@ -64,6 +64,7 @@ ActionDock 文档中心采用紧凑、权威且零冗余的六大模块设计：
 - [单元测试与沙箱验证](developer/testing.md)：基于测试运行时的纯内存毫秒级验证与虚拟时钟。
 - [状态持久化与 SQLite 存储](developer/storage.md)：内嵌 SQLite 数据模型、键值持久化与过期策略。
 - [构建打包与 Skill 导出规范](developer/build-and-export.md)：构建 Node 目录交付产物，按 Playbook 裁剪导出 Agent Skill 并发布。
+- [核心仓库贡献指南](developer/contributing.md)：ActionDock 框架源码克隆、本地多包联调与贡献者验证流程。
 
 ---
 
@@ -83,11 +84,11 @@ ActionDock 文档中心采用紧凑、权威且零冗余的六大模块设计：
 
 面向从代码仓库拉取项目源码、获取导出的技能包或运行交付产物的使用者与智能体操作端：
 
-- [消费与接入总览](consumer/overview.md)：工程依赖消费、智能体技能装载与三种接入路径选型对比。
+- [消费与接入总览](consumer/overview.md)：四大选型入口（Agent Skill、MCP 服务、独立 Node/HTTP 微服务、工程依赖）与接入指南。
 - [Agent Skill 使用指南](consumer/use-as-skill.md)：通过技能管理器一键安装、智能体装载路径与规程调用规范。
 - [开发工具 MCP 接入](consumer/use-as-mcp.md)：作为 MCP STDIO 服务直连 Cursor、Windsurf 与 Claude Code 等集成开发环境。
 - [Node 交付产物运行](consumer/standalone-run.md)：自包含 Node.js 目录交付产物运行与离线依赖支持。
-- [HTTP 微服务与 API 调度](consumer/http-service.md)：启动持久微服务并通过 REST API 远程调度。
+- [HTTP 微服务与 API 调度](consumer/http-service.md)：启动持久微服务、令牌鉴权与 RESTful 同步/异步任务调度。
 - [配置注入与多环境管理](consumer/configuration.md)：API 令牌、环境变量、SQLite 持久化配置与多环境 Profile 调度。
 
 ---
@@ -98,6 +99,7 @@ ActionDock 文档中心采用紧凑、权威且零冗余的六大模块设计：
 - [actiondock.json 清单规范权威手册](reference/schema.md)：项目清单全量字段、类型约束与配置示例。
 - [Action SDK API 参考](reference/action-api.md)：公共 SDK 核心导出函数与接口契约规范。
 - [Testing 测试框架 API 参考](reference/testing-api.md)：独立测试包导出的测试运行时、虚拟时钟与模拟组件参考。
+- [HTTP API 接口契约](reference/http-api.md)：完整的 RESTful 端点规范、请求响应 Schema、SSE 流与错误码。
 - [配置解析回退机制](reference/config.md)：配置多级回退规则、环境变量转换与类型强转。
 - [错误代码速查手册](reference/error-codes.md)：标准 JSON 错误信封与故障自愈决策表。
 
