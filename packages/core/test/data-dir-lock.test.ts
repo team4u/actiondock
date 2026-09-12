@@ -9,7 +9,7 @@ import { createActionDockApp } from "../src/app";
 import { createActionDockHost } from "../src/host";
 import { createDefaultSqliteDriver } from "../src/storage/driver";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
-import { DataDirLock, safeRemoveStaleReclaimGuard } from "../src/storage/data-dir-lock";
+import { DataDirLock, safeRemoveStaleReclaimGuard, safeRollbackLock } from "../src/storage/data-dir-lock";
 import { STORAGE_SCHEMA_VERSION } from "../src/storage/types";
 
 describe("数据目录排他锁与 Schema 版本保护测试", () => {
@@ -977,12 +977,38 @@ rl.on("line", (cmd) => {
     );
 
     // 此时新实例调用 acquire 识别到存活守卫，不会清理，等待直到 acquireTimeoutMs 超时抛出 DATA_DIR_IN_USE
+    const start = Date.now();
     expect(() => {
       DataDirLock.acquire(tempDir, { acquireTimeoutMs: 150 });
     }).toThrow("DATA_DIR_IN_USE");
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeGreaterThanOrEqual(100);
+    expect(elapsed).toBeLessThan(600);
     expect(existsSync(reclaimDir)).toBe(true);
 
     // 清理
     rmSync(reclaimDir, { recursive: true, force: true });
+  });
+
+  it("safeRollbackLock 严格核对 sessionToken：一致时清理目录，不匹配时完整恢复原位", () => {
+    const lockDir = join(tempDir, ".actiondock.data.lock");
+    mkdirSync(lockDir, { recursive: true });
+    const correctToken = "session-token-correct";
+    const wrongToken = "session-token-wrong";
+
+    writeFileSync(
+      join(lockDir, "metadata.json"),
+      JSON.stringify({ pid: process.pid, sessionToken: correctToken }, null, 2),
+      "utf8"
+    );
+
+    // 传入不匹配的 token：锁目录绝不删除，恢复原位
+    safeRollbackLock(lockDir, wrongToken);
+    expect(existsSync(lockDir)).toBe(true);
+    expect(existsSync(join(lockDir, "metadata.json"))).toBe(true);
+
+    // 传入匹配的 token：锁目录被安全回滚并清理
+    safeRollbackLock(lockDir, correctToken);
+    expect(existsSync(lockDir)).toBe(false);
   });
 });

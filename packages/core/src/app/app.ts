@@ -567,6 +567,15 @@ export class DefaultActionDockApp implements ActionDockApp {
     return await this.storage.deleteConfig(key);
   }
 
+  getState<T extends JsonValue = JsonValue>(
+    key: string,
+    options?: StateScopeOptions
+  ): Promise<T | undefined>;
+  getState<T extends JsonValue = JsonValue>(
+    actionId: string,
+    key: string,
+    options?: StateScopeOptions
+  ): Promise<T | undefined>;
   async getState<T extends JsonValue = JsonValue>(
     actionIdOrKey: string,
     keyOrOptions?: string | StateScopeOptions,
@@ -612,6 +621,17 @@ export class DefaultActionDockApp implements ActionDockApp {
     return entry?.value as T | undefined;
   }
 
+  setState<T extends JsonValue = JsonValue>(
+    key: string,
+    value: T,
+    options?: StateScopeOptions
+  ): Promise<void>;
+  setState<T extends JsonValue = JsonValue>(
+    actionId: string,
+    key: string,
+    value: T,
+    options: StateScopeOptions
+  ): Promise<void>;
   async setState<T extends JsonValue = JsonValue>(
     actionIdOrKey: string,
     keyOrValue: any,
@@ -675,6 +695,15 @@ export class DefaultActionDockApp implements ActionDockApp {
     await this.storage.setState<T>(targetNs, targetKey, value, opts?.ttl);
   }
 
+  deleteState(
+    key: string,
+    options?: StateScopeOptions
+  ): Promise<boolean>;
+  deleteState(
+    actionId: string,
+    key: string,
+    options?: StateScopeOptions
+  ): Promise<boolean>;
   async deleteState(
     actionIdOrKey: string,
     keyOrOptions?: string | StateScopeOptions,
@@ -769,6 +798,13 @@ export class DefaultActionDockApp implements ActionDockApp {
     return await this.storage.deleteState(ns, key);
   }
 
+  listStateKeys(
+    options?: StateScopeOptions
+  ): Promise<string[]>;
+  listStateKeys(
+    actionId: string,
+    options?: StateScopeOptions
+  ): Promise<string[]>;
   async listStateKeys(
     actionIdOrOptions?: string | StateScopeOptions,
     options?: StateScopeOptions
@@ -798,6 +834,13 @@ export class DefaultActionDockApp implements ActionDockApp {
     return this.storage.listStateKeys(ns, opts?.prefix);
   }
 
+  clearState(
+    options?: StateScopeOptions
+  ): Promise<number>;
+  clearState(
+    actionId: string,
+    options?: StateScopeOptions
+  ): Promise<number>;
   async clearState(
     actionIdOrOptions?: string | StateScopeOptions,
     options?: StateScopeOptions

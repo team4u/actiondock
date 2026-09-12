@@ -619,6 +619,17 @@ Execute build and then deploy artifact.
     ).rejects.toThrow("Invalid options provided to setState");
 
     await app.close();
+
+    // 4. DefaultActionDockApp 实体类拥有与 ActionDockApp 相同的重载契约
+    const concreteApp = new DefaultActionDockApp({ inMemory: true });
+    await concreteApp.setState("theme", "light");
+    expect(await concreteApp.getState("theme")).toBe("light");
+    await concreteApp.setState("worker", "counter", 42, {});
+    expect(await concreteApp.getActionState("worker", "counter")).toBe(42);
+    await expect(
+      (concreteApp as any).setState("worker", "counter", 42)
+    ).rejects.toThrow("Invalid options provided to setState");
+    await concreteApp.close();
   });
 
   it("优雅关机 close() 协调执行服务关机与底层存储安全关闭", async () => {

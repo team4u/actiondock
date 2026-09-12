@@ -9,6 +9,7 @@ import {
   hasPendingTransactions,
   recoverPendingTransactions,
   safeRemoveStaleProjectReclaimGuard,
+  safeRollbackProjectLock,
 } from "../src/project/transactions";
 
 describe("原子事务快照与崩溃恢复", () => {
@@ -416,12 +417,38 @@ rl.on("line", (cmd) => {
       "utf-8"
     );
 
+    const start = Date.now();
     expect(() => {
       acquireProjectLock(tempDir, { acquireTimeoutMs: 150 });
     }).toThrow("PROJECT_BUSY");
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeGreaterThanOrEqual(100);
+    expect(elapsed).toBeLessThan(600);
     expect(existsSync(reclaimDir)).toBe(true);
 
     // 清理
     rmSync(reclaimDir, { recursive: true, force: true });
+  });
+
+  it("safeRollbackProjectLock 严格核对 sessionToken：一致时清理目录，不匹配时完整恢复原位", () => {
+    const lockDir = join(tempDir, ".actiondock", "project.lock");
+    mkdirSync(lockDir, { recursive: true });
+    const correctToken = "proj-session-token-correct";
+    const wrongToken = "proj-session-token-wrong";
+
+    writeFileSync(
+      join(lockDir, "metadata.json"),
+      JSON.stringify({ pid: process.pid, sessionToken: correctToken }, null, 2),
+      "utf-8"
+    );
+
+    // 传入不匹配的 token：锁目录绝不删除，恢复原位
+    safeRollbackProjectLock(lockDir, wrongToken);
+    expect(existsSync(lockDir)).toBe(true);
+    expect(existsSync(join(lockDir, "metadata.json"))).toBe(true);
+
+    // 传入匹配的 token：锁目录被安全回滚并清理
+    safeRollbackProjectLock(lockDir, correctToken);
+    expect(existsSync(lockDir)).toBe(false);
   });
 });

@@ -318,7 +318,7 @@ export function safeRemoveStaleReclaimGuard(
  * 安全回滚当前进程创建的主锁。
  * 仅当锁目录中的 sessionToken 与自身一致时才删除，防止误删接管者或并发新锁。
  */
-function safeRollbackLock(lockPath: string, expectedSessionToken: string): void {
+export function safeRollbackLock(lockPath: string, expectedSessionToken: string): void {
   if (!existsSync(lockPath)) return;
   const quarantinePath = `${lockPath}.rollback.${process.pid}.${Date.now()}.${randomUUID().slice(0, 8)}`;
   try {
@@ -622,7 +622,7 @@ export class DataDirLock {
           timeoutErr.code = "DATA_DIR_IN_USE";
           throw timeoutErr;
         }
-        sleepSync(50);
+        sleepSync(Math.min(50, Math.max(1, deadline - Date.now())));
         continue;
       }
       if (reclaimState.isStale) {
@@ -654,7 +654,7 @@ export class DataDirLock {
             timeoutErr.code = "DATA_DIR_IN_USE";
             throw timeoutErr;
           }
-          sleepSync(50);
+          sleepSync(Math.min(50, Math.max(1, deadline - Date.now())));
           continue;
         }
 
@@ -682,7 +682,7 @@ export class DataDirLock {
               timeoutErr.code = "DATA_DIR_IN_USE";
               throw timeoutErr;
             }
-            sleepSync(50);
+            sleepSync(Math.min(50, Math.max(1, deadline - Date.now())));
             continue;
           }
 
@@ -729,17 +729,25 @@ export class DataDirLock {
               timeoutErr.code = "DATA_DIR_IN_USE";
               throw timeoutErr;
             }
-            sleepSync(50);
+            sleepSync(Math.min(50, Math.max(1, deadline - Date.now())));
             continue;
           }
 
           // 仅成功获取 reclaim guard 的唯一胜利者获准执行：
           // 复核主锁陈旧性 -> 隔离/清理陈旧锁 -> 原子创建新主锁并写入自身元数据 -> 清理 reclaim guard
           try {
+            const verifyReclaimOwnership = (): boolean => {
+              const ownGuard = checkReclaimGuard(reclaimDirPath, isProcessAlive, 1000);
+              return Boolean(
+                ownGuard.active &&
+                ownGuard.holderPid === currentPid &&
+                ownGuard.guardToken === guardToken
+              );
+            };
+
             // 自检校验自身守卫：验证自身 guardToken 依然有效且持有者为自身 PID
             // 若已被抢占或不匹配，立即退出当前接管并 continue 重试，杜绝在守卫已失窃的情况下操作主锁
-            const ownGuard = checkReclaimGuard(reclaimDirPath, isProcessAlive, 1000);
-            if (!ownGuard.active || ownGuard.holderPid !== currentPid || ownGuard.guardToken !== guardToken) {
+            if (!verifyReclaimOwnership()) {
               if (Date.now() >= deadline) {
                 const timeoutErr: any = new Error(
                   `DATA_DIR_IN_USE: Timeout acquiring lock on data directory '${dataDir}' after ${timeoutMs}ms`
@@ -747,7 +755,7 @@ export class DataDirLock {
                 timeoutErr.code = "DATA_DIR_IN_USE";
                 throw timeoutErr;
               }
-              sleepSync(50);
+              sleepSync(Math.min(50, Math.max(1, deadline - Date.now())));
               continue;
             }
 
@@ -762,7 +770,7 @@ export class DataDirLock {
                   timeoutErr.code = "DATA_DIR_IN_USE";
                   throw timeoutErr;
                 }
-                sleepSync(50);
+                sleepSync(Math.min(50, Math.max(1, deadline - Date.now())));
                 continue;
               }
               if (
@@ -807,7 +815,21 @@ export class DataDirLock {
               }
             }
 
-            // 3. 原子创建新主锁并写入自身元数据（严禁在遇到 EEXIST 时盲目 rmSync，等待并发者安全回滚）
+            // 后置复核 1：在清理陈旧主锁之后、创建新主锁之前，再次核验 reclaim guard 所有权
+            // 若守卫在此期间失窃，严禁继续创建新主锁，立即退出重试
+            if (!verifyReclaimOwnership()) {
+              if (Date.now() >= deadline) {
+                const timeoutErr: any = new Error(
+                  `DATA_DIR_IN_USE: Timeout acquiring lock on data directory '${dataDir}' after ${timeoutMs}ms`
+                );
+                timeoutErr.code = "DATA_DIR_IN_USE";
+                throw timeoutErr;
+              }
+              sleepSync(Math.min(50, Math.max(1, deadline - Date.now())));
+              continue;
+            }
+
+            // 3. 原子创建新主锁并写入自身元数据（严格遵守 deadline，并在每次重试检查时间窗口）
             let created = false;
             for (let attempt = 0; attempt < 40; attempt++) {
               try {
@@ -816,7 +838,14 @@ export class DataDirLock {
                 break;
               } catch (createErr: any) {
                 if (createErr?.code === "EEXIST") {
-                  sleepSync(25);
+                  if (Date.now() >= deadline) {
+                    break;
+                  }
+                  const remaining = deadline - Date.now();
+                  if (remaining <= 0) {
+                    break;
+                  }
+                  sleepSync(Math.min(25, remaining));
                   continue;
                 }
                 throw createErr;
@@ -841,6 +870,21 @@ export class DataDirLock {
             );
             writeFileSync(tmpPath, content, { mode: 0o600 });
             renameSync(tmpPath, metaPath);
+
+            // 后置复核 2：新主锁创建完成后、返回之前再次核验 reclaim guard 所有权
+            // 若守卫在创建新主锁期间失窃，说明存在并发仲裁漂移，严禁生效并安全回滚自身主锁
+            if (!verifyReclaimOwnership()) {
+              safeRollbackLock(lockDirPath, newLockInfo.sessionToken);
+              if (Date.now() >= deadline) {
+                const timeoutErr: any = new Error(
+                  `DATA_DIR_IN_USE: Timeout acquiring lock on data directory '${dataDir}' after ${timeoutMs}ms`
+                );
+                timeoutErr.code = "DATA_DIR_IN_USE";
+                throw timeoutErr;
+              }
+              sleepSync(Math.min(50, Math.max(1, deadline - Date.now())));
+              continue;
+            }
 
             return new DataDirLock(lockDirPath, newLockInfo);
           } finally {
