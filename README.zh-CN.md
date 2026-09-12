@@ -273,34 +273,26 @@ npm run test:pack
 - 快速入门：
   - [系统概览与心智模型](docs/getting-started/overview.md)：痛点解析、设计理念与角色双轨路径。
   - [运行环境准备与安装](docs/getting-started/installation.md)：Node.js 24 基础环境、全局命令与贡献者工作流。
-  - [五分钟极速上手教程](docs/getting-started/five-minute-tour.md)：从零构建第一个 Action 并全模态运行。
-- 使用者指南：
-  - [消费与接入总览](docs/consumer/overview.md)：工程依赖消费、智能体技能装载与接入模式选型。
+  - [快速上手指南](docs/getting-started/quick-start.md)：从零构建第一个 Action 并全模态运行。
+- 开发者指南：
+  - [Action 核心模型与开发指南](docs/developer/first-action.md)：强类型契约、ActionContext 上下文、状态持久化与外部 API 调用。
+  - [Playbook 规程编写指南](docs/developer/playbooks.md)：领域专家标准作业规程编排、委托依赖与安全红线。
+  - [单元测试与沙箱验证](docs/developer/testing.md)：纯内存毫秒级单元测试与确定性时钟。
+  - [状态持久化与 SQLite 存储](docs/developer/storage.md)：内嵌 SQLite 数据模型、键值存储与过期策略。
+  - [构建打包与 Skill 导出规范](docs/developer/build-and-export.md)：目录交付产物构建、npm 打包与技能资产导出。
+- 场景实战：
+  - [高可用外部 API 接入](docs/practices/external-apis.md)：网络请求、密钥防护、指数退避重试与取消响应。
+  - [受控系统命令与子进程执行](docs/practices/process-execution.md)：物理管道隔离、输出容量防御性截断与进程树跨平台清理。
+  - [长时间异步任务与进度上报](docs/practices/long-running-tasks.md)：阶段进度同步与异步任务协议集成。
+  - [多 Action 组合编排与防死锁](docs/practices/composing-actions.md)：级联调用深度限制与环路死锁阻断。
+  - [智能体协同开发与自愈闭环](docs/practices/ai-agent-development.md)：大模型自主阅读规程、编写代码与闭环自愈指南。
+- 消费接入指南：
+  - [消费与接入总览](docs/consumer/overview.md)：工程依赖消费、智能体技能装载与接入选型。
   - [Agent Skill 使用指南](docs/consumer/use-as-skill.md)：通过技能管理器一键安装、智能体装载路径与规程调用。
   - [开发工具 MCP 接入](docs/consumer/use-as-mcp.md)：STDIO 服务直连 Cursor、Windsurf 与 Claude Code。
   - [Node 交付产物运行](docs/consumer/standalone-run.md)：自包含 Node.js 目录交付产物运行与离线依赖。
   - [HTTP 微服务与 API 调度](docs/consumer/http-service.md)：微服务启动与 REST API 远程调度。
-  - [消费端配置与凭证注入](docs/consumer/configuration.md)：API 令牌、环境变量与持久化配置注入。
-- 开发者指南：
-  - [快速上手开发](docs/developer/quick-start.md)：工程初始化、编写 Action 与本地调试。
-  - [深入业务 Action 开发](docs/developer/first-action.md)：强类型模式、状态持久化与外部 API 调用。
-  - [编写 Playbook 规程](docs/developer/playbooks.md)：领域专家标准作业规程编排与安全红线。
-  - [单元测试与沙箱验证](docs/developer/testing.md)：纯内存毫秒级单元测试与确定性时钟。
-  - [状态持久化与 SQLite 存储](docs/developer/storage.md)：内嵌 SQLite 数据模型、键值存储与过期策略。
-  - [多环境 Profile 与远程调度](docs/developer/profiles.md)：多云环境节点管理与凭证保护。
-  - [构建打包与 Skill 导出](docs/developer/build-and-export.md)：目录交付产物构建、npm 打包与技能资产导出。
-- 场景实战食谱：
-  - [高可用外部 API 接入实战](docs/cookbook/external-apis.md)：网络请求、密钥防护、重试与取消响应。
-  - [受控系统命令与子进程执行](docs/cookbook/process-execution.md)：物理管道隔离、输出容量防御性截断与进程树清理。
-  - [长时间异步任务与进度上报](docs/cookbook/long-running-tasks.md)：阶段进度同步与异步任务协议集成。
-  - [多 Action 组合编排与防死锁](docs/cookbook/composing-actions.md)：级联调用深度限制与环路死锁阻断。
-  - [智能体协同开发与自愈闭环实战](docs/cookbook/ai-agent-development.md)：大模型自主阅读规程、编写代码与闭环自愈。
-- 核心概念：
-  - [Action Package 核心抽象](docs/concepts/action-package.md)：包能力、操作规程、接口契约与运行态。
-  - [Action 原子能力契约](docs/concepts/action.md)：动作定义函数与模式即契约设计哲学。
-  - [ActionContext 运行时上下文](docs/concepts/action-context.md)：配置解析回退、持久化状态、级联调用与取消链路。
-  - [Playbook 规程模型](docs/concepts/playbook.md)：面向智能体的标准作业规程与安全边界。
-  - [Agent Skill 技能资产规范](docs/concepts/skill.md)：源码型与 Node 目录型双模导出交付规范。
+  - [配置注入与多环境管理](docs/consumer/configuration.md)：API 令牌、环境变量、SQLite 持久化与多环境 Profile 调度。
 - 权威参考手册：
   - [CLI 命令行速查](docs/reference/cli.md)：全量子命令、参数选项与退出码规范。
   - [actiondock.json 清单规范权威手册](docs/reference/schema.md)：项目清单全量字段、类型约束与示例。
@@ -308,10 +300,8 @@ npm run test:pack
   - [Testing 测试框架 API 参考](docs/reference/testing-api.md)：测试运行时、虚拟时钟与模拟组件接口参考。
   - [配置解析回退机制](docs/reference/config.md)：配置多级回退链与环境变量解析。
   - [错误代码速查手册](docs/reference/error-codes.md)：标准 JSON 错误信封与自愈决策表。
-  - [版本迁移参考指南](docs/reference/v1-to-v2-migration.md)：旧版架构升级对比与平滑演进步骤。
 - 底层架构解密：
-  - [Runtime 执行引擎架构](docs/architecture/runtime.md)：单一终态状态机与并发管控。
-  - [输出通道物理隔离设计](docs/architecture/stdout-stderr.md)：数据信封与诊断日志物理隔离。
+  - [Runtime 执行引擎与通道隔离](docs/architecture/runtime.md)：单一终态状态机、并发管控与数据信封物理隔离。
   - [安全加固与防御模型](docs/architecture/security.md)：非回环鉴权、常数时间比对与原型污染防护。
 
 ---

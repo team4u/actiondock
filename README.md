@@ -273,34 +273,26 @@ For comprehensive architectural deep-dives, developer tutorials, and API referen
 - Getting Started:
   - [Overview and Mental Model](docs/getting-started/overview.md)
   - [Installation and Environment](docs/getting-started/installation.md)
-  - [Five-Minute Quick Tour](docs/getting-started/five-minute-tour.md)
+  - [Quick Start Guide](docs/getting-started/quick-start.md)
+- Developer Guide:
+  - [Action Model and Authoring](docs/developer/first-action.md)
+  - [Authoring Playbooks](docs/developer/playbooks.md)
+  - [Testing and Sandbox](docs/developer/testing.md)
+  - [Storage and Persistence](docs/developer/storage.md)
+  - [Build and Export Specification](docs/developer/build-and-export.md)
+- Scenario Practices:
+  - [High-Availability External APIs](docs/practices/external-apis.md)
+  - [Controlled Process Execution](docs/practices/process-execution.md)
+  - [Long-Running Tasks and Progress](docs/practices/long-running-tasks.md)
+  - [Composing Actions and Deadlock Prevention](docs/practices/composing-actions.md)
+  - [AI-Driven Development and Self-Healing](docs/practices/ai-agent-development.md)
 - Consumer Guide:
   - [Overview](docs/consumer/overview.md)
   - [Agent Skill Guide](docs/consumer/use-as-skill.md)
   - [IDE and Tool MCP Integration](docs/consumer/use-as-mcp.md)
   - [Node Delivery Running](docs/consumer/standalone-run.md)
   - [HTTP Microservice](docs/consumer/http-service.md)
-  - [Configuration Injection](docs/consumer/configuration.md)
-- Developer Guide:
-  - [Quick Start](docs/developer/quick-start.md)
-  - [First Action](docs/developer/first-action.md)
-  - [Authoring Playbooks](docs/developer/playbooks.md)
-  - [Testing and Sandbox](docs/developer/testing.md)
-  - [Storage and Persistence](docs/developer/storage.md)
-  - [Profiles](docs/developer/profiles.md)
-  - [Build and Export](docs/developer/build-and-export.md)
-- Cookbook & Recipes:
-  - [External APIs and Auth](docs/cookbook/external-apis.md)
-  - [Process Execution and Guardrails](docs/cookbook/process-execution.md)
-  - [Long-Running Tasks and Progress](docs/cookbook/long-running-tasks.md)
-  - [Composing Actions](docs/cookbook/composing-actions.md)
-  - [AI-Driven Development](docs/cookbook/ai-agent-development.md)
-- Concepts:
-  - [Action Package](docs/concepts/action-package.md)
-  - [Action Contract](docs/concepts/action.md)
-  - [ActionContext](docs/concepts/action-context.md)
-  - [Playbook Model](docs/concepts/playbook.md)
-  - [Agent Skill Specification](docs/concepts/skill.md)
+  - [Configuration and Profile Management](docs/consumer/configuration.md)
 - Reference:
   - [CLI Reference](docs/reference/cli.md)
   - [actiondock.json Schema Specification](docs/reference/schema.md)
@@ -308,10 +300,8 @@ For comprehensive architectural deep-dives, developer tutorials, and API referen
   - [Testing API Reference](docs/reference/testing-api.md)
   - [Config Resolution](docs/reference/config.md)
   - [Error Codes](docs/reference/error-codes.md)
-  - [Migration Guide](docs/reference/v1-to-v2-migration.md)
 - Architecture:
-  - [Runtime Engine](docs/architecture/runtime.md)
-  - [Channel Isolation](docs/architecture/stdout-stderr.md)
+  - [Runtime Engine and Channel Isolation](docs/architecture/runtime.md)
   - [Security Model](docs/architecture/security.md)
 
 ---
