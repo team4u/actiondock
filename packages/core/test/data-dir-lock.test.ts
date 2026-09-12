@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { spawn } from "node:child_process";
 import fs, { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { hostname, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
@@ -1057,37 +1057,93 @@ rl.on("line", (cmd) => {
   });
 
   it("源锁目录 mtime 较旧但刚刚被重命名为带当前时间戳的隔离目录时，GC 绝不误删，超过 10 秒后才安全删除", () => {
-    // 1. 创建源锁目录并将其 mtime 设置为 1 小时前
+    // - 创建源锁目录并将其 mtime 设置为 1 小时前
     const sourceDir = join(tempDir, ".actiondock.data.lock");
     mkdirSync(sourceDir, { recursive: true });
     const oneHourAgo = (Date.now() - 3600 * 1000) / 1000;
     utimesSync(sourceDir, oneHourAgo, oneHourAgo);
 
-    // 2. 刚刚重命名为带当前时间戳的隔离目录（模拟刚被隔离，但继承了旧 mtime）
+    // - 刚刚重命名为带当前时间戳的隔离目录（模拟刚被隔离，但继承了旧 mtime，操作者为死亡进程）
+    const deadOperatorPid = 99999999;
     const recentQuarantine = join(
       tempDir,
-      `.actiondock.data.lock.quarantine.${process.pid}.${Date.now()}.uuid1234`
+      `.actiondock.data.lock.quarantine.${deadOperatorPid}.${Date.now()}.uuid1234`
     );
     fs.renameSync(sourceDir, recentQuarantine);
 
-    // 验证该目录在文件系统上的 mtime 确实是 1 小时前（继承了源锁旧 mtime）
+    // - 验证该目录在文件系统上的 mtime 确实是 1 小时前（继承了源锁旧 mtime）
     const stat = statSync(recentQuarantine);
     expect(Date.now() - stat.mtimeMs).toBeGreaterThan(3000 * 1000);
 
-    // 3. 执行 acquire 触发 GC：由于文件名包含当前时间戳，GC 判定其处于 10 秒保护期内，绝不误删
+    // - 执行 acquire 触发 GC：由于文件名包含当前时间戳，GC 判定其处于 10 秒保护期内，绝不误删
     const lock = DataDirLock.acquire(tempDir);
     expect(existsSync(recentQuarantine)).toBe(true);
     lock.release();
 
-    // 4. 当文件名中的隔离时间戳超过 10 秒后，GC 允许安全清理
+    // - 当文件名中的隔离时间戳超过 10 秒后，操作者已死亡且无存活所有者，GC 允许安全清理
     const expiredQuarantine = join(
       tempDir,
-      `.actiondock.data.lock.quarantine.${process.pid}.${Date.now() - 20000}.uuid5678`
+      `.actiondock.data.lock.quarantine.${deadOperatorPid}.${Date.now() - 20000}.uuid5678`
     );
     fs.renameSync(recentQuarantine, expiredQuarantine);
 
     const lock2 = DataDirLock.acquire(tempDir);
     expect(existsSync(expiredQuarantine)).toBe(false);
     lock2.release();
+  });
+
+  it("超期的 rollback 隔离目录在其 metadata.json 指向存活 PID 时 GC 完好保留，修改为死亡 PID 后被安全清理", () => {
+    // - 构造超期（>20 秒）的 rollback 目录，操作者 PID 为已死亡的 99999999
+    const deadOperatorPid = 99999999;
+    const rollbackDir = join(
+      tempDir,
+      `.actiondock.data.lock.rollback.${deadOperatorPid}.${Date.now() - 25000}.uuid1111`
+    );
+    mkdirSync(rollbackDir, { recursive: true });
+
+    // - 内部 metadata.json 记录锁实际持有者为当前存活的 process.pid
+    const metaFile = join(rollbackDir, "metadata.json");
+    const activeMeta = {
+      pid: process.pid,
+      hostname: hostname(),
+      sessionToken: "active-session-token",
+      createdAt: new Date(Date.now() - 25000).toISOString(),
+    };
+    writeFileSync(metaFile, JSON.stringify(activeMeta, null, 2), "utf8");
+
+    // - 执行 acquire 触发 GC：由于持有者 PID 仍存活，双重存活 fencing 保证该目录完好保留
+    const lock1 = DataDirLock.acquire(tempDir);
+    expect(existsSync(rollbackDir)).toBe(true);
+    lock1.release();
+
+    // - 将 metadata.json 修改为已死亡的 PID
+    const deadMeta = {
+      ...activeMeta,
+      pid: deadOperatorPid,
+    };
+    writeFileSync(metaFile, JSON.stringify(deadMeta, null, 2), "utf8");
+
+    // - 再次执行 acquire 触发 GC：持有者已死且超期，目录被安全清理
+    const lock2 = DataDirLock.acquire(tempDir);
+    expect(existsSync(rollbackDir)).toBe(false);
+    lock2.release();
+  });
+
+  it("当隔离目录名称中的操作者 PID 为存活进程时，即使隔离超期也绝对不被 GC 删除", () => {
+    // - 构造超期（>20 秒）的隔离目录，但操作者 PID 为当前存活的 process.pid
+    const liveOperatorQuarantine = join(
+      tempDir,
+      `.actiondock.data.lock.rollback.${process.pid}.${Date.now() - 25000}.uuid2222`
+    );
+    mkdirSync(liveOperatorQuarantine, { recursive: true });
+
+    // - 即使 metadata.json 指向死亡 PID 或没有存活持有者
+    const metaFile = join(liveOperatorQuarantine, "metadata.json");
+    writeFileSync(metaFile, JSON.stringify({ pid: 99999999, sessionToken: "dead-token" }, null, 2), "utf8");
+
+    // - 执行 acquire 触发 GC：操作者仍存活，绝不清理
+    const lock = DataDirLock.acquire(tempDir);
+    expect(existsSync(liveOperatorQuarantine)).toBe(true);
+    lock.release();
   });
 });

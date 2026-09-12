@@ -338,25 +338,43 @@ export function safeRemoveStaleProjectReclaimGuard(
 }
 
 /**
- * 从隔离或回滚临时目录名称中解析隔离生成时间戳。
+ * 从工程锁隔离或回滚临时目录名称中解析操作者 PID 与隔离生成时间戳。
  * 命名规范：*.(quarantine|rollback|release).<pid>.<timestamp>.<uuid>
  */
-function parseProjectQuarantineTimestamp(entryName: string): number | undefined {
-  const match = entryName.match(/\.(?:quarantine|rollback|release)\.\d+\.(\d+)(?:\.|$)/);
-  if (match && match[1]) {
-    const ts = parseInt(match[1], 10);
-    if (!Number.isNaN(ts) && ts > 0) {
-      return ts;
-    }
+export function parseProjectQuarantineTimestamp(entryName: string): {
+  operatorPid?: number;
+  timestamp?: number;
+} {
+  const match = entryName.match(/\.(?:quarantine|rollback|release)\.(\d+)\.(\d+)(?:\.|$)/);
+  if (match && match[1] && match[2]) {
+    const pid = parseInt(match[1], 10);
+    const ts = parseInt(match[2], 10);
+    return {
+      operatorPid: !Number.isNaN(pid) && pid > 0 ? pid : undefined,
+      timestamp: !Number.isNaN(ts) && ts > 0 ? ts : undefined,
+    };
   }
-  return undefined;
+  const fallbackMatch = entryName.match(/\.(?:quarantine|rollback|release)\.(\d+)(?:\.|$)/);
+  if (fallbackMatch && fallbackMatch[1]) {
+    const ts = parseInt(fallbackMatch[1], 10);
+    return {
+      timestamp: !Number.isNaN(ts) && ts > 0 ? ts : undefined,
+    };
+  }
+  return {};
 }
 
+export const parseQuarantineTimestamp = parseProjectQuarantineTimestamp;
+
 /**
- * 清理过期的隔离目录（GC 回收机制）。
- * 依据文件名中的隔离时间戳（优先）或目录修改时间戳判定生命周期，防止误删继承旧源锁 mtime 的新鲜隔离目录。
+ * 清理过期的工程锁隔离目录（GC 回收机制）。
+ * 实施双重存活 fencing 校验，防止并发竞争者误删活跃持锁者或正处于回滚保护中的目录：
+ * - 检查操作者 PID：若正在操作该目录的 operatorPid 仍处于存活状态，绝对不得清理。
+ * - 检查存活年龄：若未超过 maxAgeMs，不得清理。
+ * - 检查隔离目录内 metadata.json：若记录的锁持有者 pid 存活，绝对不得清理。
+ * - 仅当操作者已死、已超过 maxAgeMs、且内部 metadata.json 记录的持有者均已死或无存活 owner 时，才安全删除。
  */
-function cleanStaleProjectQuarantines(
+export function cleanStaleProjectQuarantines(
   parentDir: string,
   basePrefix: string,
   maxAgeMs = 10000,
@@ -374,17 +392,55 @@ function cleanStaleProjectQuarantines(
       if (!entry.includes(".quarantine.") && !entry.includes(".rollback.") && !entry.includes(".release.")) continue;
       const fullPath = join(parentDir, entry);
       try {
-        const quarantinedAt = parseProjectQuarantineTimestamp(entry);
+        const { operatorPid, timestamp } = parseProjectQuarantineTimestamp(entry);
+
+        // 检查操作者 PID：若正在操作该目录的 operatorPid 仍处于存活状态（isPidAlive），绝对不得清理，直接跳过
+        if (operatorPid !== undefined && isPidAlive(operatorPid)) {
+          continue;
+        }
+
+        // 检查存活年龄：若未超过 maxAgeMs（默认 10000ms），直接跳过
         let age: number;
-        if (quarantinedAt !== undefined) {
-          age = now - quarantinedAt;
+        if (timestamp !== undefined) {
+          age = now - timestamp;
         } else {
           const stat = statSync(fullPath);
           age = now - stat.mtimeMs;
         }
-        if (age > maxAgeMs) {
-          rmSync(fullPath, { recursive: true, force: true });
+        if (age <= maxAgeMs) {
+          continue;
         }
+
+        // 检查隔离目录内 metadata.json：若 metadata 中记录的锁持有者 pid 存活（或 childPids 存在存活子进程），绝对不得清理，直接跳过
+        let isDir = false;
+        try {
+          isDir = statSync(fullPath).isDirectory();
+        } catch {
+          continue;
+        }
+        const metaPath = isDir ? join(fullPath, "metadata.json") : fullPath;
+        if (existsSync(metaPath)) {
+          try {
+            const raw = readFileSync(metaPath, "utf-8");
+            if (raw.trim().length > 0) {
+              const meta = JSON.parse(raw);
+              if (typeof meta?.pid === "number" && isPidAlive(meta.pid)) {
+                continue;
+              }
+              if (
+                Array.isArray(meta?.childPids) &&
+                meta.childPids.some((childPid: any) => typeof childPid === "number" && isPidAlive(childPid))
+              ) {
+                continue;
+              }
+            }
+          } catch {
+            // 元数据损坏或不可读，不视为存在存活持有者
+          }
+        }
+
+        // 仅当操作者已死、已超过 maxAgeMs、且内部 metadata.json 记录的持有者（及子进程）均已死或无存活 owner 时，才执行 rmSync 安全清理
+        rmSync(fullPath, { recursive: true, force: true });
       } catch {}
     }
   } catch {}

@@ -502,37 +502,98 @@ rl.on("line", (cmd) => {
     const metaDir = join(tempDir, ".actiondock");
     mkdirSync(metaDir, { recursive: true });
 
-    // 1. 创建源锁目录并将其 mtime 设置为 1 小时前
+    // - 创建源锁目录并将其 mtime 设置为 1 小时前
     const sourceDir = join(metaDir, "project.lock");
     mkdirSync(sourceDir, { recursive: true });
     const oneHourAgo = (Date.now() - 3600 * 1000) / 1000;
     utimesSync(sourceDir, oneHourAgo, oneHourAgo);
 
-    // 2. 刚刚重命名为带当前时间戳的隔离目录
+    // - 刚刚重命名为带当前时间戳的隔离目录（操作者为死亡进程）
+    const deadOperatorPid = 99999999;
     const recentQuarantine = join(
       metaDir,
-      `project.lock.quarantine.${process.pid}.${Date.now()}.uuid1234`
+      `project.lock.quarantine.${deadOperatorPid}.${Date.now()}.uuid1234`
     );
     fs.renameSync(sourceDir, recentQuarantine);
 
-    // 验证继承了旧 mtime
+    // - 验证继承了旧 mtime
     const stat = statSync(recentQuarantine);
     expect(Date.now() - stat.mtimeMs).toBeGreaterThan(3000 * 1000);
 
-    // 3. 执行 acquire 触发 GC：由于文件名包含当前时间戳，GC 判定其处于 10 秒保护期内，绝不误删
+    // - 执行 acquire 触发 GC：由于文件名包含当前时间戳，GC 判定其处于 10 秒保护期内，绝不误删
     const release = acquireProjectLock(tempDir);
     expect(existsSync(recentQuarantine)).toBe(true);
     release();
 
-    // 4. 当文件名中的隔离时间戳超过 10 秒后，GC 允许安全清理
+    // - 当文件名中的隔离时间戳超过 10 秒后，操作者已死亡且无存活所有者，GC 允许安全清理
     const expiredQuarantine = join(
       metaDir,
-      `project.lock.quarantine.${process.pid}.${Date.now() - 20000}.uuid5678`
+      `project.lock.quarantine.${deadOperatorPid}.${Date.now() - 20000}.uuid5678`
     );
     fs.renameSync(recentQuarantine, expiredQuarantine);
 
     const release2 = acquireProjectLock(tempDir);
     expect(existsSync(expiredQuarantine)).toBe(false);
     release2();
+  });
+
+  it("超期的工程锁 rollback 隔离目录在其 metadata.json 指向存活 PID 时 GC 完好保留，修改为死亡 PID 后被安全清理", () => {
+    const metaDir = join(tempDir, ".actiondock");
+    mkdirSync(metaDir, { recursive: true });
+
+    // - 构造超期（>20 秒）的 rollback 目录，操作者 PID 为已死亡的 99999999
+    const deadOperatorPid = 99999999;
+    const rollbackDir = join(
+      metaDir,
+      `project.lock.rollback.${deadOperatorPid}.${Date.now() - 25000}.uuid1111`
+    );
+    mkdirSync(rollbackDir, { recursive: true });
+
+    // - 内部 metadata.json 记录锁持有者为当前存活的 process.pid
+    const metaFile = join(rollbackDir, "metadata.json");
+    const activeMeta = {
+      pid: process.pid,
+      sessionToken: "active-session-token",
+      createdAt: Date.now() - 25000,
+    };
+    writeFileSync(metaFile, JSON.stringify(activeMeta, null, 2), "utf-8");
+
+    // - 执行 acquireProjectLock 触发 GC：持有者存活，完好保留
+    const release1 = acquireProjectLock(tempDir);
+    expect(existsSync(rollbackDir)).toBe(true);
+    release1();
+
+    // - 将 metadata.json 修改为死亡 PID
+    const deadMeta = {
+      ...activeMeta,
+      pid: deadOperatorPid,
+    };
+    writeFileSync(metaFile, JSON.stringify(deadMeta, null, 2), "utf-8");
+
+    // - 再次执行 acquireProjectLock 触发 GC：持有者已死且超期，被安全清理
+    const release2 = acquireProjectLock(tempDir);
+    expect(existsSync(rollbackDir)).toBe(false);
+    release2();
+  });
+
+  it("当工程锁隔离目录名称中的操作者 PID 为存活进程时，即使隔离超期也绝对不被 GC 删除", () => {
+    const metaDir = join(tempDir, ".actiondock");
+    mkdirSync(metaDir, { recursive: true });
+
+    // - 构造超期（>20 秒）的隔离目录，但操作者 PID 为当前存活的 process.pid
+    const liveOperatorQuarantine = join(
+      metaDir,
+      `project.lock.rollback.${process.pid}.${Date.now() - 25000}.uuid2222`
+    );
+    mkdirSync(liveOperatorQuarantine, { recursive: true });
+
+    // - 即使 metadata.json 为死亡 PID
+    const metaFile = join(liveOperatorQuarantine, "metadata.json");
+    writeFileSync(metaFile, JSON.stringify({ pid: 99999999, sessionToken: "dead-token" }, null, 2), "utf-8");
+
+    // - 执行 acquireProjectLock 触发 GC：操作者存活，绝不清理
+    const release = acquireProjectLock(tempDir);
+    expect(existsSync(liveOperatorQuarantine)).toBe(true);
+    release();
   });
 });
