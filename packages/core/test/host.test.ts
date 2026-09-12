@@ -1176,5 +1176,76 @@ actions:
       expect(appClosed).toBe(true);
     }
   });
+
+  it("外部创建的 App 实例传入 Host 后，在 host.close() 执行后未被 close 并保持独立存活", async () => {
+    let externalClosed = false;
+    let internalClosed = false;
+
+    const externalApp = await createActionDockApp({
+      projectConfig: {
+        id: "pkg.borrowed-app",
+        name: "借用包",
+        version: "1.0.0",
+        actions: {
+          ping: { entry: "", description: "存活探针" },
+        },
+      },
+      actions: {
+        ping: defineAction({
+          run: () => ({ status: "alive" }),
+        }),
+      },
+      inMemory: true,
+    });
+    const origExternalClose = externalApp.close.bind(externalApp);
+    externalApp.close = async (opts) => {
+      externalClosed = true;
+      return origExternalClose(opts);
+    };
+
+    try {
+      const host = await createActionDockHost({
+        packages: [
+          externalApp,
+          {
+            projectConfig: {
+              id: "pkg.internal-app",
+              name: "内部创建包",
+              version: "1.0.0",
+            },
+            inMemory: true,
+          },
+        ],
+        autoLoadCurrentProject: false,
+      });
+
+      const internalApp = host.getApp("pkg.internal-app");
+      expect(internalApp).toBeDefined();
+      if (internalApp) {
+        const origInternalClose = internalApp.close.bind(internalApp);
+        internalApp.close = async (opts) => {
+          internalClosed = true;
+          return origInternalClose(opts);
+        };
+      }
+
+      // 执行 Host 关闭
+      await host.close();
+
+      // 验证内部创建的 App 被正常关闭，而外部借用的 App 绝不被关闭
+      expect(internalClosed).toBe(true);
+      expect(externalClosed).toBe(false);
+
+      // 验证外部借用的 App 依然处于存活可用状态
+      const runRes = await externalApp.runAction("ping", {});
+      expect(runRes.ok).toBe(true);
+      if (runRes.ok) {
+        expect(runRes.data).toEqual({ status: "alive" });
+      }
+    } finally {
+      await externalApp.close();
+      expect(externalClosed).toBe(true);
+    }
+  });
 });
 

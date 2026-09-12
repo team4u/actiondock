@@ -779,26 +779,34 @@ export class DefaultActionDockHost implements ActionDockHost {
     return (async function* () {})();
   }
 
+  /**
+   * 优雅关闭宿主容器。
+   * 仅对内部创建的 App 实例执行 close 并安全释放底层资源；
+   * 外部传入借用的 App 实例生命周期完全由调用方负责管理，Host 关闭时仅解绑引用并清理自身内部实例。
+   */
   async close(options?: { graceMs?: number }): Promise<void> {
     if (this.isClosed) return;
     this.isClosed = true;
 
-    const apps = this.listApps();
+    const internalApps = Array.from(this.internallyCreatedApps);
     await Promise.all(
-      apps.map(async (app) => {
+      internalApps.map(async (app) => {
         try {
           await app.close(options);
         } catch {
-          // 忽略单个 App 关闭异常，确保全部安全释放
+          // 忽略内部 App 关闭异常，确保全部安全释放
         }
       })
     );
+    this.internallyCreatedApps.clear();
+    this.apps.clear();
 
     try {
       this.dataDirLock?.release();
     } catch {
       // 忽略目录排他锁释放异常
     }
+    this.dataDirLock = undefined;
   }
 }
 

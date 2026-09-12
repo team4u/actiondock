@@ -99,14 +99,16 @@ export async function checkRemoteHealth(
   timeoutMs: number = 5000,
   options?: { allowInsecureHttp?: boolean }
 ): Promise<RemoteHealthResult> {
-  assertSecureTransport(serverUrl, token, options?.allowInsecureHttp);
-  const base = normalizeServerUrl(serverUrl);
-  const v2Url = `${base}/api/v2/health`;
   const startTime = Date.now();
+  let timer: ReturnType<typeof setTimeout> | undefined;
 
   try {
+    assertSecureTransport(serverUrl, token, options?.allowInsecureHttp);
+    const base = normalizeServerUrl(serverUrl);
+    const v2Url = `${base}/api/v2/health`;
+
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    timer = setTimeout(() => controller.abort(), timeoutMs);
 
     let res = await fetch(v2Url, {
       method: "GET",
@@ -126,8 +128,6 @@ export async function checkRemoteHealth(
         }
       } catch {}
     }
-
-    clearTimeout(timer);
 
     const latencyMs = Date.now() - startTime;
 
@@ -155,6 +155,10 @@ export async function checkRemoteHealth(
       latencyMs,
       error: err.name === "AbortError" ? "Connection timed out" : err.message,
     };
+  } finally {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
   }
 }
 

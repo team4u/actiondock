@@ -464,6 +464,136 @@ Execute build and then deploy artifact.
     await app.close();
   });
 
+  it("setState 四参数与 options.actionId 冲突时抛出异常，并校验各状态方法冲突异常", async () => {
+    const app = await createActionDockApp({
+      projectConfig: {
+        id: "test.state.conflict",
+        name: "State Conflict App",
+        version: "1.0.0",
+      },
+      inMemory: true,
+    });
+
+    // 1. setState 显式位置参数与 options.actionId 冲突报错
+    await expect(
+      app.setState("action-a", "key1", "val1", { actionId: "action-b" })
+    ).rejects.toThrow(
+      "Conflicting actionId specified: positional 'action-a' vs options.actionId 'action-b'"
+    );
+
+    // 2. 正常四参数调用（options.actionId 一致或未指定）成功
+    await app.setState("action-a", "key1", "val1", { actionId: "action-a" });
+    const val1 = await app.getState<string>("action-a", "key1");
+    expect(val1).toBe("val1");
+
+    // 3. getState 位置参数与 options.actionId 冲突报错
+    await expect(
+      app.getState("action-a", "key1", { actionId: "action-b" })
+    ).rejects.toThrow(
+      "Conflicting actionId specified: positional 'action-a' vs options.actionId 'action-b'"
+    );
+
+    // 4. deleteState 位置参数与 options.actionId 冲突报错
+    await expect(
+      app.deleteState("action-a", "key1", { actionId: "action-b" })
+    ).rejects.toThrow(
+      "Conflicting actionId specified: positional 'action-a' vs options.actionId 'action-b'"
+    );
+
+    // 5. listStateKeys 位置参数与 options.actionId 冲突报错
+    await expect(
+      app.listStateKeys("action-a", { actionId: "action-b" })
+    ).rejects.toThrow(
+      "Conflicting actionId specified: positional 'action-a' vs options.actionId 'action-b'"
+    );
+
+    // 6. clearState 位置参数与 options.actionId 冲突报错
+    await expect(
+      app.clearState("action-a", { actionId: "action-b" })
+    ).rejects.toThrow(
+      "Conflicting actionId specified: positional 'action-a' vs options.actionId 'action-b'"
+    );
+
+    await app.close();
+  });
+
+  it("支持 setActionState, getActionState, deleteActionState 显式无歧义 API", async () => {
+    const app = await createActionDockApp({
+      projectConfig: {
+        id: "test.action.state",
+        name: "Action State App",
+        version: "1.0.0",
+      },
+      inMemory: true,
+    });
+
+    // 1. setActionState 写入状态并读取
+    await app.setActionState("calc-worker", "counter", 100);
+    const counter = await app.getActionState<number>("calc-worker", "counter");
+    expect(counter).toBe(100);
+
+    // 2. setActionState 支持子命名空间与 options.detail 读取
+    await app.setActionState("calc-worker", "token", "tok_123", { namespace: "auth" });
+    const authVal = await app.getActionState<string>("calc-worker", "token", { namespace: "auth" });
+    expect(authVal).toBe("tok_123");
+
+    const detailEntry = await app.getActionState<any>("calc-worker", "token", {
+      namespace: "auth",
+      detail: true,
+    });
+    expect(detailEntry).toBeDefined();
+    expect(detailEntry.value).toBe("tok_123");
+
+    // 3. deleteActionState 删除状态
+    const deleted = await app.deleteActionState("calc-worker", "counter");
+    expect(deleted).toBe(true);
+    const afterDelete = await app.getActionState("calc-worker", "counter");
+    expect(afterDelete).toBeUndefined();
+
+    // 4. setActionState / getActionState / deleteActionState 在 options.actionId 冲突时校验报错
+    await expect(
+      app.setActionState("calc-worker", "k", "v", { actionId: "other-worker" })
+    ).rejects.toThrow(
+      "Conflicting actionId specified: positional 'calc-worker' vs options.actionId 'other-worker'"
+    );
+    await expect(
+      app.getActionState("calc-worker", "k", { actionId: "other-worker" })
+    ).rejects.toThrow(
+      "Conflicting actionId specified: positional 'calc-worker' vs options.actionId 'other-worker'"
+    );
+    await expect(
+      app.deleteActionState("calc-worker", "k", { actionId: "other-worker" })
+    ).rejects.toThrow(
+      "Conflicting actionId specified: positional 'calc-worker' vs options.actionId 'other-worker'"
+    );
+
+    await app.close();
+  });
+
+  it("3 参数 setState 避免对任意 options 形状的 JSON value 错误猜测为选项", async () => {
+    const app = await createActionDockApp({
+      projectConfig: {
+        id: "test.state.disambiguate",
+        name: "Disambiguate App",
+        version: "1.0.0",
+      },
+      inMemory: true,
+    });
+
+    // 当未注册的 actionId 调用 3 参数 setState，value 恰好是包含 ttl/namespace 的对象时，
+    // 不会将其误猜测为 options，而是作为 actionId="unregistered_act" 的 value 存入
+    const arbitraryValue = { ttl: 300, namespace: "custom" };
+    await app.setState("unregistered_act", "config_meta", arbitraryValue);
+
+    const result = await app.getActionState<typeof arbitraryValue>(
+      "unregistered_act",
+      "config_meta"
+    );
+    expect(result).toEqual({ ttl: 300, namespace: "custom" });
+
+    await app.close();
+  });
+
   it("优雅关机 close() 协调执行服务关机与底层存储安全关闭", async () => {
     let customStorageClosed = false;
     const storage = new SqliteRuntimeStorage({

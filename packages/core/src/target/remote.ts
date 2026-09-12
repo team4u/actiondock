@@ -812,9 +812,7 @@ function wrapRemoteError(err: any): never {
     code === "TARGET_CAPABILITY_UNAVAILABLE" ||
     msg.includes("CAPABILITY_UNAVAILABLE") ||
     msg.includes("TARGET_CAPABILITY_UNAVAILABLE") ||
-    msg.includes("Management APIs are not enabled") ||
-    err?.status === 403 ||
-    msg.includes("(403)")
+    msg.includes("Management APIs are not enabled")
   ) {
     throw new TargetError(
       TARGET_CAPABILITY_UNAVAILABLE,

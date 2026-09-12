@@ -384,6 +384,46 @@ Follow these steps to greet a user.
     expect(queryJson.projectRoot).toBeUndefined();
   });
 
+  test("Remote Server & Client > checkRemoteHealth handles insecure HTTP rejection safely and cleans up timer", async () => {
+    // 1. When non-loopback insecure HTTP is provided with token, assertSecureTransport throws
+    // checkRemoteHealth catches it inside try and returns ok: false safely
+    const insecureResult = await checkRemoteHealth("http://remote.example.com:5177", "some-token");
+    expect(insecureResult.ok).toBe(false);
+    expect(insecureResult.error).toContain("Insecure HTTP connection with authentication token");
+    expect(insecureResult.latencyMs).toBeGreaterThanOrEqual(0);
+
+    // 2. Allow insecure HTTP override explicitly
+    const allowedInsecure = await checkRemoteHealth(
+      "http://remote.example.com:5177",
+      "some-token",
+      200,
+      { allowInsecureHttp: true }
+    );
+    expect(allowedInsecure.ok).toBe(false);
+    expect(allowedInsecure.error).not.toContain("Insecure HTTP connection");
+
+    // 3. Verify timer cleanup via finally block on both success and failure
+    let clearTimeoutCount = 0;
+    const originalClearTimeout = globalThis.clearTimeout;
+    try {
+      globalThis.clearTimeout = ((timerId: any) => {
+        clearTimeoutCount++;
+        return originalClearTimeout(timerId);
+      }) as any;
+
+      const healthAuth = await checkRemoteHealth(serverUrl, SECRET_TOKEN, 1000);
+      expect(healthAuth.ok).toBe(true);
+      expect(clearTimeoutCount).toBeGreaterThanOrEqual(1);
+
+      const beforeFailCount = clearTimeoutCount;
+      const failHealth = await checkRemoteHealth("http://127.0.0.1:59999", undefined, 200);
+      expect(failHealth.ok).toBe(false);
+      expect(clearTimeoutCount).toBeGreaterThan(beforeFailCount);
+    } finally {
+      globalThis.clearTimeout = originalClearTimeout;
+    }
+  });
+
   test("Security > Expose debug info toggle hides/reveals projectRoot", async () => {
     // Default server hides projectRoot
     const resDefault = await fetch(`${serverUrl}/api/v1/info`, {

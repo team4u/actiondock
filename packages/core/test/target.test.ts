@@ -726,5 +726,47 @@ actions:
       }
       await target.close();
     });
+
+    it("RemoteActionDockTarget 在白名单受限包下收到 403 PACKAGE_NOT_ALLOWED 正常透传而不误判为 TARGET_CAPABILITY_UNAVAILABLE", async () => {
+      const server = createServer((req, res) => {
+        res.writeHead(403, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            ok: false,
+            error: {
+              code: "PACKAGE_NOT_ALLOWED",
+              message: "Package 'restricted.pkg' is not in the allowed list",
+            },
+          })
+        );
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+      const port = (server.address() as any).port;
+
+      try {
+        const target = new RemoteActionDockTarget({
+          serverUrl: `http://127.0.0.1:${port}`,
+        });
+
+        try {
+          await target.listConfig("restricted.pkg");
+          expect(true).toBe(false);
+        } catch (err: any) {
+          expect(err.code).toBe("PACKAGE_NOT_ALLOWED");
+          expect(err.code).not.toBe(TARGET_CAPABILITY_UNAVAILABLE);
+          expect(err.message).toContain("Package 'restricted.pkg' is not in the allowed list");
+        }
+
+        try {
+          await target.getState("restricted.pkg", "act", "key");
+          expect(true).toBe(false);
+        } catch (err: any) {
+          expect(err.code).toBe("PACKAGE_NOT_ALLOWED");
+          expect(err.code).not.toBe(TARGET_CAPABILITY_UNAVAILABLE);
+        }
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    });
   });
 });

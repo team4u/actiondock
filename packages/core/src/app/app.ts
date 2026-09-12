@@ -580,6 +580,11 @@ export class DefaultActionDockApp implements ActionDockApp {
       actionId = actionIdOrKey;
       key = keyOrOptions;
       opts = options;
+      if (opts?.actionId && opts.actionId !== actionId) {
+        throw new Error(
+          `Conflicting actionId specified: positional '${actionId}' vs options.actionId '${opts.actionId}'`
+        );
+      }
     } else {
       actionId = "";
       key = actionIdOrKey;
@@ -619,7 +624,12 @@ export class DefaultActionDockApp implements ActionDockApp {
     let opts: StateScopeOptions | undefined;
 
     if (arguments.length >= 4) {
-      actionId = options?.actionId || actionIdOrKey;
+      if (options?.actionId && options.actionId !== actionIdOrKey) {
+        throw new Error(
+          `Conflicting actionId specified: positional '${actionIdOrKey}' vs options.actionId '${options.actionId}'`
+        );
+      }
+      actionId = actionIdOrKey;
       key = keyOrValue;
       value = valueOrOptions;
       opts = options;
@@ -640,26 +650,36 @@ export class DefaultActionDockApp implements ActionDockApp {
         this.actionsMap.has(actionIdOrKey) ||
         Boolean(this.projectConfig?.actions?.[actionIdOrKey]);
 
-      if (valueOrOptions && typeof valueOrOptions === "object" && typeof valueOrOptions.actionId === "string") {
-        actionId = valueOrOptions.actionId;
-        key = actionIdOrKey;
-        value = keyOrValue as T;
-        opts = valueOrOptions;
-      } else if (isKnownAction && typeof keyOrValue === "string") {
+      const hasActionIdOpt =
+        valueOrOptions !== null &&
+        typeof valueOrOptions === "object" &&
+        !Array.isArray(valueOrOptions) &&
+        typeof valueOrOptions.actionId === "string" &&
+        valueOrOptions.actionId.trim().length > 0;
+
+      if (isKnownAction && typeof keyOrValue === "string") {
+        if (hasActionIdOpt && valueOrOptions.actionId !== actionIdOrKey) {
+          throw new Error(
+            `Conflicting actionId specified: positional '${actionIdOrKey}' vs options.actionId '${valueOrOptions.actionId}'`
+          );
+        }
         actionId = actionIdOrKey;
         key = keyOrValue;
         value = valueOrOptions as T;
         opts = undefined;
+      } else if (hasActionIdOpt) {
+        actionId = valueOrOptions.actionId;
+        key = actionIdOrKey;
+        value = keyOrValue as T;
+        opts = valueOrOptions;
       } else if (typeof keyOrValue !== "string") {
         actionId = "";
         key = actionIdOrKey;
         value = keyOrValue as T;
         opts = isOpts(valueOrOptions) ? valueOrOptions : undefined;
-      } else if (isOpts(valueOrOptions)) {
-        actionId = valueOrOptions.actionId || "";
-        key = actionIdOrKey;
-        value = keyOrValue as T;
-        opts = valueOrOptions;
+        if (opts?.actionId) {
+          actionId = opts.actionId;
+        }
       } else {
         actionId = actionIdOrKey;
         key = keyOrValue;
@@ -702,6 +722,11 @@ export class DefaultActionDockApp implements ActionDockApp {
       actionId = actionIdOrKey;
       key = keyOrOptions;
       opts = options;
+      if (opts?.actionId && opts.actionId !== actionId) {
+        throw new Error(
+          `Conflicting actionId specified: positional '${actionId}' vs options.actionId '${opts.actionId}'`
+        );
+      }
     } else {
       actionId = "";
       key = actionIdOrKey;
@@ -731,6 +756,53 @@ export class DefaultActionDockApp implements ActionDockApp {
     return await this.storage.deleteState(targetNs, targetKey);
   }
 
+  async getActionState<T extends JsonValue = JsonValue>(
+    actionId: string,
+    key: string,
+    options?: StateScopeOptions
+  ): Promise<T | undefined> {
+    if (options?.actionId && options.actionId !== actionId) {
+      throw new Error(
+        `Conflicting actionId specified: positional '${actionId}' vs options.actionId '${options.actionId}'`
+      );
+    }
+    const ns = options?.namespace ? `${actionId}:${options.namespace}` : actionId;
+    if (options?.detail) {
+      const entry = await this.storage.findState(key, ns || undefined);
+      return entry as unknown as T;
+    }
+    return await this.storage.getState<T>(ns, key);
+  }
+
+  async setActionState<T extends JsonValue = JsonValue>(
+    actionId: string,
+    key: string,
+    value: T,
+    options?: StateScopeOptions
+  ): Promise<void> {
+    if (options?.actionId && options.actionId !== actionId) {
+      throw new Error(
+        `Conflicting actionId specified: positional '${actionId}' vs options.actionId '${options.actionId}'`
+      );
+    }
+    const ns = options?.namespace ? `${actionId}:${options.namespace}` : actionId;
+    await this.storage.setState<T>(ns, key, value, options?.ttl);
+  }
+
+  async deleteActionState(
+    actionId: string,
+    key: string,
+    options?: StateScopeOptions
+  ): Promise<boolean> {
+    if (options?.actionId && options.actionId !== actionId) {
+      throw new Error(
+        `Conflicting actionId specified: positional '${actionId}' vs options.actionId '${options.actionId}'`
+      );
+    }
+    const ns = options?.namespace ? `${actionId}:${options.namespace}` : actionId;
+    return await this.storage.deleteState(ns, key);
+  }
+
   async listStateKeys(
     actionIdOrOptions?: string | StateScopeOptions,
     options?: StateScopeOptions
@@ -741,6 +813,11 @@ export class DefaultActionDockApp implements ActionDockApp {
     if (typeof actionIdOrOptions === "string") {
       actionId = actionIdOrOptions;
       opts = options;
+      if (opts?.actionId && opts.actionId !== actionId) {
+        throw new Error(
+          `Conflicting actionId specified: positional '${actionId}' vs options.actionId '${opts.actionId}'`
+        );
+      }
     } else {
       actionId = "";
       opts = actionIdOrOptions;
@@ -765,6 +842,11 @@ export class DefaultActionDockApp implements ActionDockApp {
     if (typeof actionIdOrOptions === "string") {
       actionId = actionIdOrOptions;
       opts = options;
+      if (opts?.actionId && opts.actionId !== actionId) {
+        throw new Error(
+          `Conflicting actionId specified: positional '${actionId}' vs options.actionId '${opts.actionId}'`
+        );
+      }
     } else {
       actionId = "";
       opts = actionIdOrOptions;

@@ -30,7 +30,7 @@ import type { RuntimePlatform } from "../platform/types";
  * ActionDock 宿主容器初始化配置选项。
  */
 export interface ActionDockHostOptions {
-  /** 显式预注册的包列表（现成 ActionDockApp 实例或 ActionDockAppOptions 配置）。外部传入的实例生命周期与所有权归调用方所有，宿主初始化失败时不会关闭外部实例。 */
+  /** 显式预注册的包列表（现成 ActionDockApp 实例或 ActionDockAppOptions 配置）。外部传入的 App 属于借用（borrowed），生命周期完全由调用方负责管理，Host 关闭或初始化失败时仅解绑引用并清理自身内部实例，严禁关闭外部借用的 App 实例。 */
   packages?: Array<ActionDockApp | ActionDockAppOptions>;
   /** 当前工程根目录绝对物理路径 */
   projectRoot?: string;
@@ -117,6 +117,6 @@ export interface ActionDockHost {
   /** 注册新的 App 实例至当前宿主容器 */
   registerApp(app: ActionDockApp): void;
 
-  /** 优雅关闭宿主容器并安全释放所管辖的所有 App 底层资源 */
+  /** 优雅关闭宿主容器。仅对内部创建的 App 实例执行 close 并安全释放底层资源；外部传入借用的 App 实例生命周期完全由调用方负责管理，Host 关闭时仅解绑引用并清理自身内部实例。 */
   close(options?: { graceMs?: number }): Promise<void>;
 }

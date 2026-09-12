@@ -332,6 +332,28 @@ export interface ActionDockApp {
     options?: StateScopeOptions
   ): Promise<boolean>;
 
+  /** 显式获取指定 Action 命名空间的状态值 */
+  getActionState<T extends JsonValue = JsonValue>(
+    actionId: string,
+    key: string,
+    options?: StateScopeOptions
+  ): Promise<T | undefined>;
+
+  /** 显式写入指定 Action 命名空间的状态值 */
+  setActionState<T extends JsonValue = JsonValue>(
+    actionId: string,
+    key: string,
+    value: T,
+    options?: StateScopeOptions
+  ): Promise<void>;
+
+  /** 显式删除指定 Action 命名空间的状态项 */
+  deleteActionState(
+    actionId: string,
+    key: string,
+    options?: StateScopeOptions
+  ): Promise<boolean>;
+
   /** 列出所有状态键 */
   listStateKeys(
     options?: StateScopeOptions

@@ -238,11 +238,41 @@ function tryAcquireReclaimGuard(reclaimPath: string, pid: number, guardToken: st
  * 安全清理陈旧接管守卫（reclaim guard）。
  * 采用原子重命名检疫并核对 guardToken，确保仅删除此前确认已陈旧的目标，严禁误删并发新守卫。
  */
-function safeRemoveStaleReclaimGuard(
+export function safeRemoveStaleReclaimGuard(
   reclaimPath: string,
   expectedGuardToken?: string
 ): void {
   if (!existsSync(reclaimPath)) return;
+
+  let isDir = false;
+  try {
+    isDir = statSync(reclaimPath).isDirectory();
+  } catch {
+    return;
+  }
+
+  const metaPath = isDir ? join(reclaimPath, "metadata.json") : reclaimPath;
+
+  if (expectedGuardToken) {
+    if (!existsSync(metaPath)) {
+      return;
+    }
+    try {
+      const metaStat = statSync(metaPath);
+      const mtimeMs = metaStat.mtimeMs;
+      const raw = readFileSync(metaPath, "utf8");
+      const parsed = JSON.parse(raw);
+      if (parsed?.guardToken !== expectedGuardToken) {
+        return;
+      }
+      if (parsed?.pid !== process.pid && Date.now() - mtimeMs < 1000) {
+        return;
+      }
+    } catch {
+      return;
+    }
+  }
+
   const quarantinePath = `${reclaimPath}.quarantine.${process.pid}.${Date.now()}.${randomUUID().slice(0, 8)}`;
   try {
     renameSync(reclaimPath, quarantinePath);
@@ -251,21 +281,25 @@ function safeRemoveStaleReclaimGuard(
   }
 
   try {
-    const metaPath = join(quarantinePath, "metadata.json");
+    const quarantinedMetaPath = isDir ? join(quarantinePath, "metadata.json") : quarantinePath;
     let actualGuardToken: string | undefined;
-    if (existsSync(metaPath)) {
+    if (existsSync(quarantinedMetaPath)) {
       try {
-        const raw = readFileSync(metaPath, "utf8");
+        const raw = readFileSync(quarantinedMetaPath, "utf8");
         const parsed = JSON.parse(raw);
         actualGuardToken = parsed?.guardToken;
       } catch {}
     }
 
     if (expectedGuardToken !== actualGuardToken) {
-      // 并非此前检查的陈旧 guard（已被并发者替换为新活跃 guard），立即恢复原位！
+      // 并非此前检查的陈旧 guard（已被并发者替换为新活跃 guard），尝试恢复原位！
       try {
         renameSync(quarantinePath, reclaimPath);
-      } catch {}
+      } catch {
+        try {
+          rmSync(quarantinePath, { recursive: true, force: true });
+        } catch {}
+      }
       return;
     }
 
@@ -671,6 +705,14 @@ export class DataDirLock {
           // 仅成功获取 reclaim guard 的唯一胜利者获准执行：
           // 复核主锁陈旧性 -> 隔离/清理陈旧锁 -> 原子创建新主锁并写入自身元数据 -> 清理 reclaim guard
           try {
+            // 自检校验自身守卫：验证自身 guardToken 依然有效且持有者为自身 PID
+            // 若已被抢占或不匹配，立即退出当前接管并 continue 重试，杜绝在守卫已失窃的情况下操作主锁
+            const ownGuard = checkReclaimGuard(reclaimDirPath, isProcessAlive, 1000);
+            if (!ownGuard.active || ownGuard.holderPid !== currentPid || ownGuard.guardToken !== guardToken) {
+              sleepSync(50);
+              continue;
+            }
+
             // 1. 复核主锁陈旧性
             const recheckState = readLockWithGracePeriod(lockDirPath, 1000);
             if (recheckState.exists) {

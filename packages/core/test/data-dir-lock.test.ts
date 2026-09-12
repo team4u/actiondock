@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -9,7 +9,7 @@ import { createActionDockApp } from "../src/app";
 import { createActionDockHost } from "../src/host";
 import { createDefaultSqliteDriver } from "../src/storage/driver";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
-import { DataDirLock } from "../src/storage/data-dir-lock";
+import { DataDirLock, safeRemoveStaleReclaimGuard } from "../src/storage/data-dir-lock";
 import { STORAGE_SCHEMA_VERSION } from "../src/storage/types";
 
 describe("数据目录排他锁与 Schema 版本保护测试", () => {
@@ -833,5 +833,51 @@ rl.on("line", (cmd) => {
     } finally {
       await worker2.terminate();
     }
+  });
+
+  it("当 reclaimPath 的 guardToken 与 expectedGuardToken 不匹配时，safeRemoveStaleReclaimGuard 绝不重命名或破坏该 guard", () => {
+    const lockDir = join(tempDir, ".actiondock.data.lock");
+    const reclaimDir = `${lockDir}.reclaim`;
+    mkdirSync(reclaimDir, { recursive: true });
+
+    const staleTime = new Date(Date.now() - 5000);
+    const guardData = {
+      pid: 99999999,
+      guardToken: "token-actual-12345",
+      createdAt: Date.now() - 5000,
+    };
+    writeFileSync(
+      join(reclaimDir, "metadata.json"),
+      JSON.stringify(guardData, null, 2),
+      "utf8"
+    );
+
+    // 1. 刚刚写入处于宽限期内（mtimeMs 在 1000ms 内），预检应直接拦截，不重命名或破坏该 guard
+    safeRemoveStaleReclaimGuard(reclaimDir, "token-actual-12345");
+    expect(existsSync(reclaimDir)).toBe(true);
+
+    // 调整时间戳超出宽限期
+    utimesSync(join(reclaimDir, "metadata.json"), staleTime, staleTime);
+    utimesSync(reclaimDir, staleTime, staleTime);
+
+    // 2. 传入不匹配的 expectedGuardToken，预检应立即拦截，绝不重命名或破坏该 guard
+    safeRemoveStaleReclaimGuard(reclaimDir, "token-expected-99999");
+
+    // 验证 reclaimDir 依然完整存在，未被重命名或破坏
+    expect(existsSync(reclaimDir)).toBe(true);
+    expect(existsSync(join(reclaimDir, "metadata.json"))).toBe(true);
+    const content = JSON.parse(readFileSync(join(reclaimDir, "metadata.json"), "utf8"));
+    expect(content.guardToken).toBe("token-actual-12345");
+
+    // 3. 验证当 metadata.json 尚不存在时，预检立即拦截，绝不重命名或破坏该目录
+    const emptyReclaimDir = join(tempDir, "empty.reclaim");
+    mkdirSync(emptyReclaimDir, { recursive: true });
+    safeRemoveStaleReclaimGuard(emptyReclaimDir, "some-token");
+    expect(existsSync(emptyReclaimDir)).toBe(true);
+    rmSync(emptyReclaimDir, { recursive: true, force: true });
+
+    // 4. 验证当 expectedGuardToken 匹配且超出宽限期时，安全清理
+    safeRemoveStaleReclaimGuard(reclaimDir, "token-actual-12345");
+    expect(existsSync(reclaimDir)).toBe(false);
   });
 });

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import fs, { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
@@ -229,5 +229,101 @@ rl.on("line", (cmd) => {
     );
 
     expect(existsSync(lockDir)).toBe(false);
+  });
+
+  it("当 acquireProjectLock 遇到存活进程持锁抛出 PROJECT_BUSY 错误代码", () => {
+    const lockDir = join(tempDir, ".actiondock", "project.lock");
+    mkdirSync(lockDir, { recursive: true });
+    writeFileSync(
+      join(lockDir, "metadata.json"),
+      JSON.stringify({
+        pid: process.pid,
+        sessionToken: "active-holder-token",
+        createdAt: Date.now(),
+      })
+    );
+
+    let caughtErr: any;
+    try {
+      acquireProjectLock(tempDir);
+    } catch (err) {
+      caughtErr = err;
+    }
+
+    expect(caughtErr).toBeDefined();
+    expect(caughtErr?.code).toBe("PROJECT_BUSY");
+    expect(caughtErr?.message).toContain("PROJECT_BUSY");
+  });
+
+  it("当工程锁被存活进程占用（PROJECT_BUSY）时 recoverPendingTransactions 安全返回空数组", async () => {
+    const txBaseDir = join(tempDir, ".actiondock", "transactions");
+    mkdirSync(txBaseDir, { recursive: true });
+    const lockDir = join(tempDir, ".actiondock", "project.lock");
+    mkdirSync(lockDir, { recursive: true });
+    writeFileSync(
+      join(lockDir, "metadata.json"),
+      JSON.stringify({
+        pid: process.pid,
+        sessionToken: "active-holder-token",
+        createdAt: Date.now(),
+      })
+    );
+
+    const res = await recoverPendingTransactions(tempDir);
+    expect(res).toEqual([]);
+  });
+
+  it("当 acquireProjectLock 遇到权限或非 busy 异常时 recoverPendingTransactions 会正确向外抛出", async () => {
+    const txBaseDir = join(tempDir, ".actiondock", "transactions");
+    mkdirSync(txBaseDir, { recursive: true });
+
+    const origMkdir = fs.mkdirSync;
+    try {
+      // 模拟底层文件系统权限异常 EACCES
+      fs.mkdirSync = ((path: any, options: any) => {
+        if (typeof path === "string" && path.includes("project.lock")) {
+          const err: any = new Error("EACCES: permission denied, mkdir '" + path + "'");
+          err.code = "EACCES";
+          throw err;
+        }
+        return origMkdir(path, options);
+      }) as any;
+
+      let caughtErr: any;
+      try {
+        await recoverPendingTransactions(tempDir);
+      } catch (err) {
+        caughtErr = err;
+      }
+
+      expect(caughtErr).toBeDefined();
+      expect(caughtErr?.code).toBe("EACCES");
+    } finally {
+      fs.mkdirSync = origMkdir;
+    }
+
+    // 验证其他非 busy 系统异常（如 ENOSPC）同样向外透传，严禁静默吞掉
+    try {
+      fs.mkdirSync = ((path: any, options: any) => {
+        if (typeof path === "string" && path.includes("project.lock")) {
+          const err: any = new Error("ENOSPC: no space left on device");
+          err.code = "ENOSPC";
+          throw err;
+        }
+        return origMkdir(path, options);
+      }) as any;
+
+      let caughtErr2: any;
+      try {
+        await recoverPendingTransactions(tempDir);
+      } catch (err) {
+        caughtErr2 = err;
+      }
+
+      expect(caughtErr2).toBeDefined();
+      expect(caughtErr2?.code).toBe("ENOSPC");
+    } finally {
+      fs.mkdirSync = origMkdir;
+    }
   });
 });

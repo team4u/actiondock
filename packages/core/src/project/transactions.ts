@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import {
+import fs, {
   copyFileSync,
   existsSync,
   mkdirSync,
@@ -260,11 +260,41 @@ function tryAcquireProjectReclaimGuard(reclaimPath: string, pid: number, guardTo
  * 安全清理陈旧接管守卫（reclaim guard）。
  * 采用原子重命名检疫并核对 guardToken，确保仅删除目标陈旧 guard，严禁误删并发新守卫。
  */
-function safeRemoveStaleProjectReclaimGuard(
+export function safeRemoveStaleProjectReclaimGuard(
   reclaimPath: string,
   expectedGuardToken?: string
 ): void {
   if (!existsSync(reclaimPath)) return;
+
+  let isDir = false;
+  try {
+    isDir = statSync(reclaimPath).isDirectory();
+  } catch {
+    return;
+  }
+
+  const metaPath = isDir ? join(reclaimPath, "metadata.json") : reclaimPath;
+
+  if (expectedGuardToken) {
+    if (!existsSync(metaPath)) {
+      return;
+    }
+    try {
+      const metaStat = statSync(metaPath);
+      const mtimeMs = metaStat.mtimeMs;
+      const raw = readFileSync(metaPath, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (parsed?.guardToken !== expectedGuardToken) {
+        return;
+      }
+      if (parsed?.pid !== process.pid && Date.now() - mtimeMs < 1000) {
+        return;
+      }
+    } catch {
+      return;
+    }
+  }
+
   const quarantinePath = `${reclaimPath}.quarantine.${process.pid}.${Date.now()}.${randomUUID().slice(0, 8)}`;
   try {
     renameSync(reclaimPath, quarantinePath);
@@ -273,21 +303,25 @@ function safeRemoveStaleProjectReclaimGuard(
   }
 
   try {
-    const metaPath = join(quarantinePath, "metadata.json");
+    const quarantinedMetaPath = isDir ? join(quarantinePath, "metadata.json") : quarantinePath;
     let actualGuardToken: string | undefined;
-    if (existsSync(metaPath)) {
+    if (existsSync(quarantinedMetaPath)) {
       try {
-        const raw = readFileSync(metaPath, "utf-8");
+        const raw = readFileSync(quarantinedMetaPath, "utf-8");
         const parsed = JSON.parse(raw);
         actualGuardToken = parsed?.guardToken;
       } catch {}
     }
 
     if (expectedGuardToken !== actualGuardToken) {
-      // 并非此前检查的陈旧 guard（已被并发者替换），立即恢复原位！
+      // 并非此前检查的陈旧 guard（已被并发者替换），尝试恢复原位！
       try {
         renameSync(quarantinePath, reclaimPath);
-      } catch {}
+      } catch {
+        try {
+          rmSync(quarantinePath, { recursive: true, force: true });
+        } catch {}
+      }
       return;
     }
 
@@ -546,7 +580,7 @@ export function acquireProjectLock(
 
     // 2. 尝试常规获取新主锁
     try {
-      mkdirSync(lockPath, { mode: 0o700 });
+      fs.mkdirSync(lockPath, { mode: 0o700 });
 
       const metaFile = join(lockPath, "metadata.json");
       const tmpFile = join(
@@ -581,9 +615,11 @@ export function acquireProjectLock(
 
         if (lockState.info && typeof lockState.info.pid === "number") {
           if (isPidAlive(lockState.info.pid)) {
-            throw new Error(
-              `Project modification lock is held by PID ${lockState.info.pid}. Another command is running in ${projectRoot}.`
+            const busyErr: any = new Error(
+              `PROJECT_BUSY: Project modification lock is held by PID ${lockState.info.pid}. Another command is running in ${projectRoot}.`
             );
+            busyErr.code = "PROJECT_BUSY";
+            throw busyErr;
           }
         }
 
@@ -603,6 +639,14 @@ export function acquireProjectLock(
         // 仅成功获取 reclaim guard 的唯一胜利者获准执行：
         // 复核主锁陈旧性 -> 隔离/清理陈旧锁 -> 原子创建新主锁并写入自身元数据 -> 清理 reclaim guard
         try {
+          // 自检校验自身守卫：验证自身 guardToken 依然有效且持有者为自身 PID
+          // 若已被抢占或不匹配，立即退出当前接管并 continue 重试，杜绝在守卫已失窃的情况下操作主锁
+          const ownGuard = checkProjectReclaimGuard(reclaimPath, 1000);
+          if (!ownGuard.active || ownGuard.holderPid !== currentPid || ownGuard.guardToken !== guardToken) {
+            sleepSync(50);
+            continue;
+          }
+
           // 1. 复核主锁陈旧性
           const recheckState = readProjectLockWithGracePeriod(lockPath, 1000);
           if (recheckState.exists) {
@@ -615,9 +659,11 @@ export function acquireProjectLock(
               typeof recheckState.info.pid === "number" &&
               isPidAlive(recheckState.info.pid)
             ) {
-              throw new Error(
-                `Project modification lock is held by PID ${recheckState.info.pid}. Another command is running in ${projectRoot}.`
+              const busyErr: any = new Error(
+                `PROJECT_BUSY: Project modification lock is held by PID ${recheckState.info.pid}. Another command is running in ${projectRoot}.`
               );
+              busyErr.code = "PROJECT_BUSY";
+              throw busyErr;
             }
 
             // 2. 隔离并核验清理陈旧主锁（验证 sessionToken 一致，若已被他人占用则恢复原位）
@@ -634,7 +680,7 @@ export function acquireProjectLock(
           let created = false;
           for (let attempt = 0; attempt < 40; attempt++) {
             try {
-              mkdirSync(lockPath, { mode: 0o700 });
+              fs.mkdirSync(lockPath, { mode: 0o700 });
               created = true;
               break;
             } catch (createErr: any) {
@@ -887,9 +933,13 @@ export async function recoverPendingTransactions(
   let releaseLock: (() => void) | undefined;
   try {
     releaseLock = acquireProjectLock(projectRoot);
-  } catch {
-    // 获取失败（有活跃进程在执行），安全退出并返回空数组
-    return [];
+  } catch (err: any) {
+    if (err?.code === "PROJECT_BUSY" || err?.message?.includes("PROJECT_BUSY")) {
+      // 仅当项目锁被其他活跃进程占用时，安全退出并返回空数组
+      return [];
+    }
+    // 底层系统异常（如 EACCES、ENOSPC、ENOENT 等），向外抛出，严禁静默吞掉
+    throw err;
   }
 
   try {
