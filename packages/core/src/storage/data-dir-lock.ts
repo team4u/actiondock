@@ -157,8 +157,7 @@ export function isProcessAlive(pid: number): boolean {
 function checkReclaimGuard(
   reclaimPath: string,
   isAliveFn: (pid: number) => boolean,
-  gracePeriodMs = 1000,
-  maxGuardAgeMs = 5000
+  gracePeriodMs = 1000
 ): { exists: boolean; active: boolean; isStale: boolean; holderPid?: number; guardToken?: string } {
   if (!existsSync(reclaimPath)) {
     return { exists: false, active: false, isStale: false };
@@ -195,10 +194,6 @@ function checkReclaimGuard(
     const age = Date.now() - createdAt;
 
     if (isAliveFn(info.pid)) {
-      if (age > maxGuardAgeMs) {
-        // 即使持有者 PID 存活，但接管守卫持有时间超出最大阈值（如接管者被挂起或死循环），判定为陈旧守卫
-        return { exists: true, active: false, isStale: true, holderPid: info.pid, guardToken };
-      }
       return { exists: true, active: true, isStale: false, holderPid: info.pid, guardToken };
     }
 

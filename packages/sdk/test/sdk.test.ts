@@ -367,7 +367,7 @@ describe("@actiondock/sdk", () => {
 
     await runtime.state.set("permanent", "keep-me");
 
-    await new Promise((resolve) => setTimeout(resolve, 70));
+    await runtime.clock.advance(100);
 
     expect(await runtime.state.get("temp-key")).toBeUndefined();
     expect(await runtime.state.get<string>("permanent")).toBe("keep-me");
@@ -576,7 +576,7 @@ describe("@actiondock/sdk", () => {
     expect(await runtime2.state.get<string>("item")).toBe("state2");
 
     await runtime1.state.set("temp", "expiring", 0.001);
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await runtime1.clock.advance(10);
     expect(await runtime1.state.get("temp")).toBeUndefined();
   });
 });

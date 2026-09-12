@@ -356,7 +356,11 @@ export class LocalActionDockTarget implements ActionDockTarget {
     if (!app) {
       throw new Error(`Package '${packageId}' not found in target`);
     }
-    await app.setState<T>(actionId, key, value, options);
+    if (actionId) {
+      await app.setActionState<T>(actionId, key, value, options);
+    } else {
+      await app.setState<T>(key, value, options);
+    }
   }
 
   async deleteState(

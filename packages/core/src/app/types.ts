@@ -318,7 +318,7 @@ export interface ActionDockApp {
     actionId: string,
     key: string,
     value: T,
-    options?: StateScopeOptions
+    options: StateScopeOptions
   ): Promise<void>;
 
   /** 删除指定持久化状态项 */

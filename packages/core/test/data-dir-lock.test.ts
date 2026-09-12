@@ -963,28 +963,26 @@ rl.on("line", (cmd) => {
     rmSync(reclaimDir, { recursive: true, force: true });
   });
 
-  it("超出 maxGuardAgeMs 的接管守卫即使持有者 PID 存活也判定为陈旧守卫，允许被安全清理接管", () => {
+  it("持有者 PID 存活的接管守卫不会被判定为陈旧守卫，竞争者等待超时并抛出 DATA_DIR_IN_USE", () => {
     const lockDir = join(tempDir, ".actiondock.data.lock");
     const reclaimDir = `${lockDir}.reclaim`;
     mkdirSync(reclaimDir, { recursive: true });
 
-    // 模拟接管者持有 guard 超过 5000ms（如被挂起），即使 PID 存活也已过期
-    const expiredGuardToken = "expired-guard-token-123";
+    // 模拟持有者 PID 存活的接管守卫
+    const guardToken = "alive-guard-token-123";
     writeFileSync(
       join(reclaimDir, "metadata.json"),
-      JSON.stringify({ pid: process.pid, guardToken: expiredGuardToken, createdAt: Date.now() - 8000 }, null, 2),
+      JSON.stringify({ pid: process.pid, guardToken, createdAt: Date.now() - 10000 }, null, 2),
       "utf8"
     );
-    const staleTime = new Date(Date.now() - 8000);
-    utimesSync(join(reclaimDir, "metadata.json"), staleTime, staleTime);
-    utimesSync(reclaimDir, staleTime, staleTime);
 
-    // 此时新实例调用 acquire 应能识别到过期守卫，安全清理并成功获取新主锁
-    const lock = DataDirLock.acquire(tempDir, { acquireTimeoutMs: 2000 });
-    expect(lock).toBeDefined();
-    expect(existsSync(lockDir)).toBe(true);
+    // 此时新实例调用 acquire 识别到存活守卫，不会清理，等待直到 acquireTimeoutMs 超时抛出 DATA_DIR_IN_USE
+    expect(() => {
+      DataDirLock.acquire(tempDir, { acquireTimeoutMs: 150 });
+    }).toThrow("DATA_DIR_IN_USE");
+    expect(existsSync(reclaimDir)).toBe(true);
 
-    lock.release();
-    expect(existsSync(lockDir)).toBe(false);
+    // 清理
+    rmSync(reclaimDir, { recursive: true, force: true });
   });
 });

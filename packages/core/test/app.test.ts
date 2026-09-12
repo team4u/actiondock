@@ -605,6 +605,19 @@ Execute build and then deploy artifact.
     );
     expect(result2).toEqual({ ttl: 300, namespace: "custom" });
 
+    // 3. 非法三参数调用（第三参数传入非对象基元或数组）必须被显式拦截，杜绝静默写错数据
+    await expect(
+      (app as any).setState("worker", "counter", 42)
+    ).rejects.toThrow("Invalid options provided to setState");
+
+    await expect(
+      (app as any).setState("worker", "counter", "unexpected-value")
+    ).rejects.toThrow("Invalid options provided to setState");
+
+    await expect(
+      (app as any).setState("worker", "counter", [1, 2, 3])
+    ).rejects.toThrow("Invalid options provided to setState");
+
     await app.close();
   });
 

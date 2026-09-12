@@ -639,16 +639,18 @@ export class DefaultActionDockApp implements ActionDockApp {
       value = keyOrValue;
       opts = undefined;
     } else {
-      const isOpts = (obj: any): obj is StateScopeOptions => {
-        if (!obj || typeof obj !== "object" || Array.isArray(obj)) return false;
-        const validKeys = new Set(["actionId", "namespace", "ttl", "prefix", "all", "detail"]);
-        const keys = Object.keys(obj);
-        return keys.length > 0 && keys.every((k) => validKeys.has(k));
-      };
+      if (
+        valueOrOptions !== undefined &&
+        (typeof valueOrOptions !== "object" || valueOrOptions === null || Array.isArray(valueOrOptions))
+      ) {
+        throw new Error(
+          "Invalid options provided to setState. Use setActionState(actionId, key, value, options) or 4-argument setState for action state."
+        );
+      }
 
       key = actionIdOrKey;
       value = keyOrValue as T;
-      opts = isOpts(valueOrOptions) ? valueOrOptions : undefined;
+      opts = valueOrOptions as StateScopeOptions | undefined;
       actionId = opts?.actionId ?? "";
     }
 
