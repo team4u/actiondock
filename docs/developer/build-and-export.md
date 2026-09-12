@@ -157,8 +157,75 @@ Node 目录型 Skill 将 ActionDock 运行时启动胶水层与依赖闭包完�
 - `--actions <actions...>`：仅导出指定的 Action 及其依赖闭包。
 - `--skill-md <path>`：显式指定现有的自定义 `SKILL.md` 说明书，避免被默认模板覆盖。
 - `--bundle [name]`：在源码模式下将工作区内多个包聚合导出为单一复合技能套件。
-- `--custom-md <path>`：复合导出时指定自定义说明书模板（`SKILL.custom.md`），支持通过插槽（`intro`、`after-init`、`after-describe`、`after-actions`、`after-playbooks`、`after-invoke`、`append`）注入定制段落与覆盖描述。
 - `--skill-md-only`：仅就地重生成复合 `SKILL.md` 说明书，不重复拷贝子包代码与文件资产。
+
+### 本地导出与私有分发
+
+开发团队可在本地通过 ActionDock CLI 将自研能力导出并分发为 Skill，直接安装至本地智能体目录供日常使用：
+
+- 从本地已注册的 Action Package 导出：
+  ```bash
+  ad export skill -P team4u.github-tools --out ~/.claude/skills/github-tools
+  ```
+- 在 Action Package 根目录就地导出：
+  ```bash
+  ad export skill --out ~/.claude/skills/github-tools
+  ```
+- 导出自包含 Node 目录型 Skill 并固化生产依赖：
+  ```bash
+  ad export skill -P team4u.github-tools --mode node --vendor-deps --out ./dist/github-tools-skill
+  ```
+- 按指定规程闭包精简导出：
+  ```bash
+  ad export skill -P team4u.github-tools --playbook review-pr --out ~/.claude/skills/review-pr
+  ```
+
+### 自定义复合技能说明书（SKILL.custom.md）
+
+复合技能套件的 `SKILL.md` 默认由官方模板依据各子包清单自动生成。若需注入宿主或团队特有的内容（如环境初始化步骤、凭据配置约定），无需手写整份说明书——在工作区根目录放置 `SKILL.custom.md` 自定义说明书，导出时会按槽位自动拼入官方模板：
+
+```markdown
+---
+description: 覆盖复合套件的 description 元数据（可选）
+---
+
+<!-- actiondock:slot after-init -->
+### 数据目录持久化软链（宿主专用）
+
+（宿主相关的初始化说明……）
+
+<!-- actiondock:slot append -->
+## 参考文档
+
+- 团队内部知识库
+```
+
+可用插槽决定自定义段落的插入位置：
+
+| 插槽名称 | 插入位置 |
+| :--- | :--- |
+| `intro` | 标题与简介之后、运行时初始化之前 |
+| `after-init` | 运行时初始化之后 |
+| `after-describe` | 参数契约调阅之后 |
+| `after-actions` | Action 工具清单之后 |
+| `after-playbooks` | 推荐操作规程之后 |
+| `after-invoke` | 标准调用命令之后 |
+| `append` | 文档末尾 |
+
+- 标记行之前的内容自动归入 `append` 插槽；未知插槽名称会直接报错拦截。
+- frontmatter 的 `description` 仅在导出命令未显式传入描述时生效。
+
+复合导出命令（`ad export skill --bundle ...`）会自动发现工作区根目录或当前目录下的 `SKILL.custom.md`，亦可通过 `--custom-md <path>` 显式指定：
+
+```bash
+ad export skill --bundle vip-agent-tools --out ./dist/vip-agent-tools-skill
+```
+
+日常维护中，当 Action 目录与规程索引随清单变化时，可就地仅重生成 `SKILL.md`（始终重新生成，不重复拷贝子包代码与文件资产）：
+
+```bash
+ad export skill --bundle vip-agent-tools --skill-md-only
+```
 
 ---
 
