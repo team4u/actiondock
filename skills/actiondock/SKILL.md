@@ -44,7 +44,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 | **导出 Agent Skill** | `ad export skill [-P <ids...>] [-m <mode>] [--bundle]` | 导出自包含的源码型、Node 目录型或复合套件技能 | [build-and-export.md](references/build-and-export.md) |
 | **重生成复合说明书** | `ad export skill --bundle [name] --skill-md-only` | 结合自定义模板与最新清单，就地仅刷新 SKILL.md | [build-and-export.md](references/build-and-export.md) |
 | **安装与装载 Skill** | `npx skills add <repo>` 或放置于客户端目录 | 智能体技能获取、安装与主流客户端装载路径配置 | [consumer.md](references/consumer.md) |
-| **技能冷启动与挂载** | `npm install --omit=dev && ad link .` | 源码或离线技能底座就绪、依赖物化与全局挂载 | [consumer.md](references/consumer.md) |
+| **环境与依赖按需自举** | `npm install --omit=dev && ad link .` | 首次运行报错缺依赖时，Agent 执行环境自举与本地挂载 | [consumer.md](references/consumer.md) |
 | **调度已装载技能** | 意图匹配 -> 规程决议 -> 查验契约 -> 执行调用 | 引导智能体调度底层能力的标准化全生命周期流 | [consumer.md](references/consumer.md) |
 | **管理运行配置项** | `ad config list`、`ad config get`、`ad config set` | 读取、设置、列出或校验项目与全局持久化配置 | [cli.md](references/cli.md) |
 | **管理持久化状态** | `ad state list`、`ad state get`、`ad state set` | 跨执行生命周期读写状态键与清理命名空间 | [cli.md](references/cli.md) |
@@ -69,7 +69,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 
 ### 作业流一：作为消费者使用 Action 与 Skill
 
-- 智能体技能装载与冷启动：通过 `npx skills add` 安装或放置于客户端目录，进入目录执行 `npm install --omit=dev` 物化依赖并执行 `ad link .` 全局挂载。
+- 智能体技能装载与按需自举：通过 `npx skills add` 安装或放置于客户端技能目录；若首次运行报错提示缺少 `ad` 或依赖，Agent 自行进入目录执行 `npm install --omit=dev` 与 `ad link .` 完成自举。
 - 智能体调度引导生命周期：意图匹配激活 -> 规程优先决议（`ad playbook show`） -> 参数契约按需查验（`ad describe` 杜绝幻觉） -> 确定性调用（`ad run --input-file`） -> JSON 信封结果校验。详细调度指引参见 [consumer.md](references/consumer.md)。
 - 项目工程依赖消费：在工程根目录下执行 `ad add <package>` 安装并锁定依赖，通过终端 `ad run` 调用或在源码中通过 `ctx.actions.invoke` 调度。
 - 集成工具 MCP 服务挂载：在 Cursor 或 Claude Desktop 配置文件中配置命令 `"ad"`、参数 `["mcp"]`（单项目）或 `["mcp", "--all"]`（全局挂载）。
@@ -98,7 +98,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 
 不同业务场景下，智能体应按需查阅 `references/` 目录下的专项参考手册：
 
-- [consumer.md](references/consumer.md)：**Agent Skill 消费与使用指南**。当智能体装载已安装的技能、执行冷启动依赖就绪、进行意图与规程优先决议、动态查阅 `ad describe` 契约规范、执行调用及接入 MCP 时查阅。
+- [consumer.md](references/consumer.md)：**Agent Skill 消费与使用指南**。当智能体装载技能、运行遇阻执行按需自举、进行规程优先决议、查阅契约规范、执行调用及接入 MCP 时查阅。
 - [developer.md](references/developer.md)：**Action 与规程开发指南**。当创建、编写、修改 Action 业务代码、声明元数据契约、使用运行时上下文 API（配置、状态、子进程、级联调用、日志）、编写 Playbook 规程或编写内存单元测试时查阅。
 - [build-and-export.md](references/build-and-export.md)：**构建打包与 Skill 导出指南**。当执行交付产物构建、npm 打包、Agent Skill 单包或复合套件导出、配置 `SKILL.custom.md` 自定义说明书模板插槽、或执行 `--skill-md-only` 原位刷新时查阅。
 - [cli.md](references/cli.md)：**命令行全量参考手册**。当需要查询特定命令的完整参数标志、退出码规范、全局选项或 JSON 输出信封格式时查阅。

@@ -248,7 +248,7 @@ ad state get KEY --package ${pkgId}
 
 若宿主环境未安装 \`ad\` 命令行工具或依赖缺失，请依次按如下步骤完成安装：
 
-- **环境要求**：Node.js 版本大于等于 22.13.0（执行 \`node -v\` 确认）。
+- **环境要求**：Node.js 版本大于等于 24.12.0（执行 \`node -v\` 确认）。
 - **全局安装 ActionDock 命令行工具**：
   \`\`\`bash
   npm install -g @actiondock/cli
@@ -352,7 +352,7 @@ ${actionListMd}
 
 ## 运行时配置与持久化状态
 
-独立二进制程序会自动管理其本地 SQLite 数据库。如需检查或配置：
+程序会自动管理其 SQLite 数据库。如需检查或配置：
 
 \`\`\`bash
 # 查看与设置配置项
@@ -362,6 +362,16 @@ ${binaryRelPath} config set KEY VALUE
 # 查看与检索状态数据
 ${binaryRelPath} state list
 ${binaryRelPath} state get KEY
+\`\`\`
+
+---
+
+## 故障排查与依赖自愈指引（按需查阅）
+
+若在宿主环境中执行时提示模块缺失，在技能根目录下安装生产依赖：
+
+\`\`\`bash
+npm install --omit=dev
 \`\`\`
 `;
 }

@@ -59,7 +59,7 @@ npx skills add <owner/repo> -g -y
       "args": ["mcp", "--all"]
     }
   }
-  }
+}
 ```
 
 ### HTTP 传输模式接入

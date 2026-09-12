@@ -35,7 +35,7 @@ ad serve -d ./my-project --host 0.0.0.0 --port 5177 --token "sk-actiondock-secre
 - 非回环强制令牌鉴权：当 `--host` 设置为非回环地址（如 `0.0.0.0` 或物理网卡 IP）时，框架强制要求配置鉴权令牌（通过 `--token` 参数或环境变量 `ACTIONDOCK_TOKEN` 注入），否则服务端拒绝启动。
 - 常数时间对比：内置常数时间比对算法验证请求令牌，防范时序侧信道攻击。
 - 请求体上限防御：默认限制单个 JSON 请求体大小为 1MB（可通过 `--max-body 10mb` 调整），超限自动拦截并返回 413 状态码。
-- 鉴权传参方式：受保护接口均支持在 HTTP 请求头中携带 `Authorization: Bearer <token>`，或在 URL 查询参数中附加 `?token=<token>`。
+- 鉴权传参方式：受保护接口默认推荐在 HTTP 请求头中携带 `Authorization: Bearer <token>`。若需要通过 URL 查询参数 `?token=<token>` 传参，服务端启动时需显式开启 `--allow-query-token` 安全开关（默认关闭）。
 
 ---
 

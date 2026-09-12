@@ -136,17 +136,20 @@ ActionDock 2.0 提供了两种清晰的 Skill 导出模式：
 
 ### Node 目录型 Skill 模式 (`--mode node`)
 
-Node 目录型 Skill 将 ActionDock 运行时启动胶水层与依赖闭包完整内嵌于导出的 Skill 目录中，生成自包含的执行环境。
+Node 目录型 Skill 将 ActionDock 运行时启动胶水层 `entry.mjs` 与经过依赖裁剪的源码输出至 Skill 目录，使智能体能直接通过 Node.js 调用入口。
 
 - **导出命令**：
   ```bash
-  # 导出自包含的 Node 目录型 Skill
+  # 配合 --vendor-deps 物化锁定生产依赖，生成完全自包含的离线 Skill
   ad export skill --mode node --vendor-deps
 
   # 导出并生成 zip 归档
   ad export skill --mode node --vendor-deps --archive
+
+  # 仅导出运行入口与源码（不物化依赖，目标机首次缺依赖时需由 Agent 执行 npm install --omit=dev）
+  ad export skill --mode node
   ```
-- **核心特点**：目标机仅需安装通用 Node.js，无需全局预装 ActionDock 工具链，智能体可直接依据 `SKILL.md` 中的指引执行入口命令。
+- **核心特点**：目标机仅需通用 Node.js 运行时，无需全局预装 ActionDock 工具链；配合 `--vendor-deps` 时内嵌锁定的生产依赖，实现真正的离线开箱即用。
 
 ### 导出参数速查
 
