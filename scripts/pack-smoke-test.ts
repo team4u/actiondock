@@ -89,27 +89,28 @@ try {
   console.log(`[TEST] Testing in isolated temporary environment: ${testDir}`);
 
   // Write test package.json with dependencies and overrides pointing to packed tgz files
+  const toFileDep = (p: string) => `file:${p.replace(/\\/g, "/")}`;
   const testPkgJson = {
     name: "actiondock-pack-smoke-test",
     version: "1.0.0",
     type: "module",
     dependencies: {
-      "@actiondock/sdk": `file:${tarballPaths.sdk}`,
-      "@actiondock/core": `file:${tarballPaths.core}`,
-      "@actiondock/mcp": `file:${tarballPaths.mcp}`,
-      "@actiondock/builder": `file:${tarballPaths.builder}`,
-      "@actiondock/runtime-node": `file:${tarballPaths["runtime-node"]}`,
-      "@actiondock/cli": `file:${tarballPaths.cli}`,
-      "@actiondock/testing": `file:${tarballPaths.testing}`,
+      "@actiondock/sdk": toFileDep(tarballPaths.sdk),
+      "@actiondock/core": toFileDep(tarballPaths.core),
+      "@actiondock/mcp": toFileDep(tarballPaths.mcp),
+      "@actiondock/builder": toFileDep(tarballPaths.builder),
+      "@actiondock/runtime-node": toFileDep(tarballPaths["runtime-node"]),
+      "@actiondock/cli": toFileDep(tarballPaths.cli),
+      "@actiondock/testing": toFileDep(tarballPaths.testing),
     },
     overrides: {
-      "@actiondock/sdk": `file:${tarballPaths.sdk}`,
-      "@actiondock/core": `file:${tarballPaths.core}`,
-      "@actiondock/mcp": `file:${tarballPaths.mcp}`,
-      "@actiondock/builder": `file:${tarballPaths.builder}`,
-      "@actiondock/runtime-node": `file:${tarballPaths["runtime-node"]}`,
-      "@actiondock/cli": `file:${tarballPaths.cli}`,
-      "@actiondock/testing": `file:${tarballPaths.testing}`,
+      "@actiondock/sdk": toFileDep(tarballPaths.sdk),
+      "@actiondock/core": toFileDep(tarballPaths.core),
+      "@actiondock/mcp": toFileDep(tarballPaths.mcp),
+      "@actiondock/builder": toFileDep(tarballPaths.builder),
+      "@actiondock/runtime-node": toFileDep(tarballPaths["runtime-node"]),
+      "@actiondock/cli": toFileDep(tarballPaths.cli),
+      "@actiondock/testing": toFileDep(tarballPaths.testing),
     },
   };
 
@@ -257,31 +258,39 @@ process.exit(0);
   }
   console.log(nodeProc.stdout.trimEnd());
 
-  // Test CLI executable in node_modules/.bin/ad using native Node
-  console.log("[TEST] Testing CLI executable in node_modules/.bin/ad via native Node...");
-  const cliBin = join(testDir, "node_modules", ".bin", "ad");
-  if (!existsSync(cliBin)) {
-    throw new Error(`CLI executable not found at: ${cliBin}`);
+  // Test CLI executable in node_modules/.bin via platform shim
+  console.log("[TEST] Testing CLI executable in node_modules/.bin via platform shim...");
+  const isWindows = process.platform === "win32";
+  const cliShim = join(testDir, "node_modules", ".bin", isWindows ? "ad.cmd" : "ad");
+  if (!existsSync(cliShim)) {
+    throw new Error(`CLI executable shim not found at: ${cliShim}`);
   }
 
+  const runCli = (args: string[]) => {
+    if (isWindows) {
+      return spawnSync(cliShim, args, { cwd: testDir, encoding: "utf8", shell: true });
+    }
+    return spawnSync(process.execPath, [cliShim, ...args], { cwd: testDir, encoding: "utf8" });
+  };
+
   // ad --version
-  const verProc = spawnSync("node", [cliBin, "--version"], { cwd: testDir, encoding: "utf8" });
+  const verProc = runCli(["--version"]);
   if (verProc.status !== 0 || !verProc.stdout.includes(currentVersion)) {
-    throw new Error(`'node ad --version' failed: ${verProc.stderr} (output: ${verProc.stdout})`);
+    throw new Error(`'ad --version' failed: ${verProc.stderr} (output: ${verProc.stdout})`);
   }
   console.log(`[OK] node ad --version returned ${currentVersion}`);
 
   // ad --help
-  const helpProc = spawnSync("node", [cliBin, "--help"], { cwd: testDir, encoding: "utf8" });
+  const helpProc = runCli(["--help"]);
   if (helpProc.status !== 0 || !helpProc.stdout.includes("ActionDock (ad) 2.0")) {
-    throw new Error(`'node ad --help' failed: ${helpProc.stderr}`);
+    throw new Error(`'ad --help' failed: ${helpProc.stderr}`);
   }
   console.log("[OK] node ad --help verified");
 
   // ad doctor --json
-  const docProc = spawnSync("node", [cliBin, "doctor", "--json"], { cwd: testDir, encoding: "utf8" });
+  const docProc = runCli(["doctor", "--json"]);
   if (docProc.status !== 0) {
-    throw new Error(`'node ad doctor --json' failed: ${docProc.stderr}`);
+    throw new Error(`'ad doctor --json' failed: ${docProc.stderr}`);
   }
   const docJson = JSON.parse(docProc.stdout);
   if (!docJson.summary || docJson.summary.errorCount > 0) {
