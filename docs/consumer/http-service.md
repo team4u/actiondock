@@ -2,7 +2,7 @@
 
 当需要将 ActionDock 作为微服务部署，供远程 AI 智能体、持续集成流水线、自动化网关或外部前端系统通过网络调度时，可以使用 `ad serve` 启动轻量级 HTTP 服务。
 
-服务端原生基于 Node.js 模块构建，提供能力自省、同步调用、异步任务生命周期管理以及实时事件流推送能力。
+服务端原生基于 Node.js 模块构建，提供能力自省、同步调用、异步任务生命周期管理以及实时事件流推送能力。部署完成后，既可通过标准 RESTful API 远程调用，也可通过本地 CLI 的 Profile 机制透明接入与统一管控。
 
 ---
 
@@ -116,6 +116,77 @@ curl -X POST http://localhost:5177/api/v2/runs/01JMB394XYZ.../cancel \
 
 ---
 
+## 配合 CLI Profile 远程调度与消费
+
+除了直接使用 HTTP 客户端发起网络请求，ActionDock CLI 自身亦是 HTTP 微服务的一等公民客户端。通过本地 Profile 机制，无需编写网络请求代码或手动拼接鉴权头，即可在本地终端中对远端 `ad serve` 节点执行调度、日志查看与任务控制。
+
+### 添加远端服务节点
+
+在本地开发环境中，通过 `ad profile add` 将运行中的 HTTP 服务注册为具名环境配置：
+
+```bash
+# 添加远端生产节点
+ad profile add prod --server http://10.0.0.12:5177 --token "sk-actiondock-secret"
+
+# 或通过环境变量引用令牌（推荐，避免命令历史记录泄露凭据）
+ad profile add staging --server https://actiondock.internal.example.com --token-env STAGING_TOKEN
+```
+
+### 连通性探测
+
+注册后，可执行连通性自检命令验证网络链路与鉴权令牌：
+
+```bash
+ad profile test prod
+```
+
+### 跨环境透明调度
+
+在执行 Action 时，只需通过 `-p, --profile` 参数指定目标节点，CLI 会自动将调用转发至远端 HTTP 服务：
+
+```bash
+# 远程同步调用 Action
+ad run list-prs --input '{"repo": "team4u/actiondock"}' --profile prod
+
+# 远程异步后台启动（异步执行模式依赖长时间运行的 ad serve 服务端）
+ad run heavy-data-sync --input-file ./params.json --profile prod --async
+```
+
+### 远端任务生命周期与日志管理
+
+通过 CLI 可直接追踪远端服务端承载的异步任务生命周期与取消控制：
+
+```bash
+# 查询远端历史任务列表
+ad runs list --profile prod
+
+# 查询指定任务终态详情与执行耗时
+ad runs show <runId> --profile prod
+
+# 中止远端正在执行的长任务并级联回收子进程树
+ad runs cancel <runId> --profile prod --reason "手动中止任务"
+```
+
+### 切换默认执行环境
+
+若需要持续对某个远端微服务进行操作，可通过 `ad profile use` 将其设为默认目标：
+
+```bash
+# 切换默认环境为 prod
+ad profile use prod
+
+# 切换后后续命令默认面向远端执行，无需显式附加 --profile 参数
+ad run list-prs --input '{"repo": "team4u/actiondock"}'
+ad info
+
+# 切回本地单机环境
+ad profile use local
+```
+
+关于更完整的多环境节点配置、持久化权限保护与 Profile 命令行参数规范，请参阅 [多环境 Profile 远程调度机制](configuration.md#多环境-profile-远程调度机制)。
+
+---
+
 ## 端点能力与接口总览
 
 ActionDock HTTP 微服务提供了一整套标准端点：
@@ -137,8 +208,10 @@ ActionDock HTTP 微服务提供了一整套标准端点：
 
 ---
 
-## 完整接口契约参考
+## 完整接口契约与相关指引
 
 关于完整的请求响应 JSON Schema、URL 参数、多包路由模式（`/packages/:pkg/actions/:id/...`）以及全量错误码定义，请参阅：
 
 - [HTTP API 接口契约](../reference/http-api.md)
+- [多环境 Profile 远程调度机制](configuration.md#多环境-profile-远程调度机制)
+- [CLI 命令行参考（Profile 管理命令）](../reference/cli.md#多环境与远程-profile-管理)
