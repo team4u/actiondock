@@ -1,6 +1,5 @@
 import { existsSync } from "node:fs";
 import { basename } from "node:path";
-import { exportCompositeSkill, exportSkill, exportSkillBatch } from "@actiondock/builder";
 import { discoverProjects, findProjectRoot, listLinkedPackages, resolvePackageRoot } from "@actiondock/core";
 import { Command } from "commander";
 import { ExecutionError } from "../errors";
@@ -124,6 +123,7 @@ export function registerExportCommand(program: Command, context?: CliContext): v
       const isMachine = Boolean(options.json || options.envelope);
 
       try {
+        const { exportCompositeSkill, exportSkill, exportSkillBatch } = await import("@actiondock/builder");
         if (options.bundle !== undefined) {
           const bundleName =
             typeof options.bundle === "string" && options.bundle.trim()

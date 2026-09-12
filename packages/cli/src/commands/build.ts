@@ -1,4 +1,3 @@
-import { buildProject } from "@actiondock/builder";
 import { findProjectRoot, resolvePackageRoot } from "@actiondock/core";
 import { Command } from "commander";
 import { ExecutionError } from "../errors";
@@ -51,6 +50,7 @@ export function registerBuildCommand(program: Command, context?: CliContext): vo
 
       let result;
       try {
+        const { buildProject } = await import("@actiondock/builder");
         result = await buildProject({
           projectRoot: root,
           outDir: options.out,

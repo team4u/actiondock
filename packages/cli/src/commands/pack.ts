@@ -1,4 +1,3 @@
-import { packProject } from "@actiondock/builder";
 import { findProjectRoot, resolvePackageRoot } from "@actiondock/core";
 import { Command } from "commander";
 import { ExecutionError } from "../errors";
@@ -36,6 +35,7 @@ export function registerPackCommand(program: Command, context?: CliContext): voi
 
       let result;
       try {
+        const { packProject } = await import("@actiondock/builder");
         result = await packProject({
           projectRoot: root,
           outDir: options.out,

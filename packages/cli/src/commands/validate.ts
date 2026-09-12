@@ -6,7 +6,6 @@ import {
   loadProjectConfig,
   resolvePackageRoot,
 } from "@actiondock/core";
-import { SelectionPlanner } from "@actiondock/builder";
 import { Command } from "commander";
 import { ArgumentError, ExecutionError } from "../errors";
 import { renderActionValidation, renderResult } from "../renderer";
@@ -104,6 +103,7 @@ export function registerValidateCommand(program: Command, context?: CliContext):
 
       // 校验 Action 本地相对依赖完整性
       try {
+        const { SelectionPlanner } = await import("@actiondock/builder");
         SelectionPlanner.plan({ projectRoot: root, actions: id ? [id] : undefined });
       } catch (err: any) {
         if (

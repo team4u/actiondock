@@ -1,7 +1,5 @@
 import { resolve } from "node:path";
 import { findProjectRoot, formatHostForUrl, loadProjectConfig, startActionDockServer } from "@actiondock/core";
-import { createActionDockMcpServer } from "@actiondock/mcp";
-import { createMcpHandler } from "@modelcontextprotocol/server";
 import { Command } from "commander";
 import { ArgumentError, ExecutionError } from "../errors";
 import { writeStderr, writeStdout } from "../renderer";
@@ -71,6 +69,10 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
       if (enableMcp) {
         // MCP 处理器创建失败时直接终止启动，避免横幅宣称不存在的端点
         try {
+          const [{ createActionDockMcpServer }, { createMcpHandler }] = await Promise.all([
+            import("@actiondock/mcp"),
+            import("@modelcontextprotocol/server"),
+          ]);
           const handler = createMcpHandler(
             () => {
               return createActionDockMcpServer({

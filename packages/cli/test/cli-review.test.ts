@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { initProject } from "@actiondock/core";
 import pkg from "../package.json";
 
 const cliPath = resolve(import.meta.dirname, "../bin/ad.js");
@@ -35,7 +36,7 @@ describe("CLI Review & Machine Contract Regression", () => {
       symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "dir");
     }
 
-    runCli(["init", "--id", "reg.demo", "--name", "Regression Demo", "."], tempDir, env);
+    initProject(tempDir, { id: "reg.demo", name: "Regression Demo" });
   });
 
   afterEach(() => {

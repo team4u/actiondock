@@ -1,6 +1,5 @@
 import { resolve } from "node:path";
 import { findProjectRoot, formatHostForUrl, loadProjectConfig, parseDuration } from "@actiondock/core";
-import { startMcpHttpServer, startMcpStdio } from "@actiondock/mcp";
 import { Command } from "commander";
 import { ArgumentError, ExecutionError } from "../errors";
 import { writeStdout } from "../renderer";
@@ -54,6 +53,7 @@ export function registerMcpCommands(program: Command, context?: CliContext): voi
       const all = Boolean(options.all);
 
       try {
+        const { startMcpStdio } = await import("@actiondock/mcp");
         await startMcpStdio({
           projectRoots,
           packageIds,
@@ -168,6 +168,7 @@ export function registerMcpCommands(program: Command, context?: CliContext): voi
       }
 
       try {
+        const { startMcpHttpServer } = await import("@actiondock/mcp");
         const server = await startMcpHttpServer({
           port,
           host,
