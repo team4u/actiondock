@@ -9,7 +9,7 @@
 
 Build Agent Tools once. Run them anywhere.
 
-An industrial-grade toolchain for developing, testing, building, and distributing AI Agent Actions and Skills. Seamlessly deliver atomic capabilities as MCP protocol servers, Agent Skills, HTTP microservices, or self-contained Node.js delivery directories.
+An engineering toolchain for developing, testing, building, and distributing AI Agent Actions and Skills. Seamlessly deliver atomic capabilities as MCP protocol servers, Agent Skills, HTTP microservices, or self-contained Node.js delivery directories.
 
 ```text
 TypeScript Action Source
@@ -29,27 +29,23 @@ TypeScript Action Source
 
 ## Core Philosophy
 
-In an era where AI writes most of the code, the bottleneck of tool engineering is no longer boilerplate glue code—it is deterministic execution, self-healing quality, and zero-maintenance delivery.
+When agents generate code, the primary challenges are deterministic execution, reproducible delivery, and testable boundaries. Ad-hoc scripts break under environment drift, while exposing raw functions without guardrails risks unintended side effects.
 
-Ad-hoc scripts easily break due to missing dependencies, unpinned runtimes, or environment drift. Generic wrapper libraries simply expose raw functions to models without guardrails, leading to hallucinations or accidental destructive actions.
+ActionDock treats Agent Tools as testable, reliable software assets:
 
-ActionDock establishes Agent Tools as industrial-grade software assets:
-
-- Humans Define SOPs, Agents Write Implementation: Humans establish operational boundaries, sequence constraints, and safety guardrails in Playbooks; AI agents write the deterministic Action implementations against typed contracts.
-- In-Memory Sandbox and Self-Healing Loop: Test Actions in an in-memory sandbox with deterministic clocks in milliseconds. When AI generates code, it can run automated tests and self-heal autonomously based on structured errors.
-- Standard Node.js Delivery Format: Build an Action Package into a self-contained, runnable Node.js delivery directory with locked production dependencies or pack into standard npm packages.
-- Build Once, Deliver Everywhere: The exact same Action runs seamlessly across CLI, MCP servers, HTTP microservices, and Agent Skills.
-- Deterministic Lockfile and Atomic Dependency Management: Project dependencies are locked via actiondock.lock.json with atomic transaction rollbacks for ad add and ad remove.
-- Git-Native Plain Text Assets: Actions and Playbooks are plain text files designed for version control, code reviews, and CI/CD pipelines.
+- Separated Boundaries: Humans define operational sequences and safety guardrails in Playbooks; agents implement deterministic Actions against typed contracts.
+- In-Memory Sandbox: Test Actions with deterministic virtual clocks in milliseconds for automated test-and-repair loops.
+- Reproducible Delivery: Build self-contained Node.js delivery packages with locked dependencies or export directly as Agent Skills.
+- Write Once, Deliver Anywhere: The same Action runs across CLI, MCP servers, HTTP microservices, and Agent Skills.
 
 ---
 
 ## Runtime and Dependencies
 
-ActionDock 2.0 natively targets Node.js >=24.12.0:
+ActionDock natively targets Node.js >=24.12.0:
 
-- Native Runtime Engine: Powered by Node.js native type stripping, built-in SQLite (node:sqlite), and native HTTP. Standard development, testing, CLI execution, MCP servers, and HTTP services run directly on Node.js without external build tools.
-- Standard npm Workflow: Fully aligned with standard ecosystem tooling (npm test, npm run typecheck, npm run build, npm run test:pack).
+- Native Runtime Engine: Powered by Node.js native type stripping, built-in SQLite (`node:sqlite`), and native HTTP without external build tools.
+- Standard npm Workflow: Fully aligned with standard ecosystem tooling (`npm test`, `npm run typecheck`, `npm run build`, `npm run test:pack`).
 
 ---
 
@@ -57,7 +53,7 @@ ActionDock 2.0 natively targets Node.js >=24.12.0:
 
 ### For AI Agents
 
-AI agents can discover and install ActionDock skills using standard skill package managers:
+Compatible agents can install ActionDock skills directly:
 
 ```bash
 # Install ActionDock official skill globally
@@ -67,7 +63,7 @@ npx skills add team4u/actiondock -g -y
 npx skills add <owner/repo> -g -y
 ```
 
-Once installed, your agent automatically reads the SOP playbooks and invokes the deterministic actions.
+Once installed, compatible agents can discover the bundled Playbooks and use them to invoke the corresponding Actions.
 
 ### Standard Developer Workflow
 
@@ -83,11 +79,6 @@ cd hello-tools
 npm install
 ```
 
-- Add a dependency with atomic lockfile management:
-```bash
-ad add @actiondock/example-tools
-```
-
 - Run unit tests:
 ```bash
 npm test
@@ -101,25 +92,6 @@ ad run sample.greet --input '{"name":"ActionDock"}'
 - Start as an MCP server:
 ```bash
 ad mcp
-```
-
-- Export as an Agent Skill:
-```bash
-# Export source-mode skill
-ad export skill
-
-# Export self-contained Node.js directory skill
-ad export skill --mode node
-```
-
-- Build a runnable Node.js delivery directory:
-```bash
-ad build
-```
-
-- Pack into a standard npm tarball:
-```bash
-ad pack
 ```
 
 ---
@@ -192,25 +164,32 @@ When greeting a user entering the session, follow these steps:
 
 ---
 
-## Feature Comparison
+## Why ActionDock?
 
-| Feature & Dimension | ActionDock | mcp-use | FastMCP | Arcade MCP |
-| :--- | :---: | :---: | :---: | :---: |
-| Self-contained Node Delivery Build | Supported | — | — | — |
-| In-Memory Sandbox & Self-Healing Testing | Supported | Supported | Supported | Supported |
-| Decoupled SOP Playbook Guardrails | Supported | — | — | — |
-| Self-Contained Agent Skill Export | Supported | — | — | — |
-| Atomic Lockfile Dependency Management | Supported | — | — | — |
-| Multi-Modal Delivery (CLI, MCP, HTTP, Skill) | Supported | Partial | Partial | Partial |
-| Native MCP Protocol (STDIO & HTTP) | Supported | Supported | Supported | Supported |
-| Remote HTTP Microservice Calling | Supported | Supported | Supported | Supported |
-| Git-Native Plain Text Architecture | Supported | Supported | Supported | Supported |
+```text
+One Action Package
+├─ typed Actions
+├─ human-readable Playbooks
+├─ deterministic tests
+├─ reproducible dependencies
+└─ multiple delivery targets
+   ├─ CLI
+   ├─ MCP
+   ├─ HTTP
+   ├─ Agent Skill
+   └─ standalone Node.js
+```
+
+- Decoupled SOP Guardrails: Keep operational constraints and safety boundaries out of code, defined as plain-text Playbooks for human oversight.
+- Native In-Memory Sandbox: Fast, deterministic test runtime with virtual clocks and zero external database or network dependencies.
+- Multi-Target Delivery: Develop once and deliver across CLI, MCP server, HTTP microservice, Agent Skill, or standalone Node.js package.
+- Reproducible Dependencies: Deterministic lockfile resolution with transactional rollback protection on package installation and removal.
 
 ---
 
 ## Monorepo Architecture
 
-ActionDock is architected into 7 focused packages:
+ActionDock is organized as a seven-package monorepo:
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
@@ -238,13 +217,7 @@ ActionDock is architected into 7 focused packages:
 └──────────────┘               └─────────────┘└──────────────┘
 ```
 
-- [@actiondock/cli](packages/cli/README.md): Unified CLI facade and dispatcher, providing command routing, envelope formatting, scaffolding, and build exports.
-- [@actiondock/builder](packages/builder/README.md): Delivery package builder, providing directory build (`ad build`), npm packaging (`ad pack`), and Agent Skill export (`ad export skill`).
-- [@actiondock/mcp](packages/mcp/README.md): MCP protocol adapter, offering STDIO and HTTP transports with task lifecycle management and cancellation propagation.
-- [@actiondock/core](packages/core/README.md): Core domain engine, handling configuration loading, unified invocation facade, data directory locks, atomic dependency transactions, and runner state machines.
-- [@actiondock/runtime-node](packages/runtime-node/README.md): Node.js runtime adapter, providing synchronous and worker SQLite drivers, native module loading, and native HTTP servers.
-- [@actiondock/testing](packages/testing/README.md): Deterministic testing framework, providing virtual clocks, process mockers, memory storage, and test runtimes.
-- [@actiondock/sdk](packages/sdk/README.md): Pure developer contract with zero runtime dependencies, exporting `defineAction` and core context interfaces.
+See [Architecture](docs/architecture/runtime.md) for package responsibilities.
 
 ---
 
@@ -266,45 +239,16 @@ npm run test:pack
 
 ---
 
-## Documentation Center
+## Documentation
 
-For comprehensive architectural deep-dives, developer tutorials, and API reference manuals, visit the [Online Documentation](https://team4u.github.io/actiondock/) or explore the `docs/` folder:
+Visit the [Documentation Center](https://team4u.github.io/actiondock/) or explore the key guides:
 
-- Getting Started:
-  - [Overview and Mental Model](docs/getting-started/overview.md)
-  - [Installation and Environment](docs/getting-started/installation.md)
-  - [Quick Start Guide](docs/getting-started/quick-start.md)
-- Developer Guide:
-  - [Action Model and Authoring](docs/developer/first-action.md)
-  - [Authoring Playbooks](docs/developer/playbooks.md)
-  - [Testing and Sandbox](docs/developer/testing.md)
-  - [Storage and Persistence](docs/developer/storage.md)
-  - [Build and Export Specification](docs/developer/build-and-export.md)
-  - [Contributing Guide](docs/developer/contributing.md)
-- Scenario Practices:
-  - [High-Availability External APIs](docs/practices/external-apis.md)
-  - [Controlled Process Execution](docs/practices/process-execution.md)
-  - [Long-Running Tasks and Progress](docs/practices/long-running-tasks.md)
-  - [Composing Actions and Deadlock Prevention](docs/practices/composing-actions.md)
-  - [AI-Driven Development and Self-Healing](docs/practices/ai-agent-development.md)
-- Consumer Guide:
-  - [Overview](docs/consumer/overview.md)
-  - [Agent Skill Guide](docs/consumer/use-as-skill.md)
-  - [IDE and Tool MCP Integration](docs/consumer/use-as-mcp.md)
-  - [Node Delivery Running](docs/consumer/standalone-run.md)
-  - [HTTP Microservice](docs/consumer/http-service.md)
-  - [Configuration and Profile Management](docs/consumer/configuration.md)
-- Reference:
-  - [CLI Reference](docs/reference/cli.md)
-  - [actiondock.json Schema Specification](docs/reference/schema.md)
-  - [Action SDK API Reference](docs/reference/action-api.md)
-  - [Testing API Reference](docs/reference/testing-api.md)
-  - [HTTP API Reference](docs/reference/http-api.md)
-  - [Config Resolution](docs/reference/config.md)
-  - [Error Codes](docs/reference/error-codes.md)
-- Architecture:
-  - [Runtime Engine and Channel Isolation](docs/architecture/runtime.md)
-  - [Security Model](docs/architecture/security.md)
+- [Getting Started](docs/getting-started/overview.md)
+- [Developer Guide](docs/developer/first-action.md)
+- [Consumer Guide](docs/consumer/overview.md)
+- [API Reference](docs/reference/action-api.md)
+- [Architecture](docs/architecture/runtime.md)
+- [Contributing](docs/developer/contributing.md)
 
 ---
 
