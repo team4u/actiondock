@@ -1011,4 +1011,48 @@ rl.on("line", (cmd) => {
     safeRollbackLock(lockDir, correctToken);
     expect(existsSync(lockDir)).toBe(false);
   });
+
+  it("DataDirLock.acquire 在遇到缺失 metadata.json 的宽限期主锁目录时，严格受限于 acquireTimeoutMs 并在小超时下快速退出", () => {
+    const lockDir = join(tempDir, ".actiondock.data.lock");
+    mkdirSync(lockDir, { recursive: true });
+
+    const start = Date.now();
+    expect(() => {
+      DataDirLock.acquire(tempDir, { acquireTimeoutMs: 100 });
+    }).toThrow("DATA_DIR_IN_USE");
+    const elapsed = Date.now() - start;
+
+    expect(elapsed).toBeGreaterThanOrEqual(80);
+    expect(elapsed).toBeLessThan(400);
+
+    // 清理
+    rmSync(lockDir, { recursive: true, force: true });
+  });
+
+  it("safeRemoveStaleReclaimGuard 在 token 不匹配时保持隔离状态，绝不恢复至 canonical 路径以防鬼魅守卫", () => {
+    const lockDir = join(tempDir, ".actiondock.data.lock");
+    const reclaimDir = `${lockDir}.reclaim`;
+    mkdirSync(reclaimDir, { recursive: true });
+    writeFileSync(
+      join(reclaimDir, "metadata.json"),
+      JSON.stringify({ pid: 999999, guardToken: "new-active-token", createdAt: Date.now() }, null, 2),
+      "utf8"
+    );
+
+    // 不带 expectedGuardToken 调用：重命名到隔离区后检测到 actualGuardToken 存在且不匹配（undefined !== actual）
+    // 旧代码会 rename 回 reclaimDir 导致鬼魅守卫复活；新代码保持隔离状态，不恢复主路径
+    safeRemoveStaleReclaimGuard(reclaimDir);
+    expect(existsSync(reclaimDir)).toBe(false);
+  });
+
+  it("DataDirLock.acquire 与 release 会安全 GC 清理超期的隔离目录", () => {
+    const staleQuarantine = join(tempDir, ".actiondock.data.lock.quarantine.12345.100.abcd");
+    mkdirSync(staleQuarantine, { recursive: true });
+    const oldTime = (Date.now() - 20000) / 1000;
+    utimesSync(staleQuarantine, oldTime, oldTime);
+
+    const lock = DataDirLock.acquire(tempDir);
+    expect(existsSync(staleQuarantine)).toBe(false);
+    lock.release();
+  });
 });

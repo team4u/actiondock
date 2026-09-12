@@ -3,7 +3,12 @@ import { assertValidPackageId, getActionDockHome } from "../utils";
 import { SqliteRuntimeStorage } from "./sqlite";
 import type { RuntimeStorage } from "./types";
 
-export * from "./data-dir-lock";
+export {
+  DataDirLock,
+  type DataDirLockInfo,
+  isProcessAlive,
+  safeRemoveStaleReclaimGuard,
+} from "./data-dir-lock";
 export * from "./driver";
 export * from "./lazy";
 export * from "./mask";

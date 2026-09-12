@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { spawn } from "node:child_process";
-import fs, { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import fs, { existsSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
@@ -450,5 +450,51 @@ rl.on("line", (cmd) => {
     // 传入匹配的 token：锁目录被安全回滚并清理
     safeRollbackProjectLock(lockDir, correctToken);
     expect(existsSync(lockDir)).toBe(false);
+  });
+
+  it("acquireProjectLock 在遇到缺失 metadata.json 的宽限期主锁目录时，严格受限于 acquireTimeoutMs 并在小超时下快速退出", () => {
+    const lockDir = join(tempDir, ".actiondock", "project.lock");
+    mkdirSync(lockDir, { recursive: true });
+
+    const start = Date.now();
+    expect(() => {
+      acquireProjectLock(tempDir, { acquireTimeoutMs: 100 });
+    }).toThrow("PROJECT_BUSY");
+    const elapsed = Date.now() - start;
+
+    expect(elapsed).toBeGreaterThanOrEqual(80);
+    expect(elapsed).toBeLessThan(400);
+
+    // 清理
+    rmSync(lockDir, { recursive: true, force: true });
+  });
+
+  it("safeRemoveStaleProjectReclaimGuard 在 token 不匹配时保持隔离状态，绝不恢复至 canonical 路径以防鬼魅守卫", () => {
+    const lockDir = join(tempDir, ".actiondock", "project.lock");
+    const reclaimDir = `${lockDir}.reclaim`;
+    mkdirSync(reclaimDir, { recursive: true });
+    writeFileSync(
+      join(reclaimDir, "metadata.json"),
+      JSON.stringify({ pid: 999999, guardToken: "new-active-token", createdAt: Date.now() }, null, 2),
+      "utf8"
+    );
+
+    // 不带 expectedGuardToken 调用：重命名到隔离区后检测到 actualGuardToken 存在且不匹配（undefined !== actual）
+    // 旧代码会 rename 回 reclaimDir 导致鬼魅守卫复活；新代码保持隔离状态，不恢复主路径
+    safeRemoveStaleProjectReclaimGuard(reclaimDir);
+    expect(existsSync(reclaimDir)).toBe(false);
+  });
+
+  it("acquireProjectLock 与 release 会安全 GC 清理超期的工程锁隔离目录", () => {
+    const metaDir = join(tempDir, ".actiondock");
+    mkdirSync(metaDir, { recursive: true });
+    const staleQuarantine = join(metaDir, "project.lock.quarantine.12345.100.abcd");
+    mkdirSync(staleQuarantine, { recursive: true });
+    const oldTime = (Date.now() - 20000) / 1000;
+    utimesSync(staleQuarantine, oldTime, oldTime);
+
+    const release = acquireProjectLock(tempDir);
+    expect(existsSync(staleQuarantine)).toBe(false);
+    release();
   });
 });

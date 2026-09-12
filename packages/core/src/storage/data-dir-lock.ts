@@ -1,6 +1,7 @@
 import fs, {
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   renameSync,
   rmSync,
@@ -8,7 +9,7 @@ import fs, {
   writeFileSync,
 } from "node:fs";
 import { hostname } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 
 /**
@@ -50,7 +51,8 @@ function getLockMtimeMs(lockPath: string, isDir: boolean): number {
  */
 function readLockWithGracePeriod(
   lockPath: string,
-  gracePeriodMs = 3000
+  gracePeriodMs = 3000,
+  deadline?: number
 ): { exists: boolean; isDir: boolean; info?: DataDirLockInfo; inGracePeriod: boolean } {
   if (!existsSync(lockPath)) {
     return { exists: false, isDir: false, inGracePeriod: false };
@@ -91,10 +93,17 @@ function readLockWithGracePeriod(
   const mtime = getLockMtimeMs(lockPath, isDir);
   const age = Date.now() - mtime;
   if (age < gracePeriodMs) {
-    // 处于宽限期内，说明并发所有者可能正在写入，进行有限次重试等待
+    // 处于宽限期内，说明并发所有者可能正在写入，进行有限次重试等待（严格受限于 deadline）
     const maxRetries = 20;
     for (let i = 0; i < maxRetries; i++) {
-      sleepSync(50);
+      if (deadline !== undefined && Date.now() >= deadline) {
+        break;
+      }
+      const remaining = deadline !== undefined ? deadline - Date.now() : 50;
+      if (remaining <= 0) {
+        break;
+      }
+      sleepSync(Math.min(50, remaining));
       const retriedInfo = tryParse();
       if (retriedInfo) {
         return { exists: true, isDir, info: retriedInfo, inGracePeriod: false };
@@ -294,24 +303,39 @@ export function safeRemoveStaleReclaimGuard(
     }
 
     if (expectedGuardToken !== actualGuardToken) {
-      // 并非此前检查的陈旧 guard（已被并发者替换为新活跃 guard），尝试恢复原位！
-      try {
-        fs.renameSync(quarantinePath, reclaimPath);
-      } catch {
-        // 恢复原位失败（如目标路径已被新活跃守卫占用），严禁调用 rmSync 误删并发活跃守卫
-      }
+      // 并非此前检查的陈旧 guard（已被并发者替换为新活跃 guard）
+      // 保持隔离状态，严禁逆向恢复至主路径（防止并发接管者退出后残留守卫死锁主路径）
+      // 活跃接管者在后置核验中会感知守卫失窃并安全回滚，隔离目录由独立 GC 机制清理
       return;
     }
 
     // 确认正是目标陈旧 guard，安全清理
     fs.rmSync(quarantinePath, { recursive: true, force: true });
   } catch {
-    try {
-      fs.renameSync(quarantinePath, reclaimPath);
-    } catch {
-      // 恢复原位失败，严禁调用 rmSync 误删并发活跃守卫
-    }
+    // 发生异常，保持隔离状态，严禁误删或盲目恢复
   }
+}
+
+/**
+ * 清理过期的隔离目录（GC 回收机制）。
+ */
+function cleanStaleQuarantines(parentDir: string, basePrefix: string, maxAgeMs = 10000): void {
+  try {
+    if (!existsSync(parentDir)) return;
+    const entries = readdirSync(parentDir);
+    const now = Date.now();
+    for (const entry of entries) {
+      if (!entry.startsWith(basePrefix)) continue;
+      if (!entry.includes(".quarantine.") && !entry.includes(".rollback.") && !entry.includes(".release.")) continue;
+      const fullPath = join(parentDir, entry);
+      try {
+        const stat = statSync(fullPath);
+        if (now - stat.mtimeMs > maxAgeMs) {
+          rmSync(fullPath, { recursive: true, force: true });
+        }
+      } catch {}
+    }
+  } catch {}
 }
 
 /**
@@ -564,6 +588,7 @@ export class DataDirLock {
     if (this.released) return;
     this.released = true;
     safeReleaseLock(this.lockDirPath, this.info.sessionToken);
+    cleanStaleQuarantines(dirname(this.lockDirPath), ".actiondock.data.lock");
   }
 
 
@@ -593,6 +618,7 @@ export class DataDirLock {
     if (!existsSync(dataDir)) {
       mkdirSync(dataDir, { recursive: true, mode: 0o700 });
     }
+    cleanStaleQuarantines(dataDir, ".actiondock.data.lock");
 
     const lockDirPath = join(dataDir, ".actiondock.data.lock");
     const reclaimDirPath = `${lockDirPath}.reclaim`;
@@ -661,7 +687,7 @@ export class DataDirLock {
         return new DataDirLock(lockDirPath, newLockInfo);
       } catch (err: any) {
         if (err && (err.code === "EEXIST" || err.code === "ENOENT")) {
-          const lockState = readLockWithGracePeriod(lockDirPath, 3000);
+          const lockState = readLockWithGracePeriod(lockDirPath, 3000, deadline);
 
           if (!lockState.exists) {
             if (Date.now() >= deadline) {
@@ -760,7 +786,7 @@ export class DataDirLock {
             }
 
             // 1. 复核主锁陈旧性
-            const recheckState = readLockWithGracePeriod(lockDirPath, 1000);
+            const recheckState = readLockWithGracePeriod(lockDirPath, 1000, deadline);
             if (recheckState.exists) {
               if (recheckState.inGracePeriod) {
                 if (Date.now() >= deadline) {

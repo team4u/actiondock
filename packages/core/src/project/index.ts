@@ -5,6 +5,19 @@ export * from "./loader";
 export * from "./lockfile";
 export * from "./manifest";
 export * from "./resolver";
-export * from "./transactions";
+export {
+  SNAPSHOT_TRACKED_FILES,
+  type TransactionFileRecord,
+  type TransactionMetadata,
+  type ProjectTransaction,
+  isPidAlive,
+  safeRemoveStaleProjectReclaimGuard,
+  isProjectLockHeld,
+  acquireProjectLock,
+  runFrozenInstall,
+  hasPendingTransactions,
+  beginTransaction,
+  recoverPendingTransactions,
+} from "./transactions";
 export * from "./types";
 export * from "./types-generator";
