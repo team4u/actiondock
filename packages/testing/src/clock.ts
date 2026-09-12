@@ -41,7 +41,7 @@ export class FakeClock implements Clock {
       this.initialRealNow = this.currentNow;
     } else {
       this.currentNow = Date.now();
-      this.initialRealNow = Date.now();
+      this.initialRealNow = this.currentNow;
     }
     this.currentMonotonic = options.startMonotonic ?? 0;
   }
@@ -50,11 +50,7 @@ export class FakeClock implements Clock {
    * 获取当前模拟墙上时间。
    */
   now(): Date {
-    if (this.isFixed) {
-      return new Date(this.currentNow);
-    }
-    const realElapsed = Date.now() - this.initialRealNow;
-    return new Date(this.initialRealNow + Math.max(this.advancedMs, realElapsed));
+    return new Date(this.currentNow);
   }
 
   /**

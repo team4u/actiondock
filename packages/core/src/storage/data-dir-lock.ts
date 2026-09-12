@@ -1,4 +1,4 @@
-import {
+import fs, {
   existsSync,
   mkdirSync,
   readFileSync,
@@ -157,7 +157,8 @@ export function isProcessAlive(pid: number): boolean {
 function checkReclaimGuard(
   reclaimPath: string,
   isAliveFn: (pid: number) => boolean,
-  gracePeriodMs = 1000
+  gracePeriodMs = 1000,
+  maxGuardAgeMs = 5000
 ): { exists: boolean; active: boolean; isStale: boolean; holderPid?: number; guardToken?: string } {
   if (!existsSync(reclaimPath)) {
     return { exists: false, active: false, isStale: false };
@@ -190,11 +191,17 @@ function checkReclaimGuard(
   const info = tryParse();
   if (info && typeof info.pid === "number") {
     const guardToken = typeof info.guardToken === "string" ? info.guardToken : undefined;
-    if (isAliveFn(info.pid)) {
-      return { exists: true, active: true, isStale: false, holderPid: info.pid, guardToken };
-    }
     const createdAt = typeof info.createdAt === "number" ? info.createdAt : getLockMtimeMs(reclaimPath, isDir);
     const age = Date.now() - createdAt;
+
+    if (isAliveFn(info.pid)) {
+      if (age > maxGuardAgeMs) {
+        // 即使持有者 PID 存活，但接管守卫持有时间超出最大阈值（如接管者被挂起或死循环），判定为陈旧守卫
+        return { exists: true, active: false, isStale: true, holderPid: info.pid, guardToken };
+      }
+      return { exists: true, active: true, isStale: false, holderPid: info.pid, guardToken };
+    }
+
     if (age < gracePeriodMs) {
       return { exists: true, active: true, isStale: false, holderPid: info.pid, guardToken };
     }
@@ -275,7 +282,7 @@ export function safeRemoveStaleReclaimGuard(
 
   const quarantinePath = `${reclaimPath}.quarantine.${process.pid}.${Date.now()}.${randomUUID().slice(0, 8)}`;
   try {
-    renameSync(reclaimPath, quarantinePath);
+    fs.renameSync(reclaimPath, quarantinePath);
   } catch {
     return;
   }
@@ -294,24 +301,20 @@ export function safeRemoveStaleReclaimGuard(
     if (expectedGuardToken !== actualGuardToken) {
       // 并非此前检查的陈旧 guard（已被并发者替换为新活跃 guard），尝试恢复原位！
       try {
-        renameSync(quarantinePath, reclaimPath);
+        fs.renameSync(quarantinePath, reclaimPath);
       } catch {
-        try {
-          rmSync(quarantinePath, { recursive: true, force: true });
-        } catch {}
+        // 恢复原位失败（如目标路径已被新活跃守卫占用），严禁调用 rmSync 误删并发活跃守卫
       }
       return;
     }
 
     // 确认正是目标陈旧 guard，安全清理
-    rmSync(quarantinePath, { recursive: true, force: true });
+    fs.rmSync(quarantinePath, { recursive: true, force: true });
   } catch {
     try {
-      renameSync(quarantinePath, reclaimPath);
+      fs.renameSync(quarantinePath, reclaimPath);
     } catch {
-      try {
-        rmSync(quarantinePath, { recursive: true, force: true });
-      } catch {}
+      // 恢复原位失败，严禁调用 rmSync 误删并发活跃守卫
     }
   }
 }
@@ -357,7 +360,7 @@ function safeRollbackLock(lockPath: string, expectedSessionToken: string): void 
     rmSync(quarantinePath, { recursive: true, force: true });
   } catch {
     try {
-      rmSync(quarantinePath, { recursive: true, force: true });
+      renameSync(quarantinePath, lockPath);
     } catch {}
   }
 }
@@ -422,11 +425,7 @@ function safeQuarantineStaleLock(
   } catch {
     try {
       renameSync(quarantinePath, lockPath);
-    } catch {
-      try {
-        rmSync(quarantinePath, { recursive: true, force: true });
-      } catch {}
-    }
+    } catch {}
     return false;
   }
 }
@@ -471,7 +470,7 @@ function safeReleaseLock(lockPath: string, expectedSessionToken: string): void {
     }
   } catch {
     try {
-      rmSync(quarantinePath, { recursive: true, force: true });
+      renameSync(quarantinePath, lockPath);
     } catch {}
   }
 }
@@ -594,7 +593,7 @@ export class DataDirLock {
    */
   static acquire(
     dataDir: string,
-    options: { sessionToken?: string; hostSessionId?: string } = {}
+    options: { sessionToken?: string; hostSessionId?: string; acquireTimeoutMs?: number } = {}
   ): DataDirLock {
     if (!existsSync(dataDir)) {
       mkdirSync(dataDir, { recursive: true, mode: 0o700 });
@@ -605,6 +604,8 @@ export class DataDirLock {
     const currentPid = process.pid;
     const currentHost = hostname();
     const token = options.sessionToken || randomUUID();
+    const timeoutMs = options.acquireTimeoutMs ?? 5000;
+    const deadline = Date.now() + timeoutMs;
     const newLockInfo: DataDirLockInfo = {
       pid: currentPid,
       hostname: currentHost,
@@ -619,6 +620,13 @@ export class DataDirLock {
       // 1. 当竞争者尝试创建新主锁时，若检测到 reclaim 目录存在且处于宽限期内或持有者存活，必须等待，禁止在他人正在接管/验证期间抢先创建主锁
       const reclaimState = checkReclaimGuard(reclaimDirPath, isProcessAlive, 1000);
       if (reclaimState.active) {
+        if (Date.now() >= deadline) {
+          const timeoutErr: any = new Error(
+            `DATA_DIR_IN_USE: Timeout waiting for active reclaim guard (PID ${reclaimState.holderPid ?? "unknown"}) on data directory '${dataDir}' after ${timeoutMs}ms`
+          );
+          timeoutErr.code = "DATA_DIR_IN_USE";
+          throw timeoutErr;
+        }
         sleepSync(50);
         continue;
       }
@@ -644,6 +652,13 @@ export class DataDirLock {
         if (postCheck.active && postCheck.holderPid !== currentPid) {
           // 仅当锁目录中包含自身创建的 sessionToken 时安全回滚，杜绝误删他人新锁
           safeRollbackLock(lockDirPath, newLockInfo.sessionToken);
+          if (Date.now() >= deadline) {
+            const timeoutErr: any = new Error(
+              `DATA_DIR_IN_USE: Timeout acquiring lock on data directory '${dataDir}' due to active reclaim guard (PID ${postCheck.holderPid}) after ${timeoutMs}ms`
+            );
+            timeoutErr.code = "DATA_DIR_IN_USE";
+            throw timeoutErr;
+          }
           sleepSync(50);
           continue;
         }
@@ -654,10 +669,24 @@ export class DataDirLock {
           const lockState = readLockWithGracePeriod(lockDirPath, 3000);
 
           if (!lockState.exists) {
+            if (Date.now() >= deadline) {
+              const timeoutErr: any = new Error(
+                `DATA_DIR_IN_USE: Timeout acquiring lock on data directory '${dataDir}' after ${timeoutMs}ms`
+              );
+              timeoutErr.code = "DATA_DIR_IN_USE";
+              throw timeoutErr;
+            }
             continue;
           }
 
           if (lockState.inGracePeriod) {
+            if (Date.now() >= deadline) {
+              const timeoutErr: any = new Error(
+                `DATA_DIR_IN_USE: Timeout waiting for lock grace period on data directory '${dataDir}' after ${timeoutMs}ms`
+              );
+              timeoutErr.code = "DATA_DIR_IN_USE";
+              throw timeoutErr;
+            }
             sleepSync(50);
             continue;
           }
@@ -698,6 +727,13 @@ export class DataDirLock {
             if (currentReclaim.isStale) {
               safeRemoveStaleReclaimGuard(reclaimDirPath, currentReclaim.guardToken);
             }
+            if (Date.now() >= deadline) {
+              const timeoutErr: any = new Error(
+                `DATA_DIR_IN_USE: Timeout contending for reclaim guard on data directory '${dataDir}' after ${timeoutMs}ms`
+              );
+              timeoutErr.code = "DATA_DIR_IN_USE";
+              throw timeoutErr;
+            }
             sleepSync(50);
             continue;
           }
@@ -709,6 +745,13 @@ export class DataDirLock {
             // 若已被抢占或不匹配，立即退出当前接管并 continue 重试，杜绝在守卫已失窃的情况下操作主锁
             const ownGuard = checkReclaimGuard(reclaimDirPath, isProcessAlive, 1000);
             if (!ownGuard.active || ownGuard.holderPid !== currentPid || ownGuard.guardToken !== guardToken) {
+              if (Date.now() >= deadline) {
+                const timeoutErr: any = new Error(
+                  `DATA_DIR_IN_USE: Timeout acquiring lock on data directory '${dataDir}' after ${timeoutMs}ms`
+                );
+                timeoutErr.code = "DATA_DIR_IN_USE";
+                throw timeoutErr;
+              }
               sleepSync(50);
               continue;
             }
@@ -717,6 +760,13 @@ export class DataDirLock {
             const recheckState = readLockWithGracePeriod(lockDirPath, 1000);
             if (recheckState.exists) {
               if (recheckState.inGracePeriod) {
+                if (Date.now() >= deadline) {
+                  const timeoutErr: any = new Error(
+                    `DATA_DIR_IN_USE: Timeout waiting for lock grace period on data directory '${dataDir}' after ${timeoutMs}ms`
+                  );
+                  timeoutErr.code = "DATA_DIR_IN_USE";
+                  throw timeoutErr;
+                }
                 sleepSync(50);
                 continue;
               }
@@ -751,6 +801,13 @@ export class DataDirLock {
                 recheckState.info?.sessionToken ?? staleSessionToken
               );
               if (!cleaned) {
+                if (Date.now() >= deadline) {
+                  const timeoutErr: any = new Error(
+                    `DATA_DIR_IN_USE: Timeout reclaiming stale lock on data directory '${dataDir}' after ${timeoutMs}ms`
+                  );
+                  timeoutErr.code = "DATA_DIR_IN_USE";
+                  throw timeoutErr;
+                }
                 continue;
               }
             }
@@ -772,6 +829,13 @@ export class DataDirLock {
             }
 
             if (!created) {
+              if (Date.now() >= deadline) {
+                const timeoutErr: any = new Error(
+                  `DATA_DIR_IN_USE: Timeout creating primary lock on data directory '${dataDir}' after ${timeoutMs}ms`
+                );
+                timeoutErr.code = "DATA_DIR_IN_USE";
+                throw timeoutErr;
+              }
               continue;
             }
 

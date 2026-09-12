@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import fs, { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -879,5 +879,112 @@ rl.on("line", (cmd) => {
     // 4. 验证当 expectedGuardToken 匹配且超出宽限期时，安全清理
     safeRemoveStaleReclaimGuard(reclaimDir, "token-actual-12345");
     expect(existsSync(reclaimDir)).toBe(false);
+  });
+
+  it("当 reclaim guard token 不匹配且恢复原位失败时，safeRemoveStaleReclaimGuard 绝不执行 rmSync 误删隔离目录", () => {
+    const lockDir = join(tempDir, ".actiondock.data.lock");
+    const reclaimDir = `${lockDir}.reclaim`;
+    mkdirSync(reclaimDir, { recursive: true });
+
+    const staleTime = new Date(Date.now() - 5000);
+    const guardData = {
+      pid: 99999999,
+      guardToken: "token-actual-rival",
+      createdAt: Date.now() - 5000,
+    };
+    writeFileSync(
+      join(reclaimDir, "metadata.json"),
+      JSON.stringify(guardData, null, 2),
+      "utf8"
+    );
+    utimesSync(join(reclaimDir, "metadata.json"), staleTime, staleTime);
+    utimesSync(reclaimDir, staleTime, staleTime);
+
+    // 预检不带 expectedGuardToken（进入检疫重命名分支）
+    // 重命名到 quarantine 后，竞争者并发创建了新的 reclaimDir
+    // 此时恢复原位由于 EEXIST 失败，测试验证原 quarantine 目录绝不被 rmSync 误删
+    const origRenameSync = fs.renameSync;
+    let quarantinedPathFound = "";
+    try {
+      (fs.renameSync as any) = (src: string, dest: string) => {
+        if (typeof src === "string" && src.includes(".reclaim.quarantine")) {
+          // 模拟恢复原位时目标路径已被新 guard 占用，抛出 EEXIST
+          const err: any = new Error("EEXIST: file already exists");
+          err.code = "EEXIST";
+          throw err;
+        }
+        if (typeof dest === "string" && dest.includes(".reclaim.quarantine")) {
+          quarantinedPathFound = dest;
+        }
+        return origRenameSync(src, dest);
+      };
+
+      // 调用 safeRemoveStaleReclaimGuard 不带 expectedGuardToken，进入隔离后 token 检查分支
+      safeRemoveStaleReclaimGuard(reclaimDir);
+
+      // 验证隔离目录依然完整保留，绝未被 rmSync 误删
+      expect(quarantinedPathFound).not.toBe("");
+      expect(existsSync(quarantinedPathFound)).toBe(true);
+    } finally {
+      (fs.renameSync as any) = origRenameSync;
+      if (quarantinedPathFound && existsSync(quarantinedPathFound)) {
+        rmSync(quarantinedPathFound, { recursive: true, force: true });
+      }
+    }
+  });
+
+  it("当活跃 reclaim guard 持续存在时，DataDirLock.acquire 遵循 acquireTimeoutMs 超时退出并抛出 DATA_DIR_IN_USE", () => {
+    const lockDir = join(tempDir, ".actiondock.data.lock");
+    const reclaimDir = `${lockDir}.reclaim`;
+    mkdirSync(reclaimDir, { recursive: true });
+
+    // 构造活跃的 reclaim guard（当前进程 PID 存活且创建于刚刚）
+    writeFileSync(
+      join(reclaimDir, "metadata.json"),
+      JSON.stringify({ pid: process.pid, guardToken: "active-guard-token", createdAt: Date.now() }, null, 2),
+      "utf8"
+    );
+
+    let caughtErr: any;
+    const start = Date.now();
+    try {
+      DataDirLock.acquire(tempDir, { acquireTimeoutMs: 150 });
+    } catch (err) {
+      caughtErr = err;
+    }
+    const elapsed = Date.now() - start;
+
+    expect(caughtErr).toBeDefined();
+    expect(caughtErr?.code).toBe("DATA_DIR_IN_USE");
+    expect(caughtErr?.message).toContain("Timeout waiting for active reclaim guard");
+    expect(elapsed).toBeGreaterThanOrEqual(100);
+
+    // 清理
+    rmSync(reclaimDir, { recursive: true, force: true });
+  });
+
+  it("超出 maxGuardAgeMs 的接管守卫即使持有者 PID 存活也判定为陈旧守卫，允许被安全清理接管", () => {
+    const lockDir = join(tempDir, ".actiondock.data.lock");
+    const reclaimDir = `${lockDir}.reclaim`;
+    mkdirSync(reclaimDir, { recursive: true });
+
+    // 模拟接管者持有 guard 超过 5000ms（如被挂起），即使 PID 存活也已过期
+    const expiredGuardToken = "expired-guard-token-123";
+    writeFileSync(
+      join(reclaimDir, "metadata.json"),
+      JSON.stringify({ pid: process.pid, guardToken: expiredGuardToken, createdAt: Date.now() - 8000 }, null, 2),
+      "utf8"
+    );
+    const staleTime = new Date(Date.now() - 8000);
+    utimesSync(join(reclaimDir, "metadata.json"), staleTime, staleTime);
+    utimesSync(reclaimDir, staleTime, staleTime);
+
+    // 此时新实例调用 acquire 应能识别到过期守卫，安全清理并成功获取新主锁
+    const lock = DataDirLock.acquire(tempDir, { acquireTimeoutMs: 2000 });
+    expect(lock).toBeDefined();
+    expect(existsSync(lockDir)).toBe(true);
+
+    lock.release();
+    expect(existsSync(lockDir)).toBe(false);
   });
 });

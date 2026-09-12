@@ -646,46 +646,10 @@ export class DefaultActionDockApp implements ActionDockApp {
         return keys.length > 0 && keys.every((k) => validKeys.has(k));
       };
 
-      const isKnownAction =
-        this.actionsMap.has(actionIdOrKey) ||
-        Boolean(this.projectConfig?.actions?.[actionIdOrKey]);
-
-      const hasActionIdOpt =
-        valueOrOptions !== null &&
-        typeof valueOrOptions === "object" &&
-        !Array.isArray(valueOrOptions) &&
-        typeof valueOrOptions.actionId === "string" &&
-        valueOrOptions.actionId.trim().length > 0;
-
-      if (isKnownAction && typeof keyOrValue === "string") {
-        if (hasActionIdOpt && valueOrOptions.actionId !== actionIdOrKey) {
-          throw new Error(
-            `Conflicting actionId specified: positional '${actionIdOrKey}' vs options.actionId '${valueOrOptions.actionId}'`
-          );
-        }
-        actionId = actionIdOrKey;
-        key = keyOrValue;
-        value = valueOrOptions as T;
-        opts = undefined;
-      } else if (hasActionIdOpt) {
-        actionId = valueOrOptions.actionId;
-        key = actionIdOrKey;
-        value = keyOrValue as T;
-        opts = valueOrOptions;
-      } else if (typeof keyOrValue !== "string") {
-        actionId = "";
-        key = actionIdOrKey;
-        value = keyOrValue as T;
-        opts = isOpts(valueOrOptions) ? valueOrOptions : undefined;
-        if (opts?.actionId) {
-          actionId = opts.actionId;
-        }
-      } else {
-        actionId = actionIdOrKey;
-        key = keyOrValue;
-        value = valueOrOptions as T;
-        opts = undefined;
-      }
+      key = actionIdOrKey;
+      value = keyOrValue as T;
+      opts = isOpts(valueOrOptions) ? valueOrOptions : undefined;
+      actionId = opts?.actionId ?? "";
     }
 
     const ns = actionId

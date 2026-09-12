@@ -179,7 +179,8 @@ export function isPidAlive(pid: number): boolean {
  */
 function checkProjectReclaimGuard(
   reclaimPath: string,
-  gracePeriodMs = 1000
+  gracePeriodMs = 1000,
+  maxGuardAgeMs = 5000
 ): { exists: boolean; active: boolean; isStale: boolean; holderPid?: number; guardToken?: string } {
   if (!existsSync(reclaimPath)) {
     return { exists: false, active: false, isStale: false };
@@ -212,11 +213,17 @@ function checkProjectReclaimGuard(
   const info = tryParse();
   if (info && typeof info.pid === "number") {
     const guardToken = typeof info.guardToken === "string" ? info.guardToken : undefined;
-    if (isPidAlive(info.pid)) {
-      return { exists: true, active: true, isStale: false, holderPid: info.pid, guardToken };
-    }
     const createdAt = typeof info.createdAt === "number" ? info.createdAt : getProjectLockMtimeMs(reclaimPath, isDir);
     const age = Date.now() - createdAt;
+
+    if (isPidAlive(info.pid)) {
+      if (age > maxGuardAgeMs) {
+        // 即使持有者 PID 存活，若接管守卫持有时间超出最大阈值（如接管者被挂起或死循环），判定为陈旧守卫
+        return { exists: true, active: false, isStale: true, holderPid: info.pid, guardToken };
+      }
+      return { exists: true, active: true, isStale: false, holderPid: info.pid, guardToken };
+    }
+
     if (age < gracePeriodMs) {
       return { exists: true, active: true, isStale: false, holderPid: info.pid, guardToken };
     }
@@ -297,7 +304,7 @@ export function safeRemoveStaleProjectReclaimGuard(
 
   const quarantinePath = `${reclaimPath}.quarantine.${process.pid}.${Date.now()}.${randomUUID().slice(0, 8)}`;
   try {
-    renameSync(reclaimPath, quarantinePath);
+    fs.renameSync(reclaimPath, quarantinePath);
   } catch {
     return;
   }
@@ -316,23 +323,19 @@ export function safeRemoveStaleProjectReclaimGuard(
     if (expectedGuardToken !== actualGuardToken) {
       // 并非此前检查的陈旧 guard（已被并发者替换），尝试恢复原位！
       try {
-        renameSync(quarantinePath, reclaimPath);
+        fs.renameSync(quarantinePath, reclaimPath);
       } catch {
-        try {
-          rmSync(quarantinePath, { recursive: true, force: true });
-        } catch {}
+        // 恢复原位失败，严禁调用 rmSync 误删并发活跃守卫
       }
       return;
     }
 
-    rmSync(quarantinePath, { recursive: true, force: true });
+    fs.rmSync(quarantinePath, { recursive: true, force: true });
   } catch {
     try {
-      renameSync(quarantinePath, reclaimPath);
+      fs.renameSync(quarantinePath, reclaimPath);
     } catch {
-      try {
-        rmSync(quarantinePath, { recursive: true, force: true });
-      } catch {}
+      // 恢复原位失败，严禁调用 rmSync 误删并发活跃守卫
     }
   }
 }
@@ -378,7 +381,7 @@ function safeRollbackProjectLock(lockPath: string, expectedSessionToken: string)
     rmSync(quarantinePath, { recursive: true, force: true });
   } catch {
     try {
-      rmSync(quarantinePath, { recursive: true, force: true });
+      renameSync(quarantinePath, lockPath);
     } catch {}
   }
 }
@@ -442,11 +445,7 @@ function safeQuarantineStaleProjectLock(
   } catch {
     try {
       renameSync(quarantinePath, lockPath);
-    } catch {
-      try {
-        rmSync(quarantinePath, { recursive: true, force: true });
-      } catch {}
-    }
+    } catch {}
     return false;
   }
 }
@@ -491,7 +490,7 @@ function safeReleaseProjectLock(lockPath: string, expectedSessionToken: string):
     }
   } catch {
     try {
-      rmSync(quarantinePath, { recursive: true, force: true });
+      renameSync(quarantinePath, lockPath);
     } catch {}
   }
 }
@@ -548,7 +547,7 @@ export function isProjectLockHeld(projectRoot: string, excludeSelf = true): bool
  */
 export function acquireProjectLock(
   projectRoot: string,
-  options: { sessionToken?: string } = {}
+  options: { sessionToken?: string; acquireTimeoutMs?: number } = {}
 ): () => void {
   const metaDir = join(projectRoot, ".actiondock");
   if (!existsSync(metaDir)) {
@@ -559,6 +558,8 @@ export function acquireProjectLock(
   const reclaimPath = `${lockPath}.reclaim`;
   const sessionToken = options.sessionToken || randomUUID();
   const currentPid = process.pid;
+  const timeoutMs = options.acquireTimeoutMs ?? 5000;
+  const deadline = Date.now() + timeoutMs;
   const lockData = {
     pid: currentPid,
     sessionToken,
@@ -570,6 +571,13 @@ export function acquireProjectLock(
     // 1. 当竞争者尝试创建新主锁时，若检测到 reclaim 目录存在且处于宽限期内或持有者存活，必须等待，禁止在他人正在接管/验证期间抢先创建主锁
     const reclaimState = checkProjectReclaimGuard(reclaimPath, 1000);
     if (reclaimState.active) {
+      if (Date.now() >= deadline) {
+        const busyErr: any = new Error(
+          `PROJECT_BUSY: Timeout waiting for active reclaim guard (PID ${reclaimState.holderPid ?? "unknown"}) on project '${projectRoot}' after ${timeoutMs}ms`
+        );
+        busyErr.code = "PROJECT_BUSY";
+        throw busyErr;
+      }
       sleepSync(50);
       continue;
     }
@@ -595,6 +603,13 @@ export function acquireProjectLock(
       if (postCheck.active && postCheck.holderPid !== currentPid) {
         // 仅当锁目录中包含自身创建的 sessionToken 时安全回滚，杜绝误删他人新锁
         safeRollbackProjectLock(lockPath, sessionToken);
+        if (Date.now() >= deadline) {
+          const busyErr: any = new Error(
+            `PROJECT_BUSY: Timeout acquiring project lock on '${projectRoot}' due to active reclaim guard (PID ${postCheck.holderPid}) after ${timeoutMs}ms`
+          );
+          busyErr.code = "PROJECT_BUSY";
+          throw busyErr;
+        }
         sleepSync(50);
         continue;
       }
@@ -605,10 +620,24 @@ export function acquireProjectLock(
         const lockState = readProjectLockWithGracePeriod(lockPath, 3000);
 
         if (!lockState.exists) {
+          if (Date.now() >= deadline) {
+            const busyErr: any = new Error(
+              `PROJECT_BUSY: Timeout acquiring project lock on '${projectRoot}' after ${timeoutMs}ms`
+            );
+            busyErr.code = "PROJECT_BUSY";
+            throw busyErr;
+          }
           continue;
         }
 
         if (lockState.inGracePeriod) {
+          if (Date.now() >= deadline) {
+            const busyErr: any = new Error(
+              `PROJECT_BUSY: Timeout waiting for project lock grace period on '${projectRoot}' after ${timeoutMs}ms`
+            );
+            busyErr.code = "PROJECT_BUSY";
+            throw busyErr;
+          }
           sleepSync(50);
           continue;
         }
@@ -632,6 +661,13 @@ export function acquireProjectLock(
           if (currentReclaim.isStale) {
             safeRemoveStaleProjectReclaimGuard(reclaimPath, currentReclaim.guardToken);
           }
+          if (Date.now() >= deadline) {
+            const busyErr: any = new Error(
+              `PROJECT_BUSY: Timeout contending for project reclaim guard on '${projectRoot}' after ${timeoutMs}ms`
+            );
+            busyErr.code = "PROJECT_BUSY";
+            throw busyErr;
+          }
           sleepSync(50);
           continue;
         }
@@ -643,6 +679,13 @@ export function acquireProjectLock(
           // 若已被抢占或不匹配，立即退出当前接管并 continue 重试，杜绝在守卫已失窃的情况下操作主锁
           const ownGuard = checkProjectReclaimGuard(reclaimPath, 1000);
           if (!ownGuard.active || ownGuard.holderPid !== currentPid || ownGuard.guardToken !== guardToken) {
+            if (Date.now() >= deadline) {
+              const busyErr: any = new Error(
+                `PROJECT_BUSY: Timeout acquiring project lock on '${projectRoot}' after ${timeoutMs}ms`
+              );
+              busyErr.code = "PROJECT_BUSY";
+              throw busyErr;
+            }
             sleepSync(50);
             continue;
           }
@@ -651,6 +694,13 @@ export function acquireProjectLock(
           const recheckState = readProjectLockWithGracePeriod(lockPath, 1000);
           if (recheckState.exists) {
             if (recheckState.inGracePeriod) {
+              if (Date.now() >= deadline) {
+                const busyErr: any = new Error(
+                  `PROJECT_BUSY: Timeout waiting for project lock grace period on '${projectRoot}' after ${timeoutMs}ms`
+                );
+                busyErr.code = "PROJECT_BUSY";
+                throw busyErr;
+              }
               sleepSync(50);
               continue;
             }
@@ -672,6 +722,13 @@ export function acquireProjectLock(
               recheckState.info?.sessionToken ?? staleSessionToken
             );
             if (!cleaned) {
+              if (Date.now() >= deadline) {
+                const busyErr: any = new Error(
+                  `PROJECT_BUSY: Timeout reclaiming stale project lock on '${projectRoot}' after ${timeoutMs}ms`
+                );
+                busyErr.code = "PROJECT_BUSY";
+                throw busyErr;
+              }
               continue;
             }
           }
@@ -693,6 +750,13 @@ export function acquireProjectLock(
           }
 
           if (!created) {
+            if (Date.now() >= deadline) {
+              const busyErr: any = new Error(
+                `PROJECT_BUSY: Timeout creating project lock on '${projectRoot}' after ${timeoutMs}ms`
+              );
+              busyErr.code = "PROJECT_BUSY";
+              throw busyErr;
+            }
             continue;
           }
 

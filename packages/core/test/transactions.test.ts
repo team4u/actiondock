@@ -8,6 +8,7 @@ import {
   beginTransaction,
   hasPendingTransactions,
   recoverPendingTransactions,
+  safeRemoveStaleProjectReclaimGuard,
 } from "../src/project/transactions";
 
 describe("原子事务快照与崩溃恢复", () => {
@@ -325,5 +326,101 @@ rl.on("line", (cmd) => {
     } finally {
       fs.mkdirSync = origMkdir;
     }
+  });
+
+  it("当活跃 reclaim guard 持续存在时，acquireProjectLock 遵循 acquireTimeoutMs 超时退出并抛出 PROJECT_BUSY", () => {
+    const lockDir = join(tempDir, ".actiondock", "project.lock");
+    const reclaimDir = `${lockDir}.reclaim`;
+    mkdirSync(reclaimDir, { recursive: true });
+
+    // 构造活跃的 reclaim guard（当前进程 PID 存活且创建于刚刚）
+    writeFileSync(
+      join(reclaimDir, "metadata.json"),
+      JSON.stringify({ pid: process.pid, guardToken: "active-guard-token", createdAt: Date.now() }, null, 2),
+      "utf-8"
+    );
+
+    let caughtErr: any;
+    const start = Date.now();
+    try {
+      acquireProjectLock(tempDir, { acquireTimeoutMs: 150 });
+    } catch (err) {
+      caughtErr = err;
+    }
+    const elapsed = Date.now() - start;
+
+    expect(caughtErr).toBeDefined();
+    expect(caughtErr?.code).toBe("PROJECT_BUSY");
+    expect(caughtErr?.message).toContain("Timeout waiting for active reclaim guard");
+    expect(elapsed).toBeGreaterThanOrEqual(100);
+
+    // 清理
+    rmSync(reclaimDir, { recursive: true, force: true });
+  });
+
+  it("当工程接管守卫 token 不匹配且恢复原位失败时，safeRemoveStaleProjectReclaimGuard 绝不执行 rmSync 误删隔离目录", () => {
+    const lockDir = join(tempDir, ".actiondock", "project.lock");
+    const reclaimDir = `${lockDir}.reclaim`;
+    mkdirSync(reclaimDir, { recursive: true });
+
+    const guardData = {
+      pid: 99999999,
+      guardToken: "token-actual-rival",
+      createdAt: Date.now() - 5000,
+    };
+    writeFileSync(
+      join(reclaimDir, "metadata.json"),
+      JSON.stringify(guardData, null, 2),
+      "utf-8"
+    );
+
+    const origRenameSync = fs.renameSync;
+    let quarantinedPathFound = "";
+    try {
+      (fs.renameSync as any) = (src: string, dest: string) => {
+        if (typeof src === "string" && src.includes(".reclaim.quarantine")) {
+          const err: any = new Error("EEXIST: file already exists");
+          err.code = "EEXIST";
+          throw err;
+        }
+        if (typeof dest === "string" && dest.includes(".reclaim.quarantine")) {
+          quarantinedPathFound = dest;
+        }
+        return origRenameSync(src, dest);
+      };
+
+      // 不传入 expectedGuardToken，进入隔离后 token 检查分支
+      safeRemoveStaleProjectReclaimGuard(reclaimDir);
+
+      // 验证隔离目录依然完整保留，绝未被 rmSync 误删
+      expect(quarantinedPathFound).not.toBe("");
+      expect(existsSync(quarantinedPathFound)).toBe(true);
+    } finally {
+      (fs.renameSync as any) = origRenameSync;
+      if (quarantinedPathFound && existsSync(quarantinedPathFound)) {
+        rmSync(quarantinedPathFound, { recursive: true, force: true });
+      }
+    }
+  });
+
+  it("超出 maxGuardAgeMs 的工程接管守卫即使持有者 PID 存活也判定为陈旧守卫，允许被安全清理接管", () => {
+    const lockDir = join(tempDir, ".actiondock", "project.lock");
+    const reclaimDir = `${lockDir}.reclaim`;
+    mkdirSync(reclaimDir, { recursive: true });
+
+    // 模拟接管者持有 guard 超过 5000ms（如被挂起），即使 PID 存活也已过期
+    const expiredGuardToken = "expired-project-guard-token";
+    writeFileSync(
+      join(reclaimDir, "metadata.json"),
+      JSON.stringify({ pid: process.pid, guardToken: expiredGuardToken, createdAt: Date.now() - 8000 }, null, 2),
+      "utf-8"
+    );
+
+    const release = acquireProjectLock(tempDir, { acquireTimeoutMs: 2000 });
+    expect(release).toBeDefined();
+    expect(existsSync(lockDir)).toBe(true);
+
+    release();
+    expect(existsSync(lockDir)).toBe(false);
   });
 });

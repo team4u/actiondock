@@ -406,8 +406,8 @@ Execute build and then deploy artifact.
     });
 
     // 1. Action 命名空间状态读写
-    await app.setState("test-action", "counter", 42);
-    const val = await app.getState<number>("test-action", "counter");
+    await app.setActionState("test-action", "counter", 42);
+    const val = await app.getActionState<number>("test-action", "counter");
     expect(val).toBe(42);
 
     // 2. 指定子命名空间状态读写
@@ -570,7 +570,7 @@ Execute build and then deploy artifact.
     await app.close();
   });
 
-  it("3 参数 setState 避免对任意 options 形状的 JSON value 错误猜测为选项", async () => {
+  it("3 参数 setState 确定性作为扁平包级状态写入，杜绝启发式误判为 Action 状态", async () => {
     const app = await createActionDockApp({
       projectConfig: {
         id: "test.state.disambiguate",
@@ -580,16 +580,30 @@ Execute build and then deploy artifact.
       inMemory: true,
     });
 
-    // 当未注册的 actionId 调用 3 参数 setState，value 恰好是包含 ttl/namespace 的对象时，
-    // 不会将其误猜测为 options，而是作为 actionId="unregistered_act" 的 value 存入
-    const arbitraryValue = { ttl: 300, namespace: "custom" };
-    await app.setState("unregistered_act", "config_meta", arbitraryValue);
+    // 1. 三参数 setState(key, value, options) 确定性写入包级扁平状态，value 为普通字符串
+    await app.setState("theme", "dark", { ttl: 60 });
+    const themeVal = await app.getState("theme");
+    expect(themeVal).toBe("dark");
 
+    // 绝不可被误当作 Action 状态写入
+    const actionVal = await app.getActionState("theme", "dark");
+    expect(actionVal).toBeUndefined();
+
+    // 2. Action 命名空间状态显式通过 setActionState 或四参数 setState 写入
+    const arbitraryValue = { ttl: 300, namespace: "custom" };
+    await app.setActionState("unregistered_act", "config_meta", arbitraryValue);
     const result = await app.getActionState<typeof arbitraryValue>(
       "unregistered_act",
       "config_meta"
     );
     expect(result).toEqual({ ttl: 300, namespace: "custom" });
+
+    await app.setState("unregistered_act_2", "config_meta_2", arbitraryValue, {});
+    const result2 = await app.getActionState<typeof arbitraryValue>(
+      "unregistered_act_2",
+      "config_meta_2"
+    );
+    expect(result2).toEqual({ ttl: 300, namespace: "custom" });
 
     await app.close();
   });
