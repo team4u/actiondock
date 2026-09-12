@@ -30,7 +30,17 @@ if (preBuild.status !== 0) {
 }
 
 const tarballPaths: Record<string, string> = {};
-const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
+const npmExecPath = process.env.npm_execpath;
+if (!npmExecPath) {
+  throw new Error("npm_execpath is unavailable; run this script via npm run test:pack");
+}
+
+function runNpm(args: string[], cwd: string) {
+  return spawnSync(process.execPath, [npmExecPath!, ...args], {
+    cwd,
+    encoding: "utf8",
+  });
+}
 
 try {
   // Pack each package
@@ -38,13 +48,12 @@ try {
     const pkgDir = join(rootDir, "packages", pkg);
     console.log(`[PACK] Packing @actiondock/${pkg}...`);
 
-    const packProc = spawnSync(npmCmd, ["pack"], {
-      cwd: pkgDir,
-      encoding: "utf8",
-    });
+    const packProc = runNpm(["pack"], pkgDir);
 
     if (packProc.status !== 0) {
-      throw new Error(`Failed to pack @actiondock/${pkg}: ${packProc.stderr}`);
+      throw new Error(
+        `Failed to pack @actiondock/${pkg}: ${packProc.error?.message ?? packProc.stderr ?? "unknown error"}`
+      );
     }
 
     const lines = packProc.stdout.trim().split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
@@ -118,13 +127,12 @@ try {
 
   // Install packed tarballs into test environment
   console.log("[INSTALL] Installing packed tarballs into test environment...");
-  const installProc = spawnSync(npmCmd, ["install", "--no-audit", "--no-fund"], {
-    cwd: testDir,
-    encoding: "utf8",
-  });
+  const installProc = runNpm(["install", "--no-audit", "--no-fund"], testDir);
 
   if (installProc.status !== 0) {
-    throw new Error(`Dependency installation failed: ${installProc.stderr}`);
+    throw new Error(
+      `Dependency installation failed: ${installProc.error?.message ?? installProc.stderr ?? "unknown error"}`
+    );
   }
   console.log("[OK] Dependencies installed cleanly");
 
@@ -247,14 +255,16 @@ process.exit(0);
   writeFileSync(join(testDir, "test-runtime.mjs"), testScriptContent);
 
   // Execute test-runtime.mjs with native Node
-  const nodeProc = spawnSync("node", ["test-runtime.mjs"], {
+  const nodeProc = spawnSync(process.execPath, ["test-runtime.mjs"], {
     cwd: testDir,
     encoding: "utf8",
     timeout: 60000,
   });
 
   if (nodeProc.status !== 0) {
-    throw new Error(`Native Node smoke test script failed:\n${nodeProc.stderr}\n${nodeProc.stdout}`);
+    throw new Error(
+      `Native Node smoke test script failed:\n${nodeProc.error?.message ?? nodeProc.stderr ?? ""}\n${nodeProc.stdout ?? ""}`
+    );
   }
   console.log(nodeProc.stdout.trimEnd());
 
@@ -275,22 +285,28 @@ process.exit(0);
 
   // ad --version
   const verProc = runCli(["--version"]);
-  if (verProc.status !== 0 || !verProc.stdout.includes(currentVersion)) {
-    throw new Error(`'ad --version' failed: ${verProc.stderr} (output: ${verProc.stdout})`);
+  if (verProc.status !== 0 || !verProc.stdout?.includes(currentVersion)) {
+    throw new Error(
+      `'ad --version' failed: ${verProc.error?.message ?? verProc.stderr ?? "unknown error"} (output: ${verProc.stdout ?? ""})`
+    );
   }
   console.log(`[OK] node ad --version returned ${currentVersion}`);
 
   // ad --help
   const helpProc = runCli(["--help"]);
-  if (helpProc.status !== 0 || !helpProc.stdout.includes("ActionDock (ad) 2.0")) {
-    throw new Error(`'ad --help' failed: ${helpProc.stderr}`);
+  if (helpProc.status !== 0 || !helpProc.stdout?.includes("ActionDock (ad) 2.0")) {
+    throw new Error(
+      `'ad --help' failed: ${helpProc.error?.message ?? helpProc.stderr ?? "unknown error"}`
+    );
   }
   console.log("[OK] node ad --help verified");
 
   // ad doctor --json
   const docProc = runCli(["doctor", "--json"]);
   if (docProc.status !== 0) {
-    throw new Error(`'ad doctor --json' failed: ${docProc.stderr}`);
+    throw new Error(
+      `'ad doctor --json' failed: ${docProc.error?.message ?? docProc.stderr ?? "unknown error"}`
+    );
   }
   const docJson = JSON.parse(docProc.stdout);
   if (!docJson.summary || docJson.summary.errorCount > 0) {
