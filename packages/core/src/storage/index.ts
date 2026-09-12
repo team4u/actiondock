@@ -7,7 +7,6 @@ export {
   DataDirLock,
   type DataDirLockInfo,
   isProcessAlive,
-  safeRemoveStaleReclaimGuard,
 } from "./data-dir-lock";
 export * from "./driver";
 export * from "./lazy";

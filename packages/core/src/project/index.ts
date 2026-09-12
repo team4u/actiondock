@@ -11,7 +11,6 @@ export {
   type TransactionMetadata,
   type ProjectTransaction,
   isPidAlive,
-  safeRemoveStaleProjectReclaimGuard,
   isProjectLockHeld,
   acquireProjectLock,
   runFrozenInstall,

@@ -646,6 +646,7 @@ rl.on("line", (cmd) => {
     mkdirSync(reclaimDir, { mode: 0o700 });
     const staleReclaimInfo = {
       pid: 99999995,
+      guardToken: "stale-guard-token-test",
       createdAt: Date.now() - 3000,
     };
     writeFileSync(
@@ -653,6 +654,9 @@ rl.on("line", (cmd) => {
       JSON.stringify(staleReclaimInfo, null, 2),
       { mode: 0o600 }
     );
+    const staleTime = new Date(Date.now() - 3000);
+    utimesSync(join(reclaimDir, "metadata.json"), staleTime, staleTime);
+    utimesSync(reclaimDir, staleTime, staleTime);
 
     // 竞争者执行 acquire：应当自动识别并清理陈旧 reclaim 目录，成功获取主锁
     const lock = DataDirLock.acquire(tempDir);
@@ -889,7 +893,45 @@ rl.on("line", (cmd) => {
     expect(existsSync(reclaimDir)).toBe(false);
   });
 
-  it("当 reclaim guard token 不匹配且恢复原位失败时，safeRemoveStaleReclaimGuard 绝不执行 rmSync 误删隔离目录", () => {
+  it("当持有者 PID 仍存活时，即使 guardToken 匹配且已超出宽限期，safeRemoveStaleReclaimGuard 依然绝对不移动或删除该活跃 guard", () => {
+    const lockDir = join(tempDir, ".actiondock.data.lock");
+    const reclaimDir = `${lockDir}.reclaim`;
+    mkdirSync(reclaimDir, { recursive: true });
+
+    // 使用存活的外部父进程 PID（process.ppid !== process.pid 且存活）模拟活跃竞争者
+    const rivalPid = process.ppid;
+    expect(isProcessAlive(rivalPid)).toBe(true);
+    expect(rivalPid).not.toBe(process.pid);
+
+    const token = "rival-active-guard-token";
+    writeFileSync(
+      join(reclaimDir, "metadata.json"),
+      JSON.stringify({ pid: rivalPid, guardToken: token, createdAt: Date.now() - 5000 }, null, 2),
+      "utf8"
+    );
+    const staleTime = new Date(Date.now() - 5000);
+    utimesSync(join(reclaimDir, "metadata.json"), staleTime, staleTime);
+    utimesSync(reclaimDir, staleTime, staleTime);
+
+    // 调用 safeRemoveStaleReclaimGuard 传入匹配的 token
+    // 因内部自身验证持有者 rivalPid 依然存活，严格 fail-closed，绝不移动或删除该 guard
+    safeRemoveStaleReclaimGuard(reclaimDir, token);
+    expect(existsSync(reclaimDir)).toBe(true);
+    expect(existsSync(join(reclaimDir, "metadata.json"))).toBe(true);
+    const content = JSON.parse(readFileSync(join(reclaimDir, "metadata.json"), "utf8"));
+    expect(content.guardToken).toBe(token);
+
+    // 验证当前进程清理自身创建的 guard 时（parsed.pid === process.pid），能够正常清理释放
+    writeFileSync(
+      join(reclaimDir, "metadata.json"),
+      JSON.stringify({ pid: process.pid, guardToken: "my-guard-token", createdAt: Date.now() }, null, 2),
+      "utf8"
+    );
+    safeRemoveStaleReclaimGuard(reclaimDir, "my-guard-token");
+    expect(existsSync(reclaimDir)).toBe(false);
+  });
+
+  it("当 reclaim guard token 不匹配且转换孤儿目录失败时，safeRemoveStaleReclaimGuard 绝不执行 rmSync 误删隔离目录", () => {
     const lockDir = join(tempDir, ".actiondock.data.lock");
     const reclaimDir = `${lockDir}.reclaim`;
     mkdirSync(reclaimDir, { recursive: true });
@@ -897,7 +939,7 @@ rl.on("line", (cmd) => {
     const staleTime = new Date(Date.now() - 5000);
     const guardData = {
       pid: 99999999,
-      guardToken: "token-actual-rival",
+      guardToken: "token-expected-stale",
       createdAt: Date.now() - 5000,
     };
     writeFileSync(
@@ -908,27 +950,34 @@ rl.on("line", (cmd) => {
     utimesSync(join(reclaimDir, "metadata.json"), staleTime, staleTime);
     utimesSync(reclaimDir, staleTime, staleTime);
 
-    // 预检不带 expectedGuardToken（进入检疫重命名分支）
-    // 重命名到 quarantine 后，竞争者并发创建了新的 reclaimDir
-    // 此时恢复原位由于 EEXIST 失败，测试验证原 quarantine 目录绝不被 rmSync 误删
+    // 模拟竞争窗口：预检通过后在重命名到 quarantine 时，并发竞争者替换了内部 token，导致后置校验不匹配；
+    // 且转换到 orphan 目录时发生异常，测试验证原 quarantine 目录绝不被 rmSync 误删
     const origRenameSync = fs.renameSync;
     let quarantinedPathFound = "";
     try {
       (fs.renameSync as any) = (src: string, dest: string) => {
         if (typeof src === "string" && src.includes(".reclaim.quarantine")) {
-          // 模拟恢复原位时目标路径已被新 guard 占用，抛出 EEXIST
+          // 模拟转换孤儿脱离态时抛出异常
           const err: any = new Error("EEXIST: file already exists");
           err.code = "EEXIST";
           throw err;
         }
         if (typeof dest === "string" && dest.includes(".reclaim.quarantine")) {
           quarantinedPathFound = dest;
+          const res = origRenameSync(src, dest);
+          // 在隔离区写入不匹配的 rival token
+          writeFileSync(
+            join(dest, "metadata.json"),
+            JSON.stringify({ pid: 99999999, guardToken: "swapped-token-rival" }, null, 2),
+            "utf8"
+          );
+          return res;
         }
         return origRenameSync(src, dest);
       };
 
-      // 调用 safeRemoveStaleReclaimGuard 不带 expectedGuardToken，进入隔离后 token 检查分支
-      safeRemoveStaleReclaimGuard(reclaimDir);
+      // 传入匹配预检的 expectedGuardToken
+      safeRemoveStaleReclaimGuard(reclaimDir, "token-expected-stale");
 
       // 验证隔离目录依然完整保留，绝未被 rmSync 误删
       expect(quarantinedPathFound).not.toBe("");
@@ -1041,16 +1090,35 @@ rl.on("line", (cmd) => {
     const lockDir = join(tempDir, ".actiondock.data.lock");
     const reclaimDir = `${lockDir}.reclaim`;
     mkdirSync(reclaimDir, { recursive: true });
+    const staleTime = new Date(Date.now() - 5000);
     writeFileSync(
       join(reclaimDir, "metadata.json"),
-      JSON.stringify({ pid: 999999, guardToken: "new-active-token", createdAt: Date.now() }, null, 2),
+      JSON.stringify({ pid: 999999, guardToken: "expected-token-stale", createdAt: Date.now() - 5000 }, null, 2),
       "utf8"
     );
+    utimesSync(join(reclaimDir, "metadata.json"), staleTime, staleTime);
+    utimesSync(reclaimDir, staleTime, staleTime);
 
-    // 不带 expectedGuardToken 调用：重命名到隔离区后检测到 actualGuardToken 存在且不匹配（undefined !== actual）
-    // 旧代码会 rename 回 reclaimDir 导致鬼魅守卫复活；新代码保持隔离状态，不恢复主路径
-    safeRemoveStaleReclaimGuard(reclaimDir);
-    expect(existsSync(reclaimDir)).toBe(false);
+    // 模拟重命名到隔离区后检测到 actualGuardToken 发生竞态替换
+    const origRenameSync = fs.renameSync;
+    try {
+      (fs.renameSync as any) = (src: string, dest: string) => {
+        const res = origRenameSync(src, dest);
+        if (typeof dest === "string" && dest.includes(".reclaim.quarantine")) {
+          writeFileSync(
+            join(dest, "metadata.json"),
+            JSON.stringify({ pid: 999999, guardToken: "rival-swapped-token", createdAt: Date.now() - 5000 }),
+            "utf8"
+          );
+        }
+        return res;
+      };
+
+      safeRemoveStaleReclaimGuard(reclaimDir, "expected-token-stale");
+      expect(existsSync(reclaimDir)).toBe(false);
+    } finally {
+      (fs.renameSync as any) = origRenameSync;
+    }
   });
 
   it("DataDirLock.acquire 与 release 会安全 GC 清理超期的隔离目录", () => {
@@ -1160,18 +1228,40 @@ rl.on("line", (cmd) => {
     const reclaimDir = `${lockDir}.reclaim`;
     mkdirSync(reclaimDir, { recursive: true });
 
-    // - 写入守卫，持有者明确设置为当前存活的 process.pid（活 PID），带有实际 guardToken
+    // - 预检前写入已死 PID 与 expectedGuardToken，超出宽限期
+    const deadPid = 99999999;
     const livePid = process.pid;
     expect(isProcessAlive(livePid)).toBe(true);
+    const staleTime = new Date(Date.now() - 5000);
     writeFileSync(
       join(reclaimDir, "metadata.json"),
-      JSON.stringify({ pid: livePid, guardToken: "actual-token-rival", createdAt: Date.now() - 5000 }, null, 2),
+      JSON.stringify({ pid: deadPid, guardToken: "expected-token-stale", createdAt: Date.now() - 5000 }, null, 2),
       "utf8"
     );
+    utimesSync(join(reclaimDir, "metadata.json"), staleTime, staleTime);
+    utimesSync(reclaimDir, staleTime, staleTime);
 
-    // - safeRemoveStaleReclaimGuard 检出 token 不匹配并安全转换为 orphan 目录
-    safeRemoveStaleReclaimGuard(reclaimDir);
-    expect(existsSync(reclaimDir)).toBe(false);
+    // - 模拟竞态窗口：重命名到隔离区后元数据持有者被替换为存活进程与新 token
+    const origRenameSync = fs.renameSync;
+    try {
+      (fs.renameSync as any) = (src: string, dest: string) => {
+        const res = origRenameSync(src, dest);
+        if (typeof dest === "string" && dest.includes(".reclaim.quarantine")) {
+          writeFileSync(
+            join(dest, "metadata.json"),
+            JSON.stringify({ pid: livePid, guardToken: "actual-token-rival", createdAt: Date.now() - 5000 }, null, 2),
+            "utf8"
+          );
+        }
+        return res;
+      };
+
+      // - safeRemoveStaleReclaimGuard 检出 token 不匹配并安全转换为 orphan 目录
+      safeRemoveStaleReclaimGuard(reclaimDir, "expected-token-stale");
+      expect(existsSync(reclaimDir)).toBe(false);
+    } finally {
+      (fs.renameSync as any) = origRenameSync;
+    }
 
     const entries = readdirSync(tempDir);
     const orphanEntry = entries.find((e) => e.startsWith(".actiondock.data.lock.reclaim.orphan."));

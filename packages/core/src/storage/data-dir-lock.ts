@@ -249,12 +249,16 @@ function tryAcquireReclaimGuard(reclaimPath: string, pid: number, guardToken: st
 
 /**
  * 安全清理陈旧接管守卫（reclaim guard）。
- * 采用原子重命名检疫并核对 guardToken，确保仅删除此前确认已陈旧的目标，严禁误删并发新守卫。
+ * 采用原子重命名检疫并严格核对 guardToken 与持有者存活状态，确保仅删除目标陈旧 guard，严禁误删活跃守卫或并发新守卫。
+ * 
+ * @param reclaimPath 目标守卫路径
+ * @param expectedGuardToken 预期持有的守卫令牌（必填，拒绝未指定令牌的盲目清理）
  */
 export function safeRemoveStaleReclaimGuard(
   reclaimPath: string,
-  expectedGuardToken?: string
+  expectedGuardToken: string
 ): void {
+  if (!expectedGuardToken || typeof expectedGuardToken !== "string") return;
   if (!existsSync(reclaimPath)) return;
 
   let isDir = false;
@@ -265,25 +269,36 @@ export function safeRemoveStaleReclaimGuard(
   }
 
   const metaPath = isDir ? join(reclaimPath, "metadata.json") : reclaimPath;
+  if (!existsSync(metaPath)) {
+    return;
+  }
 
-  if (expectedGuardToken) {
-    if (!existsSync(metaPath)) {
+  try {
+    const metaStat = statSync(metaPath);
+    const mtimeMs = metaStat.mtimeMs;
+    const raw = readFileSync(metaPath, "utf8");
+    if (raw.trim().length === 0) {
       return;
     }
-    try {
-      const metaStat = statSync(metaPath);
-      const mtimeMs = metaStat.mtimeMs;
-      const raw = readFileSync(metaPath, "utf8");
-      const parsed = JSON.parse(raw);
-      if (parsed?.guardToken !== expectedGuardToken) {
-        return;
-      }
-      if (parsed?.pid !== process.pid && Date.now() - mtimeMs < 1000) {
-        return;
-      }
-    } catch {
+    const parsed = JSON.parse(raw);
+    if (parsed?.guardToken !== expectedGuardToken) {
       return;
     }
+
+    // 自身验证 fail-closed：
+    // 若不是当前进程自身清理自身守卫（即 parsed.pid !== process.pid）：
+    // 1. 验证持有者 PID 是否存活，若仍存活则判定守卫仍处于活跃状态，严禁删除！
+    // 2. 验证是否处于创建宽限期内（1000ms），若在宽限期内严禁删除！
+    if (parsed?.pid !== process.pid) {
+      if (typeof parsed?.pid === "number" && isProcessAlive(parsed.pid)) {
+        return;
+      }
+      if (Date.now() - mtimeMs < 1000) {
+        return;
+      }
+    }
+  } catch {
+    return;
   }
 
   const quarantinePath = `${reclaimPath}.quarantine.${process.pid}.${Date.now()}.${randomUUID().slice(0, 8)}`;
@@ -296,17 +311,26 @@ export function safeRemoveStaleReclaimGuard(
   try {
     const quarantinedMetaPath = isDir ? join(quarantinePath, "metadata.json") : quarantinePath;
     let actualGuardToken: string | undefined;
+    let actualPid: number | undefined;
     if (existsSync(quarantinedMetaPath)) {
       try {
         const raw = readFileSync(quarantinedMetaPath, "utf8");
-        const parsed = JSON.parse(raw);
-        actualGuardToken = parsed?.guardToken;
+        if (raw.trim().length > 0) {
+          const parsed = JSON.parse(raw);
+          actualGuardToken = parsed?.guardToken;
+          actualPid = typeof parsed?.pid === "number" ? parsed.pid : undefined;
+        }
       } catch {}
     }
 
-    if (expectedGuardToken !== actualGuardToken) {
-      // 并非此前检查的陈旧 guard（已被并发者替换为新活跃 guard）
-      // 保持隔离状态，转换为 .orphan 脱离态，脱离创建者 Host PID 的存活保护，由 GC 基于真实持有者存活与时间清理
+    // 后置校验：必须再次核对 actualGuardToken 与 expectedGuardToken 一致，
+    // 且若持有者非自身，必须确保 actualPid 确已死亡。
+    if (
+      expectedGuardToken !== actualGuardToken ||
+      (actualPid !== undefined && actualPid !== process.pid && isProcessAlive(actualPid))
+    ) {
+      // 并非此前检查的目标陈旧 guard（已被并发者替换或持有者存活）
+      // 保持隔离状态，转换为 .orphan 脱离态，脱离创建者 Host PID 的存活保护，由 GC 基于规范路径凭据与时间清理
       const orphanPath = `${reclaimPath}.orphan.${Date.now()}.${randomUUID().slice(0, 8)}`;
       try {
         fs.renameSync(quarantinePath, orphanPath);
@@ -314,7 +338,7 @@ export function safeRemoveStaleReclaimGuard(
       return;
     }
 
-    // 确认正是目标陈旧 guard，安全清理
+    // 确认正是目标陈旧 guard（或自身持有的 guard），安全清理
     fs.rmSync(quarantinePath, { recursive: true, force: true });
   } catch {
     // 发生异常，保持隔离状态，转换为 .orphan 脱离态
@@ -876,7 +900,7 @@ export class DataDirLock {
         sleepSync(Math.min(50, Math.max(1, deadline - Date.now())));
         continue;
       }
-      if (reclaimState.isStale) {
+      if (reclaimState.isStale && reclaimState.guardToken) {
         // 若 reclaim guard 持有者意外崩溃，其他竞争者核对此前检查的 guardToken 安全清理
         safeRemoveStaleReclaimGuard(reclaimDirPath, reclaimState.guardToken);
       }
@@ -971,7 +995,7 @@ export class DataDirLock {
           const acquiredReclaim = tryAcquireReclaimGuard(reclaimDirPath, currentPid, guardToken);
           if (!acquiredReclaim) {
             const currentReclaim = checkReclaimGuard(reclaimDirPath, isProcessAlive, 1000);
-            if (currentReclaim.isStale) {
+            if (currentReclaim.isStale && currentReclaim.guardToken) {
               safeRemoveStaleReclaimGuard(reclaimDirPath, currentReclaim.guardToken);
             }
             if (Date.now() >= deadline) {
