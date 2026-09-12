@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { spawn } from "node:child_process";
-import fs, { existsSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import fs, { existsSync, mkdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
@@ -496,5 +496,43 @@ rl.on("line", (cmd) => {
     const release = acquireProjectLock(tempDir);
     expect(existsSync(staleQuarantine)).toBe(false);
     release();
+  });
+
+  it("源锁目录 mtime 较旧但刚刚被重命名为带当前时间戳的隔离目录时，工程锁 GC 绝不误删，超过 10 秒后才安全删除", () => {
+    const metaDir = join(tempDir, ".actiondock");
+    mkdirSync(metaDir, { recursive: true });
+
+    // 1. 创建源锁目录并将其 mtime 设置为 1 小时前
+    const sourceDir = join(metaDir, "project.lock");
+    mkdirSync(sourceDir, { recursive: true });
+    const oneHourAgo = (Date.now() - 3600 * 1000) / 1000;
+    utimesSync(sourceDir, oneHourAgo, oneHourAgo);
+
+    // 2. 刚刚重命名为带当前时间戳的隔离目录
+    const recentQuarantine = join(
+      metaDir,
+      `project.lock.quarantine.${process.pid}.${Date.now()}.uuid1234`
+    );
+    fs.renameSync(sourceDir, recentQuarantine);
+
+    // 验证继承了旧 mtime
+    const stat = statSync(recentQuarantine);
+    expect(Date.now() - stat.mtimeMs).toBeGreaterThan(3000 * 1000);
+
+    // 3. 执行 acquire 触发 GC：由于文件名包含当前时间戳，GC 判定其处于 10 秒保护期内，绝不误删
+    const release = acquireProjectLock(tempDir);
+    expect(existsSync(recentQuarantine)).toBe(true);
+    release();
+
+    // 4. 当文件名中的隔离时间戳超过 10 秒后，GC 允许安全清理
+    const expiredQuarantine = join(
+      metaDir,
+      `project.lock.quarantine.${process.pid}.${Date.now() - 20000}.uuid5678`
+    );
+    fs.renameSync(recentQuarantine, expiredQuarantine);
+
+    const release2 = acquireProjectLock(tempDir);
+    expect(existsSync(expiredQuarantine)).toBe(false);
+    release2();
   });
 });

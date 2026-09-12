@@ -317,20 +317,51 @@ export function safeRemoveStaleReclaimGuard(
 }
 
 /**
- * 清理过期的隔离目录（GC 回收机制）。
+ * 从隔离或回滚临时目录名称中解析隔离生成时间戳。
+ * 命名规范：*.(quarantine|rollback|release).<pid>.<timestamp>.<uuid>
  */
-function cleanStaleQuarantines(parentDir: string, basePrefix: string, maxAgeMs = 10000): void {
+function parseQuarantineTimestamp(entryName: string): number | undefined {
+  const match = entryName.match(/\.(?:quarantine|rollback|release)\.\d+\.(\d+)(?:\.|$)/);
+  if (match && match[1]) {
+    const ts = parseInt(match[1], 10);
+    if (!Number.isNaN(ts) && ts > 0) {
+      return ts;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * 清理过期的隔离目录（GC 回收机制）。
+ * 依据文件名中的隔离时间戳（优先）或目录修改时间戳判定生命周期，防止误删继承旧源锁 mtime 的新鲜隔离目录。
+ */
+function cleanStaleQuarantines(
+  parentDir: string,
+  basePrefix: string,
+  maxAgeMs = 10000,
+  deadline?: number
+): void {
   try {
     if (!existsSync(parentDir)) return;
     const entries = readdirSync(parentDir);
     const now = Date.now();
     for (const entry of entries) {
+      if (deadline !== undefined && Date.now() >= deadline) {
+        break;
+      }
       if (!entry.startsWith(basePrefix)) continue;
       if (!entry.includes(".quarantine.") && !entry.includes(".rollback.") && !entry.includes(".release.")) continue;
       const fullPath = join(parentDir, entry);
       try {
-        const stat = statSync(fullPath);
-        if (now - stat.mtimeMs > maxAgeMs) {
+        const quarantinedAt = parseQuarantineTimestamp(entry);
+        let age: number;
+        if (quarantinedAt !== undefined) {
+          age = now - quarantinedAt;
+        } else {
+          const stat = statSync(fullPath);
+          age = now - stat.mtimeMs;
+        }
+        if (age > maxAgeMs) {
           rmSync(fullPath, { recursive: true, force: true });
         }
       } catch {}
@@ -615,18 +646,18 @@ export class DataDirLock {
     dataDir: string,
     options: { sessionToken?: string; hostSessionId?: string; acquireTimeoutMs?: number } = {}
   ): DataDirLock {
+    const timeoutMs = options.acquireTimeoutMs ?? 5000;
+    const deadline = Date.now() + timeoutMs;
     if (!existsSync(dataDir)) {
       mkdirSync(dataDir, { recursive: true, mode: 0o700 });
     }
-    cleanStaleQuarantines(dataDir, ".actiondock.data.lock");
+    cleanStaleQuarantines(dataDir, ".actiondock.data.lock", 10000, deadline);
 
     const lockDirPath = join(dataDir, ".actiondock.data.lock");
     const reclaimDirPath = `${lockDirPath}.reclaim`;
     const currentPid = process.pid;
     const currentHost = hostname();
     const token = options.sessionToken || randomUUID();
-    const timeoutMs = options.acquireTimeoutMs ?? 5000;
-    const deadline = Date.now() + timeoutMs;
     const newLockInfo: DataDirLockInfo = {
       pid: currentPid,
       hostname: currentHost,

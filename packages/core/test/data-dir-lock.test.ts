@@ -1055,4 +1055,39 @@ rl.on("line", (cmd) => {
     expect(existsSync(staleQuarantine)).toBe(false);
     lock.release();
   });
+
+  it("源锁目录 mtime 较旧但刚刚被重命名为带当前时间戳的隔离目录时，GC 绝不误删，超过 10 秒后才安全删除", () => {
+    // 1. 创建源锁目录并将其 mtime 设置为 1 小时前
+    const sourceDir = join(tempDir, ".actiondock.data.lock");
+    mkdirSync(sourceDir, { recursive: true });
+    const oneHourAgo = (Date.now() - 3600 * 1000) / 1000;
+    utimesSync(sourceDir, oneHourAgo, oneHourAgo);
+
+    // 2. 刚刚重命名为带当前时间戳的隔离目录（模拟刚被隔离，但继承了旧 mtime）
+    const recentQuarantine = join(
+      tempDir,
+      `.actiondock.data.lock.quarantine.${process.pid}.${Date.now()}.uuid1234`
+    );
+    fs.renameSync(sourceDir, recentQuarantine);
+
+    // 验证该目录在文件系统上的 mtime 确实是 1 小时前（继承了源锁旧 mtime）
+    const stat = statSync(recentQuarantine);
+    expect(Date.now() - stat.mtimeMs).toBeGreaterThan(3000 * 1000);
+
+    // 3. 执行 acquire 触发 GC：由于文件名包含当前时间戳，GC 判定其处于 10 秒保护期内，绝不误删
+    const lock = DataDirLock.acquire(tempDir);
+    expect(existsSync(recentQuarantine)).toBe(true);
+    lock.release();
+
+    // 4. 当文件名中的隔离时间戳超过 10 秒后，GC 允许安全清理
+    const expiredQuarantine = join(
+      tempDir,
+      `.actiondock.data.lock.quarantine.${process.pid}.${Date.now() - 20000}.uuid5678`
+    );
+    fs.renameSync(recentQuarantine, expiredQuarantine);
+
+    const lock2 = DataDirLock.acquire(tempDir);
+    expect(existsSync(expiredQuarantine)).toBe(false);
+    lock2.release();
+  });
 });
