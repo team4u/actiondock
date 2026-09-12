@@ -1,6 +1,6 @@
 {
   "name": "@actiondock/builder",
-  "version": "2.2.1",
+  "version": "2.2.2",
   "description": "ActionDock Build Planner, distribution packaging, and Skill exporter",
   "type": "module",
   "main": "./dist/index.js",
@@ -29,9 +29,9 @@
     "test": "node ../../scripts/run-tests.ts"
   },
   "dependencies": {
-    "@actiondock/core": "^2.2.1",
-    "@actiondock/runtime-node": "^2.2.1",
-    "@actiondock/sdk": "^2.2.1"
+    "@actiondock/core": "^2.2.2",
+    "@actiondock/runtime-node": "^2.2.2",
+    "@actiondock/sdk": "^2.2.2"
   },
   "keywords": [
     "actiondock",

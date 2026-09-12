@@ -1,17 +1,17 @@
 {
   "name": "github-tools",
-  "version": "2.2.1",
+  "version": "2.2.2",
   "description": "GitHub Actions for AI Agents",
   "type": "module",
   "scripts": {
     "test": "node --import tsx --test tests/*.test.ts"
   },
   "dependencies": {
-    "@actiondock/sdk": "^2.2.1",
-    "@actiondock/testing": "^2.2.1"
+    "@actiondock/sdk": "^2.2.2",
+    "@actiondock/testing": "^2.2.2"
   },
   "devDependencies": {
-    "@actiondock/core": "^2.2.1",
+    "@actiondock/core": "^2.2.2",
     "@types/node": "^24.10.0",
     "tsx": "^4.19.3",
     "typescript": "^5.7.0"

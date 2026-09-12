@@ -118,7 +118,6 @@ function sleepMs(ms: number): Promise<void> {
 async function main() {
   const args = process.argv.slice(2);
   const dryRun = args.includes("--dry-run");
-  const skipVerify = args.includes("--skip-verify");
 
   let customTargetTag: string | undefined;
   const tagArgIdx = args.indexOf("--target-tag");
@@ -128,17 +127,15 @@ async function main() {
 
   const targetVersion = resolveTargetVersion();
   const targetDistTag = resolveTargetDistTag(targetVersion, customTargetTag);
-  const tempDistTag = `temp-${targetVersion}-${Date.now().toString(36)}`;
 
   console.log("=== ActionDock 2.0 发布流程 ===");
   console.log(`目标版本: ${targetVersion}`);
   console.log(`目标分发标签: ${targetDistTag}`);
-  console.log(`临时分发标签: ${tempDistTag}`);
   console.log(`模拟运行模式: ${dryRun ? "是" : "否"}`);
 
   try {
-    // 预检查与原有 dist-tags 备份
-    console.log("\n[1/5] 全包版本强一致性校验与既有分发标签指针备份...");
+    // 1. 全包版本强一致性校验与不可变性校验
+    console.log("\n[1/3] 全包版本强一致性校验与不可变性校验...");
 
     // 全包版本强一致性断言校验
     console.log("- 校验根目录与全部 7 个子包版本强一致性...");
@@ -165,41 +162,32 @@ async function main() {
     }
     console.log(`  [OK] 根目录与全部 7 个子包版本均严格一致 (${targetVersion})`);
 
-    const distTagBackup: Record<string, string | null> = {};
     const localTarballs: Record<string, { path: string; shasum: string }> = {};
 
-  for (const pkg of PUBLISH_PACKAGES) {
-    console.log(`- 检查 ${pkg.name}...`);
-    const remoteDistTags = dryRun ? {} : getRemoteDistTags(pkg.name);
-    distTagBackup[pkg.name] = remoteDistTags[targetDistTag] || null;
-    console.log(`  当前 ${targetDistTag} 指向: ${distTagBackup[pkg.name] || "<空>"}`);
+    for (const pkg of PUBLISH_PACKAGES) {
+      console.log(`- 检查 ${pkg.name}...`);
+      const { tarballPath, shasum } = computeLocalTarballShasum(pkg.dir);
+      localTarballs[pkg.name] = { path: tarballPath, shasum };
 
-    // 生成本地打包产物并计算摘要
-    const { tarballPath, shasum } = computeLocalTarballShasum(pkg.dir);
-    localTarballs[pkg.name] = { path: tarballPath, shasum };
-
-    if (!dryRun) {
-      const remoteInfo = getRemotePackageInfo(pkg.name, targetVersion);
-      if (remoteInfo.exists) {
-        if (remoteInfo.shasum === shasum) {
-          console.log(`  版本 ${targetVersion} 已存在且摘要匹配 (${shasum})，将跳过实际发布`);
-        } else {
-          throw new Error(
-            `包不可变性违规: ${pkg.name}@${targetVersion} 已存在于远端且摘要不一致！\n远端: ${remoteInfo.shasum}\n本地: ${shasum}`
-          );
+      if (!dryRun) {
+        const remoteInfo = getRemotePackageInfo(pkg.name, targetVersion);
+        if (remoteInfo.exists) {
+          if (remoteInfo.shasum === shasum) {
+            console.log(`  版本 ${targetVersion} 已存在且摘要匹配 (${shasum})，将跳过实际发布`);
+          } else {
+            throw new Error(
+              `包不可变性违规: ${pkg.name}@${targetVersion} 已存在于远端且摘要不一致！\n远端: ${remoteInfo.shasum}\n本地: ${shasum}`
+            );
+          }
         }
       }
     }
-  }
 
-  // 临时分发标签隔离发布
-  console.log(`\n[2/5] 使用临时标签 (${tempDistTag}) 按拓扑顺序发布子包...`);
-  const publishedPackages: string[] = [];
-
-  try {
+    // 2. 按拓扑顺序直接发布子包（携带目标分发标签）
+    console.log(`\n[2/3] 按拓扑顺序直接发布子包至 ${targetDistTag} 标签...`);
     for (const pkg of PUBLISH_PACKAGES) {
-      console.log(`- 发布 ${pkg.name}@${targetVersion} [标签: ${tempDistTag}]...`);
-      const publishArgs = ["publish", localTarballs[pkg.name].path, "--access", "public", "--tag", tempDistTag];
+      console.log(`- 发布 ${pkg.name}@${targetVersion} [标签: ${targetDistTag}]...`);
+      const publishArgs = ["publish", localTarballs[pkg.name].path, "--access", "public", "--tag", targetDistTag];
       if (process.env.GITHUB_ACTIONS) {
         publishArgs.push("--provenance");
       }
@@ -208,10 +196,7 @@ async function main() {
       } else {
         const remoteInfo = getRemotePackageInfo(pkg.name, targetVersion);
         if (remoteInfo.exists && remoteInfo.shasum === localTarballs[pkg.name].shasum) {
-          // 确保临时标签指向该版本
-          runCmd("npm", ["dist-tag", "add", `${pkg.name}@${targetVersion}`, tempDistTag], {
-            allowFailure: true,
-          });
+          console.log(`  版本已存在于远端且摘要一致，跳过上传`);
         } else {
           let published = false;
           const maxPublishRetries = 3;
@@ -224,7 +209,7 @@ async function main() {
               break;
             } catch (publishErr) {
               if (pAttempt < maxPublishRetries) {
-                console.log(`  [重试] ${pkg.name} 发布失败，等待 5 秒后执行第 ${pAttempt + 1}/${maxPublishRetries} 次重试...`);
+                console.log(`  [重试] ${pkg.name} 发布失败，等待 5 秒后重试 (${pAttempt + 1}/${maxPublishRetries})...`);
                 await sleepMs(5000);
               } else {
                 throw publishErr;
@@ -233,132 +218,32 @@ async function main() {
           }
         }
       }
-      publishedPackages.push(pkg.name);
       if (!dryRun) {
         await sleepMs(2000);
       }
     }
-  } catch (error) {
-    console.error("\n发布阶段发生异常，由于使用临时标签隔离，外部使用者未受影响。");
-    throw error;
-  }
 
-  // 3. 发布后烟雾验证（增加轮询重试机制以应对 npm 镜像多副本最终一致性延迟）
-  if (!skipVerify && !dryRun) {
-    console.log(`\n[3/5] 验证临时标签下的包可见性与完整性...`);
-    const maxRetries = 15;
-    const retryIntervalMs = 3000;
+    // 3. 检查并清理可能残留的历史临时标签
+    console.log(`\n[3/3] 检查并清理历史遗留临时标签...`);
     for (const pkg of PUBLISH_PACKAGES) {
-      let verified = false;
-      for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        const viewRes = runCmd("npm", ["view", `${pkg.name}@${tempDistTag}`, "version"], {
-          captureOutput: true,
-          allowFailure: true,
-        });
-        if (viewRes.status === 0 && viewRes.stdout.includes(targetVersion)) {
-          verified = true;
-          break;
-        }
-        if (attempt < maxRetries) {
-          console.log(`  [等待] ${pkg.name}@${tempDistTag} 远端副本同步中，第 ${attempt}/${maxRetries} 次等待重试...`);
-          await sleepMs(retryIntervalMs);
-        }
-      }
-      if (!verified) {
-        throw new Error(`临时标签验证失败: ${pkg.name}@${tempDistTag} 未能正确定位到 ${targetVersion}`);
-      }
-      console.log(`  [OK] ${pkg.name}@${tempDistTag} 验证通过`);
-    }
-  } else {
-    console.log("\n[3/5] 跳过远端临时标签验证");
-  }
-
-  // 4. 原子分发指针切换与回滚机制
-  console.log(`\n[4/5] 原子切换正式分发标签 (${targetDistTag} -> ${targetVersion})...`);
-  const promotedPackages: string[] = [];
-
-  try {
-    for (const pkg of PUBLISH_PACKAGES) {
-      console.log(`- 指针切换: ${pkg.name} ${targetDistTag} => ${targetVersion}`);
-      if (dryRun) {
-        console.log(`  [模拟] 执行: npm dist-tag add ${pkg.name}@${targetVersion} ${targetDistTag}`);
-      } else {
-        let switched = false;
-        const maxRetries = 5;
-        const retryIntervalMs = 2000;
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-          const res = runCmd("npm", ["dist-tag", "add", `${pkg.name}@${targetVersion}`, targetDistTag], {
-            allowFailure: true,
-            captureOutput: true,
-          });
-          if (res.status === 0) {
-            switched = true;
-            break;
+      if (!dryRun) {
+        try {
+          const remoteTags = getRemoteDistTags(pkg.name);
+          for (const tag of Object.keys(remoteTags)) {
+            if (tag.startsWith("temp-")) {
+              console.log(`  清理遗留临时标签: ${pkg.name} ${tag}`);
+              runCmd("npm", ["dist-tag", "rm", pkg.name, tag], {
+                allowFailure: true,
+              });
+            }
           }
-          if (attempt < maxRetries) {
-            console.log(`  [等待] ${pkg.name} 切换 ${targetDistTag} 失败，第 ${attempt}/${maxRetries} 次重试...`);
-            await sleepMs(retryIntervalMs);
-          } else {
-            const errorMsg = (res.stderr || res.stdout || "").trim();
-            throw new Error(`指针切换失败: ${pkg.name}@${targetVersion} ${targetDistTag}\n${errorMsg}`);
-          }
+        } catch {
+          // 忽略历史临时标签清理异常
         }
-      }
-      promotedPackages.push(pkg.name);
-    }
-  } catch (promotionError) {
-    console.error("\n分发指针切换失败！正在执行自动回滚...");
-    for (const promotedPkg of promotedPackages) {
-      const prevVersion = distTagBackup[promotedPkg];
-      try {
-        if (prevVersion) {
-          console.log(`  回滚 ${promotedPkg} ${targetDistTag} => ${prevVersion}`);
-          if (!dryRun) {
-            runCmd("npm", ["dist-tag", "add", `${promotedPkg}@${prevVersion}`, targetDistTag], {
-              allowFailure: true,
-            });
-          }
-        } else {
-          console.log(`  回滚 ${promotedPkg} 移除 ${targetDistTag}`);
-          if (!dryRun) {
-            runCmd("npm", ["dist-tag", "rm", promotedPkg, targetDistTag], {
-              allowFailure: true,
-            });
-          }
-        }
-      } catch (rollbackErr) {
-        console.error(`  回滚 ${promotedPkg} 失败:`, rollbackErr);
       }
     }
-    throw promotionError;
-  }
 
-  // 5. 清理临时分发标签
-  console.log(`\n[5/5] 清理临时分发标签 (${tempDistTag})...`);
-  for (const pkg of PUBLISH_PACKAGES) {
-    if (dryRun) {
-      console.log(`  [模拟] 执行: npm dist-tag rm ${pkg.name} ${tempDistTag}`);
-    } else {
-      runCmd("npm", ["dist-tag", "rm", pkg.name, tempDistTag], {
-        allowFailure: true,
-      });
-      // 级联清理可能遗留的历史临时标签
-      try {
-        const remoteTags = getRemoteDistTags(pkg.name);
-        for (const tag of Object.keys(remoteTags)) {
-          if (tag.startsWith(`temp-${targetVersion}-`)) {
-            runCmd("npm", ["dist-tag", "rm", pkg.name, tag], {
-              allowFailure: true,
-            });
-          }
-        }
-      } catch {
-        // 忽略历史临时标签清理异常
-      }
-    }
-  }
-
-  console.log(`\n发布成功！全量 7 个子包已成功发布并推广至 ${targetDistTag} 标签。`);
+    console.log(`\n发布成功！全量 7 个子包已成功发布至 ${targetDistTag} 标签。`);
   } finally {
     // 清理可能遗留在子包目录下的 *.tgz 压缩文件
     for (const pkg of PUBLISH_PACKAGES) {
