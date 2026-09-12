@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import type { ActionDockManifest } from "./types";
-import { PACKAGE_ID_REGEX } from "../utils";
+import { isPathOutsideBoundary, PACKAGE_ID_REGEX } from "../utils";
 
 export const MANIFEST_FILE_NAME = "actiondock.json";
 
@@ -107,14 +107,14 @@ export function validateManifest(
           } else if (options?.projectRoot) {
             const resolvedPath = resolve(options.projectRoot, item.entry);
             const rel = relative(options.projectRoot, resolvedPath);
-            if (rel.startsWith("..") || isAbsolute(rel)) {
+            if (isPathOutsideBoundary(rel)) {
               errors.push(`Action '${actionId}' entry escapes project root: ${item.entry}`);
             } else if (existsSync(resolvedPath)) {
               try {
                 const realEntry = realpathSync(resolvedPath);
                 const realRoot = realpathSync(options.projectRoot);
                 const relReal = relative(realRoot, realEntry);
-                if (relReal.startsWith("..") || isAbsolute(relReal)) {
+                if (isPathOutsideBoundary(relReal)) {
                   errors.push(`Action '${actionId}' entry symlink resolves outside project root: ${item.entry}`);
                 }
               } catch (err: any) {
@@ -155,14 +155,14 @@ export function validateManifest(
           } else if (options?.projectRoot) {
             const resolvedPath = resolve(options.projectRoot, item.entry);
             const rel = relative(options.projectRoot, resolvedPath);
-            if (rel.startsWith("..") || isAbsolute(rel)) {
+            if (isPathOutsideBoundary(rel)) {
               errors.push(`Playbook '${playbookId}' entry escapes project root: ${item.entry}`);
             } else if (existsSync(resolvedPath)) {
               try {
                 const realEntry = realpathSync(resolvedPath);
                 const realRoot = realpathSync(options.projectRoot);
                 const relReal = relative(realRoot, realEntry);
-                if (relReal.startsWith("..") || isAbsolute(relReal)) {
+                if (isPathOutsideBoundary(relReal)) {
                   errors.push(`Playbook '${playbookId}' entry symlink resolves outside project root: ${item.entry}`);
                 }
               } catch (err: any) {
@@ -198,14 +198,14 @@ export function validateManifest(
         } else if (options?.projectRoot) {
           const resolvedPath = resolve(options.projectRoot, asset);
           const rel = relative(options.projectRoot, resolvedPath);
-          if (rel.startsWith("..") || isAbsolute(rel)) {
+          if (isPathOutsideBoundary(rel)) {
             errors.push(`Asset path escapes project root: ${asset}`);
           } else if (existsSync(resolvedPath)) {
             try {
               const realAsset = realpathSync(resolvedPath);
               const realRoot = realpathSync(options.projectRoot);
               const relReal = relative(realRoot, realAsset);
-              if (relReal.startsWith("..") || isAbsolute(relReal)) {
+              if (isPathOutsideBoundary(relReal)) {
                 errors.push(`Asset symlink resolves outside project root: ${asset}`);
               }
             } catch (err: any) {

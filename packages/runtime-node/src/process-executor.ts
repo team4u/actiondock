@@ -1,4 +1,4 @@
-import { type ChildProcess, spawn } from "node:child_process";
+import childProcess, { type ChildProcess, spawn } from "node:child_process";
 import type {
   ProcessExecOptions,
   ProcessResult,
@@ -15,21 +15,35 @@ import { PROCESS_CANCELLED, PROCESS_OUTPUT_LIMIT, PROCESS_SPAWN_ERROR, PROCESS_T
  *
  * @param pid 目标子进程标识
  * @param signal 发送的系统信号
+ * @param spawnFn 进程启动函数，默认为 childProcess.spawn
  */
-function killProcessGroup(pid: number, signal: "SIGTERM" | "SIGKILL"): void {
+export function killProcessGroup(
+  pid: number,
+  signal: "SIGTERM" | "SIGKILL" = "SIGTERM",
+  spawnFn: typeof spawn = childProcess.spawn
+): void {
   if (process.platform === "win32") {
-    if (signal === "SIGKILL") {
-      try {
-        spawn("taskkill", ["/pid", String(pid), "/T", "/F"], { stdio: "ignore" });
-      } catch {
-        // 忽略进程树终止异常
-      }
-    } else {
+    // Windows 环境下优先通过 taskkill /T /F 递归终止整棵进程树，防止父进程退出后子孙进程孤儿化
+    try {
+      const killer = spawnFn("taskkill", ["/pid", String(pid), "/T", "/F"], { stdio: "ignore" });
+      killer.on?.("error", () => {
+        try {
+          process.kill(pid, signal);
+        } catch {
+          // 忽略已退出状态
+        }
+      });
+    } catch {
       try {
         process.kill(pid, signal);
       } catch {
         // 忽略已退出状态
       }
+    }
+    try {
+      process.kill(pid, signal);
+    } catch {
+      // 忽略已退出状态
     }
   } else {
     try {
@@ -48,6 +62,19 @@ function killProcessGroup(pid: number, signal: "SIGTERM" | "SIGKILL"): void {
  * 基于 Node.js 原生 child_process 实现的进程执行器。
  */
 export class NodeProcessExecutor implements ProcessExecutor {
+  private readonly gracePeriodMs: number;
+  private readonly spawnFn: typeof spawn;
+
+  constructor(options?: number | { gracePeriodMs?: number; spawnFn?: typeof spawn }) {
+    if (typeof options === "number") {
+      this.gracePeriodMs = options;
+      this.spawnFn = childProcess.spawn;
+    } else {
+      this.gracePeriodMs = options?.gracePeriodMs ?? 500;
+      this.spawnFn = options?.spawnFn ?? childProcess.spawn;
+    }
+  }
+
   /**
    * 执行外部系统命令，完整支持标准输入管道、超时控制、取消信号、输出容量截断及错误拦截。
    */
@@ -73,7 +100,7 @@ export class NodeProcessExecutor implements ProcessExecutor {
 
       let child: ChildProcess;
       try {
-        child = spawn(command, args, {
+        child = this.spawnFn(command, args, {
           cwd: options.cwd,
           env: options.env ? { ...process.env, ...options.env } : process.env,
           stdio: ["pipe", "pipe", "pipe"],
@@ -109,24 +136,33 @@ export class NodeProcessExecutor implements ProcessExecutor {
 
       const terminateChild = (sig: "SIGTERM" | "SIGKILL" = "SIGTERM") => {
         if (!pid) return;
-        killProcessGroup(pid, sig);
-        if (sig === "SIGTERM" && !graceTimer) {
-          graceTimer = setTimeout(() => {
-            if (!settled) {
-              killProcessGroup(pid, "SIGKILL");
-            }
-          }, 500);
-        }
-      };
-
-      const cleanup = () => {
+        killProcessGroup(pid, sig, this.spawnFn);
         if (timeoutTimer) {
           clearTimeout(timeoutTimer);
           timeoutTimer = undefined;
         }
-        if (graceTimer) {
-          clearTimeout(graceTimer);
-          graceTimer = undefined;
+        if (sig === "SIGKILL") {
+          if (graceTimer) {
+            clearTimeout(graceTimer);
+            graceTimer = undefined;
+          }
+        } else if (!graceTimer) {
+          graceTimer = setTimeout(() => {
+            graceTimer = undefined;
+            killProcessGroup(pid, "SIGKILL", this.spawnFn);
+          }, this.gracePeriodMs);
+          graceTimer.unref?.();
+        }
+      };
+
+      /**
+       * 清理执行阶段的监听器与执行超时定时器。
+       * 注意：不清理 graceTimer，确保进程树兜底清理不受 Promise 完成（close）影响。
+       */
+      const cleanupExecution = () => {
+        if (timeoutTimer) {
+          clearTimeout(timeoutTimer);
+          timeoutTimer = undefined;
         }
         if (options.signal && abortHandler) {
           options.signal.removeEventListener("abort", abortHandler);
@@ -221,7 +257,7 @@ export class NodeProcessExecutor implements ProcessExecutor {
       child.on("error", (err: Error) => {
         if (settled) return;
         settled = true;
-        cleanup();
+        cleanupExecution();
 
         const durationMs = Date.now() - startTime;
         const spawnError: RuntimeError = error || {
@@ -258,7 +294,7 @@ export class NodeProcessExecutor implements ProcessExecutor {
       child.on("close", (exitCode, exitSignal) => {
         if (settled) return;
         settled = true;
-        cleanup();
+        cleanupExecution();
 
         const durationMs = Date.now() - startTime;
         const stdoutBuf = Buffer.concat(stdoutChunks);

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { initProject } from "../src/project/init";
@@ -141,5 +141,33 @@ describe("Manifest v2 (actiondock.json) Module", () => {
     // 不是对象
     writeFileSync(join(tempDir, "actiondock.json"), JSON.stringify(["not", "an", "object"]));
     expect(() => loadManifest(tempDir)).toThrow(/Invalid manifest format/);
+  });
+
+  it("allows paths in directories prefixed with double dots like ..cache without false boundary escape", () => {
+    const cacheDir = join(tempDir, "..cache");
+    mkdirSync(cacheDir, { recursive: true });
+    writeFileSync(join(cacheDir, "action.ts"), "export default {};");
+    writeFileSync(join(cacheDir, "playbook.md"), "# Playbook");
+    writeFileSync(join(cacheDir, "asset.json"), "{}");
+
+    const dotManifest: ActionDockManifest = {
+      id: "test.dotcache",
+      schemaVersion: 2,
+      actions: {
+        "cache.act": {
+          entry: "..cache/action.ts",
+        },
+      },
+      playbooks: {
+        "cache.pb": {
+          entry: "..cache/playbook.md",
+        },
+      },
+      assets: ["..cache/asset.json"],
+    };
+
+    const res = validateManifest(dotManifest, { projectRoot: tempDir });
+    expect(res.valid).toBe(true);
+    expect(res.errors).toBeUndefined();
   });
 });

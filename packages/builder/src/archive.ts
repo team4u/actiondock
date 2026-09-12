@@ -1,6 +1,7 @@
 import { closeSync, createReadStream, createWriteStream, openSync, readdirSync, readFileSync, statSync, writeFileSync, writeSync } from "node:fs";
 import { createDeflateRaw, deflateRawSync, gzipSync, createGzip } from "node:zlib";
 import { basename, join, relative, sep } from "node:path";
+import { Transform, Writable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 /**
@@ -52,12 +53,15 @@ const CRC32_TABLE: Uint32Array = (() => {
   return table;
 })();
 
-function crc32(buf: Buffer): number {
-  let crc = 0xffffffff;
+function updateCrc32(crc: number, buf: Buffer): number {
   for (let i = 0; i < buf.length; i++) {
     crc = CRC32_TABLE[(crc ^ buf[i]) & 0xff] ^ (crc >>> 8);
   }
-  return (crc ^ 0xffffffff) >>> 0;
+  return crc;
+}
+
+function crc32(buf: Buffer): number {
+  return (updateCrc32(0xffffffff, buf) ^ 0xffffffff) >>> 0;
 }
 
 /** Unix 毫秒时间戳转 DOS 时间格式（date/time 各 16 位） */
@@ -184,8 +188,8 @@ export function createZipArchive(dir: string, outPath: string): void {
 }
 
 /**
- * 异步流式 zip 归档：与同步版结构对称，逐文件流式读取与异步 deflate，
- * 避免全量读入内存；压缩输出与同步版字节级一致。
+ * 异步流式 zip 归档：基于 PKZIP Data Descriptor 规范实现真正流式打包，
+ * 逐文件流式读取与增量压缩写入磁盘，避免在内存中积压全量原文件与压缩内容。
  */
 export async function createZipArchiveAsync(dir: string, outPath: string): Promise<void> {
   const rootName = basename(dir);
@@ -200,11 +204,22 @@ export async function createZipArchiveAsync(dir: string, outPath: string): Promi
   let offset = 0;
 
   const writeChunk = async (chunk: Buffer): Promise<void> => {
+    if (out.destroyed) {
+      throw new Error("Output stream has been destroyed");
+    }
     offset += chunk.length;
     if (!out.write(chunk)) {
       await new Promise<void>((resolve, reject) => {
-        out.once("drain", resolve);
-        out.once("error", reject);
+        const onDrain = () => {
+          out.off("error", onError);
+          resolve();
+        };
+        const onError = (err: Error) => {
+          out.off("drain", onDrain);
+          reject(err);
+        };
+        out.once("drain", onDrain);
+        out.once("error", onError);
       });
     }
   };
@@ -217,41 +232,82 @@ export async function createZipArchiveAsync(dir: string, outPath: string): Promi
       const stat = statSync(fullPath);
       const { date, time } = dosDateTime(stat.mtimeMs);
 
-      // 流式读取并异步 deflate；未压缩时 payload 与 content 同源仅读取一次
-      let content: Buffer = Buffer.alloc(0);
-      let payload: Buffer = Buffer.alloc(0);
-      let method = 0;
-      if (!entry.isDir && stat.size > 0) {
-        const deflated = await deflateStream(fullPath, { level: 9 });
-        content = await readFileAsync(fullPath);
-        if (deflated.length < content.length) {
-          method = 8;
-          payload = deflated;
-        } else {
-          payload = content;
-        }
-      }
-      const crc = crc32(content);
+      // 外部属性：Unix 权限左移 16 位，目录附加 MS-DOS 目录位
+      const isExec =
+        !entry.isDir &&
+        (Boolean(stat.mode & 0o111) || entry.relPath.includes("bin/") || entry.relPath.startsWith("bin/"));
+      const fileMode = isExec ? 0o100755 : 0o100644;
+      const extAttrs = ((entry.isDir ? 0o40755 : fileMode) << 16) | (entry.isDir ? 0x10 : 0);
+
+      const localOffset = offset;
+      const isDeflatedFile = !entry.isDir && stat.size > 0;
+      const method = isDeflatedFile ? 8 : 0;
+      const flag = isDeflatedFile ? 0x0808 : 0x0800;
 
       // Local File Header（30 字节 + 文件名）
       const local = Buffer.alloc(30);
       local.writeUInt32LE(0x04034b50, 0);
       local.writeUInt16LE(20, 4);
-      local.writeUInt16LE(0x0800, 6); // UTF-8 文件名标志
+      local.writeUInt16LE(flag, 6);
       local.writeUInt16LE(method, 8);
       local.writeUInt16LE(time, 10);
       local.writeUInt16LE(date, 12);
-      local.writeUInt32LE(crc, 14);
-      local.writeUInt32LE(payload.length, 18);
-      local.writeUInt32LE(content.length, 22);
+      local.writeUInt32LE(0, 14); // bit 3 开启或空文件/目录置 0
+      local.writeUInt32LE(0, 18); // bit 3 开启或空文件/目录置 0
+      local.writeUInt32LE(0, 22); // bit 3 开启或空文件/目录置 0
       local.writeUInt16LE(nameBuf.length, 26);
       local.writeUInt16LE(0, 28);
 
-      const localOffset = offset;
       await writeChunk(local);
       await writeChunk(nameBuf);
-      if (payload.length > 0) {
-        await writeChunk(payload);
+
+      let fileCrc = 0;
+      let fileCompressedSize = 0;
+      let fileUncompressedSize = 0;
+
+      if (isDeflatedFile) {
+        let crcState = 0xffffffff;
+        let uncompressedSize = 0;
+        let compressedSize = 0;
+
+        const crcTransform = new Transform({
+          transform(chunk: Buffer, _encoding, callback) {
+            const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+            crcState = updateCrc32(crcState, buf);
+            uncompressedSize += buf.length;
+            callback(null, buf);
+          },
+        });
+
+        const deflater = createDeflateRaw({ level: 9 });
+
+        const outWritable = new Writable({
+          async write(chunk: Buffer, _encoding, callback) {
+            try {
+              const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+              compressedSize += buf.length;
+              await writeChunk(buf);
+              callback();
+            } catch (err) {
+              callback(err as Error);
+            }
+          },
+        });
+
+        const fileStream = createReadStream(fullPath);
+        await pipeline(fileStream, crcTransform, deflater, outWritable);
+
+        fileCrc = (crcState ^ 0xffffffff) >>> 0;
+        fileCompressedSize = compressedSize;
+        fileUncompressedSize = uncompressedSize;
+
+        // Data Descriptor（16 字节）：0x08074b50 + CRC32 + compressedSize + uncompressedSize
+        const dd = Buffer.alloc(16);
+        dd.writeUInt32LE(0x08074b50, 0);
+        dd.writeUInt32LE(fileCrc, 4);
+        dd.writeUInt32LE(fileCompressedSize, 8);
+        dd.writeUInt32LE(fileUncompressedSize, 12);
+        await writeChunk(dd);
       }
 
       // Central Directory Header（46 字节 + 文件名）
@@ -259,24 +315,18 @@ export async function createZipArchiveAsync(dir: string, outPath: string): Promi
       central.writeUInt32LE(0x02014b50, 0);
       central.writeUInt16LE((3 << 8) | 20, 4); // version made by: Unix + ZIP 2.0
       central.writeUInt16LE(20, 6); // version needed
-      central.writeUInt16LE(0x0800, 8);
+      central.writeUInt16LE(flag, 8);
       central.writeUInt16LE(method, 10);
       central.writeUInt16LE(time, 12);
       central.writeUInt16LE(date, 14);
-      central.writeUInt32LE(crc, 16);
-      central.writeUInt32LE(payload.length, 20);
-      central.writeUInt32LE(content.length, 24);
+      central.writeUInt32LE(fileCrc, 16);
+      central.writeUInt32LE(fileCompressedSize, 20);
+      central.writeUInt32LE(fileUncompressedSize, 24);
       central.writeUInt16LE(nameBuf.length, 28);
       central.writeUInt16LE(0, 30); // extra len
       central.writeUInt16LE(0, 32); // comment len
       central.writeUInt16LE(0, 34); // disk start
       central.writeUInt16LE(0, 36); // internal attrs
-      // 外部属性：Unix 权限左移 16 位，目录附加 MS-DOS 目录位
-      const isExec =
-        !entry.isDir &&
-        (Boolean(stat.mode & 0o111) || entry.relPath.includes("bin/") || entry.relPath.startsWith("bin/"));
-      const fileMode = isExec ? 0o100755 : 0o100644;
-      const extAttrs = ((entry.isDir ? 0o40755 : fileMode) << 16) | (entry.isDir ? 0x10 : 0);
       central.writeUInt32LE(extAttrs >>> 0, 38);
       central.writeUInt32LE(localOffset, 42);
       centralRecords.push({ header: Buffer.concat([central, nameBuf]) });
@@ -309,31 +359,6 @@ export async function createZipArchiveAsync(dir: string, outPath: string): Promi
     out.destroy();
     throw err;
   }
-}
-
-/** 异步读取整个文件 */
-function readFileAsync(fullPath: string): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    const stream = createReadStream(fullPath);
-    stream.on("data", (c) => chunks.push(c as Buffer));
-    stream.on("end", () => resolve(Buffer.concat(chunks)));
-    stream.on("error", reject);
-  });
-}
-
-/** 异步 deflateRaw 压缩整个文件流 */
-function deflateStream(fullPath: string, options: { level: number }): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    const source = createReadStream(fullPath);
-    const deflater = createDeflateRaw(options);
-    source.on("error", reject);
-    deflater.on("error", reject);
-    deflater.on("data", (c) => chunks.push(c as Buffer));
-    deflater.on("end", () => resolve(Buffer.concat(chunks)));
-    source.pipe(deflater);
-  });
 }
 
 /* ------------------------------------------------------------------ */

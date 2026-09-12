@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { Readable } from "node:stream";
-import { SERVER_ERROR } from "@actiondock/core";
+import { formatHostForUrl, SERVER_ERROR } from "@actiondock/core";
 import { pipeline } from "node:stream/promises";
 
 /**
@@ -23,11 +23,25 @@ export interface NodeHttpServerOptions {
  */
 export function createWebRequest(
   req: IncomingMessage,
-  options?: { baseOrigin?: string }
+  options?: { baseOrigin?: string; res?: ServerResponse } | ServerResponse
 ): Request {
   const protocol = (req.socket as any)?.encrypted ? "https" : "http";
   const host = req.headers.host || "127.0.0.1";
-  const baseOrigin = options?.baseOrigin || `${protocol}://${host}`;
+  let baseOrigin: string | undefined;
+  let res: ServerResponse | undefined;
+
+  if (options) {
+    if ("writableFinished" in options || typeof (options as any).writeHead === "function") {
+      res = options as ServerResponse;
+    } else {
+      baseOrigin = options.baseOrigin;
+      res = options.res;
+    }
+  }
+  if (!res && (req as any).res) {
+    res = (req as any).res;
+  }
+  baseOrigin = baseOrigin || `${protocol}://${host}`;
   const url = new URL(req.url || "/", baseOrigin).href;
 
   const headers = new Headers();
@@ -51,6 +65,13 @@ export function createWebRequest(
       ac.abort(new Error("Request aborted by client"));
     }
   });
+  if (res) {
+    res.on("close", () => {
+      if (!res.writableFinished) {
+        ac.abort(new Error("Request aborted by client"));
+      }
+    });
+  }
 
   const init: RequestInit = {
     method,
@@ -116,7 +137,7 @@ export function createRequestListener(
   return (req, res) => {
     let webReq: Request;
     try {
-      webReq = createWebRequest(req, options);
+      webReq = createWebRequest(req, { ...options, res });
     } catch (err: any) {
       if (!res.headersSent) {
         res.statusCode = 400;
@@ -217,7 +238,7 @@ export class NodeHttpServer {
    * 完整的 HTTP 访问基础路径。
    */
   get url(): string {
-    return `http://${this.hostAddress}:${this.portNumber}`;
+    return `http://${formatHostForUrl(this.hostAddress)}:${this.portNumber}`;
   }
 
   /**

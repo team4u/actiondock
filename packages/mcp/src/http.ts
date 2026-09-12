@@ -1,6 +1,7 @@
 import {
   ACTIONDOCK_VERSION,
   DEFAULT_MAX_BODY_BYTES,
+  formatHostForUrl,
   isLoopbackHost,
   launchHttpServer,
   resolveCorsHeaders,
@@ -243,7 +244,7 @@ export function startMcpHttpServer(
     }
 
     const actualHost = host === "0.0.0.0" ? "127.0.0.1" : host;
-    const url = `http://${actualHost}:${server.port}`;
+    const url = `http://${formatHostForUrl(actualHost)}:${server.port}`;
 
     return {
       port: server.port ?? port,

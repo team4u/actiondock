@@ -445,6 +445,21 @@ describe("SqliteRuntimeStorage", () => {
         rmSync(tempBase, { recursive: true, force: true });
       }
     });
+
+    it("allows dataDir with double-dot prefix like ..cache without throwing boundary escape error", async () => {
+      const { mkdtempSync, mkdirSync, rmSync } = await import("node:fs");
+      const { tmpdir } = await import("node:os");
+      const tempBase = mkdtempSync(join(tmpdir(), "ad-cache-storage-test-"));
+      try {
+        const cacheDataDir = join(tempBase, "..cache-data");
+        mkdirSync(cacheDataDir, { recursive: true });
+
+        const resolved = resolveDatabasePath("my-pkg", { dataDir: cacheDataDir });
+        expect(resolved).toBe(join(cacheDataDir, "my-pkg", "runtime.db"));
+      } finally {
+        rmSync(tempBase, { recursive: true, force: true });
+      }
+    });
   });
 });
 

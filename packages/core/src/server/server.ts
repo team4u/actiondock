@@ -27,6 +27,14 @@ import { isLoopbackHost, resolveCorsHeaders, verifyBearerToken } from "./securit
 import type { ActionDockServerInstance, CoreHttpServerInstance, ServerOptions } from "./types";
 
 /**
+ * 规范化主机地址用于拼接 URL。
+ * 若 host 包含冒号 : 且不以 [ 开头，则添加中括号包裹（IPv6 标准格式）。
+ */
+export function formatHostForUrl(host: string): string {
+  return host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
+}
+
+/**
  * 根据当前运行时环境启动标准 Web Request/Response 兼容的 HTTP 服务。
  */
 export async function launchHttpServer(
@@ -35,6 +43,20 @@ export async function launchHttpServer(
   fetchHandler: (req: Request) => Promise<Response>
 ): Promise<CoreHttpServerInstance> {
   const srv = createNodeHttpServer(async (req: IncomingMessage, res: ServerResponse) => {
+    const ac = new AbortController();
+    const onReqClose = () => {
+      if (!req.complete) {
+        ac.abort(new Error("Request aborted by client"));
+      }
+    };
+    const onResClose = () => {
+      if (!res.writableFinished) {
+        ac.abort(new Error("Request aborted by client"));
+      }
+    };
+    req.on("close", onReqClose);
+    res.on("close", onResClose);
+
     try {
       const protocol = (req.socket as any)?.encrypted ? "https" : "http";
       const hostHeader = req.headers.host || "127.0.0.1";
@@ -52,7 +74,7 @@ export async function launchHttpServer(
 
       const method = (req.method || "GET").toUpperCase();
       const hasBody = method !== "GET" && method !== "HEAD";
-      const init: RequestInit = { method, headers };
+      const init: RequestInit = { method, headers, signal: ac.signal };
       if (hasBody) {
         (init as any).body = Readable.toWeb(req);
         (init as any).duplex = "half";
@@ -77,6 +99,9 @@ export async function launchHttpServer(
       } else {
         res.destroy(err);
       }
+    } finally {
+      req.removeListener("close", onReqClose);
+      res.removeListener("close", onResClose);
     }
   });
 
@@ -115,9 +140,10 @@ export async function startActionDockServer(
   options: ServerOptions = {}
 ): Promise<ActionDockServerInstance> {
   let hostInstance: ActionDockHost | undefined =
-    options.host && typeof options.host === "object" && "listActions" in options.host
+    options.hostInstance ??
+    (options.host && typeof options.host === "object" && "listActions" in options.host
       ? options.host
-      : undefined;
+      : undefined);
 
   let targetInstance: ActionDockTarget | undefined = options.target;
 
@@ -376,7 +402,7 @@ export async function startActionDockServer(
     host: hostInstance,
     target: targetInstance,
     get url() {
-      return `http://${actualHost}:${this.port}`;
+      return `http://${formatHostForUrl(actualHost)}:${this.port}`;
     },
     ready: Promise.resolve(),
     stop: async (stopOptions?: { graceMs?: number }) => {

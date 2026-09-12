@@ -1,13 +1,24 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { createServer } from "node:http";
+import type * as cp from "node:child_process";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { createServer, request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   createRequestListener,
   ExecaProcessExecutor,
+  killProcessGroup,
   NodeHttpServer,
   NodeModuleLoader,
+  NodeProcessExecutor,
   NodeSqliteDriver,
   unwrapDefaultExport,
 } from "../src";
@@ -219,6 +230,226 @@ describe("ExecaProcessExecutor 单元测试", () => {
         throwOnError: true,
       })
     ).rejects.toThrow();
+  });
+
+  it("取消执行时递归清理进程组与子孙进程", async () => {
+    const pidFile = join(
+      tmpdir(),
+      `sub-cancel-${Date.now()}-${Math.random().toString(36).slice(2)}.pid`
+    );
+    const ac = new AbortController();
+
+    const execPromise = executor.exec(
+      "node",
+      [
+        "-e",
+        `
+        const { spawn } = require("child_process");
+        const fs = require("fs");
+        const c = spawn("sleep", ["30"]);
+        fs.writeFileSync(process.argv[1], String(c.pid));
+        setInterval(() => {}, 1000);
+      `,
+        pidFile,
+      ],
+      { signal: ac.signal }
+    );
+
+    while (!existsSync(pidFile)) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    const subPid = parseInt(readFileSync(pidFile, "utf8").trim(), 10);
+    ac.abort();
+
+    const res = await execPromise;
+    expect(res.ok).toBe(false);
+    expect(res.cancelled).toBe(true);
+
+    await new Promise((r) => setTimeout(r, 50));
+    let isAlive = true;
+    try {
+      process.kill(subPid, 0);
+    } catch {
+      isAlive = false;
+    }
+    expect(isAlive).toBe(false);
+    try {
+      unlinkSync(pidFile);
+    } catch {
+      // 忽略清理文件异常
+    }
+  });
+
+  it("超时退出时递归清理进程组与子孙进程", async () => {
+    const pidFile = join(
+      tmpdir(),
+      `sub-timeout-${Date.now()}-${Math.random().toString(36).slice(2)}.pid`
+    );
+
+    const execPromise = executor.exec(
+      "node",
+      [
+        "-e",
+        `
+        const { spawn } = require("child_process");
+        const fs = require("fs");
+        const c = spawn("sleep", ["30"]);
+        fs.writeFileSync(process.argv[1], String(c.pid));
+        setInterval(() => {}, 1000);
+      `,
+        pidFile,
+      ],
+      { timeoutMs: 150 }
+    );
+
+    while (!existsSync(pidFile)) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    const subPid = parseInt(readFileSync(pidFile, "utf8").trim(), 10);
+
+    const res = await execPromise;
+    expect(res.ok).toBe(false);
+    expect(res.timedOut).toBe(true);
+
+    await new Promise((r) => setTimeout(r, 50));
+    let isAlive = true;
+    try {
+      process.kill(subPid, 0);
+    } catch {
+      isAlive = false;
+    }
+    expect(isAlive).toBe(false);
+    try {
+      unlinkSync(pidFile);
+    } catch {
+      // 忽略清理文件异常
+    }
+  });
+
+  it("输出溢出时递归清理进程组与子孙进程", async () => {
+    const pidFile = join(
+      tmpdir(),
+      `sub-limit-${Date.now()}-${Math.random().toString(36).slice(2)}.pid`
+    );
+
+    const execPromise = executor.exec(
+      "node",
+      [
+        "-e",
+        `
+        const { spawn } = require("child_process");
+        const fs = require("fs");
+        const c = spawn("sleep", ["30"]);
+        fs.writeFileSync(process.argv[1], String(c.pid));
+        setInterval(() => {
+          process.stdout.write("X".repeat(1024));
+        }, 10);
+      `,
+        pidFile,
+      ],
+      { maxOutputBytes: 100 }
+    );
+
+    while (!existsSync(pidFile)) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    const subPid = parseInt(readFileSync(pidFile, "utf8").trim(), 10);
+
+    const res = await execPromise;
+    expect(res.ok).toBe(false);
+    expect(res.error?.code).toBe("PROCESS_OUTPUT_LIMIT");
+
+    await new Promise((r) => setTimeout(r, 50));
+    let isAlive = true;
+    try {
+      process.kill(subPid, 0);
+    } catch {
+      isAlive = false;
+    }
+    expect(isAlive).toBe(false);
+    try {
+      unlinkSync(pidFile);
+    } catch {
+      // 忽略清理文件异常
+    }
+  });
+
+  it("Windows 平台环境下调用 killProcessGroup 递归调用 taskkill 终止进程树", () => {
+    const origPlatform = process.platform;
+    const origKill = process.kill;
+    try {
+      Object.defineProperty(process, "platform", { value: "win32", configurable: true });
+
+      const spawnedCommands: { command: string; args: string[] }[] = [];
+      const mockSpawn = ((cmd: string, args: string[]) => {
+        spawnedCommands.push({ command: cmd, args: args });
+        return { on: () => {} } as any;
+      }) as typeof cp.spawn;
+
+      const killedSignals: { pid: number; signal: string }[] = [];
+      process.kill = ((pid: number, sig?: string | number) => {
+        killedSignals.push({ pid, signal: String(sig) });
+        return true;
+      }) as any;
+
+      // SIGTERM 时必须直接执行 taskkill /T /F 递归终止进程树，防止父进程退出后子进程孤儿化
+      killProcessGroup(99999, "SIGTERM", mockSpawn);
+      expect(spawnedCommands.length).toBe(1);
+      expect(spawnedCommands[0].command).toBe("taskkill");
+      expect(spawnedCommands[0].args).toEqual(["/pid", "99999", "/T", "/F"]);
+      expect(killedSignals.length).toBe(1);
+      expect(killedSignals[0]).toEqual({ pid: 99999, signal: "SIGTERM" });
+
+      // SIGKILL 时同样执行 taskkill /T /F
+      spawnedCommands.length = 0;
+      killedSignals.length = 0;
+      killProcessGroup(88888, "SIGKILL", mockSpawn);
+      expect(spawnedCommands.length).toBe(1);
+      expect(spawnedCommands[0].command).toBe("taskkill");
+      expect(spawnedCommands[0].args).toEqual(["/pid", "88888", "/T", "/F"]);
+      expect(killedSignals.length).toBe(1);
+      expect(killedSignals[0]).toEqual({ pid: 88888, signal: "SIGKILL" });
+    } finally {
+      Object.defineProperty(process, "platform", { value: origPlatform, configurable: true });
+      process.kill = origKill;
+    }
+  });
+
+  it("父进程关闭后 Promise 立即解析，且进程树兜底清理定时器独立执行不被取消", async () => {
+    // 实例化短兜底周期（60ms）的执行器
+    const customExecutor = new NodeProcessExecutor(60);
+
+    let sigkillCalled = false;
+    let sigtermCalled = false;
+    const origKill = process.kill;
+    process.kill = ((pid: number, sig?: string | number) => {
+      if (sig === "SIGTERM") sigtermCalled = true;
+      if (sig === "SIGKILL") sigkillCalled = true;
+      return origKill(pid, sig as any);
+    }) as any;
+
+    try {
+      const ac = new AbortController();
+      setTimeout(() => ac.abort(), 20);
+
+      const startTime = Date.now();
+      const res = await customExecutor.exec("sleep", ["2"], { signal: ac.signal });
+      const duration = Date.now() - startTime;
+
+      // 验证 Promise 立即解析（远小于兜底超时与总 sleep 时间）
+      expect(res.cancelled).toBe(true);
+      expect(duration).toBeLessThan(150);
+      expect(sigtermCalled).toBe(true);
+
+      // 在 Promise 解析完成瞬间，兜底宽限期尚未结束，SIGKILL 尚未触发
+      // 等待宽限期结束（60ms 后）
+      await new Promise((r) => setTimeout(r, 80));
+
+      // 验证兜底清理并未因父进程 close 或 Promise settled 而被清除，成功触发 SIGKILL
+      expect(sigkillCalled).toBe(true);
+    } finally {
+      process.kill = origKill;
+    }
   });
 });
 
@@ -474,5 +705,72 @@ describe("NodeHttpServer 单元测试", () => {
     const json = JSON.parse(responseBody);
     expect(json.ok).toBe(false);
     expect(json.error.code).toBe("BAD_REQUEST");
+  });
+
+  it("客户端在服务端响应完成前断开时（!res.writableFinished），createWebRequest 正确触发 abort", async () => {
+    let aborted = false;
+    let signalTriggered = false;
+
+    const server = createServer(
+      createRequestListener(async (req) => {
+        req.signal.addEventListener("abort", () => {
+          aborted = true;
+        });
+
+        // 模拟长耗时异步处理
+        for (let i = 0; i < 40; i++) {
+          if (req.signal.aborted) {
+            signalTriggered = true;
+            break;
+          }
+          await new Promise((r) => setTimeout(r, 20));
+        }
+
+        return new Response("done");
+      })
+    );
+
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as any).port;
+
+    const clientReq = request({
+      hostname: "127.0.0.1",
+      port,
+      path: "/test",
+      method: "GET",
+    });
+
+    clientReq.on("error", () => {});
+    clientReq.end();
+
+    await new Promise((r) => setTimeout(r, 40));
+    // 提前销毁客户端连接
+    clientReq.destroy();
+
+    for (let i = 0; i < 40; i++) {
+      if (aborted && signalTriggered) break;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+
+    expect(aborted).toBe(true);
+    expect(signalTriggered).toBe(true);
+
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  it("NodeHttpServer 绑定 IPv6 地址时 url 属性正确包含中括号", async () => {
+    const server = new NodeHttpServer({
+      port: 0,
+      host: "::1",
+      fetch: async () => new Response("ok"),
+    });
+
+    await server.listen(0, "::1");
+    try {
+      expect(server.url).toMatch(/^http:\/\/\[::1\]:\d+$/);
+      expect(() => new URL(server.url)).not.toThrow();
+    } finally {
+      await server.close();
+    }
   });
 });

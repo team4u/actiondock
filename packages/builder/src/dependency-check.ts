@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
+import { isPathOutsideBoundary } from "@actiondock/core";
 import { BuilderError } from "./errors";
 import type { SelectionPlan } from "./types";
 
@@ -240,7 +241,7 @@ export function assertRelativeDependenciesIntegrity(
 
       // 检查目标文件是否越出项目根目录
       const relToRoot = relative(realRoot, resolvedTarget);
-      if (relToRoot.startsWith("..") || resolve(resolvedTarget) === resolve(realRoot, "..")) {
+      if (isPathOutsideBoundary(relToRoot) || resolve(resolvedTarget) === resolve(realRoot, "..")) {
         throw new BuilderError(
           `Action '${actionId}' imports relative module '${specifier}', which resolves outside project root: '${resolvedTarget}'. External relative imports outside project root are not allowed in exported Skill packages.`,
           "EXTERNAL_LOCAL_DEPENDENCY"

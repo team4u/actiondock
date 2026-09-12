@@ -1,6 +1,6 @@
 import { existsSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, delimiter, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 /**
  * 跨运行时安全查找可执行文件绝对物理路径。
@@ -159,6 +159,21 @@ export function canonicalizePath(targetPath: string): string {
 }
 
 /**
+ * 校验相对路径是否越出根目录边界。
+ * 只有当相对路径为绝对路径、等于 ".." 或以 "..[/\\]" 起始时才判定为越界，
+ * 避免形如 ..cache、..cache/file 等在根目录内部的文件或目录被误判越界。
+ */
+export function isPathOutsideBoundary(rel: string): boolean {
+  return (
+    isAbsolute(rel) ||
+    rel === ".." ||
+    rel.startsWith(".." + sep) ||
+    rel.startsWith("../") ||
+    rel.startsWith("..\\")
+  );
+}
+
+/**
  * Ensures that a given path stays strictly within the specified root boundary,
  * preventing relative directory escape (..) and symlink jailbreak.
  * Traverses upward to the nearest existing ancestor directory to resolve symlinks
@@ -173,7 +188,7 @@ export function assertPathWithinRoot(
   const resolvedTarget = resolve(rootDir, targetPath);
   const rel = relative(resolvedRoot, resolvedTarget);
 
-  if (rel.startsWith("..") || isAbsolute(rel)) {
+  if (isPathOutsideBoundary(rel)) {
     throw new Error(`'${fieldName}' escapes boundary '${rootDir}': ${targetPath}`);
   }
 
@@ -181,7 +196,7 @@ export function assertPathWithinRoot(
   const canonicalTarget = canonicalizePath(resolvedTarget);
 
   const relReal = relative(canonicalRoot, canonicalTarget);
-  if (relReal.startsWith("..") || isAbsolute(relReal)) {
+  if (isPathOutsideBoundary(relReal)) {
     throw new Error(
       `'${fieldName}' symlink resolves outside boundary '${rootDir}': ${targetPath}`
     );

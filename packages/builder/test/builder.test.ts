@@ -38,6 +38,7 @@ import {
   SkillExporter,
   createTarGzArchive,
   createZipArchive,
+  createZipArchiveAsync,
 } from "../src";
 import {
   readTarGzEntries,
@@ -1013,6 +1014,131 @@ export default defineAction({
         expect(tarModes.get(`${rootName}/bin/run.sh`)).toBe(0o755);
         expect(tarModes.get(`${rootName}/readme.txt`)).toBe(0o644);
         expect(tarModes.get(`${rootName}/bin`)).toBe(0o755);
+      } finally {
+        rmSync(archiveTestDir, { recursive: true, force: true });
+      }
+    });
+
+    it("createZipArchiveAsync: 真正流式打包、大文件与 PKZIP Data Descriptor 规范兼容性验证", async () => {
+      const archiveTestDir = mkdtempSync(join(tmpdir(), "ad-archive-stream-test-"));
+      try {
+        const binDir = join(archiveTestDir, "bin");
+        mkdirSync(binDir, { recursive: true });
+        const subDir = join(archiveTestDir, "subdir");
+        mkdirSync(subDir, { recursive: true });
+
+        // 1. 空文件
+        const emptyFile = join(archiveTestDir, "empty.txt");
+        writeFileSync(emptyFile, "");
+
+        // 2. 普通文本文件
+        const normalFile = join(archiveTestDir, "readme.txt");
+        writeFileSync(normalFile, "Hello Streaming Zip Archive\n");
+        chmodSync(normalFile, 0o644);
+
+        // 3. 可执行脚本
+        const execScript = join(binDir, "run.sh");
+        writeFileSync(execScript, "#!/bin/sh\necho streamed-ok\n");
+        chmodSync(execScript, 0o755);
+
+        // 4. 大文件（2MB）
+        const largeContent = Buffer.alloc(2 * 1024 * 1024, "ActionDock-Streaming-Zip-Data-Descriptor-2026\n");
+        const largeFile = join(subDir, "large.dat");
+        writeFileSync(largeFile, largeContent);
+
+        const zipOut = join(tempDir, "stream-test.zip");
+        await createZipArchiveAsync(archiveTestDir, zipOut);
+
+        expect(existsSync(zipOut)).toBe(true);
+        const rootName = basename(archiveTestDir);
+
+        // 解包并验证内容一致性
+        const zipEntries = readZipEntries(zipOut);
+        expect(zipEntries.get(`${rootName}/empty.txt`)?.length).toBe(0);
+        expect(zipEntries.get(`${rootName}/readme.txt`)?.toString("utf8")).toBe("Hello Streaming Zip Archive\n");
+        expect(zipEntries.get(`${rootName}/bin/run.sh`)?.toString("utf8")).toBe("#!/bin/sh\necho streamed-ok\n");
+        const readLarge = zipEntries.get(`${rootName}/subdir/large.dat`);
+        expect(readLarge).toBeDefined();
+        expect(readLarge!.equals(largeContent)).toBe(true);
+
+        // 验证权限位
+        const zipModes = readZipEntryModes(zipOut);
+        expect(zipModes.get(`${rootName}/bin/run.sh`)).toBe(0o100755);
+        expect(zipModes.get(`${rootName}/readme.txt`)).toBe(0o100644);
+        expect(zipModes.get(`${rootName}/bin`)).toBe(0o40755);
+
+        // 二进制结构校验：验证 PKZIP Data Descriptor 规范
+        const zipBuf = readFileSync(zipOut);
+
+        // 定位 Central Directory 并校验条目的 Local File Header 与 Data Descriptor
+        let eocd = -1;
+        for (let i = zipBuf.length - 22; i >= 0; i--) {
+          if (zipBuf.readUInt32LE(i) === 0x06054b50) {
+            eocd = i;
+            break;
+          }
+        }
+        expect(eocd).toBeGreaterThan(0);
+
+        const entryCount = zipBuf.readUInt16LE(eocd + 10);
+        let ptr = zipBuf.readUInt32LE(eocd + 16);
+
+        for (let i = 0; i < entryCount; i++) {
+          expect(zipBuf.readUInt32LE(ptr)).toBe(0x02014b50);
+          const flag = zipBuf.readUInt16LE(ptr + 8);
+          const method = zipBuf.readUInt16LE(ptr + 10);
+          const crc = zipBuf.readUInt32LE(ptr + 16);
+          const compSize = zipBuf.readUInt32LE(ptr + 20);
+          const uncompSize = zipBuf.readUInt32LE(ptr + 24);
+          const nameLen = zipBuf.readUInt16LE(ptr + 28);
+          const extraLen = zipBuf.readUInt16LE(ptr + 30);
+          const commentLen = zipBuf.readUInt16LE(ptr + 32);
+          const localOffset = zipBuf.readUInt32LE(ptr + 42);
+          const entryName = zipBuf.toString("utf8", ptr + 46, ptr + 46 + nameLen);
+
+          // Local Header 检验
+          expect(zipBuf.readUInt32LE(localOffset)).toBe(0x04034b50);
+          const localFlag = zipBuf.readUInt16LE(localOffset + 6);
+          const localMethod = zipBuf.readUInt16LE(localOffset + 8);
+          const localCrc = zipBuf.readUInt32LE(localOffset + 14);
+          const localComp = zipBuf.readUInt32LE(localOffset + 18);
+          const localUncomp = zipBuf.readUInt32LE(localOffset + 22);
+
+          if (entryName.endsWith("/") || entryName.endsWith("empty.txt")) {
+            // 目录与空文件：Stored 模式，无需 Data Descriptor
+            expect(localFlag).toBe(0x0800);
+            expect(localMethod).toBe(0);
+            expect(localCrc).toBe(0);
+            expect(localComp).toBe(0);
+            expect(localUncomp).toBe(0);
+          } else {
+            // 非空文件：Deflate 模式且启用 bit 3 Data Descriptor
+            expect(localFlag).toBe(0x0808);
+            expect(flag).toBe(0x0808);
+            expect(localMethod).toBe(8);
+            expect(method).toBe(8);
+            // Local Header 中的 crc/尺寸字段置 0
+            expect(localCrc).toBe(0);
+            expect(localComp).toBe(0);
+            expect(localUncomp).toBe(0);
+            // Central Directory 中必须记录真实值
+            expect(crc).toBeGreaterThan(0);
+            expect(compSize).toBeGreaterThan(0);
+            expect(uncompSize).toBeGreaterThan(0);
+
+            // 紧随压缩数据之后存在 16 字节 Data Descriptor
+            const localNameLen = zipBuf.readUInt16LE(localOffset + 26);
+            const localExtraLen = zipBuf.readUInt16LE(localOffset + 28);
+            const ddOffset = localOffset + 30 + localNameLen + localExtraLen + compSize;
+
+            expect(zipBuf.readUInt32LE(ddOffset)).toBe(0x08074b50); // 签名
+            expect(zipBuf.readUInt32LE(ddOffset + 4)).toBe(crc); // CRC32
+            expect(zipBuf.readUInt32LE(ddOffset + 8)).toBe(compSize); // 压缩尺寸
+            expect(zipBuf.readUInt32LE(ddOffset + 12)).toBe(uncompSize); // 原始尺寸
+          }
+
+          ptr += 46 + nameLen + extraLen + commentLen;
+        }
       } finally {
         rmSync(archiveTestDir, { recursive: true, force: true });
       }

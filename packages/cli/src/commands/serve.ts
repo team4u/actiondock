@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { findProjectRoot, loadProjectConfig, startActionDockServer } from "@actiondock/core";
+import { findProjectRoot, formatHostForUrl, loadProjectConfig, startActionDockServer } from "@actiondock/core";
 import { createActionDockMcpServer } from "@actiondock/mcp";
 import { createMcpHandler } from "@modelcontextprotocol/server";
 import { Command } from "commander";
@@ -109,10 +109,13 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
           projectRoot: projectRoot || undefined,
         });
 
+        const displayHost = formatHostForUrl(host);
+        const actualEndpointHost = formatHostForUrl(host === "0.0.0.0" ? "127.0.0.1" : host);
+
         writeStdout(`\n======================================================`, context);
         writeStdout(`  ActionDock 2.0 HTTP Runner Server`, context);
         writeStdout(`======================================================`, context);
-        writeStdout(`  * Listening on:    http://${host}:${server.port}`, context);
+        writeStdout(`  * Listening on:    http://${displayHost}:${server.port}`, context);
         writeStdout(`  * Project:         ${projectName}`, context);
         if (projectRoot && exposeDebugInfo) {
           writeStdout(`  * Root Path:       ${projectRoot}`, context);
@@ -124,12 +127,12 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
         writeStdout(`  * CORS Origins:    ${corsOrigins ? corsOrigins.join(", ") : "Disabled (Default)"}`, context);
         writeStdout(`  * Max Body Size:   ${options.maxBody || "1mb"}`, context);
         writeStdout(
-          `  * Health Endpoint: http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${server.port}/api/v1/health`,
+          `  * Health Endpoint: http://${actualEndpointHost}:${server.port}/api/v1/health`,
           context
         );
         if (enableMcp) {
           writeStdout(
-            `  * MCP Endpoint:    http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${server.port}/mcp`,
+            `  * MCP Endpoint:    http://${actualEndpointHost}:${server.port}/mcp`,
             context
           );
         }

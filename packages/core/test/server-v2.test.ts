@@ -1,9 +1,10 @@
+import http from "node:http";
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { type ActionContext, defineAction } from "@actiondock/sdk";
 import { createActionDockApp } from "../src/app";
 import { createActionDockHost } from "../src/host";
 import { createActionDockTarget } from "../src/target";
-import { startActionDockServer } from "../src/server";
+import { formatHostForUrl, startActionDockServer } from "../src/server";
 
 describe("ActionDock HTTP Server v2 架构重构验证", () => {
   const AUTH_TOKEN = "v2-server-secret-token";
@@ -1016,6 +1017,213 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       expect(allowHeaders).toBe(
         "Content-Type, Authorization, Idempotency-Key, X-Request-Id, Last-Event-ID"
       );
+    });
+  });
+
+  describe("ServerOptions.hostInstance 兼容别名验证", () => {
+    it("优先读取 options.hostInstance 初始化宿主与目标门面", async () => {
+      const customApp = await createActionDockApp({
+        projectConfig: {
+          id: "pkg.host-instance",
+          name: "Host Instance Test",
+          version: "1.0.0",
+          actions: {
+            ping: { entry: "", description: "Ping action" },
+          },
+        },
+        actions: {
+          ping: defineAction({ run: () => ({ pong: true }) }),
+        },
+        inMemory: true,
+      });
+
+      const customHost = await createActionDockHost({
+        packages: [customApp],
+        autoLoadCurrentProject: false,
+        inMemory: true,
+      });
+
+      const server = await startActionDockServer({
+        port: 0,
+        hostInstance: customHost,
+        token: "test-token",
+      });
+
+      try {
+        expect(server.host).toBe(customHost);
+        expect(server.target).toBeDefined();
+        expect(server.target?.unwrap?.()).toBe(customHost);
+
+        const res = await fetch(`${server.url}/api/v2/actions`, {
+          headers: { Authorization: "Bearer test-token" },
+        });
+        expect(res.status).toBe(200);
+        const actions = await res.json();
+        expect(actions.some((a: any) => a.id === "ping" || a.id.endsWith("ping"))).toBe(true);
+      } finally {
+        await server.stop();
+      }
+    });
+
+    it("当同时提供 hostInstance 与 host 字符串时，正确绑定主机并采用 hostInstance", async () => {
+      const customApp = await createActionDockApp({
+        projectConfig: {
+          id: "pkg.both",
+          name: "Both Options Test",
+          version: "1.0.0",
+          actions: {
+            echo: { entry: "", description: "Echo action" },
+          },
+        },
+        actions: {
+          echo: defineAction({ run: (input: any) => input }),
+        },
+        inMemory: true,
+      });
+
+      const customHost = await createActionDockHost({
+        packages: [customApp],
+        autoLoadCurrentProject: false,
+        inMemory: true,
+      });
+
+      const server = await startActionDockServer({
+        port: 0,
+        host: "127.0.0.1",
+        hostInstance: customHost,
+        token: "test-token",
+      });
+
+      try {
+        expect(server.host).toBe(customHost);
+        expect(server.target?.unwrap?.()).toBe(customHost);
+      } finally {
+        await server.stop();
+      }
+    });
+  });
+
+  describe("IPv6 服务 URL 拼接与 formatHostForUrl 验证", () => {
+    it("formatHostForUrl 正确为未包裹的 IPv6 地址添加中括号", () => {
+      expect(formatHostForUrl("::1")).toBe("[::1]");
+      expect(formatHostForUrl("::")).toBe("[::]");
+      expect(formatHostForUrl("2001:db8::1")).toBe("[2001:db8::1]");
+      expect(formatHostForUrl("[::1]")).toBe("[::1]");
+      expect(formatHostForUrl("[2001:db8::1]")).toBe("[2001:db8::1]");
+      expect(formatHostForUrl("127.0.0.1")).toBe("127.0.0.1");
+      expect(formatHostForUrl("localhost")).toBe("localhost");
+      expect(formatHostForUrl("0.0.0.0")).toBe("0.0.0.0");
+    });
+
+    it("服务端绑定 IPv6 回环地址 ::1 时生成合法 URL", async () => {
+      const server = await startActionDockServer({
+        port: 0,
+        host: "::1",
+        token: "test-token",
+        target,
+        hostInstance: host,
+      });
+
+      try {
+        expect(server.url).toMatch(/^http:\/\/\[::1\]:\d+$/);
+        expect(() => new URL(server.url)).not.toThrow();
+
+        const res = await fetch(`${server.url}/api/v2/health`, {
+          headers: { Authorization: "Bearer test-token" },
+        });
+        expect(res.status).toBe(200);
+      } finally {
+        await server.stop();
+      }
+    });
+  });
+
+  describe("HTTP 客户端断开触发 signal abort 验证", () => {
+    it("当客户端在同步 Action 执行期间断开连接时，正确通过 req.signal 触发 abort 事件并终止执行", async () => {
+      let aborted = false;
+      let actionStarted = false;
+
+      const abortApp = await createActionDockApp({
+        projectConfig: {
+          id: "pkg.abortable",
+          name: "Abortable Package",
+          version: "1.0.0",
+          actions: {
+            "slow-action": { entry: "", description: "可中断耗时任务" },
+          },
+        },
+        actions: {
+          "slow-action": defineAction({
+            run: async (_input: unknown, ctx: ActionContext) => {
+              actionStarted = true;
+              ctx.signal.addEventListener("abort", () => {
+                aborted = true;
+              });
+
+              for (let i = 0; i < 50; i++) {
+                if (ctx.signal.aborted) {
+                  aborted = true;
+                  break;
+                }
+                await new Promise((r) => setTimeout(r, 20));
+              }
+              return { done: true };
+            },
+          }),
+        },
+        inMemory: true,
+      });
+
+      const abortHost = await createActionDockHost({
+        packages: [abortApp],
+        autoLoadCurrentProject: false,
+        inMemory: true,
+      });
+
+      const server = await startActionDockServer({
+        port: 0,
+        host: "127.0.0.1",
+        token: "test-token",
+        hostInstance: abortHost,
+      });
+
+      try {
+        const clientReq = http.request(
+          {
+            hostname: "127.0.0.1",
+            port: server.port,
+            path: "/api/v2/actions/pkg.abortable/slow-action/run",
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: "Bearer test-token",
+            },
+          },
+          () => {}
+        );
+
+        clientReq.on("error", () => {});
+        clientReq.write(JSON.stringify({ input: {} }));
+        clientReq.end();
+
+        // 等待动作开始执行
+        while (!actionStarted) {
+          await new Promise((r) => setTimeout(r, 10));
+        }
+
+        // 客户端提前关闭断开连接
+        clientReq.destroy();
+
+        // 等待服务端处理关闭事件并触发 abort
+        for (let i = 0; i < 50; i++) {
+          if (aborted) break;
+          await new Promise((r) => setTimeout(r, 20));
+        }
+
+        expect(aborted).toBe(true);
+      } finally {
+        await server.stop();
+      }
     });
   });
 });

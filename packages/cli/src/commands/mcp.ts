@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { findProjectRoot, loadProjectConfig, parseDuration } from "@actiondock/core";
+import { findProjectRoot, formatHostForUrl, loadProjectConfig, parseDuration } from "@actiondock/core";
 import { startMcpHttpServer, startMcpStdio } from "@actiondock/mcp";
 import { Command } from "commander";
 import { ArgumentError, ExecutionError } from "../errors";
@@ -183,11 +183,14 @@ export function registerMcpCommands(program: Command, context?: CliContext): voi
           timeoutMs,
         });
 
+        const displayHost = formatHostForUrl(host);
+        const actualMcpHost = formatHostForUrl(host === "0.0.0.0" ? "127.0.0.1" : host);
+
         writeStdout(`\n======================================================`, context);
         writeStdout(`  ActionDock 2.0 MCP HTTP Server`, context);
         writeStdout(`======================================================`, context);
-        writeStdout(`  * Listening on:    http://${host}:${server.port}`, context);
-        writeStdout(`  * MCP Endpoint:    http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${server.port}/mcp`, context);
+        writeStdout(`  * Listening on:    http://${displayHost}:${server.port}`, context);
+        writeStdout(`  * MCP Endpoint:    http://${actualMcpHost}:${server.port}/mcp`, context);
         writeStdout(`  * Target:          ${targetDescription}`, context);
         writeStdout(`  * Authentication:  ${token ? "Bearer Token Enabled" : "Disabled (Local)"}`, context);
         writeStdout(`  * CORS Origins:    ${corsOrigins ? corsOrigins.join(", ") : "Disabled (Default)"}`, context);

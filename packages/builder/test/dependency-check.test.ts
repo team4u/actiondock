@@ -8,7 +8,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { initProject, saveManifest } from "@actiondock/core";
 import {
   assertRelativeDependenciesIntegrity,
@@ -238,6 +238,76 @@ export default defineAction(async () => {
         skipDependencyValidation: true,
       });
       expect(plan).toBeDefined();
+    });
+
+    it("当 Action 引用越出项目根目录的相对路径模块时抛出 EXTERNAL_LOCAL_DEPENDENCY", () => {
+      const outsideDir = mkdtempSync(join(tmpdir(), "ad-outside-pkg-"));
+      try {
+        const outsideModule = join(outsideDir, "outside.ts");
+        writeFileSync(outsideModule, "export const outsideVal = 42;\n");
+
+        const actionFile = join(tempDir, "actions", "greet.ts");
+        const relToOutside = relative(join(tempDir, "actions"), outsideModule).replace(/\\/g, "/");
+        writeFileSync(
+          actionFile,
+          `import { defineAction } from "@actiondock/sdk";
+import { outsideVal } from "${relToOutside}";
+
+export default defineAction(async () => {
+  return { outsideVal };
+});
+`
+        );
+
+        let errorThrown: any = null;
+        try {
+          SelectionPlanner.plan({ projectRoot: tempDir });
+        } catch (err: any) {
+          errorThrown = err;
+        }
+
+        expect(errorThrown).toBeDefined();
+        expect(errorThrown instanceof BuilderError).toBe(true);
+        expect(errorThrown.code).toBe("EXTERNAL_LOCAL_DEPENDENCY");
+        expect(errorThrown.message).toContain("resolves outside project root");
+      } finally {
+        if (existsSync(outsideDir)) {
+          rmSync(outsideDir, { recursive: true, force: true });
+        }
+      }
+    });
+
+    it("当 Action 引用位于 ..cache 目录中的本地模块且声明在 files 时顺利通过校验", () => {
+      const cacheDir = join(tempDir, "..cache");
+      mkdirSync(cacheDir, { recursive: true });
+      writeFileSync(join(cacheDir, "helper.ts"), "export const helperVal = 99;\n");
+
+      const actionFile = join(tempDir, "actions", "greet.ts");
+      writeFileSync(
+        actionFile,
+        `import { defineAction } from "@actiondock/sdk";
+import { helperVal } from "../..cache/helper.js";
+
+export default defineAction(async () => {
+  return { helperVal };
+});
+`
+      );
+
+      saveManifest(tempDir, {
+        id: "test.integrity",
+        actions: {
+          "sample.greet": {
+            entry: "actions/greet.ts",
+            description: "Greet action",
+          },
+        },
+        files: ["..cache"],
+      });
+
+      const plan = SelectionPlanner.plan({ projectRoot: tempDir });
+      expect(plan).toBeDefined();
+      expect(plan.dependencies.modulesAndAssets.some((m) => m.path.includes("helper.ts"))).toBe(true);
     });
   });
 });
