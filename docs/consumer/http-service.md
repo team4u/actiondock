@@ -122,7 +122,7 @@ ActionDock HTTP 微服务提供了一整套标准端点：
 
 | 能力分类 | 主要端点 | 核心用途 |
 | :--- | :--- | :--- |
-| **系统探针** | `GET /api/v2/health` | 容器健康探查与负载均衡存活检测（免鉴权） |
+| **系统探针** | `GET /api/v2/health` | 容器健康探查与负载均衡存活检测（未配置 Token 时免鉴权；配置 Token 后需鉴权） |
 | **环境诊断** | `GET /api/v2/doctor` | 查看宿主运行时状态与存储驱动健康度 |
 | **全局自省** | `GET /api/v2/info` | 调阅已加载包大纲、Action 列表与意图检索 |
 | **Action 清单** | `GET /api/v2/actions` | 列出当前全部可用 Action 摘要 |

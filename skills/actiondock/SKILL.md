@@ -15,7 +15,7 @@ description: >-
 ActionDock 2.0 是面向 AI 智能体 Action 与 Skill 的工程化开发、测试、构建与分发工具链，命令行工具为 `ad`。
 ActionDock 默认运行于 Node.js 24（要求版本大于等于 24.12.0），基于 Node 原生类型擦除与 NodeNext 模块解析。
 ActionDock 采用 `actiondock.json`（规范版本号为 2）作为元数据唯一事实源，配套 `actiondock.lock.json`（规范版本号为 1）作为跨包依赖锁定事实源。
-ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使用 TypeScript 快速开发原子 Action 工具与业务 Playbook 规程，一键导出自包含的 Agent Skill 资产。
+ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使用 TypeScript 快速开发原子 Action 工具与业务 Playbook 规程，一键导出标准的 Agent Skill 资产。
 
 ---
 
@@ -40,8 +40,8 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 | **移除外部依赖** | `ad remove <package>` | 自动检查反向引用，安全移除依赖包 | [cli.md](references/cli.md) |
 | **单元测试与验证** | `ad test [pattern]` | 内存沙箱测试，验证业务逻辑与持久化状态 | [developer.md](references/developer.md) |
 | **打包 npm 分发包** | `ad pack [-P <id>] [-o <path>] [--dry-run]` | 打包为标准 npm 压缩包用于共享与发布 | [build-and-export.md](references/build-and-export.md) |
-| **构建交付目录** | `ad build [-P <id>] [-o <path>] [--vendor-deps]` | 构建为包含生产依赖的 Node.js 运行时交付目录 | [build-and-export.md](references/build-and-export.md) |
-| **导出 Agent Skill** | `ad export skill [-P <ids...>] [-m <mode>] [--bundle]` | 导出自包含的源码型、Node 目录型或复合套件技能 | [build-and-export.md](references/build-and-export.md) |
+| **构建交付目录** | `ad build [-P <id>] [-o <path>] [--vendor-deps]` | 构建标准 Node.js 运行时交付目录（配合 --vendor-deps 物化依赖） | [build-and-export.md](references/build-and-export.md) |
+| **导出 Agent Skill** | `ad export skill [-P <ids...>] [-m <mode>] [--bundle]` | 导出源码型、Node 目录型或复合套件技能（配合 --vendor-deps 物化依赖） | [build-and-export.md](references/build-and-export.md) |
 | **重生成复合说明书** | `ad export skill --bundle [name] --skill-md-only` | 结合自定义模板与最新清单，就地仅刷新 SKILL.md | [build-and-export.md](references/build-and-export.md) |
 | **安装与装载 Skill** | `npx skills add <repo>` 或放置于客户端目录 | 智能体技能获取、安装与主流客户端装载路径配置 | [consumer.md](references/consumer.md) |
 | **环境与依赖按需自举** | `npm install --omit=dev && ad link .` | 首次运行报错缺依赖时，Agent 执行环境自举与本地挂载 | [consumer.md](references/consumer.md) |

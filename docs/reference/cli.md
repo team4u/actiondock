@@ -290,7 +290,7 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
 
 - 启动远程调度 HTTP 微服务 (`ad serve`)：
   ```bash
-  ad serve [-H, --host <host>] [-p, --port <port>] [-t, --token <token>] [--allow-insecure-no-auth] [--cors-origin <origin>] [--max-body <size>] [--no-mcp] [-d, --dir <path>]
+  ad serve [-H, --host <host>] [-p, --port <port>] [-t, --token <token>] [--allow-query-token] [--management] [--allow-insecure-no-auth] [--cors-origin <origin>] [--max-body <size>] [--no-mcp] [-d, --dir <path>]
   ```
 
 ---

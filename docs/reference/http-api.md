@@ -423,16 +423,20 @@ ActionDock 微服务模式（通过 `ad serve` 启动）提供标准 RESTful API
 - 查询参数：`package` 或 `packageId`（可选）
 - 响应数据示例：
   ```json
-  [
-    {
-      "key": "GITHUB_TOKEN",
-      "required": true,
-      "satisfied": true,
-      "matchedEnv": "GITHUB_TOKEN",
-      "hasDefault": false,
-      "secret": true
-    }
-  ]
+  {
+    "ok": true,
+    "packageId": "example-tools",
+    "envChecks": [
+      {
+        "key": "GITHUB_TOKEN",
+        "required": true,
+        "satisfied": true,
+        "matchedEnv": "GITHUB_TOKEN",
+        "hasDefault": false,
+        "secret": true
+      }
+    ]
+  }
   ```
 
 ### 状态键列表查询 (`GET /api/v2/state`)
