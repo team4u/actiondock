@@ -56,8 +56,8 @@ function resolveTargetDistTag(version: string, customTag?: string): string {
   return "latest";
 }
 
-function getRemotePackageInfo(pkgName: string, version: string): { exists: boolean; shasum?: string; distTags?: Record<string, string> } {
-  const res = runCmd("npm", ["view", `${pkgName}@${version}`, "dist.shasum", "dist-tags", "--json"], {
+function getRemotePackageInfo(pkgName: string, version: string): { exists: boolean; shasum?: string } {
+  const res = runCmd("npm", ["view", `${pkgName}@${version}`, "dist.shasum", "--json"], {
     allowFailure: true,
     captureOutput: true,
   });
@@ -71,27 +71,9 @@ function getRemotePackageInfo(pkgName: string, version: string): { exists: boole
     return {
       exists: true,
       shasum: typeof data === "string" ? data : data["dist.shasum"] || data.shasum,
-      distTags: data["dist-tags"] || {},
     };
   } catch {
     return { exists: false };
-  }
-}
-
-function getRemoteDistTags(pkgName: string): Record<string, string> {
-  const res = runCmd("npm", ["view", pkgName, "dist-tags", "--json"], {
-    allowFailure: true,
-    captureOutput: true,
-  });
-
-  if (res.status !== 0 || !res.stdout.trim()) {
-    return {};
-  }
-
-  try {
-    return JSON.parse(res.stdout.trim());
-  } catch {
-    return {};
   }
 }
 
@@ -135,7 +117,7 @@ async function main() {
 
   try {
     // 1. 全包版本强一致性校验与不可变性校验
-    console.log("\n[1/3] 全包版本强一致性校验与不可变性校验...");
+    console.log("\n[1/2] 全包版本强一致性校验与不可变性校验...");
 
     // 全包版本强一致性断言校验
     console.log("- 校验根目录与全部 7 个子包版本强一致性...");
@@ -184,7 +166,7 @@ async function main() {
     }
 
     // 2. 按拓扑顺序直接发布子包（携带目标分发标签）
-    console.log(`\n[2/3] 按拓扑顺序直接发布子包至 ${targetDistTag} 标签...`);
+    console.log(`\n[2/2] 按拓扑顺序直接发布子包至 ${targetDistTag} 标签...`);
     for (const pkg of PUBLISH_PACKAGES) {
       console.log(`- 发布 ${pkg.name}@${targetVersion} [标签: ${targetDistTag}]...`);
       const publishArgs = ["publish", localTarballs[pkg.name].path, "--access", "public", "--tag", targetDistTag];
@@ -220,26 +202,6 @@ async function main() {
       }
       if (!dryRun) {
         await sleepMs(2000);
-      }
-    }
-
-    // 3. 检查并清理可能残留的历史临时标签
-    console.log(`\n[3/3] 检查并清理历史遗留临时标签...`);
-    for (const pkg of PUBLISH_PACKAGES) {
-      if (!dryRun) {
-        try {
-          const remoteTags = getRemoteDistTags(pkg.name);
-          for (const tag of Object.keys(remoteTags)) {
-            if (tag.startsWith("temp-")) {
-              console.log(`  清理遗留临时标签: ${pkg.name} ${tag}`);
-              runCmd("npm", ["dist-tag", "rm", pkg.name, tag], {
-                allowFailure: true,
-              });
-            }
-          }
-        } catch {
-          // 忽略历史临时标签清理异常
-        }
       }
     }
 
