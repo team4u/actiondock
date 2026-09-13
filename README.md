@@ -7,36 +7,43 @@
 
 [Documentation](https://team4u.github.io/actiondock/) | English | [简体中文](README.zh-CN.md)
 
-Build Agent Tools once. Run them anywhere.
+Agent Tool Engineering Toolchain.
 
-An engineering toolchain for developing, testing, building, and distributing AI Agent Actions and Skills. Seamlessly deliver atomic capabilities as MCP protocol servers, Agent Skills, HTTP microservices, or self-contained Node.js delivery directories.
+Turn agent-generated tool code into testable, constrained, reproducible, and shippable production software assets.
+
+Build once. Ship anywhere. Deliver the same atomic capability seamlessly as an MCP protocol server, Agent Skill package, HTTP microservice, or local CLI tool without rewriting glue code.
 
 ```text
-TypeScript Action Source
+greet.ts (typed Action implementation)
        │
-       ├── ad run          # Local CLI execution
-       ├── ad test         # Millisecond-level in-memory sandbox tests
-       ├── ad mcp          # STDIO & HTTP MCP protocol server
-       ├── ad serve        # Production HTTP microservice
-       ├── ad export skill # Portable Agent Skill package (source & node modes)
-       ├── ad pack         # Standard npm tarball packaging
-       └── ad build        # Self-contained Node.js runtime delivery build
-              ↓
-       runnable package
+       ├── ad test         --> [PASS] Millisecond in-memory sandbox & virtual clock
+       ├── ad mcp          --> [READY] Standard MCP protocol communication server
+       ├── ad export skill --> [EXPORT] Self-contained Agent Skill (SKILL.md & locked deps)
+       ├── ad serve        --> [READY] Production RESTful microservice
+       └── ad run          --> [OUTPUT] Immediate local CLI execution
 ```
+
+> Same code. Tested once. Delivered everywhere.
 
 ---
 
-## Core Philosophy
+## Pain Points and Design Philosophy
 
-When agents generate code, the primary challenges are deterministic execution, reproducible delivery, and testable boundaries. Ad-hoc scripts break under environment drift, while exposing raw functions without guardrails risks unintended side effects.
+In the era of agentic software development, writing a quick script takes seconds. But how do you confidently ship that code into production?
 
-ActionDock treats Agent Tools as testable, reliable software assets:
+Developers often ask: Since official MCP SDKs and FastMCP already exist, and an Agent Skill only requires a Markdown file, why do we need a dedicated delivery toolchain?
 
-- Separated Boundaries: Humans define operational sequences and safety guardrails in Playbooks; agents implement deterministic Actions against typed contracts.
-- In-Memory Sandbox: Test Actions with deterministic virtual clocks in milliseconds for automated test-and-repair loops.
-- Reproducible Delivery: Build self-contained Node.js delivery packages with locked dependencies or export directly as Agent Skills.
-- Write Once, Deliver Anywhere: The same Action runs across CLI, MCP servers, HTTP microservices, and Agent Skills.
+- FastMCP focuses on making it easy to author a single MCP server.
+- ActionDock makes teams confident to ship agent-generated tools directly into production environments.
+
+Exposing raw functions or ad-hoc scripts creates severe production vulnerabilities: fragile environment drift, lack of deterministic in-memory test sandboxes, and unintended agent hallucinations or destructive actions due to missing human guardrails.
+
+ActionDock enforces the core collaboration paradigm: **Humans define guardrails; Agents write the implementation.**
+
+- Decoupled SOP Guardrails: Humans define workflow sequences, validation logic, and safety guardrails in plain-text Markdown Playbooks; agents implement deterministic Actions against strict type schemas.
+- In-Memory Sandbox and Self-Healing: Millisecond virtual clocks and memory-isolated testing allow agents to run unit tests autonomously and self-heal failures.
+- Reproducible Delivery with Rollback Protection: Deterministic lockfiles and transactional dependency management prevent drift and enable self-contained runtime bundles.
+- Build Once, Deliver Anywhere: Maintain a single source of truth and deliver across CLI, MCP servers, HTTP microservices, and portable Agent Skills.
 
 ---
 

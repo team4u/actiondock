@@ -7,9 +7,9 @@
 
 [官网文档](https://team4u.github.io/actiondock/)
 
-一次编写，全模态交付。
+Agent 工具的工程化交付链。
 
-面向智能体动作与技能的工业级开发、测试、构建与分发工具链。基于 TypeScript 编写强类型原子能力，依托纯内存沙箱实现毫秒级自动化测试与自愈闭环，原生交付为 MCP 协议服务、智能体技能包、HTTP 微服务与自包含 Node.js 目录交付产物。
+把 Agent 写出来的工具代码，变成可测试、可约束、可复现、可交付的生产级软件资产。践行人定规程、Agent 写实现的分工模式，依托纯内存沙箱实现毫秒级自动化测试与自愈闭环，原生交付为 MCP 协议服务、Agent 技能包、HTTP 微服务与自包含 Node.js 目录交付产物。
 
 ---
 
@@ -51,7 +51,7 @@ ActionDock 文档中心采用紧凑、权威且零冗余的六大模块设计：
 
 - [系统概览与心智模型](getting-started/overview.md)：痛点剖析、设计理念与角色双轨路径。
 - [运行环境准备与安装](getting-started/installation.md)：Node.js 24 基础环境准备与 CLI 工具链安装。
-- [快速上手指南](getting-started/quick-start.md)：从零构建第一个 Action 并全模态运行。
+- [快速上手指南](getting-started/quick-start.md)：从零构建第一个 Action 并多形态运行。
 
 ---
 
