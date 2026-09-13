@@ -74,6 +74,8 @@ export class DefaultExecutionService implements ExecutionService {
   private storage: RuntimeStorage;
   private projectConfig?: ProjectConfig;
   public readonly eventSink: EventSink;
+  public readonly packageInstanceId: string;
+  public readonly generationId: string;
   private maxActiveRuns: number;
   private ownerId: string;
   public hostSessionId?: string;
@@ -93,6 +95,8 @@ export class DefaultExecutionService implements ExecutionService {
   constructor(options: ExecutionServiceOptions) {
     this.platform = options.platform;
     this.packageId = options.packageId;
+    this.packageInstanceId = options.packageInstanceId || this.packageId;
+    this.generationId = options.generationId || "1";
     this.hostSessionId = options.hostSessionId;
     this.projectConfig = options.projectConfig;
     this.eventSink = options.eventSink || (options.platform as any)?.eventSink || new InMemoryEventSink();
@@ -129,6 +133,8 @@ export class DefaultExecutionService implements ExecutionService {
 
     this._runner = new ActionRunner({
       packageId: this.packageId,
+      packageInstanceId: this.packageInstanceId,
+      generationId: this.generationId,
       hostSessionId: this.hostSessionId,
       storage: this.storage,
       globalStorage,
@@ -324,6 +330,11 @@ export class DefaultExecutionService implements ExecutionService {
         logger: bridge.executionLogger,
         process: options.process || options.platform?.process || this.process,
         platform: options.platform || this.platform,
+        packageInstanceId: options.packageInstanceId,
+        generationId: options.generationId,
+        tenantId: options.tenantId,
+        principalId: options.principalId,
+        owner: options.owner,
       });
 
       const activeItem: ActiveRun = {
@@ -534,9 +545,9 @@ export class DefaultExecutionService implements ExecutionService {
       rootRunId,
       parentRunId: options.parentRunId,
       packageId: targetPackageId,
-      packageInstanceId: targetPackageId,
+      packageInstanceId: options.packageInstanceId || target.runner.packageInstanceId || targetPackageId,
       actionId: targetActionId,
-      generationId: "1",
+      generationId: options.generationId || target.runner.generationId || "1",
       ownerId: this.ownerId,
       hostSessionId: options.hostSessionId || this.hostSessionId,
       status: "failed",

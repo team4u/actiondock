@@ -287,6 +287,8 @@ export class DefaultActionDockHost implements ActionDockHost {
       projectConfig: targetApp.projectConfig,
       storage: targetApp.storage,
       actions: targetApp.actionsMap,
+      packageInstanceId: targetApp.packageInstanceId,
+      generationId: targetApp.generationId,
     };
   }
 

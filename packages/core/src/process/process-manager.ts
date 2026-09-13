@@ -46,10 +46,11 @@ import {
   REQUEST_CONFLICT,
   SERVER_ERROR,
   UNSUPPORTED_CAPABILITY,
+  INVALID_CURSOR,
   OUTPUT_UNAVAILABLE,
   ProcessError,
 } from "../errors";
-import { parseCursor } from "./cursor";
+import { parseCursor, compareCursorPos } from "./cursor";
 import { ContextProcessAPI } from "./context-process";
 import type {
   ProcessDriver,
@@ -1347,25 +1348,52 @@ export class ProcessManager {
     const proc = await this.getOrLoadProcess(owner, id);
 
     if (proc.outputUnavailable) {
-      parseCursor(input.cursor, proc.info.hostEpoch, id);
+      const requestedPos = parseCursor(input.cursor, proc.info.hostEpoch, id);
       const tombstone = proc.outputTombstone ?? this.evictedOutputTombstones.get(id);
-      if (input.onGap === "error") {
-        throw new ProcessError(
-          OUTPUT_UNAVAILABLE,
-          `Process output for '${id}' is unavailable because it has been evicted from memory`,
-          { processId: id }
-        );
-      }
 
       if (tombstone) {
-        const hasGap = input.cursor !== tombstone.tailCursor;
+        const tailPos = parseCursor(tombstone.tailCursor, proc.info.hostEpoch, id);
+        const cmp = compareCursorPos(requestedPos, tailPos);
+
+        if (cmp > 0) {
+          throw new ProcessError(
+            INVALID_CURSOR,
+            "Requested cursor is beyond the end of the output log",
+            {
+              cursor: input.cursor,
+              tailCursor: tombstone.tailCursor,
+            }
+          );
+        }
+
+        if (cmp === 0) {
+          return {
+            chunks: [],
+            nextCursor: tombstone.tailCursor,
+            earliestCursor: tombstone.tailCursor,
+            tailCursor: tombstone.tailCursor,
+            truncated: false,
+            eof: true,
+            process: { ...proc.info },
+          };
+        }
+
+        const gapMode = input.onGap ?? "error";
+        if (gapMode === "error") {
+          throw new ProcessError(
+            OUTPUT_UNAVAILABLE,
+            `Process output for '${id}' is unavailable because it has been evicted from memory`,
+            { processId: id }
+          );
+        }
+
         return {
           chunks: [],
           nextCursor: tombstone.tailCursor,
           earliestCursor: tombstone.tailCursor,
           tailCursor: tombstone.tailCursor,
-          truncated: hasGap,
-          gap: hasGap ? { fromCursor: input.cursor, toCursor: tombstone.tailCursor } : undefined,
+          truncated: true,
+          gap: { fromCursor: input.cursor, toCursor: tombstone.tailCursor },
           eof: true,
           process: { ...proc.info },
         };

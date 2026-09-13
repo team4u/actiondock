@@ -6,6 +6,8 @@ import { join } from "node:path";
 import { type ActionContext, defineAction } from "@actiondock/sdk";
 import { createActionDockApp } from "../src/app";
 import { createActionDockHost, DefaultActionDockHost } from "../src/host";
+import { createDefaultPlatform } from "../src/platform";
+import { MemoryProcessDriver } from "../src/process/driver";
 import { PROJECT_RECOVERY_REQUIRED } from "../src/errors";
 
 describe("ActionDockHost 多包宿主容器", () => {
@@ -459,6 +461,83 @@ actions:
     if (!directCheckRes.ok) {
       expect(directCheckRes.error.code).toBe("UNDECLARED_ACTION_DEPENDENCY");
     }
+
+    await host.close();
+  });
+
+  it("跨包调用继承调用方租户与用户，并使用目标包的真实 packageInstanceId 与 generationId", async () => {
+    const workerAction = defineAction({
+      run: async (_input: unknown, ctx: ActionContext) => {
+        return {
+          workerOwner: (ctx.process as any).owner,
+        };
+      },
+    });
+
+    const callerAction = defineAction({
+      run: async (_input: unknown, ctx: ActionContext) => {
+        const workerRes = await ctx.actions.invoke("target.worker/do-work", {});
+        return {
+          callerOwner: (ctx.process as any).owner,
+          workerRes,
+        };
+      },
+    });
+
+    const host = await createActionDockHost({
+      platform: createDefaultPlatform({ name: "test", processDriver: new MemoryProcessDriver() }),
+      packages: [
+        {
+          projectConfig: { id: "target.worker", name: "Worker", version: "1.0.0" },
+          packageInstanceId: "target-worker-inst-9",
+          generationId: "target-worker-gen-3",
+          actions: { "do-work": workerAction },
+          inMemory: true,
+        },
+        {
+          projectConfig: {
+            id: "source.caller",
+            name: "Caller",
+            version: "1.0.0",
+            actions: {
+              "call-worker": {
+                entry: "",
+                uses: ["target.worker/do-work"],
+              },
+            },
+          },
+          packageInstanceId: "source-caller-inst-1",
+          generationId: "source-caller-gen-1",
+          actions: { "call-worker": callerAction },
+          inMemory: true,
+        },
+      ],
+      autoLoadCurrentProject: false,
+    });
+
+    const callerApp = host.getApp("source.caller")!;
+    const res = await callerApp.executionService.execute("call-worker", {}, {
+      owner: {
+        tenantId: "tenant-corp-1",
+        principalId: "user-alice",
+        packageInstanceId: "custom-caller-inst",
+        generationId: "custom-caller-gen",
+      },
+    });
+    expect(res.ok).toBe(true);
+    const data = (res as any).data;
+    expect(data.callerOwner).toEqual({
+      tenantId: "tenant-corp-1",
+      principalId: "user-alice",
+      packageInstanceId: "custom-caller-inst",
+      generationId: "custom-caller-gen",
+    });
+    expect(data.workerRes.workerOwner).toEqual({
+      tenantId: "tenant-corp-1",
+      principalId: "user-alice",
+      packageInstanceId: "target-worker-inst-9",
+      generationId: "target-worker-gen-3",
+    });
 
     await host.close();
   });

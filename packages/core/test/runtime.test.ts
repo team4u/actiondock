@@ -270,6 +270,7 @@ describe("ActionRunner", () => {
     });
 
     const parentAction = defineAction({
+      uses: ["ext-pkg/child-ext"],
       async run(_input, ctx) {
         const localIdentity = await ctx.actions.invoke("child-local", {});
         const extIdentity = await ctx.actions.invoke("ext-pkg/child-ext", {});
@@ -283,15 +284,21 @@ describe("ActionRunner", () => {
 
     const runner = new ActionRunner({
       packageId: "local-pkg",
+      packageInstanceId: "local-pkg-inst-1",
+      generationId: "local-gen-1",
       storage,
       actions: new Map<string, ActionDefinition<any, any>>([
         ["parent", parentAction],
         ["child-local", childLocal],
       ]),
-      actionResolver: async (ref) => {
-        const id = typeof ref === "string" ? ref : ref.actionId;
-        if (id === "ext-pkg/child-ext" || id === "child-ext") {
-          return childExt;
+      packageContextResolver: async (pkgId) => {
+        if (pkgId === "ext-pkg") {
+          return {
+            packageInstanceId: "ext-pkg-instance-42",
+            generationId: "gen-ext-9",
+            storage: new SqliteRuntimeStorage({ packageId: "ext-pkg", dbPath: ":memory:" }),
+            actions: new Map([["child-ext", childExt]]),
+          };
         }
         return undefined;
       },
@@ -314,12 +321,12 @@ describe("ActionRunner", () => {
       expect(data.parentOwner).toEqual(customOwner);
       // 同包子调用继承完整的 tenantId、principalId、packageInstanceId、generationId
       expect(data.localIdentity.owner).toEqual(customOwner);
-      // 跨包子调用继承 tenantId 与 principalId，但隔离 packageInstanceId 为目标包且代次归一
+      // 跨包子调用继承调用方 tenantId 与 principalId，并使用宿主目标包真实 packageInstanceId 与 generationId
       expect(data.extIdentity.owner).toEqual({
         tenantId: "tenant-custom-42",
         principalId: "user-alpha-99",
-        packageInstanceId: "ext-pkg",
-        generationId: "1",
+        packageInstanceId: "ext-pkg-instance-42",
+        generationId: "gen-ext-9",
       });
     }
   });

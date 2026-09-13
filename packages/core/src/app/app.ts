@@ -44,6 +44,8 @@ import type {
  */
 export class DefaultActionDockApp implements ActionDockApp {
   public readonly packageId: string;
+  public readonly packageInstanceId: string;
+  public readonly generationId: string;
   public readonly packageRoot?: string;
   public readonly projectConfig: ProjectConfig;
   public readonly platform: RuntimePlatform;
@@ -91,6 +93,8 @@ export class DefaultActionDockApp implements ActionDockApp {
     this.packageRoot = packageRoot;
     this.projectConfig = projectConfig;
     this.packageId = projectConfig.id;
+    this.packageInstanceId = options.packageInstanceId || (projectConfig as any).packageInstanceId || this.packageId;
+    this.generationId = options.generationId || (projectConfig as any).generationId || "1";
 
     // 2. 转换 Action 集合：委托归一化单一入口
     this.actionsMap = normalizeActionCollection(options.actions).actionsMap;
@@ -158,6 +162,8 @@ export class DefaultActionDockApp implements ActionDockApp {
     // 6. 初始化唯一执行协调服务
     this.executionService = new DefaultExecutionService({
       packageId: this.packageId,
+      packageInstanceId: this.packageInstanceId,
+      generationId: this.generationId,
       hostSessionId: options.hostSessionId,
       storage: this.storage,
       globalStorage: this.globalStorage,

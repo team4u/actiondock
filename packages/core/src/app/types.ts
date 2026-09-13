@@ -194,12 +194,20 @@ export interface ActionDockAppOptions {
     projectConfig?: ProjectConfig;
     storage: RuntimeStorage;
     actions?: Map<string, ActionDefinition>;
+    packageInstanceId?: string;
+    generationId?: string;
   } | undefined> | {
     projectRoot?: string;
     projectConfig?: ProjectConfig;
     storage: RuntimeStorage;
     actions?: Map<string, ActionDefinition>;
+    packageInstanceId?: string;
+    generationId?: string;
   } | undefined;
+  /** 包物理实例标识 */
+  packageInstanceId?: string;
+  /** 快照代次标识 */
+  generationId?: string;
   /** 临时配置覆写字典 */
   configOverrides?: Record<string, unknown>;
   /** 宿主所有者标识 */
@@ -229,6 +237,10 @@ export interface ActionDockAppOptions {
 export interface ActionDockApp {
   /** 包唯一标识 */
   readonly packageId: string;
+  /** 包物理实例标识 */
+  readonly packageInstanceId?: string;
+  /** 快照代次标识 */
+  readonly generationId?: string;
   /** 包根目录绝对物理路径 */
   readonly packageRoot?: string;
   /** 项目配置对象（actiondock.json 解析结果） */

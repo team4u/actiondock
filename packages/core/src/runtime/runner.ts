@@ -106,11 +106,34 @@ export function validateJsonValue(
 }
 
 /**
+ * 跨包运行上下文解析结果契约。
+ */
+export interface PackageContextResolution {
+  projectRoot?: string;
+  projectConfig?: ProjectConfig;
+  storage: RuntimeStorage;
+  actions?: Map<string, ActionDefinition>;
+  packageInstanceId?: string;
+  generationId?: string;
+}
+
+/**
+ * 跨包运行上下文解析委托函数契约。
+ */
+export type PackageContextResolver = (
+  packageId: string
+) => Promise<PackageContextResolution | undefined> | PackageContextResolution | undefined;
+
+/**
  * ActionRunner 初始化配置选项。
  */
 export interface RunnerOptions {
   /** 运行所属的 Package ID */
   packageId: string;
+  /** 包物理实例标识 */
+  packageInstanceId?: string;
+  /** 快照代次标识 */
+  generationId?: string;
   /** 持久化运行时存储实例（SQLite） */
   storage?: RuntimeStorage;
   /** 全局共享持久化存储实例（SQLite，用于单例池化避免泄漏） */
@@ -141,17 +164,7 @@ export interface RunnerOptions {
   /** 跨包存储工厂 */
   getStorageForPackage?: (packageId: string, projectRoot?: string) => RuntimeStorage;
   /** 跨包运行上下文解析委托函数 */
-  packageContextResolver?: (packageId: string) => Promise<{
-    projectRoot?: string;
-    projectConfig?: ProjectConfig;
-    storage: RuntimeStorage;
-    actions?: Map<string, ActionDefinition>;
-  } | undefined> | {
-    projectRoot?: string;
-    projectConfig?: ProjectConfig;
-    storage: RuntimeStorage;
-    actions?: Map<string, ActionDefinition>;
-  } | undefined;
+  packageContextResolver?: PackageContextResolver;
   /** 自定义 ActionDock 用户家目录（用于测试隔离与多租户环境） */
   customHome?: string;
   /** 执行宿主会话标识 */
@@ -293,7 +306,9 @@ interface RunFinalizer {
  * - 自动记录并持久化 RunRecord 运行记录至 SQLite 存储。
  */
 export class ActionRunner {
-  private packageId: string;
+  public readonly packageId: string;
+  public readonly packageInstanceId: string;
+  public readonly generationId: string;
   private storage: RuntimeStorage;
   private globalStorage?: RuntimeStorage;
   private projectRoot?: string;
@@ -314,22 +329,14 @@ export class ActionRunner {
     currentPackageId?: string
   ) => ActionDefinition | undefined | Promise<ActionDefinition | undefined>;
   private getStorageForPackage?: (packageId: string, projectRoot?: string) => RuntimeStorage;
-  private packageContextResolver?: (packageId: string) => Promise<{
-    projectRoot?: string;
-    projectConfig?: ProjectConfig;
-    storage: RuntimeStorage;
-    actions?: Map<string, ActionDefinition>;
-  } | undefined> | {
-    projectRoot?: string;
-    projectConfig?: ProjectConfig;
-    storage: RuntimeStorage;
-    actions?: Map<string, ActionDefinition>;
-  } | undefined;
+  private packageContextResolver?: PackageContextResolver;
   private customHome?: string;
   private hostSessionId?: string;
 
   constructor(options: RunnerOptions) {
     this.packageId = options.packageId;
+    this.packageInstanceId = options.packageInstanceId || options.packageId;
+    this.generationId = options.generationId || "1";
     this.hostSessionId = options.hostSessionId;
     this.projectRoot = options.projectRoot;
     this.projectConfig = options.projectConfig;
@@ -536,19 +543,7 @@ export class ActionRunner {
   /**
    * 注入或更新跨包运行上下文解析委托。
    */
-  public setPackageContextResolver(
-    resolver: (packageId: string) => Promise<{
-      projectRoot?: string;
-      projectConfig?: ProjectConfig;
-      storage: RuntimeStorage;
-      actions?: Map<string, ActionDefinition>;
-    } | undefined> | {
-      projectRoot?: string;
-      projectConfig?: ProjectConfig;
-      storage: RuntimeStorage;
-      actions?: Map<string, ActionDefinition>;
-    } | undefined
-  ): void {
+  public setPackageContextResolver(resolver: PackageContextResolver): void {
     this.packageContextResolver = resolver;
   }
 
@@ -587,6 +582,8 @@ export class ActionRunner {
       if (resolved) {
         const runner = new ActionRunner({
           packageId: targetPackageId,
+          packageInstanceId: resolved.packageInstanceId || (resolved.projectConfig as any)?.packageInstanceId || targetPackageId,
+          generationId: resolved.generationId || (resolved.projectConfig as any)?.generationId || "1",
           storage: resolved.storage,
           globalStorage: this.globalStorage,
           projectRoot: resolved.projectRoot,
@@ -628,6 +625,8 @@ export class ActionRunner {
       });
       const runner = new ActionRunner({
         packageId: targetPackageId,
+        packageInstanceId: (config as any).packageInstanceId || targetPackageId,
+        generationId: (config as any).generationId || "1",
         storage,
         globalStorage: this.globalStorage,
         projectRoot: root,
@@ -919,9 +918,9 @@ export class ActionRunner {
       rootRunId: this.computeRootRunId(runCtx),
       parentRunId: options.parentRunId,
       packageId: targetPackageId,
-      packageInstanceId: options.packageInstanceId || targetPackageId,
+      packageInstanceId: options.packageInstanceId || (this.packageId === targetPackageId ? this.packageInstanceId : targetPackageId),
       actionId: targetActionId,
-      generationId: options.generationId || "1",
+      generationId: options.generationId || (this.packageId === targetPackageId ? this.generationId : "1"),
       ownerId: options.ownerId || "local",
       hostSessionId: options.hostSessionId || this.hostSessionId,
       status,
@@ -1066,8 +1065,8 @@ export class ActionRunner {
     const effectiveOwner: ProcessOwner = options.owner || {
       tenantId: options.tenantId || "default",
       principalId: options.principalId || options.ownerId || "default",
-      packageInstanceId: options.packageInstanceId || targetPackageId,
-      generationId: options.generationId || "1",
+      packageInstanceId: options.packageInstanceId || (this.packageId === targetPackageId ? this.packageInstanceId : targetPackageId),
+      generationId: options.generationId || (this.packageId === targetPackageId ? this.generationId : "1"),
     };
     return createActionContext({
       actionId: targetActionId,
@@ -1126,24 +1125,11 @@ export class ActionRunner {
     const effectiveParentOwner: ProcessOwner = options.owner || {
       tenantId: options.tenantId || "default",
       principalId: options.principalId || options.ownerId || "default",
-      packageInstanceId: options.packageInstanceId || this.packageId,
-      generationId: options.generationId || "1",
+      packageInstanceId: options.packageInstanceId || this.packageInstanceId || this.packageId,
+      generationId: options.generationId || this.generationId || "1",
     };
 
     const isSamePackage = !childPackageId || childPackageId === this.packageId;
-    const childPackageInstanceId = isSamePackage
-      ? effectiveParentOwner.packageInstanceId
-      : childPackageId;
-    const childGenerationId = isSamePackage
-      ? effectiveParentOwner.generationId
-      : "1";
-
-    const childOwner: ProcessOwner = {
-      tenantId: effectiveParentOwner.tenantId,
-      principalId: effectiveParentOwner.principalId,
-      packageInstanceId: childPackageInstanceId,
-      generationId: childGenerationId,
-    };
 
     this.activeSubRuns++;
     try {
@@ -1151,6 +1137,20 @@ export class ActionRunner {
       if (runnerToUse !== this) {
         this.assertDeclaredUses(runCtx.action, targetActionId, childPackageId, childActionId);
       }
+
+      const childPackageInstanceId = isSamePackage
+        ? effectiveParentOwner.packageInstanceId
+        : (runnerToUse !== this ? runnerToUse.packageInstanceId : childPackageId);
+      const childGenerationId = isSamePackage
+        ? effectiveParentOwner.generationId
+        : (runnerToUse !== this ? runnerToUse.generationId : "1");
+
+      const childOwner: ProcessOwner = {
+        tenantId: effectiveParentOwner.tenantId,
+        principalId: effectiveParentOwner.principalId,
+        packageInstanceId: childPackageInstanceId,
+        generationId: childGenerationId,
+      };
 
       const childResult = await runnerToUse.execute(childAction, childInput, {
         rootRunId,

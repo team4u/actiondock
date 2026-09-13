@@ -16,6 +16,7 @@ import type { Clock } from "../runtime/clock";
 import type { EventSink } from "../runtime/events";
 import type { RuntimeStorage } from "../storage/types";
 import type { RuntimePlatform } from "../platform/types";
+import type { ProcessOwner } from "../process/process-manager";
 
 /**
  * 执行参数选项。
@@ -45,6 +46,16 @@ export interface ExecuteOptions {
   platform?: RuntimePlatform;
   /** 执行宿主会话标识 */
   hostSessionId?: string;
+  /** 包物理实例标识 */
+  packageInstanceId?: string;
+  /** 快照代次标识 */
+  generationId?: string;
+  /** 租户标识 */
+  tenantId?: string;
+  /** 主体标识 */
+  principalId?: string;
+  /** 执行归属所有者契约 */
+  owner?: ProcessOwner;
 }
 
 /**
@@ -68,17 +79,23 @@ export interface ExecutionServiceOptions {
   maxSubRuns?: number;
   ownerId?: string;
   actionResolver?: (ref: ActionRef | string) => ActionDefinition | undefined | Promise<ActionDefinition | undefined>;
+  packageInstanceId?: string;
+  generationId?: string;
   getStorageForPackage?: (packageId: string, projectRoot?: string) => RuntimeStorage;
   packageContextResolver?: (packageId: string) => Promise<{
     projectRoot?: string;
     projectConfig?: ProjectConfig;
     storage: RuntimeStorage;
     actions?: Map<string, ActionDefinition>;
+    packageInstanceId?: string;
+    generationId?: string;
   } | undefined> | {
     projectRoot?: string;
     projectConfig?: ProjectConfig;
     storage: RuntimeStorage;
     actions?: Map<string, ActionDefinition>;
+    packageInstanceId?: string;
+    generationId?: string;
   } | undefined;
   customHome?: string;
   platform?: RuntimePlatform;

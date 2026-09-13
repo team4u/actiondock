@@ -23,8 +23,10 @@ import {
   REQUEST_CONFLICT,
   UNSUPPORTED_CAPABILITY,
   OUTPUT_UNAVAILABLE,
+  INVALID_CURSOR,
   ProcessError,
 } from "../src/errors";
+import { encodeCursor } from "../src/process/cursor";
 import { ContextProcessAPI } from "../src/process/context-process";
 import { MemoryProcessDriver } from "../src/process/driver";
 import { MemoryProcessMetadataStore } from "../src/process/metadata-store";
@@ -1703,6 +1705,34 @@ describe("受管进程管理器 ProcessManager", () => {
       expect(skipped.truncated).toBe(true);
       expect(skipped.gap).toBeDefined();
       expect(skipped.eof).toBe(true);
+
+      // 当使用等于 tailCursor 的游标读取时，直接返回 EOF 且无截断
+      const tailRead = await manager.read(ownerA, p1.process.id, {
+        cursor: skipped.tailCursor,
+        maxBytes: 65536,
+        waitMs: 0,
+        onGap: "skip",
+      });
+      expect(tailRead.chunks.length).toBe(0);
+      expect(tailRead.truncated).toBe(false);
+      expect(tailRead.gap).toBeUndefined();
+      expect(tailRead.eof).toBe(true);
+
+      // 当使用超过末尾的未来游标读取时，无论 onGap 是 skip 还是 error，均抛出 INVALID_CURSOR 异常
+      const futureCursor = encodeCursor("epoch-test", p1.process.id, 9999, 0);
+      let futureErr: any;
+      try {
+        await manager.read(ownerA, p1.process.id, {
+          cursor: futureCursor,
+          maxBytes: 65536,
+          waitMs: 0,
+          onGap: "skip",
+        });
+      } catch (err) {
+        futureErr = err;
+      }
+      expect(futureErr).toBeInstanceOf(ProcessError);
+      expect(futureErr?.code).toBe(INVALID_CURSOR);
     });
 
     it("[Issue 7] 底层驱动在 spawn 解决前已触发退出时，启动完成不会覆盖已收到的退出状态", async () => {
