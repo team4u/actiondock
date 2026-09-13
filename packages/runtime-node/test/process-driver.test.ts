@@ -385,9 +385,11 @@ describe("NodeProcessDriver 平台驱动测试", () => {
         }
       );
       try {
-        await expect(driver.interruptForeground(handle)).rejects.toThrow(
-          /UNSUPPORTED_CAPABILITY/
-        );
+        await driver.interruptForeground(handle);
+        expect(true).toBe(false);
+      } catch (err: any) {
+        expect(err).toBeInstanceOf(ProcessError);
+        expect(err.code).toBe(UNSUPPORTED_CAPABILITY);
       } finally {
         await driver.terminate(handle, 200);
         await driver.dispose(handle);
