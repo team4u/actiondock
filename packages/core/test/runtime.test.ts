@@ -247,6 +247,83 @@ describe("ActionRunner", () => {
     }
   });
 
+  it("嵌套 Action 调用完整继承并传递调用方所有者身份与作用域凭据", async () => {
+    const storage = new SqliteRuntimeStorage({
+      packageId: "local-pkg",
+      dbPath: ":memory:",
+    });
+
+    const childLocal = defineAction({
+      run: async (_input, ctx) => {
+        return {
+          owner: (ctx.process as any).owner,
+        };
+      },
+    });
+
+    const childExt = defineAction({
+      run: async (_input, ctx) => {
+        return {
+          owner: (ctx.process as any).owner,
+        };
+      },
+    });
+
+    const parentAction = defineAction({
+      async run(_input, ctx) {
+        const localIdentity = await ctx.actions.invoke("child-local", {});
+        const extIdentity = await ctx.actions.invoke("ext-pkg/child-ext", {});
+        return {
+          parentOwner: (ctx.process as any).owner,
+          localIdentity,
+          extIdentity,
+        };
+      },
+    });
+
+    const runner = new ActionRunner({
+      packageId: "local-pkg",
+      storage,
+      actions: new Map<string, ActionDefinition<any, any>>([
+        ["parent", parentAction],
+        ["child-local", childLocal],
+      ]),
+      actionResolver: async (ref) => {
+        const id = typeof ref === "string" ? ref : ref.actionId;
+        if (id === "ext-pkg/child-ext" || id === "child-ext") {
+          return childExt;
+        }
+        return undefined;
+      },
+    });
+
+    const customOwner = {
+      tenantId: "tenant-custom-42",
+      principalId: "user-alpha-99",
+      packageInstanceId: "pkg-instance-root",
+      generationId: "gen-epoch-7",
+    };
+
+    const res = await runner.execute("parent", {}, {
+      owner: customOwner,
+    });
+
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      const data = res.data as any;
+      expect(data.parentOwner).toEqual(customOwner);
+      // 同包子调用继承完整的 tenantId、principalId、packageInstanceId、generationId
+      expect(data.localIdentity.owner).toEqual(customOwner);
+      // 跨包子调用继承 tenantId 与 principalId，但隔离 packageInstanceId 为目标包且代次归一
+      expect(data.extIdentity.owner).toEqual({
+        tenantId: "tenant-custom-42",
+        principalId: "user-alpha-99",
+        packageInstanceId: "ext-pkg",
+        generationId: "1",
+      });
+    }
+  });
+
   it("handles cross-package same-name action invocation without hijacking or false cycle detection", async () => {
     const storage = new SqliteRuntimeStorage({
       packageId: "local-pkg",

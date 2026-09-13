@@ -22,6 +22,7 @@ import {
   QUOTA_EXCEEDED,
   REQUEST_CONFLICT,
   UNSUPPORTED_CAPABILITY,
+  OUTPUT_UNAVAILABLE,
   ProcessError,
 } from "../src/errors";
 import { ContextProcessAPI } from "../src/process/context-process";
@@ -1601,6 +1602,9 @@ describe("受管进程管理器 ProcessManager", () => {
 
       const readRes = await manager.read(ownerA, processId, {
         cursor: startRes.initialCursor,
+        maxBytes: 65536,
+        waitMs: 0,
+        onGap: "error",
       });
       expect(decodeText(readRes.chunks)).toContain("trailing-output");
     });
@@ -1673,16 +1677,39 @@ describe("受管进程管理器 ProcessManager", () => {
       });
       expect(p2.process.id).toBeDefined();
 
-      // p1 终态日志已被淘汰，读取返回空
-      const readP1 = await manager.read(ownerA, p1.process.id, { cursor: p1.initialCursor });
-      expect(readP1.chunks.length).toBe(0);
+      // p1 终态日志已被淘汰，当 onGap="error" 时抛出 OUTPUT_UNAVAILABLE 错误
+      let readErr: any;
+      try {
+        await manager.read(ownerA, p1.process.id, {
+          cursor: p1.initialCursor,
+          maxBytes: 65536,
+          waitMs: 0,
+          onGap: "error",
+        });
+      } catch (err) {
+        readErr = err;
+      }
+      expect(readErr).toBeInstanceOf(ProcessError);
+      expect(readErr?.code).toBe(OUTPUT_UNAVAILABLE);
+
+      // 当 onGap="skip" 时，返回明确的淘汰断层信息
+      const skipped = await manager.read(ownerA, p1.process.id, {
+        cursor: p1.initialCursor,
+        maxBytes: 65536,
+        waitMs: 0,
+        onGap: "skip",
+      });
+      expect(skipped.chunks.length).toBe(0);
+      expect(skipped.truncated).toBe(true);
+      expect(skipped.gap).toBeDefined();
+      expect(skipped.eof).toBe(true);
     });
 
     it("[Issue 7] 底层驱动在 spawn 解决前已触发退出时，启动完成不会覆盖已收到的退出状态", async () => {
       const driver = new MemoryProcessDriver();
       driver.spawnHook = (_processId, _spec, callbacks) => {
-        callbacks.onExit({ code: 42, signal: null });
-        callbacks.onOutputClosed("natural");
+        callbacks?.onExit?.({ code: 42, signal: null });
+        callbacks?.onOutputClosed?.("natural");
       };
 
       const manager = new ProcessManager({

@@ -332,9 +332,14 @@ export class MockProcessExecutor implements ProcessExecutor {
   }
 
   /**
-   * 一次性运行外部命令并收集输出。
+  /**
+   * 优先匹配 mock 规则运行命令，未命中时委托至 ProcessManager。
    */
-  async run(input: ProcessRunInput, call?: CallOptions): Promise<ProcessRunResult> {
+  private async runWithMock(
+    input: ProcessRunInput,
+    owner: ProcessOwner,
+    call?: CallOptions
+  ): Promise<ProcessRunResult> {
     const args = input.spec.args ?? [];
     const matchedMock = this.findMock(input.spec.executable, args, {
       cwd: input.spec.cwd,
@@ -375,7 +380,14 @@ export class MockProcessExecutor implements ProcessExecutor {
       };
     }
 
-    return this.processManager.run(this.owner, input, call);
+    return this.processManager.run(owner, input, call);
+  }
+
+  /**
+   * 一次性运行外部命令并收集输出。
+   */
+  async run(input: ProcessRunInput, call?: CallOptions): Promise<ProcessRunResult> {
+    return this.runWithMock(input, this.owner, call);
   }
 
   /**
@@ -456,10 +468,22 @@ export class MockProcessExecutor implements ProcessExecutor {
   }
 
   /**
-   * 绑定指定所有者身份创建上下文进程接口。
+   * 绑定指定所有者身份创建上下文进程接口，保持 mock 拦截与生命周期追踪。
    */
   forOwner(owner: ProcessOwner, runId?: string, signal?: AbortSignal) {
-    return this.processManager.forOwner(owner, runId, signal);
+    const bound = this.processManager.forOwner(owner, runId, signal);
+    return new Proxy(bound, {
+      get: (target, prop, receiver) => {
+        if (prop === "run") {
+          return (input: ProcessRunInput, call?: CallOptions) => {
+            const mergedSignal = call?.signal ?? signal;
+            const effectiveCall = mergedSignal ? { ...call, signal: mergedSignal } : call;
+            return this.runWithMock(input, owner, effectiveCall);
+          };
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
   }
 
   /**

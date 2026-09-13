@@ -1123,6 +1123,28 @@ export class ActionRunner {
     }
     const childActionId = parsed.actionId;
 
+    const effectiveParentOwner: ProcessOwner = options.owner || {
+      tenantId: options.tenantId || "default",
+      principalId: options.principalId || options.ownerId || "default",
+      packageInstanceId: options.packageInstanceId || this.packageId,
+      generationId: options.generationId || "1",
+    };
+
+    const isSamePackage = !childPackageId || childPackageId === this.packageId;
+    const childPackageInstanceId = isSamePackage
+      ? effectiveParentOwner.packageInstanceId
+      : childPackageId;
+    const childGenerationId = isSamePackage
+      ? effectiveParentOwner.generationId
+      : "1";
+
+    const childOwner: ProcessOwner = {
+      tenantId: effectiveParentOwner.tenantId,
+      principalId: effectiveParentOwner.principalId,
+      packageInstanceId: childPackageInstanceId,
+      generationId: childGenerationId,
+    };
+
     this.activeSubRuns++;
     try {
       const runnerToUse = await this.resolveChildRunner(childPackageId, childActionId);
@@ -1141,6 +1163,13 @@ export class ActionRunner {
         logger: options.logger,
         configOverrides: options.configOverrides,
         maxCallDepth: options.maxCallDepth ?? this.maxCallDepth,
+        tenantId: childOwner.tenantId,
+        principalId: childOwner.principalId,
+        ownerId: childOwner.principalId,
+        packageInstanceId: childOwner.packageInstanceId,
+        generationId: childOwner.generationId,
+        owner: childOwner,
+        hostSessionId: options.hostSessionId ?? this.hostSessionId,
       });
       if (!childResult.ok) {
         const err = new Error(childResult.error.message);

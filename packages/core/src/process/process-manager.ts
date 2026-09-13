@@ -46,8 +46,10 @@ import {
   REQUEST_CONFLICT,
   SERVER_ERROR,
   UNSUPPORTED_CAPABILITY,
+  OUTPUT_UNAVAILABLE,
   ProcessError,
 } from "../errors";
+import { parseCursor } from "./cursor";
 import { ContextProcessAPI } from "./context-process";
 import type {
   ProcessDriver,
@@ -156,6 +158,8 @@ interface ManagedProcessRecord {
   scope: string;
   handle?: ProcessDriverHandle;
   outputLog: ProcessOutputLog;
+  outputUnavailable?: boolean;
+  outputTombstone?: EvictedOutputTombstone;
   controlEpoch: number;
   /** 取消纪元：stop 接管输入队列时递增，用于让挂起中的 dispatch 放弃过期结算 */
   cancelEpoch: number;
@@ -300,6 +304,15 @@ interface RequestReservation {
 }
 
 /**
+ * 已淘汰输出日志的墓碑信息。
+ */
+interface EvictedOutputTombstone {
+  tailCursor: string;
+  earliestCursor: string;
+  evictedAt: number;
+}
+
+/**
  * 终态输出日志缓存条目：附带驱逐时间戳支撑 TTL 过期回收与 LRU 淘汰。
  */
 interface RetainedOutputLogEntry {
@@ -348,6 +361,8 @@ export class ProcessManager {
   private processes = new Map<string, ManagedProcessRecord>();
   /** 已驱逐进程的输出日志缓存：附带时间戳支撑 TTL 过期回收与 LRU 淘汰 */
   private evictedOutputLogs = new Map<string, RetainedOutputLogEntry>();
+  /** 已淘汰输出日志的墓碑缓存：防止因日志淘汰静默丢失输出数据，支撑缺口明确告知与不可用异常 */
+  private evictedOutputTombstones = new Map<string, EvictedOutputTombstone>();
   /** 同步幂等预占表：以复合键在异步落盘窗口内锁定并发重复请求 */
   private requestReservations = new Map<string, RequestReservation>();
   private initPromise: Promise<number> | undefined;
@@ -1331,6 +1346,38 @@ export class ProcessManager {
     await this.ensureInitialized();
     const proc = await this.getOrLoadProcess(owner, id);
 
+    if (proc.outputUnavailable) {
+      parseCursor(input.cursor, proc.info.hostEpoch, id);
+      const tombstone = proc.outputTombstone ?? this.evictedOutputTombstones.get(id);
+      if (input.onGap === "error") {
+        throw new ProcessError(
+          OUTPUT_UNAVAILABLE,
+          `Process output for '${id}' is unavailable because it has been evicted from memory`,
+          { processId: id }
+        );
+      }
+
+      if (tombstone) {
+        const hasGap = input.cursor !== tombstone.tailCursor;
+        return {
+          chunks: [],
+          nextCursor: tombstone.tailCursor,
+          earliestCursor: tombstone.tailCursor,
+          tailCursor: tombstone.tailCursor,
+          truncated: hasGap,
+          gap: hasGap ? { fromCursor: input.cursor, toCursor: tombstone.tailCursor } : undefined,
+          eof: true,
+          process: { ...proc.info },
+        };
+      }
+
+      throw new ProcessError(
+        OUTPUT_UNAVAILABLE,
+        `Process output for '${id}' is unavailable because it has been evicted from memory`,
+        { processId: id }
+      );
+    }
+
     const logResult = await proc.outputLog.waitForData(
       input.cursor,
       input.waitMs,
@@ -2130,13 +2177,19 @@ export class ProcessManager {
     }
 
     const info = toSdkProcessInfo(record);
+    const retainedLog = this.getRetainedOutputLog(processId);
+    const tombstone = this.evictedOutputTombstones.get(processId);
+    const isTerminalLoaded =
+      info.state === "exited" || info.state === "failed" || info.state === "lost";
+    const isOutputUnavailable =
+      !retainedLog && (Boolean(tombstone) || (isTerminalLoaded && Boolean(record.outputClosed)));
+
     const outputLog =
-      this.getRetainedOutputLog(processId) ??
+      retainedLog ??
       new ProcessOutputLog(record.hostEpoch, processId, {
         maxBufferBytes: info.effectiveLimits.outputBufferBytes,
         maxWaiters: this.quotas.maxWaitersPerProcess,
       });
-    this.evictedOutputLogs.delete(processId);
     if (record.outputClosed && !outputLog.outputClosed) {
       outputLog.closeOutput(record.outputEndReason as any ?? "natural");
     }
@@ -2151,6 +2204,8 @@ export class ProcessManager {
       },
       scope: formatProcessScope(owner),
       outputLog,
+      outputUnavailable: isOutputUnavailable,
+      outputTombstone: tombstone,
       controlEpoch: 0,
       cancelEpoch: 0,
       inputQueue: [],
@@ -2161,17 +2216,26 @@ export class ProcessManager {
       effectiveLimits: info.effectiveLimits,
     };
 
-    // 终态且输出已关闭的记录不再回填内存表，保持终态驱逐语义；
-    // 输出日志保留在驱逐缓存中支撑后续游标读取
-    const isTerminalLoaded =
-      info.state === "exited" || info.state === "failed" || info.state === "lost";
+    // 终态且输出已关闭的记录不再回填内存表，保持终态驱逐语义
     if (isTerminalLoaded && info.outputClosed) {
-      this.retainTerminalOutputLog(processId, outputLog);
       return loaded;
     }
 
     this.processes.set(processId, loaded);
     return loaded;
+  }
+
+  /**
+   * 记录已淘汰输出日志的墓碑信息（保留最近 2048 条，防止内存无限积压）。
+   */
+  private recordTombstone(processId: string, tombstone: EvictedOutputTombstone): void {
+    if (this.evictedOutputTombstones.size >= 2048) {
+      const oldestKey = this.evictedOutputTombstones.keys().next().value;
+      if (oldestKey) {
+        this.evictedOutputTombstones.delete(oldestKey);
+      }
+    }
+    this.evictedOutputTombstones.set(processId, tombstone);
   }
 
   /**
@@ -2181,6 +2245,11 @@ export class ProcessManager {
     const now = Date.now();
     for (const [id, entry] of this.evictedOutputLogs.entries()) {
       if (now - entry.evictedAt > this.terminalLogRetentionMs) {
+        this.recordTombstone(id, {
+          tailCursor: entry.log.tailCursor,
+          earliestCursor: entry.log.earliestCursor,
+          evictedAt: now,
+        });
         this.evictedOutputLogs.delete(id);
       }
     }
@@ -2204,18 +2273,22 @@ export class ProcessManager {
   private retainTerminalOutputLog(processId: string, log: ProcessOutputLog): void {
     this.cleanExpiredTerminalLogs();
 
-    // 仅保留存在未读完输出或输出未关闭的日志
-    if (log.currentBytes === 0 && log.outputClosed) {
-      return;
-    }
-
-    // 若新加入条目会导致总输出配额超限，按 LRU 顺序淘汰最旧条目
+    // 若新加入条目会导致总输出配额超限或数量超限，按 LRU 顺序淘汰最旧条目
     while (
-      this.countRetainedOutputBufferBytes() + log.currentBytes > this.quotas.maxOutputBufferBytesPerHost &&
+      (this.countRetainedOutputBufferBytes() + log.currentBytes > this.quotas.maxOutputBufferBytesPerHost ||
+        this.evictedOutputLogs.size >= 512) &&
       this.evictedOutputLogs.size > 0
     ) {
       const oldestKey = this.evictedOutputLogs.keys().next().value;
       if (!oldestKey) break;
+      const oldestEntry = this.evictedOutputLogs.get(oldestKey);
+      if (oldestEntry) {
+        this.recordTombstone(oldestKey, {
+          tailCursor: oldestEntry.log.tailCursor,
+          earliestCursor: oldestEntry.log.earliestCursor,
+          evictedAt: Date.now(),
+        });
+      }
       this.evictedOutputLogs.delete(oldestKey);
     }
 
@@ -2257,9 +2330,7 @@ export class ProcessManager {
     this.processes.delete(proc.info.id);
 
     // 保留输出日志支撑后续游标读取（内存输出无法从持久层恢复）
-    if (!proc.outputLog.outputClosed || proc.outputLog.tailCursor !== proc.outputLog.earliestCursor) {
-      this.retainTerminalOutputLog(proc.info.id, proc.outputLog);
-    }
+    this.retainTerminalOutputLog(proc.info.id, proc.outputLog);
 
     if (proc.handle && typeof this.driver.dispose === "function") {
       try {
@@ -2329,10 +2400,15 @@ export class ProcessManager {
       const oldestKey = this.evictedOutputLogs.keys().next().value;
       if (!oldestKey) break;
       const oldest = this.evictedOutputLogs.get(oldestKey);
-      this.evictedOutputLogs.delete(oldestKey);
       if (oldest) {
+        this.recordTombstone(oldestKey, {
+          tailCursor: oldest.log.tailCursor,
+          earliestCursor: oldest.log.earliestCursor,
+          evictedAt: Date.now(),
+        });
         totalBuffer -= oldest.log.currentBytes;
       }
+      this.evictedOutputLogs.delete(oldestKey);
     }
 
     if (totalBuffer + perProcBuf > this.quotas.maxOutputBufferBytesPerHost) {
