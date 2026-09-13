@@ -137,7 +137,7 @@ export default defineAction<Input, Output>(async (input, ctx) => {
 | | `clear(prefix?: string): Promise<number>` | 清空命名空间或指定前缀下的所有状态 |
 | | `keys(prefix?: string): Promise<string[]>` | 列出指定前缀下的所有状态键 |
 | | `scope(namespace: string): StateStore` | 派生出隔离命名的子状态存储 |
-| `ctx.process` | `run(input: ProcessRunInput, call?: CallOptions): Promise<ProcessRunResult>` | 一次性运行外部命令，超时终止并收集有限输出 |
+| `ctx.process` | `run(input: ProcessRunInput, call?: CallOptions): Promise<ProcessRunResult>` | 一次性运行外部命令，超时终止并收集有限输出（详见 [process-execution.md](process-execution.md)） |
 | | `start(input: ProcessStartInput, call?: CallOptions): Promise<ProcessStartResult>` | 创建长期受管进程，返回资源元数据与初始游标 |
 | | `acquire(id: string, input: ProcessAcquireInput, call?: CallOptions): Promise<ControlGrant>` | 申请受管进程独占控制令牌，支持排队等待与续租 |
 | | `read(id: string, input: ProcessReadInput, call?: CallOptions): Promise<ReadResult>` | 基于游标读取有界原始输出日志，支持长轮询与断层跳跃 |
@@ -176,6 +176,17 @@ Action 之间的相互调度必须通过 `ctx.actions.invoke` 执行，严禁通
   - 显式声明原则：未在清单 `uses` 中声明的级联调用，即使目标代码物理可见，执行时也会被系统拦截并抛出 `UNDECLARED_ACTION_DEPENDENCY` 错误。
   - 纯粹引用原则：`ctx.actions.invoke` 严格仅接受字符串标识符或 `ActionRef` 对象，严禁传入 Action 定义对象或裸函数，违规将抛出 `INVALID_ACTION_REF` 错误。
   - 环路死锁保护：系统内置环路检测与递归配额保护，当调用链成环时抛出 `ACTION_CALL_CYCLE`，派生任务超额时抛出 `ACTION_SUBRUN_LIMIT`。
+
+---
+
+## 受管进程与系统命令治理
+
+当 Action 需要调用底层系统命令或与外部进程交互时，严禁使用 Node.js 原生 `node:child_process`，必须使用 `ctx.process` 统一接口。核心规则与交互模式如下（详见 [process-execution.md](process-execution.md)）：
+
+- 一次性执行 `run`：适用于短时有界命令，自动收集有限输出并提供超时强制阻断与缓冲区截断保护，配合 SDK 导出的 `decodeText` 安全解码。
+- 长期交互进程 `start` 与 `withControl`：对于交互式会话（如 REPL、终端交互），通过 `start` 启动后，所有输入写操作必须在 `withControl` 独占控制权租约下执行，杜绝并发交错冲突；输出通过游标 `read` 长轮询获取，配合 `createStreamDecoder` 增量多字节解码避免跨分块乱码。
+- 独占控制权与异常隔离：`withControl` 自动申请令牌并在后台定期续租；业务执行正常完成后释放；遇到异常、中断信号或续租失败时，严格调用 `stop` 强制终止并隔离进程，杜绝将脏状态暴露给后续等待者。
+- 确定性测试红线：单元测试中严禁唤起操作系统真实子进程，必须使用 `@actiondock/testing` 提供的 `FakeProcessDriver` 进行确定性全生命周期模拟。
 
 ---
 
@@ -226,6 +237,40 @@ describe("team4u.github-tools/list-issues", () => {
     });
 
     assert.equal(result.total, 0);
+  });
+});
+```
+
+针对涉及系统命令与子进程调用的 Action，严禁唤起真实进程，必须使用 `FakeProcessDriver` 进行确定性事件模拟：
+
+```typescript
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { createTestRuntime, FakeProcessDriver } from "@actiondock/testing";
+import gitStatusAction from "../actions/git-status.ts";
+
+describe("受管进程执行测试", () => {
+  it("使用 FakeProcessDriver 模拟进程输出与退出", async () => {
+    const fakeDriver = new FakeProcessDriver();
+
+    fakeDriver.onSpawn = (handle) => {
+      handle.emitOutput("stdout", "## main...origin/main\n");
+      handle.emitExit({ code: 0, signal: null });
+      handle.emitOutputClosed("natural");
+    };
+
+    const runtime = createTestRuntime({
+      platform: {
+        processDriver: fakeDriver,
+      } as any,
+    });
+
+    const result = await runtime.run(gitStatusAction, {
+      workingDirectory: "/workspace",
+    });
+
+    assert.equal(result.branch, "main...origin/main");
+    assert.equal(fakeDriver.spawnCalls.length, 1);
   });
 });
 ```

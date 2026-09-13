@@ -2,7 +2,7 @@
 name: actiondock
 description: >-
   ActionDock 2.0 开发者套件与运行指南。当用户需要执行以下任务或涉及相关概念时激活此技能：
-  创建、编写、修改或测试 ActionDock Action 工具（涉及 defineAction、ActionContext）；
+  创建、编写、修改或测试 ActionDock Action 工具（涉及 defineAction、ActionContext、受管进程与系统命令调度）；
   编写、校验或执行 Playbook 任务操作规程；
   使用或排查 ad 命令行工具（包括 ad init、ad new、ad info、ad list、ad describe、ad run、ad validate、ad generate、ad playbook、ad config、ad state、ad runs、ad serve、ad mcp、ad build、ad test、ad add、ad remove、ad pack、ad doctor、ad link、ad unlink、ad export skill、ad profile）；
   配置持久化状态与环境变量、管理全局路由注册表、执行环境体检；
@@ -32,6 +32,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 | **列出可用 Action** | `ad list [patterns...] [-P <pkg>]` | 按包或关键词列出当前包、工作区或远端的所有 Action | [cli.md](references/cli.md) |
 | **查看 Action 详情** | `ad describe <id> [-P <pkg>]` | 查看指定 Action 的 Schema 模式、入参要求与依赖 | [cli.md](references/cli.md) |
 | **执行原子 Action** | `ad run <action> --input-file <path>` | 复杂对象推荐通过参数文件传递，杜绝引号转义损坏 | [cli.md](references/cli.md) |
+| **执行受管系统命令** | `ctx.process.run` 与 `ctx.process.start` | 短时命令直接运行，长期交互会话通过 withControl 保证独占控制权 | [process-execution.md](references/process-execution.md) |
 | **异步长任务调用** | `ad run <action> --async`，结合 `ad runs` 追踪 | 提交异步执行任务并获取凭据，追踪执行进度与结果 | [cli.md](references/cli.md) |
 | **执行复合业务任务** | `ad playbook show <id>`，依步骤调度对应 Action | 规程优先原则，阅读规程正文后依步骤编排调度 | [developer.md](references/developer.md) |
 | **校验清单与规程** | `ad validate` 与 `ad playbook validate` | 校验 Action 清单完整性与规程引用合法性 | [developer.md](references/developer.md) |
@@ -80,7 +81,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 - 步骤二：新建模板代码。执行 `ad new action <action-id> -d "描述"` 脚手架生成源码并在清单中注册。
 - 步骤三：完善清单契约。在 `actiondock.json` 中定义 `inputSchema`、`outputSchema` 与必填属性。
 - 步骤四：生成强类型。执行 `ad generate types` 生成强类型声明文件 `.actiondock/generated/actions.d.ts`。
-- 步骤五：编写业务逻辑。在 `actions/<action-id>.ts` 中使用 `defineAction` 编写纯业务逻辑，调阅 [developer.md](references/developer.md) 了解上下文 API。
+- 步骤五：编写业务逻辑。在 `actions/<action-id>.ts` 中使用 `defineAction` 编写纯业务逻辑，调阅 [developer.md](references/developer.md) 了解上下文 API；若涉及底层系统命令或外部进程，调阅 [process-execution.md](references/process-execution.md) 遵循受管进程规范。
 - 步骤六：契约门禁校验。执行 `ad validate`，确保模式合法与引用存在。
 - 步骤七：沙箱单元测试。在 `tests/<action-id>.test.ts` 中使用 `createTestRuntime` 进行纯内存测试，执行 `ad test`。
 - 步骤八：编排业务规程。执行 `ad new playbook <playbook-id>` 编写标准作业规程，执行 `ad playbook validate` 校验。
@@ -100,6 +101,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 
 - [consumer.md](references/consumer.md)：**Agent Skill 消费与使用指南**。当智能体装载技能、运行遇阻执行按需自举、进行规程优先决议、查阅契约规范、执行调用及接入 MCP 时查阅。
 - [developer.md](references/developer.md)：**Action 与规程开发指南**。当创建、编写、修改 Action 业务代码、声明元数据契约、使用运行时上下文 API（配置、状态、子进程、级联调用、日志）、编写 Playbook 规程或编写内存单元测试时查阅。
+- [process-execution.md](references/process-execution.md)：**受管进程与系统命令执行指南**。当调用底层操作系统命令、管理长期交互进程与 REPL、使用 withControl 独占租约与逐流增量解码、或使用 FakeProcessDriver 编写确定性测试时查阅。
 - [build-and-export.md](references/build-and-export.md)：**构建打包与 Skill 导出指南**。当执行交付产物构建、npm 打包、Agent Skill 单包或复合套件导出、配置 `SKILL.custom.md` 自定义说明书模板插槽、或执行 `--skill-md-only` 原位刷新时查阅。
 - [cli.md](references/cli.md)：**命令行全量参考手册**。当需要查询特定命令的完整参数标志、退出码规范、全局选项或 JSON 输出信封格式时查阅。
 - [troubleshooting.md](references/troubleshooting.md)：**故障排查与自愈决策指南**。仅在命令执行报错、发生异常或测试失败时定向查阅，依据错误代码对照表进行自愈修复。
@@ -113,6 +115,8 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 - 元数据规范原则：在修改 Action 源码（包括参数模式、描述、依赖）或新增 Action 文件后，在 `actiondock.json` 中完整登记并执行 `ad validate` 确保清单与 Schema 严格匹配；需要类型提示时运行 `ad generate types`。
 - 脚手架命令原则：新增 Action 工具可使用 `ad new action <id>` 或 `ad action create <id>`，新增 Playbook 规程可使用 `ad new playbook <id>` 或 `ad playbook create <id>`。
 - 依赖管理红线：正式项目引入外部 Action 包必须在工程根目录下执行 `ad add <package>` 安装并锁定依赖，严禁使用 `ad link` 替代项目正式依赖；`ad link` 仅限本地未发布源码快速调试与工作区联调。
+- 进程受管隔离原则：严禁在 Action 内部直接调用 Node.js 原生 child_process（如 exec、spawn 等），所有系统命令与外部进程必须通过 ctx.process 统一纳管；长期交互进程写操作必须通过 withControl 保证独占令牌与异常隔离。
+- 确定性进程测试红线：编写涉及系统命令的单元测试时，严禁唤起操作系统真实子进程，必须使用 @actiondock/testing 提供的 FakeProcessDriver 进行确定性模拟与事件发射。
 - 通道隔离原则：严禁在 Action 内部调用 `console.log`，所有日志一律使用 `ctx.log`（输出至标准错误流），确保标准输出仅输出标准 JSON 信封。
 - 严格契约原则：必须为每个 Action 定义完备的 `inputSchema` 与 `outputSchema`。
 - 严格调用原则：`ctx.actions.invoke` 严格仅接受动作标识符字符串或 ActionRef 引用对象，严禁传入动作定义对象或裸函数。
