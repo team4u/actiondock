@@ -312,12 +312,13 @@ export function createActionContext(options: ContextOptions): ActionContext {
   const invokerFn = (ref: string | ActionRef, input?: unknown) => invoke(ref, input);
   const invoker: ActionInvoker = Object.assign(invokerFn, { invoke });
 
-  const defaultOwner: ProcessOwner = options.owner || {
+  const defaultOwner: ProcessOwner = {
     tenantId: "default",
     principalId: "default",
     packageInstanceId: "default",
     generationId: "default",
   };
+  const effectiveOwner: ProcessOwner = options.owner || defaultOwner;
 
   // 外部注入的可能是平台级共享 ContextProcessAPI（未绑定 runId），直接复用会让
   // 多个 run 共享同一隔离与回收状态；此处派生 run 级实例保证隔离与自动回收均以 run 为单位
@@ -330,16 +331,19 @@ export function createActionContext(options: ContextOptions): ActionContext {
     typeof injectedProcess.manager.forOwner === "function" &&
     injectedProcess.runScoped !== true;
 
-  const processApi = isSharedContextProcessApi
-    ? injectedProcess.manager.forOwner(injectedProcess.owner || defaultOwner, currentRunId, signal)
-    : options.process ||
-      (options.processManager
-        ? options.processManager.forOwner(defaultOwner, currentRunId, signal)
-        : new ProcessManager({ driver: new MemoryProcessDriver() }).forOwner(
-            defaultOwner,
-            currentRunId,
-            signal
-          ));
+  const processApi =
+    injectedProcess && typeof injectedProcess.forOwner === "function"
+      ? injectedProcess.forOwner(effectiveOwner, currentRunId, signal)
+      : isSharedContextProcessApi
+      ? injectedProcess.manager.forOwner(effectiveOwner, currentRunId, signal)
+      : options.process ||
+        (options.processManager
+          ? options.processManager.forOwner(effectiveOwner, currentRunId, signal)
+          : new ProcessManager({ driver: new MemoryProcessDriver() }).forOwner(
+              effectiveOwner,
+              currentRunId,
+              signal
+            ));
   const progressApi: ProgressReporter = options.progress || {
     report() {},
   };

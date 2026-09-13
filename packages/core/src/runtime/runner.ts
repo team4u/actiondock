@@ -40,6 +40,7 @@ import type { RuntimeStorage, TerminalRunStatus } from "../storage/types";
 import type { Clock } from "./clock";
 import type { RuntimePlatform } from "../platform/types";
 import { createActionContext, StderrLogger } from "./context";
+import type { ProcessOwner } from "../process";
 
 // 错误码常量已收敛至 src/errors.ts 单一事实源，此处保留 re-export 以维持既有导入路径兼容。
 export {
@@ -176,6 +177,12 @@ export interface ExecutionStartOptions {
   generationId?: string;
   /** 执行所有者标识 */
   ownerId?: string;
+  /** 租户标识 */
+  tenantId?: string;
+  /** 主体标识 */
+  principalId?: string;
+  /** 显式执行归属所有者契约 */
+  owner?: ProcessOwner;
   /** 执行宿主会话标识 */
   hostSessionId?: string;
   /** 调用栈数组（用于检测 A -> B -> A 环路死锁） */
@@ -1055,7 +1062,13 @@ export class ActionRunner {
     rootRunId: string;
   }) {
     const { runCtx, controller, rootRunId } = args;
-    const { options, targetActionId, effectiveProcess } = runCtx;
+    const { options, targetPackageId, targetActionId, effectiveProcess } = runCtx;
+    const effectiveOwner: ProcessOwner = options.owner || {
+      tenantId: options.tenantId || "default",
+      principalId: options.principalId || options.ownerId || "default",
+      packageInstanceId: options.packageInstanceId || targetPackageId,
+      generationId: options.generationId || "1",
+    };
     return createActionContext({
       actionId: targetActionId,
       storage: this.storage,
@@ -1067,6 +1080,7 @@ export class ActionRunner {
       parentRunId: options.parentRunId,
       signal: controller.signal,
       process: effectiveProcess,
+      owner: effectiveOwner,
       progress: options.progress,
       logger: options.logger || new StderrLogger(targetActionId),
       onActionInvoke: (childAction, childInput, parentRunId) =>

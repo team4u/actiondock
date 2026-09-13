@@ -493,4 +493,42 @@ describe("受管进程控制上下文辅助函数 withControl", () => {
     expect(mockApi.calls).toContain("acquire:req-release-revoked");
     expect(mockApi.calls).toContain("stop:req-release-revoked-error-stop");
   });
+
+  it("业务完成且 release 成功后，滞后的异步续租失败严禁误停已释放的进程", async () => {
+    const mockApi = createMockProcessAPI();
+    let triggerRenewFailure: (() => void) | undefined;
+
+    mockApi.renew = () =>
+      new Promise<ControlGrant>((_resolve, reject) => {
+        triggerRenewFailure = () => reject(new Error("late renew rejection after release"));
+      });
+
+    const resultPromise = withControl(
+      mockApi,
+      "proc-1",
+      {
+        requestId: "req-late-renew-fail",
+        ttlMs: 300,
+        autoRenew: true,
+      },
+      async () => {
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        return "business-ok";
+      }
+    );
+
+    // 等待业务逻辑执行完毕并在收敛窗口触发续租故障
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    triggerRenewFailure?.();
+
+    const result = await resultPromise;
+    expect(result).toBe("business-ok");
+    expect(mockApi.releasedToken).toBe("initial-token-123");
+
+    // 等待微任务与计时器收敛
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(mockApi.stoppedId).toBeUndefined();
+    expect(mockApi.calls.filter((c) => c.startsWith("stop"))).toEqual([]);
+  });
 });

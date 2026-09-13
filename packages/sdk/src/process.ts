@@ -262,38 +262,46 @@ export async function withControl<T>(
   let renewTimer: ReturnType<typeof setInterval> | undefined;
   let renewError: unknown | undefined;
   let isSettled = false;
+  let isReleased = false;
+  let activeRenewPromise: Promise<void> | undefined;
 
   // 启动后台自动续租
   if (autoRenew && ttlMs > 0) {
     const intervalMs = Math.max(100, Math.floor(ttlMs / 3));
-    renewTimer = setInterval(async () => {
-      if (isSettled) return;
-      try {
-        const renewed = await api.renew(
-          processId,
-          currentToken,
-          ttlMs,
-          options.signal ? { signal: options.signal } : undefined
-        );
-        currentToken = renewed.token;
-        grant.token = renewed.token;
-        grant.expiresAt = renewed.expiresAt;
-      } catch (err) {
-        renewError = err;
-        if (renewTimer) {
-          clearInterval(renewTimer);
-          renewTimer = undefined;
-        }
-        // 续租失败：按设计契约第 6.3 节要求调用 stop 隔离或终止进程
+    renewTimer = setInterval(() => {
+      if (isSettled || isReleased) return;
+      activeRenewPromise = (async () => {
         try {
-          await api.stop(processId, {
-            requestId: `${options.requestId}-renew-stop`,
-            graceMs: 1000,
-          });
-        } catch {
-          // 忽略清理阶段次级异常，保留主要续租错误
+          const renewed = await api.renew(
+            processId,
+            currentToken,
+            ttlMs,
+            options.signal ? { signal: options.signal } : undefined
+          );
+          if (isSettled || isReleased) return;
+          currentToken = renewed.token;
+          grant.token = renewed.token;
+          grant.expiresAt = renewed.expiresAt;
+        } catch (err) {
+          if (isSettled || isReleased) return;
+          renewError = err;
+          if (renewTimer) {
+            clearInterval(renewTimer);
+            renewTimer = undefined;
+          }
+          // 续租失败且业务仍在进行中：按设计契约第 6.3 节要求调用 stop 隔离或终止进程
+          try {
+            await api.stop(processId, {
+              requestId: `${options.requestId}-renew-stop`,
+              graceMs: 1000,
+            });
+          } catch {
+            // 忽略清理阶段次级异常，保留主要续租错误
+          }
+        } finally {
+          activeRenewPromise = undefined;
         }
-      }
+      })();
     }, intervalMs);
 
     if (typeof renewTimer.unref === "function") {
@@ -303,19 +311,21 @@ export async function withControl<T>(
 
   // 监听取消信号
   const onAbort = async () => {
-    if (isSettled) return;
+    if (isSettled || isReleased) return;
     isSettled = true;
     if (renewTimer) {
       clearInterval(renewTimer);
       renewTimer = undefined;
     }
-    try {
-      await api.stop(processId, {
-        requestId: `${options.requestId}-abort-stop`,
-        graceMs: 1000,
-      });
-    } catch {
-      // 忽略清理阶段次级异常
+    if (!isReleased) {
+      try {
+        await api.stop(processId, {
+          requestId: `${options.requestId}-abort-stop`,
+          graceMs: 1000,
+        });
+      } catch {
+        // 忽略清理阶段次级异常
+      }
     }
   };
 
@@ -325,6 +335,22 @@ export async function withControl<T>(
 
   try {
     const result = await fn(grant);
+
+    // 业务逻辑执行结束，立刻标记已结算并清理定时器
+    isSettled = true;
+    if (renewTimer) {
+      clearInterval(renewTimer);
+      renewTimer = undefined;
+    }
+
+    // 等待任何正在进行的异步续租请求收敛，避免续租与 release 交错竞态
+    if (activeRenewPromise) {
+      try {
+        await activeRenewPromise;
+      } catch {
+        // 忽略已结算后的续租异常
+      }
+    }
 
     // 检查续租过程中是否发生异常
     if (renewError) {
@@ -336,12 +362,6 @@ export async function withControl<T>(
       throw options.signal.reason ?? new Error("Aborted");
     }
 
-    isSettled = true;
-    if (renewTimer) {
-      clearInterval(renewTimer);
-      renewTimer = undefined;
-    }
-
     // 正常协议完成后显式 release
     try {
       await api.release(
@@ -349,6 +369,7 @@ export async function withControl<T>(
         currentToken,
         options.signal ? { signal: options.signal } : undefined
       );
+      isReleased = true;
     } catch (releaseErr: any) {
       // 区分释放失败性质：控制权已失效（进程隔离或终态）维持 stop+rethrow 契约；
       // 临时性队列繁忙错误不终止进程，保留业务结果并记录警告
@@ -377,14 +398,16 @@ export async function withControl<T>(
       renewTimer = undefined;
     }
 
-    // 失败路径：严禁调用 release，按契约调用 stop 进行隔离或终止
-    try {
-      await api.stop(processId, {
-        requestId: `${options.requestId}-error-stop`,
-        graceMs: 1000,
-      });
-    } catch {
-      // 忽略清理阶段次级异常，保留原错误向上抛出
+    // 失败路径：仅在未成功 release 时按契约调用 stop 进行隔离或终止
+    if (!isReleased) {
+      try {
+        await api.stop(processId, {
+          requestId: `${options.requestId}-error-stop`,
+          graceMs: 1000,
+        });
+      } catch {
+        // 忽略清理阶段次级异常，保留原错误向上抛出
+      }
     }
 
     throw err;

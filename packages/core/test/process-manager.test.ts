@@ -31,6 +31,7 @@ import {
   ProcessManager,
   type ProcessOwner,
 } from "../src/process/process-manager";
+import { createActionContext } from "../src/runtime/context";
 
 describe("受管进程管理器 ProcessManager", () => {
   const ownerA: ProcessOwner = {
@@ -1487,6 +1488,220 @@ describe("受管进程管理器 ProcessManager", () => {
           data: encodeText("blocked"),
         })
       ).rejects.toThrow(ProcessError);
+    });
+  });
+
+  describe("审查缺陷回归测试套件 (Review Regressions)", () => {
+    it("[Issue 1] 两个不同所有者并发使用相同 requestId 调用 start 时，分别独立创建进程且不冲突", async () => {
+      const { manager } = createManager();
+
+      const [resA, resB] = await Promise.all([
+        manager.start(ownerA, {
+          requestId: "same-req-id",
+          spec: defaultSpec,
+        }),
+        manager.start(ownerB, {
+          requestId: "same-req-id",
+          spec: defaultSpec,
+        }),
+      ]);
+
+      expect(resA.process.id).toBeDefined();
+      expect(resB.process.id).toBeDefined();
+      expect(resA.process.id).not.toBe(resB.process.id);
+    });
+
+    it("[Issue 1] 相同所有者并发使用相同 requestId 但不同负载时，立即抛出 REQUEST_CONFLICT", async () => {
+      const { manager } = createManager();
+
+      const start1 = manager.start(ownerA, {
+        requestId: "conflict-req-id",
+        spec: { executable: "echo", args: ["one"], io: { mode: "pipe" } },
+      });
+      const start2 = manager.start(ownerA, {
+        requestId: "conflict-req-id",
+        spec: { executable: "echo", args: ["two"], io: { mode: "pipe" } },
+      });
+
+      const results = await Promise.allSettled([start1, start2]);
+      const rejected = results.find((r) => r.status === "rejected") as PromiseRejectedResult | undefined;
+      expect(rejected).toBeDefined();
+      expect(((rejected!.reason as ProcessError) || {}).code).toBe(REQUEST_CONFLICT);
+    });
+
+    it("[Issue 2] Runner 构造 Action 上下文时正确继承包实例所有者，实现跨包进程隔离", () => {
+      const { manager } = createManager();
+      const platformProcess = manager.forOwner({
+        tenantId: "default",
+        principalId: "default",
+        packageInstanceId: "default",
+        generationId: "default",
+      });
+
+      const mockStorage = {
+        getConfig: () => undefined,
+        getState: () => undefined,
+      } as any;
+
+      const ctxA = createActionContext({
+        storage: mockStorage,
+        process: platformProcess,
+        owner: ownerA,
+      });
+
+      const ctxB = createActionContext({
+        storage: mockStorage,
+        process: platformProcess,
+        owner: ownerB,
+      });
+
+      expect((ctxA.process as any).owner.packageInstanceId).toBe("pkg-1");
+      expect((ctxB.process as any).owner.packageInstanceId).toBe("pkg-2");
+      expect((ctxA.process as any).owner.tenantId).toBe("tenant-a");
+      expect((ctxB.process as any).owner.tenantId).toBe("tenant-b");
+    });
+
+    it("[Issue 3] stop() 保持 stopping 状态且不提前关闭输出，真实输出关闭后才标记 outputClosed", async () => {
+      const driver = new MemoryProcessDriver();
+      const manager = new ProcessManager({
+        hostEpoch: "epoch-1",
+        driver,
+      });
+
+      const startRes = await manager.start(ownerA, {
+        requestId: "req-stop-flush",
+        spec: defaultSpec,
+      });
+      const processId = startRes.process.id;
+      const handle = (manager as any).processes.get(processId).handle;
+
+      // 覆盖 terminate 行为：模拟只发送终止信号，驱动不立即通知退出与流关闭
+      handle.terminate = async () => {};
+
+      const stopInfo = await manager.stop(ownerA, processId, {
+        requestId: "req-stop-call",
+        graceMs: 100,
+      });
+
+      // stop 完成时状态为 stopping，输出未关闭
+      expect(stopInfo.state).toBe("stopping");
+      expect(stopInfo.control).toBe("closed");
+      expect(stopInfo.outputClosed).toBe(false);
+
+      // 允许底层驱动在 stop 后继续刷入尾部输出
+      handle.emitOutput("stdout", "trailing-output");
+
+      // 驱动后续触发真实退出与流关闭
+      handle.emitExit(0, null);
+      handle.emitOutputClosed("natural");
+
+      const finalInfo = await manager.inspect(ownerA, processId);
+      expect(finalInfo.state).toBe("exited");
+      expect(finalInfo.outputClosed).toBe(true);
+
+      const readRes = await manager.read(ownerA, processId, {
+        cursor: startRes.initialCursor,
+      });
+      expect(decodeText(readRes.chunks)).toContain("trailing-output");
+    });
+
+    it("[Issue 5] 并发写入严格受输入队列配额限制，无法在落盘窗口穿透配额", async () => {
+      const { manager } = createManager({
+        maxPendingQueueBytesPerProcess: 100, // 仅允许 100 字节
+      });
+
+      const startRes = await manager.start(ownerA, {
+        requestId: "req-write-quota",
+        spec: defaultSpec,
+      });
+      const processId = startRes.process.id;
+
+      const grant = await manager.acquire(ownerA, processId, {
+        requestId: "req-write-grant",
+        waitMs: 1000,
+        ttlMs: 10000,
+      });
+
+      // 3 个并发写入，每个 40 字节，前两个 80 字节成功，第三个 120 字节超限应抛出 QUEUE_FULL
+      const writes = await Promise.allSettled([
+        manager.write(ownerA, processId, {
+          token: grant.token,
+          requestId: "write-1",
+          data: encodeBytes(new Uint8Array(40)),
+        }),
+        manager.write(ownerA, processId, {
+          token: grant.token,
+          requestId: "write-2",
+          data: encodeBytes(new Uint8Array(40)),
+        }),
+        manager.write(ownerA, processId, {
+          token: grant.token,
+          requestId: "write-3",
+          data: encodeBytes(new Uint8Array(40)),
+        }),
+      ]);
+
+      const fulfilled = writes.filter((w) => w.status === "fulfilled");
+      const rejected = writes.filter((w) => w.status === "rejected");
+      expect(fulfilled.length).toBe(2);
+      expect(rejected.length).toBe(1);
+      expect(((rejected[0] as PromiseRejectedResult).reason as ProcessError).code).toBe(QUEUE_FULL);
+    });
+
+    it("[Issue 6] 终态保留输出日志纳入宿主配额，超额时按 LRU 淘汰旧日志", async () => {
+      const { manager } = createManager({
+        maxOutputBufferBytesPerProcess: 2048,
+        maxOutputBufferBytesPerHost: 2048, // 宿主上限 2048 字节
+      });
+
+      // 启动并退出进程 1，产生 1500 字节保留日志
+      const p1 = await manager.start(ownerA, {
+        requestId: "req-p1",
+        spec: defaultSpec,
+        limits: { outputBufferBytes: 2048 },
+      });
+      const handle1 = (manager as any).processes.get(p1.process.id).handle;
+      handle1.emitOutput("stdout", new Uint8Array(1500));
+      handle1.emitExit(0, null);
+      handle1.emitOutputClosed("natural");
+
+      // 启动第 2 个进程，请求 1024 字节：1500 + 1024 > 2048，触发 LRU 淘汰 p1 的保留日志
+      const p2 = await manager.start(ownerA, {
+        requestId: "req-p2",
+        spec: defaultSpec,
+        limits: { outputBufferBytes: 1024 },
+      });
+      expect(p2.process.id).toBeDefined();
+
+      // p1 终态日志已被淘汰，读取返回空
+      const readP1 = await manager.read(ownerA, p1.process.id, { cursor: p1.initialCursor });
+      expect(readP1.chunks.length).toBe(0);
+    });
+
+    it("[Issue 7] 底层驱动在 spawn 解决前已触发退出时，启动完成不会覆盖已收到的退出状态", async () => {
+      const driver = new MemoryProcessDriver();
+      driver.spawnHook = (_processId, _spec, callbacks) => {
+        callbacks.onExit({ code: 42, signal: null });
+        callbacks.onOutputClosed("natural");
+      };
+
+      const manager = new ProcessManager({
+        hostEpoch: "epoch-1",
+        driver,
+      });
+
+      const res = await manager.start(ownerA, {
+        requestId: "req-early-exit",
+        spec: defaultSpec,
+      });
+
+      // 启动结果中状态必须保留为 exited，不能被覆写为 running
+      expect(res.process.state).toBe("exited");
+      expect(res.process.exit?.code).toBe(42);
+
+      const inspectRes = await manager.inspect(ownerA, res.process.id);
+      expect(inspectRes.state).toBe("exited");
+      expect(inspectRes.exit?.code).toBe(42);
     });
   });
 });

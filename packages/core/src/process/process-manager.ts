@@ -111,6 +111,8 @@ export interface ProcessManagerOptions {
   defaultLimits?: Partial<Limits>;
   /** 进程退出后输出排空宽限期（毫秒），默认 5000 */
   drainDeadlineMs?: number;
+  /** 终态保留输出日志最大缓存保留时长（毫秒），默认 10 分钟 (600,000 毫秒) */
+  terminalLogRetentionMs?: number;
   /** 可选结构化日志接口，用于透出持久化失败与驱动终止失败等诊断信息 */
   logger?: Logger;
 }
@@ -287,12 +289,29 @@ function toStoredProcessRecord(
 }
 
 /**
- * 同步幂等预占条目：在异步落盘窗口内锁定同 requestId 的并发请求。
+ * 同步幂等预占条目：在异步落盘窗口内锁定同作用域、进程、操作类型与请求标识的并发请求。
  */
 interface RequestReservation {
+  payloadHash: string;
+  operation: string;
   promise: Promise<unknown>;
   resolve: (value: unknown) => void;
   reject: (err: unknown) => void;
+}
+
+/**
+ * 终态输出日志缓存条目：附带驱逐时间戳支撑 TTL 过期回收与 LRU 淘汰。
+ */
+interface RetainedOutputLogEntry {
+  log: ProcessOutputLog;
+  evictedAt: number;
+}
+
+/**
+ * 格式化同步幂等预占键。
+ */
+function formatReservationKey(key: ProcessRequestKey, operation: string): string {
+  return `${key.hostEpoch}:${key.scope}:${key.processId ?? ""}:${operation}:${key.requestId}`;
 }
 
 /**
@@ -323,12 +342,13 @@ export class ProcessManager {
   public readonly quotas: ProcessManagerQuotas;
   public readonly defaultLimits: Required<Limits>;
   public readonly drainDeadlineMs: number;
+  public readonly terminalLogRetentionMs: number;
   private readonly logger?: Logger;
 
   private processes = new Map<string, ManagedProcessRecord>();
-  /** 已驱逐进程的输出日志缓存：内存态输出无法持久化，驱逐后仍需支撑游标读取 */
-  private evictedOutputLogs = new Map<string, ProcessOutputLog>();
-  /** 同步幂等预占表：键为 requestId，在异步落盘窗口内锁定并发重复请求 */
+  /** 已驱逐进程的输出日志缓存：附带时间戳支撑 TTL 过期回收与 LRU 淘汰 */
+  private evictedOutputLogs = new Map<string, RetainedOutputLogEntry>();
+  /** 同步幂等预占表：以复合键在异步落盘窗口内锁定并发重复请求 */
   private requestReservations = new Map<string, RequestReservation>();
   private initPromise: Promise<number> | undefined;
   private isShutdown = false;
@@ -358,6 +378,7 @@ export class ProcessManager {
     };
 
     this.drainDeadlineMs = options.drainDeadlineMs ?? 5000;
+    this.terminalLogRetentionMs = options.terminalLogRetentionMs ?? 10 * 60 * 1000;
     this.logger = options.logger;
   }
 
@@ -434,13 +455,26 @@ export class ProcessManager {
   }
 
   /**
-   * 同步预占幂等请求：跨 await 的检查与落盘窗口内锁定同 requestId 并发调用。
+   * 同步预占幂等请求：跨 await 的检查与落盘窗口内锁定同复合键并发调用。
    * 返回 undefined 表示预占成功，调用方继续异步路径并在完成时调用 commit/cancel。
-   * 返回 RequestReservation 表示已有同 requestId 请求进行中，调用方可等待其结果。
+   * 返回 RequestReservation 表示已有同请求进行中，调用方可等待其结果。
+   * 若已有请求负载或操作类型不同，立即抛出 REQUEST_CONFLICT 杜绝混用结果。
    */
-  private reserveRequest(requestId: string): RequestReservation | undefined {
-    const existing = this.requestReservations.get(requestId);
+  private reserveRequest(
+    key: ProcessRequestKey,
+    payloadHash: string,
+    operation: string
+  ): RequestReservation | undefined {
+    const reservationKey = formatReservationKey(key, operation);
+    const existing = this.requestReservations.get(reservationKey);
     if (existing) {
+      if (existing.payloadHash !== payloadHash || existing.operation !== operation) {
+        throw new ProcessError(
+          REQUEST_CONFLICT,
+          "Request conflict: identical requestId with different payload",
+          { requestId: key.requestId }
+        );
+      }
       return existing;
     }
     let resolveFn: (value: unknown) => void = () => {};
@@ -451,22 +485,31 @@ export class ProcessManager {
     });
     // 预占 promise 可能永远无人等待：预先挂接空捕获，避免拒绝时触发 unhandledRejection
     promise.catch(() => {});
-    this.requestReservations.set(requestId, { promise, resolve: resolveFn, reject: rejectFn });
+    const reservation: RequestReservation = {
+      payloadHash,
+      operation,
+      promise,
+      resolve: resolveFn,
+      reject: rejectFn,
+    };
+    this.requestReservations.set(reservationKey, reservation);
     return undefined;
   }
 
-  private commitReservation(requestId: string, value: unknown): void {
-    const reservation = this.requestReservations.get(requestId);
+  private commitReservation(key: ProcessRequestKey, operation: string, value: unknown): void {
+    const reservationKey = formatReservationKey(key, operation);
+    const reservation = this.requestReservations.get(reservationKey);
     if (reservation) {
-      this.requestReservations.delete(requestId);
+      this.requestReservations.delete(reservationKey);
       reservation.resolve(value);
     }
   }
 
-  private rejectReservation(requestId: string, err: unknown): void {
-    const reservation = this.requestReservations.get(requestId);
+  private rejectReservation(key: ProcessRequestKey, operation: string, err: unknown): void {
+    const reservationKey = formatReservationKey(key, operation);
+    const reservation = this.requestReservations.get(reservationKey);
     if (reservation) {
-      this.requestReservations.delete(requestId);
+      this.requestReservations.delete(reservationKey);
       reservation.reject(err);
     }
   }
@@ -519,11 +562,9 @@ export class ProcessManager {
       }
     }
 
-    for (const waiter of Array.from(this.requestReservations.keys())) {
-      this.rejectReservation(
-        waiter,
-        new ProcessError(PROCESS_CANCELLED, "Process manager has been shut down")
-      );
+    for (const [reservationKey, res] of Array.from(this.requestReservations.entries())) {
+      this.requestReservations.delete(reservationKey);
+      res.reject(new ProcessError(PROCESS_CANCELLED, "Process manager has been shut down"));
     }
   }
 
@@ -561,7 +602,7 @@ export class ProcessManager {
     const payloadHash = hashRequestPayload({ spec: input.spec, limits: input.limits });
 
     // 同步预占幂等请求，跨 await 窗口内拦截并发同 requestId 双重执行
-    const inFlight = this.reserveRequest(input.requestId);
+    const inFlight = this.reserveRequest(key, payloadHash, "start");
     if (inFlight) {
       return (await inFlight.promise) as ProcessStartResult;
     }
@@ -576,7 +617,7 @@ export class ProcessManager {
           });
         }
         const cached = existing.receipt as unknown as ProcessStartResult;
-        this.commitReservation(input.requestId, cached);
+        this.commitReservation(key, "start", cached);
         return cached;
       }
 
@@ -697,37 +738,45 @@ export class ProcessManager {
             : new ProcessError(PROCESS_CANCELLED, "Process start was cancelled");
         }
 
-        procRecord.info.state = "running";
-        await this.metadataStore.updateProcessState(processId, { state: "running" });
+        // 仅在进程仍处于 starting 初始阶段时转为 running 并挂接定时器；
+        // 若驱动在 spawn 完成前已触发 exited / failed / stopping，切勿回写为 running 且严禁启动空闲与寿命定时器
+        if (procRecord.info.state === "starting") {
+          procRecord.info.state = "running";
+          await this.metadataStore.updateProcessState(processId, { state: "running" });
 
-        this.startIdleTimer(procRecord);
-        this.startLifetimeTimer(procRecord);
+          this.startIdleTimer(procRecord);
+          this.startLifetimeTimer(procRecord);
+        }
       } catch (err: any) {
         if ((err instanceof ProcessError && err.code === PROCESS_CANCELLED) || call?.signal?.aborted) {
-          procRecord.info.state = "exited";
-          procRecord.info.endReason = "requested";
-          procRecord.info.control = "closed";
-          procRecord.outputLog.closeOutput("natural");
-          await this.metadataStore.updateProcessState(processId, {
-            state: "exited",
-            endReason: "requested",
-            control: "closed",
-            controlState: "closed",
-          });
+          if (procRecord.info.state !== "exited" && procRecord.info.state !== "failed") {
+            procRecord.info.state = "exited";
+            procRecord.info.endReason = "requested";
+            procRecord.info.control = "closed";
+            procRecord.outputLog.closeOutput("natural");
+            await this.metadataStore.updateProcessState(processId, {
+              state: "exited",
+              endReason: "requested",
+              control: "closed",
+              controlState: "closed",
+            });
+          }
           throw err instanceof ProcessError
             ? err
             : new ProcessError(PROCESS_CANCELLED, "Process start was cancelled");
         }
-        procRecord.info.state = "failed";
-        procRecord.info.endReason = "spawn-failure";
-        procRecord.info.control = "closed";
-        procRecord.outputLog.closeOutput("natural");
-        await this.metadataStore.updateProcessState(processId, {
-          state: "failed",
-          endReason: "spawn-failure",
-          control: "closed",
-          controlState: "closed",
-        });
+        if (procRecord.info.state !== "exited" && procRecord.info.state !== "failed") {
+          procRecord.info.state = "failed";
+          procRecord.info.endReason = "spawn-failure";
+          procRecord.info.control = "closed";
+          procRecord.outputLog.closeOutput("natural");
+          await this.metadataStore.updateProcessState(processId, {
+            state: "failed",
+            endReason: "spawn-failure",
+            control: "closed",
+            controlState: "closed",
+          });
+        }
         throw new ProcessError(PROCESS_SPAWN_ERROR, `Failed to spawn process: ${err?.message || String(err)}`);
       }
 
@@ -737,11 +786,11 @@ export class ProcessManager {
       };
 
       await this.metadataStore.recordRequest(key, startResult as any, payloadHash);
-      this.commitReservation(input.requestId, startResult);
+      this.commitReservation(key, "start", startResult);
       return startResult;
     } finally {
       // 成功路径已在 commit 中移除预占；此处仅对异常路径释放并唤醒等待方
-      this.rejectReservation(input.requestId, new ProcessError(
+      this.rejectReservation(key, "start", new ProcessError(
         REQUEST_CONFLICT,
         "Concurrent start request did not produce a result",
         { requestId: input.requestId }
@@ -828,7 +877,7 @@ export class ProcessManager {
     const payloadHash = hashRequestPayload({ waitMs: input.waitMs, ttlMs: input.ttlMs });
 
     // 同步预占幂等请求，跨 await 窗口内拦截并发同 requestId 双重授权
-    const inFlight = this.reserveRequest(input.requestId);
+    const inFlight = this.reserveRequest(key, payloadHash, "acquire");
     if (inFlight) {
       return (await inFlight.promise) as ControlGrant;
     }
@@ -843,7 +892,7 @@ export class ProcessManager {
           });
         }
         const cached = existing.receipt as unknown as ControlGrant;
-        this.commitReservation(input.requestId, cached);
+        this.commitReservation(key, "acquire", cached);
         return cached;
       }
 
@@ -851,7 +900,7 @@ export class ProcessManager {
       if (proc.info.control === "free" && proc.acquireWaiters.length === 0) {
         const grant = this.grantControl(proc, input.requestId, input.ttlMs, runId);
         await this.metadataStore.recordRequest(key, grant as any, payloadHash);
-        this.commitReservation(input.requestId, grant);
+        this.commitReservation(key, "acquire", grant);
         return grant;
       }
 
@@ -924,11 +973,11 @@ export class ProcessManager {
         proc.acquireWaiters.push(waiter);
       });
 
-      this.commitReservation(input.requestId, grant);
+      this.commitReservation(key, "acquire", grant);
       return grant;
     } finally {
       // 成功路径已在 commit 中移除预占；此处仅对异常路径释放并唤醒等待方
-      this.rejectReservation(input.requestId, new ProcessError(
+      this.rejectReservation(key, "acquire", new ProcessError(
         REQUEST_CONFLICT,
         "Concurrent acquire request did not produce a result",
         { requestId: input.requestId }
@@ -1056,7 +1105,7 @@ export class ProcessManager {
     const payloadHash = hashRequestPayload({ token: input.token, data: input.data });
 
     // 同步预占幂等请求，跨 await 窗口内拦截并发同 requestId 双重入队
-    const inFlight = this.reserveRequest(input.requestId);
+    const inFlight = this.reserveRequest(key, payloadHash, "write");
     if (inFlight) {
       return (await inFlight.promise) as OperationReceipt;
     }
@@ -1071,7 +1120,7 @@ export class ProcessManager {
           });
         }
         const cached = existing.receipt as unknown as OperationReceipt;
-        this.commitReservation(input.requestId, cached);
+        this.commitReservation(key, "write", cached);
         return cached;
       }
 
@@ -1085,7 +1134,7 @@ export class ProcessManager {
       const rawBytes = decodeBytes(input.data);
       const dataSize = rawBytes.byteLength;
 
-      // 待写入队列容量检查
+      // 待写入队列容量检查：在任何 await 前同步原子校验并预占配额
       if (proc.pendingInputBytes + dataSize > this.quotas.maxPendingQueueBytesPerProcess) {
         throw new ProcessError(QUEUE_FULL, "Process pending input queue limit exceeded", {
           limit: this.quotas.maxPendingQueueBytesPerProcess,
@@ -1099,34 +1148,44 @@ export class ProcessManager {
         });
       }
 
-      const receipt: OperationReceipt = {
-        requestId: input.requestId,
-        state: "queued",
-      };
-
-      await this.metadataStore.recordRequest(key, receipt as any, payloadHash);
-
+      // 同步占位预扣队列配额，杜绝并发 await 窗口穿透
       proc.pendingInputBytes += dataSize;
-      proc.inputQueue.push({
-        type: "write",
-        requestId: input.requestId,
-        token: input.token,
-        bytes: rawBytes,
-        receipt,
-        key,
-        payloadHash,
-        cancelEpoch: proc.cancelEpoch,
-      });
+      let pendingBytesCommitted = false;
 
-      // 异步调度推进
-      queueMicrotask(() => void this.dispatchNext(proc));
+      try {
+        const receipt: OperationReceipt = {
+          requestId: input.requestId,
+          state: "queued",
+        };
 
-      const queued = { ...receipt };
-      this.commitReservation(input.requestId, queued);
-      return queued;
+        await this.metadataStore.recordRequest(key, receipt as any, payloadHash);
+
+        proc.inputQueue.push({
+          type: "write",
+          requestId: input.requestId,
+          token: input.token,
+          bytes: rawBytes,
+          receipt,
+          key,
+          payloadHash,
+          cancelEpoch: proc.cancelEpoch,
+        });
+        pendingBytesCommitted = true;
+
+        // 异步调度推进
+        queueMicrotask(() => void this.dispatchNext(proc));
+
+        const queued = { ...receipt };
+        this.commitReservation(key, "write", queued);
+        return queued;
+      } finally {
+        if (!pendingBytesCommitted) {
+          proc.pendingInputBytes = Math.max(0, proc.pendingInputBytes - dataSize);
+        }
+      }
     } finally {
       // 成功路径已在 commit 中移除预占；此处仅对异常路径释放并唤醒等待方
-      this.rejectReservation(input.requestId, new ProcessError(
+      this.rejectReservation(key, "write", new ProcessError(
         REQUEST_CONFLICT,
         "Concurrent write request did not produce a result",
         { requestId: input.requestId }
@@ -1155,7 +1214,7 @@ export class ProcessManager {
     const payloadHash = hashRequestPayload({ token: input.token, action: input.action });
 
     // 同步预占幂等请求，跨 await 窗口内拦截并发同 requestId 双重入队
-    const inFlight = this.reserveRequest(input.requestId);
+    const inFlight = this.reserveRequest(key, payloadHash, "control");
     if (inFlight) {
       return (await inFlight.promise) as OperationReceipt;
     }
@@ -1170,7 +1229,7 @@ export class ProcessManager {
           });
         }
         const cached = existing.receipt as unknown as OperationReceipt;
-        this.commitReservation(input.requestId, cached);
+        this.commitReservation(key, "control", cached);
         return cached;
       }
 
@@ -1221,11 +1280,11 @@ export class ProcessManager {
       queueMicrotask(() => void this.dispatchNext(proc));
 
       const queued = { ...receipt };
-      this.commitReservation(input.requestId, queued);
+      this.commitReservation(key, "control", queued);
       return queued;
     } finally {
       // 成功路径已在 commit 中移除预占；此处仅对异常路径释放并唤醒等待方
-      this.rejectReservation(input.requestId, new ProcessError(
+      this.rejectReservation(key, "control", new ProcessError(
         REQUEST_CONFLICT,
         "Concurrent control request did not produce a result",
         { requestId: input.requestId }
@@ -1360,53 +1419,25 @@ export class ProcessManager {
 
     proc.info.endReason = proc.info.endReason ?? "requested";
     proc.info.state = "stopping";
-    await this.persistState(id, { state: "stopping", endReason: proc.info.endReason });
+    proc.info.control = "closed";
 
-    // 调用底层驱动终止；失败时记录诊断并保留 stopping 状态等待真实退出事件收敛
-    let exitResult: { code: number | null; signal: string | null } | undefined;
-    let terminateError: unknown;
+    await this.persistState(id, {
+      state: proc.info.state,
+      control: "closed",
+      controlState: "closed",
+      endReason: proc.info.endReason,
+    });
+
+    // 调用底层驱动终止；真实退出状态与输出流关闭由底层观察者事件收敛
     try {
       if (proc.handle) {
-        const res = await proc.handle.terminate(input.graceMs);
-        if (res) exitResult = res;
+        await proc.handle.terminate(input.graceMs);
       } else if (this.driver.terminate) {
         await this.driver.terminate(id, input.graceMs);
       }
     } catch (err) {
-      terminateError = err;
       this.recordDiagnostic(`Failed to terminate process '${id}' during stop`, err);
     }
-
-    if (terminateError) {
-      // 终止失败：不伪造退出结构，保留 stopping 状态，由后续真实退出或再次 stop 收敛
-      return { ...proc.info };
-    }
-
-    proc.info.control = "closed";
-    proc.info.state = "exited";
-    proc.info.endReason = proc.info.endReason ?? "requested";
-    if (exitResult) {
-      proc.info.exit = exitResult;
-    } else if (!proc.info.exit) {
-      proc.info.exit = { code: null, signal: "SIGTERM" };
-    }
-
-    proc.outputLog.closeOutput("natural");
-    proc.info.outputClosed = true;
-    proc.info.outputEndReason = "natural";
-
-    await this.persistState(id, {
-      state: "exited",
-      control: "closed",
-      controlState: "closed",
-      endReason: proc.info.endReason,
-      exitCode: proc.info.exit.code,
-      exitSignal: proc.info.exit.signal,
-      outputClosed: true,
-      outputEndReason: "natural",
-    });
-
-    this.maybeEvictProcess(proc);
 
     return { ...proc.info };
   }
@@ -2100,7 +2131,7 @@ export class ProcessManager {
 
     const info = toSdkProcessInfo(record);
     const outputLog =
-      this.evictedOutputLogs.get(processId) ??
+      this.getRetainedOutputLog(processId) ??
       new ProcessOutputLog(record.hostEpoch, processId, {
         maxBufferBytes: info.effectiveLimits.outputBufferBytes,
         maxWaiters: this.quotas.maxWaitersPerProcess,
@@ -2135,12 +2166,76 @@ export class ProcessManager {
     const isTerminalLoaded =
       info.state === "exited" || info.state === "failed" || info.state === "lost";
     if (isTerminalLoaded && info.outputClosed) {
-      this.evictedOutputLogs.set(processId, outputLog);
+      this.retainTerminalOutputLog(processId, outputLog);
       return loaded;
     }
 
     this.processes.set(processId, loaded);
     return loaded;
+  }
+
+  /**
+   * 清理已过期的终态输出日志条目。
+   */
+  private cleanExpiredTerminalLogs(): void {
+    const now = Date.now();
+    for (const [id, entry] of this.evictedOutputLogs.entries()) {
+      if (now - entry.evictedAt > this.terminalLogRetentionMs) {
+        this.evictedOutputLogs.delete(id);
+      }
+    }
+  }
+
+  /**
+   * 统计终态保留日志当前在内存中实际占用的输出缓冲字节总数。
+   */
+  private countRetainedOutputBufferBytes(): number {
+    this.cleanExpiredTerminalLogs();
+    let bytes = 0;
+    for (const entry of this.evictedOutputLogs.values()) {
+      bytes += entry.log.currentBytes;
+    }
+    return bytes;
+  }
+
+  /**
+   * 将终态输出日志存入保留缓存，并根据宿主配额执行 LRU 与 TTL 淘汰。
+   */
+  private retainTerminalOutputLog(processId: string, log: ProcessOutputLog): void {
+    this.cleanExpiredTerminalLogs();
+
+    // 仅保留存在未读完输出或输出未关闭的日志
+    if (log.currentBytes === 0 && log.outputClosed) {
+      return;
+    }
+
+    // 若新加入条目会导致总输出配额超限，按 LRU 顺序淘汰最旧条目
+    while (
+      this.countRetainedOutputBufferBytes() + log.currentBytes > this.quotas.maxOutputBufferBytesPerHost &&
+      this.evictedOutputLogs.size > 0
+    ) {
+      const oldestKey = this.evictedOutputLogs.keys().next().value;
+      if (!oldestKey) break;
+      this.evictedOutputLogs.delete(oldestKey);
+    }
+
+    this.evictedOutputLogs.set(processId, {
+      log,
+      evictedAt: Date.now(),
+    });
+  }
+
+  /**
+   * 获取终态保留日志（附带过期清理与 LRU 触达更新）。
+   */
+  private getRetainedOutputLog(processId: string): ProcessOutputLog | undefined {
+    this.cleanExpiredTerminalLogs();
+    const entry = this.evictedOutputLogs.get(processId);
+    if (!entry) return undefined;
+    // 触达刷新 LRU 顺序
+    this.evictedOutputLogs.delete(processId);
+    this.evictedOutputLogs.set(processId, entry);
+    return entry.log;
   }
 
   /**
@@ -2163,7 +2258,7 @@ export class ProcessManager {
 
     // 保留输出日志支撑后续游标读取（内存输出无法从持久层恢复）
     if (!proc.outputLog.outputClosed || proc.outputLog.tailCursor !== proc.outputLog.earliestCursor) {
-      this.evictedOutputLogs.set(proc.info.id, proc.outputLog);
+      this.retainTerminalOutputLog(proc.info.id, proc.outputLog);
     }
 
     if (proc.handle && typeof this.driver.dispose === "function") {
@@ -2221,6 +2316,23 @@ export class ProcessManager {
         requested: perProcBuf,
         limit: this.quotas.maxOutputBufferBytesPerProcess,
       });
+    }
+
+    // 终态保留输出日志实际占用字节数纳入宿主预算
+    totalBuffer += this.countRetainedOutputBufferBytes();
+
+    // 若新进程申请的缓冲使总预算超限，优先淘汰已有的终态保留日志（LRU 策略）
+    while (
+      totalBuffer + perProcBuf > this.quotas.maxOutputBufferBytesPerHost &&
+      this.evictedOutputLogs.size > 0
+    ) {
+      const oldestKey = this.evictedOutputLogs.keys().next().value;
+      if (!oldestKey) break;
+      const oldest = this.evictedOutputLogs.get(oldestKey);
+      this.evictedOutputLogs.delete(oldestKey);
+      if (oldest) {
+        totalBuffer -= oldest.log.currentBytes;
+      }
     }
 
     if (totalBuffer + perProcBuf > this.quotas.maxOutputBufferBytesPerHost) {
