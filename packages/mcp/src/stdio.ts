@@ -129,4 +129,27 @@ export async function startMcpStdio(
 
   process.once("SIGINT", () => handleSignal("SIGINT"));
   process.once("SIGTERM", () => handleSignal("SIGTERM"));
+
+  // MCP 客户端断开链路：serveStdio 在 stdin 关闭后仅关闭传输层，不退出进程，
+  // 监督进程与 IPC 宿主子进程会永久悬挂。这里监听 stdin 的 end 与 close 事件，
+  // 触发与信号一致的清理退出路径；exitCode 模式确保异步 cleanup 完成后再真正退出。
+  // 幂等防护：cleanup 已被信号或先到的 stdin 事件触发过时不重复执行
+  let cleanupTriggered = false;
+  const triggerCleanupOnce = () => {
+    if (cleanupTriggered) return;
+    cleanupTriggered = true;
+    cleanup()
+      .then(() => {
+        process.exitCode = 0;
+      })
+      .catch((err) => {
+        process.stderr.write(
+          `[MCP Stdio Cleanup Failed] ${err instanceof Error ? err.message : String(err)}\n`
+        );
+        process.exitCode = 1;
+      });
+  };
+
+  process.stdin.once("end", triggerCleanupOnce);
+  process.stdin.once("close", triggerCleanupOnce);
 }

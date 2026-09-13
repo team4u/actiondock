@@ -1,6 +1,6 @@
-import { cpSync, existsSync, readdirSync, renameSync, rmSync, statSync } from "node:fs";
+import { cpSync, existsSync, readdirSync, realpathSync, renameSync, rmSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
-import { ACTIONDOCK_VERSION } from "@actiondock/core";
+import { ACTIONDOCK_VERSION, assertPathWithinRoot } from "@actiondock/core";
 
 /**
  * builder 包内共享的文件系统基础设施。
@@ -67,20 +67,68 @@ export async function moveDirAtomic(src: string, dest: string): Promise<void> {
 }
 
 /**
- * 递归收集目录内全部文件的相对路径（正斜杠分隔，名称排序）。
- * 统一排序保证产物文件清单与内容摘要的确定性。
+ * 递归收集目录内全部文件的相对路径（正斜杠分隔）。
+ * 收集完成后对最终 POSIX 相对路径统一排序，保证跨平台 digest 一致性；
+ * 符号链接防护策略与 archive.ts collectEntries 对齐：越出根边界的软链接与循环软链接直接跳过。
  */
 export function collectRelativeFiles(dir: string, baseDir = dir): string[] {
+  const results = collectRelativeFilesUnsorted(dir, baseDir, new Set<string>());
+  return results.sort();
+}
+
+function collectRelativeFilesUnsorted(dir: string, baseDir: string, visited: Set<string>): string[] {
   if (!existsSync(dir)) return [];
+  if (visited.size === 0) {
+    try {
+      visited.add(existsSync(baseDir) ? realpathSync(baseDir) : baseDir);
+    } catch {
+      // 忽略根目录真实路径解析异常，退化为不携带根真实路径的循环拦截
+    }
+  }
   const results: string[] = [];
-  const entries = readdirSync(dir).sort();
+  let entries: string[];
+  try {
+    entries = readdirSync(dir).sort();
+  } catch {
+    return [];
+  }
   for (const entry of entries) {
     const fullPath = join(dir, entry);
-    const stat = statSync(fullPath);
-    if (stat.isDirectory()) {
-      results.push(...collectRelativeFiles(fullPath, baseDir));
-    } else if (stat.isFile()) {
-      results.push(relative(baseDir, fullPath).split(sep).join("/"));
+    try {
+      assertPathWithinRoot(baseDir, fullPath, "collect files path");
+    } catch {
+      continue;
+    }
+
+    let real: string;
+    try {
+      real = existsSync(fullPath) ? realpathSync(fullPath) : fullPath;
+    } catch {
+      continue;
+    }
+
+    try {
+      assertPathWithinRoot(baseDir, real, "collect files path");
+    } catch {
+      // 忽略并跳过指向 baseDir 外部的软链接，与归档防护策略保持一致
+      continue;
+    }
+
+    if (visited.has(real)) {
+      continue;
+    }
+    visited.add(real);
+
+    try {
+      const stat = statSync(fullPath);
+      if (stat.isDirectory()) {
+        results.push(...collectRelativeFilesUnsorted(fullPath, baseDir, visited));
+      } else if (stat.isFile()) {
+        results.push(relative(baseDir, fullPath).split(sep).join("/"));
+      }
+    } catch {
+      // 忽略无法访问或损坏的文件/符号链接
+      continue;
     }
   }
   return results;

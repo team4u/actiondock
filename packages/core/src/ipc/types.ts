@@ -1,4 +1,14 @@
 /**
+ * 监督进程向宿主子进程发送的跨进程取消通知。
+ * id 与对应 IpcCallMessage 的调用 id 一致，宿主侧据此中止同调用的 AbortController。
+ */
+export interface IpcAbortMessage {
+  id: string;
+  type: "abort";
+  reason?: string;
+}
+
+/**
  * 监督进程与宿主子进程间调用的 IPC 请求消息。
  */
 export interface IpcCallMessage {
@@ -46,5 +56,6 @@ export interface IpcReadyMessage {
 export type IpcMessage =
   | IpcCallMessage
   | IpcResponseMessage
+  | IpcAbortMessage
   | IpcEventMessage
   | IpcReadyMessage;

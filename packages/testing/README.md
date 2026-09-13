@@ -28,14 +28,23 @@ ActionDock 2.0 确定性测试框架与测试运行时。
 - 通过 `advance(ms)` 瞬间推进模拟时间，并以确定性顺序依次唤醒挂起的计时器与延迟任务。
 - 支持时间倒流检测与高精度时间戳快照。
 
+### FakeProcessDriver 确定性测试驱动桩
+
+[FakeProcessDriver](./src/process-driver.ts) 完整实现 Core 层的 ProcessDriver 契约，是受管进程测试的核心桩：
+
+- 确定性事件模拟：提供 `emitOutput`、`emitExit`、`emitOutputClosed` 与 `emitFault` 方法，在测试中以确定性时序唤醒观察者。
+- 故障与异常注入：提供 `simulateSpawnFailure`、`simulateWriteFailure`、`simulateResizeFailure` 与 `simulateTerminateFailure`，精确验证业务层容错。
+- 历史追踪与状态断言：维护 `spawnCalls`、`writes`、`eofCalls`、`interruptCalls`、`resizeCalls`、`terminateCalls` 与 `disposeCalls` 集合，供测试后置断言。
+- 动态能力覆写：支持通过 `setCapabilities` 动态调整是否支持 PTY、resize 与 inputEOF 等特征。
+
 ### MockProcessExecutor 模拟进程执行器
 
-[MockProcessExecutor](./src/process.ts) 在沙箱中拦截并伪造所有外部系统命令与子进程调用：
+[MockProcessExecutor](./src/process.ts) 深度集成 ProcessManager 与 FakeProcessDriver，拦截并模拟外部命令与受管进程调用：
 
-- 灵活规则匹配：通过 `onCommand` 注册匹配器，支持字符串完全匹配、正则表达式匹配或自定义断言谓词函数。
-- 丰富的响应定义：支持模拟标准输出、标准错误流、非零退出码、二进制字节流以及执行耗时。
-- 异常场景复现：可直接模拟命令执行超时（`timedOut`）或取消信号阻断（`cancelled`）。
-- 调用历史追踪：精确记录每次调用的完整入参、工作目录与环境变量，提供断言追踪支持。
+- 规则灵活匹配：通过 `register` 注册匹配器，支持命令字符串精确匹配、正则表达式匹配或自定义断言谓词函数。
+- 丰富响应定义：支持模拟标准输出、标准错误流、退出状态码、二进制字节流以及执行延迟。
+- 受管进程穿透：直接暴露 `driver` 底层驱动与 `processManager` 实例，无缝承接 `run`、`start`、`acquire` 等受管操作。
+- 调用历史追踪：精确记录每次调用的命令、参数、工作目录与环境变量。
 
 ### MemoryStorage 纯内存存储
 
@@ -49,36 +58,39 @@ ActionDock 2.0 确定性测试框架与测试运行时。
 
 ## 快速使用示例
 
+### 一次性受管进程命令测试
+
 ```ts
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { defineAction } from "@actiondock/sdk";
-import { createTestRuntime, MockProcessExecutor } from "@actiondock/testing";
+import { defineAction, decodeText } from "@actiondock/sdk";
+import { createTestRuntime, FakeProcessDriver } from "@actiondock/testing";
 
 const gitBranchAction = defineAction(async (input: { remote?: boolean }, ctx) => {
-  const res = await ctx.process.exec("git", ["branch"]);
-  return { output: res.stdout.trim() };
+  const res = await ctx.process.run({
+    spec: { executable: "git", args: ["branch"], io: { mode: "pipe" } },
+    timeoutMs: 5000,
+    maxOutputBytes: 1024 * 1024,
+  });
+  return { output: decodeText(res.chunks).trim() };
 });
 
 describe("git action test", () => {
-  it("mocks process and asserts output", async () => {
-    // 初始化模拟执行器并配置预设响应
-    const processExecutor = new MockProcessExecutor();
-    processExecutor.onCommand("git", {
-      stdout: "* main\n  feature/agent\n",
-    });
+  it("使用 FakeProcessDriver 模拟输出并断言", async () => {
+    const fakeDriver = new FakeProcessDriver();
+    fakeDriver.onSpawn = (handle) => {
+      handle.emitOutput("stdout", "* main\n  feature/agent\n");
+      handle.emitExit(0);
+      handle.emitOutputClosed("natural");
+    };
 
-    // 创建测试运行时并注入执行器
     const runtime = createTestRuntime({
-      process: processExecutor,
+      platform: { processDriver: fakeDriver } as any,
     });
 
-    // 执行 Action 并断言业务数据
     const result = await runtime.run(gitBranchAction, { remote: false });
     assert.equal(result.output, "* main\n  feature/agent");
-
-    // 断言底层命令调用历史
-    assert.equal(processExecutor.getHistory().length, 1);
+    assert.equal(fakeDriver.spawnCalls.length, 1);
   });
 });
 ```

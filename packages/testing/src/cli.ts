@@ -15,6 +15,8 @@ export interface ExecCliOptions {
   input?: string | Uint8Array;
   encoding?: string;
   throwOnError?: boolean;
+  /** 输出字节总量上限，超出后终止进程并标记 truncated（与 runtime-node 执行器语义对齐） */
+  maxOutputBytes?: number;
 }
 
 /**
@@ -27,6 +29,8 @@ export interface ExecCliResult {
   stderr: string;
   raw: Uint8Array;
   timedOut?: boolean;
+  /** 输出超过 maxOutputBytes 上限被截断时置为 true */
+  truncated?: boolean;
   durationMs: number;
 }
 
@@ -44,6 +48,7 @@ export async function execCli(
   options: ExecCliOptions = {}
 ): Promise<ExecCliResult> {
   const startTime = performance.now();
+  const maxOutputBytes = options.maxOutputBytes ?? Infinity;
 
   if (options.signal?.aborted) {
     const errRes: ExecCliResult = {
@@ -114,9 +119,20 @@ export async function execCli(
 
     let settled = false;
     let timedOut = false;
+    let truncated = false;
     let spawnError: Error | undefined;
     const stdoutChunks: Buffer[] = [];
     const stderrChunks: Buffer[] = [];
+    let totalOutputBytes = 0;
+
+    // 输出超限时终止进程：由 enforceOutputLimit 负责截断与标记
+    const terminateForLimit = () => {
+      try {
+        child.kill("SIGTERM");
+      } catch {
+        // 忽略已退出状态
+      }
+    };
 
     let timeoutTimer: NodeJS.Timeout | undefined;
     if (options.timeout && options.timeout > 0) {
@@ -152,7 +168,13 @@ export async function execCli(
       }
 
       const exitCode = timedOut ? -1 : (exitCodeFromClose ?? (spawnError ? -1 : 0));
-      const ok = !timedOut && exitCode === 0;
+      const ok = !timedOut && !truncated && exitCode === 0;
+
+      let limitMessage = "";
+      if (truncated && !stderr) {
+        limitMessage = `Command '${command}' output exceeded limit of ${maxOutputBytes} bytes`;
+        stderr = limitMessage;
+      }
 
       const result: ExecCliResult = {
         ok,
@@ -161,6 +183,7 @@ export async function execCli(
         stderr,
         raw: rawStdout,
         timedOut: timedOut || undefined,
+        truncated: truncated || undefined,
         durationMs,
       };
 
@@ -171,12 +194,37 @@ export async function execCli(
       resolve(result);
     };
 
+    // 输出超限时截断已收集字节并终止进程：与 runtime-node 执行器对齐，
+    // 只保留上限内的字节（含同 chunk 内截断），丢弃超限部分
+    const enforceOutputLimit = (
+      chunks: Buffer[],
+      chunk: Buffer
+    ): boolean => {
+      const remaining = maxOutputBytes - totalOutputBytes;
+      if (remaining < chunk.length) {
+        if (remaining > 0) {
+          chunks.push(chunk.subarray(0, remaining));
+          totalOutputBytes += remaining;
+        } else {
+          totalOutputBytes += chunk.length;
+        }
+        truncated = true;
+        terminateForLimit();
+        return true;
+      }
+      totalOutputBytes += chunk.length;
+      chunks.push(chunk);
+      return false;
+    };
+
     child.stdout?.on("data", (chunk: Buffer) => {
-      stdoutChunks.push(chunk);
+      if (truncated) return;
+      enforceOutputLimit(stdoutChunks, chunk);
     });
 
     child.stderr?.on("data", (chunk: Buffer) => {
-      stderrChunks.push(chunk);
+      if (truncated) return;
+      enforceOutputLimit(stderrChunks, chunk);
     });
 
     child.on("error", (err: Error) => {

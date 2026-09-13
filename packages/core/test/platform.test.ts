@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ActionContext, ProcessAPI, ProcessResult } from "@actiondock/sdk";
+import { decodeText, encodeBytes, type ActionContext, type ProcessAPI, type ProcessResult } from "@actiondock/sdk";
 import {
   ActionRunner,
   createDefaultPlatform,
@@ -101,6 +101,51 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
       expect(platform.storage).toBeDefined();
     });
 
+    it("未注入 processDriver 时默认进程 API 拒绝执行并给出明确指引", async () => {
+      const platform = createDefaultPlatform({ name: "test" });
+
+      const runInput = {
+        spec: { executable: "echo", args: [], io: { mode: "pipe" as const } },
+        timeoutMs: 1000,
+        maxOutputBytes: 1024,
+      };
+
+      let err: any;
+      try {
+        await platform.process.run(runInput);
+      } catch (e) {
+        err = e;
+      }
+
+      expect(err).toBeDefined();
+      expect(err?.code).toBe("UNSUPPORTED_CAPABILITY");
+      expect(err?.message).toContain("process driver");
+      expect(err?.message).toContain("createNodePlatform");
+
+      // start 同样拒绝且不派生进程
+      await expect(
+        platform.process.start({
+          requestId: "req-unsupported-start",
+          spec: runInput.spec,
+        })
+      ).rejects.toThrow();
+    });
+
+    it("显式注入 MemoryProcessDriver 时默认平台提供可用受管进程能力", async () => {
+      const { MemoryProcessDriver } = await import("../src/process/driver");
+      const platform = createDefaultPlatform({
+        name: "test",
+        processDriver: new MemoryProcessDriver(),
+      });
+
+      const startRes = await platform.process.start({
+        requestId: "req-memory-driver-start",
+        spec: { executable: "echo", args: [], io: { mode: "pipe" } },
+      });
+      expect(startRes.process.id).toBeDefined();
+      expect(startRes.process.state).toBe("running");
+    });
+
     it("支持显式注入自定义时钟 clock", () => {
       const fakeDate = new Date("2026-01-01T00:00:00.000Z");
       const customClock: Clock = {
@@ -116,29 +161,25 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
 
     it("支持显式注入自定义进程执行器 process", async () => {
       let executedCommand = "";
-      const customExecutor: ProcessExecutor = {
-        async exec(command: string): Promise<ProcessResult> {
-          executedCommand = command;
+      const customExecutor = {
+        async run(input: any) {
+          executedCommand = input.spec.executable;
           return {
-            ok: true,
-            exitCode: 0,
-            stdout: "custom output",
-            stderr: "",
-            durationMs: 1,
-            timedOut: false,
-            cancelled: false,
-            raw: new Uint8Array(),
+            exit: { code: 0, signal: null },
+            chunks: [{ stream: "stdout" as const, data: encodeBytes("custom output") }],
+            truncated: false,
           };
         },
-        async spawn() {
-          return { ok: true, exitCode: 0, stdout: "", stderr: "", raw: new Uint8Array(), durationMs: 0, timedOut: false, cancelled: false };
-        },
-      };
+      } as unknown as ProcessAPI;
 
       const platform = createDefaultPlatform({ process: customExecutor });
-      const res = await platform.process.exec("echo test");
+      const res = await platform.process.run({
+        spec: { executable: "echo test", args: [], io: { mode: "pipe" } },
+        timeoutMs: 5000,
+        maxOutputBytes: 1024 * 1024,
+      });
       expect(executedCommand).toBe("echo test");
-      expect(res.stdout).toBe("custom output");
+      expect(decodeText(res.chunks)).toBe("custom output");
     });
 
     it("支持显式注入自定义模块加载器 modules", async () => {
@@ -176,24 +217,16 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
   describe("ActionRunner 与 ExecutionService 平台集成与兼容性", () => {
     it("ActionRunner 支持仅传入 platform 创建并执行 Action", async () => {
       let processCalled = false;
-      const customProcess: ProcessAPI = {
-        async exec(): Promise<ProcessResult> {
+      const customProcess = {
+        async run() {
           processCalled = true;
           return {
-            ok: true,
-            exitCode: 0,
-            stdout: "ok",
-            stderr: "",
-            raw: new Uint8Array(),
-            timedOut: false,
-            cancelled: false,
-            durationMs: 0,
+            exit: { code: 0, signal: null },
+            chunks: [{ stream: "stdout" as const, data: encodeBytes("ok") }],
+            truncated: false,
           };
         },
-        async spawn() {
-          return { ok: true, exitCode: 0, stdout: "", stderr: "", raw: new Uint8Array(), durationMs: 0, timedOut: false, cancelled: false };
-        },
-      };
+      } as unknown as ProcessAPI;
 
       const testPlatform: RuntimePlatform = {
         name: "test",
@@ -225,7 +258,11 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
       runner.registerAction({
         id: "ping",
         run: async (_input: unknown, ctx: ActionContext) => {
-          await ctx.process.exec("dummy");
+          await ctx.process.run({
+            spec: { executable: "dummy", args: [], io: { mode: "pipe" } },
+            timeoutMs: 5000,
+            maxOutputBytes: 1024 * 1024,
+          });
           return { pong: true };
         },
       });
@@ -259,22 +296,14 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
           load: async <T = any>() => ({}) as unknown as T,
         },
         process: {
-          async exec(): Promise<ProcessResult> {
+          async run() {
             return {
-              ok: true,
-              exitCode: 0,
-              stdout: "platform-process",
-              stderr: "",
-              raw: new Uint8Array(),
-              timedOut: false,
-              cancelled: false,
-              durationMs: 0,
+              exit: { code: 0, signal: null },
+              chunks: [{ stream: "stdout" as const, data: encodeBytes("platform-process") }],
+              truncated: false,
             };
           },
-          async spawn() {
-            return { ok: true, exitCode: 0, stdout: "", stderr: "", raw: new Uint8Array(), durationMs: 0, timedOut: false, cancelled: false };
-          },
-        },
+        } as unknown as ProcessAPI,
         storage: {
           createStorage: () => memoryStorage,
           createGlobalStorage: () =>
@@ -290,8 +319,12 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
       service.registerAction({
         id: "inspect",
         run: async (_input: unknown, ctx: ActionContext) => {
-          const p = await ctx.process.exec("cmd");
-          return { stdout: p.stdout };
+          const p = await ctx.process.run({
+            spec: { executable: "cmd", args: [], io: { mode: "pipe" } },
+            timeoutMs: 5000,
+            maxOutputBytes: 1024 * 1024,
+          });
+          return { stdout: decodeText(p.chunks) };
         },
       });
 

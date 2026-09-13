@@ -358,10 +358,10 @@ describe("CLI Authoring & Build Workflow", () => {
     expect(existsSync(join(tempDir, "dist", "github-ops-build", "package.json"))).toBe(true);
     expect(existsSync(join(tempDir, "dist", "github-ops-build", "artifact.json"))).toBe(true);
 
-    // 9b. pack
+    // 9b. pack：tarball 名采用 npm 实际产物名（与包名 team.github-ops 对齐）
     const packProc = runCli(["pack"], tempDir);
     expect(packProc.exitCode).toBe(0);
-    expect(existsSync(join(tempDir, "dist", "github-ops-0.1.0.tgz"))).toBe(true);
+    expect(existsSync(join(tempDir, "dist", "team.github-ops-0.1.0.tgz"))).toBe(true);
 
     // 10. export skill (default: source skill)
     const exportProc = runCli(["export", "skill"], tempDir);

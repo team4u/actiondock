@@ -219,9 +219,12 @@ describe("@actiondock/mcp Adapter", () => {
     expect(calcTool.inputSchema.properties.b.type).toBe("number");
     expect(calcTool.inputSchema.required).toEqual(["a", "b"]);
 
-    // M05: outputSchema matches
+    // M05: outputSchema matches（不注入 execution 包装字段，与实际 structuredContent 一致）
     expect(calcTool.outputSchema).toBeDefined();
     expect(calcTool.outputSchema.properties.result.type).toBe("number");
+    expect(calcTool.outputSchema.properties.execution).toBeUndefined();
+    // 入参 schema 仍注入 execution 执行控制包装字段
+    expect(calcTool.inputSchema.properties.execution).toBeDefined();
   });
 
   it("M06, M09: tools/call executes through ActionRunner and writes run record", async () => {

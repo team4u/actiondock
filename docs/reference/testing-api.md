@@ -123,13 +123,14 @@ const clock = new FakeClock({
 
 ## 进程执行模拟器：MockProcessExecutor
 
-`MockProcessExecutor` 拦截动作通过 `ctx.process` 发起的所有操作系统命令，杜绝在测试中执行破坏性的外部命令：
+`MockProcessExecutor` 拦截动作通过 `ctx.process` 发起的所有操作系统命令与受管进程调用，内置 `ProcessManager` 与 `FakeProcessDriver`，在纯内存环境中支撑从简单命令模拟到受管进程全流程测试：
 
 ```ts
-import { MockProcessExecutor } from "@actiondock/testing";
+import { MockProcessExecutor, FakeProcessDriver } from "@actiondock/testing";
 
 const executor = new MockProcessExecutor({
   fallbackToReal: false, // 未命中规则时是否回退到真实子进程（默认 false，直接抛错防穿透）
+  driver: new FakeProcessDriver(), // 可选注入自定义测试驱动桩
 });
 ```
 
@@ -152,6 +153,9 @@ const executor = new MockProcessExecutor({
     stderr: `Command '${cmd} ${args.join(" ")}' failed`,
   }));
   ```
+- 访问底层受管驱动与管理器：
+  - `executor.driver`：访问底层的 `FakeProcessDriver` 实例。
+  - `executor.processManager`：访问内核 `ProcessManager` 实例。
 - 获取历史调用记录：`executor.getCalls(command?: string): ProcessCall[]`
   返回全部外部命令调用记录列表，支持传入命令名进行过滤。
 - 获取最近一次调用：`executor.getLastCall(): ProcessCall | undefined`
@@ -164,6 +168,144 @@ const executor = new MockProcessExecutor({
   清空所有已注册的模拟规则与历史调用记录。
 - 历史调用数组：`executor.calls: ProcessCall[]`
   直接访问包含 `command`、`args`、`options` 与 `timestamp` 的调用数组。
+
+---
+
+## 确定性进程驱动桩：FakeProcessDriver
+
+`FakeProcessDriver` 完整实现 Core 层的 `ProcessDriver` 契约，专为长期受管进程、流式输出、独占控制权与异常注入测试而设计。
+
+```ts
+import { FakeProcessDriver } from "@actiondock/testing";
+
+const driver = new FakeProcessDriver({
+  pty: true,
+  resize: true,
+  inputEOF: true,
+});
+```
+
+### 确定性事件模拟方法
+
+通过返回的句柄实例或驱动方法，精确控制进程在测试中的生命周期事件发射：
+
+- 发射输出数据：`driver.emitOutput(handleOrId, stream, data)`
+  向指定流（`stdout`、`stderr`、`pty`）发送文本字符串或原始字节数据。
+- 发射退出事件：`driver.emitExit(handleOrId, result)`
+  触发进程退出通知，可传入退出码数值或 `{ code, signal }` 结构。
+- 发射输出流关闭：`driver.emitOutputClosed(handleOrId, reason)`
+  标记标准输出通道关闭，原因包括 `natural`、`drain-timeout` 与 `host-lost`。
+- 发射驱动故障：`driver.emitFault(handleOrId, error)`
+  向观察者派发非预期驱动层严重错误。
+
+### 故障注入能力
+
+用于验证上层业务与框架在遇到异常时的容灾韧性：
+
+- `driver.simulateSpawnFailure(error)`：注入下一次派生启动异常。遵循平台契约，派生失败时自动依次向观察者通知 `fault`、`exited`（`code: null, signal: null`）与 `outputClosed` 三件套。
+- `driver.simulateWriteFailure(error)`：注入下一次数据写入时的异常。
+- `driver.simulateResizeFailure(error)`：注入调整终端尺寸时的异常。
+- `driver.simulateTerminateFailure(error)`：注入终止进程时的异常。
+
+### 调用历史与断言追踪
+
+驱动内部精确记录所有交互细节，供测试执行后置断言：
+
+- `driver.spawnCalls: RecordedSpawn[]`：记录所有派生请求，包含启动规范 `spec`、观察者与时间戳。
+- `driver.writes: RecordedWrite[]`：记录所有写入操作，包含目标句柄与写入字节数据副本。
+- `driver.eofCalls: RecordedEOF[]`：记录所有标准输入关闭调用。
+- `driver.interruptCalls: RecordedInterrupt[]`：记录所有前台中断调用。
+- `driver.resizeCalls: RecordedResize[]`：记录所有终端尺寸变更参数。
+- `driver.terminateCalls: RecordedTerminate[]`：记录所有优雅终止请求与宽限期。
+- `driver.disposeCalls: RecordedDispose[]`：记录所有进程句柄销毁操作。
+
+### 派生自动响应钩子
+
+通过 `onSpawn` 回调在进程派生瞬间自动触发响应行为：
+
+```ts
+driver.onSpawn = (handle, spec, observer) => {
+  // 模拟进程立即输出启动标语
+  handle.emitOutput("stdout", "service started\n");
+};
+```
+
+---
+
+## 受管进程测试实战指引
+
+### 测试一次性运行与输出收集
+
+```ts
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { createTestRuntime, FakeProcessDriver } from "@actiondock/testing";
+
+it("验证一次性命令执行与输出截断", async () => {
+  const driver = new FakeProcessDriver();
+  driver.onSpawn = (handle) => {
+    handle.emitOutput("stdout", "line 1\nline 2\n");
+    handle.emitExit(0);
+    handle.emitOutputClosed("natural");
+  };
+
+  const runtime = createTestRuntime({
+    platform: { processDriver: driver } as any,
+  });
+
+  const res = await runtime.process.run({
+    spec: { executable: "test-cmd", args: [], io: { mode: "pipe" } },
+    timeoutMs: 3000,
+    maxOutputBytes: 1024,
+  });
+
+  assert.equal(res.exit.code, 0);
+  assert.equal(res.chunks.length > 0, true);
+});
+```
+
+### 测试长期交互进程与独占控制
+
+```ts
+it("验证长期受管进程的独占写入与读取", async () => {
+  const driver = new FakeProcessDriver();
+
+  const runtime = createTestRuntime({
+    platform: { processDriver: driver } as any,
+  });
+
+  const started = await runtime.process.start({
+    requestId: "start-req-1",
+    spec: { executable: "sh", args: [], io: { mode: "pipe" } },
+  });
+
+  const grant = await runtime.process.acquire(started.process.id, {
+    requestId: "acq-1",
+    waitMs: 1000,
+    ttlMs: 5000,
+  });
+
+  // 验证写入记录
+  await runtime.process.write(started.process.id, {
+    token: grant.token,
+    requestId: "write-1",
+    data: { encoding: "base64", data: Buffer.from("echo 1\n").toString("base64") },
+  });
+
+  assert.equal(driver.writes.length, 1);
+
+  // 模拟输出并游标读取
+  driver.emitOutput(started.process.id, "stdout", "1\n");
+  const readRes = await runtime.process.read(started.process.id, {
+    cursor: started.initialCursor,
+    maxBytes: 1024,
+    waitMs: 100,
+    onGap: "error",
+  });
+
+  assert.equal(readRes.chunks.length, 1);
+});
+```
 
 ---
 

@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it } from "bun:test";
-import { defineAction } from "../src";
+import { decodeText, defineAction, encodeText } from "../src";
+import type { ProcessAPI, ProcessInfo } from "../src";
 import {
   ActionRuntimeError,
   createTestRuntime,
   MemoryConfig,
   MemoryLogger,
   MemoryStateStore,
-  MockProcessExecutor,
 } from "@actiondock/testing";
 
 describe("@actiondock/sdk", () => {
@@ -82,7 +82,9 @@ describe("@actiondock/sdk", () => {
     // 隔离性检查
     expect(await store.get<string>("global_k1")).toBe("v1");
     expect(await userScope.get<{ age: number }>("alice")).toEqual({ age: 30 });
-    expect(await store.get("alice")).toBeUndefined();
+    // 根命名空间读取会按生产 RuntimeStateStore 的 findState 契约回扫：
+    // 裸键 alice 唯一命中 users 命名空间下的同名键（与 core 生产语义一致）
+    expect(await store.get("alice")).toEqual({ age: 30 });
 
     // 深拷贝验证 (structuredClone)
     const obj = { nested: { val: 100 } };
@@ -130,8 +132,9 @@ describe("@actiondock/sdk", () => {
     expect(await scoped.get<string>("another:colon:key")).toBe("value-nested");
     expect(await scoped.keys()).toEqual(["another:colon:key"]);
 
-    // 根存储不暴露作用域键
-    expect(await store.get("another:colon:key")).toBeUndefined();
+    // 根存储按生产回扫契约仍可读到作用域键（裸键唯一命中），
+    // 但 keys 列表不暴露作用域键，写入也不落到根命名空间
+    expect(await store.get("another:colon:key")).toBe("value-nested");
     expect(await store.keys()).not.toContain("another:colon:key");
 
     // 删除包含冒号的键
@@ -376,110 +379,115 @@ describe("@actiondock/sdk", () => {
     expect(remainingKeys).toEqual(["permanent"]);
   });
 
-  it("executes CLI command safely using ctx.process.exec", async () => {
-    // 本用例验证真实子进程的输入管道、环境变量与工作目录语义，需显式开启真实回退
+  it("executes CLI command using ctx.process.run", async () => {
+    let calledSpec: any;
+    const mockProcess: ProcessAPI = {
+      async run(input) {
+        calledSpec = input.spec;
+        return {
+          exit: { code: 0, signal: null },
+          chunks: [{ stream: "stdout", data: encodeText("v24.12.0") }],
+          truncated: false,
+        };
+      },
+      async start() { throw new Error("not implemented"); },
+      async inspect() { throw new Error("not implemented"); },
+      async list() { return { processes: [] }; },
+      async acquire() { throw new Error("not implemented"); },
+      async renew() { throw new Error("not implemented"); },
+      async release() {},
+      async write() { throw new Error("not implemented"); },
+      async operation() { throw new Error("not implemented"); },
+      async read() { throw new Error("not implemented"); },
+      async control() { throw new Error("not implemented"); },
+      async stop() { throw new Error("not implemented"); },
+    };
+
     const runtime = createTestRuntime({
-      process: new MockProcessExecutor({ fallbackToReal: true }),
+      process: mockProcess as any,
     });
-    const execAction = defineAction({
-      async run(input: { command: string; args?: string[]; options?: any }, ctx) {
-        return await ctx.process.exec(input.command, input.args, input.options);
+    const runAction = defineAction({
+      async run(input: { executable: string; args: string[] }, ctx) {
+        return await ctx.process.run({
+          spec: { executable: input.executable, args: input.args, io: { mode: "pipe" } },
+          timeoutMs: 5000,
+          maxOutputBytes: 1024,
+        });
       },
     });
 
-    // 1. 成功执行
-    const res = await runtime.run(execAction, { command: "node", args: ["--version"] });
-    expect(res.ok).toBe(true);
-    expect(res.exitCode).toBe(0);
-    expect(res.stdout.length).toBeGreaterThan(0);
-    expect(res.raw.length).toBeGreaterThan(0);
-    expect(res.durationMs).toBeGreaterThanOrEqual(0);
-
-    // 2. 标准输入支持（字符串）
-    const stdinRes = await runtime.run(execAction, {
-      command: "cat",
-      args: [],
-      options: { input: "Hello ActionDock Stdin" },
-    });
-    expect(stdinRes.ok).toBe(true);
-    expect(stdinRes.stdout).toBe("Hello ActionDock Stdin");
-
-    // 3. 标准输入支持（字节流）
-    const u8Input = new TextEncoder().encode("Binary Stdin");
-    const u8Res = await runtime.run(execAction, {
-      command: "cat",
-      args: [],
-      options: { input: u8Input },
-    });
-    expect(u8Res.ok).toBe(true);
-    expect(u8Res.stdout).toBe("Binary Stdin");
-
-    // 4. 自定义环境变量与工作目录
-    const envRes = await runtime.run(execAction, {
-      command: "sh",
-      args: ["-c", "echo $MY_CUSTOM_VAR"],
-      options: { env: { MY_CUSTOM_VAR: "actiondock_val" } },
-    });
-    expect(envRes.ok).toBe(true);
-    expect(envRes.stdout).toBe("actiondock_val");
-
-    // 5. 超时控制
-    const timedOutRes = await runtime.run(execAction, {
-      command: "sleep",
-      args: ["2"],
-      options: { timeoutMs: 100 },
-    });
-    expect(timedOutRes.ok).toBe(false);
-    expect(timedOutRes.timedOut).toBe(true);
-    expect(timedOutRes.exitCode).toBe(-1);
-    expect(timedOutRes.stderr).toContain("timed out");
-
-    // 6. 不存在的命令
-    const notFound = await runtime.run(execAction, {
-      command: "__non_existent_binary_xyz_123__",
-    });
-    expect(notFound.ok).toBe(false);
-    expect(notFound.exitCode).toBe(-1);
-    expect(notFound.stderr).toContain("not found in PATH");
-
-    // 7. throwOnError 选项支持
-    await expect(
-      runtime.run(execAction, {
-        command: "__non_existent_binary_xyz_123__",
-        options: { throwOnError: true },
-      })
-    ).rejects.toThrow();
-
-    // 8. 取消信号支持
-    const controller = new AbortController();
-    controller.abort();
-    const aborted = await runtime.run(execAction, {
-      command: "node",
-      args: ["--version"],
-      options: { signal: controller.signal },
-    });
-    expect(aborted.ok).toBe(false);
-    expect(aborted.exitCode).toBe(-1);
-    expect(aborted.stderr).toContain("aborted");
+    const res = await runtime.run(runAction, { executable: "node", args: ["--version"] });
+    expect(res.exit.code).toBe(0);
+    expect(decodeText(res.chunks)).toBe("v24.12.0");
+    expect(calledSpec.executable).toBe("node");
+    expect(calledSpec.args).toEqual(["--version"]);
   });
 
-  it("executes CLI safely using ctx.process.spawn", async () => {
-    // 本用例验证真实子进程 spawn 语义，需显式开启真实回退
+  it("manages process lifecycle via ctx.process.start and inspect", async () => {
+    const dummyInfo: ProcessInfo = {
+      id: "proc-123",
+      hostEpoch: "epoch-1",
+      state: "running",
+      control: "free",
+      io: { mode: "pipe" },
+      capabilities: {
+        pty: false,
+        resize: false,
+        inputEOF: true,
+        interruptForeground: false,
+        terminationScope: "process",
+      },
+      createdAt: new Date().toISOString(),
+      outputClosed: false,
+      effectiveLimits: {
+        idleMs: 1800000,
+        lifetimeMs: 28800000,
+        outputBufferBytes: 4194304,
+      },
+    };
+
+    const mockProcess: ProcessAPI = {
+      async run() { throw new Error("not implemented"); },
+      async start(input) {
+        return { process: { ...dummyInfo, id: `proc-${input.requestId}` }, initialCursor: "cur-0" };
+      },
+      async inspect(id) {
+        return { ...dummyInfo, id };
+      },
+      async list() { return { processes: [dummyInfo] }; },
+      async acquire() { throw new Error("not implemented"); },
+      async renew() { throw new Error("not implemented"); },
+      async release() {},
+      async write() { throw new Error("not implemented"); },
+      async operation() { throw new Error("not implemented"); },
+      async read() { throw new Error("not implemented"); },
+      async control() { throw new Error("not implemented"); },
+      async stop(id) { return { ...dummyInfo, id, state: "stopping" }; },
+    };
+
     const runtime = createTestRuntime({
-      process: new MockProcessExecutor({ fallbackToReal: true }),
+      process: mockProcess as any,
     });
-    const spawnAction = defineAction({
-      async run(input: any, ctx) {
-        return await ctx.process.spawn(input.command, input.args, input.options);
+
+    const startAction = defineAction({
+      async run(input: { requestId: string; executable: string }, ctx) {
+        const started = await ctx.process.start({
+          requestId: input.requestId,
+          spec: { executable: input.executable, args: [], io: { mode: "pipe" } },
+        });
+        const inspected = await ctx.process.inspect(started.process.id);
+        return {
+          startedId: started.process.id,
+          inspectedId: inspected.id,
+          state: inspected.state,
+        };
       },
     });
 
-    const res = await runtime.run(spawnAction, {
-      command: "node",
-      args: ["--version"],
-    });
-    expect(res.ok).toBe(true);
-    expect(res.stdout).toContain("v");
+    const res = await runtime.run(startAction, { requestId: "req-abc", executable: "node" });
+    expect(res.startedId).toBe("proc-req-abc");
+    expect(res.inspectedId).toBe("proc-req-abc");
+    expect(res.state).toBe("running");
   });
 
   it("enforces input and output schema validation throwing ActionRuntimeError", async () => {

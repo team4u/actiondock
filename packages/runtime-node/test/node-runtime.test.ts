@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import type * as cp from "node:child_process";
+import { decodeText } from "@actiondock/sdk";
 import {
   existsSync,
   mkdirSync,
@@ -174,6 +175,63 @@ describe("ExecaProcessExecutor 单元测试", () => {
     });
     expect(res.ok).toBe(true);
     expect(res.stdout).toBe("actiondock_env_ok");
+  });
+
+  it("run 依据 LaunchSpec 环境策略解析生效环境，不泄漏完整宿主环境", async () => {
+    const leakVar = "TEST_RUN_ENV_LEAK_VAR_XYZ";
+    process.env[leakVar] = "host-secret-value";
+
+    try {
+      // allowlisted 策略：宿主非白名单变量不泄漏，set 注入生效，unset 生效
+      const result = await executor.run({
+        spec: {
+          executable: process.execPath,
+          args: [
+            "-e",
+            "process.stdout.write(JSON.stringify({ leak: process.env['TEST_RUN_ENV_LEAK_VAR_XYZ'] || null, injected: process.env['RUN_INJECTED_VAR'] || null, pathPresent: Boolean(process.env.PATH) }))",
+          ],
+          env: {
+            inherit: "allowlisted",
+            set: { RUN_INJECTED_VAR: "injected-by-run" },
+            unset: [],
+          },
+          io: { mode: "pipe" },
+        },
+        timeoutMs: 10000,
+        maxOutputBytes: 1024 * 1024,
+      });
+
+      expect(result.exit.code).toBe(0);
+      const parsed = JSON.parse(decodeText(result.chunks));
+      expect(parsed.leak).toBeNull();
+      expect(parsed.injected).toBe("injected-by-run");
+      expect(parsed.pathPresent).toBe(true);
+
+      // none 策略：仅保留 set 注入的变量
+      const noneResult = await executor.run({
+        spec: {
+          executable: process.execPath,
+          args: [
+            "-e",
+            "process.stdout.write(JSON.stringify({ leak: process.env['TEST_RUN_ENV_LEAK_VAR_XYZ'] || null, only: process.env.ONLY_SET_VAR || null }))",
+          ],
+          env: {
+            inherit: "none",
+            set: { ONLY_SET_VAR: "only-value" },
+          },
+          io: { mode: "pipe" },
+        },
+        timeoutMs: 10000,
+        maxOutputBytes: 1024 * 1024,
+      });
+
+      expect(noneResult.exit.code).toBe(0);
+      const noneParsed = JSON.parse(decodeText(noneResult.chunks));
+      expect(noneParsed.leak).toBeNull();
+      expect(noneParsed.only).toBe("only-value");
+    } finally {
+      delete process.env[leakVar];
+    }
   });
 
   it("支持标准输入管道传递", async () => {
@@ -834,5 +892,36 @@ describe("NodeHttpServer 单元测试", () => {
     } finally {
       await server.close();
     }
+  });
+
+  it("close 强制断开 keep-alive 空闲连接，关闭 Promise 必然 resolve", async () => {
+    const server = new NodeHttpServer({
+      port: 0,
+      host: "127.0.0.1",
+      fetch: async () => new Response("ok"),
+    });
+
+    const { port } = await server.listen(0, "127.0.0.1");
+
+    // 建立 keep-alive 空闲连接：响应完成后连接保持打开等待复用
+    const response = await fetch(`http://127.0.0.1:${port}/`, {
+      headers: { connection: "keep-alive" },
+    });
+    expect(await response.text()).toBe("ok");
+
+    // 若未强制断连，server.close 会因空闲连接悬挂而不 resolve
+    const timeoutSignal = AbortSignal.timeout(3000);
+    const closePromise = server.close();
+    const guard = new Promise<"timeout">((resolve) => {
+      const t = setTimeout(() => resolve("timeout"), 3000);
+      timeoutSignal.addEventListener("abort", () => {
+        clearTimeout(t);
+        resolve("timeout");
+      });
+    });
+
+    const winner = await Promise.race([closePromise.then(() => "closed" as const), guard]);
+    expect(winner).toBe("closed");
+    expect(server.isListening).toBe(false);
   });
 });

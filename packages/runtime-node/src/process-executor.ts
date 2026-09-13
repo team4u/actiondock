@@ -1,11 +1,37 @@
 import childProcess, { type ChildProcess, spawn } from "node:child_process";
-import type {
-  ProcessExecOptions,
-  ProcessResult,
-  RuntimeError,
+import {
+  encodeBytes,
+  type CallOptions,
+  type ControlGrant,
+  type OperationReceipt,
+  type OutputChunk,
+  type ProcessAcquireInput,
+  type ProcessControlInput,
+  type ProcessExecOptions,
+  type ProcessInfo,
+  type ProcessListInput,
+  type ProcessListResult,
+  type ProcessReadInput,
+  type ProcessResult,
+  type ProcessRunInput,
+  type ProcessRunResult,
+  type ProcessStartInput,
+  type ProcessStartResult,
+  type ProcessStopInput,
+  type ProcessWriteInput,
+  type ReadResult,
+  type RuntimeError,
 } from "@actiondock/sdk";
-import type { ProcessExecutor } from "@actiondock/core";
-import { PROCESS_CANCELLED, PROCESS_OUTPUT_LIMIT, PROCESS_SPAWN_ERROR, PROCESS_TIMEOUT } from "@actiondock/core";
+import {
+  PROCESS_CANCELLED,
+  PROCESS_OUTPUT_LIMIT,
+  PROCESS_SPAWN_ERROR,
+  PROCESS_TIMEOUT,
+  UNSUPPORTED_CAPABILITY,
+  ProcessError,
+  resolveProcessEnv,
+  type ProcessExecutor,
+} from "@actiondock/core";
 
 /**
  * 跨平台终止进程组，确保不会遗留孤儿进程。
@@ -105,11 +131,19 @@ export class NodeProcessExecutor implements ProcessExecutor {
 
   /**
    * 执行外部系统命令，完整支持标准输入管道、超时控制、取消信号、输出容量截断及错误拦截。
+   *
+   * @param command 执行命令
+   * @param args 参数列表
+   * @param options 执行选项，env 为「在宿主环境上附加」语义
+   * @param internal 内部专用参数：envAlreadyResolved 为 true 时 options.env 视为
+   *   已完整解析的生效环境（替换语义，不再叠加宿主环境），
+   *   仅供 run() 传入 LaunchSpec 环境策略解析结果时使用
    */
   async exec(
     command: string,
     args: string[] = [],
-    options: ProcessExecOptions = {}
+    options: ProcessExecOptions = {},
+    internal?: { envAlreadyResolved?: boolean }
   ): Promise<ProcessResult> {
     const startTime = Date.now();
     const maxOutputBytes = options.maxOutputBytes ?? 10 * 1024 * 1024;
@@ -130,7 +164,11 @@ export class NodeProcessExecutor implements ProcessExecutor {
       try {
         child = this.spawnFn(command, args, {
           cwd: options.cwd,
-          env: options.env ? { ...process.env, ...options.env } : process.env,
+          env: internal?.envAlreadyResolved
+            ? options.env
+            : options.env
+              ? { ...process.env, ...options.env }
+              : process.env,
           stdio: ["pipe", "pipe", "pipe"],
           detached: process.platform !== "win32",
         });
@@ -363,6 +401,89 @@ export class NodeProcessExecutor implements ProcessExecutor {
     options: ProcessExecOptions = {}
   ): Promise<ProcessResult> {
     return this.exec(command, args, options);
+  }
+
+  async run(input: ProcessRunInput, call?: CallOptions): Promise<ProcessRunResult> {
+    // 环境变量策略与 NodeProcessDriver 保持同一事实源：
+    // 依据 LaunchSpec.env 的 inherit/unset/set 完整解析生效环境（严格 allowlist 白名单），
+    // 杜绝同一 LaunchSpec 走 executor 时泄漏完整宿主环境的策略漂移
+    const res = await this.exec(
+      input.spec.executable,
+      input.spec.args ?? [],
+      {
+        cwd: input.spec.cwd,
+        env: resolveProcessEnv(input.spec.env),
+        timeoutMs: input.timeoutMs,
+        maxOutputBytes: input.maxOutputBytes,
+        signal: call?.signal,
+      },
+      { envAlreadyResolved: true }
+    );
+    const chunks: OutputChunk[] = [];
+    if (res.stdout) {
+      chunks.push({
+        stream: "stdout",
+        data: encodeBytes(res.stdout),
+      });
+    }
+    if (res.stderr) {
+      chunks.push({
+        stream: "stderr",
+        data: encodeBytes(res.stderr),
+      });
+    }
+    return {
+      exit: { code: res.exitCode, signal: res.signal ?? null },
+      chunks,
+      truncated: Boolean(res.error?.code === PROCESS_OUTPUT_LIMIT),
+    };
+  }
+
+  async start(_input: ProcessStartInput, _call?: CallOptions): Promise<ProcessStartResult> {
+    throw new ProcessError(
+      UNSUPPORTED_CAPABILITY,
+      "NodeProcessExecutor does not support managed process start; use ProcessManager with NodeProcessDriver"
+    );
+  }
+
+  async inspect(_id: string, _call?: CallOptions): Promise<ProcessInfo> {
+    throw new ProcessError(UNSUPPORTED_CAPABILITY, "NodeProcessExecutor does not support managed process inspect");
+  }
+
+  async list(_input: ProcessListInput, _call?: CallOptions): Promise<ProcessListResult> {
+    return { processes: [] };
+  }
+
+  async acquire(_id: string, _input: ProcessAcquireInput, _call?: CallOptions): Promise<ControlGrant> {
+    throw new ProcessError(UNSUPPORTED_CAPABILITY, "NodeProcessExecutor does not support managed process acquire");
+  }
+
+  async renew(_id: string, _token: string, _ttlMs: number, _call?: CallOptions): Promise<ControlGrant> {
+    throw new ProcessError(UNSUPPORTED_CAPABILITY, "NodeProcessExecutor does not support managed process renew");
+  }
+
+  async release(_id: string, _token: string, _call?: CallOptions): Promise<void> {
+    throw new ProcessError(UNSUPPORTED_CAPABILITY, "NodeProcessExecutor does not support managed process release");
+  }
+
+  async write(_id: string, _input: ProcessWriteInput, _call?: CallOptions): Promise<OperationReceipt> {
+    throw new ProcessError(UNSUPPORTED_CAPABILITY, "NodeProcessExecutor does not support managed process write");
+  }
+
+  async operation(_id: string, _requestId: string, _call?: CallOptions): Promise<OperationReceipt> {
+    throw new ProcessError(UNSUPPORTED_CAPABILITY, "NodeProcessExecutor does not support managed process operation");
+  }
+
+  async read(_id: string, _input: ProcessReadInput, _call?: CallOptions): Promise<ReadResult> {
+    throw new ProcessError(UNSUPPORTED_CAPABILITY, "NodeProcessExecutor does not support managed process read");
+  }
+
+  async control(_id: string, _input: ProcessControlInput, _call?: CallOptions): Promise<OperationReceipt> {
+    throw new ProcessError(UNSUPPORTED_CAPABILITY, "NodeProcessExecutor does not support managed process control");
+  }
+
+  async stop(_id: string, _input: ProcessStopInput, _call?: CallOptions): Promise<ProcessInfo> {
+    throw new ProcessError(UNSUPPORTED_CAPABILITY, "NodeProcessExecutor does not support managed process stop");
   }
 }
 

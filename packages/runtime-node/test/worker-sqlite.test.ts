@@ -369,6 +369,42 @@ describe("WorkerSqliteDriver 工作线程驱动测试", () => {
     await driver.close();
   });
 
+  it("函数式事务录制期内 run 返回 changes 为 0，不伪造真实行数", async () => {
+    const dbPath = join(tempDir, "worker-recorded-changes.db");
+    const driver = new WorkerSqliteDriver(dbPath);
+
+    await driver.exec(`
+      CREATE TABLE recorded_changes_test (
+        id TEXT PRIMARY KEY,
+        val TEXT NOT NULL
+      );
+    `);
+
+    let recordedChanges = -1;
+    await driver.transaction(() => {
+      // 录制期语句尚未真正执行，changes 固定为 0，不反映真实受影响行数
+      const res = driver.run("INSERT INTO recorded_changes_test (id, val) VALUES (?, ?)", "id-1", "val-1");
+      res.then((r) => {
+        recordedChanges = r.changes;
+      });
+    });
+
+    // 微任务结算后验证录制期返回值为 0
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(recordedChanges).toBe(0);
+
+    // 事务提交后数据真实写入，语句清单式事务返回真实 changes
+    const rows = await driver.all("SELECT * FROM recorded_changes_test");
+    expect(rows.length).toBe(1);
+
+    const listed = await driver.transaction<Array<{ changes: number; lastInsertRowid?: number | bigint }>>([
+      { sql: "INSERT INTO recorded_changes_test (id, val) VALUES (?, ?)", params: ["id-2", "val-2"] },
+    ]);
+    expect(listed[0].changes).toBe(1);
+
+    await driver.close();
+  });
+
   it("在事务回调中通过 driver.run(...).then(() => driver.transaction(...)) 延迟触发事务被拦截并抛出 WORKER_TRANSACTION_ASYNC_FORBIDDEN", async () => {
     const dbPath = join(tempDir, "worker-deferred-tx.db");
     const driver = new WorkerSqliteDriver(dbPath);

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { initProject } from "../src/project/init";
 import {
   getRegistryStatus,
@@ -313,6 +313,47 @@ export default defineAction(async () => ({ fromDyn2: true }));
     expect(resolved.actionId).toBe("dyn.action2");
 
     rmSync(wsDir, { recursive: true, force: true });
+  });
+
+  it("unlink workspace 时兄弟目录前缀的包记录不被误删", async () => {
+    // 构造两个同前缀的 workspace 目录：ws-sibling-xxx 与 ws-sibling-xxx-extra（裸 startsWith 会误删后者）
+    const wsDirA = mkdtempSync(join(tmpdir(), "ws-sibling-"));
+    const wsDirB = wsDirA + "-extra";
+    mkdirSync(wsDirB, { recursive: true });
+
+    const subA = join(wsDirA, "packages", "sub-a");
+    const subB = join(wsDirB, "packages", "sub-b");
+    initProject(subA, { id: "team.sibling-a", name: "Sibling A" });
+    initProject(subB, { id: "team.sibling-b", name: "Sibling B" });
+
+    try {
+      await linkPackage(wsDirA, fakeHome);
+      await linkPackage(wsDirB, fakeHome);
+
+      const beforeList = listLinkedPackages(fakeHome);
+      expect(beforeList.map((p) => p.id)).toContain("team.sibling-a");
+      expect(beforeList.map((p) => p.id)).toContain("team.sibling-b");
+
+      // 仅解除 wsDirA：wsDirB 与其子包必须完整保留
+      const unlinked = await unlinkPackage(wsDirA, fakeHome);
+      expect(unlinked?.type).toBe("workspace");
+      expect(unlinked?.packagesCount).toBe(1);
+
+      const afterList = listLinkedPackages(fakeHome);
+      expect(afterList.find((p) => p.id === "team.sibling-a")).toBeUndefined();
+      expect(afterList.find((p) => p.id === "team.sibling-b")).toBeDefined();
+
+      // 通过目录别名解除时同样不得误删兄弟目录下的包记录
+      await linkPackage(wsDirA, fakeHome);
+      const aliasUnlinked = await unlinkPackage(basename(wsDirB), fakeHome);
+      expect(aliasUnlinked?.type).toBe("workspace");
+      const finalList = listLinkedPackages(fakeHome);
+      expect(finalList.find((p) => p.id === "team.sibling-a")).toBeDefined();
+      expect(finalList.find((p) => p.id === "team.sibling-b")).toBeUndefined();
+    } finally {
+      rmSync(wsDirA, { recursive: true, force: true });
+      rmSync(wsDirB, { recursive: true, force: true });
+    }
   });
 
   it("reports registry status and prunes stale links", async () => {

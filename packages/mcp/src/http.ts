@@ -28,6 +28,15 @@ export function startMcpHttpServer(
   const host = hostString;
   const token = options.token;
 
+  // 死选项透明化：allowInsecureHttp 是客户端侧豁免开关，服务端明文 HTTP 监听
+  // 由 allowInsecureNoAuth 与 token 策略约束，传入该字段不会产生任何效果，
+  // 检测到时输出警告避免调用方误以为已生效
+  if (options.allowInsecureHttp === true) {
+    process.stderr.write(
+      "[MCP HTTP Warning] allowInsecureHttp has no effect on the server side and is deprecated; it only applies to remote ActionDockTarget clients.\n"
+    );
+  }
+
   // Non-loopback address requires token authentication by default
   if (!isLoopbackHost(host) && !token && !options.allowInsecureNoAuth) {
     throw new Error(
@@ -250,22 +259,24 @@ export function startMcpHttpServer(
       url,
       target,
       stop: async () => {
-        let targetError: unknown;
-        try {
-          await target.close();
-        } catch (err) {
-          targetError = err;
-        }
+        // 先停 HTTP 服务（等待在途请求收尾）再释放 target：
+        // 若先关 target，在途请求的后续 Action 调用会全部异常
+        let serverError: unknown;
         try {
           await server.stop(true);
-        } catch (serverErr) {
-          if (targetError) {
-            throw new AggregateError([targetError, serverErr], "Failed to stop MCP HTTP server and target");
-          }
-          throw serverErr;
+        } catch (err) {
+          serverError = err;
         }
-        if (targetError) {
-          throw targetError;
+        try {
+          await target.close();
+        } catch (targetErr) {
+          if (serverError) {
+            throw new AggregateError([serverError, targetErr], "Failed to stop MCP HTTP server and target");
+          }
+          throw targetErr;
+        }
+        if (serverError) {
+          throw serverError;
         }
       },
     };

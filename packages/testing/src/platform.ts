@@ -5,6 +5,7 @@ import {
   type FileSystem,
   type GlobalStorageFactoryOptions,
   type ModuleLoader,
+  type ProcessManager,
   type RuntimePlatform,
   type RuntimeStorage,
   type StorageFactory,
@@ -12,6 +13,7 @@ import {
 } from "@actiondock/core";
 import { FakeClock } from "./clock";
 import { MockProcessExecutor } from "./process";
+import { FakeProcessDriver } from "./process-driver";
 import { TestEventSink } from "./runtime";
 import { MemoryStorage } from "./storage";
 
@@ -27,6 +29,10 @@ export interface TestPlatformOptions {
   globalStorage?: RuntimeStorage;
   /** 可选注入的模拟进程执行器 */
   process?: MockProcessExecutor;
+  /** 可选注入的底层进程驱动 */
+  processDriver?: FakeProcessDriver;
+  /** 可选注入的受管进程管理器 */
+  processManager?: ProcessManager;
   /** 可选注入的执行事件接收器 */
   eventSink?: EventSink;
   /** 可选注入的文件系统抽象驱动 */
@@ -63,7 +69,12 @@ export interface TestPlatform extends RuntimePlatform {
  */
 export function createTestPlatform(options: TestPlatformOptions = {}): TestPlatform {
   const clock = options.clock ?? new FakeClock();
-  const process = options.process ?? new MockProcessExecutor();
+  const process =
+    options.process ??
+    new MockProcessExecutor({
+      driver: options.processDriver,
+      processManager: options.processManager,
+    });
   const eventSink = options.eventSink ?? new TestEventSink();
   const files = options.files ?? new NodeFileSystem();
   const modules = options.modules ?? new DefaultModuleLoader();

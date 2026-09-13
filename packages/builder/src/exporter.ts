@@ -3,6 +3,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -69,24 +70,33 @@ function toPlaybookDefinitions(playbooks: SelectionPlan["playbooks"]): PlaybookD
 
 /**
  * 执行归档压缩操作。
+ * 先压缩到临时路径，成功后原子重命名覆盖最终路径；失败时清理临时文件后透传原始异常，
+ * 避免旧档已删、新档半成品残留的中间态。
  */
 async function createArchive(skillDir: string, format: ArchiveFormat): Promise<string> {
   const parentDir = dirname(skillDir);
   const folderName = basename(skillDir);
   const archiveName = `${folderName}.${format === "tar.gz" ? "tar.gz" : "zip"}`;
   const archivePath = join(parentDir, archiveName);
+  const tempArchivePath = `${archivePath}.tmp`;
 
-  if (existsSync(archivePath)) {
-    rmSync(archivePath, { force: true });
+  if (existsSync(tempArchivePath)) {
+    // 清理上次失败可能残留的临时文件（兼容目录形态，避免阻塞本次压缩）
+    rmSync(tempArchivePath, { force: true, recursive: true, maxRetries: 3, retryDelay: 50 });
   }
 
   try {
     if (format === "tar.gz") {
-      await createTarGzArchiveAsync(skillDir, archivePath);
+      await createTarGzArchiveAsync(skillDir, tempArchivePath);
     } else {
-      await createZipArchiveAsync(skillDir, archivePath);
+      await createZipArchiveAsync(skillDir, tempArchivePath);
     }
+    renameSync(tempArchivePath, archivePath);
   } catch (err: any) {
+    // 压缩失败：清理临时半成品，旧档保持原样，透传原始异常
+    if (existsSync(tempArchivePath)) {
+      rmSync(tempArchivePath, { force: true, recursive: true, maxRetries: 3, retryDelay: 50 });
+    }
     throw new BuilderError(`Failed to create ${format} archive: ${err?.message || String(err)}`);
   }
 
@@ -173,9 +183,8 @@ export function findExistingCompositeSkillMd(
 
   for (const root of options.projectRoots) {
     const absRoot = resolve(root);
-    const parentDir = dirname(absRoot);
-    searchDirs.add(parentDir);
-    searchDirs.add(dirname(parentDir));
+    // 仅搜索父目录（工作区根）一级；祖父目录搜索可能命中毫不相关的全局 SKILL.md 并复制进产物
+    searchDirs.add(dirname(absRoot));
   }
 
   const candidateRelativePaths = [
@@ -496,6 +505,12 @@ function writeCompositePkgJson(
         }
       } catch (err) {
         if (err instanceof BuilderError) throw err;
+        // 复合导出缺依赖影响面大：读文件与解析失败必须显式报错，严禁静默吞掉导致聚合依赖缺失
+        throw new BuilderError(
+          `Failed to read or parse package.json of exported subpackage '${info.packageDir}' (${pkgJsonPath}): ${
+            err instanceof Error ? err.message : String(err)
+          }`
+        );
       }
     }
   }
@@ -563,8 +578,22 @@ export class SkillExporter {
       plan.externalProjectRoots && plan.externalProjectRoots.length > 0
     );
 
-    // 单包源码导出如果依赖闭包含外部包，导成 mini-workspace 形态（packages/ 下带齐依赖包），和 bundle 统一成一个交付形状
-    if (mode === "source" && !options._isSubpackage && hasExternalDeps) {
+    // 单包源码导出若依赖闭包含外部包，导成 mini-workspace 形态（packages/ 下带齐依赖包），和 bundle 统一成一个交付形状
+    // 该复合分支会展开全部依赖包，无法保留调用方传入的 actions/playbooks 过滤选项；
+    // 静默丢弃过滤会导致产物全量导出，必须显式拒绝并给出调整指引（CLI 侧已有 roots>1 守卫，此处补齐 composite 分支守卫）
+    const hasFilters = Boolean(
+      (options.actions && options.actions.length > 0) ||
+        (options.playbooks && options.playbooks.length > 0)
+    );
+    const willUseComposite = mode === "source" && !options._isSubpackage && hasExternalDeps;
+    if (hasFilters && willUseComposite) {
+      throw new BuilderError(
+        "Filtering options (--actions, --playbook) cannot be combined with a source export whose dependency closure spans external linked packages (composite mini-workspace output). Remove the filtering options to export the full closure, or adjust the 'uses' declarations so the closure stays within a single package.",
+        "FILTERS_UNSUPPORTED_FOR_COMPOSITE"
+      );
+    }
+
+    if (willUseComposite) {
       const allProjectRoots = Array.from(
         new Set([root, ...plan.externalProjectRoots!])
       );
@@ -919,6 +948,10 @@ export class SkillExporter {
             ? resolve(options.outDir)
             : resolve(options.outDir ? join(options.outDir, "SKILL.md") : join(process.cwd(), "SKILL.md"));
         mkdirSync(dirname(targetFile), { recursive: true });
+        // 目标文件即将被覆盖时输出警告，避免无提示覆盖用户已有内容
+        if (existsSync(targetFile)) {
+          console.warn(`[WARN] Existing SKILL.md will be overwritten: ${targetFile}`);
+        }
         writeFileSync(targetFile, compositeSkillMd, "utf-8");
 
         return {

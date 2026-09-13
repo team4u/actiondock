@@ -191,3 +191,64 @@ export function describeActionLoadFailure(
     },
   };
 }
+
+/** 访问被拒绝或缺少必要权限 */
+export const ACCESS_DENIED = "ACCESS_DENIED";
+
+/** 目标运行环境不支持所声明的能力 */
+export const UNSUPPORTED_CAPABILITY = "UNSUPPORTED_CAPABILITY";
+
+/** 控制权已被其他调用方持有处于忙碌状态 */
+export const CONTROL_BUSY = "CONTROL_BUSY";
+
+/** 控制权有效租约已过期 */
+export const CONTROL_EXPIRED = "CONTROL_EXPIRED";
+
+/** 控制权已被主动撤销或强制收回 */
+export const CONTROL_REVOKED = "CONTROL_REVOKED";
+
+/** 进程由于异常控制失效已进入隔离状态 */
+export const PROCESS_QUARANTINED = "PROCESS_QUARANTINED";
+
+/** 进程已被宿主标记丢失且状态不可恢复 */
+export const PROCESS_LOST = "PROCESS_LOST";
+
+/** 具有相同请求标识但携带不同负载的冲突操作 */
+export const REQUEST_CONFLICT = "REQUEST_CONFLICT";
+
+/** 输入交付结果不确定 */
+export const INPUT_OUTCOME_UNKNOWN = "INPUT_OUTCOME_UNKNOWN";
+
+/** 输出日志发生淘汰缺口且策略要求报错阻断 */
+export const OUTPUT_GAP = "OUTPUT_GAP";
+
+/** 历史输出已不可用 */
+export const OUTPUT_UNAVAILABLE = "OUTPUT_UNAVAILABLE";
+
+/** 游标格式错误或超出有效范围 */
+export const INVALID_CURSOR = "INVALID_CURSOR";
+
+/** 输入待写入队列已达容量上限 */
+export const QUEUE_FULL = "QUEUE_FULL";
+
+/** 资源使用超出配额限制 */
+export const QUOTA_EXCEEDED = "QUOTA_EXCEEDED";
+
+/** 输入通道已关闭拒绝继续写入 */
+export const INPUT_CLOSED = "INPUT_CLOSED";
+
+/**
+ * 进程领域结构化异常类。
+ */
+export class ProcessError extends Error {
+  public readonly code: string;
+  public readonly details?: Record<string, unknown>;
+
+  constructor(code: string, message: string, details?: Record<string, unknown>) {
+    super(message);
+    this.name = "ProcessError";
+    this.code = code;
+    this.details = details;
+    Object.setPrototypeOf(this, ProcessError.prototype);
+  }
+}

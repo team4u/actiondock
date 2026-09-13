@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { ExecutionResult, RunRecord } from "@actiondock/sdk";
 import { normalizeServerUrl } from "./manager";
 import type { RemoteHealthResult } from "./types";
-import { ACTION_CANCELLED, NETWORK_ERROR } from "../errors";
+import { ACTION_CANCELLED, ACTION_TIMEOUT, NETWORK_ERROR } from "../errors";
 import { isLoopbackHost } from "../server/security";
 
 /**
@@ -216,6 +216,10 @@ export async function executeRemoteAction<T = unknown>(
     executionPayload.requestId = requestId;
   }
 
+  // 组合外部取消信号与本地超时守卫：服务端僵死时仍能在 timeoutMs 内本地中断，避免永久挂起
+  let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
+  let localTimedOut = false;
+
   try {
     const headers: Record<string, string> = {
       ...buildHeaders(token),
@@ -232,25 +236,51 @@ export async function executeRemoteAction<T = unknown>(
       execution: Object.keys(executionPayload).length > 0 ? executionPayload : undefined,
     });
 
-    let res = await fetch(v2Url, {
-      method: "POST",
-      headers,
-      body: reqBody,
-      signal,
-    });
+    const controller = new AbortController();
+    const onExternalAbort = () => controller.abort(signal?.reason);
+    if (signal) {
+      if (signal.aborted) {
+        controller.abort(signal.reason);
+      } else {
+        signal.addEventListener("abort", onExternalAbort, { once: true });
+      }
+    }
+    if (typeof timeoutMs === "number" && timeoutMs > 0) {
+      timeoutTimer = setTimeout(() => {
+        localTimedOut = true;
+        controller.abort();
+      }, timeoutMs);
+    }
 
-    if (res.status === 404) {
-      try {
-        const v1Res = await fetch(`${base}/api/v1/actions/${encodeURIComponent(actionId)}/run`, {
-          method: "POST",
-          headers,
-          body: reqBody,
-          signal,
-        });
-        if (v1Res.ok || v1Res.status !== 404) {
-          res = v1Res;
-        }
-      } catch {}
+    let res: Response;
+    try {
+      res = await fetch(v2Url, {
+        method: "POST",
+        headers,
+        body: reqBody,
+        signal: controller.signal,
+      });
+
+      if (res.status === 404) {
+        try {
+          const v1Res = await fetch(`${base}/api/v1/actions/${encodeURIComponent(actionId)}/run`, {
+            method: "POST",
+            headers,
+            body: reqBody,
+            signal: controller.signal,
+          });
+          if (v1Res.ok || v1Res.status !== 404) {
+            res = v1Res;
+          }
+        } catch {}
+      }
+    } finally {
+      if (timeoutTimer !== undefined) {
+        clearTimeout(timeoutTimer);
+      }
+      if (signal) {
+        signal.removeEventListener("abort", onExternalAbort);
+      }
     }
 
     const data = (await res.json().catch(() => null)) as any;
@@ -260,9 +290,10 @@ export async function executeRemoteAction<T = unknown>(
     }
 
     if (!res.ok) {
+      // 错误信封严禁伪造 runId：与任何真实运行无关的标识会让调用方查询永远 not_found
       return {
         ok: false,
-        runId: randomUUID(),
+        runId: "",
         error: {
           code: res.status === 401 ? "UNAUTHORIZED" : "REMOTE_EXECUTION_FAILED",
           message: `Remote server HTTP ${res.status}: ${res.statusText}`,
@@ -277,10 +308,21 @@ export async function executeRemoteAction<T = unknown>(
       data,
     };
   } catch (err: any) {
+    // 本地超时守卫触发时归类为超时；外部信号中止时归类为取消
+    if (localTimedOut) {
+      return {
+        ok: false,
+        runId: "",
+        error: {
+          code: ACTION_TIMEOUT,
+          message: `Remote execution exceeded local timeout of ${timeoutMs}ms`,
+        },
+      };
+    }
     if (err.name === "AbortError" || signal?.aborted) {
       return {
         ok: false,
-        runId: randomUUID(),
+        runId: "",
         error: {
           code: ACTION_CANCELLED,
           message: "Action execution was cancelled",
@@ -289,7 +331,7 @@ export async function executeRemoteAction<T = unknown>(
     }
     return {
       ok: false,
-      runId: randomUUID(),
+      runId: "",
       error: {
         code: NETWORK_ERROR,
         message: `Failed to connect to remote ActionDock server at ${serverUrl}: ${err.message}`,

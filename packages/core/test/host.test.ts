@@ -1247,5 +1247,143 @@ actions:
       expect(externalClosed).toBe(true);
     }
   });
+
+  it("子任务启动抛出异常时配额计数正确回滚不泄漏", async () => {
+    const host = await createActionDockHost({
+      packages: [
+        {
+          projectConfig: { id: "pkg.quota-rollback", name: "配额回退包", version: "1.0.0" },
+          actions: {
+            ok: defineAction({ run: () => ({ fine: true }) }),
+          },
+          inMemory: true,
+        },
+      ],
+      maxSubRuns: 1,
+      autoLoadCurrentProject: false,
+    });
+
+    const app = host.getApp("pkg.quota-rollback")!;
+    const rootRunId = "quota-rollback-root";
+    const now = new Date().toISOString();
+    app.storage.createRun({
+      id: rootRunId,
+      rootRunId,
+      packageId: "pkg.quota-rollback",
+      packageInstanceId: "pkg.quota-rollback",
+      actionId: "ok",
+      generationId: "1",
+      ownerId: "tester",
+      status: "running",
+      startedAt: now,
+    });
+
+    // 篡改 startAction 使其抛出异常，模拟并发上限、仓储不可用、幂等冲突等启动失败
+    const origStart = app.startAction.bind(app);
+    let callCount = 0;
+    app.startAction = async (id: string, input: any, options: any) => {
+      callCount++;
+      if (callCount === 1) {
+        throw new Error("RUN_REPOSITORY_UNAVAILABLE: simulated startup failure");
+      }
+      return origStart(id, input, options);
+    };
+
+    try {
+      // 首次启动失败：配额必须回滚而非泄漏
+      await expect(
+        host.startAction("pkg.quota-rollback/ok", {}, { parentRunId: rootRunId })
+      ).rejects.toThrow("RUN_REPOSITORY_UNAVAILABLE");
+
+      // 失败后计数已回滚，后续合法子任务不受误拒（若泄漏则会被 maxSubRuns=1 拦截）
+      const ticket = await host.startAction("pkg.quota-rollback/ok", {}, { parentRunId: rootRunId });
+      const res = await ticket.result!;
+      expect(res.ok).toBe(true);
+    } finally {
+      await host.close();
+    }
+  });
+
+  it("包内 describeAction 抛出内部错误时向调用方透传而非伪装 ACTION_NOT_FOUND", async () => {
+    const host = await createActionDockHost({
+      packages: [
+        {
+          projectConfig: { id: "pkg.error-app", name: "内部错误包", version: "1.0.0" },
+          actions: {
+            fine: defineAction({ run: () => ({ ok: true }) }),
+          },
+          inMemory: true,
+        },
+        {
+          projectConfig: { id: "pkg.good-app", name: "健康包", version: "1.0.0" },
+          actions: {
+            fine: defineAction({ run: () => ({ ok: true }) }),
+          },
+          inMemory: true,
+        },
+      ],
+      autoLoadCurrentProject: false,
+    });
+
+    // 篡改其中一个 app 的 describeAction 抛出存储损坏类内部错误（非 not-found 语义）
+    const errorApp = host.getApp("pkg.error-app")!;
+    const origDescribe = errorApp.describeAction.bind(errorApp);
+    errorApp.describeAction = async (id: string) => {
+      if (id === "fine") {
+        const err = new Error("STORAGE_BUSY: database is locked");
+        (err as any).code = "STORAGE_BUSY";
+        throw err;
+      }
+      return origDescribe(id);
+    };
+
+    try {
+      // 短标识符遍历遇内部错误时必须透传原始错误，而非 ACTION_NOT_FOUND
+      await expect(host.describeAction("fine")).rejects.toThrow("STORAGE_BUSY");
+
+      // 完全限定引用下同样透传
+      await expect(host.describeAction("pkg.error-app/fine")).rejects.toThrow("STORAGE_BUSY");
+
+      // 真正不存在的 Action 仍返回 ACTION_NOT_FOUND 语义
+      await expect(host.describeAction("missing")).rejects.toThrow("ACTION_NOT_FOUND");
+    } finally {
+      await host.close();
+    }
+  });
+
+  it("runAction 遍历遇包内内部错误时向调用方透传而非伪装 ACTION_NOT_FOUND", async () => {
+    const host = await createActionDockHost({
+      packages: [
+        {
+          projectConfig: { id: "pkg.err-run", name: "运行错误包", version: "1.0.0" },
+          actions: {
+            task: defineAction({ run: () => ({ ok: true }) }),
+          },
+          inMemory: true,
+        },
+        {
+          projectConfig: { id: "pkg.ok-run", name: "运行健康包", version: "1.0.0" },
+          actions: {
+            other: defineAction({ run: () => ({ ok: true }) }),
+          },
+          inMemory: true,
+        },
+      ],
+      autoLoadCurrentProject: false,
+    });
+
+    const errorApp = host.getApp("pkg.err-run")!;
+    errorApp.describeAction = async () => {
+      const err = new Error("SQLITE_CORRUPT: database disk image is malformed");
+      (err as any).code = "SQLITE_CORRUPT";
+      throw err;
+    };
+
+    try {
+      await expect(host.runAction("task", {})).rejects.toThrow("SQLITE_CORRUPT");
+    } finally {
+      await host.close();
+    }
+  });
 });
 

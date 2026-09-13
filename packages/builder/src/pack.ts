@@ -6,13 +6,14 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { getPackageSlug, loadProjectConfig } from "@actiondock/core";
 import { BuilderError } from "./errors";
 import {
@@ -97,14 +98,33 @@ export async function packProject(options: PackOptions): Promise<PackResult> {
     }
 
     mkdirSync(targetOutDir, { recursive: true });
-    const finalTarballPath = join(targetOutDir, tarballName);
-    if (existsSync(finalTarballPath)) {
-      rmSync(finalTarballPath, { force: true });
-    }
 
+    // 优先使用 npm pack 返回的实名产物（保证与压缩包内 package.json name 一致），
+    // 移动而非复制改名；仅当无法获取实名时回退到本地拼接名
     const generatedTarball = await runNpmPack(stagingPkgDir, tempBase, tarballName);
-    copyFileSync(generatedTarball, finalTarballPath);
-    rmSync(generatedTarball, { force: true });
+    let finalTarballPath: string;
+    let finalTarballName: string;
+    if (basename(generatedTarball) === tarballName) {
+      finalTarballPath = join(targetOutDir, tarballName);
+      finalTarballName = tarballName;
+      if (existsSync(finalTarballPath)) {
+        rmSync(finalTarballPath, { force: true });
+      }
+      renameSync(generatedTarball, finalTarballPath);
+    } else {
+      finalTarballName = basename(generatedTarball);
+      finalTarballPath = join(targetOutDir, finalTarballName);
+      if (existsSync(finalTarballPath)) {
+        rmSync(finalTarballPath, { force: true });
+      }
+      try {
+        renameSync(generatedTarball, finalTarballPath);
+      } catch {
+        // 跨设备 rename 失败时回退为复制后删除源文件
+        copyFileSync(generatedTarball, finalTarballPath);
+        rmSync(generatedTarball, { force: true });
+      }
+    }
 
     const stat = statSync(finalTarballPath);
     const fileBuf = readFileSync(finalTarballPath);
@@ -115,7 +135,7 @@ export async function packProject(options: PackOptions): Promise<PackResult> {
       packageName: plan.packageName,
       version: plan.version,
       tarballPath: finalTarballPath,
-      tarballName,
+      tarballName: finalTarballName,
       sizeBytes: stat.size,
       sha256,
       files: relativeFiles,
@@ -210,6 +230,13 @@ async function compileTypeScript(
       const configFile = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
       if (!configFile.error) {
         const parsedConfig = ts.parseJsonConfigFileContent(configFile.config, ts.sys, root);
+        // tsc 不会改写 import 说明符：paths 路径别名在产物中无法解析，必须显式拒绝而非静默编译出坏产物
+        if (parsedConfig.options.paths && Object.keys(parsedConfig.options.paths).length > 0) {
+          throw new BuilderError(
+            `tsconfig.json 'paths' aliases are not supported in packed output: TypeScript does not rewrite import specifiers, so the packed artifact would contain unresolvable module specifiers. Replace path aliases with relative imports, or pre-build the project and pack the compiled output instead.`,
+            "PATHS_ALIAS_UNSUPPORTED"
+          );
+        }
         Object.assign(compilerOptions, parsedConfig.options, {
           outDir: stagingPkgDir,
           rootDir: root,
@@ -219,7 +246,10 @@ async function compileTypeScript(
           noEmit: false,
         });
       }
-    } catch {
+    } catch (err) {
+      if (err instanceof BuilderError) {
+        throw err;
+      }
       // 忽略 tsconfig 解析失败，回退到标准 compilerOptions
     }
   }

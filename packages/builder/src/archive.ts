@@ -112,7 +112,12 @@ function crc32(buf: Buffer): number {
 /** Unix 毫秒时间戳转 DOS 时间格式（date/time 各 16 位） */
 function dosDateTime(ms: number): { date: number; time: number } {
   const d = new Date(ms);
-  const year = Math.max(d.getFullYear(), 1980);
+  const rawYear = d.getFullYear();
+  // DOS 时间字段边界：年份仅能表达 [1980, 2107]，超出统一映射为 1980-01-01 00:00:00
+  const year = Math.min(Math.max(rawYear, 1980), 2107);
+  if (rawYear < 1980) {
+    return { date: ((1980 - 1980) << 9) | (1 << 5) | 1, time: 0 };
+  }
   const time = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
   const date = ((year - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
   return { date, time };

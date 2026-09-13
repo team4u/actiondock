@@ -39,13 +39,13 @@ graph TD
     CORE --> SDK
 ```
 
-- `@actiondock/sdk`：极简纯契约层，零生产依赖，仅导出 `defineAction`、`ActionContext`、`ProcessAPI`、`Logger`、`Config` 与 `StateStore`。
-- `@actiondock/core`：框架业务领域内核，提供统一调用门面 `ActionDockTarget`、数据目录排他锁 `DataDirLock`、依赖原子事务 `beginTransaction`、核心执行引擎 `ActionRunner` 与调度协调服务 `DefaultExecutionService`。
-- `@actiondock/runtime-node`：Node.js 生产环境适配驱动，提供基于 `node:sqlite` 的数据库驱动、原生进程执行器、类型擦除加载器与原生 HTTP 容器。
+- `@actiondock/sdk`：极简纯契约层，零生产依赖，导出 `defineAction`、`ActionContext`、`ProcessAPI`、`Logger`、`Config` 与 `StateStore`，并提供受管进程辅助工具（`withControl`、`createStreamDecoder` 等）。
+- `@actiondock/core`：框架业务领域内核，提供统一调用门面 `ActionDockTarget`、数据目录排他锁 `DataDirLock`、受管进程调度体系（`ProcessManager`、`ContextProcessAPI`）、依赖原子事务 `beginTransaction`、核心执行引擎 `ActionRunner` 与调度协调服务 `DefaultExecutionService`。
+- `@actiondock/runtime-node`：Node.js 生产环境适配驱动，提供基于 `node:sqlite` 的数据库驱动、原生受管进程驱动 `NodeProcessDriver`、类型擦除加载器与原生 HTTP 容器。
 - `@actiondock/builder`：构建规划器与导出器，负责依赖闭包规划、Node.js 目录交付构建（`ad build`）、npm 打包（`ad pack`）与 Agent Skill 导出。
 - `@actiondock/mcp`：MCP 协议适配层，负责将 Action 映射为标准 MCP 工具，支持 STDIO 与 HTTP 通道及取消信号链路。
 - `@actiondock/cli`：命令行门面与运行分发器，向用户与智能体暴露统一的 `ad` 命令行工具及标准信封渲染。
-- `@actiondock/testing`：确定性测试沙箱框架，收敛 `createTestRuntime` 测试运行时、`FakeClock` 虚拟时钟、`MockProcessExecutor` 与 `MemoryStorage`。
+- `@actiondock/testing`：确定性测试沙箱框架，收敛 `createTestRuntime` 测试运行时、`FakeClock` 虚拟时钟、`FakeProcessDriver` 确定性进程驱动桩、`MockProcessExecutor` 与 `MemoryStorage`。
 
 ---
 
@@ -60,7 +60,7 @@ sequenceDiagram
     participant Facade as 门面层 (CLI / MCP / HTTP)
     participant ExecService as DefaultExecutionService
     participant Runner as ActionRunner
-    participant Driver as 存储与驱动层 (SqliteDriver / ProcessExecutor)
+    participant Driver as 存储与驱动层 (SqliteDriver / ProcessDriver)
     participant Action as Action 业务逻辑
 
     Client->>Facade: 发起执行请求 (入参数据与选项)
@@ -98,7 +98,7 @@ sequenceDiagram
 `@actiondock/core` 承载 ActionDock 的核心领域逻辑，完全平台无关。该层通过四组抽象接口将领域内核与操作系统底层能力彻底解耦：
 
 - **存储抽象**：定义 `RuntimeStorage` 与 `SqliteDriver` 接口，解耦底层数据库引擎实现，规范参数化查询、结果集映射与事务边界。
-- **进程抽象**：定义 `ProcessExecutor` 接口（实现 `ProcessAPI`），解耦系统命令派生、输入输出管道、信号传递与受管子进程生命周期管理。
+- **进程抽象**：定义 `ProcessDriver` 抽象驱动接口与 `ProcessManager` 受管进程调度引擎（向上暴露标准 `ProcessAPI`），解耦系统命令派生、输入输出管道、独占控制权租约与受管子进程生命周期管理。
 - **时钟抽象**：定义 `Clock` 接口与默认的 `SystemClock`，解耦系统墙上时间与单调时钟获取，使得时间推进与超时控制在测试环境中完全可控。
 - **事件抽象**：定义 `EventSink` 接口与默认的 `InMemoryEventSink`，解耦生命周期事件的发射、有界缓冲（单运行上限 1024 条或 1MB 事件）与异步迭代订阅流。
 
@@ -110,8 +110,8 @@ sequenceDiagram
 
 - **同步存储驱动（默认）：NodeSqliteDriver**
   基于 Node.js 原生内置模块 `node:sqlite`（`DatabaseSync`）构建，满足 Core 层的同步驱动契约。默认开启预写日志模式（`PRAGMA journal_mode = WAL;`）、外键约束检查（`PRAGMA foreign_keys = ON;`）以及忙等待超时（`PRAGMA busy_timeout = 5000;`）。另有独立的异步驱动 WorkerSqliteDriver（基于 `node:worker_threads` 将同步操作卸载至后台线程，对外暴露异步接口），作为独立组件提供，不注入同步存储契约。
-- **原生进程执行器：NodeProcessExecutor**
-  基于 Node.js 原生 `node:child_process` 实现外部系统命令执行。标准输入输出实施物理管道隔离（`stdio: ["pipe", "pipe", "pipe"]`），设置 10MB 输出缓冲区上限（`maxOutputBytes`），防止畸形输出耗尽系统内存。通过独立进程组与跨平台信号分发（POSIX 负数 PID 与 Windows 进程树）精准管理子进程，杜绝孤儿进程。
+- **受管进程平台驱动与兼容执行器**：NodeProcessDriver 与 NodeProcessExecutor
+  `NodeProcessDriver` 完整实现 Core 层的 `ProcessDriver` 契约，提供基于 `node:child_process` 的 pipe 管道隔离与 PTY 伪终端支持。标准输入输出物理隔离，结合独立进程组与跨平台信号分发（POSIX 负数 PID 与 Windows 进程树）精准管理子进程，杜绝孤儿进程；支持输入净终止 `inputEOF` 与 5 秒优雅输出排空。此外保留 `NodeProcessExecutor` 用于向后兼容执行简单命令。
 - **模块加载器：NodeModuleLoader**
   基于 Node.js 现代模块解析机制加载 Action 源码，原生支持 TypeScript 类型擦除与 ESM 规范，免去日常开发态的前置编译等待。
 - **HTTP 服务端：NodeHttpServer**
@@ -137,6 +137,7 @@ sequenceDiagram
 - **全内存测试驱动**：`createTestRuntime` 提供全套轻量化内存驱动：
   - `MemoryStorage`：纯内存模拟 SQLite 行为，支持配置、状态与运行记录存储。
   - `FakeClock`：支持手动推进毫秒级时间的确定性模拟时钟。
+  - `FakeProcessDriver`：支持确定性模拟输出、退出、排空关闭与故障注入的进程驱动桩。
   - `MockProcessExecutor`：支持拦截、断言与预设输出的模拟进程执行器。
   - `TestEventSink`：全量捕获生命周期事件并支持历史追溯。
 - **真实复用核心执行器**：沙箱内部直接实例化真实的 `ActionRunner`。所有的入参出参模式严格校验、调用环路死锁检测、单一终态状态机流转与记录落库逻辑在测试中均得到真实执行，确保测试环境与生产环境语义完全一致。

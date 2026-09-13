@@ -5,7 +5,7 @@ import {
   NodeFileSystem,
   type RuntimePlatform,
 } from "@actiondock/core";
-import { defineAction } from "@actiondock/sdk";
+import { decodeText, defineAction } from "@actiondock/sdk";
 import {
   createTestPlatform,
   createTestRuntime,
@@ -102,10 +102,15 @@ describe("createTestPlatform 测试平台工厂测试", () => {
 
       const testAction = defineAction({
         run: async (_input, ctx) => {
-          const procRes = await ctx.process.exec("ad-cli whoami");
-          await ctx.state.set("user", procRes.stdout.trim());
+          const procRes = await ctx.process.run({
+            spec: { executable: "ad-cli", args: ["whoami"], io: { mode: "pipe" } },
+            timeoutMs: 5000,
+            maxOutputBytes: 1024 * 1024,
+          });
+          const text = decodeText(procRes.chunks).trim();
+          await ctx.state.set("user", text);
           return {
-            user: procRes.stdout.trim(),
+            user: text,
             runId: ctx.run.id,
           };
         },
@@ -147,8 +152,12 @@ describe("createTestPlatform 测试平台工厂测试", () => {
 
       const action = defineAction({
         run: async (_input, ctx) => {
-          const res = await ctx.process.exec("test-cmd");
-          return { out: res.stdout };
+          const res = await ctx.process.run({
+            spec: { executable: "test-cmd", args: [], io: { mode: "pipe" } },
+            timeoutMs: 5000,
+            maxOutputBytes: 1024 * 1024,
+          });
+          return { out: decodeText(res.chunks) };
         },
       });
 

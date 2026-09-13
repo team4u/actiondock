@@ -432,6 +432,8 @@ export class SelectionPlanner {
     initialActionIds: Set<string>
   ): ClosureResult {
     const resolvedActionIds = new Set<string>();
+    // queued 与 resolvedActionIds 联合判重，避免高入度节点在 uses 图中被重复入队导致 O(边数) 重复解析
+    const queued = new Set<string>(initialActionIds);
     const queue = Array.from(initialActionIds);
     const externalActionRoots = new Map<string, string>();
     const externalActionEntries = new Map<string, ActionManifestEntry>();
@@ -439,6 +441,7 @@ export class SelectionPlanner {
 
     while (queue.length > 0) {
       const currentId = queue.shift()!;
+      queued.delete(currentId);
       if (resolvedActionIds.has(currentId)) {
         continue;
       }
@@ -477,19 +480,25 @@ export class SelectionPlanner {
               entry = externalEntry;
               entryRoot = extRoot;
 
-              // 依赖包 actiondock.json 中声明的传递依赖闭包
+              // 依赖包 actiondock.json 中声明的传递依赖闭包（入队前查重，避免重复膨胀）
               const extPkgUses = extConfig?.uses;
               if (Array.isArray(extPkgUses)) {
                 for (const u of extPkgUses) {
-                  if (typeof u === "string" && u.trim() && !resolvedActionIds.has(u.trim())) {
-                    queue.push(u.trim());
+                  const trimmedUse = typeof u === "string" ? u.trim() : "";
+                  if (
+                    trimmedUse &&
+                    !resolvedActionIds.has(trimmedUse) &&
+                    !queued.has(trimmedUse)
+                  ) {
+                    queued.add(trimmedUse);
+                    queue.push(trimmedUse);
                   }
                 }
               }
             }
           }
         } catch {
-          // 忽略
+          // 外部包解析失败时交由下方缺失依赖报错统一透传
         }
       }
 
@@ -509,7 +518,8 @@ export class SelectionPlanner {
 
       if (entry.uses && Array.isArray(entry.uses)) {
         for (const depId of entry.uses) {
-          if (!resolvedActionIds.has(depId)) {
+          if (!resolvedActionIds.has(depId) && !queued.has(depId)) {
+            queued.add(depId);
             queue.push(depId);
           }
         }

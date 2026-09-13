@@ -277,6 +277,12 @@ export async function* streamRemoteEvents(
     }
     throw err;
   } finally {
+    // 防御性取消底层流：仅 releaseLock 会让连接保持挂起，造成连接泄漏
+    try {
+      await reader.cancel();
+    } catch {
+      // 流已自然结束或已被取消时忽略次级异常
+    }
     try {
       reader.releaseLock();
     } catch {}

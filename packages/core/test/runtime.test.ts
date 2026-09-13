@@ -1098,4 +1098,119 @@ export default {
       await service.close();
     }
   });
+
+  it("resolveTargetPackageRunner 并发调用共享同一次构建不重复创建 Runner", async () => {
+    const storageA = new SqliteRuntimeStorage({ packageId: "concurrent-pkg-a", dbPath: ":memory:" });
+    let resolveContext!: () => void;
+    const contextGate = new Promise<void>((resolve) => {
+      resolveContext = resolve;
+    });
+    let resolverInvocations = 0;
+
+    const runner = new ActionRunner({
+      packageId: "concurrent-pkg-a",
+      storage: storageA,
+      packageContextResolver: async () => {
+        resolverInvocations++;
+        // 模拟长异步窗口：并发调用在构建完成前全部进入等待
+        await contextGate;
+        return {
+          storage: new SqliteRuntimeStorage({ packageId: "concurrent-pkg-b", dbPath: ":memory:" }),
+          actions: new Map([
+            ["work", defineAction({ run: () => ({ from: "pkg-b" }) })],
+          ]),
+        };
+      },
+    });
+
+    // 同一 tick 内发起并发解析请求
+    const pending = Array.from({ length: 5 }).map(() =>
+      runner.resolveTargetPackageRunner("concurrent-pkg-b")
+    );
+    resolveContext();
+    const resolved = await Promise.all(pending);
+
+    // in-flight Promise 去重：解析器仅被调用一次，且并发方拿到同一 Runner 实例
+    expect(resolverInvocations).toBe(1);
+    for (const r of resolved) {
+      expect(r).toBe(resolved[0]);
+    }
+    expect(runner.getPackageRunners().size).toBe(1);
+  });
+
+  it("resolveTargetPackageRunner 构建失败后缓存不残留可重试", async () => {
+    const storageA = new SqliteRuntimeStorage({ packageId: "retry-pkg-a", dbPath: ":memory:" });
+    let attempts = 0;
+
+    const runner = new ActionRunner({
+      packageId: "retry-pkg-a",
+      storage: storageA,
+      packageContextResolver: async () => {
+        attempts++;
+        if (attempts === 1) {
+          throw new Error("simulated resolver failure");
+        }
+        return {
+          storage: new SqliteRuntimeStorage({ packageId: "retry-pkg-b", dbPath: ":memory:" }),
+          actions: new Map([
+            ["work", defineAction({ run: () => ({ ok: true }) })],
+          ]),
+        };
+      },
+    });
+
+    // 首次构建失败：异常透传且失败 Promise 不得残留缓存
+    await expect(runner.resolveTargetPackageRunner("retry-pkg-b")).rejects.toThrow(
+      "simulated resolver failure"
+    );
+    expect(runner.getPackageRunners().size).toBe(0);
+
+    // 重试应重新走解析器而非复用已失败的 Promise
+    const retried = await runner.resolveTargetPackageRunner("retry-pkg-b");
+    expect(retried).toBeDefined();
+    expect(attempts).toBe(2);
+    expect(runner.getPackageRunners().size).toBe(1);
+  });
+
+  it("平台级共享进程实例在 run 结束后不被误 dispose 且后续 run 可继续使用", async () => {
+    const { createDefaultPlatform } = await import("../src/platform");
+    const { MemoryProcessDriver } = await import("../src/process");
+    const platform = createDefaultPlatform({ name: "test", processDriver: new MemoryProcessDriver() });
+    const sharedProcess = platform.process as any;
+
+    // 校验共享实例特征：暴露 manager 派生入口且非 run 级作用域
+    expect(sharedProcess.manager).toBeDefined();
+    expect(typeof sharedProcess.manager.forOwner).toBe("function");
+    expect(sharedProcess.runScoped).not.toBe(true);
+
+    const observedRunIds = new Set<string>();
+    const probeAction = defineAction({
+      run: async (_input: unknown, ctx: any) => {
+        observedRunIds.add(ctx.run.id);
+        // 每个 run 应拿到独立的 run 级进程实例（由共享实例派生）
+        return { runScoped: ctx.process?.runScoped, sameAsPlatform: ctx.process === sharedProcess };
+      },
+    });
+
+    const storage = new SqliteRuntimeStorage({ packageId: "shared-proc-pkg", dbPath: ":memory:" });
+    const runner = new ActionRunner({
+      packageId: "shared-proc-pkg",
+      storage,
+      platform,
+      actions: new Map([["probe", probeAction]]),
+    });
+
+    const first = await runner.execute("probe", {});
+    expect(first.ok).toBe(true);
+    // run 上下文拿到的是派生的 run 级实例，而非平台共享实例本身
+    expect((first as any).data?.runScoped).toBe(true);
+    expect((first as any).data?.sameAsPlatform).toBe(false);
+
+    // 共享实例不得被首个 run 的 finally 误 dispose（后续仍可继续派生与使用）
+    expect(typeof sharedProcess.manager.forOwner).toBe("function");
+    const second = await runner.execute("probe", {});
+    expect(second.ok).toBe(true);
+    expect((second as any).data?.runScoped).toBe(true);
+    expect(observedRunIds.size).toBe(2);
+  });
 });

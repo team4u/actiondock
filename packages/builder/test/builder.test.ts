@@ -11,6 +11,7 @@ import {
   rmSync,
   statSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { Readable, Writable } from "node:stream";
@@ -30,6 +31,7 @@ import {
   buildPlan,
   BuildPlanner,
   buildProject,
+  collectRelativeFiles,
   packProject,
   BuilderError,
   exportSkill,
@@ -54,6 +56,21 @@ import {
   readZipEntries,
   readZipEntryModes,
 } from "./archive-reader";
+
+/** 捕获 console.warn 输出：返回回调执行结果与捕获的警告文本 */
+async function captureConsoleWarn<T>(fn: () => Promise<T>): Promise<{ output: string; result: T }> {
+  const chunks: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    chunks.push(args.map((a) => (typeof a === "string" ? a : String(a))).join(" "));
+  };
+  try {
+    const result = await fn();
+    return { output: chunks.join("\n"), result };
+  } finally {
+    console.warn = originalWarn;
+  }
+}
 
 /** 递归收集目录内文件：归档内相对路径（含根目录前缀）→ 文件内容 */
 function collectFiles(dir: string): Map<string, Buffer> {
@@ -235,6 +252,103 @@ export default {
       expect(actionIds).toContain("action.c");
       expect(actionIds).not.toContain("action.isolated");
       expect(plan.actions.length).toBe(3);
+    });
+
+    it("菱形依赖下闭包不重复解析：高入度节点只入队一次且结果集无重复", () => {
+      // 菱形拓扑：top -> left -> bottom、top -> right -> bottom，bottom 为高入度节点
+      for (const name of ["top", "left", "right", "bottom"]) {
+        writeFileSync(join(tempDir, "actions", `${name}.ts`), "export default {};", "utf-8");
+      }
+
+      const manifest: ActionDockManifest = {
+        schemaVersion: 1,
+        id: "test.builder-fixture",
+        actions: {
+          "action.top": {
+            entry: "actions/top.ts",
+            description: "Action Top",
+            uses: ["action.left", "action.right"],
+          },
+          "action.left": {
+            entry: "actions/left.ts",
+            description: "Action Left",
+            uses: ["action.bottom"],
+          },
+          "action.right": {
+            entry: "actions/right.ts",
+            description: "Action Right",
+            uses: ["action.bottom"],
+          },
+          "action.bottom": {
+            entry: "actions/bottom.ts",
+            description: "Action Bottom",
+            uses: [],
+          },
+        },
+      };
+      saveManifest(tempDir, manifest);
+
+      const plan = buildPlan({
+        projectRoot: tempDir,
+        actions: ["action.top"],
+      });
+
+      const actionIds = plan.actions.map((a) => a.id);
+      // 结果集恰好包含四个节点，无重复条目
+      expect(actionIds.length).toBe(4);
+      expect(new Set(actionIds).size).toBe(4);
+      for (const expected of ["action.top", "action.left", "action.right", "action.bottom"]) {
+        expect(actionIds).toContain(expected);
+      }
+    });
+
+    it("高入度菱形依赖下闭包队列不重复膨胀：多扇入节点只解析一次", () => {
+      // 构造星形+菱形混合拓扑：多个上游同时引用同一批下游，验证去重解析
+      for (const name of ["hub-a", "hub-b", "hub-c", "shared-x", "shared-y"]) {
+        writeFileSync(join(tempDir, "actions", `${name}.ts`), "export default {};", "utf-8");
+      }
+
+      const manifest: ActionDockManifest = {
+        schemaVersion: 1,
+        id: "test.builder-fixture",
+        actions: {
+          "hub.a": {
+            entry: "actions/hub-a.ts",
+            description: "Hub A",
+            uses: ["shared.x", "shared.y"],
+          },
+          "hub.b": {
+            entry: "actions/hub-b.ts",
+            description: "Hub B",
+            uses: ["shared.x", "shared.y"],
+          },
+          "hub.c": {
+            entry: "actions/hub-c.ts",
+            description: "Hub C",
+            uses: ["shared.x", "shared.y"],
+          },
+          "shared.x": {
+            entry: "actions/shared-x.ts",
+            description: "Shared X",
+            uses: [],
+          },
+          "shared.y": {
+            entry: "actions/shared-y.ts",
+            description: "Shared Y",
+            uses: [],
+          },
+        },
+      };
+      saveManifest(tempDir, manifest);
+
+      const plan = buildPlan({
+        projectRoot: tempDir,
+        actions: ["hub.a", "hub.b", "hub.c"],
+      });
+
+      const actionIds = plan.actions.map((a) => a.id);
+      expect(actionIds.length).toBe(5);
+      expect(new Set(actionIds).size).toBe(5);
     });
 
     it("支持环形依赖（A -> B -> A）安全终止并包含闭包中的所有节点", () => {
@@ -598,6 +712,100 @@ export default defineAction({
       expect(existsSync(join(buildRes.outputDir, "node_modules"))).toBe(true);
     });
 
+    it("含外部链接依赖的项目构建产物不混入外部包 entry 源文件", async () => {
+      const extDir = mkdtempSync(join(tmpdir(), "ad-ext-entry-test-"));
+      try {
+        initProject(extDir, { id: "test.ext-entry", name: "External Entry" });
+        writeFileSync(
+          join(extDir, "actions", "calc.ts"),
+          `export default { id: "calc", run: () => 42 };`
+        );
+        const extCfgPath = join(extDir, "actiondock.json");
+        const extCfg = JSON.parse(readFileSync(extCfgPath, "utf-8"));
+        extCfg.actions = {
+          calc: { entry: "actions/calc.ts", description: "Calc action", uses: [] },
+        };
+        writeFileSync(extCfgPath, JSON.stringify(extCfg, null, 2), "utf-8");
+        await linkPackage(extDir);
+
+        const mainManifestPath = join(tempDir, "actiondock.json");
+        const mainManifest = JSON.parse(readFileSync(mainManifestPath, "utf-8"));
+        mainManifest.actions["sample.greet"].uses = ["test.ext-entry/calc"];
+        writeFileSync(mainManifestPath, JSON.stringify(mainManifest, null, 2), "utf-8");
+
+        const buildRes = await buildProject({
+          projectRoot: tempDir,
+          skipDependencyValidation: true,
+        });
+
+        // 本包 entry 正常物化
+        expect(existsSync(join(buildRes.outputDir, "actions", "greet.ts"))).toBe(true);
+        // 外部包 entry 绝不物化进本包产物目录（与清单剔除策略一致）
+        expect(existsSync(join(buildRes.outputDir, "actions", "calc.ts"))).toBe(false);
+
+        // 生成的 actiondock.json 清单不包含跨包外部 Action
+        const outputManifest = JSON.parse(
+          readFileSync(join(buildRes.outputDir, "actiondock.json"), "utf-8")
+        );
+        expect(Object.keys(outputManifest.actions)).toEqual(["sample.greet"]);
+
+        // host 入口脚本不得 import 未物化的外部源文件（避免孤儿模块）
+        const hostEntry = readFileSync(join(buildRes.outputDir, "entry-host.js"), "utf-8");
+        expect(hostEntry).not.toContain("calc.ts");
+        expect(hostEntry).toContain("greet.ts");
+      } finally {
+        rmSync(extDir, { recursive: true, force: true });
+      }
+    });
+
+    it("vendorDeps 完整物化嵌套 node_modules 传递依赖树", async () => {
+      // 在项目 node_modules 下构造携带嵌套传递依赖的生产依赖
+      const depDir = join(tempDir, "node_modules", "vendor-nested-dep");
+      mkdirSync(join(depDir, "lib"), { recursive: true });
+      writeFileSync(
+        join(depDir, "package.json"),
+        JSON.stringify({ name: "vendor-nested-dep", version: "1.0.0", main: "lib/index.js" }),
+        "utf-8"
+      );
+      writeFileSync(join(depDir, "lib", "index.js"), "module.exports = 'root';", "utf-8");
+
+      const transitiveDir = join(depDir, "node_modules", "vendor-transitive-dep");
+      mkdirSync(transitiveDir, { recursive: true });
+      writeFileSync(
+        join(transitiveDir, "package.json"),
+        JSON.stringify({ name: "vendor-transitive-dep", version: "2.0.0", main: "index.js" }),
+        "utf-8"
+      );
+      writeFileSync(join(transitiveDir, "index.js"), "module.exports = 'transitive';", "utf-8");
+
+      const pkgPath = join(tempDir, "package.json");
+      const pkgData = JSON.parse(readFileSync(pkgPath, "utf-8"));
+      pkgData.dependencies = {
+        ...pkgData.dependencies,
+        "vendor-nested-dep": "^1.0.0",
+      };
+      writeFileSync(pkgPath, JSON.stringify(pkgData, null, 2), "utf-8");
+
+      const buildRes = await buildProject({
+        projectRoot: tempDir,
+        vendorDeps: true,
+      });
+
+      expect(buildRes.vendorDeps).toBe(true);
+      // 嵌套 node_modules 内的传递依赖必须完整物化，否则产物运行时 Cannot find module
+      const nestedPkg = join(
+        buildRes.outputDir,
+        "node_modules",
+        "vendor-nested-dep",
+        "node_modules",
+        "vendor-transitive-dep",
+        "package.json"
+      );
+      expect(existsSync(nestedPkg)).toBe(true);
+      const nestedMeta = JSON.parse(readFileSync(nestedPkg, "utf-8"));
+      expect(nestedMeta.name).toBe("vendor-transitive-dep");
+    });
+
     it("生命周期脚本与可复现性检查：要求可复现且必须执行安装脚本时报错拒绝", async () => {
       // 模拟包含安装脚本的外部依赖
       const fakeDepDir = join(tempDir, "node_modules", "lifecycle-dep");
@@ -651,6 +859,63 @@ export default defineAction({
       expect(dryResult.manifestSummary.actionsCount).toBe(1);
       expect(dryResult.manifestSummary.actions).toContain("sample.greet");
       expect(dryResult.tarballPath).toBeUndefined();
+    });
+
+    it("npm 实名与本地拼接名不一致时 PackResult 采用 npm 原始产物名", async () => {
+      // 将项目 package.json 的 name 改为与 pkgSlug 不同的形式：
+      // npm pack 产物名基于 package.json name（大写转小写、下划线转连字符），与本地拼接的 pkgSlug-version.tgz 不一致
+      const pkgPath = join(tempDir, "package.json");
+      const pkgData = JSON.parse(readFileSync(pkgPath, "utf-8"));
+      pkgData.name = "Test_Builder.Fixture";
+      writeFileSync(pkgPath, JSON.stringify(pkgData, null, 2), "utf-8");
+
+      const packResult = await packProject({
+        projectRoot: tempDir,
+      });
+
+      expect(packResult.tarballPath).toBeDefined();
+      expect(existsSync(packResult.tarballPath!)).toBe(true);
+
+      // 产物名必须是 npm 实际生成的文件名（基于 package.json name 规范化），而非本地拼接的 builder-fixture-0.1.0.tgz
+      expect(packResult.tarballName).toBe("Test_Builder.Fixture-0.1.0.tgz");
+      expect(packResult.tarballName).not.toBe("builder-fixture-0.1.0.tgz");
+      expect(basename(packResult.tarballPath!)).toBe(packResult.tarballName);
+      expect(packResult.sizeBytes).toBeGreaterThan(0);
+      expect(packResult.sha256).toMatch(/^[a-f0-9]{64}$/);
+    });
+
+    it("tsconfig 声明 paths 路径别名时 pack 显式拒绝而非静默编译出不可解析产物", async () => {
+      const tsconfigPath = join(tempDir, "tsconfig.json");
+      writeFileSync(
+        tsconfigPath,
+        JSON.stringify(
+          {
+            compilerOptions: {
+              target: "ES2022",
+              module: "NodeNext",
+              moduleResolution: "NodeNext",
+              baseUrl: ".",
+              paths: {
+                "@/*": ["./lib/*"],
+              },
+            },
+          },
+          null,
+          2
+        ),
+        "utf-8"
+      );
+
+      let caught: any;
+      try {
+        await packProject({ projectRoot: tempDir });
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(caught).toBeInstanceOf(BuilderError);
+      expect(caught.code).toBe("PATHS_ALIAS_UNSUPPORTED");
+      expect(caught.message).toContain("paths");
     });
 
     it("将 TypeScript Action 项目打包为标准 tgz 压缩包且不修改源工程", async () => {
@@ -1657,6 +1922,61 @@ export default defineAction({
       }
     });
 
+    it("归档压缩失败时旧档保留且临时半成品被清理，不留中间态", async () => {
+      const outDir = join(tempDir, "dist", "archive-fail-skill");
+      mkdirSync(join(tempDir, "dist"), { recursive: true });
+
+      // 将最终归档路径占用为非空目录：压缩成功但原子重命名必然失败（EISDIR/ENOTEMPTY），注入确定性失败
+      const occupiedArchivePath = `${outDir}.zip`;
+      mkdirSync(occupiedArchivePath, { recursive: true });
+      writeFileSync(join(occupiedArchivePath, "previous-good.txt"), "PREVIOUS-GOOD-ARCHIVE-CONTENT", "utf-8");
+
+      let caught: any;
+      try {
+        await exportSkill({
+          projectRoot: tempDir,
+          mode: "source",
+          outDir,
+          archive: true,
+          archiveFormat: "zip",
+        });
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(caught).toBeInstanceOf(BuilderError);
+      expect(caught.message).toContain("Failed to create zip archive");
+
+      // 已有产物原样保留，未被删除或改写
+      expect(existsSync(join(occupiedArchivePath, "previous-good.txt"))).toBe(true);
+      expect(readFileSync(join(occupiedArchivePath, "previous-good.txt"), "utf-8")).toBe(
+        "PREVIOUS-GOOD-ARCHIVE-CONTENT"
+      );
+
+      // 临时半成品被清理，不残留 .tmp 中间态
+      expect(existsSync(`${occupiedArchivePath}.tmp`)).toBe(false);
+    });
+
+    it("归档成功时临时文件原子重命名到位且无 .tmp 残留", async () => {
+      const outDir = join(tempDir, "dist", "archive-ok-skill");
+      const res = await exportSkill({
+        projectRoot: tempDir,
+        mode: "source",
+        outDir,
+        archive: true,
+        archiveFormat: "zip",
+      });
+
+      expect(res.archivePath).toBe(`${outDir}.zip`);
+      expect(existsSync(res.archivePath!)).toBe(true);
+      expect(existsSync(`${res.archivePath}.tmp`)).toBe(false);
+      // 归档内容可用且包含核心产物
+      const entries = readZipEntries(res.archivePath!);
+      const rootName = basename(outDir);
+      expect(entries.has(`${rootName}/SKILL.md`)).toBe(true);
+      expect(entries.has(`${rootName}/actiondock.json`)).toBe(true);
+    });
+
     it("单包导出若当前动作目录已有 SKILL.md 则直接复用不再自动生成", async () => {
       const customSkillContent = `# Custom Pre-existing Skill Document\n\nCustom instructions for agent.`;
       const customSkillPath = join(tempDir, "SKILL.md");
@@ -1947,6 +2267,238 @@ export default defineAction({
       } finally {
         rmSync(extDir, { recursive: true, force: true });
       }
+    });
+  });
+
+  describe("collectRelativeFiles: digest 跨平台可移植性与符号链接防护", () => {
+    it("按最终 POSIX 相对路径统一排序：目录序与路径序不一致时仍返回字典序稳定清单", () => {
+      // 构造目录序与最终相对路径字典序交叉的场景：目录 z 在目录 a 之前扫描到，但 a 内文件路径更靠前
+      const sortRoot = mkdtempSync(join(tmpdir(), "ad-collect-sort-test-"));
+      try {
+        mkdirSync(join(sortRoot, "z-dir"), { recursive: true });
+        writeFileSync(join(sortRoot, "z-dir", "0000.txt"), "z", "utf-8");
+        mkdirSync(join(sortRoot, "a-dir"), { recursive: true });
+        writeFileSync(join(sortRoot, "a-dir", "zzzz.txt"), "a", "utf-8");
+        writeFileSync(join(sortRoot, "root.txt"), "r", "utf-8");
+
+        const files = collectRelativeFiles(sortRoot);
+        // 最终相对路径统一字典序：z-dir/0000.txt 应排在 a-dir/zzzz.txt 之后，与逐层目录名排序结果相反
+        expect(files).toEqual([
+          "a-dir/zzzz.txt",
+          "root.txt",
+          "z-dir/0000.txt",
+        ]);
+        const sortedCopy = [...files].sort();
+        expect(files).toEqual(sortedCopy);
+      } finally {
+        rmSync(sortRoot, { recursive: true, force: true });
+      }
+    });
+
+    it("指向目录外部的软链接与循环软链接被安全跳过，与归档防护策略一致", () => {
+      const linkRoot = mkdtempSync(join(tmpdir(), "ad-collect-link-test-"));
+      const outsideDir = mkdtempSync(join(tmpdir(), "ad-collect-outside-"));
+      try {
+        writeFileSync(join(linkRoot, "normal.txt"), "safe", "utf-8");
+        writeFileSync(join(outsideDir, "secret.txt"), "sensitive", "utf-8");
+        symlinkSync(join(outsideDir, "secret.txt"), join(linkRoot, "escaped-link.txt"));
+        symlinkSync(linkRoot, join(linkRoot, "loop-to-root"), "dir");
+
+        const files = collectRelativeFiles(linkRoot);
+        expect(files).toEqual(["normal.txt"]);
+      } finally {
+        rmSync(linkRoot, { recursive: true, force: true });
+        rmSync(outsideDir, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe("archive dosDateTime: DOS 时间字段边界钳制", () => {
+    it("pre-1980 时间统一映射为 1980-01-01 00:00:00，年份上限 2107 不溢出", async () => {
+      const timeRoot = mkdtempSync(join(tmpdir(), "ad-dos-time-test-"));
+      try {
+        mkdirSync(timeRoot, { recursive: true });
+        // mtime 设为 1975-06-15（pre-1980）与 2200-01-01（超上限）
+        const oldFile = join(timeRoot, "old.txt");
+        writeFileSync(oldFile, "old", "utf-8");
+        const futureFile = join(timeRoot, "future.txt");
+        writeFileSync(futureFile, "future", "utf-8");
+
+        utimesSync(oldFile, new Date("1975-06-15T12:34:56Z"), new Date("1975-06-15T12:34:56Z"));
+        utimesSync(futureFile, new Date("2200-01-01T00:00:00Z"), new Date("2200-01-01T00:00:00Z"));
+
+        const zipOut = join(tempDir, "dos-time-test.zip");
+        await createZipArchiveAsync(timeRoot, zipOut);
+        expect(existsSync(zipOut)).toBe(true);
+
+        const rootName = basename(timeRoot);
+        const zipBuf = readFileSync(zipOut);
+
+        // 定位 EOCD 并解析 central directory，提取 date/time 字段验证钳制结果
+        let eocd = -1;
+        for (let i = zipBuf.length - 22; i >= 0; i--) {
+          if (zipBuf.readUInt32LE(i) === 0x06054b50) {
+            eocd = i;
+            break;
+          }
+        }
+        expect(eocd).toBeGreaterThan(0);
+        const entryCount = zipBuf.readUInt16LE(eocd + 10);
+        expect(entryCount).toBe(2); // 两个文件条目
+        let ptr = zipBuf.readUInt32LE(eocd + 16);
+
+        const dateTimeByName = new Map<string, { date: number; time: number }>();
+        for (let i = 0; i < entryCount; i++) {
+          const nameLen = zipBuf.readUInt16LE(ptr + 28);
+          const extraLen = zipBuf.readUInt16LE(ptr + 30);
+          const commentLen = zipBuf.readUInt16LE(ptr + 32);
+          const name = zipBuf.toString("utf8", ptr + 46, ptr + 46 + nameLen);
+          dateTimeByName.set(name, {
+            time: zipBuf.readUInt16LE(ptr + 12),
+            date: zipBuf.readUInt16LE(ptr + 14),
+          });
+          ptr += 46 + nameLen + extraLen + commentLen;
+        }
+
+        // pre-1980：映射为 1980-01-01 00:00:00（date=0x0021, time=0）
+        const oldDt = dateTimeByName.get(`${rootName}/old.txt`);
+        expect(oldDt).toBeDefined();
+        expect(oldDt!.date).toBe(((1980 - 1980) << 9) | (1 << 5) | 1);
+        expect(oldDt!.time).toBe(0);
+
+        // 超 2107 上限：钳制到 2107，date 字段不溢出 16 位
+        const futureDt = dateTimeByName.get(`${rootName}/future.txt`);
+        expect(futureDt).toBeDefined();
+        expect(((futureDt!.date >> 9) & 0x7f) + 1980).toBe(2107);
+        expect(futureDt!.date).toBeLessThanOrEqual(0xffff);
+        expect(futureDt!.time).toBeLessThanOrEqual(0xffff);
+      } finally {
+        rmSync(timeRoot, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe("SkillExporter: 复合导出边界行为与防御", () => {
+    it("单包导出传入过滤选项且闭包含外部依赖时显式拒绝而非静默全量导出", async () => {
+      const extDir = mkdtempSync(join(tmpdir(), "ad-filter-composite-"));
+      try {
+        initProject(extDir, { id: "test.ext-filter-dep", name: "Ext Filter Dep" });
+        writeFileSync(
+          join(extDir, "actions", "calc.ts"),
+          `export default { id: "calc", run: () => 42 };`
+        );
+        const extCfgPath = join(extDir, "actiondock.json");
+        const extCfg = JSON.parse(readFileSync(extCfgPath, "utf-8"));
+        extCfg.actions = {
+          calc: { entry: "actions/calc.ts", description: "Calc action", uses: [] },
+        };
+        writeFileSync(extCfgPath, JSON.stringify(extCfg, null, 2), "utf-8");
+        await linkPackage(extDir);
+
+        const mainManifestPath = join(tempDir, "actiondock.json");
+        const mainManifest = JSON.parse(readFileSync(mainManifestPath, "utf-8"));
+        mainManifest.actions["sample.greet"].uses = ["test.ext-filter-dep/calc"];
+        writeFileSync(mainManifestPath, JSON.stringify(mainManifest, null, 2), "utf-8");
+
+        // actions 过滤 + 外部依赖闭包：应拒绝
+        let errActions: any;
+        try {
+          await exportSkill({
+            projectRoot: tempDir,
+            mode: "source",
+            actions: ["sample.greet"],
+            outDir: join(tempDir, "dist", "filter-composite-a"),
+          });
+        } catch (err) {
+          errActions = err;
+        }
+        expect(errActions).toBeInstanceOf(BuilderError);
+        expect(errActions.code).toBe("FILTERS_UNSUPPORTED_FOR_COMPOSITE");
+
+        // playbooks 过滤 + 外部依赖闭包：同样应拒绝
+        let errPlaybooks: any;
+        try {
+          await exportSkill({
+            projectRoot: tempDir,
+            mode: "source",
+            playbooks: ["greet-user"],
+            outDir: join(tempDir, "dist", "filter-composite-b"),
+          });
+        } catch (err) {
+          errPlaybooks = err;
+        }
+        expect(errPlaybooks).toBeInstanceOf(BuilderError);
+        expect(errPlaybooks.code).toBe("FILTERS_UNSUPPORTED_FOR_COMPOSITE");
+
+        // 不带过滤时仍可正常走复合导出路径
+        const okRes = await exportSkill({
+          projectRoot: tempDir,
+          mode: "source",
+          outDir: join(tempDir, "dist", "filter-composite-ok"),
+        });
+        expect(existsSync(join(okRes.skillDir, "packages", "builder-fixture"))).toBe(true);
+        expect(existsSync(join(okRes.skillDir, "packages", "ext-filter-dep"))).toBe(true);
+      } finally {
+        rmSync(extDir, { recursive: true, force: true });
+      }
+    });
+
+    it("复合 SKILL.md 搜索不蔓延至祖父目录：祖父目录的无关 SKILL.md 不被复用", async () => {
+      // workspaceRoot 未提供时，搜索目录包含 cwd 与项目根的父目录，绝不包含祖父目录
+      const deepBase = mkdtempSync(join(tmpdir(), "ad-grandparent-test-"));
+      const projectDir = join(deepBase, "level1", "level2", "my-project");
+      try {
+        initProject(projectDir, { id: "test.deep-project", name: "Deep Project" });
+
+        // 祖父目录（level1）放置无关全局 SKILL.md
+        writeFileSync(
+          join(deepBase, "level1", "SKILL.md"),
+          "# Unrelated Global Skill\n\nShould not be picked up.",
+          "utf-8"
+        );
+
+        // 复合导出：项目根为 my-project，父目录 level2、祖父目录 level1
+        const res = await exportCompositeSkill({
+          bundleName: "deep-bundle",
+          projectRoots: [projectDir],
+          outDir: join(deepBase, "dist", "deep-bundle"),
+        });
+
+        // 产物 SKILL.md 必须是自动生成的复合说明书，而非祖父目录的无关文件
+        expect(res.usedExistingSkillMd).toBeUndefined();
+        const md = readFileSync(join(res.skillDir, "SKILL.md"), "utf-8");
+        expect(md).not.toContain("Unrelated Global Skill");
+        expect(md).toContain("deep-bundle");
+      } finally {
+        rmSync(deepBase, { recursive: true, force: true });
+      }
+    });
+
+    it("skillMdOnly 覆盖已存在的 SKILL.md 时输出警告", async () => {
+      const captured = await captureConsoleWarn(async () => {
+        const wsDir = mkdtempSync(join(tmpdir(), "ad-skillmdonly-warn-"));
+        try {
+          initProject(join(wsDir, "pkg-a"), { id: "test.warn-pkg-a", name: "Warn Pkg A" });
+          // 目标位置预先放置旧 SKILL.md
+          const outDir = join(wsDir, "out");
+          mkdirSync(outDir, { recursive: true });
+          writeFileSync(join(outDir, "SKILL.md"), "# Old Existing\n", "utf-8");
+
+          const result = await exportCompositeSkill({
+            bundleName: "warn-bundle",
+            projectRoots: [join(wsDir, "pkg-a")],
+            outDir,
+            skillMdOnly: true,
+          });
+          expect(result.skillMdFile).toBe(join(outDir, "SKILL.md"));
+          expect(readFileSync(join(outDir, "SKILL.md"), "utf-8")).not.toContain("# Old Existing");
+          return true;
+        } finally {
+          rmSync(wsDir, { recursive: true, force: true });
+        }
+      });
+      expect(captured.output).toContain("[WARN]");
+      expect(captured.output).toContain("overwritten");
     });
   });
 

@@ -1,7 +1,9 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import type { ProcessAPI } from "@actiondock/sdk";
 import {
   NodeFileSystem,
+  ProcessManager,
   resolveDatabasePath,
   resolveGlobalDatabasePath,
   SqliteRuntimeStorage,
@@ -10,6 +12,7 @@ import {
   type FileSystem,
   type GlobalStorageFactoryOptions,
   type ModuleLoader,
+  type ProcessDriver,
   type RuntimePlatform,
   type RuntimeStorage,
   type SqliteDriver,
@@ -17,7 +20,7 @@ import {
   type StorageFactoryOptions,
 } from "@actiondock/core";
 import { NodeModuleLoader } from "./module-loader";
-import { NodeProcessExecutor } from "./process-executor";
+import { NodeProcessDriver } from "./process-driver";
 import { NodeSqliteDriver } from "./sqlite-driver";
 
 /**
@@ -34,6 +37,12 @@ export interface NodePlatformOptions {
   useWorker?: boolean;
   /** 自定义 SQLite 驱动工厂函数（必须返回满足同步契约的 SqliteDriver，默认实例化 NodeSqliteDriver） */
   driverFactory?: (dbPath: string) => SqliteDriver;
+  /** 自定义进程执行驱动（默认使用基于 NodeProcessDriver 的 ProcessManager） */
+  process?: ProcessAPI;
+  /** 可选注入的底层进程驱动 */
+  processDriver?: ProcessDriver;
+  /** 可选注入的受管进程管理器 */
+  processManager?: ProcessManager;
 }
 
 function ensureDirectoryForDb(dbPath: string): void {
@@ -53,7 +62,7 @@ function ensureDirectoryForDb(dbPath: string): void {
  * 创建 Node 运行时平台实例。
  * 组装 Node 原生核心组件：
  * - NodeSqliteDriver 同步持久化存储驱动
- * - NodeProcessExecutor 原生进程执行器
+ * - NodeProcessDriver 原生进程驱动与 ProcessManager 受管进程引擎
  * - NodeHttpServer 网络服务驱动
  * - NodeModuleLoader 原生源码加载器
  * - NodeFileSystem 文件系统
@@ -65,7 +74,16 @@ export function createNodePlatform(options: NodePlatformOptions = {}): RuntimePl
   const clock: Clock = new SystemClock();
   const files: FileSystem = new NodeFileSystem({ rootDir: options.rootDir });
   const modules: ModuleLoader = new NodeModuleLoader();
-  const process = new NodeProcessExecutor();
+  const processDriver = options.processDriver ?? new NodeProcessDriver();
+  const processManager = options.processManager ?? new ProcessManager({ driver: processDriver });
+  const process: ProcessAPI =
+    options.process ??
+    processManager.forOwner({
+      tenantId: "default",
+      principalId: "default",
+      packageInstanceId: "default",
+      generationId: "default",
+    });
 
   const createDriver = options.driverFactory ?? ((dbPath: string) => new NodeSqliteDriver(dbPath));
 

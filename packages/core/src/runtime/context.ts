@@ -11,18 +11,18 @@ import type {
 } from "@actiondock/sdk";
 import type { ProjectConfig } from "../project/types";
 import type { RuntimeStorage } from "../storage/types";
+import { MemoryProcessDriver, ProcessManager, type ProcessOwner } from "../process";
 import { resolveEnvValue } from "./env";
-import { DefaultProcessExecutor } from "./process";
 
 /**
  * 生产级配置解析器实现。
  * 严格践行 5 层配置解析优先级链：
- * 1. CLI 临时参数覆写 (Overrides)
- * 2. 包级持久化存储 (Package SQLite: ~/.actiondock/data/<package-id>/runtime.db)
- * 3. 全局共享持久化存储 (Global SQLite: ~/.actiondock/global.db)
- * 4. 操作系统环境变量 (process.env: 显式绑定 / 包名前缀 / SNAKE_CASE / 类型转换)
- * 5. 项目默认配置 (actiondock.json 中的 default 字段)
- * 6. 代码级默认回退值 (fallback)
+ * - CLI 临时参数覆写 (Overrides)
+ * - 包级持久化存储 (Package SQLite: ~/.actiondock/data/<package-id>/runtime.db)
+ * - 全局共享持久化存储 (Global SQLite: ~/.actiondock/global.db)
+ * - 操作系统环境变量 (process.env: 显式绑定 / 包名前缀 / SNAKE_CASE / 类型转换)
+ * - 项目默认配置 (actiondock.json 中的 default 字段)
+ * - 代码级默认回退值 (fallback)
  */
 export class RuntimeConfig implements Config {
   private overrides: Map<string, unknown>;
@@ -255,6 +255,8 @@ export interface ContextOptions {
   callStack?: string[];
   signal?: AbortSignal;
   process?: ProcessAPI;
+  processManager?: ProcessManager;
+  owner?: ProcessOwner;
   progress?: ProgressReporter;
   logger?: Logger;
   onActionInvoke?: (
@@ -310,7 +312,34 @@ export function createActionContext(options: ContextOptions): ActionContext {
   const invokerFn = (ref: string | ActionRef, input?: unknown) => invoke(ref, input);
   const invoker: ActionInvoker = Object.assign(invokerFn, { invoke });
 
-  const processApi = options.process || new DefaultProcessExecutor();
+  const defaultOwner: ProcessOwner = options.owner || {
+    tenantId: "default",
+    principalId: "default",
+    packageInstanceId: "default",
+    generationId: "default",
+  };
+
+  // 外部注入的可能是平台级共享 ContextProcessAPI（未绑定 runId），直接复用会让
+  // 多个 run 共享同一隔离与回收状态；此处派生 run 级实例保证隔离与自动回收均以 run 为单位
+  const injectedProcess = options.process as any;
+  const isSharedContextProcessApi =
+    injectedProcess &&
+    typeof injectedProcess === "object" &&
+    typeof injectedProcess.forOwner !== "function" &&
+    injectedProcess.manager &&
+    typeof injectedProcess.manager.forOwner === "function" &&
+    injectedProcess.runScoped !== true;
+
+  const processApi = isSharedContextProcessApi
+    ? injectedProcess.manager.forOwner(injectedProcess.owner || defaultOwner, currentRunId, signal)
+    : options.process ||
+      (options.processManager
+        ? options.processManager.forOwner(defaultOwner, currentRunId, signal)
+        : new ProcessManager({ driver: new MemoryProcessDriver() }).forOwner(
+            defaultOwner,
+            currentRunId,
+            signal
+          ));
   const progressApi: ProgressReporter = options.progress || {
     report() {},
   };

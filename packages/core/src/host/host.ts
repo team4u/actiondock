@@ -57,6 +57,26 @@ function isActionDockApp(item: unknown): item is ActionDockApp {
 }
 
 /**
+ * 判定异常是否为 not-found 语义（包内确实不存在该 Action）。
+ *
+ * 遍历匹配短标识符时仅跳过此类错误；存储损坏、模块加载失败等内部错误必须向调用方透传，
+ * 严禁被吞没后伪装成 ACTION_NOT_FOUND。
+ */
+function isActionNotFoundLikeError(err: any): boolean {
+  if (!err) {
+    return false;
+  }
+  if (err.code === ACTION_NOT_FOUND || err.code === "NOT_FOUND") {
+    return true;
+  }
+  const message = typeof err.message === "string" ? err.message : String(err);
+  return (
+    message.startsWith("ACTION_NOT_FOUND:") ||
+    /Action '[^']*' not found in package/.test(message)
+  );
+}
+
+/**
  * ActionDock 统一多包宿主容器默认实现。
  * 负责聚合与调度多个 ActionDockApp 实例，提供跨包引用路由、依赖声明校验与资源配额控制。
  */
@@ -411,8 +431,11 @@ export class DefaultActionDockHost implements ActionDockHost {
         }
         const spec = await app.describeAction(parsed.actionId);
         matches.push({ app, spec: { ...spec, packageId: app.packageId } });
-      } catch {
-        // 忽略未匹配的包
+      } catch (err: any) {
+        // 仅将 not-found 语义视为「包内无此 Action」；其余异常必须透传，避免内部错误伪装成 ACTION_NOT_FOUND
+        if (!isActionNotFoundLikeError(err)) {
+          throw err;
+        }
       }
     }
 
@@ -562,8 +585,11 @@ export class DefaultActionDockHost implements ActionDockHost {
           }
           await app.describeAction(targetActionId);
           matches.push(app);
-        } catch {
-          // 忽略未找到该 Action 的包
+        } catch (err: any) {
+          // 仅将 not-found 语义视为「包内无此 Action」；其余异常必须透传，避免内部错误伪装成 ACTION_NOT_FOUND
+          if (!isActionNotFoundLikeError(err)) {
+            throw err;
+          }
         }
       }
 
@@ -722,7 +748,21 @@ export class DefaultActionDockHost implements ActionDockHost {
       );
     }
 
-    const ticket = await targetApp.startAction(targetActionId, input, execOptions);
+    let ticket: ExecutionTicket;
+    try {
+      ticket = await targetApp.startAction(targetActionId, input, execOptions);
+    } catch (err) {
+      // 启动失败（并发上限、仓储不可用、幂等冲突等）时必须回滚配额计数，避免泄漏后误拒后续合法子任务
+      if (parentRunId && effectiveRootRunId) {
+        const cnt = this.activeSubRunsPerRoot.get(effectiveRootRunId) || 1;
+        if (cnt <= 1) {
+          this.activeSubRunsPerRoot.delete(effectiveRootRunId);
+        } else {
+          this.activeSubRunsPerRoot.set(effectiveRootRunId, cnt - 1);
+        }
+      }
+      throw err;
+    }
 
     if (parentRunId && effectiveRootRunId && ticket.result) {
       const rootId = effectiveRootRunId;

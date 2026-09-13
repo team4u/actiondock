@@ -1,10 +1,36 @@
-import type { ProcessExecutor } from "@actiondock/core";
+import {
+  PROCESS_OUTPUT_LIMIT,
+  ProcessManager,
+  type ProcessDriver,
+  type ProcessExecutor,
+  type ProcessOwner,
+} from "@actiondock/core";
 import { execCli } from "./cli";
-import type {
-  ProcessExecOptions,
-  ProcessResult,
-  RuntimeError,
+import {
+  encodeBytes,
+  type CallOptions,
+  type ControlGrant,
+  type OperationReceipt,
+  type OutputChunk,
+  type ProcessAcquireInput,
+  type ProcessControlInput,
+  type ProcessExecOptions,
+  type ProcessInfo,
+  type ProcessListInput,
+  type ProcessListResult,
+  type ProcessReadInput,
+  type ProcessResult,
+  type ProcessRunInput,
+  type ProcessRunResult,
+  type ProcessStartInput,
+  type ProcessStartResult,
+  type ProcessStopInput,
+  type ProcessWriteInput,
+  type ReadResult,
+  type RuntimeError,
 } from "@actiondock/sdk";
+import type { Clock } from "@actiondock/core";
+import { FakeProcessDriver } from "./process-driver";
 
 /**
  * 模拟命令匹配器。
@@ -79,11 +105,20 @@ interface RegisteredMock {
 export interface MockProcessExecutorOptions {
   /** 未命中任何模拟规则时是否回退到真实子进程执行（默认 false，未命中即抛错） */
   fallbackToReal?: boolean;
+  /** 可选注入的底层进程驱动（默认使用 FakeProcessDriver） */
+  driver?: ProcessDriver;
+  /** 可选注入的受管进程管理器 */
+  processManager?: ProcessManager;
+  /** 默认受管进程归属所有者 */
+  owner?: ProcessOwner;
+  /** 可选注入的时钟：提供时模拟延时 delayMs 由时钟驱动（FakeClock 可确定性推进），未提供时回退真实 setTimeout */
+  clock?: Clock;
 }
 
 /**
  * 模拟进程执行器实现。
- * 遵循 ProcessExecutor 接口契约，支持预设命令响应、跟踪调用历史并模拟超时与取消场景。
+ * 遵循 ProcessExecutor / ProcessAPI 接口契约，支持预设命令响应、跟踪调用历史、
+ * 并无缝接入 ProcessManager 与 FakeProcessDriver 支撑受管进程全生命周期。
  *
  * 默认不回退真实子进程执行：未命中任何模拟规则时抛出明确错误，避免测试中的拼写失误穿透到真实系统命令。
  * 如确需真实回退（例如集成本地 CLI），可显式传入 fallbackToReal: true。
@@ -93,9 +128,24 @@ export class MockProcessExecutor implements ProcessExecutor {
   public calls: ProcessCall[] = [];
   public defaultPid = 10001;
   private readonly fallbackToReal: boolean;
+  /** 可选时钟：提供时 waitDelay 以 clock.sleep 驱动，保证确定性测试 */
+  private readonly clock?: Clock;
+  public readonly driver: ProcessDriver;
+  public readonly processManager: ProcessManager;
+  public readonly owner: ProcessOwner;
 
   constructor(options: MockProcessExecutorOptions = {}) {
     this.fallbackToReal = options.fallbackToReal ?? false;
+    this.clock = options.clock;
+    this.driver = options.driver ?? new FakeProcessDriver();
+    this.processManager =
+      options.processManager ?? new ProcessManager({ driver: this.driver });
+    this.owner = options.owner ?? {
+      tenantId: "test-tenant",
+      principalId: "test-principal",
+      packageInstanceId: "test-package",
+      generationId: "test-generation",
+    };
   }
 
   /**
@@ -173,6 +223,7 @@ export class MockProcessExecutor implements ProcessExecutor {
           timeout: options.timeoutMs,
           input: options.input,
           encoding: options.encoding,
+          maxOutputBytes: options.maxOutputBytes,
         });
         resolved = {
           ok: cliRes.ok,
@@ -182,6 +233,13 @@ export class MockProcessExecutor implements ProcessExecutor {
           raw: cliRes.raw,
           timedOut: cliRes.timedOut,
           durationMs: cliRes.durationMs,
+          error:
+            cliRes.truncated && !cliRes.ok
+              ? {
+                  code: PROCESS_OUTPUT_LIMIT,
+                  message: `Process output exceeded limit of ${options.maxOutputBytes} bytes`,
+                }
+              : undefined,
         };
       } catch (err: any) {
         resolved = {
@@ -274,6 +332,137 @@ export class MockProcessExecutor implements ProcessExecutor {
   }
 
   /**
+   * 一次性运行外部命令并收集输出。
+   */
+  async run(input: ProcessRunInput, call?: CallOptions): Promise<ProcessRunResult> {
+    const args = input.spec.args ?? [];
+    const matchedMock = this.findMock(input.spec.executable, args, {
+      cwd: input.spec.cwd,
+      env: input.spec.env?.set,
+      timeoutMs: input.timeoutMs,
+      maxOutputBytes: input.maxOutputBytes,
+      signal: call?.signal,
+    });
+
+    // 仅在确实命中 mock 或显式开启真实回退时走 exec 路径；
+    // 其余情况（含已注册其他 mock 但本命令未命中）一律落入受管进程路径，
+    // 避免任意 mock 注册后未命中命令被错误拦截并抛「未命中」
+    if (matchedMock || this.fallbackToReal) {
+      const res = await this.exec(input.spec.executable, args, {
+        cwd: input.spec.cwd,
+        env: input.spec.env?.set,
+        timeoutMs: input.timeoutMs,
+        maxOutputBytes: input.maxOutputBytes,
+        signal: call?.signal,
+      });
+      const chunks: OutputChunk[] = [];
+      if (res.stdout) {
+        chunks.push({
+          stream: "stdout",
+          data: encodeBytes(res.stdout),
+        });
+      }
+      if (res.stderr) {
+        chunks.push({
+          stream: "stderr",
+          data: encodeBytes(res.stderr),
+        });
+      }
+      return {
+        exit: { code: res.exitCode, signal: res.signal ?? null },
+        chunks,
+        truncated: Boolean(res.error?.code === "PROCESS_OUTPUT_LIMIT"),
+      };
+    }
+
+    return this.processManager.run(this.owner, input, call);
+  }
+
+  /**
+   * 启动新的受管进程资源。
+   */
+  async start(input: ProcessStartInput, call?: CallOptions): Promise<ProcessStartResult> {
+    return this.processManager.start(this.owner, input, call);
+  }
+
+  /**
+   * 查看指定受管进程资源的状态快照。
+   */
+  async inspect(id: string, call?: CallOptions): Promise<ProcessInfo> {
+    return this.processManager.inspect(this.owner, id, call);
+  }
+
+  /**
+   * 列出当前作用域内可见的受管进程资源。
+   */
+  async list(input: ProcessListInput, call?: CallOptions): Promise<ProcessListResult> {
+    return this.processManager.list(this.owner, input, call);
+  }
+
+  /**
+   * 申请指定受管进程的独占控制令牌。
+   */
+  async acquire(id: string, input: ProcessAcquireInput, call?: CallOptions): Promise<ControlGrant> {
+    return this.processManager.acquire(this.owner, id, input, call);
+  }
+
+  /**
+   * 延长当前有效控制令牌的存活时间。
+   */
+  async renew(id: string, token: string, ttlMs: number, call?: CallOptions): Promise<ControlGrant> {
+    return this.processManager.renew(this.owner, id, token, ttlMs, call);
+  }
+
+  /**
+   * 显式释放控制令牌。
+   */
+  async release(id: string, token: string, call?: CallOptions): Promise<void> {
+    return this.processManager.release(this.owner, id, token, call);
+  }
+
+  /**
+   * 向受管进程输入流写入原始字节数据。
+   */
+  async write(id: string, input: ProcessWriteInput, call?: CallOptions): Promise<OperationReceipt> {
+    return this.processManager.write(this.owner, id, input, call);
+  }
+
+  /**
+   * 查询指定请求标识的操作执行收据。
+   */
+  async operation(id: string, requestId: string, call?: CallOptions): Promise<OperationReceipt> {
+    return this.processManager.operation(this.owner, id, requestId, call);
+  }
+
+  /**
+   * 按游标读取受管进程输出流。
+   */
+  async read(id: string, input: ProcessReadInput, call?: CallOptions): Promise<ReadResult> {
+    return this.processManager.read(this.owner, id, input, call);
+  }
+
+  /**
+   * 向受管进程发送结构化控制指令。
+   */
+  async control(id: string, input: ProcessControlInput, call?: CallOptions): Promise<OperationReceipt> {
+    return this.processManager.control(this.owner, id, input, call);
+  }
+
+  /**
+   * 终止指定的受管进程资源。
+   */
+  async stop(id: string, input: ProcessStopInput, call?: CallOptions): Promise<ProcessInfo> {
+    return this.processManager.stop(this.owner, id, input, call);
+  }
+
+  /**
+   * 绑定指定所有者身份创建上下文进程接口。
+   */
+  forOwner(owner: ProcessOwner, runId?: string, signal?: AbortSignal) {
+    return this.processManager.forOwner(owner, runId, signal);
+  }
+
+  /**
    * 获取指定命令的历史调用记录。
    *
    * @param command 可选命令筛选
@@ -314,6 +503,9 @@ export class MockProcessExecutor implements ProcessExecutor {
   reset(): void {
     this.mocks = [];
     this.calls = [];
+    if (this.driver instanceof FakeProcessDriver) {
+      this.driver.reset();
+    }
   }
 
   /**
@@ -367,6 +559,12 @@ export class MockProcessExecutor implements ProcessExecutor {
     delayMs: number,
     options: ProcessExecOptions
   ): Promise<void> {
+    // 注入时钟时优先 clock.sleep：由 FakeClock.advance 确定性驱动，不占用真实时间
+    if (this.clock) {
+      await this.clock.sleep(delayMs);
+      return;
+    }
+
     return new Promise<void>((resolve) => {
       let timer: ReturnType<typeof setTimeout> | undefined;
       let onAbort: (() => void) | undefined;

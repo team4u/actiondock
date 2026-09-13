@@ -1,7 +1,8 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test, it } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { createServer } from "node:http";
 import {
   addProfile,
   cancelRemoteRun,
@@ -946,6 +947,82 @@ Follow these steps to greet a user.
       expect(stateData.ok).toBe(false);
       expect(stateData.error.message).toContain("Unknown or unregistered package");
     });
+  });
+});
+
+describe("executeRemoteAction 本地超时守卫与错误信封契约", () => {
+  it("服务端僵死不返回时本地超时守卫中断请求并返回 TIMEOUT 错误", async () => {
+    const sockets = new Set<any>();
+    // 服务端收到请求后永久挂起不响应，模拟僵死
+    const server = createServer((req, res) => {
+      sockets.add(req.socket);
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+    const port = (server.address() as any).port;
+
+    try {
+      const startedAt = Date.now();
+      const res = await executeRemoteAction(`http://127.0.0.1:${port}`, "pkg/hang", {}, {
+        timeoutMs: 120,
+        allowInsecureHttp: true,
+      });
+      const elapsed = Date.now() - startedAt;
+
+      expect(res.ok).toBe(false);
+      expect((res as any).error?.code).toBe("ACTION_TIMEOUT");
+      // 本地超时守卫必须在 timeoutMs 量级内中断，而非永久挂起
+      expect(elapsed).toBeLessThan(2000);
+      // 错误信封严禁携带伪造 runId
+      expect((res as any).runId).toBe("");
+    } finally {
+      for (const s of sockets) s.destroy();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it("外部 AbortSignal 中止时返回 ACTION_CANCELLED 且错误信封不携带伪造 runId", async () => {
+    const sockets = new Set<any>();
+    const server = createServer((req, res) => {
+      sockets.add(req.socket);
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+    const port = (server.address() as any).port;
+
+    try {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(new Error("client stopped")), 60);
+      const res = await executeRemoteAction(`http://127.0.0.1:${port}`, "pkg/hang", {}, {
+        signal: controller.signal,
+        allowInsecureHttp: true,
+      });
+
+      expect(res.ok).toBe(false);
+      expect((res as any).error?.code).toBe("ACTION_CANCELLED");
+      expect((res as any).runId).toBe("");
+    } finally {
+      for (const s of sockets) s.destroy();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it("服务端返回非 JSON 错误响应时错误信封不携带伪造 runId", async () => {
+    const server = createServer((req, res) => {
+      res.writeHead(500, { "Content-Type": "text/plain" });
+      res.end("internal error");
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+    const port = (server.address() as any).port;
+
+    try {
+      const res = await executeRemoteAction(`http://127.0.0.1:${port}`, "pkg/broken", {}, {
+        allowInsecureHttp: true,
+      });
+      expect(res.ok).toBe(false);
+      expect((res as any).error?.code).toBe("REMOTE_EXECUTION_FAILED");
+      expect((res as any).runId).toBe("");
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 });
 

@@ -279,6 +279,8 @@ export class NodeHttpServer {
 
   /**
    * 优雅关闭服务端并释放端口与活动连接。
+   * 与 core/src/server/server.ts 的策略保持一致：close 后强制断开全部连接，
+   * 避免 keep-alive 空闲连接悬挂导致关闭 Promise 永不 resolve。
    */
   async close(): Promise<void> {
     if (!this.listening) {
@@ -290,6 +292,8 @@ export class NodeHttpServer {
         if (err) reject(err);
         else resolve();
       });
+      // 强制断开全部连接（含 keep-alive 空闲连接），确保 close 回调必然触发
+      (this.server as any).closeAllConnections?.();
     });
   }
 

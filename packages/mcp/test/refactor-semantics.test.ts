@@ -48,6 +48,32 @@ describe("MCP adapter async execution mode semantics", () => {
     expect(withMagic.issues).toBeDefined();
   });
 
+  it("does not inject execution wrapper into output schemas when injectExecution is false", async () => {
+    const output: any = toMcpSchema(
+      {
+        type: "object",
+        properties: { result: { type: "number" } },
+        required: ["result"],
+        additionalProperties: false,
+      },
+      false
+    );
+    const validate = output["~standard"].validate;
+
+    // 出参不含 execution 包装字段，实际返回结构可直接通过校验
+    const plain = await validate({ result: 42 });
+    expect(plain.issues).toBeUndefined();
+
+    // 注入的 execution 字段反而应被拒绝（与实际 structuredContent 不符）
+    const polluted = await validate({ result: 42, execution: { mode: "sync" } });
+    expect(polluted.issues).toBeDefined();
+
+    // 默认参数保持入参注入行为
+    const input: any = toMcpSchema({ type: "object", properties: {} });
+    const inputProps = await input["~standard"].validate({ execution: { timeoutMs: 100 } });
+    expect(inputProps.value.execution).toEqual({ timeoutMs: 100 });
+  });
+
   it("tool schema clone does not mutate the caller's original schema object", () => {
     const original: any = {
       type: "object",
@@ -183,6 +209,88 @@ describe("MCP adapter storage lifecycle semantics", () => {
   });
 });
 
+describe("MCP adapter execution timeout combination", () => {
+  const buildMockStorage = () =>
+    ({
+      getRun: () => undefined,
+      listRuns: () => [],
+      updateRun: () => {},
+      createRun: () => {},
+      close: () => {},
+    }) as any;
+
+  it("combines client-declared execution.timeoutMs with server timeoutMs by taking the smaller value", async () => {
+    const receivedOptions: any[] = [];
+    const action = defineAction({
+      async run() {
+        return { ok: true };
+      },
+    });
+
+    const server = await createActionDockMcpServer({
+      actions: new Map([["timeout-probe", action]]),
+      storage: buildMockStorage(),
+      timeoutMs: 5000,
+    });
+
+    // 拦截底层 target 的 runAction 以观测实际传入的超时组合结果
+    const target = server.target as any;
+    const originalRun = target.runAction.bind(target);
+    target.runAction = async (_ref: string, _input: unknown, options: any) => {
+      receivedOptions.push(options);
+      return originalRun(_ref, _input, options);
+    };
+
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverTransport);
+
+    clientTransport.onmessage = (msg: any) => {
+      if (msg.id === 1) {
+        clientTransport.send({ jsonrpc: "2.0", method: "notifications/initialized" });
+        // 客户端声明更短的超时（200ms < 5000ms），组合后应取 200
+        clientTransport.send({
+          jsonrpc: "2.0",
+          id: 2,
+          method: "tools/call",
+          params: {
+            name: "timeout-probe",
+            arguments: { execution: { timeoutMs: 200 } },
+          },
+        });
+        // 客户端声明更长的超时（9000ms > 5000ms），组合后应取 5000
+        clientTransport.send({
+          jsonrpc: "2.0",
+          id: 3,
+          method: "tools/call",
+          params: {
+            name: "timeout-probe",
+            arguments: { execution: { timeoutMs: 9000 } },
+          },
+        });
+      }
+    };
+
+    clientTransport.send({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2026-07-28",
+        capabilities: {},
+        clientInfo: { name: "timeout-client", version: "1.0" },
+      },
+    });
+
+    await new Promise((r) => setTimeout(r, 200));
+
+    expect(receivedOptions.length).toBe(2);
+    expect(receivedOptions[0]?.timeoutMs).toBe(200);
+    expect(receivedOptions[1]?.timeoutMs).toBe(5000);
+
+    await server.close();
+  });
+});
+
 describe("MCP tasks extension isolation", () => {
   it("registers tasks handlers through the isolated module with schema validation", async () => {
     const runs = new Map<string, any>();
@@ -219,6 +327,85 @@ describe("MCP tasks extension isolation", () => {
     const listHandler = handlers.get("tasks/list");
     const listRes = await listHandler({ method: "tasks/list", params: { limit: 10 } });
     expect(listRes.tasks.map((t: any) => t.taskId)).toEqual(["task-x"]);
+
+    await server.close();
+  });
+
+  it("propagates semantic JSON-RPC error codes for not-found tasks instead of internal errors", async () => {
+    const server = await createActionDockMcpServer({
+      actions: new Map(),
+      storage: {
+        getRun: () => undefined,
+        listRuns: () => [],
+        updateRun: () => {},
+        createRun: () => {},
+        close: () => {},
+      } as any,
+    });
+
+    const handlers = (server.server as any)._requestHandlers;
+
+    // tasks/get 未命中时携带服务端自定义语义码（-32001 码段），而非裸 Error
+    const getHandler = handlers.get("tasks/get");
+    let getCode: unknown;
+    try {
+      await getHandler({ method: "tasks/get", params: { taskId: "missing" } });
+    } catch (err: any) {
+      getCode = err?.code;
+    }
+    expect(getCode).toBe(-32001);
+
+    // tasks/cancel 未命中时同样携带语义码
+    const cancelHandler = handlers.get("tasks/cancel");
+    let cancelCode: unknown;
+    try {
+      await cancelHandler({ method: "tasks/cancel", params: { taskId: "missing" } });
+    } catch (err: any) {
+      cancelCode = err?.code;
+    }
+    expect(cancelCode).toBe(-32001);
+
+    await server.close();
+  });
+
+  it("validates and clamps tasks/list limit to the integer range with a semantic error code", async () => {
+    const runs = new Map<string, any>();
+    for (let i = 0; i < 3; i++) {
+      runs.set(`task-${i}`, {
+        id: `task-${i}`,
+        status: "success",
+        startedAt: new Date(Date.now() - i * 1000).toISOString(),
+        finishedAt: new Date(Date.now() - i * 1000).toISOString(),
+      });
+    }
+
+    const server = await createActionDockMcpServer({
+      actions: new Map(),
+      storage: {
+        getRun: (id: string) => runs.get(id),
+        listRuns: () => Array.from(runs.values()),
+        updateRun: () => {},
+        createRun: () => {},
+        close: () => {},
+      } as any,
+    });
+
+    const listHandler = (server.server as any)._requestHandlers.get("tasks/list");
+
+    // 非整数 limit 抛携带语义码的参数错误
+    let invalidCode: unknown;
+    try {
+      await listHandler({ method: "tasks/list", params: { limit: 2.5 } });
+    } catch (err: any) {
+      invalidCode = err?.code;
+    }
+    expect(invalidCode).toBe(-32002);
+
+    // 缺省 limit 默认 50，超上限钳制到 500：均正常返回不抛错
+    const defaulted = await listHandler({ method: "tasks/list", params: {} });
+    expect(defaulted.tasks.length).toBe(3);
+    const clamped = await listHandler({ method: "tasks/list", params: { limit: 99999 } });
+    expect(clamped.tasks.length).toBe(3);
 
     await server.close();
   });

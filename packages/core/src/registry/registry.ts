@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync } from "node:fs";
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { findProjectRoot, loadProjectConfig } from "../project/loader";
 import { getActionDockHome, getPackageSlug } from "../utils";
 import { withRegistryLock } from "./lock";
@@ -37,6 +37,14 @@ import type {
  */
 function emptyRegistry(): GlobalRegistryData {
   return { version: "2.0.0", packages: {}, workspaces: {} };
+}
+
+/**
+ * 判定 entryPath 是否严格位于 baseDir 目录之内（携带路径分隔符边界）。
+ * 避免裸 startsWith 前缀匹配把兄弟目录（如 /home/ws 与 /home/ws2）误判为子路径。
+ */
+function isPathWithin(entryPath: string, baseDir: string): boolean {
+  return entryPath === baseDir || entryPath.startsWith(baseDir + sep);
 }
 
 /**
@@ -371,7 +379,8 @@ export async function unlinkPackage(
 
       let removedCount = 0;
       for (const [id, entry] of Object.entries(registry.packages)) {
-        if (entry.workspaceRoot === absPath || entry.path.startsWith(absPath)) {
+        // 路径前缀匹配必须携带分隔符边界，避免 /home/ws 误删 /home/ws2 的记录
+        if (isPathWithin(entry.path, absPath) || entry.workspaceRoot === absPath) {
           delete registry.packages[id];
           removedCount++;
         }
@@ -393,7 +402,8 @@ export async function unlinkPackage(
           delete registry.workspaces[wsPath];
           let removedCount = 0;
           for (const [id, entry] of Object.entries(registry.packages)) {
-            if (entry.workspaceRoot === wsPath || entry.path.startsWith(wsPath)) {
+            // 路径前缀匹配必须携带分隔符边界，避免 /home/ws 误删 /home/ws2 的记录
+            if (isPathWithin(entry.path, wsPath) || entry.workspaceRoot === wsPath) {
               delete registry.packages[id];
               removedCount++;
             }

@@ -30,11 +30,22 @@ ActionDock 2.0 原生 Node.js 运行时适配器包。
 - 提供同步事务处理，在回调函数抛出异常时自动回滚。
 - 事务执行过程中严格拦截并拒绝异步 Promise，防止底层锁泄漏。
 
-### NodeProcessExecutor 与 ExecaProcessExecutor 进程执行器
+### NodeProcessDriver 受管进程平台驱动
+
+[NodeProcessDriver](./src/process-driver.ts) 完整实现 Core 层的 ProcessDriver 契约，为受管进程提供企业级操作系统驱动：
+
+- pipe 管道模式：基于 `node:child_process` 派生，在派生完成前即刻挂载流监听器，彻底避免竞态导致的头部输出丢失。
+- PTY 伪终端模式：动态按需探测 `node-pty` 支持，提供真实的虚拟终端仿真与终端窗口尺寸动态调整；在缺失 PTY 支持的环境下明确报告能力不支持。
+- 严格环境变量沙箱：通过核心层统一定义的环境变量解析逻辑，支持严格白名单继承与无继承隔离，按需叠加显式新增与剔除列表。
+- 跨平台进程树隔离：使用独立进程组派生，并在终止时通过 `killProcessGroup` 跨平台递归清理子进程树，杜绝孤儿进程逃逸。
+- 写入流控与输入净终止：标准输入写入具备背压感知，支持调用 `inputEOF` 干净终止标准输入流通道。
+- 优雅输出排空：主进程退出后提供默认 5 秒输出排空宽限期，避免后续子进程尾部数据读取截断，排空结束精准触发 `outputClosed` 状态闭环。
+
+### NodeProcessExecutor 与 ExecaProcessExecutor 兼容进程执行器
 
 统一进程执行器基于 Node.js 原生能力与 [ExecaProcessExecutor](./src/process-executor.ts) 实现：
 
-- 完整实现核心层定义的 ProcessExecutor 接口。
+- 完整实现核心层定义的 ProcessExecutor 兼容接口。
 - 支持指定工作目录、环境变量合并以及向子进程标准输入流写入数据。
 - 完整支持执行超时控制与基于 AbortSignal 的外部信号取消，并采用进程树终止策略杜绝孤儿进程。
 - 内置标准输出缓冲区阈值保护，超过指定字节数时安全截断并强行终止子进程，防止内存溢出。

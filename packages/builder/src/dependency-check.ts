@@ -241,9 +241,16 @@ export function assertRelativeDependenciesIntegrity(
 
       // 检查目标文件是否越出项目根目录
       const relToRoot = relative(realRoot, resolvedTarget);
-      if (isPathOutsideBoundary(relToRoot) || resolve(resolvedTarget) === resolve(realRoot, "..")) {
+      if (isPathOutsideBoundary(relToRoot)) {
+        // 区分「项目外路径」与「monorepo 相邻包」两种情形，给出针对性修复指引
+        const resolvedParent = dirname(realRoot);
+        const relToParent = relative(resolvedParent, resolvedTarget);
+        const isSiblingPackage = !isPathOutsideBoundary(relToParent);
+        const detail = isSiblingPackage
+          ? `它位于项目根的父目录内，疑似 monorepo 相邻包。若确需依赖，请将其纳入本项目或改用包管理器依赖声明；若为本地辅助模块，请调整目录结构或将其声明进 files`
+          : `它完全位于项目外部。导出的 Skill 产物不允许携带项目外部的相对路径依赖，请将所需模块移入项目内并声明进 files`;
         throw new BuilderError(
-          `Action '${actionId}' imports relative module '${specifier}', which resolves outside project root: '${resolvedTarget}'. External relative imports outside project root are not allowed in exported Skill packages.`,
+          `Action '${actionId}' 通过相对路径 '${specifier}' 引用了项目根之外的模块（解析到 '${resolvedTarget}'）。${detail}`,
           "EXTERNAL_LOCAL_DEPENDENCY"
         );
       }

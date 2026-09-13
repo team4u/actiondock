@@ -208,84 +208,238 @@ export interface ActionRef {
 
 ---
 
-### 统一受管外部进程接口 `ProcessAPI`
+### 统一受管进程接口 ProcessAPI
 
-ActionDock 2.0 严格规范受管进程调用，`ProcessAPI` 仅提供 `exec` 与 `spawn` 两个方法（彻底移除了旧版的 `spawnDetached`、`execCli` 与 `findExecutable`）：
+ActionDock 2.0 提供工业级受管进程接口 ProcessAPI，统一管理短时有界外部命令与长期交互式进程，覆盖进程启动、独占控制权租约、逐流增量读取、结构化控制与优雅终止：
 
 ```ts
 export interface ProcessAPI {
-  /** 执行外部命令并返回标准化执行结果 */
-  exec(command: string, args?: string[], options?: ProcessExecOptions): Promise<ProcessResult>;
+  /** 一次性运行外部命令，等待其结束并收集有限输出 */
+  run(input: ProcessRunInput, call?: CallOptions): Promise<ProcessRunResult>;
 
-  /** 启动外部命令进程并返回标准化执行结果 */
-  spawn(command: string, args?: string[], options?: ProcessExecOptions): Promise<ProcessResult>;
+  /** 创建长期受管进程资源并返回可寻址元数据与初始输出游标 */
+  start(input: ProcessStartInput, call?: CallOptions): Promise<ProcessStartResult>;
+
+  /** 查看指定受管进程资源的当前最新状态 */
+  inspect(id: string, call?: CallOptions): Promise<ProcessInfo>;
+
+  /** 列出当前作用域内可见的受管进程资源 */
+  list(input: ProcessListInput, call?: CallOptions): Promise<ProcessListResult>;
+
+  /** 申请指定受管进程的独占控制令牌 */
+  acquire(id: string, input: ProcessAcquireInput, call?: CallOptions): Promise<ControlGrant>;
+
+  /** 延长当前有效控制令牌的存活时间 */
+  renew(id: string, token: string, ttlMs: number, call?: CallOptions): Promise<ControlGrant>;
+
+  /** 显式释放控制令牌，允许后续控制者申请 */
+  release(id: string, token: string, call?: CallOptions): Promise<void>;
+
+  /** 向受管进程输入流写入原始字节数据 */
+  write(id: string, input: ProcessWriteInput, call?: CallOptions): Promise<OperationReceipt>;
+
+  /** 查询指定请求标识的输入或控制操作执行收据 */
+  operation(id: string, requestId: string, call?: CallOptions): Promise<OperationReceipt>;
+
+  /** 按游标读取受管进程的有界原始字节输出流 */
+  read(id: string, input: ProcessReadInput, call?: CallOptions): Promise<ReadResult>;
+
+  /** 向受管进程发送结构化控制指令 */
+  control(id: string, input: ProcessControlInput, call?: CallOptions): Promise<OperationReceipt>;
+
+  /** 终止指定的受管进程资源 */
+  stop(id: string, input: ProcessStopInput, call?: CallOptions): Promise<ProcessInfo>;
 }
 ```
 
-#### 选项参数 `ProcessExecOptions`
+#### 核心输入与返回类型定义
+
+一次性运行类型：
+
 ```ts
-export interface ProcessExecOptions {
-  /** 子进程执行的工作目录（默认当前工作目录） */
+export interface ProcessRunInput {
+  /** 启动规范配置 */
+  spec: LaunchSpec;
+  /** 超时时限（毫秒） */
+  timeoutMs: number;
+  /** 收集输出的最大字节数 */
+  maxOutputBytes: number;
+}
+
+export interface ProcessRunResult {
+  /** 进程退出状态 */
+  exit: { code: number | null; signal: string | null };
+  /** 收集到的输出数据块列表 */
+  chunks: OutputChunk[];
+  /** 输出是否因达到上限被截断 */
+  truncated: boolean;
+}
+```
+
+启动与元数据类型：
+
+```ts
+export interface LaunchSpec {
+  /** 可执行文件路径或名称 */
+  executable: string;
+  /** 启动参数列表 */
+  args: string[];
+  /** 工作目录 */
   cwd?: string;
-  /** 注入子进程的环境变量映射 */
-  env?: Record<string, string>;
-  /** 写入子进程标准输入的文本或字节流 */
-  input?: string | Uint8Array;
-  /** 单次执行超时毫秒数；超时将触发终止信号并置位 timedOut */
-  timeoutMs?: number;
-  /** 协作式取消信号（可传入 ctx.signal） */
-  signal?: AbortSignal;
-  /** 输出字符解码编码（默认 utf-8） */
-  encoding?: string;
-  /** 退出码非 0 时是否直接抛出异常（默认 false） */
-  throwOnError?: boolean;
-  /** 允许缓冲的最大输出字节数，防止内存耗尽 */
-  maxOutputBytes?: number;
+  /** 环境变量配置 */
+  env?: {
+    inherit: "none" | "allowlisted";
+    set?: Record<string, string>;
+    unset?: string[];
+  };
+  /** 输入输出模式与终端配置 */
+  io: { mode: "pipe" } | { mode: "pty"; cols: number; rows: number; term: string };
+}
+
+export interface Limits {
+  /** 空闲超时上限（毫秒） */
+  idleMs?: number;
+  /** 存活时长上限（毫秒） */
+  lifetimeMs?: number;
+  /** 输出缓冲区容量字节上限 */
+  outputBufferBytes?: number;
+}
+
+export interface ProcessInfo {
+  id: string;
+  hostEpoch: string;
+  state: "starting" | "running" | "stopping" | "exited" | "failed" | "lost";
+  control: "free" | "held" | "quarantined" | "closed";
+  io: LaunchSpec["io"];
+  capabilities: Capabilities;
+  createdAt: string;
+  exit?: { code: number | null; signal: string | null };
+  endReason?: "natural" | "requested" | "idle" | "lifetime" | "revoked" | "input-failure" | "host-lost" | "spawn-failure";
+  outputClosed: boolean;
+  outputEndReason?: "natural" | "drain-timeout" | "host-lost";
+  effectiveLimits: Required<Limits>;
 }
 ```
 
-#### 返回结果 `ProcessResult`
+独占控制与读写交互类型：
+
 ```ts
-export interface ProcessResult {
-  /** 命令是否成功结束（退出码为 0 且未超时或取消） */
-  ok: boolean;
-  /** 进程退出状态码（异常中断时为 null） */
-  exitCode: number | null;
-  /** 导致进程退出的信号名称（如 SIGTERM） */
-  signal?: string;
-  /** 标准输出文本 */
-  stdout: string;
-  /** 标准错误文本 */
-  stderr: string;
-  /** 原始字节数组输出 */
-  raw: Uint8Array;
-  /** 是否因超时被终止 */
-  timedOut: boolean;
-  /** 是否因 AbortSignal 触发被取消 */
-  cancelled: boolean;
-  /** 命令执行耗时（毫秒） */
-  durationMs: number;
-  /** 结构化运行时错误详情（若失败） */
-  error?: RuntimeError;
+export interface ControlGrant {
+  /** 控制令牌字符串 */
+  token: string;
+  /** 凭据有效截止时间（UTC ISO 8601 格式） */
+  expiresAt: string;
+}
+
+export interface ProcessWriteInput {
+  token: string;
+  requestId: string;
+  data: Bytes;
+}
+
+export interface ProcessControlInput {
+  token: string;
+  requestId: string;
+  action:
+    | { type: "input-eof" }
+    | { type: "interrupt-foreground" }
+    | { type: "resize"; cols: number; rows: number };
+}
+
+export interface ProcessReadInput {
+  cursor: string;
+  maxBytes: number;
+  waitMs: number;
+  onGap: "error" | "skip";
+}
+
+export interface ReadResult {
+  chunks: OutputChunk[];
+  nextCursor: string;
+  earliestCursor: string;
+  tailCursor: string;
+  truncated: boolean;
+  gap?: { fromCursor: string; toCursor: string };
+  eof: boolean;
+  process: ProcessInfo;
 }
 ```
+
+#### SDK 辅助函数与工具库
+
+SDK 导出了针对受管进程交互的高阶工具函数：
+
+- `withControl(api, processId, options, fn)`：在独占控制权保护下安全执行。内部自动申请令牌、按三分之一 TTL 周期自动续租、正常执行完毕后显式调用 `release`；若发生异常或中断则严禁调用 `release`，主动调用 `stop` 隔离或终止并向外抛出原错误。
+- `createStreamDecoder()`（别名 `createIncrementalTextDecoder()`）：创建逐流增量 UTF-8 解码器，针对不同输出流（`stdout`、`stderr`、`pty`）独立缓存残缺多字节字符，杜绝切块乱码与跨流污染。
+- `encodeText(text)` 与 `encodeBytes(data)`：将纯文本或二进制数据编码为标准的 Base64 `Bytes` 结构。
+- `decodeText(bytesOrChunks)` 与 `decodeBytes(bytes)`：将 `Bytes` 结构或 `OutputChunk` 数组快速转换为 UTF-8 文本或二进制数组。
 
 #### 使用示例
+
+一次性命令执行：
+
 ```ts
-import { defineAction } from "@actiondock/sdk";
+import { defineAction, decodeText } from "@actiondock/sdk";
 
 export default defineAction(async (_input, ctx) => {
-  const res = await ctx.process.exec("git", ["log", "-1", "--format=%H %s"], {
-    timeoutMs: 5000,
-    signal: ctx.signal,
-  });
+  const res = await ctx.process.run(
+    {
+      spec: {
+        executable: "git",
+        args: ["log", "-1", "--format=%H %s"],
+        io: { mode: "pipe" },
+      },
+      timeoutMs: 5000,
+      maxOutputBytes: 1024 * 1024,
+    },
+    { signal: ctx.signal }
+  );
 
-  if (!res.ok) {
-    ctx.log.error(`Git 执行失败: ${res.stderr}`);
+  if (res.exit.code !== 0) {
+    ctx.log.error(`Git 执行失败，退出码: ${res.exit.code}`);
     return { commit: null };
   }
 
-  return { commit: res.stdout.trim() };
+  return { commit: decodeText(res.chunks).trim() };
+});
+```
+
+长期进程交互与控制权治理：
+
+```ts
+import { defineAction, encodeText, withControl, createStreamDecoder } from "@actiondock/sdk";
+
+export default defineAction(async (input: { command: string }, ctx) => {
+  const started = await ctx.process.start({
+    requestId: `start-${ctx.run.id}`,
+    spec: { executable: "bash", args: ["--norc"], io: { mode: "pipe" } },
+  });
+
+  const decoder = createStreamDecoder();
+
+  const output = await withControl(
+    ctx.process,
+    started.process.id,
+    { requestId: `ctl-${ctx.run.id}`, ttlMs: 15000 },
+    async (grant) => {
+      await ctx.process.write({
+        token: grant.token,
+        requestId: `write-${ctx.run.id}`,
+        data: encodeText(`${input.command}\n`),
+      });
+
+      const res = await ctx.process.read({
+        cursor: started.initialCursor,
+        maxBytes: 32 * 1024,
+        waitMs: 1000,
+        onGap: "skip",
+      });
+
+      return decoder.decodeChunks(res.chunks);
+    }
+  );
+
+  return { output };
 });
 ```
 

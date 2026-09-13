@@ -137,8 +137,12 @@ export default defineAction<Input, Output>(async (input, ctx) => {
 | | `clear(prefix?: string): Promise<number>` | 清空命名空间或指定前缀下的所有状态 |
 | | `keys(prefix?: string): Promise<string[]>` | 列出指定前缀下的所有状态键 |
 | | `scope(namespace: string): StateStore` | 派生出隔离命名的子状态存储 |
-| `ctx.process` | `exec(command: string, args?: string[], options?: ProcessExecOptions): Promise<ProcessResult>` | 执行外部命令，具备超时、取消与缓冲区超限保护 |
-| | `spawn(command: string, args?: string[], options?: ProcessExecOptions): Promise<ProcessResult>` | 启动外部命令子进程，返回标准化结果 |
+| `ctx.process` | `run(input: ProcessRunInput, call?: CallOptions): Promise<ProcessRunResult>` | 一次性运行外部命令，超时终止并收集有限输出 |
+| | `start(input: ProcessStartInput, call?: CallOptions): Promise<ProcessStartResult>` | 创建长期受管进程，返回资源元数据与初始游标 |
+| | `acquire(id: string, input: ProcessAcquireInput, call?: CallOptions): Promise<ControlGrant>` | 申请受管进程独占控制令牌，支持排队等待与续租 |
+| | `read(id: string, input: ProcessReadInput, call?: CallOptions): Promise<ReadResult>` | 基于游标读取有界原始输出日志，支持长轮询与断层跳跃 |
+| | `write(id: string, input: ProcessWriteInput, call?: CallOptions): Promise<OperationReceipt>` | 向受管进程输入流写入原始字节数据，需持有有效控制令牌 |
+| | `stop(id: string, input: ProcessStopInput, call?: CallOptions): Promise<ProcessInfo>` | 优雅终止受管进程并执行跨平台进程树清理 |
 | `ctx.actions` | `invoke<I, O>(action: ActionRef \| string, input?: I): Promise<O>` | 级联调用其他 Action，严格仅接受字符串 ID 或 ActionRef |
 | `ctx.log` | `info / warn / error / debug(msg: string, data?: unknown): void` | 结构化诊断日志，强制定向至标准错误流 |
 | `ctx.progress` | `report(current: number, total?: number, message?: string): void` | 汇报当前执行进度 |

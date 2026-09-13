@@ -1047,5 +1047,61 @@ actions:
         await target.close();
       }
     });
+
+    it("消费方提前 break 退出时底层连接被取消释放不发生泄漏", async () => {
+      // 跟踪处于活跃 SSE 推流状态的响应：若客户端只 releaseLock 不 cancel，这些响应将永不关闭
+      const streamingResponses = new Set<any>();
+      const server = createServer((req, res) => {
+        if (req.url?.includes("/events")) {
+          streamingResponses.add(res);
+          res.writeHead(200, {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+          });
+          // 持续发送状态事件但永不发送 finish，模拟长期活跃的事件流
+          const keepAlive = setInterval(() => {
+            res.write("event: status\ndata: {\"running\": true}\n\n");
+          }, 20);
+          res.on("close", () => {
+            streamingResponses.delete(res);
+            clearInterval(keepAlive);
+          });
+        } else {
+          res.writeHead(404);
+          res.end();
+        }
+      });
+
+      // 事件驱动信号：任一活跃流式响应关闭时 resolve，无需轮询检测
+      let signalStreamClosed!: () => void;
+      const streamClosedPromise = new Promise<void>((resolve) => {
+        signalStreamClosed = resolve;
+      });
+      server.on("request", (_req, res) => {
+        res.on("close", () => signalStreamClosed());
+      });
+
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+      const port = (server.address() as any).port;
+      const serverUrl = `http://127.0.0.1:${port}`;
+
+      try {
+        // 消费方读取首条事件后立即 break：finally 必须取消底层流，否则流式响应将永久挂起
+        for await (const evt of streamRemoteEvents(serverUrl, "leak-run", undefined, { allowInsecureHttp: true })) {
+          expect(evt.type).toBe("status");
+          break;
+        }
+
+        // 事件驱动等待服务端感知流关闭；若泄漏则超时兑付后以活跃流式响应判定失败
+        await Promise.race([
+          streamClosedPromise,
+          new Promise<void>((resolve) => setTimeout(resolve, 1500)),
+        ]);
+        expect(streamingResponses.size).toBe(0);
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    });
   });
 });

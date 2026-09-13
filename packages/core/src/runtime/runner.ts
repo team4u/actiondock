@@ -1,5 +1,4 @@
 import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type {
   ActionDefinition,
@@ -57,10 +56,13 @@ export {
 
 /**
  * 校验值是否为合法的 JSON 兼容结构，严禁 NaN、Infinity、循环引用及不可序列化类型。
+ *
+ * 环路检测采用「当前递归路径栈」语义：对象仅在自身子树遍历期间保持标记，
+ * 子树遍历完成后立即移除，从而正确放行共享子对象的有向无环结构（如 {a: shared, b: shared}）。
  */
 export function validateJsonValue(
   val: unknown,
-  seen = new WeakSet<object>()
+  stack = new WeakSet<object>()
 ): { valid: true } | { valid: false; reason: string } {
   if (val === null || typeof val === "boolean" || typeof val === "string") {
     return { valid: true };
@@ -75,24 +77,29 @@ export function validateJsonValue(
     return { valid: false, reason: `Unsupported JSON type '${typeof val}'` };
   }
   if (typeof val === "object") {
-    if (seen.has(val as object)) {
+    if (stack.has(val as object)) {
       return { valid: false, reason: "Circular reference detected in object structure" };
     }
-    seen.add(val as object);
-    if (Array.isArray(val)) {
-      for (const item of val) {
-        const res = validateJsonValue(item, seen);
-        if (!res.valid) return res;
+    stack.add(val as object);
+    try {
+      if (Array.isArray(val)) {
+        for (const item of val) {
+          const res = validateJsonValue(item, stack);
+          if (!res.valid) return res;
+        }
+        return { valid: true };
+      }
+      for (const v of Object.values(val as Record<string, unknown>)) {
+        if (v !== undefined) {
+          const res = validateJsonValue(v, stack);
+          if (!res.valid) return res;
+        }
       }
       return { valid: true };
+    } finally {
+      // 无论正常返回还是提前返回，均须将当前对象移出路径栈，避免祖先对象被误判为环路
+      stack.delete(val as object);
     }
-    for (const v of Object.values(val as Record<string, unknown>)) {
-      if (v !== undefined) {
-        const res = validateJsonValue(v, seen);
-        if (!res.valid) return res;
-      }
-    }
-    return { valid: true };
   }
   return { valid: true };
 }
@@ -293,6 +300,8 @@ export class ActionRunner {
   private maxSubRuns: number;
   private activeSubRuns = 0;
   private packageRunners = new Map<string, ActionRunner>();
+  /** 跨包 Runner 构建中的 in-flight Promise：并发调用 await 同一构建任务，消除 check-then-act 竞态 */
+  private pendingPackageRunners = new Map<string, Promise<ActionRunner | undefined>>();
   private actionResolver?: (
     ref: ActionRef | string,
     currentPackageId?: string
@@ -538,12 +547,34 @@ export class ActionRunner {
 
   /**
    * 跨包运行时解析与获取（确保跨包执行具备独立的配置、存储、状态与 Action 注册表）。
+   *
+   * 缓存 miss 后存在长异步窗口（加载配置、扫描 Action、打开存储），并发调用会重复构建
+   * Runner、重复打开 SQLite 连接且子任务限流计数分裂；故以 in-flight Promise 去重，
+   * 并发方 await 同一构建任务，构建失败时移除该 Promise 以便后续重试。
    */
   public async resolveTargetPackageRunner(targetPackageId: string): Promise<ActionRunner | undefined> {
-    if (this.packageRunners.has(targetPackageId)) {
-      return this.packageRunners.get(targetPackageId);
+    const cached = this.packageRunners.get(targetPackageId);
+    if (cached) {
+      return cached;
     }
 
+    const inFlight = this.pendingPackageRunners.get(targetPackageId);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const building = this.buildTargetPackageRunner(targetPackageId).finally(() => {
+      // 无论成败均移除 in-flight 记录：成功者已写入正式缓存，失败者允许重试
+      this.pendingPackageRunners.delete(targetPackageId);
+    });
+    this.pendingPackageRunners.set(targetPackageId, building);
+    return building;
+  }
+
+  /**
+   * 实际构建跨包 Runner（仅由 resolveTargetPackageRunner 串行调度）。
+   */
+  private async buildTargetPackageRunner(targetPackageId: string): Promise<ActionRunner | undefined> {
     if (this.packageContextResolver) {
       const resolved = await this.packageContextResolver(targetPackageId);
       if (resolved) {
@@ -580,10 +611,9 @@ export class ActionRunner {
           customHome: this.customHome,
         });
       } else {
-        const sqlitePath = (config as any).storage?.sqlitePath || ".actiondock/storage.db";
-        const dbPath = join(root, sqlitePath);
-        const { SqliteRuntimeStorage } = await import("../storage/sqlite");
-        storage = new SqliteRuntimeStorage({ dbPath, packageId: targetPackageId, clock: this.clock });
+        // 回退分支与主路径共用 createStorage 单一事实源，确保 run 记录落在统一解析的库文件
+        const { createStorage } = await import("../storage/index");
+        storage = createStorage(targetPackageId, { projectRoot: root, customHome: this.customHome });
       }
       const actionsMap = await loadActions(root, config.actionsDir, {
         autoInstall: false,
@@ -1279,6 +1309,17 @@ export class ActionRunner {
         };
       } catch (err: any) {
         return this.classifyExecutionError(err, runCtx, controller, finalizer);
+      } finally {
+        // 仅释放 run 级隔离实例；平台级共享 ContextProcessAPI 生命周期归平台所有，严禁在此误 dispose
+        if (
+          ctx &&
+          (ctx as any).process?.runScoped === true &&
+          typeof (ctx as any).process.dispose === "function"
+        ) {
+          try {
+            await (ctx as any).process.dispose();
+          } catch {}
+        }
       }
     })();
   }

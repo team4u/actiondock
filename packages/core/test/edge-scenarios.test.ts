@@ -60,6 +60,38 @@ describe("核心运行时高级防御校验与边缘异常测试套件", () => {
       expect((res as any).error?.code).toBe(INPUT_NOT_JSON);
       expect((res as any).error?.message).toContain("Circular reference detected");
     });
+
+    it("共享子对象的有向无环结构可正常通过校验", async () => {
+      const runner = createRunner("test.shared-dag");
+      const shared = { id: "shared-node" };
+      const dagInput = { a: shared, b: shared, list: [shared, shared] };
+
+      const res = await runner.execute("echo", dagInput);
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.data).toEqual({ received: dagInput });
+      }
+    });
+
+    it("共享子对象深度嵌套时仍可正常通过而真实环路仍被拦截", async () => {
+      const runner = createRunner("test.shared-dag-deep");
+      const sharedLeaf = { value: 42 };
+      const input = {
+        left: { first: sharedLeaf, second: sharedLeaf },
+        right: { first: sharedLeaf, second: sharedLeaf },
+      };
+
+      const okRes = await runner.execute("echo", input);
+      expect(okRes.ok).toBe(true);
+
+      // 同一对象在自身内部形成真实环路时仍必须被拦截
+      const loopHolder: any = { leaf: sharedLeaf };
+      loopHolder.self = loopHolder;
+      const badRes = await runner.execute("echo", loopHolder);
+      expect(badRes.ok).toBe(false);
+      expect((badRes as any).error?.code).toBe(INPUT_NOT_JSON);
+      expect((badRes as any).error?.message).toContain("Circular reference detected");
+    });
   });
 
   describe("OUTPUT_NOT_JSON 防御校验", () => {

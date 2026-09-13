@@ -21,6 +21,7 @@ import { registerTasksExtension } from "./register-tasks-extension";
 import { toMcpSchema } from "./schemas";
 import type { ActionDockMcpOptions } from "./types";
 import {
+  extractExecutionTimeoutMs,
   isAsyncExecutionRequested,
   stripExecutionWrapper,
 } from "./execution-mode";
@@ -222,6 +223,7 @@ export async function resolveTarget(
     }
     packages.push({
       packageRoot: root,
+      storage: appStorage,
       customHome: options.customHome,
       configOverrides: options.configOverrides,
     });
@@ -351,7 +353,10 @@ export async function createActionDockMcpServer(
       {
         description,
         inputSchema: toMcpSchema(action.inputSchema),
-        outputSchema: action.outputSchema ? toMcpSchema(action.outputSchema) : undefined,
+        // 出参 schema 不注入 execution 包装字段：实际 structuredContent 不含该字段，注入会与真实返回结构不符
+        outputSchema: action.outputSchema
+          ? toMcpSchema(action.outputSchema, false)
+          : undefined,
       },
       async (input: unknown, ctx: { mcpReq?: { signal?: AbortSignal } }) => {
         // 异步执行模式只认显式约定字段 execution.mode，旧版 __async 仅作只读兼容探测
@@ -361,10 +366,18 @@ export async function createActionDockMcpServer(
         // 分发前仅剥离适配层注入的包装字段，业务自有字段（含名为 async 的入参）原样透传
         const cleanInput = stripExecutionWrapper(input) as JsonValue;
 
+        // 超时组合策略：客户端声明与服务端配置同时存在时取较小值（更防御），
+        // 任一方单独存在则直接生效，双方均缺省时不设置超时
+        const clientTimeoutMs = extractExecutionTimeoutMs(input);
+        const effectiveTimeoutMs =
+          typeof options.timeoutMs === "number" && typeof clientTimeoutMs === "number"
+            ? Math.min(options.timeoutMs, clientTimeoutMs)
+            : clientTimeoutMs ?? options.timeoutMs;
+
         if (isAsync) {
           const ticket = await target.startAction(action.id, cleanInput, {
             signal,
-            timeoutMs: options.timeoutMs,
+            timeoutMs: effectiveTimeoutMs,
           });
 
           return {
@@ -384,7 +397,7 @@ export async function createActionDockMcpServer(
 
         const result = await target.runAction(action.id, cleanInput, {
           signal,
-          timeoutMs: options.timeoutMs,
+          timeoutMs: effectiveTimeoutMs,
         });
         return toMcpResult(result);
       }

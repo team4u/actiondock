@@ -29,7 +29,40 @@ import type {
 } from "../target/types";
 import { DiagnosticForwarder } from "./diagnostic";
 import { EXECUTION_ABORTED, HOST_PROCESS_EXITED } from "../errors";
-import type { IpcCallMessage, IpcResponseMessage } from "./types";
+import type { IpcAbortMessage, IpcCallMessage, IpcResponseMessage } from "./types";
+
+/**
+ * 跨进程取消信号占位标记字段名。
+ * AbortSignal 不可序列化，序列化 options 时把 signal 字段替换为该标记，
+ * 宿主侧识别后重建 AbortController 并接入 abort 消息通知链路。
+ */
+export const IPC_SIGNAL_MARKER = "__ipcSignal";
+
+/**
+ * 判断执行选项中是否携带跨进程取消信号占位标记。
+ *
+ * @param value 待检查的选项值
+ */
+export function hasIpcSignalMarker(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as Record<string, unknown>)[IPC_SIGNAL_MARKER] === true
+  );
+}
+
+/**
+ * 序列化执行选项：剥离不可序列化的 AbortSignal 并写入占位标记。
+ * 未携带 signal 时返回浅拷贝，避免消息通道直接持有调用方原始对象。
+ *
+ * @param options 原始执行选项
+ */
+function markIpcSignal(options?: ExecuteOptions): Record<string, unknown> | undefined {
+  if (!options) return undefined;
+  const { signal: _signal, ...rest } = options;
+  if (!_signal) return rest as Record<string, unknown>;
+  return { ...rest, [IPC_SIGNAL_MARKER]: true } as Record<string, unknown>;
+}
 
 /**
  * 基于 Node IPC 监督进程通信通道的 ActionDockTarget 实现。
@@ -167,7 +200,11 @@ export class IpcActionDockTarget implements ActionDockTarget {
     return this.child;
   }
 
-  private async callRemote<T>(method: string, args: unknown[]): Promise<T> {
+  private async callRemote<T>(
+    method: string,
+    args: unknown[],
+    signal?: AbortSignal
+  ): Promise<T> {
     if (this.isClosed || this.exitError) {
       if (method === "runAction") {
         return {
@@ -190,6 +227,17 @@ export class IpcActionDockTarget implements ActionDockTarget {
       args,
     };
 
+    // 事件驱动跨进程取消：signal 存在且未中止时注册 abort 监听，
+    // 触发即向宿主子进程发送 abort 消息，由宿主侧中止同调用控制器；
+    // 调用结束（无论成败）后注销监听，避免监听器泄漏
+    let onAbort: (() => void) | undefined;
+    if (signal && !signal.aborted) {
+      onAbort = () => {
+        this.sendAbort(id);
+      };
+      signal.addEventListener("abort", onAbort, { once: true });
+    }
+
     return new Promise<T>((resolve, reject) => {
       this.pendingCalls.set(id, { resolve, reject, method });
       try {
@@ -203,7 +251,33 @@ export class IpcActionDockTarget implements ActionDockTarget {
         this.pendingCalls.delete(id);
         reject(err);
       }
+    }).finally(() => {
+      if (onAbort && signal) {
+        signal.removeEventListener("abort", onAbort);
+      }
     });
+  }
+
+  /**
+   * 向宿主子进程发送跨进程取消通知，发送异常不阻断父侧调用链路。
+   *
+   * @param id 目标调用的唯一标识
+   */
+  private sendAbort(id: string): void {
+    if (this.isClosed) return;
+    try {
+      const abortMsg: IpcAbortMessage = { id, type: "abort" };
+      if (this.child.send) {
+        this.child.send(abortMsg);
+      }
+    } catch (err) {
+      // 通道已断开时发送失败属预期场景：宿主退出路径会另行以结构化错误回包
+      process.stderr.write(
+        `[IPC Target] Failed to send abort for call '${id}': ${
+          err instanceof Error ? err.message : String(err)
+        }\n`
+      );
+    }
   }
 
   async info(): Promise<TargetInfo> {
@@ -235,8 +309,7 @@ export class IpcActionDockTarget implements ActionDockTarget {
     input: JsonValue,
     options?: ExecuteOptions
   ): Promise<ExecutionResult> {
-    const { signal, ...serializableOptions } = options || {};
-    if (signal?.aborted) {
+    if (options?.signal?.aborted) {
       return {
         ok: false,
         runId: randomUUID(),
@@ -246,7 +319,9 @@ export class IpcActionDockTarget implements ActionDockTarget {
         },
       };
     }
-    return this.callRemote<ExecutionResult>("runAction", [ref, input, serializableOptions]);
+    // AbortSignal 不可序列化：以占位标记替换后随消息通道传递，宿主侧重建控制器
+    const serializableOptions = markIpcSignal(options);
+    return this.callRemote<ExecutionResult>("runAction", [ref, input, serializableOptions], options?.signal);
   }
 
   async startAction(
@@ -254,8 +329,12 @@ export class IpcActionDockTarget implements ActionDockTarget {
     input: JsonValue,
     options?: ExecuteOptions
   ): Promise<ExecutionTicket> {
-    const { signal, ...serializableOptions } = options || {};
-    return this.callRemote<ExecutionTicket>("startAction", [ref, input, serializableOptions]);
+    if (options?.signal?.aborted) {
+      throw new Error("Execution was aborted before starting");
+    }
+    // AbortSignal 不可序列化：以占位标记替换后随消息通道传递，宿主侧重建控制器
+    const serializableOptions = markIpcSignal(options);
+    return this.callRemote<ExecutionTicket>("startAction", [ref, input, serializableOptions], options?.signal);
   }
 
   async getRun(runId: string): Promise<RunRecord | undefined> {

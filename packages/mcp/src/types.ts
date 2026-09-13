@@ -117,6 +117,11 @@ export interface HttpSecurityOptions {
   token?: string;
   allowInsecureNoAuth?: boolean;
   allowQueryToken?: boolean;
+  /**
+   * 已废弃：该选项仅适用于远程 ActionDockTarget 客户端侧的明文 HTTP 豁免，
+   * 服务端监听安全性由 allowInsecureNoAuth 与 token 策略约束，传入不会产生任何效果；
+   * 服务端检测到该字段时仅输出警告日志
+   */
   allowInsecureHttp?: boolean;
   corsOrigins?: string[];
   maxBodyBytes?: number;

@@ -269,10 +269,61 @@ export default defineAction(async () => {
         expect(errorThrown).toBeDefined();
         expect(errorThrown instanceof BuilderError).toBe(true);
         expect(errorThrown.code).toBe("EXTERNAL_LOCAL_DEPENDENCY");
-        expect(errorThrown.message).toContain("resolves outside project root");
+        expect(errorThrown.message).toContain("项目根之外的模块");
+        // 临时目录兄弟位置：位于项目根父目录内，应命中 monorepo 相邻包提示分支
+        expect(errorThrown.message).toContain("monorepo 相邻包");
       } finally {
         if (existsSync(outsideDir)) {
           rmSync(outsideDir, { recursive: true, force: true });
+        }
+      }
+    });
+
+    it("当 Action 引用完全位于项目外部的深层路径时给出项目外路径提示分支", () => {
+      // 项目嵌套一层：projectRoot 的父目录为嵌套基座，外部模块位于另一个 tmp 子树下（父目录之外）
+      const nestedBase = mkdtempSync(join(tmpdir(), "ad-outside-deep-base-"));
+      const projectDir = join(nestedBase, "inner-project");
+      const otherTree = mkdtempSync(join(tmpdir(), "ad-outside-deep-other-"));
+      try {
+        initProject(projectDir, { id: "test.deep-outside", name: "Deep Outside" });
+        const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
+        if (existsSync(rootNodeModules)) {
+          symlinkSync(rootNodeModules, join(projectDir, "node_modules"), "dir");
+        }
+
+        const outsideModule = join(otherTree, "helper.ts");
+        writeFileSync(outsideModule, "export const deepVal = 7;\n");
+
+        const actionFile = join(projectDir, "actions", "greet.ts");
+        const relToOutside = relative(join(projectDir, "actions"), outsideModule).replace(/\\/g, "/");
+        writeFileSync(
+          actionFile,
+          `import { defineAction } from "@actiondock/sdk";
+import { deepVal } from "${relToOutside}";
+
+export default defineAction(async () => {
+  return { deepVal };
+});
+`
+        );
+
+        let errorThrown: any = null;
+        try {
+          SelectionPlanner.plan({ projectRoot: projectDir });
+        } catch (err: any) {
+          errorThrown = err;
+        }
+
+        expect(errorThrown).toBeDefined();
+        expect(errorThrown.code).toBe("EXTERNAL_LOCAL_DEPENDENCY");
+        expect(errorThrown.message).toContain("完全位于项目外部");
+        expect(errorThrown.message).not.toContain("monorepo 相邻包");
+      } finally {
+        if (existsSync(nestedBase)) {
+          rmSync(nestedBase, { recursive: true, force: true });
+        }
+        if (existsSync(otherTree)) {
+          rmSync(otherTree, { recursive: true, force: true });
         }
       }
     });

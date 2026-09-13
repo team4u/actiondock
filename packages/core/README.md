@@ -68,11 +68,16 @@ ActionDock 2.0 核心领域模型与调度引擎。
 - `transaction<T>(fn: () => T): T`：同步事务执行器，在出现异常时自动回滚，并在驱动层严格拦截异步 Promise 以避免事务泄漏。
 - `close(): void`：释放数据库连接与文件句柄。
 
-### ProcessExecutor 进程执行器接口
+### ProcessDriver 进程驱动契约与受管进程架构
 
-抽象跨平台的子进程操作：
+Core 层内置完整的工业级受管进程治理体系，全面解耦具体操作系统运行时：
 
-- `exec(command, args, options): Promise<ProcessResult>`：执行外部命令并捕获标准输出与标准错误流，支持标准输入流透传、执行超时控制、取消信号响应以及缓冲区防爆保护。
+- ProcessManager 进程调度引擎：承载受管进程全生命周期状态机（`starting`、`running`、`stopping`、`exited`、`failed`、`lost`），提供独占控制权令牌分配与续租排队、有界环形输出日志管理、输入队列异步调度、资源硬性限额与宿主/作用域配额审计。
+- ContextProcessAPI 运行上下文适配器：将 ProcessAPI 绑定至具体的 ActionContext 执行链路，自动注入所有者身份与运行标识，跟踪持有的控制令牌；当 Run 结束或异常而未显式释放控制权时，自动触发目标进程隔离或终止。
+- ProcessDriver 平台驱动契约：定义平台底层派生与进程控制的抽象接口（`getCapabilities`、`spawn`、`write`、`inputEOF`、`terminate` 等），屏蔽各操作系统底层实现差异。
+- ProcessOutputLog 有界环形输出日志：单进程独立的有界内存日志缓冲区，支持基于字节游标的分页查询与长轮询等待，自动识别缓冲区淘汰断层。
+- ProcessMetadataStore 元数据存储接口：提供进程运行记录与幂等请求键索引的持久化抽象，默认提供纯内存实现 MemoryProcessMetadataStore。
+- ProcessExecutor 进程执行器接口：抽象跨平台的子进程操作，向后兼容一次性命令执行。
 
 ---
 

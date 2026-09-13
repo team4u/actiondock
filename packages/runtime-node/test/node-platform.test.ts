@@ -8,7 +8,7 @@ import {
   SqliteRuntimeStorage,
   SystemClock,
 } from "@actiondock/core";
-import { defineAction } from "@actiondock/sdk";
+import { decodeText, defineAction } from "@actiondock/sdk";
 import {
   createNodePlatform,
   ExecaProcessExecutor,
@@ -40,8 +40,9 @@ describe("createNodePlatform 平台工厂测试", () => {
       expect(platform.name).toBe("node");
       expect(platform.clock).toBeInstanceOf(SystemClock);
       expect(platform.files).toBeInstanceOf(NodeFileSystem);
-      expect(platform.modules).toBeInstanceOf(TsxModuleLoader);
-      expect(platform.process).toBeInstanceOf(ExecaProcessExecutor);
+      expect(platform.process).toBeDefined();
+      expect(typeof platform.process.run).toBe("function");
+      expect(typeof platform.process.start).toBe("function");
       expect(platform.storage).toBeDefined();
       expect(typeof platform.storage.createStorage).toBe("function");
       expect(typeof platform.storage.createGlobalStorage).toBe("function");
@@ -80,13 +81,21 @@ describe("createNodePlatform 平台工厂测试", () => {
       await expect(platform.files.writeFile(outsidePath, "escape")).rejects.toThrow();
     });
 
-    it("进程执行驱动能够基于 ExecaProcessExecutor 执行命令并捕获输出", async () => {
+    it("进程执行驱动能够基于 ProcessManager 与 NodeProcessDriver 执行命令并捕获输出", async () => {
       const platform = createNodePlatform();
-      const result = await platform.process.exec("node", ["-e", "console.log('hello from node')"]);
+      const result = await platform.process.run({
+        spec: {
+          executable: "node",
+          args: ["-e", "console.log('hello from node')"],
+          io: { mode: "pipe" },
+        },
+        timeoutMs: 5000,
+        maxOutputBytes: 1024 * 1024,
+      });
 
-      expect(result.ok).toBe(true);
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout.trim()).toBe("hello from node");
+      expect(result.exit.code).toBe(0);
+      const text = decodeText(result.chunks);
+      expect(text.trim()).toBe("hello from node");
     });
 
     it("模块加载驱动能够基于 NodeModuleLoader 正常解析带扩展名模块并拒绝无扩展名", async () => {

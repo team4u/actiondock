@@ -85,17 +85,18 @@ function calculateDirectoryDigest(dir: string): string {
 
 /**
  * 生成 Host 子进程入口脚本源码（负责运行 ActionDockHost，通过 Node IPC 暴露 Target）。
+ * 与 serializePlanManifest / stageSources 的过滤条件保持一致：跨包外部 Action 不进入 import 与运行时注册，
+ * 避免入口 import 清单没有的源文件产生孤儿模块（外部源码未物化进本包目录，运行时必然加载失败）。
  */
-function generateNodeHostEntrySource(
-  plan: SelectionPlan,
-  relativeActionPaths: string[]
-): string {
-  const imports = relativeActionPaths
-    .map((relPath, idx) => `import action_${idx} from ${JSON.stringify(relPath)};`)
+function generateNodeHostEntrySource(plan: SelectionPlan): string {
+  // 仅包自有 Action 参与 import 与注册，与产物清单保持同一事实源
+  const ownActions = plan.actions.filter((a) => !a.isExternal && !a.id.includes("/"));
+  const imports = ownActions
+    .map((act, idx) => `import action_${idx} from ${JSON.stringify(`./${act.entry.replace(/\\/g, "/")}`)};`)
     .join("\n");
 
   const actionsDict: Record<string, unknown> = {};
-  for (const a of plan.actions) {
+  for (const a of ownActions) {
     actionsDict[a.id] = {
       entry: a.entry,
       description: a.description || "",
@@ -107,7 +108,7 @@ function generateNodeHostEntrySource(
     };
   }
 
-  const actionItems = plan.actions
+  const actionItems = ownActions
     .map((a, idx) => {
       const entryObj = `{
       ...(typeof action_${idx} === "function" ? { run: action_${idx} } : action_${idx}),
@@ -309,11 +310,16 @@ try {
 
 /**
  * 拷贝 Action 源码、Playbook 规程与声明的代码文件/静态资产到暂存目录。
+ * 与 serializePlanManifest 的过滤条件保持一致：跨包外部 Action 不物化进本包目录，
+ * 避免产物混入外部源文件与本包入口发生非确定性覆盖。
  */
 function stageSources(root: string, stagingDir: string, plan: SelectionPlan): string[] {
-  // 拷贝 Action 源码文件，保留相对路径
+  // 拷贝 Action 源码文件，保留相对路径（仅拷贝包自有 Action，跨包外部依赖不物化进本包目录）
   const relativeActionImports: string[] = [];
   for (const act of plan.actions) {
+    if (act.isExternal || act.id.includes("/")) {
+      continue;
+    }
     if (existsSync(act.resolvedPath)) {
       const destFile = join(stagingDir, act.entry);
       mkdirSync(dirname(destFile), { recursive: true });
@@ -419,12 +425,8 @@ function writePkgJsonAndLockfiles(
 /**
  * 生成三个入口脚本（Host 子进程、监督父进程与兼容代理转发入口）并设置可执行权限。
  */
-function writeEntrypoints(
-  stagingDir: string,
-  plan: SelectionPlan,
-  relativeActionImports: string[]
-): void {
-  const hostCode = generateNodeHostEntrySource(plan, relativeActionImports);
+function writeEntrypoints(stagingDir: string, plan: SelectionPlan): void {
+  const hostCode = generateNodeHostEntrySource(plan);
   const hostPath = join(stagingDir, "entry-host.js");
   writeFileSync(hostPath, hostCode, "utf-8");
 
@@ -462,15 +464,18 @@ function vendorDependencies(
     resolve(import.meta.dirname, "../../../node_modules"),
   ];
 
+  // 嵌套 node_modules 不再跳过：多版本共存时传递依赖必须完整物化，
+  // 否则产物运行时 Cannot find module 且构建阶段无任何警告；
+  // 保留 .git、.bin 等目录排除（.bin 为平台相关的命令行 shim，不参与运行时模块解析）
   const copyVendorPackage = (srcDir: string, destDir: string): void => {
     if (!existsSync(srcDir)) return;
     mkdirSync(destDir, { recursive: true });
     const entries = readdirSync(srcDir);
     for (const entry of entries) {
       if (
-        entry === "node_modules" ||
         entry === ".git" ||
         entry === ".actiondock" ||
+        entry === ".bin" ||
         entry === "test" ||
         entry === "tests"
       ) {
@@ -588,10 +593,10 @@ export async function buildProject(options: BuildOptions): Promise<BuildResult> 
   let platformInfo: { os: string; arch: string; nodeAbi: string } | undefined;
 
   try {
-    const relativeActionImports = stageSources(root, stagingDir, plan);
+    stageSources(root, stagingDir, plan);
     writeManifest(stagingDir, plan);
     writePkgJsonAndLockfiles(root, stagingDir, plan, pkgSlug);
-    writeEntrypoints(stagingDir, plan, relativeActionImports);
+    writeEntrypoints(stagingDir, plan);
 
     // 若开启 options.vendorDeps，物化锁定生产依赖
     if (options.vendorDeps) {

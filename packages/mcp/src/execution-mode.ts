@@ -63,3 +63,27 @@ export function stripExecutionWrapper<T>(input: T): T {
   }
   return rest as T;
 }
+
+/**
+ * 从工具调用入参的 execution 包装字段中提取客户端显式声明的超时时间。
+ *
+ * @param input 工具调用入参
+ * @returns 客户端声明的超时毫秒数，未声明或非法时返回 undefined
+ */
+export function extractExecutionTimeoutMs(input: unknown): number | undefined {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    return undefined;
+  }
+  const execution = (input as Record<string, unknown>).execution;
+  if (
+    typeof execution !== "object" ||
+    execution === null ||
+    Array.isArray(execution)
+  ) {
+    return undefined;
+  }
+  const timeoutMs = (execution as Record<string, unknown>).timeoutMs;
+  return typeof timeoutMs === "number" && Number.isFinite(timeoutMs) && timeoutMs > 0
+    ? timeoutMs
+    : undefined;
+}

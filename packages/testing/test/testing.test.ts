@@ -1,11 +1,13 @@
 import { describe, expect, it } from "bun:test";
-import { defineAction, type ActionDefinition } from "@actiondock/sdk";
+import { decodeText, defineAction, type ActionDefinition } from "@actiondock/sdk";
 import {
   ActionRuntimeError,
   createTestRuntime,
   execCli,
   FakeClock,
+  FakeProcessDriver,
   MemoryStorage,
+  MemoryStateStore,
   MockProcessExecutor,
 } from "../src";
 
@@ -47,6 +49,57 @@ describe("@actiondock/testing", () => {
       expect(clock.monotonic()).toBe(210);
       expect(triggered2).toBe(true);
       expect(clock.pendingCount).toBe(0);
+    });
+
+    it("单次 advance 内链式 sleep 逐层触发，无需多次推进", async () => {
+      const clock = new FakeClock({ startMonotonic: 0 });
+      const order: string[] = [];
+
+      // 链式回调：A 触发后才注册 B，B 触发后才注册 C，多层 async 边界叠加
+      const chain = (async () => {
+        await clock.sleep(10);
+        order.push("A");
+        await Promise.resolve();
+        await Promise.resolve();
+        await clock.sleep(5);
+        order.push("B");
+        await Promise.resolve();
+        await Promise.resolve();
+        await clock.sleep(5);
+        order.push("C");
+      })();
+
+      await clock.advance(20);
+
+      // 链上全部节点必须在本次 advance 终点前触发完毕
+      expect(order).toEqual(["A", "B", "C"]);
+      expect(clock.pendingCount).toBe(0);
+      await chain;
+    });
+
+    it("多层 async 边界内链式注册的到期 sleep 在同一次 advance 内全部触发", async () => {
+      const clock = new FakeClock({ startMonotonic: 0 });
+      const order: string[] = [];
+
+      const chain = (async () => {
+        await clock.sleep(5);
+        order.push("X");
+        // 三层 await 后再注册下一段 sleep，验证微任务排空深度
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+        await clock.sleep(5);
+        order.push("Y");
+        await Promise.resolve();
+        await clock.sleep(5);
+        order.push("Z");
+      })();
+
+      await clock.advance(15);
+
+      expect(order).toEqual(["X", "Y", "Z"]);
+      expect(clock.pendingCount).toBe(0);
+      await chain;
     });
 
     it("推进负数时间时抛出异常", async () => {
@@ -128,6 +181,40 @@ describe("@actiondock/testing", () => {
       expect(res.stdout).toContain("v");
     });
 
+    it("注册 A 命令 mock 后 run 未命中的 B 命令仍走受管进程路径", async () => {
+      const driver = new FakeProcessDriver();
+      // 受管路径由 Fake 驱动确定性驱动：派生后立即以退出码 0 结束并关闭输出
+      driver.onSpawn = (handle) => {
+        driver.emitOutput(handle.id, "stdout", "managed-path");
+        driver.emitExit(handle.id, 0);
+        driver.emitOutputClosed(handle.id, "natural");
+      };
+      const proc = new MockProcessExecutor({ driver });
+      proc.register("known-cmd", { ok: true, stdout: "mocked" });
+
+      // 已注册 mock 但 B 命令未命中：应落入受管进程路径而非 exec 抛「未命中」
+      const result = await proc.run({
+        spec: { executable: "unknown-b", args: ["--flag"], io: { mode: "pipe" } },
+        timeoutMs: 5000,
+        maxOutputBytes: 1024 * 1024,
+      });
+
+      // 受管路径返回结构化退出信封，而非抛出未命中异常
+      expect(result).toBeDefined();
+      expect(result.exit).toBeDefined();
+      expect(result.exit.code).toBe(0);
+      expect(Array.isArray(result.chunks)).toBe(true);
+      expect(decodeText(result.chunks)).toContain("managed-path");
+
+      // 已注册的 A 命令 mock 命中时仍正常返回模拟输出
+      const mocked = await proc.run({
+        spec: { executable: "known-cmd", args: [], io: { mode: "pipe" } },
+        timeoutMs: 5000,
+        maxOutputBytes: 1024 * 1024,
+      });
+      expect(decodeText(mocked.chunks)).toContain("mocked");
+    });
+
     it("带延时控制执行完毕后妥善注销 AbortSignal 监听器", async () => {
       const proc = new MockProcessExecutor();
       proc.register("delayed-cmd", { delayMs: 10, ok: true });
@@ -150,6 +237,43 @@ describe("@actiondock/testing", () => {
       expect(res.ok).toBe(true);
       expect(listenerCount).toBe(0);
     });
+
+    it("注入 FakeClock 后 delayMs 由时钟驱动，不占用真实时间", async () => {
+      const clock = new FakeClock({ startMonotonic: 0 });
+      const proc = new MockProcessExecutor({ clock });
+      proc.register("frozen-cmd", { delayMs: 60000, ok: true, stdout: "after-delay" });
+
+      let settled = false;
+      const execPromise = proc.exec("frozen-cmd").then((res) => {
+        settled = true;
+        return res;
+      });
+
+      // 未推进时钟前命令保持挂起，验证延时完全由 FakeClock 驱动
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(settled).toBe(false);
+
+      // 一次性推进起过延时窗口，命令立即完成，全程未占用真实时间
+      const advanced = clock.advance(60000);
+      const res = await execPromise;
+      await advanced;
+
+      expect(res.ok).toBe(true);
+      expect(res.stdout).toBe("after-delay");
+      expect(settled).toBe(true);
+    });
+
+    it("未注入时钟时 delayMs 回退真实 setTimeout 语义保持可用", async () => {
+      const proc = new MockProcessExecutor();
+      proc.register("real-delay-cmd", { delayMs: 20, ok: true });
+
+      const startedAt = Date.now();
+      const res = await proc.exec("real-delay-cmd");
+      expect(res.ok).toBe(true);
+      // 真实回退路径至少等待了设定的延时
+      expect(Date.now() - startedAt).toBeGreaterThanOrEqual(15);
+    });
   });
 
   describe("execCli", () => {
@@ -166,6 +290,99 @@ describe("@actiondock/testing", () => {
           throwOnError: true,
         })
       ).rejects.toThrow(/fatal error/);
+    });
+
+    it("输出超过 maxOutputBytes 上限时终止进程并标记 truncated", async () => {
+      const res = await execCli(
+        "node",
+        ["-e", "process.stdout.write('x'.repeat(65536));"],
+        { maxOutputBytes: 1024 }
+      );
+
+      // 超限：进程被终止，结果标记截断且 ok 为 false，保留的字节不超过上限
+      expect(res.ok).toBe(false);
+      expect(res.truncated).toBe(true);
+      expect(res.raw.byteLength).toBeLessThanOrEqual(1024 + 2048);
+      expect(res.stderr).toContain("exceeded limit");
+    });
+
+    it("未超限时 maxOutputBytes 不影响正常输出", async () => {
+      const res = await execCli("node", ["-e", "process.stdout.write('tiny output')"], {
+        maxOutputBytes: 1024 * 1024,
+      });
+
+      expect(res.ok).toBe(true);
+      expect(res.truncated).toBeUndefined();
+      expect(res.stdout).toBe("tiny output");
+    });
+  });
+
+  describe("MemoryStateStore", () => {
+    it("根命名空间未命中时以裸 key 回扫全部命名空间", async () => {
+      const shared = new Map<string, any>();
+      const rootStore = new MemoryStateStore(shared, "");
+      const scopedStore = rootStore.scope("cache");
+
+      await scopedStore.set("token", "scoped-value");
+
+      // 根命名空间直接读取：精确未命中后回扫命中 cache 命名空间下的同 key 条目
+      const found = await rootStore.get<string>("token");
+      expect(found).toBe("scoped-value");
+
+      // 根命名空间自身写入的同 key 条目优先精确命中，不进入回扫
+      await rootStore.set("token", "root-value");
+      expect(await rootStore.get<string>("token")).toBe("root-value");
+    });
+
+    it("回扫命中多条同名 key 时抛出歧义异常，与 core findState 契约一致", async () => {
+      const shared = new Map<string, any>();
+      const rootStore = new MemoryStateStore(shared, "");
+
+      await rootStore.scope("ns-alpha").set("dup", "alpha");
+      await rootStore.scope("ns-beta").set("dup", "beta");
+
+      let err: any;
+      try {
+        await rootStore.get("dup");
+      } catch (e) {
+        err = e;
+      }
+
+      expect(err).toBeDefined();
+      expect(err.message).toContain("Ambiguous state key 'dup'");
+      expect(err.message).toContain("ns-alpha");
+      expect(err.message).toContain("ns-beta");
+    });
+
+    it("回扫跳过已过期条目并清理，零命中返回 undefined", async () => {
+      const clock = new FakeClock({ now: "2026-01-01T00:00:00.000Z" });
+      const shared = new Map<string, any>();
+      const rootStore = new MemoryStateStore(shared, "", clock);
+
+      await rootStore.scope("ttl-ns").set("ephemeral", "gone-soon", 5);
+
+      // 未过期时回扫命中
+      expect(await rootStore.get<string>("ephemeral")).toBe("gone-soon");
+
+      // 推进 6 秒后条目过期，回扫应跳过并清理，返回 undefined
+      await clock.advance(6000);
+      expect(await rootStore.get<string>("ephemeral")).toBeUndefined();
+      expect(shared.size).toBe(0);
+
+      // 全无命中时返回 undefined
+      expect(await rootStore.get<string>("never-exists")).toBeUndefined();
+    });
+
+    it("非根命名空间不做回扫，保持严格隔离", async () => {
+      const shared = new Map<string, any>();
+      const rootStore = new MemoryStateStore(shared, "");
+
+      await rootStore.scope("ns-a").set("key", "from-a");
+
+      // ns-b 命名空间读取不应看到 ns-a 的条目
+      expect(await rootStore.scope("ns-b").get("key")).toBeUndefined();
+      // 根命名空间仍可回扫命中
+      expect(await rootStore.get<string>("key")).toBe("from-a");
     });
   });
 
@@ -472,10 +689,15 @@ describe("@actiondock/testing", () => {
 
       const cliAction = defineAction({
         async run(_input, ctx) {
-          const res = await ctx.process.exec("docker", ["ps"]);
+          const res = await ctx.process.run({
+            spec: { executable: "docker", args: ["ps"], io: { mode: "pipe" } },
+            timeoutMs: 5000,
+            maxOutputBytes: 1024 * 1024,
+          });
+          const stdout = decodeText(res.chunks);
           return {
-            stdout: res.stdout,
-            hasNginx: res.stdout.includes("nginx"),
+            stdout,
+            hasNginx: stdout.includes("nginx"),
           };
         },
       });

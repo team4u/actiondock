@@ -6,6 +6,9 @@ import { STORAGE_BUSY, STORAGE_WORKER_EXITED } from "@actiondock/core";
 
 /**
  * 编译后的工作线程异步参数化语句接口。
+ *
+ * 注意：在函数式事务录制期内，run 返回的 changes 固定为 0，不反映真实受影响行数
+ * （语句延迟到事务提交时统一执行，详见 WorkerSqliteDriver.run 的说明）。
  */
 export interface WorkerSqliteStatement {
   run(...params: any[]): Promise<{ changes: number; lastInsertRowid?: number | bigint }>;
@@ -308,6 +311,10 @@ export class WorkerSqliteDriver {
 
   /**
    * 异步执行增删改语句并返回受影响行数与最后插入行标识。
+   *
+   * 注意：函数式事务录制期内调用时，语句仅被录制并延迟到事务提交时统一执行，
+   * 此处返回的 changes 固定为 0，不反映真实受影响行数；
+   * 若需真实行数，请改用语句清单式事务（返回值内含每条语句的真实 changes）。
    */
   run(
     sql: string,
@@ -323,7 +330,8 @@ export class WorkerSqliteDriver {
     }
     if (store) {
       store.recorder.push({ type: "run", sql, params });
-      return Promise.resolve({ changes: 1 });
+      // 录制期语句尚未真正执行，真实行数不可知；返回 0 避免上层依据假 changes: 1 做出错误判断
+      return Promise.resolve({ changes: 0 });
     }
     return this.request("run", { sql, params });
   }

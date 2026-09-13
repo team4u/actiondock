@@ -316,4 +316,68 @@ export default defineAction({
       expect(crashResp.error.message).toContain("HOST_PROCESS_EXITED");
     }
   }, 10000);
+
+  it("exits the supervisor process after the MCP client closes stdin instead of hanging forever", async () => {
+    const cliScript = resolve(import.meta.dirname, "../../cli/dist/index.js");
+
+    const child = spawn(process.execPath, [cliScript, "mcp", "-d", tempDir], {
+      cwd: tempDir,
+      env: process.env,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    const receivedLines: string[] = [];
+
+    let buffer = "";
+    child.stdout.on("data", (chunk) => {
+      buffer += chunk.toString();
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      for (const line of lines) {
+        if (line.trim()) {
+          receivedLines.push(line.trim());
+        }
+      }
+    });
+
+    // 初始化 MCP 握手
+    child.stdin.write(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        id: 30,
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: {},
+          clientInfo: { name: "detach-test", version: "1.0.0" },
+        },
+      }) + "\n"
+    );
+
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error("Timeout waiting for init response")), 5000);
+      const check = setInterval(() => {
+        if (receivedLines.some((l) => l.includes(`"id":30`))) {
+          clearTimeout(timeout);
+          clearInterval(check);
+          resolve();
+        }
+      }, 50);
+    });
+
+    // 模拟 MCP 客户端断开：关闭 stdin 管道
+    child.stdin.end();
+
+    // 断言监督进程在有限时间内自行退出（不依赖外部信号），且退出码为 0
+    const exitInfo = await new Promise<{ code: number | null; signal: string | null }>((resolve) => {
+      const timeout = setTimeout(() => resolve({ code: null, signal: "HANG_TIMEOUT" }), 8000);
+      child.once("exit", (code, signal) => {
+        clearTimeout(timeout);
+        resolve({ code, signal });
+      });
+    });
+
+    expect(exitInfo.signal).not.toBe("HANG_TIMEOUT");
+    expect(exitInfo.code).toBe(0);
+  }, 15000);
 });
