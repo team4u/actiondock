@@ -96,10 +96,21 @@ export default defineAction({
       "inputSchema": {
         "type": "object",
         "properties": {
-          "repo": { "type": "string", "description": "仓库全名，例如 team4u/actiondock" },
-          "prNumber": { "type": "number", "description": "Pull Request 编号" }
+          "repo": {
+            "type": "string",
+            "description": "仓库全名，例如 team4u/actiondock",
+            "examples": ["team4u/actiondock"]
+          },
+          "prNumber": {
+            "type": "number",
+            "description": "Pull Request 编号",
+            "examples": [42]
+          }
         },
-        "required": ["repo", "prNumber"]
+        "required": ["repo", "prNumber"],
+        "examples": [
+          { "repo": "team4u/actiondock", "prNumber": 42 }
+        ]
       },
       "outputSchema": {
         "type": "object",
@@ -117,6 +128,9 @@ export default defineAction({
   }
 }
 ```
+
+> [!TIP]
+> 推荐在模式中通过 `examples` 字段提供具体取值样例，帮助智能体精准掌握参数格式与类型预期。
 
 ### 编写 Action 业务实现
 

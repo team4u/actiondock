@@ -99,17 +99,27 @@
         "properties": {
           "name": {
             "type": "string",
-            "description": "用户姓名"
+            "description": "用户姓名",
+            "examples": ["张三", "李四"]
           }
         },
         "required": ["name"],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "examples": [
+          { "name": "张三" }
+        ]
       },
       "outputSchema": {
         "type": "object",
         "properties": {
-          "message": { "type": "string" },
-          "count": { "type": "number" }
+          "message": {
+            "type": "string",
+            "examples": ["你好，张三！"]
+          },
+          "count": {
+            "type": "number",
+            "examples": [1]
+          }
         },
         "required": ["message", "count"]
       },
@@ -130,9 +140,9 @@
 - 动作功能描述：`description`
   类型为字符串。供 MCP 协议工具说明、智能体能力检索与开发者阅读。
 - 输入参数模式约束：`inputSchema`
-  类型为标准 JSON Schema 对象或布尔值。运行时在调用 `run` 前由引擎自动执行严格校验。
+  类型为标准 JSON Schema 对象或布尔值。运行时在调用 `run` 前由引擎自动执行严格校验。支持在具体字段定义或模式根层级通过 `examples`（数组格式）补充调用示例，帮助智能体更精确地理解预期参数格式。
 - 输出结果模式约束：`outputSchema`
-  类型为标准 JSON Schema 对象或布尔值。运行时在动作返回后执行出参合法性校验。
+  类型为标准 JSON Schema 对象或布尔值。运行时在动作返回后执行出参合法性校验。支持通过 `examples` 补充输出结构样例。
 - 级联依赖声明：`uses`
   类型为字符串数组。列出当前动作直接调用的子动作标识。构建与导出工具根据该字段分析依赖闭包。
 - 分类标签：`tags`
