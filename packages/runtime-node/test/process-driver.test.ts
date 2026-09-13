@@ -368,8 +368,34 @@ describe("NodeProcessDriver 平台驱动测试", () => {
 
   it("支持向子进程发送 interruptForeground 中断信号", async () => {
     const driver = new NodeProcessDriver();
-    const stdoutParts: string[] = [];
 
+    if (!driver.capabilities.interruptForeground) {
+      // 在不支持前台中断的平台（如 Windows 平台 pipe 模式），验证能力标识与拦截抛错
+      expect(driver.capabilities.interruptForeground).toBe(false);
+      const handle = await driver.spawn(
+        {
+          executable: process.execPath,
+          args: ["-e", "setInterval(() => {}, 1000);"],
+          io: { mode: "pipe" },
+        },
+        {
+          output() {},
+          exited() {},
+          outputClosed() {},
+        }
+      );
+      try {
+        await expect(driver.interruptForeground(handle)).rejects.toThrow(
+          /UNSUPPORTED_CAPABILITY/
+        );
+      } finally {
+        await driver.terminate(handle, 200);
+        await driver.dispose(handle);
+      }
+      return;
+    }
+
+    const stdoutParts: string[] = [];
     let resolveClose: () => void;
     const closePromise = new Promise<void>((resolve) => {
       resolveClose = resolve;

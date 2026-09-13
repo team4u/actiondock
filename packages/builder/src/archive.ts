@@ -110,7 +110,7 @@ function crc32(buf: Buffer): number {
 }
 
 /** Unix 毫秒时间戳转 DOS 时间格式（date/time 各 16 位） */
-function dosDateTime(ms: number): { date: number; time: number } {
+export function dosDateTime(ms: number): { date: number; time: number } {
   const d = new Date(ms);
   const rawYear = d.getFullYear();
   // DOS 时间字段边界：年份仅能表达 [1980, 2107]，超出统一映射为 1980-01-01 00:00:00

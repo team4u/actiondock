@@ -30,6 +30,7 @@ export {
   createTarGzArchiveAsync,
   createZipArchive,
   createZipArchiveAsync,
+  dosDateTime,
   writeToStream,
 } from "./archive";
 export type { TarGzArchiveOptions } from "./archive";

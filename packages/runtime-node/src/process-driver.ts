@@ -80,6 +80,13 @@ export class NodeProcessDriver implements ProcessDriver {
   }
 
   /**
+   * 运行时能力集属性访问器。
+   */
+  get capabilities(): Capabilities {
+    return this.getCapabilities();
+  }
+
+  /**
    * 获取驱动支持的运行时能力集。
    */
   getCapabilities(): Capabilities {
@@ -495,11 +502,10 @@ export class NodeProcessDriver implements ProcessDriver {
     }
 
     if (process.platform === "win32") {
-      try {
-        process.kill(pid, "SIGINT");
-      } catch {
-        // 忽略已退出状态
-      }
+      throw new ProcessError(
+        UNSUPPORTED_CAPABILITY,
+        "interruptForeground is not supported on Windows in pipe mode"
+      );
     } else {
       try {
         process.kill(-pid, "SIGINT");

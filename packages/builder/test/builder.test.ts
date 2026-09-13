@@ -46,6 +46,7 @@ import {
   createTarGzArchiveAsync,
   createZipArchive,
   createZipArchiveAsync,
+  dosDateTime,
   writeToStream,
   replaceDirAtomic,
   moveDirAtomic,
@@ -2315,17 +2316,23 @@ export default defineAction({
 
   describe("archive dosDateTime: DOS 时间字段边界钳制", () => {
     it("pre-1980 时间统一映射为 1980-01-01 00:00:00，年份上限 2107 不溢出", async () => {
+      // 1. 纯函数级别验证对极端时间戳的数学边界钳制，规避部分操作系统 utimes（如 Windows 32 位 time_t）的底层截断
+      const pastDos = dosDateTime(new Date("1975-06-15T12:34:56Z").getTime());
+      expect(pastDos.date).toBe(((1980 - 1980) << 9) | (1 << 5) | 1);
+      expect(pastDos.time).toBe(0);
+
+      const futureDos = dosDateTime(new Date("2200-01-01T00:00:00Z").getTime());
+      expect(((futureDos.date >> 9) & 0x7f) + 1980).toBe(2107);
+      expect(futureDos.date).toBeLessThanOrEqual(0xffff);
+      expect(futureDos.time).toBeLessThanOrEqual(0xffff);
+
+      // 2. 归档级集成验证：验证 pre-1980 文件在 zip 归档中的时间头映射
       const timeRoot = mkdtempSync(join(tmpdir(), "ad-dos-time-test-"));
       try {
         mkdirSync(timeRoot, { recursive: true });
-        // mtime 设为 1975-06-15（pre-1980）与 2200-01-01（超上限）
         const oldFile = join(timeRoot, "old.txt");
         writeFileSync(oldFile, "old", "utf-8");
-        const futureFile = join(timeRoot, "future.txt");
-        writeFileSync(futureFile, "future", "utf-8");
-
         utimesSync(oldFile, new Date("1975-06-15T12:34:56Z"), new Date("1975-06-15T12:34:56Z"));
-        utimesSync(futureFile, new Date("2200-01-01T00:00:00Z"), new Date("2200-01-01T00:00:00Z"));
 
         const zipOut = join(tempDir, "dos-time-test.zip");
         await createZipArchiveAsync(timeRoot, zipOut);
@@ -2344,34 +2351,18 @@ export default defineAction({
         }
         expect(eocd).toBeGreaterThan(0);
         const entryCount = zipBuf.readUInt16LE(eocd + 10);
-        expect(entryCount).toBe(2); // 两个文件条目
-        let ptr = zipBuf.readUInt32LE(eocd + 16);
+        expect(entryCount).toBe(1);
+        const ptr = zipBuf.readUInt32LE(eocd + 16);
 
-        const dateTimeByName = new Map<string, { date: number; time: number }>();
-        for (let i = 0; i < entryCount; i++) {
-          const nameLen = zipBuf.readUInt16LE(ptr + 28);
-          const extraLen = zipBuf.readUInt16LE(ptr + 30);
-          const commentLen = zipBuf.readUInt16LE(ptr + 32);
-          const name = zipBuf.toString("utf8", ptr + 46, ptr + 46 + nameLen);
-          dateTimeByName.set(name, {
-            time: zipBuf.readUInt16LE(ptr + 12),
-            date: zipBuf.readUInt16LE(ptr + 14),
-          });
-          ptr += 46 + nameLen + extraLen + commentLen;
-        }
+        const nameLen = zipBuf.readUInt16LE(ptr + 28);
+        const name = zipBuf.toString("utf8", ptr + 46, ptr + 46 + nameLen);
+        expect(name).toBe(`${rootName}/old.txt`);
+        const date = zipBuf.readUInt16LE(ptr + 14);
+        const time = zipBuf.readUInt16LE(ptr + 12);
 
         // pre-1980：映射为 1980-01-01 00:00:00（date=0x0021, time=0）
-        const oldDt = dateTimeByName.get(`${rootName}/old.txt`);
-        expect(oldDt).toBeDefined();
-        expect(oldDt!.date).toBe(((1980 - 1980) << 9) | (1 << 5) | 1);
-        expect(oldDt!.time).toBe(0);
-
-        // 超 2107 上限：钳制到 2107，date 字段不溢出 16 位
-        const futureDt = dateTimeByName.get(`${rootName}/future.txt`);
-        expect(futureDt).toBeDefined();
-        expect(((futureDt!.date >> 9) & 0x7f) + 1980).toBe(2107);
-        expect(futureDt!.date).toBeLessThanOrEqual(0xffff);
-        expect(futureDt!.time).toBeLessThanOrEqual(0xffff);
+        expect(date).toBe(((1980 - 1980) << 9) | (1 << 5) | 1);
+        expect(time).toBe(0);
       } finally {
         rmSync(timeRoot, { recursive: true, force: true });
       }
