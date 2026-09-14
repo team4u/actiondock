@@ -79,17 +79,17 @@ hello-tools/
 }
 ```
 
-在 Node.js 24 原生底座下，项目默认利用原生类型擦除配合 `tsx` 直接加载执行 TypeScript 测试文件，实现零编译等待的亚秒级测试反馈。
+生产运行时直接执行于 Node.js 24 原生底座，无需任何转译工具；测试与开发阶段由轻量加载器 `tsx` 提供零配置即时执行与亚秒级测试反馈。
 
 ---
 
 ## 声明与编写 Action
 
-ActionDock 遵循单一事实源原则。所有动作的标识、模式定义与描述统一在 `actiondock.json` 中声明。
+ActionDock 遵循单一事实源原则。所有动作的标识、模式定义与描述统一在 `actiondock.json` 中声明，并通过工具链自动生成类型声明。
 
 ### 在 actiondock.json 中声明清单契约
 
-在 `actiondock.json` 中声明配置项与加法计算动作 `math.add`：
+在 `actiondock.json` 中声明配置项与动作 `sample.greet`：
 
 ```json
 {
@@ -130,23 +130,28 @@ ActionDock 遵循单一事实源原则。所有动作的标识、模式定义与
 }
 ```
 
+### 自动生成强类型声明
+
+在清单中完成模式声明后，执行类型生成命令：
+
+```bash
+ad generate types
+```
+
+工具链将自动在 `.actiondock/generated/actions.d.ts` 生成对应的强类型定义，包括 `ActionInput<"sample.greet">` 与 `ActionOutput<"sample.greet">`（若通过 `ad action create` 创建动作，脚手架会自动完成该刷新）。
+
 ### 编写动作业务执行逻辑
 
-在 `actions/greet.ts` 中实现具体的执行逻辑。业务代码仅依赖轻量的 `@actiondock/sdk`：
+在 `actions/greet.ts` 中直接消费生成的强类型，编写纯粹的业务逻辑：
 
 ```ts
 import { defineAction } from "@actiondock/sdk";
+import type { ActionInput, ActionOutput } from "../.actiondock/generated/actions.d.ts";
 
-export interface GreetInput {
-  name: string;
-}
+export type Input = ActionInput<"sample.greet">;
+export type Output = ActionOutput<"sample.greet">;
 
-export interface GreetOutput {
-  message: string;
-  count: number;
-}
-
-export default defineAction(async (input: GreetInput, ctx): Promise<GreetOutput> => {
+export default defineAction<Input, Output>(async (input, ctx) => {
   const prefix = ctx.config.get<string>("DEFAULT_GREETING", "Hello");
   const count = ((await ctx.state.get<number>(`greet:${input.name}`)) || 0) + 1;
   await ctx.state.set(`greet:${input.name}`, count);

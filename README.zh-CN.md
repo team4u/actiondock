@@ -13,29 +13,24 @@
 
 ## 一次编写，多形态交付
 
-Action 是 ActionDock 中唯一的原子核心。业务规程 Playbook、便携技能包 Agent Skill、协议通信 MCP 服务以及生产级 HTTP 微服务，皆是围绕 Action 的能力增强与交付形态。
+Action 是 ActionDock 中唯一的产品原子与核心抽象。业务规程 Playbook、便携技能包 Agent Skill、协议通信 MCP 服务以及生产级 HTTP 微服务，皆是围绕 Action 的能力增强与交付形态。
 
 ### 10 行代码定义原子 Action
 
-在 `actions/greet.ts` 中编写纯粹的业务逻辑，享受原生强类型推导与上下文支持：
+在 `actions/greet.ts` 中编写业务逻辑，直接消费自动生成的强类型契约与上下文能力：
 
 ```ts
 import { defineAction } from "@actiondock/sdk";
+import type { ActionInput, ActionOutput } from "../.actiondock/generated/actions.d.ts";
 
-export interface GreetInput {
-  name: string;
-}
-
-export interface GreetOutput {
-  message: string;
-}
-
-export default defineAction<GreetInput, GreetOutput>(async (input, ctx) => {
-  ctx.log.info("Greeting user", input);
-  return {
-    message: `Hello, ${input.name}!`,
-  };
-});
+export default defineAction<ActionInput<"greet">, ActionOutput<"greet">>(
+  async (input, ctx) => {
+    ctx.log.info("Greeting user", input);
+    return {
+      message: `Hello, ${input.name}!`,
+    };
+  }
+);
 ```
 
 ### 多形态即刻交付
@@ -57,7 +52,7 @@ actions/greet.ts（强类型 Action 实现）
 - 纯内存沙箱与测试自愈：提供毫秒级虚拟时钟与内存隔离测试环境，支持智能体自主运行测试套件，就地捕获异常并完成闭环自愈。
 - 业务规程与原子实现解耦：人类专家在纯文本 Markdown 规程中沉淀业务时序、决策分支与安全红线；智能体专心实现强类型契约 Action，拒绝模型越权。
 - 确定性依赖复现与事务回滚：基于依赖清单严格锁定版本，支持安装与卸载操作的原子事务快照与故障回滚，彻底杜绝环境漂移。
-- 单一事实源与平台中立：全链路以 Action 为唯一核心事实源，彻底解耦底层协议与外部运行环境。
+- 契约规范与平台中立：以 `actiondock.json` 为契约唯一事实源，业务逻辑与通信协议和外部环境彻底解耦。
 
 ---
 
@@ -121,13 +116,14 @@ actions/greet.ts（强类型 Action 实现）
 ---
 
 ## 运行环境与原生设计红利
-
+ 
 ActionDock 原生构建于 Node.js 版本大于等于 24.12.0 的现代运行底座。这一运行环境门槛为开发者带来了显著的原生工程红利：
-
-- 原生类型擦除执行：直接执行 TypeScript 代码，彻底脱离 Babel、esbuild、swc 或 ts-node 等外部编译转译工具链。
+ 
+- 原生类型擦除执行：直接执行 TypeScript 代码，生产运行时彻底脱离 Babel、esbuild、swc 等外部编译转译工具链。
+- 轻量测试即时加载：单元测试由轻量加载器 `tsx` 原生驱动，测试开发阶段零编译等待，提供亚秒级反馈闭环。
 - 内置 SQLite 存储引擎：依托内置模块 `node:sqlite` 提供轻量嵌入式状态存储与沙箱持久化能力，无需编译原生二进制扩展模块，杜绝外部数据库依赖。
 - 原生 HTTP 服务：基于内置模块 `node:http` 原生支撑微服务与通信端点，杜绝冗余第三方 Web 框架，保障极低运行时开销。
-- 零转译与零冗余依赖：从本地开发、单测到多形态打包分发，全链路告别复杂的构建配置与庞大依赖树，保持纯粹敏捷的开发体验。
+- 极简依赖树：全链路告别庞大复杂的构建转译体系，保持纯粹敏捷的开发与交付体验。
 
 ---
 

@@ -13,29 +13,24 @@ Turn agent-generated tool code into testable, constrained, reproducible, and shi
 
 ## Write Once. Run Anywhere.
 
-Action is the single atomic core of ActionDock. Operational Playbooks, portable Agent Skills, standard MCP protocol servers, and production RESTful HTTP microservices are all enhancements and delivery targets centered around Action.
+Action is the single product atom and core abstraction of ActionDock. Operational Playbooks, portable Agent Skills, standard MCP protocol servers, and production RESTful HTTP microservices are all enhancements and delivery targets centered around Action.
 
 ### 10-Line Atomic Action Definition
 
-Write pure business logic in `actions/greet.ts` with native TypeScript type inference and execution context:
+Write pure business logic in `actions/greet.ts`, consuming the auto-generated typed contract and execution context directly:
 
 ```ts
 import { defineAction } from "@actiondock/sdk";
+import type { ActionInput, ActionOutput } from "../.actiondock/generated/actions.d.ts";
 
-export interface GreetInput {
-  name: string;
-}
-
-export interface GreetOutput {
-  message: string;
-}
-
-export default defineAction<GreetInput, GreetOutput>(async (input, ctx) => {
-  ctx.log.info("Greeting user", input);
-  return {
-    message: `Hello, ${input.name}!`,
-  };
-});
+export default defineAction<ActionInput<"greet">, ActionOutput<"greet">>(
+  async (input, ctx) => {
+    ctx.log.info("Greeting user", input);
+    return {
+      message: `Hello, ${input.name}!`,
+    };
+  }
+);
 ```
 
 ### Instant Multi-Target Delivery
@@ -57,7 +52,7 @@ actions/greet.ts (typed Action implementation)
 - In-memory sandbox and self-healing: Millisecond virtual clocks and memory-isolated testing allow agents to run unit tests autonomously and self-heal failures in a closed loop.
 - Decoupled operational guardrails: Humans define workflow sequences, decision branches, and safety guardrails in plain-text Markdown Playbooks; agents implement deterministic Actions against strict type schemas.
 - Deterministic dependency reproduction and transactional rollback: Deterministic lockfiles and transactional dependency snapshots prevent drift and allow safe rollbacks during installation or removal.
-- Single source of truth: Maintain a platform-neutral business core, decoupled from transport protocols and host environments.
+- Contract-first neutrality: Maintain `actiondock.json` as the single source of truth for contracts, keeping business logic fully decoupled from transport protocols and host environments.
 
 ---
 
@@ -124,10 +119,11 @@ Developing and delivering a production-grade Action follows five straightforward
 
 ActionDock natively targets Node.js >=24.12.0. This runtime threshold is intentionally chosen to provide substantial native engineering advantages:
 
-- Native TypeScript type stripping: Execute TypeScript files directly without Babel, esbuild, swc, or ts-node compilation and transpilation pipelines.
+- Native TypeScript type stripping: Execute TypeScript files directly in production without Babel, esbuild, swc, or external compilation pipelines.
+- Instant test loading: Unit tests are driven natively with the lightweight `tsx` loader, ensuring sub-second feedback loops without build waiting.
 - Built-in SQLite engine: Leverage `node:sqlite` for lightweight embedded state storage and test sandboxing without compiling native binary extensions or installing external database packages.
 - Native HTTP server: Utilize `node:http` to power microservices and endpoints with minimal runtime overhead and zero third-party web framework dependencies.
-- Zero transpilation and minimal footprint: Direct execution from local development to production distribution, keeping workflows lean, fast, and dependency-free.
+- Lean dependency tree: Eliminate sprawling build configurations and maintain an agile development and delivery lifecycle.
 
 ---
 
