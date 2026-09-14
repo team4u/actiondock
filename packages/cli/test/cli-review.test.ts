@@ -435,6 +435,18 @@ describe("CLI Review & Machine Contract Regression", () => {
     const typesContent = readFileSync(typesPath, "utf-8");
     expect(typesContent).toContain('"worker-task": {');
     expect(typesContent).toContain('"worker-task2": {');
+
+    // 验证 --input 和 --output 快捷字段契约与模版生成
+    const greetProc = runCli(
+      ["action", "create", "custom-greet", "--desc", "Greet Action", "--input", "name:string", "--output", "message:string"],
+      tempDir
+    );
+    expect(greetProc.exitCode).toBe(0);
+    const greetActionFile = readFileSync(join(tempDir, "actions", "custom-greet.ts"), "utf-8");
+    expect(greetActionFile).toContain("message: `Hello, ${input.name}!`");
+    const manifestJson = JSON.parse(readFileSync(join(tempDir, "actiondock.json"), "utf-8"));
+    expect(manifestJson.actions["custom-greet"].inputSchema.properties.name.type).toBe("string");
+    expect(manifestJson.actions["custom-greet"].outputSchema.properties.message.type).toBe("string");
   });
 
   it("outputs single JSON without duplicate error envelope and sets exit code 1 on execution failure", () => {

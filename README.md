@@ -84,10 +84,10 @@ Developing and delivering a production-grade Action follows five straightforward
   npm install
   ```
 
-- Scaffold an Action:
-  Generate a strongly typed Action skeleton and its manifest declaration:
+- Scaffold Action template and contract:
+  Generate a strongly typed Action skeleton and its contract schema in one command:
   ```bash
-  ad action create greet -d "Greeting action"
+  ad action create greet -d "Greeting action" --input name:string --output message:string
   ```
 
 - Write business logic:

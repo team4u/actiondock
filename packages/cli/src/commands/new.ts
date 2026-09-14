@@ -21,6 +21,8 @@ export function registerNewCommands(program: Command, context?: CliContext): voi
     .description("Scaffold a new Action definition file")
     .option("-d, --desc <description>", "Action description")
     .option("-f, --file <filePath>", "Target file path relative to actions dir")
+    .option("-i, --input <fields...>", "Input schema fields (e.g. name:string, count?:number)")
+    .option("-o, --output <fields...>", "Output schema fields (e.g. message:string, success:boolean)")
     .action(async (id, options) => {
       await handleActionCreate(id, options, context);
     });

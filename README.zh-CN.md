@@ -84,10 +84,10 @@ actions/greet.ts（强类型 Action 实现）
   npm install
   ```
 
-- 创建 Action 模板：
-  使用命令行工具生成强类型 Action 骨架与配置清单：
+- 创建 Action 模板与契约：
+  使用命令行工具一键生成强类型 Action 骨架与模式契约：
   ```bash
-  ad action create greet -d "用户问候动作"
+  ad action create greet -d "用户问候动作" --input name:string --output message:string
   ```
 
 - 编写业务逻辑：
