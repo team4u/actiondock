@@ -141,93 +141,57 @@ export async function handleActionCreate(
 
     const parsedInput = parseSchemaFields(options.input);
     const parsedOutput = parseSchemaFields(options.output);
-    const isGreet = id === "greet" || id.endsWith(".greet");
 
-    let inputSchema: any;
-    if (parsedInput) {
-      inputSchema = {
-        type: "object",
-        properties: parsedInput.properties,
-        required: parsedInput.required,
-      };
-    } else if (isGreet) {
-      inputSchema = {
-        type: "object",
-        properties: {
-          name: {
-            type: "string",
-            description: "Name of user to greet",
-          },
-        },
-        required: ["name"],
-      };
-    } else {
-      inputSchema = {
-        type: "object",
-        properties: {
-          exampleParam: {
-            type: "string",
-            description: "Example parameter description",
-          },
-        },
-        required: [],
-      };
-    }
-
-    let outputSchema: any;
-    if (parsedOutput) {
-      outputSchema = {
-        type: "object",
-        properties: parsedOutput.properties,
-        required: parsedOutput.required,
-      };
-    } else if (isGreet) {
-      outputSchema = {
-        type: "object",
-        properties: {
-          message: {
-            type: "string",
-            description: "Greeting message",
-          },
-        },
-        required: ["message"],
-      };
-    } else {
-      outputSchema = {
-        type: "object",
-        properties: {
-          success: { type: "boolean" },
-          result: {},
-        },
-        required: ["success"],
-      };
-    }
-
-    let returnBody: string;
-    if (outputSchema.properties && outputSchema.properties.message) {
-      const nameExpr = inputSchema.properties && inputSchema.properties.name ? "input.name" : '"ActionDock"';
-      returnBody = `  return {
-    message: \`Hello, \${${nameExpr}}!\`,
-  };`;
-    } else if (outputSchema.properties && outputSchema.properties.success) {
-      returnBody = `  return {
-    success: true,
-    result: input.exampleParam || "done",
-  };`;
-    } else {
-      const returnLines = Object.entries(outputSchema.properties || {}).map(
-        ([k, prop]: [string, any]) => {
-          if (prop.type === "number") return `    ${k}: 0,`;
-          if (prop.type === "boolean") return `    ${k}: true,`;
-          if (prop.type === "array") return `    ${k}: [],`;
-          if (prop.type === "object") return `    ${k}: {},`;
-          return `    ${k}: "done",`;
+    const inputSchema = parsedInput
+      ? {
+          type: "object",
+          properties: parsedInput.properties,
+          required: parsedInput.required,
         }
-      );
+      : {
+          type: "object",
+          properties: {
+            exampleParam: {
+              type: "string",
+              description: "Example parameter description",
+            },
+          },
+          required: [],
+        };
+
+    const outputSchema = parsedOutput
+      ? {
+          type: "object",
+          properties: parsedOutput.properties,
+          required: parsedOutput.required,
+        }
+      : {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+          },
+          required: ["success"],
+        };
+
+    // 纯粹根据 outputSchema 的字段类型生成中性占位值，杜绝业务语义假设与虚假字段访问
+    const propEntries = Object.entries(outputSchema.properties || {});
+    let returnBody: string;
+    if (propEntries.length === 0) {
+      returnBody = "  return {};";
+    } else {
+      const returnLines = propEntries.map(([k, prop]: [string, any]) => {
+        const safeKey = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(k) ? k : JSON.stringify(k);
+        let defaultVal = '"done"';
+        if (prop.type === "number" || prop.type === "integer") defaultVal = "0";
+        else if (prop.type === "boolean") defaultVal = "true";
+        else if (prop.type === "array") defaultVal = "[]";
+        else if (prop.type === "object") defaultVal = "{}";
+        return `    ${safeKey}: ${defaultVal},`;
+      });
       returnBody = `  return {\n${returnLines.join("\n")}\n  };`;
     }
 
-    const desc = options.desc || (isGreet ? "用户问候动作" : `Action ${id}`);
+    const desc = options.desc || `Action ${id}`;
     const template = `import { defineAction } from "@actiondock/sdk";
 import type { ActionInput, ActionOutput } from "${typesImportPath}";
 
@@ -264,21 +228,19 @@ ${returnBody}
     // 始终自动生成或更新类型声明文件，确保单一事实源即时生效
     writeActionTypes(root, manifest);
 
-    let sampleInputStr: string;
-    if (inputSchema.properties && inputSchema.properties.name) {
-      sampleInputStr = '{"name": "ActionDock"}';
-    } else if (parsedInput && Object.keys(parsedInput.properties).length > 0) {
+    let sampleInputStr = "{}";
+    const inputEntries = Object.entries(inputSchema.properties || {});
+    if (inputEntries.length > 0) {
       const sampleObj: Record<string, any> = {};
-      for (const [k, p] of Object.entries(parsedInput.properties) as [string, any][]) {
-        if (p.type === "number") sampleObj[k] = 42;
-        else if (p.type === "boolean") sampleObj[k] = true;
-        else if (p.type === "array") sampleObj[k] = ["item"];
-        else if (p.type === "object") sampleObj[k] = {};
-        else sampleObj[k] = "sample";
+      for (const [k, prop] of inputEntries as [string, any][]) {
+        if (prop.type === "number" || prop.type === "integer") sampleObj[k] = 42;
+        else if (prop.type === "boolean") sampleObj[k] = true;
+        else if (prop.type === "array") sampleObj[k] = ["item"];
+        else if (prop.type === "object") sampleObj[k] = {};
+        else if (k === "name") sampleObj[k] = "ActionDock";
+        else sampleObj[k] = "hello";
       }
       sampleInputStr = JSON.stringify(sampleObj);
-    } else {
-      sampleInputStr = '{"exampleParam": "hello"}';
     }
 
     writeStdout(`[OK] Created Action '${id}' at ${targetFullFile}`, context);

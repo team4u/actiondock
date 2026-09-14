@@ -436,17 +436,28 @@ describe("CLI Review & Machine Contract Regression", () => {
     expect(typesContent).toContain('"worker-task": {');
     expect(typesContent).toContain('"worker-task2": {');
 
-    // 验证 --input 和 --output 快捷字段契约与模版生成
+    // 验证 --input 和 --output 快捷字段契约与中性占位模版生成
     const greetProc = runCli(
       ["action", "create", "custom-greet", "--desc", "Greet Action", "--input", "name:string", "--output", "message:string"],
       tempDir
     );
     expect(greetProc.exitCode).toBe(0);
     const greetActionFile = readFileSync(join(tempDir, "actions", "custom-greet.ts"), "utf-8");
-    expect(greetActionFile).toContain("message: `Hello, ${input.name}!`");
+    expect(greetActionFile).toContain('message: "done",');
     const manifestJson = JSON.parse(readFileSync(join(tempDir, "actiondock.json"), "utf-8"));
     expect(manifestJson.actions["custom-greet"].inputSchema.properties.name.type).toBe("string");
     expect(manifestJson.actions["custom-greet"].outputSchema.properties.message.type).toBe("string");
+
+    // 验证带有自定义输入与输出字段时的中性类型占位生成，确保不产生虚假字段访问
+    const calcProc = runCli(
+      ["action", "create", "calculate", "--input", "count:number", "--output", "success:boolean,total:number"],
+      tempDir
+    );
+    expect(calcProc.exitCode).toBe(0);
+    const calcContent = readFileSync(join(tempDir, "actions", "calculate.ts"), "utf-8");
+    expect(calcContent).toContain("success: true,");
+    expect(calcContent).toContain("total: 0,");
+    expect(calcContent).not.toContain("exampleParam");
   });
 
   it("outputs single JSON without duplicate error envelope and sets exit code 1 on execution failure", () => {
