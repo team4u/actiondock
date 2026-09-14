@@ -237,7 +237,6 @@ ${returnBody}
         else if (prop.type === "boolean") sampleObj[k] = true;
         else if (prop.type === "array") sampleObj[k] = ["item"];
         else if (prop.type === "object") sampleObj[k] = {};
-        else if (k === "name") sampleObj[k] = "ActionDock";
         else sampleObj[k] = "hello";
       }
       sampleInputStr = JSON.stringify(sampleObj);
