@@ -1,104 +1,133 @@
 # 快速上手指南
 
-本指南带领开发者在数分钟内从零初始化一个 Action Package，掌握单一事实源清单配置、编写强类型 Action 业务逻辑、通过纯内存沙箱执行毫秒级单测，并验证同一份代码多形态交付为命令行、MCP 服务与 Agent 技能包。
+写一次 Action，同时交付 CLI、MCP、HTTP 和 Agent Skill。
+
+内置测试沙箱、状态存储、配置体系、运行追踪与可复现打包。
 
 ```text
-greet.ts (强类型 Action 实现)
-       │
-       ├── ad test         --> [PASS] 毫秒级纯内存沙箱单测与虚拟时钟
-       ├── ad mcp          --> [READY] 导出标准 MCP 协议通信服务
-       └── ad export skill --> [EXPORT] 打包自包含 Agent 技能包（含规程与锁定依赖）
-```
+$ npm install -g @actiondock/cli
+$ ad init hello && cd hello
+[OK] Initialized ActionDock project in hello
 
-> 同一份代码。一次测试。多形态交付。
+$ ad action create greet --input name:string --output message:string
+[OK] Created action greet (actions/greet.ts)
+[OK] Generated contract types (.actiondock/generated/actions.d.ts)
 
----
+$ ad test
+[PASS] tests/greet.test.ts (1.2ms, in-memory sandbox)
+1 passed, 0 failed
 
-## 运行环境准备
-
-确保本地已安装 Node.js 24.12.0 或更高版本，并在终端全局安装 ActionDock 命令行工具：
-
-```bash
-npm install -g @actiondock/cli
-```
-
-校验安装结果：
-
-```bash
-ad --version
-```
-
----
-
-## 初始化项目骨架
-
-在终端执行初始化命令创建项目骨架并安装基础依赖：
-
-```bash
-ad init hello-tools
-cd hello-tools
-npm install
-```
-
-初始化生成的标准工程目录结构如下：
-
-```text
-hello-tools/
-├── actiondock.json       # 项目元数据、配置项与动作清单唯一事实源
-├── package.json          # 依赖声明与标准测试脚本
-├── tsconfig.json         # TypeScript 现代模块配置
-├── actions/              # 原子 Action 源码目录
-│   └── greet.ts          # 示例动作业务执行源码
-├── playbooks/            # 操作规程目录
-│   └── greet-user.md     # 示例操作规程
-└── tests/                # 单元测试目录
-    └── greet.test.ts     # 单元测试用例
-```
-
-### 标准测试脚本规范
-
-生成的 `package.json` 对齐 Node.js 标准测试规范：
-
-```json
+$ ad run greet --input '{"name":"World"}'
 {
-  "name": "hello-tools",
-  "version": "0.1.0",
-  "type": "module",
-  "scripts": {
-    "test": "node --import tsx --test tests/*.test.ts"
-  },
-  "dependencies": {
-    "@actiondock/sdk": "^2.3.0"
-  },
-  "devDependencies": {
-    "@actiondock/testing": "^2.3.0",
-    "@types/node": "^24.10.0",
-    "tsx": "^4.19.0",
-    "typescript": "^5.7.0"
-  }
+  "ok": true,
+  "runId": "01JMB394K8V6C1T9A2",
+  "data": { "message": "Hello, World!" }
 }
-```
 
-生产运行时直接执行于 Node.js 24 原生底座，无需任何转译工具；测试与开发阶段由轻量加载器 `tsx` 提供零配置即时执行与亚秒级测试反馈。
+$ ad mcp          --> [READY] Model Context Protocol (STDIO/SSE)
+$ ad serve        --> [READY] RESTful HTTP Microservice (:8080)
+$ ad export skill --> [EXPORT] Self-contained Agent Skill bundle
+```
 
 ---
 
-## 声明与编写 Action
+## 极简黄金路径
 
-ActionDock 遵循单一事实源原则。所有动作的标识、模式定义与描述统一在 `actiondock.json` 中声明，并通过工具链自动生成类型声明。
+无需手动编写复杂的 JSON Schema，仅需 5 个核心命令即可走通从创建、单测、本地运行到多形态交付的全流程：
 
-### 在 actiondock.json 中声明清单契约
+- 全局安装命令行工具：
+  确保本地 Node.js 版本大于等于 24.12.0，在终端全局安装工具链：
+  ```bash
+  npm install -g @actiondock/cli
+  ```
+  安装完成后可验证版本：
+  ```bash
+  ad --version
+  ```
 
-在 `actiondock.json` 中声明配置项与动作 `sample.greet`：
+- 初始化项目骨架：
+  运行初始化命令并进入生成的项目目录：
+  ```bash
+  ad init hello
+  cd hello
+  ```
+
+- 声明并创建 Action：
+  直接通过命令行参数声明输入与输出字段，脚手架自动生成强类型契约并维护底层清单，无需手写模式配置：
+  ```bash
+  ad action create greet --input name:string --output message:string
+  ```
+
+- 编写极简业务源码：
+  查看自动生成的 `actions/greet.ts` 业务源码，输入与输出自动享受完整的类型提示与校验：
+  ```ts
+  import { defineAction } from "@actiondock/sdk";
+  import type { ActionInput, ActionOutput } from "../.actiondock/generated/actions.d.ts";
+
+  export type Input = ActionInput<"greet">;
+  export type Output = ActionOutput<"greet">;
+
+  export default defineAction<Input, Output>(async (input, ctx) => {
+    ctx.log.info("Greeting user", input);
+    return {
+      message: `Hello, ${input.name}!`,
+    };
+  });
+  ```
+
+- 执行纯内存沙箱测试：
+  运行单测套件，毫秒级纯内存沙箱与轻量加载机制提供即时反馈：
+  ```bash
+  ad test
+  ```
+
+- 本地命令行即时调用：
+  通过本地命令行直接调用动作，验证输入解析与统一数据信封：
+  ```bash
+  ad run greet --input '{"name":"World"}'
+  ```
+  终端标准输出返回统一结构的成功响应信封：
+  ```json
+  {
+    "ok": true,
+    "runId": "01JMB394K8V6C1T9A2",
+    "data": {
+      "message": "Hello, World!"
+    }
+  }
+  ```
+  过程日志自动分流至标准错误流，彻底隔离标准输出数据流。
+
+- 一键多形态即刻交付：
+  同一份 Action 业务代码无需重写或修改，即可直接交付为多种服务形态：
+  ```bash
+  # 启动标准 MCP 协议服务，直连 Cursor、Windsurf 或 Claude Desktop
+  ad mcp
+
+  # 启动生产级 RESTful HTTP 微服务
+  ad serve
+
+  # 导出自包含 Agent 技能包，供智能体客户端索引规程与调用
+  ad export skill
+  ```
+
+---
+
+## 进阶特性与底层机制
+
+当项目需要深度定制输入输出校验规则、引入持久化状态、编排业务规程或构建独立交付包时，可以进一步使用以下进阶能力。
+
+### 清单契约与手动模式定义
+
+在底层架构中，`actiondock.json` 是项目元数据、动作声明与配置项的唯一事实源。使用 `ad action create` 时工具会自动维护该文件，开发者亦可随时手动修改扩展复杂校验约束：
 
 ```json
 {
   "$schema": "https://actiondock.dev/schema/v2/actiondock.json",
   "schemaVersion": 2,
-  "id": "hello-tools",
+  "id": "hello",
   "name": "Hello Tools",
   "version": "0.1.0",
-  "description": "基础演示工具集",
   "config": {
     "DEFAULT_GREETING": {
       "description": "默认问候语前缀",
@@ -107,13 +136,17 @@ ActionDock 遵循单一事实源原则。所有动作的标识、模式定义与
     }
   },
   "actions": {
-    "sample.greet": {
+    "greet": {
       "entry": "actions/greet.ts",
-      "description": "个性化问候用户并记录问候次数",
+      "description": "问候用户并记录状态",
       "inputSchema": {
         "type": "object",
         "properties": {
-          "name": { "type": "string", "description": "用户姓名" }
+          "name": {
+            "type": "string",
+            "description": "用户名称",
+            "minLength": 1
+          }
         },
         "required": ["name"]
       },
@@ -130,34 +163,34 @@ ActionDock 遵循单一事实源原则。所有动作的标识、模式定义与
 }
 ```
 
-### 自动生成强类型声明
-
-在清单中完成模式声明后，执行类型生成命令：
+手动修改清单结构后，执行以下命令即可同步刷新生成的类型契约：
 
 ```bash
 ad generate types
 ```
 
-工具链将自动在 `.actiondock/generated/actions.d.ts` 生成对应的强类型定义，包括 `ActionInput<"sample.greet">` 与 `ActionOutput<"sample.greet">`（若通过 `ad action create` 创建动作，脚手架会自动完成该刷新）。
+类型生成器将在 `.actiondock/generated/actions.d.ts` 中输出对齐的 TypeScript 接口。
 
-### 编写动作业务执行逻辑
+### 状态持久化与配置体系
 
-在 `actions/greet.ts` 中直接消费生成的强类型，编写纯粹的业务逻辑：
+在业务逻辑中，通过 `ctx` 访问运行时提供的状态与配置能力：
 
 ```ts
 import { defineAction } from "@actiondock/sdk";
 import type { ActionInput, ActionOutput } from "../.actiondock/generated/actions.d.ts";
 
-export type Input = ActionInput<"sample.greet">;
-export type Output = ActionOutput<"sample.greet">;
+export type Input = ActionInput<"greet">;
+export type Output = ActionOutput<"greet">;
 
 export default defineAction<Input, Output>(async (input, ctx) => {
+  // 从配置系统读取参数，支持多级回退
   const prefix = ctx.config.get<string>("DEFAULT_GREETING", "Hello");
+
+  // 访问持久化状态存储
   const count = ((await ctx.state.get<number>(`greet:${input.name}`)) || 0) + 1;
   await ctx.state.set(`greet:${input.name}`, count);
 
-  // 过程日志一律写入 ctx.log（标准错误流），彻底隔离标准输出
-  ctx.log.info(`用户 ${input.name} 已问候 ${count} 次`);
+  ctx.log.info(`用户 ${input.name} 累计问候 ${count} 次`);
 
   return {
     message: `${prefix}, ${input.name}!`,
@@ -166,89 +199,35 @@ export default defineAction<Input, Output>(async (input, ctx) => {
 });
 ```
 
----
+### 操作规程与安全边界
 
-## 编写毫秒级沙箱测试
+为防止大模型在复杂任务中产生幻觉或越权操作，可以在 `playbooks/` 目录下编写纯 Markdown 业务规程：
 
-测试是智能体自主自愈与工程质量的核心保障。在 `tests/greet.test.ts` 中编写测试，使用 `@actiondock/testing` 提供的纯内存测试运行时：
+```markdown
+# 用户问候标准作业规程
 
-```ts
-import { describe, it } from "node:test";
-import assert from "node:assert/strict";
-import { createTestRuntime } from "@actiondock/testing";
-import greetAction from "../actions/greet.js";
+当会话中有新用户进入时，按以下时序执行：
 
-describe("sample.greet 动作测试", () => {
-  it("应当正确返回问候信息并自增计数", async () => {
-    const runtime = createTestRuntime();
-
-    // 第一次调用
-    const res1 = await runtime.run(greetAction, { name: "ActionDock" });
-    assert.equal(res1.message, "Hello, ActionDock!");
-    assert.equal(res1.count, 1);
-
-    // 第二次调用，断言状态持久化自增
-    const res2 = await runtime.run(greetAction, { name: "ActionDock" });
-    assert.equal(res2.count, 2);
-  });
-});
+- 验证用户真实姓名，严禁使用未经核实的匿名代号。
+- 调用 greet 执行问候并检索历史频次。
+- 若频次大于 1，在回答中体现老用户关怀。
 ```
 
-在终端执行测试，纯内存秒级输出结果：
+规程在导出 Agent 技能包时会自动与动作打包，引导智能体按照人类预设的正确时序与安全边界执行。
+
+### 独立交付包构建
+
+如果需要将项目打包为免全局依赖的独立交付目录，可使用构建命令：
 
 ```bash
-npm test
+ad build
 ```
 
----
+该命令将分析所有动作依赖，生成包含内嵌生产依赖与入口的独立产物目录，在目标机器上仅需 Node.js 运行时即可直接执行。
 
-## 本地命令行执行与通道隔离
+### 底层包机制与运行原理
 
-使用 `ad run` 命令执行动作，通过标准输入输出验证业务结果与标准化信封：
+脚手架在底层基于 Node.js 现代原生生态构建：
 
-```bash
-ad run sample.greet --input '{"name":"ActionDock"}'
-```
-
-标准输出返回统一的结构化成功信封：
-
-```json
-{
-  "ok": true,
-  "runId": "01JMB394K8V6C1T9A2...",
-  "data": {
-    "message": "Hello, ActionDock!",
-    "count": 1
-  }
-}
-```
-
-过程诊断日志则自动重定向至标准错误流，杜绝破坏 JSON 数据报文。
-
----
-
-## 多形态交付形态
-
-同一份 Action 源代码无需任何改动，即可一键交付为多种目标形态：
-
-- 启动为 MCP 协议服务：
-  ```bash
-  ad mcp
-  ```
-  立即作为标准输入输出通信服务启动，可在 Cursor、Windsurf 或 Claude Desktop 中挂载为工具。
-
-- 导出为 Agent Skill 技能包：
-  ```bash
-  # 导出源码模式技能
-  ad export skill
-
-  # 导出自包含 Node.js 目录模式技能
-  ad export skill --mode node
-  ```
-  在当前目录下生成自包含的技能资产，供智能体客户端自动识别规程与动作。
-
-- 构建自包含 Node.js 运行时交付目录：
-  ```bash
-  ad build
-  ```
-  生成开箱即用的交付目录产物，内嵌锁定的生产依赖，可直接使用 Node.js 独立运行。
+- 测试底层机制：`ad test` 底层依托 Node.js 原生测试运行器与轻量加载器 `tsx`，支持零编译即时加载测试文件。
+- 依赖管理底座：`package.json` 声明基础依赖，供底层 npm 或其他包管理器按需安装，开发者日常开发无需记忆繁琐的包管理命令，统一使用 ad 体系操作即可。
