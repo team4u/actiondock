@@ -11,117 +11,13 @@ Agent Tool Engineering Toolchain.
 
 Turn agent-generated tool code into testable, constrained, reproducible, and shippable production software assets.
 
-Build once. Ship anywhere. Deliver the same atomic capability seamlessly as an MCP protocol server, Agent Skill package, HTTP microservice, or local CLI tool without rewriting glue code.
+## Write Once. Run Anywhere.
 
-```text
-greet.ts (typed Action implementation)
-       │
-       ├── ad test         --> [PASS] Millisecond in-memory sandbox & virtual clock
-       ├── ad mcp          --> [READY] Standard MCP protocol communication server
-       ├── ad export skill --> [EXPORT] Self-contained Agent Skill (SKILL.md & locked deps)
-       ├── ad serve        --> [READY] Production RESTful microservice
-       └── ad run          --> [OUTPUT] Immediate local CLI execution
-```
+Action is the single atomic core of ActionDock. Operational Playbooks, portable Agent Skills, standard MCP protocol servers, and production RESTful HTTP microservices are all enhancements and delivery targets centered around Action.
 
-> Same code. Tested once. Delivered everywhere.
+### 10-Line Atomic Action Definition
 
----
-
-## Pain Points and Design Philosophy
-
-In the era of agentic software development, writing a quick script takes seconds. But how do you confidently ship that code into production?
-
-Developers often ask: Since official MCP SDKs and FastMCP already exist, and an Agent Skill only requires a Markdown file, why do we need a dedicated delivery toolchain?
-
-- FastMCP focuses on making it easy to author a single MCP server.
-- ActionDock makes teams confident to ship agent-generated tools directly into production environments.
-
-Exposing raw functions or ad-hoc scripts creates severe production vulnerabilities: fragile environment drift, lack of deterministic in-memory test sandboxes, and unintended agent hallucinations or destructive actions due to missing human guardrails.
-
-ActionDock enforces the core collaboration paradigm: **Humans define guardrails; Agents write the implementation.**
-
-- Decoupled SOP Guardrails: Humans define workflow sequences, validation logic, and safety guardrails in plain-text Markdown Playbooks; agents implement deterministic Actions against strict type schemas.
-- In-Memory Sandbox and Self-Healing: Millisecond virtual clocks and memory-isolated testing allow agents to run unit tests autonomously and self-heal failures.
-- Reproducible Delivery with Rollback Protection: Deterministic lockfiles and transactional dependency management prevent drift and enable self-contained runtime bundles.
-- Build Once, Deliver Anywhere: Maintain a single source of truth and deliver across CLI, MCP servers, HTTP microservices, and portable Agent Skills.
-
----
-
-## Runtime and Dependencies
-
-ActionDock natively targets Node.js >=24.12.0:
-
-- Native Runtime Engine: Powered by Node.js native type stripping, built-in SQLite (`node:sqlite`), and native HTTP without external build tools.
-- Standard npm Workflow: Fully aligned with standard ecosystem tooling (`npm test`, `npm run typecheck`, `npm run build`, `npm run test:pack`).
-
----
-
-## Quick Start
-
-### For AI Agents
-
-Compatible agents can install ActionDock skills directly:
-
-```bash
-# Install ActionDock official skill globally
-npx skills add team4u/actiondock -g -y
-
-# Or install any skill repository from GitHub
-npx skills add <owner/repo> -g -y
-```
-
-Once installed, compatible agents can discover the bundled Playbooks and use them to invoke the corresponding Actions.
-
-### Standard Developer Workflow
-
-- Install the CLI globally:
-```bash
-npm install -g @actiondock/cli
-```
-
-- Initialize a project scaffold:
-```bash
-ad init hello-tools
-cd hello-tools
-npm install
-```
-
-- Run unit tests:
-```bash
-npm test
-```
-
-- Execute an Action locally:
-```bash
-ad run sample.greet --input '{"name":"ActionDock"}'
-```
-
-- Start as an MCP server:
-```bash
-ad mcp
-```
-
----
-
-## Authoring Actions and Playbooks
-
-Under the AI-driven development paradigm, humans and agents establish a clear division of responsibility:
-
-- Humans write operational Playbooks to define expert workflows, decision branches, and strict safety guardrails.
-- Agents write deterministic Actions against typed contracts and complete self-healing loops via automated unit tests.
-
-```text
-Playbook = Human-defined SOPs (workflow sequences, branches, guardrails)
-Action   = Agent-implemented code (strongly typed, deterministic capabilities)
-
-             ↓ Combined Export
-
-          Agent Skill portable package
-```
-
-### Defining an Atomic Action
-
-Define an Action with type contracts and state persistence in `actions/greet.ts`:
+Write pure business logic in `actions/greet.ts` with native TypeScript type inference and execution context:
 
 ```ts
 import { defineAction } from "@actiondock/sdk";
@@ -132,25 +28,128 @@ export interface GreetInput {
 
 export interface GreetOutput {
   message: string;
-  count: number;
 }
 
-export default defineAction(async (input: GreetInput, ctx): Promise<GreetOutput> => {
-  const prefix = ctx.config.get("GREETING_PREFIX", "Hello");
-  const count = ((await ctx.state.get<number>(`greet:${input.name}`)) || 0) + 1;
-  await ctx.state.set(`greet:${input.name}`, count);
-  ctx.log.info(`User ${input.name} has been greeted ${count} times`);
-
+export default defineAction<GreetInput, GreetOutput>(async (input, ctx) => {
+  ctx.log.info("Greeting user", input);
   return {
-    message: `${prefix}, ${input.name}!`,
-    count,
+    message: `Hello, ${input.name}!`,
   };
 });
 ```
 
-### Writing an Operational Playbook
- 
-Define standard operating procedures in pure Markdown within `playbooks/greet-user.md`:
+### Instant Multi-Target Delivery
+
+Deliver the exact same Action code into multiple production targets without writing any glue code:
+
+```text
+actions/greet.ts (typed Action implementation)
+       │
+       ├── ad test         --> [PASS] Millisecond in-memory sandbox & virtual clock
+       ├── ad run          --> [OUTPUT] Immediate local CLI execution
+       ├── ad mcp          --> [READY] Standard MCP protocol communication server
+       ├── ad export skill --> [EXPORT] Self-contained Agent Skill (Playbook & locked deps)
+       └── ad serve        --> [READY] Production RESTful microservice
+```
+
+### Production-Grade Reliability
+
+- In-memory sandbox and self-healing: Millisecond virtual clocks and memory-isolated testing allow agents to run unit tests autonomously and self-heal failures in a closed loop.
+- Decoupled operational guardrails: Humans define workflow sequences, decision branches, and safety guardrails in plain-text Markdown Playbooks; agents implement deterministic Actions against strict type schemas.
+- Deterministic dependency reproduction and transactional rollback: Deterministic lockfiles and transactional dependency snapshots prevent drift and allow safe rollbacks during installation or removal.
+- Single source of truth: Maintain a platform-neutral business core, decoupled from transport protocols and host environments.
+
+---
+
+## Frequently Asked Questions
+
+- What is ActionDock?
+  ActionDock is an engineering toolchain for developing, testing, building, and distributing AI agent actions and skills. With Action as its sole product atom, ActionDock transforms fragile, ad-hoc scripts into robust, well-structured, production-grade software assets.
+
+- Why is it better than writing MCP directly?
+  Authoring raw MCP servers or ad-hoc scripts exposes production systems to three critical risks: lack of deterministic in-memory test sandboxes, fragile runtime dependency drift, and unintended agent hallucinations or destructive actions due to missing human guardrails. ActionDock does not replace the MCP protocol; it serves as the upstream engineering foundation. It delivers built-in in-memory unit test sandboxes, decoupled human-defined Playbook guardrails, and deterministic dependency management with transactional rollback. The same Action can be delivered as an MCP server, HTTP microservice, Agent Skill, or CLI tool without altering a single line of business logic.
+
+- How simple is it?
+  Install the `@actiondock/cli` command-line tool and author pure business functions using `defineAction`. The framework handles protocol encoding, transport multiplexing, state persistence, and logging out of the box without boilerplate.
+
+- How to get started?
+  Follow the five-step golden path below to go from scaffold initialization to multi-target delivery in two minutes.
+
+---
+
+## Golden Development Path
+
+Developing and delivering a production-grade Action follows five straightforward steps:
+
+- Initialize project scaffold:
+  Run the initialization command to create a project scaffold and install dependencies:
+  ```bash
+  ad init hello-tools
+  cd hello-tools
+  npm install
+  ```
+
+- Scaffold an Action:
+  Generate a strongly typed Action skeleton and its manifest declaration:
+  ```bash
+  ad action create greet -d "Greeting action"
+  ```
+
+- Write business logic:
+  Implement your core business logic in `actions/greet.ts` with complete type safety and context access.
+
+- Local verification and automated testing:
+  Execute fast in-memory unit tests and verify execution locally via CLI:
+  ```bash
+  # Run the unit test suite
+  npm test
+
+  # Execute the Action locally via CLI
+  ad run greet --input '{"name":"ActionDock"}'
+  ```
+
+- Multi-target delivery and export:
+  Deliver as an MCP protocol server or export as a self-contained portable Agent Skill based on your needs:
+  ```bash
+  # Launch as a standard MCP server
+  ad mcp
+
+  # Export as a self-contained Agent Skill
+  ad export skill
+  ```
+
+---
+
+## Runtime and Native Engineering Benefits
+
+ActionDock natively targets Node.js >=24.12.0. This runtime threshold is intentionally chosen to provide substantial native engineering advantages:
+
+- Native TypeScript type stripping: Execute TypeScript files directly without Babel, esbuild, swc, or ts-node compilation and transpilation pipelines.
+- Built-in SQLite engine: Leverage `node:sqlite` for lightweight embedded state storage and test sandboxing without compiling native binary extensions or installing external database packages.
+- Native HTTP server: Utilize `node:http` to power microservices and endpoints with minimal runtime overhead and zero third-party web framework dependencies.
+- Zero transpilation and minimal footprint: Direct execution from local development to production distribution, keeping workflows lean, fast, and dependency-free.
+
+---
+
+## Human-Defined Guardrails, Agent-Authored Implementation
+
+ActionDock establishes a clear boundary between human intent and agent autonomous implementation:
+
+- Humans write operational Playbooks: Define operational sequences, branching criteria, and safety guardrails in plain-text Markdown as the single source of truth for human intent.
+- Agents write atomic Actions: Implement deterministic capabilities satisfying strongly typed contracts, completing autonomous verification and self-healing through test suites.
+
+```text
+Playbook = Human-defined SOPs (workflow sequences, branches, guardrails)
+Action   = Agent-implemented code (strongly typed contracts, atomic capabilities)
+
+             ↓ Unified Delivery
+
+          Agent Skill portable package / MCP protocol server / HTTP microservice
+```
+
+### Operational Playbook Example
+
+Author standard operating procedures in plain Markdown within `playbooks/greet-user.md`:
 
 ```markdown
 # User Greeting Standard Operating Procedure
@@ -158,7 +157,7 @@ Define standard operating procedures in pure Markdown within `playbooks/greet-us
 When greeting a user entering the session, follow these steps:
 
 - Verify the user's name; do not use unverified nicknames.
-- Invoke sample.greet to perform the greeting and retrieve historical visit counts.
+- Invoke greet to perform the greeting and retrieve historical visit counts.
 - If visit count is greater than 1, add a warm welcome-back remark.
 ```
 
@@ -171,7 +170,7 @@ Declare playbook metadata and its associated actions in `actiondock.json`:
       "entry": "playbooks/greet-user.md",
       "description": "User Greeting Standard Operating Procedure",
       "actions": [
-        "sample.greet"
+        "greet"
       ]
     }
   }
@@ -180,32 +179,9 @@ Declare playbook metadata and its associated actions in `actiondock.json`:
 
 ---
 
-## Why ActionDock?
-
-```text
-One Action Package
-├─ typed Actions
-├─ human-readable Playbooks
-├─ deterministic tests
-├─ reproducible dependencies
-└─ multiple delivery targets
-   ├─ CLI
-   ├─ MCP
-   ├─ HTTP
-   ├─ Agent Skill
-   └─ standalone Node.js
-```
-
-- Decoupled SOP Guardrails: Keep operational constraints and safety boundaries out of code, defined as plain-text Playbooks for human oversight.
-- Native In-Memory Sandbox: Fast, deterministic test runtime with virtual clocks and zero external database or network dependencies.
-- Multi-Target Delivery: Develop once and deliver across CLI, MCP server, HTTP microservice, Agent Skill, or standalone Node.js package.
-- Reproducible Dependencies: Deterministic lockfile resolution with transactional rollback protection on package installation and removal.
-
----
-
 ## Monorepo Architecture
 
-ActionDock is organized as a seven-package monorepo:
+ActionDock is organized as a cohesive, layered monorepo:
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
@@ -233,11 +209,11 @@ ActionDock is organized as a seven-package monorepo:
 └──────────────┘               └─────────────┘└──────────────┘
 ```
 
-See [Architecture](docs/architecture/runtime.md) for package responsibilities.
+See [Architecture](docs/architecture/runtime.md) for detailed package responsibilities and layer designs.
 
 ---
 
-## Verification and Testing
+## Verification and Commands
 
 ```bash
 # Run all unit and integration tests

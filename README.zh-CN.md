@@ -7,121 +7,17 @@
 
 [官网文档](https://team4u.github.io/actiondock/) | [English](README.md) | 简体中文
 
-Agent 工具的工程化交付链。
+智能体工具工程化交付链。
 
-把 Agent 写出来的工具代码，变成可测试、可约束、可复现、可交付的生产级软件资产。
+把智能体生成的工具代码，转化为可测试、可约束、可复现、可交付的生产级软件资产。
 
-一次编写，多形态交付。无需为不同宿主平台重复编写适配胶水代码，同一份业务能力无缝交付为 MCP 协议服务、Agent 技能包、HTTP 微服务或本地命令行工具。
+## 一次编写，多形态交付
 
-```text
-greet.ts (强类型 Action 实现)
-       │
-       ├── ad test         --> [PASS] 毫秒级纯内存沙箱单测与虚拟时钟
-       ├── ad mcp          --> [READY] 导出标准 MCP 协议通信服务
-       ├── ad export skill --> [EXPORT] 打包自包含 Agent 技能包（含规程与锁定依赖）
-       ├── ad serve        --> [READY] 启动生产级 RESTful 微服务
-       └── ad run          --> [OUTPUT] 本地命令行即时调用验证
-```
+Action 是 ActionDock 中唯一的原子核心。业务规程 Playbook、便携技能包 Agent Skill、协议通信 MCP 服务以及生产级 HTTP 微服务，皆是围绕 Action 的能力增强与交付形态。
 
-> 同一份代码。一次测试。多形态交付。
+### 10 行代码定义原子 Action
 
----
-
-## 痛点剖析与设计哲学
-
-在 Agent 编写代码日益普及的当下，生成一段功能函数只需数秒，但如何将这些代码可靠地接入生产系统？
-
-很多开发者会问：既然已经有官方 MCP 协议库或 FastMCP，也可以手写技能描述，为什么还需要专门的交付链？
-
-- FastMCP 侧重于简化单个协议服务的编写。
-- ActionDock 致力于让团队放心把 Agent 生成的工具代码投入生产环境运行。
-
-单纯暴露裸函数或临时脚本存在明显的生产隐患：环境依赖容易漂移断裂、缺乏确定性的本地测试与状态沙箱、缺少人类业务安全规程导致的模型越权调用。
-
-ActionDock 践行**人定规程，Agent 写实现**的核心协作范式：
-
-- 业务规程与原子实现解耦：人类在纯文本 Playbook 中划定业务流程与安全红线；Agent 根据强类型契约编写确定性的原子 Action。
-- 纯内存沙箱与测试自愈：提供毫秒级虚拟时钟与内存沙箱测试环境，支持 Agent 自主运行测试并完成故障自愈闭环。
-- 生产级依赖复现与事务回滚：通过依赖锁定清单与原子事务机制，杜绝依赖漂移，支持构建自包含交付产物。
-- 一次编写，多形态交付：单一代码事实源，按需分发为命令行工具、MCP 服务、HTTP 微服务与便携技能包。
-
----
-
-## 运行环境与依赖说明
-
-ActionDock 2.0 原生构建于 Node.js >=24.12.0 运行底座：
-
-- 原生运行时能力：全面采用 Node.js 原生类型擦除、内置 SQLite 与原生 HTTP 服务，日常开发、测试、调试与运行完全脱离外部转译工具与笨重依赖。
-- 标准 npm 工作流：全面对齐主流生态工作流，支持标准测试驱动开发与包分发。
-
----
-
-## 快速开始
-
-### 智能体极速接入
-
-兼容智能体客户端可直接使用技能包管理器一键安装技能：
-
-```bash
-# 全局安装 ActionDock 官方技能
-npx skills add team4u/actiondock -g -y
-
-# 或安装开源仓库的指定技能
-npx skills add <owner/repo> -g -y
-```
-
-安装完成后，兼容智能体可感知技能包内的操作规程，并调用底层原子动作完成复杂任务。
-
-### 开发者标准工作流
-
-- 全局安装命令行工具：
-```bash
-npm install -g @actiondock/cli
-```
-
-- 初始化项目脚手架：
-```bash
-ad init hello-tools
-cd hello-tools
-npm install
-```
-
-- 运行测试套件：
-```bash
-npm test
-```
-
-- 本地执行 Action：
-```bash
-ad run sample.greet --input '{"name":"ActionDock"}'
-```
-
-- 启动为 MCP 协议服务：
-```bash
-ad mcp
-```
-
----
-
-## 编写 Action 与 Playbook
-
-在智能体驱动的研发模式下，人类与智能体建立了清晰的分工边界：
-
-- 人类编写操作规程 Playbook，明确业务工作流、决策分支与严格的安全红线。
-- 智能体根据类型契约编写确定性的 Action 动作，并通过自动化单元测试完成自愈闭环。
-
-```text
-Playbook = 人类定义的标准作业规程（工作流时序、分支判定、安全红线）
-Action   = 智能体实现的确定性代码（强类型契约、原子能力实现）
-
-             ↓ 统一导出
-
-          Agent Skill 便携技能包
-```
-
-### 定义原子 Action
-
-在 `actions/greet.ts` 中定义具备强类型契约与状态存储的 Action：
+在 `actions/greet.ts` 中编写纯粹的业务逻辑，享受原生强类型推导与上下文支持：
 
 ```ts
 import { defineAction } from "@actiondock/sdk";
@@ -132,25 +28,128 @@ export interface GreetInput {
 
 export interface GreetOutput {
   message: string;
-  count: number;
 }
 
-export default defineAction(async (input: GreetInput, ctx): Promise<GreetOutput> => {
-  const prefix = ctx.config.get("GREETING_PREFIX", "Hello");
-  const count = ((await ctx.state.get<number>(`greet:${input.name}`)) || 0) + 1;
-  await ctx.state.set(`greet:${input.name}`, count);
-  ctx.log.info(`User ${input.name} has been greeted ${count} times`);
-
+export default defineAction<GreetInput, GreetOutput>(async (input, ctx) => {
+  ctx.log.info("Greeting user", input);
   return {
-    message: `${prefix}, ${input.name}!`,
-    count,
+    message: `Hello, ${input.name}!`,
   };
 });
 ```
 
+### 多形态即刻交付
+
+同一份 Action 代码，无需编写任何适配胶水代码，即可通过命令行工具分发为多种形态：
+
+```text
+actions/greet.ts（强类型 Action 实现）
+       │
+       ├── ad test         --> [PASS] 毫秒级内存沙箱与虚拟时钟单测
+       ├── ad run          --> [OUTPUT] 本地命令行即时调用验证
+       ├── ad mcp          --> [READY] 导出标准 MCP 协议通信服务
+       ├── ad export skill --> [EXPORT] 打包自包含 Agent 技能包（含规程与锁定依赖）
+       └── ad serve        --> [READY] 启动生产级 RESTful 微服务
+```
+
+### 生产级工程保障
+
+- 纯内存沙箱与测试自愈：提供毫秒级虚拟时钟与内存隔离测试环境，支持智能体自主运行测试套件，就地捕获异常并完成闭环自愈。
+- 业务规程与原子实现解耦：人类专家在纯文本 Markdown 规程中沉淀业务时序、决策分支与安全红线；智能体专心实现强类型契约 Action，拒绝模型越权。
+- 确定性依赖复现与事务回滚：基于依赖清单严格锁定版本，支持安装与卸载操作的原子事务快照与故障回滚，彻底杜绝环境漂移。
+- 单一事实源与平台中立：全链路以 Action 为唯一核心事实源，彻底解耦底层协议与外部运行环境。
+
+---
+
+## 新手常见解答
+
+- 这是什么？
+  ActionDock 是面向智能体动作与技能的工程化开发、测试、构建与分发工具链。它以 Action 为唯一核心原子，帮助开发者将松散的代码片段转化为结构完备、具备生产保障的工业级软件资产。
+
+- 比直接写 MCP 好在哪里？
+  直接手写 MCP 服务或临时脚本存在三大生产隐患：缺乏确定性的本地测试沙箱、运行依赖容易漂移断裂、缺乏人类业务规程约束容易导致模型越权调用。ActionDock 不替代 MCP 协议，而是为 MCP 及多种交付目标提供上游工程化底座：内置毫秒级纯内存单测沙箱、人定规程 Playbook 防越权机制、依赖锁定与事务回滚保障。同一份 Action 代码无需修改，即可一键交付为 MCP 协议服务、HTTP 微服务、便携技能包或本地命令行工具。
+
+- 有多简单？
+  仅需安装全局命令行工具 `@actiondock/cli`，使用 `defineAction` 编写纯粹的业务函数即可。框架自动处理协议序列化、网络传输、状态持久化与日志链路，无需编写冗余样板代码。
+
+- 怎么开始？
+  遵循下方清晰的黄金开发路径，五步即可完成从初始化到多形态交付的全流程。
+
+---
+
+## 黄金开发路径
+
+开发与交付一个生产级 Action 仅需遵循以下五个标准步骤：
+
+- 初始化工程脚手架：
+  运行初始化命令创建项目骨架并安装依赖：
+  ```bash
+  ad init hello-tools
+  cd hello-tools
+  npm install
+  ```
+
+- 创建 Action 模板：
+  使用命令行工具生成强类型 Action 骨架与配置清单：
+  ```bash
+  ad action create greet -d "用户问候动作"
+  ```
+
+- 编写业务逻辑：
+  在 `actions/greet.ts` 中实现具体的业务逻辑，享受强类型输入输出契约与上下文能力。
+
+- 本地验证与自动化测试：
+  在纯内存沙箱中执行毫秒级单元测试，并在本地命令行快速调用验证：
+  ```bash
+  # 运行单元测试套件
+  npm test
+
+  # 本地命令行调用验证
+  ad run greet --input '{"name":"ActionDock"}'
+  ```
+
+- 多形态交付与导出：
+  根据实际需求，一键交付为 MCP 协议服务，或打包为自包含的智能体技能包：
+  ```bash
+  # 启动标准 MCP 协议通信服务
+  ad mcp
+
+  # 导出自包含智能体技能包
+  ad export skill
+  ```
+
+---
+
+## 运行环境与原生设计红利
+
+ActionDock 原生构建于 Node.js 版本大于等于 24.12.0 的现代运行底座。这一运行环境门槛为开发者带来了显著的原生工程红利：
+
+- 原生类型擦除执行：直接执行 TypeScript 代码，彻底脱离 Babel、esbuild、swc 或 ts-node 等外部编译转译工具链。
+- 内置 SQLite 存储引擎：依托内置模块 `node:sqlite` 提供轻量嵌入式状态存储与沙箱持久化能力，无需编译原生二进制扩展模块，杜绝外部数据库依赖。
+- 原生 HTTP 服务：基于内置模块 `node:http` 原生支撑微服务与通信端点，杜绝冗余第三方 Web 框架，保障极低运行时开销。
+- 零转译与零冗余依赖：从本地开发、单测到多形态打包分发，全链路告别复杂的构建配置与庞大依赖树，保持纯粹敏捷的开发体验。
+
+---
+
+## 人定规程，Agent 写实现
+
+ActionDock 倡导人类业务掌控与智能体自主实现的明确分工：
+
+- 人类编写操作规程 Playbook：在纯 Markdown 文件中划定业务时序、分支判断与安全红线，作为人类专家意图的唯一事实源。
+- 智能体编写原子 Action：根据严格的输入输出契约实现功能，并通过测试套件自主校验与自愈。
+
+```text
+Playbook = 人类定义的业务规程（工作流时序、分支判定、安全红线）
+Action   = 智能体实现的原子代码（强类型契约、纯粹业务能力）
+
+             ↓ 统一交付
+
+          Agent Skill 便携技能包 / MCP 协议服务 / HTTP 微服务
+```
+
 ### 编写操作规程 Playbook
 
-在 `playbooks/greet-user.md` 中编写纯 Markdown 格式的标准作业规程：
+在 `playbooks/greet-user.md` 中以纯 Markdown 格式沉淀标准作业规程：
 
 ```markdown
 # 用户问候标准作业规程
@@ -158,11 +157,11 @@ export default defineAction(async (input: GreetInput, ctx): Promise<GreetOutput>
 当会话中有新用户进入时，执行以下规程步骤：
 
 - 验证用户真实姓名，严禁使用未经核实的昵称。
-- 调用 sample.greet 执行问候并获取历史问候频次。
+- 调用 greet 动作执行问候并获取历史问候频次。
 - 若计数大于 1，在回答中体现老用户关怀。
 ```
 
-在 `actiondock.json` 中显式登记规程元数据及其关联动作：
+在 `actiondock.json` 中声明规程与关联的 Action：
 
 ```json
 {
@@ -171,7 +170,7 @@ export default defineAction(async (input: GreetInput, ctx): Promise<GreetOutput>
       "entry": "playbooks/greet-user.md",
       "description": "用户问候标准作业规程",
       "actions": [
-        "sample.greet"
+        "greet"
       ]
     }
   }
@@ -180,32 +179,9 @@ export default defineAction(async (input: GreetInput, ctx): Promise<GreetOutput>
 
 ---
 
-## 为什么选择 ActionDock？
-
-```text
-One Action Package
-├─ typed Actions
-├─ human-readable Playbooks
-├─ deterministic tests
-├─ reproducible dependencies
-└─ multiple delivery targets
-   ├─ CLI
-   ├─ MCP
-   ├─ HTTP
-   ├─ Agent Skill
-   └─ standalone Node.js
-```
-
-- 业务规程与安全红线解耦：将调用时序与安全边界剥离于代码之外，以纯文本 Playbook 交付人类审查与专家管控。
-- 原生纯内存沙箱：毫秒级确定性时钟与沙箱运行时，脱离外部数据库与网络依赖快速验证逻辑。
-- 一次开发，多形态交付：一次编写，按需分发为命令行工具、MCP 服务、HTTP 微服务、智能体技能包或独立 Node.js 产物。
-- 依赖可重现与事务保护：基于锁文件锁定依赖，支持安装与卸载操作的事务快照与回滚机制。
-
----
-
 ## 架构体系与子包划分
 
-ActionDock 采用职责明确的子包分层架构：
+ActionDock 采用高内聚、低耦合的子包分层架构：
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
@@ -237,7 +213,7 @@ ActionDock 采用职责明确的子包分层架构：
 
 ---
 
-## 验证与测试
+## 验证与测试命令
 
 ```bash
 # 执行全量单元测试与集成测试

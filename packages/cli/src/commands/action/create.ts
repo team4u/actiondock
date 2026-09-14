@@ -1,8 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { isAbsolute, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import {
   assertPathWithinRoot,
-  checkGeneratedTypes,
   findProjectRoot,
   getPackageSlug,
   loadManifest,
@@ -66,24 +65,26 @@ export async function handleActionCreate(
       throw new ExecutionError(`Target action file already exists at ${targetFullFile}`);
     }
 
+    const targetDir = dirname(targetFullFile);
+    if (!existsSync(targetDir)) {
+      mkdirSync(targetDir, { recursive: true });
+    }
+
+    const generatedTypesTarget = resolve(root, ".actiondock", "generated", "actions");
+    let typesImportPath = relative(targetDir, generatedTypesTarget).replace(/\\/g, "/");
+    if (!typesImportPath.startsWith("./") && !typesImportPath.startsWith("../")) {
+      typesImportPath = `./${typesImportPath}`;
+    }
+
     const desc = options.desc || `Action ${id}`;
     const template = `import { defineAction } from "@actiondock/sdk";
+import type { ActionInput, ActionOutput } from "${typesImportPath}";
 
-export interface Input {
-  exampleParam?: string;
-}
-
-export interface Output {
-  success: boolean;
-  result?: unknown;
-}
+export type Input = ActionInput<"${id}">;
+export type Output = ActionOutput<"${id}">;
 
 export default defineAction<Input, Output>(async (input, ctx) => {
   ctx.log.info("Running ${id}", input);
-
-  // Access config: ctx.config.get("MY_CONFIG")
-  // Access state:  await ctx.state.get("my_key") / await ctx.state.set("my_key", val)
-  // Call action:   await ctx.actions.invoke(otherAction, input)
 
   return {
     success: true,
@@ -128,11 +129,8 @@ export default defineAction<Input, Output>(async (input, ctx) => {
     };
     saveManifest(root, manifest);
 
-    // 若当前项目已存在类型生成文件，则同步自动刷新类型声明
-    const typeCheck = checkGeneratedTypes(root, manifest);
-    if (typeCheck.exists) {
-      writeActionTypes(root, manifest);
-    }
+    // 始终自动生成或更新类型声明文件，确保单一事实源即时生效
+    writeActionTypes(root, manifest);
 
     writeStdout(`[OK] Created Action '${id}' at ${targetFullFile}`, context);
     writeStdout(`\nTo run this action:`, context);

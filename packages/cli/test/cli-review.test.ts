@@ -306,11 +306,38 @@ describe("CLI Review & Machine Contract Regression", () => {
     );
     expect(newActionProc.exitCode).toBe(0);
     expect(existsSync(join(tempDir, "actions", "calc.ts"))).toBe(true);
+    const actionContent = readFileSync(join(tempDir, "actions", "calc.ts"), "utf-8");
+    expect(actionContent).toContain('import type { ActionInput, ActionOutput } from "../.actiondock/generated/actions";');
+    expect(actionContent).toContain('export type Input = ActionInput<"calculator">;');
+    expect(actionContent).toContain('export type Output = ActionOutput<"calculator">;');
+    expect(actionContent).not.toContain("export interface Input {");
+    expect(actionContent).not.toContain("export interface Output {");
+
+    // Verify .actiondock/generated/actions.d.ts is automatically generated
+    const generatedTypesPath = join(tempDir, ".actiondock", "generated", "actions.d.ts");
+    expect(existsSync(generatedTypesPath)).toBe(true);
+    const generatedTypes = readFileSync(generatedTypesPath, "utf-8");
+    expect(generatedTypes).toContain("export namespace Actions");
+    expect(generatedTypes).toContain('"calculator": {');
+
+    // Test nested action relative path computation
+    const nestedActionProc = runCli(
+      ["new", "action", "nested-calc", "--file", "math/sub/calc.ts"],
+      tempDir
+    );
+    expect(nestedActionProc.exitCode).toBe(0);
+    expect(existsSync(join(tempDir, "actions", "math", "sub", "calc.ts"))).toBe(true);
+    const nestedContent = readFileSync(join(tempDir, "actions", "math", "sub", "calc.ts"), "utf-8");
+    expect(nestedContent).toContain('import type { ActionInput, ActionOutput } from "../../../.actiondock/generated/actions";');
+    expect(nestedContent).toContain('export type Input = ActionInput<"nested-calc">;');
+    expect(nestedContent).toContain('export type Output = ActionOutput<"nested-calc">;');
 
     const manifestAfterAction = JSON.parse(readFileSync(join(tempDir, "actiondock.json"), "utf-8"));
     expect(manifestAfterAction.actions.calculator).toBeDefined();
     expect(manifestAfterAction.actions.calculator.description).toBe("Perform calculations");
     expect(manifestAfterAction.actions.calculator.entry).toBe("actions/calc.ts");
+    expect(manifestAfterAction.actions["nested-calc"]).toBeDefined();
+    expect(manifestAfterAction.actions["nested-calc"].entry).toBe("actions/math/sub/calc.ts");
 
     const newPlaybookProc = runCli(
       ["new", "playbook", "deploy-flow", "--desc", "Deployment flow SOP", "--actions", "calculator"],
@@ -390,10 +417,24 @@ describe("CLI Review & Machine Contract Regression", () => {
     const createProc = runCli(["action", "create", "worker-task", "--desc", "Worker Task"], tempDir);
     expect(createProc.exitCode).toBe(0);
     expect(existsSync(join(tempDir, "actions", "worker-task.ts"))).toBe(true);
+    const workerContent = readFileSync(join(tempDir, "actions", "worker-task.ts"), "utf-8");
+    expect(workerContent).toContain('import type { ActionInput, ActionOutput } from "../.actiondock/generated/actions";');
+    expect(workerContent).toContain('export type Input = ActionInput<"worker-task">;');
+    expect(workerContent).toContain('export type Output = ActionOutput<"worker-task">;');
 
     const newProc = runCli(["action", "new", "worker-task2", "--desc", "Worker Task 2"], tempDir);
     expect(newProc.exitCode).toBe(0);
     expect(existsSync(join(tempDir, "actions", "worker-task2.ts"))).toBe(true);
+    const worker2Content = readFileSync(join(tempDir, "actions", "worker-task2.ts"), "utf-8");
+    expect(worker2Content).toContain('import type { ActionInput, ActionOutput } from "../.actiondock/generated/actions";');
+    expect(worker2Content).toContain('export type Input = ActionInput<"worker-task2">;');
+    expect(worker2Content).toContain('export type Output = ActionOutput<"worker-task2">;');
+
+    const typesPath = join(tempDir, ".actiondock", "generated", "actions.d.ts");
+    expect(existsSync(typesPath)).toBe(true);
+    const typesContent = readFileSync(typesPath, "utf-8");
+    expect(typesContent).toContain('"worker-task": {');
+    expect(typesContent).toContain('"worker-task2": {');
   });
 
   it("outputs single JSON without duplicate error envelope and sets exit code 1 on execution failure", () => {

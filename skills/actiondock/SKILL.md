@@ -26,7 +26,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 | 业务意图与需求 | 核心推荐命令 | 决策建议与关键原则 | 详尽参考手册 |
 | :--- | :--- | :--- | :--- |
 | **新建工程项目** | `ad init [directory] -i <id> -n <name>` | 生成标准工程骨架，包含清单、配置、代码与规程目录 | [developer.md](references/developer.md) |
-| **新建 Action 工具** | `ad new action <id> [-d <desc>] [-f <file>]` | 脚手架自动注册清单契约，实现标准输入输出接口 | [developer.md](references/developer.md) |
+| **新建 Action 工具** | `ad action create <id>` 或 `ad new action <id>` | 脚手架自动注册清单契约并即时生成类型声明，直接消费强类型接口 | [developer.md](references/developer.md) |
 | **新建 Playbook 规程** | `ad new playbook <id> [-d <desc>] [-a <actions...>]` | 脚手架生成规程 Markdown 模板并在清单中登记 | [developer.md](references/developer.md) |
 | **探索可用能力** | `ad info <patterns...>` 或 `ad info -i <pattern>` | 模糊意图检索，优先检查规程与工具清单 | [cli.md](references/cli.md) |
 | **列出可用 Action** | `ad list [patterns...] [-P <pkg>]` | 按包或关键词列出当前包、工作区或远端的所有 Action | [cli.md](references/cli.md) |

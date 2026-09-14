@@ -2,44 +2,48 @@
 
 Action 是 ActionDock 体系中最基础的原子能力单元。
 
-它封装了一个具体的、确定性的任务（如查询数据库、调用第三方 API、处理文本、执行本地命令等），并通过强类型与模式规范约束其输入和输出。本指南系统介绍 Action 的契约设计哲学、`ActionContext` 上下文能力以及端到端的业务开发流程。
+它封装了一个具体的、确定性的任务（如查询数据库、调用外部接口、处理文本、执行受管外部命令等），并通过强类型与模式规范严格约束其输入和输出。本文档系统介绍 Action 的契约设计理念、`ActionContext` 上下文能力认知分层，以及基于单一事实源的端到端业务开发流程。
 
 ---
 
-## Action 定义契约与设计哲学
+## Action 定义契约与单一事实源
 
 在 ActionDock 2.0 中，`actiondock.json` 是元数据与契约模式的唯一事实源。每个 Action 的标识、描述、模式校验及依赖均在清单中声明，源码专注于纯粹的业务执行逻辑。
 
+### 标准类型驱动开发路径
+
+为避免模式定义与本地类型的重复编写，ActionDock 建立了从清单到代码的单向数据流与单一事实源开发闭环：
+
+- 清单声明契约：在 `actiondock.json` 的 `actions` 字典中定义 Action 输入与输出的 JSON Schema 模式规范。
+- 自动生成类型：执行 `ad generate types` 命令行指令，工具链自动将模式规范编译为强类型的 TypeScript 声明文件 `.actiondock/generated/actions.d.ts`。
+- 导入类型开发：在业务源码中导入 `ActionInput<"action-id">` 与 `ActionOutput<"action-id">` 泛型工具类型，直接约束业务执行函数，彻底消除重复手写接口的冗余。
+
 ### 动作声明形式
 
-使用 `@actiondock/sdk` 的 `defineAction` 声明业务执行函数。
+使用 `@actiondock/sdk` 的 `defineAction` 声明业务执行函数，配合生成的类型定义实现端到端强类型约束。
 
 函数式声明（推荐）：
 
 ```ts
 import { defineAction } from "@actiondock/sdk";
+import type { ActionInput, ActionOutput } from "../.actiondock/generated/actions.d.ts";
 
-export interface GreetInput {
-  name: string;
-}
-
-export interface GreetOutput {
-  message: string;
-}
-
-export default defineAction<GreetInput, GreetOutput>(async (input, ctx) => {
-  return {
-    message: `Hello, ${input.name}!`,
-  };
-});
+export default defineAction<ActionInput<"example.greet">, ActionOutput<"example.greet">>(
+  async (input, ctx) => {
+    return {
+      message: `Hello, ${input.name}!`,
+    };
+  }
+);
 ```
 
 对象式声明：
 
 ```ts
 import { defineAction } from "@actiondock/sdk";
+import type { ActionInput, ActionOutput } from "../.actiondock/generated/actions.d.ts";
 
-export default defineAction({
+export default defineAction<ActionInput<"example.greet">, ActionOutput<"example.greet">>({
   async run(input, ctx) {
     return {
       message: `Hello, ${input.name}!`,
@@ -50,28 +54,131 @@ export default defineAction({
 
 ---
 
-## ActionContext 运行时上下文
+## ActionContext 运行时上下文能力
 
-每次执行 Action 时，底层运行时引擎均向 `run` 方法注入全新的 `ActionContext` 实例，提供受控的系统交互能力：
+每次执行 Action 时，底层运行时引擎均向业务函数注入全新的 `ActionContext` 实例。为了降低认知负荷，`ActionContext` 的能力划分为高频的基础核心能力与面向复杂治理的高级深水区能力两层。
 
-- `ctx.config`：分层配置读取接口，支持运行期覆盖、内置 SQLite、环境变量与默认值多级回退。
-- `ctx.state`：持久化键值存储接口，基于当前包命名空间物理隔离，支持存活时间（TTL）自动失效。
-- `ctx.actions`：动作相互调用接口，支持级联调度下游 Action，内置调用栈深度限制与环路死锁阻断。
-- `ctx.process`：统一受管进程接口，提供短时命令一次性运行 `run`、长期交互进程启动 `start`、独占控制权治理与逐流增量读取能力。
-- `ctx.log`：结构化日志输出接口，日志严格输出至标准错误流，彻底隔离标准输出流，杜绝污染 JSON 数据信封。
-- `ctx.progress`：阶段进度报告接口，支持实时上报任务进度。
-- `ctx.signal`：协作式取消信号 `AbortSignal`，当任务被客户端主动取消或超时时自动触发中止。
-- `ctx.run`：当前执行链路元数据，包含 `id`（本次运行标识）、`rootId`（根调用标识）和 `parentId`（父级调用标识）。
+### 基础核心能力
+
+基础核心能力覆盖约百分之九十的日常业务开发场景，涵盖分层配置读取、键值状态持久化、动作级联调用以及结构化日志记录。
+
+- 分层配置读取 `ctx.config`：
+  - 职责与机制：提供多级回退的配置读取能力。依次从运行期覆盖参数、内置 SQLite 配置存储、系统环境变量以及清单默认值中解析配置。
+  - 常用方法：
+    - `ctx.config.get<T>(key: string): T | undefined`：读取指定配置，未设置时返回 `undefined`。
+    - `ctx.config.get<T>(key: string, defaultValue: T): T`：读取指定配置，未设置时回退至指定默认值。
+    - `ctx.config.has(key: string): boolean`：判断指定配置键是否存在。
+  - 使用示例：
+    ```ts
+    const token = ctx.config.get<string>("GITHUB_TOKEN");
+    const timeout = ctx.config.get<number>("TIMEOUT_MS", 5000);
+    ```
+
+- 键值状态持久化 `ctx.state`：
+  - 职责与机制：提供轻量级持久化键值存储，基于当前 Action Package 命名空间进行物理隔离，支持设置存活时间自动失效。
+  - 常用方法：
+    - `ctx.state.get<T>(key: string): Promise<T | undefined>`：获取键对应的数据，若已过期或不存在则返回 `undefined`。
+    - `ctx.state.set<T>(key: string, value: T, ttl?: number): Promise<void>`：存储键值对，可选传入秒级存活时间。
+    - `ctx.state.delete(key: string): Promise<boolean>`：删除指定键名的数据。
+    - `ctx.state.clear(prefix?: string): Promise<number>`：批量清空当前命名空间下的状态，支持前缀过滤。
+    - `ctx.state.keys(prefix?: string): Promise<string[]>`：枚举当前命名空间下匹配前缀的状态键名。
+    - `ctx.state.scope(namespace: string): StateStore`：创建具有独立二级命名空间隔离的子存储实例。
+  - 使用示例：
+    ```ts
+    // 缓存数据，存活时间设置为 3600 秒
+    await ctx.state.set(`cache:${id}`, result, 3600);
+    const cached = await ctx.state.get<Result>(`cache:${id}`);
+    ```
+
+- 动作级联调度 `ctx.actions`：
+  - 职责与机制：支持当前 Action 调度执行下游其他 Action，实现能力的细粒度原子化与高阶组合。底层运行时内置递归调用栈深度保护与环路死锁阻断检测。
+  - 常用方法：
+    - `ctx.actions.invoke<I, O>(actionId: string, input?: I): Promise<O>`：通过动作标识显式调用目标 Action 并返回类型化结果。
+    - `ctx.actions(actionId: string, input?: unknown): Promise<unknown>`：直接以函数形式执行下游 Action。
+  - 使用示例：
+    ```ts
+    const user = await ctx.actions.invoke<UserInput, UserOutput>("users.get", { id: "123" });
+    ```
+
+- 结构化日志记录 `ctx.log`：
+  - 职责与机制：结构化输出业务执行日志。所有日志严格输出至标准错误流，彻底隔离标准输出流，杜绝污染 JSON 协议信封。
+  - 常用方法：
+    - `ctx.log.debug(message: string, data?: unknown): void`：输出调试级别日志。
+    - `ctx.log.info(message: string, data?: unknown): void`：输出信息级别日志。
+    - `ctx.log.warn(message: string, data?: unknown): void`：输出警告级别日志。
+    - `ctx.log.error(message: string, data?: unknown): void`：输出错误级别日志。
+  - 使用示例：
+    ```ts
+    ctx.log.info("任务已启动", { prNumber: input.prNumber });
+    ```
+
+### 高级深水区能力
+
+高级深水区能力面向受管外部进程治理、长任务进度汇报、协作式取消协同及全流程链路追踪等系统级工程场景。
+
+- 统一受管进程治理 `ctx.process`：
+  - 职责与机制：提供跨平台受管的操作系统外部子进程生命周期治理，严禁静默衍生无管辖僵尸进程。提供短时命令一次性执行与长期常驻进程全生命周期受管治理能力。
+  - 常用方法：
+    - `ctx.process.run(input: ProcessRunInput, call?: CallOptions): Promise<ProcessRunResult>`：一次性执行命令并等待退出，内置超时中断与输出缓冲区截断保护。
+    - `ctx.process.start(input: ProcessStartInput, call?: CallOptions): Promise<ProcessStartResult>`：拉起长期受管进程，返回元数据快照与输出流游标。
+    - `ctx.process.inspect(id: string): Promise<ProcessInfo>`：查询指定受管进程的实时状态。
+    - `ctx.process.acquire(id: string, input: ProcessAcquireInput): Promise<ControlGrant>`：申请进程独占控制权令牌。
+    - `ctx.process.write(id: string, input: ProcessWriteInput): Promise<OperationReceipt>`：向受管进程输入流异步写入指令。
+  - 使用示例：
+    ```ts
+    // 一次性受管执行外部命令
+    const result = await ctx.process.run({
+      spec: {
+        executable: "git",
+        args: ["status", "--porcelain"],
+        io: { mode: "pipe" },
+      },
+      timeoutMs: 10000,
+      maxOutputBytes: 1024 * 1024,
+    });
+    ```
+
+- 阶段进度报告 `ctx.progress`：
+  - 职责与机制：长耗时或多步骤批处理任务通过进度报告器向调用端实时推送执行进度，便于智能体客户端或前端界面展示进度反馈与当前阶段说明。
+  - 常用方法：
+    - `ctx.progress.report(current: number, total?: number, message?: string): void`：汇报已完成量、总工作量与阶段说明。
+  - 使用示例：
+    ```ts
+    ctx.progress.report(3, 10, "正在拉取文件列表");
+    ```
+
+- 协作式取消中止 `ctx.signal`：
+  - 职责与机制：标准的 `AbortSignal` 信号实例。当外部调用方主动取消请求、触发超时或连接断开时，该信号置为中止态。透传给外部网络请求或异步等待流程，可立即释放系统计算资源。
+  - 使用示例：
+    ```ts
+    const response = await fetch("https://api.github.com/data", {
+      signal: ctx.signal,
+    });
+    ```
+
+- 调用链路追踪元数据 `ctx.run`：
+  - 职责与机制：提供全链路因果关联追踪上下文，包括当前执行标识、根调用标识与父级调用标识。通过该元数据可以精确串联级联调用的树状执行轨迹，便于排查与审计。
+  - 核心属性：
+    - `ctx.run.id`：当前 Action 单次执行的唯一运行标识。
+    - `ctx.run.rootId`：触发该次级联调用链路的根任务运行标识。
+    - `ctx.run.parentId`：直接触发本次执行的父级 Action 运行标识，根调用时缺省。
+  - 使用示例：
+    ```ts
+    ctx.log.info("执行链路信息", {
+      runId: ctx.run.id,
+      rootId: ctx.run.rootId,
+    });
+    ```
 
 ---
 
 ## 业务 Action 实战开发
 
-以实现 GitHub Pull Request 查询动作 `github.get-pr` 为例：
+以实现 GitHub Pull Request 查询动作 `github.get-pr` 为例，体验基于单一事实源的标准开发流程。
 
 ### 清单声明契约
 
-在 `actiondock.json` 中声明配置项与动作模式：
+在项目根目录的 `actiondock.json` 中定义配置需求与动作模式。清单是整个工程唯一的事实来源：
 
 ```json
 {
@@ -132,28 +239,28 @@ export default defineAction({
 > [!TIP]
 > 推荐在模式中通过 `examples` 字段提供具体取值样例，帮助智能体精准掌握参数格式与类型预期。
 
-### 编写 Action 业务实现
+### 自动生成 TypeScript 类型声明
 
-在 `actions/get-pr.ts` 中实现业务逻辑：
+在清单中完成契约定义后，在项目根目录运行代码生成指令：
+
+```bash
+ad generate types
+```
+
+该命令读取 `actiondock.json`，在 `.actiondock/generated/actions.d.ts` 中生成强类型的 TypeScript 类型映射。生成的类型文件由 ActionDock 框架统一托管，无需手工维护。
+
+### 导入类型并编写业务实现
+
+在 `actions/get-pr.ts` 中直接导入 `ActionInput<"github.get-pr">` 与 `ActionOutput<"github.get-pr">`，无需手工重复定义接口：
 
 ```ts
 import { defineAction } from "@actiondock/sdk";
+import type { ActionInput, ActionOutput } from "../.actiondock/generated/actions.d.ts";
 
-export interface GetPrInput {
-  repo: string;
-  prNumber: number;
-}
-
-export interface GetPrOutput {
-  id: number;
-  number: number;
-  title: string;
-  state: string;
-  url: string;
-  lastQueriedAt: string;
-}
-
-export default defineAction<GetPrInput, GetPrOutput>(async (input, ctx) => {
+export default defineAction<
+  ActionInput<"github.get-pr">,
+  ActionOutput<"github.get-pr">
+>(async (input, ctx) => {
   const token = ctx.config.get<string>("GITHUB_TOKEN");
 
   ctx.log.info(`正在查询 PR #${input.prNumber}（仓库: ${input.repo}）`);
@@ -194,7 +301,7 @@ export default defineAction<GetPrInput, GetPrOutput>(async (input, ctx) => {
 
 ## 编写确定性单元测试
 
-在 `tests/get-pr.test.ts` 中使用 `@actiondock/testing` 纯内存测试运行时进行验证：
+使用 `@actiondock/testing` 提供的纯内存测试运行时进行无外部依赖的确定性验证。在 `tests/get-pr.test.ts` 中编写测试用例：
 
 ```ts
 import { describe, it } from "node:test";
@@ -253,9 +360,14 @@ describe("github.get-pr 动作测试", () => {
   ad validate github.get-pr
   ```
 
-- 执行 Action：
+- 运行测试用例：
+  ```bash
+  ad test
+  ```
+
+- 本地直接运行 Action：
   ```bash
   ad run github.get-pr --input '{"repo": "team4u/actiondock", "prNumber": 1}'
   ```
 
-标准输出始终返回纯净的 JSON 结果信封，诊断日志全部重定向至标准错误流。
+标准输出始终返回纯净的 JSON 结果信封，结构化诊断日志全部重定向至标准错误流。

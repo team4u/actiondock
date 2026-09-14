@@ -14,7 +14,7 @@
   "schemaVersion": 2,
   "id": "team4u.github-tools",
   "name": "GitHub Tools",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "GitHub 运维与仓库交互工具集",
   "config": {
     "GITHUB_TOKEN": {
@@ -86,25 +86,32 @@
 
 ---
 
+## 自动生成 TypeScript 类型声明
+
+在 `actiondock.json` 中声明输入输出模式后，通过命令行工具编译生成强类型声明文件，确立单一事实源：
+
+```bash
+ad generate types
+```
+
+- 契约编译产物：命令将在 `.actiondock/generated/actions.d.ts` 生成对应各 Action 的强类型声明命名空间，包含 `ActionInput<T>` 与 `ActionOutput<T>` 泛型工具类型。
+- 脚手架自动维护：使用 `ad action create` 创建动作时，脚手架会自动完成模式登记并触发类型文件刷新。
+
+---
+
 ## Action 业务实现标准
 
-Action 业务代码必须通过 `defineAction` 默认导出，显式声明输入与输出类型契约：
+Action 业务代码必须通过 `defineAction` 默认导出，直接导入并消费生成类型，实现端到端强类型约束：
 
 ```typescript
 import { defineAction } from "@actiondock/sdk";
+import type { ActionInput, ActionOutput } from "../.actiondock/generated/actions.d.ts";
 
-export interface Input {
-  repo: string;
-  maxCount?: number;
-}
-
-export interface Output {
-  items: Array<{ id: string; title: string }>;
-  total: number;
-}
+export type Input = ActionInput<"list-issues">;
+export type Output = ActionOutput<"list-issues">;
 
 export default defineAction<Input, Output>(async (input, ctx) => {
-  // 配置读取：自动遵循 6 级优先级解析
+  // 配置读取：自动遵循多级优先级解析
   const token = ctx.config.get<string>("GITHUB_TOKEN");
 
   // 持久化状态：跨生命周期持久化存储（支持秒级过期 TTL）

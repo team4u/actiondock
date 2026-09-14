@@ -61,7 +61,7 @@ ActionDock 微服务模式（通过 `ad serve` 启动）提供标准 RESTful API
   {
     "ok": true,
     "status": "healthy",
-    "version": "2.2.0",
+    "version": "2.3.0",
     "timestamp": "2026-09-12T10:00:00.000Z",
     "uptime": 3600.5
   }
@@ -112,7 +112,7 @@ ActionDock 微服务模式（通过 `ad serve` 启动）提供标准 RESTful API
     {
       "ok": true,
       "type": "package_list",
-      "version": "2.2.0",
+      "version": "2.3.0",
       "packages": [
         {
           "id": "example-tools",
