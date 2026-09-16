@@ -9,13 +9,13 @@ import {
 } from "../utils";
 
 /**
- * 注册顶层统一 describe 命令：查询指定 Action 的规范结构与模式定义。
+ * 挂载 describe 子命令至指定 Commander 节点。
  * 
- * @param program Commander 根程序对象
+ * @param parent 目标 Commander 命令节点
  * @param context 命令行上下文
  */
-export function registerDescribeCommand(program: Command, context?: CliContext): void {
-  program
+export function attachDescribeCommand(parent: Command, context?: CliContext): Command {
+  return parent
     .command("describe <id>")
     .alias("show")
     .description("Show action definition, schema, and description")
@@ -83,4 +83,14 @@ export function registerDescribeCommand(program: Command, context?: CliContext):
         { localRoot: targetPackageRoot || undefined, scanLinkedPackages: true }
       );
     });
+}
+
+/**
+ * 注册顶层统一 describe 命令：查询指定 Action 的规范结构与模式定义。
+ * 
+ * @param program Commander 根程序对象
+ * @param context 命令行上下文
+ */
+export function registerDescribeCommand(program: Command, context?: CliContext): void {
+  attachDescribeCommand(program, context);
 }

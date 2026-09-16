@@ -13,6 +13,10 @@ import type { Command } from "commander";
 import { ExecutionError } from "../../errors";
 import { writeStdout } from "../../renderer";
 import type { CliContext } from "../../types";
+import { attachDescribeCommand } from "../describe";
+import { attachListCommand } from "../list";
+import { attachRunCommand } from "../run";
+import { attachValidateCommand } from "../validate";
 
 /**
  * 解析用户通过命令行传入的字段定义字符串（如 name:string, count?:number）。
@@ -76,7 +80,7 @@ export function parseSchemaFields(rawFields?: string[] | string): {
 }
 
 /**
- * 注册 action 命令组（action create, action new）。
+ * 注册 action 命令组（action create, action list, action describe, action run, action validate）。
  *
  * @param program Commander 根程序对象
  * @param context 命令行上下文
@@ -84,11 +88,10 @@ export function parseSchemaFields(rawFields?: string[] | string): {
 export function registerActionCommands(program: Command, context?: CliContext): void {
   const actionCmd = program
     .command("action")
-    .description("Manage Action definitions (create, scaffold)");
+    .description("Manage Action definitions and lifecycle (create, list, describe, run, validate)");
 
   actionCmd
     .command("create <id>")
-    .alias("new")
     .description("Scaffold a new Action definition file")
     .option("-d, --desc <description>", "Action description")
     .option("-f, --file <filePath>", "Target file path relative to actions dir")
@@ -97,6 +100,11 @@ export function registerActionCommands(program: Command, context?: CliContext): 
     .action(async (id, options) => {
       await handleActionCreate(id, options, context);
     });
+
+  attachListCommand(actionCmd, context);
+  attachDescribeCommand(actionCmd, context);
+  attachRunCommand(actionCmd, context);
+  attachValidateCommand(actionCmd, context);
 }
 
 export async function handleActionCreate(

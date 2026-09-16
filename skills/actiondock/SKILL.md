@@ -4,7 +4,7 @@ description: >-
   ActionDock 2.0 开发者套件与运行指南。当用户需要执行以下任务或涉及相关概念时激活此技能：
   创建、编写、修改或测试 ActionDock Action 工具（涉及 defineAction、ActionContext、受管进程与系统命令调度）；
   编写、校验或执行 Playbook 任务操作规程；
-  使用或排查 ad 命令行工具（包括 ad init、ad new、ad info、ad list、ad describe、ad run、ad validate、ad generate、ad playbook、ad config、ad state、ad runs、ad serve、ad mcp、ad build、ad test、ad add、ad remove、ad pack、ad doctor、ad link、ad unlink、ad export skill、ad profile）；
+  使用或排查 ad 命令行工具（包括 ad init、ad action、ad playbook、ad info、ad list、ad describe、ad run、ad validate、ad generate、ad config、ad state、ad runs、ad serve、ad mcp、ad build、ad test、ad add、ad remove、ad pack、ad doctor、ad link、ad unlink、ad export skill、ad profile）；
   配置持久化状态与环境变量、管理全局路由注册表、执行环境体检；
   将工具构建为 Node.js 运行时交付目录、打包为 npm 压缩包或导出为 Agent Skill 资产。
   凡用户询问 ActionDock、ad 命令、@actiondock/sdk 或涉及 Agent 工具开发场景均须应用此技能。
@@ -27,7 +27,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 | :--- | :--- | :--- | :--- |
 | **新建工程项目** | `ad init [directory] -i <id> -n <name>` | 生成标准工程骨架，包含清单、配置、代码与规程目录 | [developer.md](references/developer.md) |
 | **新建 Action 工具** | `ad action create <id> [-i <fields...>] [-o <fields...>]` | 脚手架快速生成代码骨架与基础清单条目，复杂模式在清单中扩展 | [developer.md](references/developer.md) |
-| **新建 Playbook 规程** | `ad new playbook <id> [-d <desc>] [-a <actions...>]` | 脚手架生成规程 Markdown 模板并在清单中登记 | [developer.md](references/developer.md) |
+| **新建 Playbook 规程** | `ad playbook create <id> [-d <desc>] [-a <actions...>]` | 脚手架生成规程 Markdown 模板并在清单中登记 | [developer.md](references/developer.md) |
 | **探索可用能力** | `ad info <patterns...>` 或 `ad info -i <pattern>` | 模糊意图检索，优先检查规程与工具清单 | [cli.md](references/cli.md) |
 | **列出可用 Action** | `ad list [patterns...] [-P <pkg>]` | 按包或关键词列出当前包、工作区或远端的所有 Action | [cli.md](references/cli.md) |
 | **查看 Action 详情** | `ad describe <id> [-P <pkg>]` | 查看指定 Action 的 Schema 模式、入参要求与依赖 | [cli.md](references/cli.md) |
@@ -84,7 +84,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 - 步骤五：编写业务逻辑。在 `actions/<action-id>.ts` 中使用 `defineAction` 编写纯业务逻辑，调阅 [developer.md](references/developer.md) 了解上下文 API；若涉及底层系统命令或外部进程，调阅 [process-execution.md](references/process-execution.md) 遵循受管进程规范。
 - 步骤六：契约门禁校验。执行 `ad validate`，确保模式合法与引用存在。
 - 步骤七：沙箱单元测试。在 `tests/<action-id>.test.ts` 中使用 `createTestRuntime` 进行纯内存测试，执行 `ad test`。
-- 步骤八：编排业务规程。执行 `ad new playbook <playbook-id>` 编写标准作业规程，执行 `ad playbook validate` 校验。
+- 步骤八：编排业务规程。执行 `ad playbook create <playbook-id>` 编写标准作业规程，执行 `ad playbook validate` 校验。
 - 步骤九：构建交付与导出。执行 `ad build` 构建交付目录，执行 `ad pack` 打包 npm 分发包，或执行 `ad export skill` 导出技能资产。多包复合套件可配合 `SKILL.custom.md` 或 `--skill-md-only` 使用，详见 [build-and-export.md](references/build-and-export.md)。
 
 ### 作业流三：安全执行与长任务追踪
@@ -113,7 +113,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 - 规程优先原则：面对业务编排任务，必须优先检索并遵循现成的 Playbook，严禁无视既有规程擅自拼凑 Action 调度次序。
 - 按需排查原则：严禁在每次任务执行前盲目进行前置环境检查、依赖重装或运行 `ad doctor` 体检；默认环境完备就绪，仅在实际遇到报错时按需修复。
 - 元数据规范原则：在修改 Action 源码（包括参数模式、描述、依赖）或新增 Action 文件后，在 `actiondock.json` 中完整登记并执行 `ad validate` 确保清单与 Schema 严格匹配；需要类型提示时运行 `ad generate types`。
-- 脚手架命令原则：新增 Action 工具可使用 `ad action create <id>`（或别名 `ad new action <id>`），命令行 `--input` 与 `--output` 仅用于生成基础字段骨架；若包含枚举、嵌套属性、正则或字段描述等复杂语义，必须在 `actiondock.json` 中以标准 JSON Schema 声明，并执行 `ad generate types` 同步类型。新增 Playbook 规程可使用 `ad playbook create <id>`（或别名 `ad new playbook <id>`）。
+- 脚手架命令原则：新增 Action 工具使用 `ad action create <id>`，命令行 `--input` 与 `--output` 仅用于生成基础字段骨架；若包含枚举、嵌套属性、正则或字段描述等复杂语义，必须在 `actiondock.json` 中以标准 JSON Schema 声明，并执行 `ad generate types` 同步类型。新增 Playbook 规程使用 `ad playbook create <id>`。
 - 依赖管理红线：正式项目引入外部 Action 包必须在工程根目录下执行 `ad add <package>` 安装并锁定依赖，严禁使用 `ad link` 替代项目正式依赖；`ad link` 仅限本地未发布源码快速调试与工作区联调。
 - 进程受管隔离原则：严禁在 Action 内部直接调用 Node.js 原生 child_process（如 exec、spawn 等），所有系统命令与外部进程必须通过 ctx.process 统一纳管；长期交互进程写操作必须通过 withControl 保证独占令牌与异常隔离。
 - 确定性进程测试红线：编写涉及系统命令的单元测试时，严禁唤起操作系统真实子进程，必须使用 @actiondock/testing 提供的 FakeProcessDriver 进行确定性模拟与事件发射。

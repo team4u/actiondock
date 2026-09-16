@@ -37,7 +37,7 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
   ```
   初始化生成包含 `actiondock.json`、`actions/`、`playbooks/` 与 `tests/` 的标准工程。
 
-- 生成新 Action 模板代码 (`ad action create` / `ad new action`)：
+- 生成新 Action 模板代码 (`ad action create`)：
   ```bash
   ad action create <id> [-d, --desc <description>] [-f, --file <filePath>] [-i, --input <fields...>] [-o, --output <fields...>]
   ```
@@ -52,9 +52,9 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
     - 字段名以 `?` 结尾表示该字段为可选。
     - 命令行简写仅用于快速初始化代码骨架；深层嵌套属性、字段说明、枚举取值、正则校验、数值范围等复杂语义规范，需在 `actiondock.json` 中扩展标准 JSON Schema，并运行 `ad generate types` 刷新类型。
 
-- 生成新 Playbook 规程模板 (`ad new playbook`)：
+- 生成新 Playbook 规程模板 (`ad playbook create`)：
   ```bash
-  ad new playbook <id> [-d, --desc <description>] [-a, --actions <actions...>] [-f, --file <filePath>]
+  ad playbook create <id> [-d, --desc <description>] [-a, --actions <actions...>] [-f, --file <filePath>]
   ```
   在当前工程中脚手架生成新 Playbook 规程 Markdown 文件并在 `actiondock.json` 中自动注册。
 
@@ -74,25 +74,25 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
 
 ### Action 开发、校验与执行
 
-- 列出 Action 清单 (`ad list`)：
+- 列出 Action 清单 (`ad list` / `ad action list`)：
   ```bash
   ad list [patterns...] [-i, --intent <pattern>] [--fallback] [--no-fallback] [-P, --package <id>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--data-dir <path>] [--json] [--envelope]
   ```
   检索并列出当前包、工作区或远程服务中可用的 Action 清单。
 
-- 查看 Action 详情与模式规范 (`ad describe`)：
+- 查看 Action 详情与模式规范 (`ad describe` / `ad action describe`)：
   ```bash
   ad describe <id> [-P, --package <id>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--data-dir <path>] [--json] [--envelope]
   ```
   查询指定 Action 的输入输出模式规范、描述及依赖定义。
 
-- 执行 Action (`ad run`)：
+- 执行 Action (`ad run` / `ad action run`)：
   ```bash
   ad run <id> [-P, --package <id>] [-i, --input <json>] [-f, --input-file <path>] [-c, --config <key=value...>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--timeout <duration>] [--request-id <id>] [--async] [--data-dir <path>] [--json] [--envelope]
   ```
   本地或远程执行指定 Action。支持通过 `--input` 或 `--input-file` 传参，支持 `--async` 异步启动（需远程服务支持），输出标准信封结果。
 
-- 校验 Action 模式与语法 (`ad validate`)：
+- 校验 Action 模式与语法 (`ad validate` / `ad action validate`)：
   ```bash
   ad validate [id] [-P, --package <id>] [--data-dir <path>] [--json] [--envelope]
   ```
@@ -172,7 +172,7 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
   ```bash
   ad playbook create <id> [-d, --desc <description>] [-a, --actions <actions...>] [-f, --file <filePath>]
   ```
-  在当前工程中创建新 Playbook 规程模板（功能等同于 `ad new playbook <id>`）。
+  在当前工程中创建新 Playbook 规程模板。
 
 ---
 

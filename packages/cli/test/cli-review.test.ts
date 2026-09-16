@@ -233,25 +233,25 @@ describe("CLI Review & Machine Contract Regression", () => {
 
     // Action create rejects absolute path
     const absPath = resolve(tempDir, "outside-action.ts");
-    const absActionProc = runCli(["new", "action", "test.abs-action", "--file", absPath], tempDir);
+    const absActionProc = runCli(["action", "create", "test.abs-action", "--file", absPath], tempDir);
     expect(absActionProc.exitCode).not.toBe(0);
     expect(absActionProc.stderr.toString()).toContain("relative path");
 
     // Action create rejects path traversal
-    const traversalActionProc = runCli(["new", "action", "test.traversal-action", "--file", "../outside.ts"], tempDir);
+    const traversalActionProc = runCli(["action", "create", "test.traversal-action", "--file", "../outside.ts"], tempDir);
     expect(traversalActionProc.exitCode).not.toBe(0);
 
     // Playbook create rejects absolute path
-    const absPbProc = runCli(["new", "playbook", "test.abs-playbook", "--file", absPath], tempDir);
+    const absPbProc = runCli(["playbook", "create", "test.abs-playbook", "--file", absPath], tempDir);
     expect(absPbProc.exitCode).not.toBe(0);
     expect(absPbProc.stderr.toString()).toContain("relative path");
 
     // Playbook create rejects path traversal
-    const traversalPbProc = runCli(["new", "playbook", "test.traversal-playbook", "--file", "../outside.md"], tempDir);
+    const traversalPbProc = runCli(["playbook", "create", "test.traversal-playbook", "--file", "../outside.md"], tempDir);
     expect(traversalPbProc.exitCode).not.toBe(0);
 
     // Valid playbook create produces unordered list in instructions
-    const validPbProc = runCli(["new", "playbook", "test.valid-pb", "--desc", "Test SOP"], tempDir);
+    const validPbProc = runCli(["playbook", "create", "test.valid-pb", "--desc", "Test SOP"], tempDir);
     expect(validPbProc.exitCode).toBe(0);
 
     const pbFilePath = join(tempDir, "playbooks", "test-valid-pb.md");
@@ -297,11 +297,11 @@ describe("CLI Review & Machine Contract Regression", () => {
     expect(runRes.data.message).toBe("Nihao, Beijing!");
   });
 
-  it("scaffolds new actions and playbooks via ad new and updates actiondock.json", () => {
+  it("scaffolds new actions and playbooks via action create and playbook create and updates actiondock.json", () => {
     runCli(["init", "--id", "test.scaffold", "."], tempDir);
 
     const newActionProc = runCli(
-      ["new", "action", "calculator", "--desc", "Perform calculations", "--file", "calc.ts"],
+      ["action", "create", "calculator", "--desc", "Perform calculations", "--file", "calc.ts"],
       tempDir
     );
     expect(newActionProc.exitCode).toBe(0);
@@ -322,7 +322,7 @@ describe("CLI Review & Machine Contract Regression", () => {
 
     // Test nested action relative path computation
     const nestedActionProc = runCli(
-      ["new", "action", "nested-calc", "--file", "math/sub/calc.ts"],
+      ["action", "create", "nested-calc", "--file", "math/sub/calc.ts"],
       tempDir
     );
     expect(nestedActionProc.exitCode).toBe(0);
@@ -340,7 +340,7 @@ describe("CLI Review & Machine Contract Regression", () => {
     expect(manifestAfterAction.actions["nested-calc"].entry).toBe("actions/math/sub/calc.ts");
 
     const newPlaybookProc = runCli(
-      ["new", "playbook", "deploy-flow", "--desc", "Deployment flow SOP", "--actions", "calculator"],
+      ["playbook", "create", "deploy-flow", "--desc", "Deployment flow SOP", "--actions", "calculator"],
       tempDir
     );
     expect(newPlaybookProc.exitCode).toBe(0);
@@ -411,7 +411,7 @@ describe("CLI Review & Machine Contract Regression", () => {
     expect(describeData.id).toBe(firstActionId);
   });
 
-  it("supports ad action create and ad action new aliases", () => {
+  it("supports ad action create and rejects legacy action new alias", () => {
     runCli(["init", "--id", "test.action-cmd", "."], tempDir);
 
     const createProc = runCli(["action", "create", "worker-task", "--desc", "Worker Task"], tempDir);
@@ -422,13 +422,17 @@ describe("CLI Review & Machine Contract Regression", () => {
     expect(workerContent).toContain('export type Input = ActionInput<"worker-task">;');
     expect(workerContent).toContain('export type Output = ActionOutput<"worker-task">;');
 
-    const newProc = runCli(["action", "new", "worker-task2", "--desc", "Worker Task 2"], tempDir);
-    expect(newProc.exitCode).toBe(0);
+    const create2Proc = runCli(["action", "create", "worker-task2", "--desc", "Worker Task 2"], tempDir);
+    expect(create2Proc.exitCode).toBe(0);
     expect(existsSync(join(tempDir, "actions", "worker-task2.ts"))).toBe(true);
     const worker2Content = readFileSync(join(tempDir, "actions", "worker-task2.ts"), "utf-8");
     expect(worker2Content).toContain('import type { ActionInput, ActionOutput } from "../.actiondock/generated/actions";');
     expect(worker2Content).toContain('export type Input = ActionInput<"worker-task2">;');
     expect(worker2Content).toContain('export type Output = ActionOutput<"worker-task2">;');
+
+    // 验证废弃别名 action new 被严格拒绝
+    const legacyNewProc = runCli(["action", "new", "worker-task3"], tempDir);
+    expect(legacyNewProc.exitCode).not.toBe(0);
 
     const typesPath = join(tempDir, ".actiondock", "generated", "actions.d.ts");
     expect(existsSync(typesPath)).toBe(true);
@@ -458,6 +462,48 @@ describe("CLI Review & Machine Contract Regression", () => {
     expect(calcContent).toContain("success: true,");
     expect(calcContent).toContain("total: 0,");
     expect(calcContent).not.toContain("exampleParam");
+  });
+
+  it("supports full action resource subcommands and strictly rejects legacy new/create commands", () => {
+    runCli(["init", "--id", "test.action-subcommands", "."], tempDir);
+
+    // 1. ad action list
+    const listProc = runCli(["action", "list", "--json"], tempDir);
+    expect(listProc.exitCode).toBe(0);
+    const listData = JSON.parse(listProc.stdout.toString());
+    expect(listData.some((a: any) => a.id === "sample.greet")).toBe(true);
+
+    // 2. ad action describe / show
+    const descProc = runCli(["action", "describe", "sample.greet", "--json"], tempDir);
+    expect(descProc.exitCode).toBe(0);
+    const descData = JSON.parse(descProc.stdout.toString());
+    expect(descData.id).toBe("sample.greet");
+
+    const showProc = runCli(["action", "show", "sample.greet", "--json"], tempDir);
+    expect(showProc.exitCode).toBe(0);
+    expect(JSON.parse(showProc.stdout.toString()).id).toBe("sample.greet");
+
+    // 3. ad action validate
+    const valProc = runCli(["action", "validate", "sample.greet", "--json"], tempDir);
+    expect(valProc.exitCode).toBe(0);
+    expect(JSON.parse(valProc.stdout.toString()).valid).toBe(true);
+
+    // 4. ad action run
+    const runProc = runCli(["action", "run", "sample.greet", "--input", '{"name":"Tester"}'], tempDir);
+    expect(runProc.exitCode).toBe(0);
+    const runRes = JSON.parse(runProc.stdout.toString());
+    expect(runRes.ok).toBe(true);
+    expect(runRes.data.message).toBe("Hello, Tester!");
+
+    // 5. 验证彻底移除历史包袱：ad new、ad create 与 ad playbook new 均被拒绝
+    const newActProc = runCli(["new", "action", "another-action"], tempDir);
+    expect(newActProc.exitCode).not.toBe(0);
+
+    const createActProc = runCli(["create", "action", "another-action"], tempDir);
+    expect(createActProc.exitCode).not.toBe(0);
+
+    const pbNewProc = runCli(["playbook", "new", "sop-task"], tempDir);
+    expect(pbNewProc.exitCode).not.toBe(0);
   });
 
   it("outputs single JSON without duplicate error envelope and sets exit code 1 on execution failure", () => {

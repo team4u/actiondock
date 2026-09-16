@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Command } from "commander";
 import type { CliContext } from "../types";
-import { registerActionCommands } from "./action/create";
+import { registerActionCommands } from "./action";
 import { registerAddCommand } from "./add";
 import { registerBuildCommand } from "./build";
 import { registerConfigCommands } from "./config";
@@ -15,7 +15,6 @@ import { registerInitCommand } from "./init";
 import { registerLinkCommands } from "./link";
 import { registerListCommand } from "./list";
 import { registerMcpCommands } from "./mcp";
-import { registerNewCommands } from "./new";
 import { registerPackCommand } from "./pack";
 import { registerPlaybookCommands } from "./playbook";
 import { registerProfileCommands } from "./profile";
@@ -95,7 +94,6 @@ export function createCliProgram(context?: CliContext): Command {
   registerInitCommand(program);
   registerAddCommand(program, context);
   registerRemoveCommand(program, context);
-  registerNewCommands(program, context);
   registerActionCommands(program, context);
   registerInfoCommand(program, context);
   registerDoctorCommand(program, context);
@@ -136,7 +134,6 @@ export {
   registerLinkCommands,
   registerListCommand,
   registerMcpCommands,
-  registerNewCommands,
   registerPackCommand,
   registerPlaybookCommands,
   registerProfileCommands,

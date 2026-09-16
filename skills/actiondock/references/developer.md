@@ -211,7 +211,7 @@ Action 之间的相互调度必须通过 `ctx.actions.invoke` 执行，严禁通
 
 ## Playbook 任务规程编写规范
 
-Playbook 用于将分散的原子 Action 编排为针对特定业务场景的标准作业流程。规程模板通过 `ad new playbook <id>` 生成，包含清单声明与 Markdown 文件正文两部分：
+Playbook 用于将分散的原子 Action 编排为针对特定业务场景的标准作业流程。规程模板通过 `ad playbook create <id>` 生成，包含清单声明与 Markdown 文件正文两部分：
 
 ```markdown
 # 业务部署流水线标准规程

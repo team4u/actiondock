@@ -6,13 +6,13 @@ import type { CliContext } from "../types";
 import { getEffectiveOptions, resolveFallbackStrategy, resolveIntent, resolveLocalPackageRoot, withTarget } from "../utils";
 
 /**
- * 注册顶层统一 list 命令：列出当前工程、已链接包或远端服务中的可用 Action。
+ * 挂载 list 子命令至指定 Commander 节点。
  * 
- * @param program Commander 根程序对象
+ * @param parent 目标 Commander 命令节点
  * @param context 命令行上下文
  */
-export function registerListCommand(program: Command, context?: CliContext): void {
-  program
+export function attachListCommand(parent: Command, context?: CliContext): Command {
+  return parent
     .command("list [patterns...]")
     .description("List actions in current project, linked packages, or remote profile")
     .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
@@ -109,4 +109,14 @@ export function registerListCommand(program: Command, context?: CliContext): voi
         { localRoot: targetPackageRoot || undefined, scanLinkedPackages: true }
       );
     });
+}
+
+/**
+ * 注册顶层统一 list 命令：列出当前工程、已链接包或远端服务中的可用 Action。
+ * 
+ * @param program Commander 根程序对象
+ * @param context 命令行上下文
+ */
+export function registerListCommand(program: Command, context?: CliContext): void {
+  attachListCommand(program, context);
 }

@@ -461,10 +461,9 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
       }
     });
 
-  // playbook create / new
+  // playbook create
   pbCmd
     .command("create <id>")
-    .alias("new")
     .description("Scaffold a new Playbook markdown file")
     .option("-d, --desc <description>", "Playbook description")
     .option("-a, --actions <actions...>", "Referenced action IDs")

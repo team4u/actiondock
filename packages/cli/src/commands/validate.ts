@@ -13,13 +13,13 @@ import type { CliContext } from "../types";
 import { getEffectiveOptions } from "../utils";
 
 /**
- * 注册顶层统一 validate 命令：校验 Action 的 Schema 与方法定义完整性。
+ * 挂载 validate 子命令至指定 Commander 节点。
  * 
- * @param program Commander 根程序对象
+ * @param parent 目标 Commander 命令节点
  * @param context 命令行上下文
  */
-export function registerValidateCommand(program: Command, context?: CliContext): void {
-  program
+export function attachValidateCommand(parent: Command, context?: CliContext): Command {
+  return parent
     .command("validate [id]")
     .description("Validate action schemas and definitions")
     .option("-P, --package <id>", "Target package ID or path")
@@ -133,4 +133,14 @@ export function registerValidateCommand(program: Command, context?: CliContext):
         );
       }
     });
+}
+
+/**
+ * 注册顶层统一 validate 命令：校验 Action 的 Schema 与方法定义完整性。
+ * 
+ * @param program Commander 根程序对象
+ * @param context 命令行上下文
+ */
+export function registerValidateCommand(program: Command, context?: CliContext): void {
+  attachValidateCommand(program, context);
 }
