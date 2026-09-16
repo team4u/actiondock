@@ -86,12 +86,12 @@ description: 覆盖复合套件的描述元数据（可选）
 
 | 插槽名称 | 对应说明书插入位置 |
 | :--- | :--- |
-| `intro` | 标题与简介之后、运行时初始化之前 |
-| `after-init` | 运行时初始化之后 |
+| `intro` | 标题与简介之后、参数契约调阅之前 |
 | `after-describe` | 参数契约调阅之后 |
 | `after-actions` | Action 工具清单之后 |
 | `after-playbooks` | 推荐操作规程之后 |
 | `after-invoke` | 标准调用命令之后 |
+| `after-init` | 故障排查与环境安装指引之后 |
 | `append` | 说明书末尾 |
 
 ### 说明书解析与合并规则

@@ -136,15 +136,16 @@ describe("Composite SKILL.md custom declaration", () => {
       customSections: parseCustomSkillDeclaration(CUSTOM_DECLARATION).sections,
     });
 
-    const idxInit = md.indexOf("## ActionDock 运行时初始化");
-    const idxSoftLink = md.indexOf("### 数据目录持久化软链");
     const idxDescribe = md.indexOf("## 动作参数契约按需调阅");
+    const idxTroubleshoot = md.indexOf("## 故障排查与环境安装指引");
+    const idxSoftLink = md.indexOf("### 数据目录持久化软链");
     const idxAppend = md.indexOf("## 参考文档");
 
-    expect(idxInit).toBeGreaterThan(-1);
-    expect(idxSoftLink).toBeGreaterThan(idxInit);
-    expect(idxSoftLink).toBeLessThan(idxDescribe);
-    expect(idxAppend).toBeGreaterThan(md.indexOf("## 故障排查与环境安装指引"));
+    expect(md).not.toContain("## ActionDock 运行时初始化");
+    expect(idxDescribe).toBeGreaterThan(-1);
+    expect(idxTroubleshoot).toBeGreaterThan(idxDescribe);
+    expect(idxSoftLink).toBeGreaterThan(idxTroubleshoot);
+    expect(idxAppend).toBeGreaterThan(idxSoftLink);
 
     // frontmatter description 为未覆盖的原始描述
     expect(md).toContain("description: 套件描述");
@@ -178,12 +179,12 @@ describe("Composite SKILL.md custom declaration", () => {
     expect(md).toContain("`test.pkg-b/b.ping`: b.ping description");
     expect(md).toContain("- [pb-a](./pkg-a/playbooks/pb-a.md): pb-a description");
 
-    const idxInit = md.indexOf("## ActionDock 运行时初始化");
-    const idxSoftLink = md.indexOf("### 数据目录持久化软链");
     const idxDescribe = md.indexOf("## 动作参数契约按需调阅");
-    expect(idxSoftLink).toBeGreaterThan(idxInit);
-    expect(idxSoftLink).toBeLessThan(idxDescribe);
-    expect(md.indexOf("## 参考文档")).toBeGreaterThan(md.indexOf("## 故障排查与环境安装指引"));
+    const idxTroubleshoot = md.indexOf("## 故障排查与环境安装指引");
+    const idxSoftLink = md.indexOf("### 数据目录持久化软链");
+    expect(md).not.toContain("## ActionDock 运行时初始化");
+    expect(idxSoftLink).toBeGreaterThan(idxTroubleshoot);
+    expect(md.indexOf("## 参考文档")).toBeGreaterThan(idxSoftLink);
   });
 
   it("full composite export bakes custom sections into the bundle SKILL.md", async () => {

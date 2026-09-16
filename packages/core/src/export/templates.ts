@@ -546,16 +546,6 @@ description: ${description}
 
 ${description}`;
 
-  const sInit = `## ActionDock 运行时初始化
-
-本技能为 **ActionDock 复合工作区技能包**，聚合了多个功能包。智能体在初次调用或初始化时，在当前技能根目录执行注册命令：
-
-\`\`\`bash
-ad link "<skill_root>"
-\`\`\`
-
-> \`ad link\` 会自动识别并注册工作区下的所有子包，使其中的 Action 随时可以通过完全限定标识调用。若初次运行提示依赖缺失，可在 \`<skill_root>\` 目录下执行 \`npm install --omit=dev\` 安装聚合依赖。`;
-
   const sDescribe = `## 动作参数契约按需调阅
 
 为节省上下文开销，各 Action 的详细参数结构不静态内嵌在说明书中。在调用未知参数的 Action 前，可在终端执行命令查阅输入输出约束：
@@ -650,16 +640,17 @@ ad run ${sampleActionId} --input-file /tmp/input.json
 - **完成安装后重新链接复合技能**：
   \`\`\`bash
   ad link "<skill_root>"
-  \`\`\``;
+  \`\`\`
+  \`ad link\` 会自动识别并注册工作区下的所有子包，使其中的 Action 随时可以通过完全限定标识调用。`;
 
   const parts: Array<{ slot: CompositeCustomSlot; text: string }> = [
     { slot: "intro", text: sIntro },
-    { slot: "after-init", text: sInit },
     { slot: "after-describe", text: sDescribe },
     { slot: "after-actions", text: sActions },
     { slot: "after-playbooks", text: sPlaybooks },
     { slot: "after-invoke", text: sInvoke },
-    { slot: "append", text: sTroubleshooting },
+    { slot: "after-init", text: sTroubleshooting },
+    { slot: "append", text: "" },
   ];
 
   // 自定义段落按文件顺序插入到对应槽位（倒序插入保证同槽位多段保持先后）
