@@ -6,6 +6,7 @@ import {
   type ActionDockTarget,
   type ResolvedTarget,
 } from "@actiondock/core";
+import { createNodePlatform } from "@actiondock/runtime-node";
 import type { CliContext } from "../types";
 
 /**
@@ -76,6 +77,11 @@ export async function withTarget(
           projectRoot: localRoot,
           customHome: context?.customHome,
           dataDir: options.dataDir || context?.dataDir,
+          platform: createNodePlatform({
+            customHome: context?.customHome,
+            dataDir: options.dataDir || context?.dataDir,
+            rootDir: localRoot,
+          }),
           ...(localOptions?.scanLinkedPackages !== undefined
             ? { scanLinkedPackages: localOptions.scanLinkedPackages }
             : undefined),
