@@ -37,11 +37,20 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
   ```
   初始化生成包含 `actiondock.json`、`actions/`、`playbooks/` 与 `tests/` 的标准工程。
 
-- 生成新 Action 模板代码 (`ad new action`)：
+- 生成新 Action 模板代码 (`ad action create` / `ad new action`)：
   ```bash
-  ad new action <id> [-d, --desc <description>] [-f, --file <filePath>]
+  ad action create <id> [-d, --desc <description>] [-f, --file <filePath>] [-i, --input <fields...>] [-o, --output <fields...>]
   ```
-  在当前工程中脚手架生成新 Action 模板源码并在 `actiondock.json` 中自动注册。
+  在当前工程中脚手架生成新 Action 模板源码并在 `actiondock.json` 中自动注册契约与生成类型。
+  - 参数说明：
+    - `-d, --desc <description>`：Action 功能描述。
+    - `-f, --file <filePath>`：指定源码文件相对于 actions 目录的相对路径。
+    - `-i, --input <fields...>`：输入模式简写字段列表，格式如 `name:string, count?:number`。
+    - `-o, --output <fields...>`：输出模式简写字段列表，格式如 `message:string, success:boolean`。
+  - 简写语法与边界说明：
+    - 支持的基础类型包括 `string`、`number`（或 `int`、`integer`）、`boolean`（或 `bool`）、`array`（或 `list`）、`object`（或 `json`）。
+    - 字段名以 `?` 结尾表示该字段为可选。
+    - 命令行简写仅用于快速初始化代码骨架；深层嵌套属性、字段说明、枚举取值、正则校验、数值范围等复杂语义规范，需在 `actiondock.json` 中扩展标准 JSON Schema，并运行 `ad generate types` 刷新类型。
 
 - 生成新 Playbook 规程模板 (`ad new playbook`)：
   ```bash

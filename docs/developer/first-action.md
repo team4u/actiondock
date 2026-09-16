@@ -14,7 +14,8 @@ Action 是 ActionDock 体系中最基础的原子能力单元。
 
 为避免模式定义与本地类型的重复编写，ActionDock 建立了从清单到代码的单向数据流与单一事实源开发闭环：
 
-- 清单声明契约：在 `actiondock.json` 的 `actions` 字典中定义 Action 输入与输出的 JSON Schema 模式规范。
+- 脚手架快速起步：执行 `ad action create <id> --input ... --output ...` 命令快速生成初始源码与基础清单条目。
+- 清单声明契约：在 `actiondock.json` 的 `actions` 字典中完善 Action 输入与输出的完整 JSON Schema 模式规范（支持字段描述、枚举、嵌套结构与范围约束）。
 - 自动生成类型：执行 `ad generate types` 命令行指令，工具链自动将模式规范编译为强类型的 TypeScript 声明文件 `.actiondock/generated/actions.d.ts`。
 - 导入类型开发：在业务源码中导入 `ActionInput<"action-id">` 与 `ActionOutput<"action-id">` 泛型工具类型，直接约束业务执行函数，彻底消除重复手写接口的冗余。
 
@@ -176,9 +177,17 @@ export default defineAction<ActionInput<"example.greet">, ActionOutput<"example.
 
 以实现 GitHub Pull Request 查询动作 `github.get-pr` 为例，体验基于单一事实源的标准开发流程。
 
-### 清单声明契约
+### 脚手架初始化与清单契约深化
 
-在项目根目录的 `actiondock.json` 中定义配置需求与动作模式。清单是整个工程唯一的事实来源：
+推荐首先使用脚手架命令生成 Action 初始代码骨架与清单基础条目：
+
+```bash
+ad action create github.get-pr -d "获取指定 GitHub 仓库的 Pull Request 详细信息" -i "repo:string, prNumber:number" -o "id:number, number:number, title:string, state:string, url:string, lastQueriedAt:string"
+```
+
+命令行参数 `--input` 与 `--output` 提供了基础类型的简写语法（支持 `string`、`number`、`boolean`、`array`、`object` 以及以问号结尾的可选标记）。
+
+为了让智能体精准理解各个参数的语义和约束，需要在作为唯一事实源的 `actiondock.json` 中深化模式规范，补充字段描述（`description`）、取值示例（`examples`）以及必填项列表：
 
 ```json
 {

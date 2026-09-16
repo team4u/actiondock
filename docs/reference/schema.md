@@ -86,7 +86,10 @@
 
 ## 动作声明规范 (actions)
 
-`actions` 映射下的每个键名为动作的完整标识符（如 `sample.greet` 或 `github.get-pr`）：
+`actions` 映射下的每个键名为动作的完整标识符（如 `sample.greet` 或 `github.get-pr`）。
+
+> [!NOTE]
+> 命令行命令 `ad action create <id> --input ... --output ...` 提供了基础类型的便捷简写，适用于快速生成初始骨架。对于复杂业务契约（包含字段描述 `description`、枚举约束 `enum`、嵌套属性 `properties`、正则与范围等），统一直接在 `actiondock.json` 中使用完整 JSON Schema 定义，并通过 `ad generate types` 刷新 TypeScript 类型。
 
 ```json
 {

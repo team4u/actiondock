@@ -26,7 +26,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 | 业务意图与需求 | 核心推荐命令 | 决策建议与关键原则 | 详尽参考手册 |
 | :--- | :--- | :--- | :--- |
 | **新建工程项目** | `ad init [directory] -i <id> -n <name>` | 生成标准工程骨架，包含清单、配置、代码与规程目录 | [developer.md](references/developer.md) |
-| **新建 Action 工具** | `ad action create <id>` 或 `ad new action <id>` | 脚手架自动注册清单契约并即时生成类型声明，直接消费强类型接口 | [developer.md](references/developer.md) |
+| **新建 Action 工具** | `ad action create <id> [-i <fields...>] [-o <fields...>]` | 脚手架快速生成代码骨架与基础清单条目，复杂模式在清单中扩展 | [developer.md](references/developer.md) |
 | **新建 Playbook 规程** | `ad new playbook <id> [-d <desc>] [-a <actions...>]` | 脚手架生成规程 Markdown 模板并在清单中登记 | [developer.md](references/developer.md) |
 | **探索可用能力** | `ad info <patterns...>` 或 `ad info -i <pattern>` | 模糊意图检索，优先检查规程与工具清单 | [cli.md](references/cli.md) |
 | **列出可用 Action** | `ad list [patterns...] [-P <pkg>]` | 按包或关键词列出当前包、工作区或远端的所有 Action | [cli.md](references/cli.md) |
@@ -78,8 +78,8 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 ### 作业流二：作为开发者创建与扩展 Action
 
 - 步骤一：工程初始化。执行 `ad init [directory] -i <package-id> -n <name>` 生成标准工程骨架。
-- 步骤二：新建模板代码。执行 `ad new action <action-id> -d "描述"` 脚手架生成源码并在清单中注册。
-- 步骤三：完善清单契约。在 `actiondock.json` 中定义 `inputSchema`、`outputSchema` 与必填属性，推荐通过 `examples` 字段补充入参与出参示例以消除模型理解歧义。
+- 步骤二：新建模板代码。执行 `ad action create <action-id> -d "描述" -i "name:string, count?:number" -o "message:string"` 脚手架生成初始源码并在清单中注册（命令行支持基础类型简写与可选标记）。
+- 步骤三：完善清单契约。若存在字段描述、枚举、嵌套结构或复杂约束，在 `actiondock.json` 中扩展标准 JSON Schema，推荐通过 `examples` 字段补充示例以消除模型理解歧义。
 - 步骤四：生成强类型。执行 `ad generate types` 生成强类型声明文件 `.actiondock/generated/actions.d.ts`。
 - 步骤五：编写业务逻辑。在 `actions/<action-id>.ts` 中使用 `defineAction` 编写纯业务逻辑，调阅 [developer.md](references/developer.md) 了解上下文 API；若涉及底层系统命令或外部进程，调阅 [process-execution.md](references/process-execution.md) 遵循受管进程规范。
 - 步骤六：契约门禁校验。执行 `ad validate`，确保模式合法与引用存在。
@@ -113,7 +113,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 - 规程优先原则：面对业务编排任务，必须优先检索并遵循现成的 Playbook，严禁无视既有规程擅自拼凑 Action 调度次序。
 - 按需排查原则：严禁在每次任务执行前盲目进行前置环境检查、依赖重装或运行 `ad doctor` 体检；默认环境完备就绪，仅在实际遇到报错时按需修复。
 - 元数据规范原则：在修改 Action 源码（包括参数模式、描述、依赖）或新增 Action 文件后，在 `actiondock.json` 中完整登记并执行 `ad validate` 确保清单与 Schema 严格匹配；需要类型提示时运行 `ad generate types`。
-- 脚手架命令原则：新增 Action 工具可使用 `ad new action <id>` 或 `ad action create <id>`，新增 Playbook 规程可使用 `ad new playbook <id>` 或 `ad playbook create <id>`。
+- 脚手架命令原则：新增 Action 工具可使用 `ad action create <id>`（或别名 `ad new action <id>`），命令行 `--input` 与 `--output` 仅用于生成基础字段骨架；若包含枚举、嵌套属性、正则或字段描述等复杂语义，必须在 `actiondock.json` 中以标准 JSON Schema 声明，并执行 `ad generate types` 同步类型。新增 Playbook 规程可使用 `ad playbook create <id>`（或别名 `ad new playbook <id>`）。
 - 依赖管理红线：正式项目引入外部 Action 包必须在工程根目录下执行 `ad add <package>` 安装并锁定依赖，严禁使用 `ad link` 替代项目正式依赖；`ad link` 仅限本地未发布源码快速调试与工作区联调。
 - 进程受管隔离原则：严禁在 Action 内部直接调用 Node.js 原生 child_process（如 exec、spawn 等），所有系统命令与外部进程必须通过 ctx.process 统一纳管；长期交互进程写操作必须通过 withControl 保证独占令牌与异常隔离。
 - 确定性进程测试红线：编写涉及系统命令的单元测试时，严禁唤起操作系统真实子进程，必须使用 @actiondock/testing 提供的 FakeProcessDriver 进行确定性模拟与事件发射。

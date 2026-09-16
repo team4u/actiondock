@@ -95,7 +95,8 @@ ad generate types
 ```
 
 - 契约编译产物：命令将在 `.actiondock/generated/actions.d.ts` 生成对应各 Action 的强类型声明命名空间，包含 `ActionInput<T>` 与 `ActionOutput<T>` 泛型工具类型。
-- 脚手架自动维护：使用 `ad action create` 创建动作时，脚手架会自动完成模式登记并触发类型文件刷新。
+- 脚手架快速起步：使用 `ad action create <id> -i "name:string, count?:number" -o "message:string"` 创建动作时，脚手架会自动完成基础模式登记并触发类型文件刷新。
+- 复杂模式深化：命令行 `--input` 与 `--output` 仅支持基础标量类型的扁平简写。若需要添加字段描述（帮助智能体准确识别意图）、枚举约束（`enum`）、嵌套对象结构（`properties`）或数值区间（`minimum`、`maximum`），直接在 `actiondock.json` 中扩展标准 JSON Schema，然后执行 `ad generate types` 刷新类型。
 
 ---
 
