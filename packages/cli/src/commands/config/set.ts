@@ -8,7 +8,7 @@ import type { ConfigItemDefinition } from "@actiondock/core";
 import { ArgumentError } from "../../errors";
 import { writeStdout } from "../../renderer";
 import type { CliContext } from "../../types";
-import { getEffectiveOptions, withTarget } from "../../utils";
+import { applyTargetOptions, getEffectiveOptions, withTarget } from "../../utils";
 import { resolveConfigValueInput } from "../../prompt";
 
 /**
@@ -18,14 +18,13 @@ import { resolveConfigValueInput } from "../../prompt";
  * @param context 命令行上下文
  */
 export function registerConfigSetCommand(configCmd: Command, context?: CliContext): void {
-  configCmd
-    .command("set <key> [value]")
-    .description("Set configuration value (supports stdin and secure prompt)")
-    .option("-P, --package <id>", "Target package ID or path")
-    .option("-g, --global", "Set in global configuration")
-    .option("-p, --profile <name>", "Configure on a remote target")
-    .option("-s, --server <url>", "Remote server URL")
-    .option("-t, --token <token>", "Auth token for remote server")
+  applyTargetOptions(
+    configCmd
+      .command("set <key> [value]")
+      .description("Set configuration value (supports stdin and secure prompt)")
+      .option("-P, --package <id>", "Target package ID or path")
+      .option("-g, --global", "Set in global configuration")
+  )
     .option("--stdin", "Read value from standard input")
     .option("--data-dir <path>", "Custom database storage directory")
     .action(async (key: string, rawVal: string | undefined, rawOptions: any, cmd: any) => {

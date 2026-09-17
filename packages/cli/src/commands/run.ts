@@ -5,7 +5,12 @@ import { Command } from "commander";
 import { ArgumentError, ExecutionError, SigintError } from "../errors";
 import { writeStdout } from "../renderer";
 import type { CliContext } from "../types";
-import { getEffectiveOptions, resolveLocalPackageRoot, withTarget } from "../utils";
+import {
+  applyTargetOptions,
+  getEffectiveOptions,
+  resolveLocalPackageRoot,
+  withTarget,
+} from "../utils";
 
 /**
  * 统一执行 Action 核心逻辑（使用 ActionDockTarget 门面）。
@@ -67,6 +72,7 @@ export async function executeAction(
         profile: options.profile,
         server: options.server,
         token: options.token,
+        insecure: options.insecure,
       },
       context?.customHome
     );
@@ -148,16 +154,15 @@ export async function executeAction(
  * @param context 命令行上下文
  */
 export function attachRunCommand(parent: Command, context?: CliContext): Command {
-  return parent
+  const cmd = parent
     .command("run <id>")
     .description("Execute an action (from current project, linked packages, or remote profile)")
     .option("-P, --package <id>", "Target package ID or path")
     .option("-i, --input <json>", "Input as JSON string")
     .option("-f, --input-file <path>", "Input from JSON file")
-    .option("-c, --config <key=value...>", "Temporary config override (repeatable)")
-    .option("-p, --profile <name>", "Execute against a specific profile")
-    .option("-s, --server <url>", "Remote server URL")
-    .option("-t, --token <token>", "Auth token for remote server")
+    .option("-c, --config <key=value...>", "Temporary config override (repeatable)");
+
+  return applyTargetOptions(cmd)
     .option("--timeout <duration>", "Execution timeout (e.g. 30s, 5m, 500ms)")
     .option("--request-id <id>", "Idempotency request ID for deduplication")
     .option("--async", "Execute asynchronously in background (requires remote server or profile)")

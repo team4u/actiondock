@@ -1,6 +1,8 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { createServer as createHttpsServer, type Server as HttpsServer } from "node:https";
+import { readFileSync } from "node:fs";
 import { Readable } from "node:stream";
-import { formatHostForUrl, SERVER_ERROR } from "@actiondock/core";
+import { formatHostForUrl, SERVER_ERROR, type ServerTlsOptions } from "@actiondock/core";
 import { pipeline } from "node:stream/promises";
 
 /**
@@ -16,6 +18,7 @@ export interface NodeHttpServerOptions {
   host?: string;
   fetch: WebRequestHandler;
   baseOrigin?: string;
+  tls?: ServerTlsOptions;
 }
 
 /**
@@ -185,10 +188,11 @@ export function createRequestListener(
  * 接收 Node HTTP 请求并转化为标准 Web Request，支持 Web Response 流式输出。
  */
 export class NodeHttpServer {
-  private server: Server;
+  private server: Server | HttpsServer;
   private listening = false;
   private portNumber = 0;
   private hostAddress = "127.0.0.1";
+  private tlsOptions?: ServerTlsOptions;
 
   constructor(optionsOrHandler: WebRequestHandler | NodeHttpServerOptions) {
     const handler =
@@ -199,9 +203,30 @@ export class NodeHttpServer {
       typeof optionsOrHandler === "object"
         ? optionsOrHandler.baseOrigin
         : undefined;
+    const tls =
+      typeof optionsOrHandler === "object"
+        ? optionsOrHandler.tls
+        : undefined;
 
+    this.tlsOptions = tls;
     const requestListener = createRequestListener(handler, { baseOrigin });
-    this.server = createServer(requestListener);
+
+    if (tls) {
+      let cert = tls.cert;
+      if (!cert && tls.certPath) {
+        cert = readFileSync(tls.certPath);
+      }
+      let key = tls.key;
+      if (!key && tls.keyPath) {
+        key = readFileSync(tls.keyPath);
+      }
+      const httpsOptions: any = { cert, key };
+      if (tls.ca) httpsOptions.ca = tls.ca;
+      if (tls.passphrase) httpsOptions.passphrase = tls.passphrase;
+      this.server = createHttpsServer(httpsOptions, requestListener);
+    } else {
+      this.server = createServer(requestListener);
+    }
 
     if (typeof optionsOrHandler === "object") {
       if (optionsOrHandler.port !== undefined) {
@@ -214,9 +239,9 @@ export class NodeHttpServer {
   }
 
   /**
-   * 底层原生 Node.js http.Server 实例。
+   * 底层原生 Node.js http.Server / https.Server 实例。
    */
-  get rawServer(): Server {
+  get rawServer(): Server | HttpsServer {
     return this.server;
   }
 
@@ -238,7 +263,8 @@ export class NodeHttpServer {
    * 完整的 HTTP 访问基础路径。
    */
   get url(): string {
-    return `http://${formatHostForUrl(this.hostAddress)}:${this.portNumber}`;
+    const protocol = this.tlsOptions ? "https" : "http";
+    return `${protocol}://${formatHostForUrl(this.hostAddress)}:${this.portNumber}`;
   }
 
   /**

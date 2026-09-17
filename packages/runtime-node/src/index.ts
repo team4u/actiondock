@@ -4,4 +4,5 @@ export * from "./process-driver";
 export * from "./module-loader";
 export * from "./http-server";
 export * from "./platform";
+export * from "./dispatcher";
 

@@ -1,4 +1,5 @@
 import { createServer as createNodeHttpServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -24,7 +25,7 @@ import {
 } from "./routes";
 import { DEFAULT_MAX_BODY_BYTES } from "./body";
 import { isLoopbackHost, resolveCorsHeaders, verifyBearerToken } from "./security";
-import type { ActionDockServerInstance, CoreHttpServerInstance, ServerOptions } from "./types";
+import type { ActionDockServerInstance, CoreHttpServerInstance, ServerOptions, ServerTlsOptions } from "./types";
 
 /**
  * 规范化主机地址用于拼接 URL。
@@ -40,9 +41,10 @@ export function formatHostForUrl(host: string): string {
 export async function launchHttpServer(
   port: number,
   host: string,
-  fetchHandler: (req: Request) => Promise<Response>
+  fetchHandler: (req: Request) => Promise<Response>,
+  tls?: ServerTlsOptions
 ): Promise<CoreHttpServerInstance> {
-  const srv = createNodeHttpServer(async (req: IncomingMessage, res: ServerResponse) => {
+  const requestListener = async (req: IncomingMessage, res: ServerResponse) => {
     const ac = new AbortController();
     const onReqClose = () => {
       if (!req.complete) {
@@ -103,7 +105,33 @@ export async function launchHttpServer(
       req.removeListener("close", onReqClose);
       res.removeListener("close", onResClose);
     }
-  });
+  };
+
+  let srv: import("node:http").Server | import("node:https").Server;
+  if (tls) {
+    let cert = tls.cert;
+    if (!cert && tls.certPath) {
+      cert = readFileSync(tls.certPath);
+    }
+    let key = tls.key;
+    if (!key && tls.keyPath) {
+      key = readFileSync(tls.keyPath);
+    }
+    const httpsOptions: any = {
+      cert,
+      key,
+    };
+    if (tls.ca) {
+      httpsOptions.ca = tls.ca;
+    }
+    if (tls.passphrase) {
+      httpsOptions.passphrase = tls.passphrase;
+    }
+    const { createServer: createHttpsServer } = await import("node:https");
+    srv = createHttpsServer(httpsOptions, requestListener);
+  } else {
+    srv = createNodeHttpServer(requestListener);
+  }
 
   const instance: CoreHttpServerInstance = {
     port,
@@ -385,12 +413,13 @@ export async function startActionDockServer(
     );
   };
 
-  const server: CoreHttpServerInstance = await launchHttpServer(port, host, fetchHandler);
+  const server: CoreHttpServerInstance = await launchHttpServer(port, host, fetchHandler, options.tls);
   if (server.ready) {
     await server.ready;
   }
 
   const actualHost = host === "0.0.0.0" ? "127.0.0.1" : host;
+  const protocol = options.tls ? "https" : "http";
 
   const instance: ActionDockServerInstance = {
     get port() {
@@ -402,13 +431,16 @@ export async function startActionDockServer(
     host: hostInstance,
     target: targetInstance,
     get url() {
-      return `http://${formatHostForUrl(actualHost)}:${this.port}`;
+      return `${protocol}://${formatHostForUrl(actualHost)}:${this.port}`;
     },
     ready: Promise.resolve(),
     stop: async (stopOptions?: { graceMs?: number }) => {
+      await server.stop(true);
       if (targetInstance) {
         try {
-          await targetInstance.close();
+          await targetInstance.close(
+            stopOptions?.graceMs !== undefined ? { timeoutMs: stopOptions.graceMs } : undefined
+          );
         } catch {
           // 忽略关闭异常
         }
@@ -420,7 +452,6 @@ export async function startActionDockServer(
           // 忽略宿主关闭异常
         }
       }
-      await server.stop(true);
     },
   };
 

@@ -14,6 +14,7 @@ import {
   CloseTimeoutError,
   TARGET_PROTOCOL_UNSUPPORTED,
   TARGET_CAPABILITY_UNAVAILABLE,
+  TARGET_CLOSED,
   streamRemoteEvents,
 } from "../src/target";
 import { startActionDockServer } from "../src/server";
@@ -709,6 +710,51 @@ actions:
         expect(err).toBeInstanceOf(TargetError);
         expect(err.code).toBe(TARGET_CAPABILITY_UNAVAILABLE);
       }
+    });
+
+    it("RemoteActionDockTarget 关闭后调用各公共方法防御性抛出 TARGET_CLOSED 错误", async () => {
+      const target = new RemoteActionDockTarget({
+        serverUrl: "http://127.0.0.1:9999",
+      });
+      await target.close();
+
+      // close 幂等调用不报错
+      await target.close();
+
+      const assertThrowsClosed = async (promise: Promise<any>) => {
+        try {
+          await promise;
+          expect(true).toBe(false);
+        } catch (err: any) {
+          expect(err).toBeInstanceOf(TargetError);
+          expect(err.code).toBe(TARGET_CLOSED);
+        }
+      };
+
+      // 各公共方法防御性抛出 TARGET_CLOSED
+      await assertThrowsClosed(target.info());
+      await assertThrowsClosed(target.listPackages());
+      await assertThrowsClosed(target.listActions());
+      await assertThrowsClosed(target.describeAction("test"));
+      await assertThrowsClosed(target.listPlaybooks());
+      await assertThrowsClosed(target.describePlaybook("test"));
+      await assertThrowsClosed(target.runAction("test", {}));
+      await assertThrowsClosed(target.startAction("test", {}));
+      await assertThrowsClosed(target.listRuns());
+      await assertThrowsClosed(target.clearRuns?.()!);
+      await assertThrowsClosed(target.getRun("run-1"));
+      await assertThrowsClosed(target.cancelRun("run-1"));
+      expect(() => target.events("run-1")).toThrow("RemoteActionDockTarget is closed");
+      await assertThrowsClosed(target.getConfig("pkg", "key"));
+      await assertThrowsClosed(target.setConfig("pkg", "key", 1));
+      await assertThrowsClosed(target.deleteConfig("pkg", "key"));
+      await assertThrowsClosed(target.listConfig("pkg"));
+      await assertThrowsClosed(target.getState("pkg", "act", "key"));
+      await assertThrowsClosed(target.setState("pkg", "act", "key", 1));
+      await assertThrowsClosed(target.deleteState("pkg", "act", "key"));
+      await assertThrowsClosed(target.listStateKeys("pkg", "act"));
+      await assertThrowsClosed(target.clearState("pkg", "act"));
+      await assertThrowsClosed(target.listStateEntries("pkg"));
     });
 
     it("LocalActionDockTarget.listStateEntries 针对未知包抛出 TargetError 且 code 为 TARGET_CAPABILITY_UNAVAILABLE", async () => {

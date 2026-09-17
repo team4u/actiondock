@@ -74,6 +74,8 @@ ActionDock 所有失败均输出确定性的结构化错误信封：
 | `TARGET_CAPABILITY_UNAVAILABLE` | 请求了目标宿主未启用的能力（如单次执行中请求异步任务）。 | 检查目标服务支持的能力清单，使用匹配的调用模式。 |
 | `UNSUPPORTED_BUILD_MODE` | 传入了已废弃的编译选项（如 `--target`、`--bytecode`、`--standalone`）。 | 移除废弃参数，使用标准的 Node.js 目录构建或 `--mode node` 模式。 |
 | `UNAUTHORIZED` | 访问受保护的 HTTP 或 MCP 服务时未提供有效令牌。 | 检查调用参数或请求头中的 `--token` 配置。 |
+| `INSECURE_TRANSPORT` | 携带认证令牌向非本地回环的明文 HTTP 服务发起请求时被安全策略阻断。 | 推荐在服务端以 `--https` 启用安全传输；或在客户端通过 `-k, --insecure` 或 `--allow-insecure-http` 显式豁免。 |
+| `TARGET_CLOSED` | 尝试在已显式调用过 close() 关闭的远程目标门面实例上调用操作方法。 | 检查目标门面的生命周期管理，确保在所有异步调用完成前不要提前调用关闭。 |
 
 ---
 

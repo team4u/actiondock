@@ -10,6 +10,7 @@ import {
   resolveProfileToken,
   resolveTarget,
   toSnakeUpperCase,
+  updateProfile,
   useProfile,
 } from "@actiondock/core";
 import { Command } from "commander";
@@ -55,13 +56,14 @@ export function registerProfileCommands(program: Command): void {
             tokenConfigured: resolved.source !== "none",
             tokenSource: resolved.source,
             token: reveal ? resolved.token : (resolved.token ? maskSecretValue(resolved.token) : undefined),
+            insecure: Boolean(p.entry.insecure),
           };
         });
 
         const filterRes = filterWithFallbackInfo(
           enriched,
           effectiveIntent,
-          [(p) => p.name, (p) => p.serverUrl, (p) => p.description, (p) => p.tokenSource],
+          [(p) => p.name, (p) => p.serverUrl, (p) => p.description, (p) => p.tokenSource, (p) => (p.insecure ? "insecure" : "")],
           shouldFallback
         );
 
@@ -98,9 +100,10 @@ export function registerProfileCommands(program: Command): void {
                 tokenInfo += ` = ${item.token}`;
               }
 
+              const insecureTag = item.insecure ? " [insecure]" : "";
               const desc = item.description ? ` - ${item.description}` : "";
               lines.push(
-                `${currentMarker}${item.name.padEnd(20)} ${item.serverUrl}${tokenInfo}${desc}`
+                `${currentMarker}${item.name.padEnd(20)} ${item.serverUrl}${tokenInfo}${insecureTag}${desc}`
               );
             }
             lines.push(
@@ -123,6 +126,7 @@ export function registerProfileCommands(program: Command): void {
     .option("-t, --token <token>", "Authentication token for the remote server (deprecated; prefer --token-env)")
     .option("--token-env <env>", "Environment variable name containing the authentication token")
     .option("-d, --desc <description>", "Description of this profile/machine")
+    .option("-k, --insecure", "Allow insecure server connections (skip TLS certificate validation)")
     .action((name, options) => {
       try {
         if (options.token) {
@@ -135,8 +139,46 @@ export function registerProfileCommands(program: Command): void {
           token: options.token,
           tokenEnv: options.tokenEnv,
           description: options.desc,
+          insecure: options.insecure ? true : undefined,
         });
-        writeStdout(`[OK] Profile '${name}' configured for server: ${options.server}`);
+        writeStdout(`[OK] Profile '${name}' configured for server: ${options.server}${options.insecure ? " (insecure: true)" : ""}`);
+      } catch (err: any) {
+        throw new ExecutionError(err.message);
+      }
+    });
+
+  // ad profile update <name>
+  profileCmd
+    .command("update <name>")
+    .description("Update an existing remote execution profile")
+    .option("-s, --server <url>", "Remote ActionDock server URL (e.g. http://1.2.3.4:5177)")
+    .option("-t, --token <token>", "Authentication token for the remote server (deprecated; prefer --token-env)")
+    .option("--token-env <env>", "Environment variable name containing the authentication token")
+    .option("-d, --desc <description>", "Description of this profile/machine")
+    .option("-k, --insecure", "Allow insecure server connections (skip TLS certificate validation)")
+    .option("--no-insecure", "Enforce strict TLS certificate validation")
+    .action((name, options) => {
+      try {
+        if (options.token) {
+          console.warn(
+            "Warning: storing tokens directly in profiles.json is deprecated. Use --token-env or standard environment variables (e.g. ACTIONDOCK_<PROFILE>_TOKEN) instead."
+          );
+        }
+        let insecure: boolean | undefined;
+        if (options.insecure === true) {
+          insecure = true;
+        } else if (options.insecure === false) {
+          insecure = false;
+        }
+
+        updateProfile(name, {
+          serverUrl: options.server,
+          token: options.token,
+          tokenEnv: options.tokenEnv,
+          description: options.desc,
+          insecure,
+        });
+        writeStdout(`[OK] Profile '${name}' updated`);
       } catch (err: any) {
         throw new ExecutionError(err.message);
       }
@@ -187,6 +229,7 @@ export function registerProfileCommands(program: Command): void {
           tokenSource: resolved.source,
           tokenEnv: entry?.tokenEnv,
           token: displayToken,
+          insecure: Boolean(entry?.insecure),
           description: entry?.description || "",
         };
 
@@ -210,6 +253,9 @@ export function registerProfileCommands(program: Command): void {
             lines.push(`Auth Source:  ${sourceDetail}`);
             if (data.tokenConfigured) {
               lines.push(`Token Value:  ${data.token}`);
+            }
+            if (data.serverUrl !== "local") {
+              lines.push(`TLS Verify:   ${data.insecure ? "Disabled (Insecure)" : "Strict (Default)"}`);
             }
             if (data.description) {
               lines.push(`Description:  ${data.description}`);
@@ -252,12 +298,18 @@ export function registerProfileCommands(program: Command): void {
   profileCmd
     .command("test [name]")
     .description("Test connection latency and health of a profile")
+    .option("-k, --insecure", "Allow insecure TLS connections (skip TLS certificate validation)")
+    .option("--allow-insecure-http", "Allow insecure HTTP connections with auth token")
     .option("--json", "Output as JSON")
     .option("--envelope", "Wrap JSON output in standard envelope")
     .action(async (name, rawOptions, cmd) => {
       try {
         const options = getEffectiveOptions(rawOptions, cmd);
-        const target = resolveTarget({ profile: name });
+        const target = resolveTarget({
+          profile: name,
+          insecure: options.insecure !== undefined ? Boolean(options.insecure) : undefined,
+          allowInsecureHttp: options.allowInsecureHttp,
+        });
         if (target.type === "local") {
           renderResult(
             { ok: true, type: "local", message: "Local execution" },
@@ -271,7 +323,10 @@ export function registerProfileCommands(program: Command): void {
           return;
         }
 
-        const health = await checkRemoteHealth(target.serverUrl!, target.token);
+        const health = await checkRemoteHealth(target.serverUrl!, target.token, 5000, {
+          allowInsecureHttp: Boolean(options.allowInsecureHttp),
+          insecure: target.insecure,
+        });
         renderResult(health, {
           json: options.json,
           envelope: options.envelope,

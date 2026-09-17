@@ -13,7 +13,7 @@ import type { Command } from "commander";
 import { ArgumentError } from "../../errors";
 import { renderConfigList, renderResult } from "../../renderer";
 import type { CliContext } from "../../types";
-import { getEffectiveOptions, resolveIntent, withTarget } from "../../utils";
+import { applyTargetOptions, getEffectiveOptions, resolveIntent, withTarget } from "../../utils";
 
 /**
  * 构造单条配置项的展示视图（含掩码决策，reveal 为假且为敏感键时打码）。
@@ -44,14 +44,13 @@ function toDisplayEntry(
  * @param context 命令行上下文
  */
 export function registerConfigListCommand(configCmd: Command, context?: CliContext): void {
-  configCmd
-    .command("list [patterns...]")
-    .description("List configuration entries (Global & Project)")
-    .option("-P, --package <id>", "Target package ID or path")
-    .option("-g, --global", "Show only global configurations")
-    .option("-p, --profile <name>", "Query config on a remote target")
-    .option("-s, --server <url>", "Remote server URL")
-    .option("-t, --token <token>", "Auth token for remote server")
+  applyTargetOptions(
+    configCmd
+      .command("list [patterns...]")
+      .description("List configuration entries (Global & Project)")
+      .option("-P, --package <id>", "Target package ID or path")
+      .option("-g, --global", "Show only global configurations")
+  )
     .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
     .option("--reveal, --show-secrets", "Reveal plain text values for secrets")
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
@@ -66,12 +65,21 @@ export function registerConfigListCommand(configCmd: Command, context?: CliConte
 
       // 远端服务分支不经过 Target 门面，直接查询远端配置接口
       const remoteTargetInfo = resolveTarget(
-        { profile: options.profile, server: options.server, token: options.token },
+        {
+          profile: options.profile,
+          server: options.server,
+          token: options.token,
+          insecure: options.insecure,
+          allowInsecureHttp: options.allowInsecureHttp,
+        },
         context?.customHome
       );
 
       if (remoteTargetInfo.type === "remote") {
-        const res = await fetchRemoteConfig(remoteTargetInfo.serverUrl!, remoteTargetInfo.token, options.package);
+        const res = await fetchRemoteConfig(remoteTargetInfo.serverUrl!, remoteTargetInfo.token, options.package, {
+          allowInsecureHttp: Boolean(options.allowInsecureHttp),
+          insecure: remoteTargetInfo.insecure,
+        });
         const entries = Object.entries(res.values || {}).map(([k, v]) =>
           toDisplayEntry(
             k,

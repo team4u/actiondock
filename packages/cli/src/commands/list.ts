@@ -3,7 +3,14 @@ import { filterWithFallbackInfo } from "@actiondock/core";
 import { ArgumentError } from "../errors";
 import { renderActionList, renderResult } from "../renderer";
 import type { CliContext } from "../types";
-import { getEffectiveOptions, resolveFallbackStrategy, resolveIntent, resolveLocalPackageRoot, withTarget } from "../utils";
+import {
+  applyTargetOptions,
+  getEffectiveOptions,
+  resolveFallbackStrategy,
+  resolveIntent,
+  resolveLocalPackageRoot,
+  withTarget,
+} from "../utils";
 
 /**
  * 挂载 list 子命令至指定 Commander 节点。
@@ -12,14 +19,13 @@ import { getEffectiveOptions, resolveFallbackStrategy, resolveIntent, resolveLoc
  * @param context 命令行上下文
  */
 export function attachListCommand(parent: Command, context?: CliContext): Command {
-  return parent
+  const cmd = parent
     .command("list [patterns...]")
     .description("List actions in current project, linked packages, or remote profile")
     .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
-    .option("-P, --package <id>", "Target package ID or path")
-    .option("-p, --profile <name>", "Query against a specific execution profile")
-    .option("-s, --server <url>", "Remote server URL")
-    .option("-t, --token <token>", "Auth token for remote server")
+    .option("-P, --package <id>", "Target package ID or path");
+
+  return applyTargetOptions(cmd)
     .option("--fallback", "Enable fallback to full list when no items match intent")
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("--json", "Output as JSON")

@@ -10,7 +10,7 @@ import type { Command } from "commander";
 import { ArgumentError } from "../../errors";
 import { renderConfigEnv, renderResult } from "../../renderer";
 import type { CliContext, EnvCheckItem } from "../../types";
-import { getEffectiveOptions } from "../../utils";
+import { applyTargetOptions, getEffectiveOptions } from "../../utils";
 
 /**
  * 注册 config env 子命令：诊断环境变量对声明配置的满足率。
@@ -19,13 +19,12 @@ import { getEffectiveOptions } from "../../utils";
  * @param context 命令行上下文
  */
 export function registerConfigEnvCommand(configCmd: Command, context?: CliContext): void {
-  configCmd
-    .command("env [identifier]")
-    .description("Diagnose environment variable satisfaction for declared configuration")
-    .option("-P, --package <id>", "Target package ID or path")
-    .option("-p, --profile <name>", "Query on a remote target")
-    .option("-s, --server <url>", "Remote server URL")
-    .option("-t, --token <token>", "Auth token for remote server")
+  applyTargetOptions(
+    configCmd
+      .command("env [identifier]")
+      .description("Diagnose environment variable satisfaction for declared configuration")
+      .option("-P, --package <id>", "Target package ID or path")
+  )
     .option("--json", "Output as JSON")
     .option("--envelope", "Wrap JSON output in standard envelope")
     .action(async (identifier: string | undefined, rawOptions: any, cmd: any) => {
@@ -38,12 +37,17 @@ export function registerConfigEnvCommand(configCmd: Command, context?: CliContex
           profile: options.profile,
           server: options.server,
           token: options.token,
+          insecure: options.insecure,
+          allowInsecureHttp: options.allowInsecureHttp,
         },
         context?.customHome
       );
 
       if (target.type === "remote") {
-        const res = await fetchRemoteConfigEnv(target.serverUrl!, target.token, targetPkg);
+        const res = await fetchRemoteConfigEnv(target.serverUrl!, target.token, targetPkg, {
+          allowInsecureHttp: Boolean(options.allowInsecureHttp),
+          insecure: target.insecure,
+        });
         renderResult(res, {
           json: options.json,
           envelope: options.envelope,

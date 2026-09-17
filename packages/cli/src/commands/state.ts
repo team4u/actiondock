@@ -8,7 +8,13 @@ import { Command } from "commander";
 import { ArgumentError, ExecutionError } from "../errors";
 import { renderResult, renderStateList, writeStdout } from "../renderer";
 import type { CliContext } from "../types";
-import { getEffectiveOptions, getTargetRoot, resolveIntent, withTarget } from "../utils";
+import {
+  applyTargetOptions,
+  getEffectiveOptions,
+  getTargetRoot,
+  resolveIntent,
+  withTarget,
+} from "../utils";
 import {
   renderLinkedPackagesStateList,
   renderProjectScopedStateList,
@@ -94,15 +100,14 @@ export function registerStateCommands(program: Command, context?: CliContext): v
   };
 
   // state list
-  stateCmd
-    .command("list [prefix]")
-    .description("List state keys in current project or linked packages")
-    .option("-P, --package <id>", "Target package ID or path")
-    .option("-a, --action <id>", "Action identifier scope")
-    .option("-n, --namespace <ns>", "Filter keys under specific namespace (omit to list all namespaces)")
-    .option("-p, --profile <name>", "Query state on a remote target")
-    .option("-s, --server <url>", "Remote server URL")
-    .option("-t, --token <token>", "Auth token for remote server")
+  applyTargetOptions(
+    stateCmd
+      .command("list [prefix]")
+      .description("List state keys in current project or linked packages")
+      .option("-P, --package <id>", "Target package ID or path")
+      .option("-a, --action <id>", "Action identifier scope")
+      .option("-n, --namespace <ns>", "Filter keys under specific namespace (omit to list all namespaces)")
+  )
     .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
     .option("--detail", "Include metadata (ttl, expiresAt, size, updatedAt) in JSON output")
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
@@ -112,15 +117,14 @@ export function registerStateCommands(program: Command, context?: CliContext): v
     .action(handleListKeys);
 
   // state keys 别名
-  stateCmd
-    .command("keys [prefix]")
-    .description("Alias for 'ad state list [prefix]'")
-    .option("-P, --package <id>", "Target package ID or path")
-    .option("-a, --action <id>", "Action identifier scope")
-    .option("-n, --namespace <ns>", "Filter keys under specific namespace")
-    .option("-p, --profile <name>", "Query state on a remote target")
-    .option("-s, --server <url>", "Remote server URL")
-    .option("-t, --token <token>", "Auth token for remote server")
+  applyTargetOptions(
+    stateCmd
+      .command("keys [prefix]")
+      .description("Alias for 'ad state list [prefix]'")
+      .option("-P, --package <id>", "Target package ID or path")
+      .option("-a, --action <id>", "Action identifier scope")
+      .option("-n, --namespace <ns>", "Filter keys under specific namespace")
+  )
     .option("-i, --intent <pattern>", "Regex or fuzzy intent filter")
     .option("--detail", "Include metadata in JSON output")
     .option("--no-fallback", "Disable fallback")
@@ -130,15 +134,14 @@ export function registerStateCommands(program: Command, context?: CliContext): v
     .action(handleListKeys);
 
   // state get <key>
-  stateCmd
-    .command("get <key>")
-    .description("Get state value by key (supports composite 'ns:key' and detail mode)")
-    .option("-P, --package <id>", "Target package ID or path")
-    .option("-a, --action <id>", "Action identifier scope")
-    .option("-n, --namespace <ns>", "Explicit namespace scope for key")
-    .option("-p, --profile <name>", "Query state on a remote target")
-    .option("-s, --server <url>", "Remote server URL")
-    .option("-t, --token <token>", "Auth token for remote server")
+  applyTargetOptions(
+    stateCmd
+      .command("get <key>")
+      .description("Get state value by key (supports composite 'ns:key' and detail mode)")
+      .option("-P, --package <id>", "Target package ID or path")
+      .option("-a, --action <id>", "Action identifier scope")
+      .option("-n, --namespace <ns>", "Explicit namespace scope for key")
+  )
     .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
     .option("--envelope", "Wrap JSON output in standard envelope")
@@ -212,16 +215,15 @@ export function registerStateCommands(program: Command, context?: CliContext): v
     });
 
   // state set <key> <value>
-  stateCmd
-    .command("set <key> <value>")
-    .description("Set state key-value (supports JSON value, composite 'ns:key', and --ttl)")
-    .option("-P, --package <id>", "Target package ID or path")
-    .option("-a, --action <id>", "Action identifier scope")
-    .option("-n, --namespace <ns>", "Explicit namespace scope for key")
-    .option("--ttl <seconds>", "Time-To-Live expiration in seconds")
-    .option("-p, --profile <name>", "Set state on a remote target")
-    .option("-s, --server <url>", "Remote server URL")
-    .option("-t, --token <token>", "Auth token for remote server")
+  applyTargetOptions(
+    stateCmd
+      .command("set <key> <value>")
+      .description("Set state key-value (supports JSON value, composite 'ns:key', and --ttl)")
+      .option("-P, --package <id>", "Target package ID or path")
+      .option("-a, --action <id>", "Action identifier scope")
+      .option("-n, --namespace <ns>", "Explicit namespace scope for key")
+      .option("--ttl <seconds>", "Time-To-Live expiration in seconds")
+  )
     .option("--data-dir <path>", "Custom database storage directory")
     .action(async (rawKey: string, rawVal: string, rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
@@ -287,16 +289,15 @@ export function registerStateCommands(program: Command, context?: CliContext): v
     });
 
   // state delete <key>
-  stateCmd
-    .command("delete <key>")
-    .alias("rm")
-    .description("Delete state key entry")
-    .option("-P, --package <id>", "Target package ID or path")
-    .option("-a, --action <id>", "Action identifier scope")
-    .option("-n, --namespace <ns>", "Explicit namespace scope for key")
-    .option("-p, --profile <name>", "Delete state on a remote target")
-    .option("-s, --server <url>", "Remote server URL")
-    .option("-t, --token <token>", "Auth token for remote server")
+  applyTargetOptions(
+    stateCmd
+      .command("delete <key>")
+      .alias("rm")
+      .description("Delete state key entry")
+      .option("-P, --package <id>", "Target package ID or path")
+      .option("-a, --action <id>", "Action identifier scope")
+      .option("-n, --namespace <ns>", "Explicit namespace scope for key")
+  )
     .option("--data-dir <path>", "Custom database storage directory")
     .action(async (rawKey: string, rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
@@ -344,17 +345,16 @@ export function registerStateCommands(program: Command, context?: CliContext): v
     });
 
   // state clear
-  stateCmd
-    .command("clear")
-    .alias("clean")
-    .description("Clear state entries (supports namespace cleanup or global wipe via --all)")
-    .option("-P, --package <id>", "Target package ID or path")
-    .option("--action <id>", "Action identifier scope")
-    .option("-n, --namespace <ns>", "Target namespace to clear (required unless --all is specified)")
-    .option("-a, --all", "Dangerously clear all state namespaces for the package")
-    .option("-p, --profile <name>", "Clear state on a remote target")
-    .option("-s, --server <url>", "Remote server URL")
-    .option("-t, --token <token>", "Auth token for remote server")
+  applyTargetOptions(
+    stateCmd
+      .command("clear")
+      .alias("clean")
+      .description("Clear state entries (supports namespace cleanup or global wipe via --all)")
+      .option("-P, --package <id>", "Target package ID or path")
+      .option("--action <id>", "Action identifier scope")
+      .option("-n, --namespace <ns>", "Target namespace to clear (required unless --all is specified)")
+      .option("-a, --all", "Dangerously clear all state namespaces for the package")
+  )
     .option("--data-dir <path>", "Custom database storage directory")
     .action(async (rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);

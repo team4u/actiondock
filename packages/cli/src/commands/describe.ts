@@ -3,6 +3,7 @@ import { ArgumentError, ExecutionError } from "../errors";
 import { renderActionDetail, renderResult } from "../renderer";
 import type { CliContext } from "../types";
 import {
+  applyTargetOptions,
   getEffectiveOptions,
   resolveLocalPackageRoot,
   withTarget,
@@ -15,14 +16,13 @@ import {
  * @param context 命令行上下文
  */
 export function attachDescribeCommand(parent: Command, context?: CliContext): Command {
-  return parent
+  const cmd = parent
     .command("describe <id>")
     .alias("show")
     .description("Show action definition, schema, and description")
-    .option("-P, --package <id>", "Target package ID or path")
-    .option("-p, --profile <name>", "Query against a specific profile")
-    .option("-s, --server <url>", "Remote server URL")
-    .option("-t, --token <token>", "Auth token for remote server")
+    .option("-P, --package <id>", "Target package ID or path");
+
+  return applyTargetOptions(cmd)
     .option("--json", "Output as JSON")
     .option("--envelope", "Wrap JSON output in standard envelope")
     .option("--data-dir <path>", "Custom database storage directory")

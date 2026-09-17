@@ -54,8 +54,10 @@ import {
   TARGET_PROTOCOL_UNSUPPORTED,
   TARGET_CAPABILITY_UNAVAILABLE,
   TARGET_RESULT_UNKNOWN,
+  TARGET_CLOSED,
 } from "./types";
 import { ACTION_CANCELLED, EXECUTION_FAILED, STATE_KEY_NOT_FOUND, TIMEOUT } from "../errors";
+import { getInsecureDispatcher } from "../server/dispatcher";
 
 /**
  * 读取并解析远端 SSE 事件流。
@@ -64,9 +66,19 @@ export async function* streamRemoteEvents(
   serverUrl: string,
   runId: string,
   token?: string,
-  options?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number; allowInsecureHttp?: boolean }
+  options?: {
+    after?: number | string;
+    signal?: AbortSignal;
+    maxQueueSize?: number;
+    allowInsecureHttp?: boolean;
+    insecure?: boolean;
+    dispatcher?: unknown;
+  }
 ): AsyncIterable<ExecutionEvent> {
-  assertSecureTransport(serverUrl, token, options?.allowInsecureHttp);
+  assertSecureTransport(serverUrl, token, {
+    allowInsecureHttp: options?.allowInsecureHttp,
+    insecure: options?.insecure,
+  });
   const base = normalizeServerUrl(serverUrl);
   const candidateUrls = [
     `${base}/api/v2/runs/${encodeURIComponent(runId)}/events`,
@@ -86,10 +98,16 @@ export async function* streamRemoteEvents(
   let res: Response | undefined;
   for (const url of candidateUrls) {
     try {
-      const resp = await fetch(url, {
+      const fetchInit: RequestInit & { dispatcher?: any } = {
         headers,
         signal: options?.signal,
-      });
+      };
+      if (options?.dispatcher) {
+        fetchInit.dispatcher = options.dispatcher;
+      } else if (options?.insecure) {
+        fetchInit.dispatcher = getInsecureDispatcher();
+      }
+      const resp = await fetch(url, fetchInit);
       if (resp.status === 410) {
         let errJson: any;
         try {
@@ -299,6 +317,9 @@ export class RemoteActionDockTarget implements ActionDockTarget {
   public readonly timeoutMs?: number;
   public readonly baseTimeoutMs: number;
   public readonly allowInsecureHttp?: boolean;
+  public readonly insecure?: boolean;
+  public readonly dispatcher?: unknown;
+  private isClosed = false;
 
   constructor(options: RemoteTargetOptions) {
     this.serverUrl = options.serverUrl;
@@ -306,13 +327,27 @@ export class RemoteActionDockTarget implements ActionDockTarget {
     this.timeoutMs = options.timeoutMs;
     this.baseTimeoutMs = options.baseTimeoutMs ?? 60000;
     this.allowInsecureHttp = options.allowInsecureHttp;
+    this.insecure = options.insecure;
+    this.dispatcher = options.dispatcher;
+  }
+
+  private assertNotClosed(): void {
+    if (this.isClosed) {
+      throw new TargetError(
+        TARGET_CLOSED,
+        "RemoteActionDockTarget is closed"
+      );
+    }
   }
 
   async info(): Promise<TargetInfo> {
+    this.assertNotClosed();
     let raw: any;
     try {
       raw = await fetchRemoteInfo(this.serverUrl, this.token, {
         allowInsecureHttp: this.allowInsecureHttp,
+        insecure: this.insecure,
+        dispatcher: this.dispatcher,
       });
     } catch (err: any) {
       wrapRemoteError(err);
@@ -353,13 +388,17 @@ export class RemoteActionDockTarget implements ActionDockTarget {
   }
 
   async listPackages(): Promise<PackageInfo[]> {
+    this.assertNotClosed();
     const info = await this.info();
     return info.packages;
   }
 
   async listActions(options?: ListActionsOptions): Promise<ActionSummary[]> {
+    this.assertNotClosed();
     const rawList = await fetchRemoteActions(this.serverUrl, this.token, options?.query, {
       allowInsecureHttp: this.allowInsecureHttp,
+      insecure: this.insecure,
+      dispatcher: this.dispatcher,
     });
     let summaries: ActionSummary[] = rawList.map((item: any) => ({
       id: item.id,
@@ -382,6 +421,7 @@ export class RemoteActionDockTarget implements ActionDockTarget {
   }
 
   async describeAction(ref: ActionRef | string): Promise<ActionSpec> {
+    this.assertNotClosed();
     let parsed: ActionRef;
     try {
       parsed = ActionResolver.parseRef(ref);
@@ -394,6 +434,8 @@ export class RemoteActionDockTarget implements ActionDockTarget {
       : parsed.actionId;
     const raw = await fetchRemoteActionShow(this.serverUrl, actionId, this.token, {
       allowInsecureHttp: this.allowInsecureHttp,
+      insecure: this.insecure,
+      dispatcher: this.dispatcher,
     });
 
     return {
@@ -411,9 +453,12 @@ export class RemoteActionDockTarget implements ActionDockTarget {
   }
 
   async listPlaybooks(options?: { intent?: string; package?: string }): Promise<PlaybookSummary[]> {
+    this.assertNotClosed();
     const rawList = await fetchRemotePlaybooks(this.serverUrl, this.token, {
       ...options,
       allowInsecureHttp: this.allowInsecureHttp,
+      insecure: this.insecure,
+      dispatcher: this.dispatcher,
     });
     return rawList.map((item: any) => ({
       id: item.id,
@@ -425,8 +470,11 @@ export class RemoteActionDockTarget implements ActionDockTarget {
   }
 
   async describePlaybook(id: string): Promise<PlaybookSpec> {
+    this.assertNotClosed();
     const raw = await fetchRemotePlaybookShow(this.serverUrl, id, this.token, {
       allowInsecureHttp: this.allowInsecureHttp,
+      insecure: this.insecure,
+      dispatcher: this.dispatcher,
     });
     const parsedPkgId = id.includes("/") ? id.slice(0, id.lastIndexOf("/")) : undefined;
     return {
@@ -444,6 +492,7 @@ export class RemoteActionDockTarget implements ActionDockTarget {
     input: JsonValue,
     options?: ExecuteOptions
   ): Promise<ExecutionResult> {
+    this.assertNotClosed();
     let parsed: ActionRef;
     try {
       parsed = ActionResolver.parseRef(ref);
@@ -467,6 +516,8 @@ export class RemoteActionDockTarget implements ActionDockTarget {
         requestId: options?.requestId,
         async: false,
         allowInsecureHttp: this.allowInsecureHttp,
+        insecure: this.insecure,
+        dispatcher: this.dispatcher,
       }
     );
   }
@@ -476,6 +527,7 @@ export class RemoteActionDockTarget implements ActionDockTarget {
     input: JsonValue,
     options?: ExecuteOptions
   ): Promise<ExecutionTicket> {
+    this.assertNotClosed();
     let parsed: ActionRef;
     try {
       parsed = ActionResolver.parseRef(ref);
@@ -499,6 +551,8 @@ export class RemoteActionDockTarget implements ActionDockTarget {
         requestId: options?.requestId,
         async: true,
         allowInsecureHttp: this.allowInsecureHttp,
+        insecure: this.insecure,
+        dispatcher: this.dispatcher,
       }
     );
 
@@ -546,6 +600,17 @@ export class RemoteActionDockTarget implements ActionDockTarget {
       };
     }
 
+    if (this.isClosed) {
+      return {
+        ok: false,
+        runId,
+        error: {
+          code: TARGET_CLOSED,
+          message: "RemoteActionDockTarget is closed",
+        },
+      };
+    }
+
     const internalController = new AbortController();
     let sseTimedOut = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -575,6 +640,16 @@ export class RemoteActionDockTarget implements ActionDockTarget {
         }
       }
     } catch (err: any) {
+      if (err?.code === TARGET_CLOSED || this.isClosed) {
+        return {
+          ok: false,
+          runId,
+          error: {
+            code: TARGET_CLOSED,
+            message: "RemoteActionDockTarget is closed",
+          },
+        };
+      }
       if (!signal?.aborted && !sseTimedOut) {
         // SSE 通道异常视为不可用：记录后按指数退避进入轮询兜底
         console.warn(
@@ -603,9 +678,33 @@ export class RemoteActionDockTarget implements ActionDockTarget {
 
     const remainingWaitMs = Math.max(0, maxWaitMs - (Date.now() - startTime));
     if (remainingWaitMs <= 0) {
-      const run = await this.getRun(runId);
-      if (run && isTerminalRunStatus(run.status)) {
-        return this.formatTerminalRunResult(run, runId);
+      if (this.isClosed) {
+        return {
+          ok: false,
+          runId,
+          error: {
+            code: TARGET_CLOSED,
+            message: "RemoteActionDockTarget is closed",
+          },
+        };
+      }
+      try {
+        const run = await this.getRun(runId);
+        if (run && isTerminalRunStatus(run.status)) {
+          return this.formatTerminalRunResult(run, runId);
+        }
+      } catch (err: any) {
+        if (err?.code === TARGET_CLOSED || this.isClosed) {
+          return {
+            ok: false,
+            runId,
+            error: {
+              code: TARGET_CLOSED,
+              message: "RemoteActionDockTarget is closed",
+            },
+          };
+        }
+        throw err;
       }
       const waitedMs = Date.now() - startTime;
       return {
@@ -638,6 +737,16 @@ export class RemoteActionDockTarget implements ActionDockTarget {
     const maxDelayMs = 2000;
 
     while (Date.now() - startTime < maxWaitMs) {
+      if (this.isClosed) {
+        return {
+          ok: false,
+          runId,
+          error: {
+            code: TARGET_CLOSED,
+            message: "RemoteActionDockTarget is closed",
+          },
+        };
+      }
       if (signal?.aborted) {
         return {
           ok: false,
@@ -648,9 +757,23 @@ export class RemoteActionDockTarget implements ActionDockTarget {
           },
         };
       }
-      const run = await this.getRun(runId);
-      if (run && isTerminalRunStatus(run.status)) {
-        return this.formatTerminalRunResult(run, runId);
+      try {
+        const run = await this.getRun(runId);
+        if (run && isTerminalRunStatus(run.status)) {
+          return this.formatTerminalRunResult(run, runId);
+        }
+      } catch (err: any) {
+        if (err?.code === TARGET_CLOSED || this.isClosed) {
+          return {
+            ok: false,
+            runId,
+            error: {
+              code: TARGET_CLOSED,
+              message: "RemoteActionDockTarget is closed",
+            },
+          };
+        }
+        throw err;
       }
       await new Promise((resolve) => setTimeout(resolve, delayMs));
       delayMs = Math.min(delayMs * 2, maxDelayMs);
@@ -692,6 +815,7 @@ export class RemoteActionDockTarget implements ActionDockTarget {
   }
 
   async listRuns(options?: ListRunsOptions): Promise<RunRecord[]> {
+    this.assertNotClosed();
     try {
       const res = await fetchRemoteRuns(this.serverUrl, this.token, {
         packageId: options?.packageId,
@@ -700,6 +824,8 @@ export class RemoteActionDockTarget implements ActionDockTarget {
         intent: options?.intent,
         limit: options?.limit,
         allowInsecureHttp: this.allowInsecureHttp,
+        insecure: this.insecure,
+        dispatcher: this.dispatcher,
       });
       return res.items || [];
     } catch (err: any) {
@@ -708,10 +834,13 @@ export class RemoteActionDockTarget implements ActionDockTarget {
   }
 
   async clearRuns(options?: { packageId?: string; actionId?: string; status?: string }): Promise<number> {
+    this.assertNotClosed();
     try {
       const res = await clearRemoteRuns(this.serverUrl, this.token, {
         ...options,
         allowInsecureHttp: this.allowInsecureHttp,
+        insecure: this.insecure,
+        dispatcher: this.dispatcher,
       });
       return res.clearedCount ?? 0;
     } catch (err: any) {
@@ -720,9 +849,12 @@ export class RemoteActionDockTarget implements ActionDockTarget {
   }
 
   async getRun(runId: string): Promise<RunRecord | undefined> {
+    this.assertNotClosed();
     try {
       return await fetchRemoteRun(this.serverUrl, runId, this.token, {
         allowInsecureHttp: this.allowInsecureHttp,
+        insecure: this.insecure,
+        dispatcher: this.dispatcher,
       });
     } catch (err: any) {
       const msg = String(err?.message || "");
@@ -734,9 +866,12 @@ export class RemoteActionDockTarget implements ActionDockTarget {
   }
 
   async cancelRun(runId: string, reason?: string): Promise<CancelResult> {
+    this.assertNotClosed();
     try {
       const res = await cancelRemoteRun(this.serverUrl, runId, this.token, reason, {
         allowInsecureHttp: this.allowInsecureHttp,
+        insecure: this.insecure,
+        dispatcher: this.dispatcher,
       });
       return { outcome: "requested", runId: res.runId };
     } catch (err: any) {
@@ -770,17 +905,29 @@ export class RemoteActionDockTarget implements ActionDockTarget {
     }
   }
 
-  async *events(
+  events(
     runId: string,
     options?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number }
   ): AsyncIterable<ExecutionEvent> {
-    yield* streamRemoteEvents(this.serverUrl, runId, this.token, {
-      ...options,
-      allowInsecureHttp: this.allowInsecureHttp,
-    });
+    this.assertNotClosed();
+    const self = this;
+    async function* stream(): AsyncIterable<ExecutionEvent> {
+      self.assertNotClosed();
+      for await (const event of streamRemoteEvents(self.serverUrl, runId, self.token, {
+        ...options,
+        allowInsecureHttp: self.allowInsecureHttp,
+        insecure: self.insecure,
+        dispatcher: self.dispatcher,
+      })) {
+        self.assertNotClosed();
+        yield event;
+      }
+    }
+    return stream();
   }
 
   async getConfig(packageId: string, key: string): Promise<ConfigValueView> {
+    this.assertNotClosed();
     try {
       const list = await this.listConfig(packageId);
       const found = list.find((c) => c.key === key);
@@ -800,9 +947,12 @@ export class RemoteActionDockTarget implements ActionDockTarget {
   }
 
   async setConfig(packageId: string, key: string, value: JsonValue): Promise<void> {
+    this.assertNotClosed();
     try {
       await setRemoteConfig(this.serverUrl, key, value, this.token, packageId || undefined, {
         allowInsecureHttp: this.allowInsecureHttp,
+        insecure: this.insecure,
+        dispatcher: this.dispatcher,
       });
     } catch (err: any) {
       wrapRemoteError(err);
@@ -810,9 +960,12 @@ export class RemoteActionDockTarget implements ActionDockTarget {
   }
 
   async deleteConfig(packageId: string, key: string): Promise<boolean> {
+    this.assertNotClosed();
     try {
       const res = await deleteRemoteConfig(this.serverUrl, key, this.token, packageId || undefined, {
         allowInsecureHttp: this.allowInsecureHttp,
+        insecure: this.insecure,
+        dispatcher: this.dispatcher,
       });
       return Boolean(res?.deleted ?? true);
     } catch (err: any) {
@@ -821,9 +974,12 @@ export class RemoteActionDockTarget implements ActionDockTarget {
   }
 
   async listConfig(packageId: string): Promise<ConfigValueView[]> {
+    this.assertNotClosed();
     try {
       const res = await fetchRemoteConfig(this.serverUrl, this.token, packageId || undefined, {
         allowInsecureHttp: this.allowInsecureHttp,
+        insecure: this.insecure,
+        dispatcher: this.dispatcher,
       });
       if (Array.isArray(res)) return res;
       if (Array.isArray(res?.items)) return res.items;
@@ -849,12 +1005,15 @@ export class RemoteActionDockTarget implements ActionDockTarget {
     key: string,
     options?: StateScopeOptions
   ): Promise<T | undefined> {
+    this.assertNotClosed();
     try {
       const res = await getRemoteStateKey(this.serverUrl, key, this.token, {
         package: packageId || undefined,
         action: actionId || undefined,
         namespace: options?.namespace,
         allowInsecureHttp: this.allowInsecureHttp,
+        insecure: this.insecure,
+        dispatcher: this.dispatcher,
       });
       if (res === undefined) return undefined;
       if (options?.detail) {
@@ -876,6 +1035,7 @@ export class RemoteActionDockTarget implements ActionDockTarget {
     value: T,
     options?: StateScopeOptions
   ): Promise<void> {
+    this.assertNotClosed();
     try {
       await setRemoteStateKey(this.serverUrl, key, value, this.token, {
         package: packageId || undefined,
@@ -883,6 +1043,8 @@ export class RemoteActionDockTarget implements ActionDockTarget {
         namespace: options?.namespace,
         ttl: options?.ttl,
         allowInsecureHttp: this.allowInsecureHttp,
+        insecure: this.insecure,
+        dispatcher: this.dispatcher,
       });
     } catch (err: any) {
       wrapRemoteError(err);
@@ -895,12 +1057,15 @@ export class RemoteActionDockTarget implements ActionDockTarget {
     key: string,
     options?: StateScopeOptions
   ): Promise<boolean> {
+    this.assertNotClosed();
     try {
       const res = await deleteRemoteStateKey(this.serverUrl, key, this.token, {
         package: packageId || undefined,
         action: actionId || undefined,
         namespace: options?.namespace,
         allowInsecureHttp: this.allowInsecureHttp,
+        insecure: this.insecure,
+        dispatcher: this.dispatcher,
       });
       return Boolean(res?.deleted ?? true);
     } catch (err: any) {
@@ -916,6 +1081,7 @@ export class RemoteActionDockTarget implements ActionDockTarget {
     actionId: string,
     options?: StateScopeOptions
   ): Promise<string[]> {
+    this.assertNotClosed();
     try {
       const res = await fetchRemoteStateList(this.serverUrl, this.token, {
         package: packageId || undefined,
@@ -923,6 +1089,8 @@ export class RemoteActionDockTarget implements ActionDockTarget {
         namespace: options?.namespace,
         prefix: options?.prefix,
         allowInsecureHttp: this.allowInsecureHttp,
+        insecure: this.insecure,
+        dispatcher: this.dispatcher,
       });
       return res.keys || [];
     } catch (err: any) {
@@ -935,6 +1103,7 @@ export class RemoteActionDockTarget implements ActionDockTarget {
     actionId: string,
     options?: StateScopeOptions
   ): Promise<number> {
+    this.assertNotClosed();
     try {
       const res = await clearRemoteState(this.serverUrl, this.token, {
         package: packageId || undefined,
@@ -943,6 +1112,8 @@ export class RemoteActionDockTarget implements ActionDockTarget {
         prefix: options?.prefix,
         all: options?.all,
         allowInsecureHttp: this.allowInsecureHttp,
+        insecure: this.insecure,
+        dispatcher: this.dispatcher,
       });
       return res.clearedCount ?? 0;
     } catch (err: any) {
@@ -954,6 +1125,7 @@ export class RemoteActionDockTarget implements ActionDockTarget {
     packageId: string,
     options?: any
   ): Promise<StateEntry[]> {
+    this.assertNotClosed();
     throw new TargetError(
       TARGET_CAPABILITY_UNAVAILABLE,
       "TARGET_CAPABILITY_UNAVAILABLE: listStateEntries is not supported on remote target"
@@ -961,7 +1133,10 @@ export class RemoteActionDockTarget implements ActionDockTarget {
   }
 
   async close(_options?: { timeoutMs?: number }): Promise<void> {
-    // 远程 Target 无本地资源需要释放
+    if (this.isClosed) {
+      return;
+    }
+    this.isClosed = true;
   }
 }
 

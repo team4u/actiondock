@@ -10,7 +10,13 @@ import { Command } from "commander";
 import { ArgumentError, ExecutionError } from "../errors";
 import { renderResult, renderRunDetail, renderRunsList } from "../renderer";
 import type { CliContext } from "../types";
-import { getEffectiveOptions, resolveIntent, withRemoteTarget, withTarget } from "../utils";
+import {
+  applyTargetOptions,
+  getEffectiveOptions,
+  resolveIntent,
+  withRemoteTarget,
+  withTarget,
+} from "../utils";
 
 /**
  * 解析本地目标包根目录与工程配置（仅在 local 分支调用）。
@@ -57,16 +63,15 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
     .description("Inspect action execution history");
 
   // runs list
-  runsCmd
-    .command("list [patterns...]")
-    .description("List recent execution records")
-    .option("-P, --package <id>", "Target package ID or path")
-    .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
-    .option("-a, --action <actionId>", "Filter by action ID")
-    .option("-n, --limit <count>", "Maximum number of records to return", "20")
-    .option("-p, --profile <name>", "Query against a specific profile")
-    .option("-s, --server <url>", "Remote server URL")
-    .option("-t, --token <token>", "Auth token for remote server")
+  applyTargetOptions(
+    runsCmd
+      .command("list [patterns...]")
+      .description("List recent execution records")
+      .option("-P, --package <id>", "Target package ID or path")
+      .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
+      .option("-a, --action <actionId>", "Filter by action ID")
+      .option("-n, --limit <count>", "Maximum number of records to return", "20")
+  )
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
@@ -136,13 +141,12 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
     });
 
   // runs show <id>
-  runsCmd
-    .command("show <id>")
-    .description("Show details of a specific execution run")
-    .option("-p, --profile <name>", "Query run against a specific profile")
-    .option("-s, --server <url>", "Remote server URL")
-    .option("-t, --token <token>", "Auth token for remote server")
-    .option("-P, --package <id>", "Target package ID or path")
+  applyTargetOptions(
+    runsCmd
+      .command("show <id>")
+      .description("Show details of a specific execution run")
+      .option("-P, --package <id>", "Target package ID or path")
+  )
     .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
     .option("--envelope", "Wrap JSON output in standard envelope")
@@ -182,12 +186,11 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
     });
 
   // runs cancel
-  runsCmd
-    .command("cancel <id>")
-    .description("Cancel a running action execution on a remote server")
-    .option("-p, --profile <name>", "Execute cancel against a specific profile")
-    .option("-s, --server <url>", "Remote server URL")
-    .option("-t, --token <token>", "Auth token for remote server")
+  applyTargetOptions(
+    runsCmd
+      .command("cancel <id>")
+      .description("Cancel a running action execution on a remote server")
+  )
     .option("-r, --reason <reason>", "Reason for cancellation")
     .option("--json", "Output as JSON")
     .option("--envelope", "Wrap JSON output in standard envelope")
@@ -202,6 +205,7 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
           profile: options.profile,
           server: options.server,
           token: options.token,
+          insecure: options.insecure,
         },
         context?.customHome
       );
@@ -236,14 +240,13 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
     });
 
   // runs clear
-  runsCmd
-    .command("clear")
-    .description("Clear execution run records")
-    .option("-P, --package <id>", "Target package ID or path")
-    .option("-a, --action <actionId>", "Filter by action ID")
-    .option("-p, --profile <name>", "Target profile")
-    .option("-s, --server <url>", "Remote server URL")
-    .option("-t, --token <token>", "Auth token for remote server")
+  applyTargetOptions(
+    runsCmd
+      .command("clear")
+      .description("Clear execution run records")
+      .option("-P, --package <id>", "Target package ID or path")
+      .option("-a, --action <actionId>", "Filter by action ID")
+  )
     .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
     .option("--envelope", "Wrap JSON output in standard envelope")

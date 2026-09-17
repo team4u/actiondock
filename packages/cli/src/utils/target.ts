@@ -7,7 +7,24 @@ import {
   type ResolvedTarget,
 } from "@actiondock/core";
 import { createNodePlatform } from "@actiondock/runtime-node";
+import type { Command } from "commander";
 import type { CliContext } from "../types";
+
+/**
+ * 统一为 Commander 命令节点挂载目标环境解析相关选项（单一事实源）。
+ * 包括：-p/--profile, -s/--server, -t/--token, -k/--insecure, --allow-insecure-http。
+ *
+ * @param command 目标 Commander 命令节点
+ * @returns 挂载选项后的命令节点
+ */
+export function applyTargetOptions(command: Command): Command {
+  return command
+    .option("-p, --profile <name>", "Query or execute against a specific profile")
+    .option("-s, --server <url>", "Remote server URL")
+    .option("-t, --token <token>", "Auth token for remote server")
+    .option("-k, --insecure", "Allow insecure server connections (skip TLS certificate validation)")
+    .option("--allow-insecure-http", "Allow sending auth token over unencrypted HTTP to non-loopback hosts");
+}
 
 /**
  * 目标解析与 Target 创建所需的统一选项视图。
@@ -24,6 +41,10 @@ export interface TargetResolutionOptions {
   token?: string;
   /** 自定义数据目录（对应 --data-dir） */
   dataDir?: string;
+  /** 是否跳过 TLS 证书合法性校验（对应 -k, --insecure） */
+  insecure?: boolean;
+  /** 是否允许向非回环地址发送明文 HTTP 请求（对应 --allow-insecure-http） */
+  allowInsecureHttp?: boolean;
 }
 
 /**
@@ -32,7 +53,7 @@ export interface TargetResolutionOptions {
  * 回调获得创建好的 target 与解析后的目标拓扑信息；无论回调成功或抛出，
  * 都保证 target 资源被正确释放，业务异常原样透传。
  *
- * @param options 命令选项视图（profile/server/token/package/dataDir）
+ * @param options 命令选项视图（profile/server/token/package/dataDir/insecure/allowInsecureHttp）
  * @param context CLI 上下文
  * @param fn 业务回调（target 为已创建的门面实例，resolved 为拓扑解析结果）
  * @param localOptions 本地分支附加选项（如 scanLinkedPackages）与 localRoot 回退策略
@@ -53,6 +74,8 @@ export async function withTarget(
       profile: options.profile,
       server: options.server,
       token: options.token,
+      insecure: options.insecure,
+      allowInsecureHttp: options.allowInsecureHttp,
     },
     context?.customHome
   );
@@ -71,6 +94,8 @@ export async function withTarget(
           type: "remote",
           serverUrl: resolved.serverUrl!,
           token: resolved.token,
+          insecure: resolved.insecure,
+          allowInsecureHttp: resolved.allowInsecureHttp ?? options.allowInsecureHttp,
         }
       : {
           type: "local",
@@ -109,6 +134,8 @@ export async function withRemoteTarget(
       profile: options.profile,
       server: options.server,
       token: options.token,
+      insecure: options.insecure,
+      allowInsecureHttp: options.allowInsecureHttp,
     },
     context?.customHome
   );
@@ -117,6 +144,8 @@ export async function withRemoteTarget(
     type: "remote",
     serverUrl: resolved.serverUrl!,
     token: resolved.token,
+    insecure: resolved.insecure,
+    allowInsecureHttp: resolved.allowInsecureHttp ?? options.allowInsecureHttp,
   });
 
   try {

@@ -3,16 +3,15 @@ import { Command } from "commander";
 import { ExecutionError } from "../errors";
 import { renderResult } from "../renderer";
 import type { CliContext } from "../types";
-import { getEffectiveOptions } from "../utils";
+import { applyTargetOptions, getEffectiveOptions } from "../utils";
 
 export function registerDoctorCommand(program: Command, context?: CliContext): void {
-  program
+  const cmd = program
     .command("doctor")
     .description("Check ActionDock environment, registry health, and project diagnostics")
-    .option("-P, --package <id|path>", "Target package ID or directory path for project diagnostics")
-    .option("-p, --profile <name>", "Query doctor diagnostics on a remote target")
-    .option("-s, --server <url>", "Remote server URL")
-    .option("-t, --token <token>", "Auth token for remote server")
+    .option("-P, --package <id|path>", "Target package ID or directory path for project diagnostics");
+
+  applyTargetOptions(cmd)
     .option("--json", "Output diagnostics report in JSON format")
     .option("--envelope", "Wrap JSON output in standard envelope")
     .action(async (rawOptions, cmd) => {
@@ -23,13 +22,17 @@ export function registerDoctorCommand(program: Command, context?: CliContext): v
             profile: options.profile,
             server: options.server,
             token: options.token,
+            insecure: options.insecure,
           },
           context?.customHome
         );
 
         let report;
         if (target.type === "remote") {
-          const remoteRes = await fetchRemoteDoctor(target.serverUrl!, target.token, options.package);
+          const remoteRes = await fetchRemoteDoctor(target.serverUrl!, target.token, options.package, {
+            allowInsecureHttp: Boolean(options.allowInsecureHttp),
+            insecure: target.insecure,
+          });
           report = remoteRes.report || remoteRes;
         } else {
           report = await runDoctorChecks({

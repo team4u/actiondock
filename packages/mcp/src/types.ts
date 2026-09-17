@@ -3,6 +3,7 @@ import type {
   ActionDockHost,
   ActionDockTarget,
   RuntimeStorage,
+  ServerTlsOptions,
 } from "@actiondock/core";
 import type { ActionDefinition, RunRecord, RunStatus } from "@actiondock/sdk";
 
@@ -125,6 +126,8 @@ export interface HttpSecurityOptions {
   allowInsecureHttp?: boolean;
   corsOrigins?: string[];
   maxBodyBytes?: number;
+  /** 服务端 TLS/HTTPS 安全传输选项 */
+  tls?: ServerTlsOptions;
 }
 
 export interface ActionDockMcpHttpOptions

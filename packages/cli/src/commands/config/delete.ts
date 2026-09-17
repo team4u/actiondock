@@ -6,7 +6,7 @@ import type { Command } from "commander";
 import { ArgumentError } from "../../errors";
 import { writeStdout } from "../../renderer";
 import type { CliContext } from "../../types";
-import { getEffectiveOptions, withTarget } from "../../utils";
+import { applyTargetOptions, getEffectiveOptions, withTarget } from "../../utils";
 
 /**
  * 注册 config delete 子命令：删除配置项。
@@ -15,15 +15,14 @@ import { getEffectiveOptions, withTarget } from "../../utils";
  * @param context 命令行上下文
  */
 export function registerConfigDeleteCommand(configCmd: Command, context?: CliContext): void {
-  configCmd
-    .command("delete <key>")
-    .alias("rm")
-    .description("Delete configuration entry")
-    .option("-P, --package <id>", "Target package ID or path")
-    .option("-g, --global", "Delete from global configuration")
-    .option("-p, --profile <name>", "Delete on a remote target")
-    .option("-s, --server <url>", "Remote server URL")
-    .option("-t, --token <token>", "Auth token for remote server")
+  applyTargetOptions(
+    configCmd
+      .command("delete <key>")
+      .alias("rm")
+      .description("Delete configuration entry")
+      .option("-P, --package <id>", "Target package ID or path")
+      .option("-g, --global", "Delete from global configuration")
+  )
     .option("--data-dir <path>", "Custom database storage directory")
     .action(async (key: string, rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);

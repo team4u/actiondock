@@ -37,6 +37,8 @@
   - **多包依赖对齐**：发布测试版本时，全部子包之间以及脚手架模板中的互引依赖必须与目标测试版本号对齐，避免 npm 无法匹配预发布版本而回退加载旧稳定版。
   - **发布验证与执行流**：
     - 验证流程：发布前必须通过 `npm test`、`npm run typecheck` 与打包烟雾测试 `npm run test:pack`。
-    - 提交流程：完成各包版本号更新后创建提交，使用 `git tag <version>` 标记并执行 `git push origin <branch> && git push origin <version>`。
-    - 流水线发布：GitHub Actions 监听标签推送，自动解析标签类型并决定 `--tag` 参数，按依赖拓扑顺序执行自动化发布。
+    - 变更智能提炼：智能体对比上一标签与当前分支的提交历史，智能提取并归纳结构化版本变更清单。
+    - 规范发版提交：完成各包版本号更新后创建提交，提交标题统一为 `chore(release): release <version>`，提交说明正文附带提炼后的完整变更清单。
+    - 附注打标机制：严禁创建无说明的轻量标签，统一使用带有完整变更说明的附注标签进行标记，执行 `git tag -a <version> -m "<summary>"`。
+    - 推送与流水线发布：执行 `git push origin <branch> && git push origin <version>` 推送分支与标签，由 GitHub Actions 监听标签推送，自动解析标签类型并决定 `--tag` 参数，按依赖拓扑顺序执行自动化发布。
 

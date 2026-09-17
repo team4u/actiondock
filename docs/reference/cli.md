@@ -25,6 +25,16 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
 - `--envelope`：将 JSON 输出包装为标准信封结构对象（包含 `ok: true, data: T` 或 `ok: false, error: { code, message, details }`）。
 - `--data-dir <path>`：指定自定义数据存储目录（覆盖默认存储路径）。由涉及 SQLite 持久化与状态存储的命令消费，在纯静态解析命令中作为无操作选项忽略。
 
+### 远程连接与目标通用选项
+
+所有支持连接远程 ActionDock 服务端的命令（包括 `run`、`runs`、`state`、`config`、`doctor`、`info`、`list`、`describe`、`playbook` 等）均由统一逻辑（`applyTargetOptions`）挂载如下选项：
+
+- `-p, --profile <name>`：指定已注册的环境配置名称。
+- `-s, --server <url>`：指定远程服务基础 URL（支持 HTTP 与 HTTPS）。
+- `-t, --token <token>`：指定远程服务访问令牌。
+- `-k, --insecure`：允许不安全的 TLS 连接，跳过对自签名或私有证书的合法性校验（适用于内网部署）。
+- `--allow-insecure-http`：豁免非回环明文 HTTP 传输令牌的安全拦截。
+
 ---
 
 ## 全量命令速查
@@ -262,11 +272,17 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
   ad profile show <name> [--reveal] [--json] [--envelope]
   ```
 
-- 添加或更新环境配置 (`ad profile add`)：
+- 添加环境配置 (`ad profile add`)：
   ```bash
-  ad profile add <name> --server <url> [--token <token>] [--token-env <envVar>] [-d, --desc <description>]
+  ad profile add <name> --server <url> [--token <token>] [--token-env <envVar>] [-k, --insecure] [-d, --desc <description>]
   ```
-  注册远端环境节点，推荐使用 `--token-env` 引用环境变量以提升安全性。
+  注册远端环境节点，推荐使用 `--token-env` 引用环境变量以提升安全性。对于内网自签名证书服务，传入 `-k, --insecure` 可忽略证书合法性校验。
+
+- 更新环境配置 (`ad profile update`)：
+  ```bash
+  ad profile update <name> [--server <url>] [--token <token>] [--token-env <envVar>] [-k, --insecure] [--no-insecure] [-d, --desc <description>]
+  ```
+  更新已有环境节点的地址、令牌或安全策略。
 
 - 切换当前默认环境 (`ad profile use`)：
   ```bash
@@ -297,10 +313,11 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
   ad mcp serve [-p, --port <port>] [-H, --host <host>] [-t, --token <token>] [--token-env <env>] [--allow-insecure-no-auth] [--allow-insecure-http] [--allow-query-token] [--cors-origin <origin>] [--max-body <size>] [-d, --dir <path>] [--package <package-id>] [--all] [--timeout <duration>]
   ```
 
-- 启动远程调度 HTTP 微服务 (`ad serve`)：
+- 启动远程调度 HTTP/HTTPS 微服务 (`ad serve`)：
   ```bash
-  ad serve [-H, --host <host>] [-p, --port <port>] [-t, --token <token>] [--allow-query-token] [--management] [--allow-insecure-no-auth] [--cors-origin <origin>] [--max-body <size>] [--no-mcp] [-d, --dir <path>]
+  ad serve [-H, --host <host>] [-p, --port <port>] [-t, --token <token>] [--https] [--tls-cert <path>] [--tls-key <path>] [--tls-ca <path>] [--tls-passphrase <passphrase>] [--allow-query-token] [--management] [--allow-insecure-no-auth] [--cors-origin <origin>] [--max-body <size>] [--no-mcp] [-d, --dir <path>]
   ```
+  原生支持 HTTPS 运行。仅传入 `--https` 时自动在本地签发并复用自签名 X.509 证书；传入 `--tls-cert` 与 `--tls-key` 时加载指定的生产机构证书。
 
 ---
 

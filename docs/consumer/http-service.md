@@ -20,13 +20,25 @@ ad serve --host 0.0.0.0 --port 5177 --token "sk-actiondock-secret"
 ad serve --port 5177 --token "sk-actiondock-secret"
 ```
 
-### 指定工程目录路径
+### 原生 HTTPS 传输加密支持
 
-无需切换工作目录，通过 `-d, --dir` 参数指定目标工程路径：
+ActionDock 服务端原生支持通过 TLS 运行 HTTPS 协议，支持零配置即时启动与显式证书配置两种模式：
 
-```bash
-ad serve -d ./my-project --host 0.0.0.0 --port 5177 --token "sk-actiondock-secret"
-```
+- 零配置自签名模式（本地与内网开发）：
+  ```bash
+  # 自动生成非对称私钥与自签名证书并启动 HTTPS 服务
+  ad serve --https --port 5177 --token "sk-actiondock-secret"
+  ```
+  启用 `--https` 且未提供证书文件时，系统会在本地家目录缓存中检查或自动签发 X.509 证书与私钥资产。证书自动包含完整的 `localhost`、`127.0.0.1`、`::1`、主机名以及当前活动网卡局域网 IP，并支持 7 天临期自动重签。
+- 生产证书模式（正式部署）：
+  ```bash
+  # 加载企业或公共受信任证书机构签发的凭据
+  ad serve --host 0.0.0.0 --port 5177 --token "sk-actiondock-secret" \
+    --tls-cert /path/to/cert.pem \
+    --tls-key /path/to/key.pem \
+    --tls-ca /path/to/ca.pem
+  ```
+  支持通过环境变量 `ACTIONDOCK_TLS_CERT` 与 `ACTIONDOCK_TLS_KEY` 注入证书与私钥路径。私钥文件受到严格文件权限保护。
 
 ---
 
@@ -126,7 +138,10 @@ curl -X POST http://localhost:5177/api/v2/runs/01JMB394XYZ.../cancel \
 
 ```bash
 # 添加远端生产节点
-ad profile add prod --server http://10.0.0.12:5177 --token "sk-actiondock-secret"
+ad profile add prod --server https://10.0.0.12:5177 --token "sk-actiondock-secret"
+
+# 添加内网自签名 HTTPS 节点（开启 -k/--insecure 自动跳过证书合法性校验）
+ad profile add dev-cluster --server https://192.168.1.100:5177 --token "sk-actiondock-secret" -k
 
 # 或通过环境变量引用令牌（推荐，避免命令历史记录泄露凭据）
 ad profile add staging --server https://actiondock.internal.example.com --token-env STAGING_TOKEN

@@ -4,27 +4,41 @@ import { normalizeServerUrl } from "./manager";
 import type { RemoteHealthResult } from "./types";
 import { ACTION_CANCELLED, ACTION_TIMEOUT, NETWORK_ERROR } from "../errors";
 import { isLoopbackHost } from "../server/security";
+import { getInsecureDispatcher } from "../server/dispatcher";
 
 /**
  * 校验在携带认证 Token 时传输层协议是否安全。
  * 若请求携带认证 Token 且目标为非本地回环的明文 http://，默认报错拒绝。
- * 可通过 allowInsecureHttp 选项、ACTIONDOCK_ALLOW_INSECURE_HTTP 环境变量或 --allow-insecure-http 命令行参数豁免。
+ * 可通过 allowInsecureHttp 选项、insecure 选项、环境变量或命令行参数豁免。
  */
 export function assertSecureTransport(
   serverUrl: string,
   token?: string,
-  allowInsecureHttp?: boolean
+  allowInsecureHttpOrOptions?: boolean | { allowInsecureHttp?: boolean; insecure?: boolean },
+  insecureArg?: boolean
 ): void {
   if (!token || !token.trim()) {
     return;
   }
 
+  let allowInsecureHttp = false;
+  let insecure = false;
+  if (typeof allowInsecureHttpOrOptions === "object" && allowInsecureHttpOrOptions !== null) {
+    allowInsecureHttp = Boolean(allowInsecureHttpOrOptions.allowInsecureHttp);
+    insecure = Boolean(allowInsecureHttpOrOptions.insecure);
+  } else {
+    allowInsecureHttp = Boolean(allowInsecureHttpOrOptions);
+    insecure = Boolean(insecureArg);
+  }
+
   const allow =
-    allowInsecureHttp === true ||
+    allowInsecureHttp ||
+    insecure ||
     (typeof process !== "undefined" &&
       (process.env?.ACTIONDOCK_ALLOW_INSECURE_HTTP === "true" ||
         process.env?.ACTIONDOCK_ALLOW_INSECURE_HTTP === "1" ||
-        process.argv?.includes("--allow-insecure-http")));
+        process.env?.ACTIONDOCK_INSECURE === "true" ||
+        process.env?.ACTIONDOCK_INSECURE === "1"));
 
   if (allow) {
     return;
@@ -60,9 +74,21 @@ function buildHeaders(token?: string): Record<string, string> {
 }
 
 /**
+ * 远端请求通用控制选项。
+ */
+export interface RemoteClientRequestOptions {
+  /** 是否允许通过非回环明文 HTTP 发送认证 Token */
+  allowInsecureHttp?: boolean;
+  /** 是否跳过服务端 TLS 证书合法性校验 */
+  insecure?: boolean;
+  /** 自定义底层 HTTP 调度器（平台中立） */
+  dispatcher?: unknown;
+}
+
+/**
  * 调用远端 ActionDock 服务端执行 Action 时的选项参数。
  */
-export interface RemoteExecuteOptions {
+export interface RemoteExecuteOptions extends RemoteClientRequestOptions {
   /** 动态配置覆盖 */
   configOverrides?: Record<string, unknown>;
   /** 鉴权 Bearer Token */
@@ -75,8 +101,6 @@ export interface RemoteExecuteOptions {
   requestId?: string;
   /** 是否异步触发（202 Accepted 立即返回 runId） */
   async?: boolean;
-  /** 是否允许通过非回环明文 HTTP 发送认证 Token */
-  allowInsecureHttp?: boolean;
 }
 
 /**
@@ -92,37 +116,44 @@ export type RemoteExecutionResult<T = unknown> = ExecutionResult<T> & {
  * @param serverUrl 目标服务端地址
  * @param token 鉴权 Token（可选）
  * @param timeoutMs 探测超时时间（默认 5000ms）
+ * @param options 传输与安全控制选项
  */
 export async function checkRemoteHealth(
   serverUrl: string,
   token?: string,
   timeoutMs: number = 5000,
-  options?: { allowInsecureHttp?: boolean }
+  options?: RemoteClientRequestOptions
 ): Promise<RemoteHealthResult> {
   const startTime = Date.now();
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   try {
-    assertSecureTransport(serverUrl, token, options?.allowInsecureHttp);
+    assertSecureTransport(serverUrl, token, {
+      allowInsecureHttp: options?.allowInsecureHttp,
+      insecure: options?.insecure,
+    });
     const base = normalizeServerUrl(serverUrl);
     const v2Url = `${base}/api/v2/health`;
 
     const controller = new AbortController();
     timer = setTimeout(() => controller.abort(), timeoutMs);
 
-    let res = await fetch(v2Url, {
+    const fetchInit: RequestInit & { dispatcher?: any } = {
       method: "GET",
       headers: buildHeaders(token),
       signal: controller.signal,
-    });
+    };
+    if (options?.dispatcher) {
+      fetchInit.dispatcher = options.dispatcher;
+    } else if (options?.insecure) {
+      fetchInit.dispatcher = getInsecureDispatcher();
+    }
+
+    let res = await fetch(v2Url, fetchInit);
 
     if (res.status === 404) {
       try {
-        const v1Res = await fetch(`${base}/api/v1/health`, {
-          method: "GET",
-          headers: buildHeaders(token),
-          signal: controller.signal,
-        });
+        const v1Res = await fetch(`${base}/api/v1/health`, fetchInit);
         if (v1Res.ok || v1Res.status !== 404) {
           res = v1Res;
         }
@@ -177,6 +208,8 @@ export async function executeRemoteAction<T = unknown>(
   let isAsync = false;
   let requestId: string | undefined;
   let allowInsecureHttp: boolean | undefined;
+  let insecure: boolean | undefined;
+  let dispatcher: unknown;
 
   if (configOverridesOrOptions && typeof configOverridesOrOptions === "object") {
     if (
@@ -186,7 +219,9 @@ export async function executeRemoteAction<T = unknown>(
       "async" in configOverridesOrOptions ||
       "requestId" in configOverridesOrOptions ||
       "configOverrides" in configOverridesOrOptions ||
-      "allowInsecureHttp" in configOverridesOrOptions
+      "allowInsecureHttp" in configOverridesOrOptions ||
+      "insecure" in configOverridesOrOptions ||
+      "dispatcher" in configOverridesOrOptions
     ) {
       const opts = configOverridesOrOptions as RemoteExecuteOptions;
       configOverrides = opts.configOverrides;
@@ -196,12 +231,14 @@ export async function executeRemoteAction<T = unknown>(
       isAsync = Boolean(opts.async);
       requestId = opts.requestId;
       allowInsecureHttp = opts.allowInsecureHttp;
+      insecure = opts.insecure;
+      dispatcher = opts.dispatcher;
     } else {
       configOverrides = configOverridesOrOptions as Record<string, unknown>;
     }
   }
 
-  assertSecureTransport(serverUrl, token, allowInsecureHttp);
+  assertSecureTransport(serverUrl, token, { allowInsecureHttp, insecure });
   const base = normalizeServerUrl(serverUrl);
   const v2Url = `${base}/api/v2/actions/${encodeURIComponent(actionId)}/run`;
 
@@ -252,23 +289,25 @@ export async function executeRemoteAction<T = unknown>(
       }, timeoutMs);
     }
 
+    const fetchInit: RequestInit & { dispatcher?: any } = {
+      method: "POST",
+      headers,
+      body: reqBody,
+      signal: controller.signal,
+    };
+    if (dispatcher) {
+      fetchInit.dispatcher = dispatcher;
+    } else if (insecure) {
+      fetchInit.dispatcher = getInsecureDispatcher();
+    }
+
     let res: Response;
     try {
-      res = await fetch(v2Url, {
-        method: "POST",
-        headers,
-        body: reqBody,
-        signal: controller.signal,
-      });
+      res = await fetch(v2Url, fetchInit);
 
       if (res.status === 404) {
         try {
-          const v1Res = await fetch(`${base}/api/v1/actions/${encodeURIComponent(actionId)}/run`, {
-            method: "POST",
-            headers,
-            body: reqBody,
-            signal: controller.signal,
-          });
+          const v1Res = await fetch(`${base}/api/v1/actions/${encodeURIComponent(actionId)}/run`, fetchInit);
           if (v1Res.ok || v1Res.status !== 404) {
             res = v1Res;
           }
@@ -344,9 +383,16 @@ async function fetchRemoteJson<T = any>(
   serverUrl: string,
   path: string,
   token?: string,
-  options: { method?: string; body?: unknown; errorPrefix?: string; allowInsecureHttp?: boolean } = {}
+  options: {
+    method?: string;
+    body?: unknown;
+    errorPrefix?: string;
+  } & RemoteClientRequestOptions = {}
 ): Promise<T> {
-  assertSecureTransport(serverUrl, token, options.allowInsecureHttp);
+  assertSecureTransport(serverUrl, token, {
+    allowInsecureHttp: options.allowInsecureHttp,
+    insecure: options.insecure,
+  });
   const base = normalizeServerUrl(serverUrl);
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   const url = `${base}${normalizedPath}`;
@@ -358,20 +404,23 @@ async function fetchRemoteJson<T = any>(
     headers["Content-Type"] = "application/json";
   }
 
-  let res = await fetch(url, {
+  const fetchInit: RequestInit & { dispatcher?: any } = {
     method,
     headers,
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-  });
+  };
+  if (options.dispatcher) {
+    fetchInit.dispatcher = options.dispatcher;
+  } else if (options.insecure) {
+    fetchInit.dispatcher = getInsecureDispatcher();
+  }
+
+  let res = await fetch(url, fetchInit);
 
   if (res.status === 404 && normalizedPath.startsWith("/api/v2/")) {
     const v1Path = normalizedPath.replace("/api/v2/", "/api/v1/");
     try {
-      const v1Res = await fetch(`${base}${v1Path}`, {
-        method,
-        headers,
-        body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-      });
+      const v1Res = await fetch(`${base}${v1Path}`, fetchInit);
       if (v1Res.ok || v1Res.status !== 404) {
         res = v1Res;
       }
@@ -400,7 +449,7 @@ export async function fetchRemoteRun(
   serverUrl: string,
   runId: string,
   token?: string,
-  options?: { allowInsecureHttp?: boolean }
+  options?: RemoteClientRequestOptions
 ): Promise<RunRecord> {
   return fetchRemoteJson<RunRecord>(
     serverUrl,
@@ -409,6 +458,8 @@ export async function fetchRemoteRun(
     {
       errorPrefix: `Failed to fetch remote run '${runId}'`,
       allowInsecureHttp: options?.allowInsecureHttp,
+      insecure: options?.insecure,
+      dispatcher: options?.dispatcher,
     }
   );
 }
@@ -418,7 +469,7 @@ export async function cancelRemoteRun(
   runId: string,
   token?: string,
   reason?: string,
-  options?: { allowInsecureHttp?: boolean }
+  options?: RemoteClientRequestOptions
 ): Promise<{ ok: boolean; runId: string; status: string }> {
   return fetchRemoteJson(
     serverUrl,
@@ -429,6 +480,8 @@ export async function cancelRemoteRun(
       body: { reason },
       errorPrefix: `Failed to cancel remote run '${runId}'`,
       allowInsecureHttp: options?.allowInsecureHttp,
+      insecure: options?.insecure,
+      dispatcher: options?.dispatcher,
     }
   );
 }
@@ -437,7 +490,7 @@ export async function fetchRemoteActions(
   serverUrl: string,
   token?: string,
   intent?: string,
-  options?: { allowInsecureHttp?: boolean }
+  options?: RemoteClientRequestOptions
 ): Promise<Array<{ id: string; description: string; packageId?: string }>> {
   const query = intent ? `?intent=${encodeURIComponent(intent)}` : "";
   return fetchRemoteJson(
@@ -447,6 +500,8 @@ export async function fetchRemoteActions(
     {
       errorPrefix: "Failed to fetch remote actions",
       allowInsecureHttp: options?.allowInsecureHttp,
+      insecure: options?.insecure,
+      dispatcher: options?.dispatcher,
     }
   );
 }
@@ -455,7 +510,7 @@ export async function fetchRemoteActionShow(
   serverUrl: string,
   actionId: string,
   token?: string,
-  options?: { allowInsecureHttp?: boolean }
+  options?: RemoteClientRequestOptions
 ): Promise<any> {
   return fetchRemoteJson(
     serverUrl,
@@ -464,6 +519,8 @@ export async function fetchRemoteActionShow(
     {
       errorPrefix: `Failed to fetch remote action '${actionId}'`,
       allowInsecureHttp: options?.allowInsecureHttp,
+      insecure: options?.insecure,
+      dispatcher: options?.dispatcher,
     }
   );
 }
@@ -471,7 +528,7 @@ export async function fetchRemoteActionShow(
 export async function fetchRemoteInfo(
   serverUrl: string,
   token?: string,
-  options?: { intent?: string; package?: string; tree?: boolean; allowInsecureHttp?: boolean }
+  options?: { intent?: string; package?: string; tree?: boolean } & RemoteClientRequestOptions
 ): Promise<any> {
   const params = new URLSearchParams();
   if (options?.intent) params.set("intent", options.intent);
@@ -485,6 +542,8 @@ export async function fetchRemoteInfo(
     {
       errorPrefix: "Failed to fetch remote info",
       allowInsecureHttp: options?.allowInsecureHttp,
+      insecure: options?.insecure,
+      dispatcher: options?.dispatcher,
     }
   );
 }
@@ -493,7 +552,7 @@ export async function fetchRemoteDoctor(
   serverUrl: string,
   token?: string,
   targetPackage?: string,
-  options?: { allowInsecureHttp?: boolean }
+  options?: RemoteClientRequestOptions
 ): Promise<any> {
   const query = targetPackage ? `?package=${encodeURIComponent(targetPackage)}` : "";
   return fetchRemoteJson(
@@ -503,6 +562,8 @@ export async function fetchRemoteDoctor(
     {
       errorPrefix: "Failed to fetch remote doctor report",
       allowInsecureHttp: options?.allowInsecureHttp,
+      insecure: options?.insecure,
+      dispatcher: options?.dispatcher,
     }
   );
 }
@@ -510,7 +571,7 @@ export async function fetchRemoteDoctor(
 export async function fetchRemotePlaybooks(
   serverUrl: string,
   token?: string,
-  options?: { intent?: string; package?: string; allowInsecureHttp?: boolean }
+  options?: { intent?: string; package?: string } & RemoteClientRequestOptions
 ): Promise<Array<{ id: string; description: string; actions: string[]; packageId: string; filePath: string }>> {
   const params = new URLSearchParams();
   if (options?.intent) params.set("intent", options.intent);
@@ -523,16 +584,40 @@ export async function fetchRemotePlaybooks(
     {
       errorPrefix: "Failed to fetch remote playbooks",
       allowInsecureHttp: options?.allowInsecureHttp,
+      insecure: options?.insecure,
+      dispatcher: options?.dispatcher,
     }
   );
 }
 
 export async function fetchRemotePlaybookShow(
+  playbookId: string,
+  token?: string,
+  options?: RemoteClientRequestOptions
+): Promise<any>;
+export async function fetchRemotePlaybookShow(
   serverUrl: string,
   playbookId: string,
   token?: string,
-  options?: { allowInsecureHttp?: boolean }
+  options?: RemoteClientRequestOptions
+): Promise<any>;
+export async function fetchRemotePlaybookShow(
+  serverUrlOrPlaybookId: string,
+  playbookIdOrToken?: string,
+  tokenOrOptions?: string | RemoteClientRequestOptions,
+  optionsArg?: RemoteClientRequestOptions
 ): Promise<any> {
+  let serverUrl = serverUrlOrPlaybookId;
+  let playbookId = playbookIdOrToken || "";
+  let token: string | undefined;
+  let options: RemoteClientRequestOptions | undefined = optionsArg;
+
+  if (typeof tokenOrOptions === "object") {
+    options = tokenOrOptions;
+  } else if (typeof tokenOrOptions === "string") {
+    token = tokenOrOptions;
+  }
+
   return fetchRemoteJson(
     serverUrl,
     `/api/v2/playbooks/${encodeURIComponent(playbookId)}`,
@@ -540,6 +625,8 @@ export async function fetchRemotePlaybookShow(
     {
       errorPrefix: `Failed to fetch remote playbook '${playbookId}'`,
       allowInsecureHttp: options?.allowInsecureHttp,
+      insecure: options?.insecure,
+      dispatcher: options?.dispatcher,
     }
   );
 }
@@ -547,7 +634,7 @@ export async function fetchRemotePlaybookShow(
 export async function fetchRemoteRuns(
   serverUrl: string,
   token?: string,
-  options?: { status?: string; actionId?: string; packageId?: string; intent?: string; limit?: number; allowInsecureHttp?: boolean }
+  options?: { status?: string; actionId?: string; packageId?: string; intent?: string; limit?: number } & RemoteClientRequestOptions
 ): Promise<{ ok: boolean; total: number; items: RunRecord[] }> {
   const params = new URLSearchParams();
   if (options?.status) params.set("status", options.status);
@@ -563,6 +650,8 @@ export async function fetchRemoteRuns(
     {
       errorPrefix: "Failed to fetch remote runs",
       allowInsecureHttp: options?.allowInsecureHttp,
+      insecure: options?.insecure,
+      dispatcher: options?.dispatcher,
     }
   );
 }
@@ -570,7 +659,7 @@ export async function fetchRemoteRuns(
 export async function clearRemoteRuns(
   serverUrl: string,
   token?: string,
-  options?: { packageId?: string; actionId?: string; status?: string; allowInsecureHttp?: boolean }
+  options?: { packageId?: string; actionId?: string; status?: string } & RemoteClientRequestOptions
 ): Promise<{ ok: boolean; clearedCount: number }> {
   return fetchRemoteJson(
     serverUrl,
@@ -581,6 +670,8 @@ export async function clearRemoteRuns(
       body: options || {},
       errorPrefix: "Failed to clear remote runs",
       allowInsecureHttp: options?.allowInsecureHttp,
+      insecure: options?.insecure,
+      dispatcher: options?.dispatcher,
     }
   );
 }
@@ -588,7 +679,7 @@ export async function clearRemoteRuns(
 export async function fetchRemoteStateList(
   serverUrl: string,
   token?: string,
-  options?: { package?: string; action?: string; namespace?: string; prefix?: string; allowInsecureHttp?: boolean }
+  options?: { package?: string; action?: string; namespace?: string; prefix?: string } & RemoteClientRequestOptions
 ): Promise<{ ok: boolean; packageId: string; keys: string[] }> {
   const params = new URLSearchParams();
   if (options?.package) params.set("package", options.package);
@@ -603,6 +694,8 @@ export async function fetchRemoteStateList(
     {
       errorPrefix: "Failed to list remote state keys",
       allowInsecureHttp: options?.allowInsecureHttp,
+      insecure: options?.insecure,
+      dispatcher: options?.dispatcher,
     }
   );
 }
@@ -611,7 +704,7 @@ export async function getRemoteStateKey(
   serverUrl: string,
   key: string,
   token?: string,
-  options?: { package?: string; action?: string; namespace?: string; allowInsecureHttp?: boolean }
+  options?: { package?: string; action?: string; namespace?: string } & RemoteClientRequestOptions
 ): Promise<any> {
   const params = new URLSearchParams();
   if (options?.package) params.set("package", options.package);
@@ -625,6 +718,8 @@ export async function getRemoteStateKey(
     {
       errorPrefix: `Failed to fetch remote state key '${key}'`,
       allowInsecureHttp: options?.allowInsecureHttp,
+      insecure: options?.insecure,
+      dispatcher: options?.dispatcher,
     }
   );
 }
@@ -634,7 +729,7 @@ export async function setRemoteStateKey(
   key: string,
   value: unknown,
   token?: string,
-  options?: { package?: string; action?: string; namespace?: string; ttl?: number; allowInsecureHttp?: boolean }
+  options?: { package?: string; action?: string; namespace?: string; ttl?: number } & RemoteClientRequestOptions
 ): Promise<any> {
   return fetchRemoteJson(
     serverUrl,
@@ -651,6 +746,8 @@ export async function setRemoteStateKey(
       },
       errorPrefix: `Failed to set remote state key '${key}'`,
       allowInsecureHttp: options?.allowInsecureHttp,
+      insecure: options?.insecure,
+      dispatcher: options?.dispatcher,
     }
   );
 }
@@ -659,7 +756,7 @@ export async function deleteRemoteStateKey(
   serverUrl: string,
   key: string,
   token?: string,
-  options?: { package?: string; action?: string; namespace?: string; allowInsecureHttp?: boolean }
+  options?: { package?: string; action?: string; namespace?: string } & RemoteClientRequestOptions
 ): Promise<any> {
   const params = new URLSearchParams();
   if (options?.package) params.set("package", options.package);
@@ -674,6 +771,8 @@ export async function deleteRemoteStateKey(
       method: "DELETE",
       errorPrefix: `Failed to delete remote state key '${key}'`,
       allowInsecureHttp: options?.allowInsecureHttp,
+      insecure: options?.insecure,
+      dispatcher: options?.dispatcher,
     }
   );
 }
@@ -681,7 +780,7 @@ export async function deleteRemoteStateKey(
 export async function clearRemoteState(
   serverUrl: string,
   token?: string,
-  options?: { package?: string; action?: string; namespace?: string; prefix?: string; all?: boolean; allowInsecureHttp?: boolean }
+  options?: { package?: string; action?: string; namespace?: string; prefix?: string; all?: boolean } & RemoteClientRequestOptions
 ): Promise<{ ok: boolean; packageId: string; clearedCount: number }> {
   return fetchRemoteJson(
     serverUrl,
@@ -692,6 +791,8 @@ export async function clearRemoteState(
       body: options || {},
       errorPrefix: "Failed to clear remote state",
       allowInsecureHttp: options?.allowInsecureHttp,
+      insecure: options?.insecure,
+      dispatcher: options?.dispatcher,
     }
   );
 }
@@ -700,7 +801,7 @@ export async function fetchRemoteConfig(
   serverUrl: string,
   token?: string,
   packageId?: string,
-  options?: { allowInsecureHttp?: boolean }
+  options?: RemoteClientRequestOptions
 ): Promise<any> {
   const query = packageId ? `?package=${encodeURIComponent(packageId)}` : "";
   return fetchRemoteJson(
@@ -710,6 +811,8 @@ export async function fetchRemoteConfig(
     {
       errorPrefix: "Failed to fetch remote config",
       allowInsecureHttp: options?.allowInsecureHttp,
+      insecure: options?.insecure,
+      dispatcher: options?.dispatcher,
     }
   );
 }
@@ -720,7 +823,7 @@ export async function setRemoteConfig(
   value: unknown,
   token?: string,
   packageId?: string,
-  options?: { allowInsecureHttp?: boolean }
+  options?: RemoteClientRequestOptions
 ): Promise<any> {
   return fetchRemoteJson(
     serverUrl,
@@ -731,6 +834,8 @@ export async function setRemoteConfig(
       body: { key, value, package: packageId },
       errorPrefix: `Failed to set remote config '${key}'`,
       allowInsecureHttp: options?.allowInsecureHttp,
+      insecure: options?.insecure,
+      dispatcher: options?.dispatcher,
     }
   );
 }
@@ -740,7 +845,7 @@ export async function deleteRemoteConfig(
   key: string,
   token?: string,
   packageId?: string,
-  options?: { allowInsecureHttp?: boolean }
+  options?: RemoteClientRequestOptions
 ): Promise<any> {
   const query = packageId ? `?package=${encodeURIComponent(packageId)}` : "";
   return fetchRemoteJson(
@@ -751,6 +856,8 @@ export async function deleteRemoteConfig(
       method: "DELETE",
       errorPrefix: `Failed to delete remote config '${key}'`,
       allowInsecureHttp: options?.allowInsecureHttp,
+      insecure: options?.insecure,
+      dispatcher: options?.dispatcher,
     }
   );
 }
@@ -759,7 +866,7 @@ export async function fetchRemoteConfigEnv(
   serverUrl: string,
   token?: string,
   packageId?: string,
-  options?: { allowInsecureHttp?: boolean }
+  options?: RemoteClientRequestOptions
 ): Promise<any> {
   const query = packageId ? `?package=${encodeURIComponent(packageId)}` : "";
   return fetchRemoteJson(
@@ -769,6 +876,8 @@ export async function fetchRemoteConfigEnv(
     {
       errorPrefix: "Failed to fetch remote config env checks",
       allowInsecureHttp: options?.allowInsecureHttp,
+      insecure: options?.insecure,
+      dispatcher: options?.dispatcher,
     }
   );
 }

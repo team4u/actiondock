@@ -137,6 +137,36 @@ export function addProfile(
     token: entry.token?.trim() || undefined,
     tokenEnv: entry.tokenEnv?.trim() || undefined,
     description: entry.description?.trim() || undefined,
+    insecure: entry.insecure !== undefined ? Boolean(entry.insecure) : undefined,
+  };
+
+  saveProfiles(profilesConfig, customHome);
+}
+
+export function updateProfile(
+  name: string,
+  entry: Partial<ProfileEntry>,
+  customHome?: string
+): void {
+  const trimmedName = name.trim();
+  if (!trimmedName) {
+    throw new Error("Profile name cannot be empty");
+  }
+  const profilesConfig = loadProfiles(customHome);
+  const existing = profilesConfig.profiles[trimmedName];
+  if (!existing) {
+    throw new Error(
+      `Profile '${trimmedName}' not found. Configure it with 'ad profile add ${trimmedName} --server <url>'`
+    );
+  }
+
+  const serverUrl = entry.serverUrl ? normalizeServerUrl(entry.serverUrl) : existing.serverUrl;
+  profilesConfig.profiles[trimmedName] = {
+    serverUrl,
+    token: entry.token !== undefined ? (entry.token.trim() || undefined) : existing.token,
+    tokenEnv: entry.tokenEnv !== undefined ? (entry.tokenEnv.trim() || undefined) : existing.tokenEnv,
+    description: entry.description !== undefined ? (entry.description.trim() || undefined) : existing.description,
+    insecure: entry.insecure !== undefined ? Boolean(entry.insecure) : existing.insecure,
   };
 
   saveProfiles(profilesConfig, customHome);
@@ -270,17 +300,30 @@ export function resolveProfileToken(
 }
 
 export function resolveTarget(
-  options?: { profile?: string; server?: string; token?: string },
+  options?: { profile?: string; server?: string; token?: string; insecure?: boolean; allowInsecureHttp?: boolean },
   customHome?: string
 ): ResolvedTarget {
+  const envInsecure =
+    typeof process !== "undefined" &&
+    (process.env?.ACTIONDOCK_INSECURE === "true" || process.env?.ACTIONDOCK_INSECURE === "1");
+  const envAllowInsecureHttp =
+    typeof process !== "undefined" &&
+    (process.env?.ACTIONDOCK_ALLOW_INSECURE_HTTP === "true" || process.env?.ACTIONDOCK_ALLOW_INSECURE_HTTP === "1");
+
+  const effectiveAllowInsecureHttp =
+    options?.allowInsecureHttp !== undefined ? Boolean(options.allowInsecureHttp) : envAllowInsecureHttp;
+
   // 1. Explicit CLI --server flag
   if (options?.server && options.server.trim()) {
     const resolvedToken = resolveProfileToken(undefined, undefined, options.token);
+    const effectiveInsecure = options.insecure !== undefined ? Boolean(options.insecure) : envInsecure;
     return {
       type: "remote",
       serverUrl: normalizeServerUrl(options.server),
       token: resolvedToken.token,
       tokenSource: resolvedToken.source,
+      insecure: effectiveInsecure,
+      allowInsecureHttp: effectiveAllowInsecureHttp,
     };
   }
 
@@ -299,23 +342,32 @@ export function resolveTarget(
       );
     }
     const resolvedToken = resolveProfileToken(pName, found, options.token);
+    const effectiveInsecure =
+      options.insecure !== undefined
+        ? Boolean(options.insecure)
+        : (envInsecure || Boolean(found.insecure));
     return {
       type: "remote",
       profileName: pName,
       serverUrl: found.serverUrl,
       token: resolvedToken.token,
       tokenSource: resolvedToken.source,
+      insecure: effectiveInsecure,
+      allowInsecureHttp: effectiveAllowInsecureHttp,
     };
   }
 
   // 3. Environment variable ACTIONDOCK_SERVER_URL
   if (process.env.ACTIONDOCK_SERVER_URL && process.env.ACTIONDOCK_SERVER_URL.trim()) {
     const resolvedToken = resolveProfileToken(undefined, undefined, options?.token);
+    const effectiveInsecure = options?.insecure !== undefined ? Boolean(options.insecure) : envInsecure;
     return {
       type: "remote",
       serverUrl: normalizeServerUrl(process.env.ACTIONDOCK_SERVER_URL),
       token: resolvedToken.token,
       tokenSource: resolvedToken.source,
+      insecure: effectiveInsecure,
+      allowInsecureHttp: effectiveAllowInsecureHttp,
     };
   }
 
@@ -332,12 +384,18 @@ export function resolveTarget(
       );
     }
     const resolvedToken = resolveProfileToken(pName, found, options?.token);
+    const effectiveInsecure =
+      options?.insecure !== undefined
+        ? Boolean(options.insecure)
+        : (envInsecure || Boolean(found.insecure));
     return {
       type: "remote",
       profileName: pName,
       serverUrl: found.serverUrl,
       token: resolvedToken.token,
       tokenSource: resolvedToken.source,
+      insecure: effectiveInsecure,
+      allowInsecureHttp: effectiveAllowInsecureHttp,
     };
   }
 
@@ -347,12 +405,18 @@ export function resolveTarget(
     const found = profilesConfig.profiles[current];
     if (found && found.serverUrl && found.serverUrl !== "local") {
       const resolvedToken = resolveProfileToken(current, found, options?.token);
+      const effectiveInsecure =
+        options?.insecure !== undefined
+          ? Boolean(options.insecure)
+          : (envInsecure || Boolean(found.insecure));
       return {
         type: "remote",
         profileName: current,
         serverUrl: found.serverUrl,
         token: resolvedToken.token,
         tokenSource: resolvedToken.source,
+        insecure: effectiveInsecure,
+        allowInsecureHttp: effectiveAllowInsecureHttp,
       };
     }
   }

@@ -12,13 +12,13 @@ import type { ResolvedTarget } from "@actiondock/core";
 import { ArgumentError } from "../../errors";
 import { renderResult } from "../../renderer";
 import type { CliContext } from "../../types";
-import { getEffectiveOptions, withTarget } from "../../utils";
+import { applyTargetOptions, getEffectiveOptions, withTarget } from "../../utils";
 
 /**
  * 解析远端目标拓扑信息（仅信息解析，不创建 Target 实例）。
  */
 function resolveRemoteTargetInfo(
-  options: { profile?: string; server?: string; token?: string },
+  options: { profile?: string; server?: string; token?: string; insecure?: boolean; allowInsecureHttp?: boolean },
   context?: CliContext
 ): ResolvedTarget {
   return resolveTarget(
@@ -26,6 +26,8 @@ function resolveRemoteTargetInfo(
       profile: options.profile,
       server: options.server,
       token: options.token,
+      insecure: options.insecure,
+      allowInsecureHttp: options.allowInsecureHttp,
     },
     context?.customHome
   );
@@ -38,14 +40,13 @@ function resolveRemoteTargetInfo(
  * @param context 命令行上下文
  */
 export function registerConfigGetCommand(configCmd: Command, context?: CliContext): void {
-  configCmd
-    .command("get <key>")
-    .description("Get configuration value for key")
-    .option("-P, --package <id>", "Target package ID or path")
-    .option("-g, --global", "Get from global configuration")
-    .option("-p, --profile <name>", "Query config on a remote target")
-    .option("-s, --server <url>", "Remote server URL")
-    .option("-t, --token <token>", "Auth token for remote server")
+  applyTargetOptions(
+    configCmd
+      .command("get <key>")
+      .description("Get configuration value for key")
+      .option("-P, --package <id>", "Target package ID or path")
+      .option("-g, --global", "Get from global configuration")
+  )
     .option("--reveal, --show-secrets", "Reveal plain text values for secrets")
     .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
@@ -61,7 +62,10 @@ export function registerConfigGetCommand(configCmd: Command, context?: CliContex
       const target = resolveRemoteTargetInfo(options, context);
 
       if (target.type === "remote") {
-        const res = await fetchRemoteConfig(target.serverUrl!, target.token, options.package);
+        const res = await fetchRemoteConfig(target.serverUrl!, target.token, options.package, {
+          allowInsecureHttp: Boolean(options.allowInsecureHttp),
+          insecure: target.insecure,
+        });
         const val = res.values?.[key];
         const isSecret = isSecretConfigKey(key, res.declared?.[key]);
         const displayValue = !reveal && isSecret && val !== undefined ? maskSecretValue(val) : val;

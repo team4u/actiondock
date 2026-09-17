@@ -16,7 +16,7 @@ import {
 } from "../renderer";
 import { getProjectDetailInfo, scanLocalAggregatedPackages } from "../services";
 import type { AggregatedPackage, CliContext, ProjectDetailInfo } from "../types";
-import { getEffectiveOptions, resolveFallbackStrategy, resolveIntent } from "../utils";
+import { applyTargetOptions, getEffectiveOptions, resolveFallbackStrategy, resolveIntent } from "../utils";
 
 /**
  * 将远端信息响应归一为本地工程详情视图。
@@ -65,15 +65,14 @@ function renderProjectDetailOutput(
  * @param context 命令行上下文
  */
 export function registerInfoCommand(program: Command, context?: CliContext): void {
-  program
+  const cmd = program
     .command("info [patterns...]")
     .description("Display information about current project, linked package, or remote target")
     .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
     .option("-P, --package <id>", "Target package ID or path")
-    .option("--tree", "Display packages in hierarchical tree view grouped by workspace")
-    .option("-p, --profile <name>", "Query against a specific profile")
-    .option("-s, --server <url>", "Remote server URL")
-    .option("-t, --token <token>", "Auth token for remote server")
+    .option("--tree", "Display packages in hierarchical tree view grouped by workspace");
+
+  applyTargetOptions(cmd)
     .option("--fallback", "Enable fallback to full list when no items match intent")
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("--json", "Output information as JSON")
@@ -91,6 +90,7 @@ export function registerInfoCommand(program: Command, context?: CliContext): voi
         profile: options.profile,
         server: options.server,
         token: options.token,
+        insecure: options.insecure,
       }, context?.customHome);
 
       if (target.type === "remote") {
@@ -101,6 +101,8 @@ export function registerInfoCommand(program: Command, context?: CliContext): voi
             intent: effectiveIntent,
             package: options.package,
             tree: Boolean(options.tree),
+            allowInsecureHttp: Boolean(options.allowInsecureHttp),
+            insecure: target.insecure,
           }
         );
 

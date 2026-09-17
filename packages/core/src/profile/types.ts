@@ -13,6 +13,8 @@ export interface ProfileEntry {
   tokenEnv?: string;
   /** 该机器/环境的描述信息 */
   description?: string;
+  /** 是否跳过 TLS 证书合法性校验（用于局域网内网自签证书） */
+  insecure?: boolean;
 }
 
 /**
@@ -50,6 +52,10 @@ export interface ResolvedTarget {
   token?: string;
   /** Token 数据来源 */
   tokenSource?: TokenResolutionSource;
+  /** 是否跳过 TLS 证书合法性校验 */
+  insecure?: boolean;
+  /** 是否允许向非回环地址发送明文 HTTP 请求 */
+  allowInsecureHttp?: boolean;
 }
 
 /**

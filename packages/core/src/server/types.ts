@@ -7,10 +7,26 @@ export interface CoreHttpServerInstance {
   ready?: Promise<void>;
 }
 
+export interface ServerTlsOptions {
+  /** TLS 证书内容（PEM 格式字符串或 Buffer） */
+  cert?: string | Buffer;
+  /** TLS 私钥内容（PEM 格式字符串或 Buffer） */
+  key?: string | Buffer;
+  /** TLS 证书文件绝对或相对路径 */
+  certPath?: string;
+  /** TLS 私钥文件绝对或相对路径 */
+  keyPath?: string;
+  /** CA 根证书或证书链内容/路径 */
+  ca?: string | Buffer | Array<string | Buffer>;
+  /** 私钥密码口令（若私钥被密码加密） */
+  passphrase?: string;
+}
+
 export type CoreHttpServerFactory = (options: {
   port: number;
   host: string;
   fetch: (req: Request) => Promise<Response>;
+  tls?: ServerTlsOptions;
 }) => CoreHttpServerInstance | Promise<CoreHttpServerInstance>;
 
 /**
@@ -59,6 +75,8 @@ export interface ServerOptions {
   enableManagement?: boolean;
   /** 是否扫描并加载外部链接包（默认在未指定 projectRoot 时为 true，指定时为 false） */
   scanLinkedPackages?: boolean;
+  /** 服务端 TLS/HTTPS 安全传输选项 */
+  tls?: ServerTlsOptions;
 }
 
 /**

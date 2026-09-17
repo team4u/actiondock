@@ -29,3 +29,10 @@ try {
 // Load test-compat to initialize environment
 const compatUrl = pathToFileURL(join(rootDir, "scripts", "test-compat.ts")).href;
 await import(compatUrl);
+
+// Ensure runtime-node platform & dispatcher are registered for tests
+const runtimeNodeDist = join(rootDir, "packages", "runtime-node", "dist", "index.js");
+if (existsSync(runtimeNodeDist)) {
+  await import(pathToFileURL(runtimeNodeDist).href);
+}
+

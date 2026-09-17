@@ -1,10 +1,17 @@
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { findProjectRoot, formatHostForUrl, loadProjectConfig, startActionDockServer } from "@actiondock/core";
+import {
+  findProjectRoot,
+  formatHostForUrl,
+  loadProjectConfig,
+  startActionDockServer,
+  type ServerTlsOptions,
+} from "@actiondock/core";
 import { Command } from "commander";
 import { ArgumentError, ExecutionError } from "../errors";
 import { writeStderr, writeStdout } from "../renderer";
 import type { CliContext } from "../types";
-import { getEffectiveOptions, parseByteSize } from "../utils";
+import { ensureSelfSignedCertificate, getEffectiveOptions, parseByteSize } from "../utils";
 
 /**
  * 注册 serve HTTP 服务启动命令。
@@ -31,6 +38,11 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
     .option("--no-mcp", "Disable unified MCP protocol endpoint at /mcp")
     .option("--allow-query-token", "Allow passing authentication token via URL query parameter (?token=xxx)")
     .option("--management", "Enable config and state management API endpoints (disabled by default for security)")
+    .option("--https", "Enable native HTTPS transport (auto-generates self-signed certificate if none provided)")
+    .option("--tls-cert <path>", "Path to TLS certificate file (or set ACTIONDOCK_TLS_CERT)")
+    .option("--tls-key <path>", "Path to TLS private key file (or set ACTIONDOCK_TLS_KEY)")
+    .option("--tls-ca <path>", "Path to TLS CA certificate file (or set ACTIONDOCK_TLS_CA)")
+    .option("--tls-passphrase <passphrase>", "Passphrase for TLS private key (or set ACTIONDOCK_TLS_PASSPHRASE)")
     .option("-d, --dir <path>", "Project root directory (default: current working directory)")
     .action(async (rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
@@ -42,6 +54,47 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
       const enableManagement = Boolean(options.management);
       const corsOrigins = options.corsOrigin && options.corsOrigin.length > 0 ? options.corsOrigin : undefined;
       const exposeDebugInfo = Boolean(options.exposeDebugInfo);
+
+      const httpsEnabled = Boolean(
+        options.https ||
+        options.tlsCert ||
+        options.tlsKey ||
+        process.env?.ACTIONDOCK_HTTPS === "true" ||
+        process.env?.ACTIONDOCK_HTTPS === "1" ||
+        process.env?.ACTIONDOCK_TLS_CERT ||
+        process.env?.ACTIONDOCK_TLS_KEY
+      );
+
+      let tls: ServerTlsOptions | undefined;
+      if (httpsEnabled) {
+        const certPath = options.tlsCert || (typeof process !== "undefined" ? process.env?.ACTIONDOCK_TLS_CERT : undefined);
+        const keyPath = options.tlsKey || (typeof process !== "undefined" ? process.env?.ACTIONDOCK_TLS_KEY : undefined);
+        const caPath = options.tlsCa || (typeof process !== "undefined" ? process.env?.ACTIONDOCK_TLS_CA : undefined);
+        const passphrase = options.tlsPassphrase || (typeof process !== "undefined" ? process.env?.ACTIONDOCK_TLS_PASSPHRASE : undefined);
+
+        if (certPath && keyPath) {
+          try {
+            tls = {
+              certPath: resolve(certPath),
+              keyPath: resolve(keyPath),
+              ca: caPath ? readFileSync(resolve(caPath), "utf-8") : undefined,
+              passphrase,
+            };
+          } catch (err: any) {
+            throw new ArgumentError(`Failed to read TLS certificate/key files: ${err.message}`);
+          }
+        } else if (certPath || keyPath) {
+          throw new ArgumentError("Both --tls-cert and --tls-key must be provided together");
+        } else {
+          const selfSigned = await ensureSelfSignedCertificate({ host });
+          tls = {
+            cert: selfSigned.cert,
+            key: selfSigned.key,
+            certPath: selfSigned.certPath,
+            keyPath: selfSigned.keyPath,
+          };
+        }
+      }
 
       let maxBodyBytes: number | undefined;
       if (options.maxBody) {
@@ -111,19 +164,25 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
           enableMcp,
           enableManagement,
           mcpHandler,
+          tls,
           projectRoot: projectRoot || undefined,
         });
 
         const displayHost = formatHostForUrl(host);
         const actualEndpointHost = formatHostForUrl(host === "0.0.0.0" ? "127.0.0.1" : host);
+        const scheme = tls ? "https" : "http";
 
         writeStdout(`\n======================================================`, context);
         writeStdout(`  ActionDock 2.0 HTTP Runner Server`, context);
         writeStdout(`======================================================`, context);
-        writeStdout(`  * Listening on:    http://${displayHost}:${server.port}`, context);
+        writeStdout(`  * Listening on:    ${scheme}://${displayHost}:${server.port}`, context);
         writeStdout(`  * Project:         ${projectName}`, context);
         if (projectRoot && exposeDebugInfo) {
           writeStdout(`  * Root Path:       ${projectRoot}`, context);
+        }
+        if (tls) {
+          const tlsDesc = tls.certPath ? `Enabled (${tls.certPath})` : "Enabled (Self-Signed)";
+          writeStdout(`  * TLS / HTTPS:     ${tlsDesc}`, context);
         }
         const authDesc = token
           ? (allowQueryToken ? "Bearer Token / Query Token Enabled" : "Bearer Token Enabled (Query Token Disabled)")
@@ -133,12 +192,12 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
         writeStdout(`  * CORS Origins:    ${corsOrigins ? corsOrigins.join(", ") : "Disabled (Default)"}`, context);
         writeStdout(`  * Max Body Size:   ${options.maxBody || "1mb"}`, context);
         writeStdout(
-          `  * Health Endpoint: http://${actualEndpointHost}:${server.port}/api/v1/health`,
+          `  * Health Endpoint: ${scheme}://${actualEndpointHost}:${server.port}/api/v1/health`,
           context
         );
         if (enableMcp) {
           writeStdout(
-            `  * MCP Endpoint:    http://${actualEndpointHost}:${server.port}/mcp`,
+            `  * MCP Endpoint:    ${scheme}://${actualEndpointHost}:${server.port}/mcp`,
             context
           );
         }

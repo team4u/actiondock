@@ -126,7 +126,7 @@ ad pack
 | `ad export skill` | 导出 Agent Skill 技能包（支持 `--mode source` 与 `--mode node`） |
 | `ad link` / `unlink` | 注册或注销工作区全局路由与符号链接 |
 | `ad profile` | 管理远程执行节点凭证与环境配置 |
-| `ad serve` | 启动远程 HTTP 执行调度微服务 |
+| `ad serve` | 启动远程 HTTP/HTTPS 执行调度微服务（原生支持 `--https` 自签名与生产证书） |
 | `ad mcp` | 以 STDIO 或 HTTP 协议启动 MCP 服务 |
 
 ---

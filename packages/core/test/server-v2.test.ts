@@ -1225,5 +1225,32 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         await server.stop();
       }
     });
+
+    it("服务端 stop 方法按时序先拒绝新连接/排空在途请求，再关闭 target 与 host", async () => {
+      const order: string[] = [];
+      const mockTarget = {
+        close: async () => {
+          order.push("target.close");
+        },
+        unwrap: () => undefined,
+      } as any;
+      const mockHost = {
+        close: async () => {
+          order.push("host.close");
+        },
+      } as any;
+
+      const server = await startActionDockServer({
+        port: 0,
+        host: "127.0.0.1",
+        target: mockTarget,
+        hostInstance: mockHost,
+      });
+
+      await server.stop();
+
+      // target.close 与 host.close 必须在 server 停止之后依次执行
+      expect(order).toEqual(["target.close", "host.close"]);
+    });
   });
 });

@@ -60,7 +60,10 @@ export function startMcpHttpServer(
       }
     );
 
-    const server = await launchHttpServer(port, host, async (req) => {
+    const server = await launchHttpServer(
+      port,
+      host,
+      async (req) => {
       const origin = req.headers.get("origin");
       const corsHeaders = resolveCorsHeaders(origin, options.corsOrigins);
 
@@ -244,14 +247,15 @@ export function startMcpHttpServer(
           },
         }
       );
-    });
+    }, options.tls);
 
     if (server.ready) {
       await server.ready;
     }
 
     const actualHost = host === "0.0.0.0" ? "127.0.0.1" : host;
-    const url = `http://${formatHostForUrl(actualHost)}:${server.port}`;
+    const protocol = options.tls ? "https" : "http";
+    const url = `${protocol}://${formatHostForUrl(actualHost)}:${server.port}`;
 
     return {
       port: server.port ?? port,

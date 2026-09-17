@@ -35,6 +35,7 @@ export const ACTIONDOCK_PROTOCOL_VERSION = "2.0";
 export const TARGET_PROTOCOL_UNSUPPORTED = "TARGET_PROTOCOL_UNSUPPORTED";
 export const TARGET_CAPABILITY_UNAVAILABLE = "TARGET_CAPABILITY_UNAVAILABLE";
 export const TARGET_RESULT_UNKNOWN = "TARGET_RESULT_UNKNOWN";
+export const TARGET_CLOSED = "TARGET_CLOSED";
 
 /**
  * 结构化 Target 异常类。
@@ -299,11 +300,20 @@ export interface RemoteTargetOptions {
   token?: string;
   /** 是否允许向非回环地址发送明文 HTTP 请求（默认 false） */
   allowInsecureHttp?: boolean;
+  /** 是否跳过 TLS 证书合法性校验（用于局域网自签证书） */
+  insecure?: boolean;
+  /** 自定义底层 HTTP 调度器（平台中立） */
+  dispatcher?: unknown;
   /** 请求超时时间（毫秒） */
   timeoutMs?: number;
   /** 轮询等待基准底线超时时间（毫秒，默认 60000ms） */
   baseTimeoutMs?: number;
 }
+
+/**
+ * 远程 ActionDockTarget 选项别名契约。
+ */
+export type RemoteActionDockTargetOptions = RemoteTargetOptions;
 
 /**
  * 监督进程 IPC 目标初始化选项。

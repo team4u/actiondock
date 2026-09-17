@@ -107,9 +107,21 @@ Profile 机制允许开发者在本地终端中无缝管理多个远端 ActionDo
 # 使用环境变量引用令牌（推荐，安全可控）
 ad profile add prod --server https://actiondock.internal.company.com --token-env PROD_ACTIONDOCK_TOKEN
 
+# 添加内网自签名 HTTPS 节点（传入 -k/--insecure 忽略证书校验）
+ad profile add dev-box --server https://192.168.1.100:5177 --token secret-token-123 -k
+
 # 使用固定 Token
 ad profile add staging --server http://10.0.0.12:8080 --token secret-token-123
 ```
+
+- 更新已有环境配置：
+  ```bash
+  # 为环境开启跳过证书合法性校验
+  ad profile update dev-box -k
+
+  # 为环境恢复强制严格证书校验
+  ad profile update dev-box --no-insecure
+  ```
 
 ### 管理与切换环境
 

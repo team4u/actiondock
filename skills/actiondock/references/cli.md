@@ -239,11 +239,11 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
 
 ### 远程微服务与协议适配 (`ad serve`, `ad mcp`, `ad profile`)
 
-- 启动 HTTP 微服务 (`ad serve`)：
+- 启动 HTTP/HTTPS 微服务 (`ad serve`)：
   ```bash
-  ad serve [-p, --port <port>] [-H, --host <host>] [-t, --token <token>] [--allow-insecure-no-auth] [--cors-origin <origin>] [--max-body <size>] [--no-mcp] [-d, --dir <path>]
+  ad serve [-p, --port <port>] [-H, --host <host>] [-t, --token <token>] [--https] [--tls-cert <path>] [--tls-key <path>] [--tls-ca <path>] [--tls-passphrase <passphrase>] [--allow-insecure-no-auth] [--cors-origin <origin>] [--max-body <size>] [--no-mcp] [-d, --dir <path>]
   ```
-  将本地 ActionDock 项目作为轻量级微服务暴露，支持 REST 与 SSE 接口。
+  将本地 ActionDock 项目作为微服务暴露，支持 REST 与 SSE 接口。原生支持 HTTPS 协议：仅传入 `--https` 时自动在本地签发并复用自签名 X.509 证书；传入 `--tls-cert` 与 `--tls-key` 时加载生产机构证书。
 
 - 启动 Model Context Protocol 协议服务 (`ad mcp`)：
   ```bash
@@ -256,12 +256,19 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
 - 管理远端执行环境配置 (`ad profile`)：
   ```bash
   ad profile list
-  ad profile add <name> --server <url> [--token <token>]
+  # 添加环境（内网自签名证书服务支持传入 -k, --insecure 跳过合法性校验）
+  ad profile add <name> --server <url> [--token <token>] [--token-env <env>] [-k, --insecure]
+  # 更新已有环境属性或切换安全策略
+  ad profile update <name> [--server <url>] [--token <token>] [-k, --insecure] [--no-insecure]
   ad profile use <name>
   ad profile show [name]
   ad profile rm <name>
   ad profile test [name]
   ```
+
+- 远程连接目标通用选项：
+  所有支持远端调用的命令（`run`、`runs`、`state`、`config`、`doctor`、`info`、`list`、`describe`、`playbook`）均已统一支持目标连接参数：
+  `-p, --profile <name>`、`-s, --server <url>`、`-t, --token <token>`、`-k, --insecure`、`--allow-insecure-http`。
 
 ---
 

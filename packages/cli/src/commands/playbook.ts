@@ -27,7 +27,7 @@ import {
   writeStdout,
 } from "../renderer";
 import type { CliContext } from "../types";
-import { getEffectiveOptions, resolveIntent } from "../utils";
+import { applyTargetOptions, getEffectiveOptions, resolveIntent } from "../utils";
 
 /**
  * 注册 Playbook 命令集合（list, show, validate, create）。
@@ -41,14 +41,13 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
     .description("Manage task Playbooks (Task SOPs for AI Agents)");
 
   // playbook list
-  pbCmd
-    .command("list [patterns...]")
-    .description("List playbooks in current project or linked packages")
-    .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
-    .option("-P, --package <id>", "Target package ID or path")
-    .option("-p, --profile <name>", "Query against a specific profile")
-    .option("-s, --server <url>", "Remote server URL")
-    .option("-t, --token <token>", "Auth token for remote server")
+  applyTargetOptions(
+    pbCmd
+      .command("list [patterns...]")
+      .description("List playbooks in current project or linked packages")
+      .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
+      .option("-P, --package <id>", "Target package ID or path")
+  )
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("--json", "Output as JSON")
     .option("--envelope", "Wrap JSON output in standard envelope")
@@ -63,12 +62,16 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
         profile: options.profile,
         server: options.server,
         token: options.token,
+        insecure: options.insecure,
+        allowInsecureHttp: options.allowInsecureHttp,
       }, context?.customHome);
 
       if (target.type === "remote") {
         const remotePbs = await fetchRemotePlaybooks(target.serverUrl!, target.token, {
           intent: effectiveIntent,
           package: options.package,
+          allowInsecureHttp: Boolean(options.allowInsecureHttp),
+          insecure: target.insecure,
         });
 
         renderResult(remotePbs, {
@@ -245,13 +248,12 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
     });
 
   // playbook show <id>
-  pbCmd
-    .command("show <id>")
-    .description("Show playbook content and metadata")
-    .option("-P, --package <id>", "Target package ID or path")
-    .option("-p, --profile <name>", "Query against a specific profile")
-    .option("-s, --server <url>", "Remote server URL")
-    .option("-t, --token <token>", "Auth token for remote server")
+  applyTargetOptions(
+    pbCmd
+      .command("show <id>")
+      .description("Show playbook content and metadata")
+      .option("-P, --package <id>", "Target package ID or path")
+  )
     .option("--json", "Output as JSON")
     .option("--envelope", "Wrap JSON output in standard envelope")
     .action(async (id: string, rawOptions: any, cmd: any) => {
@@ -265,10 +267,15 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
         profile: options.profile,
         server: options.server,
         token: options.token,
+        insecure: options.insecure,
+        allowInsecureHttp: options.allowInsecureHttp,
       }, context?.customHome);
 
       if (target.type === "remote") {
-        const detail = await fetchRemotePlaybookShow(target.serverUrl!, id, target.token);
+        const detail = await fetchRemotePlaybookShow(target.serverUrl!, id, target.token, {
+          allowInsecureHttp: Boolean(options.allowInsecureHttp),
+          insecure: target.insecure,
+        });
         renderResult(detail, {
           json: options.json,
           envelope: options.envelope,
