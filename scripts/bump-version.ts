@@ -182,10 +182,18 @@ function main() {
 
   // 4. Update lockfile
   console.log("Updating lockfile via npm install...");
-  const installRes = spawnSync("npm", ["install"], {
-    cwd: rootDir,
-    stdio: "inherit",
-  });
+  const npmCmd = process.env.npm_execpath || (process.platform === "win32" ? "npm.cmd" : "npm");
+  const isNpmJs = npmCmd.endsWith(".js") || npmCmd.endsWith(".cjs") || npmCmd.endsWith(".mjs");
+  const installRes = isNpmJs
+    ? spawnSync(process.execPath, [npmCmd, "install"], {
+        cwd: rootDir,
+        stdio: "inherit",
+      })
+    : spawnSync(npmCmd, ["install"], {
+        cwd: rootDir,
+        stdio: "inherit",
+        shell: process.platform === "win32",
+      });
   if (installRes.status !== 0) {
     console.error("Failed to update lockfile");
     process.exit(1);
@@ -193,7 +201,7 @@ function main() {
 
   // 5. Rebuild packages dist
   console.log("Rebuilding monorepo packages dist...");
-  const buildRes = spawnSync("node", [join(rootDir, "scripts", "build.ts")], {
+  const buildRes = spawnSync(process.execPath, [join(rootDir, "scripts", "build.ts")], {
     cwd: rootDir,
     stdio: "inherit",
   });

@@ -11,15 +11,19 @@ permissions:
   id-token: write
 
 jobs:
-  publish:
-    name: Verify & Publish to npm
-    runs-on: ubuntu-latest
+  verify:
+    name: Verify (Node 24, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "24.x"
@@ -36,11 +40,34 @@ jobs:
       - name: TypeScript Typecheck
         run: npm run typecheck
 
-      - name: Test
+      - name: Run Monorepo Tests
         run: npm test
 
       - name: Pack Smoke Test
         run: npm run test:pack
+
+  publish:
+    name: Publish to npm
+    needs: verify
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24.x"
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Sync Monorepo Versions from Tag
+        run: node ./scripts/bump-version.ts --from-git-tag
+
+      - name: Build Packages
+        run: npm run build
 
       - name: Publish Packages
         run: node ./scripts/publish.ts
