@@ -1,12 +1,14 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
+  createActionDockTarget,
   findProjectRoot,
   formatHostForUrl,
   loadProjectConfig,
   startActionDockServer,
   type ServerTlsOptions,
 } from "@actiondock/core";
+import { createNodePlatform } from "@actiondock/runtime-node";
 import { Command } from "commander";
 import { ArgumentError, ExecutionError } from "../errors";
 import { writeStderr, writeStdout } from "../renderer";
@@ -44,9 +46,11 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
     .option("--tls-ca <path>", "Path to TLS CA certificate file (or set ACTIONDOCK_TLS_CA)")
     .option("--tls-passphrase <passphrase>", "Passphrase for TLS private key (or set ACTIONDOCK_TLS_PASSPHRASE)")
     .option("-d, --dir <path>", "Project root directory (default: current working directory)")
+    .option("--data-dir <path>", "Custom database storage directory")
     .action(async (rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
-      const port = parseInt(options.port, 10) || 5177;
+      const parsedPort = parseInt(options.port, 10);
+      const port = Number.isNaN(parsedPort) ? 5177 : parsedPort;
       const host = options.host || "127.0.0.1";
       const token = options.token || (typeof process !== "undefined" ? process.env?.ACTIONDOCK_TOKEN : undefined);
       const allowInsecureNoAuth = Boolean(options.allowInsecureNoAuth);
@@ -119,6 +123,21 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
         }
       }
 
+      const platform = createNodePlatform({
+        customHome: context?.customHome,
+        dataDir: options.dataDir || context?.dataDir,
+        rootDir: projectRoot || undefined,
+      });
+
+      const target = await createActionDockTarget({
+        type: "local",
+        projectRoot: projectRoot || undefined,
+        customHome: context?.customHome,
+        dataDir: options.dataDir || context?.dataDir,
+        platform,
+        scanLinkedPackages: !projectRoot,
+      });
+
       let mcpHandler: ((req: Request) => Promise<Response | null | undefined>) | undefined;
       const enableMcp = options.mcp !== false;
       if (enableMcp) {
@@ -131,7 +150,7 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
           const handler = createMcpHandler(
             () => {
               return createActionDockMcpServer({
-                projectRoot: projectRoot || undefined,
+                target,
               });
             },
             {
@@ -144,6 +163,7 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
             return handler.fetch(req);
           };
         } catch (err: any) {
+          await target.close().catch(() => {});
           throw new ExecutionError(
             `Failed to initialize MCP endpoint: ${err?.message || String(err)}`,
             err
@@ -166,6 +186,7 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
           mcpHandler,
           tls,
           projectRoot: projectRoot || undefined,
+          target,
         });
 
         const displayHost = formatHostForUrl(host);
@@ -213,6 +234,7 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
         process.once("SIGINT", stopSignalHandler);
         process.once("SIGTERM", stopSignalHandler);
       } catch (err: any) {
+        await target.close().catch(() => {});
         throw new ExecutionError(`Failed to start ActionDock server: ${err.message}`, err);
       }
     });

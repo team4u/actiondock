@@ -252,6 +252,13 @@ export class DefaultActionDockApp implements ActionDockApp {
 
     // 3. 读取内存显式注入的 Action 定义
     for (const [id, act] of this.actionsMap) {
+      // 若为当前包完全限定名别名（例如 "pkgId/actionId"），跳过以防与短名 action 重复
+      if (id.startsWith(`${this.packageId}/`)) {
+        const shortId = id.slice(this.packageId.length + 1);
+        if (this.actionsMap.has(shortId) || map.has(shortId)) {
+          continue;
+        }
+      }
       const existing = map.get(id);
       const actObj = act as any;
       map.set(id, {

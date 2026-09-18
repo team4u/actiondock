@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 import { findProjectRoot, formatHostForUrl, loadProjectConfig, parseDuration } from "@actiondock/core";
+import { createNodePlatform } from "@actiondock/runtime-node";
 import { Command } from "commander";
 import { ArgumentError, ExecutionError } from "../errors";
 import { writeStdout } from "../renderer";
@@ -31,6 +32,7 @@ export function registerMcpCommands(program: Command, context?: CliContext): voi
     .option("--all", "Serve all linked packages from global registry")
     .option("--timeout <duration>", "Execution timeout (e.g. 30s, 5m, 500ms)")
     .option("--allow-insecure-http", "Allow insecure HTTP connections with auth token (INSECURE)")
+    .option("--data-dir <path>", "Custom database storage directory")
     .action(async (rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
       let timeoutMs: number | undefined;
@@ -59,6 +61,8 @@ export function registerMcpCommands(program: Command, context?: CliContext): voi
           packageIds,
           all,
           timeoutMs,
+          customHome: context?.customHome,
+          dataDir: options.dataDir || context?.dataDir,
         });
       } catch (err: any) {
         throw new ExecutionError(`Failed to start MCP STDIO server: ${err.message}`, err);
@@ -96,6 +100,7 @@ export function registerMcpCommands(program: Command, context?: CliContext): voi
     )
     .option("--all", "Serve all linked packages from global registry")
     .option("--timeout <duration>", "Execution timeout (e.g. 30s, 5m, 500ms)")
+    .option("--data-dir <path>", "Custom database storage directory")
     .action(async (rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
       const port = parseInt(options.port, 10) || 5178;
@@ -168,6 +173,11 @@ export function registerMcpCommands(program: Command, context?: CliContext): voi
       }
 
       try {
+        const platform = createNodePlatform({
+          customHome: context?.customHome,
+          dataDir: options.dataDir || context?.dataDir,
+          rootDir: projectRoots?.[0],
+        });
         const { startMcpHttpServer } = await import("@actiondock/mcp");
         const server = await startMcpHttpServer({
           port,
@@ -182,6 +192,9 @@ export function registerMcpCommands(program: Command, context?: CliContext): voi
           packageIds,
           all,
           timeoutMs,
+          customHome: context?.customHome,
+          dataDir: options.dataDir || context?.dataDir,
+          platform,
         });
 
         const displayHost = formatHostForUrl(host);

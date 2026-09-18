@@ -83,6 +83,10 @@ export interface ActionDockMcpOptions {
   all?: boolean;
   /** 自定义家目录路径 */
   customHome?: string;
+  /** 自定义全局数据存储目录 */
+  dataDir?: string;
+  /** 运行时底层平台适配（如提供 NodeProcessDriver 的平台实例） */
+  platform?: import("@actiondock/core").RuntimePlatform;
   /** 配置动态覆盖项 */
   configOverrides?: Record<string, unknown>;
   /** 单个 Tool 执行超时时间（毫秒） */

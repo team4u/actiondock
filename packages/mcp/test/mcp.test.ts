@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createActionDockTarget, linkPackage } from "@actiondock/core";
-import { defineAction } from "@actiondock/sdk";
+import { decodeText, defineAction } from "@actiondock/sdk";
 import { InMemoryTransport } from "@modelcontextprotocol/server";
 import { createActionDockMcpServer, toMcpResult } from "../src/adapter";
 import { startMcpHttpServer } from "../src/http";
@@ -1325,6 +1325,70 @@ describe("@actiondock/mcp Adapter", () => {
     expect(resourceRead.contents[0].text).toContain("Step 1");
     expect(promptsList.prompts.some((p: any) => p.name === "test.guide")).toBe(true);
     expect(promptGet.messages[0].content.text).toContain("Step 1");
+
+    await server.close();
+  });
+
+  it("executes actions using ctx.process in createActionDockMcpServer without UNSUPPORTED_CAPABILITY", async () => {
+    const procAction = defineAction({
+      id: "proc.echo",
+      description: "Echo via process",
+      async run(_input: unknown, ctx) {
+        const res = await ctx.process.run({
+          spec: { executable: process.execPath, args: ["-e", "console.log('mcp process works')"], io: { mode: "pipe" } },
+          timeoutMs: 5000,
+          maxOutputBytes: 1024,
+        });
+        return { stdout: decodeText(res.chunks).trim() };
+      },
+    });
+
+    const server = await createActionDockMcpServer({
+      actions: {
+        "proc.echo": procAction,
+      },
+    });
+
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverTransport);
+
+    let callResult: any = null;
+    let resolveCall: () => void;
+    const callPromise = new Promise<void>((r) => {
+      resolveCall = r;
+    });
+
+    clientTransport.onmessage = (msg: any) => {
+      if (msg.id === 1) {
+        clientTransport.send({ jsonrpc: "2.0", method: "notifications/initialized" });
+        clientTransport.send({
+          jsonrpc: "2.0",
+          id: 2,
+          method: "tools/call",
+          params: {
+            name: "proc.echo",
+            arguments: {},
+          },
+        });
+      } else if (msg.id === 2) {
+        callResult = msg.result;
+        resolveCall();
+      }
+    };
+
+    clientTransport.send({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: { protocolVersion: "2026-07-28", capabilities: {}, clientInfo: { name: "test", version: "1.0" } },
+    });
+
+    await callPromise;
+
+    expect(callResult.isError).toBeFalsy();
+    const parsed = JSON.parse(callResult.content[0].text);
+    expect(parsed.ok).toBe(true);
+    expect(parsed.data.stdout).toBe("mcp process works");
 
     await server.close();
   });

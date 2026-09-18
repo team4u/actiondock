@@ -226,7 +226,33 @@ export async function resolveTarget(
       storage: appStorage,
       customHome: options.customHome,
       configOverrides: options.configOverrides,
+      dataDir: options.dataDir,
     });
+  }
+
+  let platform = options.platform;
+  if (!platform && typeof process !== "undefined" && process.versions?.node) {
+    try {
+      const { createNodePlatform } = await import("@actiondock/runtime-node");
+      platform = createNodePlatform({
+        customHome: options.customHome,
+        dataDir: options.dataDir,
+        rootDir: projectRoot,
+      });
+    } catch {
+      // 优雅降级：未安装 @actiondock/runtime-node 时回退 core 默认平台
+    }
+  }
+
+  for (const pkg of packages) {
+    if (typeof pkg === "object" && pkg !== null && !("info" in pkg)) {
+      if (platform && !pkg.platform) {
+        pkg.platform = platform;
+      }
+      if (!pkg.dataDir && options.dataDir) {
+        pkg.dataDir = options.dataDir;
+      }
+    }
   }
 
   const target = await createActionDockTarget({
@@ -238,6 +264,8 @@ export async function resolveTarget(
       autoLoadCurrentProject: packages.length === 0,
     },
     customHome: options.customHome,
+    dataDir: options.dataDir,
+    platform,
   });
 
   return { target, ownsTarget: true };
@@ -285,7 +313,34 @@ export async function createActionDockMcpServer(
   registerTasksExtension(server, target);
 
   // 工具注册与模式映射：tools/list 纯粹委托 target.listActions()
-  const actions = await target.listActions();
+  const rawActions = await target.listActions();
+  const seenActionKeys = new Map<string, (typeof rawActions)[number]>();
+  for (const act of rawActions) {
+    let pkgId = act.packageId || "";
+    let actId = act.id;
+    if (act.id.includes("/")) {
+      try {
+        const parsed = ActionResolver.parseRef(act.id);
+        pkgId = pkgId || parsed.packageId || "";
+        actId = parsed.actionId;
+      } catch {
+        const idx = act.id.lastIndexOf("/");
+        pkgId = pkgId || act.id.slice(0, idx);
+        actId = act.id.slice(idx + 1);
+      }
+    }
+    const key = `${pkgId}:${actId}`;
+    const existing = seenActionKeys.get(key);
+    if (existing) {
+      // 若已存在的项是全限定名（含 /），而当前项是短名（不含 /），优先保留短名项
+      if (existing.id.includes("/") && !act.id.includes("/")) {
+        seenActionKeys.set(key, act);
+      }
+    } else {
+      seenActionKeys.set(key, act);
+    }
+  }
+  const actions = Array.from(seenActionKeys.values());
 
   // 统计 Action 基础 ID 出现频次，用于同名冲突命名空间隔离
   const baseCounts = new Map<string, number>();

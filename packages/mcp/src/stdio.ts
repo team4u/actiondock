@@ -23,7 +23,7 @@ export async function startMcpStdio(
   let childProcess: ChildProcess | undefined;
 
   // 若显式传入了已构造的 target 或不可序列化的内存对象，直接复用或解析目标实例
-  if (options.target || options.actions || options.storage || options.app || options.host) {
+  if (options.target || options.actions || options.storage || options.app || options.host || options.platform) {
     targetToUse = options.target ?? (await resolveTarget(options)).target;
   } else {
     // 建立隔离的监督子进程
@@ -44,6 +44,7 @@ export async function startMcpStdio(
           packageIds: options.packageIds,
           all: options.all,
           customHome: options.customHome,
+          dataDir: options.dataDir,
           configOverrides: options.configOverrides,
           timeoutMs: options.timeoutMs,
         }),
