@@ -104,6 +104,13 @@ function main() {
           }
         }
       }
+      if (pkg.peerDependencies) {
+        for (const dep of Object.keys(pkg.peerDependencies)) {
+          if (dep.startsWith("@actiondock/")) {
+            pkg.peerDependencies[dep] = isPrerelease ? targetVersion : `^${targetVersion}`;
+          }
+        }
+      }
       if (pkg.devDependencies) {
         for (const dep of Object.keys(pkg.devDependencies)) {
           if (dep.startsWith("@actiondock/")) {
