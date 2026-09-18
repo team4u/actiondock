@@ -17,6 +17,7 @@
     "typecheck": "tsc --noEmit",
     "build": "node ./scripts/build.ts",
     "bump": "node ./scripts/bump-version.ts",
+    "release": "node ./scripts/release.ts",
     "docs:serve": "npx docsify-cli serve docs"
   },
   "dependencies": {
