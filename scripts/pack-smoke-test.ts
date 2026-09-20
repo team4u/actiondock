@@ -39,6 +39,13 @@ function runNpm(args: string[], cwd: string) {
   return spawnSync(process.execPath, [npmExecPath!, ...args], {
     cwd,
     encoding: "utf8",
+    env: {
+      ...process.env,
+      // 剥离 npm lifecycle 注入的用户级 allow-scripts 白名单：npm 12 起项目级安装
+      // 遇到该 CLI 层配置会抛 EALLOWSCRIPTS，破坏烟雾测试环境隔离
+      npm_config_allow_scripts: undefined,
+      NPM_CONFIG_ALLOW_SCRIPTS: undefined,
+    } as NodeJS.ProcessEnv,
   });
 }
 
