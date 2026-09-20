@@ -239,8 +239,15 @@ export async function resolveTarget(
         dataDir: options.dataDir,
         rootDir: projectRoot,
       });
-    } catch {
-      // 优雅降级：未安装 @actiondock/runtime-node 时回退 core 默认平台
+    } catch (err: any) {
+      // 仅「模块不存在」类错误允许降级回退 core 默认平台；
+      // 其余异常（加载后初始化失败等）原样上抛，避免吞没真实故障
+      const isModuleMissing =
+        err?.code === "ERR_MODULE_NOT_FOUND" ||
+        /Cannot find (?:package|module)/i.test(String(err?.message || ""));
+      if (!isModuleMissing) {
+        throw err;
+      }
     }
   }
 
@@ -509,8 +516,13 @@ export async function createActionDockMcpServer(
         }
       );
     }
-  } catch {
-    // 忽略规程获取或注册异常
+  } catch (err: any) {
+    // 规程获取或注册失败不中断适配器启动，但输出诊断行保留排障线索
+    console.error(
+      `[actiondock-mcp] Failed to register playbook resources/prompts: ${
+        err?.message || String(err)
+      }`
+    );
   }
 
   // 服务生命周期：默认 close 仅关闭 MCP 服务本身，不级联 target——

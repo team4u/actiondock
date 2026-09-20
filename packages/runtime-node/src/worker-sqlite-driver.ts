@@ -82,13 +82,27 @@ try {
 
 const normalizeSqliteParams = ${normalizeSqliteParams.toString()};
 
+// 语句缓存 LRU 上限：超出后淘汰最旧语句并 finalize 释放，防止无界增长
+const STATEMENT_CACHE_LIMIT = 256;
 const statementCache = new Map();
 
 function getCachedStatement(sql) {
   let stmt = statementCache.get(sql);
-  if (!stmt) {
-    stmt = db.prepare(sql);
+  if (stmt) {
+    // 命中即刷新为最新使用，维持 LRU 淘汰序
+    statementCache.delete(sql);
     statementCache.set(sql, stmt);
+    return stmt;
+  }
+  stmt = db.prepare(sql);
+  statementCache.set(sql, stmt);
+  while (statementCache.size > STATEMENT_CACHE_LIMIT) {
+    const oldestKey = statementCache.keys().next().value;
+    const oldest = statementCache.get(oldestKey);
+    statementCache.delete(oldestKey);
+    try {
+      oldest.finalize();
+    } catch (_) {}
   }
   return stmt;
 }
@@ -475,6 +489,8 @@ export class WorkerSqliteDriver {
 
   /**
    * 正常关闭数据库连接并终止工作线程。
+   * 关闭阶段异常不静默吞没：写入 stderr 诊断保留排障线索，
+   * 但不改变既有退出语义（关闭始终收敛完成而非抛出）。
    */
   async close(): Promise<void> {
     if (this.closed) return;
@@ -485,13 +501,19 @@ export class WorkerSqliteDriver {
       if (!this.exited) {
         try {
           await this.request("close", {});
-        } catch {
-          // 忽略关闭请求响应异常
+        } catch (err) {
+          console.warn(
+            "[actiondock] WorkerSqliteDriver close request failed:",
+            err instanceof Error ? err.message : err
+          );
         }
         try {
           await this.worker.terminate();
-        } catch {
-          // 忽略终止工作线程异常
+        } catch (err) {
+          console.warn(
+            "[actiondock] WorkerSqliteDriver worker termination failed:",
+            err instanceof Error ? err.message : err
+          );
         }
       }
 

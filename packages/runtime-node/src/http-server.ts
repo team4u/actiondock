@@ -193,6 +193,7 @@ export class NodeHttpServer {
   private portNumber = 0;
   private hostAddress = "127.0.0.1";
   private tlsOptions?: ServerTlsOptions;
+  private persistentErrorHandler?: (err: Error) => void;
 
   constructor(optionsOrHandler: WebRequestHandler | NodeHttpServerOptions) {
     const handler =
@@ -276,6 +277,11 @@ export class NodeHttpServer {
 
   /**
    * 启动监听。若未显式传入端口，则默认使用实例配置或随机可用端口（0）。
+   *
+   * 监听期的 error 事件分两段处理：启动阶段由 once 监听将失败传导给本次
+   * 调用方；成功后移除该一次性监听，改挂常驻监听——运行期错误（如端口被
+   * 抢占、套接字异常关闭）始终有人处理并转发 stderr，绝不成为未处理事件
+   * 导致进程崩溃，也不会在重复 listen 时叠加监听器。
    */
   async listen(
     port?: number,
@@ -284,10 +290,22 @@ export class NodeHttpServer {
     const targetPort = port ?? this.portNumber ?? 0;
     const targetHost = host ?? this.hostAddress ?? "127.0.0.1";
 
+    if (!this.persistentErrorHandler) {
+      this.persistentErrorHandler = (err: Error) => {
+        // 常驻运行期错误兜底：没有实例级回调可转发时至少保留 stderr 诊断
+        console.error("[NodeHttpServer] unexpected server error:", err);
+      };
+      this.server.on("error", this.persistentErrorHandler);
+    }
+
     return new Promise((resolve, reject) => {
-      this.server.once("error", reject);
+      const onListenError = (err: Error) => {
+        this.server.removeListener("error", onListenError);
+        reject(err);
+      };
+      this.server.once("error", onListenError);
       this.server.listen(targetPort, targetHost, () => {
-        this.server.removeListener("error", reject);
+        this.server.removeListener("error", onListenError);
         const addr = this.server.address();
         if (addr && typeof addr === "object") {
           this.portNumber = addr.port;
@@ -307,10 +325,15 @@ export class NodeHttpServer {
    * 优雅关闭服务端并释放端口与活动连接。
    * 与 core/src/server/server.ts 的策略保持一致：close 后强制断开全部连接，
    * 避免 keep-alive 空闲连接悬挂导致关闭 Promise 永不 resolve。
+   * 关闭时同步移除常驻错误监听，避免实例滞留事件监听器。
    */
   async close(): Promise<void> {
     if (!this.listening) {
       return;
+    }
+    if (this.persistentErrorHandler) {
+      this.server.removeListener("error", this.persistentErrorHandler);
+      this.persistentErrorHandler = undefined;
     }
     return new Promise((resolve, reject) => {
       this.server.close((err) => {

@@ -182,11 +182,11 @@ export class MockProcessExecutor implements ProcessExecutor {
       timestamp: startTime,
     });
 
-    // 检查调用前是否已中断
+    // 检查调用前是否已中断：退出码语义与真实执行器对齐（信号终止即无退出码，为 null）
     if (options.signal?.aborted) {
       const res: ProcessResult = {
         ok: false,
-        exitCode: -1,
+        exitCode: null,
         signal: "SIGTERM",
         stdout: "",
         stderr: "Command aborted before execution by signal",
@@ -227,7 +227,10 @@ export class MockProcessExecutor implements ProcessExecutor {
         });
         resolved = {
           ok: cliRes.ok,
-          exitCode: cliRes.exitCode,
+          // execCli 的 -1 哨兵仅是自身信封语义（中止/超时无真实退出码）；
+          // 映射到 ProcessExecutor 契约时还原为 null，与真实执行器对齐
+          exitCode: cliRes.exitCode === -1 ? null : cliRes.exitCode,
+          cancelled: Boolean(options.signal?.aborted),
           stdout: cliRes.stdout,
           stderr: cliRes.stderr,
           raw: cliRes.raw,
@@ -244,7 +247,7 @@ export class MockProcessExecutor implements ProcessExecutor {
       } catch (err: any) {
         resolved = {
           ok: false,
-          exitCode: -1,
+          exitCode: null,
           stdout: "",
           stderr: err?.message || String(err),
           raw: new Uint8Array(),

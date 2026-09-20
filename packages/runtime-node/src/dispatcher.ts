@@ -28,13 +28,19 @@ export async function closeInsecureDispatcher(): Promise<void> {
     globalInsecureAgent = undefined;
     try {
       await agent.close();
-    } catch {
-      // 忽略关闭时的异常
+    } catch (err) {
+      // 关闭异常不静默吞没：诊断输出保留排障线索，退出流程继续收敛
+      console.warn("[actiondock] closeInsecureDispatcher failed to close agent:", err);
     }
   }
 }
 
-// 自动向 core 注册平台调度器提供者及全局符号标记
-setInsecureDispatcherProvider(getInsecureDispatcher);
-(globalThis as any)[Symbol.for("actiondock.insecureDispatcherProvider")] = getInsecureDispatcher;
-(globalThis as any)[Symbol.for("actiondock.closeInsecureDispatcher")] = closeInsecureDispatcher;
+/**
+ * 显式安装平台调度器：向 core 注册本模块的提供者函数。
+ *
+ * 模块导入本身不再携带任何全局注册副作用（不再直挂 globalThis 符号通道），
+ * 由宿主入口显式调用完成注册；可安全重复调用，重复调用幂等覆盖注册。
+ */
+export function installInsecureDispatcher(): void {
+  setInsecureDispatcherProvider(getInsecureDispatcher);
+}
