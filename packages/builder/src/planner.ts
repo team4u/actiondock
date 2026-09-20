@@ -851,25 +851,3 @@ export class SelectionPlanner {
     return planner.plan(options);
   }
 }
-
-/**
- * 构建规划器标准导出。
- * @deprecated SelectionPlanner 的历史别名，请直接使用 SelectionPlanner，将在两个版本后移除。
- */
-export const BuildPlanner = SelectionPlanner;
-/** @deprecated SelectionPlanner 类型的历史别名，请直接使用 SelectionPlanner 类型。 */
-export type BuildPlanner = SelectionPlanner;
-
-/**
- * 快捷选择规划函数。
- * @deprecated 便捷快捷函数，请直接使用 SelectionPlanner.plan，将在两个版本后移除。
- */
-export function selectionPlan(options: SelectionPlannerOptions): SelectionPlan {
-  return SelectionPlanner.plan(options);
-}
-
-/**
- * 快捷构建规划函数标准导出。
- * @deprecated selectionPlan 的历史别名，请改用 SelectionPlanner.plan，将在两个版本后移除。
- */
-export const buildPlan = selectionPlan;

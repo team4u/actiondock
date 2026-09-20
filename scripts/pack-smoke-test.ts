@@ -149,7 +149,7 @@ try {
 import { defineAction } from "@actiondock/sdk";
 import { ActionRunner, ExecutionService, SqliteRuntimeStorage, createStorage, ACTIONDOCK_VERSION } from "@actiondock/core";
 import { createActionDockMcpServer, toMcpResult } from "@actiondock/mcp";
-import { BuildPlanner, SkillExporter, buildProject } from "@actiondock/builder";
+import { SelectionPlanner, SkillExporter, buildProject } from "@actiondock/builder";
 import { createNodePlatform, NodeSqliteDriver, NodeHttpServer } from "@actiondock/runtime-node";
 import { main, createCliProgram, formatError, runStandaloneCli } from "@actiondock/cli";
 import { FakeClock, MemoryStorage, createTestRuntime } from "@actiondock/testing";
@@ -201,10 +201,10 @@ if (typeof createActionDockMcpServer !== "function" || typeof toMcpResult !== "f
 console.log("[OK] MCP createActionDockMcpServer and toMcpResult verified");
 
 // Verify Builder
-if (typeof BuildPlanner?.plan !== "function" || typeof SkillExporter?.export !== "function" || typeof buildProject !== "function") {
-  throw new Error("Builder exports missing BuildPlanner, SkillExporter, or buildProject");
+if (typeof SelectionPlanner?.plan !== "function" || typeof SkillExporter?.export !== "function" || typeof buildProject !== "function") {
+  throw new Error("Builder exports missing SelectionPlanner, SkillExporter, or buildProject");
 }
-console.log("[OK] Builder BuildPlanner, SkillExporter, and buildProject verified");
+console.log("[OK] Builder SelectionPlanner, SkillExporter, and buildProject verified");
 
 // Verify Runtime Node
 if (typeof createNodePlatform !== "function" || typeof NodeSqliteDriver !== "function" || typeof NodeHttpServer !== "function") {
