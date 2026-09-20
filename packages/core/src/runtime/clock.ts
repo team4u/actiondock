@@ -1,32 +1,7 @@
 /**
- * 统一时间与时钟接口。
+ * 时钟契约单一事实源已下沉至 storage/clock.ts（基础契约层）。
+ *
+ * 此处 re-export 维持 `runtime/clock` 与 `@actiondock/core` 根入口的既有
+ * 导入路径兼容，外部消费方无需变更。
  */
-export interface Clock {
-  /** 获取当前系统墙上时间 */
-  now(): Date;
-  /** 获取单调递增时间戳（单位：毫秒） */
-  monotonic(): number;
-  /** 异步休眠指定毫秒 */
-  sleep(ms: number): Promise<void>;
-}
-
-/**
- * 生产环境系统时钟实现。
- */
-export class SystemClock implements Clock {
-  now(): Date {
-    return new Date();
-  }
-
-  monotonic(): number {
-    if (typeof performance !== "undefined" && typeof performance.now === "function") {
-      return performance.now();
-    }
-    return Date.now();
-  }
-
-  sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-}
-
+export { type Clock, SystemClock } from "../storage/clock";

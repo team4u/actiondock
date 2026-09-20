@@ -8,6 +8,7 @@ export {
   type DataDirLockInfo,
   isProcessAlive,
 } from "./data-dir-lock";
+export * from "./clock";
 export * from "./driver";
 export * from "./lazy";
 export * from "./mask";

@@ -94,9 +94,8 @@ export { decodeStateKey, encodeStateKey, escapeStateSegment, unescapeStateSegmen
 /**
  * 基于内存 Map 的状态存储实现，支持命名空间隔离与 TTL 自动失效，专供单元测试使用。
  *
- * 根命名空间读取未命中时，会按 core 生产 RuntimeStateStore 的回扫语义，
- * 以裸 key 反查全部命名空间中的同 key 条目（多条命中时抛歧义异常，与 core 的
- * findState 契约一致），确保测试与生产行为不分叉。
+ * 读取严格限定当前命名空间（根作用域即空命名空间），与 core 生产
+ * RuntimeStateStore 语义对齐，不做跨命名空间隐式回扫。
  */
 export class MemoryStateStore implements StateStore {
   private store: Map<string, any>;
@@ -143,64 +142,20 @@ export class MemoryStateStore implements StateStore {
     return entry;
   }
 
-  /**
-   * 以裸 key 回扫全部命名空间，对齐 core 生产存储的 findState 契约：
-   * 多条命中抛歧义异常，零命中返回 undefined，唯一命中返回该条目。
-   */
-  private findAcrossNamespaces<T>(key: string): T | undefined {
-    const now = this.nowMs();
-    const hits: Array<{ storeKey: string; entry: MemoryStateEntry }> = [];
-
-    for (const [storeKey, raw] of this.store.entries()) {
-      let decoded: { namespace: string; key: string };
-      try {
-        decoded = decodeStateKey(storeKey);
-      } catch {
-        // 无法解码的复合键直接跳过，不影响其他条目回扫
-        continue;
-      }
-      if (decoded.key !== key) {
-        continue;
-      }
-      const entry = this.extractEntry(raw);
-      if (entry.expiresAt !== undefined && entry.expiresAt <= now) {
-        this.store.delete(storeKey);
-        continue;
-      }
-      hits.push({ storeKey, entry });
-    }
-
-    if (hits.length > 1) {
-      throw new Error(
-        `Ambiguous state key '${key}': matches ${hits.length} entries (${hits
-          .map((h) => decodeStateKey(h.storeKey).namespace + ":" + key)
-          .join(", ")})`
-      );
-    }
-    if (hits.length === 0) {
-      return undefined;
-    }
-    const value = hits[0].entry.value;
-    return (value !== undefined ? structuredClone(value) : undefined) as T;
-  }
-
   async get<T = unknown>(key: string): Promise<T | undefined> {
+    // 读取严格限定当前命名空间（根作用域即空命名空间），与 core RuntimeStateStore
+    // 语义对齐，不做跨命名空间隐式回扫
     const qKey = this.qualify(key);
     const raw = this.store.get(qKey);
-    if (raw !== undefined) {
-      const entry = this.settleEntry(raw);
-      if (entry === undefined) {
-        this.store.delete(qKey);
-        return undefined;
-      }
-      return (entry.value !== undefined ? structuredClone(entry.value) : undefined) as T;
+    if (raw === undefined) {
+      return undefined;
     }
-
-    // 根命名空间精确未命中时回扫全部命名空间，与 core RuntimeStateStore 语义对齐
-    if (!this.namespace) {
-      return this.findAcrossNamespaces<T>(key);
+    const entry = this.settleEntry(raw);
+    if (entry === undefined) {
+      this.store.delete(qKey);
+      return undefined;
     }
-    return undefined;
+    return (entry.value !== undefined ? structuredClone(entry.value) : undefined) as T;
   }
 
   async set<T = unknown>(

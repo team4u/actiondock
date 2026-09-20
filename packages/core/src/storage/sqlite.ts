@@ -9,7 +9,7 @@ import {
   type RuntimeError,
   type RunRecord,
 } from "@actiondock/sdk";
-import { type Clock, SystemClock } from "../runtime/clock";
+import { type Clock, SystemClock } from "./clock";
 import { createDefaultSqliteDriver } from "./driver";
 import { safeParseStoredJson } from "./utils";
 import {

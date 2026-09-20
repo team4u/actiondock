@@ -1,5 +1,6 @@
-import type { RuntimeError, RunRecord } from "@actiondock/sdk";
-import type { Clock } from "../runtime/clock";
+import type { RuntimeError, RunRecord, RunStatus } from "@actiondock/sdk";
+import { ACTION_CANCELLED, ACTION_TIMEOUT } from "../errors";
+import type { Clock } from "./clock";
 
 /**
  * 固定的存储 Schema 目标版本常量。
@@ -142,6 +143,22 @@ export function isTerminalRunStatus(status: string): status is TerminalRunStatus
     status === "timed_out" ||
     status === "interrupted"
   );
+}
+
+/**
+ * 执行终态到运行记录状态的统一映射单一事实源。
+ *
+ * 成功映射为 success；超时错误码映射为 timed_out；取消错误码映射为 cancelled；
+ * 其余失败一律映射为 failed。错误码常量来自全仓统一错误码单一事实源 errors.ts。
+ */
+export function resultStatusToRunStatus(
+  ok: boolean,
+  errorCode?: string
+): RunStatus {
+  if (ok) return "success";
+  if (errorCode === ACTION_TIMEOUT) return "timed_out";
+  if (errorCode === ACTION_CANCELLED) return "cancelled";
+  return "failed";
 }
 
 /**

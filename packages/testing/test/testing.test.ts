@@ -318,62 +318,54 @@ describe("@actiondock/testing", () => {
   });
 
   describe("MemoryStateStore", () => {
-    it("根命名空间未命中时以裸 key 回扫全部命名空间", async () => {
+    it("根命名空间读取严格限定空命名空间，不做跨命名空间隐式回扫", async () => {
       const shared = new Map<string, any>();
       const rootStore = new MemoryStateStore(shared, "");
       const scopedStore = rootStore.scope("cache");
 
       await scopedStore.set("token", "scoped-value");
 
-      // 根命名空间直接读取：精确未命中后回扫命中 cache 命名空间下的同 key 条目
-      const found = await rootStore.get<string>("token");
-      expect(found).toBe("scoped-value");
+      // 根命名空间直接读取：严格限定空命名空间，不隐式回扫 cache 命名空间
+      expect(await rootStore.get<string>("token")).toBeUndefined();
 
-      // 根命名空间自身写入的同 key 条目优先精确命中，不进入回扫
+      // 根命名空间自身写入的同 key 条目可精确命中
       await rootStore.set("token", "root-value");
       expect(await rootStore.get<string>("token")).toBe("root-value");
     });
 
-    it("回扫命中多条同名 key 时抛出歧义异常，与 core findState 契约一致", async () => {
+    it("跨命名空间同名 key 互不可见，不再抛出歧义异常", async () => {
       const shared = new Map<string, any>();
       const rootStore = new MemoryStateStore(shared, "");
 
       await rootStore.scope("ns-alpha").set("dup", "alpha");
       await rootStore.scope("ns-beta").set("dup", "beta");
 
-      let err: any;
-      try {
-        await rootStore.get("dup");
-      } catch (e) {
-        err = e;
-      }
-
-      expect(err).toBeDefined();
-      expect(err.message).toContain("Ambiguous state key 'dup'");
-      expect(err.message).toContain("ns-alpha");
-      expect(err.message).toContain("ns-beta");
+      // 根命名空间读取严格限定空命名空间，各作用域条目互不可见
+      expect(await rootStore.get("dup")).toBeUndefined();
+      expect(await rootStore.scope("ns-alpha").get("dup")).toBe("alpha");
+      expect(await rootStore.scope("ns-beta").get("dup")).toBe("beta");
     });
 
-    it("回扫跳过已过期条目并清理，零命中返回 undefined", async () => {
+    it("命名空间内过期条目失效后返回 undefined", async () => {
       const clock = new FakeClock({ now: "2026-01-01T00:00:00.000Z" });
       const shared = new Map<string, any>();
       const rootStore = new MemoryStateStore(shared, "", clock);
 
       await rootStore.scope("ttl-ns").set("ephemeral", "gone-soon", 5);
 
-      // 未过期时回扫命中
-      expect(await rootStore.get<string>("ephemeral")).toBe("gone-soon");
+      // 未过期时作用域内可命中
+      expect(await rootStore.scope("ttl-ns").get("ephemeral")).toBe("gone-soon");
 
-      // 推进 6 秒后条目过期，回扫应跳过并清理，返回 undefined
+      // 推进 6 秒后条目过期，返回 undefined
       await clock.advance(6000);
-      expect(await rootStore.get<string>("ephemeral")).toBeUndefined();
-      expect(shared.size).toBe(0);
+      expect(await rootStore.scope("ttl-ns").get("ephemeral")).toBeUndefined();
+      expect(await rootStore.get("ephemeral")).toBeUndefined();
 
       // 全无命中时返回 undefined
-      expect(await rootStore.get<string>("never-exists")).toBeUndefined();
+      expect(await rootStore.get("never-exists")).toBeUndefined();
     });
 
-    it("非根命名空间不做回扫，保持严格隔离", async () => {
+    it("非根命名空间保持严格隔离", async () => {
       const shared = new Map<string, any>();
       const rootStore = new MemoryStateStore(shared, "");
 
@@ -381,8 +373,8 @@ describe("@actiondock/testing", () => {
 
       // ns-b 命名空间读取不应看到 ns-a 的条目
       expect(await rootStore.scope("ns-b").get("key")).toBeUndefined();
-      // 根命名空间仍可回扫命中
-      expect(await rootStore.get<string>("key")).toBe("from-a");
+      // 根命名空间同样不做隐式回扫
+      expect(await rootStore.get("key")).toBeUndefined();
     });
   });
 

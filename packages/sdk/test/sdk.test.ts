@@ -82,9 +82,9 @@ describe("@actiondock/sdk", () => {
     // 隔离性检查
     expect(await store.get<string>("global_k1")).toBe("v1");
     expect(await userScope.get<{ age: number }>("alice")).toEqual({ age: 30 });
-    // 根命名空间读取会按生产 RuntimeStateStore 的 findState 契约回扫：
-    // 裸键 alice 唯一命中 users 命名空间下的同名键（与 core 生产语义一致）
-    expect(await store.get("alice")).toEqual({ age: 30 });
+    // 根命名空间读取严格限定空命名空间，与生产 RuntimeStateStore 语义一致，
+    // 不做跨命名空间隐式回扫
+    expect(await store.get("alice")).toBeUndefined();
 
     // 深拷贝验证 (structuredClone)
     const obj = { nested: { val: 100 } };
@@ -132,9 +132,9 @@ describe("@actiondock/sdk", () => {
     expect(await scoped.get<string>("another:colon:key")).toBe("value-nested");
     expect(await scoped.keys()).toEqual(["another:colon:key"]);
 
-    // 根存储按生产回扫契约仍可读到作用域键（裸键唯一命中），
-    // 但 keys 列表不暴露作用域键，写入也不落到根命名空间
-    expect(await store.get("another:colon:key")).toBe("value-nested");
+    // 根存储读取严格限定空命名空间，不隐式回扫作用域键；
+    // keys 列表不暴露作用域键，写入也不落到根命名空间
+    expect(await store.get("another:colon:key")).toBeUndefined();
     expect(await store.keys()).not.toContain("another:colon:key");
 
     // 删除包含冒号的键
