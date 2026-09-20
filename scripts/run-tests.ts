@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
 const rootDir = resolve(import.meta.dirname, "..");
@@ -11,7 +11,6 @@ function ensureBuild(): void {
   const sdkDist = join(rootDir, "packages", "sdk", "dist", "index.js");
   if (!existsSync(sdkDist)) {
     console.log("[TEST] Monorepo dist not found, auto-building packages...");
-    const { spawnSync } = require("node:child_process");
     const proc = spawnSync(process.execPath, [buildScript], {
       cwd: rootDir,
       stdio: "inherit",

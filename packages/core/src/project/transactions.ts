@@ -1150,6 +1150,13 @@ export function runFrozenInstall(projectRoot: string): void {
     cwd: projectRoot,
     stdio: "pipe",
     shell: process.platform === "win32",
+    env: {
+      ...process.env,
+      // 项目级安装禁用 npm 的 allow-scripts 白名单机制，避免用户全局 .npmrc
+      // 的 allow-scripts 约束触发 EALLOWSCRIPTS 导致恢复失败（本安装已带 --ignore-scripts）
+      npm_config_allow_scripts: "",
+      NPM_CONFIG_ALLOW_SCRIPTS: "",
+    },
   });
 
   if (proc.status !== 0) {
