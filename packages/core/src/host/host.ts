@@ -18,7 +18,6 @@ import type {
   PlaybookSpec,
   PlaybookSummary,
 } from "../app/types";
-import { ActionResolver } from "../catalog/action-resolver";
 import type {
   CancelResult,
   ExecuteOptions,
@@ -43,6 +42,19 @@ import {
   UNDECLARED_ACTION_DEPENDENCY,
 } from "../errors";
 import { DataDirLock } from "../storage/data-dir-lock";
+import {
+  ambiguousActionMessage,
+  buildRuntimeError,
+  collectPackageInfos,
+  describeActionAcrossApps,
+  describeVisiblePlaybook,
+  isRootCallVisible,
+  listVisiblePlaybooks,
+  packageNotFoundMessage,
+  parseRefLoose,
+  resolveProjectRoot,
+  resolveShortRef,
+} from "./routing";
 import type { ActionDockHost, ActionDockHostOptions } from "./types";
 
 function isActionDockApp(item: unknown): item is ActionDockApp {
@@ -53,26 +65,6 @@ function isActionDockApp(item: unknown): item is ActionDockApp {
     typeof (item as ActionDockApp).info === "function" &&
     "runAction" in item &&
     typeof (item as ActionDockApp).runAction === "function"
-  );
-}
-
-/**
- * 判定异常是否为 not-found 语义（包内确实不存在该 Action）。
- *
- * 遍历匹配短标识符时仅跳过此类错误；存储损坏、模块加载失败等内部错误必须向调用方透传，
- * 严禁被吞没后伪装成 ACTION_NOT_FOUND。
- */
-function isActionNotFoundLikeError(err: any): boolean {
-  if (!err) {
-    return false;
-  }
-  if (err.code === ACTION_NOT_FOUND || err.code === "NOT_FOUND") {
-    return true;
-  }
-  const message = typeof err.message === "string" ? err.message : String(err);
-  return (
-    message.startsWith("ACTION_NOT_FOUND:") ||
-    /Action '[^']*' not found in package/.test(message)
   );
 }
 
@@ -194,15 +186,8 @@ export class DefaultActionDockHost implements ActionDockHost {
    */
   private loadCurrentProject(options: ActionDockHostOptions): void {
     const explicitRoot = options.projectRoot;
-    let root = explicitRoot;
+    const root = resolveProjectRoot(options, () => findProjectRoot());
     if (!root) {
-      const detected = findProjectRoot();
-      if (detected) {
-        root = detected;
-      }
-    }
-
-    if (!root || !existsSync(root)) {
       return;
     }
 
@@ -348,6 +333,14 @@ export class DefaultActionDockHost implements ActionDockHost {
     }
   }
 
+  /** 路由可见性上下文（公开包集合与依赖解析器） */
+  private visibility() {
+    return {
+      hostPublicPackageIds: this.hostPublicPackageIds as ReadonlySet<string>,
+      resolver: this.resolver,
+    };
+  }
+
   getApp(packageId: string): ActionDockApp | undefined {
     return this.apps.get(packageId);
   }
@@ -402,17 +395,16 @@ export class DefaultActionDockHost implements ActionDockHost {
   }
 
   async info(): Promise<PackageInfo[]> {
-    return Promise.all(this.listApps().map((app) => app.info()));
+    return collectPackageInfos(this.listApps());
   }
 
   async listActions(options?: ListActionsOptions): Promise<ActionSummary[]> {
     let results: ActionSummary[] = [];
     const apps = this.listApps();
     for (const app of apps) {
-      const isPublic = this.hostPublicPackageIds.has(app.packageId);
       const appSummaries = await app.listActions();
       for (const item of appSummaries) {
-        if (!isPublic && this.resolver && !this.resolver.canRootCall(app.packageId, item.id)) {
+        if (!isRootCallVisible(app.packageId, item.id, this.hostPublicPackageIds, this.resolver)) {
           continue;
         }
         const qualifiedId =
@@ -450,137 +442,15 @@ export class DefaultActionDockHost implements ActionDockHost {
   }
 
   async describeAction(ref: ActionRef | string): Promise<ActionSpec> {
-    let parsed: ActionRef;
-    try {
-      parsed = ActionResolver.parseRef(ref);
-    } catch {
-      parsed = typeof ref === "object" ? ref : { actionId: ref };
-    }
-
-    if (parsed.packageId) {
-      const isPublic = this.hostPublicPackageIds.has(parsed.packageId);
-      if (!isPublic && this.resolver && !this.resolver.canRootCall(parsed.packageId, parsed.actionId)) {
-        throw new Error(
-          `UNDECLARED_ACTION_DEPENDENCY: Action '${parsed.packageId}/${parsed.actionId}' is not declared as a direct dependency in actiondock.json and is not delegated by a visible playbook`
-        );
-      }
-      const app = this.getApp(parsed.packageId);
-      if (!app) {
-        const failed = this.failedLinkedPackages.get(parsed.packageId);
-        if (failed) {
-          throw new Error(
-            `Package '${parsed.packageId}' not found in host (failed to load from '${failed.path}': ${failed.error})`
-          );
-        }
-        throw new Error(`Package '${parsed.packageId}' not found in host`);
-      }
-      const spec = await app.describeAction(parsed.actionId);
-      return {
-        ...spec,
-        packageId: app.packageId,
-      };
-    }
-
-    const matches: Array<{ app: ActionDockApp; spec: ActionSpec }> = [];
-    for (const app of this.listApps()) {
-      try {
-        const isPublic = this.hostPublicPackageIds.has(app.packageId);
-        if (!isPublic && this.resolver && !this.resolver.canRootCall(app.packageId, parsed.actionId)) {
-          continue;
-        }
-        const spec = await app.describeAction(parsed.actionId);
-        matches.push({ app, spec: { ...spec, packageId: app.packageId } });
-      } catch (err: any) {
-        // 仅将 not-found 语义视为「包内无此 Action」；其余异常必须透传，避免内部错误伪装成 ACTION_NOT_FOUND
-        if (!isActionNotFoundLikeError(err)) {
-          throw err;
-        }
-      }
-    }
-
-    if (matches.length === 1) {
-      return {
-        ...matches[0].spec,
-        packageId: matches[0].app.packageId,
-      };
-    }
-    if (matches.length > 1) {
-      const candidates = matches.map((m) => `${m.app.packageId}/${parsed.actionId}`).join(", ");
-      const err = new Error(
-        `INVALID_ACTION_REF: Action '${parsed.actionId}' is ambiguous and provided by multiple packages: ${candidates}. Please specify '<package-id>/${parsed.actionId}'. (AMBIGUOUS_ACTION_REF)`
-      );
-      (err as any).code = "INVALID_ACTION_REF";
-      (err as any).details = { alias: "AMBIGUOUS_ACTION_REF", candidates: matches.map((m) => m.app.packageId) };
-      throw err;
-    }
-
-    throw new Error(`ACTION_NOT_FOUND: Action '${parsed.actionId}' not found in any registered package`);
+    return describeActionAcrossApps(ref, this.listApps(), this.visibility(), this.failedLinkedPackages);
   }
 
   async listPlaybooks(): Promise<PlaybookSummary[]> {
-    const results: PlaybookSummary[] = [];
-    const apps = this.listApps();
-    for (const app of apps) {
-      const isPublic = this.hostPublicPackageIds.has(app.packageId);
-      if (!isPublic && this.resolver) {
-        const graph = this.resolver.resolveSync();
-        if (!graph.directDependencyIds.has(app.packageId)) {
-          continue;
-        }
-      }
-      const appPlaybooks = await app.listPlaybooks();
-      for (const item of appPlaybooks) {
-        const qualifiedId =
-          apps.length > 1 && !item.id.includes("/")
-            ? `${app.packageId}/${item.id}`
-            : item.id;
-        results.push({
-          ...item,
-          id: qualifiedId,
-          packageId: app.packageId,
-        });
-      }
-    }
-    return results;
+    return listVisiblePlaybooks(this.listApps(), this.visibility());
   }
 
   async describePlaybook(id: string): Promise<PlaybookSpec> {
-    if (id.includes("/")) {
-      const lastSlashIndex = id.lastIndexOf("/");
-      const packageId = id.slice(0, lastSlashIndex);
-      const playbookId = id.slice(lastSlashIndex + 1);
-      const isPublic = this.hostPublicPackageIds.has(packageId);
-      if (!isPublic && this.resolver) {
-        const graph = this.resolver.resolveSync();
-        if (!graph.directDependencyIds.has(packageId)) {
-          throw new Error(
-            `UNDECLARED_ACTION_DEPENDENCY: Playbook '${id}' belongs to undeclared transitive package '${packageId}'`
-          );
-        }
-      }
-      const app = this.getApp(packageId);
-      if (!app) {
-        throw new Error(`Package '${packageId}' not found in host`);
-      }
-      return app.describePlaybook(playbookId);
-    }
-
-    for (const app of this.listApps()) {
-      try {
-        const isPublic = this.hostPublicPackageIds.has(app.packageId);
-        if (!isPublic && this.resolver) {
-          const graph = this.resolver.resolveSync();
-          if (!graph.directDependencyIds.has(app.packageId)) {
-            continue;
-          }
-        }
-        return await app.describePlaybook(id);
-      } catch {
-        // 忽略未匹配的包
-      }
-    }
-
-    throw new Error(`Playbook '${id}' not found in any registered package`);
+    return describeVisiblePlaybook(this.listApps(), id, this.visibility());
   }
 
   async runAction(
@@ -605,12 +475,7 @@ export class DefaultActionDockHost implements ActionDockHost {
     }
 
     // - 解析目标包与 Action 动作标识
-    let parsed: ActionRef;
-    try {
-      parsed = ActionResolver.parseRef(ref);
-    } catch {
-      parsed = typeof ref === "object" ? ref : { actionId: ref };
-    }
+    const parsed = parseRefLoose(ref);
 
     let targetApp: ActionDockApp | undefined;
     let targetActionId = parsed.actionId;
@@ -620,14 +485,10 @@ export class DefaultActionDockHost implements ActionDockHost {
       targetApp = this.getApp(targetPackageId);
       if (!targetApp) {
         const runId = randomUUID();
-        const failed = this.failedLinkedPackages.get(targetPackageId);
-        const errorMsg = failed
-          ? `Package '${targetPackageId}' not found in host (failed to load from '${failed.path}': ${failed.error})`
-          : `Package '${targetPackageId}' not found in host`;
-        const error: RuntimeError = {
-          code: PACKAGE_NOT_FOUND,
-          message: errorMsg,
-        };
+        const error: RuntimeError = buildRuntimeError(
+          PACKAGE_NOT_FOUND,
+          packageNotFoundMessage(targetPackageId, this.failedLinkedPackages)
+        );
         return {
           runId,
           status: "failed",
@@ -635,34 +496,17 @@ export class DefaultActionDockHost implements ActionDockHost {
         };
       }
     } else {
-      const matches: ActionDockApp[] = [];
-      for (const app of this.listApps()) {
-        try {
-          const isPublic = this.hostPublicPackageIds.has(app.packageId);
-          if (!isPublic && this.resolver && !this.resolver.canRootCall(app.packageId, targetActionId)) {
-            continue;
-          }
-          await app.describeAction(targetActionId);
-          matches.push(app);
-        } catch (err: any) {
-          // 仅将 not-found 语义视为「包内无此 Action」；其余异常必须透传，避免内部错误伪装成 ACTION_NOT_FOUND
-          if (!isActionNotFoundLikeError(err)) {
-            throw err;
-          }
-        }
-      }
-
-      if (matches.length === 1) {
-        targetApp = matches[0];
+      const resolution = await resolveShortRef(this.listApps(), targetActionId, this.visibility());
+      if (resolution.kind === "unique") {
+        targetApp = resolution.app;
         targetPackageId = targetApp.packageId;
-      } else if (matches.length > 1) {
-        const candidates = matches.map((m) => `${m.packageId}/${targetActionId}`).join(", ");
+      } else if (resolution.kind === "ambiguous") {
         const runId = randomUUID();
-        const error: RuntimeError = {
-          code: INVALID_ACTION_REF,
-          message: `Action '${targetActionId}' is ambiguous and provided by multiple packages: ${candidates}. Please specify '<package-id>/${targetActionId}'.`,
-          details: { alias: "AMBIGUOUS_ACTION_REF", candidates: matches.map((m) => m.packageId) },
-        };
+        const error: RuntimeError = buildRuntimeError(
+          INVALID_ACTION_REF,
+          ambiguousActionMessage(targetActionId, resolution.candidates),
+          { alias: "AMBIGUOUS_ACTION_REF", candidates: resolution.candidates }
+        );
         return {
           runId,
           status: "failed",
@@ -670,10 +514,10 @@ export class DefaultActionDockHost implements ActionDockHost {
         };
       } else {
         const runId = randomUUID();
-        const error: RuntimeError = {
-          code: ACTION_NOT_FOUND,
-          message: `Action '${targetActionId}' not found in any registered package`,
-        };
+        const error: RuntimeError = buildRuntimeError(
+          ACTION_NOT_FOUND,
+          `Action '${targetActionId}' not found in any registered package`
+        );
         return {
           runId,
           status: "failed",
@@ -685,16 +529,13 @@ export class DefaultActionDockHost implements ActionDockHost {
     // 根调用可见性鉴权
     const parentRunId = options.parentRunId;
     if (!parentRunId && targetPackageId) {
-      const isPublic = this.hostPublicPackageIds.has(targetPackageId);
-      if (!isPublic && this.resolver && !this.resolver.canRootCall(targetPackageId, targetActionId)) {
-        const runId = randomUUID();
-        const error: RuntimeError = {
-          code: UNDECLARED_ACTION_DEPENDENCY,
-          message: `Root call to action '${targetPackageId}/${targetActionId}' is not allowed: package '${targetPackageId}' is not declared as a direct dependency in actiondock.json and is not delegated by a visible playbook`,
-          details: {
-            target: `${targetPackageId}/${targetActionId}`,
-          },
-        };
+      if (!isRootCallVisible(targetPackageId, targetActionId, this.hostPublicPackageIds, this.resolver)) {
+ const runId = randomUUID();
+const error: RuntimeError = buildRuntimeError(
+          UNDECLARED_ACTION_DEPENDENCY,
+          `Root call to action '${targetPackageId}/${targetActionId}' is not allowed: package '${targetPackageId}' is not declared as a direct dependency in actiondock.json and is not delegated by a visible playbook`,
+          { target: `${targetPackageId}/${targetActionId}` }
+        );
         return {
           runId,
           status: "failed",
@@ -727,16 +568,16 @@ export class DefaultActionDockHost implements ActionDockHost {
                     (u) => u === targetRef || u === `${targetPackageId}/*` || u === targetPackageId
                   );
               if (!isAllowed) {
-                const runId = randomUUID();
-                const error: RuntimeError = {
-                  code: UNDECLARED_ACTION_DEPENDENCY,
-                  message: `Action '${callerPackageId}/${callerActionId}' does not declare dependency on '${targetRef}' in 'uses'`,
-                  details: {
+ const runId = randomUUID();
+const error: RuntimeError = buildRuntimeError(
+                  UNDECLARED_ACTION_DEPENDENCY,
+                  `Action '${callerPackageId}/${callerActionId}' does not declare dependency on '${targetRef}' in 'uses'`,
+                  {
                     caller: `${callerPackageId}/${callerActionId}`,
                     target: targetRef,
                     declaredUses: usesList,
-                  },
-                };
+                  }
+                );
                 return {
                   runId,
                   status: "failed",
@@ -758,12 +599,12 @@ export class DefaultActionDockHost implements ActionDockHost {
           cur = await this.getRun(cur.parentRunId);
         }
         if (depth >= this.maxCallDepth) {
-          const runId = randomUUID();
-          const error: RuntimeError = {
-            code: ACTION_CALL_CYCLE,
-            message: `Maximum call depth of ${this.maxCallDepth} exceeded`,
-            details: { alias: ACTION_MAX_DEPTH_EXCEEDED, reason: "depth_exceeded", maxDepth: this.maxCallDepth },
-          };
+ const runId = randomUUID();
+const error: RuntimeError = buildRuntimeError(
+            ACTION_CALL_CYCLE,
+            `Maximum call depth of ${this.maxCallDepth} exceeded`,
+            { alias: ACTION_MAX_DEPTH_EXCEEDED, reason: "depth_exceeded", maxDepth: this.maxCallDepth }
+          );
           return {
             runId,
             status: "failed",
@@ -775,12 +616,12 @@ export class DefaultActionDockHost implements ActionDockHost {
         if (effectiveRootRunId) {
           const currentSubRuns = this.activeSubRunsPerRoot.get(effectiveRootRunId) || 0;
           if (currentSubRuns >= this.maxSubRuns) {
-            const runId = randomUUID();
-            const error: RuntimeError = {
-              code: ACTION_SUBRUN_LIMIT,
-              message: `Maximum concurrent sub-runs (${this.maxSubRuns}) reached for root run '${effectiveRootRunId}'`,
-              details: { alias: MAX_SUBRUNS_REACHED, limit: this.maxSubRuns },
-            };
+ const runId = randomUUID();
+const error: RuntimeError = buildRuntimeError(
+              ACTION_SUBRUN_LIMIT,
+              `Maximum concurrent sub-runs (${this.maxSubRuns}) reached for root run '${effectiveRootRunId}'`,
+              { alias: MAX_SUBRUNS_REACHED, limit: this.maxSubRuns }
+            );
             return {
               runId,
               status: "failed",
@@ -918,15 +759,8 @@ export async function createActionDockHost(
   let createdHost: DefaultActionDockHost | undefined;
   try {
     if (options.autoLoadCurrentProject !== false) {
-      let root = options.projectRoot;
-      if (!root) {
-        const detected = findProjectRoot();
-        if (detected) {
-          root = detected;
-        }
-      }
-
-      if (root && existsSync(root)) {
+      const root = resolveProjectRoot(options, () => findProjectRoot());
+      if (root) {
         if (isProjectLockHeld(root)) {
           const err: any = new Error(
             "PROJECT_BUSY: Project directory is locked by another active process holding project.lock"

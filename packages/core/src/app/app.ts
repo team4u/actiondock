@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import type {
   ActionDefinition,
   ExecutionEvent,
@@ -15,8 +15,7 @@ import type {
   ExecutionTicket,
 } from "../execution/types";
 import { createDefaultPlatform, type RuntimePlatform } from "../platform";
-import { findProjectRoot, loadPlaybooks, loadProjectConfig } from "../project/loader";
-import { loadManifest, MANIFEST_FILE_NAME } from "../project/manifest";
+import { findProjectRoot, loadProjectConfig } from "../project/loader";
 import type { ProjectConfig } from "../project/types";
 import { RuntimeConfig } from "../runtime/context";
 import { normalizeActionCollection } from "../runtime/action-collection";
@@ -24,6 +23,7 @@ import { createGlobalStorage, createLazyStorage, createStorage } from "../storag
 import { isSecretConfigKey, sanitizeConfigDefinitions } from "../storage/mask";
 import { decodeStateKey, SqliteRuntimeStorage } from "../storage/sqlite";
 import type { RuntimeStorage } from "../storage/types";
+import { buildStaticActionMap, buildStaticPlaybookMap } from "./static-index";
 import type {
   ActionDockApp,
   ActionDockAppOptions,
@@ -57,6 +57,9 @@ export class DefaultActionDockApp implements ActionDockApp {
   private readonly options: ActionDockAppOptions;
   private runtimeConfig: RuntimeConfig;
   private isClosed = false;
+  /** 静态清单索引缓存：包静态事实（根目录、配置、内存注入集合）在实例生命周期内不变，解析结果同实例内复用 */
+  private staticActionIndex?: Map<string, ActionSpec>;
+  private staticPlaybookIndex?: Map<string, PlaybookSpec>;
 
   constructor(options: ActionDockAppOptions = {}) {
     this.options = options;
@@ -199,163 +202,34 @@ export class DefaultActionDockApp implements ActionDockApp {
 
   /**
    * 静态读取并聚合当前包的 Action 规范索引。
-   * 不产生全量模块导入与执行副作用。
+   * 聚合逻辑委托 static-index 单一事实源；同实例内复用首次解析结果，
+   * 消除重复查询单次调用内的重复读盘（磁盘清单在实例生命周期内视为静态事实）。
    */
   private getStaticActionMap(): Map<string, ActionSpec> {
-    const map = new Map<string, ActionSpec>();
-
-    // 1. 读取声明式清单文件 (actiondock.json)
-    if (this.packageRoot) {
-      const manifestPath = join(this.packageRoot, MANIFEST_FILE_NAME);
-      // 文件不存在属于合法空态（无清单包）；解析失败（损坏 JSON 等）则输出告警并跳过清单部分
-      if (!existsSync(manifestPath)) {
-        // 合法空态：无清单文件，仅依赖后续配置与内存注入来源
-      } else {
-        try {
-          const manifest = loadManifest(this.packageRoot);
-          if (manifest?.actions) {
-            for (const [id, item] of Object.entries(manifest.actions)) {
-              map.set(id, {
-                id,
-                packageId: this.packageId,
-                description: item.description,
-                inputSchema: item.inputSchema,
-                outputSchema: item.outputSchema,
-                tags: item.tags ? [...item.tags] : [],
-                annotations: item.annotations,
-                uses: item.uses ? [...item.uses] : [],
-                entry: item.entry,
-                filePath: item.entry ? resolve(this.packageRoot, item.entry) : undefined,
-              });
-            }
-          }
-        } catch (err: any) {
-          console.warn(
-            `[App] Failed to load manifest for package '${this.packageId}' from '${manifestPath}': ${err?.message || String(err)}`
-          );
-        }
-      }
-    }
-
-    // 2. 读取项目配置文件中声明的 actions (Manifest v2 格式)
-    if (this.projectConfig && this.projectConfig.actions) {
-      const rawActions = this.projectConfig.actions;
-      if (typeof rawActions === "object" && rawActions !== null) {
-        for (const [id, item] of Object.entries(rawActions as Record<string, any>)) {
-          const existing = map.get(id);
-          map.set(id, {
-            id,
-            packageId: this.packageId,
-            description: item.description ?? existing?.description,
-            inputSchema: item.inputSchema ?? existing?.inputSchema,
-            outputSchema: item.outputSchema ?? existing?.outputSchema,
-            tags: item.tags ?? existing?.tags,
-            annotations: item.annotations ?? existing?.annotations,
-            uses: item.uses ?? existing?.uses,
-            entry: item.entry ?? existing?.entry,
-            filePath: item.entry && this.packageRoot
-              ? resolve(this.packageRoot, item.entry)
-              : existing?.filePath,
-          });
-        }
-      }
-    }
-
-    // 3. 读取内存显式注入的 Action 定义
-    for (const [id, act] of this.actionsMap) {
-      // 若为当前包完全限定名别名（例如 "pkgId/actionId"），跳过以防与短名 action 重复
-      if (id.startsWith(`${this.packageId}/`)) {
-        const shortId = id.slice(this.packageId.length + 1);
-        if (this.actionsMap.has(shortId) || map.has(shortId)) {
-          continue;
-        }
-      }
-      const existing = map.get(id);
-      const actObj = act as any;
-      map.set(id, {
-        id,
+    if (!this.staticActionIndex) {
+      this.staticActionIndex = buildStaticActionMap({
+        packageRoot: this.packageRoot,
         packageId: this.packageId,
-        description: actObj.description ?? existing?.description,
-        inputSchema: actObj.inputSchema ?? existing?.inputSchema,
-        outputSchema: actObj.outputSchema ?? existing?.outputSchema,
-        tags: actObj.tags ? [...actObj.tags] : existing?.tags,
-        annotations: actObj.annotations ?? existing?.annotations,
-        uses: actObj.uses ? [...actObj.uses] : existing?.uses,
-        entry: existing?.entry,
-        filePath: existing?.filePath,
+        projectConfig: this.projectConfig,
+        actionsMap: this.actionsMap,
       });
     }
-
-    return map;
+    return this.staticActionIndex;
   }
 
   /**
    * 静态读取并聚合当前包的 Playbook 规范索引。
+   * 聚合逻辑委托 static-index 单一事实源；同实例内复用首次解析结果。
    */
   private getStaticPlaybookMap(): Map<string, PlaybookSpec> {
-    const map = new Map<string, PlaybookSpec>();
-
-    // 1. 扫描磁盘规程文件
-    if (this.packageRoot) {
-      const playbooksDir = this.projectConfig?.playbooksDir || "playbooks";
-      const dirPath = join(this.packageRoot, playbooksDir);
-      if (existsSync(dirPath)) {
-        try {
-          const loaded = loadPlaybooks(this.packageRoot, playbooksDir);
-          for (const [id, def] of loaded) {
-            map.set(id, {
-              id: def.id,
-              packageId: this.packageId,
-              description: def.description,
-              actions: def.actions,
-              content: def.content,
-              filePath: def.filePath,
-            });
-          }
-        } catch (err: any) {
-          // 规程加载失败（清单声明非法、规程文件损坏等）输出告警并跳过磁盘部分，保持返回可用列表
-          console.warn(
-            `[App] Failed to load playbooks for package '${this.packageId}' from '${dirPath}': ${err?.message || String(err)}`
-          );
-        }
-      }
+    if (!this.staticPlaybookIndex) {
+      this.staticPlaybookIndex = buildStaticPlaybookMap({
+        packageRoot: this.packageRoot,
+        packageId: this.packageId,
+        projectConfig: this.projectConfig,
+      });
     }
-
-    // 2. 读取项目配置文件中的 playbooks
-    if (this.projectConfig && this.projectConfig.playbooks) {
-      const rawPlaybooks = this.projectConfig.playbooks;
-      if (typeof rawPlaybooks === "object" && rawPlaybooks !== null) {
-        for (const [id, item] of Object.entries(rawPlaybooks as Record<string, any>)) {
-          const existing = map.get(id);
-          let content = item.content ?? existing?.content ?? "";
-          let filePath = item.entry && this.packageRoot
-            ? resolve(this.packageRoot, item.entry)
-            : existing?.filePath;
-
-          if (!content && filePath && existsSync(filePath)) {
-            try {
-              content = readFileSync(filePath, "utf-8");
-            } catch (err: any) {
-              // 读取失败（权限、IO 错误等）输出告警并保持空正文，不再无声吞没
-              console.warn(
-                `[App] Failed to read playbook '${id}' content from '${filePath}' in package '${this.packageId}': ${err?.message || String(err)}`
-              );
-            }
-          }
-
-          map.set(id, {
-            id,
-            packageId: this.packageId,
-            description: item.description ?? existing?.description,
-            actions: item.actions ?? existing?.actions,
-            content,
-            filePath,
-          });
-        }
-      }
-    }
-
-    return map;
+    return this.staticPlaybookIndex;
   }
 
   async info(options?: { exposeDebugInfo?: boolean }): Promise<PackageInfo> {
