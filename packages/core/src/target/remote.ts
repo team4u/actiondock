@@ -53,12 +53,14 @@ import {
   TargetError,
   TARGET_PROTOCOL_UNSUPPORTED,
   TARGET_CAPABILITY_UNAVAILABLE,
-  TARGET_RESULT_UNKNOWN,
   TARGET_CLOSED,
 } from "./types";
-import { ACTION_CANCELLED, EXECUTION_FAILED, REMOTE_STREAM_UNAVAILABLE, STATE_KEY_NOT_FOUND, TIMEOUT } from "../errors";
+import { ACTION_CANCELLED, REMOTE_STREAM_UNAVAILABLE, TIMEOUT } from "../errors";
 import { getInsecureDispatcher } from "../server/dispatcher";
 import { listProtocolRouteCandidates } from "../profile/client";
+import { isRemoteStateKeyNotFound, wrapRemoteError } from "./remote-errors";
+import { formatTerminalRunResult, pollRunCompletion } from "./remote-polling";
+import { type SseMessage, parseSseMessages } from "./sse-parser";
 
 /**
  * 读取并解析远端 SSE 事件流。
@@ -100,19 +102,6 @@ export async function* streamRemoteEvents(
   if (options?.after !== undefined) {
     headers["Last-Event-ID"] = String(options.after);
   }
-
-  const res = await resolveStreamCandidate();
-  if (!res.ok) {
-    throw buildStreamUnavailableError(res.candidateFailures);
-  }
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  let eventType = "message";
-  let eventId: string | undefined;
-  let dataLines: string[] = [];
 
   /**
    * 依次尝试全部候选路由，返回首个可用响应。
@@ -186,164 +175,52 @@ export async function* streamRemoteEvents(
     return err;
   }
 
-  function dispatchCurrentEvent(): ExecutionEvent | undefined {
-    if (dataLines.length === 0) {
-      eventType = "message";
-      eventId = undefined;
-      dataLines = [];
-      return undefined;
-    }
-
-    const dataStr = dataLines.join("\n");
-    const currentType = eventType;
-    const currentId = eventId;
-
-    eventType = "message";
-    eventId = undefined;
-    dataLines = [];
-
-    if (!dataStr) {
-      return undefined;
-    }
-
-    try {
-      const data = JSON.parse(dataStr);
-      if (currentType === "finish") {
-        return {
-          eventId: currentId ?? data.eventId,
-          type: "finish",
-          runId,
-          timestamp: new Date().toISOString(),
-          result: data.result || data,
-        } as ExecutionEvent;
-      } else {
-        return {
-          eventId: currentId ?? data.eventId,
-          type: (currentType || "message") as any,
-          runId,
-          timestamp: new Date().toISOString(),
-          ...data,
-        } as ExecutionEvent;
-      }
-    } catch {
-      // 忽略非 JSON 数据行
-      return undefined;
-    }
+  const res = await resolveStreamCandidate();
+  if (!res.ok) {
+    throw buildStreamUnavailableError(res.candidateFailures);
   }
-
-  function processLine(line: string): ExecutionEvent | undefined {
-    // 遇到空行分发事件
-    if (line === "") {
-      return dispatchCurrentEvent();
-    }
-
-    // 以冒号开头的为注释忽略
-    if (line.startsWith(":")) {
-      return undefined;
-    }
-
-    let field = line;
-    let value = "";
-    const colonIdx = line.indexOf(":");
-    if (colonIdx !== -1) {
-      field = line.slice(0, colonIdx);
-      const rawVal = line.slice(colonIdx + 1);
-      value = rawVal.startsWith(" ") ? rawVal.slice(1) : rawVal;
-    }
-
-    if (field === "event") {
-      eventType = value;
-    } else if (field === "data") {
-      dataLines.push(value);
-    } else if (field === "id") {
-      if (!value.includes("\0")) {
-        eventId = value;
-      }
-    }
-
-    return undefined;
-  }
-
-
 
   try {
-    while (true) {
-      if (options?.signal?.aborted) break;
-      const { done, value } = await reader.read();
-      if (value) {
-        buffer += decoder.decode(value, { stream: !done });
-      } else if (done) {
-        buffer += decoder.decode();
-      }
-
-      let pos = 0;
-      while (pos < buffer.length) {
-        const cr = buffer.indexOf("\r", pos);
-        const lf = buffer.indexOf("\n", pos);
-
-        let nextSepPos = -1;
-        let sepLen = 0;
-
-        if (cr !== -1 && (lf === -1 || cr < lf)) {
-          if (cr === buffer.length - 1) {
-            if (!done) {
-              // 遇到未完结的 \r 暂存等待下个 chunk
-              break;
-            } else {
-              nextSepPos = cr;
-              sepLen = 1;
-            }
-          } else {
-            if (buffer[cr + 1] === "\n") {
-              nextSepPos = cr;
-              sepLen = 2;
-            } else {
-              nextSepPos = cr;
-              sepLen = 1;
-            }
-          }
-        } else if (lf !== -1 && (cr === -1 || lf < cr)) {
-          nextSepPos = lf;
-          sepLen = 1;
-        } else {
-          break;
-        }
-
-        const line = buffer.slice(pos, nextSepPos);
-        pos = nextSepPos + sepLen;
-        const evt = processLine(line);
-        if (evt) yield evt;
-      }
-      buffer = buffer.slice(pos);
-
-      if (done) {
-        if (buffer.length > 0) {
-          const line = buffer;
-          buffer = "";
-          const evt = processLine(line);
-          if (evt) yield evt;
-        }
-        // 流读取完成时若有剩余待分发事件则进行分发
-        const remainingEvt = dispatchCurrentEvent();
-        if (remainingEvt) yield remainingEvt;
-        break;
-      }
+    for await (const msg of parseSseMessages(res.body, { signal: options?.signal })) {
+      const evt = decodeExecutionEvent(msg, runId);
+      if (evt) yield evt;
     }
   } catch (err: any) {
     if (err.name === "AbortError" || options?.signal?.aborted) {
       return;
     }
     throw err;
-  } finally {
-    // 防御性取消底层流：仅 releaseLock 会让连接保持挂起，造成连接泄漏
-    try {
-      await reader.cancel();
-    } catch {
-      // 流已自然结束或已被取消时忽略次级异常
+  }
+}
+
+/**
+ * 将 SSE 消息载荷解码为统一执行事件。
+ *
+ * 非 JSON 数据行直接忽略；finish 事件取 data.result 字段，其余事件字段展开合并。
+ */
+function decodeExecutionEvent(msg: SseMessage, runId: string): ExecutionEvent | undefined {
+  try {
+    const data = JSON.parse(msg.data);
+    if (msg.event === "finish") {
+      return {
+        eventId: msg.id ?? data.eventId,
+        type: "finish",
+        runId,
+        timestamp: new Date().toISOString(),
+        result: data.result || data,
+      } as ExecutionEvent;
+    } else {
+      return {
+        eventId: msg.id ?? data.eventId,
+        type: (msg.event || "message") as any,
+        runId,
+        timestamp: new Date().toISOString(),
+        ...data,
+      } as ExecutionEvent;
     }
-    try {
-      reader.releaseLock();
-    } catch {}
+  } catch {
+    // 忽略非 JSON 数据行
+    return undefined;
   }
 }
 
@@ -771,87 +648,22 @@ export class RemoteActionDockTarget implements ActionDockTarget {
     startTime: number = Date.now(),
     totalMaxWaitMs?: number
   ): Promise<ExecutionResult> {
-    const maxWaitMs = totalMaxWaitMs ?? Math.max(this.baseTimeoutMs, timeoutMs ?? 0);
-    const remainingWaitMs = Math.max(0, maxWaitMs - (Date.now() - startTime));
-    let delayMs = Math.min(150, Math.max(10, Math.floor((remainingWaitMs || maxWaitMs) / 4)));
-    const maxDelayMs = 2000;
-
-    while (Date.now() - startTime < maxWaitMs) {
-      if (this.isClosed) {
-        return {
-          ok: false,
-          runId,
-          error: {
-            code: TARGET_CLOSED,
-            message: "RemoteActionDockTarget is closed",
-          },
-        };
-      }
-      if (signal?.aborted) {
-        return {
-          ok: false,
-          runId,
-          error: {
-            code: ACTION_CANCELLED,
-            message: "Action execution was cancelled",
-          },
-        };
-      }
-      try {
-        const run = await this.getRun(runId);
-        if (run && isTerminalRunStatus(run.status)) {
-          return this.formatTerminalRunResult(run, runId);
-        }
-      } catch (err: any) {
-        if (err?.code === TARGET_CLOSED || this.isClosed) {
-          return {
-            ok: false,
-            runId,
-            error: {
-              code: TARGET_CLOSED,
-              message: "RemoteActionDockTarget is closed",
-            },
-          };
-        }
-        throw err;
-      }
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-      delayMs = Math.min(delayMs * 2, maxDelayMs);
-    }
-
-    const waitedMs = Date.now() - startTime;
-    return {
-      ok: false,
-      runId,
-      error: {
-        code: TIMEOUT,
-        message: `Timed out waiting for run '${runId}' completion after ${waitedMs}ms`,
+    return pollRunCompletion(
+      {
+        baseTimeoutMs: this.baseTimeoutMs,
+        isClosed: () => this.isClosed,
+        getRun: (id) => this.getRun(id),
       },
-    };
+      runId,
+      signal,
+      timeoutMs,
+      startTime,
+      totalMaxWaitMs
+    );
   }
 
   private formatTerminalRunResult(run: RunRecord, runId: string): ExecutionResult {
-    if (run.status === "success") {
-      return { ok: true, runId, data: run.output ?? null };
-    }
-    if (run.status === "interrupted") {
-      return {
-        ok: false,
-        runId,
-        error: run.error || {
-          code: "RUN_INTERRUPTED",
-          message: `Run '${runId}' was interrupted`,
-        },
-      };
-    }
-    return {
-      ok: false,
-      runId,
-      error: run.error || {
-        code: EXECUTION_FAILED,
-        message: `Run finished with status ${run.status}`,
-      },
-    };
+    return formatTerminalRunResult(run, runId);
   }
 
   async listRuns(options?: ListRunsOptions): Promise<RunRecord[]> {
@@ -1180,59 +992,3 @@ export class RemoteActionDockTarget implements ActionDockTarget {
   }
 }
 
-/**
- * 判定远端状态键访问异常是否为键不存在。
- *
- * 优先读取传输层透传的结构化错误码（fetchRemoteJson 会将响应体 error.code
- * 附加到抛出异常的 code 字段），仅当旧版服务器未透传 code 时回退到
- * HTTP 状态与消息文本兼容嗅探。
- */
-function isRemoteStateKeyNotFound(err: any): boolean {
-  if (err?.code === STATE_KEY_NOT_FOUND) {
-    return true;
-  }
-  const msg = String(err?.message || "");
-  return err?.status === 404 || msg.includes("404") || msg.includes("not found");
-}
-
-function wrapRemoteError(err: any): never {
-  const msg = String(err?.message || "");
-  const code = err?.code || "";
-  if (
-    code === "CAPABILITY_UNAVAILABLE" ||
-    code === "TARGET_CAPABILITY_UNAVAILABLE" ||
-    msg.includes("CAPABILITY_UNAVAILABLE") ||
-    msg.includes("TARGET_CAPABILITY_UNAVAILABLE") ||
-    msg.includes("Management APIs are not enabled")
-  ) {
-    throw new TargetError(
-      TARGET_CAPABILITY_UNAVAILABLE,
-      `TARGET_CAPABILITY_UNAVAILABLE: Management APIs are not enabled on remote target`,
-      { originalMessage: msg }
-    );
-  }
-  if (
-    code === "PROTOCOL_UNSUPPORTED" ||
-    code === "TARGET_PROTOCOL_UNSUPPORTED" ||
-    msg.includes("PROTOCOL_UNSUPPORTED") ||
-    msg.includes("TARGET_PROTOCOL_UNSUPPORTED")
-  ) {
-    throw new TargetError(
-      TARGET_PROTOCOL_UNSUPPORTED,
-      `TARGET_PROTOCOL_UNSUPPORTED: ${msg}`,
-      { originalMessage: msg }
-    );
-  }
-  if (
-    code === "TARGET_RESULT_UNKNOWN" ||
-    code === "RESULT_UNKNOWN" ||
-    msg.includes("TARGET_RESULT_UNKNOWN")
-  ) {
-    throw new TargetError(
-      TARGET_RESULT_UNKNOWN,
-      `TARGET_RESULT_UNKNOWN: ${msg}`,
-      { originalMessage: msg }
-    );
-  }
-  throw err;
-}
