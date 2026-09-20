@@ -98,9 +98,14 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
 
 - 执行 Action (`ad run` / `ad action run`)：
   ```bash
-  ad run <id> [-P, --package <id>] [-i, --input <json>] [-f, --input-file <path>] [-c, --config <key=value...>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--timeout <duration>] [--request-id <id>] [--async] [--data-dir <path>] [--json] [--envelope]
+  ad run <id> [-P, --package <id>] [-i, --input <json> | -f, --input-file <path|->] [-c, --config <key=value...>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--timeout <duration>] [--request-id <id>] [--async] [--data-dir <path>] [--json] [--envelope]
   ```
-  本地或远程执行指定 Action。支持通过 `--input` 或 `--input-file` 传参，支持 `--async` 异步启动（需远程服务支持），输出标准信封结果。
+  本地或远程执行指定 Action，支持 `--async` 异步启动（需远程服务支持），输出标准信封结果。
+  - 参数契约：选项 `--input` 与 `--input-file` 严格互斥；未指定任何输入参数时，默认传入空对象 `{}`。
+  - 简单输入：使用 `-i, --input <json>` 传递内联 JSON 字符串，适合简易标量入参。
+  - 文件输入：使用 `-f, --input-file <path>` 从 JSON 文件读取内容并解析，适合复杂多层嵌套对象。
+  - 标准输入：使用 `-f, --input-file -` 从标准输入读取全部内容并解析，适合跨进程管道与持续集成脚本。
+  - 转义安全：复杂 JSON 推荐优先使用 `--input-file` 传递，杜绝终端引号转义损坏。无论文件还是标准输入，解析前均自动剔除 UTF-8 BOM 标记，且不设人为大小上限。
 
 - 校验 Action 模式与语法 (`ad validate` / `ad action validate`)：
   ```bash

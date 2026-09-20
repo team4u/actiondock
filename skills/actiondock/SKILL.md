@@ -31,7 +31,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 | **探索可用能力** | `ad info <patterns...>` 或 `ad info -i <pattern>` | 模糊意图检索，优先检查规程与工具清单 | [cli.md](references/cli.md) |
 | **列出可用 Action** | `ad list [patterns...] [-P <pkg>]` | 按包或关键词列出当前包、工作区或远端的所有 Action | [cli.md](references/cli.md) |
 | **查看 Action 详情** | `ad describe <id> [-P <pkg>]` | 查看指定 Action 的 Schema 模式、入参要求与依赖 | [cli.md](references/cli.md) |
-| **执行原子 Action** | `ad run <action> --input-file <path>` | 复杂对象推荐通过参数文件传递，杜绝引号转义损坏 | [cli.md](references/cli.md) |
+| **执行原子 Action** | `ad run <action> [--input <json> \| --input-file <path\|->]` | 简单参数内联传递，复杂对象推荐参数文件或标准输入，杜绝引号转义损坏 | [cli.md](references/cli.md) |
 | **执行受管系统命令** | `ctx.process.run` 与 `ctx.process.start` | 短时命令直接运行，长期交互会话通过 withControl 保证独占控制权 | [process-execution.md](references/process-execution.md) |
 | **异步长任务调用** | `ad run <action> --async`，结合 `ad runs` 追踪 | 提交异步执行任务并获取凭据，追踪执行进度与结果 | [cli.md](references/cli.md) |
 | **执行复合业务任务** | `ad playbook show <id>`，依步骤调度对应 Action | 规程优先原则，阅读规程正文后依步骤编排调度 | [developer.md](references/developer.md) |
@@ -71,7 +71,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 ### 作业流一：作为消费者使用 Action 与 Skill
 
 - 智能体技能装载与按需自举：通过 `npx skills add` 安装或放置于客户端技能目录；若首次运行报错提示缺少 `ad` 或依赖，Agent 自行进入目录执行 `npm install --omit=dev` 与 `ad link .` 完成自举。
-- 智能体调度引导生命周期：意图匹配激活 -> 规程优先决议（`ad playbook show`） -> 参数契约按需查验（`ad describe` 杜绝幻觉） -> 确定性调用（`ad run --input-file`） -> JSON 信封结果校验。详细调度指引参见 [consumer.md](references/consumer.md)。
+- 智能体调度引导生命周期：意图匹配激活 -> 规程优先决议（`ad playbook show`） -> 参数契约按需查验（`ad describe` 杜绝幻觉） -> 确定性调用（`ad run` 配合 `--input` 或 `--input-file`） -> JSON 信封结果校验。详细调度指引参见 [consumer.md](references/consumer.md)。
 - 项目工程依赖消费：在工程根目录下执行 `ad add <package>` 安装并锁定依赖，通过终端 `ad run` 调用或在源码中通过 `ctx.actions.invoke` 调度。
 - 集成工具 MCP 服务挂载：在 Cursor 或 Claude Desktop 配置文件中配置命令 `"ad"`、参数 `["mcp"]`（单项目）或 `["mcp", "--all"]`（全局挂载）。
 
@@ -89,7 +89,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 
 ### 作业流三：安全执行与长任务追踪
 
-- 传参安全规范：复杂对象推荐写入临时 JSON 文件，使用 `--input-file <path>` 传参，杜绝 Shell 引号转义损坏。
+- 传参安全规范：简单参数使用 `--input`；包含对象、数组或引号多行文本时推荐写入临时 JSON 文件使用 `--input-file <path>`，或通过管道流式传入 `--input-file -`，杜绝终端引号转义损坏。两者严格互斥，未指定输入时默认传入 `{}`。
 - 异步长任务管理：长耗时任务添加 `--async` 提交并获取凭据，通过 `ad runs show <runId>` 追踪事件流，通过 `ad runs cancel <runId>` 中途取消。
 - 配置覆盖：调试时使用 `-c KEY=VALUE` 临时覆盖配置；生产使用 `ad config set <KEY> <VALUE>` 持久化注入。
 

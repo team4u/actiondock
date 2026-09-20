@@ -31,6 +31,10 @@ ActionDock 所有失败均输出确定性的结构化错误信封：
 
 | 错误代码 | 产生原因 | 标准排查与自愈步骤 |
 | :--- | :--- | :--- |
+| `INVALID_JSON` | 输入内容不符合 JSON 语法规范（如单引号未转义、属性名未加双引号、空文件或空标准输入等）。 | 检查传入的 JSON 语法；复杂结构推荐先保存为独立文件并通过 `--input-file <path>` 传递。 |
+| `INPUT_CONFLICT` | 命令行同时指定了 `--input` 与 `--input-file` 选项。 | 移除其中一个参数，两者互斥；简单参数保留 `--input`，复杂结构保留 `--input-file`。 |
+| `INPUT_FILE_NOT_FOUND` | `--input-file` 指定的目标文件在文件系统中不存在。 | 检查文件物理路径是否准确，或改用标准输入管道 `--input-file -` 传递数据。 |
+| `INPUT_FILE_READ_FAILED` | 读取输入文件或标准输入流发生底层错误（如目标为目录或权限不足）。 | 检查文件权限，确保指定的是有效可读文件而非目录。 |
 | `INPUT_NOT_JSON` | 输入参数包含非有限数（NaN 或 Infinity）、循环引用或函数等非法类型。 | 检查调用参数，确保传递合法的纯 JSON 格式数据。推荐使用 `--input-file <path>` 传递。 |
 | `OUTPUT_NOT_JSON` | Action 业务返回值包含不可序列化的非 JSON 结构。 | 检查 Action 代码返回值，剔除非有限数、循环引用或裸类实例。 |
 | `ACTION_INPUT_INVALID` | 传入参数不匹配该 Action 声明的 inputSchema 契约。 | 执行 `ad describe <id>` 调阅参数定义与必填要求，修正传参字段与类型。 |

@@ -82,8 +82,11 @@ No manual JSON Schema required. Five core commands guide you from scaffolding to
   # Execute in-memory sandbox tests
   ad test
 
-  # Run locally via CLI
+  # Run locally via CLI (simple inline JSON)
   ad run greet --input '{"name":"World"}'
+
+  # Pass complex parameters via JSON file or stdin to avoid shell escaping
+  ad run greet --input-file input.json
   ```
 
 - Multi-target instant delivery:

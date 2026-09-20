@@ -111,7 +111,7 @@ npx skills remove <skill-name>
   - 在调用未知参数的 Action 前，智能体必须在终端执行 `ad describe <id>` 动态获取该 Action 的输入输出模式与必填字段。
   - 杜绝参数猜测与伪造属性，确保传参严格符合 `inputSchema` 约束。
 - **第四阶段：确定性执行调用**：
-  - 推荐参数文件传递：简单标量参数可使用 `--input '{"key": "val"}'`；包含对象、数组或引号多行文本的复杂参数，必须先写入临时 JSON 文件，再通过 `ad run <id> --input-file /tmp/input.json` 传递，杜绝终端引号转义损坏。
+  - 传参安全规范：简单标量参数可使用 `--input '{"key": "val"}'`；包含对象、数组或引号多行文本的复杂参数，必须先写入临时 JSON 文件，再通过 `ad run <id> --input-file /tmp/input.json` 传递，杜绝终端引号转义损坏。自动化脚本或管道调用可使用标准输入 `cat /tmp/input.json | ad run <id> --input-file -`。选项 `--input` 与 `--input-file` 严格互斥，未指定输入时默认为 `{}`。
   - 异步长任务支持：耗时操作添加 `--async` 参数（如 `ad run <action> --input-file <path> --async`），获取包含 `runId` 的票据。
 - **第五阶段：信封结果校验与错误处置**：
   - 统一解析终端输出的标准 JSON 信封：

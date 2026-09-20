@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { parseDuration, resolveTarget } from "@actiondock/core";
 import type { JsonValue } from "@actiondock/sdk";
 import { Command } from "commander";
@@ -8,6 +7,7 @@ import type { CliContext } from "../types";
 import {
   applyTargetOptions,
   getEffectiveOptions,
+  resolveActionInput,
   resolveLocalPackageRoot,
   withTarget,
 } from "../utils";
@@ -24,20 +24,11 @@ export async function executeAction(
     throw new ArgumentError("Action ID is required for run");
   }
 
-  let input: unknown = {};
-  if (options.input) {
-    try {
-      input = JSON.parse(options.input);
-    } catch (err: any) {
-      throw new ArgumentError(`Error parsing --input JSON: ${err.message}`);
-    }
-  } else if (options.inputFile) {
-    try {
-      input = JSON.parse(readFileSync(options.inputFile, "utf-8"));
-    } catch (err: any) {
-      throw new ArgumentError(`Error reading --input-file: ${err.message}`);
-    }
-  }
+  const input = await resolveActionInput({
+    input: options.input,
+    inputFile: options.inputFile,
+    stdin: context?.stdin,
+  });
 
   let timeoutMs: number | undefined;
   if (options.timeout) {
@@ -158,8 +149,8 @@ export function attachRunCommand(parent: Command, context?: CliContext): Command
     .command("run <id>")
     .description("Execute an action (from current project, linked packages, or remote profile)")
     .option("-P, --package <id>", "Target package ID or path")
-    .option("-i, --input <json>", "Input as JSON string")
-    .option("-f, --input-file <path>", "Input from JSON file")
+    .option("-i, --input <json>", "Action input as inline JSON")
+    .option("-f, --input-file <path>", "Action input from JSON file, or '-' for stdin")
     .option("-c, --config <key=value...>", "Temporary config override (repeatable)");
 
   return applyTargetOptions(cmd)

@@ -84,7 +84,14 @@ $ ad export skill --> [EXPORT] Self-contained Agent Skill bundle
 - 本地命令行即时调用：
   通过本地命令行直接调用动作，验证输入解析与统一数据信封：
   ```bash
+  # 简单参数直接内联传递
   ad run greet --input '{"name":"World"}'
+
+  # 复杂参数推荐使用 JSON 文件传递
+  ad run greet --input-file input.json
+
+  # 自动化脚本可直接通过标准输入管道传递
+  cat input.json | ad run greet --input-file -
   ```
   终端标准输出返回统一结构的成功响应信封：
   ```json

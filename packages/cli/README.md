@@ -51,7 +51,14 @@ ad add @actiondock/example-tools
 
 - 本地执行 Action：
 ```bash
+# 简单参数直接内联传递
 ad run sample.greet --input '{"name": "Alice"}'
+
+# 复杂参数或对象从文件读取
+ad run sample.greet --input-file input.json
+
+# 自动化与脚本通过标准输入传递
+cat input.json | ad run sample.greet --input-file -
 ```
 
 - 运行单元测试：
@@ -99,6 +106,35 @@ ad pack
 
 - 严格目标定位：通过 `-P, --package <id|path>` 指定目标包。系统严格区分物理路径与注册表包标识符，若目标不存在则不向当前目录或父级目录隐式回退，直接以参数校验错误退出。
 - 多目标检索契约：在执行多目标检索（如 `ad info` 或 `ad list`）时，若无任何匹配项，在机器模式下始终返回确定性空数组结构并以状态码 0 退出，不因空搜索产生异常中断。
+
+### Action 执行入参契约
+
+执行 Action 支持两种互斥的传参方式：
+
+- 简单内联参数：使用 `--input <json>` 直接解析 JSON 字符串，适合简易标量入参。
+- 复杂对象文件：使用 `--input-file <path>` 读取文件并解析 JSON，避免各类终端的引号转义损坏。
+- 标准输入管道：使用 `--input-file -` 从标准输入读取全部数据并解析 JSON，适合跨进程协同与 CI 自动化脚本。
+- 默认无输入：未指定 `--input` 与 `--input-file` 时，入参默认提供 `{}`。
+- 严格互斥：`--input` 与 `--input-file` 互斥，同时提供时直接报错并退出。
+- 统一解析：无论内联参数、文件还是标准输入，解析前均自动剔除 UTF-8 BOM 标记，且不设人为大小上限。
+
+### Windows 与多终端传参建议
+
+针对 Windows PowerShell、cmd 以及各终端中复杂 JSON 容易遇到的双引号转义问题，推荐按以下规范传参：
+
+- 简单入参：使用 `--input`，如 `ad run greet --input '{"name":"Alice"}'`。
+- 复杂结构：推荐先保存为 JSON 文件并使用 `--input-file`，如 `ad run complex-action --input-file input.json`。
+- 动态生成输入：通过管道输出配合 `--input-file -` 传递，在 PowerShell 中可执行：
+
+```powershell
+$data = @{
+  name = "Alice"
+  options = @{
+    lang = "zh-CN"
+  }
+}
+$data | ConvertTo-Json -Depth 100 | ad run complex-action --input-file -
+```
 
 ---
 

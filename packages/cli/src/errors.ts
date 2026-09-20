@@ -34,8 +34,8 @@ export class CliError extends Error {
  * 命令行参数与选项校验错误（退出码为 2）。
  */
 export class ArgumentError extends CliError {
-  constructor(message: string, details?: unknown) {
-    super(message, ExitCode.INVALID_ARGUMENT, "INVALID_ARGUMENT", details);
+  constructor(message: string, details?: unknown, code: string = "INVALID_ARGUMENT") {
+    super(message, ExitCode.INVALID_ARGUMENT, code, details);
     this.name = "ArgumentError";
   }
 }

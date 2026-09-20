@@ -82,8 +82,11 @@ $ ad export skill --> [EXPORT] Self-contained Agent Skill bundle
   # 运行纯内存沙箱测试
   ad test
 
-  # 本地命令行调用验证
+  # 本地命令行调用验证（简单参数内联传参）
   ad run greet --input '{"name":"World"}'
+
+  # 复杂参数推荐使用 JSON 文件或标准输入，避免终端转义损坏
+  ad run greet --input-file input.json
   ```
 
 - 多形态即刻交付：
