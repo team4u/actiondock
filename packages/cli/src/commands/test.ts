@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { findProjectRoot } from "@actiondock/core";
 import { Command } from "commander";
+import { writeStderr } from "../renderer";
 import { spawnAsync } from "../utils";
 
 export function registerTestCommand(program: Command): void {
@@ -36,11 +37,16 @@ export function registerTestCommand(program: Command): void {
         }
       }
 
-      // stdio inherit 保持实时输出；进程异常（如命令不存在）时回退退出码 1
+      // stdio inherit 保持实时输出；进程异常（如命令不存在）时透传错误消息并以退出码 1 失败
       const proc = await spawnAsync(testCmd, testArgs, {
         cwd,
         stdio: "inherit",
-      }).catch(() => ({ status: 1, signal: null, stdout: "", stderr: "" }));
+      }).catch((err: unknown) => {
+        writeStderr(
+          `[ERROR] Failed to run test command '${testCmd}': ${err instanceof Error ? err.message : String(err)}`
+        );
+        return { status: 1, signal: null, stdout: "", stderr: "" };
+      });
 
       if (proc.status !== 0) {
         process.exitCode = proc.status ?? 1;

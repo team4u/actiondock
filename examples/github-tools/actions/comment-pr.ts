@@ -10,6 +10,8 @@ export interface CommentPrOutput {
   posted: boolean;
   commentId: string;
   timestamp: string;
+  /** 未配置 Token 时返回演示数据，此标记为 true */
+  demo?: boolean;
 }
 
 export default defineAction(async (input: CommentPrInput, ctx): Promise<CommentPrOutput> => {
@@ -20,10 +22,12 @@ export default defineAction(async (input: CommentPrInput, ctx): Promise<CommentP
 
   if (!token) {
     ctx.log.warn("GITHUB_TOKEN not set, simulating comment post");
+    // 演示数据使用固定标识与时间戳，保证输出确定性
     return {
       posted: true,
-      commentId: `mock-comment-${Date.now()}`,
-      timestamp: new Date().toISOString(),
+      commentId: "mock-comment-0",
+      timestamp: "2026-01-01T00:00:00.000Z",
+      demo: true,
     };
   }
 

@@ -1,9 +1,9 @@
-import { fetchRemoteDoctor, resolveTarget, runDoctorChecks } from "@actiondock/core";
+import { fetchRemoteDoctor, runDoctorChecks } from "@actiondock/core";
 import { Command } from "commander";
 import { ExecutionError } from "../errors";
 import { renderResult } from "../renderer";
 import type { CliContext } from "../types";
-import { applyTargetOptions, getEffectiveOptions } from "../utils";
+import { applyTargetOptions, getEffectiveOptions, resolveTargetFromOptions } from "../utils";
 
 export function registerDoctorCommand(program: Command, context?: CliContext): void {
   const cmd = program
@@ -17,15 +17,7 @@ export function registerDoctorCommand(program: Command, context?: CliContext): v
     .action(async (rawOptions, cmd) => {
       try {
         const options = getEffectiveOptions(rawOptions, cmd);
-        const target = resolveTarget(
-          {
-            profile: options.profile,
-            server: options.server,
-            token: options.token,
-            insecure: options.insecure,
-          },
-          context?.customHome
-        );
+        const target = resolveTargetFromOptions(options, context);
 
         let report;
         if (target.type === "remote") {

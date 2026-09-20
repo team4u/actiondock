@@ -9,10 +9,10 @@ import {
   saveManifest,
 } from "@actiondock/core";
 import { Command } from "commander";
-import { ArgumentError, ExecutionError } from "../errors";
-import { renderResult } from "../renderer";
+import { ArgumentError, ExecutionError, notInProjectError } from "../errors";
+import { renderResult, writeStderr } from "../renderer";
 import type { CliContext } from "../types";
-import { getEffectiveOptions, spawnAsync } from "../utils";
+import { assertSafePackageSpec, getEffectiveOptions, spawnAsync } from "../utils";
 
 /**
  * 注册 ad remove 依赖移除命令。
@@ -30,8 +30,8 @@ export function registerRemoveCommand(program: Command, context?: CliContext): v
       const root = options.package ? resolve(options.package) : findProjectRoot();
 
       if (!root) {
-        throw new ArgumentError(
-          "Not in an ActionDock project (actiondock.json not found).\nPlease specify -P, --package <path> or cd into a project directory."
+        throw notInProjectError(
+          "Please specify -P, --package <path> or cd into a project directory."
         );
       }
 
@@ -125,7 +125,8 @@ export function registerRemoveCommand(program: Command, context?: CliContext): v
           saveLockfile(root, lockfile);
         }
 
-        // 调用包管理器执行卸载
+        // 调用包管理器执行卸载（说明符白名单校验，消除 win32 shell 拼接注入面）
+        assertSafePackageSpec(npmPackageName);
         const installCmd = getInstallCommand(root);
         const pm = installCmd[0];
         const args = pm === "bun" ? ["remove", npmPackageName] : ["uninstall", npmPackageName, "--ignore-scripts"];
@@ -134,8 +135,15 @@ export function registerRemoveCommand(program: Command, context?: CliContext): v
           cwd: root,
           stdio: "pipe",
         });
-        // 卸载失败不阻断事务提交（与原同步实现一致：忽略退出码）
-        void uninstallProc;
+        // 卸载失败不阻断事务提交，但必须可见：非零退出码输出 WARN 并在结果中标记
+        const uninstallFailed = uninstallProc.status !== 0;
+        if (uninstallFailed) {
+          const errMsg = uninstallProc.stderr || uninstallProc.stdout || "unknown error";
+          writeStderr(
+            `[WARN] Package manager '${pm}' reported failure while uninstalling '${npmPackageName}' (exit code ${uninstallProc.status ?? "null"}): ${errMsg.trim().split("\n").pop() || ""}`,
+            context
+          );
+        }
 
         // 提交事务
         await tx.commit();
@@ -144,6 +152,7 @@ export function registerRemoveCommand(program: Command, context?: CliContext): v
           packageId: targetPackageId,
           npmPackage: npmPackageName,
           retainedNamespace: targetPackageId,
+          ...(uninstallFailed ? { uninstallFailed: true } : {}),
         };
 
         renderResult(resultPayload, {

@@ -4,13 +4,12 @@ import {
   loadProjectConfig,
   resolveEnvValue,
   resolvePackageRoot,
-  resolveTarget,
 } from "@actiondock/core";
 import type { Command } from "commander";
-import { ArgumentError } from "../../errors";
+import { notInProjectError, packageNotFoundError } from "../../errors";
 import { renderConfigEnv, renderResult } from "../../renderer";
 import type { CliContext, EnvCheckItem } from "../../types";
-import { applyTargetOptions, getEffectiveOptions } from "../../utils";
+import { applyTargetOptions, getEffectiveOptions, resolveTargetFromOptions } from "../../utils";
 
 /**
  * 注册 config env 子命令：诊断环境变量对声明配置的满足率。
@@ -32,16 +31,7 @@ export function registerConfigEnvCommand(configCmd: Command, context?: CliContex
       const targetPkg = identifier || options.package;
 
       // 远端服务分支直接查询远端配置环境诊断接口
-      const target = resolveTarget(
-        {
-          profile: options.profile,
-          server: options.server,
-          token: options.token,
-          insecure: options.insecure,
-          allowInsecureHttp: options.allowInsecureHttp,
-        },
-        context?.customHome
-      );
+      const target = resolveTargetFromOptions(options, context);
 
       if (target.type === "remote") {
         const res = await fetchRemoteConfigEnv(target.serverUrl!, target.token, targetPkg, {
@@ -67,10 +57,10 @@ export function registerConfigEnvCommand(configCmd: Command, context?: CliContex
       const root = resolvePackageRoot(targetPkg);
       if (!root) {
         if (targetPkg) {
-          throw new ArgumentError(`Package '${targetPkg}' not found in linked packages or path`);
+          throw packageNotFoundError(targetPkg);
         }
-        throw new ArgumentError(
-          "Not in an ActionDock project.\nUsage: ad config env [package-id] or cd into a project directory."
+        throw notInProjectError(
+          "Usage: ad config env [package-id] or cd into a project directory."
         );
       }
 

@@ -1,6 +1,6 @@
 import { findProjectRoot, resolvePackageRoot } from "@actiondock/core";
 import { Command } from "commander";
-import { ExecutionError } from "../errors";
+import { ExecutionError, notInProjectError, packageNotFoundError } from "../errors";
 import { renderResult, writeStdout } from "../renderer";
 import type { CliContext } from "../types";
 import { getEffectiveOptions } from "../utils";
@@ -21,10 +21,10 @@ export function registerPackCommand(program: Command, context?: CliContext): voi
 
       if (!root) {
         if (options.package) {
-          throw new ExecutionError(`Package '${options.package}' not found in linked packages or path`);
+          throw packageNotFoundError(options.package);
         }
-        throw new ExecutionError(
-          "Not in an ActionDock project (actiondock.json not found).\nPlease specify -P, --package <id> or cd into a project directory."
+        throw notInProjectError(
+          "Please specify -P, --package <id> or cd into a project directory."
         );
       }
 

@@ -3,10 +3,9 @@ import {
   filterWithFallbackInfo,
   getRegistryStatus,
   resolvePackageRoot,
-  resolveTarget,
 } from "@actiondock/core";
 import { Command } from "commander";
-import { ArgumentError, ExecutionError } from "../errors";
+import { ExecutionError, NO_PROJECT_NO_LINKED_MESSAGE, packageNotFoundError } from "../errors";
 import {
   projectDetailToJson,
   renderAggregatedPackages,
@@ -16,7 +15,13 @@ import {
 } from "../renderer";
 import { getProjectDetailInfo, scanLocalAggregatedPackages } from "../services";
 import type { AggregatedPackage, CliContext, ProjectDetailInfo } from "../types";
-import { applyTargetOptions, getEffectiveOptions, resolveFallbackStrategy, resolveIntent } from "../utils";
+import {
+  applyTargetOptions,
+  getEffectiveOptions,
+  resolveFallbackStrategy,
+  resolveIntent,
+  resolveTargetFromOptions,
+} from "../utils";
 
 /**
  * 将远端信息响应归一为本地工程详情视图。
@@ -86,12 +91,7 @@ export function registerInfoCommand(program: Command, context?: CliContext): voi
       const outOpts = { json: options.json, envelope: options.envelope, context };
 
       // 远端服务目标分支
-      const target = resolveTarget({
-        profile: options.profile,
-        server: options.server,
-        token: options.token,
-        insecure: options.insecure,
-      }, context?.customHome);
+      const target = resolveTargetFromOptions(options, context);
 
       if (target.type === "remote") {
         const remoteInfo = await fetchRemoteInfo(
@@ -156,7 +156,7 @@ export function registerInfoCommand(program: Command, context?: CliContext): voi
           renderProjectDetailOutput(detail, outOpts);
           return;
         }
-        throw new ArgumentError(`Package '${options.package}' not found in linked packages or path`);
+        throw packageNotFoundError(options.package);
       }
 
       // 扫描本地候选包（当前工程根目录 + 全局已链接包）
@@ -176,7 +176,7 @@ export function registerInfoCommand(program: Command, context?: CliContext): voi
             {
               ...outOpts,
               humanFormatter: () =>
-                "No ActionDock project in current directory, and no packages linked.\nRun 'ad link' inside an Action package to register it.",
+                `${NO_PROJECT_NO_LINKED_MESSAGE}\nRun 'ad link' inside an Action package to register it.`,
             }
           );
           return;

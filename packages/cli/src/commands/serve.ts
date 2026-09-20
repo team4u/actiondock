@@ -228,7 +228,18 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
 
         const stopSignalHandler = () => {
           writeStdout("\nStopping ActionDock server...", context);
-          server.stop();
+          Promise.resolve(server.stop())
+            .catch((err: unknown) => {
+              // 停止失败必须可见：写入 stderr 一行并标记失败退出码
+              writeStderr(
+                `[ERROR] Failed to stop ActionDock server gracefully: ${err instanceof Error ? err.message : String(err)}`,
+                context
+              );
+              process.exitCode = 1;
+            })
+            .finally(() => {
+              process.exit(typeof process.exitCode === "number" ? process.exitCode : 0);
+            });
         };
 
         process.once("SIGINT", stopSignalHandler);

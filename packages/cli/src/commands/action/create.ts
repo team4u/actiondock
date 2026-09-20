@@ -10,7 +10,7 @@ import {
   writeActionTypes,
 } from "@actiondock/core";
 import type { Command } from "commander";
-import { ExecutionError } from "../../errors";
+import { ExecutionError, notInProjectError } from "../../errors";
 import { writeStdout } from "../../renderer";
 import type { CliContext } from "../../types";
 import { attachDescribeCommand } from "../describe";
@@ -114,7 +114,7 @@ export async function handleActionCreate(
 ): Promise<void> {
   const root = findProjectRoot();
   if (!root) {
-    throw new ExecutionError("Not in an ActionDock project (actiondock.json not found)");
+    throw notInProjectError();
   }
   try {
     const config = loadProjectConfig(root);

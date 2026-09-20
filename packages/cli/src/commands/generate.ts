@@ -1,6 +1,6 @@
 import type { Command } from "commander";
 import { findProjectRoot, writeActionTypes } from "@actiondock/core";
-import { ArgumentError, ExecutionError } from "../errors";
+import { ArgumentError, ExecutionError, notInProjectError } from "../errors";
 import { renderResult } from "../renderer";
 import type { CliContext } from "../types";
 import { getEffectiveOptions } from "../utils";
@@ -25,7 +25,7 @@ export function registerGenerateCommands(program: Command, context?: CliContext)
       const options = getEffectiveOptions(rawOptions, cmd);
       const root = findProjectRoot();
       if (!root) {
-        throw new ArgumentError("Not in an ActionDock project (actiondock.json not found)");
+        throw notInProjectError();
       }
 
       try {

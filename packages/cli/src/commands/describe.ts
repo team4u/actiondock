@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { ArgumentError, ExecutionError } from "../errors";
+import { ArgumentError, ExecutionError, packageNotFoundError } from "../errors";
 import { renderActionDetail, renderResult } from "../renderer";
 import type { CliContext } from "../types";
 import {
@@ -35,9 +35,7 @@ export function attachDescribeCommand(parent: Command, context?: CliContext): Co
       // 目标拓扑解析（仅 local 分支需要包寻址）
       const targetPackageRoot = resolveLocalPackageRoot(options.package);
       if (options.package && !targetPackageRoot) {
-        throw new ArgumentError(
-          `Package '${options.package}' not found in linked packages or path`
-        );
+        throw packageNotFoundError(options.package);
       }
 
       let targetRef = id;

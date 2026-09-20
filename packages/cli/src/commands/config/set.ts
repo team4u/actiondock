@@ -5,7 +5,7 @@ import {
 } from "@actiondock/core";
 import type { Command } from "commander";
 import type { ConfigItemDefinition } from "@actiondock/core";
-import { ArgumentError } from "../../errors";
+import { ArgumentError, packageNotFoundError } from "../../errors";
 import { writeStdout } from "../../renderer";
 import type { CliContext } from "../../types";
 import { applyTargetOptions, getEffectiveOptions, withTarget } from "../../utils";
@@ -85,7 +85,7 @@ export function registerConfigSetCommand(configCmd: Command, context?: CliContex
 
         if (!root) {
           if (options.package) {
-            throw new ArgumentError(`Package '${options.package}' not found in linked packages or path`);
+            throw packageNotFoundError(options.package);
           }
           await target.setConfig("global", key, parsedVal as any);
           writeStdout(`[OK] Global configuration '${key}' updated (no project in current directory)`, context);

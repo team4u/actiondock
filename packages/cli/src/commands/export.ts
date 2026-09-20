@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { basename } from "node:path";
 import { discoverProjects, findProjectRoot, listLinkedPackages, resolvePackageRoot } from "@actiondock/core";
 import { Command } from "commander";
-import { ExecutionError } from "../errors";
+import { ExecutionError, notInProjectError, packageNotFoundError } from "../errors";
 import { renderResult, writeStdout } from "../renderer";
 import type { CliContext } from "../types";
 import { getEffectiveOptions, parseListOption } from "../utils";
@@ -97,7 +97,7 @@ export function registerExportCommand(program: Command, context?: CliContext): v
         for (const pkgIdOrPath of options.package) {
           const root = resolvePackageRoot(pkgIdOrPath);
           if (!root) {
-            throw new ExecutionError(`Package '${pkgIdOrPath}' not found in linked packages or path`);
+            throw packageNotFoundError(pkgIdOrPath);
           }
           if (!roots.includes(root)) {
             roots.push(root);
@@ -108,8 +108,8 @@ export function registerExportCommand(program: Command, context?: CliContext): v
         if (root) {
           roots.push(root);
         } else {
-          throw new ExecutionError(
-            "Not in an ActionDock project (actiondock.json not found).\nPlease specify -P, --package <id>, --workspace, --all, or cd into a project directory."
+          throw notInProjectError(
+            "Please specify -P, --package <id>, --workspace, --all, or cd into a project directory."
           );
         }
       }

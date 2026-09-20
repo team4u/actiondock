@@ -1,7 +1,7 @@
 import { parseDuration, resolveTarget } from "@actiondock/core";
 import type { JsonValue } from "@actiondock/sdk";
 import { Command } from "commander";
-import { ArgumentError, ExecutionError, SigintError } from "../errors";
+import { ArgumentError, ExecutionError, SigintError, packageNotFoundError } from "../errors";
 import { writeStdout } from "../renderer";
 import type { CliContext } from "../types";
 import {
@@ -76,9 +76,7 @@ export async function executeAction(
     // 目标拓扑解析（仅 local 分支需要包寻址）
     const targetPackageRoot = resolveLocalPackageRoot(options.package);
     if (options.package && !targetPackageRoot) {
-      throw new ArgumentError(
-        `Package '${options.package}' not found in linked packages or path`
-      );
+      throw packageNotFoundError(options.package);
     }
 
     let targetRef = id;
