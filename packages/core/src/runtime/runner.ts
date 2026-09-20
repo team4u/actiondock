@@ -520,7 +520,6 @@ export class ActionRunner {
     let actionsMap: Map<string, ActionDefinition>;
     try {
       actionsMap = await loadActions(resolved.projectRoot, config.actionsDir, {
-        autoInstall: false,
         loader: this.platform?.modules,
       });
     } catch (err: any) {
@@ -644,7 +643,6 @@ export class ActionRunner {
         this.packageStorages.add(storage);
       }
       const actionsMap = await loadActions(root, config.actionsDir, {
-        autoInstall: false,
         loader: this.platform?.modules,
       });
       const runner = new ActionRunner({

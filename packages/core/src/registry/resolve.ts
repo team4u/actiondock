@@ -253,7 +253,7 @@ export async function probeActionAsync(
     return true;
   }
   try {
-    const actions = await loadActions(projectRoot, config.actionsDir, { autoInstall: false });
+    const actions = await loadActions(projectRoot, config.actionsDir);
     return actions.has(actionId) ? true : undefined;
   } catch {
     return probeActionSync(projectRoot, config, actionId);

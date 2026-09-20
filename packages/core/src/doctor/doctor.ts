@@ -390,7 +390,7 @@ export async function runDoctorChecks(options?: {
         if (manifest?.actions) {
           actionsCount = Object.keys(manifest.actions).length;
         } else {
-          const actions = await loadActions(projectRoot, config.actionsDir, { autoInstall: false });
+          const actions = await loadActions(projectRoot, config.actionsDir);
           actionsCount = actions.size;
         }
 
