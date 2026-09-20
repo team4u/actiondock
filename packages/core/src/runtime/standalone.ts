@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import type { ActionDefinition, JsonValue } from "@actiondock/sdk";
+import { decodeStateKey, type ActionDefinition, type JsonValue } from "@actiondock/sdk";
 import type { ActionSpec } from "../app/types";
 import { filterWithFallbackInfo } from "../filter";
 import type { ConfigItemDefinition } from "../project/types";
@@ -430,9 +430,15 @@ export class StandaloneDispatcher {
         const item = await target.getConfig(this.options.packageId, key);
         this.writeOut(item.configured ? JSON.stringify(item.value) : "undefined");
         return ExitCode.SUCCESS;
-      } catch {
-        this.writeOut("undefined");
-        return ExitCode.SUCCESS;
+      } catch (err: any) {
+        // 目标层能力缺失（如远端未开启管理接口）视为键未配置，输出 undefined
+        if (this.isTargetCapabilityError(err)) {
+          this.writeOut("undefined");
+          return ExitCode.SUCCESS;
+        }
+        // 内部异常严禁吞没：透传 stderr 并以 FAILURE 退出码暴露
+        this.writeErr(`Error reading config '${key}': ${err?.message || String(err)}`);
+        return ExitCode.FAILURE;
       }
     }
 
@@ -506,10 +512,10 @@ export class StandaloneDispatcher {
       }
       let ns = namespace;
       let actualKey = key;
-      if (ns === undefined && key.includes(":")) {
-        const colonIdx = key.indexOf(":");
-        ns = key.slice(0, colonIdx);
-        actualKey = key.slice(colonIdx + 1);
+      if (ns === undefined) {
+        const decoded = this.decodeStateKeyArg(key);
+        ns = decoded.namespace || undefined;
+        actualKey = decoded.key;
       }
       const val = await target.getState(this.options.packageId, "", actualKey, { namespace: ns });
       if (isJson) {
@@ -530,10 +536,10 @@ export class StandaloneDispatcher {
 
       let ns = namespace || "";
       let actualKey = key;
-      if (namespace === undefined && key.includes(":")) {
-        const colonIdx = key.indexOf(":");
-        ns = key.slice(0, colonIdx);
-        actualKey = key.slice(colonIdx + 1);
+      if (namespace === undefined) {
+        const decoded = this.decodeStateKeyArg(key);
+        ns = decoded.namespace;
+        actualKey = decoded.key;
       }
 
       let parsed: unknown = rawVal;
@@ -586,6 +592,33 @@ export class StandaloneDispatcher {
 
     this.writeErr(`Unknown state subcommand: '${sub}'`);
     return ExitCode.INVALID_ARGUMENT;
+  }
+
+  /**
+   * 判定配置读取异常是否为目标层能力缺失（键未配置语义）而非内部故障。
+   */
+  private isTargetCapabilityError(err: any): boolean {
+    const code = String(err?.code || "");
+    const msg = String(err?.message || "");
+    return (
+      code === "TARGET_CAPABILITY_UNAVAILABLE" ||
+      code === "CAPABILITY_UNAVAILABLE" ||
+      msg.includes("TARGET_CAPABILITY_UNAVAILABLE") ||
+      msg.includes("Management APIs are not enabled")
+    );
+  }
+
+  /**
+   * 解析携带命名空间前缀的状态键参数：委托 sdk 单一事实源 decodeStateKey。
+   *
+   * 解析失败（如存在多个未转义冒号的歧义键）时按纯键处理，交由存储层兜底。
+   */
+  private decodeStateKeyArg(key: string): { namespace: string; key: string } {
+    try {
+      return decodeStateKey(key);
+    } catch {
+      return { namespace: "", key };
+    }
   }
 
   private printHelp(): void {

@@ -56,11 +56,16 @@ import {
   TARGET_RESULT_UNKNOWN,
   TARGET_CLOSED,
 } from "./types";
-import { ACTION_CANCELLED, EXECUTION_FAILED, STATE_KEY_NOT_FOUND, TIMEOUT } from "../errors";
+import { ACTION_CANCELLED, EXECUTION_FAILED, REMOTE_STREAM_UNAVAILABLE, STATE_KEY_NOT_FOUND, TIMEOUT } from "../errors";
 import { getInsecureDispatcher } from "../server/dispatcher";
+import { listProtocolRouteCandidates } from "../profile/client";
 
 /**
  * 读取并解析远端 SSE 事件流。
+ *
+ * 候选路由依次尝试：v2 /events -> v2 /stream -> v1 /stream；
+ * 全部候选均不可用（网络异常或非流式响应）时抛出携带各候选 URL 与
+ * 失败原因的 REMOTE_STREAM_UNAVAILABLE 聚合错误，严禁以空流伪装正常。
  */
 export async function* streamRemoteEvents(
   serverUrl: string,
@@ -80,10 +85,11 @@ export async function* streamRemoteEvents(
     insecure: options?.insecure,
   });
   const base = normalizeServerUrl(serverUrl);
+  const runRoute = `runs/${encodeURIComponent(runId)}`;
+  // 候选优先级：v2 /events -> v2 /stream -> v1 /stream（后两者经共享协议候选工具展开）
   const candidateUrls = [
-    `${base}/api/v2/runs/${encodeURIComponent(runId)}/events`,
-    `${base}/api/v2/runs/${encodeURIComponent(runId)}/stream`,
-    `${base}/api/v1/runs/${encodeURIComponent(runId)}/stream`,
+    `${base}/api/v2/${runRoute}/events`,
+    ...listProtocolRouteCandidates(base, `/api/v2/${runRoute}/stream`),
   ];
   const headers: Record<string, string> = {
     Accept: "text/event-stream",
@@ -95,47 +101,9 @@ export async function* streamRemoteEvents(
     headers["Last-Event-ID"] = String(options.after);
   }
 
-  let res: Response | undefined;
-  for (const url of candidateUrls) {
-    try {
-      const fetchInit: RequestInit & { dispatcher?: any } = {
-        headers,
-        signal: options?.signal,
-      };
-      if (options?.dispatcher) {
-        fetchInit.dispatcher = options.dispatcher;
-      } else if (options?.insecure) {
-        fetchInit.dispatcher = getInsecureDispatcher();
-      }
-      const resp = await fetch(url, fetchInit);
-      if (resp.status === 410) {
-        let errJson: any;
-        try {
-          errJson = await resp.json();
-        } catch {}
-        const err = new Error(errJson?.error?.message || "Event cursor has expired");
-        (err as any).code = errJson?.error?.code || "EVENT_CURSOR_EXPIRED";
-        (err as any).details = errJson?.error?.details;
-        throw err;
-      }
-      if (resp.ok && resp.body) {
-        res = resp;
-        break;
-      }
-      if (resp.status !== 404) {
-        res = resp;
-        break;
-      }
-    } catch (err: any) {
-      if (err?.code === "EVENT_CURSOR_EXPIRED") {
-        throw err;
-      }
-      // 忽略单次网络连接异常并尝试备选路由
-    }
-  }
-
-  if (!res || !res.ok || !res.body) {
-    return;
+  const res = await resolveStreamCandidate();
+  if (!res.ok) {
+    throw buildStreamUnavailableError(res.candidateFailures);
   }
 
   const reader = res.body.getReader();
@@ -145,6 +113,78 @@ export async function* streamRemoteEvents(
   let eventType = "message";
   let eventId: string | undefined;
   let dataLines: string[] = [];
+
+  /**
+   * 依次尝试全部候选路由，返回首个可用响应。
+   *
+   * 单个候选失败（网络异常或非流式响应）时记录原因继续尝试后续候选；
+   * 所有候选均失败时返回汇总后的失败原因列表供上层抛出聚合错误。
+   */
+  async function resolveStreamCandidate(): Promise<
+    { ok: true; body: ReadableStream<Uint8Array> } | { ok: false; candidateFailures: Array<{ url: string; reason: string }> }
+  > {
+    const candidateFailures: Array<{ url: string; reason: string }> = [];
+    for (const url of candidateUrls) {
+      const fetchInit: RequestInit & { dispatcher?: any } = {
+        headers,
+        signal: options?.signal,
+      };
+      if (options?.dispatcher) {
+        fetchInit.dispatcher = options.dispatcher;
+      } else if (options?.insecure) {
+        fetchInit.dispatcher = getInsecureDispatcher();
+      }
+      try {
+        const resp = await fetch(url, fetchInit);
+        if (resp.status === 410) {
+          let errJson: any;
+          try {
+            errJson = await resp.json();
+          } catch {}
+          const err = new Error(errJson?.error?.message || "Event cursor has expired");
+          (err as any).code = errJson?.error?.code || "EVENT_CURSOR_EXPIRED";
+          (err as any).details = errJson?.error?.details;
+          throw err;
+        }
+        if (resp.ok && resp.body) {
+          return { ok: true, body: resp.body };
+        }
+        candidateFailures.push({
+          url,
+          reason: `HTTP ${resp.status} ${resp.statusText || ""}`.trim(),
+        });
+      } catch (err: any) {
+        if (err?.code === "EVENT_CURSOR_EXPIRED") {
+          throw err;
+        }
+        candidateFailures.push({
+          url,
+          reason: err?.message ? `${err.name || "Error"}: ${err.message}` : String(err),
+        });
+      }
+    }
+    return { ok: false, candidateFailures };
+  }
+
+  /**
+   * 构造全部候选路由均不可用时的聚合错误。
+   */
+  function buildStreamUnavailableError(
+    candidateFailures: Array<{ url: string; reason: string }>
+  ): Error {
+    const summary = candidateFailures
+      .map((f) => `${f.url} (${f.reason})`)
+      .join(", ");
+    const err = new Error(
+      `REMOTE_STREAM_UNAVAILABLE: All event stream candidates failed for run '${runId}': ${summary}`
+    );
+    (err as any).code = REMOTE_STREAM_UNAVAILABLE;
+    (err as any).details = {
+      runId,
+      candidates: candidateFailures.map((f) => ({ url: f.url, reason: f.reason })),
+    };
+    return err;
+  }
 
   function dispatchCurrentEvent(): ExecutionEvent | undefined {
     if (dataLines.length === 0) {

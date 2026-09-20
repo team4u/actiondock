@@ -86,6 +86,122 @@ export interface RemoteClientRequestOptions {
 }
 
 /**
+ * 构建绑定传输上下文（Token、安全选项与调度器）的远端请求函数。
+ *
+ * 单一事实源收敛所有 fetchRemoteXxx 端点的传输样板：
+ * 调用方仅需声明 path 与查询参数，鉴权头拼装、明文传输校验、
+ * insecure dispatcher 注入与 v2 -> v1 协议回退均在此统一处理。
+ */
+export function createRemoteFetch(
+  serverUrl: string,
+  token?: string,
+  options?: RemoteClientRequestOptions
+): (path: string, init?: RemoteFetchInit) => Promise<Response> {
+  assertSecureTransport(serverUrl, token, {
+    allowInsecureHttp: options?.allowInsecureHttp,
+    insecure: options?.insecure,
+  });
+  const base = normalizeServerUrl(serverUrl);
+  const headers = buildHeaders(token);
+
+  return async (path: string, init: RemoteFetchInit = {}): Promise<Response> => {
+    const method = init.method || "GET";
+    const mergedHeaders: Record<string, string> = { ...headers };
+    if (init.body !== undefined || init.headers) {
+      for (const [k, v] of Object.entries(init.headers || {})) {
+        mergedHeaders[k] = v;
+      }
+      if (init.body !== undefined) {
+        mergedHeaders["Content-Type"] = mergedHeaders["Content-Type"] || "application/json";
+      }
+    }
+
+    const fetchInit: RequestInit & { dispatcher?: any } = {
+      method,
+      headers: mergedHeaders,
+      body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+      signal: init.signal,
+    };
+    if (options?.dispatcher) {
+      fetchInit.dispatcher = options.dispatcher;
+    } else if (options?.insecure) {
+      fetchInit.dispatcher = getInsecureDispatcher();
+    }
+
+    return fetchWithProtocolFallback(base, path, fetchInit);
+  };
+}
+
+/** 远端请求描述选项。 */
+export interface RemoteFetchInit {
+  /** HTTP 方法（默认 GET） */
+  method?: string;
+  /** JSON 序列化请求体 */
+  body?: unknown;
+  /** 额外合并的请求头 */
+  headers?: Record<string, string>;
+  /** 中断信号 */
+  signal?: AbortSignal;
+}
+
+/** v2 优先、v1 兼容回退的协议版本优先级列表。 */
+const PROTOCOL_PREFERENCE = ["v2", "v1"] as const;
+
+/**
+ * 判定响应是否应当触发下一优先级协议重试。
+ * 仅 404（路由不存在）回退；其余状态（如 401、403、500）原样透传。
+ */
+function shouldFallbackToNextProtocol(res: Response): boolean {
+  return res.status === 404;
+}
+
+/**
+ * 携带协议回退的远端请求单一入口：先打 /api/v2/ 路由，404 时改打 /api/v1/ 路由。
+ *
+ * v1 回退请求若网络失败则沿用 v2 响应，保留原始状态与错误体供上层透传。
+ */
+export async function fetchWithProtocolFallback(
+  base: string,
+  path: string,
+  init: RequestInit & { dispatcher?: any }
+): Promise<Response> {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const isVersioned = /^\/api\/v\d+\//.test(normalizedPath);
+
+  let res = await fetch(`${base}${normalizedPath}`, init);
+  if (!isVersioned || !shouldFallbackToNextProtocol(res)) {
+    return res;
+  }
+
+  const candidates = listProtocolRouteCandidates(base, normalizedPath);
+  // 首个候选即当前已返回 404 的路由，从次优先级继续尝试
+  for (let i = 1; i < candidates.length; i++) {
+    try {
+      const fallbackRes = await fetch(candidates[i], init);
+      if (!shouldFallbackToNextProtocol(fallbackRes)) {
+        return fallbackRes;
+      }
+    } catch {
+      // 回退请求网络异常时保持既有 v2 响应，由上层统一处理
+    }
+  }
+  return res;
+}
+
+/**
+ * 列出指定路由的全部协议版本候选 URL（按优先级排序，含原始路由自身）。
+ */
+export function listProtocolRouteCandidates(base: string, path: string): string[] {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const versionMatch = normalizedPath.match(/^\/api\/(v\d+)\/(.*)$/);
+  if (!versionMatch) {
+    return [`${base}${normalizedPath}`];
+  }
+  const rest = versionMatch[2];
+  return PROTOCOL_PREFERENCE.map((version) => `${base}/api/${version}/${rest}`);
+}
+
+/**
  * 调用远端 ActionDock 服务端执行 Action 时的选项参数。
  */
 export interface RemoteExecuteOptions extends RemoteClientRequestOptions {
@@ -132,8 +248,6 @@ export async function checkRemoteHealth(
       allowInsecureHttp: options?.allowInsecureHttp,
       insecure: options?.insecure,
     });
-    const base = normalizeServerUrl(serverUrl);
-    const v2Url = `${base}/api/v2/health`;
 
     const controller = new AbortController();
     timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -149,16 +263,7 @@ export async function checkRemoteHealth(
       fetchInit.dispatcher = getInsecureDispatcher();
     }
 
-    let res = await fetch(v2Url, fetchInit);
-
-    if (res.status === 404) {
-      try {
-        const v1Res = await fetch(`${base}/api/v1/health`, fetchInit);
-        if (v1Res.ok || v1Res.status !== 404) {
-          res = v1Res;
-        }
-      } catch {}
-    }
+    const res = await fetchWithProtocolFallback(normalizeServerUrl(serverUrl), "/api/v2/health", fetchInit);
 
     const latencyMs = Date.now() - startTime;
 
@@ -239,8 +344,6 @@ export async function executeRemoteAction<T = unknown>(
   }
 
   assertSecureTransport(serverUrl, token, { allowInsecureHttp, insecure });
-  const base = normalizeServerUrl(serverUrl);
-  const v2Url = `${base}/api/v2/actions/${encodeURIComponent(actionId)}/run`;
 
   const executionPayload: Record<string, unknown> = {};
   if (isAsync) {
@@ -303,16 +406,11 @@ export async function executeRemoteAction<T = unknown>(
 
     let res: Response;
     try {
-      res = await fetch(v2Url, fetchInit);
-
-      if (res.status === 404) {
-        try {
-          const v1Res = await fetch(`${base}/api/v1/actions/${encodeURIComponent(actionId)}/run`, fetchInit);
-          if (v1Res.ok || v1Res.status !== 404) {
-            res = v1Res;
-          }
-        } catch {}
-      }
+      res = await fetchWithProtocolFallback(
+        normalizeServerUrl(serverUrl),
+        `/api/v2/actions/${encodeURIComponent(actionId)}/run`,
+        fetchInit
+      );
     } finally {
       if (timeoutTimer !== undefined) {
         clearTimeout(timeoutTimer);
@@ -389,43 +487,15 @@ async function fetchRemoteJson<T = any>(
     errorPrefix?: string;
   } & RemoteClientRequestOptions = {}
 ): Promise<T> {
-  assertSecureTransport(serverUrl, token, {
+  const remoteFetch = createRemoteFetch(serverUrl, token, {
     allowInsecureHttp: options.allowInsecureHttp,
     insecure: options.insecure,
+    dispatcher: options.dispatcher,
   });
-  const base = normalizeServerUrl(serverUrl);
-  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  const url = `${base}${normalizedPath}`;
-  const method = options.method || "GET";
-  const headers: Record<string, string> = {
-    ...buildHeaders(token),
-  };
-  if (options.body !== undefined) {
-    headers["Content-Type"] = "application/json";
-  }
-
-  const fetchInit: RequestInit & { dispatcher?: any } = {
-    method,
-    headers,
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-  };
-  if (options.dispatcher) {
-    fetchInit.dispatcher = options.dispatcher;
-  } else if (options.insecure) {
-    fetchInit.dispatcher = getInsecureDispatcher();
-  }
-
-  let res = await fetch(url, fetchInit);
-
-  if (res.status === 404 && normalizedPath.startsWith("/api/v2/")) {
-    const v1Path = normalizedPath.replace("/api/v2/", "/api/v1/");
-    try {
-      const v1Res = await fetch(`${base}${v1Path}`, fetchInit);
-      if (v1Res.ok || v1Res.status !== 404) {
-        res = v1Res;
-      }
-    } catch {}
-  }
+  const res = await remoteFetch(path, {
+    method: options.method,
+    body: options.body,
+  });
 
   const data = (await res.json().catch(() => ({}))) as any;
 

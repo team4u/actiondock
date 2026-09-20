@@ -289,9 +289,11 @@ interface RunFinalizer {
   signal?: AbortSignal;
   /** 外部中止信号监听句柄 */
   onAbort?: () => void;
+  /** 竞态监听句柄注销函数列表（finalize 时统一清理，覆盖成功路径） */
+  raceListenerRemovers: Array<() => void>;
   /** 绑定取消控制器并启动超时定时器 */
   startTimeout(controller: AbortController, timeoutMs: number): void;
-  /** 写入终态（幂等，自动清理超时定时器） */
+  /** 写入终态（幂等，自动清理超时定时器与全部监听句柄） */
   finalize(status: TerminalRunStatus, output?: unknown, error?: RuntimeError): void;
 }
 
@@ -324,6 +326,10 @@ export class ActionRunner {
   private packageRunners = new Map<string, ActionRunner>();
   /** 跨包 Runner 构建中的 in-flight Promise：并发调用 await 同一构建任务，消除 check-then-act 竞态 */
   private pendingPackageRunners = new Map<string, Promise<ActionRunner | undefined>>();
+  /** 本 Runner 直接为子包创建的存储连接（dispose 时级联关闭；外部注入存储不在此列） */
+  private packageStorages = new Set<RuntimeStorage>();
+  /** dispose 幂等守卫：并发调用复用同一次释放任务 */
+  private disposePromise: Promise<void> | undefined;
   private actionResolver?: (
     ref: ActionRef | string,
     currentPackageId?: string
@@ -411,6 +417,21 @@ export class ActionRunner {
   }
 
   /**
+   * 本地注册表阶梯检索：跨包引用查 "pkg/action"，本包引用依次查短标识与限定标识。
+   */
+  private findLocalAction(parsed: ActionRef): ActionDefinition | undefined {
+    const targetActionId = parsed.actionId;
+    const targetPackageId = parsed.packageId;
+    if (targetPackageId && targetPackageId !== this.packageId) {
+      return this.actions.get(`${targetPackageId}/${targetActionId}`);
+    }
+    return (
+      this.actions.get(targetActionId) ||
+      (this.packageId ? this.actions.get(`${this.packageId}/${targetActionId}`) : undefined)
+    );
+  }
+
+  /**
    * 动态解析 Action（支持本地注册表、自定义解析器委托与已链接包目录索引检索）。
    * 
    * @param actionOrRef Action 定义对象、引用或标识符
@@ -438,17 +459,9 @@ export class ActionRunner {
     const targetPackageId = parsed.packageId;
 
     // 本地 actions 映射表优先检索
-    if (targetPackageId && targetPackageId !== this.packageId) {
-      if (this.actions.has(`${targetPackageId}/${targetActionId}`)) {
-        return { status: "found", action: this.actions.get(`${targetPackageId}/${targetActionId}`)! };
-      }
-    } else {
-      if (this.actions.has(targetActionId)) {
-        return { status: "found", action: this.actions.get(targetActionId)! };
-      }
-      if (this.packageId && this.actions.has(`${this.packageId}/${targetActionId}`)) {
-        return { status: "found", action: this.actions.get(`${this.packageId}/${targetActionId}`)! };
-      }
+    const localMatched = this.findLocalAction(parsed);
+    if (localMatched) {
+      return { status: "found", action: localMatched };
     }
 
     // 外部注入的自定义 actionResolver 调度
@@ -607,6 +620,7 @@ export class ActionRunner {
     if (root && existsSync(root)) {
       const config = loadProjectConfig(root);
       let storage: RuntimeStorage;
+      let ownsPackageStorage = false;
       if (this.getStorageForPackage) {
         storage = this.getStorageForPackage(targetPackageId, root);
       } else if (this.platform) {
@@ -614,10 +628,16 @@ export class ActionRunner {
           projectRoot: root,
           customHome: this.customHome,
         });
+        ownsPackageStorage = true;
       } else {
         // 回退分支与主路径共用 createStorage 单一事实源，确保 run 记录落在统一解析的库文件
         const { createStorage } = await import("../storage/index");
         storage = createStorage(targetPackageId, { projectRoot: root, customHome: this.customHome });
+        ownsPackageStorage = true;
+      }
+      // 由本 Runner 直接创建的子包存储纳入级联释放清单（getStorageForPackage 注入方自管理生命周期）
+      if (ownsPackageStorage) {
+        this.packageStorages.add(storage);
       }
       const actionsMap = await loadActions(root, config.actionsDir, {
         autoInstall: false,
@@ -825,13 +845,7 @@ export class ActionRunner {
         targetPackageId = parsed.packageId;
       }
 
-      if (parsed.packageId && parsed.packageId !== this.packageId) {
-        action = this.actions.get(`${parsed.packageId}/${targetActionId}`);
-      } else {
-        action =
-          this.actions.get(targetActionId) ||
-          (this.packageId ? this.actions.get(`${this.packageId}/${targetActionId}`) : undefined);
-      }
+      action = this.findLocalAction(parsed);
     }
 
     return {
@@ -947,6 +961,7 @@ export class ActionRunner {
       controller: undefined,
       signal: undefined,
       onAbort: undefined,
+      raceListenerRemovers: [],
       startTimeout: (controller: AbortController, timeoutMs: number) => {
         finalizer.controller = controller;
         finalizer.timeoutTimer = setTimeout(() => {
@@ -962,6 +977,12 @@ export class ActionRunner {
         if (finalizer.signal && finalizer.onAbort) {
           finalizer.signal.removeEventListener("abort", finalizer.onAbort);
           finalizer.onAbort = undefined;
+        }
+        // 成功路径同样注销竞态监听句柄，避免信号对象残留引用
+        for (const remove of finalizer.raceListenerRemovers.splice(0)) {
+          try {
+            remove();
+          } catch {}
         }
         if (finalizer.finalized) return;
         finalizer.finalized = true;
@@ -1256,14 +1277,16 @@ export class ActionRunner {
     const { runId, targetActionId } = runCtx;
 
     const abortPromise = new Promise<never>((_, reject) => {
-      if (controller.signal.aborted) {
+      const rejectWithReason = () =>
         reject(controller.signal.reason || new Error("Action execution was cancelled"));
+      if (controller.signal.aborted) {
+        rejectWithReason();
       } else {
-        controller.signal.addEventListener(
-          "abort",
-          () => reject(controller.signal.reason || new Error("Action execution was cancelled")),
-          { once: true }
-        );
+        controller.signal.addEventListener("abort", rejectWithReason, { once: true });
+        // 成功与失败路径统一注销：finalize 时回收监听句柄，避免信号对象残留引用
+        finalizer.raceListenerRemovers.push(() => {
+          controller.signal.removeEventListener("abort", rejectWithReason);
+        });
       }
     });
 
@@ -1304,17 +1327,11 @@ export class ActionRunner {
             return { ok: false, runId, error };
           }
 
-          if ((currentAction as any).inputSchema) {
-            const val = validateSchema((currentAction as any).inputSchema, input);
-            if (!val.valid) {
-              const error: RuntimeError = {
-                code: INPUT_VALIDATION_FAILED,
-                message: `Input schema validation failed for action '${targetActionId}'`,
-                details: val.errors,
-              };
-              finalizer.finalize("failed", undefined, error);
-              return { ok: false, runId, error };
-            }
+          // 复用统一校验入口：优先 action 声明 schema，缺失时回退 projectConfig 清单声明
+          const schemaError = this.checkActionInputSchema(currentAction, targetActionId, input);
+          if (schemaError) {
+            finalizer.finalize("failed", undefined, schemaError);
+            return { ok: false, runId, error: schemaError };
           }
         }
 
@@ -1438,6 +1455,49 @@ export class ActionRunner {
       runId,
       error: finalizer.persistError || error,
     };
+  }
+
+  /**
+   * 释放 Runner 持有的跨包资源：遍历关闭全部子包 Runner 及其独立创建的存储连接。
+   *
+   * 幂等且并发安全：重复调用直接复用首次 Promise；子包存储异常不阻断其余释放；
+   * 仅关闭由本 Runner 构建子包 Runner 时独立创建的存储，外部注入的存储（如经
+   * packageContextResolver 传入的目标包自身存储）生命周期归所有者管理，不在此误关。
+   */
+  public async dispose(): Promise<void> {
+    if (this.disposePromise) {
+      return this.disposePromise;
+    }
+    this.disposePromise = this.disposeInternal();
+    return this.disposePromise;
+  }
+
+  private async disposeInternal(): Promise<void> {
+    // 深度优先递归释放子包 Runner（子 Runner 可能又构建了孙 Runner）
+    const children = Array.from(this.packageRunners.values());
+    this.packageRunners.clear();
+    await Promise.all(
+      children.map(async (child) => {
+        try {
+          await child.dispose();
+        } catch {
+          // 单个子 Runner 释放异常不阻断其余释放
+        }
+      })
+    );
+
+    // 关闭由本 Runner 直接创建的子包存储（buildTargetPackageRunner 回退分支）
+    for (const storage of this.packageStorages) {
+      try {
+        const res = storage.close();
+        if (res && typeof (res as any).then === "function") {
+          await res;
+        }
+      } catch {
+        // 存储重复关闭或已失效时忽略，保持释放链路继续
+      }
+    }
+    this.packageStorages.clear();
   }
 
   /**

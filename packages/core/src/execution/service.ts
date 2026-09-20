@@ -19,16 +19,14 @@ import type { Clock } from "../runtime/clock";
 import { type EventSink, InMemoryEventSink } from "../runtime/events";
 import { ActionRunner, type ExecutionHandle } from "../runtime/runner";
 import {
-  ACTION_CANCELLED,
   ACTION_NOT_FOUND,
-  ACTION_TIMEOUT,
   EXECUTION_FAILED,
   IDEMPOTENCY_CONFLICT,
   RUN_REPOSITORY_UNAVAILABLE,
   UNHANDLED_EXECUTION_ERROR,
   describeActionLoadFailure,
 } from "../errors";
-import type { RuntimeStorage } from "../storage/types";
+import { resultStatusToRunStatus, type RuntimeStorage } from "../storage/types";
 import type { RuntimePlatform } from "../platform/types";
 import type {
   CancelResult,
@@ -692,13 +690,10 @@ export class DefaultExecutionService implements ExecutionService {
   ): void {
     handle.result
       .then((result: ExecutionResult) => {
-        const finalStatus: RunStatus = result.ok
-          ? "success"
-          : result.error?.code === ACTION_TIMEOUT
-          ? "timed_out"
-          : result.error?.code === ACTION_CANCELLED
-          ? "cancelled"
-          : "failed";
+        const finalStatus = resultStatusToRunStatus(
+          result.ok,
+          result.ok ? undefined : result.error?.code
+        );
         activeItem.status = finalStatus;
         bridge.emitEvent({ type: "status", status: finalStatus });
         bridge.emitEvent({ type: "finish", result });
@@ -805,6 +800,13 @@ export class DefaultExecutionService implements ExecutionService {
     }
 
     this.activeRuns.clear();
+
+    // 级联释放跨包子包 Runner 及其独立创建的存储连接（幂等，异常不阻断后续释放）
+    try {
+      await this._runner.dispose();
+    } catch {
+      // 子包释放异常已在 dispose 内部隔离，此处仅需保障主流程继续
+    }
 
     if (this.ownsStorage && this.storage && typeof (this.storage as any).close === "function") {
       await (this.storage as any).close();
