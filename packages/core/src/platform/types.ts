@@ -45,6 +45,11 @@ export interface StorageFactoryOptions {
   dataDir?: string;
   inMemory?: boolean;
   customHome?: string;
+  /**
+   * 是否以数据目录持有者身份打开：true 时构造阶段收割死亡会话遗留的非终态运行记录。
+   * 默认 false（旁观查询打开，不触碰在途记录），供 CLI 查询命令与执行宿主并发共存。
+   */
+  recoverOrphans?: boolean;
 }
 
 /**
@@ -54,6 +59,8 @@ export interface GlobalStorageFactoryOptions {
   dataDir?: string;
   inMemory?: boolean;
   customHome?: string;
+  /** 是否以持有者身份打开并收割遗留非终态运行记录（默认 false，旁观语义） */
+  recoverOrphans?: boolean;
 }
 
 /**

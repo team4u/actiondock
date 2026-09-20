@@ -60,11 +60,11 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
         }
         if (app.storage && typeof app.storage.listRuns === "function") {
           try {
-            const records = app.storage.listRuns({ actionId, limit });
+            // 状态过滤下推到存储层 SQL，避免先分页后过滤导致某包前 N 条非目标状态时贡献 0 条
+            const records = app.storage.listRuns({ actionId, status, limit });
             for (const r of records) {
               if (!seenRunIds.has(r.id)) {
                 seenRunIds.add(r.id);
-                if (status && r.status !== status) continue;
                 if (
                   options.packageAllowlist &&
                   options.packageAllowlist.length > 0 &&
@@ -76,7 +76,12 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
                 allRuns.push(r);
               }
             }
-          } catch {}
+          } catch (err) {
+            // 单包查询失败不阻断整体列表响应，但必须可观测
+            console.warn(
+              `[actiondock] listRuns failed for package '${app.packageId}': ${err instanceof Error ? err.message : String(err)}`
+            );
+          }
         }
       }
 

@@ -1,10 +1,17 @@
-import type { RuntimeError, RunRecord } from "@actiondock/sdk";
-import type { Clock } from "../runtime/clock";
+import type { RuntimeError, RunRecord, RunStatus } from "@actiondock/sdk";
+import { ACTION_CANCELLED, ACTION_TIMEOUT } from "../errors";
+import type { Clock } from "./clock";
 
 /**
  * 固定的存储 Schema 目标版本常量。
  */
 export const STORAGE_SCHEMA_VERSION = 2;
+
+/**
+ * 幂等去重记录保留窗口（24 小时），与 LocalActionDockTarget.info()
+ * 声明的 idempotencyPolicy.retentionMs 承诺保持单一事实源。
+ */
+export const IDEMPOTENCY_RETENTION_MS = 86_400_000;
 
 /**
  * SQLite 基础参数值类型。
@@ -87,6 +94,14 @@ export interface StorageOptions {
   driver?: SqliteDriver;
   /** 可选注入的时间提供器，便于与模拟时钟联动 */
   clock?: Clock;
+  /**
+   * 是否在打开时收割死亡会话遗留的非终态运行记录（收敛为 interrupted）。
+   *
+   * 默认 false：旁观查询打开（CLI 的 state/runs/config 类命令）不收割其他进程的在途记录。
+   * 仅数据目录持有者（serve、mcp、ad run 等执行宿主）显式置 true，
+   * 避免跨进程互毁在途运行。
+   */
+  recoverOrphans?: boolean;
 }
 
 /**
@@ -139,6 +154,22 @@ export function isTerminalRunStatus(status: string): status is TerminalRunStatus
 }
 
 /**
+ * 执行终态到运行记录状态的统一映射单一事实源。
+ *
+ * 成功映射为 success；超时错误码映射为 timed_out；取消错误码映射为 cancelled；
+ * 其余失败一律映射为 failed。错误码常量来自全仓统一错误码单一事实源 errors.ts。
+ */
+export function resultStatusToRunStatus(
+  ok: boolean,
+  errorCode?: string
+): RunStatus {
+  if (ok) return "success";
+  if (errorCode === ACTION_TIMEOUT) return "timed_out";
+  if (errorCode === ACTION_CANCELLED) return "cancelled";
+  return "failed";
+}
+
+/**
  * 统一运行时存储抽象接口。
  */
 export interface RuntimeStorage {
@@ -182,13 +213,13 @@ export interface RuntimeStorage {
     finishedAt?: string
   ): void;
   getRun(id: string): RunRecord | null;
-  listRuns(options?: { actionId?: string; limit?: number }): RunRecord[];
+  listRuns(options?: { actionId?: string; status?: string; limit?: number }): RunRecord[];
   clearRuns(options?: { actionId?: string; status?: string }): number;
 
-  /** 故障重启恢复：将遗留非终态运行收敛为 interrupted */
-  recoverRunningRuns?(currentHostSessionId?: string): number | Promise<number>;
-
-  /** 收敛死亡会话遗留的非终态运行任务 */
+  /**
+   * 收敛死亡会话遗留的非终态运行任务（含无会话标识的遗留非终态记录），
+   * 统一收敛为 interrupted。历史别名 recoverRunningRuns 已合并至本方法。
+   */
   recoverDeadSessionRuns?(currentHostSessionId?: string): number | Promise<number>;
 
   /** 确保底层存储与 Schema 初始化完成 */

@@ -721,29 +721,19 @@ export interface ActionContext {
 
 /**
  * Action 动作定义契约。
- * 剥离 ActionContract 冗余属性，仅保留核心执行处理函数。
+ * 基于 ActionContract 派生（消除七字段双份维护与漂移风险）：
+ * 仅将 id 放宽为可选（支持由目录注册时再行赋标识），并追加核心 run 执行函数。
  */
-export interface ActionDefinition<I = unknown, O = unknown> {
+export interface ActionDefinition<I = unknown, O = unknown>
+  extends Omit<ActionContract, "id"> {
   /**
    * Action 的核心业务执行函数
    * @param input 输入参数数据
    * @param ctx 运行时上下文对象
    */
   run(input: I, ctx: ActionContext): Promise<O> | O;
-  /** Action 唯一标识 */
+  /** Action 唯一标识（可选，允许注册时由目录赋予） */
   id?: string;
-  /** Action 功能描述 */
-  description?: string;
-  /** 输入参数模式规范 */
-  inputSchema?: JsonSchema;
-  /** 输出结果模式规范 */
-  outputSchema?: JsonSchema;
-  /** 静态 Action 依赖列表 */
-  uses?: string[];
-  /** 检索与分类标签 */
-  tags?: string[];
-  /** 协议注解元数据 */
-  annotations?: Record<string, JsonValue>;
 }
 
 /**

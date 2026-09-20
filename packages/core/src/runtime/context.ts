@@ -45,53 +45,18 @@ export class RuntimeConfig implements Config {
   get<T = unknown>(key: string): T | undefined;
   get<T = unknown>(key: string, defaultValue: T): T;
   get<T = unknown>(key: string, defaultValue?: T): T | undefined {
-    // 1. CLI 临时参数覆盖
-    if (this.overrides.has(key)) {
-      return this.overrides.get(key) as T;
+    // 委托 describe 五层解析链唯一事实源：整链未命中（source 为 default 且无值）时回退调用方默认值
+    const resolved = this.describe<T>(key);
+    if (resolved.source === "default" && resolved.value === undefined) {
+      return defaultValue;
     }
-
-    // 2. 本地项目 SQLite 存储
-    const stored = this.storage.getConfig<T>(key);
-    if (stored !== undefined) {
-      return stored;
-    }
-
-    // 3. 全局 SQLite 存储 (~/.actiondock/global.db)
-    if (this.globalStorage) {
-      try {
-        const globalStored = this.globalStorage.getConfig<T>(key);
-        if (globalStored !== undefined) {
-          return globalStored;
-        }
-      } catch {
-        // 忽略全局存储读取异常
-      }
-    }
-
-    // 4. 环境变量（支持包名前缀、SNAKE_CASE 转换与类型自动推断）
-    const itemDef = this.projectConfig?.config?.[key];
-    const envResolved = resolveEnvValue(key, itemDef, this.projectConfig?.id);
-    if (envResolved !== undefined) {
-      return envResolved.value as T;
-    }
-
-    // 5. 项目声明的默认值 (actiondock.json)
-    if (itemDef?.default !== undefined) {
-      return itemDef.default as T;
-    }
-
-    // 6. 调用方传入的代码级回退默认值
-    return defaultValue;
+    return resolved.value;
   }
 
   has(key: string): boolean {
-    if (this.overrides.has(key)) return true;
-    if (this.storage.getConfig(key) !== undefined) return true;
-    if (this.globalStorage?.getConfig(key) !== undefined) return true;
-    const itemDef = this.projectConfig?.config?.[key];
-    if (resolveEnvValue(key, itemDef, this.projectConfig?.id) !== undefined) return true;
-    if (itemDef?.default !== undefined) return true;
-    return false;
+    // 委托 describe 五层解析链唯一事实源：default 来源且无值即视为未配置
+    const resolved = this.describe(key);
+    return !(resolved.source === "default" && resolved.value === undefined);
   }
 
   /**
@@ -114,15 +79,17 @@ export class RuntimeConfig implements Config {
       return { source: "package", value: stored };
     }
 
-    // 3. 全局持久化存储
+    // 3. 全局持久化存储（读取异常时降级继续解析链，但记录警告确保不静默吞没）
     if (this.globalStorage) {
       try {
         const globalStored = this.globalStorage.getConfig<T>(key);
         if (globalStored !== undefined) {
           return { source: "global", value: globalStored };
         }
-      } catch {
-        // 忽略全局存储读取异常
+      } catch (err) {
+        console.warn(
+          `[actiondock] global config read failed for ${key}: ${err instanceof Error ? err.message : String(err)}`
+        );
       }
     }
 
@@ -140,6 +107,9 @@ export class RuntimeConfig implements Config {
 
 /**
  * 生产级状态存储实现，将状态持久化到 SQLite 中，完整支持命名空间分段隔离与 TTL。
+ *
+ * 读取严格限定当前命名空间（根作用域即空命名空间），不做跨命名空间隐式回扫；
+ * 跨命名空间模糊检索由 RuntimeStorage.findState 显式公共 API 承担。
  */
 export class RuntimeStateStore implements StateStore {
   private storage: RuntimeStorage;
@@ -151,15 +121,9 @@ export class RuntimeStateStore implements StateStore {
   }
 
   async get<T = unknown>(key: string): Promise<T | undefined> {
-    if (this.namespace) {
-      return this.storage.getState<T>(this.namespace, key);
-    }
-    const val = await this.storage.getState<T>("", key);
-    if (val !== undefined) {
-      return val;
-    }
-    const found = await this.storage.findState<T>(key);
-    return found?.value as T | undefined;
+    // 读取严格限定当前命名空间（根作用域即空命名空间），不做跨命名空间隐式回扫；
+    // 跨命名空间检索需求由 RuntimeStorage.findState 显式公共 API 承担
+    return this.storage.getState<T>(this.namespace, key);
   }
 
   async set<T = unknown>(

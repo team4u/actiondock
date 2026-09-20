@@ -14,6 +14,8 @@ export interface GetPrOutput {
   changedFiles: number;
   additions: number;
   deletions: number;
+  /** 未配置 Token 时返回演示数据，此标记为 true */
+  demo?: boolean;
 }
 
 export default defineAction(async (input: GetPrInput, ctx): Promise<GetPrOutput> => {
@@ -33,6 +35,7 @@ export default defineAction(async (input: GetPrInput, ctx): Promise<GetPrOutput>
       changedFiles: 12,
       additions: 450,
       deletions: 120,
+      demo: true,
     };
   }
 

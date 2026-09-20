@@ -7,7 +7,7 @@ import {
   resolvePackageRoot,
 } from "@actiondock/core";
 import { Command } from "commander";
-import { ArgumentError, ExecutionError } from "../errors";
+import { ArgumentError, ExecutionError, notInProjectError, packageNotFoundError } from "../errors";
 import { renderActionValidation, renderResult } from "../renderer";
 import type { CliContext } from "../types";
 import { getEffectiveOptions } from "../utils";
@@ -33,17 +33,15 @@ export function attachValidateCommand(parent: Command, context?: CliContext): Co
       if (options.package) {
         root = resolvePackageRoot(options.package);
         if (!root) {
-          throw new ArgumentError(
-            `Package '${options.package}' not found in linked packages or path`
-          );
+          throw packageNotFoundError(options.package);
         }
       } else {
         root = findProjectRoot();
       }
 
       if (!root) {
-        throw new ArgumentError(
-          "Not in an ActionDock project (actiondock.json not found).\nPlease specify -P, --package <id> or cd into a project directory."
+        throw notInProjectError(
+          "Please specify -P, --package <id> or cd into a project directory."
         );
       }
 

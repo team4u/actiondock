@@ -89,6 +89,9 @@ export const TIMEOUT = "TIMEOUT";
 /** 远程服务器网络连接失败 */
 export const NETWORK_ERROR = "NETWORK_ERROR";
 
+/** 远程事件流全部候选路由均不可用 */
+export const REMOTE_STREAM_UNAVAILABLE = "REMOTE_STREAM_UNAVAILABLE";
+
 /** 远程目标未启用管理接口能力 */
 export const CAPABILITY_UNAVAILABLE = "CAPABILITY_UNAVAILABLE";
 

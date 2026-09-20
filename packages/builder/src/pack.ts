@@ -435,10 +435,25 @@ async function runNpmPack(
   const trimmed = stdout.trim();
   if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
     try {
-      const parsed = JSON.parse(trimmed);
-      const items = Array.isArray(parsed) ? parsed : [parsed];
-      const filename = items[0]?.filename;
-      if (typeof filename === "string" && filename.length > 0) {
+      const parsed: unknown = JSON.parse(trimmed);
+      let items: Array<{ filename?: unknown }>;
+      if (Array.isArray(parsed)) {
+        items = parsed as Array<{ filename?: unknown }>;
+      } else if (typeof parsed === "object" && parsed !== null) {
+        // npm >= 11 的 pack --json 输出为按包名索引的对象，取全部包含 filename 的条目
+        items = Object.values(parsed).filter(
+          (entry): entry is { filename?: unknown } =>
+            typeof entry === "object" && entry !== null && "filename" in entry
+        );
+      } else {
+        items = [];
+      }
+      // 多包输出时取最后一个 filename（npm 按依赖顺序逐包输出，末尾为当前项目产物）
+      const filenames = items
+        .map((item) => item.filename)
+        .filter((name): name is string => typeof name === "string" && name.length > 0);
+      const filename = filenames[filenames.length - 1];
+      if (filename !== undefined) {
         generatedName = filename;
       }
     } catch {

@@ -120,6 +120,8 @@ interface FakeInternalHandle extends ProcessHandle, ProcessDriverHandle {
 export class FakeProcessDriver implements ProcessDriver {
   private capabilities: Capabilities;
   private readonly handles = new Map<string, FakeInternalHandle>();
+  /** 模拟 pid 分配器：自增计数器保证确定性（同批次内严格递增且不重复） */
+  private nextFakePid = 10000;
 
   /** 记录所有派生调用 */
   public readonly spawnCalls: RecordedSpawn[] = [];
@@ -218,7 +220,7 @@ export class FakeProcessDriver implements ProcessDriver {
     }
 
     const id = customId ?? randomUUID();
-    const pid = Math.floor(10000 + Math.random() * 90000);
+    const pid = this.nextFakePid++;
 
     const internalHandle: FakeInternalHandle = {
       id,
@@ -336,18 +338,22 @@ export class FakeProcessDriver implements ProcessDriver {
         graceMs,
         timestamp: Date.now(),
       });
-      // 终止即退出：以 SIGTERM 语义通知观察者，保证上层等待链路收敛
+      // 终止即退出：以 SIGTERM 语义通知观察者，保证上层等待链路收敛；
+      // 随后补发 outputClosed("natural")，与真实驱动终止后的关闭序列对齐
       this.emitExit(targetHandle, { code: null, signal: "SIGTERM" });
+      this.emitOutputClosed(targetHandle, "natural");
     }
   }
 
   /**
-   * 模拟销毁进程并记录历史。
+   * 模拟销毁进程并记录历史：句柄从受管表中移除（与真实驱动 dispose 后
+   * 后续操作报「找不到实例」的契约对齐），后续 emit 系列确定性调用将抛错。
    */
   async dispose(handle: ProcessHandle): Promise<void> {
     const internal = this.handles.get(handle.id);
     if (internal) {
       internal.disposed = true;
+      this.handles.delete(handle.id);
     }
     this.disposeCalls.push({
       handle,

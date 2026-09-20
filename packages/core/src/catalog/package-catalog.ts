@@ -53,7 +53,10 @@ export class PackageCatalog {
         if (e.message?.startsWith("PACKAGE_ID_CONFLICT")) {
           throw e;
         }
-        // 忽略无效项目
+        // 无效项目跳过注册但输出告警含路径，杜绝无声丢弃
+        console.warn(
+          `[Catalog] Skipping invalid package at '${abs}': ${e?.message || String(e)}`
+        );
       }
     };
 

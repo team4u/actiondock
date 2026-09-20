@@ -51,8 +51,18 @@ function ensureDirectoryForDb(dbPath: string): void {
     if (!existsSync(dir)) {
       try {
         mkdirSync(dir, { recursive: true, mode: 0o700 });
-      } catch {
-        // 忽略目录已存在或权限异常
+      } catch (err: any) {
+        // recursive 模式下目录已存在不报错；仅当 errno 明示已存在时跳过，
+        // 其余失败（权限、磁盘满等）带上下文重抛，绝不静默吞没
+        if (err?.code === "EEXIST" || err?.code === "EISDIR") {
+          return;
+        }
+        throw new Error(
+          `Failed to create data directory '${dir}' for database '${dbPath}': ${
+            err?.message || String(err)
+          }`,
+          { cause: err }
+        );
       }
     }
   }
@@ -109,6 +119,7 @@ export function createNodePlatform(options: NodePlatformOptions = {}): RuntimePl
         packageId,
         clock,
         driver: createDriver(dbPath),
+        recoverOrphans: opts?.recoverOrphans === true,
       });
     },
     createGlobalStorage(opts?: GlobalStorageFactoryOptions): RuntimeStorage {
@@ -126,6 +137,7 @@ export function createNodePlatform(options: NodePlatformOptions = {}): RuntimePl
         packageId: "__global__",
         clock,
         driver: createDriver(dbPath),
+        recoverOrphans: opts?.recoverOrphans === true,
       });
     },
   };

@@ -1,6 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import type { ActionDefinition } from "@actiondock/sdk";
 import { DefaultModuleLoader, type ModuleLoader } from "../runtime/module-loader";
@@ -145,172 +144,6 @@ export function getInstallCommand(projectRoot?: string): string[] {
 }
 
 /**
- * 缓存依赖指纹的文件相对路径（位于 node_modules/.cache/actiondock 下）。
- * 基于项目绝对路径生成唯一哈希标识，避免软链接共享 node_modules 时指纹冲突。
- */
-function getDependencyFingerprintPath(projectRoot: string): string {
-  const projectKey = createHash("sha256").update(resolve(projectRoot)).digest("hex").slice(0, 16);
-  return join(projectRoot, "node_modules", ".cache", "actiondock", `${projectKey}-deps.hash`);
-}
-
-/**
- * 读取项目当前缓存的依赖指纹哈希。
- */
-export function readStoredDependencyFingerprint(projectRoot: string): string | null {
-  const fpPath = getDependencyFingerprintPath(projectRoot);
-  try {
-    if (existsSync(fpPath)) {
-      return readFileSync(fpPath, "utf-8").trim();
-    }
-  } catch {
-    // 忽略读取异常
-  }
-  return null;
-}
-
-/**
- * 将最新的依赖指纹哈希写入缓存文件。
- */
-export function saveDependencyFingerprint(projectRoot: string, fingerprint: string): void {
-  try {
-    const fpPath = getDependencyFingerprintPath(projectRoot);
-    const dir = dirname(fpPath);
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
-    }
-    writeFileSync(fpPath, fingerprint, "utf-8");
-  } catch {
-    // 忽略写入异常（如只读文件系统或权限限制）
-  }
-}
-
-/**
- * 递归对对象所有键名进行升序排序，保证 JSON.stringify 序列化结果的唯一性与确定性。
- */
-function sortObjectKeys(obj: unknown): unknown {
-  if (obj === null || typeof obj !== "object" || Array.isArray(obj)) {
-    return obj;
-  }
-  const sorted: Record<string, unknown> = {};
-  for (const key of Object.keys(obj as Record<string, unknown>).sort()) {
-    sorted[key] = sortObjectKeys((obj as Record<string, unknown>)[key]);
-  }
-  return sorted;
-}
-
-/**
- * 计算项目依赖的指纹哈希（基于 package.json 依赖声明及可能存在的锁文件内容）。
- * 
- * @param projectRoot 项目根目录
- * @returns 64位十六进制哈希字符串，若 package.json 不存在或解析失败则返回 null
- */
-export function computeDependencyFingerprint(projectRoot: string): string | null {
-  const pkgJsonPath = join(projectRoot, "package.json");
-  if (!existsSync(pkgJsonPath)) {
-    return null;
-  }
-
-  try {
-    const raw = readFileSync(pkgJsonPath, "utf-8");
-    const pkg = JSON.parse(raw);
-    const depSpec = {
-      dependencies: pkg.dependencies || {},
-      devDependencies: pkg.devDependencies || {},
-      peerDependencies: pkg.peerDependencies || {},
-      optionalDependencies: pkg.optionalDependencies || {},
-      overrides: pkg.overrides || {},
-      resolutions: pkg.resolutions || {},
-    };
-
-    const hash = createHash("sha256");
-    hash.update(JSON.stringify(sortObjectKeys(depSpec)));
-
-    // 锁文件变化（如团队协同合并或手动更新锁文件）同样代表依赖版本变更
-    const lockFiles = [
-      "package-lock.json",
-      "npm-shrinkwrap.json",
-      "bun.lockb",
-      "bun.lock",
-    ];
-
-    for (const lockFile of lockFiles) {
-      const lockPath = join(projectRoot, lockFile);
-      if (existsSync(lockPath)) {
-        try {
-          hash.update(lockFile);
-          hash.update(readFileSync(lockPath));
-        } catch {
-          // 忽略不可读的锁文件
-        }
-      }
-    }
-
-    return hash.digest("hex");
-  } catch {
-    return null;
-  }
-}
-
-/**
- * 确保项目依赖（node_modules）已正确安装。
- * 若尚未安装、依赖版本变更（指纹不匹配）或加载失败时，自动触发包管理器执行依赖安装。
- * 
- * @param projectRoot 项目根目录
- * @param force 是否强制重新安装
- * @returns 是否成功执行了安装或更新
- */
-export function ensureProjectDependencies(projectRoot: string, force = false): boolean {
-  if (process.env.ACTIONDOCK_AUTO_INSTALL === "false") {
-    return false;
-  }
-  const pkgJsonPath = join(projectRoot, "package.json");
-  if (!existsSync(pkgJsonPath)) {
-    return false;
-  }
-
-  let pkg: any;
-  try {
-    const raw = readFileSync(pkgJsonPath, "utf-8");
-    pkg = JSON.parse(raw);
-  } catch {
-    return false;
-  }
-
-  const hasDeps =
-    (pkg.dependencies && Object.keys(pkg.dependencies).length > 0) ||
-    (pkg.devDependencies && Object.keys(pkg.devDependencies).length > 0) ||
-    (pkg.peerDependencies && Object.keys(pkg.peerDependencies).length > 0) ||
-    (pkg.optionalDependencies && Object.keys(pkg.optionalDependencies).length > 0);
-
-  if (!hasDeps && !force) {
-    return false;
-  }
-
-  const nodeModulesPath = join(projectRoot, "node_modules");
-  const nodeModulesExists = existsSync(nodeModulesPath);
-  const currentFingerprint = computeDependencyFingerprint(projectRoot);
-
-  if (!force && nodeModulesExists) {
-    const storedFingerprint = readStoredDependencyFingerprint(projectRoot);
-    if (storedFingerprint === null) {
-      // 首次接入已包含 node_modules 的外部环境或既有项目，信任现有依赖并记录初始指纹
-      if (currentFingerprint) {
-        saveDependencyFingerprint(projectRoot, currentFingerprint);
-      }
-      return false;
-    }
-
-    if (currentFingerprint && storedFingerprint === currentFingerprint) {
-      // 依赖声明与锁文件指纹一致，无需重新安装
-      return false;
-    }
-  }
-
-  // ActionDock 2.0 彻底移除运行时静默在线安装依赖逻辑，严禁静默联网安装
-  return false;
-}
-
-/**
  * 递归扫描指定目录下的特定后缀文件（自动排除测试文件 *.test.ts, *.spec.ts 和 *.d.ts）。
  */
 function scanFiles(dir: string, extension: string): string[] {
@@ -368,7 +201,7 @@ export function discoverActionFiles(
 export async function loadActions(
   projectRoot: string,
   _actionsDir = "actions",
-  options: { autoInstall?: boolean; loader?: ModuleLoader } = {}
+  options: { loader?: ModuleLoader } = {}
 ): Promise<Map<string, ActionDefinition>> {
   const actions = new Map<string, ActionDefinition>();
   const loader = options.loader || new DefaultModuleLoader();

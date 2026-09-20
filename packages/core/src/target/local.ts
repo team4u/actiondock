@@ -140,10 +140,12 @@ export class LocalActionDockTarget implements ActionDockTarget {
       const apps = options?.packageId
         ? [this.target.getApp(options.packageId)].filter(Boolean) as ActionDockApp[]
         : this.target.listApps();
-      let records: RunRecord[] = [];
+      const records: RunRecord[] = [];
       for (const app of apps) {
+        // 状态过滤下推到存储层 SQL，避免先分页后过滤导致某包前 N 条非目标状态时贡献 0 条
         const recs = app.storage.listRuns({
           actionId: options?.actionId,
+          status: options?.status,
           limit: options?.limit,
         });
         for (const r of recs) {
@@ -154,28 +156,21 @@ export class LocalActionDockTarget implements ActionDockTarget {
         }
       }
       records.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
-      if (options?.status) {
-        records = records.filter((r) => r.status === options.status);
-      }
+      // 全局 limit 语义：合并后总条数不超过 limit，单处截断
       if (options?.limit && records.length > options.limit) {
-        records = records.slice(0, options.limit);
+        records.length = options.limit;
       }
       return records;
     } else {
       if (options?.packageId && options.packageId !== this.target.packageId) {
         return [];
       }
-      let records = this.target.storage.listRuns({
+      // 状态过滤下推到存储层 SQL，单包场景由数据库直接返回目标状态记录
+      return this.target.storage.listRuns({
         actionId: options?.actionId,
+        status: options?.status,
         limit: options?.limit,
       });
-      if (options?.status) {
-        records = records.filter((r) => r.status === options.status);
-      }
-      if (options?.limit && records.length > options.limit) {
-        records = records.slice(0, options.limit);
-      }
-      return records;
     }
   }
 

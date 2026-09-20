@@ -93,12 +93,17 @@ export class DefaultActionDockHost implements ActionDockHost {
   private isClosed = false;
   private dataDirLock?: DataDirLock;
   private failedLinkedPackages = new Map<string, { path: string; error: string }>();
+  private failedAutoLoad?: { projectRoot: string; error: string };
+  /** 透传给内部创建 App 的存储收割开关（Host 默认持有者身份，显式可关） */
+  private recoverOrphans: boolean;
 
   constructor(options: ActionDockHostOptions = {}) {
     this.hostSessionId = randomUUID();
     this.maxCallDepth = options.maxCallDepth ?? 16;
     this.maxSubRuns = options.maxSubRuns ?? 64;
     this.eventSink = options.eventSink ?? (options.platform as any)?.eventSink ?? new InMemoryEventSink();
+    // Host 默认声明数据目录持有者身份；查询旁观方（CLI 查询命令）显式置 false
+    this.recoverOrphans = options.recoverOrphans !== false;
 
     // 当指定非内存 dataDir 时获取排他目录锁，防止并发冲突
     if (options.dataDir && !options.inMemory) {
@@ -108,151 +113,17 @@ export class DefaultActionDockHost implements ActionDockHost {
     }
 
     try {
-      // 注册显式传入的 packages 列表
-      if (options.packages && Array.isArray(options.packages)) {
-        for (const item of options.packages) {
-          if (isActionDockApp(item)) {
-            this.registerAppInternal(item, true);
-          } else {
-            const app = new DefaultActionDockApp({
-              ...item,
-              hostSessionId: this.hostSessionId,
-              platform: item.platform ?? options.platform,
-              inMemory: item.inMemory ?? options.inMemory,
-              customHome: item.customHome ?? options.customHome,
-              dataDir: item.dataDir ?? options.dataDir,
-              clock: item.clock ?? options.clock,
-              process: item.process ?? options.process,
-              logger: item.logger ?? options.logger,
-              eventSink: item.eventSink ?? this.eventSink,
-              maxCallDepth: item.maxCallDepth ?? this.maxCallDepth,
-              maxSubRuns: item.maxSubRuns ?? this.maxSubRuns,
-              packageContextResolver: this.resolvePackageContext.bind(this),
-            });
-            this.internallyCreatedApps.add(app);
-            this.registerAppInternal(app, true);
-          }
-        }
-      }
+      // 阶段一：注册显式传入的 packages 列表
+      this.registerExplicitPackages(options);
 
-      // 自动加载当前工程（若发现工程根目录且未显式禁用）
+      // 阶段二：自动加载当前工程（若发现工程根目录且未显式禁用）
       if (options.autoLoadCurrentProject !== false) {
-        let root = options.projectRoot;
-        if (!root) {
-          const detected = findProjectRoot();
-          if (detected) {
-            root = detected;
-          }
-        }
-
-        if (root && existsSync(root)) {
-          if (isProjectLockHeld(root)) {
-            const err: any = new Error(
-              "PROJECT_BUSY: Project directory is locked by another active process holding project.lock"
-            );
-            err.code = PROJECT_BUSY;
-            throw err;
-          }
-          if (hasPendingTransactions(root)) {
-            const err: any = new Error(
-              `PROJECT_RECOVERY_REQUIRED: Project directory '${root}' has pending transactions requiring recovery; use async createActionDockHost() to recover automatically`
-            );
-            err.code = PROJECT_RECOVERY_REQUIRED;
-            throw err;
-          }
-          try {
-            const config = loadProjectConfig(root);
-            this.hostPublicPackageIds.add(config.id);
-
-            this.resolver = new ActionPackageResolver({
-              projectRoot: root,
-              manifest: config,
-              allowDevLinks: options.scanLinkedPackages,
-              customHome: options.customHome,
-            });
-
-            const graph = this.resolver.resolveSync();
-            this.hostPublicPackageIds.add(graph.rootPackageId);
-            for (const depId of graph.directDependencyIds) {
-              this.hostPublicPackageIds.add(depId);
-            }
-
-            for (const pkg of graph.packages.values()) {
-              if (!this.apps.has(pkg.packageId)) {
-                const isDirectOrRoot = this.hostPublicPackageIds.has(pkg.packageId);
-                const app = new DefaultActionDockApp({
-                  packageRoot: pkg.packageRoot,
-                  projectConfig: pkg.manifest,
-                  hostSessionId: this.hostSessionId,
-                  platform: options.platform,
-                  inMemory: options.inMemory,
-                  customHome: options.customHome,
-                  dataDir: options.dataDir,
-                  clock: options.clock,
-                  process: options.process,
-                  logger: options.logger,
-                  eventSink: this.eventSink,
-                  maxCallDepth: this.maxCallDepth,
-                  maxSubRuns: this.maxSubRuns,
-                  packageContextResolver: this.resolvePackageContext.bind(this),
-                });
-                this.internallyCreatedApps.add(app);
-                this.registerAppInternal(app, isDirectOrRoot);
-              }
-            }
-          } catch (err: any) {
-            if (
-              err?.code === ACTION_PACKAGE_VERSION_CONFLICT ||
-              err?.code === PROJECT_RECOVERY_REQUIRED ||
-              err?.code === PROJECT_BUSY
-            ) {
-              throw err;
-            }
-            // 忽略非 ActionDock 工程目录解析异常
-          }
-        }
+        this.loadCurrentProject(options);
       }
 
-      // 扫描已软链接的外部包并注册至 Host
+      // 阶段三：扫描已软链接的外部包并注册至 Host
       if (options.scanLinkedPackages) {
-        for (const linked of listLinkedPackages(options.customHome)) {
-          if (!this.apps.has(linked.id)) {
-            if (!existsSync(linked.path)) {
-              const err = `Linked package '${linked.id}' path does not exist on disk: '${linked.path}'`;
-              this.failedLinkedPackages.set(linked.id, { path: linked.path, error: err });
-              options.logger?.warn?.(`[Host] ${err}`);
-              continue;
-            }
-            try {
-              const config = loadProjectConfig(linked.path);
-              this.hostPublicPackageIds.add(linked.id);
-              const app = new DefaultActionDockApp({
-                packageRoot: linked.path,
-                projectConfig: config,
-                hostSessionId: this.hostSessionId,
-                platform: options.platform,
-                inMemory: options.inMemory,
-                customHome: options.customHome,
-                dataDir: options.dataDir,
-                clock: options.clock,
-                process: options.process,
-                logger: options.logger,
-                eventSink: this.eventSink,
-                maxCallDepth: this.maxCallDepth,
-                maxSubRuns: this.maxSubRuns,
-                packageContextResolver: this.resolvePackageContext.bind(this),
-              });
-              this.internallyCreatedApps.add(app);
-              this.registerAppInternal(app, true);
-            } catch (err: any) {
-              const errDetail = err?.message || String(err);
-              this.failedLinkedPackages.set(linked.id, { path: linked.path, error: errDetail });
-              options.logger?.warn?.(
-                `[Host] Failed to load linked package '${linked.id}' from '${linked.path}': ${errDetail}`
-              );
-            }
-          }
-        }
+        this.registerLinkedPackages(options);
       }
     } catch (err) {
       try {
@@ -276,6 +147,184 @@ export class DefaultActionDockHost implements ActionDockHost {
       this.internallyCreatedApps.clear();
       this.apps.clear();
       throw err;
+    }
+  }
+
+  /**
+   * 阶段函数：注册显式传入的 packages 列表（现成 App 实例或 AppOptions 配置）。
+   */
+  private registerExplicitPackages(options: ActionDockHostOptions): void {
+    if (!options.packages || !Array.isArray(options.packages)) {
+      return;
+    }
+    for (const item of options.packages) {
+      if (isActionDockApp(item)) {
+        this.registerAppInternal(item, true);
+      } else {
+        const app = new DefaultActionDockApp({
+          ...item,
+          hostSessionId: this.hostSessionId,
+          platform: item.platform ?? options.platform,
+          inMemory: item.inMemory ?? options.inMemory,
+          customHome: item.customHome ?? options.customHome,
+          dataDir: item.dataDir ?? options.dataDir,
+          clock: item.clock ?? options.clock,
+          process: item.process ?? options.process,
+          logger: item.logger ?? options.logger,
+          eventSink: item.eventSink ?? this.eventSink,
+          maxCallDepth: item.maxCallDepth ?? this.maxCallDepth,
+          maxSubRuns: item.maxSubRuns ?? this.maxSubRuns,
+          recoverOrphans: this.recoverOrphans,
+          packageContextResolver: this.resolvePackageContext.bind(this),
+        });
+        this.internallyCreatedApps.add(app);
+        this.registerAppInternal(app, true);
+      }
+    }
+  }
+
+  /**
+   * 阶段函数：自动加载当前工程并注册依赖闭包内的全部包。
+   *
+   * 失败语义区分场景：
+   * - 显式传入 projectRoot 时，任何解析失败（损坏 actiondock.json、文件系统错误等）
+   *   必须向上抛出，由调用方感知，严禁吞没；
+   * - 自动探测场景（未传 projectRoot，由 findProjectRoot 发现）失败时记录实例诊断
+   *   failedAutoLoad 并在创建时输出单行告警，保持宿主其余能力可用但绝不无声。
+   */
+  private loadCurrentProject(options: ActionDockHostOptions): void {
+    const explicitRoot = options.projectRoot;
+    let root = explicitRoot;
+    if (!root) {
+      const detected = findProjectRoot();
+      if (detected) {
+        root = detected;
+      }
+    }
+
+    if (!root || !existsSync(root)) {
+      return;
+    }
+
+    if (isProjectLockHeld(root)) {
+      const err: any = new Error(
+        "PROJECT_BUSY: Project directory is locked by another active process holding project.lock"
+      );
+      err.code = PROJECT_BUSY;
+      throw err;
+    }
+    if (hasPendingTransactions(root)) {
+      const err: any = new Error(
+        `PROJECT_RECOVERY_REQUIRED: Project directory '${root}' has pending transactions requiring recovery; use async createActionDockHost() to recover automatically`
+      );
+      err.code = PROJECT_RECOVERY_REQUIRED;
+      throw err;
+    }
+
+    try {
+      const config = loadProjectConfig(root);
+      this.hostPublicPackageIds.add(config.id);
+
+      this.resolver = new ActionPackageResolver({
+        projectRoot: root,
+        manifest: config,
+        allowDevLinks: options.scanLinkedPackages,
+        customHome: options.customHome,
+      });
+
+      const graph = this.resolver.resolveSync();
+      this.hostPublicPackageIds.add(graph.rootPackageId);
+      for (const depId of graph.directDependencyIds) {
+        this.hostPublicPackageIds.add(depId);
+      }
+
+      for (const pkg of graph.packages.values()) {
+        if (!this.apps.has(pkg.packageId)) {
+          const isDirectOrRoot = this.hostPublicPackageIds.has(pkg.packageId);
+          const app = new DefaultActionDockApp({
+            packageRoot: pkg.packageRoot,
+            projectConfig: pkg.manifest,
+            hostSessionId: this.hostSessionId,
+            platform: options.platform,
+            inMemory: options.inMemory,
+            customHome: options.customHome,
+            dataDir: options.dataDir,
+            clock: options.clock,
+            process: options.process,
+            logger: options.logger,
+            eventSink: this.eventSink,
+            maxCallDepth: this.maxCallDepth,
+            maxSubRuns: this.maxSubRuns,
+            recoverOrphans: this.recoverOrphans,
+            packageContextResolver: this.resolvePackageContext.bind(this),
+          });
+          this.internallyCreatedApps.add(app);
+          this.registerAppInternal(app, isDirectOrRoot);
+        }
+      }
+    } catch (err: any) {
+      if (
+        err?.code === ACTION_PACKAGE_VERSION_CONFLICT ||
+        err?.code === PROJECT_RECOVERY_REQUIRED ||
+        err?.code === PROJECT_BUSY
+      ) {
+        throw err;
+      }
+      if (explicitRoot) {
+        // 显式指定的工程根目录解析失败必须抛出：调用方明确指定了位置，损坏配置不允许被吞没
+        throw err;
+      }
+      // 自动探测场景：记录实例诊断并输出单行告警，避免损坏工程被无声跳过
+      const detail = err?.message || String(err);
+      this.failedAutoLoad = { projectRoot: root, error: detail };
+      console.warn(`[Host] Failed to auto-load project at '${root}': ${detail}`);
+    }
+  }
+
+  /**
+   * 阶段函数：扫描全局注册表中已软链接的外部包并注册至 Host。
+   * 加载失败的链接包记录至 failedLinkedPackages 诊断并在调阅时透传精准失败原因。
+   */
+  private registerLinkedPackages(options: ActionDockHostOptions): void {
+    for (const linked of listLinkedPackages(options.customHome)) {
+      if (this.apps.has(linked.id)) {
+        continue;
+      }
+      if (!existsSync(linked.path)) {
+        const err = `Linked package '${linked.id}' path does not exist on disk: '${linked.path}'`;
+        this.failedLinkedPackages.set(linked.id, { path: linked.path, error: err });
+        options.logger?.warn?.(`[Host] ${err}`);
+        continue;
+      }
+      try {
+        const config = loadProjectConfig(linked.path);
+        this.hostPublicPackageIds.add(linked.id);
+        const app = new DefaultActionDockApp({
+          packageRoot: linked.path,
+          projectConfig: config,
+          hostSessionId: this.hostSessionId,
+          platform: options.platform,
+          inMemory: options.inMemory,
+          customHome: options.customHome,
+          dataDir: options.dataDir,
+          clock: options.clock,
+          process: options.process,
+          logger: options.logger,
+          eventSink: this.eventSink,
+          maxCallDepth: this.maxCallDepth,
+          maxSubRuns: this.maxSubRuns,
+          recoverOrphans: this.recoverOrphans,
+          packageContextResolver: this.resolvePackageContext.bind(this),
+        });
+        this.internallyCreatedApps.add(app);
+        this.registerAppInternal(app, true);
+      } catch (err: any) {
+        const errDetail = err?.message || String(err);
+        this.failedLinkedPackages.set(linked.id, { path: linked.path, error: errDetail });
+        options.logger?.warn?.(
+          `[Host] Failed to load linked package '${linked.id}' from '${linked.path}': ${errDetail}`
+        );
+      }
     }
   }
 
@@ -307,6 +356,14 @@ export class DefaultActionDockHost implements ActionDockHost {
     return Array.from(this.apps.values());
   }
 
+  /**
+   * 获取自动加载工程的失败诊断信息。
+   * 仅自动探测场景会记录此诊断；显式传入 projectRoot 的加载失败会直接抛出，不产生此诊断。
+   */
+  getAutoLoadFailure(): { projectRoot: string; error: string } | undefined {
+    return this.failedAutoLoad;
+  }
+
   private registerAppInternal(app: ActionDockApp, isPublic: boolean): void {
     if (this.apps.has(app.packageId)) {
       const existing = this.apps.get(app.packageId)!;
@@ -323,19 +380,19 @@ export class DefaultActionDockHost implements ActionDockHost {
     }
     this.bindApp(app);
 
-    // 接管与恢复：自动将死亡会话或遗留非终态运行收敛为 interrupted
-    const st = app.storage;
-    if (st && typeof st.recoverDeadSessionRuns === "function") {
-      try {
-        st.recoverDeadSessionRuns(this.hostSessionId);
-      } catch {
-        // 忽略单包恢复异常
-      }
-    } else if (st && typeof st.recoverRunningRuns === "function") {
-      try {
-        st.recoverRunningRuns(this.hostSessionId);
-      } catch {
-        // 忽略单包恢复异常
+    // 接管与恢复：仅持有者身份的 Host 自动将死亡会话或遗留非终态运行收敛为 interrupted；
+    // 旁观查询 Host（CLI state/runs/config 命令）跳过本步骤，不动其他进程的在途记录
+    if (this.recoverOrphans) {
+      const st = app.storage;
+      if (st && typeof st.recoverDeadSessionRuns === "function") {
+        try {
+          st.recoverDeadSessionRuns(this.hostSessionId);
+        } catch (err) {
+          // 单包恢复失败不阻断整体接管流程，但必须可观测
+          console.warn(
+            `[actiondock] recoverDeadSessionRuns failed for package '${app.packageId}': ${err instanceof Error ? err.message : String(err)}`
+          );
+        }
       }
     }
   }

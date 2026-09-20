@@ -16,10 +16,10 @@ import {
   type ActionDockManifest,
 } from "@actiondock/core";
 import { Command } from "commander";
-import { ArgumentError, ExecutionError } from "../errors";
+import { ArgumentError, ExecutionError, notInProjectError } from "../errors";
 import { renderResult } from "../renderer";
 import type { CliContext } from "../types";
-import { getEffectiveOptions, spawnAsync } from "../utils";
+import { assertSafePackageSpec, getEffectiveOptions, spawnAsync } from "../utils";
 
 /**
  * 从安装说明符中提取基础 npm 包名（去除版本号及前缀范围）。
@@ -57,8 +57,8 @@ export function registerAddCommand(program: Command, context?: CliContext): void
       const root = options.package ? resolve(options.package) : findProjectRoot();
 
       if (!root) {
-        throw new ArgumentError(
-          "Not in an ActionDock project (actiondock.json not found).\nPlease specify -P, --package <path> or cd into a project directory."
+        throw notInProjectError(
+          "Please specify -P, --package <path> or cd into a project directory."
         );
       }
 
@@ -66,6 +66,9 @@ export function registerAddCommand(program: Command, context?: CliContext): void
       if (!manifest) {
         throw new ArgumentError(`actiondock.json not found in ${root}`);
       }
+
+      // 包说明符白名单前置校验：拒绝 shell 元字符，消除 win32 shell 拼接注入面
+      assertSafePackageSpec(packageSpec);
 
       const npmPackageName = extractNpmPackageName(packageSpec);
 

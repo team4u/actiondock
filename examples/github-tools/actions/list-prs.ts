@@ -8,6 +8,8 @@ export interface ListPrsInput {
 export interface ListPrsOutput {
   items: any[];
   count: number;
+  /** 未配置 Token 时返回演示数据，此标记为 true */
+  demo?: boolean;
 }
 
 export default defineAction(async (input: ListPrsInput, ctx): Promise<ListPrsOutput> => {
@@ -20,25 +22,27 @@ export default defineAction(async (input: ListPrsInput, ctx): Promise<ListPrsOut
   // If token is not configured or in mock/offline mode, return structured mock data
   if (!token) {
     ctx.log.warn("GITHUB_TOKEN not set, returning demo items");
+    // 演示数据使用固定时间戳，保证输出确定性（避免运行时钟影响测试与缓存）
     const mockItems = [
       {
         number: 101,
         title: "feat(core): support bun native compilation",
         author: "octocat",
         state: "open",
-        created_at: new Date().toISOString(),
+        created_at: "2026-01-01T00:00:00.000Z",
       },
       {
         number: 102,
         title: "fix(storage): improve sqlite concurrency with wal",
         author: "team4u",
         state: "open",
-        created_at: new Date().toISOString(),
+        created_at: "2026-01-01T00:00:00.000Z",
       },
     ];
     return {
       items: mockItems,
       count: mockItems.length,
+      demo: true,
     };
   }
 

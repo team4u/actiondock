@@ -335,6 +335,81 @@ describe("SqliteRuntimeStorage", () => {
     });
   });
 
+  describe("跨进程收割隔离（持有者显式声明，旁观者不动）", () => {
+    it("旁观实例打开同一库时 running 记录保持 running，持有者显式开启恢复开关后才收割", async () => {
+      const { mkdtempSync, rmSync } = await import("node:fs");
+      const tempDir = mkdtempSync(join(tmpdir(), "ad-recover-race-test-"));
+      const dbPath = join(tempDir, "race-pkg", "runtime.db");
+
+      try {
+        // 模拟 serve 持有者进程打开库并写入在途 running 记录
+        const owner = new SqliteRuntimeStorage({
+          packageId: "race-pkg",
+          dbPath,
+          recoverOrphans: true,
+        });
+        const now = new Date().toISOString();
+        owner.createRun({
+          id: "run-in-flight",
+          packageId: "race-pkg",
+          actionId: "job",
+          status: "running" as const,
+          startedAt: now,
+        });
+
+        // 旁观查询进程（CLI state/runs/config 类命令）打开同一库文件：缺省不收割
+        const observer = new SqliteRuntimeStorage({
+          packageId: "race-pkg",
+          dbPath,
+        });
+        expect(observer.isOpen).toBe(true);
+
+        // 旁观者打开后，持有者的在途记录仍为 running（未被误收割为 interrupted）
+        const observed = observer.getRun("run-in-flight");
+        expect(observed).not.toBeNull();
+        expect(observed?.status).toBe("running");
+        await observer.close();
+
+        // 持有者侧终态结算正常写入，不因旁观者打开而丢失
+        owner.updateRun("run-in-flight", "success", { done: true });
+        const settled = owner.getRun("run-in-flight");
+        expect(settled?.status).toBe("success");
+        expect(settled?.output).toEqual({ done: true });
+        await owner.close();
+
+        // 显式开启恢复开关的持有者打开后，遗留 running 记录才被收割为 interrupted
+        const nextOwner = new SqliteRuntimeStorage({
+          packageId: "race-pkg",
+          dbPath,
+          recoverOrphans: true,
+        });
+        const nextOwnerRun = nextOwner.createRun({
+          id: "run-orphan",
+          packageId: "race-pkg",
+          actionId: "job",
+          status: "running" as const,
+          startedAt: new Date().toISOString(),
+        });
+        expect(nextOwnerRun).toBeUndefined(); // createRun 无返回值，仅确认不抛错
+        await nextOwner.close();
+
+        const reclaimer = new SqliteRuntimeStorage({
+          packageId: "race-pkg",
+          dbPath,
+          recoverOrphans: true,
+        });
+        const reclaimed = reclaimer.getRun("run-orphan");
+        expect(reclaimed?.status).toBe("interrupted");
+        expect(reclaimed?.error?.code).toBe("RUN_INTERRUPTED");
+        await reclaimer.close();
+      } finally {
+        try {
+          rmSync(tempDir, { recursive: true, force: true });
+        } catch {}
+      }
+    });
+  });
+
   describe("Database Path Security", () => {
     it("严格拦截包含路径遍历与非法字符的 packageId", () => {
       expect(() => resolveDatabasePath("../malicious")).toThrow();

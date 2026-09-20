@@ -163,8 +163,9 @@ export async function runDoctorChecks(options?: {
         if (hasDeps && !existsSync(join(pkg.path, "node_modules"))) {
           missingNodeModules.push(pkg.id);
         }
-      } catch {
-        // 忽略异常 JSON
+      } catch (err: any) {
+        // 单包 package.json 损坏：计入检查告警而非无声跳过，诊断工具必须暴露异常
+        missingNodeModules.push(`${pkg.id} (unreadable package.json: ${err?.message || String(err)})`);
       }
     }
 
@@ -188,8 +189,15 @@ export async function runDoctorChecks(options?: {
           : "No linked packages requiring dependency verification",
       });
     }
-  } catch {
-    // 忽略依赖检查异常
+  } catch (err: any) {
+    // 依赖检查整体失败：转为 error 检查项呈现在报告中，而非无声跳过
+    checks.push({
+      id: "registry.dependencies",
+      category: "registry",
+      name: "Linked Package Dependencies",
+      status: "error",
+      message: `Failed to check linked package dependencies: ${err?.message || String(err)}`,
+    });
   }
 
   // 6. Check Cross-Package Uses Dependency Closure
@@ -210,8 +218,11 @@ export async function runDoctorChecks(options?: {
       try {
         const cfg = loadProjectConfig(curProjectRoot);
         packagesToCheck.push({ id: cfg.id, root: curProjectRoot });
-      } catch {
-        // 忽略配置异常
+      } catch (err: any) {
+        // 当前工程配置损坏：无法纳入闭包检查范围，输出告警而非无声跳过
+        console.warn(
+          `[Doctor] Skipping corrupted current project in uses-closure check: '${curProjectRoot}' (${err?.message || String(err)})`
+        );
       }
     }
 
@@ -266,8 +277,15 @@ export async function runDoctorChecks(options?: {
         message: "All cross-package uses declarations in manifests resolved successfully",
       });
     }
-  } catch {
-    // 忽略闭包检查异常
+  } catch (err: any) {
+    // 闭包检查整体失败：转为 error 检查项呈现在报告中，而非无声跳过
+    checks.push({
+      id: "registry.uses_closure",
+      category: "registry",
+      name: "Cross-Package Uses Dependencies",
+      status: "error",
+      message: `Failed to check cross-package uses dependencies: ${err?.message || String(err)}`,
+    });
   }
 
   // 7. Check Project Context
@@ -293,8 +311,11 @@ export async function runDoctorChecks(options?: {
       ) {
         projectRoot = null;
       }
-    } catch {
-      // 忽略预校验异常，交由后续详细诊断处理
+    } catch (err: any) {
+      // 预校验失败不改变根目录定位，交由后续详细诊断呈现具体错误；但绝不无声吞没，输出告警
+      console.warn(
+        `[Doctor] Failed to pre-validate project config at '${projectRoot}': ${err?.message || String(err)}`
+      );
     }
   }
 
@@ -369,7 +390,7 @@ export async function runDoctorChecks(options?: {
         if (manifest?.actions) {
           actionsCount = Object.keys(manifest.actions).length;
         } else {
-          const actions = await loadActions(projectRoot, config.actionsDir, { autoInstall: false });
+          const actions = await loadActions(projectRoot, config.actionsDir);
           actionsCount = actions.size;
         }
 
@@ -511,6 +532,7 @@ export async function runDoctorChecks(options?: {
         } else if (hasSrc || hasLib) {
           const actionFiles = discoverActionFiles(projectRoot, config.actionsDir || "actions");
           let hasReferenceToSrcOrLib = false;
+          const unreadableFiles: string[] = [];
           for (const actFile of actionFiles) {
             try {
               const src = readFileSync(actFile, "utf-8");
@@ -518,8 +540,9 @@ export async function runDoctorChecks(options?: {
                 hasReferenceToSrcOrLib = true;
                 break;
               }
-            } catch {
-              // 忽略单个文件读取异常
+            } catch (err: any) {
+              // 单文件读取失败：计入告警名单，边界检测结论不再基于无声缺失的数据
+              unreadableFiles.push(`${actFile} (${err?.message || String(err)})`);
             }
           }
 
@@ -537,13 +560,22 @@ export async function runDoctorChecks(options?: {
               id: "project.files",
               category: "project",
               name: "Declared Files",
-              status: "ok",
-              message: `Project source directories clean (no undeclared references to ${hasSrc ? "src/" : "lib/"})`,
+              status: unreadableFiles.length > 0 ? "warn" : "ok",
+              message: unreadableFiles.length > 0
+                ? `Project source directories clean, but ${unreadableFiles.length} action file(s) unreadable during boundary scan: ${unreadableFiles.join(", ")}`
+                : `Project source directories clean (no undeclared references to ${hasSrc ? "src/" : "lib/"})`,
             });
           }
         }
-      } catch {
-        // 忽略文件边界检测异常
+      } catch (err: any) {
+        // 文件边界检测整体失败：转为 error 检查项呈现在报告中，而非无声跳过
+        checks.push({
+          id: "project.files",
+          category: "project",
+          name: "Declared Files",
+          status: "error",
+          message: `Failed to inspect declared files and source boundaries: ${err?.message || String(err)}`,
+        });
       }
 
 

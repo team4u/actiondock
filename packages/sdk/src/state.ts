@@ -1,5 +1,9 @@
 /**
  * 转义状态键分段中的特殊字符（\ 和 :）。
+ *
+ * 工具独立性声明：状态键编解码是 sdk 零依赖公共包的自备最小实现，
+ * 有意独立于 core；core 的存储层反向依赖 sdk 引入本组函数，
+ * 故此处为单一事实源而非重复副本。
  */
 export function escapeStateSegment(segment: string): string {
   return segment.replace(/\\/g, "\\\\").replace(/:/g, "\\:");

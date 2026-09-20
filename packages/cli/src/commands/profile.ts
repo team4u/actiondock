@@ -19,7 +19,7 @@ import {
   CliError,
   ExecutionError,
 } from "../errors";
-import { renderResult, writeStdout } from "../renderer";
+import { renderResult, writeStderr, writeStdout } from "../renderer";
 import { getEffectiveOptions, resolveFallbackStrategy, resolveIntent } from "../utils";
 
 export function registerProfileCommands(program: Command): void {
@@ -130,7 +130,7 @@ export function registerProfileCommands(program: Command): void {
     .action((name, options) => {
       try {
         if (options.token) {
-          console.warn(
+          writeStderr(
             "Warning: storing tokens directly in profiles.json is deprecated. Use --token-env or standard environment variables (e.g. ACTIONDOCK_<PROFILE>_TOKEN) instead."
           );
         }
@@ -160,7 +160,7 @@ export function registerProfileCommands(program: Command): void {
     .action((name, options) => {
       try {
         if (options.token) {
-          console.warn(
+          writeStderr(
             "Warning: storing tokens directly in profiles.json is deprecated. Use --token-env or standard environment variables (e.g. ACTIONDOCK_<PROFILE>_TOKEN) instead."
           );
         }

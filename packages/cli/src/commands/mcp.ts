@@ -3,7 +3,7 @@ import { findProjectRoot, formatHostForUrl, loadProjectConfig, parseDuration } f
 import { createNodePlatform } from "@actiondock/runtime-node";
 import { Command } from "commander";
 import { ArgumentError, ExecutionError } from "../errors";
-import { writeStdout } from "../renderer";
+import { writeStderr, writeStdout } from "../renderer";
 import type { CliContext } from "../types";
 import { getEffectiveOptions, parseByteSize, parseListOption } from "../utils";
 
@@ -31,7 +31,6 @@ export function registerMcpCommands(program: Command, context?: CliContext): voi
     )
     .option("--all", "Serve all linked packages from global registry")
     .option("--timeout <duration>", "Execution timeout (e.g. 30s, 5m, 500ms)")
-    .option("--allow-insecure-http", "Allow insecure HTTP connections with auth token (INSECURE)")
     .option("--data-dir <path>", "Custom database storage directory")
     .action(async (rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
@@ -213,7 +212,18 @@ export function registerMcpCommands(program: Command, context?: CliContext): voi
 
         const stopSignalHandler = () => {
           writeStdout("\nStopping MCP HTTP server...", context);
-          server.stop();
+          Promise.resolve(server.stop())
+            .catch((err: unknown) => {
+              // 停止失败必须可见：写入 stderr 一行并标记失败退出码
+              writeStderr(
+                `[ERROR] Failed to stop MCP HTTP server gracefully: ${err instanceof Error ? err.message : String(err)}`,
+                context
+              );
+              process.exitCode = 1;
+            })
+            .finally(() => {
+              process.exit(typeof process.exitCode === "number" ? process.exitCode : 0);
+            });
         };
 
         process.once("SIGINT", stopSignalHandler);

@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import { normalizeSemver } from "./lib/semver.js";
 
 const rootDir = resolve(import.meta.dirname, "..");
 
@@ -57,13 +58,13 @@ function getTargetVersion(): string {
     cleaned = cleaned.slice(1);
   }
 
-  const semverRegex = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/;
-  if (!semverRegex.test(cleaned)) {
+  const normalized = normalizeSemver(cleaned);
+  if (!normalized) {
     console.error(`Error: Invalid semver version '${cleaned}'`);
     process.exit(1);
   }
 
-  return cleaned;
+  return normalized;
 }
 
 function updateJsonFile(filePath: string, updater: (json: any) => void): void {

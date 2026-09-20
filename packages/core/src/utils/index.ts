@@ -2,6 +2,8 @@ import { existsSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
+export { isLoopbackHost } from "./net";
+
 /**
  * 跨运行时安全查找可执行文件绝对物理路径。
  *

@@ -53,8 +53,8 @@ describe("GitHub Tools Action Package", () => {
       assert.notEqual(review.verdict, undefined);
       assert.notEqual(review.summary, undefined);
 
-      // Verify state checkpoint
-      const saved = await runtime.state.get("review:team4u/actiondock:42");
+      // Verify state checkpoint (unambiguous slash-delimited key format)
+      const saved = await runtime.state.get("review/team4u/actiondock/42");
       assert.notEqual(saved, undefined);
     });
   });
@@ -124,7 +124,7 @@ describe("GitHub Tools Action Package", () => {
       assert.equal(reviewData.pullNumber, 42);
       assert.equal(reviewData.verdict, "APPROVE");
 
-      const savedState = await app.getState<{ verdict: string }>("review:team4u/actiondock:42");
+      const savedState = await app.getState<{ verdict: string }>("review/team4u/actiondock/42");
       assert.ok(savedState);
       assert.equal(savedState.verdict, "APPROVE");
 

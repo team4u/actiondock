@@ -28,8 +28,6 @@ import {
 } from "@actiondock/core";
 import {
   assertValidManifestActionIds,
-  buildPlan,
-  BuildPlanner,
   buildProject,
   collectRelativeFiles,
   packProject,
@@ -38,10 +36,8 @@ import {
   exportSkillBatch,
   exportCompositeSkill,
   getInternalDependencyVersion,
-  selectionPlan,
   SelectionPlanner,
   serializePlanManifest,
-  SkillExporter,
   createTarGzArchive,
   createTarGzArchiveAsync,
   createZipArchive,
@@ -127,7 +123,7 @@ describe("@actiondock/builder 测试套件", () => {
     }
   });
 
-  describe("BuildPlanner: 依赖闭包计算与构建规划", () => {
+  describe("SelectionPlanner: 依赖闭包计算与构建规划", () => {
     it("基于声明式清单规划构建并正确区分三类依赖", () => {
       // 写入声明式清单
       const manifest: ActionDockManifest = {
@@ -148,7 +144,7 @@ describe("@actiondock/builder 测试套件", () => {
       mkdirSync(join(tempDir, "assets"), { recursive: true });
       writeFileSync(join(tempDir, "assets", "template.txt"), "Hello Template", "utf-8");
 
-      const planner = new BuildPlanner({ projectRoot: tempDir });
+      const planner = new SelectionPlanner({ projectRoot: tempDir });
       const plan = planner.plan();
 
       expect(plan.packageId).toBe("test.builder-fixture");
@@ -197,7 +193,7 @@ export default {
       saveManifest(tempDir, manifest);
 
       // 执行规划：应当成功返回，绝不得触发上述异常
-      const plan = buildPlan({
+      const plan = SelectionPlanner.plan({
         projectRoot: tempDir,
         actions: ["sample.bomb"],
       });
@@ -242,7 +238,7 @@ export default {
       saveManifest(tempDir, manifest);
 
       // 仅挑选 action.a
-      const plan = buildPlan({
+      const plan = SelectionPlanner.plan({
         projectRoot: tempDir,
         actions: ["action.a"],
       });
@@ -289,7 +285,7 @@ export default {
       };
       saveManifest(tempDir, manifest);
 
-      const plan = buildPlan({
+      const plan = SelectionPlanner.plan({
         projectRoot: tempDir,
         actions: ["action.top"],
       });
@@ -342,7 +338,7 @@ export default {
       };
       saveManifest(tempDir, manifest);
 
-      const plan = buildPlan({
+      const plan = SelectionPlanner.plan({
         projectRoot: tempDir,
         actions: ["hub.a", "hub.b", "hub.c"],
       });
@@ -374,7 +370,7 @@ export default {
       };
       saveManifest(tempDir, manifest);
 
-      const plan = buildPlan({
+      const plan = SelectionPlanner.plan({
         projectRoot: tempDir,
         actions: ["loop.a"],
       });
@@ -432,7 +428,7 @@ export default {
       writeFileSync(join(tempDir, "playbooks", "workflow-other.md"), pb2Content, "utf-8");
 
       // 仅挑选 workflow-main 规程
-      const plan = buildPlan({
+      const plan = SelectionPlanner.plan({
         projectRoot: tempDir,
         playbooks: ["workflow-main"],
       });
@@ -462,7 +458,7 @@ export default {
       saveManifest(tempDir, manifest);
 
       expect(() => {
-        buildPlan({
+        SelectionPlanner.plan({
           projectRoot: tempDir,
           actions: ["broken.action"],
         });
@@ -505,7 +501,7 @@ export default defineAction({
       saveManifest(tempDir, manifest);
 
       // 1. 显式构建参数 files 仅指定部分文件，未声明的 unused.ts 绝不猜测纳入
-      const selectivePlan = selectionPlan({
+      const selectivePlan = SelectionPlanner.plan({
         projectRoot: tempDir,
         actions: ["sample.custom-greet"],
         files: ["lib/format.ts", "lib/utils/sanitize.ts"],
@@ -619,7 +615,7 @@ export default defineAction({
         symlinkSync(externalFile, join(assetsDir, "escaped-link.txt"));
 
         // 构建全量构建计划
-        const plan = buildPlan({ projectRoot: tempDir });
+        const plan = SelectionPlanner.plan({ projectRoot: tempDir });
 
         const assetDeps = plan.dependencies.modulesAndAssets.filter((d) => d.type === "asset");
         const assetPaths = assetDeps.map((d) => d.path.replace(/\\/g, "/"));
@@ -1141,7 +1137,7 @@ export default defineAction({
     it("传入 standalone 模式时严格拒绝并抛出提示替代方案的 BuilderError", async () => {
       let error: any;
       try {
-        await SkillExporter.export({
+        await exportSkill({
           projectRoot: tempDir,
           standalone: true,
         });
@@ -1169,7 +1165,7 @@ export default defineAction({
       saveManifest(tempDir, manifest);
 
       const outDir = join(tempDir, "dist", "exported-node-skill");
-      const exportRes = await SkillExporter.export({
+      const exportRes = await exportSkill({
         projectRoot: tempDir,
         mode: "node",
         outDir,
@@ -2032,7 +2028,7 @@ export default defineAction({
       }
     });
 
-    it("resolves external linked action in BuildPlanner when linked package has default actiondock.json", async () => {
+    it("resolves external linked action in SelectionPlanner when linked package has default actiondock.json", async () => {
       const extDir = mkdtempSync(join(tmpdir(), "ext-pkg-"));
       try {
         initProject(extDir, { id: "test.ext-tools", name: "External Tools" });
@@ -2042,7 +2038,7 @@ export default defineAction({
         );
         await linkPackage(extDir);
 
-        const planner = new BuildPlanner({ projectRoot: tempDir });
+        const planner = new SelectionPlanner({ projectRoot: tempDir });
         const plan = planner.plan({
           projectRoot: tempDir,
           manifest: {
@@ -2094,7 +2090,7 @@ export default defineAction({
           `# Guide\n`
         );
 
-        const planner = new BuildPlanner({ projectRoot: customDir });
+        const planner = new SelectionPlanner({ projectRoot: customDir });
         const plan = planner.plan({ projectRoot: customDir });
         expect(plan.actionsDir).toBe("src/my-actions");
         expect(plan.playbooksDir).toBe("docs/my-playbooks");

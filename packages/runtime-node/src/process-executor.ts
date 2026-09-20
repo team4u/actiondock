@@ -155,6 +155,7 @@ export class NodeProcessExecutor implements ProcessExecutor {
       let cancelled = false;
       let outputLimitExceeded = false;
       let error: RuntimeError | undefined;
+      let writeErr: Error | undefined;
 
       const stdoutChunks: Buffer[] = [];
       const stderrChunks: Buffer[] = [];
@@ -268,19 +269,53 @@ export class NodeProcessExecutor implements ProcessExecutor {
         }, options.timeoutMs);
       }
 
-      // 处理标准输入管道流式传入
+      // 处理标准输入管道流式传入：写入错误不静默吞没，
+      // 至少以带来源标注的方式记入结果 stderr（EPIPE 常见于进程提前退出）；
+      // 大输入写入遇到背压时等待 drain 后继续，避免无界内存滞留
       if (child.stdin) {
-        child.stdin.on("error", () => {
-          // 忽略管道提前关闭错误
-        });
-        if (options.input !== undefined && options.input !== null) {
-          if (typeof options.input === "string") {
-            child.stdin.write(options.input);
-          } else {
-            child.stdin.write(Buffer.from(options.input));
+        const stdin = child.stdin;
+        stdin.on("error", (err: Error) => {
+          if (!writeErr) {
+            writeErr = err;
           }
-        }
-        child.stdin.end();
+        });
+        const writeInput = async (): Promise<void> => {
+          if (options.input === undefined || options.input === null) {
+            return;
+          }
+          const buffer =
+            typeof options.input === "string"
+              ? Buffer.from(options.input)
+              : Buffer.from(
+                  options.input.buffer,
+                  options.input.byteOffset,
+                  options.input.byteLength
+                );
+          await new Promise<void>((resolve) => {
+            let settled = false;
+            const finish = () => {
+              if (settled) return;
+              settled = true;
+              stdin.removeListener("drain", onDrain);
+              resolve();
+            };
+            const onDrain = () => finish();
+            try {
+              const canContinue = stdin.write(buffer, () => finish());
+              if (canContinue) {
+                finish();
+              } else {
+                stdin.once("drain", onDrain);
+              }
+            } catch {
+              finish();
+            }
+          });
+        };
+        void (async () => {
+          await writeInput();
+          stdin.end();
+        })();
       }
 
       // 处理标准输出数据与字节截断
@@ -332,7 +367,11 @@ export class NodeProcessExecutor implements ProcessExecutor {
         };
 
         const stdoutBuf = Buffer.concat(stdoutChunks);
-        const stderrBuf = Buffer.concat(stderrChunks);
+        const stderrBuf = Buffer.concat(
+          writeErr
+            ? [...stderrChunks, Buffer.from(`\n[stdin write failed: ${writeErr.message}]`)]
+            : stderrChunks
+        );
         const stdoutStr = stdoutBuf.toString(encoding);
         const stderrStr = stderrBuf.toString(encoding);
 
@@ -364,7 +403,11 @@ export class NodeProcessExecutor implements ProcessExecutor {
 
         const durationMs = Date.now() - startTime;
         const stdoutBuf = Buffer.concat(stdoutChunks);
-        const stderrBuf = Buffer.concat(stderrChunks);
+        const stderrBuf = Buffer.concat(
+          writeErr
+            ? [...stderrChunks, Buffer.from(`\n[stdin write failed: ${writeErr.message}]`)]
+            : stderrChunks
+        );
         const stdoutStr = stdoutBuf.toString(encoding);
         const stderrStr = stderrBuf.toString(encoding);
         const signal = exitSignal || undefined;

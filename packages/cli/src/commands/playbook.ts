@@ -14,12 +14,18 @@ import {
   resolveActionProject,
   resolvePackageRoot,
   resolvePlaybookProject,
-  resolveTarget,
   saveManifest,
   type PlaybookDefinition,
 } from "@actiondock/core";
 import { Command } from "commander";
-import { ArgumentError, CliError, ExecutionError } from "../errors";
+import {
+  ArgumentError,
+  CliError,
+  ExecutionError,
+  NO_PROJECT_NO_LINKED_MESSAGE,
+  notInProjectError,
+  packageNotFoundError,
+} from "../errors";
 import {
   renderPlaybookDetail,
   renderPlaybookList,
@@ -27,7 +33,12 @@ import {
   writeStdout,
 } from "../renderer";
 import type { CliContext } from "../types";
-import { applyTargetOptions, getEffectiveOptions, resolveIntent } from "../utils";
+import {
+  applyTargetOptions,
+  getEffectiveOptions,
+  resolveIntent,
+  resolveTargetFromOptions,
+} from "../utils";
 
 /**
  * 注册 Playbook 命令集合（list, show, validate, create）。
@@ -58,13 +69,7 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
       const isMachine = Boolean(options.json || options.envelope);
 
       // 1. 远端服务分支
-      const target = resolveTarget({
-        profile: options.profile,
-        server: options.server,
-        token: options.token,
-        insecure: options.insecure,
-        allowInsecureHttp: options.allowInsecureHttp,
-      }, context?.customHome);
+      const target = resolveTargetFromOptions(options, context);
 
       if (target.type === "remote") {
         const remotePbs = await fetchRemotePlaybooks(target.serverUrl!, target.token, {
@@ -94,9 +99,7 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
       if (options.package) {
         targetRoot = resolvePackageRoot(options.package);
         if (!targetRoot) {
-          throw new ArgumentError(
-            `Package '${options.package}' not found in linked packages or path`
-          );
+          throw packageNotFoundError(options.package);
         }
       } else {
         targetRoot = findProjectRoot();
@@ -149,7 +152,7 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
           {
             json: options.json,
             envelope: options.envelope,
-            humanFormatter: () => "No ActionDock project in current directory, and no packages linked.",
+            humanFormatter: () => NO_PROJECT_NO_LINKED_MESSAGE,
             context,
           }
         );
@@ -263,13 +266,7 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
       }
 
       // 1. 远端服务分支
-      const target = resolveTarget({
-        profile: options.profile,
-        server: options.server,
-        token: options.token,
-        insecure: options.insecure,
-        allowInsecureHttp: options.allowInsecureHttp,
-      }, context?.customHome);
+      const target = resolveTargetFromOptions(options, context);
 
       if (target.type === "remote") {
         const detail = await fetchRemotePlaybookShow(target.serverUrl!, id, target.token, {
@@ -290,9 +287,7 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
       if (options.package && !id.includes("/")) {
         const pkgRoot = resolvePackageRoot(options.package);
         if (!pkgRoot) {
-          throw new ArgumentError(
-            `Package '${options.package}' not found in linked packages or path`
-          );
+          throw packageNotFoundError(options.package);
         }
         showTarget = `${options.package}/${id}`;
       }
@@ -336,9 +331,7 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
       if (options.package) {
         root = resolvePackageRoot(options.package);
         if (!root) {
-          throw new ArgumentError(
-            `Package '${options.package}' not found in linked packages or path`
-          );
+          throw packageNotFoundError(options.package);
         }
       } else {
         root = findProjectRoot();
@@ -373,7 +366,7 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
       } else {
         const linkedList = listLinkedPackages(context?.customHome);
         if (linkedList.length === 0) {
-          throw new ArgumentError("Not in an ActionDock project, and no packages linked.");
+          throw new ArgumentError(`${NO_PROJECT_NO_LINKED_MESSAGE} Please run 'ad link' inside a package first.`);
         }
         for (const pkg of linkedList) {
           if (!existsSync(pkg.path)) continue;
@@ -487,7 +480,7 @@ export function handlePlaybookCreate(
 ): void {
   const root = findProjectRoot();
   if (!root) {
-    throw new ExecutionError("Not in an ActionDock project (actiondock.json not found)");
+    throw notInProjectError();
   }
   try {
     const config = loadProjectConfig(root);

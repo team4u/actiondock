@@ -12,11 +12,11 @@ ActionDock 2.0 构建规划、目录交付与技能导出包。
 
 ## 核心组件与能力
 
-### BuildPlanner 依赖闭包计算器
+### SelectionPlanner 依赖闭包计算器
 
 通过静态分析依赖关系与 Playbook 规程，无需执行任何业务代码，杜绝模块加载过程中的副作用：
 
-- 规划模型：[SelectionPlanner](./src/planner.ts)（别名 BuildPlanner）读取 `actiondock.json` 与 Playbook 的 YAML 头部，提取 Actions 与 Playbooks 映射。
+- 规划模型：[SelectionPlanner](./src/planner.ts) 读取 `actiondock.json` 与 Playbook 的 YAML 头部，提取 Actions 与 Playbooks 映射。
 - 递归依赖闭包：自顶向下递归解析 Action 的 `uses` 声明列表，构建完整的静态调用图。
 - 规程驱动按需剪枝：支持针对特定 Playbook 进行定向打包，自动计算并仅保留该 Playbook 直接或间接调用的最小 Action 集合，实现依赖按需裁剪。
 - 静态资产收集：自动识别并关联声明的静态资产文件。
@@ -55,11 +55,11 @@ ActionDock 2.0 构建规划、目录交付与技能导出包。
 ## 编程调用示例
 
 ```ts
-import { buildProject, packProject, SelectionPlanner, SkillExporter } from "@actiondock/builder";
+import { buildProject, packProject, SelectionPlanner, SkillExporter, exportSkill } from "@actiondock/builder";
 
 // 计算依赖规划闭包
 const planner = new SelectionPlanner({ projectRoot: "/path/to/project" });
-const plan = planner.createPlan({ playbookId: "review-pr" });
+const plan = planner.plan({ projectRoot: "/path/to/project", playbooks: ["review-pr"] });
 
 // 构建 Node.js 目录交付产物
 const buildResult = await buildProject({
@@ -74,11 +74,19 @@ const packResult = await packProject({
   outDir: "./dist/npm",
 });
 
-// 导出 Agent Skill 资产
-const exporter = new SkillExporter({ projectRoot: "/path/to/project" });
-const skillResult = await exporter.export({
-  outputDir: "./dist/skills",
-  playbookId: "review-pr",
+// 导出 Agent Skill 资产（顶层便捷入口，内部委托 SkillExporter 实例方法）
+const skillResult = await exportSkill({
+  projectRoot: "/path/to/project",
+  outDir: "./dist/skills",
+  playbooks: ["review-pr"],
+  mode: "source",
+});
+
+// 或直接实例化 SkillExporter 定制导出
+const exporter = new SkillExporter();
+const customResult = await exporter.export({
+  projectRoot: "/path/to/project",
+  outDir: "./dist/skills-custom",
   mode: "source",
 });
 ```

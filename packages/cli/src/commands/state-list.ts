@@ -5,6 +5,7 @@ import {
   loadProjectConfig,
 } from "@actiondock/core";
 import { existsSync } from "node:fs";
+import { NO_PROJECT_NO_LINKED_MESSAGE } from "../errors";
 import { renderResult, renderStateList } from "../renderer";
 import type { CliContext } from "../types";
 
@@ -93,7 +94,7 @@ export async function renderLinkedPackagesStateList(args: StateListRenderArgs): 
       {
         json: options.json,
         envelope: options.envelope,
-        humanFormatter: () => "No ActionDock project in current directory, and no packages linked.",
+        humanFormatter: () => NO_PROJECT_NO_LINKED_MESSAGE,
         context,
       }
     );

@@ -6,6 +6,14 @@ import type {
 } from "./types";
 
 /**
+ * 工具独立性声明：
+ * 本文件的字节编解码、流式解码与控制权保护工具是 sdk 作为零依赖公共包的
+ * 最小自备实现，有意独立于 core（core 及其他包反向依赖 sdk 引入这些能力）。
+ * 禁止为消除「重复」而让 sdk 反向依赖 core 或在此拷贝 core 的通用工具；
+ * 新增通用工具时应上提到调用方自身层级，而非下沉到 sdk。
+ */
+
+/**
  * 将字符串或二进制字节数组编码为标准 Bytes 结构。
  * @param data 待编码的字符串或字节数组
  */
@@ -279,9 +287,9 @@ export async function withControl<T>(
             options.signal ? { signal: options.signal } : undefined
           );
           if (isSettled || isReleased) return;
+          // 仅更新内部跟踪的最新令牌供后续释放使用，不致写调用方持有的 grant 对象：
+          // grant 属于调用方入参，直接改写会破坏所有权边界与外部对原始凭证的预期
           currentToken = renewed.token;
-          grant.token = renewed.token;
-          grant.expiresAt = renewed.expiresAt;
         } catch (err) {
           if (isSettled || isReleased) return;
           renewError = err;

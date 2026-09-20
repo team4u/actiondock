@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import { filterWithFallbackInfo } from "@actiondock/core";
-import { ArgumentError } from "../errors";
+import { packageNotFoundError } from "../errors";
 import { renderActionList, renderResult } from "../renderer";
 import type { CliContext } from "../types";
 import {
@@ -39,9 +39,7 @@ export function attachListCommand(parent: Command, context?: CliContext): Comman
       // 目标拓扑解析（仅 local 分支需要包寻址）
       const targetPackageRoot = resolveLocalPackageRoot(options.package);
       if (options.package && !targetPackageRoot) {
-        throw new ArgumentError(
-          `Package '${options.package}' not found in linked packages or path`
-        );
+        throw packageNotFoundError(options.package);
       }
 
       // 通过 Target 门面统一获取 Action 列表

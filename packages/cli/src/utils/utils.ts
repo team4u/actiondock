@@ -1,5 +1,5 @@
 import { resolvePackageRoot, findProjectRoot } from "@actiondock/core";
-import { ArgumentError } from "../errors";
+import { ArgumentError, notInProjectError, packageNotFoundError } from "../errors";
 
 /**
  * 解析意图字符串（从显式 --intent 或位置模式参数聚合）。
@@ -89,10 +89,10 @@ export function getTargetRoot(
   const root = resolvePackageRoot(targetPackage) || (targetPackage ? null : findProjectRoot());
   if (!root) {
     if (targetPackage) {
-      throw new ArgumentError(`Package '${targetPackage}' not found in linked packages or path`);
+      throw packageNotFoundError(targetPackage);
     } else {
-      throw new ArgumentError(
-        "Not in an ActionDock project (actiondock.json not found). Please specify -P, --package <id> or cd into a project directory."
+      throw notInProjectError(
+        "Please specify -P, --package <id> or cd into a project directory."
       );
     }
   }

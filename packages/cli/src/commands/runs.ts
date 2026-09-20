@@ -4,16 +4,22 @@ import {
   listLinkedPackages,
   loadProjectConfig,
   resolvePackageRoot,
-  resolveTarget,
 } from "@actiondock/core";
 import { Command } from "commander";
-import { ArgumentError, ExecutionError } from "../errors";
+import {
+  ArgumentError,
+  ExecutionError,
+  NO_PROJECT_NO_LINKED_MESSAGE,
+  notInProjectError,
+  packageNotFoundError,
+} from "../errors";
 import { renderResult, renderRunDetail, renderRunsList } from "../renderer";
 import type { CliContext } from "../types";
 import {
   applyTargetOptions,
   getEffectiveOptions,
   resolveIntent,
+  resolveTargetFromOptions,
   withRemoteTarget,
   withTarget,
 } from "../utils";
@@ -29,7 +35,7 @@ function resolveLocalRunScope(packageOption?: string): {
   if (packageOption) {
     const root = resolvePackageRoot(packageOption);
     if (!root) {
-      throw new ArgumentError(`Package '${packageOption}' not found in linked packages or path`);
+      throw packageNotFoundError(packageOption);
     }
     try {
       return { targetPackageRoot: root, projConfig: loadProjectConfig(root) };
@@ -103,7 +109,7 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
               renderResult([], {
                 json: options.json,
                 envelope: options.envelope,
-                humanFormatter: () => "No ActionDock project in current directory, and no packages linked.",
+                humanFormatter: () => NO_PROJECT_NO_LINKED_MESSAGE,
                 context,
               });
               return;
@@ -200,15 +206,7 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
         throw new ArgumentError("Run ID is required for cancel");
       }
 
-      const resolved = resolveTarget(
-        {
-          profile: options.profile,
-          server: options.server,
-          token: options.token,
-          insecure: options.insecure,
-        },
-        context?.customHome
-      );
+      const resolved = resolveTargetFromOptions(options, context);
 
       if (resolved.type === "local") {
         throw new ArgumentError(
@@ -259,14 +257,14 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
         if (options.package) {
           const root = resolvePackageRoot(options.package);
           if (!root) {
-            throw new ArgumentError(`Package '${options.package}' not found in linked packages or path`);
+            throw packageNotFoundError(options.package);
           }
           targetPackageRoot = root;
         } else {
           targetPackageRoot = findProjectRoot() || undefined;
           if (!targetPackageRoot) {
-            throw new ArgumentError(
-              "Not in an ActionDock project. Please specify -P, --package <id> or cd into a project directory."
+            throw notInProjectError(
+              "Please specify -P, --package <id> or cd into a project directory."
             );
           }
         }

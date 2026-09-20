@@ -5,8 +5,8 @@ import {
   resolvePackageRoot,
 } from "@actiondock/core";
 import { Command } from "commander";
-import { ArgumentError, ExecutionError } from "../errors";
-import { renderResult, renderStateList, writeStdout } from "../renderer";
+import { ArgumentError, ExecutionError, packageNotFoundError } from "../errors";
+import { renderResult, renderStateList, writeStderr, writeStdout } from "../renderer";
 import type { CliContext } from "../types";
 import {
   applyTargetOptions,
@@ -19,6 +19,32 @@ import {
   renderLinkedPackagesStateList,
   renderProjectScopedStateList,
 } from "./state-list";
+
+/**
+ * 解析复合状态键为命名空间与裸键视图。
+ *
+ * 多冒号歧义键（如 `review:owner/repo:42`）不再直接崩溃：
+ * 降级为「整串作为裸 key」并在 stderr 提示可用 -n/--namespace 显式指定，
+ * 保持与本地存储层歧义兜底（deleteStateSmart 的纯键回退）一致的容错语义。
+ */
+function decodeStateKeyWithFallback(
+  rawKey: string,
+  hasExplicitNamespace: boolean,
+  context?: CliContext
+): { namespace: string | undefined; key: string } {
+  try {
+    const decoded = decodeStateKey(rawKey);
+    return { namespace: decoded.namespace || undefined, key: decoded.key };
+  } catch {
+    if (!hasExplicitNamespace) {
+      writeStderr(
+        `[WARN] State key '${rawKey}' contains multiple colon delimiters; treating it as a bare key. Use -n/--namespace to specify the namespace explicitly.`,
+        context
+      );
+    }
+    return { namespace: undefined, key: rawKey };
+  }
+}
 
 /**
  * 注册 state 状态管理命令（get、set、delete、clear、keys、list）。
@@ -67,7 +93,7 @@ export function registerStateCommands(program: Command, context?: CliContext): v
       if (options.package) {
         targetRoot = resolvePackageRoot(options.package);
         if (!targetRoot) {
-          throw new ArgumentError(`Package '${options.package}' not found in linked packages or path`);
+          throw packageNotFoundError(options.package);
         }
       } else {
         targetRoot = findProjectRoot();
@@ -158,8 +184,8 @@ export function registerStateCommands(program: Command, context?: CliContext): v
           const actionId = options.action || "";
 
           if (resolved.type === "remote") {
-            const decoded = decodeStateKey(rawKey);
-            const effectiveNamespace = options.namespace || (decoded.namespace || undefined);
+            const decoded = decodeStateKeyWithFallback(rawKey, options.namespace !== undefined, context);
+            const effectiveNamespace = options.namespace || decoded.namespace;
             const actualKey = options.namespace ? rawKey : decoded.key;
 
             const entry = await target.getState(options.package || "", actionId, actualKey, {
@@ -250,8 +276,8 @@ export function registerStateCommands(program: Command, context?: CliContext): v
           const actionId = options.action || "";
 
           if (resolved.type === "remote") {
-            const decoded = decodeStateKey(rawKey);
-            const effectiveNamespace = options.namespace || (decoded.namespace || undefined);
+            const decoded = decodeStateKeyWithFallback(rawKey, options.namespace !== undefined, context);
+            const effectiveNamespace = options.namespace || decoded.namespace;
             const actualKey = options.namespace ? rawKey : decoded.key;
 
             await target.setState(options.package || "", actionId, actualKey, parsedVal as any, {
@@ -271,7 +297,7 @@ export function registerStateCommands(program: Command, context?: CliContext): v
           let finalKey = effectiveKey;
 
           if (options.namespace === undefined && effectiveKey.includes(":")) {
-            const decoded = decodeStateKey(effectiveKey);
+            const decoded = decodeStateKeyWithFallback(effectiveKey, false, context);
             actualNamespace = decoded.namespace;
             finalKey = decoded.key;
           }
@@ -312,8 +338,8 @@ export function registerStateCommands(program: Command, context?: CliContext): v
           const actionId = options.action || "";
 
           if (resolved.type === "remote") {
-            const decoded = decodeStateKey(rawKey);
-            const effectiveNamespace = options.namespace || (decoded.namespace || undefined);
+            const decoded = decodeStateKeyWithFallback(rawKey, options.namespace !== undefined, context);
+            const effectiveNamespace = options.namespace || decoded.namespace;
             const actualKey = options.namespace ? rawKey : decoded.key;
 
             const deleted = await target.deleteState(options.package || "", actionId, actualKey, {

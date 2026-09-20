@@ -59,6 +59,59 @@ interface InternalProcessInstance {
 let cachedCapabilities: Capabilities | undefined;
 
 /**
+ * POSIX 标准信号编号到名称的映射表（1-31，对齐 Linux 信号集）。
+ * pipe 模式下 Node 的 exit 事件直接给出 "SIGTERM" 等字符串信号名；
+ * node-pty 的 onExit 回调只给数字，必须经此表转换才能与 pipe 模式及
+ * FakeProcessDriver 的 signal 契约保持一致，杜绝 "15" 这类原始数字漂移。
+ */
+const POSIX_SIGNAL_NAMES: readonly (string | undefined)[] = [
+  undefined, // 0：无信号
+  "SIGHUP", // 1
+  "SIGINT", // 2
+  "SIGQUIT", // 3
+  "SIGILL", // 4
+  "SIGTRAP", // 5
+  "SIGABRT", // 6
+  "SIGBUS", // 7
+  "SIGFPE", // 8
+  "SIGKILL", // 9
+  "SIGUSR1", // 10
+  "SIGSEGV", // 11
+  "SIGUSR2", // 12
+  "SIGPIPE", // 13
+  "SIGALRM", // 14
+  "SIGTERM", // 15
+  "SIGSTKFLT", // 16
+  "SIGCHLD", // 17
+  "SIGCONT", // 18
+  "SIGSTOP", // 19
+  "SIGTSTP", // 20
+  "SIGTTIN", // 21
+  "SIGTTOU", // 22
+  "SIGURG", // 23
+  "SIGXCPU", // 24
+  "SIGXFSZ", // 25
+  "SIGVTALRM", // 26
+  "SIGPROF", // 27
+  "SIGWINCH", // 28
+  "SIGIO", // 29
+  "SIGPWR", // 30
+  "SIGSYS", // 31
+];
+
+/**
+ * 将 PTY 退出回调给出的信号数字转换为标准信号名称。
+ * 0、负数与非整数视为无信号（对齐 pipe 模式的 null 语义）；
+ * 表内已知编号返回 POSIX 名称，未知编号回退 SIG<num> 形式，绝不返回原始数字字符串。
+ */
+function ptySignalToName(signal: number | undefined | null): string | null {
+  if (typeof signal !== "number" || !Number.isInteger(signal) || signal <= 0) {
+    return null;
+  }
+  return POSIX_SIGNAL_NAMES[signal] ?? `SIG${signal}`;
+}
+
+/**
  * 基于 Node.js 标准子进程实现的平台驱动。
  * 遵循《ActionDock Managed Process 设计 v2》第 11、12 节规范：
  * - pipe 模式采用 child_process.spawn，支持进程组隔离与跨平台 killProcessGroup
@@ -251,7 +304,8 @@ export class NodeProcessDriver implements ProcessDriver {
     });
 
     ptyProcess.onExit((e: { exitCode: number; signal?: number }) => {
-      const signalStr = e.signal ? String(e.signal) : null;
+      // node-pty 只回传信号数字，必须经映射表转为标准信号名与 pipe 模式对齐
+      const signalStr = ptySignalToName(e.signal);
       markExited(e.exitCode, signalStr);
       markOutputClosed("natural");
     });
@@ -606,10 +660,19 @@ export class NodeProcessDriver implements ProcessDriver {
 
   /**
    * 销毁进程句柄并清理相关资源。
+   * 对仍在运行的实例先执行 terminate(0) 兜底（SIGTERM 后立即 SIGKILL），
+   * 绝不从受管表移除仍存活的子进程而遗留孤儿；已退出实例直接清理。
    */
   async dispose(handle: ProcessHandle): Promise<void> {
     const instance = this.instances.get(handle.id);
     if (instance) {
+      if (!instance.exited) {
+        try {
+          await this.terminate(handle, 0);
+        } catch {
+          // 兜底终止失败不阻断句柄清理，退出事件仍会经监听链路上报
+        }
+      }
       instance.cleanup();
       this.instances.delete(handle.id);
     }

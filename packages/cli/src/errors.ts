@@ -71,6 +71,28 @@ export interface FormattedError {
 }
 
 /**
+ * 目标包寻址失败错误（-P 指定的包不在链接注册表也无法按路径寻址）。
+ */
+export function packageNotFoundError(pkg: string): ArgumentError {
+  return new ArgumentError(`Package '${pkg}' not found in linked packages or path`);
+}
+
+/**
+ * 当前目录不在 ActionDock 工程内错误。
+ * `hint` 为命令专属的补救措施提示行（如 -P 参数用法）。
+ */
+export function notInProjectError(hint?: string): ArgumentError {
+  const base = "Not in an ActionDock project (actiondock.json not found)";
+  return new ArgumentError(hint ? `${base}.\n${hint}` : base);
+}
+
+/**
+ * 当前目录无工程且全局注册表无任何链接包提示文案（非错误场景使用）。
+ */
+export const NO_PROJECT_NO_LINKED_MESSAGE =
+  "No ActionDock project in current directory, and no packages linked.";
+
+/**
  * 解析并格式化任意异常为结构化错误对象。
  * 
  * @param err 待解析的异常对象

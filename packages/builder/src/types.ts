@@ -148,9 +148,9 @@ export interface BuildPlan {
 export type SelectionPlan = BuildPlan;
 
 /**
- * 构建规划器配置选项。
+ * 声明式选择规划器配置选项。
  */
-export interface BuildPlannerOptions {
+export interface SelectionPlannerOptions {
   /** 项目根目录绝对路径 */
   projectRoot: string;
   /** 显式传入的项目配置（若未提供则从 actiondock.json 读取） */
@@ -172,11 +172,6 @@ export interface BuildPlannerOptions {
   /** 是否跳过本地相对依赖完整性校验（默认 false） */
   skipDependencyValidation?: boolean;
 }
-
-/**
- * 声明式选择规划器配置选项别名。
- */
-export type SelectionPlannerOptions = BuildPlannerOptions;
 
 /**
  * 归档压缩格式。

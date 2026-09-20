@@ -8,12 +8,14 @@ export {
   type DataDirLockInfo,
   isProcessAlive,
 } from "./data-dir-lock";
+export * from "./clock";
 export * from "./driver";
 export * from "./lazy";
 export * from "./mask";
 export * from "./params";
 export * from "./sqlite";
 export * from "./types";
+export * from "./utils";
 
 /**
  * 解析并计算目标 SQLite 数据库文件的绝对路径。
@@ -60,16 +62,20 @@ export function resolveDatabasePath(
 
 /**
  * 工厂函数：为指定 Package 创建或连接 RuntimeStorage 实例。
+ *
+ * 默认旁观打开：不收割库内遗留非终态运行（recoverOrphans 默认 false），
+ * 供 CLI 查询类命令安全并发访问持有者进程正在写入的同一库文件；
+ * 执行宿主路径应传入 recoverOrphans: true 或后续显式调用 recoverDeadSessionRuns。
  * 
  * @param packageId 目标 Package ID
- * @param options 存储配置参数（支持 dataDir, inMemory, customHome）
+ * @param options 存储配置参数（支持 dataDir, inMemory, customHome, recoverOrphans）
  */
 export function createStorage(
   packageId: string,
-  options: { projectRoot?: string; dataDir?: string; inMemory?: boolean; customHome?: string } = {}
+  options: { projectRoot?: string; dataDir?: string; inMemory?: boolean; customHome?: string; recoverOrphans?: boolean } = {}
 ): RuntimeStorage {
   const dbPath = resolveDatabasePath(packageId, options);
-  return new SqliteRuntimeStorage({ dbPath, packageId });
+  return new SqliteRuntimeStorage({ dbPath, packageId, recoverOrphans: options.recoverOrphans });
 }
 
 /**

@@ -2,8 +2,15 @@ import { resolve } from "node:path";
 import type { ActionRef } from "@actiondock/sdk";
 import { ActionResolver } from "../catalog/action-resolver";
 import { resolvePackageRoot } from "../registry/registry";
-import { ensureProjectDependencies } from "./loader";
 import { loadManifest } from "./manifest";
+
+/**
+ * 依赖预装的默认实现：明确的不操作。
+ * ActionDock 2.0 移除了运行时静默在线安装，保留该签名仅为闭包遍历提供注入点（便于单测 Mock 与自定义扩展）。
+ */
+function noopEnsure(): boolean {
+  return false;
+}
 
 export interface EnsureDependencyClosureOptions {
   /**
@@ -17,19 +24,19 @@ export interface EnsureDependencyClosureOptions {
 }
 
 export interface DependencyClosureResult {
-  /** 成功执行依赖安装或更新的项目根路径列表 */
+  /** 成功执行依赖预装的项目根路径列表（默认实现下永远为空） */
   installed: string[];
   /** 无法在注册表中解析包引用的警告列表 */
   warnings: string[];
 }
 
 /**
- * 广度优先遍历 (BFS) uses 声明的跨包依赖闭包，对涉及的每个项目包逐一执行依赖预装（ensureProjectDependencies）。
- * 内部已尊重 ACTIONDOCK_AUTO_INSTALL=false 环境变量。
+ * 广度优先遍历 (BFS) uses 声明的跨包依赖闭包，对涉及的每个项目包逐一调用依赖预装回调。
+ * 默认预装回调为明确的不操作（ActionDock 2.0 不做运行时安装）；可通过 opts.ensure 注入自定义实现。
  *
  * @param roots 根项目目录列表
  * @param opts 选项参数
- * @returns 安装成功的路径列表及警告信息
+ * @returns 预装成功的路径列表及警告信息
  */
 export async function ensureDependencyClosure(
   roots: string[],
@@ -47,7 +54,7 @@ export async function ensureDependencyClosure(
     if (seen.has(root)) continue;
     seen.add(root);
 
-    const ensureFn = opts.ensure ?? ensureProjectDependencies;
+    const ensureFn = opts.ensure ?? noopEnsure;
     const wasInstalled = await ensureFn(root);
     if (wasInstalled) {
       installed.push(root);

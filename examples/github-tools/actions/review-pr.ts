@@ -47,15 +47,18 @@ export default defineAction(async (input: ReviewPrInput, ctx): Promise<ReviewPrO
     findings.push("PR title indicates Work In Progress (WIP).");
   }
 
-  const verdict = findings.length > 1 ? "REQUEST_CHANGES" : "APPROVE";
+  const verdict = findings.length > 0 ? "REQUEST_CHANGES" : "APPROVE";
   const summary = findings.length === 0
     ? `PR #${pr.number} looks great! All standard health checks passed.`
     : `PR #${pr.number} has ${findings.length} item(s) to address.`;
 
   const now = new Date().toISOString();
 
-  // 持久化审查检查点至状态存储
-  await ctx.state.set(`review:${input.repo}:${input.pullNumber}`, {
+  // 持久化审查检查点至状态存储。
+  // 状态键转义规则：复合键使用 `ns:key` 形式且分段内的冒号需转义为 `\:`；
+  // repo（owner/repo）含斜杠且双冒号会引发歧义，此处改用无歧义的斜杠分层格式，
+  // 并以 -n/--namespace 或显式裸键访问，避免多冒号歧义解析失败。
+  await ctx.state.set(`review/${input.repo}/${input.pullNumber}`, {
     verdict,
     reviewedAt: now,
   });

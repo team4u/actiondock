@@ -36,7 +36,7 @@ export {
 export type { TarGzArchiveOptions } from "./archive";
 
 // 构建规划
-export { BuildPlanner, buildPlan, SelectionPlanner, selectionPlan } from "./planner";
+export { SelectionPlanner } from "./planner";
 
 // 相对依赖完整性校验
 export {
@@ -69,7 +69,6 @@ export type {
   BuildOptions,
   BuildPlan,
   BuildPlanDependencies,
-  BuildPlannerOptions,
   BuildResult,
   CompositeSkillExportOptions,
   CompositeSkillExportResult,

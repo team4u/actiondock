@@ -6,7 +6,7 @@ import {
   resolvePackageRoot,
 } from "@actiondock/core";
 import type { Command } from "commander";
-import { ArgumentError, ExecutionError } from "../../errors";
+import { ArgumentError, ExecutionError, notInProjectError, packageNotFoundError } from "../../errors";
 import { renderConfigSchema, renderResult, writeStdout } from "../../renderer";
 import type { CliContext } from "../../types";
 import { getEffectiveOptions } from "../../utils";
@@ -33,12 +33,10 @@ export function registerConfigSchemaCommand(configCmd: Command, context?: CliCon
         const root = resolvePackageRoot(targetPkg);
         if (!root) {
           if (targetPkg) {
-            throw new ArgumentError(
-              `Package '${targetPkg}' not found in linked packages or path`
-            );
+            throw packageNotFoundError(targetPkg);
           }
-          throw new ArgumentError(
-            "Not in an ActionDock project.\nUsage: ad config schema [package-id] or cd into a project directory."
+          throw notInProjectError(
+            "Usage: ad config schema [package-id] or cd into a project directory."
           );
         }
 

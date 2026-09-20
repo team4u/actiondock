@@ -208,6 +208,11 @@ export interface ActionDockAppOptions {
   packageInstanceId?: string;
   /** 快照代次标识 */
   generationId?: string;
+  /**
+   * 是否以数据目录持有者身份打开存储：true 时构造阶段收割遗留非终态运行记录。
+   * 默认 true（App 主路径即持有者）；外部工具创建旁观视图时置 false。
+   */
+  recoverOrphans?: boolean;
   /** 临时配置覆写字典 */
   configOverrides?: Record<string, unknown>;
   /** 宿主所有者标识 */

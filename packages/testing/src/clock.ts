@@ -28,21 +28,12 @@ export interface FakeClockOptions {
 export class FakeClock implements Clock {
   private currentNow: number;
   private currentMonotonic: number;
-  private initialRealNow: number;
-  private advancedMs = 0;
-  private isFixed = false;
   private nextTimerId = 1;
   private pendingSleeps: ScheduledSleep[] = [];
 
   constructor(options: FakeClockOptions = {}) {
-    if (options.now !== undefined) {
-      this.currentNow = new Date(options.now).getTime();
-      this.isFixed = true;
-      this.initialRealNow = this.currentNow;
-    } else {
-      this.currentNow = Date.now();
-      this.initialRealNow = this.currentNow;
-    }
+    this.currentNow =
+      options.now !== undefined ? new Date(options.now).getTime() : Date.now();
     this.currentMonotonic = options.startMonotonic ?? 0;
   }
 
@@ -88,7 +79,7 @@ export class FakeClock implements Clock {
   /**
    * 手动向前推进指定毫秒时间。
    * 严格按时间戳递增顺序触发并完成所有到期的休眠计时器；
-   * 每轮先排空微任务再检查队列，确保多层 async 边界内链式注册的
+   * 每轮触发后经排空检查点再复查队列，确保多层 async 边界内链式注册的
    * 已到期 sleep 在本次 advance 终点前全部触发（含链首有 await 边界的场景）。
    *
    * @param ms 推进的毫秒数
@@ -100,11 +91,8 @@ export class FakeClock implements Clock {
 
     const destinationMonotonic = this.currentMonotonic + ms;
     const destinationNow = this.currentNow + ms;
-    if (ms > 0) {
-      this.advancedMs += ms;
-    }
 
-    // 先同步处理当前已到期项，再排空微任务后复查：resolve 触发的回调链
+    // 先同步处理当前已到期项，再经检查点复查：resolve 触发的回调链
     // 可能在任意深度的 await 边界后注册新的到期 sleep，每轮排空后重新检查。
     // 首轮无到期项时全程不经过 await，保持「无等待计时器时同步推进时间」契约
     for (;;) {
@@ -128,12 +116,12 @@ export class FakeClock implements Clock {
    * 循环排空微任务队列直至稳定（一轮排空后无新的已到期 sleep 注册），
    * 保证链式 sleep 在本次 advance 终点前全部触发。
    *
-   * 仅排空微任务，不等待任何宏任务（定时器、IO）：链式 sleep 依赖的
-   * async 回调链全部由微任务驱动，无需也无法跨越宏任务边界。
-   * 使用 setImmediate 兜底作为「微任务队列已排空」的观测哨兵：
+   * 排空手段说明：链式 sleep 依赖的 async 回调链由微任务驱动，但纯微任务
+   * 轮询无法可靠观测「已排空」；因此借助 setImmediate 作为观测哨兵——
    * setImmediate 回调只能从事件循环检查点进入，它的执行必然意味着
    * 在它之前排队的全部微任务（无论多少层 await 边界）都已完成，
-   * 以此获得不依赖拍数猜测的精确稳定性判定。
+   * 以此获得不依赖拍数猜测的精确稳定性判定。过程会跨过事件循环
+   * 检查点（宏任务边界），但等待的对象始终只是微任务队列排空。
    */
   private drainMicrotasks(): Promise<void> {
     return new Promise<void>((resolve) => {

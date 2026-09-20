@@ -5,15 +5,20 @@ import {
   isSecretConfigKey,
   loadProjectConfig,
   maskSecretValue,
-  resolveEnvValue,
   resolvePackageRoot,
-  resolveTarget,
 } from "@actiondock/core";
 import type { Command } from "commander";
-import { ArgumentError } from "../../errors";
+import { packageNotFoundError } from "../../errors";
 import { renderConfigList, renderResult } from "../../renderer";
+import { buildMergedConfigEntries } from "../../services/config-merge";
 import type { CliContext } from "../../types";
-import { applyTargetOptions, getEffectiveOptions, resolveIntent, withTarget } from "../../utils";
+import {
+  applyTargetOptions,
+  getEffectiveOptions,
+  resolveIntent,
+  resolveTargetFromOptions,
+  withTarget,
+} from "../../utils";
 
 /**
  * 构造单条配置项的展示视图（含掩码决策，reveal 为假且为敏感键时打码）。
@@ -64,16 +69,7 @@ export function registerConfigListCommand(configCmd: Command, context?: CliConte
       const reveal = Boolean(options.reveal || options.showSecrets);
 
       // 远端服务分支不经过 Target 门面，直接查询远端配置接口
-      const remoteTargetInfo = resolveTarget(
-        {
-          profile: options.profile,
-          server: options.server,
-          token: options.token,
-          insecure: options.insecure,
-          allowInsecureHttp: options.allowInsecureHttp,
-        },
-        context?.customHome
-      );
+      const remoteTargetInfo = resolveTargetFromOptions(options, context);
 
       if (remoteTargetInfo.type === "remote") {
         const res = await fetchRemoteConfig(remoteTargetInfo.serverUrl!, remoteTargetInfo.token, options.package, {
@@ -146,7 +142,7 @@ export function registerConfigListCommand(configCmd: Command, context?: CliConte
 
         if (!root) {
           if (options.package) {
-            throw new ArgumentError(`Package '${options.package}' not found in linked packages or path`);
+            throw packageNotFoundError(options.package);
           }
 
           const all = await localTarget.listConfig("global");
@@ -183,48 +179,9 @@ export function registerConfigListCommand(configCmd: Command, context?: CliConte
         }
 
         const projConfig = loadProjectConfig(root);
-        const declared = projConfig.config || {};
 
-        const globalConfigList = await localTarget.listConfig("global");
-        const projectConfigList = await localTarget.listConfig(projConfig.id);
-
-        const projectConfigMap = new Map(projectConfigList.map((c) => [c.key, c]));
-        const globalConfigMap = new Map(globalConfigList.map((c) => [c.key, c]));
-
-        const allKeys = new Set([
-          ...Object.keys(declared),
-          ...projectConfigList.map((c) => c.key),
-          ...globalConfigList.map((c) => c.key),
-        ]);
-
-        // 配置合并优先级：项目包级 > 全局持久化 > 环境变量 > 声明默认值。
-        // core 的 RuntimeConfig.describe 已是五层链事实源，但 Target 门面仅按作用域暴露
-        // listConfig(scope)，不提供跨作用域合并视图；此处保持命令层合并逻辑，
-        // 与 app.getConfig 的 describe 委托链行为语义一致（overrides 层仅存在于 run 链路）。
-        const merged = Array.from(allKeys).map((k) => {
-          let rawValue: unknown;
-          let source = "default";
-          const envResolved = resolveEnvValue(k, declared[k], projConfig.id);
-          const projItem = projectConfigMap.get(k);
-          const globItem = globalConfigMap.get(k);
-
-          if (projItem && projItem.configured && projItem.source === "package") {
-            rawValue = projItem.value;
-            source = "project";
-          } else if (globItem && globItem.configured) {
-            rawValue = globItem.value;
-            source = "global";
-          } else if (envResolved !== undefined) {
-            rawValue = envResolved.value;
-            source = "env";
-          } else {
-            rawValue = declared[k]?.default;
-            source = "default";
-          }
-
-          const isSecret = isSecretConfigKey(k, declared[k]);
-          return toDisplayEntry(k, rawValue, source, isSecret, reveal, declared[k]?.description || "");
-        });
+        // 跨作用域合并视图单一事实源：项目包级 > 全局持久化 > 环境变量 > 声明默认值
+        const merged = await buildMergedConfigEntries(root, localTarget, reveal);
 
         const filterRes = filterWithFallbackInfo(
           merged,
