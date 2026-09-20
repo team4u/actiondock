@@ -1,6 +1,39 @@
 import type { ActionDockTarget } from "../target/types";
+import { TARGET_CAPABILITY_UNAVAILABLE } from "../target/types";
 import { hasIpcSignalMarker, IPC_SIGNAL_MARKER } from "./target";
 import type { IpcAbortMessage, IpcCallMessage, IpcResponseMessage } from "./types";
+
+/**
+ * IPC 通道允许反射调用的目标方法白名单。
+ *
+ * 严格对齐 ActionDockTarget 公共接口方法名集合：白名单之外的方法一律拒绝，
+ * 防止 IPC 消息通道触达任意内部属性或危险方法（如 close 之外的私有能力）。
+ */
+const IPC_ALLOWED_METHODS: ReadonlySet<string> = new Set([
+  "info",
+  "listPackages",
+  "listActions",
+  "describeAction",
+  "listPlaybooks",
+  "describePlaybook",
+  "runAction",
+  "startAction",
+  "listRuns",
+  "getRun",
+  "cancelRun",
+  "clearRuns",
+  "events",
+  "getConfig",
+  "setConfig",
+  "deleteConfig",
+  "listConfig",
+  "getState",
+  "setState",
+  "deleteState",
+  "listStateKeys",
+  "clearState",
+  "listStateEntries",
+]);
 
 /**
  * 在 Host 子进程中启动 Node IPC 服务，向父进程暴露 ActionDockTarget 门面能力。
@@ -74,6 +107,15 @@ export async function serveParentIpc(target: ActionDockTarget): Promise<void> {
       const { id, method, args } = callMsg;
 
       try {
+        // 白名单校验：仅允许 ActionDockTarget 公共接口方法，阻止任意方法反射调用
+        if (typeof method !== "string" || !IPC_ALLOWED_METHODS.has(method)) {
+          const err = new Error(
+            `Target method '${method}' is not allowed over IPC (not in ActionDockTarget public interface)`
+          );
+          (err as any).code = TARGET_CAPABILITY_UNAVAILABLE;
+          throw err;
+        }
+
         const fn = (target as any)[method];
         if (typeof fn !== "function") {
           throw new Error(`Target method '${method}' not found`);

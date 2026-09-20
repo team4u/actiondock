@@ -15,8 +15,11 @@ export class ActionIndex {
       let manifest = null;
       try {
         manifest = loadManifest(pkg.projectRoot);
-      } catch {
-        // Skip invalid manifest during catalog indexing
+      } catch (err: any) {
+        // 清单损坏时跳过索引但输出告警含路径，回退扫描 actions 目录
+        console.warn(
+          `[Catalog] Failed to load manifest for package '${packageId}' at '${pkg.projectRoot}': ${err?.message || String(err)}`
+        );
       }
       if (manifest && manifest.actions) {
         for (const [actionId, item] of Object.entries(manifest.actions)) {
@@ -58,8 +61,11 @@ export class ActionIndex {
                 this.add(indexed);
               }
             }
-          } catch {
-            // 忽略读取目录异常
+          } catch (err: any) {
+            // 目录扫描失败时输出告警含路径，不再无声吞没
+            console.warn(
+              `[Catalog] Failed to scan actions directory for package '${packageId}' at '${actionsDir}': ${err?.message || String(err)}`
+            );
           }
         }
       }

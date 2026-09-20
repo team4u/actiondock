@@ -91,8 +91,11 @@ export function parseRegistryContent(raw: string, filePath: string): GlobalRegis
         try {
           const config = loadProjectConfig(link.path);
           packages[config.id] = buildLinkedPackageEntry(config, resolve(link.path), link.linkedAt || new Date().toISOString());
-        } catch {
-          // 迁移时项目已损坏或配置非法：跳过该条 link，避免迁移整体失败
+        } catch (err: any) {
+          // 迁移时项目已损坏或配置非法：跳过该条 link 避免迁移整体失败，但必须输出告警，杜绝链接无声消失
+          console.warn(
+            `[Registry] Skipping corrupted package link during migration: '${link.path}' (${err?.message || String(err)})`
+          );
         }
       }
     }
@@ -314,8 +317,11 @@ export async function linkPackage(
           const entry = buildLinkedPackageEntry(config, root, now, absPath);
           registry.packages[config.id] = entry;
           linkedEntries.push(entry);
-        } catch {
-          // 子项目配置损坏：跳过该子项目条目，不影响 workspace 注册本身
+        } catch (err: any) {
+          // 子项目配置损坏：跳过该子项目条目不影响 workspace 注册本身，但必须输出告警含包路径，杜绝链接无声消失
+          console.warn(
+            `[Registry] Skipping corrupted workspace child package during link: '${root}' (${err?.message || String(err)})`
+          );
         }
       }
 

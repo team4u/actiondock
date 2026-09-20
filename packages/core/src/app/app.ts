@@ -16,7 +16,7 @@ import type {
 } from "../execution/types";
 import { createDefaultPlatform, type RuntimePlatform } from "../platform";
 import { findProjectRoot, loadPlaybooks, loadProjectConfig } from "../project/loader";
-import { loadManifest } from "../project/manifest";
+import { loadManifest, MANIFEST_FILE_NAME } from "../project/manifest";
 import type { ProjectConfig } from "../project/types";
 import { RuntimeConfig } from "../runtime/context";
 import { normalizeActionCollection } from "../runtime/action-collection";
@@ -74,11 +74,9 @@ export class DefaultActionDockApp implements ActionDockApp {
     if (!projectConfig && packageRoot) {
       const configPath = join(packageRoot, "actiondock.json");
       if (existsSync(configPath)) {
-        try {
-          projectConfig = loadProjectConfig(packageRoot);
-        } catch {
-          // 忽略解析失败，使用回退配置
-        }
+        // 文件存在但解析失败（损坏 JSON、校验失败）时直接向上抛出：
+        // 仅当确实不存在 actiondock.json 文件时才允许回退默认配置，杜绝幽灵包配置
+        projectConfig = loadProjectConfig(packageRoot);
       }
     }
 
@@ -203,26 +201,34 @@ export class DefaultActionDockApp implements ActionDockApp {
 
     // 1. 读取声明式清单文件 (actiondock.json)
     if (this.packageRoot) {
-      try {
-        const manifest = loadManifest(this.packageRoot);
-        if (manifest?.actions) {
-          for (const [id, item] of Object.entries(manifest.actions)) {
-            map.set(id, {
-              id,
-              packageId: this.packageId,
-              description: item.description,
-              inputSchema: item.inputSchema,
-              outputSchema: item.outputSchema,
-              tags: item.tags ? [...item.tags] : [],
-              annotations: item.annotations,
-              uses: item.uses ? [...item.uses] : [],
-              entry: item.entry,
-              filePath: item.entry ? resolve(this.packageRoot, item.entry) : undefined,
-            });
+      const manifestPath = join(this.packageRoot, MANIFEST_FILE_NAME);
+      // 文件不存在属于合法空态（无清单包）；解析失败（损坏 JSON 等）则输出告警并跳过清单部分
+      if (!existsSync(manifestPath)) {
+        // 合法空态：无清单文件，仅依赖后续配置与内存注入来源
+      } else {
+        try {
+          const manifest = loadManifest(this.packageRoot);
+          if (manifest?.actions) {
+            for (const [id, item] of Object.entries(manifest.actions)) {
+              map.set(id, {
+                id,
+                packageId: this.packageId,
+                description: item.description,
+                inputSchema: item.inputSchema,
+                outputSchema: item.outputSchema,
+                tags: item.tags ? [...item.tags] : [],
+                annotations: item.annotations,
+                uses: item.uses ? [...item.uses] : [],
+                entry: item.entry,
+                filePath: item.entry ? resolve(this.packageRoot, item.entry) : undefined,
+              });
+            }
           }
+        } catch (err: any) {
+          console.warn(
+            `[App] Failed to load manifest for package '${this.packageId}' from '${manifestPath}': ${err?.message || String(err)}`
+          );
         }
-      } catch {
-        // 忽略清单缺失或解析异常
       }
     }
 
@@ -301,8 +307,11 @@ export class DefaultActionDockApp implements ActionDockApp {
               filePath: def.filePath,
             });
           }
-        } catch {
-          // 忽略规程加载异常
+        } catch (err: any) {
+          // 规程加载失败（清单声明非法、规程文件损坏等）输出告警并跳过磁盘部分，保持返回可用列表
+          console.warn(
+            `[App] Failed to load playbooks for package '${this.packageId}' from '${dirPath}': ${err?.message || String(err)}`
+          );
         }
       }
     }
@@ -321,8 +330,11 @@ export class DefaultActionDockApp implements ActionDockApp {
           if (!content && filePath && existsSync(filePath)) {
             try {
               content = readFileSync(filePath, "utf-8");
-            } catch {
-              // 忽略读取异常
+            } catch (err: any) {
+              // 读取失败（权限、IO 错误等）输出告警并保持空正文，不再无声吞没
+              console.warn(
+                `[App] Failed to read playbook '${id}' content from '${filePath}' in package '${this.packageId}': ${err?.message || String(err)}`
+              );
             }
           }
 
@@ -580,6 +592,48 @@ export class DefaultActionDockApp implements ActionDockApp {
     return await this.storage.deleteConfig(key);
   }
 
+  /**
+   * 状态作用域统一解析辅助函数（单一事实源）。
+   *
+   * 完成重载消歧与 actionId 冲突校验，返回最终生效的命名空间：
+   * - actionId 存在时拼 接 `${actionId}:${namespace}` 或直接 actionId；
+   * - 无 actionId 时返回显式 namespace 或空字符串（包级扁平状态）。
+   */
+  private resolveStateScope(
+    actionIdOrKey: string | undefined,
+    keyOrOptions: string | StateScopeOptions | undefined,
+    options?: StateScopeOptions
+  ): { ns: string; opts: StateScopeOptions | undefined } {
+    let actionId: string;
+    let resolvedOpts: StateScopeOptions | undefined;
+
+    // 消歧规则（与原始重载语义严格一致）：仅当第二参为字符串时认定为
+    // (actionId, key, options) 形态；否则（undefined 或选项对象）认定为
+    // (key, options) 扁平调用形态，首参是状态键而非 actionId
+    if (typeof keyOrOptions === "string") {
+      actionId = actionIdOrKey as string;
+      resolvedOpts = options;
+      if (resolvedOpts?.actionId && resolvedOpts.actionId !== actionId) {
+        throw new Error(
+          `Conflicting actionId specified: positional '${actionId}' vs options.actionId '${resolvedOpts.actionId}'`
+        );
+      }
+    } else {
+      // (key, options) 扁平调用：首参是状态键，无位置 actionId；
+      // options.actionId 属于合法的显式指定，直接采纳而非判为冲突
+      actionId = "";
+      resolvedOpts = keyOrOptions;
+    }
+    if (!actionId && resolvedOpts?.actionId) {
+      actionId = resolvedOpts.actionId;
+    }
+
+    const ns = actionId
+      ? (resolvedOpts?.namespace ? `${actionId}:${resolvedOpts.namespace}` : actionId)
+      : (resolvedOpts?.namespace ?? "");
+    return { ns, opts: resolvedOpts };
+  }
+
   getState<T extends JsonValue = JsonValue>(
     key: string,
     options?: StateScopeOptions
@@ -594,38 +648,12 @@ export class DefaultActionDockApp implements ActionDockApp {
     keyOrOptions?: string | StateScopeOptions,
     options?: StateScopeOptions
   ): Promise<T | undefined> {
-    let actionId: string;
-    let key: string;
-    let opts: StateScopeOptions | undefined;
-
-    if (typeof keyOrOptions === "string") {
-      actionId = actionIdOrKey;
-      key = keyOrOptions;
-      opts = options;
-      if (opts?.actionId && opts.actionId !== actionId) {
-        throw new Error(
-          `Conflicting actionId specified: positional '${actionId}' vs options.actionId '${opts.actionId}'`
-        );
-      }
-    } else {
-      actionId = "";
-      key = actionIdOrKey;
-      opts = keyOrOptions;
-    }
-    if (!actionId && opts?.actionId) {
-      actionId = opts.actionId;
-    }
-
-    const ns = actionId
-      ? (opts?.namespace ? `${actionId}:${opts.namespace}` : actionId)
-      : (opts?.namespace ?? "");
+    const { ns, opts } = this.resolveStateScope(actionIdOrKey, keyOrOptions, options);
+    const key = typeof keyOrOptions === "string" ? keyOrOptions : actionIdOrKey;
 
     if (opts?.detail) {
       const entry = await this.storage.findState(key, ns || undefined);
       return entry as unknown as T;
-    }
-    if (actionId) {
-      return await this.storage.getState<T>(ns, key);
     }
     if (ns) {
       return await this.storage.getState<T>(ns, key);
@@ -651,10 +679,10 @@ export class DefaultActionDockApp implements ActionDockApp {
     valueOrOptions?: any,
     options?: StateScopeOptions
   ): Promise<void> {
-    let actionId: string;
     let key: string;
     let value: T;
     let opts: StateScopeOptions | undefined;
+    let actionId: string;
 
     if (arguments.length >= 4) {
       if (options?.actionId && options.actionId !== actionIdOrKey) {
@@ -722,31 +750,8 @@ export class DefaultActionDockApp implements ActionDockApp {
     keyOrOptions?: string | StateScopeOptions,
     options?: StateScopeOptions
   ): Promise<boolean> {
-    let actionId: string;
-    let key: string;
-    let opts: StateScopeOptions | undefined;
-
-    if (typeof keyOrOptions === "string") {
-      actionId = actionIdOrKey;
-      key = keyOrOptions;
-      opts = options;
-      if (opts?.actionId && opts.actionId !== actionId) {
-        throw new Error(
-          `Conflicting actionId specified: positional '${actionId}' vs options.actionId '${opts.actionId}'`
-        );
-      }
-    } else {
-      actionId = "";
-      key = actionIdOrKey;
-      opts = keyOrOptions;
-    }
-    if (!actionId && opts?.actionId) {
-      actionId = opts.actionId;
-    }
-
-    const ns = actionId
-      ? (opts?.namespace ? `${actionId}:${opts.namespace}` : actionId)
-      : (opts?.namespace ?? "");
+    const { ns } = this.resolveStateScope(actionIdOrKey, keyOrOptions, options);
+    const key = typeof keyOrOptions === "string" ? keyOrOptions : actionIdOrKey;
 
     if (ns) {
       return await this.storage.deleteState(ns, key);
@@ -769,13 +774,8 @@ export class DefaultActionDockApp implements ActionDockApp {
     key: string,
     options?: StateScopeOptions
   ): Promise<T | undefined> {
-    if (options?.actionId && options.actionId !== actionId) {
-      throw new Error(
-        `Conflicting actionId specified: positional '${actionId}' vs options.actionId '${options.actionId}'`
-      );
-    }
-    const ns = options?.namespace ? `${actionId}:${options.namespace}` : actionId;
-    if (options?.detail) {
+    const { ns, opts } = this.resolveStateScope(actionId, key, options);
+    if (opts?.detail) {
       const entry = await this.storage.findState(key, ns || undefined);
       return entry as unknown as T;
     }
@@ -788,13 +788,8 @@ export class DefaultActionDockApp implements ActionDockApp {
     value: T,
     options?: StateScopeOptions
   ): Promise<void> {
-    if (options?.actionId && options.actionId !== actionId) {
-      throw new Error(
-        `Conflicting actionId specified: positional '${actionId}' vs options.actionId '${options.actionId}'`
-      );
-    }
-    const ns = options?.namespace ? `${actionId}:${options.namespace}` : actionId;
-    await this.storage.setState<T>(ns, key, value, options?.ttl);
+    const { ns, opts } = this.resolveStateScope(actionId, key, options);
+    await this.storage.setState<T>(ns, key, value, opts?.ttl);
   }
 
   async deleteActionState(
@@ -802,12 +797,7 @@ export class DefaultActionDockApp implements ActionDockApp {
     key: string,
     options?: StateScopeOptions
   ): Promise<boolean> {
-    if (options?.actionId && options.actionId !== actionId) {
-      throw new Error(
-        `Conflicting actionId specified: positional '${actionId}' vs options.actionId '${options.actionId}'`
-      );
-    }
-    const ns = options?.namespace ? `${actionId}:${options.namespace}` : actionId;
+    const { ns } = this.resolveStateScope(actionId, key, options);
     return await this.storage.deleteState(ns, key);
   }
 
@@ -822,29 +812,19 @@ export class DefaultActionDockApp implements ActionDockApp {
     actionIdOrOptions?: string | StateScopeOptions,
     options?: StateScopeOptions
   ): Promise<string[]> {
-    let actionId: string;
-    let opts: StateScopeOptions | undefined;
-
+    // 重载消歧：首参为字符串时是 (actionId, options) 调用（完成冲突校验后取其域）；
+    // 否则首参本身就是选项对象（或未传），取 options.actionId 或 namespace 扁平域
+    let ns: string;
     if (typeof actionIdOrOptions === "string") {
-      actionId = actionIdOrOptions;
-      opts = options;
-      if (opts?.actionId && opts.actionId !== actionId) {
-        throw new Error(
-          `Conflicting actionId specified: positional '${actionId}' vs options.actionId '${opts.actionId}'`
-        );
-      }
+      ns = this.resolveStateScope(actionIdOrOptions, "", options).ns;
     } else {
-      actionId = "";
-      opts = actionIdOrOptions;
+      const opts = actionIdOrOptions;
+      ns = opts?.actionId
+        ? (opts.namespace ? `${opts.actionId}:${opts.namespace}` : opts.actionId)
+        : (opts?.namespace ?? "");
     }
-    if (!actionId && opts?.actionId) {
-      actionId = opts.actionId;
-    }
-
-    const ns = actionId
-      ? (opts?.namespace ? `${actionId}:${opts.namespace}` : actionId)
-      : (opts?.namespace ?? null);
-    return this.storage.listStateKeys(ns, opts?.prefix);
+    const opts = typeof actionIdOrOptions === "string" ? options : actionIdOrOptions;
+    return this.storage.listStateKeys(ns ? ns : null, opts?.prefix);
   }
 
   clearState(
@@ -858,30 +838,21 @@ export class DefaultActionDockApp implements ActionDockApp {
     actionIdOrOptions?: string | StateScopeOptions,
     options?: StateScopeOptions
   ): Promise<number> {
-    let actionId: string;
-    let opts: StateScopeOptions | undefined;
-
+    // 首参为字符串时是 (actionId, options) 调用：以伪 key 消费冲突校验后取其 actionId 域；
+    // 否则首参本身就是选项对象（或未传），直接走扁平分支
     if (typeof actionIdOrOptions === "string") {
-      actionId = actionIdOrOptions;
-      opts = options;
-      if (opts?.actionId && opts.actionId !== actionId) {
-        throw new Error(
-          `Conflicting actionId specified: positional '${actionId}' vs options.actionId '${opts.actionId}'`
-        );
-      }
-    } else {
-      actionId = "";
-      opts = actionIdOrOptions;
+      const { ns } = this.resolveStateScope(actionIdOrOptions, "", options);
+      const finalNs = ns || (options?.namespace ?? "");
+      return this.storage.clearState({
+        namespace: finalNs ? finalNs : undefined,
+        prefix: options?.prefix,
+        all: options?.all,
+      });
     }
-    if (!actionId && opts?.actionId) {
-      actionId = opts.actionId;
-    }
-
-    const ns = actionId
-      ? (opts?.namespace ? `${actionId}:${opts.namespace}` : actionId)
-      : (opts?.namespace ?? undefined);
+    const opts = actionIdOrOptions;
+    const ns = opts?.namespace;
     return this.storage.clearState({
-      namespace: ns,
+      namespace: ns ? ns : undefined,
       prefix: opts?.prefix,
       all: opts?.all,
     });
