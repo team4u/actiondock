@@ -357,6 +357,8 @@ export class ActionRunner {
       this.storage = options.storage ?? options.platform.storage.createStorage(this.packageId, {
         projectRoot: this.projectRoot,
         customHome: this.customHome,
+        // Runner 作为执行宿主组件属于持有者路径，打开时收割遗留孤儿运行
+        recoverOrphans: true,
       });
       this.globalStorage = options.globalStorage ?? options.platform.storage.createGlobalStorage({
         customHome: this.customHome,
@@ -627,12 +629,14 @@ export class ActionRunner {
         storage = this.platform.storage.createStorage(targetPackageId, {
           projectRoot: root,
           customHome: this.customHome,
+          // 跨包子包存储由当前执行宿主持有，打开时收割遗留孤儿运行
+          recoverOrphans: true,
         });
         ownsPackageStorage = true;
       } else {
         // 回退分支与主路径共用 createStorage 单一事实源，确保 run 记录落在统一解析的库文件
         const { createStorage } = await import("../storage/index");
-        storage = createStorage(targetPackageId, { projectRoot: root, customHome: this.customHome });
+        storage = createStorage(targetPackageId, { projectRoot: root, customHome: this.customHome, recoverOrphans: true });
         ownsPackageStorage = true;
       }
       // 由本 Runner 直接创建的子包存储纳入级联释放清单（getStorageForPackage 注入方自管理生命周期）

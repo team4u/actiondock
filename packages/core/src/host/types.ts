@@ -38,6 +38,12 @@ export interface ActionDockHostOptions {
   autoLoadCurrentProject?: boolean;
   /** 是否扫描已软链接的外部包（通过 listLinkedPackages，默认为 false） */
   scanLinkedPackages?: boolean;
+  /**
+   * 是否以数据目录持有者身份打开包存储：true 时内部创建的 App 存储在打开阶段
+   * 收割遗留非终态运行记录。默认 true（Host 本身即持有者）；
+   * CLI 查询命令创建旁观 Host 时显式置 false，避免误收割并发 serve 进程的在途运行。
+   */
+  recoverOrphans?: boolean;
   /** 显式注入的运行时平台适配 */
   platform?: RuntimePlatform;
   /** 全局最大并发活跃运行数 */

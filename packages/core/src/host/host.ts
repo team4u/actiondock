@@ -94,12 +94,16 @@ export class DefaultActionDockHost implements ActionDockHost {
   private dataDirLock?: DataDirLock;
   private failedLinkedPackages = new Map<string, { path: string; error: string }>();
   private failedAutoLoad?: { projectRoot: string; error: string };
+  /** 透传给内部创建 App 的存储收割开关（Host 默认持有者身份，显式可关） */
+  private recoverOrphans: boolean;
 
   constructor(options: ActionDockHostOptions = {}) {
     this.hostSessionId = randomUUID();
     this.maxCallDepth = options.maxCallDepth ?? 16;
     this.maxSubRuns = options.maxSubRuns ?? 64;
     this.eventSink = options.eventSink ?? (options.platform as any)?.eventSink ?? new InMemoryEventSink();
+    // Host 默认声明数据目录持有者身份；查询旁观方（CLI 查询命令）显式置 false
+    this.recoverOrphans = options.recoverOrphans !== false;
 
     // 当指定非内存 dataDir 时获取排他目录锁，防止并发冲突
     if (options.dataDir && !options.inMemory) {
@@ -170,6 +174,7 @@ export class DefaultActionDockHost implements ActionDockHost {
           eventSink: item.eventSink ?? this.eventSink,
           maxCallDepth: item.maxCallDepth ?? this.maxCallDepth,
           maxSubRuns: item.maxSubRuns ?? this.maxSubRuns,
+          recoverOrphans: this.recoverOrphans,
           packageContextResolver: this.resolvePackageContext.bind(this),
         });
         this.internallyCreatedApps.add(app);
@@ -250,6 +255,7 @@ export class DefaultActionDockHost implements ActionDockHost {
             eventSink: this.eventSink,
             maxCallDepth: this.maxCallDepth,
             maxSubRuns: this.maxSubRuns,
+            recoverOrphans: this.recoverOrphans,
             packageContextResolver: this.resolvePackageContext.bind(this),
           });
           this.internallyCreatedApps.add(app);
@@ -307,6 +313,7 @@ export class DefaultActionDockHost implements ActionDockHost {
           eventSink: this.eventSink,
           maxCallDepth: this.maxCallDepth,
           maxSubRuns: this.maxSubRuns,
+          recoverOrphans: this.recoverOrphans,
           packageContextResolver: this.resolvePackageContext.bind(this),
         });
         this.internallyCreatedApps.add(app);
@@ -373,16 +380,19 @@ export class DefaultActionDockHost implements ActionDockHost {
     }
     this.bindApp(app);
 
-    // 接管与恢复：自动将死亡会话或遗留非终态运行收敛为 interrupted
-    const st = app.storage;
-    if (st && typeof st.recoverDeadSessionRuns === "function") {
-      try {
-        st.recoverDeadSessionRuns(this.hostSessionId);
-      } catch (err) {
-        // 单包恢复失败不阻断整体接管流程，但必须可观测
-        console.warn(
-          `[actiondock] recoverDeadSessionRuns failed for package '${app.packageId}': ${err instanceof Error ? err.message : String(err)}`
-        );
+    // 接管与恢复：仅持有者身份的 Host 自动将死亡会话或遗留非终态运行收敛为 interrupted；
+    // 旁观查询 Host（CLI state/runs/config 命令）跳过本步骤，不动其他进程的在途记录
+    if (this.recoverOrphans) {
+      const st = app.storage;
+      if (st && typeof st.recoverDeadSessionRuns === "function") {
+        try {
+          st.recoverDeadSessionRuns(this.hostSessionId);
+        } catch (err) {
+          // 单包恢复失败不阻断整体接管流程，但必须可观测
+          console.warn(
+            `[actiondock] recoverDeadSessionRuns failed for package '${app.packageId}': ${err instanceof Error ? err.message : String(err)}`
+          );
+        }
       }
     }
   }

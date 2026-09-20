@@ -94,6 +94,14 @@ export interface StorageOptions {
   driver?: SqliteDriver;
   /** 可选注入的时间提供器，便于与模拟时钟联动 */
   clock?: Clock;
+  /**
+   * 是否在打开时收割死亡会话遗留的非终态运行记录（收敛为 interrupted）。
+   *
+   * 默认 false：旁观查询打开（CLI 的 state/runs/config 类命令）不收割其他进程的在途记录。
+   * 仅数据目录持有者（serve、mcp、ad run 等执行宿主）显式置 true，
+   * 避免跨进程互毁在途运行。
+   */
+  recoverOrphans?: boolean;
 }
 
 /**

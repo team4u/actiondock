@@ -109,6 +109,9 @@ export class DefaultActionDockApp implements ActionDockApp {
         dataDir: options.dataDir,
         customHome: options.customHome,
         inMemory: options.inMemory,
+        // 默认持有者语义：App 主路径打开时收割死亡会话遗留非终态运行记录；
+        // CLI 查询旁观视图显式置 recoverOrphans: false 跳过收割
+        recoverOrphans: options.recoverOrphans !== false,
       };
 
       const storageFactory = this.platform.storage as any;
@@ -144,6 +147,8 @@ export class DefaultActionDockApp implements ActionDockApp {
         customHome: options.customHome,
         dataDir: options.dataDir,
         inMemory: options.inMemory,
+        // 与主存储保持同侧收割语义（全局库 runs 表为空集，收割无实际副作用）
+        recoverOrphans: options.recoverOrphans !== false,
       };
 
       const storageFactory = this.platform.storage as any;

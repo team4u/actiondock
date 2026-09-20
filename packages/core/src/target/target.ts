@@ -43,6 +43,8 @@ export async function createActionDockTarget(
   const host = await createActionDockHost({
     scanLinkedPackages: localOpts.scanLinkedPackages ?? true,
     ...localOpts,
+    // CLI 查询命令缺省旁观打开；显式声明 recoverOrphans 的执行命令透传持有者语义
+    recoverOrphans: localOpts.recoverOrphans === true,
     ...(localOpts.hostOptions || {}),
   });
   return new LocalActionDockTarget(host);

@@ -111,6 +111,8 @@ export class DefaultExecutionService implements ExecutionService {
         options.platform.storage.createStorage(this.packageId, {
           projectRoot: options.projectRoot,
           customHome: options.customHome,
+          // 执行服务属于数据目录持有者主路径，打开时收割遗留孤儿运行
+          recoverOrphans: true,
         });
     } else {
       this.clock = options.clock;
@@ -122,7 +124,8 @@ export class DefaultExecutionService implements ExecutionService {
     }
 
     const globalStorage = options.platform
-      ? (options.globalStorage ?? options.platform.storage.createGlobalStorage({ customHome: options.customHome }))
+      ? (options.globalStorage ??
+        options.platform.storage.createGlobalStorage({ customHome: options.customHome, recoverOrphans: true }))
       : options.globalStorage;
 
     this.ownsStorage = !options.storage;

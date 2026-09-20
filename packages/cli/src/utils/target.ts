@@ -79,6 +79,10 @@ export function resolveTargetFromOptions(
  * 回调获得创建好的 target 与解析后的目标拓扑信息；无论回调成功或抛出，
  * 都保证 target 资源被正确释放，业务异常原样透传。
  *
+ * 默认旁观打开：内部创建的本地 Host 以非收割模式打开存储（不置 recoverOrphans），
+ * 供 ad state / ad runs / ad config 等查询命令与运行中的 serve 进程并发访问同一库；
+ * 需要持有者语义的执行命令通过 localOptions.ownDataDir 显式声明。
+ *
  * @param options 命令选项视图（profile/server/token/package/dataDir/insecure/allowInsecureHttp）
  * @param context CLI 上下文
  * @param fn 业务回调（target 为已创建的门面实例，resolved 为拓扑解析结果）
@@ -93,6 +97,12 @@ export async function withTarget(
     localRoot?: string | (() => string | undefined);
     /** 是否扫描全局链接包（对应 scanLinkedPackages） */
     scanLinkedPackages?: boolean;
+    /**
+     * 是否以数据目录持有者身份打开本地 Host：true 时 App 存储打开阶段收割遗留孤儿运行。
+     * 执行类命令（ad run）应置 true；查询类命令（state/runs/config/list/describe）
+     * 保持缺省 false，避免误收割并发 serve 进程的在途运行记录。
+     */
+    ownDataDir?: boolean;
   }
 ): Promise<void> {
   const resolved = resolveTargetFromOptions(options, context);
@@ -104,6 +114,10 @@ export async function withTarget(
         findProjectRoot() ??
         undefined
       : undefined;
+
+  // 本地执行命令声明持有者身份时，向 App 层透传收割开关；
+  // 查询命令保持缺省不传，存储以旁观模式打开
+  const appRecoverOrphans = localOptions?.ownDataDir === true ? { recoverOrphans: true } : undefined;
 
   const target = await createActionDockTarget(
     resolved.type === "remote"
@@ -127,6 +141,7 @@ export async function withTarget(
           ...(localOptions?.scanLinkedPackages !== undefined
             ? { scanLinkedPackages: localOptions.scanLinkedPackages }
             : undefined),
+          ...(appRecoverOrphans ? { recoverOrphans: true } : undefined),
         }
   );
 

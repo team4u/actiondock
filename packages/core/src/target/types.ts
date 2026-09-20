@@ -287,6 +287,12 @@ export interface LocalTargetOptions {
   scanLinkedPackages?: boolean;
   /** 运行时平台适配 */
   platform?: RuntimePlatform;
+  /**
+   * 是否以数据目录持有者身份打开本地存储：true 时 App 存储在打开阶段收割
+   * 遗留非终态运行记录。默认 false（旁观查询语义），供 CLI 查询命令与
+   * 运行中的 serve 进程并发访问同一库文件。
+   */
+  recoverOrphans?: boolean;
 }
 
 /**

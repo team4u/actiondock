@@ -270,6 +270,9 @@ export async function resolveTarget(
     hostOptions: {
       autoLoadCurrentProject: packages.length === 0,
     },
+    // MCP 服务进程是长驻执行宿主，声明数据目录持有者身份，
+    // 打开时收割遗留孤儿运行记录
+    recoverOrphans: true,
     customHome: options.customHome,
     dataDir: options.dataDir,
     platform,

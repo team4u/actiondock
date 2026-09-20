@@ -119,6 +119,7 @@ export function createNodePlatform(options: NodePlatformOptions = {}): RuntimePl
         packageId,
         clock,
         driver: createDriver(dbPath),
+        recoverOrphans: opts?.recoverOrphans === true,
       });
     },
     createGlobalStorage(opts?: GlobalStorageFactoryOptions): RuntimeStorage {
@@ -136,6 +137,7 @@ export function createNodePlatform(options: NodePlatformOptions = {}): RuntimePl
         packageId: "__global__",
         clock,
         driver: createDriver(dbPath),
+        recoverOrphans: opts?.recoverOrphans === true,
       });
     },
   };

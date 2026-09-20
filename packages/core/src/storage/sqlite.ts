@@ -15,6 +15,7 @@ import { safeParseStoredJson } from "./utils";
 import {
   IDEMPOTENCY_RETENTION_MS,
   STORAGE_SCHEMA_VERSION,
+  isTerminalRunStatus,
   type IdempotencyCheckResult,
   type IdempotencyRecord,
   type RuntimeStorage,
@@ -35,6 +36,18 @@ export {
 /**
  * 统一 SQLite 运行时存储实现。
  * 通过 SqliteDriver 抽象驱动，解耦底层具体运行时引擎。
+ *
+ * 跨进程并发模型：
+ * - 同一数据目录下的 runtime.db 允许持有者进程（serve、mcp、ad run 等执行宿主）
+ *   与旁观查询进程（ad state、ad runs、ad config 等只读命令）并发打开。
+ * - 死亡会话遗留非终态运行记录的收割（recoverDeadSessionRuns）仅由显式声明
+ *   持有者身份的打开方执行：StorageOptions.recoverOrphans 为 true 时构造阶段收割，
+ *   宿主接管路径亦可显式调用 recoverDeadSessionRuns 收敛死亡会话记录。
+ * - 旁观打开（默认 recoverOrphans 为 false）保持只读语义，绝不收敛其他进程的在途
+ *   running 记录，防止查询进程把执行宿主的在途运行误收割为 interrupted，导致持有者
+ *   侧终态结算静默丢失。
+ * - updateRun 以 WHERE id = ? AND status = 'running' 条件更新；若命中零行且新状态
+ *   为终态，说明记录已被其他持有者或恢复流程改写，此处输出告警保证状态漂移可观测。
  */
 export class SqliteRuntimeStorage implements RuntimeStorage {
   private driver: SqliteDriver;
@@ -43,6 +56,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
   private isClosed = false;
   private statementCache = new Map<string, SqliteStatement>();
   private dbPath: string;
+  private recoverOrphans: boolean;
 
   get isOpen(): boolean {
     return !this.isClosed;
@@ -57,6 +71,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     this.clock = options.clock ?? new SystemClock();
     const dbPath = options.dbPath || ":memory:";
     this.dbPath = dbPath;
+    this.recoverOrphans = options.recoverOrphans === true;
 
     if (dbPath !== ":memory:") {
       const dir = dirname(dbPath);
@@ -180,8 +195,11 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       }
     }
 
-    // 重启恢复：将未正常结算的 running 与 pending 状态自动收敛为 interrupted
-    this.recoverDeadSessionRuns();
+    // 重启恢复：仅持有者身份的打开方在构造阶段收割死亡会话遗留的非终态运行；
+    // 旁观查询打开保持只读语义，绝不触碰其他进程的在途记录
+    if (this.recoverOrphans) {
+      this.recoverDeadSessionRuns();
+    }
   }
 
   /**
@@ -694,7 +712,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
             END
         WHERE id = ? AND status = 'running'
       `);
-      stmt.run(
+      const res = stmt.run(
         status,
         output !== undefined ? JSON.stringify(output) : null,
         error ? JSON.stringify(error) : null,
@@ -702,6 +720,13 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
         finishIso,
         id
       );
+      // 命中零行且新状态为终态：说明该记录已不再处于 running 状态（被其他持有者进程或
+      // 恢复流程改写），本次终态写入被丢弃；保持返回值语义不变，仅输出告警保证漂移可观测
+      if (res.changes === 0 && isTerminalRunStatus(status)) {
+        console.warn(
+          `[actiondock] updateRun matched 0 rows: run '${id}' is no longer 'running' in db=${this.dbPath}; terminal status '${status}' was not persisted (record likely settled or recovered by another holder process)`
+        );
+      }
     } catch (err) {
       if (this.isClosed) return;
       console.warn(`[SqliteRuntimeStorage] Failed to update run "${id}":`, err);
