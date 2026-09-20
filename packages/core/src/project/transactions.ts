@@ -1,131 +1,27 @@
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import fs, {
+import {
   copyFileSync,
   existsSync,
   mkdirSync,
   readdirSync,
   readFileSync,
-  renameSync,
   rmSync,
-  statSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
-
-/**
- * 同步休眠指定毫秒数。
- */
-function sleepSync(ms: number): void {
-  try {
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-  } catch {
-    const end = Date.now() + ms;
-    while (Date.now() < end) {
-      // 降级忙等待
-    }
-  }
-}
-
-/**
- * 获取项目排他锁路径最近一次修改时间戳。
- */
-function getProjectLockMtimeMs(lockPath: string, isDir: boolean): number {
-  try {
-    const stat = statSync(lockPath);
-    let mtime = Math.max(stat.mtimeMs, (stat as any).ctimeMs ?? 0);
-    if (isDir) {
-      const metaPath = join(lockPath, "metadata.json");
-      if (existsSync(metaPath)) {
-        const metaStat = statSync(metaPath);
-        mtime = Math.max(mtime, metaStat.mtimeMs, (metaStat as any).ctimeMs ?? 0);
-      }
-    }
-    return mtime;
-  } catch {
-    return Date.now();
-  }
-}
-
-/**
- * 读取项目排他锁元数据并执行宽限期检测。
- */
-function readProjectLockWithGracePeriod(
-  lockPath: string,
-  gracePeriodMs = 3000,
-  deadline?: number
-): {
-  exists: boolean;
-  isDir: boolean;
-  info?: { pid?: number; sessionToken?: string; lockToken?: string; createdAt?: number };
-  inGracePeriod: boolean;
-} {
-  if (!existsSync(lockPath)) {
-    return { exists: false, isDir: false, inGracePeriod: false };
-  }
-
-  let isDir = false;
-  try {
-    isDir = statSync(lockPath).isDirectory();
-  } catch {
-    return { exists: false, isDir: false, inGracePeriod: false };
-  }
-
-  const metaPath = isDir ? join(lockPath, "metadata.json") : lockPath;
-
-  const tryParse = (): { pid?: number; sessionToken?: string; lockToken?: string; createdAt?: number } | undefined => {
-    try {
-      if (existsSync(metaPath)) {
-        const raw = readFileSync(metaPath, "utf-8");
-        if (raw.trim().length > 0) {
-          const parsed = JSON.parse(raw);
-          if (parsed && typeof parsed.pid === "number") {
-            return parsed;
-          }
-        }
-      }
-    } catch {
-      // 损坏或并发写入中
-    }
-    return undefined;
-  };
-
-  const initialInfo = tryParse();
-  if (initialInfo) {
-    return { exists: true, isDir, info: initialInfo, inGracePeriod: false };
-  }
-
-  const mtime = getProjectLockMtimeMs(lockPath, isDir);
-  const age = Date.now() - mtime;
-  if (age < gracePeriodMs) {
-    const maxRetries = 20;
-    for (let i = 0; i < maxRetries; i++) {
-      if (deadline !== undefined && Date.now() >= deadline) {
-        break;
-      }
-      const remaining = deadline !== undefined ? deadline - Date.now() : 50;
-      if (remaining <= 0) {
-        break;
-      }
-      sleepSync(Math.min(50, remaining));
-      const retriedInfo = tryParse();
-      if (retriedInfo) {
-        return { exists: true, isDir, info: retriedInfo, inGracePeriod: false };
-      }
-      if (!existsSync(lockPath)) {
-        return { exists: false, isDir: false, inGracePeriod: false };
-      }
-    }
-
-    const currentAge = Date.now() - getProjectLockMtimeMs(lockPath, isDir);
-    if (currentAge < gracePeriodMs) {
-      return { exists: true, isDir, inGracePeriod: true };
-    }
-  }
-
-  return { exists: true, isDir, inGracePeriod: false };
-}
+import { join } from "node:path";
+import {
+  acquireDirectoryLock,
+  checkReclaimGuard,
+  cleanStaleQuarantines,
+  isProcessAlive,
+  parseQuarantineTimestamp as parseQuarantineTimestampCore,
+  readLockWithGracePeriod,
+  safeReleaseLock as coreSafeReleaseLock,
+  safeRemoveStaleReclaimGuard,
+  safeRollbackLock,
+} from "../storage/lock-core";
 import { LOCKFILE_NAME } from "./lockfile";
 import { MANIFEST_FILE_NAME } from "./manifest";
 
@@ -140,6 +36,8 @@ export const SNAPSHOT_TRACKED_FILES = [
   "pnpm-lock.yaml",
   "yarn.lock",
 ] as const;
+
+const LOCK_DIR_NAME = "project.lock";
 
 export interface TransactionFileRecord {
   name: string;
@@ -167,205 +65,7 @@ export interface ProjectTransaction {
  * 检查当前进程 PID 是否处于活跃运行状态。
  */
 export function isPidAlive(pid: number): boolean {
-  if (typeof pid !== "number" || isNaN(pid) || pid <= 0) {
-    return false;
-  }
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err: any) {
-    return err?.code === "EPERM";
-  }
-}
-
-/**
- * 检查接管守卫（reclaim guard）目录状态。
- *
- * - 若目录不存在：返回非活跃。
- * - 若处于宽限期内或持有者存活：返回活跃，禁止抢先创建主锁。
- * - 若持有者已死亡且超过宽限期：返回陈旧，可供安全清理。
- */
-function checkProjectReclaimGuard(
-  reclaimPath: string,
-  gracePeriodMs = 1000
-): { exists: boolean; active: boolean; isStale: boolean; holderPid?: number; guardToken?: string } {
-  if (!existsSync(reclaimPath)) {
-    return { exists: false, active: false, isStale: false };
-  }
-
-  let isDir = false;
-  try {
-    isDir = statSync(reclaimPath).isDirectory();
-  } catch {
-    return { exists: false, active: false, isStale: false };
-  }
-
-  const metaPath = isDir ? join(reclaimPath, "metadata.json") : reclaimPath;
-
-  const tryParse = (): { pid?: number; guardToken?: string; createdAt?: number } | undefined => {
-    try {
-      if (existsSync(metaPath)) {
-        const raw = readFileSync(metaPath, "utf-8");
-        if (raw.trim().length > 0) {
-          const parsed = JSON.parse(raw);
-          if (parsed && typeof parsed.pid === "number") {
-            return parsed;
-          }
-        }
-      }
-    } catch {}
-    return undefined;
-  };
-
-  const info = tryParse();
-  if (info && typeof info.pid === "number") {
-    const guardToken = typeof info.guardToken === "string" ? info.guardToken : undefined;
-    const createdAt = typeof info.createdAt === "number" ? info.createdAt : getProjectLockMtimeMs(reclaimPath, isDir);
-    const age = Date.now() - createdAt;
-
-    if (isPidAlive(info.pid)) {
-      return { exists: true, active: true, isStale: false, holderPid: info.pid, guardToken };
-    }
-
-    if (age < gracePeriodMs) {
-      return { exists: true, active: true, isStale: false, holderPid: info.pid, guardToken };
-    }
-    return { exists: true, active: false, isStale: true, holderPid: info.pid, guardToken };
-  }
-
-  const mtime = getProjectLockMtimeMs(reclaimPath, isDir);
-  const age = Date.now() - mtime;
-  if (age < gracePeriodMs) {
-    return { exists: true, active: true, isStale: false };
-  }
-
-  return { exists: true, active: false, isStale: true };
-}
-
-/**
- * 尝试原子获取接管守卫（reclaim guard）。
- * 基于 mkdirSync 原子创建目录并写入自身元数据与唯一 guardToken。
- */
-function tryAcquireProjectReclaimGuard(reclaimPath: string, pid: number, guardToken: string): boolean {
-  try {
-    mkdirSync(reclaimPath, { mode: 0o700 });
-    const metaPath = join(reclaimPath, "metadata.json");
-    const tmpPath = join(
-      reclaimPath,
-      `metadata.json.tmp.${pid}.${randomUUID().slice(0, 8)}`
-    );
-    writeFileSync(
-      tmpPath,
-      JSON.stringify({ pid, guardToken, createdAt: Date.now() }, null, 2),
-      "utf-8"
-    );
-    renameSync(tmpPath, metaPath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * 安全清理陈旧接管守卫（reclaim guard）。
- * 采用原子重命名检疫并严格核对 guardToken 与持有者存活状态，确保仅删除目标陈旧 guard，严禁误删活跃守卫或并发新守卫。
- * 
- * @param reclaimPath 目标守卫路径
- * @param expectedGuardToken 预期持有的守卫令牌（必填，拒绝未指定令牌的盲目清理）
- */
-export function safeRemoveStaleProjectReclaimGuard(
-  reclaimPath: string,
-  expectedGuardToken: string
-): void {
-  if (!expectedGuardToken || typeof expectedGuardToken !== "string") return;
-  if (!existsSync(reclaimPath)) return;
-
-  let isDir = false;
-  try {
-    isDir = statSync(reclaimPath).isDirectory();
-  } catch {
-    return;
-  }
-
-  const metaPath = isDir ? join(reclaimPath, "metadata.json") : reclaimPath;
-  if (!existsSync(metaPath)) {
-    return;
-  }
-
-  try {
-    const metaStat = statSync(metaPath);
-    const mtimeMs = metaStat.mtimeMs;
-    const raw = readFileSync(metaPath, "utf-8");
-    if (raw.trim().length === 0) {
-      return;
-    }
-    const parsed = JSON.parse(raw);
-    if (parsed?.guardToken !== expectedGuardToken) {
-      return;
-    }
-
-    // 自身验证 fail-closed：
-    // 若不是当前进程自身清理自身守卫（即 parsed.pid !== process.pid）：
-    // 1. 验证持有者 PID 是否存活，若仍存活则判定守卫仍处于活跃状态，严禁删除！
-    // 2. 验证是否处于创建宽限期内（1000ms），若在宽限期内严禁删除！
-    if (parsed?.pid !== process.pid) {
-      if (typeof parsed?.pid === "number" && isPidAlive(parsed.pid)) {
-        return;
-      }
-      if (Date.now() - mtimeMs < 1000) {
-        return;
-      }
-    }
-  } catch {
-    return;
-  }
-
-  const quarantinePath = `${reclaimPath}.quarantine.${process.pid}.${Date.now()}.${randomUUID().slice(0, 8)}`;
-  try {
-    fs.renameSync(reclaimPath, quarantinePath);
-  } catch {
-    return;
-  }
-
-  try {
-    const quarantinedMetaPath = isDir ? join(quarantinePath, "metadata.json") : quarantinePath;
-    let actualGuardToken: string | undefined;
-    let actualPid: number | undefined;
-    if (existsSync(quarantinedMetaPath)) {
-      try {
-        const raw = readFileSync(quarantinedMetaPath, "utf-8");
-        if (raw.trim().length > 0) {
-          const parsed = JSON.parse(raw);
-          actualGuardToken = parsed?.guardToken;
-          actualPid = typeof parsed?.pid === "number" ? parsed.pid : undefined;
-        }
-      } catch {}
-    }
-
-    // 后置校验：必须再次核对 actualGuardToken 与 expectedGuardToken 一致，
-    // 且若持有者非自身，必须确保 actualPid 确已死亡。
-    if (
-      expectedGuardToken !== actualGuardToken ||
-      (actualPid !== undefined && actualPid !== process.pid && isPidAlive(actualPid))
-    ) {
-      // 并非此前检查的目标陈旧 guard（已被并发者替换或持有者存活）
-      // 保持隔离状态，转换为 .orphan 脱离态，脱离创建者 Host PID 的存活保护，由 GC 基于真实凭证与时间清理
-      const orphanPath = `${reclaimPath}.orphan.${Date.now()}.${randomUUID().slice(0, 8)}`;
-      try {
-        fs.renameSync(quarantinePath, orphanPath);
-      } catch {}
-      return;
-    }
-
-    // 确认正是目标陈旧 guard（或自身持有的 guard），安全清理
-    fs.rmSync(quarantinePath, { recursive: true, force: true });
-  } catch {
-    // 发生异常，保持隔离状态，转换为 .orphan 脱离态
-    const orphanPath = `${reclaimPath}.orphan.${Date.now()}.${randomUUID().slice(0, 8)}`;
-    try {
-      fs.renameSync(quarantinePath, orphanPath);
-    } catch {}
-  }
+  return isProcessAlive(pid);
 }
 
 /**
@@ -376,182 +76,23 @@ export function parseProjectQuarantineTimestamp(entryName: string): {
   operatorPid?: number;
   timestamp?: number;
 } {
-  const orphanMatch = entryName.match(/\.orphan\.(\d+)(?:\.|$)/);
-  if (orphanMatch && orphanMatch[1]) {
-    const ts = parseInt(orphanMatch[1], 10);
-    return {
-      timestamp: !Number.isNaN(ts) && ts > 0 ? ts : undefined,
-    };
-  }
-
-  const match = entryName.match(/\.(?:quarantine|rollback|release)\.(\d+)\.(\d+)(?:\.|$)/);
-  if (match && match[1] && match[2]) {
-    const pid = parseInt(match[1], 10);
-    const ts = parseInt(match[2], 10);
-    return {
-      operatorPid: !Number.isNaN(pid) && pid > 0 ? pid : undefined,
-      timestamp: !Number.isNaN(ts) && ts > 0 ? ts : undefined,
-    };
-  }
-  const fallbackMatch = entryName.match(/\.(?:quarantine|rollback|release)\.(\d+)(?:\.|$)/);
-  if (fallbackMatch && fallbackMatch[1]) {
-    const ts = parseInt(fallbackMatch[1], 10);
-    return {
-      timestamp: !Number.isNaN(ts) && ts > 0 ? ts : undefined,
-    };
-  }
-  return {};
+  return parseQuarantineTimestampCore(entryName);
 }
 
 export const parseQuarantineTimestamp = parseProjectQuarantineTimestamp;
 
 /**
- * 读取目标规范路径（工程主锁目录或 reclaim 目录）中记录的当前有效令牌凭据。
+ * 安全清理陈旧接管守卫（reclaim guard）。
+ * 采用原子重命名检疫并严格核对 guardToken 与持有者存活状态，确保仅删除目标陈旧 guard，严禁误删活跃守卫或并发新守卫。
+ *
+ * @param reclaimPath 目标守卫路径
+ * @param expectedGuardToken 预期持有的守卫令牌（必填，拒绝未指定令牌的盲目清理）
  */
-function readCanonicalProjectToken(targetPath: string): string | undefined {
-  try {
-    if (!existsSync(targetPath)) {
-      return undefined;
-    }
-    let isDir = false;
-    try {
-      isDir = statSync(targetPath).isDirectory();
-    } catch {
-      return undefined;
-    }
-    const metaPath = isDir ? join(targetPath, "metadata.json") : targetPath;
-    if (!existsSync(metaPath)) {
-      return undefined;
-    }
-    const raw = readFileSync(metaPath, "utf-8");
-    if (raw.trim().length === 0) {
-      return undefined;
-    }
-    const parsed = JSON.parse(raw);
-    if (typeof parsed?.guardToken === "string" && parsed.guardToken.length > 0) {
-      return parsed.guardToken;
-    }
-    if (typeof parsed?.lockToken === "string" && parsed.lockToken.length > 0) {
-      return parsed.lockToken;
-    }
-    return undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * 清理过期的工程锁隔离目录（GC 回收机制）。
- * 实施分流存活校验，防止误删活跃持锁者与回滚中目录，同时防止孤儿目录无限泄漏：
- * - 共同前置条件：存活年龄必须超过 maxAgeMs（默认 10000ms），未超期前严禁清理（保持宽限期）。
- * - 活跃隔离目录（quarantine / rollback / release）：若 operatorPid 存活或内部 metadata.json 记录的 pid 与 childPids 存活，跳过不予清理。
- * - 孤儿脱离目录（orphan）：内部旧 metadata.pid 不再作为续命依据；提取其内部 orphanToken，仅当当前规范主路径（主锁目录与 reclaim 目录）依然持有该凭证时保守跳过；规范路径不存在或已变更凭据时直接安全清理。
- */
-export function cleanStaleProjectQuarantines(
-  parentDir: string,
-  basePrefix: string,
-  maxAgeMs = 10000,
-  deadline?: number
+export function safeRemoveStaleProjectReclaimGuard(
+  reclaimPath: string,
+  expectedGuardToken: string
 ): void {
-  try {
-    if (!existsSync(parentDir)) return;
-    const entries = readdirSync(parentDir);
-    const now = Date.now();
-    const canonicalPrimaryLockPath = basePrefix.endsWith(".reclaim")
-      ? join(parentDir, basePrefix.slice(0, -".reclaim".length))
-      : join(parentDir, basePrefix);
-    const canonicalReclaimPath = `${canonicalPrimaryLockPath}.reclaim`;
-
-    for (const entry of entries) {
-      if (deadline !== undefined && Date.now() >= deadline) {
-        break;
-      }
-      if (!entry.startsWith(basePrefix)) continue;
-      if (
-        !entry.includes(".quarantine.") &&
-        !entry.includes(".rollback.") &&
-        !entry.includes(".release.") &&
-        !entry.includes(".orphan.")
-      ) {
-        continue;
-      }
-      const fullPath = join(parentDir, entry);
-      try {
-        const { operatorPid, timestamp } = parseProjectQuarantineTimestamp(entry);
-
-        // a. 共同前置条件：存活年龄必须超过 maxAgeMs（默认 10000ms），未超期前严禁清理（保持宽限期）
-        let age: number;
-        if (timestamp !== undefined) {
-          age = now - timestamp;
-        } else {
-          const stat = statSync(fullPath);
-          age = now - stat.mtimeMs;
-        }
-        if (age <= maxAgeMs) {
-          continue;
-        }
-
-        const isOrphan = entry.includes(".orphan.");
-        if (!isOrphan) {
-          // b. 若不是 .orphan.（即活跃的 quarantine / rollback / release 目录）：
-          // - 若 operatorPid 存活，continue；
-          if (operatorPid !== undefined && isPidAlive(operatorPid)) {
-            continue;
-          }
-
-          // - 若内部 metadata.json 记录的 pid 或 childPids 存活，continue；
-          let isDir = false;
-          try {
-            isDir = statSync(fullPath).isDirectory();
-          } catch {
-            continue;
-          }
-          const metaPath = isDir ? join(fullPath, "metadata.json") : fullPath;
-          if (existsSync(metaPath)) {
-            try {
-              const raw = readFileSync(metaPath, "utf-8");
-              if (raw.trim().length > 0) {
-                const meta = JSON.parse(raw);
-                if (typeof meta?.pid === "number" && isPidAlive(meta.pid)) {
-                  continue;
-                }
-                if (
-                  Array.isArray(meta?.childPids) &&
-                  meta.childPids.some((childPid: any) => typeof childPid === "number" && isPidAlive(childPid))
-                ) {
-                  continue;
-                }
-              }
-            } catch {
-              // 元数据损坏或不可读，不视为存在存活持有者
-            }
-          }
-
-          rmSync(fullPath, { recursive: true, force: true });
-          continue;
-        }
-
-        // c. 若是 .orphan. 目录（已脱离规范路径）：
-        // 严禁再用内部旧 metadata.pid 存活为由无限续命！
-        // 提取 orphan 内部记录的 orphanToken（guardToken ?? lockToken）
-        const orphanToken = readCanonicalProjectToken(fullPath);
-
-        // 核对当前 canonical 规范主路径（主锁目录与 reclaim 目录）的当前凭证：
-        // 仅当当前规范路径依然持有该 orphanToken 时保守跳过；若规范路径不存在或已切换为其他 token，直接执行 rmSync 安全清理！
-        const primaryToken = readCanonicalProjectToken(canonicalPrimaryLockPath);
-        const reclaimToken = readCanonicalProjectToken(canonicalReclaimPath);
-
-        if (
-          orphanToken !== undefined &&
-          (orphanToken === primaryToken || orphanToken === reclaimToken)
-        ) {
-          continue;
-        }
-
-        rmSync(fullPath, { recursive: true, force: true });
-      } catch {}
-    }
-  } catch {}
+  safeRemoveStaleReclaimGuard(reclaimPath, expectedGuardToken);
 }
 
 /**
@@ -563,203 +104,33 @@ export function safeRollbackProjectLock(
   expectedSessionToken: string,
   expectedLockToken?: string
 ): void {
-  if (!existsSync(lockPath)) return;
-  const quarantinePath = `${lockPath}.rollback.${process.pid}.${Date.now()}.${randomUUID().slice(0, 8)}`;
-  try {
-    renameSync(lockPath, quarantinePath);
-  } catch {
-    return;
-  }
-
-  try {
-    let isDir = false;
-    try {
-      isDir = statSync(quarantinePath).isDirectory();
-    } catch {
-      isDir = false;
-    }
-    const metaPath = isDir ? join(quarantinePath, "metadata.json") : quarantinePath;
-    let actualSessionToken: string | undefined;
-    let actualLockToken: string | undefined;
-    if (existsSync(metaPath)) {
-      try {
-        const raw = readFileSync(metaPath, "utf-8");
-        const parsed = JSON.parse(raw);
-        actualSessionToken = parsed?.sessionToken;
-        actualLockToken = parsed?.lockToken;
-      } catch {}
-    }
-
-    const isMatch = expectedLockToken
-      ? (actualLockToken === expectedLockToken && actualSessionToken === expectedSessionToken)
-      : (actualSessionToken === expectedSessionToken);
-
-    if (!isMatch) {
-      // 并非自身刚才创建的锁目录，立即恢复原位！
-      try {
-        renameSync(quarantinePath, lockPath);
-      } catch {
-        try {
-          renameSync(quarantinePath, `${lockPath}.orphan.${Date.now()}.${randomUUID().slice(0, 8)}`);
-        } catch {}
-      }
-      return;
-    }
-
-    rmSync(quarantinePath, { recursive: true, force: true });
-  } catch {
-    try {
-      renameSync(quarantinePath, lockPath);
-    } catch {
-      try {
-        renameSync(quarantinePath, `${lockPath}.orphan.${Date.now()}.${randomUUID().slice(0, 8)}`);
-      } catch {}
-    }
-  }
+  safeRollbackLock(lockPath, expectedSessionToken, expectedLockToken);
 }
 
 /**
- * 安全隔离并清理陈旧工程主锁。
- * 隔离后复核元数据，确保仅删除目标陈旧锁，若已被更新或仍有存活所有者则恢复原位。
+ * 清理过期的工程锁隔离目录（GC 回收机制）。
+ * 实施分流存活校验，防止误删活跃持锁者与回滚中目录，同时防止孤儿目录无限泄漏，语义由目录锁内核统一承载。
  */
-function safeQuarantineStaleProjectLock(
-  lockPath: string,
-  expectedSessionToken?: string,
-  expectedLockToken?: string
-): boolean {
-  if (!existsSync(lockPath)) return true;
-  const quarantinePath = `${lockPath}.quarantine.${process.pid}.${Date.now()}.${randomUUID().slice(0, 8)}`;
-  try {
-    renameSync(lockPath, quarantinePath);
-  } catch {
-    return false;
-  }
-
-  try {
-    let isDir = false;
-    try {
-      isDir = statSync(quarantinePath).isDirectory();
-    } catch {
-      isDir = false;
-    }
-    const metaPath = isDir ? join(quarantinePath, "metadata.json") : quarantinePath;
-    let actualSessionToken: string | undefined;
-    let actualLockToken: string | undefined;
-    let actualPid: number | undefined;
-    if (existsSync(metaPath)) {
-      try {
-        const raw = readFileSync(metaPath, "utf-8");
-        const parsed = JSON.parse(raw);
-        actualSessionToken = parsed?.sessionToken;
-        actualLockToken = parsed?.lockToken;
-        actualPid = parsed?.pid;
-      } catch {}
-    }
-
-    const tokenMismatch = expectedLockToken
-      ? (actualLockToken !== expectedLockToken || (expectedSessionToken && actualSessionToken !== expectedSessionToken))
-      : ((expectedSessionToken && actualSessionToken !== expectedSessionToken) || (!expectedSessionToken && actualSessionToken));
-
-    if (tokenMismatch) {
-      // 锁已被其他竞争者接管并写入新 token，绝不可删除！立即恢复原位
-      try {
-        renameSync(quarantinePath, lockPath);
-      } catch {
-        try {
-          renameSync(quarantinePath, `${lockPath}.orphan.${Date.now()}.${randomUUID().slice(0, 8)}`);
-        } catch {}
-      }
-      return false;
-    }
-
-    if (typeof actualPid === "number" && isPidAlive(actualPid)) {
-      // 持有者实际仍存活，恢复原位
-      try {
-        renameSync(quarantinePath, lockPath);
-      } catch {
-        try {
-          renameSync(quarantinePath, `${lockPath}.orphan.${Date.now()}.${randomUUID().slice(0, 8)}`);
-        } catch {}
-      }
-      return false;
-    }
-
-    rmSync(quarantinePath, { recursive: true, force: true });
-    return true;
-  } catch {
-    try {
-      renameSync(quarantinePath, lockPath);
-    } catch {
-      try {
-        renameSync(quarantinePath, `${lockPath}.orphan.${Date.now()}.${randomUUID().slice(0, 8)}`);
-      } catch {}
-    }
-    return false;
-  }
+export function cleanStaleProjectQuarantines(
+  parentDir: string,
+  basePrefix: string,
+  maxAgeMs = 10000,
+  deadline?: number
+): void {
+  cleanStaleQuarantines(parentDir, basePrefix, maxAgeMs, deadline);
 }
 
 /**
  * 安全释放工程主锁。
  * 仅当锁目录中持有当前 lockToken / sessionToken 时才删除，杜绝删除他人新锁。
+ * 释放后同步触发一轮工程锁隔离目录 GC。
  */
 export function safeReleaseProjectLock(
   lockPath: string,
   expectedSessionToken: string,
   expectedLockToken?: string
 ): void {
-  if (!existsSync(lockPath)) return;
-  const quarantinePath = `${lockPath}.release.${process.pid}.${Date.now()}.${randomUUID().slice(0, 8)}`;
-  try {
-    renameSync(lockPath, quarantinePath);
-  } catch {
-    return;
-  }
-
-  try {
-    let isDir = false;
-    try {
-      isDir = statSync(quarantinePath).isDirectory();
-    } catch {
-      isDir = false;
-    }
-    const metaPath = isDir ? join(quarantinePath, "metadata.json") : quarantinePath;
-    let actualSessionToken: string | undefined;
-    let actualLockToken: string | undefined;
-    if (existsSync(metaPath)) {
-      try {
-        const raw = readFileSync(metaPath, "utf-8");
-        const parsed = JSON.parse(raw);
-        actualSessionToken = parsed?.sessionToken;
-        actualLockToken = parsed?.lockToken;
-      } catch {}
-    }
-
-    const isMatch = expectedLockToken
-      ? (actualLockToken === expectedLockToken && actualSessionToken === expectedSessionToken)
-      : (actualSessionToken === expectedSessionToken);
-
-    if (isMatch) {
-      rmSync(quarantinePath, { recursive: true, force: true });
-    } else {
-      // 并非当前会话持有的锁，恢复原位
-      try {
-        renameSync(quarantinePath, lockPath);
-      } catch {
-        try {
-          renameSync(quarantinePath, `${lockPath}.orphan.${Date.now()}.${randomUUID().slice(0, 8)}`);
-        } catch {}
-      }
-    }
-  } catch {
-    try {
-      renameSync(quarantinePath, lockPath);
-    } catch {
-      try {
-        renameSync(quarantinePath, `${lockPath}.orphan.${Date.now()}.${randomUUID().slice(0, 8)}`);
-      } catch {}
-    }
-  }
-  cleanStaleProjectQuarantines(dirname(lockPath), "project.lock");
+  coreSafeReleaseLock(lockPath, expectedSessionToken, expectedLockToken, { gcAfterRelease: true });
 }
 
 /**
@@ -769,10 +140,10 @@ export function safeReleaseProjectLock(
  * @param excludeSelf 是否排除当前进程本身（默认为 true，即仅当其他活跃进程持锁时判定为锁被占用）
  */
 export function isProjectLockHeld(projectRoot: string, excludeSelf = true): boolean {
-  const lockPath = join(projectRoot, ".actiondock", "project.lock");
+  const lockPath = join(projectRoot, ".actiondock", LOCK_DIR_NAME);
   const reclaimPath = `${lockPath}.reclaim`;
   if (existsSync(reclaimPath)) {
-    const reclaimState = checkProjectReclaimGuard(reclaimPath, 1000);
+    const reclaimState = checkReclaimGuard(reclaimPath, 1000);
     if (reclaimState.active) {
       if (!excludeSelf || reclaimState.holderPid !== process.pid) {
         return true;
@@ -784,7 +155,7 @@ export function isProjectLockHeld(projectRoot: string, excludeSelf = true): bool
     return false;
   }
   try {
-    const lockState = readProjectLockWithGracePeriod(lockPath, 3000);
+    const lockState = readLockWithGracePeriod(lockPath, 3000);
     if (!lockState.exists) {
       return false;
     }
@@ -795,7 +166,7 @@ export function isProjectLockHeld(projectRoot: string, excludeSelf = true): bool
       if (excludeSelf && lockState.info.pid === process.pid) {
         return false;
       }
-      return isPidAlive(lockState.info.pid);
+      return isProcessAlive(lockState.info.pid);
     }
   } catch {
     // 忽略读取解析异常
@@ -817,15 +188,12 @@ export function acquireProjectLock(
   options: { sessionToken?: string; acquireTimeoutMs?: number } = {}
 ): () => void {
   const timeoutMs = options.acquireTimeoutMs ?? 5000;
-  const deadline = Date.now() + timeoutMs;
   const metaDir = join(projectRoot, ".actiondock");
   if (!existsSync(metaDir)) {
     mkdirSync(metaDir, { recursive: true });
   }
-  cleanStaleProjectQuarantines(metaDir, "project.lock", 10000, deadline);
 
-  const lockPath = join(metaDir, "project.lock");
-  const reclaimPath = `${lockPath}.reclaim`;
+  const lockPath = join(metaDir, LOCK_DIR_NAME);
   const sessionToken = options.sessionToken || randomUUID();
   const lockToken = randomUUID();
   const currentPid = process.pid;
@@ -837,269 +205,54 @@ export function acquireProjectLock(
   };
   const content = JSON.stringify(lockData, null, 2);
 
-  while (true) {
-    // 1. 当竞争者尝试创建新主锁时，若检测到 reclaim 目录存在且处于宽限期内或持有者存活，必须等待，禁止在他人正在接管/验证期间抢先创建主锁
-    const reclaimState = checkProjectReclaimGuard(reclaimPath, 1000);
-    if (reclaimState.active) {
-      if (Date.now() >= deadline) {
+  acquireDirectoryLock({
+    lockPath,
+    parentDir: metaDir,
+    basePrefix: LOCK_DIR_NAME,
+    metadataContent: content,
+    sessionToken,
+    lockToken,
+    acquireTimeoutMs: options.acquireTimeoutMs,
+    createLockError(message) {
+      const busyErr: any = new Error(message);
+      busyErr.code = "PROJECT_BUSY";
+      return busyErr;
+    },
+    messages: {
+      timeoutWaitingReclaimGuard: (holderPid?: number) =>
+        `PROJECT_BUSY: Timeout waiting for active reclaim guard (PID ${holderPid ?? "unknown"}) on project '${projectRoot}' after ${timeoutMs}ms`,
+      timeoutAcquireBlockedByGuard: (holderPid?: number) =>
+        `PROJECT_BUSY: Timeout acquiring project lock on '${projectRoot}' due to active reclaim guard (PID ${holderPid}) after ${timeoutMs}ms`,
+      timeoutAcquire: () =>
+        `PROJECT_BUSY: Timeout acquiring project lock on '${projectRoot}' after ${timeoutMs}ms`,
+      timeoutGracePeriod: () =>
+        `PROJECT_BUSY: Timeout waiting for project lock grace period on '${projectRoot}' after ${timeoutMs}ms`,
+      timeoutGuardContention: () =>
+        `PROJECT_BUSY: Timeout contending for project reclaim guard on '${projectRoot}' after ${timeoutMs}ms`,
+      timeoutReclaimStale: () =>
+        `PROJECT_BUSY: Timeout reclaiming stale project lock on '${projectRoot}' after ${timeoutMs}ms`,
+      timeoutCreate: () =>
+        `PROJECT_BUSY: Timeout creating project lock on '${projectRoot}' after ${timeoutMs}ms`,
+    },
+    assertStaleHolderReclaimable(info) {
+      const holderPid = info.pid as number;
+      if (isProcessAlive(holderPid)) {
         const busyErr: any = new Error(
-          `PROJECT_BUSY: Timeout waiting for active reclaim guard (PID ${reclaimState.holderPid ?? "unknown"}) on project '${projectRoot}' after ${timeoutMs}ms`
+          `PROJECT_BUSY: Project modification lock is held by PID ${holderPid}. Another command is running in ${projectRoot}.`
         );
         busyErr.code = "PROJECT_BUSY";
         throw busyErr;
       }
-      sleepSync(Math.min(50, Math.max(1, deadline - Date.now())));
-      continue;
-    }
-    if (reclaimState.isStale && reclaimState.guardToken) {
-      // 若 reclaim guard 持有者意外崩溃，其他竞争者核对此前检查的 guardToken 安全清理
-      safeRemoveStaleProjectReclaimGuard(reclaimPath, reclaimState.guardToken);
-    }
-
-    // 2. 尝试常规获取新主锁
-    try {
-      fs.mkdirSync(lockPath, { mode: 0o700 });
-
-      const metaFile = join(lockPath, "metadata.json");
-      const tmpFile = join(
-        lockPath,
-        `metadata.json.tmp.${currentPid}.${randomUUID().slice(0, 8)}`
-      );
-      writeFileSync(tmpFile, content, "utf-8");
-      renameSync(tmpFile, metaFile);
-
-      // 再次确认在此窗口期内是否有他人持有活跃 reclaim guard
-      const postCheck = checkProjectReclaimGuard(reclaimPath, 1000);
-      if (postCheck.active && postCheck.holderPid !== currentPid) {
-        // 仅当锁目录中包含自身创建的 sessionToken 与 lockToken 时安全回滚，杜绝误删他人新锁
-        safeRollbackProjectLock(lockPath, sessionToken, lockToken);
-        if (Date.now() >= deadline) {
-          const busyErr: any = new Error(
-            `PROJECT_BUSY: Timeout acquiring project lock on '${projectRoot}' due to active reclaim guard (PID ${postCheck.holderPid}) after ${timeoutMs}ms`
-          );
-          busyErr.code = "PROJECT_BUSY";
-          throw busyErr;
-        }
-        sleepSync(Math.min(50, Math.max(1, deadline - Date.now())));
-        continue;
-      }
-
-      break;
-    } catch (err: any) {
-      if (err && (err.code === "EEXIST" || err.code === "ENOENT")) {
-        const lockState = readProjectLockWithGracePeriod(lockPath, 3000, deadline);
-
-        if (!lockState.exists) {
-          if (Date.now() >= deadline) {
-            const busyErr: any = new Error(
-              `PROJECT_BUSY: Timeout acquiring project lock on '${projectRoot}' after ${timeoutMs}ms`
-            );
-            busyErr.code = "PROJECT_BUSY";
-            throw busyErr;
-          }
-          continue;
-        }
-
-        if (lockState.inGracePeriod) {
-          if (Date.now() >= deadline) {
-            const busyErr: any = new Error(
-              `PROJECT_BUSY: Timeout waiting for project lock grace period on '${projectRoot}' after ${timeoutMs}ms`
-            );
-            busyErr.code = "PROJECT_BUSY";
-            throw busyErr;
-          }
-          sleepSync(Math.min(50, Math.max(1, deadline - Date.now())));
-          continue;
-        }
-
-        if (lockState.info && typeof lockState.info.pid === "number") {
-          if (isPidAlive(lockState.info.pid)) {
-            const busyErr: any = new Error(
-              `PROJECT_BUSY: Project modification lock is held by PID ${lockState.info.pid}. Another command is running in ${projectRoot}.`
-            );
-            busyErr.code = "PROJECT_BUSY";
-            throw busyErr;
-          }
-        }
-
-        const staleSessionToken = lockState.info?.sessionToken;
-        const staleLockToken = lockState.info?.lockToken;
-        const guardToken = randomUUID();
-        // 当识别到主锁为陈旧锁时，竞争者必须先原子竞争获取 reclaim guard
-        const acquiredReclaim = tryAcquireProjectReclaimGuard(reclaimPath, currentPid, guardToken);
-        if (!acquiredReclaim) {
-          const currentReclaim = checkProjectReclaimGuard(reclaimPath, 1000);
-          if (currentReclaim.isStale && currentReclaim.guardToken) {
-            safeRemoveStaleProjectReclaimGuard(reclaimPath, currentReclaim.guardToken);
-          }
-          if (Date.now() >= deadline) {
-            const busyErr: any = new Error(
-              `PROJECT_BUSY: Timeout contending for project reclaim guard on '${projectRoot}' after ${timeoutMs}ms`
-            );
-            busyErr.code = "PROJECT_BUSY";
-            throw busyErr;
-          }
-          sleepSync(Math.min(50, Math.max(1, deadline - Date.now())));
-          continue;
-        }
-
-        // 仅成功获取 reclaim guard 的唯一胜利者获准执行：
-        // 复核主锁陈旧性 -> 隔离/清理陈旧锁 -> 原子创建新主锁并写入自身元数据 -> 清理 reclaim guard
-        try {
-          const verifyProjectReclaimOwnership = (): boolean => {
-            const ownGuard = checkProjectReclaimGuard(reclaimPath, 1000);
-            return Boolean(
-              ownGuard.active &&
-              ownGuard.holderPid === currentPid &&
-              ownGuard.guardToken === guardToken
-            );
-          };
-
-          // 自检校验自身守卫：验证自身 guardToken 依然有效且持有者为自身 PID
-          // 若已被抢占或不匹配，立即退出当前接管并 continue 重试，杜绝在守卫已失窃的情况下操作主锁
-          if (!verifyProjectReclaimOwnership()) {
-            if (Date.now() >= deadline) {
-              const busyErr: any = new Error(
-                `PROJECT_BUSY: Timeout acquiring project lock on '${projectRoot}' after ${timeoutMs}ms`
-              );
-              busyErr.code = "PROJECT_BUSY";
-              throw busyErr;
-            }
-            sleepSync(Math.min(50, Math.max(1, deadline - Date.now())));
-            continue;
-          }
-
-          // 1. 复核主锁陈旧性
-          const recheckState = readProjectLockWithGracePeriod(lockPath, 1000, deadline);
-          if (recheckState.exists) {
-            if (recheckState.inGracePeriod) {
-              if (Date.now() >= deadline) {
-                const busyErr: any = new Error(
-                  `PROJECT_BUSY: Timeout waiting for project lock grace period on '${projectRoot}' after ${timeoutMs}ms`
-                );
-                busyErr.code = "PROJECT_BUSY";
-                throw busyErr;
-              }
-              sleepSync(Math.min(50, Math.max(1, deadline - Date.now())));
-              continue;
-            }
-            if (
-              recheckState.info &&
-              typeof recheckState.info.pid === "number" &&
-              isPidAlive(recheckState.info.pid)
-            ) {
-              const busyErr: any = new Error(
-                `PROJECT_BUSY: Project modification lock is held by PID ${recheckState.info.pid}. Another command is running in ${projectRoot}.`
-              );
-              busyErr.code = "PROJECT_BUSY";
-              throw busyErr;
-            }
-
-            // 2. 隔离并核验清理陈旧主锁（验证 sessionToken 一致，若已被他人占用则恢复原位）
-            const cleaned = safeQuarantineStaleProjectLock(
-              lockPath,
-              recheckState.info?.sessionToken ?? staleSessionToken,
-              recheckState.info?.lockToken ?? staleLockToken
-            );
-            if (!cleaned) {
-              if (Date.now() >= deadline) {
-                const busyErr: any = new Error(
-                  `PROJECT_BUSY: Timeout reclaiming stale project lock on '${projectRoot}' after ${timeoutMs}ms`
-                );
-                busyErr.code = "PROJECT_BUSY";
-                throw busyErr;
-              }
-              continue;
-            }
-          }
-
-          // 后置复核 1：在清理陈旧主锁之后、创建新主锁之前，再次核验 reclaim guard 所有权
-          // 若守卫在此期间失窃，严禁继续创建新主锁，立即退出重试
-          if (!verifyProjectReclaimOwnership()) {
-            if (Date.now() >= deadline) {
-              const busyErr: any = new Error(
-                `PROJECT_BUSY: Timeout acquiring project lock on '${projectRoot}' after ${timeoutMs}ms`
-              );
-              busyErr.code = "PROJECT_BUSY";
-              throw busyErr;
-            }
-            sleepSync(Math.min(50, Math.max(1, deadline - Date.now())));
-            continue;
-          }
-
-          // 3. 原子创建新主锁并写入自身元数据（严格遵守 deadline，并在每次重试检查时间窗口）
-          let created = false;
-          for (let attempt = 0; attempt < 40; attempt++) {
-            try {
-              fs.mkdirSync(lockPath, { mode: 0o700 });
-              created = true;
-              break;
-            } catch (createErr: any) {
-              if (createErr?.code === "EEXIST") {
-                if (Date.now() >= deadline) {
-                  break;
-                }
-                const remaining = deadline - Date.now();
-                if (remaining <= 0) {
-                  break;
-                }
-                sleepSync(Math.min(25, remaining));
-                continue;
-              }
-              throw createErr;
-            }
-          }
-
-          if (!created) {
-            if (Date.now() >= deadline) {
-              const busyErr: any = new Error(
-                `PROJECT_BUSY: Timeout creating project lock on '${projectRoot}' after ${timeoutMs}ms`
-              );
-              busyErr.code = "PROJECT_BUSY";
-              throw busyErr;
-            }
-            continue;
-          }
-
-          const metaFile = join(lockPath, "metadata.json");
-          const tmpFile = join(
-            lockPath,
-            `metadata.json.tmp.${currentPid}.${randomUUID().slice(0, 8)}`
-          );
-          writeFileSync(tmpFile, content, "utf-8");
-          renameSync(tmpFile, metaFile);
-
-          // 后置复核 2：新主锁创建完成后、返回之前再次核验 reclaim guard 所有权
-          // 若守卫在创建新主锁期间失窃，说明存在并发仲裁漂移，严禁生效并安全回滚自身主锁
-          if (!verifyProjectReclaimOwnership()) {
-            safeRollbackProjectLock(lockPath, sessionToken, lockToken);
-            if (Date.now() >= deadline) {
-              const busyErr: any = new Error(
-                `PROJECT_BUSY: Timeout acquiring project lock on '${projectRoot}' after ${timeoutMs}ms`
-              );
-              busyErr.code = "PROJECT_BUSY";
-              throw busyErr;
-            }
-            sleepSync(Math.min(50, Math.max(1, deadline - Date.now())));
-            continue;
-          }
-
-          break;
-        } finally {
-          // 4. 清理 reclaim guard（必须核对自身 guardToken）
-          safeRemoveStaleProjectReclaimGuard(reclaimPath, guardToken);
-        }
-      }
-      throw err;
-    }
-  }
+    },
+    onAcquired: () => true,
+  });
 
   let released = false;
   return () => {
     if (released) return;
     released = true;
     safeReleaseProjectLock(lockPath, sessionToken, lockToken);
-    cleanStaleProjectQuarantines(metaDir, "project.lock");
+    cleanStaleQuarantines(metaDir, LOCK_DIR_NAME);
   };
 }
 
