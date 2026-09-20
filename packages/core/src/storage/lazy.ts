@@ -27,6 +27,7 @@ export function createLazyStorage(factory: () => RuntimeStorage): RuntimeStorage
       if (prop === "close") {
         return () => {
           if (instance) {
+            // 驱动关闭异常不吞没：延迟代理层透传给调用方，由上层统一记录或处理
             instance.close();
           }
         };

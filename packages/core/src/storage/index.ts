@@ -14,6 +14,7 @@ export * from "./mask";
 export * from "./params";
 export * from "./sqlite";
 export * from "./types";
+export * from "./utils";
 
 /**
  * 解析并计算目标 SQLite 数据库文件的绝对路径。

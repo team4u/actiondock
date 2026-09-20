@@ -11,7 +11,9 @@ import {
 } from "@actiondock/sdk";
 import { type Clock, SystemClock } from "../runtime/clock";
 import { createDefaultSqliteDriver } from "./driver";
+import { safeParseStoredJson } from "./utils";
 import {
+  IDEMPOTENCY_RETENTION_MS,
   STORAGE_SCHEMA_VERSION,
   type IdempotencyCheckResult,
   type IdempotencyRecord,
@@ -179,15 +181,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     }
 
     // 重启恢复：将未正常结算的 running 与 pending 状态自动收敛为 interrupted
-    this.recoverRunningRuns();
-  }
-
-  /**
-   * 重启恢复：将未正常结算的非终态（running/pending）记录自动收敛为 interrupted。
-   * 若指定了当前新 Host 会话标识，将收敛不属于该会话（包括旧会话或空会话）的死亡任务。
-   */
-  public recoverRunningRuns(currentHostSessionId?: string): number {
-    return this.recoverDeadSessionRuns(currentHostSessionId);
+    this.recoverDeadSessionRuns();
   }
 
   /**
@@ -212,7 +206,10 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       const stmt = this.getStatement(sql);
       const res = stmt.run(...params);
       return res.changes;
-    } catch {
+    } catch (err) {
+      console.warn(
+        `[actiondock] recoverDeadSessionRuns failed: ${err instanceof Error ? err.message : String(err)}`
+      );
       return 0;
     }
   }
@@ -239,11 +236,10 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     if (!row || row.value_json === undefined || row.value_json === null) {
       return undefined;
     }
-    try {
-      return JSON.parse(row.value_json) as T;
-    } catch {
-      return row.value_json as unknown as T;
-    }
+    return safeParseStoredJson<T>(
+      row.value_json,
+      `config db=${this.dbPath} package=${this.packageId} key=${key}`
+    );
   }
 
   listConfig(): Record<string, unknown> {
@@ -253,11 +249,10 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     const rows = stmt.all<{ key: string; value_json: string }>(this.packageId);
     const result: Record<string, unknown> = {};
     for (const row of rows) {
-      try {
-        result[row.key] = JSON.parse(row.value_json);
-      } catch {
-        result[row.key] = row.value_json;
-      }
+      result[row.key] = safeParseStoredJson(
+        row.value_json,
+        `config db=${this.dbPath} package=${this.packageId} key=${row.key}`
+      );
     }
     return result;
   }
@@ -306,11 +301,10 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       }
     }
 
-    try {
-      return JSON.parse(row.value_json) as T;
-    } catch {
-      return row.value_json as unknown as T;
-    }
+    return safeParseStoredJson<T>(
+      row.value_json,
+      `state db=${this.dbPath} package=${this.packageId} namespace=${namespace} key=${key}`
+    );
   }
 
   private async findMatchingStateRows(targetKey: string): Promise<Array<{
@@ -411,12 +405,10 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     }
 
     const row = matchingRows[0];
-    let parsedVal: unknown;
-    try {
-      parsedVal = JSON.parse(row.value_json);
-    } catch {
-      parsedVal = row.value_json;
-    }
+    const parsedVal = safeParseStoredJson(
+      row.value_json,
+      `state db=${this.dbPath} package=${this.packageId} namespace=${row.namespace} key=${row.key}`
+    );
     return {
       packageId: this.packageId,
       namespace: row.namespace,
@@ -481,18 +473,39 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
   }
 
   /**
-   * 清理已过期的状态记录
+   * 清理已过期的状态记录。
+   *
+   * 同时按 TargetInfo.idempotencyPolicy 声明的 24 小时保留窗口，
+   * 清理 idempotency_keys 表中超过保留期的幂等去重记录，
+   * 保证承诺的 retentionMs 策略与实际清理逻辑一致。
    */
   async cleanExpiredState(): Promise<number> {
     if (this.isClosed) return 0;
     try {
-      const now = this.clock.now().toISOString();
+      const now = this.clock.now();
       const stmt = this.getStatement(
         "DELETE FROM state WHERE package_id = ? AND expires_at IS NOT NULL AND expires_at <= ?"
       );
-      const res = stmt.run(this.packageId, now);
+      const res = stmt.run(this.packageId, now.toISOString());
+
+      // 幂等去重记录保留窗口与 info() 声明的 retentionMs（24 小时）保持一致
+      const retentionCutoff = new Date(now.getTime() - IDEMPOTENCY_RETENTION_MS).toISOString();
+      try {
+        this.getStatement(
+          "DELETE FROM idempotency_keys WHERE created_at < ?"
+        ).run(retentionCutoff);
+      } catch (err) {
+        // 独立记录幂等清理失败，不影响状态清理主路径的返回语义
+        console.warn(
+          `[actiondock] idempotency retention cleanup failed: ${err instanceof Error ? err.message : String(err)}`
+        );
+      }
+
       return res.changes;
-    } catch {
+    } catch (err) {
+      console.warn(
+        `[actiondock] cleanExpiredState failed: ${err instanceof Error ? err.message : String(err)}`
+      );
       return 0;
     }
   }
@@ -599,12 +612,10 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
         continue;
       }
 
-      let parsedVal: unknown;
-      try {
-        parsedVal = JSON.parse(row.value_json);
-      } catch {
-        parsedVal = row.value_json;
-      }
+      const parsedVal = safeParseStoredJson(
+        row.value_json,
+        `state db=${this.dbPath} package=${this.packageId} namespace=${row.namespace} key=${row.key}`
+      );
 
       results.push({
         packageId: this.packageId,
@@ -707,26 +718,22 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     return this.mapRunRecord(row);
   }
 
-  listRuns(options: { actionId?: string; limit?: number } = {}): RunRecord[] {
+  listRuns(options: { actionId?: string; status?: string; limit?: number } = {}): RunRecord[] {
     const limit = options.limit || 50;
-    let rows: any[];
+    let sql = "SELECT * FROM runs WHERE package_id = ?";
+    const params: any[] = [this.packageId];
     if (options.actionId) {
-      const stmt = this.getStatement(`
-        SELECT * FROM runs
-        WHERE package_id = ? AND action_id = ?
-        ORDER BY started_at DESC
-        LIMIT ?
-      `);
-      rows = stmt.all(this.packageId, options.actionId, limit);
-    } else {
-      const stmt = this.getStatement(`
-        SELECT * FROM runs
-        WHERE package_id = ?
-        ORDER BY started_at DESC
-        LIMIT ?
-      `);
-      rows = stmt.all(this.packageId, limit);
+      sql += " AND action_id = ?";
+      params.push(options.actionId);
     }
+    if (options.status) {
+      sql += " AND status = ?";
+      params.push(options.status);
+    }
+    sql += " ORDER BY started_at DESC LIMIT ?";
+    params.push(limit);
+    const stmt = this.getStatement(sql);
+    const rows = stmt.all(...params);
     return rows.map((r) => this.mapRunRecord(r));
   }
 
@@ -747,7 +754,12 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     // 运行记录清理后，级联清理已无对应运行的孤立去重索引记录
     try {
       this.getStatement("DELETE FROM idempotency_keys WHERE run_id NOT IN (SELECT id FROM runs)").run();
-    } catch {}
+    } catch (err) {
+      // 孤立索引清理失败不影响主清理结果的返回语义，但必须可观测
+      console.warn(
+        `[actiondock] orphaned idempotency keys cleanup failed: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
 
     return res.changes;
   }
@@ -847,27 +859,26 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
   }
 
   private mapRunRecord(row: any): RunRecord {
-    let input: JsonValue | undefined;
-    let output: JsonValue | undefined;
-    let error: RuntimeError | undefined;
-
-    try {
-      input = row.input_json ? JSON.parse(row.input_json) : undefined;
-    } catch {
-      input = row.input_json;
-    }
-
-    try {
-      output = row.output_json ? JSON.parse(row.output_json) : undefined;
-    } catch {
-      output = row.output_json;
-    }
-
-    try {
-      error = row.error_json ? JSON.parse(row.error_json) : undefined;
-    } catch {
-      error = undefined;
-    }
+    // 保留旧有的真值判断：空字符串列视为未存储，与历史行为一致
+    const input = safeParseStoredJson<JsonValue>(
+      row.input_json || undefined,
+      `runs.input db=${this.dbPath} package=${this.packageId} run=${row.id}`
+    );
+    const output = safeParseStoredJson<JsonValue>(
+      row.output_json || undefined,
+      `runs.output db=${this.dbPath} package=${this.packageId} run=${row.id}`
+    );
+    // error_json 损坏时保留原始文本到 message 字段，避免错误信息丢失
+    const error = safeParseStoredJson<RuntimeError>(
+      row.error_json || undefined,
+      `runs.error db=${this.dbPath} package=${this.packageId} run=${row.id}`
+    );
+    const normalizedError: RuntimeError | undefined =
+      error !== undefined
+        ? typeof error === "object" && error !== null && typeof (error as any).message === "string"
+          ? error
+          : { code: "STORED_ERROR_DECODE_FAILED", message: String(error) }
+        : undefined;
 
     return {
       id: row.id,
@@ -895,8 +906,11 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     this.statementCache.clear();
     try {
       this.driver.close();
-    } catch {
-      // 忽略重复关闭异常
+    } catch (err) {
+      // 驱动关闭异常必须可观测，但不再重复抛出以免阻断上层关停链路
+      console.warn(
+        `[actiondock] storage close failed (db=${this.dbPath}): ${err instanceof Error ? err.message : String(err)}`
+      );
     }
   }
 }

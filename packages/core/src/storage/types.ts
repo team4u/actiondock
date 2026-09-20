@@ -7,6 +7,12 @@ import type { Clock } from "../runtime/clock";
 export const STORAGE_SCHEMA_VERSION = 2;
 
 /**
+ * 幂等去重记录保留窗口（24 小时），与 LocalActionDockTarget.info()
+ * 声明的 idempotencyPolicy.retentionMs 承诺保持单一事实源。
+ */
+export const IDEMPOTENCY_RETENTION_MS = 86_400_000;
+
+/**
  * SQLite 基础参数值类型。
  */
 export type SqlValue = null | number | string | Uint8Array;
@@ -182,13 +188,13 @@ export interface RuntimeStorage {
     finishedAt?: string
   ): void;
   getRun(id: string): RunRecord | null;
-  listRuns(options?: { actionId?: string; limit?: number }): RunRecord[];
+  listRuns(options?: { actionId?: string; status?: string; limit?: number }): RunRecord[];
   clearRuns(options?: { actionId?: string; status?: string }): number;
 
-  /** 故障重启恢复：将遗留非终态运行收敛为 interrupted */
-  recoverRunningRuns?(currentHostSessionId?: string): number | Promise<number>;
-
-  /** 收敛死亡会话遗留的非终态运行任务 */
+  /**
+   * 收敛死亡会话遗留的非终态运行任务（含无会话标识的遗留非终态记录），
+   * 统一收敛为 interrupted。历史别名 recoverRunningRuns 已合并至本方法。
+   */
   recoverDeadSessionRuns?(currentHostSessionId?: string): number | Promise<number>;
 
   /** 确保底层存储与 Schema 初始化完成 */

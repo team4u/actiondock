@@ -328,14 +328,11 @@ export class DefaultActionDockHost implements ActionDockHost {
     if (st && typeof st.recoverDeadSessionRuns === "function") {
       try {
         st.recoverDeadSessionRuns(this.hostSessionId);
-      } catch {
-        // 忽略单包恢复异常
-      }
-    } else if (st && typeof st.recoverRunningRuns === "function") {
-      try {
-        st.recoverRunningRuns(this.hostSessionId);
-      } catch {
-        // 忽略单包恢复异常
+      } catch (err) {
+        // 单包恢复失败不阻断整体接管流程，但必须可观测
+        console.warn(
+          `[actiondock] recoverDeadSessionRuns failed for package '${app.packageId}': ${err instanceof Error ? err.message : String(err)}`
+        );
       }
     }
   }

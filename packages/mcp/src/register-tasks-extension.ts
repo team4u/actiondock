@@ -145,10 +145,11 @@ export function registerTasksExtension(server: McpServer, target: ActionDockTarg
     }
     const actionId = params.actionId;
 
+    // limit 单处截断：下推到 target.listRuns 的 limit 参数，此处不再重复 slice
     const runs = await target.listRuns({ limit, actionId });
     const ordered = [...runs].sort(
       (a: RunRecord, b: RunRecord) => toTimeMillis(b.startedAt) - toTimeMillis(a.startedAt)
     );
-    return { tasks: ordered.slice(0, limit).map(toMcpTaskPayload) };
+    return { tasks: ordered.map(toMcpTaskPayload) };
   });
 }
