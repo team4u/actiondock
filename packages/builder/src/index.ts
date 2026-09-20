@@ -50,14 +50,17 @@ export { buildProject } from "./build";
 export { packProject } from "./pack";
 
 // Skill 导出
+// 入口函数与导出器门面位于 ./exporter；SKILL.md 发现能力单一事实源位于 ./skill-md
 export {
   exportCompositeSkill,
   exportSkill,
   exportSkillBatch,
-  findExistingCompositeSkillMd,
-  findExistingSingleSkillMd,
   SkillExporter,
 } from "./exporter";
+export {
+  findExistingCompositeSkillMd,
+  findExistingSingleSkillMd,
+} from "./skill-md";
 
 // 公共类型定义
 export type {
