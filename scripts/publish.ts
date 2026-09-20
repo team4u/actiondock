@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { extractPrereleaseTag } from "./lib/semver.js";
 
 const rootDir = resolve(import.meta.dirname, "..");
 
@@ -48,10 +49,9 @@ function resolveTargetVersion(): string {
 function resolveTargetDistTag(version: string, customTag?: string): string {
   if (customTag) return customTag;
 
-  const prereleaseMatch = version.match(/-([a-zA-Z]+)(?:\.|\b)/);
-  if (prereleaseMatch) {
-    const tag = prereleaseMatch[1].toLowerCase();
-    return tag;
+  const prereleaseTag = extractPrereleaseTag(version);
+  if (prereleaseTag) {
+    return prereleaseTag;
   }
   return "latest";
 }

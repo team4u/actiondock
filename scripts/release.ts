@@ -1,6 +1,17 @@
+/**
+ * 发版编排脚本（本地发起入口）。
+ *
+ * 与 GitHub Actions 流水线的职责边界：
+ * - 本脚本：提炼变更日志、同步版本号、创建规范提交并推送分支，随后创建
+ *   GitHub Release；发布触发事实源始终是 GitHub Release 事件本身。
+ * - 流水线（.github/workflows/publish.yml）：监听 Release 发布事件，重新校验、
+ *   解析版本类型决定分发标签并执行 npm 发布；本脚本不直接触碰 npm。
+ * 两层各司其职，正式发布以 GitHub Release 为唯一触发事实源。
+ */
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
+import { bumpSemver, parseSemver } from "./lib/semver.js";
 
 const rootDir = resolve(import.meta.dirname, "..");
 
@@ -42,56 +53,8 @@ function getCurrentVersion(): string {
   return rootPkg.version;
 }
 
-interface Semver {
-  major: number;
-  minor: number;
-  patch: number;
-  prerelease?: string;
-}
-
-function parseSemver(v: string): Semver {
-  const cleaned = v.trim().replace(/^v/, "");
-  const match = cleaned.match(/^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/);
-  if (!match) {
-    throw new Error(`非法的语义化版本号: '${v}'`);
-  }
-  return {
-    major: parseInt(match[1], 10),
-    minor: parseInt(match[2], 10),
-    patch: parseInt(match[3], 10),
-    prerelease: match[4],
-  };
-}
-
-function bumpSemver(current: string, type: "patch" | "minor" | "major" | "prerelease", preId = "beta"): string {
-  const parsed = parseSemver(current);
-  if (type === "major") {
-    return `${parsed.major + 1}.0.0`;
-  }
-  if (type === "minor") {
-    return `${parsed.major}.${parsed.minor + 1}.0`;
-  }
-  if (type === "patch") {
-    if (parsed.prerelease) {
-      return `${parsed.major}.${parsed.minor}.${parsed.patch}`;
-    }
-    return `${parsed.major}.${parsed.minor}.${parsed.patch + 1}`;
-  }
-  if (type === "prerelease") {
-    if (parsed.prerelease) {
-      const match = parsed.prerelease.match(/^(.*?)(?:\.(\d+))?$/);
-      if (match) {
-        const id = match[1];
-        const num = match[2] ? parseInt(match[2], 10) + 1 : 0;
-        return `${parsed.major}.${parsed.minor}.${parsed.patch}-${id}.${num}`;
-      }
-    }
-    return `${parsed.major}.${parsed.minor}.${parsed.patch + 1}-${preId}.0`;
-  }
-  return current;
-}
-
 function getPreviousVersionRef(): string | null {
+  // 优先以 GitHub Release 作为基准版本事实源
   const ghRes = runCmd("gh", ["release", "view", "--json", "tagName", "-q", ".tagName"], {
     allowFailure: true,
     captureOutput: true,
@@ -100,11 +63,19 @@ function getPreviousVersionRef(): string | null {
     return ghRes.stdout.trim();
   }
 
+  // 回退路径：GitHub Release 不可用时退回本地 git 标签探测。
+  // 这仅是本地开发便利，与「以 GitHub Release 为唯一触发事实源」的规范存在张力：
+  // 本地标签可能与远端 Release 状态漂移，仅影响提炼日志的基准范围，不影响发布事实。
+  // 正式发布流程以 GitHub Release 为准。
   const gitRes = runCmd("git", ["describe", "--tags", "--abbrev=0"], {
     allowFailure: true,
     captureOutput: true,
   });
   if (gitRes.status === 0 && gitRes.stdout.trim()) {
+    console.warn(
+      `[告警] 未能通过 GitHub CLI 获取最近 Release，已回退至本地 git 标签 ${gitRes.stdout.trim()} 提炼变更日志。`
+    );
+    console.warn(`[告警] 此为本地开发便利回退，本地标签可能与远端 Release 状态漂移；正式发布以 GitHub Release 为唯一触发事实源。`);
     return gitRes.stdout.trim();
   }
 

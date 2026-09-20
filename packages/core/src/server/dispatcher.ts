@@ -6,10 +6,11 @@ import { createRequire } from "node:module";
 export type FetchDispatcherProvider = () => unknown;
 
 let insecureDispatcherProvider: FetchDispatcherProvider | undefined;
-let fallbackInsecureAgent: any;
 
 /**
  * 注册全局用于忽略服务端证书校验的调度器提供者。
+ * 唯一注册通道：平台适配层（如 @actiondock/runtime-node 的
+ * installInsecureDispatcher）显式调用完成注册，不再读取全局符号注入。
  */
 export function setInsecureDispatcherProvider(provider?: FetchDispatcherProvider): void {
   insecureDispatcherProvider = provider;
@@ -25,18 +26,15 @@ export function getInsecureDispatcherProvider(): FetchDispatcherProvider | undef
 /**
  * 获取用于忽略服务端证书校验的调度器实例。
  * 纯粹解耦设计：
- * 1. 优先调用显式注册的提供者（如由 @actiondock/runtime-node 注册）；
- * 2. 检查全局符号注入的提供者；
- * 3. 若在 Node 环境下且前述未注入，安全动态加载兜底连接池，绝不让 core 包产生静态硬编译依赖。
+ * 1. 优先调用显式注册的提供者（如由 @actiondock/runtime-node 显式安装）；
+ * 2. 若在 Node 环境下且无注册提供者，动态加载 @actiondock/runtime-node
+ *    （其入口聚合点会显式完成安装），绝不让 core 包产生静态硬编译依赖；
+ * 3. 仍不可得时返回 undefined，由调用方回退默认 fetch，绝不在 core 内
+ *    直接探测加载 undici，避免与平台适配层形成层次倒置与隐藏依赖环。
  */
 export function getInsecureDispatcher(): unknown {
   if (insecureDispatcherProvider) {
     return insecureDispatcherProvider();
-  }
-
-  const globalProvider = (globalThis as any)[Symbol.for("actiondock.insecureDispatcherProvider")];
-  if (typeof globalProvider === "function") {
-    return globalProvider();
   }
 
   if (typeof process !== "undefined" && process.versions?.node) {
@@ -49,24 +47,6 @@ export function getInsecureDispatcher(): unknown {
     } catch {
       // 忽略未安装 @actiondock/runtime-node 的情况
     }
-
-    if (!fallbackInsecureAgent || fallbackInsecureAgent.closed || fallbackInsecureAgent.destroyed) {
-      try {
-        const req = createRequire(import.meta.url);
-        const undici = req("undici");
-        if (undici?.Agent) {
-          fallbackInsecureAgent = new undici.Agent({
-            connect: {
-              rejectUnauthorized: false,
-            },
-            bodyTimeout: 0,
-          });
-        }
-      } catch {
-        // 忽略非 Node 环境或未安装 undici 的异常
-      }
-    }
-    return fallbackInsecureAgent;
   }
 
   return undefined;
@@ -74,24 +54,19 @@ export function getInsecureDispatcher(): unknown {
 
 /**
  * 显式强制重置并销毁调度器连接池（仅用于单元测试重置或进程退出）。
+ * core 自身不再持有任何兜底连接池，关闭语义完全委托已注册的平台提供者宿主。
  */
 export async function closeInsecureDispatcher(): Promise<void> {
-  const globalClose = (globalThis as any)[Symbol.for("actiondock.closeInsecureDispatcher")];
-  if (typeof globalClose === "function") {
+  if (insecureDispatcherProvider) {
+    // 提供者由平台层注册：优先委托提供者宿主的关闭语义（如可用）
     try {
-      await globalClose();
+      const req = createRequire(import.meta.url);
+      const runtimeNode = req("@actiondock/runtime-node");
+      if (typeof runtimeNode?.closeInsecureDispatcher === "function") {
+        await runtimeNode.closeInsecureDispatcher();
+      }
     } catch {
-      // 忽略关闭异常
-    }
-  }
-
-  if (fallbackInsecureAgent) {
-    const agent = fallbackInsecureAgent;
-    fallbackInsecureAgent = undefined;
-    try {
-      await agent.close();
-    } catch {
-      // 忽略关闭异常
+      // 忽略未安装 @actiondock/runtime-node 的情况
     }
   }
 }

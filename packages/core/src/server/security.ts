@@ -1,5 +1,8 @@
 import { timingSafeEqual } from "node:crypto";
 
+// isLoopbackHost 已上移至 utils/net.ts（通用谓词单一事实源），此处仅保留 re-export 兼容旧引用路径
+export { isLoopbackHost } from "../utils/net";
+
 /**
  * 恒定时间字符串比较（Constant-time comparison）。
  * 使用底层的 `crypto.timingSafeEqual` 防范时序攻击（Timing Attack）。
@@ -17,22 +20,6 @@ export function safeEqual(a: string, b: string): boolean {
   }
 
   return timingSafeEqual(aa, bb);
-}
-
-/**
- * 检查指定的主机地址是否为本地回环接口（Loopback Host）。
- * 支持 127.0.0.1, localhost, ::1 等形式。
- * 
- * @param host 主机名或 IP 字符串
- */
-export function isLoopbackHost(host: string): boolean {
-  const trimmed = host.trim().toLowerCase().replace(/^\[|\]$/g, "");
-  return (
-    trimmed === "127.0.0.1" ||
-    trimmed === "::1" ||
-    trimmed === "localhost" ||
-    trimmed === "0:0:0:0:0:0:0:1"
-  );
 }
 
 /**

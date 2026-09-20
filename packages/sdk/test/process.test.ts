@@ -325,8 +325,9 @@ describe("受管进程控制上下文辅助函数 withControl", () => {
     expect(mockApi.stoppedId).toBe("proc-1");
   });
 
-  it("开启 autoRenew 时根据 TTL 按比例自动续租并在完成后释放最新令牌", async () => {
+  it("开启 autoRenew 时自动续租但不改写回调持有的 grant 凭证，释放时使用内部跟踪的最新令牌", async () => {
     const mockApi = createMockProcessAPI();
+    let observedGrant: ControlGrant | undefined;
 
     const result = await withControl(
       mockApi,
@@ -337,17 +338,22 @@ describe("受管进程控制上下文辅助函数 withControl", () => {
         autoRenew: true,
       },
       async (grant) => {
+        observedGrant = grant;
         // 等待触发至少一次续租
         await new Promise((resolve) => setTimeout(resolve, 250));
+        // 续租后回调持有的 grant 凭证保持不被改写
         return `done-with-${grant.token}`;
       }
     );
 
-    expect(result).toContain("done-with-renewed-token-");
+    expect(result).toContain("done-with-initial-token-123");
     expect(mockApi.renewCount).toBeGreaterThanOrEqual(1);
     expect(mockApi.calls).toContain("acquire:req-renew");
+    // 释放使用内部跟踪的最新续租令牌，而非回调持有的原始凭证
     expect(mockApi.releasedToken).toBe(`renewed-token-${mockApi.renewCount}`);
     expect(mockApi.stoppedId).toBeUndefined();
+    // 回调持有的 grant 对象在异步续租后仍保持原始令牌未被改写
+    expect(observedGrant?.token).toBe("initial-token-123");
   });
 
   it("续租失败时停止续租并调用 stop 且向外透传续租异常", async () => {

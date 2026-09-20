@@ -3,7 +3,7 @@ import type { ExecutionResult, RunRecord } from "@actiondock/sdk";
 import { normalizeServerUrl } from "./manager";
 import type { RemoteHealthResult } from "./types";
 import { ACTION_CANCELLED, ACTION_TIMEOUT, NETWORK_ERROR } from "../errors";
-import { isLoopbackHost } from "../server/security";
+import { isLoopbackHost } from "../utils/net";
 import { getInsecureDispatcher } from "../server/dispatcher";
 
 /**
