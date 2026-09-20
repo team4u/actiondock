@@ -746,15 +746,6 @@ export class SkillExporter {
   }
 
   /**
-   * 静态辅助调用单个 Skill 导出方法。
-   * @deprecated 实例方法的历史便捷入口，请直接使用实例方法，将在两个版本后移除。
-   */
-  public static async export(options: SkillExporterOptions): Promise<SkillExportResult> {
-    const exporter = new SkillExporter();
-    return exporter.export(options);
-  }
-
-  /**
    * 批量导出多个 Skill。
    */
   public async exportBatch(options: BatchSkillExportOptions): Promise<BatchSkillExportResult> {
@@ -794,15 +785,6 @@ export class SkillExporter {
       totalActions,
       totalPlaybooks,
     };
-  }
-
-  /**
-   * 静态辅助调用批量导出方法。
-   * @deprecated 实例方法的历史便捷入口，请直接使用实例方法，将在两个版本后移除。
-   */
-  public static async exportBatch(options: BatchSkillExportOptions): Promise<BatchSkillExportResult> {
-    const exporter = new SkillExporter();
-    return exporter.exportBatch(options);
   }
 
   /**
@@ -1004,22 +986,12 @@ export class SkillExporter {
       usedExistingSkillMd: existingSkillPath,
     };
   }
-
-  /**
-   * 静态辅助调用复合导出方法。
-   * @deprecated 实例方法的历史便捷入口，请直接使用实例方法，将在两个版本后移除。
-   */
-  public static async exportComposite(
-    options: CompositeSkillExportOptions
-  ): Promise<CompositeSkillExportResult> {
-    const exporter = new SkillExporter();
-    return exporter.exportComposite(options);
-  }
 }
 
 /**
- * 导出单个 Skill 产物的顶层便捷函数。
- * @deprecated SkillExporter 实例与静态方法之外的历史第三入口，请直接使用 SkillExporter 实例，将在两个版本后移除。
+ * 导出单个 Skill 产物的顶层公共入口函数。
+ * 内部创建 SkillExporter 实例并委托其实例导出方法，适合常规单次导出场景；
+ * 需要复用导出器或定制行为时可直接实例化 SkillExporter。
  */
 export async function exportSkill(options: SkillExporterOptions): Promise<SkillExportResult> {
   const exporter = new SkillExporter();
@@ -1027,21 +999,23 @@ export async function exportSkill(options: SkillExporterOptions): Promise<SkillE
 }
 
 /**
- * 批量导出多个 Skill 产物的顶层便捷函数。
- * @deprecated SkillExporter 实例与静态方法之外的历史第三入口，请直接使用 SkillExporter 实例，将在两个版本后移除。
+ * 批量导出多个 Skill 产物的顶层公共入口函数。
+ * 内部创建 SkillExporter 实例并委托其实例批量导出方法。
  */
 export async function exportSkillBatch(
   options: BatchSkillExportOptions
 ): Promise<BatchSkillExportResult> {
-  return SkillExporter.exportBatch(options);
+  const exporter = new SkillExporter();
+  return exporter.exportBatch(options);
 }
 
 /**
- * 导出复合技能套件的顶层便捷函数。
- * @deprecated SkillExporter 实例与静态方法之外的历史第三入口，请直接使用 SkillExporter 实例，将在两个版本后移除。
+ * 导出复合技能套件的顶层公共入口函数。
+ * 内部创建 SkillExporter 实例并委托其实例复合导出方法。
  */
 export async function exportCompositeSkill(
   options: CompositeSkillExportOptions
 ): Promise<CompositeSkillExportResult> {
-  return SkillExporter.exportComposite(options);
+  const exporter = new SkillExporter();
+  return exporter.exportComposite(options);
 }

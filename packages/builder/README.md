@@ -55,7 +55,7 @@ ActionDock 2.0 构建规划、目录交付与技能导出包。
 ## 编程调用示例
 
 ```ts
-import { buildProject, packProject, SelectionPlanner, SkillExporter } from "@actiondock/builder";
+import { buildProject, packProject, SelectionPlanner, SkillExporter, exportSkill } from "@actiondock/builder";
 
 // 计算依赖规划闭包
 const planner = new SelectionPlanner({ projectRoot: "/path/to/project" });
@@ -74,11 +74,19 @@ const packResult = await packProject({
   outDir: "./dist/npm",
 });
 
-// 导出 Agent Skill 资产
-const exporter = new SkillExporter({ projectRoot: "/path/to/project" });
-const skillResult = await exporter.export({
+// 导出 Agent Skill 资产（顶层便捷入口，内部委托 SkillExporter 实例方法）
+const skillResult = await exportSkill({
+  projectRoot: "/path/to/project",
   outDir: "./dist/skills",
   playbooks: ["review-pr"],
+  mode: "source",
+});
+
+// 或直接实例化 SkillExporter 定制导出
+const exporter = new SkillExporter();
+const customResult = await exporter.export({
+  projectRoot: "/path/to/project",
+  outDir: "./dist/skills-custom",
   mode: "source",
 });
 ```

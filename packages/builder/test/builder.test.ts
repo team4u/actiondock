@@ -38,7 +38,6 @@ import {
   getInternalDependencyVersion,
   SelectionPlanner,
   serializePlanManifest,
-  SkillExporter,
   createTarGzArchive,
   createTarGzArchiveAsync,
   createZipArchive,
@@ -1138,7 +1137,7 @@ export default defineAction({
     it("传入 standalone 模式时严格拒绝并抛出提示替代方案的 BuilderError", async () => {
       let error: any;
       try {
-        await SkillExporter.export({
+        await exportSkill({
           projectRoot: tempDir,
           standalone: true,
         });
@@ -1166,7 +1165,7 @@ export default defineAction({
       saveManifest(tempDir, manifest);
 
       const outDir = join(tempDir, "dist", "exported-node-skill");
-      const exportRes = await SkillExporter.export({
+      const exportRes = await exportSkill({
         projectRoot: tempDir,
         mode: "node",
         outDir,
