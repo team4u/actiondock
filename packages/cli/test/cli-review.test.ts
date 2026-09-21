@@ -287,7 +287,7 @@ describe("CLI Review & Machine Contract Regression", () => {
 
     // 3. 执行 ad run，验证 ctx.config.get 回退到全局配置
     const runProc = runCli(
-      ["run", "sample.greet", "--input", '{"name": "Beijing"}'],
+      ["run", "sample.greet", "--input", '{"name": "Beijing"}', "--json"],
       tempDir,
       env
     );
@@ -489,7 +489,7 @@ describe("CLI Review & Machine Contract Regression", () => {
     expect(JSON.parse(valProc.stdout.toString()).valid).toBe(true);
 
     // 4. ad action run
-    const runProc = runCli(["action", "run", "sample.greet", "--input", '{"name":"Tester"}'], tempDir);
+    const runProc = runCli(["action", "run", "sample.greet", "--input", '{"name":"Tester"}', "--json"], tempDir);
     expect(runProc.exitCode).toBe(0);
     const runRes = JSON.parse(runProc.stdout.toString());
     expect(runRes.ok).toBe(true);

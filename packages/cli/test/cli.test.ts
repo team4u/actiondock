@@ -176,6 +176,7 @@ describe("CLI End-to-End", () => {
           '{"name": "RemoteAgent"}',
           "--config",
           "SAMPLE_GREETING=Greetings from Cloud",
+          "--json",
         ],
         tmpdir(),
         env
@@ -196,6 +197,7 @@ describe("CLI End-to-End", () => {
           "--input",
           '{"name": "AsyncAgent"}',
           "--async",
+          "--json",
         ],
         tmpdir(),
         env

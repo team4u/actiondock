@@ -97,10 +97,22 @@ describe("StandaloneRuntime 独立二进制运行时委托 ActionDockApp", () =>
     console.log = (...args: any[]) => logs.push(args.join(" "));
 
     try {
+      // 1. 默认原始纯文本输出
       await runtime.run([
         "run",
         "greet",
         '--input={"name":"Alice"}',
+        `--data-dir=${tmpDir}`,
+      ]);
+      expect(logs.join("\n")).toContain("Hello, Alice!");
+
+      // 2. --json 机器信封输出
+      logs.length = 0;
+      await runtime.run([
+        "run",
+        "greet",
+        '--input={"name":"Alice"}',
+        "--json",
         `--data-dir=${tmpDir}`,
       ]);
       const parsed = JSON.parse(logs.join("\n"));

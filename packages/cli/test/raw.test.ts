@@ -258,9 +258,9 @@ export default defineAction(async (input: { path: string }) => {
     }
   });
 
-  it("outputs unescaped raw content to stdout and metadata to stderr with --raw", () => {
+  it("defaults to unescaped raw content to stdout and metadata to stderr", () => {
     const proc = runCli(
-      ["run", "files.read", "--input", JSON.stringify({ path: "docs/readme.md" }), "--raw"],
+      ["run", "files.read", "--input", JSON.stringify({ path: "docs/readme.md" })],
       tempDir
     );
     expect(proc.exitCode).toBe(0);
@@ -272,9 +272,9 @@ export default defineAction(async (input: { path: string }) => {
     expect(stderr).toContain("[docs/readme.md | lines 1-3 | hasMore: false]");
   });
 
-  it("outputs raw content with short flag -r", () => {
+  it("outputs standard JSON execution envelope when --json is provided", () => {
     const proc = runCli(
-      ["run", "files.read", "-i", JSON.stringify({ path: "test.txt" }), "-r"],
+      ["run", "files.read", "-i", JSON.stringify({ path: "test.txt" }), "--json"],
       tempDir
     );
     expect(proc.exitCode).toBe(0);
@@ -282,27 +282,38 @@ export default defineAction(async (input: { path: string }) => {
     const stdout = proc.stdout.toString();
     const stderr = proc.stderr.toString();
 
-    expect(stdout).toBe("# File Header\n\nBody text line 3\n");
-    expect(stderr).toContain("[test.txt | lines 1-3 | hasMore: false]");
+    expect(stderr.trim()).toBe("");
+    const parsed = JSON.parse(stdout);
+    expect(parsed.ok).toBe(true);
+    expect(parsed.runId).toBeDefined();
+    expect(parsed.data.path).toBe("test.txt");
+    expect(parsed.data.content).toBe("# File Header\n\nBody text line 3");
   });
 
-  it("works with ad action run --raw", () => {
-    const proc = runCli(
-      ["action", "run", "files.read", "-i", JSON.stringify({ path: "info.md" }), "--raw"],
+  it("works with ad action run defaulting to raw and supporting --json", () => {
+    // Default raw
+    const procRaw = runCli(
+      ["action", "run", "files.read", "-i", JSON.stringify({ path: "info.md" })],
       tempDir
     );
-    expect(proc.exitCode).toBe(0);
+    expect(procRaw.exitCode).toBe(0);
+    expect(procRaw.stdout.toString()).toBe("# File Header\n\nBody text line 3\n");
+    expect(procRaw.stderr.toString()).toContain("[info.md | lines 1-3 | hasMore: false]");
 
-    const stdout = proc.stdout.toString();
-    const stderr = proc.stderr.toString();
-
-    expect(stdout).toBe("# File Header\n\nBody text line 3\n");
-    expect(stderr).toContain("[info.md | lines 1-3 | hasMore: false]");
+    // --json machine envelope
+    const procJson = runCli(
+      ["action", "run", "files.read", "-i", JSON.stringify({ path: "info.md" }), "--json"],
+      tempDir
+    );
+    expect(procJson.exitCode).toBe(0);
+    const parsed = JSON.parse(procJson.stdout.toString());
+    expect(parsed.ok).toBe(true);
+    expect(parsed.data.path).toBe("info.md");
   });
 
-  it("handles action error properly under --raw mode by writing to stderr", () => {
+  it("handles action error properly by writing to stderr by default", () => {
     const proc = runCli(
-      ["run", "files.read", "-i", JSON.stringify({ path: "missing.txt" }), "--raw"],
+      ["run", "files.read", "-i", JSON.stringify({ path: "missing.txt" })],
       tempDir
     );
     expect(proc.exitCode).toBe(1);
@@ -313,5 +324,18 @@ export default defineAction(async (input: { path: string }) => {
     expect(stdout.trim()).toBe("");
     expect(stderr).toContain("Error");
     expect(stderr).toContain("File not found: missing.txt");
+  });
+
+  it("handles action error properly by outputting JSON envelope when --json is provided", () => {
+    const proc = runCli(
+      ["run", "files.read", "-i", JSON.stringify({ path: "missing.txt" }), "--json"],
+      tempDir
+    );
+    expect(proc.exitCode).toBe(1);
+
+    const stdout = proc.stdout.toString();
+    const parsed = JSON.parse(stdout);
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.message).toContain("File not found: missing.txt");
   });
 });

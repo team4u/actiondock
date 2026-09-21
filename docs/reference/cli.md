@@ -103,14 +103,15 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
 
 - 执行 Action (`ad run` / `ad action run`)：
   ```bash
-  ad run <id> [-P, --package <id>] [-i, --input <json> | -f, --input-file <path|->] [-c, --config <key=value...>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--timeout <duration>] [--request-id <id>] [--async] [--data-dir <path>] [--json] [--envelope] [-r, --raw]
+  ad run <id> [-P, --package <id>] [-i, --input <json> | -f, --input-file <path|->] [-c, --config <key=value...>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--timeout <duration>] [--request-id <id>] [--async] [--data-dir <path>] [--json] [--envelope]
   ```
-  本地或远程执行指定 Action，支持 `--async` 异步启动（需远程服务支持），输出标准信封结果。
+  本地或远程执行指定 Action，支持 `--async` 异步启动（需远程服务支持）。
+  - 输出模式：**默认采用原始文本输出**。直接将结果正文（如文件 `content`、`message`、`text` 或标量字符串）原始输出到 stdout（保留真实换行与格式排版，不进行 JSON 序列化转义），附加元数据（如 `lines`、`path`、`hasMore`）通过 stderr 输出；执行失败时在 stderr 输出错误详情并以退出码 1 退出。便于命令行直观阅读、LLM Agent 精确行号消费以及管道下游工具直接处理。
+  - 机器信封：添加 `--json`（或 `--envelope`）选项时，输出标准 JSON 结果信封（`{ "ok": true, "data": ... }`），失败时在 stdout 输出错误信封（`{ "ok": false, "error": ... }`）并以退出码 1 退出。
   - 参数契约：选项 `--input` 与 `--input-file` 严格互斥；未指定任何输入参数时，默认传入空对象 `{}`。
   - 简单输入：使用 `-i, --input <json>` 传递内联 JSON 字符串，适合简易标量入参。
   - 文件输入：使用 `-f, --input-file <path>` 从 JSON 文件读取内容并解析，适合复杂多层嵌套对象。
   - 标准输入：使用 `-f, --input-file -` 从标准输入读取全部内容并解析，适合跨进程管道与持续集成脚本。
-  - 原始文本输出：使用 `-r, --raw` 开启原始纯文本输出模式。直接将结果正文（如文件 `content` 或标量字符串）原始输出到 stdout（保留真实换行与格式排版，不进行 JSON 序列化转义），附加元数据（如 `lines`、`path`、`hasMore`）通过 stderr 输出。便于命令行直观阅读、LLM Agent 精确行号消费以及管道下游工具直接处理。
   - 转义安全：复杂 JSON 推荐优先使用 `--input-file` 传递，杜绝终端引号转义损坏。无论文件还是标准输入，解析前均自动剔除 UTF-8 BOM 标记，且不设人为大小上限。
 
 - 校验 Action 模式与语法 (`ad validate` / `ad action validate`)：

@@ -1182,7 +1182,7 @@ export default defineAction({
       expect(skillMd).toContain("node ./entry.mjs");
 
       // 直接执行导出的 Node 入口
-      const runProc = Bun.spawnSync([entryPath, "run", "sample.greet", "--input", '{"name": "SkillUser"}'], {
+      const runProc = Bun.spawnSync([entryPath, "run", "sample.greet", "--input", '{"name": "SkillUser"}', "--json"], {
         stdout: "pipe",
         stderr: "pipe",
       });

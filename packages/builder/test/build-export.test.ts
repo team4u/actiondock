@@ -119,6 +119,7 @@ describe("Build & Skill Export Contract", () => {
         '{"name": "Antigravity"}',
         "--timeout",
         "5s",
+        "--json",
       ],
       {
         cwd: tempDir,
@@ -172,6 +173,7 @@ describe("Build & Skill Export Contract", () => {
         "sample.greet",
         "--input",
         '{"name": "Antigravity"}',
+        "--json",
       ],
       {
         cwd: tempDir,
@@ -193,6 +195,7 @@ describe("Build & Skill Export Contract", () => {
         "sample.greet",
         "--input",
         '{"name": "Isolated"}',
+        "--json",
       ],
       {
         cwd: tempDir,
@@ -306,7 +309,7 @@ export default defineAction({
     // Execute exported entrypoint directly
     const exportedEntry = join(exportRes.skillDir, "entry.mjs");
     const binProc = Bun.spawnSync(
-      [exportedEntry, "run", "sample.greet", "--input", '{"name": "Agent"}'],
+      [exportedEntry, "run", "sample.greet", "--input", '{"name": "Agent"}', "--json"],
       {
         stdout: "pipe",
         stderr: "pipe",

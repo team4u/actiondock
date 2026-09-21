@@ -137,10 +137,10 @@ $data = @{
 $data | ConvertTo-Json -Depth 100 | ad run complex-action --input-file -
 ```
 
-### Action 输出模式与 --raw 原始文本
+### Action 输出模式与机器信封
 
-- **默认 JSON 信封输出**：`ad run` 默认将执行结果包装为标准 JSON 格式输出至 stdout，包含 `ok`、`runId`、`data` 或 `error`，便于程序化集成与 SDK 消费。
-- **原始纯文本模式 (`-r, --raw`)**：在查阅文件（如 `files.read`）、阅读代码或通过管道重定向传递文本时，传入 `-r` 或 `--raw`。正文内容以原生文本写入 stdout（保持真实换行且无 JSON 转义），相关元数据（如文件路径与行号）独立输出至 stderr，符合 Unix 管道安全原则。
+- **默认原始纯文本输出**：`ad run` 默认采用面向终端人类阅读与 LLM Agent 上下文消费的原始输出模式。直接将执行结果正文内容（如文件 `content`、`text`、`message` 或标量字符串）输出至 stdout（保留真实换行且无 JSON 转义），相关元数据（如文件路径、行号范围、截断标记）独立输出至 stderr，符合 Unix 管道安全原则。执行失败时在 stderr 输出错误详情并以退出码 1 退出。
+- **机器 JSON 信封 (`--json` / `--envelope`)**：当需要以程序化方式消费、获取完整结构化信封或被外部系统集成时，传入 `--json`（或 `--envelope`）。此时输出标准 JSON 结果信封（包含 `ok`、`runId`、`data` 或 `error`）。
 
 ---
 
@@ -154,7 +154,7 @@ $data | ConvertTo-Json -Depth 100 | ad run complex-action --input-file -
 | `ad info [patterns...]` | 检索包元数据与能力清单，支持模式匹配与树形展示 |
 | `ad list [patterns...]` | 列出包内所有已注册的 Action |
 | `ad describe <id>` | 查看 Action 的详情、参数与模式规范（别名 `ad show`） |
-| `ad run <id>` | 本地或远程执行指定 Action 并输出标准信封结果（支持 `-r, --raw` 原始文本模式） |
+| `ad run <id>` | 本地或远程执行指定 Action（默认输出原始纯文本，支持 `--json` 输出标准信封） |
 | `ad validate [id]` | 校验 Action 规范与模式规范 |
 | `ad doctor` | 执行运行环境与项目结构健康诊断 |
 | `ad action create <id>` | 创建新 Action 源码（别名 `ad action new`） |

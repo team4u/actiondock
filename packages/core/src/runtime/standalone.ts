@@ -365,12 +365,12 @@ export class StandaloneDispatcher {
 
     let input: unknown = {};
     let timeoutMs: number | undefined;
-    let raw = false;
+    let isJson = false;
 
     for (let i = 0; i < subArgs.length; i++) {
       const arg = subArgs[i];
-      if (arg === "--raw" || arg === "-r") {
-        raw = true;
+      if (arg === "--json" || arg === "--envelope") {
+        isJson = true;
       } else if (arg === "--timeout" && i + 1 < subArgs.length) {
         timeoutMs = parseDuration(subArgs[++i]);
       } else if (arg.startsWith("--timeout=")) {
@@ -404,7 +404,9 @@ export class StandaloneDispatcher {
       timeoutMs,
     });
 
-    if (raw) {
+    if (isJson) {
+      this.writeOut(JSON.stringify(result, null, 2));
+    } else {
       if (result.ok) {
         const data: any = result.data;
         let rawText: string;
@@ -484,8 +486,6 @@ export class StandaloneDispatcher {
           );
         }
       }
-    } else {
-      this.writeOut(JSON.stringify(result, null, 2));
     }
     return result.ok ? ExitCode.SUCCESS : ExitCode.FAILURE;
   }
@@ -712,8 +712,8 @@ export class StandaloneDispatcher {
     this.writeOut("Usage:");
     this.writeOut("  <cmd> list [--json]                         List available actions");
     this.writeOut("  <cmd> describe <id> [--json]                Show action details and schemas");
-    this.writeOut("  <cmd> run <id> [--input '<json>']           Execute action with JSON input");
-    this.writeOut("  <cmd> run <id> -r, --raw                    Output raw content without JSON formatting");
+    this.writeOut("  <cmd> run <id> [--input '<json>']           Execute action (raw text output by default)");
+    this.writeOut("  <cmd> run <id> [--json]                     Output standard execution result envelope");
     this.writeOut("  <cmd> config list/get/set/delete            Manage package configuration");
     this.writeOut("  <cmd> state list/get/set/delete             Manage shared state store");
     this.writeOut("\nGlobal options:");

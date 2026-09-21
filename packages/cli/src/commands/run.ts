@@ -13,7 +13,10 @@ import {
 } from "../utils";
 
 /**
- * 以原始纯文本形式渲染 Action 执行终态结果（--raw 模式）。
+ * 以原始纯文本形式渲染 Action 执行终态结果（默认纯文本模式）。
+ *
+ * 设计契约：
+ * 1. stdout: 仅承载业务有效载荷（payload）。保持原生排版、未转义多行与真实换行，供用户阅读或下游管道直接消费。
  */
 export function renderRawExecutionResult(
   targetRef: string,
@@ -180,6 +183,8 @@ export async function executeAction(
       options,
       context,
       async (target) => {
+        const isMachine = Boolean(options.json || options.envelope);
+
         if (options.async) {
           const ticket = await target.startAction(targetRef, input as JsonValue, {
             signal: controller.signal,
@@ -188,16 +193,16 @@ export async function executeAction(
             requestId: options.requestId,
           });
 
-          if (options.raw) {
-            writeStderr(`[${ticket.status}] runId: ${ticket.runId}`, context);
-            writeStdout(ticket.runId, context);
-          } else {
+          if (isMachine) {
             const asyncOutput = {
               ok: ticket.status !== "failed",
               runId: ticket.runId,
               status: ticket.status,
             };
             writeStdout(JSON.stringify(asyncOutput, null, 2), context);
+          } else {
+            writeStderr(`[${ticket.status}] runId: ${ticket.runId}`, context);
+            writeStdout(ticket.runId, context);
           }
 
           if (ticket.status === "failed") {
@@ -212,10 +217,10 @@ export async function executeAction(
             requestId: options.requestId,
           });
 
-          if (options.raw) {
-            renderRawExecutionResult(targetRef, result, context);
-          } else {
+          if (isMachine) {
             writeStdout(JSON.stringify(result, null, 2), context);
+          } else {
+            renderRawExecutionResult(targetRef, result, context);
           }
 
           if (!result.ok) {
@@ -258,7 +263,6 @@ export function attachRunCommand(parent: Command, context?: CliContext): Command
     .option("--data-dir <path>", "Custom database directory")
     .option("--json", "Output as JSON")
     .option("--envelope", "Wrap JSON output in standard envelope")
-    .option("-r, --raw", "Output raw text content directly to stdout without JSON formatting")
     .action(async (id: string, rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
       await executeAction(id, options, context);

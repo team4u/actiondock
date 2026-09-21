@@ -121,7 +121,7 @@ describe("CLI Authoring & Build Workflow", () => {
 
     // 4. run
     const runProc = runCli(
-      ["run", "sample.greet", "--input", '{"name": "Developer"}', "--timeout", "5s"],
+      ["run", "sample.greet", "--input", '{"name": "Developer"}', "--timeout", "5s", "--json"],
       tempDir
     );
     expect(runProc.exitCode).toBe(0);
@@ -174,7 +174,7 @@ describe("CLI Authoring & Build Workflow", () => {
     expect(JSON.parse(confListIntent.stdout.toString()).some((c: any) => c.key === "SAMPLE_GREETING")).toBe(true);
 
     const runWithNewConf = runCli(
-      ["run", "sample.greet", "--input", '{"name": "Cowboy"}'],
+      ["run", "sample.greet", "--input", '{"name": "Cowboy"}', "--json"],
       tempDir
     );
     expect(runWithNewConf.exitCode).toBe(0);
@@ -220,7 +220,7 @@ describe("CLI Authoring & Build Workflow", () => {
     expect(greetingEnvItem.matchedEnv).toBe("SAMPLE_GREETING");
 
     const runWithEnv = runCli(
-      ["run", "sample.greet", "--input", '{"name": "Jean"}'],
+      ["run", "sample.greet", "--input", '{"name": "Jean"}', "--json"],
       tempDir,
       { SAMPLE_GREETING: "Bonjour" }
     );
@@ -556,7 +556,7 @@ describe("CLI Authoring & Build Workflow", () => {
 
     // Execute from root (outside tempDir)
     const outsideRun = runCli(
-      ["run", "sample.greet", "--input", '{"name": "Globetrotter"}'],
+      ["run", "sample.greet", "--input", '{"name": "Globetrotter"}', "--json"],
       tmpdir()
     );
     expect(outsideRun.exitCode).toBe(0);

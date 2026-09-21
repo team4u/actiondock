@@ -111,28 +111,51 @@ describe("CLI - Standalone Mode Dispatcher", () => {
   });
 
   it("executes action successfully and handles config overrides", async () => {
-    let out = "";
-    const code = await runStandaloneCli(
+    // 1. Raw default mode
+    let outRaw = "";
+    const codeRaw = await runStandaloneCli(
       ["run", "greet", "--input", '{"name": "Alice"}', "--config", "GREETING=Hi"],
       {
         ...baseOptions,
-        stdout: (msg) => (out += msg),
+        stdout: (msg) => (outRaw += msg),
       }
     );
-    expect(code).toBe(ExitCode.SUCCESS);
-    const parsed = JSON.parse(out);
+    expect(codeRaw).toBe(ExitCode.SUCCESS);
+    expect(outRaw).toBe("Hi, Alice!");
+
+    // 2. Machine JSON mode
+    let outJson = "";
+    const codeJson = await runStandaloneCli(
+      ["run", "greet", "--input", '{"name": "Alice"}', "--config", "GREETING=Hi", "--json"],
+      {
+        ...baseOptions,
+        stdout: (msg) => (outJson += msg),
+      }
+    );
+    expect(codeJson).toBe(ExitCode.SUCCESS);
+    const parsed = JSON.parse(outJson);
     expect(parsed.ok).toBe(true);
     expect(parsed.data.message).toBe("Hi, Alice!");
   });
 
   it("handles action execution failures transparently", async () => {
-    let out = "";
-    const code = await runStandaloneCli(["run", "fail"], {
+    // 1. Raw default mode: error in stderr, non-zero exit code
+    let errOut = "";
+    const codeRaw = await runStandaloneCli(["run", "fail"], {
       ...baseOptions,
-      stdout: (msg) => (out += msg),
+      stderr: (msg) => (errOut += msg),
     });
-    expect(code).toBe(ExitCode.FAILURE);
-    const parsed = JSON.parse(out);
+    expect(codeRaw).toBe(ExitCode.FAILURE);
+    expect(errOut).toContain("Intentional failure");
+
+    // 2. Machine JSON mode: error in JSON envelope on stdout
+    let jsonOut = "";
+    const codeJson = await runStandaloneCli(["run", "fail", "--json"], {
+      ...baseOptions,
+      stdout: (msg) => (jsonOut += msg),
+    });
+    expect(codeJson).toBe(ExitCode.FAILURE);
+    const parsed = JSON.parse(jsonOut);
     expect(parsed.ok).toBe(false);
     expect(parsed.error.message).toContain("Intentional failure");
   });

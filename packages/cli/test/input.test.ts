@@ -185,7 +185,7 @@ export default defineAction(async (input: any) => {
 
   // 1. --input 正常 JSON
   it("executes action with valid inline JSON via --input", () => {
-    const proc = runCli(["run", "test.echo", "--input", "{\"name\":\"Alice\",\"age\":30}"], tempDir);
+    const proc = runCli(["run", "test.echo", "--input", "{\"name\":\"Alice\",\"age\":30}", "--json"], tempDir);
     expect(proc.exitCode).toBe(0);
     const res = JSON.parse(proc.stdout.toString());
     expect(res.ok).toBe(true);
@@ -197,7 +197,7 @@ export default defineAction(async (input: any) => {
     const filePath = join(tempDir, "valid-input.json");
     writeFileSync(filePath, JSON.stringify({ project: "ActionDock", stars: 100 }), "utf-8");
 
-    const proc = runCli(["run", "test.echo", "--input-file", filePath], tempDir);
+    const proc = runCli(["run", "test.echo", "--input-file", filePath, "--json"], tempDir);
     expect(proc.exitCode).toBe(0);
     const res = JSON.parse(proc.stdout.toString());
     expect(res.ok).toBe(true);
@@ -207,7 +207,7 @@ export default defineAction(async (input: any) => {
   // 3. --input-file - stdin
   it("executes action reading JSON from stdin via --input-file -", () => {
     const stdinPayload = JSON.stringify({ mode: "streamed", count: 99 });
-    const proc = runCli(["run", "test.echo", "--input-file", "-"], tempDir, stdinPayload);
+    const proc = runCli(["run", "test.echo", "--input-file", "-", "--json"], tempDir, stdinPayload);
     expect(proc.exitCode).toBe(0);
     const res = JSON.parse(proc.stdout.toString());
     expect(res.ok).toBe(true);
@@ -216,7 +216,7 @@ export default defineAction(async (input: any) => {
 
   // 4. 无输入默认 {}
   it("executes action with default empty object {} when no input is provided", () => {
-    const proc = runCli(["run", "test.echo"], tempDir);
+    const proc = runCli(["run", "test.echo", "--json"], tempDir);
     expect(proc.exitCode).toBe(0);
     const res = JSON.parse(proc.stdout.toString());
     expect(res.ok).toBe(true);
@@ -291,7 +291,7 @@ export default defineAction(async (input: any) => {
     // BOM in file
     const bomFilePath = join(tempDir, "bom.json");
     writeFileSync(bomFilePath, "\uFEFF{\"source\":\"bom-file\",\"active\":true}", "utf-8");
-    const fileProc = runCli(["run", "test.echo", "--input-file", bomFilePath], tempDir);
+    const fileProc = runCli(["run", "test.echo", "--input-file", bomFilePath, "--json"], tempDir);
     expect(fileProc.exitCode).toBe(0);
     const fileRes = JSON.parse(fileProc.stdout.toString());
     expect(fileRes.ok).toBe(true);
@@ -299,7 +299,7 @@ export default defineAction(async (input: any) => {
 
     // BOM in stdin
     const bomStdin = "\uFEFF{\"source\":\"bom-stdin\",\"active\":false}";
-    const stdinProc = runCli(["run", "test.echo", "--input-file", "-"], tempDir, bomStdin);
+    const stdinProc = runCli(["run", "test.echo", "--input-file", "-", "--json"], tempDir, bomStdin);
     expect(stdinProc.exitCode).toBe(0);
     const stdinRes = JSON.parse(stdinProc.stdout.toString());
     expect(stdinRes.ok).toBe(true);
@@ -312,13 +312,13 @@ export default defineAction(async (input: any) => {
     const filePath = join(tempDir, "multiline.json");
     writeFileSync(filePath, multilineJson, "utf-8");
 
-    const fileProc = runCli(["run", "test.echo", "--input-file", filePath], tempDir);
+    const fileProc = runCli(["run", "test.echo", "--input-file", filePath, "--json"], tempDir);
     expect(fileProc.exitCode).toBe(0);
     const fileRes = JSON.parse(fileProc.stdout.toString());
     expect(fileRes.ok).toBe(true);
     expect(fileRes.data.received.nested.items).toEqual([1, 2, 3]);
 
-    const stdinProc = runCli(["run", "test.echo", "--input-file", "-"], tempDir, multilineJson);
+    const stdinProc = runCli(["run", "test.echo", "--input-file", "-", "--json"], tempDir, multilineJson);
     expect(stdinProc.exitCode).toBe(0);
     const stdinRes = JSON.parse(stdinProc.stdout.toString());
     expect(stdinRes.ok).toBe(true);
@@ -338,13 +338,13 @@ export default defineAction(async (input: any) => {
     // Test file input
     const filePath = join(tempDir, "complex.json");
     writeFileSync(filePath, jsonStr, "utf-8");
-    const fileProc = runCli(["run", "test.echo", "--input-file", filePath], tempDir);
+    const fileProc = runCli(["run", "test.echo", "--input-file", filePath, "--json"], tempDir);
     expect(fileProc.exitCode).toBe(0);
     const fileRes = JSON.parse(fileProc.stdout.toString());
     expect(fileRes.data.received).toEqual(complexPayload);
 
     // Test stdin input
-    const stdinProc = runCli(["run", "test.echo", "--input-file", "-"], tempDir, jsonStr);
+    const stdinProc = runCli(["run", "test.echo", "--input-file", "-", "--json"], tempDir, jsonStr);
     expect(stdinProc.exitCode).toBe(0);
     const stdinRes = JSON.parse(stdinProc.stdout.toString());
     expect(stdinRes.data.received).toEqual(complexPayload);
@@ -379,7 +379,7 @@ export default defineAction(async (input: any) => {
     if (!pwshBin) {
       // If PowerShell is not installed in the environment, test child process piped simulation
       const pipedData = JSON.stringify({ powerShell: true, author: "PowerShellSimulated" });
-      const proc = runCli(["run", "test.echo", "--input-file", "-"], tempDir, pipedData);
+      const proc = runCli(["run", "test.echo", "--input-file", "-", "--json"], tempDir, pipedData);
       expect(proc.exitCode).toBe(0);
       const res = JSON.parse(proc.stdout.toString());
       expect(res.ok).toBe(true);
@@ -387,7 +387,7 @@ export default defineAction(async (input: any) => {
       return;
     }
 
-    const command = `$data = @{ powerShell = $true; author = 'PowerShellUser' }; $data | ConvertTo-Json -Compress | node "${cliPath}" run test.echo --input-file -`;
+    const command = `$data = @{ powerShell = $true; author = 'PowerShellUser' }; $data | ConvertTo-Json -Compress | node "${cliPath}" run test.echo --input-file - --json`;
     const res = spawnSync(pwshBin, ["-NoProfile", "-NonInteractive", "-Command", command], {
       cwd: tempDir,
       env: { ...process.env, ...(tempHome ? { ACTIONDOCK_HOME: tempHome } : {}) },
@@ -405,7 +405,7 @@ export default defineAction(async (input: any) => {
     if (!cmdBin || process.platform !== "win32") {
       // If cmd.exe is not available (e.g. on Linux), verify pipe simulation behavior
       const cmdData = JSON.stringify({ cmd: true, author: "CmdSimulated" });
-      const proc = runCli(["run", "test.echo", "--input-file", "-"], tempDir, cmdData);
+      const proc = runCli(["run", "test.echo", "--input-file", "-", "--json"], tempDir, cmdData);
       expect(proc.exitCode).toBe(0);
       const res = JSON.parse(proc.stdout.toString());
       expect(res.ok).toBe(true);
@@ -415,7 +415,7 @@ export default defineAction(async (input: any) => {
 
     const inputPath = join(tempDir, "cmd-input.json");
     writeFileSync(inputPath, JSON.stringify({ cmd: true, author: "CmdUser" }), "utf-8");
-    const cmdCommand = `type "${inputPath}" | node "${cliPath}" run test.echo --input-file -`;
+    const cmdCommand = `type "${inputPath}" | node "${cliPath}" run test.echo --input-file - --json`;
     const res = spawnSync(cmdBin, ["/d", "/s", "/c", `"${cmdCommand}"`], {
       cwd: tempDir,
       env: { ...process.env, ...(tempHome ? { ACTIONDOCK_HOME: tempHome } : {}) },
@@ -433,7 +433,7 @@ export default defineAction(async (input: any) => {
     if (process.platform === "win32") {
       // Bash and zsh are POSIX shells; on Windows verify pipe simulation behavior
       const shellData = JSON.stringify({ fromShell: true, simulated: true });
-      const proc = runCli(["run", "test.echo", "--input-file", "-"], tempDir, shellData);
+      const proc = runCli(["run", "test.echo", "--input-file", "-", "--json"], tempDir, shellData);
       expect(proc.exitCode).toBe(0);
       const res = JSON.parse(proc.stdout.toString());
       expect(res.ok).toBe(true);
@@ -446,7 +446,7 @@ export default defineAction(async (input: any) => {
 
     if (!bashBin && !zshBin) {
       const shellData = JSON.stringify({ fromShell: true, simulated: true });
-      const proc = runCli(["run", "test.echo", "--input-file", "-"], tempDir, shellData);
+      const proc = runCli(["run", "test.echo", "--input-file", "-", "--json"], tempDir, shellData);
       expect(proc.exitCode).toBe(0);
       const res = JSON.parse(proc.stdout.toString());
       expect(res.ok).toBe(true);
@@ -459,7 +459,7 @@ export default defineAction(async (input: any) => {
 
     if (bashBin) {
       // Inline JSON in Bash
-      const inlineCmd = `node "${cliPath}" run test.echo --input '{"shell":"bash-inline"}'`;
+      const inlineCmd = `node "${cliPath}" run test.echo --input '{"shell":"bash-inline"}' --json`;
       const bashInlineRes = spawnSync(bashBin, ["-c", inlineCmd], {
         cwd: tempDir,
         env: { ...process.env, ...(tempHome ? { ACTIONDOCK_HOME: tempHome } : {}) },
@@ -471,7 +471,7 @@ export default defineAction(async (input: any) => {
       expect(parsedInline.data.received.shell).toBe("bash-inline");
 
       // Stdin pipe in Bash
-      const pipeCmd = `cat "${inputPath}" | node "${cliPath}" run test.echo --input-file -`;
+      const pipeCmd = `cat "${inputPath}" | node "${cliPath}" run test.echo --input-file - --json`;
       const bashPipeRes = spawnSync(bashBin, ["-c", pipeCmd], {
         cwd: tempDir,
         env: { ...process.env, ...(tempHome ? { ACTIONDOCK_HOME: tempHome } : {}) },
@@ -485,7 +485,7 @@ export default defineAction(async (input: any) => {
 
     if (zshBin) {
       // Inline JSON in Zsh
-      const inlineCmd = `node "${cliPath}" run test.echo --input '{"shell":"zsh-inline"}'`;
+      const inlineCmd = `node "${cliPath}" run test.echo --input '{"shell":"zsh-inline"}' --json`;
       const zshInlineRes = spawnSync(zshBin, ["-c", inlineCmd], {
         cwd: tempDir,
         env: { ...process.env, ...(tempHome ? { ACTIONDOCK_HOME: tempHome } : {}) },
@@ -497,7 +497,7 @@ export default defineAction(async (input: any) => {
       expect(parsedInline.data.received.shell).toBe("zsh-inline");
 
       // Stdin pipe in Zsh
-      const pipeCmd = `cat "${inputPath}" | node "${cliPath}" run test.echo --input-file -`;
+      const pipeCmd = `cat "${inputPath}" | node "${cliPath}" run test.echo --input-file - --json`;
       const zshPipeRes = spawnSync(zshBin, ["-c", pipeCmd], {
         cwd: tempDir,
         env: { ...process.env, ...(tempHome ? { ACTIONDOCK_HOME: tempHome } : {}) },
