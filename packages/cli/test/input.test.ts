@@ -415,10 +415,12 @@ export default defineAction(async (input: any) => {
 
     const inputPath = join(tempDir, "cmd-input.json");
     writeFileSync(inputPath, JSON.stringify({ cmd: true, author: "CmdUser" }), "utf-8");
-    const res = spawnSync(cmdBin, ["/c", `type "${inputPath}" | node "${cliPath}" run test.echo --input-file -`], {
+    const cmdCommand = `type "${inputPath}" | node "${cliPath}" run test.echo --input-file -`;
+    const res = spawnSync(cmdBin, ["/d", "/s", "/c", `"${cmdCommand}"`], {
       cwd: tempDir,
       env: { ...process.env, ...(tempHome ? { ACTIONDOCK_HOME: tempHome } : {}) },
       encoding: "utf-8",
+      windowsVerbatimArguments: true,
     });
     expect(res.status).toBe(0);
     const parsed = JSON.parse(res.stdout);
@@ -428,8 +430,29 @@ export default defineAction(async (input: any) => {
 
   // 17. Bash / zsh 调用
   it("supports Bash and zsh pipe and inline JSON invocations", () => {
+    if (process.platform === "win32") {
+      // Bash and zsh are POSIX shells; on Windows verify pipe simulation behavior
+      const shellData = JSON.stringify({ fromShell: true, simulated: true });
+      const proc = runCli(["run", "test.echo", "--input-file", "-"], tempDir, shellData);
+      expect(proc.exitCode).toBe(0);
+      const res = JSON.parse(proc.stdout.toString());
+      expect(res.ok).toBe(true);
+      expect(res.data.received.fromShell).toBe(true);
+      return;
+    }
+
     const bashBin = Bun.which("bash");
     const zshBin = Bun.which("zsh");
+
+    if (!bashBin && !zshBin) {
+      const shellData = JSON.stringify({ fromShell: true, simulated: true });
+      const proc = runCli(["run", "test.echo", "--input-file", "-"], tempDir, shellData);
+      expect(proc.exitCode).toBe(0);
+      const res = JSON.parse(proc.stdout.toString());
+      expect(res.ok).toBe(true);
+      expect(res.data.received.fromShell).toBe(true);
+      return;
+    }
 
     const inputPath = join(tempDir, "shell-input.json");
     writeFileSync(inputPath, JSON.stringify({ fromShell: true }), "utf-8");
