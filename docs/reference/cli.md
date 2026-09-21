@@ -23,7 +23,12 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
 - `-h, --help`：打印命令帮助说明并退出。
 - `--json`：以标准 JSON 格式输出结果。支持机器渲染的查询与执行命令（如 `list`、`describe`、`run`、`info`、`doctor`、`playbook show`、`validate` 等）会消费该选项；未实现机器输出的交互命令（如 `init`、`test`、`link`、`serve`、`mcp` 等）将其作为无操作选项忽略，不影响人类可读输出；发生异常时无论何种命令均统一由顶层错误处理器输出 JSON 错误信封。
 - `--envelope`：将 JSON 输出包装为标准信封结构对象（包含 `ok: true, data: T` 或 `ok: false, error: { code, message, details }`）。
-- `--data-dir <path>`：指定自定义数据存储目录（覆盖默认存储路径）。由涉及 SQLite 持久化与状态存储的命令消费，在纯静态解析命令中作为无操作选项忽略。
+- `--data-dir <path>`：指定运行时数据库存储目录。由涉及 SQLite 持久化与状态存储的命令消费（包级运行时数据库 `<path>/<package-id>/runtime.db`、全局共享数据库 `<path>/global.db` 与目录排他锁 `<path>/.actiondock.data.lock`）。请注意本选项仅隔离运行期 SQLite 数据库，不影响属于用户主目录维度的全局配置与资产（如环境配置、软链接注册表及证书）。
+- `ACTIONDOCK_HOME=<path>`（环境变量）：指定 ActionDock 用户根目录（覆盖默认的系统用户主目录）。用于实现测试环境、持续集成及沙箱场景下的彻底隔离。包含以下内容：
+  - 远端执行环境配置：`<path>/.actiondock/profiles.json`
+  - 全局软链接注册表：`<path>/.actiondock/registry.json`
+  - 安全通信证书目录：`<path>/.actiondock/certs/`
+  - 默认全局与包级数据库：`<path>/.actiondock/global.db` 与 `<path>/.actiondock/data/`（在未显式传入 `--data-dir` 时生效）
 
 ### 远程连接与目标通用选项
 
@@ -98,13 +103,14 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
 
 - 执行 Action (`ad run` / `ad action run`)：
   ```bash
-  ad run <id> [-P, --package <id>] [-i, --input <json> | -f, --input-file <path|->] [-c, --config <key=value...>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--timeout <duration>] [--request-id <id>] [--async] [--data-dir <path>] [--json] [--envelope]
+  ad run <id> [-P, --package <id>] [-i, --input <json> | -f, --input-file <path|->] [-c, --config <key=value...>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--timeout <duration>] [--request-id <id>] [--async] [--data-dir <path>] [--json] [--envelope] [-r, --raw]
   ```
   本地或远程执行指定 Action，支持 `--async` 异步启动（需远程服务支持），输出标准信封结果。
   - 参数契约：选项 `--input` 与 `--input-file` 严格互斥；未指定任何输入参数时，默认传入空对象 `{}`。
   - 简单输入：使用 `-i, --input <json>` 传递内联 JSON 字符串，适合简易标量入参。
   - 文件输入：使用 `-f, --input-file <path>` 从 JSON 文件读取内容并解析，适合复杂多层嵌套对象。
   - 标准输入：使用 `-f, --input-file -` 从标准输入读取全部内容并解析，适合跨进程管道与持续集成脚本。
+  - 原始文本输出：使用 `-r, --raw` 开启原始纯文本输出模式。直接将结果正文（如文件 `content` 或标量字符串）原始输出到 stdout（保留真实换行与格式排版，不进行 JSON 序列化转义），附加元数据（如 `lines`、`path`、`hasMore`）通过 stderr 输出。便于命令行直观阅读、LLM Agent 精确行号消费以及管道下游工具直接处理。
   - 转义安全：复杂 JSON 推荐优先使用 `--input-file` 传递，杜绝终端引号转义损坏。无论文件还是标准输入，解析前均自动剔除 UTF-8 BOM 标记，且不设人为大小上限。
 
 - 校验 Action 模式与语法 (`ad validate` / `ad action validate`)：
@@ -264,6 +270,9 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
 ---
 
 ### 多环境与远程 Profile 管理
+
+> [!NOTE]
+> 环境配置统一由全局文件管理（物理路径为用户根目录下的 `.actiondock/profiles.json`）。命令行选项 `--data-dir` 仅针对运行期 SQLite 数据库生效，无法用于隔离环境配置。若需在自动化测试或隔离环境中隔离 profile，请通过环境变量 `ACTIONDOCK_HOME=<dir>` 重定向整个用户根目录。
 
 - 列出所有环境配置 (`ad profile list`)：
   ```bash

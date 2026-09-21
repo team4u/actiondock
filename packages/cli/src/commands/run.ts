@@ -1,8 +1,8 @@
 import { parseDuration, resolveTarget } from "@actiondock/core";
-import type { JsonValue } from "@actiondock/sdk";
+import type { ExecutionResult, JsonValue } from "@actiondock/sdk";
 import { Command } from "commander";
 import { ArgumentError, ExecutionError, SigintError, packageNotFoundError } from "../errors";
-import { writeStdout } from "../renderer";
+import { writeStderr, writeStdout } from "../renderer";
 import type { CliContext } from "../types";
 import {
   applyTargetOptions,
@@ -11,6 +11,97 @@ import {
   resolveLocalPackageRoot,
   withTarget,
 } from "../utils";
+
+/**
+ * 以原始纯文本形式渲染 Action 执行终态结果（--raw 模式）。
+ */
+export function renderRawExecutionResult(
+  targetRef: string,
+  result: ExecutionResult,
+  context?: CliContext
+): void {
+  if (result.ok) {
+    const data: any = result.data;
+    let rawText: string;
+    let metaInfo: Record<string, unknown> | undefined;
+
+    if (typeof data === "string") {
+      rawText = data;
+    } else if (data !== null && typeof data === "object") {
+      if ("content" in data && data.content !== undefined) {
+        rawText =
+          typeof data.content === "object" && data.content !== null
+            ? JSON.stringify(data.content, null, 2)
+            : String(data.content);
+        const { content, ...rest } = data;
+        if (Object.keys(rest).length > 0) {
+          metaInfo = rest;
+        }
+      } else if ("text" in data && typeof data.text === "string") {
+        rawText = data.text;
+        const { text, ...rest } = data;
+        if (Object.keys(rest).length > 0) {
+          metaInfo = rest;
+        }
+      } else if ("message" in data && typeof data.message === "string") {
+        rawText = data.message;
+        const { message, ...rest } = data;
+        if (Object.keys(rest).length > 0) {
+          metaInfo = rest;
+        }
+      } else {
+        rawText = JSON.stringify(data, null, 2);
+      }
+    } else if (data !== undefined) {
+      rawText = String(data);
+    } else {
+      rawText = "";
+    }
+
+    if (metaInfo) {
+      const parts: string[] = [];
+      const title = metaInfo.path ? String(metaInfo.path) : targetRef;
+      parts.push(title);
+
+      if (metaInfo.startLine !== undefined && metaInfo.endLine !== undefined) {
+        parts.push(`lines ${metaInfo.startLine}-${metaInfo.endLine}`);
+      } else if (metaInfo.line !== undefined) {
+        parts.push(`line ${metaInfo.line}`);
+      }
+
+      if (metaInfo.hasMore !== undefined) {
+        parts.push(`hasMore: ${metaInfo.hasMore}`);
+      }
+      if (metaInfo.truncated) {
+        parts.push("truncated: true");
+      }
+
+      const handled = new Set(["path", "startLine", "endLine", "line", "hasMore", "truncated"]);
+      for (const [k, v] of Object.entries(metaInfo)) {
+        if (!handled.has(k) && v !== undefined) {
+          parts.push(`${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`);
+        }
+      }
+
+      if (parts.length > 0) {
+        writeStderr(`[${parts.join(" | ")}]`, context);
+      }
+    }
+
+    writeStdout(rawText, context);
+  } else {
+    writeStderr(`Error [${result.error.code}]: ${result.error.message}`, context);
+    if (result.error.details) {
+      writeStderr(
+        typeof result.error.details === "string"
+          ? result.error.details
+          : JSON.stringify(result.error.details, null, 2),
+        context
+      );
+    }
+    process.exitCode = 1;
+  }
+}
 
 /**
  * 统一执行 Action 核心逻辑（使用 ActionDockTarget 门面）。
@@ -97,12 +188,17 @@ export async function executeAction(
             requestId: options.requestId,
           });
 
-          const asyncOutput = {
-            ok: ticket.status !== "failed",
-            runId: ticket.runId,
-            status: ticket.status,
-          };
-          writeStdout(JSON.stringify(asyncOutput, null, 2), context);
+          if (options.raw) {
+            writeStderr(`[${ticket.status}] runId: ${ticket.runId}`, context);
+            writeStdout(ticket.runId, context);
+          } else {
+            const asyncOutput = {
+              ok: ticket.status !== "failed",
+              runId: ticket.runId,
+              status: ticket.status,
+            };
+            writeStdout(JSON.stringify(asyncOutput, null, 2), context);
+          }
 
           if (ticket.status === "failed") {
             process.exitCode = 1;
@@ -116,7 +212,11 @@ export async function executeAction(
             requestId: options.requestId,
           });
 
-          writeStdout(JSON.stringify(result, null, 2), context);
+          if (options.raw) {
+            renderRawExecutionResult(targetRef, result, context);
+          } else {
+            writeStdout(JSON.stringify(result, null, 2), context);
+          }
 
           if (!result.ok) {
             process.exitCode = 1;
@@ -158,6 +258,7 @@ export function attachRunCommand(parent: Command, context?: CliContext): Command
     .option("--data-dir <path>", "Custom database directory")
     .option("--json", "Output as JSON")
     .option("--envelope", "Wrap JSON output in standard envelope")
+    .option("-r, --raw", "Output raw text content directly to stdout without JSON formatting")
     .action(async (id: string, rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
       await executeAction(id, options, context);

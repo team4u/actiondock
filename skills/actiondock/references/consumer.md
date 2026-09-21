@@ -112,9 +112,10 @@ npx skills remove <skill-name>
   - 杜绝参数猜测与伪造属性，确保传参严格符合 `inputSchema` 约束。
 - **第四阶段：确定性执行调用**：
   - 传参安全规范：简单标量参数可使用 `--input '{"key": "val"}'`；包含对象、数组或引号多行文本的复杂参数，必须先写入临时 JSON 文件，再通过 `ad run <id> --input-file /tmp/input.json` 传递，杜绝终端引号转义损坏。自动化脚本或管道调用可使用标准输入 `cat /tmp/input.json | ad run <id> --input-file -`。选项 `--input` 与 `--input-file` 严格互斥，未指定输入时默认为 `{}`。
+  - 原始文本输出：查阅文件、阅读长代码或需管道传递纯文本时，传入 `-r, --raw` 参数（如 `ad run files.read -i '{"path": "..."}' --raw`）。此时直接将正文内容输出到 stdout（保留真实换行且无 JSON 转义），元数据输出至 stderr。
   - 异步长任务支持：耗时操作添加 `--async` 参数（如 `ad run <action> --input-file <path> --async`），获取包含 `runId` 的票据。
 - **第五阶段：信封结果校验与错误处置**：
-  - 统一解析终端输出的标准 JSON 信封：
+  - 统一解析终端输出的标准 JSON 信封（若指定 `--raw` 则直接消费 stdout 纯文本，异常信息由 stderr 输出并伴随非 0 退出码）：
     - `ok: true`：提取 `data` 节点获取业务执行结果。
     - `ok: false`：提取 `error.code` 与 `error.message`。遇到报错时查阅 [troubleshooting.md](troubleshooting.md) 定向自愈。
 - **第六阶段：跨生命周期状态与运行追踪**：

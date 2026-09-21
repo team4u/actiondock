@@ -365,10 +365,13 @@ export class StandaloneDispatcher {
 
     let input: unknown = {};
     let timeoutMs: number | undefined;
+    let raw = false;
 
     for (let i = 0; i < subArgs.length; i++) {
       const arg = subArgs[i];
-      if (arg === "--timeout" && i + 1 < subArgs.length) {
+      if (arg === "--raw" || arg === "-r") {
+        raw = true;
+      } else if (arg === "--timeout" && i + 1 < subArgs.length) {
         timeoutMs = parseDuration(subArgs[++i]);
       } else if (arg.startsWith("--timeout=")) {
         timeoutMs = parseDuration(arg.slice(10));
@@ -401,7 +404,89 @@ export class StandaloneDispatcher {
       timeoutMs,
     });
 
-    this.writeOut(JSON.stringify(result, null, 2));
+    if (raw) {
+      if (result.ok) {
+        const data: any = result.data;
+        let rawText: string;
+        let metaInfo: Record<string, unknown> | undefined;
+
+        if (typeof data === "string") {
+          rawText = data;
+        } else if (data !== null && typeof data === "object") {
+          if ("content" in data && data.content !== undefined) {
+            rawText =
+              typeof data.content === "object" && data.content !== null
+                ? JSON.stringify(data.content, null, 2)
+                : String(data.content);
+            const { content, ...rest } = data;
+            if (Object.keys(rest).length > 0) {
+              metaInfo = rest;
+            }
+          } else if ("text" in data && typeof data.text === "string") {
+            rawText = data.text;
+            const { text, ...rest } = data;
+            if (Object.keys(rest).length > 0) {
+              metaInfo = rest;
+            }
+          } else if ("message" in data && typeof data.message === "string") {
+            rawText = data.message;
+            const { message, ...rest } = data;
+            if (Object.keys(rest).length > 0) {
+              metaInfo = rest;
+            }
+          } else {
+            rawText = JSON.stringify(data, null, 2);
+          }
+        } else if (data !== undefined) {
+          rawText = String(data);
+        } else {
+          rawText = "";
+        }
+
+        if (metaInfo) {
+          const parts: string[] = [];
+          const title = metaInfo.path ? String(metaInfo.path) : id;
+          parts.push(title);
+
+          if (metaInfo.startLine !== undefined && metaInfo.endLine !== undefined) {
+            parts.push(`lines ${metaInfo.startLine}-${metaInfo.endLine}`);
+          } else if (metaInfo.line !== undefined) {
+            parts.push(`line ${metaInfo.line}`);
+          }
+
+          if (metaInfo.hasMore !== undefined) {
+            parts.push(`hasMore: ${metaInfo.hasMore}`);
+          }
+          if (metaInfo.truncated) {
+            parts.push("truncated: true");
+          }
+
+          const handled = new Set(["path", "startLine", "endLine", "line", "hasMore", "truncated"]);
+          for (const [k, v] of Object.entries(metaInfo)) {
+            if (!handled.has(k) && v !== undefined) {
+              parts.push(`${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`);
+            }
+          }
+
+          if (parts.length > 0) {
+            this.writeErr(`[${parts.join(" | ")}]`);
+          }
+        }
+
+        this.writeOut(rawText);
+      } else {
+        this.writeErr(`Error [${result.error.code}]: ${result.error.message}`);
+        if (result.error.details) {
+          this.writeErr(
+            typeof result.error.details === "string"
+              ? result.error.details
+              : JSON.stringify(result.error.details, null, 2)
+          );
+        }
+      }
+    } else {
+      this.writeOut(JSON.stringify(result, null, 2));
+    }
     return result.ok ? ExitCode.SUCCESS : ExitCode.FAILURE;
   }
 
@@ -628,6 +713,7 @@ export class StandaloneDispatcher {
     this.writeOut("  <cmd> list [--json]                         List available actions");
     this.writeOut("  <cmd> describe <id> [--json]                Show action details and schemas");
     this.writeOut("  <cmd> run <id> [--input '<json>']           Execute action with JSON input");
+    this.writeOut("  <cmd> run <id> -r, --raw                    Output raw content without JSON formatting");
     this.writeOut("  <cmd> config list/get/set/delete            Manage package configuration");
     this.writeOut("  <cmd> state list/get/set/delete             Manage shared state store");
     this.writeOut("\nGlobal options:");

@@ -100,7 +100,8 @@ ad pack
 - `-h, --help`：打印命令帮助并退出。
 - `--json`：以标准 JSON 格式输出结果。
 - `--envelope`：将输出包装为标准信封结构对象（包含 `ok: true, data: T` 或 `ok: false, error: { code, message, details }`）。
-- `--data-dir <path>`：指定自定义数据存储目录，实现多测试或多任务数据隔离。
+- `--data-dir <path>`：指定运行时数据库存储目录（包级 `runtime.db`、全局 `global.db` 与目录排他锁），实现多测试或多任务运行数据隔离。注意：本选项仅隔离 SQLite 数据文件，环境配置（profile）与全局注册表（registry）属于用户根目录资产，不受 `--data-dir` 影响。
+- `ACTIONDOCK_HOME=<path>`（环境变量）：指定 ActionDock 用户根目录基准（默认对应操作系统的用户主目录）。如需隔离环境配置 `profiles.json`、全局注册表 `registry.json` 或本地证书，请通过设置此环境变量实现沙箱与自动化测试隔离。
 
 ### 严格目标解析机制
 
@@ -136,6 +137,11 @@ $data = @{
 $data | ConvertTo-Json -Depth 100 | ad run complex-action --input-file -
 ```
 
+### Action 输出模式与 --raw 原始文本
+
+- **默认 JSON 信封输出**：`ad run` 默认将执行结果包装为标准 JSON 格式输出至 stdout，包含 `ok`、`runId`、`data` 或 `error`，便于程序化集成与 SDK 消费。
+- **原始纯文本模式 (`-r, --raw`)**：在查阅文件（如 `files.read`）、阅读代码或通过管道重定向传递文本时，传入 `-r` 或 `--raw`。正文内容以原生文本写入 stdout（保持真实换行且无 JSON 转义），相关元数据（如文件路径与行号）独立输出至 stderr，符合 Unix 管道安全原则。
+
 ---
 
 ## 常用命令速查
@@ -148,7 +154,7 @@ $data | ConvertTo-Json -Depth 100 | ad run complex-action --input-file -
 | `ad info [patterns...]` | 检索包元数据与能力清单，支持模式匹配与树形展示 |
 | `ad list [patterns...]` | 列出包内所有已注册的 Action |
 | `ad describe <id>` | 查看 Action 的详情、参数与模式规范（别名 `ad show`） |
-| `ad run <id>` | 本地或远程执行指定 Action 并输出标准信封结果 |
+| `ad run <id>` | 本地或远程执行指定 Action 并输出标准信封结果（支持 `-r, --raw` 原始文本模式） |
 | `ad validate [id]` | 校验 Action 规范与模式规范 |
 | `ad doctor` | 执行运行环境与项目结构健康诊断 |
 | `ad action create <id>` | 创建新 Action 源码（别名 `ad action new`） |
