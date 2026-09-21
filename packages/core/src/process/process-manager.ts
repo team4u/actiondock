@@ -2,9 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   decodeBytes,
   encodeBytes,
-  type Bytes,
   type CallOptions,
-  type Capabilities,
   type ControlGrant,
   type ControlState,
   type Limits,
@@ -12,7 +10,6 @@ import {
   type OperationReceipt,
   type OutputChunk,
   type ProcessAcquireInput,
-  type ProcessControlAction,
   type ProcessControlInput,
   type ProcessInfo,
   type ProcessListInput,
@@ -29,17 +26,13 @@ import {
 import {
   ACCESS_DENIED,
   CONTROL_BUSY,
-  CONTROL_EXPIRED,
   CONTROL_REVOKED,
-  INPUT_CLOSED,
-  INPUT_OUTCOME_UNKNOWN,
   INPUT_VALIDATION_FAILED,
   NOT_FOUND,
   PROCESS_CANCELLED,
   PROCESS_LOST,
   PROCESS_QUARANTINED,
   PROCESS_SPAWN_ERROR,
-  QUEUE_FULL,
   QUOTA_EXCEEDED,
   REQUEST_CONFLICT,
   SERVER_ERROR,
@@ -50,6 +43,8 @@ import {
 } from "../errors";
 import { parseCursor, compareCursorPos } from "./cursor";
 import { ContextProcessAPI } from "./context-process";
+import { ControlArbiter } from "./control-arbiter";
+import { InputDispatcher } from "./input-dispatcher";
 import { DiagnosticsSink } from "./diagnostics-sink";
 import type {
   ProcessDriver,
@@ -63,26 +58,24 @@ import {
   type ProcessRequestKey,
   type StoredProcessRecord,
 } from "./metadata-store";
+import type {
+  ManagedProcessRecord,
+  ProcessOwner,
+} from "./managed-record";
 import { ProcessOutputLog, type OutputChunk as InternalOutputChunk } from "./output-log";
 import {
   ReservationTable,
   type RequestReservation,
 } from "./reservation-table";
 import { RunExecutor } from "./run-executor";
-import {
-  TerminalOutputCache,
-  type EvictedOutputTombstone,
-} from "./terminal-output-cache";
+import { TerminalOutputCache } from "./terminal-output-cache";
 
-/**
- * 受管进程归属所有者身份。
- */
-export interface ProcessOwner {
-  tenantId: string;
-  principalId: string;
-  packageInstanceId: string;
-  generationId: string;
-}
+export type {
+  ManagedProcessRecord,
+  QueuedOperation,
+  AcquireWaiter,
+  ProcessOwner,
+} from "./managed-record";
 
 /**
  * 宿主与作用域资源配额配置。
@@ -126,70 +119,6 @@ export interface ProcessManagerOptions {
   terminalLogRetentionMs?: number;
   /** 可选结构化日志接口，用于透出持久化失败与驱动终止失败等诊断信息 */
   logger?: Logger;
-}
-
-/**
- * 待调度的异步操作队列条目。
- */
-interface QueuedOperation {
-  type: "write" | "control";
-  requestId: string;
-  token: string;
-  bytes?: Uint8Array;
-  action?: ProcessControlAction;
-  /** 入队时进程的取消纪元，用于 stop 与 dispatch 竞态判定 */
-  cancelEpoch: number;
-  receipt: OperationReceipt;
-  key: ProcessRequestKey;
-  payloadHash: string;
-}
-
-/**
- * 排队等待获取控制权的调用者条目。
- */
-interface AcquireWaiter {
-  requestId: string;
-  waitMs: number;
-  ttlMs: number;
-  runId?: string;
-  timer?: ReturnType<typeof setTimeout>;
-  onAbort?: () => void;
-  resolve: (grant: ControlGrant) => void;
-  reject: (err: unknown) => void;
-}
-
-/**
- * 进程管理器内部维护的活跃受管进程记录。
- */
-interface ManagedProcessRecord {
-  info: ProcessInfo;
-  owner: ProcessOwner;
-  scope: string;
-  handle?: ProcessDriverHandle;
-  outputLog: ProcessOutputLog;
-  outputUnavailable?: boolean;
-  outputTombstone?: EvictedOutputTombstone;
-  controlEpoch: number;
-  /** 取消纪元：stop 接管输入队列时递增，用于让挂起中的 dispatch 放弃过期结算 */
-  cancelEpoch: number;
-  currentGrant?: {
-    token: string;
-    epoch: number;
-    ttlMs: number;
-    expiresAt: string;
-    runId?: string;
-    requestId: string;
-  };
-  ttlTimer?: ReturnType<typeof setTimeout>;
-  idleTimer?: ReturnType<typeof setTimeout>;
-  lifetimeTimer?: ReturnType<typeof setTimeout>;
-  drainTimer?: ReturnType<typeof setTimeout>;
-  inputQueue: QueuedOperation[];
-  pendingInputBytes: number;
-  acquireWaiters: AcquireWaiter[];
-  inputClosed: boolean;
-  isDispatching: boolean;
-  effectiveLimits: Required<Limits>;
 }
 
 /**
@@ -340,6 +269,10 @@ export class ProcessManager {
   private readonly terminalOutputCache: TerminalOutputCache;
   /** 一次性 run 执行器：仅依赖驱动、错误映射与输入校验，不触碰进程注册表 */
   private readonly runExecutor: RunExecutor;
+  /** 控制权仲裁器：独占控制权状态机全部推进路径的唯一持有者 */
+  private readonly controlArbiter: ControlArbiter;
+  /** 输入调度器：输入队列入队、串行调度与接管原语的唯一持有者 */
+  private readonly inputDispatcher: InputDispatcher;
   private initPromise: Promise<number> | undefined;
   private isShutdown = false;
 
@@ -374,6 +307,40 @@ export class ProcessManager {
       maxHostBufferBytes: this.quotas.maxOutputBufferBytesPerHost,
     });
     this.runExecutor = new RunExecutor(this.driver);
+    this.controlArbiter = new ControlArbiter({
+      persistState: (processId, patch) => this.persistState(processId, patch),
+      persistGrantReceipt: (grant, wait, proc) => this.persistReceipt(
+        {
+          hostEpoch: this.hostEpoch,
+          scope: proc.scope,
+          processId: proc.info.id,
+          requestId: wait.requestId,
+        },
+        grant as any,
+        hashRequestPayload({ waitMs: wait.waitMs, ttlMs: wait.ttlMs })
+      ),
+      refreshIdleTimer: (proc) => this.refreshIdleTimer(proc),
+      quarantineProcess: (owner, processId, token, reason) =>
+        this.quarantineProcess(owner, processId, token, reason),
+      countHostAcquireWaiters: () => this.countHostAcquireWaiters(),
+      maxWaitersPerProcess: this.quotas.maxWaitersPerProcess,
+      maxWaitersPerHost: this.quotas.maxWaitersPerHost,
+    });
+    this.inputDispatcher = new InputDispatcher(
+      {
+        persistReceipt: (key, receipt, payloadHash) =>
+          this.persistReceipt(key, receipt, payloadHash),
+        persistState: (processId, patch) => this.persistState(processId, patch),
+        quarantineProcess: (owner, processId, token, reason) =>
+          this.quarantineProcess(owner, processId, token, reason),
+        refreshIdleTimer: (proc) => this.refreshIdleTimer(proc),
+        recordDiagnostic: (message, err) => this.recordDiagnostic(message, err),
+        countHostPendingInputBytes: () => this.countHostPendingInputBytes(),
+        maxPendingQueueBytesPerProcess: this.quotas.maxPendingQueueBytesPerProcess,
+        maxPendingQueueBytesPerHost: this.quotas.maxPendingQueueBytesPerHost,
+      },
+      this.controlArbiter
+    );
   }
 
   /**
@@ -841,83 +808,18 @@ export class ProcessManager {
         return cached;
       }
 
-      // 若控制权空闲且无等待者，直接授予
-      if (proc.info.control === "free" && proc.acquireWaiters.length === 0) {
-        const grant = this.grantControl(proc, input.requestId, input.ttlMs, runId);
+      // 控制权仲裁：空闲且无等待者时直接授予，否则 FIFO 排队等待
+      // 排队路径凭据由唤醒方落盘；原请求 resolve 后在此处结算预约，保持两阶段时序不变
+      const outcome = this.controlArbiter.tryAcquire(
+        proc,
+        { requestId: input.requestId, waitMs: input.waitMs, ttlMs: input.ttlMs },
+        call,
+        runId
+      );
+      const grant = await outcome.waiter!;
+      if (outcome.granted) {
         await this.metadataStore.recordRequest(key, grant as any, payloadHash);
-        this.commitReservation(key, "acquire", grant);
-        return grant;
       }
-
-      // 控制权已被持有，检查等待队列配额并进入 FIFO 排队
-      if (proc.acquireWaiters.length >= this.quotas.maxWaitersPerProcess) {
-        throw new ProcessError(QUOTA_EXCEEDED, "Process acquire waiter quota exceeded", {
-          limit: this.quotas.maxWaitersPerProcess,
-        });
-      }
-
-      const totalHostWaiters = this.countHostAcquireWaiters();
-      if (totalHostWaiters >= this.quotas.maxWaitersPerHost) {
-        throw new ProcessError(QUOTA_EXCEEDED, "Host acquire waiter quota exceeded", {
-          limit: this.quotas.maxWaitersPerHost,
-        });
-      }
-
-      // 排队路径：由 wakeNextAcquireWaiter 在授予时落盘凭据并结算预占
-      const grant = await new Promise<ControlGrant>((resolve, reject) => {
-        let timer: ReturnType<typeof setTimeout> | undefined;
-
-        const waiter: AcquireWaiter = {
-          requestId: input.requestId,
-          waitMs: input.waitMs,
-          ttlMs: input.ttlMs,
-          runId,
-          resolve: (granted) => {
-            cleanup();
-            resolve(granted);
-          },
-          reject: (err) => {
-            cleanup();
-            reject(err);
-          },
-        };
-
-        const cleanup = () => {
-          if (timer) clearTimeout(timer);
-          const idx = proc.acquireWaiters.indexOf(waiter);
-          if (idx !== -1) {
-            proc.acquireWaiters.splice(idx, 1);
-          }
-          if (call?.signal && waiter.onAbort) {
-            call.signal.removeEventListener("abort", waiter.onAbort);
-          }
-        };
-
-        if (call?.signal) {
-          if (call.signal.aborted) {
-            reject(call.signal.reason ?? new ProcessError(PROCESS_CANCELLED, "Acquire cancelled"));
-            return;
-          }
-          waiter.onAbort = () => {
-            cleanup();
-            reject(call.signal?.reason ?? new ProcessError(PROCESS_CANCELLED, "Acquire cancelled"));
-          };
-          call.signal.addEventListener("abort", waiter.onAbort, { once: true });
-        }
-
-        timer = setTimeout(() => {
-          cleanup();
-          reject(new ProcessError(CONTROL_BUSY, "Timed out waiting for process control", {
-            waitMs: input.waitMs,
-          }));
-        }, input.waitMs);
-        if (typeof (timer as any)?.unref === "function") {
-          (timer as any).unref();
-        }
-
-        proc.acquireWaiters.push(waiter);
-      });
-
       this.commitReservation(key, "acquire", grant);
       return grant;
     } finally {
@@ -944,44 +846,10 @@ export class ProcessManager {
     await this.ensureInitialized();
     const proc = await this.getOrLoadProcess(owner, id);
 
-    if (proc.info.control === "quarantined") {
-      throw new ProcessError(PROCESS_QUARANTINED, "Process is in quarantined state");
-    }
+    // 提交前校验持有凭据有效性，随后由仲裁器清理旧定时器并设置新定时器
+    this.controlArbiter.validateHeldGrant(proc, token);
 
-    if (proc.info.control !== "held" || !proc.currentGrant) {
-      throw new ProcessError(CONTROL_REVOKED, "Process control is not currently held");
-    }
-
-    if (proc.currentGrant.token !== token) {
-      throw new ProcessError(ACCESS_DENIED, "Invalid control token");
-    }
-
-    if (new Date(proc.currentGrant.expiresAt).getTime() <= Date.now()) {
-      throw new ProcessError(CONTROL_EXPIRED, "Control token has expired");
-    }
-
-    if (proc.ttlTimer) {
-      clearTimeout(proc.ttlTimer);
-    }
-
-    const expiresAt = new Date(Date.now() + ttlMs).toISOString();
-    proc.currentGrant.ttlMs = ttlMs;
-    proc.currentGrant.expiresAt = expiresAt;
-
-    proc.ttlTimer = setTimeout(() => {
-      this.handleGrantTtlExpired(proc);
-    }, ttlMs);
-    if (typeof proc.ttlTimer.unref === "function") {
-      proc.ttlTimer.unref();
-    }
-
-    // 延长控制权刷新 idleTimeout
-    this.refreshIdleTimer(proc);
-
-    return {
-      token: proc.currentGrant.token,
-      expiresAt,
-    };
+    return this.controlArbiter.renewGrant(proc, ttlMs);
   }
 
   /**
@@ -996,6 +864,7 @@ export class ProcessManager {
     await this.ensureInitialized();
     const proc = await this.getOrLoadProcess(owner, id);
 
+    // 提交前校验持有凭据有效性
     if (proc.info.control === "quarantined") {
       throw new ProcessError(PROCESS_QUARANTINED, "Process is in quarantined state");
     }
@@ -1013,20 +882,8 @@ export class ProcessManager {
       throw new ProcessError(CONTROL_BUSY, "Cannot release control while operations are pending in queue");
     }
 
-    if (proc.ttlTimer) {
-      clearTimeout(proc.ttlTimer);
-      proc.ttlTimer = undefined;
-    }
-    proc.currentGrant = undefined;
-    proc.info.control = "free";
-
-    await this.persistState(id, {
-      control: "free",
-      controlState: "free",
-    });
-
-    // 正常 release 唤醒下一个等待者
-    this.wakeNextAcquireWaiter(proc);
+    // 仲裁器完成清理定时器、凭据置空与唯一唤醒下一个等待者
+    this.controlArbiter.releaseGrant(proc);
   }
 
   /**
@@ -1069,65 +926,18 @@ export class ProcessManager {
         return cached;
       }
 
-      // 入队前校验授权与控制状态
-      this.checkOperationAuth(proc, input.token);
-
-      if (proc.inputClosed) {
-        throw new ProcessError(INPUT_CLOSED, "Input stream is closed");
-      }
-
+      // 输入调度器同步阶段完成授权校验与队列容量预扣，异步阶段落盘入队
       const rawBytes = decodeBytes(input.data);
-      const dataSize = rawBytes.byteLength;
+      const queued = await this.inputDispatcher.enqueueWrite(proc, {
+        requestId: input.requestId,
+        token: input.token,
+        data: rawBytes,
+        key,
+        payloadHash,
+      });
 
-      // 待写入队列容量检查：在任何 await 前同步原子校验并预占配额
-      if (proc.pendingInputBytes + dataSize > this.quotas.maxPendingQueueBytesPerProcess) {
-        throw new ProcessError(QUEUE_FULL, "Process pending input queue limit exceeded", {
-          limit: this.quotas.maxPendingQueueBytesPerProcess,
-        });
-      }
-
-      const totalHostPending = this.countHostPendingInputBytes();
-      if (totalHostPending + dataSize > this.quotas.maxPendingQueueBytesPerHost) {
-        throw new ProcessError(QUEUE_FULL, "Host pending input queue limit exceeded", {
-          limit: this.quotas.maxPendingQueueBytesPerHost,
-        });
-      }
-
-      // 同步占位预扣队列配额，杜绝并发 await 窗口穿透
-      proc.pendingInputBytes += dataSize;
-      let pendingBytesCommitted = false;
-
-      try {
-        const receipt: OperationReceipt = {
-          requestId: input.requestId,
-          state: "queued",
-        };
-
-        await this.metadataStore.recordRequest(key, receipt as any, payloadHash);
-
-        proc.inputQueue.push({
-          type: "write",
-          requestId: input.requestId,
-          token: input.token,
-          bytes: rawBytes,
-          receipt,
-          key,
-          payloadHash,
-          cancelEpoch: proc.cancelEpoch,
-        });
-        pendingBytesCommitted = true;
-
-        // 异步调度推进
-        queueMicrotask(() => void this.dispatchNext(proc));
-
-        const queued = { ...receipt };
-        this.commitReservation(key, "write", queued);
-        return queued;
-      } finally {
-        if (!pendingBytesCommitted) {
-          proc.pendingInputBytes = Math.max(0, proc.pendingInputBytes - dataSize);
-        }
-      }
+      this.commitReservation(key, "write", queued);
+      return queued;
     } finally {
       // 成功路径已在 commit 中移除预占；此处仅对异常路径释放并唤醒等待方
       this.rejectReservation(key, "write", new ProcessError(
@@ -1178,10 +988,7 @@ export class ProcessManager {
         return cached;
       }
 
-      // 入队前校验授权与控制状态
-      this.checkOperationAuth(proc, input.token);
-
-      // 校验能力支持
+      // 校验能力支持（能力归属管理器，在调度器入队前完成）
       if (input.action.type === "input-eof" && !proc.info.capabilities.inputEOF) {
         throw new ProcessError(UNSUPPORTED_CAPABILITY, "Driver does not support input-eof action");
       }
@@ -1204,27 +1011,15 @@ export class ProcessManager {
         );
       }
 
-      const receipt: OperationReceipt = {
-        requestId: input.requestId,
-        state: "queued",
-      };
-
-      await this.metadataStore.recordRequest(key, receipt as any, payloadHash);
-
-      proc.inputQueue.push({
-        type: "control",
+      // 输入调度器完成授权校验、落盘与入队
+      const queued = await this.inputDispatcher.enqueueControl(proc, {
         requestId: input.requestId,
         token: input.token,
         action: input.action,
-        receipt,
         key,
         payloadHash,
-        cancelEpoch: proc.cancelEpoch,
       });
 
-      queueMicrotask(() => void this.dispatchNext(proc));
-
-      const queued = { ...receipt };
       this.commitReservation(key, "control", queued);
       return queued;
     } finally {
@@ -1384,11 +1179,7 @@ export class ProcessManager {
     }
 
     // 撤销控制权与定时器
-    if (proc.ttlTimer) {
-      clearTimeout(proc.ttlTimer);
-      proc.ttlTimer = undefined;
-    }
-    proc.currentGrant = undefined;
+    this.controlArbiter.disposeProcess(proc);
 
     if (proc.idleTimer) {
       clearTimeout(proc.idleTimer);
@@ -1403,23 +1194,14 @@ export class ProcessManager {
       proc.drainTimer = undefined;
     }
 
-    // 递增取消纪元：接管输入队列，使挂起中的 dispatch 放弃过期结算
-    proc.cancelEpoch = (proc.cancelEpoch ?? 0) + 1;
+    // 调度器同步原子接管输入队列：纪元递增、标记失败、登记落盘、清空与字节归零
+    this.inputDispatcher.takeoverQueue(proc, PROCESS_CANCELLED);
 
-    // 取消待 dispatch 输入
-    for (const op of proc.inputQueue) {
-      op.receipt.state = "failed";
-      op.receipt.errorCode = PROCESS_CANCELLED;
-      await this.persistReceipt(op.key, op.receipt, op.payloadHash);
-    }
-    proc.inputQueue = [];
-    proc.pendingInputBytes = 0;
-
-    // 拒绝排队等待者
-    while (proc.acquireWaiters.length > 0) {
-      const waiter = proc.acquireWaiters.shift()!;
-      waiter.reject(new ProcessError(CONTROL_REVOKED, "Process was stopped"));
-    }
+    // 终态拒绝全部排队等待者
+    this.controlArbiter.revokeAllWaiters(proc, {
+      code: CONTROL_REVOKED,
+      message: "Process was stopped",
+    });
 
     proc.info.endReason = proc.info.endReason ?? "requested";
     proc.info.state = "stopping";
@@ -1477,23 +1259,14 @@ export class ProcessManager {
     }
     proc.currentGrant = undefined;
 
-    // 递增取消纪元：接管输入队列，使挂起中的 dispatch 放弃过期结算
-    proc.cancelEpoch = (proc.cancelEpoch ?? 0) + 1;
+    // 调度器同步原子接管输入队列：纪元递增、标记失败、登记落盘、清空与字节归零
+    this.inputDispatcher.takeoverQueue(proc, CONTROL_REVOKED);
 
-    // 取消队列中所有待 dispatch 操作
-    for (const op of proc.inputQueue) {
-      op.receipt.state = "failed";
-      op.receipt.errorCode = CONTROL_REVOKED;
-      await this.persistReceipt(op.key, op.receipt, op.payloadHash);
-    }
-    proc.inputQueue = [];
-    proc.pendingInputBytes = 0;
-
-    // 拒绝排队等待者
-    while (proc.acquireWaiters.length > 0) {
-      const waiter = proc.acquireWaiters.shift()!;
-      waiter.reject(new ProcessError(PROCESS_QUARANTINED, reason || "Process entered quarantined state"));
-    }
+    // 终态拒绝全部排队等待者
+    this.controlArbiter.revokeAllWaiters(proc, {
+      code: PROCESS_QUARANTINED,
+      message: reason || "Process entered quarantined state",
+    });
 
     await this.persistState(processId, {
       control: "quarantined",
@@ -1515,232 +1288,6 @@ export class ProcessManager {
     this.assertNotShutdown();
 
     return this.runExecutor.execute(input, call);
-  }
-
-  /**
-   * 授予指定受管进程控制令牌。
-   */
-  private grantControl(
-    proc: ManagedProcessRecord,
-    requestId: string,
-    ttlMs: number,
-    runId?: string
-  ): ControlGrant {
-    proc.controlEpoch += 1;
-    const token = `tok_${proc.info.id}_${proc.controlEpoch}_${randomUUID().replace(/-/g, "")}`;
-    const expiresAt = new Date(Date.now() + ttlMs).toISOString();
-
-    proc.info.control = "held";
-    proc.currentGrant = {
-      token,
-      epoch: proc.controlEpoch,
-      ttlMs,
-      expiresAt,
-      runId,
-      requestId,
-    };
-
-    proc.ttlTimer = setTimeout(() => {
-      this.handleGrantTtlExpired(proc);
-    }, ttlMs);
-    if (typeof proc.ttlTimer.unref === "function") {
-      proc.ttlTimer.unref();
-    }
-
-    void this.persistState(proc.info.id, {
-      control: "held",
-      controlState: "held",
-    });
-
-    return {
-      token,
-      expiresAt,
-    };
-  }
-
-  /**
-   * 控制权到期未释放时自动转为隔离状态。
-   */
-  private handleGrantTtlExpired(proc: ManagedProcessRecord): void {
-    if (proc.info.control !== "held" || !proc.currentGrant) {
-      return;
-    }
-    void this.quarantineProcess(proc.owner, proc.info.id, proc.currentGrant.token, "Control token TTL expired");
-  }
-
-  /**
-   * 唤醒排队等待控制权的下一个调用者。
-   */
-  private wakeNextAcquireWaiter(proc: ManagedProcessRecord): void {
-    if (proc.acquireWaiters.length === 0) {
-      return;
-    }
-
-    const next = proc.acquireWaiters.shift()!;
-    const grant = this.grantControl(proc, next.requestId, next.ttlMs, next.runId);
-
-    const key: ProcessRequestKey = {
-      hostEpoch: this.hostEpoch,
-      scope: proc.scope,
-      processId: proc.info.id,
-      requestId: next.requestId,
-    };
-    const payloadHash = hashRequestPayload({ waitMs: next.waitMs, ttlMs: next.ttlMs });
-    void this.persistReceipt(key, grant as any, payloadHash);
-
-    next.resolve(grant);
-  }
-
-  /**
-   * 串行调度执行输入队列操作。
-   */
-  private async dispatchNext(proc: ManagedProcessRecord): Promise<void> {
-    if (proc.isDispatching || proc.inputQueue.length === 0) {
-      return;
-    }
-
-    proc.isDispatching = true;
-    try {
-      while (proc.inputQueue.length > 0) {
-        const op = proc.inputQueue[0];
-
-        // dispatch 前校验 token、epoch 与授权
-        if (
-          proc.info.control !== "held" ||
-          !proc.currentGrant ||
-          proc.currentGrant.token !== op.token ||
-          new Date(proc.currentGrant.expiresAt).getTime() <= Date.now() ||
-          op.cancelEpoch !== proc.cancelEpoch
-        ) {
-          if (op.cancelEpoch === proc.cancelEpoch) {
-            op.receipt.state = "failed";
-            op.receipt.errorCode =
-              proc.info.control === "quarantined" ? PROCESS_QUARANTINED : CONTROL_REVOKED;
-            await this.persistReceipt(op.key, op.receipt, op.payloadHash);
-          }
-          proc.inputQueue.shift();
-          if (op.bytes && op.cancelEpoch === proc.cancelEpoch) {
-            proc.pendingInputBytes -= op.bytes.byteLength;
-          }
-          continue;
-        }
-
-        op.receipt.state = "dispatching";
-        await this.persistReceipt(op.key, op.receipt, op.payloadHash);
-
-        if (op.type === "write" && op.bytes) {
-          try {
-            if (!proc.handle) {
-              throw new Error("Missing driver handle");
-            }
-            await proc.handle.write(op.bytes);
-
-            // 写入返回后校验取消纪元与队首位置：已被 stop 或 quarantine 接管则放弃过期结算
-            if (op.cancelEpoch !== proc.cancelEpoch || proc.inputQueue[0] !== op) {
-              continue;
-            }
-
-            op.receipt.state = "completed";
-            op.receipt.acceptedBytes = op.bytes.byteLength;
-            this.refreshIdleTimer(proc);
-          } catch (err) {
-            // 写入返回异常时同样校验取消纪元：被接管则放弃过期结算
-            if (op.cancelEpoch !== proc.cancelEpoch || proc.inputQueue[0] !== op) {
-              continue;
-            }
-            // 若写入出现不确定失败，结果标记为 unknown，进程转入 quarantined
-            op.receipt.state = "unknown";
-            op.receipt.errorCode = INPUT_OUTCOME_UNKNOWN;
-            await this.persistReceipt(op.key, op.receipt, op.payloadHash);
-            proc.inputQueue.shift();
-            proc.pendingInputBytes -= op.bytes.byteLength;
-            await this.quarantineProcess(
-              proc.owner,
-              proc.info.id,
-              op.token,
-              "Write failed with uncertain outcome"
-            );
-            break;
-          }
-        } else if (op.type === "control" && op.action) {
-          try {
-            if (!proc.handle) {
-              throw new Error("Missing driver handle");
-            }
-            if (op.action.type === "input-eof") {
-              if (proc.handle.sendInputEOF) {
-                await proc.handle.sendInputEOF();
-              }
-            } else if (op.action.type === "interrupt-foreground") {
-              if (proc.handle.interruptForeground) {
-                await proc.handle.interruptForeground();
-              }
-            } else if (op.action.type === "resize") {
-              if (proc.handle.resize) {
-                await proc.handle.resize(op.action.cols, op.action.rows);
-              }
-            }
-
-            // 控制指令返回后校验取消纪元与队首位置：已被接管则放弃过期结算
-            if (op.cancelEpoch !== proc.cancelEpoch || proc.inputQueue[0] !== op) {
-              continue;
-            }
-
-            if (op.action.type === "input-eof") {
-              proc.inputClosed = true;
-              await this.persistState(proc.info.id, { inputClosed: true } as any);
-            }
-
-            op.receipt.state = "completed";
-            this.refreshIdleTimer(proc);
-          } catch (err: any) {
-            if (op.cancelEpoch !== proc.cancelEpoch || proc.inputQueue[0] !== op) {
-              continue;
-            }
-            op.receipt.state = "failed";
-            op.receipt.errorCode = err instanceof ProcessError ? err.code : "CONTROL_FAILED";
-            if (err instanceof Error && err.message) {
-              op.receipt.errorMessage = err.message;
-            }
-            this.recordDiagnostic(`Control action '${op.action.type}' failed for request '${op.requestId}'`, err);
-          }
-        }
-
-        // 结算前再次校验：若结算窗口内被 stop 或 quarantine 接管则放弃改写
-        if (op.cancelEpoch !== proc.cancelEpoch || proc.inputQueue[0] !== op) {
-          continue;
-        }
-
-        await this.persistReceipt(op.key, op.receipt, op.payloadHash);
-        proc.inputQueue.shift();
-        if (op.bytes) {
-          proc.pendingInputBytes -= op.bytes.byteLength;
-        }
-      }
-    } finally {
-      proc.isDispatching = false;
-    }
-  }
-
-  /**
-   * 操作提交前校验持有者令牌与授权。
-   */
-  private checkOperationAuth(proc: ManagedProcessRecord, token: string): void {
-    if (proc.info.control === "quarantined") {
-      throw new ProcessError(PROCESS_QUARANTINED, "Process is in quarantined state");
-    }
-
-    if (proc.info.control !== "held" || !proc.currentGrant) {
-      throw new ProcessError(ACCESS_DENIED, "Process control is not currently held");
-    }
-
-    if (proc.currentGrant.token !== token) {
-      throw new ProcessError(ACCESS_DENIED, "Invalid control token");
-    }
-
-    if (new Date(proc.currentGrant.expiresAt).getTime() <= Date.now()) {
-      throw new ProcessError(CONTROL_EXPIRED, "Control token has expired");
-    }
   }
 
   /**
@@ -1858,11 +1405,11 @@ export class ProcessManager {
 
     proc.currentGrant = undefined;
 
-    // 拒绝排队等待者
-    while (proc.acquireWaiters.length > 0) {
-      const waiter = proc.acquireWaiters.shift()!;
-      waiter.reject(new ProcessError(CONTROL_REVOKED, "Process has exited"));
-    }
+    // 终态拒绝全部排队等待者（单一入口）
+    this.controlArbiter.revokeAllWaiters(proc, {
+      code: CONTROL_REVOKED,
+      message: "Process has exited",
+    });
 
     void this.persistState(proc.info.id, {
       state: "exited",
@@ -1937,10 +1484,11 @@ export class ProcessManager {
     proc.outputLog.closeOutput("natural");
     proc.info.outputClosed = true;
 
-    while (proc.acquireWaiters.length > 0) {
-      const waiter = proc.acquireWaiters.shift()!;
-      waiter.reject(new ProcessError(CONTROL_REVOKED, `Process error: ${err.message}`));
-    }
+    // 终态拒绝全部排队等待者（单一入口）
+    this.controlArbiter.revokeAllWaiters(proc, {
+      code: CONTROL_REVOKED,
+      message: `Process error: ${err.message}`,
+    });
 
     void this.persistState(proc.info.id, {
       state: "failed",

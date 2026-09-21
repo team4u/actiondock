@@ -6,5 +6,8 @@ export * from "./diagnostics-sink";
 export * from "./reservation-table";
 export * from "./terminal-output-cache";
 export * from "./run-executor";
+export * from "./managed-record";
+export * from "./control-arbiter";
+export * from "./input-dispatcher";
 export * from "./process-manager";
 export * from "./context-process";
