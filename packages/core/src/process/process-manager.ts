@@ -7,7 +7,6 @@ import {
   type Capabilities,
   type ControlGrant,
   type ControlState,
-  type LaunchSpec,
   type Limits,
   type Logger,
   type OperationReceipt,
@@ -40,7 +39,6 @@ import {
   PROCESS_LOST,
   PROCESS_QUARANTINED,
   PROCESS_SPAWN_ERROR,
-  PROCESS_TIMEOUT,
   QUEUE_FULL,
   QUOTA_EXCEEDED,
   REQUEST_CONFLICT,
@@ -52,6 +50,7 @@ import {
 } from "../errors";
 import { parseCursor, compareCursorPos } from "./cursor";
 import { ContextProcessAPI } from "./context-process";
+import { DiagnosticsSink } from "./diagnostics-sink";
 import type {
   ProcessDriver,
   ProcessDriverCallbacks,
@@ -65,6 +64,15 @@ import {
   type StoredProcessRecord,
 } from "./metadata-store";
 import { ProcessOutputLog, type OutputChunk as InternalOutputChunk } from "./output-log";
+import {
+  ReservationTable,
+  type RequestReservation,
+} from "./reservation-table";
+import { RunExecutor } from "./run-executor";
+import {
+  TerminalOutputCache,
+  type EvictedOutputTombstone,
+} from "./terminal-output-cache";
 
 /**
  * 受管进程归属所有者身份。
@@ -294,41 +302,6 @@ function toStoredProcessRecord(
 }
 
 /**
- * 同步幂等预占条目：在异步落盘窗口内锁定同作用域、进程、操作类型与请求标识的并发请求。
- */
-interface RequestReservation {
-  payloadHash: string;
-  operation: string;
-  promise: Promise<unknown>;
-  resolve: (value: unknown) => void;
-  reject: (err: unknown) => void;
-}
-
-/**
- * 已淘汰输出日志的墓碑信息。
- */
-interface EvictedOutputTombstone {
-  tailCursor: string;
-  earliestCursor: string;
-  evictedAt: number;
-}
-
-/**
- * 终态输出日志缓存条目：附带驱逐时间戳支撑 TTL 过期回收与 LRU 淘汰。
- */
-interface RetainedOutputLogEntry {
-  log: ProcessOutputLog;
-  evictedAt: number;
-}
-
-/**
- * 格式化同步幂等预占键。
- */
-function formatReservationKey(key: ProcessRequestKey, operation: string): string {
-  return `${key.hostEpoch}:${key.scope}:${key.processId ?? ""}:${operation}:${key.requestId}`;
-}
-
-/**
  * 校验正整数毫秒时长参数，非法时抛出参数错误。
  */
 function checkPositiveDurationMs(value: number, field: string): void {
@@ -357,19 +330,18 @@ export class ProcessManager {
   public readonly defaultLimits: Required<Limits>;
   public readonly drainDeadlineMs: number;
   public readonly terminalLogRetentionMs: number;
-  private readonly logger?: Logger;
 
   private processes = new Map<string, ManagedProcessRecord>();
-  /** 已驱逐进程的输出日志缓存：附带时间戳支撑 TTL 过期回收与 LRU 淘汰 */
-  private evictedOutputLogs = new Map<string, RetainedOutputLogEntry>();
-  /** 已淘汰输出日志的墓碑缓存：防止因日志淘汰静默丢失输出数据，支撑缺口明确告知与不可用异常 */
-  private evictedOutputTombstones = new Map<string, EvictedOutputTombstone>();
+  /** 内部诊断日志汇聚器：未注入 logger 时保留最近的持久化与驱动错误，避免静默吞没异常 */
+  private readonly diagnosticsSink: DiagnosticsSink;
   /** 同步幂等预占表：以复合键在异步落盘窗口内锁定并发重复请求 */
-  private requestReservations = new Map<string, RequestReservation>();
+  private readonly reservationTable: ReservationTable;
+  /** 终态输出日志保留缓存：附带 TTL 过期回收与 LRU 淘汰，及墓碑登记 */
+  private readonly terminalOutputCache: TerminalOutputCache;
+  /** 一次性 run 执行器：仅依赖驱动、错误映射与输入校验，不触碰进程注册表 */
+  private readonly runExecutor: RunExecutor;
   private initPromise: Promise<number> | undefined;
   private isShutdown = false;
-  /** 内部诊断日志：未注入 logger 时保留最近的持久化与驱动错误，避免静默吞没异常 */
-  private diagnostics: string[] = [];
 
   constructor(options: ProcessManagerOptions) {
     this.hostEpoch = options.hostEpoch ?? `epoch-${Date.now()}-${randomUUID().slice(0, 8)}`;
@@ -395,7 +367,13 @@ export class ProcessManager {
 
     this.drainDeadlineMs = options.drainDeadlineMs ?? 5000;
     this.terminalLogRetentionMs = options.terminalLogRetentionMs ?? 10 * 60 * 1000;
-    this.logger = options.logger;
+    this.diagnosticsSink = new DiagnosticsSink({ logger: options.logger });
+    this.reservationTable = new ReservationTable();
+    this.terminalOutputCache = new TerminalOutputCache({
+      retentionMs: this.terminalLogRetentionMs,
+      maxHostBufferBytes: this.quotas.maxOutputBufferBytesPerHost,
+    });
+    this.runExecutor = new RunExecutor(this.driver);
   }
 
   /**
@@ -428,20 +406,14 @@ export class ProcessManager {
    * 记录内部诊断信息：优先写入注入的 logger，缺失时保留在内存环形缓冲区。
    */
   private recordDiagnostic(message: string, err?: unknown): void {
-    const detail = err instanceof Error ? `${err.name}: ${err.message}` : err !== undefined ? String(err) : "";
-    const line = detail ? `${message} (${detail})` : message;
-    this.diagnostics.push(`${new Date().toISOString()} ${line}`);
-    if (this.diagnostics.length > 100) {
-      this.diagnostics.shift();
-    }
-    this.logger?.warn("[ProcessManager] " + line);
+    this.diagnosticsSink.record(message, err);
   }
 
   /**
    * 获取最近的内部诊断日志快照（最近条目在前）。
    */
   get recentDiagnostics(): string[] {
-    return [...this.diagnostics].reverse();
+    return this.diagnosticsSink.recent();
   }
 
   /**
@@ -472,62 +444,22 @@ export class ProcessManager {
 
   /**
    * 同步预占幂等请求：跨 await 的检查与落盘窗口内锁定同复合键并发调用。
-   * 返回 undefined 表示预占成功，调用方继续异步路径并在完成时调用 commit/cancel。
-   * 返回 RequestReservation 表示已有同请求进行中，调用方可等待其结果。
-   * 若已有请求负载或操作类型不同，立即抛出 REQUEST_CONFLICT 杜绝混用结果。
+   * 实现委托给独立持有的预占表，语义详见 ReservationTable.reserve。
    */
   private reserveRequest(
     key: ProcessRequestKey,
     payloadHash: string,
     operation: string
   ): RequestReservation | undefined {
-    const reservationKey = formatReservationKey(key, operation);
-    const existing = this.requestReservations.get(reservationKey);
-    if (existing) {
-      if (existing.payloadHash !== payloadHash || existing.operation !== operation) {
-        throw new ProcessError(
-          REQUEST_CONFLICT,
-          "Request conflict: identical requestId with different payload",
-          { requestId: key.requestId }
-        );
-      }
-      return existing;
-    }
-    let resolveFn: (value: unknown) => void = () => {};
-    let rejectFn: (err: unknown) => void = () => {};
-    const promise = new Promise<unknown>((res, rej) => {
-      resolveFn = res;
-      rejectFn = rej;
-    });
-    // 预占 promise 可能永远无人等待：预先挂接空捕获，避免拒绝时触发 unhandledRejection
-    promise.catch(() => {});
-    const reservation: RequestReservation = {
-      payloadHash,
-      operation,
-      promise,
-      resolve: resolveFn,
-      reject: rejectFn,
-    };
-    this.requestReservations.set(reservationKey, reservation);
-    return undefined;
+    return this.reservationTable.reserve(key, payloadHash, operation);
   }
 
   private commitReservation(key: ProcessRequestKey, operation: string, value: unknown): void {
-    const reservationKey = formatReservationKey(key, operation);
-    const reservation = this.requestReservations.get(reservationKey);
-    if (reservation) {
-      this.requestReservations.delete(reservationKey);
-      reservation.resolve(value);
-    }
+    this.reservationTable.commit(key, operation, value);
   }
 
   private rejectReservation(key: ProcessRequestKey, operation: string, err: unknown): void {
-    const reservationKey = formatReservationKey(key, operation);
-    const reservation = this.requestReservations.get(reservationKey);
-    if (reservation) {
-      this.requestReservations.delete(reservationKey);
-      reservation.reject(err);
-    }
+    this.reservationTable.reject(key, operation, err);
   }
 
   /**
@@ -578,10 +510,7 @@ export class ProcessManager {
       }
     }
 
-    for (const [reservationKey, res] of Array.from(this.requestReservations.entries())) {
-      this.requestReservations.delete(reservationKey);
-      res.reject(new ProcessError(PROCESS_CANCELLED, "Process manager has been shut down"));
-    }
+    this.reservationTable.rejectAll(new ProcessError(PROCESS_CANCELLED, "Process manager has been shut down"));
   }
 
   private assertNotShutdown(): void {
@@ -1349,7 +1278,7 @@ export class ProcessManager {
 
     if (proc.outputUnavailable) {
       const requestedPos = parseCursor(input.cursor, proc.info.hostEpoch, id);
-      const tombstone = proc.outputTombstone ?? this.evictedOutputTombstones.get(id);
+      const tombstone = proc.outputTombstone ?? this.terminalOutputCache.getTombstone(id);
 
       if (tombstone) {
         const tailPos = parseCursor(tombstone.tailCursor, proc.info.hostEpoch, id);
@@ -1574,6 +1503,7 @@ export class ProcessManager {
 
   /**
    * 一次性运行外部命令，收集有限输出并支持协作式取消与超时回收。
+   * 实现委托给独立持有的一次性 run 执行器，不触碰受管进程注册表。
    */
   async run(
     owner: ProcessOwner,
@@ -1584,145 +1514,7 @@ export class ProcessManager {
     await this.ensureInitialized();
     this.assertNotShutdown();
 
-    const ioMode = input.spec.io?.mode ?? "pipe";
-    if (ioMode !== "pipe") {
-      throw new ProcessError(UNSUPPORTED_CAPABILITY, "Run requires IO mode to be 'pipe'");
-    }
-
-    const effectiveSpec: LaunchSpec = {
-      ...input.spec,
-      io: {
-        ...input.spec.io,
-        mode: "pipe",
-      },
-    };
-
-    const runProcessId = `run-${randomUUID()}`;
-    const chunks: OutputChunk[] = [];
-    let totalBytes = 0;
-    let truncated = false;
-    let timedOut = false;
-    let cancelled = false;
-
-    let resolveExit!: (exit: { code: number | null; signal: string | null }) => void;
-    let rejectError!: (err: Error) => void;
-    const exitPromise = new Promise<{ code: number | null; signal: string | null }>((resolve, reject) => {
-      resolveExit = resolve;
-      rejectError = reject;
-    });
-
-    let driverHandle: ProcessDriverHandle | undefined;
-
-    const callbacks: ProcessDriverCallbacks = {
-      onOutput: (stream, data) => {
-        if (truncated) return;
-        if (stream !== "stdout" && stream !== "stderr") return;
-
-        const remaining = input.maxOutputBytes - totalBytes;
-        if (remaining <= 0) {
-          truncated = true;
-          if (driverHandle) {
-            void driverHandle.terminate(1000);
-          }
-          return;
-        }
-
-        if (data.byteLength > remaining) {
-          const slice = data.subarray(0, remaining);
-          chunks.push({
-            stream,
-            data: encodeBytes(slice),
-          });
-          totalBytes += slice.byteLength;
-          truncated = true;
-          if (driverHandle) {
-            void driverHandle.terminate(1000);
-          }
-        } else {
-          chunks.push({
-            stream,
-            data: encodeBytes(data),
-          });
-          totalBytes += data.byteLength;
-        }
-      },
-      onExit: (exit) => {
-        resolveExit(exit);
-      },
-      onError: (err) => {
-        rejectError(err);
-      },
-    };
-
-    // 对齐 start 防御顺序：派生前检查取消信号，已中止直接抛出取消错误不再派生进程
-    if (call?.signal?.aborted) {
-      throw call.signal.reason instanceof ProcessError
-        ? call.signal.reason
-        : new ProcessError(PROCESS_CANCELLED, "Process run was cancelled");
-    }
-
-    driverHandle = await this.driver.spawn(runProcessId, effectiveSpec, callbacks);
-
-    let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
-    if (input.timeoutMs > 0) {
-      timeoutTimer = setTimeout(() => {
-        timedOut = true;
-        if (driverHandle) {
-          void driverHandle.terminate(1000);
-        }
-      }, input.timeoutMs);
-      if (typeof (timeoutTimer as any)?.unref === "function") {
-        (timeoutTimer as any).unref();
-      }
-    }
-
-    let onAbort: (() => void) | undefined;
-    if (call?.signal) {
-      if (call.signal.aborted) {
-        if (timeoutTimer) clearTimeout(timeoutTimer);
-        if (driverHandle) void driverHandle.terminate(1000);
-        throw call.signal.reason ?? new ProcessError(PROCESS_CANCELLED, "Process run was cancelled");
-      }
-      onAbort = () => {
-        cancelled = true;
-        if (timeoutTimer) clearTimeout(timeoutTimer);
-        if (driverHandle) void driverHandle.terminate(1000);
-      };
-      call.signal.addEventListener("abort", onAbort, { once: true });
-    }
-
-    try {
-      const exit = await exitPromise;
-      if (timeoutTimer) clearTimeout(timeoutTimer);
-      if (call?.signal && onAbort) {
-        call.signal.removeEventListener("abort", onAbort);
-      }
-
-      if (timedOut) {
-        throw new ProcessError(PROCESS_TIMEOUT, `Process exceeded timeout of ${input.timeoutMs}ms`);
-      }
-      if (cancelled || call?.signal?.aborted) {
-        throw call?.signal?.reason ?? new ProcessError(PROCESS_CANCELLED, "Process run was cancelled");
-      }
-
-      return {
-        exit,
-        chunks,
-        truncated,
-      };
-    } catch (err: any) {
-      if (timeoutTimer) clearTimeout(timeoutTimer);
-      if (call?.signal && onAbort) {
-        call.signal.removeEventListener("abort", onAbort);
-      }
-      if (timedOut) {
-        throw new ProcessError(PROCESS_TIMEOUT, `Process exceeded timeout of ${input.timeoutMs}ms`);
-      }
-      if (cancelled || call?.signal?.aborted) {
-        throw call?.signal?.reason ?? new ProcessError(PROCESS_CANCELLED, "Process run was cancelled");
-      }
-      throw err;
-    }
+    return this.runExecutor.execute(input, call);
   }
 
   /**
@@ -2205,8 +1997,8 @@ export class ProcessManager {
     }
 
     const info = toSdkProcessInfo(record);
-    const retainedLog = this.getRetainedOutputLog(processId);
-    const tombstone = this.evictedOutputTombstones.get(processId);
+    const retainedLog = this.terminalOutputCache.get(processId);
+    const tombstone = this.terminalOutputCache.getTombstone(processId);
     const isTerminalLoaded =
       info.state === "exited" || info.state === "failed" || info.state === "lost";
     const isOutputUnavailable =
@@ -2254,89 +2046,10 @@ export class ProcessManager {
   }
 
   /**
-   * 记录已淘汰输出日志的墓碑信息（保留最近 2048 条，防止内存无限积压）。
-   */
-  private recordTombstone(processId: string, tombstone: EvictedOutputTombstone): void {
-    if (this.evictedOutputTombstones.size >= 2048) {
-      const oldestKey = this.evictedOutputTombstones.keys().next().value;
-      if (oldestKey) {
-        this.evictedOutputTombstones.delete(oldestKey);
-      }
-    }
-    this.evictedOutputTombstones.set(processId, tombstone);
-  }
-
-  /**
-   * 清理已过期的终态输出日志条目。
-   */
-  private cleanExpiredTerminalLogs(): void {
-    const now = Date.now();
-    for (const [id, entry] of this.evictedOutputLogs.entries()) {
-      if (now - entry.evictedAt > this.terminalLogRetentionMs) {
-        this.recordTombstone(id, {
-          tailCursor: entry.log.tailCursor,
-          earliestCursor: entry.log.earliestCursor,
-          evictedAt: now,
-        });
-        this.evictedOutputLogs.delete(id);
-      }
-    }
-  }
-
-  /**
    * 统计终态保留日志当前在内存中实际占用的输出缓冲字节总数。
    */
   private countRetainedOutputBufferBytes(): number {
-    this.cleanExpiredTerminalLogs();
-    let bytes = 0;
-    for (const entry of this.evictedOutputLogs.values()) {
-      bytes += entry.log.currentBytes;
-    }
-    return bytes;
-  }
-
-  /**
-   * 将终态输出日志存入保留缓存，并根据宿主配额执行 LRU 与 TTL 淘汰。
-   */
-  private retainTerminalOutputLog(processId: string, log: ProcessOutputLog): void {
-    this.cleanExpiredTerminalLogs();
-
-    // 若新加入条目会导致总输出配额超限或数量超限，按 LRU 顺序淘汰最旧条目
-    while (
-      (this.countRetainedOutputBufferBytes() + log.currentBytes > this.quotas.maxOutputBufferBytesPerHost ||
-        this.evictedOutputLogs.size >= 512) &&
-      this.evictedOutputLogs.size > 0
-    ) {
-      const oldestKey = this.evictedOutputLogs.keys().next().value;
-      if (!oldestKey) break;
-      const oldestEntry = this.evictedOutputLogs.get(oldestKey);
-      if (oldestEntry) {
-        this.recordTombstone(oldestKey, {
-          tailCursor: oldestEntry.log.tailCursor,
-          earliestCursor: oldestEntry.log.earliestCursor,
-          evictedAt: Date.now(),
-        });
-      }
-      this.evictedOutputLogs.delete(oldestKey);
-    }
-
-    this.evictedOutputLogs.set(processId, {
-      log,
-      evictedAt: Date.now(),
-    });
-  }
-
-  /**
-   * 获取终态保留日志（附带过期清理与 LRU 触达更新）。
-   */
-  private getRetainedOutputLog(processId: string): ProcessOutputLog | undefined {
-    this.cleanExpiredTerminalLogs();
-    const entry = this.evictedOutputLogs.get(processId);
-    if (!entry) return undefined;
-    // 触达刷新 LRU 顺序
-    this.evictedOutputLogs.delete(processId);
-    this.evictedOutputLogs.set(processId, entry);
-    return entry.log;
+    return this.terminalOutputCache.retainedBytes();
   }
 
   /**
@@ -2358,7 +2071,7 @@ export class ProcessManager {
     this.processes.delete(proc.info.id);
 
     // 保留输出日志支撑后续游标读取（内存输出无法从持久层恢复）
-    this.retainTerminalOutputLog(proc.info.id, proc.outputLog);
+    this.terminalOutputCache.retain(proc.info.id, proc.outputLog);
 
     if (proc.handle && typeof this.driver.dispose === "function") {
       try {
@@ -2418,25 +2131,17 @@ export class ProcessManager {
     }
 
     // 终态保留输出日志实际占用字节数纳入宿主预算
-    totalBuffer += this.countRetainedOutputBufferBytes();
+    const retainedBefore = this.countRetainedOutputBufferBytes();
+    totalBuffer += retainedBefore;
 
     // 若新进程申请的缓冲使总预算超限，优先淘汰已有的终态保留日志（LRU 策略）
-    while (
-      totalBuffer + perProcBuf > this.quotas.maxOutputBufferBytesPerHost &&
-      this.evictedOutputLogs.size > 0
-    ) {
-      const oldestKey = this.evictedOutputLogs.keys().next().value;
-      if (!oldestKey) break;
-      const oldest = this.evictedOutputLogs.get(oldestKey);
-      if (oldest) {
-        this.recordTombstone(oldestKey, {
-          tailCursor: oldest.log.tailCursor,
-          earliestCursor: oldest.log.earliestCursor,
-          evictedAt: Date.now(),
-        });
-        totalBuffer -= oldest.log.currentBytes;
-      }
-      this.evictedOutputLogs.delete(oldestKey);
+    // 淘汰门槛为宿主预算扣除活跃进程已占字节与新申请字节，淘汰释放的字节数同步回扣宿主预算
+    if (totalBuffer + perProcBuf > this.quotas.maxOutputBufferBytesPerHost) {
+      const activeBufferBytes = totalBuffer - retainedBefore;
+      const evictedBytes = this.terminalOutputCache.evictLRUUntil(
+        this.quotas.maxOutputBufferBytesPerHost - perProcBuf - activeBufferBytes
+      );
+      totalBuffer -= evictedBytes;
     }
 
     if (totalBuffer + perProcBuf > this.quotas.maxOutputBufferBytesPerHost) {
