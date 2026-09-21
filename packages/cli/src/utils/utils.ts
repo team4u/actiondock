@@ -100,7 +100,7 @@ export function getTargetRoot(
 }
 
 /**
- * 聚合命令自身选项与根程序全局选项（如 --json、--envelope、--data-dir 等）。
+ * 聚合命令自身选项与根程序全局选项（如 --json、--data-dir 等）。
  */
 export function getEffectiveOptions(rawOptions: any, cmd?: any): any {
   if (cmd && typeof cmd.optsWithGlobals === "function") {
@@ -111,13 +111,13 @@ export function getEffectiveOptions(rawOptions: any, cmd?: any): any {
 
 /**
  * 解析意图过滤回退策略。
- * 机器输出模式（--json/--envelope）仅在显式传 --fallback 时回退，
+ * 机器输出模式（--json）仅在显式传 --fallback 时回退，
  * 人类交互模式默认回退（可被 --no-fallback 关闭）。
  */
 export function resolveFallbackStrategy(
-  options: { fallback?: boolean; json?: boolean; envelope?: boolean }
+  options: { fallback?: boolean; json?: boolean }
 ): { isMachine: boolean; shouldFallback: boolean } {
-  const isMachine = Boolean(options.json || options.envelope);
+  const isMachine = Boolean(options.json);
   const fallbackExplicit =
     options.fallback === true ||
     (Array.isArray(process.argv) && process.argv.includes("--fallback"));

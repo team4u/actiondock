@@ -169,7 +169,7 @@ export class StandaloneDispatcher {
 
     // 2. 独立入口拒绝异步启动语义
     if (args.includes("--async")) {
-      const isJson = args.includes("--json") || args.includes("--envelope");
+      const isJson = args.includes("--json");
       if (isJson) {
         this.writeOut(
           JSON.stringify(
@@ -259,8 +259,7 @@ export class StandaloneDispatcher {
   }
 
   private async handleList(target: ActionDockTarget, subArgs: string[]): Promise<number> {
-    const isJson = subArgs.includes("--json") || subArgs.includes("--envelope");
-    const useEnvelope = subArgs.includes("--envelope");
+    const isJson = subArgs.includes("--json");
     const noFallback = subArgs.includes("--no-fallback");
     let intent: string | undefined;
     const positionalPatterns: string[] = [];
@@ -295,10 +294,7 @@ export class StandaloneDispatcher {
     );
 
     if (isJson) {
-      const payload = useEnvelope
-        ? { ok: true, data: filterRes.items }
-        : filterRes.items;
-      this.writeOut(JSON.stringify(payload, null, 2));
+      this.writeOut(JSON.stringify(filterRes.items, null, 2));
     } else {
       let text = `Actions in ${this.options.packageId} (v${this.options.version}):\n\n`;
       for (const a of filterRes.items) {
@@ -311,8 +307,7 @@ export class StandaloneDispatcher {
 
   private async handleDescribe(target: ActionDockTarget, subArgs: string[]): Promise<number> {
     const id = subArgs.find((a) => !a.startsWith("-"));
-    const isJson = subArgs.includes("--json") || subArgs.includes("--envelope");
-    const useEnvelope = subArgs.includes("--envelope");
+    const isJson = subArgs.includes("--json");
 
     if (!id) {
       this.writeErr("Error: Action ID is required for describe");
@@ -336,8 +331,7 @@ export class StandaloneDispatcher {
     };
 
     if (isJson) {
-      const payload = useEnvelope ? { ok: true, data: detail } : detail;
-      this.writeOut(JSON.stringify(payload, null, 2));
+      this.writeOut(JSON.stringify(detail, null, 2));
     } else {
       let text = `Action: ${action.id}\n`;
       if (action.description) text += `Description: ${action.description}\n`;
@@ -369,7 +363,7 @@ export class StandaloneDispatcher {
 
     for (let i = 0; i < subArgs.length; i++) {
       const arg = subArgs[i];
-      if (arg === "--json" || arg === "--envelope") {
+      if (arg === "--json") {
         isJson = true;
       } else if (arg === "--timeout" && i + 1 < subArgs.length) {
         timeoutMs = parseDuration(subArgs[++i]);
@@ -713,7 +707,7 @@ export class StandaloneDispatcher {
     this.writeOut("  <cmd> list [--json]                         List available actions");
     this.writeOut("  <cmd> describe <id> [--json]                Show action details and schemas");
     this.writeOut("  <cmd> run <id> [--input '<json>']           Execute action (raw text output by default)");
-    this.writeOut("  <cmd> run <id> [--json]                     Output standard execution result envelope");
+    this.writeOut("  <cmd> run <id> [--json]                     Output standard execution result in JSON format");
     this.writeOut("  <cmd> config list/get/set/delete            Manage package configuration");
     this.writeOut("  <cmd> state list/get/set/delete             Manage shared state store");
     this.writeOut("\nGlobal options:");

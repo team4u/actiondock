@@ -36,7 +36,6 @@ export function registerProfileCommands(program: Command): void {
     .option("--fallback", "Enable fallback to full list when no items match intent")
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("--json", "Output as JSON")
-    .option("--envelope", "Wrap JSON output in standard envelope")
     .action((patterns, rawOptions, cmd) => {
       try {
         const options = getEffectiveOptions(rawOptions, cmd);
@@ -70,14 +69,13 @@ export function registerProfileCommands(program: Command): void {
         if (filterRes.isFallback && isMachine) {
           renderResult(
             { items: filterRes.items, isFallback: true, matchedCount: 0 },
-            { json: options.json, envelope: options.envelope }
+            { json: options.json }
           );
           return;
         }
 
         renderResult(filterRes.items, {
           json: options.json,
-          envelope: options.envelope,
           humanFormatter: () => {
             const lines = ["ActionDock Execution Profiles:\n"];
             if (filterRes.isFallback && effectiveIntent) {
@@ -203,7 +201,6 @@ export function registerProfileCommands(program: Command): void {
     .description("Display details of a profile (defaults to active profile)")
     .option("--reveal, --show-secrets", "Reveal plain text values for tokens")
     .option("--json", "Output as JSON")
-    .option("--envelope", "Wrap JSON output in standard envelope")
     .action((name, rawOptions, cmd) => {
       try {
         const options = getEffectiveOptions(rawOptions, cmd);
@@ -235,7 +232,6 @@ export function registerProfileCommands(program: Command): void {
 
         renderResult(data, {
           json: options.json,
-          envelope: options.envelope,
           humanFormatter: () => {
             const lines: string[] = [];
             lines.push(`Profile:      ${data.name}${data.isCurrent ? " (Active)" : ""}`);
@@ -301,7 +297,6 @@ export function registerProfileCommands(program: Command): void {
     .option("-k, --insecure", "Allow insecure TLS connections (skip TLS certificate validation)")
     .option("--allow-insecure-http", "Allow insecure HTTP connections with auth token")
     .option("--json", "Output as JSON")
-    .option("--envelope", "Wrap JSON output in standard envelope")
     .action(async (name, rawOptions, cmd) => {
       try {
         const options = getEffectiveOptions(rawOptions, cmd);
@@ -315,7 +310,6 @@ export function registerProfileCommands(program: Command): void {
             { ok: true, type: "local", message: "Local execution" },
             {
               json: options.json,
-              envelope: options.envelope,
               humanFormatter: () =>
                 `Target profile '${target.profileName || "local"}' is local (runs in local runtime).`,
             }
@@ -329,7 +323,6 @@ export function registerProfileCommands(program: Command): void {
         });
         renderResult(health, {
           json: options.json,
-          envelope: options.envelope,
           humanFormatter: () => {
             if (health.ok) {
               return `[OK] Connected to ${target.serverUrl} (${health.latencyMs}ms) - Version: ${health.version}, Status: ${health.status}`;

@@ -22,7 +22,6 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
 - `-v, -V, --version`：打印 CLI 工具版本号并退出。
 - `-h, --help`：打印命令帮助说明并退出。
 - `--json`：以标准 JSON 格式输出结果。
-- `--envelope`：将 JSON 输出包装为标准信封结构对象（包含 `ok: true, data: T` 或 `ok: false, error: { code, message, details }`）。
 - `--data-dir <path>`：指定运行时数据库存储目录（覆盖默认的 `.actiondock/data/` 存储路径，仅隔离包级与全局 SQLite 数据库）。
 - `ACTIONDOCK_HOME=<path>`（环境变量）：重定向 ActionDock 用户根目录基准，用于彻底隔离全局环境配置（`profiles.json`）、包注册表（`registry.json`）与安全证书（`certs/`）。
 
@@ -61,13 +60,13 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
 
 - 能力检索与意图发现 (`ad info`)：
   ```bash
-  ad info [patterns...] [-i, --intent <pattern>] [--tree] [--fallback] [--no-fallback] [-P, --package <id>] [--profile <name>] [--server <url>] [--token <token>] [--data-dir <path>] [--json] [--envelope]
+  ad info [patterns...] [-i, --intent <pattern>] [--tree] [--fallback] [--no-fallback] [-P, --package <id>] [--profile <name>] [--server <url>] [--token <token>] [--data-dir <path>] [--json]
   ```
   能力发现的首选入口。支持模糊意图过滤与通过 `--tree` 打印层级挂载依赖树。
 
 - 环境诊断与体检 (`ad doctor`)：
   ```bash
-  ad doctor [-P, --package <id>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--data-dir <path>] [--json] [--envelope]
+  ad doctor [-P, --package <id>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--data-dir <path>] [--json]
   ```
   检查运行时环境、底层 SQLite 存储状态、配置就绪度及全局链接有效性。
 
@@ -77,23 +76,23 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
 
 - 列出 Action 清单 (`ad list` / `ad action list`)：
   ```bash
-  ad list [patterns...] [-i, --intent <pattern>] [--fallback] [--no-fallback] [-P, --package <id>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--data-dir <path>] [--json] [--envelope]
+  ad list [patterns...] [-i, --intent <pattern>] [--fallback] [--no-fallback] [-P, --package <id>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--data-dir <path>] [--json]
   ```
   检索并列出当前包、工作区或远端服务中已注册的 Action 清单。
 
 - 查看 Action 详情与模式规范 (`ad describe` / `ad action describe`)：
   ```bash
-  ad describe <id> [-P, --package <id>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--data-dir <path>] [--json] [--envelope]
+  ad describe <id> [-P, --package <id>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--data-dir <path>] [--json]
   ```
   调阅指定 Action 的输入输出模式规范、描述及依赖定义。
 
 - 执行 Action (`ad run` / `ad action run`)：
   ```bash
-  ad run <id> [-P, --package <id>] [-i, --input <json> | -f, --input-file <path|->] [-c, --config <key=value...>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--timeout <duration>] [--request-id <id>] [--async] [--data-dir <path>] [--json] [--envelope]
+  ad run <id> [-P, --package <id>] [-i, --input <json> | -f, --input-file <path|->] [-c, --config <key=value...>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--timeout <duration>] [--request-id <id>] [--async] [--data-dir <path>] [--json]
   ```
   本地或远程执行指定 Action，支持 `--async` 异步启动。
   - 默认原始输出：默认直接将结果正文内容（如 `content`、`text`、`message` 或文本标量）输出至 stdout，元数据输出至 stderr，保留原始格式与真实换行；失败时错误输出至 stderr 并以退出码 1 退出。
-  - 机器信封：指定 `--json`（或 `--envelope`）输出标准 JSON 执行信封（`{ ok: true, data: ... }` / `{ ok: false, error: ... }`）。
+  - 机器信封：指定 `--json` 输出标准 JSON 执行信封（`{ ok: true, data: ... }` / `{ ok: false, error: ... }`）。
   - 参数契约：选项 `--input` 与 `--input-file` 严格互斥；未指定任何输入参数时，默认传入空对象 `{}`。
   - 简单输入：使用 `-i, --input <json>` 传递内联 JSON 字符串。
   - 文件输入：使用 `-f, --input-file <path>` 从 JSON 文件读取内容并解析。
@@ -102,13 +101,13 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
 
 - 校验 Action 模式与契约 (`ad validate` / `ad action validate`)：
   ```bash
-  ad validate [id] [-P, --package <id>] [--data-dir <path>] [--json] [--envelope]
+  ad validate [id] [-P, --package <id>] [--data-dir <path>] [--json]
   ```
   校验清单规范有效性、入参出参模式与引用的入口文件物理存在性。
 
 - 自动生成 TypeScript 类型声明 (`ad generate types`)：
   ```bash
-  ad generate types [--json] [--envelope]
+  ad generate types [--json]
   ```
   基于 `actiondock.json` 中声明的 Schema 自动生成强类型声明文件（`.actiondock/generated/actions.d.ts`）。
 
@@ -174,13 +173,13 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
 
 - 安装并锁定依赖 (`ad add`)：
   ```bash
-  ad add <package> [--allow-install-scripts] [-D, --dev] [-P, --package <path>] [--json] [--envelope]
+  ad add <package> [--allow-install-scripts] [-D, --dev] [-P, --package <path>] [--json]
   ```
   安装并锁定 Action 包依赖，受原子事务保护，自动更新单一事实源锁文件 `actiondock.lock.json`。
 
 - 移除依赖并更新锁定 (`ad remove`)：
   ```bash
-  ad remove <package> [-P, --package <path>] [--json] [--envelope]
+  ad remove <package> [-P, --package <path>] [--json]
   ```
   检测反向引用，安全移除 Action 包依赖，保留数据命名空间。
 

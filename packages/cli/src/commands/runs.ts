@@ -81,13 +81,11 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
-    .option("--envelope", "Wrap JSON output in standard envelope")
     .action(async (patterns: string[] = [], rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
       const effectiveIntent = resolveIntent(options.intent, patterns);
       const shouldFallback = options.fallback !== false;
       const limit = Number.parseInt(options.limit, 10) || 20;
-
       const scope = resolveLocalRunScope(options.package);
 
       // 通过 Target 门面统一访问
@@ -96,10 +94,9 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
         context,
         async (target, resolved) => {
           const records = await target.listRuns({
-            packageId: scope.projConfig?.id || options.package,
+            packageId: options.package,
             actionId: options.action,
-            intent: effectiveIntent,
-            limit,
+            limit: 500,
           });
 
           // 若处于本地无项目环境且无任何软链接包，则直接输出友好提示
@@ -108,7 +105,6 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
             if (linked.length === 0) {
               renderResult([], {
                 json: options.json,
-                envelope: options.envelope,
                 humanFormatter: () => NO_PROJECT_NO_LINKED_MESSAGE,
                 context,
               });
@@ -127,7 +123,6 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
 
           renderResult(capped, {
             json: options.json,
-            envelope: options.envelope,
             humanFormatter: () => {
               let title = "Execution Runs";
               if (resolved.type === "remote") {
@@ -155,7 +150,6 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
   )
     .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
-    .option("--envelope", "Wrap JSON output in standard envelope")
     .action(async (id: string, rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
       if (!id) {
@@ -182,7 +176,6 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
 
           renderResult(run, {
             json: options.json,
-            envelope: options.envelope,
             humanFormatter: () => renderRunDetail(run),
             context,
           });
@@ -199,7 +192,6 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
   )
     .option("-r, --reason <reason>", "Reason for cancellation")
     .option("--json", "Output as JSON")
-    .option("--envelope", "Wrap JSON output in standard envelope")
     .action(async (id: string, rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
       if (!id) {
@@ -219,7 +211,6 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
         const isErrorOutcome = result.outcome === "not_found" || result.outcome === "not_owner";
         renderResult(result, {
           json: options.json,
-          envelope: options.envelope,
           humanFormatter: () => {
             if (result.outcome === "not_found") {
               return `Error: Run record '${id}' not found on remote server.`;
@@ -247,7 +238,6 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
   )
     .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
-    .option("--envelope", "Wrap JSON output in standard envelope")
     .action(async (rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
 
@@ -286,7 +276,6 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
           const payload = { ok: true, clearedCount: count };
           renderResult(payload, {
             json: options.json,
-            envelope: options.envelope,
             humanFormatter: () =>
               resolved.type === "remote"
                 ? `Cleared ${count} execution run(s) on remote server.`

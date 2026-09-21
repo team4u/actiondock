@@ -21,7 +21,7 @@ export * from "./commands";
 export async function main(argv: string[] = process.argv): Promise<number> {
   const program = createCliProgram();
 
-  const isMachine = argv.includes("--json") || argv.includes("--envelope");
+  const isMachine = argv.includes("--json");
 
   try {
     await program.parseAsync(argv);
@@ -36,7 +36,6 @@ export async function main(argv: string[] = process.argv): Promise<number> {
     // 复用 renderer 的 renderError 统一错误信封，消除手工拼装的双实现
     renderError(err, {
       json: isMachine,
-      envelope: isMachine,
     });
     process.exitCode = formatError(err).exitCode;
     return process.exitCode;

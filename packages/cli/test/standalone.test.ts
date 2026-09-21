@@ -75,7 +75,7 @@ describe("CLI - Standalone Mode Dispatcher", () => {
     expect(out).toContain("run");
   });
 
-  it("lists actions in json and envelope formats", async () => {
+  it("lists actions in json format", async () => {
     let jsonOut = "";
     const codeJson = await runStandaloneCli(["list", "--json"], {
       ...baseOptions,
@@ -85,16 +85,6 @@ describe("CLI - Standalone Mode Dispatcher", () => {
     const parsed = JSON.parse(jsonOut);
     expect(parsed.length).toBe(2);
     expect(parsed.some((a: any) => a.id === "greet")).toBe(true);
-
-    let envOut = "";
-    const codeEnv = await runStandaloneCli(["list", "--envelope"], {
-      ...baseOptions,
-      stdout: (msg) => (envOut += msg),
-    });
-    expect(codeEnv).toBe(ExitCode.SUCCESS);
-    const parsedEnv = JSON.parse(envOut);
-    expect(parsedEnv.ok).toBe(true);
-    expect(parsedEnv.data.length).toBe(2);
   });
 
   it("describes action specification and schema", async () => {

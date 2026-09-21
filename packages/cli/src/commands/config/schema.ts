@@ -25,7 +25,6 @@ export function registerConfigSchemaCommand(configCmd: Command, context?: CliCon
     .option("-P, --package <id>", "Target package ID or path")
     .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
-    .option("--envelope", "Wrap JSON output in standard envelope")
     .action(async (identifier: string | undefined, rawOptions: any, cmd: any) => {
       try {
         const options = getEffectiveOptions(rawOptions, cmd);
@@ -116,10 +115,9 @@ export function registerConfigSchemaCommand(configCmd: Command, context?: CliCon
           configs: items,
         };
 
-        if (options.json || options.envelope) {
+        if (options.json) {
           renderResult(result, {
             json: options.json,
-            envelope: options.envelope,
             context,
           });
         } else {

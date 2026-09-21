@@ -43,7 +43,7 @@ export function registerBuildCommand(program: Command, context?: CliContext): vo
         );
       }
 
-      const isMachine = Boolean(options.json || options.envelope);
+      const isMachine = Boolean(options.json);
       if (!isMachine) {
         writeStdout("Building Node.js delivery artifact...");
       }
@@ -70,7 +70,6 @@ export function registerBuildCommand(program: Command, context?: CliContext): vo
 
       renderResult(result, {
         json: isMachine,
-        envelope: options.envelope,
         humanFormatter: () => {
           const lines: string[] = [];
           lines.push(`[OK] Successfully built ${result.packageId} (v${result.version})`);

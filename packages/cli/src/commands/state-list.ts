@@ -58,7 +58,6 @@ export async function renderProjectScopedStateList(
     );
     renderResult(filterRes.items, {
       json: true,
-      envelope: options.envelope,
       context,
     });
     return;
@@ -68,7 +67,6 @@ export async function renderProjectScopedStateList(
 
   renderResult(filterRes.items, {
     json: options.json,
-    envelope: options.envelope,
     humanFormatter: () =>
       renderStateList(
         filterRes.items,
@@ -93,7 +91,6 @@ export async function renderLinkedPackagesStateList(args: StateListRenderArgs): 
       [],
       {
         json: options.json,
-        envelope: options.envelope,
         humanFormatter: () => NO_PROJECT_NO_LINKED_MESSAGE,
         context,
       }
@@ -131,7 +128,6 @@ export async function renderLinkedPackagesStateList(args: StateListRenderArgs): 
 
   renderResult(filterRes.items, {
     json: options.json,
-    envelope: options.envelope,
     humanFormatter: () =>
       renderStateList(
         filterRes.items,

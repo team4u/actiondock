@@ -20,7 +20,6 @@ export function registerGenerateCommands(program: Command, context?: CliContext)
     .command("types")
     .description("Generate .actiondock/generated/actions.d.ts from actiondock.json schema")
     .option("--json", "Output as JSON")
-    .option("--envelope", "Wrap JSON output in standard envelope")
     .action(async (rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
       const root = findProjectRoot();
@@ -38,7 +37,6 @@ export function registerGenerateCommands(program: Command, context?: CliContext)
 
         renderResult(result, {
           json: options.json,
-          envelope: options.envelope,
           humanFormatter: () => `[OK] Generated action types at ${filePath}\nManifest digest: ${digest}`,
           context,
         });

@@ -28,7 +28,7 @@ export function registerPackCommand(program: Command, context?: CliContext): voi
         );
       }
 
-      const isMachine = Boolean(options.json || options.envelope);
+      const isMachine = Boolean(options.json);
       if (!isMachine && !options.dryRun) {
         writeStdout("Packing Action package...");
       }
@@ -47,7 +47,6 @@ export function registerPackCommand(program: Command, context?: CliContext): voi
 
       renderResult(result, {
         json: isMachine,
-        envelope: options.envelope,
         humanFormatter: () => {
           const lines: string[] = [];
           if (options.dryRun) {

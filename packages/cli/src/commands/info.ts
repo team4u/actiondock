@@ -53,11 +53,10 @@ function remoteInfoToDetail(remoteInfo: any): ProjectDetailInfo {
  */
 function renderProjectDetailOutput(
   detail: ProjectDetailInfo,
-  options: { json?: boolean; envelope?: boolean; context?: CliContext }
+  options: { json?: boolean; context?: CliContext }
 ): void {
   renderResult(projectDetailToJson(detail), {
     json: options.json,
-    envelope: options.envelope,
     humanFormatter: () => renderProjectDetail(detail),
     context: options.context,
   });
@@ -81,14 +80,13 @@ export function registerInfoCommand(program: Command, context?: CliContext): voi
     .option("--fallback", "Enable fallback to full list when no items match intent")
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("--json", "Output information as JSON")
-    .option("--envelope", "Wrap JSON output in standard envelope")
     .option("--data-dir <path>", "Custom database storage directory")
     .action(async (patterns: string[] = [], rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
       const effectiveIntent = resolveIntent(options.intent, patterns);
       const { isMachine, shouldFallback } = resolveFallbackStrategy(options);
 
-      const outOpts = { json: options.json, envelope: options.envelope, context };
+      const outOpts = { json: options.json, context };
 
       // 远端服务目标分支
       const target = resolveTargetFromOptions(options, context);
@@ -141,7 +139,6 @@ export function registerInfoCommand(program: Command, context?: CliContext): voi
         const status = getRegistryStatus(context?.customHome);
         renderResult(status, {
           json: options.json,
-          envelope: options.envelope,
           humanFormatter: () => renderRegistryTree(status),
           context,
         });

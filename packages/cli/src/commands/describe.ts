@@ -24,7 +24,6 @@ export function attachDescribeCommand(parent: Command, context?: CliContext): Co
 
   return applyTargetOptions(cmd)
     .option("--json", "Output as JSON")
-    .option("--envelope", "Wrap JSON output in standard envelope")
     .option("--data-dir <path>", "Custom database storage directory")
     .action(async (id: string, rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
@@ -73,7 +72,6 @@ export function attachDescribeCommand(parent: Command, context?: CliContext): Co
 
           renderResult(detail, {
             json: options.json,
-            envelope: options.envelope,
             humanFormatter: () => renderActionDetail(detail),
             context,
           });

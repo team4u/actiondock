@@ -84,7 +84,7 @@ describe("CLI Authoring & Build Workflow", () => {
     expect(listPositionalProc.exitCode).toBe(0);
     expect(JSON.parse(listPositionalProc.stdout.toString()).length).toBe(1);
 
-    // In machine mode (--json / --envelope), no fallback by default when no match: returns empty array
+    // In machine mode (--json), no fallback by default when no match: returns empty array
     const listNoMatchProc = runCli(["list", "--intent", "nomatch", "--json"], tempDir);
     expect(listNoMatchProc.exitCode).toBe(0);
     expect(JSON.parse(listNoMatchProc.stdout.toString()).length).toBe(0);

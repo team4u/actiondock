@@ -76,16 +76,10 @@ describe("CLI - Envelope & Renderer Utilities", () => {
     expect(errorEnv.error?.details).toEqual({ id: 1 });
   });
 
-  it("formats json and renders envelope vs raw json", () => {
+  it("formats json with renderResult", () => {
     let out = "";
     renderResult({ key: "val" }, { json: true, context: { stdout: (m) => (out = m) } });
     expect(JSON.parse(out)).toEqual({ key: "val" });
-
-    let envOut = "";
-    renderResult({ key: "val" }, { envelope: true, context: { stdout: (m) => (envOut = m) } });
-    const parsedEnv = JSON.parse(envOut);
-    expect(parsedEnv.ok).toBe(true);
-    expect(parsedEnv.data).toEqual({ key: "val" });
   });
 
   it("renders error in human and machine formats", () => {

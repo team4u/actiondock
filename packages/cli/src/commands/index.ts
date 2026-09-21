@@ -48,8 +48,8 @@ export const CLI_VERSION = readCliVersion();
 /**
  * 递归注入全局通用选项。
  *
- * 输出纪律契约：--json/--envelope 对所有命令统一注入；已实现 renderResult
- * 数据输出的命令会消费它们，未实现机器输出的命令（init、link、test、new、
+ * 输出纪律契约：--json 对所有命令统一注入；已实现 renderResult
+ * 数据输出的命令会消费它，未实现机器输出的命令（init、link、test、new、
  * serve、mcp 等）将其作为无操作标志忽略，不影响人类输出行为。
  * 错误信封由顶层 main 的 renderError 统一兜底，与命令实现解耦。
  */
@@ -59,9 +59,6 @@ function applyCommonOptions(cmd: Command): void {
 
   if (!hasOpt("json")) {
     cmd.option("--json", "Output as JSON");
-  }
-  if (!hasOpt("envelope")) {
-    cmd.option("--envelope", "Wrap JSON output in standard envelope");
   }
   if (!hasOpt("dataDir") && !hasOpt("data-dir")) {
     cmd.option("--data-dir <path>", "Custom database storage directory");

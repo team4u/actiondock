@@ -163,7 +163,7 @@ describe("CLI Review & Machine Contract Regression", () => {
     expect(JSON.parse(noMatchActionProc.stdout.toString())).toEqual([]);
   });
 
-  it("supports common options passed before or after subcommands and envelope formatting", () => {
+  it("supports common options passed before or after subcommands", () => {
     // Before subcommand: ad --json list
     const preJson = runCli(["--json", "list"], tempDir, env);
     expect(preJson.exitCode).toBe(0);
@@ -175,20 +175,6 @@ describe("CLI Review & Machine Contract Regression", () => {
     expect(postJson.exitCode).toBe(0);
     const postJsonList = JSON.parse(postJson.stdout.toString());
     expect(Array.isArray(postJsonList)).toBe(true);
-
-    // Independent --envelope mode (without explicit --json): ad --envelope list
-    const preEnv = runCli(["--envelope", "list"], tempDir, env);
-    expect(preEnv.exitCode).toBe(0);
-    const preEnvData = JSON.parse(preEnv.stdout.toString());
-    expect(preEnvData.ok).toBe(true);
-    expect(Array.isArray(preEnvData.data)).toBe(true);
-
-    // After subcommand: ad list --envelope
-    const postEnv = runCli(["list", "--envelope"], tempDir, env);
-    expect(postEnv.exitCode).toBe(0);
-    const postEnvData = JSON.parse(postEnv.stdout.toString());
-    expect(postEnvData.ok).toBe(true);
-    expect(Array.isArray(postEnvData.data)).toBe(true);
   });
 
   it("respects custom --data-dir isolation for state and config", () => {
@@ -557,21 +543,17 @@ export default defineAction(async () => {
     expect(schemaData.missingCount).toBe(1);
   });
 
-  it("passes envelope option in ad build and ad pack", () => {
-    runCli(["init", "--id", "test.envelope-pass", "."], tempDir);
+  it("passes json option in ad build and ad pack", () => {
+    runCli(["init", "--id", "test.json-pass", "."], tempDir);
 
-    const packProc = runCli(["pack", "--dry-run", "--envelope"], tempDir);
+    const packProc = runCli(["pack", "--dry-run", "--json"], tempDir);
     expect(packProc.exitCode).toBe(0);
-    const packEnvelope = JSON.parse(packProc.stdout.toString());
-    expect(packEnvelope.ok).toBe(true);
-    expect(packEnvelope.data).toBeDefined();
-    expect(packEnvelope.data.packageId).toBe("test.envelope-pass");
+    const packData = JSON.parse(packProc.stdout.toString());
+    expect(packData.packageId).toBe("test.json-pass");
 
-    const buildProc = runCli(["build", "--envelope"], tempDir);
+    const buildProc = runCli(["build", "--json"], tempDir);
     expect(buildProc.exitCode).toBe(0);
-    const buildEnvelope = JSON.parse(buildProc.stdout.toString());
-    expect(buildEnvelope.ok).toBe(true);
-    expect(buildEnvelope.data).toBeDefined();
-    expect(buildEnvelope.data.packageId).toBe("test.envelope-pass");
+    const buildData = JSON.parse(buildProc.stdout.toString());
+    expect(buildData.packageId).toBe("test.json-pass");
   });
 });

@@ -25,7 +25,6 @@ export function registerConfigEnvCommand(configCmd: Command, context?: CliContex
       .option("-P, --package <id>", "Target package ID or path")
   )
     .option("--json", "Output as JSON")
-    .option("--envelope", "Wrap JSON output in standard envelope")
     .action(async (identifier: string | undefined, rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
       const targetPkg = identifier || options.package;
@@ -40,7 +39,6 @@ export function registerConfigEnvCommand(configCmd: Command, context?: CliContex
         });
         renderResult(res, {
           json: options.json,
-          envelope: options.envelope,
           humanFormatter: () => renderConfigEnv(res.envChecks || [], res.packageId),
           context,
         });
@@ -92,7 +90,6 @@ export function registerConfigEnvCommand(configCmd: Command, context?: CliContex
 
       renderResult(payload, {
         json: options.json,
-        envelope: options.envelope,
         humanFormatter: () => renderConfigEnv(envChecks, projConfig.id),
         context,
       });

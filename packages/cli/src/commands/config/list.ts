@@ -61,7 +61,6 @@ export function registerConfigListCommand(configCmd: Command, context?: CliConte
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
-    .option("--envelope", "Wrap JSON output in standard envelope")
     .action(async (patterns: string[] = [], rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
       const effectiveIntent = resolveIntent(options.intent, patterns);
@@ -89,7 +88,6 @@ export function registerConfigListCommand(configCmd: Command, context?: CliConte
 
         renderResult(entries, {
           json: options.json,
-          envelope: options.envelope,
           humanFormatter: () =>
             renderConfigList(
               entries,
@@ -127,7 +125,6 @@ export function registerConfigListCommand(configCmd: Command, context?: CliConte
 
           renderResult(filterRes.items, {
             json: options.json,
-            envelope: options.envelope,
             humanFormatter: () =>
               renderConfigList(
                 filterRes.items,
@@ -165,7 +162,6 @@ export function registerConfigListCommand(configCmd: Command, context?: CliConte
 
           renderResult(filterRes.items, {
             json: options.json,
-            envelope: options.envelope,
             humanFormatter: () =>
               renderConfigList(
                 filterRes.items,
@@ -192,7 +188,6 @@ export function registerConfigListCommand(configCmd: Command, context?: CliConte
 
         renderResult(filterRes.items, {
           json: options.json,
-          envelope: options.envelope,
           humanFormatter: () =>
             renderConfigList(
               filterRes.items,

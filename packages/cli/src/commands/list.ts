@@ -29,7 +29,6 @@ export function attachListCommand(parent: Command, context?: CliContext): Comman
     .option("--fallback", "Enable fallback to full list when no items match intent")
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("--json", "Output as JSON")
-    .option("--envelope", "Wrap JSON output in standard envelope")
     .option("--data-dir <path>", "Custom database storage directory")
     .action(async (patterns: string[] = [], rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
@@ -85,7 +84,7 @@ export function attachListCommand(parent: Command, context?: CliContext): Comman
           if (filterRes.isFallback && isMachine) {
             renderResult(
               { items: filterRes.items, isFallback: true, matchedCount: 0 },
-              { json: options.json, envelope: options.envelope, context }
+              { json: options.json, context }
             );
             return;
           }
@@ -99,7 +98,6 @@ export function attachListCommand(parent: Command, context?: CliContext): Comman
 
           renderResult(filterRes.items, {
             json: options.json,
-            envelope: options.envelope,
             humanFormatter: () =>
               renderActionList(
                 filterRes.items,

@@ -24,7 +24,6 @@ export function attachValidateCommand(parent: Command, context?: CliContext): Co
     .description("Validate action schemas and definitions")
     .option("-P, --package <id>", "Target package ID or path")
     .option("--json", "Output as JSON")
-    .option("--envelope", "Wrap JSON output in standard envelope")
     .option("--data-dir <path>", "Custom database storage directory")
     .action(async (id: string | undefined, rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
@@ -89,7 +88,6 @@ export function attachValidateCommand(parent: Command, context?: CliContext): Co
 
       renderResult(validationPayload, {
         json: options.json,
-        envelope: options.envelope,
         humanFormatter: () => renderActionValidation(results),
         context,
       });

@@ -13,7 +13,6 @@ export function registerDoctorCommand(program: Command, context?: CliContext): v
 
   applyTargetOptions(cmd)
     .option("--json", "Output diagnostics report in JSON format")
-    .option("--envelope", "Wrap JSON output in standard envelope")
     .action(async (rawOptions, cmd) => {
       try {
         const options = getEffectiveOptions(rawOptions, cmd);
@@ -35,7 +34,6 @@ export function registerDoctorCommand(program: Command, context?: CliContext): v
 
         renderResult(report, {
           json: options.json,
-          envelope: options.envelope,
           humanFormatter: () => {
             const lines: string[] = [];
             const title = target.type === "remote"

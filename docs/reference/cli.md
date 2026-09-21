@@ -22,7 +22,6 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
 - `-v, -V, --version`：打印 CLI 工具版本号并退出。
 - `-h, --help`：打印命令帮助说明并退出。
 - `--json`：以标准 JSON 格式输出结果。支持机器渲染的查询与执行命令（如 `list`、`describe`、`run`、`info`、`doctor`、`playbook show`、`validate` 等）会消费该选项；未实现机器输出的交互命令（如 `init`、`test`、`link`、`serve`、`mcp` 等）将其作为无操作选项忽略，不影响人类可读输出；发生异常时无论何种命令均统一由顶层错误处理器输出 JSON 错误信封。
-- `--envelope`：将 JSON 输出包装为标准信封结构对象（包含 `ok: true, data: T` 或 `ok: false, error: { code, message, details }`）。
 - `--data-dir <path>`：指定运行时数据库存储目录。由涉及 SQLite 持久化与状态存储的命令消费（包级运行时数据库 `<path>/<package-id>/runtime.db`、全局共享数据库 `<path>/global.db` 与目录排他锁 `<path>/.actiondock.data.lock`）。请注意本选项仅隔离运行期 SQLite 数据库，不影响属于用户主目录维度的全局配置与资产（如环境配置、软链接注册表及证书）。
 - `ACTIONDOCK_HOME=<path>`（环境变量）：指定 ActionDock 用户根目录（覆盖默认的系统用户主目录）。用于实现测试环境、持续集成及沙箱场景下的彻底隔离。包含以下内容：
   - 远端执行环境配置：`<path>/.actiondock/profiles.json`
@@ -75,13 +74,13 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
 
 - 能力检索与意图发现 (`ad info`)：
   ```bash
-  ad info [patterns...] [-i, --intent <pattern>] [--tree] [--fallback] [--no-fallback] [-P, --package <id>] [--profile <name>] [--server <url>] [--token <token>] [--data-dir <path>] [--json] [--envelope]
+  ad info [patterns...] [-i, --intent <pattern>] [--tree] [--fallback] [--no-fallback] [-P, --package <id>] [--profile <name>] [--server <url>] [--token <token>] [--data-dir <path>] [--json]
   ```
   智能体与开发者能力发现的首选入口。支持模糊匹配、正则意图过滤以及通过 `--tree` 打印层级依赖树。未找到匹配时在机器模式下返回空结果集合并保持退出码 0。
 
 - 环境诊断与体检 (`ad doctor`)：
   ```bash
-  ad doctor [-P, --package <id>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--data-dir <path>] [--json] [--envelope]
+  ad doctor [-P, --package <id>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--data-dir <path>] [--json]
   ```
   全面检查运行时环境、依赖状态、配置就绪度及全局链接有效性。
 
@@ -91,23 +90,23 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
 
 - 列出 Action 清单 (`ad list` / `ad action list`)：
   ```bash
-  ad list [patterns...] [-i, --intent <pattern>] [--fallback] [--no-fallback] [-P, --package <id>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--data-dir <path>] [--json] [--envelope]
+  ad list [patterns...] [-i, --intent <pattern>] [--fallback] [--no-fallback] [-P, --package <id>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--data-dir <path>] [--json]
   ```
   检索并列出当前包、工作区或远程服务中可用的 Action 清单。
 
 - 查看 Action 详情与模式规范 (`ad describe` / `ad action describe`)：
   ```bash
-  ad describe <id> [-P, --package <id>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--data-dir <path>] [--json] [--envelope]
+  ad describe <id> [-P, --package <id>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--data-dir <path>] [--json]
   ```
   查询指定 Action 的输入输出模式规范、描述及依赖定义。
 
 - 执行 Action (`ad run` / `ad action run`)：
   ```bash
-  ad run <id> [-P, --package <id>] [-i, --input <json> | -f, --input-file <path|->] [-c, --config <key=value...>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--timeout <duration>] [--request-id <id>] [--async] [--data-dir <path>] [--json] [--envelope]
+  ad run <id> [-P, --package <id>] [-i, --input <json> | -f, --input-file <path|->] [-c, --config <key=value...>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--timeout <duration>] [--request-id <id>] [--async] [--data-dir <path>] [--json]
   ```
   本地或远程执行指定 Action，支持 `--async` 异步启动（需远程服务支持）。
   - 输出模式：**默认采用原始文本输出**。直接将结果正文（如文件 `content`、`message`、`text` 或标量字符串）原始输出到 stdout（保留真实换行与格式排版，不进行 JSON 序列化转义），附加元数据（如 `lines`、`path`、`hasMore`）通过 stderr 输出；执行失败时在 stderr 输出错误详情并以退出码 1 退出。便于命令行直观阅读、LLM Agent 精确行号消费以及管道下游工具直接处理。
-  - 机器信封：添加 `--json`（或 `--envelope`）选项时，输出标准 JSON 结果信封（`{ "ok": true, "data": ... }`），失败时在 stdout 输出错误信封（`{ "ok": false, "error": ... }`）并以退出码 1 退出。
+  - 机器模式：添加 `--json` 选项时，输出标准 JSON 结果信封（`{ "ok": true, "data": ... }`），失败时在 stdout 输出错误信封（`{ "ok": false, "error": ... }`）并以退出码 1 退出。
   - 参数契约：选项 `--input` 与 `--input-file` 严格互斥；未指定任何输入参数时，默认传入空对象 `{}`。
   - 简单输入：使用 `-i, --input <json>` 传递内联 JSON 字符串，适合简易标量入参。
   - 文件输入：使用 `-f, --input-file <path>` 从 JSON 文件读取内容并解析，适合复杂多层嵌套对象。
@@ -116,13 +115,13 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
 
 - 校验 Action 模式与语法 (`ad validate` / `ad action validate`)：
   ```bash
-  ad validate [id] [-P, --package <id>] [--data-dir <path>] [--json] [--envelope]
+  ad validate [id] [-P, --package <id>] [--data-dir <path>] [--json]
   ```
   校验指定包或动作的元数据清单规范与输入输出 Schema 定义。
 
 - 自动生成 TypeScript 类型声明 (`ad generate types`)：
   ```bash
-  ad generate types [--json] [--envelope]
+  ad generate types [--json]
   ```
   基于 `actiondock.json` 中声明的 `inputSchema` 与 `outputSchema` 自动生成强类型 TypeScript 声明文件（`.actiondock/generated/actions.d.ts`）。
 
@@ -138,13 +137,13 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
 
 - 安装并锁定依赖 (`ad add`)：
   ```bash
-  ad add <package> [--allow-install-scripts] [-D, --dev] [-P, --package <path>] [--json] [--envelope]
+  ad add <package> [--allow-install-scripts] [-D, --dev] [-P, --package <path>] [--json]
   ```
   安装并锁定 Action 包依赖，同步更新 `package.json`、`actiondock.json` 与 `actiondock.lock.json`，受原子事务快照保护。
 
 - 移除依赖并更新锁定 (`ad remove`)：
   ```bash
-  ad remove <package> [-P, --package <path>] [--json] [--envelope]
+  ad remove <package> [-P, --package <path>] [--json]
   ```
   从项目中移除指定的 Action 包依赖，并同步更新 `actiondock.lock.json`。
 
@@ -177,17 +176,17 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
 
 - 列出规程清单 (`ad playbook list`)：
   ```bash
-  ad playbook list [patterns...] [-i, --intent <pattern>] [--no-fallback] [-P, --package <id>] [--data-dir <path>] [--json] [--envelope]
+  ad playbook list [patterns...] [-i, --intent <pattern>] [--no-fallback] [-P, --package <id>] [--data-dir <path>] [--json]
   ```
 
 - 查看规程详细内容 (`ad playbook show`)：
   ```bash
-  ad playbook show <id> [-P, --package <id>] [--data-dir <path>] [--json] [--envelope]
+  ad playbook show <id> [-P, --package <id>] [--data-dir <path>] [--json]
   ```
 
 - 校验规程语法与引用 (`ad playbook validate`)：
   ```bash
-  ad playbook validate [id] [-P, --package <id>] [--data-dir <path>] [--json] [--envelope]
+  ad playbook validate [id] [-P, --package <id>] [--data-dir <path>] [--json]
   ```
 
 - 创建新规程模板 (`ad playbook create`)：
@@ -203,23 +202,23 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
 - 配置管理 (`ad config`)：
   ```bash
   # 列出配置项
-  ad config list [patterns...] [-g, --global] [-P, --package <id>] [-i, --intent <pattern>] [--reveal] [--data-dir <path>] [--json] [--envelope]
+  ad config list [patterns...] [-g, --global] [-P, --package <id>] [-i, --intent <pattern>] [--reveal] [--data-dir <path>] [--json]
   # 读取配置值
-  ad config get <key> [-g, --global] [-P, --package <id>] [--reveal] [--data-dir <path>] [--json] [--envelope]
+  ad config get <key> [-g, --global] [-P, --package <id>] [--reveal] [--data-dir <path>] [--json]
   # 写入配置键值
   ad config set <key> <value> [-g, --global] [-P, --package <id>] [--data-dir <path>]
   # 删除配置项
   ad config delete <key> [-g, --global] [-P, --package <id>] [--data-dir <path>]
   # 查看项目配置声明模式
-  ad config schema [identifier] [-P, --package <id>] [--data-dir <path>] [--json] [--envelope]
+  ad config schema [identifier] [-P, --package <id>] [--data-dir <path>] [--json]
   ```
 
 - 状态持久化管理 (`ad state`)：
   ```bash
   # 列出状态键名
-  ad state list [prefix] [-P, --package <id>] [-a, --action <actionId>] [-n, --namespace <ns>] [-i, --intent <pattern>] [--data-dir <path>] [--json] [--envelope]
+  ad state list [prefix] [-P, --package <id>] [-a, --action <actionId>] [-n, --namespace <ns>] [-i, --intent <pattern>] [--data-dir <path>] [--json]
   # 读取状态值
-  ad state get <key> [-P, --package <id>] [-a, --action <actionId>] [-n, --namespace <ns>] [--data-dir <path>] [--json] [--envelope]
+  ad state get <key> [-P, --package <id>] [-a, --action <actionId>] [-n, --namespace <ns>] [--data-dir <path>] [--json]
   # 写入状态键值（支持存活时间秒数）
   ad state set <key> <value> [-P, --package <id>] [-a, --action <actionId>] [-n, --namespace <ns>] [--ttl <seconds>] [--data-dir <path>]
   # 删除状态项
@@ -234,12 +233,12 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
 
 - 列出执行历史 (`ad runs list`)：
   ```bash
-  ad runs list [patterns...] [-P, --package <id>] [-i, --intent <pattern>] [-a, --action <actionId>] [-n, --limit <count>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--no-fallback] [--data-dir <path>] [--json] [--envelope]
+  ad runs list [patterns...] [-P, --package <id>] [-i, --intent <pattern>] [-a, --action <actionId>] [-n, --limit <count>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--no-fallback] [--data-dir <path>] [--json]
   ```
 
 - 查看单次执行详情 (`ad runs show`)：
   ```bash
-  ad runs show <id> [-P, --package <id>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--data-dir <path>] [--json] [--envelope]
+  ad runs show <id> [-P, --package <id>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--data-dir <path>] [--json]
   ```
 
 - 取消正在运行的任务 (`ad runs cancel`)：
@@ -277,14 +276,14 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
 
 - 列出所有环境配置 (`ad profile list`)：
   ```bash
-  ad profile list [patterns...] [-i, --intent <pattern>] [--reveal] [--fallback] [--no-fallback] [--json] [--envelope]
+  ad profile list [patterns...] [-i, --intent <pattern>] [--reveal] [--fallback] [--no-fallback] [--json]
   ```
   列出所有已配置的远程环境节点，支持通过 `--reveal` 明文展示敏感 Token。
 
 - 查看环境配置详情 (`ad profile get` 或 `ad profile show`)：
   ```bash
-  ad profile get <name> [--reveal] [--json] [--envelope]
-  ad profile show <name> [--reveal] [--json] [--envelope]
+  ad profile get <name> [--reveal] [--json]
+  ad profile show <name> [--reveal] [--json]
   ```
 
 - 添加环境配置 (`ad profile add`)：
@@ -308,7 +307,7 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
 
 - 探测远端环境连通性 (`ad profile test`)：
   ```bash
-  ad profile test <name> [--json] [--envelope]
+  ad profile test <name> [--json]
   ```
 
 - 移除环境配置 (`ad profile remove`)：
@@ -336,9 +335,9 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
 
 ---
 
-## 标准信封输出格式
+## 标准机器输出格式
 
-使用 `--envelope` 选项或执行 Action 返回时，标准输出提供一致的信封包装：
+使用 `--json` 选项执行 Action 或发生错误时，标准输出提供一致的信封包装：
 
 ### 成功信封
 ```json

@@ -99,7 +99,6 @@ ad pack
 - `-v, -V, --version`：打印版本号并退出。
 - `-h, --help`：打印命令帮助并退出。
 - `--json`：以标准 JSON 格式输出结果。
-- `--envelope`：将输出包装为标准信封结构对象（包含 `ok: true, data: T` 或 `ok: false, error: { code, message, details }`）。
 - `--data-dir <path>`：指定运行时数据库存储目录（包级 `runtime.db`、全局 `global.db` 与目录排他锁），实现多测试或多任务运行数据隔离。注意：本选项仅隔离 SQLite 数据文件，环境配置（profile）与全局注册表（registry）属于用户根目录资产，不受 `--data-dir` 影响。
 - `ACTIONDOCK_HOME=<path>`（环境变量）：指定 ActionDock 用户根目录基准（默认对应操作系统的用户主目录）。如需隔离环境配置 `profiles.json`、全局注册表 `registry.json` 或本地证书，请通过设置此环境变量实现沙箱与自动化测试隔离。
 
@@ -137,10 +136,10 @@ $data = @{
 $data | ConvertTo-Json -Depth 100 | ad run complex-action --input-file -
 ```
 
-### Action 输出模式与机器信封
+### Action 输出模式与机器模式
 
 - **默认原始纯文本输出**：`ad run` 默认采用面向终端人类阅读与 LLM Agent 上下文消费的原始输出模式。直接将执行结果正文内容（如文件 `content`、`text`、`message` 或标量字符串）输出至 stdout（保留真实换行且无 JSON 转义），相关元数据（如文件路径、行号范围、截断标记）独立输出至 stderr，符合 Unix 管道安全原则。执行失败时在 stderr 输出错误详情并以退出码 1 退出。
-- **机器 JSON 信封 (`--json` / `--envelope`)**：当需要以程序化方式消费、获取完整结构化信封或被外部系统集成时，传入 `--json`（或 `--envelope`）。此时输出标准 JSON 结果信封（包含 `ok`、`runId`、`data` 或 `error`）。
+- **机器 JSON 格式 (`--json`)**：当需要以程序化方式消费、获取完整结构化数据或被外部系统集成时，传入 `--json`。此时输出标准 JSON 结果（包含 `ok`、`runId`、`data` 或 `error`）。
 
 ---
 

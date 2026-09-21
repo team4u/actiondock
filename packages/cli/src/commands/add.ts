@@ -51,7 +51,6 @@ export function registerAddCommand(program: Command, context?: CliContext): void
     .option("-D, --dev", "Install package as development dependency")
     .option("-P, --package <path>", "Target project directory path")
     .option("--json", "Output as JSON")
-    .option("--envelope", "Wrap JSON output in standard envelope")
     .action(async (packageSpec: string, rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
       const root = options.package ? resolve(options.package) : findProjectRoot();
@@ -173,7 +172,6 @@ export function registerAddCommand(program: Command, context?: CliContext): void
 
         renderResult(resultPayload, {
           json: options.json,
-          envelope: options.envelope,
           humanFormatter: () =>
             `Successfully added and locked '${resultPayload.packageId}' (v${resultPayload.version}) from ${resultPayload.npmPackage}.`,
           context,

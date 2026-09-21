@@ -183,7 +183,7 @@ export async function executeAction(
       options,
       context,
       async (target) => {
-        const isMachine = Boolean(options.json || options.envelope);
+        const isMachine = Boolean(options.json);
 
         if (options.async) {
           const ticket = await target.startAction(targetRef, input as JsonValue, {
@@ -262,7 +262,6 @@ export function attachRunCommand(parent: Command, context?: CliContext): Command
     .option("--async", "Execute asynchronously in background (requires remote server or profile)")
     .option("--data-dir <path>", "Custom database directory")
     .option("--json", "Output as JSON")
-    .option("--envelope", "Wrap JSON output in standard envelope")
     .action(async (id: string, rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
       await executeAction(id, options, context);

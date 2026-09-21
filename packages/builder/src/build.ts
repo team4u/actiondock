@@ -205,7 +205,7 @@ const argv = process.argv.slice(2);
 
 // 1. 监督进程接管参数校验，明确拒绝 --async
 if (argv.includes("--async")) {
-  const isJson = argv.includes("--json") || argv.includes("--envelope");
+  const isJson = argv.includes("--json");
   if (isJson) {
     console.log(
       JSON.stringify(

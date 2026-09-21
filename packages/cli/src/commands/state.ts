@@ -75,7 +75,6 @@ export function registerStateCommands(program: Command, context?: CliContext): v
 
         renderResult(keys, {
           json: options.json,
-          envelope: options.envelope,
           humanFormatter: () =>
             renderStateList(
               keys,
@@ -139,7 +138,6 @@ export function registerStateCommands(program: Command, context?: CliContext): v
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
-    .option("--envelope", "Wrap JSON output in standard envelope")
     .action(handleListKeys);
 
   // state keys 别名
@@ -156,7 +154,6 @@ export function registerStateCommands(program: Command, context?: CliContext): v
     .option("--no-fallback", "Disable fallback")
     .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
-    .option("--envelope", "Wrap JSON output in standard envelope")
     .action(handleListKeys);
 
   // state get <key>
@@ -170,7 +167,6 @@ export function registerStateCommands(program: Command, context?: CliContext): v
   )
     .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
-    .option("--envelope", "Wrap JSON output in standard envelope")
     .action(async (rawKey: string, rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
       if (!rawKey) {
@@ -202,7 +198,6 @@ export function registerStateCommands(program: Command, context?: CliContext): v
               { key: rawKey, value: val, namespace: (entry as any).namespace || effectiveNamespace },
               {
                 json: options.json,
-                envelope: options.envelope,
                 humanFormatter: () => (typeof val === "object" ? JSON.stringify(val, null, 2) : String(val)),
                 context,
               }
@@ -230,7 +225,6 @@ export function registerStateCommands(program: Command, context?: CliContext): v
             { key: rawKey, value: val, namespace: matchedNamespace },
             {
               json: options.json,
-              envelope: options.envelope,
               humanFormatter: () => (typeof val === "object" ? JSON.stringify(val, null, 2) : String(val)),
               context,
             }

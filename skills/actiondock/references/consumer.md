@@ -113,7 +113,7 @@ npx skills remove <skill-name>
 - **第四阶段：确定性执行调用**：
   - 传参安全规范：简单标量参数可使用 `--input '{"key": "val"}'`；包含对象、数组或引号多行文本的复杂参数，必须先写入临时 JSON 文件，再通过 `ad run <id> --input-file /tmp/input.json` 传递，杜绝终端引号转义损坏。自动化脚本或管道调用可使用标准输入 `cat /tmp/input.json | ad run <id> --input-file -`。选项 `--input` 与 `--input-file` 严格互斥，未指定输入时默认为 `{}`。
   - 默认原始文本输出：`ad run` 默认直接将结果正文内容（如 `content`、`text`、`message` 或标量字符串）输出至 stdout（保留真实换行且无 JSON 转义），元数据输出至 stderr。极佳适配文件查阅、代码阅读与 Unix 管道消费。
-  - 机器 JSON 信封输出：需结构化解析完整返回时传入 `--json`（或 `--envelope`），终端输出标准 JSON 信封。
+  - 机器 JSON 信封输出：需结构化解析完整返回时传入 `--json`，终端输出标准 JSON 信封。
   - 异步长任务支持：耗时操作添加 `--async` 参数（如 `ad run <action> --input-file <path> --async --json`），获取包含 `runId` 的票据。
 - **第五阶段：结果校验与错误处置**：
   - 默认模式：直接消费 stdout 纯文本；若执行失败，stderr 输出错误详情并伴随非 0 退出码。

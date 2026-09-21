@@ -34,7 +34,6 @@ export function registerConfigGetCommand(configCmd: Command, context?: CliContex
     .option("--reveal, --show-secrets", "Reveal plain text values for secrets")
     .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
-    .option("--envelope", "Wrap JSON output in standard envelope")
     .action(async (key: string, rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
       if (!key) {
@@ -63,7 +62,6 @@ export function registerConfigGetCommand(configCmd: Command, context?: CliContex
 
         renderResult(payload, {
           json: options.json,
-          envelope: options.envelope,
           humanFormatter: () => (displayValue !== undefined ? String(displayValue) : ""),
           context,
         });
@@ -93,7 +91,6 @@ export function registerConfigGetCommand(configCmd: Command, context?: CliContex
 
           renderResult(payload, {
             json: options.json,
-            envelope: options.envelope,
             humanFormatter: () => (displayValue !== undefined ? String(displayValue) : ""),
             context,
           });
@@ -121,7 +118,6 @@ export function registerConfigGetCommand(configCmd: Command, context?: CliContex
 
         renderResult(payload, {
           json: options.json,
-          envelope: options.envelope,
           humanFormatter: () => (displayValue !== undefined ? String(displayValue) : ""),
           context,
         });

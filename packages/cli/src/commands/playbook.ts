@@ -61,12 +61,11 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
   )
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("--json", "Output as JSON")
-    .option("--envelope", "Wrap JSON output in standard envelope")
     .action(async (patterns: string[] = [], rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
       const effectiveIntent = resolveIntent(options.intent, patterns);
       const shouldFallback = options.fallback !== false;
-      const isMachine = Boolean(options.json || options.envelope);
+      const isMachine = Boolean(options.json);
 
       // 1. 远端服务分支
       const target = resolveTargetFromOptions(options, context);
@@ -81,7 +80,6 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
 
         renderResult(remotePbs, {
           json: options.json,
-          envelope: options.envelope,
           humanFormatter: () =>
             renderPlaybookList(
               remotePbs,
@@ -124,14 +122,13 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
         if (filterRes.isFallback && isMachine) {
           renderResult(
             { items: filterRes.items, isFallback: true, matchedCount: 0 },
-            { json: options.json, envelope: options.envelope, context }
+            { json: options.json, context }
           );
           return;
         }
 
         renderResult(filterRes.items, {
           json: options.json,
-          envelope: options.envelope,
           humanFormatter: () =>
             renderPlaybookList(
               filterRes.items,
@@ -151,7 +148,6 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
           [],
           {
             json: options.json,
-            envelope: options.envelope,
             humanFormatter: () => NO_PROJECT_NO_LINKED_MESSAGE,
             context,
           }
@@ -228,14 +224,13 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
       if (isFallback && isMachine) {
         renderResult(
           { packages: filteredPackages, isFallback: true, matchedCount: 0 },
-          { json: options.json, envelope: options.envelope, context }
+          { json: options.json, context }
         );
         return;
       }
 
       renderResult(filteredPackages, {
         json: options.json,
-        envelope: options.envelope,
         humanFormatter: () => {
           const lines: string[] = ["Linked Playbooks:\n"];
           for (const pkg of filteredPackages) {
@@ -258,7 +253,6 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
       .option("-P, --package <id>", "Target package ID or path")
   )
     .option("--json", "Output as JSON")
-    .option("--envelope", "Wrap JSON output in standard envelope")
     .action(async (id: string, rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
       if (!id) {
@@ -275,7 +269,6 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
         });
         renderResult(detail, {
           json: options.json,
-          envelope: options.envelope,
           humanFormatter: () => renderPlaybookDetail(detail),
           context,
         });
@@ -311,7 +304,6 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
 
       renderResult(detail, {
         json: options.json,
-        envelope: options.envelope,
         humanFormatter: () => renderPlaybookDetail(detail),
         context,
       });
@@ -323,7 +315,6 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
     .description("Validate playbook format and action references (in current project or linked packages)")
     .option("-P, --package <id>", "Target package ID or path")
     .option("--json", "Output as JSON")
-    .option("--envelope", "Wrap JSON output in standard envelope")
     .action(async (id: string | undefined, rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
 
@@ -436,7 +427,6 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
         { valid: allValid, results },
         {
           json: options.json,
-          envelope: options.envelope,
           humanFormatter: () => {
             const lines: string[] = [];
             for (const r of results) {

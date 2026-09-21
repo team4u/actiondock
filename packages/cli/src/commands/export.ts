@@ -120,7 +120,7 @@ export function registerExportCommand(program: Command, context?: CliContext): v
         );
       }
 
-      const isMachine = Boolean(options.json || options.envelope);
+      const isMachine = Boolean(options.json);
 
       try {
         const { exportCompositeSkill, exportSkill, exportSkillBatch } = await import("@actiondock/builder");
@@ -145,7 +145,6 @@ export function registerExportCommand(program: Command, context?: CliContext): v
 
           renderResult(result, {
             json: isMachine,
-            envelope: options.envelope,
             humanFormatter: () => {
               const lines: string[] = [];
               lines.push(`[OK] Successfully exported Composite Skill: ${result.bundleName}`);
@@ -188,7 +187,6 @@ export function registerExportCommand(program: Command, context?: CliContext): v
 
           renderResult(batchRes, {
             json: isMachine,
-            envelope: options.envelope,
             humanFormatter: () => {
               const lines: string[] = [];
               lines.push(`[OK] Successfully batch exported ${batchRes.results.length} Skill packages to: ${batchRes.outDir}`);
@@ -223,7 +221,6 @@ export function registerExportCommand(program: Command, context?: CliContext): v
 
         renderResult(result, {
           json: isMachine,
-          envelope: options.envelope,
           humanFormatter: () => {
             const lines: string[] = [];
             lines.push(`[OK] Successfully exported ${result.mode === "node" ? "Node Directory" : "Source"} Skill: ${result.packageId} (v${result.version})`);

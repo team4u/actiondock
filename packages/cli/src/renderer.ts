@@ -87,25 +87,14 @@ export function renderResult<T>(
   data: T,
   options: {
     json?: boolean;
-    envelope?: boolean;
     humanFormatter?: () => string;
     context?: CliContext;
   }
 ): void {
-  const isJson = Boolean(options.json || options.envelope);
-  const useEnvelope = Boolean(options.envelope || (isJson && options.context?.defaultEnvelope));
+  const isJson = Boolean(options.json);
 
   if (isJson) {
-    if (useEnvelope) {
-      // 避免重复包装已有信封
-      if (typeof data === "object" && data !== null && "ok" in data) {
-        writeStdout(formatJson(data), options.context);
-      } else {
-        writeStdout(formatJson(createSuccessEnvelope(data)), options.context);
-      }
-    } else {
-      writeStdout(formatJson(data), options.context);
-    }
+    writeStdout(formatJson(data), options.context);
   } else {
     if (options.humanFormatter) {
       writeStdout(options.humanFormatter(), options.context);
@@ -122,12 +111,11 @@ export function renderError(
   err: unknown,
   options: {
     json?: boolean;
-    envelope?: boolean;
     context?: CliContext;
   }
 ): void {
   const formatted = formatError(err);
-  const isMachine = Boolean(options.json || options.envelope || options.context?.defaultEnvelope);
+  const isMachine = Boolean(options.json);
 
   if (isMachine) {
     const errorEnv = createErrorEnvelope(formatted.code, formatted.message, formatted.details);

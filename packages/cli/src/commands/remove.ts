@@ -24,7 +24,6 @@ export function registerRemoveCommand(program: Command, context?: CliContext): v
     .description("Remove an Action package dependency and update actiondock.lock.json")
     .option("-P, --package <path>", "Target project directory path")
     .option("--json", "Output as JSON")
-    .option("--envelope", "Wrap JSON output in standard envelope")
     .action(async (packageIdentifier: string, rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
       const root = options.package ? resolve(options.package) : findProjectRoot();
@@ -157,7 +156,6 @@ export function registerRemoveCommand(program: Command, context?: CliContext): v
 
         renderResult(resultPayload, {
           json: options.json,
-          envelope: options.envelope,
           humanFormatter: () =>
             `Successfully removed '${resultPayload.packageId}'.\n[INFO] Retained configuration and state namespace for package '${resultPayload.packageId}'.`,
           context,
