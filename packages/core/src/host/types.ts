@@ -73,6 +73,9 @@ export interface ActionDockHostOptions {
  * 作为多包环境下的全局协调中枢，负责多包生命周期、完全限定引用路由、依赖校验与配额管理。
  */
 export interface ActionDockHost {
+  /** 宿主容器初始化配置项（只读） */
+  readonly options?: ActionDockHostOptions;
+
   /** 获取所有已注册包的元数据信息列表 */
   info(): Promise<PackageInfo[]>;
 

@@ -236,6 +236,35 @@ describe("ActionDockTarget 统一调用门面", () => {
 
       await target.close();
     });
+
+    it("无包宿主在指定 dataDir 时正确隔离全局配置至目标目录下的 global.db", async () => {
+      const tmpDir = mkdtempSync(join(tmpdir(), "ad-target-datadir-test-"));
+      try {
+        const host = await createActionDockHost({
+          autoLoadCurrentProject: false,
+          scanLinkedPackages: false,
+          dataDir: tmpDir,
+        });
+
+        const target = new LocalActionDockTarget(host);
+        await target.setConfig("global", "isolated_key", "isolated_value");
+
+        const view = await target.getConfig("global", "isolated_key");
+        expect(view.configured).toBe(true);
+        expect(view.value).toBe("isolated_value");
+
+        const list = await target.listConfig("global");
+        expect(list.some((item) => item.key === "isolated_key")).toBe(true);
+
+        await target.close();
+
+        // 验证 global.db 确实生成在 tmpDir 目录下
+        const { existsSync } = await import("node:fs");
+        expect(existsSync(join(tmpDir, "global.db"))).toBe(true);
+      } finally {
+        rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
   });
 
   describe("createActionDockTarget 工厂函数决策分支", () => {

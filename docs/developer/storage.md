@@ -44,8 +44,11 @@ ActionDock 2.0 采用内嵌式 SQLite（基于 Node.js 原生 `node:sqlite`）�
 
 ## 存储文件路径规则
 
-- **包级存储**：包内数据统一存储于 `~/.actiondock/data/<package-id>/runtime.db`（若显式指定 `--data-dir <path>` 则为 `<path>/<package-id>/runtime.db`）。
-- **全局共享存储**：存储于用户主目录下的 `~/.actiondock/global.db`，跨所有 Action Package 共享公共配置（如全局 API Token）。
+ActionDock 区分运行期数据库存储与用户级全局资产：
+
+- 包级持久化存储：包内数据统一存储于 `~/.actiondock/data/<package-id>/runtime.db`（若显式指定 `--data-dir <path>` 则重定向至 `<path>/<package-id>/runtime.db`）。
+- 全局共享配置存储：全局键值配置存储于 `~/.actiondock/global.db`（若显式指定 `--data-dir <path>` 则重定向至 `<path>/global.db`）。
+- 用户级全局资产隔离：环境配置文件（`profiles.json`）、全局软链接注册表（`registry.json`）与本地通信证书（`certs/`）统一存放在 ActionDock 用户根目录下。若需对其进行测试隔离或多租户沙箱隔离，需设置环境变量 `ACTIONDOCK_HOME=<path>`，此时所有根目录资产将重定向至 `<path>/.actiondock/`。
 
 ---
 

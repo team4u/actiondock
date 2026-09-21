@@ -228,6 +228,8 @@ export class LocalActionDockTarget implements ActionDockTarget {
     }
   }
 
+  private fallbackGlobalStorage?: RuntimeStorage;
+
   private getGlobalStorage(): RuntimeStorage {
     if ("globalStorage" in this.target && (this.target as any).globalStorage) {
       return (this.target as any).globalStorage;
@@ -236,10 +238,13 @@ export class LocalActionDockTarget implements ActionDockTarget {
     for (const app of apps) {
       if (app.globalStorage) return app.globalStorage;
     }
-    return createGlobalStorage({
-      dataDir: (this.target as any).options?.dataDir,
-      customHome: (this.target as any).options?.customHome,
-    });
+    if (!this.fallbackGlobalStorage) {
+      this.fallbackGlobalStorage = createGlobalStorage({
+        dataDir: (this.target as any).options?.dataDir,
+        customHome: (this.target as any).options?.customHome,
+      });
+    }
+    return this.fallbackGlobalStorage;
   }
 
   private findDeclaredConfigItem(key: string): ConfigItemDefinition | undefined {
@@ -416,6 +421,13 @@ export class LocalActionDockTarget implements ActionDockTarget {
   }
 
   async close(options?: { timeoutMs?: number }): Promise<void> {
+    try {
+      this.fallbackGlobalStorage?.close();
+    } catch {
+      // 忽略兜底全局存储关闭异常
+    }
+    this.fallbackGlobalStorage = undefined;
+
     if (options?.timeoutMs && options.timeoutMs > 0) {
       let timer: any;
       const timeoutPromise = new Promise<never>((_, reject) => {

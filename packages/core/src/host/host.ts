@@ -74,6 +74,7 @@ function isActionDockApp(item: unknown): item is ActionDockApp {
  */
 export class DefaultActionDockHost implements ActionDockHost {
   public readonly hostSessionId: string;
+  public readonly options: ActionDockHostOptions;
   private apps = new Map<string, ActionDockApp>();
   private readonly internallyCreatedApps = new Set<ActionDockApp>();
   private activeSubRunsPerRoot = new Map<string, number>();
@@ -91,6 +92,7 @@ export class DefaultActionDockHost implements ActionDockHost {
 
   constructor(options: ActionDockHostOptions = {}) {
     this.hostSessionId = randomUUID();
+    this.options = options;
     this.maxCallDepth = options.maxCallDepth ?? 16;
     this.maxSubRuns = options.maxSubRuns ?? 64;
     this.eventSink = options.eventSink ?? (options.platform as any)?.eventSink ?? new InMemoryEventSink();
