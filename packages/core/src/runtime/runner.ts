@@ -9,12 +9,11 @@ import type {
   ProcessAPI,
   ProgressReporter,
   RuntimeError,
-  RunRecord,
 } from "@actiondock/sdk";
 import { ActionResolver } from "../catalog/action-resolver";
 import { loadActions, loadProjectConfig } from "../project/loader";
 import type { ProjectConfig } from "../project/types";
-import { resolveActionProject, resolvePackageRoot } from "../registry/registry";
+import { resolveActionProject } from "../registry/registry";
 import {
   ACTION_CALL_CYCLE,
   ACTION_CYCLE_DETECTED,
@@ -29,18 +28,34 @@ import {
   OUTPUT_NOT_JSON,
   RUN_PERSISTENCE_FAILED,
   RUN_REPOSITORY_UNAVAILABLE,
-  UNDECLARED_ACTION_DEPENDENCY,
+  ACTION_CANCELLED,
   PACKAGE_NOT_FOUND,
   INPUT_VALIDATION_FAILED,
   OUTPUT_VALIDATION_FAILED,
-  ACTION_CANCELLED,
+  UNDECLARED_ACTION_DEPENDENCY,
 } from "../errors";
 import { validateSchema } from "../schema/validator";
-import type { RuntimeStorage, TerminalRunStatus } from "../storage/types";
+import type { RuntimeStorage } from "../storage/types";
 import type { Clock } from "./clock";
 import type { RuntimePlatform } from "../platform/types";
 import { createActionContext, StderrLogger } from "./context";
 import type { ProcessOwner } from "../process";
+import {
+  ActionRegistry,
+  findLocalAction,
+  isActionDefinitionObject,
+  parseActionRef,
+  resolveAnonymousActionId,
+} from "./action-registry";
+import {
+  buildInitialRunRecord,
+  createRunFinalizer,
+  createRunOrThrow,
+  tryCreateRun,
+  type InitialRunRecordInput,
+  type RunFinalizer,
+} from "./run-persistence";
+import { PackageRunnerFactory } from "./package-runner-factory";
 
 // 错误码常量已收敛至 src/errors.ts 单一事实源，此处保留 re-export 以维持既有导入路径兼容。
 export {
@@ -242,9 +257,6 @@ export type ActionResolution =
   | { status: "not_found"; reason?: string }
   | { status: "load_failed"; error: Error; packageId: string; projectRoot: string };
 
-const anonymousRunnerActionIds = new WeakMap<object, string>();
-let anonymousRunnerActionCounter = 0;
-
 /**
  * 单次 start 调用的运行期共享上下文对象（收敛原闭包散落状态）。
  */
@@ -272,40 +284,17 @@ interface RunExecutionContext {
 }
 
 /**
- * 运行终态收敛器（收敛原 finalized、persistError、isTimeout、timeoutTimer 闭包状态）。
- */
-interface RunFinalizer {
-  /** 是否已写入终态 */
-  finalized: boolean;
-  /** 是否命中超时 */
-  isTimeout: boolean;
-  /** 落库异常错误信息 */
-  persistError: RuntimeError | undefined;
-  /** 超时定时器句柄 */
-  timeoutTimer: ReturnType<typeof setTimeout> | undefined;
-  /** 超时守卫绑定的取消控制器 */
-  controller: AbortController | undefined;
-  /** 外部中止信号对象 */
-  signal?: AbortSignal;
-  /** 外部中止信号监听句柄 */
-  onAbort?: () => void;
-  /** 竞态监听句柄注销函数列表（finalize 时统一清理，覆盖成功路径） */
-  raceListenerRemovers: Array<() => void>;
-  /** 绑定取消控制器并启动超时定时器 */
-  startTimeout(controller: AbortController, timeoutMs: number): void;
-  /** 写入终态（幂等，自动清理超时定时器与全部监听句柄） */
-  finalize(status: TerminalRunStatus, output?: unknown, error?: RuntimeError): void;
-}
-
-/**
  * ActionDock 核心执行引擎（ActionRunner）。
- * 
- * 职责：
- * - 负责 Action 执行的全生命周期管理（校验、隔离、跟踪、落库）。
- * - 入参 (inputSchema) 与出参 (outputSchema) 的 JSON Schema 严格校验。
- * - 嵌套 Action 相互调用的环路检测（Cycle Detection）。
- * - 超时 (Timeout) 与中断信号 (AbortSignal) 竞态控制。
- * - 自动记录并持久化 RunRecord 运行记录至 SQLite 存储。
+ *
+ * 本类为执行编排壳：负责 Action 执行的全生命周期编排（校验、深度与环路检测、
+ * 超时与取消竞态、子调用 uses 授权与错误分类），并将单一职责域委托至独立模块：
+ * - Action 注册与检索委托 `ActionRegistry`（action-registry.ts）
+ * - RunRecord 构造与落库委托 run-persistence.ts
+ * - 跨包 Runner 构建与缓存委托 `PackageRunnerFactory`（package-runner-factory.ts）
+ *
+ * 入参 (inputSchema) 与出参 (outputSchema) 的 JSON Schema 严格校验、嵌套 Action
+ * 相互调用的环路检测（Cycle Detection）、超时 (Timeout) 与中断信号 (AbortSignal)
+ * 竞态控制与运行记录持久化编排仍由本类承担。
  */
 export class ActionRunner {
   public readonly packageId: string;
@@ -316,26 +305,19 @@ export class ActionRunner {
   private projectRoot?: string;
   private projectConfig?: ProjectConfig;
   private configOverrides: Record<string, unknown>;
-  private actions: Map<string, ActionDefinition>;
+  private registry: ActionRegistry;
   private clock?: Clock;
   private process?: ProcessAPI;
   private platform?: RuntimePlatform;
   private maxCallDepth: number;
   private maxSubRuns: number;
   private activeSubRuns = 0;
-  private packageRunners = new Map<string, ActionRunner>();
-  /** 跨包 Runner 构建中的 in-flight Promise：并发调用 await 同一构建任务，消除 check-then-act 竞态 */
-  private pendingPackageRunners = new Map<string, Promise<ActionRunner | undefined>>();
-  /** 本 Runner 直接为子包创建的存储连接（dispose 时级联关闭；外部注入存储不在此列） */
-  private packageStorages = new Set<RuntimeStorage>();
-  /** dispose 幂等守卫：并发调用复用同一次释放任务 */
-  private disposePromise: Promise<void> | undefined;
+  private packageFactory: PackageRunnerFactory;
   private actionResolver?: (
     ref: ActionRef | string,
     currentPackageId?: string
   ) => ActionDefinition | undefined | Promise<ActionDefinition | undefined>;
   private getStorageForPackage?: (packageId: string, projectRoot?: string) => RuntimeStorage;
-  private packageContextResolver?: PackageContextResolver;
   private customHome?: string;
   private hostSessionId?: string;
 
@@ -347,7 +329,7 @@ export class ActionRunner {
     this.projectRoot = options.projectRoot;
     this.projectConfig = options.projectConfig;
     this.configOverrides = options.configOverrides || {};
-    this.actions = options.actions || new Map();
+    this.registry = new ActionRegistry(options.actions);
     this.customHome = options.customHome;
     this.platform = options.platform;
 
@@ -377,7 +359,28 @@ export class ActionRunner {
     this.maxSubRuns = options.maxSubRuns ?? 64;
     this.actionResolver = options.actionResolver;
     this.getStorageForPackage = options.getStorageForPackage;
-    this.packageContextResolver = options.packageContextResolver;
+
+    this.packageFactory = new PackageRunnerFactory(
+      {
+        globalStorage: this.globalStorage,
+        projectRoot: this.projectRoot,
+        process: this.process,
+        clock: this.clock,
+        platform: this.platform,
+        maxCallDepth: this.maxCallDepth,
+        maxSubRuns: this.maxSubRuns,
+        actionResolver: this.actionResolver,
+        getStorageForPackage: this.getStorageForPackage,
+        packageContextResolver: options.packageContextResolver,
+        customHome: this.customHome,
+      },
+      (opts) => new ActionRunner(opts)
+    );
+  }
+
+  /** 本地 Action 注册表底层映射（仅内部与跨包工厂委托使用） */
+  private get actions(): Map<string, ActionDefinition> {
+    return this.registry.map;
   }
 
   public getStorage(): RuntimeStorage {
@@ -385,7 +388,7 @@ export class ActionRunner {
   }
 
   public getPackageRunners(): Map<string, ActionRunner> {
-    return this.packageRunners;
+    return this.packageFactory.runners;
   }
 
   /**
@@ -397,63 +400,33 @@ export class ActionRunner {
     idOrAction: string | (({ id: string; action?: ActionDefinition } & Partial<ActionDefinition>) | ActionDefinition),
     actionDef?: ActionDefinition
   ): void {
-    if (typeof idOrAction === "string") {
-      if (actionDef) {
-        this.actions.set(idOrAction, actionDef);
-      }
-    } else {
-      const actObj = idOrAction as any;
-      const id = actObj.id || "anonymous-action";
-      const act = actObj.action || (actObj.run ? actObj : undefined);
-      if (act) {
-        this.actions.set(id, act);
-      }
-    }
+    this.registry.registerAction(idOrAction as never, actionDef as ActionDefinition);
   }
 
   /**
    * 根据 ID 检索注册的 Action。
    */
   public getAction(id: string): ActionDefinition | undefined {
-    return this.actions.get(id);
-  }
-
-  /**
-   * 本地注册表阶梯检索：跨包引用查 "pkg/action"，本包引用依次查短标识与限定标识。
-   */
-  private findLocalAction(parsed: ActionRef): ActionDefinition | undefined {
-    const targetActionId = parsed.actionId;
-    const targetPackageId = parsed.packageId;
-    if (targetPackageId && targetPackageId !== this.packageId) {
-      return this.actions.get(`${targetPackageId}/${targetActionId}`);
-    }
-    return (
-      this.actions.get(targetActionId) ||
-      (this.packageId ? this.actions.get(`${this.packageId}/${targetActionId}`) : undefined)
-    );
+    return this.registry.getAction(id);
   }
 
   /**
    * 动态解析 Action（支持本地注册表、自定义解析器委托与已链接包目录索引检索）。
-   * 
+   *
    * @param actionOrRef Action 定义对象、引用或标识符
    * @returns 解析判别联合结果（found | not_found | load_failed）
    */
   public async resolveAction(
     actionOrRef: ActionDefinition | ActionRef | string
   ): Promise<ActionResolution> {
-    if (
-      typeof actionOrRef === "object" &&
-      "run" in actionOrRef &&
-      typeof (actionOrRef as any).run === "function"
-    ) {
-      return { status: "found", action: actionOrRef as ActionDefinition };
+    if (isActionDefinitionObject(actionOrRef)) {
+      return { status: "found", action: actionOrRef };
     }
 
     const ref = actionOrRef as ActionRef | string;
     let parsed: ActionRef;
     try {
-      parsed = ActionResolver.parseRef(ref);
+      parsed = parseActionRef(ref);
     } catch (err: any) {
       return { status: "not_found", reason: err.message };
     }
@@ -461,7 +434,7 @@ export class ActionRunner {
     const targetPackageId = parsed.packageId;
 
     // 本地 actions 映射表优先检索
-    const localMatched = this.findLocalAction(parsed);
+    const localMatched = findLocalAction(this.actions, parsed, this.packageId);
     if (localMatched) {
       return { status: "found", action: localMatched };
     }
@@ -551,14 +524,14 @@ export class ActionRunner {
    * 获取当前 Runner 已注册的所有 Action 列表。
    */
   public listActions(): ActionDefinition[] {
-    return Array.from(this.actions.values());
+    return this.registry.listActions();
   }
 
   /**
    * 注入或更新跨包运行上下文解析委托。
    */
   public setPackageContextResolver(resolver: PackageContextResolver): void {
-    this.packageContextResolver = resolver;
+    this.packageFactory.setPackageContextResolver(resolver);
   }
 
   /**
@@ -569,111 +542,12 @@ export class ActionRunner {
    * 并发方 await 同一构建任务，构建失败时移除该 Promise 以便后续重试。
    */
   public async resolveTargetPackageRunner(targetPackageId: string): Promise<ActionRunner | undefined> {
-    const cached = this.packageRunners.get(targetPackageId);
-    if (cached) {
-      return cached;
-    }
-
-    const inFlight = this.pendingPackageRunners.get(targetPackageId);
-    if (inFlight) {
-      return inFlight;
-    }
-
-    const building = this.buildTargetPackageRunner(targetPackageId).finally(() => {
-      // 无论成败均移除 in-flight 记录：成功者已写入正式缓存，失败者允许重试
-      this.pendingPackageRunners.delete(targetPackageId);
-    });
-    this.pendingPackageRunners.set(targetPackageId, building);
-    return building;
-  }
-
-  /**
-   * 实际构建跨包 Runner（仅由 resolveTargetPackageRunner 串行调度）。
-   */
-  private async buildTargetPackageRunner(targetPackageId: string): Promise<ActionRunner | undefined> {
-    if (this.packageContextResolver) {
-      const resolved = await this.packageContextResolver(targetPackageId);
-      if (resolved) {
-        const runner = new ActionRunner({
-          packageId: targetPackageId,
-          packageInstanceId: resolved.packageInstanceId || (resolved.projectConfig as any)?.packageInstanceId || targetPackageId,
-          generationId: resolved.generationId || (resolved.projectConfig as any)?.generationId || "1",
-          storage: resolved.storage,
-          globalStorage: this.globalStorage,
-          projectRoot: resolved.projectRoot,
-          projectConfig: resolved.projectConfig,
-          actions: resolved.actions,
-          process: this.process,
-          clock: this.clock,
-          platform: this.platform,
-          maxCallDepth: this.maxCallDepth,
-          maxSubRuns: this.maxSubRuns,
-          actionResolver: this.actionResolver,
-          getStorageForPackage: this.getStorageForPackage,
-          packageContextResolver: this.packageContextResolver,
-        });
-        this.packageRunners.set(targetPackageId, runner);
-        return runner;
-      }
-    }
-
-    const root = resolvePackageRoot(targetPackageId, this.projectRoot, this.customHome);
-    if (root && existsSync(root)) {
-      const config = loadProjectConfig(root);
-      let storage: RuntimeStorage;
-      let ownsPackageStorage = false;
-      if (this.getStorageForPackage) {
-        storage = this.getStorageForPackage(targetPackageId, root);
-      } else if (this.platform) {
-        storage = this.platform.storage.createStorage(targetPackageId, {
-          projectRoot: root,
-          customHome: this.customHome,
-          // 跨包子包存储由当前执行宿主持有，打开时收割遗留孤儿运行
-          recoverOrphans: true,
-        });
-        ownsPackageStorage = true;
-      } else {
-        // 回退分支与主路径共用 createStorage 单一事实源，确保 run 记录落在统一解析的库文件
-        const { createStorage } = await import("../storage/index");
-        storage = createStorage(targetPackageId, { projectRoot: root, customHome: this.customHome, recoverOrphans: true });
-        ownsPackageStorage = true;
-      }
-      // 由本 Runner 直接创建的子包存储纳入级联释放清单（getStorageForPackage 注入方自管理生命周期）
-      if (ownsPackageStorage) {
-        this.packageStorages.add(storage);
-      }
-      const actionsMap = await loadActions(root, config.actionsDir, {
-        loader: this.platform?.modules,
-      });
-      const runner = new ActionRunner({
-        packageId: targetPackageId,
-        packageInstanceId: (config as any).packageInstanceId || targetPackageId,
-        generationId: (config as any).generationId || "1",
-        storage,
-        globalStorage: this.globalStorage,
-        projectRoot: root,
-        projectConfig: config,
-        actions: actionsMap,
-        process: this.process,
-        clock: this.clock,
-        platform: this.platform,
-        maxCallDepth: this.maxCallDepth,
-        maxSubRuns: this.maxSubRuns,
-        actionResolver: this.actionResolver,
-        getStorageForPackage: this.getStorageForPackage,
-        packageContextResolver: this.packageContextResolver,
-        customHome: this.customHome,
-      });
-      this.packageRunners.set(targetPackageId, runner);
-      return runner;
-    }
-
-    return undefined;
+    return this.packageFactory.resolveTargetPackageRunner(targetPackageId);
   }
 
   /**
    * 异步启动 Action 的执行并立即返回 ExecutionHandle 句柄。
-   * 
+   *
    * @param actionOrId Action 定义对象、引用或标识符
    * @param input 传递给 Action 的输入数据
    * @param options 执行控制选项（超时、取消信号、父运行 ID 等）
@@ -695,7 +569,7 @@ export class ActionRunner {
         message: `Input validation failed for action '${targetActionId}': ${inputCheck.reason}`,
       };
       // 安全记录 failed 状态（不可序列化的非法 input 严禁直接写入持久化存储）
-      this.tryPersistInitialRun(runCtx, "failed", error);
+      tryCreateRun(this.storage, buildInitialRunRecord(this.buildRunPersistenceInput(runCtx), "failed", error));
       return {
         runId,
         result: Promise.resolve({ ok: false, runId, error }),
@@ -704,8 +578,8 @@ export class ActionRunner {
     }
 
     // 始终优先将执行尝试持久化到存储中（确保任意异常与终态都可追溯）
-    this.persistInitialRun(runCtx, "running");
-    const finalizer = this.createRunFinalizer(runCtx);
+    createRunOrThrow(this.storage, buildInitialRunRecord(this.buildRunPersistenceInput(runCtx), "running"));
+    const finalizer = createRunFinalizer(this.storage, runCtx.runId);
 
     // 调用嵌套深度限制检测 (Max Call Depth Check)
     const depthError = this.checkCallDepth(runCtx.callStack, targetActionId, runCtx.options);
@@ -827,27 +701,23 @@ export class ActionRunner {
     let targetActionId: string;
     let targetPackageId: string = this.packageId;
 
-    if (
-      typeof actionOrId === "object" &&
-      "run" in actionOrId &&
-      typeof (actionOrId as any).run === "function"
-    ) {
-      action = actionOrId as ActionDefinition;
+    if (isActionDefinitionObject(actionOrId)) {
+      action = actionOrId;
       const actObj = action as any;
       if (actObj.id) {
         targetActionId = actObj.id;
       } else {
-        targetActionId = this.resolveAnonymousActionId(action);
+        targetActionId = resolveAnonymousActionId(this.actions, action);
       }
       this.actions.set(targetActionId, action);
     } else {
-      const parsed = ActionResolver.parseRef(actionOrId as ActionRef | string);
+      const parsed = parseActionRef(actionOrId as ActionRef | string);
       targetActionId = parsed.actionId;
       if (parsed.packageId) {
         targetPackageId = parsed.packageId;
       }
 
-      action = this.findLocalAction(parsed);
+      action = findLocalAction(this.actions, parsed, this.packageId);
     }
 
     return {
@@ -865,141 +735,27 @@ export class ActionRunner {
   }
 
   /**
-   * 为匿名传入的 Action 定义对象解析或分配稳定标识。
+   * 依据运行期上下文装配落库模块入参（RunRecord 构造领域契约）。
    */
-  private resolveAnonymousActionId(action: ActionDefinition): string {
-    const actObj = action as any;
-    let foundId: string | undefined;
-    for (const [id, a] of this.actions) {
-      if (a === action) {
-        foundId = id;
-        break;
-      }
-    }
-    if (foundId) {
-      return foundId;
-    }
-    let anonId = anonymousRunnerActionIds.get(action);
-    if (!anonId) {
-      anonymousRunnerActionCounter++;
-      anonId = `anonymous-action-${anonymousRunnerActionCounter}`;
-      anonymousRunnerActionIds.set(action, anonId);
-    }
-    try {
-      actObj.id = anonId;
-    } catch {}
-    return anonId;
-  }
-
-  /**
-   * 尝试将 failed 终态初始记录写入存储（非法输入场景，存储异常静默忽略）。
-   */
-  private tryPersistInitialRun(
-    runCtx: RunExecutionContext,
-    status: "running" | "failed",
-    error?: RuntimeError
-  ): void {
-    const initialRun = this.buildInitialRunRecord(runCtx, status, error);
-    try {
-      this.storage.createRun(initialRun);
-    } catch {}
-  }
-
-  /**
-   * 构建 running 初始记录并强制写入存储（存储不可用时抛出 RUN_REPOSITORY_UNAVAILABLE）。
-   */
-  private persistInitialRun(runCtx: RunExecutionContext, status: "running"): void {
-    const initialRun = this.buildInitialRunRecord(runCtx, status);
-    try {
-      this.storage.createRun(initialRun);
-    } catch (err: any) {
-      const error = new Error(`RUN_REPOSITORY_UNAVAILABLE: Failed to initialize run record in repository: ${err?.message || String(err)}`);
-      (error as any).code = RUN_REPOSITORY_UNAVAILABLE;
-      (error as any).details = { originalError: err?.message };
-      throw error;
-    }
-  }
-
-  /**
-   * 依据运行期上下文构造 RunRecord 初始记录。
-   */
-  private buildInitialRunRecord(
-    runCtx: RunExecutionContext,
-    status: "running" | "failed",
-    error?: RuntimeError
-  ): RunRecord {
-    const { runId, options, targetPackageId, targetActionId, startedAt } = runCtx;
-    const record: RunRecord = {
-      id: runId,
+  private buildRunPersistenceInput(runCtx: RunExecutionContext): InitialRunRecordInput {
+    const { options, targetPackageId, targetActionId, startedAt, input } = runCtx;
+    return {
+      runId: runCtx.runId,
       rootRunId: this.computeRootRunId(runCtx),
       parentRunId: options.parentRunId,
-      packageId: targetPackageId,
-      packageInstanceId: options.packageInstanceId || (this.packageId === targetPackageId ? this.packageInstanceId : targetPackageId),
-      actionId: targetActionId,
-      generationId: options.generationId || (this.packageId === targetPackageId ? this.generationId : "1"),
-      ownerId: options.ownerId || "local",
-      hostSessionId: options.hostSessionId || this.hostSessionId,
-      status,
-      error,
+      ownerId: options.ownerId,
+      hostSessionId: options.hostSessionId,
+      packageInstanceId: options.packageInstanceId,
+      generationId: options.generationId,
+      targetPackageId,
+      targetActionId,
       startedAt,
+      input,
+      runnerPackageId: this.packageId,
+      runnerPackageInstanceId: this.packageInstanceId,
+      runnerGenerationId: this.generationId,
+      runnerHostSessionId: this.hostSessionId,
     };
-    if (status === "running") {
-      record.input = runCtx.input as JsonValue | undefined;
-    } else {
-      record.finishedAt = startedAt;
-    }
-    return record;
-  }
-
-  /**
-   * 创建运行终态收敛器：封装终态去重、超时定时器清理与落库异常捕获。
-   */
-  private createRunFinalizer(runCtx: RunExecutionContext): RunFinalizer {
-    const finalizer: RunFinalizer = {
-      finalized: false,
-      isTimeout: false,
-      persistError: undefined,
-      timeoutTimer: undefined,
-      controller: undefined,
-      signal: undefined,
-      onAbort: undefined,
-      raceListenerRemovers: [],
-      startTimeout: (controller: AbortController, timeoutMs: number) => {
-        finalizer.controller = controller;
-        finalizer.timeoutTimer = setTimeout(() => {
-          finalizer.isTimeout = true;
-          finalizer.controller?.abort(new Error(`Action exceeded timeout of ${timeoutMs}ms`));
-        }, timeoutMs);
-      },
-      finalize: (status: TerminalRunStatus, output?: unknown, error?: RuntimeError) => {
-        if (finalizer.timeoutTimer) {
-          clearTimeout(finalizer.timeoutTimer);
-          finalizer.timeoutTimer = undefined;
-        }
-        if (finalizer.signal && finalizer.onAbort) {
-          finalizer.signal.removeEventListener("abort", finalizer.onAbort);
-          finalizer.onAbort = undefined;
-        }
-        // 成功路径同样注销竞态监听句柄，避免信号对象残留引用
-        for (const remove of finalizer.raceListenerRemovers.splice(0)) {
-          try {
-            remove();
-          } catch {}
-        }
-        if (finalizer.finalized) return;
-        finalizer.finalized = true;
-        try {
-          this.storage.updateRun(runCtx.runId, status, output, error);
-        } catch (persistErr: any) {
-          finalizer.persistError = {
-            code: RUN_PERSISTENCE_FAILED,
-            message: `RUN_PERSISTENCE_FAILED: Failed to persist run state: ${persistErr?.message || String(persistErr)}`,
-            details: { originalError: persistErr?.message },
-          };
-        }
-      },
-    };
-    return finalizer;
   }
 
   /**
@@ -1467,44 +1223,12 @@ export class ActionRunner {
    * packageContextResolver 传入的目标包自身存储）生命周期归所有者管理，不在此误关。
    */
   public async dispose(): Promise<void> {
-    if (this.disposePromise) {
-      return this.disposePromise;
-    }
-    this.disposePromise = this.disposeInternal();
-    return this.disposePromise;
-  }
-
-  private async disposeInternal(): Promise<void> {
-    // 深度优先递归释放子包 Runner（子 Runner 可能又构建了孙 Runner）
-    const children = Array.from(this.packageRunners.values());
-    this.packageRunners.clear();
-    await Promise.all(
-      children.map(async (child) => {
-        try {
-          await child.dispose();
-        } catch {
-          // 单个子 Runner 释放异常不阻断其余释放
-        }
-      })
-    );
-
-    // 关闭由本 Runner 直接创建的子包存储（buildTargetPackageRunner 回退分支）
-    for (const storage of this.packageStorages) {
-      try {
-        const res = storage.close();
-        if (res && typeof (res as any).then === "function") {
-          await res;
-        }
-      } catch {
-        // 存储重复关闭或已失效时忽略，保持释放链路继续
-      }
-    }
-    this.packageStorages.clear();
+    return this.packageFactory.dispose();
   }
 
   /**
    * 同步等待方式执行指定 Action，直接返回 ExecutionResult 信封结果。
-   * 
+   *
    * @param actionOrId Action 定义对象、引用或标识符
    * @param input 输入参数
    * @param options 执行控制选项
