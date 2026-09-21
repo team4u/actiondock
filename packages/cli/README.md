@@ -57,10 +57,7 @@ ad run sample.greet -- name=Alice
 # 传递 JSON 标量与结构（数值校验为有限数）
 ad run sample.greet -- name=Alice count:=1
 
-# 传统内联 JSON 传参
-ad run sample.greet --input '{"name": "Alice"}'
-
-# 复杂参数或对象从文件读取
+# 复杂参数或对象从文件读取（与扁平参数互斥）
 ad run sample.greet --input-file input.json
 
 # 自动化与脚本通过标准输入传递
@@ -140,7 +137,6 @@ ad pack
 针对 Windows PowerShell、cmd 以及各终端中复杂 JSON 容易遇到的双引号转义问题，推荐按以下规范传参：
 
 - 扁平参数传参（推荐）：使用 `--` 分隔并传参，如 `ad run greet -- name=Alice` 或 `ad run greet -- name=Alice count:=1`。
-- 简单入参：使用 `--input`，如 `ad run greet --input '{"name":"Alice"}'`。
 - 复杂结构：推荐先保存为 JSON 文件并使用 `--input-file`，如 `ad run complex-action --input-file input.json`。
 - 动态生成输入：通过管道输出配合 `--input-file -` 传递，在 PowerShell 中可执行：
 

@@ -385,8 +385,8 @@ describe("github.get-pr 动作测试", () => {
   # 规范扁平参数调用（推荐）
   ad run github.get-pr -- repo=team4u/actiondock prNumber:=1
 
-  # 传统内联 JSON 传参（与扁平参数严格互斥）
-  ad run github.get-pr --input '{"repo": "team4u/actiondock", "prNumber": 1}'
+  # 复杂参数或多行文本通过文件传参（与扁平参数严格互斥）
+  ad run github.get-pr --input-file input.json
   ```
   - 协议边界：`--` 分隔符作为控制平面选项（如 `--json`、`--config`、`--data-dir` 等）与数据平面（Action 入参）的协议边界。
   - 赋值操作符：`repo=team4u/actiondock` 严格保留为字符串，不执行类型猜测；`prNumber:=1` 严格解析为 JSON 格式数值，递归校验所有数值为有限数（`Number.isFinite`）。

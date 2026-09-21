@@ -79,7 +79,7 @@ ad mcp serve --port 5178
 针对已构建完毕的 Node 目录型交付产物，目标环境只需通用 Node.js 运行时（版本大于等于 24.12.0），无需预先安装全局 ActionDock CLI 工具链：
 
 ```bash
-# 执行 Action 并输出标准 JSON 信封（支持规范的 -- 分隔扁平参数，亦支持 --input）
+# 执行 Action 并输出标准 JSON 信封（规范的 -- 分隔扁平参数）
 node ./dist/app/entry.mjs run list-prs -- repo=team4u/actiondock
 ```
 

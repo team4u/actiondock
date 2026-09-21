@@ -24,7 +24,7 @@ $ ad test
 [PASS] tests/greet.test.ts (1.2ms, in-memory sandbox)
 1 passed, 0 failed
 
-$ ad run greet --input '{"name":"World"}'
+$ ad run greet --json -- name=World
 {
   "ok": true,
   "runId": "01JMB394K8V6C1T9A2",
@@ -88,8 +88,7 @@ No manual JSON Schema required. Five core commands guide you from scaffolding to
   # Pass JSON values with ':=' (recursive finite number validation)
   ad run greet -- name=World count:=1
 
-  # Pass parameters via inline JSON or JSON file (mutually exclusive with flat args)
-  ad run greet --input '{"name":"World"}'
+  # Pass complex or multiline payload via JSON file (mutually exclusive with flat args)
   ad run greet --input-file input.json
   ```
 

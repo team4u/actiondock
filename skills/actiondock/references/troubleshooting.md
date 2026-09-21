@@ -32,7 +32,11 @@ ActionDock 所有失败均输出确定性的结构化错误信封：
 | 错误代码 | 产生原因 | 标准排查与自愈步骤 |
 | :--- | :--- | :--- |
 | `INVALID_JSON` | 输入内容不符合 JSON 语法规范（如单引号未转义、属性名未加双引号、空文件或空标准输入等）。 | 检查传入的 JSON 语法；复杂结构推荐先保存为独立文件并通过 `--input-file <path>` 传递。 |
-| `INPUT_CONFLICT` | 命令行同时指定了 `--input` 与 `--input-file` 选项。 | 移除其中一个参数，两者互斥；简单参数保留 `--input`，复杂结构保留 `--input-file`。 |
+| `INVALID_FLAT_ARGUMENT` | 扁平赋值语法错误、非法属性名或非法数组索引（如前导零、负数、科学计数法等）或包含原型污染敏感属性。 | 检查赋值语法，确保属性名符合 `[A-Za-z_][A-Za-z0-9_-]*`，数组索引为非负连续整数，杜绝 `__proto__` 等属性。 |
+| `INVALID_JSON_LITERAL` | `path:=json` 中的 JSON 字面量解析失败或包含非有限数（`Infinity`、`-Infinity`、`NaN`）。 | 检查 `:=` 后的 JSON 语法是否合法，确保所有数值满足 `Number.isFinite`。 |
+| `INPUT_PATH_CONFLICT` | 扁平参数路径冲突（叶节点/容器冲突、对象/数组冲突、重复路径赋值或非连续稀疏数组）。 | 检查路径层级与类型，确保数组索引从 0 开始连续编号，杜绝同名键重复赋值与结构覆盖冲突。 |
+| `FLAT_INPUT_LIMIT_EXCEEDED` | 扁平参数数量、路径深度、路径长度、属性名长度或物化体积超出安全限制。 | 缩减参数规模；超大或深层数据改用 `--input-file <path>` 传递。 |
+| `INPUT_CONFLICT` | 命令行同时混合指定了扁平参数（`-- <assignments...>`）、`--input` 或 `--input-file`。 | 仅保留其中一种输入模式，三者严格互斥；简单标量推荐使用扁平参数，复杂结构使用 `--input-file`。 |
 | `INPUT_FILE_NOT_FOUND` | `--input-file` 指定的目标文件在文件系统中不存在。 | 检查文件物理路径是否准确，或改用标准输入管道 `--input-file -` 传递数据。 |
 | `INPUT_FILE_READ_FAILED` | 读取输入文件或标准输入流发生底层错误（如目标为目录或权限不足）。 | 检查文件权限，确保指定的是有效可读文件而非目录。 |
 | `INPUT_NOT_JSON` | 输入参数包含非有限数（NaN 或 Infinity）、循环引用或函数等非法类型。 | 检查调用参数，确保传递合法的纯 JSON 格式数据。推荐使用 `--input-file <path>` 传递。 |

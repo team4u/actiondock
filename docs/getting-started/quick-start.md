@@ -17,7 +17,7 @@ $ ad test
 [PASS] tests/greet.test.ts (1.2ms, in-memory sandbox)
 1 passed, 0 failed
 
-$ ad run greet --input '{"name":"World"}'
+$ ad run greet --json -- name=World
 {
   "ok": true,
   "runId": "01JMB394K8V6C1T9A2",
@@ -90,10 +90,7 @@ $ ad export skill --> [EXPORT] Self-contained Agent Skill bundle
   # 传递 JSON 标量与结构（:= 递归校验数值为有限数）
   ad run greet -- name=World count:=1
 
-  # 传统内联 JSON 传参（与扁平参数互斥）
-  ad run greet --input '{"name":"World"}'
-
-  # 复杂参数推荐使用 JSON 文件传递
+  # 复杂参数推荐使用 JSON 文件传递（与扁平参数互斥）
   ad run greet --input-file input.json
 
   # 自动化脚本可直接通过标准输入管道传递

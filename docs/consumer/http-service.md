@@ -169,8 +169,8 @@ ad run get-pr --profile prod -- repo=team4u/actiondock prNumber:=101
 # 远程异步后台启动（异步执行模式依赖长时间运行的 ad serve 服务端）
 ad run heavy-data-sync --profile prod --async -- task=sync
 
-# 传统选项传参（与扁平参数严格互斥）
-ad run list-prs --profile prod --input '{"repo": "team4u/actiondock"}'
+# 复杂或多行参数推荐通过文件传参（与扁平参数严格互斥）
+ad run list-prs --profile prod --input-file ./params.json
 ```
 
 CLI 在本地对扁平参数完成解析、有限数校验与物化后，将其作为标准的 JSON 数据载荷安全发送至远端 HTTP 微服务端；若参数语法非法或存在路径冲突，本地立即拦截报错并以退出码 2 退出。
@@ -199,7 +199,7 @@ ad runs cancel <runId> --profile prod --reason "手动中止任务"
 ad profile use prod
 
 # 切换后后续命令默认面向远端执行，无需显式附加 --profile 参数
-ad run list-prs --input '{"repo": "team4u/actiondock"}'
+ad run list-prs -- repo=team4u/actiondock
 ad info
 
 # 切回本地单机环境
