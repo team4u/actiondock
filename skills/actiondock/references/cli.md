@@ -84,20 +84,36 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
   ```bash
   ad describe <id> [-P, --package <id>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--data-dir <path>] [--json]
   ```
-  调阅指定 Action 的输入输出模式规范、描述及依赖定义。
+  作为编码顾问调阅指定 Action 的详细信息。不仅展示描述与依赖，还包含：
+  - 输入模式字段明细：字段名、类型、是否必填与字段描述。
+  - Flat 编码指引：字符串赋值格式（`path=value`）、JSON 标量与结构赋值格式（`path:=json`）与数组元素赋值格式（`path.0=...`）。
+  - 建议赋值样例展示：基于 `inputSchema` 声明类型提供无副作用的赋值示例数据。
 
 - 执行 Action (`ad run` / `ad action run`)：
   ```bash
-  ad run <id> [-P, --package <id>] [-i, --input <json> | -f, --input-file <path|->] [-c, --config <key=value...>] [-p, --profile <name>] [-s, --server <url>] [-t, --token <token>] [--timeout <duration>] [--request-id <id>] [--async] [--data-dir <path>] [--json]
+  ad run <id> [control-options] [-- <assignments...>]
+  # 或使用互斥的输入选项：
+  # ad run <id> [-i, --input <json> | -f, --input-file <path|->] [control-options]
   ```
   本地或远程执行指定 Action，支持 `--async` 异步启动。
-  - 默认原始输出：默认直接将结果正文内容（如 `content`、`text`、`message` 或文本标量）输出至 stdout，元数据输出至 stderr，保留原始格式与真实换行；失败时错误输出至 stderr 并以退出码 1 退出。
-  - 机器信封：指定 `--json` 输出标准 JSON 执行信封（`{ ok: true, data: ... }` / `{ ok: false, error: ... }`）。
-  - 参数契约：选项 `--input` 与 `--input-file` 严格互斥；未指定任何输入参数时，默认传入空对象 `{}`。
-  - 简单输入：使用 `-i, --input <json>` 传递内联 JSON 字符串。
-  - 文件输入：使用 `-f, --input-file <path>` 从 JSON 文件读取内容并解析。
-  - 标准输入：使用 `-f, --input-file -` 从标准输入读取全部内容并解析。
-  - 转义安全：复杂对象推荐优先使用 `--input-file` 传递，避开终端引号转义问题。输入内容自动剔除 UTF-8 BOM 标记，且不设人为大小上限。
+  - 协议边界：`--` 分隔符作为控制平面（ActionDock 选项如 `--json`、`--config`、`--data-dir`、`--profile`、`--timeout` 等）与数据平面（Action 入参）的协议边界。
+  - 两种赋值操作符：
+    - `path=value`：严格保留为字符串，不执行 JSON 解析与类型猜测。
+    - `path:=json`：严格解析为 JSON 值，递归校验所有数值为有限数（`Number.isFinite`）。
+  - 路径语法规则：
+    - 命名段（`^[A-Za-z_][A-Za-z0-9_-]*$`）表示对象属性。
+    - 纯数字段（`^(0|[1-9][0-9]*)$`）表示数组索引，数组索引必须从 0 开始连续编号，拒绝稀疏数组。
+    - 根节点始终物化为对象。
+    - 路径冲突（叶节点与容器冲突、对象与数组冲突、重复赋值）严格拒绝（`INPUT_PATH_CONFLICT`）。
+    - 拦截原型污染敏感属性（`__proto__`、`constructor`、`prototype`）。
+  - 三种输入模式互斥：扁平参数、`--input` 与 `--input-file` 严格互斥，不可混用（`INPUT_CONFLICT`）；未指定任何输入参数时，默认传入空对象 `{}`。
+  - 机器输出模式：面向智能体调用推荐使用 `--json`，当参数解析出错时输出标准错误信封并以退出码 2 退出；业务执行成功输出成功信封，业务执行失败以退出码 1 退出。
+  - 默认原始输出：默认直接将结果正文内容（如 `content`、`text`、`message` 或文本标量）输出至 stdout，元数据输出至 stderr，保留原始格式与真实换行；业务失败时错误输出至 stderr 并以退出码 1 退出。
+  - 传统输入选项：
+    - 简单输入：使用 `-i, --input <json>` 传递内联 JSON 字符串。
+    - 文件输入：使用 `-f, --input-file <path>` 从 JSON 文件读取内容并解析。
+    - 标准输入：使用 `-f, --input-file -` 从标准输入读取全部内容并解析。
+    - 转义安全：复杂对象或多行长文本推荐使用 `--input-file` 传递，避开终端引号转义问题。输入内容自动剔除 UTF-8 BOM 标记，且不设人为大小上限。
 
 - 校验 Action 模式与契约 (`ad validate` / `ad action validate`)：
   ```bash

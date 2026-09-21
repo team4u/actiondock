@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defineAction } from "@actiondock/sdk";
-import { StandaloneRuntime } from "../src/runtime/standalone";
+import { StandaloneDispatcher, StandaloneRuntime } from "../src/runtime/standalone";
 
 describe("StandaloneRuntime 独立二进制运行时委托 ActionDockApp", () => {
   const tmpDir = mkdtempSync(join(tmpdir(), "standalone-test-"));
@@ -223,5 +223,181 @@ describe("StandaloneRuntime 独立二进制运行时委托 ActionDockApp", () =>
         rmSync(tmpDir, { recursive: true, force: true });
       } catch {}
     }
+  });
+
+  it("支持使用 -- 传递 Flat 扁平参数执行 Action 并成功返回", async () => {
+    const stdoutLogs: string[] = [];
+    const stderrLogs: string[] = [];
+
+    const dispatcher = new StandaloneDispatcher({
+      packageId: "pkg.standalone",
+      version: "1.2.3",
+      actions: [
+        {
+          id: "greet",
+          action: greetAction,
+          inputSchema: {
+            type: "object",
+            properties: { name: { type: "string" } },
+            required: ["name"],
+          },
+        },
+      ],
+      stdout: (msg) => stdoutLogs.push(msg),
+      stderr: (msg) => stderrLogs.push(msg),
+    });
+
+    // 1. 默认纯文本输出
+    const code1 = await dispatcher.dispatch([
+      "run",
+      "greet",
+      `--data-dir=${tmpDir}`,
+      "--",
+      "name=Bob",
+    ]);
+    expect(code1).toBe(0);
+    expect(stdoutLogs.join("\n")).toContain("Hello, Bob!");
+
+    // 2. --json 模式输出标准 JSON
+    stdoutLogs.length = 0;
+    const code2 = await dispatcher.dispatch([
+      "run",
+      "greet",
+      "--json",
+      `--data-dir=${tmpDir}`,
+      "--",
+      "name=Charlie",
+    ]);
+    expect(code2).toBe(0);
+    const parsed = JSON.parse(stdoutLogs.join("\n"));
+    expect(parsed.ok).toBe(true);
+    expect(parsed.data).toEqual({ greeting: "Hello, Charlie!" });
+  });
+
+  it("确保 -- 后的参数严禁作为控制选项解析", async () => {
+    const stdoutLogs: string[] = [];
+    const stderrLogs: string[] = [];
+
+    const dispatcher = new StandaloneDispatcher({
+      packageId: "pkg.standalone",
+      version: "1.2.3",
+      actions: [
+        {
+          id: "greet",
+          action: greetAction,
+          inputSchema: {
+            type: "object",
+            properties: { name: { type: "string" } },
+          },
+        },
+      ],
+      stdout: (msg) => stdoutLogs.push(msg),
+      stderr: (msg) => stderrLogs.push(msg),
+    });
+
+    // -- 后面的 --data-dir 应该作为普通字符串参数而不是全局配置
+    const code = await dispatcher.dispatch([
+      "run",
+      "greet",
+      `--data-dir=${tmpDir}`,
+      "--json",
+      "--",
+      "name=--data-dir=fake",
+    ]);
+    expect(code).toBe(0);
+    const parsed = JSON.parse(stdoutLogs.join("\n"));
+    expect(parsed.ok).toBe(true);
+    expect(parsed.data).toEqual({ greeting: "Hello, --data-dir=fake!" });
+  });
+
+  it("当指定 --json 时，参数解析异常以标准 JSON 格式输出至 stdout 并返回退出码 2", async () => {
+    const stdoutLogs: string[] = [];
+    const stderrLogs: string[] = [];
+
+    const dispatcher = new StandaloneDispatcher({
+      packageId: "pkg.standalone",
+      version: "1.2.3",
+      actions: [
+        {
+          id: "greet",
+          action: greetAction,
+        },
+      ],
+      stdout: (msg) => stdoutLogs.push(msg),
+      stderr: (msg) => stderrLogs.push(msg),
+    });
+
+    // 1. 无效 Flat 参数（非法 JSON）
+    const code1 = await dispatcher.dispatch([
+      "run",
+      "greet",
+      "--json",
+      `--data-dir=${tmpDir}`,
+      "--",
+      "bad:=invalid_json",
+    ]);
+    expect(code1).toBe(2);
+    expect(stdoutLogs.length).toBeGreaterThan(0);
+    const err1 = JSON.parse(stdoutLogs.join("\n"));
+    expect(err1.ok).toBe(false);
+    expect(err1.error.code).toBe("INVALID_JSON_LITERAL");
+    expect(err1.error.message).toBeDefined();
+
+    // 2. 输入源冲突（--input 与 -- 同时指定）
+    stdoutLogs.length = 0;
+    const code2 = await dispatcher.dispatch([
+      "run",
+      "greet",
+      '--input={"name":"Alice"}',
+      "--json",
+      `--data-dir=${tmpDir}`,
+      "--",
+      "name=Bob",
+    ]);
+    expect(code2).toBe(2);
+    const err2 = JSON.parse(stdoutLogs.join("\n"));
+    expect(err2.ok).toBe(false);
+    expect(err2.error.code).toBe("INPUT_CONFLICT");
+
+    // 3. 缺少 Action ID
+    stdoutLogs.length = 0;
+    const code3 = await dispatcher.dispatch([
+      "run",
+      "--json",
+      `--data-dir=${tmpDir}`,
+    ]);
+    expect(code3).toBe(2);
+    const err3 = JSON.parse(stdoutLogs.join("\n"));
+    expect(err3.ok).toBe(false);
+    expect(err3.error.code).toBe("INVALID_ARGUMENT");
+  });
+
+  it("非 --json 模式下参数解析异常输出至 stderr 并返回退出码 2", async () => {
+    const stdoutLogs: string[] = [];
+    const stderrLogs: string[] = [];
+
+    const dispatcher = new StandaloneDispatcher({
+      packageId: "pkg.standalone",
+      version: "1.2.3",
+      actions: [
+        {
+          id: "greet",
+          action: greetAction,
+        },
+      ],
+      stdout: (msg) => stdoutLogs.push(msg),
+      stderr: (msg) => stderrLogs.push(msg),
+    });
+
+    const code = await dispatcher.dispatch([
+      "run",
+      "greet",
+      `--data-dir=${tmpDir}`,
+      "--",
+      "bad:=invalid_json",
+    ]);
+    expect(code).toBe(2);
+    expect(stderrLogs.some((l) => l.includes("Error:"))).toBe(true);
+    expect(stdoutLogs.length).toBe(0);
   });
 });

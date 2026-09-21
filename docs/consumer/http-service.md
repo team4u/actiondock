@@ -157,15 +157,23 @@ ad profile test prod
 
 ### 跨环境透明调度
 
-在执行 Action 时，只需通过 `-p, --profile` 参数指定目标节点，CLI 会自动将调用转发至远端 HTTP 服务：
+在执行 Action 时，只需通过 `-p, --profile` 参数指定目标节点，CLI 会自动将调用转发至远端 HTTP 服务。远程调用同样原生支持 Flat JsonValue Encoding v1 规范：
 
 ```bash
-# 远程同步调用 Action
-ad run list-prs --input '{"repo": "team4u/actiondock"}' --profile prod
+# 远程同步调用 Action（使用 -- 隔离控制平面与数据平面入参）
+ad run list-prs --profile prod -- repo=team4u/actiondock
+
+# 包含数值与 JSON 结构赋值
+ad run get-pr --profile prod -- repo=team4u/actiondock prNumber:=101
 
 # 远程异步后台启动（异步执行模式依赖长时间运行的 ad serve 服务端）
-ad run heavy-data-sync --input-file ./params.json --profile prod --async
+ad run heavy-data-sync --profile prod --async -- task=sync
+
+# 传统选项传参（与扁平参数严格互斥）
+ad run list-prs --profile prod --input '{"repo": "team4u/actiondock"}'
 ```
+
+CLI 在本地对扁平参数完成解析、有限数校验与物化后，将其作为标准的 JSON 数据载荷安全发送至远端 HTTP 微服务端；若参数语法非法或存在路径冲突，本地立即拦截报错并以退出码 2 退出。
 
 ### 远端任务生命周期与日志管理
 

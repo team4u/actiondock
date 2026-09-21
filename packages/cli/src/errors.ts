@@ -1,4 +1,26 @@
+import {
+  FlatInputError,
+  INVALID_FLAT_ARGUMENT,
+  INVALID_JSON_LITERAL,
+  INPUT_PATH_CONFLICT,
+  FLAT_INPUT_LIMIT_EXCEEDED,
+  INPUT_CONFLICT,
+} from "@actiondock/core";
 import { ExitCode, type ExitCodeValue } from "./types";
+
+/**
+ * 扁平输入错误码集合。
+ */
+const FLAT_ERROR_CODES = new Set<string>([
+  INVALID_FLAT_ARGUMENT,
+  INVALID_JSON_LITERAL,
+  INPUT_PATH_CONFLICT,
+  FLAT_INPUT_LIMIT_EXCEEDED,
+  INPUT_CONFLICT,
+  "INPUT_FILE_NOT_FOUND",
+  "INPUT_FILE_READ_FAILED",
+  "INVALID_JSON",
+]);
 
 /**
  * CLI 信封错误码常量（仅 CLI 输出协议使用，属包内部码，就地常量化管理）。
@@ -107,10 +129,29 @@ export function formatError(err: unknown): FormattedError {
     };
   }
 
+  if (err instanceof FlatInputError) {
+    return {
+      code: err.code,
+      message: err.message,
+      exitCode: ExitCode.INVALID_ARGUMENT,
+      details: err.details,
+    };
+  }
+
   // Commander.js 原生错误处理
   if (typeof err === "object" && err !== null && "code" in err && typeof (err as any).code === "string") {
+    const code = (err as any).code as string;
+
+    if (FLAT_ERROR_CODES.has(code)) {
+      return {
+        code,
+        message: (err as any).message || String(err),
+        exitCode: ExitCode.INVALID_ARGUMENT,
+        details: (err as any).details,
+      };
+    }
+
     const commanderErr = err as { code: string; message: string; exitCode?: number };
-    const code = commanderErr.code;
 
     // 参数类异常
     if (

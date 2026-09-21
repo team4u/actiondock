@@ -236,23 +236,11 @@ ${returnBody}
     // 始终自动生成或更新类型声明文件，确保单一事实源即时生效
     writeActionTypes(root, manifest);
 
-    let sampleInputStr = "{}";
-    const inputEntries = Object.entries(inputSchema.properties || {});
-    if (inputEntries.length > 0) {
-      const sampleObj: Record<string, any> = {};
-      for (const [k, prop] of inputEntries as [string, any][]) {
-        if (prop.type === "number" || prop.type === "integer") sampleObj[k] = 42;
-        else if (prop.type === "boolean") sampleObj[k] = true;
-        else if (prop.type === "array") sampleObj[k] = ["item"];
-        else if (prop.type === "object") sampleObj[k] = {};
-        else sampleObj[k] = "hello";
-      }
-      sampleInputStr = JSON.stringify(sampleObj);
-    }
-
     writeStdout(`[OK] Created Action '${id}' at ${targetFullFile}`, context);
     writeStdout(`\nTo run this action:`, context);
-    writeStdout(`  ad run ${id} --input '${sampleInputStr}'`, context);
+    writeStdout(`  ad run ${id} --json -- key=value`, context);
+    writeStdout(`  ad run ${id} --json -- count:=1`, context);
+    writeStdout(`  ad run ${id} --json --input-file input.json`, context);
   } catch (err: any) {
     if (err instanceof ExecutionError) throw err;
     throw new ExecutionError(err.message);

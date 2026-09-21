@@ -82,9 +82,15 @@ $ ad export skill --> [EXPORT] Self-contained Agent Skill bundle
   ```
 
 - 本地命令行即时调用：
-  通过本地命令行直接调用动作，验证输入解析与统一数据信封：
+  通过本地命令行直接调用动作，验证输入解析与统一数据信封。推荐使用规范的扁平参数赋值协议：
   ```bash
-  # 简单参数直接内联传递
+  # 扁平参数规范调用（使用 -- 隔离控制选项与数据入参，推荐）
+  ad run greet -- name=World
+
+  # 传递 JSON 标量与结构（:= 递归校验数值为有限数）
+  ad run greet -- name=World count:=1
+
+  # 传统内联 JSON 传参（与扁平参数互斥）
   ad run greet --input '{"name":"World"}'
 
   # 复杂参数推荐使用 JSON 文件传递
@@ -93,6 +99,12 @@ $ ad export skill --> [EXPORT] Self-contained Agent Skill bundle
   # 自动化脚本可直接通过标准输入管道传递
   cat input.json | ad run greet --input-file -
   ```
+  - 协议边界：`--` 分隔符作为控制平面（ActionDock 选项如 `--json`、`--config`、`--data-dir`、`--profile` 等）与数据平面（Action 入参）的协议边界。
+  - 赋值操作符：`path=value` 严格保留为字符串；`path:=json` 严格解析为 JSON 值，递归校验所有数值为有限数（`Number.isFinite`）。
+  - 路径语法规则：命名段表示对象属性，纯数字段表示数组连续索引（从 0 开始连续编号，拒绝稀疏数组），根节点始终物化为对象，严格拒绝路径冲突（`INPUT_PATH_CONFLICT`），拦截 `__proto__`、`constructor`、`prototype` 等原型污染敏感属性。
+  - 三种输入模式互斥：扁平参数、`--input` 与 `--input-file` 严格互斥，不可混用（`INPUT_CONFLICT`）；未指定输入时默认为 `{}`。
+  - 机器输出模式：面向智能体调用推荐使用 `--json`，当参数解析出错时输出标准错误信封并以退出码 2 退出。
+
   终端标准输出返回统一结构的成功响应信封：
   ```json
   {
@@ -177,6 +189,8 @@ ad generate types
 ```
 
 类型生成器将在 `.actiondock/generated/actions.d.ts` 中输出对齐的 TypeScript 接口。
+
+此外，可随时运行 `ad describe <id>` 调阅编码顾问，查看字段模式规范、Flat 编码指引与建议赋值样例展示，辅助人类开发者与智能体准确传参。
 
 ### 状态持久化与配置体系
 

@@ -17,7 +17,7 @@ $ ad test
 [PASS] tests/greet.test.ts (1.2ms, in-memory sandbox)
 1 passed, 0 failed
 
-$ ad run greet --input '{"name":"World"}'
+$ ad run greet -- name=World
 {
   "ok": true,
   "runId": "01JMB394K8V6C1T9A2",

@@ -82,10 +82,14 @@ No manual JSON Schema required. Five core commands guide you from scaffolding to
   # Execute in-memory sandbox tests
   ad test
 
-  # Run locally via CLI (simple inline JSON)
-  ad run greet --input '{"name":"World"}'
+  # Run locally via CLI using Flat JsonValue Encoding v1 (recommended)
+  ad run greet -- name=World
 
-  # Pass complex parameters via JSON file or stdin to avoid shell escaping
+  # Pass JSON values with ':=' (recursive finite number validation)
+  ad run greet -- name=World count:=1
+
+  # Pass parameters via inline JSON or JSON file (mutually exclusive with flat args)
+  ad run greet --input '{"name":"World"}'
   ad run greet --input-file input.json
   ```
 
@@ -155,6 +159,25 @@ Whenever the manifest changes, regenerate typed contracts with:
 ```bash
 ad generate types
 ```
+
+### Encoding Advisor and Flat Call Protocol
+
+To eliminate parameter hallucinations and simplify command-line interaction for agents, ActionDock provides an Encoding Advisor and Flat JsonValue Encoding protocol:
+
+- Encoding Advisor: Running `ad describe <id>` displays schema properties, field requirements, Flat encoding guides, and suggested assignments.
+- Standard call syntax: `ad run <action> [control-options] -- <assignments...>`.
+- Protocol boundary: The `--` separator isolates control plane options (such as `--json`, `--config`, `--data-dir`, `--profile`) from data plane action inputs.
+- Two assignment operators:
+  - `path=value`: Strictly preserved as a string without JSON parsing or type guessing.
+  - `path:=json`: Strictly parsed as a JSON value, recursively validating that all numbers are finite (`Number.isFinite`).
+- Path syntax rules:
+  - Named segments (`^[A-Za-z_][A-Za-z0-9_-]*$`) represent object properties.
+  - Numeric segments (`^(0|[1-9][0-9]*)$`) represent array indices. Array indices must be contiguous starting from 0, rejecting sparse arrays.
+  - Root node always materializes as an object.
+  - Path conflicts (leaf/container conflict, object/array conflict, duplicate assignments) are strictly rejected.
+  - Prototype pollution sensitive properties (`__proto__`, `constructor`, `prototype`) are blocked.
+- Three mutually exclusive input modes: Flat arguments, `--input`, and `--input-file` are strictly mutually exclusive and cannot be mixed; defaults to `{}` when omitted.
+- Machine mode: Passing `--json` outputs standard JSON execution envelopes; exits with code 2 on parameter error.
 
 ### Human Playbooks and Safety Guardrails
 

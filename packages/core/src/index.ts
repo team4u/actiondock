@@ -19,5 +19,6 @@ export * from "./host";
 export * from "./target";
 export * from "./ipc";
 export * from "./process";
+export * from "./input";
 export type { ModuleLoader } from "./runtime";
 

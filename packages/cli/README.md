@@ -51,7 +51,13 @@ ad add @actiondock/example-tools
 
 - 本地执行 Action：
 ```bash
-# 简单参数直接内联传递
+# 扁平参数赋值（规范语法，推荐）
+ad run sample.greet -- name=Alice
+
+# 传递 JSON 标量与结构（数值校验为有限数）
+ad run sample.greet -- name=Alice count:=1
+
+# 传统内联 JSON 传参
 ad run sample.greet --input '{"name": "Alice"}'
 
 # 复杂参数或对象从文件读取
@@ -109,19 +115,31 @@ ad pack
 
 ### Action 执行入参契约
 
-执行 Action 支持两种互斥的传参方式：
+执行 Action 推荐使用扁平参数赋值协议，同时支持传统选项，三者之间严格互斥：
 
-- 简单内联参数：使用 `--input <json>` 直接解析 JSON 字符串，适合简易标量入参。
-- 复杂对象文件：使用 `--input-file <path>` 读取文件并解析 JSON，避免各类终端的引号转义损坏。
-- 标准输入管道：使用 `--input-file -` 从标准输入读取全部数据并解析 JSON，适合跨进程协同与 CI 自动化脚本。
-- 默认无输入：未指定 `--input` 与 `--input-file` 时，入参默认提供 `{}`。
-- 严格互斥：`--input` 与 `--input-file` 互斥，同时提供时直接报错并退出。
-- 统一解析：无论内联参数、文件还是标准输入，解析前均自动剔除 UTF-8 BOM 标记，且不设人为大小上限。
+- 规范调用语法：`ad run <action> [control-options] -- <assignments...>`。
+- 协议边界：`--` 分隔符作为控制平面选项（如 `--json`、`--config`、`--data-dir`、`--profile` 等）与数据平面（Action 入参）的协议边界。
+- 两种赋值操作符语义：
+  - `path=value`：严格保留为字符串，不执行 JSON 解析与类型猜测。
+  - `path:=json`：严格解析为 JSON 值，递归校验所有数值为有限数（`Number.isFinite`）。
+- 路径语法规则：
+  - 命名段（`^[A-Za-z_][A-Za-z0-9_-]*$`）表示对象属性。
+  - 纯数字段（`^(0|[1-9][0-9]*)$`）表示数组索引，数组索引必须从 0 开始连续编号，拒绝稀疏数组。
+  - 根节点始终物化为对象。
+  - 路径冲突（叶节点与容器冲突、对象与数组冲突、重复赋值）严格拒绝（`INPUT_PATH_CONFLICT`）。
+  - 拦截原型污染敏感属性（`__proto__`、`constructor`、`prototype`）。
+- 三种输入模式互斥：扁平参数、`--input` 与 `--input-file` 严格互斥，不可混用（`INPUT_CONFLICT`）；未指定输入时默认为 `{}`。
+- 传统输入选项：
+  - 简单内联参数：使用 `--input <json>` 直接解析 JSON 字符串。
+  - 复杂对象文件：使用 `--input-file <path>` 读取文件并解析 JSON，避免各类终端的引号转义损坏。
+  - 标准输入管道：使用 `--input-file -` 从标准输入读取全部数据并解析 JSON。
+  - 统一解析：解析前均自动剔除 UTF-8 BOM 标记，且不设人为大小上限。
 
 ### Windows 与多终端传参建议
 
 针对 Windows PowerShell、cmd 以及各终端中复杂 JSON 容易遇到的双引号转义问题，推荐按以下规范传参：
 
+- 扁平参数传参（推荐）：使用 `--` 分隔并传参，如 `ad run greet -- name=Alice` 或 `ad run greet -- name=Alice count:=1`。
 - 简单入参：使用 `--input`，如 `ad run greet --input '{"name":"Alice"}'`。
 - 复杂结构：推荐先保存为 JSON 文件并使用 `--input-file`，如 `ad run complex-action --input-file input.json`。
 - 动态生成输入：通过管道输出配合 `--input-file -` 传递，在 PowerShell 中可执行：
@@ -138,8 +156,8 @@ $data | ConvertTo-Json -Depth 100 | ad run complex-action --input-file -
 
 ### Action 输出模式与机器模式
 
-- **默认原始纯文本输出**：`ad run` 默认采用面向终端人类阅读与 LLM Agent 上下文消费的原始输出模式。直接将执行结果正文内容（如文件 `content`、`text`、`message` 或标量字符串）输出至 stdout（保留真实换行且无 JSON 转义），相关元数据（如文件路径、行号范围、截断标记）独立输出至 stderr，符合 Unix 管道安全原则。执行失败时在 stderr 输出错误详情并以退出码 1 退出。
-- **机器 JSON 格式 (`--json`)**：当需要以程序化方式消费、获取完整结构化数据或被外部系统集成时，传入 `--json`。此时输出标准 JSON 结果（包含 `ok`、`runId`、`data` 或 `error`）。
+- **默认原始纯文本输出**：`ad run` 默认采用面向终端人类阅读与 LLM Agent 上下文消费的原始输出模式。直接将执行结果正文内容（如文件 `content`、`text`、`message` 或标量字符串）输出至 stdout（保留真实换行且无 JSON 转义），相关元数据（如文件路径、行号范围、截断标记）独立输出至 stderr，符合 Unix 管道安全原则。业务执行失败时在 stderr 输出错误详情并以退出码 1 退出。
+- **机器 JSON 格式**（`--json`）：当需要以程序化方式消费、获取完整结构化数据或被外部系统集成时，传入 `--json`。面向智能体调用推荐使用该模式；此时输出标准 JSON 结果（包含 `ok`、`runId`、`data` 或 `error`）；若参数解析出错输出标准错误信封并以退出码 2 退出。
 
 ---
 
@@ -152,8 +170,8 @@ $data | ConvertTo-Json -Depth 100 | ad run complex-action --input-file -
 | `ad remove <package>` | 卸载并更新锁定依赖，提供原子回滚保护 |
 | `ad info [patterns...]` | 检索包元数据与能力清单，支持模式匹配与树形展示 |
 | `ad list [patterns...]` | 列出包内所有已注册的 Action |
-| `ad describe <id>` | 查看 Action 的详情、参数与模式规范（别名 `ad show`） |
-| `ad run <id>` | 本地或远程执行指定 Action（默认输出原始纯文本，支持 `--json` 输出标准信封） |
+| `ad describe <id>` | 编码顾问：查看 Action 的详情、模式字段明细、Flat 编码指引与建议赋值（别名 `ad show`） |
+| `ad run <id>` | 本地或远程执行指定 Action（规范语法 `ad run <id> [options] -- <assignments...>`，支持 `--json` 输出标准信封） |
 | `ad validate [id]` | 校验 Action 规范与模式规范 |
 | `ad doctor` | 执行运行环境与项目结构健康诊断 |
 | `ad action create <id>` | 创建新 Action 源码（别名 `ad action new`） |

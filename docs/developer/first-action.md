@@ -364,6 +364,12 @@ describe("github.get-pr 动作测试", () => {
 
 ## 本地执行与模式验证
 
+- 调阅编码顾问：
+  ```bash
+  ad describe github.get-pr
+  ```
+  查看字段模式明细、Flat 编码指引与建议赋值样例展示，辅助精准传参。
+
 - 执行静态校验：
   ```bash
   ad validate github.get-pr
@@ -376,7 +382,16 @@ describe("github.get-pr 动作测试", () => {
 
 - 本地直接运行 Action：
   ```bash
+  # 规范扁平参数调用（推荐）
+  ad run github.get-pr -- repo=team4u/actiondock prNumber:=1
+
+  # 传统内联 JSON 传参（与扁平参数严格互斥）
   ad run github.get-pr --input '{"repo": "team4u/actiondock", "prNumber": 1}'
   ```
+  - 协议边界：`--` 分隔符作为控制平面选项（如 `--json`、`--config`、`--data-dir` 等）与数据平面（Action 入参）的协议边界。
+  - 赋值操作符：`repo=team4u/actiondock` 严格保留为字符串，不执行类型猜测；`prNumber:=1` 严格解析为 JSON 格式数值，递归校验所有数值为有限数（`Number.isFinite`）。
+  - 路径语法规则：命名段表示对象属性，纯数字段表示数组连续索引（从 0 开始连续编号，拒绝稀疏数组），根节点始终物化为对象，严格拒绝路径冲突（`INPUT_PATH_CONFLICT`），拦截 `__proto__`、`constructor`、`prototype` 等原型污染敏感属性。
+  - 三种输入模式互斥：扁平参数、`--input` 与 `--input-file` 严格互斥，不可混用（`INPUT_CONFLICT`）；未指定输入时默认为 `{}`。
+  - 机器输出模式：面向智能体调用推荐使用 `--json`，当参数解析出错时输出标准错误信封并以退出码 2 退出。
 
-标准输出始终返回纯净的 JSON 结果信封，结构化诊断日志全部重定向至标准错误流。
+标准输出默认输出原始纯文本或标准 JSON 结果信封，结构化诊断日志全部重定向至标准错误流。

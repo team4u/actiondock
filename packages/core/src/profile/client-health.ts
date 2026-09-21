@@ -47,6 +47,7 @@ export async function checkRemoteHealth(
       fetchInit.dispatcher = options.dispatcher;
     } else if (options?.insecure) {
       fetchInit.dispatcher = getInsecureDispatcher();
+      (fetchInit as any).tls = { rejectUnauthorized: false };
     }
 
     const res = await fetchWithProtocolFallback(normalizeServerUrl(serverUrl), "/api/v2/health", fetchInit);

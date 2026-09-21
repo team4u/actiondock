@@ -61,10 +61,10 @@ npx skills remove <skill-name>
   该命令会自动将技能登记至本机全局路由表中（`~/.actiondock/registry.json`），使智能体在任意工作目录下均可直接调用。
 - **契约查验与试跑**：
   ```bash
-  # 查验 Action 接口契约
+  # 查验 Action 接口契约（编码顾问）
   ad describe <package-id>/<action-id>
-  # 试运行调用
-  ad run <package-id>/<action-id> --input '{"key": "value"}'
+  # 试运行调用（扁平参数规范传参）
+  ad run <package-id>/<action-id> -- key=value
   ```
 
 ---
@@ -108,13 +108,25 @@ npx skills remove <skill-name>
   - **单点降级调用**：仅当无匹配规程或用户明确指示执行单点操作时，方可直接调用单一 Action。
 - **第三阶段：参数契约按需调阅**：
   - 为节省上下文开销，各 Action 的详细参数结构不静态内嵌在说明书中。
-  - 在调用未知参数的 Action 前，智能体必须在终端执行 `ad describe <id>` 动态获取该 Action 的输入输出模式与必填字段。
+  - 在调用未知参数的 Action 前，智能体必须在终端执行 `ad describe <id>` 调阅编码顾问，动态获取该 Action 的输入输出模式、字段明细、Flat 编码指引与建议赋值样例。
   - 杜绝参数猜测与伪造属性，确保传参严格符合 `inputSchema` 约束。
 - **第四阶段：确定性执行调用**：
-  - 传参安全规范：简单标量参数可使用 `--input '{"key": "val"}'`；包含对象、数组或引号多行文本的复杂参数，必须先写入临时 JSON 文件，再通过 `ad run <id> --input-file /tmp/input.json` 传递，杜绝终端引号转义损坏。自动化脚本或管道调用可使用标准输入 `cat /tmp/input.json | ad run <id> --input-file -`。选项 `--input` 与 `--input-file` 严格互斥，未指定输入时默认为 `{}`。
+  - 规范调用语法：推荐使用 `ad run <action> [control-options] -- <assignments...>`。
+  - 协议边界：`--` 分隔符作为控制平面（ActionDock 选项如 `--json`、`--config`、`--data-dir`、`--profile`）与数据平面（Action 入参）的协议边界。
+  - 两种赋值操作符：
+    - `path=value`：严格保留为字符串，不执行 JSON 解析与类型猜测。
+    - `path:=json`：严格解析为 JSON 值，递归校验所有数值为有限数（`Number.isFinite`）。
+  - 路径语法规则：
+    - 命名段（`^[A-Za-z_][A-Za-z0-9_-]*$`）表示对象属性。
+    - 纯数字段（`^(0|[1-9][0-9]*)$`）表示数组索引，数组索引必须从 0 开始连续编号，拒绝稀疏数组。
+    - 根节点始终物化为对象。
+    - 路径冲突（叶节点与容器冲突、对象与数组冲突、重复赋值）严格拒绝（`INPUT_PATH_CONFLICT`）。
+    - 拦截原型污染敏感属性（`__proto__`、`constructor`、`prototype`）。
+  - 三种输入模式互斥：扁平参数、`--input` 与 `--input-file` 严格互斥，不可混用（`INPUT_CONFLICT`）；未指定输入时默认为 `{}`。
+  - 传统文件与管道输入：对于超长文本或复杂嵌套对象，亦可写入临时 JSON 文件使用 `--input-file <path>`，或通过管道流式传入 `--input-file -`。
   - 默认原始文本输出：`ad run` 默认直接将结果正文内容（如 `content`、`text`、`message` 或标量字符串）输出至 stdout（保留真实换行且无 JSON 转义），元数据输出至 stderr。极佳适配文件查阅、代码阅读与 Unix 管道消费。
-  - 机器 JSON 信封输出：需结构化解析完整返回时传入 `--json`，终端输出标准 JSON 信封。
-  - 异步长任务支持：耗时操作添加 `--async` 参数（如 `ad run <action> --input-file <path> --async --json`），获取包含 `runId` 的票据。
+  - 机器 JSON 信封输出：面向智能体调用推荐传入 `--json`，终端输出标准 JSON 信封；若参数解析出错输出错误信封并以退出码 2 退出。
+  - 异步长任务支持：耗时操作添加 `--async` 参数（如 `ad run <action> --async --json -- task=deploy`），获取包含 `runId` 的票据。
 - **第五阶段：结果校验与错误处置**：
   - 默认模式：直接消费 stdout 纯文本；若执行失败，stderr 输出错误详情并伴随非 0 退出码。
   - `--json` 模式：解析标准 JSON 信封：

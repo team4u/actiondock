@@ -79,8 +79,8 @@ ad mcp serve --port 5178
 针对已构建完毕的 Node 目录型交付产物，目标环境只需通用 Node.js 运行时（版本大于等于 24.12.0），无需预先安装全局 ActionDock CLI 工具链：
 
 ```bash
-# 执行 Action 并输出标准 JSON 信封
-node ./dist/app/entry.mjs run list-prs --input '{"repo": "team4u/actiondock"}'
+# 执行 Action 并输出标准 JSON 信封（支持规范的 -- 分隔扁平参数，亦支持 --input）
+node ./dist/app/entry.mjs run list-prs -- repo=team4u/actiondock
 ```
 
 详细运行机制与限制请参阅 [Node 交付产物运行](standalone-run.md)。
@@ -127,7 +127,7 @@ ad add @actiondock/example-tools
 安装完成后，即可在工程中直接以完全限定标识调用该 Action：
 
 ```bash
-ad run example-tools/sample.greet --input '{"name": "ActionDock"}'
+ad run example-tools/sample.greet -- name=ActionDock
 ```
 
 若后续不再需要该依赖包，可执行移除命令：
@@ -157,7 +157,7 @@ Action 依赖的外部凭据（如 API 密钥、数据库连接串）可通过�
 
 ### 能力探索与自省
 
-在任意安装了 ActionDock 的环境中，均可通过命令行探索当前可用的能力：
+在任意安装了 ActionDock 的环境中，均可通过命令行探索当前可用的能力与调用契约：
 
 ```bash
 # 查看所有已加载的包与 Action 列表
@@ -166,9 +166,15 @@ ad info
 # 模糊意图检索
 ad info github
 
-# 查看特定 Action 的输入输出模式契约与参数规范
+# 调阅编码顾问查看输入输出模式、Flat 编码指引与建议赋值样例
 ad describe team4u.github-tools/list-prs
 ```
+
+调用 Action 时推荐使用规范语法：
+```bash
+ad run <action> [control-options] -- <assignments...>
+```
+其中 `--` 分隔符作为控制平面选项（如 `--json`、`--config`、`--data-dir`、`--profile`）与数据平面入参的协议边界，支持 `path=value`（字符串）与 `path:=json`（JSON 标量与结构，递归校验数值为有限数），与 `--input` 及 `--input-file` 严格互斥。面向智能体调用推荐使用 `--json`，当参数解析出错时输出标准错误信封并以退出码 2 退出。
 
 ---
 

@@ -144,6 +144,7 @@ export function createRemoteFetch(
       fetchInit.dispatcher = options.dispatcher;
     } else if (options?.insecure) {
       fetchInit.dispatcher = getInsecureDispatcher();
+      (fetchInit as any).tls = { rejectUnauthorized: false };
     }
 
     return fetchWithProtocolFallback(base, path, fetchInit);

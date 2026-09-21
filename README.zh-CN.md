@@ -82,10 +82,14 @@ $ ad export skill --> [EXPORT] Self-contained Agent Skill bundle
   # 运行纯内存沙箱测试
   ad test
 
-  # 本地命令行调用验证（简单参数内联传参）
-  ad run greet --input '{"name":"World"}'
+  # 本地命令行规范调用（扁平参数赋值，推荐）
+  ad run greet -- name=World
 
-  # 复杂参数推荐使用 JSON 文件或标准输入，避免终端转义损坏
+  # 传递 JSON 标量或结构使用 ':='（递归校验数值为有限数）
+  ad run greet -- name=World count:=1
+
+  # 传统内联 JSON 或文件传参（与扁平参数严格互斥）
+  ad run greet --input '{"name":"World"}'
   ad run greet --input-file input.json
   ```
 
@@ -155,6 +159,25 @@ $ ad export skill --> [EXPORT] Self-contained Agent Skill bundle
 ```bash
 ad generate types
 ```
+
+### 编码顾问与规范调用协议
+
+为了消除智能体调用工具时的参数幻觉并简化终端交互，ActionDock 提供了编码顾问与扁平键值编码协议：
+
+- 编码顾问：执行 `ad describe <id>` 不仅展示模式契约，还提供字段明细（字段名、类型、是否必填、描述）、Flat 编码指引与基于清单的建议赋值样例展示。
+- 规范调用语法：`ad run <action> [control-options] -- <assignments...>`。
+- 协议边界：`--` 分隔符作为控制平面选项（如 `--json`、`--config`、`--data-dir`、`--profile` 等）与数据平面（Action 入参）的协议边界。
+- 两种赋值操作符语义：
+  - `path=value`：严格保留为字符串，不执行 JSON 解析与类型猜测。
+  - `path:=json`：严格解析为 JSON 值，递归校验所有数值为有限数（`Number.isFinite`）。
+- 路径语法规则：
+  - 命名段（`^[A-Za-z_][A-Za-z0-9_-]*$`）表示对象属性。
+  - 纯数字段（`^(0|[1-9][0-9]*)$`）表示数组索引，数组索引必须从 0 开始连续编号，拒绝稀疏数组。
+  - 根节点始终物化为对象。
+  - 路径冲突（叶节点与容器冲突、对象与数组冲突、重复赋值）严格拒绝。
+  - 拦截原型污染敏感属性（`__proto__`、`constructor`、`prototype`）。
+- 三种输入模式互斥：扁平参数、`--input` 与 `--input-file` 严格互斥，不可混用；未指定输入时默认为 `{}`。
+- 机器输出模式：面向智能体调用推荐使用 `--json`，当参数解析出错时输出标准错误信封并以退出码 2 退出。
 
 ### 人定规程与安全红线
 

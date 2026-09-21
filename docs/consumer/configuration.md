@@ -35,7 +35,7 @@ actiondock.json 清单中的默认配置声明 (default)
 适合临时调试或流水线动态注入：
 
 ```bash
-ad run sample.greet --config GREETING_PREFIX="Bonjour" --input '{"name":"ActionDock"}'
+ad run sample.greet --config GREETING_PREFIX="Bonjour" -- name=ActionDock
 ```
 
 ### 包级本地 SQLite 配置
@@ -65,7 +65,7 @@ GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
 或直接通过系统环境变量传入：
 
 ```bash
-GITHUB_TOKEN=ghp_xxxx ad run github.get-pr --input '{"repo":"team4u/actiondock","prNumber":1}'
+GITHUB_TOKEN=ghp_xxxx ad run github.get-pr -- repo=team4u/actiondock prNumber:=1
 ```
 
 ---
@@ -153,11 +153,11 @@ ad profile add staging --server http://10.0.0.12:8080 --token secret-token-123
 在执行命令时传入 `--profile` 或 `--server` 参数，CLI 会自动将请求转发给远端 `ad serve` 节点执行：
 
 ```bash
-# 在 staging 节点同步执行 Action
-ad run github.get-pr --input '{"repo": "team4u/actiondock", "prNumber": 1}' --profile staging
+# 在 staging 节点同步执行 Action（扁平参数规范调用）
+ad run github.get-pr --profile staging -- repo=team4u/actiondock prNumber:=1
 
 # 在远程节点发起异步长任务并获取运行标识
-ad run heavy-data-sync --input-file ./params.json --profile prod --async
+ad run heavy-data-sync --profile prod --async -- task=sync
 
 # 追踪远程任务状态
 ad runs show <runId> --profile prod

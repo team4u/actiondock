@@ -12,6 +12,7 @@ import {
   stripBom,
 } from "../src/utils/input";
 import { ArgumentError } from "../src/errors";
+import { FlatInputError } from "@actiondock/core";
 
 const cliPath = resolve(import.meta.dirname, "../bin/ad.js");
 
@@ -53,21 +54,21 @@ describe("CLI Action Input Resolution - Unit Tests", () => {
     expect(parseJson("\uFEFF{\"name\":\"WithBOM\"}", "--input")).toEqual({ name: "WithBOM" });
   });
 
-  it("parseJson throws ArgumentError with INVALID_JSON code on invalid JSON", () => {
-    expect(() => parseJson("{bad json}", "--input")).toThrow(ArgumentError);
+  it("parseJson throws FlatInputError with INVALID_JSON_LITERAL code on invalid JSON", () => {
+    expect(() => parseJson("{bad json}", "--input")).toThrow(FlatInputError);
     try {
       parseJson("{bad json}", "--input");
     } catch (err: any) {
-      expect(err).toBeInstanceOf(ArgumentError);
-      expect(err.code).toBe("INVALID_JSON");
+      expect(err).toBeInstanceOf(FlatInputError);
+      expect(err.code).toBe("INVALID_JSON_LITERAL");
       expect(err.message).toContain("Invalid JSON input from --input");
     }
 
     try {
       parseJson("", "input.json");
     } catch (err: any) {
-      expect(err).toBeInstanceOf(ArgumentError);
-      expect(err.code).toBe("INVALID_JSON");
+      expect(err).toBeInstanceOf(FlatInputError);
+      expect(err.code).toBe("INVALID_JSON_LITERAL");
       expect(err.message).toContain("Invalid JSON input from input.json");
     }
   });
@@ -88,9 +89,9 @@ describe("CLI Action Input Resolution - Unit Tests", () => {
       await resolveActionInput({ input: "{\"a\":1}", inputFile: "test.json" });
       expect(true).toBe(false);
     } catch (err: any) {
-      expect(err).toBeInstanceOf(ArgumentError);
+      expect(err).toBeInstanceOf(FlatInputError);
       expect(err.code).toBe("INPUT_CONFLICT");
-      expect(err.message).toBe("--input and --input-file cannot be used together");
+      expect(err.message).toContain("mutually exclusive");
     }
   });
 
@@ -110,7 +111,7 @@ describe("CLI Action Input Resolution - Unit Tests", () => {
       await resolveActionInput({ inputFile: "nonexistent_file_12345.json" });
       expect(true).toBe(false);
     } catch (err: any) {
-      expect(err).toBeInstanceOf(ArgumentError);
+      expect(err).toBeInstanceOf(FlatInputError);
       expect(err.code).toBe("INPUT_FILE_NOT_FOUND");
       expect(err.message).toBe("Input file not found: nonexistent_file_12345.json");
     }
@@ -121,7 +122,7 @@ describe("CLI Action Input Resolution - Unit Tests", () => {
       await resolveActionInput({ inputFile: tmpdir() });
       expect(true).toBe(false);
     } catch (err: any) {
-      expect(err).toBeInstanceOf(ArgumentError);
+      expect(err).toBeInstanceOf(FlatInputError);
       expect(err.code).toBe("INPUT_FILE_READ_FAILED");
     }
   });
@@ -231,7 +232,7 @@ export default defineAction(async (input: any) => {
     // Human mode
     const proc = runCli(["run", "test.echo", "--input", "{\"a\":1}", "--input-file", filePath], tempDir);
     expect(proc.exitCode).toBe(2);
-    expect(proc.stderr.toString()).toContain("--input and --input-file cannot be used together");
+    expect(proc.stderr.toString()).toContain("mutually exclusive");
 
     // Machine mode (--json)
     const procJson = runCli(["run", "test.echo", "--input", "{\"a\":1}", "--input-file", filePath, "--json"], tempDir);
@@ -239,21 +240,21 @@ export default defineAction(async (input: any) => {
     const res = JSON.parse(procJson.stdout.toString());
     expect(res.ok).toBe(false);
     expect(res.error.code).toBe("INPUT_CONFLICT");
-    expect(res.error.message).toContain("--input and --input-file cannot be used together");
+    expect(res.error.message).toContain("mutually exclusive");
   });
 
   // 6. 非法 inline JSON
-  it("rejects invalid inline JSON with exit code 2 and INVALID_JSON code", () => {
+  it("rejects invalid inline JSON with exit code 2 and INVALID_JSON_LITERAL code", () => {
     const proc = runCli(["run", "test.echo", "--input", "{\"invalid\":", "--json"], tempDir);
     expect(proc.exitCode).toBe(2);
     const res = JSON.parse(proc.stdout.toString());
     expect(res.ok).toBe(false);
-    expect(res.error.code).toBe("INVALID_JSON");
+    expect(res.error.code).toBe("INVALID_JSON_LITERAL");
     expect(res.error.message).toContain("Invalid JSON input from --input");
   });
 
   // 7. 非法文件 JSON
-  it("rejects invalid JSON file with exit code 2 and INVALID_JSON code", () => {
+  it("rejects invalid JSON file with exit code 2 and INVALID_JSON_LITERAL code", () => {
     const filePath = join(tempDir, "bad.json");
     writeFileSync(filePath, "{\ninvalid json here\n", "utf-8");
 
@@ -261,17 +262,17 @@ export default defineAction(async (input: any) => {
     expect(proc.exitCode).toBe(2);
     const res = JSON.parse(proc.stdout.toString());
     expect(res.ok).toBe(false);
-    expect(res.error.code).toBe("INVALID_JSON");
+    expect(res.error.code).toBe("INVALID_JSON_LITERAL");
     expect(res.error.message).toContain(`Invalid JSON input from ${filePath}`);
   });
 
   // 8. 非法 stdin JSON
-  it("rejects invalid JSON from stdin with exit code 2 and INVALID_JSON code", () => {
+  it("rejects invalid JSON from stdin with exit code 2 and INVALID_JSON_LITERAL code", () => {
     const proc = runCli(["run", "test.echo", "--input-file", "-", "--json"], tempDir, "{not json}");
     expect(proc.exitCode).toBe(2);
     const res = JSON.parse(proc.stdout.toString());
     expect(res.ok).toBe(false);
-    expect(res.error.code).toBe("INVALID_JSON");
+    expect(res.error.code).toBe("INVALID_JSON_LITERAL");
     expect(res.error.message).toContain("Invalid JSON input from stdin");
   });
 
@@ -351,7 +352,7 @@ export default defineAction(async (input: any) => {
   });
 
   // 13. 空文件
-  it("rejects empty file with exit code 2 and INVALID_JSON error", () => {
+  it("rejects empty file with exit code 2 and INVALID_JSON_LITERAL error", () => {
     const emptyFile = join(tempDir, "empty.json");
     writeFileSync(emptyFile, "", "utf-8");
 
@@ -359,17 +360,17 @@ export default defineAction(async (input: any) => {
     expect(proc.exitCode).toBe(2);
     const res = JSON.parse(proc.stdout.toString());
     expect(res.ok).toBe(false);
-    expect(res.error.code).toBe("INVALID_JSON");
+    expect(res.error.code).toBe("INVALID_JSON_LITERAL");
     expect(res.error.message).toContain(`Invalid JSON input from ${emptyFile}`);
   });
 
   // 14. 空 stdin
-  it("rejects empty stdin with exit code 2 and INVALID_JSON error", () => {
+  it("rejects empty stdin with exit code 2 and INVALID_JSON_LITERAL error", () => {
     const proc = runCli(["run", "test.echo", "--input-file", "-", "--json"], tempDir, "");
     expect(proc.exitCode).toBe(2);
     const res = JSON.parse(proc.stdout.toString());
     expect(res.ok).toBe(false);
-    expect(res.error.code).toBe("INVALID_JSON");
+    expect(res.error.code).toBe("INVALID_JSON_LITERAL");
     expect(res.error.message).toContain("Invalid JSON input from stdin");
   });
 
@@ -508,5 +509,103 @@ export default defineAction(async (input: any) => {
       expect(parsedPipe.ok).toBe(true);
       expect(parsedPipe.data.received.fromShell).toBe(true);
     }
+  });
+
+  // 18. Flat JsonValue Encoding v1: 通过 -- 传递字符串赋值、JSON 赋值、嵌套对象、数字索引数组
+  it("executes action with flat arguments via -- supporting =, :=, nested objects, and indexed arrays", () => {
+    const proc = runCli(
+      [
+        "run",
+        "test.echo",
+        "--json",
+        "--",
+        "str=hello",
+        "num:=123",
+        "bool:=true",
+        "arr:=[1,2]",
+        "user.name=Alice",
+        "user.age:=30",
+        "items.0=first",
+        "items.1=second",
+      ],
+      tempDir
+    );
+    expect(proc.exitCode).toBe(0);
+    const res = JSON.parse(proc.stdout.toString());
+    expect(res.ok).toBe(true);
+    expect(res.data.received).toEqual({
+      str: "hello",
+      num: 123,
+      bool: true,
+      arr: [1, 2],
+      user: {
+        name: "Alice",
+        age: 30,
+      },
+      items: ["first", "second"],
+    });
+  });
+
+  // 19. Flat 参数与 --input 冲突返回退出码 2 及结构化错误
+  it("rejects when both flat args (via --) and --input are provided with exit code 2 and INPUT_CONFLICT", () => {
+    const proc = runCli(
+      ["run", "test.echo", "--input", '{"a":1}', "--json", "--", "b=2"],
+      tempDir
+    );
+    expect(proc.exitCode).toBe(2);
+    const res = JSON.parse(proc.stdout.toString());
+    expect(res.ok).toBe(false);
+    expect(res.error.code).toBe("INPUT_CONFLICT");
+    expect(res.error.message).toContain("mutually exclusive");
+  });
+
+  // 20. Flat 参数与 --input-file 冲突返回退出码 2 及结构化错误
+  it("rejects when both flat args (via --) and --input-file are provided with exit code 2 and INPUT_CONFLICT", () => {
+    const filePath = join(tempDir, "input.json");
+    writeFileSync(filePath, "{}", "utf-8");
+
+    const proc = runCli(
+      ["run", "test.echo", "--input-file", filePath, "--json", "--", "b=2"],
+      tempDir
+    );
+    expect(proc.exitCode).toBe(2);
+    const res = JSON.parse(proc.stdout.toString());
+    expect(res.ok).toBe(false);
+    expect(res.error.code).toBe("INPUT_CONFLICT");
+    expect(res.error.message).toContain("mutually exclusive");
+  });
+
+  // 21. 非法 Flat 参数在 --json 模式下返回正确的错误信封
+  it("rejects invalid JSON literal in flat args with exit code 2 and INVALID_JSON_LITERAL", () => {
+    const proc = runCli(
+      ["run", "test.echo", "--json", "--", "num:=invalid_json"],
+      tempDir
+    );
+    expect(proc.exitCode).toBe(2);
+    const res = JSON.parse(proc.stdout.toString());
+    expect(res.ok).toBe(false);
+    expect(res.error.code).toBe("INVALID_JSON_LITERAL");
+  });
+
+  it("rejects invalid path in flat args with exit code 2 and INVALID_FLAT_ARGUMENT", () => {
+    const proc = runCli(
+      ["run", "test.echo", "--json", "--", "bad..path=1"],
+      tempDir
+    );
+    expect(proc.exitCode).toBe(2);
+    const res = JSON.parse(proc.stdout.toString());
+    expect(res.ok).toBe(false);
+    expect(res.error.code).toBe("INVALID_FLAT_ARGUMENT");
+  });
+
+  it("rejects path conflict in flat args with exit code 2 and INPUT_PATH_CONFLICT", () => {
+    const proc = runCli(
+      ["run", "test.echo", "--json", "--", "a=1", "a.b=2"],
+      tempDir
+    );
+    expect(proc.exitCode).toBe(2);
+    const res = JSON.parse(proc.stdout.toString());
+    expect(res.ok).toBe(false);
+    expect(res.error.code).toBe("INPUT_PATH_CONFLICT");
   });
 });

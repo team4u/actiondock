@@ -133,6 +133,7 @@ describe("Native HTTPS Server and Insecure TLS Support", () => {
     const res = await fetch(`${server.url}/api/v1/health`, {
       headers: { Authorization: `Bearer ${TOKEN}` },
       dispatcher: getInsecureDispatcher(),
+      tls: { rejectUnauthorized: false },
     } as any);
     expect(res.status).toBe(200);
     const json: any = await res.json();

@@ -6,6 +6,15 @@ import type { ConfigItemDefinition } from "../project/types";
 import { createActionDockTarget } from "../target/target";
 import type { ActionDockTarget } from "../target/types";
 import { STANDALONE_ASYNC_UNSUPPORTED } from "../errors";
+import {
+  resolveActionInput,
+  FlatInputError,
+  INPUT_CONFLICT,
+  INVALID_FLAT_ARGUMENT,
+  INVALID_JSON_LITERAL,
+  INPUT_PATH_CONFLICT,
+  FLAT_INPUT_LIMIT_EXCEEDED,
+} from "../input";
 import { normalizeActionCollection } from "./action-collection";
 import { parseDuration } from "../utils";
 
@@ -139,20 +148,23 @@ export class StandaloneDispatcher {
    * @returns 退出状态码（0: 成功, 1: 失败, 2: 参数错误, 130: 中断）
    */
   async dispatch(argv: string[]): Promise<number> {
-    const args = [...argv];
+    const separator = argv.indexOf("--");
+    const controlArgs = separator >= 0 ? argv.slice(0, separator) : argv;
+    const actionArgs = separator >= 0 ? argv.slice(separator + 1) : [];
+
     let dataDir: string | undefined;
     const configOverrides: Record<string, unknown> = {};
 
-    // 1. 提取全局参数（--data-dir, --config）
+    // 1. 提取全局参数（--data-dir, --config）仅从 controlArgs 中解析
     const filteredArgs: string[] = [];
-    for (let i = 0; i < args.length; i++) {
-      const arg = args[i];
-      if (arg === "--data-dir" && i + 1 < args.length) {
-        dataDir = args[++i];
+    for (let i = 0; i < controlArgs.length; i++) {
+      const arg = controlArgs[i];
+      if (arg === "--data-dir" && i + 1 < controlArgs.length) {
+        dataDir = controlArgs[++i];
       } else if (arg.startsWith("--data-dir=")) {
         dataDir = arg.slice(11);
-      } else if (arg === "--config" && i + 1 < args.length) {
-        const pair = args[++i];
+      } else if (arg === "--config" && i + 1 < controlArgs.length) {
+        const pair = controlArgs[++i];
         const [k, ...v] = pair.split("=");
         if (k) configOverrides[k] = v.join("=");
       } else if (arg.startsWith("--config=")) {
@@ -168,8 +180,8 @@ export class StandaloneDispatcher {
     const subArgs = filteredArgs.slice(1);
 
     // 2. 独立入口拒绝异步启动语义
-    if (args.includes("--async")) {
-      const isJson = args.includes("--json");
+    if (controlArgs.includes("--async")) {
+      const isJson = controlArgs.includes("--json");
       if (isJson) {
         this.writeOut(
           JSON.stringify(
@@ -231,7 +243,7 @@ export class StandaloneDispatcher {
           return await this.handleDescribe(target, subArgs);
 
         case "run":
-          return await this.handleRun(target, subArgs, controller.signal);
+          return await this.handleRun(target, subArgs, actionArgs, controller.signal);
 
         case "config":
           return await this.handleConfig(target, subArgs);
@@ -349,51 +361,125 @@ export class StandaloneDispatcher {
   private async handleRun(
     target: ActionDockTarget,
     subArgs: string[],
+    actionArgs: string[],
     signal: AbortSignal
   ): Promise<number> {
+    const isJson = subArgs.includes("--json");
     const id = subArgs.find((a) => !a.startsWith("-"));
     if (!id) {
-      this.writeErr("Error: Action ID is required for run");
+      if (isJson) {
+        this.writeOut(
+          JSON.stringify(
+            {
+              ok: false,
+              error: {
+                code: "INVALID_ARGUMENT",
+                message: "Error: Action ID is required for run",
+              },
+            },
+            null,
+            2
+          )
+        );
+      } else {
+        this.writeErr("Error: Action ID is required for run");
+      }
       return ExitCode.INVALID_ARGUMENT;
     }
 
-    let input: unknown = {};
+    let inputStr: string | undefined;
+    let inputFile: string | undefined;
     let timeoutMs: number | undefined;
-    let isJson = false;
 
     for (let i = 0; i < subArgs.length; i++) {
       const arg = subArgs[i];
-      if (arg === "--json") {
-        isJson = true;
-      } else if (arg === "--timeout" && i + 1 < subArgs.length) {
-        timeoutMs = parseDuration(subArgs[++i]);
+      if (arg === "--timeout" && i + 1 < subArgs.length) {
+        try {
+          timeoutMs = parseDuration(subArgs[++i]);
+        } catch (err: any) {
+          if (isJson) {
+            this.writeOut(
+              JSON.stringify(
+                {
+                  ok: false,
+                  error: {
+                    code: "INVALID_ARGUMENT",
+                    message: `Invalid timeout format: ${err?.message || err}`,
+                  },
+                },
+                null,
+                2
+              )
+            );
+          } else {
+            this.writeErr(`Error: Invalid timeout format: ${err?.message || err}`);
+          }
+          return ExitCode.INVALID_ARGUMENT;
+        }
       } else if (arg.startsWith("--timeout=")) {
-        timeoutMs = parseDuration(arg.slice(10));
+        try {
+          timeoutMs = parseDuration(arg.slice(10));
+        } catch (err: any) {
+          if (isJson) {
+            this.writeOut(
+              JSON.stringify(
+                {
+                  ok: false,
+                  error: {
+                    code: "INVALID_ARGUMENT",
+                    message: `Invalid timeout format: ${err?.message || err}`,
+                  },
+                },
+                null,
+                2
+              )
+            );
+          } else {
+            this.writeErr(`Error: Invalid timeout format: ${err?.message || err}`);
+          }
+          return ExitCode.INVALID_ARGUMENT;
+        }
       } else if (arg === "--input" && i + 1 < subArgs.length) {
-        try {
-          input = JSON.parse(subArgs[++i]);
-        } catch (e: any) {
-          this.writeErr(`Error parsing --input JSON: ${e.message}`);
-          return ExitCode.INVALID_ARGUMENT;
-        }
+        inputStr = subArgs[++i];
       } else if (arg.startsWith("--input=")) {
-        try {
-          input = JSON.parse(arg.slice(8));
-        } catch (e: any) {
-          this.writeErr(`Error parsing --input JSON: ${e.message}`);
-          return ExitCode.INVALID_ARGUMENT;
-        }
+        inputStr = arg.slice(8);
       } else if (arg === "--input-file" && i + 1 < subArgs.length) {
-        try {
-          input = JSON.parse(readFileSync(subArgs[++i], "utf-8"));
-        } catch (e: any) {
-          this.writeErr(`Error reading --input-file: ${e.message}`);
-          return ExitCode.INVALID_ARGUMENT;
-        }
+        inputFile = subArgs[++i];
+      } else if (arg.startsWith("--input-file=")) {
+        inputFile = arg.slice(13);
       }
     }
 
-    const result = await target.runAction(id, input as JsonValue, {
+    let input: JsonValue;
+    try {
+      input = await resolveActionInput({
+        input: inputStr,
+        inputFile,
+        flatArgs: actionArgs.length > 0 ? actionArgs : undefined,
+        stdin: process.stdin,
+      });
+    } catch (err: any) {
+      if (isJson) {
+        this.writeOut(
+          JSON.stringify(
+            {
+              ok: false,
+              error: {
+                code: err?.code || "INVALID_ARGUMENT",
+                message: err?.message || String(err),
+              },
+            },
+            null,
+            2
+          )
+        );
+      } else {
+        this.writeErr(`Error: ${err?.message || String(err)}`);
+      }
+      return ExitCode.INVALID_ARGUMENT;
+    }
+
+    const result = await target.runAction(id, input, {
       signal,
       timeoutMs,
     });

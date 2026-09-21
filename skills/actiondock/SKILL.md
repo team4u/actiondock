@@ -30,8 +30,8 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 | **新建 Playbook 规程** | `ad playbook create <id> [-d <desc>] [-a <actions...>]` | 脚手架生成规程 Markdown 模板并在清单中登记 | [developer.md](references/developer.md) |
 | **探索可用能力** | `ad info <patterns...>` 或 `ad info -i <pattern>` | 模糊意图检索，优先检查规程与工具清单 | [cli.md](references/cli.md) |
 | **列出可用 Action** | `ad list [patterns...] [-P <pkg>]` | 按包或关键词列出当前包、工作区或远端的所有 Action | [cli.md](references/cli.md) |
-| **查看 Action 详情** | `ad describe <id> [-P <pkg>]` | 查看指定 Action 的 Schema 模式、入参要求与依赖 | [cli.md](references/cli.md) |
-| **执行原子 Action** | `ad run <action> [--input <json> \| --input-file <path\|->] [--json]` | 默认原始纯文本输出，适合查阅文件与管道消费；传 `--json` 输出标准结构化信封 | [cli.md](references/cli.md) |
+| **查看 Action 详情** | `ad describe <id> [-P <pkg>]` | 作为编码顾问查看字段明细、Flat 编码指引与建议赋值样例 | [cli.md](references/cli.md) |
+| **执行原子 Action** | `ad run <action> [control-options] [-- <assignments...>] [--json]` | 规范调用语法，支持扁平参数与 `--input` / `--input-file` 互斥输入；传 `--json` 输出标准结构化信封 | [cli.md](references/cli.md) |
 | **执行受管系统命令** | `ctx.process.run` 与 `ctx.process.start` | 短时命令直接运行，长期交互会话通过 withControl 保证独占控制权 | [process-execution.md](references/process-execution.md) |
 | **异步长任务调用** | `ad run <action> --async`，结合 `ad runs` 追踪 | 提交异步执行任务并获取凭据，追踪执行进度与结果 | [cli.md](references/cli.md) |
 | **执行复合业务任务** | `ad playbook show <id>`，依步骤调度对应 Action | 规程优先原则，阅读规程正文后依步骤编排调度 | [developer.md](references/developer.md) |
@@ -71,7 +71,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 ### 作业流一：作为消费者使用 Action 与 Skill
 
 - 智能体技能装载与按需自举：通过 `npx skills add` 安装或放置于客户端技能目录；若首次运行报错提示缺少 `ad` 或依赖，Agent 自行进入目录执行 `npm install --omit=dev` 与 `ad link .` 完成自举。
-- 智能体调度引导生命周期：意图匹配激活 -> 规程优先决议（`ad playbook show`） -> 参数契约按需查验（`ad describe` 杜绝幻觉） -> 确定性调用（`ad run` 配合 `--input` 或 `--input-file`） -> JSON 信封结果校验。详细调度指引参见 [consumer.md](references/consumer.md)。
+- 智能体调度引导生命周期：意图匹配激活 -> 规程优先决议（`ad playbook show`） -> 参数契约按需查验（`ad describe` 编码顾问） -> 确定性调用（`ad run <action> [control-options] -- <assignments...>` 或配合 `--input` / `--input-file`） -> JSON 信封结果校验。详细调度指引参见 [consumer.md](references/consumer.md)。
 - 项目工程依赖消费：在工程根目录下执行 `ad add <package>` 安装并锁定依赖，通过终端 `ad run` 调用或在源码中通过 `ctx.actions.invoke` 调度。
 - 集成工具 MCP 服务挂载：在 Cursor 或 Claude Desktop 配置文件中配置命令 `"ad"`、参数 `["mcp"]`（单项目）或 `["mcp", "--all"]`（全局挂载）。
 
@@ -89,7 +89,13 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 
 ### 作业流三：安全执行与长任务追踪
 
-- 传参安全规范：简单参数使用 `--input`；包含对象、数组或引号多行文本时推荐写入临时 JSON 文件使用 `--input-file <path>`，或通过管道流式传入 `--input-file -`，杜绝终端引号转义损坏。两者严格互斥，未指定输入时默认传入 `{}`。
+- 传参安全与扁平编码规范：
+  - 规范调用语法：`ad run <action> [control-options] -- <assignments...>`。
+  - 协议边界：`--` 分隔符作为控制平面选项（如 `--json`、`--config`、`--data-dir`、`--profile`）与数据平面（Action 入参）的协议边界。
+  - 两种赋值操作符：`path=value` 严格保留为字符串，不执行 JSON 解析与类型猜测；`path:=json` 严格解析为 JSON 值，递归校验所有数值为有限数（`Number.isFinite`）。
+  - 路径语法规则：命名段（`^[A-Za-z_][A-Za-z0-9_-]*$`）表示对象属性；纯数字段（`^(0|[1-9][0-9]*)$`）表示数组索引，数组索引必须从 0 开始连续编号，拒绝稀疏数组；根节点始终物化为对象；严禁叶节点与容器冲突、对象与数组冲突及重复赋值（违者触发 `INPUT_PATH_CONFLICT`）；拦截 `__proto__`、`constructor`、`prototype` 等原型污染敏感属性。
+  - 三种输入模式严格互斥：扁平参数、`--input <json>` 与 `--input-file <path|->` 严格互斥，不可混用（违者触发 `INPUT_CONFLICT`）；未指定输入时默认传入 `{}`。
+  - 机器模式与退出码：面向智能体调用推荐使用 `--json`；当参数解析出错时输出标准错误信封并以退出码 2 退出。
 - 默认原始输出与机器信封：`ad run` 默认直接将结果正文（如文件 `content`、`text`、`message` 或标量字符串）原始输出到 stdout（保留真实换行且无 JSON 转义），元数据独立输出至 stderr，兼顾命令行可读性、Agent 行号精确定位与 Unix 管道消费；如需程序化消费标准 JSON 信封，传入 `--json`。
 - 异步长任务管理：长耗时任务添加 `--async` 提交并获取凭据，通过 `ad runs show <runId>` 追踪事件流，通过 `ad runs cancel <runId>` 中途取消。
 - 配置覆盖：调试时使用 `-c KEY=VALUE` 临时覆盖配置；生产使用 `ad config set <KEY> <VALUE>` 持久化注入。

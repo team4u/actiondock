@@ -240,6 +240,21 @@ export const QUOTA_EXCEEDED = "QUOTA_EXCEEDED";
 /** 输入通道已关闭拒绝继续写入 */
 export const INPUT_CLOSED = "INPUT_CLOSED";
 
+/** 扁平入参赋值表达式格式非法 */
+export const INVALID_FLAT_ARGUMENT = "INVALID_FLAT_ARGUMENT";
+
+/** JSON 字面量解析失败或包含非有限数值 */
+export const INVALID_JSON_LITERAL = "INVALID_JSON_LITERAL";
+
+/** 扁平入参路径冲突 */
+export const INPUT_PATH_CONFLICT = "INPUT_PATH_CONFLICT";
+
+/** 扁平入参超出安全阈值上限 */
+export const FLAT_INPUT_LIMIT_EXCEEDED = "FLAT_INPUT_LIMIT_EXCEEDED";
+
+/** 输入源互斥冲突 */
+export const INPUT_CONFLICT = "INPUT_CONFLICT";
+
 /**
  * 进程领域结构化异常类。
  */
@@ -255,3 +270,4 @@ export class ProcessError extends Error {
     Object.setPrototypeOf(this, ProcessError.prototype);
   }
 }
+

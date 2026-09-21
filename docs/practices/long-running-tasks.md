@@ -82,7 +82,9 @@ export default defineAction(async (input: BatchProcessInput, ctx): Promise<Batch
 
 - 异步启动长任务：
   ```bash
-  ad run data.batch-process --async --input '{"items":["a","b","c","d"]}'
+  ad run data.batch-process --async -- items.0=a items.1=b items.2=c items.3=d
+  # 亦可使用互斥的 --input 选项：
+  # ad run data.batch-process --async --input '{"items":["a","b","c","d"]}'
   ```
   命令立即返回运行标识（`runId`），而不会在终端中长时间等待。
 

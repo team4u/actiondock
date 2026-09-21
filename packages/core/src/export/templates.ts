@@ -154,7 +154,7 @@ ad link "<skill_root>"
 
 ### 动作参数契约按需调阅
 
-在调用未知参数的 Action 前，可在终端执行命令按需查阅该 Action 的输入输出模式与详细说明：
+在调用未知参数的 Action 前，可在终端执行命令查阅该 Action 的输入输出模式与详细说明：
 
 \`\`\`bash
 ad describe ${pkgId}/${firstAction}
@@ -164,29 +164,33 @@ ad describe ${pkgId}/${firstAction}
 
 为避免多技能之间的 Action ID 命名冲突，建议统一使用带有 Package 前缀的完全限定 ID。
 
-推荐最佳实践：使用文件传递参数，杜绝终端引号转义问题：
+推荐标准调用格式（使用 \`--\` 传递扁平参数赋值）：
 
 \`\`\`bash
-# 写入参数到临时文件并通过 --input-file 传递
+# 字符串赋值
+ad run ${pkgId}/${firstAction} --json -- key=value
+
+# 标量类型赋值（数值、布尔值等）
+ad run ${pkgId}/${firstAction} --json -- count:=2
+\`\`\`
+
+复杂或大段输入使用 \`--input-file\` 传递：
+
+\`\`\`bash
+# 写入参数到文件并通过 --input-file 传递
 cat << 'EOF' > /tmp/input.json
 {
   "param": "value"
 }
 EOF
-ad run ${pkgId}/${firstAction} --input-file /tmp/input.json
+ad run ${pkgId}/${firstAction} --json --input-file /tmp/input.json
 \`\`\`
 
-亦可通过内联参数进行简易命令调用：
-
-\`\`\`bash
-ad run ${pkgId}/${firstAction} --input '{"param": "value"}'
-\`\`\`
-
-> **免注册本地执行**：
+> 免注册本地执行：
 > 若工作目录已位于本技能根目录，亦可直接免 link 执行：
 > \`\`\`bash
 > cd <skill_root>
-> ad run <action-id> --input-file /tmp/input.json
+> ad run <action-id> --json -- key=value
 > \`\`\`
 
 ### 结构化响应解析
@@ -296,24 +300,36 @@ description: ${desc}
 ${desc}
 
 
-### 执行 Action
+### 动作参数契约按需调阅
 
-推荐最佳实践：使用文件传递参数，杜绝终端引号转义问题：
+在调用未知参数的 Action 前，可在终端执行命令查阅该 Action 的输入输出模式与详细说明：
 
 \`\`\`bash
-# 写入参数到临时文件并通过 --input-file 传递
+${binaryRelPath} describe ${firstAction}
+\`\`\`
+
+### 执行 Action
+
+推荐标准调用格式（使用 \`--\` 传递扁平参数赋值）：
+
+\`\`\`bash
+# 字符串赋值
+${binaryRelPath} run ${firstAction} --json -- key=value
+
+# 标量类型赋值（数值、布尔值等）
+${binaryRelPath} run ${firstAction} --json -- count:=2
+\`\`\`
+
+复杂或大段输入使用 \`--input-file\` 传递：
+
+\`\`\`bash
+# 写入参数到文件并通过 --input-file 传递
 cat << 'EOF' > /tmp/input.json
 {
   "param": "value"
 }
 EOF
-${binaryRelPath} run <action-id> --input-file /tmp/input.json
-\`\`\`
-
-亦可通过内联参数进行简易命令调用：
-
-\`\`\`bash
-${binaryRelPath} run ${firstAction} --input '{"param": "value"}'
+${binaryRelPath} run <action-id> --json --input-file /tmp/input.json
 \`\`\`
 
 ### 结构化响应解析
@@ -572,16 +588,27 @@ ${playbookEntries.join("\n")}
       : "";
 
   const sInvoke = `## 标准调用命令
-
-推荐使用参数文件传递内容，杜绝终端引号转义问题：
-
+ 
+推荐标准调用格式（使用 \`--\` 传递扁平参数赋值）：
+ 
 \`\`\`bash
+# 字符串赋值
+ad run ${sampleActionId} --json -- key=value
+ 
+# 标量类型赋值（数值、布尔值等）
+ad run ${sampleActionId} --json -- count:=2
+\`\`\`
+ 
+复杂或大段输入使用 \`--input-file\` 传递：
+ 
+\`\`\`bash
+# 写入参数到文件并通过 --input-file 传递
 cat << 'EOF' > /tmp/input.json
 {
   "param": "value"
 }
 EOF
-ad run ${sampleActionId} --input-file /tmp/input.json
+ad run ${sampleActionId} --json --input-file /tmp/input.json
 \`\`\`
 
 ### 结构化响应解析

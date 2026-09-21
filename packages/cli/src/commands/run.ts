@@ -112,15 +112,18 @@ export function renderRawExecutionResult(
 export async function executeAction(
   id: string,
   options: any,
-  context?: CliContext
+  context?: CliContext,
+  flatArgs?: string[]
 ): Promise<void> {
   if (!id) {
     throw new ArgumentError("Action ID is required for run");
   }
 
+  const effectiveFlatArgs = flatArgs ?? options.flatArgs;
   const input = await resolveActionInput({
     input: options.input,
     inputFile: options.inputFile,
+    flatArgs: effectiveFlatArgs && effectiveFlatArgs.length > 0 ? effectiveFlatArgs : undefined,
     stdin: context?.stdin,
   });
 
@@ -249,7 +252,7 @@ export async function executeAction(
  */
 export function attachRunCommand(parent: Command, context?: CliContext): Command {
   const cmd = parent
-    .command("run <id>")
+    .command("run <id> [params...]")
     .description("Execute an action (from current project, linked packages, or remote profile)")
     .option("-P, --package <id>", "Target package ID or path")
     .option("-i, --input <json>", "Action input as inline JSON")
@@ -262,9 +265,18 @@ export function attachRunCommand(parent: Command, context?: CliContext): Command
     .option("--async", "Execute asynchronously in background (requires remote server or profile)")
     .option("--data-dir <path>", "Custom database directory")
     .option("--json", "Output as JSON")
-    .action(async (id: string, rawOptions: any, cmd: any) => {
-      const options = getEffectiveOptions(rawOptions, cmd);
-      await executeAction(id, options, context);
+    .action(async (id: string, params: string[] | any, rawOptions: any, cmd: any) => {
+      let flatArgs: string[] | undefined;
+      let effectiveRawOptions = rawOptions;
+      let effectiveCmd = cmd;
+      if (Array.isArray(params)) {
+        flatArgs = params.length > 0 ? params : undefined;
+      } else {
+        effectiveCmd = rawOptions;
+        effectiveRawOptions = params;
+      }
+      const options = getEffectiveOptions(effectiveRawOptions, effectiveCmd);
+      await executeAction(id, { ...options, flatArgs }, context);
     });
 }
 

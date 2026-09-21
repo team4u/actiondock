@@ -33,8 +33,13 @@ ActionDock 采用确定性的结构化错误体系。所有失败均通过标准
 | :--- | :---: | :--- | :--- |
 | `INPUT_NOT_JSON` | 400 | 输入参数包含非有限数（NaN 或 Infinity）、循环引用、undefined、函数或符号等非标准 JSON 结构。在创建运行前直接拒绝。 | 检查调用入参数据，确保传递标准 JSON 兼容的纯数据结构。 |
 | `OUTPUT_NOT_JSON` | 500 | Action 业务执行返回值包含非有限数、循环引用、undefined 或无法序列化的非 JSON 结构。 | 检查 Action 的 run 方法返回值，确保仅返回符合 JSON 规范的纯数据。 |
-| `INPUT_VALIDATION_FAILED` | 400 | 传入的参数违反了 Action 声明的 inputSchema 约束（缺少必填属性、类型不匹配、包含多余未声明字段等）。 | 执行 `ad describe <id>` 查看字段模式规范，修正传参。 |
+| `INPUT_VALIDATION_FAILED` | 400 | 传入的参数违反了 Action 声明的 inputSchema 约束（缺少必填属性、类型不匹配、包含多余未声明字段等）。 | 执行 `ad describe <id>` 调阅编码顾问查看字段模式规范，修正传参。 |
 | `OUTPUT_VALIDATION_FAILED` | 500 | Action 业务返回值违反了清单中声明的 outputSchema 约束。 | 检查 Action 实现代码，确保返回值完全符合输出模式定义。 |
+| `INVALID_FLAT_ARGUMENT` | 400 | 扁平赋值参数语法非法（如缺少赋值操作符、路径为空、点号语法非法、命名段包含非法字符或段超出长度限制、包含 `__proto__` 等原型污染敏感属性）。 | 检查扁平赋值表达式，确保符合 `path=value` 或 `path:=json` 格式，属性名符合命名规范且未包含受保护原型属性。 |
+| `INVALID_JSON_LITERAL` | 400 | 使用 `:=` 操作符赋值时，右侧值非合法 JSON 字面量，或解析后包含非有限数（NaN 或 Infinity）。 | 检查 `:=` 后的 JSON 文本，确保为合法 JSON 且所有数值满足 `Number.isFinite`；普通字符串请使用 `=` 赋值。 |
+| `INPUT_PATH_CONFLICT` | 400 | 扁平赋值表达式物化时发生路径冲突（如叶节点与容器冲突、对象与数组类型冲突、重复赋值同一叶路径、数组索引不连续产生稀疏数组等）。 | 检查各赋值项的路径前缀与类型，确保未重复赋值同一路径，数组索引从 0 开始连续编号，容器与标量无冲突。 |
+| `FLAT_INPUT_LIMIT_EXCEEDED` | 400 | 扁平赋值参数超出安全限制阈值（如赋值总数超过 1000、路径深度超过 32、路径长度超过 1024、属性名超过 128、数组索引超过 10000、单值超过 1MB 或物化总大小超过 10MB）。 | 减少单次命令行传递的赋值项数量或体积；深度嵌套或大体量数据推荐使用 `--input` 或 `--input-file` 传递。 |
+| `INPUT_CONFLICT` | 400 | 同时指定了互斥的输入模式（扁平参数、`--input` 与 `--input-file` 之间存在混用）。 | 扁平参数、`--input` 与 `--input-file` 严格互斥，仅保留其中一种传参方式。 |
 
 ---
 

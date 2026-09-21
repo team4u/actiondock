@@ -38,7 +38,7 @@ delivery-package/
 # 列出所有可用 Action 标识与简要描述
 node ./entry.mjs list
 
-# 查看特定 Action 的输入输出模式定义与参数规范
+# 调阅编码顾问查看输入输出模式定义、Flat 编码指引与建议赋值样例
 node ./entry.mjs describe list-prs
 
 # 查看版本号
@@ -52,19 +52,35 @@ node ./entry.mjs --help
 
 ## 命令行调用 Action
 
-通过 `run` 子命令指定 Action 标识与调用参数：
+通过 `run` 子命令指定 Action 标识与调用参数。独立运行模式原生支持 Flat JsonValue Encoding v1 编码协议：
 
-### 行内 JSON 字符串传参
+### 扁平参数规范调用（推荐）
+
+通过 `--` 分隔符隔离控制选项与数据入参：
 
 ```bash
-node ./entry.mjs run list-prs --input '{"repo": "team4u/actiondock"}'
+# 字符串标量赋值
+node ./entry.mjs run list-prs -- repo=team4u/actiondock
+
+# 包含数值或 JSON 标量赋值（:= 严格解析为 JSON 并递归校验数值为有限数）
+node ./entry.mjs run get-pr -- repo=team4u/actiondock prNumber:=101
 ```
 
-### 指定参数文件传参
+- 协议边界：`--` 分隔符作为控制平面（选项如 `--json`、`--config`、`--data-dir` 等）与数据平面（Action 入参）的协议边界。
+- 两种赋值操作符：
+  - `path=value`：严格保留为字符串，不执行 JSON 解析与类型猜测。
+  - `path:=json`：严格解析为 JSON 值，递归校验所有数值为有限数（`Number.isFinite`）。
+- 路径语法规则：命名段表示对象属性，纯数字段表示数组索引（从 0 开始连续编号，拒绝稀疏数组），根节点始终物化为对象，严格拒绝路径冲突（`INPUT_PATH_CONFLICT`），拦截 `__proto__`、`constructor`、`prototype` 等原型污染敏感属性。
+- 三种输入模式互斥：扁平参数、`--input` 与 `--input-file` 严格互斥，不可混用（`INPUT_CONFLICT`）；未指定输入时默认为 `{}`。
+- 参数校验与退出码：参数解析出错时，若指定 `--json` 则输出标准错误信封，并统一以退出码 2 退出。
 
-对于结构复杂或体量较大的输入参数，建议保存在本地 JSON 文件中并通过文件路径传递：
+### 传统选项传参（互斥）
 
 ```bash
+# 行内 JSON 字符串传参
+node ./entry.mjs run list-prs --input '{"repo": "team4u/actiondock"}'
+
+# 指定参数文件传参
 node ./entry.mjs run get-pr --input-file ./input.json
 ```
 
