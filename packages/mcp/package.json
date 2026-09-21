@@ -1,6 +1,6 @@
 {
   "name": "@actiondock/mcp",
-  "version": "2.5.1",
+  "version": "2.6.0",
   "description": "ActionDock MCP Adapter for exposing Actions as Model Context Protocol (MCP) Tools",
   "type": "module",
   "main": "./dist/index.js",
@@ -29,12 +29,12 @@
     "test": "node ../../scripts/run-tests.ts"
   },
   "dependencies": {
-    "@actiondock/core": "^2.5.1",
-    "@actiondock/sdk": "^2.5.1",
+    "@actiondock/core": "^2.6.0",
+    "@actiondock/sdk": "^2.6.0",
     "@modelcontextprotocol/server": "^2.0.0"
   },
   "peerDependencies": {
-    "@actiondock/runtime-node": "^2.5.1"
+    "@actiondock/runtime-node": "^2.6.0"
   },
   "peerDependenciesMeta": {
     "@actiondock/runtime-node": {
