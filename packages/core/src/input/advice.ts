@@ -62,6 +62,29 @@ export interface ActionInputAdvice {
  * @returns 结构化编码建议报告
  */
 export function buildActionInputAdvice(schema: unknown): ActionInputAdvice {
+  if (typeof schema === "boolean") {
+    if (schema === false) {
+      return {
+        flatSupported: false,
+        hasFlatFields: false,
+        fields: [],
+        requiredTemplates: [],
+        optionalTemplates: [],
+        notes: ["布尔模式 false：拒绝所有输入，任何调用参数均判定为非法"],
+      };
+    }
+    return {
+      flatSupported: false,
+      hasFlatFields: false,
+      fields: [],
+      requiredTemplates: [],
+      optionalTemplates: [],
+      notes: [
+        "布尔模式 true：接受任意合法 JSON 输入；调用时无需指定必填参数，非对象根输入请使用 --input-file 或 --input",
+      ],
+    };
+  }
+
   if (!schema || typeof schema !== "object") {
     return {
       flatSupported: false,
@@ -227,55 +250,77 @@ export function formatActionDetail(action: {
     lines.push(`Description: ${action.description}`);
   }
 
-  if (action.inputSchema && typeof action.inputSchema === "object") {
-    const advice = buildActionInputAdvice(action.inputSchema);
-
-    lines.push("\nInput Schema 字段明细:");
-    if (advice.fields.length === 0) {
-      lines.push("  - 无声明字段属性");
-    } else {
-      for (const field of advice.fields) {
-        const reqStr = field.required ? "必填" : "可选";
-        const descStr = field.description ? ` - ${field.description}` : "";
-        const hintStr = field.hint ? ` (${field.hint})` : "";
-        lines.push(`  - ${field.path} (${field.type}, ${reqStr})${descStr}${hintStr}`);
-      }
-    }
-
-    lines.push("\nFlat 编码指引:");
-    for (const g of FLAT_ENCODING_GUIDELINES) {
-      lines.push(`  - ${g}`);
-    }
-
-    if (!advice.flatSupported) {
-      lines.push("\n调用模式引导:");
-      lines.push(
-        `  - 不支持扁平传参，建议使用 --input-file: ad run ${action.id} --json --input-file input.json`
-      );
-      for (const note of advice.notes) {
-        lines.push(`  - [注意] ${note}`);
-      }
-    } else {
-      if (advice.requiredTemplates.length > 0) {
-        lines.push("\n必填赋值模板:");
-        for (const tmpl of advice.requiredTemplates) {
-          lines.push(`  - ${tmpl}`);
+  if (action.inputSchema !== undefined) {
+    if (typeof action.inputSchema === "boolean") {
+      const advice = buildActionInputAdvice(action.inputSchema);
+      if (action.inputSchema === true) {
+        lines.push("\nInput Schema: true (接受任意合法 JSON 输入)");
+        lines.push("\n调用模式引导:");
+        lines.push(`  - ad run ${action.id} --json`);
+        lines.push(`  - 复杂输入: ad run ${action.id} --json --input-file input.json`);
+        for (const note of advice.notes) {
+          lines.push(`  - [注意] ${note}`);
+        }
+      } else {
+        lines.push("\nInput Schema: false (拒绝所有输入，无有效调用参数)");
+        lines.push("\n调用模式引导:");
+        lines.push(`  - 拒绝所有输入，无有效调用参数`);
+        for (const note of advice.notes) {
+          lines.push(`  - [注意] ${note}`);
         }
       }
-      if (advice.optionalTemplates.length > 0) {
-        lines.push("\n可选赋值模板:");
-        for (const tmpl of advice.optionalTemplates) {
-          lines.push(`  - ${tmpl}`);
+    } else if (typeof action.inputSchema === "object" && action.inputSchema !== null) {
+      const advice = buildActionInputAdvice(action.inputSchema);
+
+      lines.push("\nInput Schema 字段明细:");
+      if (advice.fields.length === 0) {
+        lines.push("  - 无声明字段属性");
+      } else {
+        for (const field of advice.fields) {
+          const reqStr = field.required ? "必填" : "可选";
+          const descStr = field.description ? ` - ${field.description}` : "";
+          const hintStr = field.hint ? ` (${field.hint})` : "";
+          lines.push(`  - ${field.path} (${field.type}, ${reqStr})${descStr}${hintStr}`);
         }
       }
 
-      lines.push("\n调用模式引导:");
-      lines.push(`  - ad run ${action.id} --json -- [assignments...]`);
-      lines.push(`  - 复杂输入: ad run ${action.id} --json --input-file input.json`);
-
-      for (const note of advice.notes) {
-        lines.push(`  - [注意] ${note}`);
+      lines.push("\nFlat 编码指引:");
+      for (const g of FLAT_ENCODING_GUIDELINES) {
+        lines.push(`  - ${g}`);
       }
+
+      if (!advice.flatSupported) {
+        lines.push("\n调用模式引导:");
+        lines.push(
+          `  - 不支持扁平传参，建议使用 --input-file: ad run ${action.id} --json --input-file input.json`
+        );
+        for (const note of advice.notes) {
+          lines.push(`  - [注意] ${note}`);
+        }
+      } else {
+        if (advice.requiredTemplates.length > 0) {
+          lines.push("\n必填赋值模板:");
+          for (const tmpl of advice.requiredTemplates) {
+            lines.push(`  - ${tmpl}`);
+          }
+        }
+        if (advice.optionalTemplates.length > 0) {
+          lines.push("\n可选赋值模板:");
+          for (const tmpl of advice.optionalTemplates) {
+            lines.push(`  - ${tmpl}`);
+          }
+        }
+
+        lines.push("\n调用模式引导:");
+        lines.push(`  - ad run ${action.id} --json -- [assignments...]`);
+        lines.push(`  - 复杂输入: ad run ${action.id} --json --input-file input.json`);
+
+        for (const note of advice.notes) {
+          lines.push(`  - [注意] ${note}`);
+        }
+      }
+    } else {
+      lines.push("\nInput Schema: 无");
     }
   } else {
     lines.push("\nInput Schema: 无");

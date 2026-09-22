@@ -983,6 +983,65 @@ describe("Flat JsonValue Encoding v1", () => {
       expect(formatted).toContain("ad run test.action --json -- [assignments...]");
     });
 
+    it("布尔模式 false 返回拒绝所有输入建议报告", () => {
+      const advice = buildActionInputAdvice(false);
+      expect(advice.flatSupported).toBe(false);
+      expect(advice.hasFlatFields).toBe(false);
+      expect(advice.fields).toEqual([]);
+      expect(advice.requiredTemplates).toEqual([]);
+      expect(advice.optionalTemplates).toEqual([]);
+      expect(advice.notes).toEqual([
+        "布尔模式 false：拒绝所有输入，任何调用参数均判定为非法",
+      ]);
+    });
+
+    it("布尔模式 true 返回接受任意合法输入建议报告", () => {
+      const advice = buildActionInputAdvice(true);
+      expect(advice.flatSupported).toBe(false);
+      expect(advice.hasFlatFields).toBe(false);
+      expect(advice.fields).toEqual([]);
+      expect(advice.requiredTemplates).toEqual([]);
+      expect(advice.optionalTemplates).toEqual([]);
+      expect(advice.notes).toEqual([
+        "布尔模式 true：接受任意合法 JSON 输入；调用时无需指定必填参数，非对象根输入请使用 --input-file 或 --input",
+      ]);
+    });
+
+    it("formatActionDetail 正确渲染布尔模式 false", () => {
+      const formatted = formatActionDetail({
+        id: "test.bool-false",
+        inputSchema: false,
+      });
+      expect(formatted).toContain("Action: test.bool-false");
+      expect(formatted).toContain("Input Schema: false (拒绝所有输入，无有效调用参数)");
+      expect(formatted).toContain("调用模式引导:");
+      expect(formatted).toContain("拒绝所有输入，无有效调用参数");
+      expect(formatted).toContain("布尔模式 false：拒绝所有输入，任何调用参数均判定为非法");
+    });
+
+    it("formatActionDetail 正确渲染布尔模式 true", () => {
+      const formatted = formatActionDetail({
+        id: "test.bool-true",
+        inputSchema: true,
+      });
+      expect(formatted).toContain("Action: test.bool-true");
+      expect(formatted).toContain("Input Schema: true (接受任意合法 JSON 输入)");
+      expect(formatted).toContain("调用模式引导:");
+      expect(formatted).toContain("ad run test.bool-true --json");
+      expect(formatted).toContain("复杂输入: ad run test.bool-true --json --input-file input.json");
+      expect(formatted).toContain(
+        "布尔模式 true：接受任意合法 JSON 输入；调用时无需指定必填参数，非对象根输入请使用 --input-file 或 --input"
+      );
+    });
+
+    it("formatActionDetail 正确渲染 undefined inputSchema 为无", () => {
+      const formatted = formatActionDetail({
+        id: "test.no-schema",
+      });
+      expect(formatted).toContain("Action: test.no-schema");
+      expect(formatted).toContain("Input Schema: 无");
+    });
+
     it("验证 InputError 与 FlatInputError 的继承关系与分类", () => {
       const errJson = invalidJson("bad json");
       const errNotFound = inputFileNotFound("missing.json");

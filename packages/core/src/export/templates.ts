@@ -171,23 +171,14 @@ ad describe ${pkgId}/${firstAction}
 ad describe ${pkgId}/${firstAction}
 \`\`\`
 
-推荐标准调用格式（使用 \`--\` 传递扁平参数赋值）：
+调用语法格式：
+ad run ${pkgId}/${firstAction} --json -- ASSIGNMENT...
+（其中 ASSIGNMENT 根据 ad describe ${pkgId}/${firstAction} 查阅的参数契约提供）
+
+将参数写入 JSON 文件并通过 --input-file 传递：
 
 \`\`\`bash
-# 依据参数契约传递赋值
-ad run ${pkgId}/${firstAction} --json -- assignments...
-\`\`\`
-
-复杂或大段输入使用 \`--input-file\` 传递：
-
-\`\`\`bash
-# 写入参数到文件并通过 --input-file 传递
-cat << 'EOF' > /tmp/input.json
-{
-  "param": "value"
-}
-EOF
-ad run ${pkgId}/${firstAction} --json --input-file /tmp/input.json
+ad run ${pkgId}/${firstAction} --json --input-file input.json
 \`\`\`
 
 > 免注册本地执行：
@@ -321,23 +312,14 @@ ${binaryRelPath} describe ${firstAction}
 ${binaryRelPath} describe ${firstAction}
 \`\`\`
 
-推荐标准调用格式（使用 \`--\` 传递扁平参数赋值）：
+调用语法格式：
+${binaryRelPath} run ${firstAction} --json -- ASSIGNMENT...
+（其中 ASSIGNMENT 根据 ${binaryRelPath} describe ${firstAction} 查阅的参数契约提供）
+
+将参数写入 JSON 文件并通过 --input-file 传递：
 
 \`\`\`bash
-# 依据参数契约传递赋值
-${binaryRelPath} run ${firstAction} --json -- assignments...
-\`\`\`
-
-复杂或大段输入使用 \`--input-file\` 传递：
-
-\`\`\`bash
-# 写入参数到文件并通过 --input-file 传递
-cat << 'EOF' > /tmp/input.json
-{
-  "param": "value"
-}
-EOF
-${binaryRelPath} run ${firstAction} --json --input-file /tmp/input.json
+${binaryRelPath} run ${firstAction} --json --input-file input.json
 \`\`\`
 
 ### 结构化响应解析
@@ -604,23 +586,14 @@ ${playbookEntries.join("\n")}
 ad describe ${sampleActionId}
 \`\`\`
 
-推荐标准调用格式（使用 \`--\` 传递扁平参数赋值）：
+调用语法格式：
+ad run ${sampleActionId} --json -- ASSIGNMENT...
+（其中 ASSIGNMENT 根据 ad describe ${sampleActionId} 查阅的参数契约提供）
+ 
+将参数写入 JSON 文件并通过 --input-file 传递：
  
 \`\`\`bash
-# 依据参数契约传递赋值
-ad run ${sampleActionId} --json -- assignments...
-\`\`\`
- 
-复杂或大段输入使用 \`--input-file\` 传递：
- 
-\`\`\`bash
-# 写入参数到文件并通过 --input-file 传递
-cat << 'EOF' > /tmp/input.json
-{
-  "param": "value"
-}
-EOF
-ad run ${sampleActionId} --json --input-file /tmp/input.json
+ad run ${sampleActionId} --json --input-file input.json
 \`\`\`
 
 ### 结构化响应解析
