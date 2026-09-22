@@ -1,3 +1,6 @@
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
 import { defineAction } from "@actiondock/sdk";
 import {
@@ -83,14 +86,55 @@ describe("Phase 10: CLI Describe / Run 集成与普通 CLI / Standalone 行为�
       });
       const standaloneData = JSON.parse(standaloneOut);
 
-      // 2. buildActionDescribePayload 构造结果比对
-      const directPayload = buildActionDescribePayload({
-        id: "greet",
-        packageId: "test.phase10",
-        inputSchema: sampleAction.inputSchema,
-      });
+      // 2. 真实调用普通 CLI: main(["node", "ad", "describe", "greet", "-P", tempPkgDir, "--json"])
+      const tempPkgDir = mkdtempSync(join(tmpdir(), "ad-phase10-cli-"));
+      try {
+        writeFileSync(
+          join(tempPkgDir, "actiondock.json"),
+          JSON.stringify({
+            id: "test.phase10",
+            name: "test.phase10",
+            version: "1.0.0",
+            actions: {
+              greet: {
+                inputSchema: sampleAction.inputSchema,
+              },
+            },
+          })
+        );
+        mkdirSync(join(tempPkgDir, "actions"), { recursive: true });
+        writeFileSync(
+          join(tempPkgDir, "actions", "greet.ts"),
+          "export default function run(input: any) { return { hello: input?.name }; }\n"
+        );
 
-      expect(standaloneData).toEqual(directPayload);
+        let cliOut = "";
+        const origConsoleLog = console.log;
+        console.log = (msg: any) => {
+          cliOut += String(msg);
+        };
+        try {
+          const exitCode = await main([
+            "node",
+            "ad",
+            "describe",
+            "greet",
+            "-P",
+            tempPkgDir,
+            "--json",
+          ]);
+          expect(exitCode).toBe(0);
+        } finally {
+          console.log = origConsoleLog;
+        }
+
+        const cliData = JSON.parse(cliOut);
+
+        // 3. 直接完整比较普通 CLI 与 Standalone 输出 JSON
+        expect(cliData).toEqual(standaloneData);
+      } finally {
+        rmSync(tempPkgDir, { recursive: true, force: true });
+      }
     });
   });
 

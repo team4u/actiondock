@@ -40,7 +40,13 @@ export function attachDescribeCommand(parent: Command, context?: CliContext): Co
 
       let targetRef = id;
       if (options.package && !id.includes("/") && !id.includes(":")) {
-        targetRef = `${options.package}/${id}`;
+        const isPath =
+          options.package.includes("/") ||
+          options.package.includes("\\") ||
+          options.package.startsWith(".");
+        if (!isPath) {
+          targetRef = `${options.package}/${id}`;
+        }
       }
 
       // 通过 Target 门面统一查询 Action 规范
@@ -59,9 +65,7 @@ export function attachDescribeCommand(parent: Command, context?: CliContext): Co
             throw new ExecutionError(msg);
           }
 
-          const payload = buildActionDescribePayload(spec, {
-            packageId: options.package,
-          });
+          const payload = buildActionDescribePayload(spec);
 
           renderResult(payload, {
             json: options.json,

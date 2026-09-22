@@ -49,6 +49,37 @@ describe("ActionDock describe 输出统一设计", () => {
       });
     });
 
+    it("空对象 Schema 推荐 flat 模式且 assignments 为空对象", () => {
+      // 1. 带空 properties 对象的 Schema
+      const specWithEmptyProps = {
+        id: "empty-props",
+        inputSchema: {
+          type: "object",
+          properties: {},
+        },
+      };
+      const payload1 = buildActionDescribePayload(specWithEmptyProps);
+      expect(payload1.inputAdvice).toEqual({
+        version: 1,
+        recommendedMode: "flat",
+        assignments: {},
+      });
+
+      // 2. 仅声明 type: "object" 的 Schema
+      const specTypeOnly = {
+        id: "type-only",
+        inputSchema: {
+          type: "object",
+        },
+      };
+      const payload2 = buildActionDescribePayload(specTypeOnly);
+      expect(payload2.inputAdvice).toEqual({
+        version: 1,
+        recommendedMode: "flat",
+        assignments: {},
+      });
+    });
+
     it("复杂 Schema 标记为 full-json 并给出 COMPLEX_SCHEMA 原因", () => {
       const spec = {
         id: "complex-action",

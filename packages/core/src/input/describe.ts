@@ -104,7 +104,13 @@ export function computeActionDescribeAdvice(schema: unknown): ActionDescribeAdvi
     };
   }
 
-  if (v1Advice.schemaRecommendedMode === "flat") {
+  // 空对象模式判定：根模式为 object，无声明属性，且必填已满足（即无必填字段）
+  const isEmptyObjectSchema =
+    v1Advice.schemaState === "object" &&
+    v1Advice.requiredSatisfiable === true &&
+    v1Advice.fields.length === 0;
+
+  if (v1Advice.schemaRecommendedMode === "flat" || isEmptyObjectSchema) {
     const assignments: Record<string, "=" | ":="> = {};
     for (const field of v1Advice.fields) {
       if (field.flatSafe && field.operator) {
@@ -178,9 +184,11 @@ export function buildActionDescribePayload(
     ...(spec.description !== undefined ? { description: spec.description } : {}),
     ...(spec.inputSchema !== undefined ? { inputSchema: spec.inputSchema } : {}),
     ...(spec.outputSchema !== undefined ? { outputSchema: spec.outputSchema } : {}),
-    ...(spec.tags !== undefined ? { tags: spec.tags } : {}),
-    ...(spec.annotations !== undefined ? { annotations: spec.annotations } : {}),
-    ...(spec.uses !== undefined ? { uses: spec.uses } : {}),
+    ...(spec.tags && spec.tags.length > 0 ? { tags: spec.tags } : {}),
+    ...(spec.annotations && Object.keys(spec.annotations).length > 0
+      ? { annotations: spec.annotations }
+      : {}),
+    ...(spec.uses && spec.uses.length > 0 ? { uses: spec.uses } : {}),
     ...(spec.entry !== undefined ? { entry: spec.entry } : {}),
     inputAdvice: computeActionDescribeAdvice(spec.inputSchema),
   };
