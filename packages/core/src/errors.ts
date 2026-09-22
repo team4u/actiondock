@@ -255,6 +255,12 @@ export const INPUT_PATH_CONFLICT = "INPUT_PATH_CONFLICT";
 /** 扁平入参超出安全阈值上限 */
 export const FLAT_INPUT_LIMIT_EXCEEDED = "FLAT_INPUT_LIMIT_EXCEEDED";
 
+/** 输入数据超出上限（字节大小、嵌套深度等） */
+export const INPUT_LIMIT_EXCEEDED = "INPUT_LIMIT_EXCEEDED";
+
+/** 输入违反 ActionDock 安全策略（如包含全局禁止属性） */
+export const INPUT_POLICY_VIOLATION = "INPUT_POLICY_VIOLATION";
+
 /** 输入源互斥冲突 */
 export const INPUT_CONFLICT = "INPUT_CONFLICT";
 

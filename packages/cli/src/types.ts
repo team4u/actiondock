@@ -1,6 +1,8 @@
 import type { ActionDefinition } from "@actiondock/sdk";
-import type { ConfigItemDefinition } from "@actiondock/core";
+import type { ConfigItemDefinition, InvocationControl } from "@actiondock/core";
 import { ExitCode as CoreExitCode } from "@actiondock/core";
+
+export type { InvocationControl };
 
 /**
  * 统一退出码定义（事实源位于 core 包 StandaloneDispatcher，此处仅 re-export 维持既有导入路径兼容）。
@@ -74,6 +76,10 @@ export interface CliContext {
   stdin?: NodeJS.ReadableStream;
   /** 自定义交互式输入提示函数（用于测试或外部调用重定向） */
   promptInput?: (promptText: string, options?: { secret?: boolean; mask?: string }) => Promise<string>;
+  /** 可选的中断与取消控制契约 */
+  control?: InvocationControl;
+  /** 退出码收集器（避免污染全局 process.exitCode） */
+  exitCode?: number;
 }
 
 /**

@@ -1,4 +1,10 @@
-import { parseDuration, resolveTarget } from "@actiondock/core";
+import {
+  parseDuration,
+  resolveTarget,
+  type InvocationControl,
+  validateActionInputValue,
+  mapInputValidationFailure,
+} from "@actiondock/core";
 import type { ExecutionResult, JsonValue } from "@actiondock/sdk";
 import { Command } from "commander";
 import { ArgumentError, ExecutionError, SigintError, packageNotFoundError } from "../errors";
@@ -102,7 +108,12 @@ export function renderRawExecutionResult(
         context
       );
     }
-    process.exitCode = 1;
+    if (context) {
+      context.exitCode = 1;
+    }
+    if (!context?.control) {
+      process.exitCode = 1;
+    }
   }
 }
 
@@ -113,11 +124,15 @@ export async function executeAction(
   id: string,
   options: any,
   context?: CliContext,
-  flatArgs?: string[]
+  flatArgs?: string[],
+  control?: InvocationControl
 ): Promise<void> {
   if (!id) {
     throw new ArgumentError("Action ID is required for run");
   }
+
+  const effectiveControl = control ?? context?.control;
+  const effectiveSignal = effectiveControl?.signal;
 
   const effectiveFlatArgs = flatArgs ?? options.flatArgs;
   const input = await resolveActionInput({
@@ -126,6 +141,11 @@ export async function executeAction(
     flatArgs: effectiveFlatArgs && effectiveFlatArgs.length > 0 ? effectiveFlatArgs : undefined,
     stdin: context?.stdin,
   });
+
+  const check = validateActionInputValue(input);
+  if (!check.valid) {
+    throw mapInputValidationFailure("cli-pre-target", check);
+  }
 
   let timeoutMs: number | undefined;
   if (options.timeout) {
@@ -144,14 +164,6 @@ export async function executeAction(
       if (k) configOverrides[k] = v.join("=");
     }
   }
-
-  const controller = new AbortController();
-  let receivedSigint = false;
-  const sigintHandler = () => {
-    receivedSigint = true;
-    controller.abort(new Error("Interrupted by SIGINT"));
-  };
-  process.once("SIGINT", sigintHandler);
 
   try {
     // 异步执行仅支持远端目标，本地模式直接拒绝
@@ -190,7 +202,7 @@ export async function executeAction(
 
         if (options.async) {
           const ticket = await target.startAction(targetRef, input as JsonValue, {
-            signal: controller.signal,
+            signal: effectiveSignal,
             timeoutMs,
             config: configOverrides,
             requestId: options.requestId,
@@ -209,16 +221,25 @@ export async function executeAction(
           }
 
           if (ticket.status === "failed") {
-            process.exitCode = 1;
+            if (context) {
+              context.exitCode = 1;
+            }
             return;
           }
         } else {
           const result = await target.runAction(targetRef, input as JsonValue, {
-            signal: controller.signal,
+            signal: effectiveSignal,
             timeoutMs,
             config: configOverrides,
             requestId: options.requestId,
           });
+
+          if (
+            effectiveControl?.cancellationSource === "sigint" &&
+            (effectiveSignal?.aborted || (!result.ok && result.error?.code === "ACTION_CANCELLED"))
+          ) {
+            throw new SigintError();
+          }
 
           if (isMachine) {
             writeStdout(JSON.stringify(result, null, 2), context);
@@ -227,7 +248,9 @@ export async function executeAction(
           }
 
           if (!result.ok) {
-            process.exitCode = 1;
+            if (context) {
+              context.exitCode = 1;
+            }
             return;
           }
         }
@@ -235,12 +258,16 @@ export async function executeAction(
       { localRoot: targetPackageRoot || undefined, scanLinkedPackages: true, ownDataDir: true }
     );
   } catch (err: any) {
-    if (receivedSigint || err?.name === "AbortError" || err?.message?.includes("SIGINT")) {
+    const isSigint =
+      effectiveControl?.cancellationSource === "sigint" ||
+      err?.message?.includes("Interrupted by SIGINT");
+    if (
+      isSigint &&
+      (err?.name === "AbortError" || effectiveSignal?.aborted || err?.message?.includes("SIGINT") || err instanceof SigintError)
+    ) {
       throw new SigintError();
     }
     throw err;
-  } finally {
-    process.removeListener("SIGINT", sigintHandler);
   }
 }
 
@@ -276,7 +303,7 @@ export function attachRunCommand(parent: Command, context?: CliContext): Command
         effectiveRawOptions = params;
       }
       const options = getEffectiveOptions(effectiveRawOptions, effectiveCmd);
-      await executeAction(id, { ...options, flatArgs }, context);
+      await executeAction(id, { ...options, flatArgs }, context, undefined, context?.control);
     });
 }
 

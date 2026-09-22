@@ -4,6 +4,10 @@ import {
   invalidJsonLiteral,
   flatInputLimitExceeded,
 } from "./flat-errors";
+import {
+  isFlatPathPropertyName,
+  isForbiddenActionInputPropertyName,
+} from "./flat-predicates";
 import { validateJsonValue } from "../json/value-validator";
 
 /** 最大赋值表达式总数 */
@@ -58,9 +62,7 @@ export interface FlatParserOptions {
   maxTotalRawBytes?: number;
 }
 
-const DANGEROUS_PROPERTIES = new Set(["__proto__", "constructor", "prototype"]);
 const ARRAY_INDEX_REGEX = /^(0|[1-9][0-9]*)$/;
-const PROPERTY_KEY_REGEX = /^[A-Za-z_][A-Za-z0-9_-]*$/;
 
 /**
  * 解析单个扁平赋值表达式。
@@ -106,7 +108,7 @@ function parseSingleFlatAssignment(
   } else {
     throw invalidFlatArgument(
       `Missing assignment operator in flat argument (length: ${token.length})`,
-      { length: token.length }
+      { length: token.length, reason: "MISSING_OPERATOR" }
     );
   }
 
@@ -117,7 +119,7 @@ function parseSingleFlatAssignment(
   if (rawPath.length === 0) {
     throw invalidFlatArgument(
       `Empty path in flat assignment with operator '${operator}'`,
-      { operator, valueLength: rawValueBytes }
+      { operator, valueLength: rawValueBytes, reason: "EMPTY_PATH" }
     );
   }
 
@@ -125,7 +127,7 @@ function parseSingleFlatAssignment(
   if (pathByteLength > maxPathLength) {
     throw flatInputLimitExceeded(
       `Path length (${pathByteLength} bytes) exceeds limit (${maxPathLength} bytes)`,
-      { path: rawPath, length: pathByteLength, maxPathLength }
+      { path: rawPath, length: pathByteLength, maxPathLength, reason: "MAX_PATH_BYTES" }
     );
   }
 
@@ -136,7 +138,7 @@ function parseSingleFlatAssignment(
   ) {
     throw invalidFlatArgument(
       `Invalid dot notation in path: "${rawPath}"`,
-      { path: rawPath }
+      { path: rawPath, reason: "INVALID_DOT_NOTATION" }
     );
   }
 
@@ -144,7 +146,7 @@ function parseSingleFlatAssignment(
   if (rawSegments.length > maxPathDepth) {
     throw flatInputLimitExceeded(
       `Path depth (${rawSegments.length}) exceeds limit (${maxPathDepth}) in path: "${rawPath}"`,
-      { path: rawPath, depth: rawSegments.length, maxPathDepth }
+      { path: rawPath, depth: rawSegments.length, maxPathDepth, reason: "MAX_PATH_DEPTH" }
     );
   }
 
@@ -153,14 +155,14 @@ function parseSingleFlatAssignment(
     if (seg.length === 0) {
       throw invalidFlatArgument(
         `Empty path segment in path: "${rawPath}"`,
-        { path: rawPath }
+        { path: rawPath, reason: "INVALID_SEGMENT" }
       );
     }
 
-    if (DANGEROUS_PROPERTIES.has(seg)) {
+    if (isForbiddenActionInputPropertyName(seg)) {
       throw invalidFlatArgument(
         `Forbidden property "${seg}" in path: "${rawPath}"`,
-        { path: rawPath, segment: seg }
+        { path: rawPath, segment: seg, reason: "FORBIDDEN_PROPERTY" }
       );
     }
 
@@ -168,7 +170,7 @@ function parseSingleFlatAssignment(
     if (segByteLength > maxPropertyKeyLength) {
       throw flatInputLimitExceeded(
         `Path segment length (${segByteLength} bytes) exceeds limit (${maxPropertyKeyLength} bytes) in path: "${rawPath}"`,
-        { path: rawPath, segment: seg, length: segByteLength, maxPropertyKeyLength }
+        { path: rawPath, segment: seg, length: segByteLength, maxPropertyKeyLength, reason: "MAX_PROPERTY_KEY_BYTES" }
       );
     }
 
@@ -177,16 +179,16 @@ function parseSingleFlatAssignment(
       if (index > maxArrayIndex) {
         throw flatInputLimitExceeded(
           `Array index (${index}) exceeds limit (${maxArrayIndex}) in path: "${rawPath}"`,
-          { path: rawPath, segment: seg, index, maxArrayIndex }
+          { path: rawPath, segment: seg, index, maxArrayIndex, reason: "MAX_ARRAY_INDEX" }
         );
       }
       path.push(index);
-    } else if (PROPERTY_KEY_REGEX.test(seg)) {
+    } else if (isFlatPathPropertyName(seg)) {
       path.push(seg);
     } else {
       throw invalidFlatArgument(
         `Invalid path segment "${seg}" in path: "${rawPath}"`,
-        { path: rawPath, segment: seg }
+        { path: rawPath, segment: seg, reason: "INVALID_SEGMENT" }
       );
     }
   }
@@ -194,7 +196,7 @@ function parseSingleFlatAssignment(
   if (rawValueBytes > maxRawValueLength) {
     throw flatInputLimitExceeded(
       `Raw value length (${rawValueBytes} bytes) exceeds limit (${maxRawValueLength} bytes) for path "${rawPath}"`,
-      { path: rawPath, operator, valueLength: rawValueBytes, maxRawValueLength }
+      { path: rawPath, operator, valueLength: rawValueBytes, maxRawValueLength, reason: "MAX_RAW_VALUE_BYTES" }
     );
   }
 
@@ -205,7 +207,7 @@ function parseSingleFlatAssignment(
     if (rawValueBytes > maxJsonLiteralLength) {
       throw flatInputLimitExceeded(
         `JSON literal length (${rawValueBytes} bytes) exceeds limit (${maxJsonLiteralLength} bytes) for path "${rawPath}"`,
-        { path: rawPath, operator: ":=", valueLength: rawValueBytes, maxJsonLiteralLength }
+        { path: rawPath, operator: ":=", valueLength: rawValueBytes, maxJsonLiteralLength, reason: "MAX_JSON_LITERAL_BYTES" }
       );
     }
 
@@ -215,7 +217,7 @@ function parseSingleFlatAssignment(
     } catch {
       throw invalidJsonLiteral(
         `Failed to parse JSON literal for path "${rawPath}" (length: ${rawValueBytes} bytes)`,
-        { path: rawPath, operator: ":=", valueLength: rawValueBytes }
+        { path: rawPath, operator: ":=", valueLength: rawValueBytes, reason: "SYNTAX_ERROR" }
       );
     }
 
@@ -223,7 +225,17 @@ function parseSingleFlatAssignment(
     if (!check.valid) {
       throw invalidJsonLiteral(
         `Invalid JSON literal for path "${rawPath}": ${check.reason}`,
-        { path: rawPath, operator: ":=", valueLength: rawValueBytes }
+        {
+          path: rawPath,
+          operator: ":=",
+          valueLength: rawValueBytes,
+          reason:
+            check.code === "NON_FINITE_NUMBER"
+              ? "NON_FINITE_NUMBER"
+              : check.code === "MAX_JSON_DEPTH"
+                ? "MAX_JSON_DEPTH"
+                : "INVALID_JSON_VALUE",
+        }
       );
     }
 
@@ -254,7 +266,7 @@ export function parseFlatAssignments(
   if (tokens.length > maxAssignments) {
     throw flatInputLimitExceeded(
       `Total assignments (${tokens.length}) exceeds limit (${maxAssignments})`,
-      { count: tokens.length, maxAssignments }
+      { count: tokens.length, maxAssignments, reason: "MAX_ASSIGNMENTS" }
     );
   }
 
@@ -265,7 +277,7 @@ export function parseFlatAssignments(
     if (totalRawBytes > maxTotalRawBytes) {
       throw flatInputLimitExceeded(
         `Total raw input bytes (${totalRawBytes}) exceeds limit (${maxTotalRawBytes})`,
-        { totalBytes: totalRawBytes, maxTotalRawBytes }
+        { totalBytes: totalRawBytes, maxTotalRawBytes, reason: "MAX_TOTAL_RAW_BYTES" }
       );
     }
   }

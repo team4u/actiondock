@@ -4,9 +4,13 @@ import {
   INVALID_FLAT_ARGUMENT,
   INPUT_PATH_CONFLICT,
   FLAT_INPUT_LIMIT_EXCEEDED,
+  INPUT_LIMIT_EXCEEDED,
+  INPUT_POLICY_VIOLATION,
   INPUT_CONFLICT,
   INPUT_FILE_NOT_FOUND,
   INPUT_FILE_READ_FAILED,
+  INPUT_NOT_JSON,
+  INPUT_VALIDATION_FAILED,
 } from "../errors";
 
 export {
@@ -15,19 +19,98 @@ export {
   INVALID_FLAT_ARGUMENT,
   INPUT_PATH_CONFLICT,
   FLAT_INPUT_LIMIT_EXCEEDED,
+  INPUT_LIMIT_EXCEEDED,
+  INPUT_POLICY_VIOLATION,
   INPUT_CONFLICT,
   INPUT_FILE_NOT_FOUND,
   INPUT_FILE_READ_FAILED,
+  INPUT_NOT_JSON,
+  INPUT_VALIDATION_FAILED,
 };
+
+/** 输入大小或深度超出限制的根因类型 */
+export type InputLimitExceededReason =
+  | "MAX_INPUT_BYTES"
+  | "MAX_JSON_DEPTH"
+  | string;
+
+/** 扁平入参安全阈值超限的根因类型 */
+export type FlatInputLimitExceededReason =
+  | "MAX_ASSIGNMENTS"
+  | "MAX_PATH_DEPTH"
+  | "MAX_PATH_BYTES"
+  | "MAX_PROPERTY_KEY_BYTES"
+  | "MAX_RAW_VALUE_BYTES"
+  | "MAX_JSON_LITERAL_BYTES"
+  | "MAX_TOTAL_RAW_BYTES"
+  | "MAX_ARRAY_INDEX"
+  | "MAX_MATERIALIZED_BYTES"
+  | "MAX_MATERIALIZED_JSON_DEPTH"
+  | string;
+
+/** 输入策略违规的根因类型 */
+export type InputPolicyViolationReason =
+  | "FORBIDDEN_PROPERTY"
+  | string;
+
+/** 非法扁平参数的根因类型 */
+export type InvalidFlatArgumentReason =
+  | "MISSING_OPERATOR"
+  | "EMPTY_PATH"
+  | "INVALID_DOT_NOTATION"
+  | "INVALID_SEGMENT"
+  | "FORBIDDEN_PROPERTY"
+  | string;
+
+/** 输入路径冲突的根因类型 */
+export type InputPathConflictReason =
+  | "ROOT_INDEX_NOT_ALLOWED"
+  | "DUPLICATE_ASSIGNMENT"
+  | "LEAF_CONTAINER_CONFLICT"
+  | "OBJECT_ARRAY_CONFLICT"
+  | "SPARSE_ARRAY"
+  | "INCOMPLETE_CONTAINER"
+  | string;
+
+/** 非法完整 JSON 的根因类型 */
+export type InvalidJsonReason =
+  | "SYNTAX_ERROR"
+  | "INVALID_UTF8"
+  | "NON_FINITE_NUMBER"
+  | "MAX_JSON_DEPTH"
+  | "INVALID_JSON_VALUE"
+  | string;
+
+/** 非法 JSON 字面量的根因类型 */
+export type InvalidJsonLiteralReason =
+  | "SYNTAX_ERROR"
+  | "NON_FINITE_NUMBER"
+  | "MAX_JSON_DEPTH"
+  | "INVALID_JSON_VALUE"
+  | string;
+
+/** 输入来源类型 */
+export type InputValidationSource =
+  | "flat-json-literal"
+  | "flat-materialized"
+  | "full-json-inline"
+  | "full-json-file"
+  | "full-json-stdin"
+  | "cli-pre-target"
+  | "runtime";
 
 /**
  * 输入领域通用结构化异常类。
  */
 export class InputError extends Error {
   public readonly code: string;
-  public readonly details?: Record<string, unknown>;
+  public readonly details?: Record<string, unknown> | string[];
 
-  constructor(code: string, message: string, details?: Record<string, unknown>) {
+  constructor(
+    code: string,
+    message: string,
+    details?: Record<string, unknown> | string[]
+  ) {
     super(message);
     this.name = "InputError";
     this.code = code;
@@ -122,6 +205,26 @@ export function inputFileNotFound(
 }
 
 /**
+ * 构造 INPUT_LIMIT_EXCEEDED 异常。
+ */
+export function inputLimitExceeded(
+  message: string,
+  details?: Record<string, unknown>
+): InputError {
+  return new InputError(INPUT_LIMIT_EXCEEDED, message, details);
+}
+
+/**
+ * 构造 INPUT_POLICY_VIOLATION 异常。
+ */
+export function inputPolicyViolation(
+  message: string,
+  details?: Record<string, unknown>
+): InputError {
+  return new InputError(INPUT_POLICY_VIOLATION, message, details);
+}
+
+/**
  * 构造 INPUT_FILE_READ_FAILED 异常。
  */
 export function inputFileReadFailed(
@@ -136,3 +239,4 @@ export function inputFileReadFailed(
     { source, ...details }
   );
 }
+

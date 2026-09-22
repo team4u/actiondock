@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { buildCliDescribeInputMetadataV1 } from "@actiondock/core";
 import { ArgumentError, ExecutionError, packageNotFoundError } from "../errors";
 import { renderActionDetail, renderResult } from "../renderer";
 import type { CliContext } from "../types";
@@ -58,6 +59,10 @@ export function attachDescribeCommand(parent: Command, context?: CliContext): Co
             throw new ExecutionError(msg);
           }
 
+          const metadata = options.json
+            ? buildCliDescribeInputMetadataV1(spec.inputSchema)
+            : undefined;
+
           const detail = {
             id: spec.id,
             description: spec.description,
@@ -68,6 +73,7 @@ export function attachDescribeCommand(parent: Command, context?: CliContext): Co
             uses: spec.uses,
             entry: spec.entry,
             filePath: spec.filePath,
+            ...(metadata || {}),
           };
 
           renderResult(detail, {

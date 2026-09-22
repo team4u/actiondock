@@ -225,12 +225,13 @@ describe("Flat JsonValue Encoding v1", () => {
   });
 
   describe("安全属性拦截", () => {
-    it("拦截 __proto__ 危险属性", () => {
+    it("拦截 __proto__ 危险属性并带上 FORBIDDEN_PROPERTY 根因", () => {
       expect(() => decodeFlatInput(["__proto__=1"])).toThrow(FlatInputError);
       try {
         decodeFlatInput(["__proto__=1"]);
       } catch (err: any) {
         expect(err.code).toBe(INVALID_FLAT_ARGUMENT);
+        expect(err.details?.reason).toBe("FORBIDDEN_PROPERTY");
       }
 
       expect(() => decodeFlatInput(["a.__proto__.b=1"])).toThrow(FlatInputError);
@@ -238,15 +239,17 @@ describe("Flat JsonValue Encoding v1", () => {
         decodeFlatInput(["a.__proto__.b=1"]);
       } catch (err: any) {
         expect(err.code).toBe(INVALID_FLAT_ARGUMENT);
+        expect(err.details?.reason).toBe("FORBIDDEN_PROPERTY");
       }
     });
 
-    it("拦截 constructor 危险属性", () => {
+    it("拦截 constructor 危险属性并带上 FORBIDDEN_PROPERTY 根因", () => {
       expect(() => decodeFlatInput(["constructor=1"])).toThrow(FlatInputError);
       try {
         decodeFlatInput(["constructor=1"]);
       } catch (err: any) {
         expect(err.code).toBe(INVALID_FLAT_ARGUMENT);
+        expect(err.details?.reason).toBe("FORBIDDEN_PROPERTY");
       }
 
       expect(() => decodeFlatInput(["a.constructor.b=1"])).toThrow(FlatInputError);
@@ -254,15 +257,17 @@ describe("Flat JsonValue Encoding v1", () => {
         decodeFlatInput(["a.constructor.b=1"]);
       } catch (err: any) {
         expect(err.code).toBe(INVALID_FLAT_ARGUMENT);
+        expect(err.details?.reason).toBe("FORBIDDEN_PROPERTY");
       }
     });
 
-    it("拦截 prototype 危险属性", () => {
+    it("拦截 prototype 危险属性并带上 FORBIDDEN_PROPERTY 根因", () => {
       expect(() => decodeFlatInput(["prototype=1"])).toThrow(FlatInputError);
       try {
         decodeFlatInput(["prototype=1"]);
       } catch (err: any) {
         expect(err.code).toBe(INVALID_FLAT_ARGUMENT);
+        expect(err.details?.reason).toBe("FORBIDDEN_PROPERTY");
       }
 
       expect(() => decodeFlatInput(["a.prototype.b=1"])).toThrow(FlatInputError);
@@ -270,6 +275,7 @@ describe("Flat JsonValue Encoding v1", () => {
         decodeFlatInput(["a.prototype.b=1"]);
       } catch (err: any) {
         expect(err.code).toBe(INVALID_FLAT_ARGUMENT);
+        expect(err.details?.reason).toBe("FORBIDDEN_PROPERTY");
       }
     });
   });

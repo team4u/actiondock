@@ -1,5 +1,10 @@
 import type { JsonValue } from "@actiondock/sdk";
-import { inputPathConflict, flatInputLimitExceeded } from "./flat-errors";
+import {
+  inputPathConflict,
+  flatInputLimitExceeded,
+  invalidFlatArgument,
+} from "./flat-errors";
+import { isForbiddenActionInputPropertyName } from "./flat-predicates";
 import { DEFAULT_MAX_MATERIALIZED_SIZE_BYTES } from "./flat-parser";
 import type { FlatAssignment } from "./flat-parser";
 import { validateJsonValue } from "../json/value-validator";
@@ -66,7 +71,7 @@ function materializeNode(node: IntermediateNode): JsonValue {
         if (!child) {
           throw inputPathConflict(
             `Sparse array detected at "${node.pathStr}": missing index ${i}`,
-            { path: node.pathStr, missingIndex: i }
+            { path: node.pathStr, missingIndex: i, reason: "SPARSE_ARRAY" }
           );
         }
         result.push(materializeNode(child));
@@ -78,7 +83,7 @@ function materializeNode(node: IntermediateNode): JsonValue {
     default:
       throw inputPathConflict(
         `Incomplete intermediate node at "${node.pathStr}"`,
-        { path: node.pathStr }
+        { path: node.pathStr, reason: "INCOMPLETE_CONTAINER" }
       );
   }
 }
@@ -106,7 +111,7 @@ export function materializeFlatInput(
     if (path.length === 0) {
       throw inputPathConflict(
         `Cannot assign value directly to root object`,
-        { operator, valueLength }
+        { operator, valueLength, reason: "LEAF_CONTAINER_CONFLICT" }
       );
     }
 
@@ -118,10 +123,17 @@ export function materializeFlatInput(
       const currentPathStr = path.slice(0, i + 1).join(".");
 
       if (typeof seg === "string") {
+        if (isForbiddenActionInputPropertyName(seg)) {
+          throw invalidFlatArgument(
+            `Forbidden property "${seg}" in path: "${currentPathStr}"`,
+            { path: currentPathStr, segment: seg, reason: "FORBIDDEN_PROPERTY" }
+          );
+        }
+
         if (current.state !== NodeState.OBJECT) {
           throw inputPathConflict(
             `Path conflict at "${current.pathStr}": expected object container but found ${current.state.toLowerCase()}`,
-            { path: currentPathStr, operator, valueLength }
+            { path: currentPathStr, operator, valueLength, reason: "OBJECT_ARRAY_CONFLICT" }
           );
         }
 
@@ -141,12 +153,12 @@ export function materializeFlatInput(
           } else if (child.state === NodeState.VALUE) {
             throw inputPathConflict(
               `Duplicate assignment to leaf path "${currentPathStr}"`,
-              { path: currentPathStr, operator, valueLength }
+              { path: currentPathStr, operator, valueLength, reason: "DUPLICATE_ASSIGNMENT" }
             );
           } else {
             throw inputPathConflict(
               `Path conflict at "${currentPathStr}": cannot assign value to existing container (${child.state.toLowerCase()})`,
-              { path: currentPathStr, operator, valueLength }
+              { path: currentPathStr, operator, valueLength, reason: "LEAF_CONTAINER_CONFLICT" }
             );
           }
         } else {
@@ -159,12 +171,12 @@ export function materializeFlatInput(
           } else if (child.state === NodeState.VALUE) {
             throw inputPathConflict(
               `Path conflict at "${currentPathStr}": cannot access property "${nextSeg}" on existing value`,
-              { path: currentPathStr, operator, valueLength }
+              { path: currentPathStr, operator, valueLength, reason: "LEAF_CONTAINER_CONFLICT" }
             );
           } else if (child.state !== nextExpectedState) {
             throw inputPathConflict(
               `Path conflict at "${currentPathStr}": expected ${nextExpectedState.toLowerCase()} but found ${child.state.toLowerCase()}`,
-              { path: currentPathStr, operator, valueLength }
+              { path: currentPathStr, operator, valueLength, reason: "OBJECT_ARRAY_CONFLICT" }
             );
           }
 
@@ -175,7 +187,12 @@ export function materializeFlatInput(
         if (current.state !== NodeState.ARRAY) {
           throw inputPathConflict(
             `Path conflict at "${current.pathStr || "root"}": expected array container but found ${current.state.toLowerCase()}`,
-            { path: currentPathStr, operator, valueLength }
+            {
+              path: currentPathStr,
+              operator,
+              valueLength,
+              reason: current.pathStr === "" ? "ROOT_INDEX_NOT_ALLOWED" : "OBJECT_ARRAY_CONFLICT",
+            }
           );
         }
 
@@ -193,12 +210,12 @@ export function materializeFlatInput(
           } else if (child.state === NodeState.VALUE) {
             throw inputPathConflict(
               `Duplicate assignment to leaf path "${currentPathStr}"`,
-              { path: currentPathStr, operator, valueLength }
+              { path: currentPathStr, operator, valueLength, reason: "DUPLICATE_ASSIGNMENT" }
             );
           } else {
             throw inputPathConflict(
               `Path conflict at "${currentPathStr}": cannot assign value to existing container (${child.state.toLowerCase()})`,
-              { path: currentPathStr, operator, valueLength }
+              { path: currentPathStr, operator, valueLength, reason: "LEAF_CONTAINER_CONFLICT" }
             );
           }
         } else {
@@ -211,12 +228,12 @@ export function materializeFlatInput(
           } else if (child.state === NodeState.VALUE) {
             throw inputPathConflict(
               `Path conflict at "${currentPathStr}": cannot access index/property "${nextSeg}" on existing value`,
-              { path: currentPathStr, operator, valueLength }
+              { path: currentPathStr, operator, valueLength, reason: "LEAF_CONTAINER_CONFLICT" }
             );
           } else if (child.state !== nextExpectedState) {
             throw inputPathConflict(
               `Path conflict at "${currentPathStr}": expected ${nextExpectedState.toLowerCase()} but found ${child.state.toLowerCase()}`,
-              { path: currentPathStr, operator, valueLength }
+              { path: currentPathStr, operator, valueLength, reason: "OBJECT_ARRAY_CONFLICT" }
             );
           }
 
@@ -232,7 +249,12 @@ export function materializeFlatInput(
   if (!check.valid) {
     throw flatInputLimitExceeded(
       `Materialized input validation failed: ${check.reason}`,
-      { reason: check.reason }
+      {
+        reason:
+          check.code === "MAX_JSON_DEPTH"
+            ? "MAX_MATERIALIZED_JSON_DEPTH"
+            : "INVALID_JSON_VALUE",
+      }
     );
   }
 
@@ -243,7 +265,7 @@ export function materializeFlatInput(
   if (byteLength > maxMaterializedSizeBytes) {
     throw flatInputLimitExceeded(
       `Materialized input size (${byteLength} bytes) exceeds limit (${maxMaterializedSizeBytes} bytes)`,
-      { byteLength, maxMaterializedSizeBytes }
+      { byteLength, maxMaterializedSizeBytes, reason: "MAX_MATERIALIZED_BYTES" }
     );
   }
 

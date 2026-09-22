@@ -32,47 +32,29 @@ export interface ValidationResult {
 /**
  * 递归检查数据中是否包含危险的原型污染属性键名（__proto__、constructor、prototype）。
  */
+import { validateActionInputValue } from "../json/value-validator";
+
+/**
+ * 递归检查数据中是否包含危险的原型污染属性键名（__proto__、constructor、prototype）。
+ * 内部委托 validateActionInputValue 执行迭代遍历，确保环路安全、有向无环图安全且无调用栈溢出风险。
+ */
 export function hasDangerousKeys(data: unknown): boolean {
-  if (data === null || typeof data !== "object") {
-    return false;
-  }
-  if (Array.isArray(data)) {
-    for (const item of data) {
-      if (hasDangerousKeys(item)) return true;
-    }
-    return false;
-  }
-  const obj = data as Record<string, unknown>;
-  const keys = Object.getOwnPropertyNames(obj);
-  for (const key of keys) {
-    if (key === "__proto__" || key === "constructor" || key === "prototype") {
-      return true;
-    }
-    if (hasDangerousKeys(obj[key])) {
-      return true;
-    }
-  }
-  return false;
+  const result = validateActionInputValue(data);
+  return !result.valid && result.kind === "input-policy";
 }
 
 /**
- * 校验指定数据是否符合给定的 JSON Schema 契约。
- * 
- * 行为与策略约定：
- * 1. 严格契约校验：当 Schema 中定义 additionalProperties: false 时，包含未声明属性的输入将被直接拒绝（返回 valid: false），系统不会静默过滤或篡改用户输入。
- * 2. 危险原型键硬拦截：输入数据或其任意嵌套对象中若出现 __proto__、constructor 或 prototype 键名，即使 Schema 允许亦立即拒绝，彻底杜绝原型污染。
- * 3. 布尔 Schema：false 显式拒绝所有输入；true 或未定义时允许所有合法非污染数据。
- * 4. 无原型对象支持：完全支持 Object.create(null) 创建的无原型对象校验。
- * 
- * @param schema 期望匹配的 JSON Schema 对象（未提供或为空对象/true 时默认通过；为 false 时拒绝所有数据）
+ * 内部纯 Schema 校验器。
+ * 仅处理布尔 Schema 与 Ajv 规则校验，严禁执行 dangerous-key 遍历。
+ *
+ * @param schema 期望匹配的 JSON Schema 对象
  * @param data 待校验的原始数据
  * @returns 包含 valid 状态与错误信息列表的 ValidationResult
  */
-export function validateSchema(
+export function validateSchemaOnly(
   schema: JsonSchema | undefined,
   data: unknown
 ): ValidationResult {
-  // 1. 布尔 Schema 支持：false 拒绝一切输入；true/undefined 允许一切输入
   if (schema === false) {
     return {
       valid: false,
@@ -80,32 +62,13 @@ export function validateSchema(
     };
   }
 
-  if (schema === true || !schema) {
-    if (hasDangerousKeys(data)) {
-      return {
-        valid: false,
-        errors: ["Data contains prohibited prototype pollution keys (__proto__, constructor, or prototype)"],
-      };
-    }
+  if (
+    schema === true ||
+    !schema ||
+    typeof schema !== "object" ||
+    Object.keys(schema).length === 0
+  ) {
     return { valid: true };
-  }
-
-  if (typeof schema !== "object" || Object.keys(schema).length === 0) {
-    if (hasDangerousKeys(data)) {
-      return {
-        valid: false,
-        errors: ["Data contains prohibited prototype pollution keys (__proto__, constructor, or prototype)"],
-      };
-    }
-    return { valid: true };
-  }
-
-  // 2. 危险原型键拦截
-  if (hasDangerousKeys(data)) {
-    return {
-      valid: false,
-      errors: ["Data contains prohibited prototype pollution keys (__proto__, constructor, or prototype)"],
-    };
   }
 
   try {
@@ -141,4 +104,43 @@ export function validateSchema(
       errors: [`Schema compilation error: ${err.message || String(err)}`],
     };
   }
+}
+
+/**
+ * 校验指定数据是否符合给定的 JSON Schema 契约。
+ *
+ * 行为与策略约定：
+ * 1. 严格契约校验：当 Schema 中定义 additionalProperties: false 时，包含未声明属性的输入将被直接拒绝（返回 valid: false），系统不会静默过滤或篡改用户输入。
+ * 2. 危险原型键硬拦截：输入数据或其任意嵌套对象中若出现 __proto__、constructor 或 prototype 键名，即使 Schema 允许亦立即拒绝，彻底杜绝原型污染。
+ * 3. 布尔 Schema：false 显式拒绝所有输入；true 或未定义时允许所有合法非污染数据。
+ * 4. 无原型对象支持：完全支持 Object.create(null) 创建的无原型对象校验。
+ *
+ * @param schema 期望匹配的 JSON Schema 对象（未提供或为空对象/true 时默认通过；为 false 时拒绝所有数据）
+ * @param data 待校验的原始数据
+ * @returns 包含 valid 状态与错误信息列表的 ValidationResult
+ */
+export function validateSchema(
+  schema: JsonSchema | undefined,
+  data: unknown
+): ValidationResult {
+  // 1. 布尔 Schema 支持：false 拒绝一切输入
+  if (schema === false) {
+    return {
+      valid: false,
+      errors: ["Schema is false, rejecting all data"],
+    };
+  }
+
+  // 2. 危险原型键拦截（保持历史兼容，包含 schema 为 true / undefined / {} 的场景）
+  if (hasDangerousKeys(data)) {
+    return {
+      valid: false,
+      errors: [
+        "Data contains prohibited prototype pollution keys (__proto__, constructor, or prototype)",
+      ],
+    };
+  }
+
+  // 3. 委托纯 Schema 校验器处理其余规则校验
+  return validateSchemaOnly(schema, data);
 }

@@ -34,7 +34,7 @@ import {
   OUTPUT_VALIDATION_FAILED,
   UNDECLARED_ACTION_DEPENDENCY,
 } from "../errors";
-import { validateSchema } from "../schema/validator";
+import { validateSchemaOnly } from "../schema/validator";
 import type { RuntimeStorage } from "../storage/types";
 import type { Clock } from "./clock";
 import type { RuntimePlatform } from "../platform/types";
@@ -71,12 +71,20 @@ export {
 } from "../errors";
 import {
   validateJsonValue,
+  validateActionInputValue,
   assertJsonValue,
   type ValidateJsonOptions,
+  type ValidateActionInputOptions,
 } from "../json/value-validator";
 
 // 复用统一迭代式 JsonValue 校验器，杜绝深层递归栈溢出，并保持既有导出兼容
-export { validateJsonValue, assertJsonValue, type ValidateJsonOptions };
+export {
+  validateJsonValue,
+  validateActionInputValue,
+  assertJsonValue,
+  type ValidateJsonOptions,
+  type ValidateActionInputOptions,
+};
 
 /**
  * 跨包运行上下文解析结果契约。
@@ -519,14 +527,21 @@ export class ActionRunner {
     const runCtx = this.prepareRunContext(actionOrId, input, options);
     const { runId, targetActionId, targetPackageId } = runCtx;
 
-    // 输入参数 JSON 格式与合法性防御校验（拦截 NaN/Infinity/循环引用等非 JSON 类型）
-    const inputCheck = validateJsonValue(input);
+    // 输入参数 JSON 格式与合法性防御校验（拦截 NaN/Infinity/循环引用等非 JSON 类型及非法原型键策略违规）
+    const inputCheck = validateActionInputValue(input);
     if (!inputCheck.valid) {
-      const error: RuntimeError = {
-        code: INPUT_NOT_JSON,
-        message: `Input validation failed for action '${targetActionId}': ${inputCheck.reason}`,
-      };
-      // 安全记录 failed 状态（不可序列化的非法 input 严禁直接写入持久化存储）
+      const error: RuntimeError =
+        inputCheck.kind === "json-value"
+          ? {
+              code: INPUT_NOT_JSON,
+              message: `Input validation failed for action '${targetActionId}': ${inputCheck.reason}`,
+            }
+          : {
+              code: INPUT_VALIDATION_FAILED,
+              message: `Input validation failed for action '${targetActionId}': ${inputCheck.reason}`,
+              details: [inputCheck.reason],
+            };
+      // 安全记录 failed 状态（不可序列化或策略违规的非法 input 严禁直接写入持久化存储）
       tryCreateRun(this.storage, buildInitialRunRecord(this.buildRunPersistenceInput(runCtx), "failed", error));
       return {
         runId,
@@ -775,9 +790,11 @@ export class ActionRunner {
     input: unknown
   ): RuntimeError | undefined {
     const targetInputSchema =
-      (action as any)?.inputSchema ?? this.projectConfig?.actions?.[targetActionId]?.inputSchema;
-    if (targetInputSchema) {
-      const val = validateSchema(targetInputSchema, input);
+      (action as any)?.inputSchema !== undefined
+        ? (action as any).inputSchema
+        : this.projectConfig?.actions?.[targetActionId]?.inputSchema;
+    if (targetInputSchema !== undefined) {
+      const val = validateSchemaOnly(targetInputSchema, input);
       if (!val.valid) {
         return {
           code: INPUT_VALIDATION_FAILED,
@@ -1033,12 +1050,19 @@ export class ActionRunner {
             return { ok: false, runId, error };
           }
 
-          const inputCheck = validateJsonValue(input);
+          const inputCheck = validateActionInputValue(input);
           if (!inputCheck.valid) {
-            const error: RuntimeError = {
-              code: INPUT_NOT_JSON,
-              message: `Input validation failed for action '${targetActionId}': ${inputCheck.reason}`,
-            };
+            const error: RuntimeError =
+              inputCheck.kind === "json-value"
+                ? {
+                    code: INPUT_NOT_JSON,
+                    message: `Input validation failed for action '${targetActionId}': ${inputCheck.reason}`,
+                  }
+                : {
+                    code: INPUT_VALIDATION_FAILED,
+                    message: `Input validation failed for action '${targetActionId}': ${inputCheck.reason}`,
+                    details: [inputCheck.reason],
+                  };
             finalizer.finalize("failed", undefined, error);
             return { ok: false, runId, error };
           }
@@ -1109,9 +1133,11 @@ export class ActionRunner {
     rawOutput: unknown
   ): RuntimeError | undefined {
     const targetOutputSchema =
-      (action as any)?.outputSchema ?? this.projectConfig?.actions?.[targetActionId]?.outputSchema;
-    if (targetOutputSchema) {
-      const outVal = validateSchema(targetOutputSchema, rawOutput);
+      (action as any)?.outputSchema !== undefined
+        ? (action as any).outputSchema
+        : this.projectConfig?.actions?.[targetActionId]?.outputSchema;
+    if (targetOutputSchema !== undefined) {
+      const outVal = validateSchemaOnly(targetOutputSchema, rawOutput);
       if (!outVal.valid) {
         return {
           code: OUTPUT_VALIDATION_FAILED,

@@ -15,7 +15,10 @@ import {
   INPUT_PATH_CONFLICT,
   FLAT_INPUT_LIMIT_EXCEEDED,
   formatActionDetail,
+  buildCliDescribeInputMetadataV1,
+  mapInputValidationFailure,
 } from "../input";
+import { validateActionInputValue } from "../json/value-validator";
 import { normalizeActionCollection } from "./action-collection";
 import { parseDuration } from "../utils";
 
@@ -28,6 +31,14 @@ export const ExitCode = {
   INVALID_ARGUMENT: 2,
   SIGINT: 130,
 } as const;
+
+/**
+ * 调用控制选项契约。
+ */
+export interface InvocationControl {
+  signal?: AbortSignal;
+  cancellationSource?: "external" | "sigint";
+}
 
 /**
  * 独立二进制运行分发器配置选项。
@@ -146,9 +157,10 @@ export class StandaloneDispatcher {
    * 解析命令行参数并分发执行对应子命令。
    * 
    * @param argv 命令行参数数组（如 process.argv.slice(2)）
+   * @param control 可选的中断与取消控制契约
    * @returns 退出状态码（0: 成功, 1: 失败, 2: 参数错误, 130: 中断）
    */
-  async dispatch(argv: string[]): Promise<number> {
+  async dispatch(argv: string[], control?: InvocationControl): Promise<number> {
     const separator = argv.indexOf("--");
     const controlArgs = separator >= 0 ? argv.slice(0, separator) : argv;
     const actionArgs = separator >= 0 ? argv.slice(separator + 1) : [];
@@ -228,43 +240,50 @@ export class StandaloneDispatcher {
       return ExitCode.FAILURE;
     }
 
-    const controller = new AbortController();
-    const sigintHandler = () => {
-      controller.abort(new Error("Interrupted by SIGINT"));
-    };
-    process.once("SIGINT", sigintHandler);
-
     try {
+      let code: number;
       switch (command) {
         case "list":
-          return await this.handleList(target, subArgs);
+          code = await this.handleList(target, subArgs);
+          break;
 
         case "describe":
         case "show":
-          return await this.handleDescribe(target, subArgs);
+          code = await this.handleDescribe(target, subArgs);
+          break;
 
         case "run":
-          return await this.handleRun(target, subArgs, actionArgs, controller.signal);
+          code = await this.handleRun(target, subArgs, actionArgs, control?.signal);
+          break;
 
         case "config":
-          return await this.handleConfig(target, subArgs);
+          code = await this.handleConfig(target, subArgs);
+          break;
 
         case "state":
-          return await this.handleState(target, subArgs);
+          code = await this.handleState(target, subArgs);
+          break;
 
         default:
           this.writeErr(`Unknown command: '${command}'`);
           this.printHelp();
           return ExitCode.INVALID_ARGUMENT;
       }
+
+      if (control?.cancellationSource === "sigint" && control?.signal?.aborted) {
+        return ExitCode.SIGINT;
+      }
+      return code;
     } catch (err: any) {
-      if (err?.name === "AbortError" || controller.signal.aborted) {
+      if (
+        control?.cancellationSource === "sigint" &&
+        (control?.signal?.aborted || err?.name === "AbortError" || err?.message?.includes("SIGINT"))
+      ) {
         return ExitCode.SIGINT;
       }
       this.writeErr(`Error: ${err?.message || err}`);
       return ExitCode.FAILURE;
     } finally {
-      process.removeListener("SIGINT", sigintHandler);
       if (ownsTarget) {
         await target.close();
       }
@@ -335,12 +354,17 @@ export class StandaloneDispatcher {
       return ExitCode.INVALID_ARGUMENT;
     }
 
+    const metadata = isJson
+      ? buildCliDescribeInputMetadataV1(action.inputSchema)
+      : undefined;
+
     const detail = {
       id: action.id,
       packageId: this.options.packageId,
       description: action.description,
       inputSchema: action.inputSchema,
       outputSchema: action.outputSchema,
+      ...(metadata || {}),
     };
 
     if (isJson) {
@@ -355,7 +379,7 @@ export class StandaloneDispatcher {
     target: ActionDockTarget,
     subArgs: string[],
     actionArgs: string[],
-    signal: AbortSignal
+    signal?: AbortSignal
   ): Promise<number> {
     const isJson = subArgs.includes("--json");
     const id = subArgs.find((a) => !a.startsWith("-"));
@@ -451,6 +475,10 @@ export class StandaloneDispatcher {
         flatArgs: actionArgs.length > 0 ? actionArgs : undefined,
         stdin: process.stdin,
       });
+      const check = validateActionInputValue(input);
+      if (!check.valid) {
+        throw mapInputValidationFailure("cli-pre-target", check);
+      }
     } catch (err: any) {
       if (isJson) {
         this.writeOut(
@@ -822,3 +850,37 @@ export class StandaloneRuntime {
 export function createStandaloneRuntime(options: StandaloneRuntimeOptions): StandaloneRuntime {
   return new StandaloneRuntime(options);
 }
+
+/**
+ * 独立二进制进程入口适配器。
+ * 仅在命令行可执行入口调用，负责全局 SIGINT 监听与退出状态码写入。
+ */
+export async function runStandaloneProcess(
+  argv: string[],
+  options: StandaloneDispatcherOptions
+): Promise<void> {
+  const controller = new AbortController();
+  const control: InvocationControl = {
+    signal: controller.signal,
+  };
+  let sigintCount = 0;
+  const sigintHandler = () => {
+    sigintCount++;
+    if (sigintCount === 1) {
+      control.cancellationSource = "sigint";
+      controller.abort(new Error("Interrupted by SIGINT"));
+    } else {
+      process.exitCode = 130;
+      process.exit(130);
+    }
+  };
+  process.on("SIGINT", sigintHandler);
+  try {
+    const dispatcher = new StandaloneDispatcher(options);
+    const exitCode = await dispatcher.dispatch(argv, control);
+    process.exitCode = exitCode;
+  } finally {
+    process.removeListener("SIGINT", sigintHandler);
+  }
+}
+

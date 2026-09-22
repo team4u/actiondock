@@ -1,12 +1,733 @@
+import {
+  isFlatPathPropertyName,
+  isForbiddenActionInputPropertyName,
+} from "./flat-predicates";
+
 /**
- * Action 输入编码顾问（Encoding Advisor）。
- *
- * 职责：
- * - 集中分析 Action 的 inputSchema，评估是否支持扁平输入（Flat Encoding）。
- * - 针对合法的扁平字段生成类型感知型赋值建议（key=TEXT, key:=JSON, key.0=TEXT 等）。
- * - 针对非对象根模式、空属性模式或非法键名提供结构化回退提示（推荐 --input-file）。
- * - 提供共享的文本格式化输出，确保 CLI 与独立分发器（Standalone）的交互体验完全一致。
+ * 单个字段的输入建议明细（v1 机器契约）。
  */
+export interface CliInputFieldAdviceV1 {
+  /** 字段路径（属性名） */
+  path: string;
+  /** 是否允许作为输入传入 */
+  inputAllowed: boolean;
+  /** 是否可通过扁平语法安全赋值 */
+  flatSafe: boolean;
+  /** 是否为必填字段 */
+  required?: boolean;
+  /** 字段模式类型 */
+  type?: string;
+  /** 赋值操作符（"=" 或 ":="） */
+  operator?: "=" | ":=";
+  /** 编码类型标识 */
+  encoding?:
+    | "string"
+    | "json-number"
+    | "json-boolean"
+    | "json-null"
+    | "json-array"
+    | "json-object"
+    | "json"
+    | string;
+  /** 赋值模板样例 */
+  assignmentTemplate?: string;
+  /** 无法通过扁平赋值或被禁止的原因代码 */
+  reason?: "FORBIDDEN_PROPERTY" | "UNSAFE_FLAT_PROPERTY" | "PROPERTY_SCHEMA_FALSE" | string;
+  /** 推荐的降级输入通道 */
+  fallback?: "stdin-json" | null;
+  /** 字段描述信息 */
+  description?: string;
+  /** 人类提示信息 */
+  hint?: string;
+}
+
+/**
+ * Action 输入模式编码顾问分析报告（v1 机器契约）。
+ */
+export interface CliInputAdviceV1 {
+  version: 1;
+
+  analysisMode: "declared-properties-only";
+  analysisStatus: "ok" | "unsupported" | "malformed";
+
+  analysisCode?:
+    | "MALFORMED_SCHEMA"
+    | "COMPLEX_SCHEMA"
+    | "UNSUPPORTED_SCHEMA_SHAPE";
+
+  analysisMessage?: string;
+
+  schemaState:
+    | "absent"
+    | "reject-all"
+    | "any"
+    | "object"
+    | "json-only"
+    | "complex";
+
+  inputFeasibility:
+    | "known-impossible"
+    | "possible-or-unknown";
+
+  flatAvailable: boolean;
+  requiredSatisfiable: boolean | null;
+  flatCandidate: boolean;
+
+  schemaRecommendedMode:
+    | "none"
+    | "flat"
+    | "full-json";
+
+  feasibilityCode?:
+    | "SCHEMA_REJECTS_ALL"
+    | "REQUIRED_FIELD_FORBIDDEN"
+    | "REQUIRED_FIELD_REJECTS_ALL"
+    | "REQUIRED_FIELD_DISALLOWED_BY_ADDITIONAL_PROPERTIES";
+
+  fields: CliInputFieldAdviceV1[];
+}
+
+const RECOGNIZED_SCHEMA_TYPES = new Set([
+  "object",
+  "array",
+  "string",
+  "number",
+  "integer",
+  "boolean",
+  "null",
+]);
+
+const COMPLEX_KEYWORDS = [
+  "oneOf",
+  "anyOf",
+  "allOf",
+  "$ref",
+  "not",
+  "if",
+  "then",
+  "else",
+  "patternProperties",
+  "dependentSchemas",
+  "dependentRequired",
+  "propertyNames",
+  "unevaluatedProperties",
+] as const;
+
+function isPlainObject(val: unknown): val is Record<string, any> {
+  return typeof val === "object" && val !== null && !Array.isArray(val);
+}
+
+function isJsonValueLike(val: unknown): boolean {
+  if (
+    typeof val === "function" ||
+    typeof val === "symbol" ||
+    typeof val === "undefined" ||
+    typeof val === "bigint"
+  ) {
+    return false;
+  }
+  if (typeof val === "number" && (!Number.isFinite(val) || Number.isNaN(val))) {
+    return false;
+  }
+  return true;
+}
+
+function createMalformedAdvice(message: string): CliInputAdviceV1 {
+  return {
+    version: 1,
+    analysisMode: "declared-properties-only",
+    analysisStatus: "malformed",
+    analysisCode: "MALFORMED_SCHEMA",
+    analysisMessage: message,
+    schemaState: "complex",
+    inputFeasibility: "possible-or-unknown",
+    flatAvailable: false,
+    requiredSatisfiable: null,
+    flatCandidate: false,
+    schemaRecommendedMode: "full-json",
+    fields: [],
+  };
+}
+
+/**
+ * 依据 inputSchema 构造 v1 版本的 Action 输入编码顾问报告（机器契约）。
+ *
+ * @param schema Action 的 inputSchema 定义
+ * @returns 遵循技术设计文档规范的结构化输入建议
+ */
+export function buildCliInputAdviceV1(schema: unknown): CliInputAdviceV1 {
+  // 1. Schema Sanity 阶段（Section 44）
+  // 1.1 根形状检查（Section 44.1）
+  if (schema === undefined) {
+    return {
+      version: 1,
+      analysisMode: "declared-properties-only",
+      analysisStatus: "ok",
+      schemaState: "absent",
+      inputFeasibility: "possible-or-unknown",
+      flatAvailable: false,
+      requiredSatisfiable: null,
+      flatCandidate: false,
+      schemaRecommendedMode: "full-json",
+      fields: [],
+    };
+  }
+
+  if (typeof schema === "boolean") {
+    if (schema === false) {
+      return {
+        version: 1,
+        analysisMode: "declared-properties-only",
+        analysisStatus: "ok",
+        schemaState: "reject-all",
+        inputFeasibility: "known-impossible",
+        feasibilityCode: "SCHEMA_REJECTS_ALL",
+        flatAvailable: false,
+        requiredSatisfiable: false,
+        flatCandidate: false,
+        schemaRecommendedMode: "none",
+        fields: [],
+      };
+    }
+    return {
+      version: 1,
+      analysisMode: "declared-properties-only",
+      analysisStatus: "ok",
+      schemaState: "any",
+      inputFeasibility: "possible-or-unknown",
+      flatAvailable: false,
+      requiredSatisfiable: null,
+      flatCandidate: false,
+      schemaRecommendedMode: "full-json",
+      fields: [],
+    };
+  }
+
+  if (!isPlainObject(schema)) {
+    return {
+      version: 1,
+      analysisMode: "declared-properties-only",
+      analysisStatus: "malformed",
+      analysisCode: "MALFORMED_SCHEMA",
+      analysisMessage: "Schema root must be undefined, boolean, or a plain object",
+      schemaState: "complex",
+      inputFeasibility: "possible-or-unknown",
+      flatAvailable: false,
+      requiredSatisfiable: null,
+      flatCandidate: false,
+      schemaRecommendedMode: "full-json",
+      fields: [],
+    };
+  }
+
+  const s = schema as Record<string, any>;
+
+  // 1.2 关键字形状检查（Section 44.2）
+  // 检查 type
+  if (s.type !== undefined) {
+    if (typeof s.type === "string") {
+      if (!RECOGNIZED_SCHEMA_TYPES.has(s.type)) {
+        return createMalformedAdvice(`Unrecognized type keyword: '${s.type}'`);
+      }
+    } else if (Array.isArray(s.type)) {
+      if (s.type.length === 0) {
+        return createMalformedAdvice("Type array must not be empty");
+      }
+      const seen = new Set<string>();
+      for (const t of s.type) {
+        if (typeof t !== "string" || !RECOGNIZED_SCHEMA_TYPES.has(t)) {
+          return createMalformedAdvice(`Unrecognized type in type array: '${String(t)}'`);
+        }
+        if (seen.has(t)) {
+          return createMalformedAdvice(`Duplicate type in type array: '${t}'`);
+        }
+        seen.add(t);
+      }
+    } else {
+      return createMalformedAdvice("Type keyword must be a string or array of strings");
+    }
+  }
+
+  // 检查 properties
+  if (s.properties !== undefined) {
+    if (!isPlainObject(s.properties)) {
+      return createMalformedAdvice("Properties keyword must be a plain object");
+    }
+    for (const [propKey, propVal] of Object.entries(s.properties)) {
+      if (typeof propVal !== "boolean" && !isPlainObject(propVal)) {
+        return createMalformedAdvice(
+          `Property '${propKey}' schema must be a boolean or plain object`
+        );
+      }
+      if (isPlainObject(propVal)) {
+        if (propVal.type !== undefined) {
+          if (typeof propVal.type === "string") {
+            if (!RECOGNIZED_SCHEMA_TYPES.has(propVal.type)) {
+              return createMalformedAdvice(
+                `Unrecognized type '${propVal.type}' in property '${propKey}'`
+              );
+            }
+          } else if (Array.isArray(propVal.type)) {
+            if (propVal.type.length === 0) {
+              return createMalformedAdvice(`Type array in property '${propKey}' must not be empty`);
+            }
+            const seen = new Set<string>();
+            for (const t of propVal.type) {
+              if (typeof t !== "string" || !RECOGNIZED_SCHEMA_TYPES.has(t)) {
+                return createMalformedAdvice(
+                  `Unrecognized type '${String(t)}' in property '${propKey}'`
+                );
+              }
+              if (seen.has(t)) {
+                return createMalformedAdvice(
+                  `Duplicate type '${t}' in property '${propKey}'`
+                );
+              }
+              seen.add(t);
+            }
+          } else {
+            return createMalformedAdvice(
+              `Type in property '${propKey}' must be string or array of strings`
+            );
+          }
+        }
+        if (propVal.enum !== undefined) {
+          if (!Array.isArray(propVal.enum) || propVal.enum.length === 0) {
+            return createMalformedAdvice(`Enum in property '${propKey}' must be a non-empty array`);
+          }
+        }
+        if (propVal.const !== undefined) {
+          if (!isJsonValueLike(propVal.const)) {
+            return createMalformedAdvice(
+              `Const in property '${propKey}' must be a valid JSON value literal`
+            );
+          }
+        }
+        if (propVal.items !== undefined) {
+          if (
+            typeof propVal.items !== "boolean" &&
+            !isPlainObject(propVal.items) &&
+            !Array.isArray(propVal.items)
+          ) {
+            return createMalformedAdvice(
+              `Items in property '${propKey}' must be boolean, plain object, or array`
+            );
+          }
+        }
+      }
+    }
+  }
+
+  // 检查 required
+  if (s.required !== undefined) {
+    if (!Array.isArray(s.required)) {
+      return createMalformedAdvice("Required keyword must be an array of strings");
+    }
+    const seen = new Set<string>();
+    for (const item of s.required) {
+      if (typeof item !== "string") {
+        return createMalformedAdvice("Every item in required array must be a string");
+      }
+      if (seen.has(item)) {
+        return createMalformedAdvice(`Duplicate required property: '${item}'`);
+      }
+      seen.add(item);
+    }
+  }
+
+  // 检查 additionalProperties
+  if (s.additionalProperties !== undefined) {
+    if (
+      typeof s.additionalProperties !== "boolean" &&
+      !isPlainObject(s.additionalProperties)
+    ) {
+      return createMalformedAdvice(
+        "AdditionalProperties keyword must be a boolean or plain object"
+      );
+    }
+  }
+
+  // 检查 items
+  let isTupleItems = false;
+  if (s.items !== undefined) {
+    if (typeof s.items === "boolean" || isPlainObject(s.items)) {
+      // 合法
+    } else if (Array.isArray(s.items)) {
+      isTupleItems = true;
+    } else {
+      return createMalformedAdvice("Items keyword must be boolean, plain object, or array");
+    }
+  }
+
+  // 检查 enum
+  if (s.enum !== undefined) {
+    if (!Array.isArray(s.enum) || s.enum.length === 0) {
+      return createMalformedAdvice("Enum keyword must be a non-empty array");
+    }
+  }
+
+  // 检查 const
+  if (s.const !== undefined) {
+    if (!isJsonValueLike(s.const)) {
+      return createMalformedAdvice("Const keyword must be a valid JSON value literal");
+    }
+  }
+
+  // 检查 applicators
+  if (s.oneOf !== undefined && !Array.isArray(s.oneOf)) {
+    return createMalformedAdvice("OneOf keyword must be an array");
+  }
+  if (s.anyOf !== undefined && !Array.isArray(s.anyOf)) {
+    return createMalformedAdvice("AnyOf keyword must be an array");
+  }
+  if (s.allOf !== undefined && !Array.isArray(s.allOf)) {
+    return createMalformedAdvice("AllOf keyword must be an array");
+  }
+  if (s.$ref !== undefined && typeof s.$ref !== "string") {
+    return createMalformedAdvice("$ref keyword must be a string");
+  }
+  if (s.not !== undefined && typeof s.not !== "boolean" && !isPlainObject(s.not)) {
+    return createMalformedAdvice("Not keyword must be a boolean or plain object");
+  }
+  if (s.if !== undefined && typeof s.if !== "boolean" && !isPlainObject(s.if)) {
+    return createMalformedAdvice("If keyword must be a boolean or plain object");
+  }
+  if (s.then !== undefined && typeof s.then !== "boolean" && !isPlainObject(s.then)) {
+    return createMalformedAdvice("Then keyword must be a boolean or plain object");
+  }
+  if (s.else !== undefined && typeof s.else !== "boolean" && !isPlainObject(s.else)) {
+    return createMalformedAdvice("Else keyword must be a boolean or plain object");
+  }
+
+  // 2. 语义分类阶段（Section 45）
+  if (Object.keys(s).length === 0) {
+    return {
+      version: 1,
+      analysisMode: "declared-properties-only",
+      analysisStatus: "ok",
+      schemaState: "any",
+      inputFeasibility: "possible-or-unknown",
+      flatAvailable: false,
+      requiredSatisfiable: null,
+      flatCandidate: false,
+      schemaRecommendedMode: "full-json",
+      fields: [],
+    };
+  }
+
+  const hasComplexKeyword =
+    isTupleItems ||
+    COMPLEX_KEYWORDS.some((kw) => s[kw] !== undefined);
+
+  let schemaState: CliInputAdviceV1["schemaState"];
+  if (hasComplexKeyword) {
+    schemaState = "complex";
+  } else if (s.type === "object") {
+    schemaState = "object";
+  } else if (typeof s.type === "string" && s.type !== "object") {
+    schemaState = "json-only";
+  } else if (Array.isArray(s.type)) {
+    schemaState = "complex";
+  } else if (
+    s.type === undefined &&
+    (s.properties !== undefined || s.required !== undefined || s.additionalProperties !== undefined)
+  ) {
+    schemaState = "complex";
+  } else {
+    schemaState = "complex";
+  }
+
+  const analysisStatus: CliInputAdviceV1["analysisStatus"] =
+    schemaState === "complex" ? "unsupported" : "ok";
+  const analysisCode =
+    schemaState === "complex"
+      ? isTupleItems
+        ? "UNSUPPORTED_SCHEMA_SHAPE"
+        : "COMPLEX_SCHEMA"
+      : undefined;
+  const analysisMessage =
+    schemaState === "complex"
+      ? "Complex schema structure is not supported for flat encoding"
+      : undefined;
+
+  // 3. 输入可行性判定（Section 47）
+  const requiredList: string[] = Array.isArray(s.required) ? s.required : [];
+  const properties: Record<string, any> = isPlainObject(s.properties) ? s.properties : {};
+
+  let inputFeasibility: CliInputAdviceV1["inputFeasibility"] = "possible-or-unknown";
+  let feasibilityCode: CliInputAdviceV1["feasibilityCode"] | undefined;
+
+  if (requiredList.some(isForbiddenActionInputPropertyName)) {
+    inputFeasibility = "known-impossible";
+    feasibilityCode = "REQUIRED_FIELD_FORBIDDEN";
+  } else if (requiredList.some((k) => properties[k] === false)) {
+    inputFeasibility = "known-impossible";
+    feasibilityCode = "REQUIRED_FIELD_REJECTS_ALL";
+  } else if (
+    s.additionalProperties === false &&
+    requiredList.some((k) => !(k in properties))
+  ) {
+    inputFeasibility = "known-impossible";
+    feasibilityCode = "REQUIRED_FIELD_DISALLOWED_BY_ADDITIONAL_PROPERTIES";
+  }
+
+  // 4. 字段建议生成（Section 50）
+  const fields: CliInputFieldAdviceV1[] = [];
+  for (const [key, propSchema] of Object.entries(properties)) {
+    const isReq = requiredList.includes(key);
+
+    if (isForbiddenActionInputPropertyName(key)) {
+      fields.push({
+        path: key,
+        inputAllowed: false,
+        flatSafe: false,
+        required: isReq,
+        reason: "FORBIDDEN_PROPERTY",
+        fallback: null,
+        ...(isPlainObject(propSchema) && propSchema.description
+          ? { description: propSchema.description }
+          : {}),
+        hint: "Globally forbidden property",
+      });
+      continue;
+    }
+
+    if (propSchema === false) {
+      fields.push({
+        path: key,
+        inputAllowed: false,
+        flatSafe: false,
+        required: isReq,
+        reason: "PROPERTY_SCHEMA_FALSE",
+        fallback: null,
+        hint: "Property schema rejects all values",
+      });
+      continue;
+    }
+
+    if (!isFlatPathPropertyName(key)) {
+      const typeStr =
+        isPlainObject(propSchema) && propSchema.type
+          ? String(propSchema.type)
+          : "any";
+      fields.push({
+        path: key,
+        inputAllowed: true,
+        flatSafe: false,
+        required: isReq,
+        type: typeStr,
+        reason: "UNSAFE_FLAT_PROPERTY",
+        fallback: "stdin-json",
+        ...(isPlainObject(propSchema) && propSchema.description
+          ? { description: propSchema.description }
+          : {}),
+        hint: "Property name contains unsafe characters for flat encoding",
+      });
+      continue;
+    }
+
+    // Flat-safe property
+    if (propSchema === true) {
+      fields.push({
+        path: key,
+        inputAllowed: true,
+        flatSafe: true,
+        required: isReq,
+        type: "any",
+        operator: ":=",
+        encoding: "json",
+        assignmentTemplate: `${key}:=JSON`,
+      });
+      continue;
+    }
+
+    const propObj = propSchema as Record<string, any>;
+    const propType = propObj.type;
+    const desc = propObj.description;
+
+    // Section 46: enum/const 规则：
+    // enum/const 绝不改变 operator 选择，仅显式单一 schema.type 决定 operator。
+    // 无显式 type 时不推断类型，推荐 full-json，flatSafe: false。
+    if (typeof propType === "string") {
+      if (propType === "string") {
+        fields.push({
+          path: key,
+          inputAllowed: true,
+          flatSafe: true,
+          required: isReq,
+          type: "string",
+          operator: "=",
+          encoding: "string",
+          assignmentTemplate: `${key}=TEXT`,
+          ...(desc ? { description: desc } : {}),
+        });
+      } else if (propType === "number" || propType === "integer") {
+        fields.push({
+          path: key,
+          inputAllowed: true,
+          flatSafe: true,
+          required: isReq,
+          type: propType,
+          operator: ":=",
+          encoding: "json-number",
+          assignmentTemplate: `${key}:=NUMBER`,
+          ...(desc ? { description: desc } : {}),
+        });
+      } else if (propType === "boolean") {
+        fields.push({
+          path: key,
+          inputAllowed: true,
+          flatSafe: true,
+          required: isReq,
+          type: "boolean",
+          operator: ":=",
+          encoding: "json-boolean",
+          assignmentTemplate: `${key}:=BOOLEAN`,
+          ...(desc ? { description: desc } : {}),
+        });
+      } else if (propType === "null") {
+        fields.push({
+          path: key,
+          inputAllowed: true,
+          flatSafe: true,
+          required: isReq,
+          type: "null",
+          operator: ":=",
+          encoding: "json-null",
+          assignmentTemplate: `${key}:=null`,
+          ...(desc ? { description: desc } : {}),
+        });
+      } else if (propType === "array") {
+        fields.push({
+          path: key,
+          inputAllowed: true,
+          flatSafe: true,
+          required: isReq,
+          type: "array",
+          operator: ":=",
+          encoding: "json-array",
+          assignmentTemplate: `${key}:=JSON`,
+          hint: "建议使用 --input-file 或标准输入传递数组结构",
+          ...(desc ? { description: desc } : {}),
+        });
+      } else if (propType === "object") {
+        fields.push({
+          path: key,
+          inputAllowed: true,
+          flatSafe: true,
+          required: isReq,
+          type: "object",
+          operator: ":=",
+          encoding: "json-object",
+          assignmentTemplate: `${key}:=JSON`,
+          hint: "大型结构建议使用 --input-file",
+          ...(desc ? { description: desc } : {}),
+        });
+      } else {
+        fields.push({
+          path: key,
+          inputAllowed: true,
+          flatSafe: false,
+          required: isReq,
+          type: propType,
+          reason: "UNSAFE_FLAT_PROPERTY",
+          fallback: "stdin-json",
+          ...(desc ? { description: desc } : {}),
+        });
+      }
+    } else {
+      // 无显式单一类型（如 union type 或无 type 的 enum/const）
+      fields.push({
+        path: key,
+        inputAllowed: true,
+        flatSafe: false,
+        required: isReq,
+        type: Array.isArray(propType) ? propType.join(" | ") : "any",
+        reason: "UNSAFE_FLAT_PROPERTY",
+        fallback: "stdin-json",
+        ...(desc ? { description: desc } : {}),
+      });
+    }
+  }
+
+  // 5. requiredSatisfiable 计算（Section 48）
+  let requiredSatisfiable: boolean | null = null;
+  if (schemaState === "json-only") {
+    requiredSatisfiable = false;
+  } else if (schemaState === "complex") {
+    requiredSatisfiable = null;
+  } else if (schemaState === "object") {
+    if (requiredList.length === 0) {
+      requiredSatisfiable = true;
+    } else {
+      let hasNull = false;
+      let allSafe = true;
+      for (const reqKey of requiredList) {
+        if (isForbiddenActionInputPropertyName(reqKey)) {
+          requiredSatisfiable = false;
+          allSafe = false;
+          break;
+        }
+        const field = fields.find((f) => f.path === reqKey);
+        if (!field) {
+          if (s.additionalProperties === false) {
+            requiredSatisfiable = false;
+            allSafe = false;
+            break;
+          } else {
+            hasNull = true;
+            continue;
+          }
+        }
+        if (
+          !field.inputAllowed ||
+          field.flatSafe === false ||
+          !field.operator ||
+          !field.encoding
+        ) {
+          requiredSatisfiable = false;
+          allSafe = false;
+          break;
+        }
+      }
+      if (allSafe) {
+        requiredSatisfiable = hasNull ? null : true;
+      }
+    }
+  }
+
+  // 6. flatAvailable, flatCandidate, schemaRecommendedMode（Section 49）
+  const flatAvailable = fields.some((f) => f.flatSafe && f.operator !== undefined);
+  const flatCandidate =
+    schemaState === "object" && requiredSatisfiable === true && flatAvailable;
+
+  let schemaRecommendedMode: CliInputAdviceV1["schemaRecommendedMode"];
+  if (inputFeasibility === "known-impossible") {
+    schemaRecommendedMode = "none";
+  } else if (schemaState === "json-only" || schemaState === "complex") {
+    schemaRecommendedMode = "full-json";
+  } else if (schemaState === "object" && flatCandidate) {
+    schemaRecommendedMode = "flat";
+  } else {
+    schemaRecommendedMode = "full-json";
+  }
+
+  return {
+    version: 1,
+    analysisMode: "declared-properties-only",
+    analysisStatus,
+    ...(analysisCode ? { analysisCode } : {}),
+    ...(analysisMessage ? { analysisMessage } : {}),
+    schemaState,
+    inputFeasibility,
+    flatAvailable,
+    requiredSatisfiable,
+    flatCandidate,
+    schemaRecommendedMode,
+    ...(feasibilityCode ? { feasibilityCode } : {}),
+    fields,
+  };
+}
 
 export const FLAT_SAFE_KEY_REGEX = /^[A-Za-z_][A-Za-z0-9_-]*$/;
 

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { validateSchema } from "../src/schema/validator";
+import {
+  validateSchema,
+  validateSchemaOnly,
+  hasDangerousKeys,
+} from "../src/schema/validator";
 
 describe("JSON Schema Validator 测试套件", () => {
   it("处理空 Schema 或未定义 Schema 默认校验通过", () => {
@@ -178,5 +182,59 @@ describe("JSON Schema Validator 测试套件", () => {
     nullProtoFail.foo = 123;
     const resFail = validateSchema(schema, nullProtoFail);
     expect(resFail.valid).toBe(false);
+  });
+
+  it("validateSchemaOnly 仅校验 Schema 规则而不执行 dangerous-key 检查", () => {
+    // false Schema 拒绝所有输入
+    const resFalse = validateSchemaOnly(false, { a: 1 });
+    expect(resFalse.valid).toBe(false);
+    expect(resFalse.errors?.[0]).toContain("Schema is false");
+
+    // true, undefined, 空对象均通过
+    expect(validateSchemaOnly(true, { a: 1 }).valid).toBe(true);
+    expect(validateSchemaOnly(undefined, { a: 1 }).valid).toBe(true);
+    expect(validateSchemaOnly({}, { a: 1 }).valid).toBe(true);
+
+    // 包含原型污染键的数据在 validateSchemaOnly 下若无 schema 规则限制将直接通过
+    const dangerous = JSON.parse('{"__proto__": {"evil": true}}');
+    expect(validateSchemaOnly(undefined, dangerous).valid).toBe(true);
+    expect(validateSchemaOnly({}, dangerous).valid).toBe(true);
+  });
+
+  it("hasDangerousKeys 与 validateSchema 支持 DAG 有向无环图安全遍历", () => {
+    // 构造具备共享子结构的 DAG
+    const leaf = { name: "shared-leaf", count: 42 };
+    const dag = {
+      nodeA: leaf,
+      nodeB: leaf,
+      items: [leaf, leaf],
+    };
+
+    expect(hasDangerousKeys(dag)).toBe(false);
+
+    const schema = {
+      type: "object",
+      properties: {
+        nodeA: { type: "object" },
+        nodeB: { type: "object" },
+        items: { type: "array" },
+      },
+    };
+    const res = validateSchema(schema, dag);
+    expect(res.valid).toBe(true);
+  });
+
+  it("hasDangerousKeys 与 validateSchema 环路安全，杜绝调用栈溢出", () => {
+    // 构造直接环路对象
+    const circularObj: any = { title: "circular" };
+    circularObj.self = circularObj;
+
+    // 不会因递归导致 RangeError: Maximum call stack size exceeded
+    expect(hasDangerousKeys(circularObj)).toBe(false);
+
+    // 构造带原型的环路对象
+    const circularDangerous: any = { constructor: "danger" };
+    circularDangerous.loop = circularDangerous;
+    expect(hasDangerousKeys(circularDangerous)).toBe(true);
   });
 });

@@ -8,8 +8,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const distEntry = resolve(import.meta.dirname, "../dist/index.js");
 
 if (existsSync(distEntry)) {
-  const { main } = await import(pathToFileURL(distEntry).href);
-  await main(process.argv);
+  const { runCliProcess } = await import(pathToFileURL(distEntry).href);
+  await runCliProcess(process.argv);
 } else {
   const isBun = typeof process.versions.bun !== "undefined";
   const hasTsx =
@@ -37,6 +37,6 @@ if (existsSync(distEntry)) {
     }
   }
 
-  const { main } = await import("../src/index.ts");
-  await main(process.argv);
+  const { runCliProcess } = await import("../src/index.ts");
+  await runCliProcess(process.argv);
 }
