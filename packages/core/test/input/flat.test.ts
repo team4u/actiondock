@@ -829,16 +829,16 @@ describe("Flat JsonValue Encoding v1", () => {
       const advice = buildActionInputAdvice(schema);
       expect(advice.flatSupported).toBe(true);
       expect(advice.hasFlatFields).toBe(true);
-      expect(advice.requiredTokens).toEqual(["name=TEXT"]);
-      expect(advice.optionalTokens).toContain("age:=NUMBER");
-      expect(advice.optionalTokens).toContain("active:=BOOLEAN");
-      expect(advice.optionalTokens).toContain("tags.0=TEXT");
-      expect(advice.optionalTokens).toContain("meta:=JSON");
+      expect(advice.requiredTemplates).toEqual(["name=TEXT"]);
+      expect(advice.optionalTemplates).toContain("age:=NUMBER");
+      expect(advice.optionalTemplates).toContain("active:=BOOLEAN");
+      expect(advice.optionalTemplates).toContain("tags.0=TEXT");
+      expect(advice.optionalTemplates).toContain("meta:=JSON");
 
       const metaField = advice.fields.find((f) => f.path === "meta");
       expect(metaField).toBeDefined();
       expect(metaField?.flatSafe).toBe(true);
-      expect(metaField?.token).toBe("meta:=JSON");
+      expect(metaField?.assignmentTemplate).toBe("meta:=JSON");
       expect(metaField?.hint).toBe("大型结构建议使用 --input-file");
     });
 
@@ -889,11 +889,11 @@ describe("Flat JsonValue Encoding v1", () => {
       const advice = buildActionInputAdvice(schema);
       expect(advice.flatSupported).toBe(true);
       expect(advice.hasFlatFields).toBe(true);
-      expect(advice.optionalTokens).toContain("valid_key=TEXT");
-      expect(advice.optionalTokens).not.toContain("user name=TEXT");
+      expect(advice.optionalTemplates).toContain("valid_key=TEXT");
+      expect(advice.optionalTemplates).not.toContain("user name=TEXT");
       const unsafeField = advice.fields.find((f) => f.path === "user name");
       expect(unsafeField?.flatSafe).toBe(false);
-      expect(unsafeField?.token).toBeUndefined();
+      expect(unsafeField?.assignmentTemplate).toBeUndefined();
       expect(advice.notes.some((n) => n.includes("user name"))).toBe(true);
     });
 
@@ -913,7 +913,7 @@ describe("Flat JsonValue Encoding v1", () => {
       expect(advice.notes.some((n) => n.includes("user name"))).toBe(true);
     });
 
-    it("生成的命令包含完整 required 字段且无人类提示混杂", () => {
+    it("展示必填与可选赋值模板且调用模式引导不拼接伪造模板字符", () => {
       const formatted = formatActionDetail({
         id: "sample.create",
         inputSchema: {
@@ -927,12 +927,35 @@ describe("Flat JsonValue Encoding v1", () => {
         },
       });
 
+      expect(formatted).toContain("必填赋值模板:");
+      expect(formatted).toContain("  - name=TEXT");
+      expect(formatted).toContain("  - age:=NUMBER");
+      expect(formatted).toContain("可选赋值模板:");
+      expect(formatted).toContain("  - meta:=JSON");
+      expect(formatted).toContain("调用模式引导:");
+
       const commandLine = formatted
         .split("\n")
-        .find((l) => l.includes("ad run sample.create"));
-      expect(commandLine).toBeDefined();
-      expect(commandLine).toBe("  - ad run sample.create --json -- name=TEXT age:=NUMBER");
+        .find((l) => l.includes("ad run sample.create --json --"));
+      expect(commandLine).toBe("  - ad run sample.create --json -- [assignments...]");
+      expect(commandLine).not.toContain("TEXT");
+      expect(commandLine).not.toContain("NUMBER");
       expect(commandLine).not.toContain("建议使用");
+    });
+
+    it("不支持扁平传参时在调用模式引导中明确提示使用 --input-file", () => {
+      const formatted = formatActionDetail({
+        id: "sample.array",
+        inputSchema: {
+          type: "array",
+          items: { type: "string" },
+        },
+      });
+
+      expect(formatted).toContain("调用模式引导:");
+      expect(formatted).toContain(
+        "不支持扁平传参，建议使用 --input-file: ad run sample.array --json --input-file input.json"
+      );
     });
 
     it("formatActionDetail 输出排版与 CLI 完全一致", () => {
@@ -954,8 +977,10 @@ describe("Flat JsonValue Encoding v1", () => {
       expect(formatted).toContain("Input Schema 字段明细:");
       expect(formatted).toContain("title (string, 必填) - 标题");
       expect(formatted).toContain("Flat 编码指引:");
-      expect(formatted).toContain("建议赋值样例 (Suggested Assignments):");
-      expect(formatted).toContain("ad run test.action --json -- title=TEXT");
+      expect(formatted).toContain("必填赋值模板:");
+      expect(formatted).toContain("  - title=TEXT");
+      expect(formatted).toContain("调用模式引导:");
+      expect(formatted).toContain("ad run test.action --json -- [assignments...]");
     });
 
     it("验证 InputError 与 FlatInputError 的继承关系与分类", () => {

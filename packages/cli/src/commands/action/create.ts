@@ -8,7 +8,6 @@ import {
   loadProjectConfig,
   saveManifest,
   writeActionTypes,
-  buildActionInputAdvice,
 } from "@actiondock/core";
 import type { Command } from "commander";
 import { ExecutionError, notInProjectError } from "../../errors";
@@ -238,23 +237,12 @@ ${returnBody}
     writeActionTypes(root, manifest);
 
     writeStdout(`[OK] Created Action '${id}' at ${targetFullFile}`, context);
-    writeStdout(`\nTo run this action:`, context);
-
-    const advice = buildActionInputAdvice(inputSchema);
-    if (advice.flatSupported) {
-      if (advice.requiredTokens.length > 0) {
-        writeStdout(`  ad run ${id} --json -- ${advice.requiredTokens.join(" ")}`, context);
-      } else if (advice.optionalTokens.length > 0) {
-        writeStdout(`  ad run ${id} --json -- ${advice.optionalTokens.join(" ")}`, context);
-      } else {
-        writeStdout(`  ad run ${id} --json`, context);
-      }
-    } else {
-      writeStdout(`  ad run ${id} --json`, context);
-    }
-    writeStdout(`  ad run ${id} --json --input-file input.json`, context);
-    writeStdout(`\nTo inspect parameter contract and advice:`, context);
+    writeStdout(`\n查阅参数契约:`, context);
     writeStdout(`  ad describe ${id}`, context);
+    writeStdout(`\n调用语法:`, context);
+    writeStdout(`  ad run ${id} --json -- assignments...`, context);
+    writeStdout(`\n复杂输入:`, context);
+    writeStdout(`  ad run ${id} --json --input-file input.json`, context);
   } catch (err: any) {
     if (err instanceof ExecutionError) throw err;
     throw new ExecutionError(err.message);

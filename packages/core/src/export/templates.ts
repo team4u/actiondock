@@ -1,7 +1,6 @@
 import { basename } from "node:path";
 import type { ActionSpec } from "../app/types";
 import type { PlaybookDefinition, ProjectConfig } from "../project/types";
-import { buildActionInputAdvice } from "../input/advice";
 
 export type SkillActionItem =
   | ActionSpec
@@ -127,19 +126,6 @@ export function generateSourceSkillMd(
   const pkgId = config.id;
   const firstAction = actions[0]?.id || "sample.greet";
 
-  const firstActionItem = actions.find((a) => a.id === firstAction) || actions[0];
-  const advice = firstActionItem?.inputSchema
-    ? buildActionInputAdvice(firstActionItem.inputSchema)
-    : undefined;
-  const sampleFlatArgs =
-    advice && advice.flatSupported
-      ? advice.requiredTokens.length > 0
-        ? `ad run ${pkgId}/${firstAction} --json -- ${advice.requiredTokens.join(" ")}`
-        : advice.optionalTokens.length > 0
-          ? `ad run ${pkgId}/${firstAction} --json -- ${advice.optionalTokens.join(" ")}`
-          : `ad run ${pkgId}/${firstAction} --json`
-      : `ad run ${pkgId}/${firstAction} --json -- <param>=<value>`;
-
   const playbookSection = renderPlaybookSectionMarkdown(playbooks, config.playbooksDir || "playbooks");
   const actionListMd = renderActionListMarkdown(actions, { packageId: pkgId });
 
@@ -189,7 +175,7 @@ ad describe ${pkgId}/${firstAction}
 
 \`\`\`bash
 # 依据参数契约传递赋值
-${sampleFlatArgs}
+ad run ${pkgId}/${firstAction} --json -- assignments...
 \`\`\`
 
 复杂或大段输入使用 \`--input-file\` 传递：
@@ -208,7 +194,7 @@ ad run ${pkgId}/${firstAction} --json --input-file /tmp/input.json
 > 若工作目录已位于本技能根目录，亦可直接免 link 执行：
 > \`\`\`bash
 > cd <skill_root>
-> ad run <action-id> --json
+> ad run ${firstAction} --json
 > \`\`\`
 
 ### 结构化响应解析
@@ -305,19 +291,6 @@ export function generateStandaloneSkillMd(
   const { cleanName, desc } = getCleanSkillMetadata(config);
   const firstAction = actions[0]?.id || "sample.greet";
 
-  const firstActionItem = actions.find((a) => a.id === firstAction) || actions[0];
-  const advice = firstActionItem?.inputSchema
-    ? buildActionInputAdvice(firstActionItem.inputSchema)
-    : undefined;
-  const sampleFlatArgs =
-    advice && advice.flatSupported
-      ? advice.requiredTokens.length > 0
-        ? `${binaryRelPath} run ${firstAction} --json -- ${advice.requiredTokens.join(" ")}`
-        : advice.optionalTokens.length > 0
-          ? `${binaryRelPath} run ${firstAction} --json -- ${advice.optionalTokens.join(" ")}`
-          : `${binaryRelPath} run ${firstAction} --json`
-      : `${binaryRelPath} run ${firstAction} --json -- <param>=<value>`;
-
   const playbookSection = renderPlaybookSectionMarkdown(playbooks, config.playbooksDir || "playbooks");
   const actionListMd = renderActionListMarkdown(actions);
 
@@ -352,7 +325,7 @@ ${binaryRelPath} describe ${firstAction}
 
 \`\`\`bash
 # 依据参数契约传递赋值
-${sampleFlatArgs}
+${binaryRelPath} run ${firstAction} --json -- assignments...
 \`\`\`
 
 复杂或大段输入使用 \`--input-file\` 传递：
@@ -364,7 +337,7 @@ cat << 'EOF' > /tmp/input.json
   "param": "value"
 }
 EOF
-${binaryRelPath} run <action-id> --json --input-file /tmp/input.json
+${binaryRelPath} run ${firstAction} --json --input-file /tmp/input.json
 \`\`\`
 
 ### 结构化响应解析
@@ -635,7 +608,7 @@ ad describe ${sampleActionId}
  
 \`\`\`bash
 # 依据参数契约传递赋值
-ad run ${sampleActionId} --json -- <param>=<value>
+ad run ${sampleActionId} --json -- assignments...
 \`\`\`
  
 复杂或大段输入使用 \`--input-file\` 传递：

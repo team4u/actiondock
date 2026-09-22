@@ -29,8 +29,8 @@ export interface ActionInputFieldAdvice {
   required: boolean;
   /** 字段名是否满足扁平编码安全规范 */
   flatSafe: boolean;
-  /** 纯粹可执行的赋值 token，如 "name=TEXT"、"age:=NUMBER"、"meta:=JSON" */
-  token?: string;
+  /** 编码模板（如 "name=TEXT"、"age:=NUMBER"、"meta:=JSON"），非直接可执行 token */
+  assignmentTemplate?: string;
   /** 人类说明文字，如 "大型结构建议使用 --input-file" */
   hint?: string;
   /** 字段描述信息 */
@@ -47,10 +47,10 @@ export interface ActionInputAdvice {
   hasFlatFields: boolean;
   /** 字段明细清单 */
   fields: ActionInputFieldAdvice[];
-  /** 所有必填字段的纯 token 数组 */
-  requiredTokens: string[];
-  /** 可选字段的纯 token 数组 */
-  optionalTokens: string[];
+  /** 所有必填字段的编码模板数组 */
+  requiredTemplates: string[];
+  /** 可选字段的编码模板数组 */
+  optionalTemplates: string[];
   /** 结构化提示与降级说明清单 */
   notes: string[];
 }
@@ -67,8 +67,8 @@ export function buildActionInputAdvice(schema: unknown): ActionInputAdvice {
       flatSupported: false,
       hasFlatFields: false,
       fields: [],
-      requiredTokens: [],
-      optionalTokens: [],
+      requiredTemplates: [],
+      optionalTemplates: [],
       notes: ["根模式未声明输入字段，直接调用或使用 --input-file / --input '{}'"],
     };
   }
@@ -81,8 +81,8 @@ export function buildActionInputAdvice(schema: unknown): ActionInputAdvice {
       flatSupported: false,
       hasFlatFields: false,
       fields: [],
-      requiredTokens: [],
-      optionalTokens: [],
+      requiredTemplates: [],
+      optionalTemplates: [],
       notes: [
         `根模式类型为 '${s.type}'，不支持扁平赋值，建议使用 --input-file 或 --input`,
       ],
@@ -98,15 +98,15 @@ export function buildActionInputAdvice(schema: unknown): ActionInputAdvice {
       flatSupported: false,
       hasFlatFields: false,
       fields: [],
-      requiredTokens: [],
-      optionalTokens: [],
+      requiredTemplates: [],
+      optionalTemplates: [],
       notes: ["根模式无声明属性，不支持扁平赋值，建议使用 --input-file 或 --input '{}'"],
     };
   }
 
   const fields: ActionInputFieldAdvice[] = [];
-  const requiredTokens: string[] = [];
-  const optionalTokens: string[] = [];
+  const requiredTemplates: string[] = [];
+  const optionalTemplates: string[] = [];
   const notes: string[] = [];
 
   for (const key of propKeys) {
@@ -115,55 +115,55 @@ export function buildActionInputAdvice(schema: unknown): ActionInputAdvice {
     const isReq = required.includes(key);
     const isFlatSafe = FLAT_SAFE_KEY_REGEX.test(key);
 
-    let token: string | undefined;
+    let assignmentTemplate: string | undefined;
     let hint: string | undefined;
 
     if (isFlatSafe) {
       if (prop.type === "string") {
-        token = `${key}=TEXT`;
+        assignmentTemplate = `${key}=TEXT`;
       } else if (prop.type === "number" || prop.type === "integer") {
-        token = `${key}:=NUMBER`;
+        assignmentTemplate = `${key}:=NUMBER`;
       } else if (prop.type === "boolean") {
-        token = `${key}:=BOOLEAN`;
+        assignmentTemplate = `${key}:=BOOLEAN`;
       } else if (
         prop.type === "array" &&
         prop.items &&
         typeof prop.items === "object" &&
         prop.items.type === "string"
       ) {
-        token = `${key}.0=TEXT`;
+        assignmentTemplate = `${key}.0=TEXT`;
       } else if (
         prop.type === "array" &&
         prop.items &&
         typeof prop.items === "object" &&
         (prop.items.type === "number" || prop.items.type === "integer")
       ) {
-        token = `${key}.0:=NUMBER`;
+        assignmentTemplate = `${key}.0:=NUMBER`;
       } else if (
         prop.type === "array" &&
         prop.items &&
         typeof prop.items === "object" &&
         prop.items.type === "boolean"
       ) {
-        token = `${key}.0:=BOOLEAN`;
+        assignmentTemplate = `${key}.0:=BOOLEAN`;
       } else if (prop.type === "array") {
-        token = `${key}:=JSON`;
+        assignmentTemplate = `${key}:=JSON`;
         hint = "数组结构建议使用 --input-file";
       } else if (prop.type === "object") {
-        token = `${key}:=JSON`;
+        assignmentTemplate = `${key}:=JSON`;
         hint = "大型结构建议使用 --input-file";
       } else {
-        token = `${key}:=JSON`;
+        assignmentTemplate = `${key}:=JSON`;
         hint = "复杂或未知类型建议使用 --input-file";
       }
 
       if (isReq) {
-        if (token) {
-          requiredTokens.push(token);
+        if (assignmentTemplate) {
+          requiredTemplates.push(assignmentTemplate);
         }
       } else {
-        if (token) {
-          optionalTokens.push(token);
+        if (assignmentTemplate) {
+          optionalTemplates.push(assignmentTemplate);
         }
       }
     } else {
@@ -176,18 +176,18 @@ export function buildActionInputAdvice(schema: unknown): ActionInputAdvice {
       type: typeStr,
       required: isReq,
       flatSafe: isFlatSafe,
-      token,
+      assignmentTemplate,
       hint,
       description: prop.description,
     });
   }
 
-  const hasFlatFields = fields.some((f) => f.flatSafe && f.token !== undefined);
+  const hasFlatFields = fields.some((f) => f.flatSafe && f.assignmentTemplate !== undefined);
 
   // 仅当根模式为对象且所有 required 字段均具备 flatSafe 赋值方案时为 true
   const allRequiredFlatSafe = required.every((reqKey) => {
     const f = fields.find((field) => field.path === reqKey);
-    return f !== undefined && f.flatSafe && f.token !== undefined;
+    return f !== undefined && f.flatSafe && f.assignmentTemplate !== undefined;
   });
 
   const flatSupported = hasFlatFields && allRequiredFlatSafe;
@@ -196,8 +196,8 @@ export function buildActionInputAdvice(schema: unknown): ActionInputAdvice {
     flatSupported,
     hasFlatFields,
     fields,
-    requiredTokens,
-    optionalTokens,
+    requiredTemplates,
+    optionalTemplates,
     notes,
   };
 }
@@ -247,23 +247,31 @@ export function formatActionDetail(action: {
       lines.push(`  - ${g}`);
     }
 
-    lines.push("\n建议赋值样例 (Suggested Assignments):");
     if (!advice.flatSupported) {
-      if (advice.notes.length > 0) {
-        for (const note of advice.notes) {
-          lines.push(`  - (${note})`);
-        }
-      } else {
-        lines.push("  - (无输入字段，直接调用或使用 --input '{}')");
+      lines.push("\n调用模式引导:");
+      lines.push(
+        `  - 不支持扁平传参，建议使用 --input-file: ad run ${action.id} --json --input-file input.json`
+      );
+      for (const note of advice.notes) {
+        lines.push(`  - [注意] ${note}`);
       }
     } else {
-      if (advice.requiredTokens.length > 0) {
-        lines.push(`  - ad run ${action.id} --json -- ${advice.requiredTokens.join(" ")}`);
-      } else if (advice.optionalTokens.length > 0) {
-        lines.push(`  - ad run ${action.id} --json -- ${advice.optionalTokens[0]}`);
-      } else {
-        lines.push(`  - ad run ${action.id} --json`);
+      if (advice.requiredTemplates.length > 0) {
+        lines.push("\n必填赋值模板:");
+        for (const tmpl of advice.requiredTemplates) {
+          lines.push(`  - ${tmpl}`);
+        }
       }
+      if (advice.optionalTemplates.length > 0) {
+        lines.push("\n可选赋值模板:");
+        for (const tmpl of advice.optionalTemplates) {
+          lines.push(`  - ${tmpl}`);
+        }
+      }
+
+      lines.push("\n调用模式引导:");
+      lines.push(`  - ad run ${action.id} --json -- [assignments...]`);
+      lines.push(`  - 复杂输入: ad run ${action.id} --json --input-file input.json`);
 
       for (const note of advice.notes) {
         lines.push(`  - [注意] ${note}`);
