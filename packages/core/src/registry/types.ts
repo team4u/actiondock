@@ -99,29 +99,4 @@ export interface PruneResult {
   prunedWorkspaces: LinkedWorkspaceEntry[];
 }
 
-/**
- * Action 归属项目解析结果。
- */
-export interface ResolvedActionProject {
-  /** 所在项目的根目录绝对路径 */
-  projectRoot: string;
-  /** 所属 Package ID */
-  packageId: string;
-  /** 匹配到的 Action ID */
-  actionId: string;
-}
-
-/**
- * Playbook 归属项目解析结果。
- */
-export interface ResolvedPlaybookProject {
-  /** 所在项目的根目录绝对路径 */
-  projectRoot: string;
-  /** 所属 Package ID */
-  packageId: string;
-  /** 匹配到的 Playbook ID */
-  playbookId: string;
-  /** Playbook 实体数据 */
-  playbook: import("../project/types").PlaybookDefinition;
-}
 

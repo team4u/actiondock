@@ -11,14 +11,6 @@ import {
   discoverProjects,
   pathExistsAsync,
 } from "./scan";
-import {
-  probeActionAsync,
-  probeActionSync,
-  probePlaybook,
-  resolveEntityFlow,
-  runFlowAsync,
-  runFlowSync,
-} from "./resolve";
 import type {
   GlobalRegistryData,
   LinkedPackageEntry,
@@ -27,8 +19,6 @@ import type {
   PruneResult,
   RegistryStatusReport,
   RegistryTreeItem,
-  ResolvedActionProject,
-  ResolvedPlaybookProject,
   UnlinkResult,
 } from "./types";
 
@@ -503,61 +493,7 @@ export function listLinkedWorkspaces(customHome?: string): LinkedWorkspaceEntry[
   return Object.values(registry.workspaces || {});
 }
 
-export function resolveActionProjectSync(
-  actionIdentifier: string,
-  cwd: string = process.cwd(),
-  customHome?: string
-): ResolvedActionProject {
-  return runFlowSync(
-    resolveEntityFlow<true, ResolvedActionProject>({
-      identifier: actionIdentifier,
-      cwd,
-      entityNoun: "Action",
-      listLinkedPackages: () => listLinkedPackages(customHome),
-      probe: (root, config, id) => probeActionSync(root, config, id) as true,
-      buildResult: (projectRoot, packageId, actionId) => ({ projectRoot, packageId, actionId }),
-    })
-  );
-}
 
-export async function resolveActionProject(
-  actionIdentifier: string,
-  cwd: string = process.cwd(),
-  customHome?: string
-): Promise<ResolvedActionProject> {
-  return runFlowAsync(
-    resolveEntityFlow<true, ResolvedActionProject>({
-      identifier: actionIdentifier,
-      cwd,
-      entityNoun: "Action",
-      listLinkedPackages: () => listLinkedPackagesAsync(customHome) as any,
-      probe: (root, config, id) => probeActionAsync(root, config, id) as any,
-      buildResult: (projectRoot, packageId, actionId) => ({ projectRoot, packageId, actionId }),
-    })
-  );
-}
-
-export function resolvePlaybookProject(
-  playbookIdentifier: string,
-  cwd: string = process.cwd(),
-  customHome?: string
-): ResolvedPlaybookProject {
-  return runFlowSync(
-    resolveEntityFlow<import("../project/types").PlaybookDefinition, ResolvedPlaybookProject>({
-      identifier: playbookIdentifier,
-      cwd,
-      entityNoun: "Playbook",
-      listLinkedPackages: () => listLinkedPackages(customHome),
-      probe: (root, config, id) => probePlaybook(root, config, id) as import("../project/types").PlaybookDefinition,
-      buildResult: (projectRoot, packageId, playbookId, playbook) => ({
-        projectRoot,
-        packageId,
-        playbookId,
-        playbook,
-      }),
-    })
-  );
-}
 
 export function resolvePackageRoot(
   packageIdOrPath?: string,

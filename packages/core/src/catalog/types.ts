@@ -1,32 +1,11 @@
 import type { ActionContract } from "@actiondock/sdk";
 import type { ProjectConfig } from "../project/types";
 
-/**
- * 注册的位置条目类型。
- */
-export type LocationType = "package" | "workspace";
-
-/**
- * 位置注册表中的单条链接记录。
- */
-export interface LocationLink {
-  /** 位置类型：单包或工作区 */
-  type: LocationType;
-  /** 目录绝对物理路径 */
-  path: string;
-  /** 注册时间（ISO 8601） */
-  linkedAt: string;
-  /** 扫描最大深度（工作区模式有效，默认 3） */
-  depth?: number;
-}
-
-/**
- * 物理位置注册表文件（~/.actiondock/registry.json）格式。
- */
-export interface LocationRegistryData {
-  schemaVersion: 1;
-  links: LocationLink[];
-}
+export * from "./discovery";
+export * from "./graph";
+export * from "./action-catalog";
+export * from "./resolve-action";
+export * from "./resolve-playbook";
 
 /**
  * 解析后的包实例快照。

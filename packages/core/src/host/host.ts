@@ -44,7 +44,16 @@ import {
 import { InvocationPolicy } from "../invocation/policy";
 import { DataDirLock } from "../storage/data-dir-lock";
 import {
-  ambiguousActionMessage,
+  DefaultActionCatalog,
+  DefaultPackageGraph,
+  resolveAction,
+  type ActionCatalog,
+  type PackageGraph,
+  type PackageNode,
+  type ResolvedAction,
+} from "../catalog";
+import { createPackageIdentity } from "../runtime/identity";
+import {
   buildRuntimeError,
   collectPackageInfos,
   describeActionAcrossApps,
@@ -54,7 +63,6 @@ import {
   packageNotFoundMessage,
   parseRefLoose,
   resolveProjectRoot,
-  resolveShortRef,
 } from "./routing";
 import type { ActionDockHost, ActionDockHostOptions } from "./types";
 
@@ -90,6 +98,8 @@ export class DefaultActionDockHost implements ActionDockHost {
   private failedAutoLoad?: { projectRoot: string; error: string };
   /** 透传给内部创建 App 的存储收割开关（Host 默认持有者身份，显式可关） */
   private recoverOrphans: boolean;
+  private graph: PackageGraph;
+  private catalog: ActionCatalog;
 
   constructor(options: ActionDockHostOptions = {}) {
     this.hostSessionId = randomUUID();
@@ -103,6 +113,8 @@ export class DefaultActionDockHost implements ActionDockHost {
     this.eventSink = options.eventSink ?? (options.platform as any)?.eventSink ?? new InMemoryEventSink();
     // Host 默认声明数据目录持有者身份；查询旁观方（CLI 查询命令）显式置 false
     this.recoverOrphans = options.recoverOrphans !== false;
+    this.graph = new DefaultPackageGraph(new Map());
+    this.catalog = new DefaultActionCatalog(this.graph);
 
     // 当指定非内存 dataDir 时获取排他目录锁，防止并发冲突
     if (options.dataDir && !options.inMemory) {
@@ -124,6 +136,8 @@ export class DefaultActionDockHost implements ActionDockHost {
       if (options.scanLinkedPackages) {
         this.registerLinkedPackages(options);
       }
+
+      this.rebuildGraphAndCatalog();
     } catch (err) {
       try {
         this.dataDirLock?.release();
@@ -367,23 +381,15 @@ export class DefaultActionDockHost implements ActionDockHost {
       callerRunId?: string,
       callerContext?: { owner?: any; tenantId?: string; principalId?: string; callStack?: string[] }
     ) => {
-      let resolvedRef = childAction;
-      if (typeof childAction === "string") {
-        if (!childAction.includes("/")) {
-          if (callerApp.actionsMap?.has(childAction) || callerApp.projectConfig?.actions?.[childAction]) {
-            resolvedRef = `${callerApp.packageId}/${childAction}`;
-          }
-        }
-      } else if (typeof childAction === "object" && childAction !== null && !childAction.packageId) {
-        if (callerApp.actionsMap?.has(childAction.actionId) || callerApp.projectConfig?.actions?.[childAction.actionId]) {
-          resolvedRef = { ...childAction, packageId: callerApp.packageId };
-        }
-      }
+      const resolved = resolveAction(childAction, {
+        caller: callerApp.packageId,
+        graph: this.graph,
+        catalog: this.catalog,
+      });
 
-      const targetPackageId = typeof resolvedRef === "string"
-        ? (resolvedRef.includes("/") ? resolvedRef.slice(0, resolvedRef.lastIndexOf("/")) : callerApp.packageId)
-        : (resolvedRef.packageId || callerApp.packageId);
-      const isSamePackage = !targetPackageId || targetPackageId === callerApp.packageId;
+      const resolvedRef = `${resolved.package.id}/${resolved.ref.actionId}`;
+      const targetPackageId = resolved.package.id;
+      const isSamePackage = targetPackageId === callerApp.packageId;
       const targetApp = isSamePackage ? callerApp : this.getApp(targetPackageId);
 
       const targetOwner = callerContext?.owner
@@ -424,6 +430,68 @@ export class DefaultActionDockHost implements ActionDockHost {
     };
   }
 
+  private rebuildGraphAndCatalog(): void {
+    const nodes = new Map<string, PackageNode>();
+    for (const app of this.apps.values()) {
+      const identity = createPackageIdentity({
+        id: app.packageId,
+        instanceId: app.packageInstanceId || `${app.packageId}:${app.packageRoot}`,
+        generation: app.generationId || "1",
+      });
+      nodes.set(app.packageId, {
+        identity,
+        root: app.packageRoot || "",
+        manifest: app.projectConfig,
+        directDependencies: new Set<string>(),
+        transitiveDependencies: new Set<string>(),
+        isRoot: this.hostPublicPackageIds.has(app.packageId),
+      });
+    }
+
+    for (const node of nodes.values()) {
+      if (node.manifest?.dependencies && typeof node.manifest.dependencies === "object") {
+        for (const depId of Object.keys(node.manifest.dependencies)) {
+          if (nodes.has(depId)) {
+            node.directDependencies.add(depId);
+          }
+        }
+      }
+    }
+
+    for (const node of nodes.values()) {
+      const queue = Array.from(node.directDependencies);
+      const visited = new Set<string>(node.directDependencies);
+      while (queue.length > 0) {
+        const curr = queue.shift()!;
+        node.transitiveDependencies.add(curr);
+        const depNode = nodes.get(curr);
+        if (depNode) {
+          for (const next of depNode.directDependencies) {
+            if (next !== node.identity.id && !visited.has(next)) {
+              visited.add(next);
+              queue.push(next);
+            }
+          }
+        }
+      }
+    }
+
+    const rootNode = Array.from(nodes.values()).find((n) => n.isRoot);
+    this.graph = new DefaultPackageGraph(nodes, rootNode?.identity);
+    this.catalog = new DefaultActionCatalog(this.graph, (pkgId) => {
+      const app = this.getApp(pkgId);
+      if (!app) return undefined;
+      const map = new Map<string, any>(app.actionsMap);
+      const runnerRegistry = (app.executionService as any)?._runner?.registry?.map;
+      if (runnerRegistry) {
+        for (const [k, v] of runnerRegistry) {
+          map.set(k, v);
+        }
+      }
+      return map;
+    });
+  }
+
   getApp(packageId: string): ActionDockApp | undefined {
     return this.apps.get(packageId);
   }
@@ -455,6 +523,7 @@ export class DefaultActionDockHost implements ActionDockHost {
       this.hostPublicPackageIds.add(app.packageId);
     }
     this.bindApp(app);
+    this.rebuildGraphAndCatalog();
 
     // 接管与恢复：仅持有者身份的 Host 自动将死亡会话或遗留非终态运行收敛为 interrupted；
     // 旁观查询 Host（CLI state/runs/config 命令）跳过本步骤，不动其他进程的在途记录
@@ -525,7 +594,14 @@ export class DefaultActionDockHost implements ActionDockHost {
   }
 
   async describeAction(ref: ActionRef | string): Promise<ActionSpec> {
-    return describeActionAcrossApps(ref, this.listApps(), this.visibility(), this.failedLinkedPackages);
+    return describeActionAcrossApps(
+      ref,
+      this.listApps(),
+      this.visibility(),
+      this.failedLinkedPackages,
+      this.catalog,
+      this.graph
+    );
   }
 
   async listPlaybooks(): Promise<PlaybookSummary[]> {
@@ -557,56 +633,60 @@ export class DefaultActionDockHost implements ActionDockHost {
       throw new Error("ActionDockHost is closed: new tasks rejected");
     }
 
-    // - 解析目标包与 Action 动作标识
-    const parsed = parseRefLoose(ref);
-
-    let targetApp: ActionDockApp | undefined;
-    let targetActionId = parsed.actionId;
-    let targetPackageId = parsed.packageId;
-
-    if (targetPackageId) {
-      targetApp = this.getApp(targetPackageId);
-      if (!targetApp) {
-        const runId = randomUUID();
-        const error: RuntimeError = buildRuntimeError(
-          PACKAGE_NOT_FOUND,
-          packageNotFoundMessage(targetPackageId, this.failedLinkedPackages)
-        );
+    // - 统一基于纯领域 resolveAction 解析目标包与 Action 动作标识
+    let resolved: ResolvedAction;
+    try {
+      resolved = resolveAction(ref, {
+        graph: this.graph,
+        catalog: this.catalog,
+      });
+    } catch (err: any) {
+      const runId = randomUUID();
+      let code = err.code || ACTION_NOT_FOUND;
+      let message = err.message || String(err);
+      if (code === PACKAGE_NOT_FOUND || message.startsWith("PACKAGE_NOT_FOUND")) {
+        code = PACKAGE_NOT_FOUND;
+        const parsed = parseRefLoose(ref);
+        if (parsed.packageId) {
+          message = packageNotFoundMessage(parsed.packageId, this.failedLinkedPackages);
+        }
+      } else if (code === INVALID_ACTION_REF && err.details?.alias === "AMBIGUOUS_ACTION_REF") {
         return {
           runId,
           status: "failed",
-          result: Promise.resolve({ ok: false, runId, error }),
+          result: Promise.resolve({
+            ok: false,
+            runId,
+            error: buildRuntimeError(INVALID_ACTION_REF, message, err.details),
+          }),
         };
       }
-    } else {
-      const resolution = await resolveShortRef(this.listApps(), targetActionId, this.visibility());
-      if (resolution.kind === "unique") {
-        targetApp = resolution.app;
-        targetPackageId = targetApp.packageId;
-      } else if (resolution.kind === "ambiguous") {
-        const runId = randomUUID();
-        const error: RuntimeError = buildRuntimeError(
-          INVALID_ACTION_REF,
-          ambiguousActionMessage(targetActionId, resolution.candidates),
-          { alias: "AMBIGUOUS_ACTION_REF", candidates: resolution.candidates }
-        );
-        return {
+      return {
+        runId,
+        status: "failed",
+        result: Promise.resolve({
+          ok: false,
           runId,
-          status: "failed",
-          result: Promise.resolve({ ok: false, runId, error }),
-        };
-      } else {
-        const runId = randomUUID();
-        const error: RuntimeError = buildRuntimeError(
-          ACTION_NOT_FOUND,
-          `Action '${targetActionId}' not found in any registered package`
-        );
-        return {
-          runId,
-          status: "failed",
-          result: Promise.resolve({ ok: false, runId, error }),
-        };
-      }
+          error: buildRuntimeError(code, message),
+        }),
+      };
+    }
+
+    const targetPackageId = resolved.package.id;
+    const targetActionId = resolved.ref.actionId;
+    const targetApp = this.getApp(targetPackageId);
+
+    if (!targetApp) {
+      const runId = randomUUID();
+      const error: RuntimeError = buildRuntimeError(
+        PACKAGE_NOT_FOUND,
+        packageNotFoundMessage(targetPackageId, this.failedLinkedPackages)
+      );
+      return {
+        runId,
+        status: "failed",
+        result: Promise.resolve({ ok: false, runId, error }),
+      };
     }
 
     // 根调用可见性鉴权（统一委托 InvocationPolicy 单一事实源）

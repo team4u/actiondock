@@ -5,12 +5,15 @@ import {
   assertPathWithinRoot,
   type ActionDockManifest,
   type ActionManifestEntry,
+  DefaultActionCatalog,
   loadManifest,
   loadPlaybooks,
   loadProjectConfig,
+  PackageDiscovery,
+  PackageGraphBuilder,
   type PlaybookDefinition,
   type ProjectConfig,
-  resolveActionProjectSync,
+  resolveAction,
   validateManifest,
 } from "@actiondock/core";
 import { PlannerError } from "./errors";
@@ -439,6 +442,11 @@ export class SelectionPlanner {
     const externalActionEntries = new Map<string, ActionManifestEntry>();
     const manifestActions = manifest.actions || {};
 
+    const discovery = new PackageDiscovery({ currentProjectRoot: root });
+    const discovered = discovery.discoverSync();
+    const graph = new PackageGraphBuilder({ packages: discovered, root }).buildSync();
+    const catalog = new DefaultActionCatalog(graph);
+
     while (queue.length > 0) {
       const currentId = queue.shift()!;
       queued.delete(currentId);
@@ -451,30 +459,31 @@ export class SelectionPlanner {
 
       if (!entry) {
         try {
-          const resolvedExternal = resolveActionProjectSync(currentId, root);
-          if (resolvedExternal && existsSync(resolvedExternal.projectRoot)) {
-            const extRoot = resolvedExternal.projectRoot;
+          const resolved = resolveAction(currentId, { graph, catalog, caller: config?.id });
+          const extNode = graph.packages.get(resolved.package.id);
+          if (extNode && existsSync(extNode.root)) {
+            const extRoot = extNode.root;
             let extConfig: ProjectConfigWithDeclarations;
             try {
               extConfig = loadProjectConfig(extRoot) as ProjectConfigWithDeclarations;
             } catch {
               extConfig = {
-                id: resolvedExternal.packageId,
-                name: resolvedExternal.packageId,
+                id: resolved.package.id,
+                name: resolved.package.id,
                 version: "0.1.0",
               };
             }
             const externalManifest = loadManifest(extRoot);
             let externalEntry =
-              externalManifest?.actions?.[resolvedExternal.actionId] ||
-              extConfig?.actions?.[resolvedExternal.actionId];
+              externalManifest?.actions?.[resolved.ref.actionId] ||
+              extConfig?.actions?.[resolved.ref.actionId];
             if (!externalEntry) {
               const staticManifest = generateFallbackManifest(
                 extRoot,
                 extConfig.actionsDir || "actions",
                 extConfig
               );
-              externalEntry = staticManifest.actions?.[resolvedExternal.actionId];
+              externalEntry = staticManifest.actions?.[resolved.ref.actionId];
             }
             if (externalEntry) {
               entry = externalEntry;

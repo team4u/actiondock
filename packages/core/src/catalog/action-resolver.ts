@@ -1,5 +1,6 @@
 import type { ActionRef, ResolvedActionRef } from "@actiondock/sdk";
 import { ActionIndex } from "./action-index";
+import { parseActionRef } from "./resolve-action";
 import type { CatalogSnapshot, IndexedAction } from "./types";
 
 export interface ResolveOptions {
@@ -17,34 +18,10 @@ export class ActionResolver {
 
   /**
    * 解析字符串或 ActionRef 为规范化的 ActionRef。
-   * 支持 greet、my-tools/greet、@team/github/issues.list。
+   * 单一事实源：委派 parseActionRef。
    */
   public static parseRef(refStringOrObj: string | ActionRef): ActionRef {
-    if (typeof refStringOrObj === "object") {
-      return refStringOrObj;
-    }
-
-    const str = refStringOrObj.trim();
-    if (str.includes("/")) {
-      const lastSlashIndex = str.lastIndexOf("/");
-      const packageId = str.slice(0, lastSlashIndex);
-      const actionId = str.slice(lastSlashIndex + 1);
-
-      if (actionId.includes(":") || actionId.includes("/") || actionId.includes("..")) {
-        throw new Error(`Invalid action identifier: '${actionId}'`);
-      }
-      return { packageId, actionId };
-    }
-
-    // 处理旧语法 package:action 的兼容提醒
-    if (str.includes(":")) {
-      const parts = str.split(":");
-      throw new Error(
-        `Legacy syntax '${str}' is deprecated. Please use '${parts.join("/")}' instead.`
-      );
-    }
-
-    return { actionId: str };
+    return parseActionRef(refStringOrObj);
   }
 
   public resolve(

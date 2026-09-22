@@ -193,11 +193,11 @@ describe("ActionDockHost 多包宿主容器", () => {
     expect(specUnique.id).toBe("create");
 
     // 7. 冲突短标识符 describeAction 抛出歧义异常
-    expect(host.describeAction("search")).rejects.toThrow("AMBIGUOUS_ACTION_REF");
+    await expect(host.describeAction("search")).rejects.toThrow("AMBIGUOUS_ACTION_REF");
 
     // 8. 不存在的 Action 抛出异常
-    expect(host.describeAction("missing")).rejects.toThrow("ACTION_NOT_FOUND");
-    expect(host.describeAction("pkg.none/action")).rejects.toThrow("Package 'pkg.none' not found in host");
+    await expect(host.describeAction("missing")).rejects.toThrow("ACTION_NOT_FOUND");
+    await expect(host.describeAction("pkg.none/action")).rejects.toThrow("Package 'pkg.none' not found in host");
 
     await host.close();
   });
@@ -1396,7 +1396,7 @@ actions:
         {
           projectConfig: { id: "pkg.good-app", name: "健康包", version: "1.0.0" },
           actions: {
-            fine: defineAction({ run: () => ({ ok: true }) }),
+            okAction: defineAction({ run: () => ({ ok: true }) }),
           },
           inMemory: true,
         },
@@ -1430,7 +1430,7 @@ actions:
     }
   });
 
-  it("runAction 遍历遇包内内部错误时向调用方透传而非伪装 ACTION_NOT_FOUND", async () => {
+  it("runAction 遇包内内部错误时向调用方透传而非伪装 ACTION_NOT_FOUND", async () => {
     const host = await createActionDockHost({
       packages: [
         {
@@ -1452,7 +1452,7 @@ actions:
     });
 
     const errorApp = host.getApp("pkg.err-run")!;
-    errorApp.describeAction = async () => {
+    errorApp.startAction = async () => {
       const err = new Error("SQLITE_CORRUPT: database disk image is malformed");
       (err as any).code = "SQLITE_CORRUPT";
       throw err;

@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import {
   assertPathWithinRoot,
+  DefaultActionCatalog,
   fetchRemotePlaybooks,
   fetchRemotePlaybookShow,
   filterWithFallbackInfo,
@@ -11,9 +12,11 @@ import {
   loadManifest,
   loadPlaybooks,
   loadProjectConfig,
-  resolveActionProject,
+  PackageDiscovery,
+  PackageGraphBuilder,
+  resolveAction,
   resolvePackageRoot,
-  resolvePlaybookProject,
+  resolvePlaybook,
   saveManifest,
   type PlaybookDefinition,
 } from "@actiondock/core";
@@ -287,7 +290,12 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
 
       let resolved;
       try {
-        resolved = resolvePlaybookProject(showTarget);
+        const discovery = new PackageDiscovery({
+          currentProjectRoot: findProjectRoot() || undefined,
+          customHome: context?.customHome,
+        });
+        const graph = new PackageGraphBuilder({ packages: discovery.discoverSync() }).buildSync();
+        resolved = resolvePlaybook(showTarget, { graph });
       } catch (err: any) {
         throw new ArgumentError(err.message);
       }
@@ -345,7 +353,12 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
       } else if (id) {
         let resolved;
         try {
-          resolved = resolvePlaybookProject(id);
+          const discovery = new PackageDiscovery({
+            currentProjectRoot: findProjectRoot() || undefined,
+            customHome: context?.customHome,
+          });
+          const graph = new PackageGraphBuilder({ packages: discovery.discoverSync() }).buildSync();
+          resolved = resolvePlaybook(id, { graph });
         } catch (err: any) {
           throw new ArgumentError(err.message);
         }
@@ -376,6 +389,12 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
       }
 
       const results: Array<{ id: string; packageId: string; valid: boolean; warnings: string[]; errors: string[] }> = [];
+      const discovery = new PackageDiscovery({
+        currentProjectRoot: findProjectRoot() || undefined,
+        customHome: context?.customHome,
+      });
+      const graph = new PackageGraphBuilder({ packages: discovery.discoverSync() }).buildSync();
+      const catalog = new DefaultActionCatalog(graph);
 
       for (const target of targets) {
         const config = loadProjectConfig(target.root);
@@ -397,7 +416,7 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
             for (const actRef of pb.actions) {
               if (actRef.includes("/")) {
                 try {
-                  await resolveActionProject(actRef);
+                  resolveAction(actRef, { graph, catalog, caller: target.packageId });
                 } catch (e: any) {
                   errors.push(`Referenced cross-package action '${actRef}' not resolvable: ${e.message}`);
                 }

@@ -4,17 +4,20 @@ import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { initProject } from "../src/project/init";
 import {
+  DefaultActionCatalog,
+  DefaultRegistryStore,
   getRegistryStatus,
   linkPackage,
   listLinkedPackages,
   loadRegistry,
+  PackageDiscovery,
+  PackageGraphBuilder,
   pruneRegistry,
-  resolveActionProject,
-  resolveActionProjectSync,
+  resolveAction,
   resolvePackageRoot,
-  resolvePlaybookProject,
+  resolvePlaybook,
   unlinkPackage,
-} from "../src/registry";
+} from "../src";
 
 describe("Registry and Linking Mechanism", () => {
   let fakeHome: string;
@@ -162,63 +165,75 @@ export default defineAction(async () => ({ pkg: "B-unique" }));
   it("resolves action from current project first", async () => {
     await linkPackage(pkgBDir, fakeHome);
 
+    const discovery = new PackageDiscovery({ currentProjectRoot: pkgADir, customHome: fakeHome });
+    const graph = new PackageGraphBuilder({ packages: discovery.discoverSync(), root: pkgADir }).buildSync();
+    const catalog = new DefaultActionCatalog(graph);
+
     // When running inside pkgADir, resolving common.action should resolve to pkg A
-    const res = await resolveActionProject("common.action", pkgADir, fakeHome);
-    expect(res.packageId).toBe("team.pkg-a");
-    expect(res.projectRoot).toBe(pkgADir);
+    const res = resolveAction("common.action", { graph, catalog, caller: "team.pkg-a" });
+    expect(res.package.id).toBe("team.pkg-a");
+    expect(graph.packages.get(res.package.id)?.root).toBe(pkgADir);
   });
 
   it("resolves unique action from linked packages when outside of project", async () => {
     await linkPackage(pkgBDir, fakeHome);
 
-    const outsideDir = fakeHome; // empty dir with no actiondock.json
-    const res = await resolveActionProject("unique.b", outsideDir, fakeHome);
-    expect(res.packageId).toBe("team.pkg-b");
-    expect(res.projectRoot).toBe(pkgBDir);
+    const discovery = new PackageDiscovery({ customHome: fakeHome });
+    const graph = new PackageGraphBuilder({ packages: discovery.discoverSync() }).buildSync();
+    const catalog = new DefaultActionCatalog(graph);
+
+    const res = resolveAction("unique.b", { graph, catalog });
+    expect(res.package.id).toBe("team.pkg-b");
+    expect(graph.packages.get(res.package.id)?.root).toBe(pkgBDir);
   });
 
   it("detects conflict and allows scoped package resolution", async () => {
     await linkPackage(pkgADir, fakeHome);
     await linkPackage(pkgBDir, fakeHome);
 
-    const outsideDir = fakeHome;
+    const discovery = new PackageDiscovery({ customHome: fakeHome });
+    const graph = new PackageGraphBuilder({ packages: discovery.discoverSync() }).buildSync();
+    const catalog = new DefaultActionCatalog(graph);
 
     // Unscoped common.action should throw error because both A and B provide it
-    // 拒绝断言需显式 await，避免未处理的 Promise 拒绝泄漏
-    await expect(
-      resolveActionProject("common.action", outsideDir, fakeHome)
-    ).rejects.toThrow("provided by multiple linked packages");
+    expect(() =>
+      resolveAction("common.action", { graph, catalog })
+    ).toThrow(/ambiguous/i);
 
     // Scoped package specification should resolve cleanly
-    const resA = await resolveActionProject("team.pkg-a/common.action", outsideDir, fakeHome);
-    expect(resA.packageId).toBe("team.pkg-a");
+    const resA = resolveAction("team.pkg-a/common.action", { graph, catalog });
+    expect(resA.package.id).toBe("team.pkg-a");
 
-    const resB = await resolveActionProject("pkg-b/common.action", outsideDir, fakeHome);
-    expect(resB.packageId).toBe("team.pkg-b");
+    const resB = resolveAction("team.pkg-b/common.action", { graph, catalog });
+    expect(resB.package.id).toBe("team.pkg-b");
   });
 
   it("resolves playbook from current project and linked packages", async () => {
     await linkPackage(pkgADir, fakeHome);
     await linkPackage(pkgBDir, fakeHome);
 
+    const discovery = new PackageDiscovery({ currentProjectRoot: pkgADir, customHome: fakeHome });
+    const graph = new PackageGraphBuilder({ packages: discovery.discoverSync(), root: pkgADir }).buildSync();
+
     // 1. Inside pkgADir
-    const localRes = resolvePlaybookProject("common-sop", pkgADir, fakeHome);
+    const localRes = resolvePlaybook("common-sop", { graph, caller: "team.pkg-a" });
     expect(localRes.packageId).toBe("team.pkg-a");
     expect(localRes.playbook.description).toBe("Common SOP in A");
 
     // 2. Outside project: unique playbook
-    const outsideDir = fakeHome;
-    const uniqueRes = resolvePlaybookProject("unique-b-sop", outsideDir, fakeHome);
+    const outsideDiscovery = new PackageDiscovery({ customHome: fakeHome });
+    const outsideGraph = new PackageGraphBuilder({ packages: outsideDiscovery.discoverSync() }).buildSync();
+    const uniqueRes = resolvePlaybook("unique-b-sop", { graph: outsideGraph });
     expect(uniqueRes.packageId).toBe("team.pkg-b");
     expect(uniqueRes.playbook.id).toBe("unique-b-sop");
 
     // 3. Outside project: conflicting playbook throws
     expect(() =>
-      resolvePlaybookProject("common-sop", outsideDir, fakeHome)
+      resolvePlaybook("common-sop", { graph: outsideGraph })
     ).toThrow("provided by multiple linked packages");
 
     // 4. Outside project: scoped playbook resolves cleanly
-    const scopedRes = resolvePlaybookProject("team.pkg-a/common-sop", outsideDir, fakeHome);
+    const scopedRes = resolvePlaybook("team.pkg-a/common-sop", { graph: outsideGraph });
     expect(scopedRes.packageId).toBe("team.pkg-a");
     expect(scopedRes.playbook.id).toBe("common-sop");
   });
@@ -306,11 +321,14 @@ export default defineAction(async () => ({ fromDyn2: true }));
     expect(allLinked.map((p) => p.id)).toContain("team.dyn-1");
     expect(allLinked.map((p) => p.id)).toContain("team.dyn-2");
 
-    // 5. resolveActionProject should seamlessly resolve action from newly added sub2!
-    const resolved = await resolveActionProject("dyn.action2", fakeHome, fakeHome);
-    expect(resolved.packageId).toBe("team.dyn-2");
-    expect(resolved.projectRoot).toBe(sub2);
-    expect(resolved.actionId).toBe("dyn.action2");
+    // 5. resolveAction should seamlessly resolve action from newly added sub2!
+    const wsDiscovery = new PackageDiscovery({ customHome: fakeHome });
+    const wsGraph = new PackageGraphBuilder({ packages: wsDiscovery.discoverSync() }).buildSync();
+    const wsCatalog = new DefaultActionCatalog(wsGraph);
+    const resolved = resolveAction("dyn.action2", { graph: wsGraph, catalog: wsCatalog });
+    expect(resolved.package.id).toBe("team.dyn-2");
+    expect(wsGraph.packages.get(resolved.package.id)?.root).toBe(sub2);
+    expect(resolved.ref.actionId).toBe("dyn.action2");
 
     rmSync(wsDir, { recursive: true, force: true });
   });
@@ -430,18 +448,22 @@ export default defineAction({
       const root = resolvePackageRoot("@team/tools", fakeHome, fakeHome);
       expect(root).toBe(scopedDir);
 
-      // 2. resolvePlaybookProject should resolve @team/tools/deploy correctly using lastIndexOf
-      const pbRes = resolvePlaybookProject("@team/tools/deploy", fakeHome, fakeHome);
+      const scopedDiscovery = new PackageDiscovery({ customHome: fakeHome });
+      const scopedGraph = new PackageGraphBuilder({ packages: scopedDiscovery.discoverSync() }).buildSync();
+      const scopedCatalog = new DefaultActionCatalog(scopedGraph);
+
+      // 2. resolvePlaybook should resolve @team/tools/deploy correctly using lastIndexOf
+      const pbRes = resolvePlaybook("@team/tools/deploy", { graph: scopedGraph });
       expect(pbRes.packageId).toBe("@team/tools");
       expect(pbRes.playbookId).toBe("deploy");
       expect(pbRes.playbook.description).toBe("Scoped Deploy Playbook");
       expect(pbRes.projectRoot).toBe(scopedDir);
 
-      // 3. resolveActionProject should resolve @team/tools/greet
-      const actRes = await resolveActionProject("@team/tools/greet", fakeHome, fakeHome);
-      expect(actRes.packageId).toBe("@team/tools");
-      expect(actRes.actionId).toBe("greet");
-      expect(actRes.projectRoot).toBe(scopedDir);
+      // 3. resolveAction should resolve @team/tools/greet
+      const actRes = resolveAction("@team/tools/greet", { graph: scopedGraph, catalog: scopedCatalog });
+      expect(actRes.package.id).toBe("@team/tools");
+      expect(actRes.ref.actionId).toBe("greet");
+      expect(scopedGraph.packages.get(actRes.package.id)?.root).toBe(scopedDir);
     } finally {
       rmSync(scopedDir, { recursive: true, force: true });
     }
@@ -516,16 +538,16 @@ export default defineAction({
       // 1. resolvePackageRoot should return currentDir, NOT oldDir
       expect(resolvePackageRoot("team.shared", currentDir, fakeHome)).toBe(currentDir);
 
-      // 2. resolveActionProjectSync should resolve from currentDir
-      const syncAct = resolveActionProjectSync("team.shared/echo", currentDir, fakeHome);
-      expect(syncAct.projectRoot).toBe(currentDir);
+      const prioDiscovery = new PackageDiscovery({ currentProjectRoot: currentDir, customHome: fakeHome });
+      const prioGraph = new PackageGraphBuilder({ packages: prioDiscovery.discoverSync(), root: currentDir }).buildSync();
+      const prioCatalog = new DefaultActionCatalog(prioGraph);
 
-      // 3. resolveActionProject (async) should resolve from currentDir
-      const asyncAct = await resolveActionProject("team.shared/echo", currentDir, fakeHome);
-      expect(asyncAct.projectRoot).toBe(currentDir);
+      // 2. resolveAction should resolve from currentDir
+      const syncAct = resolveAction("team.shared/echo", { graph: prioGraph, catalog: prioCatalog });
+      expect(prioGraph.packages.get(syncAct.package.id)?.root).toBe(currentDir);
 
-      // 4. resolvePlaybookProject should resolve from currentDir
-      const pbRes = resolvePlaybookProject("team.shared/sop", currentDir, fakeHome);
+      // 3. resolvePlaybook should resolve from currentDir
+      const pbRes = resolvePlaybook("team.shared/sop", { graph: prioGraph });
       expect(pbRes.projectRoot).toBe(currentDir);
       expect(pbRes.playbook.description).toBe("Current SOP");
     } finally {
@@ -534,34 +556,27 @@ export default defineAction({
     }
   });
 
-  it("converges LocationRegistry and GlobalRegistry formats and migrates links seamlessly", async () => {
-    const { LocationRegistry } = await import("../src/catalog/location-registry");
-    const locReg = new LocationRegistry(fakeHome);
+  it("RegistryStore manages links and migrates legacy schemaVersion 1 formats seamlessly", async () => {
+    const store = new DefaultRegistryStore(fakeHome);
 
-    // 1. Link packages using standard linkPackage
-    await linkPackage(pkgADir, fakeHome);
-    await linkPackage(pkgBDir, fakeHome);
+    // 1. Link packages using standard link
+    await store.link(pkgADir);
+    await store.link(pkgBDir);
 
-    // 2. Load via LocationRegistry: should reflect both packages as links
-    const locData = locReg.load();
-    expect(locData.schemaVersion).toBe(1);
-    expect(locData.links.length).toBe(2);
-    expect(locData.links.some((l) => l.path === pkgADir)).toBe(true);
-    expect(locData.links.some((l) => l.path === pkgBDir)).toBe(true);
+    // 2. List packages
+    const list = store.listPackages();
+    expect(list.length).toBe(2);
+    expect(list.some((l) => l.path === pkgADir)).toBe(true);
+    expect(list.some((l) => l.path === pkgBDir)).toBe(true);
 
-    // 3. Save modified links via LocationRegistry
-    await locReg.removeLink(pkgADir);
-    const updatedLoc = locReg.load();
-    expect(updatedLoc.links.length).toBe(1);
-    expect(updatedLoc.links[0].path).toBe(pkgBDir);
+    // 3. Unlink package
+    await store.unlink("team.pkg-a");
+    const updatedList = store.listPackages();
+    expect(updatedList.length).toBe(1);
+    expect(updatedList[0].path).toBe(pkgBDir);
 
-    // 4. Verify GlobalRegistry data reflects the update
-    const globalData = loadRegistry(fakeHome);
-    expect(globalData.packages["team.pkg-a"]).toBeUndefined();
-    expect(globalData.packages["team.pkg-b"]).toBeDefined();
-
-    // 5. Test raw migration when registry file contains ONLY schemaVersion 1 links
-    const filePath = locReg.getFilePath();
+    // 4. Test raw migration when registry file contains ONLY schemaVersion 1 links
+    const filePath = store.getFilePath();
     writeFileSync(
       filePath,
       JSON.stringify({
@@ -571,7 +586,7 @@ export default defineAction({
       "utf-8"
     );
 
-    const migrated = loadRegistry(fakeHome);
+    const migrated = store.load();
     expect(migrated.packages["team.pkg-a"]).toBeDefined();
     expect(migrated.packages["team.pkg-a"].path).toBe(pkgADir);
   });

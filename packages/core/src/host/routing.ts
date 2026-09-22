@@ -7,41 +7,30 @@ import type {
   PlaybookSpec,
   PlaybookSummary,
 } from "../app/types";
-import { ActionResolver } from "../catalog/action-resolver";
+import {
+  DefaultActionCatalog,
+  DefaultPackageGraph,
+  parseActionRef,
+  resolveAction,
+  resolvePlaybook,
+  type ActionCatalog,
+  type PackageGraph,
+  type ResolvedAction,
+} from "../catalog";
 import type { ActionPackageResolver } from "../project/resolver";
-
-/**
- * 判定异常是否为 not-found 语义（包内确实不存在该 Action）。
- *
- * 遍历匹配短标识符时仅跳过此类错误；存储损坏、模块加载失败等内部错误必须向调用方透传，
- * 严禁被吞没后伪装成 ACTION_NOT_FOUND。
- */
-export function isActionNotFoundLikeError(err: any): boolean {
-  if (!err) {
-    return false;
-  }
-  if (err.code === "ACTION_NOT_FOUND" || err.code === "NOT_FOUND") {
-    return true;
-  }
-  const message = typeof err.message === "string" ? err.message : String(err);
-  return (
-    message.startsWith("ACTION_NOT_FOUND:") ||
-    /Action '[^']*' not found in package/.test(message)
-  );
-}
+import { InvocationPolicy } from "../invocation/policy";
 
 /**
  * 宽松解析引用：优先结构化解析，失败时按对象或裸短标识符回退。
+ * 委派纯领域解析 parseActionRef 单一事实源。
  */
 export function parseRefLoose(ref: ActionRef | string): ActionRef {
   try {
-    return ActionResolver.parseRef(ref);
+    return parseActionRef(ref);
   } catch {
-    return typeof ref === "object" ? ref : { actionId: ref };
+    return typeof ref === "object" && ref !== null ? ref : { actionId: String(ref) };
   }
 }
-
-import { InvocationPolicy } from "../invocation/policy";
 
 /**
  * 根调用可见性判定：非公开包且存在依赖解析器时，交由解析器委托规则裁决。
@@ -53,51 +42,12 @@ export function isRootCallVisible(
   resolver?: ActionPackageResolver
 ): boolean {
   const policy = new InvocationPolicy();
-  return policy.checkRootVisibility(packageId, actionId, { hostPublicPackageIds, resolver }) === undefined;
-}
-
-/**
- * 跨包短标识符歧义消解结果：唯一匹配、歧义多匹配与零匹配三态。
- */
-export type ShortRefResolution =
-  | { kind: "unique"; app: ActionDockApp }
-  | { kind: "ambiguous"; candidates: string[] }
-  | { kind: "not_found" };
-
-/**
- * 在全部已注册包中按短标识符解析唯一提供方。
- *
- * 可见性过滤遵循根调用规则（公开包直接可见；传递依赖包仅可见 Playbook 委托项）；
- * 仅 not-found 语义错误被跳过，其余异常向调用方透传。
- */
-export async function resolveShortRef(
-  apps: readonly ActionDockApp[],
-  actionId: string,
-  visibility: { hostPublicPackageIds: ReadonlySet<string>; resolver?: ActionPackageResolver }
-): Promise<ShortRefResolution> {
-  const matches: ActionDockApp[] = [];
-  for (const app of apps) {
-    try {
-      if (!isRootCallVisible(app.packageId, actionId, visibility.hostPublicPackageIds, visibility.resolver)) {
-        continue;
-      }
-      await app.describeAction(actionId);
-      matches.push(app);
-    } catch (err: any) {
-      // 仅将 not-found 语义视为「包内无此 Action」；其余异常必须透传，避免内部错误伪装成 ACTION_NOT_FOUND
-      if (!isActionNotFoundLikeError(err)) {
-        throw err;
-      }
-    }
-  }
-
-  if (matches.length === 1) {
-    return { kind: "unique", app: matches[0] };
-  }
-  if (matches.length > 1) {
-    return { kind: "ambiguous", candidates: matches.map((m) => m.packageId) };
-  }
-  return { kind: "not_found" };
+  return (
+    policy.checkRootVisibility(packageId, actionId, {
+      hostPublicPackageIds,
+      resolver,
+    }) === undefined
+  );
 }
 
 /**
@@ -147,50 +97,48 @@ export async function listVisiblePlaybooks(
 }
 
 /**
- * 静态查询指定 Playbook 规范：支持「包/规程」限定引用与裸短标识符两级解析。
- * 未声明依赖的传递包、不存在的规程与空匹配分别抛出对应语义错误。
+ * 静态查询指定 Playbook 规范：基于 resolvePlaybook 统一纯领域解析。
  */
 export async function describeVisiblePlaybook(
   apps: readonly ActionDockApp[],
   id: string,
   visibility: { hostPublicPackageIds: ReadonlySet<string>; resolver?: ActionPackageResolver }
 ): Promise<PlaybookSpec> {
-  if (id.includes("/")) {
-    const lastSlashIndex = id.lastIndexOf("/");
-    const packageId = id.slice(0, lastSlashIndex);
-    const playbookId = id.slice(lastSlashIndex + 1);
-    const isPublic = visibility.hostPublicPackageIds.has(packageId);
-    if (!isPublic && visibility.resolver) {
-      const graph = visibility.resolver.resolveSync();
-      if (!graph.directDependencyIds.has(packageId)) {
-        throw new Error(
-          `UNDECLARED_ACTION_DEPENDENCY: Playbook '${id}' belongs to undeclared transitive package '${packageId}'`
-        );
-      }
-    }
-    const app = apps.find((a) => a.packageId === packageId);
-    if (!app) {
-      throw new Error(`Package '${packageId}' not found in host`);
-    }
-    return app.describePlaybook(playbookId);
-  }
+  const graph: PackageGraph = new DefaultPackageGraph(
+    new Map(
+      apps.map((a) => [
+        a.packageId,
+        {
+          identity: {
+            id: a.packageId,
+            instanceId: a.packageInstanceId || a.packageId,
+            generation: a.generationId || "1",
+          },
+          root: a.packageRoot || "",
+          manifest: a.projectConfig,
+          directDependencies: new Set<string>(),
+          transitiveDependencies: new Set<string>(),
+        },
+      ])
+    )
+  );
 
-  for (const app of apps) {
-    try {
-      const isPublic = visibility.hostPublicPackageIds.has(app.packageId);
-      if (!isPublic && visibility.resolver) {
-        const graph = visibility.resolver.resolveSync();
-        if (!graph.directDependencyIds.has(app.packageId)) {
-          continue;
-        }
-      }
-      return await app.describePlaybook(id);
-    } catch {
-      // 忽略未匹配的包
+  const resolved = resolvePlaybook(id, { graph });
+  const isPublic = visibility.hostPublicPackageIds.has(resolved.packageId);
+  if (!isPublic && visibility.resolver) {
+    const depGraph = visibility.resolver.resolveSync();
+    if (!depGraph.directDependencyIds.has(resolved.packageId)) {
+      throw new Error(
+        `UNDECLARED_ACTION_DEPENDENCY: Playbook '${id}' belongs to undeclared transitive package '${resolved.packageId}'`
+      );
     }
   }
 
-  throw new Error(`Playbook '${id}' not found in any registered package`);
+  const app = apps.find((a) => a.packageId === resolved.packageId);
+  if (!app) {
+    throw new Error(`Package '${resolved.packageId}' not found in host`);
+  }
+  return app.describePlaybook(resolved.playbookId);
 }
 
 /**
@@ -224,65 +172,85 @@ export function ambiguousActionMessage(actionId: string, candidates: readonly st
 }
 
 /**
- * 静态查询指定 Action 规范：包限定引用直查，裸短标识符跨包消歧后返回。
+ * 静态查询指定 Action 规范：基于 resolveAction 统一纯领域解析。
  */
 export async function describeActionAcrossApps(
   ref: ActionRef | string,
   apps: readonly ActionDockApp[],
   visibility: { hostPublicPackageIds: ReadonlySet<string>; resolver?: ActionPackageResolver },
-  failedLinkedPackages: ReadonlyMap<string, { path: string; error: string }>
+  failedLinkedPackages: ReadonlyMap<string, { path: string; error: string }>,
+  catalog?: ActionCatalog,
+  graph?: PackageGraph
 ): Promise<ActionSpec> {
   const parsed = parseRefLoose(ref);
-
-  if (parsed.packageId) {
-    if (!isRootCallVisible(parsed.packageId, parsed.actionId, visibility.hostPublicPackageIds, visibility.resolver)) {
-      throw new Error(
-        `UNDECLARED_ACTION_DEPENDENCY: Action '${parsed.packageId}/${parsed.actionId}' is not declared as a direct dependency in actiondock.json and is not delegated by a visible playbook`
-      );
-    }
-    const app = apps.find((a) => a.packageId === parsed.packageId);
-    if (!app) {
-      throw new Error(packageNotFoundMessage(parsed.packageId, failedLinkedPackages));
-    }
-    const spec = await app.describeAction(parsed.actionId);
-    return {
-      ...spec,
-      packageId: app.packageId,
-    };
+  if (parsed.packageId && failedLinkedPackages.has(parsed.packageId)) {
+    throw new Error(packageNotFoundMessage(parsed.packageId, failedLinkedPackages));
   }
-
-  const matches: Array<{ app: ActionDockApp; spec: ActionSpec }> = [];
-  for (const app of apps) {
-    try {
-      if (!isRootCallVisible(app.packageId, parsed.actionId, visibility.hostPublicPackageIds, visibility.resolver)) {
-        continue;
-      }
-      const spec = await app.describeAction(parsed.actionId);
-      matches.push({ app, spec: { ...spec, packageId: app.packageId } });
-    } catch (err: any) {
-      // 仅将 not-found 语义视为「包内无此 Action」；其余异常必须透传，避免内部错误伪装成 ACTION_NOT_FOUND
-      if (!isActionNotFoundLikeError(err)) {
-        throw err;
-      }
-    }
-  }
-
-  if (matches.length === 1) {
-    return {
-      ...matches[0].spec,
-      packageId: matches[0].app.packageId,
-    };
-  }
-  if (matches.length > 1) {
-    const err = new Error(
-      `INVALID_ACTION_REF: ${ambiguousActionMessage(parsed.actionId, matches.map((m) => m.app.packageId))} (AMBIGUOUS_ACTION_REF)`
+  const effectiveGraph =
+    graph ||
+    new DefaultPackageGraph(
+      new Map(
+        apps.map((a) => [
+          a.packageId,
+          {
+            identity: {
+              id: a.packageId,
+              instanceId: a.packageInstanceId || a.packageId,
+              generation: a.generationId || "1",
+            },
+            root: a.packageRoot || "",
+            manifest: a.projectConfig,
+            directDependencies: new Set<string>(),
+            transitiveDependencies: new Set<string>(),
+          },
+        ])
+      )
     );
-    (err as any).code = "INVALID_ACTION_REF";
-    (err as any).details = { alias: "AMBIGUOUS_ACTION_REF", candidates: matches.map((m) => m.app.packageId) };
+  const effectiveCatalog =
+    catalog ||
+    new DefaultActionCatalog(effectiveGraph, (pkgId) =>
+      apps.find((a) => a.packageId === pkgId)?.actionsMap
+    );
+
+  let resolved: ResolvedAction;
+  try {
+    resolved = resolveAction(ref, {
+      graph: effectiveGraph,
+      catalog: effectiveCatalog,
+    });
+  } catch (err: any) {
+    if (err.code === "PACKAGE_NOT_FOUND" || err.message?.includes("PACKAGE_NOT_FOUND")) {
+      const parsed = parseRefLoose(ref);
+      if (parsed.packageId) {
+        throw new Error(packageNotFoundMessage(parsed.packageId, failedLinkedPackages));
+      }
+    }
     throw err;
   }
 
-  throw new Error(`ACTION_NOT_FOUND: Action '${parsed.actionId}' not found in any registered package`);
+  if (
+    !isRootCallVisible(
+      resolved.package.id,
+      resolved.ref.actionId,
+      visibility.hostPublicPackageIds,
+      visibility.resolver
+    )
+  ) {
+    throw new Error(
+      `UNDECLARED_ACTION_DEPENDENCY: Action '${resolved.package.id}/${resolved.ref.actionId}' is not declared as a direct dependency in actiondock.json and is not delegated by a visible playbook`
+    );
+  }
+
+  const app = apps.find((a) => a.packageId === resolved.package.id);
+  if (!app) {
+    throw new Error(packageNotFoundMessage(resolved.package.id, failedLinkedPackages));
+  }
+
+  const spec = await app.describeAction(resolved.ref.actionId);
+  return {
+    ...spec,
+    packageId: app.packageId,
+  };
 }
 
 /** existsSync 的可注入探测依赖（纯函数模块保持可测试性） */

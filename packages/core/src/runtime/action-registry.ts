@@ -1,5 +1,4 @@
 import type { ActionDefinition, ActionRef } from "@actiondock/sdk";
-import { ActionResolver } from "../catalog/action-resolver";
 
 /**
  * Action 注册表（单一职责模块）。
@@ -132,11 +131,4 @@ export function isActionDefinitionObject(value: unknown): value is ActionDefinit
     "run" in (value as object) &&
     typeof (value as any).run === "function"
   );
-}
-
-/**
- * 解析 Action 引用或标识符（解析失败抛出原始异常，由调用方分类处理）。
- */
-export function parseActionRef(ref: ActionRef | string): ActionRef {
-  return ActionResolver.parseRef(ref);
 }

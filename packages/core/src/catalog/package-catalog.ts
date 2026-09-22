@@ -1,84 +1,37 @@
-import { existsSync, realpathSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { resolve } from "node:path";
-import { findProjectRoot, loadProjectConfig } from "../project/loader";
-import { discoverProjects } from "../registry/registry";
-import { LocationRegistry } from "./location-registry";
+import { findProjectRoot } from "../project/loader";
+import { PackageDiscovery } from "./discovery";
 import type { CatalogPackageEntry, CatalogSnapshot } from "./types";
 
+/**
+ * 兼容包目录快照构建器 PackageCatalog。
+ * 内部已收敛至 PackageDiscovery 作为包发现的唯一事实源。
+ */
 export class PackageCatalog {
-  private registry: LocationRegistry;
+  private readonly customHome?: string;
 
-  constructor(registry?: LocationRegistry) {
-    this.registry = registry || new LocationRegistry();
+  constructor(customHome?: string) {
+    this.customHome = customHome;
   }
 
   public buildSnapshot(cwd: string = process.cwd()): CatalogSnapshot {
+    const currentRoot = findProjectRoot(cwd) || undefined;
+    const discovery = new PackageDiscovery({
+      currentProjectRoot: currentRoot,
+      customHome: this.customHome,
+    });
+
+    const discovered = discovery.discoverSync();
     const packages = new Map<string, CatalogPackageEntry>();
-    const seenRealPaths = new Map<string, string>(); // realPath -> packageId
-    const seenPackageIds = new Map<string, string>(); // packageId -> realPath
 
-    const registerPackage = (root: string, isChild: boolean = false) => {
-      const abs = resolve(root);
-      if (!existsSync(abs)) return;
-      const real = realpathSync(abs);
-
-      if (seenRealPaths.has(real)) {
-        return; // 符号链接归一化去重
-      }
-
-      try {
-        const config = loadProjectConfig(abs);
-        if (seenPackageIds.has(config.id)) {
-          const existingPath = seenPackageIds.get(config.id);
-          if (existingPath !== real) {
-            throw new Error(
-              `PACKAGE_ID_CONFLICT: Package ID '${config.id}' is declared by multiple directories: '${existingPath}' and '${real}'`
-            );
-          }
-        }
-
-        const entry: CatalogPackageEntry = {
-          id: config.id,
-          packageInstanceId: `${config.id}:${real}`,
-          projectRoot: abs,
-          config,
-          isWorkspaceChild: isChild,
-        };
-
-        packages.set(config.id, entry);
-        seenRealPaths.set(real, config.id);
-        seenPackageIds.set(config.id, real);
-      } catch (e: any) {
-        if (e.message?.startsWith("PACKAGE_ID_CONFLICT")) {
-          throw e;
-        }
-        // 无效项目跳过注册但输出告警含路径，杜绝无声丢弃
-        console.warn(
-          `[Catalog] Skipping invalid package at '${abs}': ${e?.message || String(e)}`
-        );
-      }
-    };
-
-    // 优先包含当前工作目录所在项目
-    const currentRoot = findProjectRoot(cwd);
-    if (currentRoot) {
-      registerPackage(currentRoot);
-    }
-
-    // 扫描注册表中的位置
-    const regData = this.registry.load();
-    for (const link of regData.links) {
-      if (!existsSync(link.path)) continue;
-
-      if (link.type === "package") {
-        registerPackage(link.path);
-      } else if (link.type === "workspace") {
-        const subprojects = discoverProjects(link.path, link.depth ?? 3);
-        for (const sub of subprojects) {
-          registerPackage(sub, true);
-        }
-      }
+    for (const pkg of discovered) {
+      packages.set(pkg.id, {
+        id: pkg.id,
+        packageInstanceId: `${pkg.id}:${pkg.root}`,
+        projectRoot: pkg.root,
+        config: pkg.manifest,
+        isWorkspaceChild: pkg.isWorkspaceChild,
+      });
     }
 
     return {
