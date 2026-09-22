@@ -15,6 +15,7 @@ import {
   INPUT_PATH_CONFLICT,
   FLAT_INPUT_LIMIT_EXCEEDED,
   formatActionDetail,
+  buildActionDescribePayload,
   buildCliDescribeInputMetadataV1,
   mapInputValidationFailure,
 } from "../input";
@@ -342,7 +343,23 @@ export class StandaloneDispatcher {
     const isJson = subArgs.includes("--json");
 
     if (!id) {
-      this.writeErr("Error: Action ID is required for describe");
+      if (isJson) {
+        this.writeOut(
+          JSON.stringify(
+            {
+              ok: false,
+              error: {
+                code: "INVALID_ARGUMENT",
+                message: "Action ID is required for describe",
+              },
+            },
+            null,
+            2
+          )
+        );
+      } else {
+        this.writeErr("Error: Action ID is required for describe");
+      }
       return ExitCode.INVALID_ARGUMENT;
     }
 
@@ -350,27 +367,34 @@ export class StandaloneDispatcher {
     try {
       action = await target.describeAction(id);
     } catch {
-      this.writeErr(`Error: Action '${id}' not found`);
+      if (isJson) {
+        this.writeOut(
+          JSON.stringify(
+            {
+              ok: false,
+              error: {
+                code: "INVALID_ARGUMENT",
+                message: `Action '${id}' not found`,
+              },
+            },
+            null,
+            2
+          )
+        );
+      } else {
+        this.writeErr(`Error: Action '${id}' not found`);
+      }
       return ExitCode.INVALID_ARGUMENT;
     }
 
-    const metadata = isJson
-      ? buildCliDescribeInputMetadataV1(action.inputSchema)
-      : undefined;
-
-    const detail = {
-      id: action.id,
+    const payload = buildActionDescribePayload(action, {
       packageId: this.options.packageId,
-      description: action.description,
-      inputSchema: action.inputSchema,
-      outputSchema: action.outputSchema,
-      ...(metadata || {}),
-    };
+    });
 
     if (isJson) {
-      this.writeOut(JSON.stringify(detail, null, 2));
+      this.writeOut(JSON.stringify(payload, null, 2));
     } else {
-      this.writeOut(formatActionDetail(detail));
+      this.writeOut(formatActionDetail(payload));
     }
     return ExitCode.SUCCESS;
   }

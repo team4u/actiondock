@@ -1,7 +1,7 @@
 import { Command } from "commander";
-import { buildCliDescribeInputMetadataV1 } from "@actiondock/core";
+import { buildActionDescribePayload, formatActionDetail } from "@actiondock/core";
 import { ArgumentError, ExecutionError, packageNotFoundError } from "../errors";
-import { renderActionDetail, renderResult } from "../renderer";
+import { renderResult } from "../renderer";
 import type { CliContext } from "../types";
 import {
   applyTargetOptions,
@@ -59,26 +59,13 @@ export function attachDescribeCommand(parent: Command, context?: CliContext): Co
             throw new ExecutionError(msg);
           }
 
-          const metadata = options.json
-            ? buildCliDescribeInputMetadataV1(spec.inputSchema)
-            : undefined;
+          const payload = buildActionDescribePayload(spec, {
+            packageId: options.package,
+          });
 
-          const detail = {
-            id: spec.id,
-            description: spec.description,
-            inputSchema: spec.inputSchema,
-            outputSchema: spec.outputSchema,
-            tags: spec.tags,
-            annotations: spec.annotations,
-            uses: spec.uses,
-            entry: spec.entry,
-            filePath: spec.filePath,
-            ...(metadata || {}),
-          };
-
-          renderResult(detail, {
+          renderResult(payload, {
             json: options.json,
-            humanFormatter: () => renderActionDetail(detail),
+            humanFormatter: () => formatActionDetail(payload),
             context,
           });
         },

@@ -919,7 +919,7 @@ describe("Flat JsonValue Encoding v1", () => {
       expect(advice.notes.some((n) => n.includes("user name"))).toBe(true);
     });
 
-    it("展示必填与可选赋值模板且调用模式引导不拼接伪造模板字符", () => {
+    it("展示扁平推荐模式与建议赋值操作符", () => {
       const formatted = formatActionDetail({
         id: "sample.create",
         inputSchema: {
@@ -933,23 +933,15 @@ describe("Flat JsonValue Encoding v1", () => {
         },
       });
 
-      expect(formatted).toContain("必填赋值模板:");
-      expect(formatted).toContain("  - name=TEXT");
-      expect(formatted).toContain("  - age:=NUMBER");
-      expect(formatted).toContain("可选赋值模板:");
-      expect(formatted).toContain("  - meta:=JSON");
-      expect(formatted).toContain("调用模式引导:");
-
-      const commandLine = formatted
-        .split("\n")
-        .find((l) => l.includes("ad run sample.create --json --"));
-      expect(commandLine).toBe("  - ad run sample.create --json -- [assignments...]");
-      expect(commandLine).not.toContain("TEXT");
-      expect(commandLine).not.toContain("NUMBER");
-      expect(commandLine).not.toContain("建议使用");
+      expect(formatted).toContain("Action: sample.create");
+      expect(formatted).toContain("Recommended Input: flat");
+      expect(formatted).toContain("Assignments:");
+      expect(formatted).toContain("  name=");
+      expect(formatted).toContain("  age:=");
+      expect(formatted).toContain("  meta:=");
     });
 
-    it("不支持扁平传参时在调用模式引导中明确提示使用 --input-file", () => {
+    it("不支持扁平传参时在调用模式引导中明确推荐 full-json 并给出原因", () => {
       const formatted = formatActionDetail({
         id: "sample.array",
         inputSchema: {
@@ -958,10 +950,9 @@ describe("Flat JsonValue Encoding v1", () => {
         },
       });
 
-      expect(formatted).toContain("调用模式引导:");
-      expect(formatted).toContain(
-        "不支持扁平传参，建议使用 --input-file: ad run sample.array --json --input-file input.json"
-      );
+      expect(formatted).toContain("Action: sample.array");
+      expect(formatted).toContain("Recommended Input: full-json");
+      expect(formatted).toContain("Reason: NON_OBJECT_SCHEMA");
     });
 
     it("formatActionDetail 输出排版与 CLI 完全一致", () => {
@@ -980,13 +971,9 @@ describe("Flat JsonValue Encoding v1", () => {
 
       expect(formatted).toContain("Action: test.action");
       expect(formatted).toContain("Package: test.pkg");
-      expect(formatted).toContain("Input Schema 字段明细:");
-      expect(formatted).toContain("title (string, 必填) - 标题");
-      expect(formatted).toContain("Flat 编码指引:");
-      expect(formatted).toContain("必填赋值模板:");
-      expect(formatted).toContain("  - title=TEXT");
-      expect(formatted).toContain("调用模式引导:");
-      expect(formatted).toContain("ad run test.action --json -- [assignments...]");
+      expect(formatted).toContain("Description: 测试动作");
+      expect(formatted).toContain("Recommended Input: flat");
+      expect(formatted).toContain("Assignments:\n  title=");
     });
 
     it("布尔模式 false 返回拒绝所有输入建议报告", () => {
@@ -1019,10 +1006,9 @@ describe("Flat JsonValue Encoding v1", () => {
         inputSchema: false,
       });
       expect(formatted).toContain("Action: test.bool-false");
-      expect(formatted).toContain("Input Schema: false (拒绝所有输入，无有效调用参数)");
-      expect(formatted).toContain("调用模式引导:");
-      expect(formatted).toContain("拒绝所有输入，无有效调用参数");
-      expect(formatted).toContain("布尔模式 false：拒绝所有输入，任何调用参数均判定为非法");
+      expect(formatted).toContain("Input Schema:\nfalse");
+      expect(formatted).toContain("Recommended Input: none");
+      expect(formatted).toContain("Reason: SCHEMA_REJECTS_ALL");
     });
 
     it("formatActionDetail 正确渲染布尔模式 true", () => {
@@ -1031,21 +1017,18 @@ describe("Flat JsonValue Encoding v1", () => {
         inputSchema: true,
       });
       expect(formatted).toContain("Action: test.bool-true");
-      expect(formatted).toContain("Input Schema: true (接受任意合法 JSON 输入)");
-      expect(formatted).toContain("调用模式引导:");
-      expect(formatted).toContain("ad run test.bool-true --json");
-      expect(formatted).toContain("复杂输入: ad run test.bool-true --json --input-file input.json");
-      expect(formatted).toContain(
-        "布尔模式 true：接受任意合法 JSON 输入；调用时无需指定必填参数，非对象根输入请使用 --input-file 或 --input"
-      );
+      expect(formatted).toContain("Input Schema:\ntrue");
+      expect(formatted).toContain("Recommended Input: full-json");
+      expect(formatted).toContain("Reason: ARBITRARY_SCHEMA");
     });
 
-    it("formatActionDetail 正确渲染 undefined inputSchema 为无", () => {
+    it("formatActionDetail 正确渲染 undefined inputSchema 为无模式", () => {
       const formatted = formatActionDetail({
         id: "test.no-schema",
       });
       expect(formatted).toContain("Action: test.no-schema");
-      expect(formatted).toContain("Input Schema: 无");
+      expect(formatted).toContain("Recommended Input: full-json");
+      expect(formatted).toContain("Reason: NO_SCHEMA");
     });
 
     it("formatActionDetail 正确渲染布尔模式 outputSchema (false 与 true)", () => {

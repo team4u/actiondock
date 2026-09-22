@@ -3,7 +3,7 @@ import { defineAction } from "@actiondock/sdk";
 import {
   StandaloneDispatcher,
   ExitCode,
-  buildCliDescribeInputMetadataV1,
+  buildActionDescribePayload,
 } from "@actiondock/core";
 import { executeAction } from "../src/commands/run";
 import { main } from "../src/index";
@@ -37,7 +37,7 @@ describe("Phase 10: CLI Describe / Run 集成与普通 CLI / Standalone 行为�
   };
 
   describe("describe --json 元数据输出与版本字段对齐", () => {
-    it("standalone describe --json 注入完整输入元数据且 scope 为 cli-pre-target", async () => {
+    it("standalone describe --json 产出统一 Payload 结构且剔除重复全局元数据", async () => {
       let out = "";
       const code = await runStandaloneCli(["describe", "greet", "--json"], {
         ...baseStandaloneOpts,
@@ -48,36 +48,30 @@ describe("Phase 10: CLI Describe / Run 集成与普通 CLI / Standalone 行为�
       const parsed = JSON.parse(out);
 
       expect(parsed.id).toBe("greet");
-      expect(parsed.inputTransport).toBeDefined();
-      expect(parsed.inputTransport.version).toBe(1);
-      expect(parsed.inputTransport.fullJson.inlineOption).toBe("--input");
-      expect(parsed.inputTransport.fullJson.fileOption).toBe("--input-file");
+      expect(parsed.packageId).toBe("test.phase10");
+      expect(parsed.inputSchema).toEqual(sampleAction.inputSchema);
+      expect(parsed.outputSchema).toBeUndefined();
 
-      expect(parsed.inputEncoding).toBeDefined();
-      expect(parsed.inputEncoding.name).toBe("flat-json-value");
-      expect(parsed.inputEncoding.version).toBe(1);
-      expect(parsed.inputEncoding.operators.string).toBe("=");
-      expect(parsed.inputEncoding.operators.json).toBe(":=");
+      // 验证重复元数据已被移除
+      expect(parsed.inputTransport).toBeUndefined();
+      expect(parsed.inputEncoding).toBeUndefined();
+      expect(parsed.inputPolicy).toBeUndefined();
 
-      expect(parsed.inputPolicy).toBeDefined();
-      expect(parsed.inputPolicy.version).toBe(1);
-      expect(parsed.inputPolicy.scope).toBe("cli-pre-target");
-      expect(parsed.inputPolicy.forbiddenPropertyNames).toContain("__proto__");
-      expect(parsed.inputPolicy.forbiddenPropertyNames).toContain("constructor");
-      expect(parsed.inputPolicy.forbiddenPropertyNames).toContain("prototype");
-
+      // 验证 inputAdvice 精简结构
       expect(parsed.inputAdvice).toBeDefined();
       expect(parsed.inputAdvice.version).toBe(1);
-      expect(parsed.inputAdvice.schemaState).toBe("object");
-      expect(parsed.inputAdvice.schemaRecommendedMode).toBe("flat");
-      expect(parsed.inputAdvice.flatCandidate).toBe(true);
-      expect(parsed.inputAdvice.requiredSatisfiable).toBe(true);
+      expect(parsed.inputAdvice.recommendedMode).toBe("flat");
+      expect(parsed.inputAdvice.assignments).toEqual({
+        name: "=",
+        age: ":=",
+      });
 
-      const expectedMetadata = buildCliDescribeInputMetadataV1(sampleAction.inputSchema);
-      expect(parsed.inputTransport).toEqual(expectedMetadata.inputTransport);
-      expect(parsed.inputEncoding).toEqual(expectedMetadata.inputEncoding);
-      expect(parsed.inputPolicy).toEqual(expectedMetadata.inputPolicy);
-      expect(parsed.inputAdvice).toEqual(expectedMetadata.inputAdvice);
+      const expectedPayload = buildActionDescribePayload({
+        id: "greet",
+        packageId: "test.phase10",
+        inputSchema: sampleAction.inputSchema,
+      });
+      expect(parsed).toEqual(expectedPayload);
     });
 
     it("普通 CLI describe --json 与 Standalone describe --json 机器契约完全一致", async () => {
@@ -89,14 +83,14 @@ describe("Phase 10: CLI Describe / Run 集成与普通 CLI / Standalone 行为�
       });
       const standaloneData = JSON.parse(standaloneOut);
 
-      // 2. buildCliDescribeInputMetadataV1 构造结果比对
-      const directMetadata = buildCliDescribeInputMetadataV1(sampleAction.inputSchema);
+      // 2. buildActionDescribePayload 构造结果比对
+      const directPayload = buildActionDescribePayload({
+        id: "greet",
+        packageId: "test.phase10",
+        inputSchema: sampleAction.inputSchema,
+      });
 
-      expect(standaloneData.inputTransport).toEqual(directMetadata.inputTransport);
-      expect(standaloneData.inputEncoding).toEqual(directMetadata.inputEncoding);
-      expect(standaloneData.inputPolicy).toEqual(directMetadata.inputPolicy);
-      expect(standaloneData.inputAdvice).toEqual(directMetadata.inputAdvice);
-      expect(standaloneData.inputPolicy.scope).toBe("cli-pre-target");
+      expect(standaloneData).toEqual(directPayload);
     });
   });
 

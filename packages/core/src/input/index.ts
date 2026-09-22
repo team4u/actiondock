@@ -11,3 +11,4 @@ export * from "./stdin-input";
 export * from "./input-resolver";
 export * from "./advice";
 export * from "./metadata";
+export * from "./describe";

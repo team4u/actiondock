@@ -673,8 +673,8 @@ export default defineAction(async (input: any) => {
     expect(advice.notes.some((n) => n.includes("user name"))).toBe(true);
   });
 
-  // 24. 展示赋值模板与调用模式引导且不拼接伪造模板变量
-  it("generates action detail advice with assignment templates and abstract invocation guidance", () => {
+  // 24. 展示扁平推荐模式与建议赋值操作符
+  it("generates action detail advice with recommended mode and assignments", () => {
     const formatted = formatActionDetail({
       id: "test.echo",
       inputSchema: {
@@ -687,19 +687,11 @@ export default defineAction(async (input: any) => {
         required: ["name", "count"],
       },
     });
-    expect(formatted).toContain("必填赋值模板:");
-    expect(formatted).toContain("  - name=TEXT");
-    expect(formatted).toContain("  - count:=NUMBER");
-    expect(formatted).toContain("可选赋值模板:");
-    expect(formatted).toContain("  - meta:=JSON");
-    expect(formatted).toContain("调用模式引导:");
-
-    const commandLine = formatted
-      .split("\n")
-      .find((l) => l.includes("ad run test.echo --json --"));
-    expect(commandLine).toBe("  - ad run test.echo --json -- [assignments...]");
-    expect(commandLine).not.toContain("TEXT");
-    expect(commandLine).not.toContain("NUMBER");
-    expect(commandLine).not.toContain("建议使用");
+    expect(formatted).toContain("Action: test.echo");
+    expect(formatted).toContain("Recommended Input: flat");
+    expect(formatted).toContain("Assignments:");
+    expect(formatted).toContain("  name=");
+    expect(formatted).toContain("  count:=");
+    expect(formatted).toContain("  meta:=");
   });
 });
