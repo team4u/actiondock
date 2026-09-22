@@ -2,14 +2,14 @@ import { CAPABILITY_UNAVAILABLE } from "../../errors";
 import { resolveEnvValue } from "../../runtime";
 import { isSecretConfigKey, maskSecretValue, sanitizeConfigDefinitions } from "../../storage";
 import { readJsonBody } from "../body";
-import { assertPackageAllowed, getSubPath, jsonResponse, resolveAppForPackage, type RouteContext } from "./common";
+import { getSubPath, jsonResponse, resolveTargetPackageId, type RouteContext } from "./common";
 
 /**
  * 处理配置元数据与当前值读取、更新及删除接口。
  * 在未显式开启管理功能 (options.enableManagement !== true) 时返回 403 拒绝。
  */
 export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | null> {
-  const { req, url, pathname, corsHeaders, options, host, target } = ctx;
+  const { req, url, pathname, corsHeaders, options, service } = ctx;
   const subpath = getSubPath(pathname);
 
   const isConfigRoute =
@@ -22,7 +22,7 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
   }
 
   // 校验管理能力开关
-  if (options.enableManagement !== true) {
+  if (options.enableManagement !== true || !service.management?.config) {
     return jsonResponse(
       {
         ok: false,
@@ -39,16 +39,14 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
   // 1. Config Env Check: GET /config/env
   if (subpath === "/config/env" && req.method === "GET") {
     try {
+      const pkgs = await service.discovery.listPackages();
       const pkgParam = url.searchParams.get("package") || url.searchParams.get("packageId") || undefined;
-      if (pkgParam) {
-        assertPackageAllowed(pkgParam, options);
-      }
-      const app = resolveAppForPackage(pkgParam, host, target, options);
-      assertPackageAllowed(app.packageId, options);
-      const declared = app.projectConfig?.config || {};
+      const targetPackageId = resolveTargetPackageId(pkgs, pkgParam, options);
+      const pkg = pkgs.find((p) => p.id === targetPackageId);
+      const declared = pkg?.config || {};
       const envChecks: any[] = [];
       for (const [k, def] of Object.entries(declared as Record<string, any>)) {
-        const resolved = resolveEnvValue(k, def, app.packageId);
+        const resolved = resolveEnvValue(k, def, targetPackageId);
         const matchedEnv = resolved?.envKey || null;
         envChecks.push({
           key: k,
@@ -59,7 +57,7 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
           secret: isSecretConfigKey(k, def),
         });
       }
-      return jsonResponse({ ok: true, packageId: app.packageId, envChecks }, 200, corsHeaders);
+      return jsonResponse({ ok: true, packageId: targetPackageId, envChecks }, 200, corsHeaders);
     } catch (err: any) {
       if (err.code === "PACKAGE_NOT_ALLOWED" || err.status === 403) {
         return jsonResponse(
@@ -89,25 +87,23 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
   // 2. Config Query: GET /config
   if (subpath === "/config" && req.method === "GET") {
     try {
+      const pkgs = await service.discovery.listPackages();
       const pkgParam = url.searchParams.get("package") || url.searchParams.get("packageId") || undefined;
-      if (pkgParam) {
-        assertPackageAllowed(pkgParam, options);
-      }
-      const app = resolveAppForPackage(pkgParam, host, target, options);
-      assertPackageAllowed(app.packageId, options);
-      const stored = app.storage.listConfig();
-      const rawDeclared = app.projectConfig?.config || {};
+      const targetPackageId = resolveTargetPackageId(pkgs, pkgParam, options);
+      const pkg = pkgs.find((p) => p.id === targetPackageId);
+      const rawDeclared = pkg?.config || {};
       const declared = sanitizeConfigDefinitions(rawDeclared) || {};
+      const views = await service.management.config.list(targetPackageId);
       const maskedValues: Record<string, any> = {};
-      for (const [k, v] of Object.entries(stored)) {
-        if (isSecretConfigKey(k, rawDeclared[k])) {
-          maskedValues[k] = maskSecretValue(v);
+      for (const v of views) {
+        if (v.secret) {
+          maskedValues[v.key] = "********";
         } else {
-          maskedValues[k] = v;
+          maskedValues[v.key] = v.value;
         }
       }
       return jsonResponse(
-        { ok: true, packageId: app.packageId, declared, values: maskedValues },
+        { ok: true, packageId: targetPackageId, declared, values: maskedValues },
         200,
         corsHeaders
       );
@@ -142,11 +138,8 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
     try {
       const body = await readJsonBody(req, { maxBytes: options.maxBodyBytes });
       const pkgParam = url.searchParams.get("package") || url.searchParams.get("packageId") || body.package || undefined;
-      if (pkgParam) {
-        assertPackageAllowed(pkgParam, options);
-      }
-      const app = resolveAppForPackage(pkgParam, host, target, options);
-      assertPackageAllowed(app.packageId, options);
+      const pkgs = await service.discovery.listPackages();
+      const targetPackageId = resolveTargetPackageId(pkgs, pkgParam, options);
       const key = body.key;
       if (!key) {
         return jsonResponse(
@@ -155,8 +148,8 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
           corsHeaders
         );
       }
-      await app.setConfig(key, body.value);
-      return jsonResponse({ ok: true, packageId: app.packageId, key, message: "updated" }, 200, corsHeaders);
+      await service.management.config.set(targetPackageId, key, body.value);
+      return jsonResponse({ ok: true, packageId: targetPackageId, key, message: "updated" }, 200, corsHeaders);
     } catch (err: any) {
       if (err.code === "PACKAGE_NOT_ALLOWED" || err.status === 403) {
         return jsonResponse(
@@ -189,13 +182,10 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
     try {
       const key = decodeURIComponent(configKeyMatch[1]);
       const pkgParam = url.searchParams.get("package") || url.searchParams.get("packageId") || undefined;
-      if (pkgParam) {
-        assertPackageAllowed(pkgParam, options);
-      }
-      const app = resolveAppForPackage(pkgParam, host, target, options);
-      assertPackageAllowed(app.packageId, options);
-      const deleted = app.storage.deleteConfig(key);
-      return jsonResponse({ ok: true, packageId: app.packageId, key, deleted }, 200, corsHeaders);
+      const pkgs = await service.discovery.listPackages();
+      const targetPackageId = resolveTargetPackageId(pkgs, pkgParam, options);
+      const deleted = await service.management.config.delete(targetPackageId, key);
+      return jsonResponse({ ok: true, packageId: targetPackageId, key, deleted }, 200, corsHeaders);
     } catch (err: any) {
       if (err.code === "PACKAGE_NOT_ALLOWED" || err.status === 403) {
         return jsonResponse(

@@ -5,7 +5,7 @@ import { assertPackageAllowed, getSubPath, jsonResponse, type RouteContext } fro
  * 处理 Playbook 规程相关的 HTTP 路由（列表与 SOP 详情查询）。
  */
 export async function handlePlaybooksRoutes(ctx: RouteContext): Promise<Response | null> {
-  const { req, url, pathname, corsHeaders, target, host, options } = ctx;
+  const { req, url, pathname, corsHeaders, service, options } = ctx;
   const subpath = getSubPath(pathname);
 
   // 1. Playbooks List: GET /api/v2/playbooks, GET /playbooks
@@ -18,7 +18,7 @@ export async function handlePlaybooksRoutes(ctx: RouteContext): Promise<Response
         assertPackageAllowed(targetPkg, options);
       }
 
-      let pbs = await target.listPlaybooks({ intent, package: targetPkg });
+      let pbs = await service.discovery.listPlaybooks({ intent, package: targetPkg });
 
       if (targetPkg) {
         pbs = pbs.filter((p) => p.packageId === targetPkg);
@@ -83,7 +83,7 @@ export async function handlePlaybooksRoutes(ctx: RouteContext): Promise<Response
 
     const ref = `${packageId}/${playbookId}`;
     try {
-      const pb = await target.describePlaybook(ref);
+      const pb = await service.discovery.describePlaybook(ref);
       return jsonResponse(pb, 200, corsHeaders);
     } catch (err: any) {
       return jsonResponse(
@@ -124,23 +124,10 @@ export async function handlePlaybooksRoutes(ctx: RouteContext): Promise<Response
     }
 
     try {
-      const pb = await target.describePlaybook(playbookId);
-      const unwrapped = target.unwrap?.();
-      let pkgId = (pb as any).packageId || (unwrapped && "packageId" in unwrapped ? (unwrapped as any).packageId : undefined);
-      if (!pkgId && host) {
-        for (const app of host.listApps()) {
-          try {
-            const map = (app as any).getStaticPlaybookMap?.();
-            const cleanId = playbookId.replace(/\.md$/, "");
-            if (map?.has(cleanId) || map?.has(playbookId)) {
-              pkgId = app.packageId;
-              break;
-            }
-          } catch {}
-        }
-      }
+      const pb = await service.discovery.describePlaybook(playbookId);
+      let pkgId = (pb as any).packageId;
       if (!pkgId) {
-        const allPbs = await target.listPlaybooks().catch(() => []);
+        const allPbs = await service.discovery.listPlaybooks().catch(() => []);
         const matched = allPbs.find((p) => p.id === playbookId || p.id.endsWith(`/${playbookId}`));
         if (matched?.packageId) {
           pkgId = matched.packageId;

@@ -1,6 +1,7 @@
 import type {
   ActionDockApp,
   ActionDockHost,
+  ActionDockService,
   ActionDockTarget,
   RuntimeStorage,
   ServerTlsOptions,
@@ -67,6 +68,8 @@ export function toMcpTaskPayload(run: RunRecord): McpTaskPayload {
 export interface ActionDockMcpOptions {
   /** 目标 ActionDockTarget 门面实例（最高优先级） */
   target?: ActionDockTarget;
+  /** 目标 ActionDockService 标准服务端口实例 */
+  service?: ActionDockService;
   /** 目标 ActionDockHost 宿主实例 */
   host?: ActionDockHost;
   /** 目标 ActionDockApp 应用实例 */
@@ -145,6 +148,7 @@ export interface ActionDockMcpHttpServerInstance {
   host: string;
   url: string;
   target?: ActionDockTarget;
+  service?: ActionDockService;
   stop: () => Promise<void>;
 }
 

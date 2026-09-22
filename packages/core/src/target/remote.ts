@@ -61,6 +61,7 @@ import { listProtocolRouteCandidates } from "../profile/client";
 import { isRemoteStateKeyNotFound, wrapRemoteError } from "./remote-errors";
 import { formatTerminalRunResult, pollRunCompletion } from "./remote-polling";
 import { type SseMessage, parseSseMessages } from "./sse-parser";
+import { RemoteActionDockService } from "../service/remote";
 
 /**
  * 读取并解析远端 SSE 事件流。
@@ -236,6 +237,7 @@ export class RemoteActionDockTarget implements ActionDockTarget {
   public readonly allowInsecureHttp?: boolean;
   public readonly insecure?: boolean;
   public readonly dispatcher?: unknown;
+  public readonly service: RemoteActionDockService;
   private isClosed = false;
 
   constructor(options: RemoteTargetOptions) {
@@ -246,6 +248,7 @@ export class RemoteActionDockTarget implements ActionDockTarget {
     this.allowInsecureHttp = options.allowInsecureHttp;
     this.insecure = options.insecure;
     this.dispatcher = options.dispatcher;
+    this.service = new RemoteActionDockService(options);
   }
 
   private assertNotClosed(): void {

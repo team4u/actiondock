@@ -262,6 +262,7 @@ export function startMcpHttpServer(
       host,
       url,
       target,
+      service: (target as any).service,
       stop: async () => {
         // 先停 HTTP 服务（等待在途请求收尾）再释放 target：
         // 若先关 target，在途请求的后续 Action 调用会全部异常

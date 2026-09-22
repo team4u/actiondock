@@ -237,9 +237,6 @@ export interface ActionDockTarget {
   /** 列出指定包在存储中的状态条目（含完整元数据） */
   listStateEntries?(packageId: string, options?: any): Promise<StateEntry[]>;
 
-  /** 解包被包装的内部宿主或应用实例（仅本地包装型目标存在） */
-  unwrap?(): ActionDockHost | ActionDockApp | undefined;
-
   /** 关闭目标连接并清理底层资源 */
   close(options?: { timeoutMs?: number }): Promise<void>;
 }
@@ -314,6 +311,8 @@ export interface RemoteTargetOptions {
   timeoutMs?: number;
   /** 轮询等待基准底线超时时间（毫秒，默认 60000ms） */
   baseTimeoutMs?: number;
+  /** 是否启用配置与状态管理端口（默认 true） */
+  enableManagement?: boolean;
 }
 
 /**

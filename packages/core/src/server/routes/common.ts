@@ -1,5 +1,6 @@
-import type { ActionDockApp } from "../../app/types";
+import type { PackageInfo } from "../../app/types";
 import type { ActionDockHost } from "../../host/types";
+import type { ActionDockService } from "../../service/types";
 import type { ActionDockTarget } from "../../target/types";
 import { assertValidPackageId } from "../../utils";
 import type { ServerOptions } from "../types";
@@ -14,8 +15,9 @@ export interface RouteContext {
   corsHeaders: Record<string, string>;
   projectRoot: string | null;
   customHome?: string;
+  service: ActionDockService;
   host?: ActionDockHost;
-  target: ActionDockTarget;
+  target?: ActionDockTarget;
   options: ServerOptions;
 }
 
@@ -83,62 +85,43 @@ export function assertPackageAllowed(
 }
 
 /**
- * 从 Host 或 Target 中依据 packageId 解析对应的 ActionDockApp 实例。
- * 若提供了 options，过滤或优先选择白名单内的 app。
+ * 基于已发现的包清单解析目标包唯一标识。
+ * 纯粹面向 PackageInfo 元数据，彻底去除对 App 实例的依赖与穿透。
  */
-export function resolveAppForPackage(
-  packageIdOrPath: string | undefined,
-  host?: ActionDockHost,
-  target?: ActionDockTarget,
+export function resolveTargetPackageId(
+  packages: PackageInfo[],
+  requestedPackageId?: string,
   options?: ServerOptions
-): ActionDockApp {
-  if (packageIdOrPath) {
-    assertPackageAllowed(packageIdOrPath, options);
-    assertValidPackageId(packageIdOrPath);
-    if (host) {
-      const app = host.getApp(packageIdOrPath);
-      if (app) return app;
+): string {
+  if (requestedPackageId) {
+    if (requestedPackageId === "global") {
+      return "global";
     }
-    const innerTarget = target?.unwrap?.();
-    if (innerTarget && "packageId" in innerTarget && innerTarget.packageId === packageIdOrPath) {
-      return innerTarget;
+    assertValidPackageId(requestedPackageId);
+    assertPackageAllowed(requestedPackageId, options);
+    const matched = packages.find(
+      (p) => p.id === requestedPackageId || p.packageRoot === requestedPackageId
+    );
+    if (!matched) {
+      throw new Error(`Unknown or unregistered package: '${requestedPackageId}'`);
     }
-    if (innerTarget && "getApp" in innerTarget) {
-      const app = innerTarget.getApp(packageIdOrPath);
-      if (app) return app;
-    }
-    throw new Error(`Unknown or unregistered package: '${packageIdOrPath}'`);
+    return matched.id;
   }
 
-  if (host) {
-    const apps = host.listApps();
-    if (
-      options?.packageAllowlist &&
-      Array.isArray(options.packageAllowlist) &&
-      options.packageAllowlist.length > 0
-    ) {
-      const allowedApp = apps.find((a) => options.packageAllowlist!.includes(a.packageId));
-      if (allowedApp) return allowedApp;
-    }
-    if (apps.length > 0) return apps[0];
+  let targetId: string;
+  if (
+    options?.packageAllowlist &&
+    Array.isArray(options.packageAllowlist) &&
+    options.packageAllowlist.length > 0
+  ) {
+    const allowed = packages.find((p) => options.packageAllowlist!.includes(p.id));
+    targetId = allowed ? allowed.id : (packages[0]?.id || "");
+  } else if (packages.length > 0) {
+    targetId = packages[0].id;
+  } else {
+    throw new Error("No registered package found in service");
   }
 
-  const innerTarget = target?.unwrap?.();
-  if (innerTarget && "listApps" in innerTarget) {
-    const apps = innerTarget.listApps();
-    if (
-      options?.packageAllowlist &&
-      Array.isArray(options.packageAllowlist) &&
-      options.packageAllowlist.length > 0
-    ) {
-      const allowedApp = apps.find((a: any) => options.packageAllowlist!.includes(a.packageId));
-      if (allowedApp) return allowedApp;
-    }
-    if (apps.length > 0) return apps[0];
-  }
-  if (innerTarget && "packageId" in innerTarget) {
-    return innerTarget;
-  }
-
-  throw new Error("No registered package found in host or target");
+  assertPackageAllowed(targetId, options);
+  return targetId;
 }

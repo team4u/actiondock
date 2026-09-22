@@ -20,9 +20,9 @@ import type {
   ExecutionTicket,
 } from "../execution/types";
 import type { ActionDockHost } from "../host/types";
-import type { ConfigItemDefinition } from "../project/types";
-import { createGlobalStorage, isSecretConfigKey } from "../storage";
-import type { RuntimeStorage, StateEntry } from "../storage/types";
+import { LocalActionDockService } from "../service/local";
+import type { ActionDockService } from "../service/types";
+import type { StateEntry } from "../storage/types";
 import {
   ACTIONDOCK_PROTOCOL_VERSION,
   type ActionDockTarget,
@@ -31,36 +31,24 @@ import {
   type StateScopeOptions,
   type TargetInfo,
   TargetError,
-  CloseTimeoutError,
   TARGET_CAPABILITY_UNAVAILABLE,
 } from "./types";
 
 /**
- * 本地 ActionDockTarget 门面实现。
- * 内部包装 ActionDockHost 或 ActionDockApp，将统一调用直接转交给 Host 或 App。
+ * 基于 ActionDockService 的 Target 门面适配层。
+ * 为 CLI 与旧版调用方提供统一调用契约，绝不暴露 unwrap 穿透能力。
  */
-export class LocalActionDockTarget implements ActionDockTarget {
-  public readonly target: ActionDockHost | ActionDockApp;
+export class ServiceActionDockTarget implements ActionDockTarget {
+  public readonly service: ActionDockService;
 
-  constructor(target: ActionDockHost | ActionDockApp) {
-    this.target = target;
-  }
-
-  unwrap(): ActionDockHost | ActionDockApp {
-    return this.target;
+  constructor(service: ActionDockService) {
+    this.service = service;
   }
 
   async info(): Promise<TargetInfo> {
     const packages = await this.listPackages();
-    let id = "local-host";
-    let name = "Local Host";
-    if ("listApps" in this.target) {
-      id = (this.target as any).id || "local-host";
-      name = (this.target as any).name || "Local Host";
-    } else {
-      id = this.target.packageId;
-      name = packages[0]?.name || this.target.packageId;
-    }
+    const id = packages[0]?.id || "local-host";
+    const name = packages[0]?.name || "Local Host";
     return {
       id,
       name,
@@ -82,33 +70,23 @@ export class LocalActionDockTarget implements ActionDockTarget {
   }
 
   async listPackages(): Promise<PackageInfo[]> {
-    if ("listApps" in this.target) {
-      const apps = this.target.listApps();
-      return Promise.all(apps.map((app) => app.info()));
-    } else {
-      return [await this.target.info()];
-    }
+    return this.service.discovery.listPackages();
   }
 
   async listActions(options?: ListActionsOptions): Promise<ActionSummary[]> {
-    return this.target.listActions(options);
+    return this.service.discovery.listActions(options);
   }
 
   async describeAction(ref: ActionRef | string): Promise<ActionSpec> {
-    if ("getApp" in this.target) {
-      return this.target.describeAction(ref);
-    } else {
-      const actionId = typeof ref === "string" ? ref : ref.actionId;
-      return this.target.describeAction(actionId);
-    }
+    return this.service.discovery.describeAction(ref);
   }
 
-  async listPlaybooks(): Promise<PlaybookSummary[]> {
-    return this.target.listPlaybooks();
+  async listPlaybooks(options?: { intent?: string; package?: string }): Promise<PlaybookSummary[]> {
+    return this.service.discovery.listPlaybooks(options);
   }
 
   async describePlaybook(id: string): Promise<PlaybookSpec> {
-    return this.target.describePlaybook(id);
+    return this.service.discovery.describePlaybook(id);
   }
 
   async runAction(
@@ -116,11 +94,7 @@ export class LocalActionDockTarget implements ActionDockTarget {
     input: JsonValue,
     options?: ExecuteOptions
   ): Promise<ExecutionResult> {
-    if ("listApps" in this.target) {
-      return (this.target as ActionDockHost).runAction(ref, input, options);
-    }
-    const actionId = typeof ref === "string" ? (ref.includes(":") ? ref.split(":").pop()! : ref) : ref.actionId;
-    return (this.target as ActionDockApp).runAction(actionId, input, options);
+    return this.service.execution.run(ref, input, options);
   }
 
   async startAction(
@@ -128,208 +102,61 @@ export class LocalActionDockTarget implements ActionDockTarget {
     input: JsonValue,
     options?: ExecuteOptions
   ): Promise<ExecutionTicket> {
-    if ("listApps" in this.target) {
-      return (this.target as ActionDockHost).startAction(ref, input, options);
-    }
-    const actionId = typeof ref === "string" ? (ref.includes(":") ? ref.split(":").pop()! : ref) : ref.actionId;
-    return (this.target as ActionDockApp).startAction(actionId, input, options);
+    return this.service.execution.start(ref, input, options);
   }
 
   async listRuns(options?: ListRunsOptions): Promise<RunRecord[]> {
-    if ("listApps" in this.target) {
-      const apps = options?.packageId
-        ? [this.target.getApp(options.packageId)].filter(Boolean) as ActionDockApp[]
-        : this.target.listApps();
-      const records: RunRecord[] = [];
-      for (const app of apps) {
-        // 状态过滤下推到存储层 SQL，避免先分页后过滤导致某包前 N 条非目标状态时贡献 0 条
-        const recs = app.storage.listRuns({
-          actionId: options?.actionId,
-          status: options?.status,
-          limit: options?.limit,
-        });
-        for (const r of recs) {
-          records.push({
-            ...r,
-            packageId: (r as any).packageId || app.packageId,
-          });
-        }
-      }
-      records.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
-      // 全局 limit 语义：合并后总条数不超过 limit，单处截断
-      if (options?.limit && records.length > options.limit) {
-        records.length = options.limit;
-      }
-      return records;
-    } else {
-      if (options?.packageId && options.packageId !== this.target.packageId) {
-        return [];
-      }
-      // 状态过滤下推到存储层 SQL，单包场景由数据库直接返回目标状态记录
-      return this.target.storage.listRuns({
-        actionId: options?.actionId,
-        status: options?.status,
-        limit: options?.limit,
-      });
-    }
-  }
-
-  async clearRuns(options?: { packageId?: string; actionId?: string; status?: string }): Promise<number> {
-    if ("listApps" in this.target) {
-      const apps = options?.packageId
-        ? [this.target.getApp(options.packageId)].filter(Boolean) as ActionDockApp[]
-        : this.target.listApps();
-      let total = 0;
-      for (const app of apps) {
-        total += app.storage.clearRuns({
-          actionId: options?.actionId,
-          status: options?.status,
-        });
-      }
-      return total;
-    } else {
-      if (options?.packageId && options.packageId !== this.target.packageId) {
-        return 0;
-      }
-      return this.target.storage.clearRuns({
-        actionId: options?.actionId,
-        status: options?.status,
-      });
-    }
+    return this.service.runs.list(options);
   }
 
   async getRun(runId: string): Promise<RunRecord | undefined> {
-    return this.target.getRun(runId);
+    return this.service.runs.get(runId);
   }
 
   async cancelRun(runId: string, reason?: string): Promise<CancelResult> {
-    return this.target.cancelRun(runId, reason);
+    return this.service.runs.cancel(runId, reason);
+  }
+
+  async clearRuns(options?: { packageId?: string; actionId?: string; status?: string }): Promise<number> {
+    if (this.service.runs.clear) {
+      return this.service.runs.clear(options);
+    }
+    return 0;
   }
 
   events(
     runId: string,
     options?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number }
   ): AsyncIterable<ExecutionEvent> {
-    return this.target.events(runId, options);
-  }
-
-  private resolveApp(packageId?: string): ActionDockApp | undefined {
-    if ("listApps" in this.target) {
-      if (packageId) {
-        return this.target.getApp(packageId);
-      }
-      const apps = this.target.listApps();
-      return apps.length === 1 ? apps[0] : undefined;
-    } else {
-      if (!packageId || packageId === this.target.packageId) {
-        return this.target;
-      }
-      return undefined;
-    }
-  }
-
-  private fallbackGlobalStorage?: RuntimeStorage;
-
-  private getGlobalStorage(): RuntimeStorage {
-    if ("globalStorage" in this.target && (this.target as any).globalStorage) {
-      return (this.target as any).globalStorage;
-    }
-    const apps = "listApps" in this.target ? (this.target as any).listApps() : [];
-    for (const app of apps) {
-      if (app.globalStorage) return app.globalStorage;
-    }
-    if (!this.fallbackGlobalStorage) {
-      this.fallbackGlobalStorage = createGlobalStorage({
-        dataDir: (this.target as any).options?.dataDir,
-        customHome: (this.target as any).options?.customHome,
-      });
-    }
-    return this.fallbackGlobalStorage;
-  }
-
-  private findDeclaredConfigItem(key: string): ConfigItemDefinition | undefined {
-    if ("listApps" in this.target) {
-      let foundItem: ConfigItemDefinition | undefined;
-      for (const app of (this.target as ActionDockHost).listApps()) {
-        const item = app.projectConfig?.config?.[key];
-        if (item) {
-          if (item.secret) return item;
-          foundItem = item;
-        }
-      }
-      return foundItem;
-    } else if ("projectConfig" in this.target) {
-      return (this.target as ActionDockApp).projectConfig?.config?.[key];
-    }
-    return undefined;
+    return this.service.runs.events(runId, options);
   }
 
   async getConfig(packageId: string, key: string): Promise<ConfigValueView> {
-    if (packageId === "global") {
-      const globalStorage = this.getGlobalStorage();
-      const val = globalStorage.getConfig(key);
-      const configured = val !== undefined;
-      const declaredItem = this.findDeclaredConfigItem(key);
-      const isSecret = isSecretConfigKey(key, declaredItem);
-      return {
-        key,
-        configured,
-        secret: isSecret,
-        source: configured ? "global" : "default",
-        value: !isSecret && configured ? (val as JsonValue) : undefined,
-      };
+    if (!this.service.management?.config) {
+      throw new TargetError(TARGET_CAPABILITY_UNAVAILABLE, "Management config port is not available");
     }
-    const app = this.resolveApp(packageId);
-    if (!app) {
-      throw new Error(`Package '${packageId}' not found in target`);
-    }
-    return app.getConfig(key);
+    return this.service.management.config.get(packageId, key);
   }
 
   async setConfig(packageId: string, key: string, value: JsonValue): Promise<void> {
-    if (packageId === "global") {
-      await this.getGlobalStorage().setConfig(key, value);
-      return;
+    if (!this.service.management?.config) {
+      throw new TargetError(TARGET_CAPABILITY_UNAVAILABLE, "Management config port is not available");
     }
-    const app = this.resolveApp(packageId);
-    if (!app) {
-      throw new Error(`Package '${packageId}' not found in target`);
-    }
-    await app.setConfig(key, value);
+    await this.service.management.config.set(packageId, key, value);
   }
 
   async deleteConfig(packageId: string, key: string): Promise<boolean> {
-    if (packageId === "global") {
-      return await this.getGlobalStorage().deleteConfig(key);
+    if (!this.service.management?.config) {
+      throw new TargetError(TARGET_CAPABILITY_UNAVAILABLE, "Management config port is not available");
     }
-    const app = this.resolveApp(packageId);
-    if (!app) {
-      throw new Error(`Package '${packageId}' not found in target`);
-    }
-    return await app.deleteConfig(key);
+    return this.service.management.config.delete(packageId, key);
   }
 
   async listConfig(packageId: string): Promise<ConfigValueView[]> {
-    if (packageId === "global") {
-      const globalStorage = this.getGlobalStorage();
-      const all = globalStorage.listConfig();
-      return Object.entries(all).map(([key, val]) => {
-        const declaredItem = this.findDeclaredConfigItem(key);
-        const isSecret = isSecretConfigKey(key, declaredItem);
-        return {
-          key,
-          configured: true,
-          secret: isSecret,
-          source: "global",
-          value: isSecret ? undefined : (val as JsonValue),
-        };
-      });
+    if (!this.service.management?.config) {
+      throw new TargetError(TARGET_CAPABILITY_UNAVAILABLE, "Management config port is not available");
     }
-    const app = this.resolveApp(packageId);
-    if (!app) {
-      throw new Error(`Package '${packageId}' not found in target`);
-    }
-    return app.listConfig();
+    return this.service.management.config.list(packageId);
   }
 
   async getState<T extends JsonValue = JsonValue>(
@@ -338,11 +165,10 @@ export class LocalActionDockTarget implements ActionDockTarget {
     key: string,
     options?: StateScopeOptions
   ): Promise<T | undefined> {
-    const app = this.resolveApp(packageId);
-    if (!app) {
-      throw new Error(`Package '${packageId}' not found in target`);
+    if (!this.service.management?.state) {
+      throw new TargetError(TARGET_CAPABILITY_UNAVAILABLE, "Management state port is not available");
     }
-    return app.getState<T>(actionId, key, options);
+    return this.service.management.state.get<T>(packageId, actionId, key, options);
   }
 
   async setState<T extends JsonValue = JsonValue>(
@@ -352,15 +178,10 @@ export class LocalActionDockTarget implements ActionDockTarget {
     value: T,
     options?: StateScopeOptions
   ): Promise<void> {
-    const app = this.resolveApp(packageId);
-    if (!app) {
-      throw new Error(`Package '${packageId}' not found in target`);
+    if (!this.service.management?.state) {
+      throw new TargetError(TARGET_CAPABILITY_UNAVAILABLE, "Management state port is not available");
     }
-    if (actionId) {
-      await app.setActionState<T>(actionId, key, value, options);
-    } else {
-      await app.setState<T>(key, value, options);
-    }
+    await this.service.management.state.set<T>(packageId, actionId, key, value, options);
   }
 
   async deleteState(
@@ -369,11 +190,10 @@ export class LocalActionDockTarget implements ActionDockTarget {
     key: string,
     options?: StateScopeOptions
   ): Promise<boolean> {
-    const app = this.resolveApp(packageId);
-    if (!app) {
-      throw new Error(`Package '${packageId}' not found in target`);
+    if (!this.service.management?.state) {
+      throw new TargetError(TARGET_CAPABILITY_UNAVAILABLE, "Management state port is not available");
     }
-    return app.deleteState(actionId, key, options);
+    return this.service.management.state.delete(packageId, actionId, key, options);
   }
 
   async listStateKeys(
@@ -381,11 +201,10 @@ export class LocalActionDockTarget implements ActionDockTarget {
     actionId: string,
     options?: StateScopeOptions
   ): Promise<string[]> {
-    const app = this.resolveApp(packageId);
-    if (!app) {
-      throw new Error(`Package '${packageId}' not found in target`);
+    if (!this.service.management?.state) {
+      throw new TargetError(TARGET_CAPABILITY_UNAVAILABLE, "Management state port is not available");
     }
-    return app.listStateKeys(actionId, options);
+    return this.service.management.state.list(packageId, actionId, options);
   }
 
   async clearState(
@@ -393,55 +212,44 @@ export class LocalActionDockTarget implements ActionDockTarget {
     actionId: string,
     options?: StateScopeOptions
   ): Promise<number> {
-    const app = this.resolveApp(packageId);
-    if (!app) {
-      throw new Error(`Package '${packageId}' not found in target`);
+    if (!this.service.management?.state) {
+      throw new TargetError(TARGET_CAPABILITY_UNAVAILABLE, "Management state port is not available");
     }
-    return app.clearState(actionId, options);
+    return this.service.management.state.clear(packageId, actionId, options);
   }
 
   async listStateEntries(
     packageId: string,
     options?: any
   ): Promise<StateEntry[]> {
-    const app = this.resolveApp(packageId);
-    if (!app) {
-      throw new TargetError(
-        TARGET_CAPABILITY_UNAVAILABLE,
-        `TARGET_CAPABILITY_UNAVAILABLE: Package '${packageId}' not found in target`
-      );
+    if (!this.service.management?.state?.listEntries) {
+      throw new TargetError(TARGET_CAPABILITY_UNAVAILABLE, "listStateEntries is not supported");
     }
-    if (!app.storage || typeof (app.storage as any).listStateEntries !== "function") {
-      throw new TargetError(
-        TARGET_CAPABILITY_UNAVAILABLE,
-        `TARGET_CAPABILITY_UNAVAILABLE: listStateEntries is not supported by package '${packageId}' storage`
-      );
-    }
-    return app.storage.listStateEntries(options);
+    return this.service.management.state.listEntries(packageId, options);
   }
 
   async close(options?: { timeoutMs?: number }): Promise<void> {
-    try {
-      this.fallbackGlobalStorage?.close();
-    } catch {
-      // 忽略兜底全局存储关闭异常
-    }
-    this.fallbackGlobalStorage = undefined;
+    return this.service.close(options);
+  }
+}
 
-    if (options?.timeoutMs && options.timeoutMs > 0) {
-      let timer: any;
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => {
-          reject(new CloseTimeoutError(`Target close operation timed out after ${options.timeoutMs}ms`));
-        }, options.timeoutMs);
-      });
-      try {
-        await Promise.race([this.target.close(), timeoutPromise]);
-      } finally {
-        clearTimeout(timer);
-      }
-      return;
+/**
+ * 本地 ActionDockTarget 门面兼容类。
+ * 基于 ServiceActionDockTarget 包装 LocalActionDockService，
+ * 绝不暴露 unwrap 穿透到底层实例。
+ */
+export class LocalActionDockTarget extends ServiceActionDockTarget {
+  constructor(target: ActionDockHost | ActionDockApp | ActionDockService) {
+    if (
+      target &&
+      typeof target === "object" &&
+      "discovery" in target &&
+      "execution" in target &&
+      "runs" in target
+    ) {
+      super(target as ActionDockService);
+    } else {
+      super(new LocalActionDockService(target as ActionDockHost | ActionDockApp));
     }
-    return this.target.close();
   }
 }

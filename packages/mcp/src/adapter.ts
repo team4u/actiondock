@@ -5,6 +5,7 @@ import {
   ACTIONDOCK_VERSION,
   ActionResolver,
   createActionDockTarget,
+  ServiceActionDockTarget,
   findProjectRoot,
   resolvePackageRoot,
 } from "@actiondock/core";
@@ -117,6 +118,11 @@ export async function resolveTarget(
 ): Promise<{ target: ActionDockTarget; ownsTarget: boolean }> {
   if (options.target) {
     return { target: options.target, ownsTarget: false };
+  }
+
+  if (options.service) {
+    const target = new ServiceActionDockTarget(options.service);
+    return { target, ownsTarget: false };
   }
 
   if (options.host) {

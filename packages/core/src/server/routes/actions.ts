@@ -9,7 +9,7 @@ import { getSubPath, jsonResponse, type RouteContext } from "./common";
  * 处理 Action 相关的 HTTP 路由（列表、规范查询、同步执行与异步启动）。
  */
 export async function handleActionsRoutes(ctx: RouteContext): Promise<Response | null> {
-  const { req, url, pathname, corsHeaders, options, target } = ctx;
+  const { req, url, pathname, corsHeaders, options, service } = ctx;
   const subpath = getSubPath(pathname);
 
   // 1. Actions List: GET /api/v2/actions, GET /actions
@@ -21,7 +21,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
       const prefix = url.searchParams.get("prefix") || undefined;
       const tags = url.searchParams.getAll("tag");
 
-      let actions = await target.listActions({
+      let actions = await service.discovery.listActions({
         query,
         prefix,
         tags: tags.length > 0 ? tags : undefined,
@@ -83,7 +83,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
     }
     const ref = `${packageId}/${actionId}`;
     try {
-      const spec = await target.describeAction(ref);
+      const spec = await service.discovery.describeAction(ref);
       return jsonResponse(spec, 200, corsHeaders);
     } catch (err: any) {
       return jsonResponse(
@@ -124,7 +124,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
     } catch {}
 
     try {
-      const spec = await target.describeAction(actionId);
+      const spec = await service.discovery.describeAction(actionId);
       if (
         options.packageAllowlist &&
         options.packageAllowlist.length > 0 &&
@@ -190,7 +190,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
     if (options.packageAllowlist && options.packageAllowlist.length > 0) {
       if (!pkgId) {
         try {
-          const spec = await target.describeAction(actionRef);
+          const spec = await service.discovery.describeAction(actionRef);
           pkgId = spec?.packageId;
         } catch {}
       }
@@ -274,7 +274,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
 
     if (isAsync) {
       try {
-        const ticket = await target.startAction(actionRef, input, {
+        const ticket = await service.execution.start(actionRef, input, {
           timeoutMs,
           config: configOverrides,
           requestId,
@@ -327,7 +327,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
 
     // 同步执行模式
     try {
-      const result = await target.runAction(actionRef, input, {
+      const result = await service.execution.run(actionRef, input, {
         signal: req.signal,
         timeoutMs,
         config: configOverrides,

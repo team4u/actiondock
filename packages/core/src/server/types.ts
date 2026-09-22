@@ -1,4 +1,5 @@
 import type { ActionDockHost } from "../host/types";
+import type { ActionDockService } from "../service/types";
 import type { ActionDockTarget } from "../target/types";
 
 export interface CoreHttpServerInstance {
@@ -41,6 +42,8 @@ export interface ServerOptions {
   hostInstance?: ActionDockHost;
   /** 关联的目标 ActionDockTarget 门面实例 */
   target?: ActionDockTarget;
+  /** 关联的标准 ActionDockService 服务端口实例 */
+  service?: ActionDockService;
   /** 显式绑定的主机地址（当 host 传入 ActionDockHost 时的可选覆盖项） */
   hostname?: string;
   /** 用于 HTTP Bearer Token 鉴权的密钥令牌 */
@@ -89,6 +92,8 @@ export interface ActionDockServerInstance {
   host?: ActionDockHost;
   /** 关联的 ActionDockTarget 目标门面实例 */
   target?: ActionDockTarget;
+  /** 关联的 ActionDockService 服务端口实例 */
+  service: ActionDockService;
   /** 服务端可访问的基础 URL（如 "http://127.0.0.1:5177"） */
   url: string;
   /** 服务就绪 Promise（可等待端口解析与监听建立） */

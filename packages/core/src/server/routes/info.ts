@@ -19,11 +19,11 @@ function sanitizePackage<T extends { config?: any }>(pkg: T, exposeDebugInfo?: b
 
 /**
  * 处理系统自省与包信息接口：
- * - GET /api/v2/info 与 GET /info -> 委托 target.info()
- * - GET /api/v2/packages 与 GET /packages -> 委托 host.info() 或 target.info()
+ * - GET /api/v2/info 与 GET /info -> 委托 service.info()
+ * - GET /api/v2/packages 与 GET /packages -> 委托 service.discovery.listPackages()
  */
 export async function handleInfoRoute(ctx: RouteContext): Promise<Response | null> {
-  const { req, url, pathname, corsHeaders, options, target, host, projectRoot } = ctx;
+  const { req, url, pathname, corsHeaders, options, service, projectRoot } = ctx;
   const subpath = getSubPath(pathname);
 
   // 1. Packages List: GET /api/v2/packages, /packages
@@ -34,7 +34,7 @@ export async function handleInfoRoute(ctx: RouteContext): Promise<Response | nul
         assertPackageAllowed(targetPkg, options);
       }
 
-      const rawPackages = target ? await target.listPackages() : (host ? await host.info() : []);
+      const rawPackages = await service.discovery.listPackages();
       let packages = rawPackages.map((p) => sanitizePackage(p, options.exposeDebugInfo));
       if (options.packageAllowlist && Array.isArray(options.packageAllowlist) && options.packageAllowlist.length > 0) {
         packages = packages.filter((p) => p.id && options.packageAllowlist!.includes(p.id));
@@ -83,8 +83,7 @@ export async function handleInfoRoute(ctx: RouteContext): Promise<Response | nul
         assertPackageAllowed(targetPkg, options);
       }
 
-      const targetInfo = await target.info();
-      const rawPackages = targetInfo.packages || [];
+      const rawPackages = await service.info();
       let packages = rawPackages.map((p) => sanitizePackage(p, options.exposeDebugInfo));
       if (options.packageAllowlist && Array.isArray(options.packageAllowlist) && options.packageAllowlist.length > 0) {
         packages = packages.filter((p) => p.id && options.packageAllowlist!.includes(p.id));

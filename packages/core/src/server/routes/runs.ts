@@ -1,7 +1,6 @@
-import { filterByIntent } from "../../filter";
 import { EXECUTION_FAILED } from "../../errors";
 import { isTerminalRunStatus } from "../../storage/types";
-import type { ExecutionEvent, RunRecord } from "@actiondock/sdk";
+import type { ExecutionEvent } from "@actiondock/sdk";
 import { readJsonBody } from "../body";
 import { getSubPath, jsonResponse, type RouteContext } from "./common";
 
@@ -9,7 +8,7 @@ import { getSubPath, jsonResponse, type RouteContext } from "./common";
  * 处理历史运行记录查询、清理、详情及 SSE 流式日志接口。
  */
 export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | null> {
-  const { req, url, pathname, corsHeaders, options, target, host } = ctx;
+  const { req, url, pathname, corsHeaders, options, service } = ctx;
   const subpath = getSubPath(pathname);
 
   // 1. Runs List: GET /api/v2/runs, GET /runs
@@ -40,65 +39,23 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
         );
       }
 
-      const allRuns: RunRecord[] = [];
-      const seenRunIds = new Set<string>();
+      let allRuns = await service.runs.list({
+        actionId,
+        status,
+        packageId,
+        intent,
+        limit,
+      });
 
-      const apps = host
-        ? host.listApps()
-        : (() => {
-            const inner = target?.unwrap?.();
-            return inner && "listApps" in inner ? inner.listApps() : [inner].filter(Boolean);
-          })();
-
-      for (const app of apps) {
-        if (!app) continue;
-        if (packageId && app.packageId !== packageId) continue;
-        if (options.packageAllowlist && options.packageAllowlist.length > 0) {
-          if (!options.packageAllowlist.includes(app.packageId)) {
-            continue;
-          }
-        }
-        if (app.storage && typeof app.storage.listRuns === "function") {
-          try {
-            // 状态过滤下推到存储层 SQL，避免先分页后过滤导致某包前 N 条非目标状态时贡献 0 条
-            const records = app.storage.listRuns({ actionId, status, limit });
-            for (const r of records) {
-              if (!seenRunIds.has(r.id)) {
-                seenRunIds.add(r.id);
-                if (
-                  options.packageAllowlist &&
-                  options.packageAllowlist.length > 0 &&
-                  r.packageId &&
-                  !options.packageAllowlist.includes(r.packageId)
-                ) {
-                  continue;
-                }
-                allRuns.push(r);
-              }
-            }
-          } catch (err) {
-            // 单包查询失败不阻断整体列表响应，但必须可观测
-            console.warn(
-              `[actiondock] listRuns failed for package '${app.packageId}': ${err instanceof Error ? err.message : String(err)}`
-            );
-          }
-        }
+      if (options.packageAllowlist && options.packageAllowlist.length > 0) {
+        allRuns = allRuns.filter(
+          (r) => !r.packageId || options.packageAllowlist!.includes(r.packageId)
+        );
       }
 
-      allRuns.sort((a, b) => (b.startedAt || "").localeCompare(a.startedAt || ""));
-
-      const filtered = intent
-        ? filterByIntent(
-            allRuns,
-            intent,
-            [(r) => r.id, (r) => r.actionId, (r) => r.status, (r) => r.packageId],
-            false
-          )
-        : allRuns;
-
-      const sliced = filtered.slice(0, limit);
+      const sliced = allRuns.slice(0, limit);
       return jsonResponse(
-        { ok: true, total: filtered.length, items: sliced },
+        { ok: true, total: allRuns.length, items: sliced },
         200,
         corsHeaders
       );
@@ -145,24 +102,8 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
       }
 
       let clearedCount = 0;
-      const apps = host
-        ? host.listApps()
-        : (() => {
-            const inner = target?.unwrap?.();
-            return inner && "listApps" in inner ? inner.listApps() : [inner].filter(Boolean);
-          })();
-
-      for (const app of apps) {
-        if (!app) continue;
-        if (packageId && app.packageId !== packageId) continue;
-        if (options.packageAllowlist && options.packageAllowlist.length > 0) {
-          if (!options.packageAllowlist.includes(app.packageId)) {
-            continue;
-          }
-        }
-        if (app.storage && typeof app.storage.clearRuns === "function") {
-          clearedCount += app.storage.clearRuns({ actionId, status });
-        }
+      if (service.runs.clear) {
+        clearedCount = await service.runs.clear({ packageId, actionId, status });
       }
 
       return jsonResponse({ ok: true, clearedCount }, 200, corsHeaders);
@@ -179,7 +120,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
   const runEventsMatch = subpath.match(/^\/runs\/([^/]+)\/(events|stream)$/);
   if (runEventsMatch && req.method === "GET") {
     const runId = decodeURIComponent(runEventsMatch[1]);
-    const run = await target.getRun(runId);
+    const run = await service.runs.get(runId);
 
     if (!run) {
       return jsonResponse(
@@ -224,7 +165,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
       }
     }
 
-    const eventStream = target.events(runId, { after: afterCursor, signal: req.signal });
+    const eventStream = service.runs.events(runId, { after: afterCursor, signal: req.signal });
     const iterator = eventStream[Symbol.asyncIterator]();
 
     // 检查游标是否在建流前已过期：拉取首个事件，若抛出 EVENT_CURSOR_EXPIRED 直接返回 410
@@ -343,7 +284,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
   const runShowMatch = subpath.match(/^\/runs\/([^/]+)$/);
   if (runShowMatch && req.method === "GET") {
     const runId = decodeURIComponent(runShowMatch[1]);
-    const run = await target.getRun(runId);
+    const run = await service.runs.get(runId);
 
     if (!run) {
       return jsonResponse(
@@ -385,7 +326,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
   if (runCancelMatch && req.method === "POST") {
     const runId = decodeURIComponent(runCancelMatch[1]);
     if (options.packageAllowlist && options.packageAllowlist.length > 0) {
-      const run = await target.getRun(runId);
+      const run = await service.runs.get(runId);
       if (run && (!run.packageId || !options.packageAllowlist.includes(run.packageId))) {
         return jsonResponse(
           {
@@ -406,7 +347,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
     } catch {}
 
     const reason = body?.reason || "Cancelled by client request";
-    const cancelResult = await target.cancelRun(runId, reason);
+    const cancelResult = await service.runs.cancel(runId, reason);
 
     if (cancelResult.outcome === "not_found") {
       return jsonResponse(

@@ -1052,7 +1052,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       try {
         expect(server.host).toBe(customHost);
         expect(server.target).toBeDefined();
-        expect(server.target?.unwrap?.()).toBe(customHost);
+        expect(server.service).toBeDefined();
 
         const res = await fetch(`${server.url}/api/v2/actions`, {
           headers: { Authorization: "Bearer test-token" },
@@ -1096,7 +1096,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
 
       try {
         expect(server.host).toBe(customHost);
-        expect(server.target?.unwrap?.()).toBe(customHost);
+        expect(server.service).toBeDefined();
       } finally {
         await server.stop();
       }
@@ -1232,7 +1232,6 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         close: async () => {
           order.push("target.close");
         },
-        unwrap: () => undefined,
       } as any;
       const mockHost = {
         close: async () => {

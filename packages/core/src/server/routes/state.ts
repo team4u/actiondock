@@ -1,14 +1,14 @@
 import { decodeStateKey } from "../../storage";
 import { CAPABILITY_UNAVAILABLE, STATE_KEY_NOT_FOUND } from "../../errors";
 import { readJsonBody } from "../body";
-import { assertPackageAllowed, getSubPath, jsonResponse, resolveAppForPackage, type RouteContext } from "./common";
+import { assertPackageAllowed, getSubPath, jsonResponse, resolveTargetPackageId, type RouteContext } from "./common";
 
 /**
  * 处理状态键名列表、读取、写入、删除及清空接口。
  * 在未显式开启管理功能 (options.enableManagement !== true) 时返回 403 拒绝。
  */
 export async function handleStateRoutes(ctx: RouteContext): Promise<Response | null> {
-  const { req, url, pathname, corsHeaders, options, host, target } = ctx;
+  const { req, url, pathname, corsHeaders, options, service } = ctx;
   const subpath = getSubPath(pathname);
 
   const isStateRoute =
@@ -21,7 +21,7 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
   }
 
   // 校验管理能力开关
-  if (options.enableManagement !== true) {
+  if (options.enableManagement !== true || !service.management?.state) {
     return jsonResponse(
       {
         ok: false,
@@ -43,16 +43,14 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
       const nsParam = url.searchParams.get("namespace") ?? undefined;
       const prefix = url.searchParams.get("prefix") || "";
 
-      if (pkgParam) {
-        assertPackageAllowed(pkgParam, options);
-      }
-      const app = resolveAppForPackage(pkgParam, host, target, options);
-      assertPackageAllowed(app.packageId, options);
-      const effectiveNs = actionParam
-        ? (nsParam !== undefined ? `${actionParam}:${nsParam}` : actionParam)
-        : (nsParam !== undefined ? nsParam : null);
-      const keys = await app.storage.listStateKeys(effectiveNs, prefix);
-      return jsonResponse({ ok: true, packageId: app.packageId, keys }, 200, corsHeaders);
+      const pkgs = await service.discovery.listPackages();
+      const targetPackageId = resolveTargetPackageId(pkgs, pkgParam, options);
+
+      const keys = await service.management.state.list(targetPackageId, actionParam, {
+        namespace: nsParam,
+        prefix,
+      });
+      return jsonResponse({ ok: true, packageId: targetPackageId, keys }, 200, corsHeaders);
     } catch (err: any) {
       if (err.code === "PACKAGE_NOT_ALLOWED" || err.status === 403) {
         return jsonResponse(
@@ -86,19 +84,16 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
       const pkgParam = url.searchParams.get("package") || url.searchParams.get("packageId") || body.package || undefined;
       const actionParam = url.searchParams.get("action") || url.searchParams.get("actionId") || body.action || body.actionId || "";
       const baseNs = body.namespace ?? (url.searchParams.get("namespace") || undefined);
-      const effectiveNs = actionParam ? (baseNs ? `${actionParam}:${baseNs}` : actionParam) : baseNs;
 
-      if (pkgParam) {
-        assertPackageAllowed(pkgParam, options);
-      }
-      const app = resolveAppForPackage(pkgParam, host, target, options);
-      assertPackageAllowed(app.packageId, options);
-      const clearedCount = await app.storage.clearState({
-        namespace: effectiveNs,
+      const pkgs = await service.discovery.listPackages();
+      const targetPackageId = resolveTargetPackageId(pkgs, pkgParam, options);
+
+      const clearedCount = await service.management.state.clear(targetPackageId, actionParam, {
+        namespace: baseNs,
         all: Boolean(body.all ?? url.searchParams.get("all") === "true"),
         prefix: body.prefix ?? (url.searchParams.get("prefix") || undefined),
       });
-      return jsonResponse({ ok: true, packageId: app.packageId, clearedCount }, 200, corsHeaders);
+      return jsonResponse({ ok: true, packageId: targetPackageId, clearedCount }, 200, corsHeaders);
     } catch (err: any) {
       if (err.code === "PACKAGE_NOT_ALLOWED" || err.status === 403) {
         return jsonResponse(
@@ -133,30 +128,33 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
       const pkgParam = url.searchParams.get("package") || url.searchParams.get("packageId") || undefined;
       const actionParam = url.searchParams.get("action") || url.searchParams.get("actionId") || "";
       const nsParam = url.searchParams.get("namespace") || undefined;
-      const effectiveNs = actionParam ? (nsParam ? `${actionParam}:${nsParam}` : actionParam) : nsParam;
-      if (pkgParam) {
-        assertPackageAllowed(pkgParam, options);
-      }
-      const app = resolveAppForPackage(pkgParam, host, target, options);
-      assertPackageAllowed(app.packageId, options);
+
+      const pkgs = await service.discovery.listPackages();
+      const targetPackageId = resolveTargetPackageId(pkgs, pkgParam, options);
 
       if (req.method === "GET") {
-        const entry = await app.storage.findState(key, effectiveNs);
-        if (!entry || entry.value === undefined) {
+        const entry = await service.management.state.get(targetPackageId, actionParam, key, {
+          namespace: nsParam,
+          detail: true,
+        });
+        if (!entry || (typeof entry === "object" && (entry as any).value === undefined)) {
           return jsonResponse(
             { ok: false, error: { code: STATE_KEY_NOT_FOUND, message: `State key '${key}' not found` } },
             404,
             corsHeaders
           );
         }
+        const data = typeof entry === "object" && "value" in entry
+          ? entry
+          : { key, namespace: nsParam || "", value: entry, expiresAt: undefined };
         return jsonResponse(
           {
             ok: true,
-            packageId: app.packageId,
-            key: entry.key,
-            namespace: entry.namespace,
-            value: entry.value,
-            expiresAt: entry.expiresAt,
+            packageId: targetPackageId,
+            key: (data as any).key || key,
+            namespace: (data as any).namespace ?? nsParam ?? "",
+            value: (data as any).value,
+            expiresAt: (data as any).expiresAt,
           },
           200,
           corsHeaders
@@ -169,26 +167,30 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
         const ttl = typeof body.ttl === "number" ? body.ttl : undefined;
         const bodyAction = body.action || body.actionId || actionParam;
         const explicitNs = body.namespace || nsParam;
-        const combinedNs = bodyAction ? (explicitNs ? `${bodyAction}:${explicitNs}` : bodyAction) : explicitNs;
 
         let actualKey = key;
-        let ns = combinedNs || "";
-        if (!combinedNs) {
+        let ns = explicitNs;
+        if (!bodyAction && !explicitNs) {
           const decoded = decodeStateKey(key);
           ns = decoded.namespace;
           actualKey = decoded.key;
         }
 
-        await app.storage.setState(ns, actualKey, val, ttl);
+        await service.management.state.set(targetPackageId, bodyAction, actualKey, val, {
+          namespace: ns,
+          ttl,
+        });
         return jsonResponse(
-          { ok: true, packageId: app.packageId, key: actualKey, namespace: ns, message: "updated" },
+          { ok: true, packageId: targetPackageId, key: actualKey, namespace: ns || bodyAction || "", message: "updated" },
           200,
           corsHeaders
         );
       }
 
       if (req.method === "DELETE") {
-        const deleted = await app.storage.deleteStateSmart(key, effectiveNs);
+        const deleted = await service.management.state.delete(targetPackageId, actionParam, key, {
+          namespace: nsParam,
+        });
         if (!deleted) {
           return jsonResponse(
             { ok: false, error: { code: STATE_KEY_NOT_FOUND, message: `State key '${key}' not found` } },
@@ -196,7 +198,7 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
             corsHeaders
           );
         }
-        return jsonResponse({ ok: true, packageId: app.packageId, key, deleted: true }, 200, corsHeaders);
+        return jsonResponse({ ok: true, packageId: targetPackageId, key, deleted: true }, 200, corsHeaders);
       }
     } catch (err: any) {
       if (err.code === "PACKAGE_NOT_ALLOWED" || err.status === 403) {
