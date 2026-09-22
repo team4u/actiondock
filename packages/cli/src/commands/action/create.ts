@@ -241,9 +241,13 @@ ${returnBody}
     writeStdout(`\nTo run this action:`, context);
 
     const advice = buildActionInputAdvice(inputSchema);
-    if (advice.flatSupported && advice.suggestedAssignments.length > 0) {
-      for (const item of advice.suggestedAssignments) {
-        writeStdout(`  ad run ${id} --json -- ${item}`, context);
+    if (advice.flatSupported) {
+      if (advice.requiredTokens.length > 0) {
+        writeStdout(`  ad run ${id} --json -- ${advice.requiredTokens.join(" ")}`, context);
+      } else if (advice.optionalTokens.length > 0) {
+        writeStdout(`  ad run ${id} --json -- ${advice.optionalTokens.join(" ")}`, context);
+      } else {
+        writeStdout(`  ad run ${id} --json`, context);
       }
     } else {
       writeStdout(`  ad run ${id} --json`, context);

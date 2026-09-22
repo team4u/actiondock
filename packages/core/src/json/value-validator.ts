@@ -1,13 +1,13 @@
 import type { JsonValue } from "@actiondock/sdk";
 
 /** 默认 JSON 最大嵌套深度限制（防止恶意超深结构） */
-export const DEFAULT_MAX_JSON_DEPTH = 100_000;
+export const DEFAULT_MAX_JSON_DEPTH = 256;
 
 /**
  * JSON 结构校验选项。
  */
 export interface ValidateJsonOptions {
-  /** 最大允许嵌套深度（默认 100,000） */
+  /** 最大允许嵌套深度（默认 256） */
   maxDepth?: number;
 }
 

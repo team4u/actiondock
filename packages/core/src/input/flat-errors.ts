@@ -53,8 +53,8 @@ export class FlatInputError extends InputError {
 export function invalidJson(
   message: string,
   details?: Record<string, unknown>
-): FlatInputError {
-  return new FlatInputError(INVALID_JSON, message, details);
+): InputError {
+  return new InputError(INVALID_JSON, message, details);
 }
 
 /**
@@ -103,8 +103,8 @@ export function flatInputLimitExceeded(
 export function inputConflict(
   message: string,
   details?: Record<string, unknown>
-): FlatInputError {
-  return new FlatInputError(INPUT_CONFLICT, message, details);
+): InputError {
+  return new InputError(INPUT_CONFLICT, message, details);
 }
 
 /**
@@ -113,8 +113,8 @@ export function inputConflict(
 export function inputFileNotFound(
   filePath: string,
   details?: Record<string, unknown>
-): FlatInputError {
-  return new FlatInputError(
+): InputError {
+  return new InputError(
     INPUT_FILE_NOT_FOUND,
     `Input file not found: ${filePath}`,
     { filePath, ...details }
@@ -128,9 +128,9 @@ export function inputFileReadFailed(
   source: string,
   cause: unknown,
   details?: Record<string, unknown>
-): FlatInputError {
+): InputError {
   const reason = cause instanceof Error ? cause.message : String(cause);
-  return new FlatInputError(
+  return new InputError(
     INPUT_FILE_READ_FAILED,
     `Failed to read input from ${source}: ${reason}`,
     { source, ...details }

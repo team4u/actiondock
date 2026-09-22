@@ -132,8 +132,12 @@ export function generateSourceSkillMd(
     ? buildActionInputAdvice(firstActionItem.inputSchema)
     : undefined;
   const sampleFlatArgs =
-    advice && advice.flatSupported && advice.suggestedAssignments.length > 0
-      ? advice.suggestedAssignments.slice(0, 2).map((s) => `ad run ${pkgId}/${firstAction} --json -- ${s}`).join("\n")
+    advice && advice.flatSupported
+      ? advice.requiredTokens.length > 0
+        ? `ad run ${pkgId}/${firstAction} --json -- ${advice.requiredTokens.join(" ")}`
+        : advice.optionalTokens.length > 0
+          ? `ad run ${pkgId}/${firstAction} --json -- ${advice.optionalTokens.join(" ")}`
+          : `ad run ${pkgId}/${firstAction} --json`
       : `ad run ${pkgId}/${firstAction} --json -- <param>=<value>`;
 
   const playbookSection = renderPlaybookSectionMarkdown(playbooks, config.playbooksDir || "playbooks");
@@ -306,8 +310,12 @@ export function generateStandaloneSkillMd(
     ? buildActionInputAdvice(firstActionItem.inputSchema)
     : undefined;
   const sampleFlatArgs =
-    advice && advice.flatSupported && advice.suggestedAssignments.length > 0
-      ? advice.suggestedAssignments.slice(0, 2).map((s) => `${binaryRelPath} run ${firstAction} --json -- ${s}`).join("\n")
+    advice && advice.flatSupported
+      ? advice.requiredTokens.length > 0
+        ? `${binaryRelPath} run ${firstAction} --json -- ${advice.requiredTokens.join(" ")}`
+        : advice.optionalTokens.length > 0
+          ? `${binaryRelPath} run ${firstAction} --json -- ${advice.optionalTokens.join(" ")}`
+          : `${binaryRelPath} run ${firstAction} --json`
       : `${binaryRelPath} run ${firstAction} --json -- <param>=<value>`;
 
   const playbookSection = renderPlaybookSectionMarkdown(playbooks, config.playbooksDir || "playbooks");

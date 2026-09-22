@@ -10,6 +10,8 @@ import {
   readStdin,
   resolveActionInput,
   stripBom,
+  buildActionInputAdvice,
+  formatActionDetail,
 } from "../src/utils/input";
 import { ArgumentError } from "../src/errors";
 import { FlatInputError, InputError } from "@actiondock/core";
@@ -73,6 +75,30 @@ describe("CLI Action Input Resolution - Unit Tests", () => {
     }
   });
 
+  it("parseJson throws InputError with INVALID_JSON on 1e400 (Infinity) or deep structure", () => {
+    expect(() => parseJson("1e400", "--input")).toThrow(InputError);
+    try {
+      parseJson("1e400", "--input");
+    } catch (err: any) {
+      expect(err).toBeInstanceOf(InputError);
+      expect(err.code).toBe("INVALID_JSON");
+      expect(err.message).toContain("Number is non-finite or NaN");
+    }
+
+    let deep = "1";
+    for (let i = 0; i < 260; i++) {
+      deep = `{"inner":${deep}}`;
+    }
+    expect(() => parseJson(deep, "--input")).toThrow(InputError);
+    try {
+      parseJson(deep, "--input");
+    } catch (err: any) {
+      expect(err).toBeInstanceOf(InputError);
+      expect(err.code).toBe("INVALID_JSON");
+      expect(err.message).toContain("Max JSON depth limit");
+    }
+  });
+
   it("readStdin reads full stream content", async () => {
     const stream = Readable.from(["hello ", "world"]);
     const text = await readStdin(stream);
@@ -89,7 +115,8 @@ describe("CLI Action Input Resolution - Unit Tests", () => {
       await resolveActionInput({ input: "{\"a\":1}", inputFile: "test.json" });
       expect(true).toBe(false);
     } catch (err: any) {
-      expect(err).toBeInstanceOf(FlatInputError);
+      expect(err).toBeInstanceOf(InputError);
+      expect(err).not.toBeInstanceOf(FlatInputError);
       expect(err.code).toBe("INPUT_CONFLICT");
       expect(err.message).toContain("mutually exclusive");
     }
@@ -111,7 +138,8 @@ describe("CLI Action Input Resolution - Unit Tests", () => {
       await resolveActionInput({ inputFile: "nonexistent_file_12345.json" });
       expect(true).toBe(false);
     } catch (err: any) {
-      expect(err).toBeInstanceOf(FlatInputError);
+      expect(err).toBeInstanceOf(InputError);
+      expect(err).not.toBeInstanceOf(FlatInputError);
       expect(err.code).toBe("INPUT_FILE_NOT_FOUND");
       expect(err.message).toBe("Input file not found: nonexistent_file_12345.json");
     }
@@ -122,9 +150,20 @@ describe("CLI Action Input Resolution - Unit Tests", () => {
       await resolveActionInput({ inputFile: tmpdir() });
       expect(true).toBe(false);
     } catch (err: any) {
-      expect(err).toBeInstanceOf(FlatInputError);
+      expect(err).toBeInstanceOf(InputError);
+      expect(err).not.toBeInstanceOf(FlatInputError);
       expect(err.code).toBe("INPUT_FILE_READ_FAILED");
     }
+  });
+
+  it("verifies InputError and FlatInputError inheritance", () => {
+    const baseErr = new InputError("TEST_CODE", "test message");
+    expect(baseErr).toBeInstanceOf(InputError);
+    expect(baseErr).not.toBeInstanceOf(FlatInputError);
+
+    const flatErr = new FlatInputError("FLAT_CODE", "flat message");
+    expect(flatErr).toBeInstanceOf(FlatInputError);
+    expect(flatErr).toBeInstanceOf(InputError);
   });
 });
 
@@ -607,5 +646,52 @@ export default defineAction(async (input: any) => {
     const res = JSON.parse(proc.stdout.toString());
     expect(res.ok).toBe(false);
     expect(res.error.code).toBe("INPUT_PATH_CONFLICT");
+  });
+
+  // 22. --input '1e400' 抛出 INVALID_JSON
+  it("rejects --input '1e400' (Infinity) with exit code 2 and INVALID_JSON code", () => {
+    const proc = runCli(["run", "test.echo", "--input", "1e400", "--json"], tempDir);
+    expect(proc.exitCode).toBe(2);
+    const res = JSON.parse(proc.stdout.toString());
+    expect(res.ok).toBe(false);
+    expect(res.error.code).toBe("INVALID_JSON");
+    expect(res.error.message).toContain("Number is non-finite or NaN");
+  });
+
+  // 23. 含有非 flat-safe required 字段时 flatSupported 为 false
+  it("marks flatSupported as false when required field contains non-flat-safe characters", () => {
+    const advice = buildActionInputAdvice({
+      type: "object",
+      properties: {
+        "user name": { type: "string" },
+        age: { type: "number" },
+      },
+      required: ["user name"],
+    });
+    expect(advice.flatSupported).toBe(false);
+    expect(advice.hasFlatFields).toBe(true);
+    expect(advice.notes.some((n) => n.includes("user name"))).toBe(true);
+  });
+
+  // 24. 生成的建议命令包含完整 required 字段且无人类提示混杂
+  it("generates action detail advice with all required tokens and no human hint in command", () => {
+    const formatted = formatActionDetail({
+      id: "test.echo",
+      inputSchema: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          count: { type: "number" },
+          meta: { type: "object" },
+        },
+        required: ["name", "count"],
+      },
+    });
+    const commandLine = formatted
+      .split("\n")
+      .find((l) => l.includes("ad run test.echo"));
+    expect(commandLine).toBeDefined();
+    expect(commandLine).toBe("  - ad run test.echo --json -- name=TEXT count:=NUMBER");
+    expect(commandLine).not.toContain("建议使用");
   });
 });

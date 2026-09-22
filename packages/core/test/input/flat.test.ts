@@ -19,6 +19,14 @@ import {
   INPUT_CONFLICT,
   buildActionInputAdvice,
   formatActionDetail,
+  invalidJson,
+  inputFileNotFound,
+  inputFileReadFailed,
+  inputConflict,
+  invalidFlatArgument,
+  invalidJsonLiteral,
+  inputPathConflict,
+  flatInputLimitExceeded,
 } from "../../src/input";
 
 describe("Flat JsonValue Encoding v1", () => {
@@ -439,10 +447,12 @@ describe("Flat JsonValue Encoding v1", () => {
     it("拒绝同时指定 flatArgs 与 input", async () => {
       await expect(
         resolveActionInput({ flatArgs: ["a=1"], input: '{"b":2}' })
-      ).rejects.toThrow(FlatInputError);
+      ).rejects.toThrow(InputError);
       try {
         await resolveActionInput({ flatArgs: ["a=1"], input: '{"b":2}' });
       } catch (err: any) {
+        expect(err).toBeInstanceOf(InputError);
+        expect(err).not.toBeInstanceOf(FlatInputError);
         expect(err.code).toBe(INPUT_CONFLICT);
       }
     });
@@ -450,10 +460,12 @@ describe("Flat JsonValue Encoding v1", () => {
     it("拒绝同时指定 flatArgs 与 inputFile", async () => {
       await expect(
         resolveActionInput({ flatArgs: ["a=1"], inputFile: "test.json" })
-      ).rejects.toThrow(FlatInputError);
+      ).rejects.toThrow(InputError);
       try {
         await resolveActionInput({ flatArgs: ["a=1"], inputFile: "test.json" });
       } catch (err: any) {
+        expect(err).toBeInstanceOf(InputError);
+        expect(err).not.toBeInstanceOf(FlatInputError);
         expect(err.code).toBe(INPUT_CONFLICT);
       }
     });
@@ -461,10 +473,12 @@ describe("Flat JsonValue Encoding v1", () => {
     it("拒绝同时指定 input 与 inputFile", async () => {
       await expect(
         resolveActionInput({ input: '{"a":1}', inputFile: "test.json" })
-      ).rejects.toThrow(FlatInputError);
+      ).rejects.toThrow(InputError);
       try {
         await resolveActionInput({ input: '{"a":1}', inputFile: "test.json" });
       } catch (err: any) {
+        expect(err).toBeInstanceOf(InputError);
+        expect(err).not.toBeInstanceOf(FlatInputError);
         expect(err.code).toBe(INPUT_CONFLICT);
       }
     });
@@ -476,7 +490,7 @@ describe("Flat JsonValue Encoding v1", () => {
           input: '{"b":2}',
           inputFile: "test.json",
         })
-      ).rejects.toThrow(FlatInputError);
+      ).rejects.toThrow(InputError);
       try {
         await resolveActionInput({
           flatArgs: ["a=1"],
@@ -484,6 +498,8 @@ describe("Flat JsonValue Encoding v1", () => {
           inputFile: "test.json",
         });
       } catch (err: any) {
+        expect(err).toBeInstanceOf(InputError);
+        expect(err).not.toBeInstanceOf(FlatInputError);
         expect(err.code).toBe(INPUT_CONFLICT);
       }
     });
@@ -694,6 +710,29 @@ describe("Flat JsonValue Encoding v1", () => {
       }
     });
 
+    it("--input 包含 1e400 (Infinity) 或深度超限抛出 INVALID_JSON", async () => {
+      await expect(resolveActionInput({ input: "1e400" })).rejects.toThrow(InputError);
+      try {
+        await resolveActionInput({ input: "1e400" });
+      } catch (err: any) {
+        expect(err.code).toBe(INVALID_JSON);
+        expect(err.message).toContain("Number is non-finite or NaN");
+      }
+
+      // 深度超过 256
+      let deep = "1";
+      for (let i = 0; i < 260; i++) {
+        deep = `{"inner":${deep}}`;
+      }
+      await expect(resolveActionInput({ input: deep })).rejects.toThrow(InputError);
+      try {
+        await resolveActionInput({ input: deep });
+      } catch (err: any) {
+        expect(err.code).toBe(INVALID_JSON);
+        expect(err.message).toContain("Max JSON depth limit");
+      }
+    });
+
     it("--input-file 完整文档解析失败抛出 INVALID_JSON", async () => {
       const testFile = join(tmpdir(), `test-invalid-${Date.now()}.json`);
       writeFileSync(testFile, "invalid json document", "utf8");
@@ -789,13 +828,18 @@ describe("Flat JsonValue Encoding v1", () => {
 
       const advice = buildActionInputAdvice(schema);
       expect(advice.flatSupported).toBe(true);
-      expect(advice.suggestedAssignments).toContain("name=TEXT");
-      expect(advice.suggestedAssignments).toContain("age:=JSON");
-      expect(advice.suggestedAssignments).toContain("active:=JSON");
-      expect(advice.suggestedAssignments).toContain("tags.0=TEXT");
-      expect(
-        advice.suggestedAssignments.some((s) => s.includes("meta.<field>="))
-      ).toBe(true);
+      expect(advice.hasFlatFields).toBe(true);
+      expect(advice.requiredTokens).toEqual(["name=TEXT"]);
+      expect(advice.optionalTokens).toContain("age:=NUMBER");
+      expect(advice.optionalTokens).toContain("active:=BOOLEAN");
+      expect(advice.optionalTokens).toContain("tags.0=TEXT");
+      expect(advice.optionalTokens).toContain("meta:=JSON");
+
+      const metaField = advice.fields.find((f) => f.path === "meta");
+      expect(metaField).toBeDefined();
+      expect(metaField?.flatSafe).toBe(true);
+      expect(metaField?.token).toBe("meta:=JSON");
+      expect(metaField?.hint).toBe("大型结构建议使用 --input-file");
     });
 
     it("根模式为 array 时降级提示使用 --input-file", () => {
@@ -806,6 +850,7 @@ describe("Flat JsonValue Encoding v1", () => {
 
       const advice = buildActionInputAdvice(schema);
       expect(advice.flatSupported).toBe(false);
+      expect(advice.hasFlatFields).toBe(false);
       expect(advice.notes.some((n) => n.includes("--input-file"))).toBe(true);
     });
 
@@ -816,6 +861,7 @@ describe("Flat JsonValue Encoding v1", () => {
 
       const advice = buildActionInputAdvice(schema);
       expect(advice.flatSupported).toBe(false);
+      expect(advice.hasFlatFields).toBe(false);
       expect(advice.notes.some((n) => n.includes("--input-file"))).toBe(true);
     });
 
@@ -827,6 +873,7 @@ describe("Flat JsonValue Encoding v1", () => {
 
       const advice = buildActionInputAdvice(schema);
       expect(advice.flatSupported).toBe(false);
+      expect(advice.hasFlatFields).toBe(false);
       expect(advice.notes.some((n) => n.includes("--input-file"))).toBe(true);
     });
 
@@ -841,9 +888,51 @@ describe("Flat JsonValue Encoding v1", () => {
 
       const advice = buildActionInputAdvice(schema);
       expect(advice.flatSupported).toBe(true);
-      expect(advice.suggestedAssignments).toContain("valid_key=TEXT");
-      expect(advice.suggestedAssignments).not.toContain("user name=TEXT");
+      expect(advice.hasFlatFields).toBe(true);
+      expect(advice.optionalTokens).toContain("valid_key=TEXT");
+      expect(advice.optionalTokens).not.toContain("user name=TEXT");
+      const unsafeField = advice.fields.find((f) => f.path === "user name");
+      expect(unsafeField?.flatSafe).toBe(false);
+      expect(unsafeField?.token).toBeUndefined();
       expect(advice.notes.some((n) => n.includes("user name"))).toBe(true);
+    });
+
+    it("含有非 flat-safe required 字段时 flatSupported 为 false", () => {
+      const schema = {
+        type: "object",
+        properties: {
+          "user name": { type: "string" },
+          valid_key: { type: "string" },
+        },
+        required: ["user name"],
+      };
+
+      const advice = buildActionInputAdvice(schema);
+      expect(advice.flatSupported).toBe(false);
+      expect(advice.hasFlatFields).toBe(true);
+      expect(advice.notes.some((n) => n.includes("user name"))).toBe(true);
+    });
+
+    it("生成的命令包含完整 required 字段且无人类提示混杂", () => {
+      const formatted = formatActionDetail({
+        id: "sample.create",
+        inputSchema: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            age: { type: "number" },
+            meta: { type: "object" },
+          },
+          required: ["name", "age"],
+        },
+      });
+
+      const commandLine = formatted
+        .split("\n")
+        .find((l) => l.includes("ad run sample.create"));
+      expect(commandLine).toBeDefined();
+      expect(commandLine).toBe("  - ad run sample.create --json -- name=TEXT age:=NUMBER");
+      expect(commandLine).not.toContain("建议使用");
     });
 
     it("formatActionDetail 输出排版与 CLI 完全一致", () => {
@@ -866,7 +955,37 @@ describe("Flat JsonValue Encoding v1", () => {
       expect(formatted).toContain("title (string, 必填) - 标题");
       expect(formatted).toContain("Flat 编码指引:");
       expect(formatted).toContain("建议赋值样例 (Suggested Assignments):");
-      expect(formatted).toContain("title=TEXT");
+      expect(formatted).toContain("ad run test.action --json -- title=TEXT");
+    });
+
+    it("验证 InputError 与 FlatInputError 的继承关系与分类", () => {
+      const errJson = invalidJson("bad json");
+      const errNotFound = inputFileNotFound("missing.json");
+      const errReadFailed = inputFileReadFailed("bad.json", new Error("io error"));
+      const errConflict = inputConflict("conflict");
+
+      expect(errJson).toBeInstanceOf(InputError);
+      expect(errJson).not.toBeInstanceOf(FlatInputError);
+      expect(errNotFound).toBeInstanceOf(InputError);
+      expect(errNotFound).not.toBeInstanceOf(FlatInputError);
+      expect(errReadFailed).toBeInstanceOf(InputError);
+      expect(errReadFailed).not.toBeInstanceOf(FlatInputError);
+      expect(errConflict).toBeInstanceOf(InputError);
+      expect(errConflict).not.toBeInstanceOf(FlatInputError);
+
+      const errFlatArg = invalidFlatArgument("bad arg");
+      const errLiteral = invalidJsonLiteral("bad literal");
+      const errPath = inputPathConflict("path conflict");
+      const errLimit = flatInputLimitExceeded("limit exceeded");
+
+      expect(errFlatArg).toBeInstanceOf(FlatInputError);
+      expect(errFlatArg).toBeInstanceOf(InputError);
+      expect(errLiteral).toBeInstanceOf(FlatInputError);
+      expect(errLiteral).toBeInstanceOf(InputError);
+      expect(errPath).toBeInstanceOf(FlatInputError);
+      expect(errPath).toBeInstanceOf(InputError);
+      expect(errLimit).toBeInstanceOf(FlatInputError);
+      expect(errLimit).toBeInstanceOf(InputError);
     });
   });
 });

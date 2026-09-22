@@ -1,6 +1,5 @@
 import {
   InputError,
-  FlatInputError,
   INVALID_FLAT_ARGUMENT,
   INVALID_JSON,
   INVALID_JSON_LITERAL,
@@ -133,7 +132,7 @@ export function formatError(err: unknown): FormattedError {
     };
   }
 
-  if (err instanceof InputError || err instanceof FlatInputError) {
+  if (err instanceof InputError) {
     return {
       code: err.code,
       message: err.message,

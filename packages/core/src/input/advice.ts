@@ -10,36 +10,47 @@
 
 export const FLAT_SAFE_KEY_REGEX = /^[A-Za-z_][A-Za-z0-9_-]*$/;
 
+export const FLAT_ENCODING_GUIDELINES: readonly string[] = [
+  "字符串: path=TEXT",
+  "JSON 标量与结构: path:=JSON (例如 count:=1, enabled:=true)",
+  "数组元素: path.INDEX=... (例如 items.0=first)",
+  "提示: 复杂嵌套或大段文本建议使用 --input 或 --input-file",
+];
+
 /**
  * 单个字段的输入建议明细。
  */
 export interface ActionInputFieldAdvice {
-  /** 字段属性名 */
-  name: string;
+  /** 字段路径（属性名） */
+  path: string;
   /** 字段类型字符串 */
   type: string;
   /** 是否为必填字段 */
   required: boolean;
-  /** 字段描述信息 */
-  description?: string;
-  /** 建议赋值表达式（仅在 flatSafe 为 true 时存在） */
-  suggestedAssignment?: string;
   /** 字段名是否满足扁平编码安全规范 */
   flatSafe: boolean;
+  /** 纯粹可执行的赋值 token，如 "name=TEXT"、"age:=NUMBER"、"meta:=JSON" */
+  token?: string;
+  /** 人类说明文字，如 "大型结构建议使用 --input-file" */
+  hint?: string;
+  /** 字段描述信息 */
+  description?: string;
 }
 
 /**
  * Action 输入模式整体编码顾问分析报告。
  */
 export interface ActionInputAdvice {
-  /** 根模式是否支持扁平入参赋值 */
+  /** 根模式是否支持扁平入参赋值（仅当根模式为对象且所有 required 字段均具备 flatSafe 赋值方案时为 true） */
   flatSupported: boolean;
+  /** 是否存在至少一个可扁平化的字段 */
+  hasFlatFields: boolean;
   /** 字段明细清单 */
   fields: ActionInputFieldAdvice[];
-  /** 扁平编码全局指引清单 */
-  guidelines: string[];
-  /** 建议赋值样例清单 */
-  suggestedAssignments: string[];
+  /** 所有必填字段的纯 token 数组 */
+  requiredTokens: string[];
+  /** 可选字段的纯 token 数组 */
+  optionalTokens: string[];
   /** 结构化提示与降级说明清单 */
   notes: string[];
 }
@@ -51,19 +62,13 @@ export interface ActionInputAdvice {
  * @returns 结构化编码建议报告
  */
 export function buildActionInputAdvice(schema: unknown): ActionInputAdvice {
-  const guidelines: string[] = [
-    "字符串: path=TEXT",
-    "JSON 标量与结构: path:=JSON (例如 count:=1, enabled:=true)",
-    "数组元素: path.INDEX=... (例如 items.0=first)",
-    "提示: 复杂嵌套或大段文本建议使用 --input 或 --input-file",
-  ];
-
   if (!schema || typeof schema !== "object") {
     return {
       flatSupported: false,
+      hasFlatFields: false,
       fields: [],
-      guidelines,
-      suggestedAssignments: [],
+      requiredTokens: [],
+      optionalTokens: [],
       notes: ["根模式未声明输入字段，直接调用或使用 --input-file / --input '{}'"],
     };
   }
@@ -74,9 +79,10 @@ export function buildActionInputAdvice(schema: unknown): ActionInputAdvice {
   if (s.type !== undefined && s.type !== "object") {
     return {
       flatSupported: false,
+      hasFlatFields: false,
       fields: [],
-      guidelines,
-      suggestedAssignments: [],
+      requiredTokens: [],
+      optionalTokens: [],
       notes: [
         `根模式类型为 '${s.type}'，不支持扁平赋值，建议使用 --input-file 或 --input`,
       ],
@@ -90,18 +96,18 @@ export function buildActionInputAdvice(schema: unknown): ActionInputAdvice {
   if (propKeys.length === 0) {
     return {
       flatSupported: false,
+      hasFlatFields: false,
       fields: [],
-      guidelines,
-      suggestedAssignments: [],
+      requiredTokens: [],
+      optionalTokens: [],
       notes: ["根模式无声明属性，不支持扁平赋值，建议使用 --input-file 或 --input '{}'"],
     };
   }
 
   const fields: ActionInputFieldAdvice[] = [];
-  const suggestedAssignments: string[] = [];
+  const requiredTokens: string[] = [];
+  const optionalTokens: string[] = [];
   const notes: string[] = [];
-
-  let hasFlatSafeField = false;
 
   for (const key of propKeys) {
     const prop = properties[key] || {};
@@ -109,61 +115,89 @@ export function buildActionInputAdvice(schema: unknown): ActionInputAdvice {
     const isReq = required.includes(key);
     const isFlatSafe = FLAT_SAFE_KEY_REGEX.test(key);
 
-    let suggestion: string | undefined;
+    let token: string | undefined;
+    let hint: string | undefined;
 
     if (isFlatSafe) {
-      hasFlatSafeField = true;
       if (prop.type === "string") {
-        suggestion = `${key}=TEXT`;
-      } else if (
-        prop.type === "number" ||
-        prop.type === "integer" ||
-        prop.type === "boolean"
-      ) {
-        suggestion = `${key}:=JSON`;
+        token = `${key}=TEXT`;
+      } else if (prop.type === "number" || prop.type === "integer") {
+        token = `${key}:=NUMBER`;
+      } else if (prop.type === "boolean") {
+        token = `${key}:=BOOLEAN`;
       } else if (
         prop.type === "array" &&
         prop.items &&
         typeof prop.items === "object" &&
         prop.items.type === "string"
       ) {
-        suggestion = `${key}.0=TEXT`;
+        token = `${key}.0=TEXT`;
       } else if (
         prop.type === "array" &&
         prop.items &&
         typeof prop.items === "object" &&
-        (prop.items.type === "number" ||
-          prop.items.type === "integer" ||
-          prop.items.type === "boolean")
+        (prop.items.type === "number" || prop.items.type === "integer")
       ) {
-        suggestion = `${key}.0:=JSON`;
+        token = `${key}.0:=NUMBER`;
+      } else if (
+        prop.type === "array" &&
+        prop.items &&
+        typeof prop.items === "object" &&
+        prop.items.type === "boolean"
+      ) {
+        token = `${key}.0:=BOOLEAN`;
       } else if (prop.type === "array") {
-        suggestion = `${key}.0=... (数组元素建议使用 ${key}.0=TEXT 或 --input-file)`;
+        token = `${key}:=JSON`;
+        hint = "数组结构建议使用 --input-file";
       } else if (prop.type === "object") {
-        suggestion = `${key}.<field>=... (复杂嵌套建议使用 --input 或 --input-file)`;
+        token = `${key}:=JSON`;
+        hint = "大型结构建议使用 --input-file";
       } else {
-        suggestion = `${key}=... (复杂或未知类型建议使用 --input 或 --input-file)`;
+        token = `${key}:=JSON`;
+        hint = "复杂或未知类型建议使用 --input-file";
       }
-      suggestedAssignments.push(suggestion);
+
+      if (isReq) {
+        if (token) {
+          requiredTokens.push(token);
+        }
+      } else {
+        if (token) {
+          optionalTokens.push(token);
+        }
+      }
     } else {
+      hint = "包含非安全字符，建议使用 --input-file";
       notes.push(`属性 '${key}' 包含非安全字符，不支持扁平赋值，建议使用 --input-file`);
     }
 
     fields.push({
-      name: key,
+      path: key,
       type: typeStr,
       required: isReq,
-      description: prop.description,
-      suggestedAssignment: suggestion,
       flatSafe: isFlatSafe,
+      token,
+      hint,
+      description: prop.description,
     });
   }
 
+  const hasFlatFields = fields.some((f) => f.flatSafe && f.token !== undefined);
+
+  // 仅当根模式为对象且所有 required 字段均具备 flatSafe 赋值方案时为 true
+  const allRequiredFlatSafe = required.every((reqKey) => {
+    const f = fields.find((field) => field.path === reqKey);
+    return f !== undefined && f.flatSafe && f.token !== undefined;
+  });
+
+  const flatSupported = hasFlatFields && allRequiredFlatSafe;
+
   return {
-    flatSupported: hasFlatSafeField,
+    flatSupported,
+    hasFlatFields,
     fields,
-    guidelines,
-    suggestedAssignments,
+    requiredTokens,
+    optionalTokens,
     notes,
   };
 }
@@ -203,17 +237,18 @@ export function formatActionDetail(action: {
       for (const field of advice.fields) {
         const reqStr = field.required ? "必填" : "可选";
         const descStr = field.description ? ` - ${field.description}` : "";
-        lines.push(`  - ${field.name} (${field.type}, ${reqStr})${descStr}`);
+        const hintStr = field.hint ? ` (${field.hint})` : "";
+        lines.push(`  - ${field.path} (${field.type}, ${reqStr})${descStr}${hintStr}`);
       }
     }
 
     lines.push("\nFlat 编码指引:");
-    for (const g of advice.guidelines) {
+    for (const g of FLAT_ENCODING_GUIDELINES) {
       lines.push(`  - ${g}`);
     }
 
     lines.push("\n建议赋值样例 (Suggested Assignments):");
-    if (!advice.flatSupported || advice.suggestedAssignments.length === 0) {
+    if (!advice.flatSupported) {
       if (advice.notes.length > 0) {
         for (const note of advice.notes) {
           lines.push(`  - (${note})`);
@@ -222,9 +257,14 @@ export function formatActionDetail(action: {
         lines.push("  - (无输入字段，直接调用或使用 --input '{}')");
       }
     } else {
-      for (const item of advice.suggestedAssignments) {
-        lines.push(`  - ${item}`);
+      if (advice.requiredTokens.length > 0) {
+        lines.push(`  - ad run ${action.id} --json -- ${advice.requiredTokens.join(" ")}`);
+      } else if (advice.optionalTokens.length > 0) {
+        lines.push(`  - ad run ${action.id} --json -- ${advice.optionalTokens[0]}`);
+      } else {
+        lines.push(`  - ad run ${action.id} --json`);
       }
+
       for (const note of advice.notes) {
         lines.push(`  - [注意] ${note}`);
       }

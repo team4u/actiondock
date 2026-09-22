@@ -12,7 +12,7 @@ describe("Iterative JsonValue Validator", () => {
       root = { next: root };
     }
 
-    const res = validateJsonValue(root);
+    const res = validateJsonValue(root, { maxDepth: 25_000 });
     expect(res.valid).toBe(true);
   });
 
@@ -22,8 +22,29 @@ describe("Iterative JsonValue Validator", () => {
       arr = [arr];
     }
 
-    const res = validateJsonValue(arr);
+    const res = validateJsonValue(arr, { maxDepth: 25_000 });
     expect(res.valid).toBe(true);
+  });
+
+  it("默认最大深度限制 256：深度 256 通过，深度 257 拦截", () => {
+    expect(DEFAULT_MAX_JSON_DEPTH).toBe(256);
+
+    let obj256: any = {};
+    for (let i = 0; i < 256; i++) {
+      obj256 = { inner: obj256 };
+    }
+    const res256 = validateJsonValue(obj256);
+    expect(res256.valid).toBe(true);
+
+    let obj257: any = {};
+    for (let i = 0; i < 257; i++) {
+      obj257 = { inner: obj257 };
+    }
+    const res257 = validateJsonValue(obj257);
+    expect(res257.valid).toBe(false);
+    if (!res257.valid) {
+      expect(res257.reason).toContain("Max JSON depth limit (256) exceeded");
+    }
   });
 
   it("支持自定义最大深度限制并拦截超限结构", () => {

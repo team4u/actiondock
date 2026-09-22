@@ -9,6 +9,7 @@ import {
 import { decodeFlatInput } from "./flat-decode";
 import type { FlatParserOptions } from "./flat-parser";
 import type { FlatMaterializerOptions } from "./flat-materializer";
+import { assertJsonValue, DEFAULT_MAX_JSON_DEPTH } from "../json/value-validator";
 
 /**
  * 剔除 UTF-8 文本起始处的 BOM 字节标记（\uFEFF）。
@@ -55,7 +56,9 @@ export interface ResolveActionInputOptions {
 export function parseJson(text: string, source: string): JsonValue {
   const cleaned = stripBom(text);
   try {
-    return JSON.parse(cleaned);
+    const parsed = JSON.parse(cleaned);
+    assertJsonValue(parsed, { maxDepth: DEFAULT_MAX_JSON_DEPTH });
+    return parsed;
   } catch (err: unknown) {
     throw invalidJson(
       `Invalid JSON input from ${source}: ${err instanceof Error ? err.message : String(err)}`,

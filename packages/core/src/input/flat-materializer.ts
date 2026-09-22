@@ -2,6 +2,7 @@ import type { JsonValue } from "@actiondock/sdk";
 import { inputPathConflict, flatInputLimitExceeded } from "./flat-errors";
 import { DEFAULT_MAX_MATERIALIZED_SIZE_BYTES } from "./flat-parser";
 import type { FlatAssignment } from "./flat-parser";
+import { validateJsonValue } from "../json/value-validator";
 
 /**
  * 节点状态枚举（四态节点模型）。
@@ -226,6 +227,14 @@ export function materializeFlatInput(
   }
 
   const result = materializeNode(root);
+
+  const check = validateJsonValue(result);
+  if (!check.valid) {
+    throw flatInputLimitExceeded(
+      `Materialized input validation failed: ${check.reason}`,
+      { reason: check.reason }
+    );
+  }
 
   const maxMaterializedSizeBytes =
     options?.maxMaterializedSizeBytes ?? DEFAULT_MAX_MATERIALIZED_SIZE_BYTES;
