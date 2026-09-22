@@ -243,6 +243,9 @@ export const INPUT_CLOSED = "INPUT_CLOSED";
 /** 扁平入参赋值表达式格式非法 */
 export const INVALID_FLAT_ARGUMENT = "INVALID_FLAT_ARGUMENT";
 
+/** 完整 JSON 文档解析失败 */
+export const INVALID_JSON = "INVALID_JSON";
+
 /** JSON 字面量解析失败或包含非有限数值 */
 export const INVALID_JSON_LITERAL = "INVALID_JSON_LITERAL";
 
@@ -254,6 +257,12 @@ export const FLAT_INPUT_LIMIT_EXCEEDED = "FLAT_INPUT_LIMIT_EXCEEDED";
 
 /** 输入源互斥冲突 */
 export const INPUT_CONFLICT = "INPUT_CONFLICT";
+
+/** 输入文件不存在 */
+export const INPUT_FILE_NOT_FOUND = "INPUT_FILE_NOT_FOUND";
+
+/** 输入文件或流读取失败 */
+export const INPUT_FILE_READ_FAILED = "INPUT_FILE_READ_FAILED";
 
 /**
  * 进程领域结构化异常类。

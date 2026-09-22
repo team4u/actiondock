@@ -20,5 +20,6 @@ export * from "./target";
 export * from "./ipc";
 export * from "./process";
 export * from "./input";
+export * from "./json";
 export type { ModuleLoader } from "./runtime";
 

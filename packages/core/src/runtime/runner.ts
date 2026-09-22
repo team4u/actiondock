@@ -69,56 +69,14 @@ export {
   ACTION_CYCLE_DETECTED,
   ACTION_MAX_DEPTH_EXCEEDED,
 } from "../errors";
+import {
+  validateJsonValue,
+  assertJsonValue,
+  type ValidateJsonOptions,
+} from "../json/value-validator";
 
-/**
- * 校验值是否为合法的 JSON 兼容结构，严禁 NaN、Infinity、循环引用及不可序列化类型。
- *
- * 环路检测采用「当前递归路径栈」语义：对象仅在自身子树遍历期间保持标记，
- * 子树遍历完成后立即移除，从而正确放行共享子对象的有向无环结构（如 {a: shared, b: shared}）。
- */
-export function validateJsonValue(
-  val: unknown,
-  stack = new WeakSet<object>()
-): { valid: true } | { valid: false; reason: string } {
-  if (val === null || typeof val === "boolean" || typeof val === "string") {
-    return { valid: true };
-  }
-  if (typeof val === "number") {
-    if (!Number.isFinite(val) || Number.isNaN(val)) {
-      return { valid: false, reason: `Number is non-finite or NaN (${val})` };
-    }
-    return { valid: true };
-  }
-  if (typeof val === "undefined" || typeof val === "function" || typeof val === "symbol" || typeof val === "bigint") {
-    return { valid: false, reason: `Unsupported JSON type '${typeof val}'` };
-  }
-  if (typeof val === "object") {
-    if (stack.has(val as object)) {
-      return { valid: false, reason: "Circular reference detected in object structure" };
-    }
-    stack.add(val as object);
-    try {
-      if (Array.isArray(val)) {
-        for (const item of val) {
-          const res = validateJsonValue(item, stack);
-          if (!res.valid) return res;
-        }
-        return { valid: true };
-      }
-      for (const v of Object.values(val as Record<string, unknown>)) {
-        if (v !== undefined) {
-          const res = validateJsonValue(v, stack);
-          if (!res.valid) return res;
-        }
-      }
-      return { valid: true };
-    } finally {
-      // 无论正常返回还是提前返回，均须将当前对象移出路径栈，避免祖先对象被误判为环路
-      stack.delete(val as object);
-    }
-  }
-  return { valid: true };
-}
+// 复用统一迭代式 JsonValue 校验器，杜绝深层递归栈溢出，并保持既有导出兼容
+export { validateJsonValue, assertJsonValue, type ValidateJsonOptions };
 
 /**
  * 跨包运行上下文解析结果契约。

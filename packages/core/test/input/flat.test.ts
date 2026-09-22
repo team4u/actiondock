@@ -9,12 +9,16 @@ import {
   materializeFlatInput,
   resolveActionInput,
   stripBom,
+  InputError,
   FlatInputError,
   INVALID_FLAT_ARGUMENT,
+  INVALID_JSON,
   INVALID_JSON_LITERAL,
   INPUT_PATH_CONFLICT,
   FLAT_INPUT_LIMIT_EXCEEDED,
   INPUT_CONFLICT,
+  buildActionInputAdvice,
+  formatActionDetail,
 } from "../../src/input";
 
 describe("Flat JsonValue Encoding v1", () => {
@@ -626,6 +630,243 @@ describe("Flat JsonValue Encoding v1", () => {
       } catch (err: any) {
         expect(err.code).toBe(INVALID_FLAT_ARGUMENT);
       }
+    });
+  });
+
+  describe("错误信息脱敏（避免回显完整参数值）", () => {
+    it("路径冲突异常严禁在错误信息与 details 中回显敏感参数明文", () => {
+      const secret = "super_secret_api_key_123456";
+      let caughtErr: any;
+      try {
+        decodeFlatInput([`auth.token=${secret}`, `auth.token.secret=true`]);
+      } catch (err: any) {
+        caughtErr = err;
+      }
+      expect(caughtErr).toBeDefined();
+      expect(caughtErr.code).toBe(INPUT_PATH_CONFLICT);
+      expect(caughtErr.message).not.toContain(secret);
+      expect(JSON.stringify(caughtErr.details || {})).not.toContain(secret);
+      expect(caughtErr.details.path).toBe("auth.token");
+      expect(caughtErr.details.valueLength).toBe(Buffer.byteLength("true", "utf8"));
+    });
+
+    it("JSON 字面量解析失败严禁在错误信息与 details 中回显敏感内容", () => {
+      const sensitiveToken = "my_sensitive_unquoted_payload";
+      let caughtErr: any;
+      try {
+        decodeFlatInput([`password:=${sensitiveToken}`]);
+      } catch (err: any) {
+        caughtErr = err;
+      }
+      expect(caughtErr).toBeDefined();
+      expect(caughtErr.code).toBe(INVALID_JSON_LITERAL);
+      expect(caughtErr.message).not.toContain(sensitiveToken);
+      expect(JSON.stringify(caughtErr.details || {})).not.toContain(sensitiveToken);
+      expect(caughtErr.details.path).toBe("password");
+      expect(caughtErr.details.operator).toBe(":=");
+      expect(caughtErr.details.valueLength).toBe(Buffer.byteLength(sensitiveToken, "utf8"));
+    });
+
+    it("空路径异常严禁在 details 中回显未经脱敏的参数明文", () => {
+      const sensitiveVal = "super_secret_unassociated_value";
+      let caughtErr: any;
+      try {
+        decodeFlatInput([`=${sensitiveVal}`]);
+      } catch (err: any) {
+        caughtErr = err;
+      }
+      expect(caughtErr).toBeDefined();
+      expect(caughtErr.code).toBe(INVALID_FLAT_ARGUMENT);
+      expect(caughtErr.message).not.toContain(sensitiveVal);
+      expect(JSON.stringify(caughtErr.details || {})).not.toContain(sensitiveVal);
+    });
+  });
+
+  describe("INVALID_JSON 与 INVALID_JSON_LITERAL 独立断言", () => {
+    it("--input 完整文档解析失败抛出 INVALID_JSON", async () => {
+      await expect(resolveActionInput({ input: "{bad json}" })).rejects.toThrow(
+        InputError
+      );
+      try {
+        await resolveActionInput({ input: "{bad json}" });
+      } catch (err: any) {
+        expect(err.code).toBe(INVALID_JSON);
+      }
+    });
+
+    it("--input-file 完整文档解析失败抛出 INVALID_JSON", async () => {
+      const testFile = join(tmpdir(), `test-invalid-${Date.now()}.json`);
+      writeFileSync(testFile, "invalid json document", "utf8");
+      try {
+        await expect(resolveActionInput({ inputFile: testFile })).rejects.toThrow(
+          InputError
+        );
+        try {
+          await resolveActionInput({ inputFile: testFile });
+        } catch (err: any) {
+          expect(err.code).toBe(INVALID_JSON);
+        }
+      } finally {
+        unlinkSync(testFile);
+      }
+    });
+
+    it("stdin 完整文档解析失败抛出 INVALID_JSON", async () => {
+      const stream = Readable.from(["not a valid json"]);
+      await expect(
+        resolveActionInput({ inputFile: "-", stdin: stream })
+      ).rejects.toThrow(InputError);
+      try {
+        const stream2 = Readable.from(["not a valid json"]);
+        await resolveActionInput({ inputFile: "-", stdin: stream2 });
+      } catch (err: any) {
+        expect(err.code).toBe(INVALID_JSON);
+      }
+    });
+
+    it("仅 path:=json 字面量解析失败抛出 INVALID_JSON_LITERAL", () => {
+      expect(() => decodeFlatInput(["num:=not_json"])).toThrow(FlatInputError);
+      try {
+        decodeFlatInput(["num:=not_json"]);
+      } catch (err: any) {
+        expect(err.code).toBe(INVALID_JSON_LITERAL);
+      }
+    });
+  });
+
+  describe("空数组安全处理", () => {
+    it("空 flatArgs 数组不会与 input 发生互斥冲突", async () => {
+      const res = await resolveActionInput({ flatArgs: [], input: '{"hello":"world"}' });
+      expect(res).toEqual({ hello: "world" });
+    });
+
+    it("空 flatArgs 数组不会与 inputFile 发生互斥冲突", async () => {
+      const testFile = join(tmpdir(), `test-empty-flat-${Date.now()}.json`);
+      writeFileSync(testFile, '{"fromFile":true}', "utf8");
+      try {
+        const res = await resolveActionInput({ flatArgs: [], inputFile: testFile });
+        expect(res).toEqual({ fromFile: true });
+      } finally {
+        unlinkSync(testFile);
+      }
+    });
+  });
+
+  describe("聚合预算预检与字节级资源限制", () => {
+    it("拦截累计原始输入总字节数超限", () => {
+      expect(() =>
+        parseFlatAssignments(["a=123", "b=456"], { maxTotalRawBytes: 5 })
+      ).toThrow(FlatInputError);
+      try {
+        parseFlatAssignments(["a=123", "b=456"], { maxTotalRawBytes: 5 });
+      } catch (err: any) {
+        expect(err.code).toBe(FLAT_INPUT_LIMIT_EXCEEDED);
+        expect(err.message).toContain("Total raw input bytes");
+      }
+    });
+  });
+
+  describe("编码顾问（Encoding Advisor）与格式化渲染", () => {
+    it("根模式为 object 且有合法属性时返回 flatSupported: true 并生成正确建议", () => {
+      const schema = {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "用户名称" },
+          age: { type: "number", description: "年龄" },
+          active: { type: "boolean", description: "是否激活" },
+          tags: {
+            type: "array",
+            items: { type: "string" },
+            description: "标签列表",
+          },
+          meta: {
+            type: "object",
+            description: "元数据",
+          },
+        },
+        required: ["name"],
+      };
+
+      const advice = buildActionInputAdvice(schema);
+      expect(advice.flatSupported).toBe(true);
+      expect(advice.suggestedAssignments).toContain("name=TEXT");
+      expect(advice.suggestedAssignments).toContain("age:=JSON");
+      expect(advice.suggestedAssignments).toContain("active:=JSON");
+      expect(advice.suggestedAssignments).toContain("tags.0=TEXT");
+      expect(
+        advice.suggestedAssignments.some((s) => s.includes("meta.<field>="))
+      ).toBe(true);
+    });
+
+    it("根模式为 array 时降级提示使用 --input-file", () => {
+      const schema = {
+        type: "array",
+        items: { type: "string" },
+      };
+
+      const advice = buildActionInputAdvice(schema);
+      expect(advice.flatSupported).toBe(false);
+      expect(advice.notes.some((n) => n.includes("--input-file"))).toBe(true);
+    });
+
+    it("根模式为基本类型时降级提示使用 --input-file", () => {
+      const schema = {
+        type: "string",
+      };
+
+      const advice = buildActionInputAdvice(schema);
+      expect(advice.flatSupported).toBe(false);
+      expect(advice.notes.some((n) => n.includes("--input-file"))).toBe(true);
+    });
+
+    it("根模式为无声明属性对象时降级提示使用 --input-file", () => {
+      const schema = {
+        type: "object",
+        properties: {},
+      };
+
+      const advice = buildActionInputAdvice(schema);
+      expect(advice.flatSupported).toBe(false);
+      expect(advice.notes.some((n) => n.includes("--input-file"))).toBe(true);
+    });
+
+    it("属性名包含非安全字符时跳过扁平建议并添加提示", () => {
+      const schema = {
+        type: "object",
+        properties: {
+          "user name": { type: "string" },
+          "valid_key": { type: "string" },
+        },
+      };
+
+      const advice = buildActionInputAdvice(schema);
+      expect(advice.flatSupported).toBe(true);
+      expect(advice.suggestedAssignments).toContain("valid_key=TEXT");
+      expect(advice.suggestedAssignments).not.toContain("user name=TEXT");
+      expect(advice.notes.some((n) => n.includes("user name"))).toBe(true);
+    });
+
+    it("formatActionDetail 输出排版与 CLI 完全一致", () => {
+      const formatted = formatActionDetail({
+        id: "test.action",
+        packageId: "test.pkg",
+        description: "测试动作",
+        inputSchema: {
+          type: "object",
+          properties: {
+            title: { type: "string", description: "标题" },
+          },
+          required: ["title"],
+        },
+      });
+
+      expect(formatted).toContain("Action: test.action");
+      expect(formatted).toContain("Package: test.pkg");
+      expect(formatted).toContain("Input Schema 字段明细:");
+      expect(formatted).toContain("title (string, 必填) - 标题");
+      expect(formatted).toContain("Flat 编码指引:");
+      expect(formatted).toContain("建议赋值样例 (Suggested Assignments):");
+      expect(formatted).toContain("title=TEXT");
     });
   });
 });

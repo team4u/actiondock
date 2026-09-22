@@ -8,6 +8,7 @@ import {
   loadProjectConfig,
   saveManifest,
   writeActionTypes,
+  buildActionInputAdvice,
 } from "@actiondock/core";
 import type { Command } from "commander";
 import { ExecutionError, notInProjectError } from "../../errors";
@@ -238,9 +239,18 @@ ${returnBody}
 
     writeStdout(`[OK] Created Action '${id}' at ${targetFullFile}`, context);
     writeStdout(`\nTo run this action:`, context);
-    writeStdout(`  ad run ${id} --json -- key=value`, context);
-    writeStdout(`  ad run ${id} --json -- count:=1`, context);
+
+    const advice = buildActionInputAdvice(inputSchema);
+    if (advice.flatSupported && advice.suggestedAssignments.length > 0) {
+      for (const item of advice.suggestedAssignments) {
+        writeStdout(`  ad run ${id} --json -- ${item}`, context);
+      }
+    } else {
+      writeStdout(`  ad run ${id} --json`, context);
+    }
     writeStdout(`  ad run ${id} --json --input-file input.json`, context);
+    writeStdout(`\nTo inspect parameter contract and advice:`, context);
+    writeStdout(`  ad describe ${id}`, context);
   } catch (err: any) {
     if (err instanceof ExecutionError) throw err;
     throw new ExecutionError(err.message);

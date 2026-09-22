@@ -12,7 +12,7 @@ import {
   stripBom,
 } from "../src/utils/input";
 import { ArgumentError } from "../src/errors";
-import { FlatInputError } from "@actiondock/core";
+import { FlatInputError, InputError } from "@actiondock/core";
 
 const cliPath = resolve(import.meta.dirname, "../bin/ad.js");
 
@@ -54,21 +54,21 @@ describe("CLI Action Input Resolution - Unit Tests", () => {
     expect(parseJson("\uFEFF{\"name\":\"WithBOM\"}", "--input")).toEqual({ name: "WithBOM" });
   });
 
-  it("parseJson throws FlatInputError with INVALID_JSON_LITERAL code on invalid JSON", () => {
-    expect(() => parseJson("{bad json}", "--input")).toThrow(FlatInputError);
+  it("parseJson throws InputError with INVALID_JSON code on invalid JSON", () => {
+    expect(() => parseJson("{bad json}", "--input")).toThrow(InputError);
     try {
       parseJson("{bad json}", "--input");
     } catch (err: any) {
-      expect(err).toBeInstanceOf(FlatInputError);
-      expect(err.code).toBe("INVALID_JSON_LITERAL");
+      expect(err).toBeInstanceOf(InputError);
+      expect(err.code).toBe("INVALID_JSON");
       expect(err.message).toContain("Invalid JSON input from --input");
     }
 
     try {
       parseJson("", "input.json");
     } catch (err: any) {
-      expect(err).toBeInstanceOf(FlatInputError);
-      expect(err.code).toBe("INVALID_JSON_LITERAL");
+      expect(err).toBeInstanceOf(InputError);
+      expect(err.code).toBe("INVALID_JSON");
       expect(err.message).toContain("Invalid JSON input from input.json");
     }
   });
@@ -244,17 +244,17 @@ export default defineAction(async (input: any) => {
   });
 
   // 6. 非法 inline JSON
-  it("rejects invalid inline JSON with exit code 2 and INVALID_JSON_LITERAL code", () => {
+  it("rejects invalid inline JSON with exit code 2 and INVALID_JSON code", () => {
     const proc = runCli(["run", "test.echo", "--input", "{\"invalid\":", "--json"], tempDir);
     expect(proc.exitCode).toBe(2);
     const res = JSON.parse(proc.stdout.toString());
     expect(res.ok).toBe(false);
-    expect(res.error.code).toBe("INVALID_JSON_LITERAL");
+    expect(res.error.code).toBe("INVALID_JSON");
     expect(res.error.message).toContain("Invalid JSON input from --input");
   });
 
   // 7. 非法文件 JSON
-  it("rejects invalid JSON file with exit code 2 and INVALID_JSON_LITERAL code", () => {
+  it("rejects invalid JSON file with exit code 2 and INVALID_JSON code", () => {
     const filePath = join(tempDir, "bad.json");
     writeFileSync(filePath, "{\ninvalid json here\n", "utf-8");
 
@@ -262,17 +262,17 @@ export default defineAction(async (input: any) => {
     expect(proc.exitCode).toBe(2);
     const res = JSON.parse(proc.stdout.toString());
     expect(res.ok).toBe(false);
-    expect(res.error.code).toBe("INVALID_JSON_LITERAL");
+    expect(res.error.code).toBe("INVALID_JSON");
     expect(res.error.message).toContain(`Invalid JSON input from ${filePath}`);
   });
 
   // 8. 非法 stdin JSON
-  it("rejects invalid JSON from stdin with exit code 2 and INVALID_JSON_LITERAL code", () => {
+  it("rejects invalid JSON from stdin with exit code 2 and INVALID_JSON code", () => {
     const proc = runCli(["run", "test.echo", "--input-file", "-", "--json"], tempDir, "{not json}");
     expect(proc.exitCode).toBe(2);
     const res = JSON.parse(proc.stdout.toString());
     expect(res.ok).toBe(false);
-    expect(res.error.code).toBe("INVALID_JSON_LITERAL");
+    expect(res.error.code).toBe("INVALID_JSON");
     expect(res.error.message).toContain("Invalid JSON input from stdin");
   });
 
@@ -352,7 +352,7 @@ export default defineAction(async (input: any) => {
   });
 
   // 13. 空文件
-  it("rejects empty file with exit code 2 and INVALID_JSON_LITERAL error", () => {
+  it("rejects empty file with exit code 2 and INVALID_JSON error", () => {
     const emptyFile = join(tempDir, "empty.json");
     writeFileSync(emptyFile, "", "utf-8");
 
@@ -360,17 +360,17 @@ export default defineAction(async (input: any) => {
     expect(proc.exitCode).toBe(2);
     const res = JSON.parse(proc.stdout.toString());
     expect(res.ok).toBe(false);
-    expect(res.error.code).toBe("INVALID_JSON_LITERAL");
+    expect(res.error.code).toBe("INVALID_JSON");
     expect(res.error.message).toContain(`Invalid JSON input from ${emptyFile}`);
   });
 
   // 14. 空 stdin
-  it("rejects empty stdin with exit code 2 and INVALID_JSON_LITERAL error", () => {
+  it("rejects empty stdin with exit code 2 and INVALID_JSON error", () => {
     const proc = runCli(["run", "test.echo", "--input-file", "-", "--json"], tempDir, "");
     expect(proc.exitCode).toBe(2);
     const res = JSON.parse(proc.stdout.toString());
     expect(res.ok).toBe(false);
-    expect(res.error.code).toBe("INVALID_JSON_LITERAL");
+    expect(res.error.code).toBe("INVALID_JSON");
     expect(res.error.message).toContain("Invalid JSON input from stdin");
   });
 

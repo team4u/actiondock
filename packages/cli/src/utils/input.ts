@@ -4,4 +4,8 @@ export {
   parseJson,
   readStdin,
   stripBom,
+  InputError,
+  FlatInputError,
+  buildActionInputAdvice,
+  formatActionDetail,
 } from "@actiondock/core";

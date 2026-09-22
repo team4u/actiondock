@@ -1,5 +1,5 @@
 import type { RunRecord } from "@actiondock/sdk";
-import type { RegistryStatusReport } from "@actiondock/core";
+import { formatActionDetail, type RegistryStatusReport } from "@actiondock/core";
 import type { Envelope, ProjectDetailInfo, AggregatedPackage, EnvCheckItem, CliContext } from "./types";
 import { formatError } from "./errors";
 
@@ -318,13 +318,7 @@ export function renderActionList(
 
 /**
  * 格式化渲染 Action 详情（编码顾问 Encoding Advisor）。
- *
- * 遵循规范第 39 节要求：
- * - 呈现输入模式字段明细（字段名、类型、是否必填、描述）。
- * - 呈现 Flat 编码指引（string 为 path=TEXT，JSON 为 path:=JSON，数组元素为 path.INDEX=...）。
- * - 基于 inputSchema 字段类型输出 Suggested 赋值示例。
- * - 提示复杂结构使用 --input 或 --input-file。
- * - 遵循规范第 40、41 节，不生成动态可执行命令，仅将样例作为数据展示。
+ * 统一复用 core 下沉的 formatActionDetail 实现，与独立分发器保持完全一致。
  */
 export function renderActionDetail(action: {
   id: string;
@@ -334,75 +328,7 @@ export function renderActionDetail(action: {
   inputSchema?: unknown;
   outputSchema?: unknown;
 }): string {
-  const lines: string[] = [];
-  lines.push(`Action:      ${action.id}`);
-  if (action.packageId) {
-    const rootDesc = action.projectRoot ? ` (${action.projectRoot})` : "";
-    lines.push(`Package:     ${action.packageId}${rootDesc}`);
-  }
-  if (action.description) {
-    lines.push(`Description: ${action.description}`);
-  }
-
-  // 1. 输入模式字段明细
-  if (action.inputSchema && typeof action.inputSchema === "object") {
-    const schema = action.inputSchema as Record<string, any>;
-    const properties = (schema.properties || {}) as Record<string, any>;
-    const required = Array.isArray(schema.required) ? (schema.required as string[]) : [];
-    const propKeys = Object.keys(properties);
-
-    lines.push("\nInput Schema 字段明细:");
-    if (propKeys.length === 0) {
-      lines.push("  - 无声明字段属性");
-    } else {
-      for (const key of propKeys) {
-        const prop = properties[key] || {};
-        const typeStr = prop.type ? String(prop.type) : "any";
-        const reqStr = required.includes(key) ? "必填" : "可选";
-        const descStr = prop.description ? ` - ${prop.description}` : "";
-        lines.push(`  - ${key} (${typeStr}, ${reqStr})${descStr}`);
-      }
-    }
-
-    // 2. Flat 编码指引
-    lines.push("\nFlat 编码指引:");
-    lines.push("  - 字符串: path=TEXT");
-    lines.push("  - JSON 标量与结构: path:=JSON (例如 count:=1, enabled:=true)");
-    lines.push("  - 数组元素: path.INDEX=... (例如 items.0=first)");
-    lines.push("  - 提示: 复杂嵌套或大段文本建议使用 --input 或 --input-file");
-
-    // 3. 建议赋值样例（遵循规范第 40、41 节，不生成动态可执行命令，仅将样例作为数据展示）
-    lines.push("\n建议赋值样例 (Suggested Assignments):");
-    if (propKeys.length === 0) {
-      lines.push("  - (无输入字段，直接调用或使用 --input '{}')");
-    } else {
-      for (const key of propKeys) {
-        const prop = properties[key] || {};
-        const type = prop.type;
-        if (type === "string") {
-          lines.push(`  - ${key}=value`);
-        } else if (type === "number" || type === "integer") {
-          lines.push(`  - ${key}:=1`);
-        } else if (type === "boolean") {
-          lines.push(`  - ${key}:=true`);
-        } else if (type === "array") {
-          lines.push(`  - ${key}.0=item`);
-        } else if (type === "object") {
-          lines.push(`  - ${key}.field=value`);
-        } else {
-          lines.push(`  - ${key}=value`);
-        }
-      }
-    }
-  } else {
-    lines.push("\nInput Schema: 无");
-  }
-
-  if (action.outputSchema) {
-    lines.push("\nOutput Schema:");
-    lines.push(JSON.stringify(action.outputSchema, null, 2));
-  }
-  return lines.join("\n");
+  return formatActionDetail(action);
 }
 
 /**

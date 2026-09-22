@@ -14,6 +14,7 @@ import {
   INVALID_JSON_LITERAL,
   INPUT_PATH_CONFLICT,
   FLAT_INPUT_LIMIT_EXCEEDED,
+  formatActionDetail,
 } from "../input";
 import { normalizeActionCollection } from "./action-collection";
 import { parseDuration } from "../utils";
@@ -345,15 +346,7 @@ export class StandaloneDispatcher {
     if (isJson) {
       this.writeOut(JSON.stringify(detail, null, 2));
     } else {
-      let text = `Action: ${action.id}\n`;
-      if (action.description) text += `Description: ${action.description}\n`;
-      if (action.inputSchema) {
-        text += `\nInput Schema:\n${JSON.stringify(action.inputSchema, null, 2)}\n`;
-      }
-      if (action.outputSchema) {
-        text += `\nOutput Schema:\n${JSON.stringify(action.outputSchema, null, 2)}\n`;
-      }
-      this.writeOut(text.trimEnd());
+      this.writeOut(formatActionDetail(detail));
     }
     return ExitCode.SUCCESS;
   }
@@ -467,6 +460,7 @@ export class StandaloneDispatcher {
               error: {
                 code: err?.code || "INVALID_ARGUMENT",
                 message: err?.message || String(err),
+                ...(err?.details !== undefined ? { details: err.details } : {}),
               },
             },
             null,

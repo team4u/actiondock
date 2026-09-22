@@ -1,6 +1,7 @@
 import { basename } from "node:path";
 import type { ActionSpec } from "../app/types";
 import type { PlaybookDefinition, ProjectConfig } from "../project/types";
+import { buildActionInputAdvice } from "../input/advice";
 
 export type SkillActionItem =
   | ActionSpec
@@ -126,6 +127,15 @@ export function generateSourceSkillMd(
   const pkgId = config.id;
   const firstAction = actions[0]?.id || "sample.greet";
 
+  const firstActionItem = actions.find((a) => a.id === firstAction) || actions[0];
+  const advice = firstActionItem?.inputSchema
+    ? buildActionInputAdvice(firstActionItem.inputSchema)
+    : undefined;
+  const sampleFlatArgs =
+    advice && advice.flatSupported && advice.suggestedAssignments.length > 0
+      ? advice.suggestedAssignments.slice(0, 2).map((s) => `ad run ${pkgId}/${firstAction} --json -- ${s}`).join("\n")
+      : `ad run ${pkgId}/${firstAction} --json -- <param>=<value>`;
+
   const playbookSection = renderPlaybookSectionMarkdown(playbooks, config.playbooksDir || "playbooks");
   const actionListMd = renderActionListMarkdown(actions, { packageId: pkgId });
 
@@ -164,14 +174,18 @@ ad describe ${pkgId}/${firstAction}
 
 为避免多技能之间的 Action ID 命名冲突，建议统一使用带有 Package 前缀的完全限定 ID。
 
+推荐在执行前调用 describe 命令调阅确切参数契约：
+
+\`\`\`bash
+# 调阅参数契约与建议赋值样例
+ad describe ${pkgId}/${firstAction}
+\`\`\`
+
 推荐标准调用格式（使用 \`--\` 传递扁平参数赋值）：
 
 \`\`\`bash
-# 字符串赋值
-ad run ${pkgId}/${firstAction} --json -- key=value
-
-# 标量类型赋值（数值、布尔值等）
-ad run ${pkgId}/${firstAction} --json -- count:=2
+# 依据参数契约传递赋值
+${sampleFlatArgs}
 \`\`\`
 
 复杂或大段输入使用 \`--input-file\` 传递：
@@ -190,7 +204,7 @@ ad run ${pkgId}/${firstAction} --json --input-file /tmp/input.json
 > 若工作目录已位于本技能根目录，亦可直接免 link 执行：
 > \`\`\`bash
 > cd <skill_root>
-> ad run <action-id> --json -- key=value
+> ad run <action-id> --json
 > \`\`\`
 
 ### 结构化响应解析
@@ -287,6 +301,15 @@ export function generateStandaloneSkillMd(
   const { cleanName, desc } = getCleanSkillMetadata(config);
   const firstAction = actions[0]?.id || "sample.greet";
 
+  const firstActionItem = actions.find((a) => a.id === firstAction) || actions[0];
+  const advice = firstActionItem?.inputSchema
+    ? buildActionInputAdvice(firstActionItem.inputSchema)
+    : undefined;
+  const sampleFlatArgs =
+    advice && advice.flatSupported && advice.suggestedAssignments.length > 0
+      ? advice.suggestedAssignments.slice(0, 2).map((s) => `${binaryRelPath} run ${firstAction} --json -- ${s}`).join("\n")
+      : `${binaryRelPath} run ${firstAction} --json -- <param>=<value>`;
+
   const playbookSection = renderPlaybookSectionMarkdown(playbooks, config.playbooksDir || "playbooks");
   const actionListMd = renderActionListMarkdown(actions);
 
@@ -310,14 +333,18 @@ ${binaryRelPath} describe ${firstAction}
 
 ### 执行 Action
 
+推荐在执行前调用 describe 命令调阅确切参数契约：
+
+\`\`\`bash
+# 调阅参数契约与建议赋值样例
+${binaryRelPath} describe ${firstAction}
+\`\`\`
+
 推荐标准调用格式（使用 \`--\` 传递扁平参数赋值）：
 
 \`\`\`bash
-# 字符串赋值
-${binaryRelPath} run ${firstAction} --json -- key=value
-
-# 标量类型赋值（数值、布尔值等）
-${binaryRelPath} run ${firstAction} --json -- count:=2
+# 依据参数契约传递赋值
+${sampleFlatArgs}
 \`\`\`
 
 复杂或大段输入使用 \`--input-file\` 传递：
@@ -589,14 +616,18 @@ ${playbookEntries.join("\n")}
 
   const sInvoke = `## 标准调用命令
  
+推荐在执行前调用 describe 命令调阅确切参数契约：
+
+\`\`\`bash
+# 调阅参数契约与建议赋值样例
+ad describe ${sampleActionId}
+\`\`\`
+
 推荐标准调用格式（使用 \`--\` 传递扁平参数赋值）：
  
 \`\`\`bash
-# 字符串赋值
-ad run ${sampleActionId} --json -- key=value
- 
-# 标量类型赋值（数值、布尔值等）
-ad run ${sampleActionId} --json -- count:=2
+# 依据参数契约传递赋值
+ad run ${sampleActionId} --json -- <param>=<value>
 \`\`\`
  
 复杂或大段输入使用 \`--input-file\` 传递：

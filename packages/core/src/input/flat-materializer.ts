@@ -15,7 +15,6 @@ export const NodeState = {
 
 export type NodeState = (typeof NodeState)[keyof typeof NodeState];
 
-
 /**
  * 物化配置选项。
  */
@@ -86,6 +85,9 @@ function materializeNode(node: IntermediateNode): JsonValue {
 /**
  * 将扁平赋值表达式列表物化为标准 JSON 值对象。
  *
+ * 安全规范：
+ * - 错误信息与 details 中严禁回显原始 raw、rawValue 或完整 token，仅保留 path、operator、valueLength。
+ *
  * @param assignments 扁平赋值表达式列表
  * @param options 物化配置选项
  * @returns 物化后的 JSON 对象
@@ -97,12 +99,13 @@ export function materializeFlatInput(
   const root = createNode("", NodeState.OBJECT);
 
   for (const assignment of assignments) {
-    const { path, value, raw } = assignment;
+    const { path, value, operator, rawValue } = assignment;
+    const valueLength = Buffer.byteLength(rawValue, "utf8");
 
     if (path.length === 0) {
       throw inputPathConflict(
-        `Cannot assign value directly to root object: "${raw}"`,
-        { raw }
+        `Cannot assign value directly to root object`,
+        { operator, valueLength }
       );
     }
 
@@ -117,7 +120,7 @@ export function materializeFlatInput(
         if (current.state !== NodeState.OBJECT) {
           throw inputPathConflict(
             `Path conflict at "${current.pathStr}": expected object container but found ${current.state.toLowerCase()}`,
-            { path: currentPathStr, raw }
+            { path: currentPathStr, operator, valueLength }
           );
         }
 
@@ -136,13 +139,13 @@ export function materializeFlatInput(
             child.value = value;
           } else if (child.state === NodeState.VALUE) {
             throw inputPathConflict(
-              `Duplicate assignment to leaf path "${currentPathStr}": "${raw}"`,
-              { path: currentPathStr, raw }
+              `Duplicate assignment to leaf path "${currentPathStr}"`,
+              { path: currentPathStr, operator, valueLength }
             );
           } else {
             throw inputPathConflict(
               `Path conflict at "${currentPathStr}": cannot assign value to existing container (${child.state.toLowerCase()})`,
-              { path: currentPathStr, raw }
+              { path: currentPathStr, operator, valueLength }
             );
           }
         } else {
@@ -155,12 +158,12 @@ export function materializeFlatInput(
           } else if (child.state === NodeState.VALUE) {
             throw inputPathConflict(
               `Path conflict at "${currentPathStr}": cannot access property "${nextSeg}" on existing value`,
-              { path: currentPathStr, raw }
+              { path: currentPathStr, operator, valueLength }
             );
           } else if (child.state !== nextExpectedState) {
             throw inputPathConflict(
               `Path conflict at "${currentPathStr}": expected ${nextExpectedState.toLowerCase()} but found ${child.state.toLowerCase()}`,
-              { path: currentPathStr, raw }
+              { path: currentPathStr, operator, valueLength }
             );
           }
 
@@ -171,7 +174,7 @@ export function materializeFlatInput(
         if (current.state !== NodeState.ARRAY) {
           throw inputPathConflict(
             `Path conflict at "${current.pathStr || "root"}": expected array container but found ${current.state.toLowerCase()}`,
-            { path: currentPathStr, raw }
+            { path: currentPathStr, operator, valueLength }
           );
         }
 
@@ -188,13 +191,13 @@ export function materializeFlatInput(
             child.value = value;
           } else if (child.state === NodeState.VALUE) {
             throw inputPathConflict(
-              `Duplicate assignment to leaf path "${currentPathStr}": "${raw}"`,
-              { path: currentPathStr, raw }
+              `Duplicate assignment to leaf path "${currentPathStr}"`,
+              { path: currentPathStr, operator, valueLength }
             );
           } else {
             throw inputPathConflict(
               `Path conflict at "${currentPathStr}": cannot assign value to existing container (${child.state.toLowerCase()})`,
-              { path: currentPathStr, raw }
+              { path: currentPathStr, operator, valueLength }
             );
           }
         } else {
@@ -207,12 +210,12 @@ export function materializeFlatInput(
           } else if (child.state === NodeState.VALUE) {
             throw inputPathConflict(
               `Path conflict at "${currentPathStr}": cannot access index/property "${nextSeg}" on existing value`,
-              { path: currentPathStr, raw }
+              { path: currentPathStr, operator, valueLength }
             );
           } else if (child.state !== nextExpectedState) {
             throw inputPathConflict(
               `Path conflict at "${currentPathStr}": expected ${nextExpectedState.toLowerCase()} but found ${child.state.toLowerCase()}`,
-              { path: currentPathStr, raw }
+              { path: currentPathStr, operator, valueLength }
             );
           }
 

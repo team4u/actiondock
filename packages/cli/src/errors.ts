@@ -1,25 +1,29 @@
 import {
+  InputError,
   FlatInputError,
   INVALID_FLAT_ARGUMENT,
+  INVALID_JSON,
   INVALID_JSON_LITERAL,
   INPUT_PATH_CONFLICT,
   FLAT_INPUT_LIMIT_EXCEEDED,
   INPUT_CONFLICT,
+  INPUT_FILE_NOT_FOUND,
+  INPUT_FILE_READ_FAILED,
 } from "@actiondock/core";
 import { ExitCode, type ExitCodeValue } from "./types";
 
 /**
- * 扁平输入错误码集合。
+ * 扁平与解析输入错误码集合。
  */
 const FLAT_ERROR_CODES = new Set<string>([
   INVALID_FLAT_ARGUMENT,
+  INVALID_JSON,
   INVALID_JSON_LITERAL,
   INPUT_PATH_CONFLICT,
   FLAT_INPUT_LIMIT_EXCEEDED,
   INPUT_CONFLICT,
-  "INPUT_FILE_NOT_FOUND",
-  "INPUT_FILE_READ_FAILED",
-  "INVALID_JSON",
+  INPUT_FILE_NOT_FOUND,
+  INPUT_FILE_READ_FAILED,
 ]);
 
 /**
@@ -129,7 +133,7 @@ export function formatError(err: unknown): FormattedError {
     };
   }
 
-  if (err instanceof FlatInputError) {
+  if (err instanceof InputError || err instanceof FlatInputError) {
     return {
       code: err.code,
       message: err.message,
