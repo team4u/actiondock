@@ -41,6 +41,7 @@ import {
   PROJECT_RECOVERY_REQUIRED,
   UNDECLARED_ACTION_DEPENDENCY,
 } from "../errors";
+import { InvocationPolicy } from "../invocation/policy";
 import { DataDirLock } from "../storage/data-dir-lock";
 import {
   ambiguousActionMessage,
@@ -77,7 +78,7 @@ export class DefaultActionDockHost implements ActionDockHost {
   public readonly options: ActionDockHostOptions;
   private apps = new Map<string, ActionDockApp>();
   private readonly internallyCreatedApps = new Set<ActionDockApp>();
-  private activeSubRunsPerRoot = new Map<string, number>();
+  public readonly policy: InvocationPolicy;
   private hostPublicPackageIds = new Set<string>();
   private resolver?: ActionPackageResolver;
   private maxCallDepth: number;
@@ -95,6 +96,10 @@ export class DefaultActionDockHost implements ActionDockHost {
     this.options = options;
     this.maxCallDepth = options.maxCallDepth ?? 16;
     this.maxSubRuns = options.maxSubRuns ?? 64;
+    this.policy = new InvocationPolicy({
+      maxCallDepth: this.maxCallDepth,
+      maxSubRuns: this.maxSubRuns,
+    });
     this.eventSink = options.eventSink ?? (options.platform as any)?.eventSink ?? new InMemoryEventSink();
     // Host 默认声明数据目录持有者身份；查询旁观方（CLI 查询命令）显式置 false
     this.recoverOrphans = options.recoverOrphans !== false;
@@ -329,10 +334,86 @@ export class DefaultActionDockHost implements ActionDockHost {
   }
 
   private bindApp(app: ActionDockApp): void {
+    const invoker = this.createActionInvoker(app);
+    if (typeof (app as any).setActionInvoker === "function") {
+      (app as any).setActionInvoker(invoker);
+    } else if (app.executionService && typeof (app.executionService as any).setActionInvoker === "function") {
+      (app.executionService as any).setActionInvoker(invoker);
+    }
     const runner = app.executionService?.runner;
+    if (runner && typeof (runner as any).setActionInvoker === "function") {
+      (runner as any).setActionInvoker(invoker);
+    }
     if (runner && typeof runner.setPackageContextResolver === "function") {
       runner.setPackageContextResolver(this.resolvePackageContext.bind(this));
     }
+  }
+
+  /**
+   * 构造应用专属动作调用委托器。
+   * 铁律 2：跨包调用改走 ActionInvoker 回到 Host 执行主链，经由 InvocationPolicy 授权后调用目标 Package 的 ExecutionService。
+   */
+  private createActionInvoker(
+    callerApp: ActionDockApp
+  ): (
+    childAction: ActionRef | string,
+    childInput: unknown,
+    callerRunId?: string,
+    callerContext?: { owner?: any; tenantId?: string; principalId?: string; callStack?: string[] }
+  ) => Promise<unknown> {
+    return async (
+      childAction: ActionRef | string,
+      childInput: unknown,
+      callerRunId?: string,
+      callerContext?: { owner?: any; tenantId?: string; principalId?: string; callStack?: string[] }
+    ) => {
+      let resolvedRef = childAction;
+      if (typeof childAction === "string") {
+        if (!childAction.includes("/")) {
+          if (callerApp.actionsMap?.has(childAction) || callerApp.projectConfig?.actions?.[childAction]) {
+            resolvedRef = `${callerApp.packageId}/${childAction}`;
+          }
+        }
+      } else if (typeof childAction === "object" && childAction !== null && !childAction.packageId) {
+        if (callerApp.actionsMap?.has(childAction.actionId) || callerApp.projectConfig?.actions?.[childAction.actionId]) {
+          resolvedRef = { ...childAction, packageId: callerApp.packageId };
+        }
+      }
+
+      const targetPackageId = typeof resolvedRef === "string"
+        ? (resolvedRef.includes("/") ? resolvedRef.slice(0, resolvedRef.lastIndexOf("/")) : callerApp.packageId)
+        : (resolvedRef.packageId || callerApp.packageId);
+      const isSamePackage = !targetPackageId || targetPackageId === callerApp.packageId;
+      const targetApp = isSamePackage ? callerApp : this.getApp(targetPackageId);
+
+      const targetOwner = callerContext?.owner
+        ? {
+            tenantId: callerContext.owner.tenantId,
+            principalId: callerContext.owner.principalId,
+            packageInstanceId: isSamePackage
+              ? (callerContext.owner.packageInstanceId || callerApp.packageInstanceId || callerApp.packageId)
+              : (targetApp?.packageInstanceId || targetApp?.packageId || targetPackageId),
+            generationId: isSamePackage
+              ? (callerContext.owner.generationId || callerApp.generationId || "1")
+              : (targetApp?.generationId || "1"),
+          }
+        : undefined;
+
+      const result = await this.runAction(resolvedRef, childInput as JsonValue, {
+        parentRunId: callerRunId,
+        tenantId: callerContext?.tenantId,
+        principalId: callerContext?.principalId,
+        owner: targetOwner,
+        callStack: callerContext?.callStack,
+      });
+      if (!result.ok) {
+        const err = new Error(result.error.message);
+        (err as any).code = result.error.code;
+        (err as any).details = result.error.details;
+        throw err;
+      }
+      return result.data;
+    };
   }
 
   /** 路由可见性上下文（公开包集合与依赖解析器） */
@@ -528,71 +609,65 @@ export class DefaultActionDockHost implements ActionDockHost {
       }
     }
 
-    // 根调用可见性鉴权
+    // 根调用可见性鉴权（统一委托 InvocationPolicy 单一事实源）
     const parentRunId = options.parentRunId;
     if (!parentRunId && targetPackageId) {
-      if (!isRootCallVisible(targetPackageId, targetActionId, this.hostPublicPackageIds, this.resolver)) {
- const runId = randomUUID();
-const error: RuntimeError = buildRuntimeError(
-          UNDECLARED_ACTION_DEPENDENCY,
-          `Root call to action '${targetPackageId}/${targetActionId}' is not allowed: package '${targetPackageId}' is not declared as a direct dependency in actiondock.json and is not delegated by a visible playbook`,
-          { target: `${targetPackageId}/${targetActionId}` }
-        );
+      const visibilityErr = this.policy.checkRootVisibility(targetPackageId, targetActionId, this.visibility());
+      if (visibilityErr) {
+        const runId = randomUUID();
         return {
           runId,
           status: "failed",
-          result: Promise.resolve({ ok: false, runId, error }),
+          result: Promise.resolve({ ok: false, runId, error: visibilityErr }),
         };
       }
     }
 
-    // - 父子任务血缘关系、调用配额与跨包 uses 声明依赖校验
+    // 父子任务血缘关系、调用配额与跨包 uses 声明依赖校验（统一委托 InvocationPolicy 单一事实源）
     let effectiveRootRunId = options.rootRunId;
+    let effectiveCallStack: string[] = (options as any).callStack ? [...(options as any).callStack] : [];
 
     if (parentRunId) {
       const parentRun = await this.getRun(parentRunId);
       if (parentRun) {
-        effectiveRootRunId = effectiveRootRunId || parentRun.rootRunId || parentRunId;
+        const lineage = this.policy.resolveLineage({
+          runId: parentRun.id,
+          rootRunId: options.rootRunId,
+          parentRunId,
+          parentRecord: parentRun,
+        });
+        effectiveRootRunId = lineage.rootRunId;
 
         // 跨包 uses 依赖声明校验
         const callerPackageId = parentRun.packageId;
         const callerActionId = parentRun.actionId;
         if (callerPackageId && callerPackageId !== targetPackageId) {
           const callerApp = this.getApp(callerPackageId);
+          let declaredUses: string[] | undefined;
           if (callerApp) {
             try {
               const callerSpec = await callerApp.describeAction(callerActionId);
-              const usesList = callerSpec.uses || [];
-              const targetRef = `${targetPackageId}/${targetActionId}`;
-              const isAllowed = this.resolver
-                ? this.resolver.canCascadeCall(callerPackageId, callerActionId, targetPackageId, targetActionId)
-                : usesList.some(
-                    (u) => u === targetRef || u === `${targetPackageId}/*` || u === targetPackageId
-                  );
-              if (!isAllowed) {
- const runId = randomUUID();
-const error: RuntimeError = buildRuntimeError(
-                  UNDECLARED_ACTION_DEPENDENCY,
-                  `Action '${callerPackageId}/${callerActionId}' does not declare dependency on '${targetRef}' in 'uses'`,
-                  {
-                    caller: `${callerPackageId}/${callerActionId}`,
-                    target: targetRef,
-                    declaredUses: usesList,
-                  }
-                );
-                return {
-                  runId,
-                  status: "failed",
-                  result: Promise.resolve({ ok: false, runId, error }),
-                };
-              }
+              declaredUses = callerSpec.uses;
             } catch {
               // 忽略规范提取异常，交由执行服务执行
             }
           }
+          const authErr = this.policy.checkUsesAuthorization(
+            { packageId: callerPackageId, actionId: callerActionId, declaredUses },
+            { packageId: targetPackageId, actionId: targetActionId },
+            this.resolver
+          );
+          if (authErr) {
+            const runId = randomUUID();
+            return {
+              runId,
+              status: "failed",
+              result: Promise.resolve({ ok: false, runId, error: authErr }),
+            };
+          }
         }
 
-        // 调用嵌套深度限制校验
+        // 调用嵌套深度限制校验（通过父子运行血缘链追溯深度）
         let depth = 1;
         let cur: RunRecord | undefined = parentRun;
         while (cur && cur.parentRunId) {
@@ -601,40 +676,55 @@ const error: RuntimeError = buildRuntimeError(
           cur = await this.getRun(cur.parentRunId);
         }
         if (depth >= this.maxCallDepth) {
- const runId = randomUUID();
-const error: RuntimeError = buildRuntimeError(
-            ACTION_CALL_CYCLE,
-            `Maximum call depth of ${this.maxCallDepth} exceeded`,
-            { alias: ACTION_MAX_DEPTH_EXCEEDED, reason: "depth_exceeded", maxDepth: this.maxCallDepth }
+          const depthErr = this.policy.checkCallDepth(
+            new Array(depth).fill(""),
+            targetActionId,
+            options.maxCallDepth
           );
-          return {
-            runId,
-            status: "failed",
-            result: Promise.resolve({ ok: false, runId, error }),
-          };
+          if (depthErr) {
+            const runId = randomUUID();
+            return {
+              runId,
+              status: "failed",
+              result: Promise.resolve({ ok: false, runId, error: depthErr }),
+            };
+          }
+        }
+
+        // 调用链环路检测（仅当显式传递活跃调用栈时执行，避免误判合法并发或迭代子任务）
+        if (options.callStack && options.callStack.length > 0) {
+          const cycle = this.policy.checkCycle(
+            options.callStack,
+            targetActionId,
+            targetPackageId,
+            parentRun.packageId
+          );
+          if (cycle.error) {
+            const runId = randomUUID();
+            return {
+              runId,
+              status: "failed",
+              result: Promise.resolve({ ok: false, runId, error: cycle.error }),
+            };
+          }
         }
 
         // 针对根运行的并发子任务数限制校验
         if (effectiveRootRunId) {
-          const currentSubRuns = this.activeSubRunsPerRoot.get(effectiveRootRunId) || 0;
-          if (currentSubRuns >= this.maxSubRuns) {
- const runId = randomUUID();
-const error: RuntimeError = buildRuntimeError(
-              ACTION_SUBRUN_LIMIT,
-              `Maximum concurrent sub-runs (${this.maxSubRuns}) reached for root run '${effectiveRootRunId}'`,
-              { alias: MAX_SUBRUNS_REACHED, limit: this.maxSubRuns }
-            );
+          const quotaErr = this.policy.checkSubRunQuota(effectiveRootRunId);
+          if (quotaErr) {
+            const runId = randomUUID();
             return {
               runId,
               status: "failed",
-              result: Promise.resolve({ ok: false, runId, error }),
+              result: Promise.resolve({ ok: false, runId, error: quotaErr }),
             };
           }
         }
       }
     }
 
-    // - 构造子运行参数并调度至目标 App 执行
+    // 构造子运行参数并调度至目标 App 执行
     const execOptions: ExecuteOptions = {
       ...options,
       rootRunId: effectiveRootRunId,
@@ -644,24 +734,15 @@ const error: RuntimeError = buildRuntimeError(
     };
 
     if (parentRunId && effectiveRootRunId) {
-      this.activeSubRunsPerRoot.set(
-        effectiveRootRunId,
-        (this.activeSubRunsPerRoot.get(effectiveRootRunId) || 0) + 1
-      );
+      this.policy.acquireSubRun(effectiveRootRunId);
     }
 
     let ticket: ExecutionTicket;
     try {
       ticket = await targetApp.startAction(targetActionId, input, execOptions);
     } catch (err) {
-      // 启动失败（并发上限、仓储不可用、幂等冲突等）时必须回滚配额计数，避免泄漏后误拒后续合法子任务
       if (parentRunId && effectiveRootRunId) {
-        const cnt = this.activeSubRunsPerRoot.get(effectiveRootRunId) || 1;
-        if (cnt <= 1) {
-          this.activeSubRunsPerRoot.delete(effectiveRootRunId);
-        } else {
-          this.activeSubRunsPerRoot.set(effectiveRootRunId, cnt - 1);
-        }
+        this.policy.releaseSubRun(effectiveRootRunId);
       }
       throw err;
     }
@@ -669,12 +750,7 @@ const error: RuntimeError = buildRuntimeError(
     if (parentRunId && effectiveRootRunId && ticket.result) {
       const rootId = effectiveRootRunId;
       ticket.result = ticket.result.finally(() => {
-        const cnt = this.activeSubRunsPerRoot.get(rootId) || 1;
-        if (cnt <= 1) {
-          this.activeSubRunsPerRoot.delete(rootId);
-        } else {
-          this.activeSubRunsPerRoot.set(rootId, cnt - 1);
-        }
+        this.policy.releaseSubRun(rootId);
       });
     }
 

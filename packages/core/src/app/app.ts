@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type {
   ActionDefinition,
+  ActionRef,
   ExecutionEvent,
   ExecutionResult,
   JsonValue,
@@ -9,6 +10,7 @@ import type {
 } from "@actiondock/sdk";
 import { DefaultExecutionService } from "../execution/service";
 import type {
+  ActionInvoker,
   CancelResult,
   ExecuteOptions,
   ExecutionService,
@@ -23,6 +25,7 @@ import { createGlobalStorage, createLazyStorage, createStorage } from "../storag
 import { isSecretConfigKey, sanitizeConfigDefinitions } from "../storage/mask";
 import { decodeStateKey, SqliteRuntimeStorage } from "../storage/sqlite";
 import type { RuntimeStorage } from "../storage/types";
+import { createPackageIdentity, type PackageIdentity } from "../runtime/identity";
 import { buildStaticActionMap, buildStaticPlaybookMap } from "./static-index";
 import type {
   ActionDockApp,
@@ -32,6 +35,7 @@ import type {
   ConfigValueView,
   ListActionsOptions,
   PackageInfo,
+  PackageRuntime,
   PlaybookSpec,
   PlaybookSummary,
   StateScopeOptions,
@@ -43,6 +47,7 @@ import type {
  * 封装并管理单个 Action Package 的执行引擎、静态元数据索引、配置与状态存储生命周期。
  */
 export class DefaultActionDockApp implements ActionDockApp {
+  public readonly identity: PackageIdentity;
   public readonly packageId: string;
   public readonly packageInstanceId: string;
   public readonly generationId: string;
@@ -93,9 +98,14 @@ export class DefaultActionDockApp implements ActionDockApp {
 
     this.packageRoot = packageRoot;
     this.projectConfig = projectConfig;
-    this.packageId = projectConfig.id;
-    this.packageInstanceId = options.packageInstanceId || (projectConfig as any).packageInstanceId || this.packageId;
-    this.generationId = options.generationId || (projectConfig as any).generationId || "1";
+    this.identity = options.identity || createPackageIdentity({
+      id: projectConfig.id,
+      instanceId: options.packageInstanceId || (projectConfig as any).packageInstanceId,
+      generation: options.generationId || (projectConfig as any).generationId,
+    });
+    this.packageId = this.identity.id;
+    this.packageInstanceId = this.identity.instanceId;
+    this.generationId = this.identity.generation;
 
     // 2. 转换 Action 集合：委托归一化单一入口
     this.actionsMap = normalizeActionCollection(options.actions).actionsMap;
@@ -167,6 +177,7 @@ export class DefaultActionDockApp implements ActionDockApp {
 
     // 6. 初始化唯一执行协调服务
     this.executionService = new DefaultExecutionService({
+      identity: this.identity,
       packageId: this.packageId,
       packageInstanceId: this.packageInstanceId,
       generationId: this.generationId,
@@ -189,6 +200,7 @@ export class DefaultActionDockApp implements ActionDockApp {
       packageContextResolver: options.packageContextResolver,
       customHome: options.customHome,
       platform: this.platform,
+      actionInvoker: options.actionInvoker,
     });
 
     // 7. 初始化配置解析器
@@ -428,6 +440,12 @@ export class DefaultActionDockApp implements ActionDockApp {
     options?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number }
   ): AsyncIterable<ExecutionEvent> {
     return this.executionService.events(runId, options);
+  }
+
+  public setActionInvoker(invoker?: ActionInvoker): void {
+    if (this.executionService && typeof (this.executionService as any).setActionInvoker === "function") {
+      (this.executionService as any).setActionInvoker(invoker);
+    }
   }
 
   async listConfig(): Promise<ConfigValueView[]> {

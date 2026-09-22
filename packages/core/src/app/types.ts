@@ -9,6 +9,7 @@ import type {
   RunRecord,
 } from "@actiondock/sdk";
 import type {
+  ActionInvoker,
   CancelResult,
   ExecuteOptions,
   ExecutionService,
@@ -21,7 +22,9 @@ import type { RuntimePlatform, StorageFactory, StorageFactoryOptions } from "../
 import type { RuntimeStorage } from "../storage/types";
 import type { ConfigValueView, StateScopeOptions } from "../target/types";
 
-export type { ConfigValueView, RuntimePlatform, StateScopeOptions, StorageFactory, StorageFactoryOptions };
+import type { PackageIdentity } from "../runtime/identity";
+
+export type { ConfigValueView, PackageIdentity, RuntimePlatform, StateScopeOptions, StorageFactory, StorageFactoryOptions };
 
 /**
  * 宏包信息契约。
@@ -204,6 +207,8 @@ export interface ActionDockAppOptions {
     packageInstanceId?: string;
     generationId?: string;
   } | undefined;
+  /** 显式注入的包物理与快照身份标识值对象 */
+  identity?: PackageIdentity;
   /** 包物理实例标识 */
   packageInstanceId?: string;
   /** 快照代次标识 */
@@ -233,13 +238,183 @@ export interface ActionDockAppOptions {
   process?: ProcessAPI;
   /** 是否暴露调试与物理路径信息 */
   exposeDebugInfo?: boolean;
+  /** 子任务动作调用委托器 */
+  actionInvoker?: (
+    childAction: ActionRef | string,
+    childInput: unknown,
+    callerRunId?: string
+  ) => Promise<unknown>;
 }
 
 /**
- * ActionDock 统一应用领域契约。
- * 作为单个 Action Package 的唯一运行单元与对外门面。
+ * 单个 Action Package 的运行时领域契约（PackageRuntime）。
+ *
+ * 铁律 1 执行主链核心节点：
+ * Host -> Resolution -> PackageRuntime -> ExecutionService -> ActionRunner -> Action
  */
-export interface ActionDockApp {
+export interface PackageRuntime {
+  /** 包唯一物理与快照身份标识值对象（只在创建时生成一次） */
+  readonly identity: PackageIdentity;
+  /** 包唯一逻辑标识 */
+  readonly packageId: string;
+  /** 包物理实例标识 */
+  readonly packageInstanceId?: string;
+  /** 快照代次标识 */
+  readonly generationId?: string;
+  /** 包根目录绝对物理路径 */
+  readonly packageRoot?: string;
+  /** 项目配置对象（actiondock.json 解析结果） */
+  readonly projectConfig: ProjectConfig;
+  /** 底层运行平台驱动适配契约 */
+  readonly platform: RuntimePlatform;
+  /** 当前包持久化存储实例 */
+  readonly storage: RuntimeStorage;
+  /** 全局持久化存储实例 */
+  readonly globalStorage?: RuntimeStorage;
+  /** 统一执行协调服务实例 */
+  readonly executionService: ExecutionService;
+  /** 预加载的 Action 定义映射表（短标识至定义） */
+  readonly actionsMap: Map<string, ActionDefinition>;
+
+  /** 获取当前包元数据信息 */
+  info(options?: { exposeDebugInfo?: boolean }): Promise<PackageInfo>;
+
+  /** 静态列出当前包中所有可用的 Action 摘要 */
+  listActions(options?: ListActionsOptions): Promise<ActionSummary[]>;
+
+  /** 静态查询并返回指定 Action 的规范结构与模式定义 */
+  describeAction(id: string): Promise<ActionSpec>;
+
+  /** 静态列出当前包中所有可用的 Playbook 摘要 */
+  listPlaybooks(): Promise<PlaybookSummary[]>;
+
+  /** 静态查询并返回指定 Playbook 的规范内容与操作指南 */
+  describePlaybook(id: string): Promise<PlaybookSpec>;
+
+  /** 同步执行指定 Action 并等待终态结果（仅接受本包短标识） */
+  runAction(
+    id: string,
+    input: JsonValue,
+    options?: ExecuteOptions
+  ): Promise<ExecutionResult>;
+
+  /** 异步启动指定 Action 并立即返回任务执行票据（仅接受本包短标识） */
+  startAction(
+    id: string,
+    input: JsonValue,
+    options?: ExecuteOptions
+  ): Promise<ExecutionTicket>;
+
+  /** 查询指定运行标识的记录详情 */
+  getRun(runId: string): Promise<RunRecord | undefined>;
+
+  /** 取消指定在运行的任务 */
+  cancelRun(runId: string, reason?: string): Promise<CancelResult>;
+
+  /** 订阅指定运行的事件流 */
+  events(
+    runId: string,
+    options?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number }
+  ): AsyncIterable<ExecutionEvent>;
+
+  /** 列出当前包的所有配置安全视图 */
+  listConfig(): Promise<ConfigValueView[]>;
+
+  /** 获取指定配置项的安全视图（按五层优先级链解析） */
+  getConfig(key: string): Promise<ConfigValueView>;
+
+  /** 写入持久化配置项 */
+  setConfig(key: string, value: JsonValue): Promise<void>;
+
+  /** 删除持久化配置项 */
+  deleteConfig(key: string): Promise<boolean>;
+
+  /** 获取指定持久化状态值 */
+  getState<T extends JsonValue = JsonValue>(
+    key: string,
+    options?: StateScopeOptions
+  ): Promise<T | undefined>;
+  getState<T extends JsonValue = JsonValue>(
+    actionId: string,
+    key: string,
+    options?: StateScopeOptions
+  ): Promise<T | undefined>;
+
+  /** 写入指定持久化状态值 */
+  setState<T extends JsonValue = JsonValue>(
+    key: string,
+    value: T,
+    options?: StateScopeOptions
+  ): Promise<void>;
+  setState<T extends JsonValue = JsonValue>(
+    actionId: string,
+    key: string,
+    value: T,
+    options: StateScopeOptions
+  ): Promise<void>;
+
+  /** 删除指定持久化状态项 */
+  deleteState(
+    key: string,
+    options?: StateScopeOptions
+  ): Promise<boolean>;
+  deleteState(
+    actionId: string,
+    key: string,
+    options?: StateScopeOptions
+  ): Promise<boolean>;
+
+  /** 显式获取指定 Action 命名空间的状态值 */
+  getActionState<T extends JsonValue = JsonValue>(
+    actionId: string,
+    key: string,
+    options?: StateScopeOptions
+  ): Promise<T | undefined>;
+
+  /** 显式写入指定 Action 命名空间的状态值 */
+  setActionState<T extends JsonValue = JsonValue>(
+    actionId: string,
+    key: string,
+    value: T,
+    options?: StateScopeOptions
+  ): Promise<void>;
+
+  /** 显式删除指定 Action 命名空间的状态项 */
+  deleteActionState(
+    actionId: string,
+    key: string,
+    options?: StateScopeOptions
+  ): Promise<boolean>;
+
+  /** 列出所有状态键 */
+  listStateKeys(
+    options?: StateScopeOptions
+  ): Promise<string[]>;
+  listStateKeys(
+    actionId: string,
+    options?: StateScopeOptions
+  ): Promise<string[]>;
+
+  /** 清空指定持久化状态项 */
+  clearState(
+    options?: StateScopeOptions
+  ): Promise<number>;
+  clearState(
+    actionId: string,
+    options?: StateScopeOptions
+  ): Promise<number>;
+
+  /** 设置子任务动作调用委托器 */
+  setActionInvoker?(invoker?: ActionInvoker): void;
+
+  /** 优雅关闭应用并收尾清理所有底层资源 */
+  close(options?: { graceMs?: number }): Promise<void>;
+}
+
+/**
+ * ActionDock 统一应用领域契约（PackageRuntime 别名兼容）。
+ */
+export interface ActionDockApp extends PackageRuntime {
   /** 包唯一标识 */
   readonly packageId: string;
   /** 包物理实例标识 */

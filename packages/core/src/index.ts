@@ -21,5 +21,6 @@ export * from "./ipc";
 export * from "./process";
 export * from "./input";
 export * from "./json";
+export * from "./invocation";
 export type { ModuleLoader } from "./runtime";
 

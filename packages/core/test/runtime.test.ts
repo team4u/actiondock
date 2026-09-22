@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type ActionDefinition, defineAction } from "@actiondock/sdk";
+import { type ActionDefinition, type ActionRef, defineAction } from "@actiondock/sdk";
 import { ActionResolver } from "../src/catalog/action-resolver";
 import { DefaultExecutionService } from "../src/execution/service";
 import { initProject } from "../src/project/init";
@@ -282,6 +282,15 @@ describe("ActionRunner", () => {
       },
     });
 
+    const extStorage = new SqliteRuntimeStorage({ packageId: "ext-pkg", dbPath: ":memory:" });
+    const extRunner = new ActionRunner({
+      packageId: "ext-pkg",
+      packageInstanceId: "ext-pkg-instance-42",
+      generationId: "gen-ext-9",
+      storage: extStorage,
+      actions: new Map([["child-ext", childExt]]),
+    });
+
     const runner = new ActionRunner({
       packageId: "local-pkg",
       packageInstanceId: "local-pkg-inst-1",
@@ -291,17 +300,31 @@ describe("ActionRunner", () => {
         ["parent", parentAction],
         ["child-local", childLocal],
       ]),
-      packageContextResolver: async (pkgId) => {
-        if (pkgId === "ext-pkg") {
-          return {
-            packageInstanceId: "ext-pkg-instance-42",
-            generationId: "gen-ext-9",
-            storage: new SqliteRuntimeStorage({ packageId: "ext-pkg", dbPath: ":memory:" }),
-            actions: new Map([["child-ext", childExt]]),
-          };
+    });
+
+    runner.setActionInvoker(async (childAction: ActionRef | string, childInput: unknown, _parentRunId?: string, callerContext?: any) => {
+      const parsed = ActionResolver.parseRef(childAction);
+      if (parsed.packageId === "ext-pkg") {
+        const targetOwner = {
+          tenantId: callerContext?.tenantId ?? callerContext?.owner?.tenantId ?? "default",
+          principalId: callerContext?.principalId ?? callerContext?.owner?.principalId ?? "default",
+          packageInstanceId: extRunner.packageInstanceId,
+          generationId: extRunner.generationId,
+        };
+        const childRes = await extRunner.execute(parsed.actionId, childInput, { owner: targetOwner });
+        if (!childRes.ok) {
+          throw new Error(childRes.error.message);
         }
-        return undefined;
-      },
+        return childRes.data;
+      }
+      if (!parsed.packageId || parsed.packageId === "local-pkg") {
+        const childRes = await runner.execute(parsed.actionId, childInput, { owner: callerContext?.owner });
+        if (!childRes.ok) {
+          throw new Error(childRes.error.message);
+        }
+        return childRes.data;
+      }
+      throw new Error(`Package '${parsed.packageId}' not found`);
     });
 
     const customOwner = {
@@ -645,7 +668,7 @@ describe("ActionRunner", () => {
     expect(runs[0].error?.code).toBe("ACTION_TIMEOUT");
   });
 
-  it("handles ExecutionHandle.cancel and ExecutionManager correctly", async () => {
+  it("handles ExecutionHandle.cancel and active runs management correctly", async () => {
     const storage = new SqliteRuntimeStorage({
       packageId: "test-pkg",
       dbPath: ":memory:",
@@ -869,25 +892,34 @@ describe("ActionRunner", () => {
       },
     });
 
+    const pkgBRunner = new ActionRunner({
+      packageId: "pkg-b",
+      storage: pkgBStorage,
+      projectConfig: {
+        id: "pkg-b",
+        name: "Package B",
+        version: "1.0.0",
+        config: { greeting: { default: "hello from B" } },
+      },
+      actions: new Map([["b.worker", pkgBAction]]),
+    });
+
     const pkgARunner = new ActionRunner({
       packageId: "pkg-a",
       storage: pkgAStorage,
       actions: new Map([["a.caller", pkgAAction]]),
-      packageContextResolver: async (packageId) => {
-        if (packageId === "pkg-b") {
-          return {
-            storage: pkgBStorage,
-            projectConfig: {
-              id: "pkg-b",
-              name: "Package B",
-              version: "1.0.0",
-              config: { greeting: { default: "hello from B" } },
-            },
-            actions: new Map([["b.worker", pkgBAction]]),
-          };
+    });
+
+    pkgARunner.setActionInvoker(async (ref, input) => {
+      const parsed = ActionResolver.parseRef(ref);
+      if (parsed.packageId === "pkg-b") {
+        const res = await pkgBRunner.execute(parsed.actionId, input);
+        if (!res.ok) {
+          throw new Error(res.error.message);
         }
-        return undefined;
-      },
+        return res.data;
+      }
+      throw new Error(`Package '${parsed.packageId}' not found`);
     });
 
     const result = await pkgARunner.execute("a.caller", { foo: "bar" });
@@ -960,130 +992,58 @@ describe("ActionRunner", () => {
     expect(record?.error?.code).toBe("ACTION_NOT_FOUND");
   });
 
-  it("returns ACTION_LOAD_FAILED when action source import fails in linked package", async () => {
-    const fakeHome = mkdtempSync(join(tmpdir(), "runner-home-"));
-    const pkgDir = mkdtempSync(join(tmpdir(), "runner-pkg-"));
-    try {
-      initProject(pkgDir, {
-        id: "team.broken-pkg",
-        name: "Broken Package",
-      });
-      await linkPackage(pkgDir, fakeHome);
+  it("ActionRunner strictly rejects external package reference without searching linked packages", async () => {
+    const storage = new SqliteRuntimeStorage({
+      packageId: "caller-pkg",
+      dbPath: ":memory:",
+    });
 
-      const brokenActionCode = `
-import { nonexistentModule } from "completely-nonexistent-package-123456";
-export default {
-  id: "broken.act",
-  run() { return { ok: true }; }
-};
-`;
-      writeFileSync(join(pkgDir, "actions", "broken.act.ts"), brokenActionCode);
+    const runner = new ActionRunner({
+      packageId: "caller-pkg",
+      storage,
+    });
 
-      const manifestPath = join(pkgDir, "actiondock.json");
-      const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-      manifest.actions["broken.act"] = {
-        entry: "actions/broken.act.ts",
-        description: "Broken action",
-      };
-      writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
-
-      const storage = new SqliteRuntimeStorage({
-        packageId: "caller-pkg",
-        dbPath: ":memory:",
-      });
-
-      const runner = new ActionRunner({
-        packageId: "caller-pkg",
-        storage,
-        customHome: fakeHome,
-      });
-
-      const result = await runner.execute("team.broken-pkg/broken.act", {});
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe("ACTION_LOAD_FAILED");
-        expect(result.error.message).toContain("broken.act");
-        expect(result.error.message).toContain("team.broken-pkg");
-        expect(result.error.details).toBeDefined();
-        const details = result.error.details as any;
-        expect(details.packageId).toBe("team.broken-pkg");
-        expect(details.projectRoot).toBe(pkgDir);
-        expect(details.rootCause).toMatch(/Cannot find package|Cannot find module|Could not resolve/);
-        expect(details.hint).toContain("依赖未安装");
-      }
-    } finally {
-      rmSync(fakeHome, { recursive: true, force: true });
-      rmSync(pkgDir, { recursive: true, force: true });
+    const result = await runner.execute("unlinked.pkg/some.action", {});
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("ACTION_NOT_FOUND");
+      expect((result.error.details as any)?.reason).toContain(
+        "Runner for package 'caller-pkg' cannot resolve external package 'unlinked.pkg'"
+      );
     }
   });
 
-  it("returns ACTION_NOT_FOUND with resolver reason when package is not linked", async () => {
-    const fakeHome = mkdtempSync(join(tmpdir(), "runner-home-"));
-    try {
-      const storage = new SqliteRuntimeStorage({
-        packageId: "caller-pkg",
-        dbPath: ":memory:",
-      });
-
-      const runner = new ActionRunner({
-        packageId: "caller-pkg",
-        storage,
-        customHome: fakeHome,
-      });
-
-      const result = await runner.execute("unlinked.pkg/some.action", {});
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe("ACTION_NOT_FOUND");
-        expect((result.error.details as any)?.reason).toMatch(/Linked package 'unlinked\.pkg' not found|ad link/);
-      }
-    } finally {
-      rmSync(fakeHome, { recursive: true, force: true });
-    }
-  });
-
-  it("DefaultExecutionService unifies cross-package string and object ref resolution and storage attribution", async () => {
+  it("DefaultExecutionService unifies string and object ref resolution for local package actions", async () => {
     const storageA = new SqliteRuntimeStorage({ packageId: "pkg-a", dbPath: ":memory:" });
-    const storageB = new SqliteRuntimeStorage({ packageId: "pkg-b", dbPath: ":memory:" });
 
     const workAction = defineAction({
       async run(input: { task: string }) {
-        return { done: true, task: input.task, fromPkg: "pkg-b" };
+        return { done: true, task: input.task, fromPkg: "pkg-a" };
       },
     });
-
 
     const serviceA = new DefaultExecutionService({
       packageId: "pkg-a",
       storage: storageA,
-      packageContextResolver: (targetPkgId) => {
-        if (targetPkgId === "pkg-b") {
-          return {
-            storage: storageB,
-            actions: new Map([["work", workAction]]),
-          };
-        }
-        return undefined;
-      },
+      actions: new Map([["work", workAction]]),
     });
 
-    // 字符串形式："pkg-b/work"
-    const stringRes = await serviceA.execute("pkg-b/work", { task: "clean" });
+    // 字符串形式："work"
+    const stringRes = await serviceA.execute("work", { task: "clean" });
     expect(stringRes.ok).toBe(true);
-    expect((stringRes as any).data).toEqual({ done: true, task: "clean", fromPkg: "pkg-b" });
+    expect((stringRes as any).data).toEqual({ done: true, task: "clean", fromPkg: "pkg-a" });
 
-    // 校验运行记录归属：写入目标包存储（storageB），而非源包（storageA）
-    expect(storageB.listRuns().length).toBe(1);
-    expect(storageB.listRuns()[0].actionId).toBe("work");
-    expect(storageB.listRuns()[0].packageId).toBe("pkg-b");
-    expect(storageA.listRuns().length).toBe(0);
+    // 完全限定字符串形式："pkg-a/work"
+    const fqRes = await serviceA.execute("pkg-a/work", { task: "clean-fq" });
+    expect(fqRes.ok).toBe(true);
+    expect((fqRes as any).data).toEqual({ done: true, task: "clean-fq", fromPkg: "pkg-a" });
 
-    // 对象形式：{ packageId: "pkg-b", actionId: "work" }
-    const objRes = await serviceA.execute({ packageId: "pkg-b", actionId: "work" }, { task: "build" });
+    // 对象形式：{ packageId: "pkg-a", actionId: "work" }
+    const objRes = await serviceA.execute({ packageId: "pkg-a", actionId: "work" }, { task: "build" });
     expect(objRes.ok).toBe(true);
-    expect((objRes as any).data).toEqual({ done: true, task: "build", fromPkg: "pkg-b" });
-    expect(storageB.listRuns().length).toBe(2);
-    expect(storageA.listRuns().length).toBe(0);
+    expect((objRes as any).data).toEqual({ done: true, task: "build", fromPkg: "pkg-a" });
+
+    expect(storageA.listRuns().length).toBe(3);
   });
 
   it("DefaultExecutionService and ActionRunner strictly reject non-existent package without borrowing local actions or creating ghost storage", async () => {
@@ -1183,78 +1143,6 @@ export default {
     }
   });
 
-  it("resolveTargetPackageRunner 并发调用共享同一次构建不重复创建 Runner", async () => {
-    const storageA = new SqliteRuntimeStorage({ packageId: "concurrent-pkg-a", dbPath: ":memory:" });
-    let resolveContext!: () => void;
-    const contextGate = new Promise<void>((resolve) => {
-      resolveContext = resolve;
-    });
-    let resolverInvocations = 0;
-
-    const runner = new ActionRunner({
-      packageId: "concurrent-pkg-a",
-      storage: storageA,
-      packageContextResolver: async () => {
-        resolverInvocations++;
-        // 模拟长异步窗口：并发调用在构建完成前全部进入等待
-        await contextGate;
-        return {
-          storage: new SqliteRuntimeStorage({ packageId: "concurrent-pkg-b", dbPath: ":memory:" }),
-          actions: new Map([
-            ["work", defineAction({ run: () => ({ from: "pkg-b" }) })],
-          ]),
-        };
-      },
-    });
-
-    // 同一 tick 内发起并发解析请求
-    const pending = Array.from({ length: 5 }).map(() =>
-      runner.resolveTargetPackageRunner("concurrent-pkg-b")
-    );
-    resolveContext();
-    const resolved = await Promise.all(pending);
-
-    // in-flight Promise 去重：解析器仅被调用一次，且并发方拿到同一 Runner 实例
-    expect(resolverInvocations).toBe(1);
-    for (const r of resolved) {
-      expect(r).toBe(resolved[0]);
-    }
-    expect(runner.getPackageRunners().size).toBe(1);
-  });
-
-  it("resolveTargetPackageRunner 构建失败后缓存不残留可重试", async () => {
-    const storageA = new SqliteRuntimeStorage({ packageId: "retry-pkg-a", dbPath: ":memory:" });
-    let attempts = 0;
-
-    const runner = new ActionRunner({
-      packageId: "retry-pkg-a",
-      storage: storageA,
-      packageContextResolver: async () => {
-        attempts++;
-        if (attempts === 1) {
-          throw new Error("simulated resolver failure");
-        }
-        return {
-          storage: new SqliteRuntimeStorage({ packageId: "retry-pkg-b", dbPath: ":memory:" }),
-          actions: new Map([
-            ["work", defineAction({ run: () => ({ ok: true }) })],
-          ]),
-        };
-      },
-    });
-
-    // 首次构建失败：异常透传且失败 Promise 不得残留缓存
-    await expect(runner.resolveTargetPackageRunner("retry-pkg-b")).rejects.toThrow(
-      "simulated resolver failure"
-    );
-    expect(runner.getPackageRunners().size).toBe(0);
-
-    // 重试应重新走解析器而非复用已失败的 Promise
-    const retried = await runner.resolveTargetPackageRunner("retry-pkg-b");
-    expect(retried).toBeDefined();
-    expect(attempts).toBe(2);
-    expect(runner.getPackageRunners().size).toBe(1);
-  });
 
   it("平台级共享进程实例在 run 结束后不被误 dispose 且后续 run 可继续使用", async () => {
     const { createDefaultPlatform } = await import("../src/platform");

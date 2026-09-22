@@ -167,7 +167,6 @@ describe("Host 多包依赖可见性与锁文件加载集成", () => {
     expect(actionIds).toContain("pkg-c/c-echo"); // 被 run-c Playbook 精确委托点名暴露
     expect(actionIds).not.toContain("pkg-c/c-secret"); // 未被委托，不对外可见
 
-    // 验证根调用：委托的 pkg-c/c-echo 允许调用
     const resEcho = await host.runAction("pkg-c/c-echo", { text: "world" });
     expect(resEcho.ok).toBe(true);
     if (resEcho.ok) {

@@ -13,7 +13,6 @@ import type {
 import { ActionResolver } from "../catalog/action-resolver";
 import { loadActions, loadProjectConfig } from "../project/loader";
 import type { ProjectConfig } from "../project/types";
-import { resolveActionProject } from "../registry/registry";
 import {
   ACTION_CALL_CYCLE,
   ACTION_CYCLE_DETECTED,
@@ -40,6 +39,8 @@ import type { Clock } from "./clock";
 import type { RuntimePlatform } from "../platform/types";
 import { createActionContext, StderrLogger } from "./context";
 import type { ProcessOwner } from "../process";
+import { createPackageIdentity, type PackageIdentity } from "./identity";
+import { InvocationPolicy } from "../invocation/policy";
 import {
   ActionRegistry,
   findLocalAction,
@@ -55,7 +56,6 @@ import {
   type InitialRunRecordInput,
   type RunFinalizer,
 } from "./run-persistence";
-import { PackageRunnerFactory } from "./package-runner-factory";
 
 // 错误码常量已收敛至 src/errors.ts 单一事实源，此处保留 re-export 以维持既有导入路径兼容。
 export {
@@ -109,6 +109,8 @@ export type PackageContextResolver = (
  * ActionRunner 初始化配置选项。
  */
 export interface RunnerOptions {
+  /** 显式注入的包物理与快照身份标识值对象 */
+  identity?: PackageIdentity;
   /** 运行所属的 Package ID */
   packageId: string;
   /** 包物理实例标识 */
@@ -150,6 +152,13 @@ export interface RunnerOptions {
   customHome?: string;
   /** 执行宿主会话标识 */
   hostSessionId?: string;
+  /** 子任务调用委托函数 */
+  actionInvoker?: (
+    childAction: ActionRef | string,
+    childInput: unknown,
+    callerRunId?: string,
+    callerContext?: any
+  ) => Promise<unknown>;
 }
 
 /** ActionRunnerOptions 别名兼容 */
@@ -197,6 +206,13 @@ export interface ExecutionStartOptions {
   logger?: Logger;
   /** 执行级临时配置覆盖项 */
   configOverrides?: Record<string, unknown>;
+  /** 子任务调用委托函数 */
+  actionInvoker?: (
+    childAction: ActionRef | string,
+    childInput: unknown,
+    callerRunId?: string,
+    callerContext?: any
+  ) => Promise<unknown>;
 }
 
 /**
@@ -263,6 +279,7 @@ interface RunExecutionContext {
  * 竞态控制与运行记录持久化编排仍由本类承担。
  */
 export class ActionRunner {
+  public readonly identity: PackageIdentity;
   public readonly packageId: string;
   public readonly packageInstanceId: string;
   public readonly generationId: string;
@@ -277,20 +294,29 @@ export class ActionRunner {
   private platform?: RuntimePlatform;
   private maxCallDepth: number;
   private maxSubRuns: number;
-  private activeSubRuns = 0;
-  private packageFactory: PackageRunnerFactory;
   private actionResolver?: (
     ref: ActionRef | string,
     currentPackageId?: string
   ) => ActionDefinition | undefined | Promise<ActionDefinition | undefined>;
-  private getStorageForPackage?: (packageId: string, projectRoot?: string) => RuntimeStorage;
   private customHome?: string;
   private hostSessionId?: string;
+  private actionInvoker?: (
+    childAction: ActionRef | string,
+    childInput: unknown,
+    callerRunId?: string,
+    callerContext?: any
+  ) => Promise<unknown>;
+  private policy: InvocationPolicy;
 
   constructor(options: RunnerOptions) {
-    this.packageId = options.packageId;
-    this.packageInstanceId = options.packageInstanceId || options.packageId;
-    this.generationId = options.generationId || "1";
+    this.identity = options.identity || createPackageIdentity({
+      id: options.packageId,
+      instanceId: options.packageInstanceId,
+      generation: options.generationId,
+    });
+    this.packageId = this.identity.id;
+    this.packageInstanceId = this.identity.instanceId;
+    this.generationId = this.identity.generation;
     this.hostSessionId = options.hostSessionId;
     this.projectRoot = options.projectRoot;
     this.projectConfig = options.projectConfig;
@@ -298,6 +324,7 @@ export class ActionRunner {
     this.registry = new ActionRegistry(options.actions);
     this.customHome = options.customHome;
     this.platform = options.platform;
+    this.actionInvoker = options.actionInvoker;
 
     if (options.platform) {
       this.clock = options.platform.clock;
@@ -324,37 +351,19 @@ export class ActionRunner {
     this.maxCallDepth = options.maxCallDepth ?? 16;
     this.maxSubRuns = options.maxSubRuns ?? 64;
     this.actionResolver = options.actionResolver;
-    this.getStorageForPackage = options.getStorageForPackage;
-
-    this.packageFactory = new PackageRunnerFactory(
-      {
-        globalStorage: this.globalStorage,
-        projectRoot: this.projectRoot,
-        process: this.process,
-        clock: this.clock,
-        platform: this.platform,
-        maxCallDepth: this.maxCallDepth,
-        maxSubRuns: this.maxSubRuns,
-        actionResolver: this.actionResolver,
-        getStorageForPackage: this.getStorageForPackage,
-        packageContextResolver: options.packageContextResolver,
-        customHome: this.customHome,
-      },
-      (opts) => new ActionRunner(opts)
-    );
+    this.policy = new InvocationPolicy({
+      maxCallDepth: this.maxCallDepth,
+      maxSubRuns: this.maxSubRuns,
+    });
   }
 
-  /** 本地 Action 注册表底层映射（仅内部与跨包工厂委托使用） */
+  /** 本地 Action 注册表底层映射 */
   private get actions(): Map<string, ActionDefinition> {
     return this.registry.map;
   }
 
   public getStorage(): RuntimeStorage {
     return this.storage;
-  }
-
-  public getPackageRunners(): Map<string, ActionRunner> {
-    return this.packageFactory.runners;
   }
 
   /**
@@ -374,6 +383,20 @@ export class ActionRunner {
    */
   public getAction(id: string): ActionDefinition | undefined {
     return this.registry.getAction(id);
+  }
+
+  /**
+   * 设置子任务动作调用委托器。
+   */
+  public setActionInvoker(
+    invoker?: (
+      childAction: ActionRef | string,
+      childInput: unknown,
+      callerRunId?: string,
+      callerContext?: any
+    ) => Promise<unknown>
+  ): void {
+    this.actionInvoker = invoker;
   }
 
   /**
@@ -410,13 +433,9 @@ export class ActionRunner {
       try {
         const customResolved = await this.actionResolver(ref, this.packageId);
         if (customResolved) {
-          if (targetPackageId && targetPackageId !== this.packageId) {
-            this.actions.set(`${targetPackageId}/${targetActionId}`, customResolved);
-          } else {
-            this.actions.set(targetActionId, customResolved);
-            if (this.packageId) {
-              this.actions.set(`${this.packageId}/${targetActionId}`, customResolved);
-            }
+          this.actions.set(targetActionId, customResolved);
+          if (this.packageId) {
+            this.actions.set(`${this.packageId}/${targetActionId}`, customResolved);
           }
           return { status: "found", action: customResolved };
         }
@@ -425,64 +444,55 @@ export class ActionRunner {
       }
     }
 
-    // 基于全局链接注册表与目录索引的动态寻址与按需加载
-    const identifier = targetPackageId
-      ? `${targetPackageId}/${targetActionId}`
-      : targetActionId;
+    // 铁律 4：Runner 仅执行自己所属 Package 的 Action，在本包 projectRoot 下按需加载本地 Action
+    if ((!targetPackageId || targetPackageId === this.packageId) && this.projectRoot && existsSync(this.projectRoot)) {
+      let config: ProjectConfig;
+      try {
+        config = this.projectConfig || loadProjectConfig(this.projectRoot);
+      } catch (err: any) {
+        return {
+          status: "load_failed",
+          error: err instanceof Error ? err : new Error(String(err)),
+          packageId: this.packageId,
+          projectRoot: this.projectRoot,
+        };
+      }
 
-    let resolved;
-    try {
-      resolved = await resolveActionProject(identifier, this.projectRoot, this.customHome);
-    } catch (err: any) {
-      return { status: "not_found", reason: err.message };
+      let actionsMap: Map<string, ActionDefinition>;
+      try {
+        actionsMap = await loadActions(this.projectRoot, config.actionsDir, {
+          loader: this.platform?.modules,
+        });
+      } catch (err: any) {
+        return {
+          status: "load_failed",
+          error: err instanceof Error ? err : new Error(String(err)),
+          packageId: this.packageId,
+          projectRoot: this.projectRoot,
+        };
+      }
+
+      const matched = actionsMap.get(targetActionId);
+      if (matched) {
+        this.actions.set(targetActionId, matched);
+        if (this.packageId) {
+          this.actions.set(`${this.packageId}/${targetActionId}`, matched);
+        }
+        return { status: "found", action: matched };
+      }
     }
 
-    if (!resolved || !existsSync(resolved.projectRoot)) {
+    // 铁律 4：Runner 不找 Package：只能执行自己所属 Package 的 Action
+    if (targetPackageId && targetPackageId !== this.packageId) {
       return {
         status: "not_found",
-        reason: `Project root not found for action '${identifier}'`,
+        reason: `Runner for package '${this.packageId}' cannot resolve external package '${targetPackageId}'`,
       };
-    }
-
-    let config;
-    try {
-      config = loadProjectConfig(resolved.projectRoot);
-    } catch (err: any) {
-      return {
-        status: "load_failed",
-        error: err instanceof Error ? err : new Error(String(err)),
-        packageId: resolved.packageId,
-        projectRoot: resolved.projectRoot,
-      };
-    }
-
-    let actionsMap: Map<string, ActionDefinition>;
-    try {
-      actionsMap = await loadActions(resolved.projectRoot, config.actionsDir, {
-        loader: this.platform?.modules,
-      });
-    } catch (err: any) {
-      return {
-        status: "load_failed",
-        error: err instanceof Error ? err : new Error(String(err)),
-        packageId: resolved.packageId,
-        projectRoot: resolved.projectRoot,
-      };
-    }
-
-    const matched = actionsMap.get(resolved.actionId);
-    if (matched) {
-      this.actions.set(`${resolved.packageId}/${resolved.actionId}`, matched);
-      // 仅当目标包就是当前项目时才注册短标识符，避免跨包动态载入污染全局短标识符
-      if (!targetPackageId || resolved.packageId === this.packageId) {
-        this.actions.set(resolved.actionId, matched);
-      }
-      return { status: "found", action: matched };
     }
 
     return {
       status: "not_found",
-      reason: `Action '${resolved.actionId}' not found in package '${resolved.packageId}' (${resolved.projectRoot})`,
+      reason: `Action '${targetActionId}' not found in package '${this.packageId}'`,
     };
   }
 
@@ -494,22 +504,9 @@ export class ActionRunner {
   }
 
   /**
-   * 注入或更新跨包运行上下文解析委托。
+   * 注入或更新跨包运行上下文解析委托（空实现兼容）。
    */
-  public setPackageContextResolver(resolver: PackageContextResolver): void {
-    this.packageFactory.setPackageContextResolver(resolver);
-  }
-
-  /**
-   * 跨包运行时解析与获取（确保跨包执行具备独立的配置、存储、状态与 Action 注册表）。
-   *
-   * 缓存 miss 后存在长异步窗口（加载配置、扫描 Action、打开存储），并发调用会重复构建
-   * Runner、重复打开 SQLite 连接且子任务限流计数分裂；故以 in-flight Promise 去重，
-   * 并发方 await 同一构建任务，构建失败时移除该 Promise 以便后续重试。
-   */
-  public async resolveTargetPackageRunner(targetPackageId: string): Promise<ActionRunner | undefined> {
-    return this.packageFactory.resolveTargetPackageRunner(targetPackageId);
-  }
+  public setPackageContextResolver(_resolver?: PackageContextResolver): void {}
 
   /**
    * 异步启动 Action 的执行并立即返回 ExecutionHandle 句柄。
@@ -555,7 +552,7 @@ export class ActionRunner {
     const finalizer = createRunFinalizer(this.storage, runCtx.runId);
 
     // 调用嵌套深度限制检测 (Max Call Depth Check)
-    const depthError = this.checkCallDepth(runCtx.callStack, targetActionId, runCtx.options);
+    const depthError = this.policy.checkCallDepth(runCtx.callStack, targetActionId, runCtx.options.maxCallDepth);
     if (depthError) {
       finalizer.finalize("failed", undefined, depthError);
       return {
@@ -566,7 +563,7 @@ export class ActionRunner {
     }
 
     // 环路死锁检测 (Cycle Detection)
-    const cycle = this.computeCallKey(runCtx.callStack, targetActionId, targetPackageId);
+    const cycle = this.policy.checkCycle(runCtx.callStack, targetActionId, targetPackageId, this.packageId);
     if (cycle.error) {
       finalizer.finalize("failed", undefined, cycle.error);
       return {
@@ -731,55 +728,6 @@ export class ActionRunner {
     };
   }
 
-  /**
-   * 调用嵌套深度限制检测（超限时返回 ACTION_CALL_CYCLE 错误）。
-   */
-  private checkCallDepth(
-    callStack: string[],
-    targetActionId: string,
-    options: ExecutionStartOptions
-  ): RuntimeError | undefined {
-    // 执行级 options.maxCallDepth 可覆盖构造级默认值，保留原覆盖契约
-    const maxDepth = options.maxCallDepth ?? this.maxCallDepth;
-    if (callStack.length >= maxDepth) {
-      return {
-        code: ACTION_CALL_CYCLE,
-        message: `Maximum call depth of ${maxDepth} exceeded: ${callStack.join(" -> ")} -> ${targetActionId}`,
-        details: { alias: ACTION_MAX_DEPTH_EXCEEDED, reason: "depth_exceeded", maxDepth, callStack: [...callStack] },
-      };
-    }
-    return undefined;
-  }
-
-  /**
-   * 计算调用键并执行环路死锁检测（命中时返回携带错误的调用键结果）。
-   */
-  private computeCallKey(
-    callStack: string[],
-    targetActionId: string,
-    targetPackageId: string
-  ): { callKey: string; error?: RuntimeError } {
-    const isExternal = Boolean(targetPackageId && targetPackageId !== this.packageId);
-    const callKey = isExternal
-      ? `${targetPackageId}/${targetActionId}`
-      : targetActionId;
-
-    const hasCycle = isExternal
-      ? callStack.includes(callKey)
-      : (callStack.includes(callKey) || (this.packageId ? callStack.includes(`${this.packageId}/${targetActionId}`) : false));
-
-    if (hasCycle) {
-      return {
-        callKey,
-        error: {
-          code: ACTION_CALL_CYCLE,
-          message: `Cycle detected in action invocation: ${callStack.join(" -> ")} -> ${callKey}`,
-          details: { alias: ACTION_CYCLE_DETECTED, reason: "cycle_detected", callStack: [...callStack], target: callKey },
-        },
-      };
-    }
-    return { callKey };
-  }
 
   /**
    * 输入参数 JSON Schema 校验（若 action 已就绪，返回校验错误或 undefined）。
@@ -849,7 +797,9 @@ export class ActionRunner {
   }
 
   /**
-   * 子 Action 调用委托：并发上限守卫、uses 跨包声明校验与子执行派发。
+   * 子 Action 调用委托：
+   * 优先委托注入的 Host 动作调用器（走 Host 执行主链与 InvocationPolicy 鉴权）；
+   * 未注入调用器时（单元测试环境）回退同包内直接调度。
    */
   private async invokeChildAction(args: {
     runCtx: RunExecutionContext;
@@ -860,53 +810,58 @@ export class ActionRunner {
     parentRunId?: string;
   }): Promise<unknown> {
     const { runCtx, controller, rootRunId, childAction, childInput, parentRunId } = args;
-    const { options, targetActionId, effectiveProcess, callStack } = runCtx;
+    const { options, effectiveProcess, callStack } = runCtx;
 
-    if (this.activeSubRuns >= this.maxSubRuns) {
+    const effectiveParentOwner: ProcessOwner = options.owner || {
+      tenantId: options.tenantId || "default",
+      principalId: options.principalId || options.ownerId || "default",
+      packageInstanceId: this.packageInstanceId,
+      generationId: this.generationId,
+    };
+
+    // 统一通过调用治理策略校验并申请并发子任务配额
+    const quotaErr = this.policy.checkSubRunQuota(rootRunId);
+    if (quotaErr) {
+      const err = new Error(quotaErr.message);
+      (err as any).code = quotaErr.code;
+      (err as any).details = quotaErr.details;
+      throw err;
+    }
+
+    if (!this.policy.acquireSubRun(rootRunId)) {
       const err = new Error(`Maximum concurrent sub-runs (${this.maxSubRuns}) reached`);
       (err as any).code = ACTION_SUBRUN_LIMIT;
       (err as any).details = { alias: MAX_SUBRUNS_REACHED, limit: this.maxSubRuns };
       throw err;
     }
 
-    let childPackageId = this.packageId;
-    const parsed = ActionResolver.parseRef(childAction as ActionRef | string);
-    if (parsed.packageId) {
-      childPackageId = parsed.packageId;
-    }
-    const childActionId = parsed.actionId;
-
-    const effectiveParentOwner: ProcessOwner = options.owner || {
-      tenantId: options.tenantId || "default",
-      principalId: options.principalId || options.ownerId || "default",
-      packageInstanceId: options.packageInstanceId || this.packageInstanceId || this.packageId,
-      generationId: options.generationId || this.generationId || "1",
-    };
-
-    const isSamePackage = !childPackageId || childPackageId === this.packageId;
-
-    this.activeSubRuns++;
     try {
-      const runnerToUse = await this.resolveChildRunner(childPackageId, childActionId);
-      if (runnerToUse !== this) {
-        this.assertDeclaredUses(runCtx.action, targetActionId, childPackageId, childActionId);
+      // 优先委托注入的 Host 动作调用器
+      const invoker = options.actionInvoker || this.actionInvoker;
+      if (invoker) {
+        return await (invoker as any)(childAction, childInput, parentRunId, {
+          owner: effectiveParentOwner,
+          tenantId: effectiveParentOwner.tenantId,
+          principalId: effectiveParentOwner.principalId,
+          callStack,
+        });
       }
 
-      const childPackageInstanceId = isSamePackage
-        ? effectiveParentOwner.packageInstanceId
-        : (runnerToUse !== this ? runnerToUse.packageInstanceId : childPackageId);
-      const childGenerationId = isSamePackage
-        ? effectiveParentOwner.generationId
-        : (runnerToUse !== this ? runnerToUse.generationId : "1");
+      // 单元测试无 Host 场景：本地动作或外部已注入动作直接调度
+      const parsed = typeof childAction === "string" ? parseActionRef(childAction) : childAction;
+      const childPackageId = parsed.packageId || this.packageId;
 
-      const childOwner: ProcessOwner = {
-        tenantId: effectiveParentOwner.tenantId,
-        principalId: effectiveParentOwner.principalId,
-        packageInstanceId: childPackageInstanceId,
-        generationId: childGenerationId,
-      };
+      if (
+        childPackageId !== this.packageId &&
+        !this.actionResolver &&
+        !this.actions.has(`${childPackageId}/${parsed.actionId}`)
+      ) {
+        const err = new Error(`Package '${childPackageId}' could not be resolved`);
+        (err as any).code = PACKAGE_NOT_FOUND;
+        throw err;
+      }
 
-      const childResult = await runnerToUse.execute(childAction, childInput, {
+      const childResult = await this.execute(childAction, childInput, {
         rootRunId,
         parentRunId,
         callStack,
@@ -917,14 +872,10 @@ export class ActionRunner {
         logger: options.logger,
         configOverrides: options.configOverrides,
         maxCallDepth: options.maxCallDepth ?? this.maxCallDepth,
-        tenantId: childOwner.tenantId,
-        principalId: childOwner.principalId,
-        ownerId: childOwner.principalId,
-        packageInstanceId: childOwner.packageInstanceId,
-        generationId: childOwner.generationId,
-        owner: childOwner,
+        owner: effectiveParentOwner,
         hostSessionId: options.hostSessionId ?? this.hostSessionId,
       });
+
       if (!childResult.ok) {
         const err = new Error(childResult.error.message);
         (err as any).code = childResult.error.code;
@@ -933,65 +884,8 @@ export class ActionRunner {
       }
       return childResult.data;
     } finally {
-      this.activeSubRuns--;
+      this.policy.releaseSubRun(rootRunId);
     }
-  }
-
-  /**
-   * 校验跨包子调用是否已在 uses 声明中授权（未声明时抛出 UNDECLARED_ACTION_DEPENDENCY）。
-   */
-  private assertDeclaredUses(
-    action: ActionDefinition | undefined,
-    targetActionId: string,
-    childPackageId: string,
-    childActionId: string
-  ): void {
-    if (!childPackageId || childPackageId === this.packageId) {
-      return;
-    }
-    const actionConfig = this.projectConfig?.actions?.[targetActionId] as any;
-    const rawUses = actionConfig?.uses ?? (action as any)?.uses;
-    const declaredUses = Array.isArray(rawUses) ? rawUses : [];
-    const targetRef = `${childPackageId}/${childActionId}`;
-    const isAllowed = declaredUses.some(
-      (u: string) => u === targetRef || u === `${childPackageId}/*` || u === childPackageId
-    );
-    if (!isAllowed) {
-      const err = new Error(
-        `Undeclared cross-package dependency: Action '${this.packageId}/${targetActionId}' does not declare '${targetRef}' in 'uses'`
-      );
-      (err as any).code = UNDECLARED_ACTION_DEPENDENCY;
-      (err as any).details = {
-        caller: `${this.packageId}/${targetActionId}`,
-        target: targetRef,
-        declaredUses: rawUses,
-      };
-      throw err;
-    }
-  }
-
-  /**
-   * 解析子调用应使用的 Runner（本包或已解析的目标包 Runner）。
-   */
-  private async resolveChildRunner(
-    childPackageId: string,
-    childActionId: string
-  ): Promise<ActionRunner> {
-    if (childPackageId && childPackageId !== this.packageId) {
-      const targetRunner = await this.resolveTargetPackageRunner(childPackageId);
-      if (targetRunner) {
-        return targetRunner;
-      }
-      if (this.actions.has(`${childPackageId}/${childActionId}`)) {
-        return this;
-      }
-      if (!this.actionResolver) {
-        const err = new Error(`Package '${childPackageId}' could not be resolved`);
-        (err as any).code = PACKAGE_NOT_FOUND;
-        throw err;
-      }
-    }
-    return this;
   }
 
   /**
@@ -1200,15 +1094,10 @@ export class ActionRunner {
   }
 
   /**
-   * 释放 Runner 持有的跨包资源：遍历关闭全部子包 Runner 及其独立创建的存储连接。
-   *
-   * 幂等且并发安全：重复调用直接复用首次 Promise；子包存储异常不阻断其余释放；
-   * 仅关闭由本 Runner 构建子包 Runner 时独立创建的存储，外部注入的存储（如经
-   * packageContextResolver 传入的目标包自身存储）生命周期归所有者管理，不在此误关。
+   * 释放 Runner 持有的资源。
+   * 铁律 4：Runner 仅执行自己所属 Package 的 Action，不管理外部包生命周期。
    */
-  public async dispose(): Promise<void> {
-    return this.packageFactory.dispose();
-  }
+  public async dispose(): Promise<void> {}
 
   /**
    * 同步等待方式执行指定 Action，直接返回 ExecutionResult 信封结果。

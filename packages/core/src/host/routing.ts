@@ -41,6 +41,8 @@ export function parseRefLoose(ref: ActionRef | string): ActionRef {
   }
 }
 
+import { InvocationPolicy } from "../invocation/policy";
+
 /**
  * 根调用可见性判定：非公开包且存在依赖解析器时，交由解析器委托规则裁决。
  */
@@ -50,14 +52,8 @@ export function isRootCallVisible(
   hostPublicPackageIds: ReadonlySet<string>,
   resolver?: ActionPackageResolver
 ): boolean {
-  const isPublic = hostPublicPackageIds.has(packageId);
-  if (isPublic) {
-    return true;
-  }
-  if (resolver && !resolver.canRootCall(packageId, actionId)) {
-    return false;
-  }
-  return true;
+  const policy = new InvocationPolicy();
+  return policy.checkRootVisibility(packageId, actionId, { hostPublicPackageIds, resolver }) === undefined;
 }
 
 /**

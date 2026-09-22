@@ -28,7 +28,9 @@ import {
 } from "../errors";
 import { resultStatusToRunStatus, type RuntimeStorage } from "../storage/types";
 import type { RuntimePlatform } from "../platform/types";
+import { createPackageIdentity, type PackageIdentity } from "../runtime/identity";
 import type {
+  ActionInvoker,
   CancelResult,
   ExecuteOptions,
   ExecutionService,
@@ -68,7 +70,8 @@ interface ExecutionEventBridge {
  * 统一执行协调服务实现。
  */
 export class DefaultExecutionService implements ExecutionService {
-  private packageId: string;
+  public readonly identity: PackageIdentity;
+  public readonly packageId: string;
   private storage: RuntimeStorage;
   private projectConfig?: ProjectConfig;
   public readonly eventSink: EventSink;
@@ -89,12 +92,18 @@ export class DefaultExecutionService implements ExecutionService {
   private ownsStorage: boolean;
   private ownsGlobalStorage: boolean;
   private globalStorage?: RuntimeStorage;
+  private actionInvoker?: ActionInvoker;
 
   constructor(options: ExecutionServiceOptions) {
     this.platform = options.platform;
-    this.packageId = options.packageId;
-    this.packageInstanceId = options.packageInstanceId || this.packageId;
-    this.generationId = options.generationId || "1";
+    this.identity = options.identity || createPackageIdentity({
+      id: options.packageId,
+      instanceId: options.packageInstanceId,
+      generation: options.generationId,
+    });
+    this.packageId = this.identity.id;
+    this.packageInstanceId = this.identity.instanceId;
+    this.generationId = this.identity.generation;
     this.hostSessionId = options.hostSessionId;
     this.projectConfig = options.projectConfig;
     this.eventSink = options.eventSink || (options.platform as any)?.eventSink || new InMemoryEventSink();
@@ -102,6 +111,7 @@ export class DefaultExecutionService implements ExecutionService {
     this.ownerId = options.ownerId || `host-${randomUUID().slice(0, 8)}`;
     this.actionResolver = options.actionResolver;
     this.logger = options.logger;
+    this.actionInvoker = options.actionInvoker;
 
     if (options.platform) {
       this.clock = options.platform.clock;
@@ -161,11 +171,17 @@ export class DefaultExecutionService implements ExecutionService {
       getStorageForPackage: options.getStorageForPackage,
       packageContextResolver: options.packageContextResolver,
       customHome: options.customHome,
+      actionInvoker: this.actionInvoker,
     });
   }
 
   public get runner(): ActionRunner {
     return this._runner;
+  }
+
+  public setActionInvoker(invoker?: ActionInvoker): void {
+    this.actionInvoker = invoker;
+    this._runner.setActionInvoker(invoker);
   }
 
   public registerAction(id: string, action: ActionDefinition): void;
@@ -201,15 +217,12 @@ export class DefaultExecutionService implements ExecutionService {
     const parsed = typeof ref === "string" ? ActionResolver.parseRef(ref) : ref;
     const actionId = parsed.actionId;
     const targetPackageId = parsed.packageId || this.packageId;
-    let runner = this._runner;
     if (targetPackageId !== this.packageId) {
-      const targetRunner = await this._runner.resolveTargetPackageRunner(targetPackageId);
-      if (!targetRunner) return undefined;
-      runner = targetRunner;
+      return undefined;
     }
-    const fromRunner = runner.getAction(actionId);
+    const fromRunner = this._runner.getAction(actionId);
     if (fromRunner) return fromRunner;
-    if (this.actionResolver && targetPackageId === this.packageId) {
+    if (this.actionResolver) {
       return this.actionResolver(parsed);
     }
     return undefined;
@@ -331,11 +344,21 @@ export class DefaultExecutionService implements ExecutionService {
         logger: bridge.executionLogger,
         process: options.process || options.platform?.process || this.process,
         platform: options.platform || this.platform,
-        packageInstanceId: options.packageInstanceId,
-        generationId: options.generationId,
-        tenantId: options.tenantId,
-        principalId: options.principalId,
-        owner: options.owner,
+        packageInstanceId: options.packageInstanceId || this.packageInstanceId,
+        generationId: options.generationId || this.generationId,
+        tenantId: options.owner?.tenantId || options.tenantId,
+        principalId: options.owner?.principalId || options.principalId,
+        owner: options.owner
+          ? {
+              tenantId: options.owner.tenantId,
+              principalId: options.owner.principalId,
+              packageInstanceId:
+                options.owner.packageInstanceId || options.packageInstanceId || this.packageInstanceId,
+              generationId:
+                options.owner.generationId || options.generationId || this.generationId,
+            }
+          : undefined,
+        actionInvoker: options.actionInvoker || this.actionInvoker,
       });
 
       const activeItem: ActiveRun = {
@@ -455,53 +478,48 @@ export class DefaultExecutionService implements ExecutionService {
   }
 
   /**
-   * 解析执行目标：确定目标 Runner 并解析目标 Action 定义。
+   * 解析执行目标：确定目标 Action 定义。
+   * 铁律 4：Runner 不找 Package，ExecutionService 仅执行本 Package 的 Action。
    */
   private async resolveExecutionTarget(
     parsedRef: ActionRef,
     targetPackageId: string,
     targetActionId: string
   ): Promise<{ runner: ActionRunner; action?: ActionDefinition; resolveError?: RuntimeError }> {
-    let runnerToUse: ActionRunner = this._runner;
+    const runnerToUse: ActionRunner = this._runner;
     let resolveError: RuntimeError | undefined;
 
     if (targetPackageId && targetPackageId !== this.packageId) {
-      const targetRunner = await this._runner.resolveTargetPackageRunner(targetPackageId);
-      if (targetRunner) {
-        runnerToUse = targetRunner;
-      } else {
-        resolveError = {
-          code: ACTION_NOT_FOUND,
-          message: `Target package '${targetPackageId}' not found or unresolvable`,
-        };
-      }
+      resolveError = {
+        code: ACTION_NOT_FOUND,
+        message: `Package '${this.packageId}' cannot execute action for external package '${targetPackageId}'`,
+      };
+      return { runner: runnerToUse, action: undefined, resolveError };
     }
 
-    let action: ActionDefinition | undefined;
-    if (!resolveError) {
-      action = runnerToUse.getAction(targetActionId) || runnerToUse.getAction(`${targetPackageId}/${targetActionId}`);
+    let action: ActionDefinition | undefined =
+      runnerToUse.getAction(targetActionId) || runnerToUse.getAction(`${targetPackageId}/${targetActionId}`);
 
-      if (!action) {
-        const resolution = await runnerToUse.resolveAction(parsedRef);
-        if (resolution.status === "found") {
-          action = resolution.action;
-        } else if (resolution.status === "load_failed") {
-          resolveError = describeActionLoadFailure(resolution.error, {
-            actionId: targetActionId,
-            packageId: resolution.packageId,
-            projectRoot: resolution.projectRoot,
-          });
+    if (!action) {
+      const resolution = await runnerToUse.resolveAction(parsedRef);
+      if (resolution.status === "found") {
+        action = resolution.action;
+      } else if (resolution.status === "load_failed") {
+        resolveError = describeActionLoadFailure(resolution.error, {
+          actionId: targetActionId,
+          packageId: resolution.packageId,
+          projectRoot: resolution.projectRoot,
+        });
+      } else {
+        const targetAction = await this.resolveTargetAction(parsedRef);
+        if (targetAction) {
+          action = targetAction;
         } else {
-          const targetAction = await this.resolveTargetAction(parsedRef);
-          if (targetAction) {
-            action = targetAction;
-          } else {
-            resolveError = {
-              code: ACTION_NOT_FOUND,
-              message: `Action '${targetActionId}' not found in package '${targetPackageId}'`,
-              details: resolution.reason ? { reason: resolution.reason } : undefined,
-            };
-          }
+          resolveError = {
+            code: ACTION_NOT_FOUND,
+            message: `Action '${targetActionId}' not found in package '${targetPackageId}'`,
+            details: resolution.reason ? { reason: resolution.reason } : undefined,
+          };
         }
       }
     }
@@ -726,27 +744,7 @@ export class DefaultExecutionService implements ExecutionService {
   }
 
   async get(runId: string): Promise<RunRecord | undefined> {
-    const record = this.storage.getRun(runId);
-    if (record) return record;
-
-    // 检查所有已解析的目标包 Runner 存储
-    const visited = new Set<ActionRunner>([this._runner]);
-    const queue: ActionRunner[] = [this._runner];
-    while (queue.length > 0) {
-      const runner = queue.shift()!;
-      for (const [_, childRunner] of runner.getPackageRunners()) {
-        if (!visited.has(childRunner)) {
-          visited.add(childRunner);
-          queue.push(childRunner);
-          const childRecord = childRunner.getStorage().getRun(runId);
-          if (childRecord) {
-            return childRecord;
-          }
-        }
-      }
-    }
-
-    return undefined;
+    return this.storage.getRun(runId) ?? undefined;
   }
 
   async cancel(runId: string, reason?: string): Promise<CancelResult> {
@@ -804,12 +802,7 @@ export class DefaultExecutionService implements ExecutionService {
 
     this.activeRuns.clear();
 
-    // 级联释放跨包子包 Runner 及其独立创建的存储连接（幂等，异常不阻断后续释放）
-    try {
-      await this._runner.dispose();
-    } catch {
-      // 子包释放异常已在 dispose 内部隔离，此处仅需保障主流程继续
-    }
+    await this._runner.dispose();
 
     if (this.ownsStorage && this.storage && typeof (this.storage as any).close === "function") {
       await (this.storage as any).close();

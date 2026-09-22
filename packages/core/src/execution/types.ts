@@ -17,29 +17,25 @@ import type { EventSink } from "../runtime/events";
 import type { RuntimeStorage } from "../storage/types";
 import type { RuntimePlatform } from "../platform/types";
 import type { ProcessOwner } from "../process/process-manager";
+import type { PackageIdentity, RunOptions } from "../invocation/types";
+
+export type { PackageIdentity, RunOptions };
 
 /**
- * 执行参数选项。
+ * 执行参数选项（ExecuteOptions）。
+ * 继承公开 RunOptions，并承载内部执行协调参数。
  */
-export interface ExecuteOptions {
-  /** 外部取消信号 */
-  signal?: AbortSignal;
-  /** 超时时间（毫秒） */
-  timeoutMs?: number;
-  /** 配置临时覆盖字典 */
-  config?: Record<string, JsonValue>;
-  /** 幂等请求去重标识 */
-  requestId?: string;
+export interface ExecuteOptions extends RunOptions {
+  /** 显式指定的运行 ID */
+  runId?: string;
   /** 父运行 ID */
   parentRunId?: string;
   /** 根运行 ID */
   rootRunId?: string;
+  /** 调用栈切片快照 */
+  callStack?: string[];
   /** 最大调用嵌套深度限制 */
   maxCallDepth?: number;
-  /** 外部日志注入 */
-  logger?: Logger;
-  /** 外部进度报告器注入 */
-  progress?: ProgressReporter;
   /** 外部进程执行器注入 */
   process?: ProcessAPI;
   /** 可选的底层运行平台契约 */
@@ -50,18 +46,30 @@ export interface ExecuteOptions {
   packageInstanceId?: string;
   /** 快照代次标识 */
   generationId?: string;
-  /** 租户标识 */
-  tenantId?: string;
-  /** 主体标识 */
-  principalId?: string;
   /** 执行归属所有者契约 */
   owner?: ProcessOwner;
+  /** 宿主所有者标识 */
+  ownerId?: string;
+  /** 子任务调用委托函数 */
+  actionInvoker?: ActionInvoker;
 }
+
+/**
+ * 跨包动作调用委托函数。
+ */
+export type ActionInvoker = (
+  childAction: ActionRef | string,
+  childInput: unknown,
+  callerRunId?: string,
+  callerContext?: any
+) => Promise<unknown>;
 
 /**
  * 统一执行协调服务配置选项。
  */
 export interface ExecutionServiceOptions {
+  /** 包物理与快照身份标识值对象 */
+  identity?: PackageIdentity;
   packageId: string;
   hostSessionId?: string;
   storage?: RuntimeStorage;
@@ -99,6 +107,8 @@ export interface ExecutionServiceOptions {
   } | undefined;
   customHome?: string;
   platform?: RuntimePlatform;
+  /** 子任务调用委托函数 */
+  actionInvoker?: ActionInvoker;
 }
 
 /**
@@ -126,6 +136,9 @@ export type CancelResult =
  * 统一执行协调服务接口。
  */
 export interface ExecutionService {
+  /** 包物理与快照身份标识值对象 */
+  readonly identity: PackageIdentity;
+
   /** 底层 Action 执行引擎（用于跨包上下文注入与动态解析委托） */
   readonly runner: ActionRunner;
 
@@ -163,6 +176,15 @@ export interface ExecutionService {
 
   /** 按 ID 检索已注册的 Action 定义 */
   getAction(id: string): ActionDefinition | undefined;
+
+  /** 设置子任务动作调用委托器 */
+  setActionInvoker?(
+    invoker?: (
+      childAction: ActionRef | string,
+      childInput: unknown,
+      callerRunId?: string
+    ) => Promise<unknown>
+  ): void;
 
   /** 优雅关闭服务并等待活跃任务收尾 */
   close(options?: { graceMs?: number }): Promise<void>;
