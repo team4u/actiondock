@@ -1042,6 +1042,20 @@ describe("Flat JsonValue Encoding v1", () => {
       expect(formatted).toContain("Input Schema: 无");
     });
 
+    it("formatActionDetail 正确渲染布尔模式 outputSchema (false 与 true)", () => {
+      const formattedFalse = formatActionDetail({
+        id: "test.output-false",
+        outputSchema: false,
+      });
+      expect(formattedFalse).toContain("Output Schema:\nfalse");
+
+      const formattedTrue = formatActionDetail({
+        id: "test.output-true",
+        outputSchema: true,
+      });
+      expect(formattedTrue).toContain("Output Schema:\ntrue");
+    });
+
     it("验证 InputError 与 FlatInputError 的继承关系与分类", () => {
       const errJson = invalidJson("bad json");
       const errNotFound = inputFileNotFound("missing.json");

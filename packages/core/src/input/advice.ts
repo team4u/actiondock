@@ -326,7 +326,7 @@ export function formatActionDetail(action: {
     lines.push("\nInput Schema: 无");
   }
 
-  if (action.outputSchema) {
+  if (action.outputSchema !== undefined) {
     lines.push("\nOutput Schema:");
     lines.push(JSON.stringify(action.outputSchema, null, 2));
   }
