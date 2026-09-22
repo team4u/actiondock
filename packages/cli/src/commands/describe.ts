@@ -38,16 +38,7 @@ export function attachDescribeCommand(parent: Command, context?: CliContext): Co
         throw packageNotFoundError(options.package);
       }
 
-      let targetRef = id;
-      if (options.package && !id.includes("/") && !id.includes(":")) {
-        const isPath =
-          options.package.includes("/") ||
-          options.package.includes("\\") ||
-          options.package.startsWith(".");
-        if (!isPath) {
-          targetRef = `${options.package}/${id}`;
-        }
-      }
+      const targetRef = id;
 
       // 通过 Target 门面统一查询 Action 规范
       await withTarget(
