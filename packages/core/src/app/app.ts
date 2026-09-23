@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type {
@@ -12,7 +13,6 @@ import { DefaultExecutionService } from "../execution/service";
 import type {
   ActionInvoker,
   CancelResult,
-  ExecuteOptions,
   ExecutionService,
   ExecutionTicket,
 } from "../execution/types";
@@ -26,10 +26,9 @@ import { isSecretConfigKey, sanitizeConfigDefinitions } from "../storage/mask";
 import { decodeStateKey, SqliteRuntimeStorage } from "../storage/sqlite";
 import type { RuntimeStorage } from "../storage/types";
 import { createPackageIdentity, type PackageIdentity } from "../runtime/identity";
-import { InvocationPolicy } from "../invocation/policy";
 import { parseActionRef } from "../catalog/resolve-action";
-import { ACTION_SUBRUN_LIMIT, CAPABILITY_UNAVAILABLE, MAX_SUBRUNS_REACHED, ActionDockError } from "../errors";
-import type { InvocationContext } from "../invocation/types";
+import { CAPABILITY_UNAVAILABLE, INVOCATION_UNSUPPORTED, ActionDockError } from "../errors";
+import type { InvocationContext, RunOptions } from "../invocation/types";
 import { buildStaticActionMap, buildStaticPlaybookMap } from "./static-index";
 import type {
   ActionSpec,
@@ -194,69 +193,13 @@ export class DefaultPackageRuntime implements PackageRuntime {
     });
 
     if (!options.actionInvoker) {
-      const localPolicy = new InvocationPolicy({
-        maxCallDepth: options.maxCallDepth ?? 16,
-        maxSubRuns: options.maxSubRuns ?? 64,
-      });
-      const defaultInvoker: ActionInvoker = async (childAction, childInput, context: InvocationContext) => {
-        const parsed = typeof childAction === "string" ? parseActionRef(childAction) : childAction;
-        const targetActionId = parsed.actionId;
-        const targetPackageId = parsed.packageId || this.packageId;
-
-        const depthErr = localPolicy.checkCallDepth(context.callStack, targetActionId, context.maxCallDepth);
-        if (depthErr) {
-          const err = new Error(depthErr.message);
-          (err as any).code = depthErr.code;
-          (err as any).details = depthErr.details;
-          throw err;
-        }
-
-        const cycle = localPolicy.checkCycle(context.callStack, targetActionId, targetPackageId, this.packageId);
-        if (cycle.error) {
-          const err = new Error(cycle.error.message);
-          (err as any).code = cycle.error.code;
-          (err as any).details = cycle.error.details;
-          throw err;
-        }
-
-        const rootRunId = context.rootRunId;
-        const quotaErr = localPolicy.checkSubRunQuota(rootRunId);
-        if (quotaErr) {
-          const err = new Error(quotaErr.message);
-          (err as any).code = quotaErr.code;
-          (err as any).details = quotaErr.details;
-          throw err;
-        }
-
-        if (!localPolicy.acquireSubRun(rootRunId)) {
-          const err = new Error(`Maximum concurrent sub-runs (${localPolicy.maxSubRuns}) reached`);
-          (err as any).code = ACTION_SUBRUN_LIMIT;
-          (err as any).details = { alias: MAX_SUBRUNS_REACHED, limit: localPolicy.maxSubRuns };
-          throw err;
-        }
-
-        try {
-          const subContext: InvocationContext = {
-            ...context,
-            callStack: [...context.callStack, cycle.callKey],
-          };
-          const ticket = await this.executionService.start(targetActionId, childInput as JsonValue, subContext);
-          if (!ticket.result) {
-            throw new Error(`Execution ticket for run '${ticket.runId}' has no result Promise`);
-          }
-          const res = await ticket.result;
-          if (!res.ok) {
-            const err = new Error(res.error.message);
-            (err as any).code = res.error.code;
-            (err as any).details = res.error.details;
-            throw err;
-          }
-          return res.data;
-        } finally {
-          localPolicy.releaseSubRun(rootRunId);
-        }
+      const unsupportedInvoker: ActionInvoker = async () => {
+        throw new ActionDockError(
+          INVOCATION_UNSUPPORTED,
+          "Cascaded action invocation (ctx.actions.invoke) is not supported in standalone PackageRuntime. Actions must be executed within an ActionDock Host."
+        );
       };
-      this.executionService.setActionInvoker?.(defaultInvoker);
+      this.executionService.setActionInvoker?.(unsupportedInvoker);
     }
 
     // 7. 初始化配置解析器
@@ -447,10 +390,50 @@ export class DefaultPackageRuntime implements PackageRuntime {
     };
   }
 
+  private buildRootInvocationContext(options?: RunOptions | InvocationContext): InvocationContext {
+    if (
+      typeof options === "object" &&
+      options !== null &&
+      "package" in options &&
+      "callStack" in options &&
+      "runId" in options &&
+      "rootRunId" in options
+    ) {
+      return options as InvocationContext;
+    }
+    const runId = (options as any)?.runId || randomUUID();
+    const rootRunId = (options as any)?.rootRunId || runId;
+    return {
+      runId,
+      rootRunId,
+      parentRunId: (options as any)?.parentRunId,
+      callStack: (options as any)?.callStack ? [...(options as any).callStack] : [],
+      package: this.identity,
+      signal: options?.signal ?? new AbortController().signal,
+      timeoutMs: options?.timeoutMs,
+      config: options?.config,
+      requestId: options?.requestId,
+      tenantId: options?.tenantId,
+      principalId: options?.principalId,
+      hostSessionId: (options as any)?.hostSessionId || this.options.hostSessionId,
+      maxCallDepth: (options as any)?.maxCallDepth ?? this.options.maxCallDepth,
+      logger: options?.logger ?? this.options.logger,
+      progress: options?.progress,
+      process: (options as any)?.process ?? this.options.process ?? this.platform.process,
+      platform: (options as any)?.platform ?? this.platform,
+      owner: (options as any)?.owner ?? {
+        tenantId: options?.tenantId || "default",
+        principalId: options?.principalId || "default",
+        packageInstanceId: this.identity.instanceId,
+        generationId: this.identity.generation,
+      },
+    };
+  }
+
   async runAction(
     id: string,
     input: JsonValue,
-    options?: ExecuteOptions
+    options?: RunOptions | InvocationContext
   ): Promise<ExecutionResult> {
     let actionId = id;
     if (actionId.includes("/")) {
@@ -462,13 +445,14 @@ export class DefaultPackageRuntime implements PackageRuntime {
         );
       }
     }
-    return this.executionService.execute(actionId, input, options);
+    const context = this.buildRootInvocationContext(options);
+    return this.executionService.execute(actionId, input, context);
   }
 
   async startAction(
     id: string,
     input: JsonValue,
-    options?: ExecuteOptions
+    options?: RunOptions | InvocationContext
   ): Promise<ExecutionTicket> {
     let actionId = id;
     if (actionId.includes("/")) {
@@ -480,7 +464,8 @@ export class DefaultPackageRuntime implements PackageRuntime {
         );
       }
     }
-    return this.executionService.start(actionId, input, options);
+    const context = this.buildRootInvocationContext(options);
+    return this.executionService.start(actionId, input, context);
   }
 
   async getRun(runId: string): Promise<RunRecord | undefined> {

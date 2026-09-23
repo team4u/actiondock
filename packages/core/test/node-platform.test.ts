@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decodeText, defineAction } from "@actiondock/sdk";
-import { createNodePlatform, SqliteRuntimeStorage, SystemClock } from "../src";
+import { createNodePlatform, createInvocationContext, SqliteRuntimeStorage, SystemClock } from "../src";
 import { createPackageIdentity } from "../src/runtime/identity";
 import { DefaultExecutionService } from "../src/execution/service";
 import { NodeFileSystem } from "../src/platform/node-fs";
@@ -198,8 +198,9 @@ describe("createNodePlatform 平台工厂测试", () => {
         },
       });
 
+      const identity = createPackageIdentity({ id: "node-test-package" });
       const service = new DefaultExecutionService({
-        identity: createPackageIdentity({ id: "node-test-package" }),
+        identity,
         packageId: "node-test-package",
         platform,
         storage: platform.storage.createStorage("node-test-package"),
@@ -207,7 +208,7 @@ describe("createNodePlatform 平台工厂测试", () => {
 
       service.registerAction("echo-action", testAction);
 
-      const ticket = await service.start("echo-action", {});
+      const ticket = await service.start("echo-action", {}, createInvocationContext({ package: identity }));
       const result = await ticket.result!;
 
       expect(result.ok).toBe(true);

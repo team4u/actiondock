@@ -362,7 +362,7 @@ export class PackageGraphBuilder {
     if (this.options.packages) {
       for (const pkg of this.options.packages) {
         const digest = computeManifestDigest(pkg.manifest);
-        const identity = createPackageIdentity({
+        const identity = pkg.identity ?? createPackageIdentity({
           id: pkg.id,
           instanceId: `${pkg.id}:${pkg.root}`,
           generation,

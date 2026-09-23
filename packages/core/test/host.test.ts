@@ -516,7 +516,13 @@ actions:
     });
 
     const callerApp = host.getRuntime("source.caller")!;
+    const testRunId = "run-caller-test";
     const res = await callerApp.executionService.execute("call-worker", {}, {
+      runId: testRunId,
+      rootRunId: testRunId,
+      callStack: [],
+      package: callerApp.identity,
+      signal: new AbortController().signal,
       owner: {
         tenantId: "tenant-corp-1",
         principalId: "user-alice",

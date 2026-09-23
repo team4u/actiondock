@@ -11,10 +11,10 @@ import type {
 import type {
   ActionInvoker,
   CancelResult,
-  ExecuteOptions,
   ExecutionService,
   ExecutionTicket,
 } from "../execution/types";
+import type { RunOptions } from "../invocation/types";
 import type { ConfigItemDefinition, ProjectConfig } from "../project/types";
 import type { EventSink } from "../runtime/events";
 import type { RuntimePlatform, StorageFactory, StorageFactoryOptions } from "../platform/types";
@@ -275,14 +275,14 @@ export interface PackageRuntime {
   runAction(
     id: string,
     input: JsonValue,
-    options?: ExecuteOptions
+    options?: RunOptions
   ): Promise<ExecutionResult>;
 
   /** 异步启动指定 Action 并立即返回任务执行票据（仅接受本包短标识） */
   startAction(
     id: string,
     input: JsonValue,
-    options?: ExecuteOptions
+    options?: RunOptions
   ): Promise<ExecutionTicket>;
 
   /** 查询任务执行记录列表 */

@@ -165,7 +165,20 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
       }
     }
 
-    const eventStream = service.runs.events(runId, { after: afterCursor, signal: req.signal });
+    if (!service.events) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: {
+            code: "CAPABILITY_UNAVAILABLE",
+            message: "EventsPort is not supported by this ActionDock service",
+          },
+        },
+        501
+      );
+    }
+
+    const eventStream = service.events.events(runId, { after: afterCursor, signal: req.signal });
     const iterator = eventStream[Symbol.asyncIterator]();
 
     // 检查游标是否在建流前已过期：拉取首个事件，若抛出 EVENT_CURSOR_EXPIRED 直接返回 410

@@ -31,7 +31,9 @@ import type {
   ActionDockService,
   ConfigPort,
   DiscoveryPort,
+  EventsPort,
   ExecutionPort,
+  RunEventSubscriptionOptions,
   RunsPort,
   StatePort,
 } from "./types";
@@ -47,6 +49,7 @@ export class LocalActionDockService implements ActionDockService {
   public readonly discovery: DiscoveryPort;
   public readonly execution: ExecutionPort;
   public readonly runs: RunsPort;
+  public readonly events: EventsPort;
   public readonly management?: {
     config: ConfigPort;
     state: StatePort;
@@ -115,15 +118,17 @@ export class LocalActionDockService implements ActionDockService {
         return self.host.cancelRun(runId, reason);
       },
 
-      events(
-        runId: string,
-        opts?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number }
-      ): AsyncIterable<ExecutionEvent> {
-        return self.host.events(runId, opts);
-      },
-
       async clear(opts?: { packageId?: string; actionId?: string; status?: string; olderThanMs?: number }): Promise<number> {
         return self.host.clearRuns(opts);
+      },
+    };
+
+    this.events = {
+      events(
+        runId: string,
+        opts?: RunEventSubscriptionOptions
+      ): AsyncIterable<ExecutionEvent> {
+        return self.host.events(runId, opts);
       },
     };
 

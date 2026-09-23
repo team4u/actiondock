@@ -17,42 +17,15 @@ import type { EventSink } from "../runtime/events";
 import type { RuntimeStorage } from "../storage/types";
 import type { RuntimePlatform } from "../platform/types";
 import type { ProcessOwner } from "../process/process-manager";
-import type { PackageIdentity, RunOptions, InvocationContext } from "../invocation/types";
+import {
+  type PackageIdentity,
+  type RunOptions,
+  type InvocationContext,
+  createInvocationContext,
+} from "../invocation/types";
 
+export { createInvocationContext };
 export type { PackageIdentity, RunOptions, InvocationContext };
-
-/**
- * 执行参数选项（ExecuteOptions）。
- * 继承公开 RunOptions，并承载内部执行协调参数。
- */
-export interface ExecuteOptions extends RunOptions {
-  /** 显式指定的运行 ID */
-  runId?: string;
-  /** 父运行 ID */
-  parentRunId?: string;
-  /** 根运行 ID */
-  rootRunId?: string;
-  /** 调用栈切片快照 */
-  callStack?: readonly string[];
-  /** 最大调用嵌套深度限制 */
-  maxCallDepth?: number;
-  /** 外部进程执行器注入 */
-  process?: ProcessAPI;
-  /** 可选的底层运行平台契约 */
-  platform?: RuntimePlatform;
-  /** 执行宿主会话标识 */
-  hostSessionId?: string;
-  /** 包物理实例标识 */
-  packageInstanceId?: string;
-  /** 快照代次标识 */
-  generationId?: string;
-  /** 执行归属所有者契约 */
-  owner?: ProcessOwner;
-  /** 宿主所有者标识 */
-  ownerId?: string;
-  /** 子任务调用委托函数 */
-  actionInvoker?: ActionInvoker;
-}
 
 /**
  * 跨包动作调用委托函数。
@@ -129,14 +102,21 @@ export interface ExecutionService {
   execute(
     ref: ActionRef | string,
     input: JsonValue,
-    options?: ExecuteOptions | InvocationContext
+    context: InvocationContext
+  ): Promise<ExecutionResult>;
+
+  /** 同步执行 Action 并等待终态结果（execute 统一别名） */
+  run(
+    ref: ActionRef | string,
+    input: JsonValue,
+    context: InvocationContext
   ): Promise<ExecutionResult>;
 
   /** 异步启动 Action 并立即返回任务票据 */
   start(
     ref: ActionRef | string,
     input: JsonValue,
-    options?: ExecuteOptions | InvocationContext
+    context: InvocationContext
   ): Promise<ExecutionTicket>;
 
   /** 根据 ID 获取运行记录 */

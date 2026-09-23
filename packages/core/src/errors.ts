@@ -77,6 +77,9 @@ export const RUN_PERSISTENCE_FAILED = "RUN_PERSISTENCE_FAILED";
 /** 独立单执行二进制拒绝异步启动语义 */
 export const STANDALONE_ASYNC_UNSUPPORTED = "STANDALONE_ASYNC_UNSUPPORTED";
 
+/** 独立运行模式不支持级联调用 */
+export const INVOCATION_UNSUPPORTED = "INVOCATION_UNSUPPORTED";
+
 /** 宿主子进程已退出，调用无法送达 */
 export const HOST_PROCESS_EXITED = "HOST_PROCESS_EXITED";
 
@@ -333,6 +336,7 @@ export type ErrorCode =
   | typeof RUN_REPOSITORY_UNAVAILABLE
   | typeof RUN_PERSISTENCE_FAILED
   | typeof STANDALONE_ASYNC_UNSUPPORTED
+  | typeof INVOCATION_UNSUPPORTED
   | typeof HOST_PROCESS_EXITED
   | typeof EXECUTION_ABORTED
   | typeof TIMEOUT

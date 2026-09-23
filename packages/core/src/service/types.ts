@@ -187,6 +187,26 @@ export interface ExecutionPort {
 }
 
 /**
+ * 运行事件订阅控制选项。
+ */
+export interface RunEventSubscriptionOptions {
+  /** 起始游标位置（序号或标识） */
+  after?: number | string;
+  /** 外部取消信号 */
+  signal?: AbortSignal;
+  /** 最大背压队列深度 */
+  maxQueueSize?: number;
+}
+
+/**
+ * 任务执行事件流服务端口。
+ */
+export interface EventsPort {
+  /** 订阅指定运行的事件流 */
+  events(runId: string, options?: RunEventSubscriptionOptions): AsyncIterable<ExecutionEvent>;
+}
+
+/**
  * 任务运行记录管理服务端口。
  */
 export interface RunsPort {
@@ -196,11 +216,6 @@ export interface RunsPort {
   get(runId: string): Promise<RunRecord | undefined>;
   /** 取消指定在运行的任务 */
   cancel(runId: string, reason?: string): Promise<CancelResult>;
-  /** 订阅指定运行的事件流 */
-  events(
-    runId: string,
-    options?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number }
-  ): AsyncIterable<ExecutionEvent>;
   /** 清空历史任务运行记录 */
   clear?(options?: { packageId?: string; actionId?: string; status?: string }): Promise<number>;
 }
@@ -273,6 +288,8 @@ export interface ActionDockService {
   execution: ExecutionPort;
   /** 运行记录服务端口 */
   runs: RunsPort;
+  /** 执行事件流服务端口（可选，若通道不支持流式事件则为 undefined） */
+  events?: EventsPort;
   /** 管理服务端口（可选，若服务端未开启管理能力则为 undefined） */
   management?: {
     config: ConfigPort;

@@ -17,7 +17,6 @@ import { ActionResolver } from "../catalog/action-resolver";
 import { ACTION_CANCELLED, TIMEOUT } from "../errors";
 import type {
   CancelResult,
-  ExecuteOptions,
   ExecutionTicket,
 } from "../execution/types";
 import type { RunOptions } from "../invocation/types";
@@ -61,7 +60,9 @@ import type {
   ConfigPort,
   ConnectActionDockOptions,
   DiscoveryPort,
+  EventsPort,
   ExecutionPort,
+  RunEventSubscriptionOptions,
   RunsPort,
   StatePort,
 } from "./types";
@@ -84,6 +85,7 @@ export class RemoteActionDockService implements ActionDockService {
   public readonly discovery: DiscoveryPort;
   public readonly execution: ExecutionPort;
   public readonly runs: RunsPort;
+  public readonly events: EventsPort;
   public readonly management?: {
     config: ConfigPort;
     state: StatePort;
@@ -394,9 +396,26 @@ export class RemoteActionDockService implements ActionDockService {
         }
       },
 
+      async clear(opts?: { packageId?: string; actionId?: string; status?: string }): Promise<number> {
+        self.assertNotClosed();
+        try {
+          const res = await clearRemoteRuns(self.serverUrl, self.token, {
+            ...opts,
+            allowInsecureHttp: self.allowInsecureHttp,
+            insecure: self.insecure,
+            dispatcher: self.dispatcher,
+          });
+          return res.clearedCount ?? 0;
+        } catch (err: any) {
+          wrapRemoteError(err);
+        }
+      },
+    };
+
+    this.events = {
       events(
         runId: string,
-        opts?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number }
+        opts?: RunEventSubscriptionOptions
       ): AsyncIterable<ExecutionEvent> {
         self.assertNotClosed();
         async function* stream(): AsyncIterable<ExecutionEvent> {
@@ -412,21 +431,6 @@ export class RemoteActionDockService implements ActionDockService {
           }
         }
         return stream();
-      },
-
-      async clear(opts?: { packageId?: string; actionId?: string; status?: string }): Promise<number> {
-        self.assertNotClosed();
-        try {
-          const res = await clearRemoteRuns(self.serverUrl, self.token, {
-            ...opts,
-            allowInsecureHttp: self.allowInsecureHttp,
-            insecure: self.insecure,
-            dispatcher: self.dispatcher,
-          });
-          return res.clearedCount ?? 0;
-        } catch (err: any) {
-          wrapRemoteError(err);
-        }
       },
     };
 
@@ -707,7 +711,7 @@ export class RemoteActionDockService implements ActionDockService {
     }
 
     try {
-      for await (const evt of this.runs.events(runId, { signal: internalController.signal })) {
+      for await (const evt of this.events.events(runId, { signal: internalController.signal })) {
         if (evt.type === "finish") {
           const res = (evt as any).result || (evt as any).data || evt;
           if (typeof res?.ok === "boolean") {

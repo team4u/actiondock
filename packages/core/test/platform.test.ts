@@ -6,6 +6,7 @@ import { decodeText, encodeBytes, type ActionContext, type ProcessAPI, type Proc
 import { ActionRunner } from "../src/runtime/runner";
 import {
   createNodePlatform,
+  createInvocationContext,
   SqliteRuntimeStorage,
   type Clock,
   type ModuleLoader,
@@ -298,8 +299,9 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
         },
       };
 
+      const identity = createPackageIdentity({ id: "exec-pkg" });
       const service = new DefaultExecutionService({
-        identity: createPackageIdentity({ id: "exec-pkg" }),
+        identity,
         packageId: "exec-pkg",
         platform: testPlatform,
         storage: memoryStorage,
@@ -317,7 +319,7 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
         },
       });
 
-      const result = await service.execute("inspect", {});
+      const result = await service.execute("inspect", {}, createInvocationContext({ package: identity }));
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.data).toEqual({ stdout: "platform-process" });
@@ -343,8 +345,9 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
         sleep: async () => {},
       };
 
+      const identity = createPackageIdentity({ id: "legacy-pkg" });
       const service = new DefaultExecutionService({
-        identity: createPackageIdentity({ id: "legacy-pkg" }),
+        identity,
         packageId: "legacy-pkg",
         storage: legacyStorage,
         clock: legacyClock,
@@ -355,7 +358,7 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
         run: async (input: any) => input,
       });
 
-      const res = await service.execute("echo", { text: "hello" });
+      const res = await service.execute("echo", { text: "hello" }, createInvocationContext({ package: identity }));
       expect(res.ok).toBe(true);
       if (res.ok) {
         expect(res.data).toEqual({ text: "hello" });

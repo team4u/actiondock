@@ -20,6 +20,8 @@ export type {
   DiscoveryPort,
   ExecutionPort,
   RunsPort,
+  EventsPort,
+  RunEventSubscriptionOptions,
   ConfigPort,
   StatePort,
   CreateActionDockOptions,
@@ -46,6 +48,12 @@ export type {
   PackageInfo,
   ListActionsOptions,
 } from "./app/types";
+export {
+  createInvocationContext,
+} from "./execution/types";
+export {
+  createPackageIdentity,
+} from "./runtime/identity";
 export type {
   RunOptions,
   ExecutionTicket,
@@ -212,6 +220,7 @@ export {
   RUN_REPOSITORY_UNAVAILABLE,
   RUN_PERSISTENCE_FAILED,
   STANDALONE_ASYNC_UNSUPPORTED,
+  INVOCATION_UNSUPPORTED,
   HOST_PROCESS_EXITED,
   EXECUTION_ABORTED,
   TIMEOUT,

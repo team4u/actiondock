@@ -545,9 +545,10 @@ export async function createActionDockMcpServer(
   decorated.close = closeFn;
   decorated.service = service;
   decorated.host = options.host;
-  decorated.runtime = options.runtime;
-  decorated.events = (runId: string, opts?: { after?: number; signal?: AbortSignal }) =>
-    service.runs.events(runId, opts);
+  if (service.events) {
+    decorated.events = (runId: string, opts?: { after?: number; signal?: AbortSignal }) =>
+      service.events!.events(runId, opts);
+  }
 
   return decorated;
 }

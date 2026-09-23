@@ -22,10 +22,9 @@ import type {
 import type {
   ActionInvoker,
   CancelResult,
-  ExecuteOptions,
   ExecutionTicket,
 } from "../execution/types";
-import type { InvocationContext } from "../invocation/types";
+import type { InvocationContext, RunOptions } from "../invocation/types";
 import { findProjectRoot, loadProjectConfig } from "../project/loader";
 import { hasPendingTransactions, isProjectLockHeld, recoverPendingTransactions } from "../project/transactions";
 import { listLinkedPackages } from "../registry/registry";
@@ -260,6 +259,7 @@ export class DefaultActionDockHost implements ActionDockHost {
           const runtime = new DefaultPackageRuntime({
             packageRoot: pkg.root,
             projectConfig: pkg.manifest,
+            identity: pkg.identity,
             hostSessionId: this.hostSessionId,
             platform: options.platform,
             inMemory: options.inMemory,
@@ -527,6 +527,7 @@ export class DefaultActionDockHost implements ActionDockHost {
       id: runtime.packageId,
       root: runtime.packageRoot || "",
       manifest: runtime.projectConfig,
+      identity: runtime.identity,
       isCurrentProject: this.hostPublicPackageIds.has(runtime.packageId),
     }));
 
@@ -696,7 +697,7 @@ export class DefaultActionDockHost implements ActionDockHost {
   async runAction(
     ref: ActionRef | string,
     input: JsonValue,
-    options: ExecuteOptions = {}
+    options: RunOptions = {}
   ): Promise<ExecutionResult> {
     const ticket = await this.startAction(ref, input, options);
     if (!ticket.result) {
@@ -708,7 +709,7 @@ export class DefaultActionDockHost implements ActionDockHost {
   async startAction(
     ref: ActionRef | string,
     input: JsonValue,
-    options: ExecuteOptions = {}
+    options: RunOptions = {}
   ): Promise<ExecutionTicket> {
     if (this.isClosed) {
       throw new Error("ActionDockHost is closed: new tasks rejected");
@@ -787,9 +788,12 @@ export class DefaultActionDockHost implements ActionDockHost {
     // 父子任务血缘关系、调用配额与跨包 uses 声明依赖校验（统一委托 InvocationPolicy 单一事实源）
     let effectiveRootRunId = options.rootRunId;
     let effectiveCallStack: string[] = (options as any).callStack ? [...(options as any).callStack] : [];
+    let declaredUses: string[] | undefined;
+    let parentRunRecord: RunRecord | undefined;
 
     if (parentRunId) {
       const parentRun = await this.getRun(parentRunId);
+      parentRunRecord = parentRun;
       if (parentRun) {
         const lineage = this.policy.resolveLineage({
           runId: parentRun.id,
@@ -802,9 +806,8 @@ export class DefaultActionDockHost implements ActionDockHost {
         // 跨包 uses 依赖声明校验
         const callerPackageId = parentRun.packageId;
         const callerActionId = parentRun.actionId;
-        if (callerPackageId && callerPackageId !== targetPackageId) {
+        if (callerPackageId) {
           const callerRuntime = this.getRuntime(callerPackageId);
-          let declaredUses: string[] | undefined;
           if (callerRuntime) {
             try {
               const callerSpec = await callerRuntime.describeAction(callerActionId);
@@ -813,6 +816,9 @@ export class DefaultActionDockHost implements ActionDockHost {
               // 忽略规范提取异常，交由执行服务执行
             }
           }
+        }
+
+        if (callerPackageId && callerPackageId !== targetPackageId) {
           const authErr = this.policy.checkUsesAuthorization(
             { packageId: callerPackageId, actionId: callerActionId, declaredUses },
             { packageId: targetPackageId, actionId: targetActionId },
@@ -885,13 +891,41 @@ export class DefaultActionDockHost implements ActionDockHost {
       }
     }
 
-    // 构造子运行参数并调度至目标 Runtime 执行
-    const execOptions: ExecuteOptions = {
-      ...options,
-      rootRunId: effectiveRootRunId,
+    // 构造强类型根 InvocationContext 并调度至目标 ExecutionService 执行
+    const runId = options.runId || randomUUID();
+    const rootRunId = effectiveRootRunId || runId;
+    const rootContext: InvocationContext = {
+      runId,
+      rootRunId,
       parentRunId,
+      caller: parentRunRecord
+        ? {
+            packageId: parentRunRecord.packageId,
+            actionId: parentRunRecord.actionId,
+            runId: parentRunRecord.id,
+            declaredUses,
+          }
+        : undefined,
+      callStack: effectiveCallStack,
+      package: targetRuntime.identity,
+      signal: options.signal ?? new AbortController().signal,
+      timeoutMs: options.timeoutMs,
+      config: options.config,
+      requestId: options.requestId,
+      tenantId: options.tenantId,
+      principalId: options.principalId,
       hostSessionId: this.hostSessionId,
       maxCallDepth: options.maxCallDepth ?? this.maxCallDepth,
+      logger: options.logger,
+      progress: options.progress,
+      process: options.process ?? this.options.process,
+      platform: options.platform ?? this.options.platform,
+      owner: options.owner ?? {
+        tenantId: options.tenantId || "default",
+        principalId: options.principalId || "default",
+        packageInstanceId: targetRuntime.identity.instanceId,
+        generationId: targetRuntime.identity.generation,
+      },
     };
 
     if (parentRunId && effectiveRootRunId) {
@@ -900,7 +934,11 @@ export class DefaultActionDockHost implements ActionDockHost {
 
     let ticket: ExecutionTicket;
     try {
-      ticket = await targetRuntime.startAction(targetActionId, input, execOptions);
+      ticket = await targetRuntime.startAction(
+        targetActionId,
+        input,
+        rootContext
+      );
     } catch (err) {
       if (parentRunId && effectiveRootRunId) {
         this.policy.releaseSubRun(effectiveRootRunId);

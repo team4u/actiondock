@@ -10,6 +10,7 @@ import { linkPackage } from "../src/registry/registry";
 import { ActionRunner } from "../src/runtime/runner";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
 import { createPackageIdentity } from "../src/runtime/identity";
+import { createInvocationContext } from "../src/invocation/types";
 import { InvocationPolicy } from "../src/invocation/policy";
 
 describe("ActionRunner", () => {
@@ -762,15 +763,16 @@ describe("ActionRunner", () => {
       },
     };
 
+    const identity = createPackageIdentity({ id: "test-pkg" });
     const service = new DefaultExecutionService({
-      identity: createPackageIdentity({ id: "test-pkg" }),
+      identity,
       packageId: "test-pkg",
       storage,
       eventSink: eventSink as any,
     });
     service.registerAction("test.progress-log", progressAndLogAction);
 
-    const result = await service.execute({ actionId: "test.progress-log" }, {});
+    const result = await service.execute({ actionId: "test.progress-log" }, {}, createInvocationContext({ package: identity }));
     expect(result.ok).toBe(true);
 
     const logEvents = emittedEvents.filter((e) => e.type === "log");
@@ -1040,13 +1042,14 @@ describe("ActionRunner", () => {
       dbPath: ":memory:",
     });
 
+    const identity = createPackageIdentity({ id: "test-pkg" });
     const service = new DefaultExecutionService({
-      identity: createPackageIdentity({ id: "test-pkg" }),
+      identity,
       packageId: "test-pkg",
       storage,
     });
 
-    const result = await service.execute({ actionId: "nonexistent.action" }, {});
+    const result = await service.execute({ actionId: "nonexistent.action" }, {}, createInvocationContext({ package: identity }));
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe("ACTION_NOT_FOUND");
@@ -1089,25 +1092,26 @@ describe("ActionRunner", () => {
       },
     });
 
+    const identityA = createPackageIdentity({ id: "pkg-a" });
     const serviceA = new DefaultExecutionService({
-      identity: createPackageIdentity({ id: "pkg-a" }),
+      identity: identityA,
       packageId: "pkg-a",
       storage: storageA,
       actions: new Map([["work", workAction]]),
     });
 
     // 字符串形式："work"
-    const stringRes = await serviceA.execute("work", { task: "clean" });
+    const stringRes = await serviceA.execute("work", { task: "clean" }, createInvocationContext({ package: identityA }));
     expect(stringRes.ok).toBe(true);
     expect((stringRes as any).data).toEqual({ done: true, task: "clean", fromPkg: "pkg-a" });
 
     // 完全限定字符串形式："pkg-a/work"
-    const fqRes = await serviceA.execute("pkg-a/work", { task: "clean-fq" });
+    const fqRes = await serviceA.execute("pkg-a/work", { task: "clean-fq" }, createInvocationContext({ package: identityA }));
     expect(fqRes.ok).toBe(true);
     expect((fqRes as any).data).toEqual({ done: true, task: "clean-fq", fromPkg: "pkg-a" });
 
     // 对象形式：{ packageId: "pkg-a", actionId: "work" }
-    const objRes = await serviceA.execute({ packageId: "pkg-a", actionId: "work" }, { task: "build" });
+    const objRes = await serviceA.execute({ packageId: "pkg-a", actionId: "work" }, { task: "build" }, createInvocationContext({ package: identityA }));
     expect(objRes.ok).toBe(true);
     expect((objRes as any).data).toEqual({ done: true, task: "build", fromPkg: "pkg-a" });
 
@@ -1124,15 +1128,16 @@ describe("ActionRunner", () => {
       },
     });
 
+    const identityA = createPackageIdentity({ id: "pkg-a" });
     const serviceA = new DefaultExecutionService({
-      identity: createPackageIdentity({ id: "pkg-a" }),
+      identity: identityA,
       packageId: "pkg-a",
       storage: storageA,
       actions: new Map([["secret", localAction]]),
     });
 
     // Calling non-existent ghost-pkg/secret must NOT execute pkg-a's secret action
-    const result = await serviceA.execute("ghost-pkg/secret", {});
+    const result = await serviceA.execute("ghost-pkg/secret", {}, createInvocationContext({ package: identityA }));
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe("ACTION_NOT_FOUND");
@@ -1159,8 +1164,9 @@ describe("ActionRunner", () => {
       },
     });
 
+    const identity = createPackageIdentity({ id: "concurrency-pkg" });
     const service = new DefaultExecutionService({
-      identity: createPackageIdentity({ id: "concurrency-pkg" }),
+      identity,
       packageId: "concurrency-pkg",
       storage,
       maxActiveRuns: maxActive,
@@ -1172,7 +1178,7 @@ describe("ActionRunner", () => {
       const totalRequests = 10;
       const startPromises = Array.from({ length: totalRequests }).map(async (_, idx) => {
         try {
-          const ticket = await service.start("slow", { index: idx });
+          const ticket = await service.start("slow", { index: idx }, createInvocationContext({ package: identity }));
           return { success: true, ticket };
         } catch (err: any) {
           return { success: false, error: err };
@@ -1197,7 +1203,7 @@ describe("ActionRunner", () => {
       }
 
       // After completions, new requests can succeed
-      const followUpTicket = await service.start("slow", {});
+      const followUpTicket = await service.start("slow", {}, createInvocationContext({ package: identity }));
       expect(followUpTicket.status).toBe("running");
       expect(followUpTicket.result).toBeDefined();
       const followUpRes = await followUpTicket.result!;

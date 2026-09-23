@@ -6,6 +6,8 @@ import type { ActionDockManifest } from "../project/types";
 import { DefaultRegistryStore, type RegistryStore } from "../registry/store";
 import { discoverProjectConfigs } from "../registry/scan";
 
+import type { PackageIdentity } from "../runtime/identity";
+
 /**
  * 发现的包基本信息规范。
  */
@@ -16,6 +18,8 @@ export interface DiscoveredPackage {
   readonly root: string;
   /** 包清单定义 */
   readonly manifest: ActionDockManifest;
+  /** 包物理与快照身份凭证（可选，由已有运行时传入） */
+  readonly identity?: PackageIdentity;
   /** 是否来自工作区目录扫描发现 */
   readonly isWorkspaceChild?: boolean;
   /** 是否为当前工作目录工程 */

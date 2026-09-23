@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { fork, type ChildProcess } from "node:child_process";
 import type {
   ActionRef,
-  ExecutionEvent,
   ExecutionResult,
   JsonValue,
   RunRecord,
@@ -245,10 +244,6 @@ export class IpcActionDockService implements ActionDockService {
 
       async cancel(runId: string, reason?: string): Promise<CancelResult> {
         return self.callRemote<CancelResult>("cancelRun", [runId, reason]);
-      },
-
-      async *events(_runId: string, _opts?: any): AsyncIterable<ExecutionEvent> {
-        // 基础 IPC 通道暂不流式下发历史事件
       },
 
       async clear(opts?: { packageId?: string; actionId?: string; status?: string; olderThanMs?: number }): Promise<number> {

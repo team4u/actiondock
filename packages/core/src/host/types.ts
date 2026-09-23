@@ -19,9 +19,9 @@ import type {
 } from "../app/types";
 import type {
   CancelResult,
-  ExecuteOptions,
   ExecutionTicket,
 } from "../execution/types";
+import type { RunOptions } from "../invocation/types";
 import type { Clock } from "../runtime/clock";
 import type { EventSink } from "../runtime/events";
 import type { RuntimePlatform } from "../platform/types";
@@ -97,14 +97,14 @@ export interface ActionDockHost {
   runAction(
     ref: ActionRef | string,
     input: JsonValue,
-    options?: ExecuteOptions
+    options?: RunOptions
   ): Promise<ExecutionResult>;
 
   /** 异步启动指定 Action 并立即返回任务执行票据 */
   startAction(
     ref: ActionRef | string,
     input: JsonValue,
-    options?: ExecuteOptions
+    options?: RunOptions
   ): Promise<ExecutionTicket>;
 
   /** 查询指定运行标识的记录详情 */

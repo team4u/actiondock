@@ -32,7 +32,6 @@ import { createPackageIdentity, type PackageIdentity } from "../runtime/identity
 import type {
   ActionInvoker,
   CancelResult,
-  ExecuteOptions,
   ExecutionService,
   ExecutionServiceOptions,
   ExecutionTicket,
@@ -199,13 +198,21 @@ export class DefaultExecutionService implements ExecutionService {
   async execute(
     ref: ActionRef | string,
     input: JsonValue,
-    options: ExecuteOptions | InvocationContext = {}
+    context: InvocationContext
   ): Promise<ExecutionResult> {
-    const ticket = await this.start(ref, input, options);
+    const ticket = await this.start(ref, input, context);
     if (!ticket.result) {
       throw new Error(`Execution ticket for run '${ticket.runId}' has no result Promise`);
     }
     return ticket.result;
+  }
+
+  async run(
+    ref: ActionRef | string,
+    input: JsonValue,
+    context: InvocationContext
+  ): Promise<ExecutionResult> {
+    return this.execute(ref, input, context);
   }
 
   public get activeRunsCount(): number {
@@ -215,7 +222,7 @@ export class DefaultExecutionService implements ExecutionService {
   async start(
     ref: ActionRef | string,
     input: JsonValue,
-    options: ExecuteOptions | InvocationContext = {}
+    context: InvocationContext
   ): Promise<ExecutionTicket> {
     if (this.isClosing) {
       throw new Error("ExecutionService is closing: new tasks rejected");
@@ -247,12 +254,12 @@ export class DefaultExecutionService implements ExecutionService {
       const targetActionId = parsedRef.actionId;
       const targetPackageId = parsedRef.packageId || this.packageId;
       const actionRef = `${targetPackageId}/${targetActionId}`;
-      const effectiveClock = options.platform?.clock ?? this.clock;
+      const effectiveClock = context.platform?.clock ?? this.clock;
 
       // requestId 幂等检查与去重处理
       const gateResult = await this.checkIdempotencyGate(
         input,
-        options,
+        context,
         actionRef,
         effectiveClock
       );
@@ -268,7 +275,7 @@ export class DefaultExecutionService implements ExecutionService {
         return this.failTicketForMissingAction({
           target,
           input,
-          options,
+          context,
           targetPackageId,
           targetActionId,
           designatedRunId,
@@ -282,12 +289,12 @@ export class DefaultExecutionService implements ExecutionService {
 
       const controller = new AbortController();
       let onAbort: (() => void) | undefined;
-      if (options.signal && typeof options.signal.addEventListener === "function") {
-        if (options.signal.aborted) {
-          controller.abort(options.signal.reason);
+      if (context.signal && typeof context.signal.addEventListener === "function") {
+        if (context.signal.aborted) {
+          controller.abort(context.signal.reason);
         } else {
-          onAbort = () => controller.abort(options.signal?.reason);
-          options.signal.addEventListener(
+          onAbort = () => controller.abort(context.signal?.reason);
+          context.signal.addEventListener(
             "abort",
             onAbort,
             { once: true }
@@ -295,49 +302,39 @@ export class DefaultExecutionService implements ExecutionService {
         }
       }
 
-      const runId = designatedRunId || randomUUID();
-      const bridge = this.createEventBridge({ runId, options, effectiveClock });
-
-      const optPkgInstanceId =
-        "package" in options && options.package
-          ? options.package.instanceId
-          : (options as ExecuteOptions).packageInstanceId;
-      const optGenerationId =
-        "package" in options && options.package
-          ? options.package.generation
-          : (options as ExecuteOptions).generationId;
-      const optActionInvoker = (options as ExecuteOptions).actionInvoker;
+      const runId = designatedRunId || context.runId || randomUUID();
+      const bridge = this.createEventBridge({ runId, context, effectiveClock });
 
       this.registerResolvedAction(target.runner, targetPackageId, targetActionId, target.action);
       const handle = target.runner.start(targetActionId, input, {
         runId,
-        rootRunId: options.rootRunId,
-        parentRunId: options.parentRunId,
-        callStack: options.callStack ? [...options.callStack] : undefined,
-        hostSessionId: options.hostSessionId || this.hostSessionId,
-        maxCallDepth: options.maxCallDepth,
-        configOverrides: options.config as Record<string, unknown> | undefined,
+        rootRunId: context.rootRunId,
+        parentRunId: context.parentRunId,
+        callStack: context.callStack ? [...context.callStack] : undefined,
+        hostSessionId: context.hostSessionId || this.hostSessionId,
+        maxCallDepth: context.maxCallDepth,
+        configOverrides: context.config as Record<string, unknown> | undefined,
         signal: controller.signal,
-        timeoutMs: options.timeoutMs,
+        timeoutMs: context.timeoutMs,
         progress: bridge.progressReporter,
         logger: bridge.executionLogger,
-        process: options.process || options.platform?.process || this.process,
-        platform: options.platform || this.platform,
-        packageInstanceId: optPkgInstanceId || this.packageInstanceId,
-        generationId: optGenerationId || this.generationId,
-        tenantId: options.owner?.tenantId || options.tenantId,
-        principalId: options.owner?.principalId || options.principalId,
-        owner: options.owner
+        process: context.process || context.platform?.process || this.process,
+        platform: context.platform || this.platform,
+        packageInstanceId: context.package.instanceId,
+        generationId: context.package.generation,
+        tenantId: context.owner?.tenantId || context.tenantId,
+        principalId: context.owner?.principalId || context.principalId,
+        owner: context.owner
           ? {
-              tenantId: options.owner.tenantId,
-              principalId: options.owner.principalId,
+              tenantId: context.owner.tenantId,
+              principalId: context.owner.principalId,
               packageInstanceId:
-                options.owner.packageInstanceId || optPkgInstanceId || this.packageInstanceId,
+                context.owner.packageInstanceId || context.package.instanceId,
               generationId:
-                options.owner.generationId || optGenerationId || this.generationId,
+                context.owner.generationId || context.package.generation,
             }
           : undefined,
-        actionInvoker: optActionInvoker || this.actionInvoker,
+        actionInvoker: this.actionInvoker,
       });
 
       const activeItem: ActiveRun = {
@@ -346,7 +343,7 @@ export class DefaultExecutionService implements ExecutionService {
         controller,
         status: "running",
         startedAt: (effectiveClock?.now() ?? new Date()).toISOString(),
-        signal: options.signal,
+        signal: context.signal,
         onAbort,
       };
 
@@ -372,18 +369,18 @@ export class DefaultExecutionService implements ExecutionService {
    */
   private async checkIdempotencyGate(
     input: JsonValue,
-    options: ExecuteOptions,
+    context: InvocationContext,
     actionRef: string,
     effectiveClock?: Clock
   ): Promise<{ ticket?: ExecutionTicket; designatedRunId?: string }> {
-    if (!options.requestId) {
+    if (!context.requestId) {
       return {};
     }
 
     const digestPayload = {
       input,
-      config: options.config,
-      timeoutMs: options.timeoutMs,
+      config: context.config,
+      timeoutMs: context.timeoutMs,
     };
     const inputDigest = computeDigest(digestPayload);
     const provisionalRunId = randomUUID();
@@ -395,7 +392,7 @@ export class DefaultExecutionService implements ExecutionService {
     const idemp = this.storage.checkAndRecordIdempotency({
       ownerId: this.ownerId,
       actionRef,
-      requestId: options.requestId,
+      requestId: context.requestId,
       inputDigest,
       runId: provisionalRunId,
       createdAt: (effectiveClock?.now() ?? new Date()).toISOString(),
@@ -404,9 +401,9 @@ export class DefaultExecutionService implements ExecutionService {
     if (idemp.outcome === "conflict") {
       const conflictError: RuntimeError = {
         code: IDEMPOTENCY_CONFLICT,
-        message: `Idempotency conflict for requestId '${options.requestId}': input parameters digest mismatch`,
+        message: `Idempotency conflict for requestId '${context.requestId}': input parameters digest mismatch`,
         details: {
-          requestId: options.requestId,
+          requestId: context.requestId,
           actionRef,
           expectedDigest: idemp.existingDigest,
           actualDigest: inputDigest,
@@ -524,30 +521,30 @@ export class DefaultExecutionService implements ExecutionService {
   private failTicketForMissingAction(args: {
     target: { runner: ActionRunner; resolveError?: RuntimeError };
     input: JsonValue;
-    options: ExecuteOptions;
+    context: InvocationContext;
     targetPackageId: string;
     targetActionId: string;
     designatedRunId?: string;
     effectiveClock?: Clock;
   }): ExecutionTicket {
-    const { target, input, options, targetPackageId, targetActionId, designatedRunId, effectiveClock } = args;
-    const runId = designatedRunId || randomUUID();
+    const { target, input, context, targetPackageId, targetActionId, designatedRunId, effectiveClock } = args;
+    const runId = designatedRunId || context.runId || randomUUID();
     const now = (effectiveClock?.now() ?? new Date()).toISOString();
     const error: RuntimeError = target.resolveError || {
       code: ACTION_NOT_FOUND,
       message: `Action '${targetActionId}' not found in package '${targetPackageId}'`,
     };
-    const rootRunId = options.rootRunId || options.parentRunId || runId;
+    const rootRunId = context.rootRunId || context.parentRunId || runId;
     const initialRun: RunRecord = {
       id: runId,
       rootRunId,
-      parentRunId: options.parentRunId,
+      parentRunId: context.parentRunId,
       packageId: targetPackageId,
-      packageInstanceId: options.packageInstanceId || target.runner.packageInstanceId,
+      packageInstanceId: context.package.instanceId || target.runner.packageInstanceId,
       actionId: targetActionId,
-      generationId: options.generationId || target.runner.generationId,
+      generationId: context.package.generation || target.runner.generationId,
       ownerId: this.ownerId,
-      hostSessionId: options.hostSessionId || this.hostSessionId,
+      hostSessionId: context.hostSessionId || this.hostSessionId,
       status: "failed",
       input,
       error,
@@ -600,10 +597,10 @@ export class DefaultExecutionService implements ExecutionService {
    */
   private createEventBridge(args: {
     runId: string;
-    options: ExecuteOptions;
+    context: InvocationContext;
     effectiveClock?: Clock;
   }): ExecutionEventBridge {
-    const { runId, options, effectiveClock } = args;
+    const { runId, context, effectiveClock } = args;
     let sequence = 0;
     type EventPayload =
       | { type: "log"; level: "debug" | "info" | "warn" | "error"; message: string; data?: JsonValue }
@@ -615,7 +612,7 @@ export class DefaultExecutionService implements ExecutionService {
       const evt: ExecutionEvent = {
         ...payload,
         runId,
-        rootRunId: options.rootRunId || options.parentRunId || runId,
+        rootRunId: context.rootRunId || context.parentRunId || runId,
         sequence: sequence++,
         timestamp: (effectiveClock?.now() ?? new Date()).toISOString(),
       };
@@ -624,7 +621,7 @@ export class DefaultExecutionService implements ExecutionService {
 
     const progressReporter: ProgressReporter = {
       report(current: number, total?: number, message?: string) {
-        options.progress?.report(current, total, message);
+        context.progress?.report(current, total, message);
         emitEvent({
           type: "progress",
           current,
@@ -637,7 +634,7 @@ export class DefaultExecutionService implements ExecutionService {
     const executionLogger: Logger = {
       debug: (message: string, data?: unknown) => {
         this.logger?.debug(message, data);
-        options.logger?.debug(message, data);
+        context.logger?.debug(message, data);
         emitEvent({
           type: "log",
           level: "debug",
@@ -647,7 +644,7 @@ export class DefaultExecutionService implements ExecutionService {
       },
       info: (message: string, data?: unknown) => {
         this.logger?.info(message, data);
-        options.logger?.info(message, data);
+        context.logger?.info(message, data);
         emitEvent({
           type: "log",
           level: "info",
@@ -657,7 +654,7 @@ export class DefaultExecutionService implements ExecutionService {
       },
       warn: (message: string, data?: unknown) => {
         this.logger?.warn(message, data);
-        options.logger?.warn(message, data);
+        context.logger?.warn(message, data);
         emitEvent({
           type: "log",
           level: "warn",
@@ -667,7 +664,7 @@ export class DefaultExecutionService implements ExecutionService {
       },
       error: (message: string, data?: unknown) => {
         this.logger?.error(message, data);
-        options.logger?.error(message, data);
+        context.logger?.error(message, data);
         emitEvent({
           type: "log",
           level: "error",

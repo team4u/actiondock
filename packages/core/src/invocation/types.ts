@@ -5,10 +5,12 @@ import type {
   ProcessAPI,
   ProgressReporter,
 } from "@actiondock/sdk";
+import { randomUUID } from "node:crypto";
 import type { ProcessOwner } from "../process";
 import type { RuntimePlatform } from "../platform/types";
-import type { PackageIdentity } from "../runtime/identity";
+import { createPackageIdentity, type PackageIdentity } from "../runtime/identity";
 
+export { createPackageIdentity };
 export type { PackageIdentity };
 
 /**
@@ -32,6 +34,22 @@ export interface RunOptions {
   logger?: Logger;
   /** 进度报告器 */
   progress?: ProgressReporter;
+  /** 显式指定的运行 ID */
+  runId?: string;
+  /** 父运行 ID */
+  parentRunId?: string;
+  /** 根运行 ID */
+  rootRunId?: string;
+  /** 调用栈切片快照 */
+  callStack?: readonly string[];
+  /** 最大调用嵌套深度限制 */
+  maxCallDepth?: number;
+  /** 执行归属所有者契约 */
+  owner?: ProcessOwner;
+  /** 外部进程执行器注入 */
+  process?: ProcessAPI;
+  /** 可选的底层运行平台契约 */
+  platform?: RuntimePlatform;
 }
 
 /**
@@ -91,6 +109,42 @@ export interface InvocationContext {
   readonly platform?: RuntimePlatform;
   /** 进程属主身份 */
   readonly owner?: ProcessOwner;
+}
+
+/**
+ * 构造合法的内部调用上下文（InvocationContext）。
+ * 供测试或内部直接调用执行服务时便捷装配根上下文凭据。
+ */
+export function createInvocationContext(options?: Partial<InvocationContext>): InvocationContext {
+  const runId = options?.runId ?? randomUUID();
+  const rootRunId = options?.rootRunId ?? runId;
+  const pkg = options?.package ?? createPackageIdentity({ id: "default-pkg" });
+  return {
+    runId,
+    rootRunId,
+    parentRunId: options?.parentRunId,
+    caller: options?.caller,
+    callStack: options?.callStack ? [...options.callStack] : [],
+    package: pkg,
+    signal: options?.signal ?? new AbortController().signal,
+    timeoutMs: options?.timeoutMs,
+    config: options?.config,
+    requestId: options?.requestId,
+    tenantId: options?.tenantId,
+    principalId: options?.principalId,
+    hostSessionId: options?.hostSessionId,
+    maxCallDepth: options?.maxCallDepth,
+    logger: options?.logger,
+    progress: options?.progress,
+    process: options?.process,
+    platform: options?.platform,
+    owner: options?.owner ?? {
+      tenantId: options?.tenantId || "default",
+      principalId: options?.principalId || "default",
+      packageInstanceId: pkg.instanceId,
+      generationId: pkg.generation,
+    },
+  };
 }
 
 /**
