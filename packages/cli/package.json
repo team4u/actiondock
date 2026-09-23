@@ -37,7 +37,6 @@
     "@actiondock/builder": "^2.7.0",
     "@actiondock/core": "^2.7.0",
     "@actiondock/mcp": "^2.7.0",
-    "@actiondock/runtime-node": "^2.7.0",
     "@actiondock/sdk": "^2.7.0",
     "commander": "^13.1.0",
     "selfsigned": "^5.5.0"

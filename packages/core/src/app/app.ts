@@ -16,7 +16,7 @@ import type {
   ExecutionService,
   ExecutionTicket,
 } from "../execution/types";
-import { createDefaultPlatform, type RuntimePlatform } from "../platform";
+import { createNodePlatform, type RuntimePlatform } from "../platform";
 import { findProjectRoot, loadProjectConfig } from "../project/loader";
 import type { ProjectConfig } from "../project/types";
 import { RuntimeConfig } from "../runtime/context";
@@ -111,7 +111,7 @@ export class DefaultActionDockApp implements ActionDockApp {
     this.actionsMap = normalizeActionCollection(options.actions).actionsMap;
 
     // 3. 确定平台适配层
-    this.platform = options.platform ?? createDefaultPlatform();
+    this.platform = options.platform ?? createNodePlatform();
 
     // 4. 确定并初始化存储实例
     if (options.storage) {

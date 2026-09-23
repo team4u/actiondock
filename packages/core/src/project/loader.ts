@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import type { ActionDefinition } from "@actiondock/sdk";
-import { DefaultModuleLoader, type ModuleLoader } from "../runtime/module-loader";
+import { NodeModuleLoader, type ModuleLoader } from "../node/module-loader";
 import { ACTION_LOAD_FAILED, isMissingModuleError } from "../errors";
 import { loadManifest, ACTION_ID_REGEX, PLAYBOOK_ID_REGEX } from "./manifest";
 import type {
@@ -204,7 +204,7 @@ export async function loadActions(
   options: { loader?: ModuleLoader } = {}
 ): Promise<Map<string, ActionDefinition>> {
   const actions = new Map<string, ActionDefinition>();
-  const loader = options.loader || new DefaultModuleLoader();
+  const loader = options.loader || new NodeModuleLoader();
 
   let manifest: ActionDockManifest | null = null;
   try {

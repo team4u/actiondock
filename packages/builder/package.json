@@ -30,7 +30,6 @@
   },
   "dependencies": {
     "@actiondock/core": "^2.7.0",
-    "@actiondock/runtime-node": "^2.7.0",
     "@actiondock/sdk": "^2.7.0"
   },
   "keywords": [

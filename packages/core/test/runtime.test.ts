@@ -1145,9 +1145,9 @@ describe("ActionRunner", () => {
 
 
   it("平台级共享进程实例在 run 结束后不被误 dispose 且后续 run 可继续使用", async () => {
-    const { createDefaultPlatform } = await import("../src/platform");
+    const { createNodePlatform } = await import("../src/platform");
     const { MemoryProcessDriver } = await import("../src/process");
-    const platform = createDefaultPlatform({ name: "test", processDriver: new MemoryProcessDriver() });
+    const platform = createNodePlatform({ name: "test", processDriver: new MemoryProcessDriver() });
     const sharedProcess = platform.process as any;
 
     // 校验共享实例特征：暴露 manager 派生入口且非 run 级作用域

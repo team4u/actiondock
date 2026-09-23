@@ -1,12 +1,12 @@
 import {
   createActionDockTarget,
+  createNodePlatform,
   findProjectRoot,
   resolvePackageRoot,
   resolveTarget,
   type ActionDockTarget,
   type ResolvedTarget,
 } from "@actiondock/core";
-import { createNodePlatform } from "@actiondock/runtime-node";
 import type { Command } from "commander";
 import type { CliContext } from "../types";
 

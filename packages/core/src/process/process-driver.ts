@@ -6,22 +6,98 @@ import {
   INPUT_CLOSED,
   UNSUPPORTED_CAPABILITY,
   ProcessError,
+} from "../errors";
+import {
+  DEFAULT_ENV_ALLOWLIST,
+  resolveProcessEnv,
   type ProcessDriver,
   type ProcessDriverCallbacks,
   type ProcessDriverHandle,
   type ProcessHandle,
   type ProcessObserver,
-  DEFAULT_ENV_ALLOWLIST,
-  resolveProcessEnv,
-} from "@actiondock/core";
-import { killProcessGroup } from "./process-executor";
+} from "./driver";
+
+export { DEFAULT_ENV_ALLOWLIST, resolveProcessEnv };
+export type { ProcessDriver, ProcessObserver, ProcessHandle, ProcessDriverCallbacks, ProcessDriverHandle };
 
 /**
- * 环境变量解析单一事实源：位于 core 的 resolveProcessEnv（严格 allowlist 白名单、none 与 set/unset 策略）。
- * 本模块 re-export 维持既有导入路径兼容，进程执行器与驱动共用同一份实现，杜绝策略漂移。
+ * 跨平台终止进程组，确保不会遗留孤儿进程。
+ *
+ * - 在 POSIX 环境下通过负数进程标识终止整个进程组
+ * - 在 Windows 环境下优先通过 taskkill 递归终止整棵进程树，等待其完成后将 process.kill 作为失败或超时 fallback
+ *
+ * @param pid 目标子进程标识
+ * @param signal 发送的系统信号
+ * @param spawnFn 进程启动函数，默认为 childProcess.spawn
  */
-export { DEFAULT_ENV_ALLOWLIST, resolveProcessEnv };
-export type { ProcessDriver, ProcessObserver, ProcessHandle };
+export function killProcessGroup(
+  pid: number,
+  signal: "SIGTERM" | "SIGKILL" = "SIGTERM",
+  spawnFn: typeof spawn = childProcess.spawn
+): Promise<void> {
+  if (process.platform === "win32") {
+    return new Promise<void>((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (!settled) {
+          settled = true;
+          resolve();
+        }
+      };
+
+      const fallbackToProcessKill = () => {
+        try {
+          process.kill(pid, signal);
+        } catch {
+          // 忽略已退出状态
+        }
+        finish();
+      };
+
+      try {
+        const killer = spawnFn("taskkill", ["/pid", String(pid), "/T", "/F"], { stdio: "ignore" });
+
+        // 超时保底 fallback：若 taskkill 超过 2000ms 仍未退出，执行 process.kill 强行兜底
+        const timer = setTimeout(() => {
+          try {
+            killer.kill?.();
+          } catch {
+            // 忽略终止失败异常
+          }
+          fallbackToProcessKill();
+        }, 2000);
+        timer.unref?.();
+
+        killer.on?.("error", () => {
+          clearTimeout(timer);
+          fallbackToProcessKill();
+        });
+
+        killer.on?.("close", (code) => {
+          clearTimeout(timer);
+          if (code !== 0) {
+            fallbackToProcessKill();
+          } else {
+            finish();
+          }
+        });
+      } catch {
+        fallbackToProcessKill();
+      }
+    });
+  } else {
+    try {
+      process.kill(-pid, signal);
+    } catch {
+      try {
+        process.kill(pid, signal);
+      } catch {
+        // 忽略已退出状态
+      }
+    }
+    return Promise.resolve();
+  }
+}
 
 /**
  * NodeProcessDriver 初始化选项。
@@ -113,7 +189,7 @@ function ptySignalToName(signal: number | undefined | null): string | null {
 
 /**
  * 基于 Node.js 标准子进程实现的平台驱动。
- * 遵循《ActionDock Managed Process 设计 v2》第 11、12 节规范：
+ * 遵循《ActionDock Managed Process 设计 v2》规范：
  * - pipe 模式采用 child_process.spawn，支持进程组隔离与跨平台 killProcessGroup
  * - 输出与生命周期监听在 spawn 返回前完成绑定，杜绝竞态丢失
  * - 环境变量按 allowlisted 白名单与 none 策略严格继承，叠加 set 与 unset 变更
@@ -124,7 +200,7 @@ function ptySignalToName(signal: number | undefined | null): string | null {
  */
 export class NodeProcessDriver implements ProcessDriver {
   private readonly drainDeadlineMs: number;
-  private readonly spawnFn: typeof spawn;
+  readonly spawnFn: typeof spawn;
   private readonly instances = new Map<string, InternalProcessInstance>();
 
   constructor(options: NodeProcessDriverOptions = {}) {

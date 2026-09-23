@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
-import { normalizeSqliteParams } from "@actiondock/core";
-import type { SqliteDriver, SqliteStatement } from "@actiondock/core";
+import { normalizeSqliteParams } from "./params";
+import type { SqliteDriver, SqliteStatement } from "./types";
 
 export * from "./worker-sqlite-driver";
 

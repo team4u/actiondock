@@ -129,9 +129,9 @@ function generateNodeHostEntrySource(plan: SelectionPlan): string {
 import {
   createActionDockHost,
   createActionDockTarget,
+  createNodePlatform,
   serveParentIpc,
 } from "@actiondock/core";
-import { createNodePlatform } from "@actiondock/runtime-node";
 ${imports}
 
 let dataDir;
@@ -383,7 +383,6 @@ function writePkgJsonAndLockfiles(
   // 准备锁定的生产依赖
   const productionDependencies: Record<string, string> = {
     "@actiondock/core": getInternalDependencyVersion(),
-    "@actiondock/runtime-node": getInternalDependencyVersion(),
     "@actiondock/sdk": getInternalDependencyVersion(),
   };
   for (const ext of plan.dependencies.external) {
@@ -510,7 +509,7 @@ function vendorDependencies(
   }
 
   // 复制 ActionDock 内部依赖
-  for (const internalPkg of ["@actiondock/core", "@actiondock/sdk", "@actiondock/runtime-node"]) {
+  for (const internalPkg of ["@actiondock/core", "@actiondock/sdk"]) {
     for (const baseModules of sourceCandidates) {
       const srcDep = join(baseModules, internalPkg);
       if (existsSync(srcDep)) {

@@ -108,7 +108,7 @@ Core 层内置完整的工业级受管进程治理体系，全面解耦具体操
 
 `@actiondock/core` 保持平台中立，不绑定任何特定运行环境：
 
-- 在日常生产与 Node.js 运行时中，通过 [@actiondock/runtime-node](../runtime-node/README.md) 注入默认同步存储驱动与 Node.js 进程执行器（另有独立异步驱动 WorkerSqliteDriver 可选）。
+- 在日常生产与 Node.js 运行时中，默认组装 NodeSqliteDriver 同步存储驱动与 NodeProcessDriver 进程执行驱动（另有独立异步驱动 WorkerSqliteDriver 可选）。
 - 在自动化测试中，通过 [@actiondock/testing](../testing/README.md) 注入纯内存存储驱动 MemoryStorage 与模拟进程执行器 MockProcessExecutor。
 
 ---

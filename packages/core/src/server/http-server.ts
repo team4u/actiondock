@@ -2,8 +2,10 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { createServer as createHttpsServer, type Server as HttpsServer } from "node:https";
 import { readFileSync } from "node:fs";
 import { Readable } from "node:stream";
-import { formatHostForUrl, SERVER_ERROR, type ServerTlsOptions } from "@actiondock/core";
 import { pipeline } from "node:stream/promises";
+import { SERVER_ERROR } from "../errors";
+import { formatHostForUrl } from "./server";
+import type { ServerTlsOptions } from "./types";
 
 /**
  * Web 标准 Request 处理函数。
@@ -277,11 +279,6 @@ export class NodeHttpServer {
 
   /**
    * 启动监听。若未显式传入端口，则默认使用实例配置或随机可用端口（0）。
-   *
-   * 监听期的 error 事件分两段处理：启动阶段由 once 监听将失败传导给本次
-   * 调用方；成功后移除该一次性监听，改挂常驻监听——运行期错误（如端口被
-   * 抢占、套接字异常关闭）始终有人处理并转发 stderr，绝不成为未处理事件
-   * 导致进程崩溃，也不会在重复 listen 时叠加监听器。
    */
   async listen(
     port?: number,
@@ -292,7 +289,6 @@ export class NodeHttpServer {
 
     if (!this.persistentErrorHandler) {
       this.persistentErrorHandler = (err: Error) => {
-        // 常驻运行期错误兜底：没有实例级回调可转发时至少保留 stderr 诊断
         console.error("[NodeHttpServer] unexpected server error:", err);
       };
       this.server.on("error", this.persistentErrorHandler);
@@ -323,9 +319,6 @@ export class NodeHttpServer {
 
   /**
    * 优雅关闭服务端并释放端口与活动连接。
-   * 与 core/src/server/server.ts 的策略保持一致：close 后强制断开全部连接，
-   * 避免 keep-alive 空闲连接悬挂导致关闭 Promise 永不 resolve。
-   * 关闭时同步移除常驻错误监听，避免实例滞留事件监听器。
    */
   async close(): Promise<void> {
     if (!this.listening) {
@@ -341,7 +334,6 @@ export class NodeHttpServer {
         if (err) reject(err);
         else resolve();
       });
-      // 强制断开全部连接（含 keep-alive 空闲连接），确保 close 回调必然触发
       (this.server as any).closeAllConnections?.();
     });
   }

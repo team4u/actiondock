@@ -10,6 +10,8 @@ export {
 } from "./data-dir-lock";
 export * from "./clock";
 export * from "./driver";
+export * from "./sqlite-driver";
+export * from "./worker-sqlite-driver";
 export * from "./lazy";
 export * from "./mask";
 export * from "./params";

@@ -5,6 +5,7 @@ import {
   ACTIONDOCK_VERSION,
   ActionResolver,
   createActionDockTarget,
+  createNodePlatform,
   ServiceActionDockTarget,
   findProjectRoot,
   resolvePackageRoot,
@@ -238,23 +239,11 @@ export async function resolveTarget(
 
   let platform = options.platform;
   if (!platform && typeof process !== "undefined" && process.versions?.node) {
-    try {
-      const { createNodePlatform } = await import("@actiondock/runtime-node");
-      platform = createNodePlatform({
-        customHome: options.customHome,
-        dataDir: options.dataDir,
-        rootDir: projectRoot,
-      });
-    } catch (err: any) {
-      // 仅「模块不存在」类错误允许降级回退 core 默认平台；
-      // 其余异常（加载后初始化失败等）原样上抛，避免吞没真实故障
-      const isModuleMissing =
-        err?.code === "ERR_MODULE_NOT_FOUND" ||
-        /Cannot find (?:package|module)/i.test(String(err?.message || ""));
-      if (!isModuleMissing) {
-        throw err;
-      }
-    }
+    platform = createNodePlatform({
+      customHome: options.customHome,
+      dataDir: options.dataDir,
+      rootDir: projectRoot,
+    });
   }
 
   for (const pkg of packages) {

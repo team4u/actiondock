@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { decodeText, encodeBytes, type ActionContext, type ProcessAPI, type ProcessResult } from "@actiondock/sdk";
 import {
   ActionRunner,
-  createDefaultPlatform,
+  createNodePlatform,
   DefaultExecutionService,
   NodeFileSystem,
   SqliteRuntimeStorage,
@@ -89,9 +89,9 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
     });
   });
 
-  describe("createDefaultPlatform 平台组装与显式注入测试", () => {
+  describe("createNodePlatform 平台组装与显式注入测试", () => {
     it("具备标准 RuntimePlatform 属性契约并默认使用 Node 原生驱动", () => {
-      const platform = createDefaultPlatform({ name: "test" });
+      const platform = createNodePlatform({ name: "test" });
       expect(platform.name).toBe("test");
       expect(platform.clock).toBeDefined();
       expect(platform.clock.now()).toBeInstanceOf(Date);
@@ -101,39 +101,23 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
       expect(platform.storage).toBeDefined();
     });
 
-    it("未注入 processDriver 时默认进程 API 拒绝执行并给出明确指引", async () => {
-      const platform = createDefaultPlatform({ name: "test" });
+    it("默认具备可用 NodeProcessDriver 进程能力", async () => {
+      const platform = createNodePlatform({ name: "test" });
 
       const runInput = {
-        spec: { executable: "echo", args: [], io: { mode: "pipe" as const } },
-        timeoutMs: 1000,
+        spec: { executable: "echo", args: ["platform-ok"], io: { mode: "pipe" as const } },
+        timeoutMs: 5000,
         maxOutputBytes: 1024,
       };
 
-      let err: any;
-      try {
-        await platform.process.run(runInput);
-      } catch (e) {
-        err = e;
-      }
-
-      expect(err).toBeDefined();
-      expect(err?.code).toBe("UNSUPPORTED_CAPABILITY");
-      expect(err?.message).toContain("process driver");
-      expect(err?.message).toContain("createNodePlatform");
-
-      // start 同样拒绝且不派生进程
-      await expect(
-        platform.process.start({
-          requestId: "req-unsupported-start",
-          spec: runInput.spec,
-        })
-      ).rejects.toThrow();
+      const res = await platform.process.run(runInput);
+      expect(res.exit.code).toBe(0);
+      expect(decodeText(res.chunks)).toContain("platform-ok");
     });
 
-    it("显式注入 MemoryProcessDriver 时默认平台提供可用受管进程能力", async () => {
+    it("显式注入 MemoryProcessDriver 时平台提供可用受管进程能力", async () => {
       const { MemoryProcessDriver } = await import("../src/process/driver");
-      const platform = createDefaultPlatform({
+      const platform = createNodePlatform({
         name: "test",
         processDriver: new MemoryProcessDriver(),
       });
@@ -154,7 +138,7 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
         sleep: async () => {},
       };
 
-      const platform = createDefaultPlatform({ clock: customClock });
+      const platform = createNodePlatform({ clock: customClock });
       expect(platform.clock.now()).toEqual(fakeDate);
       expect(platform.clock.monotonic()).toBe(12345);
     });
@@ -172,7 +156,7 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
         },
       } as unknown as ProcessAPI;
 
-      const platform = createDefaultPlatform({ process: customExecutor });
+      const platform = createNodePlatform({ process: customExecutor });
       const res = await platform.process.run({
         spec: { executable: "echo test", args: [], io: { mode: "pipe" } },
         timeoutMs: 5000,
@@ -191,14 +175,14 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
         },
       };
 
-      const platform = createDefaultPlatform({ modules: customLoader });
+      const platform = createNodePlatform({ modules: customLoader });
       const mod = await platform.modules.load<any>("virtual:module");
       expect(loadedSpecifier).toBe("virtual:module");
       expect(mod.customModule).toBe(true);
     });
 
     it("storage 工厂正确创建独立 SQLite 存储实例", async () => {
-      const platform = createDefaultPlatform();
+      const platform = createNodePlatform();
       const storage = platform.storage.createStorage("test-pkg", { inMemory: true });
       expect(storage).toBeDefined();
       expect(storage.isOpen).toBe(true);

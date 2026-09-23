@@ -1,32 +1,34 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { ProcessAPI } from "@actiondock/sdk";
+import { SystemClock, type Clock } from "../runtime/clock";
+import { NodeModuleLoader, type ModuleLoader } from "../node/module-loader";
+import { NodeProcessDriver } from "../process/process-driver";
+import { ProcessManager } from "../process/process-manager";
+import type { ProcessDriver } from "../process/driver";
+import { NodeSqliteDriver } from "../storage/sqlite-driver";
 import {
-  NodeFileSystem,
-  ProcessManager,
   resolveDatabasePath,
   resolveGlobalDatabasePath,
   SqliteRuntimeStorage,
-  SystemClock,
-  type Clock,
-  type FileSystem,
-  type GlobalStorageFactoryOptions,
-  type ModuleLoader,
-  type ProcessDriver,
-  type RuntimePlatform,
   type RuntimeStorage,
   type SqliteDriver,
-  type StorageFactory,
-  type StorageFactoryOptions,
-} from "@actiondock/core";
-import { NodeModuleLoader } from "./module-loader";
-import { NodeProcessDriver } from "./process-driver";
-import { NodeSqliteDriver } from "./sqlite-driver";
+} from "../storage";
+import { NodeFileSystem } from "./node-fs";
+import type {
+  FileSystem,
+  GlobalStorageFactoryOptions,
+  RuntimePlatform,
+  StorageFactory,
+  StorageFactoryOptions,
+} from "./types";
 
 /**
  * Node 平台构建配置选项。
  */
 export interface NodePlatformOptions {
+  /** 平台名称覆盖（默认使用 node） */
+  name?: "node" | "test";
   /** 自定义全局数据存储目录 */
   dataDir?: string;
   /** 自定义家目录路径 */
@@ -37,12 +39,20 @@ export interface NodePlatformOptions {
   useWorker?: boolean;
   /** 自定义 SQLite 驱动工厂函数（必须返回满足同步契约的 SqliteDriver，默认实例化 NodeSqliteDriver） */
   driverFactory?: (dbPath: string) => SqliteDriver;
-  /** 自定义进程执行驱动（默认使用基于 NodeProcessDriver 的 ProcessManager） */
+  /** 自定义进程执行驱动（默认依托基于 NodeProcessDriver 的 ProcessManager） */
   process?: ProcessAPI;
   /** 可选注入的底层进程驱动 */
   processDriver?: ProcessDriver;
   /** 可选注入的受管进程管理器 */
   processManager?: ProcessManager;
+  /** 自定义源码加载驱动（默认实例化 NodeModuleLoader） */
+  modules?: ModuleLoader;
+  /** 自定义文件系统实现（默认实例化 NodeFileSystem） */
+  files?: FileSystem;
+  /** 自定义时钟驱动（默认实例化 SystemClock） */
+  clock?: Clock;
+  /** 自定义存储工厂（默认基于 NodeSqliteDriver 构造） */
+  storage?: StorageFactory;
 }
 
 function ensureDirectoryForDb(dbPath: string): void {
@@ -52,8 +62,6 @@ function ensureDirectoryForDb(dbPath: string): void {
       try {
         mkdirSync(dir, { recursive: true, mode: 0o700 });
       } catch (err: any) {
-        // recursive 模式下目录已存在不报错；仅当 errno 明示已存在时跳过，
-        // 其余失败（权限、磁盘满等）带上下文重抛，绝不静默吞没
         if (err?.code === "EEXIST" || err?.code === "EISDIR") {
           return;
         }
@@ -73,7 +81,6 @@ function ensureDirectoryForDb(dbPath: string): void {
  * 组装 Node 原生核心组件：
  * - NodeSqliteDriver 同步持久化存储驱动
  * - NodeProcessDriver 原生进程驱动与 ProcessManager 受管进程引擎
- * - NodeHttpServer 网络服务驱动
  * - NodeModuleLoader 原生源码加载器
  * - NodeFileSystem 文件系统
  * - SystemClock 系统时钟
@@ -81,9 +88,10 @@ function ensureDirectoryForDb(dbPath: string): void {
  * @param options 平台配置选项
  */
 export function createNodePlatform(options: NodePlatformOptions = {}): RuntimePlatform {
-  const clock: Clock = new SystemClock();
-  const files: FileSystem = new NodeFileSystem({ rootDir: options.rootDir });
-  const modules: ModuleLoader = new NodeModuleLoader();
+  const platformName: "node" | "test" = options.name ?? "node";
+  const clock: Clock = options.clock ?? new SystemClock();
+  const files: FileSystem = options.files ?? new NodeFileSystem({ rootDir: options.rootDir });
+  const modules: ModuleLoader = options.modules ?? new NodeModuleLoader();
   const processDriver = options.processDriver ?? new NodeProcessDriver();
   const processManager = options.processManager ?? new ProcessManager({ driver: processDriver });
   const process: ProcessAPI =
@@ -97,15 +105,13 @@ export function createNodePlatform(options: NodePlatformOptions = {}): RuntimePl
 
   const createDriver = options.driverFactory ?? ((dbPath: string) => new NodeSqliteDriver(dbPath));
 
-  // 异步 WorkerSqliteDriver 不再兼容存储层的同步 SqliteDriver 契约：
-  // 传入 useWorker 时回落到同步驱动并告警，避免静默注入造成语义错乱。
   if (options.useWorker) {
     console.warn(
       "[createNodePlatform] useWorker is deprecated: WorkerSqliteDriver is async and no longer satisfies the sync SqliteDriver contract; falling back to NodeSqliteDriver."
     );
   }
 
-  const storage: StorageFactory = {
+  const storage: StorageFactory = options.storage ?? {
     createStorage(packageId: string, opts?: StorageFactoryOptions): RuntimeStorage {
       const mergedOpts = {
         customHome: options.customHome,
@@ -143,7 +149,7 @@ export function createNodePlatform(options: NodePlatformOptions = {}): RuntimePl
   };
 
   return {
-    name: "node",
+    name: platformName,
     clock,
     files,
     modules,

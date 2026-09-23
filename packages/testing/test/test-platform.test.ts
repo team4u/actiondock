@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import {
   DefaultExecutionService,
-  DefaultModuleLoader,
   NodeFileSystem,
+  NodeModuleLoader,
   type RuntimePlatform,
 } from "@actiondock/core";
 import { decodeText, defineAction } from "@actiondock/sdk";
@@ -24,7 +24,7 @@ describe("createTestPlatform 测试平台工厂测试", () => {
       expect(platform.name).toBe("test");
       expect(platform.clock).toBeInstanceOf(FakeClock);
       expect(platform.files).toBeInstanceOf(NodeFileSystem);
-      expect(platform.modules).toBeInstanceOf(DefaultModuleLoader);
+      expect(platform.modules).toBeInstanceOf(NodeModuleLoader);
       expect(platform.process).toBeInstanceOf(MockProcessExecutor);
       expect(platform.eventSink).toBeInstanceOf(TestEventSink);
       expect(platform.storage).toBeDefined();

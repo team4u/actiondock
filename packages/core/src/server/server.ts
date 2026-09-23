@@ -1,8 +1,5 @@
-import { createServer as createNodeHttpServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
+import { NodeHttpServer } from "./http-server";
 import { createActionDockHost } from "../host/host";
 import { NOT_FOUND, UNAUTHORIZED } from "../errors";
 import type { ActionDockHost } from "../host/types";
@@ -95,119 +92,20 @@ export async function launchHttpServer(
   fetchHandler: (req: Request) => Promise<Response>,
   tls?: ServerTlsOptions
 ): Promise<CoreHttpServerInstance> {
-  const requestListener = async (req: IncomingMessage, res: ServerResponse) => {
-    const ac = new AbortController();
-    const onReqClose = () => {
-      if (!req.complete) {
-        ac.abort(new Error("Request aborted by client"));
-      }
-    };
-    const onResClose = () => {
-      if (!res.writableFinished) {
-        ac.abort(new Error("Request aborted by client"));
-      }
-    };
-    req.on("close", onReqClose);
-    res.on("close", onResClose);
-
-    try {
-      const protocol = (req.socket as any)?.encrypted ? "https" : "http";
-      const hostHeader = req.headers.host || "127.0.0.1";
-      const url = new URL(req.url || "/", `${protocol}://${hostHeader}`).href;
-
-      const headers = new Headers();
-      for (const [k, v] of Object.entries(req.headers)) {
-        if (v === undefined) continue;
-        if (Array.isArray(v)) {
-          for (const item of v) headers.append(k, item);
-        } else {
-          headers.set(k, v);
-        }
-      }
-
-      const method = (req.method || "GET").toUpperCase();
-      const hasBody = method !== "GET" && method !== "HEAD";
-      const init: RequestInit = { method, headers, signal: ac.signal };
-      if (hasBody) {
-        (init as any).body = Readable.toWeb(req);
-        (init as any).duplex = "half";
-      }
-
-      const webReq = new Request(url, init);
-      const webRes = await fetchHandler(webReq);
-
-      res.statusCode = webRes.status;
-      if (webRes.statusText) res.statusMessage = webRes.statusText;
-      webRes.headers.forEach((v, k) => res.setHeader(k, v));
-
-      if (!webRes.body) {
-        res.end();
-        return;
-      }
-      await pipeline(Readable.fromWeb(webRes.body as any), res);
-    } catch (err: any) {
-      if (!res.headersSent) {
-        res.statusCode = 500;
-        res.end(JSON.stringify({ error: err?.message || String(err) }));
-      } else {
-        res.destroy(err);
-      }
-    } finally {
-      req.removeListener("close", onReqClose);
-      res.removeListener("close", onResClose);
-    }
-  };
-
-  let srv: import("node:http").Server | import("node:https").Server;
-  if (tls) {
-    let cert = tls.cert;
-    if (!cert && tls.certPath) {
-      cert = readFileSync(tls.certPath);
-    }
-    let key = tls.key;
-    if (!key && tls.keyPath) {
-      key = readFileSync(tls.keyPath);
-    }
-    const httpsOptions: any = {
-      cert,
-      key,
-    };
-    if (tls.ca) {
-      httpsOptions.ca = tls.ca;
-    }
-    if (tls.passphrase) {
-      httpsOptions.passphrase = tls.passphrase;
-    }
-    const { createServer: createHttpsServer } = await import("node:https");
-    srv = createHttpsServer(httpsOptions, requestListener);
-  } else {
-    srv = createNodeHttpServer(requestListener);
-  }
-
-  const instance: CoreHttpServerInstance = {
+  const server = new NodeHttpServer({
     port,
-    stop: async () => {
-      await new Promise<void>((resolve) => {
-        srv.close(() => resolve());
-        (srv as any).closeAllConnections?.();
-      });
-    },
-  };
-
-  await new Promise<void>((resolve, reject) => {
-    srv.once("error", (err) => {
-      reject(err);
-    });
-    srv.listen(port, host, () => {
-      const addr = srv.address();
-      if (typeof addr === "object" && addr) {
-        instance.port = addr.port;
-      }
-      resolve();
-    });
+    host,
+    fetch: fetchHandler,
+    tls,
   });
-
-  instance.ready = Promise.resolve();
+  await server.listen(port, host);
+  const instance: CoreHttpServerInstance = {
+    port: server.port,
+    stop: async () => {
+      await server.close();
+    },
+    ready: Promise.resolve(),
+  };
   return instance;
 }
 

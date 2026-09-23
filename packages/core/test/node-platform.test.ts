@@ -2,20 +2,17 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  DefaultExecutionService,
-  NodeFileSystem,
-  SqliteRuntimeStorage,
-  SystemClock,
-} from "@actiondock/core";
 import { decodeText, defineAction } from "@actiondock/sdk";
 import {
   createNodePlatform,
+  DefaultExecutionService,
   ExecaProcessExecutor,
+  NodeFileSystem,
   NodeHttpServer,
   NodeSqliteDriver,
+  SqliteRuntimeStorage,
+  SystemClock,
   TsxModuleLoader,
-
 } from "../src";
 
 describe("createNodePlatform 平台工厂测试", () => {

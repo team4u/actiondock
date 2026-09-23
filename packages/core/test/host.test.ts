@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { type ActionContext, defineAction } from "@actiondock/sdk";
 import { createActionDockApp } from "../src/app";
 import { createActionDockHost, DefaultActionDockHost } from "../src/host";
-import { createDefaultPlatform } from "../src/platform";
+import { createNodePlatform } from "../src/platform";
 import { MemoryProcessDriver } from "../src/process/driver";
 import { PROJECT_RECOVERY_REQUIRED } from "../src/errors";
 
@@ -485,7 +485,7 @@ actions:
     });
 
     const host = await createActionDockHost({
-      platform: createDefaultPlatform({ name: "test", processDriver: new MemoryProcessDriver() }),
+      platform: createNodePlatform({ name: "test", processDriver: new MemoryProcessDriver() }),
       packages: [
         {
           projectConfig: { id: "target.worker", name: "Worker", version: "1.0.0" },

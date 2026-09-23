@@ -5,6 +5,11 @@ import type { Capabilities, LaunchSpec } from "@actiondock/sdk";
  */
 export interface ProcessDriverHandle {
   /**
+   * 进程系统标识符（若底层为操作系统子进程）。
+   */
+  pid?: number;
+
+  /**
    * 向受管进程标准输入通道写入原始字节数据。
    *
    * @param data 原始字节切片

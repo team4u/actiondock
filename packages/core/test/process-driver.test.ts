@@ -5,8 +5,6 @@ import {
   INPUT_CLOSED,
   UNSUPPORTED_CAPABILITY,
   ProcessError,
-} from "@actiondock/core";
-import {
   NodeProcessDriver,
   resolveProcessEnv,
 } from "../src";

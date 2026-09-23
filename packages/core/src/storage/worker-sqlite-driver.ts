@@ -1,8 +1,8 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { Worker } from "node:worker_threads";
-import { normalizeSqliteParams } from "@actiondock/core";
-import { STORAGE_BUSY, STORAGE_WORKER_EXITED } from "@actiondock/core";
+import { normalizeSqliteParams } from "./params";
+import { STORAGE_BUSY, STORAGE_WORKER_EXITED } from "../errors";
 
 /**
  * 编译后的工作线程异步参数化语句接口。

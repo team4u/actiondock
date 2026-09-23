@@ -23,5 +23,6 @@ export * from "./input";
 export * from "./json";
 export * from "./invocation";
 export * from "./service";
+export * from "./node";
 export type { ModuleLoader } from "./runtime";
 

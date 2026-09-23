@@ -33,14 +33,6 @@
     "@actiondock/sdk": "^2.7.0",
     "@modelcontextprotocol/server": "^2.0.0"
   },
-  "peerDependencies": {
-    "@actiondock/runtime-node": "^2.7.0"
-  },
-  "peerDependenciesMeta": {
-    "@actiondock/runtime-node": {
-      "optional": true
-    }
-  },
   "devDependencies": {
     "typescript": "^5.7.0"
   },

@@ -1,6 +1,6 @@
 import {
-  DefaultModuleLoader,
   NodeFileSystem,
+  NodeModuleLoader,
   type EventSink,
   type FileSystem,
   type GlobalStorageFactoryOptions,
@@ -62,7 +62,7 @@ export interface TestPlatform extends RuntimePlatform {
  * - MockProcessExecutor 模拟进程执行器
  * - MemoryStorage 纯内存数据库存储
  * - TestEventSink 确定性事件接收器
- * - DefaultModuleLoader 动态模块加载器
+ * - NodeModuleLoader 动态模块加载器
  * - NodeFileSystem 文件系统
  *
  * @param options 测试平台配置选项
@@ -77,7 +77,7 @@ export function createTestPlatform(options: TestPlatformOptions = {}): TestPlatf
     });
   const eventSink = options.eventSink ?? new TestEventSink();
   const files = options.files ?? new NodeFileSystem();
-  const modules = options.modules ?? new DefaultModuleLoader();
+  const modules = options.modules ?? new NodeModuleLoader();
 
   const packageStorages = new Map<string, RuntimeStorage>();
   let globalStorageInstance = options.globalStorage;

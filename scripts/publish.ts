@@ -18,7 +18,6 @@ const PUBLISH_PACKAGES: PackageInfo[] = [
   { name: "@actiondock/sdk", dir: join(rootDir, "packages", "sdk") },
   { name: "@actiondock/core", dir: join(rootDir, "packages", "core") },
   { name: "@actiondock/testing", dir: join(rootDir, "packages", "testing") },
-  { name: "@actiondock/runtime-node", dir: join(rootDir, "packages", "runtime-node") },
   { name: "@actiondock/builder", dir: join(rootDir, "packages", "builder") },
   { name: "@actiondock/mcp", dir: join(rootDir, "packages", "mcp") },
   { name: "@actiondock/cli", dir: join(rootDir, "packages", "cli") },

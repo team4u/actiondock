@@ -4,9 +4,8 @@
 - **运行时与引擎**：默认运行时为 Node.js（版本大于等于 24.12.0，基于 node:sqlite、node:http 与类型擦除提供原生驱动）。
 - **代码库分层结构**：
   - `packages/sdk`：`@actiondock/sdk`（极简公共 SDK：`defineAction`、`ActionContext`、`Config`、`StateStore`、`ActionInvoker`、`Logger`、`ProcessAPI`）。
-  - `packages/core`：`@actiondock/core`（公共领域内核：`project`、`runtime`、`storage`、`schema`、`catalog`、`execution`、`server`、`target`）。
+  - `packages/core`：`@actiondock/core`（公共领域内核与 Node 原生运行时：`project`、`runtime`、`storage`、`process`、`schema`、`catalog`、`execution`、`server`、`target`、`service`、`createNodePlatform`、`NodeSqliteDriver`、`NodeProcessDriver`、`NodeHttpServer`）。
   - `packages/builder`：`@actiondock/builder`（依赖规划与分发构建：`BuildPlanner`、`SkillExporter`、目录型构建与 npm 打包）。
-  - `packages/runtime-node`：`@actiondock/runtime-node`（Node.js 运行时适配层：`WorkerSqliteDriver`、`NodeSqliteDriver`、`ExecaProcessExecutor`、`NodeHttpServer`）。
   - `packages/testing`：`@actiondock/testing`（确定性测试工具框架：`createTestRuntime`、`FakeClock`、`MockProcessExecutor`、`MemoryStorage`）。
   - `packages/mcp`：`@actiondock/mcp`（Model Context Protocol 适配器：STDIO/HTTP Transport、Tool 映射、取消链路）。
   - `packages/cli`：`@actiondock/cli`（CLI 工具链与独立运行分发器：`init`、`info`、`list`、`describe`、`run`、`validate`、`config`、`state`、`runs`、`serve`、`mcp`、`build`、`test`、`add`、`remove`、`pack`、`doctor`、`link`、`unlink`、`export skill`）。

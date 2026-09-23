@@ -12,7 +12,6 @@ const packages = [
   "core",
   "mcp",
   "builder",
-  "runtime-node",
   "cli",
   "testing",
 ] as const;
@@ -115,7 +114,6 @@ try {
       "@actiondock/core": toFileDep(tarballPaths.core),
       "@actiondock/mcp": toFileDep(tarballPaths.mcp),
       "@actiondock/builder": toFileDep(tarballPaths.builder),
-      "@actiondock/runtime-node": toFileDep(tarballPaths["runtime-node"]),
       "@actiondock/cli": toFileDep(tarballPaths.cli),
       "@actiondock/testing": toFileDep(tarballPaths.testing),
     },
@@ -124,7 +122,6 @@ try {
       "@actiondock/core": toFileDep(tarballPaths.core),
       "@actiondock/mcp": toFileDep(tarballPaths.mcp),
       "@actiondock/builder": toFileDep(tarballPaths.builder),
-      "@actiondock/runtime-node": toFileDep(tarballPaths["runtime-node"]),
       "@actiondock/cli": toFileDep(tarballPaths.cli),
       "@actiondock/testing": toFileDep(tarballPaths.testing),
     },
@@ -143,14 +140,13 @@ try {
   }
   console.log("[OK] Dependencies installed cleanly");
 
-  // Write Node.js test script covering all 7 packages
+  // Write Node.js test script covering all 6 packages
   console.log("[TEST] Testing module imports and runtime execution via native Node.js...");
   const testScriptContent = `
 import { defineAction } from "@actiondock/sdk";
-import { ActionRunner, ExecutionService, SqliteRuntimeStorage, createStorage, ACTIONDOCK_VERSION } from "@actiondock/core";
+import { ActionRunner, ExecutionService, SqliteRuntimeStorage, createStorage, ACTIONDOCK_VERSION, createNodePlatform, NodeSqliteDriver, NodeHttpServer } from "@actiondock/core";
 import { createActionDockMcpServer, toMcpResult } from "@actiondock/mcp";
 import { SelectionPlanner, SkillExporter, buildProject, exportSkill } from "@actiondock/builder";
-import { createNodePlatform, NodeSqliteDriver, NodeHttpServer } from "@actiondock/runtime-node";
 import { main, createCliProgram, formatError, runStandaloneCli } from "@actiondock/cli";
 import { FakeClock, MemoryStorage, createTestRuntime } from "@actiondock/testing";
 
@@ -210,7 +206,7 @@ console.log("[OK] Builder SelectionPlanner, SkillExporter, exportSkill, and buil
 if (typeof createNodePlatform !== "function" || typeof NodeSqliteDriver !== "function" || typeof NodeHttpServer !== "function") {
   throw new Error("Runtime Node exports missing key components");
 }
-console.log("[OK] Runtime Node createNodePlatform, NodeSqliteDriver, and NodeHttpServer verified");
+console.log("[OK] Core createNodePlatform, NodeSqliteDriver, and NodeHttpServer verified");
 
 // Verify CLI
 if (typeof main !== "function" || typeof createCliProgram !== "function" || typeof formatError !== "function" || typeof runStandaloneCli !== "function") {

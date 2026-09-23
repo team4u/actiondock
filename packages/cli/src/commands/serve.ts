@@ -2,13 +2,13 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   createActionDockTarget,
+  createNodePlatform,
   findProjectRoot,
   formatHostForUrl,
   loadProjectConfig,
   startActionDockServer,
   type ServerTlsOptions,
 } from "@actiondock/core";
-import { createNodePlatform } from "@actiondock/runtime-node";
 import { Command } from "commander";
 import { ArgumentError, ExecutionError } from "../errors";
 import { writeStderr, writeStdout } from "../renderer";

@@ -1,7 +1,35 @@
 import { existsSync, statSync } from "node:fs";
 import { dirname, extname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import type { ModuleLoader } from "@actiondock/core";
+/**
+ * 统一源码模块加载器接口。
+ * 解耦 Action 与各类扩展模块的具体加载机制（如 ECMAScript 原生 import、tsx 动态转译加载等）。
+ */
+export interface ModuleLoader {
+  /**
+   * 解析模块标识符为绝对路径或完整 URL。
+   *
+   * @param specifier 模块规范说明符或物理路径
+   * @param parentPath 发起解析的父级文件或目录路径
+   */
+  resolve?(specifier: string, parentPath?: string): string;
+
+  /**
+   * 动态加载模块并返回命名空间全量导出对象。
+   *
+   * @param specifier 模块规范说明符或物理路径
+   * @param parentPath 发起加载的父级文件或目录路径
+   */
+  load<T = any>(specifier: string, parentPath?: string): Promise<T>;
+
+  /**
+   * 加载模块并解包其默认导出（default 或 action 属性）。
+   *
+   * @param specifier 模块规范说明符或物理路径
+   * @param parentPath 发起加载的父级文件或目录路径
+   */
+  loadDefault?<T = any>(specifier: string, parentPath?: string): Promise<T>;
+}
 
 /**
  * Node 原生 TypeScript 与 ESM 模块支持的扩展名集合。

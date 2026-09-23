@@ -9,7 +9,6 @@ const subPackages = [
   "sdk",
   "core",
   "builder",
-  "runtime-node",
   "testing",
   "mcp",
   "cli",

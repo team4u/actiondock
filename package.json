@@ -25,7 +25,6 @@
     "@actiondock/cli": "^2.7.0",
     "@actiondock/core": "^2.7.0",
     "@actiondock/mcp": "^2.7.0",
-    "@actiondock/runtime-node": "^2.7.0",
     "@actiondock/sdk": "^2.7.0",
     "@actiondock/testing": "^2.7.0",
     "@modelcontextprotocol/server": "2.0.0"

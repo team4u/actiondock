@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type ActionContext, defineAction } from "@actiondock/sdk";
 import { createActionDockApp, DefaultActionDockApp } from "../src/app";
-import { createDefaultPlatform } from "../src/platform";
+import { createNodePlatform } from "../src/platform";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
 
 describe("ActionDockApp", () => {
@@ -677,7 +677,7 @@ Execute build and then deploy artifact.
   });
 
   it("支持显式平台注入与默认平台回退", async () => {
-    const defaultPlatform = createDefaultPlatform();
+    const defaultPlatform = createNodePlatform();
     expect(defaultPlatform.name).toBeDefined();
     expect(defaultPlatform.storage).toBeDefined();
 
