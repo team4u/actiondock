@@ -22,10 +22,12 @@ import {
   type RunOptions,
   type InvocationContext,
   createInvocationContext,
+  createRootInvocationContext,
 } from "../invocation/types";
+import type { LocalActionResolver } from "../runtime/runner";
 
-export { createInvocationContext };
-export type { PackageIdentity, RunOptions, InvocationContext };
+export { createInvocationContext, createRootInvocationContext };
+export type { PackageIdentity, RunOptions, InvocationContext, LocalActionResolver };
 
 /**
  * 跨包动作调用委托函数。
@@ -42,7 +44,6 @@ export type ActionInvoker = (
 export interface ExecutionServiceOptions {
   /** 包物理与快照身份标识值对象（必填单一事实源） */
   identity: PackageIdentity;
-  packageId?: string;
   hostSessionId?: string;
   storage: RuntimeStorage;
   globalStorage?: RuntimeStorage;
@@ -58,12 +59,9 @@ export interface ExecutionServiceOptions {
   maxCallDepth?: number;
   maxSubRuns?: number;
   ownerId?: string;
-  actionResolver?: (ref: ActionRef | string) => ActionDefinition | undefined | Promise<ActionDefinition | undefined>;
-  packageInstanceId?: string;
-  generationId?: string;
+  actionResolver?: LocalActionResolver;
   customHome?: string;
   platform?: RuntimePlatform;
-  /** 子任务调用委托函数 */
   actionInvoker?: ActionInvoker;
 }
 

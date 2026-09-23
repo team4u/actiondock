@@ -23,7 +23,6 @@ describe("Phase 7: 运行时安全边界与布尔模式修正", () => {
 
     const runner = new ActionRunner({
       identity: createPackageIdentity({ id: "test-pkg" }),
-      packageId: "test-pkg",
       storage,
       actions: new Map([["test.reject", testAction]]),
     });
@@ -58,7 +57,6 @@ describe("Phase 7: 运行时安全边界与布尔模式修正", () => {
 
     const runner = new ActionRunner({
       identity: createPackageIdentity({ id: "test-pkg" }),
-      packageId: "test-pkg",
       storage,
       actions: new Map([["test.out-reject", testAction]]),
     });
@@ -123,7 +121,6 @@ describe("Phase 7: 运行时安全边界与布尔模式修正", () => {
 
     const runner = new ActionRunner({
       identity: createPackageIdentity({ id: "test-pkg" }),
-      packageId: "test-pkg",
       storage,
       actions: new Map([
         ["test.date", dateAction],
@@ -160,7 +157,6 @@ describe("Phase 7: 运行时安全边界与布尔模式修正", () => {
 
     const runner = new ActionRunner({
       identity: createPackageIdentity({ id: "test-pkg" }),
-      packageId: "test-pkg",
       storage,
       actions: new Map([["test.policy", testAction]]),
     });

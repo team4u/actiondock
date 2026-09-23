@@ -33,6 +33,8 @@ import {
   INPUT_VALIDATION_FAILED,
   OUTPUT_VALIDATION_FAILED,
   UNDECLARED_ACTION_DEPENDENCY,
+  INVOCATION_UNSUPPORTED,
+  ActionDockError,
 } from "../errors";
 import { validateSchemaOnly } from "../schema/validator";
 import type { RuntimeStorage } from "../storage/types";
@@ -88,17 +90,18 @@ export {
 };
 
 /**
+ * 局部动作解析器委托函数契约（仅限当前包内部动作）。
+ */
+export type LocalActionResolver = (
+  actionId: string
+) => ActionDefinition | undefined | Promise<ActionDefinition | undefined>;
+
+/**
  * ActionRunner 初始化配置选项。
  */
 export interface RunnerOptions {
   /** 显式注入的包物理与快照身份标识值对象（必填单一事实源） */
   identity: PackageIdentity;
-  /** 运行所属的 Package ID（可省略，优先自 identity.id 获取） */
-  packageId?: string;
-  /** 包物理实例标识（可省略，优先自 identity.instanceId 获取） */
-  packageInstanceId?: string;
-  /** 快照代次标识（可省略，优先自 identity.generation 获取） */
-  generationId?: string;
   /** 持久化运行时存储实例（SQLite） */
   storage: RuntimeStorage;
   /** 全局共享持久化存储实例（SQLite，用于单例池化避免泄漏） */
@@ -117,11 +120,8 @@ export interface RunnerOptions {
   clock?: Clock;
   /** 可选的底层运行时平台契约 */
   platform?: RuntimePlatform;
-  /** 动态解析跨包或未注册 Action 的委托函数 */
-  actionResolver?: (
-    ref: ActionRef | string,
-    currentPackageId?: string
-  ) => ActionDefinition | undefined | Promise<ActionDefinition | undefined>;
+  /** 仅支持当前包局部 Action 的动态解析委托函数 */
+  actionResolver?: LocalActionResolver;
   /** 自定义 ActionDock 用户家目录（用于测试隔离与多租户环境） */
   customHome?: string;
   /** 执行宿主会话标识 */
@@ -256,11 +256,8 @@ export class ActionRunner {
   private clock?: Clock;
   private process?: ProcessAPI;
   private platform?: RuntimePlatform;
-  private actionResolver?: (
-    ref: ActionRef | string,
-    currentPackageId?: string
-  ) => ActionDefinition | undefined | Promise<ActionDefinition | undefined>;
   private customHome?: string;
+  private actionResolver?: LocalActionResolver;
   private hostSessionId?: string;
   private actionInvoker?: ActionInvoker;
 
@@ -349,16 +346,24 @@ export class ActionRunner {
     const targetActionId = parsed.actionId;
     const targetPackageId = parsed.packageId;
 
+    // 铁律：ActionRunner 仅限执行当前包局部 Action，任何跨包请求直接拒绝，禁止跨包解析和执行
+    if (targetPackageId && targetPackageId !== this.packageId) {
+      return {
+        status: "not_found",
+        reason: `Cross-package action '${targetPackageId}/${targetActionId}' cannot be resolved by ActionRunner of package '${this.packageId}'`,
+      };
+    }
+
     // 本地 actions 映射表优先检索
     const localMatched = findLocalAction(this.actions, parsed, this.packageId);
     if (localMatched) {
       return { status: "found", action: localMatched };
     }
 
-    // 外部注入的自定义 actionResolver 调度
+    // 外部注入的局部 actionResolver 调度
     if (this.actionResolver) {
       try {
-        const customResolved = await this.actionResolver(ref, this.packageId);
+        const customResolved = await this.actionResolver(targetActionId);
         if (customResolved) {
           this.actions.set(targetActionId, customResolved);
           if (this.packageId) {
@@ -701,8 +706,8 @@ export class ActionRunner {
 
   /**
    * 子 Action 调用委托：
-   * 优先委托注入的 Host 动作调用器（走 Host 执行主链与 InvocationPolicy 鉴权）；
-   * 未注入调用器时（单元测试环境）回退同包内直接调度。
+   * 必须委托 Host 动作调用器（走 Host 执行主链与 InvocationPolicy 鉴权）；
+   * 缺少 actionInvoker 时直接抛出 INVOCATION_UNSUPPORTED，严禁跨包或同包无约束执行逃逸。
    */
   private async invokeChildAction(args: {
     runCtx: RunExecutionContext;
@@ -715,6 +720,14 @@ export class ActionRunner {
     const { runCtx, controller, rootRunId, childAction, childInput, parentRunId } = args;
     const { options, effectiveProcess, callStack } = runCtx;
 
+    const invoker = options.actionInvoker || this.actionInvoker;
+    if (!invoker) {
+      throw new ActionDockError(
+        INVOCATION_UNSUPPORTED,
+        "Nested action invocation requires a Host ActionInvoker"
+      );
+    }
+
     const effectiveParentOwner: ProcessOwner = options.owner || {
       tenantId: options.tenantId || "default",
       principalId: options.principalId || options.ownerId || "default",
@@ -722,75 +735,35 @@ export class ActionRunner {
       generationId: this.generationId,
     };
 
-    // 优先委托注入的 Host 动作调用器（统一传递强类型 InvocationContext）
-    const invoker = options.actionInvoker || this.actionInvoker;
-    if (invoker) {
-      const childRunId = randomUUID();
-      const invocationContext: InvocationContext = {
-        runId: childRunId,
-        rootRunId,
-        parentRunId: parentRunId || runCtx.runId,
-        caller: {
-          packageId: this.packageId,
-          actionId: runCtx.targetActionId,
-          runId: runCtx.runId,
-          declaredUses:
-            (runCtx.action as any)?.uses ||
-            this.projectConfig?.actions?.[runCtx.targetActionId]?.uses,
-        },
-        callStack: [...callStack],
-        package: this.identity,
-        signal: controller.signal,
-        timeoutMs: options.timeoutMs,
-        maxCallDepth: options.maxCallDepth,
-        config: options.configOverrides,
-        tenantId: effectiveParentOwner.tenantId,
-        principalId: effectiveParentOwner.principalId,
-        hostSessionId: options.hostSessionId || this.hostSessionId,
-        logger: options.logger,
-        progress: options.progress,
-        process: effectiveProcess,
-        platform: options.platform || this.platform,
-        owner: effectiveParentOwner,
-      };
-      return await invoker(childAction, childInput, invocationContext);
-    }
-
-    // 单元测试无 Host 场景：本地动作或外部已注入动作直接调度
-    const parsed = typeof childAction === "string" ? parseActionRef(childAction) : childAction;
-    const childPackageId = parsed.packageId || this.packageId;
-
-    if (
-      childPackageId !== this.packageId &&
-      !this.actionResolver &&
-      !this.actions.has(`${childPackageId}/${parsed.actionId}`)
-    ) {
-      const err = new Error(`Package '${childPackageId}' could not be resolved`);
-      (err as any).code = PACKAGE_NOT_FOUND;
-      throw err;
-    }
-
-    const childResult = await this.execute(childAction, childInput, {
+    const childRunId = randomUUID();
+    const invocationContext: InvocationContext = {
+      runId: childRunId,
       rootRunId,
       parentRunId: parentRunId || runCtx.runId,
+      caller: {
+        packageId: this.packageId,
+        actionId: runCtx.targetActionId,
+        runId: runCtx.runId,
+        declaredUses:
+          (runCtx.action as any)?.uses ||
+          this.projectConfig?.actions?.[runCtx.targetActionId]?.uses,
+      },
       callStack: [...callStack],
+      package: this.identity,
       signal: controller.signal,
+      timeoutMs: options.timeoutMs,
+      maxCallDepth: options.maxCallDepth,
+      config: options.configOverrides,
+      tenantId: effectiveParentOwner.tenantId,
+      principalId: effectiveParentOwner.principalId,
+      hostSessionId: options.hostSessionId || this.hostSessionId,
+      logger: options.logger,
+      progress: options.progress,
       process: effectiveProcess,
       platform: options.platform || this.platform,
-      progress: options.progress,
-      logger: options.logger,
-      configOverrides: options.configOverrides,
       owner: effectiveParentOwner,
-      hostSessionId: options.hostSessionId ?? this.hostSessionId,
-    });
-
-    if (!childResult.ok) {
-      const err = new Error(childResult.error.message);
-      (err as any).code = childResult.error.code;
-      (err as any).details = childResult.error.details;
-      throw err;
-    }
-    return childResult.data;
+    };
+    return await invoker(childAction, childInput, invocationContext);
   }
 
   /**

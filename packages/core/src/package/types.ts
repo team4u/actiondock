@@ -13,6 +13,7 @@ import type {
   CancelResult,
   ExecutionService,
   ExecutionTicket,
+  LocalActionResolver,
 } from "../execution/types";
 import type { RunOptions } from "../invocation/types";
 import type { ConfigItemDefinition, ProjectConfig } from "../project/types";
@@ -189,8 +190,8 @@ export interface PackageRuntimeOptions {
     | Map<string, ActionDefinition>
     | Array<{ id: string; action: ActionDefinition } | (ActionDefinition & { id: string })>
     | Record<string, ActionDefinition>;
-  /** 跨包或动态 Action 解析器 */
-  actionResolver?: (ref: ActionRef | string) => ActionDefinition | undefined | Promise<ActionDefinition | undefined>;
+  /** 仅支持当前包局部 Action 的动态解析委托函数 */
+  actionResolver?: LocalActionResolver;
   /** 显式注入的包物理与快照身份标识值对象 */
   identity?: PackageIdentity;
   /** 包物理实例标识 */

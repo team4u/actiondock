@@ -92,7 +92,13 @@ export class LocalActionDockService implements ActionDockService {
         opts?: RunOptions
       ): Promise<ExecutionResult> {
         const actionRef: ActionRef = typeof ref === "string" ? parseActionRef(ref) : ref;
-        return self.host.runAction(actionRef, (input ?? {}) as JsonValue, opts);
+        const cleanOpts: RunOptions = {
+          signal: opts?.signal,
+          timeoutMs: opts?.timeoutMs,
+          config: opts?.config,
+          requestId: opts?.requestId,
+        };
+        return self.host.runAction(actionRef, (input ?? {}) as JsonValue, cleanOpts);
       },
 
       async start(
@@ -101,7 +107,13 @@ export class LocalActionDockService implements ActionDockService {
         opts?: RunOptions
       ): Promise<ExecutionTicket> {
         const actionRef: ActionRef = typeof ref === "string" ? parseActionRef(ref) : ref;
-        return self.host.startAction(actionRef, (input ?? {}) as JsonValue, opts);
+        const cleanOpts: RunOptions = {
+          signal: opts?.signal,
+          timeoutMs: opts?.timeoutMs,
+          config: opts?.config,
+          requestId: opts?.requestId,
+        };
+        return self.host.startAction(actionRef, (input ?? {}) as JsonValue, cleanOpts);
       },
     };
 

@@ -6,6 +6,7 @@ import {
   ACTION_SUBRUN_LIMIT,
   MAX_SUBRUNS_REACHED,
   UNDECLARED_ACTION_DEPENDENCY,
+  ActionDockError,
 } from "../errors";
 import type { PackageGraph } from "../catalog/graph";
 
@@ -65,10 +66,36 @@ export class InvocationPolicy {
   public readonly maxCallDepth: number;
   public readonly maxSubRuns: number;
   private readonly activeSubRunsPerRoot = new Map<string, number>();
+  private visibilityContext?: RootVisibilityContext;
 
   constructor(options: InvocationPolicyOptions = {}) {
     this.maxCallDepth = options.maxCallDepth ?? 16;
     this.maxSubRuns = options.maxSubRuns ?? 64;
+  }
+
+  /**
+   * 设置路由可见性上下文。
+   */
+  public setVisibilityContext(context?: RootVisibilityContext): void {
+    this.visibilityContext = context;
+  }
+
+  /**
+   * 严格断言根调用可见性（Root Visibility Assertion）。
+   * 若不可见则抛出 ActionDockError(UNDECLARED_ACTION_DEPENDENCY, ...)。
+   */
+  public assertRootVisibility(
+    resolved: { package: { id: string }; ref: { actionId: string } },
+    context?: RootVisibilityContext
+  ): void {
+    const ctx = context ?? this.visibilityContext;
+    if (!ctx) {
+      return;
+    }
+    const error = this.checkRootVisibility(resolved.package.id, resolved.ref.actionId, ctx);
+    if (error) {
+      throw new ActionDockError(error.code, error.message, error.details);
+    }
   }
 
   /**

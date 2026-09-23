@@ -204,7 +204,6 @@ describe("createNodePlatform 平台工厂测试", () => {
       const identity = createPackageIdentity({ id: "node-test-package" });
       const service = new DefaultExecutionService({
         identity,
-        packageId: "node-test-package",
         platform,
         storage: platform.storage.createStorage("node-test-package"),
       });

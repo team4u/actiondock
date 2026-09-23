@@ -24,7 +24,11 @@ import type {
   CancelResult,
   ExecutionTicket,
 } from "../execution/types";
-import type { InvocationContext, RunOptions } from "../invocation/types";
+import {
+  createRootInvocationContext,
+  type InvocationContext,
+  type RunOptions,
+} from "../invocation/types";
 import { findProjectRoot, loadProjectConfig } from "../project/loader";
 import { hasPendingTransactions, isProjectLockHeld, recoverPendingTransactions } from "../project/transactions";
 import { listLinkedPackages } from "../registry/registry";
@@ -187,6 +191,7 @@ export class DefaultActionDockHost implements ActionDockHost {
         const runtime = new DefaultPackageRuntime({
           ...item,
           hostSessionId: this.hostSessionId,
+          globalStorage: item.globalStorage ?? this.getGlobalStorage(),
           platform: item.platform ?? options.platform,
           inMemory: item.inMemory ?? options.inMemory,
           customHome: item.customHome ?? options.customHome,
@@ -261,6 +266,7 @@ export class DefaultActionDockHost implements ActionDockHost {
             projectConfig: pkg.manifest,
             identity: pkg.identity,
             hostSessionId: this.hostSessionId,
+            globalStorage: this.getGlobalStorage(),
             platform: options.platform,
             inMemory: options.inMemory,
             customHome: options.customHome,
@@ -318,6 +324,7 @@ export class DefaultActionDockHost implements ActionDockHost {
           packageRoot: linked.path,
           projectConfig: config,
           hostSessionId: this.hostSessionId,
+          globalStorage: this.getGlobalStorage(),
           platform: options.platform,
           inMemory: options.inMemory,
           customHome: options.customHome,
@@ -552,6 +559,7 @@ export class DefaultActionDockHost implements ActionDockHost {
       }
       return map;
     });
+    this.policy.setVisibilityContext(this.visibility());
   }
 
   getRuntime(packageId: string): PackageRuntime | undefined {
@@ -771,189 +779,41 @@ export class DefaultActionDockHost implements ActionDockHost {
       };
     }
 
-    // 根调用可见性鉴权（统一委托 InvocationPolicy 单一事实源）
-    const parentRunId = options.parentRunId;
-    if (!parentRunId && targetPackageId) {
-      const visibilityErr = this.policy.checkRootVisibility(targetPackageId, targetActionId, this.visibility());
-      if (visibilityErr) {
-        const runId = randomUUID();
-        return {
+    // 根调用可见性鉴权（统一委托 InvocationPolicy 单一事实源断言）
+    try {
+      this.policy.assertRootVisibility(resolved, this.visibility());
+    } catch (err: any) {
+      const runId = randomUUID();
+      return {
+        runId,
+        status: "failed",
+        result: Promise.resolve({
+          ok: false,
           runId,
-          status: "failed",
-          result: Promise.resolve({ ok: false, runId, error: visibilityErr }),
-        };
-      }
+          error: buildRuntimeError(err.code || UNDECLARED_ACTION_DEPENDENCY, err.message, err.details),
+        }),
+      };
     }
 
-    // 父子任务血缘关系、调用配额与跨包 uses 声明依赖校验（统一委托 InvocationPolicy 单一事实源）
-    let effectiveRootRunId = options.rootRunId;
-    let effectiveCallStack: string[] = (options as any).callStack ? [...(options as any).callStack] : [];
-    let declaredUses: string[] | undefined;
-    let parentRunRecord: RunRecord | undefined;
-
-    if (parentRunId) {
-      const parentRun = await this.getRun(parentRunId);
-      parentRunRecord = parentRun;
-      if (parentRun) {
-        const lineage = this.policy.resolveLineage({
-          runId: parentRun.id,
-          rootRunId: options.rootRunId,
-          parentRunId,
-          parentRecord: parentRun,
-        });
-        effectiveRootRunId = lineage.rootRunId;
-
-        // 跨包 uses 依赖声明校验
-        const callerPackageId = parentRun.packageId;
-        const callerActionId = parentRun.actionId;
-        if (callerPackageId) {
-          const callerRuntime = this.getRuntime(callerPackageId);
-          if (callerRuntime) {
-            try {
-              const callerSpec = await callerRuntime.describeAction(callerActionId);
-              declaredUses = callerSpec.uses;
-            } catch {
-              // 忽略规范提取异常，交由执行服务执行
-            }
-          }
-        }
-
-        if (callerPackageId && callerPackageId !== targetPackageId) {
-          const authErr = this.policy.checkUsesAuthorization(
-            { packageId: callerPackageId, actionId: callerActionId, declaredUses },
-            { packageId: targetPackageId, actionId: targetActionId },
-            this.graph
-          );
-          if (authErr) {
-            const runId = randomUUID();
-            return {
-              runId,
-              status: "failed",
-              result: Promise.resolve({ ok: false, runId, error: authErr }),
-            };
-          }
-        }
-
-        // 调用嵌套深度限制校验（通过父子运行血缘链追溯深度）
-        let depth = 1;
-        let cur: RunRecord | undefined = parentRun;
-        while (cur && cur.parentRunId) {
-          depth++;
-          if (depth > this.maxCallDepth) break;
-          cur = await this.getRun(cur.parentRunId);
-        }
-        if (depth >= this.maxCallDepth) {
-          const depthErr = this.policy.checkCallDepth(
-            new Array(depth).fill(""),
-            targetActionId,
-            options.maxCallDepth
-          );
-          if (depthErr) {
-            const runId = randomUUID();
-            return {
-              runId,
-              status: "failed",
-              result: Promise.resolve({ ok: false, runId, error: depthErr }),
-            };
-          }
-        }
-
-        // 调用链环路检测（仅当显式传递活跃调用栈时执行，避免误判合法并发或迭代子任务）
-        if (options.callStack && options.callStack.length > 0) {
-          const cycle = this.policy.checkCycle(
-            options.callStack,
-            targetActionId,
-            targetPackageId,
-            parentRun.packageId
-          );
-          if (cycle.error) {
-            const runId = randomUUID();
-            return {
-              runId,
-              status: "failed",
-              result: Promise.resolve({ ok: false, runId, error: cycle.error }),
-            };
-          }
-        }
-
-        // 针对根运行的并发子任务数限制校验
-        if (effectiveRootRunId) {
-          const quotaErr = this.policy.checkSubRunQuota(effectiveRootRunId);
-          if (quotaErr) {
-            const runId = randomUUID();
-            return {
-              runId,
-              status: "failed",
-              result: Promise.resolve({ ok: false, runId, error: quotaErr }),
-            };
-          }
-        }
-      }
-    }
-
-    // 构造强类型根 InvocationContext 并调度至目标 ExecutionService 执行
-    const runId = options.runId || randomUUID();
-    const rootRunId = effectiveRootRunId || runId;
-    const rootContext: InvocationContext = {
-      runId,
-      rootRunId,
-      parentRunId,
-      caller: parentRunRecord
-        ? {
-            packageId: parentRunRecord.packageId,
-            actionId: parentRunRecord.actionId,
-            runId: parentRunRecord.id,
-            declaredUses,
-          }
-        : undefined,
-      callStack: effectiveCallStack,
-      package: targetRuntime.identity,
-      signal: options.signal ?? new AbortController().signal,
+    // 在边界安全组装受信任的根调用上下文（纯 Root Call，无父级血缘）
+    const rootContext = createRootInvocationContext({
+      targetPackage: targetRuntime.identity,
+      signal: options.signal,
       timeoutMs: options.timeoutMs,
       config: options.config,
       requestId: options.requestId,
-      tenantId: options.tenantId,
-      principalId: options.principalId,
       hostSessionId: this.hostSessionId,
-      maxCallDepth: options.maxCallDepth ?? this.maxCallDepth,
-      logger: options.logger,
-      progress: options.progress,
-      process: options.process ?? this.options.process,
-      platform: options.platform ?? this.options.platform,
-      owner: options.owner ?? {
-        tenantId: options.tenantId || "default",
-        principalId: options.principalId || "default",
-        packageInstanceId: targetRuntime.identity.instanceId,
-        generationId: targetRuntime.identity.generation,
-      },
-    };
+      maxCallDepth: this.maxCallDepth,
+      process: this.options.process,
+      platform: this.options.platform,
+    });
 
-    if (parentRunId && effectiveRootRunId) {
-      this.policy.acquireSubRun(effectiveRootRunId);
-    }
-
-    let ticket: ExecutionTicket;
-    try {
-      ticket = await targetRuntime.startAction(
-        targetActionId,
-        input,
-        rootContext
-      );
-    } catch (err) {
-      if (parentRunId && effectiveRootRunId) {
-        this.policy.releaseSubRun(effectiveRootRunId);
-      }
-      throw err;
-    }
-
-    if (parentRunId && effectiveRootRunId && ticket.result) {
-      const rootId = effectiveRootRunId;
-      ticket.result = ticket.result.finally(() => {
-        this.policy.releaseSubRun(rootId);
-      });
-    }
-
-    return ticket;
+    // 调度目标包执行服务
+    return targetRuntime.executionService.start(
+      targetActionId,
+      input,
+      rootContext
+    );
   }
 
   async getRun(runId: string): Promise<RunRecord | undefined> {
@@ -1039,9 +899,6 @@ export class DefaultActionDockHost implements ActionDockHost {
   }
 
   private getGlobalStorage(): RuntimeStorage {
-    for (const runtime of this.listRuntimes()) {
-      if (runtime.globalStorage) return runtime.globalStorage;
-    }
     if (!this.globalStorage) {
       this.globalStorage =
         this.options.platform?.storage?.createGlobalStorage?.({

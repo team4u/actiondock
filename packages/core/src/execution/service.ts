@@ -36,6 +36,7 @@ import type {
   ExecutionServiceOptions,
   ExecutionTicket,
   InvocationContext,
+  LocalActionResolver,
 } from "./types";
 
 export type { ExecutionServiceOptions };
@@ -85,7 +86,7 @@ export class DefaultExecutionService implements ExecutionService {
   private clock?: Clock;
   private process?: ProcessAPI;
   private platform?: RuntimePlatform;
-  private actionResolver?: (ref: ActionRef | string) => ActionDefinition | undefined | Promise<ActionDefinition | undefined>;
+  private actionResolver?: LocalActionResolver;
   private activeRuns = new Map<string, ActiveRun>();
   private globalStorage?: RuntimeStorage;
   private actionInvoker?: ActionInvoker;
@@ -118,9 +119,6 @@ export class DefaultExecutionService implements ExecutionService {
 
     this._runner = new ActionRunner({
       identity: this.identity,
-      packageId: this.packageId,
-      packageInstanceId: this.packageInstanceId,
-      generationId: this.generationId,
       hostSessionId: this.hostSessionId,
       storage: this.storage,
       globalStorage: this.globalStorage,
@@ -131,16 +129,7 @@ export class DefaultExecutionService implements ExecutionService {
       process: this.process,
       clock: this.clock,
       platform: options.platform,
-      actionResolver: (ref, currentPkgId) => {
-        const parsed = typeof ref === "string" ? ActionResolver.parseRef(ref) : ref;
-        if (parsed.packageId && parsed.packageId !== this.packageId) {
-          return undefined;
-        }
-        if (currentPkgId && currentPkgId !== this.packageId) {
-          return undefined;
-        }
-        return this.actionResolver ? this.actionResolver(parsed) : undefined;
-      },
+      actionResolver: this.actionResolver,
       customHome: options.customHome,
       actionInvoker: this.actionInvoker,
     });
@@ -190,7 +179,7 @@ export class DefaultExecutionService implements ExecutionService {
     const fromRunner = this._runner.getAction(actionId);
     if (fromRunner) return fromRunner;
     if (this.actionResolver) {
-      return this.actionResolver(parsed);
+      return this.actionResolver(actionId);
     }
     return undefined;
   }

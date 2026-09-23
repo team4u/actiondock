@@ -63,9 +63,14 @@ export function hasIpcSignalMarker(value: unknown): value is Record<string, unkn
  */
 function markIpcSignal(options?: RunOptions): Record<string, unknown> | undefined {
   if (!options) return undefined;
-  const { signal: _signal, ...rest } = options;
-  if (!_signal) return rest as Record<string, unknown>;
-  return { ...rest, [IPC_SIGNAL_MARKER]: true } as Record<string, unknown>;
+  const clean: Record<string, unknown> = {};
+  if (options.timeoutMs !== undefined) clean.timeoutMs = options.timeoutMs;
+  if (options.config !== undefined) clean.config = options.config;
+  if (options.requestId !== undefined) clean.requestId = options.requestId;
+  if (options.signal) {
+    clean[IPC_SIGNAL_MARKER] = true;
+  }
+  return clean;
 }
 
 /**

@@ -13,44 +13,7 @@ import { createPackageIdentity, type PackageIdentity } from "../runtime/identity
 export { createPackageIdentity };
 export type { PackageIdentity };
 
-/**
- * 公开运行控制选项（RunOptions）。
- * 面向外部调用方（CLI, HTTP, MCP, IPC, Target）的公开契约，禁止污染内部运行时状态。
- */
-export interface RunOptions {
-  /** 外部传入的 AbortSignal 取消信号 */
-  signal?: AbortSignal;
-  /** 最大超时时间（毫秒） */
-  timeoutMs?: number;
-  /** 执行级临时配置覆盖字典 */
-  config?: Record<string, unknown>;
-  /** 幂等请求标识 */
-  requestId?: string;
-  /** 租户标识 */
-  tenantId?: string;
-  /** 主体标识 */
-  principalId?: string;
-  /** 日志记录器 */
-  logger?: Logger;
-  /** 进度报告器 */
-  progress?: ProgressReporter;
-  /** 显式指定的运行 ID */
-  runId?: string;
-  /** 父运行 ID */
-  parentRunId?: string;
-  /** 根运行 ID */
-  rootRunId?: string;
-  /** 调用栈切片快照 */
-  callStack?: readonly string[];
-  /** 最大调用嵌套深度限制 */
-  maxCallDepth?: number;
-  /** 执行归属所有者契约 */
-  owner?: ProcessOwner;
-  /** 外部进程执行器注入 */
-  process?: ProcessAPI;
-  /** 可选的底层运行平台契约 */
-  platform?: RuntimePlatform;
-}
+export type { RunOptions } from "../service/types";
 
 /**
  * 内部调用方身份凭证（InvocationCaller）。
@@ -112,35 +75,112 @@ export interface InvocationContext {
 }
 
 /**
- * 构造合法的内部调用上下文（InvocationContext）。
- * 供测试或内部直接调用执行服务时便捷装配根上下文凭据。
+ * 内部调用上下文选项契约。
+ * 强制要求提供确定的 PackageIdentity，禁止隐式兜底 mock 默认包。
  */
-export function createInvocationContext(options?: Partial<InvocationContext>): InvocationContext {
-  const runId = options?.runId ?? randomUUID();
-  const rootRunId = options?.rootRunId ?? runId;
-  const pkg = options?.package ?? createPackageIdentity({ id: "default-pkg" });
+export interface CreateInvocationContextOptions extends Omit<Partial<InvocationContext>, "package"> {
+  /** 目标包物理与快照身份标识（必填单一事实源） */
+  package: PackageIdentity;
+}
+
+/**
+ * 构造合法的内部调用上下文（InvocationContext）。
+ * 供测试或内部直接调用执行服务时便捷装配上下文凭据。
+ */
+export function createInvocationContext(options: CreateInvocationContextOptions): InvocationContext {
+  const runId = options.runId ?? randomUUID();
+  const rootRunId = options.rootRunId ?? runId;
+  const pkg = options.package;
   return {
     runId,
     rootRunId,
-    parentRunId: options?.parentRunId,
-    caller: options?.caller,
-    callStack: options?.callStack ? [...options.callStack] : [],
+    parentRunId: options.parentRunId,
+    caller: options.caller,
+    callStack: options.callStack ? [...options.callStack] : [],
     package: pkg,
-    signal: options?.signal ?? new AbortController().signal,
-    timeoutMs: options?.timeoutMs,
-    config: options?.config,
-    requestId: options?.requestId,
-    tenantId: options?.tenantId,
-    principalId: options?.principalId,
-    hostSessionId: options?.hostSessionId,
-    maxCallDepth: options?.maxCallDepth,
-    logger: options?.logger,
-    progress: options?.progress,
-    process: options?.process,
-    platform: options?.platform,
-    owner: options?.owner ?? {
-      tenantId: options?.tenantId || "default",
-      principalId: options?.principalId || "default",
+    signal: options.signal ?? new AbortController().signal,
+    timeoutMs: options.timeoutMs,
+    config: options.config,
+    requestId: options.requestId,
+    tenantId: options.tenantId,
+    principalId: options.principalId,
+    hostSessionId: options.hostSessionId,
+    maxCallDepth: options.maxCallDepth,
+    logger: options.logger,
+    progress: options.progress,
+    process: options.process,
+    platform: options.platform,
+    owner: options.owner ?? {
+      tenantId: options.tenantId || "default",
+      principalId: options.principalId || "default",
+      packageInstanceId: pkg.instanceId,
+      generationId: pkg.generation,
+    },
+  };
+}
+
+/**
+ * 构造受信任的根调用上下文选项。
+ */
+export interface CreateRootInvocationContextOptions {
+  /** 目标包物理与快照身份标识（必填单一事实源） */
+  targetPackage: PackageIdentity;
+  /** 外部传入的 AbortSignal 取消信号 */
+  signal?: AbortSignal;
+  /** 最大超时时间（毫秒） */
+  timeoutMs?: number;
+  /** 执行级临时配置覆盖字典 */
+  config?: Record<string, unknown>;
+  /** 幂等请求标识 */
+  requestId?: string;
+  /** 执行宿主会话标识 */
+  hostSessionId?: string;
+  /** 最大调用嵌套深度限制 */
+  maxCallDepth?: number;
+  /** 外部进程执行器注入 */
+  process?: ProcessAPI;
+  /** 可选的底层运行平台契约 */
+  platform?: RuntimePlatform;
+  /** 租户标识 */
+  tenantId?: string;
+  /** 主体标识 */
+  principalId?: string;
+  /** 日志记录器 */
+  logger?: Logger;
+  /** 进度报告器 */
+  progress?: ProgressReporter;
+  /** 显式执行归属所有者契约 */
+  owner?: ProcessOwner;
+}
+
+/**
+ * 构造合法的受信任根调用上下文（Root InvocationContext）。
+ * 在 Host 服务边界装配，严格保证无父级调用血缘（parentRunId 为 undefined），
+ * 根运行 ID 等同于自身运行 ID，调用栈为空，且仅透传受信任参数。
+ */
+export function createRootInvocationContext(options: CreateRootInvocationContextOptions): InvocationContext {
+  const runId = randomUUID();
+  const pkg = options.targetPackage;
+  return {
+    runId,
+    rootRunId: runId,
+    parentRunId: undefined,
+    caller: undefined,
+    callStack: [],
+    package: pkg,
+    signal: options.signal ?? new AbortController().signal,
+    timeoutMs: options.timeoutMs,
+    config: options.config,
+    requestId: options.requestId,
+    hostSessionId: options.hostSessionId,
+    maxCallDepth: options.maxCallDepth,
+    logger: options.logger,
+    progress: options.progress,
+    process: options.process,
+    platform: options.platform,
+    owner: options.owner ?? {
+      tenantId: options.tenantId || "default",
+      principalId: options.principalId || "default",
       packageInstanceId: pkg.instanceId,
       generationId: pkg.generation,
     },

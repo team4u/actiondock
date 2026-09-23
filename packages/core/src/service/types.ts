@@ -19,11 +19,25 @@ import type {
   CancelResult,
   ExecutionTicket,
 } from "../execution/types";
-import type { RunOptions } from "../invocation/types";
 import type { ActionDockHost, ActionDockHostOptions } from "../host/types";
 import type { RuntimePlatform } from "../platform/types";
 import type { StateEntry } from "../storage/types";
 import { ActionDockError } from "../errors";
+
+/**
+ * 公开运行控制选项（RunOptions）。
+ * 面向外部调用方的公开契约，彻底剥离内部 Lineage 字段，严禁污染内部运行时状态。
+ */
+export interface RunOptions {
+  /** 外部传入的 AbortSignal 取消信号 */
+  signal?: AbortSignal;
+  /** 最大超时时间（毫秒） */
+  timeoutMs?: number;
+  /** 执行级临时配置覆盖字典 */
+  config?: Record<string, JsonValue>;
+  /** 幂等请求标识 */
+  requestId?: string;
+}
 
 /**
  * 统一协议版本常量。

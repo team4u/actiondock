@@ -12,6 +12,7 @@ import { SqliteRuntimeStorage } from "../src/storage/sqlite";
 import { createPackageIdentity } from "../src/runtime/identity";
 import { createInvocationContext } from "../src/invocation/types";
 import { InvocationPolicy } from "../src/invocation/policy";
+import { createActionDockHost } from "../src/host/host";
 
 describe("ActionRunner", () => {
   it("executes an action successfully and validates schema", async () => {
@@ -28,7 +29,6 @@ describe("ActionRunner", () => {
 
     const runner = new ActionRunner({
       identity: createPackageIdentity({ id: "test-pkg" }),
-      packageId: "test-pkg",
       storage,
       projectConfig: {
         id: "test-pkg",
@@ -83,7 +83,6 @@ describe("ActionRunner", () => {
 
     const runner = new ActionRunner({
       identity: createPackageIdentity({ id: "test-pkg" }),
-      packageId: "test-pkg",
       storage,
       projectConfig: {
         id: "test-pkg",
@@ -142,7 +141,6 @@ describe("ActionRunner", () => {
 
     const runner = new ActionRunner({
       identity: createPackageIdentity({ id: "test-pkg" }),
-      packageId: "test-pkg",
       storage,
       projectConfig,
       configOverrides: {
@@ -183,12 +181,20 @@ describe("ActionRunner", () => {
 
     const runner = new ActionRunner({
       identity: createPackageIdentity({ id: "test-pkg" }),
-      packageId: "test-pkg",
       storage,
       actions: new Map<string, ActionDefinition<any, any>>([
         ["chain.step1", step1],
         ["chain.step2", step2],
       ]),
+    });
+    runner.setActionInvoker(async (childAction, childInput, context) => {
+      const parsed = typeof childAction === "string" ? childAction : childAction.actionId;
+      const childRes = await runner.execute(parsed, childInput, {
+        parentRunId: context.parentRunId,
+        rootRunId: context.rootRunId,
+      });
+      if (!childRes.ok) throw new Error(childRes.error.message);
+      return childRes.data;
     });
 
     const res = await runner.execute("chain.step2", { n: 5 });
@@ -211,8 +217,8 @@ describe("ActionRunner", () => {
       run: (input: { x: number }) => input.x * 2,
     });
 
-    const extAction = defineAction({
-      run: (input: { name: string }) => `Hello, ${input.name}!`,
+    const dynamicStep = defineAction({
+      run: (input: { x: number }) => input.x * 10,
     });
 
     const orchestrator = defineAction({
@@ -229,19 +235,32 @@ describe("ActionRunner", () => {
 
     const runner = new ActionRunner({
       identity: createPackageIdentity({ id: "local-pkg" }),
-      packageId: "local-pkg",
       storage,
       actions: new Map<string, ActionDefinition<any, any>>([
         ["local.calc", localStep],
         ["orchestrator", orchestrator],
       ]),
-      actionResolver: async (ref) => {
-        const id = typeof ref === "string" ? ref : ref.actionId;
-        if (id === "ext-pkg/greet" || id === "greet") {
-          return extAction;
+      actionResolver: async (actionId: string) => {
+        if (actionId === "local.dynamic") {
+          return dynamicStep;
         }
         return undefined;
       },
+    });
+
+    runner.setActionInvoker(async (childAction: ActionRef | string, childInput: unknown, context) => {
+      const parsed = ActionResolver.parseRef(childAction);
+      if (parsed.packageId === "ext-pkg") {
+        return `Hello, ${(childInput as any).name}!`;
+      }
+      const childRes = await runner.execute(parsed.actionId, childInput, {
+        parentRunId: context.parentRunId,
+        rootRunId: context.rootRunId,
+      });
+      if (!childRes.ok) {
+        throw new Error(childRes.error.message);
+      }
+      return childRes.data;
     });
 
     const res = await runner.execute("orchestrator", { val: 5 });
@@ -252,6 +271,13 @@ describe("ActionRunner", () => {
         refRes: 20,
         extRes: "Hello, ActionDock!",
       });
+    }
+
+    // 验证局部动态解析器 LocalActionResolver
+    const dynRes = await runner.execute("local.dynamic", { x: 3 });
+    expect(dynRes.ok).toBe(true);
+    if (dynRes.ok) {
+      expect(dynRes.data).toBe(30);
     }
   });
 
@@ -297,9 +323,6 @@ describe("ActionRunner", () => {
         instanceId: "ext-pkg-instance-42",
         generation: "gen-ext-9",
       }),
-      packageId: "ext-pkg",
-      packageInstanceId: "ext-pkg-instance-42",
-      generationId: "gen-ext-9",
       storage: extStorage,
       actions: new Map([["child-ext", childExt]]),
     });
@@ -310,9 +333,6 @@ describe("ActionRunner", () => {
         instanceId: "local-pkg-inst-1",
         generation: "local-gen-1",
       }),
-      packageId: "local-pkg",
-      packageInstanceId: "local-pkg-inst-1",
-      generationId: "local-gen-1",
       storage,
       actions: new Map<string, ActionDefinition<any, any>>([
         ["parent", parentAction],
@@ -373,11 +393,6 @@ describe("ActionRunner", () => {
   });
 
   it("handles cross-package same-name action invocation without hijacking or false cycle detection", async () => {
-    const storage = new SqliteRuntimeStorage({
-      packageId: "local-pkg",
-      dbPath: ":memory:",
-    });
-
     const localCalc = defineAction({
       run: (input: { x: number }) => input.x + 1,
     });
@@ -387,6 +402,7 @@ describe("ActionRunner", () => {
     });
 
     const caller = defineAction({
+      uses: ["ext-pkg/calc"],
       async run(input: { x: number }, ctx) {
         // 1. 调用本地动作
         const local = await ctx.actions.invoke<any, number>("calc", { x: input.x });
@@ -398,24 +414,39 @@ describe("ActionRunner", () => {
       },
     });
 
-    const runner = new ActionRunner({
-      identity: createPackageIdentity({ id: "local-pkg" }),
-      packageId: "local-pkg",
-      storage,
-      actions: new Map<string, ActionDefinition<any, any>>([
-        ["calc", localCalc],
-        ["caller", caller],
-      ]),
-      actionResolver: async (ref) => {
-        const id = typeof ref === "string" ? ref : `${ref.packageId}/${ref.actionId}`;
-        if (id === "ext-pkg/calc") {
-          return extCalc;
-        }
-        return undefined;
-      },
+    const host = await createActionDockHost({
+      packages: [
+        {
+          projectConfig: {
+            id: "local-pkg",
+            actions: {
+              calc: { entry: "" },
+              caller: { entry: "", uses: ["ext-pkg/calc"] },
+            },
+          },
+          actions: {
+            calc: localCalc,
+            caller,
+          },
+          inMemory: true,
+        },
+        {
+          projectConfig: {
+            id: "ext-pkg",
+            actions: {
+              calc: { entry: "" },
+            },
+          },
+          actions: {
+            calc: extCalc,
+          },
+          inMemory: true,
+        },
+      ],
+      autoLoadCurrentProject: false,
     });
 
-    const res = await runner.execute("caller", { x: 5 });
+    const res = await host.runAction("local-pkg/caller", { x: 5 });
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.data).toEqual({
@@ -424,6 +455,8 @@ describe("ActionRunner", () => {
         extRef: 50,
       });
     }
+
+    await host.close();
   });
 
   it("resolves scoped package action references (@scope/pkg/action)", () => {
@@ -496,7 +529,6 @@ describe("ActionRunner", () => {
 
       const runner = new ActionRunner({
         identity: createPackageIdentity({ id: "team.demo-service" }),
-        packageId: "team.demo-service",
         storage,
         projectConfig,
         actions: new Map([["demo.env-test", action]]),
@@ -561,7 +593,6 @@ describe("ActionRunner", () => {
 
       const runner = new ActionRunner({
         identity: createPackageIdentity({ id: "@scope/my-service" }),
-        packageId: "@scope/my-service",
         storage,
         projectConfig,
         actions: new Map([["env-test", action]]),
@@ -627,7 +658,6 @@ describe("ActionRunner", () => {
 
       const runner = new ActionRunner({
         identity: createPackageIdentity({ id: "tier-pkg" }),
-        packageId: "tier-pkg",
         storage,
         projectConfig,
         configOverrides: {
@@ -674,7 +704,6 @@ describe("ActionRunner", () => {
 
     const runner = new ActionRunner({
       identity: createPackageIdentity({ id: "test-pkg" }),
-      packageId: "test-pkg",
       storage,
       actions: new Map([["test.sleep", sleepAction]]),
     });
@@ -711,7 +740,6 @@ describe("ActionRunner", () => {
 
     const runner = new ActionRunner({
       identity: createPackageIdentity({ id: "test-pkg" }),
-      packageId: "test-pkg",
       storage,
       actions: new Map([["test.cancellable", cancellableAction]]),
     });
@@ -766,7 +794,6 @@ describe("ActionRunner", () => {
     const identity = createPackageIdentity({ id: "test-pkg" });
     const service = new DefaultExecutionService({
       identity,
-      packageId: "test-pkg",
       storage,
       eventSink: eventSink as any,
     });
@@ -805,7 +832,6 @@ describe("ActionRunner", () => {
 
     const runner = new ActionRunner({
       identity: createPackageIdentity({ id: "test-pkg" }),
-      packageId: "test-pkg",
       storage,
       projectConfig: {
         id: "test-pkg",
@@ -959,7 +985,6 @@ describe("ActionRunner", () => {
 
     const pkgBRunner = new ActionRunner({
       identity: createPackageIdentity({ id: "pkg-b" }),
-      packageId: "pkg-b",
       storage: pkgBStorage,
       projectConfig: {
         id: "pkg-b",
@@ -972,7 +997,6 @@ describe("ActionRunner", () => {
 
     const pkgARunner = new ActionRunner({
       identity: createPackageIdentity({ id: "pkg-a" }),
-      packageId: "pkg-a",
       storage: pkgAStorage,
       actions: new Map([["a.caller", pkgAAction]]),
     });
@@ -1011,29 +1035,37 @@ describe("ActionRunner", () => {
   });
 
   it("handles unregistered or unresolvable cross-package invocation with clear error", async () => {
-    const pkgStorage = new SqliteRuntimeStorage({
-      packageId: "pkg-caller",
-      dbPath: ":memory:",
-    });
-
     const callerAction = defineAction({
       async run(input: any, ctx) {
         return ctx.actions.invoke({ packageId: "unregistered-remote-pkg", actionId: "some.action" }, input);
       },
     });
 
-    const runner = new ActionRunner({
-      identity: createPackageIdentity({ id: "pkg-caller" }),
-      packageId: "pkg-caller",
-      storage: pkgStorage,
-      actions: new Map([["caller.test", callerAction]]),
+    const host = await createActionDockHost({
+      packages: [
+        {
+          projectConfig: {
+            id: "pkg-caller",
+            actions: {
+              "caller.test": { entry: "" },
+            },
+          },
+          actions: {
+            "caller.test": callerAction,
+          },
+          inMemory: true,
+        },
+      ],
+      autoLoadCurrentProject: false,
     });
 
-    const result = await runner.execute("caller.test", {});
+    const result = await host.runAction("pkg-caller/caller.test", {});
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe("PACKAGE_NOT_FOUND");
     }
+
+    await host.close();
   });
 
   it("DefaultExecutionService persists ACTION_NOT_FOUND and preserves error code", async () => {
@@ -1045,7 +1077,6 @@ describe("ActionRunner", () => {
     const identity = createPackageIdentity({ id: "test-pkg" });
     const service = new DefaultExecutionService({
       identity,
-      packageId: "test-pkg",
       storage,
     });
 
@@ -1069,7 +1100,6 @@ describe("ActionRunner", () => {
 
     const runner = new ActionRunner({
       identity: createPackageIdentity({ id: "caller-pkg" }),
-      packageId: "caller-pkg",
       storage,
     });
 
@@ -1078,7 +1108,7 @@ describe("ActionRunner", () => {
     if (!result.ok) {
       expect(result.error.code).toBe("ACTION_NOT_FOUND");
       expect((result.error.details as any)?.reason).toContain(
-        "Runner for package 'caller-pkg' cannot resolve external package 'unlinked.pkg'"
+        "Cross-package action 'unlinked.pkg/some.action' cannot be resolved by ActionRunner"
       );
     }
   });
@@ -1095,7 +1125,6 @@ describe("ActionRunner", () => {
     const identityA = createPackageIdentity({ id: "pkg-a" });
     const serviceA = new DefaultExecutionService({
       identity: identityA,
-      packageId: "pkg-a",
       storage: storageA,
       actions: new Map([["work", workAction]]),
     });
@@ -1131,7 +1160,6 @@ describe("ActionRunner", () => {
     const identityA = createPackageIdentity({ id: "pkg-a" });
     const serviceA = new DefaultExecutionService({
       identity: identityA,
-      packageId: "pkg-a",
       storage: storageA,
       actions: new Map([["secret", localAction]]),
     });
@@ -1167,7 +1195,6 @@ describe("ActionRunner", () => {
     const identity = createPackageIdentity({ id: "concurrency-pkg" });
     const service = new DefaultExecutionService({
       identity,
-      packageId: "concurrency-pkg",
       storage,
       maxActiveRuns: maxActive,
       actions: new Map([["slow", slowAction]]),
@@ -1237,7 +1264,6 @@ describe("ActionRunner", () => {
     const storage = new SqliteRuntimeStorage({ packageId: "shared-proc-pkg", dbPath: ":memory:" });
     const runner = new ActionRunner({
       identity: createPackageIdentity({ id: "shared-proc-pkg" }),
-      packageId: "shared-proc-pkg",
       storage,
       platform,
       actions: new Map([["probe", probeAction]]),

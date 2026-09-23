@@ -25,7 +25,6 @@ describe("核心运行时高级防御校验与边缘异常测试套件", () => {
       const storage = new SqliteRuntimeStorage({ packageId, dbPath: ":memory:" });
       return new ActionRunner({
         identity: createPackageIdentity({ id: packageId }),
-        packageId,
         storage,
         actions: new Map([["echo", echoAction]]),
       });
@@ -105,7 +104,6 @@ describe("核心运行时高级防御校验与边缘异常测试套件", () => {
       const storage = new SqliteRuntimeStorage({ packageId: "test.out-nan", dbPath: ":memory:" });
       const runner = new ActionRunner({
         identity: createPackageIdentity({ id: "test.out-nan" }),
-        packageId: "test.out-nan",
         storage,
         actions: new Map([["nan-action", nanAction]]),
       });
@@ -123,7 +121,6 @@ describe("核心运行时高级防御校验与边缘异常测试套件", () => {
       const storage = new SqliteRuntimeStorage({ packageId: "test.out-inf", dbPath: ":memory:" });
       const runner = new ActionRunner({
         identity: createPackageIdentity({ id: "test.out-inf" }),
-        packageId: "test.out-inf",
         storage,
         actions: new Map([["inf-action", infAction]]),
       });
@@ -145,7 +142,6 @@ describe("核心运行时高级防御校验与边缘异常测试套件", () => {
       const storage = new SqliteRuntimeStorage({ packageId: "test.out-circ", dbPath: ":memory:" });
       const runner = new ActionRunner({
         identity: createPackageIdentity({ id: "test.out-circ" }),
-        packageId: "test.out-circ",
         storage,
         actions: new Map([["circ-action", circularAction]]),
       });
@@ -184,7 +180,6 @@ describe("核心运行时高级防御校验与边缘异常测试套件", () => {
 
       const runner = new ActionRunner({
         identity: createPackageIdentity({ id: "test.repo-unavailable" }),
-        packageId: "test.repo-unavailable",
         actions: new Map([["simple", simpleAction]]),
         storage: faultyStorage,
       });
@@ -221,7 +216,6 @@ describe("核心运行时高级防御校验与边缘异常测试套件", () => {
 
       const runner = new ActionRunner({
         identity: createPackageIdentity({ id: "test.persist-failed" }),
-        packageId: "test.persist-failed",
         actions: new Map([["simple", simpleAction]]),
         storage: flakyStorage,
       });
@@ -265,7 +259,6 @@ describe("核心运行时高级防御校验与边缘异常测试套件", () => {
       const storage = new SqliteRuntimeStorage({ packageId: "test.subrun-limit", dbPath: ":memory:" });
       const runner = new ActionRunner({
         identity: createPackageIdentity({ id: "test.subrun-limit" }),
-        packageId: "test.subrun-limit",
         storage,
         actions: new Map<string, any>([
           ["parent", parentAction],
@@ -325,7 +318,6 @@ describe("核心运行时高级防御校验与边缘异常测试套件", () => {
       const storage = new SqliteRuntimeStorage({ packageId: "test.cycle-detection", dbPath: ":memory:" });
       const runner = new ActionRunner({
         identity: createPackageIdentity({ id: "test.cycle-detection" }),
-        packageId: "test.cycle-detection",
         storage,
         actions: new Map([
           ["action-a", actionA],

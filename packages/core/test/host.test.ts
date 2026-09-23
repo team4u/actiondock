@@ -437,31 +437,6 @@ actions:
       expect(failedRes.error.message).toContain("Undeclared cross-package dependency");
     }
 
-    // 3. 通过 host.runAction 带 parentRunId 显式模拟跨包调用校验
-    // 创建一个模拟 parentRun，指向 service.caller 的 undeclared-caller
-    const callerApp = host.getRuntime("service.caller")!;
-    const mockParentRunId = "mock-parent-run-id";
-    callerApp.storage.createRun({
-      id: mockParentRunId,
-      rootRunId: mockParentRunId,
-      packageId: "service.caller",
-      packageInstanceId: "service.caller",
-      actionId: "undeclared-caller",
-      generationId: "1",
-      ownerId: "test-owner",
-      status: "running",
-      input: {},
-      startedAt: new Date().toISOString(),
-    });
-
-    const directCheckRes = await host.runAction("service.worker/worker-task", { num: 3 }, {
-      parentRunId: mockParentRunId,
-    });
-    expect(directCheckRes.ok).toBe(false);
-    if (!directCheckRes.ok) {
-      expect(directCheckRes.error.code).toBe("UNDECLARED_ACTION_DEPENDENCY");
-    }
-
     await host.close();
   });
 
@@ -549,14 +524,70 @@ actions:
   });
 
   it("统一限制调用深度与根运行子任务数配额", async () => {
+    let releaseGate!: () => void;
+    const gate = new Promise<void>((r) => {
+      releaseGate = r;
+    });
+
+    const stepA = defineAction({
+      run: async (_input, ctx) => ctx.actions.invoke("pkg.depth/stepB", {}),
+    });
+    const stepB = defineAction({
+      run: async (_input, ctx) => ctx.actions.invoke("pkg.depth/stepC", {}),
+    });
+    const stepC = defineAction({
+      run: async (_input, ctx) => ctx.actions.invoke("pkg.depth/stepD", {}),
+    });
+    const stepD = defineAction({
+      run: async () => ({ done: true }),
+    });
+
+    const slowAction = defineAction({
+      run: async () => {
+        await gate;
+        return { finished: true };
+      },
+    });
+
+    const rootParallelAction = defineAction({
+      run: async (_input, ctx) => {
+        const p1 = ctx.actions.invoke("pkg.depth/slow", {});
+        const p2 = ctx.actions.invoke("pkg.depth/slow", {});
+        try {
+          await ctx.actions.invoke("pkg.depth/slow", {});
+          return { error: null };
+        } catch (err: any) {
+          return { error: { code: err.code, message: err.message } };
+        } finally {
+          releaseGate();
+          await Promise.allSettled([p1, p2]);
+        }
+      },
+    });
+
     const host = await createActionDockHost({
       packages: [
         {
-          projectConfig: { id: "pkg.depth", name: "深度测试包", version: "1.0.0" },
+          projectConfig: {
+            id: "pkg.depth",
+            name: "深度测试包",
+            version: "1.0.0",
+            actions: {
+              stepA: { entry: "" },
+              stepB: { entry: "" },
+              stepC: { entry: "" },
+              stepD: { entry: "" },
+              slow: { entry: "" },
+              rootParallel: { entry: "" },
+            },
+          },
           actions: {
-            step: defineAction({
-              run: () => ({ done: true }),
-            }),
+            stepA,
+            stepB,
+            stepC,
+            stepD,
+            slow: slowAction,
+            rootParallel: rootParallelAction,
           },
           inMemory: true,
         },
@@ -566,94 +597,21 @@ actions:
       autoLoadCurrentProject: false,
     });
 
-    const app = host.getRuntime("pkg.depth")!;
-
-    // 1. 模拟构建深度达到 3 层的调用链
-    const run0 = "depth-run-0";
-    const run1 = "depth-run-1";
-    const run2 = "depth-run-2";
-    const now = new Date().toISOString();
-
-    app.storage.createRun({
-      id: run0,
-      rootRunId: run0,
-      packageId: "pkg.depth",
-      packageInstanceId: "pkg.depth",
-      actionId: "step",
-      generationId: "1",
-      ownerId: "tester",
-      status: "running",
-      startedAt: now,
-    });
-
-    app.storage.createRun({
-      id: run1,
-      rootRunId: run0,
-      parentRunId: run0,
-      packageId: "pkg.depth",
-      packageInstanceId: "pkg.depth",
-      actionId: "step",
-      generationId: "1",
-      ownerId: "tester",
-      status: "running",
-      startedAt: now,
-    });
-
-    app.storage.createRun({
-      id: run2,
-      rootRunId: run0,
-      parentRunId: run1,
-      packageId: "pkg.depth",
-      packageInstanceId: "pkg.depth",
-      actionId: "step",
-      generationId: "1",
-      ownerId: "tester",
-      status: "running",
-      startedAt: now,
-    });
-
-    // 此时从 run2 继续发起子任务将超过 maxCallDepth (3)
-    const depthExceeded = await host.runAction("pkg.depth/step", {}, { parentRunId: run2 });
-    expect(depthExceeded.ok).toBe(false);
-    if (!depthExceeded.ok) {
-      expect(["ACTION_CALL_CYCLE", "ACTION_MAX_DEPTH_EXCEEDED"]).toContain(depthExceeded.error.code);
+    // 1. 调用深度测试：A -> B -> C -> D 超过 maxCallDepth (3)
+    const depthRes = await host.runAction("pkg.depth/stepA", {});
+    expect(depthRes.ok).toBe(false);
+    if (!depthRes.ok) {
+      expect(["ACTION_CALL_CYCLE", "ACTION_MAX_DEPTH_EXCEEDED"]).toContain(depthRes.error.code);
     }
 
-    // 2. 测试子任务数限额 (maxSubRuns: 2)
-    // 启动长时间运行的动作
-    const slowAction = defineAction({
-      run: async () => {
-        await new Promise((resolve) => setTimeout(resolve, 150));
-        return { finished: true };
-      },
-    });
-    (app.executionService as any).registerAction("slow", slowAction);
-
-    const rootRunId = "root-limit-test";
-    app.storage.createRun({
-      id: rootRunId,
-      rootRunId,
-      packageId: "pkg.depth",
-      packageInstanceId: "pkg.depth",
-      actionId: "step",
-      generationId: "1",
-      ownerId: "tester",
-      status: "running",
-      startedAt: now,
-    });
-
-    const sub1 = await host.startAction("pkg.depth/slow", {}, { parentRunId: rootRunId });
-    const sub2 = await host.startAction("pkg.depth/slow", {}, { parentRunId: rootRunId });
-    // 此时活跃子任务已达到 2 个，发起第 3 个应受限
-    const sub3 = await host.startAction("pkg.depth/slow", {}, { parentRunId: rootRunId });
-    const sub3Res = await sub3.result!;
-    expect(sub3Res.ok).toBe(false);
-    if (!sub3Res.ok) {
-      expect(["ACTION_SUBRUN_LIMIT", "MAX_SUBRUNS_REACHED"]).toContain(sub3Res.error.code);
+    // 2. 子任务限额测试：maxSubRuns: 2，第 3 个并发子任务被拒
+    const quotaRes = await host.runAction("pkg.depth/rootParallel", {});
+    expect(quotaRes.ok).toBe(true);
+    if (quotaRes.ok) {
+      const data = quotaRes.data as any;
+      expect(["ACTION_SUBRUN_LIMIT", "MAX_SUBRUNS_REACHED"]).toContain(data.error?.code);
     }
 
-    await sub1.result;
-    await sub2.result;
     await host.close();
   });
 
@@ -1334,12 +1292,46 @@ actions:
   });
 
   it("子任务启动抛出异常时配额计数正确回滚不泄漏", async () => {
+    let callCount = 0;
+    const workerAction = defineAction({
+      run: () => {
+        callCount++;
+        if (callCount === 1) {
+          throw new Error("Simulated worker failure");
+        }
+        return { fine: true };
+      },
+    });
+
+    const callerAction = defineAction({
+      run: async (_input, ctx) => {
+        let firstFailed = false;
+        try {
+          await ctx.actions.invoke("pkg.quota-rollback/worker", {});
+        } catch {
+          firstFailed = true;
+        }
+
+        const secondRes = await ctx.actions.invoke("pkg.quota-rollback/worker", {});
+        return { firstFailed, secondRes };
+      },
+    });
+
     const host = await createActionDockHost({
       packages: [
         {
-          projectConfig: { id: "pkg.quota-rollback", name: "配额回退包", version: "1.0.0" },
+          projectConfig: {
+            id: "pkg.quota-rollback",
+            name: "配额回退包",
+            version: "1.0.0",
+            actions: {
+              worker: { entry: "" },
+              caller: { entry: "" },
+            },
+          },
           actions: {
-            ok: defineAction({ run: () => ({ fine: true }) }),
+            worker: workerAction,
+            caller: callerAction,
           },
           inMemory: true,
         },
@@ -1348,42 +1340,13 @@ actions:
       autoLoadCurrentProject: false,
     });
 
-    const app = host.getRuntime("pkg.quota-rollback")!;
-    const rootRunId = "quota-rollback-root";
-    const now = new Date().toISOString();
-    app.storage.createRun({
-      id: rootRunId,
-      rootRunId,
-      packageId: "pkg.quota-rollback",
-      packageInstanceId: "pkg.quota-rollback",
-      actionId: "ok",
-      generationId: "1",
-      ownerId: "tester",
-      status: "running",
-      startedAt: now,
-    });
-
-    // 篡改 startAction 使其抛出异常，模拟并发上限、仓储不可用、幂等冲突等启动失败
-    const origStart = app.startAction.bind(app);
-    let callCount = 0;
-    app.startAction = async (id: string, input: any, options: any) => {
-      callCount++;
-      if (callCount === 1) {
-        throw new Error("RUN_REPOSITORY_UNAVAILABLE: simulated startup failure");
-      }
-      return origStart(id, input, options);
-    };
-
     try {
-      // 首次启动失败：配额必须回滚而非泄漏
-      await expect(
-        host.startAction("pkg.quota-rollback/ok", {}, { parentRunId: rootRunId })
-      ).rejects.toThrow("RUN_REPOSITORY_UNAVAILABLE");
-
-      // 失败后计数已回滚，后续合法子任务不受误拒（若泄漏则会被 maxSubRuns=1 拦截）
-      const ticket = await host.startAction("pkg.quota-rollback/ok", {}, { parentRunId: rootRunId });
-      const res = await ticket.result!;
+      const res = await host.runAction("pkg.quota-rollback/caller", {});
       expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect((res.data as any).firstFailed).toBe(true);
+        expect((res.data as any).secondRes).toEqual({ fine: true });
+      }
     } finally {
       await host.close();
     }
@@ -1458,7 +1421,7 @@ actions:
     });
 
     const errorApp = host.getRuntime("pkg.err-run")!;
-    errorApp.startAction = async () => {
+    errorApp.executionService.start = async () => {
       const err = new Error("SQLITE_CORRUPT: database disk image is malformed");
       (err as any).code = "SQLITE_CORRUPT";
       throw err;

@@ -28,7 +28,7 @@ import type { RuntimeStorage } from "../storage/types";
 import { createPackageIdentity, type PackageIdentity } from "../runtime/identity";
 import { parseActionRef } from "../catalog/resolve-action";
 import { CAPABILITY_UNAVAILABLE, INVOCATION_UNSUPPORTED, ActionDockError } from "../errors";
-import type { InvocationContext, RunOptions } from "../invocation/types";
+import { createRootInvocationContext, type InvocationContext, type RunOptions } from "../invocation/types";
 import { buildStaticActionMap, buildStaticPlaybookMap } from "./static-index";
 import type {
   ActionSpec,
@@ -65,6 +65,7 @@ export class DefaultPackageRuntime implements PackageRuntime {
   private readonly options: PackageRuntimeOptions;
   private runtimeConfig: RuntimeConfig;
   private isClosed = false;
+  private injectedGlobalStorage = false;
   /** 静态清单索引缓存：包静态事实（根目录、配置、内存注入集合）在实例生命周期内不变，解析结果同实例内复用 */
   private staticActionIndex?: Map<string, ActionSpec>;
   private staticPlaybookIndex?: Map<string, PlaybookSpec>;
@@ -144,11 +145,13 @@ export class DefaultPackageRuntime implements PackageRuntime {
     // 5. 确定全局存储实例
     if (options.globalStorage) {
       this.globalStorage = options.globalStorage;
+      this.injectedGlobalStorage = true;
     } else if (options.inMemory) {
       this.globalStorage = new SqliteRuntimeStorage({
         dbPath: ":memory:",
         packageId: "__global__",
       });
+      this.injectedGlobalStorage = false;
     } else {
       const globalOpts = {
         customHome: options.customHome,
@@ -163,14 +166,12 @@ export class DefaultPackageRuntime implements PackageRuntime {
       };
 
       this.globalStorage = createLazyStorage(initGlobalStorage);
+      this.injectedGlobalStorage = false;
     }
 
     // 6. 初始化唯一执行协调服务
     this.executionService = new DefaultExecutionService({
       identity: this.identity,
-      packageId: this.packageId,
-      packageInstanceId: this.packageInstanceId,
-      generationId: this.generationId,
       hostSessionId: options.hostSessionId,
       storage: this.storage,
       globalStorage: this.globalStorage,
@@ -401,33 +402,18 @@ export class DefaultPackageRuntime implements PackageRuntime {
     ) {
       return options as InvocationContext;
     }
-    const runId = (options as any)?.runId || randomUUID();
-    const rootRunId = (options as any)?.rootRunId || runId;
-    return {
-      runId,
-      rootRunId,
-      parentRunId: (options as any)?.parentRunId,
-      callStack: (options as any)?.callStack ? [...(options as any).callStack] : [],
-      package: this.identity,
-      signal: options?.signal ?? new AbortController().signal,
+    return createRootInvocationContext({
+      targetPackage: this.identity,
+      signal: options?.signal,
       timeoutMs: options?.timeoutMs,
       config: options?.config,
       requestId: options?.requestId,
-      tenantId: options?.tenantId,
-      principalId: options?.principalId,
-      hostSessionId: (options as any)?.hostSessionId || this.options.hostSessionId,
-      maxCallDepth: (options as any)?.maxCallDepth ?? this.options.maxCallDepth,
-      logger: options?.logger ?? this.options.logger,
-      progress: options?.progress,
-      process: (options as any)?.process ?? this.options.process ?? this.platform.process,
-      platform: (options as any)?.platform ?? this.platform,
-      owner: (options as any)?.owner ?? {
-        tenantId: options?.tenantId || "default",
-        principalId: options?.principalId || "default",
-        packageInstanceId: this.identity.instanceId,
-        generationId: this.identity.generation,
-      },
-    };
+      hostSessionId: this.options.hostSessionId,
+      maxCallDepth: this.options.maxCallDepth,
+      logger: this.options.logger,
+      process: this.options.process ?? this.platform.process,
+      platform: this.platform,
+    });
   }
 
   async runAction(
@@ -833,10 +819,12 @@ export class DefaultPackageRuntime implements PackageRuntime {
       } catch {
         // 忽略存储重复关闭异常
       } finally {
-        try {
-          this.globalStorage?.close();
-        } catch {
-          // 忽略全局存储关闭异常
+        if (!this.injectedGlobalStorage) {
+          try {
+            this.globalStorage?.close();
+          } catch {
+            // 忽略全局存储关闭异常
+          }
         }
       }
     }
