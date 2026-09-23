@@ -144,7 +144,7 @@ try {
   console.log("[TEST] Testing module imports and runtime execution via native Node.js...");
   const testScriptContent = `
 import { defineAction } from "@actiondock/sdk";
-import { createActionDock, connectActionDock, ExecutionService, createPackageIdentity, SqliteRuntimeStorage, createStorage, ACTIONDOCK_VERSION, createNodePlatform, NodeSqliteDriver, NodeHttpServer } from "@actiondock/core";
+import { createActionDock, connectActionDock, ACTIONDOCK_VERSION, createNodePlatform, startActionDockServer } from "@actiondock/core";
 import { createActionDockMcpServer, toMcpResult } from "@actiondock/mcp";
 import { SelectionPlanner, SkillExporter, buildProject, exportSkill } from "@actiondock/builder";
 import { main, createCliProgram, formatError, runStandaloneCli } from "@actiondock/cli";
@@ -182,13 +182,13 @@ if ((await runtime.state.get("count")) !== 42) {
 console.log("[OK] SDK defineAction and createTestRuntime verified");
 
 // Verify Core
-if (typeof createActionDock !== "function" || typeof connectActionDock !== "function" || typeof ExecutionService !== "function") {
-  throw new Error("Core exports missing createActionDock, connectActionDock, or ExecutionService");
+if (typeof createActionDock !== "function" || typeof connectActionDock !== "function") {
+  throw new Error("Core exports missing createActionDock or connectActionDock");
 }
 if (ACTIONDOCK_VERSION !== "${currentVersion}") {
   throw new Error("Core ACTIONDOCK_VERSION mismatch: " + ACTIONDOCK_VERSION);
 }
-console.log("[OK] Core createActionDock, ExecutionService, and version verified");
+console.log("[OK] Core createActionDock, connectActionDock, and version verified");
 
 // Verify MCP
 if (typeof createActionDockMcpServer !== "function" || typeof toMcpResult !== "function") {
@@ -203,10 +203,10 @@ if (typeof SelectionPlanner?.plan !== "function" || typeof SkillExporter?.protot
 console.log("[OK] Builder SelectionPlanner, SkillExporter, exportSkill, and buildProject verified");
 
 // Verify Runtime Node
-if (typeof createNodePlatform !== "function" || typeof NodeSqliteDriver !== "function" || typeof NodeHttpServer !== "function") {
-  throw new Error("Runtime Node exports missing key components");
+if (typeof createNodePlatform !== "function" || typeof startActionDockServer !== "function") {
+  throw new Error("Runtime Node exports missing createNodePlatform or startActionDockServer");
 }
-console.log("[OK] Core createNodePlatform, NodeSqliteDriver, and NodeHttpServer verified");
+console.log("[OK] Core createNodePlatform and startActionDockServer verified");
 
 // Verify CLI
 if (typeof main !== "function" || typeof createCliProgram !== "function" || typeof formatError !== "function" || typeof runStandaloneCli !== "function") {
@@ -220,39 +220,30 @@ if (typeof FakeClock !== "function" || typeof MemoryStorage !== "function" || ty
 }
 console.log("[OK] Testing FakeClock, MemoryStorage, and createTestRuntime verified");
 
-// Verify Core Execution Service with Node Platform
-const nodePlatform = createNodePlatform();
-const nodeStorage = nodePlatform.storage.createStorage("smoke-test-pkg", { inMemory: true });
-const execService = new ExecutionService({
-  identity: createPackageIdentity({ id: "smoke-test-pkg" }),
-  packageId: "smoke-test-pkg",
-  platform: nodePlatform,
-  storage: nodeStorage,
-  actionResolver: (ref) => {
-    const actionId = typeof ref === "string" ? ref : ref.actionId;
-    if (actionId === "smoke.action") {
-      return {
-        id: "smoke.action",
-        description: "Smoke action",
-        inputSchema: { type: "object" },
-        run: async () => ({ result: "node-execution-success" }),
-      };
-    }
-    return undefined;
-  },
+// Verify Core createActionDock execution with Node Platform
+const service = await createActionDock({
+  packages: [
+    {
+      projectConfig: { id: "smoke-test-pkg", name: "smoke-test-pkg", version: "1.0.0" },
+      actions: {
+        "smoke.action": {
+          run: async () => ({ result: "node-execution-success" }),
+        },
+      },
+      inMemory: true,
+    },
+  ],
+  autoLoadCurrentProject: false,
+  scanLinkedPackages: false,
+  inMemory: true,
 });
 
-const execResult = await execService.execute("smoke.action", {});
+const execResult = await service.execution.run("smoke.action", {});
 if (!execResult.ok || execResult.data?.result !== "node-execution-success") {
   throw new Error("Native Node execution service run failed: " + JSON.stringify(execResult));
 }
-const runs = await nodeStorage.listRuns();
-if (runs.length === 0 || runs[0].id !== execResult.runId || runs[0].status !== "success") {
-  throw new Error("Native Node storage run record missing or mismatched: " + JSON.stringify(runs));
-}
-await execService.close();
-await nodeStorage.close();
-console.log("[OK] Core ExecutionService with NodeSqliteDriver executed and verified");
+await service.close();
+console.log("[OK] Core createActionDock executed and verified");
 process.exit(0);
 `;
 

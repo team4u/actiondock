@@ -9,7 +9,6 @@ import {
   loadManifest,
   loadPlaybooks,
   loadProjectConfig,
-  PackageDiscovery,
   PackageGraphBuilder,
   type PlaybookDefinition,
   type ProjectConfig,
@@ -442,9 +441,7 @@ export class SelectionPlanner {
     const externalActionEntries = new Map<string, ActionManifestEntry>();
     const manifestActions = manifest.actions || {};
 
-    const discovery = new PackageDiscovery({ currentProjectRoot: root });
-    const discovered = discovery.discoverSync();
-    const graph = new PackageGraphBuilder({ packages: discovered, root }).buildSync();
+    const graph = new PackageGraphBuilder({ root, allowDevLinks: true }).buildSync();
     const catalog = new DefaultActionCatalog(graph);
 
     while (queue.length > 0) {

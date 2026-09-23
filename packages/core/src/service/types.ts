@@ -34,11 +34,8 @@ export const ACTIONDOCK_PROTOCOL_VERSION = "2.0";
  * 服务端/通信协议错误码常量。
  */
 export const PROTOCOL_UNSUPPORTED = "PROTOCOL_UNSUPPORTED";
-export const TARGET_PROTOCOL_UNSUPPORTED = "TARGET_PROTOCOL_UNSUPPORTED";
-export const TARGET_CAPABILITY_UNAVAILABLE = "TARGET_CAPABILITY_UNAVAILABLE";
-export const TARGET_RESULT_UNKNOWN = "TARGET_RESULT_UNKNOWN";
+export const SERVICE_RESULT_UNKNOWN = "SERVICE_RESULT_UNKNOWN";
 export const SERVICE_CLOSED = "SERVICE_CLOSED";
-export const TARGET_CLOSED = "TARGET_CLOSED";
 
 /**
  * 结构化服务通信异常类。
@@ -50,15 +47,6 @@ export class ServiceError extends ActionDockError {
     this.name = "ServiceError";
     this.details = details;
     Object.setPrototypeOf(this, ServiceError.prototype);
-  }
-}
-
-/** 兼容旧名字的别名 */
-export class TargetError extends ServiceError {
-  constructor(code: string, message: string, details?: Record<string, unknown>) {
-    super(code, message, details);
-    this.name = "TargetError";
-    Object.setPrototypeOf(this, TargetError.prototype);
   }
 }
 
@@ -75,9 +63,9 @@ export class CloseTimeoutError extends Error {
 }
 
 /**
- * 目标自省元数据信息。
+ * 服务自省元数据信息。
  */
-export interface TargetInfo {
+export interface ServiceInfo {
   id: string;
   name: string;
   protocolVersion: string;
@@ -163,9 +151,6 @@ export interface RemoteServiceOptions {
   /** 是否启用配置与状态管理端口（默认 true） */
   enableManagement?: boolean;
 }
-
-/** 兼容别名 */
-export type RemoteTargetOptions = RemoteServiceOptions;
 
 /**
  * 资产与元数据发现服务端口。
@@ -315,6 +300,8 @@ export interface CreateActionDockOptions {
   hostOptions?: ActionDockHostOptions;
   /** 当前工程根目录绝对路径 */
   projectRoot?: string;
+  /** 是否自动加载当前工程（默认为 true） */
+  autoLoadCurrentProject?: boolean;
   /** 预注册包配置列表 */
   packages?: Array<PackageRuntime | PackageRuntimeOptions>;
   /** 自定义 ActionDock 家目录 */

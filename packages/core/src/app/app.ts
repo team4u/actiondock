@@ -458,7 +458,7 @@ export class DefaultPackageRuntime implements PackageRuntime {
         actionId = actionId.slice(this.packageId.length + 1);
       } else {
         throw new Error(
-          `ActionDockApp only accepts local action short ID '${id}'. Cross-package invocations must be dispatched via Host invoker.`
+          `PackageRuntime only accepts local action short ID '${id}'. Cross-package invocations must be dispatched via Host invoker.`
         );
       }
     }
@@ -476,7 +476,7 @@ export class DefaultPackageRuntime implements PackageRuntime {
         actionId = actionId.slice(this.packageId.length + 1);
       } else {
         throw new Error(
-          `ActionDockApp only accepts local action short ID '${id}'. Cross-package invocations must be dispatched via Host invoker.`
+          `PackageRuntime only accepts local action short ID '${id}'. Cross-package invocations must be dispatched via Host invoker.`
         );
       }
     }

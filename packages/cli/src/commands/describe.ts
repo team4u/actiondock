@@ -13,7 +13,7 @@ import {
   applyTargetOptions,
   getEffectiveOptions,
   resolveLocalPackageRoot,
-  withTarget,
+  withService,
 } from "../utils";
 
 /**
@@ -47,7 +47,7 @@ export function attachDescribeCommand(parent: Command, context?: CliContext): Co
       const targetRef = id;
 
       // 通过 Service 门面统一查询 Action 规范
-      await withTarget(
+      await withService(
         options,
         context,
         async (service) => {

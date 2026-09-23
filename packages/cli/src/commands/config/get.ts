@@ -14,7 +14,7 @@ import {
   applyTargetOptions,
   getEffectiveOptions,
   resolveTargetFromOptions,
-  withTarget,
+  withService,
 } from "../../utils";
 
 /**
@@ -71,7 +71,7 @@ export function registerConfigGetCommand(configCmd: Command, context?: CliContex
       // 本地分支
       const root = resolvePackageRoot(options.package);
 
-      await withTarget(options, context, async (service) => {
+      await withService(options, context, async (service) => {
         if (options.global || !root) {
           if (!options.global && options.package && !root) {
             throw packageNotFoundError(options.package);

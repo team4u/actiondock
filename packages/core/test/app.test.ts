@@ -7,7 +7,7 @@ import { createPackageRuntime, DefaultPackageRuntime } from "../src/app";
 import { createNodePlatform } from "../src/platform";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
 
-describe("ActionDockApp", () => {
+describe("PackageRuntime", () => {
   it("工厂函数 createPackageRuntime 与 DefaultPackageRuntime 初始化并正确返回 PackageInfo", async () => {
     const app = await createPackageRuntime({
       projectConfig: {
@@ -620,7 +620,7 @@ Execute build and then deploy artifact.
 
     await app.close();
 
-    // 4. DefaultPackageRuntime 实体类拥有与 ActionDockApp 相同的重载契约
+    // 4. DefaultPackageRuntime 实体类拥有与 PackageRuntime 相同的重载契约
     const concreteApp = new DefaultPackageRuntime({ inMemory: true });
     await concreteApp.setState("theme", "light");
     expect(await concreteApp.getState("theme")).toBe("light");

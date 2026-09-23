@@ -4,7 +4,8 @@ import { ActionRunner } from "../src/runtime/runner";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
 import { createPackageRuntime } from "../src/app";
 import { createActionDockHost } from "../src/host";
-import { createPackageIdentity, InvocationPolicy } from "../src";
+import { createPackageIdentity } from "../src/runtime/identity";
+import { InvocationPolicy } from "../src/invocation/policy";
 import {
   INPUT_NOT_JSON,
   OUTPUT_NOT_JSON,

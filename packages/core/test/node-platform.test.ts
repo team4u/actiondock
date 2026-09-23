@@ -3,17 +3,13 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decodeText, defineAction } from "@actiondock/sdk";
-import {
-  createNodePlatform,
-  createPackageIdentity,
-  DefaultExecutionService,
-  NodeFileSystem,
-  NodeHttpServer,
-  NodeModuleLoader,
-  NodeSqliteDriver,
-  SqliteRuntimeStorage,
-  SystemClock,
-} from "../src";
+import { createNodePlatform, SqliteRuntimeStorage, SystemClock } from "../src";
+import { createPackageIdentity } from "../src/runtime/identity";
+import { DefaultExecutionService } from "../src/execution/service";
+import { NodeFileSystem } from "../src/platform/node-fs";
+import { NodeHttpServer } from "../src/server/http-server";
+import { NodeModuleLoader } from "../src/node/module-loader";
+import { NodeSqliteDriver } from "../src/storage/sqlite-driver";
 import { ExecaProcessExecutor } from "../src/process/process-executor";
 
 describe("createNodePlatform 平台工厂测试", () => {

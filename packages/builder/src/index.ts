@@ -1,100 +1,38 @@
 /**
  * @actiondock/builder 公共导出面。
- * 采用显式命名导出替代全量 export *，保证公开 API 边界清晰可控。
+ * 专注于暴露核心构建主接口与必要契约，低层内部工具作为包内模块封装。
  */
 
-// 错误类型
+// 错误模型
 export { BuilderError, PlannerError } from "./errors";
 
-// 共享基础设施
-export { getInternalDependencyVersion } from "./fs-utils";
-
-// 清单组装与依赖协议校验
-export {
-  assertNoFileProtocolDeps,
-  assertValidManifestActionIds,
-  serializeManifestAction,
-  serializeManifestPlaybooks,
-  serializePlanManifest,
-} from "./manifest";
-export type { SerializePlanManifestOptions } from "./manifest";
-
-// 归档压缩
-export {
-  createTarGzArchive,
-  createTarGzArchiveAsync,
-  createZipArchive,
-  createZipArchiveAsync,
-} from "./archive";
-export type { TarGzArchiveOptions } from "./archive";
-
-// Skill 模板与规范声明
-export {
-  COMPOSITE_CUSTOM_DECLARATION_FILE,
-  COMPOSITE_CUSTOM_SLOTS,
-  generateCompositeSkillMd,
-  generateSkillJson,
-  generateSkillMd,
-  generateSourceSkillMd,
-  generateStandaloneSkillMd,
-  parseCustomSections,
-  parseCustomSkillDeclaration,
-} from "./skill";
-export type {
-  CompositeCustomDeclaration,
-  CompositeCustomSection,
-  CompositeCustomSlot,
-  CompositeSkillPackageInfo,
-  GenerateSkillJsonOptions,
-  SkillActionItem,
-} from "./skill";
-
-// 构建规划
-export { SelectionPlanner } from "./planner";
-
-// 相对依赖完整性校验
-export {
-  assertRelativeDependenciesIntegrity,
-  extractRelativeSpecifiers,
-  resolveRelativeModule,
-} from "./dependency-check";
-
-// 目录型构建与 npm 打包
+// 构建、打包与导出主接口
 export { buildProject } from "./build";
 export { packProject } from "./pack";
-
-// Skill 导出
-// 入口函数与导出器门面位于 ./exporter；SKILL.md 发现能力单一事实源位于 ./skill-md
 export {
   exportCompositeSkill,
   exportSkill,
   exportSkillBatch,
   SkillExporter,
 } from "./exporter";
-export {
-  findExistingCompositeSkillMd,
-  findExistingSingleSkillMd,
-} from "./skill-md";
 
-// 公共类型定义
+// 构建规划器
+export { SelectionPlanner } from "./planner";
+
+// 公共契约与配置类型
 export type {
-  ActionDependency,
   ArchiveFormat,
-  AssetDependency,
   BatchSkillExportOptions,
   BatchSkillExportResult,
   BuildOptions,
   BuildPlan,
-  BuildPlanDependencies,
   BuildResult,
   CompositeSkillExportOptions,
   CompositeSkillExportResult,
-  ExternalDependency,
-  LockfileInfo,
+  ExportSkillOptions,
+  ExportSkillResult,
   PackOptions,
   PackResult,
-  PlaybookPlanEntry,
-  ProjectConfigWithDeclarations,
   SelectionPlan,
   SelectionPlannerOptions,
   SkillExporterOptions,

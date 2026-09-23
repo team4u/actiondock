@@ -99,8 +99,8 @@ ActionDock 2.x 彻底解耦上层适配与底层实现，通过标准服务端�
 
 通过顶层工厂函数提供无缝屏蔽本地与远程拓扑差异的服务门面：
 
-- 本地服务门面 `createActionDock`：创建 `LocalActionDockService` 实例，在当前 Node.js 进程内装配原生运行时驱动并高效执行。
-- 远端服务门面 `connectActionDock`：创建 `RemoteActionDockService` 实例，通过 HTTP 协议与远端 ActionDock 服务通信，支持鉴权令牌、请求超时控制与证书安全校验。
+- 本地服务门面 `createActionDock`：创建本地 `ActionDockService` 服务实例，在当前 Node.js 进程内装配原生运行时驱动并高效执行。
+- 远端服务门面 `connectActionDock`：创建远端 `ActionDockService` 服务实例，通过 HTTP 协议与远端 ActionDock 服务通信，支持鉴权令牌、请求超时控制与证书安全校验。
 
 ### 五大标准服务端口
 

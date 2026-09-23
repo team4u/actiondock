@@ -7,7 +7,7 @@ import { join } from "node:path";
 /**
  * IPC 取消链路端到端测试。
  *
- * 验证监督进程（IpcActionDockTarget）到宿主子进程（serveParentIpc）的
+ * 验证监督进程（IpcActionDockService）到宿主子进程（serveParentIpc）的
  * 跨进程取消传播：父侧 abort signal 后，宿主侧 AbortController 同步中止，
  * 长运行 Action 以取消语义（cancelled 状态与 ACTION_CANCELLED 错误码）结束。
  */

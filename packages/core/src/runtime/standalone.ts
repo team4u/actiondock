@@ -646,8 +646,8 @@ export class StandaloneDispatcher {
         this.writeOut(item.configured ? JSON.stringify(item.value) : "undefined");
         return ExitCode.SUCCESS;
       } catch (err: any) {
-        // 目标层能力缺失（如远端未开启管理接口）视为键未配置，输出 undefined
-        if (this.isTargetCapabilityError(err)) {
+        // 服务能力缺失（如远端未开启管理接口）视为键未配置，输出 undefined
+        if (this.isServiceCapabilityError(err)) {
           this.writeOut("undefined");
           return ExitCode.SUCCESS;
         }
@@ -815,13 +815,13 @@ export class StandaloneDispatcher {
   }
 
   /**
-   * 判定配置读取异常是否为目标层能力缺失（键未配置语义）而非内部故障。
+   * 判定配置读取异常是否为服务能力缺失（键未配置语义）而非内部故障。
    */
-  private isTargetCapabilityError(err: any): boolean {
+  private isServiceCapabilityError(err: any): boolean {
     const code = String(err?.code || "");
     return (
-      code === "TARGET_CAPABILITY_UNAVAILABLE" ||
-      code === "CAPABILITY_UNAVAILABLE"
+      code === "CAPABILITY_UNAVAILABLE" ||
+      code === "TARGET_CAPABILITY_UNAVAILABLE"
     );
   }
 

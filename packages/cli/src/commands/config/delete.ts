@@ -6,7 +6,7 @@ import type { Command } from "commander";
 import { ArgumentError, packageNotFoundError } from "../../errors";
 import { writeStdout } from "../../renderer";
 import type { CliContext } from "../../types";
-import { applyTargetOptions, getEffectiveOptions, withTarget } from "../../utils";
+import { applyTargetOptions, getEffectiveOptions, withService } from "../../utils";
 
 /**
  * 注册 config delete 子命令：删除配置项。
@@ -32,7 +32,7 @@ export function registerConfigDeleteCommand(configCmd: Command, context?: CliCon
 
       const root = resolvePackageRoot(options.package);
 
-      await withTarget(options, context, async (service, resolved) => {
+      await withService(options, context, async (service, resolved) => {
         if (resolved.type === "remote") {
           await service.management?.config.delete(options.package || "", key);
           writeStdout(`[OK] Configuration '${key}' deleted from remote server`, context);

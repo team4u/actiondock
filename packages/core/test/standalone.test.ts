@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { defineAction } from "@actiondock/sdk";
 import { StandaloneDispatcher, StandaloneRuntime } from "../src/runtime/standalone";
 
-describe("StandaloneRuntime 独立二进制运行时委托 ActionDockApp", () => {
+describe("StandaloneRuntime 独立二进制运行时委托 PackageRuntime", () => {
   const tmpDir = mkdtempSync(join(tmpdir(), "standalone-test-"));
 
   const greetAction = defineAction({

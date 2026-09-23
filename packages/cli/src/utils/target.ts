@@ -147,9 +147,6 @@ export async function withService(
   }
 }
 
-/** 兼容别名 */
-export const withTarget = withService;
-
 /**
  * 仅远端模式目标执行辅助：创建远端 Service 并保证资源释放。
  * 适用于 runs cancel 等明确要求远端目标的命令。
@@ -174,9 +171,6 @@ export async function withRemoteService(
     await service.close();
   }
 }
-
-/** 兼容别名 */
-export const withRemoteTarget = withRemoteService;
 
 /**
  * 目标包根目录解析（含 -P 显式寻址与当前工程回退）。

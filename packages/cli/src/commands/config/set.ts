@@ -8,7 +8,7 @@ import type { ConfigItemDefinition } from "@actiondock/core";
 import { ArgumentError, packageNotFoundError } from "../../errors";
 import { writeStdout } from "../../renderer";
 import type { CliContext } from "../../types";
-import { applyTargetOptions, getEffectiveOptions, withTarget } from "../../utils";
+import { applyTargetOptions, getEffectiveOptions, withService } from "../../utils";
 import { resolveConfigValueInput } from "../../prompt";
 
 /**
@@ -70,7 +70,7 @@ export function registerConfigSetCommand(configCmd: Command, context?: CliContex
       }
 
       // 目标解析与写入（远端分支直接写远端作用域，本地分支按全局/项目作用域写入）
-      await withTarget(options, context, async (service, resolved) => {
+      await withService(options, context, async (service, resolved) => {
         if (resolved.type === "remote") {
           await service.management?.config.set(options.package || "", key, parsedVal as any);
           writeStdout(`[OK] Configuration '${key}' updated on remote server`, context);

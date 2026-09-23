@@ -127,7 +127,6 @@ function generateNodeHostEntrySource(plan: SelectionPlan): string {
   return `#!/usr/bin/env node
 // AUTO-GENERATED HOST ENTRYPOINT BY ACTIONDOCK BUILDER. DO NOT EDIT.
 import {
-  createActionDockHost,
   createActionDock,
   createNodePlatform,
   serveParentIpc,
@@ -153,7 +152,7 @@ for (let i = 0; i < args.length; i++) {
   }
 }
 
-const host = await createActionDockHost({
+const service = await createActionDock({
   dataDir,
   packages: [
     {
@@ -173,9 +172,9 @@ const host = await createActionDockHost({
     },
   ],
   platform: createNodePlatform({ dataDir }),
+  autoLoadCurrentProject: false,
+  scanLinkedPackages: false,
 });
-
-const service = await createActionDock({ host });
 await serveParentIpc(service);
 `;
 }

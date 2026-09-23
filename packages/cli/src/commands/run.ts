@@ -16,7 +16,7 @@ import {
   getEffectiveOptions,
   resolveActionInput,
   resolveLocalPackageRoot,
-  withTarget,
+  withService,
 } from "../utils";
 
 /**
@@ -198,7 +198,7 @@ export async function executeAction(
     }
 
     // 通过 Service 统一执行
-    await withTarget(
+    await withService(
       options,
       context,
       async (service) => {

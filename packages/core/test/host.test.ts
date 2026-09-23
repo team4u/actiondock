@@ -11,7 +11,7 @@ import { MemoryProcessDriver } from "../src/process/driver";
 import { PROJECT_RECOVERY_REQUIRED } from "../src/errors";
 
 describe("ActionDockHost 多包宿主容器", () => {
-  it("初始化并支持 ActionDockApp 实例与 ActionDockAppOptions 配置混合注册", async () => {
+  it("初始化并支持 PackageRuntime 实例与 PackageRuntimeOptions 配置混合注册", async () => {
     const mathAddAction = defineAction({
       run: (input: { a: number; b: number }) => ({ sum: input.a + input.b }),
     });
@@ -1166,7 +1166,7 @@ actions:
     }
   });
 
-  it("当 Host 初始化失败时，外部传入的 ActionDockApp 实例不被 close() 并可继续使用", async () => {
+  it("当 Host 初始化失败时，外部传入的 PackageRuntime 实例不被 close() 并可继续使用", async () => {
     let appClosed = false;
     const externalApp = await createPackageRuntime({
       projectConfig: { id: "pkg.external", name: "外部包", version: "1.0.0" },

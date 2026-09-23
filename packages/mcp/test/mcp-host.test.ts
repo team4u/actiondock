@@ -1,15 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import {
-  createPackageRuntime,
-  createActionDockHost,
-  createActionDock,
-} from "@actiondock/core";
+import { createActionDock } from "@actiondock/core";
 import { defineAction, type ActionContext } from "@actiondock/sdk";
 import { InMemoryTransport } from "@modelcontextprotocol/server";
 import { createActionDockMcpServer } from "../src/adapter";
 
 describe("@actiondock/mcp Host Integration", () => {
-  it("connects ActionDockHost directly, handling tools/list, sync/async tools/call, tasks/get, tasks/cancel, and close", async () => {
+  it("connects ActionDockService directly, handling tools/list, sync/async tools/call, tasks/get, tasks/cancel, and close", async () => {
     let slowTaskCancelled = false;
 
     // 1. 定义测试用 Action
@@ -36,60 +32,61 @@ describe("@actiondock/mcp Host Integration", () => {
       },
     });
 
-    // 2. 创建 PackageRuntime 与 ActionDockHost
-    const app = await createPackageRuntime({
-      projectConfig: {
-        id: "test.mcp-host-app",
-        name: "MCP Host Test App",
-        version: "1.0.0",
-        description: "Package for testing ActionDockHost with MCP",
-        actions: {
-          "calc.add": {
-            entry: "",
-            description: "加法计算动作",
-            inputSchema: {
-              type: "object",
-              properties: {
-                a: { type: "number" },
-                b: { type: "number" },
+    // 2. 创建 ActionDockService
+    const service = await createActionDock({
+      packages: [
+        {
+          projectConfig: {
+            id: "test.mcp-host-app",
+            name: "MCP Host Test App",
+            version: "1.0.0",
+            description: "Package for testing ActionDockHost with MCP",
+            actions: {
+              "calc.add": {
+                entry: "",
+                description: "加法计算动作",
+                inputSchema: {
+                  type: "object",
+                  properties: {
+                    a: { type: "number" },
+                    b: { type: "number" },
+                  },
+                  required: ["a", "b"],
+                },
+                outputSchema: {
+                  type: "object",
+                  properties: {
+                    sum: { type: "number" },
+                  },
+                  required: ["sum"],
+                },
               },
-              required: ["a", "b"],
-            },
-            outputSchema: {
-              type: "object",
-              properties: {
-                sum: { type: "number" },
+              "task.slow": {
+                entry: "",
+                description: "慢速动作用于异步与取消测试",
+                inputSchema: {
+                  type: "object",
+                  properties: {
+                    durationMs: { type: "number" },
+                  },
+                },
               },
-              required: ["sum"],
             },
           },
-          "task.slow": {
-            entry: "",
-            description: "慢速动作用于异步与取消测试",
-            inputSchema: {
-              type: "object",
-              properties: {
-                durationMs: { type: "number" },
-              },
-            },
+          actions: {
+            "calc.add": addAction,
+            "task.slow": slowAction,
           },
+          inMemory: true,
         },
-      },
-      actions: {
-        "calc.add": addAction,
-        "task.slow": slowAction,
-      },
-      inMemory: true,
-    });
-
-    const host = await createActionDockHost({
-      packages: [app],
+      ],
       autoLoadCurrentProject: false,
+      scanLinkedPackages: false,
       inMemory: true,
     });
 
-    // 3. 传入 host 创建 MCP 服务端
-    const server = await createActionDockMcpServer({ host, cascadeServiceClose: true });
+    // 3. 传入 service 创建 MCP 服务端
+    const server = await createActionDockMcpServer({ service, cascadeServiceClose: true });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await server.connect(serverTransport);
 
@@ -264,11 +261,11 @@ describe("@actiondock/mcp Host Integration", () => {
     // 9. 断言 server.close() 优雅关闭 host 资源
     await server.close();
     await expect(
-      host.runAction("test.mcp-host-app/calc.add", { a: 1, b: 2 })
-    ).rejects.toThrow("ActionDockHost is closed");
+      service.execution.run("test.mcp-host-app/calc.add", { a: 1, b: 2 })
+    ).rejects.toThrow();
   });
 
-  it("injects ActionDockTarget directly, verifying tools list discovery, sync call, async task, and cancellation", async () => {
+  it("injects ActionDockService directly, verifying tools list discovery, sync call, async task, and cancellation", async () => {
     let slowTaskCancelled = false;
 
     const addAction = defineAction({
@@ -294,51 +291,57 @@ describe("@actiondock/mcp Host Integration", () => {
       },
     });
 
-    const app = await createPackageRuntime({
-      projectConfig: {
-        id: "test.mcp-target-app",
-        name: "MCP Target Test App",
-        version: "1.0.0",
-        actions: {
-          "calc.add": {
-            entry: "",
-            description: "加法计算动作",
-            inputSchema: {
-              type: "object",
-              properties: {
-                a: { type: "number" },
-                b: { type: "number" },
+    const service = await createActionDock({
+      packages: [
+        {
+          projectConfig: {
+            id: "test.mcp-target-app",
+            name: "MCP Target Test App",
+            version: "1.0.0",
+            actions: {
+              "calc.add": {
+                entry: "",
+                description: "加法计算动作",
+                inputSchema: {
+                  type: "object",
+                  properties: {
+                    a: { type: "number" },
+                    b: { type: "number" },
+                  },
+                  required: ["a", "b"],
+                },
+                outputSchema: {
+                  type: "object",
+                  properties: {
+                    sum: { type: "number" },
+                  },
+                  required: ["sum"],
+                },
               },
-              required: ["a", "b"],
-            },
-            outputSchema: {
-              type: "object",
-              properties: {
-                sum: { type: "number" },
+              "task.slow": {
+                entry: "",
+                description: "慢速动作",
+                inputSchema: {
+                  type: "object",
+                  properties: {
+                    durationMs: { type: "number" },
+                  },
+                },
               },
-              required: ["sum"],
             },
           },
-          "task.slow": {
-            entry: "",
-            description: "慢速动作",
-            inputSchema: {
-              type: "object",
-              properties: {
-                durationMs: { type: "number" },
-              },
-            },
+          actions: {
+            "calc.add": addAction,
+            "task.slow": slowAction,
           },
+          inMemory: true,
         },
-      },
-      actions: {
-        "calc.add": addAction,
-        "task.slow": slowAction,
-      },
+      ],
+      autoLoadCurrentProject: false,
+      scanLinkedPackages: false,
       inMemory: true,
     });
 
-    const service = await createActionDock({ packageRuntime: app });
     const server = await createActionDockMcpServer({ service, cascadeServiceClose: true });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await server.connect(serverTransport);

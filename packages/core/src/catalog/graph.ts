@@ -706,6 +706,41 @@ export class PackageGraphBuilder {
         }
       }
 
+      if (scanLinked) {
+        for (const [devPkgId, devPkgDir] of devLinkMap.entries()) {
+          if (devPkgId !== rootPackageId && !nodes.has(devPkgId) && existsSync(devPkgDir)) {
+            const manifestPath = join(devPkgDir, MANIFEST_FILE_NAME);
+            if (!existsSync(manifestPath)) continue;
+            try {
+              const manifestRaw = readFileSync(manifestPath, "utf-8");
+              const devManifest = parseJsonWithoutDuplicates<ActionDockManifest>(manifestRaw);
+              const actualDigest = computeManifestDigest(devManifest);
+              const identity = createPackageIdentity({
+                id: devPkgId,
+                instanceId: `${devPkgId}:${devPkgDir}`,
+                generation,
+              });
+              nodes.set(devPkgId, {
+                identity,
+                packageId: devPkgId,
+                root: devPkgDir,
+                manifest: devManifest,
+                manifestDigest: actualDigest,
+                version: devManifest.version || "0.1.0",
+                npmPackage: devPkgId,
+                directDependencies: new Set<string>(),
+                transitiveDependencies: new Set<string>(),
+                isDirect: true,
+                isRoot: false,
+              });
+              rootNode.directDependencies.add(devPkgId);
+            } catch {
+              // 忽略解析失败的链接包
+            }
+          }
+        }
+      }
+
       for (const node of nodes.values()) {
         if (node.manifest.dependencies && typeof node.manifest.dependencies === "object") {
           for (const depId of Object.keys(node.manifest.dependencies)) {

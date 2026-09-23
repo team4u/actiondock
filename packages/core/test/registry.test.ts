@@ -8,7 +8,6 @@ import {
   getRegistryStatus,
   linkPackage,
   listLinkedPackages,
-  PackageDiscovery,
   PackageGraphBuilder,
   pruneRegistry,
   resolveAction,
@@ -16,6 +15,7 @@ import {
   resolvePlaybook,
   unlinkPackage,
 } from "../src";
+import { PackageDiscovery } from "../src/catalog/discovery";
 import { DefaultRegistryStore } from "../src/registry/store";
 import { loadRegistry } from "../src/registry/registry";
 

@@ -11,7 +11,7 @@ import {
 } from "@actiondock/core";
 import { Command } from "commander";
 import { registerProfileCommands } from "../src/commands/profile";
-import { withTarget, withRemoteTarget } from "../src/utils/target";
+import { withService, withRemoteService } from "../src/utils/target";
 
 describe("Profile Insecure TLS Integration", () => {
   const tempHome = mkdtempSync(join(tmpdir(), "actiondock-profile-tls-test-"));
@@ -117,11 +117,11 @@ describe("Profile Insecure TLS Integration", () => {
     }
   });
 
-  it("withTarget 与 withRemoteTarget 正确将 insecure 与 allowInsecureHttp 透传至 resolveTarget", async () => {
+  it("withService 与 withRemoteService 正确将 insecure 与 allowInsecureHttp 透传至 resolveTarget", async () => {
     let capturedResolvedTarget: any;
     let capturedTarget: any;
 
-    await withTarget(
+    await withService(
       {
         server: "http://127.0.0.1:5177",
         insecure: true,
@@ -142,7 +142,7 @@ describe("Profile Insecure TLS Integration", () => {
     let capturedRemoteResolvedTarget: any;
     let capturedRemoteTarget: any;
 
-    await withRemoteTarget(
+    await withRemoteService(
       {
         server: "https://127.0.0.1:5177",
         insecure: true,

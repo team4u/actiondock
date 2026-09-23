@@ -13,7 +13,7 @@ import {
   getEffectiveOptions,
   getTargetRoot,
   resolveIntent,
-  withTarget,
+  withService,
 } from "../utils";
 import {
   renderLinkedPackagesStateList,
@@ -63,7 +63,7 @@ export function registerStateCommands(program: Command, context?: CliContext): v
     const effectiveIntent = resolveIntent(options.intent, prefix ? [prefix] : []);
     const shouldFallback = options.fallback !== false;
 
-    await withTarget(options, context, async (service, resolved) => {
+    await withService(options, context, async (service, resolved) => {
       const actionId = options.action || "";
 
       // 远端服务模式：直接列举远端包作用域键
@@ -173,7 +173,7 @@ export function registerStateCommands(program: Command, context?: CliContext): v
         throw new ArgumentError("State key is required");
       }
 
-      await withTarget(
+      await withService(
         options,
         context,
         async (service, resolved) => {
@@ -263,7 +263,7 @@ export function registerStateCommands(program: Command, context?: CliContext): v
         throw new ArgumentError(`Invalid --ttl value: '${options.ttl}'. Must be a positive integer.`);
       }
 
-      await withTarget(
+      await withService(
         options,
         context,
         async (service, resolved) => {
@@ -325,7 +325,7 @@ export function registerStateCommands(program: Command, context?: CliContext): v
         throw new ArgumentError("State key is required");
       }
 
-      await withTarget(
+      await withService(
         options,
         context,
         async (service, resolved) => {
@@ -384,7 +384,7 @@ export function registerStateCommands(program: Command, context?: CliContext): v
         );
       }
 
-      await withTarget(options, context, async (service, resolved) => {
+      await withService(options, context, async (service, resolved) => {
         const actionId = options.action || "";
 
         if (resolved.type === "remote") {

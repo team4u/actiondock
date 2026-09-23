@@ -6,7 +6,7 @@ ActionDock 2.x Node-first 原生运行时与核心领域。
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-`@actiondock/core` 是 ActionDock 2.x 的核心领域内核与 Node-first 原生运行时。承载包图发现、动作目录、调用治理、执行主链、存储驱动（`NodeSqliteDriver`、`WorkerSqliteDriver`）、受管进程驱动（`NodeProcessDriver`）、HTTP 网络服务（`NodeHttpServer`）、标准服务端口体系（`DiscoveryPort`、`ExecutionPort`、`RunsPort`、`ConfigPort`、`StatePort`）与统一服务门面（`createActionDock`、`connectActionDock`）。
+`@actiondock/core` 是 ActionDock 2.x 的核心领域内核与 Node-first 原生运行时。统一暴露核心服务门面（`createActionDock`、`connectActionDock`）、标准服务端口体系（`DiscoveryPort`、`ExecutionPort`、`RunsPort`、`ConfigPort`、`StatePort`）、统一错误模型（`ActionDockError`）、原生平台装配（`createNodePlatform`）、服务启动（`startActionDockServer`）与包图依赖契约（`PackageGraph`），内部驱动存储引擎、受管进程与 HTTP 网络服务。
 
 ---
 
@@ -21,7 +21,7 @@ Host -> Resolution -> PackageRuntime -> ExecutionService -> ActionRunner -> Acti
 - 宿主接入（Host）：通过 `ActionDockHost` 或标准服务端口接收外部调用请求与入参数据。
 - 解析定位（Resolution）：通过 `resolveAction` 依赖单一事实源完成动作寻址与跨包引用消歧。
 - 运行时装配（PackageRuntime）：基于包图节点构建隔离的包级执行上下文与依赖环境。
-- 执行协调（ExecutionService）：`DefaultExecutionService` 统筹并发配额、追踪根调用与协同取消信号。
+- 执行协调（ExecutionService）：统筹并发配额、追踪根调用与协同取消信号。
 - 动作执行（ActionRunner）：驱动单一终态状态机，执行入参出参模式校验、循环依赖拦截与状态持久化。
 - 业务执行（Action）：执行开发者编写的纯粹业务逻辑并产出强类型结果。
 
@@ -33,8 +33,8 @@ Host -> Resolution -> PackageRuntime -> ExecutionService -> ActionRunner -> Acti
 
 通过顶层工厂函数提供无缝屏蔽本地与远程拓扑差异的服务门面：
 
-- 本地服务门面 `createActionDock`：创建 `LocalActionDockService` 实例，在当前 Node.js 进程内装配原生运行时驱动并高效执行。
-- 远端服务门面 `connectActionDock`：创建 `RemoteActionDockService` 实例，通过 HTTP 协议与远端 ActionDock 服务通信，支持鉴权令牌、请求超时控制与证书安全校验。
+- 本地服务门面 `createActionDock`：创建本地 `ActionDockService` 服务端口实例，在当前 Node.js 进程内装配原生运行时驱动并高效执行。
+- 远端服务门面 `connectActionDock`：创建远端 `ActionDockService` 服务端口实例，通过 HTTP 协议与远端 ActionDock 服务通信，支持鉴权令牌、请求超时控制与证书安全校验。
 
 ### 标准服务端口体系
 

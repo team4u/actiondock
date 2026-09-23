@@ -1,9 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
-  DefaultExecutionService,
-  NodeFileSystem,
-  NodeModuleLoader,
-  createPackageIdentity,
+  createActionDock,
   type RuntimePlatform,
 } from "@actiondock/core";
 import { decodeText, defineAction } from "@actiondock/sdk";
@@ -24,8 +21,10 @@ describe("createTestPlatform 测试平台工厂测试", () => {
 
       expect(platform.name).toBe("test");
       expect(platform.clock).toBeInstanceOf(FakeClock);
-      expect(platform.files).toBeInstanceOf(NodeFileSystem);
-      expect(platform.modules).toBeInstanceOf(NodeModuleLoader);
+      expect(platform.files).toBeDefined();
+      expect(typeof platform.files.readFile).toBe("function");
+      expect(platform.modules).toBeDefined();
+      expect(typeof platform.modules.load).toBe("function");
       expect(platform.process).toBeInstanceOf(MockProcessExecutor);
       expect(platform.eventSink).toBeInstanceOf(TestEventSink);
       expect(platform.storage).toBeDefined();
@@ -97,7 +96,7 @@ describe("createTestPlatform 测试平台工厂测试", () => {
   });
 
   describe("内核执行服务平台集成", () => {
-    it("注入至 DefaultExecutionService 并跑通完整 Action 执行链路", async () => {
+    it("注入至 ActionDockService 并跑通完整 Action 执行链路", async () => {
       const platform = createTestPlatform();
       platform.process.register("ad-cli whoami", { stdout: "agent-user" });
 
@@ -117,17 +116,31 @@ describe("createTestPlatform 测试平台工厂测试", () => {
         },
       });
 
-      const service = new DefaultExecutionService({
-        identity: createPackageIdentity({ id: "test-pkg" }),
-        packageId: "test-pkg",
+      const service = await createActionDock({
         platform,
-        eventSink: platform.eventSink,
-        storage: new MemoryStorage(),
+        packages: [
+          {
+            projectConfig: {
+              id: "test-pkg",
+              name: "test-pkg",
+              version: "1.0.0",
+              actions: {
+                "test-echo": {
+                  entry: "",
+                  description: "echo action",
+                },
+              },
+            },
+            actions: {
+              "test-echo": testAction,
+            },
+          },
+        ],
+        autoLoadCurrentProject: false,
+        scanLinkedPackages: false,
       });
 
-      service.registerAction("test-echo", testAction);
-
-      const ticket = await service.start("test-echo", {});
+      const ticket = await service.execution.start("test-pkg/test-echo", {});
       const result: any = await ticket.result!;
 
       expect(result).toBeDefined();

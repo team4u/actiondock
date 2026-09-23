@@ -329,6 +329,11 @@ export interface SkillExporterOptions {
 }
 
 /**
+ * 导出 Skill 选项契约（对齐标准接口命名）。
+ */
+export type ExportSkillOptions = SkillExporterOptions;
+
+/**
  * Skill 导出完成结果。
  */
 export interface SkillExportResult {
@@ -355,6 +360,11 @@ export interface SkillExportResult {
   /** 若复用了已有的 SKILL.md 文件，返回该文件的绝对路径 */
   usedExistingSkillMd?: string;
 }
+
+/**
+ * 导出 Skill 结果契约（对齐标准接口命名）。
+ */
+export type ExportSkillResult = SkillExportResult;
 
 /**
  * 批量 Skill 导出选项。

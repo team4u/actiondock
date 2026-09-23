@@ -11,13 +11,15 @@ import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { initProject, saveManifest } from "@actiondock/core";
 import {
-  assertRelativeDependenciesIntegrity,
-  extractRelativeSpecifiers,
-  resolveRelativeModule,
   SelectionPlanner,
   exportSkill,
   BuilderError,
 } from "../src";
+import {
+  assertRelativeDependenciesIntegrity,
+  extractRelativeSpecifiers,
+  resolveRelativeModule,
+} from "../src/dependency-check";
 
 describe("本地相对路径依赖完整性校验", () => {
   describe("extractRelativeSpecifiers 提取相对导入说明符", () => {

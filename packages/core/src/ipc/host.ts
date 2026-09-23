@@ -1,5 +1,5 @@
 import type { ActionDockService } from "../service/types";
-import { TARGET_CAPABILITY_UNAVAILABLE } from "../service/types";
+import { CAPABILITY_UNAVAILABLE } from "../errors";
 import { hasIpcSignalMarker, IPC_SIGNAL_MARKER } from "./service";
 import type { IpcAbortMessage, IpcCallMessage, IpcResponseMessage } from "./types";
 
@@ -112,7 +112,7 @@ export async function serveParentIpc(service: ActionDockService): Promise<void> 
           const err = new Error(
             `Target method '${method}' is not allowed over IPC`
           );
-          (err as any).code = TARGET_CAPABILITY_UNAVAILABLE;
+          (err as any).code = CAPABILITY_UNAVAILABLE;
           throw err;
         }
 

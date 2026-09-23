@@ -3,7 +3,6 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   ACTIONDOCK_VERSION,
-  ActionResolver,
   createActionDock,
   createNodePlatform,
   findProjectRoot,
@@ -26,6 +25,20 @@ import {
   isAsyncExecutionRequested,
   stripExecutionWrapper,
 } from "./execution-mode";
+
+/**
+ * 解析 Action 引用字符串为包标识与动作标识。
+ */
+function splitActionRef(ref: string): { packageId?: string; actionId: string } {
+  const idx = ref.lastIndexOf("/");
+  if (idx === -1) {
+    return { actionId: ref };
+  }
+  return {
+    packageId: ref.slice(0, idx),
+    actionId: ref.slice(idx + 1),
+  };
+}
 
 /**
  * 判断目标值是否为普通对象（Plain Object）。
@@ -314,15 +327,9 @@ export async function createActionDockMcpServer(
     let pkgId = act.packageId || "";
     let actId = act.id;
     if (act.id.includes("/")) {
-      try {
-        const parsed = ActionResolver.parseRef(act.id);
-        pkgId = pkgId || parsed.packageId || "";
-        actId = parsed.actionId;
-      } catch {
-        const idx = act.id.lastIndexOf("/");
-        pkgId = pkgId || act.id.slice(0, idx);
-        actId = act.id.slice(idx + 1);
-      }
+      const parsed = splitActionRef(act.id);
+      pkgId = pkgId || parsed.packageId || "";
+      actId = parsed.actionId;
     }
     const key = `${pkgId}:${actId}`;
     const existing = seenActionKeys.get(key);
@@ -342,13 +349,8 @@ export async function createActionDockMcpServer(
   for (const act of actions) {
     let baseId = act.id;
     if (act.id.includes("/")) {
-      try {
-        const parsed = ActionResolver.parseRef(act.id);
-        baseId = parsed.actionId;
-      } catch {
-        const idx = act.id.lastIndexOf("/");
-        baseId = act.id.slice(idx + 1);
-      }
+      const parsed = splitActionRef(act.id);
+      baseId = parsed.actionId;
     }
     baseCounts.set(baseId, (baseCounts.get(baseId) || 0) + 1);
   }
@@ -359,15 +361,9 @@ export async function createActionDockMcpServer(
     let baseId = action.id;
     let packageId = action.packageId;
     if (action.id.includes("/")) {
-      try {
-        const parsed = ActionResolver.parseRef(action.id);
-        packageId = parsed.packageId || packageId;
-        baseId = parsed.actionId;
-      } catch {
-        const idx = action.id.lastIndexOf("/");
-        packageId = packageId || action.id.slice(0, idx);
-        baseId = action.id.slice(idx + 1);
-      }
+      const parsed = splitActionRef(action.id);
+      packageId = parsed.packageId || packageId;
+      baseId = parsed.actionId;
     }
 
     const count = baseCounts.get(baseId) || 1;

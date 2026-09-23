@@ -17,7 +17,7 @@ import {
   getEffectiveOptions,
   resolveIntent,
   resolveTargetFromOptions,
-  withTarget,
+  withService,
 } from "../../utils";
 
 /**
@@ -101,7 +101,7 @@ export function registerConfigListCommand(configCmd: Command, context?: CliConte
       }
 
       // 本地分支（通过 Service 门面统一访问）
-      await withTarget(options, context, async (service) => {
+      await withService(options, context, async (service) => {
         const root = options.package ? resolvePackageRoot(options.package) : findProjectRoot();
 
         if (options.global) {

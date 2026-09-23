@@ -6,15 +6,15 @@ import { decodeText, encodeBytes, type ActionContext, type ProcessAPI, type Proc
 import { ActionRunner } from "../src/runtime/runner";
 import {
   createNodePlatform,
-  createPackageIdentity,
-  DefaultExecutionService,
-  NodeFileSystem,
   SqliteRuntimeStorage,
   type Clock,
   type ModuleLoader,
   type ProcessExecutor,
   type RuntimePlatform,
 } from "../src";
+import { createPackageIdentity } from "../src/runtime/identity";
+import { DefaultExecutionService } from "../src/execution/service";
+import { NodeFileSystem } from "../src/platform/node-fs";
 
 describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
   let tempDir: string;

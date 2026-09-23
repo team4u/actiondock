@@ -70,7 +70,8 @@ import {
 } from "./routing";
 import type { ActionDockHost, ActionDockHostOptions } from "./types";
 import type { ConfigValueView, ListRunsOptions, StateScopeOptions } from "../service/types";
-import { TargetError, TARGET_CAPABILITY_UNAVAILABLE } from "../service/types";
+import { ServiceError } from "../service/types";
+import { CAPABILITY_UNAVAILABLE } from "../errors";
 import { createGlobalStorage, isSecretConfigKey } from "../storage";
 import type { RuntimeStorage, StateEntry } from "../storage/types";
 import type { ConfigItemDefinition } from "../project/types";
@@ -1180,9 +1181,9 @@ export class DefaultActionDockHost implements ActionDockHost {
   ): Promise<StateEntry[]> {
     const runtime = this.resolveRuntime(packageId);
     if (!runtime) {
-      throw new TargetError(
-        TARGET_CAPABILITY_UNAVAILABLE,
-        `TARGET_CAPABILITY_UNAVAILABLE: Package '${packageId}' not found in host`
+      throw new ServiceError(
+        CAPABILITY_UNAVAILABLE,
+        `CAPABILITY_UNAVAILABLE: Package '${packageId}' not found in host`
       );
     }
     if (!runtime.listStateEntries) {

@@ -1,6 +1,5 @@
 import {
-  NodeFileSystem,
-  NodeModuleLoader,
+  createNodePlatform,
   type EventSink,
   type FileSystem,
   type GlobalStorageFactoryOptions,
@@ -76,8 +75,9 @@ export function createTestPlatform(options: TestPlatformOptions = {}): TestPlatf
       processManager: options.processManager,
     });
   const eventSink = options.eventSink ?? new TestEventSink();
-  const files = options.files ?? new NodeFileSystem();
-  const modules = options.modules ?? new NodeModuleLoader();
+  const defaultPlatform = (!options.files || !options.modules) ? createNodePlatform() : undefined;
+  const files = options.files ?? defaultPlatform!.files;
+  const modules = options.modules ?? defaultPlatform!.modules;
 
   const packageStorages = new Map<string, RuntimeStorage>();
   let globalStorageInstance = options.globalStorage;

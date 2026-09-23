@@ -12,7 +12,6 @@ import {
   loadManifest,
   loadPlaybooks,
   loadProjectConfig,
-  PackageDiscovery,
   PackageGraphBuilder,
   resolveAction,
   resolvePackageRoot,
@@ -290,11 +289,11 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
 
       let resolved;
       try {
-        const discovery = new PackageDiscovery({
-          currentProjectRoot: findProjectRoot() || undefined,
+        const graph = new PackageGraphBuilder({
+          root: findProjectRoot() || undefined,
           customHome: context?.customHome,
-        });
-        const graph = new PackageGraphBuilder({ packages: discovery.discoverSync() }).buildSync();
+          allowDevLinks: true,
+        }).buildSync();
         resolved = resolvePlaybook(showTarget, { graph });
       } catch (err: any) {
         throw new ArgumentError(err.message);
@@ -353,11 +352,11 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
       } else if (id) {
         let resolved;
         try {
-          const discovery = new PackageDiscovery({
-            currentProjectRoot: findProjectRoot() || undefined,
+          const graph = new PackageGraphBuilder({
+            root: findProjectRoot() || undefined,
             customHome: context?.customHome,
-          });
-          const graph = new PackageGraphBuilder({ packages: discovery.discoverSync() }).buildSync();
+            allowDevLinks: true,
+          }).buildSync();
           resolved = resolvePlaybook(id, { graph });
         } catch (err: any) {
           throw new ArgumentError(err.message);
@@ -389,11 +388,11 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
       }
 
       const results: Array<{ id: string; packageId: string; valid: boolean; warnings: string[]; errors: string[] }> = [];
-      const discovery = new PackageDiscovery({
-        currentProjectRoot: findProjectRoot() || undefined,
+      const graph = new PackageGraphBuilder({
+        root: findProjectRoot() || undefined,
         customHome: context?.customHome,
-      });
-      const graph = new PackageGraphBuilder({ packages: discovery.discoverSync() }).buildSync();
+        allowDevLinks: true,
+      }).buildSync();
       const catalog = new DefaultActionCatalog(graph);
 
       for (const target of targets) {

@@ -3,7 +3,7 @@ import { defineAction } from "@actiondock/sdk";
 import { ActionRunner } from "../src/runtime/runner";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
 import { StandaloneDispatcher, ExitCode } from "../src/runtime/standalone";
-import { createPackageIdentity } from "../src";
+import { createPackageIdentity } from "../src/runtime/identity";
 
 describe("Phase 7: 运行时安全边界与布尔模式修正", () => {
   it("inputSchema: false 拒绝所有输入且不执行 Action", async () => {

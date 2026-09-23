@@ -13,11 +13,9 @@ import {
 import { createServer, request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  NodeHttpServer,
-  NodeModuleLoader,
-  NodeSqliteDriver,
-} from "../src";
+import { NodeHttpServer } from "../src/server/http-server";
+import { NodeModuleLoader } from "../src/node/module-loader";
+import { NodeSqliteDriver } from "../src/storage/sqlite-driver";
 import { createRequestListener } from "../src/server/http-server";
 import {
   ExecaProcessExecutor,

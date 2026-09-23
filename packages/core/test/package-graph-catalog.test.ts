@@ -5,11 +5,11 @@ import { join } from "node:path";
 import { parseActionRef } from "../src/catalog/resolve-action";
 import {
   DefaultActionCatalog,
-  PackageDiscovery,
   PackageGraphBuilder,
   resolveAction,
   resolvePlaybook,
 } from "../src";
+import { PackageDiscovery } from "../src/catalog/discovery";
 import { DefaultPackageGraph } from "../src/catalog/graph";
 import { DefaultRegistryStore } from "../src/registry/store";
 

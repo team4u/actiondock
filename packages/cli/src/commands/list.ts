@@ -9,7 +9,7 @@ import {
   resolveFallbackStrategy,
   resolveIntent,
   resolveLocalPackageRoot,
-  withTarget,
+  withService,
 } from "../utils";
 
 /**
@@ -42,7 +42,7 @@ export function attachListCommand(parent: Command, context?: CliContext): Comman
       }
 
       // 通过 Service 门面统一获取 Action 列表
-      await withTarget(
+      await withService(
         options,
         context,
         async (service, resolved) => {

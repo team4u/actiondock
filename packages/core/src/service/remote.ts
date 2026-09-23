@@ -45,15 +45,15 @@ import { isRemoteStateKeyNotFound, wrapRemoteError } from "./remote-errors";
 import { formatTerminalRunResult, pollRunCompletion } from "./remote-polling";
 import { streamRemoteEvents } from "./sse-stream";
 import { isTerminalRunStatus, type StateEntry } from "../storage/types";
+import { CAPABILITY_UNAVAILABLE } from "../errors";
 import {
   ACTIONDOCK_PROTOCOL_VERSION,
-  TARGET_CAPABILITY_UNAVAILABLE,
-  TARGET_CLOSED,
-  TARGET_PROTOCOL_UNSUPPORTED,
-  TargetError,
+  PROTOCOL_UNSUPPORTED,
+  SERVICE_CLOSED,
+  ServiceError,
   type ConfigValueView,
   type ListRunsOptions,
-  type RemoteTargetOptions,
+  type RemoteServiceOptions,
   type StateScopeOptions,
 } from "./types";
 import type {
@@ -89,7 +89,7 @@ export class RemoteActionDockService implements ActionDockService {
     state: StatePort;
   };
 
-  constructor(options: ConnectActionDockOptions | RemoteTargetOptions) {
+  constructor(options: ConnectActionDockOptions | RemoteServiceOptions) {
     if (!options.serverUrl) {
       throw new Error("serverUrl is required for RemoteActionDockService");
     }
@@ -122,9 +122,9 @@ export class RemoteActionDockService implements ActionDockService {
           const [remoteMajor] = protocolVersion.split(".");
           const [currentMajor] = ACTIONDOCK_PROTOCOL_VERSION.split(".");
           if (remoteMajor !== currentMajor) {
-            throw new TargetError(
-              TARGET_PROTOCOL_UNSUPPORTED,
-              `TARGET_PROTOCOL_UNSUPPORTED: Remote server protocol version '${protocolVersion}' is incompatible with expected '${ACTIONDOCK_PROTOCOL_VERSION}'`
+            throw new ServiceError(
+              PROTOCOL_UNSUPPORTED,
+              `PROTOCOL_UNSUPPORTED: Remote server protocol version '${protocolVersion}' is incompatible with expected '${ACTIONDOCK_PROTOCOL_VERSION}'`
             );
           }
         }
@@ -635,9 +635,9 @@ export class RemoteActionDockService implements ActionDockService {
             _opts?: any
           ): Promise<StateEntry[]> {
             self.assertNotClosed();
-            throw new TargetError(
-              TARGET_CAPABILITY_UNAVAILABLE,
-              "TARGET_CAPABILITY_UNAVAILABLE: listStateEntries is not supported on remote service"
+            throw new ServiceError(
+              CAPABILITY_UNAVAILABLE,
+              "CAPABILITY_UNAVAILABLE: listStateEntries is not supported on remote service"
             );
           },
         },
@@ -647,8 +647,8 @@ export class RemoteActionDockService implements ActionDockService {
 
   private assertNotClosed(): void {
     if (this.isClosed) {
-      throw new TargetError(
-        TARGET_CLOSED,
+      throw new ServiceError(
+        SERVICE_CLOSED,
         "RemoteActionDockService is closed"
       );
     }
@@ -682,7 +682,7 @@ export class RemoteActionDockService implements ActionDockService {
         ok: false,
         runId,
         error: {
-          code: TARGET_CLOSED,
+          code: SERVICE_CLOSED,
           message: "RemoteActionDockService is closed",
         },
       };
@@ -716,12 +716,12 @@ export class RemoteActionDockService implements ActionDockService {
         }
       }
     } catch (err: any) {
-      if (err?.code === TARGET_CLOSED || this.isClosed) {
+      if (err?.code === SERVICE_CLOSED || this.isClosed) {
         return {
           ok: false,
           runId,
           error: {
-            code: TARGET_CLOSED,
+            code: SERVICE_CLOSED,
             message: "RemoteActionDockService is closed",
           },
         };
@@ -758,7 +758,7 @@ export class RemoteActionDockService implements ActionDockService {
           ok: false,
           runId,
           error: {
-            code: TARGET_CLOSED,
+            code: SERVICE_CLOSED,
             message: "RemoteActionDockService is closed",
           },
         };
@@ -769,12 +769,12 @@ export class RemoteActionDockService implements ActionDockService {
           return formatTerminalRunResult(run, runId);
         }
       } catch (err: any) {
-        if (err?.code === TARGET_CLOSED || this.isClosed) {
+        if (err?.code === SERVICE_CLOSED || this.isClosed) {
           return {
             ok: false,
             runId,
             error: {
-              code: TARGET_CLOSED,
+              code: SERVICE_CLOSED,
               message: "RemoteActionDockService is closed",
             },
           };

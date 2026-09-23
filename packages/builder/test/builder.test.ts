@@ -27,27 +27,29 @@ import {
   saveManifest,
 } from "@actiondock/core";
 import {
-  assertValidManifestActionIds,
   buildProject,
   packProject,
   BuilderError,
   exportSkill,
   exportSkillBatch,
   exportCompositeSkill,
-  getInternalDependencyVersion,
   SelectionPlanner,
-  serializePlanManifest,
-  createTarGzArchive,
-  createTarGzArchiveAsync,
-  createZipArchive,
-  createZipArchiveAsync,
 } from "../src";
 import {
+  assertValidManifestActionIds,
+  serializePlanManifest,
+} from "../src/manifest";
+import {
   collectRelativeFiles,
+  getInternalDependencyVersion,
   replaceDirAtomic,
   moveDirAtomic,
 } from "../src/fs-utils";
 import {
+  createTarGzArchive,
+  createTarGzArchiveAsync,
+  createZipArchive,
+  createZipArchiveAsync,
   dosDateTime,
   writeToStream,
 } from "../src/archive";

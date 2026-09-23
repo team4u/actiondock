@@ -9,7 +9,8 @@ import { initProject } from "../src/project/init";
 import { linkPackage } from "../src/registry/registry";
 import { ActionRunner } from "../src/runtime/runner";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
-import { createPackageIdentity, InvocationPolicy } from "../src";
+import { createPackageIdentity } from "../src/runtime/identity";
+import { InvocationPolicy } from "../src/invocation/policy";
 
 describe("ActionRunner", () => {
   it("executes an action successfully and validates schema", async () => {

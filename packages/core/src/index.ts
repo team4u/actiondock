@@ -8,13 +8,11 @@
 // 1. 核心版本号单一事实源
 export { ACTIONDOCK_VERSION } from "./version";
 
-// 2. 统一服务门面与服务实现
+// 2. 统一服务门面
 export {
   createActionDock,
   connectActionDock,
 } from "./service/factory";
-export { LocalActionDockService } from "./service/local";
-export { RemoteActionDockService } from "./service/remote";
 export { streamRemoteEvents } from "./service/sse-stream";
 export type {
   ActionDockService,
@@ -56,24 +54,12 @@ export type {
   ActionInvoker,
   InvocationContext,
 } from "./execution/types";
-export { createPackageIdentity } from "./runtime/identity";
-export { InvocationPolicy, type InvocationPolicyOptions } from "./invocation/policy";
-export {
-  DefaultExecutionService,
-  DefaultExecutionService as ExecutionService,
-  type ExecutionServiceOptions,
-} from "./execution/service";
 
 // 4. 平台与服务启动
 export {
   createNodePlatform,
   type NodePlatformOptions,
 } from "./platform/node";
-export { NodeSqliteDriver } from "./storage/sqlite-driver";
-export { NodeHttpServer } from "./server/http-server";
-export { NodeFileSystem } from "./platform/node-fs";
-export { NodeModuleLoader } from "./node/module-loader";
-export { NodeProcessDriver } from "./process/process-driver";
 export {
   startActionDockServer,
   launchHttpServer,
@@ -140,10 +126,7 @@ export {
   DefaultActionCatalog,
   type ActionCatalog,
 } from "./catalog/action-catalog";
-export { ActionResolver } from "./catalog/action-resolver";
-export { PackageDiscovery } from "./catalog/discovery";
 export {
-  DefaultPackageGraph,
   PackageGraphBuilder,
   ActionPackageVersionConflictError,
   UndeclaredActionDependencyError,
@@ -294,11 +277,7 @@ export {
   type ResolveActionInputOptions,
 } from "./input/index";
 export { validateActionInputValue } from "./json/value-validator";
-export {
-  parseJson,
-  readStdin,
-  stripBom,
-} from "./input/input-resolver";
+export { parseJson } from "./input/input-resolver";
 
 // 10. 运行时契约、时钟与存储
 export type {
@@ -317,11 +296,6 @@ export {
   InMemoryEventSink,
   type EventSink,
 } from "./runtime/events";
-export {
-  RuntimeConfig,
-  RuntimeStateStore,
-} from "./runtime/context";
-export { normalizeActionCollection } from "./runtime/action-collection";
 
 // 11. 进程管理契约
 export {
@@ -338,19 +312,11 @@ export type {
 } from "./process/driver";
 export { findExecutable } from "./utils/index";
 
-// 12. 宿主容器与运行时适配层
-export {
-  createActionDockHost,
-  DefaultActionDockHost,
-} from "./host/host";
+// 12. 宿主容器与运行时适配契约
 export type {
   ActionDockHost,
   ActionDockHostOptions,
 } from "./host/types";
-export {
-  createPackageRuntime,
-  DefaultPackageRuntime,
-} from "./app/app";
 export type {
   PackageRuntime,
   PackageRuntimeOptions,

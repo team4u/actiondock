@@ -20,8 +20,8 @@ import {
   getEffectiveOptions,
   resolveIntent,
   resolveTargetFromOptions,
-  withRemoteTarget,
-  withTarget,
+  withRemoteService,
+  withService,
 } from "../utils";
 
 /**
@@ -89,7 +89,7 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
       const scope = resolveLocalRunScope(options.package);
 
       // 通过 Service 门面统一访问
-      await withTarget(
+      await withService(
         options,
         context,
         async (service, resolved) => {
@@ -159,7 +159,7 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
       const scope = resolveLocalRunScope(options.package);
 
       // 通过 Service 门面统一查询
-      await withTarget(
+      await withService(
         options,
         context,
         async (service, resolved) => {
@@ -206,7 +206,7 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
         );
       }
 
-      await withRemoteTarget(options, context, async (service) => {
+      await withRemoteService(options, context, async (service) => {
         const result = await service.runs.cancel(id, options.reason);
         const isErrorOutcome = result.outcome === "not_found" || result.outcome === "not_owner";
         renderResult(result, {
@@ -265,7 +265,7 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
         }
       }
 
-      await withTarget(
+      await withService(
         options,
         context,
         async (service, resolved) => {

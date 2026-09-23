@@ -6,12 +6,11 @@
  * 优先读取传输层透传的结构化错误码，无法识别时原样透传。
  */
 
-import { ActionDockError, STATE_KEY_NOT_FOUND } from "../errors";
+import { ActionDockError, CAPABILITY_UNAVAILABLE, STATE_KEY_NOT_FOUND } from "../errors";
 import {
-  TARGET_CAPABILITY_UNAVAILABLE,
-  TARGET_PROTOCOL_UNSUPPORTED,
-  TARGET_RESULT_UNKNOWN,
-  TargetError,
+  PROTOCOL_UNSUPPORTED,
+  SERVICE_RESULT_UNKNOWN,
+  ServiceError,
 } from "./types";
 
 /**
@@ -25,9 +24,9 @@ export function wrapRemoteError(err: any): never {
     code === "CAPABILITY_UNAVAILABLE" ||
     code === "TARGET_CAPABILITY_UNAVAILABLE"
   ) {
-    throw new TargetError(
-      TARGET_CAPABILITY_UNAVAILABLE,
-      `TARGET_CAPABILITY_UNAVAILABLE: Management APIs are not enabled on remote service`,
+    throw new ServiceError(
+      CAPABILITY_UNAVAILABLE,
+      `CAPABILITY_UNAVAILABLE: Management APIs are not enabled on remote service`,
       { originalMessage: err?.message }
     );
   }
@@ -35,19 +34,20 @@ export function wrapRemoteError(err: any): never {
     code === "PROTOCOL_UNSUPPORTED" ||
     code === "TARGET_PROTOCOL_UNSUPPORTED"
   ) {
-    throw new TargetError(
-      TARGET_PROTOCOL_UNSUPPORTED,
-      `TARGET_PROTOCOL_UNSUPPORTED: ${err?.message || ""}`,
+    throw new ServiceError(
+      PROTOCOL_UNSUPPORTED,
+      `PROTOCOL_UNSUPPORTED: ${err?.message || ""}`,
       { originalMessage: err?.message }
     );
   }
   if (
+    code === "SERVICE_RESULT_UNKNOWN" ||
     code === "TARGET_RESULT_UNKNOWN" ||
     code === "RESULT_UNKNOWN"
   ) {
-    throw new TargetError(
-      TARGET_RESULT_UNKNOWN,
-      `TARGET_RESULT_UNKNOWN: ${err?.message || ""}`,
+    throw new ServiceError(
+      SERVICE_RESULT_UNKNOWN,
+      `SERVICE_RESULT_UNKNOWN: ${err?.message || ""}`,
       { originalMessage: err?.message }
     );
   }
