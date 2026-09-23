@@ -94,9 +94,6 @@ export interface ActionRunnerOptions {
   actionInvoker?: ActionInvoker;
 }
 
-/** 兼容旧版 RunnerOptions 导出别名 */
-export type RunnerOptions = ActionRunnerOptions;
-
 /**
  * 启动 Action 执行时的可选控制参数。
  */
