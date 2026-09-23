@@ -278,7 +278,7 @@ export class StandaloneDispatcher {
     } catch (err: any) {
       if (
         control?.cancellationSource === "sigint" &&
-        (control?.signal?.aborted || err?.name === "AbortError" || err?.message?.includes("SIGINT"))
+        (control?.signal?.aborted || err?.name === "AbortError" || err?.code === "SIGINT_INTERRUPTED")
       ) {
         return ExitCode.SIGINT;
       }
@@ -810,12 +810,9 @@ export class StandaloneDispatcher {
    */
   private isTargetCapabilityError(err: any): boolean {
     const code = String(err?.code || "");
-    const msg = String(err?.message || "");
     return (
       code === "TARGET_CAPABILITY_UNAVAILABLE" ||
-      code === "CAPABILITY_UNAVAILABLE" ||
-      msg.includes("TARGET_CAPABILITY_UNAVAILABLE") ||
-      msg.includes("Management APIs are not enabled")
+      code === "CAPABILITY_UNAVAILABLE"
     );
   }
 

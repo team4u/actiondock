@@ -1,5 +1,11 @@
 import { Command } from "commander";
-import { buildActionDescribePayload, formatActionDetail } from "@actiondock/core";
+import {
+  buildActionDescribePayload,
+  formatActionDetail,
+  ACTION_NOT_FOUND,
+  PACKAGE_NOT_FOUND,
+  NOT_FOUND,
+} from "@actiondock/core";
 import { ArgumentError, ExecutionError, packageNotFoundError } from "../errors";
 import { renderResult } from "../renderer";
 import type { CliContext } from "../types";
@@ -49,11 +55,11 @@ export function attachDescribeCommand(parent: Command, context?: CliContext): Co
           try {
             spec = await target.describeAction(targetRef);
           } catch (err: any) {
-            const msg = err?.message || String(err);
-            if (msg.includes("not found") || msg.includes("ACTION_NOT_FOUND")) {
-              throw new ArgumentError(msg);
+            const code = err?.code;
+            if (code === ACTION_NOT_FOUND || code === NOT_FOUND || code === PACKAGE_NOT_FOUND) {
+              throw new ArgumentError(err?.message || String(err), err?.details, code);
             }
-            throw new ExecutionError(msg);
+            throw new ExecutionError(err?.message || String(err), err?.details, code);
           }
 
           const payload = buildActionDescribePayload(spec);

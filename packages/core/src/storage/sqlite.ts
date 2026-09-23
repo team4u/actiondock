@@ -12,6 +12,7 @@ import {
 import { type Clock, SystemClock } from "./clock";
 import { createDefaultSqliteDriver } from "./driver";
 import { safeParseStoredJson } from "./utils";
+import { ActionDockError, AMBIGUOUS_STATE_KEY } from "../errors";
 import {
   IDEMPOTENCY_RETENTION_MS,
   STORAGE_SCHEMA_VERSION,
@@ -414,7 +415,8 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
 
     const matchingRows = await this.findMatchingStateRows(targetKey);
     if (matchingRows.length > 1) {
-      throw new Error(
+      throw new ActionDockError(
+        AMBIGUOUS_STATE_KEY,
         `Ambiguous state key '${targetKey}': matches ${matchingRows.length} entries (${matchingRows.map((r) => `${r.namespace}:${r.key}`).join(", ")})`
       );
     }
@@ -479,7 +481,8 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
 
     const matchingRows = await this.findMatchingStateRows(targetKey);
     if (matchingRows.length > 1) {
-      throw new Error(
+      throw new ActionDockError(
+        AMBIGUOUS_STATE_KEY,
         `Ambiguous state key '${targetKey}': matches ${matchingRows.length} entries for deletion (${matchingRows.map((r) => `${r.namespace}:${r.key}`).join(", ")})`
       );
     }

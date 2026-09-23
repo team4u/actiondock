@@ -51,7 +51,7 @@ export async function main(
   } catch (err: unknown) {
     if (
       control?.cancellationSource === "sigint" &&
-      (control?.signal?.aborted || (err as any)?.name === "AbortError" || (err as any)?.message?.includes("SIGINT") || err instanceof SigintError)
+      (control?.signal?.aborted || (err as any)?.name === "AbortError" || (err as any)?.code === "SIGINT_INTERRUPTED" || err instanceof SigintError)
     ) {
       return ExitCode.SIGINT;
     }

@@ -51,17 +51,19 @@ export function getSubPath(pathname: string): string {
   return pathname;
 }
 
+import { ActionDockError, PACKAGE_NOT_FOUND, PACKAGE_NOT_ALLOWED } from "../../errors";
+
 /**
  * 包未列入白名单拒绝访问异常。
  */
-export class PackageNotAllowedError extends Error {
+export class PackageNotAllowedError extends ActionDockError {
   status = 403;
   statusCode = 403;
-  code = "PACKAGE_NOT_ALLOWED";
 
   constructor(packageId: string) {
-    super(`Package '${packageId}' is not in the allowed package list`);
+    super(PACKAGE_NOT_ALLOWED, `Package '${packageId}' is not in the allowed package list`);
     this.name = "PackageNotAllowedError";
+    Object.setPrototypeOf(this, PackageNotAllowedError.prototype);
   }
 }
 
@@ -70,23 +72,22 @@ export class PackageNotAllowedError extends Error {
  * 当 options.packageAllowlist 存在且目标 packageId 不在白名单中时抛出 403 PACKAGE_NOT_ALLOWED 异常。
  */
 export function assertPackageAllowed(
-  packageId: string | undefined | null,
-  options?: { packageAllowlist?: string[] }
+  packageId: string,
+  options?: ServerOptions
 ): void {
   if (
     options?.packageAllowlist &&
     Array.isArray(options.packageAllowlist) &&
-    options.packageAllowlist.length > 0
+    options.packageAllowlist.length > 0 &&
+    !options.packageAllowlist.includes(packageId)
   ) {
-    if (!packageId || !options.packageAllowlist.includes(packageId)) {
-      throw new PackageNotAllowedError(packageId || "");
-    }
+    throw new PackageNotAllowedError(packageId);
   }
 }
 
 /**
- * 基于已发现的包清单解析目标包唯一标识。
- * 纯粹面向 PackageInfo 元数据，彻底去除对 App 实例的依赖与穿透。
+ * 解析并确定生效的目标 packageId。
+ * 遵循严格的解析规则与白名单检查。
  */
 export function resolveTargetPackageId(
   packages: PackageInfo[],
@@ -103,7 +104,10 @@ export function resolveTargetPackageId(
       (p) => p.id === requestedPackageId || p.packageRoot === requestedPackageId
     );
     if (!matched) {
-      throw new Error(`Unknown or unregistered package: '${requestedPackageId}'`);
+      throw new ActionDockError(
+        PACKAGE_NOT_FOUND,
+        `Unknown or unregistered package: '${requestedPackageId}'`
+      );
     }
     return matched.id;
   }
@@ -119,7 +123,7 @@ export function resolveTargetPackageId(
   } else if (packages.length > 0) {
     targetId = packages[0].id;
   } else {
-    throw new Error("No registered package found in service");
+    throw new ActionDockError(PACKAGE_NOT_FOUND, "No registered package found in service");
   }
 
   assertPackageAllowed(targetId, options);

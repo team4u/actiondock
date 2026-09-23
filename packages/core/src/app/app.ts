@@ -21,7 +21,7 @@ import { findProjectRoot, loadProjectConfig } from "../project/loader";
 import type { ProjectConfig } from "../project/types";
 import { RuntimeConfig } from "../runtime/context";
 import { normalizeActionCollection } from "../runtime/action-collection";
-import { createGlobalStorage, createLazyStorage, createStorage } from "../storage";
+import { createLazyStorage } from "../storage";
 import { isSecretConfigKey, sanitizeConfigDefinitions } from "../storage/mask";
 import { decodeStateKey, SqliteRuntimeStorage } from "../storage/sqlite";
 import type { RuntimeStorage } from "../storage/types";
@@ -127,17 +127,8 @@ export class DefaultActionDockApp implements ActionDockApp {
         recoverOrphans: options.recoverOrphans !== false,
       };
 
-      const storageFactory = this.platform.storage as any;
       const initStorage = () => {
-        if (typeof storageFactory === "function") {
-          return storageFactory(this.packageId, storageOpts);
-        } else if (storageFactory && typeof storageFactory.createStorage === "function") {
-          return storageFactory.createStorage(this.packageId, storageOpts);
-        } else if (storageFactory && typeof storageFactory.create === "function") {
-          return storageFactory.create(this.packageId, storageOpts);
-        } else {
-          return createStorage(this.packageId, storageOpts);
-        }
+        return this.platform.storage.createStorage(this.packageId, storageOpts);
       };
 
       if (options.inMemory) {
@@ -164,12 +155,8 @@ export class DefaultActionDockApp implements ActionDockApp {
         recoverOrphans: options.recoverOrphans !== false,
       };
 
-      const storageFactory = this.platform.storage as any;
       const initGlobalStorage = () => {
-        if (storageFactory && typeof storageFactory.createGlobalStorage === "function") {
-          return storageFactory.createGlobalStorage(globalOpts);
-        }
-        return createGlobalStorage(globalOpts);
+        return this.platform.storage.createGlobalStorage(globalOpts);
       };
 
       this.globalStorage = createLazyStorage(initGlobalStorage);

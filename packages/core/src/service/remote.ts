@@ -355,8 +355,8 @@ export class RemoteActionDockService implements ActionDockService {
             dispatcher: self.dispatcher,
           });
         } catch (err: any) {
-          const msg = String(err?.message || "");
-          if (msg.includes("404") || msg.includes("not found") || msg.includes("RUN_NOT_FOUND")) {
+          const code = String(err?.code || "");
+          if (code === "RUN_NOT_FOUND" || code === "NOT_FOUND" || err?.status === 404) {
             return undefined;
           }
           throw err;
@@ -373,13 +373,8 @@ export class RemoteActionDockService implements ActionDockService {
           });
           return { outcome: "requested", runId: res.runId };
         } catch (err: any) {
-          const msg = String(err?.message || "");
           const code = String(err?.code || "");
-          if (
-            code === "RUN_ALREADY_FINISHED" ||
-            msg.includes("already finished") ||
-            msg.includes("RUN_ALREADY_FINISHED")
-          ) {
+          if (code === "RUN_ALREADY_FINISHED") {
             let status = (err as any)?.errorData?.status || (err as any)?.details?.status;
             if (!status) {
               try {
@@ -391,12 +386,7 @@ export class RemoteActionDockService implements ActionDockService {
             }
             return { outcome: "already_terminal", runId, status: (status as any) || "failed" };
           }
-          if (
-            code === "RUN_NOT_FOUND" ||
-            msg.includes("not found") ||
-            msg.includes("RUN_NOT_FOUND") ||
-            msg.includes("404")
-          ) {
+          if (code === "RUN_NOT_FOUND" || code === "NOT_FOUND" || err?.status === 404) {
             return { outcome: "not_found", runId };
           }
           throw err;

@@ -6,13 +6,8 @@
 // 错误类型
 export { BuilderError, PlannerError } from "./errors";
 
-// 共享基础设施（内部复用的通用能力，随包公开便于下游校验）
-export {
-  collectRelativeFiles,
-  getInternalDependencyVersion,
-  moveDirAtomic,
-  replaceDirAtomic,
-} from "./fs-utils";
+// 共享基础设施
+export { getInternalDependencyVersion } from "./fs-utils";
 
 // 清单组装与依赖协议校验
 export {
@@ -30,10 +25,29 @@ export {
   createTarGzArchiveAsync,
   createZipArchive,
   createZipArchiveAsync,
-  dosDateTime,
-  writeToStream,
 } from "./archive";
 export type { TarGzArchiveOptions } from "./archive";
+
+// Skill 模板与规范声明
+export {
+  COMPOSITE_CUSTOM_DECLARATION_FILE,
+  COMPOSITE_CUSTOM_SLOTS,
+  generateCompositeSkillMd,
+  generateSkillJson,
+  generateSkillMd,
+  generateSourceSkillMd,
+  generateStandaloneSkillMd,
+  parseCustomSections,
+  parseCustomSkillDeclaration,
+} from "./skill";
+export type {
+  CompositeCustomDeclaration,
+  CompositeCustomSection,
+  CompositeCustomSlot,
+  CompositeSkillPackageInfo,
+  GenerateSkillJsonOptions,
+  SkillActionItem,
+} from "./skill";
 
 // 构建规划
 export { SelectionPlanner } from "./planner";

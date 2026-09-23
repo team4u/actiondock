@@ -117,7 +117,7 @@ export class LocalActionDockService implements ActionDockService {
         if ("listApps" in self.target) {
           return (self.target as ActionDockHost).runAction(ref, input, opts);
         }
-        const actionId = typeof ref === "string" ? (ref.includes(":") ? ref.split(":").pop()! : ref) : ref.actionId;
+        const actionId = typeof ref === "string" ? (ref.includes("/") ? ref.split("/").pop()! : ref) : ref.actionId;
         return (self.target as ActionDockApp).runAction(actionId, input, opts);
       },
 
@@ -129,7 +129,7 @@ export class LocalActionDockService implements ActionDockService {
         if ("listApps" in self.target) {
           return (self.target as ActionDockHost).startAction(ref, input, opts);
         }
-        const actionId = typeof ref === "string" ? (ref.includes(":") ? ref.split(":").pop()! : ref) : ref.actionId;
+        const actionId = typeof ref === "string" ? (ref.includes("/") ? ref.split("/").pop()! : ref) : ref.actionId;
         return (self.target as ActionDockApp).startAction(actionId, input, opts);
       },
     };

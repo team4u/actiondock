@@ -176,29 +176,10 @@ export class FakeProcessDriver implements ProcessDriver {
   }
 
   /**
-   * 派生启动新进程，支持标准与旧版重载签名。
+   * 派生启动新进程。
    */
-  spawn(spec: LaunchSpec, observer: ProcessObserver): Promise<ProcessHandle>;
-  spawn(
-    processId: string,
-    spec: LaunchSpec,
-    callbacks: ProcessDriverCallbacks
-  ): Promise<ProcessDriverHandle>;
-  async spawn(
-    specOrProcessId: LaunchSpec | string,
-    observerOrSpec: ProcessObserver | LaunchSpec,
-    maybeCallbacks?: ProcessDriverCallbacks
-  ): Promise<any> {
-    if (typeof specOrProcessId === "string") {
-      const processId = specOrProcessId;
-      const spec = observerOrSpec as LaunchSpec;
-      const callbacks = maybeCallbacks!;
-      return this.spawnLegacy(processId, spec, callbacks);
-    }
-
-    const spec = specOrProcessId;
-    const observer = observerOrSpec as ProcessObserver;
-    return this.spawnStandard(spec, observer);
+  async spawn(spec: LaunchSpec, observer: ProcessObserver): Promise<ProcessHandle> {
+    return this.spawnStandard(spec, observer, observer.processId);
   }
 
   /**
@@ -319,18 +300,17 @@ export class FakeProcessDriver implements ProcessDriver {
    * ProcessManager.run 的超时/超限路径在 terminate 后永远收不到退出事件，
    * 调用方会永久挂起。需要非退出语义的用例可先 setExitBehavior 或
    * 直接使用 handle 上的确定性模拟接口自行控制退出时机。
+  /**
+   * 优雅终止进程。
    */
-  terminate(handle: ProcessHandle, graceMs: number): Promise<void>;
-  terminate(processId: string, graceMs: number): Promise<void>;
-  async terminate(handleOrId: ProcessHandle | string, graceMs: number): Promise<void> {
+  async terminate(handle: ProcessHandle, graceMs: number): Promise<void> {
     if (this.nextTerminateError) {
       const err = this.nextTerminateError;
       this.nextTerminateError = undefined;
       throw err;
     }
 
-    const targetHandle =
-      typeof handleOrId === "string" ? this.handles.get(handleOrId) : handleOrId;
+    const targetHandle = this.handles.get(handle.id);
 
     if (targetHandle) {
       this.terminateCalls.push({
@@ -534,32 +514,7 @@ export class FakeProcessDriver implements ProcessDriver {
     this.onSpawn = undefined;
   }
 
-  /**
-   * 兼容旧版基于 processId 派生新进程。
-   */
-  private async spawnLegacy(
-    processId: string,
-    spec: LaunchSpec,
-    callbacks: ProcessDriverCallbacks
-  ): Promise<ProcessDriverHandle> {
-    const observer: ProcessObserver = {
-      output(stream, data) {
-        callbacks.onOutput(stream, data);
-      },
-      exited(result) {
-        callbacks.onExit(result);
-      },
-      outputClosed(reason) {
-        callbacks.onOutputClosed?.(reason);
-      },
-      fault(err) {
-        callbacks.onError(err);
-      },
-    };
 
-    const handle = await this.spawnStandard(spec, observer, processId);
-    return handle as unknown as ProcessDriverHandle;
-  }
 
   /**
    * 内部解析指定句柄或标识。

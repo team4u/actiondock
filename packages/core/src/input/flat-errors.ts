@@ -1,4 +1,5 @@
 import {
+  ActionDockError,
   INVALID_JSON,
   INVALID_JSON_LITERAL,
   INVALID_FLAT_ARGUMENT,
@@ -102,8 +103,7 @@ export type InputValidationSource =
 /**
  * 输入领域通用结构化异常类。
  */
-export class InputError extends Error {
-  public readonly code: string;
+export class InputError extends ActionDockError {
   public readonly details?: Record<string, unknown> | string[];
 
   constructor(
@@ -111,9 +111,8 @@ export class InputError extends Error {
     message: string,
     details?: Record<string, unknown> | string[]
   ) {
-    super(message);
+    super(code, message, details);
     this.name = "InputError";
-    this.code = code;
     this.details = details;
     Object.setPrototypeOf(this, InputError.prototype);
   }

@@ -6,7 +6,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { generateSourceSkillMd } from "@actiondock/core";
+import { generateSourceSkillMd } from "./skill";
 import { BuilderError } from "./errors";
 import { getInternalDependencyVersion } from "./fs-utils";
 import {

@@ -1,4 +1,4 @@
-import { generateStandaloneSkillMd } from "@actiondock/core";
+import { generateStandaloneSkillMd } from "./skill";
 import { buildProject } from "./build";
 import { collectRelativeFiles } from "./fs-utils";
 import {

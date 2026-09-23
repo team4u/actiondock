@@ -455,10 +455,15 @@ describe("Managed Process 第 18 节全量验收测试套件", () => {
     const { manager, driver } = createManager();
 
     let createdHandle: MemoryProcessDriverHandle | undefined;
-    driver.spawnHook = async (processId: string, spec: LaunchSpec, callbacks: any) => {
+    driver.spawnHook = async (spec: LaunchSpec, observer: any) => {
       // 模拟驱动派生异步耗时
       await new Promise((resolve) => setTimeout(resolve, 40));
-      createdHandle = new MemoryProcessDriverHandle(processId, spec, callbacks);
+      createdHandle = new MemoryProcessDriverHandle(observer.processId || "test-proc", spec, {
+        onOutput: (stream, data) => observer.output(stream, data),
+        onExit: (exit) => observer.exited(exit),
+        onOutputClosed: (reason) => observer.outputClosed(reason),
+        onError: (err) => observer.fault?.(err),
+      });
       return createdHandle;
     };
 

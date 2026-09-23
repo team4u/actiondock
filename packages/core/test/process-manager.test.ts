@@ -866,11 +866,11 @@ describe("受管进程管理器 ProcessManager", () => {
     it("成功执行并收集管道输出", async () => {
       const { manager, driver } = createManager();
 
-      driver.spawnHook = async (processId, spec, callbacks) => {
+      driver.spawnHook = async (_spec, observer) => {
         setTimeout(() => {
-          callbacks.onOutput("stdout", new TextEncoder().encode("line 1\n"));
-          callbacks.onOutput("stderr", new TextEncoder().encode("err 1\n"));
-          callbacks.onExit({ code: 0, signal: null });
+          observer.output("stdout", new TextEncoder().encode("line 1\n"));
+          observer.output("stderr", new TextEncoder().encode("err 1\n"));
+          observer.exited({ code: 0, signal: null });
         }, 10);
       };
 
@@ -920,10 +920,10 @@ describe("受管进程管理器 ProcessManager", () => {
     it("超出 maxOutputBytes 时截断输出并标记 truncated", async () => {
       const { manager, driver } = createManager();
 
-      driver.spawnHook = async (processId, spec, callbacks) => {
+      driver.spawnHook = async (_spec, observer) => {
         setTimeout(() => {
-          callbacks.onOutput("stdout", new TextEncoder().encode("0123456789"));
-          callbacks.onExit({ code: 0, signal: null });
+          observer.output("stdout", new TextEncoder().encode("0123456789"));
+          observer.exited({ code: 0, signal: null });
         }, 10);
       };
 
@@ -940,7 +940,7 @@ describe("受管进程管理器 ProcessManager", () => {
     it("执行超时自动清理进程并抛出 PROCESS_TIMEOUT", async () => {
       const { manager, driver } = createManager();
 
-      driver.spawnHook = async (processId, spec, callbacks) => {
+      driver.spawnHook = async () => {
         // 不触发 onExit 模拟超时
       };
 
@@ -1737,9 +1737,9 @@ describe("受管进程管理器 ProcessManager", () => {
 
     it("[Issue 7] 底层驱动在 spawn 解决前已触发退出时，启动完成不会覆盖已收到的退出状态", async () => {
       const driver = new MemoryProcessDriver();
-      driver.spawnHook = (_processId, _spec, callbacks) => {
-        callbacks?.onExit?.({ code: 42, signal: null });
-        callbacks?.onOutputClosed?.("natural");
+      driver.spawnHook = (_spec, observer) => {
+        observer.exited({ code: 42, signal: null });
+        observer.outputClosed("natural");
       };
 
       const manager = new ProcessManager({

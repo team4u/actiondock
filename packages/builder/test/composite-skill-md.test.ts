@@ -7,7 +7,7 @@ import {
   parseCustomSections,
   parseCustomSkillDeclaration,
   type CompositeSkillPackageInfo,
-} from "@actiondock/core";
+} from "../src/skill";
 import { exportCompositeSkill } from "../src/exporter";
 
 function writeJson(filePath: string, value: unknown): void {

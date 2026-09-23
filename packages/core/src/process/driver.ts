@@ -161,6 +161,9 @@ export function resolveProcessEnv(
  * 进程观察者接口，接收来自底层驱动的流输出与生命周期通知。
  */
 export interface ProcessObserver {
+  /** 期望关联的受管进程标识（若有） */
+  processId?: string;
+
   /**
    * 接收来自进程的输出数据。
    *
@@ -219,15 +222,6 @@ export interface ProcessDriver {
   spawn(spec: LaunchSpec, observer: ProcessObserver): Promise<ProcessHandle>;
 
   /**
-   * 兼容旧版基于 processId 派生新进程签名。
-   */
-  spawn(
-    processId: string,
-    spec: LaunchSpec,
-    callbacks: ProcessDriverCallbacks
-  ): Promise<ProcessDriverHandle>;
-
-  /**
    * 向受管进程标准输入写入字节数据。
    *
    * @param handle 进程句柄
@@ -254,7 +248,6 @@ export interface ProcessDriver {
    * 优雅终止或强制终止底层进程。
    */
   terminate(handle: ProcessHandle, graceMs: number): Promise<void>;
-  terminate(processId: string, graceMs: number): Promise<void>;
 
   /**
    * 销毁进程句柄并清理关联资源。
@@ -268,7 +261,7 @@ export interface ProcessDriver {
 export class MemoryProcessDriver implements ProcessDriver {
   private capabilities: Capabilities;
   public handles = new Map<string, MemoryProcessDriverHandle>();
-  public spawnHook?: (processId: string, spec: LaunchSpec, callbacks: ProcessDriverCallbacks) => Promise<MemoryProcessDriverHandle | void> | MemoryProcessDriverHandle | void;
+  public spawnHook?: (spec: LaunchSpec, observer: ProcessObserver) => Promise<MemoryProcessDriverHandle | void> | MemoryProcessDriverHandle | void;
 
   constructor(capabilities?: Partial<Capabilities>) {
     this.capabilities = {
@@ -289,31 +282,16 @@ export class MemoryProcessDriver implements ProcessDriver {
     this.capabilities = { ...this.capabilities, ...caps };
   }
 
-  async spawn(
-    specOrProcessId: LaunchSpec | string,
-    observerOrSpec: ProcessObserver | LaunchSpec,
-    maybeCallbacks?: ProcessDriverCallbacks
-  ): Promise<any> {
-    if (typeof specOrProcessId === "string") {
-      const processId = specOrProcessId;
-      const spec = observerOrSpec as LaunchSpec;
-      const callbacks = maybeCallbacks!;
-      if (this.spawnHook) {
-        const customHandle = await this.spawnHook(processId, spec, callbacks);
-        if (customHandle) {
-          this.handles.set(processId, customHandle);
-          return customHandle;
-        }
+  async spawn(spec: LaunchSpec, observer: ProcessObserver): Promise<ProcessHandle> {
+    const processId = observer.processId ?? `mem-${Math.random().toString(36).slice(2, 10)}`;
+    if (this.spawnHook) {
+      const customHandle = await this.spawnHook(spec, observer);
+      if (customHandle) {
+        this.handles.set(customHandle.id, customHandle);
+        return customHandle;
       }
-
-      const handle = new MemoryProcessDriverHandle(processId, spec, callbacks);
-      this.handles.set(processId, handle);
-      return handle;
     }
 
-    const spec = specOrProcessId;
-    const observer = observerOrSpec as ProcessObserver;
-    const processId = `mem-${Math.random().toString(36).slice(2, 10)}`;
     const callbacks: ProcessDriverCallbacks = {
       onOutput(stream, data) {
         observer.output(stream, data);
@@ -334,11 +312,10 @@ export class MemoryProcessDriver implements ProcessDriver {
     return handle;
   }
 
-  async terminate(handleOrId: ProcessHandle | string, graceMs: number): Promise<void> {
-    const id = typeof handleOrId === "string" ? handleOrId : handleOrId.id;
-    const handle = this.handles.get(id);
-    if (handle) {
-      await handle.terminate(graceMs);
+  async terminate(handle: ProcessHandle, graceMs: number): Promise<void> {
+    const instance = this.handles.get(handle.id);
+    if (instance) {
+      await instance.terminate(graceMs);
     }
   }
 }

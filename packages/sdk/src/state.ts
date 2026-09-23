@@ -55,5 +55,7 @@ export function decodeStateKey(fullKey: string): { namespace: string; key: strin
     };
   }
 
-  throw new Error(`Ambiguous state key '${fullKey}': contains multiple unescaped colon delimiters`);
+  const err: any = new Error(`Ambiguous state key '${fullKey}': contains multiple unescaped colon delimiters`);
+  err.code = "AMBIGUOUS_STATE_KEY";
+  throw err;
 }

@@ -530,14 +530,6 @@ function vendorDependencies(
  * @returns 构建产物结果描述
  */
 export async function buildProject(options: BuildOptions): Promise<BuildResult> {
-  // 彻底删除原有单文件二进制输出语义，明确拒绝并报错
-  if (options.target !== undefined || options.bytecode !== undefined) {
-    throw new BuilderError(
-      "Unsupported build mode: '--target' and '--bytecode' standalone single-file binary compilation have been removed in ActionDock 2.0. Directory-based Node.js builds are now the standard distribution format.",
-      "UNSUPPORTED_BUILD_MODE"
-    );
-  }
-
   const root = resolve(options.projectRoot);
   const plan = SelectionPlanner.plan({
     projectRoot: root,

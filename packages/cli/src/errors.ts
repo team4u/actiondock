@@ -1,5 +1,12 @@
 import {
+  ActionDockError,
   InputError,
+  INVALID_ARGUMENT,
+  INVALID_PACKAGE_ID,
+  PACKAGE_NOT_FOUND,
+  ACTION_NOT_FOUND,
+  NOT_FOUND,
+  PATH_TRAVERSAL,
   INVALID_FLAT_ARGUMENT,
   INVALID_JSON,
   INVALID_JSON_LITERAL,
@@ -145,6 +152,23 @@ export function formatError(err: unknown): FormattedError {
     };
   }
 
+  if (err instanceof ActionDockError) {
+    const isArgument =
+      err.code === INVALID_ARGUMENT ||
+      err.code === INVALID_PACKAGE_ID ||
+      err.code === PACKAGE_NOT_FOUND ||
+      err.code === ACTION_NOT_FOUND ||
+      err.code === NOT_FOUND ||
+      err.code === PATH_TRAVERSAL ||
+      FLAT_ERROR_CODES.has(err.code);
+    return {
+      code: err.code,
+      message: err.message,
+      exitCode: isArgument ? ExitCode.INVALID_ARGUMENT : ExitCode.FAILURE,
+      details: err.details,
+    };
+  }
+
   // Commander.js 原生错误处理
   if (typeof err === "object" && err !== null && "code" in err && typeof (err as any).code === "string") {
     const code = (err as any).code as string;
@@ -188,9 +212,10 @@ export function formatError(err: unknown): FormattedError {
 
   if (err instanceof Error) {
     return {
-      code: CLI_CODE_ERROR,
+      code: (err as any).code || CLI_CODE_ERROR,
       message: err.message,
       exitCode: ExitCode.FAILURE,
+      details: (err as any).details,
     };
   }
 

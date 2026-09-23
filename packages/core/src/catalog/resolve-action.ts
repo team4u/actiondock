@@ -57,12 +57,8 @@ export function parseActionRef(ref: ActionRef | string): ActionRef {
     return { packageId, actionId };
   }
 
-  // 检查旧语法兼容提示
   if (str.includes(":")) {
-    const parts = str.split(":");
-    throw new Error(
-      `Legacy syntax '${str}' is deprecated. Please use '${parts.join("/")}' instead.`
-    );
+    throw new Error(`Invalid action identifier: '${str}'`);
   }
 
   return { actionId: str };

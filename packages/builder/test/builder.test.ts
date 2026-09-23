@@ -29,7 +29,6 @@ import {
 import {
   assertValidManifestActionIds,
   buildProject,
-  collectRelativeFiles,
   packProject,
   BuilderError,
   exportSkill,
@@ -42,11 +41,16 @@ import {
   createTarGzArchiveAsync,
   createZipArchive,
   createZipArchiveAsync,
-  dosDateTime,
-  writeToStream,
+} from "../src";
+import {
+  collectRelativeFiles,
   replaceDirAtomic,
   moveDirAtomic,
-} from "../src";
+} from "../src/fs-utils";
+import {
+  dosDateTime,
+  writeToStream,
+} from "../src/archive";
 import {
   readTarGzEntries,
   readTarGzEntryModes,
@@ -631,32 +635,6 @@ export default defineAction({
   });
 
   describe("buildProject: Node.js 目录型交付产物生成", () => {
-    it("传入 target 或 bytecode 时必须抛出带有 UNSUPPORTED_BUILD_MODE 的 BuilderError", async () => {
-      let errorTarget: any;
-      try {
-        await buildProject({
-          projectRoot: tempDir,
-          target: "linux-x64",
-        });
-      } catch (err) {
-        errorTarget = err;
-      }
-      expect(errorTarget).toBeInstanceOf(BuilderError);
-      expect(errorTarget.code).toBe("UNSUPPORTED_BUILD_MODE");
-
-      let errorBytecode: any;
-      try {
-        await buildProject({
-          projectRoot: tempDir,
-          bytecode: true,
-        });
-      } catch (err) {
-        errorBytecode = err;
-      }
-      expect(errorBytecode).toBeInstanceOf(BuilderError);
-      expect(errorBytecode.code).toBe("UNSUPPORTED_BUILD_MODE");
-    });
-
     it("成功构建 Node.js 目录交付产物并生成可执行启动入口与元数据", async () => {
       const buildRes = await buildProject({
         projectRoot: tempDir,
@@ -1132,22 +1110,6 @@ export default defineAction({
       // 正式发布版本采用 ^ 语义范围
       expect(getInternalDependencyVersion("2.0.0")).toBe("^2.0.0");
       expect(getInternalDependencyVersion("2.1.3")).toBe("^2.1.3");
-    });
-
-    it("传入 standalone 模式时严格拒绝并抛出提示替代方案的 BuilderError", async () => {
-      let error: any;
-      try {
-        await exportSkill({
-          projectRoot: tempDir,
-          standalone: true,
-        });
-      } catch (err) {
-        error = err;
-      }
-
-      expect(error).toBeInstanceOf(BuilderError);
-      expect(error.code).toBe("UNSUPPORTED_BUILD_MODE");
-      expect(error.message).toContain("--mode node");
     });
 
     it("导出 Node 目录型 Skill 包并验证可执行性", async () => {

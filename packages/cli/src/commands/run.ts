@@ -4,6 +4,7 @@ import {
   type InvocationControl,
   validateActionInputValue,
   mapInputValidationFailure,
+  ACTION_CANCELLED,
 } from "@actiondock/core";
 import type { ExecutionResult, JsonValue } from "@actiondock/sdk";
 import { Command } from "commander";
@@ -189,7 +190,7 @@ export async function executeAction(
     }
 
     let targetRef = id;
-    if (options.package && !id.includes("/") && !id.includes(":")) {
+    if (options.package && !id.includes("/")) {
       targetRef = `${options.package}/${id}`;
     }
 
@@ -260,10 +261,12 @@ export async function executeAction(
   } catch (err: any) {
     const isSigint =
       effectiveControl?.cancellationSource === "sigint" ||
-      err?.message?.includes("Interrupted by SIGINT");
+      err?.code === "SIGINT_INTERRUPTED" ||
+      err instanceof SigintError;
     if (
-      isSigint &&
-      (err?.name === "AbortError" || effectiveSignal?.aborted || err?.message?.includes("SIGINT") || err instanceof SigintError)
+      isSigint ||
+      (effectiveControl?.cancellationSource === "sigint" &&
+        (err?.name === "AbortError" || effectiveSignal?.aborted || err?.code === ACTION_CANCELLED))
     ) {
       throw new SigintError();
     }

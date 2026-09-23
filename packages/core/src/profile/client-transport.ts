@@ -151,21 +151,8 @@ export function createRemoteFetch(
   };
 }
 
-/** v2 优先、v1 兼容回退的协议版本优先级列表。 */
-const PROTOCOL_PREFERENCE = ["v2", "v1"] as const;
-
 /**
- * 判定响应是否应当触发下一优先级协议重试。
- * 仅 404（路由不存在）回退；其余状态（如 401、403、500）原样透传。
- */
-function shouldFallbackToNextProtocol(res: Response): boolean {
-  return res.status === 404;
-}
-
-/**
- * 携带协议回退的远端请求单一入口：先打 /api/v2/ 路由，404 时改打 /api/v1/ 路由。
- *
- * v1 回退请求若网络失败则沿用 v2 响应，保留原始状态与错误体供上层透传。
+ * 远端请求单一入口：执行目标协议路由请求。
  */
 export async function fetchWithProtocolFallback(
   base: string,
@@ -173,37 +160,13 @@ export async function fetchWithProtocolFallback(
   init: RequestInit & { dispatcher?: any }
 ): Promise<Response> {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  const isVersioned = /^\/api\/v\d+\//.test(normalizedPath);
-
-  let res = await fetch(`${base}${normalizedPath}`, init);
-  if (!isVersioned || !shouldFallbackToNextProtocol(res)) {
-    return res;
-  }
-
-  const candidates = listProtocolRouteCandidates(base, normalizedPath);
-  // 首个候选即当前已返回 404 的路由，从次优先级继续尝试
-  for (let i = 1; i < candidates.length; i++) {
-    try {
-      const fallbackRes = await fetch(candidates[i], init);
-      if (!shouldFallbackToNextProtocol(fallbackRes)) {
-        return fallbackRes;
-      }
-    } catch {
-      // 回退请求网络异常时保持既有 v2 响应，由上层统一处理
-    }
-  }
-  return res;
+  return fetch(`${base}${normalizedPath}`, init);
 }
 
 /**
- * 列出指定路由的全部协议版本候选 URL（按优先级排序，含原始路由自身）。
+ * 列出指定路由的协议版本候选 URL。
  */
 export function listProtocolRouteCandidates(base: string, path: string): string[] {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  const versionMatch = normalizedPath.match(/^\/api\/(v\d+)\/(.*)$/);
-  if (!versionMatch) {
-    return [`${base}${normalizedPath}`];
-  }
-  const rest = versionMatch[2];
-  return PROTOCOL_PREFERENCE.map((version) => `${base}/api/${version}/${rest}`);
+  return [`${base}${normalizedPath}`];
 }

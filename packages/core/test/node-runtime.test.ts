@@ -573,7 +573,7 @@ describe("ExecaProcessExecutor 单元测试", () => {
   });
 });
 
-describe("NodeModuleLoader 与 TsxModuleLoader 单元测试", () => {
+describe("NodeModuleLoader 单元测试", () => {
   // 夹具统一落在系统临时目录（mkdtemp 随机子目录），避免污染仓库工作区
   const testDir = mkdtempSync(join(tmpdir(), "test-loader-"));
 

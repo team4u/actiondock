@@ -48,8 +48,7 @@ import { InputDispatcher } from "./input-dispatcher";
 import { DiagnosticsSink } from "./diagnostics-sink";
 import type {
   ProcessDriver,
-  ProcessDriverCallbacks,
-  ProcessDriverHandle,
+  ProcessObserver,
 } from "./driver";
 import {
   MemoryProcessMetadataStore,
@@ -587,17 +586,18 @@ export class ProcessManager {
       // 调用驱动派生进程
       let abortListener: (() => void) | undefined;
       try {
-        const callbacks: ProcessDriverCallbacks = {
-          onOutput: (stream, data) => {
+        const observer: ProcessObserver = {
+          processId,
+          output: (stream, data) => {
             procRecord.outputLog.append(stream, data);
           },
-          onExit: (exit) => {
+          exited: (exit) => {
             this.handleProcessExit(procRecord, exit);
           },
-          onOutputClosed: (reason) => {
+          outputClosed: (reason) => {
             this.handleOutputClosed(procRecord, reason);
           },
-          onError: (err) => {
+          fault: (err) => {
             this.handleProcessError(procRecord, err);
           },
         };
@@ -608,7 +608,7 @@ export class ProcessManager {
             : new ProcessError(PROCESS_CANCELLED, "Process start was cancelled");
         }
 
-        const spawnPromise = this.driver.spawn(processId, input.spec, callbacks);
+        const spawnPromise = this.driver.spawn(input.spec, observer);
         if (call?.signal) {
           const abortPromise = new Promise<never>((_, reject) => {
             abortListener = () => {
@@ -622,12 +622,12 @@ export class ProcessManager {
           });
 
           try {
-            procRecord.handle = await Promise.race([spawnPromise, abortPromise]);
+            procRecord.handle = (await Promise.race([spawnPromise, abortPromise])) as any;
           } catch (raceErr) {
             void spawnPromise
               .then((h) => {
-                if (h && typeof h.terminate === "function") {
-                  void h.terminate(0);
+                if (h) {
+                  void this.driver.terminate(h, 0);
                 }
               })
               .catch(() => {});
@@ -638,12 +638,12 @@ export class ProcessManager {
             }
           }
         } else {
-          procRecord.handle = await spawnPromise;
+          procRecord.handle = (await spawnPromise) as any;
         }
 
         if (call?.signal?.aborted) {
-          if (procRecord.handle && typeof procRecord.handle.terminate === "function") {
-            await procRecord.handle.terminate(0);
+          if (procRecord.handle) {
+            await this.driver.terminate(procRecord.handle, 0);
           }
           throw call.signal.reason instanceof ProcessError
             ? call.signal.reason
@@ -1217,9 +1217,7 @@ export class ProcessManager {
     // 调用底层驱动终止；真实退出状态与输出流关闭由底层观察者事件收敛
     try {
       if (proc.handle) {
-        await proc.handle.terminate(input.graceMs);
-      } else if (this.driver.terminate) {
-        await this.driver.terminate(id, input.graceMs);
+        await this.driver.terminate(proc.handle, input.graceMs);
       }
     } catch (err) {
       this.recordDiagnostic(`Failed to terminate process '${id}' during stop`, err);

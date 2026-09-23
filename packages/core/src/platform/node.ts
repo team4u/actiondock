@@ -35,8 +35,6 @@ export interface NodePlatformOptions {
   customHome?: string;
   /** 文件系统安全沙箱根路径 */
   rootDir?: string;
-  /** 【已废弃】WorkerSqliteDriver 为异步驱动，不再兼容存储层的同步 SqliteDriver 契约，保留选项仅为兼容旧参数，任何非假值均回落到同步驱动并告警 */
-  useWorker?: boolean;
   /** 自定义 SQLite 驱动工厂函数（必须返回满足同步契约的 SqliteDriver，默认实例化 NodeSqliteDriver） */
   driverFactory?: (dbPath: string) => SqliteDriver;
   /** 自定义进程执行驱动（默认依托基于 NodeProcessDriver 的 ProcessManager） */
@@ -104,12 +102,6 @@ export function createNodePlatform(options: NodePlatformOptions = {}): RuntimePl
     });
 
   const createDriver = options.driverFactory ?? ((dbPath: string) => new NodeSqliteDriver(dbPath));
-
-  if (options.useWorker) {
-    console.warn(
-      "[createNodePlatform] useWorker is deprecated: WorkerSqliteDriver is async and no longer satisfies the sync SqliteDriver contract; falling back to NodeSqliteDriver."
-    );
-  }
 
   const storage: StorageFactory = options.storage ?? {
     createStorage(packageId: string, opts?: StorageFactoryOptions): RuntimeStorage {

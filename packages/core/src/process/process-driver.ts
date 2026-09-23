@@ -244,29 +244,9 @@ export class NodeProcessDriver implements ProcessDriver {
 
   /**
    * 依据《Managed Process 设计 v2》标准契约启动受管进程。
-   * 同时兼容旧版重载签名。
    */
-  spawn(spec: LaunchSpec, observer: ProcessObserver): Promise<ProcessHandle>;
-  spawn(
-    processId: string,
-    spec: LaunchSpec,
-    callbacks: ProcessDriverCallbacks
-  ): Promise<ProcessDriverHandle>;
-  async spawn(
-    specOrProcessId: LaunchSpec | string,
-    observerOrSpec: ProcessObserver | LaunchSpec,
-    maybeCallbacks?: ProcessDriverCallbacks
-  ): Promise<any> {
-    if (typeof specOrProcessId === "string") {
-      const processId = specOrProcessId;
-      const spec = observerOrSpec as LaunchSpec;
-      const callbacks = maybeCallbacks!;
-      return this.spawnLegacy(processId, spec, callbacks);
-    }
-
-    const spec = specOrProcessId;
-    const observer = observerOrSpec as ProcessObserver;
-    return this.spawnStandard(spec, observer);
+  async spawn(spec: LaunchSpec, observer: ProcessObserver): Promise<ProcessHandle> {
+    return this.spawnStandard(spec, observer, observer.processId);
   }
 
   /**
@@ -666,13 +646,8 @@ export class NodeProcessDriver implements ProcessDriver {
   /**
    * 优雅终止进程，超时未退出则发送 SIGKILL 强杀兜底。
    */
-  terminate(handle: ProcessHandle, graceMs: number): Promise<void>;
-  terminate(processId: string, graceMs: number): Promise<void>;
-  async terminate(handleOrId: ProcessHandle | string, graceMs: number): Promise<void> {
-    const instance =
-      typeof handleOrId === "string"
-        ? this.instances.get(handleOrId)
-        : this.resolveInstance(handleOrId);
+  async terminate(handle: ProcessHandle, graceMs: number): Promise<void> {
+    const instance = this.resolveInstance(handle);
 
     if (!instance) {
       return;
@@ -754,32 +729,7 @@ export class NodeProcessDriver implements ProcessDriver {
     }
   }
 
-  /**
-   * 兼容旧版基于 processId 派生新进程。
-   */
-  private async spawnLegacy(
-    processId: string,
-    spec: LaunchSpec,
-    callbacks: ProcessDriverCallbacks
-  ): Promise<ProcessDriverHandle> {
-    const observer: ProcessObserver = {
-      output(stream, data) {
-        callbacks.onOutput(stream, data);
-      },
-      exited(result) {
-        callbacks.onExit(result);
-      },
-      outputClosed(reason) {
-        callbacks.onOutputClosed?.(reason);
-      },
-      fault(err) {
-        callbacks.onError(err);
-      },
-    };
 
-    const handle = await this.spawnStandard(spec, observer, processId);
-    return handle as unknown as ProcessDriverHandle;
-  }
 
   /**
    * 解析查找内部受管进程实例。

@@ -1,6 +1,7 @@
 import { existsSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { ActionDockError, INVALID_PACKAGE_ID, PATH_TRAVERSAL } from "../errors";
 
 export { isLoopbackHost } from "./net";
 
@@ -121,7 +122,8 @@ export function assertValidPackageId(packageId: string): void {
     packageId.includes("..") ||
     (!PACKAGE_ID_REGEX.test(packageId) && !isScopedLegacy)
   ) {
-    throw new Error(
+    throw new ActionDockError(
+      INVALID_PACKAGE_ID,
       `Invalid packageId '${packageId}': must match ${PACKAGE_ID_REGEX} and not contain path traversal characters`
     );
   }
@@ -191,7 +193,10 @@ export function assertPathWithinRoot(
   const rel = relative(resolvedRoot, resolvedTarget);
 
   if (isPathOutsideBoundary(rel)) {
-    throw new Error(`'${fieldName}' escapes boundary '${rootDir}': ${targetPath}`);
+    throw new ActionDockError(
+      PATH_TRAVERSAL,
+      `'${fieldName}' escapes boundary '${rootDir}': ${targetPath}`
+    );
   }
 
   const canonicalRoot = canonicalizePath(resolvedRoot);
@@ -199,7 +204,8 @@ export function assertPathWithinRoot(
 
   const relReal = relative(canonicalRoot, canonicalTarget);
   if (isPathOutsideBoundary(relReal)) {
-    throw new Error(
+    throw new ActionDockError(
+      PATH_TRAVERSAL,
       `'${fieldName}' symlink resolves outside boundary '${rootDir}': ${targetPath}`
     );
   }

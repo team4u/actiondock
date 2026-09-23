@@ -1,14 +1,16 @@
 import { copyFileSync, existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import {
-  COMPOSITE_CUSTOM_DECLARATION_FILE,
-  parseCustomSkillDeclaration,
   getPackageSlug,
-  type CompositeCustomDeclaration,
   type PlaybookDefinition,
   type ProjectConfig,
-  type SkillActionItem,
 } from "@actiondock/core";
+import {
+  COMPOSITE_CUSTOM_DECLARATION_FILE,
+  parseCustomSkillDeclaration,
+  type CompositeCustomDeclaration,
+  type SkillActionItem,
+} from "./skill";
 import { BuilderError } from "./errors";
 import type { CompositeSkillExportOptions, SelectionPlan } from "./types";
 

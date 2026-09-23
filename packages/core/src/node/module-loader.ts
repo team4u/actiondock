@@ -1,6 +1,7 @@
 import { existsSync, statSync } from "node:fs";
 import { dirname, extname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { ActionDockError, ACTION_LOAD_FAILED } from "../errors";
 /**
  * 统一源码模块加载器接口。
  * 解耦 Action 与各类扩展模块的具体加载机制（如 ECMAScript 原生 import、tsx 动态转译加载等）。
@@ -124,19 +125,19 @@ export class NodeModuleLoader implements ModuleLoader {
       );
     }
 
+    let stat;
     try {
-      const stat = statSync(candidateBasePath);
-      if (!stat.isFile()) {
-        throw new Error(
-          `Cannot resolve module '${specifier}' from '${parentPath || process.cwd()}': path is not a file`
-        );
-      }
+      stat = statSync(candidateBasePath);
     } catch (err: any) {
-      if (err.message.startsWith("Cannot resolve module")) {
-        throw err;
-      }
-      throw new Error(
+      throw new ActionDockError(
+        ACTION_LOAD_FAILED,
         `Cannot resolve module '${specifier}' from '${parentPath || process.cwd()}': ${err.message}`
+      );
+    }
+    if (!stat.isFile()) {
+      throw new ActionDockError(
+        ACTION_LOAD_FAILED,
+        `Cannot resolve module '${specifier}' from '${parentPath || process.cwd()}': path is not a file`
       );
     }
 
@@ -187,8 +188,3 @@ export class NodeModuleLoader implements ModuleLoader {
     return new NodeModuleLoader().loadDefault<T>(specifier, parentPath);
   }
 }
-
-/**
- * 兼容原有类名导出。
- */
-export { NodeModuleLoader as TsxModuleLoader };

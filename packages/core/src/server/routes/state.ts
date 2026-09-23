@@ -1,7 +1,27 @@
 import { decodeStateKey } from "../../storage";
-import { CAPABILITY_UNAVAILABLE, STATE_KEY_NOT_FOUND } from "../../errors";
+import {
+  AMBIGUOUS_STATE_KEY,
+  CAPABILITY_UNAVAILABLE,
+  INVALID_ARGUMENT,
+  INVALID_PACKAGE_ID,
+  PACKAGE_NOT_FOUND,
+  PATH_TRAVERSAL,
+  STATE_KEY_NOT_FOUND,
+} from "../../errors";
 import { readJsonBody } from "../body";
 import { assertPackageAllowed, getSubPath, jsonResponse, resolveTargetPackageId, type RouteContext } from "./common";
+
+function isClientStateError(err: any): boolean {
+  return (
+    err?.code === PACKAGE_NOT_FOUND ||
+    err?.code === INVALID_PACKAGE_ID ||
+    err?.code === PATH_TRAVERSAL ||
+    err?.code === AMBIGUOUS_STATE_KEY ||
+    err?.code === INVALID_ARGUMENT ||
+    err?.status === 400 ||
+    err?.status === 404
+  );
+}
 
 /**
  * 处理状态键名列表、读取、写入、删除及清空接口。
@@ -65,10 +85,7 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
           corsHeaders
         );
       }
-      const isClient =
-        err.message?.includes("Unknown or unregistered package") ||
-        err.message?.includes("Invalid packageId") ||
-        err.message?.includes("escapes boundary");
+      const isClient = isClientStateError(err);
       return jsonResponse(
         { ok: false, error: { code: isClient ? "INVALID_ARGUMENT" : "STATE_LIST_ERROR", message: err.message } },
         isClient ? 400 : 500,
@@ -108,10 +125,7 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
           corsHeaders
         );
       }
-      const isClient =
-        err.message?.includes("Unknown or unregistered package") ||
-        err.message?.includes("Invalid packageId") ||
-        err.message?.includes("escapes boundary");
+      const isClient = isClientStateError(err);
       return jsonResponse(
         { ok: false, error: { code: isClient ? "INVALID_ARGUMENT" : "STATE_CLEAR_ERROR", message: err.message } },
         isClient ? 400 : 500,
@@ -214,11 +228,7 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
           corsHeaders
         );
       }
-      const isClient =
-        err.message?.includes("Unknown or unregistered package") ||
-        err.message?.includes("Invalid packageId") ||
-        err.message?.includes("escapes boundary") ||
-        err.message?.includes("Ambiguous state key");
+      const isClient = isClientStateError(err);
       return jsonResponse(
         { ok: false, error: { code: isClient ? "INVALID_ARGUMENT" : "STATE_KEY_ERROR", message: err.message } },
         isClient ? 400 : 500,

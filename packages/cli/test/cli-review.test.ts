@@ -338,18 +338,8 @@ describe("CLI Review & Machine Contract Regression", () => {
     expect(manifestAfterPb.playbooks["deploy-flow"].actions).toEqual(["calculator"]);
   });
 
-  it("enforces UNSUPPORTED_BUILD_MODE on ad build with --target or --bytecode and validates ad pack --dry-run", () => {
+  it("validates ad pack --dry-run", () => {
     runCli(["init", "--id", "test.build-modes", "."], tempDir);
-
-    const targetProc = runCli(["build", "--target", "linux-x64", "--json"], tempDir);
-    expect(targetProc.exitCode).not.toBe(0);
-    const targetErr = JSON.parse(targetProc.stdout.toString() || targetProc.stderr.toString());
-    expect(targetErr.error?.code || targetErr.code).toBe("UNSUPPORTED_BUILD_MODE");
-
-    const byteProc = runCli(["build", "--bytecode", "--json"], tempDir);
-    expect(byteProc.exitCode).not.toBe(0);
-    const byteErr = JSON.parse(byteProc.stdout.toString() || byteProc.stderr.toString());
-    expect(byteErr.error?.code || byteErr.code).toBe("UNSUPPORTED_BUILD_MODE");
 
     const packDryProc = runCli(["pack", "--dry-run", "--json"], tempDir);
     expect(packDryProc.exitCode).toBe(0);

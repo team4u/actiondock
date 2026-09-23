@@ -644,7 +644,7 @@ export class DefaultActionDockHost implements ActionDockHost {
       const runId = randomUUID();
       let code = err.code || ACTION_NOT_FOUND;
       let message = err.message || String(err);
-      if (code === PACKAGE_NOT_FOUND || message.startsWith("PACKAGE_NOT_FOUND")) {
+      if (code === PACKAGE_NOT_FOUND) {
         code = PACKAGE_NOT_FOUND;
         const parsed = parseRefLoose(ref);
         if (parsed.packageId) {

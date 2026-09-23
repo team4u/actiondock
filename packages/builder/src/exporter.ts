@@ -41,19 +41,6 @@ export class SkillExporter {
    * @returns 导出产物详细描述
    */
   public async export(options: SkillExporterOptions): Promise<SkillExportResult> {
-    // 彻底废弃旧的独立二进制编译分支与参数
-    if (
-      options.standalone ||
-      (options.mode as string) === "standalone" ||
-      options.target !== undefined ||
-      options.bytecode !== undefined
-    ) {
-      throw new BuilderError(
-        "The '--standalone' mode has been removed in ActionDock 2.0. Please use '--mode node' for self-contained Node.js directory skills, or '--mode source' for source-based skills.",
-        "UNSUPPORTED_BUILD_MODE"
-      );
-    }
-
     const root = resolve(options.projectRoot);
     const mode: "source" | "node" = options.mode === "node" ? "node" : "source";
 

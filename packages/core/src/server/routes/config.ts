@@ -1,8 +1,26 @@
-import { CAPABILITY_UNAVAILABLE } from "../../errors";
+import {
+  CAPABILITY_UNAVAILABLE,
+  INVALID_ARGUMENT,
+  INVALID_PACKAGE_ID,
+  PACKAGE_NOT_ALLOWED,
+  PACKAGE_NOT_FOUND,
+  PATH_TRAVERSAL,
+} from "../../errors";
 import { resolveEnvValue } from "../../runtime";
 import { isSecretConfigKey, maskSecretValue, sanitizeConfigDefinitions } from "../../storage";
 import { readJsonBody } from "../body";
 import { getSubPath, jsonResponse, resolveTargetPackageId, type RouteContext } from "./common";
+
+function isClientConfigError(err: any): boolean {
+  return (
+    err?.code === PACKAGE_NOT_FOUND ||
+    err?.code === INVALID_PACKAGE_ID ||
+    err?.code === PATH_TRAVERSAL ||
+    err?.code === INVALID_ARGUMENT ||
+    err?.status === 400 ||
+    err?.status === 404
+  );
+}
 
 /**
  * 处理配置元数据与当前值读取、更新及删除接口。
@@ -72,10 +90,7 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
           corsHeaders
         );
       }
-      const isClient =
-        err.message?.includes("Unknown or unregistered package") ||
-        err.message?.includes("Invalid packageId") ||
-        err.message?.includes("escapes boundary");
+      const isClient = isClientConfigError(err);
       return jsonResponse(
         { ok: false, error: { code: isClient ? "INVALID_ARGUMENT" : "CONFIG_ENV_ERROR", message: err.message } },
         isClient ? 400 : 500,
@@ -121,10 +136,7 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
           corsHeaders
         );
       }
-      const isClient =
-        err.message?.includes("Unknown or unregistered package") ||
-        err.message?.includes("Invalid packageId") ||
-        err.message?.includes("escapes boundary");
+      const isClient = isClientConfigError(err);
       return jsonResponse(
         { ok: false, error: { code: isClient ? "INVALID_ARGUMENT" : "CONFIG_LIST_ERROR", message: err.message } },
         isClient ? 400 : 500,
@@ -164,10 +176,7 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
           corsHeaders
         );
       }
-      const isClient =
-        err.message?.includes("Unknown or unregistered package") ||
-        err.message?.includes("Invalid packageId") ||
-        err.message?.includes("escapes boundary");
+      const isClient = isClientConfigError(err);
       return jsonResponse(
         { ok: false, error: { code: isClient ? "INVALID_ARGUMENT" : "CONFIG_SET_ERROR", message: err.message } },
         isClient ? 400 : 500,
@@ -200,10 +209,7 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
           corsHeaders
         );
       }
-      const isClient =
-        err.message?.includes("Unknown or unregistered package") ||
-        err.message?.includes("Invalid packageId") ||
-        err.message?.includes("escapes boundary");
+      const isClient = isClientConfigError(err);
       return jsonResponse(
         { ok: false, error: { code: isClient ? "INVALID_ARGUMENT" : "CONFIG_DELETE_ERROR", message: err.message } },
         isClient ? 400 : 500,

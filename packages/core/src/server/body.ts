@@ -1,3 +1,5 @@
+import { ActionDockError } from "../errors";
+
 /**
  * 默认单次 HTTP 请求体最大字节上限（1 MiB）。
  */
@@ -6,22 +8,22 @@ export const DEFAULT_MAX_BODY_BYTES = 1024 * 1024; // 1 MiB
 /**
  * 请求体超出最大允许体积时抛出的异常（对应 HTTP 413 Payload Too Large）。
  */
-export class RequestTooLargeError extends Error {
-  public code = "REQUEST_TOO_LARGE";
+export class RequestTooLargeError extends ActionDockError {
   constructor(message = "Request body exceeds maximum allowed size") {
-    super(message);
+    super("REQUEST_TOO_LARGE", message);
     this.name = "RequestTooLargeError";
+    Object.setPrototypeOf(this, RequestTooLargeError.prototype);
   }
 }
 
 /**
  * 请求体非合法 JSON 格式时抛出的异常（对应 HTTP 400 Bad Request）。
  */
-export class InvalidJsonError extends Error {
-  public code = "INVALID_JSON";
+export class InvalidJsonError extends ActionDockError {
   constructor(message = "Failed to parse request body as JSON") {
-    super(message);
+    super("INVALID_JSON", message);
     this.name = "InvalidJsonError";
+    Object.setPrototypeOf(this, InvalidJsonError.prototype);
   }
 }
 

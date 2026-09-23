@@ -67,28 +67,36 @@ export function areVersionsCompatible(v1: string, v2: string): boolean {
   return true;
 }
 
+import {
+  ActionDockError,
+  ACTION_PACKAGE_VERSION_CONFLICT,
+  UNDECLARED_ACTION_DEPENDENCY,
+} from "../errors";
+
 /**
  * 版本冲突错误。
  */
-export class ActionPackageVersionConflictError extends Error {
-  readonly code = "ACTION_PACKAGE_VERSION_CONFLICT";
+export class ActionPackageVersionConflictError extends ActionDockError {
   readonly packageId: string;
   readonly conflicts: Array<{ requester: string; rangeOrVersion: string }>;
 
   constructor(packageId: string, conflicts: Array<{ requester: string; rangeOrVersion: string }>) {
     const details = conflicts.map((c) => `'${c.requester}' 要求 '${c.rangeOrVersion}'`).join(", ");
-    super(`ACTION_PACKAGE_VERSION_CONFLICT: 逻辑包 '${packageId}' 存在不可收敛的版本冲突: ${details}`);
+    super(
+      ACTION_PACKAGE_VERSION_CONFLICT,
+      `ACTION_PACKAGE_VERSION_CONFLICT: 逻辑包 '${packageId}' 存在不可收敛的版本冲突: ${details}`
+    );
     this.name = "ActionPackageVersionConflictError";
     this.packageId = packageId;
     this.conflicts = conflicts;
+    Object.setPrototypeOf(this, ActionPackageVersionConflictError.prototype);
   }
 }
 
 /**
  * 未声明依赖调用拦截错误。
  */
-export class UndeclaredActionDependencyError extends Error {
-  readonly code = "UNDECLARED_ACTION_DEPENDENCY";
+export class UndeclaredActionDependencyError extends ActionDockError {
   readonly targetRef: string;
   readonly caller?: string;
 
@@ -96,10 +104,11 @@ export class UndeclaredActionDependencyError extends Error {
     const msg = caller
       ? `UNDECLARED_ACTION_DEPENDENCY: Action '${caller}' 未在 'uses' 中声明对 '${targetRef}' 的跨包依赖`
       : `UNDECLARED_ACTION_DEPENDENCY: 根调用 Action '${targetRef}' 被拒绝: 目标包既非 actiondock.json 直接依赖，亦未被可见 Playbook 委托${reason ? ` (${reason})` : ""}`;
-    super(msg);
+    super(UNDECLARED_ACTION_DEPENDENCY, msg);
     this.name = "UndeclaredActionDependencyError";
     this.targetRef = targetRef;
     this.caller = caller;
+    Object.setPrototypeOf(this, UndeclaredActionDependencyError.prototype);
   }
 }
 

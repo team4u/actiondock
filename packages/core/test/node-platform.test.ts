@@ -9,10 +9,10 @@ import {
   ExecaProcessExecutor,
   NodeFileSystem,
   NodeHttpServer,
+  NodeModuleLoader,
   NodeSqliteDriver,
   SqliteRuntimeStorage,
   SystemClock,
-  TsxModuleLoader,
 } from "../src";
 
 describe("createNodePlatform 平台工厂测试", () => {
@@ -107,7 +107,7 @@ describe("createNodePlatform 平台工厂测试", () => {
 
   describe("存储工厂与驱动支持", () => {
     it("基于 NodeSqliteDriver 创建内存数据库并读写配置与状态", async () => {
-      const platform = createNodePlatform({ useWorker: false });
+      const platform = createNodePlatform();
       const storage = platform.storage.createStorage("test-pkg", { inMemory: true });
 
       expect(storage).toBeInstanceOf(SqliteRuntimeStorage);
@@ -124,7 +124,7 @@ describe("createNodePlatform 平台工厂测试", () => {
 
     it("支持自定义 dataDir 与 customHome 路径配置", async () => {
       const dataDir = join(tempDir, "custom-data");
-      const platform = createNodePlatform({ dataDir, customHome: tempDir, useWorker: false });
+      const platform = createNodePlatform({ dataDir, customHome: tempDir });
 
       const storage = platform.storage.createStorage("scoped-pkg");
       expect(storage.isOpen).toBe(true);
@@ -154,20 +154,12 @@ describe("createNodePlatform 平台工厂测试", () => {
       await storage.close();
     });
 
-    it("默认使用 NodeSqliteDriver 同步存储驱动（useWorker 已废弃并回落同步驱动）", async () => {
+    it("默认使用 NodeSqliteDriver 同步存储驱动", async () => {
       const platform = createNodePlatform();
       const storage = platform.storage.createStorage("worker-default-test", { inMemory: true });
       expect(storage).toBeInstanceOf(SqliteRuntimeStorage);
       expect((storage as any).driver).toBeInstanceOf(NodeSqliteDriver);
       await storage.close();
-
-      // 显式传入 useWorker 时同样回落到同步驱动并保持兼容
-      const warnPlatform = createNodePlatform({ useWorker: true });
-      const warnStorage = warnPlatform.storage.createStorage("worker-fallback-test", {
-        inMemory: true,
-      });
-      expect((warnStorage as any).driver).toBeInstanceOf(NodeSqliteDriver);
-      await warnStorage.close();
     });
   });
 

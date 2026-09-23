@@ -270,18 +270,130 @@ export const INPUT_FILE_NOT_FOUND = "INPUT_FILE_NOT_FOUND";
 /** 输入文件或流读取失败 */
 export const INPUT_FILE_READ_FAILED = "INPUT_FILE_READ_FAILED";
 
+/** 命令参数或选项非法 */
+export const INVALID_ARGUMENT = "INVALID_ARGUMENT";
+
+/** 目标包未列入白名单 */
+export const PACKAGE_NOT_ALLOWED = "PACKAGE_NOT_ALLOWED";
+
+/** 包标识符格式非法或包含越界字符 */
+export const INVALID_PACKAGE_ID = "INVALID_PACKAGE_ID";
+
+/** 路径越界违规访问 */
+export const PATH_TRAVERSAL = "PATH_TRAVERSAL";
+
+/** 状态键存在多命名空间歧义 */
+export const AMBIGUOUS_STATE_KEY = "AMBIGUOUS_STATE_KEY";
+
+/** 目标运行记录未找到 */
+export const RUN_NOT_FOUND = "RUN_NOT_FOUND";
+
+/** 目标运行已进入终态不可操作 */
+export const RUN_ALREADY_FINISHED = "RUN_ALREADY_FINISHED";
+
+/**
+ * ActionDock 统一基础结构化异常类。
+ * 全仓各领域异常与跨层透传异常的统一事实源基类。
+ */
+export class ActionDockError<T = any> extends Error {
+  public readonly code: string;
+  public readonly details?: T;
+
+  constructor(code: string, message: string, details?: T) {
+    super(message);
+    this.name = "ActionDockError";
+    this.code = code;
+    this.details = details;
+    Object.setPrototypeOf(this, ActionDockError.prototype);
+  }
+}
+
+/**
+ * 集中定义的标准结构化错误码联合类型。
+ */
+export type ErrorCode =
+  | typeof PACKAGE_NOT_FOUND
+  | typeof ACTION_PACKAGE_VERSION_CONFLICT
+  | typeof ACTION_NOT_FOUND
+  | typeof ACTION_LOAD_FAILED
+  | typeof ACTION_FAILED
+  | typeof ACTION_TIMEOUT
+  | typeof ACTION_CANCELLED
+  | typeof INPUT_VALIDATION_FAILED
+  | typeof OUTPUT_VALIDATION_FAILED
+  | typeof INPUT_NOT_JSON
+  | typeof OUTPUT_NOT_JSON
+  | typeof ACTION_SUBRUN_LIMIT
+  | typeof ACTION_CALL_CYCLE
+  | typeof UNDECLARED_ACTION_DEPENDENCY
+  | typeof INVALID_ACTION_REF
+  | typeof IDEMPOTENCY_CONFLICT
+  | typeof EXECUTION_FAILED
+  | typeof UNHANDLED_EXECUTION_ERROR
+  | typeof RUN_REPOSITORY_UNAVAILABLE
+  | typeof RUN_PERSISTENCE_FAILED
+  | typeof STANDALONE_ASYNC_UNSUPPORTED
+  | typeof HOST_PROCESS_EXITED
+  | typeof EXECUTION_ABORTED
+  | typeof TIMEOUT
+  | typeof NETWORK_ERROR
+  | typeof REMOTE_STREAM_UNAVAILABLE
+  | typeof CAPABILITY_UNAVAILABLE
+  | typeof STATE_KEY_NOT_FOUND
+  | typeof STORAGE_BUSY
+  | typeof PROJECT_BUSY
+  | typeof PROJECT_RECOVERY_REQUIRED
+  | typeof STORAGE_WORKER_EXITED
+  | typeof EVENT_BACKPRESSURE_LIMIT
+  | typeof EVENT_CURSOR_EXPIRED
+  | typeof PROCESS_OUTPUT_LIMIT
+  | typeof PROCESS_SPAWN_ERROR
+  | typeof PROCESS_CANCELLED
+  | typeof PROCESS_TIMEOUT
+  | typeof UNAUTHORIZED
+  | typeof NOT_FOUND
+  | typeof SERVER_ERROR
+  | typeof ACCESS_DENIED
+  | typeof UNSUPPORTED_CAPABILITY
+  | typeof CONTROL_BUSY
+  | typeof CONTROL_EXPIRED
+  | typeof CONTROL_REVOKED
+  | typeof PROCESS_QUARANTINED
+  | typeof PROCESS_LOST
+  | typeof REQUEST_CONFLICT
+  | typeof INPUT_OUTCOME_UNKNOWN
+  | typeof OUTPUT_GAP
+  | typeof OUTPUT_UNAVAILABLE
+  | typeof INVALID_CURSOR
+  | typeof QUEUE_FULL
+  | typeof QUOTA_EXCEEDED
+  | typeof INPUT_CLOSED
+  | typeof INVALID_FLAT_ARGUMENT
+  | typeof INVALID_JSON
+  | typeof INVALID_JSON_LITERAL
+  | typeof INPUT_PATH_CONFLICT
+  | typeof FLAT_INPUT_LIMIT_EXCEEDED
+  | typeof INPUT_LIMIT_EXCEEDED
+  | typeof INPUT_POLICY_VIOLATION
+  | typeof INPUT_CONFLICT
+  | typeof INPUT_FILE_NOT_FOUND
+  | typeof INPUT_FILE_READ_FAILED
+  | typeof INVALID_ARGUMENT
+  | typeof PACKAGE_NOT_ALLOWED
+  | typeof INVALID_PACKAGE_ID
+  | typeof PATH_TRAVERSAL
+  | typeof AMBIGUOUS_STATE_KEY
+  | typeof RUN_NOT_FOUND
+  | typeof RUN_ALREADY_FINISHED
+  | (string & {});
+
 /**
  * 进程领域结构化异常类。
  */
-export class ProcessError extends Error {
-  public readonly code: string;
-  public readonly details?: Record<string, unknown>;
-
+export class ProcessError extends ActionDockError {
   constructor(code: string, message: string, details?: Record<string, unknown>) {
-    super(message);
+    super(code, message, details);
     this.name = "ProcessError";
-    this.code = code;
-    this.details = details;
     Object.setPrototypeOf(this, ProcessError.prototype);
   }
 }

@@ -5,7 +5,7 @@ import type {
   ProcessControlAction,
   ProcessInfo,
 } from "@actiondock/sdk";
-import type { ProcessDriverHandle } from "./driver";
+import type { ProcessDriverHandle, ProcessHandle } from "./driver";
 import type { ProcessRequestKey } from "./metadata-store";
 import type { ProcessOutputLog } from "./output-log";
 import type { EvictedOutputTombstone } from "./terminal-output-cache";
@@ -60,7 +60,7 @@ export interface ManagedProcessRecord {
   info: ProcessInfo;
   owner: ProcessOwner;
   scope: string;
-  handle?: ProcessDriverHandle;
+  handle?: ProcessHandle & ProcessDriverHandle;
   outputLog: ProcessOutputLog;
   outputUnavailable?: boolean;
   outputTombstone?: EvictedOutputTombstone;

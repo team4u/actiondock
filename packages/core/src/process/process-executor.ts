@@ -30,7 +30,7 @@ import {
   UNSUPPORTED_CAPABILITY,
   ProcessError,
 } from "../errors";
-import type { ProcessDriver, ProcessDriverCallbacks, ProcessDriverHandle } from "./driver";
+import type { ProcessDriver, ProcessDriverCallbacks, ProcessDriverHandle, ProcessObserver } from "./driver";
 import { NodeProcessDriver, killProcessGroup } from "./process-driver";
 import { RunExecutor } from "./run-executor";
 import type { ProcessExecutor } from "../runtime/process";
@@ -258,7 +258,13 @@ export class NodeProcessExecutor implements ProcessExecutor {
       }
 
       try {
-        handle = await this.driver.spawn(processId, spec, callbacks);
+        const observer: ProcessObserver = {
+          output: (stream, data) => callbacks.onOutput(stream, data),
+          exited: (exit) => callbacks.onExit(exit),
+          outputClosed: (reason) => callbacks.onOutputClosed?.(reason),
+          fault: (err) => callbacks.onError(err),
+        };
+        handle = (await this.driver.spawn(spec, observer)) as any;
         if (cancelled || timedOut || outputLimitExceeded) {
           terminateChild("SIGTERM");
         }
@@ -267,7 +273,7 @@ export class NodeProcessExecutor implements ProcessExecutor {
         return;
       }
 
-      if (options.input !== undefined && options.input !== null) {
+      if (options.input !== undefined && options.input !== null && handle) {
         const inputBytes =
           typeof options.input === "string"
             ? new TextEncoder().encode(options.input)

@@ -28,9 +28,6 @@ export function registerExportCommand(program: Command, context?: CliContext): v
       "Export multiple packages as a unified composite Skill bundle (defaults to workspace directory name if omitted)"
     )
     .option("-m, --mode <mode>", "Skill export mode ('source' or 'node')", "source")
-    .option("-s, --standalone", "Export standalone binary skill (removed)")
-    .option("-t, --target <target>", "Target compilation platform (removed)")
-    .option("--bytecode", "Bytecode compilation (removed)")
     .option("-o, --out <path>", "Output skill directory")
     .option("-p, --playbook <playbooks...>", "Only export specific playbook(s) and their dependent actions", parseListOption)
     .option("-a, --actions <actions...>", "Only export specific action(s)", parseListOption)
@@ -43,15 +40,6 @@ export function registerExportCommand(program: Command, context?: CliContext): v
     .option("--require-reproducible", "Require reproducible build and fail if install scripts must run")
     .action(async (rawOptions, cmd) => {
       const options = getEffectiveOptions(rawOptions, cmd);
-      // 彻底删除 --standalone 单文件编译选项
-      if (options.standalone || options.target !== undefined || options.bytecode !== undefined) {
-        throw new ExecutionError(
-          "The '--standalone' option and binary target flags have been removed in ActionDock 2.0. Please use '--mode node' for self-contained Node.js directory skills, or '--mode source' for source-based skills.",
-          undefined,
-          "UNSUPPORTED_BUILD_MODE"
-        );
-      }
-
       const mode = options.mode === "node" ? "node" : "source";
 
       if (options.bundle && mode === "node") {

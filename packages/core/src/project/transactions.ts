@@ -476,7 +476,7 @@ export async function recoverPendingTransactions(
   try {
     releaseLock = acquireProjectLock(projectRoot);
   } catch (err: any) {
-    if (err?.code === "PROJECT_BUSY" || err?.message?.includes("PROJECT_BUSY")) {
+    if (err?.code === "PROJECT_BUSY") {
       // 仅当项目锁被其他活跃进程占用时，安全退出并返回空数组
       return [];
     }

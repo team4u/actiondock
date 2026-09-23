@@ -15,8 +15,8 @@ import {
 } from "../errors";
 import type {
   ProcessDriver,
-  ProcessDriverCallbacks,
-  ProcessDriverHandle,
+  ProcessHandle,
+  ProcessObserver,
 } from "./driver";
 
 /**
@@ -63,10 +63,10 @@ export class RunExecutor {
       rejectError = reject;
     });
 
-    let driverHandle: ProcessDriverHandle | undefined;
+    let driverHandle: ProcessHandle | undefined;
 
-    const callbacks: ProcessDriverCallbacks = {
-      onOutput: (stream, data) => {
+    const observer: ProcessObserver = {
+      output: (stream, data) => {
         if (truncated) return;
         if (stream !== "stdout" && stream !== "stderr") return;
 
@@ -74,7 +74,7 @@ export class RunExecutor {
         if (remaining <= 0) {
           truncated = true;
           if (driverHandle) {
-            void driverHandle.terminate(1000);
+            void this.driver.terminate(driverHandle, 1000);
           }
           return;
         }
@@ -88,7 +88,7 @@ export class RunExecutor {
           totalBytes += slice.byteLength;
           truncated = true;
           if (driverHandle) {
-            void driverHandle.terminate(1000);
+            void this.driver.terminate(driverHandle, 1000);
           }
         } else {
           chunks.push({
@@ -98,10 +98,11 @@ export class RunExecutor {
           totalBytes += data.byteLength;
         }
       },
-      onExit: (exit) => {
+      exited: (exit) => {
         resolveExit(exit);
       },
-      onError: (err) => {
+      outputClosed: () => {},
+      fault: (err) => {
         rejectError(err);
       },
     };
@@ -113,14 +114,14 @@ export class RunExecutor {
         : new ProcessError(PROCESS_CANCELLED, "Process run was cancelled");
     }
 
-    driverHandle = await this.driver.spawn(runProcessId, effectiveSpec, callbacks);
+    driverHandle = await this.driver.spawn(effectiveSpec, observer);
 
     let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
     if (input.timeoutMs > 0) {
       timeoutTimer = setTimeout(() => {
         timedOut = true;
         if (driverHandle) {
-          void driverHandle.terminate(1000);
+          void this.driver.terminate(driverHandle, 1000);
         }
       }, input.timeoutMs);
       if (typeof (timeoutTimer as any)?.unref === "function") {
@@ -132,13 +133,13 @@ export class RunExecutor {
     if (call?.signal) {
       if (call.signal.aborted) {
         if (timeoutTimer) clearTimeout(timeoutTimer);
-        if (driverHandle) void driverHandle.terminate(1000);
+        if (driverHandle) void this.driver.terminate(driverHandle, 1000);
         throw call.signal.reason ?? new ProcessError(PROCESS_CANCELLED, "Process run was cancelled");
       }
       onAbort = () => {
         cancelled = true;
         if (timeoutTimer) clearTimeout(timeoutTimer);
-        if (driverHandle) void driverHandle.terminate(1000);
+        if (driverHandle) void this.driver.terminate(driverHandle, 1000);
       };
       call.signal.addEventListener("abort", onAbort, { once: true });
     }

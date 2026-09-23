@@ -20,42 +20,35 @@ import {
  * 无法识别的异常按防御与透明原则原样抛出，严禁静默吞没。
  */
 export function wrapRemoteError(err: any): never {
-  const msg = String(err?.message || "");
   const code = err?.code || "";
   if (
     code === "CAPABILITY_UNAVAILABLE" ||
-    code === "TARGET_CAPABILITY_UNAVAILABLE" ||
-    msg.includes("CAPABILITY_UNAVAILABLE") ||
-    msg.includes("TARGET_CAPABILITY_UNAVAILABLE") ||
-    msg.includes("Management APIs are not enabled")
+    code === "TARGET_CAPABILITY_UNAVAILABLE"
   ) {
     throw new TargetError(
       TARGET_CAPABILITY_UNAVAILABLE,
       `TARGET_CAPABILITY_UNAVAILABLE: Management APIs are not enabled on remote target`,
-      { originalMessage: msg }
+      { originalMessage: err?.message }
     );
   }
   if (
     code === "PROTOCOL_UNSUPPORTED" ||
-    code === "TARGET_PROTOCOL_UNSUPPORTED" ||
-    msg.includes("PROTOCOL_UNSUPPORTED") ||
-    msg.includes("TARGET_PROTOCOL_UNSUPPORTED")
+    code === "TARGET_PROTOCOL_UNSUPPORTED"
   ) {
     throw new TargetError(
       TARGET_PROTOCOL_UNSUPPORTED,
-      `TARGET_PROTOCOL_UNSUPPORTED: ${msg}`,
-      { originalMessage: msg }
+      `TARGET_PROTOCOL_UNSUPPORTED: ${err?.message || ""}`,
+      { originalMessage: err?.message }
     );
   }
   if (
     code === "TARGET_RESULT_UNKNOWN" ||
-    code === "RESULT_UNKNOWN" ||
-    msg.includes("TARGET_RESULT_UNKNOWN")
+    code === "RESULT_UNKNOWN"
   ) {
     throw new TargetError(
       TARGET_RESULT_UNKNOWN,
-      `TARGET_RESULT_UNKNOWN: ${msg}`,
-      { originalMessage: msg }
+      `TARGET_RESULT_UNKNOWN: ${err?.message || ""}`,
+      { originalMessage: err?.message }
     );
   }
   throw err;
@@ -63,15 +56,8 @@ export function wrapRemoteError(err: any): never {
 
 /**
  * 判定远端状态键访问异常是否为键不存在。
- *
- * 优先读取传输层透传的结构化错误码（fetchRemoteJson 会将响应体 error.code
- * 附加到抛出异常的 code 字段），仅当旧版服务器未透传 code 时回退到
- * HTTP 状态与消息文本兼容嗅探。
+ * 读取结构化错误码与 HTTP 状态码。
  */
 export function isRemoteStateKeyNotFound(err: any): boolean {
-  if (err?.code === STATE_KEY_NOT_FOUND) {
-    return true;
-  }
-  const msg = String(err?.message || "");
-  return err?.status === 404 || msg.includes("404") || msg.includes("not found");
+  return err?.code === STATE_KEY_NOT_FOUND || err?.code === "NOT_FOUND" || err?.status === 404;
 }

@@ -206,23 +206,6 @@ export interface BuildOptions {
   manifest?: ActionDockManifest;
   /** 是否跳过本地相对依赖完整性校验（默认 false） */
   skipDependencyValidation?: boolean;
-
-  /**
-   * 已移除的单文件二进制输出目标平台参数。
-   * 若传入将抛出 UNSUPPORTED_BUILD_MODE 错误。
-   */
-  target?: string;
-
-  /**
-   * 已移除的字节码预编译参数。
-   * 若传入将抛出 UNSUPPORTED_BUILD_MODE 错误。
-   */
-  bytecode?: boolean;
-
-  /**
-   * 代码混淆选项（历史遗留占位字段，目录型构建不再读取）。
-   */
-  minify?: boolean;
 }
 
 /**
@@ -343,15 +326,6 @@ export interface SkillExporterOptions {
   customMdPath?: string;
   /** 所属 Workspace 根目录（可选） */
   workspaceRoot?: string;
-
-  /**
-   * 已废弃的独立单文件编译选项。
-   * 若传入将抛出替代方案提示或错误。
-   */
-  standalone?: boolean;
-  target?: string;
-  bytecode?: boolean;
-  minify?: boolean;
 }
 
 /**

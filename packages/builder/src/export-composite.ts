@@ -8,13 +8,12 @@ import {
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import {
-  generateCompositeSkillMd,
   getPackageSlug,
   loadManifest,
   loadPlaybooks,
   loadProjectConfig,
-  type CompositeSkillPackageInfo,
 } from "@actiondock/core";
+import { generateCompositeSkillMd, type CompositeSkillPackageInfo } from "./skill";
 import { BuilderError } from "./errors";
 import { collectRelativeFiles, getInternalDependencyVersion, replaceDirAtomic } from "./fs-utils";
 import { assertNoFileProtocolDeps, resolveWorkspaceDepVersion } from "./manifest";

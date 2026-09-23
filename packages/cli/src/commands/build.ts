@@ -17,18 +17,8 @@ export function registerBuildCommand(program: Command, context?: CliContext): vo
     .option("--vendor-deps", "Materialize locked production dependencies into the output")
     .option("--allow-install-scripts", "Allow lifecycle install scripts to run during vendor-deps")
     .option("--require-reproducible", "Require reproducible build and fail if install scripts must run")
-    .option("-t, --target <target>", "Target compilation platform (removed)")
-    .option("--bytecode", "Bytecode compilation (removed)")
     .action(async (rawOptions, cmd) => {
       const options = getEffectiveOptions(rawOptions, cmd);
-      // 彻底删除原有单文件二进制输出语义
-      if (options.target !== undefined || options.bytecode !== undefined) {
-        throw new ExecutionError(
-          "Unsupported build mode: '--target' and '--bytecode' standalone single-file binary compilation have been removed in ActionDock 2.0. Directory-based Node.js builds are now the standard distribution format.",
-          undefined,
-          "UNSUPPORTED_BUILD_MODE"
-        );
-      }
 
       const root = options.package
         ? resolvePackageRoot(options.package)

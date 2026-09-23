@@ -19,6 +19,7 @@ import {
 } from "../catalog";
 import type { ActionPackageResolver } from "../project/resolver";
 import { InvocationPolicy } from "../invocation/policy";
+import { ActionDockError, PACKAGE_NOT_FOUND } from "../errors";
 
 /**
  * 宽松解析引用：优先结构化解析，失败时按对象或裸短标识符回退。
@@ -219,10 +220,10 @@ export async function describeActionAcrossApps(
       catalog: effectiveCatalog,
     });
   } catch (err: any) {
-    if (err.code === "PACKAGE_NOT_FOUND" || err.message?.includes("PACKAGE_NOT_FOUND")) {
+    if (err.code === PACKAGE_NOT_FOUND) {
       const parsed = parseRefLoose(ref);
       if (parsed.packageId) {
-        throw new Error(packageNotFoundMessage(parsed.packageId, failedLinkedPackages));
+        throw new ActionDockError(PACKAGE_NOT_FOUND, packageNotFoundMessage(parsed.packageId, failedLinkedPackages));
       }
     }
     throw err;

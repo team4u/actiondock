@@ -37,17 +37,18 @@ export const TARGET_CAPABILITY_UNAVAILABLE = "TARGET_CAPABILITY_UNAVAILABLE";
 export const TARGET_RESULT_UNKNOWN = "TARGET_RESULT_UNKNOWN";
 export const TARGET_CLOSED = "TARGET_CLOSED";
 
+import { ActionDockError } from "../errors";
+
 /**
  * 结构化 Target 异常类。
  */
-export class TargetError extends Error {
-  readonly code: string;
+export class TargetError extends ActionDockError {
   readonly details?: Record<string, unknown>;
   constructor(code: string, message: string, details?: Record<string, unknown>) {
-    super(message);
+    super(code, message, details);
     this.name = "TargetError";
-    this.code = code;
     this.details = details;
+    Object.setPrototypeOf(this, TargetError.prototype);
   }
 }
 

@@ -282,15 +282,7 @@ export default defineAction({
     expect(exportRes.files).toContain("lib/utils/formatter.ts");
   });
 
-  it("exports Node directory Skill package when mode is node and rejects standalone", async () => {
-    // 验证传入 standalone 选项时严格拒绝
-    await expect(
-      exportSkill({
-        projectRoot: tempDir,
-        standalone: true,
-      })
-    ).rejects.toThrow();
-
+  it("exports Node directory Skill package when mode is node", async () => {
     const exportRes = await exportSkill({
       projectRoot: tempDir,
       mode: "node",
@@ -399,19 +391,5 @@ export default defineAction({
     expect(listData.length).toBe(1);
     expect(listData[0].id).toBe("sample.greet");
   }, 30000);
-
-  it("throws BuilderError with UNSUPPORTED_BUILD_MODE when target or bytecode is passed", async () => {
-    let err: any;
-    try {
-      await buildProject({
-        projectRoot: tempDir,
-        bytecode: true,
-      });
-    } catch (e) {
-      err = e;
-    }
-    expect(err).toBeDefined();
-    expect(err.code).toBe("UNSUPPORTED_BUILD_MODE");
-  });
 });
 
