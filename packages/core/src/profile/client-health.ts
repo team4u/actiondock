@@ -3,7 +3,7 @@ import type { RemoteHealthResult } from "./types";
 import {
   assertSecureTransport,
   buildHeaders,
-  fetchWithProtocolFallback,
+  fetchRemoteRoute,
   type RemoteClientRequestOptions,
 } from "./client-transport";
 import { getInsecureDispatcher } from "../server/dispatcher";
@@ -50,7 +50,7 @@ export async function checkRemoteHealth(
       (fetchInit as any).tls = { rejectUnauthorized: false };
     }
 
-    const res = await fetchWithProtocolFallback(normalizeServerUrl(serverUrl), "/api/v2/health", fetchInit);
+    const res = await fetchRemoteRoute(normalizeServerUrl(serverUrl), "/api/v2/health", fetchInit);
 
     const latencyMs = Date.now() - startTime;
 

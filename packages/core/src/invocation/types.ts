@@ -7,7 +7,6 @@ import type {
 } from "@actiondock/sdk";
 import { randomUUID } from "node:crypto";
 import type { ProcessOwner } from "../process";
-import type { RuntimePlatform } from "../platform/types";
 import { createPackageIdentity, type PackageIdentity } from "../runtime/identity";
 
 export { createPackageIdentity };
@@ -68,8 +67,6 @@ export interface InvocationContext {
   readonly progress?: ProgressReporter;
   /** 进程执行器 */
   readonly process?: ProcessAPI;
-  /** 运行时底层平台 */
-  readonly platform?: RuntimePlatform;
   /** 进程属主身份 */
   readonly owner?: ProcessOwner;
 }
@@ -109,7 +106,6 @@ export function createInvocationContext(options: CreateInvocationContextOptions)
     logger: options.logger,
     progress: options.progress,
     process: options.process,
-    platform: options.platform,
     owner: options.owner ?? {
       tenantId: options.tenantId || "default",
       principalId: options.principalId || "default",
@@ -141,8 +137,6 @@ export interface CreateRootInvocationContextOptions {
   maxCallDepth?: number;
   /** 外部进程执行器注入 */
   process?: ProcessAPI;
-  /** 可选的底层运行平台契约 */
-  platform?: RuntimePlatform;
   /** 租户标识 */
   tenantId?: string;
   /** 主体标识 */
@@ -179,7 +173,6 @@ export function createRootInvocationContext(options: CreateRootInvocationContext
     logger: options.logger,
     progress: options.progress,
     process: options.process,
-    platform: options.platform,
     owner: options.owner ?? {
       tenantId: options.tenantId || "default",
       principalId: options.principalId || "default",

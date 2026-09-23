@@ -41,17 +41,8 @@ export const OUTPUT_NOT_JSON = "OUTPUT_NOT_JSON";
 /** 根运行并发子任务数达到上限 */
 export const ACTION_SUBRUN_LIMIT = "ACTION_SUBRUN_LIMIT";
 
-/** 子任务数达限错误的别名标记（details.alias 专用，非独立错误码） */
-export const MAX_SUBRUNS_REACHED = "MAX_SUBRUNS_REACHED";
-
 /** Action 调用链出现环路 */
 export const ACTION_CALL_CYCLE = "ACTION_CALL_CYCLE";
-
-/** 调用链环路检测的别名标记（details.alias 专用，非独立错误码） */
-export const ACTION_CYCLE_DETECTED = "ACTION_CYCLE_DETECTED";
-
-/** 调用链深度超限的别名标记（details.alias 专用，非独立错误码） */
-export const ACTION_MAX_DEPTH_EXCEEDED = "ACTION_MAX_DEPTH_EXCEEDED";
 
 /** 跨包调用未在 uses 中声明依赖 */
 export const UNDECLARED_ACTION_DEPENDENCY = "UNDECLARED_ACTION_DEPENDENCY";
@@ -431,10 +422,7 @@ export type ErrorCode =
   | typeof INPUT_NOT_JSON
   | typeof OUTPUT_NOT_JSON
   | typeof ACTION_SUBRUN_LIMIT
-  | typeof MAX_SUBRUNS_REACHED
   | typeof ACTION_CALL_CYCLE
-  | typeof ACTION_CYCLE_DETECTED
-  | typeof ACTION_MAX_DEPTH_EXCEEDED
   | typeof UNDECLARED_ACTION_DEPENDENCY
   | typeof INVALID_ACTION_REF
   | typeof IDEMPOTENCY_CONFLICT

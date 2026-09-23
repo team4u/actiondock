@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import type {
   ActionDefinition,
@@ -14,8 +15,10 @@ import type {
 } from "@actiondock/sdk";
 import { parseActionRef } from "../catalog/resolve-action";
 import { computeDigest } from "../project/digest";
+import { loadActions, loadProjectConfig } from "../project/loader";
 import type { ProjectConfig } from "../project/types";
 import type { Clock } from "../runtime/clock";
+import type { ModuleLoader } from "../runtime/module-loader";
 import { type EventSink, InMemoryEventSink } from "../runtime/events";
 import { ActionRunner, type ExecutionHandle } from "../runtime/runner";
 import {
@@ -28,7 +31,6 @@ import {
   describeActionLoadFailure,
 } from "../errors";
 import { resultStatusToRunStatus, type RuntimeStorage } from "../storage/types";
-import type { RuntimePlatform } from "../platform/types";
 import { createPackageIdentity, type PackageIdentity } from "../runtime/identity";
 import type {
   ActionInvoker,
@@ -76,6 +78,8 @@ export class DefaultExecutionService implements ExecutionService {
   public readonly packageId: string;
   private storage: RuntimeStorage;
   private projectConfig?: ProjectConfig;
+  private projectRoot?: string;
+  private moduleLoader?: ModuleLoader;
   public readonly eventSink: EventSink;
   public readonly packageInstanceId: string;
   public readonly generationId: string;
@@ -86,7 +90,6 @@ export class DefaultExecutionService implements ExecutionService {
   private logger?: Logger;
   private clock?: Clock;
   private process?: ProcessAPI;
-  private platform?: RuntimePlatform;
   private actionResolver?: LocalActionResolver;
   private activeRuns = new Map<string, ActiveRun>();
   private globalStorage?: RuntimeStorage;
@@ -107,7 +110,9 @@ export class DefaultExecutionService implements ExecutionService {
     this.generationId = this.identity.generation;
     this.hostSessionId = options.hostSessionId;
     this.projectConfig = options.projectConfig;
-    this.eventSink = options.eventSink || (options.platform as any)?.eventSink || new InMemoryEventSink();
+    this.projectRoot = options.projectRoot;
+    this.moduleLoader = options.moduleLoader;
+    this.eventSink = options.eventSink || new InMemoryEventSink();
     this.maxActiveRuns = options.maxActiveRuns || 32;
     this.ownerId = options.ownerId || `host-${randomUUID().slice(0, 8)}`;
     this.actionResolver = options.actionResolver;
@@ -115,8 +120,8 @@ export class DefaultExecutionService implements ExecutionService {
     this.actionInvoker = options.actionInvoker;
     this.storage = options.storage;
     this.globalStorage = options.globalStorage;
-    this.clock = options.clock ?? options.platform?.clock;
-    this.process = options.process ?? options.platform?.process;
+    this.clock = options.clock;
+    this.process = options.process;
 
     this._runner = new ActionRunner({
       identity: this.identity,
@@ -129,15 +134,11 @@ export class DefaultExecutionService implements ExecutionService {
       actions: options.actions,
       process: this.process,
       clock: this.clock,
-      platform: options.platform,
+      moduleLoader: this.moduleLoader,
       actionResolver: this.actionResolver,
       customHome: options.customHome,
       actionInvoker: this.actionInvoker,
     });
-  }
-
-  public get runner(): ActionRunner {
-    return this._runner;
   }
 
   public setActionInvoker(invoker?: ActionInvoker): void {
@@ -244,7 +245,7 @@ export class DefaultExecutionService implements ExecutionService {
       const targetActionId = parsedRef.actionId;
       const targetPackageId = parsedRef.packageId || this.packageId;
       const actionRef = `${targetPackageId}/${targetActionId}`;
-      const effectiveClock = context.platform?.clock ?? this.clock;
+      const effectiveClock = this.clock;
 
       // requestId 幂等检查与去重处理
       const gateResult = await this.checkIdempotencyGate(
@@ -308,8 +309,7 @@ export class DefaultExecutionService implements ExecutionService {
         timeoutMs: context.timeoutMs,
         progress: bridge.progressReporter,
         logger: bridge.executionLogger,
-        process: context.process || context.platform?.process || this.process,
-        platform: context.platform || this.platform,
+        process: context.process || this.process,
         packageInstanceId: context.package.instanceId,
         generationId: context.package.generation,
         tenantId: context.owner?.tenantId || context.tenantId,
@@ -476,6 +476,44 @@ export class DefaultExecutionService implements ExecutionService {
         const targetAction = await this.resolveTargetAction(parsedRef);
         if (targetAction) {
           action = targetAction;
+        } else if (this.projectRoot && existsSync(this.projectRoot)) {
+          let config: ProjectConfig;
+          try {
+            config = this.projectConfig || loadProjectConfig(this.projectRoot);
+          } catch (err: any) {
+            resolveError = describeActionLoadFailure(err, {
+              actionId: targetActionId,
+              packageId: this.packageId,
+              projectRoot: this.projectRoot,
+            });
+            return { runner: runnerToUse, action: undefined, resolveError };
+          }
+
+          let actionsMap: Map<string, ActionDefinition>;
+          try {
+            actionsMap = await loadActions(this.projectRoot, config.actionsDir, {
+              loader: this.moduleLoader,
+            });
+          } catch (err: any) {
+            resolveError = describeActionLoadFailure(err, {
+              actionId: targetActionId,
+              packageId: this.packageId,
+              projectRoot: this.projectRoot,
+            });
+            return { runner: runnerToUse, action: undefined, resolveError };
+          }
+
+          const matched = actionsMap.get(targetActionId);
+          if (matched) {
+            action = matched;
+            runnerToUse.registerAction(targetActionId, matched);
+          } else {
+            resolveError = {
+              code: ACTION_NOT_FOUND,
+              message: `Action '${targetActionId}' not found in package '${targetPackageId}'`,
+              details: resolution.reason ? { reason: resolution.reason } : undefined,
+            };
+          }
         } else {
           resolveError = {
             code: ACTION_NOT_FOUND,
@@ -487,6 +525,22 @@ export class DefaultExecutionService implements ExecutionService {
     }
 
     return { runner: runnerToUse, action, resolveError };
+  }
+
+  /**
+   * 解析指定 Action 定义（供 PackageRuntime 或内部使用）。
+   */
+  public async resolveAction(ref: ActionRef | string): Promise<ActionDefinition | undefined> {
+    let parsedRef: ActionRef;
+    try {
+      parsedRef = parseActionRef(ref);
+    } catch {
+      parsedRef = typeof ref === "object" ? ref : { actionId: ref };
+    }
+    const targetActionId = parsedRef.actionId;
+    const targetPackageId = parsedRef.packageId || this.packageId;
+    const target = await this.resolveExecutionTarget(parsedRef, targetPackageId, targetActionId);
+    return target.action;
   }
 
   /**

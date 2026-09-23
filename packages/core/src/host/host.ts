@@ -416,15 +416,7 @@ export class DefaultActionDockHost implements ActionDockHost {
 
   private bindRuntime(runtime: PackageRuntime): void {
     const invoker = this.createActionInvoker(runtime);
-    if (typeof (runtime as any).setActionInvoker === "function") {
-      (runtime as any).setActionInvoker(invoker);
-    } else if (runtime.executionService && typeof (runtime.executionService as any).setActionInvoker === "function") {
-      (runtime.executionService as any).setActionInvoker(invoker);
-    }
-    const runner = runtime.executionService?.runner;
-    if (runner && typeof (runner as any).setActionInvoker === "function") {
-      (runner as any).setActionInvoker(invoker);
-    }
+    runtime.setActionInvoker?.(invoker);
   }
 
   /**
@@ -547,11 +539,10 @@ export class DefaultActionDockHost implements ActionDockHost {
           logger: context.logger,
           progress: context.progress,
           process: context.process,
-          platform: context.platform,
           owner: targetOwner,
         };
 
-        const ticket = await targetRuntime.executionService.start(
+        const ticket = await targetRuntime.startInvocation(
           targetActionId,
           childInput as JsonValue,
           subInvocationContext
@@ -599,14 +590,7 @@ export class DefaultActionDockHost implements ActionDockHost {
     this.catalog = new DefaultActionCatalog(this.graph, (pkgId) => {
       const runtime = this.getRuntime(pkgId);
       if (!runtime) return undefined;
-      const map = new Map<string, any>(runtime.actionsMap);
-      const runnerRegistry = (runtime.executionService as any)?._runner?.registry?.map;
-      if (runnerRegistry) {
-        for (const [k, v] of runnerRegistry) {
-          map.set(k, v);
-        }
-      }
-      return map;
+      return new Map<string, any>((runtime as any).actionsMap);
     });
     this.policy.setVisibilityContext(this.visibility());
   }
@@ -655,10 +639,9 @@ export class DefaultActionDockHost implements ActionDockHost {
     // 接管与恢复：仅持有者身份的 Host 自动将死亡会话或遗留非终态运行收敛为 interrupted；
     // 旁观查询 Host（CLI state/runs/config 命令）跳过本步骤，不动其他进程的在途记录
     if (this.recoverOrphans) {
-      const st = runtime.storage;
-      if (st && typeof st.recoverDeadSessionRuns === "function") {
+      if (typeof (runtime as any).recoverDeadSessionRuns === "function") {
         try {
-          st.recoverDeadSessionRuns(this.hostSessionId);
+          (runtime as any).recoverDeadSessionRuns(this.hostSessionId);
         } catch (err) {
           // 单包恢复失败不阻断整体接管流程，但必须可观测
           console.warn(
@@ -856,11 +839,10 @@ export class DefaultActionDockHost implements ActionDockHost {
       hostSessionId: this.hostSessionId,
       maxCallDepth: this.maxCallDepth,
       process: this.options.process,
-      platform: this.options.platform,
     });
 
     // 调度目标包执行服务
-    return targetRuntime.executionService.start(
+    return targetRuntime.startInvocation(
       targetActionId,
       input,
       rootContext
@@ -932,12 +914,7 @@ export class DefaultActionDockHost implements ActionDockHost {
     options?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number }
   ): AsyncIterable<ExecutionEvent> {
     for (const runtime of this.listRuntimes()) {
-      if (runtime.executionService?.getActiveHandle?.(runId)) {
-        return runtime.events(runId, options);
-      }
-    }
-    for (const runtime of this.listRuntimes()) {
-      const storageRecord = runtime.storage?.getRun?.(runId);
+      const storageRecord = (runtime as any).storage?.getRun?.(runId);
       if (storageRecord) {
         return runtime.events(runId, options);
       }
@@ -946,7 +923,7 @@ export class DefaultActionDockHost implements ActionDockHost {
     if (firstRuntime) {
       return firstRuntime.events(runId, options);
     }
-    return (async function* () {})();
+    return this.eventSink.subscribe(runId, options);
   }
 
   private getGlobalStorage(): RuntimeStorage {

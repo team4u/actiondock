@@ -538,7 +538,7 @@ describe("@actiondock/sdk", () => {
     expect(res).toEqual({ valid: true });
   });
 
-  it("detects cyclic action invocations and throws ACTION_CYCLE_DETECTED", async () => {
+  it("detects cyclic action invocations and throws ACTION_CALL_CYCLE", async () => {
     const loopA = defineAction({
       async run(_input: any, ctx) {
         return ctx.actions.invoke("test.loop-b", {});
@@ -562,7 +562,7 @@ describe("@actiondock/sdk", () => {
       await runtime.run(loopA, {});
       expect(true).toBe(false);
     } catch (err: any) {
-      expect(["ACTION_CALL_CYCLE", "ACTION_CYCLE_DETECTED"]).toContain(err.code);
+      expect(err.code).toBe("ACTION_CALL_CYCLE");
     }
   });
 

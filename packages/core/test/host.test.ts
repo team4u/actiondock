@@ -499,7 +499,7 @@ actions:
 
     const callerApp = host.getRuntime("source.caller")!;
     const testRunId = "run-caller-test";
-    const res = await callerApp.executionService.execute("call-worker", {}, {
+    const ticket = await callerApp.startInvocation("call-worker", {}, {
       runId: testRunId,
       rootRunId: testRunId,
       callStack: [],
@@ -512,6 +512,7 @@ actions:
         generationId: "custom-caller-gen",
       },
     });
+    const res = await ticket.result!;
     expect(res.ok).toBe(true);
     const data = (res as any).data;
     expect(data.callerOwner).toEqual({
@@ -608,7 +609,7 @@ actions:
     const depthRes = await host.runAction("pkg.depth/stepA", {});
     expect(depthRes.ok).toBe(false);
     if (!depthRes.ok) {
-      expect(["ACTION_CALL_CYCLE", "ACTION_MAX_DEPTH_EXCEEDED"]).toContain(depthRes.error.code);
+      expect(depthRes.error.code).toBe("ACTION_CALL_CYCLE");
     }
 
     // 2. 子任务限额测试：maxSubRuns: 2，第 3 个并发子任务被拒
@@ -616,7 +617,7 @@ actions:
     expect(quotaRes.ok).toBe(true);
     if (quotaRes.ok) {
       const data = quotaRes.data as any;
-      expect(["ACTION_SUBRUN_LIMIT", "MAX_SUBRUNS_REACHED"]).toContain(data.error?.code);
+      expect(data.error?.code).toBe("ACTION_SUBRUN_LIMIT");
     }
 
     await host.close();
@@ -1400,7 +1401,7 @@ actions:
     });
 
     const errorApp = host.getRuntime("pkg.err-run")!;
-    errorApp.executionService.start = async () => {
+    errorApp.startInvocation = async () => {
       const err = new Error("SQLITE_CORRUPT: database disk image is malformed");
       (err as any).code = "SQLITE_CORRUPT";
       throw err;

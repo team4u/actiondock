@@ -238,7 +238,8 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
 
       const runner = new ActionRunner({
         identity: createPackageIdentity({ id: "test-pkg" }),
-        platform: testPlatform,
+        clock: testPlatform.clock,
+        process: testPlatform.process,
         storage: testPlatform.storage.createStorage("test-pkg"),
       });
 
@@ -303,7 +304,8 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
       const identity = createPackageIdentity({ id: "exec-pkg" });
       const service = new DefaultExecutionService({
         identity,
-        platform: testPlatform,
+        clock: testPlatform.clock,
+        process: testPlatform.process,
         storage: memoryStorage,
       });
 

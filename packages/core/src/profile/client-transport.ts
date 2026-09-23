@@ -147,14 +147,14 @@ export function createRemoteFetch(
       (fetchInit as any).tls = { rejectUnauthorized: false };
     }
 
-    return fetchWithProtocolFallback(base, path, fetchInit);
+    return fetchRemoteRoute(base, path, fetchInit);
   };
 }
 
 /**
  * 远端请求单一入口：执行目标协议路由请求。
  */
-export async function fetchWithProtocolFallback(
+export async function fetchRemoteRoute(
   base: string,
   path: string,
   init: RequestInit & { dispatcher?: any }

@@ -907,7 +907,7 @@ describe("ActionRunner", () => {
     const cycleResult = await runner.execute("test.cycle-action", {});
     expect(cycleResult.ok).toBe(false);
     const runs = storage.listRuns();
-    const cycleRun = runs.find((r) => r.error?.code === "ACTION_CALL_CYCLE" || r.error?.code === "ACTION_CYCLE_DETECTED");
+    const cycleRun = runs.find((r) => r.error?.code === "ACTION_CALL_CYCLE");
     expect(cycleRun).toBeDefined();
     expect(cycleRun?.status).toBe("failed");
 
@@ -940,7 +940,7 @@ describe("ActionRunner", () => {
 
     const depthResult = await runner.execute("test.rec-a", {}, { maxCallDepth: 3 });
     expect(depthResult.ok).toBe(false);
-    const depthRun = storage.listRuns().find((r) => r.error?.code === "ACTION_CALL_CYCLE" || r.error?.code === "ACTION_MAX_DEPTH_EXCEEDED");
+    const depthRun = storage.listRuns().find((r) => r.error?.code === "ACTION_CALL_CYCLE");
     expect(depthRun).toBeDefined();
     expect(depthRun?.status).toBe("failed");
 
@@ -1265,7 +1265,8 @@ describe("ActionRunner", () => {
     const runner = new ActionRunner({
       identity: createPackageIdentity({ id: "shared-proc-pkg" }),
       storage,
-      platform,
+      process: platform.process,
+      clock: platform.clock,
       actions: new Map([["probe", probeAction]]),
     });
 

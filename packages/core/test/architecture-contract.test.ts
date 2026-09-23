@@ -8,7 +8,7 @@ import { createPackageRuntime, DefaultPackageRuntime } from "../src/package/runt
 import { ActionRunner } from "../src/runtime/runner";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
 import { createPackageIdentity } from "../src/runtime/identity";
-import { INVOCATION_UNSUPPORTED, UNDECLARED_ACTION_DEPENDENCY } from "../src/errors";
+import { IDEMPOTENCY_CONFLICT, INVOCATION_UNSUPPORTED, UNDECLARED_ACTION_DEPENDENCY } from "../src/errors";
 import { LocalActionDockService } from "../src/service/local";
 import { createActionDock } from "../src/service/factory";
 import type { RunOptions } from "../src/service/types";
@@ -272,8 +272,8 @@ describe("架构核心契约测试：信任边界与局部执行规范", () => {
     });
 
     const runtime = host.getRuntime("pkg.same-package")!;
-    const origInvoker = (runtime.executionService as any).actionInvoker;
-    (runtime.executionService as any).setActionInvoker(async (childAction: any, childInput: any, context: any) => {
+    const origInvoker = ((runtime as any).executionService as any).actionInvoker;
+    ((runtime as any).executionService as any).setActionInvoker(async (childAction: any, childInput: any, context: any) => {
       invokerIntercepted = true;
       return origInvoker(childAction, childInput, context);
     });
@@ -305,18 +305,18 @@ describe("架构核心契约测试：信任边界与局部执行规范", () => {
     });
 
     const runtime = host.getRuntime("pkg.singleton-exec")!;
-    const execServiceFirst = runtime.executionService;
+    const execServiceFirst = (runtime as any).executionService;
 
     // 执行一次动作
     await host.runAction("pkg.singleton-exec/test", {});
 
-    const execServiceSecond = runtime.executionService;
+    const execServiceSecond = (runtime as any).executionService;
     // 实例必须绝对同一
     expect(execServiceFirst).toBe(execServiceSecond);
 
     // 再次执行动作
     await host.runAction("pkg.singleton-exec/test", {});
-    const execServiceThird = runtime.executionService;
+    const execServiceThird = (runtime as any).executionService;
     expect(execServiceFirst).toBe(execServiceThird);
 
     await host.close();
@@ -341,10 +341,10 @@ describe("架构核心契约测试：信任边界与局部执行规范", () => {
 
     // 校验 Runtime 与 ExecutionService 共享同一 PackageIdentity 引用
     expect(runtime.identity).toBe(customIdentity);
-    expect(runtime.executionService.identity).toBe(customIdentity);
+    expect((runtime as any).executionService.identity).toBe(customIdentity);
 
     // 校验 Runner 内部持有的 identity 与传入的实例绝对同一
-    const runner = (runtime.executionService as any).runner;
+    const runner = ((runtime as any).executionService as any)._runner;
     expect(runner.identity).toBe(customIdentity);
     expect(runner.packageId).toBe("pkg.identity-check");
     expect(runner.packageInstanceId).toBe("inst-xyz-99");
@@ -457,7 +457,7 @@ describe("架构核心契约测试：信任边界与局部执行规范", () => {
     const originalClose = runtime.close.bind(runtime);
     runtime.close = async (options?: { graceMs?: number }) => {
       try {
-        const val = runtime.globalStorage?.getConfig("close_phase_key");
+        const val = (runtime as any).globalStorage?.getConfig("close_phase_key");
         globalConfigValueDuringRuntimeClose = val;
         globalStorageAccessibleDuringRuntimeClose = val === "still_alive";
       } catch {
@@ -668,5 +668,244 @@ describe("架构核心契约测试：信任边界与局部执行规范", () => {
     }
 
     await runtime.close();
+  });
+
+  it("契约 15：跨包嵌套调用与直接根调用统一经由目标包唯一 ExecutionService 与 ActionRunner 处理，activeRuns、events、cancel 与 idempotency 契约严格闭环不分裂", async () => {
+    let slowActionRunning = false;
+    let slowActionCancelled = false;
+
+    const workerAction = defineAction({
+      run: async (input: any, ctx: ActionContext) => {
+        return {
+          received: input,
+          runId: ctx.run.id,
+          rootId: ctx.run.rootId,
+          parentId: ctx.run.parentId ?? null,
+        };
+      },
+    });
+
+    const slowAction = defineAction({
+      run: async (_input: any, ctx: ActionContext) => {
+        slowActionRunning = true;
+        ctx.log.info("slowAction in-flight");
+        await new Promise<void>((resolve, reject) => {
+          if (ctx.signal.aborted) {
+            slowActionCancelled = true;
+            return reject(ctx.signal.reason || new Error("Cancelled"));
+          }
+          const onAbort = () => {
+            slowActionCancelled = true;
+            reject(ctx.signal.reason || new Error("Cancelled"));
+          };
+          ctx.signal.addEventListener("abort", onAbort, { once: true });
+        });
+        return { done: true };
+      },
+    });
+
+    const idempotentAction = defineAction({
+      run: async (input: any) => {
+        return { value: input, processed: true };
+      },
+    });
+
+    const callerAction = defineAction({
+      uses: [
+        "pkg.target-b/worker",
+        "pkg.target-b/slow",
+        "pkg.target-b/idempotent",
+      ],
+      run: async (input: any, ctx: ActionContext) => {
+        const target = input.target || "pkg.target-b/worker";
+        return await ctx.actions.invoke(target, input.payload ?? input);
+      },
+    });
+
+    const host = await createActionDockHost({
+      packages: [
+        {
+          projectConfig: {
+            id: "pkg.caller-a",
+            name: "Caller Package A",
+            version: "1.0.0",
+            actions: {
+              caller: {
+                entry: "",
+                uses: [
+                  "pkg.target-b/worker",
+                  "pkg.target-b/slow",
+                  "pkg.target-b/idempotent",
+                ],
+              },
+            },
+          },
+          actions: { caller: callerAction },
+          inMemory: true,
+        },
+        {
+          projectConfig: {
+            id: "pkg.target-b",
+            name: "Target Package B",
+            version: "1.0.0",
+            actions: {
+              worker: { entry: "" },
+              slow: { entry: "" },
+              idempotent: { entry: "" },
+            },
+          },
+          actions: {
+            worker: workerAction,
+            slow: slowAction,
+            idempotent: idempotentAction,
+          },
+          inMemory: true,
+        },
+      ],
+      autoLoadCurrentProject: false,
+    });
+
+    const runtimeA = host.getRuntime("pkg.caller-a")!;
+    const runtimeB = host.getRuntime("pkg.target-b")!;
+    expect(runtimeA).toBeDefined();
+    expect(runtimeB).toBeDefined();
+
+    const execServiceB = (runtimeB as any).executionService;
+    const runnerB = (execServiceB as any)._runner;
+    expect(execServiceB).toBeDefined();
+    expect(runnerB).toBeDefined();
+
+    // 1. 验证直接根调用 B 与 A->B 跨包嵌套调用均由 B 的同一个 ExecutionService 与同一个 ActionRunner 执行
+    const directRes = await host.runAction("pkg.target-b/worker", { msg: "from-root" });
+    expect(directRes.ok).toBe(true);
+    const directData = (directRes as any).data;
+    expect(directData.received).toEqual({ msg: "from-root" });
+    expect(directData.parentId).toBeNull();
+    expect(directData.rootId).toBe(directData.runId);
+
+    const nestedRes = await host.runAction("pkg.caller-a/caller", {
+      target: "pkg.target-b/worker",
+      payload: { msg: "from-nested" },
+    });
+    expect(nestedRes.ok).toBe(true);
+    const nestedData = (nestedRes as any).data;
+    expect(nestedData.received).toEqual({ msg: "from-nested" });
+    expect(nestedData.parentId).toBeDefined();
+    expect(nestedData.parentId).not.toBeNull();
+    expect(nestedData.rootId).not.toBe(nestedData.runId);
+
+    // 持久化记录验证：两个运行都准确记录在 Package B 的存储中，血缘完整
+    const directRecord = await runtimeB.getRun(directData.runId);
+    expect(directRecord).toBeDefined();
+    expect(directRecord?.packageId).toBe("pkg.target-b");
+    expect(directRecord?.actionId).toBe("worker");
+
+    const nestedRecord = await runtimeB.getRun(nestedData.runId);
+    expect(nestedRecord).toBeDefined();
+    expect(nestedRecord?.packageId).toBe("pkg.target-b");
+    expect(nestedRecord?.actionId).toBe("worker");
+    expect(nestedRecord?.parentRunId).toBe(nestedData.parentId);
+
+    // 2. 验证 activeRuns 与 cancel 在根调用与跨包嵌套调用中均在 B 的 ExecutionService 统一跟踪
+    // (a) 根调用 B 异步任务取消
+    slowActionRunning = false;
+    slowActionCancelled = false;
+    const slowDirectTicket = await host.startAction("pkg.target-b/slow", {});
+    expect(slowDirectTicket.runId).toBeDefined();
+    while (!slowActionRunning) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    expect(execServiceB.activeRunsCount).toBeGreaterThanOrEqual(1);
+
+    const cancelDirectRes = await host.cancelRun(slowDirectTicket.runId, "direct cancel");
+    expect(cancelDirectRes.outcome).toBe("requested");
+    const directSlowOutcome = await slowDirectTicket.result!;
+    expect(directSlowOutcome.ok).toBe(false);
+    expect(slowActionCancelled).toBe(true);
+    while (execServiceB.activeRunsCount > 0) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    expect(execServiceB.activeRunsCount).toBe(0);
+
+    // (b) A->B 跨包嵌套调用任务取消
+    slowActionRunning = false;
+    slowActionCancelled = false;
+    const slowNestedTicket = await host.startAction("pkg.caller-a/caller", {
+      target: "pkg.target-b/slow",
+      payload: {},
+    });
+    expect(slowNestedTicket.runId).toBeDefined();
+    while (!slowActionRunning) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    // B 的 executionService 正确跟踪到由嵌套调用派发的活跃运行
+    expect(execServiceB.activeRunsCount).toBeGreaterThanOrEqual(1);
+
+    const cancelNestedRes = await host.cancelRun(slowNestedTicket.runId, "nested cancel");
+    expect(cancelNestedRes.outcome).toBe("requested");
+    const nestedSlowOutcome = await slowNestedTicket.result!;
+    expect(nestedSlowOutcome.ok).toBe(false);
+    expect(slowActionCancelled).toBe(true);
+    while (execServiceB.activeRunsCount > 0) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    expect(execServiceB.activeRunsCount).toBe(0);
+
+    // 3. 验证 events 在根调用与跨包嵌套调用中均能准确收录
+    const eventsReceived: any[] = [];
+    const eventRunTicket = await host.startAction("pkg.target-b/worker", { msg: "event-test" });
+    for await (const evt of host.events(eventRunTicket.runId)) {
+      eventsReceived.push(evt);
+      if (evt.type === "finish") break;
+    }
+    expect(eventsReceived.some((e) => e.type === "status")).toBe(true);
+    expect(eventsReceived.some((e) => e.type === "finish")).toBe(true);
+
+    // 4. 验证 idempotency (requestId) 在根调用与跨包嵌套调用中表现完全一致
+    // (a) 根调用幂等生效
+    const directIdem1 = await host.runAction("pkg.target-b/idempotent", { key: "idem-a" }, { requestId: "req-direct-1" });
+    expect(directIdem1.ok).toBe(true);
+    const directIdem2 = await host.runAction("pkg.target-b/idempotent", { key: "idem-a" }, { requestId: "req-direct-1" });
+    expect(directIdem2.ok).toBe(true);
+    expect(directIdem1.runId).toBe(directIdem2.runId);
+
+    // (b) 根调用幂等参数冲突拦截
+    let directConflictError: any;
+    try {
+      await host.runAction("pkg.target-b/idempotent", { key: "idem-different" }, { requestId: "req-direct-1" });
+    } catch (err: any) {
+      directConflictError = err;
+    }
+    expect(directConflictError).toBeDefined();
+    expect(directConflictError.code).toBe(IDEMPOTENCY_CONFLICT);
+
+    // (c) 嵌套调用幂等生效
+    const nestedIdem1 = await host.runAction("pkg.caller-a/caller", {
+      target: "pkg.target-b/idempotent",
+      payload: { key: "idem-b" },
+    }, { requestId: "req-nested-1" });
+    expect(nestedIdem1.ok).toBe(true);
+
+    const nestedIdem2 = await host.runAction("pkg.caller-a/caller", {
+      target: "pkg.target-b/idempotent",
+      payload: { key: "idem-b" },
+    }, { requestId: "req-nested-1" });
+    expect(nestedIdem2.ok).toBe(true);
+    expect(nestedIdem1.runId).toBe(nestedIdem2.runId);
+
+    // (d) 嵌套调用幂等参数冲突拦截
+    let nestedConflictError: any;
+    try {
+      await host.runAction("pkg.caller-a/caller", {
+        target: "pkg.target-b/idempotent",
+        payload: { key: "idem-conflict" },
+      }, { requestId: "req-nested-1" });
+    } catch (err: any) {
+      nestedConflictError = err;
+    }
+    expect(nestedConflictError).toBeDefined();
+    expect(nestedConflictError.code).toBe(IDEMPOTENCY_CONFLICT);
+
+    await host.close();
   });
 });

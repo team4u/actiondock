@@ -63,12 +63,11 @@ export class DefaultPackageRuntime implements PackageRuntime {
   public readonly generationId: string;
   public readonly packageRoot?: string;
   public readonly projectConfig: ProjectConfig;
-  public readonly platform: RuntimePlatform;
-  public readonly storage: RuntimeStorage;
-  public readonly globalStorage?: RuntimeStorage;
-  public readonly executionService: ExecutionService;
-
-  public readonly actionsMap: Map<string, ActionDefinition>;
+  private readonly platform: RuntimePlatform;
+  private readonly storage: RuntimeStorage;
+  private readonly globalStorage?: RuntimeStorage;
+  private readonly executionService: ExecutionService;
+  private readonly actionsMap: Map<string, ActionDefinition>;
   private readonly options: PackageRuntimeInternalOptions;
   private runtimeConfig: RuntimeConfig;
   private isClosed = false;
@@ -196,7 +195,7 @@ export class DefaultPackageRuntime implements PackageRuntime {
       ownerId: options.ownerId,
       actionResolver: options.actionResolver,
       customHome: options.customHome,
-      platform: this.platform,
+      moduleLoader: this.platform.modules,
       actionInvoker: options.actionInvoker,
     });
 
@@ -332,14 +331,14 @@ export class DefaultPackageRuntime implements PackageRuntime {
         this.executionService.getAction(id) ||
         (spec ? this.executionService.getAction(spec.id) : undefined);
     }
-    if (!liveAction && this.executionService.runner?.resolveAction) {
+    if (!liveAction && this.executionService.resolveAction) {
       try {
         // 仅在本包范围内解析动态动作：限定 packageId 前缀，避免全局兜底搜索把
         // 其他包的动作误计为本包提供者（host 层据此统计候选导致 AMBIGUOUS_ACTION_REF 误报）。
         const qualifiedId = id.includes("/") ? id : `${this.packageId}/${id}`;
-        const resolution = await this.executionService.runner.resolveAction(qualifiedId);
-        if (resolution.status === "found") {
-          liveAction = resolution.action;
+        const resolution = await this.executionService.resolveAction(qualifiedId);
+        if (resolution) {
+          liveAction = resolution;
         }
       } catch {
         // 忽略动态解析异常
@@ -411,7 +410,6 @@ export class DefaultPackageRuntime implements PackageRuntime {
       maxCallDepth: this.options.maxCallDepth,
       logger: this.options.logger,
       process: this.options.process ?? this.platform.process,
-      platform: this.platform,
     });
   }
 
@@ -455,6 +453,18 @@ export class DefaultPackageRuntime implements PackageRuntime {
     return this.executionService.start(actionId, input, context);
   }
 
+  async startInvocation(
+    actionId: string,
+    input: JsonValue,
+    context: InvocationContext
+  ): Promise<ExecutionTicket> {
+    let targetId = actionId;
+    if (targetId.startsWith(`${this.packageId}/`)) {
+      targetId = targetId.slice(this.packageId.length + 1);
+    }
+    return this.executionService.start(targetId, input, context);
+  }
+
   async getRun(runId: string): Promise<RunRecord | undefined> {
     return this.executionService.get(runId);
   }
@@ -473,6 +483,12 @@ export class DefaultPackageRuntime implements PackageRuntime {
   public setActionInvoker(invoker?: ActionInvoker): void {
     if (this.executionService && typeof (this.executionService as any).setActionInvoker === "function") {
       (this.executionService as any).setActionInvoker(invoker);
+    }
+  }
+
+  public recoverDeadSessionRuns(sessionId?: string): void {
+    if (typeof (this.storage as any).recoverDeadSessionRuns === "function") {
+      (this.storage as any).recoverDeadSessionRuns(sessionId);
     }
   }
 

@@ -692,7 +692,7 @@ Execute build and then deploy artifact.
       inMemory: true,
     });
 
-    expect(app.platform).toBe(defaultPlatform);
+    expect((app as any).platform).toBe(defaultPlatform);
     await app.close();
   });
 });

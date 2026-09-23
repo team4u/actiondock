@@ -6,7 +6,7 @@ import { normalizeServerUrl } from "./manager";
 import {
   assertSecureTransport,
   buildHeaders,
-  fetchWithProtocolFallback,
+  fetchRemoteRoute,
   type RemoteClientRequestOptions,
 } from "./client-transport";
 import { buildQueryString, fetchRemoteJson } from "./client-query";
@@ -151,7 +151,7 @@ export async function executeRemoteAction<T = unknown>(
 
     let res: Response;
     try {
-      res = await fetchWithProtocolFallback(
+      res = await fetchRemoteRoute(
         normalizeServerUrl(serverUrl),
         `/api/v2/actions/${encodeURIComponent(actionId)}/run`,
         fetchInit

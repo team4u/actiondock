@@ -212,7 +212,7 @@ export async function describeActionAcrossRuntimes(
   const effectiveCatalog =
     catalog ||
     new DefaultActionCatalog(effectiveGraph, (pkgId) =>
-      runtimes.find((a) => a.packageId === pkgId)?.actionsMap
+      (runtimes.find((a) => a.packageId === pkgId) as any)?.actionsMap
     );
 
   let resolved: ResolvedAction;

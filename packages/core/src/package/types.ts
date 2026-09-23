@@ -15,7 +15,7 @@ import type {
   ExecutionTicket,
   LocalActionResolver,
 } from "../execution/types";
-import type { RunOptions } from "../invocation/types";
+import type { InvocationContext, RunOptions } from "../invocation/types";
 import type { ConfigItemDefinition, ProjectConfig } from "../project/types";
 import type { EventSink } from "../runtime/events";
 import type { RuntimePlatform, StorageFactory, StorageFactoryOptions } from "../platform/types";
@@ -250,16 +250,16 @@ export interface PackageRuntime {
   readonly packageRoot?: string;
   /** 项目配置对象（actiondock.json 解析结果） */
   readonly projectConfig: ProjectConfig;
-  /** 底层运行平台驱动适配契约 */
-  readonly platform: RuntimePlatform;
-  /** 当前包持久化存储实例 */
-  readonly storage: RuntimeStorage;
-  /** 全局持久化存储实例 */
-  readonly globalStorage?: RuntimeStorage;
-  /** 统一执行协调服务实例 */
-  readonly executionService: ExecutionService;
-  /** 预加载的 Action 定义映射表（短标识至定义） */
-  readonly actionsMap: Map<string, ActionDefinition>;
+
+  /**
+   * 受信任内部调用方法（Host 或子任务执行主链调用入口）。
+   * 委托内部 ExecutionService 执行，确保全生命周期指标与事件不发生分裂。
+   */
+  startInvocation(
+    actionId: string,
+    input: JsonValue,
+    context: InvocationContext
+  ): Promise<ExecutionTicket>;
 
   /** 获取当前包元数据信息 */
   info(options?: { exposeDebugInfo?: boolean }): Promise<PackageInfo>;

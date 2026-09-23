@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import type {
   ActionDefinition,
@@ -11,7 +10,6 @@ import type {
   RuntimeError,
 } from "@actiondock/sdk";
 import { parseActionRef } from "../catalog/resolve-action";
-import { loadActions, loadProjectConfig } from "../project/loader";
 import type { ProjectConfig } from "../project/types";
 import {
   ACTION_CALL_CYCLE,
@@ -36,7 +34,7 @@ import { validateSchemaOnly } from "../schema/validator";
 import { validateActionInputValue } from "../json/value-validator";
 import type { RuntimeStorage } from "../storage/types";
 import type { Clock } from "./clock";
-import type { RuntimePlatform } from "../platform/types";
+import type { ModuleLoader } from "./module-loader";
 import { createActionContext, StderrLogger } from "./context";
 import type { ProcessOwner } from "../process";
 import type { PackageIdentity } from "./identity";
@@ -69,7 +67,7 @@ export type LocalActionResolver = (
 /**
  * ActionRunner 初始化配置选项。
  */
-export interface RunnerOptions {
+export interface ActionRunnerOptions {
   /** 显式注入的包物理与快照身份标识值对象（必填单一事实源） */
   identity: PackageIdentity;
   /** 持久化运行时存储实例（SQLite） */
@@ -88,8 +86,8 @@ export interface RunnerOptions {
   process?: ProcessAPI;
   /** 可选的时间与时钟源（默认使用存储内嵌时钟或系统时间） */
   clock?: Clock;
-  /** 可选的底层运行时平台契约 */
-  platform?: RuntimePlatform;
+  /** 可选的源码模块加载器 */
+  moduleLoader?: ModuleLoader;
   /** 仅支持当前包局部 Action 的动态解析委托函数 */
   actionResolver?: LocalActionResolver;
   /** 自定义 ActionDock 用户家目录（用于测试隔离与多租户环境） */
@@ -99,6 +97,9 @@ export interface RunnerOptions {
   /** 子任务调用委托函数 */
   actionInvoker?: ActionInvoker;
 }
+
+/** 兼容旧版 RunnerOptions 导出别名 */
+export type RunnerOptions = ActionRunnerOptions;
 
 /**
  * 启动 Action 执行时的可选控制参数。
@@ -134,8 +135,8 @@ export interface ExecutionStartOptions {
   maxCallDepth?: number;
   /** 外部注入的进程执行器 */
   process?: ProcessAPI;
-  /** 可选的底层运行时平台契约 */
-  platform?: RuntimePlatform;
+  /** 可选的时间与时钟源 */
+  clock?: Clock;
   /** 外部注入的进度报告器 */
   progress?: ProgressReporter;
   /** 外部注入的日志记录器 */
@@ -222,13 +223,13 @@ export class ActionRunner {
   private registry: ActionRegistry;
   private clock?: Clock;
   private process?: ProcessAPI;
-  private platform?: RuntimePlatform;
+  private moduleLoader?: ModuleLoader;
   private customHome?: string;
   private actionResolver?: LocalActionResolver;
   private hostSessionId?: string;
   private actionInvoker?: ActionInvoker;
 
-  constructor(options: RunnerOptions) {
+  constructor(options: ActionRunnerOptions) {
     if (!options.identity) {
       throw new Error("ActionRunner requires 'identity' PackageIdentity option");
     }
@@ -242,7 +243,7 @@ export class ActionRunner {
     this.configOverrides = options.configOverrides || {};
     this.registry = new ActionRegistry(options.actions);
     this.customHome = options.customHome;
-    this.platform = options.platform;
+    this.moduleLoader = options.moduleLoader;
     this.actionInvoker = options.actionInvoker;
     this.actionResolver = options.actionResolver;
 
@@ -251,8 +252,8 @@ export class ActionRunner {
     }
     this.storage = options.storage;
     this.globalStorage = options.globalStorage;
-    this.clock = options.clock ?? options.platform?.clock;
-    this.process = options.process ?? options.platform?.process;
+    this.clock = options.clock;
+    this.process = options.process;
   }
 
   /** 本地 Action 注册表底层映射 */
@@ -340,44 +341,6 @@ export class ActionRunner {
         }
       } catch (err: any) {
         return { status: "not_found", reason: err.message };
-      }
-    }
-
-    // 铁律 4：Runner 仅执行自己所属 Package 的 Action，在本包 projectRoot 下按需加载本地 Action
-    if ((!targetPackageId || targetPackageId === this.packageId) && this.projectRoot && existsSync(this.projectRoot)) {
-      let config: ProjectConfig;
-      try {
-        config = this.projectConfig || loadProjectConfig(this.projectRoot);
-      } catch (err: any) {
-        return {
-          status: "load_failed",
-          error: err instanceof Error ? err : new Error(String(err)),
-          packageId: this.packageId,
-          projectRoot: this.projectRoot,
-        };
-      }
-
-      let actionsMap: Map<string, ActionDefinition>;
-      try {
-        actionsMap = await loadActions(this.projectRoot, config.actionsDir, {
-          loader: this.platform?.modules,
-        });
-      } catch (err: any) {
-        return {
-          status: "load_failed",
-          error: err instanceof Error ? err : new Error(String(err)),
-          packageId: this.packageId,
-          projectRoot: this.projectRoot,
-        };
-      }
-
-      const matched = actionsMap.get(targetActionId);
-      if (matched) {
-        this.actions.set(targetActionId, matched);
-        if (this.packageId) {
-          this.actions.set(`${this.packageId}/${targetActionId}`, matched);
-        }
-        return { status: "found", action: matched };
       }
     }
 
@@ -540,8 +503,8 @@ export class ActionRunner {
     options: ExecutionStartOptions
   ): RunExecutionContext {
     const runId = options.runId || randomUUID();
-    const effectiveClock = options.platform?.clock ?? this.clock;
-    const effectiveProcess = options.process || options.platform?.process || this.process;
+    const effectiveClock = options.clock ?? this.clock;
+    const effectiveProcess = options.process || this.process;
     const startedAt =
       effectiveClock?.now().toISOString() ||
       (typeof (this.storage as any).clock?.now === "function"
@@ -734,7 +697,6 @@ export class ActionRunner {
       logger: options.logger,
       progress: options.progress,
       process: effectiveProcess,
-      platform: options.platform || this.platform,
       owner: effectiveParentOwner,
     };
     return await invoker(childAction, childInput, invocationContext);

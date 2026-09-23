@@ -20,7 +20,7 @@
 export {
   assertSecureTransport,
   createRemoteFetch,
-  fetchWithProtocolFallback,
+  fetchRemoteRoute,
   listProtocolRouteCandidates,
 } from "./client-transport";
 export type {

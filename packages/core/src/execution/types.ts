@@ -15,7 +15,7 @@ import type { ActionRunner, ExecutionHandle } from "../runtime/runner";
 import type { Clock } from "../runtime/clock";
 import type { EventSink } from "../runtime/events";
 import type { RuntimeStorage } from "../storage/types";
-import type { RuntimePlatform } from "../platform/types";
+import type { ModuleLoader } from "../runtime/module-loader";
 import type { ProcessOwner } from "../process/process-manager";
 import {
   type PackageIdentity,
@@ -61,7 +61,7 @@ export interface ExecutionServiceOptions {
   ownerId?: string;
   actionResolver?: LocalActionResolver;
   customHome?: string;
-  platform?: RuntimePlatform;
+  moduleLoader?: ModuleLoader;
   actionInvoker?: ActionInvoker;
 }
 
@@ -93,8 +93,8 @@ export interface ExecutionService {
   /** 包物理与快照身份标识值对象 */
   readonly identity: PackageIdentity;
 
-  /** 底层 Action 执行引擎（用于跨包上下文注入与动态解析委托） */
-  readonly runner: ActionRunner;
+  /** 解析指定 Action 定义（支持本地注册、局部解析器及工程目录扫描） */
+  resolveAction?(ref: ActionRef | string): Promise<ActionDefinition | undefined>;
 
   /** 同步执行 Action 并等待终态结果 */
   execute(
