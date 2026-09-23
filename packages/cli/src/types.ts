@@ -1,9 +1,9 @@
 import type { ActionDefinition } from "@actiondock/sdk";
 import type { ConfigItemDefinition } from "@actiondock/core/project";
-import type { InvocationControl } from "@actiondock/core/package";
+import type { InvocationControl } from "@actiondock/core";
 import {
   ExitCode as CoreExitCode,
-} from "@actiondock/core/package";
+} from "@actiondock/core";
 
 export type { InvocationControl };
 

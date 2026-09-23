@@ -1,5 +1,5 @@
 import type { ExecutionEvent } from "@actiondock/sdk";
-import { EVENT_BACKPRESSURE_LIMIT, EVENT_CURSOR_EXPIRED } from "../errors";
+import { ActionDockError, EVENT_BACKPRESSURE_LIMIT, EVENT_CURSOR_EXPIRED } from "../errors";
 
 export interface EventSinkSubscribeOptions {
   after?: number | string;
@@ -512,18 +512,17 @@ export class InMemoryEventSink implements EventSink {
     const earliestSeq = run.earliestRetainedSequence ?? 0;
     if (afterSequence !== undefined && afterSequence >= 0 && afterSequence < earliestSeq - 1) {
       const earliestCursor = run.earliestRetainedEventId ?? String(earliestSeq);
-      const expiredErr = new Error(
-        `Event cursor '${after}' has expired; earliest available cursor is '${earliestCursor}'`
+      throw new ActionDockError(
+        EVENT_CURSOR_EXPIRED,
+        `Event cursor '${after}' has expired; earliest available cursor is '${earliestCursor}'`,
+        {
+          cursor: after,
+          earliestCursor,
+          earliestRetainedCursor: earliestCursor,
+          earliestSequence: earliestSeq,
+          earliestEventId: run.earliestRetainedEventId,
+        }
       );
-      (expiredErr as any).code = EVENT_CURSOR_EXPIRED;
-      (expiredErr as any).details = {
-        cursor: after,
-        earliestCursor,
-        earliestRetainedCursor: earliestCursor,
-        earliestSequence: earliestSeq,
-        earliestEventId: run.earliestRetainedEventId,
-      };
-      throw expiredErr;
     }
   }
 

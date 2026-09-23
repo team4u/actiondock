@@ -1,5 +1,5 @@
 import type { ExecutionEvent } from "@actiondock/sdk";
-import { REMOTE_STREAM_UNAVAILABLE } from "../errors";
+import { ActionDockError, EVENT_CURSOR_EXPIRED, REMOTE_STREAM_UNAVAILABLE } from "../errors";
 import { assertSecureTransport, listProtocolRouteCandidates } from "../profile/client";
 import { normalizeServerUrl } from "../profile/manager";
 import { getInsecureDispatcher } from "../server/dispatcher";
@@ -102,10 +102,11 @@ export async function* streamRemoteEvents(
           try {
             errJson = await resp.json();
           } catch {}
-          const err = new Error(errJson?.error?.message || "Event cursor has expired");
-          (err as any).code = errJson?.error?.code || "EVENT_CURSOR_EXPIRED";
-          (err as any).details = errJson?.error?.details;
-          throw err;
+          throw new ActionDockError(
+            errJson?.error?.code || EVENT_CURSOR_EXPIRED,
+            errJson?.error?.message || "Event cursor has expired",
+            errJson?.error?.details
+          );
         }
         if (resp.ok && resp.body) {
           return { ok: true, body: resp.body };
@@ -129,19 +130,18 @@ export async function* streamRemoteEvents(
 
   function buildStreamUnavailableError(
     candidateFailures: Array<{ url: string; reason: string }>
-  ): Error {
+  ): ActionDockError {
     const summary = candidateFailures
       .map((f) => `${f.url} (${f.reason})`)
       .join(", ");
-    const err = new Error(
-      `REMOTE_STREAM_UNAVAILABLE: All event stream candidates failed for run '${runId}': ${summary}`
+    return new ActionDockError(
+      REMOTE_STREAM_UNAVAILABLE,
+      `REMOTE_STREAM_UNAVAILABLE: All event stream candidates failed for run '${runId}': ${summary}`,
+      {
+        runId,
+        candidates: candidateFailures.map((f) => ({ url: f.url, reason: f.reason })),
+      }
     );
-    (err as any).code = REMOTE_STREAM_UNAVAILABLE;
-    (err as any).details = {
-      runId,
-      candidates: candidateFailures.map((f) => ({ url: f.url, reason: f.reason })),
-    };
-    return err;
   }
 
   const res = await resolveStreamCandidate();

@@ -1,12 +1,11 @@
 import {
   PROCESS_OUTPUT_LIMIT,
-} from "@actiondock/core";
-import {
   ProcessManager,
   type ProcessDriver,
   type ProcessExecutor,
   type ProcessOwner,
-} from "@actiondock/core/package";
+  type Clock,
+} from "@actiondock/core";
 import { execCli } from "./cli";
 import {
   encodeBytes,
@@ -32,7 +31,6 @@ import {
   type ReadResult,
   type RuntimeError,
 } from "@actiondock/sdk";
-import type { Clock } from "@actiondock/core/package";
 import { FakeProcessDriver } from "./process-driver";
 
 /**

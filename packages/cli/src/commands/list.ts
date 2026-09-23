@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import {
   filterWithFallbackInfo,
-} from "@actiondock/core/package";
+} from "@actiondock/core";
 import { packageNotFoundError } from "../errors";
 import { renderActionList, renderResult } from "../renderer";
 import type { CliContext } from "../types";

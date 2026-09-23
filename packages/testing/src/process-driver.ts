@@ -6,7 +6,7 @@ import type {
   ProcessDriverHandle,
   ProcessHandle,
   ProcessObserver,
-} from "@actiondock/core/package";
+} from "@actiondock/core";
 
 export type { ProcessDriver, ProcessObserver, ProcessHandle };
 

@@ -1,6 +1,7 @@
 import { isLoopbackHost } from "../utils/net";
 import { normalizeServerUrl } from "./manager";
 import { getInsecureDispatcher } from "../server/dispatcher";
+import { ActionDockError, INSECURE_TRANSPORT } from "../errors";
 
 /**
  * 远端客户端传输层。
@@ -52,14 +53,13 @@ export function assertSecureTransport(
     try {
       const parsed = new URL(base);
       if (!isLoopbackHost(parsed.hostname)) {
-        const err = new Error(
+        throw new ActionDockError(
+          INSECURE_TRANSPORT,
           `Insecure HTTP connection with authentication token to non-loopback host '${parsed.hostname}' is prohibited. Use HTTPS or pass --allow-insecure-http to override.`
         );
-        (err as any).code = "INSECURE_TRANSPORT";
-        throw err;
       }
     } catch (e: any) {
-      if (e.code === "INSECURE_TRANSPORT") {
+      if (e instanceof ActionDockError || e?.code === INSECURE_TRANSPORT) {
         throw e;
       }
     }

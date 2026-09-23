@@ -34,6 +34,7 @@ import { hasPendingTransactions, isProjectLockHeld, recoverPendingTransactions }
 import { listLinkedPackages } from "../registry/registry";
 import { InMemoryEventSink, type EventSink } from "../runtime/events";
 import {
+  ActionDockError,
   ACTION_CALL_CYCLE,
   ACTION_MAX_DEPTH_EXCEEDED,
   ACTION_NOT_FOUND,
@@ -386,9 +387,7 @@ export class DefaultActionDockHost implements ActionDockHost {
       const targetRuntime = isSamePackage ? callerRuntime : this.getRuntime(targetPackageId);
 
       if (!targetRuntime) {
-        const err = new Error(packageNotFoundMessage(targetPackageId, this.failedLinkedPackages));
-        (err as any).code = PACKAGE_NOT_FOUND;
-        throw err;
+        throw new ActionDockError(PACKAGE_NOT_FOUND, packageNotFoundMessage(targetPackageId, this.failedLinkedPackages));
       }
 
       // 跨包 uses 依赖声明校验（统一委托 InvocationPolicy 单一事实源）
@@ -412,10 +411,7 @@ export class DefaultActionDockHost implements ActionDockHost {
           this.graph
         );
         if (authErr) {
-          const err = new Error(authErr.message);
-          (err as any).code = authErr.code;
-          (err as any).details = authErr.details;
-          throw err;
+          throw new ActionDockError(authErr.code, authErr.message, authErr.details);
         }
       }
 
@@ -426,10 +422,7 @@ export class DefaultActionDockHost implements ActionDockHost {
         context.maxCallDepth
       );
       if (depthErr) {
-        const err = new Error(depthErr.message);
-        (err as any).code = depthErr.code;
-        (err as any).details = depthErr.details;
-        throw err;
+        throw new ActionDockError(depthErr.code, depthErr.message, depthErr.details);
       }
 
       // 调用链环路死锁检测
@@ -440,26 +433,21 @@ export class DefaultActionDockHost implements ActionDockHost {
         callerRuntime.packageId
       );
       if (cycle.error) {
-        const err = new Error(cycle.error.message);
-        (err as any).code = cycle.error.code;
-        (err as any).details = cycle.error.details;
-        throw err;
+        throw new ActionDockError(cycle.error.code, cycle.error.message, cycle.error.details);
       }
 
       // 针对根运行的并发子任务配额校验与申请
       const rootRunId = context.rootRunId;
       const quotaErr = this.policy.checkSubRunQuota(rootRunId);
       if (quotaErr) {
-        const err = new Error(quotaErr.message);
-        (err as any).code = quotaErr.code;
-        (err as any).details = quotaErr.details;
-        throw err;
+        throw new ActionDockError(quotaErr.code, quotaErr.message, quotaErr.details);
       }
       if (!this.policy.acquireSubRun(rootRunId)) {
-        const err = new Error(`Maximum concurrent sub-runs (${this.policy.maxSubRuns}) reached`);
-        (err as any).code = ACTION_SUBRUN_LIMIT;
-        (err as any).details = { alias: MAX_SUBRUNS_REACHED, limit: this.policy.maxSubRuns };
-        throw err;
+        throw new ActionDockError(
+          ACTION_SUBRUN_LIMIT,
+          `Maximum concurrent sub-runs (${this.policy.maxSubRuns}) reached`,
+          { alias: MAX_SUBRUNS_REACHED, limit: this.policy.maxSubRuns }
+        );
       }
 
       try {
@@ -509,10 +497,7 @@ export class DefaultActionDockHost implements ActionDockHost {
         }
         const result = await ticket.result;
         if (!result.ok) {
-          const err = new Error(result.error.message);
-          (err as any).code = result.error.code;
-          (err as any).details = result.error.details;
-          throw err;
+          throw new ActionDockError(result.error.code, result.error.message, result.error.details);
         }
         return result.data;
       } finally {
@@ -1137,11 +1122,10 @@ export async function createActionDockHost(
       const root = resolveProjectRoot(options, () => findProjectRoot());
       if (root) {
         if (isProjectLockHeld(root)) {
-          const err: any = new Error(
+          throw new ActionDockError(
+            PROJECT_BUSY,
             "PROJECT_BUSY: Project directory is locked by another active process holding project.lock"
           );
-          err.code = PROJECT_BUSY;
-          throw err;
         }
         // 依据事务日志恢复未完成提交的悬空事务（锁持有者存活时严禁判定为崩溃事务并禁止自动恢复）
         if (hasPendingTransactions(root)) {

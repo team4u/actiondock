@@ -1,5 +1,5 @@
 import type { ActionDockService } from "../service/types";
-import { CAPABILITY_UNAVAILABLE } from "../errors";
+import { ActionDockError, CAPABILITY_UNAVAILABLE } from "../errors";
 import { hasIpcSignalMarker, IPC_SIGNAL_MARKER } from "./service";
 import type { IpcAbortMessage, IpcCallMessage, IpcResponseMessage } from "./types";
 
@@ -109,11 +109,10 @@ export async function serveParentIpc(service: ActionDockService): Promise<void> 
       try {
         // 白名单校验：仅允许白名单方法，阻止任意方法反射调用
         if (typeof method !== "string" || !IPC_ALLOWED_METHODS.has(method)) {
-          const err = new Error(
+          throw new ActionDockError(
+            CAPABILITY_UNAVAILABLE,
             `Target method '${method}' is not allowed over IPC`
           );
-          (err as any).code = CAPABILITY_UNAVAILABLE;
-          throw err;
         }
 
         // 反序列化执行选项：识别取消信号占位标记并重建控制器接入取消链路

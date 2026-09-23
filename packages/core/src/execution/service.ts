@@ -19,6 +19,7 @@ import type { Clock } from "../runtime/clock";
 import { type EventSink, InMemoryEventSink } from "../runtime/events";
 import { ActionRunner, type ExecutionHandle } from "../runtime/runner";
 import {
+  ActionDockError,
   ACTION_NOT_FOUND,
   EXECUTION_FAILED,
   IDEMPOTENCY_CONFLICT,
@@ -388,20 +389,16 @@ export class DefaultExecutionService implements ExecutionService {
     });
 
     if (idemp.outcome === "conflict") {
-      const conflictError: RuntimeError = {
-        code: IDEMPOTENCY_CONFLICT,
-        message: `Idempotency conflict for requestId '${context.requestId}': input parameters digest mismatch`,
-        details: {
+      throw new ActionDockError(
+        IDEMPOTENCY_CONFLICT,
+        `Idempotency conflict for requestId '${context.requestId}': input parameters digest mismatch`,
+        {
           requestId: context.requestId,
           actionRef,
           expectedDigest: idemp.existingDigest,
           actualDigest: inputDigest,
-        },
-      };
-      const err = new Error(conflictError.message);
-      (err as any).code = conflictError.code;
-      (err as any).details = conflictError.details;
-      throw err;
+        }
+      );
     }
 
     if (idemp.outcome === "duplicate") {
@@ -543,10 +540,11 @@ export class DefaultExecutionService implements ExecutionService {
     try {
       target.runner.getStorage().createRun(initialRun);
     } catch (err: any) {
-      const repErr = new Error(`RUN_REPOSITORY_UNAVAILABLE: Failed to initialize run record in repository: ${err?.message || String(err)}`);
-      (repErr as any).code = RUN_REPOSITORY_UNAVAILABLE;
-      (repErr as any).details = { originalError: err?.message };
-      throw repErr;
+      throw new ActionDockError(
+        RUN_REPOSITORY_UNAVAILABLE,
+        `RUN_REPOSITORY_UNAVAILABLE: Failed to initialize run record in repository: ${err?.message || String(err)}`,
+        { originalError: err?.message }
+      );
     }
 
     this.eventSink.emit({

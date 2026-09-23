@@ -2,7 +2,7 @@ import {
   type Clock,
   SqliteRuntimeStorage,
   type SqliteDriver,
-} from "@actiondock/core/package";
+} from "@actiondock/core";
 
 /**
  * 内存运行时存储初始化选项。

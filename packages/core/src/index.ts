@@ -56,11 +56,53 @@ export type {
   ListActionsOptions,
 } from "./package/types";
 
-// 5. 原生平台装配与服务端启动
+// 5. 原生平台装配、存储与宿主
 export {
   createNodePlatform,
   type NodePlatformOptions,
 } from "./platform/node";
+export type {
+  RuntimePlatform,
+  FileSystem,
+  StorageFactory,
+  StorageFactoryOptions,
+  GlobalStorageFactoryOptions,
+} from "./platform/types";
+export {
+  type Clock,
+  SystemClock,
+} from "./runtime/clock";
+export type { ModuleLoader } from "./node/module-loader";
+export {
+  InMemoryEventSink,
+  type EventSink,
+} from "./runtime/events";
+export {
+  ProcessManager,
+  type ProcessOwner,
+} from "./process/process-manager";
+export type { ProcessExecutor } from "./runtime/process";
+export type {
+  ProcessDriver,
+  ProcessDriverCallbacks,
+  ProcessDriverHandle,
+  ProcessHandle,
+  ProcessObserver,
+} from "./process/driver";
+export {
+  createStorage,
+  resolveDatabasePath,
+} from "./storage/index";
+export { SqliteRuntimeStorage } from "./storage/sqlite";
+export type {
+  RuntimeStorage,
+  SqliteDriver,
+} from "./storage/types";
+export type {
+  ActionDockHost,
+  ActionDockHostOptions,
+} from "./host/types";
+export { createActionDockHost } from "./host/host";
 export {
   startActionDockServer,
 } from "./server/server";
@@ -70,7 +112,30 @@ export type {
   ActionDockServerInstance,
 } from "./server/types";
 
-// 6. 核心工程辅助
+// 6. 独立运行分发与入参解析
+export {
+  ExitCode,
+  StandaloneDispatcher,
+  type StandaloneDispatcherOptions,
+  type InvocationControl,
+} from "./runtime/standalone";
+export {
+  resolveActionInput,
+  buildActionInputAdvice,
+  formatActionDetail,
+  buildActionDescribePayload,
+  mapInputValidationFailure,
+  type ResolveActionInputOptions,
+} from "./input/index";
+export { validateActionInputValue } from "./json/value-validator";
+export { parseJson } from "./input/input-resolver";
+export {
+  InputError,
+  FlatInputError,
+} from "./input/flat-errors";
+export { filterWithFallbackInfo } from "./filter/intent";
+
+// 7. 核心工程辅助
 export { initProject } from "./project/init";
 export {
   loadProjectConfig,
@@ -80,12 +145,12 @@ export type {
   ProjectConfig,
 } from "./project/types";
 
-// 7. 包图抽象契约
+// 8. 包图抽象契约
 export type {
   PackageGraph,
 } from "./catalog/graph";
 
-// 8. 统一错误模型与常用标准错误码
+// 9. 统一错误模型与常用标准错误码
 export {
   ActionDockError,
   ProcessError,

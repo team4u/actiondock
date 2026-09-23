@@ -37,6 +37,7 @@ import {
   ActionDockError,
 } from "../errors";
 import { validateSchemaOnly } from "../schema/validator";
+import { validateActionInputValue } from "../json/value-validator";
 import type { RuntimeStorage } from "../storage/types";
 import type { Clock } from "./clock";
 import type { RuntimePlatform } from "../platform/types";
@@ -60,34 +61,7 @@ import {
   type RunFinalizer,
 } from "./run-persistence";
 
-// 错误码常量已收敛至 src/errors.ts 单一事实源，此处保留 re-export 以维持既有导入路径兼容。
-export {
-  RUN_REPOSITORY_UNAVAILABLE,
-  RUN_PERSISTENCE_FAILED,
-  INPUT_NOT_JSON,
-  OUTPUT_NOT_JSON,
-  ACTION_SUBRUN_LIMIT,
-  MAX_SUBRUNS_REACHED,
-  ACTION_CALL_CYCLE,
-  ACTION_CYCLE_DETECTED,
-  ACTION_MAX_DEPTH_EXCEEDED,
-} from "../errors";
-import {
-  validateJsonValue,
-  validateActionInputValue,
-  assertJsonValue,
-  type ValidateJsonOptions,
-  type ValidateActionInputOptions,
-} from "../json/value-validator";
-
-// 复用统一迭代式 JsonValue 校验器，杜绝深层递归栈溢出，并保持既有导出兼容
-export {
-  validateJsonValue,
-  validateActionInputValue,
-  assertJsonValue,
-  type ValidateJsonOptions,
-  type ValidateActionInputOptions,
-};
+import { validateJsonValue } from "../json/value-validator";
 
 /**
  * 局部动作解析器委托函数契约（仅限当前包内部动作）。
@@ -129,9 +103,6 @@ export interface RunnerOptions {
   /** 子任务调用委托函数 */
   actionInvoker?: ActionInvoker;
 }
-
-/** ActionRunnerOptions 别名兼容 */
-export type ActionRunnerOptions = RunnerOptions;
 
 /**
  * 启动 Action 执行时的可选控制参数。

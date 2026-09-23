@@ -14,7 +14,13 @@ import type {
   PlaybookSummary,
 } from "../package/types";
 import { ActionResolver } from "../catalog/action-resolver";
-import { ACTION_CANCELLED, TIMEOUT } from "../errors";
+import {
+  ActionDockError,
+  ACTION_CANCELLED,
+  CAPABILITY_UNAVAILABLE,
+  INVALID_ARGUMENT,
+  TIMEOUT,
+} from "../errors";
 import type {
   CancelResult,
   ExecutionTicket,
@@ -44,7 +50,6 @@ import { isRemoteStateKeyNotFound, wrapRemoteError } from "./remote-errors";
 import { formatTerminalRunResult, pollRunCompletion } from "./remote-polling";
 import { streamRemoteEvents } from "./sse-stream";
 import { isTerminalRunStatus, type StateEntry } from "../storage/types";
-import { CAPABILITY_UNAVAILABLE } from "../errors";
 import {
   ACTIONDOCK_PROTOCOL_VERSION,
   PROTOCOL_UNSUPPORTED,
@@ -93,7 +98,7 @@ export class RemoteActionDockService implements ActionDockService {
 
   constructor(options: ConnectActionDockOptions | RemoteServiceOptions) {
     if (!options.serverUrl) {
-      throw new Error("serverUrl is required for RemoteActionDockService");
+      throw new ActionDockError(INVALID_ARGUMENT, "serverUrl is required for RemoteActionDockService");
     }
     this.serverUrl = options.serverUrl;
     this.token = options.token;

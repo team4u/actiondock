@@ -89,8 +89,17 @@ export const EXECUTION_ABORTED = "EXECUTION_ABORTED";
 /** 远程运行等待超时 */
 export const TIMEOUT = "TIMEOUT";
 
+/** 服务已关闭拒绝继续调用 */
+export const SERVICE_CLOSED = "SERVICE_CLOSED";
+
 /** 远程服务器网络连接失败 */
 export const NETWORK_ERROR = "NETWORK_ERROR";
+
+/** 非本地明文 HTTP 传输违规 */
+export const INSECURE_TRANSPORT = "INSECURE_TRANSPORT";
+
+/** 远程 HTTP 请求失败 */
+export const REMOTE_REQUEST_FAILED = "REMOTE_REQUEST_FAILED";
 
 /** 远程事件流全部候选路由均不可用 */
 export const REMOTE_STREAM_UNAVAILABLE = "REMOTE_STREAM_UNAVAILABLE";
@@ -301,12 +310,14 @@ export const RUN_ALREADY_FINISHED = "RUN_ALREADY_FINISHED";
 export class ActionDockError<T = any> extends Error {
   public readonly code: string;
   public readonly details?: T;
+  public readonly status?: number;
 
-  constructor(code: string, message: string, details?: T) {
+  constructor(code: string, message: string, details?: T, status?: number) {
     super(message);
     this.name = "ActionDockError";
     this.code = code;
     this.details = details;
+    this.status = status;
     Object.setPrototypeOf(this, ActionDockError.prototype);
   }
 }
@@ -340,7 +351,10 @@ export type ErrorCode =
   | typeof HOST_PROCESS_EXITED
   | typeof EXECUTION_ABORTED
   | typeof TIMEOUT
+  | typeof SERVICE_CLOSED
   | typeof NETWORK_ERROR
+  | typeof INSECURE_TRANSPORT
+  | typeof REMOTE_REQUEST_FAILED
   | typeof REMOTE_STREAM_UNAVAILABLE
   | typeof CAPABILITY_UNAVAILABLE
   | typeof STATE_KEY_NOT_FOUND

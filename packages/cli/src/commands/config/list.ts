@@ -3,8 +3,6 @@ import {
 } from "@actiondock/core/profile";
 import {
   filterWithFallbackInfo,
-} from "@actiondock/core/package";
-import {
   findProjectRoot,
   loadProjectConfig,
 } from "@actiondock/core";

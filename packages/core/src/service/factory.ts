@@ -2,6 +2,7 @@ import { createPackageRuntime } from "../package/runtime";
 import { createActionDockHost } from "../host/host";
 import { LocalActionDockService } from "./local";
 import { RemoteActionDockService } from "./remote";
+import { ActionDockError, INVALID_ARGUMENT, NOT_FOUND } from "../errors";
 import type {
   ActionDockService,
   ConnectActionDockOptions,
@@ -78,7 +79,7 @@ export async function connectActionDock(
       const { resolveTarget } = await import("../profile/manager");
       const resolved = resolveTarget({ profile: urlOrProfile }, options?.customHome);
       if (resolved.type !== "remote" || !resolved.serverUrl) {
-        throw new Error(`Profile '${urlOrProfile}' not found or is not a remote profile`);
+        throw new ActionDockError(NOT_FOUND, `Profile '${urlOrProfile}' not found or is not a remote profile`);
       }
       targetUrl = resolved.serverUrl;
       token = resolved.token ?? token;
@@ -86,7 +87,7 @@ export async function connectActionDock(
       allowInsecureHttp = resolved.allowInsecureHttp ?? allowInsecureHttp;
     }
   } else {
-    throw new Error("Invalid urlOrProfile argument for connectActionDock");
+    throw new ActionDockError(INVALID_ARGUMENT, "Invalid urlOrProfile argument for connectActionDock");
   }
 
   return new RemoteActionDockService({

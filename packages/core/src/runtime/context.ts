@@ -13,6 +13,7 @@ import type { ProjectConfig } from "../project/types";
 import type { RuntimeStorage } from "../storage/types";
 import { MemoryProcessDriver, ProcessManager, type ProcessOwner } from "../process";
 import { resolveEnvValue } from "./env";
+import { ActionDockError, INVALID_ACTION_REF } from "../errors";
 
 /**
  * 生产级配置解析器实现。
@@ -257,11 +258,10 @@ export function createActionContext(options: ContextOptions): ActionContext {
       typeof action !== "string" &&
       (!action || typeof action !== "object" || typeof (action as any).run === "function" || !("actionId" in action))
     ) {
-      const err = new Error(
+      throw new ActionDockError(
+        INVALID_ACTION_REF,
         "INVALID_ACTION_REF: ctx.actions.invoke strictly accepts only ActionRef or string, passing ActionDefinition or function is prohibited"
       );
-      (err as any).code = "INVALID_ACTION_REF";
-      throw err;
     }
     if (options.onActionInvoke) {
       return (await options.onActionInvoke(

@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { loadPlaybooks } from "../project/loader";
 import type { PlaybookDefinition } from "../project/types";
 import { getPackageSlug } from "../utils";
+import { ActionDockError, INVALID_ACTION_REF, NOT_FOUND, PACKAGE_NOT_FOUND } from "../errors";
 import type { PackageGraph, PackageNode } from "./graph";
 
 function getNodePlaybooks(node: PackageNode): Map<string, PlaybookDefinition> {
@@ -85,13 +86,14 @@ export function resolvePlaybook(
       );
 
     if (!node) {
-      throw new Error(`Package '${targetPackage}' not found`);
+      throw new ActionDockError(PACKAGE_NOT_FOUND, `Package '${targetPackage}' not found`);
     }
 
     const playbooks = getNodePlaybooks(node);
     const playbook = playbooks.get(playbookId);
     if (!playbook) {
-      throw new Error(
+      throw new ActionDockError(
+        NOT_FOUND,
         `Playbook '${playbookId}' not found in package '${node.identity.id}' (${node.root})`
       );
     }
@@ -152,10 +154,11 @@ export function resolvePlaybook(
 
   if (matches.length > 1) {
     const pkgList = matches.map((m) => `'${m.packageId}'`).join(", ");
-    throw new Error(
+    throw new ActionDockError(
+      INVALID_ACTION_REF,
       `Playbook '${str}' is provided by multiple linked packages: ${pkgList}. Please specify using '<package-id>/${str}'.`
     );
   }
 
-  throw new Error(`Playbook '${str}' not found in any registered package`);
+  throw new ActionDockError(NOT_FOUND, `Playbook '${str}' not found in any registered package`);
 }

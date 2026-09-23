@@ -6,7 +6,7 @@ export {
   FlatInputError,
   buildActionInputAdvice,
   formatActionDetail,
-} from "@actiondock/core/package";
+} from "@actiondock/core";
 
 /**
  * 剔除 UTF-8 字符串头部的 BOM 标记字符。

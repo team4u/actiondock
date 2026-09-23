@@ -1,4 +1,5 @@
 import { createRemoteFetch, type RemoteClientRequestOptions } from "./client-transport";
+import { ActionDockError, NOT_FOUND, REMOTE_REQUEST_FAILED, UNAUTHORIZED } from "../errors";
 
 /**
  * 远端端点函数共享的请求与查询构造层。
@@ -36,13 +37,12 @@ export async function fetchRemoteJson<T = any>(
   if (!res.ok || (options.method === "POST" && data && data.ok === false)) {
     const errorPrefix = options.errorPrefix || "Remote request failed";
     const msg = data?.error?.message || `${errorPrefix} (${res.status}): ${res.statusText}`;
-    const err = new Error(msg);
-    if (data?.error?.code) {
-      (err as any).code = data.error.code;
-    }
-    (err as any).status = res.status;
+    const code =
+      data?.error?.code ||
+      (res.status === 404 ? NOT_FOUND : res.status === 401 ? UNAUTHORIZED : REMOTE_REQUEST_FAILED);
+    const details = data?.error?.details ?? data?.error;
+    const err = new ActionDockError(code, msg, details, res.status);
     (err as any).errorData = data?.error;
-    (err as any).details = data?.error?.details ?? data?.error;
     throw err;
   }
 

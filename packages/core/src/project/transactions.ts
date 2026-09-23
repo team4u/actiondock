@@ -22,6 +22,7 @@ import {
   safeRemoveStaleReclaimGuard,
   safeRollbackLock,
 } from "../storage/lock-core";
+import { ActionDockError, PROJECT_BUSY, PROJECT_RECOVERY_REQUIRED } from "../errors";
 import { LOCKFILE_NAME } from "./lockfile";
 import { MANIFEST_FILE_NAME } from "./manifest";
 
@@ -214,9 +215,7 @@ export function acquireProjectLock(
     lockToken,
     acquireTimeoutMs: options.acquireTimeoutMs,
     createLockError(message) {
-      const busyErr: any = new Error(message);
-      busyErr.code = "PROJECT_BUSY";
-      return busyErr;
+      return new ActionDockError(PROJECT_BUSY, message);
     },
     messages: {
       timeoutWaitingReclaimGuard: (holderPid?: number) =>
@@ -237,11 +236,10 @@ export function acquireProjectLock(
     assertStaleHolderReclaimable(info) {
       const holderPid = info.pid as number;
       if (isProcessAlive(holderPid)) {
-        const busyErr: any = new Error(
+        throw new ActionDockError(
+          PROJECT_BUSY,
           `PROJECT_BUSY: Project modification lock is held by PID ${holderPid}. Another command is running in ${projectRoot}.`
         );
-        busyErr.code = "PROJECT_BUSY";
-        throw busyErr;
       }
     },
     onAcquired: () => true,
@@ -314,11 +312,10 @@ export function runFrozenInstall(projectRoot: string): void {
 
   if (proc.status !== 0) {
     const errorMsg = proc.stderr?.toString() || proc.stdout?.toString() || "Unknown error";
-    const err = new Error(
+    throw new ActionDockError(
+      PROJECT_RECOVERY_REQUIRED,
       `PROJECT_RECOVERY_REQUIRED: Frozen install failed during recovery in ${projectRoot}: ${errorMsg}`
     );
-    (err as any).code = "PROJECT_RECOVERY_REQUIRED";
-    throw err;
   }
 }
 

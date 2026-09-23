@@ -1,3 +1,5 @@
+import { ActionRuntimeError } from "./error";
+
 /**
  * 转义状态键分段中的特殊字符（\ 和 :）。
  *
@@ -55,7 +57,8 @@ export function decodeStateKey(fullKey: string): { namespace: string; key: strin
     };
   }
 
-  const err: any = new Error(`Ambiguous state key '${fullKey}': contains multiple unescaped colon delimiters`);
-  err.code = "AMBIGUOUS_STATE_KEY";
-  throw err;
+  throw new ActionRuntimeError({
+    code: "AMBIGUOUS_STATE_KEY",
+    message: `Ambiguous state key '${fullKey}': contains multiple unescaped colon delimiters`,
+  });
 }

@@ -1,7 +1,5 @@
 import {
   filterWithFallbackInfo,
-} from "@actiondock/core/package";
-import {
   findProjectRoot,
   loadProjectConfig,
 } from "@actiondock/core";

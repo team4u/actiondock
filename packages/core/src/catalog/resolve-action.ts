@@ -2,6 +2,12 @@ import type { ActionContract, ActionRef, ResolvedActionRef } from "@actiondock/s
 import type { PackageIdentity } from "../runtime/identity";
 import type { ActionCatalog } from "./action-catalog";
 import type { PackageGraph } from "./graph";
+import {
+  ActionDockError,
+  ACTION_NOT_FOUND,
+  INVALID_ACTION_REF,
+  PACKAGE_NOT_FOUND,
+} from "../errors";
 
 /**
  * ActionRef 解析上下文。
@@ -83,9 +89,7 @@ export function resolveAction(
   if (parsed.packageId) {
     const node = context.graph.packages.get(parsed.packageId);
     if (!node) {
-      const err: any = new Error(`PACKAGE_NOT_FOUND: Package '${parsed.packageId}' not found`);
-      err.code = "PACKAGE_NOT_FOUND";
-      throw err;
+      throw new ActionDockError(PACKAGE_NOT_FOUND, `PACKAGE_NOT_FOUND: Package '${parsed.packageId}' not found`);
     }
 
     const matches = context.catalog.find({
@@ -93,11 +97,10 @@ export function resolveAction(
       actionId: parsed.actionId,
     });
     if (matches.length === 0) {
-      const err: any = new Error(
+      throw new ActionDockError(
+        ACTION_NOT_FOUND,
         `ACTION_NOT_FOUND: Action '${parsed.actionId}' not found in package '${parsed.packageId}'`
       );
-      err.code = "ACTION_NOT_FOUND";
-      throw err;
     }
 
     const candidate = matches[0];
@@ -145,22 +148,19 @@ export function resolveAction(
     const message = context.caller
       ? `ACTION_NOT_FOUND: Action '${parsed.actionId}' not found in current project or any registered package`
       : `ACTION_NOT_FOUND: Action '${parsed.actionId}' not found in any registered package`;
-    const err: any = new Error(message);
-    err.code = "ACTION_NOT_FOUND";
-    throw err;
+    throw new ActionDockError(ACTION_NOT_FOUND, message);
   }
 
   if (allMatches.length > 1) {
     const candidates = allMatches.map((m) => `${m.packageId}/${m.actionId}`).join(", ");
-    const err: any = new Error(
-      `INVALID_ACTION_REF: Action '${parsed.actionId}' is ambiguous and provided by multiple packages: ${candidates}. Please specify '<package-id>/${parsed.actionId}'. (AMBIGUOUS_ACTION_REF)`
+    throw new ActionDockError(
+      INVALID_ACTION_REF,
+      `INVALID_ACTION_REF: Action '${parsed.actionId}' is ambiguous and provided by multiple packages: ${candidates}. Please specify '<package-id>/${parsed.actionId}'. (AMBIGUOUS_ACTION_REF)`,
+      {
+        alias: "AMBIGUOUS_ACTION_REF",
+        candidates: allMatches.map((m) => m.packageId),
+      }
     );
-    err.code = "INVALID_ACTION_REF";
-    err.details = {
-      alias: "AMBIGUOUS_ACTION_REF",
-      candidates: allMatches.map((m) => m.packageId),
-    };
-    throw err;
   }
 
   const candidate = allMatches[0];

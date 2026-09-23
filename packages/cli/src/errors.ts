@@ -16,10 +16,8 @@ import {
   INPUT_CONFLICT,
   INPUT_FILE_NOT_FOUND,
   INPUT_FILE_READ_FAILED,
-} from "@actiondock/core";
-import {
   InputError,
-} from "@actiondock/core/package";
+} from "@actiondock/core";
 import { ExitCode, type ExitCodeValue } from "./types";
 
 /**

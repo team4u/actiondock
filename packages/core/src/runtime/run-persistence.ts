@@ -1,5 +1,5 @@
 import type { JsonValue, RuntimeError, RunRecord } from "@actiondock/sdk";
-import { RUN_PERSISTENCE_FAILED, RUN_REPOSITORY_UNAVAILABLE } from "../errors";
+import { ActionDockError, RUN_PERSISTENCE_FAILED, RUN_REPOSITORY_UNAVAILABLE } from "../errors";
 import type { RuntimeStorage, TerminalRunStatus } from "../storage/types";
 
 /**
@@ -131,12 +131,11 @@ export function createRunOrThrow(storage: RuntimeStorage, record: RunRecord): vo
   try {
     storage.createRun(record);
   } catch (err: any) {
-    const error = new Error(
-      `RUN_REPOSITORY_UNAVAILABLE: Failed to initialize run record in repository: ${err?.message || String(err)}`
+    throw new ActionDockError(
+      RUN_REPOSITORY_UNAVAILABLE,
+      `RUN_REPOSITORY_UNAVAILABLE: Failed to initialize run record in repository: ${err?.message || String(err)}`,
+      { originalError: err?.message }
     );
-    (error as any).code = RUN_REPOSITORY_UNAVAILABLE;
-    (error as any).details = { originalError: err?.message };
-    throw error;
   }
 }
 

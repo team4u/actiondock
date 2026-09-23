@@ -1,6 +1,6 @@
 import {
   decodeStateKey,
-} from "@actiondock/core/package";
+} from "@actiondock/sdk";
 import {
   findProjectRoot,
   loadProjectConfig,

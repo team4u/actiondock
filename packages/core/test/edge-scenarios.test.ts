@@ -13,7 +13,7 @@ import {
   RUN_PERSISTENCE_FAILED,
   ACTION_SUBRUN_LIMIT,
   ACTION_CALL_CYCLE,
-} from "../src/runtime/runner";
+} from "../src/errors";
 
 describe("核心运行时高级防御校验与边缘异常测试套件", () => {
   describe("INPUT_NOT_JSON 防御校验", () => {

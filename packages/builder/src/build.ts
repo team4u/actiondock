@@ -189,14 +189,12 @@ import { spawn } from "node:child_process";
 import { join } from "node:path";
 import {
   STANDALONE_ASYNC_UNSUPPORTED,
+  StandaloneDispatcher,
+  ExitCode,
 } from "@actiondock/core";
 import {
   IpcActionDockService,
 } from "@actiondock/core/server";
-import {
-  StandaloneDispatcher,
-  ExitCode,
-} from "@actiondock/core/package";
 
 const METADATA = {
   packageId: ${JSON.stringify(plan.packageId)},

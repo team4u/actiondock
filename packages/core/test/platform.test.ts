@@ -4,15 +4,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decodeText, encodeBytes, type ActionContext, type ProcessAPI, type ProcessResult } from "@actiondock/sdk";
 import { ActionRunner } from "../src/runtime/runner";
-import { createNodePlatform } from "../src";
-import { createInvocationContext } from "../src/execution/types";
 import {
+  createNodePlatform,
   SqliteRuntimeStorage,
   type Clock,
   type ModuleLoader,
   type ProcessExecutor,
   type RuntimePlatform,
-} from "../src/package";
+} from "../src";
+import { createInvocationContext } from "../src/execution/types";
 import { createPackageIdentity } from "../src/runtime/identity";
 import { DefaultExecutionService } from "../src/execution/service";
 import { NodeFileSystem } from "../src/platform/node-fs";
@@ -227,7 +227,7 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
         },
         process: customProcess,
         storage: {
-          createStorage: (pkgId) =>
+          createStorage: (pkgId: any) =>
             new SqliteRuntimeStorage({ packageId: pkgId, dbPath: ":memory:" }),
           createGlobalStorage: () =>
             new SqliteRuntimeStorage({ packageId: "__global__", dbPath: ":memory:" }),

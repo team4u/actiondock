@@ -20,7 +20,13 @@ import type {
 } from "../execution/types";
 import type { RunOptions } from "../invocation/types";
 import { DiagnosticForwarder } from "./diagnostic";
-import { EXECUTION_ABORTED, HOST_PROCESS_EXITED } from "../errors";
+import {
+  ActionDockError,
+  CAPABILITY_UNAVAILABLE,
+  EXECUTION_ABORTED,
+  HOST_PROCESS_EXITED,
+  SERVICE_CLOSED,
+} from "../errors";
 import type {
   ActionDockService,
   ConfigPort,
@@ -144,9 +150,11 @@ export class IpcActionDockService implements ActionDockService {
           if (resp.ok) {
             pending.resolve(resp.data);
           } else {
-            const err = new Error(resp.error?.message || "IPC Service call failed");
-            if (resp.error?.code) (err as any).code = resp.error.code;
-            if (resp.error?.details) (err as any).details = resp.error.details;
+            const err = new ActionDockError(
+              resp.error?.code || "IPC_ERROR",
+              resp.error?.message || "IPC Service call failed",
+              resp.error?.details as Record<string, unknown> | undefined
+            );
             pending.reject(err);
           }
         }
@@ -155,8 +163,7 @@ export class IpcActionDockService implements ActionDockService {
 
     this.child.on("exit", (code, signal) => {
       const exitMsg = `Host process exited prematurely with code ${code ?? signal ?? "unknown"}`;
-      const err = new Error(exitMsg);
-      (err as any).code = HOST_PROCESS_EXITED;
+      const err = new ActionDockError(HOST_PROCESS_EXITED, exitMsg);
       this.exitError = err;
       this.isClosed = true;
 
@@ -230,7 +237,7 @@ export class IpcActionDockService implements ActionDockService {
         opts?: RunOptions
       ): Promise<ExecutionTicket> {
         if (opts?.signal?.aborted) {
-          throw new Error("Execution was aborted before starting");
+          throw new ActionDockError(EXECUTION_ABORTED, "Execution was aborted before starting");
         }
         const serializableOptions = markIpcSignal(opts);
         return self.callRemote<ExecutionTicket>("startAction", [ref, input ?? {}, serializableOptions], opts?.signal);
@@ -348,7 +355,7 @@ export class IpcActionDockService implements ActionDockService {
           },
         } as unknown as T;
       }
-      throw this.exitError || new Error(`IpcActionDockService is closed: cannot call '${method}'`);
+      throw this.exitError || new ActionDockError(SERVICE_CLOSED, `IpcActionDockService is closed: cannot call '${method}'`);
     }
 
     await this.readyPromise;
@@ -380,7 +387,7 @@ export class IpcActionDockService implements ActionDockService {
 
       try {
         if (!this.child.send) {
-          throw new Error("ChildProcess IPC channel is not available");
+          throw new ActionDockError(CAPABILITY_UNAVAILABLE, "ChildProcess IPC channel is not available");
         }
         this.child.send(message, (err) => {
           if (err) {

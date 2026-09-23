@@ -3,7 +3,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type ActionContext, defineAction } from "@actiondock/sdk";
-import { createPackageRuntime, DefaultPackageRuntime } from "../src/package";
+import { createPackageRuntime } from "../src/package";
+import { DefaultPackageRuntime } from "../src/package/runtime";
 import { createNodePlatform } from "../src/platform";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
 

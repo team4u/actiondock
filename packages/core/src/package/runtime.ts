@@ -26,8 +26,14 @@ import { isSecretConfigKey, sanitizeConfigDefinitions } from "../storage/mask";
 import { decodeStateKey, SqliteRuntimeStorage } from "../storage/sqlite";
 import type { RuntimeStorage } from "../storage/types";
 import { createPackageIdentity, type PackageIdentity } from "../runtime/identity";
-import { parseActionRef } from "../catalog/resolve-action";
-import { CAPABILITY_UNAVAILABLE, INVOCATION_UNSUPPORTED, ActionDockError } from "../errors";
+import {
+  ACTION_NOT_FOUND,
+  ActionDockError,
+  CAPABILITY_UNAVAILABLE,
+  INVALID_ARGUMENT,
+  INVOCATION_UNSUPPORTED,
+  NOT_FOUND,
+} from "../errors";
 import { createRootInvocationContext, type InvocationContext, type RunOptions } from "../invocation/types";
 import { buildStaticActionMap, buildStaticPlaybookMap } from "./static-index";
 import type {
@@ -356,7 +362,7 @@ export class DefaultPackageRuntime implements PackageRuntime {
     }
 
     if (!spec) {
-      throw new Error(`Action '${id}' not found in package '${this.packageId}'`);
+      throw new ActionDockError(ACTION_NOT_FOUND, `Action '${id}' not found in package '${this.packageId}'`);
     }
 
     return {
@@ -382,7 +388,7 @@ export class DefaultPackageRuntime implements PackageRuntime {
     const spec = map.get(cleanId) || map.get(id);
 
     if (!spec) {
-      throw new Error(`Playbook '${id}' not found in package '${this.packageId}'`);
+      throw new ActionDockError(NOT_FOUND, `Playbook '${id}' not found in package '${this.packageId}'`);
     }
 
     return {
@@ -426,7 +432,8 @@ export class DefaultPackageRuntime implements PackageRuntime {
       if (actionId.startsWith(`${this.packageId}/`)) {
         actionId = actionId.slice(this.packageId.length + 1);
       } else {
-        throw new Error(
+        throw new ActionDockError(
+          INVOCATION_UNSUPPORTED,
           `PackageRuntime only accepts local action short ID '${id}'. Cross-package invocations must be dispatched via Host invoker.`
         );
       }
@@ -445,7 +452,8 @@ export class DefaultPackageRuntime implements PackageRuntime {
       if (actionId.startsWith(`${this.packageId}/`)) {
         actionId = actionId.slice(this.packageId.length + 1);
       } else {
-        throw new Error(
+        throw new ActionDockError(
+          INVOCATION_UNSUPPORTED,
           `PackageRuntime only accepts local action short ID '${id}'. Cross-package invocations must be dispatched via Host invoker.`
         );
       }
@@ -538,7 +546,8 @@ export class DefaultPackageRuntime implements PackageRuntime {
       actionId = actionIdOrKey as string;
       resolvedOpts = options;
       if (resolvedOpts?.actionId && resolvedOpts.actionId !== actionId) {
-        throw new Error(
+        throw new ActionDockError(
+          INVALID_ARGUMENT,
           `Conflicting actionId specified: positional '${actionId}' vs options.actionId '${resolvedOpts.actionId}'`
         );
       }
@@ -610,7 +619,8 @@ export class DefaultPackageRuntime implements PackageRuntime {
 
     if (arguments.length >= 4) {
       if (options?.actionId && options.actionId !== actionIdOrKey) {
-        throw new Error(
+        throw new ActionDockError(
+          INVALID_ARGUMENT,
           `Conflicting actionId specified: positional '${actionIdOrKey}' vs options.actionId '${options.actionId}'`
         );
       }
@@ -628,7 +638,8 @@ export class DefaultPackageRuntime implements PackageRuntime {
         valueOrOptions !== undefined &&
         (typeof valueOrOptions !== "object" || valueOrOptions === null || Array.isArray(valueOrOptions))
       ) {
-        throw new Error(
+        throw new ActionDockError(
+          INVALID_ARGUMENT,
           "Invalid options provided to setState. Use setActionState(actionId, key, value, options) or 4-argument setState for action state."
         );
       }

@@ -1,4 +1,5 @@
 import type { ActionRef, ResolvedActionRef } from "@actiondock/sdk";
+import { ActionDockError, ACTION_NOT_FOUND, INVALID_ACTION_REF } from "../errors";
 import { ActionIndex } from "./action-index";
 import { parseActionRef } from "./resolve-action";
 import type { CatalogSnapshot, IndexedAction } from "./types";
@@ -34,7 +35,8 @@ export class ActionResolver {
     if (ref.packageId) {
       const matches = this.index.find(ref.actionId, ref.packageId);
       if (matches.length === 0) {
-        throw new Error(
+        throw new ActionDockError(
+          ACTION_NOT_FOUND,
           `ACTION_NOT_FOUND: Action '${ref.actionId}' not found in package '${ref.packageId}'`
         );
       }
@@ -72,17 +74,22 @@ export class ActionResolver {
     // 3. 全局唯一匹配检查
     const allMatches = this.index.find(ref.actionId);
     if (allMatches.length === 0) {
-      throw new Error(`ACTION_NOT_FOUND: Action '${ref.actionId}' not found in any linked package`);
+      throw new ActionDockError(
+        ACTION_NOT_FOUND,
+        `ACTION_NOT_FOUND: Action '${ref.actionId}' not found in any linked package`
+      );
     }
 
     if (allMatches.length > 1) {
       const candidates = allMatches.map((m) => `${m.packageId}/${m.actionId}`).join(", ");
-      const err = new Error(
-        `INVALID_ACTION_REF: Action '${ref.actionId}' is ambiguous and provided by multiple packages: ${candidates}. Please specify the package name. (AMBIGUOUS_ACTION_REF)`
+      throw new ActionDockError(
+        INVALID_ACTION_REF,
+        `INVALID_ACTION_REF: Action '${ref.actionId}' is ambiguous and provided by multiple packages: ${candidates}. Please specify the package name. (AMBIGUOUS_ACTION_REF)`,
+        {
+          alias: "AMBIGUOUS_ACTION_REF",
+          candidates: allMatches.map((m) => m.packageId),
+        }
       );
-      (err as any).code = "INVALID_ACTION_REF";
-      (err as any).details = { alias: "AMBIGUOUS_ACTION_REF" };
-      throw err;
     }
 
     const matched = allMatches[0];

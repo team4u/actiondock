@@ -13,7 +13,7 @@ import {
 } from "@actiondock/core/profile";
 import {
   filterWithFallbackInfo,
-} from "@actiondock/core/package";
+} from "@actiondock/core";
 import {
   maskSecretValue,
 } from "@actiondock/core/project";

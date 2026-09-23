@@ -1,13 +1,11 @@
-import type { ActionDockService } from "@actiondock/core";
 import {
   filterWithFallbackInfo,
-} from "@actiondock/core/package";
+  loadProjectConfig,
+  type ActionDockService,
+} from "@actiondock/core";
 import {
   listLinkedPackages,
 } from "@actiondock/core/registry";
-import {
-  loadProjectConfig,
-} from "@actiondock/core";
 import { existsSync } from "node:fs";
 import { NO_PROJECT_NO_LINKED_MESSAGE } from "../errors";
 import { renderResult, renderStateList } from "../renderer";
