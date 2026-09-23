@@ -1,6 +1,6 @@
 # 构建规划与产物导出
 
-ActionDock 3.0 提供了面向生产交付与智能体消费的现代构建与导出工具链。构建与导出核心由 `@actiondock/builder` 驱动，包含基于声明式清单的依赖闭包规划器 `SelectionPlanner`、Skill 模板生成器、Node 目录型交付产物构建器、npm Action 标准打包器与多模态 Skill 导出器。
+ActionDock 2.x 提供了面向生产交付与智能体消费的现代构建与导出工具链。构建与导出核心由 `@actiondock/builder` 驱动，包含基于声明式清单的依赖闭包规划器 `SelectionPlanner`、Skill 模板生成器、Node 目录型交付产物构建器、npm Action 标准打包器与多模态 Skill 导出器。
 
 工具链全面采用标准、透明且易于容器化部署的 Node 目录型交付产物体系。
 
@@ -107,7 +107,7 @@ ad pack --dry-run
 
 `ad export skill` 命令将 Action Package 导出为供各类 AI 智能体（如 Claude Code、Cursor、Windsurf、Antigravity）理解与消费的自包含 Skill 资产。
 
-ActionDock 3.0 提供了两种清晰的 Skill 导出模式：
+ActionDock 2.x 提供了两种清晰的 Skill 导出模式：
 
 ### 源码型 Skill 模式 (`--mode source`)
 

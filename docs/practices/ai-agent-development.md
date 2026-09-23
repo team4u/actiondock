@@ -34,7 +34,7 @@ ActionDock 将工具软件工程划分为两大清晰的职责边界：
 ```markdown
 # 智能体开发指引
 
-- 项目架构：基于 ActionDock 3.0 构建，核心清单为 actiondock.json（schemaVersion: 2）。
+- 项目架构：基于 ActionDock 2.x 构建，核心清单为 actiondock.json（schemaVersion: 2）。
 - 编码契约：Action 业务逻辑仅依赖 @actiondock/sdk，严禁直接引入未经清单声明的外部包。
 - 物理通道：业务返回值仅通过 run 方法输出至标准输出；过程日志一律使用 ctx.log 写入标准错误输出，严禁使用 console.log。
 - 测试与自愈驱动：每次编写或修改 Action 源码后，必须在 tests/ 下编写配套单测，并执行 npm test 验证。若测试失败，必须分析结构化报错并自主修正，严禁交付未经测试的代码。

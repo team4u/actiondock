@@ -1,18 +1,18 @@
 # @actiondock/core
 
-ActionDock 3.0 Node-first 原生运行时与核心领域。
+ActionDock 2.x Node-first 原生运行时与核心领域。
 
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D24.12.0-green?logo=node.js)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-`@actiondock/core` 是 ActionDock 3.0 的核心领域内核与 Node-first 原生运行时。承载包图发现、动作目录、调用治理、执行主链、存储驱动（`NodeSqliteDriver`、`WorkerSqliteDriver`）、受管进程驱动（`NodeProcessDriver`）、HTTP 网络服务（`NodeHttpServer`）、标准服务端口体系（`DiscoveryPort`、`ExecutionPort`、`RunsPort`、`ConfigPort`、`StatePort`）与统一服务门面（`createActionDock`、`connectActionDock`）。
+`@actiondock/core` 是 ActionDock 2.x 的核心领域内核与 Node-first 原生运行时。承载包图发现、动作目录、调用治理、执行主链、存储驱动（`NodeSqliteDriver`、`WorkerSqliteDriver`）、受管进程驱动（`NodeProcessDriver`）、HTTP 网络服务（`NodeHttpServer`）、标准服务端口体系（`DiscoveryPort`、`ExecutionPort`、`RunsPort`、`ConfigPort`、`StatePort`）与统一服务门面（`createActionDock`、`connectActionDock`）。
 
 ---
 
 ## 统一执行主链
 
-ActionDock 3.0 将所有调用形态（命令行、协议服务、微服务与测试沙箱）收敛至统一的确定性执行主链：
+ActionDock 2.x 将所有调用形态（命令行、协议服务、微服务与测试沙箱）收敛至统一的确定性执行主链：
 
 ```text
 Host -> Resolution -> PackageRuntime -> ExecutionService -> ActionRunner -> Action
@@ -50,7 +50,7 @@ Host -> Resolution -> PackageRuntime -> ExecutionService -> ActionRunner -> Acti
 
 ## 单一事实源架构原则
 
-ActionDock 3.0 全面贯彻单一事实源设计，彻底杜绝各模块私自实现短名搜索或启发式猜测：
+ActionDock 2.x 全面贯彻单一事实源设计，彻底杜绝各模块私自实现短名搜索或启发式猜测：
 
 - 包图发现单一事实源 `PackageDiscovery`：自顶向下扫描工作区与全局注册表，建立包目录索引。
 - 包拓扑图单一事实源 `PackageGraph`：维护包节点身份标识、实例版本与拓扑依赖关系。

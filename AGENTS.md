@@ -1,6 +1,6 @@
-# Agent 开发协作指引 - ActionDock 3.0
+# Agent 开发协作指引 - ActionDock 2.x
 
-- **核心定位**：ActionDock 3.0 是面向 AI Agent Action 与 Skill 的开发、测试、构建与分发工具链。
+- **核心定位**：ActionDock 2.x 是面向 AI Agent Action 与 Skill 的开发、测试、构建与分发工具链。
 - **运行时与引擎**：默认运行时为 Node.js（版本大于等于 24.12.0，基于 node:sqlite、node:http 与类型擦除提供原生驱动）。
 - **代码库分层结构**：
   - `packages/sdk`：`@actiondock/sdk`（极简公共 SDK：`defineAction`、`ActionContext`、`Config`、`StateStore`、`ActionInvoker`、`Logger`、`ProcessAPI`）。
@@ -31,8 +31,8 @@
   - **触发事实源**：以 GitHub Release 发行作为唯一触发事实源，彻底去除本地手工管理 Git 标签的流程，禁止脱离版本发行在本地直接执行手工发布。
   - **分发标签隔离**：正式版本发布使用默认分发标签 `latest`；预发布测试版本必须使用 `beta`、`alpha` 等独立分发标签，严禁测试版本覆盖 `latest` 指针。
   - **版本命名规范**：
-    - 正式版本：采用语义化版本号，如 `3.0.0` 或 `v3.0.0`。
-    - 测试版本：采用携带预发布后缀的版本号，如 `3.0.1-beta.0` 或 `v3.0.1-beta.0`。
+    - 正式版本：采用语义化版本号，如 `2.8.0` 或 `v2.8.0`。
+    - 测试版本：采用携带预发布后缀的版本号，如 `2.8.1-beta.0` 或 `v2.8.1-beta.0`。
   - **多包依赖对齐**：发布测试版本时，全部子包之间以及脚手架模板中的互引依赖必须与目标测试版本号对齐，避免 npm 无法匹配预发布版本而回退加载旧稳定版。
   - **发布验证与执行流**：
     - 验证流程：发布前必须通过 `npm test`、`npm run typecheck` 与打包烟雾测试 `npm run test:pack`。

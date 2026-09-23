@@ -1,6 +1,6 @@
 # 底层架构：Runtime 执行引擎与分层架构
 
-ActionDock 3.0 围绕执行的确定性、强类型安全与环境解耦构建，保证任何形式的调用（CLI、MCP、HTTP、测试沙箱或目录型构建运行）均收敛至一致的核心执行语义。
+ActionDock 2.x 围绕执行的确定性、强类型安全与环境解耦构建，保证任何形式的调用（CLI、MCP、HTTP、测试沙箱或目录型构建运行）均收敛至一致的核心执行语义。
 
 ---
 
@@ -45,7 +45,7 @@ graph TD
 
 ## 统一执行主链
 
-ActionDock 3.0 内部采用统一的执行主链通道，无论通过 CLI、MCP、HTTP 还是测试沙箱发起调用，均收敛至严格确定的流水线：
+ActionDock 2.x 内部采用统一的执行主链通道，无论通过 CLI、MCP、HTTP 还是测试沙箱发起调用，均收敛至严格确定的流水线：
 
 ```text
 Host -> Resolution -> PackageRuntime -> ExecutionService -> ActionRunner -> Action
@@ -93,7 +93,7 @@ sequenceDiagram
 
 ## 统一服务门面与标准服务端口
 
-ActionDock 3.0 彻底解耦上层适配与底层实现，通过标准服务端口体系与统一服务门面消除底层实体穿透：
+ActionDock 2.x 彻底解耦上层适配与底层实现，通过标准服务端口体系与统一服务门面消除底层实体穿透：
 
 ### 统一服务门面
 
@@ -116,7 +116,7 @@ ActionDock 3.0 彻底解耦上层适配与底层实现，通过标准服务端�
 
 ## 单一事实源体系
 
-ActionDock 3.0 全面贯彻单一事实源设计，彻底杜绝各模块私自实现短名搜索或启发式猜测：
+ActionDock 2.x 全面贯彻单一事实源设计，彻底杜绝各模块私自实现短名搜索或启发式猜测：
 
 - 包图发现单一事实源 `PackageDiscovery`：自顶向下扫描工作区与全局注册表，建立包目录索引。
 - 包拓扑图单一事实源 `PackageGraph`：维护包节点身份标识、实例版本与拓扑依赖关系。
@@ -138,7 +138,7 @@ ActionDock 3.0 全面贯彻单一事实源设计，彻底杜绝各模块私自�
 
 ## Core 原生运行时驱动体系
 
-在 ActionDock 3.0 中，Node 原生运行时能力全面内聚归并入 `@actiondock/core`，依托 Node.js 原生特性构建高性能企业级驱动：
+在 ActionDock 2.x 中，Node 原生运行时能力全面内聚归并入 `@actiondock/core`，依托 Node.js 原生特性构建高性能企业级驱动：
 
 - 同步存储驱动 `NodeSqliteDriver`：基于 Node.js 原生内置模块 `node:sqlite`（`DatabaseSync`）构建，满足同步驱动契约。默认开启预写日志模式（WAL）、外键约束检查以及忙等待超时（`busy_timeout = 5000`）。
 - 异步工作线程存储驱动 `WorkerSqliteDriver`：基于 `node:worker_threads` 构建的独立异步存储组件，将同步数据库操作卸载至后台线程，对外暴露异步接口。

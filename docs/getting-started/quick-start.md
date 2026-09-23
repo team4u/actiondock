@@ -1,6 +1,6 @@
 # 快速上手指南
 
-ActionDock 3.0 写一次 Action，同时交付 CLI、MCP、HTTP 和 Agent Skill。
+ActionDock 2.x 写一次 Action，同时交付 CLI、MCP、HTTP 和 Agent Skill。
 
 内置测试沙箱、状态存储、配置体系、运行追踪与可复现打包。
 

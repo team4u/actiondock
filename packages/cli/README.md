@@ -1,6 +1,6 @@
 # @actiondock/cli
 
-ActionDock 3.0 官方命令行门面工具链。
+ActionDock 2.x 官方命令行门面工具链。
 
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D24.12.0-green?logo=node.js)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?logo=typescript)](https://www.typescriptlang.org/)

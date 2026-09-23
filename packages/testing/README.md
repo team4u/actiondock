@@ -1,6 +1,6 @@
 # @actiondock/testing
 
-ActionDock 3.0 确定性测试框架与测试运行时。
+ActionDock 2.x 确定性测试框架与测试运行时。
 
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D24.12.0-green?logo=node.js)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?logo=typescript)](https://www.typescriptlang.org/)

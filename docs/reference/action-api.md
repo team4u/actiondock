@@ -26,7 +26,7 @@ export default defineAction<TInput, TOutput>({
 
 ### ActionDefinition 契约规范
 
-在 ActionDock 3.0 中，`actiondock.json` 是元数据的权威事实源。`ActionDefinition` 仍保留代码内元数据字段用于兼容和编程式调用场景，新项目推荐将元数据统一声明在清单中：
+在 ActionDock 2.x 中，`actiondock.json` 是元数据的权威事实源。`ActionDefinition` 仍保留代码内元数据字段用于兼容和编程式调用场景，新项目推荐将元数据统一声明在清单中：
 
 ```ts
 export interface ActionDefinition<I = unknown, O = unknown> {
@@ -210,7 +210,7 @@ export interface ActionRef {
 
 ### 统一受管进程接口 ProcessAPI
 
-ActionDock 3.0 提供工业级受管进程接口 ProcessAPI，统一管理短时有界外部命令与长期交互式进程，覆盖进程启动、独占控制权租约、逐流增量读取、结构化控制与优雅终止：
+ActionDock 2.x 提供工业级受管进程接口 ProcessAPI，统一管理短时有界外部命令与长期交互式进程，覆盖进程启动、独占控制权租约、逐流增量读取、结构化控制与优雅终止：
 
 ```ts
 export interface ProcessAPI {

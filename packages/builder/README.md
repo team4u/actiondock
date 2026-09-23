@@ -1,12 +1,12 @@
 # @actiondock/builder
 
-ActionDock 3.0 构建规划、目录交付与技能导出包。
+ActionDock 2.x 构建规划、目录交付与技能导出包。
 
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D24.12.0-green?logo=node.js)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-`@actiondock/builder` 负责静态分析依赖关系、构建 Node.js 目录交付产物、打包标准 npm 压缩包以及将工具和规程导出为可分发的 Agent Skill 资产。在 ActionDock 3.0 中，Skill 模板生成与规程渲染能力（`generateSkillMd`、`generateCompositeSkillMd` 等）已统一归位并入本包。
+`@actiondock/builder` 负责静态分析依赖关系、构建 Node.js 目录交付产物、打包标准 npm 压缩包以及将工具和规程导出为可分发的 Agent Skill 资产。在 ActionDock 2.x 中，Skill 模板生成与规程渲染能力（`generateSkillMd`、`generateCompositeSkillMd` 等）已统一归位并入本包。
 
 ---
 
