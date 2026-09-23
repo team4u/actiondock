@@ -397,19 +397,11 @@ export class DefaultPackageRuntime implements PackageRuntime {
     };
   }
 
-  private buildRootInvocationContext(options?: RunOptions | InvocationContext): InvocationContext {
-    if (
-      typeof options === "object" &&
-      options !== null &&
-      "package" in options &&
-      "callStack" in options &&
-      "runId" in options &&
-      "rootRunId" in options
-    ) {
-      return options as InvocationContext;
-    }
+  private buildRootInvocationContext(actionId: string, options?: RunOptions): InvocationContext {
+    const rootKey = `${this.packageId}/${actionId}`;
     return createRootInvocationContext({
       targetPackage: this.identity,
+      callStack: [rootKey],
       signal: options?.signal,
       timeoutMs: options?.timeoutMs,
       config: options?.config,
@@ -425,7 +417,7 @@ export class DefaultPackageRuntime implements PackageRuntime {
   async runAction(
     id: string,
     input: JsonValue,
-    options?: RunOptions | InvocationContext
+    options?: RunOptions
   ): Promise<ExecutionResult> {
     let actionId = id;
     if (actionId.includes("/")) {
@@ -438,14 +430,14 @@ export class DefaultPackageRuntime implements PackageRuntime {
         );
       }
     }
-    const context = this.buildRootInvocationContext(options);
+    const context = this.buildRootInvocationContext(actionId, options);
     return this.executionService.execute(actionId, input, context);
   }
 
   async startAction(
     id: string,
     input: JsonValue,
-    options?: RunOptions | InvocationContext
+    options?: RunOptions
   ): Promise<ExecutionTicket> {
     let actionId = id;
     if (actionId.includes("/")) {
@@ -458,7 +450,7 @@ export class DefaultPackageRuntime implements PackageRuntime {
         );
       }
     }
-    const context = this.buildRootInvocationContext(options);
+    const context = this.buildRootInvocationContext(actionId, options);
     return this.executionService.start(actionId, input, context);
   }
 

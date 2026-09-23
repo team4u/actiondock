@@ -114,7 +114,7 @@ export class DefaultActionDockHost implements ActionDockHost {
   private catalog: ActionCatalog;
   private globalStorage?: RuntimeStorage;
 
-  constructor(options: ActionDockHostOptions = {}) {
+  constructor(options: ActionDockHostOptions = {}, internalOptions?: { deferInit?: boolean }) {
     this.hostSessionId = randomUUID();
     this.options = options;
     this.maxCallDepth = options.maxCallDepth ?? 16;
@@ -136,44 +136,101 @@ export class DefaultActionDockHost implements ActionDockHost {
       });
     }
 
+    if (internalOptions?.deferInit) {
+      return;
+    }
+
     try {
-      // 阶段一：注册显式传入的 packages 列表
-      this.registerExplicitPackages(options);
-
-      // 阶段二：自动加载当前工程（若发现工程根目录且未显式禁用）
-      if (options.autoLoadCurrentProject !== false) {
-        this.loadCurrentProject(options);
-      }
-
-      // 阶段三：扫描已软链接的外部包并注册至 Host
-      if (options.scanLinkedPackages) {
-        this.registerLinkedPackages(options);
-      }
-
-      this.rebuildGraphAndCatalog();
+      this.initializeSync();
     } catch (err) {
-      try {
-        this.dataDirLock?.release();
-      } catch {
-        // 忽略排他锁释放异常
-      }
-      this.dataDirLock = undefined;
-
-      // 仅安全关闭宿主内部创建的子 runtime，外部传入的 runtime 保持调用方生命周期与所有权
-      for (const runtime of this.internallyCreatedRuntimes) {
-        try {
-          const closePromise = runtime.close();
-          if (closePromise && typeof (closePromise as any).catch === "function") {
-            (closePromise as any).catch(() => {});
-          }
-        } catch {
-          // 忽略 runtime 关闭异常
-        }
-      }
-      this.internallyCreatedRuntimes.clear();
-      this.runtimes.clear();
+      this.rollbackSync();
       throw err;
     }
+  }
+
+  private initializeSync(): void {
+    // 阶段一：注册显式传入的 packages 列表
+    this.registerExplicitPackages(this.options);
+
+    // 阶段二：自动加载当前工程（若发现工程根目录且未显式禁用）
+    if (this.options.autoLoadCurrentProject !== false) {
+      this.loadCurrentProject(this.options);
+    }
+
+    // 阶段三：扫描已软链接的外部包并注册至 Host
+    if (this.options.scanLinkedPackages) {
+      this.registerLinkedPackages(this.options);
+    }
+
+    this.rebuildGraphAndCatalog();
+  }
+
+  public async initializeAsync(): Promise<void> {
+    this.initializeSync();
+  }
+
+  /**
+   * 异步安全回滚初始化失败时所占用的资源。
+   */
+  public async rollbackInitialization(): Promise<void> {
+    const internalRuntimes = Array.from(this.internallyCreatedRuntimes);
+    await Promise.all(
+      internalRuntimes.map(async (runtime) => {
+        try {
+          await runtime.close();
+        } catch {
+          // 忽略内部 Runtime 关闭异常
+        }
+      })
+    );
+    this.internallyCreatedRuntimes.clear();
+    this.runtimes.clear();
+
+    try {
+      this.globalStorage?.close();
+    } catch {
+      // 忽略全局存储关闭异常
+    }
+    this.globalStorage = undefined;
+
+    try {
+      this.dataDirLock?.release();
+    } catch {
+      // 忽略排他锁释放异常
+    }
+    this.dataDirLock = undefined;
+    this.isClosed = true;
+  }
+
+  private rollbackSync(): void {
+    try {
+      this.dataDirLock?.release();
+    } catch {
+      // 忽略排他锁释放异常
+    }
+    this.dataDirLock = undefined;
+
+    // 仅安全关闭宿主内部创建的子 runtime，外部传入的 runtime 保持调用方生命周期与所有权
+    for (const runtime of this.internallyCreatedRuntimes) {
+      try {
+        const closePromise = runtime.close();
+        if (closePromise && typeof (closePromise as any).catch === "function") {
+          (closePromise as any).catch(() => {});
+        }
+      } catch {
+        // 忽略 runtime 关闭异常
+      }
+    }
+    this.internallyCreatedRuntimes.clear();
+    this.runtimes.clear();
+
+    try {
+      this.globalStorage?.close();
+    } catch {
+      // 忽略全局存储关闭异常
+    }
+    this.globalStorage = undefined;
+    this.isClosed = true;
   }
 
   /**
@@ -779,8 +836,10 @@ export class DefaultActionDockHost implements ActionDockHost {
     }
 
     // 在边界安全组装受信任的根调用上下文（纯 Root Call，无父级血缘）
+    const rootKey = `${targetPackageId}/${targetActionId}`;
     const rootContext = createRootInvocationContext({
       targetPackage: targetRuntime.identity,
+      callStack: [rootKey],
       signal: options.signal,
       timeoutMs: options.timeoutMs,
       config: options.config,
@@ -1136,14 +1195,15 @@ export async function createActionDockHost(
       }
     }
 
-    createdHost = new DefaultActionDockHost(options);
+    createdHost = new DefaultActionDockHost(options, { deferInit: true });
+    await createdHost.initializeAsync();
     return createdHost;
   } catch (err) {
     if (createdHost) {
       try {
-        await createdHost.close();
+        await createdHost.rollbackInitialization();
       } catch {
-        // 忽略宿主关闭异常
+        // 忽略宿主回滚异常，确保抛出原始异常
       }
     }
     throw err;

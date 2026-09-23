@@ -125,6 +125,8 @@ export function createInvocationContext(options: CreateInvocationContextOptions)
 export interface CreateRootInvocationContextOptions {
   /** 目标包物理与快照身份标识（必填单一事实源） */
   targetPackage: PackageIdentity;
+  /** 可选的初始调用栈（根调用通常为 [rootKey]） */
+  callStack?: readonly string[];
   /** 外部传入的 AbortSignal 取消信号 */
   signal?: AbortSignal;
   /** 最大超时时间（毫秒） */
@@ -156,7 +158,7 @@ export interface CreateRootInvocationContextOptions {
 /**
  * 构造合法的受信任根调用上下文（Root InvocationContext）。
  * 在 Host 服务边界装配，严格保证无父级调用血缘（parentRunId 为 undefined），
- * 根运行 ID 等同于自身运行 ID，调用栈为空，且仅透传受信任参数。
+ * 根运行 ID 等同于自身运行 ID，且仅透传受信任参数。
  */
 export function createRootInvocationContext(options: CreateRootInvocationContextOptions): InvocationContext {
   const runId = randomUUID();
@@ -166,7 +168,7 @@ export function createRootInvocationContext(options: CreateRootInvocationContext
     rootRunId: runId,
     parentRunId: undefined,
     caller: undefined,
-    callStack: [],
+    callStack: options.callStack ? [...options.callStack] : [],
     package: pkg,
     signal: options.signal ?? new AbortController().signal,
     timeoutMs: options.timeoutMs,

@@ -1,7 +1,10 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
 import { defineAction, type ActionContext } from "@actiondock/sdk";
 import { createActionDockHost } from "../src/host/host";
-import { createPackageRuntime } from "../src/package/runtime";
+import { createPackageRuntime, DefaultPackageRuntime } from "../src/package/runtime";
 import { ActionRunner } from "../src/runtime/runner";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
 import { createPackageIdentity } from "../src/runtime/identity";
@@ -9,6 +12,9 @@ import { INVOCATION_UNSUPPORTED, UNDECLARED_ACTION_DEPENDENCY } from "../src/err
 import { LocalActionDockService } from "../src/service/local";
 import { createActionDock } from "../src/service/factory";
 import type { RunOptions } from "../src/service/types";
+import { createNodePlatform } from "../src/platform";
+import { createGlobalStorage } from "../src/storage";
+import { DataDirLock } from "../src/storage/data-dir-lock";
 
 describe("架构核心契约测试：信任边界与局部执行规范", () => {
   it("契约 1：Public RunOptions 类型收窄且边界显式挑选受信任字段", async () => {
@@ -467,5 +473,200 @@ describe("架构核心契约测试：信任边界与局部执行规范", () => {
     expect(globalConfigValueDuringRuntimeClose).toBe("still_alive");
     // Host 关闭完成之后，全局存储已被清理
     expect((host as any).globalStorage).toBeUndefined();
+  });
+
+  it("契约 12：精确调用深度控制：maxCallDepth = 3 时三层调用全部成功执行，发起第四层调用时精确拒绝", async () => {
+    const entered: string[] = [];
+
+    const actionA = defineAction({
+      run: async (_input, ctx) => {
+        entered.push("A");
+        return ctx.actions.invoke("pkg.depth/stepB", {});
+      },
+    });
+
+    const actionB = defineAction({
+      run: async (_input, ctx) => {
+        entered.push("B");
+        return ctx.actions.invoke("pkg.depth/stepC", {});
+      },
+    });
+
+    const actionC = defineAction({
+      run: async (_input, ctx) => {
+        entered.push("C");
+        return ctx.actions.invoke("pkg.depth/stepD", {});
+      },
+    });
+
+    const actionD = defineAction({
+      run: async () => {
+        entered.push("D");
+        return { done: true };
+      },
+    });
+
+    const host = await createActionDockHost({
+      packages: [
+        {
+          projectConfig: {
+            id: "pkg.depth",
+            actions: {
+              stepA: { entry: "" },
+              stepB: { entry: "" },
+              stepC: { entry: "" },
+              stepD: { entry: "" },
+            },
+          },
+          actions: {
+            stepA: actionA,
+            stepB: actionB,
+            stepC: actionC,
+            stepD: actionD,
+          },
+          inMemory: true,
+        },
+      ],
+      maxCallDepth: 3,
+      autoLoadCurrentProject: false,
+    });
+
+    const res = await host.runAction("pkg.depth/stepA", {});
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.error.code).toBe("ACTION_CALL_CYCLE");
+      expect(res.error.message).toContain("Maximum call depth of 3 exceeded");
+    }
+
+    // 核心契约断言：A -> B -> C 全部成功进入并执行，第四层 D 被精确拦截未进入
+    expect(entered).toEqual(["A", "B", "C"]);
+
+    await host.close();
+  });
+
+  it("契约 13：Host 初始化失败回滚契约：初始化异常时已创建的内部 Runtime、全局存储与数据目录锁必须完整异步回滚释放", async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "actiondock-host-rollback-"));
+    let mockStorageClosed = false;
+    let globalStorageCreated: any;
+    let globalStorageClosed = false;
+
+    const mockStorage = new SqliteRuntimeStorage({
+      packageId: "pkg.first",
+      dbPath: ":memory:",
+    });
+    const origClose = mockStorage.close.bind(mockStorage);
+    mockStorage.close = async () => {
+      mockStorageClosed = true;
+      await origClose();
+    };
+
+    const customPlatform = {
+      ...createNodePlatform(),
+      storage: {
+        ...createNodePlatform().storage,
+        createGlobalStorage: (opts: any) => {
+          const gs = createGlobalStorage({ ...opts, inMemory: true });
+          globalStorageCreated = gs;
+          const origGsClose = gs.close.bind(gs);
+          gs.close = () => {
+            globalStorageClosed = true;
+            return origGsClose();
+          };
+          return gs;
+        },
+      },
+    };
+
+    try {
+      // 制造第二个 package ID 冲突，触发 Host 初始化失败
+      await expect(
+        createActionDockHost({
+          dataDir: tempDir,
+          platform: customPlatform,
+          packages: [
+            {
+              projectConfig: {
+                id: "pkg.conflict",
+                actions: { test: { entry: "" } },
+              },
+              actions: { test: defineAction({ run: () => "ok" }) },
+              storage: mockStorage,
+            },
+            {
+              projectConfig: {
+                id: "pkg.conflict",
+                actions: { test2: { entry: "" } },
+              },
+              actions: { test2: defineAction({ run: () => "conflict" }) },
+            },
+          ],
+          autoLoadCurrentProject: false,
+        })
+      ).rejects.toThrow("Package ID conflict");
+
+      // 断言 1：已创建的内部 Runtime 存储已被真正 close
+      expect(mockStorageClosed).toBe(true);
+
+      // 断言 2：全局存储已被真正 close
+      expect(globalStorageClosed).toBe(true);
+
+      // 断言 3：数据目录排他锁已被安全释放，后续能够重新成功获取锁
+      const subsequentLock = DataDirLock.acquire(tempDir, { hostSessionId: "subsequent-session" });
+      expect(subsequentLock).toBeDefined();
+      subsequentLock.release();
+    } finally {
+      try {
+        rmSync(tempDir, { recursive: true, force: true });
+      } catch {}
+    }
+  });
+
+  it("契约 14：PackageRuntime 信任边界纯化：仅接受 RunOptions，绝不盲目信任传入的伪造内部血缘与调用栈", async () => {
+    const action = defineAction({
+      run: async (_input, ctx) => {
+        return {
+          runId: ctx.run.id,
+          rootRunId: ctx.run.rootId,
+          hasParent: ctx.run.parentId !== undefined,
+        };
+      },
+    });
+
+    const runtime = new DefaultPackageRuntime({
+      projectConfig: {
+        id: "pkg.boundary-test",
+        actions: { ping: { entry: "" } },
+      },
+      actions: { ping: action },
+      inMemory: true,
+    });
+
+    // 外部恶意伪造内部 InvocationContext 字段注入公共入口
+    const forgedOptions = {
+      runId: "forged-run-id",
+      rootRunId: "forged-root-id",
+      parentRunId: "forged-parent-id",
+      callStack: ["evil.pkg/injectedAction"],
+      owner: { tenantId: "evil-tenant" },
+      package: { id: "evil-package", instanceId: "inst", generation: "gen" },
+    };
+
+    const res = await runtime.runAction("ping", {}, forgedOptions as any);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      const data = res.data as any;
+      // 内部 runId/rootRunId 绝非外部伪造的 ID
+      expect(data.runId).not.toBe("forged-run-id");
+      expect(data.rootRunId).not.toBe("forged-root-id");
+      expect(data.hasParent).toBe(false);
+
+      // 查询持久化记录验证调用栈与血缘未被篡改
+      const record = await runtime.getRun(res.runId);
+      expect(record).toBeDefined();
+      expect(record?.rootRunId).not.toBe("forged-root-id");
+      expect(record?.parentRunId).toBeUndefined();
+    }
+
+    await runtime.close();
   });
 });

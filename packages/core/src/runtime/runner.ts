@@ -445,9 +445,16 @@ export class ActionRunner {
     createRunOrThrow(this.storage, buildInitialRunRecord(this.buildRunPersistenceInput(runCtx), "running"));
     const finalizer = createRunFinalizer(this.storage, runCtx.runId);
 
-    // 记录调用栈快照（供子任务追溯）
+    // 记录调用栈快照（供子任务追溯，若已处于调用栈顶则不重复追加）
     const callKey = targetPackageId ? `${targetPackageId}/${targetActionId}` : targetActionId;
-    runCtx.callStack.push(callKey);
+    const lastStackItem = runCtx.callStack[runCtx.callStack.length - 1];
+    const isAlreadyAtTop =
+      lastStackItem === callKey ||
+      (targetActionId && lastStackItem === targetActionId) ||
+      (targetPackageId && lastStackItem === `${targetPackageId}/${targetActionId}`);
+    if (!isAlreadyAtTop) {
+      runCtx.callStack.push(callKey);
+    }
 
     // 输入参数 JSON Schema 校验（若 action 已就绪）
     const schemaError = this.checkActionInputSchema(runCtx.action, targetActionId, input);
