@@ -20,6 +20,7 @@ import type {
   ExecuteOptions,
   ExecutionTicket,
 } from "../execution/types";
+import type { RunOptions } from "../invocation/types";
 import {
   cancelRemoteRun,
   clearRemoteRuns,
@@ -239,16 +240,16 @@ export class RemoteActionDockService implements ActionDockService {
 
     this.execution = {
       async run(
-        ref: ActionRef | string,
-        input: JsonValue,
-        opts?: ExecuteOptions
+        ref: ActionRef,
+        input?: unknown,
+        opts?: RunOptions
       ): Promise<ExecutionResult> {
         self.assertNotClosed();
         let parsed: ActionRef;
         try {
           parsed = ActionResolver.parseRef(ref);
         } catch {
-          parsed = typeof ref === "object" ? ref : { actionId: ref };
+          parsed = typeof ref === "object" ? ref : { actionId: String(ref) };
         }
 
         const actionId = parsed.packageId
@@ -258,7 +259,7 @@ export class RemoteActionDockService implements ActionDockService {
         return executeRemoteAction(
           self.serverUrl,
           actionId,
-          input,
+          (input ?? {}) as JsonValue,
           {
             configOverrides: opts?.config,
             token: self.token,
@@ -274,16 +275,16 @@ export class RemoteActionDockService implements ActionDockService {
       },
 
       async start(
-        ref: ActionRef | string,
-        input: JsonValue,
-        opts?: ExecuteOptions
+        ref: ActionRef,
+        input?: unknown,
+        opts?: RunOptions
       ): Promise<ExecutionTicket> {
         self.assertNotClosed();
         let parsed: ActionRef;
         try {
           parsed = ActionResolver.parseRef(ref);
         } catch {
-          parsed = typeof ref === "object" ? ref : { actionId: ref };
+          parsed = typeof ref === "object" ? ref : { actionId: String(ref) };
         }
 
         const actionId = parsed.packageId
@@ -293,7 +294,7 @@ export class RemoteActionDockService implements ActionDockService {
         const res = await executeRemoteAction(
           self.serverUrl,
           actionId,
-          input,
+          (input ?? {}) as JsonValue,
           {
             configOverrides: opts?.config,
             token: self.token,

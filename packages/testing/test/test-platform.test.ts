@@ -3,6 +3,7 @@ import {
   DefaultExecutionService,
   NodeFileSystem,
   NodeModuleLoader,
+  createPackageIdentity,
   type RuntimePlatform,
 } from "@actiondock/core";
 import { decodeText, defineAction } from "@actiondock/sdk";
@@ -117,6 +118,7 @@ describe("createTestPlatform 测试平台工厂测试", () => {
       });
 
       const service = new DefaultExecutionService({
+        identity: createPackageIdentity({ id: "test-pkg" }),
         packageId: "test-pkg",
         platform,
         eventSink: platform.eventSink,

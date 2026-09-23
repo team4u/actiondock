@@ -17,9 +17,9 @@ import type { EventSink } from "../runtime/events";
 import type { RuntimeStorage } from "../storage/types";
 import type { RuntimePlatform } from "../platform/types";
 import type { ProcessOwner } from "../process/process-manager";
-import type { PackageIdentity, RunOptions } from "../invocation/types";
+import type { PackageIdentity, RunOptions, InvocationContext } from "../invocation/types";
 
-export type { PackageIdentity, RunOptions };
+export type { PackageIdentity, RunOptions, InvocationContext };
 
 /**
  * 执行参数选项（ExecuteOptions）。
@@ -33,7 +33,7 @@ export interface ExecuteOptions extends RunOptions {
   /** 根运行 ID */
   rootRunId?: string;
   /** 调用栈切片快照 */
-  callStack?: string[];
+  callStack?: readonly string[];
   /** 最大调用嵌套深度限制 */
   maxCallDepth?: number;
   /** 外部进程执行器注入 */
@@ -60,17 +60,16 @@ export interface ExecuteOptions extends RunOptions {
 export type ActionInvoker = (
   childAction: ActionRef | string,
   childInput: unknown,
-  callerRunId?: string,
-  callerContext?: any
+  context: InvocationContext
 ) => Promise<unknown>;
 
 /**
  * 统一执行协调服务配置选项。
  */
 export interface ExecutionServiceOptions {
-  /** 包物理与快照身份标识值对象 */
-  identity?: PackageIdentity;
-  packageId: string;
+  /** 包物理与快照身份标识值对象（必填单一事实源） */
+  identity: PackageIdentity;
+  packageId?: string;
   hostSessionId?: string;
   storage?: RuntimeStorage;
   globalStorage?: RuntimeStorage;
@@ -89,22 +88,6 @@ export interface ExecutionServiceOptions {
   actionResolver?: (ref: ActionRef | string) => ActionDefinition | undefined | Promise<ActionDefinition | undefined>;
   packageInstanceId?: string;
   generationId?: string;
-  getStorageForPackage?: (packageId: string, projectRoot?: string) => RuntimeStorage;
-  packageContextResolver?: (packageId: string) => Promise<{
-    projectRoot?: string;
-    projectConfig?: ProjectConfig;
-    storage: RuntimeStorage;
-    actions?: Map<string, ActionDefinition>;
-    packageInstanceId?: string;
-    generationId?: string;
-  } | undefined> | {
-    projectRoot?: string;
-    projectConfig?: ProjectConfig;
-    storage: RuntimeStorage;
-    actions?: Map<string, ActionDefinition>;
-    packageInstanceId?: string;
-    generationId?: string;
-  } | undefined;
   customHome?: string;
   platform?: RuntimePlatform;
   /** 子任务调用委托函数 */
@@ -146,14 +129,14 @@ export interface ExecutionService {
   execute(
     ref: ActionRef | string,
     input: JsonValue,
-    options?: ExecuteOptions
+    options?: ExecuteOptions | InvocationContext
   ): Promise<ExecutionResult>;
 
   /** 异步启动 Action 并立即返回任务票据 */
   start(
     ref: ActionRef | string,
     input: JsonValue,
-    options?: ExecuteOptions
+    options?: ExecuteOptions | InvocationContext
   ): Promise<ExecutionTicket>;
 
   /** 根据 ID 获取运行记录 */
@@ -178,13 +161,7 @@ export interface ExecutionService {
   getAction(id: string): ActionDefinition | undefined;
 
   /** 设置子任务动作调用委托器 */
-  setActionInvoker?(
-    invoker?: (
-      childAction: ActionRef | string,
-      childInput: unknown,
-      callerRunId?: string
-    ) => Promise<unknown>
-  ): void;
+  setActionInvoker?(invoker?: ActionInvoker): void;
 
   /** 优雅关闭服务并等待活跃任务收尾 */
   close(options?: { graceMs?: number }): Promise<void>;

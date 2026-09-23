@@ -4,6 +4,7 @@ import { ActionRunner } from "../src/runtime/runner";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
 import { createActionDockApp } from "../src/app";
 import { createActionDockHost } from "../src/host";
+import { createPackageIdentity, InvocationPolicy } from "../src";
 import {
   INPUT_NOT_JSON,
   OUTPUT_NOT_JSON,
@@ -22,6 +23,7 @@ describe("核心运行时高级防御校验与边缘异常测试套件", () => {
     const createRunner = (packageId: string) => {
       const storage = new SqliteRuntimeStorage({ packageId, dbPath: ":memory:" });
       return new ActionRunner({
+        identity: createPackageIdentity({ id: packageId }),
         packageId,
         storage,
         actions: new Map([["echo", echoAction]]),
@@ -101,6 +103,7 @@ describe("核心运行时高级防御校验与边缘异常测试套件", () => {
       });
       const storage = new SqliteRuntimeStorage({ packageId: "test.out-nan", dbPath: ":memory:" });
       const runner = new ActionRunner({
+        identity: createPackageIdentity({ id: "test.out-nan" }),
         packageId: "test.out-nan",
         storage,
         actions: new Map([["nan-action", nanAction]]),
@@ -118,6 +121,7 @@ describe("核心运行时高级防御校验与边缘异常测试套件", () => {
       });
       const storage = new SqliteRuntimeStorage({ packageId: "test.out-inf", dbPath: ":memory:" });
       const runner = new ActionRunner({
+        identity: createPackageIdentity({ id: "test.out-inf" }),
         packageId: "test.out-inf",
         storage,
         actions: new Map([["inf-action", infAction]]),
@@ -139,6 +143,7 @@ describe("核心运行时高级防御校验与边缘异常测试套件", () => {
       });
       const storage = new SqliteRuntimeStorage({ packageId: "test.out-circ", dbPath: ":memory:" });
       const runner = new ActionRunner({
+        identity: createPackageIdentity({ id: "test.out-circ" }),
         packageId: "test.out-circ",
         storage,
         actions: new Map([["circ-action", circularAction]]),
@@ -177,6 +182,7 @@ describe("核心运行时高级防御校验与边缘异常测试套件", () => {
       } as any;
 
       const runner = new ActionRunner({
+        identity: createPackageIdentity({ id: "test.repo-unavailable" }),
         packageId: "test.repo-unavailable",
         actions: new Map([["simple", simpleAction]]),
         storage: faultyStorage,
@@ -213,6 +219,7 @@ describe("核心运行时高级防御校验与边缘异常测试套件", () => {
       } as any;
 
       const runner = new ActionRunner({
+        identity: createPackageIdentity({ id: "test.persist-failed" }),
         packageId: "test.persist-failed",
         actions: new Map([["simple", simpleAction]]),
         storage: flakyStorage,
@@ -256,13 +263,42 @@ describe("核心运行时高级防御校验与边缘异常测试套件", () => {
 
       const storage = new SqliteRuntimeStorage({ packageId: "test.subrun-limit", dbPath: ":memory:" });
       const runner = new ActionRunner({
+        identity: createPackageIdentity({ id: "test.subrun-limit" }),
         packageId: "test.subrun-limit",
         storage,
         actions: new Map<string, any>([
           ["parent", parentAction],
           ["slow-child", slowChildAction],
         ]),
-        maxSubRuns: 1,
+      });
+      const policy = new InvocationPolicy({ maxSubRuns: 1 });
+      runner.setActionInvoker(async (childAction, childInput, context) => {
+        const rootRunId = context.rootRunId;
+        const quotaErr = policy.checkSubRunQuota(rootRunId);
+        if (quotaErr) {
+          const err = new Error(quotaErr.message);
+          (err as any).code = quotaErr.code;
+          throw err;
+        }
+        if (!policy.acquireSubRun(rootRunId)) {
+          const err = new Error(`Maximum concurrent sub-runs (1) reached`);
+          (err as any).code = ACTION_SUBRUN_LIMIT;
+          throw err;
+        }
+        try {
+          const res = await runner.execute(childAction, childInput, {
+            parentRunId: context.parentRunId,
+            rootRunId: context.rootRunId,
+          });
+          if (!res.ok) {
+            const err = new Error(res.error.message);
+            (err as any).code = res.error.code;
+            throw err;
+          }
+          return res.data;
+        } finally {
+          policy.releaseSubRun(rootRunId);
+        }
       });
 
       const res = await runner.execute("parent", {});
@@ -287,12 +323,34 @@ describe("核心运行时高级防御校验与边缘异常测试套件", () => {
 
       const storage = new SqliteRuntimeStorage({ packageId: "test.cycle-detection", dbPath: ":memory:" });
       const runner = new ActionRunner({
+        identity: createPackageIdentity({ id: "test.cycle-detection" }),
         packageId: "test.cycle-detection",
         storage,
         actions: new Map([
           ["action-a", actionA],
           ["action-b", actionB],
         ]),
+      });
+      const cyclePolicy = new InvocationPolicy();
+      runner.setActionInvoker(async (childAction, childInput, context) => {
+        const parsed = typeof childAction === "string" ? childAction : childAction.actionId;
+        const cycle = cyclePolicy.checkCycle(context.callStack, parsed, "test.cycle-detection", "test.cycle-detection");
+        if (cycle.error) {
+          const err = new Error(cycle.error.message);
+          (err as any).code = cycle.error.code;
+          throw err;
+        }
+        const res = await runner.execute(childAction, childInput, {
+          parentRunId: context.parentRunId,
+          rootRunId: context.rootRunId,
+          callStack: [...context.callStack, cycle.callKey],
+        });
+        if (!res.ok) {
+          const err = new Error(res.error.message);
+          (err as any).code = res.error.code;
+          throw err;
+        }
+        return res.data;
       });
 
       const res = await runner.execute("action-a", {});

@@ -19,6 +19,8 @@ import type {
   ExecuteOptions,
   ExecutionTicket,
 } from "../execution/types";
+import type { RunOptions } from "../invocation/types";
+import { parseActionRef } from "../catalog/resolve-action";
 import { filterByIntent } from "../filter";
 import type { ActionDockHost } from "../host/types";
 import type { ConfigItemDefinition } from "../project/types";
@@ -110,27 +112,27 @@ export class LocalActionDockService implements ActionDockService {
 
     this.execution = {
       async run(
-        ref: ActionRef | string,
-        input: JsonValue,
-        opts?: ExecuteOptions
+        ref: ActionRef,
+        input?: unknown,
+        opts?: RunOptions
       ): Promise<ExecutionResult> {
+        const actionRef: ActionRef = typeof ref === "string" ? parseActionRef(ref) : ref;
         if ("listApps" in self.target) {
-          return (self.target as ActionDockHost).runAction(ref, input, opts);
+          return (self.target as ActionDockHost).runAction(actionRef, (input ?? {}) as JsonValue, opts);
         }
-        const actionId = typeof ref === "string" ? (ref.includes("/") ? ref.split("/").pop()! : ref) : ref.actionId;
-        return (self.target as ActionDockApp).runAction(actionId, input, opts);
+        return (self.target as ActionDockApp).runAction(actionRef.actionId, (input ?? {}) as JsonValue, opts);
       },
 
       async start(
-        ref: ActionRef | string,
-        input: JsonValue,
-        opts?: ExecuteOptions
+        ref: ActionRef,
+        input?: unknown,
+        opts?: RunOptions
       ): Promise<ExecutionTicket> {
+        const actionRef: ActionRef = typeof ref === "string" ? parseActionRef(ref) : ref;
         if ("listApps" in self.target) {
-          return (self.target as ActionDockHost).startAction(ref, input, opts);
+          return (self.target as ActionDockHost).startAction(actionRef, (input ?? {}) as JsonValue, opts);
         }
-        const actionId = typeof ref === "string" ? (ref.includes("/") ? ref.split("/").pop()! : ref) : ref.actionId;
-        return (self.target as ActionDockApp).startAction(actionId, input, opts);
+        return (self.target as ActionDockApp).startAction(actionRef.actionId, (input ?? {}) as JsonValue, opts);
       },
     };
 

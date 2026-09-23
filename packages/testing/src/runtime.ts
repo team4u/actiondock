@@ -1,7 +1,11 @@
 import {
   DefaultExecutionService,
   type ExecutionService,
-  type ExecutionStartOptions,
+  type RunOptions,
+  type ActionInvoker,
+  type InvocationContext,
+  createPackageIdentity,
+  InvocationPolicy,
   InMemoryEventSink,
   type ProjectConfig,
   RuntimeConfig,
@@ -430,7 +434,7 @@ export interface TestRuntime {
   execute<I = unknown, O = unknown>(
     action: ActionDefinition<I, O> | string,
     input?: I,
-    options?: ExecutionStartOptions
+    options?: RunOptions
   ): Promise<ExecutionResult<O>>;
 }
 
@@ -617,7 +621,10 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
 
   const actionsMap = normalizeTestActions(options.actions, packageId);
 
+  const identity = createPackageIdentity({ id: packageId });
+
   const executionService = new DefaultExecutionService({
+    identity,
     packageId,
     storage,
     projectConfig: options.projectConfig,
@@ -629,6 +636,95 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
     eventSink: events,
     platform: options.platform,
   });
+
+  const policy = new InvocationPolicy({ maxCallDepth: 16, maxSubRuns: 64 });
+  const testInvoker: ActionInvoker = async (childAction, childInput, context) => {
+    const actionRef =
+      typeof childAction === "string"
+        ? childAction
+        : childAction.packageId
+        ? `${childAction.packageId}/${childAction.actionId}`
+        : childAction.actionId;
+    const parts = actionRef.split("/");
+    const targetActionId = parts.length > 1 ? parts[1] : parts[0];
+    const targetPackageId = parts.length > 1 ? parts[0] : packageId;
+
+    const depthErr = policy.checkCallDepth(context.callStack, targetActionId, context.maxCallDepth);
+    if (depthErr) {
+      const err = new Error(depthErr.message);
+      (err as any).code = depthErr.code;
+      (err as any).details = depthErr.details;
+      throw err;
+    }
+
+    const cycle = policy.checkCycle(context.callStack, targetActionId, targetPackageId, packageId);
+    if (cycle.error) {
+      const err = new Error(cycle.error.message);
+      (err as any).code = cycle.error.code;
+      (err as any).details = cycle.error.details;
+      throw err;
+    }
+
+    const rootRunId = context.rootRunId;
+    const quotaErr = policy.checkSubRunQuota(rootRunId);
+    if (quotaErr) {
+      const err = new Error(quotaErr.message);
+      (err as any).code = quotaErr.code;
+      (err as any).details = quotaErr.details;
+      throw err;
+    }
+
+    if (!policy.acquireSubRun(rootRunId)) {
+      const err = new Error(`Maximum concurrent sub-runs (${policy.maxSubRuns}) reached`);
+      (err as any).code = "ACTION_SUBRUN_LIMIT";
+      (err as any).details = { alias: "MAX_SUBRUNS_REACHED", limit: policy.maxSubRuns };
+      throw err;
+    }
+
+    try {
+      const subContext: InvocationContext = {
+        ...context,
+        callStack: [...context.callStack, cycle.callKey],
+      };
+
+      if (targetPackageId !== packageId) {
+        const runner = (executionService as any)._runner;
+        if (runner?.getAction(actionRef)) {
+          const res = await runner.execute(actionRef, childInput, {
+            runId: subContext.runId,
+            rootRunId: subContext.rootRunId,
+            parentRunId: subContext.parentRunId,
+            callStack: subContext.callStack,
+            signal: subContext.signal,
+            maxCallDepth: subContext.maxCallDepth,
+          });
+          if (!res.ok) {
+            const err = new Error(res.error.message);
+            (err as any).code = res.error.code;
+            (err as any).details = res.error.details;
+            throw err;
+          }
+          return res.data;
+        }
+      }
+
+      const ticket = await executionService.start(targetActionId, childInput as JsonValue, subContext);
+      if (!ticket.result) {
+        throw new Error(`Execution ticket for run '${ticket.runId}' has no result Promise`);
+      }
+      const res = await ticket.result;
+      if (!res.ok) {
+        const err = new Error(res.error.message);
+        (err as any).code = res.error.code;
+        (err as any).details = res.error.details;
+        throw err;
+      }
+      return res.data;
+    } finally {
+      policy.releaseSubRun(rootRunId);
+    }
+  };
+  executionService.setActionInvoker?.(testInvoker);
 
   const registry = new TestActionRegistry(actionsMap, executionService, packageId);
 
@@ -652,7 +748,7 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
   const execute = async <I = unknown, O = unknown>(
     action: ActionDefinition<I, O> | string,
     input: I = {} as I,
-    execOptions: ExecutionStartOptions = {}
+    execOptions: RunOptions = {}
   ): Promise<ExecutionResult<O>> => {
     const actionRef = resolveActionRef(action, registry);
 
@@ -662,13 +758,12 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
       {
         signal: execOptions.signal,
         timeoutMs: execOptions.timeoutMs,
-        config: execOptions.configOverrides as Record<string, JsonValue> | undefined,
-        parentRunId: execOptions.parentRunId,
-        rootRunId: execOptions.rootRunId,
-        maxCallDepth: execOptions.maxCallDepth,
+        config: execOptions.config as Record<string, JsonValue> | undefined,
+        tenantId: execOptions.tenantId,
+        principalId: execOptions.principalId,
+        requestId: execOptions.requestId,
         logger: execOptions.logger,
         progress: execOptions.progress,
-        process: execOptions.process || process,
       }
     );
 

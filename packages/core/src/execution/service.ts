@@ -36,6 +36,7 @@ import type {
   ExecutionService,
   ExecutionServiceOptions,
   ExecutionTicket,
+  InvocationContext,
 } from "./types";
 
 export type { ExecutionServiceOptions };
@@ -95,12 +96,10 @@ export class DefaultExecutionService implements ExecutionService {
   private actionInvoker?: ActionInvoker;
 
   constructor(options: ExecutionServiceOptions) {
-    this.platform = options.platform;
-    this.identity = options.identity || createPackageIdentity({
-      id: options.packageId,
-      instanceId: options.packageInstanceId,
-      generation: options.generationId,
-    });
+    if (!options.identity) {
+      throw new Error("DefaultExecutionService requires 'identity' PackageIdentity option");
+    }
+    this.identity = options.identity;
     this.packageId = this.identity.id;
     this.packageInstanceId = this.identity.instanceId;
     this.generationId = this.identity.generation;
@@ -143,6 +142,7 @@ export class DefaultExecutionService implements ExecutionService {
     this.globalStorage = globalStorage;
 
     this._runner = new ActionRunner({
+      identity: this.identity,
       packageId: this.packageId,
       packageInstanceId: this.packageInstanceId,
       generationId: this.generationId,
@@ -156,8 +156,6 @@ export class DefaultExecutionService implements ExecutionService {
       process: this.process,
       clock: this.clock,
       platform: options.platform,
-      maxCallDepth: options.maxCallDepth,
-      maxSubRuns: options.maxSubRuns,
       actionResolver: (ref, currentPkgId) => {
         const parsed = typeof ref === "string" ? ActionResolver.parseRef(ref) : ref;
         if (parsed.packageId && parsed.packageId !== this.packageId) {
@@ -168,8 +166,6 @@ export class DefaultExecutionService implements ExecutionService {
         }
         return this.actionResolver ? this.actionResolver(parsed) : undefined;
       },
-      getStorageForPackage: options.getStorageForPackage,
-      packageContextResolver: options.packageContextResolver,
       customHome: options.customHome,
       actionInvoker: this.actionInvoker,
     });
@@ -209,10 +205,6 @@ export class DefaultExecutionService implements ExecutionService {
     return this.activeRuns.get(runId)?.handle;
   }
 
-  public setPackageContextResolver(resolver: any): void {
-    this._runner.setPackageContextResolver(resolver);
-  }
-
   private async resolveTargetAction(ref: ActionRef | string): Promise<ActionDefinition | undefined> {
     const parsed = typeof ref === "string" ? ActionResolver.parseRef(ref) : ref;
     const actionId = parsed.actionId;
@@ -231,7 +223,7 @@ export class DefaultExecutionService implements ExecutionService {
   async execute(
     ref: ActionRef | string,
     input: JsonValue,
-    options: ExecuteOptions = {}
+    options: ExecuteOptions | InvocationContext = {}
   ): Promise<ExecutionResult> {
     const ticket = await this.start(ref, input, options);
     if (!ticket.result) {
@@ -247,7 +239,7 @@ export class DefaultExecutionService implements ExecutionService {
   async start(
     ref: ActionRef | string,
     input: JsonValue,
-    options: ExecuteOptions = {}
+    options: ExecuteOptions | InvocationContext = {}
   ): Promise<ExecutionTicket> {
     if (this.isClosing) {
       throw new Error("ExecutionService is closing: new tasks rejected");
@@ -330,11 +322,22 @@ export class DefaultExecutionService implements ExecutionService {
       const runId = designatedRunId || randomUUID();
       const bridge = this.createEventBridge({ runId, options, effectiveClock });
 
+      const optPkgInstanceId =
+        "package" in options && options.package
+          ? options.package.instanceId
+          : (options as ExecuteOptions).packageInstanceId;
+      const optGenerationId =
+        "package" in options && options.package
+          ? options.package.generation
+          : (options as ExecuteOptions).generationId;
+      const optActionInvoker = (options as ExecuteOptions).actionInvoker;
+
       this.registerResolvedAction(target.runner, targetPackageId, targetActionId, target.action);
       const handle = target.runner.start(targetActionId, input, {
         runId,
         rootRunId: options.rootRunId,
         parentRunId: options.parentRunId,
+        callStack: options.callStack ? [...options.callStack] : undefined,
         hostSessionId: options.hostSessionId || this.hostSessionId,
         maxCallDepth: options.maxCallDepth,
         configOverrides: options.config as Record<string, unknown> | undefined,
@@ -344,8 +347,8 @@ export class DefaultExecutionService implements ExecutionService {
         logger: bridge.executionLogger,
         process: options.process || options.platform?.process || this.process,
         platform: options.platform || this.platform,
-        packageInstanceId: options.packageInstanceId || this.packageInstanceId,
-        generationId: options.generationId || this.generationId,
+        packageInstanceId: optPkgInstanceId || this.packageInstanceId,
+        generationId: optGenerationId || this.generationId,
         tenantId: options.owner?.tenantId || options.tenantId,
         principalId: options.owner?.principalId || options.principalId,
         owner: options.owner
@@ -353,12 +356,12 @@ export class DefaultExecutionService implements ExecutionService {
               tenantId: options.owner.tenantId,
               principalId: options.owner.principalId,
               packageInstanceId:
-                options.owner.packageInstanceId || options.packageInstanceId || this.packageInstanceId,
+                options.owner.packageInstanceId || optPkgInstanceId || this.packageInstanceId,
               generationId:
-                options.owner.generationId || options.generationId || this.generationId,
+                options.owner.generationId || optGenerationId || this.generationId,
             }
           : undefined,
-        actionInvoker: options.actionInvoker || this.actionInvoker,
+        actionInvoker: optActionInvoker || this.actionInvoker,
       });
 
       const activeItem: ActiveRun = {
@@ -564,9 +567,9 @@ export class DefaultExecutionService implements ExecutionService {
       rootRunId,
       parentRunId: options.parentRunId,
       packageId: targetPackageId,
-      packageInstanceId: options.packageInstanceId || target.runner.packageInstanceId || targetPackageId,
+      packageInstanceId: options.packageInstanceId || target.runner.packageInstanceId,
       actionId: targetActionId,
-      generationId: options.generationId || target.runner.generationId || "1",
+      generationId: options.generationId || target.runner.generationId,
       ownerId: this.ownerId,
       hostSessionId: options.hostSessionId || this.hostSessionId,
       status: "failed",

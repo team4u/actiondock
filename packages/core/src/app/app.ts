@@ -26,6 +26,10 @@ import { isSecretConfigKey, sanitizeConfigDefinitions } from "../storage/mask";
 import { decodeStateKey, SqliteRuntimeStorage } from "../storage/sqlite";
 import type { RuntimeStorage } from "../storage/types";
 import { createPackageIdentity, type PackageIdentity } from "../runtime/identity";
+import { InvocationPolicy } from "../invocation/policy";
+import { parseActionRef } from "../catalog/resolve-action";
+import { ACTION_SUBRUN_LIMIT, MAX_SUBRUNS_REACHED } from "../errors";
+import type { InvocationContext } from "../invocation/types";
 import { buildStaticActionMap, buildStaticPlaybookMap } from "./static-index";
 import type {
   ActionDockApp,
@@ -184,11 +188,76 @@ export class DefaultActionDockApp implements ActionDockApp {
       maxSubRuns: options.maxSubRuns,
       ownerId: options.ownerId,
       actionResolver: options.actionResolver,
-      packageContextResolver: options.packageContextResolver,
       customHome: options.customHome,
       platform: this.platform,
       actionInvoker: options.actionInvoker,
     });
+
+    if (!options.actionInvoker) {
+      const localPolicy = new InvocationPolicy({
+        maxCallDepth: options.maxCallDepth ?? 16,
+        maxSubRuns: options.maxSubRuns ?? 64,
+      });
+      const defaultInvoker: ActionInvoker = async (childAction, childInput, context: InvocationContext) => {
+        const parsed = typeof childAction === "string" ? parseActionRef(childAction) : childAction;
+        const targetActionId = parsed.actionId;
+        const targetPackageId = parsed.packageId || this.packageId;
+
+        const depthErr = localPolicy.checkCallDepth(context.callStack, targetActionId, context.maxCallDepth);
+        if (depthErr) {
+          const err = new Error(depthErr.message);
+          (err as any).code = depthErr.code;
+          (err as any).details = depthErr.details;
+          throw err;
+        }
+
+        const cycle = localPolicy.checkCycle(context.callStack, targetActionId, targetPackageId, this.packageId);
+        if (cycle.error) {
+          const err = new Error(cycle.error.message);
+          (err as any).code = cycle.error.code;
+          (err as any).details = cycle.error.details;
+          throw err;
+        }
+
+        const rootRunId = context.rootRunId;
+        const quotaErr = localPolicy.checkSubRunQuota(rootRunId);
+        if (quotaErr) {
+          const err = new Error(quotaErr.message);
+          (err as any).code = quotaErr.code;
+          (err as any).details = quotaErr.details;
+          throw err;
+        }
+
+        if (!localPolicy.acquireSubRun(rootRunId)) {
+          const err = new Error(`Maximum concurrent sub-runs (${localPolicy.maxSubRuns}) reached`);
+          (err as any).code = ACTION_SUBRUN_LIMIT;
+          (err as any).details = { alias: MAX_SUBRUNS_REACHED, limit: localPolicy.maxSubRuns };
+          throw err;
+        }
+
+        try {
+          const subContext: InvocationContext = {
+            ...context,
+            callStack: [...context.callStack, cycle.callKey],
+          };
+          const ticket = await this.executionService.start(targetActionId, childInput as JsonValue, subContext);
+          if (!ticket.result) {
+            throw new Error(`Execution ticket for run '${ticket.runId}' has no result Promise`);
+          }
+          const res = await ticket.result;
+          if (!res.ok) {
+            const err = new Error(res.error.message);
+            (err as any).code = res.error.code;
+            (err as any).details = res.error.details;
+            throw err;
+          }
+          return res.data;
+        } finally {
+          localPolicy.releaseSubRun(rootRunId);
+        }
+      };
+      this.executionService.setActionInvoker?.(defaultInvoker);
+    }
 
     // 7. 初始化配置解析器
     this.runtimeConfig = new RuntimeConfig(

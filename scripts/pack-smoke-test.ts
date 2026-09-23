@@ -144,7 +144,7 @@ try {
   console.log("[TEST] Testing module imports and runtime execution via native Node.js...");
   const testScriptContent = `
 import { defineAction } from "@actiondock/sdk";
-import { createActionDock, connectActionDock, ExecutionService, SqliteRuntimeStorage, createStorage, ACTIONDOCK_VERSION, createNodePlatform, NodeSqliteDriver, NodeHttpServer } from "@actiondock/core";
+import { createActionDock, connectActionDock, ExecutionService, createPackageIdentity, SqliteRuntimeStorage, createStorage, ACTIONDOCK_VERSION, createNodePlatform, NodeSqliteDriver, NodeHttpServer } from "@actiondock/core";
 import { createActionDockMcpServer, toMcpResult } from "@actiondock/mcp";
 import { SelectionPlanner, SkillExporter, buildProject, exportSkill } from "@actiondock/builder";
 import { main, createCliProgram, formatError, runStandaloneCli } from "@actiondock/cli";
@@ -224,6 +224,7 @@ console.log("[OK] Testing FakeClock, MemoryStorage, and createTestRuntime verifi
 const nodePlatform = createNodePlatform();
 const nodeStorage = nodePlatform.storage.createStorage("smoke-test-pkg", { inMemory: true });
 const execService = new ExecutionService({
+  identity: createPackageIdentity({ id: "smoke-test-pkg" }),
   packageId: "smoke-test-pkg",
   platform: nodePlatform,
   storage: nodeStorage,

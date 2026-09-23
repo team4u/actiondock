@@ -17,9 +17,9 @@ import type {
 } from "../app/types";
 import type {
   CancelResult,
-  ExecuteOptions,
   ExecutionTicket,
 } from "../execution/types";
+import type { RunOptions } from "../invocation/types";
 import type { ActionDockHost, ActionDockHostOptions } from "../host/types";
 import type { RuntimePlatform } from "../platform/types";
 import type { StateEntry } from "../storage/types";
@@ -52,15 +52,15 @@ export interface DiscoveryPort {
 export interface ExecutionPort {
   /** 同步执行指定 Action 并等待终态结果 */
   run(
-    ref: ActionRef | string,
-    input: JsonValue,
-    options?: ExecuteOptions
+    ref: ActionRef,
+    input?: unknown,
+    options?: RunOptions
   ): Promise<ExecutionResult>;
   /** 异步启动指定 Action 并立即返回任务执行票据 */
   start(
-    ref: ActionRef | string,
-    input: JsonValue,
-    options?: ExecuteOptions
+    ref: ActionRef,
+    input?: unknown,
+    options?: RunOptions
   ): Promise<ExecutionTicket>;
 }
 

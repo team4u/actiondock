@@ -9,6 +9,7 @@ import { initProject } from "../src/project/init";
 import { linkPackage } from "../src/registry/registry";
 import { ActionRunner } from "../src/runtime/runner";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
+import { createPackageIdentity, InvocationPolicy } from "../src";
 
 describe("ActionRunner", () => {
   it("executes an action successfully and validates schema", async () => {
@@ -24,6 +25,7 @@ describe("ActionRunner", () => {
     });
 
     const runner = new ActionRunner({
+      identity: createPackageIdentity({ id: "test-pkg" }),
       packageId: "test-pkg",
       storage,
       projectConfig: {
@@ -78,6 +80,7 @@ describe("ActionRunner", () => {
     });
 
     const runner = new ActionRunner({
+      identity: createPackageIdentity({ id: "test-pkg" }),
       packageId: "test-pkg",
       storage,
       projectConfig: {
@@ -136,6 +139,7 @@ describe("ActionRunner", () => {
     });
 
     const runner = new ActionRunner({
+      identity: createPackageIdentity({ id: "test-pkg" }),
       packageId: "test-pkg",
       storage,
       projectConfig,
@@ -176,6 +180,7 @@ describe("ActionRunner", () => {
     });
 
     const runner = new ActionRunner({
+      identity: createPackageIdentity({ id: "test-pkg" }),
       packageId: "test-pkg",
       storage,
       actions: new Map<string, ActionDefinition<any, any>>([
@@ -221,6 +226,7 @@ describe("ActionRunner", () => {
     });
 
     const runner = new ActionRunner({
+      identity: createPackageIdentity({ id: "local-pkg" }),
       packageId: "local-pkg",
       storage,
       actions: new Map<string, ActionDefinition<any, any>>([
@@ -284,6 +290,11 @@ describe("ActionRunner", () => {
 
     const extStorage = new SqliteRuntimeStorage({ packageId: "ext-pkg", dbPath: ":memory:" });
     const extRunner = new ActionRunner({
+      identity: createPackageIdentity({
+        id: "ext-pkg",
+        instanceId: "ext-pkg-instance-42",
+        generation: "gen-ext-9",
+      }),
       packageId: "ext-pkg",
       packageInstanceId: "ext-pkg-instance-42",
       generationId: "gen-ext-9",
@@ -292,6 +303,11 @@ describe("ActionRunner", () => {
     });
 
     const runner = new ActionRunner({
+      identity: createPackageIdentity({
+        id: "local-pkg",
+        instanceId: "local-pkg-inst-1",
+        generation: "local-gen-1",
+      }),
       packageId: "local-pkg",
       packageInstanceId: "local-pkg-inst-1",
       generationId: "local-gen-1",
@@ -302,12 +318,12 @@ describe("ActionRunner", () => {
       ]),
     });
 
-    runner.setActionInvoker(async (childAction: ActionRef | string, childInput: unknown, _parentRunId?: string, callerContext?: any) => {
+    runner.setActionInvoker(async (childAction: ActionRef | string, childInput: unknown, context) => {
       const parsed = ActionResolver.parseRef(childAction);
       if (parsed.packageId === "ext-pkg") {
         const targetOwner = {
-          tenantId: callerContext?.tenantId ?? callerContext?.owner?.tenantId ?? "default",
-          principalId: callerContext?.principalId ?? callerContext?.owner?.principalId ?? "default",
+          tenantId: context.tenantId ?? context.owner?.tenantId ?? "default",
+          principalId: context.principalId ?? context.owner?.principalId ?? "default",
           packageInstanceId: extRunner.packageInstanceId,
           generationId: extRunner.generationId,
         };
@@ -318,7 +334,7 @@ describe("ActionRunner", () => {
         return childRes.data;
       }
       if (!parsed.packageId || parsed.packageId === "local-pkg") {
-        const childRes = await runner.execute(parsed.actionId, childInput, { owner: callerContext?.owner });
+        const childRes = await runner.execute(parsed.actionId, childInput, { owner: context.owner });
         if (!childRes.ok) {
           throw new Error(childRes.error.message);
         }
@@ -381,6 +397,7 @@ describe("ActionRunner", () => {
     });
 
     const runner = new ActionRunner({
+      identity: createPackageIdentity({ id: "local-pkg" }),
       packageId: "local-pkg",
       storage,
       actions: new Map<string, ActionDefinition<any, any>>([
@@ -476,6 +493,7 @@ describe("ActionRunner", () => {
       });
 
       const runner = new ActionRunner({
+        identity: createPackageIdentity({ id: "team.demo-service" }),
         packageId: "team.demo-service",
         storage,
         projectConfig,
@@ -540,6 +558,7 @@ describe("ActionRunner", () => {
       });
 
       const runner = new ActionRunner({
+        identity: createPackageIdentity({ id: "@scope/my-service" }),
         packageId: "@scope/my-service",
         storage,
         projectConfig,
@@ -605,6 +624,7 @@ describe("ActionRunner", () => {
       });
 
       const runner = new ActionRunner({
+        identity: createPackageIdentity({ id: "tier-pkg" }),
         packageId: "tier-pkg",
         storage,
         projectConfig,
@@ -651,6 +671,7 @@ describe("ActionRunner", () => {
     });
 
     const runner = new ActionRunner({
+      identity: createPackageIdentity({ id: "test-pkg" }),
       packageId: "test-pkg",
       storage,
       actions: new Map([["test.sleep", sleepAction]]),
@@ -687,6 +708,7 @@ describe("ActionRunner", () => {
     });
 
     const runner = new ActionRunner({
+      identity: createPackageIdentity({ id: "test-pkg" }),
       packageId: "test-pkg",
       storage,
       actions: new Map([["test.cancellable", cancellableAction]]),
@@ -740,6 +762,7 @@ describe("ActionRunner", () => {
     };
 
     const service = new DefaultExecutionService({
+      identity: createPackageIdentity({ id: "test-pkg" }),
       packageId: "test-pkg",
       storage,
       eventSink: eventSink as any,
@@ -778,6 +801,7 @@ describe("ActionRunner", () => {
     });
 
     const runner = new ActionRunner({
+      identity: createPackageIdentity({ id: "test-pkg" }),
       packageId: "test-pkg",
       storage,
       projectConfig: {
@@ -794,7 +818,45 @@ describe("ActionRunner", () => {
         },
       },
       actions: new Map([["test.schema-action", schemaAction]]),
-      maxCallDepth: 3,
+    });
+
+    const policy = new InvocationPolicy({ maxCallDepth: 3 });
+    runner.setActionInvoker(async (childAction, childInput, context) => {
+      const ref = typeof childAction === "string" ? { actionId: childAction } : childAction;
+      const targetActionId = ref.actionId;
+      const targetKey = `${runner.packageId}/${targetActionId}`;
+      const callStack = context.callStack ?? [];
+
+      const cycle = policy.checkCycle(callStack, targetActionId, runner.packageId, runner.packageId);
+      if (cycle.error) {
+        const err = new Error(cycle.error.message);
+        (err as any).code = cycle.error.code;
+        (err as any).details = cycle.error.details;
+        throw err;
+      }
+
+      const depthErr = policy.checkCallDepth(callStack, targetActionId, context.maxCallDepth);
+      if (depthErr) {
+        const err = new Error(depthErr.message);
+        (err as any).code = depthErr.code;
+        (err as any).details = depthErr.details;
+        throw err;
+      }
+
+      const res = await runner.execute(targetActionId, childInput, {
+        parentRunId: context.parentRunId,
+        rootRunId: context.rootRunId,
+        callStack: [...callStack, targetKey],
+        signal: context.signal,
+        maxCallDepth: context.maxCallDepth,
+      });
+      if (!res.ok) {
+        const err = new Error(res.error.message);
+        (err as any).code = res.error.code;
+        (err as any).details = res.error.details;
+        throw err;
+      }
+      return res.data;
     });
 
     // 1. Validation failure should be persisted
@@ -893,6 +955,7 @@ describe("ActionRunner", () => {
     });
 
     const pkgBRunner = new ActionRunner({
+      identity: createPackageIdentity({ id: "pkg-b" }),
       packageId: "pkg-b",
       storage: pkgBStorage,
       projectConfig: {
@@ -905,6 +968,7 @@ describe("ActionRunner", () => {
     });
 
     const pkgARunner = new ActionRunner({
+      identity: createPackageIdentity({ id: "pkg-a" }),
       packageId: "pkg-a",
       storage: pkgAStorage,
       actions: new Map([["a.caller", pkgAAction]]),
@@ -956,10 +1020,10 @@ describe("ActionRunner", () => {
     });
 
     const runner = new ActionRunner({
+      identity: createPackageIdentity({ id: "pkg-caller" }),
       packageId: "pkg-caller",
       storage: pkgStorage,
       actions: new Map([["caller.test", callerAction]]),
-      packageContextResolver: async () => undefined,
     });
 
     const result = await runner.execute("caller.test", {});
@@ -976,6 +1040,7 @@ describe("ActionRunner", () => {
     });
 
     const service = new DefaultExecutionService({
+      identity: createPackageIdentity({ id: "test-pkg" }),
       packageId: "test-pkg",
       storage,
     });
@@ -999,6 +1064,7 @@ describe("ActionRunner", () => {
     });
 
     const runner = new ActionRunner({
+      identity: createPackageIdentity({ id: "caller-pkg" }),
       packageId: "caller-pkg",
       storage,
     });
@@ -1023,6 +1089,7 @@ describe("ActionRunner", () => {
     });
 
     const serviceA = new DefaultExecutionService({
+      identity: createPackageIdentity({ id: "pkg-a" }),
       packageId: "pkg-a",
       storage: storageA,
       actions: new Map([["work", workAction]]),
@@ -1057,15 +1124,10 @@ describe("ActionRunner", () => {
     });
 
     const serviceA = new DefaultExecutionService({
+      identity: createPackageIdentity({ id: "pkg-a" }),
       packageId: "pkg-a",
       storage: storageA,
       actions: new Map([["secret", localAction]]),
-      getStorageForPackage: (pkgId) => {
-        if (pkgId === "ghost-pkg") {
-          ghostStorageCreated = true;
-        }
-        return new SqliteRuntimeStorage({ packageId: pkgId, dbPath: ":memory:" });
-      },
     });
 
     // Calling non-existent ghost-pkg/secret must NOT execute pkg-a's secret action
@@ -1097,6 +1159,7 @@ describe("ActionRunner", () => {
     });
 
     const service = new DefaultExecutionService({
+      identity: createPackageIdentity({ id: "concurrency-pkg" }),
       packageId: "concurrency-pkg",
       storage,
       maxActiveRuns: maxActive,
@@ -1166,6 +1229,7 @@ describe("ActionRunner", () => {
 
     const storage = new SqliteRuntimeStorage({ packageId: "shared-proc-pkg", dbPath: ":memory:" });
     const runner = new ActionRunner({
+      identity: createPackageIdentity({ id: "shared-proc-pkg" }),
       packageId: "shared-proc-pkg",
       storage,
       platform,

@@ -30,7 +30,7 @@ export async function createActionDock(
   const host = await createActionDockHost({
     scanLinkedPackages: options.scanLinkedPackages ?? true,
     ...options,
-    recoverOrphans: options.recoverOrphans === true,
+    recoverOrphans: options.recoverOrphans ?? true,
     ...(options.hostOptions || {}),
   });
   return new LocalActionDockService(host, { enableManagement: options.enableManagement });

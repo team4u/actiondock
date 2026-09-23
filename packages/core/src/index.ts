@@ -45,12 +45,14 @@ export type {
 } from "./app/types";
 export type {
   RunOptions,
-  ExecuteOptions,
   ExecutionTicket,
   CancelResult,
   PackageIdentity,
+  ActionInvoker,
+  InvocationContext,
 } from "./execution/types";
-export type { ExecutionStartOptions } from "./runtime/runner";
+export { createPackageIdentity } from "./runtime/identity";
+export { InvocationPolicy, type InvocationPolicyOptions } from "./invocation/policy";
 export {
   DefaultExecutionService,
   DefaultExecutionService as ExecutionService,

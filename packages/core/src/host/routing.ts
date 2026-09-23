@@ -110,11 +110,7 @@ export async function describeVisiblePlaybook(
       apps.map((a) => [
         a.packageId,
         {
-          identity: {
-            id: a.packageId,
-            instanceId: a.packageInstanceId || a.packageId,
-            generation: a.generationId || "1",
-          },
+          identity: a.identity,
           root: a.packageRoot || "",
           manifest: a.projectConfig,
           directDependencies: new Set<string>(),
@@ -194,11 +190,7 @@ export async function describeActionAcrossApps(
         apps.map((a) => [
           a.packageId,
           {
-            identity: {
-              id: a.packageId,
-              instanceId: a.packageInstanceId || a.packageId,
-              generation: a.generationId || "1",
-            },
+            identity: a.identity,
             root: a.packageRoot || "",
             manifest: a.projectConfig,
             directDependencies: new Set<string>(),

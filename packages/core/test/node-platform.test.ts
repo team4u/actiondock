@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { decodeText, defineAction } from "@actiondock/sdk";
 import {
   createNodePlatform,
+  createPackageIdentity,
   DefaultExecutionService,
   NodeFileSystem,
   NodeHttpServer,
@@ -202,6 +203,7 @@ describe("createNodePlatform 平台工厂测试", () => {
       });
 
       const service = new DefaultExecutionService({
+        identity: createPackageIdentity({ id: "node-test-package" }),
         packageId: "node-test-package",
         platform,
       });

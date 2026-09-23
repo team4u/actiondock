@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { ActionRef } from "@actiondock/sdk";
 import { ActionResolver } from "../../catalog/action-resolver";
 import { filterByIntent } from "../../filter";
 import { ACTION_NOT_FOUND, ACTION_TIMEOUT, IDEMPOTENCY_CONFLICT, INPUT_VALIDATION_FAILED, PACKAGE_NOT_FOUND } from "../../errors";
@@ -272,9 +273,16 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
       body?.execution?.requestId ||
       undefined;
 
+    let actionRefObj: ActionRef;
+    try {
+      actionRefObj = ActionResolver.parseRef(actionRef);
+    } catch {
+      actionRefObj = { actionId: actionRef };
+    }
+
     if (isAsync) {
       try {
-        const ticket = await service.execution.start(actionRef, input, {
+        const ticket = await service.execution.start(actionRefObj, input, {
           timeoutMs,
           config: configOverrides,
           requestId,
@@ -327,7 +335,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
 
     // 同步执行模式
     try {
-      const result = await service.execution.run(actionRef, input, {
+      const result = await service.execution.run(actionRefObj, input, {
         signal: req.signal,
         timeoutMs,
         config: configOverrides,

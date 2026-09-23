@@ -20,6 +20,7 @@ import type {
   ExecutionTicket,
 } from "../execution/types";
 import type { ActionDockHost } from "../host/types";
+import { parseActionRef } from "../catalog/resolve-action";
 import { LocalActionDockService } from "../service/local";
 import type { ActionDockService } from "../service/types";
 import type { StateEntry } from "../storage/types";
@@ -94,7 +95,8 @@ export class ServiceActionDockTarget implements ActionDockTarget {
     input: JsonValue,
     options?: ExecuteOptions
   ): Promise<ExecutionResult> {
-    return this.service.execution.run(ref, input, options);
+    const actionRef: ActionRef = typeof ref === "string" ? parseActionRef(ref) : ref;
+    return this.service.execution.run(actionRef, input, options);
   }
 
   async startAction(
@@ -102,7 +104,8 @@ export class ServiceActionDockTarget implements ActionDockTarget {
     input: JsonValue,
     options?: ExecuteOptions
   ): Promise<ExecutionTicket> {
-    return this.service.execution.start(ref, input, options);
+    const actionRef: ActionRef = typeof ref === "string" ? parseActionRef(ref) : ref;
+    return this.service.execution.start(actionRef, input, options);
   }
 
   async listRuns(options?: ListRunsOptions): Promise<RunRecord[]> {

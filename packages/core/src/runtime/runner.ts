@@ -40,8 +40,9 @@ import type { Clock } from "./clock";
 import type { RuntimePlatform } from "../platform/types";
 import { createActionContext, StderrLogger } from "./context";
 import type { ProcessOwner } from "../process";
-import { createPackageIdentity, type PackageIdentity } from "./identity";
-import { InvocationPolicy } from "../invocation/policy";
+import type { PackageIdentity } from "./identity";
+import type { ActionInvoker } from "../execution/types";
+import type { InvocationCaller, InvocationContext } from "../invocation/types";
 import {
   ActionRegistry,
   findLocalAction,
@@ -87,35 +88,16 @@ export {
 };
 
 /**
- * 跨包运行上下文解析结果契约。
- */
-export interface PackageContextResolution {
-  projectRoot?: string;
-  projectConfig?: ProjectConfig;
-  storage: RuntimeStorage;
-  actions?: Map<string, ActionDefinition>;
-  packageInstanceId?: string;
-  generationId?: string;
-}
-
-/**
- * 跨包运行上下文解析委托函数契约。
- */
-export type PackageContextResolver = (
-  packageId: string
-) => Promise<PackageContextResolution | undefined> | PackageContextResolution | undefined;
-
-/**
  * ActionRunner 初始化配置选项。
  */
 export interface RunnerOptions {
-  /** 显式注入的包物理与快照身份标识值对象 */
-  identity?: PackageIdentity;
-  /** 运行所属的 Package ID */
-  packageId: string;
-  /** 包物理实例标识 */
+  /** 显式注入的包物理与快照身份标识值对象（必填单一事实源） */
+  identity: PackageIdentity;
+  /** 运行所属的 Package ID（可省略，优先自 identity.id 获取） */
+  packageId?: string;
+  /** 包物理实例标识（可省略，优先自 identity.instanceId 获取） */
   packageInstanceId?: string;
-  /** 快照代次标识 */
+  /** 快照代次标识（可省略，优先自 identity.generation 获取） */
   generationId?: string;
   /** 持久化运行时存储实例（SQLite） */
   storage?: RuntimeStorage;
@@ -140,25 +122,12 @@ export interface RunnerOptions {
     ref: ActionRef | string,
     currentPackageId?: string
   ) => ActionDefinition | undefined | Promise<ActionDefinition | undefined>;
-  /** 最大调用嵌套深度限制（防死循环/过深调用链，默认 16） */
-  maxCallDepth?: number;
-  /** 最大并发子任务数限制（默认 64） */
-  maxSubRuns?: number;
-  /** 跨包存储工厂 */
-  getStorageForPackage?: (packageId: string, projectRoot?: string) => RuntimeStorage;
-  /** 跨包运行上下文解析委托函数 */
-  packageContextResolver?: PackageContextResolver;
   /** 自定义 ActionDock 用户家目录（用于测试隔离与多租户环境） */
   customHome?: string;
   /** 执行宿主会话标识 */
   hostSessionId?: string;
   /** 子任务调用委托函数 */
-  actionInvoker?: (
-    childAction: ActionRef | string,
-    childInput: unknown,
-    callerRunId?: string,
-    callerContext?: any
-  ) => Promise<unknown>;
+  actionInvoker?: ActionInvoker;
 }
 
 /** ActionRunnerOptions 别名兼容 */
@@ -207,12 +176,7 @@ export interface ExecutionStartOptions {
   /** 执行级临时配置覆盖项 */
   configOverrides?: Record<string, unknown>;
   /** 子任务调用委托函数 */
-  actionInvoker?: (
-    childAction: ActionRef | string,
-    childInput: unknown,
-    callerRunId?: string,
-    callerContext?: any
-  ) => Promise<unknown>;
+  actionInvoker?: ActionInvoker;
 }
 
 /**
@@ -292,28 +256,19 @@ export class ActionRunner {
   private clock?: Clock;
   private process?: ProcessAPI;
   private platform?: RuntimePlatform;
-  private maxCallDepth: number;
-  private maxSubRuns: number;
   private actionResolver?: (
     ref: ActionRef | string,
     currentPackageId?: string
   ) => ActionDefinition | undefined | Promise<ActionDefinition | undefined>;
   private customHome?: string;
   private hostSessionId?: string;
-  private actionInvoker?: (
-    childAction: ActionRef | string,
-    childInput: unknown,
-    callerRunId?: string,
-    callerContext?: any
-  ) => Promise<unknown>;
-  private policy: InvocationPolicy;
+  private actionInvoker?: ActionInvoker;
 
   constructor(options: RunnerOptions) {
-    this.identity = options.identity || createPackageIdentity({
-      id: options.packageId,
-      instanceId: options.packageInstanceId,
-      generation: options.generationId,
-    });
+    if (!options.identity) {
+      throw new Error("ActionRunner requires 'identity' PackageIdentity option");
+    }
+    this.identity = options.identity;
     this.packageId = this.identity.id;
     this.packageInstanceId = this.identity.instanceId;
     this.generationId = this.identity.generation;
@@ -325,6 +280,7 @@ export class ActionRunner {
     this.customHome = options.customHome;
     this.platform = options.platform;
     this.actionInvoker = options.actionInvoker;
+    this.actionResolver = options.actionResolver;
 
     if (options.platform) {
       this.clock = options.platform.clock;
@@ -347,14 +303,6 @@ export class ActionRunner {
       this.process = options.process;
       this.clock = options.clock;
     }
-
-    this.maxCallDepth = options.maxCallDepth ?? 16;
-    this.maxSubRuns = options.maxSubRuns ?? 64;
-    this.actionResolver = options.actionResolver;
-    this.policy = new InvocationPolicy({
-      maxCallDepth: this.maxCallDepth,
-      maxSubRuns: this.maxSubRuns,
-    });
   }
 
   /** 本地 Action 注册表底层映射 */
@@ -388,14 +336,7 @@ export class ActionRunner {
   /**
    * 设置子任务动作调用委托器。
    */
-  public setActionInvoker(
-    invoker?: (
-      childAction: ActionRef | string,
-      childInput: unknown,
-      callerRunId?: string,
-      callerContext?: any
-    ) => Promise<unknown>
-  ): void {
+  public setActionInvoker(invoker?: ActionInvoker): void {
     this.actionInvoker = invoker;
   }
 
@@ -504,11 +445,6 @@ export class ActionRunner {
   }
 
   /**
-   * 注入或更新跨包运行上下文解析委托（空实现兼容）。
-   */
-  public setPackageContextResolver(_resolver?: PackageContextResolver): void {}
-
-  /**
    * 异步启动 Action 的执行并立即返回 ExecutionHandle 句柄。
    *
    * @param actionOrId Action 定义对象、引用或标识符
@@ -551,28 +487,9 @@ export class ActionRunner {
     createRunOrThrow(this.storage, buildInitialRunRecord(this.buildRunPersistenceInput(runCtx), "running"));
     const finalizer = createRunFinalizer(this.storage, runCtx.runId);
 
-    // 调用嵌套深度限制检测 (Max Call Depth Check)
-    const depthError = this.policy.checkCallDepth(runCtx.callStack, targetActionId, runCtx.options.maxCallDepth);
-    if (depthError) {
-      finalizer.finalize("failed", undefined, depthError);
-      return {
-        runId,
-        result: Promise.resolve({ ok: false, runId, error: depthError }),
-        cancel: () => false,
-      };
-    }
-
-    // 环路死锁检测 (Cycle Detection)
-    const cycle = this.policy.checkCycle(runCtx.callStack, targetActionId, targetPackageId, this.packageId);
-    if (cycle.error) {
-      finalizer.finalize("failed", undefined, cycle.error);
-      return {
-        runId,
-        result: Promise.resolve({ ok: false, runId, error: cycle.error }),
-        cancel: () => false,
-      };
-    }
-    runCtx.callStack.push(cycle.callKey);
+    // 记录调用栈快照（供子任务追溯）
+    const callKey = targetPackageId ? `${targetPackageId}/${targetActionId}` : targetActionId;
+    runCtx.callStack.push(callKey);
 
     // 输入参数 JSON Schema 校验（若 action 已就绪）
     const schemaError = this.checkActionInputSchema(runCtx.action, targetActionId, input);
@@ -767,8 +684,8 @@ export class ActionRunner {
     const effectiveOwner: ProcessOwner = options.owner || {
       tenantId: options.tenantId || "default",
       principalId: options.principalId || options.ownerId || "default",
-      packageInstanceId: options.packageInstanceId || (this.packageId === targetPackageId ? this.packageInstanceId : targetPackageId),
-      generationId: options.generationId || (this.packageId === targetPackageId ? this.generationId : "1"),
+      packageInstanceId: options.packageInstanceId || this.packageInstanceId,
+      generationId: options.generationId || this.generationId,
     };
     return createActionContext({
       actionId: targetActionId,
@@ -819,73 +736,75 @@ export class ActionRunner {
       generationId: this.generationId,
     };
 
-    // 统一通过调用治理策略校验并申请并发子任务配额
-    const quotaErr = this.policy.checkSubRunQuota(rootRunId);
-    if (quotaErr) {
-      const err = new Error(quotaErr.message);
-      (err as any).code = quotaErr.code;
-      (err as any).details = quotaErr.details;
-      throw err;
-    }
-
-    if (!this.policy.acquireSubRun(rootRunId)) {
-      const err = new Error(`Maximum concurrent sub-runs (${this.maxSubRuns}) reached`);
-      (err as any).code = ACTION_SUBRUN_LIMIT;
-      (err as any).details = { alias: MAX_SUBRUNS_REACHED, limit: this.maxSubRuns };
-      throw err;
-    }
-
-    try {
-      // 优先委托注入的 Host 动作调用器
-      const invoker = options.actionInvoker || this.actionInvoker;
-      if (invoker) {
-        return await (invoker as any)(childAction, childInput, parentRunId, {
-          owner: effectiveParentOwner,
-          tenantId: effectiveParentOwner.tenantId,
-          principalId: effectiveParentOwner.principalId,
-          callStack,
-        });
-      }
-
-      // 单元测试无 Host 场景：本地动作或外部已注入动作直接调度
-      const parsed = typeof childAction === "string" ? parseActionRef(childAction) : childAction;
-      const childPackageId = parsed.packageId || this.packageId;
-
-      if (
-        childPackageId !== this.packageId &&
-        !this.actionResolver &&
-        !this.actions.has(`${childPackageId}/${parsed.actionId}`)
-      ) {
-        const err = new Error(`Package '${childPackageId}' could not be resolved`);
-        (err as any).code = PACKAGE_NOT_FOUND;
-        throw err;
-      }
-
-      const childResult = await this.execute(childAction, childInput, {
+    // 优先委托注入的 Host 动作调用器（统一传递强类型 InvocationContext）
+    const invoker = options.actionInvoker || this.actionInvoker;
+    if (invoker) {
+      const childRunId = randomUUID();
+      const invocationContext: InvocationContext = {
+        runId: childRunId,
         rootRunId,
-        parentRunId,
-        callStack,
+        parentRunId: parentRunId || runCtx.runId,
+        caller: {
+          packageId: this.packageId,
+          actionId: runCtx.targetActionId,
+          runId: runCtx.runId,
+          declaredUses:
+            (runCtx.action as any)?.uses ||
+            this.projectConfig?.actions?.[runCtx.targetActionId]?.uses,
+        },
+        callStack: [...callStack],
+        package: this.identity,
         signal: controller.signal,
+        timeoutMs: options.timeoutMs,
+        maxCallDepth: options.maxCallDepth,
+        config: options.configOverrides,
+        tenantId: effectiveParentOwner.tenantId,
+        principalId: effectiveParentOwner.principalId,
+        hostSessionId: options.hostSessionId || this.hostSessionId,
+        logger: options.logger,
+        progress: options.progress,
         process: effectiveProcess,
         platform: options.platform || this.platform,
-        progress: options.progress,
-        logger: options.logger,
-        configOverrides: options.configOverrides,
-        maxCallDepth: options.maxCallDepth ?? this.maxCallDepth,
         owner: effectiveParentOwner,
-        hostSessionId: options.hostSessionId ?? this.hostSessionId,
-      });
-
-      if (!childResult.ok) {
-        const err = new Error(childResult.error.message);
-        (err as any).code = childResult.error.code;
-        (err as any).details = childResult.error.details;
-        throw err;
-      }
-      return childResult.data;
-    } finally {
-      this.policy.releaseSubRun(rootRunId);
+      };
+      return await invoker(childAction, childInput, invocationContext);
     }
+
+    // 单元测试无 Host 场景：本地动作或外部已注入动作直接调度
+    const parsed = typeof childAction === "string" ? parseActionRef(childAction) : childAction;
+    const childPackageId = parsed.packageId || this.packageId;
+
+    if (
+      childPackageId !== this.packageId &&
+      !this.actionResolver &&
+      !this.actions.has(`${childPackageId}/${parsed.actionId}`)
+    ) {
+      const err = new Error(`Package '${childPackageId}' could not be resolved`);
+      (err as any).code = PACKAGE_NOT_FOUND;
+      throw err;
+    }
+
+    const childResult = await this.execute(childAction, childInput, {
+      rootRunId,
+      parentRunId: parentRunId || runCtx.runId,
+      callStack: [...callStack],
+      signal: controller.signal,
+      process: effectiveProcess,
+      platform: options.platform || this.platform,
+      progress: options.progress,
+      logger: options.logger,
+      configOverrides: options.configOverrides,
+      owner: effectiveParentOwner,
+      hostSessionId: options.hostSessionId ?? this.hostSessionId,
+    });
+
+    if (!childResult.ok) {
+      const err = new Error(childResult.error.message);
+      (err as any).code = childResult.error.code;
+      (err as any).details = childResult.error.details;
+      throw err;
+    }
+    return childResult.data;
   }
 
   /**

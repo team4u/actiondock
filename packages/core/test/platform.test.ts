@@ -6,6 +6,7 @@ import { decodeText, encodeBytes, type ActionContext, type ProcessAPI, type Proc
 import { ActionRunner } from "../src/runtime/runner";
 import {
   createNodePlatform,
+  createPackageIdentity,
   DefaultExecutionService,
   NodeFileSystem,
   SqliteRuntimeStorage,
@@ -233,6 +234,7 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
       };
 
       const runner = new ActionRunner({
+        identity: createPackageIdentity({ id: "test-pkg" }),
         packageId: "test-pkg",
         platform: testPlatform,
       });
@@ -296,6 +298,7 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
       };
 
       const service = new DefaultExecutionService({
+        identity: createPackageIdentity({ id: "exec-pkg" }),
         packageId: "exec-pkg",
         platform: testPlatform,
       });
@@ -339,6 +342,7 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
       };
 
       const service = new DefaultExecutionService({
+        identity: createPackageIdentity({ id: "legacy-pkg" }),
         packageId: "legacy-pkg",
         storage: legacyStorage,
         clock: legacyClock,

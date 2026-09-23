@@ -191,22 +191,6 @@ export interface ActionDockAppOptions {
     | Record<string, ActionDefinition>;
   /** 跨包或动态 Action 解析器 */
   actionResolver?: (ref: ActionRef | string) => ActionDefinition | undefined | Promise<ActionDefinition | undefined>;
-  /** 跨包运行上下文解析委托函数 */
-  packageContextResolver?: (packageId: string) => Promise<{
-    projectRoot?: string;
-    projectConfig?: ProjectConfig;
-    storage: RuntimeStorage;
-    actions?: Map<string, ActionDefinition>;
-    packageInstanceId?: string;
-    generationId?: string;
-  } | undefined> | {
-    projectRoot?: string;
-    projectConfig?: ProjectConfig;
-    storage: RuntimeStorage;
-    actions?: Map<string, ActionDefinition>;
-    packageInstanceId?: string;
-    generationId?: string;
-  } | undefined;
   /** 显式注入的包物理与快照身份标识值对象 */
   identity?: PackageIdentity;
   /** 包物理实例标识 */
@@ -239,11 +223,7 @@ export interface ActionDockAppOptions {
   /** 是否暴露调试与物理路径信息 */
   exposeDebugInfo?: boolean;
   /** 子任务动作调用委托器 */
-  actionInvoker?: (
-    childAction: ActionRef | string,
-    childInput: unknown,
-    callerRunId?: string
-  ) => Promise<unknown>;
+  actionInvoker?: ActionInvoker;
 }
 
 /**
@@ -415,6 +395,8 @@ export interface PackageRuntime {
  * ActionDock 统一应用领域契约（PackageRuntime 别名兼容）。
  */
 export interface ActionDockApp extends PackageRuntime {
+  /** 包物理与快照身份标识值对象 */
+  readonly identity: PackageIdentity;
   /** 包唯一标识 */
   readonly packageId: string;
   /** 包物理实例标识 */

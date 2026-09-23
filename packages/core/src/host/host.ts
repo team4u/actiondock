@@ -19,10 +19,12 @@ import type {
   PlaybookSummary,
 } from "../app/types";
 import type {
+  ActionInvoker,
   CancelResult,
   ExecuteOptions,
   ExecutionTicket,
 } from "../execution/types";
+import type { InvocationContext } from "../invocation/types";
 import { findProjectRoot, loadProjectConfig } from "../project/loader";
 import { ActionPackageResolver } from "../project/resolver";
 import { hasPendingTransactions, isProjectLockHeld, recoverPendingTransactions } from "../project/transactions";
@@ -188,7 +190,6 @@ export class DefaultActionDockHost implements ActionDockHost {
           maxCallDepth: item.maxCallDepth ?? this.maxCallDepth,
           maxSubRuns: item.maxSubRuns ?? this.maxSubRuns,
           recoverOrphans: this.recoverOrphans,
-          packageContextResolver: this.resolvePackageContext.bind(this),
         });
         this.internallyCreatedApps.add(app);
         this.registerAppInternal(app, true);
@@ -262,7 +263,6 @@ export class DefaultActionDockHost implements ActionDockHost {
             maxCallDepth: this.maxCallDepth,
             maxSubRuns: this.maxSubRuns,
             recoverOrphans: this.recoverOrphans,
-            packageContextResolver: this.resolvePackageContext.bind(this),
           });
           this.internallyCreatedApps.add(app);
           this.registerAppInternal(app, isDirectOrRoot);
@@ -320,7 +320,6 @@ export class DefaultActionDockHost implements ActionDockHost {
           maxCallDepth: this.maxCallDepth,
           maxSubRuns: this.maxSubRuns,
           recoverOrphans: this.recoverOrphans,
-          packageContextResolver: this.resolvePackageContext.bind(this),
         });
         this.internallyCreatedApps.add(app);
         this.registerAppInternal(app, true);
@@ -334,19 +333,6 @@ export class DefaultActionDockHost implements ActionDockHost {
     }
   }
 
-  private resolvePackageContext(packageId: string) {
-    const targetApp = this.getApp(packageId);
-    if (!targetApp) return undefined;
-    return {
-      projectRoot: targetApp.packageRoot,
-      projectConfig: targetApp.projectConfig,
-      storage: targetApp.storage,
-      actions: targetApp.actionsMap,
-      packageInstanceId: targetApp.packageInstanceId,
-      generationId: targetApp.generationId,
-    };
-  }
-
   private bindApp(app: ActionDockApp): void {
     const invoker = this.createActionInvoker(app);
     if (typeof (app as any).setActionInvoker === "function") {
@@ -358,67 +344,164 @@ export class DefaultActionDockHost implements ActionDockHost {
     if (runner && typeof (runner as any).setActionInvoker === "function") {
       (runner as any).setActionInvoker(invoker);
     }
-    if (runner && typeof runner.setPackageContextResolver === "function") {
-      runner.setPackageContextResolver(this.resolvePackageContext.bind(this));
-    }
   }
 
   /**
    * 构造应用专属动作调用委托器。
-   * 铁律 2：跨包调用改走 ActionInvoker 回到 Host 执行主链，经由 InvocationPolicy 授权后调用目标 Package 的 ExecutionService。
+   * 铁律 2：跨包调用改走 ActionInvoker 回到 Host 执行主链，经由唯一的 InvocationPolicy 授权后调用目标 Package 的 ExecutionService。
    */
   private createActionInvoker(
     callerApp: ActionDockApp
-  ): (
-    childAction: ActionRef | string,
-    childInput: unknown,
-    callerRunId?: string,
-    callerContext?: { owner?: any; tenantId?: string; principalId?: string; callStack?: string[] }
-  ) => Promise<unknown> {
+  ): ActionInvoker {
     return async (
       childAction: ActionRef | string,
       childInput: unknown,
-      callerRunId?: string,
-      callerContext?: { owner?: any; tenantId?: string; principalId?: string; callStack?: string[] }
-    ) => {
+      context: InvocationContext
+    ): Promise<unknown> => {
       const resolved = resolveAction(childAction, {
         caller: callerApp.packageId,
         graph: this.graph,
         catalog: this.catalog,
       });
 
-      const resolvedRef = `${resolved.package.id}/${resolved.ref.actionId}`;
       const targetPackageId = resolved.package.id;
+      const targetActionId = resolved.ref.actionId;
       const isSamePackage = targetPackageId === callerApp.packageId;
       const targetApp = isSamePackage ? callerApp : this.getApp(targetPackageId);
 
-      const targetOwner = callerContext?.owner
-        ? {
-            tenantId: callerContext.owner.tenantId,
-            principalId: callerContext.owner.principalId,
-            packageInstanceId: isSamePackage
-              ? (callerContext.owner.packageInstanceId || callerApp.packageInstanceId || callerApp.packageId)
-              : (targetApp?.packageInstanceId || targetApp?.packageId || targetPackageId),
-            generationId: isSamePackage
-              ? (callerContext.owner.generationId || callerApp.generationId || "1")
-              : (targetApp?.generationId || "1"),
-          }
-        : undefined;
-
-      const result = await this.runAction(resolvedRef, childInput as JsonValue, {
-        parentRunId: callerRunId,
-        tenantId: callerContext?.tenantId,
-        principalId: callerContext?.principalId,
-        owner: targetOwner,
-        callStack: callerContext?.callStack,
-      });
-      if (!result.ok) {
-        const err = new Error(result.error.message);
-        (err as any).code = result.error.code;
-        (err as any).details = result.error.details;
+      if (!targetApp) {
+        const err = new Error(packageNotFoundMessage(targetPackageId, this.failedLinkedPackages));
+        (err as any).code = PACKAGE_NOT_FOUND;
         throw err;
       }
-      return result.data;
+
+      // 跨包 uses 依赖声明校验（统一委托 InvocationPolicy 单一事实源）
+      if (!isSamePackage) {
+        let declaredUses = context.caller?.declaredUses;
+        if (!declaredUses) {
+          try {
+            const callerSpec = await callerApp.describeAction(context.caller?.actionId || "");
+            declaredUses = callerSpec.uses;
+          } catch {
+            // 忽略规范提取异常
+          }
+        }
+        const authErr = this.policy.checkUsesAuthorization(
+          {
+            packageId: callerApp.packageId,
+            actionId: context.caller?.actionId || "",
+            declaredUses,
+          },
+          { packageId: targetPackageId, actionId: targetActionId },
+          this.resolver
+        );
+        if (authErr) {
+          const err = new Error(authErr.message);
+          (err as any).code = authErr.code;
+          (err as any).details = authErr.details;
+          throw err;
+        }
+      }
+
+      // 调用嵌套深度限制校验
+      const depthErr = this.policy.checkCallDepth(
+        context.callStack,
+        targetActionId,
+        context.maxCallDepth
+      );
+      if (depthErr) {
+        const err = new Error(depthErr.message);
+        (err as any).code = depthErr.code;
+        (err as any).details = depthErr.details;
+        throw err;
+      }
+
+      // 调用链环路死锁检测
+      const cycle = this.policy.checkCycle(
+        context.callStack,
+        targetActionId,
+        targetPackageId,
+        callerApp.packageId
+      );
+      if (cycle.error) {
+        const err = new Error(cycle.error.message);
+        (err as any).code = cycle.error.code;
+        (err as any).details = cycle.error.details;
+        throw err;
+      }
+
+      // 针对根运行的并发子任务配额校验与申请
+      const rootRunId = context.rootRunId;
+      const quotaErr = this.policy.checkSubRunQuota(rootRunId);
+      if (quotaErr) {
+        const err = new Error(quotaErr.message);
+        (err as any).code = quotaErr.code;
+        (err as any).details = quotaErr.details;
+        throw err;
+      }
+      if (!this.policy.acquireSubRun(rootRunId)) {
+        const err = new Error(`Maximum concurrent sub-runs (${this.policy.maxSubRuns}) reached`);
+        (err as any).code = ACTION_SUBRUN_LIMIT;
+        (err as any).details = { alias: MAX_SUBRUNS_REACHED, limit: this.policy.maxSubRuns };
+        throw err;
+      }
+
+      try {
+        const nextCallStack = [...context.callStack, cycle.callKey];
+        const targetOwner = context.owner
+          ? {
+              tenantId: context.owner.tenantId,
+              principalId: context.owner.principalId,
+              packageInstanceId: isSamePackage
+                ? (context.owner.packageInstanceId || callerApp.identity.instanceId)
+                : targetApp.identity.instanceId,
+              generationId: isSamePackage
+                ? (context.owner.generationId || callerApp.identity.generation)
+                : targetApp.identity.generation,
+            }
+          : undefined;
+
+        const subInvocationContext: InvocationContext = {
+          runId: context.runId,
+          rootRunId: context.rootRunId,
+          parentRunId: context.parentRunId,
+          caller: context.caller,
+          callStack: nextCallStack,
+          package: targetApp.identity,
+          signal: context.signal,
+          timeoutMs: context.timeoutMs,
+          config: context.config,
+          requestId: context.requestId,
+          tenantId: context.tenantId,
+          principalId: context.principalId,
+          hostSessionId: context.hostSessionId || this.hostSessionId,
+          maxCallDepth: context.maxCallDepth ?? this.maxCallDepth,
+          logger: context.logger,
+          progress: context.progress,
+          process: context.process,
+          platform: context.platform,
+          owner: targetOwner,
+        };
+
+        const ticket = await targetApp.executionService.start(
+          targetActionId,
+          childInput as JsonValue,
+          subInvocationContext
+        );
+        if (!ticket.result) {
+          throw new Error(`Execution ticket for run '${ticket.runId}' has no result Promise`);
+        }
+        const result = await ticket.result;
+        if (!result.ok) {
+          const err = new Error(result.error.message);
+          (err as any).code = result.error.code;
+          (err as any).details = result.error.details;
+          throw err;
+        }
+        return result.data;
+      } finally {
+        this.policy.releaseSubRun(rootRunId);
+      }
     };
   }
 
@@ -433,13 +516,8 @@ export class DefaultActionDockHost implements ActionDockHost {
   private rebuildGraphAndCatalog(): void {
     const nodes = new Map<string, PackageNode>();
     for (const app of this.apps.values()) {
-      const identity = createPackageIdentity({
-        id: app.packageId,
-        instanceId: app.packageInstanceId || `${app.packageId}:${app.packageRoot}`,
-        generation: app.generationId || "1",
-      });
       nodes.set(app.packageId, {
-        identity,
+        identity: app.identity,
         root: app.packageRoot || "",
         manifest: app.projectConfig,
         directDependencies: new Set<string>(),

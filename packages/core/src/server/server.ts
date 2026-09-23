@@ -22,9 +22,14 @@ import {
   jsonResponse,
   type RouteContext,
 } from "./routes";
+import type { JsonValue } from "@actiondock/sdk";
 import { DEFAULT_MAX_BODY_BYTES } from "./body";
 import { isLoopbackHost, resolveCorsHeaders, verifyBearerToken } from "./security";
 import type { ActionDockServerInstance, CoreHttpServerInstance, ServerOptions, ServerTlsOptions } from "./types";
+
+// ============================================================================
+// Service Adapters
+// ============================================================================
 
 /**
  * 依据传入的 Target 适配标准 ActionDockService 端口结构。
@@ -40,8 +45,8 @@ function createServiceFromTarget(target: ActionDockTarget, enableManagement = tr
       describePlaybook: (id) => target.describePlaybook(id),
     },
     execution: {
-      run: (ref, input, opts) => target.runAction(ref, input, opts),
-      start: (ref, input, opts) => target.startAction(ref, input, opts),
+      run: (ref, input, opts) => target.runAction(ref, (input ?? {}) as JsonValue, opts),
+      start: (ref, input, opts) => target.startAction(ref, (input ?? {}) as JsonValue, opts),
     },
     runs: {
       list: (query) => target.listRuns(query),
