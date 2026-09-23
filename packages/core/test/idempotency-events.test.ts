@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { type ActionContext, defineAction } from "@actiondock/sdk";
-import { createPackageRuntime } from "../src/app";
+import { createPackageRuntime } from "../src/package";
 import { createActionDockHost } from "../src/host";
 import { createActionDock } from "../src/service";
 import { startActionDockServer } from "../src/server";
@@ -419,10 +419,9 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
 
       serverInstance = await startActionDockServer({
         port: 0,
-        host: "127.0.0.1",
+        hostname: "127.0.0.1",
         token: AUTH_TOKEN,
         service,
-        hostInstance: host,
         enableManagement: false,
       });
       serverUrl = `http://127.0.0.1:${serverInstance.port}`;

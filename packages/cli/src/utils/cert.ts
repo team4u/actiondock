@@ -3,7 +3,9 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSy
 import { isIP } from "node:net";
 import { hostname, networkInterfaces } from "node:os";
 import { join } from "node:path";
-import { getActionDockHome } from "@actiondock/core";
+import {
+  getActionDockHome,
+} from "@actiondock/core/registry";
 import { generate } from "selfsigned";
 
 /**

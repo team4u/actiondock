@@ -5,7 +5,7 @@ import { hostname, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
-import { createPackageRuntime } from "../src/app";
+import { createPackageRuntime } from "../src/package";
 import { createActionDockHost } from "../src/host";
 import { createDefaultSqliteDriver } from "../src/storage/driver";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";

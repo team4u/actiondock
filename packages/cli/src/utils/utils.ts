@@ -1,4 +1,9 @@
-import { resolvePackageRoot, findProjectRoot } from "@actiondock/core";
+import {
+  resolvePackageRoot,
+} from "@actiondock/core/registry";
+import {
+  findProjectRoot,
+} from "@actiondock/core";
 import { ArgumentError, notInProjectError, packageNotFoundError } from "../errors";
 
 /**

@@ -2,7 +2,7 @@ import {
   linkPackage,
   pruneRegistry,
   unlinkPackage,
-} from "@actiondock/core";
+} from "@actiondock/core/registry";
 import { ExecutionError } from "../errors";
 import { writeStdout } from "../renderer";
 import { Command } from "commander";

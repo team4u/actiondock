@@ -6,7 +6,21 @@ ActionDock 2.x Node-first 原生运行时与核心领域。
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-`@actiondock/core` 是 ActionDock 2.x 的核心领域内核与 Node-first 原生运行时。统一暴露核心服务门面（`createActionDock`、`connectActionDock`）、标准服务端口体系（`DiscoveryPort`、`ExecutionPort`、`RunsPort`、`ConfigPort`、`StatePort`）、统一错误模型（`ActionDockError`）、原生平台装配（`createNodePlatform`）、服务启动（`startActionDockServer`）与包图依赖契约（`PackageGraph`），内部驱动存储引擎、受管进程与 HTTP 网络服务。
+`@actiondock/core` 是 ActionDock 2.x 的核心领域内核与 Node-first 原生运行时。统一暴露最小化核心服务门面（`createActionDock`、`connectActionDock`）、标准服务端口体系（`DiscoveryPort`、`ExecutionPort`、`RunsPort`、`EventsPort`、`ConfigPort`、`StatePort`）、统一错误模型（`ActionDockError`）、原生平台装配（`createNodePlatform`）、服务启动（`startActionDockServer`）与包图依赖契约（`PackageGraph`），内部驱动存储引擎、受管进程与 HTTP 网络服务。
+
+---
+
+## 子路径导出规范
+
+为保障边界清晰与根入口极简，`@actiondock/core` 提供精细化子路径导出：
+
+- `.`：核心公共根入口，仅暴露 minimal 服务门面、服务端口、平台工厂与核心契约。
+- `./server`：HTTP 服务容器、路由分发、TLS 安全与服务端守护进程。
+- `./project`：项目元数据、清单与依赖管理、依赖闭包及原子事务。
+- `./registry`：包注册表、软链接治理与包根目录寻址。
+- `./profile`：远程连接配置与管理客户端。
+- `./graph`：包图模型与动作目录解析。
+- `./package`：包级运行时、存储驱动与参数解析工具。
 
 ---
 
@@ -15,15 +29,15 @@ ActionDock 2.x Node-first 原生运行时与核心领域。
 ActionDock 2.x 将所有调用形态（命令行、协议服务、微服务与测试沙箱）收敛至统一的确定性执行主链：
 
 ```text
-Host -> Resolution -> PackageRuntime -> ExecutionService -> ActionRunner -> Action
+Service -> Resolution -> PackageRuntime -> ExecutionService -> ActionRunner -> Action
 ```
 
-- 宿主接入（Host）：通过 `ActionDockHost` 或标准服务端口接收外部调用请求与入参数据。
-- 解析定位（Resolution）：通过 `resolveAction` 依赖单一事实源完成动作寻址与跨包引用消歧。
-- 运行时装配（PackageRuntime）：基于包图节点构建隔离的包级执行上下文与依赖环境。
-- 执行协调（ExecutionService）：统筹并发配额、追踪根调用与协同取消信号。
-- 动作执行（ActionRunner）：驱动单一终态状态机，执行入参出参模式校验、循环依赖拦截与状态持久化。
-- 业务执行（Action）：执行开发者编写的纯粹业务逻辑并产出强类型结果。
+- 服务接入：通过统一服务门面或标准服务端口接收外部调用请求与入参数据。
+- 解析定位：通过 `resolveAction` 依赖单一事实源完成动作寻址与跨包引用消歧。
+- 运行时装配：基于包图节点构建隔离的包级执行上下文与依赖环境。
+- 执行协调：统筹并发配额、追踪根调用与协同取消信号。
+- 动作执行：驱动单一终态状态机，执行入参出参模式校验、循环依赖拦截与状态持久化。
+- 业务执行：执行开发者编写的纯粹业务逻辑并产出强类型结果。
 
 ---
 
@@ -38,11 +52,12 @@ Host -> Resolution -> PackageRuntime -> ExecutionService -> ActionRunner -> Acti
 
 ### 标准服务端口体系
 
-系统将所有对外能力解耦并收敛为五大标准服务端口契约：
+系统将所有对外能力解耦并收敛为六大标准服务端口契约：
 
 - 发现端口 `DiscoveryPort`：负责包与动作的元数据发现、清单检索、全文过滤与规程查询。
 - 执行端口 `ExecutionPort`：负责动作的同步阻塞执行（`run`）与异步启动执行（`start`）。
 - 运行端口 `RunsPort`：负责任务运行历史列表、单次详情查询与协同取消（`cancel`）。
+- 事件端口 `EventsPort`：负责任务执行实时事件流订阅。
 - 配置端口 `ConfigPort`：负责运行时分层配置读取、持久化配置管理与环境变量满足度体检。
 - 状态端口 `StatePort`：负责包级与动作级持久化键值存取、前缀列举与过期清理。
 

@@ -1,10 +1,14 @@
 import {
   filterWithFallbackInfo,
+} from "@actiondock/core/package";
+import {
   findProjectRoot,
-  listLinkedPackages,
   loadProjectConfig,
-  resolvePackageRoot,
 } from "@actiondock/core";
+import {
+  listLinkedPackages,
+  resolvePackageRoot,
+} from "@actiondock/core/registry";
 import { Command } from "commander";
 import {
   ArgumentError,

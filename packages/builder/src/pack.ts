@@ -14,7 +14,8 @@ import {
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import { getPackageSlug, loadProjectConfig } from "@actiondock/core";
+import { loadProjectConfig } from "@actiondock/core";
+import { getPackageSlug } from "@actiondock/core/project";
 import { BuilderError } from "./errors";
 import {
   assertNoFileProtocolDeps,

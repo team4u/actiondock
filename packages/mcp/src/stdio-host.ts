@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { serveParentIpc } from "@actiondock/core";
+import { serveParentIpc } from "@actiondock/core/server";
 import { resolveService } from "./adapter";
 import type { ActionDockMcpOptions } from "./types";
 

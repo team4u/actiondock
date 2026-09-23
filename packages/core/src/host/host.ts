@@ -8,7 +8,7 @@ import type {
   RunRecord,
   RuntimeError,
 } from "@actiondock/sdk";
-import { DefaultPackageRuntime } from "../app/app";
+import { DefaultPackageRuntime } from "../package/runtime";
 import type {
   PackageInfo,
   PackageRuntime,
@@ -18,7 +18,7 @@ import type {
   ListActionsOptions,
   PlaybookSpec,
   PlaybookSummary,
-} from "../app/types";
+} from "../package/types";
 import type {
   ActionInvoker,
   CancelResult,

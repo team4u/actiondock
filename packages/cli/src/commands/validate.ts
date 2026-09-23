@@ -1,11 +1,15 @@
 import {
   checkGeneratedTypes,
-  findProjectRoot,
   GENERATED_TYPES_OUTDATED_CODE,
   loadActions,
+} from "@actiondock/core/project";
+import {
+  findProjectRoot,
   loadProjectConfig,
-  resolvePackageRoot,
 } from "@actiondock/core";
+import {
+  resolvePackageRoot,
+} from "@actiondock/core/registry";
 import { Command } from "commander";
 import { ArgumentError, ExecutionError, notInProjectError, packageNotFoundError } from "../errors";
 import { renderActionValidation, renderResult } from "../renderer";

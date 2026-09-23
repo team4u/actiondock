@@ -2,23 +2,33 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import {
   assertPathWithinRoot,
-  DefaultActionCatalog,
-  fetchRemotePlaybooks,
-  fetchRemotePlaybookShow,
-  filterWithFallbackInfo,
-  findProjectRoot,
-  listLinkedPackages,
   loadActions,
   loadManifest,
   loadPlaybooks,
-  loadProjectConfig,
-  PackageGraphBuilder,
-  resolveAction,
-  resolvePackageRoot,
-  resolvePlaybook,
   saveManifest,
   type PlaybookDefinition,
+} from "@actiondock/core/project";
+import {
+  DefaultActionCatalog,
+  PackageGraphBuilder,
+  resolveAction,
+  resolvePlaybook,
+} from "@actiondock/core/graph";
+import {
+  fetchRemotePlaybooks,
+  fetchRemotePlaybookShow,
+} from "@actiondock/core/profile";
+import {
+  filterWithFallbackInfo,
+} from "@actiondock/core/package";
+import {
+  findProjectRoot,
+  loadProjectConfig,
 } from "@actiondock/core";
+import {
+  listLinkedPackages,
+  resolvePackageRoot,
+} from "@actiondock/core/registry";
 import { Command } from "commander";
 import {
   ArgumentError,

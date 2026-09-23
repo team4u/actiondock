@@ -1,5 +1,15 @@
 import { resolve } from "node:path";
-import { createNodePlatform, findProjectRoot, formatHostForUrl, loadProjectConfig, parseDuration } from "@actiondock/core";
+import {
+  createNodePlatform,
+  findProjectRoot,
+  loadProjectConfig,
+} from "@actiondock/core";
+import {
+  formatHostForUrl,
+} from "@actiondock/core/server";
+import {
+  parseDuration,
+} from "@actiondock/core/project";
 import { Command } from "commander";
 import { ArgumentError, ExecutionError } from "../errors";
 import { writeStderr, writeStdout } from "../renderer";

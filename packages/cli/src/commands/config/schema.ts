@@ -1,10 +1,16 @@
 import {
   createActionDock,
-  isSecretConfigKey,
   loadProjectConfig,
-  resolveEnvValue,
-  resolvePackageRoot,
 } from "@actiondock/core";
+import {
+  isSecretConfigKey,
+} from "@actiondock/core/project";
+import {
+  resolveEnvValue,
+} from "@actiondock/core/profile";
+import {
+  resolvePackageRoot,
+} from "@actiondock/core/registry";
 import type { Command } from "commander";
 import { ArgumentError, ExecutionError, notInProjectError, packageNotFoundError } from "../../errors";
 import { renderConfigSchema, renderResult, writeStdout } from "../../renderer";

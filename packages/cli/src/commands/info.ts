@@ -1,9 +1,13 @@
 import {
   fetchRemoteInfo,
+} from "@actiondock/core/profile";
+import {
   filterWithFallbackInfo,
+} from "@actiondock/core/package";
+import {
   getRegistryStatus,
   resolvePackageRoot,
-} from "@actiondock/core";
+} from "@actiondock/core/registry";
 import { Command } from "commander";
 import { ExecutionError, NO_PROJECT_NO_LINKED_MESSAGE, packageNotFoundError } from "../errors";
 import {

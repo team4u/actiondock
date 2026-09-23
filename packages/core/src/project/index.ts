@@ -19,3 +19,17 @@ export {
 } from "./transactions";
 export * from "./types";
 export * from "./types-generator";
+export {
+  assertPathWithinRoot,
+  isPathOutsideBoundary,
+  getPackageSlug,
+  parseDuration,
+} from "../utils";
+export {
+  isSecretConfigKey,
+  maskSecretValue,
+  sanitizeConfigDefinitions,
+} from "../storage/mask";
+export {
+  runDoctorChecks,
+} from "../doctor/doctor";

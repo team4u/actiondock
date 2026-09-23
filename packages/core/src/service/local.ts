@@ -12,7 +12,7 @@ import type {
   PackageInfo,
   PlaybookSpec,
   PlaybookSummary,
-} from "../app/types";
+} from "../package/types";
 import type {
   CancelResult,
   ExecutionTicket,

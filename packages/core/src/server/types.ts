@@ -1,4 +1,3 @@
-import type { ActionDockHost } from "../host/types";
 import type { ActionDockService } from "../service/types";
 
 export interface CoreHttpServerInstance {
@@ -35,14 +34,12 @@ export type CoreHttpServerFactory = (options: {
 export interface ServerOptions {
   /** 监听端口号（默认 5177） */
   port?: number;
-  /** 绑定监听的主机地址（默认 "127.0.0.1"），或关联的 ActionDockHost 宿主实例 */
-  host?: string | ActionDockHost;
-  /** 显式绑定的 ActionDockHost 宿主实例（向前兼容别名） */
-  hostInstance?: ActionDockHost;
+  /** 绑定监听的主机地址（默认 "127.0.0.1"） */
+  hostname?: string;
+  /** 绑定监听的主机地址（hostname 的字符串别名） */
+  host?: string;
   /** 关联的标准 ActionDockService 服务端口实例 */
   service?: ActionDockService;
-  /** 显式绑定的主机地址（当 host 传入 ActionDockHost 时的可选覆盖项） */
-  hostname?: string;
   /** 用于 HTTP Bearer Token 鉴权的密钥令牌 */
   token?: string;
   /** 是否允许通过 URL 查询参数携带 Token 进行鉴权（默认 false，关闭以防泄露） */
@@ -85,8 +82,6 @@ export interface ServerOptions {
 export interface ActionDockServerInstance {
   /** 实际监听的端口号 */
   port: number;
-  /** 关联的 ActionDockHost 宿主实例（若启动时传入或创建） */
-  host?: ActionDockHost;
   /** 关联的 ActionDockService 服务端口实例 */
   service: ActionDockService;
   /** 服务端可访问的基础 URL（如 "http://127.0.0.1:5177"） */

@@ -4,13 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
-  checkRemoteHealth,
   connectActionDock,
   initProject,
   startActionDockServer,
-  type ActionDockServerInstance,
 } from "../src";
-import { executeRemoteAction } from "../src/profile/client";
+import { type ActionDockServerInstance } from "../src/server";
+import { checkRemoteHealth, executeRemoteAction } from "../src/profile";
 import { getInsecureDispatcher } from "../src/server/dispatcher";
 
 /**

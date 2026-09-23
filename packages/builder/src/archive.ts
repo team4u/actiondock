@@ -3,7 +3,7 @@ import { createDeflateRaw, deflateRawSync, gzipSync, createGzip } from "node:zli
 import { basename, join, relative, sep } from "node:path";
 import { Readable, Transform, Writable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { assertPathWithinRoot } from "@actiondock/core";
+import { assertPathWithinRoot } from "@actiondock/core/project";
 
 /**
  * 纯 Node 实现的归档压缩模块。

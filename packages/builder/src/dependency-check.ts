@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
-import { isPathOutsideBoundary } from "@actiondock/core";
+import { isPathOutsideBoundary } from "@actiondock/core/project";
 import { BuilderError } from "./errors";
 import type { SelectionPlan } from "./types";
 

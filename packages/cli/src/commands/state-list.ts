@@ -1,7 +1,11 @@
 import type { ActionDockService } from "@actiondock/core";
 import {
   filterWithFallbackInfo,
+} from "@actiondock/core/package";
+import {
   listLinkedPackages,
+} from "@actiondock/core/registry";
+import {
   loadProjectConfig,
 } from "@actiondock/core";
 import { existsSync } from "node:fs";

@@ -1,4 +1,6 @@
-import { initProject } from "@actiondock/core";
+import {
+  initProject,
+} from "@actiondock/core";
 import { writeStdout } from "../renderer";
 import { ExecutionError } from "../errors";
 import { Command } from "commander";

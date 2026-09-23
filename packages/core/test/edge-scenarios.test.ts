@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { defineAction, type ActionContext } from "@actiondock/sdk";
 import { ActionRunner } from "../src/runtime/runner";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
-import { createPackageRuntime } from "../src/app";
+import { createPackageRuntime } from "../src/package";
 import { createActionDockHost } from "../src/host";
 import { createPackageIdentity } from "../src/runtime/identity";
 import { InvocationPolicy } from "../src/invocation/policy";

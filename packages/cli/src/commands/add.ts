@@ -2,9 +2,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
   PackageGraphBuilder,
+} from "@actiondock/core/graph";
+import {
   beginTransaction,
   computeManifestDigest,
-  findProjectRoot,
   getInstallCommand,
   loadLockfile,
   loadManifest,
@@ -14,6 +15,9 @@ import {
   saveManifest,
   type ActionDockLockfile,
   type ActionDockManifest,
+} from "@actiondock/core/project";
+import {
+  findProjectRoot,
 } from "@actiondock/core";
 import { Command } from "commander";
 import { ArgumentError, ExecutionError, notInProjectError } from "../errors";

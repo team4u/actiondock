@@ -1,5 +1,4 @@
-import type { PackageInfo } from "../../app/types";
-import type { ActionDockHost } from "../../host/types";
+import type { PackageInfo } from "../../package/types";
 import type { ActionDockService } from "../../service/types";
 import { assertValidPackageId } from "../../utils";
 import type { ServerOptions } from "../types";
@@ -15,7 +14,6 @@ export interface RouteContext {
   projectRoot: string | null;
   customHome?: string;
   service: ActionDockService;
-  host?: ActionDockHost;
   options: ServerOptions;
 }
 

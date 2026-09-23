@@ -1,12 +1,20 @@
 import {
   fetchRemoteConfig,
+} from "@actiondock/core/profile";
+import {
   filterWithFallbackInfo,
+} from "@actiondock/core/package";
+import {
   findProjectRoot,
-  isSecretConfigKey,
   loadProjectConfig,
-  maskSecretValue,
-  resolvePackageRoot,
 } from "@actiondock/core";
+import {
+  isSecretConfigKey,
+  maskSecretValue,
+} from "@actiondock/core/project";
+import {
+  resolvePackageRoot,
+} from "@actiondock/core/registry";
 import type { Command } from "commander";
 import { packageNotFoundError } from "../../errors";
 import { renderConfigList, renderResult } from "../../renderer";

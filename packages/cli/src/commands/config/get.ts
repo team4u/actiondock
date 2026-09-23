@@ -1,10 +1,16 @@
 import {
   fetchRemoteConfig,
+} from "@actiondock/core/profile";
+import {
   isSecretConfigKey,
-  loadProjectConfig,
   maskSecretValue,
-  resolvePackageRoot,
+} from "@actiondock/core/project";
+import {
+  loadProjectConfig,
 } from "@actiondock/core";
+import {
+  resolvePackageRoot,
+} from "@actiondock/core/registry";
 import type { Command } from "commander";
 import { ArgumentError, packageNotFoundError } from "../../errors";
 import { renderResult } from "../../renderer";

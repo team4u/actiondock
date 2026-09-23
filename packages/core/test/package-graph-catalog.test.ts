@@ -8,7 +8,7 @@ import {
   PackageGraphBuilder,
   resolveAction,
   resolvePlaybook,
-} from "../src";
+} from "../src/graph";
 import { PackageDiscovery } from "../src/catalog/discovery";
 import { DefaultPackageGraph } from "../src/catalog/graph";
 import { DefaultRegistryStore } from "../src/registry/store";

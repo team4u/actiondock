@@ -1,4 +1,4 @@
-import type { ActionSpec } from "../app/types";
+import type { ActionSpec } from "../package/types";
 import { buildCliInputAdviceV1 } from "./advice";
 import { isForbiddenActionInputPropertyName } from "./flat-predicates";
 

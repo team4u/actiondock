@@ -4,11 +4,13 @@ import {
   createActionDock,
   createNodePlatform,
   findProjectRoot,
-  formatHostForUrl,
   loadProjectConfig,
   startActionDockServer,
-  type ServerTlsOptions,
 } from "@actiondock/core";
+import {
+  formatHostForUrl,
+  type ServerTlsOptions,
+} from "@actiondock/core/server";
 import { Command } from "commander";
 import { ArgumentError, ExecutionError } from "../errors";
 import { writeStderr, writeStdout } from "../renderer";

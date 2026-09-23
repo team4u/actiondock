@@ -2,7 +2,7 @@ import {
   StandaloneDispatcher as CoreStandaloneDispatcher,
   type StandaloneDispatcherOptions,
   type InvocationControl,
-} from "@actiondock/core";
+} from "@actiondock/core/package";
 import type { StandaloneOptions } from "../types";
 
 export { type InvocationControl };

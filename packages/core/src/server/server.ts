@@ -1,12 +1,10 @@
 import { resolve } from "node:path";
 import { NodeHttpServer } from "./http-server";
-import { createActionDockHost } from "../host/host";
+import { createActionDock } from "../service/factory";
 import { NOT_FOUND, UNAUTHORIZED } from "../errors";
-import type { ActionDockHost } from "../host/types";
 import { ensureDependencyClosure } from "../project/closure";
 import { findProjectRoot } from "../project/loader";
 import { listLinkedPackages, resolvePackageRoot } from "../registry/registry";
-import { LocalActionDockService } from "../service/local";
 import type { ActionDockService } from "../service/types";
 import {
   handleActionsRoutes,
@@ -65,16 +63,7 @@ export async function launchHttpServer(
 export async function startActionDockServer(
   options: ServerOptions = {}
 ): Promise<ActionDockServerInstance> {
-  let hostInstance: ActionDockHost | undefined =
-    options.hostInstance ??
-    (options.host && typeof options.host === "object" && "listActions" in options.host
-      ? options.host
-      : undefined);
-
-  const hostString =
-    typeof options.host === "string"
-      ? options.host
-      : (options.hostname ?? "127.0.0.1");
+  const hostString = options.hostname ?? options.host ?? "127.0.0.1";
 
   const port = options.port ?? 5177;
   const host = hostString;
@@ -93,22 +82,18 @@ export async function startActionDockServer(
 
   let serviceInstance: ActionDockService | undefined = options.service;
 
-  // 若调用方未传入 host 或 service，通过 projectRoot、customHome、platform 等直接创建宿主
-  if (!serviceInstance && !hostInstance) {
+  // 若未传 service，服务端统一通过 createActionDock() 实例化，不再接受或处理外部传入的 Host 实体
+  if (!serviceInstance) {
     const scanLinkedPackages = options.scanLinkedPackages ?? !projectRoot;
-    hostInstance = await createActionDockHost({
+    serviceInstance = await createActionDock({
       projectRoot: projectRoot || undefined,
       customHome,
       platform: options.platform,
       dataDir: options.dataDir,
       inMemory: options.inMemory,
       scanLinkedPackages,
-      autoLoadCurrentProject: true,
+      enableManagement: options.enableManagement,
     });
-  }
-
-  if (!serviceInstance && hostInstance) {
-    serviceInstance = new LocalActionDockService(hostInstance, { enableManagement: options.enableManagement });
   }
 
   if (!serviceInstance) {
@@ -160,7 +145,6 @@ export async function startActionDockServer(
       projectRoot,
       customHome,
       service: serviceInstance!,
-      host: hostInstance,
       options,
     };
 
@@ -325,7 +309,6 @@ export async function startActionDockServer(
     set port(val: number) {
       server.port = val;
     },
-    host: hostInstance,
     service: serviceInstance,
     get url() {
       return `${protocol}://${formatHostForUrl(actualHost)}:${this.port}`;
@@ -338,13 +321,6 @@ export async function startActionDockServer(
           await serviceInstance.close(stopOptions);
         } catch {
           // 忽略服务关闭异常
-        }
-      }
-      if (hostInstance) {
-        try {
-          await hostInstance.close(stopOptions);
-        } catch {
-          // 忽略宿主关闭异常
         }
       }
     },

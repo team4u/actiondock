@@ -1,6 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { findProjectRoot } from "@actiondock/core";
+import {
+  findProjectRoot,
+} from "@actiondock/core";
 import { Command } from "commander";
 import { writeStderr } from "../renderer";
 import { spawnAsync } from "../utils";

@@ -1,5 +1,10 @@
 import type { Command } from "commander";
-import { findProjectRoot, writeActionTypes } from "@actiondock/core";
+import {
+  findProjectRoot,
+} from "@actiondock/core";
+import {
+  writeActionTypes,
+} from "@actiondock/core/project";
 import { ArgumentError, ExecutionError, notInProjectError } from "../errors";
 import { renderResult } from "../renderer";
 import type { CliContext } from "../types";

@@ -1,4 +1,9 @@
-import { findProjectRoot, resolvePackageRoot } from "@actiondock/core";
+import {
+  findProjectRoot,
+} from "@actiondock/core";
+import {
+  resolvePackageRoot,
+} from "@actiondock/core/registry";
 import { Command } from "commander";
 import { ExecutionError, notInProjectError, packageNotFoundError } from "../errors";
 import { renderResult, writeStdout } from "../renderer";

@@ -3,11 +3,15 @@ import {
   createActionDock,
   createNodePlatform,
   findProjectRoot,
-  resolvePackageRoot,
-  resolveTarget,
   type ActionDockService,
-  type ResolvedTarget,
 } from "@actiondock/core";
+import {
+  resolvePackageRoot,
+} from "@actiondock/core/registry";
+import {
+  resolveTarget,
+  type ResolvedTarget,
+} from "@actiondock/core/profile";
 import type { Command } from "commander";
 import type { CliContext } from "../types";
 

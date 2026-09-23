@@ -2,12 +2,14 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import {
   assertPathWithinRoot,
-  findProjectRoot,
   getPackageSlug,
   loadManifest,
-  loadProjectConfig,
   saveManifest,
   writeActionTypes,
+} from "@actiondock/core/project";
+import {
+  findProjectRoot,
+  loadProjectConfig,
 } from "@actiondock/core";
 import type { Command } from "commander";
 import { ExecutionError, notInProjectError } from "../../errors";

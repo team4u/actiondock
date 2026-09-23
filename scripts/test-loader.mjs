@@ -28,13 +28,23 @@ export async function resolve(specifier, context, nextResolve) {
       }
     }
 
-    // 2. Check @actiondock/* workspace aliases
+    // 2. Check @actiondock/* workspace aliases and subpaths
     if (specifier.startsWith("@actiondock/")) {
-      const pkgName = specifier.slice("@actiondock/".length);
-      const candidates = [
-        path.join(rootDir, "packages", pkgName, "src", "index.ts"),
-        path.join(rootDir, "packages", pkgName, "dist", "index.js"),
-      ];
+      const sub = specifier.slice("@actiondock/".length);
+      const parts = sub.split("/");
+      const pkg = parts[0];
+      const rest = parts.slice(1).join("/");
+      const candidates = rest
+        ? [
+            path.join(rootDir, "packages", pkg, "src", rest, "index.ts"),
+            path.join(rootDir, "packages", pkg, "src", rest + ".ts"),
+            path.join(rootDir, "packages", pkg, "dist", rest, "index.js"),
+            path.join(rootDir, "packages", pkg, "dist", rest + ".js"),
+          ]
+        : [
+            path.join(rootDir, "packages", pkg, "src", "index.ts"),
+            path.join(rootDir, "packages", pkg, "dist", "index.js"),
+          ];
       for (const candidate of candidates) {
         if (fs.existsSync(candidate)) {
           return await nextResolve(pathToFileURL(candidate).href, context);

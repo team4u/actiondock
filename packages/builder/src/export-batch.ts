@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { getPackageSlug, loadProjectConfig } from "@actiondock/core";
+import { loadProjectConfig } from "@actiondock/core";
+import { getPackageSlug } from "@actiondock/core/project";
 import { BuilderError } from "./errors";
 import type {
   BatchSkillExportOptions,

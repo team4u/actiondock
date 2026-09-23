@@ -7,7 +7,7 @@ import {
   StandaloneDispatcher,
   ExitCode,
   buildActionDescribePayload,
-} from "@actiondock/core";
+} from "@actiondock/core/package";
 import { executeAction } from "../src/commands/run";
 import { main } from "../src/index";
 import { runStandaloneCli } from "../src/standalone";

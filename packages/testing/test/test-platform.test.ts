@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import {
   createActionDock,
-  type RuntimePlatform,
 } from "@actiondock/core";
+import type { RuntimePlatform } from "@actiondock/core/package";
 import { decodeText, defineAction } from "@actiondock/sdk";
 import {
   createTestPlatform,

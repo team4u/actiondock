@@ -1,4 +1,4 @@
-import { createPackageRuntime } from "../app/app";
+import { createPackageRuntime } from "../package/runtime";
 import { createActionDockHost } from "../host/host";
 import { LocalActionDockService } from "./local";
 import { RemoteActionDockService } from "./remote";

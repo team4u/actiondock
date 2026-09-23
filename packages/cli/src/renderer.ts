@@ -1,5 +1,10 @@
 import type { RunRecord } from "@actiondock/sdk";
-import { formatActionDetail, type RegistryStatusReport } from "@actiondock/core";
+import {
+  formatActionDetail,
+} from "@actiondock/core/package";
+import {
+  type RegistryStatusReport,
+} from "@actiondock/core/registry";
 import type { Envelope, ProjectDetailInfo, AggregatedPackage, EnvCheckItem, CliContext } from "./types";
 import { formatError } from "./errors";
 

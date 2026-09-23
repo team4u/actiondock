@@ -1,9 +1,13 @@
 import {
   decodeStateKey,
+} from "@actiondock/core/package";
+import {
   findProjectRoot,
   loadProjectConfig,
-  resolvePackageRoot,
 } from "@actiondock/core";
+import {
+  resolvePackageRoot,
+} from "@actiondock/core/registry";
 import { Command } from "commander";
 import { ArgumentError, ExecutionError, packageNotFoundError } from "../errors";
 import { renderResult, renderStateList, writeStderr, writeStdout } from "../renderer";

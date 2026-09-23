@@ -1,13 +1,15 @@
 import {
   ACTIONDOCK_VERSION,
+  UNAUTHORIZED,
+} from "@actiondock/core";
+import {
   DEFAULT_MAX_BODY_BYTES,
   formatHostForUrl,
   isLoopbackHost,
   launchHttpServer,
   resolveCorsHeaders,
   verifyBearerToken,
-  UNAUTHORIZED,
-} from "@actiondock/core";
+} from "@actiondock/core/server";
 import { createMcpHandler } from "@modelcontextprotocol/server";
 import { createActionDockMcpServer, resolveService } from "./adapter";
 import type { ActionDockMcpHttpOptions, ActionDockMcpHttpServerInstance } from "./types";

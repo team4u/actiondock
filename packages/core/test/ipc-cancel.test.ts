@@ -14,7 +14,8 @@ import { join } from "node:path";
 
 /** 测试专用宿主子进程脚本：以 serveParentIpc 暴露单个慢速 Action。 */
 const HOST_SCRIPT = `
-import { serveParentIpc, createActionDock } from "@actiondock/core";
+import { createActionDock } from "@actiondock/core";
+import { serveParentIpc } from "@actiondock/core/server";
 import { defineAction } from "@actiondock/sdk";
 
 const slowAction = defineAction({

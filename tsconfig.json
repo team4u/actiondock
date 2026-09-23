@@ -12,6 +12,12 @@
     "paths": {
       "@actiondock/sdk": ["./packages/sdk/src/index.ts"],
       "@actiondock/core": ["./packages/core/src/index.ts"],
+      "@actiondock/core/server": ["./packages/core/src/server/index.ts"],
+      "@actiondock/core/project": ["./packages/core/src/project/index.ts"],
+      "@actiondock/core/registry": ["./packages/core/src/registry/index.ts"],
+      "@actiondock/core/profile": ["./packages/core/src/profile/index.ts"],
+      "@actiondock/core/graph": ["./packages/core/src/graph/index.ts"],
+      "@actiondock/core/package": ["./packages/core/src/package/index.ts"],
       "@actiondock/testing": ["./packages/testing/src/index.ts"],
       "@actiondock/mcp": ["./packages/mcp/src/index.ts"],
       "@actiondock/builder": ["./packages/builder/src/index.ts"],

@@ -19,13 +19,17 @@ import { createGzip } from "node:zlib";
 import { tmpdir } from "node:os";
 import { basename, join, relative, resolve, sep } from "node:path";
 import {
+  initProject,
+} from "@actiondock/core";
+import {
+  linkPackage,
+} from "@actiondock/core/registry";
+import {
   type ActionDockManifest,
   ACTION_ID_REGEX,
-  initProject,
-  linkPackage,
   loadActions,
   saveManifest,
-} from "@actiondock/core";
+} from "@actiondock/core/project";
 import {
   buildProject,
   packProject,

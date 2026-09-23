@@ -4,17 +4,19 @@ import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { initProject } from "../src/project/init";
 import {
-  DefaultActionCatalog,
   getRegistryStatus,
   linkPackage,
   listLinkedPackages,
-  PackageGraphBuilder,
   pruneRegistry,
-  resolveAction,
-  resolvePackageRoot,
-  resolvePlaybook,
   unlinkPackage,
-} from "../src";
+  resolvePackageRoot,
+} from "../src/registry";
+import {
+  DefaultActionCatalog,
+  PackageGraphBuilder,
+  resolveAction,
+  resolvePlaybook,
+} from "../src/graph";
 import { PackageDiscovery } from "../src/catalog/discovery";
 import { DefaultRegistryStore } from "../src/registry/store";
 import { loadRegistry } from "../src/registry/registry";

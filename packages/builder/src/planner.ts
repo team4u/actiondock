@@ -2,19 +2,23 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, join, relative, resolve } from "node:path";
 import {
+  loadProjectConfig,
+} from "@actiondock/core";
+import {
   assertPathWithinRoot,
   type ActionDockManifest,
   type ActionManifestEntry,
-  DefaultActionCatalog,
   loadManifest,
   loadPlaybooks,
-  loadProjectConfig,
-  PackageGraphBuilder,
   type PlaybookDefinition,
   type ProjectConfig,
-  resolveAction,
   validateManifest,
-} from "@actiondock/core";
+} from "@actiondock/core/project";
+import {
+  DefaultActionCatalog,
+  PackageGraphBuilder,
+  resolveAction,
+} from "@actiondock/core/graph";
 import { PlannerError } from "./errors";
 import { assertRelativeDependenciesIntegrity } from "./dependency-check";
 import type {

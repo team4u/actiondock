@@ -1,5 +1,6 @@
 import { basename } from "node:path";
-import type { ActionSpec, PlaybookDefinition, ProjectConfig } from "@actiondock/core";
+import type { ActionSpec, ProjectConfig } from "@actiondock/core";
+import type { PlaybookDefinition } from "@actiondock/core/project";
 
 export type SkillActionItem =
   | ActionSpec

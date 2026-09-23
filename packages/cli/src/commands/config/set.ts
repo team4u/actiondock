@@ -1,10 +1,14 @@
 import {
   isSecretConfigKey,
+} from "@actiondock/core/project";
+import {
   loadProjectConfig,
-  resolvePackageRoot,
 } from "@actiondock/core";
+import {
+  resolvePackageRoot,
+} from "@actiondock/core/registry";
 import type { Command } from "commander";
-import type { ConfigItemDefinition } from "@actiondock/core";
+import type { ConfigItemDefinition } from "@actiondock/core/project";
 import { ArgumentError, packageNotFoundError } from "../../errors";
 import { writeStdout } from "../../renderer";
 import type { CliContext } from "../../types";

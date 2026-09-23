@@ -1,12 +1,14 @@
 import { resolve } from "node:path";
 import {
   beginTransaction,
-  findProjectRoot,
   getInstallCommand,
   loadLockfile,
   loadManifest,
   saveLockfile,
   saveManifest,
+} from "@actiondock/core/project";
+import {
+  findProjectRoot,
 } from "@actiondock/core";
 import { Command } from "commander";
 import { ArgumentError, ExecutionError, notInProjectError } from "../errors";

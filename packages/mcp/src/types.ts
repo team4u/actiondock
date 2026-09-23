@@ -1,10 +1,15 @@
 import type {
-  ActionDockHost,
   ActionDockService,
-  PackageRuntime,
-  RuntimeStorage,
-  ServerTlsOptions,
 } from "@actiondock/core";
+import type {
+  ActionDockHost,
+  PackageRuntime,
+  RuntimePlatform,
+  RuntimeStorage,
+} from "@actiondock/core/package";
+import type {
+  ServerTlsOptions,
+} from "@actiondock/core/server";
 import type { ActionDefinition, RunRecord, RunStatus } from "@actiondock/sdk";
 
 /**
@@ -86,7 +91,7 @@ export interface ActionDockMcpOptions {
   /** 自定义全局数据存储目录 */
   dataDir?: string;
   /** 运行时底层平台适配（如提供 NodeProcessDriver 的平台实例） */
-  platform?: import("@actiondock/core").RuntimePlatform;
+  platform?: RuntimePlatform;
   /** 配置动态覆盖项 */
   configOverrides?: Record<string, unknown>;
   /** 单个 Tool 执行超时时间（毫秒） */

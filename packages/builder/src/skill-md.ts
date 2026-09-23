@@ -4,7 +4,7 @@ import {
   getPackageSlug,
   type PlaybookDefinition,
   type ProjectConfig,
-} from "@actiondock/core";
+} from "@actiondock/core/project";
 import {
   COMPOSITE_CUSTOM_DECLARATION_FILE,
   parseCustomSkillDeclaration,

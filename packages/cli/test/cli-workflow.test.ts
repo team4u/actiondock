@@ -3,7 +3,10 @@ setDefaultTimeout(120000);
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { ACTION_ID_REGEX, loadActions } from "@actiondock/core";
+import {
+  ACTION_ID_REGEX,
+  loadActions,
+} from "@actiondock/core/project";
 
 const cliPath = resolve(import.meta.dirname, "../bin/ad.js");
 

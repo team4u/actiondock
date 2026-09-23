@@ -9,7 +9,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
-import { initProject, saveManifest } from "@actiondock/core";
+import { initProject } from "@actiondock/core";
+import { saveManifest } from "@actiondock/core/project";
 import {
   SelectionPlanner,
   exportSkill,

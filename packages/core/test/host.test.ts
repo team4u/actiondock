@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type ActionContext, defineAction } from "@actiondock/sdk";
-import { createPackageRuntime } from "../src/app";
+import { createPackageRuntime } from "../src/package";
 import { createActionDockHost, DefaultActionDockHost } from "../src/host";
 import { createNodePlatform } from "../src/platform";
 import { MemoryProcessDriver } from "../src/process/driver";

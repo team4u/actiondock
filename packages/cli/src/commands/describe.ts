@@ -2,6 +2,8 @@ import { Command } from "commander";
 import {
   buildActionDescribePayload,
   formatActionDetail,
+} from "@actiondock/core/package";
+import {
   ACTION_NOT_FOUND,
   PACKAGE_NOT_FOUND,
   NOT_FOUND,

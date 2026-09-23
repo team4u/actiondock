@@ -4,28 +4,24 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createServer } from "node:http";
 import {
-  addProfile,
-  checkRemoteHealth,
-  fetchRemoteConfig,
-  fetchRemoteConfigEnv,
-  fetchRemoteDoctor,
-  fetchRemoteInfo,
-  fetchRemotePlaybookShow,
-  fetchRemotePlaybooks,
-  getProfile,
   initProject,
+  startActionDockServer,
+  ACTIONDOCK_VERSION,
+} from "../src";
+import {
   isLoopbackHost,
+  verifyBearerToken,
+} from "../src/server";
+import {
+  addProfile,
+  getProfile,
   listProfiles,
   loadProfiles,
   removeProfile,
   resolveProfileToken,
   resolveTarget,
-  startActionDockServer,
   useProfile,
-  verifyBearerToken,
-  ACTIONDOCK_VERSION,
-} from "../src";
-import {
+  checkRemoteHealth,
   cancelRemoteRun,
   clearRemoteRuns,
   clearRemoteState,
@@ -37,10 +33,16 @@ import {
   fetchRemoteRun,
   fetchRemoteRuns,
   fetchRemoteStateList,
+  fetchRemoteConfig,
+  fetchRemoteConfigEnv,
+  fetchRemoteDoctor,
+  fetchRemoteInfo,
+  fetchRemotePlaybookShow,
+  fetchRemotePlaybooks,
   getRemoteStateKey,
   setRemoteConfig,
   setRemoteStateKey,
-} from "../src/profile/client";
+} from "../src/profile";
 import { safeEqual } from "../src/server/security";
 
 describe("Profile Management & Remote Server", () => {

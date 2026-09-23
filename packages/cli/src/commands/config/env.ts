@@ -1,10 +1,16 @@
 import {
   fetchRemoteConfigEnv,
-  isSecretConfigKey,
-  loadProjectConfig,
   resolveEnvValue,
-  resolvePackageRoot,
+} from "@actiondock/core/profile";
+import {
+  isSecretConfigKey,
+} from "@actiondock/core/project";
+import {
+  loadProjectConfig,
 } from "@actiondock/core";
+import {
+  resolvePackageRoot,
+} from "@actiondock/core/registry";
 import type { Command } from "commander";
 import { notInProjectError, packageNotFoundError } from "../../errors";
 import { renderConfigEnv, renderResult } from "../../renderer";

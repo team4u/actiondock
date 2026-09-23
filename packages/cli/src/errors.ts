@@ -1,6 +1,5 @@
 import {
   ActionDockError,
-  InputError,
   INVALID_ARGUMENT,
   INVALID_PACKAGE_ID,
   PACKAGE_NOT_FOUND,
@@ -18,6 +17,9 @@ import {
   INPUT_FILE_NOT_FOUND,
   INPUT_FILE_READ_FAILED,
 } from "@actiondock/core";
+import {
+  InputError,
+} from "@actiondock/core/package";
 import { ExitCode, type ExitCodeValue } from "./types";
 
 /**

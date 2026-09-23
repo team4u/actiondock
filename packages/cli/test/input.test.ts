@@ -14,7 +14,10 @@ import {
   formatActionDetail,
 } from "../src/utils/input";
 import { ArgumentError } from "../src/errors";
-import { FlatInputError, InputError } from "@actiondock/core";
+import {
+  FlatInputError,
+  InputError,
+} from "@actiondock/core/package";
 
 const cliPath = resolve(import.meta.dirname, "../bin/ad.js");
 

@@ -1,6 +1,13 @@
 import { existsSync } from "node:fs";
 import { basename } from "node:path";
-import { discoverProjects, findProjectRoot, listLinkedPackages, resolvePackageRoot } from "@actiondock/core";
+import {
+  discoverProjects,
+  listLinkedPackages,
+  resolvePackageRoot,
+} from "@actiondock/core/registry";
+import {
+  findProjectRoot,
+} from "@actiondock/core";
 import { Command } from "commander";
 import { ExecutionError, notInProjectError, packageNotFoundError } from "../errors";
 import { renderResult, writeStdout } from "../renderer";

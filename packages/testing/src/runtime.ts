@@ -3,11 +3,13 @@ import {
   type ActionDockService,
   type RunOptions,
   type ProjectConfig,
+} from "@actiondock/core";
+import {
   type RuntimePlatform,
   SystemClock,
   type Clock,
   type EventSink,
-} from "@actiondock/core";
+} from "@actiondock/core/package";
 import type {
   ActionDefinition,
   Config,

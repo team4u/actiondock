@@ -6,15 +6,17 @@ import {
   createActionDock,
   createNodePlatform,
   findProjectRoot,
-  resolvePackageRoot,
+} from "@actiondock/core";
+import { resolvePackageRoot } from "@actiondock/core/registry";
+import type {
+  ActionDockService,
 } from "@actiondock/core";
 import type {
   ActionDockHost,
-  ActionDockService,
   PackageRuntime,
   PackageRuntimeOptions,
   RuntimeStorage,
-} from "@actiondock/core";
+} from "@actiondock/core/package";
 import type { ExecutionResult, JsonValue, RunRecord } from "@actiondock/sdk";
 import { McpServer } from "@modelcontextprotocol/server";
 import { registerTasksExtension } from "./register-tasks-extension";

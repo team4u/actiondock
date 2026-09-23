@@ -1,1 +1,1 @@
-export { parseDuration } from "@actiondock/core";
+export { parseDuration } from "@actiondock/core/project";

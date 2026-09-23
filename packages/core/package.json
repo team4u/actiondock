@@ -9,8 +9,45 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "bun": "./src/index.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "bun": "./src/server/index.ts",
+      "import": "./dist/server/index.js",
+      "default": "./dist/server/index.js"
+    },
+    "./project": {
+      "types": "./dist/project/index.d.ts",
+      "bun": "./src/project/index.ts",
+      "import": "./dist/project/index.js",
+      "default": "./dist/project/index.js"
+    },
+    "./registry": {
+      "types": "./dist/registry/index.d.ts",
+      "bun": "./src/registry/index.ts",
+      "import": "./dist/registry/index.js",
+      "default": "./dist/registry/index.js"
+    },
+    "./profile": {
+      "types": "./dist/profile/index.d.ts",
+      "bun": "./src/profile/index.ts",
+      "import": "./dist/profile/index.js",
+      "default": "./dist/profile/index.js"
+    },
+    "./graph": {
+      "types": "./dist/graph/index.d.ts",
+      "bun": "./src/graph/index.ts",
+      "import": "./dist/graph/index.js",
+      "default": "./dist/graph/index.js"
+    },
+    "./package": {
+      "types": "./dist/package/index.d.ts",
+      "bun": "./src/package/index.ts",
+      "import": "./dist/package/index.js",
+      "default": "./dist/package/index.js"
     }
   },
   "files": [

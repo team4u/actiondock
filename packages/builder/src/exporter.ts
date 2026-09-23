@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { getPackageSlug } from "@actiondock/core";
+import { getPackageSlug } from "@actiondock/core/project";
 import { BuilderError } from "./errors";
 import { replaceDirAtomic } from "./fs-utils";
 import { collectRelativeFiles } from "./fs-utils";

@@ -6,7 +6,7 @@ import type {
   ActionSpec,
   PlaybookSpec,
   PlaybookSummary,
-} from "../app/types";
+} from "../package/types";
 import {
   DefaultActionCatalog,
   DefaultPackageGraph,

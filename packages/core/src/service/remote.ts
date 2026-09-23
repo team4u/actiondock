@@ -12,7 +12,7 @@ import type {
   PackageInfo,
   PlaybookSpec,
   PlaybookSummary,
-} from "../app/types";
+} from "../package/types";
 import { ActionResolver } from "../catalog/action-resolver";
 import { ACTION_CANCELLED, TIMEOUT } from "../errors";
 import type {

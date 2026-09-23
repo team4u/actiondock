@@ -4,15 +4,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decodeText, encodeBytes, type ActionContext, type ProcessAPI, type ProcessResult } from "@actiondock/sdk";
 import { ActionRunner } from "../src/runtime/runner";
+import { createNodePlatform } from "../src";
+import { createInvocationContext } from "../src/execution/types";
 import {
-  createNodePlatform,
-  createInvocationContext,
   SqliteRuntimeStorage,
   type Clock,
   type ModuleLoader,
   type ProcessExecutor,
   type RuntimePlatform,
-} from "../src";
+} from "../src/package";
 import { createPackageIdentity } from "../src/runtime/identity";
 import { DefaultExecutionService } from "../src/execution/service";
 import { NodeFileSystem } from "../src/platform/node-fs";

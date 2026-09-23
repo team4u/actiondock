@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { ACTION_ID_REGEX } from "@actiondock/core";
+import { ACTION_ID_REGEX } from "@actiondock/core/project";
 import { BuilderError } from "./errors";
 import { getInternalDependencyVersion } from "./fs-utils";
 import type { ActionDependency, PlaybookPlanEntry } from "./types";

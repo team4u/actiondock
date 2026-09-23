@@ -1,4 +1,9 @@
-import { fetchRemoteDoctor, runDoctorChecks } from "@actiondock/core";
+import {
+  fetchRemoteDoctor,
+} from "@actiondock/core/profile";
+import {
+  runDoctorChecks,
+} from "@actiondock/core/project";
 import { Command } from "commander";
 import { ExecutionError } from "../errors";
 import { renderResult } from "../renderer";

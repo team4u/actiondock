@@ -1,18 +1,22 @@
 import {
   addProfile,
   checkRemoteHealth,
-  filterWithFallbackInfo,
   getProfile,
   listProfiles,
   loadProfiles,
-  maskSecretValue,
   removeProfile,
   resolveProfileToken,
   resolveTarget,
   toSnakeUpperCase,
   updateProfile,
   useProfile,
-} from "@actiondock/core";
+} from "@actiondock/core/profile";
+import {
+  filterWithFallbackInfo,
+} from "@actiondock/core/package";
+import {
+  maskSecretValue,
+} from "@actiondock/core/project";
 import { Command } from "commander";
 import {
   ArgumentError,

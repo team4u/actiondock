@@ -1,4 +1,5 @@
-import type { ActionDockManifest, ProjectConfig } from "@actiondock/core";
+import type { ProjectConfig } from "@actiondock/core";
+import type { ActionDockManifest } from "@actiondock/core/project";
 
 /**
  * 规划输入侧的项目配置扩展字段。

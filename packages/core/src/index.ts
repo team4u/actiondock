@@ -1,19 +1,19 @@
 /**
  * ActionDock 核心引擎公共 API 统一收口与出口定义。
  *
- * 遵循架构设计规范铁律：内部模块默认不属于 public API，严格杜绝 export * 直接公开内部实现。
- * 仅显式导出稳定公共契约、服务端口、工程门面与必要适配层。
+ * 遵循架构设计规范铁律：收窄为 Minimal 核心门面，非必要内部工程辅助函数与解析器工具
+ * 移至特定子路径导出（./server, ./project, ./registry, ./profile, ./graph, ./package），
+ * 严格杜绝在根导出泄露内部执行上下文机制。
  */
 
 // 1. 核心版本号单一事实源
 export { ACTIONDOCK_VERSION } from "./version";
 
-// 2. 统一服务门面
+// 2. 统一服务门面与核心契约接口
 export {
   createActionDock,
   connectActionDock,
 } from "./service/factory";
-export { streamRemoteEvents } from "./service/sse-stream";
 export type {
   ActionDockService,
   ActionDockService as ActionDock,
@@ -26,13 +26,13 @@ export type {
   StatePort,
   CreateActionDockOptions,
   ConnectActionDockOptions,
+  RemoteServiceOptions,
   ConfigValueView,
   ListRunsOptions,
   StateScopeOptions,
-  RemoteServiceOptions,
 } from "./service/types";
 
-// 3. 核心服务端口与契约类型（转引 SDK 规范类型与应用层契约）
+// 3. 执行配置与结果模型（转引 SDK 规范类型与核心执行契约）
 export type {
   ActionRef,
   ResolvedActionRef,
@@ -41,161 +41,55 @@ export type {
   ExecutionEvent,
 } from "@actiondock/sdk";
 export type {
+  RunOptions,
+  ExecutionTicket,
+  CancelResult,
+} from "./execution/types";
+
+// 4. 动作与包描述模型
+export type {
   ActionSpec,
   ActionSummary,
   PlaybookSpec,
   PlaybookSummary,
   PackageInfo,
   ListActionsOptions,
-} from "./app/types";
-export {
-  createInvocationContext,
-} from "./execution/types";
-export {
-  createPackageIdentity,
-} from "./runtime/identity";
-export type {
-  RunOptions,
-  ExecutionTicket,
-  CancelResult,
-  PackageIdentity,
-  ActionInvoker,
-  InvocationContext,
-} from "./execution/types";
+} from "./package/types";
 
-// 4. 平台与服务启动
+// 5. 原生平台装配与服务端启动
 export {
   createNodePlatform,
   type NodePlatformOptions,
 } from "./platform/node";
 export {
   startActionDockServer,
-  launchHttpServer,
-  formatHostForUrl,
 } from "./server/server";
 export type {
+  ServerOptions,
   ServerOptions as ActionDockServerOptions,
   ActionDockServerInstance,
-  ServerTlsOptions,
 } from "./server/types";
-export {
-  isLoopbackHost,
-  resolveCorsHeaders,
-  verifyBearerToken,
-} from "./server/security";
-export { DEFAULT_MAX_BODY_BYTES } from "./server/body";
 
-// 5. 工程与配置
+// 6. 核心工程辅助
 export { initProject } from "./project/init";
 export {
   loadProjectConfig,
   findProjectRoot,
-  getInstallCommand,
-  loadActions,
-  loadPlaybooks,
 } from "./project/loader";
-export {
-  resolvePackageRoot,
-  discoverProjects,
-} from "./registry/registry";
-export {
-  loadManifest,
-  saveManifest,
-  validateManifest,
-  MANIFEST_FILE_NAME,
-  ACTION_ID_REGEX,
-} from "./project/manifest";
-export {
-  computeManifestDigest,
-  parseJsonWithoutDuplicates,
-} from "./project/digest";
-export {
-  loadLockfile,
-  saveLockfile,
-  type ActionDockLockfile,
-} from "./project/lockfile";
-export {
-  checkGeneratedTypes,
-  writeActionTypes,
-  GENERATED_TYPES_OUTDATED_CODE,
-} from "./project/types-generator";
 export type {
   ProjectConfig,
-  ActionDockManifest,
-  ActionManifestEntry,
-  ConfigItemDefinition,
-  PlaybookDefinition,
 } from "./project/types";
 
-// 6. 目录、发现与编排规程
-export { resolveAction } from "./catalog/resolve-action";
-export { resolvePlaybook } from "./catalog/resolve-playbook";
-export {
-  DefaultActionCatalog,
-  type ActionCatalog,
-} from "./catalog/action-catalog";
-export {
-  PackageGraphBuilder,
-  ActionPackageVersionConflictError,
-  UndeclaredActionDependencyError,
-  parseSemVer,
-  areVersionsCompatible,
-  type PackageGraph,
-  type PackageNode,
-  type PackageGraphBuilderOptions,
-  type SemVer,
+// 7. 包图抽象契约
+export type {
+  PackageGraph,
 } from "./catalog/graph";
-export { buildActionDescribePayload } from "./input/describe";
-export { filterWithFallbackInfo } from "./filter/intent";
 
-// 7. 注册表与软链接管理
-export {
-  linkPackage,
-  unlinkPackage,
-  listLinkedPackages,
-  pruneRegistry,
-  getRegistryStatus,
-} from "./registry/registry";
-export type { RegistryStatusReport } from "./registry/types";
-
-// 8. 运行配置与目标管理
-export {
-  addProfile,
-  removeProfile,
-  updateProfile,
-  useProfile,
-  getProfile,
-  listProfiles,
-  loadProfiles,
-  resolveProfileToken,
-  resolveTarget,
-} from "./profile/manager";
-export { toSnakeUpperCase } from "./runtime/env";
-export {
-  fetchRemoteConfig,
-  fetchRemoteConfigEnv,
-} from "./profile/client-config";
-export {
-  fetchRemoteDoctor,
-  fetchRemoteInfo,
-} from "./profile/client-actions";
-export {
-  fetchRemotePlaybooks,
-  fetchRemotePlaybookShow,
-} from "./profile/client-playbooks";
-export { checkRemoteHealth } from "./profile/client-health";
-export type { ResolvedTarget } from "./profile/types";
-export { IpcActionDockService } from "./ipc/service";
-export type { IpcServiceOptions } from "./ipc/types";
-
-// 9. 统一错误模型与标准错误码
+// 8. 统一错误模型与常用标准错误码
 export {
   ActionDockError,
   ProcessError,
   type ErrorCode,
-  describeActionLoadFailure,
-  isMissingModuleError,
-  type ActionLoadFailureContext,
   PACKAGE_NOT_FOUND,
   ACTION_PACKAGE_VERSION_CONFLICT,
   ACTION_NOT_FOUND,
@@ -274,96 +168,3 @@ export {
   RUN_NOT_FOUND,
   RUN_ALREADY_FINISHED,
 } from "./errors";
-export {
-  InputError,
-  FlatInputError,
-} from "./input/flat-errors";
-export {
-  resolveActionInput,
-  buildActionInputAdvice,
-  formatActionDetail,
-  mapInputValidationFailure,
-  type ResolveActionInputOptions,
-} from "./input/index";
-export { validateActionInputValue } from "./json/value-validator";
-export { parseJson } from "./input/input-resolver";
-
-// 10. 运行时契约、时钟与存储
-export type {
-  RuntimePlatform,
-  FileSystem,
-  StorageFactory,
-  StorageFactoryOptions,
-  GlobalStorageFactoryOptions,
-} from "./platform/types";
-export {
-  type Clock,
-  SystemClock,
-} from "./runtime/clock";
-export type { ModuleLoader } from "./node/module-loader";
-export {
-  InMemoryEventSink,
-  type EventSink,
-} from "./runtime/events";
-
-// 11. 进程管理契约
-export {
-  ProcessManager,
-  type ProcessOwner,
-} from "./process/process-manager";
-export type { ProcessExecutor } from "./runtime/process";
-export type {
-  ProcessDriver,
-  ProcessDriverCallbacks,
-  ProcessDriverHandle,
-  ProcessHandle,
-  ProcessObserver,
-} from "./process/driver";
-export { findExecutable } from "./utils/index";
-
-// 12. 宿主容器与运行时适配契约
-export type {
-  ActionDockHost,
-  ActionDockHostOptions,
-} from "./host/types";
-export type {
-  PackageRuntime,
-  PackageRuntimeOptions,
-} from "./app/types";
-
-// 13. IPC 通信与单执行分发器
-export { serveParentIpc } from "./ipc/host";
-export {
-  ExitCode,
-  StandaloneDispatcher,
-  type StandaloneDispatcherOptions,
-  type InvocationControl,
-} from "./runtime/standalone";
-
-// 14. 存储引擎与状态存取
-export {
-  createStorage,
-  resolveDatabasePath,
-} from "./storage/index";
-export { SqliteRuntimeStorage } from "./storage/sqlite";
-export { beginTransaction } from "./project/transactions";
-export type {
-  RuntimeStorage,
-  SqliteDriver,
-} from "./storage/types";
-export { decodeStateKey } from "./storage/sqlite";
-export {
-  isSecretConfigKey,
-  maskSecretValue,
-} from "./storage/mask";
-
-// 15. 体检工具与通用文件路径工具
-export { runDoctorChecks } from "./doctor/doctor";
-export {
-  getActionDockHome,
-  getPackageSlug,
-  assertPathWithinRoot,
-  isPathOutsideBoundary,
-  parseDuration,
-} from "./utils/index";
-export { resolveEnvValue } from "./runtime/env";

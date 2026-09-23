@@ -1,7 +1,9 @@
 import {
   loadProjectConfig,
-  resolvePackageRoot,
 } from "@actiondock/core";
+import {
+  resolvePackageRoot,
+} from "@actiondock/core/registry";
 import type { Command } from "commander";
 import { ArgumentError, packageNotFoundError } from "../../errors";
 import { writeStdout } from "../../renderer";

@@ -1,5 +1,5 @@
 import type { ActionDefinition } from "@actiondock/sdk";
-import type { ActionSpec } from "../app/types";
+import type { ActionSpec } from "../package/types";
 
 /**
  * 归一化 Action 集合的产物结构。

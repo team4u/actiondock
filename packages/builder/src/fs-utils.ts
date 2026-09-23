@@ -1,6 +1,7 @@
 import { cpSync, existsSync, readdirSync, realpathSync, renameSync, rmSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
-import { ACTIONDOCK_VERSION, assertPathWithinRoot } from "@actiondock/core";
+import { ACTIONDOCK_VERSION } from "@actiondock/core";
+import { assertPathWithinRoot } from "@actiondock/core/project";
 
 /**
  * builder 包内共享的文件系统基础设施。

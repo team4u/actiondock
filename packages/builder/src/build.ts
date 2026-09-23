@@ -14,8 +14,8 @@ import { basename, dirname, join, resolve } from "node:path";
 import {
   ACTIONDOCK_VERSION,
   STANDALONE_ASYNC_UNSUPPORTED,
-  getPackageSlug,
 } from "@actiondock/core";
+import { getPackageSlug } from "@actiondock/core/project";
 import { createZipArchiveAsync } from "./archive";
 import { BuilderError } from "./errors";
 import { collectRelativeFiles, getInternalDependencyVersion, replaceDirAtomic } from "./fs-utils";
@@ -129,8 +129,8 @@ function generateNodeHostEntrySource(plan: SelectionPlan): string {
 import {
   createActionDock,
   createNodePlatform,
-  serveParentIpc,
 } from "@actiondock/core";
+import { serveParentIpc } from "@actiondock/core/server";
 ${imports}
 
 let dataDir;
@@ -188,11 +188,15 @@ function generateNodeSupervisorEntrySource(plan: SelectionPlan): string {
 import { spawn } from "node:child_process";
 import { join } from "node:path";
 import {
-  IpcActionDockService,
-  StandaloneDispatcher,
-  ExitCode,
   STANDALONE_ASYNC_UNSUPPORTED,
 } from "@actiondock/core";
+import {
+  IpcActionDockService,
+} from "@actiondock/core/server";
+import {
+  StandaloneDispatcher,
+  ExitCode,
+} from "@actiondock/core/package";
 
 const METADATA = {
   packageId: ${JSON.stringify(plan.packageId)},

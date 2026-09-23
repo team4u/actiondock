@@ -8,7 +8,7 @@ import {
   loadProfiles,
   resolveTarget,
   updateProfile,
-} from "@actiondock/core";
+} from "@actiondock/core/profile";
 import { Command } from "commander";
 import { registerProfileCommands } from "../src/commands/profile";
 import { withService, withRemoteService } from "../src/utils/target";

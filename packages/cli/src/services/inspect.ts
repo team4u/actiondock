@@ -1,11 +1,15 @@
 import { existsSync } from "node:fs";
 import {
   findProjectRoot,
-  listLinkedPackages,
-  loadManifest,
-  loadPlaybooks,
   loadProjectConfig,
 } from "@actiondock/core";
+import {
+  listLinkedPackages,
+} from "@actiondock/core/registry";
+import {
+  loadManifest,
+  loadPlaybooks,
+} from "@actiondock/core/project";
 import type { AggregatedPackage, CliContext, ProjectDetailInfo } from "../types";
 
 /**
