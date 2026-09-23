@@ -3,13 +3,13 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type ActionContext, defineAction } from "@actiondock/sdk";
-import { createActionDockApp, DefaultActionDockApp } from "../src/app";
+import { createPackageRuntime, DefaultPackageRuntime } from "../src/app";
 import { createNodePlatform } from "../src/platform";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
 
 describe("ActionDockApp", () => {
-  it("工厂函数 createActionDockApp 与 DefaultActionDockApp 初始化并正确返回 PackageInfo", async () => {
-    const app = await createActionDockApp({
+  it("工厂函数 createPackageRuntime 与 DefaultPackageRuntime 初始化并正确返回 PackageInfo", async () => {
+    const app = await createPackageRuntime({
       projectConfig: {
         id: "demo.service",
         name: "Demo Service",
@@ -27,7 +27,7 @@ describe("ActionDockApp", () => {
       inMemory: true,
     });
 
-    expect(app).toBeInstanceOf(DefaultActionDockApp);
+    expect(app).toBeInstanceOf(DefaultPackageRuntime);
     const info = await app.info();
     expect(info.id).toBe("demo.service");
     expect(info.name).toBe("Demo Service");
@@ -86,7 +86,7 @@ describe("ActionDockApp", () => {
         )
       );
 
-      const app = await createActionDockApp({
+      const app = await createPackageRuntime({
         packageRoot: tempDir,
         inMemory: true,
       });
@@ -174,7 +174,7 @@ Execute build and then deploy artifact.
 `
       );
 
-      const app = await createActionDockApp({
+      const app = await createPackageRuntime({
         packageRoot: tempDir,
         inMemory: true,
       });
@@ -213,7 +213,7 @@ Execute build and then deploy artifact.
       },
     });
 
-    const app = await createActionDockApp({
+    const app = await createPackageRuntime({
       projectConfig: {
         id: "test.app",
         name: "Test App",
@@ -301,7 +301,7 @@ Execute build and then deploy artifact.
       },
     });
 
-    const app = await createActionDockApp({
+    const app = await createPackageRuntime({
       projectConfig: {
         id: "test.cancel",
         name: "Cancel App",
@@ -353,7 +353,7 @@ Execute build and then deploy artifact.
   });
 
   it("支持配置的读写与五层优先级链解析", async () => {
-    const app = await createActionDockApp({
+    const app = await createPackageRuntime({
       projectConfig: {
         id: "test.config",
         name: "Config App",
@@ -396,7 +396,7 @@ Execute build and then deploy artifact.
   });
 
   it("支持状态管理：getState, setState, deleteState 及命名空间隔离", async () => {
-    const app = await createActionDockApp({
+    const app = await createPackageRuntime({
       projectConfig: {
         id: "test.state",
         name: "State App",
@@ -431,7 +431,7 @@ Execute build and then deploy artifact.
   });
 
   it("setState/getState/deleteState 支持 StateScopeOptions 中 actionId 参数并消歧三参数调用", async () => {
-    const app = await createActionDockApp({
+    const app = await createPackageRuntime({
       projectConfig: {
         id: "test.state.scope",
         name: "State Scope App",
@@ -465,7 +465,7 @@ Execute build and then deploy artifact.
   });
 
   it("setState 四参数与 options.actionId 冲突时抛出异常，并校验各状态方法冲突异常", async () => {
-    const app = await createActionDockApp({
+    const app = await createPackageRuntime({
       projectConfig: {
         id: "test.state.conflict",
         name: "State Conflict App",
@@ -518,7 +518,7 @@ Execute build and then deploy artifact.
   });
 
   it("支持 setActionState, getActionState, deleteActionState 显式无歧义 API", async () => {
-    const app = await createActionDockApp({
+    const app = await createPackageRuntime({
       projectConfig: {
         id: "test.action.state",
         name: "Action State App",
@@ -571,7 +571,7 @@ Execute build and then deploy artifact.
   });
 
   it("3 参数 setState 确定性作为扁平包级状态写入，杜绝启发式误判为 Action 状态", async () => {
-    const app = await createActionDockApp({
+    const app = await createPackageRuntime({
       projectConfig: {
         id: "test.state.disambiguate",
         name: "Disambiguate App",
@@ -620,8 +620,8 @@ Execute build and then deploy artifact.
 
     await app.close();
 
-    // 4. DefaultActionDockApp 实体类拥有与 ActionDockApp 相同的重载契约
-    const concreteApp = new DefaultActionDockApp({ inMemory: true });
+    // 4. DefaultPackageRuntime 实体类拥有与 ActionDockApp 相同的重载契约
+    const concreteApp = new DefaultPackageRuntime({ inMemory: true });
     await concreteApp.setState("theme", "light");
     expect(await concreteApp.getState("theme")).toBe("light");
     await concreteApp.setState("worker", "counter", 42, {});
@@ -649,7 +649,7 @@ Execute build and then deploy artifact.
       run: async () => ({ success: true }),
     });
 
-    const app = await createActionDockApp({
+    const app = await createPackageRuntime({
       projectConfig: {
         id: "test.shutdown",
         name: "Shutdown App",
@@ -681,7 +681,7 @@ Execute build and then deploy artifact.
     expect(defaultPlatform.name).toBeDefined();
     expect(defaultPlatform.storage).toBeDefined();
 
-    const app = await createActionDockApp({
+    const app = await createPackageRuntime({
       projectConfig: {
         id: "test.platform",
         name: "Platform App",

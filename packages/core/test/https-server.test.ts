@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import {
   checkRemoteHealth,
-  createActionDockTarget,
+  connectActionDock,
   initProject,
   startActionDockServer,
   type ActionDockServerInstance,
@@ -108,7 +108,7 @@ describe("Native HTTPS Server and Insecure TLS Support", () => {
   it("未开启 insecure 时请求自签名 HTTPS 服务端被拒绝校验", async () => {
     let errorOccurred = false;
     try {
-      await fetch(`${server.url}/api/v1/health`);
+      await fetch(`${server.url}/api/v2/health`);
     } catch {
       errorOccurred = true;
     }
@@ -130,7 +130,7 @@ describe("Native HTTPS Server and Insecure TLS Support", () => {
   });
 
   it("直接使用 fetch 配合 getInsecureDispatcher 可正常访问 HTTPS API", async () => {
-    const res = await fetch(`${server.url}/api/v1/health`, {
+    const res = await fetch(`${server.url}/api/v2/health`, {
       headers: { Authorization: `Bearer ${TOKEN}` },
       dispatcher: getInsecureDispatcher(),
       tls: { rejectUnauthorized: false },
@@ -140,23 +140,23 @@ describe("Native HTTPS Server and Insecure TLS Support", () => {
     expect(json.status).toBe("healthy");
   });
 
-  it("RemoteActionDockTarget 开启 insecure 时能够通过 HTTPS 进行自省与动作查询", async () => {
-    const target = await createActionDockTarget({
-      type: "remote",
+  it("RemoteActionDockService 开启 insecure 时能够通过 HTTPS 进行自省与动作查询", async () => {
+    const service = await connectActionDock({
       serverUrl: server.url,
       token: TOKEN,
       insecure: true,
     });
 
     try {
-      const info = await target.info();
-      expect(info.protocolVersion).toBe("2.0");
-      expect(Array.isArray(info.packages)).toBe(true);
+      const info = await service.info();
+      expect(Array.isArray(info)).toBe(true);
+      expect(info.length).toBeGreaterThan(0);
+      expect(info[0].id).toBe("test.https-app");
 
-      const actions = await target.listActions();
+      const actions = await service.discovery.listActions();
       expect(Array.isArray(actions)).toBe(true);
     } finally {
-      await target.close();
+      await service.close();
     }
   });
 });

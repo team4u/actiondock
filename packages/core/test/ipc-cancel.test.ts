@@ -14,8 +14,7 @@ import { join } from "node:path";
 
 /** 测试专用宿主子进程脚本：以 serveParentIpc 暴露单个慢速 Action。 */
 const HOST_SCRIPT = `
-import { serveParentIpc } from "@actiondock/core";
-import { createActionDockApp } from "@actiondock/core";
+import { serveParentIpc, createActionDock } from "@actiondock/core";
 import { defineAction } from "@actiondock/sdk";
 
 const slowAction = defineAction({
@@ -33,20 +32,22 @@ const slowAction = defineAction({
   },
 });
 
-const app = await createActionDockApp({
-  projectConfig: {
-    id: "test.ipc-cancel-pkg",
-    name: "IPC Cancel Test",
-    version: "1.0.0",
-    actions: {
-      "task.blocking": { entry: "", description: "慢速动作用于取消链路验证" },
+const service = await createActionDock({
+  runtimeOptions: {
+    projectConfig: {
+      id: "test.ipc-cancel-pkg",
+      name: "IPC Cancel Test",
+      version: "1.0.0",
+      actions: {
+        "task.blocking": { entry: "", description: "慢速动作用于取消链路验证" },
+      },
     },
+    actions: { "task.blocking": slowAction },
+    inMemory: true,
   },
-  actions: { "task.blocking": slowAction },
-  inMemory: true,
 });
 
-await serveParentIpc(app);
+await serveParentIpc(service);
 `;
 
 describe("IPC cross-process cancellation chain", () => {
@@ -69,27 +70,27 @@ describe("IPC cross-process cancellation chain", () => {
     const hostScriptPath = join(tempDir, "ipc-cancel-host.ts");
     writeFileSync(hostScriptPath, HOST_SCRIPT);
 
-    const { IpcActionDockTarget } = await import("../src/ipc/target");
+    const { IpcActionDockService } = await import("../src/ipc/service");
     // fork 默认即建立 IPC 通道，无需自定义 stdio；类型断言收敛额外传参以保持与现有 fork 行为一致
-    const target = new IpcActionDockTarget({
+    const service = new IpcActionDockService({
       scriptPath: hostScriptPath,
       cwd: tempDir,
       stdio: ["pipe", "pipe", "pipe", "ipc"],
-    } as ConstructorParameters<typeof IpcActionDockTarget>[0]);
-    hostChild = target.process;
+    } as ConstructorParameters<typeof IpcActionDockService>[0]);
+    hostChild = service.process;
 
     let hostSignalAborted = false;
-    hostChild.on("message", (msg: any) => {
+    hostChild!.on("message", (msg: any) => {
       if (msg?.type === "test-signal-aborted") {
         hostSignalAborted = true;
       }
     });
 
-    await target.waitReady();
+    await service.waitReady();
 
     // 父侧发起长运行调用并携带取消信号
     const controller = new AbortController();
-    const runPromise = target.runAction(
+    const runPromise = service.execution.run(
       "test.ipc-cancel-pkg/task.blocking",
       {} as never,
       { signal: controller.signal }
@@ -112,6 +113,6 @@ describe("IPC cross-process cancellation chain", () => {
     }
     expect(result.error?.code).toBe("ACTION_CANCELLED");
 
-    await target.close();
+    await service.close();
   }, 20000);
 });

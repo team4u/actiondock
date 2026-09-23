@@ -100,12 +100,12 @@ export function registerConfigListCommand(configCmd: Command, context?: CliConte
         return;
       }
 
-      // 本地分支（通过 Target 门面统一访问）
-      await withTarget(options, context, async (localTarget) => {
+      // 本地分支（通过 Service 门面统一访问）
+      await withTarget(options, context, async (service) => {
         const root = options.package ? resolvePackageRoot(options.package) : findProjectRoot();
 
         if (options.global) {
-          const all = await localTarget.listConfig("global");
+          const all = (await service.management?.config.list("global")) ?? [];
           const entries = all.map((item) =>
             toDisplayEntry(
               item.key,
@@ -142,7 +142,7 @@ export function registerConfigListCommand(configCmd: Command, context?: CliConte
             throw packageNotFoundError(options.package);
           }
 
-          const all = await localTarget.listConfig("global");
+          const all = (await service.management?.config.list("global")) ?? [];
           const entries = all.map((item) =>
             toDisplayEntry(
               item.key,
@@ -177,7 +177,7 @@ export function registerConfigListCommand(configCmd: Command, context?: CliConte
         const projConfig = loadProjectConfig(root);
 
         // 跨作用域合并视图单一事实源：项目包级 > 全局持久化 > 环境变量 > 声明默认值
-        const merged = await buildMergedConfigEntries(root, localTarget, reveal);
+        const merged = await buildMergedConfigEntries(root, service, reveal);
 
         const filterRes = filterWithFallbackInfo(
           merged,

@@ -88,12 +88,12 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
       const limit = Number.parseInt(options.limit, 10) || 20;
       const scope = resolveLocalRunScope(options.package);
 
-      // 通过 Target 门面统一访问
+      // 通过 Service 门面统一访问
       await withTarget(
         options,
         context,
-        async (target, resolved) => {
-          const records = await target.listRuns({
+        async (service, resolved) => {
+          const records = await service.runs.list({
             packageId: options.package,
             actionId: options.action,
             limit: 500,
@@ -158,12 +158,12 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
 
       const scope = resolveLocalRunScope(options.package);
 
-      // 通过 Target 门面统一查询
+      // 通过 Service 门面统一查询
       await withTarget(
         options,
         context,
-        async (target, resolved) => {
-          const run = await target.getRun(id);
+        async (service, resolved) => {
+          const run = await service.runs.get(id);
           if (!run) {
             if (resolved.type === "remote") {
               throw new ExecutionError(`Run record '${id}' not found on remote server`);
@@ -206,8 +206,8 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
         );
       }
 
-      await withRemoteTarget(options, context, async (target) => {
-        const result = await target.cancelRun(id, options.reason);
+      await withRemoteTarget(options, context, async (service) => {
+        const result = await service.runs.cancel(id, options.reason);
         const isErrorOutcome = result.outcome === "not_found" || result.outcome === "not_owner";
         renderResult(result, {
           json: options.json,
@@ -268,9 +268,9 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
       await withTarget(
         options,
         context,
-        async (target, resolved) => {
-          const count = target.clearRuns
-            ? await target.clearRuns({ packageId, actionId: options.action })
+        async (service, resolved) => {
+          const count = service.runs.clear
+            ? await service.runs.clear({ packageId, actionId: options.action })
             : 0;
 
           const payload = { ok: true, clearedCount: count };

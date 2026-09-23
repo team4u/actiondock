@@ -8,12 +8,12 @@ import type {
   RunRecord,
 } from "@actiondock/sdk";
 import type {
-  ActionDockApp,
-  ActionDockAppOptions,
+  PackageInfo,
+  PackageRuntime,
+  PackageRuntimeOptions,
   ActionSpec,
   ActionSummary,
   ListActionsOptions,
-  PackageInfo,
   PlaybookSpec,
   PlaybookSummary,
 } from "../app/types";
@@ -25,13 +25,15 @@ import type {
 import type { Clock } from "../runtime/clock";
 import type { EventSink } from "../runtime/events";
 import type { RuntimePlatform } from "../platform/types";
+import type { ConfigValueView, ListRunsOptions, StateScopeOptions } from "../service/types";
+import type { StateEntry } from "../storage/types";
 
 /**
  * ActionDock 宿主容器初始化配置选项。
  */
 export interface ActionDockHostOptions {
-  /** 显式预注册的包列表（现成 ActionDockApp 实例或 ActionDockAppOptions 配置）。外部传入的 App 属于借用（borrowed），生命周期完全由调用方负责管理，Host 关闭或初始化失败时仅解绑引用并清理自身内部实例，严禁关闭外部借用的 App 实例。 */
-  packages?: Array<ActionDockApp | ActionDockAppOptions>;
+  /** 显式预注册的包列表（现成 PackageRuntime 实例或 PackageRuntimeOptions 配置）。外部传入的 Runtime 属于借用（borrowed），生命周期完全由调用方负责管理，Host 关闭或初始化失败时仅解绑引用并清理自身内部实例，严禁关闭外部借用的 Runtime 实例。 */
+  packages?: Array<PackageRuntime | PackageRuntimeOptions>;
   /** 当前工程根目录绝对物理路径 */
   projectRoot?: string;
   /** 是否自动加载当前工程（默认为 true） */
@@ -39,7 +41,7 @@ export interface ActionDockHostOptions {
   /** 是否扫描已软链接的外部包（通过 listLinkedPackages，默认为 false） */
   scanLinkedPackages?: boolean;
   /**
-   * 是否以数据目录持有者身份打开包存储：true 时内部创建的 App 存储在打开阶段
+   * 是否以数据目录持有者身份打开包存储：true 时内部创建的 Runtime 存储在打开阶段
    * 收割遗留非终态运行记录。默认 true（Host 本身即持有者）；
    * CLI 查询命令创建旁观 Host 时显式置 false，避免误收割并发 serve 进程的在途运行。
    */
@@ -86,7 +88,7 @@ export interface ActionDockHost {
   describeAction(ref: ActionRef | string): Promise<ActionSpec>;
 
   /** 静态列出所有已注册包中可用的 Playbook 规程摘要 */
-  listPlaybooks(): Promise<PlaybookSummary[]>;
+  listPlaybooks(options?: { intent?: string; package?: string }): Promise<PlaybookSummary[]>;
 
   /** 静态查询并返回指定 Playbook 的规范内容与操作指南 */
   describePlaybook(id: string): Promise<PlaybookSpec>;
@@ -108,6 +110,12 @@ export interface ActionDockHost {
   /** 查询指定运行标识的记录详情 */
   getRun(runId: string): Promise<RunRecord | undefined>;
 
+  /** 列出运行记录 */
+  listRuns(query?: ListRunsOptions): Promise<RunRecord[]>;
+
+  /** 清理运行记录 */
+  clearRuns(options?: { packageId?: string; actionId?: string; status?: string; olderThanMs?: number }): Promise<number>;
+
   /** 取消指定在运行的任务 */
   cancelRun(runId: string, reason?: string): Promise<CancelResult>;
 
@@ -117,15 +125,72 @@ export interface ActionDockHost {
     options?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number }
   ): AsyncIterable<ExecutionEvent>;
 
-  /** 根据包唯一标识获取指定 App 实例 */
-  getApp(packageId: string): ActionDockApp | undefined;
+  /** 获取配置项视图 */
+  getConfig(packageId: string, key: string): Promise<ConfigValueView>;
 
-  /** 获取所有当前已注册的 App 实例列表 */
-  listApps(): ActionDockApp[];
+  /** 设置配置项 */
+  setConfig(packageId: string, key: string, value: JsonValue): Promise<void>;
 
-  /** 注册新的 App 实例至当前宿主容器 */
-  registerApp(app: ActionDockApp): void;
+  /** 删除配置项 */
+  deleteConfig(packageId: string, key: string): Promise<boolean>;
 
-  /** 优雅关闭宿主容器。仅对内部创建的 App 实例执行 close 并安全释放底层资源；外部传入借用的 App 实例生命周期完全由调用方负责管理，Host 关闭时仅解绑引用并清理自身内部实例。 */
+  /** 列出指定包（或 global）的全部配置项视图 */
+  listConfig(packageId: string): Promise<ConfigValueView[]>;
+
+  /** 获取状态项 */
+  getState<T extends JsonValue = JsonValue>(
+    packageId: string,
+    actionId: string,
+    key: string,
+    options?: StateScopeOptions
+  ): Promise<T | undefined>;
+
+  /** 设置状态项 */
+  setState<T extends JsonValue = JsonValue>(
+    packageId: string,
+    actionId: string,
+    key: string,
+    value: T,
+    options?: StateScopeOptions
+  ): Promise<void>;
+
+  /** 删除状态项 */
+  deleteState(
+    packageId: string,
+    actionId: string,
+    key: string,
+    options?: StateScopeOptions
+  ): Promise<boolean>;
+
+  /** 列出状态项键名 */
+  listStateKeys(
+    packageId: string,
+    actionId: string,
+    options?: StateScopeOptions
+  ): Promise<string[]>;
+
+  /** 清理状态项 */
+  clearState(
+    packageId: string,
+    actionId: string,
+    options?: StateScopeOptions
+  ): Promise<number>;
+
+  /** 列出状态项明细 */
+  listStateEntries(
+    packageId: string,
+    options?: any
+  ): Promise<StateEntry[]>;
+
+  /** 根据包唯一标识获取指定 Runtime 实例 */
+  getRuntime(packageId: string): PackageRuntime | undefined;
+
+  /** 获取所有当前已注册的 Runtime 实例列表 */
+  listRuntimes(): PackageRuntime[];
+
+  /** 注册新的 Runtime 实例至当前宿主容器 */
+  registerRuntime(runtime: PackageRuntime): void;
+
+  /** 优雅关闭宿主容器。仅对内部创建的 Runtime 实例执行 close 并安全释放底层资源；外部传入借用的 Runtime 实例生命周期完全由调用方负责管理，Host 关闭时仅解绑引用并清理自身内部实例。 */
   close(options?: { graceMs?: number }): Promise<void>;
 }

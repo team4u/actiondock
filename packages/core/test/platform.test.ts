@@ -237,6 +237,7 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
         identity: createPackageIdentity({ id: "test-pkg" }),
         packageId: "test-pkg",
         platform: testPlatform,
+        storage: testPlatform.storage.createStorage("test-pkg"),
       });
 
       expect(runner.getStorage()).toBeDefined();
@@ -301,6 +302,7 @@ describe("RuntimePlatform 契约与 DefaultPlatform 测试", () => {
         identity: createPackageIdentity({ id: "exec-pkg" }),
         packageId: "exec-pkg",
         platform: testPlatform,
+        storage: memoryStorage,
       });
 
       service.registerAction({

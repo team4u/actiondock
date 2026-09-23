@@ -4,15 +4,14 @@ import { verifyBearerToken } from "../security";
 import { type RouteContext, jsonResponse } from "./common";
 
 /**
- * 处理健康检查与就绪状态接口（支持 /api/v2/health、/health 与兼容别名 /api/v1/health）。
+ * 处理健康检查与就绪状态接口（支持 /api/v2/health 与 /health）。
  */
 export async function handleHealthRoute(ctx: RouteContext): Promise<Response | null> {
   const { req, pathname, corsHeaders, options, projectRoot } = ctx;
 
   if (
     pathname !== "/api/v2/health" &&
-    pathname !== "/health" &&
-    pathname !== "/api/v1/health"
+    pathname !== "/health"
   ) {
     return null;
   }

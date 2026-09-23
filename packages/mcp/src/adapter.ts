@@ -4,17 +4,16 @@ import { resolve } from "node:path";
 import {
   ACTIONDOCK_VERSION,
   ActionResolver,
-  createActionDockTarget,
+  createActionDock,
   createNodePlatform,
-  ServiceActionDockTarget,
   findProjectRoot,
   resolvePackageRoot,
 } from "@actiondock/core";
 import type {
-  ActionDockApp,
-  ActionDockAppOptions,
   ActionDockHost,
-  ActionDockTarget,
+  ActionDockService,
+  PackageRuntime,
+  PackageRuntimeOptions,
   RuntimeStorage,
 } from "@actiondock/core";
 import type { ExecutionResult, JsonValue, RunRecord } from "@actiondock/sdk";
@@ -82,7 +81,7 @@ const MCP_TOOL_NAME_COLLISION = "MCP_TOOL_NAME_COLLISION";
  *
  * 默认（ownStorageLifecycle 为 false）时外部 storage 生命周期由注入方管理，
  * 适配层仅委托读写而不接管关闭：所有成员函数与属性原样转发到原始实例并绑定原 this，
- * 仅 close 收敛为显式声明的无操作边界，确保 target.close() 级联关闭时不会误伤外部实例。
+ * 仅 close 收敛为显式声明的无操作边界，确保 service.close() 级联关闭时不会误伤外部实例。
  *
  * @param storage 外部注入的存储实例
  */
@@ -112,31 +111,26 @@ function toolNameCollisionError(toolName: string): Error & { code: string } {
 }
 
 /**
- * 解析或基于选项创建底层 ActionDockTarget 统一门面。
+ * 解析或基于选项创建底层 ActionDockService 统一门面。
  */
-export async function resolveTarget(
+export async function resolveService(
   options: ActionDockMcpOptions
-): Promise<{ target: ActionDockTarget; ownsTarget: boolean }> {
-  if (options.target) {
-    return { target: options.target, ownsTarget: false };
-  }
-
+): Promise<{ service: ActionDockService; ownsService: boolean }> {
   if (options.service) {
-    const target = new ServiceActionDockTarget(options.service);
-    return { target, ownsTarget: false };
+    return { service: options.service, ownsService: false };
   }
 
   if (options.host) {
-    const target = await createActionDockTarget({ type: "local", host: options.host });
-    return { target, ownsTarget: false };
+    const service = await createActionDock({ host: options.host });
+    return { service, ownsService: false };
   }
 
-  if (options.app) {
-    const target = await createActionDockTarget({ type: "local", app: options.app });
-    return { target, ownsTarget: false };
+  if (options.runtime) {
+    const service = await createActionDock({ runtime: options.runtime });
+    return { service, ownsService: false };
   }
 
-  const packages: ActionDockAppOptions[] = [];
+  const packages: PackageRuntimeOptions[] = [];
 
   // 外部注入的 storage 生命周期默认由注入方管理，适配层不伪造 close 语义；
   // 仅当显式声明 ownStorageLifecycle 时才向包配置透传原始实例（随 target.close() 级联关闭）
@@ -257,7 +251,7 @@ export async function resolveTarget(
     }
   }
 
-  const target = await createActionDockTarget({
+  const service = await createActionDock({
     type: "local",
     projectRoot,
     packages: packages.length > 0 ? packages : undefined,
@@ -273,37 +267,33 @@ export async function resolveTarget(
     platform,
   });
 
-  return { target, ownsTarget: true };
+  return { service, ownsService: true };
 }
 
 export type ActionDockMcpServer = McpServer & {
   close: () => Promise<void>;
-  target: ActionDockTarget;
+  service: ActionDockService;
   host?: ActionDockHost;
-  app?: ActionDockApp;
+  runtime?: PackageRuntime;
   events?: (runId: string, options?: { after?: number; signal?: AbortSignal }) => AsyncIterable<Record<string, unknown>>;
 };
 
 /**
- * 创建并配置基于 ActionDockTarget 的 McpServer 适配层实例。
+ * 创建并配置基于 ActionDockService 的 McpServer 适配层实例。
  */
 export async function createActionDockMcpServer(
   options: ActionDockMcpOptions = {}
 ): Promise<ActionDockMcpServer> {
-  const { target } = await resolveTarget(options);
+  const { service } = await resolveService(options);
 
   let serverName = "actiondock";
   let serverVersion = ACTIONDOCK_VERSION;
 
   try {
-    const info = await target.info();
-    if (info) {
-      serverName = info.name || info.id || "actiondock";
-      serverVersion = info.protocolVersion || ACTIONDOCK_VERSION;
-      if (info.packages && info.packages.length === 1) {
-        serverName = info.packages[0].name || info.packages[0].id || serverName;
-        serverVersion = info.packages[0].version || serverVersion;
-      }
+    const packages = await service.info();
+    if (packages && packages.length === 1) {
+      serverName = packages[0].name || packages[0].id || serverName;
+      serverVersion = packages[0].version || serverVersion;
     }
   } catch {
     // 忽略元数据读取失败，使用默认值
@@ -315,10 +305,10 @@ export async function createActionDockMcpServer(
   });
 
   // 任务规范扩展注册集中隔离在独立模块，本层不再直接操作 SDK 内层实例
-  registerTasksExtension(server, target);
+  registerTasksExtension(server, service);
 
-  // 工具注册与模式映射：tools/list 纯粹委托 target.listActions()
-  const rawActions = await target.listActions();
+  // 工具注册与模式映射：tools/list 纯粹委托 service.discovery.listActions()
+  const rawActions = await service.discovery.listActions();
   const seenActionKeys = new Map<string, (typeof rawActions)[number]>();
   for (const act of rawActions) {
     let pkgId = act.packageId || "";
@@ -407,7 +397,7 @@ export async function createActionDockMcpServer(
       ? `[${action.id}] ${action.description || ""}`.trim()
       : action.description;
 
-    // 工具执行：tools/call 委托 target.runAction() 或 target.startAction()
+    // 工具执行：tools/call 委托 service.execution.run() 或 service.execution.start()
     server.registerTool(
       toolName,
       {
@@ -435,7 +425,7 @@ export async function createActionDockMcpServer(
             : clientTimeoutMs ?? options.timeoutMs;
 
         if (isAsync) {
-          const ticket = await target.startAction(action.id, cleanInput, {
+          const ticket = await service.execution.start(action.id, cleanInput, {
             signal,
             timeoutMs: effectiveTimeoutMs,
           });
@@ -455,7 +445,7 @@ export async function createActionDockMcpServer(
           };
         }
 
-        const result = await target.runAction(action.id, cleanInput, {
+        const result = await service.execution.run(action.id, cleanInput, {
           signal,
           timeoutMs: effectiveTimeoutMs,
         });
@@ -468,7 +458,7 @@ export async function createActionDockMcpServer(
 
   // 资源与规程映射：规程映射为只读 MCP Resource 与 Prompt
   try {
-    const playbooks = await target.listPlaybooks();
+    const playbooks = await service.discovery.listPlaybooks();
     for (const pb of playbooks) {
       server.registerResource(
         pb.id,
@@ -479,7 +469,7 @@ export async function createActionDockMcpServer(
           mimeType: "text/markdown",
         },
         async (uri: URL) => {
-          const spec = await target.describePlaybook(pb.id);
+          const spec = await service.discovery.describePlaybook(pb.id);
           return {
             contents: [
               {
@@ -499,7 +489,7 @@ export async function createActionDockMcpServer(
           description: pb.description,
         },
         async () => {
-          const spec = await target.describePlaybook(pb.id);
+          const spec = await service.discovery.describePlaybook(pb.id);
           return {
             messages: [
               {
@@ -523,9 +513,9 @@ export async function createActionDockMcpServer(
     );
   }
 
-  // 服务生命周期：默认 close 仅关闭 MCP 服务本身，不级联 target——
-  // SDK 传输层（HTTP 每请求 / stdio 探测回落）会销毁工厂产物，若 close 级联会误杀共享 target；
-  // 需要「一次 close 同时释放 target」的独立持有方显式传 cascadeTargetClose
+  // 服务生命周期：默认 close 仅关闭 MCP 服务本身，不级联 service——
+  // SDK 传输层（HTTP 每请求 / stdio 探测回落）会销毁工厂产物，若 close 级联会误杀共享 service；
+  // 需要「一次 close 同时释放 service」的独立持有方显式传 cascadeServiceClose
   const originalClose = server.close.bind(server);
   let isClosed = false;
 
@@ -533,19 +523,19 @@ export async function createActionDockMcpServer(
     if (isClosed) return;
     isClosed = true;
 
-    // 清理异常不吞没：先关服务再级联目标，server 关闭失败也继续释放 target 并聚合上抛
+    // 清理异常不吞没：先关服务再级联目标，server 关闭失败也继续释放 service 并聚合上抛
     let closeError: unknown;
     try {
       await originalClose();
     } catch (err) {
       closeError = err;
     }
-    if (options.cascadeTargetClose) {
+    if (options.cascadeServiceClose) {
       try {
-        await target.close();
+        await service.close();
       } catch (err) {
         if (closeError !== undefined) {
-          throw new AggregateError([closeError, err], "Failed to close MCP server and target");
+          throw new AggregateError([closeError, err], "Failed to close MCP server and service");
         }
         throw err;
       }
@@ -557,11 +547,11 @@ export async function createActionDockMcpServer(
 
   const decorated = server as ActionDockMcpServer;
   decorated.close = closeFn;
-  decorated.target = target;
+  decorated.service = service;
   decorated.host = options.host;
-  decorated.app = options.app;
-  decorated.events = (runId: string, opts?: Parameters<ActionDockTarget["events"]>[1]) =>
-    target.events(runId, opts);
+  decorated.runtime = options.runtime;
+  decorated.events = (runId: string, opts?: { after?: number; signal?: AbortSignal }) =>
+    service.runs.events(runId, opts);
 
   return decorated;
 }

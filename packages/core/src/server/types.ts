@@ -1,6 +1,5 @@
 import type { ActionDockHost } from "../host/types";
 import type { ActionDockService } from "../service/types";
-import type { ActionDockTarget } from "../target/types";
 
 export interface CoreHttpServerInstance {
   port: number;
@@ -40,8 +39,6 @@ export interface ServerOptions {
   host?: string | ActionDockHost;
   /** 显式绑定的 ActionDockHost 宿主实例（向前兼容别名） */
   hostInstance?: ActionDockHost;
-  /** 关联的目标 ActionDockTarget 门面实例 */
-  target?: ActionDockTarget;
   /** 关联的标准 ActionDockService 服务端口实例 */
   service?: ActionDockService;
   /** 显式绑定的主机地址（当 host 传入 ActionDockHost 时的可选覆盖项） */
@@ -90,8 +87,6 @@ export interface ActionDockServerInstance {
   port: number;
   /** 关联的 ActionDockHost 宿主实例（若启动时传入或创建） */
   host?: ActionDockHost;
-  /** 关联的 ActionDockTarget 目标门面实例 */
-  target?: ActionDockTarget;
   /** 关联的 ActionDockService 服务端口实例 */
   service: ActionDockService;
   /** 服务端可访问的基础 URL（如 "http://127.0.0.1:5177"） */
@@ -101,4 +96,3 @@ export interface ActionDockServerInstance {
   /** 优雅关闭服务端并释放底层资源 */
   stop: (options?: { graceMs?: number }) => Promise<void> | void;
 }
-

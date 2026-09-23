@@ -1,9 +1,9 @@
 import http from "node:http";
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { type ActionContext, defineAction } from "@actiondock/sdk";
-import { createActionDockApp } from "../src/app";
+import { createPackageRuntime } from "../src/app";
 import { createActionDockHost } from "../src/host";
-import { createActionDockTarget } from "../src/target";
+import { createActionDock } from "../src/service";
 import { formatHostForUrl, startActionDockServer } from "../src/server";
 
 describe("ActionDock HTTP Server v2 架构重构验证", () => {
@@ -11,6 +11,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
   let serverInstance: any;
   let serverUrl: string;
   let host: any;
+  let service: any;
   let target: any;
 
   beforeAll(async () => {
@@ -30,7 +31,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       },
     });
 
-    const appA = await createActionDockApp({
+    const appA = await createPackageRuntime({
       projectConfig: {
         id: "pkg.math",
         name: "Math Package",
@@ -77,7 +78,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       inMemory: true,
     });
 
-    const appB = await createActionDockApp({
+    const appB = await createPackageRuntime({
       projectConfig: {
         id: "pkg.extra",
         name: "Extra Package",
@@ -93,13 +94,14 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       inMemory: true,
     });
 
-    target = await createActionDockTarget({ host });
+    service = await createActionDock({ host });
+    target = service;
 
     serverInstance = await startActionDockServer({
       port: 0,
       host: "127.0.0.1",
       token: AUTH_TOKEN,
-      target,
+      service,
       hostInstance: host,
       enableManagement: false,
     });
@@ -344,7 +346,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
     });
 
     it("开启 enableManagement 时，请求配置与状态管理接口正常放行", async () => {
-      const mgmtApp = await createActionDockApp({
+      const mgmtApp = await createPackageRuntime({
         projectConfig: { id: "pkg.mgmt", name: "Mgmt App", version: "1.0.0" },
         inMemory: true,
       });
@@ -353,13 +355,13 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         autoLoadCurrentProject: false,
         inMemory: true,
       });
-      const mgmtTarget = await createActionDockTarget({ host: mgmtHost });
+      const mgmtService = await createActionDock({ host: mgmtHost });
 
       const mgmtServer = await startActionDockServer({
         port: 0,
         host: "127.0.0.1",
         token: AUTH_TOKEN,
-        target: mgmtTarget,
+        service: mgmtService,
         hostInstance: mgmtHost,
         enableManagement: true,
       });
@@ -394,7 +396,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         port: 0,
         host: "127.0.0.1",
         token: AUTH_TOKEN,
-        target,
+        service,
         hostInstance: host,
         enableManagement: true,
         packageAllowlist: ["pkg.math"],
@@ -452,8 +454,8 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       expect(allowedPbRes.status).toBe(200);
     });
 
-    it("target-only 单 App 启动服务并配置白名单，请求短规程路由验证严格受到 packageAllowlist 拦截", async () => {
-      const singleApp = await createActionDockApp({
+    it("单 PackageRuntime 启动服务并配置白名单，请求短规程路由验证严格受到 packageAllowlist 拦截", async () => {
+      const singleApp = await createPackageRuntime({
         projectConfig: {
           id: "pkg.standalone",
           name: "Standalone Package",
@@ -468,12 +470,12 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         inMemory: true,
       });
 
-      const singleTarget = await createActionDockTarget({ app: singleApp });
+      const singleService = await createActionDock({ packageRuntime: singleApp });
       const targetOnlyServer = await startActionDockServer({
         port: 0,
         host: "127.0.0.1",
         token: AUTH_TOKEN,
-        target: singleTarget,
+        service: singleService,
         packageAllowlist: ["pkg.other"],
       });
       const targetOnlyUrl = `http://127.0.0.1:${targetOnlyServer.port}`;
@@ -568,16 +570,16 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
             version: "1.0.0",
           })
         );
-        const docApp = await createActionDockApp({
+        const docApp = await createPackageRuntime({
           packageRoot: tempDir,
           inMemory: true,
         });
-        const docTarget = await createActionDockTarget({ app: docApp });
+        const docService = await createActionDock({ packageRuntime: docApp });
         const docServer = await startActionDockServer({
           port: 0,
           host: "127.0.0.1",
           token: AUTH_TOKEN,
-          target: docTarget,
+          service: docService,
           packageAllowlist: ["pkg.doctor-target"],
         });
         const docUrl = `http://127.0.0.1:${docServer.port}`;
@@ -690,7 +692,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         port: 0,
         host: "127.0.0.1",
         token: AUTH_TOKEN,
-        target,
+        service,
         hostInstance: host,
         enableManagement: true,
         packageAllowlist: ["pkg.unregistered"],
@@ -736,7 +738,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         run: (input: { x: number; y: number }) => ({ result: input.x + input.y }),
       });
 
-      const emptyAppA = await createActionDockApp({
+      const emptyAppA = await createPackageRuntime({
         projectConfig: {
           id: "pkg.math",
           name: "Math Package",
@@ -777,7 +779,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         inMemory: true,
       });
 
-      const emptyAppB = await createActionDockApp({
+      const emptyAppB = await createPackageRuntime({
         projectConfig: {
           id: "pkg.extra",
           name: "Extra Package",
@@ -793,13 +795,13 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         inMemory: true,
       });
 
-      const emptyTarget = await createActionDockTarget({ host: emptyHost });
+      const emptyService = await createActionDock({ host: emptyHost });
 
       emptyListServer = await startActionDockServer({
         port: 0,
         host: "127.0.0.1",
         token: AUTH_TOKEN,
-        target: emptyTarget,
+        service: emptyService,
         hostInstance: emptyHost,
         enableManagement: true,
         packageAllowlist: [],
@@ -864,8 +866,8 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
   });
 
   describe("exposeDebugInfo 调试与物理路径信息安全收敛验证", () => {
-    it("DefaultActionDockApp.info() 契约在 exposeDebugInfo 为 false 时不暴露 packageRoot", async () => {
-      const debugApp = await createActionDockApp({
+    it("DefaultPackageRuntime.info() 契约在 exposeDebugInfo 为 false 时不暴露 packageRoot", async () => {
+      const debugApp = await createPackageRuntime({
         packageRoot: "/root/code/test-pkg",
         projectConfig: {
           id: "pkg.debug-test",
@@ -883,7 +885,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       const infoWithOverride = await debugApp.info({ exposeDebugInfo: true });
       expect(infoWithOverride.packageRoot).toBe("/root/code/test-pkg");
 
-      const defaultApp = await createActionDockApp({
+      const defaultApp = await createPackageRuntime({
         packageRoot: "/root/code/test-pkg-default",
         projectConfig: {
           id: "pkg.debug-default",
@@ -904,7 +906,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         port: 0,
         host: "127.0.0.1",
         token: AUTH_TOKEN,
-        target,
+        service,
         hostInstance: host,
         enableManagement: false,
         exposeDebugInfo: false,
@@ -949,7 +951,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         port: 0,
         host: "127.0.0.1",
         token: AUTH_TOKEN,
-        target,
+        service,
         hostInstance: host,
         enableManagement: true,
         corsOrigins: ["http://localhost:3000", "https://app.actiondock.com"],
@@ -1022,7 +1024,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
 
   describe("ServerOptions.hostInstance 兼容别名验证", () => {
     it("优先读取 options.hostInstance 初始化宿主与目标门面", async () => {
-      const customApp = await createActionDockApp({
+      const customApp = await createPackageRuntime({
         projectConfig: {
           id: "pkg.host-instance",
           name: "Host Instance Test",
@@ -1051,7 +1053,6 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
 
       try {
         expect(server.host).toBe(customHost);
-        expect(server.target).toBeDefined();
         expect(server.service).toBeDefined();
 
         const res = await fetch(`${server.url}/api/v2/actions`, {
@@ -1066,7 +1067,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
     });
 
     it("当同时提供 hostInstance 与 host 字符串时，正确绑定主机并采用 hostInstance", async () => {
-      const customApp = await createActionDockApp({
+      const customApp = await createPackageRuntime({
         projectConfig: {
           id: "pkg.both",
           name: "Both Options Test",
@@ -1120,7 +1121,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         port: 0,
         host: "::1",
         token: "test-token",
-        target,
+        service,
         hostInstance: host,
       });
 
@@ -1143,7 +1144,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       let aborted = false;
       let actionStarted = false;
 
-      const abortApp = await createActionDockApp({
+      const abortApp = await createPackageRuntime({
         projectConfig: {
           id: "pkg.abortable",
           name: "Abortable Package",
@@ -1226,11 +1227,11 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       }
     });
 
-    it("服务端 stop 方法按时序先拒绝新连接/排空在途请求，再关闭 target 与 host", async () => {
+    it("服务端 stop 方法按时序先拒绝新连接/排空在途请求，再关闭 service 与 host", async () => {
       const order: string[] = [];
-      const mockTarget = {
+      const mockService = {
         close: async () => {
-          order.push("target.close");
+          order.push("service.close");
         },
       } as any;
       const mockHost = {
@@ -1242,14 +1243,14 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       const server = await startActionDockServer({
         port: 0,
         host: "127.0.0.1",
-        target: mockTarget,
+        service: mockService,
         hostInstance: mockHost,
       });
 
       await server.stop();
 
-      // target.close 与 host.close 必须在 server 停止之后依次执行
-      expect(order).toEqual(["target.close", "host.close"]);
+      // service.close 与 host.close 必须在 server 停止之后依次执行
+      expect(order).toEqual(["service.close", "host.close"]);
     });
   });
 });

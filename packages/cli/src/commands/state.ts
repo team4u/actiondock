@@ -63,15 +63,15 @@ export function registerStateCommands(program: Command, context?: CliContext): v
     const effectiveIntent = resolveIntent(options.intent, prefix ? [prefix] : []);
     const shouldFallback = options.fallback !== false;
 
-    await withTarget(options, context, async (target, resolved) => {
+    await withTarget(options, context, async (service, resolved) => {
       const actionId = options.action || "";
 
       // 远端服务模式：直接列举远端包作用域键
       if (resolved.type === "remote") {
-        const keys = await target.listStateKeys(options.package || "", actionId, {
+        const keys = (await service.management?.state.list(options.package || "", actionId, {
           namespace: options.namespace,
           prefix,
-        });
+        })) ?? [];
 
         renderResult(keys, {
           json: options.json,
@@ -100,7 +100,7 @@ export function registerStateCommands(program: Command, context?: CliContext): v
 
       if (targetRoot) {
         await renderProjectScopedStateList({
-          target,
+          service,
           targetRoot,
           actionId,
           prefix,
@@ -113,7 +113,7 @@ export function registerStateCommands(program: Command, context?: CliContext): v
       }
 
       await renderLinkedPackagesStateList({
-        target,
+        service,
         actionId,
         prefix,
         options,
@@ -176,7 +176,7 @@ export function registerStateCommands(program: Command, context?: CliContext): v
       await withTarget(
         options,
         context,
-        async (target, resolved) => {
+        async (service, resolved) => {
           const actionId = options.action || "";
 
           if (resolved.type === "remote") {
@@ -184,7 +184,7 @@ export function registerStateCommands(program: Command, context?: CliContext): v
             const effectiveNamespace = options.namespace || decoded.namespace;
             const actualKey = options.namespace ? rawKey : decoded.key;
 
-            const entry = await target.getState(options.package || "", actionId, actualKey, {
+            const entry = await service.management?.state.get(options.package || "", actionId, actualKey, {
               namespace: effectiveNamespace,
               detail: true,
             });
@@ -209,7 +209,7 @@ export function registerStateCommands(program: Command, context?: CliContext): v
           const { root, key: effectiveKey } = getTargetRoot(options.package, rawKey);
           const projConfig = loadProjectConfig(root);
 
-          const entry = await target.getState(projConfig.id, actionId, effectiveKey, {
+          const entry = await service.management?.state.get(projConfig.id, actionId, effectiveKey, {
             namespace: options.namespace,
             detail: true,
           });
@@ -266,7 +266,7 @@ export function registerStateCommands(program: Command, context?: CliContext): v
       await withTarget(
         options,
         context,
-        async (target, resolved) => {
+        async (service, resolved) => {
           const actionId = options.action || "";
 
           if (resolved.type === "remote") {
@@ -274,7 +274,7 @@ export function registerStateCommands(program: Command, context?: CliContext): v
             const effectiveNamespace = options.namespace || decoded.namespace;
             const actualKey = options.namespace ? rawKey : decoded.key;
 
-            await target.setState(options.package || "", actionId, actualKey, parsedVal as any, {
+            await service.management?.state.set(options.package || "", actionId, actualKey, parsedVal as any, {
               namespace: effectiveNamespace,
               ttl: ttlSec,
             });
@@ -296,7 +296,7 @@ export function registerStateCommands(program: Command, context?: CliContext): v
             finalKey = decoded.key;
           }
 
-          await target.setState(projConfig.id, actionId, finalKey, parsedVal as any, {
+          await service.management?.state.set(projConfig.id, actionId, finalKey, parsedVal as any, {
             namespace: actualNamespace,
             ttl: ttlSec,
           });
@@ -328,7 +328,7 @@ export function registerStateCommands(program: Command, context?: CliContext): v
       await withTarget(
         options,
         context,
-        async (target, resolved) => {
+        async (service, resolved) => {
           const actionId = options.action || "";
 
           if (resolved.type === "remote") {
@@ -336,7 +336,7 @@ export function registerStateCommands(program: Command, context?: CliContext): v
             const effectiveNamespace = options.namespace || decoded.namespace;
             const actualKey = options.namespace ? rawKey : decoded.key;
 
-            const deleted = await target.deleteState(options.package || "", actionId, actualKey, {
+            const deleted = await service.management?.state.delete(options.package || "", actionId, actualKey, {
               namespace: effectiveNamespace,
             });
 
@@ -352,7 +352,7 @@ export function registerStateCommands(program: Command, context?: CliContext): v
           const { root, key: effectiveKey } = getTargetRoot(options.package, rawKey);
           const projConfig = loadProjectConfig(root);
 
-          const deleted = await target.deleteState(projConfig.id, actionId, effectiveKey, {
+          const deleted = await service.management?.state.delete(projConfig.id, actionId, effectiveKey, {
             namespace: options.namespace,
           });
           if (!deleted) {
@@ -384,14 +384,14 @@ export function registerStateCommands(program: Command, context?: CliContext): v
         );
       }
 
-      await withTarget(options, context, async (target, resolved) => {
+      await withTarget(options, context, async (service, resolved) => {
         const actionId = options.action || "";
 
         if (resolved.type === "remote") {
-          const count = await target.clearState(options.package || "", actionId, {
+          const count = (await service.management?.state.clear(options.package || "", actionId, {
             namespace: options.namespace,
             all: Boolean(options.all),
-          });
+          })) ?? 0;
           writeStdout(`[OK] Cleared ${count} state entry(s) on remote server`, context);
           return;
         }
@@ -400,10 +400,10 @@ export function registerStateCommands(program: Command, context?: CliContext): v
         const { root } = getTargetRoot(options.package);
         const projConfig = loadProjectConfig(root);
 
-        const count = await target.clearState(projConfig.id, actionId, {
+        const count = (await service.management?.state.clear(projConfig.id, actionId, {
           namespace: options.namespace,
           all: Boolean(options.all),
-        });
+        })) ?? 0;
 
         const scopeDesc = options.all
           ? "all namespaces"

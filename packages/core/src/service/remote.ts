@@ -41,10 +41,10 @@ import {
   setRemoteConfig,
   setRemoteStateKey,
 } from "../profile/client";
+import { isRemoteStateKeyNotFound, wrapRemoteError } from "./remote-errors";
+import { formatTerminalRunResult, pollRunCompletion } from "./remote-polling";
+import { streamRemoteEvents } from "./sse-stream";
 import { isTerminalRunStatus, type StateEntry } from "../storage/types";
-import { isRemoteStateKeyNotFound, wrapRemoteError } from "../target/remote-errors";
-import { formatTerminalRunResult, pollRunCompletion } from "../target/remote-polling";
-import { streamRemoteEvents } from "../target/remote";
 import {
   ACTIONDOCK_PROTOCOL_VERSION,
   TARGET_CAPABILITY_UNAVAILABLE,
@@ -55,7 +55,7 @@ import {
   type ListRunsOptions,
   type RemoteTargetOptions,
   type StateScopeOptions,
-} from "../target/types";
+} from "./types";
 import type {
   ActionDockService,
   ConfigPort,

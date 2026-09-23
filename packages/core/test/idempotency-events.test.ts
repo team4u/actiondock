@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { type ActionContext, defineAction } from "@actiondock/sdk";
-import { createActionDockApp } from "../src/app";
+import { createPackageRuntime } from "../src/app";
 import { createActionDockHost } from "../src/host";
-import { createActionDockTarget } from "../src/target";
+import { createActionDock } from "../src/service";
 import { startActionDockServer } from "../src/server";
 import { InMemoryEventSink } from "../src/runtime/events";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
@@ -18,7 +18,7 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
         },
       });
 
-      const app = await createActionDockApp({
+      const app = await createPackageRuntime({
         projectConfig: {
           id: "pkg.idemp",
           name: "Idempotency Test",
@@ -41,19 +41,19 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
         autoLoadCurrentProject: false,
         inMemory: true,
       });
-      const target = await createActionDockTarget({ host });
+      const service = await createActionDock({ host });
 
       const reqId = "client-req-001";
       const input = { value: 21 };
 
-      const res1 = await target.runAction("pkg.idemp/double", input, { requestId: reqId });
+      const res1 = await service.execution.run("pkg.idemp/double", input, { requestId: reqId });
       expect(res1.ok).toBe(true);
       if (res1.ok) {
         expect(res1.data).toEqual({ doubled: 42 });
       }
       expect(runCount).toBe(1);
 
-      const res2 = await target.runAction("pkg.idemp/double", input, { requestId: reqId });
+      const res2 = await service.execution.run("pkg.idemp/double", input, { requestId: reqId });
       expect(res2.ok).toBe(true);
       if (res2.ok) {
         expect(res2.data).toEqual({ doubled: 42 });
@@ -61,7 +61,7 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
       expect(res2.runId).toBe(res1.runId);
       expect(runCount).toBe(1);
 
-      const ticket = await target.startAction("pkg.idemp/double", input, { requestId: reqId });
+      const ticket = await service.execution.start("pkg.idemp/double", input, { requestId: reqId });
       expect(ticket.runId).toBe(res1.runId);
       const ticketRes = await ticket.result;
       expect(ticketRes?.ok).toBe(true);
@@ -78,7 +78,7 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
         run: async (input: { message: string }) => ({ echo: input.message }),
       });
 
-      const app = await createActionDockApp({
+      const app = await createPackageRuntime({
         projectConfig: {
           id: "pkg.conflict",
           name: "Conflict Test",
@@ -101,15 +101,15 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
         autoLoadCurrentProject: false,
         inMemory: true,
       });
-      const target = await createActionDockTarget({ host });
+      const service = await createActionDock({ host });
 
       const reqId = "client-conflict-001";
-      const res1 = await target.runAction("pkg.conflict/echo", { message: "initial" }, { requestId: reqId });
+      const res1 = await service.execution.run("pkg.conflict/echo", { message: "initial" }, { requestId: reqId });
       expect(res1.ok).toBe(true);
 
       let conflictError: any;
       try {
-        await target.runAction("pkg.conflict/echo", { message: "tampered" }, { requestId: reqId });
+        await service.execution.run("pkg.conflict/echo", { message: "tampered" }, { requestId: reqId });
       } catch (err: any) {
         conflictError = err;
       }
@@ -127,7 +127,7 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
         run: async () => ({ count: ++counter }),
       });
 
-      const app = await createActionDockApp({
+      const app = await createPackageRuntime({
         projectConfig: {
           id: "pkg.no-idemp",
           name: "No Idempotency Test",
@@ -147,10 +147,10 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
         autoLoadCurrentProject: false,
         inMemory: true,
       });
-      const target = await createActionDockTarget({ host });
+      const service = await createActionDock({ host });
 
-      const res1 = await target.runAction("pkg.no-idemp/inc", {});
-      const res2 = await target.runAction("pkg.no-idemp/inc", {});
+      const res1 = await service.execution.run("pkg.no-idemp/inc", {});
+      const res2 = await service.execution.run("pkg.no-idemp/inc", {});
 
       expect(res1.runId).not.toBe(res2.runId);
       if (res1.ok && res2.ok) {
@@ -379,7 +379,7 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
     let serverInstance: any;
     let serverUrl: string;
     let host: any;
-    let target: any;
+    let service: any;
 
     beforeAll(async () => {
       const stepAction = defineAction({
@@ -392,7 +392,7 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
         },
       });
 
-      const app = await createActionDockApp({
+      const app = await createPackageRuntime({
         projectConfig: {
           id: "pkg.stream",
           name: "Stream Package",
@@ -415,13 +415,13 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
         autoLoadCurrentProject: false,
         inMemory: true,
       });
-      target = await createActionDockTarget({ host });
+      service = await createActionDock({ host });
 
       serverInstance = await startActionDockServer({
         port: 0,
         host: "127.0.0.1",
         token: AUTH_TOKEN,
-        target,
+        service,
         hostInstance: host,
         enableManagement: false,
       });
@@ -492,7 +492,7 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
     });
 
     it("HTTP GET events 携带 Last-Event-ID 请求头续传事件流并在 SSE 输出 id 字段", async () => {
-      const ticket = await target.startAction("pkg.stream/step", {});
+      const ticket = await service.execution.start("pkg.stream/step", {});
       await ticket.result;
 
       const eventsRes = await fetch(`${serverUrl}/api/v2/runs/${ticket.runId}/events`, {
@@ -512,10 +512,10 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
     });
 
     it("HTTP GET events 传入已过期游标时直接返回 HTTP 410 与 EVENT_CURSOR_EXPIRED 错误", async () => {
-      const ticket = await target.startAction("pkg.stream/step", {});
+      const ticket = await service.execution.start("pkg.stream/step", {});
       await ticket.result;
 
-      const app = host.getApp("pkg.stream");
+      const app = host.getRuntime("pkg.stream");
       const eventSink = (app?.executionService as any)?.eventSink;
       if (eventSink?.pruneEvents) {
         eventSink.pruneEvents(ticket.runId, 5);

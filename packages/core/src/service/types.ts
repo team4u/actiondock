@@ -6,12 +6,12 @@ import type {
   RunRecord,
 } from "@actiondock/sdk";
 import type {
-  ActionDockApp,
-  ActionDockAppOptions,
   ActionSpec,
   ActionSummary,
   ListActionsOptions,
   PackageInfo,
+  PackageRuntime,
+  PackageRuntimeOptions,
   PlaybookSpec,
   PlaybookSummary,
 } from "../app/types";
@@ -23,12 +23,149 @@ import type { RunOptions } from "../invocation/types";
 import type { ActionDockHost, ActionDockHostOptions } from "../host/types";
 import type { RuntimePlatform } from "../platform/types";
 import type { StateEntry } from "../storage/types";
-import type {
-  ConfigValueView,
-  ListRunsOptions,
-  RemoteTargetOptions,
-  StateScopeOptions,
-} from "../target/types";
+import { ActionDockError } from "../errors";
+
+/**
+ * 统一协议版本常量。
+ */
+export const ACTIONDOCK_PROTOCOL_VERSION = "2.0";
+
+/**
+ * 服务端/通信协议错误码常量。
+ */
+export const PROTOCOL_UNSUPPORTED = "PROTOCOL_UNSUPPORTED";
+export const TARGET_PROTOCOL_UNSUPPORTED = "TARGET_PROTOCOL_UNSUPPORTED";
+export const TARGET_CAPABILITY_UNAVAILABLE = "TARGET_CAPABILITY_UNAVAILABLE";
+export const TARGET_RESULT_UNKNOWN = "TARGET_RESULT_UNKNOWN";
+export const SERVICE_CLOSED = "SERVICE_CLOSED";
+export const TARGET_CLOSED = "TARGET_CLOSED";
+
+/**
+ * 结构化服务通信异常类。
+ */
+export class ServiceError extends ActionDockError {
+  readonly details?: Record<string, unknown>;
+  constructor(code: string, message: string, details?: Record<string, unknown>) {
+    super(code, message, details);
+    this.name = "ServiceError";
+    this.details = details;
+    Object.setPrototypeOf(this, ServiceError.prototype);
+  }
+}
+
+/** 兼容旧名字的别名 */
+export class TargetError extends ServiceError {
+  constructor(code: string, message: string, details?: Record<string, unknown>) {
+    super(code, message, details);
+    this.name = "TargetError";
+    Object.setPrototypeOf(this, TargetError.prototype);
+  }
+}
+
+/**
+ * 服务关闭超时异常类。
+ */
+export class CloseTimeoutError extends Error {
+  readonly runIds?: string[];
+  constructor(message = "Service close operation timed out", runIds?: string[]) {
+    super(message);
+    this.name = "CloseTimeoutError";
+    this.runIds = runIds;
+  }
+}
+
+/**
+ * 目标自省元数据信息。
+ */
+export interface TargetInfo {
+  id: string;
+  name: string;
+  protocolVersion: string;
+  packages: PackageInfo[];
+  capabilities: string[];
+  idempotencyPolicy?: {
+    retentionMs?: number;
+    header?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+/**
+ * 配置项安全视图契约。
+ * 屏蔽敏感配置原文，仅暴露是否已配置、是否为秘密及实际解析来源。
+ */
+export interface ConfigValueView {
+  /** 配置项键名 */
+  key: string;
+  /** 是否已显式配置或存在有效值 */
+  configured: boolean;
+  /** 是否为秘密敏感配置 */
+  secret: boolean;
+  /** 配置值实际解析来源 */
+  source: string;
+  /** 非秘密配置的实际数据值 */
+  value?: JsonValue;
+}
+
+/**
+ * 状态作用域与筛选控制选项。
+ */
+export interface StateScopeOptions {
+  /** 显式绑定的 Action 标识 */
+  actionId?: string;
+  /** 显式子命名空间（相对于 Action 根命名空间） */
+  namespace?: string;
+  /** 存活有效期（秒），仅在写入状态时生效 */
+  ttl?: number;
+  /** 键名前缀过滤匹配 */
+  prefix?: string;
+  /** 是否清空所有条目 */
+  all?: boolean;
+  /** 是否返回完整条目详情 */
+  detail?: boolean;
+}
+
+/**
+ * 任务运行记录列表查询选项。
+ */
+export interface ListRunsOptions {
+  /** 目标包唯一标识 */
+  packageId?: string;
+  /** Action 动作唯一标识 */
+  actionId?: string;
+  /** 运行终态状态筛选 */
+  status?: string;
+  /** 模糊意图检索模式 */
+  intent?: string;
+  /** 最大返回记录条数限制 */
+  limit?: number;
+}
+
+/**
+ * 远程服务连接配置选项。
+ */
+export interface RemoteServiceOptions {
+  /** 远端 ActionDock 服务 HTTP 根地址 */
+  serverUrl: string;
+  /** 鉴权 Bearer Token（可选） */
+  token?: string;
+  /** 是否允许向非回环地址发送明文 HTTP 请求（默认 false） */
+  allowInsecureHttp?: boolean;
+  /** 是否跳过 TLS 证书合法性校验（用于局域网自签证书） */
+  insecure?: boolean;
+  /** 自定义底层 HTTP 调度器（平台中立） */
+  dispatcher?: unknown;
+  /** 请求超时时间（毫秒） */
+  timeoutMs?: number;
+  /** 轮询等待基准底线超时时间（毫秒，默认 60000ms） */
+  baseTimeoutMs?: number;
+  /** 是否启用配置与状态管理端口（默认 true） */
+  enableManagement?: boolean;
+}
+
+/** 兼容别名 */
+export type RemoteTargetOptions = RemoteServiceOptions;
 
 /**
  * 资产与元数据发现服务端口。
@@ -52,13 +189,13 @@ export interface DiscoveryPort {
 export interface ExecutionPort {
   /** 同步执行指定 Action 并等待终态结果 */
   run(
-    ref: ActionRef,
+    ref: ActionRef | string,
     input?: unknown,
     options?: RunOptions
   ): Promise<ExecutionResult>;
   /** 异步启动指定 Action 并立即返回任务执行票据 */
   start(
-    ref: ActionRef,
+    ref: ActionRef | string,
     input?: unknown,
     options?: RunOptions
   ): Promise<ExecutionTicket>;
@@ -164,18 +301,22 @@ export interface ActionDockService {
  * 创建 ActionDock 本地服务选项。
  */
 export interface CreateActionDockOptions {
+  /** 模式类型（可选） */
+  type?: "local";
   /** 包装的 ActionDockHost 实例 */
   host?: ActionDockHost;
-  /** 包装的 ActionDockApp 实例 */
-  app?: ActionDockApp;
-  /** 单包 App 初始化配置（若未提供 host/app） */
-  appOptions?: ActionDockAppOptions;
+  /** 包装的 PackageRuntime 实例 */
+  runtime?: PackageRuntime;
+  /** 包装的 PackageRuntime 实例别名 */
+  packageRuntime?: PackageRuntime;
+  /** 单包 PackageRuntime 初始化配置（若未提供 host/packageRuntime） */
+  runtimeOptions?: PackageRuntimeOptions;
   /** 宿主 Host 初始化配置 */
   hostOptions?: ActionDockHostOptions;
   /** 当前工程根目录绝对路径 */
   projectRoot?: string;
   /** 预注册包配置列表 */
-  packages?: Array<ActionDockApp | ActionDockAppOptions>;
+  packages?: Array<PackageRuntime | PackageRuntimeOptions>;
   /** 自定义 ActionDock 家目录 */
   customHome?: string;
   /** 是否采用纯内存运行模式 */

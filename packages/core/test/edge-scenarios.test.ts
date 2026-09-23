@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { defineAction, type ActionContext } from "@actiondock/sdk";
 import { ActionRunner } from "../src/runtime/runner";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
-import { createActionDockApp } from "../src/app";
+import { createPackageRuntime } from "../src/app";
 import { createActionDockHost } from "../src/host";
 import { createPackageIdentity, InvocationPolicy } from "../src";
 import {
@@ -369,7 +369,7 @@ describe("核心运行时高级防御校验与边缘异常测试套件", () => {
         run: () => ({ source: "pkg.math-b", val: 200 }),
       });
 
-      const appA = await createActionDockApp({
+      const appA = await createPackageRuntime({
         projectConfig: {
           id: "pkg.math-a",
           name: "Math Package A",
@@ -379,7 +379,7 @@ describe("核心运行时高级防御校验与边缘异常测试套件", () => {
         inMemory: true,
       });
 
-      const appB = await createActionDockApp({
+      const appB = await createPackageRuntime({
         projectConfig: {
           id: "pkg.math-b",
           name: "Math Package B",

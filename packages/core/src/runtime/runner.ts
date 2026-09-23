@@ -100,7 +100,7 @@ export interface RunnerOptions {
   /** 快照代次标识（可省略，优先自 identity.generation 获取） */
   generationId?: string;
   /** 持久化运行时存储实例（SQLite） */
-  storage?: RuntimeStorage;
+  storage: RuntimeStorage;
   /** 全局共享持久化存储实例（SQLite，用于单例池化避免泄漏） */
   globalStorage?: RuntimeStorage;
   /** 项目根目录绝对路径 */
@@ -282,27 +282,13 @@ export class ActionRunner {
     this.actionInvoker = options.actionInvoker;
     this.actionResolver = options.actionResolver;
 
-    if (options.platform) {
-      this.clock = options.platform.clock;
-      this.process = options.platform.process;
-      this.storage = options.storage ?? options.platform.storage.createStorage(this.packageId, {
-        projectRoot: this.projectRoot,
-        customHome: this.customHome,
-        // Runner 作为执行宿主组件属于持有者路径，打开时收割遗留孤儿运行
-        recoverOrphans: true,
-      });
-      this.globalStorage = options.globalStorage ?? options.platform.storage.createGlobalStorage({
-        customHome: this.customHome,
-      });
-    } else {
-      if (!options.storage) {
-        throw new Error("ActionRunner requires either 'storage' or 'platform' option");
-      }
-      this.storage = options.storage;
-      this.globalStorage = options.globalStorage;
-      this.process = options.process;
-      this.clock = options.clock;
+    if (!options.storage) {
+      throw new Error("ActionRunner requires 'storage' option");
     }
+    this.storage = options.storage;
+    this.globalStorage = options.globalStorage;
+    this.clock = options.clock ?? options.platform?.clock;
+    this.process = options.process ?? options.platform?.process;
   }
 
   /** 本地 Action 注册表底层映射 */

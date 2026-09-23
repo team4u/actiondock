@@ -206,6 +206,7 @@ describe("createNodePlatform 平台工厂测试", () => {
         identity: createPackageIdentity({ id: "node-test-package" }),
         packageId: "node-test-package",
         platform,
+        storage: platform.storage.createStorage("node-test-package"),
       });
 
       service.registerAction("echo-action", testAction);

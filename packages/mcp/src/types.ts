@@ -1,8 +1,7 @@
 import type {
-  ActionDockApp,
   ActionDockHost,
   ActionDockService,
-  ActionDockTarget,
+  PackageRuntime,
   RuntimeStorage,
   ServerTlsOptions,
 } from "@actiondock/core";
@@ -63,17 +62,15 @@ export function toMcpTaskPayload(run: RunRecord): McpTaskPayload {
 
 /**
  * ActionDock MCP 适配层初始化选项。
- * 统一以 target（及可选 host, app）为核心。
+ * 统一以 service（及可选 host, runtime）为核心。
  */
 export interface ActionDockMcpOptions {
-  /** 目标 ActionDockTarget 门面实例（最高优先级） */
-  target?: ActionDockTarget;
   /** 目标 ActionDockService 标准服务端口实例 */
   service?: ActionDockService;
   /** 目标 ActionDockHost 宿主实例 */
   host?: ActionDockHost;
-  /** 目标 ActionDockApp 应用实例 */
-  app?: ActionDockApp;
+  /** 目标 PackageRuntime 应用运行时实例 */
+  runtime?: PackageRuntime;
   /** 单个目标项目根目录 */
   projectRoot?: string;
   /** 多个项目根目录（用于多包聚合提供） */
@@ -103,17 +100,17 @@ export interface ActionDockMcpOptions {
   storage?: RuntimeStorage;
   /**
    * 是否由适配层接管外部注入 storage 的生命周期。
-   * 默认 false：外部注入的 storage 由注入方自行管理，适配层不具各 close 语义；
-   * 置为 true 时透传原始实例，随 target.close() 级联关闭。
+   * 默认 false：外部注入的 storage 由注入方自行管理，适配层不具备 close 语义；
+   * 置为 true 时透传原始实例，随 service.close() 级联关闭。
    */
   ownStorageLifecycle?: boolean;
   /**
-   * 实例 close 是否级联关闭 target 门面。
+   * 实例 close 是否级联关闭 service 门面。
    * 默认 false：适配层产物可能被 SDK 传输层按请求（或按连接）创建与销毁，
-   * 级联语义会误杀共享 target，生命周期统一由外层入口的 stop/cleanup 收敛；
-   * 仅在调用方自行持有实例并需要一次 close 同时释放 target 时置 true。
+   * 级联语义会误杀共享 service，生命周期统一由外层入口的 stop/cleanup 收敛；
+   * 仅在调用方自行持有实例并需要一次 close 同时释放 service 时置 true。
    */
-  cascadeTargetClose?: boolean;
+  cascadeServiceClose?: boolean;
 }
 
 /**
@@ -125,11 +122,6 @@ export interface HttpSecurityOptions {
   token?: string;
   allowInsecureNoAuth?: boolean;
   allowQueryToken?: boolean;
-  /**
-   * 已废弃：该选项仅适用于远程 ActionDockTarget 客户端侧的明文 HTTP 豁免，
-   * 服务端监听安全性由 allowInsecureNoAuth 与 token 策略约束，传入不会产生任何效果；
-   * 服务端检测到该字段时仅输出警告日志
-   */
   allowInsecureHttp?: boolean;
   corsOrigins?: string[];
   maxBodyBytes?: number;
@@ -147,8 +139,7 @@ export interface ActionDockMcpHttpServerInstance {
   port: number;
   host: string;
   url: string;
-  target?: ActionDockTarget;
-  service?: ActionDockService;
+  service: ActionDockService;
   stop: () => Promise<void>;
 }
 

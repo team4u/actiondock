@@ -2,9 +2,9 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { IpcActionDockTarget, type ActionDockTarget } from "@actiondock/core";
+import { IpcActionDockService, type ActionDockService } from "@actiondock/core";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
-import { createActionDockMcpServer, resolveTarget, type ActionDockMcpServer } from "./adapter";
+import { createActionDockMcpServer, resolveService, type ActionDockMcpServer } from "./adapter";
 import type { ActionDockMcpOptions } from "./types";
 
 /**
@@ -19,12 +19,12 @@ export async function startMcpStdio(
   options: ActionDockMcpOptions = {}
 ): Promise<void> {
   let activeServer: ActionDockMcpServer | undefined;
-  let targetToUse: ActionDockTarget | undefined;
+  let serviceToUse: ActionDockService | undefined;
   let childProcess: ChildProcess | undefined;
 
-  // 若显式传入了已构造的 target 或不可序列化的内存对象，直接复用或解析目标实例
-  if (options.target || options.actions || options.storage || options.app || options.host || options.platform) {
-    targetToUse = options.target ?? (await resolveTarget(options)).target;
+  // 若显式传入了已构造的 service 或不可序列化的内存对象，直接复用或解析目标实例
+  if (options.service || options.actions || options.storage || options.runtime || options.host || options.platform) {
+    serviceToUse = options.service ?? (await resolveService(options)).service;
   } else {
     // 建立隔离的监督子进程
     const currentDir = dirname(fileURLToPath(import.meta.url));
@@ -53,7 +53,7 @@ export async function startMcpStdio(
     });
 
     // 标准输出物理隔离与受控限流排空转入 stderr 诊断流
-    targetToUse = new IpcActionDockTarget({
+    serviceToUse = new IpcActionDockService({
       childProcess,
       maxDiagnosticBytes: 512 * 1024,
       maxDiagnosticRate: 64 * 1024,
@@ -65,10 +65,10 @@ export async function startMcpStdio(
     async () => {
       const server = await createActionDockMcpServer({
         ...options,
-        target: targetToUse,
+        service: serviceToUse,
       });
       activeServer = server;
-      targetToUse = targetToUse || server.target;
+      serviceToUse = serviceToUse || server.service;
       return server;
     },
     {
@@ -95,9 +95,9 @@ export async function startMcpStdio(
         swallow(err);
       }
     }
-    if (targetToUse) {
+    if (serviceToUse) {
       try {
-        await targetToUse.close();
+        await serviceToUse.close();
       } catch (err) {
         swallow(err);
       }

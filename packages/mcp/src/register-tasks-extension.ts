@@ -1,4 +1,4 @@
-import type { ActionDockTarget } from "@actiondock/core";
+import type { ActionDockService } from "@actiondock/core";
 import type { RunRecord } from "@actiondock/sdk";
 import { fromJsonSchema, McpServer } from "@modelcontextprotocol/server";
 import { toMcpTaskPayload, toMcpTaskStatus } from "./types";
@@ -98,9 +98,9 @@ function toTimeMillis(value: string): number {
  * 在低层 Server 实例上注册 tasks 能力声明与三个请求处理器。
  *
  * @param server MCP 高层服务实例
- * @param target ActionDockTarget 公共契约门面
+ * @param service ActionDockService 公共服务实例
  */
-export function registerTasksExtension(server: McpServer, target: ActionDockTarget): void {
+export function registerTasksExtension(server: McpServer, service: ActionDockService): void {
   server.server.registerCapabilities({
     tasks: {
       list: {},
@@ -109,7 +109,7 @@ export function registerTasksExtension(server: McpServer, target: ActionDockTarg
   });
 
   server.server.setRequestHandler("tasks/get", { params: TASK_ID_PARAMS }, async (params) => {
-    const run = await target.getRun(params.taskId);
+    const run = await service.runs.get(params.taskId);
     if (!run) {
       // 携带语义码透传，避免被 SDK 映射为内部错误
       throw taskNotFoundError(params.taskId);
@@ -119,14 +119,14 @@ export function registerTasksExtension(server: McpServer, target: ActionDockTarg
 
   server.server.setRequestHandler("tasks/cancel", { params: TASK_ID_PARAMS }, async (params) => {
     const reason = params.reason || "Cancelled via MCP tasks/cancel";
-    const cancelRes = await target.cancelRun(params.taskId, reason);
+    const cancelRes = await service.runs.cancel(params.taskId, reason);
     if (cancelRes.outcome === "requested") {
       return { taskId: params.taskId, status: "cancelled" };
     }
     if (cancelRes.outcome === "already_terminal") {
       return { taskId: params.taskId, status: toMcpTaskStatus(cancelRes.status) };
     }
-    const run = await target.getRun(params.taskId);
+    const run = await service.runs.get(params.taskId);
     if (!run) {
       // 携带语义码透传，避免被 SDK 映射为内部错误
       throw taskNotFoundError(params.taskId);
@@ -145,8 +145,8 @@ export function registerTasksExtension(server: McpServer, target: ActionDockTarg
     }
     const actionId = params.actionId;
 
-    // limit 单处截断：下推到 target.listRuns 的 limit 参数，此处不再重复 slice
-    const runs = await target.listRuns({ limit, actionId });
+    // limit 单处截断：下推到 service.runs.list 的 limit 参数，此处不再重复 slice
+    const runs = await service.runs.list({ limit, actionId });
     const ordered = [...runs].sort(
       (a: RunRecord, b: RunRecord) => toTimeMillis(b.startedAt) - toTimeMillis(a.startedAt)
     );

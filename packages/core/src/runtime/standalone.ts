@@ -3,8 +3,8 @@ import { decodeStateKey, type ActionDefinition, type JsonValue } from "@actiondo
 import type { ActionSpec } from "../app/types";
 import { filterWithFallbackInfo } from "../filter";
 import type { ConfigItemDefinition } from "../project/types";
-import { createActionDockTarget } from "../target/target";
-import type { ActionDockTarget } from "../target/types";
+import { createActionDock } from "../service/factory";
+import type { ActionDockService } from "../service/types";
 import { STANDALONE_ASYNC_UNSUPPORTED } from "../errors";
 import {
   resolveActionInput,
@@ -51,8 +51,8 @@ export interface StandaloneDispatcherOptions {
   version: string;
   /** 描述信息 */
   description?: string;
-  /** 已构造的 ActionDockTarget 门面（若未传入则依据 actions/config 自动创建） */
-  target?: ActionDockTarget;
+  /** 已构造的 ActionDockService 服务（若未传入则依据 actions/config 自动创建） */
+  service?: ActionDockService;
   /** 声明的配置依赖定义（兼容选项） */
   configDefs?: Record<string, ConfigItemDefinition>;
   config?: Record<string, ConfigItemDefinition>;
@@ -81,7 +81,7 @@ export interface StandaloneDispatcherOptions {
  * 
  * 职责：
  * 1. 负责轻量参数解析、诊断输出渲染与统一退出码管理。
- * 2. 统一面向 ActionDockTarget 门面调用能力（支持本地 LocalTarget 与 IPC 监督隔离 Target）。
+ * 2. 统一面向 ActionDockService 服务调用能力。
  * 3. 严格遵循 ActionDock 2.0 输出协议约定：结果数据专走 stdout，日志与错误专走 stderr。
  * 4. 独立入口拒绝异步启动语义，显式拦截并返回 STANDALONE_ASYNC_UNSUPPORTED。
  */
@@ -108,16 +108,16 @@ export class StandaloneDispatcher {
     }
   }
 
-  private async createLocalTarget(
+  private async createLocalService(
     dataDir?: string,
     configOverrides: Record<string, unknown> = {}
-  ): Promise<{ target: ActionDockTarget; ownsTarget: boolean }> {
-    if (this.options.target) {
-      return { target: this.options.target, ownsTarget: false };
+  ): Promise<{ service: ActionDockService; ownsService: boolean }> {
+    if (this.options.service) {
+      return { service: this.options.service, ownsService: false };
     }
 
-    if (this.options.inMemory && (this.options as any)._sharedTarget) {
-      return { target: (this.options as any)._sharedTarget, ownsTarget: false };
+    if (this.options.inMemory && (this.options as any)._sharedService) {
+      return { service: (this.options as any)._sharedService, ownsService: false };
     }
 
     // 归一化 Action 集合：单一入口统一三形态输入
@@ -125,7 +125,7 @@ export class StandaloneDispatcher {
     // projectConfig.actions 要求 manifest 形态，字段语义兼容，此处显式收敛类型
     const manifestActions = actionSpecs as Record<string, any>;
 
-    const appOptions = {
+    const runtimeOptions = {
       projectConfig: {
         id: this.options.packageId,
         name: this.options.packageId,
@@ -141,17 +141,16 @@ export class StandaloneDispatcher {
       inMemory: this.options.inMemory,
     };
 
-    const target = await createActionDockTarget({
-      type: "local",
-      appOptions,
+    const service = await createActionDock({
+      runtimeOptions,
     });
 
     if (this.options.inMemory) {
-      (this.options as any)._sharedTarget = target;
-      return { target, ownsTarget: false };
+      (this.options as any)._sharedService = service;
+      return { service, ownsService: false };
     }
 
-    return { target, ownsTarget: true };
+    return { service, ownsService: true };
   }
 
   /**
@@ -230,14 +229,14 @@ export class StandaloneDispatcher {
       return ExitCode.SUCCESS;
     }
 
-    let target: ActionDockTarget;
-    let ownsTarget = false;
+    let service: ActionDockService;
+    let ownsService = false;
     try {
-      const targetRes = await this.createLocalTarget(dataDir, configOverrides);
-      target = targetRes.target;
-      ownsTarget = targetRes.ownsTarget;
+      const serviceRes = await this.createLocalService(dataDir, configOverrides);
+      service = serviceRes.service;
+      ownsService = serviceRes.ownsService;
     } catch (err: any) {
-      this.writeErr(`Error initializing standalone target: ${err?.message || err}`);
+      this.writeErr(`Error initializing standalone service: ${err?.message || err}`);
       return ExitCode.FAILURE;
     }
 
@@ -245,24 +244,24 @@ export class StandaloneDispatcher {
       let code: number;
       switch (command) {
         case "list":
-          code = await this.handleList(target, subArgs);
+          code = await this.handleList(service, subArgs);
           break;
 
         case "describe":
         case "show":
-          code = await this.handleDescribe(target, subArgs);
+          code = await this.handleDescribe(service, subArgs);
           break;
 
         case "run":
-          code = await this.handleRun(target, subArgs, actionArgs, control?.signal);
+          code = await this.handleRun(service, subArgs, actionArgs, control?.signal);
           break;
 
         case "config":
-          code = await this.handleConfig(target, subArgs);
+          code = await this.handleConfig(service, subArgs);
           break;
 
         case "state":
-          code = await this.handleState(target, subArgs);
+          code = await this.handleState(service, subArgs);
           break;
 
         default:
@@ -285,13 +284,13 @@ export class StandaloneDispatcher {
       this.writeErr(`Error: ${err?.message || err}`);
       return ExitCode.FAILURE;
     } finally {
-      if (ownsTarget) {
-        await target.close();
+      if (ownsService) {
+        await service.close();
       }
     }
   }
 
-  private async handleList(target: ActionDockTarget, subArgs: string[]): Promise<number> {
+  private async handleList(service: ActionDockService, subArgs: string[]): Promise<number> {
     const isJson = subArgs.includes("--json");
     const noFallback = subArgs.includes("--no-fallback");
     let intent: string | undefined;
@@ -313,7 +312,7 @@ export class StandaloneDispatcher {
     const effectiveIntent =
       intent || (positionalPatterns.length > 0 ? positionalPatterns.join("|") : undefined);
 
-    const actions = await target.listActions();
+    const actions = await service.discovery.listActions();
     const list = actions.map((a) => ({
       id: a.id,
       description: a.description || "",
@@ -338,7 +337,7 @@ export class StandaloneDispatcher {
     return ExitCode.SUCCESS;
   }
 
-  private async handleDescribe(target: ActionDockTarget, subArgs: string[]): Promise<number> {
+  private async handleDescribe(service: ActionDockService, subArgs: string[]): Promise<number> {
     const id = subArgs.find((a) => !a.startsWith("-"));
     const isJson = subArgs.includes("--json");
 
@@ -365,7 +364,7 @@ export class StandaloneDispatcher {
 
     let action: ActionSpec | undefined;
     try {
-      action = await target.describeAction(id);
+      action = await service.discovery.describeAction(id);
     } catch {
       if (isJson) {
         this.writeOut(
@@ -400,7 +399,7 @@ export class StandaloneDispatcher {
   }
 
   private async handleRun(
-    target: ActionDockTarget,
+    service: ActionDockService,
     subArgs: string[],
     actionArgs: string[],
     signal?: AbortSignal
@@ -525,7 +524,7 @@ export class StandaloneDispatcher {
       return ExitCode.INVALID_ARGUMENT;
     }
 
-    const result = await target.runAction(id, input, {
+    const result = await service.execution.run(id, input, {
       signal,
       timeoutMs,
     });
@@ -616,11 +615,16 @@ export class StandaloneDispatcher {
     return result.ok ? ExitCode.SUCCESS : ExitCode.FAILURE;
   }
 
-  private async handleConfig(target: ActionDockTarget, subArgs: string[]): Promise<number> {
+  private async handleConfig(service: ActionDockService, subArgs: string[]): Promise<number> {
     const sub = subArgs[0] || "list";
 
+    if (!service.management) {
+      this.writeErr("Error: management port is not enabled on this service");
+      return ExitCode.FAILURE;
+    }
+
     if (sub === "list") {
-      const views = await target.listConfig(this.options.packageId);
+      const views = await service.management.config.list(this.options.packageId);
       const dict: Record<string, unknown> = {};
       for (const v of views) {
         if (v.configured && v.value !== undefined) {
@@ -638,7 +642,7 @@ export class StandaloneDispatcher {
         return ExitCode.INVALID_ARGUMENT;
       }
       try {
-        const item = await target.getConfig(this.options.packageId, key);
+        const item = await service.management.config.get(this.options.packageId, key);
         this.writeOut(item.configured ? JSON.stringify(item.value) : "undefined");
         return ExitCode.SUCCESS;
       } catch (err: any) {
@@ -666,7 +670,7 @@ export class StandaloneDispatcher {
       } catch {
         parsed = rawVal;
       }
-      await target.setConfig(this.options.packageId, key, parsed as any);
+      await service.management.config.set(this.options.packageId, key, parsed as any);
       this.writeOut(`Config '${key}' updated`);
       return ExitCode.SUCCESS;
     }
@@ -677,7 +681,7 @@ export class StandaloneDispatcher {
         this.writeErr("Error: config key required");
         return ExitCode.INVALID_ARGUMENT;
       }
-      await target.deleteConfig(this.options.packageId, key);
+      await service.management.config.delete(this.options.packageId, key);
       this.writeOut(`Config '${key}' deleted`);
       return ExitCode.SUCCESS;
     }
@@ -686,11 +690,16 @@ export class StandaloneDispatcher {
     return ExitCode.INVALID_ARGUMENT;
   }
 
-  private async handleState(target: ActionDockTarget, subArgs: string[]): Promise<number> {
+  private async handleState(service: ActionDockService, subArgs: string[]): Promise<number> {
     const sub = subArgs[0] || "list";
     let namespace: string | undefined;
     let isAll = false;
     let isJson = false;
+
+    if (!service.management) {
+      this.writeErr("Error: management port is not enabled on this service");
+      return ExitCode.FAILURE;
+    }
 
     for (let i = 1; i < subArgs.length; i++) {
       if ((subArgs[i] === "-n" || subArgs[i] === "--namespace") && i + 1 < subArgs.length) {
@@ -706,7 +715,7 @@ export class StandaloneDispatcher {
 
     if (sub === "list") {
       const prefix = subArgs[1] && !subArgs[1].startsWith("-") ? subArgs[1] : "";
-      const keys = await target.listStateKeys(this.options.packageId, "", {
+      const keys = await service.management.state.list(this.options.packageId, "", {
         namespace,
         prefix: prefix || undefined,
         all: isAll,
@@ -728,7 +737,7 @@ export class StandaloneDispatcher {
         ns = decoded.namespace || undefined;
         actualKey = decoded.key;
       }
-      const val = await target.getState(this.options.packageId, "", actualKey, { namespace: ns });
+      const val = await service.management.state.get(this.options.packageId, "", actualKey, { namespace: ns });
       if (isJson) {
         this.writeOut(JSON.stringify({ key, value: val }, null, 2));
       } else {
@@ -769,7 +778,7 @@ export class StandaloneDispatcher {
         }
       }
 
-      await target.setState(this.options.packageId, "", actualKey, parsed as any, { namespace: ns, ttl });
+      await service.management.state.set(this.options.packageId, "", actualKey, parsed as any, { namespace: ns, ttl });
       const displayKey = ns ? `${ns}:${actualKey}` : actualKey;
       this.writeOut(`State '${displayKey}' updated`);
       return ExitCode.SUCCESS;
@@ -781,7 +790,7 @@ export class StandaloneDispatcher {
         this.writeErr("Error: state key required");
         return ExitCode.INVALID_ARGUMENT;
       }
-      const deleted = await target.deleteState(this.options.packageId, "", key, { namespace });
+      const deleted = await service.management.state.delete(this.options.packageId, "", key, { namespace });
       if (deleted) {
         this.writeOut(`State '${key}' deleted`);
         return ExitCode.SUCCESS;
@@ -792,7 +801,7 @@ export class StandaloneDispatcher {
 
     if (sub === "clear" || sub === "clean") {
       const prefix = subArgs[1] && !subArgs[1].startsWith("-") ? subArgs[1] : "";
-      const count = await target.clearState(this.options.packageId, "", {
+      const count = await service.management.state.clear(this.options.packageId, "", {
         namespace,
         all: isAll,
         prefix: prefix || undefined,

@@ -3,7 +3,7 @@ import {
   loadProjectConfig,
   maskSecretValue,
   resolveEnvValue,
-  type ActionDockTarget,
+  type ActionDockService,
   type ConfigItemDefinition,
   type ConfigValueView,
 } from "@actiondock/core";
@@ -29,17 +29,17 @@ export interface MergedConfigEntry {
  * @param key 配置键名
  * @param packageId 包标识（用于包级作用域寻址与环境变量解析）
  * @param declaredItem 工程声明的配置项定义
- * @param target 已创建的 Target 门面实例
+ * @param service 已创建的 Service 服务实例
  * @param reveal 是否揭示敏感值明文（为假且敏感键时打码）
  */
 export async function resolveMergedConfigEntry(
   key: string,
   packageId: string,
   declaredItem: ConfigItemDefinition | undefined,
-  target: ActionDockTarget,
+  service: ActionDockService,
   reveal: boolean
 ): Promise<{ value: unknown; source: MergedConfigEntry["source"]; secret: boolean }> {
-  const confView = await target.getConfig(packageId, key);
+  const confView = await service.management?.config.get(packageId, key);
   const envResolved = resolveEnvValue(key, declaredItem, packageId);
 
   let rawValue: unknown;
@@ -68,19 +68,19 @@ export async function resolveMergedConfigEntry(
  * 消除 config get 与 config list 两命令间的合并实现差异。
  *
  * @param root 工程根目录
- * @param target 已创建的 Target 门面实例
+ * @param service 已创建的 Service 服务实例
  * @param reveal 是否揭示敏感值明文
  */
 export async function buildMergedConfigEntries(
   root: string,
-  target: ActionDockTarget,
+  service: ActionDockService,
   reveal: boolean
 ): Promise<MergedConfigEntry[]> {
   const projConfig = loadProjectConfig(root);
   const declared = projConfig.config || {};
 
-  const projectConfigList: ConfigValueView[] = await target.listConfig(projConfig.id);
-  const globalConfigList: ConfigValueView[] = await target.listConfig("global");
+  const projectConfigList: ConfigValueView[] = (await service.management?.config.list(projConfig.id)) ?? [];
+  const globalConfigList: ConfigValueView[] = (await service.management?.config.list("global")) ?? [];
 
   const projectConfigMap = new Map(projectConfigList.map((c) => [c.key, c]));
   const globalConfigMap = new Map(globalConfigList.map((c) => [c.key, c]));

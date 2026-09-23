@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { parseSseMessages, type SseMessage } from "../src/target/sse-parser";
+import { parseSseMessages, type SseMessage } from "../src/service/sse-parser";
 
 function sseStream(chunks: string[]): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();

@@ -41,12 +41,12 @@ export function attachListCommand(parent: Command, context?: CliContext): Comman
         throw packageNotFoundError(options.package);
       }
 
-      // 通过 Target 门面统一获取 Action 列表
+      // 通过 Service 门面统一获取 Action 列表
       await withTarget(
         options,
         context,
-        async (target, resolved) => {
-          let rawSummaries = await target.listActions();
+        async (service, resolved) => {
+          let rawSummaries = await service.discovery.listActions();
 
           // 若指定了目标包但本地未过滤，则精确匹配包标识
           if (options.package && !options.profile && !options.server) {

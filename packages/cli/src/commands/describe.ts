@@ -46,14 +46,14 @@ export function attachDescribeCommand(parent: Command, context?: CliContext): Co
 
       const targetRef = id;
 
-      // 通过 Target 门面统一查询 Action 规范
+      // 通过 Service 门面统一查询 Action 规范
       await withTarget(
         options,
         context,
-        async (target) => {
+        async (service) => {
           let spec;
           try {
-            spec = await target.describeAction(targetRef);
+            spec = await service.discovery.describeAction(targetRef);
           } catch (err: any) {
             const code = err?.code;
             if (code === ACTION_NOT_FOUND || code === NOT_FOUND || code === PACKAGE_NOT_FOUND) {

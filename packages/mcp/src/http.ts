@@ -9,7 +9,7 @@ import {
   UNAUTHORIZED,
 } from "@actiondock/core";
 import { createMcpHandler } from "@modelcontextprotocol/server";
-import { createActionDockMcpServer, resolveTarget } from "./adapter";
+import { createActionDockMcpServer, resolveService } from "./adapter";
 import type { ActionDockMcpHttpOptions, ActionDockMcpHttpServerInstance } from "./types";
 
 /**
@@ -33,7 +33,7 @@ export function startMcpHttpServer(
   // 检测到时输出警告避免调用方误以为已生效
   if (options.allowInsecureHttp === true) {
     process.stderr.write(
-      "[MCP HTTP Warning] allowInsecureHttp has no effect on the server side and is deprecated; it only applies to remote ActionDockTarget clients.\n"
+      "[MCP HTTP Warning] allowInsecureHttp has no effect on the server side and is deprecated; it only applies to remote ActionDock clients.\n"
     );
   }
 
@@ -45,14 +45,14 @@ export function startMcpHttpServer(
   }
 
   return (async () => {
-    // 先一次性解析 target，工厂闭包直接捕获已解析产物，消除选项重复展开
-    const { target } = await resolveTarget({
+    // 先一次性解析 service，工厂闭包直接捕获已解析产物，消除选项重复展开
+    const { service } = await resolveService({
       ...options,
       host: hostInstance ?? (typeof options.host === "object" ? options.host : undefined),
     });
 
     const handler = createMcpHandler(
-      () => createActionDockMcpServer({ target }),
+      () => createActionDockMcpServer({ service }),
       {
         onerror: (err) => {
           process.stderr.write(`[MCP HTTP Error] ${err?.message || String(err)}\n`);
@@ -79,7 +79,7 @@ export function startMcpHttpServer(
       const verifyOptions = { allowQueryToken: (options as any).allowQueryToken };
 
       // 1. Health check
-      if (pathname === "/health" || pathname === "/api/v1/health") {
+      if (pathname === "/health") {
         if (!verifyBearerToken(req, token, verifyOptions)) {
           return new Response(
             JSON.stringify({
@@ -261,11 +261,10 @@ export function startMcpHttpServer(
       port: server.port ?? port,
       host,
       url,
-      target,
-      service: (target as any).service,
+      service,
       stop: async () => {
-        // 先停 HTTP 服务（等待在途请求收尾）再释放 target：
-        // 若先关 target，在途请求的后续 Action 调用会全部异常
+        // 先停 HTTP 服务（等待在途请求收尾）再释放 service：
+        // 若先关 service，在途请求的后续 Action 调用会全部异常
         let serverError: unknown;
         try {
           await server.stop(true);
@@ -273,12 +272,12 @@ export function startMcpHttpServer(
           serverError = err;
         }
         try {
-          await target.close();
-        } catch (targetErr) {
+          await service.close();
+        } catch (serviceErr) {
           if (serverError) {
-            throw new AggregateError([serverError, targetErr], "Failed to stop MCP HTTP server and target");
+            throw new AggregateError([serverError, serviceErr], "Failed to stop MCP HTTP server and service");
           }
-          throw targetErr;
+          throw serviceErr;
         }
         if (serverError) {
           throw serverError;

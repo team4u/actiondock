@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type ActionContext, defineAction } from "@actiondock/sdk";
-import { createActionDockApp } from "../src/app";
+import { createPackageRuntime } from "../src/app";
 import { createActionDockHost, DefaultActionDockHost } from "../src/host";
 import { createNodePlatform } from "../src/platform";
 import { MemoryProcessDriver } from "../src/process/driver";
@@ -16,7 +16,7 @@ describe("ActionDockHost 多包宿主容器", () => {
       run: (input: { a: number; b: number }) => ({ sum: input.a + input.b }),
     });
 
-    const appA = await createActionDockApp({
+    const appA = await createPackageRuntime({
       projectConfig: {
         id: "pkg.math",
         name: "数学计算包",
@@ -47,18 +47,18 @@ describe("ActionDockHost 多包宿主容器", () => {
     });
 
     expect(host).toBeInstanceOf(DefaultActionDockHost);
-    const apps = host.listApps();
+    const apps = host.listRuntimes();
     expect(apps.length).toBe(2);
 
-    const mathApp = host.getApp("pkg.math");
+    const mathApp = host.getRuntime("pkg.math");
     expect(mathApp).toBeDefined();
     expect(mathApp?.packageId).toBe("pkg.math");
 
-    const strApp = host.getApp("pkg.string");
+    const strApp = host.getRuntime("pkg.string");
     expect(strApp).toBeDefined();
     expect(strApp?.packageId).toBe("pkg.string");
 
-    const unknownApp = host.getApp("pkg.unknown");
+    const unknownApp = host.getRuntime("pkg.unknown");
     expect(unknownApp).toBeUndefined();
 
     const infoList = await host.info();
@@ -92,12 +92,12 @@ describe("ActionDockHost 多包宿主容器", () => {
         inMemory: true,
       });
 
-      const autoApp = host.getApp("pkg.auto");
+      const autoApp = host.getRuntime("pkg.auto");
       expect(autoApp).toBeDefined();
       expect(autoApp?.packageId).toBe("pkg.auto");
 
       // 注册同名冲突包抛出异常
-      const duplicateApp = await createActionDockApp({
+      const duplicateApp = await createPackageRuntime({
         projectConfig: {
           id: "pkg.auto",
           name: "同名冲突包",
@@ -106,12 +106,12 @@ describe("ActionDockHost 多包宿主容器", () => {
         inMemory: true,
       });
 
-      expect(() => host.registerApp(duplicateApp)).toThrow(
+      expect(() => host.registerRuntime(duplicateApp)).toThrow(
         "Package ID conflict: package 'pkg.auto' is already registered in host"
       );
 
       // 重复注册同一实例为幂等无害操作
-      host.registerApp(autoApp!);
+      host.registerRuntime(autoApp!);
 
       await duplicateApp.close();
       await host.close();
@@ -439,7 +439,7 @@ actions:
 
     // 3. 通过 host.runAction 带 parentRunId 显式模拟跨包调用校验
     // 创建一个模拟 parentRun，指向 service.caller 的 undeclared-caller
-    const callerApp = host.getApp("service.caller")!;
+    const callerApp = host.getRuntime("service.caller")!;
     const mockParentRunId = "mock-parent-run-id";
     callerApp.storage.createRun({
       id: mockParentRunId,
@@ -515,7 +515,7 @@ actions:
       autoLoadCurrentProject: false,
     });
 
-    const callerApp = host.getApp("source.caller")!;
+    const callerApp = host.getRuntime("source.caller")!;
     const res = await callerApp.executionService.execute("call-worker", {}, {
       owner: {
         tenantId: "tenant-corp-1",
@@ -560,7 +560,7 @@ actions:
       autoLoadCurrentProject: false,
     });
 
-    const app = host.getApp("pkg.depth")!;
+    const app = host.getRuntime("pkg.depth")!;
 
     // 1. 模拟构建深度达到 3 层的调用链
     const run0 = "depth-run-0";
@@ -772,7 +772,7 @@ actions:
       });
 
       // 验证 Host 成功装载该链接包（未被静默丢弃）
-      const app = host.getApp("openclaw.test-tool");
+      const app = host.getRuntime("openclaw.test-tool");
       expect(app).toBeDefined();
       expect(app?.packageId).toBe("openclaw.test-tool");
 
@@ -1158,7 +1158,7 @@ actions:
       });
 
       expect(host).toBeDefined();
-      expect(host.getApp("pkg.pending-tx")).toBeDefined();
+      expect(host.getRuntime("pkg.pending-tx")).toBeDefined();
       await host.close();
     } finally {
       rmSync(tempProjDir, { recursive: true, force: true });
@@ -1168,7 +1168,7 @@ actions:
 
   it("当 Host 初始化失败时，外部传入的 ActionDockApp 实例不被 close() 并可继续使用", async () => {
     let appClosed = false;
-    const externalApp = await createActionDockApp({
+    const externalApp = await createPackageRuntime({
       projectConfig: { id: "pkg.external", name: "外部包", version: "1.0.0" },
       actions: [
         {
@@ -1181,7 +1181,7 @@ actions:
       inMemory: true,
     });
     const origClose = externalApp.close.bind(externalApp);
-    externalApp.close = async (opts) => {
+    externalApp.close = async (opts?: any) => {
       appClosed = true;
       return origClose(opts);
     };
@@ -1260,7 +1260,7 @@ actions:
     let externalClosed = false;
     let internalClosed = false;
 
-    const externalApp = await createActionDockApp({
+    const externalApp = await createPackageRuntime({
       projectConfig: {
         id: "pkg.borrowed-app",
         name: "借用包",
@@ -1277,7 +1277,7 @@ actions:
       inMemory: true,
     });
     const origExternalClose = externalApp.close.bind(externalApp);
-    externalApp.close = async (opts) => {
+    externalApp.close = async (opts?: any) => {
       externalClosed = true;
       return origExternalClose(opts);
     };
@@ -1298,11 +1298,11 @@ actions:
         autoLoadCurrentProject: false,
       });
 
-      const internalApp = host.getApp("pkg.internal-app");
+      const internalApp = host.getRuntime("pkg.internal-app");
       expect(internalApp).toBeDefined();
       if (internalApp) {
         const origInternalClose = internalApp.close.bind(internalApp);
-        internalApp.close = async (opts) => {
+        internalApp.close = async (opts?: any) => {
           internalClosed = true;
           return origInternalClose(opts);
         };
@@ -1342,7 +1342,7 @@ actions:
       autoLoadCurrentProject: false,
     });
 
-    const app = host.getApp("pkg.quota-rollback")!;
+    const app = host.getRuntime("pkg.quota-rollback")!;
     const rootRunId = "quota-rollback-root";
     const now = new Date().toISOString();
     app.storage.createRun({
@@ -1405,7 +1405,7 @@ actions:
     });
 
     // 篡改其中一个 app 的 describeAction 抛出存储损坏类内部错误（非 not-found 语义）
-    const errorApp = host.getApp("pkg.error-app")!;
+    const errorApp = host.getRuntime("pkg.error-app")!;
     const origDescribe = errorApp.describeAction.bind(errorApp);
     errorApp.describeAction = async (id: string) => {
       if (id === "fine") {
@@ -1451,7 +1451,7 @@ actions:
       autoLoadCurrentProject: false,
     });
 
-    const errorApp = host.getApp("pkg.err-run")!;
+    const errorApp = host.getRuntime("pkg.err-run")!;
     errorApp.startAction = async () => {
       const err = new Error("SQLITE_CORRUPT: database disk image is malformed");
       (err as any).code = "SQLITE_CORRUPT";

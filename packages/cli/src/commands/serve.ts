@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
-  createActionDockTarget,
+  createActionDock,
   createNodePlatform,
   findProjectRoot,
   formatHostForUrl,
@@ -129,7 +129,7 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
         rootDir: projectRoot || undefined,
       });
 
-      const target = await createActionDockTarget({
+      const service = await createActionDock({
         type: "local",
         projectRoot: projectRoot || undefined,
         customHome: context?.customHome,
@@ -150,7 +150,7 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
           const handler = createMcpHandler(
             () => {
               return createActionDockMcpServer({
-                target,
+                service,
               });
             },
             {
@@ -163,7 +163,7 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
             return handler.fetch(req);
           };
         } catch (err: any) {
-          await target.close().catch(() => {});
+          await service.close().catch(() => {});
           throw new ExecutionError(
             `Failed to initialize MCP endpoint: ${err?.message || String(err)}`,
             err
@@ -186,7 +186,7 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
           mcpHandler,
           tls,
           projectRoot: projectRoot || undefined,
-          target,
+          service,
         });
 
         const displayHost = formatHostForUrl(host);
@@ -213,7 +213,7 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
         writeStdout(`  * CORS Origins:    ${corsOrigins ? corsOrigins.join(", ") : "Disabled (Default)"}`, context);
         writeStdout(`  * Max Body Size:   ${options.maxBody || "1mb"}`, context);
         writeStdout(
-          `  * Health Endpoint: ${scheme}://${actualEndpointHost}:${server.port}/api/v1/health`,
+          `  * Health Endpoint: ${scheme}://${actualEndpointHost}:${server.port}/api/v2/health`,
           context
         );
         if (enableMcp) {
@@ -245,7 +245,7 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
         process.once("SIGINT", stopSignalHandler);
         process.once("SIGTERM", stopSignalHandler);
       } catch (err: any) {
-        await target.close().catch(() => {});
+        await service.close().catch(() => {});
         throw new ExecutionError(`Failed to start ActionDock server: ${err.message}`, err);
       }
     });

@@ -2,7 +2,7 @@ import { runDoctorChecks } from "../../doctor/doctor";
 import { assertPackageAllowed, getSubPath, jsonResponse, type RouteContext } from "./common";
 
 /**
- * 处理环境与依赖诊断接口（GET /api/v2/doctor、/doctor 与兼容别名 /api/v1/doctor）。
+ * 处理环境与依赖诊断接口（GET /api/v2/doctor 与 /doctor）。
  */
 export async function handleDoctorRoute(ctx: RouteContext): Promise<Response | null> {
   const { req, url, pathname, corsHeaders, projectRoot, customHome, service, options } = ctx;

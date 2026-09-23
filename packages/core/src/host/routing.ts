@@ -1,9 +1,9 @@
 import { existsSync } from "node:fs";
 import type { ActionRef, RuntimeError } from "@actiondock/sdk";
 import type {
-  ActionDockApp,
-  ActionSpec,
   PackageInfo,
+  PackageRuntime,
+  ActionSpec,
   PlaybookSpec,
   PlaybookSummary,
 } from "../app/types";
@@ -68,28 +68,28 @@ export function packageNotFoundMessage(
  * 静态查询并聚合可见包的 Playbook 规程摘要（带包前缀限定）。
  */
 export async function listVisiblePlaybooks(
-  apps: readonly ActionDockApp[],
+  runtimes: readonly PackageRuntime[],
   visibility: { hostPublicPackageIds: ReadonlySet<string>; graph?: PackageGraph }
 ): Promise<PlaybookSummary[]> {
   const results: PlaybookSummary[] = [];
-  for (const app of apps) {
-    const isPublic = visibility.hostPublicPackageIds.has(app.packageId);
+  for (const runtime of runtimes) {
+    const isPublic = visibility.hostPublicPackageIds.has(runtime.packageId);
     if (!isPublic && visibility.graph) {
       const rootNode = visibility.graph.root ? visibility.graph.getNode(visibility.graph.root.id) : undefined;
-      if (!rootNode?.directDependencies.has(app.packageId)) {
+      if (!rootNode?.directDependencies.has(runtime.packageId)) {
         continue;
       }
     }
-    const appPlaybooks = await app.listPlaybooks();
-    for (const item of appPlaybooks) {
+    const runtimePlaybooks = await runtime.listPlaybooks();
+    for (const item of runtimePlaybooks) {
       const qualifiedId =
-        apps.length > 1 && !item.id.includes("/")
-          ? `${app.packageId}/${item.id}`
+        runtimes.length > 1 && !item.id.includes("/")
+          ? `${runtime.packageId}/${item.id}`
           : item.id;
       results.push({
         ...item,
         id: qualifiedId,
-        packageId: app.packageId,
+        packageId: runtime.packageId,
       });
     }
   }
@@ -100,7 +100,7 @@ export async function listVisiblePlaybooks(
  * 静态查询指定 Playbook 规范：基于 resolvePlaybook 统一纯领域解析。
  */
 export async function describeVisiblePlaybook(
-  apps: readonly ActionDockApp[],
+  runtimes: readonly PackageRuntime[],
   id: string,
   visibility: { hostPublicPackageIds: ReadonlySet<string>; graph?: PackageGraph }
 ): Promise<PlaybookSpec> {
@@ -108,7 +108,7 @@ export async function describeVisiblePlaybook(
     visibility.graph ||
     new DefaultPackageGraph(
       new Map(
-        apps.map((a) => [
+        runtimes.map((a) => [
           a.packageId,
           {
             identity: a.identity,
@@ -136,18 +136,18 @@ export async function describeVisiblePlaybook(
     }
   }
 
-  const app = apps.find((a) => a.packageId === resolved.packageId);
-  if (!app) {
+  const runtime = runtimes.find((a) => a.packageId === resolved.packageId);
+  if (!runtime) {
     throw new Error(`Package '${resolved.packageId}' not found in host`);
   }
-  return app.describePlaybook(resolved.playbookId);
+  return runtime.describePlaybook(resolved.playbookId);
 }
 
 /**
  * 聚合全部已注册包的元数据信息。
  */
-export async function collectPackageInfos(apps: readonly ActionDockApp[]): Promise<PackageInfo[]> {
-  return Promise.all(apps.map((app) => app.info()));
+export async function collectPackageInfos(runtimes: readonly PackageRuntime[]): Promise<PackageInfo[]> {
+  return Promise.all(runtimes.map((runtime) => runtime.info()));
 }
 
 /**
@@ -176,9 +176,9 @@ export function ambiguousActionMessage(actionId: string, candidates: readonly st
 /**
  * 静态查询指定 Action 规范：基于 resolveAction 统一纯领域解析。
  */
-export async function describeActionAcrossApps(
+export async function describeActionAcrossRuntimes(
   ref: ActionRef | string,
-  apps: readonly ActionDockApp[],
+  runtimes: readonly PackageRuntime[],
   visibility: { hostPublicPackageIds: ReadonlySet<string>; graph?: PackageGraph },
   failedLinkedPackages: ReadonlyMap<string, { path: string; error: string }>,
   catalog?: ActionCatalog,
@@ -193,7 +193,7 @@ export async function describeActionAcrossApps(
     visibility.graph ||
     new DefaultPackageGraph(
       new Map(
-        apps.map((a) => [
+        runtimes.map((a) => [
           a.packageId,
           {
             identity: a.identity,
@@ -212,7 +212,7 @@ export async function describeActionAcrossApps(
   const effectiveCatalog =
     catalog ||
     new DefaultActionCatalog(effectiveGraph, (pkgId) =>
-      apps.find((a) => a.packageId === pkgId)?.actionsMap
+      runtimes.find((a) => a.packageId === pkgId)?.actionsMap
     );
 
   let resolved: ResolvedAction;
@@ -244,15 +244,15 @@ export async function describeActionAcrossApps(
     );
   }
 
-  const app = apps.find((a) => a.packageId === resolved.package.id);
-  if (!app) {
+  const runtime = runtimes.find((a) => a.packageId === resolved.package.id);
+  if (!runtime) {
     throw new Error(packageNotFoundMessage(resolved.package.id, failedLinkedPackages));
   }
 
-  const spec = await app.describeAction(resolved.ref.actionId);
+  const spec = await runtime.describeAction(resolved.ref.actionId);
   return {
     ...spec,
-    packageId: app.packageId,
+    packageId: runtime.packageId,
   };
 }
 

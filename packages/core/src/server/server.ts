@@ -6,8 +6,6 @@ import type { ActionDockHost } from "../host/types";
 import { ensureDependencyClosure } from "../project/closure";
 import { findProjectRoot } from "../project/loader";
 import { listLinkedPackages, resolvePackageRoot } from "../registry/registry";
-import { ServiceActionDockTarget } from "../target/local";
-import type { ActionDockTarget } from "../target/types";
 import { LocalActionDockService } from "../service/local";
 import type { ActionDockService } from "../service/types";
 import {
@@ -22,63 +20,9 @@ import {
   jsonResponse,
   type RouteContext,
 } from "./routes";
-import type { JsonValue } from "@actiondock/sdk";
 import { DEFAULT_MAX_BODY_BYTES } from "./body";
 import { isLoopbackHost, resolveCorsHeaders, verifyBearerToken } from "./security";
 import type { ActionDockServerInstance, CoreHttpServerInstance, ServerOptions, ServerTlsOptions } from "./types";
-
-// ============================================================================
-// Service Adapters
-// ============================================================================
-
-/**
- * 依据传入的 Target 适配标准 ActionDockService 端口结构。
- */
-function createServiceFromTarget(target: ActionDockTarget, enableManagement = true): ActionDockService {
-  return {
-    info: () => target.listPackages(),
-    discovery: {
-      listPackages: () => target.listPackages(),
-      listActions: (opts) => target.listActions(opts),
-      describeAction: (ref) => target.describeAction(ref),
-      listPlaybooks: (opts) => target.listPlaybooks(opts),
-      describePlaybook: (id) => target.describePlaybook(id),
-    },
-    execution: {
-      run: (ref, input, opts) => target.runAction(ref, (input ?? {}) as JsonValue, opts),
-      start: (ref, input, opts) => target.startAction(ref, (input ?? {}) as JsonValue, opts),
-    },
-    runs: {
-      list: (query) => target.listRuns(query),
-      get: (runId) => target.getRun(runId),
-      cancel: (runId, reason) => target.cancelRun(runId, reason),
-      events: (runId, opts) => target.events(runId, opts),
-      clear: (opts) => (target.clearRuns ? target.clearRuns(opts) : Promise.resolve(0)),
-    },
-    management: enableManagement
-      ? {
-          config: {
-            get: (pkg, k) => target.getConfig(pkg, k),
-            set: (pkg, k, v) => target.setConfig(pkg, k, v),
-            delete: (pkg, k) => target.deleteConfig(pkg, k),
-            list: (pkg) => target.listConfig(pkg),
-          },
-          state: {
-            get: (pkg, act, k, opts) => target.getState(pkg, act, k, opts),
-            set: (pkg, act, k, v, opts) => target.setState(pkg, act, k, v, opts),
-            delete: (pkg, act, k, opts) => target.deleteState(pkg, act, k, opts),
-            list: (pkg, act, opts) => target.listStateKeys(pkg, act, opts),
-            clear: (pkg, act, opts) => target.clearState(pkg, act, opts),
-            listEntries: (pkg, opts) =>
-              target.listStateEntries
-                ? target.listStateEntries(pkg, opts)
-                : Promise.reject(new Error("listStateEntries not supported")),
-          },
-        }
-      : undefined,
-    close: (opts) => target.close(opts),
-  };
-}
 
 /**
  * 规范化主机地址用于拼接 URL。
@@ -115,8 +59,8 @@ export async function launchHttpServer(
 }
 
 /**
- * 启动 ActionDock 2.0 原生轻量级 HTTP 服务端。
- * 作为 ActionDockHost 与 ActionDockTarget 的薄适配层，负责中间件流转、认证拦截与路由分发。
+ * 启动 ActionDock 原生轻量级 HTTP 服务端。
+ * 面向 ActionDockService 服务端口，负责中间件流转、认证拦截与路由分发。
  */
 export async function startActionDockServer(
   options: ServerOptions = {}
@@ -126,8 +70,6 @@ export async function startActionDockServer(
     (options.host && typeof options.host === "object" && "listActions" in options.host
       ? options.host
       : undefined);
-
-  let targetInstance: ActionDockTarget | undefined = options.target;
 
   const hostString =
     typeof options.host === "string"
@@ -151,8 +93,8 @@ export async function startActionDockServer(
 
   let serviceInstance: ActionDockService | undefined = options.service;
 
-  // 若调用方未传入 host、target 或 service，通过 projectRoot、customHome、platform 等直接创建宿主
-  if (!serviceInstance && !targetInstance && !hostInstance) {
+  // 若调用方未传入 host 或 service，通过 projectRoot、customHome、platform 等直接创建宿主
+  if (!serviceInstance && !hostInstance) {
     const scanLinkedPackages = options.scanLinkedPackages ?? !projectRoot;
     hostInstance = await createActionDockHost({
       projectRoot: projectRoot || undefined,
@@ -165,18 +107,12 @@ export async function startActionDockServer(
     });
   }
 
-  if (!serviceInstance) {
-    if (targetInstance && "service" in targetInstance && (targetInstance as any).service) {
-      serviceInstance = (targetInstance as any).service;
-    } else if (targetInstance) {
-      serviceInstance = createServiceFromTarget(targetInstance, options.enableManagement !== false);
-    } else if (hostInstance) {
-      serviceInstance = new LocalActionDockService(hostInstance, { enableManagement: options.enableManagement });
-    }
+  if (!serviceInstance && hostInstance) {
+    serviceInstance = new LocalActionDockService(hostInstance, { enableManagement: options.enableManagement });
   }
 
-  if (!targetInstance && serviceInstance) {
-    targetInstance = new ServiceActionDockTarget(serviceInstance);
+  if (!serviceInstance) {
+    throw new Error("Failed to initialize ActionDockService for server");
   }
 
   const roots: string[] = [];
@@ -225,7 +161,6 @@ export async function startActionDockServer(
       customHome,
       service: serviceInstance!,
       host: hostInstance,
-      target: targetInstance!,
       options,
     };
 
@@ -347,7 +282,7 @@ export async function startActionDockServer(
       );
     }
 
-    // 4. 业务领域路由分发（完全委托 Target / Host）
+    // 4. 业务领域路由分发（完全委托 Service）
     const routeResponse =
       (await handleInfoRoute(ctx)) ||
       (await handleDoctorRoute(ctx)) ||
@@ -391,21 +326,18 @@ export async function startActionDockServer(
       server.port = val;
     },
     host: hostInstance,
-    target: targetInstance,
-    service: serviceInstance!,
+    service: serviceInstance,
     get url() {
       return `${protocol}://${formatHostForUrl(actualHost)}:${this.port}`;
     },
     ready: Promise.resolve(),
     stop: async (stopOptions?: { graceMs?: number }) => {
       await server.stop(true);
-      if (options.target) {
+      if (serviceInstance) {
         try {
-          await options.target.close(
-            stopOptions?.graceMs !== undefined ? { timeoutMs: stopOptions.graceMs } : undefined
-          );
+          await serviceInstance.close(stopOptions);
         } catch {
-          // 忽略关闭异常
+          // 忽略服务关闭异常
         }
       }
       if (hostInstance) {
@@ -413,12 +345,6 @@ export async function startActionDockServer(
           await hostInstance.close(stopOptions);
         } catch {
           // 忽略宿主关闭异常
-        }
-      } else if (!options.target && serviceInstance) {
-        try {
-          await serviceInstance.close(stopOptions);
-        } catch {
-          // 忽略服务关闭异常
         }
       }
     },

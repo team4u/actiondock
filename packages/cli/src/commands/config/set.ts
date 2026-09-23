@@ -70,15 +70,15 @@ export function registerConfigSetCommand(configCmd: Command, context?: CliContex
       }
 
       // 目标解析与写入（远端分支直接写远端作用域，本地分支按全局/项目作用域写入）
-      await withTarget(options, context, async (target, resolved) => {
+      await withTarget(options, context, async (service, resolved) => {
         if (resolved.type === "remote") {
-          await target.setConfig(options.package || "", key, parsedVal as any);
+          await service.management?.config.set(options.package || "", key, parsedVal as any);
           writeStdout(`[OK] Configuration '${key}' updated on remote server`, context);
           return;
         }
 
         if (options.global) {
-          await target.setConfig("global", key, parsedVal as any);
+          await service.management?.config.set("global", key, parsedVal as any);
           writeStdout(`[OK] Global configuration '${key}' updated`, context);
           return;
         }
@@ -87,12 +87,12 @@ export function registerConfigSetCommand(configCmd: Command, context?: CliContex
           if (options.package) {
             throw packageNotFoundError(options.package);
           }
-          await target.setConfig("global", key, parsedVal as any);
+          await service.management?.config.set("global", key, parsedVal as any);
           writeStdout(`[OK] Global configuration '${key}' updated (no project in current directory)`, context);
           return;
         }
 
-        await target.setConfig(projConfig.id, key, parsedVal as any);
+        await service.management?.config.set(projConfig.id, key, parsedVal as any);
         writeStdout(`[OK] Configuration '${key}' updated for package '${projConfig.id}'`, context);
       });
     });

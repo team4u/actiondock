@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import {
-  createActionDockApp,
+  createPackageRuntime,
   createActionDockHost,
-  createActionDockTarget,
+  createActionDock,
 } from "@actiondock/core";
 import { defineAction, type ActionContext } from "@actiondock/sdk";
 import { InMemoryTransport } from "@modelcontextprotocol/server";
@@ -36,8 +36,8 @@ describe("@actiondock/mcp Host Integration", () => {
       },
     });
 
-    // 2. 创建 ActionDockApp 与 ActionDockHost
-    const app = await createActionDockApp({
+    // 2. 创建 PackageRuntime 与 ActionDockHost
+    const app = await createPackageRuntime({
       projectConfig: {
         id: "test.mcp-host-app",
         name: "MCP Host Test App",
@@ -89,7 +89,7 @@ describe("@actiondock/mcp Host Integration", () => {
     });
 
     // 3. 传入 host 创建 MCP 服务端
-    const server = await createActionDockMcpServer({ host, cascadeTargetClose: true });
+    const server = await createActionDockMcpServer({ host, cascadeServiceClose: true });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await server.connect(serverTransport);
 
@@ -294,7 +294,7 @@ describe("@actiondock/mcp Host Integration", () => {
       },
     });
 
-    const app = await createActionDockApp({
+    const app = await createPackageRuntime({
       projectConfig: {
         id: "test.mcp-target-app",
         name: "MCP Target Test App",
@@ -338,8 +338,8 @@ describe("@actiondock/mcp Host Integration", () => {
       inMemory: true,
     });
 
-    const target = await createActionDockTarget({ app });
-    const server = await createActionDockMcpServer({ target, cascadeTargetClose: true });
+    const service = await createActionDock({ packageRuntime: app });
+    const server = await createActionDockMcpServer({ service, cascadeServiceClose: true });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await server.connect(serverTransport);
 
@@ -408,7 +408,7 @@ describe("@actiondock/mcp Host Integration", () => {
     expect(slowTaskCancelled).toBe(true);
 
     await server.close();
-    await expect(target.runAction("calc.add", { a: 1, b: 2 })).rejects.toThrow();
+    await expect(service.execution.run("calc.add", { a: 1, b: 2 })).rejects.toThrow();
   });
 });
 

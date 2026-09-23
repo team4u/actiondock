@@ -122,6 +122,7 @@ describe("createTestPlatform 测试平台工厂测试", () => {
         packageId: "test-pkg",
         platform,
         eventSink: platform.eventSink,
+        storage: new MemoryStorage(),
       });
 
       service.registerAction("test-echo", testAction);

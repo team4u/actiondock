@@ -28,18 +28,18 @@ import type { RuntimeStorage } from "../storage/types";
 import { createPackageIdentity, type PackageIdentity } from "../runtime/identity";
 import { InvocationPolicy } from "../invocation/policy";
 import { parseActionRef } from "../catalog/resolve-action";
-import { ACTION_SUBRUN_LIMIT, MAX_SUBRUNS_REACHED } from "../errors";
+import { ACTION_SUBRUN_LIMIT, CAPABILITY_UNAVAILABLE, MAX_SUBRUNS_REACHED, ActionDockError } from "../errors";
 import type { InvocationContext } from "../invocation/types";
 import { buildStaticActionMap, buildStaticPlaybookMap } from "./static-index";
 import type {
-  ActionDockApp,
-  ActionDockAppOptions,
   ActionSpec,
   ActionSummary,
   ConfigValueView,
   ListActionsOptions,
+  ListRunsOptions,
   PackageInfo,
   PackageRuntime,
+  PackageRuntimeOptions,
   PlaybookSpec,
   PlaybookSummary,
   StateScopeOptions,
@@ -47,10 +47,10 @@ import type {
 } from "./types";
 
 /**
- * ActionDock 统一应用默认实现。
+ * ActionDock 统一包运行时默认实现。
  * 封装并管理单个 Action Package 的执行引擎、静态元数据索引、配置与状态存储生命周期。
  */
-export class DefaultActionDockApp implements ActionDockApp {
+export class DefaultPackageRuntime implements PackageRuntime {
   public readonly identity: PackageIdentity;
   public readonly packageId: string;
   public readonly packageInstanceId: string;
@@ -63,14 +63,14 @@ export class DefaultActionDockApp implements ActionDockApp {
   public readonly executionService: ExecutionService;
 
   public readonly actionsMap: Map<string, ActionDefinition>;
-  private readonly options: ActionDockAppOptions;
+  private readonly options: PackageRuntimeOptions;
   private runtimeConfig: RuntimeConfig;
   private isClosed = false;
   /** 静态清单索引缓存：包静态事实（根目录、配置、内存注入集合）在实例生命周期内不变，解析结果同实例内复用 */
   private staticActionIndex?: Map<string, ActionSpec>;
   private staticPlaybookIndex?: Map<string, PlaybookSpec>;
 
-  constructor(options: ActionDockAppOptions = {}) {
+  constructor(options: PackageRuntimeOptions = {}) {
     this.options = options;
     // 1. 确定项目根路径与配置对象
     let packageRoot = options.packageRoot;
@@ -811,6 +811,31 @@ export class DefaultActionDockApp implements ActionDockApp {
     });
   }
 
+  async listRuns(options?: ListRunsOptions): Promise<RunRecord[]> {
+    return this.storage.listRuns({
+      actionId: options?.actionId,
+      status: options?.status,
+      limit: options?.limit,
+    });
+  }
+
+  async clearRuns(options?: { actionId?: string; status?: string }): Promise<number> {
+    return this.storage.clearRuns({
+      actionId: options?.actionId,
+      status: options?.status,
+    });
+  }
+
+  async listStateEntries(options?: any): Promise<import("../storage/types").StateEntry[]> {
+    if (typeof (this.storage as any).listStateEntries === "function") {
+      return (this.storage as any).listStateEntries(options);
+    }
+    throw new ActionDockError(
+      CAPABILITY_UNAVAILABLE,
+      `CAPABILITY_UNAVAILABLE: listStateEntries is not supported by package '${this.packageId}' storage`
+    );
+  }
+
   async close(options?: { graceMs?: number }): Promise<void> {
     if (this.isClosed) return;
     this.isClosed = true;
@@ -834,10 +859,11 @@ export class DefaultActionDockApp implements ActionDockApp {
 }
 
 /**
- * 工厂函数：创建并初始化 ActionDockApp 实例。
+ * 工厂函数：创建并初始化 PackageRuntime 实例。
  */
-export async function createActionDockApp(
-  options: ActionDockAppOptions = {}
-): Promise<ActionDockApp> {
-  return new DefaultActionDockApp(options);
+export async function createPackageRuntime(
+  options: PackageRuntimeOptions = {}
+): Promise<PackageRuntime> {
+  return new DefaultPackageRuntime(options);
 }
+

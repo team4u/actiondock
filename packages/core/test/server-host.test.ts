@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { defineAction } from "@actiondock/sdk";
-import { createActionDockApp } from "../src/app";
+import { createPackageRuntime } from "../src/app";
 import { createActionDockHost } from "../src/host";
 import { startActionDockServer } from "../src/server";
 
@@ -10,7 +10,7 @@ describe("startActionDockServer 扩展支持 ActionDockHost 绑定与生命周�
       run: () => ({ pong: true }),
     });
 
-    const app = await createActionDockApp({
+    const app = await createPackageRuntime({
       projectConfig: {
         id: "pkg.server-host-app",
         name: "Server Host App",

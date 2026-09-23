@@ -71,7 +71,7 @@ export interface ExecutionServiceOptions {
   identity: PackageIdentity;
   packageId?: string;
   hostSessionId?: string;
-  storage?: RuntimeStorage;
+  storage: RuntimeStorage;
   globalStorage?: RuntimeStorage;
   projectRoot?: string;
   projectConfig?: ProjectConfig;

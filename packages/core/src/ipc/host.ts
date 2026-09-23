@@ -1,13 +1,13 @@
-import type { ActionDockTarget } from "../target/types";
-import { TARGET_CAPABILITY_UNAVAILABLE } from "../target/types";
-import { hasIpcSignalMarker, IPC_SIGNAL_MARKER } from "./target";
+import type { ActionDockService } from "../service/types";
+import { TARGET_CAPABILITY_UNAVAILABLE } from "../service/types";
+import { hasIpcSignalMarker, IPC_SIGNAL_MARKER } from "./service";
 import type { IpcAbortMessage, IpcCallMessage, IpcResponseMessage } from "./types";
 
 /**
  * IPC 通道允许反射调用的目标方法白名单。
  *
- * 严格对齐 ActionDockTarget 公共接口方法名集合：白名单之外的方法一律拒绝，
- * 防止 IPC 消息通道触达任意内部属性或危险方法（如 close 之外的私有能力）。
+ * 严格对齐 ActionDockService 公共方法集合：白名单之外的方法一律拒绝，
+ * 防止 IPC 消息通道触达任意内部属性或危险方法。
  */
 const IPC_ALLOWED_METHODS: ReadonlySet<string> = new Set([
   "info",
@@ -36,16 +36,16 @@ const IPC_ALLOWED_METHODS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * 在 Host 子进程中启动 Node IPC 服务，向父进程暴露 ActionDockTarget 门面能力。
+ * 在 Host 子进程中启动 Node IPC 服务，向父进程暴露 ActionDockService 门面能力。
  *
  * 跨进程取消链路：监督进程序列化执行选项时把 AbortSignal 替换为占位标记，
  * 本侧反序列化时识别标记并重建 AbortController 传入目标调用，同时维护
  * 调用 id 到控制器的映射；收到 abort 消息时触发对应控制器中止，
  * 调用完成后清理映射，确保取消信号全链路透传。
  *
- * @param target 已构造好的 ActionDockTarget 实例
+ * @param service 已构造好的 ActionDockService 实例
  */
-export async function serveParentIpc(target: ActionDockTarget): Promise<void> {
+export async function serveParentIpc(service: ActionDockService): Promise<void> {
   if (!process.send) {
     // 若当前未以 IPC 模式运行，直接退出
     return;
@@ -56,7 +56,7 @@ export async function serveParentIpc(target: ActionDockTarget): Promise<void> {
     if (isClosing) return;
     isClosing = true;
     try {
-      await target.close();
+      await service.close();
     } catch {
       // 忽略关闭异常
     }
@@ -107,24 +107,90 @@ export async function serveParentIpc(target: ActionDockTarget): Promise<void> {
       const { id, method, args } = callMsg;
 
       try {
-        // 白名单校验：仅允许 ActionDockTarget 公共接口方法，阻止任意方法反射调用
+        // 白名单校验：仅允许白名单方法，阻止任意方法反射调用
         if (typeof method !== "string" || !IPC_ALLOWED_METHODS.has(method)) {
           const err = new Error(
-            `Target method '${method}' is not allowed over IPC (not in ActionDockTarget public interface)`
+            `Target method '${method}' is not allowed over IPC`
           );
           (err as any).code = TARGET_CAPABILITY_UNAVAILABLE;
           throw err;
         }
 
-        const fn = (target as any)[method];
-        if (typeof fn !== "function") {
-          throw new Error(`Target method '${method}' not found`);
+        // 反序列化执行选项：识别取消信号占位标记并重建控制器接入取消链路
+        const a = (args || []).map((arg: unknown) => reviveIpcSignal(id, arg)) as any[];
+
+        let result: unknown;
+        switch (method) {
+          case "info":
+            result = await service.info();
+            break;
+          case "listPackages":
+            result = await service.discovery.listPackages();
+            break;
+          case "listActions":
+            result = await service.discovery.listActions(a[0]);
+            break;
+          case "describeAction":
+            result = await service.discovery.describeAction(a[0]);
+            break;
+          case "listPlaybooks":
+            result = await service.discovery.listPlaybooks(a[0]);
+            break;
+          case "describePlaybook":
+            result = await service.discovery.describePlaybook(a[0]);
+            break;
+          case "runAction":
+            result = await service.execution.run(a[0], a[1], a[2]);
+            break;
+          case "startAction":
+            result = await service.execution.start(a[0], a[1], a[2]);
+            break;
+          case "listRuns":
+            result = await service.runs.list(a[0]);
+            break;
+          case "getRun":
+            result = await service.runs.get(a[0]);
+            break;
+          case "cancelRun":
+            result = await service.runs.cancel(a[0], a[1]);
+            break;
+          case "clearRuns":
+            result = service.runs.clear ? await service.runs.clear(a[0]) : 0;
+            break;
+          case "getConfig":
+            result = await service.management?.config.get(a[0], a[1]);
+            break;
+          case "setConfig":
+            result = await service.management?.config.set(a[0], a[1], a[2]);
+            break;
+          case "deleteConfig":
+            result = await service.management?.config.delete(a[0], a[1]);
+            break;
+          case "listConfig":
+            result = await service.management?.config.list(a[0]);
+            break;
+          case "getState":
+            result = await service.management?.state.get(a[0], a[1], a[2], a[3]);
+            break;
+          case "setState":
+            result = await service.management?.state.set(a[0], a[1], a[2], a[3], a[4]);
+            break;
+          case "deleteState":
+            result = await service.management?.state.delete(a[0], a[1], a[2], a[3]);
+            break;
+          case "listStateKeys":
+            result = await service.management?.state.list(a[0], a[1], a[2]);
+            break;
+          case "clearState":
+            result = await service.management?.state.clear(a[0], a[1], a[2]);
+            break;
+          case "listStateEntries":
+            result = service.management?.state.listEntries ? await service.management.state.listEntries(a[0], a[1]) : [];
+            break;
+          default:
+            throw new Error(`Method '${method}' not implemented`);
         }
 
-        // 反序列化执行选项：识别取消信号占位标记并重建控制器接入取消链路
-        const revivedArgs = (args || []).map((arg: unknown) => reviveIpcSignal(id, arg));
-
-        const result = await fn.apply(target, revivedArgs);
         const response: IpcResponseMessage = {
           id,
           type: "response",
@@ -141,7 +207,7 @@ export async function serveParentIpc(target: ActionDockTarget): Promise<void> {
           type: "response",
           ok: false,
           error: {
-            code: err?.code || "TARGET_ERROR",
+            code: err?.code || "SERVICE_ERROR",
             message: err?.message || String(err),
             stack: err?.stack,
             details: err?.details,
@@ -173,7 +239,7 @@ export async function serveParentIpc(target: ActionDockTarget): Promise<void> {
         process.send({ type: "pong" });
       }
     } else {
-      // 向后兼容：旧版本对端可能推送未知消息类型，防御性忽略并记录诊断，不中断通道
+      // 防御性忽略未知消息类型并记录诊断，不中断通道
       process.stderr.write(
         `[IPC Host] Ignoring unknown IPC message type: ${JSON.stringify((msg as any).type)}\n`
       );

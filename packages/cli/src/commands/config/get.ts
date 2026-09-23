@@ -71,13 +71,13 @@ export function registerConfigGetCommand(configCmd: Command, context?: CliContex
       // 本地分支
       const root = resolvePackageRoot(options.package);
 
-      await withTarget(options, context, async (localTarget) => {
+      await withTarget(options, context, async (service) => {
         if (options.global || !root) {
           if (!options.global && options.package && !root) {
             throw packageNotFoundError(options.package);
           }
 
-          const confView = await localTarget.getConfig("global", key);
+          const confView = await service.management?.config.get("global", key);
           const val = confView?.value;
           const isSecret = confView?.secret ?? isSecretConfigKey(key);
           const displayValue = !reveal && isSecret && val !== undefined ? maskSecretValue(val) : val;
@@ -105,7 +105,7 @@ export function registerConfigGetCommand(configCmd: Command, context?: CliContex
           key,
           projConfig.id,
           declaredItem,
-          localTarget,
+          service,
           reveal
         );
 

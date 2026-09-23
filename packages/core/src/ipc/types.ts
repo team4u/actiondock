@@ -59,3 +59,29 @@ export type IpcMessage =
   | IpcAbortMessage
   | IpcEventMessage
   | IpcReadyMessage;
+
+/**
+ * 监督进程 IPC 服务初始化选项。
+ */
+export interface IpcServiceOptions {
+  type?: "ipc";
+  /** 已启动的子进程实例（需具备 IPC 通道） */
+  childProcess?: any;
+  /** 待启动的脚本物理路径 */
+  scriptPath?: string;
+  /** 启动参数 */
+  scriptArgs?: string[];
+  /** 工作目录 */
+  cwd?: string;
+  /** 环境变量 */
+  env?: NodeJS.ProcessEnv;
+  /** 诊断流最大缓冲字节数 */
+  maxDiagnosticBytes?: number;
+  /** 诊断流每秒最大字节速率 */
+  maxDiagnosticRate?: number;
+  /** 诊断流目标输出 */
+  diagnosticTarget?: any;
+  /** 是否启用管理端口（默认 true） */
+  enableManagement?: boolean;
+}
+

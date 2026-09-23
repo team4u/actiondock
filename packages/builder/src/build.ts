@@ -128,7 +128,7 @@ function generateNodeHostEntrySource(plan: SelectionPlan): string {
 // AUTO-GENERATED HOST ENTRYPOINT BY ACTIONDOCK BUILDER. DO NOT EDIT.
 import {
   createActionDockHost,
-  createActionDockTarget,
+  createActionDock,
   createNodePlatform,
   serveParentIpc,
 } from "@actiondock/core";
@@ -175,8 +175,8 @@ const host = await createActionDockHost({
   platform: createNodePlatform({ dataDir }),
 });
 
-const target = await createActionDockTarget({ type: "local", host });
-await serveParentIpc(target);
+const service = await createActionDock({ host });
+await serveParentIpc(service);
 `;
 }
 
@@ -189,7 +189,7 @@ function generateNodeSupervisorEntrySource(plan: SelectionPlan): string {
 import { spawn } from "node:child_process";
 import { join } from "node:path";
 import {
-  IpcActionDockTarget,
+  IpcActionDockService,
   StandaloneDispatcher,
   ExitCode,
   STANDALONE_ASYNC_UNSUPPORTED,
@@ -259,7 +259,7 @@ const child = spawn(process.execPath, [hostScript, ...argv], {
 });
 
 // 4. 标准输出通道物理隔离与受控限流排空
-const target = new IpcActionDockTarget({
+const service = new IpcActionDockService({
   childProcess: child,
   maxDiagnosticBytes: 512 * 1024,
   maxDiagnosticRate: 64 * 1024,
@@ -271,7 +271,7 @@ const cleanup = async () => {
   if (cleanedUp) return;
   cleanedUp = true;
   try {
-    await target.close();
+    await service.close();
   } catch {}
 };
 
@@ -289,7 +289,7 @@ const dispatcher = new StandaloneDispatcher({
   packageId: METADATA.packageId,
   version: METADATA.version,
   description: METADATA.description,
-  target,
+  service,
 });
 
 try {

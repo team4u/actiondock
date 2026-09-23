@@ -1,10 +1,11 @@
 import {
-  createActionDockTarget,
+  connectActionDock,
+  createActionDock,
   createNodePlatform,
   findProjectRoot,
   resolvePackageRoot,
   resolveTarget,
-  type ActionDockTarget,
+  type ActionDockService,
   type ResolvedTarget,
 } from "@actiondock/core";
 import type { Command } from "commander";
@@ -27,7 +28,7 @@ export function applyTargetOptions(command: Command): Command {
 }
 
 /**
- * 目标解析与 Target 创建所需的统一选项视图。
+ * 目标解析与 Service 创建所需的统一选项视图。
  * 与既有命令内联解析逻辑保持逐字段一致，作为唯一事实源供各命令复用。
  */
 export interface TargetResolutionOptions {
@@ -55,7 +56,7 @@ export interface TargetResolutionOptions {
  *
  * @param options 命令选项视图（支持直接传入 Commander 解析后的 options 对象）
  * @param context CLI 上下文
- * @returns 解析后的目标拓扑信息（仅信息解析，不创建 Target 实例）
+ * @returns 解析后的目标拓扑信息（仅信息解析，不创建 Service 实例）
  */
 export function resolveTargetFromOptions(
   options: TargetResolutionOptions,
@@ -74,10 +75,10 @@ export function resolveTargetFromOptions(
 }
 
 /**
- * 高阶目标执行辅助：统一封装「目标解析 → Target 创建 → 业务回调 → try/finally close」样板。
+ * 高阶服务执行辅助：统一封装「目标解析 → Service 创建 → 业务回调 → try/finally close」样板。
  *
- * 回调获得创建好的 target 与解析后的目标拓扑信息；无论回调成功或抛出，
- * 都保证 target 资源被正确释放，业务异常原样透传。
+ * 回调获得创建好的 service 与解析后的目标拓扑信息；无论回调成功或抛出，
+ * 都保证 service 资源被正确释放，业务异常原样透传。
  *
  * 默认旁观打开：内部创建的本地 Host 以非收割模式打开存储（不置 recoverOrphans），
  * 供 ad state / ad runs / ad config 等查询命令与运行中的 serve 进程并发访问同一库；
@@ -85,13 +86,13 @@ export function resolveTargetFromOptions(
  *
  * @param options 命令选项视图（profile/server/token/package/dataDir/insecure/allowInsecureHttp）
  * @param context CLI 上下文
- * @param fn 业务回调（target 为已创建的门面实例，resolved 为拓扑解析结果）
+ * @param fn 业务回调（service 为已创建的服务端口实例，resolved 为拓扑解析结果）
  * @param localOptions 本地分支附加选项（如 scanLinkedPackages）与 localRoot 回退策略
  */
-export async function withTarget(
+export async function withService(
   options: TargetResolutionOptions,
   context: CliContext | undefined,
-  fn: (target: ActionDockTarget, resolved: ResolvedTarget) => Promise<void>,
+  fn: (service: ActionDockService, resolved: ResolvedTarget) => Promise<void>,
   localOptions?: {
     /** 本地工程根目录（支持惰性工厂，仅在 local 分支求值）；未提供时按 findProjectRoot 回退 */
     localRoot?: string | (() => string | undefined);
@@ -115,20 +116,15 @@ export async function withTarget(
         undefined
       : undefined;
 
-  // 本地执行命令声明持有者身份时，向 App 层透传收割开关；
-  // 查询命令保持缺省不传，存储以旁观模式打开
-  const appRecoverOrphans = localOptions?.ownDataDir === true ? { recoverOrphans: true } : undefined;
-
-  const target = await createActionDockTarget(
+  const service =
     resolved.type === "remote"
-      ? {
-          type: "remote",
+      ? await connectActionDock({
           serverUrl: resolved.serverUrl!,
           token: resolved.token,
           insecure: resolved.insecure,
           allowInsecureHttp: resolved.allowInsecureHttp ?? options.allowInsecureHttp,
-        }
-      : {
+        })
+      : await createActionDock({
           type: "local",
           projectRoot: localRoot,
           customHome: context?.customHome,
@@ -141,30 +137,31 @@ export async function withTarget(
           ...(localOptions?.scanLinkedPackages !== undefined
             ? { scanLinkedPackages: localOptions.scanLinkedPackages }
             : undefined),
-          ...(appRecoverOrphans ? { recoverOrphans: true } : undefined),
-        }
-  );
+          ...(localOptions?.ownDataDir === true ? { recoverOrphans: true } : undefined),
+        });
 
   try {
-    await fn(target, resolved);
+    await fn(service, resolved);
   } finally {
-    await target.close();
+    await service.close();
   }
 }
 
+/** 兼容别名 */
+export const withTarget = withService;
+
 /**
- * 仅远端模式目标执行辅助：创建远端 Target 并保证资源释放。
+ * 仅远端模式目标执行辅助：创建远端 Service 并保证资源释放。
  * 适用于 runs cancel 等明确要求远端目标的命令。
  */
-export async function withRemoteTarget(
+export async function withRemoteService(
   options: TargetResolutionOptions,
   context: CliContext | undefined,
-  fn: (target: ActionDockTarget, resolved: ResolvedTarget) => Promise<void>
+  fn: (service: ActionDockService, resolved: ResolvedTarget) => Promise<void>
 ): Promise<void> {
   const resolved = resolveTargetFromOptions(options, context);
 
-  const target = await createActionDockTarget({
-    type: "remote",
+  const service = await connectActionDock({
     serverUrl: resolved.serverUrl!,
     token: resolved.token,
     insecure: resolved.insecure,
@@ -172,11 +169,14 @@ export async function withRemoteTarget(
   });
 
   try {
-    await fn(target, resolved);
+    await fn(service, resolved);
   } finally {
-    await target.close();
+    await service.close();
   }
 }
+
+/** 兼容别名 */
+export const withRemoteTarget = withRemoteService;
 
 /**
  * 目标包根目录解析（含 -P 显式寻址与当前工程回退）。

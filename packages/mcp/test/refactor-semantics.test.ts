@@ -164,7 +164,7 @@ describe("MCP adapter storage lifecycle semantics", () => {
     expect(closed).toBe(false);
   });
 
-  it("ownStorageLifecycle: true cascades close through target.close()", async () => {
+  it("ownStorageLifecycle: true cascades close through service.close()", async () => {
     let closed = false;
     const server = await createActionDockMcpServer({
       actions: new Map(),
@@ -172,8 +172,8 @@ describe("MCP adapter storage lifecycle semantics", () => {
         closed = true;
       }),
       ownStorageLifecycle: true,
-      // 独立持有实例场景：显式声明 close 级联 target 生命周期
-      cascadeTargetClose: true,
+      // 独立持有实例场景：显式声明 close 级联 service 生命周期
+      cascadeServiceClose: true,
     });
     await server.close();
     expect(closed).toBe(true);
@@ -201,7 +201,7 @@ describe("MCP adapter storage lifecycle semantics", () => {
       } as any,
     });
 
-    const run = await server.target.getRun("run-1");
+    const run = await server.service.runs.get("run-1");
     expect(run?.id).toBe("run-1");
 
     await server.close();
@@ -233,10 +233,10 @@ describe("MCP adapter execution timeout combination", () => {
       timeoutMs: 5000,
     });
 
-    // 拦截底层 target 的 runAction 以观测实际传入的超时组合结果
-    const target = server.target as any;
-    const originalRun = target.runAction.bind(target);
-    target.runAction = async (_ref: string, _input: unknown, options: any) => {
+    // 拦截底层 service 的 execution.run 以观测实际传入的超时组合结果
+    const service = server.service as any;
+    const originalRun = service.execution.run.bind(service.execution);
+    service.execution.run = async (_ref: string, _input: unknown, options: any) => {
       receivedOptions.push(options);
       return originalRun(_ref, _input, options);
     };

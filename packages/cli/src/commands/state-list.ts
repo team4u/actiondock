@@ -1,4 +1,4 @@
-import type { ActionDockTarget } from "@actiondock/core";
+import type { ActionDockService } from "@actiondock/core";
 import {
   filterWithFallbackInfo,
   listLinkedPackages,
@@ -13,7 +13,7 @@ import type { CliContext } from "../types";
  * 状态键列表渲染参数视图。
  */
 export interface StateListRenderArgs {
-  target: ActionDockTarget;
+  service: ActionDockService;
   actionId: string;
   prefix: string;
   options: any;
@@ -28,21 +28,21 @@ export interface StateListRenderArgs {
 export async function renderProjectScopedStateList(
   args: StateListRenderArgs & { targetRoot: string }
 ): Promise<void> {
-  const { target, targetRoot, actionId, prefix, options, effectiveIntent, shouldFallback, context } = args;
+  const { service, targetRoot, actionId, prefix, options, effectiveIntent, shouldFallback, context } = args;
   const projConfig = loadProjectConfig(targetRoot);
-  const allKeys = await target.listStateKeys(
+  const allKeys = (await service.management?.state.list(
     projConfig.id,
     actionId,
     {
       namespace: options.namespace !== undefined ? options.namespace : null,
       prefix,
     }
-  );
+  )) ?? [];
 
   if (options.detail && options.json) {
     const entries: Array<{ key: string; namespace?: string; fullKey?: string; value: unknown }> = [];
     for (const k of allKeys) {
-      const entry = await target.getState(projConfig.id, actionId, k, {
+      const entry = await service.management?.state.get(projConfig.id, actionId, k, {
         namespace: options.namespace,
         detail: true,
       });
@@ -82,7 +82,7 @@ export async function renderProjectScopedStateList(
  * 渲染全部链接包聚合的状态键列表（跳过磁盘失效与清单损坏的链接项）。
  */
 export async function renderLinkedPackagesStateList(args: StateListRenderArgs): Promise<void> {
-  const { target, actionId, prefix, options, effectiveIntent, shouldFallback, context } = args;
+  const { service, actionId, prefix, options, effectiveIntent, shouldFallback, context } = args;
 
   // 扫描所有链接的包状态
   const linked = listLinkedPackages();
@@ -103,14 +103,14 @@ export async function renderLinkedPackagesStateList(args: StateListRenderArgs): 
     if (!existsSync(pkg.path)) continue;
     try {
       const config = loadProjectConfig(pkg.path);
-      const keys = await target.listStateKeys(
+      const keys = (await service.management?.state.list(
         config.id,
         actionId,
         {
           namespace: options.namespace !== undefined ? options.namespace : null,
           prefix,
         }
-      );
+      )) ?? [];
       for (const k of keys) {
         aggregatedKeys.push(`${config.id}/${k}`);
       }

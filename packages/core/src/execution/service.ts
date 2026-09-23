@@ -88,16 +88,17 @@ export class DefaultExecutionService implements ExecutionService {
   private platform?: RuntimePlatform;
   private actionResolver?: (ref: ActionRef | string) => ActionDefinition | undefined | Promise<ActionDefinition | undefined>;
   private activeRuns = new Map<string, ActiveRun>();
-  private reservedSlots = 0;
-  private isClosing = false;
-  private ownsStorage: boolean;
-  private ownsGlobalStorage: boolean;
   private globalStorage?: RuntimeStorage;
   private actionInvoker?: ActionInvoker;
+  private isClosing = false;
+  private reservedSlots = 0;
 
   constructor(options: ExecutionServiceOptions) {
     if (!options.identity) {
       throw new Error("DefaultExecutionService requires 'identity' PackageIdentity option");
+    }
+    if (!options.storage) {
+      throw new Error("DefaultExecutionService requires 'storage' option");
     }
     this.identity = options.identity;
     this.packageId = this.identity.id;
@@ -111,35 +112,10 @@ export class DefaultExecutionService implements ExecutionService {
     this.actionResolver = options.actionResolver;
     this.logger = options.logger;
     this.actionInvoker = options.actionInvoker;
-
-    if (options.platform) {
-      this.clock = options.platform.clock;
-      this.process = options.platform.process;
-      this.storage =
-        options.storage ??
-        options.platform.storage.createStorage(this.packageId, {
-          projectRoot: options.projectRoot,
-          customHome: options.customHome,
-          // 执行服务属于数据目录持有者主路径，打开时收割遗留孤儿运行
-          recoverOrphans: true,
-        });
-    } else {
-      this.clock = options.clock;
-      this.process = options.process;
-      if (!options.storage) {
-        throw new Error("ExecutionService requires either 'storage' or 'platform' option");
-      }
-      this.storage = options.storage;
-    }
-
-    const globalStorage = options.platform
-      ? (options.globalStorage ??
-        options.platform.storage.createGlobalStorage({ customHome: options.customHome, recoverOrphans: true }))
-      : options.globalStorage;
-
-    this.ownsStorage = !options.storage;
-    this.ownsGlobalStorage = !options.globalStorage && !!options.platform;
-    this.globalStorage = globalStorage;
+    this.storage = options.storage;
+    this.globalStorage = options.globalStorage;
+    this.clock = options.clock ?? options.platform?.clock;
+    this.process = options.process ?? options.platform?.process;
 
     this._runner = new ActionRunner({
       identity: this.identity,
@@ -148,7 +124,7 @@ export class DefaultExecutionService implements ExecutionService {
       generationId: this.generationId,
       hostSessionId: this.hostSessionId,
       storage: this.storage,
-      globalStorage,
+      globalStorage: this.globalStorage,
       projectRoot: options.projectRoot,
       projectConfig: this.projectConfig,
       configOverrides: options.configOverrides,
@@ -807,12 +783,6 @@ export class DefaultExecutionService implements ExecutionService {
 
     await this._runner.dispose();
 
-    if (this.ownsStorage && this.storage && typeof (this.storage as any).close === "function") {
-      await (this.storage as any).close();
-    }
-    if (this.ownsGlobalStorage && this.globalStorage && typeof (this.globalStorage as any).close === "function") {
-      await (this.globalStorage as any).close();
-    }
   }
 }
 

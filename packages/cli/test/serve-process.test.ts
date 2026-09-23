@@ -160,7 +160,7 @@ export default defineAction({
     let ready = false;
     for (let i = 0; i < 30; i++) {
       try {
-        const res = await fetch(`${serverUrl}/api/v1/health`, {
+        const res = await fetch(`${serverUrl}/api/v2/health`, {
           headers: { Authorization: `Bearer ${SECRET}` },
         });
         if (res.ok) {

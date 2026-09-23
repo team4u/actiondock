@@ -347,14 +347,14 @@ Follow these steps to greet a user.
     expect(safeEqual("abc", "def")).toBe(false);
     expect(safeEqual("abc", "abcd")).toBe(false);
 
-    const reqWithBearer = new Request("http://127.0.0.1:5177/api/v1/health", {
+    const reqWithBearer = new Request("http://127.0.0.1:5177/api/v2/health", {
       headers: { authorization: "Bearer secret-token" },
     });
     expect(verifyBearerToken(reqWithBearer, "secret-token")).toBe(true);
     expect(verifyBearerToken(reqWithBearer, "wrong-token")).toBe(false);
 
     // URL Query token support (disabled by default, enabled when allowQueryToken is true)
-    const reqWithQuery = new Request("http://127.0.0.1:5177/api/v1/health?token=secret-token");
+    const reqWithQuery = new Request("http://127.0.0.1:5177/api/v2/health?token=secret-token");
     expect(verifyBearerToken(reqWithQuery, "secret-token")).toBe(false);
     expect(verifyBearerToken(reqWithQuery, "secret-token", { allowQueryToken: true })).toBe(true);
     expect(verifyBearerToken(reqWithQuery, "wrong-token", { allowQueryToken: true })).toBe(false);
@@ -373,11 +373,11 @@ Follow these steps to greet a user.
     expect(healthAuth.latencyMs).toBeGreaterThanOrEqual(0);
 
     // Direct HTTP GET with query token is rejected by default (401)
-    const resQuery = await fetch(`${serverUrl}/api/v1/health?token=${SECRET_TOKEN}`);
+    const resQuery = await fetch(`${serverUrl}/api/v2/health?token=${SECRET_TOKEN}`);
     expect(resQuery.status).toBe(401);
 
     // Direct HTTP GET with Bearer token succeeds
-    const resBearer = await fetch(`${serverUrl}/api/v1/health`, {
+    const resBearer = await fetch(`${serverUrl}/api/v2/health`, {
       headers: { authorization: `Bearer ${SECRET_TOKEN}` },
     });
     expect(resBearer.status).toBe(200);
@@ -429,7 +429,7 @@ Follow these steps to greet a user.
 
   test("Security > Expose debug info toggle hides/reveals projectRoot", async () => {
     // Default server hides projectRoot
-    const resDefault = await fetch(`${serverUrl}/api/v1/info`, {
+    const resDefault = await fetch(`${serverUrl}/api/v2/info`, {
       headers: { authorization: `Bearer ${SECRET_TOKEN}` },
     });
     const jsonDefault = await resDefault.json();
@@ -446,7 +446,7 @@ Follow these steps to greet a user.
     });
     const debugUrl = `http://127.0.0.1:${debugServer.port}`;
 
-    const resDebug = await fetch(`${debugUrl}/api/v1/info`, {
+    const resDebug = await fetch(`${debugUrl}/api/v2/info`, {
       headers: { authorization: `Bearer ${SECRET_TOKEN}` },
     });
     const jsonDebug = await resDebug.json();
@@ -458,7 +458,7 @@ Follow these steps to greet a user.
 
   test("Security > CORS is disabled by default and respects whitelist when configured", async () => {
     // Default server (no corsOrigins configured)
-    const resDefault = await fetch(`${serverUrl}/api/v1/health`, {
+    const resDefault = await fetch(`${serverUrl}/api/v2/health`, {
       headers: {
         authorization: `Bearer ${SECRET_TOKEN}`,
         origin: "http://attacker.example.com",
@@ -476,7 +476,7 @@ Follow these steps to greet a user.
     const corsUrl = `http://127.0.0.1:${corsServer.port}`;
 
     // 1. Allowed origin gets CORS header
-    const resAllowed = await fetch(`${corsUrl}/api/v1/health`, {
+    const resAllowed = await fetch(`${corsUrl}/api/v2/health`, {
       headers: {
         authorization: `Bearer ${SECRET_TOKEN}`,
         origin: "http://allowed.local:3000",
@@ -485,7 +485,7 @@ Follow these steps to greet a user.
     expect(resAllowed.headers.get("access-control-allow-origin")).toBe("http://allowed.local:3000");
 
     // 2. Disallowed origin does not get CORS header
-    const resDisallowed = await fetch(`${corsUrl}/api/v1/health`, {
+    const resDisallowed = await fetch(`${corsUrl}/api/v2/health`, {
       headers: {
         authorization: `Bearer ${SECRET_TOKEN}`,
         origin: "http://disallowed.com",
@@ -494,7 +494,7 @@ Follow these steps to greet a user.
     expect(resDisallowed.headers.get("access-control-allow-origin")).toBeNull();
 
     // 3. OPTIONS preflight
-    const resOptions = await fetch(`${corsUrl}/api/v1/actions/sample.greet/run`, {
+    const resOptions = await fetch(`${corsUrl}/api/v2/actions/sample.greet/run`, {
       method: "OPTIONS",
       headers: { origin: "http://allowed.local:3000" },
     });
@@ -520,7 +520,7 @@ Follow these steps to greet a user.
       input: { name: "A".repeat(200) },
     });
 
-    const res = await fetch(`${smallUrl}/api/v1/actions/sample.greet/run`, {
+    const res = await fetch(`${smallUrl}/api/v2/actions/sample.greet/run`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -706,7 +706,7 @@ Follow these steps to greet a user.
   });
 
   describe("Extended HTTP Service Endpoints", () => {
-    test("GET /api/v1/info > supports tree, package, and intent query parameters", async () => {
+    test("GET /api/v2/info > supports tree, package, and intent query parameters", async () => {
       // 1. Info with intent filter
       const infoIntent = await fetchRemoteInfo(serverUrl, SECRET_TOKEN, { intent: "greet" });
       expect(infoIntent).toBeDefined();
@@ -723,7 +723,7 @@ Follow these steps to greet a user.
       expect(infoTree.packages).toBeDefined();
     });
 
-    test("GET /api/v1/playbooks > lists playbooks and shows SOP content", async () => {
+    test("GET /api/v2/playbooks > lists playbooks and shows SOP content", async () => {
       // List playbooks
       const pbs = await fetchRemotePlaybooks(serverUrl, SECRET_TOKEN);
       expect(Array.isArray(pbs)).toBe(true);
@@ -739,7 +739,7 @@ Follow these steps to greet a user.
       expect(pbDetail.actions).toContain("sample.greet");
     });
 
-    test("GET & POST /api/v1/runs > queries execution runs and clears records", async () => {
+    test("GET & POST /api/v2/runs > queries execution runs and clears records", async () => {
       // 1. Fetch runs list
       const runsList = await fetchRemoteRuns(serverUrl, SECRET_TOKEN, { limit: 10 });
       expect(Array.isArray(runsList.items)).toBe(true);
@@ -816,7 +816,7 @@ Follow these steps to greet a user.
       expect(getRes2.key).toBe("b:c");
 
       // 3. Ambiguous key without escaping returns 400
-      const ambiguousRes = await fetch(`${serverUrl}/api/v1/state/a:b:c`, {
+      const ambiguousRes = await fetch(`${serverUrl}/api/v2/state/a:b:c`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -876,16 +876,16 @@ Follow these steps to greet a user.
       expect(Array.isArray(envRes.envChecks)).toBe(true);
     });
 
-    test("GET /api/v1/doctor > runs diagnostics on remote server", async () => {
+    test("GET /api/v2/doctor > runs diagnostics on remote server", async () => {
       const doc = await fetchRemoteDoctor(serverUrl, SECRET_TOKEN);
       expect(doc.ok !== undefined).toBe(true);
       expect((doc.report || doc).summary).toBeDefined();
       expect((doc.report || doc).checks.length).toBeGreaterThan(0);
     });
 
-    test("GET /api/v1/runs/:runId/stream > connects to SSE stream and receives updates", async () => {
+    test("GET /api/v2/runs/:runId/stream > connects to SSE stream and receives updates", async () => {
       // Dispatch an async run
-      const asyncRes = await fetch(`${serverUrl}/api/v1/actions/sample.long-task/run`, {
+      const asyncRes = await fetch(`${serverUrl}/api/v2/actions/sample.long-task/run`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -902,7 +902,7 @@ Follow these steps to greet a user.
       expect(runId).toBeDefined();
 
       // Connect to SSE stream
-      const sseRes = await fetch(`${serverUrl}/api/v1/runs/${runId}/stream`, {
+      const sseRes = await fetch(`${serverUrl}/api/v2/runs/${runId}/stream`, {
         headers: {
           Authorization: `Bearer ${SECRET_TOKEN}`,
         },
@@ -922,8 +922,8 @@ Follow these steps to greet a user.
     });
 
     test("Security & Boundary > rejects unknown packages and path traversal in routes", async () => {
-      // 1. Unknown package on /api/v1/config returns 400
-      const unknownPkgRes = await fetch(`${serverUrl}/api/v1/config?package=nonexistent-package`, {
+      // 1. Unknown package on /api/v2/config returns 400
+      const unknownPkgRes = await fetch(`${serverUrl}/api/v2/config?package=nonexistent-package`, {
         headers: { Authorization: `Bearer ${SECRET_TOKEN}` },
       });
       expect(unknownPkgRes.status).toBe(400);
@@ -932,7 +932,7 @@ Follow these steps to greet a user.
       expect(unknownData.error.message).toContain("Unknown or unregistered package");
 
       // 2. Path traversal in package parameter returns 400
-      const traversalRes = await fetch(`${serverUrl}/api/v1/config?package=../../etc`, {
+      const traversalRes = await fetch(`${serverUrl}/api/v2/config?package=../../etc`, {
         headers: { Authorization: `Bearer ${SECRET_TOKEN}` },
       });
       expect(traversalRes.status).toBe(400);
@@ -940,8 +940,8 @@ Follow these steps to greet a user.
       expect(traversalData.ok).toBe(false);
       expect(traversalData.error.message).toContain("Invalid packageId");
 
-      // 3. Unknown package on /api/v1/state returns 400
-      const stateUnknownRes = await fetch(`${serverUrl}/api/v1/state?package=nonexistent-package`, {
+      // 3. Unknown package on /api/v2/state returns 400
+      const stateUnknownRes = await fetch(`${serverUrl}/api/v2/state?package=nonexistent-package`, {
         headers: { Authorization: `Bearer ${SECRET_TOKEN}` },
       });
       expect(stateUnknownRes.status).toBe(400);

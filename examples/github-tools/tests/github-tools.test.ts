@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { resolve } from "node:path";
-import { createActionDockApp } from "@actiondock/core";
+import { createPackageRuntime } from "@actiondock/core";
 import { createTestRuntime } from "@actiondock/testing";
 import commentPrAction from "../actions/comment-pr";
 import getPrAction from "../actions/get-pr";
@@ -59,10 +59,10 @@ describe("GitHub Tools Action Package", () => {
     });
   });
 
-  describe("ActionDockApp Manifest v2 integration", () => {
+  describe("PackageRuntime Manifest v2 integration", () => {
     it("inspects package info and static declarations", async () => {
       const packageRoot = resolve(import.meta.dirname, "..");
-      const app = await createActionDockApp({ packageRoot, inMemory: true });
+      const app = await createPackageRuntime({ packageRoot, inMemory: true });
 
       const info = await app.info();
       assert.equal(info.id, "team4u.github-tools");
@@ -92,9 +92,9 @@ describe("GitHub Tools Action Package", () => {
       await app.close();
     });
 
-    it("executes actions and persists state through ActionDockApp", async () => {
+    it("executes actions and persists state through PackageRuntime", async () => {
       const packageRoot = resolve(import.meta.dirname, "..");
-      const app = await createActionDockApp({ packageRoot, inMemory: true });
+      const app = await createPackageRuntime({ packageRoot, inMemory: true });
 
       const listRes = await app.runAction("list-prs", { repo: "team4u/actiondock" });
       assert.equal(listRes.ok, true);

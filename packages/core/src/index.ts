@@ -15,6 +15,7 @@ export {
 } from "./service/factory";
 export { LocalActionDockService } from "./service/local";
 export { RemoteActionDockService } from "./service/remote";
+export { streamRemoteEvents } from "./service/sse-stream";
 export type {
   ActionDockService,
   ActionDockService as ActionDock,
@@ -25,6 +26,10 @@ export type {
   StatePort,
   CreateActionDockOptions,
   ConnectActionDockOptions,
+  ConfigValueView,
+  ListRunsOptions,
+  StateScopeOptions,
+  RemoteServiceOptions,
 } from "./service/types";
 
 // 3. 核心服务端口与契约类型（转引 SDK 规范类型与应用层契约）
@@ -188,17 +193,9 @@ export {
   fetchRemotePlaybookShow,
 } from "./profile/client-playbooks";
 export { checkRemoteHealth } from "./profile/client-health";
-export { createActionDockTarget } from "./target/target";
-export type {
-  ActionDockTarget,
-  RemoteTargetOptions,
-  ConfigValueView,
-  ListRunsOptions,
-  StateScopeOptions,
-} from "./target/types";
 export type { ResolvedTarget } from "./profile/types";
-export { ServiceActionDockTarget } from "./target/local";
-export { IpcActionDockTarget } from "./ipc/target";
+export { IpcActionDockService } from "./ipc/service";
+export type { IpcServiceOptions } from "./ipc/types";
 
 // 9. 统一错误模型与标准错误码
 export {
@@ -341,7 +338,7 @@ export type {
 } from "./process/driver";
 export { findExecutable } from "./utils/index";
 
-// 12. 宿主容器与单包应用适配层
+// 12. 宿主容器与运行时适配层
 export {
   createActionDockHost,
   DefaultActionDockHost,
@@ -351,12 +348,12 @@ export type {
   ActionDockHostOptions,
 } from "./host/types";
 export {
-  createActionDockApp,
-  DefaultActionDockApp,
+  createPackageRuntime,
+  DefaultPackageRuntime,
 } from "./app/app";
 export type {
-  ActionDockApp,
-  ActionDockAppOptions,
+  PackageRuntime,
+  PackageRuntimeOptions,
 } from "./app/types";
 
 // 13. IPC 通信与单执行分发器

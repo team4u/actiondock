@@ -8,13 +8,14 @@ import type {
   RunRecord,
   RuntimeError,
 } from "@actiondock/sdk";
-import { DefaultActionDockApp } from "../app/app";
+import { DefaultPackageRuntime } from "../app/app";
 import type {
-  ActionDockApp,
+  PackageInfo,
+  PackageRuntime,
+  PackageRuntimeOptions,
   ActionSpec,
   ActionSummary,
   ListActionsOptions,
-  PackageInfo,
   PlaybookSpec,
   PlaybookSummary,
 } from "../app/types";
@@ -59,7 +60,7 @@ import { createPackageIdentity } from "../runtime/identity";
 import {
   buildRuntimeError,
   collectPackageInfos,
-  describeActionAcrossApps,
+  describeActionAcrossRuntimes,
   describeVisiblePlaybook,
   isRootCallVisible,
   listVisiblePlaybooks,
@@ -68,27 +69,33 @@ import {
   resolveProjectRoot,
 } from "./routing";
 import type { ActionDockHost, ActionDockHostOptions } from "./types";
+import type { ConfigValueView, ListRunsOptions, StateScopeOptions } from "../service/types";
+import { TargetError, TARGET_CAPABILITY_UNAVAILABLE } from "../service/types";
+import { createGlobalStorage, isSecretConfigKey } from "../storage";
+import type { RuntimeStorage, StateEntry } from "../storage/types";
+import type { ConfigItemDefinition } from "../project/types";
+import { filterByIntent } from "../filter";
 
-function isActionDockApp(item: unknown): item is ActionDockApp {
+function isPackageRuntime(item: unknown): item is PackageRuntime {
   return (
     typeof item === "object" &&
     item !== null &&
     "info" in item &&
-    typeof (item as ActionDockApp).info === "function" &&
+    typeof (item as PackageRuntime).info === "function" &&
     "runAction" in item &&
-    typeof (item as ActionDockApp).runAction === "function"
+    typeof (item as PackageRuntime).runAction === "function"
   );
 }
 
 /**
  * ActionDock 统一多包宿主容器默认实现。
- * 负责聚合与调度多个 ActionDockApp 实例，提供跨包引用路由、依赖声明校验与资源配额控制。
+ * 负责聚合与调度多个 PackageRuntime 实例，提供跨包引用路由、依赖声明校验与资源配额控制。
  */
 export class DefaultActionDockHost implements ActionDockHost {
   public readonly hostSessionId: string;
   public readonly options: ActionDockHostOptions;
-  private apps = new Map<string, ActionDockApp>();
-  private readonly internallyCreatedApps = new Set<ActionDockApp>();
+  private runtimes = new Map<string, PackageRuntime>();
+  private readonly internallyCreatedRuntimes = new Set<PackageRuntime>();
   public readonly policy: InvocationPolicy;
   private hostPublicPackageIds = new Set<string>();
   private maxCallDepth: number;
@@ -98,10 +105,11 @@ export class DefaultActionDockHost implements ActionDockHost {
   private dataDirLock?: DataDirLock;
   private failedLinkedPackages = new Map<string, { path: string; error: string }>();
   private failedAutoLoad?: { projectRoot: string; error: string };
-  /** 透传给内部创建 App 的存储收割开关（Host 默认持有者身份，显式可关） */
+  /** 透传给内部创建 Runtime 的存储收割开关（Host 默认持有者身份，显式可关） */
   private recoverOrphans: boolean;
   private graph: PackageGraph;
   private catalog: ActionCatalog;
+  private globalStorage?: RuntimeStorage;
 
   constructor(options: ActionDockHostOptions = {}) {
     this.hostSessionId = randomUUID();
@@ -148,35 +156,35 @@ export class DefaultActionDockHost implements ActionDockHost {
       }
       this.dataDirLock = undefined;
 
-      // 仅安全关闭宿主内部创建的子 app，外部传入的 app 保持调用方生命周期与所有权
-      for (const app of this.internallyCreatedApps) {
+      // 仅安全关闭宿主内部创建的子 runtime，外部传入的 runtime 保持调用方生命周期与所有权
+      for (const runtime of this.internallyCreatedRuntimes) {
         try {
-          const closePromise = app.close();
+          const closePromise = runtime.close();
           if (closePromise && typeof (closePromise as any).catch === "function") {
             (closePromise as any).catch(() => {});
           }
         } catch {
-          // 忽略 app 关闭异常
+          // 忽略 runtime 关闭异常
         }
       }
-      this.internallyCreatedApps.clear();
-      this.apps.clear();
+      this.internallyCreatedRuntimes.clear();
+      this.runtimes.clear();
       throw err;
     }
   }
 
   /**
-   * 阶段函数：注册显式传入的 packages 列表（现成 App 实例或 AppOptions 配置）。
+   * 阶段函数：注册显式传入的 packages 列表（现成 Runtime 实例或 PackageRuntimeOptions 配置）。
    */
   private registerExplicitPackages(options: ActionDockHostOptions): void {
     if (!options.packages || !Array.isArray(options.packages)) {
       return;
     }
     for (const item of options.packages) {
-      if (isActionDockApp(item)) {
-        this.registerAppInternal(item, true);
+      if (isPackageRuntime(item)) {
+        this.registerRuntimeInternal(item, true);
       } else {
-        const app = new DefaultActionDockApp({
+        const runtime = new DefaultPackageRuntime({
           ...item,
           hostSessionId: this.hostSessionId,
           platform: item.platform ?? options.platform,
@@ -191,8 +199,8 @@ export class DefaultActionDockHost implements ActionDockHost {
           maxSubRuns: item.maxSubRuns ?? this.maxSubRuns,
           recoverOrphans: this.recoverOrphans,
         });
-        this.internallyCreatedApps.add(app);
-        this.registerAppInternal(app, true);
+        this.internallyCreatedRuntimes.add(runtime);
+        this.registerRuntimeInternal(runtime, true);
       }
     }
   }
@@ -246,9 +254,9 @@ export class DefaultActionDockHost implements ActionDockHost {
       }
 
       for (const pkg of graph.packages.values()) {
-        if (!this.apps.has(pkg.packageId)) {
+        if (!this.runtimes.has(pkg.packageId)) {
           const isDirectOrRoot = this.hostPublicPackageIds.has(pkg.packageId);
-          const app = new DefaultActionDockApp({
+          const runtime = new DefaultPackageRuntime({
             packageRoot: pkg.root,
             projectConfig: pkg.manifest,
             hostSessionId: this.hostSessionId,
@@ -264,8 +272,8 @@ export class DefaultActionDockHost implements ActionDockHost {
             maxSubRuns: this.maxSubRuns,
             recoverOrphans: this.recoverOrphans,
           });
-          this.internallyCreatedApps.add(app);
-          this.registerAppInternal(app, isDirectOrRoot);
+          this.internallyCreatedRuntimes.add(runtime);
+          this.registerRuntimeInternal(runtime, isDirectOrRoot);
         }
       }
     } catch (err: any) {
@@ -293,7 +301,7 @@ export class DefaultActionDockHost implements ActionDockHost {
    */
   private registerLinkedPackages(options: ActionDockHostOptions): void {
     for (const linked of listLinkedPackages(options.customHome)) {
-      if (this.apps.has(linked.id)) {
+      if (this.runtimes.has(linked.id)) {
         continue;
       }
       if (!existsSync(linked.path)) {
@@ -305,7 +313,7 @@ export class DefaultActionDockHost implements ActionDockHost {
       try {
         const config = loadProjectConfig(linked.path);
         this.hostPublicPackageIds.add(linked.id);
-        const app = new DefaultActionDockApp({
+        const runtime = new DefaultPackageRuntime({
           packageRoot: linked.path,
           projectConfig: config,
           hostSessionId: this.hostSessionId,
@@ -321,8 +329,8 @@ export class DefaultActionDockHost implements ActionDockHost {
           maxSubRuns: this.maxSubRuns,
           recoverOrphans: this.recoverOrphans,
         });
-        this.internallyCreatedApps.add(app);
-        this.registerAppInternal(app, true);
+        this.internallyCreatedRuntimes.add(runtime);
+        this.registerRuntimeInternal(runtime, true);
       } catch (err: any) {
         const errDetail = err?.message || String(err);
         this.failedLinkedPackages.set(linked.id, { path: linked.path, error: errDetail });
@@ -333,14 +341,14 @@ export class DefaultActionDockHost implements ActionDockHost {
     }
   }
 
-  private bindApp(app: ActionDockApp): void {
-    const invoker = this.createActionInvoker(app);
-    if (typeof (app as any).setActionInvoker === "function") {
-      (app as any).setActionInvoker(invoker);
-    } else if (app.executionService && typeof (app.executionService as any).setActionInvoker === "function") {
-      (app.executionService as any).setActionInvoker(invoker);
+  private bindRuntime(runtime: PackageRuntime): void {
+    const invoker = this.createActionInvoker(runtime);
+    if (typeof (runtime as any).setActionInvoker === "function") {
+      (runtime as any).setActionInvoker(invoker);
+    } else if (runtime.executionService && typeof (runtime.executionService as any).setActionInvoker === "function") {
+      (runtime.executionService as any).setActionInvoker(invoker);
     }
-    const runner = app.executionService?.runner;
+    const runner = runtime.executionService?.runner;
     if (runner && typeof (runner as any).setActionInvoker === "function") {
       (runner as any).setActionInvoker(invoker);
     }
@@ -351,7 +359,7 @@ export class DefaultActionDockHost implements ActionDockHost {
    * 铁律 2：跨包调用改走 ActionInvoker 回到 Host 执行主链，经由唯一的 InvocationPolicy 授权后调用目标 Package 的 ExecutionService。
    */
   private createActionInvoker(
-    callerApp: ActionDockApp
+    callerRuntime: PackageRuntime
   ): ActionInvoker {
     return async (
       childAction: ActionRef | string,
@@ -359,17 +367,17 @@ export class DefaultActionDockHost implements ActionDockHost {
       context: InvocationContext
     ): Promise<unknown> => {
       const resolved = resolveAction(childAction, {
-        caller: callerApp.packageId,
+        caller: callerRuntime.packageId,
         graph: this.graph,
         catalog: this.catalog,
       });
 
       const targetPackageId = resolved.package.id;
       const targetActionId = resolved.ref.actionId;
-      const isSamePackage = targetPackageId === callerApp.packageId;
-      const targetApp = isSamePackage ? callerApp : this.getApp(targetPackageId);
+      const isSamePackage = targetPackageId === callerRuntime.packageId;
+      const targetRuntime = isSamePackage ? callerRuntime : this.getRuntime(targetPackageId);
 
-      if (!targetApp) {
+      if (!targetRuntime) {
         const err = new Error(packageNotFoundMessage(targetPackageId, this.failedLinkedPackages));
         (err as any).code = PACKAGE_NOT_FOUND;
         throw err;
@@ -380,7 +388,7 @@ export class DefaultActionDockHost implements ActionDockHost {
         let declaredUses = context.caller?.declaredUses;
         if (!declaredUses) {
           try {
-            const callerSpec = await callerApp.describeAction(context.caller?.actionId || "");
+            const callerSpec = await callerRuntime.describeAction(context.caller?.actionId || "");
             declaredUses = callerSpec.uses;
           } catch {
             // 忽略规范提取异常
@@ -388,7 +396,7 @@ export class DefaultActionDockHost implements ActionDockHost {
         }
         const authErr = this.policy.checkUsesAuthorization(
           {
-            packageId: callerApp.packageId,
+            packageId: callerRuntime.packageId,
             actionId: context.caller?.actionId || "",
             declaredUses,
           },
@@ -421,7 +429,7 @@ export class DefaultActionDockHost implements ActionDockHost {
         context.callStack,
         targetActionId,
         targetPackageId,
-        callerApp.packageId
+        callerRuntime.packageId
       );
       if (cycle.error) {
         const err = new Error(cycle.error.message);
@@ -453,11 +461,11 @@ export class DefaultActionDockHost implements ActionDockHost {
               tenantId: context.owner.tenantId,
               principalId: context.owner.principalId,
               packageInstanceId: isSamePackage
-                ? (context.owner.packageInstanceId || callerApp.identity.instanceId)
-                : targetApp.identity.instanceId,
+                ? (context.owner.packageInstanceId || callerRuntime.identity.instanceId)
+                : targetRuntime.identity.instanceId,
               generationId: isSamePackage
-                ? (context.owner.generationId || callerApp.identity.generation)
-                : targetApp.identity.generation,
+                ? (context.owner.generationId || callerRuntime.identity.generation)
+                : targetRuntime.identity.generation,
             }
           : undefined;
 
@@ -467,7 +475,7 @@ export class DefaultActionDockHost implements ActionDockHost {
           parentRunId: context.parentRunId,
           caller: context.caller,
           callStack: nextCallStack,
-          package: targetApp.identity,
+          package: targetRuntime.identity,
           signal: context.signal,
           timeoutMs: context.timeoutMs,
           config: context.config,
@@ -483,7 +491,7 @@ export class DefaultActionDockHost implements ActionDockHost {
           owner: targetOwner,
         };
 
-        const ticket = await targetApp.executionService.start(
+        const ticket = await targetRuntime.executionService.start(
           targetActionId,
           childInput as JsonValue,
           subInvocationContext
@@ -514,27 +522,27 @@ export class DefaultActionDockHost implements ActionDockHost {
   }
 
   private rebuildGraphAndCatalog(): void {
-    const discovered: DiscoveredPackage[] = Array.from(this.apps.values()).map((app) => ({
-      id: app.packageId,
-      root: app.packageRoot || "",
-      manifest: app.projectConfig,
-      isCurrentProject: this.hostPublicPackageIds.has(app.packageId),
+    const discovered: DiscoveredPackage[] = Array.from(this.runtimes.values()).map((runtime) => ({
+      id: runtime.packageId,
+      root: runtime.packageRoot || "",
+      manifest: runtime.projectConfig,
+      isCurrentProject: this.hostPublicPackageIds.has(runtime.packageId),
     }));
 
-    const rootApp = Array.from(this.apps.values()).find((app) =>
-      this.hostPublicPackageIds.has(app.packageId)
+    const rootRuntime = Array.from(this.runtimes.values()).find((runtime) =>
+      this.hostPublicPackageIds.has(runtime.packageId)
     );
 
     const builder = new PackageGraphBuilder({
       packages: discovered,
-      root: rootApp?.packageRoot || rootApp?.packageId,
+      root: rootRuntime?.packageRoot || rootRuntime?.packageId,
     });
     this.graph = builder.buildSync();
     this.catalog = new DefaultActionCatalog(this.graph, (pkgId) => {
-      const app = this.getApp(pkgId);
-      if (!app) return undefined;
-      const map = new Map<string, any>(app.actionsMap);
-      const runnerRegistry = (app.executionService as any)?._runner?.registry?.map;
+      const runtime = this.getRuntime(pkgId);
+      if (!runtime) return undefined;
+      const map = new Map<string, any>(runtime.actionsMap);
+      const runnerRegistry = (runtime.executionService as any)?._runner?.registry?.map;
       if (runnerRegistry) {
         for (const [k, v] of runnerRegistry) {
           map.set(k, v);
@@ -544,8 +552,8 @@ export class DefaultActionDockHost implements ActionDockHost {
     });
   }
 
-  getApp(packageId: string): ActionDockApp | undefined {
-    return this.apps.get(packageId);
+  getRuntime(packageId: string): PackageRuntime | undefined {
+    return this.runtimes.get(packageId);
   }
 
   getGraph(): PackageGraph {
@@ -556,8 +564,8 @@ export class DefaultActionDockHost implements ActionDockHost {
     return this.catalog;
   }
 
-  listApps(): ActionDockApp[] {
-    return Array.from(this.apps.values());
+  listRuntimes(): PackageRuntime[] {
+    return Array.from(this.runtimes.values());
   }
 
   /**
@@ -568,65 +576,65 @@ export class DefaultActionDockHost implements ActionDockHost {
     return this.failedAutoLoad;
   }
 
-  private registerAppInternal(app: ActionDockApp, isPublic: boolean): void {
-    if (this.apps.has(app.packageId)) {
-      const existing = this.apps.get(app.packageId)!;
-      if (existing === app) {
+  private registerRuntimeInternal(runtime: PackageRuntime, isPublic: boolean): void {
+    if (this.runtimes.has(runtime.packageId)) {
+      const existing = this.runtimes.get(runtime.packageId)!;
+      if (existing === runtime) {
         return;
       }
       throw new Error(
-        `Package ID conflict: package '${app.packageId}' is already registered in host`
+        `Package ID conflict: package '${runtime.packageId}' is already registered in host`
       );
     }
-    this.apps.set(app.packageId, app);
+    this.runtimes.set(runtime.packageId, runtime);
     if (isPublic) {
-      this.hostPublicPackageIds.add(app.packageId);
+      this.hostPublicPackageIds.add(runtime.packageId);
     }
-    this.bindApp(app);
+    this.bindRuntime(runtime);
     this.rebuildGraphAndCatalog();
 
     // 接管与恢复：仅持有者身份的 Host 自动将死亡会话或遗留非终态运行收敛为 interrupted；
     // 旁观查询 Host（CLI state/runs/config 命令）跳过本步骤，不动其他进程的在途记录
     if (this.recoverOrphans) {
-      const st = app.storage;
+      const st = runtime.storage;
       if (st && typeof st.recoverDeadSessionRuns === "function") {
         try {
           st.recoverDeadSessionRuns(this.hostSessionId);
         } catch (err) {
           // 单包恢复失败不阻断整体接管流程，但必须可观测
           console.warn(
-            `[actiondock] recoverDeadSessionRuns failed for package '${app.packageId}': ${err instanceof Error ? err.message : String(err)}`
+            `[actiondock] recoverDeadSessionRuns failed for package '${runtime.packageId}': ${err instanceof Error ? err.message : String(err)}`
           );
         }
       }
     }
   }
 
-  registerApp(app: ActionDockApp): void {
-    this.registerAppInternal(app, true);
+  registerRuntime(runtime: PackageRuntime): void {
+    this.registerRuntimeInternal(runtime, true);
   }
 
   async info(): Promise<PackageInfo[]> {
-    return collectPackageInfos(this.listApps());
+    return collectPackageInfos(this.listRuntimes());
   }
 
   async listActions(options?: ListActionsOptions): Promise<ActionSummary[]> {
     let results: ActionSummary[] = [];
-    const apps = this.listApps();
-    for (const app of apps) {
-      const appSummaries = await app.listActions();
-      for (const item of appSummaries) {
-        if (!isRootCallVisible(app.packageId, item.id, this.hostPublicPackageIds, this.graph)) {
+    const runtimes = this.listRuntimes();
+    for (const runtime of runtimes) {
+      const runtimeSummaries = await runtime.listActions();
+      for (const item of runtimeSummaries) {
+        if (!isRootCallVisible(runtime.packageId, item.id, this.hostPublicPackageIds, this.graph)) {
           continue;
         }
         const qualifiedId =
-          apps.length > 1 && !item.id.includes("/")
-            ? `${app.packageId}/${item.id}`
+          runtimes.length > 1 && !item.id.includes("/")
+            ? `${runtime.packageId}/${item.id}`
             : item.id;
         results.push({
           ...item,
           id: qualifiedId,
-          packageId: app.packageId,
+          packageId: runtime.packageId,
         });
       }
     }
@@ -654,9 +662,9 @@ export class DefaultActionDockHost implements ActionDockHost {
   }
 
   async describeAction(ref: ActionRef | string): Promise<ActionSpec> {
-    return describeActionAcrossApps(
+    return describeActionAcrossRuntimes(
       ref,
-      this.listApps(),
+      this.listRuntimes(),
       this.visibility(),
       this.failedLinkedPackages,
       this.catalog,
@@ -664,12 +672,24 @@ export class DefaultActionDockHost implements ActionDockHost {
     );
   }
 
-  async listPlaybooks(): Promise<PlaybookSummary[]> {
-    return listVisiblePlaybooks(this.listApps(), this.visibility());
+  async listPlaybooks(options?: { intent?: string; package?: string }): Promise<PlaybookSummary[]> {
+    let pbs = await listVisiblePlaybooks(this.listRuntimes(), this.visibility());
+    if (options?.package) {
+      pbs = pbs.filter((p) => p.packageId === options.package);
+    }
+    if (options?.intent) {
+      pbs = filterByIntent(
+        pbs,
+        options.intent,
+        [(p) => p.id, (p) => p.description || "", (p) => p.packageId || "", (p) => (p.actions || []).join(" ")],
+        false
+      );
+    }
+    return pbs;
   }
 
   async describePlaybook(id: string): Promise<PlaybookSpec> {
-    return describeVisiblePlaybook(this.listApps(), id, this.visibility());
+    return describeVisiblePlaybook(this.listRuntimes(), id, this.visibility());
   }
 
   async runAction(
@@ -734,9 +754,9 @@ export class DefaultActionDockHost implements ActionDockHost {
 
     const targetPackageId = resolved.package.id;
     const targetActionId = resolved.ref.actionId;
-    const targetApp = this.getApp(targetPackageId);
+    const targetRuntime = this.getRuntime(targetPackageId);
 
-    if (!targetApp) {
+    if (!targetRuntime) {
       const runId = randomUUID();
       const error: RuntimeError = buildRuntimeError(
         PACKAGE_NOT_FOUND,
@@ -782,11 +802,11 @@ export class DefaultActionDockHost implements ActionDockHost {
         const callerPackageId = parentRun.packageId;
         const callerActionId = parentRun.actionId;
         if (callerPackageId && callerPackageId !== targetPackageId) {
-          const callerApp = this.getApp(callerPackageId);
+          const callerRuntime = this.getRuntime(callerPackageId);
           let declaredUses: string[] | undefined;
-          if (callerApp) {
+          if (callerRuntime) {
             try {
-              const callerSpec = await callerApp.describeAction(callerActionId);
+              const callerSpec = await callerRuntime.describeAction(callerActionId);
               declaredUses = callerSpec.uses;
             } catch {
               // 忽略规范提取异常，交由执行服务执行
@@ -864,7 +884,7 @@ export class DefaultActionDockHost implements ActionDockHost {
       }
     }
 
-    // 构造子运行参数并调度至目标 App 执行
+    // 构造子运行参数并调度至目标 Runtime 执行
     const execOptions: ExecuteOptions = {
       ...options,
       rootRunId: effectiveRootRunId,
@@ -879,7 +899,7 @@ export class DefaultActionDockHost implements ActionDockHost {
 
     let ticket: ExecutionTicket;
     try {
-      ticket = await targetApp.startAction(targetActionId, input, execOptions);
+      ticket = await targetRuntime.startAction(targetActionId, input, execOptions);
     } catch (err) {
       if (parentRunId && effectiveRootRunId) {
         this.policy.releaseSubRun(effectiveRootRunId);
@@ -898,16 +918,58 @@ export class DefaultActionDockHost implements ActionDockHost {
   }
 
   async getRun(runId: string): Promise<RunRecord | undefined> {
-    for (const app of this.listApps()) {
-      const record = await app.getRun(runId);
+    for (const runtime of this.listRuntimes()) {
+      const record = await runtime.getRun(runId);
       if (record) return record;
     }
     return undefined;
   }
 
+  async listRuns(query?: ListRunsOptions): Promise<RunRecord[]> {
+    const runtimes = query?.packageId
+      ? [this.getRuntime(query.packageId)].filter(Boolean) as PackageRuntime[]
+      : this.listRuntimes();
+    const records: RunRecord[] = [];
+    for (const runtime of runtimes) {
+      const recs = await runtime.listRuns(query);
+      for (const r of recs) {
+        records.push({
+          ...r,
+          packageId: (r as any).packageId || runtime.packageId,
+        });
+      }
+    }
+    records.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+    let result = records;
+    if (query?.intent) {
+      result = filterByIntent(
+        result,
+        query.intent,
+        [(r) => r.id, (r) => r.actionId, (r) => r.status, (r) => r.packageId],
+        false
+      );
+    }
+    if (query?.limit && result.length > query.limit) {
+      result.length = query.limit;
+    }
+    return result;
+  }
+
+  async clearRuns(options?: { packageId?: string; actionId?: string; status?: string; olderThanMs?: number }): Promise<number> {
+    const runtimes = options?.packageId
+      ? [this.getRuntime(options.packageId)].filter(Boolean) as PackageRuntime[]
+      : this.listRuntimes();
+    let total = 0;
+    for (const runtime of runtimes) {
+      const res = await runtime.clearRuns(options);
+      total += res;
+    }
+    return total;
+  }
+
   async cancelRun(runId: string, reason?: string): Promise<CancelResult> {
-    for (const app of this.listApps()) {
-      const res = await app.cancelRun(runId, reason);
+    for (const runtime of this.listRuntimes()) {
+      const res = await runtime.cancelRun(runId, reason);
       if (res.outcome !== "not_found") {
         return res;
       }
@@ -919,45 +981,244 @@ export class DefaultActionDockHost implements ActionDockHost {
     runId: string,
     options?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number }
   ): AsyncIterable<ExecutionEvent> {
-    for (const app of this.listApps()) {
-      if (app.executionService?.getActiveHandle?.(runId)) {
-        return app.events(runId, options);
+    for (const runtime of this.listRuntimes()) {
+      if (runtime.executionService?.getActiveHandle?.(runId)) {
+        return runtime.events(runId, options);
       }
     }
-    for (const app of this.listApps()) {
-      const storageRecord = app.storage?.getRun?.(runId);
+    for (const runtime of this.listRuntimes()) {
+      const storageRecord = runtime.storage?.getRun?.(runId);
       if (storageRecord) {
-        return app.events(runId, options);
+        return runtime.events(runId, options);
       }
     }
-    const firstApp = this.listApps()[0];
-    if (firstApp) {
-      return firstApp.events(runId, options);
+    const firstRuntime = this.listRuntimes()[0];
+    if (firstRuntime) {
+      return firstRuntime.events(runId, options);
     }
     return (async function* () {})();
   }
 
+  private getGlobalStorage(): RuntimeStorage {
+    for (const runtime of this.listRuntimes()) {
+      if (runtime.globalStorage) return runtime.globalStorage;
+    }
+    if (!this.globalStorage) {
+      this.globalStorage =
+        this.options.platform?.storage?.createGlobalStorage?.({
+          dataDir: this.options.dataDir,
+          customHome: this.options.customHome,
+        }) ??
+        createGlobalStorage({
+          dataDir: this.options.dataDir,
+          customHome: this.options.customHome,
+          inMemory: this.options.inMemory,
+        });
+    }
+    return this.globalStorage;
+  }
+
+  private findDeclaredConfigItem(key: string): ConfigItemDefinition | undefined {
+    let foundItem: ConfigItemDefinition | undefined;
+    for (const runtime of this.listRuntimes()) {
+      const item = runtime.projectConfig?.config?.[key];
+      if (item) {
+        if (item.secret) return item;
+        foundItem = item;
+      }
+    }
+    return foundItem;
+  }
+
+  private resolveRuntime(packageId?: string): PackageRuntime | undefined {
+    if (packageId) {
+      return this.getRuntime(packageId);
+    }
+    const runtimes = this.listRuntimes();
+    return runtimes.length === 1 ? runtimes[0] : undefined;
+  }
+
+  async getConfig(packageId: string, key: string): Promise<ConfigValueView> {
+    if (packageId === "global") {
+      const globalStorage = this.getGlobalStorage();
+      const val = globalStorage.getConfig(key);
+      const configured = val !== undefined;
+      const declaredItem = this.findDeclaredConfigItem(key);
+      const isSecret = isSecretConfigKey(key, declaredItem);
+      return {
+        key,
+        configured,
+        secret: isSecret,
+        source: configured ? "global" : "default",
+        value: !isSecret && configured ? (val as JsonValue) : undefined,
+      };
+    }
+    const runtime = this.resolveRuntime(packageId);
+    if (!runtime) {
+      throw new Error(`Package '${packageId}' not found in host`);
+    }
+    return runtime.getConfig(key);
+  }
+
+  async setConfig(packageId: string, key: string, value: JsonValue): Promise<void> {
+    if (packageId === "global") {
+      await this.getGlobalStorage().setConfig(key, value);
+      return;
+    }
+    const runtime = this.resolveRuntime(packageId);
+    if (!runtime) {
+      throw new Error(`Package '${packageId}' not found in host`);
+    }
+    await runtime.setConfig(key, value);
+  }
+
+  async deleteConfig(packageId: string, key: string): Promise<boolean> {
+    if (packageId === "global") {
+      return await this.getGlobalStorage().deleteConfig(key);
+    }
+    const runtime = this.resolveRuntime(packageId);
+    if (!runtime) {
+      throw new Error(`Package '${packageId}' not found in host`);
+    }
+    return await runtime.deleteConfig(key);
+  }
+
+  async listConfig(packageId: string): Promise<ConfigValueView[]> {
+    if (packageId === "global") {
+      const globalStorage = this.getGlobalStorage();
+      const all = globalStorage.listConfig();
+      return Object.entries(all).map(([key, val]) => {
+        const declaredItem = this.findDeclaredConfigItem(key);
+        const isSecret = isSecretConfigKey(key, declaredItem);
+        return {
+          key,
+          configured: true,
+          secret: isSecret,
+          source: "global",
+          value: isSecret ? undefined : (val as JsonValue),
+        };
+      });
+    }
+    const runtime = this.resolveRuntime(packageId);
+    if (!runtime) {
+      throw new Error(`Package '${packageId}' not found in host`);
+    }
+    return runtime.listConfig();
+  }
+
+  async getState<T extends JsonValue = JsonValue>(
+    packageId: string,
+    actionId: string,
+    key: string,
+    options?: StateScopeOptions
+  ): Promise<T | undefined> {
+    const runtime = this.resolveRuntime(packageId);
+    if (!runtime) {
+      throw new Error(`Package '${packageId}' not found in host`);
+    }
+    return runtime.getState<T>(actionId, key, options);
+  }
+
+  async setState<T extends JsonValue = JsonValue>(
+    packageId: string,
+    actionId: string,
+    key: string,
+    value: T,
+    options?: StateScopeOptions
+  ): Promise<void> {
+    const runtime = this.resolveRuntime(packageId);
+    if (!runtime) {
+      throw new Error(`Package '${packageId}' not found in host`);
+    }
+    if (actionId) {
+      await runtime.setActionState<T>(actionId, key, value, options);
+    } else {
+      await runtime.setState<T>(key, value, options);
+    }
+  }
+
+  async deleteState(
+    packageId: string,
+    actionId: string,
+    key: string,
+    options?: StateScopeOptions
+  ): Promise<boolean> {
+    const runtime = this.resolveRuntime(packageId);
+    if (!runtime) {
+      throw new Error(`Package '${packageId}' not found in host`);
+    }
+    return runtime.deleteState(actionId, key, options);
+  }
+
+  async listStateKeys(
+    packageId: string,
+    actionId: string,
+    options?: StateScopeOptions
+  ): Promise<string[]> {
+    const runtime = this.resolveRuntime(packageId);
+    if (!runtime) {
+      throw new Error(`Package '${packageId}' not found in host`);
+    }
+    return runtime.listStateKeys(actionId, options);
+  }
+
+  async clearState(
+    packageId: string,
+    actionId: string,
+    options?: StateScopeOptions
+  ): Promise<number> {
+    const runtime = this.resolveRuntime(packageId);
+    if (!runtime) {
+      throw new Error(`Package '${packageId}' not found in host`);
+    }
+    return runtime.clearState(actionId, options);
+  }
+
+  async listStateEntries(
+    packageId: string,
+    options?: any
+  ): Promise<StateEntry[]> {
+    const runtime = this.resolveRuntime(packageId);
+    if (!runtime) {
+      throw new TargetError(
+        TARGET_CAPABILITY_UNAVAILABLE,
+        `TARGET_CAPABILITY_UNAVAILABLE: Package '${packageId}' not found in host`
+      );
+    }
+    if (!runtime.listStateEntries) {
+      return [];
+    }
+    return runtime.listStateEntries(options);
+  }
+
   /**
    * 优雅关闭宿主容器。
-   * 仅对内部创建的 App 实例执行 close 并安全释放底层资源；
-   * 外部传入借用的 App 实例生命周期完全由调用方负责管理，Host 关闭时仅解绑引用并清理自身内部实例。
+   * 仅对内部创建的 Runtime 实例执行 close 并安全释放底层资源；
+   * 外部传入借用的 Runtime 实例生命周期完全由调用方负责管理，Host 关闭时仅解绑引用并清理自身内部实例。
    */
   async close(options?: { graceMs?: number }): Promise<void> {
     if (this.isClosed) return;
     this.isClosed = true;
 
-    const internalApps = Array.from(this.internallyCreatedApps);
+    try {
+      this.globalStorage?.close();
+    } catch {
+      // 忽略全局存储关闭异常
+    }
+    this.globalStorage = undefined;
+
+    const internalRuntimes = Array.from(this.internallyCreatedRuntimes);
     await Promise.all(
-      internalApps.map(async (app) => {
+      internalRuntimes.map(async (runtime) => {
         try {
-          await app.close(options);
+          await runtime.close(options);
         } catch {
-          // 忽略内部 App 关闭异常，确保全部安全释放
+          // 忽略内部 Runtime 关闭异常，确保全部安全释放
         }
       })
     );
-    this.internallyCreatedApps.clear();
-    this.apps.clear();
+    this.internallyCreatedRuntimes.clear();
+    this.runtimes.clear();
 
     try {
       this.dataDirLock?.release();

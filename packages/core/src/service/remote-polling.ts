@@ -9,11 +9,11 @@
 import type { ExecutionResult, RunRecord } from "@actiondock/sdk";
 import { ACTION_CANCELLED, EXECUTION_FAILED, TIMEOUT } from "../errors";
 import { isTerminalRunStatus } from "../storage/types";
-import { TARGET_CLOSED } from "./types";
+import { SERVICE_CLOSED } from "./types";
 
 /**
- * 轮询依赖上下文：由 RemoteActionDockTarget 门面注入自身能力，
- * 保持本模块与门面实现解耦（子模块不得反向依赖 remote.ts）。
+ * 轮询依赖上下文：由 RemoteActionDockService 门面注入自身能力，
+ * 保持本模块与门面实现解耦。
  */
 export interface RunPollingContext {
   /** 轮询等待基准底线超时时间（毫秒，默认 60000ms） */
@@ -80,8 +80,8 @@ export async function pollRunCompletion(
         ok: false,
         runId,
         error: {
-          code: TARGET_CLOSED,
-          message: "RemoteActionDockTarget is closed",
+          code: SERVICE_CLOSED,
+          message: "RemoteActionDockService is closed",
         },
       };
     }
@@ -101,13 +101,13 @@ export async function pollRunCompletion(
         return formatTerminalRunResult(run, runId);
       }
     } catch (err: any) {
-      if (err?.code === TARGET_CLOSED || ctx.isClosed()) {
+      if (err?.code === SERVICE_CLOSED || ctx.isClosed()) {
         return {
           ok: false,
           runId,
           error: {
-            code: TARGET_CLOSED,
-            message: "RemoteActionDockTarget is closed",
+            code: SERVICE_CLOSED,
+            message: "RemoteActionDockService is closed",
           },
         };
       }

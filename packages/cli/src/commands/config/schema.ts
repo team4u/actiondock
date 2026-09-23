@@ -1,5 +1,5 @@
 import {
-  createActionDockTarget,
+  createActionDock,
   isSecretConfigKey,
   loadProjectConfig,
   resolveEnvValue,
@@ -43,7 +43,7 @@ export function registerConfigSchemaCommand(configCmd: Command, context?: CliCon
         const declared = projConfig.config || {};
         const declaredKeys = Object.keys(declared);
 
-        const target = await createActionDockTarget({
+        const service = await createActionDock({
           type: "local",
           projectRoot: root,
           customHome: context?.customHome,
@@ -53,10 +53,10 @@ export function registerConfigSchemaCommand(configCmd: Command, context?: CliCon
         let globalConfig: import("@actiondock/core").ConfigValueView[] = [];
         let projectConfig: import("@actiondock/core").ConfigValueView[] = [];
         try {
-          globalConfig = await target.listConfig("global");
-          projectConfig = await target.listConfig(projConfig.id);
+          globalConfig = (await service.management?.config.list("global")) ?? [];
+          projectConfig = (await service.management?.config.list(projConfig.id)) ?? [];
         } finally {
-          await target.close();
+          await service.close();
         }
 
         const projectConfigMap = new Map(projectConfig.map((c) => [c.key, c]));

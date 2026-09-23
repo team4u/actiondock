@@ -119,7 +119,10 @@ export function renderRawExecutionResult(
 }
 
 /**
- * 统一执行 Action 核心逻辑（使用 ActionDockTarget 门面）。
+ * 统一执行 Action 核心逻辑（使用 ActionDockService 服务端口）。
+ * 
+ * @param id 目标 Action 标识
+ * @param options 执行选项（由 Command 统一构造）
  */
 export async function executeAction(
   id: string,
@@ -194,15 +197,15 @@ export async function executeAction(
       targetRef = `${options.package}/${id}`;
     }
 
-    // 通过 Target 统一执行
+    // 通过 Service 统一执行
     await withTarget(
       options,
       context,
-      async (target) => {
+      async (service) => {
         const isMachine = Boolean(options.json);
 
         if (options.async) {
-          const ticket = await target.startAction(targetRef, input as JsonValue, {
+          const ticket = await service.execution.start(targetRef, input as JsonValue, {
             signal: effectiveSignal,
             timeoutMs,
             config: configOverrides,
@@ -228,7 +231,7 @@ export async function executeAction(
             return;
           }
         } else {
-          const result = await target.runAction(targetRef, input as JsonValue, {
+          const result = await service.execution.run(targetRef, input as JsonValue, {
             signal: effectiveSignal,
             timeoutMs,
             config: configOverrides,

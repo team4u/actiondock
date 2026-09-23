@@ -32,15 +32,15 @@ export function registerConfigDeleteCommand(configCmd: Command, context?: CliCon
 
       const root = resolvePackageRoot(options.package);
 
-      await withTarget(options, context, async (target, resolved) => {
+      await withTarget(options, context, async (service, resolved) => {
         if (resolved.type === "remote") {
-          await target.deleteConfig(options.package || "", key);
+          await service.management?.config.delete(options.package || "", key);
           writeStdout(`[OK] Configuration '${key}' deleted from remote server`, context);
           return;
         }
 
         if (options.global) {
-          await target.deleteConfig("global", key);
+          await service.management?.config.delete("global", key);
           writeStdout(`[OK] Global configuration '${key}' deleted`, context);
           return;
         }
@@ -49,13 +49,13 @@ export function registerConfigDeleteCommand(configCmd: Command, context?: CliCon
           if (options.package) {
             throw packageNotFoundError(options.package);
           }
-          await target.deleteConfig("global", key);
+          await service.management?.config.delete("global", key);
           writeStdout(`[OK] Global configuration '${key}' deleted`, context);
           return;
         }
 
         const projConfig = loadProjectConfig(root);
-        await target.deleteConfig(projConfig.id, key);
+        await service.management?.config.delete(projConfig.id, key);
         writeStdout(`[OK] Configuration '${key}' deleted for package '${projConfig.id}'`, context);
       });
     });

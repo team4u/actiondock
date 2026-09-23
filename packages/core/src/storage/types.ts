@@ -8,8 +8,8 @@ import type { Clock } from "./clock";
 export const STORAGE_SCHEMA_VERSION = 2;
 
 /**
- * 幂等去重记录保留窗口（24 小时），与 LocalActionDockTarget.info()
- * 声明的 idempotencyPolicy.retentionMs 承诺保持单一事实源。
+ * 幂等去重记录保留窗口（24 小时），与 ActionDockService.info()
+ * 中的 idempotencyPolicy.retentionMs 保持单一事实源。
  */
 export const IDEMPOTENCY_RETENTION_MS = 86_400_000;
 

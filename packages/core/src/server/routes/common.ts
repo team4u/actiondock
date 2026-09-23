@@ -1,7 +1,6 @@
 import type { PackageInfo } from "../../app/types";
 import type { ActionDockHost } from "../../host/types";
 import type { ActionDockService } from "../../service/types";
-import type { ActionDockTarget } from "../../target/types";
 import { assertValidPackageId } from "../../utils";
 import type { ServerOptions } from "../types";
 
@@ -17,7 +16,6 @@ export interface RouteContext {
   customHome?: string;
   service: ActionDockService;
   host?: ActionDockHost;
-  target?: ActionDockTarget;
   options: ServerOptions;
 }
 
@@ -39,13 +37,10 @@ export function jsonResponse(
 }
 
 /**
- * 剥离标准版本前缀 (/api/v2/ 与兼容的 /api/v1/)，获取相对路由子路径。
+ * 剥离标准版本前缀 (/api/v2/)，获取相对路由子路径。
  */
 export function getSubPath(pathname: string): string {
   if (pathname.startsWith("/api/v2/")) {
-    return pathname.slice(7);
-  }
-  if (pathname.startsWith("/api/v1/")) {
     return pathname.slice(7);
   }
   return pathname;

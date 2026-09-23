@@ -1,12 +1,12 @@
-import { createActionDockApp } from "../app/app";
+import { createPackageRuntime } from "../app/app";
 import { createActionDockHost } from "../host/host";
-import type { RemoteTargetOptions } from "../target/types";
 import { LocalActionDockService } from "./local";
 import { RemoteActionDockService } from "./remote";
 import type {
   ActionDockService,
   ConnectActionDockOptions,
   CreateActionDockOptions,
+  RemoteServiceOptions,
 } from "./types";
 
 /**
@@ -19,12 +19,23 @@ export async function createActionDock(
   if (options.host) {
     return new LocalActionDockService(options.host, { enableManagement: options.enableManagement });
   }
-  if (options.app) {
-    return new LocalActionDockService(options.app, { enableManagement: options.enableManagement });
+  const runtimeToUse = options.runtime || options.packageRuntime;
+  if (runtimeToUse) {
+    const host = await createActionDockHost({
+      packages: [runtimeToUse],
+      autoLoadCurrentProject: false,
+      scanLinkedPackages: false,
+    });
+    return new LocalActionDockService(host, { enableManagement: options.enableManagement });
   }
-  if (options.appOptions) {
-    const app = await createActionDockApp(options.appOptions);
-    return new LocalActionDockService(app, { enableManagement: options.enableManagement });
+  if (options.runtimeOptions) {
+    const runtime = await createPackageRuntime(options.runtimeOptions);
+    const host = await createActionDockHost({
+      packages: [runtime],
+      autoLoadCurrentProject: false,
+      scanLinkedPackages: false,
+    });
+    return new LocalActionDockService(host, { enableManagement: options.enableManagement });
   }
 
   const host = await createActionDockHost({
@@ -41,7 +52,7 @@ export async function createActionDock(
  * 支持传入目标 HTTP 根地址、Profile 别名或完整连接配置选项。
  */
 export async function connectActionDock(
-  urlOrProfile: string | RemoteTargetOptions,
+  urlOrProfile: string | RemoteServiceOptions,
   options?: ConnectActionDockOptions
 ): Promise<RemoteActionDockService> {
   let targetUrl: string;

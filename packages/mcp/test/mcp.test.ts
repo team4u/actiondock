@@ -2,7 +2,7 @@ import { afterAll, describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createActionDockTarget, linkPackage } from "@actiondock/core";
+import { createActionDock, linkPackage } from "@actiondock/core";
 import { decodeText, defineAction } from "@actiondock/sdk";
 import { InMemoryTransport } from "@modelcontextprotocol/server";
 import { createActionDockMcpServer, toMcpResult } from "../src/adapter";
@@ -1186,45 +1186,45 @@ describe("@actiondock/mcp Adapter", () => {
     await server.close();
   });
 
-  it("coordinates target.close() upon server.close() when cascadeTargetClose is set", async () => {
-    let targetClosed = false;
-    const dummyTarget = await createActionDockTarget({ projectRoot: tmpDir });
-    const originalTargetClose = dummyTarget.close.bind(dummyTarget);
-    dummyTarget.close = async () => {
-      targetClosed = true;
-      return originalTargetClose();
+  it("coordinates service.close() upon server.close() when cascadeServiceClose is set", async () => {
+    let serviceClosed = false;
+    const dummyService = await createActionDock({ projectRoot: tmpDir });
+    const originalServiceClose = dummyService.close.bind(dummyService);
+    dummyService.close = async () => {
+      serviceClosed = true;
+      return originalServiceClose();
     };
 
     const server = await createActionDockMcpServer({
-      target: dummyTarget,
-      // 独立持有实例：close 级联释放 target
-      cascadeTargetClose: true,
+      service: dummyService,
+      // 独立持有实例：close 级联释放 service
+      cascadeServiceClose: true,
     });
 
     await server.close();
-    expect(targetClosed).toBe(true);
+    expect(serviceClosed).toBe(true);
   });
 
-  it("coordinates target.close() on startMcpHttpServer stop()", async () => {
-    let targetClosed = false;
-    const dummyTarget = await createActionDockTarget({ projectRoot: tmpDir });
-    const originalTargetClose = dummyTarget.close.bind(dummyTarget);
-    dummyTarget.close = async () => {
-      targetClosed = true;
-      return originalTargetClose();
+  it("coordinates service.close() on startMcpHttpServer stop()", async () => {
+    let serviceClosed = false;
+    const dummyService = await createActionDock({ projectRoot: tmpDir });
+    const originalServiceClose = dummyService.close.bind(dummyService);
+    dummyService.close = async () => {
+      serviceClosed = true;
+      return originalServiceClose();
     };
 
     const httpServer = await startMcpHttpServer({
-      target: dummyTarget,
+      service: dummyService,
       port: 0,
       host: "127.0.0.1",
     });
 
     await httpServer.stop();
-    expect(targetClosed).toBe(true);
+    expect(serviceClosed).toBe(true);
   });
 
-  it("passes customHome to target resolution correctly", async () => {
+  it("passes customHome to service resolution correctly", async () => {
     // 使用系统临时目录承载伪 Home，测试结束无论成败均兜底清理
     const fakeHome = mkdtempSync(join(tmpdir(), "test-mcp-custom-home-"));
     try {
@@ -1233,8 +1233,8 @@ describe("@actiondock/mcp Adapter", () => {
       const server = await createActionDockMcpServer({
         packageId: "test.mcp-pkg",
         customHome: fakeHome,
-        // 测试独立持有实例：close 必须级联释放 target 及其 SQLite 句柄，否则 Windows 下临时目录无法删除
-        cascadeTargetClose: true,
+        // 测试独立持有实例：close 必须级联释放 service 及其 SQLite 句柄，否则 Windows 下临时目录无法删除
+        cascadeServiceClose: true,
       });
       expect(server).toBeDefined();
       await server.close();
@@ -1243,23 +1243,25 @@ describe("@actiondock/mcp Adapter", () => {
     }
   });
 
-  it("startMcpHttpServer stop() transparently propagates target.close errors", async () => {
-    const dummyTarget: any = {
-      info: async () => ({ id: "test", version: "1.0.0" }),
-      listActions: async () => [],
-      listPlaybooks: async () => [],
+  it("startMcpHttpServer stop() transparently propagates service.close errors", async () => {
+    const dummyService: any = {
+      discovery: {
+        listPackages: async () => [],
+        listActions: async () => [],
+        listPlaybooks: async () => [],
+      },
       close: async () => {
-        throw new Error("Simulated Target Close Failure");
+        throw new Error("Simulated Service Close Failure");
       },
     };
 
     const httpServer = await startMcpHttpServer({
-      target: dummyTarget,
+      service: dummyService,
       port: 0,
       host: "127.0.0.1",
     });
 
-    await expect(httpServer.stop()).rejects.toThrow("Simulated Target Close Failure");
+    await expect(httpServer.stop()).rejects.toThrow("Simulated Service Close Failure");
   });
 
   it("maps playbooks to read-only MCP Resource and Prompt", async () => {

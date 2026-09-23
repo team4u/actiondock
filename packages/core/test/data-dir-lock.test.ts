@@ -5,7 +5,7 @@ import { hostname, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
-import { createActionDockApp } from "../src/app";
+import { createPackageRuntime } from "../src/app";
 import { createActionDockHost } from "../src/host";
 import { createDefaultSqliteDriver } from "../src/storage/driver";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
@@ -151,7 +151,7 @@ describe("数据目录排他锁与 Schema 版本保护测试", () => {
     writeFileSync(lockFile, JSON.stringify(deadLockInfo, null, 2), { mode: 0o600 });
 
     // 3. 新 Host 启动接管数据目录
-    const app = await createActionDockApp({
+    const app = await createPackageRuntime({
       projectConfig: {
         id: "pkg.recovery-test",
         name: "恢复测试包",
