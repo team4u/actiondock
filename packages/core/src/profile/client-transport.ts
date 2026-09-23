@@ -5,8 +5,8 @@ import { getInsecureDispatcher } from "../server/dispatcher";
 /**
  * 远端客户端传输层。
  *
- * 职责单一聚焦：鉴权头拼装、明文传输安全校验、insecure dispatcher 注入
- * 与 v2 -> v1 协议回退，作为全部远端端点函数的传输样板单一事实源。
+ * 职责单一聚焦：鉴权头拼装、明文传输安全校验与 insecure dispatcher 注入，
+ * 作为全部远端端点函数的传输样板单一事实源。
  */
 
 /**
@@ -107,8 +107,8 @@ export interface RemoteFetchInit {
  * 构建绑定传输上下文（Token、安全选项与调度器）的远端请求函数。
  *
  * 单一事实源收敛所有 fetchRemoteXxx 端点的传输样板：
- * 调用方仅需声明 path 与查询参数，鉴权头拼装、明文传输校验、
- * insecure dispatcher 注入与 v2 -> v1 协议回退均在此统一处理。
+ * 调用方仅需声明 path 与查询参数，鉴权头拼装、明文传输校验与
+ * insecure dispatcher 注入均在此统一处理。
  */
 export function createRemoteFetch(
   serverUrl: string,

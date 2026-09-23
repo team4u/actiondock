@@ -270,9 +270,9 @@ interface RunExecutionContext {
  *
  * 本类为执行编排壳：负责 Action 执行的全生命周期编排（校验、深度与环路检测、
  * 超时与取消竞态、子调用 uses 授权与错误分类），并将单一职责域委托至独立模块：
- * - Action 注册与检索委托 `ActionRegistry`（action-registry.ts）
+ * - Action 注册与检索委托 ActionRegistry（action-registry.ts）
  * - RunRecord 构造与落库委托 run-persistence.ts
- * - 跨包 Runner 构建与缓存委托 `PackageRunnerFactory`（package-runner-factory.ts）
+ * - 跨包动作调用委托注入的 ActionInvoker 并重返目标包执行服务
  *
  * 入参 (inputSchema) 与出参 (outputSchema) 的 JSON Schema 严格校验、嵌套 Action
  * 相互调用的环路检测（Cycle Detection）、超时 (Timeout) 与中断信号 (AbortSignal)
