@@ -1,3 +1,4 @@
+import { DOCTOR_ERROR, PACKAGE_NOT_ALLOWED } from "../../errors";
 import { runDoctorChecks } from "../../doctor/doctor";
 import { assertPackageAllowed, getSubPath, jsonResponse, type RouteContext } from "./common";
 
@@ -20,7 +21,7 @@ export async function handleDoctorRoute(ctx: RouteContext): Promise<Response | n
           {
             ok: false,
             error: {
-              code: "PACKAGE_NOT_ALLOWED",
+              code: PACKAGE_NOT_ALLOWED,
               message: "Global doctor check is forbidden when package allowlist is active. Please specify an allowed package.",
             },
           },
@@ -48,12 +49,12 @@ export async function handleDoctorRoute(ctx: RouteContext): Promise<Response | n
     });
     return jsonResponse({ ok: true, report }, 200, corsHeaders);
   } catch (err: any) {
-    if (err.code === "PACKAGE_NOT_ALLOWED" || err.status === 403) {
+    if (err.code === PACKAGE_NOT_ALLOWED || err.status === 403) {
       return jsonResponse(
         {
           ok: false,
           error: {
-            code: "PACKAGE_NOT_ALLOWED",
+            code: PACKAGE_NOT_ALLOWED,
             message: err.message || "Package is not in the allowed package list",
           },
         },
@@ -62,7 +63,7 @@ export async function handleDoctorRoute(ctx: RouteContext): Promise<Response | n
       );
     }
     return jsonResponse(
-      { ok: false, error: { code: "DOCTOR_ERROR", message: err.message } },
+      { ok: false, error: { code: DOCTOR_ERROR, message: err.message } },
       500,
       corsHeaders
     );

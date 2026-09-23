@@ -2,7 +2,19 @@ import { randomUUID } from "node:crypto";
 import type { ActionRef } from "@actiondock/sdk";
 import { parseActionRef } from "../../catalog/resolve-action";
 import { filterByIntent } from "../../filter";
-import { ACTION_NOT_FOUND, ACTION_TIMEOUT, IDEMPOTENCY_CONFLICT, INPUT_VALIDATION_FAILED, PACKAGE_NOT_FOUND } from "../../errors";
+import {
+  ACTION_EXECUTION_ERROR,
+  ACTION_NOT_FOUND,
+  ACTION_START_FAILED,
+  ACTION_TIMEOUT,
+  ACTIONS_LIST_ERROR,
+  IDEMPOTENCY_CONFLICT,
+  INPUT_VALIDATION_FAILED,
+  INVALID_JSON,
+  PACKAGE_FORBIDDEN,
+  PACKAGE_NOT_FOUND,
+  REQUEST_TOO_LARGE,
+} from "../../errors";
 import { InvalidJsonError, readJsonBody, RequestTooLargeError } from "../body";
 import { getSubPath, jsonResponse, type RouteContext } from "./common";
 
@@ -54,7 +66,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
       return jsonResponse(
         {
           ok: false,
-          error: { code: "ACTIONS_LIST_ERROR", message: err.message },
+          error: { code: ACTIONS_LIST_ERROR, message: err.message },
         },
         500,
         corsHeaders
@@ -73,7 +85,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
           {
             ok: false,
             error: {
-              code: "PACKAGE_FORBIDDEN",
+              code: PACKAGE_FORBIDDEN,
               message: `Package '${packageId}' is not in the allowed package list`,
             },
           },
@@ -113,7 +125,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
             {
               ok: false,
               error: {
-                code: "PACKAGE_FORBIDDEN",
+                code: PACKAGE_FORBIDDEN,
                 message: `Package '${parsed.packageId}' is not in the allowed package list`,
               },
             },
@@ -135,7 +147,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
           {
             ok: false,
             error: {
-              code: "PACKAGE_FORBIDDEN",
+              code: PACKAGE_FORBIDDEN,
               message: `Package '${spec.packageId}' is not in the allowed package list`,
             },
           },
@@ -202,7 +214,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
             ok: false,
             runId: randomUUID(),
             error: {
-              code: "PACKAGE_FORBIDDEN",
+              code: PACKAGE_FORBIDDEN,
               message: pkgId
                 ? `Package '${pkgId}' is not in the allowed package list`
                 : `Action '${actionRef}' does not belong to any allowed package`,
@@ -223,7 +235,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
           {
             ok: false,
             runId: randomUUID(),
-            error: { code: "REQUEST_TOO_LARGE", message: err.message },
+            error: { code: REQUEST_TOO_LARGE, message: err.message },
           },
           413,
           corsHeaders
@@ -234,7 +246,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
           {
             ok: false,
             runId: randomUUID(),
-            error: { code: "INVALID_JSON", message: err.message },
+            error: { code: INVALID_JSON, message: err.message },
           },
           400,
           corsHeaders
@@ -244,7 +256,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
         {
           ok: false,
           runId: randomUUID(),
-          error: { code: "INVALID_JSON", message: `Failed to parse request body: ${err.message}` },
+          error: { code: INVALID_JSON, message: `Failed to parse request body: ${err.message}` },
         },
         400,
         corsHeaders
@@ -323,7 +335,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
             ok: false,
             runId: randomUUID(),
             error: {
-              code: "ACTION_START_FAILED",
+              code: ACTION_START_FAILED,
               message: err.message || String(err),
             },
           },
@@ -381,7 +393,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
           ok: false,
           runId: randomUUID(),
           error: {
-            code: "ACTION_EXECUTION_ERROR",
+            code: ACTION_EXECUTION_ERROR,
             message: err.message || String(err),
           },
         },

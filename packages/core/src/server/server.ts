@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { NodeHttpServer } from "./http-server";
 import { createActionDock } from "../service/factory";
-import { NOT_FOUND, UNAUTHORIZED } from "../errors";
+import { NOT_FOUND, REQUEST_TOO_LARGE, UNAUTHORIZED } from "../errors";
 import { ensureDependencyClosure } from "../project/closure";
 import { findProjectRoot } from "../project/loader";
 import { listLinkedPackages, resolvePackageRoot } from "../registry/registry";
@@ -184,7 +184,7 @@ export async function startActionDockServer(
             {
               ok: false,
               error: {
-                code: "REQUEST_TOO_LARGE",
+                code: REQUEST_TOO_LARGE,
                 message: "Request body exceeds maximum allowed size",
               },
             },
@@ -224,7 +224,7 @@ export async function startActionDockServer(
             {
               ok: false,
               error: {
-                code: "REQUEST_TOO_LARGE",
+                code: REQUEST_TOO_LARGE,
                 message: "Request body exceeds maximum allowed size",
               },
             },

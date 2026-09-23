@@ -1,4 +1,5 @@
 import { filterByIntent } from "../../filter";
+import { PACKAGE_NOT_ALLOWED, PLAYBOOK_NOT_FOUND, PLAYBOOKS_LIST_ERROR } from "../../errors";
 import { assertPackageAllowed, getSubPath, jsonResponse, type RouteContext } from "./common";
 
 /**
@@ -39,12 +40,12 @@ export async function handlePlaybooksRoutes(ctx: RouteContext): Promise<Response
 
       return jsonResponse(pbs, 200, corsHeaders);
     } catch (err: any) {
-      if (err.code === "PACKAGE_NOT_ALLOWED" || err.status === 403) {
+      if (err.code === PACKAGE_NOT_ALLOWED || err.status === 403) {
         return jsonResponse(
           {
             ok: false,
             error: {
-              code: "PACKAGE_NOT_ALLOWED",
+              code: PACKAGE_NOT_ALLOWED,
               message: err.message || "Package is not in the allowed package list",
             },
           },
@@ -53,7 +54,7 @@ export async function handlePlaybooksRoutes(ctx: RouteContext): Promise<Response
         );
       }
       return jsonResponse(
-        { ok: false, error: { code: "PLAYBOOKS_LIST_ERROR", message: err.message } },
+        { ok: false, error: { code: PLAYBOOKS_LIST_ERROR, message: err.message } },
         500,
         corsHeaders
       );
@@ -72,7 +73,7 @@ export async function handlePlaybooksRoutes(ctx: RouteContext): Promise<Response
         {
           ok: false,
           error: {
-            code: "PACKAGE_NOT_ALLOWED",
+            code: PACKAGE_NOT_ALLOWED,
             message: err.message || `Package '${packageId}' is not in the allowed package list`,
           },
         },
@@ -90,7 +91,7 @@ export async function handlePlaybooksRoutes(ctx: RouteContext): Promise<Response
         {
           ok: false,
           error: {
-            code: "PLAYBOOK_NOT_FOUND",
+            code: PLAYBOOK_NOT_FOUND,
             message: err.message || `Playbook '${playbookId}' not found in package '${packageId}'`,
           },
         },
@@ -113,7 +114,7 @@ export async function handlePlaybooksRoutes(ctx: RouteContext): Promise<Response
           {
             ok: false,
             error: {
-              code: "PACKAGE_NOT_ALLOWED",
+              code: PACKAGE_NOT_ALLOWED,
               message: err.message || `Package '${pkgFromRef}' is not in the allowed package list`,
             },
           },
@@ -136,12 +137,12 @@ export async function handlePlaybooksRoutes(ctx: RouteContext): Promise<Response
       assertPackageAllowed(pkgId, options);
       return jsonResponse(pb, 200, corsHeaders);
     } catch (err: any) {
-      if (err.code === "PACKAGE_NOT_ALLOWED" || err.status === 403) {
+      if (err.code === PACKAGE_NOT_ALLOWED || err.status === 403) {
         return jsonResponse(
           {
             ok: false,
             error: {
-              code: "PACKAGE_NOT_ALLOWED",
+              code: PACKAGE_NOT_ALLOWED,
               message: err.message || "Package is not in the allowed package list",
             },
           },
@@ -150,7 +151,7 @@ export async function handlePlaybooksRoutes(ctx: RouteContext): Promise<Response
         );
       }
       return jsonResponse(
-        { ok: false, error: { code: "PLAYBOOK_NOT_FOUND", message: err.message } },
+        { ok: false, error: { code: PLAYBOOK_NOT_FOUND, message: err.message } },
         404,
         corsHeaders
       );

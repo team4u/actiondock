@@ -22,9 +22,11 @@ import type { RunOptions } from "../invocation/types";
 import { DiagnosticForwarder } from "./diagnostic";
 import {
   ActionDockError,
+  type ErrorCode,
   CAPABILITY_UNAVAILABLE,
   EXECUTION_ABORTED,
   HOST_PROCESS_EXITED,
+  IPC_ERROR,
   SERVICE_CLOSED,
 } from "../errors";
 import type {
@@ -151,7 +153,7 @@ export class IpcActionDockService implements ActionDockService {
             pending.resolve(resp.data);
           } else {
             const err = new ActionDockError(
-              resp.error?.code || "IPC_ERROR",
+              (resp.error?.code as ErrorCode) || IPC_ERROR,
               resp.error?.message || "IPC Service call failed",
               resp.error?.details as Record<string, unknown> | undefined
             );

@@ -164,21 +164,13 @@ export interface StateOptions {
 }
 
 /**
- * PackageRuntime 初始化配置选项。
+ * PackageRuntime 初始化公开配置选项（面向用户与外部配置）。
  */
 export interface PackageRuntimeOptions {
   /** 项目根目录绝对物理路径 */
   packageRoot?: string;
   /** 项目配置文件 (actiondock.json) 对象 */
   projectConfig?: ProjectConfig;
-  /** 显式注入的运行时平台适配 */
-  platform?: RuntimePlatform;
-  /** 显式注入的项目级运行时存储实例 */
-  storage?: RuntimeStorage;
-  /** 显式注入的全局运行时存储实例 */
-  globalStorage?: RuntimeStorage;
-  /** 显式注入的事件接收器 */
-  eventSink?: EventSink;
   /** 数据持久化存储目录 */
   dataDir?: string;
   /** 自定义家目录绝对路径 */
@@ -192,8 +184,6 @@ export interface PackageRuntimeOptions {
     | Record<string, ActionDefinition>;
   /** 仅支持当前包局部 Action 的动态解析委托函数 */
   actionResolver?: LocalActionResolver;
-  /** 显式注入的包物理与快照身份标识值对象 */
-  identity?: PackageIdentity;
   /**
    * 是否以数据目录持有者身份打开存储：true 时构造阶段收割遗留非终态运行记录。
    * 默认 true（PackageRuntime 主路径即持有者）；外部工具创建旁观视图时置 false。
@@ -209,8 +199,8 @@ export interface PackageRuntimeOptions {
   maxCallDepth?: number;
   /** 最大子任务数限制 */
   maxSubRuns?: number;
-  /** 执行宿主会话标识 */
-  hostSessionId?: string;
+  /** 显式注入的运行时平台适配 */
+  platform?: RuntimePlatform;
   /** 日志记录器 */
   logger?: Logger;
   /** 时钟源 */
@@ -219,8 +209,26 @@ export interface PackageRuntimeOptions {
   process?: ProcessAPI;
   /** 是否暴露调试与物理路径信息 */
   exposeDebugInfo?: boolean;
+}
+
+/**
+ * PackageRuntime 内部装配选项（框架内部接线与依赖注入）。
+ *
+ * 普通公开 API 仅暴露 PackageRuntimeOptions，此选项仅在 Host 容器或核心测试装配时使用。
+ */
+export interface PackageRuntimeInternalOptions extends PackageRuntimeOptions {
+  /** 显式注入的包物理与快照身份标识值对象 */
+  identity?: PackageIdentity;
+  /** 显式注入的项目级运行时存储实例 */
+  storage?: RuntimeStorage;
+  /** 显式注入的全局运行时存储实例 */
+  globalStorage?: RuntimeStorage;
+  /** 显式注入的事件接收器 */
+  eventSink?: EventSink;
   /** 子任务动作调用委托器 */
   actionInvoker?: ActionInvoker;
+  /** 执行宿主会话标识 */
+  hostSessionId?: string;
 }
 
 /**

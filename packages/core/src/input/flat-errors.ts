@@ -1,5 +1,6 @@
 import {
   ActionDockError,
+  type ErrorCode,
   INVALID_JSON,
   INVALID_JSON_LITERAL,
   INVALID_FLAT_ARGUMENT,
@@ -107,7 +108,7 @@ export class InputError extends ActionDockError {
   public readonly details?: Record<string, unknown> | string[];
 
   constructor(
-    code: string,
+    code: ErrorCode,
     message: string,
     details?: Record<string, unknown> | string[]
   ) {
@@ -122,7 +123,7 @@ export class InputError extends ActionDockError {
  * 扁平输入结构化异常类（继承 InputError 保持既有捕获兼容）。
  */
 export class FlatInputError extends InputError {
-  constructor(code: string, message: string, details?: Record<string, unknown>) {
+  constructor(code: ErrorCode, message: string, details?: Record<string, unknown>) {
     super(code, message, details);
     this.name = "FlatInputError";
     Object.setPrototypeOf(this, FlatInputError.prototype);

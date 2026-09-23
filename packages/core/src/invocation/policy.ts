@@ -1,9 +1,9 @@
-import type { RuntimeError } from "@actiondock/sdk";
 import {
   ACTION_CALL_CYCLE,
   ACTION_SUBRUN_LIMIT,
   UNDECLARED_ACTION_DEPENDENCY,
   ActionDockError,
+  type ErrorCode,
 } from "../errors";
 import type { PackageGraph } from "../catalog/graph";
 
@@ -45,11 +45,20 @@ export interface TargetActionInfo {
 }
 
 /**
+ * 调用治理策略错误描述。
+ */
+export interface PolicyError {
+  code: ErrorCode;
+  message: string;
+  details?: Record<string, unknown>;
+}
+
+/**
  * 环路检测结果。
  */
 export interface CycleCheckResult {
   callKey: string;
-  error?: RuntimeError;
+  error?: PolicyError;
 }
 
 /**
@@ -111,7 +120,7 @@ export class InvocationPolicy {
     targetPackageId: string,
     targetActionId: string,
     context: RootVisibilityContext
-  ): RuntimeError | undefined {
+  ): PolicyError | undefined {
     const isPublic = context.hostPublicPackageIds.has(targetPackageId);
     if (isPublic) {
       return undefined;
@@ -145,7 +154,7 @@ export class InvocationPolicy {
     caller: CallerActionInfo,
     target: TargetActionInfo,
     graph?: PackageGraph
-  ): RuntimeError | undefined {
+  ): PolicyError | undefined {
     // 同包调用完全自由开放，不作限制
     if (!caller.packageId || !target.packageId || caller.packageId === target.packageId) {
       return undefined;
@@ -197,7 +206,7 @@ export class InvocationPolicy {
     callStack: readonly string[],
     targetActionId: string,
     maxDepthOverride?: number
-  ): RuntimeError | undefined {
+  ): PolicyError | undefined {
     const limit = maxDepthOverride ?? this.maxCallDepth;
     if (callStack.length >= limit) {
       return {
@@ -274,7 +283,7 @@ export class InvocationPolicy {
    * @param rootRunId 根运行标识符
    * @returns 超限错误或 undefined
    */
-  public checkSubRunQuota(rootRunId: string): RuntimeError | undefined {
+  public checkSubRunQuota(rootRunId: string): PolicyError | undefined {
     const current = this.activeSubRunsPerRoot.get(rootRunId) || 0;
     if (current >= this.maxSubRuns) {
       return {

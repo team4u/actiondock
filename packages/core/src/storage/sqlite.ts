@@ -12,7 +12,7 @@ import {
 import { type Clock, SystemClock } from "./clock";
 import { createDefaultSqliteDriver } from "./driver";
 import { safeParseStoredJson } from "./utils";
-import { ActionDockError, AMBIGUOUS_STATE_KEY } from "../errors";
+import { ActionDockError, AMBIGUOUS_STATE_KEY, STORED_ERROR_DECODE_FAILED, UNSUPPORTED_STORAGE_SCHEMA } from "../errors";
 import {
   IDEMPOTENCY_RETENTION_MS,
   STORAGE_SCHEMA_VERSION,
@@ -180,7 +180,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       const err: any = new Error(
         `UNSUPPORTED_STORAGE_SCHEMA: Database schema version ${version} is incompatible (expected ${STORAGE_SCHEMA_VERSION}). Silent upgrade and database overwriting are strictly prohibited.`
       );
-      err.code = "UNSUPPORTED_STORAGE_SCHEMA";
+      err.code = UNSUPPORTED_STORAGE_SCHEMA;
       throw err;
     }
 
@@ -905,7 +905,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       error !== undefined
         ? typeof error === "object" && error !== null && typeof (error as any).message === "string"
           ? error
-          : { code: "STORED_ERROR_DECODE_FAILED", message: String(error) }
+          : { code: STORED_ERROR_DECODE_FAILED, message: String(error) }
         : undefined;
 
     return {

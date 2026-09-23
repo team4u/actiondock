@@ -3,7 +3,7 @@ import { createServer as createHttpsServer, type Server as HttpsServer } from "n
 import { readFileSync } from "node:fs";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { SERVER_ERROR } from "../errors";
+import { BAD_REQUEST, SERVER_ERROR } from "../errors";
 import { formatHostForUrl } from "./server";
 import type { ServerTlsOptions } from "./types";
 
@@ -151,7 +151,7 @@ export function createRequestListener(
           JSON.stringify({
             ok: false,
             error: {
-              code: "BAD_REQUEST",
+              code: BAD_REQUEST,
               message: err?.message || String(err),
             },
           })

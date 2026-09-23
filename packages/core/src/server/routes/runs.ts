@@ -1,4 +1,15 @@
-import { EXECUTION_FAILED } from "../../errors";
+import {
+  CAPABILITY_UNAVAILABLE,
+  EVENT_BACKPRESSURE_LIMIT,
+  EVENT_CURSOR_EXPIRED,
+  EXECUTION_FAILED,
+  PACKAGE_FORBIDDEN,
+  RUN_ALREADY_FINISHED,
+  RUN_INTERRUPTED,
+  RUN_NOT_FOUND,
+  RUNS_CLEAR_ERROR,
+  RUNS_LIST_ERROR,
+} from "../../errors";
 import { isTerminalRunStatus } from "../../storage/types";
 import type { ExecutionEvent } from "@actiondock/sdk";
 import { readJsonBody } from "../body";
@@ -30,7 +41,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
           {
             ok: false,
             error: {
-              code: "PACKAGE_FORBIDDEN",
+              code: PACKAGE_FORBIDDEN,
               message: `Package '${packageId}' is not in the allowed package list`,
             },
           },
@@ -61,7 +72,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
       );
     } catch (err: any) {
       return jsonResponse(
-        { ok: false, error: { code: "RUNS_LIST_ERROR", message: err.message } },
+        { ok: false, error: { code: RUNS_LIST_ERROR, message: err.message } },
         500,
         corsHeaders
       );
@@ -92,7 +103,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
           {
             ok: false,
             error: {
-              code: "PACKAGE_FORBIDDEN",
+              code: PACKAGE_FORBIDDEN,
               message: `Package '${packageId}' is not in the allowed package list`,
             },
           },
@@ -109,7 +120,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
       return jsonResponse({ ok: true, clearedCount }, 200, corsHeaders);
     } catch (err: any) {
       return jsonResponse(
-        { ok: false, error: { code: "RUNS_CLEAR_ERROR", message: err.message } },
+        { ok: false, error: { code: RUNS_CLEAR_ERROR, message: err.message } },
         500,
         corsHeaders
       );
@@ -124,7 +135,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
 
     if (!run) {
       return jsonResponse(
-        { ok: false, error: { code: "RUN_NOT_FOUND", message: `Run '${runId}' not found` } },
+        { ok: false, error: { code: RUN_NOT_FOUND, message: `Run '${runId}' not found` } },
         404,
         corsHeaders
       );
@@ -139,7 +150,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
         {
           ok: false,
           error: {
-            code: "PACKAGE_FORBIDDEN",
+            code: PACKAGE_FORBIDDEN,
             message: `Package '${run.packageId}' is not in the allowed package list`,
           },
         },
@@ -170,7 +181,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
         {
           ok: false,
           error: {
-            code: "CAPABILITY_UNAVAILABLE",
+            code: CAPABILITY_UNAVAILABLE,
             message: "EventsPort is not supported by this ActionDock service",
           },
         },
@@ -186,12 +197,12 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
     try {
       firstResult = await iterator.next();
     } catch (err: any) {
-      if (err?.code === "EVENT_CURSOR_EXPIRED") {
+      if (err?.code === EVENT_CURSOR_EXPIRED) {
         return jsonResponse(
           {
             ok: false,
             error: {
-              code: "EVENT_CURSOR_EXPIRED",
+              code: EVENT_CURSOR_EXPIRED,
               message: err.message || "Event cursor has expired",
               details: err.details,
             },
@@ -223,7 +234,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
               encoder.encode(`${idField}event: ${eventType}\ndata: ${JSON.stringify(evt)}\n\n`)
             );
             // 若首条事件为背压终止事件，立即关闭通道
-            if (evt.type === "error" && (evt as any).error?.code === "EVENT_BACKPRESSURE_LIMIT") {
+            if (evt.type === "error" && (evt as any).error?.code === EVENT_BACKPRESSURE_LIMIT) {
               controller.close();
               return;
             }
@@ -245,7 +256,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
             );
 
             // 若收到背压截断终止事件，正常关闭流通道
-            if (evt.type === "error" && (evt as any).error?.code === "EVENT_BACKPRESSURE_LIMIT") {
+            if (evt.type === "error" && (evt as any).error?.code === EVENT_BACKPRESSURE_LIMIT) {
               break;
             }
           }
@@ -262,7 +273,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
                       ok: false,
                       runId,
                       error: run.error || {
-                        code: run.status === "interrupted" ? "RUN_INTERRUPTED" : EXECUTION_FAILED,
+                        code: run.status === "interrupted" ? RUN_INTERRUPTED : EXECUTION_FAILED,
                         message: `Run finished with status ${run.status}`,
                       },
                     },
@@ -304,7 +315,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
         {
           ok: false,
           error: {
-            code: "RUN_NOT_FOUND",
+            code: RUN_NOT_FOUND,
             message: `Run '${runId}' not found`,
           },
         },
@@ -322,7 +333,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
         {
           ok: false,
           error: {
-            code: "PACKAGE_FORBIDDEN",
+            code: PACKAGE_FORBIDDEN,
             message: `Package '${run.packageId || "unknown"}' is not in the allowed package list`,
           },
         },
@@ -345,7 +356,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
           {
             ok: false,
             error: {
-              code: "PACKAGE_FORBIDDEN",
+              code: PACKAGE_FORBIDDEN,
               message: `Package '${run.packageId}' is not in the allowed package list`,
             },
           },
@@ -367,7 +378,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
         {
           ok: false,
           error: {
-            code: "RUN_NOT_FOUND",
+            code: RUN_NOT_FOUND,
             message: `Run '${runId}' not found`,
           },
         },
@@ -381,7 +392,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
         {
           ok: false,
           error: {
-            code: "RUN_ALREADY_FINISHED",
+            code: RUN_ALREADY_FINISHED,
             message: `Run '${runId}' has already finished with status '${cancelResult.status}'`,
             status: cancelResult.status,
           },

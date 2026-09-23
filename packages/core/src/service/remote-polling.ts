@@ -7,7 +7,7 @@
  */
 
 import type { ExecutionResult, RunRecord } from "@actiondock/sdk";
-import { ACTION_CANCELLED, EXECUTION_FAILED, TIMEOUT } from "../errors";
+import { ACTION_CANCELLED, EXECUTION_FAILED, RUN_INTERRUPTED, TIMEOUT } from "../errors";
 import { isTerminalRunStatus } from "../storage/types";
 import { SERVICE_CLOSED } from "./types";
 
@@ -36,7 +36,7 @@ export function formatTerminalRunResult(run: RunRecord, runId: string): Executio
       ok: false,
       runId,
       error: run.error || {
-        code: "RUN_INTERRUPTED",
+        code: RUN_INTERRUPTED,
         message: `Run '${runId}' was interrupted`,
       },
     };

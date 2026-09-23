@@ -4,9 +4,13 @@ import {
   CAPABILITY_UNAVAILABLE,
   INVALID_ARGUMENT,
   INVALID_PACKAGE_ID,
+  PACKAGE_NOT_ALLOWED,
   PACKAGE_NOT_FOUND,
   PATH_TRAVERSAL,
+  STATE_CLEAR_ERROR,
+  STATE_KEY_ERROR,
   STATE_KEY_NOT_FOUND,
+  STATE_LIST_ERROR,
 } from "../../errors";
 import { readJsonBody } from "../body";
 import { assertPackageAllowed, getSubPath, jsonResponse, resolveTargetPackageId, type RouteContext } from "./common";
@@ -72,12 +76,12 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
       });
       return jsonResponse({ ok: true, packageId: targetPackageId, keys }, 200, corsHeaders);
     } catch (err: any) {
-      if (err.code === "PACKAGE_NOT_ALLOWED" || err.status === 403) {
+      if (err.code === PACKAGE_NOT_ALLOWED || err.status === 403) {
         return jsonResponse(
           {
             ok: false,
             error: {
-              code: "PACKAGE_NOT_ALLOWED",
+              code: PACKAGE_NOT_ALLOWED,
               message: err.message || "Package is not in the allowed package list",
             },
           },
@@ -87,7 +91,7 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
       }
       const isClient = isClientStateError(err);
       return jsonResponse(
-        { ok: false, error: { code: isClient ? "INVALID_ARGUMENT" : "STATE_LIST_ERROR", message: err.message } },
+        { ok: false, error: { code: isClient ? INVALID_ARGUMENT : STATE_LIST_ERROR, message: err.message } },
         isClient ? 400 : 500,
         corsHeaders
       );
@@ -112,12 +116,12 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
       });
       return jsonResponse({ ok: true, packageId: targetPackageId, clearedCount }, 200, corsHeaders);
     } catch (err: any) {
-      if (err.code === "PACKAGE_NOT_ALLOWED" || err.status === 403) {
+      if (err.code === PACKAGE_NOT_ALLOWED || err.status === 403) {
         return jsonResponse(
           {
             ok: false,
             error: {
-              code: "PACKAGE_NOT_ALLOWED",
+              code: PACKAGE_NOT_ALLOWED,
               message: err.message || "Package is not in the allowed package list",
             },
           },
@@ -127,7 +131,7 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
       }
       const isClient = isClientStateError(err);
       return jsonResponse(
-        { ok: false, error: { code: isClient ? "INVALID_ARGUMENT" : "STATE_CLEAR_ERROR", message: err.message } },
+        { ok: false, error: { code: isClient ? INVALID_ARGUMENT : STATE_CLEAR_ERROR, message: err.message } },
         isClient ? 400 : 500,
         corsHeaders
       );
@@ -215,12 +219,12 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
         return jsonResponse({ ok: true, packageId: targetPackageId, key, deleted: true }, 200, corsHeaders);
       }
     } catch (err: any) {
-      if (err.code === "PACKAGE_NOT_ALLOWED" || err.status === 403) {
+      if (err.code === PACKAGE_NOT_ALLOWED || err.status === 403) {
         return jsonResponse(
           {
             ok: false,
             error: {
-              code: "PACKAGE_NOT_ALLOWED",
+              code: PACKAGE_NOT_ALLOWED,
               message: err.message || "Package is not in the allowed package list",
             },
           },
@@ -230,7 +234,7 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
       }
       const isClient = isClientStateError(err);
       return jsonResponse(
-        { ok: false, error: { code: isClient ? "INVALID_ARGUMENT" : "STATE_KEY_ERROR", message: err.message } },
+        { ok: false, error: { code: isClient ? INVALID_ARGUMENT : STATE_KEY_ERROR, message: err.message } },
         isClient ? 400 : 500,
         corsHeaders
       );

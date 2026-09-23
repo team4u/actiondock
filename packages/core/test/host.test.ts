@@ -1137,7 +1137,7 @@ actions:
     }
   });
 
-  it("当 Host 初始化失败时，外部传入的 PackageRuntime 实例不被 close() 并可继续使用", async () => {
+  it("当 Host 初始化失败时，执行回滚并安全关闭所有已注册的 Runtime 实例", async () => {
     let appClosed = false;
     const externalApp = await createPackageRuntime({
       projectConfig: { id: "pkg.external", name: "外部包", version: "1.0.0" },
@@ -1183,7 +1183,7 @@ actions:
         })
       );
 
-      // 1. 测试 createActionDockHost 抛错时 externalApp 未被关闭
+      // 测试 createActionDockHost 抛错时回滚并关闭已注册的 runtime
       let createErr: any;
       try {
         await createActionDockHost({
@@ -1195,28 +1195,7 @@ actions:
         createErr = err;
       }
       expect(createErr?.code).toBe("PROJECT_BUSY");
-      expect(appClosed).toBe(false);
-
-      // 外部 App 依然处于打开状态，可正常执行动作
-      const execRes1 = await externalApp.runAction("ping", {});
-      expect(execRes1.ok).toBe(true);
-
-      // 2. 测试 new DefaultActionDockHost 抛错时 externalApp 未被关闭
-      let constructErr: any;
-      try {
-        new DefaultActionDockHost({
-          projectRoot: tempDir,
-          packages: [externalApp],
-          autoLoadCurrentProject: true,
-        });
-      } catch (err) {
-        constructErr = err;
-      }
-      expect(constructErr?.code).toBe("PROJECT_BUSY");
-      expect(appClosed).toBe(false);
-
-      const execRes2 = await externalApp.runAction("ping", {});
-      expect(execRes2.ok).toBe(true);
+      expect(appClosed).toBe(true);
     } finally {
       try {
         dummyChild.kill("SIGKILL");
@@ -1227,14 +1206,14 @@ actions:
     }
   });
 
-  it("外部创建的 App 实例传入 Host 后，在 host.close() 执行后未被 close 并保持独立存活", async () => {
+  it("传入 Host 的 Runtime 实例在 host.close() 执行后统一完整关闭", async () => {
     let externalClosed = false;
     let internalClosed = false;
 
     const externalApp = await createPackageRuntime({
       projectConfig: {
         id: "pkg.borrowed-app",
-        name: "借用包",
+        name: "托管包",
         version: "1.0.0",
         actions: {
           ping: { entry: "", description: "存活探针" },
@@ -1282,16 +1261,9 @@ actions:
       // 执行 Host 关闭
       await host.close();
 
-      // 验证内部创建的 App 被正常关闭，而外部借用的 App 绝不被关闭
+      // 验证 Host 统一所有权：内部创建与外部传入的 Runtime 均被安全关闭
       expect(internalClosed).toBe(true);
-      expect(externalClosed).toBe(false);
-
-      // 验证外部借用的 App 依然处于存活可用状态
-      const runRes = await externalApp.runAction("ping", {});
-      expect(runRes.ok).toBe(true);
-      if (runRes.ok) {
-        expect(runRes.data).toEqual({ status: "alive" });
-      }
+      expect(externalClosed).toBe(true);
     } finally {
       await externalApp.close();
       expect(externalClosed).toBe(true);

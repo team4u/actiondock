@@ -10,7 +10,9 @@ import type {
   ActionSummary,
   ListActionsOptions,
   PackageInfo,
+  PackageRuntime,
   PackageRuntimeOptions,
+  PackageRuntimeInternalOptions,
   PlaybookSpec,
   PlaybookSummary,
 } from "../package/types";
@@ -21,7 +23,13 @@ import type {
 import type { ActionDockHostOptions } from "../host/types";
 import type { RuntimePlatform } from "../platform/types";
 import type { StateEntry } from "../storage/types";
-import { ActionDockError } from "../errors";
+import {
+  ActionDockError,
+  type ErrorCode,
+  PROTOCOL_UNSUPPORTED,
+  SERVICE_RESULT_UNKNOWN,
+  SERVICE_CLOSED,
+} from "../errors";
 
 /**
  * 公开运行控制选项（RunOptions）。
@@ -44,18 +52,16 @@ export interface RunOptions {
 export const ACTIONDOCK_PROTOCOL_VERSION = "2.0";
 
 /**
- * 服务端/通信协议错误码常量。
+ * 服务端/通信协议错误码常量（单一事实源引用自 errors.ts）。
  */
-export const PROTOCOL_UNSUPPORTED = "PROTOCOL_UNSUPPORTED";
-export const SERVICE_RESULT_UNKNOWN = "SERVICE_RESULT_UNKNOWN";
-export const SERVICE_CLOSED = "SERVICE_CLOSED";
+export { PROTOCOL_UNSUPPORTED, SERVICE_RESULT_UNKNOWN, SERVICE_CLOSED };
 
 /**
  * 结构化服务通信异常类。
  */
 export class ServiceError extends ActionDockError {
   readonly details?: Record<string, unknown>;
-  constructor(code: string, message: string, details?: Record<string, unknown>) {
+  constructor(code: ErrorCode, message: string, details?: Record<string, unknown>) {
     super(code, message, details);
     this.name = "ServiceError";
     this.details = details;
@@ -319,15 +325,15 @@ export interface CreateActionDockOptions {
   /** 模式类型（可选） */
   type?: "local";
   /** 单包 PackageRuntime 初始化配置 */
-  runtimeOptions?: PackageRuntimeOptions;
+  runtimeOptions?: PackageRuntimeOptions | PackageRuntimeInternalOptions;
   /** 宿主 Host 初始化配置 */
   hostOptions?: ActionDockHostOptions;
   /** 当前工程根目录绝对路径 */
   projectRoot?: string;
   /** 是否自动加载当前工程（默认为 true） */
   autoLoadCurrentProject?: boolean;
-  /** 预注册包配置列表 */
-  packages?: Array<PackageRuntimeOptions>;
+  /** 预注册包配置列表（PackageRuntime 实例、PackageRuntimeOptions 配置或包目录绝对物理路径） */
+  packages?: Array<PackageRuntime | PackageRuntimeOptions | PackageRuntimeInternalOptions | string>;
   /** 自定义 ActionDock 家目录 */
   customHome?: string;
   /** 是否采用纯内存运行模式 */

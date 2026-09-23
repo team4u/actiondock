@@ -9,6 +9,7 @@ import {
   toCliInputErrorEnvelope,
   InputError,
 } from "../../src/input";
+import { INVALID_ARGUMENT } from "../../src/errors";
 
 describe("Phase 9: Input Advice v1 与元数据构建器", () => {
   describe("Schema Sanity 阶段（Section 44）", () => {
@@ -538,10 +539,10 @@ describe("Phase 9: Input Advice v1 与元数据构建器", () => {
     });
 
     it("toCliInputErrorEnvelope 与 formatInputErrorForCli 格式化", () => {
-      const err = new InputError("CUSTOM_ERR", "Something failed", { path: "a.b" });
+      const err = new InputError(INVALID_ARGUMENT, "Something failed", { path: "a.b" });
       const envelope = toCliInputErrorEnvelope(err);
       expect(envelope.ok).toBe(false);
-      expect(envelope.error.code).toBe("CUSTOM_ERR");
+      expect(envelope.error.code).toBe(INVALID_ARGUMENT);
       expect(envelope.error.message).toBe("Something failed");
       expect(envelope.error.details).toEqual({ path: "a.b" });
 

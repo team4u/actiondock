@@ -44,6 +44,7 @@ import {
   PROJECT_BUSY,
   PROJECT_RECOVERY_REQUIRED,
   UNDECLARED_ACTION_DEPENDENCY,
+  type ErrorCode,
 } from "../errors";
 import { InvocationPolicy } from "../invocation/policy";
 import { DataDirLock } from "../storage/data-dir-lock";
@@ -90,15 +91,10 @@ function isPackageRuntime(item: unknown): item is PackageRuntime {
   );
 }
 
-/**
- * ActionDock 统一多包宿主容器默认实现。
- * 负责聚合与调度多个 PackageRuntime 实例，提供跨包引用路由、依赖声明校验与资源配额控制。
- */
 export class DefaultActionDockHost implements ActionDockHost {
   public readonly hostSessionId: string;
   public readonly options: ActionDockHostOptions;
   private runtimes = new Map<string, PackageRuntime>();
-  private readonly internallyCreatedRuntimes = new Set<PackageRuntime>();
   public readonly policy: InvocationPolicy;
   private hostPublicPackageIds = new Set<string>();
   private maxCallDepth: number;
@@ -137,6 +133,12 @@ export class DefaultActionDockHost implements ActionDockHost {
     }
 
     if (internalOptions?.deferInit) {
+      try {
+        this.registerExplicitPackages(this.options);
+      } catch (err) {
+        this.rollbackSync();
+        throw err;
+      }
       return;
     }
 
@@ -166,24 +168,33 @@ export class DefaultActionDockHost implements ActionDockHost {
   }
 
   public async initializeAsync(): Promise<void> {
-    this.initializeSync();
+    // 阶段二：自动加载当前工程（若发现工程根目录且未显式禁用）
+    if (this.options.autoLoadCurrentProject !== false) {
+      this.loadCurrentProject(this.options);
+    }
+
+    // 阶段三：扫描已软链接的外部包并注册至 Host
+    if (this.options.scanLinkedPackages) {
+      this.registerLinkedPackages(this.options);
+    }
+
+    this.rebuildGraphAndCatalog();
   }
 
   /**
    * 异步安全回滚初始化失败时所占用的资源。
    */
   public async rollbackInitialization(): Promise<void> {
-    const internalRuntimes = Array.from(this.internallyCreatedRuntimes);
+    const allRuntimes = Array.from(this.runtimes.values());
     await Promise.all(
-      internalRuntimes.map(async (runtime) => {
+      allRuntimes.map(async (runtime) => {
         try {
           await runtime.close();
         } catch {
-          // 忽略内部 Runtime 关闭异常
+          // 忽略 Runtime 关闭异常
         }
       })
     );
-    this.internallyCreatedRuntimes.clear();
     this.runtimes.clear();
 
     try {
@@ -210,8 +221,8 @@ export class DefaultActionDockHost implements ActionDockHost {
     }
     this.dataDirLock = undefined;
 
-    // 仅安全关闭宿主内部创建的子 runtime，外部传入的 runtime 保持调用方生命周期与所有权
-    for (const runtime of this.internallyCreatedRuntimes) {
+    // 安全关闭宿主管理的所有 Runtime 实例
+    for (const runtime of this.runtimes.values()) {
       try {
         const closePromise = runtime.close();
         if (closePromise && typeof (closePromise as any).catch === "function") {
@@ -221,7 +232,6 @@ export class DefaultActionDockHost implements ActionDockHost {
         // 忽略 runtime 关闭异常
       }
     }
-    this.internallyCreatedRuntimes.clear();
     this.runtimes.clear();
 
     try {
@@ -234,7 +244,7 @@ export class DefaultActionDockHost implements ActionDockHost {
   }
 
   /**
-   * 阶段函数：注册显式传入的 packages 列表（现成 Runtime 实例或 PackageRuntimeOptions 配置）。
+   * 阶段函数：注册显式传入的 packages 列表（PackageRuntimeOptions 配置或包目录物理路径）。
    */
   private registerExplicitPackages(options: ActionDockHostOptions): void {
     if (!options.packages || !Array.isArray(options.packages)) {
@@ -244,23 +254,24 @@ export class DefaultActionDockHost implements ActionDockHost {
       if (isPackageRuntime(item)) {
         this.registerRuntimeInternal(item, true);
       } else {
+        const packageOptions: PackageRuntimeOptions =
+          typeof item === "string" ? { packageRoot: item } : item;
         const runtime = new DefaultPackageRuntime({
-          ...item,
+          ...packageOptions,
           hostSessionId: this.hostSessionId,
-          globalStorage: item.globalStorage ?? this.getGlobalStorage(),
-          platform: item.platform ?? options.platform,
-          inMemory: item.inMemory ?? options.inMemory,
-          customHome: item.customHome ?? options.customHome,
-          dataDir: item.dataDir ?? options.dataDir,
-          clock: item.clock ?? options.clock,
-          process: item.process ?? options.process,
-          logger: item.logger ?? options.logger,
-          eventSink: item.eventSink ?? this.eventSink,
-          maxCallDepth: item.maxCallDepth ?? this.maxCallDepth,
-          maxSubRuns: item.maxSubRuns ?? this.maxSubRuns,
+          globalStorage: (packageOptions as any).globalStorage ?? this.getGlobalStorage(),
+          platform: packageOptions.platform ?? options.platform,
+          inMemory: packageOptions.inMemory ?? options.inMemory,
+          customHome: packageOptions.customHome ?? options.customHome,
+          dataDir: packageOptions.dataDir ?? options.dataDir,
+          clock: packageOptions.clock ?? options.clock,
+          process: packageOptions.process ?? options.process,
+          logger: packageOptions.logger ?? options.logger,
+          eventSink: (packageOptions as any).eventSink ?? this.eventSink,
+          maxCallDepth: packageOptions.maxCallDepth ?? this.maxCallDepth,
+          maxSubRuns: packageOptions.maxSubRuns ?? this.maxSubRuns,
           recoverOrphans: this.recoverOrphans,
         });
-        this.internallyCreatedRuntimes.add(runtime);
         this.registerRuntimeInternal(runtime, true);
       }
     }
@@ -335,7 +346,6 @@ export class DefaultActionDockHost implements ActionDockHost {
             maxSubRuns: this.maxSubRuns,
             recoverOrphans: this.recoverOrphans,
           });
-          this.internallyCreatedRuntimes.add(runtime);
           this.registerRuntimeInternal(runtime, isDirectOrRoot);
         }
       }
@@ -393,7 +403,6 @@ export class DefaultActionDockHost implements ActionDockHost {
           maxSubRuns: this.maxSubRuns,
           recoverOrphans: this.recoverOrphans,
         });
-        this.internallyCreatedRuntimes.add(runtime);
         this.registerRuntimeInternal(runtime, true);
       } catch (err: any) {
         const errDetail = err?.message || String(err);
@@ -552,7 +561,7 @@ export class DefaultActionDockHost implements ActionDockHost {
         }
         const result = await ticket.result;
         if (!result.ok) {
-          throw new ActionDockError(result.error.code, result.error.message, result.error.details);
+          throw new ActionDockError(result.error.code as ErrorCode, result.error.message, result.error.details);
         }
         return result.data;
       } finally {
@@ -943,7 +952,7 @@ export class DefaultActionDockHost implements ActionDockHost {
   private getGlobalStorage(): RuntimeStorage {
     if (!this.globalStorage) {
       const hasInMemoryPackage = this.options.packages?.some(
-        (item) => !isPackageRuntime(item) && item.inMemory
+        (item) => typeof item !== "string" && !isPackageRuntime(item) && item.inMemory
       );
       const inMemory = Boolean(this.options.inMemory || hasInMemoryPackage);
       this.globalStorage =
@@ -1142,17 +1151,16 @@ export class DefaultActionDockHost implements ActionDockHost {
     if (this.isClosed) return;
     this.isClosed = true;
 
-    const internalRuntimes = Array.from(this.internallyCreatedRuntimes);
+    const allRuntimes = Array.from(this.runtimes.values());
     await Promise.all(
-      internalRuntimes.map(async (runtime) => {
+      allRuntimes.map(async (runtime) => {
         try {
           await runtime.close(options);
         } catch {
-          // 忽略内部 Runtime 关闭异常，确保全部安全释放
+          // 忽略 Runtime 关闭异常，确保全部安全释放
         }
       })
     );
-    this.internallyCreatedRuntimes.clear();
     this.runtimes.clear();
 
     try {
@@ -1179,6 +1187,8 @@ export async function createActionDockHost(
 ): Promise<ActionDockHost> {
   let createdHost: DefaultActionDockHost | undefined;
   try {
+    createdHost = new DefaultActionDockHost(options, { deferInit: true });
+
     if (options.autoLoadCurrentProject !== false) {
       const root = resolveProjectRoot(options, () => findProjectRoot());
       if (root) {
@@ -1195,7 +1205,6 @@ export async function createActionDockHost(
       }
     }
 
-    createdHost = new DefaultActionDockHost(options, { deferInit: true });
     await createdHost.initializeAsync();
     return createdHost;
   } catch (err) {

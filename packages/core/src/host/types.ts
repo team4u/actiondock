@@ -11,6 +11,7 @@ import type {
   PackageInfo,
   PackageRuntime,
   PackageRuntimeOptions,
+  PackageRuntimeInternalOptions,
   ActionSpec,
   ActionSummary,
   ListActionsOptions,
@@ -32,8 +33,8 @@ import type { StateEntry } from "../storage/types";
  * ActionDock 宿主容器初始化配置选项。
  */
 export interface ActionDockHostOptions {
-  /** 显式预注册的包列表（现成 PackageRuntime 实例或 PackageRuntimeOptions 配置）。外部传入的 Runtime 属于借用（borrowed），生命周期完全由调用方负责管理，Host 关闭或初始化失败时仅解绑引用并清理自身内部实例，严禁关闭外部借用的 Runtime 实例。 */
-  packages?: Array<PackageRuntime | PackageRuntimeOptions>;
+  /** 显式预注册的包列表（PackageRuntime 实例、PackageRuntimeOptions 配置或包目录物理路径）。Host 统一管理其生命周期，关闭时统一释放。 */
+  packages?: Array<PackageRuntime | PackageRuntimeOptions | PackageRuntimeInternalOptions | string>;
   /** 当前工程根目录绝对物理路径 */
   projectRoot?: string;
   /** 是否自动加载当前工程（默认为 true） */
@@ -193,6 +194,6 @@ export interface ActionDockHost {
   /** 注册新的 Runtime 实例至当前宿主容器 */
   registerRuntime(runtime: PackageRuntime): void;
 
-  /** 优雅关闭宿主容器。仅对内部创建的 Runtime 实例执行 close 并安全释放底层资源；外部传入借用的 Runtime 实例生命周期完全由调用方负责管理，Host 关闭时仅解绑引用并清理自身内部实例。 */
+  /** 优雅关闭宿主容器。统一完整关闭所管理的所有 Runtime 实例并安全释放底层资源。 */
   close(options?: { graceMs?: number }): Promise<void>;
 }

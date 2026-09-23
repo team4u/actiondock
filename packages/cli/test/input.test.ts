@@ -18,6 +18,7 @@ import {
   FlatInputError,
   InputError,
 } from "@actiondock/core/project";
+import { INVALID_ARGUMENT, INVALID_FLAT_ARGUMENT } from "@actiondock/core";
 
 const cliPath = resolve(import.meta.dirname, "../bin/ad.js");
 
@@ -160,11 +161,11 @@ describe("CLI Action Input Resolution - Unit Tests", () => {
   });
 
   it("verifies InputError and FlatInputError inheritance", () => {
-    const baseErr = new InputError("TEST_CODE", "test message");
+    const baseErr = new InputError(INVALID_ARGUMENT, "test message");
     expect(baseErr).toBeInstanceOf(InputError);
     expect(baseErr).not.toBeInstanceOf(FlatInputError);
 
-    const flatErr = new FlatInputError("FLAT_CODE", "flat message");
+    const flatErr = new FlatInputError(INVALID_FLAT_ARGUMENT, "flat message");
     expect(flatErr).toBeInstanceOf(FlatInputError);
     expect(flatErr).toBeInstanceOf(InputError);
   });

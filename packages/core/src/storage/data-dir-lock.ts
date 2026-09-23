@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, renameSync, statSync, writeFileSync } from "node
 import { hostname } from "node:os";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
+import { DATA_DIR_IN_USE, DATA_DIR_RECOVERY_REQUIRED } from "../errors";
 import {
   acquireDirectoryLock,
   cleanStaleQuarantines,
@@ -203,7 +204,7 @@ export class DataDirLock {
       acquireTimeoutMs: options.acquireTimeoutMs,
       createLockError(message) {
         const timeoutErr: any = new Error(message);
-        timeoutErr.code = "DATA_DIR_IN_USE";
+        timeoutErr.code = DATA_DIR_IN_USE;
         return timeoutErr;
       },
       messages: {
@@ -228,7 +229,7 @@ export class DataDirLock {
           const inUseErr: any = new Error(
             `DATA_DIR_IN_USE: Data directory '${dataDir}' is in use by another active Host process (PID ${holderPid})`
           );
-          inUseErr.code = "DATA_DIR_IN_USE";
+          inUseErr.code = DATA_DIR_IN_USE;
           throw inUseErr;
         }
 
@@ -240,7 +241,7 @@ export class DataDirLock {
               ", "
             )}) are still running`
           );
-          recoveryErr.code = "DATA_DIR_RECOVERY_REQUIRED";
+          recoveryErr.code = DATA_DIR_RECOVERY_REQUIRED;
           throw recoveryErr;
         }
       },

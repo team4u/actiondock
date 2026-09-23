@@ -1,5 +1,8 @@
 import {
   PROCESS_OUTPUT_LIMIT,
+  PROCESS_TIMEOUT,
+  PROCESS_CANCELLED,
+  PROCESS_FAILED,
 } from "@actiondock/core";
 import {
   ProcessManager,
@@ -293,17 +296,17 @@ export class MockProcessExecutor implements ProcessExecutor {
     if (!error) {
       if (timedOut) {
         error = {
-          code: "PROCESS_TIMEOUT",
+          code: PROCESS_TIMEOUT,
           message: `Process exceeded timeout of ${options.timeoutMs ?? durationMs}ms`,
         };
       } else if (cancelled) {
         error = {
-          code: "PROCESS_CANCELLED",
+          code: PROCESS_CANCELLED,
           message: "Process was cancelled by AbortSignal",
         };
       } else if (!ok) {
         error = {
-          code: "PROCESS_FAILED",
+          code: PROCESS_FAILED,
           message: stderr || `Process exited with code ${exitCode}`,
         };
       }

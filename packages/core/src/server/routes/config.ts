@@ -1,5 +1,9 @@
 import {
   CAPABILITY_UNAVAILABLE,
+  CONFIG_DELETE_ERROR,
+  CONFIG_ENV_ERROR,
+  CONFIG_LIST_ERROR,
+  CONFIG_SET_ERROR,
   INVALID_ARGUMENT,
   INVALID_PACKAGE_ID,
   PACKAGE_NOT_ALLOWED,
@@ -77,12 +81,12 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
       }
       return jsonResponse({ ok: true, packageId: targetPackageId, envChecks }, 200, corsHeaders);
     } catch (err: any) {
-      if (err.code === "PACKAGE_NOT_ALLOWED" || err.status === 403) {
+      if (err.code === PACKAGE_NOT_ALLOWED || err.status === 403) {
         return jsonResponse(
           {
             ok: false,
             error: {
-              code: "PACKAGE_NOT_ALLOWED",
+              code: PACKAGE_NOT_ALLOWED,
               message: err.message || "Package is not in the allowed package list",
             },
           },
@@ -92,7 +96,7 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
       }
       const isClient = isClientConfigError(err);
       return jsonResponse(
-        { ok: false, error: { code: isClient ? "INVALID_ARGUMENT" : "CONFIG_ENV_ERROR", message: err.message } },
+        { ok: false, error: { code: isClient ? INVALID_ARGUMENT : CONFIG_ENV_ERROR, message: err.message } },
         isClient ? 400 : 500,
         corsHeaders
       );
@@ -123,12 +127,12 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
         corsHeaders
       );
     } catch (err: any) {
-      if (err.code === "PACKAGE_NOT_ALLOWED" || err.status === 403) {
+      if (err.code === PACKAGE_NOT_ALLOWED || err.status === 403) {
         return jsonResponse(
           {
             ok: false,
             error: {
-              code: "PACKAGE_NOT_ALLOWED",
+              code: PACKAGE_NOT_ALLOWED,
               message: err.message || "Package is not in the allowed package list",
             },
           },
@@ -138,7 +142,7 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
       }
       const isClient = isClientConfigError(err);
       return jsonResponse(
-        { ok: false, error: { code: isClient ? "INVALID_ARGUMENT" : "CONFIG_LIST_ERROR", message: err.message } },
+        { ok: false, error: { code: isClient ? INVALID_ARGUMENT : CONFIG_LIST_ERROR, message: err.message } },
         isClient ? 400 : 500,
         corsHeaders
       );
@@ -155,7 +159,7 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
       const key = body.key;
       if (!key) {
         return jsonResponse(
-          { ok: false, error: { code: "INVALID_ARGUMENT", message: "Config 'key' is required" } },
+          { ok: false, error: { code: INVALID_ARGUMENT, message: "Config 'key' is required" } },
           400,
           corsHeaders
         );
@@ -163,12 +167,12 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
       await service.management.config.set(targetPackageId, key, body.value);
       return jsonResponse({ ok: true, packageId: targetPackageId, key, message: "updated" }, 200, corsHeaders);
     } catch (err: any) {
-      if (err.code === "PACKAGE_NOT_ALLOWED" || err.status === 403) {
+      if (err.code === PACKAGE_NOT_ALLOWED || err.status === 403) {
         return jsonResponse(
           {
             ok: false,
             error: {
-              code: "PACKAGE_NOT_ALLOWED",
+              code: PACKAGE_NOT_ALLOWED,
               message: err.message || "Package is not in the allowed package list",
             },
           },
@@ -178,7 +182,7 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
       }
       const isClient = isClientConfigError(err);
       return jsonResponse(
-        { ok: false, error: { code: isClient ? "INVALID_ARGUMENT" : "CONFIG_SET_ERROR", message: err.message } },
+        { ok: false, error: { code: isClient ? INVALID_ARGUMENT : CONFIG_SET_ERROR, message: err.message } },
         isClient ? 400 : 500,
         corsHeaders
       );
@@ -196,12 +200,12 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
       const deleted = await service.management.config.delete(targetPackageId, key);
       return jsonResponse({ ok: true, packageId: targetPackageId, key, deleted }, 200, corsHeaders);
     } catch (err: any) {
-      if (err.code === "PACKAGE_NOT_ALLOWED" || err.status === 403) {
+      if (err.code === PACKAGE_NOT_ALLOWED || err.status === 403) {
         return jsonResponse(
           {
             ok: false,
             error: {
-              code: "PACKAGE_NOT_ALLOWED",
+              code: PACKAGE_NOT_ALLOWED,
               message: err.message || "Package is not in the allowed package list",
             },
           },
@@ -211,7 +215,7 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
       }
       const isClient = isClientConfigError(err);
       return jsonResponse(
-        { ok: false, error: { code: isClient ? "INVALID_ARGUMENT" : "CONFIG_DELETE_ERROR", message: err.message } },
+        { ok: false, error: { code: isClient ? INVALID_ARGUMENT : CONFIG_DELETE_ERROR, message: err.message } },
         isClient ? 400 : 500,
         corsHeaders
       );

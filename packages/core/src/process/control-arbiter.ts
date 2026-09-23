@@ -8,6 +8,7 @@ import {
   PROCESS_QUARANTINED,
   QUOTA_EXCEEDED,
   ProcessError,
+  type ErrorCode,
 } from "../errors";
 import type {
   AcquireWaiter,
@@ -336,7 +337,7 @@ export class ControlArbiter {
    * 终态转移（exit/error/stop/quarantine）必须经由此方法清空等待队列，
    * 禁止直接操作 acquireWaiters 数组。
    */
-  revokeAllWaiters(proc: ManagedProcessRecord, reason: { code: string; message: string }): void {
+  revokeAllWaiters(proc: ManagedProcessRecord, reason: { code: ErrorCode; message: string }): void {
     while (proc.acquireWaiters.length > 0) {
       const waiter = proc.acquireWaiters.shift()!;
       waiter.reject(new ProcessError(reason.code, reason.message));

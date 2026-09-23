@@ -147,6 +147,99 @@ export const NOT_FOUND = "NOT_FOUND";
 /** HTTP 服务内部错误 */
 export const SERVER_ERROR = "SERVER_ERROR";
 
+/** HTTP 服务请求非法 */
+export const BAD_REQUEST = "BAD_REQUEST";
+
+/** 目标包未列入允许白名单（403 禁止访问） */
+export const PACKAGE_FORBIDDEN = "PACKAGE_FORBIDDEN";
+
+/** 目标规程未找到 */
+export const PLAYBOOK_NOT_FOUND = "PLAYBOOK_NOT_FOUND";
+
+/** 请求体体积超出安全限制 */
+export const REQUEST_TOO_LARGE = "REQUEST_TOO_LARGE";
+
+/** 动作异步启动失败 */
+export const ACTION_START_FAILED = "ACTION_START_FAILED";
+
+/** 动作执行发生内部错误 */
+export const ACTION_EXECUTION_ERROR = "ACTION_EXECUTION_ERROR";
+
+/** 动作列表检索失败 */
+export const ACTIONS_LIST_ERROR = "ACTIONS_LIST_ERROR";
+
+/** 规程列表检索失败 */
+export const PLAYBOOKS_LIST_ERROR = "PLAYBOOKS_LIST_ERROR";
+
+/** 运行记录列表检索失败 */
+export const RUNS_LIST_ERROR = "RUNS_LIST_ERROR";
+
+/** 运行记录清空操作失败 */
+export const RUNS_CLEAR_ERROR = "RUNS_CLEAR_ERROR";
+
+/** 服务大纲信息自省失败 */
+export const INFO_ERROR = "INFO_ERROR";
+
+/** 包信息检索失败 */
+export const PACKAGES_INFO_ERROR = "PACKAGES_INFO_ERROR";
+
+/** 环境诊断体检执行失败 */
+export const DOCTOR_ERROR = "DOCTOR_ERROR";
+
+/** 运行由于服务中断或异常退出被置为中断态 */
+export const RUN_INTERRUPTED = "RUN_INTERRUPTED";
+
+/** 配置项环境变量生成失败 */
+export const CONFIG_ENV_ERROR = "CONFIG_ENV_ERROR";
+
+/** 配置项列表检索失败 */
+export const CONFIG_LIST_ERROR = "CONFIG_LIST_ERROR";
+
+/** 配置项写入失败 */
+export const CONFIG_SET_ERROR = "CONFIG_SET_ERROR";
+
+/** 配置项删除失败 */
+export const CONFIG_DELETE_ERROR = "CONFIG_DELETE_ERROR";
+
+/** 状态条目列表检索失败 */
+export const STATE_LIST_ERROR = "STATE_LIST_ERROR";
+
+/** 状态清空操作失败 */
+export const STATE_CLEAR_ERROR = "STATE_CLEAR_ERROR";
+
+/** 状态键操作异常 */
+export const STATE_KEY_ERROR = "STATE_KEY_ERROR";
+
+/** 数据目录已被其他活跃会话持有 */
+export const DATA_DIR_IN_USE = "DATA_DIR_IN_USE";
+
+/** 数据目录存在未完成的事务，需执行恢复 */
+export const DATA_DIR_RECOVERY_REQUIRED = "DATA_DIR_RECOVERY_REQUIRED";
+
+/** 存储底层 Schema 版本不受支持 */
+export const UNSUPPORTED_STORAGE_SCHEMA = "UNSUPPORTED_STORAGE_SCHEMA";
+
+/** 持久化运行错误对象反序列化解码失败 */
+export const STORED_ERROR_DECODE_FAILED = "STORED_ERROR_DECODE_FAILED";
+
+/** 子进程执行失败终结 */
+export const PROCESS_FAILED = "PROCESS_FAILED";
+
+/** 生成的类型定义已过期 */
+export const GENERATED_TYPES_OUTDATED = "GENERATED_TYPES_OUTDATED";
+
+/** 通信协议版本或格式不受支持 */
+export const PROTOCOL_UNSUPPORTED = "PROTOCOL_UNSUPPORTED";
+
+/** 服务调用结果未知 */
+export const SERVICE_RESULT_UNKNOWN = "SERVICE_RESULT_UNKNOWN";
+
+/** MCP 工具命名发生冲突 */
+export const MCP_TOOL_NAME_COLLISION = "MCP_TOOL_NAME_COLLISION";
+
+/** 跨进程 IPC 通信或调用异常 */
+export const IPC_ERROR = "IPC_ERROR";
+
 /**
  * 判定错误消息根因是否为依赖模块缺失。
  * 兼容 Node.js 与打包器（Bun 等）两类加载器的报错文案。
@@ -308,11 +401,11 @@ export const RUN_ALREADY_FINISHED = "RUN_ALREADY_FINISHED";
  * 全仓各领域异常与跨层透传异常的统一事实源基类。
  */
 export class ActionDockError<T = any> extends Error {
-  public readonly code: string;
+  public readonly code: ErrorCode;
   public readonly details?: T;
   public readonly status?: number;
 
-  constructor(code: string, message: string, details?: T, status?: number) {
+  constructor(code: ErrorCode, message: string, details?: T, status?: number) {
     super(message);
     this.name = "ActionDockError";
     this.code = code;
@@ -338,7 +431,10 @@ export type ErrorCode =
   | typeof INPUT_NOT_JSON
   | typeof OUTPUT_NOT_JSON
   | typeof ACTION_SUBRUN_LIMIT
+  | typeof MAX_SUBRUNS_REACHED
   | typeof ACTION_CALL_CYCLE
+  | typeof ACTION_CYCLE_DETECTED
+  | typeof ACTION_MAX_DEPTH_EXCEEDED
   | typeof UNDECLARED_ACTION_DEPENDENCY
   | typeof INVALID_ACTION_REF
   | typeof IDEMPOTENCY_CONFLICT
@@ -371,6 +467,36 @@ export type ErrorCode =
   | typeof UNAUTHORIZED
   | typeof NOT_FOUND
   | typeof SERVER_ERROR
+  | typeof BAD_REQUEST
+  | typeof PACKAGE_FORBIDDEN
+  | typeof PLAYBOOK_NOT_FOUND
+  | typeof REQUEST_TOO_LARGE
+  | typeof ACTION_START_FAILED
+  | typeof ACTION_EXECUTION_ERROR
+  | typeof ACTIONS_LIST_ERROR
+  | typeof PLAYBOOKS_LIST_ERROR
+  | typeof RUNS_LIST_ERROR
+  | typeof RUNS_CLEAR_ERROR
+  | typeof INFO_ERROR
+  | typeof PACKAGES_INFO_ERROR
+  | typeof DOCTOR_ERROR
+  | typeof RUN_INTERRUPTED
+  | typeof CONFIG_ENV_ERROR
+  | typeof CONFIG_LIST_ERROR
+  | typeof CONFIG_SET_ERROR
+  | typeof CONFIG_DELETE_ERROR
+  | typeof STATE_LIST_ERROR
+  | typeof STATE_CLEAR_ERROR
+  | typeof STATE_KEY_ERROR
+  | typeof DATA_DIR_IN_USE
+  | typeof DATA_DIR_RECOVERY_REQUIRED
+  | typeof UNSUPPORTED_STORAGE_SCHEMA
+  | typeof STORED_ERROR_DECODE_FAILED
+  | typeof PROCESS_FAILED
+  | typeof GENERATED_TYPES_OUTDATED
+  | typeof PROTOCOL_UNSUPPORTED
+  | typeof SERVICE_RESULT_UNKNOWN
+  | typeof MCP_TOOL_NAME_COLLISION
   | typeof ACCESS_DENIED
   | typeof UNSUPPORTED_CAPABILITY
   | typeof CONTROL_BUSY
@@ -403,13 +529,13 @@ export type ErrorCode =
   | typeof AMBIGUOUS_STATE_KEY
   | typeof RUN_NOT_FOUND
   | typeof RUN_ALREADY_FINISHED
-  | (string & {});
+  | typeof IPC_ERROR;
 
 /**
  * 进程领域结构化异常类。
  */
 export class ProcessError extends ActionDockError {
-  constructor(code: string, message: string, details?: Record<string, unknown>) {
+  constructor(code: ErrorCode, message: string, details?: Record<string, unknown>) {
     super(code, message, details);
     this.name = "ProcessError";
     Object.setPrototypeOf(this, ProcessError.prototype);

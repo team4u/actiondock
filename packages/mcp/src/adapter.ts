@@ -6,6 +6,7 @@ import {
   createActionDock,
   createNodePlatform,
   findProjectRoot,
+  MCP_TOOL_NAME_COLLISION,
   type ActionDockService,
 } from "@actiondock/core";
 import {
@@ -17,6 +18,7 @@ import { resolvePackageRoot } from "@actiondock/core/registry";
 import type {
   PackageRuntime,
   PackageRuntimeOptions,
+  PackageRuntimeInternalOptions,
   RuntimeStorage,
 } from "@actiondock/core/package";
 import type { ExecutionResult, JsonValue, RunRecord } from "@actiondock/sdk";
@@ -90,8 +92,6 @@ export function toMcpResult(result: ExecutionResult) {
   };
 }
 
-/** 适配层统一结构化错误码：MCP 工具名冲突。 */
-const MCP_TOOL_NAME_COLLISION = "MCP_TOOL_NAME_COLLISION";
 
 /**
  * 构造外部注入 storage 的非接管视图。
@@ -144,15 +144,15 @@ export async function resolveService(
 
   if (options.runtime) {
     const host = await createActionDockHost({
-      packages: [options.runtime],
       autoLoadCurrentProject: false,
       scanLinkedPackages: false,
     });
+    host.registerRuntime(options.runtime);
     const service = new LocalActionDockService(host);
     return { service, ownsService: false };
   }
 
-  const packages: PackageRuntimeOptions[] = [];
+  const packages: PackageRuntimeInternalOptions[] = [];
 
   // 外部注入的 storage 生命周期默认由注入方管理，适配层不伪造 close 语义；
   // 仅当显式声明 ownStorageLifecycle 时才向包配置透传原始实例（随 target.close() 级联关闭）

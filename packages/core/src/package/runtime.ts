@@ -45,6 +45,7 @@ import type {
   PackageInfo,
   PackageRuntime,
   PackageRuntimeOptions,
+  PackageRuntimeInternalOptions,
   PlaybookSpec,
   PlaybookSummary,
   StateScopeOptions,
@@ -68,7 +69,7 @@ export class DefaultPackageRuntime implements PackageRuntime {
   public readonly executionService: ExecutionService;
 
   public readonly actionsMap: Map<string, ActionDefinition>;
-  private readonly options: PackageRuntimeOptions;
+  private readonly options: PackageRuntimeInternalOptions;
   private runtimeConfig: RuntimeConfig;
   private isClosed = false;
   private injectedGlobalStorage = false;
@@ -76,7 +77,7 @@ export class DefaultPackageRuntime implements PackageRuntime {
   private staticActionIndex?: Map<string, ActionSpec>;
   private staticPlaybookIndex?: Map<string, PlaybookSpec>;
 
-  constructor(options: PackageRuntimeOptions = {}) {
+  constructor(options: PackageRuntimeInternalOptions = {}) {
     this.options = options;
     // 1. 确定项目根路径与配置对象
     let packageRoot = options.packageRoot;
@@ -838,7 +839,7 @@ export class DefaultPackageRuntime implements PackageRuntime {
  * 工厂函数：创建并初始化 PackageRuntime 实例。
  */
 export async function createPackageRuntime(
-  options: PackageRuntimeOptions = {}
+  options: PackageRuntimeInternalOptions = {}
 ): Promise<PackageRuntime> {
   return new DefaultPackageRuntime(options);
 }

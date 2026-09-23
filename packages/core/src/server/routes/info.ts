@@ -1,5 +1,5 @@
 import { filterWithFallbackInfo } from "../../filter";
-import { PACKAGE_NOT_FOUND } from "../../errors";
+import { INFO_ERROR, PACKAGE_NOT_ALLOWED, PACKAGE_NOT_FOUND, PACKAGES_INFO_ERROR } from "../../errors";
 import { ACTIONDOCK_VERSION } from "../../version";
 import { sanitizeConfigDefinitions } from "../../storage";
 import { assertPackageAllowed, getSubPath, jsonResponse, type RouteContext } from "./common";
@@ -48,12 +48,12 @@ export async function handleInfoRoute(ctx: RouteContext): Promise<Response | nul
         corsHeaders
       );
     } catch (err: any) {
-      if (err.code === "PACKAGE_NOT_ALLOWED" || err.status === 403) {
+      if (err.code === PACKAGE_NOT_ALLOWED || err.status === 403) {
         return jsonResponse(
           {
             ok: false,
             error: {
-              code: "PACKAGE_NOT_ALLOWED",
+              code: PACKAGE_NOT_ALLOWED,
               message: err.message || "Package is not in the allowed package list",
             },
           },
@@ -64,7 +64,7 @@ export async function handleInfoRoute(ctx: RouteContext): Promise<Response | nul
       return jsonResponse(
         {
           ok: false,
-          error: { code: "PACKAGES_INFO_ERROR", message: err.message },
+          error: { code: PACKAGES_INFO_ERROR, message: err.message },
         },
         500,
         corsHeaders
@@ -196,12 +196,12 @@ export async function handleInfoRoute(ctx: RouteContext): Promise<Response | nul
         corsHeaders
       );
     } catch (err: any) {
-      if (err.code === "PACKAGE_NOT_ALLOWED" || err.status === 403) {
+      if (err.code === PACKAGE_NOT_ALLOWED || err.status === 403) {
         return jsonResponse(
           {
             ok: false,
             error: {
-              code: "PACKAGE_NOT_ALLOWED",
+              code: PACKAGE_NOT_ALLOWED,
               message: err.message || "Package is not in the allowed package list",
             },
           },
@@ -212,7 +212,7 @@ export async function handleInfoRoute(ctx: RouteContext): Promise<Response | nul
       return jsonResponse(
         {
           ok: false,
-          error: { code: "INFO_ERROR", message: err.message },
+          error: { code: INFO_ERROR, message: err.message },
         },
         500,
         corsHeaders
