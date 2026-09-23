@@ -5,12 +5,13 @@ import { computeManifestDigest } from "../src/project/digest";
 import { saveLockfile, type ActionDockLockfile } from "../src/project/lockfile";
 import { MANIFEST_FILE_NAME } from "../src/project/manifest";
 import {
-  ActionPackageResolver,
   ActionPackageVersionConflictError,
+  PackageGraphBuilder,
   UndeclaredActionDependencyError,
-} from "../src/project/resolver";
+} from "../src/catalog/graph";
+import { InvocationPolicy } from "../src/invocation/policy";
 
-describe("依赖解析器 ActionPackageResolver", () => {
+describe("包图构建器 PackageGraphBuilder 与包图 PackageGraph", () => {
   const tempDir = join(process.cwd(), ".tmp-resolver-test-" + Date.now());
 
   beforeEach(() => {
@@ -91,8 +92,8 @@ describe("依赖解析器 ActionPackageResolver", () => {
     };
     saveLockfile(rootDir, lockfile);
 
-    const resolver = new ActionPackageResolver({ projectRoot: rootDir });
-    const graph = resolver.resolveSync();
+    const builder = new PackageGraphBuilder({ projectRoot: rootDir });
+    const graph = builder.buildSync();
 
     expect(graph.rootPackageId).toBe("root-app");
     expect(graph.packages.has("pkg-b")).toBe(true);
@@ -129,11 +130,11 @@ describe("依赖解析器 ActionPackageResolver", () => {
       },
     });
 
-    const resolver = new ActionPackageResolver({ projectRoot: rootDir });
-    expect(() => resolver.resolveSync()).toThrow(ActionPackageVersionConflictError);
+    const builder = new PackageGraphBuilder({ projectRoot: rootDir });
+    expect(() => builder.buildSync()).toThrow(ActionPackageVersionConflictError);
 
     try {
-      resolver.resolveSync();
+      builder.buildSync();
     } catch (err: any) {
       expect(err.code).toBe("ACTION_PACKAGE_VERSION_CONFLICT");
       expect(err.packageId).toBe("pkg-d");
@@ -164,16 +165,32 @@ describe("依赖解析器 ActionPackageResolver", () => {
       dependencies: { "pkg-b": "^1.0.0" },
     });
 
-    const resolver = new ActionPackageResolver({ projectRoot: rootDir });
+    const builder = new PackageGraphBuilder({ projectRoot: rootDir });
+    const graph = builder.buildSync();
 
     // 根包直接调用直接依赖 pkg-b 的 Action 允许
-    expect(resolver.canRootCall("pkg-b", "runB")).toBe(true);
+    expect(graph.canRootCall("pkg-b", "runB")).toBe(true);
 
     // 根包未将 pkg-c 声明为直接依赖，且无可见 Playbook 委托，调用应被拒绝
-    expect(resolver.canRootCall("pkg-c", "secretAction")).toBe(false);
-    expect(() => resolver.assertRootCallAllowed("pkg-c", "secretAction")).toThrow(
+    expect(graph.canRootCall("pkg-c", "secretAction")).toBe(false);
+    expect(() => graph.assertRootCallAllowed("pkg-c", "secretAction")).toThrow(
       UndeclaredActionDependencyError
     );
+
+    // 经由 InvocationPolicy 校验一致
+    const policy = new InvocationPolicy();
+    const allowedRes = policy.checkRootVisibility("pkg-b", "runB", {
+      hostPublicPackageIds: new Set(["root-app", "pkg-b"]),
+      graph,
+    });
+    expect(allowedRes).toBeUndefined();
+
+    const blockedRes = policy.checkRootVisibility("pkg-c", "secretAction", {
+      hostPublicPackageIds: new Set(["root-app", "pkg-b"]),
+      graph,
+    });
+    expect(blockedRes).toBeDefined();
+    expect(blockedRes?.code).toBe("UNDECLARED_ACTION_DEPENDENCY");
   });
 
   it("当可见 Playbook 明确委托点名传递包的特定 Action 时允许根调用，其余 Action 依然受限", () => {
@@ -218,17 +235,33 @@ describe("依赖解析器 ActionPackageResolver", () => {
       }
     );
 
-    const resolver = new ActionPackageResolver({ projectRoot: rootDir });
+    const builder = new PackageGraphBuilder({ projectRoot: rootDir });
+    const graph = builder.buildSync();
 
     // 点名委托的 check 允许根调用
-    expect(resolver.canRootCall("pkg-c", "check")).toBe(true);
-    expect(() => resolver.assertRootCallAllowed("pkg-c", "check")).not.toThrow();
+    expect(graph.canRootCall("pkg-c", "check")).toBe(true);
+    expect(() => graph.assertRootCallAllowed("pkg-c", "check")).not.toThrow();
 
     // 未被委托的 internalSecret 依然被拦截
-    expect(resolver.canRootCall("pkg-c", "internalSecret")).toBe(false);
-    expect(() => resolver.assertRootCallAllowed("pkg-c", "internalSecret")).toThrow(
+    expect(graph.canRootCall("pkg-c", "internalSecret")).toBe(false);
+    expect(() => graph.assertRootCallAllowed("pkg-c", "internalSecret")).toThrow(
       UndeclaredActionDependencyError
     );
+
+    // 经由 InvocationPolicy 校验一致
+    const policy = new InvocationPolicy();
+    const allowedRes = policy.checkRootVisibility("pkg-c", "check", {
+      hostPublicPackageIds: new Set(["root-app", "pkg-b"]),
+      graph,
+    });
+    expect(allowedRes).toBeUndefined();
+
+    const blockedRes = policy.checkRootVisibility("pkg-c", "internalSecret", {
+      hostPublicPackageIds: new Set(["root-app", "pkg-b"]),
+      graph,
+    });
+    expect(blockedRes).toBeDefined();
+    expect(blockedRes?.code).toBe("UNDECLARED_ACTION_DEPENDENCY");
   });
 
   it("校验跨包级联调用必须在 uses 中显式声明", () => {
@@ -257,18 +290,36 @@ describe("依赖解析器 ActionPackageResolver", () => {
       },
     });
 
-    const resolver = new ActionPackageResolver({ projectRoot: rootDir });
+    const builder = new PackageGraphBuilder({ projectRoot: rootDir });
+    const graph = builder.buildSync();
 
     // 声明了 uses 的调用允许
-    expect(resolver.canCascadeCall("root-app", "declaredAction", "pkg-b", "helper")).toBe(true);
+    expect(graph.canCascadeCall("root-app", "declaredAction", "pkg-b", "helper")).toBe(true);
     expect(() =>
-      resolver.assertCascadeCallAllowed("root-app", "declaredAction", "pkg-b", "helper")
+      graph.assertCascadeCallAllowed("root-app", "declaredAction", "pkg-b", "helper")
     ).not.toThrow();
 
     // 未声明 uses 的调用拦截
-    expect(resolver.canCascadeCall("root-app", "undeclaredAction", "pkg-b", "helper")).toBe(false);
+    expect(graph.canCascadeCall("root-app", "undeclaredAction", "pkg-b", "helper")).toBe(false);
     expect(() =>
-      resolver.assertCascadeCallAllowed("root-app", "undeclaredAction", "pkg-b", "helper")
+      graph.assertCascadeCallAllowed("root-app", "undeclaredAction", "pkg-b", "helper")
     ).toThrow(UndeclaredActionDependencyError);
+
+    // 经由 InvocationPolicy 校验一致
+    const policy = new InvocationPolicy();
+    const authOk = policy.checkUsesAuthorization(
+      { packageId: "root-app", actionId: "declaredAction", declaredUses: ["pkg-b/helper"] },
+      { packageId: "pkg-b", actionId: "helper" },
+      graph
+    );
+    expect(authOk).toBeUndefined();
+
+    const authFail = policy.checkUsesAuthorization(
+      { packageId: "root-app", actionId: "undeclaredAction", declaredUses: [] },
+      { packageId: "pkg-b", actionId: "helper" },
+      graph
+    );
+    expect(authFail).toBeDefined();
+    expect(authFail?.code).toBe("UNDECLARED_ACTION_DEPENDENCY");
   });
 });

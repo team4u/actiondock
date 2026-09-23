@@ -4,7 +4,6 @@ export * from "./init";
 export * from "./loader";
 export * from "./lockfile";
 export * from "./manifest";
-export * from "./resolver";
 export {
   SNAPSHOT_TRACKED_FILES,
   type TransactionFileRecord,

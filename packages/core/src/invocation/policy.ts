@@ -7,7 +7,7 @@ import {
   MAX_SUBRUNS_REACHED,
   UNDECLARED_ACTION_DEPENDENCY,
 } from "../errors";
-import type { ActionPackageResolver } from "../project/resolver";
+import type { PackageGraph } from "../catalog/graph";
 
 /**
  * 调用治理策略初始化选项。
@@ -25,8 +25,8 @@ export interface InvocationPolicyOptions {
 export interface RootVisibilityContext {
   /** 宿主公开暴露的包标识集合 */
   hostPublicPackageIds: ReadonlySet<string>;
-  /** 包依赖图解析器 */
-  resolver?: ActionPackageResolver;
+  /** 包依赖拓扑图 */
+  graph?: PackageGraph;
 }
 
 /**
@@ -93,7 +93,7 @@ export class InvocationPolicy {
       return undefined;
     }
 
-    if (context.resolver && !context.resolver.canRootCall(targetPackageId, targetActionId)) {
+    if (context.graph && !context.graph.canRootCall(targetPackageId, targetActionId)) {
       return {
         code: UNDECLARED_ACTION_DEPENDENCY,
         message: `Root call to action '${targetPackageId}/${targetActionId}' is not allowed: package '${targetPackageId}' is not declared as a direct dependency in actiondock.json and is not delegated by a visible playbook`,
@@ -110,17 +110,17 @@ export class InvocationPolicy {
    * 判定规则：
    * - 同包内部 Action 互调自然合法，豁免 uses 声明；
    * - 跨包调用必须在调用方 Action 的 uses 声明列表中显式声明目标（完全限定名、通配符或包名），
-   *   或经由 ActionPackageResolver.canCascadeCall 裁决通过；未声明直接拦截。
+   *   或经由 PackageGraph.canCascadeCall 裁决通过；未声明直接拦截。
    *
    * @param caller 调用方 Action 标识与声明上下文
    * @param target 目标 Action 标识
-   * @param resolver 可选的包依赖解析器
+   * @param graph 可选的包依赖拓扑图
    * @returns 若鉴权未通过返回标准 RuntimeError，通过则返回 undefined
    */
   public checkUsesAuthorization(
     caller: CallerActionInfo,
     target: TargetActionInfo,
-    resolver?: ActionPackageResolver
+    graph?: PackageGraph
   ): RuntimeError | undefined {
     // 同包调用完全自由开放，不作限制
     if (!caller.packageId || !target.packageId || caller.packageId === target.packageId) {
@@ -128,10 +128,18 @@ export class InvocationPolicy {
     }
 
     const targetRef = `${target.packageId}/${target.actionId}`;
-    const usesList = caller.declaredUses || [];
+    const callerNode = graph?.getNode(caller.packageId);
+    const shortActionId = caller.actionId.includes("/")
+      ? caller.actionId.split("/").pop()!
+      : caller.actionId;
+    const usesList =
+      caller.declaredUses ||
+      callerNode?.manifest?.actions?.[shortActionId]?.uses ||
+      callerNode?.manifest?.actions?.[caller.actionId]?.uses ||
+      [];
 
-    const isAllowed = resolver
-      ? resolver.canCascadeCall(caller.packageId, caller.actionId, target.packageId, target.actionId)
+    const isAllowed = graph
+      ? graph.canCascadeCall(caller.packageId, caller.actionId, target.packageId, target.actionId)
       : usesList.some(
           (u) => u === targetRef || u === `${target.packageId}/*` || u === target.packageId
         );

@@ -17,7 +17,6 @@ import {
   type PackageGraph,
   type ResolvedAction,
 } from "../catalog";
-import type { ActionPackageResolver } from "../project/resolver";
 import { InvocationPolicy } from "../invocation/policy";
 import { ActionDockError, PACKAGE_NOT_FOUND } from "../errors";
 
@@ -34,19 +33,19 @@ export function parseRefLoose(ref: ActionRef | string): ActionRef {
 }
 
 /**
- * 根调用可见性判定：非公开包且存在依赖解析器时，交由解析器委托规则裁决。
+ * 根调用可见性判定：非公开包且存在依赖图时，交由图委托规则裁决。
  */
 export function isRootCallVisible(
   packageId: string,
   actionId: string,
   hostPublicPackageIds: ReadonlySet<string>,
-  resolver?: ActionPackageResolver
+  graph?: PackageGraph
 ): boolean {
   const policy = new InvocationPolicy();
   return (
     policy.checkRootVisibility(packageId, actionId, {
       hostPublicPackageIds,
-      resolver,
+      graph,
     }) === undefined
   );
 }
@@ -70,14 +69,14 @@ export function packageNotFoundMessage(
  */
 export async function listVisiblePlaybooks(
   apps: readonly ActionDockApp[],
-  visibility: { hostPublicPackageIds: ReadonlySet<string>; resolver?: ActionPackageResolver }
+  visibility: { hostPublicPackageIds: ReadonlySet<string>; graph?: PackageGraph }
 ): Promise<PlaybookSummary[]> {
   const results: PlaybookSummary[] = [];
   for (const app of apps) {
     const isPublic = visibility.hostPublicPackageIds.has(app.packageId);
-    if (!isPublic && visibility.resolver) {
-      const graph = visibility.resolver.resolveSync();
-      if (!graph.directDependencyIds.has(app.packageId)) {
+    if (!isPublic && visibility.graph) {
+      const rootNode = visibility.graph.root ? visibility.graph.getNode(visibility.graph.root.id) : undefined;
+      if (!rootNode?.directDependencies.has(app.packageId)) {
         continue;
       }
     }
@@ -103,28 +102,34 @@ export async function listVisiblePlaybooks(
 export async function describeVisiblePlaybook(
   apps: readonly ActionDockApp[],
   id: string,
-  visibility: { hostPublicPackageIds: ReadonlySet<string>; resolver?: ActionPackageResolver }
+  visibility: { hostPublicPackageIds: ReadonlySet<string>; graph?: PackageGraph }
 ): Promise<PlaybookSpec> {
-  const graph: PackageGraph = new DefaultPackageGraph(
-    new Map(
-      apps.map((a) => [
-        a.packageId,
-        {
-          identity: a.identity,
-          root: a.packageRoot || "",
-          manifest: a.projectConfig,
-          directDependencies: new Set<string>(),
-          transitiveDependencies: new Set<string>(),
-        },
-      ])
-    )
-  );
+  const graph: PackageGraph =
+    visibility.graph ||
+    new DefaultPackageGraph(
+      new Map(
+        apps.map((a) => [
+          a.packageId,
+          {
+            identity: a.identity,
+            packageId: a.packageId,
+            root: a.packageRoot || "",
+            manifest: a.projectConfig,
+            manifestDigest: "",
+            version: a.projectConfig?.version || "0.1.0",
+            npmPackage: a.packageId,
+            directDependencies: new Set<string>(),
+            transitiveDependencies: new Set<string>(),
+          },
+        ])
+      )
+    );
 
   const resolved = resolvePlaybook(id, { graph });
   const isPublic = visibility.hostPublicPackageIds.has(resolved.packageId);
-  if (!isPublic && visibility.resolver) {
-    const depGraph = visibility.resolver.resolveSync();
-    if (!depGraph.directDependencyIds.has(resolved.packageId)) {
+  if (!isPublic && visibility.graph) {
+    const rootNode = visibility.graph.root ? visibility.graph.getNode(visibility.graph.root.id) : undefined;
+    if (!rootNode?.directDependencies.has(resolved.packageId)) {
       throw new Error(
         `UNDECLARED_ACTION_DEPENDENCY: Playbook '${id}' belongs to undeclared transitive package '${resolved.packageId}'`
       );
@@ -174,7 +179,7 @@ export function ambiguousActionMessage(actionId: string, candidates: readonly st
 export async function describeActionAcrossApps(
   ref: ActionRef | string,
   apps: readonly ActionDockApp[],
-  visibility: { hostPublicPackageIds: ReadonlySet<string>; resolver?: ActionPackageResolver },
+  visibility: { hostPublicPackageIds: ReadonlySet<string>; graph?: PackageGraph },
   failedLinkedPackages: ReadonlyMap<string, { path: string; error: string }>,
   catalog?: ActionCatalog,
   graph?: PackageGraph
@@ -185,14 +190,19 @@ export async function describeActionAcrossApps(
   }
   const effectiveGraph =
     graph ||
+    visibility.graph ||
     new DefaultPackageGraph(
       new Map(
         apps.map((a) => [
           a.packageId,
           {
             identity: a.identity,
+            packageId: a.packageId,
             root: a.packageRoot || "",
             manifest: a.projectConfig,
+            manifestDigest: "",
+            version: a.projectConfig?.version || "0.1.0",
+            npmPackage: a.packageId,
             directDependencies: new Set<string>(),
             transitiveDependencies: new Set<string>(),
           },
@@ -226,7 +236,7 @@ export async function describeActionAcrossApps(
       resolved.package.id,
       resolved.ref.actionId,
       visibility.hostPublicPackageIds,
-      visibility.resolver
+      effectiveGraph
     )
   ) {
     throw new Error(

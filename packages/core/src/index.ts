@@ -137,7 +137,18 @@ export {
 } from "./catalog/action-catalog";
 export { ActionResolver } from "./catalog/action-resolver";
 export { PackageDiscovery } from "./catalog/discovery";
-export { PackageGraphBuilder } from "./catalog/graph";
+export {
+  DefaultPackageGraph,
+  PackageGraphBuilder,
+  ActionPackageVersionConflictError,
+  UndeclaredActionDependencyError,
+  parseSemVer,
+  areVersionsCompatible,
+  type PackageGraph,
+  type PackageNode,
+  type PackageGraphBuilderOptions,
+  type SemVer,
+} from "./catalog/graph";
 export { buildActionDescribePayload } from "./input/describe";
 export { filterWithFallbackInfo } from "./filter/intent";
 
@@ -339,10 +350,6 @@ export type {
   ActionDockHost,
   ActionDockHostOptions,
 } from "./host/types";
-export {
-  ActionPackageResolver,
-  type ActionPackageResolverOptions,
-} from "./project/resolver";
 export {
   createActionDockApp,
   DefaultActionDockApp,

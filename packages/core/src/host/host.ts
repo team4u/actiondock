@@ -26,7 +26,6 @@ import type {
 } from "../execution/types";
 import type { InvocationContext } from "../invocation/types";
 import { findProjectRoot, loadProjectConfig } from "../project/loader";
-import { ActionPackageResolver } from "../project/resolver";
 import { hasPendingTransactions, isProjectLockHeld, recoverPendingTransactions } from "../project/transactions";
 import { listLinkedPackages } from "../registry/registry";
 import { InMemoryEventSink, type EventSink } from "../runtime/events";
@@ -48,8 +47,10 @@ import { DataDirLock } from "../storage/data-dir-lock";
 import {
   DefaultActionCatalog,
   DefaultPackageGraph,
+  PackageGraphBuilder,
   resolveAction,
   type ActionCatalog,
+  type DiscoveredPackage,
   type PackageGraph,
   type PackageNode,
   type ResolvedAction,
@@ -90,7 +91,6 @@ export class DefaultActionDockHost implements ActionDockHost {
   private readonly internallyCreatedApps = new Set<ActionDockApp>();
   public readonly policy: InvocationPolicy;
   private hostPublicPackageIds = new Set<string>();
-  private resolver?: ActionPackageResolver;
   private maxCallDepth: number;
   private maxSubRuns: number;
   private eventSink: EventSink;
@@ -230,17 +230,17 @@ export class DefaultActionDockHost implements ActionDockHost {
 
     try {
       const config = loadProjectConfig(root);
-      this.hostPublicPackageIds.add(config.id);
-
-      this.resolver = new ActionPackageResolver({
+      const builder = new PackageGraphBuilder({
         projectRoot: root,
         manifest: config,
         allowDevLinks: options.scanLinkedPackages,
         customHome: options.customHome,
       });
 
-      const graph = this.resolver.resolveSync();
-      this.hostPublicPackageIds.add(graph.rootPackageId);
+      const graph = builder.buildSync();
+      if (graph.rootPackageId) {
+        this.hostPublicPackageIds.add(graph.rootPackageId);
+      }
       for (const depId of graph.directDependencyIds) {
         this.hostPublicPackageIds.add(depId);
       }
@@ -249,7 +249,7 @@ export class DefaultActionDockHost implements ActionDockHost {
         if (!this.apps.has(pkg.packageId)) {
           const isDirectOrRoot = this.hostPublicPackageIds.has(pkg.packageId);
           const app = new DefaultActionDockApp({
-            packageRoot: pkg.packageRoot,
+            packageRoot: pkg.root,
             projectConfig: pkg.manifest,
             hostSessionId: this.hostSessionId,
             platform: options.platform,
@@ -393,7 +393,7 @@ export class DefaultActionDockHost implements ActionDockHost {
             declaredUses,
           },
           { packageId: targetPackageId, actionId: targetActionId },
-          this.resolver
+          this.graph
         );
         if (authErr) {
           const err = new Error(authErr.message);
@@ -505,57 +505,31 @@ export class DefaultActionDockHost implements ActionDockHost {
     };
   }
 
-  /** 路由可见性上下文（公开包集合与依赖解析器） */
+  /** 路由可见性上下文（公开包集合与包依赖图） */
   private visibility() {
     return {
       hostPublicPackageIds: this.hostPublicPackageIds as ReadonlySet<string>,
-      resolver: this.resolver,
+      graph: this.graph,
     };
   }
 
   private rebuildGraphAndCatalog(): void {
-    const nodes = new Map<string, PackageNode>();
-    for (const app of this.apps.values()) {
-      nodes.set(app.packageId, {
-        identity: app.identity,
-        root: app.packageRoot || "",
-        manifest: app.projectConfig,
-        directDependencies: new Set<string>(),
-        transitiveDependencies: new Set<string>(),
-        isRoot: this.hostPublicPackageIds.has(app.packageId),
-      });
-    }
+    const discovered: DiscoveredPackage[] = Array.from(this.apps.values()).map((app) => ({
+      id: app.packageId,
+      root: app.packageRoot || "",
+      manifest: app.projectConfig,
+      isCurrentProject: this.hostPublicPackageIds.has(app.packageId),
+    }));
 
-    for (const node of nodes.values()) {
-      if (node.manifest?.dependencies && typeof node.manifest.dependencies === "object") {
-        for (const depId of Object.keys(node.manifest.dependencies)) {
-          if (nodes.has(depId)) {
-            node.directDependencies.add(depId);
-          }
-        }
-      }
-    }
+    const rootApp = Array.from(this.apps.values()).find((app) =>
+      this.hostPublicPackageIds.has(app.packageId)
+    );
 
-    for (const node of nodes.values()) {
-      const queue = Array.from(node.directDependencies);
-      const visited = new Set<string>(node.directDependencies);
-      while (queue.length > 0) {
-        const curr = queue.shift()!;
-        node.transitiveDependencies.add(curr);
-        const depNode = nodes.get(curr);
-        if (depNode) {
-          for (const next of depNode.directDependencies) {
-            if (next !== node.identity.id && !visited.has(next)) {
-              visited.add(next);
-              queue.push(next);
-            }
-          }
-        }
-      }
-    }
-
-    const rootNode = Array.from(nodes.values()).find((n) => n.isRoot);
-    this.graph = new DefaultPackageGraph(nodes, rootNode?.identity);
+    const builder = new PackageGraphBuilder({
+      packages: discovered,
+      root: rootApp?.packageRoot || rootApp?.packageId,
+    });
+    this.graph = builder.buildSync();
     this.catalog = new DefaultActionCatalog(this.graph, (pkgId) => {
       const app = this.getApp(pkgId);
       if (!app) return undefined;
@@ -572,6 +546,14 @@ export class DefaultActionDockHost implements ActionDockHost {
 
   getApp(packageId: string): ActionDockApp | undefined {
     return this.apps.get(packageId);
+  }
+
+  getGraph(): PackageGraph {
+    return this.graph;
+  }
+
+  getCatalog(): ActionCatalog {
+    return this.catalog;
   }
 
   listApps(): ActionDockApp[] {
@@ -634,7 +616,7 @@ export class DefaultActionDockHost implements ActionDockHost {
     for (const app of apps) {
       const appSummaries = await app.listActions();
       for (const item of appSummaries) {
-        if (!isRootCallVisible(app.packageId, item.id, this.hostPublicPackageIds, this.resolver)) {
+        if (!isRootCallVisible(app.packageId, item.id, this.hostPublicPackageIds, this.graph)) {
           continue;
         }
         const qualifiedId =
@@ -813,7 +795,7 @@ export class DefaultActionDockHost implements ActionDockHost {
           const authErr = this.policy.checkUsesAuthorization(
             { packageId: callerPackageId, actionId: callerActionId, declaredUses },
             { packageId: targetPackageId, actionId: targetActionId },
-            this.resolver
+            this.graph
           );
           if (authErr) {
             const runId = randomUUID();

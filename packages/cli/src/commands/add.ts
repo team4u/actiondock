@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
-  ActionPackageResolver,
+  PackageGraphBuilder,
   beginTransaction,
   computeManifestDigest,
   findProjectRoot,
@@ -131,9 +131,9 @@ export function registerAddCommand(program: Command, context?: CliContext): void
         manifest.dependencies[targetPackageId] =
           targetPackageId === npmPackageName ? `^${targetVersion}` : npmPackageName;
 
-        // 触发依赖图解析及版本冲突检测
-        const resolver = new ActionPackageResolver({ projectRoot: root, manifest });
-        const graph = resolver.resolveSync();
+        // 触发依赖图构建及版本冲突检测
+        const builder = new PackageGraphBuilder({ projectRoot: root, manifest });
+        const graph = builder.buildSync();
 
         // 更新 actiondock.lock.json
         const lockfile: ActionDockLockfile = loadLockfile(root) || {

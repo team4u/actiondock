@@ -87,7 +87,7 @@ ActionDock 2.x 全面贯彻单一事实源设计，彻底杜绝各模块私自�
 
 基于 `actiondock.lock.json`（规范版本 `lockfileVersion: 1`）提供严格的依赖版本锁定与原子事务保护：
 
-- 依赖解析：`ActionPackageResolver` 递归解析本地包依赖与符号链接，避免重复加载。
+- 依赖图构建：`PackageGraphBuilder` 递归解析本地包依赖与符号链接，统一建立拓扑图并检测版本冲突。
 - 原子事务：`beginTransaction` 在执行依赖增删（如 `ad add` 与 `ad remove`）前为 `package.json`、`actiondock.json` 与 `actiondock.lock.json` 创建快照。若安装或校验流程失败，自动执行原子回滚并恢复原始状态。
 
 ---
