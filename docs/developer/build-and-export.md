@@ -1,8 +1,8 @@
 # 构建规划与产物导出
 
-ActionDock 2.0 提供了面向生产交付与智能体消费的现代构建与导出工具链。构建与导出核心由 `@actiondock/builder` 驱动，包含基于声明式清单的依赖闭包规划器 `SelectionPlanner`、Node 目录型交付产物构建器、npm Action 标准打包器与双模态 Skill 导出器。
+ActionDock 3.0 提供了面向生产交付与智能体消费的现代构建与导出工具链。构建与导出核心由 `@actiondock/builder` 驱动，包含基于声明式清单的依赖闭包规划器 `SelectionPlanner`、Skill 模板生成器、Node 目录型交付产物构建器、npm Action 标准打包器与多模态 Skill 导出器。
 
-在 ActionDock 2.0 中，彻底废除了原有的外部单文件二进制编译器以及 `--target` 与 `--bytecode` 选项。工具链全面转向标准、透明且易于容器化部署的 Node 目录型交付产物体系。
+工具链全面采用标准、透明且易于容器化部署的 Node 目录型交付产物体系。
 
 ---
 
@@ -61,7 +61,6 @@ Action 在 `actiondock.json` 中可以通过 `uses` 数组显式声明其依赖�
 - **物化锁定生产依赖**：`--vendor-deps`，在干净的暂存目录中物化锁定的生产依赖，将所需的 `node_modules` 完整内嵌至交付产物中，使目标服务器在离线无网络环境下亦可直接运行。
 - **安装脚本安全门禁**：`--allow-install-scripts`，默认禁用（`false`）。防止依赖包中的生命周期脚本在物化期间隐式执行恶意系统命令。
 - **强制可复现性校验**：`--require-reproducible`，强制要求构建结果可复现。如果检测到外部依赖存在必须执行的生命周期安装脚本，构建将立即报错中止。
-- **废弃参数拦截**：若传入已废弃的 `--target` 或 `--bytecode` 参数，系统将抛出 `UNSUPPORTED_BUILD_MODE` 错误，提示开发者单文件二进制编译已被废除。
 
 ### 构建示例
 
@@ -108,7 +107,7 @@ ad pack --dry-run
 
 `ad export skill` 命令将 Action Package 导出为供各类 AI 智能体（如 Claude Code、Cursor、Windsurf、Antigravity）理解与消费的自包含 Skill 资产。
 
-ActionDock 2.0 提供了两种清晰的 Skill 导出模式：
+ActionDock 3.0 提供了两种清晰的 Skill 导出模式：
 
 ### 源码型 Skill 模式 (`--mode source`)
 

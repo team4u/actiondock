@@ -38,5 +38,5 @@
   - [错误代码速查手册](/reference/error-codes.md)
 
 - **底层架构解密**
-  - [Runtime 执行引擎与通道隔离](/architecture/runtime.md)
+  - [Runtime 执行引擎与分层架构](/architecture/runtime.md)
   - [安全加固与防御模型](/architecture/security.md)

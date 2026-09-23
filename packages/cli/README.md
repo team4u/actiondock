@@ -1,6 +1,6 @@
 # @actiondock/cli
 
-ActionDock 2.0 官方命令行门面工具链。
+ActionDock 3.0 官方命令行门面工具链。
 
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D24.12.0-green?logo=node.js)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?logo=typescript)](https://www.typescriptlang.org/)
@@ -15,7 +15,6 @@ ActionDock 2.0 官方命令行门面工具链。
 - 原生基于 Node.js >=24.12.0 运行，充分依托原生类型擦除、内置 SQLite 与原生 HTTP 特性。
 - 支持 npm、pnpm 与 yarn 标准包管理器进行全局安装与项目级管理。
 - 日常开发、调试、测试、构建、打包、MCP 服务启动与 HTTP 部署完全基于 Node.js 与 npm 标准工作流，无需安装外部编译器。
-- 单文件独立二进制构建（`--target`、`--bytecode`、`--standalone`）与 `actiondock.manifest.json` 已在 2.0 中彻底移除，由标准的 Node.js 目录交付产物与 npm 打包取代。
 
 ---
 
@@ -190,10 +189,9 @@ $data | ConvertTo-Json -Depth 100 | ad run complex-action --input-file -
 
 作为顶层门面与独立运行分发器，`@actiondock/cli` 串联以下子包：
 
-- 领域内核与运行时：依赖 [@actiondock/core](../core/README.md)，在启动时直接调用内置的原生平台驱动实现与调用门面。
-- 领域内核：依赖 [@actiondock/core](../core/README.md)，调度统一调用门面 ActionDockTarget、数据目录锁 DataDirLock 与依赖事务管理器。
-- 构建与打包：依赖 [@actiondock/builder](../builder/README.md)，完成目录交付构建、npm 打包与技能导出。
-- 协议服务：通过 [@actiondock/mcp](../mcp/README.md) 启动协议监听。
+- 领域内核与运行时：依赖 [@actiondock/core](../core/README.md)，统一对接标准服务端口体系（`DiscoveryPort`、`ExecutionPort`、`RunsPort`、`ConfigPort`、`StatePort`）与统一服务门面（`createActionDock`、`connectActionDock`），承载原生运行时、存储驱动与受管进程治理。
+- 构建与打包：依赖 [@actiondock/builder](../builder/README.md)，完成依赖闭包规划、Node 目录交付产物构建、npm 打包与 Agent Skill 资产导出。
+- 协议服务：通过 [@actiondock/mcp](../mcp/README.md) 启动 Model Context Protocol 协议监听与适配。
 
 ---
 

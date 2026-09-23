@@ -1,12 +1,12 @@
 # @actiondock/sdk
 
-ActionDock 2.0 纯净核心开发者接口契约包。
+ActionDock 3.0 纯净核心开发者接口契约包。
 
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D24.12.0-green?logo=node.js)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-`@actiondock/sdk` 为开发者编写原子 Action 提供零生产依赖的纯净类型定义与核心契约。测试工具（`createTestRuntime`、`FakeClock`、`MockProcessExecutor`、`MemoryStorage`）已全面收敛至 [@actiondock/testing](../testing/README.md)。
+`@actiondock/sdk` 为开发者编写原子 Action 提供零生产依赖的纯净类型定义与核心契约。测试工具（`createTestRuntime`、`FakeClock`、`FakeProcessDriver`、`MockProcessExecutor`、`MemoryStorage`）已全面收敛至 [@actiondock/testing](../testing/README.md)。
 
 ---
 

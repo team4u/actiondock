@@ -234,15 +234,16 @@ ActionDock is structured as a cohesive, layered monorepo:
                ▼                              ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                      @actiondock/core                       │
-│       Domain models, state machine, data locks & contracts  │
-└───────┬─────────────────────────────┬───────────────┬───────┘
-         │                             │               │
-         ▼                             ▼               ▼
-┌──────────────┐               ┌─────────────┐┌──────────────┐
-│ runtime-node │               │   testing   ││     sdk      │
-│Sync/Worker DB│               │In-memory test││Pure contract │
-│& Node HTTP   │               │runtime & clock││Zero runtime  │
-└──────────────┘               └─────────────┘└──────────────┘
+│   Node native runtime, domain models, service ports & facade│
+│   NodeSqliteDriver / NodeProcessDriver / NodeHttpServer     │
+└─────────────────────────────┬───────────────┬───────────────┘
+                              │               │
+                              ▼               ▼
+                       ┌─────────────┐ ┌──────────────┐
+                       │   testing   │ │     sdk      │
+                       │In-memory test│ │Minimal SDK  │
+                       │runtime & clock│ │Zero-dep types│
+                       └─────────────┘ └──────────────┘
 ```
 
 ---

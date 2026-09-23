@@ -1,6 +1,6 @@
 # HTTP API 接口契约
 
-ActionDock 微服务模式（通过 `ad serve` 启动）提供标准 RESTful API 规范，用于向远程 AI 智能体、持续集成流水线、网关及外部业务系统提供能力自省、动作调度与任务流管理。
+ActionDock 3.0 微服务模式（通过 `ad serve` 启动）提供标准 RESTful API 规范，用于向远程 AI 智能体、持续集成流水线、网关及外部业务系统提供能力自省、动作调度与任务流管理。
 
 ---
 
@@ -61,7 +61,7 @@ ActionDock 微服务模式（通过 `ad serve` 启动）提供标准 RESTful API
   {
     "ok": true,
     "status": "healthy",
-    "version": "2.3.0",
+    "version": "3.0.0",
     "timestamp": "2026-09-12T10:00:00.000Z",
     "uptime": 3600.5
   }
@@ -112,7 +112,7 @@ ActionDock 微服务模式（通过 `ad serve` 启动）提供标准 RESTful API
     {
       "ok": true,
       "type": "package_list",
-      "version": "2.3.0",
+      "version": "3.0.0",
       "packages": [
         {
           "id": "example-tools",

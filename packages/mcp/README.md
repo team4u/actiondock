@@ -1,13 +1,13 @@
 # @actiondock/mcp
 
-ActionDock 2.0 模型上下文协议适配器。
+ActionDock 3.0 模型上下文协议适配器。
 
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D24.12.0-green?logo=node.js)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![MCP](https://img.shields.io/badge/MCP-Protocol%20Compliant-purple)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-`@actiondock/mcp` 将 ActionDock 中的原子 Action 映射为标准的模型上下文协议工具，无缝接入各类主流 AI 智能体与开发环境。
+`@actiondock/mcp` 将 ActionDock 中的原子 Action 映射为标准的模型上下文协议工具，无缝接入各类主流 AI 智能体与开发环境。在 ActionDock 3.0 中，MCP 适配层全面对接 `@actiondock/core` 导出的标准服务端口体系（`DiscoveryPort`、`ExecutionPort` 与 `RunsPort`），彻底消除对底层私有实体的直接穿透。
 
 ---
 
@@ -28,7 +28,7 @@ ActionDock 2.0 模型上下文协议适配器。
 ### 协同取消信号向下传播
 
 - 当 MCP 客户端发起取消请求时，适配层自动捕获中断事件。
-- 取消信号直接传递至底层的 ActionRunner 调度器，并联动激活当前任务上下文中的 `ctx.signal`。
+- 取消信号通过服务端口直接传递至底层的执行服务，并联动激活当前任务上下文中的 `ctx.signal`。
 - 业务代码可通过监听 AbortSignal 安全释放资源或提前终止执行。
 
 ### Tasks 异步任务映射扩展

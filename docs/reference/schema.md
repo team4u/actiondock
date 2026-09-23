@@ -1,6 +1,6 @@
 # 参考手册：actiondock.json 清单规范
 
-在 ActionDock 2.0 体系中，位于工程根目录的 `actiondock.json` 是项目元数据、配置项声明、跨包依赖、原子动作契约与操作规程映射的唯一事实源。
+在 ActionDock 3.0 体系中，位于工程根目录的 `actiondock.json` 是项目元数据、配置项声明、跨包依赖、原子动作契约与操作规程映射的唯一事实源。
 
 框架在静态检索（`ad info`、`ad list`）、运行期入参出参模式校验、构建依赖静态裁剪（`ad build`）与技能导出（`ad export skill`）时，统一以 `actiondock.json` 作为唯一仲裁依据。
 

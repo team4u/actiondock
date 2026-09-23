@@ -1,6 +1,6 @@
 # 参考手册：CLI 命令行速查
 
-`ad` 是 ActionDock 2.0 的统一命令行门面工具，用于驱动 Action 与 Skill 的创建、依赖管理、能力检索、本地执行、状态配置管理、测试套件调度、目录构建、打包分发与技能导出。
+`ad` 是 ActionDock 3.0 的统一命令行门面工具，用于驱动 Action 与 Skill 的创建、依赖管理、能力检索、本地执行、状态配置管理、测试套件调度、目录构建、打包分发与技能导出。
 
 ---
 
@@ -213,7 +213,7 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
   ```bash
   ad build [-P, --package <id>] [-o, --out <path>] [-a, --actions <actions...>] [-p, --playbooks <playbooks...>] [-z, --archive] [--vendor-deps] [--allow-install-scripts] [--require-reproducible]
   ```
-  将 Action 构建为 Node.js 交付目录或归档包。已废弃并移除 `--target` 与 `--bytecode` 选项。
+  将 Action 构建为 Node.js 交付目录或归档包。支持通过 `--vendor-deps` 固化生产依赖。
 
 - 导出智能体技能资产 (`ad export skill`)：
   ```bash

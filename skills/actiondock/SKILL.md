@@ -1,7 +1,7 @@
 ---
 name: actiondock
 description: >-
-  ActionDock 2.0 开发者套件与运行指南。当用户需要执行以下任务或涉及相关概念时激活此技能：
+  ActionDock 3.0 开发者套件与运行指南。当用户需要执行以下任务或涉及相关概念时激活此技能：
   创建、编写、修改或测试 ActionDock Action 工具（涉及 defineAction、ActionContext、受管进程与系统命令调度）；
   编写、校验或执行 Playbook 任务操作规程；
   使用或排查 ad 命令行工具（包括 ad init、ad action、ad playbook、ad info、ad list、ad describe、ad run、ad validate、ad generate、ad config、ad state、ad runs、ad serve、ad mcp、ad build、ad test、ad add、ad remove、ad pack、ad doctor、ad link、ad unlink、ad export skill、ad profile）；
@@ -10,9 +10,9 @@ description: >-
   凡用户询问 ActionDock、ad 命令、@actiondock/sdk 或涉及 Agent 工具开发场景均须应用此技能。
 ---
 
-# ActionDock 2.0 开发者技能指南
+# ActionDock 3.0 开发者技能指南
 
-ActionDock 2.0 是面向 AI 智能体 Action 与 Skill 的工程化开发、测试、构建与分发工具链，命令行工具为 `ad`。
+ActionDock 3.0 是面向 AI 智能体 Action 与 Skill 的工程化开发、测试、构建与分发工具链，命令行工具为 `ad`。
 ActionDock 默认运行于 Node.js 24（要求版本大于等于 24.12.0），基于 Node 原生类型擦除与 NodeNext 模块解析。
 ActionDock 采用 `actiondock.json`（规范版本号为 2）作为元数据唯一事实源，配套 `actiondock.lock.json`（规范版本号为 1）作为跨包依赖锁定事实源。
 ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使用 TypeScript 快速开发原子 Action 工具与业务 Playbook 规程，一键导出标准的 Agent Skill 资产。

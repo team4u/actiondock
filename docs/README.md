@@ -7,7 +7,7 @@
 
 [官网文档](https://team4u.github.io/actiondock/)
 
-Agent 工具的工程化交付链。
+ActionDock 3.0 面向智能体动作与技能的工程化开发与交付工具链。
 
 把 Agent 写出来的工具代码，变成可测试、可约束、可复现、可交付的生产级软件资产。践行人定规程、Agent 写实现的分工模式，依托纯内存沙箱实现毫秒级自动化测试与自愈闭环，原生交付为 MCP 协议服务、Agent 技能包、HTTP 微服务与自包含 Node.js 目录交付产物。
 
@@ -107,5 +107,5 @@ ActionDock 文档中心采用紧凑、权威且零冗余的六大模块设计：
 
 ### 底层架构解密
 
-- [Runtime 执行引擎与通道隔离](architecture/runtime.md)：单一终态状态机、并发调度队列、配额管理与标准输出物理隔离。
+- [Runtime 执行引擎与分层架构](architecture/runtime.md)：统一执行主链、标准服务端口体系、原生运行时驱动与通道隔离。
 - [安全加固与防御模型](architecture/security.md)：非回环鉴权、常数时间比对与原型污染防护。

@@ -1,115 +1,94 @@
 # @actiondock/core
 
-ActionDock 2.0 核心领域模型与调度引擎。
+ActionDock 3.0 Node-first 原生运行时与核心领域。
 
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D24.12.0-green?logo=node.js)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-`@actiondock/core` 承载 ActionDock 的领域对象、状态机、数据目录排他锁、统一调用门面、依赖事务管理与执行服务，是与具体宿主环境解耦的通用内核。
+`@actiondock/core` 是 ActionDock 3.0 的核心领域内核与 Node-first 原生运行时。承载包图发现、动作目录、调用治理、执行主链、存储驱动（`NodeSqliteDriver`、`WorkerSqliteDriver`）、受管进程驱动（`NodeProcessDriver`）、HTTP 网络服务（`NodeHttpServer`）、标准服务端口体系（`DiscoveryPort`、`ExecutionPort`、`RunsPort`、`ConfigPort`、`StatePort`）与统一服务门面（`createActionDock`、`connectActionDock`）。
 
 ---
 
-## 统一调用门面与异常
+## 统一执行主链
 
-### ActionDockTarget 统一调用门面
+ActionDock 3.0 将所有调用形态（命令行、协议服务、微服务与测试沙箱）收敛至统一的确定性执行主链：
 
-[ActionDockTarget](./src/target/types.ts) 为命令行工具、上层服务与应用集成屏蔽本地执行、远程服务与跨进程通信的物理拓扑差异：
+```text
+Host -> Resolution -> PackageRuntime -> ExecutionService -> ActionRunner -> Action
+```
 
-- 本地门面 LocalTarget：直接调用本地加载的 ActionDockApp 或 ActionDockHost 实例，在同进程内高效执行。
-- 远程门面 RemoteTarget：通过 HTTP 协议与远程 ActionDock 服务通信，支持鉴权令牌与请求超时控制。
-- 跨进程门面 IpcTarget：通过 Node.js 进程间通信通道与子进程交互，包含诊断流速率保护与反压控制。
-
-### TargetError 结构化异常
-
-[TargetError](./src/target/types.ts) 继承标准 Error，提供机器可读的结构化错误码与附加详情：
-
-- `TARGET_PROTOCOL_UNSUPPORTED`：协议版本或特性不受支持。
-- `TARGET_CAPABILITY_UNAVAILABLE`：目标端未启用或缺失所需能力。
-- `TARGET_RESULT_UNKNOWN`：连接超时或中断导致执行结果状态未知。
+- 宿主接入（Host）：通过 `ActionDockHost` 或标准服务端口接收外部调用请求与入参数据。
+- 解析定位（Resolution）：通过 `resolveAction` 依赖单一事实源完成动作寻址与跨包引用消歧。
+- 运行时装配（PackageRuntime）：基于包图节点构建隔离的包级执行上下文与依赖环境。
+- 执行协调（ExecutionService）：`DefaultExecutionService` 统筹并发配额、追踪根调用与协同取消信号。
+- 动作执行（ActionRunner）：驱动单一终态状态机，执行入参出参模式校验、循环依赖拦截与状态持久化。
+- 业务执行（Action）：执行开发者编写的纯粹业务逻辑并产出强类型结果。
 
 ---
 
-## 数据目录锁与故障恢复
+## 统一服务门面与标准服务端口
 
-[DataDirLock](./src/storage/data-dir-lock.ts) 在数据目录下维护 `.actiondock.data.lock` 排他文件锁，记录宿主主进程与受管子进程状态，防止多实例并发冲突：
+### 统一服务门面
 
-- `DATA_DIR_IN_USE`：检测到已有活跃宿主主进程正在持有该数据目录，拒绝并发启动。
-- `DATA_DIR_RECOVERY_REQUIRED`：检测到前序宿主主进程异常退出，但仍有关联受管子进程处于运行状态，触发故障恢复拦截。
-- 正常退出时自动释放并移除锁文件；非正常退出且无任何残留进程时允许安全接管。
+通过顶层工厂函数提供无缝屏蔽本地与远程拓扑差异的服务门面：
+
+- 本地服务门面 `createActionDock`：创建 `LocalActionDockService` 实例，在当前 Node.js 进程内装配原生运行时驱动并高效执行。
+- 远端服务门面 `connectActionDock`：创建 `RemoteActionDockService` 实例，通过 HTTP 协议与远端 ActionDock 服务通信，支持鉴权令牌、请求超时控制与证书安全校验。
+
+### 标准服务端口体系
+
+系统将所有对外能力解耦并收敛为五大标准服务端口契约：
+
+- 发现端口 `DiscoveryPort`：负责包与动作的元数据发现、清单检索、全文过滤与规程查询。
+- 执行端口 `ExecutionPort`：负责动作的同步阻塞执行（`run`）与异步启动执行（`start`）。
+- 运行端口 `RunsPort`：负责任务运行历史列表、单次详情查询与协同取消（`cancel`）。
+- 配置端口 `ConfigPort`：负责运行时分层配置读取、持久化配置管理与环境变量满足度体检。
+- 状态端口 `StatePort`：负责包级与动作级持久化键值存取、前缀列举与过期清理。
 
 ---
 
-## 依赖管理与锁定规范
+## 单一事实源架构原则
+
+ActionDock 3.0 全面贯彻单一事实源设计，彻底杜绝各模块私自实现短名搜索或启发式猜测：
+
+- 包图发现单一事实源 `PackageDiscovery`：自顶向下扫描工作区与全局注册表，建立包目录索引。
+- 包拓扑图单一事实源 `PackageGraph`：维护包节点身份标识、实例版本与拓扑依赖关系。
+- 动作目录单一事实源 `ActionCatalog`：统一聚合索引所有已加载包的动作元数据，提供确定性的多维检索能力。
+- 动作解析单一事实源 `resolveAction`：作为全系统动作引用的唯一解析函数。优先支持包限定斜杠语法（`<package-id>/<action-id>`）与当前调用方所属包优先匹配；严格禁止冒号历史语法（`pkg:action`）。
+- 调用治理策略单一事实源 `InvocationPolicy`：统筹管理根任务最大并发配额（默认 32）、子任务并发上限（默认 64）与最大调用嵌套深度（默认 16）。
+
+---
+
+## 原生运行时驱动
+
+`@actiondock/core` 深度集成 Node.js 24 原生能力，无需编译外部二进制扩展：
+
+- 原生存储驱动 `NodeSqliteDriver`：基于 Node.js 原生 `node:sqlite`（`DatabaseSync`）构建同步存储驱动。默认启用预写日志模式（WAL）、外键约束检查与忙等待超时。
+- 异步工作线程存储驱动 `WorkerSqliteDriver`：基于 `node:worker_threads` 将同步数据库操作卸载至专用后台线程，对外暴露异步接口。
+- 受管进程平台驱动 `NodeProcessDriver`：实现完整的受管进程治理体系。基于管道彻底切断子进程与宿主标准流的物理连通；支持跨平台独立进程组管理与信号派发；提供独占控制权租约、逐流增量读取与优雅终止。
+- 原生网络服务容器 `NodeHttpServer`：基于 Node.js 原生 `node:http` 承载 RESTful 微服务与 Server-Sent Events 事件流。
+- 原生模块加载器 `NodeModuleLoader`：基于 Node.js 原生类型擦除机制直接加载 TypeScript 源码，免除前置编译转译开销。
+- 原生文件系统抽象 `NodeFileSystem`：提供跨平台文件读写与原子文件事务保障。
+
+---
+
+## 数据目录锁与故障自愈
+
+通过 `DataDirLock` 在数据目录下维护 `.actiondock.data.lock` 排他文件锁，记录宿主进程与受管子进程状态：
+
+- 活跃进程冲突防护：检测到已有活跃宿主主进程正在持有该数据目录时，抛出 `DATA_DIR_IN_USE` 错误拒绝并发启动。
+- 孤儿进程保护：检测到前序宿主主进程异常退出但仍有关联受管子进程处于运行状态时，抛出 `DATA_DIR_RECOVERY_REQUIRED` 错误，阻止脏写并等待子进程回收。
+- 故障自动恢复：前序宿主进程与关联子进程均已死亡时，当前宿主自动接管排他锁并安全清理残留会话。
+
+---
+
+## 依赖管理与原子事务
 
 基于 `actiondock.lock.json`（规范版本 `lockfileVersion: 1`）提供严格的依赖版本锁定与原子事务保护：
 
-- 依赖解析：[ActionPackageResolver](./src/project/resolver.ts) 递归解析本地包依赖与符号链接，避免重复加载。
-- 原子事务：[beginTransaction](./src/project/transactions.ts) 在执行依赖增删（如 `ad add` 与 `ad remove`）前为 `package.json`、`actiondock.json` 与 `actiondock.lock.json` 创建磁盘快照。若安装或校验流程失败，自动执行原子回滚并恢复原始状态。
-
----
-
-## 核心领域模型
-
-- ProjectConfig：定义在 `actiondock.json` 中的项目规范，包含包标识、名称、版本号、目录配置以及配置项元数据。
-- PlaybookDefinition：智能体操作规程定义，由 Markdown 文本与其头部 YAML 元数据构成，静态记录任务步骤与调用的 Action 依赖列表。
-- ConfigItemDefinition：单项配置规范，涵盖默认值、类型约束、敏感脱敏标记及绑定的外部环境变量。
-
----
-
-## 关键抽象契约
-
-### SqliteDriver 驱动接口
-
-解耦底层数据库实现，提供一致的参数化执行与事务契约：
-
-- `exec(sql: string): void`：执行无返回值的 SQL 语句。
-- `prepare(sql: string): SqliteStatement`：编译 SQL 模板，生成预编译语句对象。
-- `transaction<T>(fn: () => T): T`：同步事务执行器，在出现异常时自动回滚，并在驱动层严格拦截异步 Promise 以避免事务泄漏。
-- `close(): void`：释放数据库连接与文件句柄。
-
-### ProcessDriver 进程驱动契约与受管进程架构
-
-Core 层内置完整的工业级受管进程治理体系，全面解耦具体操作系统运行时：
-
-- ProcessManager 进程调度引擎：承载受管进程全生命周期状态机（`starting`、`running`、`stopping`、`exited`、`failed`、`lost`），提供独占控制权令牌分配与续租排队、有界环形输出日志管理、输入队列异步调度、资源硬性限额与宿主/作用域配额审计。
-- ContextProcessAPI 运行上下文适配器：将 ProcessAPI 绑定至具体的 ActionContext 执行链路，自动注入所有者身份与运行标识，跟踪持有的控制令牌；当 Run 结束或异常而未显式释放控制权时，自动触发目标进程隔离或终止。
-- ProcessDriver 平台驱动契约：定义平台底层派生与进程控制的抽象接口（`getCapabilities`、`spawn`、`write`、`inputEOF`、`terminate` 等），屏蔽各操作系统底层实现差异。
-- ProcessOutputLog 有界环形输出日志：单进程独立的有界内存日志缓冲区，支持基于字节游标的分页查询与长轮询等待，自动识别缓冲区淘汰断层。
-- ProcessMetadataStore 元数据存储接口：提供进程运行记录与幂等请求键索引的持久化抽象，默认提供纯内存实现 MemoryProcessMetadataStore。
-- ProcessExecutor 进程执行器接口：抽象跨平台的子进程操作，向后兼容一次性命令执行。
-
----
-
-## 执行核心与状态机
-
-### ActionRunner 执行状态机
-
-[ActionRunner](./src/execution/runner.ts) 是单个 Action 执行的核心引擎，负责完整的生命周期状态流转与契约保障：
-
-- 调用链环路检测：基于调用栈跟踪，当检测到依赖循环调用时立即拦截并返回错误信封。
-- 模式严格校验：在 Action 执行前校验输入数据是否满足模式规范，校验失败时直接阻断并生成结构化诊断信息。
-- 运行记录持久化：在 SQLite 中写入 `running` 状态记录，并在结束时流转至对应终态。
-- 生命周期状态转换：涵盖 `running`、`success`、`failed`、`timed_out`、`cancelled`、`interrupted` 状态。
-- 上下文环境合成：动态构建 ActionContext，集成配置优先级解析器、状态存储器与标准错误流日志记录器。
-
-### DefaultExecutionService 统一执行服务
-
-[DefaultExecutionService](./src/execution/service.ts) 负责系统层面的并发控制、任务追踪与生命周期协同：
-
-- 并发度控制：维护活跃任务表，支持配置系统最大并发上限，超限时排队或拒绝。
-- 全链路追踪：为每次执行分配全局唯一的根运行标识与父子调用关联。
-- 协同取消传播：支持根据运行标识获取执行句柄，向下游所有派生子任务广播取消信号。
-- 事件汇聚分发：将执行过程中的状态变更事件统一推送到事件接收器中。
-
----
-
-## 运行时可插拔设计
-
-`@actiondock/core` 保持平台中立，不绑定任何特定运行环境：
-
-- 在日常生产与 Node.js 运行时中，默认组装 NodeSqliteDriver 同步存储驱动与 NodeProcessDriver 进程执行驱动（另有独立异步驱动 WorkerSqliteDriver 可选）。
-- 在自动化测试中，通过 [@actiondock/testing](../testing/README.md) 注入纯内存存储驱动 MemoryStorage 与模拟进程执行器 MockProcessExecutor。
+- 依赖解析：`ActionPackageResolver` 递归解析本地包依赖与符号链接，避免重复加载。
+- 原子事务：`beginTransaction` 在执行依赖增删（如 `ad add` 与 `ad remove`）前为 `package.json`、`actiondock.json` 与 `actiondock.lock.json` 创建快照。若安装或校验流程失败，自动执行原子回滚并恢复原始状态。
 
 ---
 

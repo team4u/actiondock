@@ -1,6 +1,6 @@
 # 实践指南：SQLite 存储与状态管理
 
-ActionDock 2.0 采用内嵌式 SQLite（基于 Node.js 原生 `node:sqlite`）作为零依赖持久化存储后端，无需安装外部服务。存储层遵循严格的同步驱动契约（`SqliteDriver`），默认使用主线程同步驱动配合 WAL 模式与忙等待超时保障读写并发；另提供基于专用后台工作线程的异步驱动 WorkerSqliteDriver 作为独立组件，并建立了严格的数据目录租约锁协议与故障自愈机制。
+ActionDock 3.0 采用内嵌式 SQLite（基于 Node.js 原生 `node:sqlite`）作为零依赖持久化存储后端，无需安装外部服务。存储层遵循严格的同步驱动契约（`SqliteDriver`），默认使用主线程同步驱动配合 WAL 模式与忙等待超时保障读写并发；另提供基于专用后台工作线程的异步驱动 WorkerSqliteDriver 作为独立组件，并建立了严格的数据目录租约锁协议与故障自愈机制。
 
 ---
 

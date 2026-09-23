@@ -1,6 +1,6 @@
 # 实践指南：单元测试与沙箱验证
 
-ActionDock 倡导开箱即测试与确定性验证理念。在 ActionDock 2.0 中，测试基础设施下沉至 `@actiondock/testing` 独立测试包，与标准 Node.js 测试框架（`node:test`、`node:assert/strict`）及 `tsx` 原生对齐，无需启动任何外部依赖、真实后台服务或真实数据库，即可在内存中完成全生命周期的精确验证。
+ActionDock 倡导开箱即测试与确定性验证理念。在 ActionDock 3.0 中，测试基础设施下沉至 `@actiondock/testing` 独立测试包，与标准 Node.js 测试框架（`node:test`、`node:assert/strict`）及 `tsx` 原生对齐，无需启动任何外部依赖、真实后台服务或真实数据库，即可在内存中完成全生命周期的精确验证。
 
 ---
 

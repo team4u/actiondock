@@ -1,6 +1,6 @@
 # 参考手册：Testing 测试框架 API
 
-`@actiondock/testing` 是 ActionDock 2.0 官方测试框架，提供毫秒级确定性纯内存测试沙箱、虚拟单调时钟、进程调用拦截模拟与内存持久化存储引擎，完全对齐 Node.js 原生测试标准（`node:test`、`node:assert/strict`）。
+`@actiondock/testing` 是 ActionDock 3.0 官方测试框架，提供毫秒级确定性纯内存测试沙箱、虚拟单调时钟、进程调用拦截模拟与内存持久化存储引擎，完全对齐 Node.js 原生测试标准（`node:test`、`node:assert/strict`）。
 
 ---
 

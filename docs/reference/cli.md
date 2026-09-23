@@ -1,6 +1,6 @@
 # 参考手册：CLI 命令行速查
 
-`ad` 是 ActionDock 2.0 的统一命令行门面工具，用于驱动 Action 与 Skill 的创建、依赖管理、能力检索、本地执行、状态配置管理、测试套件调度、目录构建、打包分发与产物导出。
+`ad` 是 ActionDock 3.0 的统一命令行门面工具，用于驱动 Action 与 Skill 的创建、依赖管理、能力检索、本地执行、状态配置管理、测试套件调度、目录构建、打包分发与产物导出。
 
 ---
 
@@ -177,13 +177,13 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
   ```bash
   ad build [-P, --package <id>] [-o, --out <path>] [-a, --actions <actions...>] [-p, --playbooks <playbooks...>] [-z, --archive] [--vendor-deps] [--allow-install-scripts] [--require-reproducible]
   ```
-  将项目 Action 构建为可直接由 Node.js 运行的交付目录或压缩归档包。支持通过 `--vendor-deps` 固化生产依赖。已废弃并移除 `--target` 与 `--bytecode` 选项（传入将返回 `UNSUPPORTED_BUILD_MODE` 错误）。
+  将项目 Action 构建为可直接由 Node.js 运行的交付目录或压缩归档包。支持通过 `--vendor-deps` 固化生产依赖。
 
 - 导出智能体技能 (`ad export skill`)：
   ```bash
   ad export skill [-P, --package <id...>] [--workspace] [--all] [--bundle [name]] [-m, --mode <mode>] [-o, --out <path>] [-p, --playbook <playbooks...>] [-a, --actions <actions...>] [-z, --archive] [--skill-md <path>] [--custom-md <path>] [--skill-md-only] [--vendor-deps] [--allow-install-scripts] [--require-reproducible]
   ```
-  导出面向智能体的 Agent Skill 目录。支持 `-m, --mode source`（默认源码型）与 `-m, --mode node`（自包含 Node.js 目录型）；已废弃并移除 `--standalone`、`--target` 与 `--bytecode` 选项（传入将返回 `UNSUPPORTED_BUILD_MODE` 错误）。
+  导出面向智能体的 Agent Skill 目录。支持 `-m, --mode source`（默认源码型）与 `-m, --mode node`（自包含 Node.js 目录型）。
   复合导出（`--bundle`）支持 `--custom-md <path>` 指定自定义说明书（`SKILL.custom.md`，含槽位段落与可选 description 覆盖；缺省时自动发现工作区根目录/当前目录下的同名文件），以及 `--skill-md-only` 就地仅重生成复合 SKILL.md（始终重新生成，忽略已有 SKILL.md，不拷贝子包产物）。
 
 ---

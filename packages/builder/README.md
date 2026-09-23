@@ -1,12 +1,12 @@
 # @actiondock/builder
 
-ActionDock 2.0 构建规划、目录交付与技能导出包。
+ActionDock 3.0 构建规划、目录交付与技能导出包。
 
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D24.12.0-green?logo=node.js)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-`@actiondock/builder` 负责静态分析依赖关系、构建 Node.js 目录交付产物、打包标准 npm 压缩包以及将工具和规程导出为可分发的 Agent Skill 资产。
+`@actiondock/builder` 负责静态分析依赖关系、构建 Node.js 目录交付产物、打包标准 npm 压缩包以及将工具和规程导出为可分发的 Agent Skill 资产。在 ActionDock 3.0 中，Skill 模板生成与规程渲染能力（`generateSkillMd`、`generateCompositeSkillMd` 等）已统一归位并入本包。
 
 ---
 
@@ -29,7 +29,6 @@ ActionDock 2.0 构建规划、目录交付与技能导出包。
 - 预置生产依赖：支持 `--vendor-deps` 选项，将锁定的生产依赖物化至产物目录内，实现离线自包含运行。
 - 可重现构建检验：支持 `--require-reproducible` 选项，当存在不受控的生命周期安装脚本时严格报错阻断，保证构建确定性。
 - 标准归档打包：支持 `--archive` 选项，自动将构建目录打包为标准 `.zip` 压缩归档文件。
-- 原单文件二进制编译选项（`--target` 与 `--bytecode`）已彻底删除，统一采用 Node.js 目录交付格式。
 
 ### packProject npm 包打包
 
@@ -39,9 +38,9 @@ ActionDock 2.0 构建规划、目录交付与技能导出包。
 - 预检模式：支持 `--dry-run` 选项，完整校验打包清单、动作列表与文件总数，无需实际写入磁盘。
 - 完整性校验：自动计算并输出打包产物的字节大小与 SHA-256 校验和。
 
-### SkillExporter 技能导出器
+### SkillExporter 与模板生成器
 
-[SkillExporter](./src/exporter.ts) 将原子 Action 与操作规程 Playbook 打包导出为面向主流 AI 智能体生态的标准 Agent Skill 资产：
+[SkillExporter](./src/exporter.ts) 与技能模板生成器（`generateSkillMd`、`generateCompositeSkillMd`）将原子 Action 与操作规程 Playbook 打包导出为面向主流 AI 智能体生态的标准 Agent Skill 资产：
 
 - 生成 SKILL.md 指令：提取 Playbook 规程内容与工具元数据，合成符合智能体规范的操作指南文档与声明头部。
 - 源码模式技能导出：使用 `--mode source`（默认模式），保留 TypeScript 源码与依赖声明，适合具备 Node.js 运行环境的智能体容器直接运行。

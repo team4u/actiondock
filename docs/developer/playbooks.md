@@ -20,7 +20,7 @@ Playbook 将运维手册、业务流程与专家经验沉淀为结构化 Markdow
 
 ## 清单配置与单一事实源
 
-在 ActionDock 2.0 中，`actiondock.json`（规范版本 `schemaVersion: 2`）是动作与规程清单的唯一事实源。Playbook 的条目在清单中显式登记：
+在 ActionDock 3.0 中，`actiondock.json`（规范版本 `schemaVersion: 2`）是动作与规程清单的唯一事实源。Playbook 的条目在清单中显式登记：
 
 ```json
 {

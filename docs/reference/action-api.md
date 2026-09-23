@@ -26,7 +26,7 @@ export default defineAction<TInput, TOutput>({
 
 ### ActionDefinition 契约规范
 
-在 ActionDock 2.0 中，`actiondock.json` 是元数据的权威事实源。`ActionDefinition` 仍保留代码内元数据字段用于兼容和编程式调用场景，新项目推荐将元数据统一声明在清单中：
+在 ActionDock 3.0 中，`actiondock.json` 是元数据的权威事实源。`ActionDefinition` 仍保留代码内元数据字段用于兼容和编程式调用场景，新项目推荐将元数据统一声明在清单中：
 
 ```ts
 export interface ActionDefinition<I = unknown, O = unknown> {
@@ -202,7 +202,7 @@ export interface ActionRef {
 
 #### 调用参数约束与禁止事项
 - 仅接受标识符与引用：`ctx.actions.invoke` 严格只接受动作标识符字符串（短标识符如 `"greet"` 或跨包限定标识符如 `"shared-pkg/b"`）或 `ActionRef` 引用对象。
-- 禁止传入动作定义对象：**严禁将 ActionDefinition 对象或裸函数传入 ctx.actions.invoke**。传入定义对象将绕过 `actiondock.json` 清单校验、模式规范检查与子运行链路记录，执行引擎将抛出 `INVALID_ACTION_REF` 错误。
+- 禁止传入动作定义对象：严禁将动作定义对象或裸函数传入 `ctx.actions.invoke`。传入定义对象将绕过 `actiondock.json` 清单校验、模式规范检查与子运行链路记录，执行引擎将抛出 `INVALID_ACTION_REF` 错误。
 - 依赖必须显式声明：所有通过 `ctx.actions.invoke` 发起的级联调用，必须在当前包 `actiondock.json` 的 `uses` 列表中显式声明。未声明的调用将返回 `UNDECLARED_ACTION_DEPENDENCY` 错误。
 - 循环调用防护：当检测到相互调用成环时，执行引擎抛出 `ACTION_CALL_CYCLE` 错误。
 
@@ -210,7 +210,7 @@ export interface ActionRef {
 
 ### 统一受管进程接口 ProcessAPI
 
-ActionDock 2.0 提供工业级受管进程接口 ProcessAPI，统一管理短时有界外部命令与长期交互式进程，覆盖进程启动、独占控制权租约、逐流增量读取、结构化控制与优雅终止：
+ActionDock 3.0 提供工业级受管进程接口 ProcessAPI，统一管理短时有界外部命令与长期交互式进程，覆盖进程启动、独占控制权租约、逐流增量读取、结构化控制与优雅终止：
 
 ```ts
 export interface ProcessAPI {

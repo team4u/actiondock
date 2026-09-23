@@ -8,7 +8,7 @@ Action 是 ActionDock 体系中最基础的原子能力单元。
 
 ## Action 定义契约与单一事实源
 
-在 ActionDock 2.0 中，`actiondock.json` 是元数据与契约模式的唯一事实源。每个 Action 的标识、描述、模式校验及依赖均在清单中声明，源码专注于纯粹的业务执行逻辑。
+在 ActionDock 3.0 中，`actiondock.json` 是元数据与契约模式的唯一事实源。每个 Action 的标识、描述、模式校验及依赖均在清单中声明，源码专注于纯粹的业务执行逻辑。
 
 ### 标准类型驱动开发路径
 
