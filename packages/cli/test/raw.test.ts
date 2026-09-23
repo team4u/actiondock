@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from "bun:test";
 setDefaultTimeout(120000);
 import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -196,13 +196,15 @@ describe("CLI Action Raw Output Mode - Unit Tests", () => {
 describe("CLI Action Raw Output Mode - End-to-End Tests", () => {
   let tempDir: string;
 
-  beforeEach(() => {
+  beforeAll(() => {
     tempDir = mkdtempSync(join(tmpdir(), "ad-cli-raw-test-"));
     tempHome = mkdtempSync(join(tmpdir(), "ad-cli-raw-home-"));
 
     const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
     if (existsSync(rootNodeModules)) {
-      symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "junction");
+      try {
+        symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "junction");
+      } catch {}
     }
 
     // Initialize package
@@ -239,14 +241,14 @@ export default defineAction(async (input: { path: string }) => {
     writeFileSync(configPath, JSON.stringify(existingConfig, null, 2), "utf-8");
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
     if (tempHome && existsSync(tempHome)) {
       try {
         rmSync(tempHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       } catch {}
       tempHome = undefined;
     }
-    if (existsSync(tempDir)) {
+    if (tempDir && existsSync(tempDir)) {
       try {
         rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       } catch {

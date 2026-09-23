@@ -1,15 +1,40 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "bun:test";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { buildProject } from "../src/build";
 import { exportSkill } from "../src/exporter";
 import { initProject } from "@actiondock/core";
 
+const deferredCleanupDirs = new Set<string>();
+
+/** 快速非阻塞清理目录，遇到 Windows 短暂句柄占用时安全捕获并推迟回收，杜绝用例生命周期中的阻塞延迟 */
+function safeCleanDir(targetDir?: string): void {
+  if (!targetDir || !existsSync(targetDir)) return;
+  try {
+    rmSync(targetDir, { recursive: true, force: true, maxRetries: 1, retryDelay: 10 });
+  } catch {
+    deferredCleanupDirs.add(targetDir);
+  }
+}
+
+function flushDeferredCleanup(): void {
+  for (const dir of deferredCleanupDirs) {
+    if (existsSync(dir)) {
+      try {
+        rmSync(dir, { recursive: true, force: true, maxRetries: 1, retryDelay: 10 });
+      } catch {}
+    }
+  }
+  deferredCleanupDirs.clear();
+}
+
 describe("Build & Skill Export Contract", () => {
+  let suiteBaseDir: string;
   let tempDir: string;
   let tempHome: string;
   let customDataDir: string;
+  let caseIndex = 0;
 
   function runBin(cmdArray: string[], options: any = {}) {
     return Bun.spawnSync(cmdArray, {
@@ -25,9 +50,21 @@ describe("Build & Skill Export Contract", () => {
     });
   }
 
+  beforeAll(() => {
+    suiteBaseDir = mkdtempSync(join(tmpdir(), "actiondock-build-suite-"));
+  });
+
+  afterAll(() => {
+    safeCleanDir(suiteBaseDir);
+    flushDeferredCleanup();
+  });
+
   beforeEach(() => {
-    tempDir = mkdtempSync(join(tmpdir(), "actiondock-build-test-"));
-    tempHome = mkdtempSync(join(tmpdir(), "actiondock-build-test-home-"));
+    caseIndex++;
+    tempDir = join(suiteBaseDir, `case-${caseIndex}`);
+    mkdirSync(tempDir, { recursive: true });
+    tempHome = join(suiteBaseDir, `home-${caseIndex}`);
+    mkdirSync(tempHome, { recursive: true });
     customDataDir = join(tempDir, ".custom-data");
 
     // Link root node_modules so @actiondock/sdk is resolvable during build
@@ -44,24 +81,9 @@ describe("Build & Skill Export Contract", () => {
     });
   });
 
-  afterEach(async () => {
-    if (tempHome && existsSync(tempHome)) {
-      try {
-        rmSync(tempHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
-      } catch {}
-    }
-    if (existsSync(tempDir)) {
-      try {
-        rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
-      } catch {
-        await new Promise((r) => setTimeout(r, 200));
-        try {
-          rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
-        } catch {
-          // Ignore
-        }
-      }
-    }
+  afterEach(() => {
+    safeCleanDir(tempHome);
+    safeCleanDir(tempDir);
   });
 
   it("builds a standalone executable and verifies CLI commands work in compiled binary", async () => {

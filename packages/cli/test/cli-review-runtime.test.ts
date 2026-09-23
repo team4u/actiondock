@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from "bun:test";
 setDefaultTimeout(120000);
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -27,7 +27,7 @@ describe("CLI Review - Runtime & Project Regression", () => {
   let customDataDir: string;
   let env: Record<string, string>;
 
-  beforeEach(() => {
+  beforeAll(() => {
     tempDir = mkdtempSync(join(tmpdir(), "actiondock-reg-rt-project-"));
     customHome = mkdtempSync(join(tmpdir(), "actiondock-reg-rt-home-"));
     customDataDir = mkdtempSync(join(tmpdir(), "actiondock-reg-rt-data-"));
@@ -45,13 +45,18 @@ describe("CLI Review - Runtime & Project Regression", () => {
     initProject(tempDir, { id: "reg.demo", name: "Regression Demo" });
   });
 
-  afterEach(() => {
+  afterAll(async () => {
     for (const dir of [tempDir, customHome, customDataDir]) {
       if (dir && existsSync(dir)) {
         try {
-          rmSync(dir, { recursive: true, force: true });
+          rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
         } catch {
-          // ignore
+          await new Promise((r) => setTimeout(r, 200));
+          try {
+            rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+          } catch {
+            // ignore
+          }
         }
       }
     }
@@ -127,7 +132,7 @@ describe("CLI Review - Runtime & Project Regression", () => {
   });
 
   it("sets exit code 1 on ad config schema when required config is missing", () => {
-    runCli(["init", "--id", "test.cfg-schema", "."], tempDir);
+    initProject(tempDir, { id: "test.cfg-schema" });
 
     const manifestPath = join(tempDir, "actiondock.json");
     const manifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
@@ -147,7 +152,7 @@ describe("CLI Review - Runtime & Project Regression", () => {
   });
 
   it("scaffolds new actions and playbooks via action create and playbook create and updates actiondock.json", () => {
-    runCli(["init", "--id", "test.scaffold", "."], tempDir);
+    initProject(tempDir, { id: "test.scaffold" });
 
     const newActionProc = runCli(
       ["action", "create", "calculator", "--desc", "Perform calculations", "--file", "calc.ts"],
@@ -202,7 +207,7 @@ describe("CLI Review - Runtime & Project Regression", () => {
   });
 
   it("validates ad pack --dry-run", () => {
-    runCli(["init", "--id", "test.build-modes", "."], tempDir);
+    initProject(tempDir, { id: "test.build-modes" });
 
     const packDryProc = runCli(["pack", "--dry-run", "--json"], tempDir);
     expect(packDryProc.exitCode).toBe(0);

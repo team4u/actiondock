@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -20,11 +20,13 @@ function runCli(args: string[], cwd?: string) {
 describe("CLI ad validate 本地相对依赖完整性校验", () => {
   let tempDir: string;
 
-  beforeEach(() => {
+  beforeAll(() => {
     tempDir = mkdtempSync(join(tmpdir(), "actiondock-validate-deps-"));
     const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
     if (existsSync(rootNodeModules)) {
-      symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "junction");
+      try {
+        symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "junction");
+      } catch {}
     }
     initProject(tempDir, {
       id: "test.validate-deps",
@@ -32,11 +34,16 @@ describe("CLI ad validate 本地相对依赖完整性校验", () => {
     });
   });
 
-  afterEach(() => {
-    if (existsSync(tempDir)) {
+  afterAll(async () => {
+    if (tempDir && existsSync(tempDir)) {
       try {
-        rmSync(tempDir, { recursive: true, force: true });
-      } catch {}
+        rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      } catch {
+        await new Promise((r) => setTimeout(r, 200));
+        try {
+          rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+        } catch {}
+      }
     }
   });
 

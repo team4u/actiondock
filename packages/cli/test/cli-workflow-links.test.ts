@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 setDefaultTimeout(120000);
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -6,6 +6,29 @@ import { join, resolve } from "node:path";
 import { initProject } from "@actiondock/core";
 
 const cliPath = resolve(import.meta.dirname, "../bin/ad.js");
+
+const deferredCleanupDirs = new Set<string>();
+
+/** 快速非阻塞清理目录，遇到 Windows 短暂句柄占用时安全捕获并推迟回收，杜绝用例生命周期中的阻塞延迟 */
+function safeCleanDir(targetDir?: string): void {
+  if (!targetDir || !existsSync(targetDir)) return;
+  try {
+    rmSync(targetDir, { recursive: true, force: true, maxRetries: 1, retryDelay: 10 });
+  } catch {
+    deferredCleanupDirs.add(targetDir);
+  }
+}
+
+function flushDeferredCleanup(): void {
+  for (const dir of deferredCleanupDirs) {
+    if (existsSync(dir)) {
+      try {
+        rmSync(dir, { recursive: true, force: true, maxRetries: 1, retryDelay: 10 });
+      } catch {}
+    }
+  }
+  deferredCleanupDirs.clear();
+}
 
 let tempHome: string | undefined;
 
@@ -23,11 +46,25 @@ function runCli(args: string[], cwd?: string, env?: Record<string, string>) {
 }
 
 describe("CLI Workflow - Package Links & Outside Discovery", () => {
+  let suiteBaseDir: string;
   let tempDir: string;
+  let caseIndex = 0;
+
+  beforeAll(() => {
+    suiteBaseDir = mkdtempSync(join(tmpdir(), "actiondock-cli-links-suite-"));
+  });
+
+  afterAll(() => {
+    safeCleanDir(suiteBaseDir);
+    flushDeferredCleanup();
+  });
 
   beforeEach(() => {
-    tempDir = mkdtempSync(join(tmpdir(), "actiondock-cli-links-"));
-    tempHome = mkdtempSync(join(tmpdir(), "actiondock-cli-links-home-"));
+    caseIndex++;
+    tempDir = join(suiteBaseDir, `case-${caseIndex}`);
+    mkdirSync(tempDir, { recursive: true });
+    tempHome = join(suiteBaseDir, `home-${caseIndex}`);
+    mkdirSync(tempHome, { recursive: true });
     const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
     if (existsSync(rootNodeModules)) {
       symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "junction");
@@ -35,23 +72,12 @@ describe("CLI Workflow - Package Links & Outside Discovery", () => {
     initProject(tempDir, { id: "team.github-ops", name: "GitHub Ops" });
   });
 
-  afterEach(async () => {
-    if (tempHome && existsSync(tempHome)) {
-      try {
-        rmSync(tempHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
-      } catch {}
+  afterEach(() => {
+    if (tempHome) {
+      safeCleanDir(tempHome);
       tempHome = undefined;
     }
-    if (existsSync(tempDir)) {
-      try {
-        rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
-      } catch {
-        await new Promise((r) => setTimeout(r, 200));
-        try {
-          rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
-        } catch {}
-      }
-    }
+    safeCleanDir(tempDir);
   });
 
   it("supports common CLI options before and after subcommands", () => {
@@ -169,7 +195,7 @@ describe("CLI Workflow - Package Links & Outside Discovery", () => {
       expect(outsideBuild.exitCode).toBe(0);
       expect(existsSync(join(outsideBuildOut, "entry.mjs"))).toBe(true);
     } finally {
-      rmSync(outsideBuildOut, { recursive: true, force: true });
+      safeCleanDir(outsideBuildOut);
     }
 
     // Export with -P from outside directory
@@ -179,7 +205,7 @@ describe("CLI Workflow - Package Links & Outside Discovery", () => {
       expect(outsideExport.exitCode).toBe(0);
       expect(existsSync(join(outsideExportDir, "SKILL.md"))).toBe(true);
     } finally {
-      rmSync(outsideExportDir, { recursive: true, force: true });
+      safeCleanDir(outsideExportDir);
     }
 
     // Execute from root (outside tempDir)
@@ -218,7 +244,7 @@ describe("CLI Workflow - Package Links & Outside Discovery", () => {
       expect(crossValData.valid).toBe(true);
       expect(crossValData.results[0].warnings.length).toBe(0);
     } finally {
-      rmSync(pkgBDir, { recursive: true, force: true });
+      safeCleanDir(pkgBDir);
     }
 
     // 13. unlink

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 import {
   chmodSync,
   createReadStream,
@@ -98,13 +98,50 @@ function collectFiles(dir: string): Map<string, Buffer> {
   return files;
 }
 
+const deferredCleanupDirs = new Set<string>();
+
+/** 快速非阻塞清理目录，遇到 Windows 短暂句柄占用时安全捕获并推迟回收，杜绝用例生命周期中的阻塞延迟 */
+function safeCleanDir(targetDir?: string): void {
+  if (!targetDir || !existsSync(targetDir)) return;
+  try {
+    rmSync(targetDir, { recursive: true, force: true, maxRetries: 1, retryDelay: 10 });
+  } catch {
+    deferredCleanupDirs.add(targetDir);
+  }
+}
+
+function flushDeferredCleanup(): void {
+  for (const dir of deferredCleanupDirs) {
+    if (existsSync(dir)) {
+      try {
+        rmSync(dir, { recursive: true, force: true, maxRetries: 1, retryDelay: 10 });
+      } catch {}
+    }
+  }
+  deferredCleanupDirs.clear();
+}
+
 describe("@actiondock/builder 测试套件", () => {
+  let suiteBaseDir: string;
   let tempDir: string;
   let tempHome: string;
+  let caseIndex = 0;
+
+  beforeAll(() => {
+    suiteBaseDir = mkdtempSync(join(tmpdir(), "ad-builder-suite-"));
+    tempHome = join(suiteBaseDir, "home");
+    mkdirSync(tempHome, { recursive: true });
+  });
+
+  afterAll(() => {
+    safeCleanDir(suiteBaseDir);
+    flushDeferredCleanup();
+  });
 
   beforeEach(() => {
-    tempDir = mkdtempSync(join(tmpdir(), "ad-builder-test-"));
-    tempHome = mkdtempSync(join(tmpdir(), "ad-builder-test-home-"));
+    caseIndex++;
+    tempDir = join(suiteBaseDir, `case-${caseIndex}`);
+    mkdirSync(tempDir, { recursive: true });
 
     // 软链接根 node_modules 保证测试期间依赖解析
     const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
@@ -122,24 +159,8 @@ describe("@actiondock/builder 测试套件", () => {
     });
   });
 
-  afterEach(async () => {
-    if (tempHome && existsSync(tempHome)) {
-      try {
-        rmSync(tempHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
-      } catch {}
-    }
-    if (existsSync(tempDir)) {
-      try {
-        rmSync(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-      } catch {
-        await new Promise((r) => setTimeout(r, 200));
-        try {
-          rmSync(tempDir, { recursive: true, force: true });
-        } catch {
-          // 忽略清理异常
-        }
-      }
-    }
+  afterEach(() => {
+    safeCleanDir(tempDir);
   });
 
   describe("SelectionPlanner: 依赖闭包计算与构建规划", () => {
@@ -615,7 +636,7 @@ export default defineAction({
         expect(actionIds).toContain("root.caller");
         expect(actionIds).toContain("test.closure-dep/dep-action");
       } finally {
-        rmSync(extDir, { recursive: true, force: true });
+        safeCleanDir(extDir);
       }
     });
 
@@ -644,7 +665,7 @@ export default defineAction({
         // 逃逸外部的软链接应被忽略并跳过
         expect(assetPaths).not.toContain("assets/escaped-link.txt");
       } finally {
-        rmSync(externalDir, { recursive: true, force: true });
+        safeCleanDir(externalDir);
       }
     });
   });
@@ -753,7 +774,7 @@ export default defineAction({
         expect(hostEntry).not.toContain("calc.ts");
         expect(hostEntry).toContain("greet.ts");
       } finally {
-        rmSync(extDir, { recursive: true, force: true });
+        safeCleanDir(extDir);
       }
     });
 
@@ -1280,7 +1301,7 @@ export default defineAction({
         expect(tarModes.get(`${rootName}/readme.txt`)).toBe(0o644);
         expect(tarModes.get(`${rootName}/bin`)).toBe(0o755);
       } finally {
-        rmSync(archiveTestDir, { recursive: true, force: true });
+        safeCleanDir(archiveTestDir);
       }
     });
 
@@ -1405,7 +1426,7 @@ export default defineAction({
           ptr += 46 + nameLen + extraLen + commentLen;
         }
       } finally {
-        rmSync(archiveTestDir, { recursive: true, force: true });
+        safeCleanDir(archiveTestDir);
       }
     });
 
@@ -1457,7 +1478,7 @@ export default defineAction({
         expect(tarModes.get(`${rootName}/readme.txt`)).toBe(0o644);
         expect(tarModes.get(`${rootName}/bin`)).toBe(0o755);
       } finally {
-        rmSync(archiveTestDir, { recursive: true, force: true });
+        safeCleanDir(archiveTestDir);
       }
     });
 
@@ -1530,7 +1551,7 @@ export default defineAction({
         expect(archivedPayload).toBeDefined();
         expect(archivedPayload!.equals(payload)).toBe(true);
       } finally {
-        rmSync(archiveTestDir, { recursive: true, force: true });
+        safeCleanDir(archiveTestDir);
       }
     });
 
@@ -1571,7 +1592,7 @@ export default defineAction({
         expect(caughtError).toBeDefined();
         expect(caughtError?.message).toBe("SIMULATED_DISK_IO_READ_FAILURE");
       } finally {
-        rmSync(archiveTestDir, { recursive: true, force: true });
+        safeCleanDir(archiveTestDir);
       }
     });
 
@@ -1605,7 +1626,7 @@ export default defineAction({
         expect(caughtError).toBeDefined();
         expect(caughtError?.message).toBe("SIMULATED_DISK_FULL_WRITE_FAILURE");
       } finally {
-        rmSync(archiveTestDir, { recursive: true, force: true });
+        safeCleanDir(archiveTestDir);
       }
     });
 
@@ -1709,8 +1730,8 @@ export default defineAction({
           expect(tarEntries.has(`${rootName}/escaped-dir/secret.txt`)).toBe(false);
         }
       } finally {
-        rmSync(archiveTestDir, { recursive: true, force: true });
-        rmSync(outsideDir, { recursive: true, force: true });
+        safeCleanDir(archiveTestDir);
+        safeCleanDir(outsideDir);
       }
     });
 
@@ -1759,7 +1780,7 @@ export default defineAction({
           expect(tarEntries.get(`${rootName}/subdir/sub-file.txt`)?.toString("utf-8")).toBe("sub file content");
         }
       } finally {
-        rmSync(archiveTestDir, { recursive: true, force: true });
+        safeCleanDir(archiveTestDir);
       }
     });
 
@@ -1816,7 +1837,7 @@ export default defineAction({
           expect(tarEntries.get(`${rootName}/link-to-target.txt`)?.toString("utf-8")).toBe("target content");
         }
       } finally {
-        rmSync(archiveTestDir, { recursive: true, force: true });
+        safeCleanDir(archiveTestDir);
       }
     });
 
@@ -1842,7 +1863,7 @@ export default defineAction({
         expect(existsSync(join(batchRes.outDir, "second-package-skill", "SKILL.md"))).toBe(true);
         expect(existsSync(join(batchRes.outDir, "builder-fixture-skill", "actiondock.skill.json"))).toBe(false);
       } finally {
-        rmSync(pkg2Dir, { recursive: true, force: true });
+        safeCleanDir(pkg2Dir);
       }
     });
 
@@ -1910,7 +1931,7 @@ export default defineAction({
         expect(compositeRes.archivePath).toBeDefined();
         expect(existsSync(compositeRes.archivePath!)).toBe(true);
       } finally {
-        rmSync(pkg2Dir, { recursive: true, force: true });
+        safeCleanDir(pkg2Dir);
       }
     });
 
@@ -1985,7 +2006,9 @@ export default defineAction({
         const copiedContent = readFileSync(join(res.skillDir, "SKILL.md"), "utf-8");
         expect(copiedContent).toBe(customSkillContent);
       } finally {
-        rmSync(customSkillPath, { force: true });
+        try {
+          rmSync(customSkillPath, { force: true });
+        } catch {}
       }
     });
 
@@ -2019,7 +2042,7 @@ export default defineAction({
         expect(existsSync(join(res.skillDir, "packages", "pkg-a", "SKILL.md"))).toBe(false);
         expect(existsSync(join(res.skillDir, "packages", "pkg-b", "SKILL.md"))).toBe(false);
       } finally {
-        rmSync(workspaceDir, { recursive: true, force: true });
+        safeCleanDir(workspaceDir);
       }
     });
 
@@ -2050,7 +2073,7 @@ export default defineAction({
 
         expect(plan.actions.some((a) => a.id === "test.ext-tools/calc")).toBe(true);
       } finally {
-        rmSync(extDir, { recursive: true, force: true });
+        safeCleanDir(extDir);
       }
     });
 
@@ -2105,7 +2128,7 @@ export default defineAction({
         const exportedSkillMd = readFileSync(join(outDir, "SKILL.md"), "utf-8");
         expect(exportedSkillMd).toContain("./docs/my-playbooks/guide.md");
       } finally {
-        rmSync(customDir, { recursive: true, force: true });
+        safeCleanDir(customDir);
       }
     });
 
@@ -2138,7 +2161,7 @@ export default defineAction({
         expect(fileKey).toBeDefined();
         expect(entries.get(fileKey!)?.toString("utf-8")).toBe("hello long path");
       } finally {
-        rmSync(archiveDir, { recursive: true, force: true });
+        safeCleanDir(archiveDir);
       }
     });
 
@@ -2257,7 +2280,7 @@ export default defineAction({
           }
         }
       } finally {
-        rmSync(extDir, { recursive: true, force: true });
+        safeCleanDir(extDir);
       }
     });
   });
@@ -2283,7 +2306,7 @@ export default defineAction({
         const sortedCopy = [...files].sort();
         expect(files).toEqual(sortedCopy);
       } finally {
-        rmSync(sortRoot, { recursive: true, force: true });
+        safeCleanDir(sortRoot);
       }
     });
 
@@ -2299,8 +2322,8 @@ export default defineAction({
         const files = collectRelativeFiles(linkRoot);
         expect(files).toEqual(["normal.txt"]);
       } finally {
-        rmSync(linkRoot, { recursive: true, force: true });
-        rmSync(outsideDir, { recursive: true, force: true });
+        safeCleanDir(linkRoot);
+        safeCleanDir(outsideDir);
       }
     });
   });
@@ -2355,7 +2378,7 @@ export default defineAction({
         expect(date).toBe(((1980 - 1980) << 9) | (1 << 5) | 1);
         expect(time).toBe(0);
       } finally {
-        rmSync(timeRoot, { recursive: true, force: true });
+        safeCleanDir(timeRoot);
       }
     });
   });
@@ -2421,7 +2444,7 @@ export default defineAction({
         expect(existsSync(join(okRes.skillDir, "packages", "builder-fixture"))).toBe(true);
         expect(existsSync(join(okRes.skillDir, "packages", "ext-filter-dep"))).toBe(true);
       } finally {
-        rmSync(extDir, { recursive: true, force: true });
+        safeCleanDir(extDir);
       }
     });
 
@@ -2452,7 +2475,7 @@ export default defineAction({
         expect(md).not.toContain("Unrelated Global Skill");
         expect(md).toContain("deep-bundle");
       } finally {
-        rmSync(deepBase, { recursive: true, force: true });
+        safeCleanDir(deepBase);
       }
     });
 
@@ -2476,7 +2499,7 @@ export default defineAction({
           expect(readFileSync(join(outDir, "SKILL.md"), "utf-8")).not.toContain("# Old Existing");
           return true;
         } finally {
-          rmSync(wsDir, { recursive: true, force: true });
+          safeCleanDir(wsDir);
         }
       });
       expect(captured.output).toContain("[WARN]");
@@ -2507,7 +2530,7 @@ export default defineAction({
         const leftoverOld = readdirSync(testRoot).filter((name) => name.includes(".old-"));
         expect(leftoverOld.length).toBe(0);
       } finally {
-        rmSync(testRoot, { recursive: true, force: true });
+        safeCleanDir(testRoot);
       }
     });
 
@@ -2538,7 +2561,7 @@ export default defineAction({
         const leftoverOld = readdirSync(testRoot).filter((name) => name.includes(".old-"));
         expect(leftoverOld.length).toBe(0);
       } finally {
-        rmSync(testRoot, { recursive: true, force: true });
+        safeCleanDir(testRoot);
       }
     });
 
@@ -2556,7 +2579,7 @@ export default defineAction({
         expect(existsSync(target)).toBe(true);
         expect(existsSync(join(target, "data.json"))).toBe(true);
       } finally {
-        rmSync(testRoot, { recursive: true, force: true });
+        safeCleanDir(testRoot);
       }
     });
   });
