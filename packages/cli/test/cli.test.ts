@@ -32,7 +32,7 @@ describe("CLI End-to-End", () => {
     // Link root node_modules so @actiondock/sdk is available
     const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
     if (existsSync(rootNodeModules)) {
-      symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "dir");
+      symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "junction");
     }
   });
 
@@ -270,8 +270,8 @@ describe("CLI End-to-End", () => {
       expect(init2.exitCode).toBe(0);
 
       if (existsSync(rootNodeModules)) {
-        symlinkSync(rootNodeModules, join(sub1, "node_modules"), "dir");
-        symlinkSync(rootNodeModules, join(sub2, "node_modules"), "dir");
+        symlinkSync(rootNodeModules, join(sub1, "node_modules"), "junction");
+        symlinkSync(rootNodeModules, join(sub2, "node_modules"), "junction");
       }
 
       // Link the workspace root

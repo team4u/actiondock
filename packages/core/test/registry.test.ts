@@ -33,8 +33,8 @@ describe("Registry and Linking Mechanism", () => {
 
     const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
     if (existsSync(rootNodeModules)) {
-      symlinkSync(rootNodeModules, join(pkgADir, "node_modules"), "dir");
-      symlinkSync(rootNodeModules, join(pkgBDir, "node_modules"), "dir");
+      symlinkSync(rootNodeModules, join(pkgADir, "node_modules"), "junction");
+      symlinkSync(rootNodeModules, join(pkgBDir, "node_modules"), "junction");
     }
 
     // Init Package A with action 'common.action' and 'unique.a'
@@ -281,7 +281,7 @@ export default defineAction(async () => ({ pkg: "B-unique" }));
     const sub1 = join(wsDir, "tools", "sub1");
     initProject(sub1, { id: "team.dyn-1", name: "Dynamic Sub 1" });
     if (existsSync(rootNodeModules)) {
-      symlinkSync(rootNodeModules, join(sub1, "node_modules"), "dir");
+      symlinkSync(rootNodeModules, join(sub1, "node_modules"), "junction");
     }
 
     const action1Content = `
@@ -304,7 +304,7 @@ export default defineAction(async () => ({ ok: true }));
     const sub2 = join(wsDir, "tools", "sub2");
     initProject(sub2, { id: "team.dyn-2", name: "Dynamic Sub 2" });
     if (existsSync(rootNodeModules)) {
-      symlinkSync(rootNodeModules, join(sub2, "node_modules"), "dir");
+      symlinkSync(rootNodeModules, join(sub2, "node_modules"), "junction");
     }
 
     const action2Content = `
@@ -410,7 +410,7 @@ export default defineAction(async () => ({ fromDyn2: true }));
     const scopedDir = mkdtempSync(join(tmpdir(), "scoped-pkg-"));
     const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
     if (existsSync(rootNodeModules)) {
-      symlinkSync(rootNodeModules, join(scopedDir, "node_modules"), "dir");
+      symlinkSync(rootNodeModules, join(scopedDir, "node_modules"), "junction");
     }
     try {
       initProject(scopedDir, { id: "@team/tools", name: "Scoped Tools" });
@@ -477,8 +477,8 @@ export default defineAction({
     const currentDir = mkdtempSync(join(tmpdir(), "current-pkg-"));
     const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
     if (existsSync(rootNodeModules)) {
-      symlinkSync(rootNodeModules, join(oldDir, "node_modules"), "dir");
-      symlinkSync(rootNodeModules, join(currentDir, "node_modules"), "dir");
+      symlinkSync(rootNodeModules, join(oldDir, "node_modules"), "junction");
+      symlinkSync(rootNodeModules, join(currentDir, "node_modules"), "junction");
     }
     try {
       initProject(oldDir, { id: "team.shared", name: "Old Copy" });

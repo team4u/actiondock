@@ -30,7 +30,9 @@ describe("CLI Workflow - State & Runs Management", () => {
     tempHome = mkdtempSync(join(tmpdir(), "actiondock-cli-state-home-"));
     const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
     if (existsSync(rootNodeModules)) {
-      symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "dir");
+      try {
+        symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "junction");
+      } catch {}
     }
     initProject(tempDir, { id: "team.github-ops", name: "GitHub Ops" });
   });
@@ -76,7 +78,7 @@ describe("CLI Workflow - State & Runs Management", () => {
     expect(stateVal.value).toBe(3);
 
     const stateSetTtl = runCli(
-      ["state", "set", "short_lived", "session_abc", "--ttl", "1"],
+      ["state", "set", "short_lived", "session_abc", "--ttl", "60"],
       tempDir
     );
     expect(stateSetTtl.exitCode).toBe(0);
@@ -84,6 +86,11 @@ describe("CLI Workflow - State & Runs Management", () => {
       ["state", "get", "short_lived", "--json"],
       tempDir
     );
+    if (getShortLived.exitCode !== 0) {
+      throw new Error(
+        `getShortLived failed with exitCode ${getShortLived.exitCode}\nSTDOUT: ${getShortLived.stdout.toString()}\nSTDERR: ${getShortLived.stderr.toString()}`
+      );
+    }
     expect(getShortLived.exitCode).toBe(0);
     expect(JSON.parse(getShortLived.stdout.toString()).value).toBe("session_abc");
 

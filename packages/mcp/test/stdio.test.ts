@@ -38,7 +38,7 @@ describe("MCP STDIO Protocol Process Isolation", () => {
 
     const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
     if (existsSync(rootNodeModules)) {
-      symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "dir");
+      symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "junction");
     }
 
     mkdirSync(join(tempDir, "actions"), { recursive: true });

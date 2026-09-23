@@ -13,7 +13,7 @@ describe("Manifest v2 (actiondock.json) Module", () => {
     tempDir = mkdtempSync(join(tmpdir(), "actiondock-manifest-test-"));
     const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
     if (existsSync(rootNodeModules)) {
-      symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "dir");
+      symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "junction");
     }
     initProject(tempDir, {
       id: "org.manifest-test",

@@ -23,7 +23,7 @@ describe("Project Loader & Init", () => {
     // Link root node_modules so @actiondock/sdk is resolvable
     const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
     if (existsSync(rootNodeModules)) {
-      symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "dir");
+      symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "junction");
     }
   });
 
@@ -258,7 +258,7 @@ Perform audit steps.
       const outsideDir = mkdtempSync(join(tmpdir(), "actiondock-outside-"));
       try {
         const symlinkActions = join(tempDir, "symlink-actions");
-        symlinkSync(outsideDir, symlinkActions, "dir");
+        symlinkSync(outsideDir, symlinkActions, "junction");
 
         writeFileSync(
           join(tempDir, "actiondock.json"),
@@ -274,7 +274,7 @@ Perform audit steps.
       const outsideDir = mkdtempSync(join(tmpdir(), "actiondock-outside-"));
       try {
         const symlinkDir = join(tempDir, "external-link");
-        symlinkSync(outsideDir, symlinkDir, "dir");
+        symlinkSync(outsideDir, symlinkDir, "junction");
 
         // The target file does not exist yet, but its parent directory is a symlink pointing outside
         const nonExistentTarget = join(symlinkDir, "sub", "deep", "nonexistent.ts");
@@ -293,7 +293,7 @@ Perform audit steps.
         mkdirSync(realTarget, { recursive: true });
 
         const symlinkDir = join(tempDir, "linked-app");
-        symlinkSync(realTarget, symlinkDir, "dir");
+        symlinkSync(realTarget, symlinkDir, "junction");
 
         // rootDir has a symlink ancestor (linked-app) and subfolder does not exist yet
         const rootDir = join(symlinkDir, "data");

@@ -24,7 +24,7 @@ describe("CLI ad validate 本地相对依赖完整性校验", () => {
     tempDir = mkdtempSync(join(tmpdir(), "actiondock-validate-deps-"));
     const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
     if (existsSync(rootNodeModules)) {
-      symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "dir");
+      symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "junction");
     }
     initProject(tempDir, {
       id: "test.validate-deps",

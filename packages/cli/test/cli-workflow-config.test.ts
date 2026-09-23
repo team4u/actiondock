@@ -30,7 +30,7 @@ describe("CLI Workflow - Config Management", () => {
     tempHome = mkdtempSync(join(tmpdir(), "actiondock-cli-cfg-home-"));
     const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
     if (existsSync(rootNodeModules)) {
-      symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "dir");
+      symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "junction");
     }
     initProject(tempDir, { id: "team.github-ops", name: "GitHub Ops" });
   });

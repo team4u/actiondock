@@ -8,22 +8,34 @@ import { initProject } from "@actiondock/core";
 
 describe("Build & Skill Export Contract", () => {
   let tempDir: string;
+  let tempHome: string;
   let customDataDir: string;
+
+  function runBin(cmdArray: string[], options: any = {}) {
+    return Bun.spawnSync(cmdArray, {
+      cwd: tempDir,
+      stdout: "pipe",
+      stderr: "pipe",
+      ...options,
+      env: {
+        ...process.env,
+        ...(tempHome ? { ACTIONDOCK_HOME: tempHome } : {}),
+        ...options.env,
+      },
+    });
+  }
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), "actiondock-build-test-"));
+    tempHome = mkdtempSync(join(tmpdir(), "actiondock-build-test-home-"));
     customDataDir = join(tempDir, ".custom-data");
-
-    // Clean up any existing global test package data
-    const globalDataDir = join(homedir(), ".actiondock", "data", "test.sample-tools");
-    if (existsSync(globalDataDir)) {
-      rmSync(globalDataDir, { recursive: true, force: true });
-    }
 
     // Link root node_modules so @actiondock/sdk is resolvable during build
     const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
     if (existsSync(rootNodeModules)) {
-      symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "dir");
+      try {
+        symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "junction");
+      } catch {}
     }
     initProject(tempDir, {
       id: "test.sample-tools",
@@ -33,6 +45,11 @@ describe("Build & Skill Export Contract", () => {
   });
 
   afterEach(async () => {
+    if (tempHome && existsSync(tempHome)) {
+      try {
+        rmSync(tempHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      } catch {}
+    }
     if (existsSync(tempDir)) {
       try {
         rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
@@ -43,14 +60,6 @@ describe("Build & Skill Export Contract", () => {
         } catch {
           // Ignore
         }
-      }
-    }
-    const globalDataDir = join(homedir(), ".actiondock", "data", "test.sample-tools");
-    if (existsSync(globalDataDir)) {
-      try {
-        rmSync(globalDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
-      } catch {
-        // Ignore
       }
     }
   });
@@ -68,11 +77,7 @@ describe("Build & Skill Export Contract", () => {
     expect(metadata.actions).toEqual(["sample.greet"]);
 
     // 1. Test binary `list --json`
-    const listProc = Bun.spawnSync([buildRes.executablePath, "list", "--json"], {
-      cwd: tempDir,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+    const listProc = runBin([buildRes.executablePath, "list", "--json"]);
     expect(listProc.exitCode).toBe(0);
     const listJson = JSON.parse(listProc.stdout.toString());
     expect(listJson).toEqual([
@@ -80,53 +85,32 @@ describe("Build & Skill Export Contract", () => {
     ]);
 
     // 1b. Test binary `list --intent greet --json` and `list nonexist --no-fallback --json`
-    const listIntentProc = Bun.spawnSync(
-      [buildRes.executablePath, "list", "--intent", "greet|other", "--json"],
-      { cwd: tempDir, stdout: "pipe", stderr: "pipe" }
-    );
+    const listIntentProc = runBin([buildRes.executablePath, "list", "--intent", "greet|other", "--json"]);
     expect(listIntentProc.exitCode).toBe(0);
     expect(JSON.parse(listIntentProc.stdout.toString()).length).toBe(1);
 
-    const listStrictProc = Bun.spawnSync(
-      [buildRes.executablePath, "list", "nomatch", "--no-fallback", "--json"],
-      { cwd: tempDir, stdout: "pipe", stderr: "pipe" }
-    );
+    const listStrictProc = runBin([buildRes.executablePath, "list", "nomatch", "--no-fallback", "--json"]);
     expect(listStrictProc.exitCode).toBe(0);
     expect(JSON.parse(listStrictProc.stdout.toString())).toEqual([]);
 
-
     // 2. Test binary `describe <id> --json`
-    const descProc = Bun.spawnSync(
-      [buildRes.executablePath, "describe", "sample.greet", "--json"],
-      {
-        cwd: tempDir,
-        stdout: "pipe",
-        stderr: "pipe",
-      }
-    );
+    const descProc = runBin([buildRes.executablePath, "describe", "sample.greet", "--json"]);
     expect(descProc.exitCode).toBe(0);
     const descJson = JSON.parse(descProc.stdout.toString());
     expect(descJson.id).toBe("sample.greet");
     expect(descJson.inputSchema).toBeDefined();
 
     // 3. Test binary `run <id> --input '...'` with default greeting
-    const runProc = Bun.spawnSync(
-      [
-        buildRes.executablePath,
-        "run",
-        "sample.greet",
-        "--input",
-        '{"name": "Antigravity"}',
-        "--timeout",
-        "5s",
-        "--json",
-      ],
-      {
-        cwd: tempDir,
-        stdout: "pipe",
-        stderr: "pipe",
-      }
-    );
+    const runProc = runBin([
+      buildRes.executablePath,
+      "run",
+      "sample.greet",
+      "--input",
+      '{"name": "Antigravity"}',
+      "--timeout",
+      "5s",
+      "--json",
+    ]);
     expect(runProc.exitCode).toBe(0);
     const runJson = JSON.parse(runProc.stdout.toString());
     expect(runJson.ok).toBe(true);
@@ -134,75 +118,46 @@ describe("Build & Skill Export Contract", () => {
     expect(runJson.runId).toBeDefined();
 
     // 3b. Test binary rejects --async
-    const asyncProc = Bun.spawnSync(
-      [
-        buildRes.executablePath,
-        "run",
-        "sample.greet",
-        "--input",
-        '{"name": "Antigravity"}',
-        "--async",
-      ],
-      {
-        cwd: tempDir,
-        stdout: "pipe",
-        stderr: "pipe",
-      }
-    );
+    const asyncProc = runBin([
+      buildRes.executablePath,
+      "run",
+      "sample.greet",
+      "--input",
+      '{"name": "Antigravity"}',
+      "--async",
+    ]);
     expect(asyncProc.exitCode).toBe(1);
     expect(asyncProc.stderr.toString()).toContain(
       "Async execution is not supported in standalone single-execution binaries"
     );
 
-
     // 4. Test binary `config set` and verify persistence in subsequent run
-    const confSet = Bun.spawnSync(
-      [buildRes.executablePath, "config", "set", "SAMPLE_GREETING", "Welcome"],
-      {
-        cwd: tempDir,
-        stdout: "pipe",
-        stderr: "pipe",
-      }
-    );
+    const confSet = runBin([buildRes.executablePath, "config", "set", "SAMPLE_GREETING", "Welcome"]);
     expect(confSet.exitCode).toBe(0);
 
-    const confRun = Bun.spawnSync(
-      [
-        buildRes.executablePath,
-        "run",
-        "sample.greet",
-        "--input",
-        '{"name": "Antigravity"}',
-        "--json",
-      ],
-      {
-        cwd: tempDir,
-        stdout: "pipe",
-        stderr: "pipe",
-      }
-    );
+    const confRun = runBin([
+      buildRes.executablePath,
+      "run",
+      "sample.greet",
+      "--input",
+      '{"name": "Antigravity"}',
+      "--json",
+    ]);
     expect(confRun.exitCode).toBe(0);
     const confRunJson = JSON.parse(confRun.stdout.toString());
     expect(confRunJson.data.message).toBe("Welcome, Antigravity!");
 
     // 5. Test binary with custom --data-dir isolation
-    const isolatedRun = Bun.spawnSync(
-      [
-        buildRes.executablePath,
-        "--data-dir",
-        customDataDir,
-        "run",
-        "sample.greet",
-        "--input",
-        '{"name": "Isolated"}',
-        "--json",
-      ],
-      {
-        cwd: tempDir,
-        stdout: "pipe",
-        stderr: "pipe",
-      }
-    );
+    const isolatedRun = runBin([
+      buildRes.executablePath,
+      "--data-dir",
+      customDataDir,
+      "run",
+      "sample.greet",
+      "--input",
+      '{"name": "Isolated"}',
+      "--json",
+    ]);
     expect(isolatedRun.exitCode).toBe(0);
     const isoJson = JSON.parse(isolatedRun.stdout.toString());
     // In new isolated data-dir, it uses default greeting ("Hello")
@@ -300,12 +255,8 @@ export default defineAction({
 
     // Execute exported entrypoint directly
     const exportedEntry = join(exportRes.skillDir, "entry.mjs");
-    const binProc = Bun.spawnSync(
-      [exportedEntry, "run", "sample.greet", "--input", '{"name": "Agent"}', "--json"],
-      {
-        stdout: "pipe",
-        stderr: "pipe",
-      }
+    const binProc = runBin(
+      [exportedEntry, "run", "sample.greet", "--input", '{"name": "Agent"}', "--json"]
     );
     expect(binProc.exitCode).toBe(0);
     const res = JSON.parse(binProc.stdout.toString());
@@ -382,10 +333,7 @@ export default defineAction({
     });
 
     const selectiveEntry = join(exportNodeRes.skillDir, "entry.mjs");
-    const listProc = Bun.spawnSync([selectiveEntry, "list", "--json"], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+    const listProc = runBin([selectiveEntry, "list", "--json"]);
     expect(listProc.exitCode).toBe(0);
     const listData = JSON.parse(listProc.stdout.toString());
     expect(listData.length).toBe(1);

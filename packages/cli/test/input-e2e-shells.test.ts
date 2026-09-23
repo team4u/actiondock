@@ -38,7 +38,7 @@ describe("CLI Action Input Resolution - Shell Pipes and Platforms", () => {
     const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
     if (existsSync(rootNodeModules)) {
       try {
-        symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "dir");
+        symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "junction");
       } catch {}
     }
 

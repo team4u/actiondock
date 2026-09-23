@@ -129,7 +129,7 @@ Follow these steps to greet a user.
     // Link root node_modules so @actiondock/sdk is resolvable
     const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
     if (existsSync(rootNodeModules)) {
-      symlinkSync(rootNodeModules, join(projectDir, "node_modules"), "dir");
+      symlinkSync(rootNodeModules, join(projectDir, "node_modules"), "junction");
     }
 
     // 2. Start ActionDock server on a random port with token

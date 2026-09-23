@@ -91,12 +91,17 @@ if (typeof (globalThis as any).Bun === "undefined") {
         input: options.stdin ?? options.input,
         timeout: options.timeout,
       });
+      const stderrBuf = Buffer.isBuffer(res.stderr) ? res.stderr : Buffer.from(res.stderr || "");
+      const errorBuf = res.error
+        ? Buffer.from(`\n[spawnSync Error]: ${res.error.stack || res.error.message}\n`)
+        : Buffer.alloc(0);
+      const combinedStderr = res.error ? Buffer.concat([stderrBuf, errorBuf]) : stderrBuf;
       return {
         // 启动失败（res.error）时 status/signal 均为 null，必须显式置为失败，
         // 否则错误被掩码成 exitCode 0 + 空 stdout
         exitCode: res.error ? 1 : res.status ?? (res.signal ? 1 : 0),
         stdout: Buffer.isBuffer(res.stdout) ? res.stdout : Buffer.from(res.stdout || ""),
-        stderr: Buffer.isBuffer(res.stderr) ? res.stderr : Buffer.from(res.stderr || ""),
+        stderr: combinedStderr,
         signalCode: res.signal,
       };
     },

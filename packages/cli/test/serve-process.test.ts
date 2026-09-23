@@ -48,7 +48,7 @@ describe("ad serve 模式下进程驱动与 ctx.process 远程执行验证", () 
 
     const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
     if (existsSync(rootNodeModules)) {
-      symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "dir");
+      symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "junction");
     }
 
     mkdirSync(join(tempDir, "actions"), { recursive: true });

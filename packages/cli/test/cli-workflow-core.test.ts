@@ -29,7 +29,7 @@ describe("CLI Workflow - Core Lifecycle", () => {
     tempHome = mkdtempSync(join(tmpdir(), "actiondock-cli-core-home-"));
     const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
     if (existsSync(rootNodeModules)) {
-      symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "dir");
+      symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "junction");
     }
   });
 

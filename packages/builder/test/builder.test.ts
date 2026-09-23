@@ -100,14 +100,18 @@ function collectFiles(dir: string): Map<string, Buffer> {
 
 describe("@actiondock/builder 测试套件", () => {
   let tempDir: string;
+  let tempHome: string;
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), "ad-builder-test-"));
+    tempHome = mkdtempSync(join(tmpdir(), "ad-builder-test-home-"));
 
     // 软链接根 node_modules 保证测试期间依赖解析
     const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
     if (existsSync(rootNodeModules)) {
-      symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "dir");
+      try {
+        symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "junction");
+      } catch {}
     }
 
     // 初始化基础项目结构
@@ -119,6 +123,11 @@ describe("@actiondock/builder 测试套件", () => {
   });
 
   afterEach(async () => {
+    if (tempHome && existsSync(tempHome)) {
+      try {
+        rmSync(tempHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      } catch {}
+    }
     if (existsSync(tempDir)) {
       try {
         rmSync(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
@@ -661,9 +670,18 @@ export default defineAction({
       // 执行生成的启动入口测试 list 与 describe
       const listProc = Bun.spawnSync([buildRes.entrypointPath, "list", "--json"], {
         cwd: tempDir,
+        env: {
+          ...process.env,
+          ACTIONDOCK_HOME: tempHome,
+        },
         stdout: "pipe",
         stderr: "pipe",
       });
+      if (listProc.exitCode !== 0) {
+        throw new Error(
+          `listProc failed with exitCode ${listProc.exitCode}\nSTDOUT: ${listProc.stdout.toString()}\nSTDERR: ${listProc.stderr.toString()}`
+        );
+      }
       expect(listProc.exitCode).toBe(0);
       const listJson = JSON.parse(listProc.stdout.toString());
       expect(listJson.length).toBe(1);
@@ -1151,9 +1169,18 @@ export default defineAction({
 
       // 直接执行导出的 Node 入口
       const runProc = Bun.spawnSync([entryPath, "run", "sample.greet", "--input", '{"name": "SkillUser"}', "--json"], {
+        env: {
+          ...process.env,
+          ACTIONDOCK_HOME: tempHome,
+        },
         stdout: "pipe",
         stderr: "pipe",
       });
+      if (runProc.exitCode !== 0) {
+        throw new Error(
+          `runProc failed with exitCode ${runProc.exitCode}\nSTDOUT: ${runProc.stdout.toString()}\nSTDERR: ${runProc.stderr.toString()}`
+        );
+      }
       expect(runProc.exitCode).toBe(0);
       const res = JSON.parse(runProc.stdout.toString().trim());
       expect(res.ok).toBe(true);
@@ -1650,7 +1677,7 @@ export default defineAction({
 
         // 创建指向外部目录的软链接
         const linkToOutsideDir = join(archiveTestDir, "escaped-dir");
-        symlinkSync(outsideDir, linkToOutsideDir, "dir");
+        symlinkSync(outsideDir, linkToOutsideDir, "junction");
 
         const zipOut = join(tempDir, "escape-test.zip");
         const tarOut = join(tempDir, "escape-test.tar.gz");
@@ -1699,9 +1726,9 @@ export default defineAction({
         writeFileSync(subFile, "sub file content", "utf-8");
 
         // 指向根目录的循环软链接
-        symlinkSync(archiveTestDir, join(subDir, "loop-to-root"), "dir");
+        symlinkSync(archiveTestDir, join(subDir, "loop-to-root"), "junction");
         // 指向当前子目录自身的循环软链接
-        symlinkSync(subDir, join(subDir, "loop-to-self"), "dir");
+        symlinkSync(subDir, join(subDir, "loop-to-self"), "junction");
 
         const zipOut = join(tempDir, "cycle-test.zip");
         const tarOut = join(tempDir, "cycle-test.tar.gz");
@@ -2267,7 +2294,7 @@ export default defineAction({
         writeFileSync(join(linkRoot, "normal.txt"), "safe", "utf-8");
         writeFileSync(join(outsideDir, "secret.txt"), "sensitive", "utf-8");
         symlinkSync(join(outsideDir, "secret.txt"), join(linkRoot, "escaped-link.txt"));
-        symlinkSync(linkRoot, join(linkRoot, "loop-to-root"), "dir");
+        symlinkSync(linkRoot, join(linkRoot, "loop-to-root"), "junction");
 
         const files = collectRelativeFiles(linkRoot);
         expect(files).toEqual(["normal.txt"]);

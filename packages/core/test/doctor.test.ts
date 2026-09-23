@@ -16,7 +16,7 @@ describe("Doctor Diagnostics Module", () => {
 
     const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
     if (existsSync(rootNodeModules)) {
-      symlinkSync(rootNodeModules, join(pkgDir, "node_modules"), "dir");
+      symlinkSync(rootNodeModules, join(pkgDir, "node_modules"), "junction");
     }
 
     initProject(pkgDir, {

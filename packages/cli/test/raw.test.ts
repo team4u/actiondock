@@ -202,7 +202,7 @@ describe("CLI Action Raw Output Mode - End-to-End Tests", () => {
 
     const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
     if (existsSync(rootNodeModules)) {
-      symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "dir");
+      symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "junction");
     }
 
     // Initialize package

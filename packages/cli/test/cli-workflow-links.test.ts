@@ -30,7 +30,7 @@ describe("CLI Workflow - Package Links & Outside Discovery", () => {
     tempHome = mkdtempSync(join(tmpdir(), "actiondock-cli-links-home-"));
     const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
     if (existsSync(rootNodeModules)) {
-      symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "dir");
+      symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "junction");
     }
     initProject(tempDir, { id: "team.github-ops", name: "GitHub Ops" });
   });
@@ -197,7 +197,7 @@ describe("CLI Workflow - Package Links & Outside Discovery", () => {
     try {
       const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
       if (existsSync(rootNodeModules)) {
-        symlinkSync(rootNodeModules, join(pkgBDir, "node_modules"), "dir");
+        symlinkSync(rootNodeModules, join(pkgBDir, "node_modules"), "junction");
       }
       runCli(["init", "--id", "team.consumer-pkg", "."], pkgBDir);
       runCli(
@@ -237,7 +237,7 @@ describe("CLI Workflow - Package Links & Outside Discovery", () => {
 
     const fakeUserHome = join(tempDir, "fake-user-home");
     mkdirSync(fakeUserHome, { recursive: true });
-    symlinkSync(realActionDockDir, join(fakeUserHome, ".actiondock"), "dir");
+    symlinkSync(realActionDockDir, join(fakeUserHome, ".actiondock"), "junction");
 
     const customEnv = { ACTIONDOCK_HOME: fakeUserHome };
 

@@ -109,7 +109,7 @@ describe("本地相对路径依赖完整性校验", () => {
 
       const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
       if (existsSync(rootNodeModules)) {
-        symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "dir");
+        symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "junction");
       }
 
       initProject(tempDir, {
@@ -272,7 +272,7 @@ export default defineAction(async () => {
         initProject(projectDir, { id: "test.deep-outside", name: "Deep Outside" });
         const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
         if (existsSync(rootNodeModules)) {
-          symlinkSync(rootNodeModules, join(projectDir, "node_modules"), "dir");
+          symlinkSync(rootNodeModules, join(projectDir, "node_modules"), "junction");
         }
 
         const outsideModule = join(otherTree, "helper.ts");
