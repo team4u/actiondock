@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { ControlGrant } from "@actiondock/sdk";
 import {
   ACCESS_DENIED,
@@ -177,7 +176,7 @@ export class ControlArbiter {
     runId?: string
   ): ControlGrant {
     proc.controlEpoch += 1;
-    const token = `tok_${proc.info.id}_${proc.controlEpoch}_${randomUUID().replace(/-/g, "")}`;
+    const token = `tok_${proc.info.id}_${proc.controlEpoch}_${crypto.randomUUID().replace(/-/g, "")}`;
     const expiresAt = new Date(Date.now() + ttlMs).toISOString();
 
     proc.info.control = "held";

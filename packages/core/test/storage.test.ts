@@ -148,6 +148,74 @@ describe("SqliteRuntimeStorage", () => {
       expect(await storage.listStateKeys()).toEqual([]);
     });
 
+    it("过期条目惰性删除失败时输出可观测告警而非静默吞没", async () => {
+      let currentTime = 1000000;
+      const testClock = {
+        now: () => new Date(currentTime),
+        monotonic: () => currentTime,
+        sleep: async (ms: number) => {
+          currentTime += ms;
+        },
+      };
+      const innerDriver = createDefaultSqliteDriver(":memory:");
+      // 包装驱动：仅拦截 DELETE FROM state 使其抛错，其余透传，
+      // 保证读取路径正常而惰性删除路径可注入失败
+      const failingDeleteDriver = {
+        exec: (sql: string) => innerDriver.exec(sql),
+        prepare: (sql: string) => {
+          const stmt = innerDriver.prepare(sql);
+          if (sql.trimStart().toUpperCase().startsWith("DELETE FROM STATE")) {
+            return {
+              run: () => {
+                throw new Error("injected delete failure");
+              },
+              get: () => undefined,
+              all: () => [],
+            };
+          }
+          return stmt;
+        },
+        transaction: (fn: any) => innerDriver.transaction(fn),
+        close: () => innerDriver.close(),
+        isOpen: true,
+      } as any;
+
+      const ttlStorage = new SqliteRuntimeStorage({
+        packageId: "test-pkg",
+        dbPath: ":memory:",
+        clock: testClock,
+        driver: failingDeleteDriver,
+      });
+
+      const originalWarn = console.warn;
+      const warnCalls: string[] = [];
+      console.warn = ((msg: any) => {
+        warnCalls.push(String(msg));
+      }) as any;
+
+      try {
+        await ttlStorage.setState("ns-warn", "stale-key", "val", 1);
+        currentTime += 2000;
+
+        // 读取路径正常返回 undefined（过期），后台惰性删除失败仅告警
+        expect(await ttlStorage.getState("ns-warn", "stale-key")).toBeUndefined();
+
+        // 惰性删除在后台 Promise 中执行，等待微任务周期后断言告警已产出
+        await new Promise((r) => setTimeout(r, 50));
+        expect(
+          warnCalls.some(
+            (m) =>
+              m.includes("expired state lazy delete failed") &&
+              m.includes("ns-warn") &&
+              m.includes("stale-key")
+          )
+        ).toBe(true);
+      } finally {
+        console.warn = originalWarn;
+        ttlStorage.close();
+      }
+    });
+
     it("should expire state keys based on TTL", async () => {
       let currentTime = 1000000;
       const testClock = {
@@ -301,6 +369,23 @@ describe("SqliteRuntimeStorage", () => {
         expect(remaining?.value).toEqual({ source: "a / b:c" });
       } finally {
         memStorage.close();
+      }
+    });
+  });
+
+  describe("跨进程并发基线", () => {
+    it("init 时统一设置 busy_timeout 为 5000ms（与 worker 驱动行为基线一致）", () => {
+      const s = new SqliteRuntimeStorage({
+        packageId: "test-pkg",
+        dbPath: ":memory:",
+      });
+      try {
+        const row = (s as any).driver.prepare("PRAGMA busy_timeout;").get() as {
+          timeout?: number;
+        } | undefined;
+        expect(Number(row?.timeout)).toBe(5000);
+      } finally {
+        s.close();
       }
     });
   });

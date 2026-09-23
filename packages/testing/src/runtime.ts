@@ -163,7 +163,8 @@ export class MemoryStateStore implements StateStore {
   ): Promise<void> {
     const fullKey = this.qualify(key);
     const clonedValue = typeof value === "object" && value !== null ? structuredClone(value) : value;
-    if (ttlSeconds !== undefined && ttlSeconds !== null && !isNaN(ttlSeconds)) {
+    // 与 SDK StateStore 契约及 core 存储层判定对齐：不传或小于等于 0 均表示永久有效
+    if (typeof ttlSeconds === "number" && ttlSeconds > 0) {
       const expiresAt = this.nowMs() + ttlSeconds * 1000;
       this.store.set(fullKey, {
         __actiondock_entry__: true,

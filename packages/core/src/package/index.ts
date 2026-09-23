@@ -11,6 +11,7 @@ export {
   createPackageRuntime,
   DefaultPackageRuntime,
 } from "./runtime";
+export { findExecutable } from "../utils";
 export type {
   PackageRuntime,
   PackageRuntimeOptions,

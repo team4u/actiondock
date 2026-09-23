@@ -34,6 +34,7 @@ import {
   buildProject,
   packProject,
   BuilderError,
+  PlannerError,
   exportSkill,
   exportSkillBatch,
   exportCompositeSkill,
@@ -2504,6 +2505,130 @@ export default defineAction({
       });
       expect(captured.output).toContain("[WARN]");
       expect(captured.output).toContain("overwritten");
+    });
+  });
+
+  describe("单一事实源收敛后的行为契约", () => {
+    it("单包导出与复合导出的依赖清洗产物一致：file:/workspace:/@actiondock 混合依赖同一结果", async () => {
+      const siblingPkgDir = join(tempDir, "packages", "shared-helper");
+      mkdirSync(siblingPkgDir, { recursive: true });
+      writeFileSync(
+        join(siblingPkgDir, "package.json"),
+        JSON.stringify({ name: "shared-helper", version: "7.8.9" })
+      );
+      writeFileSync(
+        join(tempDir, "package.json"),
+        JSON.stringify(
+          {
+            name: "sanitize-parity-pkg",
+            version: "1.2.3",
+            dependencies: {
+              "@actiondock/core": "workspace:*",
+              "shared-helper": "workspace:*",
+              "pinned-dep": "workspace:~3.0.0",
+              "plain-dep": "^2.0.0",
+            },
+            devDependencies: { typescript: "^5.0.0" },
+          },
+          null,
+          2
+        )
+      );
+
+      // 单包源码导出产物依赖
+      const singleRes = await exportSkill({
+        projectRoot: tempDir,
+        mode: "source",
+        outDir: join(tempDir, "dist", "parity-single"),
+      });
+      const singleDeps = JSON.parse(
+        readFileSync(join(singleRes.skillDir, "package.json"), "utf-8")
+      ).dependencies;
+
+      // 复合导出产物依赖（聚合链路应产出等价清洗结果）
+      const compositeRes = await exportCompositeSkill({
+        bundleName: "parity-bundle",
+        projectRoots: [tempDir],
+        outDir: join(tempDir, "dist", "parity-composite"),
+      });
+      const compositeDeps = JSON.parse(
+        readFileSync(join(compositeRes.skillDir, "package.json"), "utf-8")
+      ).dependencies;
+
+      // 两条链路对同一依赖字典的清洗结果必须一致
+      expect(Object.keys(singleDeps).sort()).toEqual(Object.keys(compositeDeps).sort());
+      for (const dep of Object.keys(singleDeps)) {
+        expect(compositeDeps[dep]).toBe(singleDeps[dep]);
+      }
+      expect(singleDeps["shared-helper"]).toBe("^7.8.9");
+      expect(singleDeps["pinned-dep"]).toBe("~3.0.0");
+      expect(singleDeps["plain-dep"]).toBe("^2.0.0");
+      expect(singleDeps["@actiondock/sdk"]).toBeDefined();
+      expect(singleDeps.devDependencies).toBeUndefined();
+    });
+
+    it("目录名冲突回退后仍同名时追加数字后缀，两个同尾段 ID 包目录互不覆盖", async () => {
+      const clashBase = mkdtempSync(join(tmpdir(), "ad-clash-test-"));
+      try {
+        // 两个同尾段但前缀不同的点号 ID：getPackageSlug 相同，回退值也不同
+        initProject(join(clashBase, "a"), { id: "alpha.shared", name: "Alpha Shared" });
+        initProject(join(clashBase, "b"), { id: "beta.shared", name: "Beta Shared" });
+
+        const batchRes = await exportSkillBatch({
+          projectRoots: [join(clashBase, "a"), join(clashBase, "b")],
+          outDir: join(clashBase, "dist", "batch"),
+        });
+        expect(batchRes.results.length).toBe(2);
+
+        // 两个导出目录必须同时存在（互不覆盖）
+        expect(existsSync(join(batchRes.results[0].skillDir, "SKILL.md"))).toBe(true);
+        expect(existsSync(join(batchRes.results[1].skillDir, "SKILL.md"))).toBe(true);
+        expect(batchRes.results[0].skillDir).not.toBe(batchRes.results[1].skillDir);
+
+        // 复合导出同样保证子包目录互不覆盖
+        const compositeRes = await exportCompositeSkill({
+          bundleName: "clash-bundle",
+          projectRoots: [join(clashBase, "a"), join(clashBase, "b")],
+          outDir: join(clashBase, "dist", "composite"),
+        });
+        const subDirs = readdirSync(join(compositeRes.skillDir, "packages")).sort();
+        expect(subDirs.length).toBe(2);
+        expect(new Set(subDirs).size).toBe(2);
+        for (const sub of subDirs) {
+          expect(existsSync(join(compositeRes.skillDir, "packages", sub, "actiondock.json"))).toBe(true);
+        }
+      } finally {
+        safeCleanDir(clashBase);
+      }
+    });
+
+    it("损坏的 package.json 使规划报 PlannerError 并携带路径与原因，而非静默空依赖", () => {
+      writeFileSync(join(tempDir, "package.json"), "{ this is not valid json !!!");
+      let err: any;
+      try {
+        SelectionPlanner.plan({ projectRoot: tempDir });
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeInstanceOf(PlannerError);
+      expect(err.code).toBe("EXTRACT_DEPS_ERROR");
+      expect(err.message).toContain("package.json");
+    });
+
+    it("tsconfig.json 解析失败时回退默认编译选项但输出显著告警", async () => {
+      writeFileSync(
+        join(tempDir, "tsconfig.json"),
+        "{ invalid tsconfig content !!!"
+      );
+      const captured = await captureConsoleWarn(async () => {
+        const res = await packProject({
+          projectRoot: tempDir,
+          dryRun: true,
+        });
+        return res;
+      });
+      expect(captured.output).toContain("Failed to parse tsconfig.json");
+      expect(captured.result.files.length).toBeGreaterThan(0);
     });
   });
 

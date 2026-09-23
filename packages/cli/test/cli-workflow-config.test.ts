@@ -52,9 +52,14 @@ describe("CLI Workflow - Config Management", () => {
     const confObj = JSON.parse(confGet.stdout.toString());
     expect(confObj.value).toBe("Howdy");
 
-    const confListIntent = await runCliAsync(["config", "list", "--intent", "SAMPLE.*GREETING", "--json"], tempDir);
+    const confListIntent = await runCliAsync(["config", "list", "--intent", "SAMPLE_GREETING", "--json"], tempDir);
     expect(confListIntent.exitCode).toBe(0);
     expect(JSON.parse(confListIntent.stdout.toString()).some((c: any) => c.key === "SAMPLE_GREETING")).toBe(true);
+
+    // 机器模式（--json）无匹配且未显式 --fallback 时不回退：返回空集
+    const confListNoMatch = await runCliAsync(["config", "list", "--intent", "nomatch-xyz", "--json"], tempDir);
+    expect(confListNoMatch.exitCode).toBe(0);
+    expect(JSON.parse(confListNoMatch.stdout.toString())).toEqual([]);
 
     const runWithNewConf = await runCliAsync(
       ["run", "sample.greet", "--input", '{"name": "Cowboy"}', "--json"],

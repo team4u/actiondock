@@ -137,8 +137,14 @@ export class DataDirLock {
         writeFileSync(tmpPath, content, { mode: 0o600 });
         renameSync(tmpPath, this.lockDirPath);
       }
-    } catch {
-      // 忽略刷新写入异常
+    } catch (err) {
+      // 元数据刷新失败不可中断宿主启动，但绝不能静默吞没：childPids 是
+      // DATA_DIR_RECOVERY_REQUIRED 判定的唯一依据，丢失会使恢复决策退化为直接接管。
+      // 输出单行告警携带原因，保证降级事件可观测。
+      const reason = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `[actiondock] data dir lock metadata flush failed (lock='${this.lockDirPath}'): ${reason}`
+      );
     }
   }
 

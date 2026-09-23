@@ -29,7 +29,12 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
       const actionId = url.searchParams.get("actionId") || undefined;
       const packageId = url.searchParams.get("packageId") || undefined;
       const intent = url.searchParams.get("intent") || undefined;
-      const limit = parseInt(url.searchParams.get("limit") || "50", 10);
+      // limit 边界防护：非法或超界值回退默认 50，并夹紧到 1 至 500 区间
+      const parsedLimit = parseInt(url.searchParams.get("limit") || "50", 10);
+      const limit =
+        Number.isFinite(parsedLimit) && parsedLimit > 0
+          ? Math.min(parsedLimit, 500)
+          : 50;
 
       if (
         packageId &&
@@ -192,47 +197,56 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
     const eventStream = service.events.events(runId, { after: afterCursor, signal: req.signal });
     const iterator = eventStream[Symbol.asyncIterator]();
 
-    // 检查游标是否在建流前已过期：拉取首个事件，若抛出 EVENT_CURSOR_EXPIRED 直接返回 410
-    let firstResult: IteratorResult<ExecutionEvent>;
+    const encoder = new TextEncoder();
+    const encodeEvent = (evt: ExecutionEvent): Uint8Array => {
+      const eventType = evt.type || "message";
+      const idField = evt.eventId ? `id: ${evt.eventId}\n` : `id: ${evt.sequence}\n`;
+      return encoder.encode(`${idField}event: ${eventType}\ndata: ${JSON.stringify(evt)}\n\n`);
+    };
+
+    // 游标过期检测：仅等待首事件一小段时间（过期错误通常在拉取瞬间抛出）；
+    // 超时后立即开流，保证响应头及时下发，不再等首事件到达
+    const CURSOR_PROBE_MS = 250;
+    let firstResult: IteratorResult<ExecutionEvent> | undefined;
+    let cursorExpired: any = null;
+    const firstPull = iterator.next();
     try {
-      firstResult = await iterator.next();
+      firstResult = await Promise.race([
+        firstPull,
+        new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), CURSOR_PROBE_MS)),
+      ]);
     } catch (err: any) {
-      if (err?.code === EVENT_CURSOR_EXPIRED) {
-        return jsonResponse(
-          {
-            ok: false,
-            error: {
-              code: EVENT_CURSOR_EXPIRED,
-              message: err.message || "Event cursor has expired",
-              details: err.details,
-            },
+      cursorExpired = err;
+    }
+
+    if (cursorExpired?.code === EVENT_CURSOR_EXPIRED) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: {
+            code: EVENT_CURSOR_EXPIRED,
+            message: cursorExpired.message || "Event cursor has expired",
+            details: cursorExpired.details,
           },
-          410,
-          corsHeaders
-        );
-      }
-      throw err;
+        },
+        410,
+        corsHeaders
+      );
     }
 
     const stream = new ReadableStream({
       async start(controller) {
-        const encoder = new TextEncoder();
         let sawFinish = false;
-        let eventsCount = 0;
 
         try {
-          // 先消费首个事件结果
-          if (!firstResult.done) {
-            eventsCount++;
-            const evt = firstResult.value;
+          // 先消费首个事件结果（探测期内未完成则继续等待）
+          const first = firstResult ?? (await firstPull);
+          if (!first.done) {
+            const evt = first.value;
             if (evt.type === "finish") {
               sawFinish = true;
             }
-            const eventType = evt.type || "message";
-            const idField = evt.eventId ? `id: ${evt.eventId}\n` : `id: ${evt.sequence}\n`;
-            controller.enqueue(
-              encoder.encode(`${idField}event: ${eventType}\ndata: ${JSON.stringify(evt)}\n\n`)
-            );
+            controller.enqueue(encodeEvent(evt));
             // 若首条事件为背压终止事件，立即关闭通道
             if (evt.type === "error" && (evt as any).error?.code === EVENT_BACKPRESSURE_LIMIT) {
               controller.close();
@@ -244,16 +258,11 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
           while (!req.signal.aborted) {
             const nextResult = await iterator.next();
             if (nextResult.done) break;
-            eventsCount++;
             const evt = nextResult.value;
             if (evt.type === "finish") {
               sawFinish = true;
             }
-            const eventType = evt.type || "message";
-            const idField = evt.eventId ? `id: ${evt.eventId}\n` : `id: ${evt.sequence}\n`;
-            controller.enqueue(
-              encoder.encode(`${idField}event: ${eventType}\ndata: ${JSON.stringify(evt)}\n\n`)
-            );
+            controller.enqueue(encodeEvent(evt));
 
             // 若收到背压截断终止事件，正常关闭流通道
             if (evt.type === "error" && (evt as any).error?.code === EVENT_BACKPRESSURE_LIMIT) {
@@ -282,15 +291,26 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
               encoder.encode(`event: finish\ndata: ${JSON.stringify(finishEvt)}\n\n`)
             );
           }
-        } catch {
-          // 忽略中断
+        } catch (err) {
+          // 流中断不静默：保留诊断线索（客户端断连属正常路径，仅记录非预期异常）
+          if (!(err instanceof Error) || err.name !== "AbortError") {
+            console.warn(`[RunsRoute] SSE stream for run '${runId}' interrupted: ${err instanceof Error ? err.message : String(err)}`);
+          }
         } finally {
           try {
             controller.close();
           } catch {}
         }
       },
-      cancel() {},
+      cancel() {
+        // 客户端断开时释放底层事件迭代器，避免资源悬挂
+        try {
+          const ret = iterator.return?.() as unknown;
+          if (ret && typeof (ret as Promise<void>).catch === "function") {
+            (ret as Promise<void>).catch(() => {});
+          }
+        } catch {}
+      },
     });
 
     return new Response(stream, {

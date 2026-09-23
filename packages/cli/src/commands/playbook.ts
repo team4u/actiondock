@@ -35,6 +35,7 @@ import {
   NO_PROJECT_NO_LINKED_MESSAGE,
   notInProjectError,
   packageNotFoundError,
+  wrapAsExecutionError,
 } from "../errors";
 import {
   renderPlaybookDetail,
@@ -46,6 +47,8 @@ import type { CliContext } from "../types";
 import {
   applyTargetOptions,
   getEffectiveOptions,
+  remoteTargetSuffix,
+  resolveFallbackStrategy,
   resolveIntent,
   resolveTargetFromOptions,
 } from "../utils";
@@ -69,13 +72,13 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
       .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
       .option("-P, --package <id>", "Target package ID or path")
   )
+    .option("--fallback", "Enable fallback to full list when no items match intent")
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("--json", "Output as JSON")
     .action(async (patterns: string[] = [], rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
       const effectiveIntent = resolveIntent(options.intent, patterns);
-      const shouldFallback = options.fallback !== false;
-      const isMachine = Boolean(options.json);
+      const { shouldFallback, isMachine } = resolveFallbackStrategy(options);
 
       // 1. 远端服务分支
       const target = resolveTargetFromOptions(options, context);
@@ -93,7 +96,7 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
           humanFormatter: () =>
             renderPlaybookList(
               remotePbs,
-              `Playbooks on remote server ${target.serverUrl}${target.profileName ? ` (Profile: ${target.profileName})` : ""}`,
+              `Playbooks ${remoteTargetSuffix(target)}`,
               false,
               effectiveIntent
             ),
@@ -556,6 +559,6 @@ This playbook provides task execution guidance for AI Agents.
     if (err instanceof CliError) {
       throw err;
     }
-    throw new ExecutionError(err.message);
+    throw wrapAsExecutionError(err);
   }
 }

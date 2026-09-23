@@ -12,7 +12,7 @@ import {
   loadProjectConfig,
 } from "@actiondock/core";
 import type { Command } from "commander";
-import { ExecutionError, notInProjectError } from "../../errors";
+import { ExecutionError, notInProjectError, wrapAsExecutionError } from "../../errors";
 import { writeStdout } from "../../renderer";
 import type { CliContext } from "../../types";
 import { attachDescribeCommand } from "../describe";
@@ -245,7 +245,6 @@ ${returnBody}
     writeStdout(`  根据 describe 输出的赋值模板传递参数：ad run ${id} --json -- ASSIGNMENT...`, context);
     writeStdout(`  复杂输入或大段文本：ad run ${id} --json --input-file input.json`, context);
   } catch (err: any) {
-    if (err instanceof ExecutionError) throw err;
-    throw new ExecutionError(err.message);
+    throw wrapAsExecutionError(err);
   }
 }

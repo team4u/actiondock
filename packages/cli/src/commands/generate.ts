@@ -5,7 +5,7 @@ import {
 import {
   writeActionTypes,
 } from "@actiondock/core/project";
-import { ArgumentError, ExecutionError, notInProjectError } from "../errors";
+import { ArgumentError, notInProjectError, wrapAsExecutionError } from "../errors";
 import { renderResult } from "../renderer";
 import type { CliContext } from "../types";
 import { getEffectiveOptions } from "../utils";
@@ -46,7 +46,7 @@ export function registerGenerateCommands(program: Command, context?: CliContext)
           context,
         });
       } catch (err: any) {
-        throw new ExecutionError(`Failed to generate types: ${err.message}`);
+        throw wrapAsExecutionError(err, "Failed to generate types: ");
       }
     });
 }

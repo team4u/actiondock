@@ -1,8 +1,9 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { toSnakeUpperCase } from "../runtime/env";
 import { isLoopbackHost } from "../utils/net";
 import { getActionDockHome } from "../utils";
+import { ActionDockError, INVALID_ARGUMENT } from "../errors";
 import type {
   ProfileEntry,
   ProfilesConfig,
@@ -66,6 +67,11 @@ export function getProfilesFilePath(customHome?: string): string {
 
 /**
  * 加载并读取 profiles.json 配置文件。
+ *
+ * 损坏语义与注册表（registry.ts）对齐：JSON 损坏或结构非法时将原文件原子留档为
+ * `profiles.json.corrupt` 并抛出带恢复指引的异常，绝不静默返回默认配置——否则
+ * 后续任意一次 saveProfiles 会用默认配置覆写原文件，导致用户全部远端环境配置
+ * 永久丢失。文件不存在时仍走默认初始化。
  */
 export function loadProfiles(customHome?: string): ProfilesConfig {
   const filePath = getProfilesFilePath(customHome);
@@ -73,15 +79,52 @@ export function loadProfiles(customHome?: string): ProfilesConfig {
     return structuredClone(DEFAULT_PROFILES_CONFIG);
   }
 
+  let raw: string;
   try {
-    const raw = readFileSync(filePath, "utf-8");
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object" || !parsed.profiles) {
+    raw = readFileSync(filePath, "utf-8");
+  } catch (err: any) {
+    if (err.code === "ENOENT") {
       return structuredClone(DEFAULT_PROFILES_CONFIG);
     }
-    return parsed as ProfilesConfig;
+    throw err;
+  }
+
+  let parsed: any;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err: any) {
+    archiveCorruptProfiles(filePath);
+    throw new ActionDockError(
+      INVALID_ARGUMENT,
+      `Profiles file '${filePath}' is corrupted (invalid JSON: ${err.message}). ` +
+        `The original data has been preserved as '${filePath}.corrupt'. ` +
+        `Restore it manually or remove it to start with the default profiles.`
+    );
+  }
+
+  if (!parsed || typeof parsed !== "object" || !parsed.profiles) {
+    archiveCorruptProfiles(filePath);
+    throw new ActionDockError(
+      INVALID_ARGUMENT,
+      `Profiles file '${filePath}' is corrupted (missing or invalid 'profiles' field). ` +
+        `The original data has been preserved as '${filePath}.corrupt'. ` +
+        `Restore it manually or remove it to start with the default profiles.`
+    );
+  }
+
+  return parsed as ProfilesConfig;
+}
+
+/**
+ * 将损坏的 profiles 文件原子留档为 `${filePath}.corrupt`，
+ * 后续 saveProfiles 的直接写入不会覆盖留档（文件名不同）。
+ */
+function archiveCorruptProfiles(filePath: string): void {
+  try {
+    renameSync(filePath, `${filePath}.corrupt`);
   } catch {
-    return structuredClone(DEFAULT_PROFILES_CONFIG);
+    // 留档失败（如文件被其他进程先行移动）时仅放弃留档：错误仍会向上抛出，
+    // 不会出现静默清空
   }
 }
 

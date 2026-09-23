@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type {
   ActionDefinition,
   ActionRef,
@@ -38,6 +37,7 @@ import type { ProcessOwner } from "../process";
 import type { PackageIdentity } from "./identity";
 import type { ActionInvoker } from "../execution/types";
 import type { InvocationCaller, InvocationContext } from "../invocation/types";
+import { createDefaultProcessOwner } from "../invocation/types";
 import {
   ActionRegistry,
   findLocalAction,
@@ -162,6 +162,30 @@ export interface ExecutionHandle {
 export type ActionResolution =
   | { status: "found"; action: ActionDefinition }
   | { status: "not_found"; reason?: string };
+
+/**
+ * 将输入值校验结果映射为标准运行时错误（单一事实源）。
+ *
+ * json-value 分支映射 INPUT_NOT_JSON（非 JSON 类型值），input-policy 分支映射
+ * INPUT_VALIDATION_FAILED（策略违规）并携带 details 数组；start 同步路径与
+ * raceExecutionAndAbort 延迟解析路径共用，确保错误码与 details 结构一致。
+ */
+function buildInputValidationError(
+  targetActionId: string,
+  check: Exclude<ReturnType<typeof validateActionInputValue>, { valid: true }>
+): RuntimeError {
+  if (check.kind === "json-value") {
+    return {
+      code: INPUT_NOT_JSON,
+      message: `Input validation failed for action '${targetActionId}': ${check.reason}`,
+    };
+  }
+  return {
+    code: INPUT_VALIDATION_FAILED,
+    message: `Input validation failed for action '${targetActionId}': ${check.reason}`,
+    details: [check.reason],
+  };
+}
 
 /**
  * 单次 start 调用的运行期共享上下文对象（收敛原闭包散落状态）。
@@ -374,17 +398,7 @@ export class ActionRunner {
     // 输入参数 JSON 格式与合法性防御校验（拦截 NaN/Infinity/循环引用等非 JSON 类型及非法原型键策略违规）
     const inputCheck = validateActionInputValue(input);
     if (!inputCheck.valid) {
-      const error: RuntimeError =
-        inputCheck.kind === "json-value"
-          ? {
-              code: INPUT_NOT_JSON,
-              message: `Input validation failed for action '${targetActionId}': ${inputCheck.reason}`,
-            }
-          : {
-              code: INPUT_VALIDATION_FAILED,
-              message: `Input validation failed for action '${targetActionId}': ${inputCheck.reason}`,
-              details: [inputCheck.reason],
-            };
+      const error = buildInputValidationError(targetActionId, inputCheck);
       // 安全记录 failed 状态（不可序列化或策略违规的非法 input 严禁直接写入持久化存储）
       tryCreateRun(this.storage, buildInitialRunRecord(this.buildRunPersistenceInput(runCtx), "failed", error));
       return {
@@ -492,7 +506,7 @@ export class ActionRunner {
     input: unknown,
     options: ExecutionStartOptions
   ): RunExecutionContext {
-    const runId = options.runId || randomUUID();
+    const runId = options.runId || crypto.randomUUID();
     const effectiveClock = options.clock ?? this.clock;
     const effectiveProcess = options.process || this.process;
     const startedAt =
@@ -599,12 +613,14 @@ export class ActionRunner {
   }) {
     const { runCtx, controller, rootRunId } = args;
     const { options, targetPackageId, targetActionId, effectiveProcess } = runCtx;
-    const effectiveOwner: ProcessOwner = options.owner || {
-      tenantId: options.tenantId || "default",
-      principalId: options.principalId || options.ownerId || "default",
-      packageInstanceId: options.packageInstanceId || this.packageInstanceId,
-      generationId: options.generationId || this.generationId,
-    };
+    const effectiveOwner: ProcessOwner =
+      options.owner ||
+      createDefaultProcessOwner({
+        tenantId: options.tenantId,
+        principalId: options.principalId || options.ownerId,
+        packageInstanceId: options.packageInstanceId || this.packageInstanceId,
+        generationId: options.generationId || this.generationId,
+      });
     return createActionContext({
       actionId: targetActionId,
       storage: this.storage,
@@ -655,14 +671,16 @@ export class ActionRunner {
       );
     }
 
-    const effectiveParentOwner: ProcessOwner = options.owner || {
-      tenantId: options.tenantId || "default",
-      principalId: options.principalId || options.ownerId || "default",
-      packageInstanceId: this.packageInstanceId,
-      generationId: this.generationId,
-    };
+    const effectiveParentOwner: ProcessOwner =
+      options.owner ||
+      createDefaultProcessOwner({
+        tenantId: options.tenantId,
+        principalId: options.principalId || options.ownerId,
+        packageInstanceId: this.packageInstanceId,
+        generationId: this.generationId,
+      });
 
-    const childRunId = randomUUID();
+    const childRunId = crypto.randomUUID();
     const invocationContext: InvocationContext = {
       runId: childRunId,
       rootRunId,
@@ -741,17 +759,7 @@ export class ActionRunner {
 
           const inputCheck = validateActionInputValue(input);
           if (!inputCheck.valid) {
-            const error: RuntimeError =
-              inputCheck.kind === "json-value"
-                ? {
-                    code: INPUT_NOT_JSON,
-                    message: `Input validation failed for action '${targetActionId}': ${inputCheck.reason}`,
-                  }
-                : {
-                    code: INPUT_VALIDATION_FAILED,
-                    message: `Input validation failed for action '${targetActionId}': ${inputCheck.reason}`,
-                    details: [inputCheck.reason],
-                  };
+            const error = buildInputValidationError(targetActionId, inputCheck);
             finalizer.finalize("failed", undefined, error);
             return { ok: false, runId, error };
           }

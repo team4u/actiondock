@@ -5,6 +5,7 @@ import { BuilderError } from "./errors";
 import { replaceDirAtomic } from "./fs-utils";
 import { collectRelativeFiles } from "./fs-utils";
 import { SelectionPlanner } from "./planner";
+import { isOwnAction } from "./types";
 import {
   buildConfigForTemplates,
   findExistingCompositeSkillMd,
@@ -149,9 +150,7 @@ export class SkillExporter {
       archivePath = await createArchive(targetSkillDir, resolveArchiveFormat(options));
     }
 
-    const ownActions = plan.actions.filter(
-      (a) => !a.isExternal && !a.id.includes("/")
-    );
+    const ownActions = plan.actions.filter((a) => isOwnAction(a));
 
     return {
       packageId: plan.packageId,

@@ -56,9 +56,14 @@ describe("CLI Workflow - State & Runs Management", () => {
     const stateKeys = JSON.parse(stateList.stdout.toString());
     expect(stateKeys).toContain("greet_count");
 
-    const stateListIntent = await runCliAsync(["state", "list", "--intent", "greet.*", "--json"], tempDir);
+    const stateListIntent = await runCliAsync(["state", "list", "--intent", "greet", "--json"], tempDir);
     expect(stateListIntent.exitCode).toBe(0);
     expect(JSON.parse(stateListIntent.stdout.toString())).toContain("greet_count");
+
+    // 机器模式（--json）无匹配且未显式 --fallback 时不回退：返回空集
+    const stateListNoMatch = await runCliAsync(["state", "list", "--intent", "nomatch-xyz", "--json"], tempDir);
+    expect(stateListNoMatch.exitCode).toBe(0);
+    expect(JSON.parse(stateListNoMatch.stdout.toString())).toEqual([]);
 
     const stateGet = await runCliAsync(["state", "get", "greet_count", "--json"], tempDir);
     expect(stateGet.exitCode).toBe(0);
@@ -158,9 +163,14 @@ describe("CLI Workflow - State & Runs Management", () => {
     const runs = JSON.parse(runsListProc.stdout.toString());
     expect(runs.length).toBe(3);
 
-    const runsListIntent = await runCliAsync(["runs", "list", "--intent", "sample\\.greet", "--json"], tempDir);
+    const runsListIntent = await runCliAsync(["runs", "list", "--intent", "sample.greet", "--json"], tempDir);
     expect(runsListIntent.exitCode).toBe(0);
     expect(JSON.parse(runsListIntent.stdout.toString()).length).toBe(3);
+
+    // 机器模式（--json）无匹配且未显式 --fallback 时不回退：返回空集
+    const runsListNoMatch = await runCliAsync(["runs", "list", "--intent", "nomatch-xyz", "--json"], tempDir);
+    expect(runsListNoMatch.exitCode).toBe(0);
+    expect(JSON.parse(runsListNoMatch.stdout.toString())).toEqual([]);
 
     const runShowProc = await runCliAsync(["runs", "show", runs[0].id, "--json"], tempDir);
     expect(runShowProc.exitCode).toBe(0);

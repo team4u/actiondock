@@ -5,7 +5,6 @@ import type {
   ProcessAPI,
   ProgressReporter,
 } from "@actiondock/sdk";
-import { randomUUID } from "node:crypto";
 import type { ProcessOwner } from "../process";
 import { createPackageIdentity, type PackageIdentity } from "../runtime/identity";
 
@@ -13,6 +12,31 @@ export { createPackageIdentity };
 export type { PackageIdentity };
 
 export type { RunOptions } from "../service/types";
+
+/**
+ * 构造默认进程归属所有者（ProcessOwner）的单一事实源工厂。
+ *
+ * 兜底语义：租户与主体标识缺失时回退 "default"，包实例与代次标识缺失时回退
+ * 调用方提供的兜底值；全部五处默认 Owner 构造点（invocation、runner、runtime
+ * 上下文与进程执行器）必须统一经由本工厂，禁止散落字面量拷贝。
+ */
+export function createDefaultProcessOwner(options?: {
+  /** 租户标识，缺省回退 "default" */
+  tenantId?: string;
+  /** 主体标识，缺省回退 "default" */
+  principalId?: string;
+  /** 包物理实例标识兜底值，缺省回退 "default" */
+  packageInstanceId?: string;
+  /** 快照代次标识兜底值，缺省回退 "default" */
+  generationId?: string;
+}): ProcessOwner {
+  return {
+    tenantId: options?.tenantId || "default",
+    principalId: options?.principalId || "default",
+    packageInstanceId: options?.packageInstanceId || "default",
+    generationId: options?.generationId || "default",
+  };
+}
 
 /**
  * 内部调用方身份凭证（InvocationCaller）。
@@ -85,7 +109,7 @@ export interface CreateInvocationContextOptions extends Omit<Partial<InvocationC
  * 供测试或内部直接调用执行服务时便捷装配上下文凭据。
  */
 export function createInvocationContext(options: CreateInvocationContextOptions): InvocationContext {
-  const runId = options.runId ?? randomUUID();
+  const runId = options.runId ?? crypto.randomUUID();
   const rootRunId = options.rootRunId ?? runId;
   const pkg = options.package;
   return {
@@ -106,12 +130,13 @@ export function createInvocationContext(options: CreateInvocationContextOptions)
     logger: options.logger,
     progress: options.progress,
     process: options.process,
-    owner: options.owner ?? {
-      tenantId: options.tenantId || "default",
-      principalId: options.principalId || "default",
-      packageInstanceId: pkg.instanceId,
-      generationId: pkg.generation,
-    },
+    owner: options.owner ??
+      createDefaultProcessOwner({
+        tenantId: options.tenantId,
+        principalId: options.principalId,
+        packageInstanceId: pkg.instanceId,
+        generationId: pkg.generation,
+      }),
   };
 }
 
@@ -155,7 +180,7 @@ export interface CreateRootInvocationContextOptions {
  * 根运行 ID 等同于自身运行 ID，且仅透传受信任参数。
  */
 export function createRootInvocationContext(options: CreateRootInvocationContextOptions): InvocationContext {
-  const runId = randomUUID();
+  const runId = crypto.randomUUID();
   const pkg = options.targetPackage;
   return {
     runId,
@@ -173,12 +198,13 @@ export function createRootInvocationContext(options: CreateRootInvocationContext
     logger: options.logger,
     progress: options.progress,
     process: options.process,
-    owner: options.owner ?? {
-      tenantId: options.tenantId || "default",
-      principalId: options.principalId || "default",
-      packageInstanceId: pkg.instanceId,
-      generationId: pkg.generation,
-    },
+    owner: options.owner ??
+      createDefaultProcessOwner({
+        tenantId: options.tenantId,
+        principalId: options.principalId,
+        packageInstanceId: pkg.instanceId,
+        generationId: pkg.generation,
+      }),
   };
 }
 

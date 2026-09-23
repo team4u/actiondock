@@ -1,4 +1,5 @@
 import {
+  isFlatSafePropertyName,
   isFlatPathPropertyName,
   isForbiddenActionInputPropertyName,
 } from "./flat-predicates";
@@ -729,8 +730,11 @@ export function buildCliInputAdviceV1(schema: unknown): CliInputAdviceV1 {
   };
 }
 
-export const FLAT_SAFE_KEY_REGEX = /^[A-Za-z_][A-Za-z0-9_-]*$/;
-
+/**
+ * 扁平编码通用指引文案。
+ * 属性名安全判定统一引用 flat-predicates 的单一事实源（含禁止属性排除），
+ * 禁止在本文件另建独立正则分叉。
+ */
 export const FLAT_ENCODING_GUIDELINES: readonly string[] = [
   "字符串: path=TEXT",
   "JSON 标量与结构: path:=JSON (例如 count:=1, enabled:=true)",
@@ -857,7 +861,7 @@ export function buildActionInputAdvice(schema: unknown): ActionInputAdvice {
     const prop = properties[key] || {};
     const typeStr = prop.type ? String(prop.type) : "any";
     const isReq = required.includes(key);
-    const isFlatSafe = FLAT_SAFE_KEY_REGEX.test(key);
+    const isFlatSafe = isFlatSafePropertyName(key);
 
     let assignmentTemplate: string | undefined;
     let hint: string | undefined;

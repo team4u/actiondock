@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import {
   decodeBytes,
   encodeBytes,
@@ -276,7 +276,7 @@ export class ProcessManager {
   private isShutdown = false;
 
   constructor(options: ProcessManagerOptions) {
-    this.hostEpoch = options.hostEpoch ?? `epoch-${Date.now()}-${randomUUID().slice(0, 8)}`;
+    this.hostEpoch = options.hostEpoch ?? `epoch-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
     this.driver = options.driver;
     this.metadataStore = options.metadataStore ?? new MemoryProcessMetadataStore();
 
@@ -489,7 +489,7 @@ export class ProcessManager {
    * 为指定所有者与运行上下文创建 ProcessAPI 代理适配器。
    */
   forOwner(owner: ProcessOwner, runId?: string, signal?: AbortSignal): ContextProcessAPI {
-    return new ContextProcessAPI(this, owner, runId ?? randomUUID(), signal, Boolean(runId));
+    return new ContextProcessAPI(this, owner, runId ?? crypto.randomUUID(), signal, Boolean(runId));
   }
 
   /**
@@ -541,7 +541,7 @@ export class ProcessManager {
         throw new ProcessError(UNSUPPORTED_CAPABILITY, "Driver does not support PTY mode");
       }
 
-      const processId = `proc-${randomUUID()}`;
+      const processId = `proc-${crypto.randomUUID()}`;
       const effectiveLimits: Required<Limits> = {
         idleMs: input.limits?.idleMs ?? this.defaultLimits.idleMs,
         lifetimeMs: input.limits?.lifetimeMs ?? this.defaultLimits.lifetimeMs,
@@ -700,8 +700,13 @@ export class ProcessManager {
       await this.metadataStore.recordRequest(key, startResult as any, payloadHash);
       this.commitReservation(key, "start", startResult);
       return startResult;
+    } catch (err) {
+      // 失败路径：以原始错误结算预占，等待同 requestId 的并发调用方收到真实失败原因而非固定冲突错误
+      this.rejectReservation(key, "start", err);
+      throw err;
     } finally {
-      // 成功路径已在 commit 中移除预占；此处仅对异常路径释放并唤醒等待方
+      // 成功路径已在 commit 中移除预占；失败路径已在 catch 中以原始错误结算；
+      // 此处仅为既未 commit 也未 reject 的异常逃逸路径释放预占并唤醒等待方
       this.rejectReservation(key, "start", new ProcessError(
         REQUEST_CONFLICT,
         "Concurrent start request did not produce a result",
@@ -822,8 +827,13 @@ export class ProcessManager {
       }
       this.commitReservation(key, "acquire", grant);
       return grant;
+    } catch (err) {
+      // 失败路径：以原始错误结算预占，等待同 requestId 的并发调用方收到真实失败原因而非固定冲突错误
+      this.rejectReservation(key, "acquire", err);
+      throw err;
     } finally {
-      // 成功路径已在 commit 中移除预占；此处仅对异常路径释放并唤醒等待方
+      // 成功路径已在 commit 中移除预占；失败路径已在 catch 中以原始错误结算；
+      // 此处仅为既未 commit 也未 reject 的异常逃逸路径释放预占并唤醒等待方
       this.rejectReservation(key, "acquire", new ProcessError(
         REQUEST_CONFLICT,
         "Concurrent acquire request did not produce a result",
@@ -938,8 +948,13 @@ export class ProcessManager {
 
       this.commitReservation(key, "write", queued);
       return queued;
+    } catch (err) {
+      // 失败路径：以原始错误结算预占，等待同 requestId 的并发调用方收到真实失败原因而非固定冲突错误
+      this.rejectReservation(key, "write", err);
+      throw err;
     } finally {
-      // 成功路径已在 commit 中移除预占；此处仅对异常路径释放并唤醒等待方
+      // 成功路径已在 commit 中移除预占；失败路径已在 catch 中以原始错误结算；
+      // 此处仅为既未 commit 也未 reject 的异常逃逸路径释放预占并唤醒等待方
       this.rejectReservation(key, "write", new ProcessError(
         REQUEST_CONFLICT,
         "Concurrent write request did not produce a result",
@@ -1022,8 +1037,13 @@ export class ProcessManager {
 
       this.commitReservation(key, "control", queued);
       return queued;
+    } catch (err) {
+      // 失败路径：以原始错误结算预占，等待同 requestId 的并发调用方收到真实失败原因而非固定冲突错误
+      this.rejectReservation(key, "control", err);
+      throw err;
     } finally {
-      // 成功路径已在 commit 中移除预占；此处仅对异常路径释放并唤醒等待方
+      // 成功路径已在 commit 中移除预占；失败路径已在 catch 中以原始错误结算；
+      // 此处仅为既未 commit 也未 reject 的异常逃逸路径释放预占并唤醒等待方
       this.rejectReservation(key, "control", new ProcessError(
         REQUEST_CONFLICT,
         "Concurrent control request did not produce a result",
@@ -1348,7 +1368,7 @@ export class ProcessManager {
     }
     proc.info.endReason = "idle";
     this.stop(proc.owner, proc.info.id, {
-      requestId: `idle-${randomUUID()}`,
+      requestId: `idle-${crypto.randomUUID()}`,
       graceMs: 1000,
     }).catch((err: unknown) => {
       this.recordDiagnostic(`Idle timeout stop failed for process '${proc.info.id}'`, err);
@@ -1368,7 +1388,7 @@ export class ProcessManager {
     }
     proc.info.endReason = "lifetime";
     this.stop(proc.owner, proc.info.id, {
-      requestId: `lifetime-${randomUUID()}`,
+      requestId: `lifetime-${crypto.randomUUID()}`,
       graceMs: 1000,
     }).catch((err: unknown) => {
       this.recordDiagnostic(`Lifetime timeout stop failed for process '${proc.info.id}'`, err);

@@ -1,9 +1,9 @@
-import { closeSync, createReadStream, createWriteStream, existsSync, openSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync, writeSync } from "node:fs";
+import { closeSync, createReadStream, createWriteStream, existsSync, openSync, readFileSync, statSync, writeFileSync, writeSync } from "node:fs";
 import { createDeflateRaw, deflateRawSync, gzipSync, createGzip } from "node:zlib";
-import { basename, join, relative, sep } from "node:path";
+import { basename, join } from "node:path";
 import { Readable, Transform, Writable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { assertPathWithinRoot } from "@actiondock/core/project";
+import { traverseDirectory } from "@actiondock/core/project";
 
 /**
  * 纯 Node 实现的归档压缩模块。
@@ -21,64 +21,38 @@ interface ArchiveEntry {
   isDir: boolean;
 }
 
-/** 递归收集目录内全部条目，执行安全路径边界校验与符号链接循环拦截 */
-function collectEntries(dir: string, baseDir = dir, visited = new Set<string>()): ArchiveEntry[] {
+/**
+ * 递归收集目录内全部条目。
+ * 目录遍历统一复用 core 的 traverseDirectory 单一事实源，
+ * 自带安全路径边界校验、软链接越界跳过与循环拦截。
+ */
+function collectEntries(dir: string): ArchiveEntry[] {
   if (!existsSync(dir)) return [];
-  if (visited.size === 0) {
-    try {
-      visited.add(existsSync(baseDir) ? realpathSync(baseDir) : baseDir);
-    } catch {
-      // 忽略
-    }
+  return traverseDirectory(dir, { includeDirs: true }).map((entry) => ({
+    relPath: entry.relPath,
+    isDir: entry.isDir,
+  }));
+}
+
+/**
+ * 归档条目可执行位启发式：bin/ 路径前缀约定为可执行产物。
+ * 与磁盘 mode 权限位任一命中即按 0755 落归档元数据。
+ */
+const EXECUTABLE_PATH_HINT = "bin/";
+
+/**
+ * 计算归档条目的 Unix 权限位：目录固定 0755；文件按「磁盘 mode 含执行位
+ * 或相对路径命中 bin/ 启发式」判定为 0755，其余 0644。
+ */
+function computeUnixMode(relPath: string, mode: number, isDir: boolean): number {
+  if (isDir) {
+    return 0o40755;
   }
-  const entries: ArchiveEntry[] = [];
-  let names: string[];
-  try {
-    names = readdirSync(dir).sort();
-  } catch {
-    return [];
-  }
-  for (const name of names) {
-    const fullPath = join(dir, name);
-    try {
-      assertPathWithinRoot(baseDir, fullPath, "archive path");
-    } catch {
-      continue;
-    }
-
-    let real: string;
-    try {
-      real = existsSync(fullPath) ? realpathSync(fullPath) : fullPath;
-    } catch {
-      continue;
-    }
-
-    try {
-      assertPathWithinRoot(baseDir, real, "archive path");
-    } catch {
-      // 忽略并跳过指向 baseDir 外部的软链接
-      continue;
-    }
-
-    if (visited.has(real)) {
-      continue;
-    }
-    visited.add(real);
-
-    try {
-      const stat = statSync(fullPath);
-      if (stat.isDirectory()) {
-        entries.push({ relPath: relative(baseDir, fullPath).split(sep).join("/"), isDir: true });
-        entries.push(...collectEntries(fullPath, baseDir, visited));
-      } else if (stat.isFile()) {
-        entries.push({ relPath: relative(baseDir, fullPath).split(sep).join("/"), isDir: false });
-      }
-    } catch {
-      // 忽略无法访问或损坏的文件/符号链接
-      continue;
-    }
-  }
-  return entries;
+  const isExec =
+    Boolean(mode & 0o111) ||
+    relPath.includes(EXECUTABLE_PATH_HINT) ||
+    relPath.startsWith(EXECUTABLE_PATH_HINT);
+  return isExec ? 0o100755 : 0o100644;
 }
 
 /* ------------------------------------------------------------------ */
@@ -202,11 +176,8 @@ export function createZipArchive(dir: string, outPath: string): void {
       central.writeUInt16LE(0, 34); // disk start
       central.writeUInt16LE(0, 36); // internal attrs
       // 外部属性：Unix 权限左移 16 位，目录附加 MS-DOS 目录位
-      const isExec =
-        !entry.isDir &&
-        (Boolean(stat.mode & 0o111) || entry.relPath.includes("bin/") || entry.relPath.startsWith("bin/"));
-      const fileMode = isExec ? 0o100755 : 0o100644;
-      const extAttrs = ((entry.isDir ? 0o40755 : fileMode) << 16) | (entry.isDir ? 0x10 : 0);
+      const fileMode = computeUnixMode(entry.relPath, stat.mode, entry.isDir);
+      const extAttrs = (fileMode << 16) | (entry.isDir ? 0x10 : 0);
       central.writeUInt32LE(extAttrs >>> 0, 38);
       central.writeUInt32LE(offset, 42);
       centralRecords.push({ header: Buffer.concat([central, nameBuf]), localOffset: offset });
@@ -310,11 +281,8 @@ export async function createZipArchiveAsync(dir: string, outPath: string): Promi
       const { date, time } = dosDateTime(stat.mtimeMs);
 
       // 外部属性：Unix 权限左移 16 位，目录附加 MS-DOS 目录位
-      const isExec =
-        !entry.isDir &&
-        (Boolean(stat.mode & 0o111) || entry.relPath.includes("bin/") || entry.relPath.startsWith("bin/"));
-      const fileMode = isExec ? 0o100755 : 0o100644;
-      const extAttrs = ((entry.isDir ? 0o40755 : fileMode) << 16) | (entry.isDir ? 0x10 : 0);
+      const fileMode = computeUnixMode(entry.relPath, stat.mode, entry.isDir);
+      const extAttrs = (fileMode << 16) | (entry.isDir ? 0x10 : 0);
 
       const localOffset = offset;
       const isDeflatedFile = !entry.isDir && stat.size > 0;
@@ -516,9 +484,7 @@ export function createTarGzArchive(dir: string, outPath: string): void {
     const fullPath = join(dir, entry.relPath);
     const stat = statSync(fullPath);
     const content = entry.isDir ? Buffer.alloc(0) : readFileSync(fullPath);
-    const isExec =
-      !entry.isDir &&
-      (Boolean(stat.mode & 0o111) || entry.relPath.includes("bin/") || entry.relPath.startsWith("bin/"));
+    const mode = computeUnixMode(entry.relPath, stat.mode, entry.isDir);
 
     chunks.push(
       tarHeader(
@@ -526,7 +492,7 @@ export function createTarGzArchive(dir: string, outPath: string): void {
         content.length,
         Math.floor(stat.mtimeMs / 1000),
         entry.isDir,
-        isExec
+        entry.isDir ? "0000755" : mode === 0o100755
       )
     );
     if (!entry.isDir) {
@@ -579,16 +545,14 @@ export async function createTarGzArchiveAsync(
       const path = `${rootName}/${entry.relPath}${entry.isDir ? "/" : ""}`;
       const fullPath = join(dir, entry.relPath);
       const stat = statSync(fullPath);
-      const isExec =
-        !entry.isDir &&
-        (Boolean(stat.mode & 0o111) || entry.relPath.includes("bin/") || entry.relPath.startsWith("bin/"));
+      const mode = computeUnixMode(entry.relPath, stat.mode, entry.isDir);
 
       const header = tarHeader(
         path,
         entry.isDir ? 0 : stat.size,
         Math.floor(stat.mtimeMs / 1000),
         entry.isDir,
-        isExec
+        entry.isDir ? "0000755" : mode === 0o100755
       );
       await writeToStream(gzip, header);
 

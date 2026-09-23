@@ -17,6 +17,7 @@ import {
   PROCESS_CANCELLED,
   PROCESS_LOST,
   PROCESS_QUARANTINED,
+  PROCESS_SPAWN_ERROR,
   PROCESS_TIMEOUT,
   QUEUE_FULL,
   QUOTA_EXCEEDED,
@@ -1770,6 +1771,70 @@ describe("受管进程管理器 ProcessManager", () => {
       const inspectRes = await manager.inspect(ownerA, res.process.id);
       expect(inspectRes.state).toBe("exited");
       expect(inspectRes.exit?.code).toBe(42);
+    });
+
+    it("[Issue 8] 首次 start 失败时，同 requestId 并发等待方收到原始错误码而非 REQUEST_CONFLICT", async () => {
+      const driver = new MemoryProcessDriver();
+      // spawnHook 抛出模拟驱动派生失败
+      driver.spawnHook = () => {
+        throw new Error("simulated driver spawn failure");
+      };
+      const manager = new ProcessManager({
+        hostEpoch: "epoch-fail-prop",
+        driver,
+        metadataStore: new MemoryProcessMetadataStore(),
+      });
+
+      const [r1, r2] = await Promise.allSettled([
+        manager.start(ownerA, { requestId: "req-fail-prop", spec: defaultSpec }),
+        manager.start(ownerA, { requestId: "req-fail-prop", spec: defaultSpec }),
+      ]);
+
+      // 首个执行者与并发等待方均应收到原始失败（PROCESS_SPAWN_ERROR），而非固定 REQUEST_CONFLICT
+      expect(r1.status).toBe("rejected");
+      expect(r2.status).toBe("rejected");
+      const err1 = (r1 as PromiseRejectedResult).reason as ProcessError;
+      const err2 = (r2 as PromiseRejectedResult).reason as ProcessError;
+      expect(err1).toBeInstanceOf(ProcessError);
+      expect(err2).toBeInstanceOf(ProcessError);
+      expect(err1.code).toBe(PROCESS_SPAWN_ERROR);
+      expect(err2.code).toBe(PROCESS_SPAWN_ERROR);
+      expect(err2.message).toContain("simulated driver spawn failure");
+    });
+
+    it("[Issue 8] 首次 write 失败时，同 requestId 并发等待方收到原始错误码而非 REQUEST_CONFLICT", async () => {
+      const { manager, driver } = createManager();
+
+      const startRes = await manager.start(ownerA, {
+        requestId: "req-fail-prop-w-start",
+        spec: defaultSpec,
+      });
+      const processId = startRes.process.id;
+
+      // 持有令牌后构造并发写入：首次因令牌错误失败，第二个同 requestId 调用方应收到同样错误
+      const payload = encodeText("data");
+      const [w1, w2] = await Promise.allSettled([
+        manager.write(ownerA, processId, {
+          token: "invalid-token",
+          requestId: "req-fail-prop-write",
+          data: payload,
+        }),
+        manager.write(ownerA, processId, {
+          token: "invalid-token",
+          requestId: "req-fail-prop-write",
+          data: payload,
+        }),
+      ]);
+
+      expect(w1.status).toBe("rejected");
+      expect(w2.status).toBe("rejected");
+      const err1 = (w1 as PromiseRejectedResult).reason as ProcessError;
+      const err2 = (w2 as PromiseRejectedResult).reason as ProcessError;
+      // 原始错误为令牌校验失败（ACCESS_DENIED 或 CONTROL_REVOKED），而非 REQUEST_CONFLICT
+      expect(err1.code).not.toBe(REQUEST_CONFLICT);
+      expect(err2.code).not.toBe(REQUEST_CONFLICT);
+      expect(err2.code).toBe(err1.code);
+      expect(driver.handles.get(processId)!.writtenChunks.length).toBe(0);
     });
   });
 });

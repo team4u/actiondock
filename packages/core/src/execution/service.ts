@@ -1,5 +1,4 @@
 import { existsSync } from "node:fs";
-import { randomUUID } from "node:crypto";
 import type {
   ActionDefinition,
   ActionRef,
@@ -114,7 +113,7 @@ export class DefaultExecutionService implements ExecutionService {
     this.moduleLoader = options.moduleLoader;
     this.eventSink = options.eventSink || new InMemoryEventSink();
     this.maxActiveRuns = options.maxActiveRuns || 32;
-    this.ownerId = options.ownerId || `host-${randomUUID().slice(0, 8)}`;
+    this.ownerId = options.ownerId || `host-${crypto.randomUUID().slice(0, 8)}`;
     this.actionResolver = options.actionResolver;
     this.logger = options.logger;
     this.actionInvoker = options.actionInvoker;
@@ -292,7 +291,7 @@ export class DefaultExecutionService implements ExecutionService {
         }
       }
 
-      const runId = designatedRunId || context.runId || randomUUID();
+      const runId = designatedRunId || context.runId || crypto.randomUUID();
       const bridge = this.createEventBridge({ runId, context, effectiveClock });
 
       this.registerResolvedAction(target.runner, targetPackageId, targetActionId, target.action);
@@ -372,7 +371,7 @@ export class DefaultExecutionService implements ExecutionService {
       timeoutMs: context.timeoutMs,
     };
     const inputDigest = computeDigest(digestPayload);
-    const provisionalRunId = randomUUID();
+    const provisionalRunId = crypto.randomUUID();
 
     if (!this.storage.checkAndRecordIdempotency) {
       return {};
@@ -561,7 +560,7 @@ export class DefaultExecutionService implements ExecutionService {
     effectiveClock?: Clock;
   }): ExecutionTicket {
     const { target, input, context, targetPackageId, targetActionId, designatedRunId, effectiveClock } = args;
-    const runId = designatedRunId || context.runId || randomUUID();
+    const runId = designatedRunId || context.runId || crypto.randomUUID();
     const now = (effectiveClock?.now() ?? new Date()).toISOString();
     const error: RuntimeError = target.resolveError || {
       code: ACTION_NOT_FOUND,

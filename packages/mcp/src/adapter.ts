@@ -32,6 +32,37 @@ import {
 } from "./execution-mode";
 
 /**
+ * MCP 工具回调上下文中携带的请求级取消信号字段。
+ *
+ * 该形状未出现在 SDK 的公开类型承诺中（依赖 ctx.mcpReq.signal 运行时形状），
+ * SDK 升级一旦调整形状不会报错，只会拿到 undefined，取消能力静默失效。
+ * 因此集中收敛到本函数管理，并在首次发现形状缺失时向 stderr 输出一次降级警告。
+ */
+interface ToolCallbackContext {
+  mcpReq?: { signal?: AbortSignal };
+}
+
+/** 形状缺失告警是否已输出过（每个进程仅告警一次，避免逐请求噪声） */
+let cancelSignalDegradationWarned = false;
+
+/**
+ * 从 MCP 工具回调上下文提取请求级取消信号。
+ *
+ * @param ctx MCP SDK 回调传入的工具执行上下文
+ * @returns 可用的 AbortSignal；形状缺失时返回 undefined 并输出一次降级警告
+ */
+function extractCancelSignal(ctx: ToolCallbackContext | undefined): AbortSignal | undefined {
+  const signal = ctx?.mcpReq?.signal;
+  if (!signal && !cancelSignalDegradationWarned) {
+    cancelSignalDegradationWarned = true;
+    process.stderr.write(
+      "[actiondock-mcp] Tool cancel signal unavailable: MCP SDK callback context does not expose mcpReq.signal; per-request cancellation is degraded for this server instance.\n"
+    );
+  }
+  return signal;
+}
+
+/**
  * 解析 Action 引用字符串为包标识与动作标识。
  */
 function splitActionRef(ref: string): { packageId?: string; actionId: string } {
@@ -365,6 +396,15 @@ export async function createActionDockMcpServer(
 
   const registeredToolNames = new Set<string>();
 
+  // 多包判定（循环外一次算清）：不同 packageId 去重计数大于 1，
+  // 或任一 id 含斜杠（跨包限定名形态），则工具描述需附全限定 id 锚点
+  const distinctPackageIds = new Set(
+    actions
+      .map((a) => (a.id.includes("/") ? splitActionRef(a.id).packageId || a.packageId : a.packageId))
+      .filter((pkg): pkg is string => Boolean(pkg))
+  );
+  const isMultiPackage = distinctPackageIds.size > 1 || actions.some((a) => a.id.includes("/"));
+
   for (const action of actions) {
     let baseId = action.id;
     let packageId = action.packageId;
@@ -394,9 +434,6 @@ export async function createActionDockMcpServer(
     }
     registeredToolNames.add(toolName);
 
-    const isMultiPackage = actions.some(
-      (a) => a.id.includes("/") || (a.packageId && a.packageId !== actions[0].packageId)
-    );
     const description = isMultiPackage
       ? `[${action.id}] ${action.description || ""}`.trim()
       : action.description;
@@ -412,10 +449,10 @@ export async function createActionDockMcpServer(
           ? toMcpSchema(action.outputSchema, false)
           : undefined,
       },
-      async (input: unknown, ctx: { mcpReq?: { signal?: AbortSignal } }) => {
+      async (input: unknown, ctx: ToolCallbackContext) => {
         // 异步执行模式只认显式约定字段 execution.mode，旧版 __async 仅作只读兼容探测
         const isAsync = isAsyncExecutionRequested(input);
-        const signal = ctx.mcpReq?.signal;
+        const signal = extractCancelSignal(ctx);
 
         // 分发前仅剥离适配层注入的包装字段，业务自有字段（含名为 async 的入参）原样透传
         const cleanInput = stripExecutionWrapper(input) as JsonValue;

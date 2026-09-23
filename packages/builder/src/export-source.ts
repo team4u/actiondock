@@ -11,9 +11,10 @@ import { BuilderError } from "./errors";
 import { getInternalDependencyVersion } from "./fs-utils";
 import {
   assertValidManifestActionIds,
-  resolveWorkspaceDepVersion,
+  sanitizeExportDependencies,
   serializePlanManifest,
 } from "./manifest";
+import { isOwnAction } from "./types";
 import type { SelectionPlan, SkillExporterOptions } from "./types";
 import {
   buildConfigForTemplates,
@@ -86,7 +87,7 @@ export function stageSourceSkill(
 
   // 拷贝 Action 源码文件，保留相对路径（仅拷贝自有 Action，跨包依赖不物化进消费包目录）
   for (const act of plan.actions) {
-    if (act.isExternal || act.id.includes("/")) {
+    if (!isOwnAction(act)) {
       continue;
     }
     if (existsSync(act.resolvedPath)) {
@@ -120,7 +121,7 @@ export function stageSourceSkill(
 }
 
 /**
- * 生成源码型 Skill 的 package.json（含依赖协议校验与 workspace 版本解析）。
+ * 生成源码型 Skill 的 package.json（依赖清洗统一复用 manifest 的 sanitizeExportDependencies 单一入口）。
  */
 function writeSourceSkillPkgJson(
   root: string,
@@ -128,31 +129,6 @@ function writeSourceSkillPkgJson(
   plan: SelectionPlan,
   pkgSlug: string
 ): void {
-  const sanitizeDependencies = (deps?: Record<string, string>): Record<string, string> => {
-    const result: Record<string, string> = {};
-    if (deps && typeof deps === "object") {
-      for (const [k, v] of Object.entries(deps)) {
-        const verStr = String(v);
-        if (verStr.startsWith("file:")) {
-          throw new BuilderError(
-            `Unsupported file: dependency for '${k}'. Runtime dependencies must not use file: protocol in exported skill packages.`
-          );
-        }
-        if (k.startsWith("@actiondock/")) {
-          result[k] = getInternalDependencyVersion();
-        } else if (verStr.startsWith("workspace:")) {
-          result[k] = resolveWorkspaceDepVersion(root, k, verStr);
-        } else {
-          result[k] = verStr;
-        }
-      }
-    }
-    if (!result["@actiondock/sdk"]) {
-      result["@actiondock/sdk"] = getInternalDependencyVersion();
-    }
-    return result;
-  };
-
   let exportedPkg: Record<string, unknown>;
   const projectPkgPath = join(root, "package.json");
   if (existsSync(projectPkgPath)) {
@@ -164,7 +140,11 @@ function writeSourceSkillPkgJson(
         version: plan.version || parsed.version || "0.1.0",
         description: plan.description || parsed.description,
         type: "module",
-        dependencies: sanitizeDependencies(parsed.dependencies),
+        dependencies: sanitizeExportDependencies(
+          root,
+          parsed.dependencies,
+          "exported skill packages"
+        ),
       };
     } catch (err) {
       if (err instanceof BuilderError) {

@@ -5,7 +5,7 @@ import {
   runDoctorChecks,
 } from "@actiondock/core/project";
 import { Command } from "commander";
-import { ExecutionError } from "../errors";
+import { wrapAsExecutionError } from "../errors";
 import { renderResult } from "../renderer";
 import type { CliContext } from "../types";
 import { applyTargetOptions, getEffectiveOptions, resolveTargetFromOptions } from "../utils";
@@ -83,7 +83,7 @@ export function registerDoctorCommand(program: Command, context?: CliContext): v
           process.exitCode = 1;
         }
       } catch (err: any) {
-        throw new ExecutionError(`Doctor failed to run diagnostics: ${err.message}`);
+        throw wrapAsExecutionError(err, "Doctor failed to run diagnostics: ");
       }
     });
 }

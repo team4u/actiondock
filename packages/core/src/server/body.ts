@@ -36,23 +36,21 @@ export interface ReadJsonBodyOptions {
 }
 
 /**
- * 流式安全地读取 HTTP 请求体并解析为 JSON 对象。
- * 
+ * 流式安全地读取 HTTP 请求体为原始字节数组（有界读取单一事实源）。
+ *
  * 防护机制：
- * 1. 快速拒绝（Fast-path）：若请求头中存在 `Content-Length` 且超过 `maxBytes`，立即抛出 RequestTooLargeError，不进行内存分配。
- * 2. 流式计数器（Chunk Streaming）：在读取 ReadableStream 过程中实时累计字节数，中途超出上限即刻截断并释放流锁，防止大文件 DoS 与内存耗尽（OOM）。
- * 3. 安全解码：处理空请求体与 UTF-8 字符集解码。
- * 
+ * 1. 快速拒绝（Fast-path）：若请求头中存在 Content-Length 且超过 maxBytes，立即抛出 RequestTooLargeError，不进行内存分配。
+ * 2. 流式计数器（Chunk Streaming）：读取 ReadableStream 过程中实时累计字节数，中途超出上限即刻截断并释放流锁，防止大文件 DoS 与内存耗尽（OOM）。
+ *
  * @param req 传入的 Request 对象
  * @param options 读取配置选项
- * @returns 解析后的 JSON 对象
+ * @returns 原始字节数组（空请求体返回空数组）
  * @throws {RequestTooLargeError} 若请求体体积超限
- * @throws {InvalidJsonError} 若请求体非合法 JSON
  */
-export async function readJsonBody<T = any>(
+export async function readBodyWithLimit(
   req: Request,
   options: ReadJsonBodyOptions = {}
-): Promise<T> {
+): Promise<Uint8Array> {
   const maxBytes = options.maxBytes ?? DEFAULT_MAX_BODY_BYTES;
 
   // 1. 快速检查 Content-Length 头部
@@ -66,7 +64,7 @@ export async function readJsonBody<T = any>(
 
   // 2. 流式读取并实时统计字节数
   if (!req.body) {
-    return {} as T;
+    return new Uint8Array(0);
   }
 
   const reader = req.body.getReader();
@@ -80,6 +78,7 @@ export async function readJsonBody<T = any>(
       if (value) {
         totalBytes += value.byteLength;
         if (totalBytes > maxBytes) {
+          await reader.cancel();
           throw new RequestTooLargeError();
         }
         chunks.push(value);
@@ -90,15 +89,37 @@ export async function readJsonBody<T = any>(
   }
 
   if (chunks.length === 0 || totalBytes === 0) {
-    return {} as T;
+    return new Uint8Array(0);
   }
 
-  // 3. 拼接字节数组并进行 UTF-8 解码
+  // 3. 拼接字节数组
   const merged = new Uint8Array(totalBytes);
   let offset = 0;
   for (const chunk of chunks) {
     merged.set(chunk, offset);
     offset += chunk.byteLength;
+  }
+  return merged;
+}
+
+/**
+ * 流式安全地读取 HTTP 请求体并解析为 JSON 对象。
+ * 防护机制见 readBodyWithLimit；此外处理空请求体与 UTF-8 字符集解码。
+ *
+ * @param req 传入的 Request 对象
+ * @param options 读取配置选项
+ * @returns 解析后的 JSON 对象
+ * @throws {RequestTooLargeError} 若请求体体积超限
+ * @throws {InvalidJsonError} 若请求体非合法 JSON
+ */
+export async function readJsonBody<T = any>(
+  req: Request,
+  options: ReadJsonBodyOptions = {}
+): Promise<T> {
+  const merged = await readBodyWithLimit(req, options);
+
+  if (merged.byteLength === 0) {
+    return {} as T;
   }
 
   const text = new TextDecoder("utf-8").decode(merged);

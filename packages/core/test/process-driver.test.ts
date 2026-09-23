@@ -9,11 +9,20 @@ import {
 import { NodeProcessDriver } from "../src/process/process-driver";
 import { resolveProcessEnv } from "../src/process/driver";
 
-/** 读取驱动内部实例的 exit 监听器数量，用于验证 terminate 自清理 */
+/** 读取驱动内部实例的 exit 监听器数量，用于验证 terminate 自清理；
+ * 终态自清理后实例已从表中移除时返回 -1，语义上等同于监听器已清空 */
 async function getExitListenerCount(driver: NodeProcessDriver, handle: any): Promise<number> {
   const instances = (driver as any).instances as Map<string, { exitListeners: Array<() => void> }>;
   const instance = instances.get(handle.id);
   return instance ? instance.exitListeners.length : -1;
+}
+
+/** 断言指定句柄的实例已无残留 exit 监听器（已移除或监听器归零均视为达标） */
+async function expectNoExitListeners(driver: NodeProcessDriver, handle: any): Promise<void> {
+  const count = await getExitListenerCount(driver, handle);
+  if (count !== -1 && count !== 0) {
+    throw new Error(`Expected no exit listeners but found ${count}`);
+  }
 }
 
 describe("NodeProcessDriver 平台驱动测试", () => {
@@ -521,10 +530,14 @@ describe("NodeProcessDriver 平台驱动测试", () => {
     await closePromise;
     await driver.dispose(handle);
 
-    // dispose 后操作句柄将报错找不到实例
-    await expect(driver.write(handle, new Uint8Array([1]))).rejects.toThrow(
-      `Process instance not found for handle id: ${handle.id}`
-    );
+    // dispose 后实例已从受管表移除，写入按输入管道已关闭语义抛出 INPUT_CLOSED 结构化异常
+    try {
+      await driver.write(handle, new Uint8Array([1]));
+      expect.unreachable();
+    } catch (err: any) {
+      expect(err).toBeInstanceOf(ProcessError);
+      expect(err.code).toBe(INPUT_CLOSED);
+    }
   });
 
   it("getCapabilities 缓存探测结果，重复调用不再重复探测 node-pty", async () => {
@@ -567,13 +580,13 @@ describe("NodeProcessDriver 平台驱动测试", () => {
     mockChild.emit("close", 0, null);
     await terminateOnce;
 
-    // 监听器列表必须已自清理归零，不得残留累积
-    expect(await getExitListenerCount(driver, handle)).toBe(0);
+    // 监听器列表必须已自清理（终态实例可能已从受管表自移除，两种状态均无残留）
+    await expectNoExitListeners(driver, handle);
 
     // 反复 terminate 已退出实例：不应向监听器列表追加任何新条目
     await driver.terminate(handle, 100);
     await driver.terminate(handle, 100);
-    expect(await getExitListenerCount(driver, handle)).toBe(0);
+    await expectNoExitListeners(driver, handle);
 
     // 通过内部状态断言监听器已清空：再次派生同 id 实例验证列表复用不受污染
     const handleAgain = await driver.spawn(
@@ -584,5 +597,96 @@ describe("NodeProcessDriver 平台驱动测试", () => {
 
     await driver.dispose(handle);
     await driver.dispose(handleAgain);
+  });
+
+  it("子进程快速退出后实例自清理，受管表回落归零不残留", async () => {
+    const driver = new NodeProcessDriver();
+    const instances = (driver as any).instances as Map<string, unknown>;
+
+    let resolveClose: () => void;
+    const closePromise = new Promise<void>((resolve) => {
+      resolveClose = resolve;
+    });
+
+    // 不经 dispose 直接 spawn 快速退出的子进程，模拟一次性 run 链路的真实使用方式
+    const handle = await driver.spawn(
+      { executable: process.execPath, args: ["-e", "process.exit(0);"], io: { mode: "pipe" } },
+      {
+        output() {},
+        exited() {},
+        outputClosed() {
+          resolveClose();
+        },
+      }
+    );
+
+    expect(instances.size).toBe(1);
+
+    await closePromise;
+
+    // exit 与 outputClosed 双条件满足后实例应自动从受管表移除，无需显式 dispose
+    expect(instances.size).toBe(0);
+
+    // 高频模拟一次性 run 链路：多次 spawn 后表仍应回落归零，不随调用量单调增长
+    for (let i = 0; i < 5; i++) {
+      let resolveEach: () => void;
+      const eachClose = new Promise<void>((resolve) => {
+        resolveEach = resolve;
+      });
+      await driver.spawn(
+        { executable: process.execPath, args: ["-e", "process.exit(0);"], io: { mode: "pipe" } },
+        {
+          output() {},
+          exited() {},
+          outputClosed() {
+            resolveEach();
+          },
+        }
+      );
+      await eachClose;
+    }
+    expect(instances.size).toBe(0);
+
+    // dispose 已自清理的实例应为无害空操作
+    await driver.dispose(handle);
+    expect(instances.size).toBe(0);
+  });
+
+  it("drain 超时路径同样触发实例自清理", async () => {
+    const mockChild = new EventEmitter() as any;
+    mockChild.pid = 99998;
+    mockChild.stdout = new PassThrough();
+    mockChild.stderr = new PassThrough();
+    mockChild.stdin = new PassThrough();
+
+    const driver = new NodeProcessDriver({
+      drainDeadlineMs: 40,
+      spawnFn: (() => mockChild) as any,
+    });
+    const instances = (driver as any).instances as Map<string, unknown>;
+
+    let resolveClose: () => void;
+    const closePromise = new Promise<void>((resolve) => {
+      resolveClose = resolve;
+    });
+
+    await driver.spawn(
+      { executable: "mock-binary", args: [], io: { mode: "pipe" } },
+      {
+        output() {},
+        exited() {},
+        outputClosed() {
+          resolveClose();
+        },
+      }
+    );
+
+    expect(instances.size).toBe(1);
+
+    // 触发 exit 但刻意不关闭 stdio，等待 drain 超时后输出关闭也应触发自清理
+    mockChild.emit("exit", 0, null);
+    await closePromise;
+
+    expect(instances.size).toBe(0);
   });
 });

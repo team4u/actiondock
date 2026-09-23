@@ -87,6 +87,34 @@ export class ExecutionError extends CliError {
 }
 
 /**
+ * 将任意异常统一包裹为 CLI 执行错误（错误码保留辅助）。
+ *
+ * 包裹规则：
+ * - CliError 与 ActionDockError 原样透传（保留原始 code、details 与退出码映射）；
+ * - 其余异常包裹为 ExecutionError，并保留 cause 链接与数字型 code 字段，
+ *   避免 core 抛出的结构化错误码被一律降级为 EXECUTION_FAILURE。
+ * - messagePrefix 仅对需要包裹的分支生效（附加命令语境说明）；
+ *   透传分支保持原始实例不变，不重建消息。
+ *
+ * @param err 待包裹的原始异常
+ * @param messagePrefix 可选的消息前缀（仅包裹分支生效）
+ */
+export function wrapAsExecutionError(err: unknown, messagePrefix?: string): Error {
+  if (err instanceof CliError || err instanceof ActionDockError) {
+    return err;
+  }
+  const originalMessage = err instanceof Error ? err.message : String(err);
+  const message = messagePrefix ? `${messagePrefix}${originalMessage}` : originalMessage;
+  const rawCode = (err as { code?: unknown } | null | undefined)?.code;
+  const code = typeof rawCode === "string" && rawCode ? rawCode : "EXECUTION_FAILURE";
+  const wrapped = new ExecutionError(message, undefined, code);
+  if (err instanceof Error) {
+    (wrapped as Error & { cause?: unknown }).cause = err;
+  }
+  return wrapped;
+}
+
+/**
  * 用户中断信号错误（退出码为 130）。
  */
 export class SigintError extends CliError {

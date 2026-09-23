@@ -21,6 +21,9 @@ import { BuilderError } from "./errors";
 import { collectRelativeFiles, getInternalDependencyVersion, replaceDirAtomic } from "./fs-utils";
 import { assertValidManifestActionIds, serializePlanManifest } from "./manifest";
 import { SelectionPlanner } from "./planner";
+import { copyPlanEntries } from "./stage-sources";
+import { isOwnAction } from "./types";
+export { copyPlanEntries } from "./stage-sources";
 import type { BuildOptions, BuildResult, ExternalDependency, SelectionPlan } from "./types";
 
 /**
@@ -90,7 +93,7 @@ function calculateDirectoryDigest(dir: string): string {
  */
 function generateNodeHostEntrySource(plan: SelectionPlan): string {
   // 仅包自有 Action 参与 import 与注册，与产物清单保持同一事实源
-  const ownActions = plan.actions.filter((a) => !a.isExternal && !a.id.includes("/"));
+  const ownActions = plan.actions.filter((a) => isOwnAction(a));
   const imports = ownActions
     .map((act, idx) => `import action_${idx} from ${JSON.stringify(`./${act.entry.replace(/\\/g, "/")}`)};`)
     .join("\n");
@@ -311,50 +314,10 @@ try {
 
 /**
  * 拷贝 Action 源码、Playbook 规程与声明的代码文件/静态资产到暂存目录。
- * 与 serializePlanManifest 的过滤条件保持一致：跨包外部 Action 不物化进本包目录，
- * 避免产物混入外部源文件与本包入口发生非确定性覆盖。
+ * 拷贝内核统一复用 stage-sources 的 copyPlanEntries，无差异化调优时直接全量拷贝。
  */
 function stageSources(root: string, stagingDir: string, plan: SelectionPlan): string[] {
-  // 拷贝 Action 源码文件，保留相对路径（仅拷贝包自有 Action，跨包外部依赖不物化进本包目录）
-  const relativeActionImports: string[] = [];
-  for (const act of plan.actions) {
-    if (act.isExternal || act.id.includes("/")) {
-      continue;
-    }
-    if (existsSync(act.resolvedPath)) {
-      const destFile = join(stagingDir, act.entry);
-      mkdirSync(dirname(destFile), { recursive: true });
-      copyFileSync(act.resolvedPath, destFile);
-      relativeActionImports.push(`./${act.entry.replace(/\\/g, "/")}`);
-    }
-  }
-
-  // 拷贝 Playbook 规程文件
-  if (plan.playbooks.length > 0) {
-    const playbooksDir = plan.playbooksDir || "playbooks";
-    const playbooksDestDir = join(stagingDir, playbooksDir);
-    mkdirSync(playbooksDestDir, { recursive: true });
-    for (const pb of plan.playbooks) {
-      if (existsSync(pb.filePath)) {
-        const destPb = join(playbooksDestDir, basename(pb.filePath));
-        copyFileSync(pb.filePath, destPb);
-      }
-    }
-  }
-
-  // 拷贝声明的代码文件与静态资产
-  for (const dep of plan.dependencies.modulesAndAssets) {
-    if (
-      (dep.type === "asset" || dep.type === "module" || dep.type === "file") &&
-      existsSync(dep.resolvedPath)
-    ) {
-      const destPath = join(stagingDir, dep.path);
-      mkdirSync(dirname(destPath), { recursive: true });
-      copyFileSync(dep.resolvedPath, destPath);
-    }
-  }
-
-  return relativeActionImports;
+  return copyPlanEntries(root, stagingDir, plan);
 }
 
 /**

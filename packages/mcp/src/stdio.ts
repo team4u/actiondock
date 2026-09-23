@@ -21,11 +21,17 @@ export async function startMcpStdio(
 ): Promise<void> {
   let activeServer: ActionDockMcpServer | undefined;
   let serviceToUse: ActionDockService | undefined;
+  let ownsService = false;
   let childProcess: ChildProcess | undefined;
 
-  // 若显式传入了已构造的 service 或不可序列化的内存对象，直接复用或解析目标实例
+  // 若显式传入了已构造的 service 或不可序列化的内存对象，直接复用或解析目标实例；
+  // ownsService 标记与 adapter 的所有权契约对齐：仅自建实例由本入口的 cleanup 收敛生命周期
   if (options.service || options.actions || options.storage || options.runtime || options.host || options.platform) {
-    serviceToUse = options.service ?? (await resolveService(options)).service;
+    const resolved = options.service
+      ? { service: options.service, ownsService: false }
+      : await resolveService(options);
+    serviceToUse = resolved.service;
+    ownsService = resolved.ownsService;
   } else {
     // 建立隔离的监督子进程
     const currentDir = dirname(fileURLToPath(import.meta.url));
@@ -60,6 +66,8 @@ export async function startMcpStdio(
       maxDiagnosticRate: 64 * 1024,
       diagnosticTarget: process.stderr,
     });
+    // IPC 代理实例由本入口创建，生命周期归本入口的 cleanup 所有
+    ownsService = true;
   }
 
   const stdioHandler = serveStdio(
@@ -96,7 +104,9 @@ export async function startMcpStdio(
         swallow(err);
       }
     }
-    if (serviceToUse) {
+    if (serviceToUse && ownsService) {
+      // 外部注入的 service（ownsService 为 false）生命周期归调用方，这里不越权关闭；
+      // 自建实例（含 IPC 子进程代理）由本入口统一收敛
       try {
         await serviceToUse.close();
       } catch (err) {

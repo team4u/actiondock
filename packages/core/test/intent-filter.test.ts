@@ -18,12 +18,17 @@ describe("Intent & Fuzzy Filter", () => {
     expect(r2?.test("get-issue")).toBe(true);
     expect(r2?.test("deploy")).toBe(false);
 
-    const r3 = compileIntentRegex("git.*(pr|issue)");
+    const r3 = compileIntentRegex("re:git.*(pr|issue)");
     expect(r3?.test("github-pr")).toBe(true);
     expect(r3?.test("git_fetch_issue")).toBe(true);
 
-    // Invalid regex syntax safely falls back to literal match
-    const r4 = compileIntentRegex("[invalid(regex");
+    // 默认字面量模式：特殊字符按子串匹配，不构成正则
+    const r3l = compileIntentRegex("git.*(pr|issue)");
+    expect(r3l?.test("git.*(pr|issue)")).toBe(true);
+    expect(r3l?.test("github-pr")).toBe(false);
+
+    // re: 前缀但语法非法时安全降级为字面量匹配
+    const r4 = compileIntentRegex("re:[invalid(regex");
     expect(r4?.test("[invalid(regex")).toBe(true);
     expect(r4?.test("other")).toBe(false);
 

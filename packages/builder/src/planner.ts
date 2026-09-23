@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { basename, join, relative, resolve } from "node:path";
 import {
   loadProjectConfig,
 } from "@actiondock/core";
 import {
   assertPathWithinRoot,
+  traverseDirectory,
   type ActionDockManifest,
   type ActionManifestEntry,
   loadManifest,
@@ -35,53 +36,27 @@ import type { ProjectConfigWithDeclarations } from "./types";
 
 /**
  * 递归扫描指定目录下的文件，返回绝对路径列表。
- * 通过安全路径边界能力校验，阻止越界并避免符号链接逃逸。
+ * 目录遍历统一复用 core 的 traverseDirectory 单一事实源，
+ * 自带软链接越界防护与循环拦截。
  */
-function walkDirectory(dir: string, rootDir: string = dir, visited = new Set<string>()): string[] {
-  if (!existsSync(dir)) return [];
-  const results: string[] = [];
-  const entries = readdirSync(dir);
-  for (const entry of entries) {
-    const fullPath = join(dir, entry);
-    if (rootDir) {
-      try {
-        assertPathWithinRoot(rootDir, fullPath, "planner path");
-      } catch {
-        continue;
-      }
-    }
-    let real: string;
-    try {
-      real = existsSync(fullPath) ? realpathSync(fullPath) : fullPath;
-    } catch {
-      continue;
-    }
-    if (rootDir) {
-      try {
-        assertPathWithinRoot(rootDir, real, "planner path");
-      } catch {
-        // 忽略并跳过指向项目根目录外部的软链接
-        continue;
-      }
-    }
-    if (visited.has(real)) {
-      continue;
-    }
-    visited.add(real);
-    try {
-      const stat = statSync(fullPath);
-      if (stat.isDirectory()) {
-        results.push(...walkDirectory(fullPath, rootDir, visited));
-      } else if (stat.isFile()) {
-        results.push(fullPath);
-      }
-    } catch {
-      // 忽略无法访问或损坏的文件/符号链接
-      continue;
-    }
-  }
-  return results;
+function walkDirectory(dir: string, _rootDir: string = dir): string[] {
+  return traverseDirectory(dir).map((entry) => entry.fullPath);
 }
+
+/**
+ * 测试与类型声明文件后缀常量（供 fallback 清单过滤与 isIgnoredPath 共享同一口径）。
+ */
+const TEST_FILE_SUFFIXES = [
+  ".test.ts",
+  ".test.js",
+  ".test.tsx",
+  ".test.jsx",
+  ".spec.ts",
+  ".spec.js",
+  ".spec.tsx",
+  ".spec.jsx",
+  ".d.ts",
+];
 
 /**
  * 忽略的文件模式判断（排除测试文件、类型声明文件以及构建/版本控制等私有目录）。
@@ -94,15 +69,7 @@ function isIgnoredPath(relPath: string): boolean {
     normalized.startsWith(".git/") ||
     normalized.startsWith("dist/") ||
     normalized.startsWith(".actiondock/") ||
-    normalized.endsWith(".test.ts") ||
-    normalized.endsWith(".test.js") ||
-    normalized.endsWith(".test.tsx") ||
-    normalized.endsWith(".test.jsx") ||
-    normalized.endsWith(".spec.ts") ||
-    normalized.endsWith(".spec.js") ||
-    normalized.endsWith(".spec.tsx") ||
-    normalized.endsWith(".spec.jsx") ||
-    normalized.endsWith(".d.ts")
+    TEST_FILE_SUFFIXES.some((suffix) => normalized.endsWith(suffix))
   );
 }
 
@@ -153,8 +120,12 @@ function computeLockfileInfo(projectRoot: string, preferredLockfile?: string): L
             sha256,
           };
         }
-      } catch {
-        continue;
+      } catch (err: any) {
+        // 存在但不可读：显式报错而非静默跳过，否则构建在无锁文件摘要状态下继续，可复现性校验形同虚设
+        throw new PlannerError(
+          `Lockfile '${lockFileName}' exists but could not be read in ${projectRoot}: ${err?.message || String(err)}`,
+          "LOCKFILE_READ_ERROR"
+        );
       }
     }
   }
@@ -192,15 +163,15 @@ function generateFallbackManifest(
     }
   }
 
-  // 若 actions 目录存在，基于文件名建立默认映射
+  // 若 actions 目录存在，基于文件名建立默认映射（过滤规则与 isIgnoredPath 保持同一口径）
   if (existsSync(dir)) {
-    const files = walkDirectory(dir, projectRoot).filter(
-      (f) =>
+    const files = walkDirectory(dir, projectRoot).filter((f) => {
+      const rel = relative(projectRoot, f).replace(/\\/g, "/");
+      return (
         (f.endsWith(".ts") || f.endsWith(".js")) &&
-        !f.endsWith(".d.ts") &&
-        !f.endsWith(".test.ts") &&
-        !f.endsWith(".spec.ts")
-    );
+        !isIgnoredPath(rel)
+      );
+    });
 
     for (const file of files) {
       const relPath = relative(projectRoot, file).replace(/\\/g, "/");
@@ -225,40 +196,49 @@ function generateFallbackManifest(
 
 /**
  * 收集项目根目录 package.json 中声明的外部 npm 依赖。
+ *
+ * 防御与透明原则：文件不存在返回空集合（合法的无依赖工程）；
+ * 文件存在但不可读或 JSON 损坏时抛 PlannerError 并携带路径与原因，
+ * 严禁静默吞掉导致后续 build 的生产依赖、pack 的产物依赖与 vendorDeps 全部无声缺失。
  */
 function extractExternalDependencies(projectRoot: string): ExternalDependency[] {
   const pkgPath = join(projectRoot, "package.json");
   if (!existsSync(pkgPath)) return [];
 
+  let parsed: Record<string, unknown>;
   try {
     const raw = readFileSync(pkgPath, "utf-8");
-    const parsed = JSON.parse(raw);
-    const deps: ExternalDependency[] = [];
-
-    if (parsed.dependencies && typeof parsed.dependencies === "object") {
-      for (const [name, versionRange] of Object.entries(parsed.dependencies)) {
-        deps.push({
-          name,
-          versionRange: String(versionRange),
-          isDev: false,
-        });
-      }
-    }
-
-    if (parsed.devDependencies && typeof parsed.devDependencies === "object") {
-      for (const [name, versionRange] of Object.entries(parsed.devDependencies)) {
-        deps.push({
-          name,
-          versionRange: String(versionRange),
-          isDev: true,
-        });
-      }
-    }
-
-    return deps;
-  } catch {
-    return [];
+    parsed = JSON.parse(raw);
+  } catch (err: any) {
+    throw new PlannerError(
+      `Failed to read or parse package.json at ${pkgPath}: ${err?.message || String(err)}`,
+      "EXTRACT_DEPS_ERROR"
+    );
   }
+
+  const deps: ExternalDependency[] = [];
+
+  if (parsed.dependencies && typeof parsed.dependencies === "object") {
+    for (const [name, versionRange] of Object.entries(parsed.dependencies as Record<string, unknown>)) {
+      deps.push({
+        name,
+        versionRange: String(versionRange),
+        isDev: false,
+      });
+    }
+  }
+
+  if (parsed.devDependencies && typeof parsed.devDependencies === "object") {
+    for (const [name, versionRange] of Object.entries(parsed.devDependencies as Record<string, unknown>)) {
+      deps.push({
+        name,
+        versionRange: String(versionRange),
+        isDev: true,
+      });
+    }
+  }
+
+  return deps;
 }
 
 /**

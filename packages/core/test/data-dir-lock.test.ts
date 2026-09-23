@@ -1374,3 +1374,43 @@ rl.on("line", (cmd) => {
     expect(existsSync(lockDir)).toBe(false);
   });
 });
+
+describe("DataDirLock 元数据刷新失败可观测性", () => {
+  it("registerChildPid 触发的 flush 写入失败时输出告警且不抛出", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "ad-lock-flush-"));
+    try {
+      // 锁路径指向不存在的父目录，使 flush 的临时文件写入必然失败（写入失败路径）
+      const lockDirPath = join(tempDir, "missing-parent", ".actiondock.data.lock");
+      const lock = new DataDirLock(lockDirPath, {
+        pid: process.pid,
+        hostname: hostname(),
+        sessionToken: "flush-test-token",
+        lockToken: "flush-test-lock-token",
+        createdAt: new Date().toISOString(),
+        childPids: [],
+      });
+
+      const originalWarn = console.warn;
+      const warnCalls: string[] = [];
+      console.warn = ((msg: any) => {
+        warnCalls.push(String(msg));
+      }) as any;
+
+      try {
+        // flush 失败不得抛出，也不得中断宿主流程
+        expect(() => lock.registerChildPid(4321)).not.toThrow();
+        expect(
+          warnCalls.some(
+            (m) =>
+              m.includes("data dir lock metadata flush failed") &&
+              m.includes(lockDirPath)
+          )
+        ).toBe(true);
+      } finally {
+        console.warn = originalWarn;
+      }
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+});

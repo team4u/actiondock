@@ -22,6 +22,8 @@ import type { CliContext } from "../types";
 import {
   applyTargetOptions,
   getEffectiveOptions,
+  remoteTargetSuffix,
+  resolveFallbackStrategy,
   resolveIntent,
   resolveTargetFromOptions,
   withRemoteService,
@@ -82,13 +84,14 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
       .option("-a, --action <actionId>", "Filter by action ID")
       .option("-n, --limit <count>", "Maximum number of records to return", "20")
   )
+    .option("--fallback", "Enable fallback to full list when no items match intent")
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
     .action(async (patterns: string[] = [], rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
       const effectiveIntent = resolveIntent(options.intent, patterns);
-      const shouldFallback = options.fallback !== false;
+      const { shouldFallback } = resolveFallbackStrategy(options);
       const limit = Number.parseInt(options.limit, 10) || 20;
       const scope = resolveLocalRunScope(options.package);
 
@@ -97,10 +100,14 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
         options,
         context,
         async (service, resolved) => {
+          // limit 下推查询层：intent 过滤发生在内存（过滤后仍需截断到用户值），
+          // 下推时附加合理裕量，保证过滤后可截断数量不少于用户请求
+          const FETCH_HEADROOM = 200;
+          const queryLimit = effectiveIntent ? limit + FETCH_HEADROOM : limit;
           const records = await service.runs.list({
             packageId: options.package,
             actionId: options.action,
-            limit: 500,
+            limit: queryLimit,
           });
 
           // 若处于本地无项目环境且无任何软链接包，则直接输出友好提示
@@ -130,7 +137,7 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
             humanFormatter: () => {
               let title = "Execution Runs";
               if (resolved.type === "remote") {
-                title = `Execution Runs on remote server ${resolved.serverUrl}${resolved.profileName ? ` (Profile: ${resolved.profileName})` : ""}`;
+                title = `Execution Runs ${remoteTargetSuffix(resolved)}`;
               } else if (scope.projConfig) {
                 title = `Execution Runs in ${scope.projConfig.name} (${scope.projConfig.id})`;
               } else {

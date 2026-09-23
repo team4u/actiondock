@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { loadProjectConfig } from "@actiondock/core";
 import { getPackageSlug } from "@actiondock/core/project";
 import { BuilderError } from "./errors";
+import { allocatePackageDirName } from "./manifest";
 import type {
   BatchSkillExportOptions,
   BatchSkillExportResult,
@@ -40,11 +41,8 @@ export async function exportBatchImpl(
   const usedDirNames = new Set<string>();
   for (const projectRoot of options.projectRoots) {
     const config = loadProjectConfig(projectRoot);
-    let pkgSlug = getPackageSlug(config.id);
-    if (usedDirNames.has(pkgSlug)) {
-      pkgSlug = config.id.replace(/[^a-zA-Z0-9-_]/g, "-").replace(/^-+|-+$/g, "");
-    }
-    usedDirNames.add(pkgSlug);
+    // 目录名分配统一复用 manifest 的 allocatePackageDirName，回退后仍冲突会追加数字后缀
+    const pkgSlug = allocatePackageDirName(usedDirNames, config.id);
 
     const pkgOutDir = join(baseOutDir, `${pkgSlug}-skill`);
 

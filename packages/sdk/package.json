@@ -28,6 +28,9 @@
     "build": "node ../../scripts/build.ts",
     "test": "node ../../scripts/run-tests.ts"
   },
+  "devDependencies": {
+    "@actiondock/testing": "^2.7.0"
+  },
   "keywords": [
     "actiondock",
     "agent",

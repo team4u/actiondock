@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import {
   encodeBytes,
   type CallOptions,
@@ -49,7 +48,7 @@ export class RunExecutor {
       },
     };
 
-    const runProcessId = `run-${randomUUID()}`;
+    const runProcessId = `run-${crypto.randomUUID()}`;
     const chunks: OutputChunk[] = [];
     let totalBytes = 0;
     let truncated = false;

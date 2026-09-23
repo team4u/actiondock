@@ -55,6 +55,8 @@ export interface PackageDiscoveryOptions {
  */
 export class PackageDiscovery {
   private readonly options: PackageDiscoveryOptions;
+  /** 包标识到物理根路径（realpath 归一）的查重映射，避免注册路径的线性全表扫描 */
+  private readonly idRealPaths = new Map<string, string>();
 
   constructor(options: PackageDiscoveryOptions = {}) {
     this.options = options;
@@ -65,6 +67,7 @@ export class PackageDiscovery {
    */
   public discoverSync(): DiscoveredPackage[] {
     const packages = new Map<string, DiscoveredPackage>();
+    this.idRealPaths.clear();
     const registryStore =
       this.options.registryStore || new DefaultRegistryStore(this.options.customHome);
     const scanLinked = this.options.scanLinkedPackages !== false;
@@ -98,16 +101,15 @@ export class PackageDiscovery {
         return;
       }
 
-      for (const existing of packages.values()) {
-        if (existing.id === manifest.id) {
-          const existingReal = realpathSync(existing.root);
-          if (existingReal !== real) {
-            throw new Error(
-              `PACKAGE_ID_CONFLICT: Package ID '${manifest.id}' is declared by multiple directories: '${existing.root}' and '${abs}'`
-            );
-          }
-        }
+      // 以 id 到物理路径的映射做常数查重，替代全表线性扫描；同物理路径重复注册静默去重
+      const idRealPaths = this.idRealPaths;
+      const existingReal = idRealPaths.get(manifest.id);
+      if (existingReal !== undefined && existingReal !== real) {
+        throw new Error(
+          `PACKAGE_ID_CONFLICT: Package ID '${manifest.id}' is declared by multiple directories: '${existingReal}' and '${abs}'`
+        );
       }
+      idRealPaths.set(manifest.id, real);
 
       packages.set(real, {
         id: manifest.id,

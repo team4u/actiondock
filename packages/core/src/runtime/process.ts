@@ -19,6 +19,7 @@ import {
   type ProcessWriteInput,
   type ReadResult,
 } from "@actiondock/sdk";
+import { createDefaultProcessOwner } from "../invocation/types";
 import { MemoryProcessDriver, ProcessManager, type ProcessOwner } from "../process";
 
 export type ProcessExecutor = ProcessAPI;
@@ -33,12 +34,7 @@ export class DefaultProcessExecutor implements ProcessExecutor {
 
   constructor(manager?: ProcessManager, owner?: ProcessOwner) {
     this.manager = manager ?? new ProcessManager({ driver: new MemoryProcessDriver() });
-    this.owner = owner ?? {
-      tenantId: "default",
-      principalId: "default",
-      packageInstanceId: "default",
-      generationId: "default",
-    };
+    this.owner = owner ?? createDefaultProcessOwner();
   }
 
   async exec(

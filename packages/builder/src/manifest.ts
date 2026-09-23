@@ -1,8 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { ACTION_ID_REGEX } from "@actiondock/core/project";
+import { ACTION_ID_REGEX, getPackageSlug } from "@actiondock/core/project";
 import { BuilderError } from "./errors";
 import { getInternalDependencyVersion } from "./fs-utils";
+import { isOwnAction } from "./types";
 import type { ActionDependency, PlaybookPlanEntry } from "./types";
 
 /**
@@ -101,7 +102,7 @@ export function serializePlanManifest(
   const manifestActions: Record<string, unknown> = {};
   for (const act of plan.actions) {
     // 仅序列化包自有 Action，跨包依赖不写入包清单
-    if (act.isExternal || act.id.includes("/")) {
+    if (!isOwnAction(act)) {
       continue;
     }
     const serialized = serializeManifestAction(act);
@@ -236,6 +237,75 @@ export function resolveWorkspaceDepVersion(root: string, depName: string, ver: s
   throw new BuilderError(
     `Failed to resolve workspace dependency '${depName}' (${ver}) in '${root}'. Target package version could not be found.`
   );
+}
+
+/**
+ * 为导出子包分配互不冲突的目录名。
+ *
+ * 首选 Package ID 尾段（getPackageSlug）；冲突时回退为 ID 全量的安全形式，
+ * 回退后仍冲突（如两个同尾段 ID 回退值相同）则追加数字后缀直至唯一，
+ * 严禁仅加入 used 集合而不二次消歧导致目录互相覆盖。
+ *
+ * @param used 已占用的目录名集合（函数内部会登记分配结果）
+ * @param configId 待分配目录名的 Package ID
+ */
+export function allocatePackageDirName(used: Set<string>, configId: string): string {
+  let name = getPackageSlug(configId);
+  if (used.has(name)) {
+    name = configId.replace(/[^a-zA-Z0-9-_]/g, "-").replace(/^-+|-+$/g, "");
+  }
+  if (!name) {
+    name = getPackageSlug(configId) || "package";
+  }
+  if (used.has(name)) {
+    let suffix = 2;
+    while (used.has(`${name}-${suffix}`)) {
+      suffix++;
+    }
+    name = `${name}-${suffix}`;
+  }
+  used.add(name);
+  return name;
+}
+
+/**
+ * 导出产物依赖清洗单一入口。
+ *
+ * 清洗规则（单包源码导出与复合套件聚合导出共用同一事实源）：
+ * - file: 本地协议拒绝（经 assertNoFileProtocolDeps）；
+ * - @actiondock/* 内部依赖覆写为内部版本规则；
+ * - workspace: 前缀解析为真实版本（经 resolveWorkspaceDepVersion）；
+ * - 其余依赖原样保留。
+ *
+ * @param root 解析 workspace 依赖时的参照根目录
+ * @param deps 待清洗的依赖字典（可选）
+ * @param context 错误消息中的场景描述
+ * @param ensureSdk 是否保证 @actiondock/sdk 依赖存在（单包导出需要，复合根目录已预置）
+ */
+export function sanitizeExportDependencies(
+  root: string,
+  deps: Record<string, unknown> | undefined,
+  context: string,
+  ensureSdk = true
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  assertNoFileProtocolDeps(deps, context);
+  if (deps && typeof deps === "object") {
+    for (const [depName, depVer] of Object.entries(deps)) {
+      const verStr = String(depVer);
+      if (depName.startsWith("@actiondock/")) {
+        result[depName] = getInternalDependencyVersion();
+      } else if (verStr.startsWith("workspace:")) {
+        result[depName] = resolveWorkspaceDepVersion(root, depName, verStr);
+      } else {
+        result[depName] = verStr;
+      }
+    }
+  }
+  if (ensureSdk && !result["@actiondock/sdk"]) {
+    result["@actiondock/sdk"] = getInternalDependencyVersion();
+  }
+  return result;
 }
 
 /**

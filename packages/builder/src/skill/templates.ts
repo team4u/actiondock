@@ -169,11 +169,10 @@ ad describe ${pkgId}/${firstAction}
 \`\`\`bash
 # 调阅参数契约与建议赋值样例
 ad describe ${pkgId}/${firstAction}
-\`\`\`
 
-调用语法格式：
+# 调用语法格式（其中 ASSIGNMENT 根据 ad describe 查阅的参数契约提供）
 ad run ${pkgId}/${firstAction} --json -- ASSIGNMENT...
-（其中 ASSIGNMENT 根据 ad describe ${pkgId}/${firstAction} 查阅的参数契约提供）
+\`\`\`
 
 将参数写入 JSON 文件并通过 --input-file 传递：
 
@@ -310,11 +309,10 @@ ${binaryRelPath} describe ${firstAction}
 \`\`\`bash
 # 调阅参数契约与建议赋值样例
 ${binaryRelPath} describe ${firstAction}
-\`\`\`
 
-调用语法格式：
+# 调用语法格式（其中 ASSIGNMENT 根据 describe 查阅的参数契约提供）
 ${binaryRelPath} run ${firstAction} --json -- ASSIGNMENT...
-（其中 ASSIGNMENT 根据 ${binaryRelPath} describe ${firstAction} 查阅的参数契约提供）
+\`\`\`
 
 将参数写入 JSON 文件并通过 --input-file 传递：
 
@@ -584,11 +582,10 @@ ${playbookEntries.join("\n")}
 \`\`\`bash
 # 调阅参数契约与建议赋值样例
 ad describe ${sampleActionId}
-\`\`\`
 
-调用语法格式：
+# 调用语法格式（其中 ASSIGNMENT 根据 ad describe 查阅的参数契约提供）
 ad run ${sampleActionId} --json -- ASSIGNMENT...
-（其中 ASSIGNMENT 根据 ad describe ${sampleActionId} 查阅的参数契约提供）
+\`\`\`
  
 将参数写入 JSON 文件并通过 --input-file 传递：
  
@@ -678,92 +675,5 @@ ad run ${sampleActionId} --json --input-file input.json
       .map((p) => p.text.trim())
       .join("\n\n") + "\n"
   );
-}
-
-
-export interface GenerateSkillJsonOptions {
-  mode?: "source" | "standalone";
-  executable?: string;
-  target?: string;
-  playbooks?: PlaybookDefinition[];
-}
-
-export function generateSkillJson(
-  config: ProjectConfig,
-  actions: SkillActionItem[],
-  binaryNameOrOptions?: string | GenerateSkillJsonOptions,
-  target = "host",
-  playbooksList: PlaybookDefinition[] = []
-): string {
-  let mode: "source" | "standalone" = "source";
-  let executable: string | undefined;
-  let targetPlatform = target;
-  let playbooks = playbooksList;
-
-  if (typeof binaryNameOrOptions === "string") {
-    mode = "standalone";
-    executable = `./bin/${binaryNameOrOptions}`;
-  } else if (binaryNameOrOptions && typeof binaryNameOrOptions === "object") {
-    mode = binaryNameOrOptions.mode || (binaryNameOrOptions.executable ? "standalone" : "source");
-    executable = binaryNameOrOptions.executable;
-    targetPlatform = binaryNameOrOptions.target || target;
-    if (binaryNameOrOptions.playbooks) {
-      playbooks = binaryNameOrOptions.playbooks;
-    }
-  }
-
-  const manifest: Record<string, unknown> = {
-    schemaVersion: "2.0.0",
-    packageId: config.id,
-    name: config.name,
-    version: config.version,
-    description: config.description,
-    mode,
-  };
-
-  if (mode === "standalone" && executable) {
-    manifest.target = targetPlatform;
-    manifest.executable = executable;
-  }
-
-  manifest.actions = actions.map((a: any) => {
-    const item: Record<string, unknown> = {
-      id: a.id,
-    };
-    if (a.entry) {
-      item.entry = a.entry;
-    }
-    if (a.description) {
-      item.description = a.description;
-    }
-    if (a.inputSchema !== undefined) {
-      item.inputSchema = a.inputSchema;
-    }
-    if (a.outputSchema !== undefined) {
-      item.outputSchema = a.outputSchema;
-    }
-    if (a.uses) {
-      item.uses = a.uses;
-    }
-    if (a.tags) {
-      item.tags = a.tags;
-    }
-    if (a.annotations) {
-      item.annotations = a.annotations;
-    }
-    return item;
-  });
-
-  if (playbooks && playbooks.length > 0) {
-    manifest.playbooks = playbooks.map((p) => ({
-      id: p.id,
-      description: p.description,
-      entry: `playbooks/${basename(p.filePath)}`,
-    }));
-  }
-
-  manifest.exportedAt = new Date().toISOString();
-
-  return JSON.stringify(manifest, null, 2) + "\n";
 }
 

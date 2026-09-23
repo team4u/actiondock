@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import {
@@ -339,6 +338,141 @@ export interface PackageGraphBuilderOptions {
 }
 
 /**
+ * 构建包节点公共字段（单一事实源：模式 A/B/C 共用，避免节点构造字面量三处拷贝）。
+ */
+function createPackageNodeFields(params: {
+  id: string;
+  root: string;
+  manifest: ActionDockManifest;
+  npmPackage: string;
+  isDirect: boolean;
+  isRoot: boolean;
+  identity?: PackageIdentity;
+  generation?: string;
+}): {
+  identity: PackageIdentity;
+  packageId: string;
+  root: string;
+  manifest: ActionDockManifest;
+  manifestDigest: string;
+  version: string;
+  npmPackage: string;
+  directDependencies: Set<string>;
+  transitiveDependencies: Set<string>;
+  isDirect: boolean;
+  isRoot: boolean;
+} {
+  const digest = computeManifestDigest(params.manifest);
+  const identity =
+    params.identity ??
+    createPackageIdentity({
+      id: params.id,
+      instanceId: `${params.id}:${params.root}`,
+      generation: params.generation ?? "",
+    });
+  return {
+    identity,
+    packageId: params.id,
+    root: params.root,
+    manifest: params.manifest,
+    manifestDigest: digest,
+    version: params.manifest.version || "0.1.0",
+    npmPackage: params.npmPackage,
+    directDependencies: new Set<string>(),
+    transitiveDependencies: new Set<string>(),
+    isDirect: params.isDirect,
+    isRoot: params.isRoot,
+  };
+}
+
+/**
+ * 从各包清单的 dependencies 中补全直接依赖边（仅计入图中已存在的包）。
+ */
+function linkDirectDependencies(nodes: Map<string, PackageNode>): void {
+  for (const node of nodes.values()) {
+    if (node.manifest.dependencies && typeof node.manifest.dependencies === "object") {
+      for (const depId of Object.keys(node.manifest.dependencies)) {
+        if (nodes.has(depId)) {
+          node.directDependencies.add(depId);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * 以 BFS 计算每个节点的传递依赖闭包（单一事实源，自带环防护）。
+ */
+function computeTransitiveDependencies(nodes: Map<string, PackageNode>): void {
+  for (const node of nodes.values()) {
+    const q = Array.from(node.directDependencies);
+    const visited = new Set<string>(node.directDependencies);
+    while (q.length > 0) {
+      const curr = q.shift()!;
+      node.transitiveDependencies.add(curr);
+      const depNode = nodes.get(curr);
+      if (depNode) {
+        for (const next of depNode.directDependencies) {
+          if (next !== node.identity.id && !visited.has(next)) {
+            visited.add(next);
+            q.push(next);
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * 聚合根包与其直接依赖包的可见 Playbook 及委托点名的 Action（单一事实源）。
+ */
+function collectVisiblePlaybooks(
+  rootNode: PackageNode | undefined,
+  nodes: Map<string, PackageNode>
+): { visiblePlaybooks: Map<string, PlaybookDefinition>; delegatedActions: Set<string> } {
+  const visiblePlaybooks = new Map<string, PlaybookDefinition>();
+  const delegatedActions = new Set<string>();
+  if (rootNode && rootNode.root && existsSync(rootNode.root)) {
+    try {
+      const rootPbs = loadPlaybooks(rootNode.root, undefined, rootNode.manifest);
+      for (const [id, pb] of rootPbs.entries()) {
+        visiblePlaybooks.set(id, pb);
+        visiblePlaybooks.set(`${rootNode.packageId}/${id}`, pb);
+      }
+    } catch {
+      // 忽略根包 Playbook 加载异常
+    }
+
+    for (const depId of rootNode.directDependencies) {
+      if (depId === rootNode.packageId) continue;
+      const depNode = nodes.get(depId);
+      if (depNode && depNode.root && existsSync(depNode.root)) {
+        try {
+          const depPbs = loadPlaybooks(depNode.root, undefined, depNode.manifest);
+          for (const [id, pb] of depPbs.entries()) {
+            visiblePlaybooks.set(`${depId}/${id}`, pb);
+          }
+        } catch {
+          // 忽略依赖包 Playbook 加载异常
+        }
+      }
+    }
+  }
+
+  for (const pb of visiblePlaybooks.values()) {
+    if (Array.isArray(pb.actions)) {
+      for (const actRef of pb.actions) {
+        if (typeof actRef === "string" && actRef.trim()) {
+          delegatedActions.add(actRef.trim());
+        }
+      }
+    }
+  }
+
+  return { visiblePlaybooks, delegatedActions };
+}
+
+/**
  * 包依赖拓扑图构建器 PackageGraphBuilder。
  * 输入发现的包集合或工程根目录，统一实施版本冲突检测、lockfile 校验与拓扑图构建。
  */
@@ -350,139 +484,102 @@ export class PackageGraphBuilder {
   }
 
   /**
-   * 同步构建包依赖拓扑图。
+   * 同步构建包依赖拓扑图（模式 A：显式包集合）。
    */
-  public buildSync(): PackageGraph {
-    const projectRoot = this.options.projectRoot || this.options.root;
-    const absProjectRoot = projectRoot ? resolve(projectRoot) : undefined;
-    const generation = this.options.generationId || randomUUID();
-    const nodes = new Map<string, PackageNode>();
+  private buildFromPackages(nodes: Map<string, PackageNode>, generation: string): PackageGraph {
+    for (const pkg of this.options.packages!) {
+      const fields = createPackageNodeFields({
+        id: pkg.id,
+        root: pkg.root,
+        manifest: pkg.manifest,
+        npmPackage: pkg.id,
+        isDirect: Boolean(pkg.isCurrentProject),
+        isRoot: Boolean(pkg.isCurrentProject),
+        identity: pkg.identity,
+        generation,
+      });
+      nodes.set(pkg.id, fields);
+    }
 
-    // 模式 A：显式包集合模式（由 Host.rebuildGraphAndCatalog 或测试直接传入已发现包）
-    if (this.options.packages) {
-      for (const pkg of this.options.packages) {
-        const digest = computeManifestDigest(pkg.manifest);
-        const identity = pkg.identity ?? createPackageIdentity({
-          id: pkg.id,
-          instanceId: `${pkg.id}:${pkg.root}`,
-          generation,
-        });
-        nodes.set(pkg.id, {
-          identity,
-          packageId: pkg.id,
-          root: pkg.root,
-          manifest: pkg.manifest,
-          manifestDigest: digest,
-          version: pkg.manifest.version || "0.1.0",
-          npmPackage: pkg.id,
-          directDependencies: new Set<string>(),
-          transitiveDependencies: new Set<string>(),
-          isDirect: Boolean(pkg.isCurrentProject),
-          isRoot: Boolean(pkg.isCurrentProject),
-        });
-      }
-
-      let rootIdentity: PackageIdentity | undefined;
-      if (this.options.root) {
-        if (nodes.has(this.options.root)) {
-          rootIdentity = nodes.get(this.options.root)!.identity;
-        } else {
-          const absRoot = resolve(this.options.root);
-          for (const node of nodes.values()) {
-            if (resolve(node.root) === absRoot) {
-              rootIdentity = node.identity;
-              break;
-            }
-          }
-        }
-      }
-
-      if (!rootIdentity) {
+    let rootIdentity: PackageIdentity | undefined;
+    if (this.options.root) {
+      if (nodes.has(this.options.root)) {
+        rootIdentity = nodes.get(this.options.root)!.identity;
+      } else {
+        const absRoot = resolve(this.options.root);
         for (const node of nodes.values()) {
-          if (node.isRoot) {
+          if (resolve(node.root) === absRoot) {
             rootIdentity = node.identity;
             break;
           }
         }
       }
+    }
 
-      if (rootIdentity) {
-        const rootNode = nodes.get(rootIdentity.id);
-        if (rootNode) {
-          (rootNode as any).isRoot = true;
-          (rootNode as any).isDirect = true;
-        }
-      }
-
+    if (!rootIdentity) {
       for (const node of nodes.values()) {
-        if (node.manifest.dependencies && typeof node.manifest.dependencies === "object") {
-          for (const depId of Object.keys(node.manifest.dependencies)) {
-            if (nodes.has(depId)) {
-              node.directDependencies.add(depId);
-            }
-          }
+        if (node.isRoot) {
+          rootIdentity = node.identity;
+          break;
         }
       }
+    }
 
-      for (const node of nodes.values()) {
-        const q = Array.from(node.directDependencies);
-        const visited = new Set<string>(node.directDependencies);
-        while (q.length > 0) {
-          const curr = q.shift()!;
-          node.transitiveDependencies.add(curr);
-          const depNode = nodes.get(curr);
-          if (depNode) {
-            for (const next of depNode.directDependencies) {
-              if (next !== node.identity.id && !visited.has(next)) {
-                visited.add(next);
-                q.push(next);
-              }
-            }
-          }
-        }
+    if (rootIdentity) {
+      const rootNode = nodes.get(rootIdentity.id);
+      if (rootNode) {
+        (rootNode as any).isRoot = true;
+        (rootNode as any).isDirect = true;
       }
+    }
 
-      const visiblePlaybooks = new Map<string, PlaybookDefinition>();
-      const delegatedActions = new Set<string>();
-      const effectiveRootNode = rootIdentity ? nodes.get(rootIdentity.id) : undefined;
-      if (effectiveRootNode && effectiveRootNode.root && existsSync(effectiveRootNode.root)) {
-        try {
-          const rootPbs = loadPlaybooks(effectiveRootNode.root, undefined, effectiveRootNode.manifest);
-          for (const [id, pb] of rootPbs.entries()) {
-            visiblePlaybooks.set(id, pb);
-            visiblePlaybooks.set(`${effectiveRootNode.packageId}/${id}`, pb);
-          }
-        } catch {
-          // 忽略根包 Playbook 加载异常
-        }
+    linkDirectDependencies(nodes);
+    computeTransitiveDependencies(nodes);
 
-        for (const depId of effectiveRootNode.directDependencies) {
-          if (depId === effectiveRootNode.packageId) continue;
-          const depNode = nodes.get(depId);
-          if (depNode && depNode.root && existsSync(depNode.root)) {
-            try {
-              const depPbs = loadPlaybooks(depNode.root, undefined, depNode.manifest);
-              for (const [id, pb] of depPbs.entries()) {
-                visiblePlaybooks.set(`${depId}/${id}`, pb);
-              }
-            } catch {
-              // 忽略依赖包 Playbook 加载异常
-            }
-          }
-        }
-      }
+    const effectiveRootNode = rootIdentity ? nodes.get(rootIdentity.id) : undefined;
+    const { visiblePlaybooks, delegatedActions } = collectVisiblePlaybooks(effectiveRootNode, nodes);
+    return new DefaultPackageGraph(nodes, rootIdentity, visiblePlaybooks, delegatedActions);
+  }
 
-      for (const pb of visiblePlaybooks.values()) {
-        if (Array.isArray(pb.actions)) {
-          for (const actRef of pb.actions) {
-            if (typeof actRef === "string" && actRef.trim()) {
-              delegatedActions.add(actRef.trim());
-            }
-          }
-        }
-      }
+  /**
+   * 同步构建包依赖拓扑图（模式 C：全局包发现）。
+   */
+  private buildFromGlobalDiscovery(nodes: Map<string, PackageNode>, generation: string): PackageGraph {
+    const discOpts: PackageDiscoveryOptions = {
+      ...this.options.discoveryOptions,
+      customHome: this.options.discoveryOptions?.customHome ?? this.options.customHome,
+      scanLinkedPackages:
+        this.options.discoveryOptions?.scanLinkedPackages ?? this.options.allowDevLinks ?? true,
+    };
+    const discovered = new PackageDiscovery(discOpts).discoverSync();
+    for (const pkg of discovered) {
+      const fields = createPackageNodeFields({
+        id: pkg.id,
+        root: pkg.root,
+        manifest: pkg.manifest,
+        npmPackage: pkg.id,
+        isDirect: Boolean(pkg.isCurrentProject),
+        isRoot: Boolean(pkg.isCurrentProject),
+        generation,
+      });
+      nodes.set(pkg.id, fields);
+    }
 
-      return new DefaultPackageGraph(nodes, rootIdentity, visiblePlaybooks, delegatedActions);
+    return new DefaultPackageGraph(nodes);
+  }
+
+  /**
+   * 同步构建包依赖拓扑图。
+   */
+  public buildSync(): PackageGraph {
+    const projectRoot = this.options.projectRoot || this.options.root;
+    const absProjectRoot = projectRoot ? resolve(projectRoot) : undefined;
+    const generation = this.options.generationId || crypto.randomUUID();
+    const nodes = new Map<string, PackageNode>();
+
+    // 模式 A：显式包集合模式（由 Host.rebuildGraphAndCatalog 或测试直接传入已发现包）
+    if (this.options.packages) {
+      return this.buildFromPackages(nodes, generation);
     }
 
     // 模式 B：单工程或根目录依赖解析闭包构建
@@ -503,7 +600,6 @@ export class PackageGraphBuilder {
       }
 
       const rootPackageId = rootManifest.id;
-      const rootDigest = computeManifestDigest(rootManifest);
       const rootIdentity = createPackageIdentity({
         id: rootPackageId,
         instanceId: `${rootPackageId}:${absProjectRoot}`,
@@ -511,17 +607,15 @@ export class PackageGraphBuilder {
       });
 
       const rootNode: PackageNode = {
-        identity: rootIdentity,
-        packageId: rootPackageId,
-        root: absProjectRoot,
-        manifest: rootManifest,
-        manifestDigest: rootDigest,
-        version: rootManifest.version || "0.1.0",
-        npmPackage: rootPackageId,
-        directDependencies: new Set<string>(),
-        transitiveDependencies: new Set<string>(),
-        isDirect: true,
-        isRoot: true,
+        ...createPackageNodeFields({
+          id: rootPackageId,
+          root: absProjectRoot,
+          manifest: rootManifest,
+          npmPackage: rootPackageId,
+          isDirect: true,
+          isRoot: true,
+          identity: rootIdentity,
+        }),
       };
       nodes.set(rootPackageId, rootNode);
 
@@ -679,17 +773,15 @@ export class PackageGraphBuilder {
         });
 
         const newNode: PackageNode = {
-          identity,
-          packageId: item.pkgId,
-          root: pkgDir,
-          manifest: depManifest,
-          manifestDigest: actualDigest,
-          version: pkgVersion,
-          npmPackage: locked?.npmPackage || item.rangeOrSpec,
-          directDependencies: new Set<string>(),
-          transitiveDependencies: new Set<string>(),
-          isDirect: item.isDirect,
-          isRoot: false,
+          ...createPackageNodeFields({
+            id: item.pkgId,
+            root: pkgDir,
+            manifest: depManifest,
+            npmPackage: locked?.npmPackage || item.rangeOrSpec,
+            isDirect: item.isDirect,
+            isRoot: false,
+            identity,
+          }),
         };
         nodes.set(item.pkgId, newNode);
 
@@ -714,25 +806,18 @@ export class PackageGraphBuilder {
             try {
               const manifestRaw = readFileSync(manifestPath, "utf-8");
               const devManifest = parseJsonWithoutDuplicates<ActionDockManifest>(manifestRaw);
-              const actualDigest = computeManifestDigest(devManifest);
-              const identity = createPackageIdentity({
-                id: devPkgId,
-                instanceId: `${devPkgId}:${devPkgDir}`,
-                generation,
-              });
-              nodes.set(devPkgId, {
-                identity,
-                packageId: devPkgId,
-                root: devPkgDir,
-                manifest: devManifest,
-                manifestDigest: actualDigest,
-                version: devManifest.version || "0.1.0",
-                npmPackage: devPkgId,
-                directDependencies: new Set<string>(),
-                transitiveDependencies: new Set<string>(),
-                isDirect: true,
-                isRoot: false,
-              });
+              nodes.set(
+                devPkgId,
+                createPackageNodeFields({
+                  id: devPkgId,
+                  root: devPkgDir,
+                  manifest: devManifest,
+                  npmPackage: devPkgId,
+                  isDirect: true,
+                  isRoot: false,
+                  generation,
+                })
+              );
               rootNode.directDependencies.add(devPkgId);
             } catch {
               // 忽略解析失败的链接包
@@ -741,107 +826,15 @@ export class PackageGraphBuilder {
         }
       }
 
-      for (const node of nodes.values()) {
-        if (node.manifest.dependencies && typeof node.manifest.dependencies === "object") {
-          for (const depId of Object.keys(node.manifest.dependencies)) {
-            if (nodes.has(depId)) {
-              node.directDependencies.add(depId);
-            }
-          }
-        }
-      }
+      linkDirectDependencies(nodes);
+      computeTransitiveDependencies(nodes);
 
-      for (const node of nodes.values()) {
-        const q = Array.from(node.directDependencies);
-        const visited = new Set<string>(node.directDependencies);
-        while (q.length > 0) {
-          const curr = q.shift()!;
-          node.transitiveDependencies.add(curr);
-          const depNode = nodes.get(curr);
-          if (depNode) {
-            for (const next of depNode.directDependencies) {
-              if (next !== node.identity.id && !visited.has(next)) {
-                visited.add(next);
-                q.push(next);
-              }
-            }
-          }
-        }
-      }
-
-      const visiblePlaybooks = new Map<string, PlaybookDefinition>();
-      const delegatedActions = new Set<string>();
-      if (rootNode.root && existsSync(rootNode.root)) {
-        try {
-          const rootPbs = loadPlaybooks(rootNode.root, undefined, rootNode.manifest);
-          for (const [id, pb] of rootPbs.entries()) {
-            visiblePlaybooks.set(id, pb);
-            visiblePlaybooks.set(`${rootNode.packageId}/${id}`, pb);
-          }
-        } catch {
-          // 忽略根包 Playbook 加载异常
-        }
-
-        for (const depId of rootNode.directDependencies) {
-          if (depId === rootNode.packageId) continue;
-          const depNode = nodes.get(depId);
-          if (depNode && depNode.root && existsSync(depNode.root)) {
-            try {
-              const depPbs = loadPlaybooks(depNode.root, undefined, depNode.manifest);
-              for (const [id, pb] of depPbs.entries()) {
-                visiblePlaybooks.set(`${depId}/${id}`, pb);
-              }
-            } catch {
-              // 忽略依赖包 Playbook 加载异常
-            }
-          }
-        }
-      }
-
-      for (const pb of visiblePlaybooks.values()) {
-        if (Array.isArray(pb.actions)) {
-          for (const actRef of pb.actions) {
-            if (typeof actRef === "string" && actRef.trim()) {
-              delegatedActions.add(actRef.trim());
-            }
-          }
-        }
-      }
-
+      const { visiblePlaybooks, delegatedActions } = collectVisiblePlaybooks(rootNode, nodes);
       return new DefaultPackageGraph(nodes, rootIdentity, visiblePlaybooks, delegatedActions);
     }
 
     // 模式 C：全局包发现构建
-    const discOpts: PackageDiscoveryOptions = {
-      ...this.options.discoveryOptions,
-      customHome: this.options.discoveryOptions?.customHome ?? this.options.customHome,
-      scanLinkedPackages:
-        this.options.discoveryOptions?.scanLinkedPackages ?? this.options.allowDevLinks ?? true,
-    };
-    const discovered = new PackageDiscovery(discOpts).discoverSync();
-    for (const pkg of discovered) {
-      const digest = computeManifestDigest(pkg.manifest);
-      const identity = createPackageIdentity({
-        id: pkg.id,
-        instanceId: `${pkg.id}:${pkg.root}`,
-        generation,
-      });
-      nodes.set(pkg.id, {
-        identity,
-        packageId: pkg.id,
-        root: pkg.root,
-        manifest: pkg.manifest,
-        manifestDigest: digest,
-        version: pkg.manifest.version || "0.1.0",
-        npmPackage: pkg.id,
-        directDependencies: new Set<string>(),
-        transitiveDependencies: new Set<string>(),
-        isDirect: Boolean(pkg.isCurrentProject),
-        isRoot: Boolean(pkg.isCurrentProject),
-      });
-    }
-
-    return new DefaultPackageGraph(nodes);
+    return this.buildFromGlobalDiscovery(nodes, generation);
   }
 
   /**

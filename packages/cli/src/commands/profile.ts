@@ -18,8 +18,8 @@ import {
 import { Command } from "commander";
 import {
   ArgumentError,
-  CliError,
   ExecutionError,
+  wrapAsExecutionError,
 } from "../errors";
 import { renderResult, writeStderr, writeStdout } from "../renderer";
 import { getEffectiveOptions, resolveFallbackStrategy, resolveIntent } from "../utils";
@@ -113,8 +113,7 @@ export function registerProfileCommands(program: Command): void {
           },
         });
       } catch (err: any) {
-        if (err instanceof ArgumentError || err instanceof CliError) throw err;
-        throw new ExecutionError(err.message);
+        throw wrapAsExecutionError(err);
       }
     });
 
@@ -143,7 +142,7 @@ export function registerProfileCommands(program: Command): void {
         });
         writeStdout(`[OK] Profile '${name}' configured for server: ${options.server}${options.insecure ? " (insecure: true)" : ""}`);
       } catch (err: any) {
-        throw new ExecutionError(err.message);
+        throw wrapAsExecutionError(err);
       }
     });
 
@@ -180,7 +179,7 @@ export function registerProfileCommands(program: Command): void {
         });
         writeStdout(`[OK] Profile '${name}' updated`);
       } catch (err: any) {
-        throw new ExecutionError(err.message);
+        throw wrapAsExecutionError(err);
       }
     });
 
@@ -193,7 +192,7 @@ export function registerProfileCommands(program: Command): void {
         useProfile(name);
         writeStdout(`[OK] Active profile switched to '${name}'`);
       } catch (err: any) {
-        throw new ExecutionError(err.message);
+        throw wrapAsExecutionError(err);
       }
     });
 
@@ -262,10 +261,7 @@ export function registerProfileCommands(program: Command): void {
           },
         });
       } catch (err: any) {
-        if (err instanceof ArgumentError || err instanceof CliError) {
-          throw err;
-        }
-        throw new ExecutionError(err.message);
+        throw wrapAsExecutionError(err);
       }
     });
 
@@ -285,10 +281,7 @@ export function registerProfileCommands(program: Command): void {
         }
         writeStdout(`[OK] Profile '${name}' removed`);
       } catch (err: any) {
-        if (err instanceof CliError) {
-          throw err;
-        }
-        throw new ExecutionError(err.message);
+        throw wrapAsExecutionError(err);
       }
     });
 
@@ -336,8 +329,7 @@ export function registerProfileCommands(program: Command): void {
           process.exitCode = 1;
         }
       } catch (err: any) {
-        if (err instanceof ArgumentError || err instanceof CliError) throw err;
-        throw new ExecutionError(err.message);
+        throw wrapAsExecutionError(err);
       }
     });
 }

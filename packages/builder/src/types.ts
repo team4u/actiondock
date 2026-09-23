@@ -42,6 +42,17 @@ export interface ActionDependency {
 }
 
 /**
+ * 判定 Action 是否为当前包自有（非外部依赖包且 ID 不含跨包斜杠前缀）。
+ *
+ * 产物契约核心谓词：入口生成、清单序列化、源码物化、导出统计等全部链路
+ * 必须经由此单一事实源判定，避免外部标记与斜杠 ID 双条件在某处漏改一半
+ * 导致孤儿模块或清单漂移。
+ */
+export function isOwnAction(action: Pick<ActionDependency, "id" | "isExternal">): boolean {
+  return !action.isExternal && !action.id.includes("/");
+}
+
+/**
  * 资产或模块依赖描述。
  */
 export interface AssetDependency {

@@ -8,6 +8,7 @@ import type { CliContext } from "../types";
 import {
   applyTargetOptions,
   getEffectiveOptions,
+  remoteTargetSuffix,
   resolveFallbackStrategy,
   resolveIntent,
   resolveLocalPackageRoot,
@@ -50,14 +51,22 @@ export function attachListCommand(parent: Command, context?: CliContext): Comman
         async (service, resolved) => {
           let rawSummaries = await service.discovery.listActions();
 
-          // 若指定了目标包但本地未过滤，则精确匹配包标识
+          // 若指定了目标包但本地未过滤，则按包归属精确过滤：
+          // 仅保留全限定名命中目标包前缀、或 packageId 归属目标包的条目；
+          // 无法归属到目标包的无前缀短 id 条目不放行，避免他包短 id 混入
           if (options.package && !options.profile && !options.server) {
-            rawSummaries = rawSummaries.filter(
-              (s) =>
-                s.id.startsWith(`${options.package}/`) ||
-                (s as any).packageId === options.package ||
-                !s.id.includes("/")
-            );
+            const targetPkg = options.package;
+            rawSummaries = rawSummaries.filter((s) => {
+              if ((s as any).packageId) {
+                return (
+                  (s as any).packageId === targetPkg ||
+                  s.id === targetPkg ||
+                  s.id.startsWith(`${targetPkg}/`)
+                );
+              }
+              // 无 packageId 归属信息的条目：仅全限定名前缀命中时放行
+              return s.id === targetPkg || s.id.startsWith(`${targetPkg}/`);
+            });
           }
 
           const rawList = rawSummaries.map((s) => {
@@ -93,7 +102,7 @@ export function attachListCommand(parent: Command, context?: CliContext): Comman
 
           const title =
             resolved.type === "remote"
-              ? `Actions on remote server ${resolved.serverUrl}${resolved.profileName ? ` (Profile: ${resolved.profileName})` : ""}`
+              ? `Actions ${remoteTargetSuffix(resolved)}`
               : targetPackageRoot
               ? `Actions in ${options.package || "current project"}`
               : "Available Actions";

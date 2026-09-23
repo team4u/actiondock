@@ -109,6 +109,10 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
   private init(): void {
     this.driver.exec("PRAGMA journal_mode = WAL;");
     this.driver.exec("PRAGMA synchronous = NORMAL;");
+    // 跨进程写并发基线：SQLite 默认忙等为零，持有者与旁观写进程的写窗口重叠时
+    // 会立即抛 SQLITE_BUSY。统一设置 5 秒忙等，使默认同步驱动、工作线程驱动
+    // （worker 脚本已内置同值）与任何注入驱动的行为基线一致。
+    this.driver.exec("PRAGMA busy_timeout = 5000;");
 
     // 读取 Schema 版本号
     const versionRes = this.driver.prepare("PRAGMA user_version;").get<{
@@ -315,7 +319,13 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     if (row.expires_at) {
       const expires = new Date(row.expires_at).getTime();
       if (this.clock.now().getTime() >= expires) {
-        this.deleteState(namespace, key).catch(() => {});
+        // 惰性删除失败仅降级不影响读取语义，但必须可观测，与其他存储降级点对齐
+        this.deleteState(namespace, key).catch((err) => {
+          const reason = err instanceof Error ? err.message : String(err);
+          console.warn(
+            `[actiondock] expired state lazy delete failed (namespace='${namespace}' key='${key}'): ${reason}`
+          );
+        });
         return undefined;
       }
     }
@@ -376,7 +386,15 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     const uniqueMap = new Map<string, (typeof rawRows)[0]>();
     for (const r of rawRows) {
       if (r.expires_at && now >= new Date(r.expires_at).getTime()) {
-        this.deleteState(r.namespace, r.key).catch(() => {});
+        // 惰性删除失败仅降级不影响匹配语义，但必须可观测，与其他存储降级点对齐
+        const ns = r.namespace;
+        const k = r.key;
+        this.deleteState(ns, k).catch((err) => {
+          const reason = err instanceof Error ? err.message : String(err);
+          console.warn(
+            `[actiondock] expired state lazy delete failed (namespace='${ns}' key='${k}'): ${reason}`
+          );
+        });
         continue;
       }
       uniqueMap.set(`${r.namespace}\0${r.key}`, r);

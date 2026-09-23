@@ -1,6 +1,5 @@
 import childProcess, { type ChildProcess, spawn } from "node:child_process";
 import { createRequire } from "node:module";
-import { randomUUID } from "node:crypto";
 import type { Capabilities, LaunchSpec } from "@actiondock/sdk";
 import {
   INPUT_CLOSED,
@@ -126,6 +125,8 @@ interface InternalProcessInstance {
   exitListeners: Array<() => void>;
   onExit(callback: () => void): void;
   cleanup(): void;
+  /** 终态收敛（exit 且输出关闭）后从受管表自移除 */
+  selfRelease(): void;
 }
 
 /**
@@ -282,7 +283,7 @@ export class NodeProcessDriver implements ProcessDriver {
       );
     }
 
-    const handleId = customId ?? randomUUID();
+    const handleId = customId ?? crypto.randomUUID();
     const env = resolveProcessEnv(spec.env);
     const cols = spec.io.cols ?? 80;
     const rows = spec.io.rows ?? 24;
@@ -330,6 +331,12 @@ export class NodeProcessDriver implements ProcessDriver {
         }
         exitListeners.length = 0;
       },
+      selfRelease: () => {
+        // 终态收敛后自移除：按实例身份判断，dispose 先行移除或表内已换新实例时不重复删除
+        if (this.instances.get(handleId) === instance) {
+          this.instances.delete(handleId);
+        }
+      },
     };
 
     const markExited = (code: number | null, signal: string | null) => {
@@ -352,6 +359,7 @@ export class NodeProcessDriver implements ProcessDriver {
         instance.outputClosed = true;
         observer.outputClosed(reason);
       }
+      instance.selfRelease();
     };
 
     // 绑定 PTY 数据输出
@@ -379,7 +387,7 @@ export class NodeProcessDriver implements ProcessDriver {
     observer: ProcessObserver,
     customId?: string
   ): Promise<ProcessHandle> {
-    const handleId = customId ?? randomUUID();
+    const handleId = customId ?? crypto.randomUUID();
     const env = resolveProcessEnv(spec.env);
 
     let child: ChildProcess;
@@ -422,6 +430,12 @@ export class NodeProcessDriver implements ProcessDriver {
         }
         exitListeners.length = 0;
       },
+      selfRelease: () => {
+        // 终态收敛后自移除：按实例身份判断，dispose 先行移除或表内已换新实例时不重复删除
+        if (this.instances.get(handleId) === instance) {
+          this.instances.delete(handleId);
+        }
+      },
     };
 
     const markExited = (code: number | null, signal: string | null) => {
@@ -444,6 +458,7 @@ export class NodeProcessDriver implements ProcessDriver {
         instance.outputClosed = true;
         observer.outputClosed(reason);
       }
+      instance.selfRelease();
     };
 
     // 同步完成 stdout/stderr 监听绑定，防止产生数据丢失竞态
@@ -510,9 +525,14 @@ export class NodeProcessDriver implements ProcessDriver {
 
   /**
    * 向受管进程输入流写入字节数据，支持背压与管道提早关闭错误捕获。
+   * 终态自清理（selfRelease）或 dispose 先行移除实例时，进程已退出且输入管道必然关闭，
+   * 按已关闭语义抛出 INPUT_CLOSED 而非笼统异常。
    */
   async write(handle: ProcessHandle, data: Uint8Array): Promise<void> {
-    const instance = this.resolveInstance(handle);
+    const instance = this.instances.get(handle.id);
+    if (!instance) {
+      throw new ProcessError(INPUT_CLOSED, "Process stdin is closed or destroyed");
+    }
 
     if (instance.mode === "pty" && instance.ptyProcess) {
       const text = new TextDecoder().decode(data);
@@ -645,9 +665,10 @@ export class NodeProcessDriver implements ProcessDriver {
 
   /**
    * 优雅终止进程，超时未退出则发送 SIGKILL 强杀兜底。
+   * 终态自清理（selfRelease）或 dispose 先行移除实例时视为已终止，直接无害返回。
    */
   async terminate(handle: ProcessHandle, graceMs: number): Promise<void> {
-    const instance = this.resolveInstance(handle);
+    const instance = this.instances.get(handle.id);
 
     if (!instance) {
       return;
@@ -713,6 +734,8 @@ export class NodeProcessDriver implements ProcessDriver {
    * 销毁进程句柄并清理相关资源。
    * 对仍在运行的实例先执行 terminate(0) 兜底（SIGTERM 后立即 SIGKILL），
    * 绝不从受管表移除仍存活的子进程而遗留孤儿；已退出实例直接清理。
+   * 终态自清理（selfRelease）与 dispose 可能并发到达，二者均按实例身份判断，
+   * 后到方对已删除条目为无害空操作。
    */
   async dispose(handle: ProcessHandle): Promise<void> {
     const instance = this.instances.get(handle.id);
@@ -725,7 +748,9 @@ export class NodeProcessDriver implements ProcessDriver {
         }
       }
       instance.cleanup();
-      this.instances.delete(handle.id);
+      if (this.instances.get(handle.id) === instance) {
+        this.instances.delete(handle.id);
+      }
     }
   }
 

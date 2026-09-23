@@ -2,17 +2,11 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { normalizeSemver } from "./lib/semver.js";
+import { discoverWorkspacePackages } from "./lib/discover-workspace-packages.js";
 
 const rootDir = resolve(import.meta.dirname, "..");
 
-const subPackages = [
-  "sdk",
-  "core",
-  "builder",
-  "testing",
-  "mcp",
-  "cli",
-];
+const subPackages = discoverWorkspacePackages(rootDir).map((pkg) => pkg.shortName);
 
 const examplePackages = [
   "github-tools",

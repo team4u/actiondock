@@ -9,7 +9,7 @@ import {
   findProjectRoot,
 } from "@actiondock/core";
 import { Command } from "commander";
-import { ExecutionError, notInProjectError, packageNotFoundError } from "../errors";
+import { ExecutionError, notInProjectError, packageNotFoundError, wrapAsExecutionError } from "../errors";
 import { renderResult, writeStdout } from "../renderer";
 import type { CliContext } from "../types";
 import { getEffectiveOptions, parseListOption } from "../utils";
@@ -234,10 +234,8 @@ export function registerExportCommand(program: Command, context?: CliContext): v
           context,
         });
       } catch (err: any) {
-        if (err?.code === "UNSUPPORTED_BUILD_MODE") {
-          throw new ExecutionError(err.message, undefined, "UNSUPPORTED_BUILD_MODE");
-        }
-        throw new ExecutionError(`Export failed: ${err.message}`);
+        // wrapAsExecutionError 保留原始错误码（含 UNSUPPORTED_BUILD_MODE）
+        throw wrapAsExecutionError(err, "Export failed: ");
       }
     });
 }

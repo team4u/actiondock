@@ -1,12 +1,4 @@
-import {
-  after,
-  afterEach,
-  before,
-  beforeEach,
-  describe as nodeDescribe,
-  it as nodeIt,
-  test as nodeTest,
-} from "node:test";
+import { after, afterEach, before, beforeEach, describe as nodeDescribe, it as nodeIt, test as nodeTest } from "node:test";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -46,6 +38,12 @@ export function setDefaultTimeout(_timeoutMs: number): void {
   // node:test supports test-level timeout, global timeout is a no-op here
 }
 
+/**
+ * PATH 检索可执行文件：与 packages/core/src/utils/index.ts 的 findExecutable 行为对齐
+ * （Windows 下对无点命令追加 PATHEXT 扩展名、其余直接拼接）。
+ * 本文件为测试 shim 加载层，先于 @actiondock/core 可用性保证而存在，
+ * 因此以复制对齐方式维护，行为变更需与 core 实现同步。
+ */
 function findExecutable(command: string): string | null {
   const hasPathSep = command.includes("/") || command.includes("\\");
   if (hasPathSep) {
@@ -61,7 +59,7 @@ function findExecutable(command: string): string | null {
   for (const dir of dirs) {
     if (!dir) continue;
     for (const ext of pathext) {
-      const candidate = join(dir, isWindows ? `${command}${ext}` : command);
+      const candidate = join(dir, isWindows && !command.includes(".") ? command + ext : command);
       if (existsSync(candidate)) return candidate;
     }
   }

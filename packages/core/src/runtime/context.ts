@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type {
   ActionContext,
   ActionInvoker,
@@ -12,6 +11,7 @@ import type {
 import type { ProjectConfig } from "../project/types";
 import type { RuntimeStorage } from "../storage/types";
 import { MemoryProcessDriver, ProcessManager, type ProcessOwner } from "../process";
+import { createDefaultProcessOwner } from "../invocation/types";
 import { resolveEnvValue } from "./env";
 import { ActionDockError, INVALID_ACTION_REF } from "../errors";
 
@@ -247,7 +247,7 @@ export function createActionContext(options: ContextOptions): ActionContext {
   const state = new RuntimeStateStore(options.storage);
   const log = options.logger || new StderrLogger();
   const signal = options.signal ?? new AbortController().signal;
-  const currentRunId = options.runId || randomUUID();
+  const currentRunId = options.runId || crypto.randomUUID();
   const currentRootRunId = options.rootRunId || options.parentRunId || currentRunId;
 
   const invoke = async <I, O>(
@@ -276,12 +276,7 @@ export function createActionContext(options: ContextOptions): ActionContext {
   const invokerFn = (ref: string | ActionRef, input?: unknown) => invoke(ref, input);
   const invoker: ActionInvoker = Object.assign(invokerFn, { invoke });
 
-  const defaultOwner: ProcessOwner = {
-    tenantId: "default",
-    principalId: "default",
-    packageInstanceId: "default",
-    generationId: "default",
-  };
+  const defaultOwner: ProcessOwner = createDefaultProcessOwner();
   const effectiveOwner: ProcessOwner = options.owner || defaultOwner;
 
   // 外部注入的可能是平台级共享 ContextProcessAPI（未绑定 runId），直接复用会让

@@ -21,6 +21,8 @@ import type { CliContext } from "../../types";
 import {
   applyTargetOptions,
   getEffectiveOptions,
+  remoteTargetLabel,
+  resolveFallbackStrategy,
   resolveIntent,
   resolveTargetFromOptions,
   withService,
@@ -64,13 +66,14 @@ export function registerConfigListCommand(configCmd: Command, context?: CliConte
   )
     .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
     .option("--reveal, --show-secrets", "Reveal plain text values for secrets")
+    .option("--fallback", "Enable fallback to full list when no items match intent")
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
     .action(async (patterns: string[] = [], rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
       const effectiveIntent = resolveIntent(options.intent, patterns);
-      const shouldFallback = options.fallback !== false;
+      const { shouldFallback } = resolveFallbackStrategy(options);
       const reveal = Boolean(options.reveal || options.showSecrets);
 
       // 远端服务分支不经过 Target 门面，直接查询远端配置接口
@@ -97,7 +100,7 @@ export function registerConfigListCommand(configCmd: Command, context?: CliConte
           humanFormatter: () =>
             renderConfigList(
               entries,
-              `Remote Server ${remoteTargetInfo.serverUrl}${remoteTargetInfo.profileName ? ` (Profile: ${remoteTargetInfo.profileName})` : ""}`,
+              remoteTargetLabel(remoteTargetInfo),
               false,
               effectiveIntent
             ),

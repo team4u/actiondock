@@ -158,12 +158,21 @@ describe("CLI End-to-End", () => {
       expect(remoteActions.some((a: any) => a.id === "sample.greet")).toBe(true);
 
       const remoteListIntentProc = runCli(
-        ["list", "--profile", "cloud-aliyun", "--intent", "sample\\.greet", "--json"],
+        ["list", "--profile", "cloud-aliyun", "--intent", "sample.greet", "--json"],
         tmpdir(),
         env
       );
       expect(remoteListIntentProc.exitCode).toBe(0);
       expect(JSON.parse(remoteListIntentProc.stdout.toString()).length).toBe(1);
+
+      // 机器模式（--json）无匹配且未显式 --fallback 时不回退：返回空集
+      const remoteListNoMatchProc = runCli(
+        ["list", "--profile", "cloud-aliyun", "--intent", "nomatch-xyz", "--json"],
+        tmpdir(),
+        env
+      );
+      expect(remoteListNoMatchProc.exitCode).toBe(0);
+      expect(JSON.parse(remoteListNoMatchProc.stdout.toString())).toEqual([]);
 
       // 6. Execute action on remote server via ad run --profile
       const remoteRunProc = runCli(

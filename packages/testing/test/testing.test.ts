@@ -366,6 +366,23 @@ describe("@actiondock/testing", () => {
       expect(await rootStore.get("never-exists")).toBeUndefined();
     });
 
+    it("TTL 为 0 或负数时按契约表示永久有效", async () => {
+      const clock = new FakeClock({ now: "2026-01-01T00:00:00.000Z" });
+      const store = new MemoryStateStore(new Map<string, any>(), "", clock);
+
+      // SDK 契约：不传或小于等于 0 表示永久有效，立即读取不应过期丢失
+      await store.set("zero-ttl", "kept-zero", 0);
+      await store.set("negative-ttl", "kept-negative", -5);
+
+      expect(await store.get<string>("zero-ttl")).toBe("kept-zero");
+      expect(await store.get<string>("negative-ttl")).toBe("kept-negative");
+
+      // 推进时间后仍永久有效
+      await clock.advance(60_000);
+      expect(await store.get<string>("zero-ttl")).toBe("kept-zero");
+      expect(await store.get<string>("negative-ttl")).toBe("kept-negative");
+    });
+
     it("非根命名空间保持严格隔离", async () => {
       const shared = new Map<string, any>();
       const rootStore = new MemoryStateStore(shared, "");

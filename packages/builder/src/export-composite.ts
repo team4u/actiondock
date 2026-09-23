@@ -18,7 +18,7 @@ import {
 import { generateCompositeSkillMd, type CompositeSkillPackageInfo } from "./skill";
 import { BuilderError } from "./errors";
 import { collectRelativeFiles, getInternalDependencyVersion, replaceDirAtomic } from "./fs-utils";
-import { assertNoFileProtocolDeps, resolveWorkspaceDepVersion } from "./manifest";
+import { allocatePackageDirName, sanitizeExportDependencies } from "./manifest";
 import { SelectionPlanner } from "./planner";
 import {
   findExistingCompositeSkillMd,
@@ -113,11 +113,8 @@ export async function exportCompositeImpl(
         // 就地生成：规程链接基于工作区实际子目录名
         pkgSlug = basename(resolve(projectRoot));
       } else {
-        pkgSlug = getPackageSlug(config.id);
-        if (usedDirNames.has(pkgSlug)) {
-          pkgSlug = config.id.replace(/[^a-zA-Z0-9-_]/g, "-").replace(/^-+|-+$/g, "");
-        }
-        usedDirNames.add(pkgSlug);
+        // 目录名分配统一复用 manifest 的 allocatePackageDirName，回退后仍冲突会追加数字后缀
+        pkgSlug = allocatePackageDirName(usedDirNames, config.id);
       }
 
       let actionIds: string[];
@@ -247,6 +244,7 @@ export async function exportCompositeImpl(
 
 /**
  * 复合套件聚合各子包依赖并生成复合根目录 package.json。
+ * 依赖清洗统一复用 manifest 的 sanitizeExportDependencies 单一入口，与单包导出口径一致。
  */
 function writeCompositePkgJson(
   stagingDir: string,
@@ -263,23 +261,15 @@ function writeCompositePkgJson(
     if (existsSync(pkgJsonPath)) {
       try {
         const parsed = JSON.parse(readFileSync(pkgJsonPath, "utf-8"));
-        if (parsed.dependencies && typeof parsed.dependencies === "object") {
-          assertNoFileProtocolDeps(parsed.dependencies, "exported skill packages");
-          for (const [dep, ver] of Object.entries(parsed.dependencies)) {
-            const verStr = String(ver);
-            if (dep.startsWith("@actiondock/")) {
-              aggregatedDeps[dep] = getInternalDependencyVersion();
-            } else if (verStr.startsWith("workspace:")) {
-              aggregatedDeps[dep] = resolveWorkspaceDepVersion(
-                join(packagesDestDir, info.packageDir),
-                dep,
-                verStr
-              );
-            } else {
-              aggregatedDeps[dep] = verStr;
-            }
-          }
-        }
+        Object.assign(
+          aggregatedDeps,
+          sanitizeExportDependencies(
+            join(packagesDestDir, info.packageDir),
+            parsed.dependencies,
+            "exported skill packages",
+            false
+          )
+        );
       } catch (err) {
         if (err instanceof BuilderError) throw err;
         // 复合导出缺依赖影响面大：读文件与解析失败必须显式报错，严禁静默吞掉导致聚合依赖缺失

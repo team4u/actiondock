@@ -293,15 +293,13 @@ export class FakeProcessDriver implements ProcessDriver {
   }
 
   /**
-   * 模拟终止进程并记录历史。
+   * 模拟终止进程并记录历史。优雅终止进程。
    *
    * 终止语义与 MemoryProcessDriver 对齐：除非测试通过 nextTerminateError
    * 注入故障，否则终止后进程必须退出（触发 exited 回调），否则
    * ProcessManager.run 的超时/超限路径在 terminate 后永远收不到退出事件，
    * 调用方会永久挂起。需要非退出语义的用例可先 setExitBehavior 或
    * 直接使用 handle 上的确定性模拟接口自行控制退出时机。
-  /**
-   * 优雅终止进程。
    */
   async terminate(handle: ProcessHandle, graceMs: number): Promise<void> {
     if (this.nextTerminateError) {

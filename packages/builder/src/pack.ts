@@ -26,6 +26,8 @@ import {
 } from "./manifest";
 import { collectRelativeFiles } from "./fs-utils";
 import { SelectionPlanner } from "./planner";
+import { isOwnAction } from "./types";
+import { copyPlanEntries } from "./stage-sources";
 import type { ActionDependency, PackOptions, PackResult, SelectionPlan } from "./types";
 
 /**
@@ -199,7 +201,7 @@ async function compileTypeScript(
 
   const tsSourceFiles = new Set<string>();
   for (const act of plan.actions) {
-    if (act.isExternal || act.id.includes("/")) continue;
+    if (!isOwnAction(act)) continue;
     if (isTypeScriptSource(act.entry)) {
       tsSourceFiles.add(act.resolvedPath);
     }
@@ -229,29 +231,38 @@ async function compileTypeScript(
   if (existsSync(tsconfigPath)) {
     try {
       const configFile = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
-      if (!configFile.error) {
-        const parsedConfig = ts.parseJsonConfigFileContent(configFile.config, ts.sys, root);
-        // tsc 不会改写 import 说明符：paths 路径别名在产物中无法解析，必须显式拒绝而非静默编译出坏产物
-        if (parsedConfig.options.paths && Object.keys(parsedConfig.options.paths).length > 0) {
-          throw new BuilderError(
-            `tsconfig.json 'paths' aliases are not supported in packed output: TypeScript does not rewrite import specifiers, so the packed artifact would contain unresolvable module specifiers. Replace path aliases with relative imports, or pre-build the project and pack the compiled output instead.`,
-            "PATHS_ALIAS_UNSUPPORTED"
-          );
-        }
-        Object.assign(compilerOptions, parsedConfig.options, {
-          outDir: stagingPkgDir,
-          rootDir: root,
-          declaration: true,
-          emitDeclarationOnly: false,
-          rewriteRelativeImportExtensions: true,
-          noEmit: false,
-        });
+      if (configFile.error) {
+        throw new Error(ts.formatDiagnostic(configFile.error));
       }
+      const parsedConfig = ts.parseJsonConfigFileContent(configFile.config, ts.sys, root);
+      if (parsedConfig.errors && parsedConfig.errors.length > 0) {
+        throw new Error(ts.formatDiagnostics(parsedConfig.errors));
+      }
+      // tsc 不会改写 import 说明符：paths 路径别名在产物中无法解析，必须显式拒绝而非静默编译出坏产物
+      if (parsedConfig.options.paths && Object.keys(parsedConfig.options.paths).length > 0) {
+        throw new BuilderError(
+          `tsconfig.json 'paths' aliases are not supported in packed output: TypeScript does not rewrite import specifiers, so the packed artifact would contain unresolvable module specifiers. Replace path aliases with relative imports, or pre-build the project and pack the compiled output instead.`,
+          "PATHS_ALIAS_UNSUPPORTED"
+        );
+      }
+      Object.assign(compilerOptions, parsedConfig.options, {
+        outDir: stagingPkgDir,
+        rootDir: root,
+        declaration: true,
+        emitDeclarationOnly: false,
+        rewriteRelativeImportExtensions: true,
+        noEmit: false,
+      });
     } catch (err) {
       if (err instanceof BuilderError) {
         throw err;
       }
-      // 忽略 tsconfig 解析失败，回退到标准 compilerOptions
+      // tsconfig 解析失败回退默认 compilerOptions，但必须输出显著告警：
+      // 用户配置的 strict、target 等被丢弃可能编译出行为不同的产物，严禁无提示
+      const reason = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `[actiondock] Warning: Failed to parse tsconfig.json at ${tsconfigPath}; falling back to default compiler options for packed output. Root cause: ${reason}`
+      );
     }
   }
 
@@ -278,40 +289,16 @@ async function compileTypeScript(
 
 /**
  * 拷贝声明的非 TypeScript 模块、静态资产、原生 JavaScript 入口、Playbook 与基础文档到暂存目录。
+ * 拷贝内核统一复用 stage-sources 的 copyPlanEntries，仅通过谓词分化编译排除差异。
  */
 function stageSources(root: string, stagingPkgDir: string, plan: SelectionPlan): void {
-  // 拷贝声明的非 TypeScript 模块与静态资产
-  for (const dep of plan.dependencies.modulesAndAssets) {
-    if (
-      (dep.type === "asset" || dep.type === "module" || dep.type === "file") &&
-      existsSync(dep.resolvedPath)
-    ) {
-      if (isTypeScriptSource(dep.path)) {
-        continue; // 已由 TypeScript 编译生成 .js 与 .d.ts
-      }
-      const destPath = join(stagingPkgDir, dep.path);
-      mkdirSync(dirname(destPath), { recursive: true });
-      copyFileSync(dep.resolvedPath, destPath);
-    }
-  }
-
-  // 拷贝原生 JavaScript Action 入口（若存在）
-  for (const act of plan.actions) {
-    if (!isTypeScriptSource(act.entry)) {
-      const destPath = join(stagingPkgDir, act.entry);
-      mkdirSync(dirname(destPath), { recursive: true });
-      copyFileSync(act.resolvedPath, destPath);
-    }
-  }
-
-  // 拷贝 Playbook 规程文件
-  for (const pb of plan.playbooks) {
-    if (existsSync(pb.filePath)) {
-      const destPb = join(stagingPkgDir, relative(root, pb.filePath));
-      mkdirSync(dirname(destPb), { recursive: true });
-      copyFileSync(pb.filePath, destPb);
-    }
-  }
+  copyPlanEntries(root, stagingPkgDir, plan, {
+    // TypeScript 入口已由编译阶段生成 .js 与 .d.ts，不重复物化源文件
+    copyAction: (act) => !isTypeScriptSource(act.entry),
+    copyModule: (dep) => !isTypeScriptSource(dep.path),
+    // pack 产物保留源工程相对路径（与编译输出的目录结构一致）
+    playbookRelPath: (pb) => relative(root, pb.filePath),
+  });
 
   // 拷贝 README 等基础文档（若存在）
   for (const doc of ["README.md", "readme.md", "LICENSE", "license"]) {
@@ -346,7 +333,7 @@ function writeManifestAndPkgJson(
   // 构建编译后的 Action 清单字典并严格校验入口扩展名
   const compiledEntries = new Map<string, string>();
   for (const act of plan.actions) {
-    if (act.isExternal || act.id.includes("/")) continue;
+    if (!isOwnAction(act)) continue;
     const destEntry = compiledEntryFor(act);
     if (!destEntry.endsWith(".js") && !destEntry.endsWith(".mjs")) {
       throw new BuilderError(

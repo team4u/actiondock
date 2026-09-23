@@ -1,143 +1,131 @@
 import {
-  createActionDock,
   loadProjectConfig,
 } from "@actiondock/core";
 import {
   isSecretConfigKey,
 } from "@actiondock/core/project";
 import {
-  resolveEnvValue,
-} from "@actiondock/core/profile";
-import {
   resolvePackageRoot,
 } from "@actiondock/core/registry";
 import type { Command } from "commander";
-import { ArgumentError, ExecutionError, notInProjectError, packageNotFoundError } from "../../errors";
+import { notInProjectError, packageNotFoundError } from "../../errors";
 import { renderConfigSchema, renderResult, writeStdout } from "../../renderer";
+import { buildMergedConfigEntries } from "../../services/config-merge";
 import type { CliContext } from "../../types";
-import { getEffectiveOptions } from "../../utils";
+import { applyTargetOptions, getEffectiveOptions, withService } from "../../utils";
 
 /**
  * 注册 config schema 子命令：检查声明配置的解析状态。
  *
+ * 状态推导复用 config-merge 的跨作用域合并视图单一事实源
+ * （项目包级 > 全局持久化 > 环境变量 > 声明默认值）：
+ * - source 命中 project、global 或 env 时状态为 SET；
+ * - source 为 default（仅声明默认值兜底）时状态为 DEFAULT；
+ * - 键无任何来源（不在合并视图中，即未声明默认值也未持久化）时状态为 MISSING。
+ *
  * @param configCmd config 命令实例
- * @param context 命令行上下文
+ * @param context CLI 上下文
  */
 export function registerConfigSchemaCommand(configCmd: Command, context?: CliContext): void {
-  configCmd
-    .command("schema [identifier]")
-    .alias("check")
-    .description("Inspect declared configuration requirements and check resolution status")
-    .option("-P, --package <id>", "Target package ID or path")
+  applyTargetOptions(
+    configCmd
+      .command("schema [identifier]")
+      .alias("check")
+      .description("Inspect declared configuration requirements and check resolution status")
+      .option("-P, --package <id>", "Target package ID or path")
+  )
     .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
     .action(async (identifier: string | undefined, rawOptions: any, cmd: any) => {
-      try {
-        const options = getEffectiveOptions(rawOptions, cmd);
-        const targetPkg = identifier || options.package;
-        const root = resolvePackageRoot(targetPkg);
-        if (!root) {
-          if (targetPkg) {
-            throw packageNotFoundError(targetPkg);
-          }
-          throw notInProjectError(
-            "Usage: ad config schema [package-id] or cd into a project directory."
-          );
+      const options = getEffectiveOptions(rawOptions, cmd);
+      const targetPkg = identifier || options.package;
+      const root = resolvePackageRoot(targetPkg);
+      if (!root) {
+        if (targetPkg) {
+          throw packageNotFoundError(targetPkg);
         }
-
-        const projConfig = loadProjectConfig(root);
-        const declared = projConfig.config || {};
-        const declaredKeys = Object.keys(declared);
-
-        const service = await createActionDock({
-          type: "local",
-          projectRoot: root,
-          customHome: context?.customHome,
-          dataDir: options.dataDir || context?.dataDir,
-        });
-
-        let globalConfig: import("@actiondock/core").ConfigValueView[] = [];
-        let projectConfig: import("@actiondock/core").ConfigValueView[] = [];
-        try {
-          globalConfig = (await service.management?.config.list("global")) ?? [];
-          projectConfig = (await service.management?.config.list(projConfig.id)) ?? [];
-        } finally {
-          await service.close();
-        }
-
-        const projectConfigMap = new Map(projectConfig.map((c) => [c.key, c]));
-        const globalConfigMap = new Map(globalConfig.map((c) => [c.key, c]));
-
-        const items = declaredKeys.map((key) => {
-          const itemDef = declared[key];
-          const isSecret = isSecretConfigKey(key, itemDef);
-
-          let resolvedValue: unknown;
-          let source: "project" | "global" | "env" | "default" | "missing" = "missing";
-          let status: "SET" | "DEFAULT" | "MISSING" = "MISSING";
-          const envResolved = resolveEnvValue(key, itemDef, projConfig.id);
-
-          const projItem = projectConfigMap.get(key);
-          const globItem = globalConfigMap.get(key);
-
-          if (projItem && projItem.configured && projItem.source === "package") {
-            resolvedValue = projItem.value;
-            source = "project";
-            status = "SET";
-          } else if (globItem && globItem.configured) {
-            resolvedValue = globItem.value;
-            source = "global";
-            status = "SET";
-          } else if (envResolved !== undefined) {
-            resolvedValue = envResolved.value;
-            source = "env";
-            status = "SET";
-          } else if (itemDef.default !== undefined) {
-            resolvedValue = itemDef.default;
-            source = "default";
-            status = "DEFAULT";
-          }
-
-          return {
-            key,
-            required: Boolean(itemDef.required),
-            secret: isSecret,
-            status,
-            source,
-            description: itemDef.description || "",
-            defaultValue: itemDef.default,
-            hasValue: resolvedValue !== undefined,
-          };
-        });
-
-        const missingRequired = items.filter((i) => i.required && i.status === "MISSING");
-        const ok = missingRequired.length === 0;
-
-        const result = {
-          packageId: projConfig.id,
-          projectRoot: root,
-          ok,
-          missingCount: missingRequired.length,
-          configs: items,
-        };
-
-        if (options.json) {
-          renderResult(result, {
-            json: options.json,
-            context,
-          });
-        } else {
-          writeStdout(renderConfigSchema(items, projConfig.id, root) + "\n", context);
-        }
-
-        if (!ok) {
-          process.exitCode = 1;
-        }
-      } catch (err: any) {
-        if (err instanceof ArgumentError || err instanceof ExecutionError) {
-          throw err;
-        }
-        throw new ExecutionError(err.message);
+        throw notInProjectError(
+          "Usage: ad config schema [package-id] or cd into a project directory."
+        );
       }
+
+      const projConfig = loadProjectConfig(root);
+      const declared = projConfig.config || {};
+
+      // 远端目标显式拒绝：schema 状态推导依赖本地工程声明与环境变量解析，
+      // 远端作用域无法获得等价视图，静默落到本地会误导调用方
+      if (options.profile || options.server) {
+        throw notInProjectError(
+          "'ad config schema' only supports local projects. Remote targets are not supported for schema inspection."
+        );
+      }
+
+      // 跨作用域合并视图单一事实源：与 config list 共享同一条优先级链
+      await withService(
+        options,
+        context,
+        async (service) => {
+          const merged = await buildMergedConfigEntries(root, service, true);
+          const mergedByKey = new Map(merged.map((entry) => [entry.key, entry]));
+
+          const items = Object.keys(declared).map((key) => {
+            const itemDef = declared[key];
+            const isSecret = isSecretConfigKey(key, itemDef);
+            const mergedEntry = mergedByKey.get(key);
+
+            let source: "project" | "global" | "env" | "default" | "missing" = "missing";
+            let status: "SET" | "DEFAULT" | "MISSING" = "MISSING";
+            let resolvedValue: unknown;
+
+            if (mergedEntry) {
+              source = mergedEntry.source;
+              resolvedValue = mergedEntry.value;
+              // 合并视图的 default 来源仅是链尾兑底标签：
+              // 真正的 DEFAULT 状态要求声明确实携带默认值，否则视为 MISSING
+              if (mergedEntry.source !== "default") {
+                status = "SET";
+              } else if (itemDef.default !== undefined) {
+                status = "DEFAULT";
+              }
+            }
+
+            return {
+              key,
+              required: Boolean(itemDef.required),
+              secret: isSecret,
+              status,
+              source,
+              description: itemDef.description || "",
+              defaultValue: itemDef.default,
+              hasValue: resolvedValue !== undefined,
+            };
+          });
+
+          const missingRequired = items.filter((i) => i.required && i.status === "MISSING");
+          const ok = missingRequired.length === 0;
+
+          const result = {
+            packageId: projConfig.id,
+            projectRoot: root,
+            ok,
+            missingCount: missingRequired.length,
+            configs: items,
+          };
+
+          if (options.json) {
+            renderResult(result, {
+              json: options.json,
+              context,
+            });
+          } else {
+            writeStdout(renderConfigSchema(items, projConfig.id, root) + "\n", context);
+          }
+
+          if (!ok) {
+            process.exitCode = 1;
+          }
+        },
+        { localRoot: root }
+      );
     });
 }

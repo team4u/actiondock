@@ -20,7 +20,7 @@ import {
   findProjectRoot,
 } from "@actiondock/core";
 import { Command } from "commander";
-import { ArgumentError, ExecutionError, notInProjectError } from "../errors";
+import { ArgumentError, ExecutionError, notInProjectError, wrapAsExecutionError } from "../errors";
 import { renderResult } from "../renderer";
 import type { CliContext } from "../types";
 import { assertSafePackageSpec, getEffectiveOptions, spawnAsync } from "../utils";
@@ -182,7 +182,13 @@ export function registerAddCommand(program: Command, context?: CliContext): void
         });
       } catch (err: any) {
         await tx.rollback({ frozenInstall: false });
-        throw new ExecutionError(err.message, err, err.code || "ADD_DEPENDENCY_FAILED");
+        // ActionDockError 与 CliError 原样透传（保留 code 与 details），
+        // 其余包裹为 ExecutionError 并保留原始 code 与 details
+        const passthrough = wrapAsExecutionError(err);
+        if (passthrough !== err) {
+          throw new ExecutionError(err.message, err, err.code || "ADD_DEPENDENCY_FAILED");
+        }
+        throw passthrough;
       }
     });
 }

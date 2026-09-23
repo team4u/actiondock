@@ -16,6 +16,8 @@ import {
   applyTargetOptions,
   getEffectiveOptions,
   getTargetRoot,
+  remoteTargetLabel,
+  resolveFallbackStrategy,
   resolveIntent,
   withService,
 } from "../utils";
@@ -51,10 +53,43 @@ function decodeStateKeyWithFallback(
 }
 
 /**
+ * 解耦后的状态键寻址视图（get、set、delete 三命令共享）。
+ */
+interface StateAddress {
+  /** 生效命名空间（显式 -n 优先，其次复合键前缀；均无则 undefined） */
+  namespace: string | undefined;
+  /** 解耦后的裸键（显式 -n 时保持原始键串不拆解） */
+  key: string;
+}
+
+/**
+ * 统一预解码状态键寻址（get、set、delete 共享的单一事实源）。
+ *
+ * 三命令在 CLI 层即完成 `ns:key` 复合键解耦：
+ * - 显式 `-n/--namespace` 指定时命名空间以其为准，键保持原串不拆解；
+ * - 未显式指定时按复合键语法预解码出命名空间与裸键；
+ * - 多冒号歧义键降级为整串裸键并提示。
+ *
+ * 本地与远端分支都消费解耦后的 namespace + key，
+ * 消除「set 预解码而 get/delete 依赖存储层回退」的语义不对称。
+ */
+function resolveStateAddress(
+  rawKey: string,
+  options: { namespace?: string },
+  context?: CliContext
+): StateAddress {
+  if (options.namespace !== undefined) {
+    return { namespace: options.namespace, key: rawKey };
+  }
+  const decoded = decodeStateKeyWithFallback(rawKey, false, context);
+  return { namespace: decoded.namespace, key: decoded.key };
+}
+
+/**
  * 注册 state 状态管理命令（get、set、delete、clear、keys、list）。
  *
- * @param program Commander 实例
- * @param context 命令行上下文
+ * @param program Commander 根程序对象
+ * @param context CLI 上下文
  */
 export function registerStateCommands(program: Command, context?: CliContext): void {
   const stateCmd = program
@@ -65,7 +100,7 @@ export function registerStateCommands(program: Command, context?: CliContext): v
   const handleListKeys = async (prefix: string = "", rawOptions: any, cmd: any) => {
     const options = getEffectiveOptions(rawOptions, cmd);
     const effectiveIntent = resolveIntent(options.intent, prefix ? [prefix] : []);
-    const shouldFallback = options.fallback !== false;
+    const { shouldFallback } = resolveFallbackStrategy(options);
 
     await withService(options, context, async (service, resolved) => {
       const actionId = options.action || "";
@@ -82,7 +117,7 @@ export function registerStateCommands(program: Command, context?: CliContext): v
           humanFormatter: () =>
             renderStateList(
               keys,
-              `Remote Server ${resolved.serverUrl}${resolved.profileName ? ` (Profile: ${resolved.profileName})` : ""}`,
+              remoteTargetLabel(resolved),
               false,
               effectiveIntent
             ),
@@ -139,6 +174,7 @@ export function registerStateCommands(program: Command, context?: CliContext): v
   )
     .option("-i, --intent <pattern>", "Regex or fuzzy intent filter; falls back to full list when no match")
     .option("--detail", "Include metadata (ttl, expiresAt, size, updatedAt) in JSON output")
+    .option("--fallback", "Enable fallback to full list when no items match intent")
     .option("--no-fallback", "Disable fallback to full list when no items match intent")
     .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
@@ -155,6 +191,7 @@ export function registerStateCommands(program: Command, context?: CliContext): v
   )
     .option("-i, --intent <pattern>", "Regex or fuzzy intent filter")
     .option("--detail", "Include metadata in JSON output")
+    .option("--fallback", "Enable fallback to full list when no items match intent")
     .option("--no-fallback", "Disable fallback")
     .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
@@ -184,12 +221,10 @@ export function registerStateCommands(program: Command, context?: CliContext): v
           const actionId = options.action || "";
 
           if (resolved.type === "remote") {
-            const decoded = decodeStateKeyWithFallback(rawKey, options.namespace !== undefined, context);
-            const effectiveNamespace = options.namespace || decoded.namespace;
-            const actualKey = options.namespace ? rawKey : decoded.key;
+            const address = resolveStateAddress(rawKey, options, context);
 
-            const entry = await service.management?.state.get(options.package || "", actionId, actualKey, {
-              namespace: effectiveNamespace,
+            const entry = await service.management?.state.get(options.package || "", actionId, address.key, {
+              namespace: address.namespace,
               detail: true,
             });
 
@@ -199,7 +234,7 @@ export function registerStateCommands(program: Command, context?: CliContext): v
 
             const val = (entry as any).value;
             renderResult(
-              { key: rawKey, value: val, namespace: (entry as any).namespace || effectiveNamespace },
+              { key: rawKey, value: val, namespace: (entry as any).namespace || address.namespace },
               {
                 json: options.json,
                 humanFormatter: () => (typeof val === "object" ? JSON.stringify(val, null, 2) : String(val)),
@@ -209,12 +244,13 @@ export function registerStateCommands(program: Command, context?: CliContext): v
             return;
           }
 
-          // 本地项目模式
+          // 本地项目模式：getTargetRoot 会从键中剥离 pkg/ 前缀，寻址基于解耦后的裸键
           const { root, key: effectiveKey } = getTargetRoot(options.package, rawKey);
+          const address = resolveStateAddress(effectiveKey, options, context);
           const projConfig = loadProjectConfig(root);
 
-          const entry = await service.management?.state.get(projConfig.id, actionId, effectiveKey, {
-            namespace: options.namespace,
+          const entry = await service.management?.state.get(projConfig.id, actionId, address.key, {
+            namespace: address.namespace,
             detail: true,
           });
 
@@ -274,12 +310,9 @@ export function registerStateCommands(program: Command, context?: CliContext): v
           const actionId = options.action || "";
 
           if (resolved.type === "remote") {
-            const decoded = decodeStateKeyWithFallback(rawKey, options.namespace !== undefined, context);
-            const effectiveNamespace = options.namespace || decoded.namespace;
-            const actualKey = options.namespace ? rawKey : decoded.key;
-
-            await service.management?.state.set(options.package || "", actionId, actualKey, parsedVal as any, {
-              namespace: effectiveNamespace,
+            const address = resolveStateAddress(rawKey, options, context);
+            await service.management?.state.set(options.package || "", actionId, address.key, parsedVal as any, {
+              namespace: address.namespace,
               ttl: ttlSec,
             });
 
@@ -287,25 +320,17 @@ export function registerStateCommands(program: Command, context?: CliContext): v
             return;
           }
 
-          // 本地项目模式
+          // 本地项目模式：getTargetRoot 会从键中剥离 pkg/ 前缀，寻址基于解耦后的裸键
           const { root, key: effectiveKey } = getTargetRoot(options.package, rawKey);
+          const address = resolveStateAddress(effectiveKey, options, context);
           const projConfig = loadProjectConfig(root);
 
-          let actualNamespace = options.namespace;
-          let finalKey = effectiveKey;
-
-          if (options.namespace === undefined && effectiveKey.includes(":")) {
-            const decoded = decodeStateKeyWithFallback(effectiveKey, false, context);
-            actualNamespace = decoded.namespace;
-            finalKey = decoded.key;
-          }
-
-          await service.management?.state.set(projConfig.id, actionId, finalKey, parsedVal as any, {
-            namespace: actualNamespace,
+          await service.management?.state.set(projConfig.id, actionId, address.key, parsedVal as any, {
+            namespace: address.namespace,
             ttl: ttlSec,
           });
 
-          const displayKey = actualNamespace ? `${actualNamespace}:${finalKey}` : finalKey;
+          const displayKey = address.namespace ? `${address.namespace}:${address.key}` : address.key;
           writeStdout(`[OK] State '${displayKey}' updated in package '${projConfig.id}'`, context);
         },
         { localRoot: () => getTargetRoot(options.package, rawKey).root }
@@ -336,12 +361,9 @@ export function registerStateCommands(program: Command, context?: CliContext): v
           const actionId = options.action || "";
 
           if (resolved.type === "remote") {
-            const decoded = decodeStateKeyWithFallback(rawKey, options.namespace !== undefined, context);
-            const effectiveNamespace = options.namespace || decoded.namespace;
-            const actualKey = options.namespace ? rawKey : decoded.key;
-
-            const deleted = await service.management?.state.delete(options.package || "", actionId, actualKey, {
-              namespace: effectiveNamespace,
+            const address = resolveStateAddress(rawKey, options, context);
+            const deleted = await service.management?.state.delete(options.package || "", actionId, address.key, {
+              namespace: address.namespace,
             });
 
             if (!deleted) {
@@ -352,12 +374,13 @@ export function registerStateCommands(program: Command, context?: CliContext): v
             return;
           }
 
-          // 本地项目模式
+          // 本地项目模式：getTargetRoot 会从键中剥离 pkg/ 前缀，寻址基于解耦后的裸键
           const { root, key: effectiveKey } = getTargetRoot(options.package, rawKey);
+          const address = resolveStateAddress(effectiveKey, options, context);
           const projConfig = loadProjectConfig(root);
 
-          const deleted = await service.management?.state.delete(projConfig.id, actionId, effectiveKey, {
-            namespace: options.namespace,
+          const deleted = await service.management?.state.delete(projConfig.id, actionId, address.key, {
+            namespace: address.namespace,
           });
           if (!deleted) {
             throw new ExecutionError(`State key '${rawKey}' not found in package '${projConfig.id}'`);
@@ -417,4 +440,3 @@ export function registerStateCommands(program: Command, context?: CliContext): v
       { localRoot: () => getTargetRoot(options.package).root });
     });
 }
-

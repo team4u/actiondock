@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { discoverActionFiles, loadActions, loadPlaybooks, loadProjectConfig } from "../../project/loader";
 import { loadManifest, MANIFEST_FILE_NAME } from "../../project/manifest";
@@ -63,33 +63,49 @@ function checkProjectSdk(scope: ProjectCheckScope): void {
 
 /**
  * 检查工程运行时数据库可写性。
+ *
+ * 探测写入独立临时数据库文件，避免对生产运行库产生写副作用：
+ * 体检是诊断行为，不得在真实库上执行写加删事务引入额外写竞争。
  */
 async function checkProjectStorage(scope: ProjectCheckScope): Promise<void> {
   const { ctx, config } = scope;
 
   const dbPath = resolveDatabasePath(config.id, { customHome: ctx.customHome });
+  const probeDir = dirname(dbPath);
+  // 探测库：与生产库同目录但独立命名，结束后整体删除，不留探测残留
+  const probeId = `doctor.probe.${Date.now()}`;
+  const probePkgDir = dirname(resolveDatabasePath(probeId, { customHome: ctx.customHome }));
+  const probeStorage = createStorage(probeId, { customHome: ctx.customHome });
   try {
-    const projectStorage = createStorage(config.id, { customHome: ctx.customHome });
-    await projectStorage.setConfig("_doctor_probe_", "ok");
-    await projectStorage.deleteConfig("_doctor_probe_");
-    projectStorage.close();
+    await probeStorage.setConfig("probe", "ok");
+    probeStorage.close();
 
     ctx.checks.push({
       id: "project.storage",
       category: "project",
       name: "Project Database",
       status: "ok",
-      message: `Database writable at ${dbPath}`,
+      message: `Database directory writable at ${probeDir}`,
     });
   } catch (err: any) {
+    try {
+      probeStorage.close();
+    } catch {}
     ctx.checks.push({
       id: "project.storage",
       category: "project",
       name: "Project Database",
       status: "error",
-      message: `Failed to write project runtime database: ${err.message}`,
-      fix: `Check write permissions for '${dirname(dbPath)}'`,
+      message: `Failed to write project runtime database directory: ${err.message}`,
+      fix: `Check write permissions for '${probeDir}'`,
     });
+  } finally {
+    // 清理探测库目录（含 WAL/SHM 侧车文件）
+    try {
+      if (existsSync(probePkgDir)) {
+        rmSync(probePkgDir, { recursive: true, force: true });
+      }
+    } catch {}
   }
 }
 

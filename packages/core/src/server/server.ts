@@ -18,7 +18,7 @@ import {
   jsonResponse,
   type RouteContext,
 } from "./routes";
-import { DEFAULT_MAX_BODY_BYTES } from "./body";
+import { DEFAULT_MAX_BODY_BYTES, readBodyWithLimit, RequestTooLargeError } from "./body";
 import { isLoopbackHost, resolveCorsHeaders, verifyBearerToken } from "./security";
 import type { ActionDockServerInstance, CoreHttpServerInstance, ServerOptions, ServerTlsOptions } from "./types";
 
@@ -174,77 +174,36 @@ export async function startActionDockServer(
         );
       }
 
-      // 请求体体积限制保护
+      // 请求体体积限制保护（复用 body 域有界读取单一事实源）
       const maxBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
-      const contentLengthHeader = req.headers.get("content-length");
-      if (contentLengthHeader) {
-        const parsedLength = parseInt(contentLengthHeader, 10);
-        if (!isNaN(parsedLength) && parsedLength > maxBytes) {
-          return jsonResponse(
-            {
-              ok: false,
-              error: {
-                code: REQUEST_TOO_LARGE,
-                message: "Request body exceeds maximum allowed size",
-              },
-            },
-            413,
-            corsHeaders
-          );
-        }
-      }
-
       let mcpReq = req;
       if (req.body && req.method !== "GET" && req.method !== "HEAD") {
-        const reader = req.body.getReader();
-        const chunks: Uint8Array[] = [];
-        let totalBytes = 0;
-        let tooLarge = false;
-
         try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            if (value) {
-              totalBytes += value.byteLength;
-              if (totalBytes > maxBytes) {
-                tooLarge = true;
-                await reader.cancel();
-                break;
-              }
-              chunks.push(value);
-            }
-          }
-        } finally {
-          reader.releaseLock();
-        }
-
-        if (tooLarge) {
-          return jsonResponse(
-            {
-              ok: false,
-              error: {
-                code: REQUEST_TOO_LARGE,
-                message: "Request body exceeds maximum allowed size",
+          const merged = await readBodyWithLimit(req, { maxBytes });
+          const bodyInit =
+            merged.byteLength > 0 ? new Blob([merged as unknown as BlobPart]) : undefined;
+          mcpReq = new Request(req.url, {
+            method: req.method,
+            headers: req.headers,
+            body: bodyInit,
+            signal: req.signal,
+          });
+        } catch (err) {
+          if (err instanceof RequestTooLargeError) {
+            return jsonResponse(
+              {
+                ok: false,
+                error: {
+                  code: REQUEST_TOO_LARGE,
+                  message: "Request body exceeds maximum allowed size",
+                },
               },
-            },
-            413,
-            corsHeaders
-          );
+              413,
+              corsHeaders
+            );
+          }
+          throw err;
         }
-
-        const merged = new Uint8Array(totalBytes);
-        let offset = 0;
-        for (const chunk of chunks) {
-          merged.set(chunk, offset);
-          offset += chunk.byteLength;
-        }
-        mcpReq = new Request(req.url, {
-          method: req.method,
-          headers: req.headers,
-          body: merged,
-          signal: req.signal,
-        });
       }
 
       const mcpRes = await options.mcpHandler(mcpReq);
@@ -319,8 +278,11 @@ export async function startActionDockServer(
       if (serviceInstance) {
         try {
           await serviceInstance.close(stopOptions);
-        } catch {
-          // 忽略服务关闭异常
+        } catch (err) {
+          // 服务关闭失败不阻断停机流程，但保留可观测诊断
+          console.warn(
+            `[ActionDockServer] Service close failed during stop: ${err instanceof Error ? err.message : String(err)}`
+          );
         }
       }
     },

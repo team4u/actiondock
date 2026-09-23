@@ -1,9 +1,120 @@
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { ActionDockError, INVALID_PACKAGE_ID, PATH_TRAVERSAL } from "../errors";
 
 export { isLoopbackHost } from "./net";
+
+/**
+ * 目录遍历条目描述。
+ */
+export interface TraverseDirectoryEntry {
+  /** 相对遍历根目录的 POSIX 风格路径 */
+  relPath: string;
+  /** 条目绝对路径 */
+  fullPath: string;
+  /** 是否为目录 */
+  isDir: boolean;
+}
+
+/**
+ * 目录遍历配置选项。
+ */
+export interface TraverseDirectoryOptions {
+  /**
+   * 条目忽略谓词：返回 true 的相对路径（含目录自身）不进入结果，目录不再下钻。
+   * 各调用方的业务忽略规则（如 node_modules、测试文件）以谓词传入保持现有行为。
+   */
+  ignore?: (relPath: string, isDir: boolean) => boolean;
+  /** 是否在结果中包含目录条目（默认仅返回文件） */
+  includeDirs?: boolean;
+  /** 目录不可读时的错误回调（默认静默跳过该目录） */
+  onReadError?: (dir: string, err: unknown) => void;
+}
+
+/**
+ * 递归遍历目录的单一事实源实现（同步）。
+ *
+ * 防护策略（以归档与摘要收集链路的历史行为为准）：
+ * - 软链接越界防护：条目真实路径越出遍历根目录边界时直接跳过；
+ * - 循环防护：以真实路径去重，重复访问即跳过（含根目录自身入集合）；
+ * - 无法 stat 或损坏的条目直接跳过，不中断整体遍历；
+ * - 同级条目按名称排序，保证遍历顺序稳定。
+ *
+ * 根目录自身不作为条目返回；目录条目（includeDirs 开启时）先于其子条目输出。
+ */
+export function traverseDirectory(
+  root: string,
+  options: TraverseDirectoryOptions = {}
+): TraverseDirectoryEntry[] {
+  const results: TraverseDirectoryEntry[] = [];
+  const visited = new Set<string>();
+
+  const resolvedRoot = resolve(root);
+  try {
+    visited.add(existsSync(resolvedRoot) ? realpathSync(resolvedRoot) : resolvedRoot);
+  } catch {
+    // 根目录真实路径解析异常时退化为不携带根真实路径的循环拦截
+  }
+
+  const walk = (dir: string): void => {
+    let names: string[];
+    try {
+      names = readdirSync(dir).sort();
+    } catch (err) {
+      options.onReadError?.(dir, err);
+      return;
+    }
+    for (const name of names) {
+      const fullPath = join(dir, name);
+      const relPath = relative(resolvedRoot, fullPath).split(sep).join("/");
+
+      let isDir: boolean;
+      try {
+        isDir = statSync(fullPath).isDirectory();
+      } catch {
+        // 无法访问或损坏的文件/符号链接直接跳过
+        continue;
+      }
+
+      if (options.ignore?.(relPath, isDir)) {
+        continue;
+      }
+
+      // 软链接越界防护：条目真实路径越出根目录边界时直接跳过
+      let real: string;
+      try {
+        real = existsSync(fullPath) ? realpathSync(fullPath) : fullPath;
+      } catch {
+        continue;
+      }
+      try {
+        assertPathWithinRoot(resolvedRoot, real, "traverse path");
+      } catch {
+        continue;
+      }
+
+      // 循环防护：真实路径重复出现即跳过
+      if (visited.has(real)) {
+        continue;
+      }
+      visited.add(real);
+
+      if (isDir) {
+        if (options.includeDirs) {
+          results.push({ relPath, fullPath, isDir: true });
+        }
+        walk(fullPath);
+      } else {
+        results.push({ relPath, fullPath, isDir: false });
+      }
+    }
+  };
+
+  walk(resolvedRoot);
+  return results;
+}
+
 
 /**
  * 跨运行时安全查找可执行文件绝对物理路径。

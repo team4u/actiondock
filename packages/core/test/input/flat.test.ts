@@ -949,6 +949,50 @@ describe("Flat JsonValue Encoding v1", () => {
       expect(advice.notes.some((n) => n.includes("user name"))).toBe(true);
     });
 
+    it("禁止属性（__proto__ 等）不产出 flatSafe 赋值模板，与解析器判定一致", () => {
+      // 回归：旧引擎曾用独立正则判定 flatSafe，未叠加禁止属性过滤，
+      // 会为 __proto__ 生成赋值模板，而解析器会拒绝该属性，建议与解析自相矛盾
+      for (const forbidden of ["__proto__", "constructor", "prototype"]) {
+        const schema = {
+          type: "object",
+          properties: {
+            [forbidden]: { type: "string" },
+            normal_field: { type: "string" },
+          },
+        };
+
+        const advice = buildActionInputAdvice(schema);
+
+        const forbiddenField = advice.fields.find((f) => f.path === forbidden);
+        expect(forbiddenField?.flatSafe).toBe(false);
+        expect(forbiddenField?.assignmentTemplate).toBeUndefined();
+
+        // 任何模板清单都不包含禁止属性的赋值形态
+        const allTemplates = [...advice.requiredTemplates, ...advice.optionalTemplates];
+        expect(allTemplates.some((t) => t.startsWith(`${forbidden}=`) || t.startsWith(`${forbidden}:=`))).toBe(false);
+        expect(allTemplates.some((t) => t.startsWith(`${forbidden}.`))).toBe(false);
+
+        // 正常属性不受影响，仍可扁平赋值
+        expect(advice.optionalTemplates).toContain("normal_field=TEXT");
+      }
+    });
+
+    it("禁止属性作为 required 字段时 flatSupported 为 false", () => {
+      const schema = {
+        type: "object",
+        properties: {
+          __proto__: { type: "string" },
+          normal_field: { type: "string" },
+        },
+        required: ["__proto__"],
+      };
+
+      const advice = buildActionInputAdvice(schema);
+      expect(advice.flatSupported).toBe(false);
+      expect(advice.hasFlatFields).toBe(true);
+      expect(advice.requiredTemplates).toEqual([]);
+    });
+
     it("含有非 flat-safe required 字段时 flatSupported 为 false", () => {
       const schema = {
         type: "object",

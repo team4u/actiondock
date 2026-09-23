@@ -341,7 +341,6 @@ export class MockProcessExecutor implements ProcessExecutor {
   }
 
   /**
-  /**
    * 优先匹配 mock 规则运行命令，未命中时委托至 ProcessManager。
    */
   private async runWithMock(

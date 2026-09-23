@@ -527,7 +527,7 @@ describe("ExecaProcessExecutor 单元测试", () => {
     }
   });
 
-  it("父进程关闭后 Promise 立即解析，且进程树兜底清理定时器独立执行不被取消", async () => {
+  it("父进程关闭后 Promise 立即解析，结算时清理 grace 宽限定时器不再补发 SIGKILL", async () => {
     // 实例化短兜底周期（60ms）的执行器
     const customExecutor = new NodeProcessExecutor(60);
 
@@ -537,7 +537,11 @@ describe("ExecaProcessExecutor 单元测试", () => {
     process.kill = ((pid: number, sig?: string | number) => {
       if (sig === "SIGTERM") sigtermCalled = true;
       if (sig === "SIGKILL") sigkillCalled = true;
-      return origKill(pid, sig as any);
+      try {
+        return origKill(pid, sig as any);
+      } catch {
+        // 子进程可能已退出，忽略无效信号发送
+      }
     }) as any;
 
     try {
@@ -559,12 +563,52 @@ describe("ExecaProcessExecutor 单元测试", () => {
         expect(sigtermCalled).toBe(true);
       }
 
-      // 在 Promise 解析完成瞬间，兜底宽限期尚未结束，SIGKILL 尚未触发
-      // 等待宽限期结束（60ms 后）
-      await new Promise((r) => setTimeout(r, 80));
+      // 等待超过宽限期（60ms）验证：结算时已清理 grace 定时器且子进程已退出，
+      // 不再对已退出（或可能已被操作系统复用 pid）的目标补发 SIGKILL
+      await new Promise((r) => setTimeout(r, 100));
+      expect(sigkillCalled).toBe(false);
+    } finally {
+      process.kill = origKill;
+    }
+  });
 
-      // 验证兜底清理并未因父进程 close 或 Promise settled 而被清除，成功触发 SIGKILL
+  it("子进程忽略 SIGTERM 时 grace 宽限期到后仍升级 SIGKILL 强杀兜底", async () => {
+    // 实例化短兜底周期（60ms）的执行器
+    const customExecutor = new NodeProcessExecutor(60);
+
+    let sigkillCalled = false;
+    let sigtermCalled = false;
+    const origKill = process.kill;
+    process.kill = ((pid: number, sig?: string | number) => {
+      if (sig === "SIGTERM") sigtermCalled = true;
+      if (sig === "SIGKILL") sigkillCalled = true;
+      try {
+        return origKill(pid, sig as any);
+      } catch {
+        // 忽略已退出目标的信号发送失败
+      }
+    }) as any;
+
+    try {
+      // 子进程就绪后打印标记，确保 SIGTERM 处理器已注册完毕再触发取消，
+      // 避免启动窗口内信号先于处理器注册导致进程直接退出
+      const ac = new AbortController();
+      setTimeout(() => ac.abort(), 300);
+
+      // 子进程显式忽略 SIGTERM，验证宽限期后仍会升级 SIGKILL 兑现强杀兑底
+      const res = await customExecutor.exec(
+        process.execPath,
+        [
+          "-e",
+          "process.on('SIGTERM', () => {}); process.stdout.write('READY'); setTimeout(() => {}, 5000);",
+        ],
+        { signal: ac.signal }
+      );
+      expect(res.cancelled).toBe(true);
+
       if (process.platform !== "win32") {
+        expect(sigtermCalled).toBe(true);
+        // 忽略 SIGTERM 的存活子进程在宽限期到后仍必须升级 SIGKILL 完成强杀
         expect(sigkillCalled).toBe(true);
       }
     } finally {

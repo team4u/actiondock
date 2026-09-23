@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+
 import type { ActionRef } from "@actiondock/sdk";
 import { parseActionRef } from "../../catalog/resolve-action";
 import { filterByIntent } from "../../filter";
@@ -212,7 +212,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
         return jsonResponse(
           {
             ok: false,
-            runId: randomUUID(),
+            runId: "",
             error: {
               code: PACKAGE_FORBIDDEN,
               message: pkgId
@@ -234,7 +234,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
         return jsonResponse(
           {
             ok: false,
-            runId: randomUUID(),
+            runId: "",
             error: { code: REQUEST_TOO_LARGE, message: err.message },
           },
           413,
@@ -245,7 +245,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
         return jsonResponse(
           {
             ok: false,
-            runId: randomUUID(),
+            runId: "",
             error: { code: INVALID_JSON, message: err.message },
           },
           400,
@@ -255,7 +255,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
       return jsonResponse(
         {
           ok: false,
-          runId: randomUUID(),
+          runId: "",
           error: { code: INVALID_JSON, message: `Failed to parse request body: ${err.message}` },
         },
         400,
@@ -333,7 +333,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
         return jsonResponse(
           {
             ok: false,
-            runId: randomUUID(),
+            runId: "",
             error: {
               code: ACTION_START_FAILED,
               message: err.message || String(err),
@@ -391,7 +391,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
       return jsonResponse(
         {
           ok: false,
-          runId: randomUUID(),
+          runId: "",
           error: {
             code: ACTION_EXECUTION_ERROR,
             message: err.message || String(err),

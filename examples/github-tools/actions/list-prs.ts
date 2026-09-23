@@ -5,8 +5,17 @@ export interface ListPrsInput {
   state?: "open" | "closed" | "all";
 }
 
+/** Pull Request 摘要条目（与 GitHub pulls 列表接口的简化子集对齐） */
+export interface PullRequestSummary {
+  number: number;
+  title: string;
+  author: string;
+  state: string;
+  created_at: string;
+}
+
 export interface ListPrsOutput {
-  items: any[];
+  items: PullRequestSummary[];
   count: number;
   /** 未配置 Token 时返回演示数据，此标记为 true */
   demo?: boolean;
@@ -58,7 +67,7 @@ export default defineAction(async (input: ListPrsInput, ctx): Promise<ListPrsOut
     throw new Error(`GitHub API returned ${res.status}: ${res.statusText}`);
   }
 
-  const items = (await res.json()) as any[];
+  const items = (await res.json()) as PullRequestSummary[];
   return {
     items,
     count: items.length,

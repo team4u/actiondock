@@ -24,6 +24,9 @@ export {
   isPathOutsideBoundary,
   getPackageSlug,
   parseDuration,
+  traverseDirectory,
+  type TraverseDirectoryEntry,
+  type TraverseDirectoryOptions,
 } from "../utils";
 export {
   isSecretConfigKey,

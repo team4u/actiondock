@@ -3,7 +3,7 @@ import {
   pruneRegistry,
   unlinkPackage,
 } from "@actiondock/core/registry";
-import { ExecutionError } from "../errors";
+import { wrapAsExecutionError } from "../errors";
 import { writeStdout } from "../renderer";
 import { Command } from "commander";
 
@@ -29,7 +29,7 @@ export function registerLinkCommands(program: Command): void {
           writeStdout(`[OK] Linked package '${result.id}' (v${result.version}) from ${result.path}`);
         }
       } catch (err: any) {
-        throw new ExecutionError(err.message);
+        throw wrapAsExecutionError(err);
       }
     });
 
@@ -68,7 +68,7 @@ export function registerLinkCommands(program: Command): void {
           writeStdout(`Package or workspace '${identifier || process.cwd()}' was not linked in registry`);
         }
       } catch (err: any) {
-        throw new ExecutionError(err.message);
+        throw wrapAsExecutionError(err);
       }
     });
 }

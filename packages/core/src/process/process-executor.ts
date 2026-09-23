@@ -1,5 +1,4 @@
 import type { spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import {
   type CallOptions,
   type ControlGrant,
@@ -76,7 +75,7 @@ export class NodeProcessExecutor implements ProcessExecutor {
     const startTime = Date.now();
     const maxOutputBytes = options.maxOutputBytes ?? 10 * 1024 * 1024;
     const encoding = (options.encoding as BufferEncoding) || "utf8";
-    const processId = `exec-${randomUUID()}`;
+    const processId = `exec-${crypto.randomUUID()}`;
 
     return new Promise<ProcessResult>(async (resolve, reject) => {
       let settled = false;
@@ -91,8 +90,11 @@ export class NodeProcessExecutor implements ProcessExecutor {
       let totalBytes = 0;
 
       let timeoutTimer: NodeJS.Timeout | undefined;
+      let graceTimer: NodeJS.Timeout | undefined;
       let abortHandler: (() => void) | undefined;
       let handle: ProcessDriverHandle | undefined;
+      /** 子进程是否已退出：grace 宽限期 SIGKILL 升级前的存活二闪确认依据 */
+      let childExited = false;
 
       const finish = (result: ProcessResult) => {
         if (settled) return;
@@ -100,6 +102,12 @@ export class NodeProcessExecutor implements ProcessExecutor {
         if (timeoutTimer) {
           clearTimeout(timeoutTimer);
           timeoutTimer = undefined;
+        }
+        // 结算时同步清理 grace 宽限定时器：子进程已退出（或已故障），
+        // 后续 SIGKILL 升级不再必要，且可避免定时器泄漏与 pid 复用误杀
+        if (graceTimer) {
+          clearTimeout(graceTimer);
+          graceTimer = undefined;
         }
         if (options.signal && abortHandler) {
           options.signal.removeEventListener("abort", abortHandler);
@@ -112,8 +120,6 @@ export class NodeProcessExecutor implements ProcessExecutor {
           resolve(result);
         }
       };
-
-      let graceTimer: NodeJS.Timeout | undefined;
 
       const terminateChild = (sig: "SIGTERM" | "SIGKILL" = "SIGTERM") => {
         const pid = handle?.pid;
@@ -132,6 +138,11 @@ export class NodeProcessExecutor implements ProcessExecutor {
         } else if (!graceTimer) {
           graceTimer = setTimeout(() => {
             graceTimer = undefined;
+            // 宽限期到时二次确认子进程句柄仍存活：已退出则跳过 SIGKILL，
+            // 杜绝对已复用 pid 的无关进程组误杀
+            if (childExited) {
+              return;
+            }
             const targetPid = handle?.pid;
             if (targetPid) {
               killProcessGroup(targetPid, "SIGKILL", (this.driver as any).spawnFn);
@@ -161,6 +172,7 @@ export class NodeProcessExecutor implements ProcessExecutor {
           else if (stream === "stderr") stderrChunks.push(chunk);
         },
         onExit: (exit) => {
+          childExited = true;
           const durationMs = Date.now() - startTime;
           const stdoutBuf = Buffer.concat(stdoutChunks);
           const stderrBuf = Buffer.concat(
@@ -186,6 +198,7 @@ export class NodeProcessExecutor implements ProcessExecutor {
           });
         },
         onError: (err) => {
+          childExited = true;
           const durationMs = Date.now() - startTime;
           const spawnError: RuntimeError = error || {
             code: PROCESS_SPAWN_ERROR,

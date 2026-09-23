@@ -6,6 +6,15 @@ import type { PackageGraph } from "./graph";
 import { parseActionRef } from "./resolve-action";
 
 /**
+ * 推断清单声明的 Action 入口相对路径：优先 .ts，不存在时回退 .js，兼容纯 JS 包。
+ */
+function inferActionEntry(packageRoot: string, manifest: { actionsDir?: string } | undefined, actionId: string): string {
+  const actionsDir = manifest?.actionsDir || "actions";
+  const tsEntry = join(actionsDir, `${actionId}.ts`);
+  return existsSync(join(packageRoot, tsEntry)) ? tsEntry : join(actionsDir, `${actionId}.js`);
+}
+
+/**
  * 动作目录候选条目规范。
  */
 export interface ActionCandidate {
@@ -122,7 +131,8 @@ export class DefaultActionCatalog implements ActionCatalog {
       // 1. 清单显式 actions 声明优先索引
       if (manifest?.actions && typeof manifest.actions === "object") {
         for (const [actionId, item] of Object.entries(manifest.actions)) {
-          const entry = (item as any)?.entry || join(manifest.actionsDir || "actions", `${actionId}.ts`);
+          const entry =
+            (item as any)?.entry || inferActionEntry(node.root, manifest, actionId);
           const candidate: ActionCandidate = {
             packageId,
             packageIdentity: node.identity,

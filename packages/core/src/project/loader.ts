@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import type { ActionDefinition } from "@actiondock/sdk";
 import { NodeModuleLoader, type ModuleLoader } from "../node/module-loader";
@@ -47,6 +47,7 @@ import {
   PACKAGE_ID_REGEX,
   assertPathWithinRoot,
   assertWithinProjectRoot,
+  traverseDirectory,
 } from "../utils";
 
 /**
@@ -144,34 +145,33 @@ export function getInstallCommand(projectRoot?: string): string[] {
 }
 
 /**
- * 递归扫描指定目录下的特定后缀文件（自动排除测试文件 *.test.ts, *.spec.ts 和 *.d.ts）。
+ * 测试与类型声明文件后缀常量（与 builder 的 isIgnoredPath 保持同一语义口径）。
+ */
+const TEST_FILE_SUFFIXES = [
+  ".test.ts",
+  ".test.js",
+  ".test.tsx",
+  ".test.jsx",
+  ".spec.ts",
+  ".spec.js",
+  ".spec.tsx",
+  ".spec.jsx",
+  ".d.ts",
+];
+
+/**
+ * 递归扫描指定目录下的特定后缀文件（自动排除测试文件与类型声明文件）。
+ * 目录遍历统一复用 core utils 的 traverseDirectory 单一事实源，
+ * 自带软链接越界与循环防护。
  */
 function scanFiles(dir: string, extension: string): string[] {
-  if (!existsSync(dir)) return [];
-  const results: string[] = [];
-
-  function walk(current: string) {
-    const entries = readdirSync(current);
-    for (const entry of entries) {
-      const fullPath = join(current, entry);
-      const stat = statSync(fullPath);
-      if (stat.isDirectory()) {
-        walk(fullPath);
-      } else if (stat.isFile() && fullPath.endsWith(extension)) {
-        // 排除测试与类型声明文件
-        if (
-          !fullPath.endsWith(".test.ts") &&
-          !fullPath.endsWith(".spec.ts") &&
-          !fullPath.endsWith(".d.ts")
-        ) {
-          results.push(fullPath);
-        }
-      }
-    }
-  }
-
-  walk(dir);
-  return results;
+  return traverseDirectory(dir)
+    .filter(
+      (entry) =>
+        entry.relPath.endsWith(extension) &&
+        !TEST_FILE_SUFFIXES.some((suffix) => entry.relPath.endsWith(suffix))
+    )
+    .map((entry) => entry.fullPath);
 }
 
 /**
