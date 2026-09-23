@@ -3,7 +3,7 @@ import {
 } from "@actiondock/core/profile";
 import {
   filterWithFallbackInfo,
-} from "@actiondock/core";
+} from "@actiondock/core/project";
 import {
   getRegistryStatus,
   resolvePackageRoot,

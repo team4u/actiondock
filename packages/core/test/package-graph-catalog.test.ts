@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseActionRef } from "../src/catalog/resolve-action";
+import { ActionDockError, INVALID_ACTION_REF } from "../src/errors";
 import {
   DefaultActionCatalog,
   PackageGraphBuilder,
@@ -300,6 +301,65 @@ describe("PackageDiscovery, PackageGraph, ActionCatalog, and resolveAction", () 
       const pbB = resolvePlaybook("flow-b", { graph });
       expect(pbB.packageId).toBe("pkg-b");
       expect(pbB.playbook.description).toBe("Flow in B");
+    });
+  });
+
+  describe("parseActionRef", () => {
+    it("parses valid action references correctly", () => {
+      expect(parseActionRef("greet")).toEqual({ actionId: "greet" });
+      expect(parseActionRef("pkg-a/greet")).toEqual({ packageId: "pkg-a", actionId: "greet" });
+      expect(parseActionRef({ actionId: "greet" })).toEqual({ actionId: "greet" });
+      expect(parseActionRef({ packageId: "pkg-a", actionId: "greet" })).toEqual({
+        packageId: "pkg-a",
+        actionId: "greet",
+      });
+    });
+
+    it("throws ActionDockError(INVALID_ACTION_REF) on invalid action references", () => {
+      // Empty string
+      try {
+        parseActionRef("");
+        expect(true).toBe(false);
+      } catch (err: any) {
+        expect(err).toBeInstanceOf(ActionDockError);
+        expect(err.code).toBe(INVALID_ACTION_REF);
+      }
+
+      // Missing actionId in object
+      try {
+        parseActionRef({ actionId: "" } as any);
+        expect(true).toBe(false);
+      } catch (err: any) {
+        expect(err).toBeInstanceOf(ActionDockError);
+        expect(err.code).toBe(INVALID_ACTION_REF);
+      }
+
+      // Colon in reference
+      try {
+        parseActionRef("invalid:colon");
+        expect(true).toBe(false);
+      } catch (err: any) {
+        expect(err).toBeInstanceOf(ActionDockError);
+        expect(err.code).toBe(INVALID_ACTION_REF);
+      }
+
+      // Invalid trailing slash
+      try {
+        parseActionRef("pkg/");
+        expect(true).toBe(false);
+      } catch (err: any) {
+        expect(err).toBeInstanceOf(ActionDockError);
+        expect(err.code).toBe(INVALID_ACTION_REF);
+      }
+
+      // Invalid path traversal in actionId
+      try {
+        parseActionRef("pkg/..");
+        expect(true).toBe(false);
+      } catch (err: any) {
+        expect(err).toBeInstanceOf(ActionDockError);
+        expect(err.code).toBe(INVALID_ACTION_REF);
+      }
     });
   });
 });

@@ -42,14 +42,20 @@ export interface ResolvedAction {
 export function parseActionRef(ref: ActionRef | string): ActionRef {
   if (typeof ref === "object" && ref !== null) {
     if (!ref.actionId) {
-      throw new Error("Invalid action identifier: actionId is required");
+      throw new ActionDockError(
+        INVALID_ACTION_REF,
+        "INVALID_ACTION_REF: Invalid action identifier: actionId is required"
+      );
     }
     return ref;
   }
 
   const str = String(ref).trim();
   if (!str) {
-    throw new Error("Invalid action identifier: cannot be empty");
+    throw new ActionDockError(
+      INVALID_ACTION_REF,
+      "INVALID_ACTION_REF: Invalid action identifier: cannot be empty"
+    );
   }
 
   if (str.includes("/")) {
@@ -58,13 +64,19 @@ export function parseActionRef(ref: ActionRef | string): ActionRef {
     const actionId = str.slice(lastSlashIndex + 1);
 
     if (!packageId || !actionId || actionId.includes(":") || actionId.includes("/") || actionId.includes("..")) {
-      throw new Error(`Invalid action identifier: '${str}'`);
+      throw new ActionDockError(
+        INVALID_ACTION_REF,
+        `INVALID_ACTION_REF: Invalid action identifier: '${str}'`
+      );
     }
     return { packageId, actionId };
   }
 
   if (str.includes(":")) {
-    throw new Error(`Invalid action identifier: '${str}'`);
+    throw new ActionDockError(
+      INVALID_ACTION_REF,
+      `INVALID_ACTION_REF: Invalid action identifier: '${str}'`
+    );
   }
 
   return { actionId: str };

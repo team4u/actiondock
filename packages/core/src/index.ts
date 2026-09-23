@@ -1,25 +1,19 @@
 /**
  * ActionDock 核心引擎公共 API 统一收口与出口定义。
  *
- * 遵循架构设计规范铁律：收窄为 Minimal 核心门面，非必要内部工程辅助函数与解析器工具
- * 移至特定子路径导出（./server, ./project, ./registry, ./profile, ./graph, ./package），
- * 严格杜绝在根导出泄露内部执行上下文机制。
+ * 遵循架构设计规范铁律：收窄为 Minimal 核心门面，非必要内部工程辅助函数、
+ * 平台大对象驱动与解析器工具移至特定子路径导出（./server, ./project, ./registry,
+ * ./profile, ./graph, ./package），严格杜绝在根导出泄露内部执行与平台上下文机制。
  */
 
 // 1. 核心版本号单一事实源
 export { ACTIONDOCK_VERSION } from "./version";
 
-// 2. 统一服务门面与核心契约接口
+// 2. 统一服务门面与聚合契约接口
 export {
   createActionDock,
   connectActionDock,
 } from "./service/factory";
-export {
-  LocalActionDockService,
-} from "./service/local";
-export {
-  RemoteActionDockService,
-} from "./service/remote";
 export type {
   ActionDockService,
   ActionDockService as ActionDock,
@@ -62,53 +56,11 @@ export type {
   ListActionsOptions,
 } from "./package/types";
 
-// 5. 原生平台装配、存储与宿主
+// 5. 原生平台装配与服务启动
 export {
   createNodePlatform,
   type NodePlatformOptions,
 } from "./platform/node";
-export type {
-  RuntimePlatform,
-  FileSystem,
-  StorageFactory,
-  StorageFactoryOptions,
-  GlobalStorageFactoryOptions,
-} from "./platform/types";
-export {
-  type Clock,
-  SystemClock,
-} from "./runtime/clock";
-export type { ModuleLoader } from "./node/module-loader";
-export {
-  InMemoryEventSink,
-  type EventSink,
-} from "./runtime/events";
-export {
-  ProcessManager,
-  type ProcessOwner,
-} from "./process/process-manager";
-export type { ProcessExecutor } from "./runtime/process";
-export type {
-  ProcessDriver,
-  ProcessDriverCallbacks,
-  ProcessDriverHandle,
-  ProcessHandle,
-  ProcessObserver,
-} from "./process/driver";
-export {
-  createStorage,
-  resolveDatabasePath,
-} from "./storage/index";
-export { SqliteRuntimeStorage } from "./storage/sqlite";
-export type {
-  RuntimeStorage,
-  SqliteDriver,
-} from "./storage/types";
-export type {
-  ActionDockHost,
-  ActionDockHostOptions,
-} from "./host/types";
-export { createActionDockHost } from "./host/host";
 export {
   startActionDockServer,
 } from "./server/server";
@@ -118,30 +70,7 @@ export type {
   ActionDockServerInstance,
 } from "./server/types";
 
-// 6. 独立运行分发与入参解析
-export {
-  ExitCode,
-  StandaloneDispatcher,
-  type StandaloneDispatcherOptions,
-  type InvocationControl,
-} from "./runtime/standalone";
-export {
-  resolveActionInput,
-  buildActionInputAdvice,
-  formatActionDetail,
-  buildActionDescribePayload,
-  mapInputValidationFailure,
-  type ResolveActionInputOptions,
-} from "./input/index";
-export { validateActionInputValue } from "./json/value-validator";
-export { parseJson } from "./input/input-resolver";
-export {
-  InputError,
-  FlatInputError,
-} from "./input/flat-errors";
-export { filterWithFallbackInfo } from "./filter/intent";
-
-// 7. 核心工程辅助
+// 6. 核心工程辅助
 export { initProject } from "./project/init";
 export {
   loadProjectConfig,
@@ -151,12 +80,12 @@ export type {
   ProjectConfig,
 } from "./project/types";
 
-// 8. 包图抽象契约
+// 7. 包图抽象契约
 export type {
   PackageGraph,
 } from "./catalog/graph";
 
-// 9. 统一错误模型与常用标准错误码
+// 8. 统一错误模型与核心标准错误码常量
 export {
   ActionDockError,
   ProcessError,

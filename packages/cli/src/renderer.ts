@@ -1,7 +1,7 @@
 import type { RunRecord } from "@actiondock/sdk";
 import {
   formatActionDetail,
-} from "@actiondock/core";
+} from "@actiondock/core/project";
 import {
   type RegistryStatusReport,
 } from "@actiondock/core/registry";

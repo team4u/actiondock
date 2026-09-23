@@ -1,15 +1,17 @@
 import {
   createNodePlatform,
-  type EventSink,
-  type FileSystem,
-  type GlobalStorageFactoryOptions,
-  type ModuleLoader,
-  type ProcessManager,
-  type RuntimePlatform,
-  type RuntimeStorage,
-  type StorageFactory,
-  type StorageFactoryOptions,
 } from "@actiondock/core";
+import type {
+  EventSink,
+  FileSystem,
+  GlobalStorageFactoryOptions,
+  ModuleLoader,
+  ProcessManager,
+  RuntimePlatform,
+  RuntimeStorage,
+  StorageFactory,
+  StorageFactoryOptions,
+} from "@actiondock/core/package";
 import { FakeClock } from "./clock";
 import { MockProcessExecutor } from "./process";
 import { FakeProcessDriver } from "./process-driver";

@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type ActionContext, defineAction } from "@actiondock/sdk";
 import { createPackageRuntime } from "../src/package";
+import { createPackageIdentity } from "../src/runtime/identity";
 import { createActionDockHost, DefaultActionDockHost } from "../src/host";
 import { createNodePlatform } from "../src/platform";
 import { MemoryProcessDriver } from "../src/process/driver";
@@ -464,8 +465,11 @@ actions:
       packages: [
         {
           projectConfig: { id: "target.worker", name: "Worker", version: "1.0.0" },
-          packageInstanceId: "target-worker-inst-9",
-          generationId: "target-worker-gen-3",
+          identity: createPackageIdentity({
+            id: "target.worker",
+            instanceId: "target-worker-inst-9",
+            generation: "target-worker-gen-3",
+          }),
           actions: { "do-work": workerAction },
           inMemory: true,
         },
@@ -481,8 +485,11 @@ actions:
               },
             },
           },
-          packageInstanceId: "source-caller-inst-1",
-          generationId: "source-caller-gen-1",
+          identity: createPackageIdentity({
+            id: "source.caller",
+            instanceId: "source-caller-inst-1",
+            generation: "source-caller-gen-1",
+          }),
           actions: { "call-worker": callerAction },
           inMemory: true,
         },

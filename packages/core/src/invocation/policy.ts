@@ -1,10 +1,7 @@
 import type { RuntimeError } from "@actiondock/sdk";
 import {
   ACTION_CALL_CYCLE,
-  ACTION_CYCLE_DETECTED,
-  ACTION_MAX_DEPTH_EXCEEDED,
   ACTION_SUBRUN_LIMIT,
-  MAX_SUBRUNS_REACHED,
   UNDECLARED_ACTION_DEPENDENCY,
   ActionDockError,
 } from "../errors";
@@ -189,7 +186,7 @@ export class InvocationPolicy {
   /**
    * 调用嵌套最大深度限制校验（Max Call Depth Policy）。
    *
-   * 超限时返回标准 ACTION_CALL_CYCLE 错误（携带 ACTION_MAX_DEPTH_EXCEEDED 别名）。
+   * 超限时返回标准 ACTION_CALL_CYCLE 错误。
    *
    * @param callStack 当前已累积的调用栈切片
    * @param targetActionId 欲调用的目标 Action 标识
@@ -207,7 +204,6 @@ export class InvocationPolicy {
         code: ACTION_CALL_CYCLE,
         message: `Maximum call depth of ${limit} exceeded: ${callStack.join(" -> ")} -> ${targetActionId}`,
         details: {
-          alias: ACTION_MAX_DEPTH_EXCEEDED,
           reason: "depth_exceeded",
           maxDepth: limit,
           callStack: [...callStack],
@@ -221,7 +217,7 @@ export class InvocationPolicy {
    * 调用链环路死锁检测（Cycle Detection Policy）。
    *
    * 计算目标调用键并在历史调用栈中执行检测，杜绝 A -> B -> A 形成死锁。
-   * 命中环路时返回 ACTION_CALL_CYCLE 错误（携带 ACTION_CYCLE_DETECTED 别名）。
+   * 命中环路时返回 ACTION_CALL_CYCLE 错误。
    *
    * @param callStack 当前已累积的调用栈切片
    * @param targetActionId 欲调用的目标 Action 标识
@@ -259,7 +255,6 @@ export class InvocationPolicy {
           code: ACTION_CALL_CYCLE,
           message: `Cycle detected in action invocation: ${callStack.join(" -> ")} -> ${callKey}`,
           details: {
-            alias: ACTION_CYCLE_DETECTED,
             reason: "cycle_detected",
             callStack: [...callStack],
             target: callKey,
@@ -286,7 +281,6 @@ export class InvocationPolicy {
         code: ACTION_SUBRUN_LIMIT,
         message: `Maximum concurrent sub-runs (${this.maxSubRuns}) reached for root run '${rootRunId}'`,
         details: {
-          alias: MAX_SUBRUNS_REACHED,
           limit: this.maxSubRuns,
         },
       };
@@ -328,36 +322,5 @@ export class InvocationPolicy {
    */
   public getActiveSubRuns(rootRunId: string): number {
     return this.activeSubRunsPerRoot.get(rootRunId) || 0;
-  }
-
-  /**
-   * 运行血缘关系解析裁决（Lineage Policy）。
-   *
-   * 计算本次执行所归属的有效 rootRunId 与 parentRunId：
-   * - 存在 parentRunId 时，优先继承显式 rootRunId，其次父记录 rootRunId，最后 parentRunId；
-   * - 不存在 parentRunId 时，以自身 runId 成为新树根。
-   *
-   * @param args 血缘上下文入参
-   * @returns 最终生效的 rootRunId 与 parentRunId
-   */
-  public resolveLineage(args: {
-    runId: string;
-    rootRunId?: string;
-    parentRunId?: string;
-    parentRecord?: { rootRunId?: string; id?: string };
-  }): { rootRunId: string; parentRunId?: string } {
-    const { runId, rootRunId, parentRunId, parentRecord } = args;
-    if (parentRunId) {
-      const effectiveRoot =
-        rootRunId || parentRecord?.rootRunId || parentRecord?.id || parentRunId;
-      return {
-        rootRunId: effectiveRoot,
-        parentRunId,
-      };
-    }
-    return {
-      rootRunId: rootRunId || runId,
-      parentRunId: undefined,
-    };
   }
 }

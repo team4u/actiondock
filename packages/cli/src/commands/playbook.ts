@@ -7,6 +7,7 @@ import {
   loadPlaybooks,
   saveManifest,
   type PlaybookDefinition,
+  filterWithFallbackInfo,
 } from "@actiondock/core/project";
 import {
   DefaultActionCatalog,
@@ -19,7 +20,6 @@ import {
   fetchRemotePlaybookShow,
 } from "@actiondock/core/profile";
 import {
-  filterWithFallbackInfo,
   findProjectRoot,
   loadProjectConfig,
 } from "@actiondock/core";

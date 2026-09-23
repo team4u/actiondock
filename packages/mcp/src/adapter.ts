@@ -4,20 +4,20 @@ import { resolve } from "node:path";
 import {
   ACTIONDOCK_VERSION,
   createActionDock,
-  createActionDockHost,
   createNodePlatform,
   findProjectRoot,
+  type ActionDockService,
+} from "@actiondock/core";
+import {
+  createActionDockHost,
   LocalActionDockService,
-} from "@actiondock/core";
+  type ActionDockHost,
+} from "@actiondock/core/server";
 import { resolvePackageRoot } from "@actiondock/core/registry";
-import type {
-  ActionDockHost,
-  ActionDockService,
-  RuntimeStorage,
-} from "@actiondock/core";
 import type {
   PackageRuntime,
   PackageRuntimeOptions,
+  RuntimeStorage,
 } from "@actiondock/core/package";
 import type { ExecutionResult, JsonValue, RunRecord } from "@actiondock/sdk";
 import { McpServer } from "@modelcontextprotocol/server";

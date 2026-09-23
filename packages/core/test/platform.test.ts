@@ -6,12 +6,14 @@ import { decodeText, encodeBytes, type ActionContext, type ProcessAPI, type Proc
 import { ActionRunner } from "../src/runtime/runner";
 import {
   createNodePlatform,
+} from "../src";
+import {
   SqliteRuntimeStorage,
   type Clock,
   type ModuleLoader,
   type ProcessExecutor,
   type RuntimePlatform,
-} from "../src";
+} from "../src/package";
 import { createInvocationContext } from "../src/execution/types";
 import { createPackageIdentity } from "../src/runtime/identity";
 import { DefaultExecutionService } from "../src/execution/service";

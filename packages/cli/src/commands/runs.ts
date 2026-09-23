@@ -1,8 +1,10 @@
 import {
-  filterWithFallbackInfo,
   findProjectRoot,
   loadProjectConfig,
 } from "@actiondock/core";
+import {
+  filterWithFallbackInfo,
+} from "@actiondock/core/project";
 import {
   listLinkedPackages,
   resolvePackageRoot,

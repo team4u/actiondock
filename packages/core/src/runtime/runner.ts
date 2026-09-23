@@ -15,15 +15,12 @@ import { loadActions, loadProjectConfig } from "../project/loader";
 import type { ProjectConfig } from "../project/types";
 import {
   ACTION_CALL_CYCLE,
-  ACTION_CYCLE_DETECTED,
   ACTION_FAILED,
-  ACTION_MAX_DEPTH_EXCEEDED,
   ACTION_NOT_FOUND,
   ACTION_SUBRUN_LIMIT,
   ACTION_TIMEOUT,
   describeActionLoadFailure,
   INPUT_NOT_JSON,
-  MAX_SUBRUNS_REACHED,
   OUTPUT_NOT_JSON,
   RUN_PERSISTENCE_FAILED,
   RUN_REPOSITORY_UNAVAILABLE,

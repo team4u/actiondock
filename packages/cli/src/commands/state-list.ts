@@ -1,8 +1,10 @@
 import {
-  filterWithFallbackInfo,
   loadProjectConfig,
   type ActionDockService,
 } from "@actiondock/core";
+import {
+  filterWithFallbackInfo,
+} from "@actiondock/core/project";
 import {
   listLinkedPackages,
 } from "@actiondock/core/registry";

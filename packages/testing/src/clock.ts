@@ -1,4 +1,4 @@
-import type { Clock } from "@actiondock/core";
+import type { Clock } from "@actiondock/core/package";
 
 /**
  * 待触发的计划计时器项。

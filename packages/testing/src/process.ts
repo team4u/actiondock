@@ -1,11 +1,13 @@
 import {
   PROCESS_OUTPUT_LIMIT,
+} from "@actiondock/core";
+import {
   ProcessManager,
   type ProcessDriver,
   type ProcessExecutor,
   type ProcessOwner,
   type Clock,
-} from "@actiondock/core";
+} from "@actiondock/core/package";
 import { execCli } from "./cli";
 import {
   encodeBytes,

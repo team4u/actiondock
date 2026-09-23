@@ -6,8 +6,10 @@ import { defineAction } from "@actiondock/sdk";
 import {
   StandaloneDispatcher,
   ExitCode,
+} from "@actiondock/core/server";
+import {
   buildActionDescribePayload,
-} from "@actiondock/core";
+} from "@actiondock/core/project";
 import { executeAction } from "../src/commands/run";
 import { main } from "../src/index";
 import { runStandaloneCli } from "../src/standalone";

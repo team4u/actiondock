@@ -1,11 +1,13 @@
 import { Command } from "commander";
 import {
-  buildActionDescribePayload,
-  formatActionDetail,
   ACTION_NOT_FOUND,
   PACKAGE_NOT_FOUND,
   NOT_FOUND,
 } from "@actiondock/core";
+import {
+  buildActionDescribePayload,
+  formatActionDetail,
+} from "@actiondock/core/project";
 import { ArgumentError, ExecutionError, packageNotFoundError } from "../errors";
 import { renderResult } from "../renderer";
 import type { CliContext } from "../types";

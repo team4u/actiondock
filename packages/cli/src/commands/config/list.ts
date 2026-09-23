@@ -2,11 +2,11 @@ import {
   fetchRemoteConfig,
 } from "@actiondock/core/profile";
 import {
-  filterWithFallbackInfo,
   findProjectRoot,
   loadProjectConfig,
 } from "@actiondock/core";
 import {
+  filterWithFallbackInfo,
   isSecretConfigKey,
   maskSecretValue,
 } from "@actiondock/core/project";

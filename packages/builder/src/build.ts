@@ -189,11 +189,11 @@ import { spawn } from "node:child_process";
 import { join } from "node:path";
 import {
   STANDALONE_ASYNC_UNSUPPORTED,
-  StandaloneDispatcher,
-  ExitCode,
 } from "@actiondock/core";
 import {
+  ExitCode,
   IpcActionDockService,
+  StandaloneDispatcher,
 } from "@actiondock/core/server";
 
 const METADATA = {

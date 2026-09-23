@@ -947,9 +947,9 @@ describe("ActionRunner", () => {
     // 执行级 maxCallDepth 覆盖契约：构造级默认 3，执行级 1 应立即拦住嵌套调用
     const shallowResult = await runner.execute("test.rec-a", {}, { maxCallDepth: 1 });
     expect(shallowResult.ok).toBe(false);
-    const shallowError = (shallowResult as { ok: false; error?: { code?: string; details?: { alias?: string } } }).error;
+    const shallowError = (shallowResult as { ok: false; error?: { code?: string; details?: { reason?: string } } }).error;
     expect(shallowError?.code).toBe("ACTION_CALL_CYCLE");
-    expect(shallowError?.details?.alias).toBe("ACTION_MAX_DEPTH_EXCEEDED");
+    expect(shallowError?.details?.reason).toBe("depth_exceeded");
     // 执行级覆盖为更大值时，同样四层链可正常递归完成（覆盖构造级 3）
     const deepOk = await runner.execute("test.rec-a", {}, { maxCallDepth: 8 });
     expect(deepOk.ok).toBe(true);

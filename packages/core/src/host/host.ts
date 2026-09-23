@@ -36,12 +36,10 @@ import { InMemoryEventSink, type EventSink } from "../runtime/events";
 import {
   ActionDockError,
   ACTION_CALL_CYCLE,
-  ACTION_MAX_DEPTH_EXCEEDED,
   ACTION_NOT_FOUND,
   ACTION_PACKAGE_VERSION_CONFLICT,
   ACTION_SUBRUN_LIMIT,
   INVALID_ACTION_REF,
-  MAX_SUBRUNS_REACHED,
   PACKAGE_NOT_FOUND,
   PROJECT_BUSY,
   PROJECT_RECOVERY_REQUIRED,
@@ -446,7 +444,7 @@ export class DefaultActionDockHost implements ActionDockHost {
         throw new ActionDockError(
           ACTION_SUBRUN_LIMIT,
           `Maximum concurrent sub-runs (${this.policy.maxSubRuns}) reached`,
-          { alias: MAX_SUBRUNS_REACHED, limit: this.policy.maxSubRuns }
+          { limit: this.policy.maxSubRuns }
         );
       }
 

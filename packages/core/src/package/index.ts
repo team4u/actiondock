@@ -9,6 +9,7 @@
 
 export {
   createPackageRuntime,
+  DefaultPackageRuntime,
 } from "./runtime";
 export type {
   PackageRuntime,
@@ -19,3 +20,45 @@ export type {
   PlaybookSpec,
   PlaybookSummary,
 } from "./types";
+
+// 运行时平台与进程驱动契约
+export type {
+  RuntimePlatform,
+  FileSystem,
+  StorageFactory,
+  StorageFactoryOptions,
+  GlobalStorageFactoryOptions,
+} from "../platform/types";
+export {
+  type Clock,
+  SystemClock,
+} from "../runtime/clock";
+export type { ModuleLoader } from "../node/module-loader";
+export {
+  InMemoryEventSink,
+  type EventSink,
+} from "../runtime/events";
+export {
+  ProcessManager,
+  type ProcessOwner,
+} from "../process/process-manager";
+export type { ProcessExecutor } from "../runtime/process";
+export type {
+  ProcessDriver,
+  ProcessDriverCallbacks,
+  ProcessDriverHandle,
+  ProcessHandle,
+  ProcessObserver,
+} from "../process/driver";
+
+// 存储契约与驱动
+export {
+  createStorage,
+  resolveDatabasePath,
+} from "../storage/index";
+export { SqliteRuntimeStorage } from "../storage/sqlite";
+export type {
+  RuntimeStorage,
+  SqliteDriver,
+  StateEntry,
+} from "../storage/types";

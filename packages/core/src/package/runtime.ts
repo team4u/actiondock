@@ -110,8 +110,8 @@ export class DefaultPackageRuntime implements PackageRuntime {
     this.projectConfig = projectConfig;
     this.identity = options.identity || createPackageIdentity({
       id: projectConfig.id,
-      instanceId: options.packageInstanceId || (projectConfig as any).packageInstanceId,
-      generation: options.generationId || (projectConfig as any).generationId,
+      instanceId: (options as any)?.packageInstanceId || (projectConfig as any).packageInstanceId,
+      generation: (options as any)?.generationId || (projectConfig as any).generationId,
     });
     this.packageId = this.identity.id;
     this.packageInstanceId = this.identity.instanceId;

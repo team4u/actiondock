@@ -194,10 +194,6 @@ export interface PackageRuntimeOptions {
   actionResolver?: LocalActionResolver;
   /** 显式注入的包物理与快照身份标识值对象 */
   identity?: PackageIdentity;
-  /** 包物理实例标识 */
-  packageInstanceId?: string;
-  /** 快照代次标识 */
-  generationId?: string;
   /**
    * 是否以数据目录持有者身份打开存储：true 时构造阶段收割遗留非终态运行记录。
    * 默认 true（PackageRuntime 主路径即持有者）；外部工具创建旁观视图时置 false。

@@ -17,7 +17,7 @@ import { ArgumentError } from "../src/errors";
 import {
   FlatInputError,
   InputError,
-} from "@actiondock/core";
+} from "@actiondock/core/project";
 
 const cliPath = resolve(import.meta.dirname, "../bin/ad.js");
 
