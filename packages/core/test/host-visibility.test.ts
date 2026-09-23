@@ -220,7 +220,7 @@ describe("Host 多包依赖可见性与锁文件加载集成", () => {
       },
     });
 
-    expect(
+    await expect(
       createActionDockHost({
         projectRoot: rootDir,
         inMemory: true,

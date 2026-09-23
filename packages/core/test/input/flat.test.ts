@@ -101,6 +101,7 @@ describe("Flat JsonValue Encoding v1", () => {
       expect(() => decodeFlatInput(["bad:=invalid_json"])).toThrow(FlatInputError);
       try {
         decodeFlatInput(["bad:=invalid_json"]);
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(INVALID_JSON_LITERAL);
       }
@@ -110,6 +111,7 @@ describe("Flat JsonValue Encoding v1", () => {
       expect(() => decodeFlatInput(["inf:=1e999"])).toThrow(FlatInputError);
       try {
         decodeFlatInput(["inf:=1e999"]);
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(INVALID_JSON_LITERAL);
       }
@@ -117,6 +119,7 @@ describe("Flat JsonValue Encoding v1", () => {
       expect(() => decodeFlatInput(["arr:=[1, 1e999]"])).toThrow(FlatInputError);
       try {
         decodeFlatInput(["arr:=[1, 1e999]"]);
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(INVALID_JSON_LITERAL);
       }
@@ -124,6 +127,7 @@ describe("Flat JsonValue Encoding v1", () => {
       expect(() => decodeFlatInput(['obj:={"val": 1e999}'])).toThrow(FlatInputError);
       try {
         decodeFlatInput(['obj:={"val": 1e999}']);
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(INVALID_JSON_LITERAL);
       }
@@ -186,6 +190,7 @@ describe("Flat JsonValue Encoding v1", () => {
       expect(() => decodeFlatInput(["items.00=1"])).toThrow(FlatInputError);
       try {
         decodeFlatInput(["items.00=1"]);
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(INVALID_FLAT_ARGUMENT);
       }
@@ -193,6 +198,7 @@ describe("Flat JsonValue Encoding v1", () => {
       expect(() => decodeFlatInput(["items.01=1"])).toThrow(FlatInputError);
       try {
         decodeFlatInput(["items.01=1"]);
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(INVALID_FLAT_ARGUMENT);
       }
@@ -202,6 +208,7 @@ describe("Flat JsonValue Encoding v1", () => {
       expect(() => decodeFlatInput(["items.-1=1"])).toThrow(FlatInputError);
       try {
         decodeFlatInput(["items.-1=1"]);
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(INVALID_FLAT_ARGUMENT);
       }
@@ -209,6 +216,7 @@ describe("Flat JsonValue Encoding v1", () => {
       expect(() => decodeFlatInput(["items.1e2=1"])).toThrow(FlatInputError);
       try {
         decodeFlatInput(["items.1e2=1"]);
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(INVALID_FLAT_ARGUMENT);
       }
@@ -218,6 +226,7 @@ describe("Flat JsonValue Encoding v1", () => {
       expect(() => decodeFlatInput(["0=foo"])).toThrow(FlatInputError);
       try {
         decodeFlatInput(["0=foo"]);
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(INPUT_PATH_CONFLICT);
       }
@@ -229,6 +238,7 @@ describe("Flat JsonValue Encoding v1", () => {
       expect(() => decodeFlatInput(["__proto__=1"])).toThrow(FlatInputError);
       try {
         decodeFlatInput(["__proto__=1"]);
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(INVALID_FLAT_ARGUMENT);
         expect(err.details?.reason).toBe("FORBIDDEN_PROPERTY");
@@ -237,6 +247,7 @@ describe("Flat JsonValue Encoding v1", () => {
       expect(() => decodeFlatInput(["a.__proto__.b=1"])).toThrow(FlatInputError);
       try {
         decodeFlatInput(["a.__proto__.b=1"]);
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(INVALID_FLAT_ARGUMENT);
         expect(err.details?.reason).toBe("FORBIDDEN_PROPERTY");
@@ -247,6 +258,7 @@ describe("Flat JsonValue Encoding v1", () => {
       expect(() => decodeFlatInput(["constructor=1"])).toThrow(FlatInputError);
       try {
         decodeFlatInput(["constructor=1"]);
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(INVALID_FLAT_ARGUMENT);
         expect(err.details?.reason).toBe("FORBIDDEN_PROPERTY");
@@ -255,6 +267,7 @@ describe("Flat JsonValue Encoding v1", () => {
       expect(() => decodeFlatInput(["a.constructor.b=1"])).toThrow(FlatInputError);
       try {
         decodeFlatInput(["a.constructor.b=1"]);
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(INVALID_FLAT_ARGUMENT);
         expect(err.details?.reason).toBe("FORBIDDEN_PROPERTY");
@@ -265,6 +278,7 @@ describe("Flat JsonValue Encoding v1", () => {
       expect(() => decodeFlatInput(["prototype=1"])).toThrow(FlatInputError);
       try {
         decodeFlatInput(["prototype=1"]);
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(INVALID_FLAT_ARGUMENT);
         expect(err.details?.reason).toBe("FORBIDDEN_PROPERTY");
@@ -273,6 +287,7 @@ describe("Flat JsonValue Encoding v1", () => {
       expect(() => decodeFlatInput(["a.prototype.b=1"])).toThrow(FlatInputError);
       try {
         decodeFlatInput(["a.prototype.b=1"]);
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(INVALID_FLAT_ARGUMENT);
         expect(err.details?.reason).toBe("FORBIDDEN_PROPERTY");
@@ -285,6 +300,7 @@ describe("Flat JsonValue Encoding v1", () => {
       expect(() => decodeFlatInput(["a=1", "a.b=2"])).toThrow(FlatInputError);
       try {
         decodeFlatInput(["a=1", "a.b=2"]);
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(INPUT_PATH_CONFLICT);
       }
@@ -294,6 +310,7 @@ describe("Flat JsonValue Encoding v1", () => {
       expect(() => decodeFlatInput(["a.b=2", "a=1"])).toThrow(FlatInputError);
       try {
         decodeFlatInput(["a.b=2", "a=1"]);
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(INPUT_PATH_CONFLICT);
       }
@@ -303,6 +320,7 @@ describe("Flat JsonValue Encoding v1", () => {
       expect(() => decodeFlatInput(["a.b=1", "a.0=2"])).toThrow(FlatInputError);
       try {
         decodeFlatInput(["a.b=1", "a.0=2"]);
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(INPUT_PATH_CONFLICT);
       }
@@ -312,6 +330,7 @@ describe("Flat JsonValue Encoding v1", () => {
       expect(() => decodeFlatInput(["a.0=1", "a.b=2"])).toThrow(FlatInputError);
       try {
         decodeFlatInput(["a.0=1", "a.b=2"]);
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(INPUT_PATH_CONFLICT);
       }
@@ -321,6 +340,7 @@ describe("Flat JsonValue Encoding v1", () => {
       expect(() => decodeFlatInput(["a=1", "a=2"])).toThrow(FlatInputError);
       try {
         decodeFlatInput(["a=1", "a=2"]);
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(INPUT_PATH_CONFLICT);
       }
@@ -330,6 +350,7 @@ describe("Flat JsonValue Encoding v1", () => {
       expect(() => decodeFlatInput(["a=1", "a=1"])).toThrow(FlatInputError);
       try {
         decodeFlatInput(["a=1", "a=1"]);
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(INPUT_PATH_CONFLICT);
       }
@@ -341,6 +362,7 @@ describe("Flat JsonValue Encoding v1", () => {
       expect(() => decodeFlatInput(["items.1=foo"])).toThrow(FlatInputError);
       try {
         decodeFlatInput(["items.1=foo"]);
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(INPUT_PATH_CONFLICT);
       }
@@ -352,6 +374,7 @@ describe("Flat JsonValue Encoding v1", () => {
       );
       try {
         decodeFlatInput(["items.0=foo", "items.2=bar"]);
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(INPUT_PATH_CONFLICT);
       }
@@ -365,6 +388,7 @@ describe("Flat JsonValue Encoding v1", () => {
       ).toThrow(FlatInputError);
       try {
         parseFlatAssignments(["a=1", "b=2"], { maxAssignments: 1 });
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(FLAT_INPUT_LIMIT_EXCEEDED);
       }
@@ -376,6 +400,7 @@ describe("Flat JsonValue Encoding v1", () => {
       ).toThrow(FlatInputError);
       try {
         parseFlatAssignments(["a.b.c=1"], { maxPathDepth: 2 });
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(FLAT_INPUT_LIMIT_EXCEEDED);
       }
@@ -387,6 +412,7 @@ describe("Flat JsonValue Encoding v1", () => {
       ).toThrow(FlatInputError);
       try {
         parseFlatAssignments(["abcdef=1"], { maxPathLength: 4 });
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(FLAT_INPUT_LIMIT_EXCEEDED);
       }
@@ -398,6 +424,7 @@ describe("Flat JsonValue Encoding v1", () => {
       ).toThrow(FlatInputError);
       try {
         parseFlatAssignments(["verylongname=1"], { maxPropertyKeyLength: 5 });
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(FLAT_INPUT_LIMIT_EXCEEDED);
       }
@@ -409,6 +436,7 @@ describe("Flat JsonValue Encoding v1", () => {
       ).toThrow(FlatInputError);
       try {
         parseFlatAssignments(["k=toolongvalue"], { maxRawValueLength: 5 });
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(FLAT_INPUT_LIMIT_EXCEEDED);
       }
@@ -420,6 +448,7 @@ describe("Flat JsonValue Encoding v1", () => {
       ).toThrow(FlatInputError);
       try {
         parseFlatAssignments(['k:="toolongjson"'], { maxJsonLiteralLength: 5 });
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(FLAT_INPUT_LIMIT_EXCEEDED);
       }
@@ -431,6 +460,7 @@ describe("Flat JsonValue Encoding v1", () => {
       ).toThrow(FlatInputError);
       try {
         parseFlatAssignments(["items.100=1"], { maxArrayIndex: 50 });
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(FLAT_INPUT_LIMIT_EXCEEDED);
       }
@@ -443,6 +473,7 @@ describe("Flat JsonValue Encoding v1", () => {
       ).toThrow(FlatInputError);
       try {
         materializeFlatInput(assignments, { maxMaterializedSizeBytes: 5 });
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(FLAT_INPUT_LIMIT_EXCEEDED);
       }
@@ -456,6 +487,7 @@ describe("Flat JsonValue Encoding v1", () => {
       ).rejects.toThrow(InputError);
       try {
         await resolveActionInput({ flatArgs: ["a=1"], input: '{"b":2}' });
+        expect.unreachable();
       } catch (err: any) {
         expect(err).toBeInstanceOf(InputError);
         expect(err).not.toBeInstanceOf(FlatInputError);
@@ -469,6 +501,7 @@ describe("Flat JsonValue Encoding v1", () => {
       ).rejects.toThrow(InputError);
       try {
         await resolveActionInput({ flatArgs: ["a=1"], inputFile: "test.json" });
+        expect.unreachable();
       } catch (err: any) {
         expect(err).toBeInstanceOf(InputError);
         expect(err).not.toBeInstanceOf(FlatInputError);
@@ -482,6 +515,7 @@ describe("Flat JsonValue Encoding v1", () => {
       ).rejects.toThrow(InputError);
       try {
         await resolveActionInput({ input: '{"a":1}', inputFile: "test.json" });
+        expect.unreachable();
       } catch (err: any) {
         expect(err).toBeInstanceOf(InputError);
         expect(err).not.toBeInstanceOf(FlatInputError);
@@ -503,6 +537,7 @@ describe("Flat JsonValue Encoding v1", () => {
           input: '{"b":2}',
           inputFile: "test.json",
         });
+        expect.unreachable();
       } catch (err: any) {
         expect(err).toBeInstanceOf(InputError);
         expect(err).not.toBeInstanceOf(FlatInputError);
@@ -623,6 +658,7 @@ describe("Flat JsonValue Encoding v1", () => {
         expect(() => decodeFlatInput([token])).toThrow(FlatInputError);
         try {
           decodeFlatInput([token]);
+          expect.unreachable();
         } catch (err: any) {
           expect(err.code).toBe(INVALID_FLAT_ARGUMENT);
         }
@@ -633,6 +669,7 @@ describe("Flat JsonValue Encoding v1", () => {
       expect(() => decodeFlatInput(["no_operator"])).toThrow(FlatInputError);
       try {
         decodeFlatInput(["no_operator"]);
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(INVALID_FLAT_ARGUMENT);
       }
@@ -642,6 +679,7 @@ describe("Flat JsonValue Encoding v1", () => {
       expect(() => decodeFlatInput(["=value"])).toThrow(FlatInputError);
       try {
         decodeFlatInput(["=value"]);
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(INVALID_FLAT_ARGUMENT);
       }
@@ -649,6 +687,7 @@ describe("Flat JsonValue Encoding v1", () => {
       expect(() => decodeFlatInput([":=123"])).toThrow(FlatInputError);
       try {
         decodeFlatInput([":=123"]);
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(INVALID_FLAT_ARGUMENT);
       }
@@ -711,6 +750,7 @@ describe("Flat JsonValue Encoding v1", () => {
       );
       try {
         await resolveActionInput({ input: "{bad json}" });
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(INVALID_JSON);
       }
@@ -720,6 +760,7 @@ describe("Flat JsonValue Encoding v1", () => {
       await expect(resolveActionInput({ input: "1e400" })).rejects.toThrow(InputError);
       try {
         await resolveActionInput({ input: "1e400" });
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(INVALID_JSON);
         expect(err.message).toContain("Number is non-finite or NaN");
@@ -733,6 +774,7 @@ describe("Flat JsonValue Encoding v1", () => {
       await expect(resolveActionInput({ input: deep })).rejects.toThrow(InputError);
       try {
         await resolveActionInput({ input: deep });
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(INVALID_JSON);
         expect(err.message).toContain("Max JSON depth limit");
@@ -748,6 +790,7 @@ describe("Flat JsonValue Encoding v1", () => {
         );
         try {
           await resolveActionInput({ inputFile: testFile });
+          expect.unreachable();
         } catch (err: any) {
           expect(err.code).toBe(INVALID_JSON);
         }
@@ -764,6 +807,7 @@ describe("Flat JsonValue Encoding v1", () => {
       try {
         const stream2 = Readable.from(["not a valid json"]);
         await resolveActionInput({ inputFile: "-", stdin: stream2 });
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(INVALID_JSON);
       }
@@ -773,6 +817,7 @@ describe("Flat JsonValue Encoding v1", () => {
       expect(() => decodeFlatInput(["num:=not_json"])).toThrow(FlatInputError);
       try {
         decodeFlatInput(["num:=not_json"]);
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(INVALID_JSON_LITERAL);
       }
@@ -804,6 +849,7 @@ describe("Flat JsonValue Encoding v1", () => {
       ).toThrow(FlatInputError);
       try {
         parseFlatAssignments(["a=123", "b=456"], { maxTotalRawBytes: 5 });
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(FLAT_INPUT_LIMIT_EXCEEDED);
         expect(err.message).toContain("Total raw input bytes");

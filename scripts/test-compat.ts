@@ -365,6 +365,24 @@ function createExpectation(actual: any, isNot = false): any {
   };
 }
 
-export function expect(actual: any): any {
-  return createExpectation(actual, false);
+export interface ExpectFunction {
+  (actual?: any): any;
+  unreachable(message?: string): never;
+  fail(message?: string): never;
 }
+
+export const expect: ExpectFunction = Object.assign(
+  function (actual?: any): any {
+    return createExpectation(actual, false);
+  },
+  {
+    unreachable(message?: string): never {
+      assert.fail(message ?? "Expected code to be unreachable");
+    },
+    fail(message?: string): never {
+      assert.fail(message ?? "Test failed");
+    },
+  }
+);
+
+export { assert };

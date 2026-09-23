@@ -318,7 +318,7 @@ Follow these steps to greet a user.
     expect(isLoopbackHost("192.168.1.100")).toBe(false);
 
     // Binding to 0.0.0.0 without token and without allowInsecureNoAuth should throw
-    expect(
+    await expect(
       startActionDockServer({
         port: 0,
         host: "0.0.0.0",
@@ -655,17 +655,17 @@ Follow these steps to greet a user.
     expect(run.error?.code).toBe("ACTION_CANCELLED");
 
     // Cancelling an already finished/cancelled run should return 409
-    expect(
+    await expect(
       cancelRemoteRun(serverUrl, runId, SECRET_TOKEN)
     ).rejects.toThrow("has already finished");
   });
 
   test("Execution Lifecycle > returns 404 when cancelling or fetching non-existent run", async () => {
-    expect(
+    await expect(
       fetchRemoteRun(serverUrl, "non-existent-run-id", SECRET_TOKEN)
     ).rejects.toThrow("not found");
 
-    expect(
+    await expect(
       cancelRemoteRun(serverUrl, "non-existent-run-id", SECRET_TOKEN)
     ).rejects.toThrow("not found");
   });

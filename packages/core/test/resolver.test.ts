@@ -135,6 +135,7 @@ describe("包图构建器 PackageGraphBuilder 与包图 PackageGraph", () => {
 
     try {
       builder.buildSync();
+      expect.unreachable();
     } catch (err: any) {
       expect(err.code).toBe("ACTION_PACKAGE_VERSION_CONFLICT");
       expect(err.packageId).toBe("pkg-d");

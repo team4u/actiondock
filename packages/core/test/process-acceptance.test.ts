@@ -108,6 +108,7 @@ describe("Managed Process 第 18 节全量验收测试套件", () => {
         undefined,
         "run-2"
       );
+      expect.unreachable();
     } catch (err: any) {
       expect(err.code).toBe(CONTROL_BUSY);
     }
@@ -208,6 +209,7 @@ describe("Managed Process 第 18 节全量验收测试套件", () => {
         undefined,
         "run-b"
       );
+      expect.unreachable();
     } catch (err: any) {
       expect(err.code).toBe(PROCESS_QUARANTINED);
     }
@@ -227,6 +229,7 @@ describe("Managed Process 第 18 节全量验收测试套件", () => {
         requestId: "req-write-from-b",
         data: encodeText("malicious input from B"),
       });
+      expect.unreachable();
     } catch (err: any) {
       expect(err.code).toBe(PROCESS_QUARANTINED);
     }
@@ -374,6 +377,7 @@ describe("Managed Process 第 18 节全量验收测试套件", () => {
         requestId: "req-same-id-diff-payload",
         data: encodeText("altered content"),
       });
+      expect.unreachable();
     } catch (err: any) {
       expect(err.code).toBe(REQUEST_CONFLICT);
     }
@@ -486,6 +490,7 @@ describe("Managed Process 第 18 节全量验收测试套件", () => {
 
     try {
       await startPromise;
+      expect.unreachable();
     } catch (err: any) {
       expect(err.code).toBe(PROCESS_CANCELLED);
     }
@@ -664,6 +669,7 @@ describe("Managed Process 第 18 节全量验收测试套件", () => {
         waitMs: 0,
         onGap: "error",
       });
+      expect.unreachable();
     } catch (err: any) {
       expect(err.code).toBe(OUTPUT_GAP);
       expect(err.details?.earliestCursor).toBeDefined();
@@ -996,6 +1002,7 @@ describe("Managed Process 第 18 节全量验收测试套件", () => {
         requestId: "req-write-fill-2",
         data: encodeBytes(new Uint8Array(50)),
       });
+      expect.unreachable();
     } catch (err: any) {
       expect(err.code).toBe(QUEUE_FULL);
     }
@@ -1039,6 +1046,7 @@ describe("Managed Process 第 18 节全量验收测试套件", () => {
         requestId: "req-quota-p3",
         spec: defaultSpec,
       });
+      expect.unreachable();
     } catch (err: any) {
       expect(err.code).toBe(QUOTA_EXCEEDED);
     }

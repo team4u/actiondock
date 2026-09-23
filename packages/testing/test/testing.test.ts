@@ -104,7 +104,7 @@ describe("@actiondock/testing", () => {
 
     it("推进负数时间时抛出异常", async () => {
       const clock = new FakeClock();
-      expect(clock.advance(-10)).rejects.toThrow("Cannot advance clock by negative time");
+      await expect(clock.advance(-10)).rejects.toThrow("Cannot advance clock by negative time");
     });
   });
 
@@ -154,6 +154,7 @@ describe("@actiondock/testing", () => {
       let err: any;
       try {
         await proc.exec("gti", ["status"]);
+        expect.unreachable();
       } catch (e) {
         err = e;
       }
@@ -528,13 +529,11 @@ describe("@actiondock/testing", () => {
       // 输入校验失败
       const inputFailEnvelope = await runtime.execute(strictAction, { invalidKey: 123 } as any);
       expect(inputFailEnvelope.ok).toBe(false);
-      if (!inputFailEnvelope.ok) {
-        expect(inputFailEnvelope.error.code).toBe("INPUT_VALIDATION_FAILED");
-      }
+      expect((inputFailEnvelope as any).error.code).toBe("INPUT_VALIDATION_FAILED");
 
       try {
         await runtime.run(strictAction, { invalidKey: 123 } as any);
-        expect(true).toBe(false);
+        expect.unreachable();
       } catch (err: any) {
         expect(err instanceof ActionRuntimeError).toBe(true);
         expect(err.code).toBe("INPUT_VALIDATION_FAILED");
@@ -543,13 +542,11 @@ describe("@actiondock/testing", () => {
       // 输出校验失败
       const outputFailEnvelope = await runtime.execute(strictAction, { requiredKey: "ok" });
       expect(outputFailEnvelope.ok).toBe(false);
-      if (!outputFailEnvelope.ok) {
-        expect(outputFailEnvelope.error.code).toBe("OUTPUT_VALIDATION_FAILED");
-      }
+      expect((outputFailEnvelope as any).error.code).toBe("OUTPUT_VALIDATION_FAILED");
 
       try {
         await runtime.run(strictAction, { requiredKey: "ok" });
-        expect(true).toBe(false);
+        expect.unreachable();
       } catch (err: any) {
         expect(err instanceof ActionRuntimeError).toBe(true);
         expect(err.code).toBe("OUTPUT_VALIDATION_FAILED");
@@ -657,18 +654,17 @@ describe("@actiondock/testing", () => {
       // 超时控制
       const timeoutRes = await runtime.execute(hangingAction, {}, { timeoutMs: 50 });
       expect(timeoutRes.ok).toBe(false);
-      if (!timeoutRes.ok) {
-        expect(timeoutRes.error.code).toBe("ACTION_TIMEOUT");
-      }
+      expect((timeoutRes as any).error.code).toBe("ACTION_TIMEOUT");
 
       // 外部 AbortSignal 取消
       const controller = new AbortController();
-      setTimeout(() => controller.abort("manual abort"), 30);
-
-      const cancelRes = await runtime.execute(hangingAction, {}, { signal: controller.signal });
-      expect(cancelRes.ok).toBe(false);
-      if (!cancelRes.ok) {
-        expect(cancelRes.error.code).toBe("ACTION_CANCELLED");
+      const timer = setTimeout(() => controller.abort("manual abort"), 30);
+      try {
+        const cancelRes = await runtime.execute(hangingAction, {}, { signal: controller.signal });
+        expect(cancelRes.ok).toBe(false);
+        expect((cancelRes as any).error.code).toBe("ACTION_CANCELLED");
+      } finally {
+        clearTimeout(timer);
       }
     });
 
@@ -799,9 +795,7 @@ describe("@actiondock/testing", () => {
       // 对齐的 execute 错误校验
       const execFail = await testingRuntime.execute(testAction, { a: "invalid" as any, b: 20 });
       expect(execFail.ok).toBe(false);
-      if (!execFail.ok) {
-        expect(execFail.error?.code).toBe("INPUT_VALIDATION_FAILED");
-      }
+      expect((execFail as any).error?.code).toBe("INPUT_VALIDATION_FAILED");
     });
   });
 });

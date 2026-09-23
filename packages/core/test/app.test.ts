@@ -129,7 +129,7 @@ describe("PackageRuntime", () => {
       expect(fqSpec.id).toBe("calc.add");
 
       // 不存在的 Action 抛出异常
-      expect(app.describeAction("nonexistent")).rejects.toThrow(
+      await expect(app.describeAction("nonexistent")).rejects.toThrow(
         "Action 'nonexistent' not found in package 'pkg.tools'"
       );
 
@@ -197,7 +197,7 @@ Execute build and then deploy artifact.
       expect(specWithExt.id).toBe("deploy");
 
       // 不存在的 Playbook 抛出异常
-      expect(app.describePlaybook("unknown")).rejects.toThrow(
+      await expect(app.describePlaybook("unknown")).rejects.toThrow(
         "Playbook 'unknown' not found in package 'pkg.sop'"
       );
 
@@ -669,7 +669,7 @@ Execute build and then deploy artifact.
     expect(customStorageClosed).toBe(true);
 
     // 关机后拒绝接收新任务
-    expect(app.runAction("dummy", {})).rejects.toThrow(
+    await expect(app.runAction("dummy", {})).rejects.toThrow(
       "ExecutionService is closing: new tasks rejected"
     );
 

@@ -64,7 +64,7 @@ describe("CLI 依赖管理命令 (ad add / ad remove)", () => {
     );
 
     const program = createCliProgram();
-    expect(
+    await expect(
       program.parseAsync(["node", "ad", "remove", "pkg.tool", "-P", tempDir])
     ).rejects.toThrow(/action 'doSomething' declares dependency on it in 'uses'/);
 

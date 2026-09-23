@@ -19,6 +19,7 @@ describe("Strict UTF-8 与 BOM 工具套件", () => {
 
       try {
         decodeUtf8Strict(invalidBytes, "full-json-inline");
+        expect.unreachable();
       } catch (err: any) {
         expect(err).toBeInstanceOf(InputError);
         expect(err.code).toBe(INVALID_JSON);
@@ -32,12 +33,14 @@ describe("Strict UTF-8 与 BOM 工具套件", () => {
 
       try {
         decodeUtf8Strict(invalidBytes, "full-json-file");
+        expect.unreachable();
       } catch (err: any) {
         expect(err.details?.source).toBe("file");
       }
 
       try {
         decodeUtf8Strict(invalidBytes, "full-json-stdin");
+        expect.unreachable();
       } catch (err: any) {
         expect(err.details?.source).toBe("stdin");
       }

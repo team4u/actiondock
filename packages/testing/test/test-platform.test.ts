@@ -42,7 +42,7 @@ describe("createTestPlatform 测试平台工厂测试", () => {
       const platform = createTestPlatform();
       const initialTime = platform.clock.now().getTime();
 
-      platform.clock.advance(5000);
+      await platform.clock.advance(5000);
       expect(platform.clock.now().getTime()).toBe(initialTime + 5000);
       expect(platform.clock.monotonic()).toBeGreaterThanOrEqual(5000);
     });

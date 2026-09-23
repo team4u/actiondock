@@ -209,7 +209,7 @@ describe("@actiondock/sdk", () => {
 
     try {
       await runtime.run(invalidCaller, {});
-      expect(true).toBe(false);
+      expect.unreachable();
     } catch (err: any) {
       expect(err.code).toBe("INVALID_ACTION_REF");
     }
@@ -265,7 +265,7 @@ describe("@actiondock/sdk", () => {
         "test.cycle": cycleAction,
       },
     });
-    expect(runtime.run("test.cycle", {})).rejects.toThrow("Cycle detected");
+    await expect(runtime.run("test.cycle", {})).rejects.toThrow("Cycle detected");
   });
 
   it("supports full-trace run context (rootId, parentId) in nested action invocation", async () => {
@@ -518,7 +518,7 @@ describe("@actiondock/sdk", () => {
     // 输入参数校验失败
     try {
       await runtime.run(strictAction, { count: "not-a-number" } as any);
-      expect(true).toBe(false);
+      expect.unreachable();
     } catch (err: any) {
       expect(err).toBeInstanceOf(ActionRuntimeError);
       expect(err.code).toBe("INPUT_VALIDATION_FAILED");
@@ -527,7 +527,7 @@ describe("@actiondock/sdk", () => {
     // 输出参数校验失败
     try {
       await runtime.run(strictAction, { count: -1 });
-      expect(true).toBe(false);
+      expect.unreachable();
     } catch (err: any) {
       expect(err).toBeInstanceOf(ActionRuntimeError);
       expect(err.code).toBe("OUTPUT_VALIDATION_FAILED");
@@ -560,7 +560,7 @@ describe("@actiondock/sdk", () => {
 
     try {
       await runtime.run(loopA, {});
-      expect(true).toBe(false);
+      expect.unreachable();
     } catch (err: any) {
       expect(err.code).toBe("ACTION_CALL_CYCLE");
     }

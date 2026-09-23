@@ -301,7 +301,7 @@ actions:
       expect(backupSpec.id).toBe("backup");
       expect(backupSpec.content).toContain("# 备份操作指南");
 
-      expect(host.describePlaybook("nonexistent")).rejects.toThrow("not found in any registered package");
+      await expect(host.describePlaybook("nonexistent")).rejects.toThrow("not found in any registered package");
 
       await host.close();
     } finally {
@@ -682,7 +682,7 @@ actions:
 
     // 优雅关闭
     await host.close();
-    expect(host.runAction("pkg.lifecycle/long-task", {})).rejects.toThrow(
+    await expect(host.runAction("pkg.lifecycle/long-task", {})).rejects.toThrow(
       "ActionDockHost is closed: new tasks rejected"
     );
   });

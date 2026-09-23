@@ -209,7 +209,7 @@ describe("Source-Aware Validation Error Mapping (Section 19)", () => {
       expect((err.details as any)?.reason).toBe("MAX_JSON_DEPTH");
     });
 
-    it("非有限数值映射为 INVALID_JSON + NON_FINITE_NUMBER", () => {
+    it("CLI 预处理输入中非有限数值映射为 INVALID_JSON + NON_FINITE_NUMBER", () => {
       const err = mapInputValidationFailure("cli-pre-target", {
         valid: false,
         code: "NON_FINITE_NUMBER",

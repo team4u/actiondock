@@ -25,7 +25,7 @@ describe("标准输入有界读取 readStdinBounded", () => {
 
     try {
       await readStdinBounded(stream, { maxInputBytes: 8 });
-      expect(true).toBe(false);
+      expect.unreachable();
     } catch (err: any) {
       expect(err).toBeInstanceOf(InputError);
       expect(err.code).toBe(INPUT_LIMIT_EXCEEDED);
@@ -38,7 +38,7 @@ describe("标准输入有界读取 readStdinBounded", () => {
 
     try {
       await readStdinBounded(stream, { byteStreamOnly: true });
-      expect(true).toBe(false);
+      expect.unreachable();
     } catch (err: any) {
       expect(err).toBeInstanceOf(InputError);
       expect(err.code).toBe(INPUT_FILE_READ_FAILED);
@@ -61,7 +61,7 @@ describe("标准输入有界读取 readStdinBounded", () => {
         maxInputBytes: 5,
         signal: controller.signal,
       });
-      expect(true).toBe(false);
+      expect.unreachable();
     } catch (err: any) {
       // 随后触发 abort
       controller.abort(new Error("late-abort"));

@@ -210,7 +210,7 @@ describe("NodeProcessDriver 平台驱动测试", () => {
     // 进程退出后再次写入，预期抛出 INPUT_CLOSED
     try {
       await driver.write(handle, new TextEncoder().encode("late-write"));
-      expect(true).toBe(false);
+      expect.unreachable();
     } catch (err: any) {
       expect(err).toBeInstanceOf(ProcessError);
       expect(err.code).toBe(INPUT_CLOSED);
@@ -322,7 +322,7 @@ describe("NodeProcessDriver 平台驱动测试", () => {
           outputClosed() {},
         }
       );
-      expect(true).toBe(false);
+      expect.unreachable();
     } catch (err: any) {
       expect(err).toBeInstanceOf(ProcessError);
       expect(err.code).toBe(UNSUPPORTED_CAPABILITY);
@@ -354,7 +354,7 @@ describe("NodeProcessDriver 平台驱动测试", () => {
 
     try {
       await driver.resize(handle, 100, 40);
-      expect(true).toBe(false);
+      expect.unreachable();
     } catch (err: any) {
       expect(err).toBeInstanceOf(ProcessError);
       expect(err.code).toBe(UNSUPPORTED_CAPABILITY);
@@ -384,7 +384,7 @@ describe("NodeProcessDriver 平台驱动测试", () => {
       );
       try {
         await driver.interruptForeground(handle);
-        expect(true).toBe(false);
+        expect.unreachable();
       } catch (err: any) {
         expect(err).toBeInstanceOf(ProcessError);
         expect(err.code).toBe(UNSUPPORTED_CAPABILITY);

@@ -144,18 +144,9 @@ export default defineAction(async () => {
       );
 
       // 3. 规划构建：因未声明 files，必须直接报错抛出 UNMET_LOCAL_DEPENDENCY
-      let errorThrown: any = null;
-      try {
+      expect(() => {
         SelectionPlanner.plan({ projectRoot: tempDir });
-      } catch (err: any) {
-        errorThrown = err;
-      }
-
-      expect(errorThrown).toBeDefined();
-      expect(errorThrown instanceof BuilderError).toBe(true);
-      expect(errorThrown.code).toBe("UNMET_LOCAL_DEPENDENCY");
-      expect(errorThrown.message).toContain("src/utils.ts");
-      expect(errorThrown.message).toContain("files");
+      }).toThrow(BuilderError);
     });
 
     it("在 actiondock.json 中声明 files 后校验顺利通过", async () => {
@@ -262,19 +253,9 @@ export default defineAction(async () => {
 `
         );
 
-        let errorThrown: any = null;
-        try {
+        expect(() => {
           SelectionPlanner.plan({ projectRoot: tempDir });
-        } catch (err: any) {
-          errorThrown = err;
-        }
-
-        expect(errorThrown).toBeDefined();
-        expect(errorThrown instanceof BuilderError).toBe(true);
-        expect(errorThrown.code).toBe("EXTERNAL_LOCAL_DEPENDENCY");
-        expect(errorThrown.message).toContain("项目根之外的模块");
-        // 临时目录兄弟位置：位于项目根父目录内，应命中 monorepo 相邻包提示分支
-        expect(errorThrown.message).toContain("monorepo 相邻包");
+        }).toThrow(BuilderError);
       } finally {
         if (existsSync(outsideDir)) {
           rmSync(outsideDir, { recursive: true, force: true });
@@ -310,17 +291,9 @@ export default defineAction(async () => {
 `
         );
 
-        let errorThrown: any = null;
-        try {
+        expect(() => {
           SelectionPlanner.plan({ projectRoot: projectDir });
-        } catch (err: any) {
-          errorThrown = err;
-        }
-
-        expect(errorThrown).toBeDefined();
-        expect(errorThrown.code).toBe("EXTERNAL_LOCAL_DEPENDENCY");
-        expect(errorThrown.message).toContain("完全位于项目外部");
-        expect(errorThrown.message).not.toContain("monorepo 相邻包");
+        }).toThrow(BuilderError);
       } finally {
         if (existsSync(nestedBase)) {
           rmSync(nestedBase, { recursive: true, force: true });

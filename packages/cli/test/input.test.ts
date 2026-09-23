@@ -64,6 +64,7 @@ describe("CLI Action Input Resolution - Unit Tests", () => {
     expect(() => parseJson("{bad json}", "--input")).toThrow(InputError);
     try {
       parseJson("{bad json}", "--input");
+      expect(true).toBe(false);
     } catch (err: any) {
       expect(err).toBeInstanceOf(InputError);
       expect(err.code).toBe("INVALID_JSON");
@@ -72,6 +73,7 @@ describe("CLI Action Input Resolution - Unit Tests", () => {
 
     try {
       parseJson("", "input.json");
+      expect(true).toBe(false);
     } catch (err: any) {
       expect(err).toBeInstanceOf(InputError);
       expect(err.code).toBe("INVALID_JSON");
@@ -83,6 +85,7 @@ describe("CLI Action Input Resolution - Unit Tests", () => {
     expect(() => parseJson("1e400", "--input")).toThrow(InputError);
     try {
       parseJson("1e400", "--input");
+      expect(true).toBe(false);
     } catch (err: any) {
       expect(err).toBeInstanceOf(InputError);
       expect(err.code).toBe("INVALID_JSON");
@@ -96,6 +99,7 @@ describe("CLI Action Input Resolution - Unit Tests", () => {
     expect(() => parseJson(deep, "--input")).toThrow(InputError);
     try {
       parseJson(deep, "--input");
+      expect(true).toBe(false);
     } catch (err: any) {
       expect(err).toBeInstanceOf(InputError);
       expect(err.code).toBe("INVALID_JSON");

@@ -47,7 +47,7 @@ describe("常规文件输入有界读取 openRegularInputFile", () => {
   it("拒绝目录路径并抛出 UNSUPPORTED_FILE_TYPE", async () => {
     try {
       await openRegularInputFile(tempDir);
-      expect(true).toBe(false);
+      expect.unreachable();
     } catch (err: any) {
       expect(err).toBeInstanceOf(InputError);
       expect(err.code).toBe(INPUT_FILE_READ_FAILED);
@@ -59,7 +59,7 @@ describe("常规文件输入有界读取 openRegularInputFile", () => {
     const missing = join(tempDir, "non-existent-file.json");
     try {
       await openRegularInputFile(missing);
-      expect(true).toBe(false);
+      expect.unreachable();
     } catch (err: any) {
       expect(err).toBeInstanceOf(InputError);
       expect(err.code).toBe(INPUT_FILE_NOT_FOUND);
@@ -74,7 +74,7 @@ describe("常规文件输入有界读取 openRegularInputFile", () => {
     const opened = await openRegularInputFile(largeFile);
     try {
       await opened.readBounded(5); // 限制 5 字节
-      expect(true).toBe(false);
+      expect.unreachable();
     } catch (err: any) {
       expect(err).toBeInstanceOf(InputError);
       expect(err.code).toBe(INPUT_LIMIT_EXCEEDED);

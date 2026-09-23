@@ -319,7 +319,7 @@ describe("PackageDiscovery, PackageGraph, ActionCatalog, and resolveAction", () 
       // Empty string
       try {
         parseActionRef("");
-        expect(true).toBe(false);
+        expect.unreachable();
       } catch (err: any) {
         expect(err).toBeInstanceOf(ActionDockError);
         expect(err.code).toBe(INVALID_ACTION_REF);
@@ -328,7 +328,7 @@ describe("PackageDiscovery, PackageGraph, ActionCatalog, and resolveAction", () 
       // Missing actionId in object
       try {
         parseActionRef({ actionId: "" } as any);
-        expect(true).toBe(false);
+        expect.unreachable();
       } catch (err: any) {
         expect(err).toBeInstanceOf(ActionDockError);
         expect(err.code).toBe(INVALID_ACTION_REF);
@@ -337,7 +337,7 @@ describe("PackageDiscovery, PackageGraph, ActionCatalog, and resolveAction", () 
       // Colon in reference
       try {
         parseActionRef("invalid:colon");
-        expect(true).toBe(false);
+        expect.unreachable();
       } catch (err: any) {
         expect(err).toBeInstanceOf(ActionDockError);
         expect(err.code).toBe(INVALID_ACTION_REF);
@@ -346,7 +346,7 @@ describe("PackageDiscovery, PackageGraph, ActionCatalog, and resolveAction", () 
       // Invalid trailing slash
       try {
         parseActionRef("pkg/");
-        expect(true).toBe(false);
+        expect.unreachable();
       } catch (err: any) {
         expect(err).toBeInstanceOf(ActionDockError);
         expect(err.code).toBe(INVALID_ACTION_REF);
@@ -355,7 +355,7 @@ describe("PackageDiscovery, PackageGraph, ActionCatalog, and resolveAction", () 
       // Invalid path traversal in actionId
       try {
         parseActionRef("pkg/..");
-        expect(true).toBe(false);
+        expect.unreachable();
       } catch (err: any) {
         expect(err).toBeInstanceOf(ActionDockError);
         expect(err.code).toBe(INVALID_ACTION_REF);

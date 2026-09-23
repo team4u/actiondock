@@ -186,7 +186,7 @@ describe("核心运行时高级防御校验与边缘异常测试套件", () => {
 
       try {
         await runner.execute("simple", {});
-        expect(true).toBe(false);
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(RUN_REPOSITORY_UNAVAILABLE);
         expect(err.message).toContain("RUN_REPOSITORY_UNAVAILABLE");
@@ -397,7 +397,7 @@ describe("核心运行时高级防御校验与边缘异常测试套件", () => {
       // 2. describeAction 使用歧义短 ID 抛出异常
       try {
         await host.describeAction("calc");
-        expect(true).toBe(false);
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe("INVALID_ACTION_REF");
         expect(err.message).toContain("AMBIGUOUS_ACTION_REF");

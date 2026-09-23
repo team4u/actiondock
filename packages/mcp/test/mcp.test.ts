@@ -155,11 +155,7 @@ describe("@actiondock/mcp Adapter", () => {
     }
   });
 
-  try {
-    setupTestProject(tmpDir);
-  } catch (err) {
-    console.error("Failed to setup test project:", err);
-  }
+  setupTestProject(tmpDir);
 
   it("M01-M05: tools/list discovers all actions and maps schemas correctly", async () => {
     const server = await createActionDockMcpServer({ projectRoot: tmpDir });

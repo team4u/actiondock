@@ -115,6 +115,7 @@ describe("受管进程管理器 ProcessManager", () => {
             io: { mode: "pty", cols: 80, rows: 24, term: "xterm" },
           },
         });
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(UNSUPPORTED_CAPABILITY);
       }
@@ -165,6 +166,7 @@ describe("受管进程管理器 ProcessManager", () => {
             io: { mode: "pipe" },
           },
         });
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(REQUEST_CONFLICT);
       }
@@ -380,6 +382,7 @@ describe("受管进程管理器 ProcessManager", () => {
 
       try {
         await manager.release(ownerA, processId, grant.token);
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(CONTROL_BUSY);
       }
@@ -424,6 +427,7 @@ describe("受管进程管理器 ProcessManager", () => {
           waitMs: 100,
           ttlMs: 1000,
         });
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(PROCESS_QUARANTINED);
       }
@@ -512,6 +516,7 @@ describe("受管进程管理器 ProcessManager", () => {
           waitMs: 30,
           ttlMs: 5000,
         });
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(CONTROL_BUSY);
       }
@@ -631,6 +636,7 @@ describe("受管进程管理器 ProcessManager", () => {
           requestId: "req-same-write",
           data: encodeText("different data"),
         });
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(REQUEST_CONFLICT);
       }
@@ -701,6 +707,7 @@ describe("受管进程管理器 ProcessManager", () => {
           requestId: "req-write-after-eof",
           data: encodeText("blocked"),
         });
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(INPUT_CLOSED);
       }
@@ -756,6 +763,7 @@ describe("受管进程管理器 ProcessManager", () => {
 
       try {
         await manager.start(ownerA, { requestId: "req-q-3", spec: defaultSpec });
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(QUOTA_EXCEEDED);
       }
@@ -799,6 +807,7 @@ describe("受管进程管理器 ProcessManager", () => {
           requestId: "req-qf-write-2",
           data: encodeBytes(new Uint8Array(50)),
         });
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(QUEUE_FULL);
       }
@@ -912,6 +921,7 @@ describe("受管进程管理器 ProcessManager", () => {
           timeoutMs: 1000,
           maxOutputBytes: 1024,
         });
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(UNSUPPORTED_CAPABILITY);
       }
@@ -958,6 +968,7 @@ describe("受管进程管理器 ProcessManager", () => {
           timeoutMs: 50,
           maxOutputBytes: 1024,
         });
+        expect.unreachable();
       } catch (err: any) {
         expect(err.code).toBe(PROCESS_TIMEOUT);
       }

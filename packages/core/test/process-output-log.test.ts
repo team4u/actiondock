@@ -48,7 +48,7 @@ describe("不透明游标引擎", () => {
 
     try {
       parseCursor("cur_not_json", hostEpoch, processId);
-      expect(true).toBe(false);
+      expect.unreachable();
     } catch (err) {
       expect(err instanceof ProcessError).toBe(true);
       expect((err as ProcessError).code).toBe(INVALID_CURSOR);
@@ -59,7 +59,7 @@ describe("不透明游标引擎", () => {
     const cursorStr = encodeCursor("other-epoch", processId, 1, 0);
     try {
       parseCursor(cursorStr, hostEpoch, processId);
-      expect(true).toBe(false);
+      expect.unreachable();
     } catch (err) {
       expect(err instanceof ProcessError).toBe(true);
       const procErr = err as ProcessError;
@@ -73,7 +73,7 @@ describe("不透明游标引擎", () => {
     const cursorStr = encodeCursor(hostEpoch, "other-proc", 1, 0);
     try {
       parseCursor(cursorStr, hostEpoch, processId);
-      expect(true).toBe(false);
+      expect.unreachable();
     } catch (err) {
       expect(err instanceof ProcessError).toBe(true);
       const procErr = err as ProcessError;
@@ -263,7 +263,7 @@ describe("ProcessOutputLog 原始字节输出日志", () => {
 
     try {
       log.read(oldCursor, 50, "error");
-      expect(true).toBe(false);
+      expect.unreachable();
     } catch (err) {
       expect(err instanceof ProcessError).toBe(true);
       const procErr = err as ProcessError;
@@ -448,7 +448,7 @@ describe("长轮询等待机制 (waitForData)", () => {
 
     try {
       await waitPromise;
-      expect(true).toBe(false);
+      expect.unreachable();
     } catch (err) {
       expect(err instanceof ProcessError).toBe(true);
       const procErr = err as ProcessError;
@@ -472,7 +472,7 @@ describe("长轮询等待机制 (waitForData)", () => {
     // 第 4 个超额拒绝
     try {
       await log.waitForData(cursor, 1000);
-      expect(true).toBe(false);
+      expect.unreachable();
     } catch (err) {
       expect(err instanceof ProcessError).toBe(true);
       const procErr = err as ProcessError;

@@ -200,6 +200,7 @@ describe("Phase 10: CLI Describe / Run 集成与普通 CLI / Standalone 行为�
           },
           context
         );
+        expect(true).toBe(false);
       } catch (err) {
         caughtErr = err;
       }
@@ -223,6 +224,7 @@ describe("Phase 10: CLI Describe / Run 集成与普通 CLI / Standalone 行为�
             },
             { exitCode: 0 }
           );
+          expect(true).toBe(false);
         } catch (err) {
           caughtErr = err;
         }

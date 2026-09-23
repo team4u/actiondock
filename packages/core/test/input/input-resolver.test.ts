@@ -33,7 +33,7 @@ describe("输入模式仲裁与解析器 resolveActionInput", () => {
           flatArgs: ["a=1"],
           input: '{"b":2}',
         });
-        expect(true).toBe(false);
+        expect.unreachable();
       } catch (err: any) {
         expect(err).toBeInstanceOf(InputError);
         expect(err.code).toBe(INPUT_CONFLICT);
@@ -47,7 +47,7 @@ describe("输入模式仲裁与解析器 resolveActionInput", () => {
           flatArgs: ["a=1"],
           inputFile: "some-file.json",
         });
-        expect(true).toBe(false);
+        expect.unreachable();
       } catch (err: any) {
         expect(err).toBeInstanceOf(InputError);
         expect(err.code).toBe(INPUT_CONFLICT);
@@ -60,7 +60,7 @@ describe("输入模式仲裁与解析器 resolveActionInput", () => {
           input: '{"a":1}',
           inputFile: "some-file.json",
         });
-        expect(true).toBe(false);
+        expect.unreachable();
       } catch (err: any) {
         expect(err).toBeInstanceOf(InputError);
         expect(err.code).toBe(INPUT_CONFLICT);
@@ -73,7 +73,7 @@ describe("输入模式仲裁与解析器 resolveActionInput", () => {
     it("options.input === '' 为显式 Full JSON 模式，抛出 INVALID_JSON / SYNTAX_ERROR 且不退化为 {}", async () => {
       try {
         await resolveActionInput({ input: "" });
-        expect(true).toBe(false);
+        expect.unreachable();
       } catch (err: any) {
         expect(err).toBeInstanceOf(InputError);
         expect(err.code).toBe(INVALID_JSON);
@@ -85,7 +85,7 @@ describe("输入模式仲裁与解析器 resolveActionInput", () => {
       // 纯空白
       try {
         await resolveActionInput({ input: "   \n\t  " });
-        expect(true).toBe(false);
+        expect.unreachable();
       } catch (err: any) {
         expect(err).toBeInstanceOf(InputError);
         expect(err.code).toBe(INVALID_JSON);
@@ -95,7 +95,7 @@ describe("输入模式仲裁与解析器 resolveActionInput", () => {
       // 纯 BOM
       try {
         await resolveActionInput({ input: "\uFEFF" });
-        expect(true).toBe(false);
+        expect.unreachable();
       } catch (err: any) {
         expect(err).toBeInstanceOf(InputError);
         expect(err.code).toBe(INVALID_JSON);
@@ -109,7 +109,7 @@ describe("输入模式仲裁与解析器 resolveActionInput", () => {
 
       try {
         await resolveActionInput({ inputFile: emptyFilePath });
-        expect(true).toBe(false);
+        expect.unreachable();
       } catch (err: any) {
         expect(err).toBeInstanceOf(InputError);
         expect(err.code).toBe(INVALID_JSON);
@@ -122,7 +122,7 @@ describe("输入模式仲裁与解析器 resolveActionInput", () => {
 
       try {
         await resolveActionInput({ inputFile: "-", stdin: emptyStream });
-        expect(true).toBe(false);
+        expect.unreachable();
       } catch (err: any) {
         expect(err).toBeInstanceOf(InputError);
         expect(err.code).toBe(INVALID_JSON);
@@ -140,7 +140,7 @@ describe("输入模式仲裁与解析器 resolveActionInput", () => {
           inputFile: missingPath,
           policy: { sanitizeInputErrors: true },
         });
-        expect(true).toBe(false);
+        expect.unreachable();
       } catch (err: any) {
         expect(err).toBeInstanceOf(InputError);
         expect(err.code).toBe(INPUT_FILE_NOT_FOUND);
@@ -158,7 +158,7 @@ describe("输入模式仲裁与解析器 resolveActionInput", () => {
           input: '{"key":"secret"}',
           policy: { sanitizeInputErrors: true },
         });
-        expect(true).toBe(false);
+        expect.unreachable();
       } catch (err: any) {
         expect(err).toBeInstanceOf(InputError);
         expect(err.code).toBe(INPUT_CONFLICT);
@@ -174,7 +174,7 @@ describe("输入模式仲裁与解析器 resolveActionInput", () => {
           input: '{"password":"very-secret-password-123", syntax_error',
           policy: { sanitizeInputErrors: true },
         });
-        expect(true).toBe(false);
+        expect.unreachable();
       } catch (err: any) {
         expect(err).toBeInstanceOf(InputError);
         expect(err.code).toBe(INVALID_JSON);
@@ -197,7 +197,7 @@ describe("输入模式仲裁与解析器 resolveActionInput", () => {
             sanitizeInputErrors: true,
           },
         });
-        expect(true).toBe(false);
+        expect.unreachable();
       } catch (err: any) {
         expect(err).toBeInstanceOf(InputError);
         expect(err.code).toBe(INPUT_LIMIT_EXCEEDED);

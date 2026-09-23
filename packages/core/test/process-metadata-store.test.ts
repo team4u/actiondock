@@ -118,6 +118,7 @@ describe("ProcessMetadataStore", () => {
         let errorThrown = false;
         try {
           await store.updateProcessState("not-found-id", { state: "lost" });
+          expect.unreachable();
         } catch (err: any) {
           errorThrown = true;
           expect(err.message).toContain("not found");
@@ -477,6 +478,7 @@ describe("ProcessMetadataStore", () => {
       let errThrown = false;
       try {
         await store.getProcess("proc-1");
+        expect.unreachable();
       } catch (err: any) {
         errThrown = true;
         expect(err.message).toContain("closed");
