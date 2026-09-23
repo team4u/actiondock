@@ -11,7 +11,6 @@ import type {
   PackageInfo,
   PackageRuntime,
   PackageRuntimeOptions,
-  PackageRuntimeInternalOptions,
   ActionSpec,
   ActionSummary,
   ListActionsOptions,
@@ -34,7 +33,7 @@ import type { StateEntry } from "../storage/types";
  */
 export interface ActionDockHostOptions {
   /** 显式预注册的包列表（PackageRuntime 实例、PackageRuntimeOptions 配置或包目录物理路径）。Host 统一管理其生命周期，关闭时统一释放。 */
-  packages?: Array<PackageRuntime | PackageRuntimeOptions | PackageRuntimeInternalOptions | string>;
+  packages?: Array<PackageRuntime | PackageRuntimeOptions | string>;
   /** 当前工程根目录绝对物理路径 */
   projectRoot?: string;
   /** 是否自动加载当前工程（默认为 true） */

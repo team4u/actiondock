@@ -12,7 +12,6 @@ import type {
   PackageInfo,
   PackageRuntime,
   PackageRuntimeOptions,
-  PackageRuntimeInternalOptions,
   PlaybookSpec,
   PlaybookSummary,
 } from "../package/types";
@@ -325,7 +324,7 @@ export interface CreateActionDockOptions {
   /** 模式类型（可选） */
   type?: "local";
   /** 单包 PackageRuntime 初始化配置 */
-  runtimeOptions?: PackageRuntimeOptions | PackageRuntimeInternalOptions;
+  runtimeOptions?: PackageRuntimeOptions;
   /** 宿主 Host 初始化配置 */
   hostOptions?: ActionDockHostOptions;
   /** 当前工程根目录绝对路径 */
@@ -333,7 +332,7 @@ export interface CreateActionDockOptions {
   /** 是否自动加载当前工程（默认为 true） */
   autoLoadCurrentProject?: boolean;
   /** 预注册包配置列表（PackageRuntime 实例、PackageRuntimeOptions 配置或包目录绝对物理路径） */
-  packages?: Array<PackageRuntime | PackageRuntimeOptions | PackageRuntimeInternalOptions | string>;
+  packages?: Array<PackageRuntime | PackageRuntimeOptions | string>;
   /** 自定义 ActionDock 家目录 */
   customHome?: string;
   /** 是否采用纯内存运行模式 */

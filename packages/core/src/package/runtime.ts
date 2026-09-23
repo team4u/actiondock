@@ -40,6 +40,7 @@ import type {
   ActionSpec,
   ActionSummary,
   ConfigValueView,
+  HostManagedPackageRuntime,
   ListActionsOptions,
   ListRunsOptions,
   PackageInfo,
@@ -56,7 +57,7 @@ import type {
  * ActionDock 统一包运行时默认实现。
  * 封装并管理单个 Action Package 的执行引擎、静态元数据索引、配置与状态存储生命周期。
  */
-export class DefaultPackageRuntime implements PackageRuntime {
+export class DefaultPackageRuntime implements HostManagedPackageRuntime {
   public readonly identity: PackageIdentity;
   public readonly packageId: string;
   public readonly packageInstanceId: string;
@@ -855,7 +856,7 @@ export class DefaultPackageRuntime implements PackageRuntime {
  * 工厂函数：创建并初始化 PackageRuntime 实例。
  */
 export async function createPackageRuntime(
-  options: PackageRuntimeInternalOptions = {}
+  options: PackageRuntimeOptions = {}
 ): Promise<PackageRuntime> {
   return new DefaultPackageRuntime(options);
 }

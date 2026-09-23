@@ -659,7 +659,7 @@ Execute build and then deploy artifact.
       storage,
       actions: { dummy: dummyAction },
       inMemory: true,
-    });
+    } as any);
 
     const res = await app.runAction("dummy", {});
     expect(res.ok).toBe(true);

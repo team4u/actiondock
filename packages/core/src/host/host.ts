@@ -10,6 +10,7 @@ import type {
 } from "@actiondock/sdk";
 import { DefaultPackageRuntime } from "../package/runtime";
 import type {
+  HostManagedPackageRuntime,
   PackageInfo,
   PackageRuntime,
   PackageRuntimeOptions,
@@ -416,7 +417,9 @@ export class DefaultActionDockHost implements ActionDockHost {
 
   private bindRuntime(runtime: PackageRuntime): void {
     const invoker = this.createActionInvoker(runtime);
-    runtime.setActionInvoker?.(invoker);
+    if ("setActionInvoker" in runtime && typeof (runtime as HostManagedPackageRuntime).setActionInvoker === "function") {
+      (runtime as HostManagedPackageRuntime).setActionInvoker(invoker);
+    }
   }
 
   /**

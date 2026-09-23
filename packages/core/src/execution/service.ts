@@ -134,7 +134,6 @@ export class DefaultExecutionService implements ExecutionService {
       actions: options.actions,
       process: this.process,
       clock: this.clock,
-      moduleLoader: this.moduleLoader,
       actionResolver: this.actionResolver,
       customHome: options.customHome,
       actionInvoker: this.actionInvoker,
@@ -466,12 +465,6 @@ export class DefaultExecutionService implements ExecutionService {
       const resolution = await runnerToUse.resolveAction(parsedRef);
       if (resolution.status === "found") {
         action = resolution.action;
-      } else if (resolution.status === "load_failed") {
-        resolveError = describeActionLoadFailure(resolution.error, {
-          actionId: targetActionId,
-          packageId: resolution.packageId,
-          projectRoot: resolution.projectRoot,
-        });
       } else {
         const targetAction = await this.resolveTargetAction(parsedRef);
         if (targetAction) {

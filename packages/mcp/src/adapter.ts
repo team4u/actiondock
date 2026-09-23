@@ -18,7 +18,6 @@ import { resolvePackageRoot } from "@actiondock/core/registry";
 import type {
   PackageRuntime,
   PackageRuntimeOptions,
-  PackageRuntimeInternalOptions,
   RuntimeStorage,
 } from "@actiondock/core/package";
 import type { ExecutionResult, JsonValue, RunRecord } from "@actiondock/sdk";
@@ -152,7 +151,7 @@ export async function resolveService(
     return { service, ownsService: false };
   }
 
-  const packages: PackageRuntimeInternalOptions[] = [];
+  const packages: PackageRuntimeOptions[] = [];
 
   // 外部注入的 storage 生命周期默认由注入方管理，适配层不伪造 close 语义；
   // 仅当显式声明 ownStorageLifecycle 时才向包配置透传原始实例（随 target.close() 级联关闭）
@@ -172,11 +171,11 @@ export async function resolveService(
         version: ACTIONDOCK_VERSION,
       },
       actions: options.actions,
-      storage: appStorage,
+      ...(appStorage ? { storage: appStorage } : {}),
       inMemory: true,
       customHome: options.customHome,
       configOverrides: options.configOverrides,
-    });
+    } as PackageRuntimeOptions);
   }
 
   if (options.projectRoots && options.projectRoots.length > 0) {
@@ -190,10 +189,10 @@ export async function resolveService(
       }
       packages.push({
         packageRoot: detected,
-        storage: appStorage,
+        ...(appStorage ? { storage: appStorage } : {}),
         customHome: options.customHome,
         configOverrides: options.configOverrides,
-      });
+      } as PackageRuntimeOptions);
     }
   }
 
@@ -205,10 +204,10 @@ export async function resolveService(
       }
       packages.push({
         packageRoot: root,
-        storage: appStorage,
+        ...(appStorage ? { storage: appStorage } : {}),
         customHome: options.customHome,
         configOverrides: options.configOverrides,
-      });
+      } as PackageRuntimeOptions);
     }
   }
 
@@ -246,11 +245,11 @@ export async function resolveService(
     }
     packages.push({
       packageRoot: root,
-      storage: appStorage,
+      ...(appStorage ? { storage: appStorage } : {}),
       customHome: options.customHome,
       configOverrides: options.configOverrides,
       dataDir: options.dataDir,
-    });
+    } as PackageRuntimeOptions);
   }
 
   let platform = options.platform;

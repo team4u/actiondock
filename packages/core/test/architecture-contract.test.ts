@@ -337,7 +337,7 @@ describe("架构核心契约测试：信任边界与局部执行规范", () => {
       },
       actions: [{ id: "ping", action: defineAction({ run: () => "pong" }) }],
       inMemory: true,
-    });
+    } as any);
 
     // 校验 Runtime 与 ExecutionService 共享同一 PackageIdentity 引用
     expect(runtime.identity).toBe(customIdentity);
@@ -591,7 +591,7 @@ describe("架构核心契约测试：信任边界与局部执行规范", () => {
               },
               actions: { test: defineAction({ run: () => "ok" }) },
               storage: mockStorage,
-            },
+            } as any,
             {
               projectConfig: {
                 id: "pkg.conflict",

@@ -17,7 +17,6 @@ import {
   ACTION_NOT_FOUND,
   ACTION_SUBRUN_LIMIT,
   ACTION_TIMEOUT,
-  describeActionLoadFailure,
   INPUT_NOT_JSON,
   OUTPUT_NOT_JSON,
   RUN_PERSISTENCE_FAILED,
@@ -34,7 +33,6 @@ import { validateSchemaOnly } from "../schema/validator";
 import { validateActionInputValue } from "../json/value-validator";
 import type { RuntimeStorage } from "../storage/types";
 import type { Clock } from "./clock";
-import type { ModuleLoader } from "./module-loader";
 import { createActionContext, StderrLogger } from "./context";
 import type { ProcessOwner } from "../process";
 import type { PackageIdentity } from "./identity";
@@ -86,8 +84,6 @@ export interface ActionRunnerOptions {
   process?: ProcessAPI;
   /** 可选的时间与时钟源（默认使用存储内嵌时钟或系统时间） */
   clock?: Clock;
-  /** 可选的源码模块加载器 */
-  moduleLoader?: ModuleLoader;
   /** 仅支持当前包局部 Action 的动态解析委托函数 */
   actionResolver?: LocalActionResolver;
   /** 自定义 ActionDock 用户家目录（用于测试隔离与多租户环境） */
@@ -168,8 +164,7 @@ export interface ExecutionHandle {
  */
 export type ActionResolution =
   | { status: "found"; action: ActionDefinition }
-  | { status: "not_found"; reason?: string }
-  | { status: "load_failed"; error: Error; packageId: string; projectRoot: string };
+  | { status: "not_found"; reason?: string };
 
 /**
  * 单次 start 调用的运行期共享上下文对象（收敛原闭包散落状态）。
@@ -223,7 +218,6 @@ export class ActionRunner {
   private registry: ActionRegistry;
   private clock?: Clock;
   private process?: ProcessAPI;
-  private moduleLoader?: ModuleLoader;
   private customHome?: string;
   private actionResolver?: LocalActionResolver;
   private hostSessionId?: string;
@@ -243,7 +237,6 @@ export class ActionRunner {
     this.configOverrides = options.configOverrides || {};
     this.registry = new ActionRegistry(options.actions);
     this.customHome = options.customHome;
-    this.moduleLoader = options.moduleLoader;
     this.actionInvoker = options.actionInvoker;
     this.actionResolver = options.actionResolver;
 
@@ -295,7 +288,7 @@ export class ActionRunner {
    * 动态解析 Action（支持本地注册表、自定义解析器委托与已链接包目录索引检索）。
    *
    * @param actionOrRef Action 定义对象、引用或标识符
-   * @returns 解析判别联合结果（found | not_found | load_failed）
+   * @returns 解析判别联合结果（found | not_found）
    */
   public async resolveAction(
     actionOrRef: ActionDefinition | ActionRef | string
@@ -739,15 +732,6 @@ export class ActionRunner {
           if (resolution.status === "found") {
             currentAction = resolution.action;
             runCtx.action = currentAction;
-          } else if (resolution.status === "load_failed") {
-            const cause = resolution.error;
-            const error: RuntimeError = describeActionLoadFailure(cause, {
-              actionId: targetActionId,
-              packageId: resolution.packageId,
-              projectRoot: resolution.projectRoot,
-            });
-            finalizer.finalize("failed", undefined, error);
-            return { ok: false, runId, error };
           } else {
             const error: RuntimeError = {
               code: ACTION_NOT_FOUND,

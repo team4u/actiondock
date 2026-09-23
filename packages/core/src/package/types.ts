@@ -398,9 +398,13 @@ export interface PackageRuntime {
   /** 列出当前包在存储中的状态条目（含完整元数据） */
   listStateEntries?(options?: any): Promise<StateEntry[]>;
 
-  /** 设置子任务动作调用委托器 */
-  setActionInvoker?(invoker?: ActionInvoker): void;
-
   /** 优雅关闭应用并收尾清理所有底层资源 */
   close(options?: { graceMs?: number }): Promise<void>;
+}
+
+/**
+ * 宿主托管专用内部运行时契约。
+ */
+export interface HostManagedPackageRuntime extends PackageRuntime {
+  setActionInvoker(invoker?: ActionInvoker): void;
 }

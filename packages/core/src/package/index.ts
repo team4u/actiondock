@@ -14,7 +14,6 @@ export {
 export type {
   PackageRuntime,
   PackageRuntimeOptions,
-  PackageRuntimeInternalOptions,
   PackageInfo,
   ActionSpec,
   ActionSummary,
