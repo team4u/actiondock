@@ -10,7 +10,6 @@ import type {
   ProgressReporter,
   RuntimeError,
 } from "@actiondock/sdk";
-import { ActionResolver } from "../catalog/action-resolver";
 import { parseActionRef } from "../catalog/resolve-action";
 import { loadActions, loadProjectConfig } from "../project/loader";
 import type { ProjectConfig } from "../project/types";

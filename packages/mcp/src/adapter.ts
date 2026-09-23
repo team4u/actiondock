@@ -4,8 +4,10 @@ import { resolve } from "node:path";
 import {
   ACTIONDOCK_VERSION,
   createActionDock,
+  createActionDockHost,
   createNodePlatform,
   findProjectRoot,
+  LocalActionDockService,
 } from "@actiondock/core";
 import { resolvePackageRoot } from "@actiondock/core/registry";
 import type {
@@ -136,12 +138,17 @@ export async function resolveService(
   }
 
   if (options.host) {
-    const service = await createActionDock({ host: options.host });
+    const service = new LocalActionDockService(options.host);
     return { service, ownsService: false };
   }
 
   if (options.runtime) {
-    const service = await createActionDock({ runtime: options.runtime });
+    const host = await createActionDockHost({
+      packages: [options.runtime],
+      autoLoadCurrentProject: false,
+      scanLinkedPackages: false,
+    });
+    const service = new LocalActionDockService(host);
     return { service, ownsService: false };
   }
 

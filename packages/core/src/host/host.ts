@@ -885,6 +885,10 @@ export class DefaultActionDockHost implements ActionDockHost {
 
   private getGlobalStorage(): RuntimeStorage {
     if (!this.globalStorage) {
+      const hasInMemoryPackage = this.options.packages?.some(
+        (item) => !isPackageRuntime(item) && item.inMemory
+      );
+      const inMemory = Boolean(this.options.inMemory || hasInMemoryPackage);
       this.globalStorage =
         this.options.platform?.storage?.createGlobalStorage?.({
           dataDir: this.options.dataDir,
@@ -893,7 +897,7 @@ export class DefaultActionDockHost implements ActionDockHost {
         createGlobalStorage({
           dataDir: this.options.dataDir,
           customHome: this.options.customHome,
-          inMemory: this.options.inMemory,
+          inMemory,
         });
     }
     return this.globalStorage;
@@ -1081,13 +1085,6 @@ export class DefaultActionDockHost implements ActionDockHost {
     if (this.isClosed) return;
     this.isClosed = true;
 
-    try {
-      this.globalStorage?.close();
-    } catch {
-      // 忽略全局存储关闭异常
-    }
-    this.globalStorage = undefined;
-
     const internalRuntimes = Array.from(this.internallyCreatedRuntimes);
     await Promise.all(
       internalRuntimes.map(async (runtime) => {
@@ -1100,6 +1097,13 @@ export class DefaultActionDockHost implements ActionDockHost {
     );
     this.internallyCreatedRuntimes.clear();
     this.runtimes.clear();
+
+    try {
+      this.globalStorage?.close();
+    } catch {
+      // 忽略全局存储关闭异常
+    }
+    this.globalStorage = undefined;
 
     try {
       this.dataDirLock?.release();

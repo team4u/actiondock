@@ -1,4 +1,3 @@
-import { createPackageRuntime } from "../package/runtime";
 import { createActionDockHost } from "../host/host";
 import { LocalActionDockService } from "./local";
 import { RemoteActionDockService } from "./remote";
@@ -17,24 +16,21 @@ import type {
 export async function createActionDock(
   options: CreateActionDockOptions = {}
 ): Promise<ActionDockService> {
-  if (options.host) {
-    return new LocalActionDockService(options.host, { enableManagement: options.enableManagement });
-  }
-  const runtimeToUse = options.runtime || options.packageRuntime;
-  if (runtimeToUse) {
-    const host = await createActionDockHost({
-      packages: [runtimeToUse],
-      autoLoadCurrentProject: false,
-      scanLinkedPackages: false,
-    });
-    return new LocalActionDockService(host, { enableManagement: options.enableManagement });
-  }
   if (options.runtimeOptions) {
-    const runtime = await createPackageRuntime(options.runtimeOptions);
+    const inMemory = options.inMemory ?? options.runtimeOptions.inMemory;
     const host = await createActionDockHost({
-      packages: [runtime],
+      packages: [options.runtimeOptions],
       autoLoadCurrentProject: false,
       scanLinkedPackages: false,
+      inMemory,
+      dataDir: options.dataDir ?? options.runtimeOptions.dataDir,
+      customHome: options.customHome ?? options.runtimeOptions.customHome,
+      platform: options.platform ?? options.runtimeOptions.platform,
+      clock: options.runtimeOptions.clock,
+      process: options.runtimeOptions.process,
+      logger: options.runtimeOptions.logger,
+      recoverOrphans: options.recoverOrphans,
+      enableManagement: options.enableManagement,
     });
     return new LocalActionDockService(host, { enableManagement: options.enableManagement });
   }

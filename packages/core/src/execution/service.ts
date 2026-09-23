@@ -12,7 +12,7 @@ import type {
   RunStatus,
   RuntimeError,
 } from "@actiondock/sdk";
-import { ActionResolver } from "../catalog/action-resolver";
+import { parseActionRef } from "../catalog/resolve-action";
 import { computeDigest } from "../project/digest";
 import type { ProjectConfig } from "../project/types";
 import type { Clock } from "../runtime/clock";
@@ -171,7 +171,7 @@ export class DefaultExecutionService implements ExecutionService {
   }
 
   private async resolveTargetAction(ref: ActionRef | string): Promise<ActionDefinition | undefined> {
-    const parsed = typeof ref === "string" ? ActionResolver.parseRef(ref) : ref;
+    const parsed = typeof ref === "string" ? parseActionRef(ref) : ref;
     const actionId = parsed.actionId;
     const targetPackageId = parsed.packageId || this.packageId;
     if (targetPackageId !== this.packageId) {
@@ -237,7 +237,7 @@ export class DefaultExecutionService implements ExecutionService {
     try {
       let parsedRef: ActionRef;
       try {
-        parsedRef = ActionResolver.parseRef(ref);
+        parsedRef = parseActionRef(ref);
       } catch {
         parsedRef = typeof ref === "object" ? ref : { actionId: ref };
       }

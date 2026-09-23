@@ -1,6 +1,5 @@
 import { describe, expect, it } from "bun:test";
 import { defineAction } from "@actiondock/sdk";
-import { createPackageRuntime } from "../src/package";
 import { createActionDock } from "../src/service";
 import { startActionDockServer } from "../src/server";
 
@@ -10,18 +9,16 @@ describe("startActionDockServer 支持 ActionDockService 绑定与生命周期�
       run: () => ({ pong: true }),
     });
 
-    const app = await createPackageRuntime({
-      projectConfig: {
-        id: "pkg.server-service-app",
-        name: "Server Service App",
-        version: "1.0.0",
-      },
-      actions: [{ id: "ping", action: pingAction }],
-      inMemory: true,
-    });
-
     const service = await createActionDock({
-      runtime: app,
+      runtimeOptions: {
+        projectConfig: {
+          id: "pkg.server-service-app",
+          name: "Server Service App",
+          version: "1.0.0",
+        },
+        actions: [{ id: "ping", action: pingAction }],
+        inMemory: true,
+      },
     });
 
     // 验证 service 正常运行

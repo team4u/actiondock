@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import type { ActionRef } from "@actiondock/sdk";
-import { ActionResolver } from "../catalog/action-resolver";
+import { parseActionRef } from "../catalog/resolve-action";
 import { resolvePackageRoot } from "../registry/registry";
 import { loadManifest } from "./manifest";
 
@@ -75,7 +75,7 @@ export async function ensureDependencyClosure(
         if (typeof rawRef !== "string" || !rawRef.trim()) continue;
         let parsed: ActionRef;
         try {
-          parsed = ActionResolver.parseRef(rawRef);
+          parsed = parseActionRef(rawRef);
         } catch {
           warnings.push(`uses 声明 '${rawRef}' 未在注册表中解析到包`);
           continue;

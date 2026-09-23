@@ -68,6 +68,8 @@ export interface ActionDockHostOptions {
   inMemory?: boolean;
   /** 事件接收器 */
   eventSink?: EventSink;
+  /** 是否开启管理能力（配置与状态管理） */
+  enableManagement?: boolean;
 }
 
 /**

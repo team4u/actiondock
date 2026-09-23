@@ -10,7 +10,6 @@ import type {
   ActionSummary,
   ListActionsOptions,
   PackageInfo,
-  PackageRuntime,
   PackageRuntimeOptions,
   PlaybookSpec,
   PlaybookSummary,
@@ -19,7 +18,7 @@ import type {
   CancelResult,
   ExecutionTicket,
 } from "../execution/types";
-import type { ActionDockHost, ActionDockHostOptions } from "../host/types";
+import type { ActionDockHostOptions } from "../host/types";
 import type { RuntimePlatform } from "../platform/types";
 import type { StateEntry } from "../storage/types";
 import { ActionDockError } from "../errors";
@@ -319,13 +318,7 @@ export interface ActionDockService {
 export interface CreateActionDockOptions {
   /** 模式类型（可选） */
   type?: "local";
-  /** 包装的 ActionDockHost 实例 */
-  host?: ActionDockHost;
-  /** 包装的 PackageRuntime 实例 */
-  runtime?: PackageRuntime;
-  /** 包装的 PackageRuntime 实例别名 */
-  packageRuntime?: PackageRuntime;
-  /** 单包 PackageRuntime 初始化配置（若未提供 host/packageRuntime） */
+  /** 单包 PackageRuntime 初始化配置 */
   runtimeOptions?: PackageRuntimeOptions;
   /** 宿主 Host 初始化配置 */
   hostOptions?: ActionDockHostOptions;
@@ -334,7 +327,7 @@ export interface CreateActionDockOptions {
   /** 是否自动加载当前工程（默认为 true） */
   autoLoadCurrentProject?: boolean;
   /** 预注册包配置列表 */
-  packages?: Array<PackageRuntime | PackageRuntimeOptions>;
+  packages?: Array<PackageRuntimeOptions>;
   /** 自定义 ActionDock 家目录 */
   customHome?: string;
   /** 是否采用纯内存运行模式 */

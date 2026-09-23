@@ -14,6 +14,12 @@ export {
   createActionDock,
   connectActionDock,
 } from "./service/factory";
+export {
+  LocalActionDockService,
+} from "./service/local";
+export {
+  RemoteActionDockService,
+} from "./service/remote";
 export type {
   ActionDockService,
   ActionDockService as ActionDock,

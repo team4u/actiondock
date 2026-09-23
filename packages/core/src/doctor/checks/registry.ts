@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ActionRef } from "@actiondock/sdk";
-import { ActionResolver } from "../../catalog/action-resolver";
+import { parseActionRef } from "../../catalog/resolve-action";
 import { findProjectRoot, loadProjectConfig } from "../../project/loader";
 import { loadManifest } from "../../project/manifest";
 import { getRegistryStatus, listLinkedPackages, resolvePackageRoot } from "../../registry/registry";
@@ -163,7 +163,7 @@ export const checkUsesClosure: DoctorCheck = {
             if (typeof rawRef !== "string" || !rawRef.trim()) continue;
             let parsed: ActionRef;
             try {
-              parsed = ActionResolver.parseRef(rawRef);
+              parsed = parseActionRef(rawRef);
             } catch {
               unresolvableUses.push(`${pkg.id}/${actionId} -> '${rawRef}'`);
               continue;

@@ -13,7 +13,7 @@ import type {
   PlaybookSpec,
   PlaybookSummary,
 } from "../package/types";
-import { ActionResolver } from "../catalog/action-resolver";
+import { parseActionRef } from "../catalog/resolve-action";
 import {
   ActionDockError,
   ACTION_CANCELLED,
@@ -181,7 +181,7 @@ export class RemoteActionDockService implements ActionDockService {
         self.assertNotClosed();
         let parsed: ActionRef;
         try {
-          parsed = ActionResolver.parseRef(ref);
+          parsed = parseActionRef(ref);
         } catch {
           parsed = typeof ref === "object" ? ref : { actionId: ref };
         }
@@ -254,7 +254,7 @@ export class RemoteActionDockService implements ActionDockService {
         self.assertNotClosed();
         let parsed: ActionRef;
         try {
-          parsed = ActionResolver.parseRef(ref);
+          parsed = parseActionRef(ref);
         } catch {
           parsed = typeof ref === "object" ? ref : { actionId: String(ref) };
         }
@@ -289,7 +289,7 @@ export class RemoteActionDockService implements ActionDockService {
         self.assertNotClosed();
         let parsed: ActionRef;
         try {
-          parsed = ActionResolver.parseRef(ref);
+          parsed = parseActionRef(ref);
         } catch {
           parsed = typeof ref === "object" ? ref : { actionId: String(ref) };
         }

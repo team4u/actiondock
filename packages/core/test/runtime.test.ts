@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type ActionDefinition, type ActionRef, defineAction } from "@actiondock/sdk";
-import { ActionResolver } from "../src/catalog/action-resolver";
+import { parseActionRef } from "../src/catalog/resolve-action";
 import { DefaultExecutionService } from "../src/execution/service";
 import { initProject } from "../src/project/init";
 import { linkPackage } from "../src/registry/registry";
@@ -249,7 +249,7 @@ describe("ActionRunner", () => {
     });
 
     runner.setActionInvoker(async (childAction: ActionRef | string, childInput: unknown, context) => {
-      const parsed = ActionResolver.parseRef(childAction);
+      const parsed = parseActionRef(childAction);
       if (parsed.packageId === "ext-pkg") {
         return `Hello, ${(childInput as any).name}!`;
       }
@@ -341,7 +341,7 @@ describe("ActionRunner", () => {
     });
 
     runner.setActionInvoker(async (childAction: ActionRef | string, childInput: unknown, context) => {
-      const parsed = ActionResolver.parseRef(childAction);
+      const parsed = parseActionRef(childAction);
       if (parsed.packageId === "ext-pkg") {
         const targetOwner = {
           tenantId: context.tenantId ?? context.owner?.tenantId ?? "default",
@@ -460,7 +460,7 @@ describe("ActionRunner", () => {
   });
 
   it("resolves scoped package action references (@scope/pkg/action)", () => {
-    const parsed = ActionResolver.parseRef("@team/tools/add");
+    const parsed = parseActionRef("@team/tools/add");
     expect(parsed.packageId).toBe("@team/tools");
     expect(parsed.actionId).toBe("add");
   });
@@ -1002,7 +1002,7 @@ describe("ActionRunner", () => {
     });
 
     pkgARunner.setActionInvoker(async (ref, input) => {
-      const parsed = ActionResolver.parseRef(ref);
+      const parsed = parseActionRef(ref);
       if (parsed.packageId === "pkg-b") {
         const res = await pkgBRunner.execute(parsed.actionId, input);
         if (!res.ok) {

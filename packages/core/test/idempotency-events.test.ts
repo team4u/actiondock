@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { type ActionContext, defineAction } from "@actiondock/sdk";
 import { createPackageRuntime } from "../src/package";
 import { createActionDockHost } from "../src/host";
-import { createActionDock } from "../src/service";
+import { createActionDock, LocalActionDockService } from "../src/service";
 import { startActionDockServer } from "../src/server";
 import { InMemoryEventSink } from "../src/runtime/events";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
@@ -41,7 +41,7 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
         autoLoadCurrentProject: false,
         inMemory: true,
       });
-      const service = await createActionDock({ host });
+      const service = new LocalActionDockService(host);
 
       const reqId = "client-req-001";
       const input = { value: 21 };
@@ -101,7 +101,7 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
         autoLoadCurrentProject: false,
         inMemory: true,
       });
-      const service = await createActionDock({ host });
+      const service = new LocalActionDockService(host);
 
       const reqId = "client-conflict-001";
       const res1 = await service.execution.run("pkg.conflict/echo", { message: "initial" }, { requestId: reqId });
@@ -147,7 +147,7 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
         autoLoadCurrentProject: false,
         inMemory: true,
       });
-      const service = await createActionDock({ host });
+      const service = new LocalActionDockService(host);
 
       const res1 = await service.execution.run("pkg.no-idemp/inc", {});
       const res2 = await service.execution.run("pkg.no-idemp/inc", {});
@@ -415,7 +415,7 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
         autoLoadCurrentProject: false,
         inMemory: true,
       });
-      service = await createActionDock({ host });
+      service = new LocalActionDockService(host);
 
       serverInstance = await startActionDockServer({
         port: 0,

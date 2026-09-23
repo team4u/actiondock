@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { ActionRef } from "@actiondock/sdk";
-import { ActionResolver } from "../../catalog/action-resolver";
+import { parseActionRef } from "../../catalog/resolve-action";
 import { filterByIntent } from "../../filter";
 import { ACTION_NOT_FOUND, ACTION_TIMEOUT, IDEMPOTENCY_CONFLICT, INPUT_VALIDATION_FAILED, PACKAGE_NOT_FOUND } from "../../errors";
 import { InvalidJsonError, readJsonBody, RequestTooLargeError } from "../body";
@@ -106,7 +106,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
   if (actionShowMatch && req.method === "GET") {
     const actionId = decodeURIComponent(actionShowMatch[1]);
     try {
-      const parsed = ActionResolver.parseRef(actionId);
+      const parsed = parseActionRef(actionId);
       if (parsed.packageId && options.packageAllowlist && options.packageAllowlist.length > 0) {
         if (!options.packageAllowlist.includes(parsed.packageId)) {
           return jsonResponse(
@@ -182,7 +182,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
       actionRef = decodeURIComponent(shortRunMatch![1]);
       endpointMode = shortRunMatch![2] as "run" | "start";
       try {
-        const parsed = ActionResolver.parseRef(actionRef);
+        const parsed = parseActionRef(actionRef);
         pkgId = parsed.packageId;
       } catch {}
     }
@@ -275,7 +275,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
 
     let actionRefObj: ActionRef;
     try {
-      actionRefObj = ActionResolver.parseRef(actionRef);
+      actionRefObj = parseActionRef(actionRef);
     } catch {
       actionRefObj = { actionId: actionRef };
     }

@@ -7,6 +7,7 @@ import { SqliteRuntimeStorage } from "../src/storage/sqlite";
 import { createPackageIdentity } from "../src/runtime/identity";
 import { INVOCATION_UNSUPPORTED, UNDECLARED_ACTION_DEPENDENCY } from "../src/errors";
 import { LocalActionDockService } from "../src/service/local";
+import { createActionDock } from "../src/service/factory";
 import type { RunOptions } from "../src/service/types";
 
 describe("架构核心契约测试：信任边界与局部执行规范", () => {
@@ -344,5 +345,127 @@ describe("架构核心契约测试：信任边界与局部执行规范", () => {
     expect(runner.generationId).toBe("gen-2026-v1");
 
     await runtime.close();
+  });
+
+  it("契约 9：createActionDock({ runtimeOptions }) 在 service.close() 时自动关闭内部 Runtime", async () => {
+    const service = await createActionDock({
+      runtimeOptions: {
+        projectConfig: {
+          id: "pkg.lifecycle-contract",
+          actions: { ping: { entry: "" } },
+        },
+        actions: [{ id: "ping", action: defineAction({ run: () => "pong" }) }],
+        inMemory: true,
+      },
+    });
+
+    const host = (service as any).host;
+    const runtime = host.getRuntime("pkg.lifecycle-contract")!;
+    expect(runtime).toBeDefined();
+    expect((runtime as any).isClosed).toBe(false);
+
+    // 服务正常调用
+    const res = await service.execution.run("pkg.lifecycle-contract/ping", {});
+    expect(res.ok).toBe(true);
+
+    // 关闭服务，内部 Runtime 随 Host 级联关闭
+    await service.close();
+    expect((runtime as any).isClosed).toBe(true);
+
+    // 关闭后再次执行被拒绝
+    await expect(service.execution.run("pkg.lifecycle-contract/ping", {})).rejects.toThrow();
+  });
+
+  it("契约 10：inMemory: true 模式下 Host 与 Runtime 共享同一个 GlobalStorage（Host 写入全局配置，Runtime 可立即读到）", async () => {
+    const service = await createActionDock({
+      runtimeOptions: {
+        projectConfig: {
+          id: "pkg.shared-global",
+          actions: {
+            readGlobal: { entry: "" },
+          },
+        },
+        actions: [{
+          id: "readGlobal",
+          action: defineAction({
+            run: async (_input: unknown, ctx: ActionContext) => {
+              return {
+                globalSetting: ctx.config.get("company_name"),
+              };
+            },
+          }),
+        }],
+        inMemory: true,
+      },
+    });
+
+    const host = (service as any).host;
+    const runtime = host.getRuntime("pkg.shared-global")!;
+    expect(runtime).toBeDefined();
+
+    // 校验 Host 与 Runtime 共享同一 GlobalStorage 内存实例
+    expect((host as any).globalStorage).toBeDefined();
+    expect(runtime.globalStorage).toBe((host as any).globalStorage);
+
+    // Host 写入全局配置
+    await service.management!.config.set("global", "company_name", "AcmeCorp");
+
+    // Runtime 可立即通过 globalStorage 读取
+    expect(runtime.globalStorage?.getConfig("company_name")).toBe("AcmeCorp");
+
+    // Action 运行期间通过 ctx.config 读取全局配置
+    const res = await service.execution.run("pkg.shared-global/readGlobal", {});
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect((res.data as any).globalSetting).toBe("AcmeCorp");
+    }
+
+    await service.close();
+  });
+
+  it("契约 11：Host.close() 时共享的全局存储严格在所有内部 Runtime 关闭之后再关闭", async () => {
+    let globalStorageAccessibleDuringRuntimeClose = false;
+    let globalConfigValueDuringRuntimeClose: unknown;
+
+    const host = await createActionDockHost({
+      packages: [
+        {
+          projectConfig: {
+            id: "pkg.close-order-test",
+            actions: { test: { entry: "" } },
+          },
+          actions: [{ id: "test", action: defineAction({ run: () => "ok" }) }],
+          inMemory: true,
+        },
+      ],
+      autoLoadCurrentProject: false,
+      inMemory: true,
+    });
+
+    await host.setConfig("global", "close_phase_key", "still_alive");
+
+    const runtime = host.getRuntime("pkg.close-order-test")!;
+    expect(runtime).toBeDefined();
+
+    // 劫持 runtime.close，验证在 runtime 关闭期间 globalStorage 依然存活可用
+    const originalClose = runtime.close.bind(runtime);
+    runtime.close = async (options?: { graceMs?: number }) => {
+      try {
+        const val = runtime.globalStorage?.getConfig("close_phase_key");
+        globalConfigValueDuringRuntimeClose = val;
+        globalStorageAccessibleDuringRuntimeClose = val === "still_alive";
+      } catch {
+        globalStorageAccessibleDuringRuntimeClose = false;
+      }
+      return originalClose(options);
+    };
+
+    await host.close();
+
+    // 验证 Runtime 关闭时全局存储依然处于存活且可访问状态
+    expect(globalStorageAccessibleDuringRuntimeClose).toBe(true);
+    expect(globalConfigValueDuringRuntimeClose).toBe("still_alive");
+    // Host 关闭完成之后，全局存储已被清理
+    expect((host as any).globalStorage).toBeUndefined();
   });
 });
