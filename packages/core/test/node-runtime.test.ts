@@ -14,15 +14,17 @@ import { createServer, request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  createRequestListener,
-  ExecaProcessExecutor,
-  killProcessGroup,
   NodeHttpServer,
   NodeModuleLoader,
-  NodeProcessExecutor,
   NodeSqliteDriver,
-  unwrapDefaultExport,
 } from "../src";
+import { createRequestListener } from "../src/server/http-server";
+import {
+  ExecaProcessExecutor,
+  killProcessGroup,
+  NodeProcessExecutor,
+} from "../src/process/process-executor";
+import { unwrapDefaultExport } from "../src/node/module-loader";
 
 describe("NodeSqliteDriver 单元测试", () => {
   it("支持基础增删改查，正确处理展开参数与数组参数", () => {
@@ -687,7 +689,7 @@ describe("NodeHttpServer 单元测试", () => {
     let capturedBody = "";
 
     const server = createServer(
-      createRequestListener(async (req) => {
+      createRequestListener(async (req: any) => {
         capturedMethod = req.method;
         const url = new URL(req.url);
         capturedPath = url.pathname;
@@ -832,7 +834,7 @@ describe("NodeHttpServer 单元测试", () => {
     let signalTriggered = false;
 
     const server = createServer(
-      createRequestListener(async (req) => {
+      createRequestListener(async (req: any) => {
         req.signal.addEventListener("abort", () => {
           aborted = true;
         });

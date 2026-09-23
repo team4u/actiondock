@@ -6,12 +6,12 @@ import { join } from "node:path";
 import {
   checkRemoteHealth,
   createActionDockTarget,
-  executeRemoteAction,
-  getInsecureDispatcher,
   initProject,
   startActionDockServer,
   type ActionDockServerInstance,
 } from "../src";
+import { executeRemoteAction } from "../src/profile/client";
+import { getInsecureDispatcher } from "../src/server/dispatcher";
 
 /**
  * 预置合法的自签名测试证书与私钥静态常量（有效期至 2040 年，包含 localhost 与 127.0.0.1 扩展）。

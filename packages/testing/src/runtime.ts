@@ -1,5 +1,4 @@
 import {
-  ActionRunner,
   DefaultExecutionService,
   type ExecutionService,
   type ExecutionStartOptions,
@@ -403,7 +402,7 @@ export interface TestRuntime {
   /** 统一执行服务 */
   executionService: ExecutionService;
   /** 核心执行器引擎（向后兼容保留） */
-  runner: ActionRunner;
+  runner: unknown;
   /** 注册 Action 动作定义 */
   registerAction(id: string, action: ActionDefinition): void;
   registerAction(action: ({ id: string; action?: ActionDefinition } & Partial<ActionDefinition>) | ActionDefinition): void;

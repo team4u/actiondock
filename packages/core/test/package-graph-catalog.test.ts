@@ -2,16 +2,16 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { parseActionRef } from "../src/catalog/resolve-action";
 import {
   DefaultActionCatalog,
-  DefaultPackageGraph,
-  DefaultRegistryStore,
   PackageDiscovery,
   PackageGraphBuilder,
-  parseActionRef,
   resolveAction,
   resolvePlaybook,
 } from "../src";
+import { DefaultPackageGraph } from "../src/catalog/graph";
+import { DefaultRegistryStore } from "../src/registry/store";
 
 describe("PackageDiscovery, PackageGraph, ActionCatalog, and resolveAction", () => {
   let tempHome: string;

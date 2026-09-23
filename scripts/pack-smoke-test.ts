@@ -144,7 +144,7 @@ try {
   console.log("[TEST] Testing module imports and runtime execution via native Node.js...");
   const testScriptContent = `
 import { defineAction } from "@actiondock/sdk";
-import { ActionRunner, ExecutionService, SqliteRuntimeStorage, createStorage, ACTIONDOCK_VERSION, createNodePlatform, NodeSqliteDriver, NodeHttpServer } from "@actiondock/core";
+import { createActionDock, connectActionDock, ExecutionService, SqliteRuntimeStorage, createStorage, ACTIONDOCK_VERSION, createNodePlatform, NodeSqliteDriver, NodeHttpServer } from "@actiondock/core";
 import { createActionDockMcpServer, toMcpResult } from "@actiondock/mcp";
 import { SelectionPlanner, SkillExporter, buildProject, exportSkill } from "@actiondock/builder";
 import { main, createCliProgram, formatError, runStandaloneCli } from "@actiondock/cli";
@@ -182,13 +182,13 @@ if ((await runtime.state.get("count")) !== 42) {
 console.log("[OK] SDK defineAction and createTestRuntime verified");
 
 // Verify Core
-if (typeof ActionRunner !== "function" || typeof ExecutionService !== "function") {
-  throw new Error("Core exports missing ActionRunner or ExecutionService");
+if (typeof createActionDock !== "function" || typeof connectActionDock !== "function" || typeof ExecutionService !== "function") {
+  throw new Error("Core exports missing createActionDock, connectActionDock, or ExecutionService");
 }
 if (ACTIONDOCK_VERSION !== "${currentVersion}") {
   throw new Error("Core ACTIONDOCK_VERSION mismatch: " + ACTIONDOCK_VERSION);
 }
-console.log("[OK] Core ActionRunner, ExecutionService, and version verified");
+console.log("[OK] Core createActionDock, ExecutionService, and version verified");
 
 // Verify MCP
 if (typeof createActionDockMcpServer !== "function" || typeof toMcpResult !== "function") {

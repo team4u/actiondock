@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { WorkerSqliteDriver } from "../src";
+import { WorkerSqliteDriver } from "../src/storage/worker-sqlite-driver";
 
 describe("WorkerSqliteDriver 工作线程驱动测试", () => {
   let tempDir: string;

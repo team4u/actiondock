@@ -5,26 +5,14 @@ import { join, resolve } from "node:path";
 import { createServer } from "node:http";
 import {
   addProfile,
-  cancelRemoteRun,
   checkRemoteHealth,
-  clearRemoteRuns,
-  clearRemoteState,
-  deleteRemoteConfig,
-  deleteRemoteStateKey,
-  executeRemoteAction,
-  fetchRemoteActions,
-  fetchRemoteActionShow,
   fetchRemoteConfig,
   fetchRemoteConfigEnv,
   fetchRemoteDoctor,
   fetchRemoteInfo,
   fetchRemotePlaybookShow,
   fetchRemotePlaybooks,
-  fetchRemoteRun,
-  fetchRemoteRuns,
-  fetchRemoteStateList,
   getProfile,
-  getRemoteStateKey,
   initProject,
   isLoopbackHost,
   listProfiles,
@@ -32,14 +20,28 @@ import {
   removeProfile,
   resolveProfileToken,
   resolveTarget,
-  safeEqual,
-  setRemoteConfig,
-  setRemoteStateKey,
   startActionDockServer,
   useProfile,
   verifyBearerToken,
   ACTIONDOCK_VERSION,
 } from "../src";
+import {
+  cancelRemoteRun,
+  clearRemoteRuns,
+  clearRemoteState,
+  deleteRemoteConfig,
+  deleteRemoteStateKey,
+  executeRemoteAction,
+  fetchRemoteActions,
+  fetchRemoteActionShow,
+  fetchRemoteRun,
+  fetchRemoteRuns,
+  fetchRemoteStateList,
+  getRemoteStateKey,
+  setRemoteConfig,
+  setRemoteStateKey,
+} from "../src/profile/client";
+import { safeEqual } from "../src/server/security";
 
 describe("Profile Management & Remote Server", () => {
   const tempDir = mkdtempSync(join(tmpdir(), "actiondock-profile-test-"));
@@ -543,7 +545,7 @@ Follow these steps to greet a user.
     const actions = await fetchRemoteActions(serverUrl, SECRET_TOKEN);
     expect(Array.isArray(actions)).toBe(true);
     expect(actions.length).toBeGreaterThan(0);
-    expect(actions.some((a) => a.id === "sample.greet")).toBe(true);
+    expect(actions.some((a: any) => a.id === "sample.greet")).toBe(true);
 
     // Filter remote actions by intent regex
     const matched = await fetchRemoteActions(serverUrl, SECRET_TOKEN, "greet");

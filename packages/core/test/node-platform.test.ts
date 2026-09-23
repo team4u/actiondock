@@ -6,7 +6,6 @@ import { decodeText, defineAction } from "@actiondock/sdk";
 import {
   createNodePlatform,
   DefaultExecutionService,
-  ExecaProcessExecutor,
   NodeFileSystem,
   NodeHttpServer,
   NodeModuleLoader,
@@ -14,6 +13,7 @@ import {
   SqliteRuntimeStorage,
   SystemClock,
 } from "../src";
+import { ExecaProcessExecutor } from "../src/process/process-executor";
 
 describe("createNodePlatform 平台工厂测试", () => {
   let tempDir: string;

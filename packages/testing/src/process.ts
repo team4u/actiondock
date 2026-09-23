@@ -13,6 +13,7 @@ import {
   type OperationReceipt,
   type OutputChunk,
   type ProcessAcquireInput,
+  type ProcessAPI,
   type ProcessControlInput,
   type ProcessExecOptions,
   type ProcessInfo,
@@ -473,7 +474,7 @@ export class MockProcessExecutor implements ProcessExecutor {
   /**
    * 绑定指定所有者身份创建上下文进程接口，保持 mock 拦截与生命周期追踪。
    */
-  forOwner(owner: ProcessOwner, runId?: string, signal?: AbortSignal) {
+  forOwner(owner: ProcessOwner, runId?: string, signal?: AbortSignal): ProcessAPI {
     const bound = this.processManager.forOwner(owner, runId, signal);
     return new Proxy(bound, {
       get: (target, prop, receiver) => {

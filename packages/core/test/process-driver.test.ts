@@ -6,8 +6,8 @@ import {
   UNSUPPORTED_CAPABILITY,
   ProcessError,
   NodeProcessDriver,
-  resolveProcessEnv,
 } from "../src";
+import { resolveProcessEnv } from "../src/process/driver";
 
 /** 读取驱动内部实例的 exit 监听器数量，用于验证 terminate 自清理 */
 async function getExitListenerCount(driver: NodeProcessDriver, handle: any): Promise<number> {

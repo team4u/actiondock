@@ -5,11 +5,9 @@ import { basename, join, resolve } from "node:path";
 import { initProject } from "../src/project/init";
 import {
   DefaultActionCatalog,
-  DefaultRegistryStore,
   getRegistryStatus,
   linkPackage,
   listLinkedPackages,
-  loadRegistry,
   PackageDiscovery,
   PackageGraphBuilder,
   pruneRegistry,
@@ -18,6 +16,8 @@ import {
   resolvePlaybook,
   unlinkPackage,
 } from "../src";
+import { DefaultRegistryStore } from "../src/registry/store";
+import { loadRegistry } from "../src/registry/registry";
 
 describe("Registry and Linking Mechanism", () => {
   let fakeHome: string;
