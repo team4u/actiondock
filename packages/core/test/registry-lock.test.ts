@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -52,23 +53,28 @@ describe("Registry Lock 残留判定与心跳续期", () => {
 
   it("陈旧锁含存活 pid 时不被接管并超时报错", async () => {
     const registryPath = makeRegistryPath("alive-pid");
-    // 进程 1（init）在任何存活系统上必然存在
-    seedStaleLock(registryPath, { pid: 1 });
+    // 启动跨平台绝对存活的独立子进程，避免硬编码 pid 1 在 Windows 下不存在（Windows 无 pid 1）
+    const dummy = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
+    try {
+      seedStaleLock(registryPath, { pid: dummy.pid });
 
-    const startedAt = Date.now();
-    await expect(
-      withRegistryLock(registryPath, () => "should-not-run", {
-        acquireTimeoutMs: 120,
-        retryDelayMs: 15,
-      })
-    ).rejects.toThrow("Failed to acquire registry lock");
-    const elapsed = Date.now() - startedAt;
+      const startedAt = Date.now();
+      await expect(
+        withRegistryLock(registryPath, () => "should-not-run", {
+          acquireTimeoutMs: 120,
+          retryDelayMs: 15,
+        })
+      ).rejects.toThrow("Failed to acquire registry lock");
+      const elapsed = Date.now() - startedAt;
 
-    // 必须等待到超时才失败，而非立即抢占
-    expect(elapsed).toBeGreaterThanOrEqual(80);
-    // 原锁目录（含存活 pid 元数据）保持不被破坏
-    expect(existsSync(`${registryPath}.lock`)).toBe(true);
-    expect(existsSync(join(`${registryPath}.lock`, "metadata.json"))).toBe(true);
+      // 必须等待到超时才失败，而非立即抢占
+      expect(elapsed).toBeGreaterThanOrEqual(80);
+      // 原锁目录（含存活 pid 元数据）保持不被破坏
+      expect(existsSync(`${registryPath}.lock`)).toBe(true);
+      expect(existsSync(join(`${registryPath}.lock`, "metadata.json"))).toBe(true);
+    } finally {
+      dummy.kill();
+    }
   });
 
   it("pid 元数据缺失时维持仅看 mtime 的历史行为", async () => {

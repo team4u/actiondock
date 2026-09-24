@@ -561,12 +561,11 @@ describe("ExecaProcessExecutor 单元测试", () => {
       expect(duration).toBeLessThan(1000);
       if (process.platform !== "win32") {
         expect(sigtermCalled).toBe(true);
+        // 等待超过宽限期（60ms）验证：结算时已清理 grace 定时器且子进程已退出，
+        // 不再对已退出（或可能已被操作系统复用 pid）的目标补发 SIGKILL
+        await new Promise((r) => setTimeout(r, 100));
+        expect(sigkillCalled).toBe(false);
       }
-
-      // 等待超过宽限期（60ms）验证：结算时已清理 grace 定时器且子进程已退出，
-      // 不再对已退出（或可能已被操作系统复用 pid）的目标补发 SIGKILL
-      await new Promise((r) => setTimeout(r, 100));
-      expect(sigkillCalled).toBe(false);
     } finally {
       process.kill = origKill;
     }
