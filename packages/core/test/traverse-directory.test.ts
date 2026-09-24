@@ -1,11 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { traverseDirectory } from "../src/utils";
-
-const req = createRequire(import.meta.url);
+import { discoverActionFiles } from "../src/project/loader";
 
 /**
  * traverseDirectory 目录遍历单一事实源契约测试。
@@ -128,11 +126,11 @@ describe("消费方链路一致性契约", () => {
       }).map((e) => e.relPath);
 
       // 链路二：builder 相对文件收集（fs-utils.collectRelativeFiles）
-      const { collectRelativeFiles } = await import("../../builder/dist/fs-utils.js");
+      const { collectRelativeFiles } = await import("../../builder/src/fs-utils");
       const collected = collectRelativeFiles(root).filter((f) => !f.startsWith("node_modules/"));
 
       // 链路三：builder 归档条目收集（archive 内部 collectEntries 经压缩产物验证，剔除目录条目后与文件链路对齐）
-      const { createZipArchiveAsync } = await import("../../builder/dist/archive.js");
+      const { createZipArchiveAsync } = await import("../../builder/src/archive");
       const { readZipEntries } = await import("../../builder/test/archive-reader");
       const zipPath = join(base, "out.zip");
       await createZipArchiveAsync(root, zipPath);
@@ -152,7 +150,7 @@ describe("消费方链路一致性契约", () => {
     }
   });
 
-  it("循环软链接场景下各消费链路结果一致", () => {
+  it("循环软链接场景下各消费链路结果一致", async () => {
     const { base, root } = buildSharedTree(false);
     try {
       // 根目录内制造指向祖先的循环软链接
@@ -162,7 +160,8 @@ describe("消费方链路一致性契约", () => {
         ignore: (relPath) => relPath.startsWith("node_modules/"),
       }).map((e) => e.relPath);
 
-      const collected = collectRelativeFilesViaImport(root);
+      const { collectRelativeFiles } = await import("../../builder/src/fs-utils");
+      const collected = collectRelativeFiles(root).filter((f) => !f.startsWith("node_modules/"));
       expect(primitive.sort()).toEqual(collected.sort());
     } finally {
       rmSync(base, { recursive: true, force: true });
@@ -178,7 +177,6 @@ describe("消费方链路一致性契约", () => {
       }).map((e) => e.relPath);
 
       // 链路二：core loader 的 scanFiles（经 discoverActionFiles 触达）
-      const { discoverActionFiles } = loadProjectLoader();
       const actionFiles = discoverActionFiles(root);
       const loaderRels = actionFiles.map((f) => relative(root, f).replace(/\\/g, "/"));
 
@@ -192,14 +190,3 @@ describe("消费方链路一致性契约", () => {
     }
   });
 });
-
-/** 经预构建产物同步加载 builder fs-utils（包导出面仅限根入口，按 dist 相对路径加载），验证消费链路与原语一致 */
-function collectRelativeFilesViaImport(root: string): string[] {
-  const mod = req("../../builder/dist/fs-utils.js");
-  return mod.collectRelativeFiles(root).filter((f: string) => !f.startsWith("node_modules/"));
-}
-
-/** 经预构建产物同步加载 core project loader */
-function loadProjectLoader(): { discoverActionFiles: (root: string) => string[] } {
-  return req("@actiondock/core/project");
-}
