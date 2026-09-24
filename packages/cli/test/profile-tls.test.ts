@@ -11,7 +11,7 @@ import {
 } from "@actiondock/core/profile";
 import { Command } from "commander";
 import { registerProfileCommands } from "../src/commands/profile";
-import { withService, withRemoteService } from "../src/utils/target";
+import { withService } from "../src/utils/target";
 
 describe("Profile Insecure TLS Integration", () => {
   const tempHome = mkdtempSync(join(tmpdir(), "actiondock-profile-tls-test-"));
@@ -117,7 +117,7 @@ describe("Profile Insecure TLS Integration", () => {
     }
   });
 
-  it("withService 与 withRemoteService 正确将 insecure 与 allowInsecureHttp 透传至 resolveTarget", async () => {
+  it("withService 正确将 insecure 与 allowInsecureHttp 透传至 resolveTarget（含 requireRemote 远端分支）", async () => {
     let capturedResolvedTarget: any;
     let capturedTarget: any;
 
@@ -142,7 +142,7 @@ describe("Profile Insecure TLS Integration", () => {
     let capturedRemoteResolvedTarget: any;
     let capturedRemoteTarget: any;
 
-    await withRemoteService(
+    await withService(
       {
         server: "https://127.0.0.1:5177",
         insecure: true,
@@ -152,12 +152,32 @@ describe("Profile Insecure TLS Integration", () => {
       async (target, resolved) => {
         capturedRemoteResolvedTarget = resolved;
         capturedRemoteTarget = target;
-      }
+      },
+      { requireRemote: true }
     );
 
     expect(capturedRemoteResolvedTarget.insecure).toBe(true);
     expect(capturedRemoteResolvedTarget.allowInsecureHttp).toBe(true);
     expect(capturedRemoteTarget.insecure).toBe(true);
     expect(capturedRemoteTarget.allowInsecureHttp).toBe(true);
+
+    // requireRemote 在 local 分支必须直接拒绝（与 ad runs cancel 的本地拒绝语义一致）
+    await withService(
+      {},
+      { customHome: tempHome } as any,
+      async () => {
+        throw new Error("should not reach here");
+      },
+      { requireRemote: true }
+    ).then(
+      () => {
+        throw new Error("requireRemote should reject local target");
+      },
+      (err: any) => {
+        expect(err.message).toBe(
+          "'ad runs cancel' is only supported for remote execution targets. Use --profile <name> or --server <url>."
+        );
+      }
+    );
   });
 });

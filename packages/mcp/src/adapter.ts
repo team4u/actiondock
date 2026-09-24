@@ -18,9 +18,10 @@ import { resolvePackageRoot } from "@actiondock/core/registry";
 import type {
   PackageRuntime,
   PackageRuntimeOptions,
-  RuntimeStorage,
 } from "@actiondock/core/package";
-import type { ExecutionResult, JsonValue, RunRecord } from "@actiondock/sdk";
+import { createNonClosingStorageView } from "@actiondock/core/package";
+import { parseActionRef } from "@actiondock/core/graph";
+import type { ExecutionResult, JsonValue } from "@actiondock/sdk";
 import { McpServer } from "@modelcontextprotocol/server";
 import { registerTasksExtension } from "./register-tasks-extension";
 import { toMcpSchema } from "./schemas";
@@ -63,17 +64,18 @@ function extractCancelSignal(ctx: ToolCallbackContext | undefined): AbortSignal 
 }
 
 /**
- * 解析 Action 引用字符串为包标识与动作标识。
+ * 解析 Action 引用字符串为包标识与动作标识（容错语义）。
+ *
+ * 委派 core 的 parseActionRef 单一事实源完成解析；非法形态（如尾部斜杠、
+ * 含冒号等）回退为整体短名处理，与适配层既有的注册容错行为保持一致，
+ * 不让目录聚合阶段的脏数据中断服务启动。
  */
 function splitActionRef(ref: string): { packageId?: string; actionId: string } {
-  const idx = ref.lastIndexOf("/");
-  if (idx === -1) {
+  try {
+    return parseActionRef(ref);
+  } catch {
     return { actionId: ref };
   }
-  return {
-    packageId: ref.slice(0, idx),
-    actionId: ref.slice(idx + 1),
-  };
 }
 
 /**
@@ -124,27 +126,6 @@ export function toMcpResult(result: ExecutionResult) {
 
 
 /**
- * 构造外部注入 storage 的非接管视图。
- *
- * 默认（ownStorageLifecycle 为 false）时外部 storage 生命周期由注入方管理，
- * 适配层仅委托读写而不接管关闭：所有成员函数与属性原样转发到原始实例并绑定原 this，
- * 仅 close 收敛为显式声明的无操作边界，确保 service.close() 级联关闭时不会误伤外部实例。
- *
- * @param storage 外部注入的存储实例
- */
-function createExternalStorageView(storage: RuntimeStorage): RuntimeStorage {
-  return new Proxy(storage, {
-    get(target, prop) {
-      if (prop === "close") {
-        return () => undefined;
-      }
-      const value = Reflect.get(target, prop, target);
-      return typeof value === "function" ? (value as (...args: unknown[]) => unknown).bind(target) : value;
-    },
-  });
-}
-
-/**
  * 构造携带结构化错误码的工具名冲突异常。
  *
  * @param toolName 冲突的工具名
@@ -184,28 +165,33 @@ export async function resolveService(
 
   const packages: PackageRuntimeOptions[] = [];
 
-  // 外部注入的 storage 生命周期默认由注入方管理，适配层不伪造 close 语义；
-  // 仅当显式声明 ownStorageLifecycle 时才向包配置透传原始实例（随 target.close() 级联关闭）
-  // 外部注入的 storage 生命周期默认由注入方管理，适配层仅委托读写不接管关闭；
-  // 显式声明 ownStorageLifecycle 时透传原始实例，随 target.close() 级联关闭
+  // 外部注入的 storage 生命周期默认由注入方管理，适配层仅委托读写不接管关闭
+  // （非接管视图复用 core 单一事实源）；显式声明 ownStorageLifecycle 时透传
+  // 原始实例，随 target.close() 级联关闭
   const appStorage = options.storage
     ? options.ownStorageLifecycle
       ? options.storage
-      : createExternalStorageView(options.storage)
+      : createNonClosingStorageView(options.storage)
     : undefined;
+
+  // 多分支共享的包选项基底单点构造：storage 视图、家目录与配置覆写
+  // 在此收敛一次，各 push 分支仅叠加自身特有字段
+  const basePkgOpts = {
+    ...(appStorage ? { storage: appStorage } : {}),
+    customHome: options.customHome,
+    configOverrides: options.configOverrides,
+  };
 
   if (options.actions) {
     packages.push({
+      ...basePkgOpts,
       projectConfig: {
         id: options.packageId || "default",
         name: options.packageId || "default",
         version: ACTIONDOCK_VERSION,
       },
       actions: options.actions,
-      ...(appStorage ? { storage: appStorage } : {}),
       inMemory: true,
-      customHome: options.customHome,
-      configOverrides: options.configOverrides,
     } as PackageRuntimeOptions);
   }
 
@@ -219,25 +205,22 @@ export async function resolveService(
         );
       }
       packages.push({
+        ...basePkgOpts,
         packageRoot: detected,
-        ...(appStorage ? { storage: appStorage } : {}),
-        customHome: options.customHome,
-        configOverrides: options.configOverrides,
       } as PackageRuntimeOptions);
     }
   }
 
-  if (options.packageIds && options.packageIds.length > 0) {
-    for (const pkgId of options.packageIds) {
+  const targetPackageIds = options.packageIds || options.packageAllowlist;
+  if (targetPackageIds && targetPackageIds.length > 0) {
+    for (const pkgId of targetPackageIds) {
       const root = resolvePackageRoot(pkgId, undefined, options.customHome);
       if (!root || !existsSync(root)) {
         throw new Error(`Package '${pkgId}' not found in registry`);
       }
       packages.push({
+        ...basePkgOpts,
         packageRoot: root,
-        ...(appStorage ? { storage: appStorage } : {}),
-        customHome: options.customHome,
-        configOverrides: options.configOverrides,
       } as PackageRuntimeOptions);
     }
   }
@@ -275,10 +258,8 @@ export async function resolveService(
       throw new Error(`Package '${options.packageId}' not found in registry`);
     }
     packages.push({
+      ...basePkgOpts,
       packageRoot: root,
-      ...(appStorage ? { storage: appStorage } : {}),
-      customHome: options.customHome,
-      configOverrides: options.configOverrides,
       dataDir: options.dataDir,
     } as PackageRuntimeOptions);
   }
@@ -338,11 +319,23 @@ export async function createActionDockMcpServer(
 ): Promise<ActionDockMcpServer> {
   const { service } = await resolveService(options);
 
+  const allowedPackageIds =
+    options.packageAllowlist && options.packageAllowlist.length > 0
+      ? options.packageAllowlist
+      : options.packageIds && options.packageIds.length > 0
+      ? options.packageIds
+      : options.packageId
+      ? [options.packageId]
+      : undefined;
+
   let serverName = "actiondock";
   let serverVersion = ACTIONDOCK_VERSION;
 
   try {
-    const packages = await service.info();
+    let packages = await service.info();
+    if (allowedPackageIds && allowedPackageIds.length > 0) {
+      packages = packages.filter((p) => p.id && allowedPackageIds.includes(p.id));
+    }
     if (packages && packages.length === 1) {
       serverName = packages[0].name || packages[0].id || serverName;
       serverVersion = packages[0].version || serverVersion;
@@ -357,20 +350,42 @@ export async function createActionDockMcpServer(
   });
 
   // 任务规范扩展注册集中隔离在独立模块，本层不再直接操作 SDK 内层实例
-  registerTasksExtension(server, service);
+  registerTasksExtension(server, service, allowedPackageIds);
 
   // 工具注册与模式映射：tools/list 纯粹委托 service.discovery.listActions()
-  const rawActions = await service.discovery.listActions();
-  const seenActionKeys = new Map<string, (typeof rawActions)[number]>();
+  let rawActions = await service.discovery.listActions();
+  // 引用解析单点归一：每项仅解析一次，后续各轮（白名单过滤、去重、频次统计、
+  // 工具命名）复用同一结果，避免同一列表对 splitActionRef 的三轮重复调用；
+  // 显式 packageId 与解析所得 packageId 分别留存，各轮按既有优先级消费
+  const parsedRefs = new Map<
+    (typeof rawActions)[number],
+    { explicitPkgId: string; parsedPkgId?: string; baseId: string }
+  >();
   for (const act of rawActions) {
-    let pkgId = act.packageId || "";
-    let actId = act.id;
     if (act.id.includes("/")) {
       const parsed = splitActionRef(act.id);
-      pkgId = pkgId || parsed.packageId || "";
-      actId = parsed.actionId;
+      parsedRefs.set(act, {
+        explicitPkgId: act.packageId || "",
+        parsedPkgId: parsed.packageId,
+        baseId: parsed.actionId,
+      });
+    } else {
+      parsedRefs.set(act, { explicitPkgId: act.packageId || "", baseId: act.id });
     }
-    const key = `${pkgId}:${actId}`;
+  }
+  if (allowedPackageIds && allowedPackageIds.length > 0) {
+    // 白名单轮：显式 packageId 优先，缺失时回退解析所得
+    rawActions = rawActions.filter((act) => {
+      const ref = parsedRefs.get(act)!;
+      const pkgId = ref.explicitPkgId || ref.parsedPkgId || "";
+      return pkgId ? allowedPackageIds.includes(pkgId) : false;
+    });
+  }
+  const seenActionKeys = new Map<string, (typeof rawActions)[number]>();
+  for (const act of rawActions) {
+    const ref = parsedRefs.get(act)!;
+    const pkgId = ref.explicitPkgId || ref.parsedPkgId || "";
+    const key = `${pkgId}:${ref.baseId}`;
     const existing = seenActionKeys.get(key);
     if (existing) {
       // 若已存在的项是全限定名（含 /），而当前项是短名（不含 /），优先保留短名项
@@ -386,33 +401,29 @@ export async function createActionDockMcpServer(
   // 统计 Action 基础 ID 出现频次，用于同名冲突命名空间隔离
   const baseCounts = new Map<string, number>();
   for (const act of actions) {
-    let baseId = act.id;
-    if (act.id.includes("/")) {
-      const parsed = splitActionRef(act.id);
-      baseId = parsed.actionId;
-    }
+    const baseId = parsedRefs.get(act)!.baseId;
     baseCounts.set(baseId, (baseCounts.get(baseId) || 0) + 1);
   }
 
   const registeredToolNames = new Set<string>();
 
   // 多包判定（循环外一次算清）：不同 packageId 去重计数大于 1，
-  // 或任一 id 含斜杠（跨包限定名形态），则工具描述需附全限定 id 锚点
+  // 或任一 id 含斜杠（跨包限定名形态），则工具描述需附全限定 id 锚点；
+  // 本轮与工具命名轮一致：解析所得 packageId 优先，缺失时回退显式声明
   const distinctPackageIds = new Set(
     actions
-      .map((a) => (a.id.includes("/") ? splitActionRef(a.id).packageId || a.packageId : a.packageId))
+      .map((a) => {
+        const ref = parsedRefs.get(a)!;
+        return ref.parsedPkgId || a.packageId;
+      })
       .filter((pkg): pkg is string => Boolean(pkg))
   );
   const isMultiPackage = distinctPackageIds.size > 1 || actions.some((a) => a.id.includes("/"));
 
   for (const action of actions) {
-    let baseId = action.id;
-    let packageId = action.packageId;
-    if (action.id.includes("/")) {
-      const parsed = splitActionRef(action.id);
-      packageId = parsed.packageId || packageId;
-      baseId = parsed.actionId;
-    }
+    const ref = parsedRefs.get(action)!;
+    const baseId = ref.baseId;
+    const packageId = ref.parsedPkgId || action.packageId;
 
     const count = baseCounts.get(baseId) || 1;
     let toolName = baseId;
@@ -499,7 +510,12 @@ export async function createActionDockMcpServer(
 
   // 资源与规程映射：规程映射为只读 MCP Resource 与 Prompt
   try {
-    const playbooks = await service.discovery.listPlaybooks();
+    let playbooks = await service.discovery.listPlaybooks();
+    if (allowedPackageIds && allowedPackageIds.length > 0) {
+      playbooks = playbooks.filter(
+        (pb) => pb.packageId && allowedPackageIds.includes(pb.packageId)
+      );
+    }
     for (const pb of playbooks) {
       server.registerResource(
         pb.id,

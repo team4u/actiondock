@@ -1,14 +1,8 @@
-import {
-  findProjectRoot,
-} from "@actiondock/core";
-import {
-  resolvePackageRoot,
-} from "@actiondock/core/registry";
 import { Command } from "commander";
-import { ExecutionError, notInProjectError, packageNotFoundError } from "../errors";
+import { ExecutionError } from "../errors";
 import { renderResult, writeStdout } from "../renderer";
 import type { CliContext } from "../types";
-import { getEffectiveOptions, parseListOption } from "../utils";
+import { getEffectiveOptions, parseListOption, requirePackageRoot } from "../utils";
 
 export function registerBuildCommand(program: Command, context?: CliContext): void {
   program
@@ -25,18 +19,7 @@ export function registerBuildCommand(program: Command, context?: CliContext): vo
     .action(async (rawOptions, cmd) => {
       const options = getEffectiveOptions(rawOptions, cmd);
 
-      const root = options.package
-        ? resolvePackageRoot(options.package)
-        : findProjectRoot();
-
-      if (!root) {
-        if (options.package) {
-          throw packageNotFoundError(options.package);
-        }
-        throw notInProjectError(
-          "Please specify -P, --package <id> or cd into a project directory."
-        );
-      }
+      const { root } = requirePackageRoot(options.package);
 
       const isMachine = Boolean(options.json);
       if (!isMachine) {

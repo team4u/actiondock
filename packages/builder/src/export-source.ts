@@ -1,11 +1,10 @@
 import {
   copyFileSync,
   existsSync,
-  mkdirSync,
   readFileSync,
   writeFileSync,
 } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { basename, join } from "node:path";
 import { generateSourceSkillMd } from "./skill";
 import { BuilderError } from "./errors";
 import { getInternalDependencyVersion } from "./fs-utils";
@@ -14,7 +13,7 @@ import {
   sanitizeExportDependencies,
   serializePlanManifest,
 } from "./manifest";
-import { isOwnAction } from "./types";
+import { copyPlanEntries } from "./stage-sources";
 import type { SelectionPlan, SkillExporterOptions } from "./types";
 import {
   buildConfigForTemplates,
@@ -42,10 +41,6 @@ export function stageSourceSkill(
 ): string | undefined {
   const actionsDir = plan.actionsDir || "actions";
   const playbooksDir = plan.playbooksDir || "playbooks";
-  const playbooksDestDir = join(skillDir, playbooksDir);
-  if (plan.playbooks.length > 0) {
-    mkdirSync(playbooksDestDir, { recursive: true });
-  }
 
   const configForTemplates = buildConfigForTemplates(plan, actionsDir, playbooksDir);
 
@@ -85,37 +80,10 @@ export function stageSourceSkill(
     copyFileSync(tsconfigPath, join(skillDir, "tsconfig.json"));
   }
 
-  // 拷贝 Action 源码文件，保留相对路径（仅拷贝自有 Action，跨包依赖不物化进消费包目录）
-  for (const act of plan.actions) {
-    if (!isOwnAction(act)) {
-      continue;
-    }
-    if (existsSync(act.resolvedPath)) {
-      const destFile = join(skillDir, act.entry);
-      mkdirSync(dirname(destFile), { recursive: true });
-      copyFileSync(act.resolvedPath, destFile);
-    }
-  }
-
-  // 拷贝静态资产与代码模块文件，保留相对路径
-  for (const dep of plan.dependencies.modulesAndAssets) {
-    if (
-      (dep.type === "asset" || dep.type === "module" || dep.type === "file") &&
-      existsSync(dep.resolvedPath)
-    ) {
-      const destAsset = join(skillDir, dep.path);
-      mkdirSync(dirname(destAsset), { recursive: true });
-      copyFileSync(dep.resolvedPath, destAsset);
-    }
-  }
-
-  // 拷贝 Playbook 规程文件
-  for (const pb of plan.playbooks) {
-    if (existsSync(pb.filePath)) {
-      const destPb = join(playbooksDestDir, basename(pb.filePath));
-      copyFileSync(pb.filePath, destPb);
-    }
-  }
+  // 拷贝 Action 源码、静态资产与 Playbook 规程文件（共享拷贝内核，行为与 stage-sources 单一事实源对齐）
+  copyPlanEntries(skillDir, plan, {
+    playbookRelPath: (pb) => join(playbooksDir, basename(pb.filePath)),
+  });
 
   return usedExistingSkillMd;
 }

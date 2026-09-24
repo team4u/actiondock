@@ -1,5 +1,4 @@
 import {
-  parseDuration,
   validateActionInputValue,
   mapInputValidationFailure,
 } from "@actiondock/core/project";
@@ -22,6 +21,7 @@ import {
   getEffectiveOptions,
   resolveActionInput,
   resolveLocalPackageRoot,
+  resolveTimeoutMs,
   withService,
 } from "../utils";
 
@@ -157,14 +157,7 @@ export async function executeAction(
     throw mapInputValidationFailure("cli-pre-target", check);
   }
 
-  let timeoutMs: number | undefined;
-  if (options.timeout) {
-    try {
-      timeoutMs = parseDuration(options.timeout);
-    } catch (err: any) {
-      throw new ArgumentError(`Invalid timeout format: ${err.message}`);
-    }
-  }
+  const timeoutMs = resolveTimeoutMs(options.timeout);
 
   const configOverrides: Record<string, JsonValue> = {};
   if (options.config) {
@@ -268,15 +261,14 @@ export async function executeAction(
       { localRoot: targetPackageRoot || undefined, scanLinkedPackages: true, ownDataDir: true }
     );
   } catch (err: any) {
+    // sigint 取消源、中断链路特征错误码或 SigintError 本身，均统一归并为 SigintError
+    // 原 if 中额外的「cancellationSource 为 sigint 且 AbortError/aborted/ACTION_CANCELLED」
+    // 子句被首项 cancellationSource === "sigint" 完全蕴含，等价化简后移除
     const isSigint =
       effectiveControl?.cancellationSource === "sigint" ||
       err?.code === "SIGINT_INTERRUPTED" ||
       err instanceof SigintError;
-    if (
-      isSigint ||
-      (effectiveControl?.cancellationSource === "sigint" &&
-        (err?.name === "AbortError" || effectiveSignal?.aborted || err?.code === ACTION_CANCELLED))
-    ) {
+    if (isSigint) {
       throw new SigintError();
     }
     throw err;

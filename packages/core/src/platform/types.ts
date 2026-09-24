@@ -84,16 +84,6 @@ export interface StorageFactory {
 }
 
 /**
- * 跨运行时 HTTP 服务启动工厂契约。
- */
-export interface HttpServerFactory {
-  /**
-   * 启动 HTTP 服务端实例。
-   */
-  launchHttpServer(options: any): Promise<any>;
-}
-
-/**
  * 运行时底层环境核心标准契约。
  * 提供统一的运行时契约，屏蔽宿主平台与测试沙箱环境的实现差异。
  */

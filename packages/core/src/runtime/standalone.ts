@@ -108,6 +108,49 @@ export class StandaloneDispatcher {
     }
   }
 
+  /**
+   * 统一错误输出辅助方法。
+   *
+   * JSON 模式向 stdout 输出两空格缩进的标准错误结构；
+   * 纯文本模式向 stderr 输出单行错误消息（默认携带 Error: 前缀）。
+   * 消息文本与退出码由调用方逐字给定，输出字节严格保持不变。
+   *
+   * @param isJson 是否处于 JSON 输出模式
+   * @param code 错误码
+   * @param message JSON 模式错误消息（兼作纯文本默认消息主体）
+   * @param exitCode 调用方应返回的退出状态码
+   * @param options 可选项：textMessage 覆盖纯文本消息全文；details 为 JSON 模式可选结构化详情
+   * @returns 透传 exitCode 供调用方直接返回
+   */
+  private emitError(
+    isJson: boolean,
+    code: string,
+    message: string,
+    exitCode: number,
+    options?: { textMessage?: string; details?: unknown }
+  ): number {
+    if (isJson) {
+      const details = options?.details;
+      this.writeOut(
+        JSON.stringify(
+          {
+            ok: false,
+            error: {
+              code,
+              message,
+              ...(details !== undefined ? { details } : {}),
+            },
+          },
+          null,
+          2
+        )
+      );
+    } else {
+      this.writeErr(options?.textMessage ?? `Error: ${message}`);
+    }
+    return exitCode;
+  }
+
   private async createLocalService(
     dataDir?: string,
     configOverrides: Record<string, unknown> = {}
@@ -194,28 +237,15 @@ export class StandaloneDispatcher {
 
     // 2. 独立入口拒绝异步启动语义
     if (controlArgs.includes("--async")) {
-      const isJson = controlArgs.includes("--json");
-      if (isJson) {
-        this.writeOut(
-          JSON.stringify(
-            {
-              ok: false,
-              error: {
-                code: STANDALONE_ASYNC_UNSUPPORTED,
-                message:
-                  "Async execution is not supported in standalone single-execution binaries. Use 'ad serve' or remote target.",
-              },
-            },
-            null,
-            2
-          )
-        );
-      } else {
-        this.writeErr(
-          `Error [${STANDALONE_ASYNC_UNSUPPORTED}]: Async execution is not supported in standalone single-execution binaries.`
-        );
-      }
-      return ExitCode.FAILURE;
+      return this.emitError(
+        controlArgs.includes("--json"),
+        STANDALONE_ASYNC_UNSUPPORTED,
+        "Async execution is not supported in standalone single-execution binaries. Use 'ad serve' or remote target.",
+        ExitCode.FAILURE,
+        {
+          textMessage: `Error [${STANDALONE_ASYNC_UNSUPPORTED}]: Async execution is not supported in standalone single-execution binaries.`,
+        }
+      );
     }
 
     // 3. 版本与帮助快速处理（无需初始化 Host / Storage）
@@ -342,48 +372,14 @@ export class StandaloneDispatcher {
     const isJson = subArgs.includes("--json");
 
     if (!id) {
-      if (isJson) {
-        this.writeOut(
-          JSON.stringify(
-            {
-              ok: false,
-              error: {
-                code: "INVALID_ARGUMENT",
-                message: "Action ID is required for describe",
-              },
-            },
-            null,
-            2
-          )
-        );
-      } else {
-        this.writeErr("Error: Action ID is required for describe");
-      }
-      return ExitCode.INVALID_ARGUMENT;
+      return this.emitError(isJson, "INVALID_ARGUMENT", "Action ID is required for describe", ExitCode.INVALID_ARGUMENT);
     }
 
     let action: ActionSpec | undefined;
     try {
       action = await service.discovery.describeAction(id);
     } catch {
-      if (isJson) {
-        this.writeOut(
-          JSON.stringify(
-            {
-              ok: false,
-              error: {
-                code: "INVALID_ARGUMENT",
-                message: `Action '${id}' not found`,
-              },
-            },
-            null,
-            2
-          )
-        );
-      } else {
-        this.writeErr(`Error: Action '${id}' not found`);
-      }
-      return ExitCode.INVALID_ARGUMENT;
+      return this.emitError(isJson, "INVALID_ARGUMENT", `Action '${id}' not found`, ExitCode.INVALID_ARGUMENT);
     }
 
     const payload = buildActionDescribePayload(action, {
@@ -407,24 +403,13 @@ export class StandaloneDispatcher {
     const isJson = subArgs.includes("--json");
     const id = subArgs.find((a) => !a.startsWith("-"));
     if (!id) {
-      if (isJson) {
-        this.writeOut(
-          JSON.stringify(
-            {
-              ok: false,
-              error: {
-                code: "INVALID_ARGUMENT",
-                message: "Error: Action ID is required for run",
-              },
-            },
-            null,
-            2
-          )
-        );
-      } else {
-        this.writeErr("Error: Action ID is required for run");
-      }
-      return ExitCode.INVALID_ARGUMENT;
+      return this.emitError(
+        isJson,
+        "INVALID_ARGUMENT",
+        "Error: Action ID is required for run",
+        ExitCode.INVALID_ARGUMENT,
+        { textMessage: "Error: Action ID is required for run" }
+      );
     }
 
     let inputStr: string | undefined;
@@ -437,47 +422,23 @@ export class StandaloneDispatcher {
         try {
           timeoutMs = parseDuration(subArgs[++i]);
         } catch (err: any) {
-          if (isJson) {
-            this.writeOut(
-              JSON.stringify(
-                {
-                  ok: false,
-                  error: {
-                    code: "INVALID_ARGUMENT",
-                    message: `Invalid timeout format: ${err?.message || err}`,
-                  },
-                },
-                null,
-                2
-              )
-            );
-          } else {
-            this.writeErr(`Error: Invalid timeout format: ${err?.message || err}`);
-          }
-          return ExitCode.INVALID_ARGUMENT;
+          return this.emitError(
+            isJson,
+            "INVALID_ARGUMENT",
+            `Invalid timeout format: ${err?.message || err}`,
+            ExitCode.INVALID_ARGUMENT
+          );
         }
       } else if (arg.startsWith("--timeout=")) {
         try {
           timeoutMs = parseDuration(arg.slice(10));
         } catch (err: any) {
-          if (isJson) {
-            this.writeOut(
-              JSON.stringify(
-                {
-                  ok: false,
-                  error: {
-                    code: "INVALID_ARGUMENT",
-                    message: `Invalid timeout format: ${err?.message || err}`,
-                  },
-                },
-                null,
-                2
-              )
-            );
-          } else {
-            this.writeErr(`Error: Invalid timeout format: ${err?.message || err}`);
-          }
-          return ExitCode.INVALID_ARGUMENT;
+          return this.emitError(
+            isJson,
+            "INVALID_ARGUMENT",
+            `Invalid timeout format: ${err?.message || err}`,
+            ExitCode.INVALID_ARGUMENT
+          );
         }
       } else if (arg === "--input" && i + 1 < subArgs.length) {
         inputStr = subArgs[++i];
@@ -503,25 +464,9 @@ export class StandaloneDispatcher {
         throw mapInputValidationFailure("cli-pre-target", check);
       }
     } catch (err: any) {
-      if (isJson) {
-        this.writeOut(
-          JSON.stringify(
-            {
-              ok: false,
-              error: {
-                code: err?.code || "INVALID_ARGUMENT",
-                message: err?.message || String(err),
-                ...(err?.details !== undefined ? { details: err.details } : {}),
-              },
-            },
-            null,
-            2
-          )
-        );
-      } else {
-        this.writeErr(`Error: ${err?.message || String(err)}`);
-      }
-      return ExitCode.INVALID_ARGUMENT;
+      return this.emitError(isJson, err?.code || "INVALID_ARGUMENT", err?.message || String(err), ExitCode.INVALID_ARGUMENT, {
+        details: err?.details,
+      });
     }
 
     const result = await service.execution.run(id, input, {

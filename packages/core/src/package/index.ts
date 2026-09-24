@@ -11,6 +11,7 @@ export {
   createPackageRuntime,
   DefaultPackageRuntime,
 } from "./runtime";
+export { createNonClosingStorageView } from "./storage-view";
 export { findExecutable } from "../utils";
 export type {
   PackageRuntime,
@@ -44,6 +45,7 @@ export {
   type ProcessOwner,
 } from "../process/process-manager";
 export type { ProcessExecutor } from "../runtime/process";
+export { NodeProcessExecutor } from "../process/process-executor";
 export type {
   ProcessDriver,
   ProcessDriverCallbacks,

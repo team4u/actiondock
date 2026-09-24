@@ -3,18 +3,11 @@ import {
   GENERATED_TYPES_OUTDATED_CODE,
   loadActions,
 } from "@actiondock/core/project";
-import {
-  findProjectRoot,
-  loadProjectConfig,
-} from "@actiondock/core";
-import {
-  resolvePackageRoot,
-} from "@actiondock/core/registry";
 import { Command } from "commander";
-import { ArgumentError, ExecutionError, notInProjectError, packageNotFoundError } from "../errors";
+import { ArgumentError, ExecutionError } from "../errors";
 import { renderActionValidation, renderResult } from "../renderer";
 import type { CliContext } from "../types";
-import { getEffectiveOptions } from "../utils";
+import { getEffectiveOptions, requirePackageRoot } from "../utils";
 
 /**
  * 挂载 validate 子命令至指定 Commander 节点。
@@ -31,24 +24,8 @@ export function attachValidateCommand(parent: Command, context?: CliContext): Co
     .option("--data-dir <path>", "Custom database storage directory")
     .action(async (id: string | undefined, rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
-      let root: string | null = null;
+      const { root, projConfig: config } = requirePackageRoot(options.package, { loadConfig: true });
 
-      if (options.package) {
-        root = resolvePackageRoot(options.package);
-        if (!root) {
-          throw packageNotFoundError(options.package);
-        }
-      } else {
-        root = findProjectRoot();
-      }
-
-      if (!root) {
-        throw notInProjectError(
-          "Please specify -P, --package <id> or cd into a project directory."
-        );
-      }
-
-      const config = loadProjectConfig(root);
       const actions = await loadActions(root, config.actionsDir);
 
       let toValidate: Array<{ id: string; act: any; spec?: any }> = [];

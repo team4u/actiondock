@@ -97,6 +97,32 @@ export async function listVisiblePlaybooks(
 }
 
 /**
+ * 基于 Runtime 列表构造无依赖关系的兜底包图。
+ *
+ * 无任何可见包图可用时的降级事实源：每个包独立成节点，无直接与传递依赖边。
+ */
+function buildFallbackGraph(runtimes: readonly PackageRuntime[]): PackageGraph {
+  return new DefaultPackageGraph(
+    new Map(
+      runtimes.map((a) => [
+        a.packageId,
+        {
+          identity: a.identity,
+          packageId: a.packageId,
+          root: a.packageRoot || "",
+          manifest: a.projectConfig,
+          manifestDigest: "",
+          version: a.projectConfig?.version || "0.1.0",
+          npmPackage: a.packageId,
+          directDependencies: new Set<string>(),
+          transitiveDependencies: new Set<string>(),
+        },
+      ])
+    )
+  );
+}
+
+/**
  * 静态查询指定 Playbook 规范：基于 resolvePlaybook 统一纯领域解析。
  */
 export async function describeVisiblePlaybook(
@@ -104,26 +130,7 @@ export async function describeVisiblePlaybook(
   id: string,
   visibility: { hostPublicPackageIds: ReadonlySet<string>; graph?: PackageGraph }
 ): Promise<PlaybookSpec> {
-  const graph: PackageGraph =
-    visibility.graph ||
-    new DefaultPackageGraph(
-      new Map(
-        runtimes.map((a) => [
-          a.packageId,
-          {
-            identity: a.identity,
-            packageId: a.packageId,
-            root: a.packageRoot || "",
-            manifest: a.projectConfig,
-            manifestDigest: "",
-            version: a.projectConfig?.version || "0.1.0",
-            npmPackage: a.packageId,
-            directDependencies: new Set<string>(),
-            transitiveDependencies: new Set<string>(),
-          },
-        ])
-      )
-    );
+  const graph: PackageGraph = visibility.graph || buildFallbackGraph(runtimes);
 
   const resolved = resolvePlaybook(id, { graph });
   const isPublic = visibility.hostPublicPackageIds.has(resolved.packageId);
@@ -166,14 +173,6 @@ export function buildRuntimeError(
 }
 
 /**
- * 构造短标识符歧义错误消息（供静态查询与启动执行链路复用统一文案）。
- */
-export function ambiguousActionMessage(actionId: string, candidates: readonly string[]): string {
-  const joined = candidates.map((c) => `${c}/${actionId}`).join(", ");
-  return `Action '${actionId}' is ambiguous and provided by multiple packages: ${joined}. Please specify '<package-id>/${actionId}'.`;
-}
-
-/**
  * 静态查询指定 Action 规范：基于 resolveAction 统一纯领域解析。
  */
 export async function describeActionAcrossRuntimes(
@@ -189,26 +188,7 @@ export async function describeActionAcrossRuntimes(
     throw new Error(packageNotFoundMessage(parsed.packageId, failedLinkedPackages));
   }
   const effectiveGraph =
-    graph ||
-    visibility.graph ||
-    new DefaultPackageGraph(
-      new Map(
-        runtimes.map((a) => [
-          a.packageId,
-          {
-            identity: a.identity,
-            packageId: a.packageId,
-            root: a.packageRoot || "",
-            manifest: a.projectConfig,
-            manifestDigest: "",
-            version: a.projectConfig?.version || "0.1.0",
-            npmPackage: a.packageId,
-            directDependencies: new Set<string>(),
-            transitiveDependencies: new Set<string>(),
-          },
-        ])
-      )
-    );
+    graph || visibility.graph || buildFallbackGraph(runtimes);
   const effectiveCatalog =
     catalog ||
     new DefaultActionCatalog(effectiveGraph, (pkgId) =>

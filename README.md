@@ -98,7 +98,7 @@ No manual JSON Schema required. Five core commands guide you from scaffolding to
   # Launch as a standard MCP protocol server (for Cursor, Windsurf, or Claude Desktop)
   ad mcp
 
-  # Launch as a production RESTful HTTP microservice
+  # Launch as a production RESTful HTTP/HTTPS microservice (supports -P/--package allowlist, --https zero-config TLS)
   ad serve
 
   # Export as a self-contained portable Agent Skill bundle

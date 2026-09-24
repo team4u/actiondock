@@ -410,3 +410,90 @@ describe("MCP tasks extension isolation", () => {
     await server.close();
   });
 });
+
+describe("MCP adapter packageAllowlist filtering semantics", () => {
+  it("filters tools, playbooks, and tasks according to packageAllowlist", async () => {
+    const fakeService: any = {
+      info: async () => [
+        { id: "pkg-a", name: "Package A", version: "1.0.0" },
+        { id: "pkg-b", name: "Package B", version: "2.0.0" },
+      ],
+      discovery: {
+        listActions: async () => [
+          { id: "action-a", packageId: "pkg-a", description: "Action A" },
+          { id: "action-b", packageId: "pkg-b", description: "Action B" },
+        ],
+        listPlaybooks: async () => [
+          { id: "pb-a", packageId: "pkg-a", description: "Playbook A" },
+          { id: "pb-b", packageId: "pkg-b", description: "Playbook B" },
+        ],
+        describeAction: async () => ({}),
+        describePlaybook: async () => ({ content: "content" }),
+      },
+      execution: {
+        run: async () => ({ ok: true, data: {} }),
+        start: async () => ({ runId: "r1" }),
+      },
+      runs: {
+        get: async (id: string) => {
+          if (id === "run-b") return { id: "run-b", packageId: "pkg-b" };
+          if (id === "run-none") return { id: "run-none" };
+          return { id: "run-a", packageId: "pkg-a" };
+        },
+        list: async () => [
+          { id: "run-a", packageId: "pkg-a", startedAt: new Date().toISOString() },
+          { id: "run-b", packageId: "pkg-b", startedAt: new Date().toISOString() },
+          { id: "run-none", startedAt: new Date().toISOString() },
+        ],
+        cancel: async () => ({ outcome: "requested" }),
+      },
+      close: async () => {},
+    };
+
+    const server = await createActionDockMcpServer({
+      service: fakeService,
+      packageAllowlist: ["pkg-a"],
+    });
+
+    // 1. Verify tools
+    const toolsHandler = (server.server as any)._requestHandlers.get("tools/list");
+    const toolsResult = await toolsHandler({ method: "tools/list", params: {} });
+    const toolNames = toolsResult.tools.map((t: any) => t.name);
+    expect(toolNames).toContain("action-a");
+    expect(toolNames).not.toContain("action-b");
+
+    // 2. Verify tasks/list filters out both pkg-b and unassigned runs
+    const tasksListHandler = (server.server as any)._requestHandlers.get("tasks/list");
+    const tasksResult = await tasksListHandler({ method: "tasks/list", params: {} });
+    const taskIds = tasksResult.tasks.map((t: any) => t.taskId);
+    expect(taskIds).toContain("run-a");
+    expect(taskIds).not.toContain("run-b");
+    expect(taskIds).not.toContain("run-none");
+
+    // 3. Verify tasks/get for forbidden package and unassigned package
+    const tasksGetHandler = (server.server as any)._requestHandlers.get("tasks/get");
+    await expect(tasksGetHandler({ method: "tasks/get", params: { taskId: "run-b" } })).rejects.toThrow();
+    await expect(tasksGetHandler({ method: "tasks/get", params: { taskId: "run-none" } })).rejects.toThrow();
+
+    // 4. Verify tasks/cancel for forbidden package and unassigned package
+    const tasksCancelHandler = (server.server as any)._requestHandlers.get("tasks/cancel");
+    await expect(tasksCancelHandler({ method: "tasks/cancel", params: { taskId: "run-b" } })).rejects.toThrow();
+    await expect(tasksCancelHandler({ method: "tasks/cancel", params: { taskId: "run-none" } })).rejects.toThrow();
+
+    // 5. Verify resources and prompts
+    const resourcesHandler = (server.server as any)._requestHandlers.get("resources/list");
+    const resourcesResult = await resourcesHandler({ method: "resources/list", params: {} });
+    const resourceUris = resourcesResult.resources.map((r: any) => r.uri);
+    expect(resourceUris.some((u: string) => u.includes("pb-a"))).toBe(true);
+    expect(resourceUris.some((u: string) => u.includes("pb-b"))).toBe(false);
+
+    const promptsHandler = (server.server as any)._requestHandlers.get("prompts/list");
+    const promptsResult = await promptsHandler({ method: "prompts/list", params: {} });
+    const promptNames = promptsResult.prompts.map((p: any) => p.name);
+    expect(promptNames).toContain("pb-a");
+    expect(promptNames).not.toContain("pb-b");
+
+    await server.close();
+  });
+});
+

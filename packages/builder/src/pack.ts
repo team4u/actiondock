@@ -292,7 +292,7 @@ async function compileTypeScript(
  * 拷贝内核统一复用 stage-sources 的 copyPlanEntries，仅通过谓词分化编译排除差异。
  */
 function stageSources(root: string, stagingPkgDir: string, plan: SelectionPlan): void {
-  copyPlanEntries(root, stagingPkgDir, plan, {
+  copyPlanEntries(stagingPkgDir, plan, {
     // TypeScript 入口已由编译阶段生成 .js 与 .d.ts，不重复物化源文件
     copyAction: (act) => !isTypeScriptSource(act.entry),
     copyModule: (dep) => !isTypeScriptSource(dep.path),

@@ -1,3 +1,5 @@
+import { readStdinBounded, stripBom } from "@actiondock/core/project";
+
 export {
   resolveActionInput,
   type ResolveActionInputOptions,
@@ -8,25 +10,16 @@ export {
   formatActionDetail,
 } from "@actiondock/core/project";
 
-/**
- * 剔除 UTF-8 字符串头部的 BOM 标记字符。
- */
-export function stripBom(content: string): string {
-  if (typeof content === "string" && content.charCodeAt(0) === 0xfeff) {
-    return content.slice(1);
-  }
-  return content;
-}
+// BOM 剥离单一事实源转引：core 已提供逐字一致的实现，此处仅保留导出面兼容。
+export { stripBom };
 
 /**
  * 从标准输入流中完整读取全部数据并转换为 UTF-8 字符串。
+ * 底层委托 core 的有界读取实现：保持宽松 UTF-8 解码语义与 BOM 剥离行为，
+ * 同时获得默认 10MB 输入上限保护，超限时抛出结构化 INPUT_LIMIT_EXCEEDED 异常。
  */
 export async function readStdin(
   stream: NodeJS.ReadableStream = process.stdin
 ): Promise<string> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of stream) {
-    chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
-  }
-  return stripBom(Buffer.concat(chunks).toString("utf-8"));
+  return stripBom(await readStdinBounded(stream, { strictUtf8: false }));
 }

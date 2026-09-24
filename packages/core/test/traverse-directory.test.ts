@@ -132,10 +132,10 @@ describe("消费方链路一致性契约", () => {
       const collected = collectRelativeFiles(root).filter((f) => !f.startsWith("node_modules/"));
 
       // 链路三：builder 归档条目收集（archive 内部 collectEntries 经压缩产物验证，剔除目录条目后与文件链路对齐）
-      const { createZipArchive } = await import("../../builder/dist/archive.js");
+      const { createZipArchiveAsync } = await import("../../builder/dist/archive.js");
       const { readZipEntries } = await import("../../builder/test/archive-reader");
       const zipPath = join(base, "out.zip");
-      createZipArchive(root, zipPath);
+      await createZipArchiveAsync(root, zipPath);
       const zipContents = readZipEntries(zipPath);
       const archived = Array.from(zipContents.entries())
         .map(([name, content]) => ({ rel: name.split("/").slice(1).join("/"), isDir: content === null }))

@@ -80,7 +80,6 @@ ActionDock 2.x 全面贯彻单一事实源设计，彻底杜绝各模块私自�
 `@actiondock/core` 深度集成 Node.js 24 原生能力，无需编译外部二进制扩展：
 
 - 原生存储驱动 `NodeSqliteDriver`：基于 Node.js 原生 `node:sqlite`（`DatabaseSync`）构建同步存储驱动。默认启用预写日志模式（WAL）、外键约束检查与忙等待超时。
-- 异步工作线程存储驱动 `WorkerSqliteDriver`：基于 `node:worker_threads` 将同步数据库操作卸载至专用后台线程，对外暴露异步接口。
 - 受管进程平台驱动 `NodeProcessDriver`：实现完整的受管进程治理体系。基于管道彻底切断子进程与宿主标准流的物理连通；支持跨平台独立进程组管理与信号派发；提供独占控制权租约、逐流增量读取与优雅终止。
 - 原生网络服务容器 `NodeHttpServer`：基于 Node.js 原生 `node:http` 承载 RESTful 微服务与 Server-Sent Events 事件流。
 - 原生模块加载器 `NodeModuleLoader`：基于 Node.js 原生类型擦除机制直接加载 TypeScript 源码，免除前置编译转译开销。

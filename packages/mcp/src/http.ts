@@ -1,9 +1,6 @@
+import { ACTIONDOCK_VERSION, UNAUTHORIZED } from "@actiondock/core";
 import {
-  ACTIONDOCK_VERSION,
-  UNAUTHORIZED,
-} from "@actiondock/core";
-import {
-  DEFAULT_MAX_BODY_BYTES,
+  createMcpEndpointHandler,
   formatHostForUrl,
   isLoopbackHost,
   launchHttpServer,
@@ -13,98 +10,6 @@ import {
 import { createMcpHandler } from "@modelcontextprotocol/server";
 import { createActionDockMcpServer, resolveService } from "./adapter";
 import type { ActionDockMcpHttpOptions, ActionDockMcpHttpServerInstance } from "./types";
-
-/** 请求体读取超限时返回的哨兵，调用方据此构造 413 响应 */
-const REQUEST_BODY_TOO_LARGE = Symbol("actiondock.requestBodyTooLarge");
-
-/**
- * 有界读取请求体字节流（本包私有的限流读取原语）。
- *
- * 防护策略与 core/server 的 readJsonBody 保持同构：
- * 快速拒绝（Content-Length 预检）、流式计数（超限即刻取消读流）、
- * chunk 拼接为完整 Uint8Array；超限时不抛出异常而是返回哨兵值，
- * 由调用方自行决定错误响应形态（如 413 JSON）。
- *
- * @param req 待读取的 Request 对象
- * @param maxBytes 单次请求体允许的最大字节数
- * @returns 完整请求体字节；超限时返回 REQUEST_BODY_TOO_LARGE 哨兵
- */
-async function readBodyWithLimit(
-  req: Request,
-  maxBytes: number
-): Promise<Uint8Array | typeof REQUEST_BODY_TOO_LARGE> {
-  // 1. 快速拒绝：Content-Length 头部预检，避免任何内存分配
-  const contentLengthHeader = req.headers.get("content-length");
-  if (contentLengthHeader) {
-    const parsedLength = parseInt(contentLengthHeader, 10);
-    if (!isNaN(parsedLength) && parsedLength > maxBytes) {
-      return REQUEST_BODY_TOO_LARGE;
-    }
-  }
-
-  if (!req.body) {
-    return new Uint8Array(0);
-  }
-
-  // 2. 流式读取并实时计数：中途超限即刻取消并释放流锁，防止大文件 DoS 与内存耗尽
-  const reader = req.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let totalBytes = 0;
-  let tooLarge = false;
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (value) {
-        totalBytes += value.byteLength;
-        if (totalBytes > maxBytes) {
-          tooLarge = true;
-          await reader.cancel();
-          break;
-        }
-        chunks.push(value);
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
-
-  if (tooLarge) {
-    return REQUEST_BODY_TOO_LARGE;
-  }
-
-  // 3. 拼接完整字节数组
-  const merged = new Uint8Array(totalBytes);
-  let offset = 0;
-  for (const chunk of chunks) {
-    merged.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return merged;
-}
-
-/**
- * 构造 413 Payload Too Large JSON 响应。
- */
-function requestTooLargeResponse(corsHeaders: Record<string, string>): Response {
-  return new Response(
-    JSON.stringify({
-      ok: false,
-      error: {
-        code: "REQUEST_TOO_LARGE",
-        message: "Request body exceeds maximum allowed size",
-      },
-    }),
-    {
-      status: 413,
-      headers: {
-        "Content-Type": "application/json",
-        ...corsHeaders,
-      },
-    }
-  );
-}
 
 /**
  * Starts an ActionDock MCP server over HTTP transport.
@@ -145,12 +50,52 @@ export function startMcpHttpServer(
       host: hostInstance ?? (typeof options.host === "object" ? options.host : undefined),
     });
 
+    const resolvedHost = hostInstance ?? (typeof options.host === "object" ? options.host : undefined);
     const handler = createMcpHandler(
-      () => createActionDockMcpServer({ service }),
+      () => createActionDockMcpServer({ ...options, host: resolvedHost, service }),
       {
         onerror: (err) => {
           process.stderr.write(`[MCP HTTP Error] ${err?.message || String(err)}\n`);
         },
+      }
+    );
+
+    // JSON-RPC 形态的 401 响应构造：mcp 客户端按 JSON-RPC 错误信封消费鉴权失败
+    // （错误码 -32000），区别于 core 网关的标准 JSON 信封
+    const unauthorizedJsonRpcResponse = (
+      corsHeaders: Record<string, string>
+    ): Response =>
+      new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          error: {
+            code: -32000,
+            message: "Unauthorized: Invalid or missing Bearer token",
+          },
+          id: null,
+        }),
+        {
+          status: 401,
+          headers: {
+            "Content-Type": "application/json",
+            ...corsHeaders,
+          },
+        }
+      );
+
+    // MCP 端点共享处理器：Bearer 鉴权（401 JSON-RPC 形态）→ 请求体有界读取
+    // （413 拦截）→ 重建 Request 委托 SDK 处理器 → CORS merge 回写。
+    // 序列收敛为 core 单一事实源，此处仅以定制钩子表达 mcp 独立服务的差异
+    const mcpEndpoint = createMcpEndpointHandler(
+      (req) => handler.fetch(req),
+      {
+        token,
+        allowQueryToken: (options as any).allowQueryToken,
+        corsOrigins: options.corsOrigins,
+        maxBodyBytes: options.maxBodyBytes,
+        // mcp 独立服务将解析出的 CORS 头合并覆盖到 MCP 响应（core 网关为 inherit 透传）
+        corsApplyMode: "merge",
+        unauthorizedResponse: unauthorizedJsonRpcResponse,
       }
     );
 
@@ -172,7 +117,7 @@ export function startMcpHttpServer(
       const pathname = url.pathname;
       const verifyOptions = { allowQueryToken: (options as any).allowQueryToken };
 
-      // 1. Health check
+      // 健康检查路由
       if (pathname === "/health") {
         if (!verifyBearerToken(req, token, verifyOptions)) {
           return new Response(
@@ -209,63 +154,14 @@ export function startMcpHttpServer(
         );
       }
 
-      // 2. Authentication check
-      if (!verifyBearerToken(req, token, verifyOptions)) {
-        return new Response(
-          JSON.stringify({
-            jsonrpc: "2.0",
-            error: {
-              code: -32000,
-              message: "Unauthorized: Invalid or missing Bearer token",
-            },
-            id: null,
-          }),
-          {
-            status: 401,
-            headers: {
-              "Content-Type": "application/json",
-              ...corsHeaders,
-            },
-          }
-        );
+      // 委托 MCP 端点（/mcp 与 / 双路径，鉴权与限流由共享端点处理器承担）
+      if (pathname === "/mcp" || pathname === "/") {
+        return (await mcpEndpoint(req))!;
       }
 
-      // 3. Delegate MCP endpoint
-      if (pathname === "/mcp" || pathname === "/") {
-        const maxBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
-
-        let currentReq = req;
-        if (req.body && req.method !== "GET" && req.method !== "HEAD") {
-          const bodyBytes = await readBodyWithLimit(req, maxBytes);
-          if (bodyBytes === REQUEST_BODY_TOO_LARGE) {
-            return requestTooLargeResponse(corsHeaders);
-          }
-
-          // BodyInit 交叉类型对 Uint8Array 的 ArrayBuffer 变体敏感，
-          // 复制到确切 ArrayBuffer 后以字节数组视图传递
-          const bodyBuffer = new ArrayBuffer(bodyBytes.byteLength);
-          new Uint8Array(bodyBuffer).set(bodyBytes);
-          currentReq = new Request(req.url, {
-            method: req.method,
-            headers: req.headers,
-            body: new Uint8Array(bodyBuffer),
-            signal: req.signal,
-          });
-        }
-
-        const mcpResponse = await handler.fetch(currentReq);
-        if (Object.keys(corsHeaders).length > 0) {
-          const newHeaders = new Headers(mcpResponse.headers);
-          for (const [k, v] of Object.entries(corsHeaders)) {
-            newHeaders.set(k, String(v));
-          }
-          return new Response(mcpResponse.body, {
-            status: mcpResponse.status,
-            statusText: mcpResponse.statusText,
-            headers: newHeaders,
-          });
-        }
-        return mcpResponse;
+      // 其余路径统一鉴权拦截：未认证访问任意未知路径返回 401 而非 404
+      if (!verifyBearerToken(req, token, verifyOptions)) {
+        return unauthorizedJsonRpcResponse(corsHeaders);
       }
 
       return new Response(

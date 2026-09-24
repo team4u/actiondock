@@ -1,4 +1,3 @@
-import { getActionDockHome } from "../utils";
 import {
   getRegistryFilePath,
   getRegistryStatus,
@@ -41,7 +40,9 @@ export interface RegistryStore {
 
 /**
  * 默认注册表物理位置存储实现。
- * 直接基于文件系统注册表文件（~/.actiondock/registry.json）读写。
+ * 直接基于文件系统注册表文件（~/.actiondock/registry.json）读写；
+ * 全部方法均为向 registry.ts 自由函数透传 customHome 的零逻辑转发，
+ * 收敛为单行委托以消除重复样板。
  */
 export class DefaultRegistryStore implements RegistryStore {
   readonly customHome?: string;
@@ -53,39 +54,30 @@ export class DefaultRegistryStore implements RegistryStore {
   getFilePath(): string {
     return getRegistryFilePath(this.customHome);
   }
-
   load(): GlobalRegistryData {
     return loadRegistry(this.customHome);
   }
-
   loadAsync(): Promise<GlobalRegistryData> {
     return loadRegistryAsync(this.customHome);
   }
-
-  async save(data: GlobalRegistryData): Promise<void> {
-    await saveRegistry(data, this.customHome);
+  save(data: GlobalRegistryData): Promise<void> {
+    return saveRegistry(data, this.customHome);
   }
-
   listPackages(): LinkedPackageEntry[] {
     return listLinkedPackages(this.customHome);
   }
-
   listWorkspaces(): LinkedWorkspaceEntry[] {
     return listLinkedWorkspaces(this.customHome);
   }
-
-  async link(path: string, options?: { recursive?: boolean }): Promise<LinkResult> {
+  link(path: string, options?: { recursive?: boolean }): Promise<LinkResult> {
     return linkPackage(path, this.customHome, options);
   }
-
-  async unlink(idOrPath: string): Promise<UnlinkResult | null> {
+  unlink(idOrPath: string): Promise<UnlinkResult | null> {
     return unlinkPackage(idOrPath, this.customHome);
   }
-
-  async prune(): Promise<PruneResult> {
+  prune(): Promise<PruneResult> {
     return pruneRegistry(this.customHome);
   }
-
   getStatus(): RegistryStatusReport {
     return getRegistryStatus(this.customHome);
   }

@@ -52,6 +52,7 @@ import type {
   StateScopeOptions,
   StorageFactoryOptions,
 } from "./types";
+import { applyActionSummaryFilters } from "./types";
 
 /**
  * ActionDock 统一包运行时默认实现。
@@ -191,8 +192,6 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
       logger: options.logger,
       eventSink: options.eventSink ?? (this.platform as any)?.eventSink,
       maxActiveRuns: options.maxActiveRuns,
-      maxCallDepth: options.maxCallDepth,
-      maxSubRuns: options.maxSubRuns,
       ownerId: options.ownerId,
       actionResolver: options.actionResolver,
       customHome: options.customHome,
@@ -276,7 +275,7 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
 
   async listActions(options?: ListActionsOptions): Promise<ActionSummary[]> {
     const map = this.getStaticActionMap();
-    let summaries: ActionSummary[] = Array.from(map.values()).map((spec) => ({
+    const summaries: ActionSummary[] = Array.from(map.values()).map((spec) => ({
       id: spec.id,
       packageId: this.packageId,
       description: spec.description,
@@ -287,27 +286,7 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
       inputSchema: spec.inputSchema,
       outputSchema: spec.outputSchema,
     }));
-
-    if (options?.tags && options.tags.length > 0) {
-      summaries = summaries.filter((s) =>
-        options.tags!.every((t) => s.tags?.includes(t))
-      );
-    }
-
-    if (options?.query) {
-      const q = options.query.toLowerCase();
-      summaries = summaries.filter(
-        (s) =>
-          s.id.toLowerCase().includes(q) ||
-          (s.description && s.description.toLowerCase().includes(q))
-      );
-    }
-
-    if (options?.prefix) {
-      summaries = summaries.filter((s) => s.id.startsWith(options.prefix!));
-    }
-
-    return summaries;
+    return applyActionSummaryFilters(summaries, options);
   }
 
   async describeAction(id: string): Promise<ActionSpec> {
@@ -537,44 +516,51 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
   /**
    * 状态作用域统一解析辅助函数（单一事实源）。
    *
-   * 完成重载消歧与 actionId 冲突校验，返回最终生效的命名空间：
-   * - actionId 存在时拼 接 `${actionId}:${namespace}` 或直接 actionId；
-   * - 无 actionId 时返回显式 namespace 或空字符串（包级扁平状态）。
+   * 完成重载消歧后委托 mergeStateScope 计算最终生效的命名空间：
+   * - (actionId, key, options) 形态：位置 actionId 参与冲突校验；
+   * - (key, options) 扁平形态：首参是状态键，options.actionId 属合法显式指定。
    */
   private resolveStateScope(
     actionIdOrKey: string | undefined,
     keyOrOptions: string | StateScopeOptions | undefined,
     options?: StateScopeOptions
   ): { ns: string; opts: StateScopeOptions | undefined } {
-    let actionId: string;
-    let resolvedOpts: StateScopeOptions | undefined;
-
     // 消歧规则（与原始重载语义严格一致）：仅当第二参为字符串时认定为
     // (actionId, key, options) 形态；否则（undefined 或选项对象）认定为
     // (key, options) 扁平调用形态，首参是状态键而非 actionId
     if (typeof keyOrOptions === "string") {
-      actionId = actionIdOrKey as string;
-      resolvedOpts = options;
-      if (resolvedOpts?.actionId && resolvedOpts.actionId !== actionId) {
+      return { ns: this.mergeStateScope(actionIdOrKey, options), opts: options };
+    }
+    return { ns: this.mergeStateScope(undefined, keyOrOptions), opts: keyOrOptions };
+  }
+
+  /**
+   * 合并位置 actionId 与 options.actionId 并计算最终命名空间（单一事实源）。
+   *
+   * - positionalActionId 非 undefined：调用形态携带位置 actionId，
+   *   options.actionId 与其冲突时抛出异常（空串同样参与冲突校验）；
+   * - positionalActionId 为 undefined：无位置 actionId 的扁平调用形态，
+   *   options.actionId 属合法显式指定，直接采纳。
+   */
+  private mergeStateScope(
+    positionalActionId: string | undefined,
+    opts?: StateScopeOptions
+  ): string {
+    let actionId: string;
+    if (positionalActionId !== undefined) {
+      actionId = positionalActionId;
+      if (opts?.actionId && opts.actionId !== actionId) {
         throw new ActionDockError(
           INVALID_ARGUMENT,
-          `Conflicting actionId specified: positional '${actionId}' vs options.actionId '${resolvedOpts.actionId}'`
+          `Conflicting actionId specified: positional '${actionId}' vs options.actionId '${opts.actionId}'`
         );
       }
     } else {
-      // (key, options) 扁平调用：首参是状态键，无位置 actionId；
-      // options.actionId 属于合法的显式指定，直接采纳而非判为冲突
-      actionId = "";
-      resolvedOpts = keyOrOptions;
+      actionId = opts?.actionId ?? "";
     }
-    if (!actionId && resolvedOpts?.actionId) {
-      actionId = resolvedOpts.actionId;
-    }
-
-    const ns = actionId
-      ? (resolvedOpts?.namespace ? `${actionId}:${resolvedOpts.namespace}` : actionId)
-      : (resolvedOpts?.namespace ?? "");
-    return { ns, opts: resolvedOpts };
+    return actionId
+      ? (opts?.namespace ? `${actionId}:${opts.namespace}` : actionId)
+      : (opts?.namespace ?? "");
   }
 
   getState<T extends JsonValue = JsonValue>(
@@ -625,21 +611,16 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
     let key: string;
     let value: T;
     let opts: StateScopeOptions | undefined;
-    let actionId: string;
+    // 携带位置 actionId 的调用形态标记：undefined 表示扁平 (key, value[, options]) 形态
+    let positionalActionId: string | undefined;
 
+    // 消歧规则（与原始重载语义严格一致）：按实参个数区分三形态
     if (arguments.length >= 4) {
-      if (options?.actionId && options.actionId !== actionIdOrKey) {
-        throw new ActionDockError(
-          INVALID_ARGUMENT,
-          `Conflicting actionId specified: positional '${actionIdOrKey}' vs options.actionId '${options.actionId}'`
-        );
-      }
-      actionId = actionIdOrKey;
+      positionalActionId = actionIdOrKey;
       key = keyOrValue;
       value = valueOrOptions;
       opts = options;
     } else if (arguments.length === 2) {
-      actionId = "";
       key = actionIdOrKey;
       value = keyOrValue;
       opts = undefined;
@@ -657,12 +638,10 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
       key = actionIdOrKey;
       value = keyOrValue as T;
       opts = valueOrOptions as StateScopeOptions | undefined;
-      actionId = opts?.actionId ?? "";
     }
 
-    const ns = actionId
-      ? (opts?.namespace ? `${actionId}:${opts.namespace}` : actionId)
-      : (opts?.namespace ?? "");
+    // 作用域解析与命名空间计算统一委托 mergeStateScope 单一事实源
+    const ns = this.mergeStateScope(positionalActionId, opts);
 
     if (ns) {
       await this.storage.setState<T>(ns, key, value, opts?.ttl);

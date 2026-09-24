@@ -2,8 +2,6 @@ import { DatabaseSync } from "node:sqlite";
 import { normalizeSqliteParams } from "./params";
 import type { SqliteDriver, SqliteStatement } from "./types";
 
-export * from "./worker-sqlite-driver";
-
 export { normalizeSqliteParams };
 
 /**

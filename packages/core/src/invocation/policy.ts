@@ -6,6 +6,7 @@ import {
   type ErrorCode,
 } from "../errors";
 import type { PackageGraph } from "../catalog/graph";
+import { isUsesDeclared } from "../catalog/graph";
 
 /**
  * 调用治理策略初始化选项。
@@ -173,9 +174,7 @@ export class InvocationPolicy {
 
     const isAllowed = graph
       ? graph.canCascadeCall(caller.packageId, caller.actionId, target.packageId, target.actionId)
-      : usesList.some(
-          (u) => u === targetRef || u === `${target.packageId}/*` || u === target.packageId
-        );
+      : usesList.some((u) => isUsesDeclared(u, target.packageId, target.actionId));
 
     if (!isAllowed) {
       return {

@@ -41,7 +41,6 @@ function copyPlanFile(stagingDir: string, srcPath: string, relPath: string): voi
  * 返回已拷贝 Action 入口的相对导入说明符清单（build 的入口生成使用，pack 忽略）。
  */
 export function copyPlanEntries(
-  _root: string,
   stagingDir: string,
   plan: SelectionPlan,
   options: CopyPlanEntriesOptions = {}

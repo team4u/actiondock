@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { NodeHttpServer } from "./http-server";
 import { createActionDock } from "../service/factory";
-import { NOT_FOUND, REQUEST_TOO_LARGE, UNAUTHORIZED } from "../errors";
+import { NOT_FOUND, UNAUTHORIZED } from "../errors";
 import { ensureDependencyClosure } from "../project/closure";
 import { findProjectRoot } from "../project/loader";
 import { listLinkedPackages, resolvePackageRoot } from "../registry/registry";
@@ -18,8 +18,8 @@ import {
   jsonResponse,
   type RouteContext,
 } from "./routes";
-import { DEFAULT_MAX_BODY_BYTES, readBodyWithLimit, RequestTooLargeError } from "./body";
 import { isLoopbackHost, resolveCorsHeaders, verifyBearerToken } from "./security";
+import { createMcpEndpointHandler } from "./mcp-endpoint";
 import type { ActionDockServerInstance, CoreHttpServerInstance, ServerOptions, ServerTlsOptions } from "./types";
 
 /**
@@ -123,6 +123,16 @@ export async function startActionDockServer(
     await ensureDependencyClosure(roots, { customHome });
   }
 
+  // MCP 统一网关端点处理器：鉴权、请求体限流与委托序列收敛为共享单一事实源
+  const mcpEndpointHandler = options.mcpHandler
+    ? createMcpEndpointHandler(options.mcpHandler, {
+        token,
+        allowQueryToken: options.allowQueryToken,
+        corsOrigins: options.corsOrigins,
+        maxBodyBytes: options.maxBodyBytes,
+      })
+    : undefined;
+
   const fetchHandler = async (req: Request): Promise<Response> => {
     const origin = req.headers.get("origin");
     const corsHeaders = resolveCorsHeaders(origin, options.corsOrigins);
@@ -154,59 +164,13 @@ export async function startActionDockServer(
       return healthResponse;
     }
 
-    // 2. MCP 统一网关端点
+    // 2. MCP 统一网关端点（委托共享端点处理器）
     if (
       options.enableMcp !== false &&
-      options.mcpHandler &&
+      mcpEndpointHandler &&
       (pathname === "/mcp" || pathname.startsWith("/mcp/"))
     ) {
-      if (!verifyBearerToken(req, token, options)) {
-        return jsonResponse(
-          {
-            ok: false,
-            error: {
-              code: UNAUTHORIZED,
-              message: "Invalid or missing Bearer token",
-            },
-          },
-          401,
-          corsHeaders
-        );
-      }
-
-      // 请求体体积限制保护（复用 body 域有界读取单一事实源）
-      const maxBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
-      let mcpReq = req;
-      if (req.body && req.method !== "GET" && req.method !== "HEAD") {
-        try {
-          const merged = await readBodyWithLimit(req, { maxBytes });
-          const bodyInit =
-            merged.byteLength > 0 ? new Blob([merged as unknown as BlobPart]) : undefined;
-          mcpReq = new Request(req.url, {
-            method: req.method,
-            headers: req.headers,
-            body: bodyInit,
-            signal: req.signal,
-          });
-        } catch (err) {
-          if (err instanceof RequestTooLargeError) {
-            return jsonResponse(
-              {
-                ok: false,
-                error: {
-                  code: REQUEST_TOO_LARGE,
-                  message: "Request body exceeds maximum allowed size",
-                },
-              },
-              413,
-              corsHeaders
-            );
-          }
-          throw err;
-        }
-      }
-
-      const mcpRes = await options.mcpHandler(mcpReq);
+      const mcpRes = await mcpEndpointHandler(req);
       if (mcpRes) return mcpRes;
     }
 

@@ -47,20 +47,6 @@ export class DiagnosticForwarder {
   }
 
   /**
-   * 是否已达到上限并处于截断状态。
-   */
-  public get isTruncated(): boolean {
-    return this.truncated;
-  }
-
-  /**
-   * 已成功转发的累计字节数。
-   */
-  public get bytesEmitted(): number {
-    return this.totalBytesEmitted;
-  }
-
-  /**
    * 绑定并监听可读流（如 childProcess.stdout 或 childProcess.stderr）。
    * 
    * @param stream 待转发的可读流
@@ -148,15 +134,5 @@ export class DiagnosticForwarder {
       stream.removeListener("data", handler);
     }
     this.attachedStreams.clear();
-  }
-
-  /**
-   * 重置计数器与截断标志。
-   */
-  public reset(): void {
-    this.totalBytesEmitted = 0;
-    this.bytesInCurrentWindow = 0;
-    this.windowStartMs = Date.now();
-    this.truncated = false;
   }
 }

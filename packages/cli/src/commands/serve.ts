@@ -7,15 +7,27 @@ import {
   loadProjectConfig,
   startActionDockServer,
 } from "@actiondock/core";
+import { resolvePackageRoot } from "@actiondock/core/registry";
 import {
   formatHostForUrl,
   type ServerTlsOptions,
 } from "@actiondock/core/server";
 import { Command } from "commander";
-import { ArgumentError, ExecutionError } from "../errors";
+import { ArgumentError, ExecutionError, packageNotFoundError } from "../errors";
 import { writeStderr, writeStdout } from "../renderer";
 import type { CliContext } from "../types";
-import { ensureSelfSignedCertificate, getEffectiveOptions, parseByteSize } from "../utils";
+import {
+  ensureSelfSignedCertificate,
+  getEffectiveOptions,
+  normalizeCorsOrigins,
+  registerStopSignalHandler,
+  printServerBanner,
+  resolveMaxBodyBytes,
+  resolveServerHost,
+  resolveServerPort,
+  resolveServerToken,
+  parseListOption,
+} from "../utils";
 
 /**
  * 注册 serve HTTP 服务启动命令。
@@ -48,17 +60,22 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
     .option("--tls-ca <path>", "Path to TLS CA certificate file (or set ACTIONDOCK_TLS_CA)")
     .option("--tls-passphrase <passphrase>", "Passphrase for TLS private key (or set ACTIONDOCK_TLS_PASSPHRASE)")
     .option("-d, --dir <path>", "Project root directory (default: current working directory)")
+    .option(
+      "-P, --package <package-id>",
+      "Specific package ID(s) to serve (can be specified multiple times or comma-separated)",
+      parseListOption,
+      []
+    )
     .option("--data-dir <path>", "Custom database storage directory")
     .action(async (rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
-      const parsedPort = parseInt(options.port, 10);
-      const port = Number.isNaN(parsedPort) ? 5177 : parsedPort;
-      const host = options.host || "127.0.0.1";
-      const token = options.token || (typeof process !== "undefined" ? process.env?.ACTIONDOCK_TOKEN : undefined);
+      const port = resolveServerPort(options.port, 5177);
+      const host = resolveServerHost(options.host);
+      const token = resolveServerToken(options.token);
       const allowInsecureNoAuth = Boolean(options.allowInsecureNoAuth);
       const allowQueryToken = Boolean(options.allowQueryToken);
       const enableManagement = Boolean(options.management);
-      const corsOrigins = options.corsOrigin && options.corsOrigin.length > 0 ? options.corsOrigin : undefined;
+      const corsOrigins = normalizeCorsOrigins(options.corsOrigin);
       const exposeDebugInfo = Boolean(options.exposeDebugInfo);
 
       const httpsEnabled = Boolean(
@@ -102,18 +119,49 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
         }
       }
 
-      let maxBodyBytes: number | undefined;
-      if (options.maxBody) {
-        try {
-          maxBodyBytes = parseByteSize(options.maxBody);
-        } catch (err: any) {
-          throw new ArgumentError(`Invalid max-body format: ${err.message}`);
-        }
-      }
+      const maxBodyBytes = resolveMaxBodyBytes(options.maxBody);
 
       const projectRoot = options.dir
         ? resolve(options.dir)
         : findProjectRoot(process.cwd());
+
+      const rawPackages: string[] = options.package || [];
+      const packageAllowlist: string[] | undefined =
+        rawPackages.length > 0 ? [] : undefined;
+      const resolvedPackageIds: string[] = [];
+      const explicitPackages: Array<{ packageRoot: string }> = [];
+
+      if (rawPackages.length > 0) {
+        for (const pkgId of rawPackages) {
+          const root = resolvePackageRoot(pkgId, projectRoot || undefined, context?.customHome);
+          if (!root) {
+            throw packageNotFoundError(pkgId);
+          }
+          if (!projectRoot || root !== projectRoot) {
+            if (!explicitPackages.some((p) => p.packageRoot === root)) {
+              explicitPackages.push({ packageRoot: root });
+            }
+          }
+          let resolvedId = pkgId;
+          try {
+            const config = loadProjectConfig(root);
+            if (config.id) {
+              resolvedId = config.id;
+              if (!packageAllowlist!.includes(config.id)) {
+                packageAllowlist!.push(config.id);
+              }
+            }
+          } catch {
+            // 降级使用原始标识符
+          }
+          if (!packageAllowlist!.includes(pkgId)) {
+            packageAllowlist!.push(pkgId);
+          }
+          if (!resolvedPackageIds.includes(resolvedId)) {
+            resolvedPackageIds.push(resolvedId);
+          }
+        }
+      }
 
       let projectName = "Global Registry Mode";
       if (projectRoot) {
@@ -134,10 +182,11 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
       const service = await createActionDock({
         type: "local",
         projectRoot: projectRoot || undefined,
+        packages: explicitPackages.length > 0 ? explicitPackages : undefined,
         customHome: context?.customHome,
         dataDir: options.dataDir || context?.dataDir,
         platform,
-        scanLinkedPackages: !projectRoot,
+        scanLinkedPackages: !projectRoot || rawPackages.length > 0,
       });
 
       let mcpHandler: ((req: Request) => Promise<Response | null | undefined>) | undefined;
@@ -153,6 +202,8 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
             () => {
               return createActionDockMcpServer({
                 service,
+                packageAllowlist,
+                packageIds: packageAllowlist,
               });
             },
             {
@@ -189,17 +240,19 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
           tls,
           projectRoot: projectRoot || undefined,
           service,
+          packageAllowlist,
         });
 
         const displayHost = formatHostForUrl(host);
         const actualEndpointHost = formatHostForUrl(host === "0.0.0.0" ? "127.0.0.1" : host);
         const scheme = tls ? "https" : "http";
 
-        writeStdout(`\n======================================================`, context);
-        writeStdout(`  ActionDock 2.0 HTTP Runner Server`, context);
-        writeStdout(`======================================================`, context);
-        writeStdout(`  * Listening on:    ${scheme}://${displayHost}:${server.port}`, context);
-        writeStdout(`  * Project:         ${projectName}`, context);
+        printServerBanner(`ActionDock 2.0 HTTP Runner Server`, scheme, displayHost, server.port, context);
+        if (resolvedPackageIds.length > 0) {
+          writeStdout(`  * Packages:        ${resolvedPackageIds.join(", ")}`, context);
+        } else {
+          writeStdout(`  * Project:         ${projectName}`, context);
+        }
         if (projectRoot && exposeDebugInfo) {
           writeStdout(`  * Root Path:       ${projectRoot}`, context);
         }
@@ -228,24 +281,7 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
         writeStdout(`Server is ready to accept remote requests.`, context);
         writeStdout(`Press Ctrl+C to terminate.\n`, context);
 
-        const stopSignalHandler = () => {
-          writeStdout("\nStopping ActionDock server...", context);
-          Promise.resolve(server.stop())
-            .catch((err: unknown) => {
-              // 停止失败必须可见：写入 stderr 一行并标记失败退出码
-              writeStderr(
-                `[ERROR] Failed to stop ActionDock server gracefully: ${err instanceof Error ? err.message : String(err)}`,
-                context
-              );
-              process.exitCode = 1;
-            })
-            .finally(() => {
-              process.exit(typeof process.exitCode === "number" ? process.exitCode : 0);
-            });
-        };
-
-        process.once("SIGINT", stopSignalHandler);
-        process.once("SIGTERM", stopSignalHandler);
+        registerStopSignalHandler(server, `ActionDock server`, context);
       } catch (err: any) {
         await service.close().catch(() => {});
         throw new ExecutionError(`Failed to start ActionDock server: ${err.message}`, err);

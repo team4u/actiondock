@@ -6,24 +6,18 @@ import { join, resolve } from "node:path";
 import { renderRawExecutionResult } from "../src/commands/run";
 import type { ExecutionResult } from "@actiondock/sdk";
 
-const cliPath = resolve(import.meta.dirname, "../bin/ad.js");
+import { runCliAsync } from "./helpers/run-cli";
 
 let tempHome: string | undefined;
 
-function runCli(
+async function runCli(
   args: string[],
   cwd?: string,
   env?: Record<string, string>
 ) {
-  return Bun.spawnSync(["bun", cliPath, ...args], {
-    cwd,
-    env: {
-      ...process.env,
-      ...(tempHome ? { ACTIONDOCK_HOME: tempHome } : {}),
-      ...env,
-    },
-    stdout: "pipe",
-    stderr: "pipe",
+  return await runCliAsync(args, cwd, {
+    ...(tempHome ? { ACTIONDOCK_HOME: tempHome } : {}),
+    ...env,
   });
 }
 
@@ -196,7 +190,7 @@ describe("CLI Action Raw Output Mode - Unit Tests", () => {
 describe("CLI Action Raw Output Mode - End-to-End Tests", () => {
   let tempDir: string;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     tempDir = mkdtempSync(join(tmpdir(), "ad-cli-raw-test-"));
     tempHome = mkdtempSync(join(tmpdir(), "ad-cli-raw-home-"));
 
@@ -208,7 +202,7 @@ describe("CLI Action Raw Output Mode - End-to-End Tests", () => {
     }
 
     // Initialize package
-    const initProc = runCli(["init", "--id", "test.raw-pkg", "--name", "Raw Pkg", "."], tempDir);
+    const initProc = await runCli(["init", "--id", "test.raw-pkg", "--name", "Raw Pkg", "."], tempDir);
     expect(initProc.exitCode).toBe(0);
 
     // Create a mock files.read action
@@ -260,8 +254,8 @@ export default defineAction(async (input: { path: string }) => {
     }
   });
 
-  it("defaults to unescaped raw content to stdout and metadata to stderr", () => {
-    const proc = runCli(
+  it("defaults to unescaped raw content to stdout and metadata to stderr", async () => {
+    const proc = await runCli(
       ["run", "files.read", "--input", JSON.stringify({ path: "docs/readme.md" })],
       tempDir
     );
@@ -274,8 +268,8 @@ export default defineAction(async (input: { path: string }) => {
     expect(stderr).toContain("[docs/readme.md | lines 1-3 | hasMore: false]");
   });
 
-  it("outputs standard JSON execution envelope when --json is provided", () => {
-    const proc = runCli(
+  it("outputs standard JSON execution envelope when --json is provided", async () => {
+    const proc = await runCli(
       ["run", "files.read", "-i", JSON.stringify({ path: "test.txt" }), "--json"],
       tempDir
     );
@@ -292,9 +286,9 @@ export default defineAction(async (input: { path: string }) => {
     expect(parsed.data.content).toBe("# File Header\n\nBody text line 3");
   });
 
-  it("works with ad action run defaulting to raw and supporting --json", () => {
+  it("works with ad action run defaulting to raw and supporting --json", async () => {
     // Default raw
-    const procRaw = runCli(
+    const procRaw = await runCli(
       ["action", "run", "files.read", "-i", JSON.stringify({ path: "info.md" })],
       tempDir
     );
@@ -303,7 +297,7 @@ export default defineAction(async (input: { path: string }) => {
     expect(procRaw.stderr.toString()).toContain("[info.md | lines 1-3 | hasMore: false]");
 
     // --json machine envelope
-    const procJson = runCli(
+    const procJson = await runCli(
       ["action", "run", "files.read", "-i", JSON.stringify({ path: "info.md" }), "--json"],
       tempDir
     );
@@ -313,8 +307,8 @@ export default defineAction(async (input: { path: string }) => {
     expect(parsed.data.path).toBe("info.md");
   });
 
-  it("handles action error properly by writing to stderr by default", () => {
-    const proc = runCli(
+  it("handles action error properly by writing to stderr by default", async () => {
+    const proc = await runCli(
       ["run", "files.read", "-i", JSON.stringify({ path: "missing.txt" })],
       tempDir
     );
@@ -328,8 +322,8 @@ export default defineAction(async (input: { path: string }) => {
     expect(stderr).toContain("File not found: missing.txt");
   });
 
-  it("handles action error properly by outputting JSON envelope when --json is provided", () => {
-    const proc = runCli(
+  it("handles action error properly by outputting JSON envelope when --json is provided", async () => {
+    const proc = await runCli(
       ["run", "files.read", "-i", JSON.stringify({ path: "missing.txt" }), "--json"],
       tempDir
     );

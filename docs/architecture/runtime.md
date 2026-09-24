@@ -35,7 +35,7 @@ graph TD
 ```
 
 - `@actiondock/sdk`：极简纯契约层，零生产依赖，导出 `defineAction`、`ActionContext`、`ProcessAPI`、`Logger`、`Config` 与 `StateStore`，并提供受管进程辅助工具（`withControl`、`createStreamDecoder` 等）。
-- `@actiondock/core`：Node-first 原生运行时与核心领域，包含包图发现、动作目录、调用治理、执行主链、存储驱动（`NodeSqliteDriver`、`WorkerSqliteDriver`）、受管进程驱动（`NodeProcessDriver`）、HTTP 网络服务（`NodeHttpServer`）、标准服务端口体系（`DiscoveryPort`、`ExecutionPort`、`RunsPort`、`ConfigPort`、`StatePort`）与统一服务门面（`createActionDock`、`connectActionDock`）。
+- `@actiondock/core`：Node-first 原生运行时与核心领域，包含包图发现、动作目录、调用治理、执行主链、存储驱动（`NodeSqliteDriver`）、受管进程驱动（`NodeProcessDriver`）、HTTP 网络服务（`NodeHttpServer`）、标准服务端口体系（`DiscoveryPort`、`ExecutionPort`、`RunsPort`、`ConfigPort`、`StatePort`）与统一服务门面（`createActionDock`、`connectActionDock`）。
 - `@actiondock/builder`：构建规划与分发构建包，负责依赖闭包规划、Skill 模板生成与规程渲染、Node.js 目录交付产物构建（`ad build`）、npm 打包（`ad pack`）与 Agent Skill 资产导出。
 - `@actiondock/mcp`：MCP 协议适配层，全面对接核心层标准服务端口，将 Action 映射为标准 MCP 工具，支持 STDIO 与 HTTP 通道及取消信号链路。
 - `@actiondock/cli`：命令行门面与运行分发器，向用户与智能体暴露统一的 `ad` 命令行工具及标准信封渲染。
@@ -141,7 +141,6 @@ ActionDock 2.x 全面贯彻单一事实源设计，彻底杜绝各模块私自�
 在 ActionDock 2.x 中，Node 原生运行时能力全面内聚归并入 `@actiondock/core`，依托 Node.js 原生特性构建高性能企业级驱动：
 
 - 同步存储驱动 `NodeSqliteDriver`：基于 Node.js 原生内置模块 `node:sqlite`（`DatabaseSync`）构建，满足同步驱动契约。默认开启预写日志模式（WAL）、外键约束检查以及忙等待超时（`busy_timeout = 5000`）。
-- 异步工作线程存储驱动 `WorkerSqliteDriver`：基于 `node:worker_threads` 构建的独立异步存储组件，将同步数据库操作卸载至后台线程，对外暴露异步接口。
 - 受管进程平台驱动 `NodeProcessDriver`：完整实现 Core 层的 `ProcessDriver` 契约，提供基于 `node:child_process` 的 pipe 管道隔离与 PTY 伪终端支持。标准输入输出物理隔离，结合独立进程组与跨平台信号分发（POSIX 负数 PID 与 Windows 进程树）精准管理子进程，杜绝孤儿进程；支持输入净终止 `inputEOF` 与优雅输出排空。此外保留 `NodeProcessExecutor` 用于向后兼容执行简单命令。
 - 原生模块加载器 `NodeModuleLoader`：基于 Node.js 现代模块解析机制加载 Action 源码，原生支持 TypeScript 类型擦除与 ESM 规范，免去日常开发态的前置编译等待。
 - 原生网络服务容器 `NodeHttpServer`：基于 Node.js 原生 `node:http` 实现，将底层请求与响应转化为标准的 Web Request 与 Response 规范，并通过 Web Streams 实现流式数据传输与管道转发。

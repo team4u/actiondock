@@ -191,25 +191,32 @@ export class IpcActionDockService implements ActionDockService {
 
     const self = this;
 
+    /**
+     * 生成方法级端口转发器：把端口方法调用映射为 callRemote 远端调用。
+     * 方法名与参数列表的对应关系即唯一事实源，杜绝手写转发样板膨胀。
+     */
+    const forward = <T>(method: string, args: unknown[]): Promise<T> =>
+      self.callRemote<T>(method, args);
+
     this.discovery = {
       async listPackages(): Promise<PackageInfo[]> {
-        return self.callRemote<PackageInfo[]>("listPackages", []);
+        return forward<PackageInfo[]>("listPackages", []);
       },
 
       async listActions(opts?: ListActionsOptions): Promise<ActionSummary[]> {
-        return self.callRemote<ActionSummary[]>("listActions", [opts]);
+        return forward<ActionSummary[]>("listActions", [opts]);
       },
 
       async describeAction(ref: ActionRef | string): Promise<ActionSpec> {
-        return self.callRemote<ActionSpec>("describeAction", [ref]);
+        return forward<ActionSpec>("describeAction", [ref]);
       },
 
       async listPlaybooks(opts?: { intent?: string; package?: string }): Promise<PlaybookSummary[]> {
-        return self.callRemote<PlaybookSummary[]>("listPlaybooks", [opts]);
+        return forward<PlaybookSummary[]>("listPlaybooks", [opts]);
       },
 
       async describePlaybook(id: string): Promise<PlaybookSpec> {
-        return self.callRemote<PlaybookSpec>("describePlaybook", [id]);
+        return forward<PlaybookSpec>("describePlaybook", [id]);
       },
     };
 
@@ -248,20 +255,20 @@ export class IpcActionDockService implements ActionDockService {
 
     this.runs = {
       async list(query?: ListRunsOptions): Promise<RunRecord[]> {
-        return self.callRemote<RunRecord[]>("listRuns", [query]);
+        return forward<RunRecord[]>("listRuns", [query]);
       },
 
       async get(runId: string): Promise<RunRecord | undefined> {
-        const res = await self.callRemote<RunRecord | null | undefined>("getRun", [runId]);
+        const res = await forward<RunRecord | null | undefined>("getRun", [runId]);
         return res ?? undefined;
       },
 
       async cancel(runId: string, reason?: string): Promise<CancelResult> {
-        return self.callRemote<CancelResult>("cancelRun", [runId, reason]);
+        return forward<CancelResult>("cancelRun", [runId, reason]);
       },
 
       async clear(opts?: { packageId?: string; actionId?: string; status?: string; olderThanMs?: number }): Promise<number> {
-        return self.callRemote<number>("clearRuns", [opts]);
+        return forward<number>("clearRuns", [opts]);
       },
     };
 
@@ -269,19 +276,19 @@ export class IpcActionDockService implements ActionDockService {
       this.management = {
         config: {
           async get(packageId: string, key: string): Promise<ConfigValueView> {
-            return self.callRemote<ConfigValueView>("getConfig", [packageId, key]);
+            return forward<ConfigValueView>("getConfig", [packageId, key]);
           },
 
           async set(packageId: string, key: string, value: JsonValue): Promise<void> {
-            return self.callRemote<void>("setConfig", [packageId, key, value]);
+            return forward<void>("setConfig", [packageId, key, value]);
           },
 
           async delete(packageId: string, key: string): Promise<boolean> {
-            return self.callRemote<boolean>("deleteConfig", [packageId, key]);
+            return forward<boolean>("deleteConfig", [packageId, key]);
           },
 
           async list(packageId: string): Promise<ConfigValueView[]> {
-            return self.callRemote<ConfigValueView[]>("listConfig", [packageId]);
+            return forward<ConfigValueView[]>("listConfig", [packageId]);
           },
         },
 
@@ -292,7 +299,7 @@ export class IpcActionDockService implements ActionDockService {
             key: string,
             opts?: StateScopeOptions
           ): Promise<T | undefined> {
-            return self.callRemote<T | undefined>("getState", [packageId, actionId, key, opts]);
+            return forward<T | undefined>("getState", [packageId, actionId, key, opts]);
           },
 
           async set<T extends JsonValue = JsonValue>(
@@ -302,7 +309,7 @@ export class IpcActionDockService implements ActionDockService {
             value: T,
             opts?: StateScopeOptions
           ): Promise<void> {
-            return self.callRemote<void>("setState", [packageId, actionId, key, value, opts]);
+            return forward<void>("setState", [packageId, actionId, key, value, opts]);
           },
 
           async delete(
@@ -311,7 +318,7 @@ export class IpcActionDockService implements ActionDockService {
             key: string,
             opts?: StateScopeOptions
           ): Promise<boolean> {
-            return self.callRemote<boolean>("deleteState", [packageId, actionId, key, opts]);
+            return forward<boolean>("deleteState", [packageId, actionId, key, opts]);
           },
 
           async list(
@@ -319,7 +326,7 @@ export class IpcActionDockService implements ActionDockService {
             actionId: string,
             opts?: StateScopeOptions
           ): Promise<string[]> {
-            return self.callRemote<string[]>("listStateKeys", [packageId, actionId, opts]);
+            return forward<string[]>("listStateKeys", [packageId, actionId, opts]);
           },
 
           async clear(
@@ -327,22 +334,18 @@ export class IpcActionDockService implements ActionDockService {
             actionId: string,
             opts?: StateScopeOptions
           ): Promise<number> {
-            return self.callRemote<number>("clearState", [packageId, actionId, opts]);
+            return forward<number>("clearState", [packageId, actionId, opts]);
           },
 
           async listEntries(
             packageId: string,
             opts?: any
           ): Promise<StateEntry[]> {
-            return self.callRemote<StateEntry[]>("listStateEntries", [packageId, opts]);
+            return forward<StateEntry[]>("listStateEntries", [packageId, opts]);
           },
         },
       };
     }
-  }
-
-  public async ready(): Promise<void> {
-    await this.readyPromise;
   }
 
   private async callRemote<T>(method: string, args: unknown[], signal?: AbortSignal): Promise<T> {
@@ -444,11 +447,7 @@ export class IpcActionDockService implements ActionDockService {
     }
 
     const exitPromise = new Promise<void>((resolve) => {
-      if (this.child.exitCode !== null) {
-        resolve();
-      } else {
-        this.child.once("exit", () => resolve());
-      }
+      this.child.once("exit", () => resolve());
     });
 
     try {

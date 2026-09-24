@@ -51,9 +51,7 @@ import {
   moveDirAtomic,
 } from "../src/fs-utils";
 import {
-  createTarGzArchive,
   createTarGzArchiveAsync,
-  createZipArchive,
   createZipArchiveAsync,
   dosDateTime,
   writeToStream,
@@ -1268,7 +1266,7 @@ export default defineAction({
       }
     });
 
-    it("打包归档时正确识别并保留可执行文件与 bin 目录权限位 (zip 与 tar.gz)", () => {
+    it("打包归档时正确识别并保留可执行文件与 bin 目录权限位 (zip 与 tar.gz)", async () => {
       const archiveTestDir = mkdtempSync(join(tmpdir(), "ad-archive-perm-test-"));
       try {
         const binDir = join(archiveTestDir, "bin");
@@ -1285,8 +1283,8 @@ export default defineAction({
         const zipOut = join(tempDir, "perm-test.zip");
         const tarOut = join(tempDir, "perm-test.tar.gz");
 
-        createZipArchive(archiveTestDir, zipOut);
-        createTarGzArchive(archiveTestDir, tarOut);
+        await createZipArchiveAsync(archiveTestDir, zipOut);
+        await createTarGzArchiveAsync(archiveTestDir, tarOut);
 
         const rootName = basename(archiveTestDir);
 
@@ -1706,8 +1704,8 @@ export default defineAction({
         const zipAsyncOut = join(tempDir, "escape-test-async.zip");
         const tarAsyncOut = join(tempDir, "escape-test-async.tar.gz");
 
-        createZipArchive(archiveTestDir, zipOut);
-        createTarGzArchive(archiveTestDir, tarOut);
+        await createZipArchiveAsync(archiveTestDir, zipOut);
+        await createTarGzArchiveAsync(archiveTestDir, tarOut);
         await createZipArchiveAsync(archiveTestDir, zipAsyncOut);
         await createTarGzArchiveAsync(archiveTestDir, tarAsyncOut);
 
@@ -1757,9 +1755,9 @@ export default defineAction({
         const zipAsyncOut = join(tempDir, "cycle-test-async.zip");
         const tarAsyncOut = join(tempDir, "cycle-test-async.tar.gz");
 
-        // 验证同步与异步四种打包接口均能安全完成且不会出现无限递归与栈溢出
-        createZipArchive(archiveTestDir, zipOut);
-        createTarGzArchive(archiveTestDir, tarOut);
+        // 验证异步流式打包接口能安全完成且不会出现无限递归与栈溢出
+        await createZipArchiveAsync(archiveTestDir, zipOut);
+        await createTarGzArchiveAsync(archiveTestDir, tarOut);
         await createZipArchiveAsync(archiveTestDir, zipAsyncOut);
         await createTarGzArchiveAsync(archiveTestDir, tarAsyncOut);
 
@@ -1809,8 +1807,8 @@ export default defineAction({
         const zipAsyncOut = join(tempDir, "valid-test-async.zip");
         const tarAsyncOut = join(tempDir, "valid-test-async.tar.gz");
 
-        createZipArchive(archiveTestDir, zipOut);
-        createTarGzArchive(archiveTestDir, tarOut);
+        await createZipArchiveAsync(archiveTestDir, zipOut);
+        await createTarGzArchiveAsync(archiveTestDir, tarOut);
         await createZipArchiveAsync(archiveTestDir, zipAsyncOut);
         await createTarGzArchiveAsync(archiveTestDir, tarAsyncOut);
 
@@ -2133,7 +2131,7 @@ export default defineAction({
       }
     });
 
-    it("creates valid USTAR tar.gz archives with long directory and file paths (>100 chars)", () => {
+    it("creates valid USTAR tar.gz archives with long directory and file paths (>100 chars)", async () => {
       const archiveDir = mkdtempSync(join(tmpdir(), "archive-long-path-"));
       const outTarGz = join(archiveDir, "archive.tar.gz");
       try {
@@ -2147,7 +2145,7 @@ export default defineAction({
         mkdirSync(deepDir, { recursive: true });
         writeFileSync(join(deepDir, "sample.txt"), "hello long path");
 
-        createTarGzArchive(archiveDir, outTarGz);
+        await createTarGzArchiveAsync(archiveDir, outTarGz);
         expect(existsSync(outTarGz)).toBe(true);
 
         const entries = readTarGzEntries(outTarGz);

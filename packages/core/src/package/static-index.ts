@@ -26,6 +26,76 @@ export interface StaticActionIndexInput extends StaticIndexInput {
 }
 
 /**
+ * 字段级合并覆盖策略：不同来源对同名字段的覆盖语义存在差异。
+ *
+ * - 常规字段（description 等）：声明值优先，缺省回退既有值；
+ * - 数组字段（tags/uses）：声明值存在时可选拷贝新数组，避免与来源对象共享引用；
+ * - 派生字段（filePath）：由声明 entry 与包根目录计算，声明缺失时回退既有值。
+ */
+interface MergeFieldPolicy {
+  /** 数组字段：声明值存在时拷贝副本（磁盘清单与内存注入层启用，配置声明层直传引用） */
+  arrayCopy?: boolean;
+  /** 数组字段列表 */
+  arrayFields?: Array<"tags" | "uses">;
+  /** 派生字段：是否依据声明 entry 计算物理路径 */
+  deriveFilePath?: boolean;
+  /** 保留既有值：声明无对应字段时保留既有 entry 与 filePath */
+  preserveEntry?: boolean;
+}
+
+/**
+ * 将增量声明合并到既有 Action 规范之上（纯函数，单一事实源）。
+ *
+ * 优先级语义由调用顺序表达：后层调用时以先层结果作为 base，
+ * 声明值（patch）存在时覆盖，缺省字段回退 base 既有值。
+ */
+function mergeSpec(
+  base: ActionSpec | undefined,
+  id: string,
+  packageId: string,
+  patch: {
+    description?: string;
+    inputSchema?: ActionSpec["inputSchema"];
+    outputSchema?: ActionSpec["outputSchema"];
+    tags?: string[];
+    annotations?: Record<string, unknown>;
+    uses?: string[];
+    entry?: string;
+  },
+  packageRoot: string | undefined,
+  policy: MergeFieldPolicy = {}
+): ActionSpec {
+  const { arrayCopy = true, arrayFields = [], deriveFilePath = false, preserveEntry = false } = policy;
+  const merged: ActionSpec = {
+    id,
+    packageId,
+    description: patch.description ?? base?.description,
+    inputSchema: patch.inputSchema ?? base?.inputSchema,
+    outputSchema: patch.outputSchema ?? base?.outputSchema,
+    annotations: patch.annotations ?? base?.annotations,
+  };
+  for (const field of arrayFields) {
+    merged[field] = patch[field]
+      ? (arrayCopy ? [...patch[field]!] : patch[field])
+      : base?.[field];
+  }
+  if (deriveFilePath) {
+    merged.entry = patch.entry ?? base?.entry;
+    merged.filePath =
+      patch.entry && packageRoot
+        ? resolve(packageRoot, patch.entry)
+        : base?.filePath;
+  } else if (preserveEntry) {
+    merged.entry = base?.entry;
+    merged.filePath = base?.filePath;
+  } else {
+    merged.entry = patch.entry ?? base?.entry;
+    merged.filePath = base?.filePath;
+  }
+  return merged;
+}
+
+/**
  * 静态读取并聚合指定包的 Action 规范索引。
  * 不产生全量模块导入与执行副作用。
  *
@@ -51,18 +121,18 @@ export function buildStaticActionMap(input: StaticActionIndexInput): Map<string,
         const manifest = loadManifest(packageRoot);
         if (manifest?.actions) {
           for (const [id, item] of Object.entries(manifest.actions)) {
-            map.set(id, {
+            // 磁盘清单为最底层来源：无更低层可回退，tags 与 uses 缺省时归一为空数组
+            map.set(
               id,
-              packageId,
-              description: item.description,
-              inputSchema: item.inputSchema,
-              outputSchema: item.outputSchema,
-              tags: item.tags ? [...item.tags] : [],
-              annotations: item.annotations,
-              uses: item.uses ? [...item.uses] : [],
-              entry: item.entry,
-              filePath: item.entry ? resolve(packageRoot, item.entry) : undefined,
-            });
+              mergeSpec(undefined, id, packageId, {
+                ...item,
+                tags: item.tags ?? [],
+                uses: item.uses ?? [],
+              }, packageRoot, {
+                arrayFields: ["tags", "uses"],
+                deriveFilePath: true,
+              })
+            );
           }
         }
       } catch (err: any) {
@@ -78,21 +148,15 @@ export function buildStaticActionMap(input: StaticActionIndexInput): Map<string,
     const rawActions = projectConfig.actions;
     if (typeof rawActions === "object" && rawActions !== null) {
       for (const [id, item] of Object.entries(rawActions as Record<string, any>)) {
-        const existing = map.get(id);
-        map.set(id, {
+        // 配置声明层：覆盖磁盘清单层，entry 变化时重算物理路径；数组字段直传引用
+        map.set(
           id,
-          packageId,
-          description: item.description ?? existing?.description,
-          inputSchema: item.inputSchema ?? existing?.inputSchema,
-          outputSchema: item.outputSchema ?? existing?.outputSchema,
-          tags: item.tags ?? existing?.tags,
-          annotations: item.annotations ?? existing?.annotations,
-          uses: item.uses ?? existing?.uses,
-          entry: item.entry ?? existing?.entry,
-          filePath: item.entry && packageRoot
-            ? resolve(packageRoot, item.entry)
-            : existing?.filePath,
-        });
+          mergeSpec(map.get(id), id, packageId, item, packageRoot, {
+            arrayFields: ["tags", "uses"],
+            arrayCopy: false,
+            deriveFilePath: true,
+          })
+        );
       }
     }
   }
@@ -106,20 +170,14 @@ export function buildStaticActionMap(input: StaticActionIndexInput): Map<string,
         continue;
       }
     }
-    const existing = map.get(id);
-    const actObj = act as any;
-    map.set(id, {
+    // 内存注入层：保留磁盘层解析出的 entry 与 filePath，仅覆盖动态定义相关字段
+    map.set(
       id,
-      packageId,
-      description: actObj.description ?? existing?.description,
-      inputSchema: actObj.inputSchema ?? existing?.inputSchema,
-      outputSchema: actObj.outputSchema ?? existing?.outputSchema,
-      tags: actObj.tags ? [...actObj.tags] : existing?.tags,
-      annotations: actObj.annotations ?? existing?.annotations,
-      uses: actObj.uses ? [...actObj.uses] : existing?.uses,
-      entry: existing?.entry,
-      filePath: existing?.filePath,
-    });
+      mergeSpec(map.get(id), id, packageId, act as any, packageRoot, {
+        arrayFields: ["tags", "uses"],
+        preserveEntry: true,
+      })
+    );
   }
 
   return map;

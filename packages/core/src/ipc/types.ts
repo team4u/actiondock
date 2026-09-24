@@ -35,32 +35,6 @@ export interface IpcResponseMessage {
 }
 
 /**
- * 宿主子进程向监督进程流式推送的执行事件。
- */
-export interface IpcEventMessage {
-  type: "event";
-  runId: string;
-  event: unknown;
-}
-
-/**
- * 宿主子进程初始化就绪通知。
- */
-export interface IpcReadyMessage {
-  type: "ready";
-}
-
-/**
- * 联合 IPC 消息类型。
- */
-export type IpcMessage =
-  | IpcCallMessage
-  | IpcResponseMessage
-  | IpcAbortMessage
-  | IpcEventMessage
-  | IpcReadyMessage;
-
-/**
  * 监督进程 IPC 服务初始化选项。
  */
 export interface IpcServiceOptions {

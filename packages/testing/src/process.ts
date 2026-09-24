@@ -1,17 +1,16 @@
 import {
-  PROCESS_OUTPUT_LIMIT,
   PROCESS_TIMEOUT,
   PROCESS_CANCELLED,
   PROCESS_FAILED,
 } from "@actiondock/core";
 import {
   ProcessManager,
+  NodeProcessExecutor,
   type ProcessDriver,
   type ProcessExecutor,
   type ProcessOwner,
   type Clock,
 } from "@actiondock/core/package";
-import { execCli } from "./cli";
 import {
   encodeBytes,
   type CallOptions,
@@ -122,6 +121,16 @@ export interface MockProcessExecutorOptions {
 }
 
 /**
+ * fallbackToReal 真实回退共享执行器。
+ *
+ * 未命中模拟规则且显式开启真实回退时直接委托 core 执行器：进程组派生、
+ * 两级终止（SIGTERM 后宽限升级 SIGKILL）、AbortSignal 全程生效与输出上限
+ * 截断等关键语义与生产路径完全同源，返回结构直接满足 ProcessResult 契约，
+ * 无需任何适配层。
+ */
+const realExecutor = new NodeProcessExecutor();
+
+/**
  * 模拟进程执行器实现。
  * 遵循 ProcessExecutor / ProcessAPI 接口契约，支持预设命令响应、跟踪调用历史、
  * 并无缝接入 ProcessManager 与 FakeProcessDriver 支撑受管进程全生命周期。
@@ -132,7 +141,6 @@ export interface MockProcessExecutorOptions {
 export class MockProcessExecutor implements ProcessExecutor {
   private mocks: RegisteredMock[] = [];
   public calls: ProcessCall[] = [];
-  public defaultPid = 10001;
   private readonly fallbackToReal: boolean;
   /** 可选时钟：提供时 waitDelay 以 clock.sleep 驱动，保证确定性测试 */
   private readonly clock?: Clock;
@@ -222,35 +230,19 @@ export class MockProcessExecutor implements ProcessExecutor {
         );
       }
       try {
-        const cliRes = await execCli(command, args, {
+        // 直接委托 core 执行器：真实回退与生产语义完全一致（进程组派生、
+        // 两级终止、AbortSignal、输出上限），返回结构即 ProcessResult 契约
+        resolved = await realExecutor.exec(command, args, {
           cwd: options.cwd,
           env: options.env,
-          signal: options.signal,
-          timeout: options.timeoutMs,
           input: options.input,
+          timeoutMs: options.timeoutMs,
+          signal: options.signal,
           encoding: options.encoding,
           maxOutputBytes: options.maxOutputBytes,
         });
-        resolved = {
-          ok: cliRes.ok,
-          // execCli 的 -1 哨兵仅是自身信封语义（中止/超时无真实退出码）；
-          // 映射到 ProcessExecutor 契约时还原为 null，与真实执行器对齐
-          exitCode: cliRes.exitCode === -1 ? null : cliRes.exitCode,
-          cancelled: Boolean(options.signal?.aborted),
-          stdout: cliRes.stdout,
-          stderr: cliRes.stderr,
-          raw: cliRes.raw,
-          timedOut: cliRes.timedOut,
-          durationMs: cliRes.durationMs,
-          error:
-            cliRes.truncated && !cliRes.ok
-              ? {
-                  code: PROCESS_OUTPUT_LIMIT,
-                  message: `Process output exceeded limit of ${options.maxOutputBytes} bytes`,
-                }
-              : undefined,
-        };
       } catch (err: any) {
+        // throwOnError 路径由 core 执行器直接抛出，此处统一还原为结果信封
         resolved = {
           ok: false,
           exitCode: null,

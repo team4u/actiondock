@@ -1,39 +1,59 @@
 import type { ActionDockService } from "../service/types";
-import { ActionDockError, CAPABILITY_UNAVAILABLE } from "../errors";
+import { ActionDockError, CAPABILITY_UNAVAILABLE, SERVICE_ERROR } from "../errors";
 import { hasIpcSignalMarker, IPC_SIGNAL_MARKER } from "./service";
 import type { IpcAbortMessage, IpcCallMessage, IpcResponseMessage } from "./types";
 
 /**
- * IPC 通道允许反射调用的目标方法白名单。
+ * IPC 通道方法分发表：方法名到目标调用的唯一事实源。
  *
- * 严格对齐 ActionDockService 公共方法集合：白名单之外的方法一律拒绝，
+ * 严格对齐 ActionDockService 公共方法集合：表之外的方法一律拒绝，
  * 防止 IPC 消息通道触达任意内部属性或危险方法。
+ * 白名单即分发表的键集合，杜绝两份清单重复维护漂移。
  */
-const IPC_ALLOWED_METHODS: ReadonlySet<string> = new Set([
-  "info",
-  "listPackages",
-  "listActions",
-  "describeAction",
-  "listPlaybooks",
-  "describePlaybook",
-  "runAction",
-  "startAction",
-  "listRuns",
-  "getRun",
-  "cancelRun",
-  "clearRuns",
-  "events",
-  "getConfig",
-  "setConfig",
-  "deleteConfig",
-  "listConfig",
-  "getState",
-  "setState",
-  "deleteState",
-  "listStateKeys",
-  "clearState",
-  "listStateEntries",
-]);
+const IPC_METHOD_HANDLERS: Readonly<
+  Record<string, (service: ActionDockService, args: unknown[]) => Promise<unknown>>
+> = {
+  info: async (service) => service.info(),
+  listPackages: async (service) => service.discovery.listPackages(),
+  listActions: async (service, a) => service.discovery.listActions(a[0] as any),
+  describeAction: async (service, a) => service.discovery.describeAction(a[0] as any),
+  listPlaybooks: async (service, a) => service.discovery.listPlaybooks(a[0] as any),
+  describePlaybook: async (service, a) => service.discovery.describePlaybook(a[0] as string),
+  runAction: async (service, a) => service.execution.run(a[0] as any, a[1], a[2] as any),
+  startAction: async (service, a) => service.execution.start(a[0] as any, a[1], a[2] as any),
+  listRuns: async (service, a) => service.runs.list(a[0] as any),
+  getRun: async (service, a) => service.runs.get(a[0] as string),
+  cancelRun: async (service, a) => service.runs.cancel(a[0] as string, a[1] as string),
+  clearRuns: async (service, a) =>
+    service.runs.clear ? await service.runs.clear(a[0] as any) : 0,
+  getConfig: async (service, a) =>
+    service.management?.config.get(a[0] as string, a[1] as string),
+  setConfig: async (service, a) =>
+    service.management?.config.set(a[0] as string, a[1] as string, a[2] as any),
+  deleteConfig: async (service, a) =>
+    service.management?.config.delete(a[0] as string, a[1] as string),
+  listConfig: async (service, a) => service.management?.config.list(a[0] as string),
+  getState: async (service, a) =>
+    service.management?.state.get(a[0] as string, a[1] as string, a[2] as string, a[3] as any),
+  setState: async (service, a) =>
+    service.management?.state.set(
+      a[0] as string,
+      a[1] as string,
+      a[2] as string,
+      a[3] as any,
+      a[4] as any
+    ),
+  deleteState: async (service, a) =>
+    service.management?.state.delete(a[0] as string, a[1] as string, a[2] as string, a[3] as any),
+  listStateKeys: async (service, a) =>
+    service.management?.state.list(a[0] as string, a[1] as string, a[2] as any),
+  clearState: async (service, a) =>
+    service.management?.state.clear(a[0] as string, a[1] as string, a[2] as any),
+  listStateEntries: async (service, a) =>
+    service.management?.state.listEntries
+      ? await service.management.state.listEntries(a[0] as string, a[1] as any)
+      : [],
+};
 
 /**
  * 在 Host 子进程中启动 Node IPC 服务，向父进程暴露 ActionDockService 门面能力。
@@ -107,8 +127,10 @@ export async function serveParentIpc(service: ActionDockService): Promise<void> 
       const { id, method, args } = callMsg;
 
       try {
-        // 白名单校验：仅允许白名单方法，阻止任意方法反射调用
-        if (typeof method !== "string" || !IPC_ALLOWED_METHODS.has(method)) {
+        // 白名单校验：仅允许分发表内方法，阻止任意方法反射调用
+        const handler =
+          typeof method === "string" ? IPC_METHOD_HANDLERS[method] : undefined;
+        if (!handler) {
           throw new ActionDockError(
             CAPABILITY_UNAVAILABLE,
             `Target method '${method}' is not allowed over IPC`
@@ -118,77 +140,7 @@ export async function serveParentIpc(service: ActionDockService): Promise<void> 
         // 反序列化执行选项：识别取消信号占位标记并重建控制器接入取消链路
         const a = (args || []).map((arg: unknown) => reviveIpcSignal(id, arg)) as any[];
 
-        let result: unknown;
-        switch (method) {
-          case "info":
-            result = await service.info();
-            break;
-          case "listPackages":
-            result = await service.discovery.listPackages();
-            break;
-          case "listActions":
-            result = await service.discovery.listActions(a[0]);
-            break;
-          case "describeAction":
-            result = await service.discovery.describeAction(a[0]);
-            break;
-          case "listPlaybooks":
-            result = await service.discovery.listPlaybooks(a[0]);
-            break;
-          case "describePlaybook":
-            result = await service.discovery.describePlaybook(a[0]);
-            break;
-          case "runAction":
-            result = await service.execution.run(a[0], a[1], a[2]);
-            break;
-          case "startAction":
-            result = await service.execution.start(a[0], a[1], a[2]);
-            break;
-          case "listRuns":
-            result = await service.runs.list(a[0]);
-            break;
-          case "getRun":
-            result = await service.runs.get(a[0]);
-            break;
-          case "cancelRun":
-            result = await service.runs.cancel(a[0], a[1]);
-            break;
-          case "clearRuns":
-            result = service.runs.clear ? await service.runs.clear(a[0]) : 0;
-            break;
-          case "getConfig":
-            result = await service.management?.config.get(a[0], a[1]);
-            break;
-          case "setConfig":
-            result = await service.management?.config.set(a[0], a[1], a[2]);
-            break;
-          case "deleteConfig":
-            result = await service.management?.config.delete(a[0], a[1]);
-            break;
-          case "listConfig":
-            result = await service.management?.config.list(a[0]);
-            break;
-          case "getState":
-            result = await service.management?.state.get(a[0], a[1], a[2], a[3]);
-            break;
-          case "setState":
-            result = await service.management?.state.set(a[0], a[1], a[2], a[3], a[4]);
-            break;
-          case "deleteState":
-            result = await service.management?.state.delete(a[0], a[1], a[2], a[3]);
-            break;
-          case "listStateKeys":
-            result = await service.management?.state.list(a[0], a[1], a[2]);
-            break;
-          case "clearState":
-            result = await service.management?.state.clear(a[0], a[1], a[2]);
-            break;
-          case "listStateEntries":
-            result = service.management?.state.listEntries ? await service.management.state.listEntries(a[0], a[1]) : [];
-            break;
-          default:
-            throw new Error(`Method '${method}' not implemented`);
-        }
+        const result = await handler(service, a);
 
         const response: IpcResponseMessage = {
           id,
@@ -206,7 +158,7 @@ export async function serveParentIpc(service: ActionDockService): Promise<void> 
           type: "response",
           ok: false,
           error: {
-            code: err?.code || "SERVICE_ERROR",
+            code: err?.code || SERVICE_ERROR,
             message: err?.message || String(err),
             stack: err?.stack,
             details: err?.details,

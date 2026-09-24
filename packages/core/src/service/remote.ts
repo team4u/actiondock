@@ -675,26 +675,32 @@ export class RemoteActionDockService implements ActionDockService {
     const startTime = Date.now();
     const maxWaitMs = Math.max(this.baseTimeoutMs, timeoutMs ?? 0);
 
+    // 服务已关闭时的统一失败结果
+    const closedResult = () => ({
+      ok: false as const,
+      runId,
+      error: {
+        code: SERVICE_CLOSED,
+        message: "RemoteActionDockService is closed",
+      },
+    });
+
+    // 外部取消信号已触发时的统一取消结果
+    const cancelledResult = () => ({
+      ok: false as const,
+      runId,
+      error: {
+        code: ACTION_CANCELLED,
+        message: "Action execution was cancelled",
+      },
+    });
+
     if (signal?.aborted) {
-      return {
-        ok: false,
-        runId,
-        error: {
-          code: ACTION_CANCELLED,
-          message: "Action execution was cancelled",
-        },
-      };
+      return cancelledResult();
     }
 
     if (this.isClosed) {
-      return {
-        ok: false,
-        runId,
-        error: {
-          code: SERVICE_CLOSED,
-          message: "RemoteActionDockService is closed",
-        },
-      };
+      return closedResult();
     }
 
     const internalController = new AbortController();
@@ -726,14 +732,7 @@ export class RemoteActionDockService implements ActionDockService {
       }
     } catch (err: any) {
       if (err?.code === SERVICE_CLOSED || this.isClosed) {
-        return {
-          ok: false,
-          runId,
-          error: {
-            code: SERVICE_CLOSED,
-            message: "RemoteActionDockService is closed",
-          },
-        };
+        return closedResult();
       }
       if (!signal?.aborted && !sseTimedOut) {
         console.warn(
@@ -750,27 +749,13 @@ export class RemoteActionDockService implements ActionDockService {
     }
 
     if (signal?.aborted) {
-      return {
-        ok: false,
-        runId,
-        error: {
-          code: ACTION_CANCELLED,
-          message: "Action execution was cancelled",
-        },
-      };
+      return cancelledResult();
     }
 
     const remainingWaitMs = Math.max(0, maxWaitMs - (Date.now() - startTime));
     if (remainingWaitMs <= 0) {
       if (this.isClosed) {
-        return {
-          ok: false,
-          runId,
-          error: {
-            code: SERVICE_CLOSED,
-            message: "RemoteActionDockService is closed",
-          },
-        };
+        return closedResult();
       }
       try {
         const run = await this.runs.get(runId);
@@ -779,14 +764,7 @@ export class RemoteActionDockService implements ActionDockService {
         }
       } catch (err: any) {
         if (err?.code === SERVICE_CLOSED || this.isClosed) {
-          return {
-            ok: false,
-            runId,
-            error: {
-              code: SERVICE_CLOSED,
-              message: "RemoteActionDockService is closed",
-            },
-          };
+          return closedResult();
         }
         throw err;
       }

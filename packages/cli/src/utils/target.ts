@@ -13,6 +13,7 @@ import {
   type ResolvedTarget,
 } from "@actiondock/core/profile";
 import type { Command } from "commander";
+import { ArgumentError } from "../errors";
 import type { CliContext } from "../types";
 
 /**
@@ -108,9 +109,20 @@ export async function withService(
      * 保持缺省 false，避免误收割并发 serve 进程的在途运行记录。
      */
     ownDataDir?: boolean;
+    /**
+     * 是否强制要求远端目标：true 时 local 分支直接抛 ArgumentError（如 ad runs cancel），
+     * 替代原 withRemoteService 的专用实现。
+     */
+    requireRemote?: boolean;
   }
 ): Promise<void> {
   const resolved = resolveTargetFromOptions(options, context);
+
+  if (localOptions?.requireRemote && resolved.type === "local") {
+    throw new ArgumentError(
+      "'ad runs cancel' is only supported for remote execution targets. Use --profile <name> or --server <url>."
+    );
+  }
 
   // localRoot 仅在 local 分支求值，避免远端模式下触发包寻址副作用
   const localRoot =
@@ -143,31 +155,6 @@ export async function withService(
             : undefined),
           ...(localOptions?.ownDataDir === true ? { recoverOrphans: true } : undefined),
         });
-
-  try {
-    await fn(service, resolved);
-  } finally {
-    await service.close();
-  }
-}
-
-/**
- * 仅远端模式目标执行辅助：创建远端 Service 并保证资源释放。
- * 适用于 runs cancel 等明确要求远端目标的命令。
- */
-export async function withRemoteService(
-  options: TargetResolutionOptions,
-  context: CliContext | undefined,
-  fn: (service: ActionDockService, resolved: ResolvedTarget) => Promise<void>
-): Promise<void> {
-  const resolved = resolveTargetFromOptions(options, context);
-
-  const service = await connectActionDock({
-    serverUrl: resolved.serverUrl!,
-    token: resolved.token,
-    insecure: resolved.insecure,
-    allowInsecureHttp: resolved.allowInsecureHttp ?? options.allowInsecureHttp,
-  });
 
   try {
     await fn(service, resolved);

@@ -359,13 +359,6 @@ export class ActionRunner {
     }
 
     // 铁律 4：Runner 不找 Package：只能执行自己所属 Package 的 Action
-    if (targetPackageId && targetPackageId !== this.packageId) {
-      return {
-        status: "not_found",
-        reason: `Runner for package '${this.packageId}' cannot resolve external package '${targetPackageId}'`,
-      };
-    }
-
     return {
       status: "not_found",
       reason: `Action '${targetActionId}' not found in package '${this.packageId}'`,

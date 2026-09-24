@@ -21,11 +21,11 @@ export {
   assertSecureTransport,
   createRemoteFetch,
   fetchRemoteRoute,
-  listProtocolRouteCandidates,
 } from "./client-transport";
 export type {
   RemoteClientRequestOptions,
   RemoteFetchInit,
+  SecureTransportOptions,
 } from "./client-transport";
 
 // 健康检查

@@ -10,6 +10,11 @@ import fs, {
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
+import { isProcessAlive } from "../utils/process";
+
+// isProcessAlive 已上移至 utils/process.ts（跨域通用谓词单一事实源），
+// 此处仅保留 re-export 兼容旧引用路径
+export { isProcessAlive };
 
 /**
  * 目录锁内核（单一事实源）。
@@ -61,23 +66,6 @@ export interface ReclaimGuardState {
   isStale: boolean;
   holderPid?: number;
   guardToken?: string;
-}
-
-/**
- * 检查目标进程是否处于存活状态。
- *
- * @param pid 待检测的进程标识符
- */
-export function isProcessAlive(pid: number): boolean {
-  if (typeof pid !== "number" || isNaN(pid) || pid <= 0) {
-    return false;
-  }
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err: any) {
-    return Boolean(err && err.code === "EPERM");
-  }
 }
 
 /**

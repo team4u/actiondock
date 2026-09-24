@@ -49,6 +49,7 @@ ActionDock 采用确定性的结构化错误体系。所有失败均通过标准
 | :--- | :---: | :--- | :--- |
 | `ACTION_NOT_FOUND` | 404 | 指定的 Action 标识在当前包、链接包或注册表中均未命中。 | 执行 `ad list` 确认动作标识是否存在或检查拼写。 |
 | `PACKAGE_NOT_FOUND` | 404 | 请求中指定的包标识符无法在当前工作区、已链接包或注册表中定位。 | 确认包标识符拼写，或执行 `ad link` 挂载对应包。 |
+| `PACKAGE_NOT_ALLOWED` | 403 | 目标包未列入微服务启动白名单（`-P, --package`）或已被访问控制规则拒绝。 | 确认服务启动时传入的 `-P, --package` 参数包含该包标识符，或调整客户端调用的包名称。 |
 | `ACTION_LOAD_FAILED` | 500 | Action 源码入口模块加载失败（模块缺失、语法错误或依赖未安装）。 | 检查入口文件路径与 TypeScript 语法，并在包目录下执行依赖安装。 |
 | `ACTION_PACKAGE_VERSION_CONFLICT` | 409 | 依赖图中检测到相同包标识但存在不兼容的版本冲突。 | 检查 `actiondock.lock.json` 与依赖版本声明，消除多版本冲突。 |
 

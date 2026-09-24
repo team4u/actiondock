@@ -798,7 +798,6 @@ describe("@actiondock/testing", () => {
         },
         actions: { "calc.add": testAction },
       });
-      expect(platformRuntime.executionService).toBeDefined();
       const platformOut = await platformRuntime.run<{ a: number; b: number }, { sum: number }>(testAction, { a: 15, b: 25 });
       expect(platformOut).toEqual({ sum: 40 });
 

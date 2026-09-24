@@ -13,31 +13,12 @@ import { loadManifest, MANIFEST_FILE_NAME } from "../project/manifest";
 import type { ActionDockManifest, PlaybookDefinition } from "../project/types";
 import { listLinkedPackages } from "../registry/registry";
 import { createPackageIdentity, type PackageIdentity } from "../runtime/identity";
+import { parseSemVer, type SemVer } from "../utils";
 import { PackageDiscovery, type DiscoveredPackage, type PackageDiscoveryOptions } from "./discovery";
 
-/**
- * 语义化版本元数据结构。
- */
-export interface SemVer {
-  major: number;
-  minor: number;
-  patch: number;
-  prerelease?: string;
-}
-
-/**
- * 解析基础 SemVer 版本字符串。
- */
-export function parseSemVer(v: string): SemVer | null {
-  const match = v.trim().replace(/^[v=]/, "").match(/^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/);
-  if (!match) return null;
-  return {
-    major: parseInt(match[1], 10),
-    minor: parseInt(match[2], 10),
-    patch: parseInt(match[3], 10),
-    prerelease: match[4],
-  };
-}
+// 维持既有对外导出面：SemVer 与 parseSemVer 的单一事实源已上移 utils，此处转引保持兼容。
+export type { SemVer };
+export { parseSemVer };
 
 /**
  * 校验两个语义化版本范围是否兼容并能收敛为单一解析版本。
@@ -108,6 +89,29 @@ export class UndeclaredActionDependencyError extends ActionDockError {
     this.caller = caller;
     Object.setPrototypeOf(this, UndeclaredActionDependencyError.prototype);
   }
+}
+
+/**
+ * 判定单一 uses 声明项是否命中目标 Action（跨包调用授权单一事实源）。
+ *
+ * 匹配语义（安全铁律，逐字不变）：
+ * - 完全限定名：`<targetPackageId>/<targetActionId>`；
+ * - 包级通配符：`<targetPackageId>/*`；
+ * - 裸包名：`<targetPackageId>`。
+ *
+ * DefaultPackageGraph.canCascadeCall 与 InvocationPolicy.checkUsesAuthorization
+ * 必须统一经由本谓词判定，禁止在调用点另建重复表达式分叉。
+ */
+export function isUsesDeclared(
+  use: string,
+  targetPackageId: string,
+  targetActionId: string
+): boolean {
+  return (
+    use === `${targetPackageId}/${targetActionId}` ||
+    use === `${targetPackageId}/*` ||
+    use === targetPackageId
+  );
 }
 
 /**
@@ -289,11 +293,8 @@ export class DefaultPackageGraph implements PackageGraph {
 
     const callerActionEntry = callerPkg.manifest.actions?.[callerActionId];
     const usesList = callerActionEntry?.uses || [];
-    const targetRef = `${targetPackageId}/${targetActionId}`;
 
-    return usesList.some(
-      (u) => u === targetRef || u === `${targetPackageId}/*` || u === targetPackageId
-    );
+    return usesList.some((u) => isUsesDeclared(u, targetPackageId, targetActionId));
   }
 
   assertCascadeCallAllowed(

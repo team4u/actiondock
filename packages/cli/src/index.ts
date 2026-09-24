@@ -22,9 +22,10 @@ export * from "./commands";
  */
 export async function main(
   argv: string[] = process.argv,
-  control?: InvocationControl
+  control?: InvocationControl,
+  contextOptions?: Partial<CliContext>
 ): Promise<number> {
-  const context: CliContext = { control, exitCode: 0 };
+  const context: CliContext = { control, exitCode: 0, ...contextOptions };
   const program = createCliProgram(context);
 
   const isMachine = argv.includes("--json");

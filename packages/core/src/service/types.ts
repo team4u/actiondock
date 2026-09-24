@@ -81,23 +81,6 @@ export class CloseTimeoutError extends Error {
 }
 
 /**
- * 服务自省元数据信息。
- */
-export interface ServiceInfo {
-  id: string;
-  name: string;
-  protocolVersion: string;
-  packages: PackageInfo[];
-  capabilities: string[];
-  idempotencyPolicy?: {
-    retentionMs?: number;
-    header?: string;
-    [key: string]: unknown;
-  };
-  [key: string]: unknown;
-}
-
-/**
  * 配置项安全视图契约。
  * 屏蔽敏感配置原文，仅暴露是否已配置、是否为秘密及实际解析来源。
  */
@@ -351,24 +334,13 @@ export interface CreateActionDockOptions {
 
 /**
  * 连接 ActionDock 远程服务选项。
+ *
+ * 与 RemoteServiceOptions 字段同源：远程服务连接配置为单一事实源，
+ * 此处仅放宽 serverUrl 必选性并补充独立家目录差异字段，公开形状不变。
  */
-export interface ConnectActionDockOptions {
-  /** 远端 ActionDock 服务 HTTP 根地址 */
+export interface ConnectActionDockOptions extends Omit<RemoteServiceOptions, "serverUrl"> {
+  /** 远端 ActionDock 服务 HTTP 根地址（连接入口负责解析，此处可缺省） */
   serverUrl?: string;
-  /** 鉴权 Bearer Token（可选） */
-  token?: string;
-  /** 是否允许向非回环地址发送明文 HTTP 请求（默认 false） */
-  allowInsecureHttp?: boolean;
-  /** 是否跳过 TLS 证书合法性校验 */
-  insecure?: boolean;
-  /** 自定义底层 HTTP 调度器 */
-  dispatcher?: unknown;
-  /** 请求超时时间（毫秒） */
-  timeoutMs?: number;
-  /** 轮询等待基准底线超时时间（毫秒，默认 60000ms） */
-  baseTimeoutMs?: number;
-  /** 是否开启管理端口（默认 true） */
-  enableManagement?: boolean;
   /** 自定义 ActionDock 家目录（用于读取自定义位置 profiles.json） */
   customHome?: string;
 }

@@ -5,17 +5,10 @@ import {
 import {
   isSecretConfigKey,
 } from "@actiondock/core/project";
-import {
-  loadProjectConfig,
-} from "@actiondock/core";
-import {
-  resolvePackageRoot,
-} from "@actiondock/core/registry";
 import type { Command } from "commander";
-import { notInProjectError, packageNotFoundError } from "../../errors";
 import { renderConfigEnv, renderResult } from "../../renderer";
 import type { CliContext, EnvCheckItem } from "../../types";
-import { applyTargetOptions, getEffectiveOptions, resolveTargetFromOptions } from "../../utils";
+import { applyTargetOptions, getEffectiveOptions, requirePackageRoot, resolveTargetFromOptions } from "../../utils";
 
 /**
  * 注册 config env 子命令：诊断环境变量对声明配置的满足率。
@@ -58,17 +51,11 @@ export function registerConfigEnvCommand(configCmd: Command, context?: CliContex
       }
 
       // 本地项目分支
-      const root = resolvePackageRoot(targetPkg);
-      if (!root) {
-        if (targetPkg) {
-          throw packageNotFoundError(targetPkg);
-        }
-        throw notInProjectError(
-          "Usage: ad config env [package-id] or cd into a project directory."
-        );
-      }
+      const { root, projConfig } = requirePackageRoot(targetPkg, {
+        loadConfig: true,
+        hint: "Usage: ad config env [package-id] or cd into a project directory.",
+      });
 
-      const projConfig = loadProjectConfig(root);
       const declared = projConfig.config || {};
       const envChecks: EnvCheckItem[] = [];
 

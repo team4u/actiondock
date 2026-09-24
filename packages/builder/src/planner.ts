@@ -39,7 +39,7 @@ import type { ProjectConfigWithDeclarations } from "./types";
  * 目录遍历统一复用 core 的 traverseDirectory 单一事实源，
  * 自带软链接越界防护与循环拦截。
  */
-function walkDirectory(dir: string, _rootDir: string = dir): string[] {
+function walkDirectory(dir: string): string[] {
   return traverseDirectory(dir).map((entry) => entry.fullPath);
 }
 
@@ -165,7 +165,7 @@ function generateFallbackManifest(
 
   // 若 actions 目录存在，基于文件名建立默认映射（过滤规则与 isIgnoredPath 保持同一口径）
   if (existsSync(dir)) {
-    const files = walkDirectory(dir, projectRoot).filter((f) => {
+    const files = walkDirectory(dir).filter((f) => {
       const rel = relative(projectRoot, f).replace(/\\/g, "/");
       return (
         (f.endsWith(".ts") || f.endsWith(".js")) &&
@@ -601,7 +601,7 @@ export class SelectionPlanner {
       }
       const stat = statSync(resolvedFile);
       if (stat.isDirectory()) {
-        const walked = walkDirectory(resolvedFile, root);
+        const walked = walkDirectory(resolvedFile);
         for (const f of walked) {
           const rel = relative(root, f).replace(/\\/g, "/");
           if (!isIgnoredPath(rel) && !actionPathSet.has(f) && !filePathSet.has(rel)) {
@@ -649,7 +649,7 @@ export class SelectionPlanner {
       }
       const stat = statSync(resolvedAsset);
       if (stat.isDirectory()) {
-        const walked = walkDirectory(resolvedAsset, root);
+        const walked = walkDirectory(resolvedAsset);
         for (const f of walked) {
           const rel = relative(root, f).replace(/\\/g, "/");
           if (!assetPathSet.has(rel)) {
@@ -677,7 +677,7 @@ export class SelectionPlanner {
     // 默认 assets 目录扫描
     const defaultAssetsDir = join(root, "assets");
     if (existsSync(defaultAssetsDir)) {
-      const assetFiles = walkDirectory(defaultAssetsDir, root);
+      const assetFiles = walkDirectory(defaultAssetsDir);
       for (const file of assetFiles) {
         const rel = relative(root, file).replace(/\\/g, "/");
         if (!assetPathSet.has(rel)) {

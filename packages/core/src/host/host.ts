@@ -9,6 +9,7 @@ import type {
   RuntimeError,
 } from "@actiondock/sdk";
 import { DefaultPackageRuntime } from "../package/runtime";
+import { applyActionSummaryFilters } from "../package/types";
 import type {
   HostManagedPackageRuntime,
   PackageInfo,
@@ -134,12 +135,6 @@ export class DefaultActionDockHost implements ActionDockHost {
     }
 
     if (internalOptions?.deferInit) {
-      try {
-        this.registerExplicitPackages(this.options);
-      } catch (err) {
-        this.rollbackSync();
-        throw err;
-      }
       return;
     }
 
@@ -169,8 +164,24 @@ export class DefaultActionDockHost implements ActionDockHost {
   }
 
   public async initializeAsync(): Promise<void> {
+    // 阶段一：注册显式传入的 packages 列表
+    this.registerExplicitPackages(this.options);
+
     // 阶段二：自动加载当前工程（若发现工程根目录且未显式禁用）
     if (this.options.autoLoadCurrentProject !== false) {
+      const root = resolveProjectRoot(this.options, () => findProjectRoot());
+      if (root) {
+        if (isProjectLockHeld(root)) {
+          throw new ActionDockError(
+            PROJECT_BUSY,
+            "PROJECT_BUSY: Project directory is locked by another active process holding project.lock"
+          );
+        }
+        // 依据事务日志恢复未完成提交的悬空事务（锁持有者存活时严禁判定为崩溃事务并禁止自动恢复）
+        if (hasPendingTransactions(root)) {
+          await recoverPendingTransactions(root, { frozenInstall: true });
+        }
+      }
       this.loadCurrentProject(this.options);
     }
 
@@ -183,19 +194,37 @@ export class DefaultActionDockHost implements ActionDockHost {
   }
 
   /**
-   * 异步安全回滚初始化失败时所占用的资源。
+   * 安全回滚初始化失败时所占用的资源。
+   *
+   * 同步语境（构造函数路径）下对 runtime.close() 采用 fire-and-forget：
+   * 仅附加吞没异常的 catch 处理器，不 await，避免构造链路引入异步;
+   * 异步语境下逐个 await 全部 runtime.close() 后再依次释放全局存储与目录锁。
    */
-  public async rollbackInitialization(): Promise<void> {
-    const allRuntimes = Array.from(this.runtimes.values());
-    await Promise.all(
-      allRuntimes.map(async (runtime) => {
+  private async rollbackResources(sync: boolean): Promise<void> {
+    if (sync) {
+      // 安全关闭宿主管理的所有 Runtime 实例（同步语境 fire-and-forget）
+      for (const runtime of this.runtimes.values()) {
         try {
-          await runtime.close();
+          const closePromise = runtime.close();
+          if (closePromise && typeof (closePromise as any).catch === "function") {
+            (closePromise as any).catch(() => {});
+          }
         } catch {
-          // 忽略 Runtime 关闭异常
+          // 忽略 runtime 关闭异常
         }
-      })
-    );
+      }
+    } else {
+      const allRuntimes = Array.from(this.runtimes.values());
+      await Promise.all(
+        allRuntimes.map(async (runtime) => {
+          try {
+            await runtime.close();
+          } catch {
+            // 忽略 Runtime 关闭异常
+          }
+        })
+      );
+    }
     this.runtimes.clear();
 
     try {
@@ -214,34 +243,15 @@ export class DefaultActionDockHost implements ActionDockHost {
     this.isClosed = true;
   }
 
+  /**
+   * 异步安全回滚初始化失败时所占用的资源。
+   */
+  public async rollbackInitialization(): Promise<void> {
+    await this.rollbackResources(false);
+  }
+
   private rollbackSync(): void {
-    try {
-      this.dataDirLock?.release();
-    } catch {
-      // 忽略排他锁释放异常
-    }
-    this.dataDirLock = undefined;
-
-    // 安全关闭宿主管理的所有 Runtime 实例
-    for (const runtime of this.runtimes.values()) {
-      try {
-        const closePromise = runtime.close();
-        if (closePromise && typeof (closePromise as any).catch === "function") {
-          (closePromise as any).catch(() => {});
-        }
-      } catch {
-        // 忽略 runtime 关闭异常
-      }
-    }
-    this.runtimes.clear();
-
-    try {
-      this.globalStorage?.close();
-    } catch {
-      // 忽略全局存储关闭异常
-    }
-    this.globalStorage = undefined;
-    this.isClosed = true;
+    void this.rollbackResources(true);
   }
 
   /**
@@ -602,24 +612,8 @@ export class DefaultActionDockHost implements ActionDockHost {
     return this.runtimes.get(packageId);
   }
 
-  getGraph(): PackageGraph {
-    return this.graph;
-  }
-
-  getCatalog(): ActionCatalog {
-    return this.catalog;
-  }
-
   listRuntimes(): PackageRuntime[] {
     return Array.from(this.runtimes.values());
-  }
-
-  /**
-   * 获取自动加载工程的失败诊断信息。
-   * 仅自动探测场景会记录此诊断；显式传入 projectRoot 的加载失败会直接抛出，不产生此诊断。
-   */
-  getAutoLoadFailure(): { projectRoot: string; error: string } | undefined {
-    return this.failedAutoLoad;
   }
 
   private registerRuntimeInternal(runtime: PackageRuntime, isPublic: boolean): void {
@@ -664,7 +658,8 @@ export class DefaultActionDockHost implements ActionDockHost {
   }
 
   async listActions(options?: ListActionsOptions): Promise<ActionSummary[]> {
-    let results: ActionSummary[] = [];
+    // 外层完成可见性筛选与跨包限定名改写后，统一委托共享过滤函数完成检索
+    const results: ActionSummary[] = [];
     const runtimes = this.listRuntimes();
     for (const runtime of runtimes) {
       const runtimeSummaries = await runtime.listActions();
@@ -683,27 +678,7 @@ export class DefaultActionDockHost implements ActionDockHost {
         });
       }
     }
-
-    if (options?.tags && options.tags.length > 0) {
-      results = results.filter((s) =>
-        options.tags!.every((t) => s.tags?.includes(t))
-      );
-    }
-
-    if (options?.query) {
-      const q = options.query.toLowerCase();
-      results = results.filter(
-        (s) =>
-          s.id.toLowerCase().includes(q) ||
-          (s.description && s.description.toLowerCase().includes(q))
-      );
-    }
-
-    if (options?.prefix) {
-      results = results.filter((s) => s.id.startsWith(options.prefix!));
-    }
-
-    return results;
+    return applyActionSummaryFilters(results, options);
   }
 
   async describeAction(ref: ActionRef | string): Promise<ActionSpec> {
@@ -969,6 +944,17 @@ export class DefaultActionDockHost implements ActionDockHost {
     return runtimes.length === 1 ? runtimes[0] : undefined;
   }
 
+  /**
+   * 解析目标包运行时：未命中时抛出统一的包未找到错误。
+   */
+  private requireRuntime(packageId: string): PackageRuntime {
+    const runtime = this.resolveRuntime(packageId);
+    if (!runtime) {
+      throw new Error(`Package '${packageId}' not found in host`);
+    }
+    return runtime;
+  }
+
   async getConfig(packageId: string, key: string): Promise<ConfigValueView> {
     if (packageId === "global") {
       const globalStorage = this.getGlobalStorage();
@@ -984,11 +970,7 @@ export class DefaultActionDockHost implements ActionDockHost {
         value: !isSecret && configured ? (val as JsonValue) : undefined,
       };
     }
-    const runtime = this.resolveRuntime(packageId);
-    if (!runtime) {
-      throw new Error(`Package '${packageId}' not found in host`);
-    }
-    return runtime.getConfig(key);
+    return this.requireRuntime(packageId).getConfig(key);
   }
 
   async setConfig(packageId: string, key: string, value: JsonValue): Promise<void> {
@@ -996,22 +978,14 @@ export class DefaultActionDockHost implements ActionDockHost {
       await this.getGlobalStorage().setConfig(key, value);
       return;
     }
-    const runtime = this.resolveRuntime(packageId);
-    if (!runtime) {
-      throw new Error(`Package '${packageId}' not found in host`);
-    }
-    await runtime.setConfig(key, value);
+    await this.requireRuntime(packageId).setConfig(key, value);
   }
 
   async deleteConfig(packageId: string, key: string): Promise<boolean> {
     if (packageId === "global") {
       return await this.getGlobalStorage().deleteConfig(key);
     }
-    const runtime = this.resolveRuntime(packageId);
-    if (!runtime) {
-      throw new Error(`Package '${packageId}' not found in host`);
-    }
-    return await runtime.deleteConfig(key);
+    return await this.requireRuntime(packageId).deleteConfig(key);
   }
 
   async listConfig(packageId: string): Promise<ConfigValueView[]> {
@@ -1030,11 +1004,7 @@ export class DefaultActionDockHost implements ActionDockHost {
         };
       });
     }
-    const runtime = this.resolveRuntime(packageId);
-    if (!runtime) {
-      throw new Error(`Package '${packageId}' not found in host`);
-    }
-    return runtime.listConfig();
+    return this.requireRuntime(packageId).listConfig();
   }
 
   async getState<T extends JsonValue = JsonValue>(
@@ -1043,11 +1013,7 @@ export class DefaultActionDockHost implements ActionDockHost {
     key: string,
     options?: StateScopeOptions
   ): Promise<T | undefined> {
-    const runtime = this.resolveRuntime(packageId);
-    if (!runtime) {
-      throw new Error(`Package '${packageId}' not found in host`);
-    }
-    return runtime.getState<T>(actionId, key, options);
+    return this.requireRuntime(packageId).getState<T>(actionId, key, options);
   }
 
   async setState<T extends JsonValue = JsonValue>(
@@ -1057,10 +1023,7 @@ export class DefaultActionDockHost implements ActionDockHost {
     value: T,
     options?: StateScopeOptions
   ): Promise<void> {
-    const runtime = this.resolveRuntime(packageId);
-    if (!runtime) {
-      throw new Error(`Package '${packageId}' not found in host`);
-    }
+    const runtime = this.requireRuntime(packageId);
     if (actionId) {
       await runtime.setActionState<T>(actionId, key, value, options);
     } else {
@@ -1074,11 +1037,7 @@ export class DefaultActionDockHost implements ActionDockHost {
     key: string,
     options?: StateScopeOptions
   ): Promise<boolean> {
-    const runtime = this.resolveRuntime(packageId);
-    if (!runtime) {
-      throw new Error(`Package '${packageId}' not found in host`);
-    }
-    return runtime.deleteState(actionId, key, options);
+    return this.requireRuntime(packageId).deleteState(actionId, key, options);
   }
 
   async listStateKeys(
@@ -1086,11 +1045,7 @@ export class DefaultActionDockHost implements ActionDockHost {
     actionId: string,
     options?: StateScopeOptions
   ): Promise<string[]> {
-    const runtime = this.resolveRuntime(packageId);
-    if (!runtime) {
-      throw new Error(`Package '${packageId}' not found in host`);
-    }
-    return runtime.listStateKeys(actionId, options);
+    return this.requireRuntime(packageId).listStateKeys(actionId, options);
   }
 
   async clearState(
@@ -1098,11 +1053,7 @@ export class DefaultActionDockHost implements ActionDockHost {
     actionId: string,
     options?: StateScopeOptions
   ): Promise<number> {
-    const runtime = this.resolveRuntime(packageId);
-    if (!runtime) {
-      throw new Error(`Package '${packageId}' not found in host`);
-    }
-    return runtime.clearState(actionId, options);
+    return this.requireRuntime(packageId).clearState(actionId, options);
   }
 
   async listStateEntries(
@@ -1168,23 +1119,6 @@ export async function createActionDockHost(
   let createdHost: DefaultActionDockHost | undefined;
   try {
     createdHost = new DefaultActionDockHost(options, { deferInit: true });
-
-    if (options.autoLoadCurrentProject !== false) {
-      const root = resolveProjectRoot(options, () => findProjectRoot());
-      if (root) {
-        if (isProjectLockHeld(root)) {
-          throw new ActionDockError(
-            PROJECT_BUSY,
-            "PROJECT_BUSY: Project directory is locked by another active process holding project.lock"
-          );
-        }
-        // 依据事务日志恢复未完成提交的悬空事务（锁持有者存活时严禁判定为崩溃事务并禁止自动恢复）
-        if (hasPendingTransactions(root)) {
-          await recoverPendingTransactions(root, { frozenInstall: true });
-        }
-      }
-    }
-
     await createdHost.initializeAsync();
     return createdHost;
   } catch (err) {

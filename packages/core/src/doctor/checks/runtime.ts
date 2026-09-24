@@ -1,7 +1,38 @@
-import { findExecutable } from "../../utils";
+import { findExecutable, parseSemVer } from "../../utils";
 import type { DoctorCheck } from "../context";
 
+/**
+ * 比较两个版本字符串（基于 utils.parseSemVer 单一事实源）。
+ *
+ * 行为契约（与历史手写实现逐字节对齐）：
+ * - 双方均为严格三段式语义化版本且无预发布后缀时，按 major/minor/patch 逐段数值比较；
+ * - 其余形态（两段式、带 v 前缀的四段式、携带预发布后缀等）回退到历史宽松语义：
+ *   去 v 前缀后按点分段数值比较，缺段补零、非数值段作零。
+ *   宽松回退保留历史行为的尾段数值比较（预发布后缀的数字段参与比较），
+ *   与 parseSemVer 的严格语义存在刻意差异，不得合并。
+ */
 function compareSemver(v1: string, v2: string): number {
+  // 预检：parseSemVer 会剥离 = 前缀而历史宽松语义不会（NaN 段作零），
+  // 携带 = 前缀的输入必须回退宽松分支以保持历史行为完全一致。
+  if (v1[0] === "=" || v2[0] === "=") {
+    return compareLooseVersion(v1, v2);
+  }
+  const s1 = parseSemVer(v1);
+  const s2 = parseSemVer(v2);
+  if (s1 && s2 && !s1.prerelease && !s2.prerelease) {
+    if (s1.major !== s2.major) return s1.major > s2.major ? 1 : -1;
+    if (s1.minor !== s2.minor) return s1.minor > s2.minor ? 1 : -1;
+    if (s1.patch !== s2.patch) return s1.patch > s2.patch ? 1 : -1;
+    return 0;
+  }
+  return compareLooseVersion(v1, v2);
+}
+
+/**
+ * 历史宽松版本比较（去 v 前缀后按点分段数值比较，缺段补零、非数值段作零）。
+ * 仅供 compareSemver 的非严格形态回退分支使用，禁止断开对外直接引用。
+ */
+function compareLooseVersion(v1: string, v2: string): number {
   const p1 = v1.replace(/^v/, "").split(".").map(Number);
   const p2 = v2.replace(/^v/, "").split(".").map(Number);
   for (let i = 0; i < Math.max(p1.length, p2.length); i++) {

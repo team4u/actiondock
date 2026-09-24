@@ -8,33 +8,25 @@ import {
   formatActionDetail,
 } from "../src/utils/input";
 
-const cliPath = resolve(import.meta.dirname, "../bin/ad.js");
+import { runCliAsync } from "./helpers/run-cli";
 
 let tempHome: string | undefined;
 
-function runCli(
+async function runCli(
   args: string[],
   cwd?: string,
-  stdinInput?: string | Buffer,
   env?: Record<string, string>
 ) {
-  return Bun.spawnSync(["bun", cliPath, ...args], {
-    cwd,
-    env: {
-      ...process.env,
-      ...(tempHome ? { ACTIONDOCK_HOME: tempHome } : {}),
-      ...env,
-    },
-    stdin: stdinInput !== undefined ? (Buffer.isBuffer(stdinInput) ? stdinInput : Buffer.from(stdinInput)) : undefined,
-    stdout: "pipe",
-    stderr: "pipe",
+  return await runCliAsync(args, cwd, {
+    ...(tempHome ? { ACTIONDOCK_HOME: tempHome } : {}),
+    ...env,
   });
 }
 
 describe("CLI Action Input Resolution - Flat Arguments and Advice", () => {
   let tempDir: string;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     tempDir = mkdtempSync(join(tmpdir(), "ad-cli-input-flat-test-"));
     tempHome = mkdtempSync(join(tmpdir(), "ad-cli-input-flat-home-"));
 
@@ -46,7 +38,7 @@ describe("CLI Action Input Resolution - Flat Arguments and Advice", () => {
     }
 
     // Initialize project
-    const initProc = runCli(["init", "--id", "test.input-pkg", "--name", "Input Pkg", "."], tempDir);
+    const initProc = await runCli(["init", "--id", "test.input-pkg", "--name", "Input Pkg", "."], tempDir);
     expect(initProc.exitCode).toBe(0);
 
     // Create an echo action that returns the exact received input
@@ -90,8 +82,8 @@ export default defineAction(async (input: any) => {
   });
 
   // 18. Flat JsonValue Encoding v1: 通过 -- 传递字符串赋值、JSON 赋值、嵌套对象、数字索引数组
-  it("executes action with flat arguments via -- supporting =, :=, nested objects, and indexed arrays", () => {
-    const proc = runCli(
+  it("executes action with flat arguments via -- supporting =, :=, nested objects, and indexed arrays", async () => {
+    const proc = await runCli(
       [
         "run",
         "test.echo",
@@ -125,8 +117,8 @@ export default defineAction(async (input: any) => {
   });
 
   // 19. Flat 参数与 --input 冲突返回退出码 2 及结构化错误
-  it("rejects when both flat args (via --) and --input are provided with exit code 2 and INPUT_CONFLICT", () => {
-    const proc = runCli(
+  it("rejects when both flat args (via --) and --input are provided with exit code 2 and INPUT_CONFLICT", async () => {
+    const proc = await runCli(
       ["run", "test.echo", "--input", '{"a":1}', "--json", "--", "b=2"],
       tempDir
     );
@@ -138,11 +130,11 @@ export default defineAction(async (input: any) => {
   });
 
   // 20. Flat 参数与 --input-file 冲突返回退出码 2 及结构化错误
-  it("rejects when both flat args (via --) and --input-file are provided with exit code 2 and INPUT_CONFLICT", () => {
+  it("rejects when both flat args (via --) and --input-file are provided with exit code 2 and INPUT_CONFLICT", async () => {
     const filePath = join(tempDir, "input.json");
     writeFileSync(filePath, "{}", "utf-8");
 
-    const proc = runCli(
+    const proc = await runCli(
       ["run", "test.echo", "--input-file", filePath, "--json", "--", "b=2"],
       tempDir
     );
@@ -154,8 +146,8 @@ export default defineAction(async (input: any) => {
   });
 
   // 21. 非法 Flat 参数在 --json 模式下返回正确的错误信封
-  it("rejects invalid JSON literal in flat args with exit code 2 and INVALID_JSON_LITERAL", () => {
-    const proc = runCli(
+  it("rejects invalid JSON literal in flat args with exit code 2 and INVALID_JSON_LITERAL", async () => {
+    const proc = await runCli(
       ["run", "test.echo", "--json", "--", "num:=invalid_json"],
       tempDir
     );
@@ -165,8 +157,8 @@ export default defineAction(async (input: any) => {
     expect(res.error.code).toBe("INVALID_JSON_LITERAL");
   });
 
-  it("rejects invalid path in flat args with exit code 2 and INVALID_FLAT_ARGUMENT", () => {
-    const proc = runCli(
+  it("rejects invalid path in flat args with exit code 2 and INVALID_FLAT_ARGUMENT", async () => {
+    const proc = await runCli(
       ["run", "test.echo", "--json", "--", "bad..path=1"],
       tempDir
     );
@@ -176,8 +168,8 @@ export default defineAction(async (input: any) => {
     expect(res.error.code).toBe("INVALID_FLAT_ARGUMENT");
   });
 
-  it("rejects path conflict in flat args with exit code 2 and INPUT_PATH_CONFLICT", () => {
-    const proc = runCli(
+  it("rejects path conflict in flat args with exit code 2 and INPUT_PATH_CONFLICT", async () => {
+    const proc = await runCli(
       ["run", "test.echo", "--json", "--", "a=1", "a.b=2"],
       tempDir
     );
@@ -188,8 +180,8 @@ export default defineAction(async (input: any) => {
   });
 
   // 22. --input '1e400' 抛出 INVALID_JSON
-  it("rejects --input '1e400' (Infinity) with exit code 2 and INVALID_JSON code", () => {
-    const proc = runCli(["run", "test.echo", "--input", "1e400", "--json"], tempDir);
+  it("rejects --input '1e400' (Infinity) with exit code 2 and INVALID_JSON code", async () => {
+    const proc = await runCli(["run", "test.echo", "--input", "1e400", "--json"], tempDir);
     expect(proc.exitCode).toBe(2);
     const res = JSON.parse(proc.stdout.toString());
     expect(res.ok).toBe(false);

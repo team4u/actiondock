@@ -166,25 +166,4 @@ export class NodeModuleLoader implements ModuleLoader {
     const mod = await this.load(specifier, parentPath);
     return unwrapDefaultExport<T>(mod);
   }
-
-  /**
-   * 静态快捷方法：解析模块路径。
-   */
-  static resolve(specifier: string, parentPath?: string): string {
-    return new NodeModuleLoader().resolve(specifier, parentPath);
-  }
-
-  /**
-   * 静态快捷方法：动态加载模块。
-   */
-  static async load<T = any>(specifier: string, parentPath?: string): Promise<T> {
-    return new NodeModuleLoader().load<T>(specifier, parentPath);
-  }
-
-  /**
-   * 静态快捷方法：动态加载模块默认导出。
-   */
-  static async loadDefault<T = any>(specifier: string, parentPath?: string): Promise<T> {
-    return new NodeModuleLoader().loadDefault<T>(specifier, parentPath);
-  }
 }

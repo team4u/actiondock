@@ -21,13 +21,6 @@ export interface ServerTlsOptions {
   passphrase?: string;
 }
 
-export type CoreHttpServerFactory = (options: {
-  port: number;
-  host: string;
-  fetch: (req: Request) => Promise<Response>;
-  tls?: ServerTlsOptions;
-}) => CoreHttpServerInstance | Promise<CoreHttpServerInstance>;
-
 /**
  * 启动 ActionDock HTTP Runner 服务端的配置选项。
  */

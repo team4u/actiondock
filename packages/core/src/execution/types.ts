@@ -56,8 +56,6 @@ export interface ExecutionServiceOptions {
   logger?: Logger;
   eventSink?: EventSink;
   maxActiveRuns?: number;
-  maxCallDepth?: number;
-  maxSubRuns?: number;
   ownerId?: string;
   actionResolver?: LocalActionResolver;
   customHome?: string;

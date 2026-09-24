@@ -231,6 +231,9 @@ export const MCP_TOOL_NAME_COLLISION = "MCP_TOOL_NAME_COLLISION";
 /** 跨进程 IPC 通信或调用异常 */
 export const IPC_ERROR = "IPC_ERROR";
 
+/** 服务调用层内部异常回退错误码 */
+export const SERVICE_ERROR = "SERVICE_ERROR";
+
 /**
  * 判定错误消息根因是否为依赖模块缺失。
  * 兼容 Node.js 与打包器（Bun 等）两类加载器的报错文案。
@@ -517,7 +520,8 @@ export type ErrorCode =
   | typeof AMBIGUOUS_STATE_KEY
   | typeof RUN_NOT_FOUND
   | typeof RUN_ALREADY_FINISHED
-  | typeof IPC_ERROR;
+  | typeof IPC_ERROR
+  | typeof SERVICE_ERROR;
 
 /**
  * 进程领域结构化异常类。

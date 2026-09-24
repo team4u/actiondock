@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import type { ActionDefinition } from "@actiondock/sdk";
-import { NodeModuleLoader, type ModuleLoader } from "../node/module-loader";
+import { NodeModuleLoader, type ModuleLoader, unwrapDefaultExport } from "../node/module-loader";
 import { ACTION_LOAD_FAILED, isMissingModuleError } from "../errors";
 import { loadManifest, ACTION_ID_REGEX, PLAYBOOK_ID_REGEX } from "./manifest";
 import type {
@@ -257,7 +257,7 @@ export async function loadActions(
         throw error;
       }
 
-      const exported = imported?.default ?? imported?.action ?? imported;
+      const exported = unwrapDefaultExport(imported);
       let runFn: ((input: any, ctx: any) => any) | undefined;
       if (typeof exported === "function") {
         runFn = exported;

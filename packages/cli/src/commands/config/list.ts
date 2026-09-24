@@ -113,41 +113,9 @@ export function registerConfigListCommand(configCmd: Command, context?: CliConte
       await withService(options, context, async (service) => {
         const root = options.package ? resolvePackageRoot(options.package) : findProjectRoot();
 
-        if (options.global) {
-          const all = (await service.management?.config.list("global")) ?? [];
-          const entries = all.map((item) =>
-            toDisplayEntry(
-              item.key,
-              item.value,
-              "global",
-              item.secret || isSecretConfigKey(item.key),
-              reveal
-            )
-          );
-
-          const filterRes = filterWithFallbackInfo(
-            entries,
-            effectiveIntent,
-            [(c) => c.key, (c) => c.value],
-            shouldFallback
-          );
-
-          renderResult(filterRes.items, {
-            json: options.json,
-            humanFormatter: () =>
-              renderConfigList(
-                filterRes.items,
-                "Global Scope",
-                filterRes.isFallback,
-                effectiveIntent
-              ),
-            context,
-          });
-          return;
-        }
-
-        if (!root) {
-          if (options.package) {
+        // 全局作用域分支：显式 --global 或无工程回退时仅列举全局配置
+        if (options.global || !root) {
+          if (!options.global && options.package) {
             throw packageNotFoundError(options.package);
           }
 
@@ -174,7 +142,7 @@ export function registerConfigListCommand(configCmd: Command, context?: CliConte
             humanFormatter: () =>
               renderConfigList(
                 filterRes.items,
-                "Global Scope (No project found)",
+                options.global ? "Global Scope" : "Global Scope (No project found)",
                 filterRes.isFallback,
                 effectiveIntent
               ),

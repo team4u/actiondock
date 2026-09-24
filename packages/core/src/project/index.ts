@@ -37,14 +37,17 @@ export {
   runDoctorChecks,
 } from "../doctor/doctor";
 
-// 动作入参解析、校验与格式化
+// 动作入参解析、校验与格式化（含 BOM 剥离与标准输入有界读取的单一事实源转引）
 export {
   resolveActionInput,
   buildActionInputAdvice,
   formatActionDetail,
   buildActionDescribePayload,
   mapInputValidationFailure,
+  stripBom,
+  readStdinBounded,
   type ResolveActionInputOptions,
+  type ReadStdinBoundedOptions,
 } from "../input/index";
 export { validateActionInputValue } from "../json/value-validator";
 export { parseJson } from "../input/input-resolver";

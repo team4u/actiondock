@@ -11,10 +11,10 @@ import {
   INPUT_CONFLICT,
   INPUT_FILE_NOT_FOUND,
   INPUT_FILE_READ_FAILED,
-  INPUT_NOT_JSON,
-  INPUT_VALIDATION_FAILED,
 } from "../errors";
 
+// 错误码常量对外转引单一事实源：仅保留工厂函数实际引用的导入绑定，
+// 对外输出统一经由本条 export-from 语句完成，不再另列本地重导出清单。
 export {
   INVALID_JSON,
   INVALID_JSON_LITERAL,
@@ -28,7 +28,7 @@ export {
   INPUT_FILE_READ_FAILED,
   INPUT_NOT_JSON,
   INPUT_VALIDATION_FAILED,
-};
+} from "../errors";
 
 /** 输入大小或深度超出限制的根因类型 */
 export type InputLimitExceededReason =

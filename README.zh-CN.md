@@ -98,7 +98,7 @@ $ ad export skill --> [EXPORT] Self-contained Agent Skill bundle
   # 启动标准 MCP 协议通信服务（供 Cursor、Windsurf 或 Claude Desktop 挂载）
   ad mcp
 
-  # 启动生产级 RESTful HTTP/HTTPS 微服务（支持 --https 零配置自签名证书或生产机构证书）
+  # 启动生产级 RESTful HTTP/HTTPS 微服务（支持 -P/--package 指定包白名单，支持 --https 零配置自签名证书或生产机构证书）
   ad serve
 
   # 导出自包含 Agent 技能包（供智能体自主检索规程与调用动作）

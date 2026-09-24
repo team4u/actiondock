@@ -1,7 +1,59 @@
 import type { ActionDockService } from "@actiondock/core";
-import type { RunRecord } from "@actiondock/sdk";
+import type { RunRecord, RunStatus } from "@actiondock/sdk";
 import { fromJsonSchema, McpServer } from "@modelcontextprotocol/server";
-import { toMcpTaskPayload, toMcpTaskStatus } from "./types";
+
+/**
+ * MCP 任务状态枚举（兼容 Model Context Protocol Task 规范）。
+ */
+export type McpTaskStatus = "working" | "completed" | "failed" | "cancelled";
+
+/**
+ * MCP 任务状态数据载荷结构体。
+ */
+export interface McpTaskPayload {
+  taskId: string;
+  status: McpTaskStatus;
+  createdAt: string;
+  finishedAt?: string;
+  input?: unknown;
+  output?: unknown;
+  error?: unknown;
+}
+
+/**
+ * 将 ActionDock 内部的 RunStatus 转换为 MCP 标准的 TaskStatus。
+ */
+export function toMcpTaskStatus(status: RunStatus): McpTaskStatus {
+  switch (status) {
+    case "running":
+      return "working";
+    case "success":
+      return "completed";
+    case "failed":
+    case "timed_out":
+    case "interrupted":
+      return "failed";
+    case "cancelled":
+      return "cancelled";
+    default:
+      return "failed";
+  }
+}
+
+/**
+ * 将内部 RunRecord 实体转换为向 MCP 客户端暴露的 McpTaskPayload。
+ */
+export function toMcpTaskPayload(run: RunRecord): McpTaskPayload {
+  return {
+    taskId: run.id,
+    status: toMcpTaskStatus(run.status),
+    createdAt: run.startedAt,
+    finishedAt: run.finishedAt,
+    input: run.input,
+    output: run.output,
+    error: run.error,
+  };
+}
 
 /**
  * MCP Tasks 规范扩展注册隔离点。
@@ -100,7 +152,11 @@ function toTimeMillis(value: string): number {
  * @param server MCP 高层服务实例
  * @param service ActionDockService 公共服务实例
  */
-export function registerTasksExtension(server: McpServer, service: ActionDockService): void {
+export function registerTasksExtension(
+  server: McpServer,
+  service: ActionDockService,
+  allowedPackageIds?: string[]
+): void {
   server.server.registerCapabilities({
     tasks: {
       list: {},
@@ -114,10 +170,27 @@ export function registerTasksExtension(server: McpServer, service: ActionDockSer
       // 携带语义码透传，避免被 SDK 映射为内部错误
       throw taskNotFoundError(params.taskId);
     }
+    if (
+      allowedPackageIds &&
+      allowedPackageIds.length > 0 &&
+      (!run.packageId || !allowedPackageIds.includes(run.packageId))
+    ) {
+      throw taskNotFoundError(params.taskId);
+    }
     return { task: toMcpTaskPayload(run) };
   });
 
   server.server.setRequestHandler("tasks/cancel", { params: TASK_ID_PARAMS }, async (params) => {
+    if (allowedPackageIds && allowedPackageIds.length > 0) {
+      const existingRun = await service.runs.get(params.taskId);
+      if (
+        !existingRun ||
+        !existingRun.packageId ||
+        !allowedPackageIds.includes(existingRun.packageId)
+      ) {
+        throw taskNotFoundError(params.taskId);
+      }
+    }
     const reason = params.reason || "Cancelled via MCP tasks/cancel";
     const cancelRes = await service.runs.cancel(params.taskId, reason);
     if (cancelRes.outcome === "requested") {
@@ -146,7 +219,10 @@ export function registerTasksExtension(server: McpServer, service: ActionDockSer
     const actionId = params.actionId;
 
     // limit 单处截断：下推到 service.runs.list 的 limit 参数，此处不再重复 slice
-    const runs = await service.runs.list({ limit, actionId });
+    let runs = await service.runs.list({ limit, actionId });
+    if (allowedPackageIds && allowedPackageIds.length > 0) {
+      runs = runs.filter((r) => Boolean(r.packageId && allowedPackageIds.includes(r.packageId)));
+    }
     const ordered = [...runs].sort(
       (a: RunRecord, b: RunRecord) => toTimeMillis(b.startedAt) - toTimeMillis(a.startedAt)
     );

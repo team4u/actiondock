@@ -120,6 +120,40 @@ export interface ListActionsOptions {
 }
 
 /**
+ * 对 Action 摘要列表应用统一的检索过滤（标签、模糊关键词与标识前缀）。
+ *
+ * PackageRuntime 与 Host 两级列表查询的单一事实源：
+ * 两处过滤块逐字相同，收敛后调用方仅需在外层叠加各自的特有逻辑
+ * （Host 版在过滤前额外完成可见性筛选与跨包限定名改写）。
+ */
+export function applyActionSummaryFilters<
+  T extends { id: string; description?: string; tags?: string[] }
+>(summaries: readonly T[], options?: ListActionsOptions): T[] {
+  let results = summaries as T[];
+
+  if (options?.tags && options.tags.length > 0) {
+    results = results.filter((s) =>
+      options.tags!.every((t) => s.tags?.includes(t))
+    );
+  }
+
+  if (options?.query) {
+    const q = options.query.toLowerCase();
+    results = results.filter(
+      (s) =>
+        s.id.toLowerCase().includes(q) ||
+        (s.description && s.description.toLowerCase().includes(q))
+    );
+  }
+
+  if (options?.prefix) {
+    results = results.filter((s) => s.id.startsWith(options.prefix!));
+  }
+
+  return results;
+}
+
+/**
  * Playbook 规程简要摘要条目。
  */
 export interface PlaybookSummary {

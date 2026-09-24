@@ -215,7 +215,7 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
 - 请求端点：
   - 简短模式：`GET /api/v2/actions/:actionId`
   - 多包模式：`GET /api/v2/packages/:packageId/actions/:actionId`
-- 响应结构：直接返回单个 `ActionSpec` 规范对象（结构同数组单项）。若 Action 不存在则返回 404 与 `ACTION_NOT_FOUND`。
+- 响应结构：直接返回单个 `ActionSpec` 规范对象（结构同数组单项）。若 Action 不存在则返回 404 与 `ACTION_NOT_FOUND`；若服务端配置了 `-P, --package` 且目标包未在白名单中，返回 403 与 `PACKAGE_NOT_ALLOWED`。
 
 ---
 
@@ -228,6 +228,7 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
 - 请求端点：
   - 简短模式：`POST /api/v2/actions/:actionId/run`
   - 多包模式：`POST /api/v2/packages/:packageId/actions/:actionId/run`
+- 白名单约束：若服务端启动时配置了 `-P, --package` 包白名单，请求未授权包的 Action 将被服务端拒绝，返回 HTTP 403 状态码与 `PACKAGE_NOT_ALLOWED`。
 - 请求头支持：
   - `Authorization: Bearer <token>`
   - `Content-Type: application/json`

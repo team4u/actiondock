@@ -30,7 +30,6 @@ export async function createActionDock(
       process: options.runtimeOptions.process,
       logger: options.runtimeOptions.logger,
       recoverOrphans: options.recoverOrphans,
-      enableManagement: options.enableManagement,
     });
     return new LocalActionDockService(host, { enableManagement: options.enableManagement });
   }

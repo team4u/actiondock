@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { createActionDock } from "@actiondock/core";
 import { linkPackage } from "@actiondock/core/registry";
 import { decodeText, defineAction } from "@actiondock/sdk";
@@ -11,6 +11,10 @@ import { startMcpHttpServer } from "../src/http";
 
 function setupTestProject(tmpDir: string) {
   mkdirSync(tmpDir, { recursive: true });
+  const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
+  if (existsSync(rootNodeModules) && !existsSync(join(tmpDir, "node_modules"))) {
+    symlinkSync(rootNodeModules, join(tmpDir, "node_modules"), "junction");
+  }
   mkdirSync(join(tmpDir, "actions"), { recursive: true });
 
   writeFileSync(
@@ -723,6 +727,15 @@ describe("@actiondock/mcp Adapter", () => {
     const pkg2Dir = join(tmpDir, "pkg2");
     mkdirSync(join(pkg1Dir, "actions"), { recursive: true });
     mkdirSync(join(pkg2Dir, "actions"), { recursive: true });
+    const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
+    if (existsSync(rootNodeModules)) {
+      if (!existsSync(join(pkg1Dir, "node_modules"))) {
+        symlinkSync(rootNodeModules, join(pkg1Dir, "node_modules"), "junction");
+      }
+      if (!existsSync(join(pkg2Dir, "node_modules"))) {
+        symlinkSync(rootNodeModules, join(pkg2Dir, "node_modules"), "junction");
+      }
+    }
 
     writeFileSync(
       join(pkg1Dir, "actiondock.json"),

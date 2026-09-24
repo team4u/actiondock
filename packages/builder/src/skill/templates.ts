@@ -117,6 +117,101 @@ ${list}
 `;
 }
 
+/**
+ * JSON 信封段落变体：source 与 composite 使用「信封」表述，standalone 使用「结果」表述。
+ */
+type JsonEnvelopeWording = "envelope" | "result";
+
+/**
+ * 渲染「结构化响应解析」小节：三处生成器共用同一 JSON 信封代码块，
+ * 仅首行名词与 stdout/stderr 描述行随变体分化。
+ */
+function renderJsonEnvelopeSection(wording: JsonEnvelopeWording, options?: { withDescriptions?: boolean }): string {
+  const noun = wording === "envelope" ? "信封" : "结果";
+  const stdoutLine =
+    wording === "envelope"
+      ? "- `stdout`：标准 JSON 信封结果。当 `ok` 为 `true` 时，从 `data` 提取业务返回值推进后续步骤；当 `ok` 为 `false` 时，从 `error` 提取错误码与信息以判定自愈策略或上报。"
+      : "- `stdout`：标准 JSON 结果信封。当 `ok` 为 `true` 时，从 `data` 提取业务数据；当 `ok` 为 `false` 时，从 `error` 读取错误原因以处理异常。";
+  const stderrTail = wording === "envelope" ? "跟踪" : "";
+  const descriptionBlock =
+    options?.withDescriptions === false
+      ? ""
+      : `\n\n${stdoutLine}\n- \`stderr\`：执行日志与诊断${stderrTail}信息。`;
+  return `### 结构化响应解析
+
+所有 Action 执行结果均在 \`stdout\` 输出标准格式的 JSON ${noun}：
+
+\`\`\`json
+// 执行成功响应 (ok 为 true)
+{
+  "ok": true,
+  "runId": "01J...",
+  "data": { ... }
+}
+
+// 执行失败响应 (ok 为 false)
+{
+  "ok": false,
+  "runId": "01J...",
+  "error": {
+    "code": "ACTION_EXECUTION_FAILED",
+    "message": "错误详细描述信息"
+  }
+}
+\`\`\`${descriptionBlock}`;
+}
+
+/**
+ * 渲染「故障排查与环境安装指引」整节：source 与 composite 共用完整安装指引，
+ * 差异点（依赖安装步骤标题、重新链接步骤标题、复合链接语义说明）通过参数分化。
+ */
+function renderTroubleshootingSection(options: {
+  /** 依赖安装步骤标题：source 为安装技能源码依赖，composite 为安装复合技能聚合依赖 */
+  dependencyStepLabel: string;
+  /** 重新链接步骤标题 */
+  relinkStepLabel: string;
+  /** 是否在重新链接步骤末尾附加复合技能注册语义说明 */
+  compositeLinkNote?: boolean;
+}): string {
+  const relinkNote = options.compositeLinkNote
+    ? `\n  \`ad link\` 会自动识别并注册工作区下的所有子包，使其中的 Action 随时可以通过完全限定标识调用。`
+    : "";
+  return `---
+
+## 故障排查与环境安装指引（按需查阅）
+
+> [!NOTE]
+> **按需排查原则**：默认宿主环境中已预置 \`ad\` 命令行工具与 Node.js 运行环境。正常执行流程直接调用上述 Action 即可，**严禁在任务启动前盲目进行前置环境检查或体检**；仅在终端明确报错提示命令不存在（如 \`ad: command not found\`）或提示依赖缺失时，方可按本节指引安装初始化。
+
+### 命令行工具与环境依赖未就绪时的安装指引
+
+若宿主环境未安装 \`ad\` 命令行工具或依赖缺失，请依次按如下步骤完成安装：
+
+- **环境要求**：Node.js 版本大于等于 24.12.0（执行 \`node -v\` 确认）。
+- **全局安装 ActionDock 命令行工具**：
+  \`\`\`bash
+  npm install -g @actiondock/cli
+  \`\`\`
+- **${options.dependencyStepLabel}**：
+  若在技能目录内调用时提示模块缺失，在 \`<skill_root>\` 目录下安装生产依赖：
+  \`\`\`bash
+  cd "<skill_root>" && npm install --omit=dev
+  \`\`\`
+- **验证工具就绪**：
+  \`\`\`bash
+  ad --version
+  \`\`\`
+- **环境诊断与体检**：
+  安装完成后若仍遇到异常，执行体检命令排查：
+  \`\`\`bash
+  ad doctor
+  \`\`\`
+- **${options.relinkStepLabel}**：
+  \`\`\`bash
+  ad link "<skill_root>"
+  \`\`\`${relinkNote}`;
+}
+
 export function generateSourceSkillMd(
   config: ProjectConfig,
   actions: SkillActionItem[],
@@ -187,31 +282,7 @@ ad run ${pkgId}/${firstAction} --json --input-file input.json
 > ad run ${firstAction} --json
 > \`\`\`
 
-### 结构化响应解析
-
-所有 Action 执行结果均在 \`stdout\` 输出标准格式的 JSON 信封：
-
-\`\`\`json
-// 执行成功响应 (ok 为 true)
-{
-  "ok": true,
-  "runId": "01J...",
-  "data": { ... }
-}
-
-// 执行失败响应 (ok 为 false)
-{
-  "ok": false,
-  "runId": "01J...",
-  "error": {
-    "code": "ACTION_EXECUTION_FAILED",
-    "message": "错误详细描述信息"
-  }
-}
-\`\`\`
-
-- \`stdout\`：标准 JSON 信封结果。当 \`ok\` 为 \`true\` 时，从 \`data\` 提取业务返回值推进后续步骤；当 \`ok\` 为 \`false\` 时，从 \`error\` 提取错误码与信息以判定自愈策略或上报。
-- \`stderr\`：执行日志与诊断跟踪信息。
+${renderJsonEnvelopeSection("envelope")}
 ${playbookSection}
 ---
 
@@ -235,40 +306,10 @@ ad state list --package ${pkgId}
 ad state get KEY --package ${pkgId}
 \`\`\`
 
----
-
-## 故障排查与环境安装指引（按需查阅）
-
-> [!NOTE]
-> **按需排查原则**：默认宿主环境中已预置 \`ad\` 命令行工具与 Node.js 运行环境。正常执行流程直接调用上述 Action 即可，**严禁在任务启动前盲目进行前置环境检查或体检**；仅在终端明确报错提示命令不存在（如 \`ad: command not found\`）或提示依赖缺失时，方可按本节指引安装初始化。
-
-### 命令行工具与环境依赖未就绪时的安装指引
-
-若宿主环境未安装 \`ad\` 命令行工具或依赖缺失，请依次按如下步骤完成安装：
-
-- **环境要求**：Node.js 版本大于等于 24.12.0（执行 \`node -v\` 确认）。
-- **全局安装 ActionDock 命令行工具**：
-  \`\`\`bash
-  npm install -g @actiondock/cli
-  \`\`\`
-- **安装技能源码依赖**：
-  若在技能目录内调用时提示模块缺失，在 \`<skill_root>\` 目录下安装生产依赖：
-  \`\`\`bash
-  cd "<skill_root>" && npm install --omit=dev
-  \`\`\`
-- **验证工具就绪**：
-  \`\`\`bash
-  ad --version
-  \`\`\`
-- **环境诊断与体检**：
-  安装完成后若仍遇到异常，执行体检命令排查：
-  \`\`\`bash
-  ad doctor
-  \`\`\`
-- **完成安装后重新链接本技能**：
-  \`\`\`bash
-  ad link "<skill_root>"
-  \`\`\`
+${renderTroubleshootingSection({
+  dependencyStepLabel: "安装技能源码依赖",
+  relinkStepLabel: "完成安装后重新链接本技能",
+})}
 `;
 }
 
@@ -320,31 +361,7 @@ ${binaryRelPath} run ${firstAction} --json -- ASSIGNMENT...
 ${binaryRelPath} run ${firstAction} --json --input-file input.json
 \`\`\`
 
-### 结构化响应解析
-
-所有 Action 执行结果均在 \`stdout\` 输出标准格式的 JSON 结果：
-
-\`\`\`json
-// 执行成功响应 (ok 为 true)
-{
-  "ok": true,
-  "runId": "01J...",
-  "data": { ... }
-}
-
-// 执行失败响应 (ok 为 false)
-{
-  "ok": false,
-  "runId": "01J...",
-  "error": {
-    "code": "ACTION_EXECUTION_FAILED",
-    "message": "错误详细描述信息"
-  }
-}
-\`\`\`
-
-- \`stdout\`：标准 JSON 结果信封。当 \`ok\` 为 \`true\` 时，从 \`data\` 提取业务数据；当 \`ok\` 为 \`false\` 时，从 \`error\` 读取错误原因以处理异常。
-- \`stderr\`：执行日志与诊断信息。
+${renderJsonEnvelopeSection("result")}
 ${playbookSection}
 ---
 
@@ -378,21 +395,6 @@ ${binaryRelPath} state get KEY
 npm install --omit=dev
 \`\`\`
 `;
-}
-
-export function generateSkillMd(
-  config: ProjectConfig,
-  actions: SkillActionItem[],
-  playbooks: PlaybookDefinition[],
-  optionsOrBinaryPath: string | { mode?: "source" | "standalone"; binaryRelPath?: string } = "./bin/action-bin"
-): string {
-  if (typeof optionsOrBinaryPath === "string") {
-    return generateStandaloneSkillMd(config, actions, playbooks, optionsOrBinaryPath);
-  }
-  if (optionsOrBinaryPath.mode === "source") {
-    return generateSourceSkillMd(config, actions, playbooks);
-  }
-  return generateStandaloneSkillMd(config, actions, playbooks, optionsOrBinaryPath.binaryRelPath || "./bin/action-bin");
 }
 
 export interface CompositeSkillPackageInfo {
@@ -593,64 +595,13 @@ ad run ${sampleActionId} --json -- ASSIGNMENT...
 ad run ${sampleActionId} --json --input-file input.json
 \`\`\`
 
-### 结构化响应解析
+${renderJsonEnvelopeSection("envelope", { withDescriptions: false })}`;
 
-所有 Action 执行结果均在 \`stdout\` 输出标准格式的 JSON 信封：
-
-\`\`\`json
-// 执行成功响应 (ok 为 true)
-{
-  "ok": true,
-  "runId": "01J...",
-  "data": { ... }
-}
-
-// 执行失败响应 (ok 为 false)
-{
-  "ok": false,
-  "runId": "01J...",
-  "error": {
-    "code": "ACTION_EXECUTION_FAILED",
-    "message": "错误详细描述信息"
-  }
-}
-\`\`\``;
-
-  const sTroubleshooting = `---
-
-## 故障排查与环境安装指引（按需查阅）
-
-> [!NOTE]
-> **按需排查原则**：默认宿主环境中已预置 \`ad\` 命令行工具与 Node.js 运行环境。正常执行流程直接调用上述 Action 即可，**严禁在任务启动前盲目进行前置环境检查或体检**；仅在终端明确报错提示命令不存在（如 \`ad: command not found\`）或提示依赖缺失时，方可按本节指引安装初始化。
-
-### 命令行工具与环境依赖未就绪时的安装指引
-
-若宿主环境未安装 \`ad\` 命令行工具或依赖缺失，请依次按如下步骤完成安装：
-
-- **环境要求**：Node.js 版本大于等于 24.12.0（执行 \`node -v\` 确认）。
-- **全局安装 ActionDock 命令行工具**：
-  \`\`\`bash
-  npm install -g @actiondock/cli
-  \`\`\`
-- **安装复合技能聚合依赖**：
-  若在技能目录内调用时提示模块缺失，在 \`<skill_root>\` 目录下安装生产依赖：
-  \`\`\`bash
-  cd "<skill_root>" && npm install --omit=dev
-  \`\`\`
-- **验证工具就绪**：
-  \`\`\`bash
-  ad --version
-  \`\`\`
-- **环境诊断与体检**：
-  安装完成后若仍遇到异常，执行体检命令排查：
-  \`\`\`bash
-  ad doctor
-  \`\`\`
-- **完成安装后重新链接复合技能**：
-  \`\`\`bash
-  ad link "<skill_root>"
-  \`\`\`
-  \`ad link\` 会自动识别并注册工作区下的所有子包，使其中的 Action 随时可以通过完全限定标识调用。`;
+  const sTroubleshooting = renderTroubleshootingSection({
+    dependencyStepLabel: "安装复合技能聚合依赖",
+    relinkStepLabel: "完成安装后重新链接复合技能",
+    compositeLinkNote: true,
+  });
 
   const parts: Array<{ slot: CompositeCustomSlot; text: string }> = [
     { slot: "intro", text: sIntro },

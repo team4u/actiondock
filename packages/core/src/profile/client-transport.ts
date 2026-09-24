@@ -11,6 +11,16 @@ import { ActionDockError, INSECURE_TRANSPORT, INVALID_ARGUMENT } from "../errors
  */
 
 /**
+ * 传输层安全豁免控制选项。
+ */
+export interface SecureTransportOptions {
+  /** 是否允许向非回环地址发送明文 HTTP 请求 */
+  allowInsecureHttp?: boolean;
+  /** 是否跳过 TLS 证书合法性校验 */
+  insecure?: boolean;
+}
+
+/**
  * 校验在携带认证 Token 时传输层协议与目标地址是否安全。
  * 若请求携带认证 Token 且目标为非本地回环的明文 http://，默认报错拒绝。
  * 可通过 allowInsecureHttp 选项、insecure 选项、环境变量或命令行参数豁免明文限制。
@@ -20,22 +30,14 @@ import { ActionDockError, INSECURE_TRANSPORT, INVALID_ARGUMENT } from "../errors
 export function assertSecureTransport(
   serverUrl: string,
   token?: string,
-  allowInsecureHttpOrOptions?: boolean | { allowInsecureHttp?: boolean; insecure?: boolean },
-  insecureArg?: boolean
+  options?: SecureTransportOptions
 ): void {
   if (!token || !token.trim()) {
     return;
   }
 
-  let allowInsecureHttp = false;
-  let insecure = false;
-  if (typeof allowInsecureHttpOrOptions === "object" && allowInsecureHttpOrOptions !== null) {
-    allowInsecureHttp = Boolean(allowInsecureHttpOrOptions.allowInsecureHttp);
-    insecure = Boolean(allowInsecureHttpOrOptions.insecure);
-  } else {
-    allowInsecureHttp = Boolean(allowInsecureHttpOrOptions);
-    insecure = Boolean(insecureArg);
-  }
+  const allowInsecureHttp = Boolean(options?.allowInsecureHttp);
+  const insecure = Boolean(options?.insecure);
 
   const allow =
     allowInsecureHttp ||
@@ -188,12 +190,4 @@ export async function fetchRemoteRoute(
 ): Promise<Response> {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   return fetch(`${base}${normalizedPath}`, init);
-}
-
-/**
- * 列出指定路由的协议版本候选 URL。
- */
-export function listProtocolRouteCandidates(base: string, path: string): string[] {
-  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  return [`${base}${normalizedPath}`];
 }

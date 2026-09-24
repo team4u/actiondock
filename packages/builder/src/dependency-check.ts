@@ -64,6 +64,24 @@ const RESOLUTION_EXTENSIONS = [
 ];
 
 /**
+ * 将路径解析为物理真实路径：不存在时回退到逻辑绝对路径，realpath 失败时同样回退。
+ */
+function toRealPath(p: string): string {
+  try {
+    return existsSync(p) ? realpathSync(p) : resolve(p);
+  } catch {
+    return resolve(p);
+  }
+}
+
+/**
+ * 判断候选路径是否为磁盘上真实存在的文件。
+ */
+function isFileReal(cand: string): boolean {
+  return existsSync(cand) && statSync(cand).isFile();
+}
+
+/**
  * 将相对模块说明符解析为磁盘上的物理真实文件路径。
  */
 export function resolveRelativeModule(
@@ -73,61 +91,37 @@ export function resolveRelativeModule(
   const basePath = resolve(fromDir, specifier);
 
   // 1. 精确匹配文件
-  if (existsSync(basePath) && statSync(basePath).isFile()) {
-    try {
-      return realpathSync(basePath);
-    } catch {
-      return basePath;
-    }
+  if (isFileReal(basePath)) {
+    return toRealPath(basePath);
   }
 
   // 2. ESM TypeScript 映射：导入写了 .js / .mjs / .cjs，但在源码中真实文件为 .ts / .mts / .cts
   if (specifier.endsWith(".js")) {
     const tsCandidate = basePath.slice(0, -3) + ".ts";
-    if (existsSync(tsCandidate) && statSync(tsCandidate).isFile()) {
-      try {
-        return realpathSync(tsCandidate);
-      } catch {
-        return tsCandidate;
-      }
+    if (isFileReal(tsCandidate)) {
+      return toRealPath(tsCandidate);
     }
     const tsxCandidate = basePath.slice(0, -3) + ".tsx";
-    if (existsSync(tsxCandidate) && statSync(tsxCandidate).isFile()) {
-      try {
-        return realpathSync(tsxCandidate);
-      } catch {
-        return tsxCandidate;
-      }
+    if (isFileReal(tsxCandidate)) {
+      return toRealPath(tsxCandidate);
     }
   } else if (specifier.endsWith(".mjs")) {
     const mtsCandidate = basePath.slice(0, -4) + ".mts";
-    if (existsSync(mtsCandidate) && statSync(mtsCandidate).isFile()) {
-      try {
-        return realpathSync(mtsCandidate);
-      } catch {
-        return mtsCandidate;
-      }
+    if (isFileReal(mtsCandidate)) {
+      return toRealPath(mtsCandidate);
     }
   } else if (specifier.endsWith(".cjs")) {
     const ctsCandidate = basePath.slice(0, -4) + ".cts";
-    if (existsSync(ctsCandidate) && statSync(ctsCandidate).isFile()) {
-      try {
-        return realpathSync(ctsCandidate);
-      } catch {
-        return ctsCandidate;
-      }
+    if (isFileReal(ctsCandidate)) {
+      return toRealPath(ctsCandidate);
     }
   }
 
   // 3. 补充扩展名尝试
   for (const ext of RESOLUTION_EXTENSIONS) {
     const cand = basePath + ext;
-    if (existsSync(cand) && statSync(cand).isFile()) {
-      try {
-        return realpathSync(cand);
-      } catch {
-        return cand;
-      }
+    if (isFileReal(cand)) {
+      return toRealPath(cand);
     }
   }
 
@@ -135,12 +129,8 @@ export function resolveRelativeModule(
   for (const ext of RESOLUTION_EXTENSIONS) {
     if (ext === "") continue;
     const cand = join(basePath, `index${ext}`);
-    if (existsSync(cand) && statSync(cand).isFile()) {
-      try {
-        return realpathSync(cand);
-      } catch {
-        return cand;
-      }
+    if (isFileReal(cand)) {
+      return toRealPath(cand);
     }
   }
 
@@ -156,39 +146,20 @@ export function assertRelativeDependenciesIntegrity(
   plan: SelectionPlan
 ): void {
   const root = resolve(projectRoot);
-  let realRoot: string;
-  try {
-    realRoot = existsSync(root) ? realpathSync(root) : root;
-  } catch {
-    realRoot = root;
-  }
+  const realRoot = toRealPath(root);
 
   // 收集已包含在构建规划中的全部文件物理绝对路径
   const collectedPaths = new Set<string>();
 
   for (const act of plan.actions) {
     if (act.resolvedPath) {
-      try {
-        const real = existsSync(act.resolvedPath)
-          ? realpathSync(act.resolvedPath)
-          : resolve(act.resolvedPath);
-        collectedPaths.add(real);
-      } catch {
-        collectedPaths.add(resolve(act.resolvedPath));
-      }
+      collectedPaths.add(toRealPath(act.resolvedPath));
     }
   }
 
   for (const dep of plan.dependencies.modulesAndAssets) {
     if (dep.resolvedPath) {
-      try {
-        const real = existsSync(dep.resolvedPath)
-          ? realpathSync(dep.resolvedPath)
-          : resolve(dep.resolvedPath);
-        collectedPaths.add(real);
-      } catch {
-        collectedPaths.add(resolve(dep.resolvedPath));
-      }
+      collectedPaths.add(toRealPath(dep.resolvedPath));
     }
   }
 
@@ -196,19 +167,7 @@ export function assertRelativeDependenciesIntegrity(
   const queue: Array<{ file: string; actionId: string }> = [];
   for (const act of plan.actions) {
     if (act.resolvedPath && existsSync(act.resolvedPath)) {
-      try {
-        queue.push({
-          file: existsSync(act.resolvedPath)
-            ? realpathSync(act.resolvedPath)
-            : resolve(act.resolvedPath),
-          actionId: act.id,
-        });
-      } catch {
-        queue.push({
-          file: resolve(act.resolvedPath),
-          actionId: act.id,
-        });
-      }
+      queue.push({ file: toRealPath(act.resolvedPath), actionId: act.id });
     }
   }
 

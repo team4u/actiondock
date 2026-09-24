@@ -8,6 +8,7 @@ import {
 import {
   resolvePackageRoot,
 } from "@actiondock/core/registry";
+import type { ResolvedTarget } from "@actiondock/core/profile";
 import { Command } from "commander";
 import { ArgumentError, ExecutionError, packageNotFoundError } from "../errors";
 import { renderResult, renderStateList, writeStderr, writeStdout } from "../renderer";
@@ -19,38 +20,13 @@ import {
   remoteTargetLabel,
   resolveFallbackStrategy,
   resolveIntent,
+  resolveTargetFromOptions,
   withService,
 } from "../utils";
 import {
   renderLinkedPackagesStateList,
   renderProjectScopedStateList,
 } from "./state-list";
-
-/**
- * 解析复合状态键为命名空间与裸键视图。
- *
- * 多冒号歧义键（如 `review:owner/repo:42`）不再直接崩溃：
- * 降级为「整串作为裸 key」并在 stderr 提示可用 -n/--namespace 显式指定，
- * 保持与本地存储层歧义兜底（deleteStateSmart 的纯键回退）一致的容错语义。
- */
-function decodeStateKeyWithFallback(
-  rawKey: string,
-  hasExplicitNamespace: boolean,
-  context?: CliContext
-): { namespace: string | undefined; key: string } {
-  try {
-    const decoded = decodeStateKey(rawKey);
-    return { namespace: decoded.namespace || undefined, key: decoded.key };
-  } catch {
-    if (!hasExplicitNamespace) {
-      writeStderr(
-        `[WARN] State key '${rawKey}' contains multiple colon delimiters; treating it as a bare key. Use -n/--namespace to specify the namespace explicitly.`,
-        context
-      );
-    }
-    return { namespace: undefined, key: rawKey };
-  }
-}
 
 /**
  * 解耦后的状态键寻址视图（get、set、delete 三命令共享）。
@@ -70,6 +46,10 @@ interface StateAddress {
  * - 未显式指定时按复合键语法预解码出命名空间与裸键；
  * - 多冒号歧义键降级为整串裸键并提示。
  *
+ * 歧义键（如 `review:owner/repo:42`）不再直接崩溃：
+ * 降级为「整串作为裸 key」并在 stderr 提示可用 -n/--namespace 显式指定，
+ * 保持与本地存储层歧义兜底（deleteStateSmart 的纯键回退）一致的容错语义。
+ *
  * 本地与远端分支都消费解耦后的 namespace + key，
  * 消除「set 预解码而 get/delete 依赖存储层回退」的语义不对称。
  */
@@ -81,8 +61,84 @@ function resolveStateAddress(
   if (options.namespace !== undefined) {
     return { namespace: options.namespace, key: rawKey };
   }
-  const decoded = decodeStateKeyWithFallback(rawKey, false, context);
-  return { namespace: decoded.namespace, key: decoded.key };
+  try {
+    const decoded = decodeStateKey(rawKey);
+    return { namespace: decoded.namespace || undefined, key: decoded.key };
+  } catch {
+    writeStderr(
+      `[WARN] State key '${rawKey}' contains multiple colon delimiters; treating it as a bare key. Use -n/--namespace to specify the namespace explicitly.`,
+      context
+    );
+    return { namespace: undefined, key: rawKey };
+  }
+}
+
+/**
+ * 状态命令的作用域解析结果（get、set、delete、clear 共享）。
+ *
+ * 远端与本地分支的命令体结构完全同构（解析作用域 → 调端口 → 统一消息），
+ * 差异仅体现在以下维度，由本视图一次性收敛：
+ * - 端口寻址使用的包标识（远端为 -P 原值，本地为工程配置 id）；
+ * - not-found 判定与成功消息的作用域后缀；
+ * - 本地分支的工程根目录、工程配置与剥离 pkg/ 前缀后的裸键。
+ *
+ * 本地分支的 localRoot 由本视图一并透出，供 withService 的惰性工厂消费，
+ * 保证 getTargetRoot 在单次命令执行中至多求值一次。
+ */
+interface StateScope {
+  /** 端口寻址使用的包标识 */
+  packageId: string;
+  /** not-found 与 set 成功消息的作用域后缀（on remote server / in package '...'） */
+  scopeSuffix: string;
+  /** delete 成功消息的作用域后缀（on remote server / from package '...'） */
+  deleteSuffix: string;
+  /** 剥离 pkg/ 前缀后的裸键（远端分支等于原始键） */
+  effectiveKey: string;
+  /** 本地工程配置（仅本地分支存在） */
+  projConfig: ReturnType<typeof loadProjectConfig> | undefined;
+  /** 本地工程根目录（远端分支为 undefined） */
+  localRoot: string | undefined;
+}
+
+/**
+ * 解析状态命令目标作用域（remote 与 local 双分支模板的单一事实源）。
+ *
+ * 远端分支直接以 -P 参数寻址，消息后缀固定为 "on remote server"；
+ * 本地分支基于 getTargetRoot 完成包寻址（含从键中剥离 pkg/ 前缀），
+ * 以工程配置 id 寻址，消息后缀为 "in/from package '...'"。
+ *
+ * @param resolved 目标拓扑解析结果
+ * @param options 命令选项视图
+ * @param rawKey 原始键（本地分支用于剥离 pkg/ 前缀）
+ * @returns 作用域解析结果（含包标识、消息后缀、本地根目录与工程配置）
+ */
+function resolveStateScope(
+  resolved: ResolvedTarget,
+  options: { package?: string },
+  rawKey?: string
+): StateScope {
+  if (resolved.type === "remote") {
+    return {
+      packageId: options.package || "",
+      scopeSuffix: "on remote server",
+      deleteSuffix: "on remote server",
+      effectiveKey: rawKey || "",
+      projConfig: undefined,
+      localRoot: undefined,
+    };
+  }
+
+  // 本地项目模式：getTargetRoot 会从键中剥离 pkg/ 前缀，寻址基于解耦后的裸键
+  const { root, key: effectiveKey } = getTargetRoot(options.package, rawKey);
+  const projConfig = loadProjectConfig(root);
+  return {
+    packageId: projConfig.id,
+    scopeSuffix: `in package '${projConfig.id}'`,
+    deleteSuffix: `from package '${projConfig.id}'`,
+    effectiveKey,
+    projConfig,
+    localRoot: root,
+  };
 }
 
 /**
@@ -214,52 +270,30 @@ export function registerStateCommands(program: Command, context?: CliContext): v
         throw new ArgumentError("State key is required");
       }
 
+      // 惰性作用域缓存：仅本地分支求值一次，避免远端模式触发包寻址副作用
+      let scope: StateScope | undefined;
+      const resolveScope = (resolved: ResolvedTarget): StateScope =>
+        (scope ??= resolveStateScope(resolved, options, rawKey));
+
       await withService(
         options,
         context,
         async (service, resolved) => {
           const actionId = options.action || "";
+          const targetScope = resolveScope(resolved);
+          const address = resolveStateAddress(targetScope.effectiveKey, options, context);
 
-          if (resolved.type === "remote") {
-            const address = resolveStateAddress(rawKey, options, context);
-
-            const entry = await service.management?.state.get(options.package || "", actionId, address.key, {
-              namespace: address.namespace,
-              detail: true,
-            });
-
-            if (entry === undefined || (entry as any).value === undefined) {
-              throw new ExecutionError(`State key '${rawKey}' not found on remote server`);
-            }
-
-            const val = (entry as any).value;
-            renderResult(
-              { key: rawKey, value: val, namespace: (entry as any).namespace || address.namespace },
-              {
-                json: options.json,
-                humanFormatter: () => (typeof val === "object" ? JSON.stringify(val, null, 2) : String(val)),
-                context,
-              }
-            );
-            return;
-          }
-
-          // 本地项目模式：getTargetRoot 会从键中剥离 pkg/ 前缀，寻址基于解耦后的裸键
-          const { root, key: effectiveKey } = getTargetRoot(options.package, rawKey);
-          const address = resolveStateAddress(effectiveKey, options, context);
-          const projConfig = loadProjectConfig(root);
-
-          const entry = await service.management?.state.get(projConfig.id, actionId, address.key, {
+          const entry = await service.management?.state.get(targetScope.packageId, actionId, address.key, {
             namespace: address.namespace,
             detail: true,
           });
 
           if (entry === undefined || (entry as any).value === undefined) {
-            throw new ExecutionError(`State key '${rawKey}' not found in package '${projConfig.id}'`);
+            throw new ExecutionError(`State key '${rawKey}' not found ${targetScope.scopeSuffix}`);
           }
 
           const val = (entry as any).value;
-          const matchedNamespace = (entry as any).namespace;
+          const matchedNamespace = resolved.type === "remote" ? ((entry as any).namespace || address.namespace) : (entry as any).namespace;
 
           renderResult(
             { key: rawKey, value: val, namespace: matchedNamespace },
@@ -270,7 +304,7 @@ export function registerStateCommands(program: Command, context?: CliContext): v
             }
           );
         },
-        { localRoot: () => getTargetRoot(options.package, rawKey).root }
+        { localRoot: () => resolveScope(resolveTargetFromOptions(options, context)).localRoot }
       );
     });
 
@@ -303,37 +337,29 @@ export function registerStateCommands(program: Command, context?: CliContext): v
         throw new ArgumentError(`Invalid --ttl value: '${options.ttl}'. Must be a positive integer.`);
       }
 
+      // 惰性作用域缓存：仅本地分支求值一次，避免远端模式触发包寻址副作用
+      let scope: StateScope | undefined;
+      const resolveScope = (resolved: ResolvedTarget): StateScope =>
+        (scope ??= resolveStateScope(resolved, options, rawKey));
+
       await withService(
         options,
         context,
         async (service, resolved) => {
           const actionId = options.action || "";
+          const targetScope = resolveScope(resolved);
+          const address = resolveStateAddress(targetScope.effectiveKey, options, context);
 
-          if (resolved.type === "remote") {
-            const address = resolveStateAddress(rawKey, options, context);
-            await service.management?.state.set(options.package || "", actionId, address.key, parsedVal as any, {
-              namespace: address.namespace,
-              ttl: ttlSec,
-            });
-
-            writeStdout(`[OK] State '${rawKey}' updated on remote server`, context);
-            return;
-          }
-
-          // 本地项目模式：getTargetRoot 会从键中剥离 pkg/ 前缀，寻址基于解耦后的裸键
-          const { root, key: effectiveKey } = getTargetRoot(options.package, rawKey);
-          const address = resolveStateAddress(effectiveKey, options, context);
-          const projConfig = loadProjectConfig(root);
-
-          await service.management?.state.set(projConfig.id, actionId, address.key, parsedVal as any, {
+          await service.management?.state.set(targetScope.packageId, actionId, address.key, parsedVal as any, {
             namespace: address.namespace,
             ttl: ttlSec,
           });
 
-          const displayKey = address.namespace ? `${address.namespace}:${address.key}` : address.key;
-          writeStdout(`[OK] State '${displayKey}' updated in package '${projConfig.id}'`, context);
+          // 远端回显原始键；本地回显解耦后的 ns:key 复合视图
+          const displayKey = resolved.type === "remote" ? rawKey : (address.namespace ? `${address.namespace}:${address.key}` : address.key);
+          writeStdout(`[OK] State '${displayKey}' updated ${targetScope.scopeSuffix}`, context);
         },
-        { localRoot: () => getTargetRoot(options.package, rawKey).root }
+        { localRoot: () => resolveScope(resolveTargetFromOptions(options, context)).localRoot }
       );
     });
 
@@ -354,40 +380,30 @@ export function registerStateCommands(program: Command, context?: CliContext): v
         throw new ArgumentError("State key is required");
       }
 
+      // 惰性作用域缓存：仅本地分支求值一次，避免远端模式触发包寻址副作用
+      let scope: StateScope | undefined;
+      const resolveScope = (resolved: ResolvedTarget): StateScope =>
+        (scope ??= resolveStateScope(resolved, options, rawKey));
+
       await withService(
         options,
         context,
         async (service, resolved) => {
           const actionId = options.action || "";
+          const targetScope = resolveScope(resolved);
+          const address = resolveStateAddress(targetScope.effectiveKey, options, context);
 
-          if (resolved.type === "remote") {
-            const address = resolveStateAddress(rawKey, options, context);
-            const deleted = await service.management?.state.delete(options.package || "", actionId, address.key, {
-              namespace: address.namespace,
-            });
-
-            if (!deleted) {
-              throw new ExecutionError(`State key '${rawKey}' not found on remote server`);
-            }
-
-            writeStdout(`[OK] State '${rawKey}' deleted on remote server`, context);
-            return;
-          }
-
-          // 本地项目模式：getTargetRoot 会从键中剥离 pkg/ 前缀，寻址基于解耦后的裸键
-          const { root, key: effectiveKey } = getTargetRoot(options.package, rawKey);
-          const address = resolveStateAddress(effectiveKey, options, context);
-          const projConfig = loadProjectConfig(root);
-
-          const deleted = await service.management?.state.delete(projConfig.id, actionId, address.key, {
+          const deleted = await service.management?.state.delete(targetScope.packageId, actionId, address.key, {
             namespace: address.namespace,
           });
+
           if (!deleted) {
-            throw new ExecutionError(`State key '${rawKey}' not found in package '${projConfig.id}'`);
+            throw new ExecutionError(`State key '${rawKey}' not found ${targetScope.scopeSuffix}`);
           }
-          writeStdout(`[OK] State '${rawKey}' deleted from package '${projConfig.id}'`, context);
+
+          writeStdout(`[OK] State '${rawKey}' deleted ${targetScope.deleteSuffix}`, context);
         },
-        { localRoot: () => getTargetRoot(options.package, rawKey).root }
+        { localRoot: () => resolveScope(resolveTargetFromOptions(options, context)).localRoot }
       );
     });
 
@@ -411,6 +427,11 @@ export function registerStateCommands(program: Command, context?: CliContext): v
         );
       }
 
+      // 惰性作用域缓存：仅本地分支求值一次，避免远端模式触发包寻址副作用
+      let scope: StateScope | undefined;
+      const resolveScope = (resolved: ResolvedTarget): StateScope =>
+        (scope ??= resolveStateScope(resolved, options));
+
       await withService(options, context, async (service, resolved) => {
         const actionId = options.action || "";
 
@@ -424,10 +445,9 @@ export function registerStateCommands(program: Command, context?: CliContext): v
         }
 
         // 本地项目模式
-        const { root } = getTargetRoot(options.package);
-        const projConfig = loadProjectConfig(root);
+        const targetScope = resolveScope(resolved);
 
-        const count = (await service.management?.state.clear(projConfig.id, actionId, {
+        const count = (await service.management?.state.clear(targetScope.packageId, actionId, {
           namespace: options.namespace,
           all: Boolean(options.all),
         })) ?? 0;
@@ -435,8 +455,8 @@ export function registerStateCommands(program: Command, context?: CliContext): v
         const scopeDesc = options.all
           ? "all namespaces"
           : `namespace '${options.namespace}'`;
-        writeStdout(`[OK] Cleared ${count} state entry(s) in ${scopeDesc} for package '${projConfig.id}'`, context);
+        writeStdout(`[OK] Cleared ${count} state entry(s) in ${scopeDesc} for package '${targetScope.projConfig!.id}'`, context);
       },
-      { localRoot: () => getTargetRoot(options.package).root });
+      { localRoot: () => resolveScope(resolveTargetFromOptions(options, context)).localRoot });
     });
 }

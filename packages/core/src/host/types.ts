@@ -48,8 +48,6 @@ export interface ActionDockHostOptions {
   recoverOrphans?: boolean;
   /** 显式注入的运行时平台适配 */
   platform?: RuntimePlatform;
-  /** 全局最大并发活跃运行数 */
-  maxActiveRuns?: number;
   /** 全局调用嵌套深度限制（默认 16） */
   maxCallDepth?: number;
   /** 全局子任务数限制（默认 64） */
@@ -68,8 +66,6 @@ export interface ActionDockHostOptions {
   inMemory?: boolean;
   /** 事件接收器 */
   eventSink?: EventSink;
-  /** 是否开启管理能力（配置与状态管理） */
-  enableManagement?: boolean;
 }
 
 /**

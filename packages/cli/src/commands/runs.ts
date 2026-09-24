@@ -14,7 +14,6 @@ import {
   ArgumentError,
   ExecutionError,
   NO_PROJECT_NO_LINKED_MESSAGE,
-  notInProjectError,
   packageNotFoundError,
 } from "../errors";
 import { renderResult, renderRunDetail, renderRunsList } from "../renderer";
@@ -23,10 +22,9 @@ import {
   applyTargetOptions,
   getEffectiveOptions,
   remoteTargetSuffix,
+  requirePackageRoot,
   resolveFallbackStrategy,
   resolveIntent,
-  resolveTargetFromOptions,
-  withRemoteService,
   withService,
 } from "../utils";
 
@@ -209,34 +207,31 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
         throw new ArgumentError("Run ID is required for cancel");
       }
 
-      const resolved = resolveTargetFromOptions(options, context);
-
-      if (resolved.type === "local") {
-        throw new ArgumentError(
-          "'ad runs cancel' is only supported for remote execution targets. Use --profile <name> or --server <url>."
-        );
-      }
-
-      await withRemoteService(options, context, async (service) => {
-        const result = await service.runs.cancel(id, options.reason);
-        const isErrorOutcome = result.outcome === "not_found" || result.outcome === "not_owner";
-        renderResult(result, {
-          json: options.json,
-          humanFormatter: () => {
-            if (result.outcome === "not_found") {
-              return `Error: Run record '${id}' not found on remote server.`;
-            }
-            if (result.outcome === "not_owner") {
-              return `Error: Cannot cancel run '${id}': not the owner.`;
-            }
-            return `Run '${id}' cancellation requested (Status: ${(result as any).status || result.outcome}).`;
-          },
-          context,
-        });
-        if (isErrorOutcome) {
-          process.exitCode = 1;
-        }
-      });
+      await withService(
+        options,
+        context,
+        async (service) => {
+          const result = await service.runs.cancel(id, options.reason);
+          const isErrorOutcome = result.outcome === "not_found" || result.outcome === "not_owner";
+          renderResult(result, {
+            json: options.json,
+            humanFormatter: () => {
+              if (result.outcome === "not_found") {
+                return `Error: Run record '${id}' not found on remote server.`;
+              }
+              if (result.outcome === "not_owner") {
+                return `Error: Cannot cancel run '${id}': not the owner.`;
+              }
+              return `Run '${id}' cancellation requested (Status: ${(result as any).status || result.outcome}).`;
+            },
+            context,
+          });
+          if (isErrorOutcome) {
+            process.exitCode = 1;
+          }
+        },
+        { requireRemote: true }
+      );
     });
 
   // runs clear
@@ -255,20 +250,7 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
       let targetPackageRoot: string | undefined;
       let packageId = options.package;
       if (!options.profile && !options.server) {
-        if (options.package) {
-          const root = resolvePackageRoot(options.package);
-          if (!root) {
-            throw packageNotFoundError(options.package);
-          }
-          targetPackageRoot = root;
-        } else {
-          targetPackageRoot = findProjectRoot() || undefined;
-          if (!targetPackageRoot) {
-            throw notInProjectError(
-              "Please specify -P, --package <id> or cd into a project directory."
-            );
-          }
-        }
+        targetPackageRoot = requirePackageRoot(options.package).root;
         try {
           packageId = loadProjectConfig(targetPackageRoot).id;
         } catch {

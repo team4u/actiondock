@@ -1,8 +1,8 @@
 import { afterAll, describe, expect, it } from "bun:test";
-import { spawn, type ChildProcess } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import type { ChildProcess } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 /**
  * IPC 取消链路端到端测试。
@@ -53,6 +53,10 @@ await serveParentIpc(service);
 
 describe("IPC cross-process cancellation chain", () => {
   const tempDir = mkdtempSync(join(tmpdir(), "ipc-cancel-test-"));
+  const rootNodeModules = resolve(import.meta.dirname, "../../../node_modules");
+  if (existsSync(rootNodeModules) && !existsSync(join(tempDir, "node_modules"))) {
+    symlinkSync(rootNodeModules, join(tempDir, "node_modules"), "junction");
+  }
   let hostChild: ChildProcess | undefined;
 
   afterAll(() => {

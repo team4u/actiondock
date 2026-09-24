@@ -1,6 +1,6 @@
-import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { findExecutable } from "@actiondock/core/package";
+import { findExecutable, NodeProcessExecutor } from "@actiondock/core/package";
+import type { ProcessResult } from "@actiondock/sdk";
 
 export { findExecutable };
 
@@ -35,18 +35,50 @@ export interface ExecCliResult {
 }
 
 /**
- * 终止宽限升级时限：SIGTERM 后未退出则升级 SIGKILL，与 runtime-node 执行器默认宽限期对齐。
+ * 共享真实进程执行器。
+ *
+ * 进程组派生、两级终止（SIGTERM 后约 500ms 宽限升级 SIGKILL）、AbortSignal
+ * 全程生效与输出上限截断等关键语义统一由 core 执行器承担，此处仅持有共享实例。
  */
-const KILL_GRACE_MS = 500;
+const realExecutor = new NodeProcessExecutor();
+
+/**
+ * 将 core 执行结果转换为 CLI 结果信封。
+ *
+ * 仅收敛两类确有差异的部分：
+ * - exitCode 哨兵：中止、超时与派生失败无真实退出码（null），CLI 信封以 -1 表达；
+ * - stderr 兜底文案：输出超限、超时与中止时若命令自身未输出错误，补充 CLI 风格说明。
+ */
+function toCliResult(command: string, res: ProcessResult, options: ExecCliOptions): ExecCliResult {
+  const truncated = res.error?.code === "PROCESS_OUTPUT_LIMIT";
+  let stderr = res.stderr;
+  if (!stderr && truncated) {
+    stderr = `Command '${command}' output exceeded limit of ${options.maxOutputBytes} bytes`;
+  }
+  if (!stderr && res.timedOut) {
+    stderr = `Command '${command}' timed out after ${options.timeout}ms`;
+  }
+  if (!stderr && res.cancelled) {
+    stderr = `Command '${command}' was aborted by signal`;
+  }
+  return {
+    ok: res.ok,
+    exitCode: res.exitCode ?? -1,
+    stdout: res.stdout,
+    stderr,
+    raw: res.raw,
+    timedOut: res.timedOut || undefined,
+    truncated: truncated || undefined,
+    durationMs: res.durationMs,
+  };
+}
 
 /**
  * 执行外部 CLI 命令并收集输出。
- * 基于异步 spawn 与 Promise 化封装（与 runtime-node 执行器风格对齐），保留既有的输出收集与退出码语义。
  *
- * 与真实执行器的语义对齐点：
- * - 进程以独立进程组派生（POSIX），终止时对整组发信号，不遗留子孙进程；
- * - AbortSignal 全程生效：启动前、运行中 abort 均会终止进程组；
- * - 超时与终止路径均为 SIGTERM 后宽限期升级 SIGKILL 的两级策略。
+ * 本函数是 core NodeProcessExecutor 之上的薄封装，仅保留 CLI 信封特有的部分：
+ * 命令 PATH 预解析（未命中时返回固定错误信封）、全量宿主环境继承，以及超时、
+ * 中止、输出超限时的 stderr 兜底文案与 exitCode 哨兵转换。
  *
  * @param command 执行命令
  * @param args 参数列表
@@ -58,7 +90,6 @@ export async function execCli(
   options: ExecCliOptions = {}
 ): Promise<ExecCliResult> {
   const startTime = performance.now();
-  const maxOutputBytes = options.maxOutputBytes ?? Infinity;
 
   if (options.signal?.aborted) {
     const errRes: ExecCliResult = {
@@ -93,210 +124,44 @@ export async function execCli(
     return errRes;
   }
 
-  let stdinInput: Buffer | undefined;
-  if (options.input !== undefined) {
-    if (typeof options.input === "string") {
-      stdinInput = Buffer.from(options.input);
-    } else if (options.input instanceof Uint8Array) {
-      stdinInput = Buffer.from(options.input);
-    }
+  let res: ProcessResult;
+  try {
+    res = await realExecutor.exec(
+      binPath,
+      args,
+      {
+        cwd: options.cwd,
+        // 全量继承宿主环境并叠加调用方覆盖：保留既有宽 env 合并语义，
+        // 不套用受管进程路径的 allowlisted 白名单继承策略，
+        // 故标记 env 已完整解析交由 core 直接使用
+        env: { ...process.env, ...(options.env ?? {}) } as Record<string, string>,
+        input: options.input,
+        timeoutMs: options.timeout,
+        signal: options.signal,
+        encoding: options.encoding,
+        // 未显式指定时不设上限：与既有默认语义一致，规避 core 的 10MB 默认上限
+        maxOutputBytes: options.maxOutputBytes ?? Infinity,
+      },
+      { envAlreadyResolved: true }
+    );
+  } catch (err: any) {
+    // 防御兜底：core 执行器内部已将派生与运行故障收敛为结果信封，此路径仅拦截意外异常
+    res = {
+      ok: false,
+      exitCode: null,
+      signal: undefined,
+      stdout: "",
+      stderr: err?.message || String(err),
+      raw: new Uint8Array(0),
+      timedOut: false,
+      cancelled: false,
+      durationMs: Math.round(performance.now() - startTime),
+    };
   }
 
-  return new Promise<ExecCliResult>((resolve, reject) => {
-    let child;
-    try {
-      child = spawn(binPath, args, {
-        cwd: options.cwd || process.cwd(),
-        env: options.env ? { ...process.env, ...options.env } : process.env,
-        stdio: [stdinInput ? "pipe" : "ignore", "pipe", "pipe"],
-        detached: process.platform !== "win32",
-      });
-    } catch (err: any) {
-      const errRes: ExecCliResult = {
-        ok: false,
-        exitCode: -1,
-        stdout: "",
-        stderr: err?.message || String(err),
-        raw: new Uint8Array(0),
-        durationMs: Math.round(performance.now() - startTime),
-      };
-      if (options.throwOnError) {
-        reject(err);
-        return;
-      }
-      resolve(errRes);
-      return;
-    }
-
-    let settled = false;
-    let timedOut = false;
-    let truncated = false;
-    let terminatedByAbort = false;
-    let spawnError: Error | undefined;
-    const stdoutChunks: Buffer[] = [];
-    const stderrChunks: Buffer[] = [];
-    let totalOutputBytes = 0;
-
-    // POSIX 下对整组发负数 pid；Windows 回退单 pid。失败时静默（已退出或权限
-    // 变更属终止路径常态，由 SIGKILL 升级与 close 事件兜底）
-    const killChild = (signal: "SIGTERM" | "SIGKILL") => {
-      const pid = child.pid;
-      if (!pid) return;
-      if (process.platform !== "win32") {
-        try {
-          process.kill(-pid, signal);
-          return;
-        } catch {
-          // 进程组已消失时回退单 pid 再尝试
-        }
-      }
-      try {
-        process.kill(pid, signal);
-      } catch {
-        // 忽略已退出状态
-      }
-    };
-
-    // 两级终止：SIGTERM 后宽限期内未退出升级 SIGKILL，与 runtime-node 执行器对齐
-    let killUpgradeTimer: NodeJS.Timeout | undefined;
-    const terminateChild = () => {
-      if (killUpgradeTimer) return;
-      killChild("SIGTERM");
-      killUpgradeTimer = setTimeout(() => {
-        killUpgradeTimer = undefined;
-        killChild("SIGKILL");
-      }, KILL_GRACE_MS);
-      killUpgradeTimer.unref?.();
-    };
-
-    // 输出超限时终止进程：由 enforceOutputLimit 负责截断与标记
-    const terminateForLimit = () => {
-      terminateChild();
-    };
-
-    let timeoutTimer: NodeJS.Timeout | undefined;
-    if (options.timeout && options.timeout > 0) {
-      timeoutTimer = setTimeout(() => {
-        timedOut = true;
-        terminateChild();
-      }, options.timeout);
-    }
-
-    // AbortSignal 全程生效：运行中 abort 即终止进程组（不再仅启动前检查）
-    let abortListener: (() => void) | undefined;
-    if (options.signal) {
-      abortListener = () => {
-        if (settled) return;
-        terminatedByAbort = true;
-        terminateChild();
-      };
-      if (options.signal.aborted) {
-        abortListener();
-      } else {
-        options.signal.addEventListener("abort", abortListener, { once: true });
-      }
-    }
-
-    const cleanup = () => {
-      if (timeoutTimer) clearTimeout(timeoutTimer);
-      if (killUpgradeTimer) clearTimeout(killUpgradeTimer);
-      if (options.signal && abortListener) {
-        options.signal.removeEventListener("abort", abortListener);
-      }
-    };
-
-    const finalize = (exitCodeFromClose: number | null) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-
-      const durationMs = Math.round(performance.now() - startTime);
-      const decoder = new TextDecoder(options.encoding || "utf-8");
-      const rawStdout = stdoutChunks.length > 0 ? new Uint8Array(Buffer.concat(stdoutChunks)) : new Uint8Array(0);
-      const rawStderr = stderrChunks.length > 0 ? new Uint8Array(Buffer.concat(stderrChunks)) : new Uint8Array(0);
-
-      const stdout = rawStdout.length > 0 ? decoder.decode(rawStdout).trim() : "";
-      let stderr = rawStderr.length > 0 ? decoder.decode(rawStderr).trim() : "";
-
-      if (truncated && !stderr) {
-        stderr = `Command '${command}' output exceeded limit of ${maxOutputBytes} bytes`;
-      }
-
-      if (timedOut && !stderr) {
-        stderr = `Command '${command}' timed out after ${options.timeout}ms`;
-      }
-      if (terminatedByAbort && !stderr) {
-        stderr = `Command '${command}' was aborted by signal`;
-      }
-
-      const exitCode = timedOut || terminatedByAbort ? -1 : (exitCodeFromClose ?? (spawnError ? -1 : 0));
-      const ok = !timedOut && !terminatedByAbort && !truncated && exitCode === 0;
-
-      const result: ExecCliResult = {
-        ok,
-        exitCode,
-        stdout,
-        stderr,
-        raw: rawStdout,
-        timedOut: timedOut || undefined,
-        truncated: truncated || undefined,
-        durationMs,
-      };
-
-      if (options.throwOnError && !ok) {
-        reject(new Error(stderr || `Command '${command}' failed with exit code ${exitCode}`));
-        return;
-      }
-      resolve(result);
-    };
-
-    // 输出超限时截断已收集字节并终止进程：与 runtime-node 执行器对齐，
-    // 只保留上限内的字节（含同 chunk 内截断），丢弃超限部分
-    const enforceOutputLimit = (
-      chunks: Buffer[],
-      chunk: Buffer
-    ): boolean => {
-      const remaining = maxOutputBytes - totalOutputBytes;
-      if (remaining < chunk.length) {
-        if (remaining > 0) {
-          chunks.push(chunk.subarray(0, remaining));
-          totalOutputBytes += remaining;
-        } else {
-          totalOutputBytes += chunk.length;
-        }
-        truncated = true;
-        terminateForLimit();
-        return true;
-      }
-      totalOutputBytes += chunk.length;
-      chunks.push(chunk);
-      return false;
-    };
-
-    child.stdout?.on("data", (chunk: Buffer) => {
-      if (truncated) return;
-      enforceOutputLimit(stdoutChunks, chunk);
-    });
-
-    child.stderr?.on("data", (chunk: Buffer) => {
-      if (truncated) return;
-      enforceOutputLimit(stderrChunks, chunk);
-    });
-
-    child.on("error", (err: Error) => {
-      spawnError = err;
-      finalize(child.exitCode);
-    });
-
-    child.on("close", (code: number | null) => {
-      finalize(code);
-    });
-
-    if (stdinInput && child.stdin) {
-      child.stdin.on("error", () => {
-        // 目标进程提前退出时忽略管道写入错误
-      });
-      child.stdin.end(stdinInput);
-    }
-  });
+  const result = toCliResult(command, res, options);
+  if (options.throwOnError && !result.ok) {
+    throw new Error(result.stderr || `Command '${command}' failed with exit code ${result.exitCode}`);
+  }
+  return result;
 }

@@ -12,7 +12,11 @@ import {
   FlatInputError,
   InputError,
 } from "@actiondock/core/project";
-import { INVALID_ARGUMENT, INVALID_FLAT_ARGUMENT } from "@actiondock/core";
+import {
+  INVALID_ARGUMENT,
+  INVALID_FLAT_ARGUMENT,
+  INPUT_LIMIT_EXCEEDED,
+} from "@actiondock/core";
 
 describe("CLI Action Input Resolution - Unit Tests", () => {
   it("stripBom removes leading BOM character and preserves clean string", () => {
@@ -82,6 +86,31 @@ describe("CLI Action Input Resolution - Unit Tests", () => {
     const stream = Readable.from(["hello ", "world"]);
     const text = await readStdin(stream);
     expect(text).toBe("hello world");
+  });
+
+  it("readStdin strips leading BOM and keeps lenient UTF-8 decoding", async () => {
+    const bomStream = Readable.from([Buffer.from("\uFEFFhello", "utf-8")]);
+    const text = await readStdin(bomStream);
+    expect(text).toBe("hello");
+
+    // 非法 UTF-8 字节在宽松模式下以替换字符呈现，不抛出异常
+    const invalidStream = Readable.from([Buffer.from([0xff, 0xfe, 0x61])]);
+    const lenient = await readStdin(invalidStream);
+    expect(lenient.includes(String.fromCodePoint(0xfffd))).toBe(true);
+  });
+
+  it("readStdin rejects input exceeding default 10MB bound with INPUT_LIMIT_EXCEEDED", async () => {
+    // 默认 10MB 上限保护：超出即抛结构化异常，错误消息对用户友好
+    const huge = Buffer.alloc(10 * 1024 * 1024 + 1, 0x61);
+    const stream = Readable.from([huge]);
+    try {
+      await readStdin(stream);
+      expect(true).toBe(false);
+    } catch (err: any) {
+      expect(err).toBeInstanceOf(InputError);
+      expect(err.code).toBe(INPUT_LIMIT_EXCEEDED);
+      expect(err.message).toContain("Stdin input exceeds maximum limit");
+    }
   });
 
   it("resolveActionInput returns {} when neither input nor inputFile is provided", async () => {

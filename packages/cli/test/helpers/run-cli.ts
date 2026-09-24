@@ -1,3 +1,4 @@
+import { Readable } from "node:stream";
 import { format } from "node:util";
 import { main } from "../../src/index";
 
@@ -42,8 +43,20 @@ const executionLock = new AsyncLock();
 export async function runCliAsync(
   args: string[],
   cwd?: string,
-  env?: Record<string, string | undefined>
+  env?: Record<string, string | undefined> | string | Buffer | NodeJS.ReadableStream,
+  stdinInput?: string | Buffer | NodeJS.ReadableStream
 ): Promise<RunCliResult> {
+  let effectiveEnv: Record<string, string | undefined> | undefined;
+  let effectiveStdin: string | Buffer | NodeJS.ReadableStream | undefined;
+
+  if (typeof env === "string" || Buffer.isBuffer(env) || (env && typeof (env as any).pipe === "function")) {
+    effectiveStdin = env as string | Buffer | NodeJS.ReadableStream;
+    effectiveEnv = undefined;
+  } else {
+    effectiveEnv = env as Record<string, string | undefined> | undefined;
+    effectiveStdin = stdinInput;
+  }
+
   return executionLock.acquire(async () => {
     const origCwd = process.cwd();
     const origEnv = { ...process.env };
@@ -61,6 +74,11 @@ export async function runCliAsync(
         cb = encoding;
         encoding = undefined;
       }
+      // Node.js 原生 test runner 使用 v8.serialize (0xFF 起始字节) 与父进程通信，
+      // 此类二进制 IPC 包必须直接穿透至原始 stdout，不能被截获进入 CLI 业务输出。
+      if (chunk && (chunk[0] === 0xff || ((chunk instanceof Uint8Array || Buffer.isBuffer(chunk)) && chunk[0] === 0xff))) {
+        return origStdoutWrite(chunk, encoding, cb);
+      }
       const buf = Buffer.isBuffer(chunk)
         ? chunk
         : chunk instanceof Uint8Array
@@ -77,6 +95,9 @@ export async function runCliAsync(
       if (typeof encoding === "function") {
         cb = encoding;
         encoding = undefined;
+      }
+      if (chunk && (chunk[0] === 0xff || ((chunk instanceof Uint8Array || Buffer.isBuffer(chunk)) && chunk[0] === 0xff))) {
+        return origStderrWrite(chunk, encoding, cb);
       }
       const buf = Buffer.isBuffer(chunk)
         ? chunk
@@ -107,8 +128,8 @@ export async function runCliAsync(
         process.chdir(cwd);
       }
 
-      if (env) {
-        for (const [k, v] of Object.entries(env)) {
+      if (effectiveEnv) {
+        for (const [k, v] of Object.entries(effectiveEnv)) {
           if (v === undefined) {
             delete process.env[k];
           } else {
@@ -117,9 +138,18 @@ export async function runCliAsync(
         }
       }
 
+      let stdinStream: NodeJS.ReadableStream | undefined;
+      if (effectiveStdin !== undefined) {
+        if (typeof effectiveStdin === "string" || Buffer.isBuffer(effectiveStdin)) {
+          stdinStream = Readable.from([effectiveStdin]);
+        } else {
+          stdinStream = effectiveStdin;
+        }
+      }
+
       let exitCode = 0;
       try {
-        exitCode = await main(["node", "ad", ...args]);
+        exitCode = await main(["node", "ad", ...args], undefined, { stdin: stdinStream });
       } catch (err: any) {
         exitCode = typeof err?.exitCode === "number" ? err.exitCode : 1;
       }

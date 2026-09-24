@@ -4,33 +4,31 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSy
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-const cliPath = resolve(import.meta.dirname, "../bin/ad.js");
+import { runCliAsync } from "./helpers/run-cli";
 
 let tempHome: string | undefined;
 
-function runCli(
+async function runCli(
   args: string[],
   cwd?: string,
   stdinInput?: string | Buffer,
   env?: Record<string, string>
 ) {
-  return Bun.spawnSync(["bun", cliPath, ...args], {
+  return await runCliAsync(
+    args,
     cwd,
-    env: {
-      ...process.env,
+    {
       ...(tempHome ? { ACTIONDOCK_HOME: tempHome } : {}),
       ...env,
     },
-    stdin: stdinInput !== undefined ? (Buffer.isBuffer(stdinInput) ? stdinInput : Buffer.from(stdinInput)) : undefined,
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+    stdinInput
+  );
 }
 
 describe("CLI Action Input Resolution - JSON and File Inputs", () => {
   let tempDir: string;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     tempDir = mkdtempSync(join(tmpdir(), "ad-cli-input-json-test-"));
     tempHome = mkdtempSync(join(tmpdir(), "ad-cli-input-json-home-"));
 
@@ -42,7 +40,7 @@ describe("CLI Action Input Resolution - JSON and File Inputs", () => {
     }
 
     // Initialize project
-    const initProc = runCli(["init", "--id", "test.input-pkg", "--name", "Input Pkg", "."], tempDir);
+    const initProc = await runCli(["init", "--id", "test.input-pkg", "--name", "Input Pkg", "."], tempDir);
     expect(initProc.exitCode).toBe(0);
 
     // Create an echo action that returns the exact received input
@@ -86,8 +84,8 @@ export default defineAction(async (input: any) => {
   });
 
   // 1. --input 正常 JSON
-  it("executes action with valid inline JSON via --input", () => {
-    const proc = runCli(["run", "test.echo", "--input", "{\"name\":\"Alice\",\"age\":30}", "--json"], tempDir);
+  it("executes action with valid inline JSON via --input", async () => {
+    const proc = await runCli(["run", "test.echo", "--input", "{\"name\":\"Alice\",\"age\":30}", "--json"], tempDir);
     expect(proc.exitCode).toBe(0);
     const res = JSON.parse(proc.stdout.toString());
     expect(res.ok).toBe(true);
@@ -95,11 +93,11 @@ export default defineAction(async (input: any) => {
   });
 
   // 2. --input-file 正常文件
-  it("executes action with valid file JSON via --input-file", () => {
+  it("executes action with valid file JSON via --input-file", async () => {
     const filePath = join(tempDir, "valid-input.json");
     writeFileSync(filePath, JSON.stringify({ project: "ActionDock", stars: 100 }), "utf-8");
 
-    const proc = runCli(["run", "test.echo", "--input-file", filePath, "--json"], tempDir);
+    const proc = await runCli(["run", "test.echo", "--input-file", filePath, "--json"], tempDir);
     expect(proc.exitCode).toBe(0);
     const res = JSON.parse(proc.stdout.toString());
     expect(res.ok).toBe(true);
@@ -107,9 +105,9 @@ export default defineAction(async (input: any) => {
   });
 
   // 3. --input-file - stdin
-  it("executes action reading JSON from stdin via --input-file -", () => {
+  it("executes action reading JSON from stdin via --input-file -", async () => {
     const stdinPayload = JSON.stringify({ mode: "streamed", count: 99 });
-    const proc = runCli(["run", "test.echo", "--input-file", "-", "--json"], tempDir, stdinPayload);
+    const proc = await runCli(["run", "test.echo", "--input-file", "-", "--json"], tempDir, stdinPayload);
     expect(proc.exitCode).toBe(0);
     const res = JSON.parse(proc.stdout.toString());
     expect(res.ok).toBe(true);
@@ -117,8 +115,8 @@ export default defineAction(async (input: any) => {
   });
 
   // 4. 无输入默认 {}
-  it("executes action with default empty object {} when no input is provided", () => {
-    const proc = runCli(["run", "test.echo", "--json"], tempDir);
+  it("executes action with default empty object {} when no input is provided", async () => {
+    const proc = await runCli(["run", "test.echo", "--json"], tempDir);
     expect(proc.exitCode).toBe(0);
     const res = JSON.parse(proc.stdout.toString());
     expect(res.ok).toBe(true);
@@ -126,17 +124,17 @@ export default defineAction(async (input: any) => {
   });
 
   // 5. --input 与 --input-file 冲突
-  it("rejects when both --input and --input-file are provided with exit code 2", () => {
+  it("rejects when both --input and --input-file are provided with exit code 2", async () => {
     const filePath = join(tempDir, "input.json");
     writeFileSync(filePath, "{}", "utf-8");
 
     // Human mode
-    const proc = runCli(["run", "test.echo", "--input", "{\"a\":1}", "--input-file", filePath], tempDir);
+    const proc = await runCli(["run", "test.echo", "--input", "{\"a\":1}", "--input-file", filePath], tempDir);
     expect(proc.exitCode).toBe(2);
     expect(proc.stderr.toString()).toContain("mutually exclusive");
 
     // Machine mode (--json)
-    const procJson = runCli(["run", "test.echo", "--input", "{\"a\":1}", "--input-file", filePath, "--json"], tempDir);
+    const procJson = await runCli(["run", "test.echo", "--input", "{\"a\":1}", "--input-file", filePath, "--json"], tempDir);
     expect(procJson.exitCode).toBe(2);
     const res = JSON.parse(procJson.stdout.toString());
     expect(res.ok).toBe(false);
@@ -145,8 +143,8 @@ export default defineAction(async (input: any) => {
   });
 
   // 6. 非法 inline JSON
-  it("rejects invalid inline JSON with exit code 2 and INVALID_JSON code", () => {
-    const proc = runCli(["run", "test.echo", "--input", "{\"invalid\":", "--json"], tempDir);
+  it("rejects invalid inline JSON with exit code 2 and INVALID_JSON code", async () => {
+    const proc = await runCli(["run", "test.echo", "--input", "{\"invalid\":", "--json"], tempDir);
     expect(proc.exitCode).toBe(2);
     const res = JSON.parse(proc.stdout.toString());
     expect(res.ok).toBe(false);
@@ -155,11 +153,11 @@ export default defineAction(async (input: any) => {
   });
 
   // 7. 非法文件 JSON
-  it("rejects invalid JSON file with exit code 2 and INVALID_JSON code", () => {
+  it("rejects invalid JSON file with exit code 2 and INVALID_JSON code", async () => {
     const filePath = join(tempDir, "bad.json");
     writeFileSync(filePath, "{\ninvalid json here\n", "utf-8");
 
-    const proc = runCli(["run", "test.echo", "--input-file", filePath, "--json"], tempDir);
+    const proc = await runCli(["run", "test.echo", "--input-file", filePath, "--json"], tempDir);
     expect(proc.exitCode).toBe(2);
     const res = JSON.parse(proc.stdout.toString());
     expect(res.ok).toBe(false);
@@ -168,8 +166,8 @@ export default defineAction(async (input: any) => {
   });
 
   // 8. 非法 stdin JSON
-  it("rejects invalid JSON from stdin with exit code 2 and INVALID_JSON code", () => {
-    const proc = runCli(["run", "test.echo", "--input-file", "-", "--json"], tempDir, "{not json}");
+  it("rejects invalid JSON from stdin with exit code 2 and INVALID_JSON code", async () => {
+    const proc = await runCli(["run", "test.echo", "--input-file", "-", "--json"], tempDir, "{not json}");
     expect(proc.exitCode).toBe(2);
     const res = JSON.parse(proc.stdout.toString());
     expect(res.ok).toBe(false);
@@ -178,9 +176,9 @@ export default defineAction(async (input: any) => {
   });
 
   // 9. 文件不存在
-  it("rejects nonexistent input file with exit code 2 and INPUT_FILE_NOT_FOUND code", () => {
+  it("rejects nonexistent input file with exit code 2 and INPUT_FILE_NOT_FOUND code", async () => {
     const missingPath = join(tempDir, "does-not-exist.json");
-    const proc = runCli(["run", "test.echo", "--input-file", missingPath, "--json"], tempDir);
+    const proc = await runCli(["run", "test.echo", "--input-file", missingPath, "--json"], tempDir);
     expect(proc.exitCode).toBe(2);
     const res = JSON.parse(proc.stdout.toString());
     expect(res.ok).toBe(false);
@@ -189,11 +187,11 @@ export default defineAction(async (input: any) => {
   });
 
   // 10. UTF-8 BOM
-  it("strips UTF-8 BOM correctly from both file and stdin", () => {
+  it("strips UTF-8 BOM correctly from both file and stdin", async () => {
     // BOM in file
     const bomFilePath = join(tempDir, "bom.json");
     writeFileSync(bomFilePath, "\uFEFF{\"source\":\"bom-file\",\"active\":true}", "utf-8");
-    const fileProc = runCli(["run", "test.echo", "--input-file", bomFilePath, "--json"], tempDir);
+    const fileProc = await runCli(["run", "test.echo", "--input-file", bomFilePath, "--json"], tempDir);
     expect(fileProc.exitCode).toBe(0);
     const fileRes = JSON.parse(fileProc.stdout.toString());
     expect(fileRes.ok).toBe(true);
@@ -201,7 +199,7 @@ export default defineAction(async (input: any) => {
 
     // BOM in stdin
     const bomStdin = "\uFEFF{\"source\":\"bom-stdin\",\"active\":false}";
-    const stdinProc = runCli(["run", "test.echo", "--input-file", "-", "--json"], tempDir, bomStdin);
+    const stdinProc = await runCli(["run", "test.echo", "--input-file", "-", "--json"], tempDir, bomStdin);
     expect(stdinProc.exitCode).toBe(0);
     const stdinRes = JSON.parse(stdinProc.stdout.toString());
     expect(stdinRes.ok).toBe(true);
@@ -209,18 +207,18 @@ export default defineAction(async (input: any) => {
   });
 
   // 11. 多行 JSON
-  it("correctly parses multi-line formatted JSON from file and stdin", () => {
+  it("correctly parses multi-line formatted JSON from file and stdin", async () => {
     const multilineJson = `{\n  "title": "multi-line",\n  "nested": {\n    "items": [\n      1,\n      2,\n      3\n    ]\n  }\n}`;
     const filePath = join(tempDir, "multiline.json");
     writeFileSync(filePath, multilineJson, "utf-8");
 
-    const fileProc = runCli(["run", "test.echo", "--input-file", filePath, "--json"], tempDir);
+    const fileProc = await runCli(["run", "test.echo", "--input-file", filePath, "--json"], tempDir);
     expect(fileProc.exitCode).toBe(0);
     const fileRes = JSON.parse(fileProc.stdout.toString());
     expect(fileRes.ok).toBe(true);
     expect(fileRes.data.received.nested.items).toEqual([1, 2, 3]);
 
-    const stdinProc = runCli(["run", "test.echo", "--input-file", "-", "--json"], tempDir, multilineJson);
+    const stdinProc = await runCli(["run", "test.echo", "--input-file", "-", "--json"], tempDir, multilineJson);
     expect(stdinProc.exitCode).toBe(0);
     const stdinRes = JSON.parse(stdinProc.stdout.toString());
     expect(stdinRes.ok).toBe(true);
@@ -228,7 +226,7 @@ export default defineAction(async (input: any) => {
   });
 
   // 12. JSON 中包含双引号、反斜杠、换行
-  it("correctly handles quotes, backslashes, and escaped newlines inside JSON values", () => {
+  it("correctly handles quotes, backslashes, and escaped newlines inside JSON values", async () => {
     const complexPayload = {
       escapedQuotes: 'He said, "ActionDock is great!"',
       backslashes: 'C:\\Users\\admin\\Desktop\\project\\config.json',
@@ -240,24 +238,24 @@ export default defineAction(async (input: any) => {
     // Test file input
     const filePath = join(tempDir, "complex.json");
     writeFileSync(filePath, jsonStr, "utf-8");
-    const fileProc = runCli(["run", "test.echo", "--input-file", filePath, "--json"], tempDir);
+    const fileProc = await runCli(["run", "test.echo", "--input-file", filePath, "--json"], tempDir);
     expect(fileProc.exitCode).toBe(0);
     const fileRes = JSON.parse(fileProc.stdout.toString());
     expect(fileRes.data.received).toEqual(complexPayload);
 
     // Test stdin input
-    const stdinProc = runCli(["run", "test.echo", "--input-file", "-", "--json"], tempDir, jsonStr);
+    const stdinProc = await runCli(["run", "test.echo", "--input-file", "-", "--json"], tempDir, jsonStr);
     expect(stdinProc.exitCode).toBe(0);
     const stdinRes = JSON.parse(stdinProc.stdout.toString());
     expect(stdinRes.data.received).toEqual(complexPayload);
   });
 
   // 13. 空文件
-  it("rejects empty file with exit code 2 and INVALID_JSON error", () => {
+  it("rejects empty file with exit code 2 and INVALID_JSON error", async () => {
     const emptyFile = join(tempDir, "empty.json");
     writeFileSync(emptyFile, "", "utf-8");
 
-    const proc = runCli(["run", "test.echo", "--input-file", emptyFile, "--json"], tempDir);
+    const proc = await runCli(["run", "test.echo", "--input-file", emptyFile, "--json"], tempDir);
     expect(proc.exitCode).toBe(2);
     const res = JSON.parse(proc.stdout.toString());
     expect(res.ok).toBe(false);
@@ -266,8 +264,8 @@ export default defineAction(async (input: any) => {
   });
 
   // 14. 空 stdin
-  it("rejects empty stdin with exit code 2 and INVALID_JSON error", () => {
-    const proc = runCli(["run", "test.echo", "--input-file", "-", "--json"], tempDir, "");
+  it("rejects empty stdin with exit code 2 and INVALID_JSON error", async () => {
+    const proc = await runCli(["run", "test.echo", "--input-file", "-", "--json"], tempDir, "");
     expect(proc.exitCode).toBe(2);
     const res = JSON.parse(proc.stdout.toString());
     expect(res.ok).toBe(false);

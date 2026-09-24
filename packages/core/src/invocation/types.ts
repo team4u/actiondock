@@ -178,18 +178,16 @@ export interface CreateRootInvocationContextOptions {
  * 构造合法的受信任根调用上下文（Root InvocationContext）。
  * 在 Host 服务边界装配，严格保证无父级调用血缘（parentRunId 为 undefined），
  * 根运行 ID 等同于自身运行 ID，且仅透传受信任参数。
+ *
+ * 实现委托 createInvocationContext 单一事实源：不传入 runId/rootRunId/parentRunId/caller，
+ * 由公共构造逻辑兜底生成 runId 并令 rootRunId 收敛为自身 runId；随后显式覆写
+ * parentRunId 与 caller 为 undefined，并按根调用契约挑选字段，保持无血缘血缘字段的键序不变。
  */
 export function createRootInvocationContext(options: CreateRootInvocationContextOptions): InvocationContext {
-  const runId = crypto.randomUUID();
-  const pkg = options.targetPackage;
-  return {
-    runId,
-    rootRunId: runId,
-    parentRunId: undefined,
-    caller: undefined,
-    callStack: options.callStack ? [...options.callStack] : [],
-    package: pkg,
-    signal: options.signal ?? new AbortController().signal,
+  const base = createInvocationContext({
+    package: options.targetPackage,
+    callStack: options.callStack,
+    signal: options.signal,
     timeoutMs: options.timeoutMs,
     config: options.config,
     requestId: options.requestId,
@@ -198,13 +196,27 @@ export function createRootInvocationContext(options: CreateRootInvocationContext
     logger: options.logger,
     progress: options.progress,
     process: options.process,
-    owner: options.owner ??
-      createDefaultProcessOwner({
-        tenantId: options.tenantId,
-        principalId: options.principalId,
-        packageInstanceId: pkg.instanceId,
-        generationId: pkg.generation,
-      }),
+    owner: options.owner,
+    tenantId: options.tenantId,
+    principalId: options.principalId,
+  });
+  return {
+    runId: base.runId,
+    rootRunId: base.rootRunId,
+    parentRunId: undefined,
+    caller: undefined,
+    callStack: base.callStack,
+    package: base.package,
+    signal: base.signal,
+    timeoutMs: base.timeoutMs,
+    config: base.config,
+    requestId: base.requestId,
+    hostSessionId: base.hostSessionId,
+    maxCallDepth: base.maxCallDepth,
+    logger: base.logger,
+    progress: base.progress,
+    process: base.process,
+    owner: base.owner,
   };
 }
 

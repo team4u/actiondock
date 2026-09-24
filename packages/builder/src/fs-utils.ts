@@ -72,7 +72,7 @@ export async function moveDirAtomic(src: string, dest: string): Promise<void> {
  * 目录遍历统一复用 core 的 traverseDirectory 单一事实源，
  * 自带软链接越界跳过与循环拦截防护。
  */
-export function collectRelativeFiles(dir: string, _baseDir = dir): string[] {
+export function collectRelativeFiles(dir: string): string[] {
   if (!existsSync(dir)) return [];
   return traverseDirectory(dir)
     .map((entry) => entry.relPath)

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { readFile, mkdir, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { isProcessAlive } from "../utils/process";
 
 /**
  * 锁目录最近一次心跳（创建或续期）后超过该时长且持有进程已死亡，
@@ -27,29 +28,22 @@ export const REGISTRY_LOCK_RETRY_DELAY_MS = 25;
 export const REGISTRY_LOCK_HEARTBEAT_MS = 3000;
 
 /**
+ * 锁配置选项。
+ */
+export interface RegistryLockOptions {
+  staleMs?: number;
+  acquireTimeoutMs?: number;
+  retryDelayMs?: number;
+  heartbeatMs?: number;
+}
+
+/**
  * 锁目录内的持有者元数据文件名。
  */
 const LOCK_METADATA_FILE = "metadata.json";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
-}
-
-/**
- * 检查目标进程是否处于存活状态。
- * process.kill(pid, 0) 探测：无异常视为存活；ESRCH（进程不存在）视为已死；
- * 其他异常（如 EPERM，权限不足但进程存在）保守视为存活，避免误杀他人锁。
- */
-function isProcessAlive(pid: number): boolean {
-  if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0) {
-    return false;
-  }
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err: any) {
-    return err?.code !== "ESRCH";
-  }
 }
 
 /**
@@ -114,7 +108,7 @@ const activeLockDirs = new Set<string>();
  * - mtime 超龄 且元数据缺失/非法：仅看 mtime 维持历史行为回收
  *   （兼容旧版本无元数据锁目录与竞态窗口内的半初始化锁目录）。
  */
-async function isStaleLock(lockDir: string): Promise<boolean> {
+async function isStaleLock(lockDir: string, staleMs: number = REGISTRY_LOCK_STALE_MS): Promise<boolean> {
   let lockAgeMs: number;
   try {
     const info = await stat(lockDir);
@@ -124,7 +118,7 @@ async function isStaleLock(lockDir: string): Promise<boolean> {
     throw err;
   }
 
-  if (lockAgeMs <= REGISTRY_LOCK_STALE_MS) {
+  if (lockAgeMs <= staleMs) {
     return false;
   }
 
@@ -155,15 +149,22 @@ async function isStaleLock(lockDir: string): Promise<boolean> {
  *
  * @param filePath 注册表文件路径，锁目录为其同级 `${filePath}.lock`
  * @param fn 持锁期间执行的操作（同步或异步）
+ * @param options 可选锁超时与重试配置
  * @returns fn 的返回值
- * @throws 超过 REGISTRY_LOCK_ACQUIRE_TIMEOUT_MS 仍未获取时抛出描述性错误
+ * @throws 超过 acquireTimeoutMs 仍未获取时抛出描述性错误
  */
 export async function withRegistryLock<T>(
   filePath: string,
-  fn: () => T | Promise<T>
+  fn: () => T | Promise<T>,
+  options?: RegistryLockOptions
 ): Promise<T> {
+  const staleMs = options?.staleMs ?? REGISTRY_LOCK_STALE_MS;
+  const acquireTimeoutMs = options?.acquireTimeoutMs ?? REGISTRY_LOCK_ACQUIRE_TIMEOUT_MS;
+  const retryDelayMs = options?.retryDelayMs ?? REGISTRY_LOCK_RETRY_DELAY_MS;
+  const heartbeatMs = options?.heartbeatMs ?? REGISTRY_LOCK_HEARTBEAT_MS;
+
   const lockDir = `${filePath}.lock`;
-  const deadline = Date.now() + REGISTRY_LOCK_ACQUIRE_TIMEOUT_MS;
+  const deadline = Date.now() + acquireTimeoutMs;
 
   while (true) {
     try {
@@ -180,7 +181,7 @@ export async function withRegistryLock<T>(
     // 锁被占用，检查是否为可回收的残留锁
     let stale: boolean;
     try {
-      stale = await isStaleLock(lockDir);
+      stale = await isStaleLock(lockDir, staleMs);
     } catch (err: any) {
       if (err.code === "ENOENT") {
         // 持有者恰好在两次探测之间释放，立即重试获取
@@ -208,12 +209,12 @@ export async function withRegistryLock<T>(
 
     if (Date.now() > deadline) {
       throw new Error(
-        `Failed to acquire registry lock '${lockDir}' within ${REGISTRY_LOCK_ACQUIRE_TIMEOUT_MS}ms. ` +
+        `Failed to acquire registry lock '${lockDir}' within ${acquireTimeoutMs}ms. ` +
           `The lock may be held by another ActionDock process; retry after it exits or remove the stale lock directory manually.`
       );
     }
 
-    await sleep(REGISTRY_LOCK_RETRY_DELAY_MS);
+    await sleep(retryDelayMs);
   }
 
   // 持有者元数据写入失败不阻断持锁（退化为仅 mtime 判定），但保证可观测
@@ -238,7 +239,7 @@ export async function withRegistryLock<T>(
       const reason = err instanceof Error ? err.message : String(err);
       console.warn(`[Registry] Failed to refresh lock heartbeat for '${lockDir}': ${reason}`);
     });
-  }, REGISTRY_LOCK_HEARTBEAT_MS);
+  }, heartbeatMs);
   heartbeat.unref?.();
 
   try {

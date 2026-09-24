@@ -7,18 +7,56 @@ import {
 import {
   formatHostForUrl,
 } from "@actiondock/core/server";
-import {
-  parseDuration,
-} from "@actiondock/core/project";
 import { Command } from "commander";
-import { ArgumentError, ExecutionError } from "../errors";
-import { writeStderr, writeStdout } from "../renderer";
+import { ExecutionError } from "../errors";
+import { writeStdout } from "../renderer";
 import type { CliContext } from "../types";
-import { getEffectiveOptions, parseByteSize, parseListOption } from "../utils";
+import {
+  getEffectiveOptions,
+  normalizeCorsOrigins,
+  parseListOption,
+  printServerBanner,
+  registerStopSignalHandler,
+  resolveMaxBodyBytes,
+  resolveServerHost,
+  resolveServerPort,
+  resolveServerToken,
+  resolveTimeoutMs,
+} from "../utils";
+
+/**
+ * mcp 命令双分支（STDIO 与 HTTP serve）共享的目标选项解析视图。
+ */
+interface McpServeOptions {
+  /** 显式指定的工程根目录列表（-d/--dir，已绝对化；缺省 undefined） */
+  projectRoots: string[] | undefined;
+  /** 显式指定的链接包标识列表（--package；缺省 undefined） */
+  packageIds: string[] | undefined;
+  /** 是否服务全局注册表中的全部链接包 */
+  all: boolean;
+  /** 执行超时毫秒数 */
+  timeoutMs: number | undefined;
+}
+
+/**
+ * 解析 mcp 命令双分支共享的目标选项（目录、包、超时）。
+ */
+function resolveMcpServeOptions(options: any): McpServeOptions {
+  return {
+    projectRoots:
+      options.dir && options.dir.length > 0
+        ? options.dir.map((d: string) => resolve(d))
+        : undefined,
+    packageIds:
+      options.package && options.package.length > 0 ? options.package : undefined,
+    all: Boolean(options.all),
+    timeoutMs: resolveTimeoutMs(options.timeout),
+  };
+}
 
 /**
  * 注册 mcp 命令（STDIO 与 HTTP 传输服务模式）。
- * 
+ *
  * @param program Commander 实例
  * @param context 命令行上下文
  */
@@ -43,24 +81,7 @@ export function registerMcpCommands(program: Command, context?: CliContext): voi
     .option("--data-dir <path>", "Custom database storage directory")
     .action(async (rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
-      let timeoutMs: number | undefined;
-      if (options.timeout) {
-        try {
-          timeoutMs = parseDuration(options.timeout);
-        } catch (err: any) {
-          throw new ArgumentError(`Invalid timeout format: ${err.message}`);
-        }
-      }
-
-      const projectRoots =
-        options.dir && options.dir.length > 0
-          ? options.dir.map((d: string) => resolve(d))
-          : undefined;
-
-      const packageIds =
-        options.package && options.package.length > 0 ? options.package : undefined;
-
-      const all = Boolean(options.all);
+      const { projectRoots, packageIds, all, timeoutMs } = resolveMcpServeOptions(options);
 
       try {
         const { startMcpStdio } = await import("@actiondock/mcp");
@@ -111,46 +132,17 @@ export function registerMcpCommands(program: Command, context?: CliContext): voi
     .option("--data-dir <path>", "Custom database storage directory")
     .action(async (rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
-      const port = parseInt(options.port, 10) || 5178;
-      const host = options.host || "127.0.0.1";
-      const token =
-        options.token ||
-        (options.tokenEnv && typeof process !== "undefined" ? process.env?.[options.tokenEnv] : undefined) ||
-        (typeof process !== "undefined" ? process.env?.ACTIONDOCK_TOKEN : undefined);
+      const port = resolveServerPort(options.port, 5178, true);
+      const host = resolveServerHost(options.host);
+      const token = resolveServerToken(options.token, options.tokenEnv);
 
       const allowInsecureNoAuth = Boolean(options.allowInsecureNoAuth);
       const allowInsecureHttp = Boolean(options.allowInsecureHttp);
       const allowQueryToken = Boolean(options.allowQueryToken);
-      const corsOrigins =
-        options.corsOrigin && options.corsOrigin.length > 0 ? options.corsOrigin : undefined;
+      const corsOrigins = normalizeCorsOrigins(options.corsOrigin);
+      const maxBodyBytes = resolveMaxBodyBytes(options.maxBody);
 
-      let maxBodyBytes: number | undefined;
-      if (options.maxBody) {
-        try {
-          maxBodyBytes = parseByteSize(options.maxBody);
-        } catch (err: any) {
-          throw new ArgumentError(`Invalid max-body format: ${err.message}`);
-        }
-      }
-
-      let timeoutMs: number | undefined;
-      if (options.timeout) {
-        try {
-          timeoutMs = parseDuration(options.timeout);
-        } catch (err: any) {
-          throw new ArgumentError(`Invalid timeout format: ${err.message}`);
-        }
-      }
-
-      const projectRoots =
-        options.dir && options.dir.length > 0
-          ? options.dir.map((d: string) => resolve(d))
-          : undefined;
-
-      const packageIds =
-        options.package && options.package.length > 0 ? options.package : undefined;
-
-      const all = Boolean(options.all);
+      const { projectRoots, packageIds, all, timeoutMs } = resolveMcpServeOptions(options);
 
       let targetDescription = "ActionDock MCP Server";
       if (all) {
@@ -208,10 +200,7 @@ export function registerMcpCommands(program: Command, context?: CliContext): voi
         const displayHost = formatHostForUrl(host);
         const actualMcpHost = formatHostForUrl(host === "0.0.0.0" ? "127.0.0.1" : host);
 
-        writeStdout(`\n======================================================`, context);
-        writeStdout(`  ActionDock 2.0 MCP HTTP Server`, context);
-        writeStdout(`======================================================`, context);
-        writeStdout(`  * Listening on:    http://${displayHost}:${server.port}`, context);
+        printServerBanner(`ActionDock 2.0 MCP HTTP Server`, "http", displayHost, server.port, context);
         writeStdout(`  * MCP Endpoint:    http://${actualMcpHost}:${server.port}/mcp`, context);
         writeStdout(`  * Target:          ${targetDescription}`, context);
         writeStdout(`  * Authentication:  ${token ? "Bearer Token Enabled" : "Disabled (Local)"}`, context);
@@ -219,24 +208,7 @@ export function registerMcpCommands(program: Command, context?: CliContext): voi
         writeStdout(`======================================================\n`, context);
         writeStdout(`Press Ctrl+C to terminate.\n`, context);
 
-        const stopSignalHandler = () => {
-          writeStdout("\nStopping MCP HTTP server...", context);
-          Promise.resolve(server.stop())
-            .catch((err: unknown) => {
-              // 停止失败必须可见：写入 stderr 一行并标记失败退出码
-              writeStderr(
-                `[ERROR] Failed to stop MCP HTTP server gracefully: ${err instanceof Error ? err.message : String(err)}`,
-                context
-              );
-              process.exitCode = 1;
-            })
-            .finally(() => {
-              process.exit(typeof process.exitCode === "number" ? process.exitCode : 0);
-            });
-        };
-
-        process.once("SIGINT", stopSignalHandler);
-        process.once("SIGTERM", stopSignalHandler);
+        registerStopSignalHandler(server, `MCP HTTP server`, context);
       } catch (err: any) {
         throw new ExecutionError(`Failed to start ActionDock MCP HTTP server: ${err.message}`, err);
       }

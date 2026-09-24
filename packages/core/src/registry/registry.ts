@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync } from "node:fs";
-import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { findProjectRoot, loadProjectConfig } from "../project/loader";
 import { getActionDockHome, getPackageSlug } from "../utils";
@@ -7,9 +7,7 @@ import { withRegistryLock } from "./lock";
 import {
   buildLinkedPackageEntry,
   discoverProjectConfigs,
-  discoverProjectConfigsAsync,
   discoverProjects,
-  pathExistsAsync,
 } from "./scan";
 import type {
   GlobalRegistryData,
@@ -460,24 +458,6 @@ export function listLinkedPackages(customHome?: string): LinkedPackageEntry[] {
     for (const ws of Object.values(registry.workspaces)) {
       if (!existsSync(ws.path)) continue;
       for (const { root, config } of discoverProjectConfigs(ws.path)) {
-        if (!result[config.id] || result[config.id].workspaceRoot === ws.path) {
-          result[config.id] = buildLinkedPackageEntry(config, root, ws.linkedAt, ws.path);
-        }
-      }
-    }
-  }
-
-  return Object.values(result);
-}
-
-export async function listLinkedPackagesAsync(customHome?: string): Promise<LinkedPackageEntry[]> {
-  const registry = await loadRegistryAsync(customHome);
-  const result: Record<string, LinkedPackageEntry> = { ...registry.packages };
-
-  if (registry.workspaces) {
-    for (const ws of Object.values(registry.workspaces)) {
-      if (!(await pathExistsAsync(ws.path))) continue;
-      for (const { root, config } of await discoverProjectConfigsAsync(ws.path)) {
         if (!result[config.id] || result[config.id].workspaceRoot === ws.path) {
           result[config.id] = buildLinkedPackageEntry(config, root, ws.linkedAt, ws.path);
         }

@@ -3,8 +3,6 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, w
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  REGISTRY_LOCK_ACQUIRE_TIMEOUT_MS,
-  REGISTRY_LOCK_HEARTBEAT_MS,
   REGISTRY_LOCK_STALE_MS,
   withRegistryLock,
 } from "../src/registry/lock";
@@ -59,12 +57,15 @@ describe("Registry Lock 残留判定与心跳续期", () => {
 
     const startedAt = Date.now();
     await expect(
-      withRegistryLock(registryPath, () => "should-not-run")
+      withRegistryLock(registryPath, () => "should-not-run", {
+        acquireTimeoutMs: 120,
+        retryDelayMs: 15,
+      })
     ).rejects.toThrow("Failed to acquire registry lock");
     const elapsed = Date.now() - startedAt;
 
     // 必须等待到超时才失败，而非立即抢占
-    expect(elapsed).toBeGreaterThanOrEqual(REGISTRY_LOCK_ACQUIRE_TIMEOUT_MS - 1000);
+    expect(elapsed).toBeGreaterThanOrEqual(80);
     // 原锁目录（含存活 pid 元数据）保持不被破坏
     expect(existsSync(`${registryPath}.lock`)).toBe(true);
     expect(existsSync(join(`${registryPath}.lock`, "metadata.json"))).toBe(true);
@@ -81,18 +82,22 @@ describe("Registry Lock 残留判定与心跳续期", () => {
 
   it("mtime 未超龄时即使 pid 已死也不会被立即抢占（需等到超龄后）", async () => {
     const registryPath = makeRegistryPath("fresh-mtime");
-    // 已死 pid 但 mtime 仅 1 秒龄：新鲜窗口内不可回收，
+    // 已死 pid 但 mtime 仅 20 毫秒龄：新鲜窗口内不可回收，
     // 随着等待 mtime 逐渐超龄后才按残留锁接管
-    seedStaleLock(registryPath, { pid: 999999999, ageMs: 1000 });
+    seedStaleLock(registryPath, { pid: 999999999, ageMs: 20 });
 
     const startedAt = Date.now();
-    const result = await withRegistryLock(registryPath, () => "delayed-reclaim");
+    const result = await withRegistryLock(
+      registryPath,
+      () => "delayed-reclaim",
+      { staleMs: 120, acquireTimeoutMs: 600, retryDelayMs: 15 }
+    );
     const elapsed = Date.now() - startedAt;
 
     expect(result).toBe("delayed-reclaim");
-    // 必须等到 mtime 超过 stale 阈值（10s - 1s 龄 = 至少再等 9 秒）才接管，
+    // 必须等到 mtime 超过 stale 阈值（120ms - 20ms 龄 = 至少再等 100ms）才接管，
     // 证明新鲜窗口内未被抢占
-    expect(elapsed).toBeGreaterThanOrEqual(REGISTRY_LOCK_STALE_MS - 1500);
+    expect(elapsed).toBeGreaterThanOrEqual(80);
     expect(existsSync(`${registryPath}.lock`)).toBe(false);
   });
 
@@ -116,12 +121,15 @@ describe("Registry Lock 残留判定与心跳续期", () => {
     const lockDir = `${registryPath}.lock`;
     let mtimeAtMiddle: number;
 
-    // 持锁耗时超过 stale 阈值（心跳间隔 3 秒，stale 阈值 10 秒，等待 2 个心跳周期以上）
-    const holdMs = REGISTRY_LOCK_HEARTBEAT_MS * 2 + 500;
-    await withRegistryLock(registryPath, async () => {
-      await new Promise((r) => setTimeout(r, holdMs));
-      mtimeAtMiddle = Date.now();
-    });
+    const holdMs = 70;
+    await withRegistryLock(
+      registryPath,
+      async () => {
+        await new Promise((r) => setTimeout(r, holdMs));
+        mtimeAtMiddle = Date.now();
+      },
+      { heartbeatMs: 30, staleMs: 80 }
+    );
 
     // fn 执行期间锁目录未被外部回收，且 mtime 已被心跳续期（晚于持锁开始时刻）
     const infoAfter = { existed: existsSync(lockDir) };
@@ -133,17 +141,20 @@ describe("Registry Lock 残留判定与心跳续期", () => {
     const registryPath = makeRegistryPath("contended");
     let holderDone = false;
 
-    const holder = withRegistryLock(registryPath, async () => {
-      // 模拟慢磁盘深度扫描：超过一个心跳周期但远小于 stale 阈值会被心跳覆盖，
-      // 此处再叠加超过 stale 阈值验证存活 pid 复核路径
-      await new Promise((r) => setTimeout(r, REGISTRY_LOCK_STALE_MS + 1500));
-      holderDone = true;
-      return "holder";
-    });
+    const lockOptions = { staleMs: 80, heartbeatMs: 25, retryDelayMs: 10 };
+    const holder = withRegistryLock(
+      registryPath,
+      async () => {
+        await new Promise((r) => setTimeout(r, 90));
+        holderDone = true;
+        return "holder";
+      },
+      lockOptions
+    );
 
     // 等待持有者已确认持锁后再发起竞争
-    await new Promise((r) => setTimeout(r, 100));
-    const waiter = withRegistryLock(registryPath, () => "waiter");
+    await new Promise((r) => setTimeout(r, 20));
+    const waiter = withRegistryLock(registryPath, () => "waiter", lockOptions);
 
     const [holderResult, waiterResult] = await Promise.all([holder, waiter]);
     expect(holderResult).toBe("holder");

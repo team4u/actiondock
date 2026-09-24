@@ -3,6 +3,7 @@ export * from "./security";
 export * from "./body";
 export * from "./routes";
 export * from "./server";
+export * from "./mcp-endpoint";
 export * from "./dispatcher";
 export * from "./http-server";
 export { serveParentIpc } from "../ipc/host";

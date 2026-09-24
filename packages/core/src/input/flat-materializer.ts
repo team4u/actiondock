@@ -104,6 +104,70 @@ export function materializeFlatInput(
 ): JsonValue {
   const root = createNode("", NodeState.OBJECT);
 
+  /**
+   * 叶子赋值四态推进（字符串段与数字段共用单一事实源）。
+   * - UNSET：置为 VALUE 并写入值；
+   * - VALUE：重复赋值，抛 DUPLICATE_ASSIGNMENT；
+   * - OBJECT/ARRAY：值写入既有容器，抛 LEAF_CONTAINER_CONFLICT。
+   */
+  const assignLeaf = (
+    child: IntermediateNode,
+    currentPathStr: string,
+    operator: FlatAssignment["operator"],
+    value: JsonValue,
+    valueLength: number
+  ): void => {
+    if (child.state === NodeState.UNSET) {
+      child.state = NodeState.VALUE;
+      child.value = value;
+    } else if (child.state === NodeState.VALUE) {
+      throw inputPathConflict(
+        `Duplicate assignment to leaf path "${currentPathStr}"`,
+        { path: currentPathStr, operator, valueLength, reason: "DUPLICATE_ASSIGNMENT" }
+      );
+    } else {
+      throw inputPathConflict(
+        `Path conflict at "${currentPathStr}": cannot assign value to existing container (${child.state.toLowerCase()})`,
+        { path: currentPathStr, operator, valueLength, reason: "LEAF_CONTAINER_CONFLICT" }
+      );
+    }
+  };
+
+  /**
+   * 容器下钻三态推进（字符串段与数字段共用单一事实源）。
+   * - UNSET：按下一路径段形态初始化为 OBJECT 或 ARRAY；
+   * - VALUE：穿透既有值节点，抛 LEAF_CONTAINER_CONFLICT；
+   * - 容器形态与期望不符：抛 OBJECT_ARRAY_CONFLICT。
+   * 错误消息中下一访问段的措辞由 accessNoun 提供（字符串段为 property，数字段为 index/property）。
+   */
+  const descend = (
+    child: IntermediateNode,
+    currentPathStr: string,
+    nextSeg: string | number,
+    operator: FlatAssignment["operator"],
+    valueLength: number,
+    accessNoun: "property" | "index/property"
+  ): IntermediateNode => {
+    const nextExpectedState =
+      typeof nextSeg === "number" ? NodeState.ARRAY : NodeState.OBJECT;
+
+    if (child.state === NodeState.UNSET) {
+      child.state = nextExpectedState;
+    } else if (child.state === NodeState.VALUE) {
+      throw inputPathConflict(
+        `Path conflict at "${currentPathStr}": cannot access ${accessNoun} "${nextSeg}" on existing value`,
+        { path: currentPathStr, operator, valueLength, reason: "LEAF_CONTAINER_CONFLICT" }
+      );
+    } else if (child.state !== nextExpectedState) {
+      throw inputPathConflict(
+        `Path conflict at "${currentPathStr}": expected ${nextExpectedState.toLowerCase()} but found ${child.state.toLowerCase()}`,
+        { path: currentPathStr, operator, valueLength, reason: "OBJECT_ARRAY_CONFLICT" }
+      );
+    }
+
+    return child;
+  };
+
   for (const assignment of assignments) {
     const { path, value, operator, rawValue } = assignment;
     const valueLength = Buffer.byteLength(rawValue, "utf8");
@@ -147,40 +211,16 @@ export function materializeFlatInput(
         }
 
         if (isLast) {
-          if (child.state === NodeState.UNSET) {
-            child.state = NodeState.VALUE;
-            child.value = value;
-          } else if (child.state === NodeState.VALUE) {
-            throw inputPathConflict(
-              `Duplicate assignment to leaf path "${currentPathStr}"`,
-              { path: currentPathStr, operator, valueLength, reason: "DUPLICATE_ASSIGNMENT" }
-            );
-          } else {
-            throw inputPathConflict(
-              `Path conflict at "${currentPathStr}": cannot assign value to existing container (${child.state.toLowerCase()})`,
-              { path: currentPathStr, operator, valueLength, reason: "LEAF_CONTAINER_CONFLICT" }
-            );
-          }
+          assignLeaf(child, currentPathStr, operator, value, valueLength);
         } else {
-          const nextSeg = path[i + 1];
-          const nextExpectedState =
-            typeof nextSeg === "number" ? NodeState.ARRAY : NodeState.OBJECT;
-
-          if (child.state === NodeState.UNSET) {
-            child.state = nextExpectedState;
-          } else if (child.state === NodeState.VALUE) {
-            throw inputPathConflict(
-              `Path conflict at "${currentPathStr}": cannot access property "${nextSeg}" on existing value`,
-              { path: currentPathStr, operator, valueLength, reason: "LEAF_CONTAINER_CONFLICT" }
-            );
-          } else if (child.state !== nextExpectedState) {
-            throw inputPathConflict(
-              `Path conflict at "${currentPathStr}": expected ${nextExpectedState.toLowerCase()} but found ${child.state.toLowerCase()}`,
-              { path: currentPathStr, operator, valueLength, reason: "OBJECT_ARRAY_CONFLICT" }
-            );
-          }
-
-          current = child;
+          current = descend(
+            child,
+            currentPathStr,
+            path[i + 1],
+            operator,
+            valueLength,
+            "property"
+          );
         }
       } else {
         // seg is a number
@@ -204,40 +244,16 @@ export function materializeFlatInput(
         }
 
         if (isLast) {
-          if (child.state === NodeState.UNSET) {
-            child.state = NodeState.VALUE;
-            child.value = value;
-          } else if (child.state === NodeState.VALUE) {
-            throw inputPathConflict(
-              `Duplicate assignment to leaf path "${currentPathStr}"`,
-              { path: currentPathStr, operator, valueLength, reason: "DUPLICATE_ASSIGNMENT" }
-            );
-          } else {
-            throw inputPathConflict(
-              `Path conflict at "${currentPathStr}": cannot assign value to existing container (${child.state.toLowerCase()})`,
-              { path: currentPathStr, operator, valueLength, reason: "LEAF_CONTAINER_CONFLICT" }
-            );
-          }
+          assignLeaf(child, currentPathStr, operator, value, valueLength);
         } else {
-          const nextSeg = path[i + 1];
-          const nextExpectedState =
-            typeof nextSeg === "number" ? NodeState.ARRAY : NodeState.OBJECT;
-
-          if (child.state === NodeState.UNSET) {
-            child.state = nextExpectedState;
-          } else if (child.state === NodeState.VALUE) {
-            throw inputPathConflict(
-              `Path conflict at "${currentPathStr}": cannot access index/property "${nextSeg}" on existing value`,
-              { path: currentPathStr, operator, valueLength, reason: "LEAF_CONTAINER_CONFLICT" }
-            );
-          } else if (child.state !== nextExpectedState) {
-            throw inputPathConflict(
-              `Path conflict at "${currentPathStr}": expected ${nextExpectedState.toLowerCase()} but found ${child.state.toLowerCase()}`,
-              { path: currentPathStr, operator, valueLength, reason: "OBJECT_ARRAY_CONFLICT" }
-            );
-          }
-
-          current = child;
+          current = descend(
+            child,
+            currentPathStr,
+            path[i + 1],
+            operator,
+            valueLength,
+            "index/property"
+          );
         }
       }
     }

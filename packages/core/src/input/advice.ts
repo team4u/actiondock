@@ -151,6 +151,117 @@ function createMalformedAdvice(message: string): CliInputAdviceV1 {
 }
 
 /**
+ * 构造无字段可用、推荐 full-json 的 ok 状态报告骨架（absent / any 语义共用单一事实源）。
+ * 字段顺序与既有契约保持一致，禁止调整键序。
+ */
+function createNonFlatOkAdvice(schemaState: "absent" | "any"): CliInputAdviceV1 {
+  return {
+    version: 1,
+    analysisMode: "declared-properties-only",
+    analysisStatus: "ok",
+    schemaState,
+    inputFeasibility: "possible-or-unknown",
+    flatAvailable: false,
+    requiredSatisfiable: null,
+    flatCandidate: false,
+    schemaRecommendedMode: "full-json",
+    fields: [],
+  };
+}
+
+/**
+ * type 关键字结构校验结果原因码（根级与属性级共用单一事实源）。
+ *
+ * 消息拼接规则（措辞模板由调用方持有，保证既有消息逐字节不变）：
+ * - UNRECOGNIZED_TYPE：字符串型 type 非法；
+ * - UNRECOGNIZED_TYPE_IN_ARRAY：数组型 type 内元素非法；
+ * - EMPTY_TYPE_ARRAY / NOT_STRING_OR_ARRAY：无插值；
+ * - DUPLICATE_TYPE：数组内重复元素。
+ */
+interface TypeKeywordIssue {
+  code:
+    | "UNRECOGNIZED_TYPE"
+    | "UNRECOGNIZED_TYPE_IN_ARRAY"
+    | "EMPTY_TYPE_ARRAY"
+    | "DUPLICATE_TYPE"
+    | "NOT_STRING_OR_ARRAY";
+  /** 参与消息插值的目标类型值（非法与重复场景提供） */
+  value?: string;
+}
+
+/**
+ * 校验 schema 节点的 type 关键字结构合法性（根级与属性级重复逻辑的单一事实源）。
+ *
+ * 判定规则：
+ * - 字符串型 type 必须属于 RECOGNIZED_SCHEMA_TYPES；
+ * - 数组型 type 不得为空、元素必须是受认可字符串且不得重复；
+ * - 其余形态（数字、对象等）非法。
+ *
+ * @param type 待校验的 type 关键字值
+ * @returns 非法时返回结构化原因，合法时返回 undefined
+ */
+function validateTypeKeyword(type: unknown): TypeKeywordIssue | undefined {
+  if (typeof type === "string") {
+    if (!RECOGNIZED_SCHEMA_TYPES.has(type)) {
+      return { code: "UNRECOGNIZED_TYPE", value: type };
+    }
+    return undefined;
+  }
+  if (Array.isArray(type)) {
+    if (type.length === 0) {
+      return { code: "EMPTY_TYPE_ARRAY" };
+    }
+    const seen = new Set<string>();
+    for (const t of type) {
+      if (typeof t !== "string" || !RECOGNIZED_SCHEMA_TYPES.has(t)) {
+        return { code: "UNRECOGNIZED_TYPE_IN_ARRAY", value: String(t) };
+      }
+      if (seen.has(t)) {
+        return { code: "DUPLICATE_TYPE", value: t };
+      }
+      seen.add(t);
+    }
+    return undefined;
+  }
+  return { code: "NOT_STRING_OR_ARRAY" };
+}
+
+/**
+ * 依 TypeKeywordIssue 构造根级 type 关键字 malformed 消息（措辞与历史实现逐字节一致）。
+ */
+function formatRootTypeKeywordMessage(issue: TypeKeywordIssue): string {
+  switch (issue.code) {
+    case "UNRECOGNIZED_TYPE":
+      return `Unrecognized type keyword: '${issue.value}'`;
+    case "UNRECOGNIZED_TYPE_IN_ARRAY":
+      return `Unrecognized type in type array: '${issue.value}'`;
+    case "EMPTY_TYPE_ARRAY":
+      return "Type array must not be empty";
+    case "DUPLICATE_TYPE":
+      return `Duplicate type in type array: '${issue.value}'`;
+    case "NOT_STRING_OR_ARRAY":
+      return "Type keyword must be a string or array of strings";
+  }
+}
+
+/**
+ * 依 TypeKeywordIssue 构造属性级 type 关键字 malformed 消息（措辞与历史实现逐字节一致）。
+ */
+function formatPropertyTypeKeywordMessage(issue: TypeKeywordIssue, propKey: string): string {
+  switch (issue.code) {
+    case "UNRECOGNIZED_TYPE":
+    case "UNRECOGNIZED_TYPE_IN_ARRAY":
+      return `Unrecognized type '${issue.value}' in property '${propKey}'`;
+    case "EMPTY_TYPE_ARRAY":
+      return `Type array in property '${propKey}' must not be empty`;
+    case "DUPLICATE_TYPE":
+      return `Duplicate type '${issue.value}' in property '${propKey}'`;
+    case "NOT_STRING_OR_ARRAY":
+      return `Type in property '${propKey}' must be string or array of strings`;
+  }
+}
+
+/**
  * 依据 inputSchema 构造 v1 版本的 Action 输入编码顾问报告（机器契约）。
  *
  * @param schema Action 的 inputSchema 定义
@@ -160,18 +271,7 @@ export function buildCliInputAdviceV1(schema: unknown): CliInputAdviceV1 {
   // 1. Schema Sanity 阶段（Section 44）
   // 1.1 根形状检查（Section 44.1）
   if (schema === undefined) {
-    return {
-      version: 1,
-      analysisMode: "declared-properties-only",
-      analysisStatus: "ok",
-      schemaState: "absent",
-      inputFeasibility: "possible-or-unknown",
-      flatAvailable: false,
-      requiredSatisfiable: null,
-      flatCandidate: false,
-      schemaRecommendedMode: "full-json",
-      fields: [],
-    };
+    return createNonFlatOkAdvice("absent");
   }
 
   if (typeof schema === "boolean") {
@@ -190,18 +290,7 @@ export function buildCliInputAdviceV1(schema: unknown): CliInputAdviceV1 {
         fields: [],
       };
     }
-    return {
-      version: 1,
-      analysisMode: "declared-properties-only",
-      analysisStatus: "ok",
-      schemaState: "any",
-      inputFeasibility: "possible-or-unknown",
-      flatAvailable: false,
-      requiredSatisfiable: null,
-      flatCandidate: false,
-      schemaRecommendedMode: "full-json",
-      fields: [],
-    };
+    return createNonFlatOkAdvice("any");
   }
 
   if (!isPlainObject(schema)) {
@@ -224,28 +313,11 @@ export function buildCliInputAdviceV1(schema: unknown): CliInputAdviceV1 {
   const s = schema as Record<string, any>;
 
   // 1.2 关键字形状检查（Section 44.2）
-  // 检查 type
+  // 检查 type（结构校验单一事实源，根级消息模板独立持有）
   if (s.type !== undefined) {
-    if (typeof s.type === "string") {
-      if (!RECOGNIZED_SCHEMA_TYPES.has(s.type)) {
-        return createMalformedAdvice(`Unrecognized type keyword: '${s.type}'`);
-      }
-    } else if (Array.isArray(s.type)) {
-      if (s.type.length === 0) {
-        return createMalformedAdvice("Type array must not be empty");
-      }
-      const seen = new Set<string>();
-      for (const t of s.type) {
-        if (typeof t !== "string" || !RECOGNIZED_SCHEMA_TYPES.has(t)) {
-          return createMalformedAdvice(`Unrecognized type in type array: '${String(t)}'`);
-        }
-        if (seen.has(t)) {
-          return createMalformedAdvice(`Duplicate type in type array: '${t}'`);
-        }
-        seen.add(t);
-      }
-    } else {
-      return createMalformedAdvice("Type keyword must be a string or array of strings");
+    const issue = validateTypeKeyword(s.type);
+    if (issue) {
+      return createMalformedAdvice(formatRootTypeKeywordMessage(issue));
     }
   }
 
@@ -262,34 +334,9 @@ export function buildCliInputAdviceV1(schema: unknown): CliInputAdviceV1 {
       }
       if (isPlainObject(propVal)) {
         if (propVal.type !== undefined) {
-          if (typeof propVal.type === "string") {
-            if (!RECOGNIZED_SCHEMA_TYPES.has(propVal.type)) {
-              return createMalformedAdvice(
-                `Unrecognized type '${propVal.type}' in property '${propKey}'`
-              );
-            }
-          } else if (Array.isArray(propVal.type)) {
-            if (propVal.type.length === 0) {
-              return createMalformedAdvice(`Type array in property '${propKey}' must not be empty`);
-            }
-            const seen = new Set<string>();
-            for (const t of propVal.type) {
-              if (typeof t !== "string" || !RECOGNIZED_SCHEMA_TYPES.has(t)) {
-                return createMalformedAdvice(
-                  `Unrecognized type '${String(t)}' in property '${propKey}'`
-                );
-              }
-              if (seen.has(t)) {
-                return createMalformedAdvice(
-                  `Duplicate type '${t}' in property '${propKey}'`
-                );
-              }
-              seen.add(t);
-            }
-          } else {
-            return createMalformedAdvice(
-              `Type in property '${propKey}' must be string or array of strings`
-            );
+          const issue = validateTypeKeyword(propVal.type);
+          if (issue) {
+            return createMalformedAdvice(formatPropertyTypeKeywordMessage(issue, propKey));
           }
         }
         if (propVal.enum !== undefined) {
@@ -402,18 +449,7 @@ export function buildCliInputAdviceV1(schema: unknown): CliInputAdviceV1 {
 
   // 2. 语义分类阶段（Section 45）
   if (Object.keys(s).length === 0) {
-    return {
-      version: 1,
-      analysisMode: "declared-properties-only",
-      analysisStatus: "ok",
-      schemaState: "any",
-      inputFeasibility: "possible-or-unknown",
-      flatAvailable: false,
-      requiredSatisfiable: null,
-      flatCandidate: false,
-      schemaRecommendedMode: "full-json",
-      fields: [],
-    };
+    return createNonFlatOkAdvice("any");
   }
 
   const hasComplexKeyword =
@@ -550,78 +586,40 @@ export function buildCliInputAdviceV1(schema: unknown): CliInputAdviceV1 {
     // enum/const 绝不改变 operator 选择，仅显式单一 schema.type 决定 operator。
     // 无显式 type 时不推断类型，推荐 full-json，flatSafe: false。
     if (typeof propType === "string") {
-      if (propType === "string") {
-        fields.push({
-          path: key,
-          inputAllowed: true,
-          flatSafe: true,
-          required: isReq,
-          type: "string",
-          operator: "=",
-          encoding: "string",
-          assignmentTemplate: `${key}=TEXT`,
-          ...(desc ? { description: desc } : {}),
-        });
-      } else if (propType === "number" || propType === "integer") {
+      // Flat-safe 显式单一类型的编码参数表（string/number/integer/boolean/null/array/object）。
+      // 各分支仅在 type、encoding、assignmentTemplate 与 hint 上差异，结构完全一致。
+      const flatSafeTypeTable: Record<
+        string,
+        { encoding: string; assignmentTemplate: string; hint?: string }
+      > = {
+        string: { encoding: "string", assignmentTemplate: `${key}=TEXT` },
+        number: { encoding: "json-number", assignmentTemplate: `${key}:=NUMBER` },
+        integer: { encoding: "json-number", assignmentTemplate: `${key}:=NUMBER` },
+        boolean: { encoding: "json-boolean", assignmentTemplate: `${key}:=BOOLEAN` },
+        null: { encoding: "json-null", assignmentTemplate: `${key}:=null` },
+        array: {
+          encoding: "json-array",
+          assignmentTemplate: `${key}:=JSON`,
+          hint: "建议使用 --input-file 或标准输入传递数组结构",
+        },
+        object: {
+          encoding: "json-object",
+          assignmentTemplate: `${key}:=JSON`,
+          hint: "大型结构建议使用 --input-file",
+        },
+      };
+      const flatSafeEntry = flatSafeTypeTable[propType];
+      if (flatSafeEntry) {
         fields.push({
           path: key,
           inputAllowed: true,
           flatSafe: true,
           required: isReq,
           type: propType,
-          operator: ":=",
-          encoding: "json-number",
-          assignmentTemplate: `${key}:=NUMBER`,
-          ...(desc ? { description: desc } : {}),
-        });
-      } else if (propType === "boolean") {
-        fields.push({
-          path: key,
-          inputAllowed: true,
-          flatSafe: true,
-          required: isReq,
-          type: "boolean",
-          operator: ":=",
-          encoding: "json-boolean",
-          assignmentTemplate: `${key}:=BOOLEAN`,
-          ...(desc ? { description: desc } : {}),
-        });
-      } else if (propType === "null") {
-        fields.push({
-          path: key,
-          inputAllowed: true,
-          flatSafe: true,
-          required: isReq,
-          type: "null",
-          operator: ":=",
-          encoding: "json-null",
-          assignmentTemplate: `${key}:=null`,
-          ...(desc ? { description: desc } : {}),
-        });
-      } else if (propType === "array") {
-        fields.push({
-          path: key,
-          inputAllowed: true,
-          flatSafe: true,
-          required: isReq,
-          type: "array",
-          operator: ":=",
-          encoding: "json-array",
-          assignmentTemplate: `${key}:=JSON`,
-          hint: "建议使用 --input-file 或标准输入传递数组结构",
-          ...(desc ? { description: desc } : {}),
-        });
-      } else if (propType === "object") {
-        fields.push({
-          path: key,
-          inputAllowed: true,
-          flatSafe: true,
-          required: isReq,
-          type: "object",
-          operator: ":=",
-          encoding: "json-object",
-          assignmentTemplate: `${key}:=JSON`,
-          hint: "大型结构建议使用 --input-file",
+          operator: propType === "string" ? "=" : ":=",
+          encoding: flatSafeEntry.encoding,
+          assignmentTemplate: flatSafeEntry.assignmentTemplate,
+          ...(flatSafeEntry.hint ? { hint: flatSafeEntry.hint } : {}),
           ...(desc ? { description: desc } : {}),
         });
       } else {
@@ -781,6 +779,21 @@ export interface ActionInputAdvice {
 }
 
 /**
+ * 构造无扁平能力、无字段明细的空结果建议报告（各降级早退分支共用单一事实源）。
+ * 键序与既有契约保持一致，禁止调整。
+ */
+function createEmptyFlatAdvice(notes: string[]): ActionInputAdvice {
+  return {
+    flatSupported: false,
+    hasFlatFields: false,
+    fields: [],
+    requiredTemplates: [],
+    optionalTemplates: [],
+    notes,
+  };
+}
+
+/**
  * 依据 inputSchema 构造统一的 Action 输入编码建议。
  *
  * @param schema Action 的 inputSchema 定义
@@ -789,52 +802,24 @@ export interface ActionInputAdvice {
 export function buildActionInputAdvice(schema: unknown): ActionInputAdvice {
   if (typeof schema === "boolean") {
     if (schema === false) {
-      return {
-        flatSupported: false,
-        hasFlatFields: false,
-        fields: [],
-        requiredTemplates: [],
-        optionalTemplates: [],
-        notes: ["布尔模式 false：拒绝所有输入，任何调用参数均判定为非法"],
-      };
+      return createEmptyFlatAdvice(["布尔模式 false：拒绝所有输入，任何调用参数均判定为非法"]);
     }
-    return {
-      flatSupported: false,
-      hasFlatFields: false,
-      fields: [],
-      requiredTemplates: [],
-      optionalTemplates: [],
-      notes: [
-        "布尔模式 true：接受任意合法 JSON 输入；调用时无需指定必填参数，非对象根输入请使用 --input-file 或 --input",
-      ],
-    };
+    return createEmptyFlatAdvice([
+      "布尔模式 true：接受任意合法 JSON 输入；调用时无需指定必填参数，非对象根输入请使用 --input-file 或 --input",
+    ]);
   }
 
   if (!schema || typeof schema !== "object") {
-    return {
-      flatSupported: false,
-      hasFlatFields: false,
-      fields: [],
-      requiredTemplates: [],
-      optionalTemplates: [],
-      notes: ["根模式未声明输入字段，直接调用或使用 --input-file / --input '{}'"],
-    };
+    return createEmptyFlatAdvice(["根模式未声明输入字段，直接调用或使用 --input-file / --input '{}'"]);
   }
 
   const s = schema as Record<string, any>;
 
   // 校验根模式是否为 object 类型
   if (s.type !== undefined && s.type !== "object") {
-    return {
-      flatSupported: false,
-      hasFlatFields: false,
-      fields: [],
-      requiredTemplates: [],
-      optionalTemplates: [],
-      notes: [
-        `根模式类型为 '${s.type}'，不支持扁平赋值，建议使用 --input-file 或 --input`,
-      ],
-    };
+    return createEmptyFlatAdvice([
+      `根模式类型为 '${s.type}'，不支持扁平赋值，建议使用 --input-file 或 --input`,
+    ]);
   }
 
   const properties = (s.properties || {}) as Record<string, any>;
@@ -842,14 +827,7 @@ export function buildActionInputAdvice(schema: unknown): ActionInputAdvice {
   const propKeys = Object.keys(properties);
 
   if (propKeys.length === 0) {
-    return {
-      flatSupported: false,
-      hasFlatFields: false,
-      fields: [],
-      requiredTemplates: [],
-      optionalTemplates: [],
-      notes: ["根模式无声明属性，不支持扁平赋值，建议使用 --input-file 或 --input '{}'"],
-    };
+    return createEmptyFlatAdvice(["根模式无声明属性，不支持扁平赋值，建议使用 --input-file 或 --input '{}'"]);
   }
 
   const fields: ActionInputFieldAdvice[] = [];
@@ -867,33 +845,27 @@ export function buildActionInputAdvice(schema: unknown): ActionInputAdvice {
     let hint: string | undefined;
 
     if (isFlatSafe) {
+      // 数组元素标量类型到扁平元素赋值模板的参数表（共用同一守卫与拼接规则）。
+      // 命中时模板形态为 `${key}.0<operator><占位符>`，未命中回退数组整体 JSON 模板。
+      const itemsTypeTemplates: Record<string, string> = {
+        string: `${key}.0=TEXT`,
+        number: `${key}.0:=NUMBER`,
+        integer: `${key}.0:=NUMBER`,
+        boolean: `${key}.0:=BOOLEAN`,
+      };
+      const itemsTemplate =
+        prop.type === "array" && prop.items && typeof prop.items === "object"
+          ? itemsTypeTemplates[prop.items.type]
+          : undefined;
+
       if (prop.type === "string") {
         assignmentTemplate = `${key}=TEXT`;
       } else if (prop.type === "number" || prop.type === "integer") {
         assignmentTemplate = `${key}:=NUMBER`;
       } else if (prop.type === "boolean") {
         assignmentTemplate = `${key}:=BOOLEAN`;
-      } else if (
-        prop.type === "array" &&
-        prop.items &&
-        typeof prop.items === "object" &&
-        prop.items.type === "string"
-      ) {
-        assignmentTemplate = `${key}.0=TEXT`;
-      } else if (
-        prop.type === "array" &&
-        prop.items &&
-        typeof prop.items === "object" &&
-        (prop.items.type === "number" || prop.items.type === "integer")
-      ) {
-        assignmentTemplate = `${key}.0:=NUMBER`;
-      } else if (
-        prop.type === "array" &&
-        prop.items &&
-        typeof prop.items === "object" &&
-        prop.items.type === "boolean"
-      ) {
-        assignmentTemplate = `${key}.0:=BOOLEAN`;
+      } else if (itemsTemplate) {
+        assignmentTemplate = itemsTemplate;
       } else if (prop.type === "array") {
         assignmentTemplate = `${key}:=JSON`;
         hint = "数组结构建议使用 --input-file";

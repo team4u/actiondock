@@ -169,21 +169,6 @@ export class DefaultExecutionService implements ExecutionService {
     return this.activeRuns.get(runId)?.handle;
   }
 
-  private async resolveTargetAction(ref: ActionRef | string): Promise<ActionDefinition | undefined> {
-    const parsed = typeof ref === "string" ? parseActionRef(ref) : ref;
-    const actionId = parsed.actionId;
-    const targetPackageId = parsed.packageId || this.packageId;
-    if (targetPackageId !== this.packageId) {
-      return undefined;
-    }
-    const fromRunner = this._runner.getAction(actionId);
-    if (fromRunner) return fromRunner;
-    if (this.actionResolver) {
-      return this.actionResolver(actionId);
-    }
-    return undefined;
-  }
-
   async execute(
     ref: ActionRef | string,
     input: JsonValue,
@@ -294,7 +279,7 @@ export class DefaultExecutionService implements ExecutionService {
       const runId = designatedRunId || context.runId || crypto.randomUUID();
       const bridge = this.createEventBridge({ runId, context, effectiveClock });
 
-      this.registerResolvedAction(target.runner, targetPackageId, targetActionId, target.action);
+      target.runner.registerAction(targetActionId, target.action);
       const handle = target.runner.start(targetActionId, input, {
         runId,
         rootRunId: context.rootRunId,
@@ -465,7 +450,7 @@ export class DefaultExecutionService implements ExecutionService {
       if (resolution.status === "found") {
         action = resolution.action;
       } else {
-        const targetAction = await this.resolveTargetAction(parsedRef);
+        const targetAction = await this.actionResolver?.(targetActionId);
         if (targetAction) {
           action = targetAction;
         } else if (this.projectRoot && existsSync(this.projectRoot)) {
@@ -533,18 +518,6 @@ export class DefaultExecutionService implements ExecutionService {
     const targetPackageId = parsedRef.packageId || this.packageId;
     const target = await this.resolveExecutionTarget(parsedRef, targetPackageId, targetActionId);
     return target.action;
-  }
-
-  /**
-   * 注册解析成功的目标 Action 至目标 Runner（收敛为单一注册入口）。
-   */
-  private registerResolvedAction(
-    runner: ActionRunner,
-    targetPackageId: string,
-    targetActionId: string,
-    action: ActionDefinition
-  ): void {
-    runner.registerAction(targetActionId, action);
   }
 
   /**
@@ -664,47 +637,24 @@ export class DefaultExecutionService implements ExecutionService {
       },
     };
 
+    const mkLevelLogger =
+      (level: "debug" | "info" | "warn" | "error") =>
+      (message: string, data?: unknown) => {
+        this.logger?.[level](message, data);
+        context.logger?.[level](message, data);
+        emitEvent({
+          type: "log",
+          level,
+          message,
+          data: data as JsonValue | undefined,
+        });
+      };
+
     const executionLogger: Logger = {
-      debug: (message: string, data?: unknown) => {
-        this.logger?.debug(message, data);
-        context.logger?.debug(message, data);
-        emitEvent({
-          type: "log",
-          level: "debug",
-          message,
-          data: data as JsonValue | undefined,
-        });
-      },
-      info: (message: string, data?: unknown) => {
-        this.logger?.info(message, data);
-        context.logger?.info(message, data);
-        emitEvent({
-          type: "log",
-          level: "info",
-          message,
-          data: data as JsonValue | undefined,
-        });
-      },
-      warn: (message: string, data?: unknown) => {
-        this.logger?.warn(message, data);
-        context.logger?.warn(message, data);
-        emitEvent({
-          type: "log",
-          level: "warn",
-          message,
-          data: data as JsonValue | undefined,
-        });
-      },
-      error: (message: string, data?: unknown) => {
-        this.logger?.error(message, data);
-        context.logger?.error(message, data);
-        emitEvent({
-          type: "log",
-          level: "error",
-          message,
-          data: data as JsonValue | undefined,
-        });
-      },
+      debug: mkLevelLogger("debug"),
+      info: mkLevelLogger("info"),
+      warn: mkLevelLogger("warn"),
+      error: mkLevelLogger("error"),
     };
 
     return { emitEvent, progressReporter, executionLogger };

@@ -316,8 +316,8 @@ try {
  * 拷贝 Action 源码、Playbook 规程与声明的代码文件/静态资产到暂存目录。
  * 拷贝内核统一复用 stage-sources 的 copyPlanEntries，无差异化调优时直接全量拷贝。
  */
-function stageSources(root: string, stagingDir: string, plan: SelectionPlan): string[] {
-  return copyPlanEntries(root, stagingDir, plan);
+function stageSources(stagingDir: string, plan: SelectionPlan): string[] {
+  return copyPlanEntries(stagingDir, plan);
 }
 
 /**
@@ -548,7 +548,7 @@ export async function buildProject(options: BuildOptions): Promise<BuildResult> 
   let platformInfo: { os: string; arch: string; nodeAbi: string } | undefined;
 
   try {
-    stageSources(root, stagingDir, plan);
+    stageSources(stagingDir, plan);
     writeManifest(stagingDir, plan);
     writePkgJsonAndLockfiles(root, stagingDir, plan, pkgSlug);
     writeEntrypoints(stagingDir, plan);

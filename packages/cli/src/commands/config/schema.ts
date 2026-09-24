@@ -1,18 +1,12 @@
 import {
-  loadProjectConfig,
-} from "@actiondock/core";
-import {
   isSecretConfigKey,
 } from "@actiondock/core/project";
-import {
-  resolvePackageRoot,
-} from "@actiondock/core/registry";
 import type { Command } from "commander";
-import { notInProjectError, packageNotFoundError } from "../../errors";
+import { notInProjectError } from "../../errors";
 import { renderConfigSchema, renderResult, writeStdout } from "../../renderer";
 import { buildMergedConfigEntries } from "../../services/config-merge";
 import type { CliContext } from "../../types";
-import { applyTargetOptions, getEffectiveOptions, withService } from "../../utils";
+import { applyTargetOptions, getEffectiveOptions, requirePackageRoot, withService } from "../../utils";
 
 /**
  * 注册 config schema 子命令：检查声明配置的解析状态。
@@ -39,17 +33,11 @@ export function registerConfigSchemaCommand(configCmd: Command, context?: CliCon
     .action(async (identifier: string | undefined, rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
       const targetPkg = identifier || options.package;
-      const root = resolvePackageRoot(targetPkg);
-      if (!root) {
-        if (targetPkg) {
-          throw packageNotFoundError(targetPkg);
-        }
-        throw notInProjectError(
-          "Usage: ad config schema [package-id] or cd into a project directory."
-        );
-      }
+      const { root, projConfig } = requirePackageRoot(targetPkg, {
+        loadConfig: true,
+        hint: "Usage: ad config schema [package-id] or cd into a project directory.",
+      });
 
-      const projConfig = loadProjectConfig(root);
       const declared = projConfig.config || {};
 
       // 远端目标显式拒绝：schema 状态推导依赖本地工程声明与环境变量解析，

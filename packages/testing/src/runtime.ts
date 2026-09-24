@@ -6,6 +6,7 @@ import {
 } from "@actiondock/core";
 import {
   SystemClock,
+  createNonClosingStorageView,
   type Clock,
   type EventSink,
   type RuntimePlatform,
@@ -84,76 +85,33 @@ export class MemoryConfig implements Config {
 }
 
 /**
- * 内存状态条目结构体，包含数据值与可选的过期时间戳。
- */
-export interface MemoryStateEntry {
-  value: unknown;
-  expiresAt?: number;
-}
-
-/**
- * 基于内存 Map 的状态存储实现，支持命名空间隔离与 TTL 自动失效，专供单元测试使用。
+ * 基于内存存储的状态存储实现，支持命名空间隔离与 TTL 自动失效，专供单元测试使用。
  *
+ * 内部委托 MemoryStorage（内存 SQLite），与生产存储层同源：
+ * TTL 判定、命名空间隔离与 JSON 序列化语义均与运行时完全一致。
  * 读取严格限定当前命名空间（根作用域即空命名空间），不做跨命名空间隐式回扫。
  */
 export class MemoryStateStore implements StateStore {
-  private store: Map<string, any>;
+  private storage: MemoryStorage;
   private namespace: string;
   private clock: Clock;
 
   constructor(
-    store?: Map<string, any>,
+    _shared?: Map<string, any>,
     namespace = "",
-    clock?: Clock
+    clock?: Clock,
+    /** 可选注入的共享存储实例（scope 派生时内部传递） */
+    sharedStorage?: MemoryStorage
   ) {
-    this.store = store || new Map();
-    this.namespace = namespace;
+    // 注入的共享 Map 仅保留参数位兼容旧签名，实际存储统一落在内存 SQLite；
+    // scope 派生实例共享同一 storage 与 clock，保持与旧版共享 Map 等价的可见性语义
     this.clock = clock ?? new SystemClock();
-  }
-
-  /** 获取注入时钟的当前时间戳（毫秒），TTL 过期判定单一事实入口 */
-  private nowMs(): number {
-    return this.clock.now().getTime();
-  }
-
-  private qualify(key: string): string {
-    return encodeStateKey(this.namespace, key);
-  }
-
-  private extractEntry(raw: unknown): MemoryStateEntry {
-    if (
-      raw !== null &&
-      typeof raw === "object" &&
-      ("__actiondock_entry__" in (raw as Record<string, unknown>) ||
-        "expiresAt" in (raw as Record<string, unknown>))
-    ) {
-      return raw as MemoryStateEntry;
-    }
-    return { value: raw };
-  }
-
-  /** 提取并结算条目：命中且未过期返回条目本身，已过期删除并返回 undefined */
-  private settleEntry(raw: unknown): MemoryStateEntry | undefined {
-    const entry = this.extractEntry(raw);
-    if (entry.expiresAt !== undefined && entry.expiresAt <= this.nowMs()) {
-      return undefined;
-    }
-    return entry;
+    this.storage = sharedStorage ?? new MemoryStorage({ clock: this.clock });
+    this.namespace = namespace;
   }
 
   async get<T = unknown>(key: string): Promise<T | undefined> {
-    const fullKey = this.qualify(key);
-    const raw = this.store.get(fullKey);
-    if (raw === undefined) {
-      return undefined;
-    }
-    const settled = this.settleEntry(raw);
-    if (!settled) {
-      this.store.delete(fullKey);
-      return undefined;
-    }
-    const val = settled.value;
-    return (typeof val === "object" && val !== null ? structuredClone(val) : val) as T;
+    return this.storage.getState<T>(this.namespace, key);
   }
 
   async set<T = unknown>(
@@ -161,76 +119,33 @@ export class MemoryStateStore implements StateStore {
     value: T,
     ttlSeconds?: number
   ): Promise<void> {
-    const fullKey = this.qualify(key);
-    const clonedValue = typeof value === "object" && value !== null ? structuredClone(value) : value;
-    // 与 SDK StateStore 契约及 core 存储层判定对齐：不传或小于等于 0 均表示永久有效
-    if (typeof ttlSeconds === "number" && ttlSeconds > 0) {
-      const expiresAt = this.nowMs() + ttlSeconds * 1000;
-      this.store.set(fullKey, {
-        __actiondock_entry__: true,
-        value: clonedValue,
-        expiresAt,
-      });
-    } else {
-      this.store.set(fullKey, {
-        __actiondock_entry__: true,
-        value: clonedValue,
-      });
-    }
+    return this.storage.setState<T>(this.namespace, key, value, ttlSeconds);
   }
 
   async delete(key: string): Promise<boolean> {
-    const fullKey = this.qualify(key);
-    return this.store.delete(fullKey);
+    return this.storage.deleteState(this.namespace, key);
   }
 
-  async clear(): Promise<number> {
-    let count = 0;
-    for (const fullKey of [...this.store.keys()]) {
-      try {
-        const decoded = decodeStateKey(fullKey);
-        if (decoded.namespace === this.namespace) {
-          this.store.delete(fullKey);
-          count++;
-        }
-      } catch {
-        // 忽略无法解析的键
-      }
-    }
-    return count;
-  }
-
-  async list(): Promise<string[]> {
-    const result: string[] = [];
-    for (const [fullKey, raw] of this.store.entries()) {
-      try {
-        const decoded = decodeStateKey(fullKey);
-        if (decoded.namespace === this.namespace) {
-          const entry = this.settleEntry(raw);
-          if (entry) {
-            result.push(decoded.key);
-          } else {
-            this.store.delete(fullKey);
-          }
-        }
-      } catch {
-        // 忽略无法解析的键
-      }
-    }
-    return result;
+  async clear(prefix = ""): Promise<number> {
+    return this.storage.clearState({
+      namespace: this.namespace,
+      prefix: prefix || undefined,
+    });
   }
 
   async keys(prefix = ""): Promise<string[]> {
-    const all = await this.list();
-    if (!prefix) return all;
-    return all.filter((k) => k.startsWith(prefix));
+    return this.storage.listStateKeys(this.namespace, prefix || undefined);
+  }
+
+  async list(prefix = ""): Promise<string[]> {
+    return this.keys(prefix);
   }
 
   scope(namespace: string): StateStore {
     const nextNs = this.namespace
       ? `${this.namespace}:${namespace}`
       : namespace;
-    return new MemoryStateStore(this.store, nextNs, this.clock);
+    return new MemoryStateStore(undefined, nextNs, this.clock, this.storage);
   }
 }
 
@@ -335,53 +250,12 @@ export class TestConfigStore implements TestConfig {
 }
 
 /**
- * 测试状态存储实现，对接 MemoryStorage。
+ * 测试状态存储实现：直接复用 MemoryStateStore 的 MemoryStorage 委托实现，
+ * 与导出的公共状态存储保持单一事实源。
  */
-class TestStateStore implements StateStore {
-  private storage: MemoryStorage;
-  private namespace: string;
-
+class TestStateStore extends MemoryStateStore {
   constructor(storage: MemoryStorage, namespace = "") {
-    this.storage = storage;
-    this.namespace = namespace;
-  }
-
-  async get<T = unknown>(key: string): Promise<T | undefined> {
-    return this.storage.getState<T>(this.namespace, key);
-  }
-
-  async set<T = unknown>(
-    key: string,
-    value: T,
-    ttl?: number
-  ): Promise<void> {
-    return this.storage.setState<T>(this.namespace, key, value, ttl);
-  }
-
-  async delete(key: string): Promise<boolean> {
-    return this.storage.deleteState(this.namespace, key);
-  }
-
-  async clear(prefix = ""): Promise<number> {
-    return this.storage.clearState({
-      namespace: this.namespace,
-      prefix: prefix || undefined,
-    });
-  }
-
-  async keys(prefix = ""): Promise<string[]> {
-    return this.storage.listStateKeys(this.namespace, prefix);
-  }
-
-  async list(prefix = ""): Promise<string[]> {
-    return this.keys(prefix);
-  }
-
-  scope(namespace: string): StateStore {
-    const nextNs = this.namespace
-      ? `${this.namespace}:${namespace}`
-      : namespace;
-    return new TestStateStore(this.storage, nextNs);
+    super(undefined, namespace, undefined, storage);
   }
 }
 
@@ -489,10 +363,6 @@ export interface TestRuntime {
   logger: MemoryLogger;
   /** 底层存储引擎 */
   storage: MemoryStorage;
-  /** 统一执行服务 */
-  executionService: any;
-  /** 核心执行器引擎（向后兼容保留） */
-  runner: unknown;
   /** 注册 Action 动作定义 */
   registerAction(id: string, action: ActionDefinition): void;
   registerAction(action: ({ id: string; action?: ActionDefinition } & Partial<ActionDefinition>) | ActionDefinition): void;
@@ -524,18 +394,6 @@ export interface TestRuntime {
   ): Promise<ExecutionResult<O>>;
 }
 
-function createExternalStorageView(storage: MemoryStorage): MemoryStorage {
-  return new Proxy(storage, {
-    get(target, prop) {
-      if (prop === "close") {
-        return () => undefined;
-      }
-      const value = Reflect.get(target, prop, target);
-      return typeof value === "function" ? (value as (...args: unknown[]) => unknown).bind(target) : value;
-    },
-  });
-}
-
 /**
  * 创建全功能测试运行时实例。
  * 基于统一 createActionDock 服务门面协调执行全生命周期，并暴露配置、状态、时钟、进程与事件等调试接口。
@@ -561,7 +419,9 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
           clock,
         }));
   const storage = rawStorage;
-  const safeStorage = createExternalStorageView(storage);
+  // 外部注入的 storage 生命周期由注入方管理，仅以非接管视图转发读写，
+  // 避免 service.close() 级联关闭误伤外部实例（共享 core 单一实现）
+  const safeStorage = createNonClosingStorageView(storage);
 
   // 初始化配置数据
   if (options.config) {
@@ -813,15 +673,6 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
     return result.data;
   };
 
-  const executionServiceStub = {
-    get runner() {
-      return {};
-    },
-    registerAction,
-    getAction,
-    listActions,
-  };
-
   return {
     config: testConfig,
     state: testState,
@@ -830,8 +681,6 @@ export function createTestRuntime(options: TestRuntimeOptions = {}): TestRuntime
     events,
     logger: memoryLogger,
     storage,
-    executionService: executionServiceStub as any,
-    runner: {},
     registerAction,
     getAction,
     listActions,

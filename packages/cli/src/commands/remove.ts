@@ -1,20 +1,21 @@
-import { resolve } from "node:path";
 import {
   beginTransaction,
   getInstallCommand,
   loadLockfile,
-  loadManifest,
   saveLockfile,
   saveManifest,
 } from "@actiondock/core/project";
-import {
-  findProjectRoot,
-} from "@actiondock/core";
 import { Command } from "commander";
-import { ArgumentError, ExecutionError, notInProjectError, wrapAsExecutionError } from "../errors";
+import { ArgumentError, ExecutionError } from "../errors";
 import { renderResult, writeStderr } from "../renderer";
 import type { CliContext } from "../types";
-import { assertSafePackageSpec, getEffectiveOptions, spawnAsync } from "../utils";
+import {
+  assertSafePackageSpec,
+  getEffectiveOptions,
+  requireProjectManifestRoot,
+  rollbackAndRethrow,
+  spawnAsync,
+} from "../utils";
 
 /**
  * 注册 ad remove 依赖移除命令。
@@ -28,18 +29,7 @@ export function registerRemoveCommand(program: Command, context?: CliContext): v
     .option("--json", "Output as JSON")
     .action(async (packageIdentifier: string, rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
-      const root = options.package ? resolve(options.package) : findProjectRoot();
-
-      if (!root) {
-        throw notInProjectError(
-          "Please specify -P, --package <path> or cd into a project directory."
-        );
-      }
-
-      const manifest = loadManifest(root);
-      if (!manifest) {
-        throw new ArgumentError(`actiondock.json not found in ${root}`);
-      }
+      const { root, manifest } = requireProjectManifestRoot(options.package);
 
       // 寻址逻辑包标识
       let targetPackageId: string | null = null;
@@ -163,14 +153,7 @@ export function registerRemoveCommand(program: Command, context?: CliContext): v
           context,
         });
       } catch (err: any) {
-        await tx.rollback({ frozenInstall: false });
-        // ActionDockError 与 CliError 原样透传（保留 code 与 details），
-        // 其余包裹为 ExecutionError 并保留原始 code 与 details
-        const passthrough = wrapAsExecutionError(err);
-        if (passthrough !== err) {
-          throw new ExecutionError(err.message, err, err.code || "REMOVE_DEPENDENCY_FAILED");
-        }
-        throw passthrough;
+        await rollbackAndRethrow(tx, err, "REMOVE_DEPENDENCY_FAILED");
       }
     });
 }

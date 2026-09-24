@@ -38,8 +38,8 @@ export interface SqliteStatement {
  * 本契约为同步驱动：exec、prepare 与 transaction 全部以同步语义返回结果，
  * 不接受任何 Promise 或异步实现。SqliteRuntimeStorage 的公共同步方法
  * （getConfig、listConfig、getRun、listRuns、checkAndRecordIdempotency 等）
- * 直接依赖这一同步保证。异步驱动（如 runtime-node 的 WorkerSqliteDriver）
- * 不应注入本契约，需通过 RuntimeStorage 的异步外观层另行适配。
+ * 直接依赖这一同步保证。异步驱动不应注入本契约，
+ * 需通过 RuntimeStorage 的异步外观层另行适配。
  */
 export interface SqliteDriver {
   exec(sql: string): void;

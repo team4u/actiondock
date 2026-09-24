@@ -1,18 +1,6 @@
 # 实践指南：SQLite 存储与状态管理
 
-ActionDock 2.x 采用内嵌式 SQLite（基于 Node.js 原生 `node:sqlite`）作为零依赖持久化存储后端，无需安装外部服务。存储层遵循严格的同步驱动契约（`SqliteDriver`），默认使用主线程同步驱动配合 WAL 模式与忙等待超时保障读写并发；另提供基于专用后台工作线程的异步驱动 WorkerSqliteDriver 作为独立组件，并建立了严格的数据目录租约锁协议与故障自愈机制。
-
----
-
-## 异步存储驱动：WorkerSqliteDriver
-
-在高并发任务与流式交互场景下，若需要将密集 SQLite 操作卸载出主线程，可将 WorkerSqliteDriver 作为独立异步驱动直接使用（不注入同步存储契约）。
-
-### 专用工作线程隔离机制
-
-- **专用后台线程执行**：`WorkerSqliteDriver` 基于 Node.js `node:worker_threads` 创建独立的专用工作线程，将所有底层 SQLite 磁盘读写与查询操作完全卸载至后台工作线程中执行。
-- **主事件循环零阻塞**：主线程仅通过消息通道发起请求并接收结果，对外提供完全异步的语句接口（`WorkerSqliteStatement` 提供 `run`、`get`、`all` 异步方法）。主事件循环零阻塞，彻底杜绝了数据库慢查询或锁竞争导致整个进程失去响应的问题。
-- **预写日志模式加固**：工作线程内数据库连接默认开启预写日志模式（`PRAGMA journal_mode = WAL;`）、外键约束检查（`PRAGMA foreign_keys = ON;`）以及 5000 毫秒忙等待超时（`PRAGMA busy_timeout = 5000;`），实现高效读写并发。
+ActionDock 2.x 采用内嵌式 SQLite（基于 Node.js 原生 `node:sqlite`）作为零依赖持久化存储后端，无需安装外部服务。存储层遵循严格的同步驱动契约（`SqliteDriver`），默认使用主线程同步驱动配合 WAL 模式与忙等待超时保障读写并发，并建立了严格的数据目录租约锁协议与故障自愈机制。
 
 ---
 
