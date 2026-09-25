@@ -39,6 +39,14 @@ ActionDock 2.x 模型上下文协议适配器。
 - 任务主动取消：通过 `tasks/cancel` 端点向正在后台执行的长周期任务发出中止指令。
 - 任务清单列举：通过 `tasks/list` 端点批量查询当前会话及宿主下的活跃与历史任务列表。
 
+### 细粒度权限白名单与安全过滤
+
+MCP 适配层原生支持基于包与动作维度的双层白名单控制，通过 `ActionDockMcpOptions` 进行配置：
+
+- 包白名单 `packageAllowlist`（别名 `packageIds`）：限制仅暴露指定包内的工具。
+- 动作白名单 `actionAllowlist`：限制仅暴露指定的动作，支持动作短名 `actionId` 与全限定名 `packageId/actionId`。
+- 联动过滤机制：同时配置包白名单与动作白名单时自动计算权限交集。未获授权的动作不会出现在 `tools/list` 工具列表中；在 `tasks/get`、`tasks/cancel` 与 `tasks/list` 任务扩展中，涉及未授权动作的任务同样予以严格隔离与隐藏。
+
 ---
 
 ## 快速使用
@@ -60,6 +68,8 @@ import { startMcpStdioServer } from "@actiondock/mcp";
 
 await startMcpStdioServer({
   projectRoot: process.cwd(),
+  packageAllowlist: ["system-tools"],
+  actionAllowlist: ["system-tools/status", "ping"],
 });
 ```
 

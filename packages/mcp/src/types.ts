@@ -31,6 +31,8 @@ export interface ActionDockMcpOptions {
   packageIds?: string[];
   /** 允许访问执行的 Package ID 白名单列表（为空允许全部） */
   packageAllowlist?: string[];
+  /** 允许暴露执行的 Action 标识白名单列表（为空允许全部，支持短名或 packageId/actionId） */
+  actionAllowlist?: string[];
   /** 是否聚合暴露全局 Registry 中的所有 Package */
   all?: boolean;
   /** 自定义家目录路径 */
@@ -64,6 +66,9 @@ export interface ActionDockMcpOptions {
    */
   cascadeServiceClose?: boolean;
 }
+
+/** ActionDock MCP 适配层初始化选项别名 */
+export type ActionDockMcpServerOptions = ActionDockMcpOptions;
 
 /**
  * HTTP 传输协议安全配置项。

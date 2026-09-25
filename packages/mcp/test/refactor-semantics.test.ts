@@ -495,5 +495,69 @@ describe("MCP adapter packageAllowlist filtering semantics", () => {
 
     await server.close();
   });
+
+  it("filters tools and tasks according to actionAllowlist", async () => {
+    const fakeService: any = {
+      info: async () => [
+        { id: "pkg-a", name: "Package A", version: "1.0.0" },
+      ],
+      discovery: {
+        listActions: async () => [
+          { id: "action-a", packageId: "pkg-a", description: "Action A" },
+          { id: "action-b", packageId: "pkg-a", description: "Action B" },
+        ],
+        listPlaybooks: async () => [],
+        describeAction: async () => ({}),
+        describePlaybook: async () => ({ content: "content" }),
+      },
+      execution: {
+        run: async () => ({ ok: true, data: {} }),
+        start: async () => ({ runId: "r1" }),
+      },
+      runs: {
+        get: async (id: string) => {
+          if (id === "run-b") return { id: "run-b", packageId: "pkg-a", actionId: "action-b" };
+          return { id: "run-a", packageId: "pkg-a", actionId: "action-a" };
+        },
+        list: async () => [
+          { id: "run-a", packageId: "pkg-a", actionId: "action-a", startedAt: new Date().toISOString() },
+          { id: "run-b", packageId: "pkg-a", actionId: "action-b", startedAt: new Date().toISOString() },
+        ],
+        cancel: async () => ({ outcome: "requested" }),
+      },
+      close: async () => {},
+    };
+
+    const server = await createActionDockMcpServer({
+      service: fakeService,
+      actionAllowlist: ["pkg-a/action-a"],
+    });
+
+    // 1. Verify tools
+    const toolsHandler = (server.server as any)._requestHandlers.get("tools/list");
+    const toolsResult = await toolsHandler({ method: "tools/list", params: {} });
+    const toolNames = toolsResult.tools.map((t: any) => t.name);
+    expect(toolNames).toContain("action-a");
+    expect(toolNames).not.toContain("action-b");
+
+    // 2. Verify tasks/list
+    const tasksListHandler = (server.server as any)._requestHandlers.get("tasks/list");
+    const tasksResult = await tasksListHandler({ method: "tasks/list", params: {} });
+    const taskIds = tasksResult.tasks.map((t: any) => t.taskId);
+    expect(taskIds).toContain("run-a");
+    expect(taskIds).not.toContain("run-b");
+
+    // 3. Verify tasks/get
+    const tasksGetHandler = (server.server as any)._requestHandlers.get("tasks/get");
+    const taskGetOk = await tasksGetHandler({ method: "tasks/get", params: { taskId: "run-a" } });
+    expect(taskGetOk.task.taskId).toBe("run-a");
+    await expect(tasksGetHandler({ method: "tasks/get", params: { taskId: "run-b" } })).rejects.toThrow();
+
+    // 4. Verify tasks/cancel
+    const tasksCancelHandler = (server.server as any)._requestHandlers.get("tasks/cancel");
+    await expect(tasksCancelHandler({ method: "tasks/cancel", params: { taskId: "run-b" } })).rejects.toThrow();
+
+    await server.close();
+  });
 });
 

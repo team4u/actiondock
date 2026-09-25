@@ -11,6 +11,7 @@ import {
 } from "@actiondock/core";
 import {
   createActionDockHost,
+  isActionAllowed,
   LocalActionDockService,
   type ActionDockHost,
 } from "@actiondock/core/server";
@@ -350,7 +351,7 @@ export async function createActionDockMcpServer(
   });
 
   // 任务规范扩展注册集中隔离在独立模块，本层不再直接操作 SDK 内层实例
-  registerTasksExtension(server, service, allowedPackageIds);
+  registerTasksExtension(server, service, allowedPackageIds, options.actionAllowlist);
 
   // 工具注册与模式映射：tools/list 纯粹委托 service.discovery.listActions()
   let rawActions = await service.discovery.listActions();
@@ -379,6 +380,13 @@ export async function createActionDockMcpServer(
       const ref = parsedRefs.get(act)!;
       const pkgId = ref.explicitPkgId || ref.parsedPkgId || "";
       return pkgId ? allowedPackageIds.includes(pkgId) : false;
+    });
+  }
+  if (options.actionAllowlist && options.actionAllowlist.length > 0) {
+    rawActions = rawActions.filter((act) => {
+      const ref = parsedRefs.get(act)!;
+      const pkgId = ref.explicitPkgId || ref.parsedPkgId || undefined;
+      return isActionAllowed({ packageId: pkgId, actionId: ref.baseId }, options.actionAllowlist);
     });
   }
   const seenActionKeys = new Map<string, (typeof rawActions)[number]>();

@@ -87,6 +87,26 @@ ActionDock 2.x 全面贯彻单一事实源设计，彻底杜绝各模块私自�
 
 ---
 
+## 微服务启动与访问控制
+
+通过 `startActionDockServer` 启动 Node.js 原生 HTTP/HTTPS 微服务，提供标准 RESTful API 与统一内嵌 `/mcp` 端点：
+
+- 服务配置参数（`ServerOptions`）：
+  - `port`：监听端口（默认 5177）。
+  - `host`：监听地址（默认 127.0.0.1，监听非回环地址时强制要求配置 token）。
+  - `token`：服务访问鉴权令牌。
+  - `packageAllowlist`：允许访问执行的包标识白名单列表（为空允许全部）。
+  - `actionAllowlist`：允许访问执行的动作标识白名单列表（为空允许全部，支持短名 actionId 与全限定名 packageId/actionId）。
+  - `tls`：HTTPS 证书与私钥配置。
+  - `corsOrigins`：允许的跨域来源白名单。
+- 权限交集与安全拦截：
+  - 同时配置 `packageAllowlist` 与 `actionAllowlist` 时取两者交集。
+  - 未在白名单中的动作详情调阅与执行请求均被严格拦截，返回 HTTP 403 状态码与 `ACTION_FORBIDDEN` 结构化错误。
+  - 历史运行记录查询、单次详情与取消操作同步实施白名单校验。
+  - 统一内嵌的 MCP 协议端点工具注册与任务扩展同样受白名单联动过滤。
+
+---
+
 ## 数据目录锁与故障自愈
 
 通过 `DataDirLock` 在数据目录下维护 `.actiondock.data.lock` 排他文件锁，记录宿主进程与受管子进程状态：

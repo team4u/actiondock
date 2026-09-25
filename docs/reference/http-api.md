@@ -37,7 +37,7 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
 | `202 Accepted` | 异步任务已接受并在后台启动执行，返回任务票据与事件流地址 | - |
 | `400 Bad Request` | 请求体 JSON 格式非法、输入参数校验失败或不可操作状态 | `INVALID_JSON`, `INPUT_VALIDATION_FAILED` |
 | `401 Unauthorized` | 缺少鉴权令牌或令牌比对未通过 | `UNAUTHORIZED` |
-| `403 Forbidden` | 目标包未列入允许白名单，或未开启管理功能端点 | `PACKAGE_NOT_ALLOWED`, `PACKAGE_FORBIDDEN`, `CAPABILITY_UNAVAILABLE` |
+| `403 Forbidden` | 目标包或动作未列入允许白名单，或未开启管理功能端点 | `PACKAGE_NOT_ALLOWED`, `ACTION_FORBIDDEN`, `PACKAGE_FORBIDDEN`, `CAPABILITY_UNAVAILABLE` |
 | `404 Not Found` | 请求的 Action、Package、Playbook 或 Run 记录不存在 | `ACTION_NOT_FOUND`, `PACKAGE_NOT_FOUND`, `PLAYBOOK_NOT_FOUND`, `RUN_NOT_FOUND` |
 | `409 Conflict` | 携带相同幂等标识发起了冲突请求，或取消已处终态的任务 | `IDEMPOTENCY_CONFLICT`, `RUN_ALREADY_FINISHED` |
 | `410 Gone` | SSE 事件流断点续传游标在服务端已过期清理 | `EVENT_CURSOR_EXPIRED` |
@@ -187,6 +187,7 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
   - `package` 或 `packageId`（可选）：按所属包筛选。
   - `prefix`（可选）：按 Action 标识前缀筛选。
   - `tag`（可选，可重复）：按标注标签筛选。
+- 白名单过滤：若服务端配置了 `-P, --package` 或 `-A, --action` 白名单，列表中仅返回同时满足白名单条件的 Action。
 - 响应结构：直接返回 Action 规范对象数组：
   ```json
   [
@@ -215,7 +216,7 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
 - 请求端点：
   - 简短模式：`GET /api/v2/actions/:actionId`
   - 多包模式：`GET /api/v2/packages/:packageId/actions/:actionId`
-- 响应结构：直接返回单个 `ActionSpec` 规范对象（结构同数组单项）。若 Action 不存在则返回 404 与 `ACTION_NOT_FOUND`；若服务端配置了 `-P, --package` 且目标包未在白名单中，返回 403 与 `PACKAGE_NOT_ALLOWED`。
+- 响应结构：直接返回单个 `ActionSpec` 规范对象（结构同数组单项）。若 Action 不存在则返回 404 与 `ACTION_NOT_FOUND`；若服务端配置了 `-P, --package` 且目标包未在白名单中，返回 403 与 `PACKAGE_NOT_ALLOWED`；若服务端配置了 `-A, --action` 且目标动作未在白名单中，返回 403 与 `ACTION_FORBIDDEN`。
 
 ---
 
@@ -228,7 +229,7 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
 - 请求端点：
   - 简短模式：`POST /api/v2/actions/:actionId/run`
   - 多包模式：`POST /api/v2/packages/:packageId/actions/:actionId/run`
-- 白名单约束：若服务端启动时配置了 `-P, --package` 包白名单，请求未授权包的 Action 将被服务端拒绝，返回 HTTP 403 状态码与 `PACKAGE_NOT_ALLOWED`。
+- 白名单约束：若服务端启动时配置了 `-P, --package` 包白名单或 `-A, --action` 动作白名单，请求未列入白名单的包或动作将被服务端阻断拦截，分别返回 HTTP 403 状态码与 `PACKAGE_NOT_ALLOWED` 或 `ACTION_FORBIDDEN`。同时配置时需同时满足两项白名单约束。
 - 请求头支持：
   - `Authorization: Bearer <token>`
   - `Content-Type: application/json`
@@ -283,6 +284,7 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
   - 简短模式：`POST /api/v2/actions/:actionId/start`
   - 多包模式：`POST /api/v2/packages/:packageId/actions/:actionId/start`
 - 请求体与请求头参数与同步模式完全一致。
+- 白名单约束：与同步模式一致，未列入白名单的包或动作将被服务端阻断拦截，分别返回 403 与 `PACKAGE_NOT_ALLOWED` 或 `ACTION_FORBIDDEN`。
 - 响应状态码：202 Accepted
 - 响应数据结构：
   ```json
@@ -302,6 +304,7 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
 
 - 请求方式：`GET`
 - 鉴权说明：需要有效 Bearer 令牌。
+- 白名单过滤：若服务端配置了包白名单或动作白名单，返回的历史记录列表自动过滤，仅包含符合白名单条件的记录。
 - 查询参数：
   - `limit`（可选）：最大返回记录数，**默认值为 50**。
   - `status`（可选）：按运行状态筛选。状态包含进行中状态（`pending`、`running`）以及终态（`success`、`failed`、`cancelled`、`timed_out`、`interrupted`）。
@@ -331,7 +334,7 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
 ### 查询单次执行详情 (`GET /api/v2/runs/:runId`)
 
 - 请求方式：`GET`
-- 响应结构：直接返回单个 `RunRecord` 实体对象。若任务不存在返回 404 与 `RUN_NOT_FOUND`。
+- 响应结构：直接返回单个 `RunRecord` 实体对象。若任务不存在返回 404 与 `RUN_NOT_FOUND`；若任务所属包或动作未在允许白名单中，返回 403 与 `PACKAGE_NOT_ALLOWED` 或 `ACTION_FORBIDDEN`。
 
 ### 取消正在执行的任务 (`POST /api/v2/runs/:runId/cancel`)
 
@@ -364,6 +367,7 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
       }
     }
     ```
+  - 任务未列入白名单（403 Forbidden）：若任务所属包或动作未在允许白名单中，返回 `PACKAGE_NOT_ALLOWED` 或 `ACTION_FORBIDDEN`。
   - 任务未找到（404 Not Found）：返回 `RUN_NOT_FOUND`。
 
 ### 清理执行历史记录 (`POST /api/v2/runs/clear` 或 `DELETE /api/v2/runs`)
@@ -385,6 +389,7 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
 
 - 请求方式：`GET`
 - 响应头：`Content-Type: text/event-stream`
+- 白名单校验：若任务所属包或动作未在允许白名单中，服务端拒绝推送并返回 HTTP 403 状态码与 `PACKAGE_NOT_ALLOWED` 或 `ACTION_FORBIDDEN`。
 - 断点续传支持：
   - 客户端可在请求头携带 `Last-Event-ID: <eventId>`，或在 URL 中添加 `?after=<eventId>`。
   - 服务端从指定游标之后恢复推送。

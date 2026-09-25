@@ -108,6 +108,7 @@ ad pack
 
 - 严格目标定位：通过 `-P, --package <id|path>` 指定目标包。系统严格区分物理路径与注册表包标识符，若目标不存在则不向当前目录或父级目录隐式回退，直接以参数校验错误退出。
 - 多目标检索契约：在执行多目标检索（如 `ad info` 或 `ad list`）时，若无任何匹配项，在机器模式下始终返回确定性空数组结构并以状态码 0 退出，不因空搜索产生异常中断。
+- 服务端细粒度白名单：通过 `ad serve` 启动微服务时，支持通过 `-P, --package <package-id>` 与 `-A, --action <action-ref>` 分别指定包白名单与动作白名单（支持短名与全限定名，可多次指定或逗号分隔）。同时配置时取权限交集。未授权动作的详情调阅与执行均被阻断并返回 403 错误（错误码 `ACTION_FORBIDDEN`），历史运行记录与 MCP 协议工具暴露同步过滤。
 
 ### Action 执行入参契约
 
@@ -180,7 +181,7 @@ $data | ConvertTo-Json -Depth 100 | ad run complex-action --input-file -
 | `ad export skill` | 导出 Agent Skill 技能包（支持 `--mode source` 与 `--mode node`） |
 | `ad link` / `unlink` | 注册或注销工作区全局路由与符号链接 |
 | `ad profile` | 管理远程执行节点凭证与环境配置 |
-| `ad serve` | 启动远程 HTTP/HTTPS 执行调度微服务（原生支持 `--https` 自签名与生产证书） |
+| `ad serve` | 启动远程 HTTP/HTTPS 执行调度微服务（支持 `-P` 包白名单与 `-A` 动作白名单细粒度权限控制，原生支持 `--https` 自签名与生产证书） |
 | `ad mcp` | 以 STDIO 或 HTTP 协议启动 MCP 服务 |
 
 ---

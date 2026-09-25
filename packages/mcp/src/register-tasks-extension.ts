@@ -1,4 +1,5 @@
 import type { ActionDockService } from "@actiondock/core";
+import { isActionAllowed } from "@actiondock/core/server";
 import type { RunRecord, RunStatus } from "@actiondock/sdk";
 import { fromJsonSchema, McpServer } from "@modelcontextprotocol/server";
 
@@ -155,7 +156,8 @@ function toTimeMillis(value: string): number {
 export function registerTasksExtension(
   server: McpServer,
   service: ActionDockService,
-  allowedPackageIds?: string[]
+  allowedPackageIds?: string[],
+  actionAllowlist?: string[]
 ): void {
   server.server.registerCapabilities({
     tasks: {
@@ -177,18 +179,39 @@ export function registerTasksExtension(
     ) {
       throw taskNotFoundError(params.taskId);
     }
+    if (
+      actionAllowlist &&
+      actionAllowlist.length > 0 &&
+      !isActionAllowed({ packageId: run.packageId, actionId: run.actionId }, actionAllowlist)
+    ) {
+      throw taskNotFoundError(params.taskId);
+    }
     return { task: toMcpTaskPayload(run) };
   });
 
   server.server.setRequestHandler("tasks/cancel", { params: TASK_ID_PARAMS }, async (params) => {
-    if (allowedPackageIds && allowedPackageIds.length > 0) {
+    const hasPackageFilter = Boolean(allowedPackageIds && allowedPackageIds.length > 0);
+    const hasActionFilter = Boolean(actionAllowlist && actionAllowlist.length > 0);
+
+    if (hasPackageFilter || hasActionFilter) {
       const existingRun = await service.runs.get(params.taskId);
-      if (
-        !existingRun ||
-        !existingRun.packageId ||
-        !allowedPackageIds.includes(existingRun.packageId)
-      ) {
+      if (!existingRun) {
         throw taskNotFoundError(params.taskId);
+      }
+      if (hasPackageFilter) {
+        if (!existingRun.packageId || !allowedPackageIds!.includes(existingRun.packageId)) {
+          throw taskNotFoundError(params.taskId);
+        }
+      }
+      if (hasActionFilter) {
+        if (
+          !isActionAllowed(
+            { packageId: existingRun.packageId, actionId: existingRun.actionId },
+            actionAllowlist
+          )
+        ) {
+          throw taskNotFoundError(params.taskId);
+        }
       }
     }
     const reason = params.reason || "Cancelled via MCP tasks/cancel";
@@ -222,6 +245,11 @@ export function registerTasksExtension(
     let runs = await service.runs.list({ limit, actionId });
     if (allowedPackageIds && allowedPackageIds.length > 0) {
       runs = runs.filter((r) => Boolean(r.packageId && allowedPackageIds.includes(r.packageId)));
+    }
+    if (actionAllowlist && actionAllowlist.length > 0) {
+      runs = runs.filter((r) =>
+        isActionAllowed({ packageId: r.packageId, actionId: r.actionId }, actionAllowlist)
+      );
     }
     const ordered = [...runs].sort(
       (a: RunRecord, b: RunRecord) => toTimeMillis(b.startedAt) - toTimeMillis(a.startedAt)

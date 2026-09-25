@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import { NodeHttpServer } from "./http-server";
 import { createActionDock } from "../service/factory";
 import { NOT_FOUND, UNAUTHORIZED } from "../errors";
+import { parseActionRef } from "../catalog/resolve-action";
 import { ensureDependencyClosure } from "../project/closure";
 import { findProjectRoot } from "../project/loader";
 import { listLinkedPackages, resolvePackageRoot } from "../registry/registry";
@@ -116,6 +117,20 @@ export async function startActionDockServer(
       if (!roots.includes(pkg.path)) {
         roots.push(pkg.path);
       }
+    }
+  }
+
+  if (options.actionAllowlist && options.actionAllowlist.length > 0) {
+    for (const actRef of options.actionAllowlist) {
+      try {
+        const parsed = parseActionRef(actRef);
+        if (parsed.packageId) {
+          const r = resolvePackageRoot(parsed.packageId, projectRoot || undefined, customHome);
+          if (r && !roots.includes(r)) {
+            roots.push(r);
+          }
+        }
+      } catch {}
     }
   }
 

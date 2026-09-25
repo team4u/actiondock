@@ -1,4 +1,5 @@
 import {
+  ACTION_FORBIDDEN,
   CAPABILITY_UNAVAILABLE,
   EVENT_BACKPRESSURE_LIMIT,
   EVENT_CURSOR_EXPIRED,
@@ -13,7 +14,7 @@ import {
 import { isTerminalRunStatus } from "../../storage/types";
 import type { ExecutionEvent } from "@actiondock/sdk";
 import { readJsonBody } from "../body";
-import { getSubPath, jsonResponse, type RouteContext } from "./common";
+import { getSubPath, isActionAllowed, jsonResponse, type RouteContext } from "./common";
 
 /**
  * 处理历史运行记录查询、清理、详情及 SSE 流式日志接口。
@@ -55,6 +56,25 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
         );
       }
 
+      if (
+        actionId &&
+        options.actionAllowlist &&
+        options.actionAllowlist.length > 0 &&
+        !isActionAllowed({ packageId, actionId }, options.actionAllowlist)
+      ) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: ACTION_FORBIDDEN,
+              message: `Action '${packageId ? `${packageId}/${actionId}` : actionId}' is not in the allowed action list`,
+            },
+          },
+          403,
+          corsHeaders
+        );
+      }
+
       let allRuns = await service.runs.list({
         actionId,
         status,
@@ -66,6 +86,12 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
       if (options.packageAllowlist && options.packageAllowlist.length > 0) {
         allRuns = allRuns.filter(
           (r) => !r.packageId || options.packageAllowlist!.includes(r.packageId)
+        );
+      }
+
+      if (options.actionAllowlist && options.actionAllowlist.length > 0) {
+        allRuns = allRuns.filter((r) =>
+          isActionAllowed({ packageId: r.packageId, actionId: r.actionId }, options.actionAllowlist)
         );
       }
 
@@ -157,6 +183,24 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
           error: {
             code: PACKAGE_FORBIDDEN,
             message: `Package '${run.packageId}' is not in the allowed package list`,
+          },
+        },
+        403,
+        corsHeaders
+      );
+    }
+
+    if (
+      options.actionAllowlist &&
+      options.actionAllowlist.length > 0 &&
+      !isActionAllowed({ packageId: run.packageId, actionId: run.actionId }, options.actionAllowlist)
+    ) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: {
+            code: ACTION_FORBIDDEN,
+            message: `Action '${run.packageId ? `${run.packageId}/${run.actionId}` : run.actionId}' is not in the allowed action list`,
           },
         },
         403,
@@ -362,6 +406,24 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
       );
     }
 
+    if (
+      options.actionAllowlist &&
+      options.actionAllowlist.length > 0 &&
+      !isActionAllowed({ packageId: run.packageId, actionId: run.actionId }, options.actionAllowlist)
+    ) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: {
+            code: ACTION_FORBIDDEN,
+            message: `Action '${run.packageId ? `${run.packageId}/${run.actionId}` : run.actionId}' is not in the allowed action list`,
+          },
+        },
+        403,
+        corsHeaders
+      );
+    }
+
     return jsonResponse(run, 200, corsHeaders);
   }
 
@@ -369,20 +431,46 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
   const runCancelMatch = subpath.match(/^\/runs\/([^/]+)\/cancel$/);
   if (runCancelMatch && req.method === "POST") {
     const runId = decodeURIComponent(runCancelMatch[1]);
-    if (options.packageAllowlist && options.packageAllowlist.length > 0) {
+    if (
+      (options.packageAllowlist && options.packageAllowlist.length > 0) ||
+      (options.actionAllowlist && options.actionAllowlist.length > 0)
+    ) {
       const run = await service.runs.get(runId);
-      if (run && (!run.packageId || !options.packageAllowlist.includes(run.packageId))) {
-        return jsonResponse(
-          {
-            ok: false,
-            error: {
-              code: PACKAGE_FORBIDDEN,
-              message: `Package '${run.packageId}' is not in the allowed package list`,
+      if (run) {
+        if (
+          options.packageAllowlist &&
+          options.packageAllowlist.length > 0 &&
+          (!run.packageId || !options.packageAllowlist.includes(run.packageId))
+        ) {
+          return jsonResponse(
+            {
+              ok: false,
+              error: {
+                code: PACKAGE_FORBIDDEN,
+                message: `Package '${run.packageId}' is not in the allowed package list`,
+              },
             },
-          },
-          403,
-          corsHeaders
-        );
+            403,
+            corsHeaders
+          );
+        }
+        if (
+          options.actionAllowlist &&
+          options.actionAllowlist.length > 0 &&
+          !isActionAllowed({ packageId: run.packageId, actionId: run.actionId }, options.actionAllowlist)
+        ) {
+          return jsonResponse(
+            {
+              ok: false,
+              error: {
+                code: ACTION_FORBIDDEN,
+                message: `Action '${run.packageId ? `${run.packageId}/${run.actionId}` : run.actionId}' is not in the allowed action list`,
+              },
+            },
+            403,
+            corsHeaders
+          );
+        }
       }
     }
     let body: any = {};

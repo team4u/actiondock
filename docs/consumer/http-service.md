@@ -20,34 +20,36 @@ ad serve --host 0.0.0.0 --port 5177 --token "sk-actiondock-secret"
 ad serve --port 5177 --token "sk-actiondock-secret"
 ```
 
-### 指定特定包启动微服务（多包隔离与访问白名单）
+### 包与动作访问白名单（细粒度权限隔离）
 
-在多包工作区、集成宿主工程或共享部署节点中，如果仅希望向外部客户端暴露特定的 Action Package，可以使用 `-P, --package <package-id>` 参数指定允许对外提供服务的包白名单。该参数支持多次指定或使用逗号分隔：
+在多包工作区、集成宿主工程或共享部署节点中，如果仅希望向外部客户端暴露特定的 Action Package 或特定动作，可以使用 `-P, --package <package-id>` 与 `-A, --action <action-ref>` 参数指定白名单。两项参数均支持多次指定或使用逗号分隔：
 
 ```bash
 # 启动微服务并仅对外暴露 github-tools 与 ci-tools 两个包（逗号分隔，推荐）
 ad serve -P github-tools,ci-tools --port 5177 --token "sk-actiondock-secret"
 
-# 亦可多次使用 -P 参数分别指定
-ad serve -P github-tools -P ci-tools --port 5177 --token "sk-actiondock-secret"
+# 限制特定动作白名单（支持短名与全限定名，多次指定或逗号分隔）
+ad serve -A sample.greet,calc.add --port 5177 --token "sk-actiondock-secret"
 
-# 生产环境远程监听结合指定包白名单
-ad serve --host 0.0.0.0 --port 5177 --token "sk-actiondock-secret" -P github-tools,ci-tools
+# 同时指定包白名单与动作白名单（取两者权限交集）
+ad serve -P github-tools -A github-tools/list-prs --port 5177 --token "sk-actiondock-secret"
 ```
 
 #### 白名单保护与隔离机制
 
 - **启动状态与横幅展示**：
-  服务成功启动时，控制台横幅（Banner）将输出当前激活的包清单（如 `* Packages: github-tools, ci-tools`），清晰标识服务的能力边界。
+  服务成功启动时，控制台横幅将输出当前激活的包清单与动作清单（如 `* Packages: github-tools, ci-tools` 与 `* Actions: sample.greet`），清晰标识服务的能力边界。
 - **全方位 API 路由与端点保护**：
-  - **能力发现与自省过滤**：`GET /api/v2/info` 与 `GET /api/v2/actions` 仅返回白名单内包含的 Package 及 Action 元数据；未授权包在列表中被彻底过滤，对客户端不可见。
-  - **显式路径与执行阻断**：任何针对未授权包的查询与执行请求（包括 `GET /api/v2/packages/:packageId/...`、`POST /api/v2/packages/:packageId/actions/:id/run`、`POST /api/v2/packages/:packageId/actions/:id/start` 等），以及解析到未授权包的全局简短路由（`POST /api/v2/actions/:id/run`），均会被服务端严格阻断，返回 HTTP 403 状态码及错误码 `PACKAGE_NOT_ALLOWED`。
-  - **环境诊断与规程隔离**：`GET /api/v2/doctor`、`GET /api/v2/playbooks` 以及配置/状态接口同样限制在白名单允许的包范围内。
-- **统一内嵌 `/mcp` 端点同步受控**：
-  - 服务默认挂载的统一内嵌 `/mcp` 协议端点（支持通过 `--no-mcp` 关闭）会完全同步继承该白名单。
-  - 接入 MCP 协议的智能体客户端（如 Cursor、Windsurf、Claude Desktop 等）在调用 `tools/list` 时仅能感知到白名单内的工具集合；若客户端发起调用未授权的工具（`tools/call`），服务端将直接拒绝调用。
-- **严格的包解析与启动校验**：
-  - 参数支持传入当前工作区工程、本地相对/绝对路径或通过 `ad link` 注册在全局注册表中的包标识符。
+  - **能力发现与自省过滤**：`GET /api/v2/info` 与 `GET /api/v2/actions` 仅返回白名单内包含的 Package 及 Action 元数据；未在白名单中的内容在列表中被彻底过滤，对客户端不可见。
+  - **显式路径与执行阻断**：任何针对未授权包或动作的查询与执行请求（包括 `GET /api/v2/packages/:packageId/...`、`GET /api/v2/actions/:id`、`POST /api/v2/actions/:id/run`、`POST /api/v2/actions/:id/start` 等），均会被服务端严格阻断，返回 HTTP 403 状态码及错误码 `PACKAGE_NOT_ALLOWED` 或 `ACTION_FORBIDDEN`。
+  - **历史记录与任务治理隔离**：`GET /api/v2/runs` 执行记录列表自动应用白名单过滤；未授权包或动作的单次详情查询（`GET /api/v2/runs/:runId`）、任务主动取消（`POST /api/v2/runs/:runId/cancel`）与实时事件流推送（`GET /api/v2/runs/:runId/events`）均返回 403 状态码。
+  - **环境诊断与规程隔离**：`GET /api/v2/doctor`、`GET /api/v2/playbooks` 以及配置/状态接口同样限制在白名单允许的包与动作范围内。
+- **统一内嵌 MCP 端点同步受控**：
+  - 服务默认挂载的统一内嵌 `/mcp` 协议端点（支持通过 `--no-mcp` 关闭）会完全同步继承包与动作白名单。
+  - 接入 MCP 协议的智能体客户端在调用 `tools/list` 时仅能感知到白名单内的工具集合；若客户端发起调用未授权的工具（`tools/call`），服务端将直接拒绝调用。
+  - MCP 任务扩展（`tasks/get`、`tasks/cancel`、`tasks/list`）同步实施白名单校验与过滤。
+- **严格的包与动作解析校验**：
+  - 参数支持传入当前工作区工程、本地相对/绝对路径或通过 `ad link` 注册在全局注册表中的包标识符；动作参数支持短名与全限定名。
   - 若传入的包标识符在本地或全局注册表中无法定位，服务端在启动解析阶段将直接报错并终止退出，防止因拼写错误导致非预期的空服务或隐蔽安全隐患。
 
 ### 原生 HTTPS 传输加密支持
@@ -75,7 +77,7 @@ ActionDock 服务端原生支持通过 TLS 运行 HTTPS 协议，支持零配置
 ## 安全机制与身份鉴权
 
 - 非回环强制令牌鉴权：当 `--host` 设置为非回环地址（如 `0.0.0.0` 或物理网卡 IP）时，框架强制要求配置鉴权令牌（通过 `--token` 参数或环境变量 `ACTIONDOCK_TOKEN` 注入），否则服务端拒绝启动。
-- 多包隔离与白名单保护：通过 `-P, --package` 指定包白名单，使服务端仅对外暴露受信任包的能力。无论 RESTful API 还是统一内嵌 `/mcp` 端点均统一受控，访问未授权包返回 403 `PACKAGE_NOT_ALLOWED`。
+- 权限隔离与白名单保护：通过 `-P, --package` 与 `-A, --action` 指定包与动作白名单，使服务端仅对外暴露受信任能力。无论 RESTful API 还是统一内嵌 `/mcp` 端点均统一受控，访问未授权包返回 403 `PACKAGE_NOT_ALLOWED`，访问未授权动作返回 403 `ACTION_FORBIDDEN`。
 - 常数时间对比：内置常数时间比对算法验证请求令牌，防范时序侧信道攻击。
 - 请求体上限防御：默认限制单个 JSON 请求体大小为 1MB（可通过 `--max-body 10mb` 调整），超限自动拦截并返回 413 状态码。
 - 鉴权传参方式：受保护接口默认推荐在 HTTP 请求头中携带 `Authorization: Bearer <token>`。若需要通过 URL 查询参数 `?token=<token>` 传参，服务端启动时需显式开启 `--allow-query-token` 安全开关（默认关闭）。

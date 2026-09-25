@@ -8,6 +8,7 @@ import {
   startActionDockServer,
 } from "@actiondock/core";
 import { resolvePackageRoot } from "@actiondock/core/registry";
+import { parseActionRef } from "@actiondock/core/graph";
 import {
   formatHostForUrl,
   type ServerTlsOptions,
@@ -63,6 +64,12 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
     .option(
       "-P, --package <package-id>",
       "Specific package ID(s) to serve (can be specified multiple times or comma-separated)",
+      parseListOption,
+      []
+    )
+    .option(
+      "-A, --action <action-ref>",
+      "Specific action ref(s) to serve (can be specified multiple times or comma-separated)",
       parseListOption,
       []
     )
@@ -131,6 +138,10 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
       const resolvedPackageIds: string[] = [];
       const explicitPackages: Array<{ packageRoot: string }> = [];
 
+      const rawActions: string[] = options.action || [];
+      const actionAllowlist: string[] | undefined =
+        rawActions.length > 0 ? [...rawActions] : undefined;
+
       if (rawPackages.length > 0) {
         for (const pkgId of rawPackages) {
           const root = resolvePackageRoot(pkgId, projectRoot || undefined, context?.customHome);
@@ -163,6 +174,31 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
         }
       }
 
+      if (rawActions.length > 0) {
+        for (const actRef of rawActions) {
+          try {
+            const parsed = parseActionRef(actRef);
+            if (parsed.packageId) {
+              const root = resolvePackageRoot(parsed.packageId, projectRoot || undefined, context?.customHome);
+              if (root) {
+                if (!projectRoot || root !== projectRoot) {
+                  if (!explicitPackages.some((p) => p.packageRoot === root)) {
+                    explicitPackages.push({ packageRoot: root });
+                  }
+                }
+              } else {
+                writeStderr(
+                  `Warning: Package '${parsed.packageId}' specified in action '${actRef}' was not found.`,
+                  context
+                );
+              }
+            }
+          } catch {
+            // 忽略非标准或短引用形态
+          }
+        }
+      }
+
       let projectName = "Global Registry Mode";
       if (projectRoot) {
         try {
@@ -186,7 +222,7 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
         customHome: context?.customHome,
         dataDir: options.dataDir || context?.dataDir,
         platform,
-        scanLinkedPackages: !projectRoot || rawPackages.length > 0,
+        scanLinkedPackages: !projectRoot || rawPackages.length > 0 || rawActions.length > 0,
       });
 
       let mcpHandler: ((req: Request) => Promise<Response | null | undefined>) | undefined;
@@ -204,6 +240,7 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
                 service,
                 packageAllowlist,
                 packageIds: packageAllowlist,
+                actionAllowlist,
               });
             },
             {
@@ -241,6 +278,7 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
           projectRoot: projectRoot || undefined,
           service,
           packageAllowlist,
+          actionAllowlist,
         });
 
         const displayHost = formatHostForUrl(host);
@@ -252,6 +290,9 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
           writeStdout(`  * Packages:        ${resolvedPackageIds.join(", ")}`, context);
         } else {
           writeStdout(`  * Project:         ${projectName}`, context);
+        }
+        if (actionAllowlist && actionAllowlist.length > 0) {
+          writeStdout(`  * Actions:         ${actionAllowlist.join(", ")}`, context);
         }
         if (projectRoot && exposeDebugInfo) {
           writeStdout(`  * Root Path:       ${projectRoot}`, context);

@@ -144,6 +144,9 @@ export const BAD_REQUEST = "BAD_REQUEST";
 /** 目标包未列入允许白名单（403 禁止访问） */
 export const PACKAGE_FORBIDDEN = "PACKAGE_FORBIDDEN";
 
+/** 目标动作未列入允许白名单（403 禁止访问） */
+export const ACTION_FORBIDDEN = "ACTION_FORBIDDEN";
+
 /** 目标规程未找到 */
 export const PLAYBOOK_NOT_FOUND = "PLAYBOOK_NOT_FOUND";
 
@@ -460,6 +463,7 @@ export type ErrorCode =
   | typeof SERVER_ERROR
   | typeof BAD_REQUEST
   | typeof PACKAGE_FORBIDDEN
+  | typeof ACTION_FORBIDDEN
   | typeof PLAYBOOK_NOT_FOUND
   | typeof REQUEST_TOO_LARGE
   | typeof ACTION_START_FAILED
@@ -522,6 +526,9 @@ export type ErrorCode =
   | typeof RUN_ALREADY_FINISHED
   | typeof IPC_ERROR
   | typeof SERVICE_ERROR;
+
+/** 全仓统一错误码类型别名 */
+export type ActionDockErrorCode = ErrorCode;
 
 /**
  * 进程领域结构化异常类。

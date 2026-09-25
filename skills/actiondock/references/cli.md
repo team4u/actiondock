@@ -264,9 +264,9 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
 
 - 启动 HTTP/HTTPS 微服务 (`ad serve`)：
   ```bash
-  ad serve [-p, --port <port>] [-H, --host <host>] [-t, --token <token>] [--https] [--tls-cert <path>] [--tls-key <path>] [--tls-ca <path>] [--tls-passphrase <passphrase>] [--allow-insecure-no-auth] [--cors-origin <origin>] [--max-body <size>] [--no-mcp] [-d, --dir <path>]
+  ad serve [-p, --port <port>] [-H, --host <host>] [-t, --token <token>] [-P, --package <package-id>] [-A, --action <action-ref>] [--https] [--tls-cert <path>] [--tls-key <path>] [--tls-ca <path>] [--tls-passphrase <passphrase>] [--allow-insecure-no-auth] [--cors-origin <origin>] [--max-body <size>] [--no-mcp] [-d, --dir <path>] [--data-dir <path>]
   ```
-  将本地 ActionDock 项目作为微服务暴露，支持 REST 与 SSE 接口。原生支持 HTTPS 协议：仅传入 `--https` 时自动在本地签发并复用自签名 X.509 证书；传入 `--tls-cert` 与 `--tls-key` 时加载生产机构证书。
+  将本地 ActionDock 项目作为微服务暴露，支持 REST 与 SSE 接口。支持通过 `-P, --package` 指定包白名单，通过 `-A, --action` 指定动作白名单（支持短名与全限定名，多次指定或逗号分隔，两者取交集过滤，越权访问返回 403 `ACTION_FORBIDDEN`）。原生支持 HTTPS 协议：仅传入 `--https` 时自动在本地签发并复用自签名 X.509 证书；传入 `--tls-cert` 与 `--tls-key` 时加载生产机构证书。
 
 - 启动 Model Context Protocol 协议服务 (`ad mcp`)：
   ```bash

@@ -52,6 +52,8 @@ ActionDock 所有失败均输出确定性的结构化错误信封：
 | :--- | :--- | :--- |
 | `ACTION_NOT_FOUND` | 指定的动作标识不存在。 | 执行 `ad list` 确认当前项目或注册表中动作标识的拼写。 |
 | `PACKAGE_NOT_FOUND` | 指定的包标识符无法在当前工作区或注册表中定位。 | 确认包标识符拼写；若为外部依赖包执行 `ad add <package>` 安装；若为本地未发布源码包执行 `ad link` 挂载。 |
+| `PACKAGE_NOT_ALLOWED` | 目标包未列入服务端启动白名单。 | 确认服务端启动参数 `-P, --package` 是否包含该包标识，或调整调用的包名。 |
+| `ACTION_FORBIDDEN` | 目标动作未列入服务端允许白名单。 | 确认服务端启动参数 `-A, --action` 是否包含该动作标识（短名或全限定名），或调整调用的动作名。 |
 | `UNDECLARED_ACTION_DEPENDENCY` | 级联调用了未在清单 uses 列表中声明的目标 Action。 | 在调用方 `actiondock.json` 的对应 Action 下补全 `uses: ["<target-action>"]` 声明。 |
 | `INVALID_ACTION_REF` | 跨包调用标识存在歧义，或向 invoke 传入了 Action 定义对象。 | 跨包调用使用完全限定标识符 `<pkg>/<action>`；确保 `invoke` 仅传入字符串标识符或 ActionRef 对象。 |
 | `ACTION_CALL_CYCLE` | 级联调用发生循环调用或超深递归。 | 检查 Action 间的相互调用链路，消除闭环逻辑。 |

@@ -51,6 +51,8 @@ export interface ServerOptions {
   corsOrigins?: string[];
   /** 允许访问执行的 Package ID 白名单列表（为空允许全部） */
   packageAllowlist?: string[];
+  /** 允许访问执行的 Action 标识白名单列表（为空允许全部，支持短名或 packageId/actionId） */
+  actionAllowlist?: string[];
   /** 最大允许的请求体字节限制（默认 1MB，防 DoS） */
   maxBodyBytes?: number;
   /** 是否在 health 和 info 接口中透传本地 projectRoot 等调试路径 */

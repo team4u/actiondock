@@ -4,6 +4,7 @@ import { parseActionRef } from "../../catalog/resolve-action";
 import { filterByIntent } from "../../filter";
 import {
   ACTION_EXECUTION_ERROR,
+  ACTION_FORBIDDEN,
   ACTION_NOT_FOUND,
   ACTION_START_FAILED,
   ACTION_TIMEOUT,
@@ -16,7 +17,7 @@ import {
   REQUEST_TOO_LARGE,
 } from "../../errors";
 import { InvalidJsonError, readJsonBody, RequestTooLargeError } from "../body";
-import { getSubPath, jsonResponse, type RouteContext } from "./common";
+import { getSubPath, isActionAllowed, jsonResponse, type RouteContext } from "./common";
 
 /**
  * 处理 Action 相关的 HTTP 路由（列表、规范查询、同步执行与异步启动）。
@@ -49,6 +50,12 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
       if (options.packageAllowlist && options.packageAllowlist.length > 0) {
         actions = actions.filter(
           (a) => a.packageId && options.packageAllowlist!.includes(a.packageId)
+        );
+      }
+
+      if (options.actionAllowlist && options.actionAllowlist.length > 0) {
+        actions = actions.filter((a) =>
+          isActionAllowed({ id: a.id, packageId: a.packageId }, options.actionAllowlist)
         );
       }
 
@@ -87,6 +94,21 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
             error: {
               code: PACKAGE_FORBIDDEN,
               message: `Package '${packageId}' is not in the allowed package list`,
+            },
+          },
+          403,
+          corsHeaders
+        );
+      }
+    }
+    if (options.actionAllowlist && options.actionAllowlist.length > 0) {
+      if (!isActionAllowed({ packageId, actionId }, options.actionAllowlist)) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: ACTION_FORBIDDEN,
+              message: `Action '${packageId}/${actionId}' is not in the allowed action list`,
             },
           },
           403,
@@ -134,6 +156,21 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
           );
         }
       }
+      if (parsed.packageId && options.actionAllowlist && options.actionAllowlist.length > 0) {
+        if (!isActionAllowed({ packageId: parsed.packageId, actionId: parsed.actionId }, options.actionAllowlist)) {
+          return jsonResponse(
+            {
+              ok: false,
+              error: {
+                code: ACTION_FORBIDDEN,
+                message: `Action '${actionId}' is not in the allowed action list`,
+              },
+            },
+            403,
+            corsHeaders
+          );
+        }
+      }
     } catch {}
 
     try {
@@ -149,6 +186,23 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
             error: {
               code: PACKAGE_FORBIDDEN,
               message: `Package '${spec.packageId}' is not in the allowed package list`,
+            },
+          },
+          403,
+          corsHeaders
+        );
+      }
+      if (
+        options.actionAllowlist &&
+        options.actionAllowlist.length > 0 &&
+        !isActionAllowed({ packageId: spec.packageId, actionId: spec.id }, options.actionAllowlist)
+      ) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: ACTION_FORBIDDEN,
+              message: `Action '${spec.packageId ? `${spec.packageId}/${spec.id}` : spec.id}' is not in the allowed action list`,
             },
           },
           403,
@@ -184,10 +238,11 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
     let actionRef: string;
     let endpointMode: "run" | "start";
     let pkgId: string | undefined;
+    let actId: string | undefined;
 
     if (pkgRunMatch) {
       pkgId = decodeURIComponent(pkgRunMatch[1]);
-      const actId = decodeURIComponent(pkgRunMatch[2]);
+      actId = decodeURIComponent(pkgRunMatch[2]);
       endpointMode = pkgRunMatch[3] as "run" | "start";
       actionRef = `${pkgId}/${actId}`;
     } else {
@@ -196,6 +251,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
       try {
         const parsed = parseActionRef(actionRef);
         pkgId = parsed.packageId;
+        actId = parsed.actionId;
       } catch {}
     }
 
@@ -205,6 +261,9 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
         try {
           const spec = await service.discovery.describeAction(actionRef);
           pkgId = spec?.packageId;
+          if (!actId) {
+            actId = spec?.id;
+          }
         } catch {}
       }
 
@@ -218,6 +277,40 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
               message: pkgId
                 ? `Package '${pkgId}' is not in the allowed package list`
                 : `Action '${actionRef}' does not belong to any allowed package`,
+            },
+          },
+          403,
+          corsHeaders
+        );
+      }
+    }
+
+    // 校验 Action 允许白名单
+    if (options.actionAllowlist && options.actionAllowlist.length > 0) {
+      if (!pkgId || !actId) {
+        try {
+          const spec = await service.discovery.describeAction(actionRef);
+          if (!pkgId) pkgId = spec?.packageId;
+          if (!actId) actId = spec?.id;
+        } catch {}
+      }
+      if (!actId) {
+        try {
+          const parsed = parseActionRef(actionRef);
+          actId = parsed.actionId;
+          if (!pkgId) pkgId = parsed.packageId;
+        } catch {
+          actId = actionRef;
+        }
+      }
+      if (!isActionAllowed({ packageId: pkgId, actionId: actId }, options.actionAllowlist)) {
+        return jsonResponse(
+          {
+            ok: false,
+            runId: "",
+            error: {
+              code: ACTION_FORBIDDEN,
+              message: `Action '${actionRef}' is not in the allowed action list`,
             },
           },
           403,
