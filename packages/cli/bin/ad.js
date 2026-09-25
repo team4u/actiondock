@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
@@ -24,14 +24,39 @@ if (!isBun && !hasTsx) {
   }
 
   if (tsxSpecifier) {
-    const res = spawnSync(
+    const child = spawn(
       process.execPath,
       ["--import", tsxSpecifier, fileURLToPath(import.meta.url), ...process.argv.slice(2)],
       {
         stdio: "inherit",
       }
     );
-    process.exit(res.status ?? (res.signal ? 1 : 0));
+
+    const forwardSignal = (sig) => {
+      if (child.pid && !child.killed) {
+        try {
+          child.kill(sig);
+        } catch {}
+      }
+    };
+
+    process.on("SIGTERM", () => forwardSignal("SIGTERM"));
+    process.on("SIGINT", () => forwardSignal("SIGINT"));
+    process.on("SIGHUP", () => forwardSignal("SIGHUP"));
+
+    await new Promise((resolvePromise) => {
+      child.on("exit", (code, signal) => {
+        if (signal) {
+          process.removeListener("SIGTERM", forwardSignal);
+          process.removeListener("SIGINT", forwardSignal);
+          process.removeListener("SIGHUP", forwardSignal);
+          process.kill(process.pid, signal);
+        } else {
+          process.exit(code ?? 0);
+        }
+        resolvePromise();
+      });
+    });
   }
 }
 
