@@ -264,9 +264,16 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
 
 - 启动 HTTP/HTTPS 微服务 (`ad serve`)：
   ```bash
-  ad serve [-p, --port <port>] [-H, --host <host>] [-t, --token <token>] [-P, --package <package-id>] [-A, --action <action-ref>] [--https] [--tls-cert <path>] [--tls-key <path>] [--tls-ca <path>] [--tls-passphrase <passphrase>] [--allow-insecure-no-auth] [--cors-origin <origin>] [--max-body <size>] [--no-mcp] [-d, --dir <path>] [--data-dir <path>]
+  ad serve [-p, --port <port>] [-H, --host <host>] [-t, --token <token>] [-P, --package <package-id>] [-A, --action <action-ref>] [--views-file <path>] [--https] [--tls-cert <path>] [--tls-key <path>] [--tls-ca <path>] [--tls-passphrase <passphrase>] [--allow-insecure-no-auth] [--cors-origin <origin>] [--max-body <size>] [--no-mcp] [-d, --dir <path>] [--data-dir <path>]
   ```
   将本地 ActionDock 项目作为微服务暴露，支持 REST 与 SSE 接口。支持通过 `-P, --package` 指定包白名单，通过 `-A, --action` 指定动作白名单（支持短名与全限定名，多次指定或逗号分隔，两者取交集过滤，越权访问返回 403 `ACTION_FORBIDDEN`）。原生支持 HTTPS 协议：仅传入 `--https` 时自动在本地签发并复用自签名 X.509 证书；传入 `--tls-cert` 与 `--tls-key` 时加载生产机构证书。
+  - 参数说明：
+    - `--views-file <path>`：指定包含虚拟投影视图配置的外部 JSON 配置文件路径。支持在单个服务监听端口上划分出多个具备独立权限策略的虚拟视图，合并优先级高于 `actiondock.json` 中的 `server.views`。
+  - 单端口多权限与虚拟投影视图：
+    - 声明方式：支持在 `actiondock.json` 的 `server.views` 声明多视图配置，或通过 `--views-file <path>` 传入外部配置文件。命令行指定的文件优先级高于清单配置。
+    - 权限完全隔离：在单个监听端口下划分出多个具备独立安全策略的虚拟端点视图，免去为不同权限角色启动多个服务的运维成本。各视图拥有独立的鉴权 Token、包白名单与动作白名单，越权调用拦截并返回 403。
+    - 管理端点门禁：通过 `enableManagement` 精细化控制配置与状态端点（`/api/v2/config` 与 `/api/v2/state`），默认关闭，仅对显式授权的视图开放。
+    - 专属协议端点：各视图提供独立的 MCP 端点 `/views/:viewName/mcp` 与 RESTful 端点 `/views/:viewName/api/v2/*`，根据白名单严格暴露纯净工具集，杜绝元数据泄露。
 
 - 启动 Model Context Protocol 协议服务 (`ad mcp`)：
   ```bash

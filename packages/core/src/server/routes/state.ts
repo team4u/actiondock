@@ -13,7 +13,14 @@ import {
   STATE_LIST_ERROR,
 } from "../../errors";
 import { readJsonBody } from "../body";
-import { assertPackageAllowed, getSubPath, jsonResponse, resolveTargetPackageId, type RouteContext } from "./common";
+import {
+  assertPackageAllowed,
+  getSubPath,
+  isManagementAllowedByPolicy,
+  jsonResponse,
+  resolveTargetPackageId,
+  type RouteContext,
+} from "./common";
 
 function isClientStateError(err: any): boolean {
   return (
@@ -29,10 +36,10 @@ function isClientStateError(err: any): boolean {
 
 /**
  * 处理状态键名列表、读取、写入、删除及清空接口。
- * 在未显式开启管理功能 (options.enableManagement !== true) 时返回 403 拒绝。
+ * 在未显式开启管理功能时返回 403 拒绝。
  */
 export async function handleStateRoutes(ctx: RouteContext): Promise<Response | null> {
-  const { req, url, pathname, corsHeaders, options, service } = ctx;
+  const { req, url, pathname, corsHeaders, options, service, activePolicy: policy } = ctx;
   const subpath = getSubPath(pathname);
 
   const isStateRoute =
@@ -45,7 +52,7 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
   }
 
   // 校验管理能力开关
-  if (options.enableManagement !== true || !service.management?.state) {
+  if (!isManagementAllowedByPolicy(policy) || !service.management?.state) {
     return jsonResponse(
       {
         ok: false,
@@ -68,7 +75,7 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
       const prefix = url.searchParams.get("prefix") || "";
 
       const pkgs = await service.discovery.listPackages();
-      const targetPackageId = resolveTargetPackageId(pkgs, pkgParam, options);
+      const targetPackageId = resolveTargetPackageId(pkgs, pkgParam, policy);
 
       const keys = await service.management.state.list(targetPackageId, actionParam, {
         namespace: nsParam,
@@ -107,7 +114,7 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
       const baseNs = body.namespace ?? (url.searchParams.get("namespace") || undefined);
 
       const pkgs = await service.discovery.listPackages();
-      const targetPackageId = resolveTargetPackageId(pkgs, pkgParam, options);
+      const targetPackageId = resolveTargetPackageId(pkgs, pkgParam, policy);
 
       const clearedCount = await service.management.state.clear(targetPackageId, actionParam, {
         namespace: baseNs,
@@ -148,7 +155,7 @@ export async function handleStateRoutes(ctx: RouteContext): Promise<Response | n
       const nsParam = url.searchParams.get("namespace") || undefined;
 
       const pkgs = await service.discovery.listPackages();
-      const targetPackageId = resolveTargetPackageId(pkgs, pkgParam, options);
+      const targetPackageId = resolveTargetPackageId(pkgs, pkgParam, policy);
 
       if (req.method === "GET") {
         const entry = await service.management.state.get(targetPackageId, actionParam, key, {

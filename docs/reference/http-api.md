@@ -8,12 +8,19 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
 
 ### 路由前缀
 
-- 标准 API 路由统一采用 `/api/v2` 前缀。
-- 为兼容早期客户端，根路径路由（如 `/health`、`/doctor`、`/info`、`/packages`、`/actions`、`/runs`、`/playbooks`）自动映射至对等的 `/api/v2/*` 端点。
+- 标准 API 根路由：统一采用 `/api/v2` 前缀（例如 `GET /api/v2/actions`、`POST /api/v2/actions/:id/run`）。
+- 虚拟投影视图命名空间路由：统一采用 `/views/:viewName/api/v2/*` 前缀（例如 `GET /views/:viewName/api/v2/actions`、`POST /views/:viewName/api/v2/actions/:id/run`、`GET /views/:viewName/api/v2/config`）。
+  - 视图端点隔离：请求带有 `/views/:viewName` 前缀的端点时，服务端自动激活该指定视图的安全策略（包括该视图独立的 Bearer 令牌、包白名单、动作白名单与管理权限开关）。
+  - 视图专属 MCP 协议端点：挂载在 `/views/:viewName/mcp` 路径下，各视图的工具集合与调用权限严格限定在该视图权限范围内。
+  - 子路径规范化防穿透：服务端在解析视图请求时，对 `:viewName` 之后的子路径执行规范化解析，自动消除多斜杠并解析相对路径跳转，防范命名空间混淆与目录穿透。
+  - 视图未找到拦截：若请求的 `:viewName` 未在服务端注册，直接返回 HTTP 404 状态码与 `NOT_FOUND` 错误。
+- 根路径向后兼容与智能视图匹配：
+  - 传统根路径路由（如 `/health`、`/doctor`、`/info`、`/packages`、`/actions`、`/runs`、`/playbooks`）自动映射至对等的 `/api/v2/*` 端点，既有调用无需修改路径。
+  - 智能令牌视图匹配：当客户端直接请求根路径路由（`/api/v2/*` 或 `/mcp`）时，服务端提取请求中的 Bearer 令牌并遍历已注册视图；若命中匹配，自动激活该视图对应的安全策略。若未提供令牌或未命中任何自定义视图，则平滑回退至默认视图策略。
 
 ### 身份鉴权机制
 
-服务端监听在非回环地址（如 `0.0.0.0` 或物理网卡 IP）时，强制要求配置鉴权令牌（通过启动参数 `--token` 或环境变量 `ACTIONDOCK_TOKEN` 注入）。所有受保护端点支持以下认证方式：
+服务端监听在非回环地址（如 `0.0.0.0` 或物理网卡 IP）时，强制要求配置鉴权令牌（通过启动参数 `--token`、环境变量 `ACTIONDOCK_TOKEN` 或视图独立配置中的 `token` 注入）。所有受保护端点支持以下认证方式：
 
 - **HTTP 请求头鉴权（标准推荐方式）**：
   ```text
@@ -26,7 +33,8 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
   > [!IMPORTANT]
   > **安全策略提示**：出于安全防御考量（防范 Token 泄露至浏览器历史、服务端访问日志及 Referer 引用头），URL 查询参数鉴权**默认处于关闭状态**。仅当服务端启动时显式开启 `--allow-query-token` 开关时，服务端才允许解析 URL 查询参数中的 Token。生产环境强烈建议仅使用请求头鉴权。
 
-- **防时序侧信道攻击**：令牌校验底层采用 Node.js 原生的常数时间比对算法（`crypto.timingSafeEqual`），彻底防范时序侧信道嗅探。
+- **虚拟投影视图独立令牌**：在单端口多视图服务中，每个虚拟视图可声明独立的鉴权令牌。当访问 `/views/:viewName/...` 命名空间端点时，必须提供与该视图相匹配的 Bearer 令牌；访问根路径端点时，服务端通过常数时间比对自动识别令牌归属的视图。
+- **防时序侧信道攻击**：令牌校验底层采用 Node.js 原生的常数时间比对算法（`crypto.timingSafeEqual`），遍历全部已注册视图执行比对，彻底防范时序侧信道嗅探。
 - **未授权拦截**：当配置了令牌且客户端未提供有效凭据时，服务端一律拒绝请求并返回 HTTP 401 状态码与 `UNAUTHORIZED` 错误。
 
 ### HTTP 状态码映射标准
@@ -38,7 +46,7 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
 | `400 Bad Request` | 请求体 JSON 格式非法、输入参数校验失败或不可操作状态 | `INVALID_JSON`, `INPUT_VALIDATION_FAILED` |
 | `401 Unauthorized` | 缺少鉴权令牌或令牌比对未通过 | `UNAUTHORIZED` |
 | `403 Forbidden` | 目标包或动作未列入允许白名单，或未开启管理功能端点 | `PACKAGE_NOT_ALLOWED`, `ACTION_FORBIDDEN`, `PACKAGE_FORBIDDEN`, `CAPABILITY_UNAVAILABLE` |
-| `404 Not Found` | 请求的 Action、Package、Playbook 或 Run 记录不存在 | `ACTION_NOT_FOUND`, `PACKAGE_NOT_FOUND`, `PLAYBOOK_NOT_FOUND`, `RUN_NOT_FOUND` |
+| `404 Not Found` | 请求的 Action、Package、Playbook、Run 记录或指定虚拟视图不存在 | `ACTION_NOT_FOUND`, `PACKAGE_NOT_FOUND`, `PLAYBOOK_NOT_FOUND`, `RUN_NOT_FOUND`, `NOT_FOUND` |
 | `409 Conflict` | 携带相同幂等标识发起了冲突请求，或取消已处终态的任务 | `IDEMPOTENCY_CONFLICT`, `RUN_ALREADY_FINISHED` |
 | `410 Gone` | SSE 事件流断点续传游标在服务端已过期清理 | `EVENT_CURSOR_EXPIRED` |
 | `413 Payload Too Large` | 请求体体积超过服务端配置的安全上限（默认 1MB） | `REQUEST_TOO_LARGE` |
@@ -419,7 +427,7 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
 ## 管理类端点（配置与持久化状态）
 
 > [!IMPORTANT]
-> **管理接口开启门禁**：所有 `/api/v2/config` 与 `/api/v2/state` 管理路由默认处于禁用状态。必须在服务端启动时显式传入 `--management` 参数（或设置 `enableManagement: true`），否则服务端统一返回 HTTP 403 Forbidden 与 `CAPABILITY_UNAVAILABLE` 错误。
+> **管理接口开启门禁**：所有 `/api/v2/config` 与 `/api/v2/state` 管理路由默认处于禁用状态。必须在服务端启动时显式传入 `--management` 参数，或在对应虚拟视图配置中设置 `enableManagement: true`，否则服务端统一返回 HTTP 403 Forbidden 与 `CAPABILITY_UNAVAILABLE` 错误。
 
 ### 环境变量满足度体检 (`GET /api/v2/config/env`)
 
@@ -457,3 +465,22 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
     "keys": ["user_pref", "cache_stamp"]
   }
   ```
+
+---
+
+## 模型上下文协议网关端点
+
+ActionDock 服务端内嵌支持标准 MCP 协议端点，便于 AI 智能体通过网络直接发现并调度工具能力：
+
+### 统一根 MCP 端点 (`POST /mcp`)
+
+- 请求方式：`POST`（支持 Streamable HTTP 与 SSE 通信）
+- 鉴权说明：需携带当前生效的 Bearer 令牌。
+- 策略约束：继承全局策略或基于令牌自动匹配的视图策略，`tools/list` 仅返回白名单内的工具，`tools/call` 严格实施白名单校验。
+
+### 虚拟视图专属 MCP 端点 (`POST /views/:viewName/mcp`)
+
+- 请求方式：`POST`（支持 Streamable HTTP 与 SSE 通信）
+- 鉴权说明：需携带与 `:viewName` 视图匹配的 Bearer 令牌。
+- 策略约束：严格限定在该视图的 `packageAllowlist` 与 `actionAllowlist` 范围内。
+- 视图禁用状态：若目标视图配置了 `enableMcp: false`，服务端拒绝连接并返回 HTTP 404 状态码与 `NOT_FOUND` 错误。

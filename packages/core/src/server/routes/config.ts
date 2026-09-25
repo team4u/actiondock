@@ -13,7 +13,13 @@ import {
 import { resolveEnvValue } from "../../runtime";
 import { isSecretConfigKey, maskSecretValue, sanitizeConfigDefinitions } from "../../storage";
 import { readJsonBody } from "../body";
-import { getSubPath, jsonResponse, resolveTargetPackageId, type RouteContext } from "./common";
+import {
+  getSubPath,
+  isManagementAllowedByPolicy,
+  jsonResponse,
+  resolveTargetPackageId,
+  type RouteContext,
+} from "./common";
 
 function isClientConfigError(err: any): boolean {
   return (
@@ -28,10 +34,10 @@ function isClientConfigError(err: any): boolean {
 
 /**
  * 处理配置元数据与当前值读取、更新及删除接口。
- * 在未显式开启管理功能 (options.enableManagement !== true) 时返回 403 拒绝。
+ * 在未显式开启管理功能时返回 403 拒绝。
  */
 export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | null> {
-  const { req, url, pathname, corsHeaders, options, service } = ctx;
+  const { req, url, pathname, corsHeaders, options, service, activePolicy: policy } = ctx;
   const subpath = getSubPath(pathname);
 
   const isConfigRoute =
@@ -44,7 +50,7 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
   }
 
   // 校验管理能力开关
-  if (options.enableManagement !== true || !service.management?.config) {
+  if (!isManagementAllowedByPolicy(policy) || !service.management?.config) {
     return jsonResponse(
       {
         ok: false,
@@ -63,7 +69,7 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
     try {
       const pkgs = await service.discovery.listPackages();
       const pkgParam = url.searchParams.get("package") || url.searchParams.get("packageId") || undefined;
-      const targetPackageId = resolveTargetPackageId(pkgs, pkgParam, options);
+      const targetPackageId = resolveTargetPackageId(pkgs, pkgParam, policy);
       const pkg = pkgs.find((p) => p.id === targetPackageId);
       const declared = pkg?.config || {};
       const envChecks: any[] = [];
@@ -108,7 +114,7 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
     try {
       const pkgs = await service.discovery.listPackages();
       const pkgParam = url.searchParams.get("package") || url.searchParams.get("packageId") || undefined;
-      const targetPackageId = resolveTargetPackageId(pkgs, pkgParam, options);
+      const targetPackageId = resolveTargetPackageId(pkgs, pkgParam, policy);
       const pkg = pkgs.find((p) => p.id === targetPackageId);
       const rawDeclared = pkg?.config || {};
       const declared = sanitizeConfigDefinitions(rawDeclared) || {};
@@ -155,7 +161,7 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
       const body = await readJsonBody(req, { maxBytes: options.maxBodyBytes });
       const pkgParam = url.searchParams.get("package") || url.searchParams.get("packageId") || body.package || undefined;
       const pkgs = await service.discovery.listPackages();
-      const targetPackageId = resolveTargetPackageId(pkgs, pkgParam, options);
+      const targetPackageId = resolveTargetPackageId(pkgs, pkgParam, policy);
       const key = body.key;
       if (!key) {
         return jsonResponse(
@@ -196,7 +202,7 @@ export async function handleConfigRoutes(ctx: RouteContext): Promise<Response | 
       const key = decodeURIComponent(configKeyMatch[1]);
       const pkgParam = url.searchParams.get("package") || url.searchParams.get("packageId") || undefined;
       const pkgs = await service.discovery.listPackages();
-      const targetPackageId = resolveTargetPackageId(pkgs, pkgParam, options);
+      const targetPackageId = resolveTargetPackageId(pkgs, pkgParam, policy);
       const deleted = await service.management.config.delete(targetPackageId, key);
       return jsonResponse({ ok: true, packageId: targetPackageId, key, deleted }, 200, corsHeaders);
     } catch (err: any) {

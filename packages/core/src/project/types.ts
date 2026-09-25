@@ -87,6 +87,11 @@ export interface ActionDockManifest {
   actionsDir?: string;
   /** Playbook 规程文档存放目录（向后兼容过渡配置） */
   playbooksDir?: string;
+  /** 服务端高级配置（如虚拟投影视图 views 等） */
+  server?: {
+    views?: Record<string, import("../server/types").ServerViewOptions> | import("../server/types").ServerViewOptions[];
+    [key: string]: unknown;
+  };
 }
 
 /**

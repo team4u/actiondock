@@ -1,22 +1,34 @@
 import type { PackageInfo } from "../../package/types";
-import type { ActionDockService } from "../../service/types";
 import { assertValidPackageId } from "../../utils";
-import { parseActionRef } from "../../catalog/resolve-action";
-import type { ServerOptions } from "../types";
+import { ActionDockError, PACKAGE_NOT_FOUND } from "../../errors";
+import type { EffectiveServerPolicy, RouteContext, ServerOptions } from "../types";
+import {
+  ActionForbiddenError,
+  assertActionAllowedByPolicy,
+  assertPackageAllowedByPolicy,
+  filterActionsByPolicy,
+  filterPackagesByPolicy,
+  isActionAllowed,
+  isActionAllowedByPolicy,
+  isManagementAllowedByPolicy,
+  isPackageAllowedByPolicy,
+  PackageNotAllowedError,
+} from "../policy";
 
-/**
- * 路由处理统一上下文对象。
- */
-export interface RouteContext {
-  req: Request;
-  url: URL;
-  pathname: string;
-  corsHeaders: Record<string, string>;
-  projectRoot: string | null;
-  customHome?: string;
-  service: ActionDockService;
-  options: ServerOptions;
-}
+export type { RouteContext };
+
+export {
+  ActionForbiddenError,
+  PackageNotAllowedError,
+  isActionAllowed,
+  isActionAllowedByPolicy,
+  isPackageAllowedByPolicy,
+  isManagementAllowedByPolicy,
+  filterActionsByPolicy,
+  filterPackagesByPolicy,
+  assertActionAllowedByPolicy,
+  assertPackageAllowedByPolicy,
+};
 
 /**
  * 构造带 CORS 头的标准 JSON HTTP 响应。
@@ -45,149 +57,37 @@ export function getSubPath(pathname: string): string {
   return pathname;
 }
 
-import { ActionDockError, ACTION_FORBIDDEN, PACKAGE_NOT_FOUND, PACKAGE_NOT_ALLOWED } from "../../errors";
-
-/**
- * 动作未列入白名单拒绝访问异常。
- */
-export class ActionForbiddenError extends ActionDockError {
-  status = 403;
-  statusCode = 403;
-
-  constructor(actionRef: string) {
-    super(ACTION_FORBIDDEN, `Action '${actionRef}' is not in the allowed action list`);
-    this.name = "ActionForbiddenError";
-    Object.setPrototypeOf(this, ActionForbiddenError.prototype);
-  }
-}
-
-/**
- * 校验目标动作是否在 actionAllowlist 允许白名单中。
- * 支持短名 actionId 与全限定名 packageId/actionId 匹配：
- * - 白名单项若含 '/'（如 pkg/act），则必须 packageId 与 actionId 同时精确匹配。
- * - 白名单项若不含 '/'（如 act），则只需 actionId 匹配（不限包）。
- *
- * @param action 目标动作对象或引用字符串
- * @param allowlist 允许动作白名单列表
- * @returns 是否允许访问
- */
-export function isActionAllowed(
-  action:
-    | { actionId?: string; id?: string; packageId?: string }
-    | string
-    | null
-    | undefined,
-  allowlist?: string[]
-): boolean {
-  if (!allowlist || !Array.isArray(allowlist) || allowlist.length === 0) {
-    return true;
-  }
-  if (!action) {
-    return false;
-  }
-
-  let target: { packageId?: string; actionId: string };
-  try {
-    if (typeof action === "string") {
-      target = parseActionRef(action);
-    } else {
-      const rawId = action.actionId || action.id;
-      if (!rawId) return false;
-      if (action.packageId) {
-        if (rawId.includes("/")) {
-          target = parseActionRef(rawId);
-        } else {
-          target = parseActionRef({
-            packageId: action.packageId,
-            actionId: rawId,
-          });
-        }
-      } else {
-        target = parseActionRef(rawId);
-      }
-    }
-  } catch {
-    return false;
-  }
-
-  for (const item of allowlist) {
-    if (typeof item !== "string") continue;
-    const trimmed = item.trim();
-    if (!trimmed) continue;
-
-    try {
-      const rule = parseActionRef(trimmed);
-      if (rule.packageId) {
-        if (rule.packageId === target.packageId && rule.actionId === target.actionId) {
-          return true;
-        }
-      } else {
-        if (rule.actionId === target.actionId) {
-          return true;
-        }
-      }
-    } catch {
-      continue;
-    }
-  }
-
-  return false;
-}
-
 /**
  * 校验目标 action 是否属于允许动作白名单。
- * 当 options.actionAllowlist 存在且目标 action 不在白名单中时抛出 403 ACTION_FORBIDDEN 异常。
+ * 当 options 或 policy 中的 actionAllowlist 存在且目标 action 不在白名单中时抛出 403 ACTION_FORBIDDEN 异常。
  */
 export function assertActionAllowed(
   action: { actionId?: string; id?: string; packageId?: string } | string,
-  options?: ServerOptions
+  options?: ServerOptions | EffectiveServerPolicy
 ): void {
-  if (
-    options?.actionAllowlist &&
-    Array.isArray(options.actionAllowlist) &&
-    options.actionAllowlist.length > 0 &&
-    !isActionAllowed(action, options.actionAllowlist)
-  ) {
-    const actRef =
-      typeof action === "string"
-        ? action
-        : action.packageId
-        ? `${action.packageId}/${action.actionId || action.id}`
-        : action.actionId || action.id || "unknown";
-    throw new ActionForbiddenError(actRef);
-  }
-}
-
-/**
- * 包未列入白名单拒绝访问异常。
- */
-export class PackageNotAllowedError extends ActionDockError {
-  status = 403;
-  statusCode = 403;
-
-  constructor(packageId: string) {
-    super(PACKAGE_NOT_ALLOWED, `Package '${packageId}' is not in the allowed package list`);
-    this.name = "PackageNotAllowedError";
-    Object.setPrototypeOf(this, PackageNotAllowedError.prototype);
-  }
+  const policy: EffectiveServerPolicy | undefined = options
+    ? {
+        packageAllowlist: options.packageAllowlist,
+        actionAllowlist: options.actionAllowlist,
+      }
+    : undefined;
+  assertActionAllowedByPolicy(action, policy);
 }
 
 /**
  * 校验目标 packageId 是否属于允许包白名单。
- * 当 options.packageAllowlist 存在且目标 packageId 不在白名单中时抛出 403 PACKAGE_NOT_ALLOWED 异常。
+ * 当 options 或 policy 中的 packageAllowlist 存在且目标 packageId 不在白名单中时抛出 403 PACKAGE_NOT_ALLOWED 异常。
  */
 export function assertPackageAllowed(
   packageId: string,
-  options?: ServerOptions
+  options?: ServerOptions | EffectiveServerPolicy
 ): void {
-  if (
-    options?.packageAllowlist &&
-    Array.isArray(options.packageAllowlist) &&
-    options.packageAllowlist.length > 0 &&
-    !options.packageAllowlist.includes(packageId)
-  ) {
-    throw new PackageNotAllowedError(packageId);
-  }
+  const policy: EffectiveServerPolicy | undefined = options
+    ? {
+        packageAllowlist: options.packageAllowlist,
+      }
+    : undefined;
+  assertPackageAllowedByPolicy(packageId, policy);
 }
 
 /**
@@ -197,8 +97,9 @@ export function assertPackageAllowed(
 export function resolveTargetPackageId(
   packages: PackageInfo[],
   requestedPackageId?: string,
-  options?: ServerOptions
+  options?: ServerOptions | EffectiveServerPolicy
 ): string {
+  const allowlist = options?.packageAllowlist;
   if (requestedPackageId) {
     if (requestedPackageId === "global") {
       return "global";
@@ -219,11 +120,11 @@ export function resolveTargetPackageId(
 
   let targetId: string;
   if (
-    options?.packageAllowlist &&
-    Array.isArray(options.packageAllowlist) &&
-    options.packageAllowlist.length > 0
+    allowlist &&
+    Array.isArray(allowlist) &&
+    allowlist.length > 0
   ) {
-    const allowed = packages.find((p) => options.packageAllowlist!.includes(p.id));
+    const allowed = packages.find((p) => allowlist.includes(p.id));
     targetId = allowed ? allowed.id : (packages[0]?.id || "");
   } else if (packages.length > 0) {
     targetId = packages[0].id;

@@ -6,7 +6,7 @@ import { assertPackageAllowed, getSubPath, jsonResponse, type RouteContext } fro
  * 处理环境与依赖诊断接口（GET /api/v2/doctor 与 /doctor）。
  */
 export async function handleDoctorRoute(ctx: RouteContext): Promise<Response | null> {
-  const { req, url, pathname, corsHeaders, projectRoot, customHome, service, options } = ctx;
+  const { req, url, pathname, corsHeaders, projectRoot, customHome, service, options, activePolicy: policy } = ctx;
   const subpath = getSubPath(pathname);
 
   if (subpath !== "/doctor" || req.method !== "GET") {
@@ -15,7 +15,7 @@ export async function handleDoctorRoute(ctx: RouteContext): Promise<Response | n
 
   try {
     const targetPkg = url.searchParams.get("package") || url.searchParams.get("packageId") || undefined;
-    if (options.packageAllowlist && options.packageAllowlist.length > 0) {
+    if (policy.packageAllowlist && policy.packageAllowlist.length > 0) {
       if (!targetPkg) {
         return jsonResponse(
           {
@@ -31,7 +31,7 @@ export async function handleDoctorRoute(ctx: RouteContext): Promise<Response | n
       }
     }
     if (targetPkg) {
-      assertPackageAllowed(targetPkg, options);
+      assertPackageAllowed(targetPkg, policy);
     }
 
     let packageRoot: string | undefined;
@@ -45,7 +45,7 @@ export async function handleDoctorRoute(ctx: RouteContext): Promise<Response | n
       cwd: packageRoot || projectRoot || process.cwd(),
       packageIdOrPath: packageRoot || targetPkg,
       customHome,
-      packageAllowlist: options.packageAllowlist,
+      packageAllowlist: policy.packageAllowlist,
     });
     return jsonResponse({ ok: true, report }, 200, corsHeaders);
   } catch (err: any) {

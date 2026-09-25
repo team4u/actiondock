@@ -78,13 +78,21 @@ npx skills remove <skill-name>
   - 当前项目生效：`<project-root>/.claude/skills/<skill-name>`
 - **Cursor 与 Windsurf**：
   - 技能文件目录：`<project-root>/.cursor/skills/<skill-name>`
-  - MCP 协议原生挂载：在 `mcp.json` 中配置 `"command": "ad", "args": ["mcp", "--all"]`。
+  - MCP 协议原生挂载：本地在 `mcp.json` 中配置 `"command": "ad", "args": ["mcp", "--all"]`，远端服务可通过专属虚拟视图 MCP 端点接入。
 - **Antigravity 与 Gemini CLI**：
   - 用户全局生效：`~/.gemini/antigravity-cli/skills/<skill-name>`
   - 工作区生效：`<workspace-root>/.gemini/skills/<skill-name>`
 - **自研智能体与通用 SDK**：
   - 将 `SKILL.md` 与目标 Playbook 正文直接注入系统提示词。
   - 动态执行 `ad describe <id> --json` 获取模式契约，精准对接函数调用。
+
+### MCP 协议原生挂载
+
+对于支持 Model Context Protocol 协议的智能体客户端与集成开发环境，可通过本地进程或远程服务原生接入工具能力：
+
+- **本地 STDIO 挂载**：在客户端配置文件（如 `mcp.json`）中指定启动命令与参数（例如 `"command": "ad", "args": ["mcp", "--all"]`）。
+- **远程专属虚拟视图挂载**：在多权限服务环境下，智能体可通过 HTTP 或 SSE 方式连接远程微服务的专属虚拟视图 MCP 端点（如 `http://host:port/views/:viewName/mcp`），并在请求头中携带该视图对应的鉴权 Token。
+- **纯净工具集隔离保障**：专属虚拟视图端点在 `tools/list` 工具发现与 `tools/call` 执行阶段均由统一策略守卫严格把关，仅向智能体呈现白名单授权范围内的纯净工具集，杜绝因全量暴露带来的工具列表抖动与未授权元数据泄露。
 
 ---
 

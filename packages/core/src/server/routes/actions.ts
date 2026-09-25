@@ -17,13 +17,20 @@ import {
   REQUEST_TOO_LARGE,
 } from "../../errors";
 import { InvalidJsonError, readJsonBody, RequestTooLargeError } from "../body";
-import { getSubPath, isActionAllowed, jsonResponse, type RouteContext } from "./common";
+import {
+  filterActionsByPolicy,
+  getSubPath,
+  isActionAllowedByPolicy,
+  isPackageAllowedByPolicy,
+  jsonResponse,
+  type RouteContext,
+} from "./common";
 
 /**
  * 处理 Action 相关的 HTTP 路由（列表、规范查询、同步执行与异步启动）。
  */
 export async function handleActionsRoutes(ctx: RouteContext): Promise<Response | null> {
-  const { req, url, pathname, corsHeaders, options, service } = ctx;
+  const { req, url, pathname, corsHeaders, options, service, activePolicy: policy } = ctx;
   const subpath = getSubPath(pathname);
 
   // 1. Actions List: GET /api/v2/actions, GET /actions
@@ -47,17 +54,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
         );
       }
 
-      if (options.packageAllowlist && options.packageAllowlist.length > 0) {
-        actions = actions.filter(
-          (a) => a.packageId && options.packageAllowlist!.includes(a.packageId)
-        );
-      }
-
-      if (options.actionAllowlist && options.actionAllowlist.length > 0) {
-        actions = actions.filter((a) =>
-          isActionAllowed({ id: a.id, packageId: a.packageId }, options.actionAllowlist)
-        );
-      }
+      actions = filterActionsByPolicy(actions, policy);
 
       if (intent) {
         actions = filterByIntent(
@@ -86,35 +83,31 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
   if (pkgActionShowMatch && req.method === "GET") {
     const packageId = decodeURIComponent(pkgActionShowMatch[1]);
     const actionId = decodeURIComponent(pkgActionShowMatch[2]);
-    if (options.packageAllowlist && options.packageAllowlist.length > 0) {
-      if (!options.packageAllowlist.includes(packageId)) {
-        return jsonResponse(
-          {
-            ok: false,
-            error: {
-              code: PACKAGE_FORBIDDEN,
-              message: `Package '${packageId}' is not in the allowed package list`,
-            },
+    if (!isPackageAllowedByPolicy(packageId, policy)) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: {
+            code: PACKAGE_FORBIDDEN,
+            message: `Package '${packageId}' is not in the allowed package list`,
           },
-          403,
-          corsHeaders
-        );
-      }
+        },
+        403,
+        corsHeaders
+      );
     }
-    if (options.actionAllowlist && options.actionAllowlist.length > 0) {
-      if (!isActionAllowed({ packageId, actionId }, options.actionAllowlist)) {
-        return jsonResponse(
-          {
-            ok: false,
-            error: {
-              code: ACTION_FORBIDDEN,
-              message: `Action '${packageId}/${actionId}' is not in the allowed action list`,
-            },
+    if (!isActionAllowedByPolicy({ packageId, actionId }, policy)) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: {
+            code: ACTION_FORBIDDEN,
+            message: `Action '${packageId}/${actionId}' is not in the allowed action list`,
           },
-          403,
-          corsHeaders
-        );
-      }
+        },
+        403,
+        corsHeaders
+      );
     }
     const ref = `${packageId}/${actionId}`;
     try {
@@ -141,8 +134,8 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
     const actionId = decodeURIComponent(actionShowMatch[1]);
     try {
       const parsed = parseActionRef(actionId);
-      if (parsed.packageId && options.packageAllowlist && options.packageAllowlist.length > 0) {
-        if (!options.packageAllowlist.includes(parsed.packageId)) {
+      if (parsed.packageId) {
+        if (!isPackageAllowedByPolicy(parsed.packageId, policy)) {
           return jsonResponse(
             {
               ok: false,
@@ -155,9 +148,7 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
             corsHeaders
           );
         }
-      }
-      if (parsed.packageId && options.actionAllowlist && options.actionAllowlist.length > 0) {
-        if (!isActionAllowed({ packageId: parsed.packageId, actionId: parsed.actionId }, options.actionAllowlist)) {
+        if (!isActionAllowedByPolicy({ packageId: parsed.packageId, actionId: parsed.actionId }, policy)) {
           return jsonResponse(
             {
               ok: false,
@@ -175,28 +166,20 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
 
     try {
       const spec = await service.discovery.describeAction(actionId);
-      if (
-        options.packageAllowlist &&
-        options.packageAllowlist.length > 0 &&
-        (!spec.packageId || !options.packageAllowlist.includes(spec.packageId))
-      ) {
+      if (!isPackageAllowedByPolicy(spec.packageId, policy)) {
         return jsonResponse(
           {
             ok: false,
             error: {
               code: PACKAGE_FORBIDDEN,
-              message: `Package '${spec.packageId}' is not in the allowed package list`,
+              message: `Package '${spec.packageId || "unknown"}' is not in the allowed package list`,
             },
           },
           403,
           corsHeaders
         );
       }
-      if (
-        options.actionAllowlist &&
-        options.actionAllowlist.length > 0 &&
-        !isActionAllowed({ packageId: spec.packageId, actionId: spec.id }, options.actionAllowlist)
-      ) {
+      if (!isActionAllowedByPolicy({ packageId: spec.packageId, actionId: spec.id }, policy)) {
         return jsonResponse(
           {
             ok: false,
@@ -255,68 +238,57 @@ export async function handleActionsRoutes(ctx: RouteContext): Promise<Response |
       } catch {}
     }
 
-    // 校验 Package 允许白名单
-    if (options.packageAllowlist && options.packageAllowlist.length > 0) {
-      if (!pkgId) {
-        try {
-          const spec = await service.discovery.describeAction(actionRef);
-          pkgId = spec?.packageId;
-          if (!actId) {
-            actId = spec?.id;
-          }
-        } catch {}
-      }
+    // 解析并补全包与动作标识（仅在必要时单次查询 spec）
+    if ((!pkgId || !actId) && (policy.packageAllowlist?.length || policy.actionAllowlist?.length)) {
+      try {
+        const spec = await service.discovery.describeAction(actionRef);
+        pkgId = pkgId || spec?.packageId;
+        actId = actId || spec?.id;
+      } catch {}
+    }
 
-      if (!pkgId || !options.packageAllowlist.includes(pkgId)) {
-        return jsonResponse(
-          {
-            ok: false,
-            runId: "",
-            error: {
-              code: PACKAGE_FORBIDDEN,
-              message: pkgId
-                ? `Package '${pkgId}' is not in the allowed package list`
-                : `Action '${actionRef}' does not belong to any allowed package`,
-            },
-          },
-          403,
-          corsHeaders
-        );
+    if (!actId) {
+      try {
+        const parsed = parseActionRef(actionRef);
+        actId = parsed.actionId;
+        pkgId = pkgId || parsed.packageId;
+      } catch {
+        actId = actionRef;
       }
     }
 
-    // 校验 Action 允许白名单
-    if (options.actionAllowlist && options.actionAllowlist.length > 0) {
-      if (!pkgId || !actId) {
-        try {
-          const spec = await service.discovery.describeAction(actionRef);
-          if (!pkgId) pkgId = spec?.packageId;
-          if (!actId) actId = spec?.id;
-        } catch {}
-      }
-      if (!actId) {
-        try {
-          const parsed = parseActionRef(actionRef);
-          actId = parsed.actionId;
-          if (!pkgId) pkgId = parsed.packageId;
-        } catch {
-          actId = actionRef;
-        }
-      }
-      if (!isActionAllowed({ packageId: pkgId, actionId: actId }, options.actionAllowlist)) {
-        return jsonResponse(
-          {
-            ok: false,
-            runId: "",
-            error: {
-              code: ACTION_FORBIDDEN,
-              message: `Action '${actionRef}' is not in the allowed action list`,
-            },
+    // 校验 Package 允许白名单
+    if (!isPackageAllowedByPolicy(pkgId, policy)) {
+      return jsonResponse(
+        {
+          ok: false,
+          runId: "",
+          error: {
+            code: PACKAGE_FORBIDDEN,
+            message: pkgId
+              ? `Package '${pkgId}' is not in the allowed package list`
+              : `Action '${actionRef}' does not belong to any allowed package`,
           },
-          403,
-          corsHeaders
-        );
-      }
+        },
+        403,
+        corsHeaders
+      );
+    }
+
+    // 校验 Action 允许白名单
+    if (!isActionAllowedByPolicy({ packageId: pkgId, actionId: actId }, policy)) {
+      return jsonResponse(
+        {
+          ok: false,
+          runId: "",
+          error: {
+            code: ACTION_FORBIDDEN,
+            message: `Action '${actionRef}' is not in the allowed action list`,
+          },
+        },
+        403,
+        corsHeaders
+      );
     }
 
     let body: any = {};

@@ -14,13 +14,13 @@ import {
 import { isTerminalRunStatus } from "../../storage/types";
 import type { ExecutionEvent } from "@actiondock/sdk";
 import { readJsonBody } from "../body";
-import { getSubPath, isActionAllowed, jsonResponse, type RouteContext } from "./common";
+import { getSubPath, isActionAllowedByPolicy, isPackageAllowedByPolicy, jsonResponse, type RouteContext } from "./common";
 
 /**
  * 处理历史运行记录查询、清理、详情及 SSE 流式日志接口。
  */
 export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | null> {
-  const { req, url, pathname, corsHeaders, options, service } = ctx;
+  const { req, url, pathname, corsHeaders, options, service, activePolicy: policy } = ctx;
   const subpath = getSubPath(pathname);
 
   // 1. Runs List: GET /api/v2/runs, GET /runs
@@ -37,12 +37,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
           ? Math.min(parsedLimit, 500)
           : 50;
 
-      if (
-        packageId &&
-        options.packageAllowlist &&
-        options.packageAllowlist.length > 0 &&
-        !options.packageAllowlist.includes(packageId)
-      ) {
+      if (packageId && !isPackageAllowedByPolicy(packageId, policy)) {
         return jsonResponse(
           {
             ok: false,
@@ -56,12 +51,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
         );
       }
 
-      if (
-        actionId &&
-        options.actionAllowlist &&
-        options.actionAllowlist.length > 0 &&
-        !isActionAllowed({ packageId, actionId }, options.actionAllowlist)
-      ) {
+      if (actionId && !isActionAllowedByPolicy({ packageId, actionId }, policy)) {
         return jsonResponse(
           {
             ok: false,
@@ -83,15 +73,13 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
         limit,
       });
 
-      if (options.packageAllowlist && options.packageAllowlist.length > 0) {
-        allRuns = allRuns.filter(
-          (r) => !r.packageId || options.packageAllowlist!.includes(r.packageId)
-        );
+      if (policy.packageAllowlist && policy.packageAllowlist.length > 0) {
+        allRuns = allRuns.filter((r) => isPackageAllowedByPolicy(r.packageId, policy));
       }
 
-      if (options.actionAllowlist && options.actionAllowlist.length > 0) {
+      if (policy.actionAllowlist && policy.actionAllowlist.length > 0) {
         allRuns = allRuns.filter((r) =>
-          isActionAllowed({ packageId: r.packageId, actionId: r.actionId }, options.actionAllowlist)
+          isActionAllowedByPolicy({ packageId: r.packageId, actionId: r.actionId }, policy)
         );
       }
 
@@ -124,12 +112,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
       const actionId = url.searchParams.get("actionId") || body.actionId || undefined;
       const status = url.searchParams.get("status") || body.status || undefined;
 
-      if (
-        packageId &&
-        options.packageAllowlist &&
-        options.packageAllowlist.length > 0 &&
-        !options.packageAllowlist.includes(packageId)
-      ) {
+      if (packageId && !isPackageAllowedByPolicy(packageId, policy)) {
         return jsonResponse(
           {
             ok: false,
@@ -172,17 +155,13 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
       );
     }
 
-    if (
-      options.packageAllowlist &&
-      options.packageAllowlist.length > 0 &&
-      (!run.packageId || !options.packageAllowlist.includes(run.packageId))
-    ) {
+    if (!isPackageAllowedByPolicy(run.packageId, policy)) {
       return jsonResponse(
         {
           ok: false,
           error: {
             code: PACKAGE_FORBIDDEN,
-            message: `Package '${run.packageId}' is not in the allowed package list`,
+            message: `Package '${run.packageId || "unknown"}' is not in the allowed package list`,
           },
         },
         403,
@@ -190,11 +169,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
       );
     }
 
-    if (
-      options.actionAllowlist &&
-      options.actionAllowlist.length > 0 &&
-      !isActionAllowed({ packageId: run.packageId, actionId: run.actionId }, options.actionAllowlist)
-    ) {
+    if (!isActionAllowedByPolicy({ packageId: run.packageId, actionId: run.actionId }, policy)) {
       return jsonResponse(
         {
           ok: false,
@@ -388,11 +363,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
       );
     }
 
-    if (
-      options.packageAllowlist &&
-      options.packageAllowlist.length > 0 &&
-      (!run.packageId || !options.packageAllowlist.includes(run.packageId))
-    ) {
+    if (!isPackageAllowedByPolicy(run.packageId, policy)) {
       return jsonResponse(
         {
           ok: false,
@@ -406,11 +377,7 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
       );
     }
 
-    if (
-      options.actionAllowlist &&
-      options.actionAllowlist.length > 0 &&
-      !isActionAllowed({ packageId: run.packageId, actionId: run.actionId }, options.actionAllowlist)
-    ) {
+    if (!isActionAllowedByPolicy({ packageId: run.packageId, actionId: run.actionId }, policy)) {
       return jsonResponse(
         {
           ok: false,
@@ -432,33 +399,25 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
   if (runCancelMatch && req.method === "POST") {
     const runId = decodeURIComponent(runCancelMatch[1]);
     if (
-      (options.packageAllowlist && options.packageAllowlist.length > 0) ||
-      (options.actionAllowlist && options.actionAllowlist.length > 0)
+      (policy.packageAllowlist && policy.packageAllowlist.length > 0) ||
+      (policy.actionAllowlist && policy.actionAllowlist.length > 0)
     ) {
       const run = await service.runs.get(runId);
       if (run) {
-        if (
-          options.packageAllowlist &&
-          options.packageAllowlist.length > 0 &&
-          (!run.packageId || !options.packageAllowlist.includes(run.packageId))
-        ) {
+        if (!isPackageAllowedByPolicy(run.packageId, policy)) {
           return jsonResponse(
             {
               ok: false,
               error: {
                 code: PACKAGE_FORBIDDEN,
-                message: `Package '${run.packageId}' is not in the allowed package list`,
+                message: `Package '${run.packageId || "unknown"}' is not in the allowed package list`,
               },
             },
             403,
             corsHeaders
           );
         }
-        if (
-          options.actionAllowlist &&
-          options.actionAllowlist.length > 0 &&
-          !isActionAllowed({ packageId: run.packageId, actionId: run.actionId }, options.actionAllowlist)
-        ) {
+        if (!isActionAllowedByPolicy({ packageId: run.packageId, actionId: run.actionId }, policy)) {
           return jsonResponse(
             {
               ok: false,

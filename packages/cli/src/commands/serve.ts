@@ -9,9 +9,12 @@ import {
 } from "@actiondock/core";
 import { resolvePackageRoot } from "@actiondock/core/registry";
 import { parseActionRef } from "@actiondock/core/graph";
+import type { ActionDockManifest } from "@actiondock/core/project";
 import {
   formatHostForUrl,
+  type EffectiveServerPolicy,
   type ServerTlsOptions,
+  type ServerViewOptions,
 } from "@actiondock/core/server";
 import { Command } from "commander";
 import { ArgumentError, ExecutionError, packageNotFoundError } from "../errors";
@@ -20,6 +23,8 @@ import type { CliContext } from "../types";
 import {
   ensureSelfSignedCertificate,
   getEffectiveOptions,
+  loadViewsFromFile,
+  mergeServerViews,
   normalizeCorsOrigins,
   registerStopSignalHandler,
   printServerBanner,
@@ -73,6 +78,8 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
       parseListOption,
       []
     )
+    .option("--views-file <path>", "Path to JSON file configuring virtual projection views")
+    .option("--views <json>", "JSON string configuring virtual projection views")
     .option("--data-dir <path>", "Custom database storage directory")
     .action(async (rawOptions: any, cmd: any) => {
       const options = getEffectiveOptions(rawOptions, cmd);
@@ -131,6 +138,41 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
       const projectRoot = options.dir
         ? resolve(options.dir)
         : findProjectRoot(process.cwd());
+
+      let projectConfig: ActionDockManifest | undefined;
+      let projectName = "Global Registry Mode";
+      if (projectRoot) {
+        try {
+          projectConfig = loadProjectConfig(projectRoot);
+          projectName = `${projectConfig.name} (${projectConfig.id})`;
+        } catch {
+          // 降级处理
+        }
+      }
+
+      const fileViews = options.viewsFile
+        ? loadViewsFromFile(options.viewsFile)
+        : undefined;
+
+      let cliViews: Record<string, ServerViewOptions> | ServerViewOptions[] | undefined;
+      if (options.views) {
+        try {
+          const parsed = typeof options.views === "string" ? JSON.parse(options.views) : options.views;
+          cliViews =
+            parsed && typeof parsed === "object" && "views" in parsed && (typeof (parsed as Record<string, unknown>).views === "object" || Array.isArray((parsed as Record<string, unknown>).views))
+              ? (parsed as Record<string, unknown>).views as Record<string, ServerViewOptions> | ServerViewOptions[]
+              : (parsed as Record<string, ServerViewOptions> | ServerViewOptions[]);
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          throw new ArgumentError(`Failed to parse --views option: ${msg}`);
+        }
+      }
+
+      const configViews = projectConfig?.server?.views;
+      const viewsConfig = mergeServerViews(
+        mergeServerViews(configViews, fileViews),
+        cliViews
+      );
 
       const rawPackages: string[] = options.package || [];
       const packageAllowlist: string[] | undefined =
@@ -199,13 +241,39 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
         }
       }
 
-      let projectName = "Global Registry Mode";
-      if (projectRoot) {
-        try {
-          const config = loadProjectConfig(projectRoot);
-          projectName = `${config.name} (${config.id})`;
-        } catch {
-          // 降级处理
+      if (viewsConfig) {
+        const viewItems = Array.isArray(viewsConfig) ? viewsConfig : Object.values(viewsConfig);
+        for (const item of viewItems) {
+          if (!item || typeof item !== "object") continue;
+          if (Array.isArray(item.packageAllowlist)) {
+            for (const pkgId of item.packageAllowlist) {
+              if (typeof pkgId === "string") {
+                const root = resolvePackageRoot(pkgId, projectRoot || undefined, context?.customHome);
+                if (root && (!projectRoot || root !== projectRoot)) {
+                  if (!explicitPackages.some((p) => p.packageRoot === root)) {
+                    explicitPackages.push({ packageRoot: root });
+                  }
+                }
+              }
+            }
+          }
+          if (Array.isArray(item.actionAllowlist)) {
+            for (const actRef of item.actionAllowlist) {
+              if (typeof actRef === "string") {
+                try {
+                  const parsed = parseActionRef(actRef);
+                  if (parsed.packageId) {
+                    const root = resolvePackageRoot(parsed.packageId, projectRoot || undefined, context?.customHome);
+                    if (root && (!projectRoot || root !== projectRoot)) {
+                      if (!explicitPackages.some((p) => p.packageRoot === root)) {
+                        explicitPackages.push({ packageRoot: root });
+                      }
+                    }
+                  }
+                } catch {}
+              }
+            }
+          }
         }
       }
 
@@ -222,10 +290,12 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
         customHome: context?.customHome,
         dataDir: options.dataDir || context?.dataDir,
         platform,
-        scanLinkedPackages: !projectRoot || rawPackages.length > 0 || rawActions.length > 0,
+        scanLinkedPackages: !projectRoot || rawPackages.length > 0 || rawActions.length > 0 || Boolean(viewsConfig),
       });
 
-      let mcpHandler: ((req: Request) => Promise<Response | null | undefined>) | undefined;
+      let mcpHandlerFactory:
+        | ((view: EffectiveServerPolicy) => (req: Request) => Promise<Response | null | undefined>)
+        | undefined;
       const enableMcp = options.mcp !== false;
       if (enableMcp) {
         // MCP 处理器创建失败时直接终止启动，避免横幅宣称不存在的端点
@@ -234,23 +304,25 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
             import("@actiondock/mcp"),
             import("@modelcontextprotocol/server"),
           ]);
-          const handler = createMcpHandler(
-            () => {
-              return createActionDockMcpServer({
-                service,
-                packageAllowlist,
-                packageIds: packageAllowlist,
-                actionAllowlist,
-              });
-            },
-            {
-              onerror: (err) => {
-                writeStderr(`[MCP HTTP Error] ${err?.message || String(err)}`, context);
+          mcpHandlerFactory = (view: EffectiveServerPolicy) => {
+            const handler = createMcpHandler(
+              () => {
+                return createActionDockMcpServer({
+                  service,
+                  packageAllowlist: view.packageAllowlist,
+                  packageIds: view.packageAllowlist,
+                  actionAllowlist: view.actionAllowlist,
+                });
               },
-            }
-          );
-          mcpHandler = async (req: Request) => {
-            return handler.fetch(req);
+              {
+                onerror: (err) => {
+                  writeStderr(`[MCP HTTP Error] ${err?.message || String(err)}`, context);
+                },
+              }
+            );
+            return async (req: Request) => {
+              return handler.fetch(req);
+            };
           };
         } catch (err: any) {
           await service.close().catch(() => {});
@@ -273,19 +345,31 @@ export function registerServeCommand(program: Command, context?: CliContext): vo
           exposeDebugInfo,
           enableMcp,
           enableManagement,
-          mcpHandler,
+          mcpHandlerFactory,
           tls,
           projectRoot: projectRoot || undefined,
           service,
           packageAllowlist,
           actionAllowlist,
+          views: viewsConfig,
         });
 
         const displayHost = formatHostForUrl(host);
         const actualEndpointHost = formatHostForUrl(host === "0.0.0.0" ? "127.0.0.1" : host);
         const scheme = tls ? "https" : "http";
 
-        printServerBanner(`ActionDock 2.0 HTTP Runner Server`, scheme, displayHost, server.port, context);
+        printServerBanner(
+          `ActionDock 2.0 HTTP Runner Server`,
+          scheme,
+          displayHost,
+          server.port,
+          context,
+          {
+            views: viewsConfig,
+            endpointHost: actualEndpointHost,
+            enableMcp,
+          }
+        );
         if (resolvedPackageIds.length > 0) {
           writeStdout(`  * Packages:        ${resolvedPackageIds.join(", ")}`, context);
         } else {

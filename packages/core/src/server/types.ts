@@ -22,6 +22,44 @@ export interface ServerTlsOptions {
 }
 
 /**
+ * 单个虚拟投影视图（Virtual View）的配置选项。
+ */
+export interface ServerViewOptions {
+  /** 视图唯一标识名称（若在 views 对象中配置则键名作为默认名称） */
+  name?: string;
+  /** 该视图独立的 Bearer Token 鉴权令牌 */
+  token?: string;
+  /** 该视图允许访问执行的 Package ID 白名单列表（为空允许全部） */
+  packageAllowlist?: string[];
+  /** 该视图允许访问执行的 Action 标识白名单列表（为空允许全部，支持短名或 packageId/actionId） */
+  actionAllowlist?: string[];
+  /** 该视图是否开启配置与状态管理路由能力（默认关闭） */
+  enableManagement?: boolean;
+  /** 该视图是否启用一体化 MCP 协议支持（默认开启） */
+  enableMcp?: boolean;
+  /** 该视图自定义的 MCP 请求处理器钩子（可选，支持请求处理函数或接收视图策略的工厂函数） */
+  mcpHandler?:
+    | ((req: Request, view?: EffectiveServerPolicy) => Promise<Response | null | undefined> | Response | null | undefined)
+    | ((view: EffectiveServerPolicy) => ((req: Request) => Promise<Response | null | undefined> | Response | null | undefined));
+}
+
+/**
+ * 当前请求上下文生效的统一服务端安全策略。
+ */
+export interface EffectiveServerPolicy {
+  /** 当前生效的视图名称（默认视图为 "default"） */
+  viewName?: string;
+  /** 当前生效的 Bearer Token 鉴权令牌 */
+  token?: string;
+  /** 当前生效的 Package ID 白名单列表 */
+  packageAllowlist?: string[];
+  /** 当前生效的 Action 标识白名单列表 */
+  actionAllowlist?: string[];
+  /** 当前生效的管理能力开关 */
+  enableManagement?: boolean;
+}
+
+/**
  * 启动 ActionDock HTTP Runner 服务端的配置选项。
  */
 export interface ServerOptions {
@@ -59,8 +97,12 @@ export interface ServerOptions {
   exposeDebugInfo?: boolean;
   /** 是否启用一体化 MCP 协议支持（默认开启） */
   enableMcp?: boolean;
-  /** 自定义 MCP 请求处理器钩子（若挂载则 /mcp 路由交由其处理） */
-  mcpHandler?: (req: Request) => Promise<Response | null | undefined> | Response | null | undefined;
+  /** 自定义 MCP 请求处理器钩子（若挂载则 /mcp 路由交由其处理，支持处理函数或接收视图策略的工厂函数） */
+  mcpHandler?:
+    | ((req: Request, view?: EffectiveServerPolicy) => Promise<Response | null | undefined> | Response | null | undefined)
+    | ((view: EffectiveServerPolicy) => ((req: Request) => Promise<Response | null | undefined> | Response | null | undefined));
+  /** 自定义 MCP 处理器工厂函数（可选，为每个视图创建独立处理器） */
+  mcpHandlerFactory?: (view: EffectiveServerPolicy) => ((req: Request) => Promise<Response | null | undefined> | Response | null | undefined);
   /** 可选注入的统一运行时底层平台 */
   platform?: import("../platform/types").RuntimePlatform;
   /** 是否显式开启配置与状态管理路由能力（默认关闭，关闭时返回 403） */
@@ -69,6 +111,27 @@ export interface ServerOptions {
   scanLinkedPackages?: boolean;
   /** 服务端 TLS/HTTPS 安全传输选项 */
   tls?: ServerTlsOptions;
+  /**
+   * 虚拟投影视图配置。
+   * 支持对象字典形式 Record<string, ServerViewOptions> 或数组形式 ServerViewOptions[]。
+   * 单端口上支持多视图独立隔离 Token、白名单与管理权限。
+   */
+  views?: Record<string, ServerViewOptions> | ServerViewOptions[];
+}
+
+/**
+ * 路由处理统一上下文对象。
+ */
+export interface RouteContext {
+  req: Request;
+  url: URL;
+  pathname: string;
+  corsHeaders: Record<string, string>;
+  projectRoot: string | null;
+  customHome?: string;
+  service: ActionDockService;
+  options: ServerOptions;
+  activePolicy: EffectiveServerPolicy;
 }
 
 /**

@@ -50,7 +50,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 | **管理运行配置项** | `ad config list`、`ad config get`、`ad config set` | 读取、设置、列出或校验项目与全局持久化配置 | [cli.md](references/cli.md) |
 | **管理持久化状态** | `ad state list`、`ad state get`、`ad state set` | 跨执行生命周期读写状态键与清理命名空间 | [cli.md](references/cli.md) |
 | **配置远程执行环境** | `ad profile list`、`ad profile add`、`ad profile use`、`ad profile update` | 管理远端 Runner 服务的连接凭证、内网证书忽略与当前切换目标 | [cli.md](references/cli.md) |
-| **启动微服务或协议** | `ad serve` 与 `ad mcp` | 暴露轻量 HTTP/HTTPS 运行服务（支持 `--https` 零配置自签名）或标准 MCP 协议接口 | [cli.md](references/cli.md) |
+| **启动微服务或协议** | `ad serve` 与 `ad mcp` | 暴露轻量 HTTP/HTTPS 运行服务（支持单端口多视图 Virtual Views 安全隔离与 `--https` 零配置自签名）或标准 MCP 协议接口 | [cli.md](references/cli.md) |
 | **本地开发软链挂载** | `ad link [path]`、`ad unlink [id|path]` | 本地源码快速试跑或多包联调，登记至本机全局路由表 | [cli.md](references/cli.md) |
 | **排查错误与自愈修复** | 遇到报错时按错误码检索决策表并自愈 | 仅在报错时查阅，严禁在执行前盲目体检 | [troubleshooting.md](references/troubleshooting.md) |
 

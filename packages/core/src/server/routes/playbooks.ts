@@ -1,12 +1,12 @@
 import { filterByIntent } from "../../filter";
 import { PACKAGE_NOT_ALLOWED, PLAYBOOK_NOT_FOUND, PLAYBOOKS_LIST_ERROR } from "../../errors";
-import { assertPackageAllowed, getSubPath, jsonResponse, type RouteContext } from "./common";
+import { assertPackageAllowed, getSubPath, isPackageAllowedByPolicy, jsonResponse, type RouteContext } from "./common";
 
 /**
  * 处理 Playbook 规程相关的 HTTP 路由（列表与 SOP 详情查询）。
  */
 export async function handlePlaybooksRoutes(ctx: RouteContext): Promise<Response | null> {
-  const { req, url, pathname, corsHeaders, service, options } = ctx;
+  const { req, url, pathname, corsHeaders, service, options, activePolicy: policy } = ctx;
   const subpath = getSubPath(pathname);
 
   // 1. Playbooks List: GET /api/v2/playbooks, GET /playbooks
@@ -16,7 +16,7 @@ export async function handlePlaybooksRoutes(ctx: RouteContext): Promise<Response
       const targetPkg = url.searchParams.get("package") || url.searchParams.get("packageId") || undefined;
 
       if (targetPkg) {
-        assertPackageAllowed(targetPkg, options);
+        assertPackageAllowed(targetPkg, policy);
       }
 
       let pbs = await service.discovery.listPlaybooks({ intent, package: targetPkg });
@@ -25,8 +25,8 @@ export async function handlePlaybooksRoutes(ctx: RouteContext): Promise<Response
         pbs = pbs.filter((p) => p.packageId === targetPkg);
       }
 
-      if (options.packageAllowlist && Array.isArray(options.packageAllowlist) && options.packageAllowlist.length > 0) {
-        pbs = pbs.filter((p) => p.packageId && options.packageAllowlist!.includes(p.packageId));
+      if (policy.packageAllowlist && Array.isArray(policy.packageAllowlist) && policy.packageAllowlist.length > 0) {
+        pbs = pbs.filter((p) => isPackageAllowedByPolicy(p.packageId, policy));
       }
 
       if (intent) {
@@ -67,7 +67,7 @@ export async function handlePlaybooksRoutes(ctx: RouteContext): Promise<Response
     const packageId = decodeURIComponent(pkgPlaybookMatch[1]);
     const playbookId = decodeURIComponent(pkgPlaybookMatch[2]);
     try {
-      assertPackageAllowed(packageId, options);
+      assertPackageAllowed(packageId, policy);
     } catch (err: any) {
       return jsonResponse(
         {
@@ -108,7 +108,7 @@ export async function handlePlaybooksRoutes(ctx: RouteContext): Promise<Response
     if (playbookId.includes("/")) {
       const pkgFromRef = playbookId.slice(0, playbookId.lastIndexOf("/"));
       try {
-        assertPackageAllowed(pkgFromRef, options);
+        assertPackageAllowed(pkgFromRef, policy);
       } catch (err: any) {
         return jsonResponse(
           {
@@ -134,7 +134,7 @@ export async function handlePlaybooksRoutes(ctx: RouteContext): Promise<Response
           pkgId = matched.packageId;
         }
       }
-      assertPackageAllowed(pkgId, options);
+      assertPackageAllowed(pkgId, policy);
       return jsonResponse(pb, 200, corsHeaders);
     } catch (err: any) {
       if (err.code === PACKAGE_NOT_ALLOWED || err.status === 403) {

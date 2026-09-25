@@ -16,6 +16,8 @@ export function safeEqual(a: string, b: string): boolean {
   const bb = Buffer.from(b);
 
   if (aa.length !== bb.length) {
+    // 长度不等时对自身做一次恒定时间比较，消除因长度不等提前退出带来的时序差
+    timingSafeEqual(aa, aa);
     return false;
   }
 
@@ -28,6 +30,40 @@ export function safeEqual(a: string, b: string): boolean {
 export interface VerifyBearerTokenOptions {
   /** 是否允许通过 URL 查询参数携带 Token（默认 false） */
   allowQueryToken?: boolean;
+}
+
+/**
+ * 从 HTTP 请求中提取 Bearer Token。
+ * 
+ * 默认仅接受 HTTP 请求头: `Authorization: Bearer <token>`。
+ * 仅当 allowQueryToken 为 true 时才允许解析 URL 查询参数 `?token=<token>`。
+ * 
+ * @param req 传入的 HTTP Request 对象
+ * @param allowQueryToken 是否允许从 URL 查询参数解析 Token
+ * @returns 提取出的 Token 字符串，若未携带则返回 null
+ */
+export function extractBearerToken(req: Request, allowQueryToken?: boolean): string | null {
+  // 1. 请求头 Authorization: Bearer <token>
+  const authHeader = req.headers.get("authorization");
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.slice(7).trim();
+    if (token) return token;
+  }
+
+  // 2. URL 查询参数: ?token=<token>（仅当显式开启 allowQueryToken 时允许）
+  if (allowQueryToken) {
+    try {
+      const url = new URL(req.url);
+      const tokenParam = url.searchParams.get("token");
+      if (tokenParam && tokenParam.trim()) {
+        return tokenParam.trim();
+      }
+    } catch {
+      // 畸形 URL 忽略
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -50,34 +86,14 @@ export function verifyBearerToken(
     return true;
   }
 
-  const trimmedExpected = expectedToken.trim();
-
-  // 1. 请求头 Authorization: Bearer <token>
-  const authHeader = req.headers.get("authorization");
-  if (authHeader && authHeader.startsWith("Bearer ")) {
-    const token = authHeader.slice(7).trim();
-    if (safeEqual(token, trimmedExpected)) {
-      return true;
-    }
-  }
-
-  // 2. URL 查询参数: ?token=<token>（仅当显式开启 allowQueryToken 时允许）
   const allowQuery =
     typeof options === "boolean" ? options : options?.allowQueryToken === true;
-
-  if (allowQuery) {
-    try {
-      const url = new URL(req.url);
-      const tokenParam = url.searchParams.get("token");
-      if (tokenParam && safeEqual(tokenParam.trim(), trimmedExpected)) {
-        return true;
-      }
-    } catch {
-      // 畸形 URL 视作鉴权失败
-    }
+  const token = extractBearerToken(req, allowQuery);
+  if (!token) {
+    return false;
   }
 
-  return false;
+  return safeEqual(token, expectedToken.trim());
 }
 
 /**

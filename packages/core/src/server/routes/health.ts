@@ -7,7 +7,7 @@ import { type RouteContext, jsonResponse } from "./common";
  * 处理健康检查与就绪状态接口（支持 /api/v2/health 与 /health）。
  */
 export async function handleHealthRoute(ctx: RouteContext): Promise<Response | null> {
-  const { req, pathname, corsHeaders, options, projectRoot } = ctx;
+  const { req, pathname, corsHeaders, options, projectRoot, activePolicy: policy } = ctx;
 
   if (
     pathname !== "/api/v2/health" &&
@@ -16,7 +16,7 @@ export async function handleHealthRoute(ctx: RouteContext): Promise<Response | n
     return null;
   }
 
-  if (!verifyBearerToken(req, options.token, options)) {
+  if (!verifyBearerToken(req, policy.token, options)) {
     return jsonResponse(
       {
         ok: false,

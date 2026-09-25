@@ -1,4 +1,4 @@
-import { resolve } from "node:path";
+import { posix, resolve } from "node:path";
 import { NodeHttpServer } from "./http-server";
 import { createActionDock } from "../service/factory";
 import { NOT_FOUND, UNAUTHORIZED } from "../errors";
@@ -20,8 +20,21 @@ import {
   type RouteContext,
 } from "./routes";
 import { isLoopbackHost, resolveCorsHeaders, verifyBearerToken } from "./security";
-import { createMcpEndpointHandler } from "./mcp-endpoint";
-import type { ActionDockServerInstance, CoreHttpServerInstance, ServerOptions, ServerTlsOptions } from "./types";
+import { createMcpEndpointHandler, type McpDelegateHandler } from "./mcp-endpoint";
+import {
+  extractBearerToken,
+  matchViewByToken,
+  normalizeServerViews,
+  type NormalizedServerView,
+} from "./policy";
+import type {
+  ActionDockServerInstance,
+  CoreHttpServerInstance,
+  EffectiveServerPolicy,
+  ServerOptions,
+  ServerTlsOptions,
+  ServerViewOptions,
+} from "./types";
 
 /**
  * 规范化主机地址用于拼接 URL。
@@ -74,8 +87,16 @@ export async function startActionDockServer(
     ? resolve(options.projectRoot)
     : findProjectRoot(process.cwd());
 
+  // 1. 归一化解析视图配置集合（含默认视图与自定义视图）
+  const { defaultView, views } = normalizeServerViews(options);
+
   // 非回环地址强制要求配置 Token 鉴权（防裸奔）
-  if (!isLoopbackHost(host) && !token && !options.allowInsecureNoAuth) {
+  const hasTokenConfigured = Boolean(
+    token ||
+    defaultView.policy.token ||
+    Array.from(views.values()).some((v) => Boolean(v.policy.token))
+  );
+  if (!isLoopbackHost(host) && !hasTokenConfigured && !options.allowInsecureNoAuth) {
     throw new Error(
       "Authentication token is required when binding to a non-loopback address. Use --allow-insecure-no-auth to override."
     );
@@ -101,12 +122,30 @@ export async function startActionDockServer(
     throw new Error("Failed to initialize ActionDockService for server");
   }
 
+  // 2. 聚合所有 views 声明的依赖包与动作，确保依赖闭包满足
   const roots: string[] = [];
   if (projectRoot) {
     roots.push(projectRoot);
   }
-  if (options.packageAllowlist && options.packageAllowlist.length > 0) {
-    for (const pkgId of options.packageAllowlist) {
+
+  const aggregatedPackageAllowlist = new Set<string>();
+  const aggregatedActionAllowlist = new Set<string>();
+
+  for (const v of views.values()) {
+    if (v.policy.packageAllowlist) {
+      for (const pkg of v.policy.packageAllowlist) {
+        aggregatedPackageAllowlist.add(pkg);
+      }
+    }
+    if (v.policy.actionAllowlist) {
+      for (const act of v.policy.actionAllowlist) {
+        aggregatedActionAllowlist.add(act);
+      }
+    }
+  }
+
+  if (aggregatedPackageAllowlist.size > 0) {
+    for (const pkgId of aggregatedPackageAllowlist) {
       const r = resolvePackageRoot(pkgId, projectRoot || undefined, customHome);
       if (r && !roots.includes(r)) {
         roots.push(r);
@@ -120,8 +159,8 @@ export async function startActionDockServer(
     }
   }
 
-  if (options.actionAllowlist && options.actionAllowlist.length > 0) {
-    for (const actRef of options.actionAllowlist) {
+  if (aggregatedActionAllowlist.size > 0) {
+    for (const actRef of aggregatedActionAllowlist) {
       try {
         const parsed = parseActionRef(actRef);
         if (parsed.packageId) {
@@ -138,15 +177,61 @@ export async function startActionDockServer(
     await ensureDependencyClosure(roots, { customHome });
   }
 
-  // MCP 统一网关端点处理器：鉴权、请求体限流与委托序列收敛为共享单一事实源
-  const mcpEndpointHandler = options.mcpHandler
-    ? createMcpEndpointHandler(options.mcpHandler, {
-        token,
-        allowQueryToken: options.allowQueryToken,
-        corsOrigins: options.corsOrigins,
-        maxBodyBytes: options.maxBodyBytes,
-      })
-    : undefined;
+  // 3. 为每个启用 MCP 的视图独立装配 MCP 处理器
+  if (options.enableMcp !== false) {
+    for (const v of views.values()) {
+      if (v.enableMcp !== false) {
+        let delegate: McpDelegateHandler | undefined;
+        if (v.rawOptions.mcpHandler) {
+          if (v.rawOptions.mcpHandler.length >= 2) {
+            delegate = (req: Request) => (v.rawOptions.mcpHandler as (req: Request, view?: EffectiveServerPolicy) => Promise<Response | null | undefined> | Response | null | undefined)(req, v.policy);
+          } else {
+            let factoryResult: unknown;
+            try {
+              factoryResult = (v.rawOptions.mcpHandler as (view: EffectiveServerPolicy) => unknown)(v.policy);
+            } catch {
+              factoryResult = null;
+            }
+            if (typeof factoryResult === "function") {
+              delegate = factoryResult as McpDelegateHandler;
+            } else {
+              delegate = (req: Request) => (v.rawOptions.mcpHandler as (req: Request, view?: EffectiveServerPolicy) => Promise<Response | null | undefined> | Response | null | undefined)(req, v.policy);
+            }
+          }
+        } else if (options.mcpHandlerFactory) {
+          delegate = options.mcpHandlerFactory(v.policy);
+        } else if (options.mcpHandler) {
+          if (options.mcpHandler.length >= 2) {
+            delegate = (req: Request) => (options.mcpHandler as (req: Request, view?: EffectiveServerPolicy) => Promise<Response | null | undefined> | Response | null | undefined)(req, v.policy);
+          } else {
+            let factoryResult: unknown;
+            try {
+              factoryResult = (options.mcpHandler as (view: EffectiveServerPolicy) => unknown)(v.policy);
+            } catch {
+              factoryResult = null;
+            }
+            if (typeof factoryResult === "function") {
+              delegate = factoryResult as McpDelegateHandler;
+            } else {
+              if (factoryResult && typeof (factoryResult as Promise<unknown>).catch === "function") {
+                (factoryResult as Promise<unknown>).catch(() => {});
+              }
+              delegate = (req: Request) => (options.mcpHandler as (req: Request, view?: EffectiveServerPolicy) => Promise<Response | null | undefined> | Response | null | undefined)(req, v.policy);
+            }
+          }
+        }
+
+        if (delegate) {
+          v.mcpEndpointHandler = createMcpEndpointHandler(delegate, {
+            token: v.policy.token,
+            allowQueryToken: options.allowQueryToken,
+            corsOrigins: options.corsOrigins,
+            maxBodyBytes: options.maxBodyBytes,
+          });
+        }
+      }
+    }
+  }
 
   const fetchHandler = async (req: Request): Promise<Response> => {
     const origin = req.headers.get("origin");
@@ -160,37 +245,131 @@ export async function startActionDockServer(
     }
 
     const url = new URL(req.url);
-    const pathname = url.pathname;
+    const rawPathname = url.pathname;
+
+    let activeView: NormalizedServerView;
+    let effectivePathname: string;
+    let effectiveReq: Request = req;
+
+    // 1. 检查是否为 /views/:viewName/... 命名空间路由
+    const viewMatch = rawPathname.match(/^\/views\/([^/]+)(\/.*)?$/);
+    if (viewMatch) {
+      let viewName: string;
+      try {
+        viewName = decodeURIComponent(viewMatch[1]);
+      } catch {
+        return jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: NOT_FOUND,
+              message: `Invalid view name encoding: '${viewMatch[1]}'`,
+            },
+          },
+          400,
+          corsHeaders
+        );
+      }
+
+      const matched = views.get(viewName);
+      if (!matched) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: NOT_FOUND,
+              message: `View '${viewName}' not found`,
+            },
+          },
+          404,
+          corsHeaders
+        );
+      }
+      activeView = matched;
+
+      // 规范化子路径，防范路径穿透与多斜杠混淆
+      let rawEffective = viewMatch[2] || "/";
+      if (!rawEffective.startsWith("/")) {
+        rawEffective = "/" + rawEffective;
+      }
+      const normalizedPath = posix.normalize(rawEffective);
+      effectivePathname = normalizedPath.startsWith("/") ? normalizedPath : "/" + normalizedPath;
+
+      // 剥离 /views/:viewName 前缀后重构 URL 与 Request
+      const rewrittenUrl = new URL(req.url);
+      rewrittenUrl.pathname = effectivePathname;
+      try {
+        const init: RequestInit & { duplex?: "half" } = {
+          method: req.method,
+          headers: req.headers,
+          signal: req.signal,
+        };
+        if (req.body && req.method !== "GET" && req.method !== "HEAD") {
+          init.body = req.body;
+          init.duplex = "half";
+        }
+        effectiveReq = new Request(rewrittenUrl.toString(), init);
+      } catch {
+        effectiveReq = req;
+      }
+    } else {
+      // 根路径请求：智能根据 Bearer Token 匹配视图或回退默认视图（遍历全量视图以防范时序差异）
+      effectivePathname = rawPathname;
+      const clientToken = extractBearerToken(req, options.allowQueryToken);
+      if (clientToken) {
+        const matchedByToken = matchViewByToken(clientToken, views.values());
+        activeView = matchedByToken ?? defaultView;
+      } else {
+        activeView = defaultView;
+      }
+    }
+
+    const effectivePolicy = activeView.policy;
+
+    const effectiveUrl = new URL(effectiveReq.url);
+    effectiveUrl.pathname = effectivePathname;
 
     const ctx: RouteContext = {
-      req,
-      url,
-      pathname,
+      req: effectiveReq,
+      url: effectiveUrl,
+      pathname: effectivePathname,
       corsHeaders,
       projectRoot,
       customHome,
       service: serviceInstance!,
       options,
+      activePolicy: effectivePolicy,
     };
 
-    // 1. 健康检查路由（内部处理独立鉴权逻辑）
+    // 2. 健康检查路由（内部处理独立鉴权逻辑，使用 activePolicy.token）
     const healthResponse = await handleHealthRoute(ctx);
     if (healthResponse) {
       return healthResponse;
     }
 
-    // 2. MCP 统一网关端点（委托共享端点处理器）
-    if (
-      options.enableMcp !== false &&
-      mcpEndpointHandler &&
-      (pathname === "/mcp" || pathname.startsWith("/mcp/"))
-    ) {
-      const mcpRes = await mcpEndpointHandler(req);
-      if (mcpRes) return mcpRes;
+    // 3. MCP 统一网关端点（委托当前视图的端点处理器）
+    if (effectivePathname === "/mcp" || effectivePathname.startsWith("/mcp/")) {
+      if (activeView.enableMcp === false || options.enableMcp === false) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: {
+              code: NOT_FOUND,
+              message: `MCP endpoint is disabled for view '${activeView.name}'`,
+            },
+          },
+          404,
+          corsHeaders
+        );
+      }
+      if (activeView.mcpEndpointHandler) {
+        const mcpRes = await activeView.mcpEndpointHandler(effectiveReq);
+        if (mcpRes) return mcpRes;
+      }
     }
 
-    // 3. 全局 API 认证鉴权拦截
-    if (!verifyBearerToken(req, token, options)) {
+    // 4. API 认证鉴权拦截（基于当前生效策略中的 Token）
+    if (!verifyBearerToken(effectiveReq, effectivePolicy.token, options)) {
       return jsonResponse(
         {
           ok: false,
@@ -204,7 +383,7 @@ export async function startActionDockServer(
       );
     }
 
-    // 4. 业务领域路由分发（完全委托 Service）
+    // 5. 业务领域路由分发（完全委托 Service 与 RouteContext 中的 activePolicy）
     const routeResponse =
       (await handleInfoRoute(ctx)) ||
       (await handleDoctorRoute(ctx)) ||
@@ -218,13 +397,13 @@ export async function startActionDockServer(
       return routeResponse;
     }
 
-    // 5. 404 路由兜底
+    // 6. 404 路由兜底
     return jsonResponse(
       {
         ok: false,
         error: {
           code: NOT_FOUND,
-          message: `Route not found: ${req.method} ${pathname}`,
+          message: `Route not found: ${req.method} ${rawPathname}`,
         },
       },
       404,

@@ -345,12 +345,14 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
 
 - 启动远程调度 HTTP/HTTPS 微服务 (`ad serve`)：
   ```bash
-  ad serve [-H, --host <host>] [-p, --port <port>] [-t, --token <token>] [-P, --package <package-id>] [-A, --action <action-ref>] [--https] [--tls-cert <path>] [--tls-key <path>] [--tls-ca <path>] [--tls-passphrase <passphrase>] [--allow-query-token] [--management] [--allow-insecure-no-auth] [--cors-origin <origin>] [--max-body <size>] [--no-mcp] [-d, --dir <path>] [--data-dir <path>]
+  ad serve [-H, --host <host>] [-p, --port <port>] [-t, --token <token>] [-P, --package <package-id>] [-A, --action <action-ref>] [--views-file <path>] [--views <json>] [--https] [--tls-cert <path>] [--tls-key <path>] [--tls-ca <path>] [--tls-passphrase <passphrase>] [--allow-query-token] [--management] [--allow-insecure-no-auth] [--cors-origin <origin>] [--max-body <size>] [--no-mcp] [-d, --dir <path>] [--data-dir <path>]
   ```
   原生支持 HTTPS 运行。仅传入 `--https` 时自动在本地签发并复用自签名 X.509 证书；传入 `--tls-cert` 与 `--tls-key` 时加载指定的生产机构证书。
   - 参数说明：
     - `-P, --package <package-id>`：限制服务对外暴露的 Action Package 白名单，可多次指定或使用逗号分隔（例如 `-P pkg-a,pkg-b` 或 `-P pkg-a -P pkg-b`）。指定后仅允许访问白名单中的包，RESTful API 与统一内嵌 `/mcp` 端点均受此限制，请求未授权的包将返回 403 `PACKAGE_NOT_ALLOWED`。
     - `-A, --action <action-ref>`：限制服务对外暴露的动作白名单，可多次指定或使用逗号分隔（例如 `-A greet,calc` 或 `-A pkg-a/action-1`）。支持指定动作短名 `actionId` 与全限定名 `packageId/actionId`。同时指定 `-P, --package` 与 `-A, --action` 时取两者权限交集。未在白名单中的动作详情与执行均返回 403 错误（错误码 `ACTION_FORBIDDEN`）；历史运行记录列表、单次详情与取消同样受白名单限制；统一内嵌 `/mcp` 端点的工具列表与任务扩展同步过滤。
+    - `--views-file <path>`：指定包含虚拟投影视图配置的 JSON 外部文件路径。支持在单个服务监听端口上划分出多个具备独立鉴权令牌、包白名单、动作白名单、管理权限门禁与专属 MCP 端点的视图。文件格式支持视图字典对象、数组形态或包裹形态。合并优先级高于 `actiondock.json` 中的 `server.views`。
+    - `--views <json>`：以 JSON 字符串形式直接内联指定虚拟投影视图配置。合并优先级高于 `--views-file`。
     - `-H, --host <host>`：服务监听地址（默认 `127.0.0.1`）。
     - `-p, --port <port>`：服务监听端口（默认 `5177`）。
     - `-t, --token <token>`：服务访问鉴权令牌（亦可通过环境变量 `ACTIONDOCK_TOKEN` 设置）。监听非回环地址时强制要求配置。

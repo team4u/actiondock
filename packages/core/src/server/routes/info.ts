@@ -2,7 +2,7 @@ import { filterWithFallbackInfo } from "../../filter";
 import { INFO_ERROR, PACKAGE_NOT_ALLOWED, PACKAGE_NOT_FOUND, PACKAGES_INFO_ERROR } from "../../errors";
 import { ACTIONDOCK_VERSION } from "../../version";
 import { sanitizeConfigDefinitions } from "../../storage";
-import { assertPackageAllowed, getSubPath, jsonResponse, type RouteContext } from "./common";
+import { assertPackageAllowed, filterPackagesByPolicy, getSubPath, jsonResponse, type RouteContext } from "./common";
 
 function sanitizePackage<T extends { config?: any }>(pkg: T, exposeDebugInfo?: boolean): T {
   if (!pkg) return pkg;
@@ -23,7 +23,7 @@ function sanitizePackage<T extends { config?: any }>(pkg: T, exposeDebugInfo?: b
  * - GET /api/v2/packages 与 GET /packages -> 委托 service.discovery.listPackages()
  */
 export async function handleInfoRoute(ctx: RouteContext): Promise<Response | null> {
-  const { req, url, pathname, corsHeaders, options, service, projectRoot } = ctx;
+  const { req, url, pathname, corsHeaders, options, service, projectRoot, activePolicy: policy } = ctx;
   const subpath = getSubPath(pathname);
 
   // 1. Packages List: GET /api/v2/packages, /packages
@@ -31,14 +31,14 @@ export async function handleInfoRoute(ctx: RouteContext): Promise<Response | nul
     try {
       const targetPkg = url.searchParams.get("package") || url.searchParams.get("packageId") || undefined;
       if (targetPkg) {
-        assertPackageAllowed(targetPkg, options);
+        assertPackageAllowed(targetPkg, policy);
       }
 
       const rawPackages = await service.discovery.listPackages();
-      let packages = rawPackages.map((p) => sanitizePackage(p, options.exposeDebugInfo));
-      if (options.packageAllowlist && Array.isArray(options.packageAllowlist) && options.packageAllowlist.length > 0) {
-        packages = packages.filter((p) => p.id && options.packageAllowlist!.includes(p.id));
-      }
+      const packages = filterPackagesByPolicy(
+        rawPackages.map((p) => sanitizePackage(p, options.exposeDebugInfo)),
+        policy
+      );
       return jsonResponse(
         {
           ok: true,
@@ -80,14 +80,14 @@ export async function handleInfoRoute(ctx: RouteContext): Promise<Response | nul
       const targetPkg = url.searchParams.get("package") || url.searchParams.get("packageId") || undefined;
 
       if (targetPkg) {
-        assertPackageAllowed(targetPkg, options);
+        assertPackageAllowed(targetPkg, policy);
       }
 
       const rawPackages = await service.info();
-      let packages = rawPackages.map((p) => sanitizePackage(p, options.exposeDebugInfo));
-      if (options.packageAllowlist && Array.isArray(options.packageAllowlist) && options.packageAllowlist.length > 0) {
-        packages = packages.filter((p) => p.id && options.packageAllowlist!.includes(p.id));
-      }
+      const packages = filterPackagesByPolicy(
+        rawPackages.map((p) => sanitizePackage(p, options.exposeDebugInfo)),
+        policy
+      );
 
       if (isTree) {
         return jsonResponse(
