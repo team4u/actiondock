@@ -105,10 +105,10 @@ export function initProject(targetDir: string, options: InitOptions = {}): void 
       node: ">=24.12.0",
     },
     dependencies: {
-      "@actiondock/sdk": "^2.8.0",
+      "@actiondock/sdk": "^2.9.0",
     },
     devDependencies: {
-      "@actiondock/testing": "^2.8.0",
+      "@actiondock/testing": "^2.9.0",
       "@types/node": "^22.13.0",
       "tsx": "^4.19.0",
       "typescript": "^5.7.0",
