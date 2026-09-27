@@ -184,4 +184,26 @@ ad runs show 01JM8A... [-P <pkg>]
 
 # 取消运行中的任务
 ad runs cancel 01JM8A... --profile <name>
+
+# 清理运行记录（支持指定保留时长与保留条数）
+ad runs clear                                # 清空当前包的所有运行记录
+ad runs clear --older-than 14d               # 仅清理超过 14 天的运行记录
+ad runs clear --keep 500                     # 保留最新的 500 条记录，清理其余记录
+ad runs clear --older-than 7d --keep 100     # 清理 7 天前记录，但至少保底保留最新 100 条
+ad runs clear -a "deploy" --status failed    # 仅清理特定动作失败状态的历史记录
 ```
+
+### 运行记录保留策略与自动清理机制
+
+为了防止高频调用撑满磁盘空间，ActionDock 内置了时间与数量双重保留策略：
+
+- 时间保留策略：默认保留 14 天（`DEFAULT_RUNS_RETENTION_MS`），超过保留时长的终态记录会被自动淘汰。
+- 数量保留策略：单个包默认保留最多 5000 条终态记录（`DEFAULT_MAX_RUNS_PER_PACKAGE`），超出上限时按时间先后淘汰最旧的记录。
+- 最小保底机制：时间过期清理时默认保底保留最近的 50 条记录（`DEFAULT_MIN_RETAIN_RUNS`），防止低频调用场景下历史记录被完全清空。
+- 状态安全隔离：清理机制严格仅淘汰终态记录（`success`、`failed`、`cancelled`、`timed_out`、`interrupted`），在途运行的任务不会被误删。
+- 定期巡检机制：
+  - 常驻服务：在启动 `ad serve` 时，后台会自动挂载轻量级巡检定时器（默认每 1 小时巡检一次），周期性调用清理逻辑。
+  - 短时执行：在持有者进程初始化数据库（会话接管恢复时点）以及写入达到批次阈值时，自动触发机会性防抖清理。
+- 策略配置覆盖：
+  - 通过配置系统持久化设置：`ad config set runs.retentionDays 30` 或 `ad config set runs.maxRuns 10000`。
+  - 通过环境变量覆盖：`ACTIONDOCK_RUNS_RETENTION_DAYS`、`ACTIONDOCK_RUNS_MAX_COUNT` 与 `ACTIONDOCK_RUNS_MIN_RETAIN`。

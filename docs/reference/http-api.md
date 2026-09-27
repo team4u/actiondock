@@ -382,12 +382,34 @@ ActionDock 2.x 微服务模式（通过 `ad serve` 启动）提供标准 RESTful
 
 批量清理历史执行记录：
 
-- 请求参数（支持查询参数或 JSON 请求体）：`packageId`、`actionId`、`status`
-- 响应：
+- 请求参数（支持查询参数或 JSON 请求体）：
+  - `packageId`：按目标包标识过滤
+  - `actionId`：按目标动作标识过滤
+  - `status`：按状态过滤（如 `success`、`failed`、`cancelled`、`timed_out`、`interrupted`）
+  - `olderThan` 或 `olderThanMs`：仅清理早于指定时间跨度的记录（支持 `14d`、`7d`、`24h`、`30m` 或毫秒数值）
+  - `keep`：保底保留的最新记录条数（例如 `keep: 100` 表示保留最新的 100 条，删除其余匹配记录）
+- 响应样例：
   ```json
   {
     "ok": true,
     "clearedCount": 12
+  }
+  ```
+
+### 按保留策略自动清理历史记录 (`POST /api/v2/runs/clean-expired`)
+
+基于时间与数量双重保留策略，清理过期的终态运行记录与超出上限的最旧记录：
+
+- 请求方式：`POST`
+- 请求参数（JSON 请求体，可选覆盖默认策略）：
+  - `maxAgeMs`：最大保留时长（毫秒，默认 14 天）
+  - `maxRuns`：单包最大保留条数（默认 5000 条，超出按最旧先淘汰）
+  - `minRetainRuns`：最小保底保留条数（默认 50 条，防止低频调用场景全部清空）
+- 响应样例：
+  ```json
+  {
+    "ok": true,
+    "cleanedCount": 5
   }
   ```
 

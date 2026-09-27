@@ -264,8 +264,9 @@ CLI 顶层调度器对所有子命令统一注入通用控制选项：
 
 - 清理执行记录 (`ad runs clear`)：
   ```bash
-  ad runs clear [-P, --package <id>] [--before <time>] [--all]
+  ad runs clear [-P, --package <id>] [-a, --action <actionId>] [--status <status>] [--older-than <duration>] [--keep <count>] [--data-dir <path>] [--json]
   ```
+  按包标识、动作标识、状态、时间保留跨度（如 `14d`、`7d`、`24h`、`30m`）或最新保留条数（`--keep`）精确清理执行记录。
 
 ---
 

@@ -183,7 +183,28 @@ describe("CLI Workflow - State & Runs Management", () => {
     expect(cancelLocalProc.exitCode).toBe(2);
     expect(cancelLocalProc.stderr.toString()).toContain("'ad runs cancel' is only supported for remote execution targets");
 
-    // 8b. runs clear
+    // 8b. runs clear with filters
+    // Run another action so we have at least 2 runs
+    await runCliAsync(["run", "ping"], tempDir);
+    const beforeClearRuns = await runCliAsync(["runs", "list", "--json"], tempDir);
+    expect(JSON.parse(beforeClearRuns.stdout.toString()).length).toBeGreaterThanOrEqual(2);
+
+    // Clear runs older than 100 days (should clear 0)
+    const clearOlderProc = await runCliAsync(["runs", "clear", "--older-than", "100d", "--json"], tempDir);
+    expect(clearOlderProc.exitCode).toBe(0);
+    expect(JSON.parse(clearOlderProc.stdout.toString())).toEqual({ ok: true, clearedCount: 0 });
+
+    // Clear keeping newest 1 run
+    const clearKeepProc = await runCliAsync(["runs", "clear", "--keep", "1", "--json"], tempDir);
+    expect(clearKeepProc.exitCode).toBe(0);
+    const keepResult = JSON.parse(clearKeepProc.stdout.toString());
+    expect(keepResult.ok).toBe(true);
+    expect(keepResult.clearedCount).toBeGreaterThanOrEqual(1);
+
+    const runsListAfterKeep = await runCliAsync(["runs", "list", "--json"], tempDir);
+    expect(JSON.parse(runsListAfterKeep.stdout.toString()).length).toBe(1);
+
+    // Full clear
     const clearRunsProc = await runCliAsync(["runs", "clear"], tempDir);
     expect(clearRunsProc.exitCode).toBe(0);
     expect(clearRunsProc.stdout.toString()).toContain("Cleared");

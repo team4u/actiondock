@@ -73,10 +73,22 @@ export function resolveDatabasePath(
  */
 export function createStorage(
   packageId: string,
-  options: { projectRoot?: string; dataDir?: string; inMemory?: boolean; customHome?: string; recoverOrphans?: boolean } = {}
+  options: {
+    projectRoot?: string;
+    dataDir?: string;
+    inMemory?: boolean;
+    customHome?: string;
+    recoverOrphans?: boolean;
+    retentionPolicy?: import("./types").RunsRetentionPolicy;
+  } = {}
 ): RuntimeStorage {
   const dbPath = resolveDatabasePath(packageId, options);
-  return new SqliteRuntimeStorage({ dbPath, packageId, recoverOrphans: options.recoverOrphans });
+  return new SqliteRuntimeStorage({
+    dbPath,
+    packageId,
+    recoverOrphans: options.recoverOrphans,
+    retentionPolicy: options.retentionPolicy,
+  });
 }
 
 /**

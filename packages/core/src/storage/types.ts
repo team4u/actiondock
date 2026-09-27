@@ -14,6 +14,33 @@ export const STORAGE_SCHEMA_VERSION = 2;
 export const IDEMPOTENCY_RETENTION_MS = 86_400_000;
 
 /**
+ * 运行记录默认保留时长常量（14 天）。
+ */
+export const DEFAULT_RUNS_RETENTION_MS = 14 * 86_400_000;
+
+/**
+ * 运行记录单个包默认最大终态记录保留条数（5000 条）。
+ */
+export const DEFAULT_MAX_RUNS_PER_PACKAGE = 5000;
+
+/**
+ * 运行记录时间过期清理默认保底保留条数（50 条）。
+ */
+export const DEFAULT_MIN_RETAIN_RUNS = 50;
+
+/**
+ * 运行记录双重保留策略契约（基于时间与基于数量）。
+ */
+export interface RunsRetentionPolicy {
+  /** 最大保留时长（毫秒，默认 14 天） */
+  maxAgeMs?: number;
+  /** 单个包最大保留终态记录数（默认 5000，超出按最旧先淘汰） */
+  maxRuns?: number;
+  /** 最小保底保留终态记录数（默认 50，防止全清空） */
+  minRetainRuns?: number;
+}
+
+/**
  * SQLite 基础参数值类型。
  */
 export type SqlValue = null | number | string | Uint8Array;
@@ -102,6 +129,8 @@ export interface StorageOptions {
    * 避免跨进程互毁在途运行。
    */
   recoverOrphans?: boolean;
+  /** 运行记录保留策略配置 */
+  retentionPolicy?: RunsRetentionPolicy;
 }
 
 /**
@@ -214,7 +243,14 @@ export interface RuntimeStorage {
   ): void;
   getRun(id: string): RunRecord | null;
   listRuns(options?: { actionId?: string; status?: string; limit?: number }): RunRecord[];
-  clearRuns(options?: { actionId?: string; status?: string }): number;
+  clearRuns(options?: {
+    actionId?: string;
+    status?: string;
+    olderThanMs?: number;
+    keep?: number;
+  }): number;
+  /** 按保留策略清理过期及超额的终态运行记录（基于时间与数量策略） */
+  cleanExpiredRuns?(policy?: RunsRetentionPolicy): number;
 
   /**
    * 收敛死亡会话遗留的非终态运行任务（含无会话标识的遗留非终态记录），

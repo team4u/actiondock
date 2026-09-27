@@ -334,7 +334,15 @@ export interface PackageRuntime {
   cancelRun(runId: string, reason?: string): Promise<CancelResult>;
 
   /** 清空历史任务运行记录 */
-  clearRuns(options?: { actionId?: string; status?: string }): Promise<number>;
+  clearRuns(options?: {
+    actionId?: string;
+    status?: string;
+    olderThanMs?: number;
+    keep?: number;
+  }): Promise<number>;
+
+  /** 按保留策略清理过期及超额的终态运行记录（基于时间与数量策略） */
+  cleanExpiredRuns?(policy?: import("../storage/types").RunsRetentionPolicy): Promise<number>;
 
   /** 订阅指定运行的事件流 */
   events(

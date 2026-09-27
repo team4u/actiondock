@@ -56,7 +56,7 @@ Service -> Resolution -> PackageRuntime -> ExecutionService -> ActionRunner -> A
 
 - 发现端口 `DiscoveryPort`：负责包与动作的元数据发现、清单检索、全文过滤与规程查询。
 - 执行端口 `ExecutionPort`：负责动作的同步阻塞执行（`run`）与异步启动执行（`start`）。
-- 运行端口 `RunsPort`：负责任务运行历史列表、单次详情查询与协同取消（`cancel`）。
+- 运行端口 `RunsPort`：负责任务运行历史列表、单次详情查询、协同取消（`cancel`）以及历史记录清理与保留策略淘汰（`clearRuns`、`cleanExpiredRuns`）。
 - 事件端口 `EventsPort`：负责任务执行实时事件流订阅。
 - 配置端口 `ConfigPort`：负责运行时分层配置读取、持久化配置管理与环境变量满足度体检。
 - 状态端口 `StatePort`：负责包级与动作级持久化键值存取、前缀列举与过期清理。

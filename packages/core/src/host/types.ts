@@ -112,7 +112,16 @@ export interface ActionDockHost {
   listRuns(query?: ListRunsOptions): Promise<RunRecord[]>;
 
   /** 清理运行记录 */
-  clearRuns(options?: { packageId?: string; actionId?: string; status?: string; olderThanMs?: number }): Promise<number>;
+  clearRuns(options?: {
+    packageId?: string;
+    actionId?: string;
+    status?: string;
+    olderThanMs?: number;
+    keep?: number;
+  }): Promise<number>;
+
+  /** 按保留策略清理所有运行时中的过期及超额终态运行记录 */
+  cleanExpiredRuns(policy?: import("../storage/types").RunsRetentionPolicy): Promise<number>;
 
   /** 取消指定在运行的任务 */
   cancelRun(runId: string, reason?: string): Promise<CancelResult>;

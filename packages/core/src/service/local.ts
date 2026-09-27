@@ -130,8 +130,12 @@ export class LocalActionDockService implements ActionDockService {
         return self.host.cancelRun(runId, reason);
       },
 
-      async clear(opts?: { packageId?: string; actionId?: string; status?: string; olderThanMs?: number }): Promise<number> {
+      async clear(opts?: { packageId?: string; actionId?: string; status?: string; olderThanMs?: number; keep?: number }): Promise<number> {
         return self.host.clearRuns(opts);
+      },
+
+      async cleanExpired(policy?: import("../storage/types").RunsRetentionPolicy): Promise<number> {
+        return self.host.cleanExpiredRuns(policy);
       },
     };
 

@@ -81,12 +81,18 @@ export async function fetchRemoteRuns(
 }
 
 /**
- * 清空远端运行记录（可按包、Action、状态过滤清除范围）。
+ * 清空远端运行记录（可按包、Action、状态、保留时长、保留数量过滤清除范围）。
  */
 export async function clearRemoteRuns(
   serverUrl: string,
   token?: string,
-  options?: { packageId?: string; actionId?: string; status?: string } & RemoteClientRequestOptions
+  options?: {
+    packageId?: string;
+    actionId?: string;
+    status?: string;
+    olderThanMs?: number;
+    keep?: number;
+  } & RemoteClientRequestOptions
 ): Promise<{ ok: boolean; clearedCount: number }> {
   return fetchRemoteJson(
     serverUrl,
@@ -96,6 +102,29 @@ export async function clearRemoteRuns(
       method: "POST",
       body: options || {},
       errorPrefix: "Failed to clear remote runs",
+      allowInsecureHttp: options?.allowInsecureHttp,
+      insecure: options?.insecure,
+      dispatcher: options?.dispatcher,
+    }
+  );
+}
+
+/**
+ * 按保留策略清理远端过期及超额运行记录。
+ */
+export async function cleanExpiredRemoteRuns(
+  serverUrl: string,
+  token?: string,
+  options?: import("../storage/types").RunsRetentionPolicy & RemoteClientRequestOptions
+): Promise<{ ok: boolean; cleanedCount: number }> {
+  return fetchRemoteJson(
+    serverUrl,
+    "/api/v2/runs/clean-expired",
+    token,
+    {
+      method: "POST",
+      body: options || {},
+      errorPrefix: "Failed to clean expired remote runs",
       allowInsecureHttp: options?.allowInsecureHttp,
       insecure: options?.insecure,
       dispatcher: options?.dispatcher,

@@ -14,11 +14,15 @@ import { createDefaultSqliteDriver } from "./driver";
 import { safeParseStoredJson } from "./utils";
 import { ActionDockError, AMBIGUOUS_STATE_KEY, STORED_ERROR_DECODE_FAILED, UNSUPPORTED_STORAGE_SCHEMA } from "../errors";
 import {
+  DEFAULT_MAX_RUNS_PER_PACKAGE,
+  DEFAULT_MIN_RETAIN_RUNS,
+  DEFAULT_RUNS_RETENTION_MS,
   IDEMPOTENCY_RETENTION_MS,
   STORAGE_SCHEMA_VERSION,
   isTerminalRunStatus,
   type IdempotencyCheckResult,
   type IdempotencyRecord,
+  type RunsRetentionPolicy,
   type RuntimeStorage,
   type SqliteDriver,
   type SqliteStatement,
@@ -58,6 +62,11 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
   private statementCache = new Map<string, SqliteStatement>();
   private dbPath: string;
   private recoverOrphans: boolean;
+  private retentionPolicy?: RunsRetentionPolicy;
+  private lastRunsCleanupAt = 0;
+  private runInsertCount = 0;
+  private static readonly RUNS_CLEANUP_INTERVAL_MS = 3600_000;
+  private static readonly RUNS_CLEANUP_BATCH_THRESHOLD = 50;
 
   get isOpen(): boolean {
     return !this.isClosed;
@@ -73,6 +82,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     const dbPath = options.dbPath || ":memory:";
     this.dbPath = dbPath;
     this.recoverOrphans = options.recoverOrphans === true;
+    this.retentionPolicy = options.retentionPolicy;
 
     if (dbPath !== ":memory:") {
       const dir = dirname(dbPath);
@@ -200,10 +210,11 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       }
     }
 
-    // 重启恢复：仅持有者身份的打开方在构造阶段收割死亡会话遗留的非终态运行；
+    // 重启恢复：仅持有者身份的打开方在构造阶段收割死亡会话遗留的非终态运行并执行历史记录清理；
     // 旁观查询打开保持只读语义，绝不触碰其他进程的在途记录
     if (this.recoverOrphans) {
       this.recoverDeadSessionRuns();
+      this.cleanExpiredRuns();
     }
   }
 
@@ -712,6 +723,23 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       finishedAt,
       durationMs
     );
+
+    this.runInsertCount++;
+    const nowMs = this.clock.now().getTime();
+    if (
+      this.runInsertCount >= SqliteRuntimeStorage.RUNS_CLEANUP_BATCH_THRESHOLD &&
+      nowMs - this.lastRunsCleanupAt >= SqliteRuntimeStorage.RUNS_CLEANUP_INTERVAL_MS
+    ) {
+      this.lastRunsCleanupAt = nowMs;
+      this.runInsertCount = 0;
+      try {
+        this.cleanExpiredRuns();
+      } catch (cleanupErr) {
+        console.warn(
+          `[actiondock] opportunistic cleanExpiredRuns failed: ${cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)}`
+        );
+      }
+    }
   }
 
   updateRun(
@@ -783,7 +811,12 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     return rows.map((r) => this.mapRunRecord(r));
   }
 
-  clearRuns(options: { actionId?: string; status?: string } = {}): number {
+  clearRuns(options: {
+    actionId?: string;
+    status?: string;
+    olderThanMs?: number;
+    keep?: number;
+  } = {}): number {
     let sql = "DELETE FROM runs WHERE package_id = ?";
     const params: any[] = [this.packageId];
     if (options.actionId) {
@@ -794,6 +827,29 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       sql += " AND status = ?";
       params.push(options.status);
     }
+    if (typeof options.olderThanMs === "number" && options.olderThanMs > 0) {
+      const cutoff = new Date(this.clock.now().getTime() - options.olderThanMs).toISOString();
+      sql += " AND started_at < ?";
+      params.push(cutoff);
+    }
+    if (typeof options.keep === "number" && options.keep > 0) {
+      let subQuery = "SELECT id FROM runs WHERE package_id = ?";
+      const subParams: any[] = [this.packageId];
+      if (options.actionId) {
+        subQuery += " AND action_id = ?";
+        subParams.push(options.actionId);
+      }
+      if (options.status) {
+        subQuery += " AND status = ?";
+        subParams.push(options.status);
+      }
+      subQuery += " ORDER BY started_at DESC LIMIT ?";
+      subParams.push(options.keep);
+
+      sql += ` AND id NOT IN (${subQuery})`;
+      params.push(...subParams);
+    }
+
     const stmt = this.getStatement(sql);
     const res = stmt.run(...params);
 
@@ -808,6 +864,139 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
     }
 
     return res.changes;
+  }
+
+  /**
+   * 按保留策略清理过期的终态运行记录与超出容量限制的最旧运行记录。
+   *
+   * 包含：
+   * - 基于时间：删除早于 maxAgeMs 的终态记录（保留 minRetainRuns 保底数量）。
+   * - 基于数量：若终态记录总数超过 maxRuns，按时间由旧至新淘汰超出部分。
+   * - 级联清理孤立的幂等去重记录。
+   */
+  cleanExpiredRuns(policy?: RunsRetentionPolicy): number {
+    if (this.isClosed) return 0;
+    try {
+      const resolved = this.resolveRetentionPolicy(policy);
+      const { maxAgeMs, maxRuns, minRetainRuns } = resolved;
+      let totalDeleted = 0;
+
+      // 1. 基于时间策略清理（仅针对终态记录）
+      if (maxAgeMs > 0) {
+        const now = this.clock.now().getTime();
+        const cutoff = new Date(now - maxAgeMs).toISOString();
+
+        if (minRetainRuns > 0) {
+          const stmt = this.getStatement(`
+            DELETE FROM runs
+            WHERE package_id = ?
+              AND status IN ('success', 'failed', 'cancelled', 'timed_out', 'interrupted')
+              AND started_at < ?
+              AND id NOT IN (
+                SELECT id FROM runs
+                WHERE package_id = ?
+                  AND status IN ('success', 'failed', 'cancelled', 'timed_out', 'interrupted')
+                ORDER BY started_at DESC
+                LIMIT ?
+              )
+          `);
+          const res = stmt.run(this.packageId, cutoff, this.packageId, minRetainRuns);
+          totalDeleted += res.changes;
+        } else {
+          const stmt = this.getStatement(`
+            DELETE FROM runs
+            WHERE package_id = ?
+              AND status IN ('success', 'failed', 'cancelled', 'timed_out', 'interrupted')
+              AND started_at < ?
+          `);
+          const res = stmt.run(this.packageId, cutoff);
+          totalDeleted += res.changes;
+        }
+      }
+
+      // 2. 基于数量策略清理（若当前终态记录数超过 maxRuns，淘汰最旧的记录）
+      if (maxRuns > 0) {
+        const stmt = this.getStatement(`
+          DELETE FROM runs
+          WHERE package_id = ?
+            AND status IN ('success', 'failed', 'cancelled', 'timed_out', 'interrupted')
+            AND id NOT IN (
+              SELECT id FROM runs
+              WHERE package_id = ?
+                AND status IN ('success', 'failed', 'cancelled', 'timed_out', 'interrupted')
+              ORDER BY started_at DESC
+              LIMIT ?
+            )
+        `);
+        const res = stmt.run(this.packageId, this.packageId, maxRuns);
+        totalDeleted += res.changes;
+      }
+
+      // 3. 级联清理无对应运行记录的孤立幂等去重索引
+      if (totalDeleted > 0) {
+        try {
+          this.getStatement(
+            "DELETE FROM idempotency_keys WHERE run_id NOT IN (SELECT id FROM runs)"
+          ).run();
+        } catch (err) {
+          console.warn(
+            `[actiondock] orphaned idempotency keys cleanup failed: ${err instanceof Error ? err.message : String(err)}`
+          );
+        }
+      }
+
+      return totalDeleted;
+    } catch (err) {
+      console.warn(
+        `[actiondock] cleanExpiredRuns failed: ${err instanceof Error ? err.message : String(err)}`
+      );
+      return 0;
+    }
+  }
+
+  private resolveRetentionPolicy(policy?: RunsRetentionPolicy): Required<RunsRetentionPolicy> {
+    let configDays: number | undefined;
+    let configMaxRuns: number | undefined;
+    let configMinRetain: number | undefined;
+
+    try {
+      configDays = this.getConfig<number>("runs.retentionDays");
+      configMaxRuns = this.getConfig<number>("runs.maxRuns");
+      configMinRetain = this.getConfig<number>("runs.minRetainRuns");
+    } catch {}
+
+    const envDays = process.env.ACTIONDOCK_RUNS_RETENTION_DAYS
+      ? parseInt(process.env.ACTIONDOCK_RUNS_RETENTION_DAYS, 10)
+      : undefined;
+    const envMaxRuns = process.env.ACTIONDOCK_RUNS_MAX_COUNT
+      ? parseInt(process.env.ACTIONDOCK_RUNS_MAX_COUNT, 10)
+      : undefined;
+    const envMinRetain = process.env.ACTIONDOCK_RUNS_MIN_RETAIN
+      ? parseInt(process.env.ACTIONDOCK_RUNS_MIN_RETAIN, 10)
+      : undefined;
+
+    const maxAgeMs =
+      policy?.maxAgeMs ??
+      this.retentionPolicy?.maxAgeMs ??
+      (typeof configDays === "number" && configDays > 0 ? configDays * 86_400_000 : undefined) ??
+      (typeof envDays === "number" && !isNaN(envDays) && envDays > 0 ? envDays * 86_400_000 : undefined) ??
+      DEFAULT_RUNS_RETENTION_MS;
+
+    const maxRuns =
+      policy?.maxRuns ??
+      this.retentionPolicy?.maxRuns ??
+      (typeof configMaxRuns === "number" && configMaxRuns > 0 ? configMaxRuns : undefined) ??
+      (typeof envMaxRuns === "number" && !isNaN(envMaxRuns) && envMaxRuns > 0 ? envMaxRuns : undefined) ??
+      DEFAULT_MAX_RUNS_PER_PACKAGE;
+
+    const minRetainRuns =
+      policy?.minRetainRuns ??
+      this.retentionPolicy?.minRetainRuns ??
+      (typeof configMinRetain === "number" && configMinRetain >= 0 ? configMinRetain : undefined) ??
+      (typeof envMinRetain === "number" && !isNaN(envMinRetain) && envMinRetain >= 0 ? envMinRetain : undefined) ??
+      DEFAULT_MIN_RETAIN_RUNS;
+
+    return { maxAgeMs, maxRuns, minRetainRuns };
   }
 
   // --- Idempotency 幂等去重管理 ---

@@ -155,7 +155,7 @@ ActionDock CLI 遵循确定性的退出码规范，供宿主环境、脚本与�
 
 - 清理历史运行记录 (`ad runs clear`)：
   ```bash
-  ad runs clear [-a, --action <actionId>]
+  ad runs clear [-P, --package <id>] [-a, --action <actionId>] [--status <status>] [--older-than <duration>] [--keep <count>]
   ```
 
 ---

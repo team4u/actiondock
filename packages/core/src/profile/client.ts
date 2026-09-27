@@ -48,6 +48,7 @@ export { fetchRemotePlaybookShow, fetchRemotePlaybooks } from "./client-playbook
 export {
   cancelRemoteRun,
   clearRemoteRuns,
+  cleanExpiredRemoteRuns,
   fetchRemoteRun,
   fetchRemoteRuns,
 } from "./client-runs";

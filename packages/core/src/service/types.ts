@@ -218,7 +218,15 @@ export interface RunsPort {
   /** 取消指定在运行的任务 */
   cancel(runId: string, reason?: string): Promise<CancelResult>;
   /** 清空历史任务运行记录 */
-  clear?(options?: { packageId?: string; actionId?: string; status?: string }): Promise<number>;
+  clear?(options?: {
+    packageId?: string;
+    actionId?: string;
+    status?: string;
+    olderThanMs?: number;
+    keep?: number;
+  }): Promise<number>;
+  /** 按保留策略清理过期及超额的终态运行记录（基于时间与数量策略） */
+  cleanExpired?(policy?: import("../storage/types").RunsRetentionPolicy): Promise<number>;
 }
 
 /**

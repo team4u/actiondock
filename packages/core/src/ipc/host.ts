@@ -26,6 +26,8 @@ const IPC_METHOD_HANDLERS: Readonly<
   cancelRun: async (service, a) => service.runs.cancel(a[0] as string, a[1] as string),
   clearRuns: async (service, a) =>
     service.runs.clear ? await service.runs.clear(a[0] as any) : 0,
+  cleanExpiredRuns: async (service, a) =>
+    service.runs.cleanExpired ? await service.runs.cleanExpired(a[0] as any) : 0,
   getConfig: async (service, a) =>
     service.management?.config.get(a[0] as string, a[1] as string),
   setConfig: async (service, a) =>

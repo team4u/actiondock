@@ -29,6 +29,7 @@ import type { RunOptions } from "../invocation/types";
 import {
   cancelRemoteRun,
   clearRemoteRuns,
+  cleanExpiredRemoteRuns,
   clearRemoteState,
   deleteRemoteConfig,
   deleteRemoteStateKey,
@@ -401,7 +402,7 @@ export class RemoteActionDockService implements ActionDockService {
         }
       },
 
-      async clear(opts?: { packageId?: string; actionId?: string; status?: string }): Promise<number> {
+      async clear(opts?: { packageId?: string; actionId?: string; status?: string; olderThanMs?: number; keep?: number }): Promise<number> {
         self.assertNotClosed();
         try {
           const res = await clearRemoteRuns(self.serverUrl, self.token, {
@@ -411,6 +412,21 @@ export class RemoteActionDockService implements ActionDockService {
             dispatcher: self.dispatcher,
           });
           return res.clearedCount ?? 0;
+        } catch (err: any) {
+          wrapRemoteError(err);
+        }
+      },
+
+      async cleanExpired(policy?: import("../storage/types").RunsRetentionPolicy): Promise<number> {
+        self.assertNotClosed();
+        try {
+          const res = await cleanExpiredRemoteRuns(self.serverUrl, self.token, {
+            ...policy,
+            allowInsecureHttp: self.allowInsecureHttp,
+            insecure: self.insecure,
+            dispatcher: self.dispatcher,
+          });
+          return res.cleanedCount ?? 0;
         } catch (err: any) {
           wrapRemoteError(err);
         }

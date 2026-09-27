@@ -419,6 +419,20 @@ export async function startActionDockServer(
   const actualHost = host === "0.0.0.0" ? "127.0.0.1" : host;
   const protocol = options.tls ? "https" : "http";
 
+  // 启动后台运行记录定期自动清理巡检定时器（默认 1 小时巡检一次）
+  const runsCleanupIntervalMs = 3600_000;
+  let runsCleanupTimer: ReturnType<typeof setInterval> | undefined;
+  if (serviceInstance.runs?.cleanExpired) {
+    runsCleanupTimer = setInterval(() => {
+      serviceInstance?.runs?.cleanExpired?.().catch((err) => {
+        console.warn(
+          `[ActionDockServer] Periodic runs cleanup failed: ${err instanceof Error ? err.message : String(err)}`
+        );
+      });
+    }, runsCleanupIntervalMs);
+    runsCleanupTimer.unref();
+  }
+
   const instance: ActionDockServerInstance = {
     get port() {
       return server.port ?? port;
@@ -432,6 +446,10 @@ export async function startActionDockServer(
     },
     ready: Promise.resolve(),
     stop: async (stopOptions?: { graceMs?: number }) => {
+      if (runsCleanupTimer) {
+        clearInterval(runsCleanupTimer);
+        runsCleanupTimer = undefined;
+      }
       await server.stop(true);
       if (serviceInstance) {
         try {

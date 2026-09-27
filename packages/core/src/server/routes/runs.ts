@@ -13,6 +13,7 @@ import {
 } from "../../errors";
 import { isTerminalRunStatus } from "../../storage/types";
 import type { ExecutionEvent } from "@actiondock/sdk";
+import { parseDuration } from "../../utils";
 import { readJsonBody } from "../body";
 import { getSubPath, isActionAllowedByPolicy, isPackageAllowedByPolicy, jsonResponse, type RouteContext } from "./common";
 
@@ -112,6 +113,31 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
       const actionId = url.searchParams.get("actionId") || body.actionId || undefined;
       const status = url.searchParams.get("status") || body.status || undefined;
 
+      const rawOlderThan =
+        url.searchParams.get("olderThan") ||
+        url.searchParams.get("olderThanMs") ||
+        body.olderThan ||
+        body.olderThanMs;
+      let olderThanMs: number | undefined;
+      if (typeof rawOlderThan === "number" && rawOlderThan > 0) {
+        olderThanMs = rawOlderThan;
+      } else if (typeof rawOlderThan === "string" && rawOlderThan.trim()) {
+        try {
+          olderThanMs = parseDuration(rawOlderThan);
+        } catch {}
+      }
+
+      const rawKeep = url.searchParams.get("keep") || body.keep;
+      let keep: number | undefined;
+      if (typeof rawKeep === "number" && rawKeep >= 0) {
+        keep = rawKeep;
+      } else if (typeof rawKeep === "string" && rawKeep.trim()) {
+        const parsed = parseInt(rawKeep.trim(), 10);
+        if (!isNaN(parsed) && parsed >= 0) {
+          keep = parsed;
+        }
+      }
+
       if (packageId && !isPackageAllowedByPolicy(packageId, policy)) {
         return jsonResponse(
           {
@@ -128,10 +154,37 @@ export async function handleRunsRoutes(ctx: RouteContext): Promise<Response | nu
 
       let clearedCount = 0;
       if (service.runs.clear) {
-        clearedCount = await service.runs.clear({ packageId, actionId, status });
+        clearedCount = await service.runs.clear({
+          packageId,
+          actionId,
+          status,
+          olderThanMs,
+          keep,
+        });
       }
 
       return jsonResponse({ ok: true, clearedCount }, 200, corsHeaders);
+    } catch (err: any) {
+      return jsonResponse(
+        { ok: false, error: { code: RUNS_CLEAR_ERROR, message: err.message } },
+        500,
+        corsHeaders
+      );
+    }
+  }
+
+  // 2.1 Runs Clean Expired: POST /api/v2/runs/clean-expired, POST /runs/clean-expired
+  if (subpath === "/runs/clean-expired" && req.method === "POST") {
+    try {
+      let body: any = {};
+      if (req.headers.get("content-type")?.includes("json")) {
+        body = await readJsonBody(req, { maxBytes: options.maxBodyBytes }).catch(() => ({}));
+      }
+      let cleanedCount = 0;
+      if (service.runs.cleanExpired) {
+        cleanedCount = await service.runs.cleanExpired(body);
+      }
+      return jsonResponse({ ok: true, cleanedCount }, 200, corsHeaders);
     } catch (err: any) {
       return jsonResponse(
         { ok: false, error: { code: RUNS_CLEAR_ERROR, message: err.message } },

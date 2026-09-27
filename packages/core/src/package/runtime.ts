@@ -790,11 +790,25 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
     });
   }
 
-  async clearRuns(options?: { actionId?: string; status?: string }): Promise<number> {
+  async clearRuns(options?: {
+    actionId?: string;
+    status?: string;
+    olderThanMs?: number;
+    keep?: number;
+  }): Promise<number> {
     return this.storage.clearRuns({
       actionId: options?.actionId,
       status: options?.status,
+      olderThanMs: options?.olderThanMs,
+      keep: options?.keep,
     });
+  }
+
+  async cleanExpiredRuns(policy?: import("../storage/types").RunsRetentionPolicy): Promise<number> {
+    if (typeof (this.storage as any).cleanExpiredRuns === "function") {
+      return (this.storage as any).cleanExpiredRuns(policy);
+    }
+    return 0;
   }
 
   async listStateEntries(options?: any): Promise<import("../storage/types").StateEntry[]> {

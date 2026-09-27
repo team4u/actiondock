@@ -865,7 +865,13 @@ export class DefaultActionDockHost implements ActionDockHost {
     return result;
   }
 
-  async clearRuns(options?: { packageId?: string; actionId?: string; status?: string; olderThanMs?: number }): Promise<number> {
+  async clearRuns(options?: {
+    packageId?: string;
+    actionId?: string;
+    status?: string;
+    olderThanMs?: number;
+    keep?: number;
+  }): Promise<number> {
     const runtimes = options?.packageId
       ? [this.getRuntime(options.packageId)].filter(Boolean) as PackageRuntime[]
       : this.listRuntimes();
@@ -873,6 +879,17 @@ export class DefaultActionDockHost implements ActionDockHost {
     for (const runtime of runtimes) {
       const res = await runtime.clearRuns(options);
       total += res;
+    }
+    return total;
+  }
+
+  async cleanExpiredRuns(policy?: import("../storage/types").RunsRetentionPolicy): Promise<number> {
+    let total = 0;
+    for (const runtime of this.listRuntimes()) {
+      if (typeof runtime.cleanExpiredRuns === "function") {
+        const res = await runtime.cleanExpiredRuns(policy);
+        total += res;
+      }
     }
     return total;
   }

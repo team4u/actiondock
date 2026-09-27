@@ -1,7 +1,7 @@
 import type { ProcessAPI } from "@actiondock/sdk";
 import type { Clock } from "../runtime/clock";
 import type { ModuleLoader } from "../runtime/module-loader";
-import type { RuntimeStorage } from "../storage/types";
+import type { RunsRetentionPolicy, RuntimeStorage } from "../storage/types";
 
 /**
  * 文件元数据信息契约。
@@ -50,6 +50,8 @@ export interface StorageFactoryOptions {
    * 默认 false（旁观查询打开，不触碰在途记录），供 CLI 查询命令与执行宿主并发共存。
    */
   recoverOrphans?: boolean;
+  /** 运行记录保留策略配置 */
+  retentionPolicy?: RunsRetentionPolicy;
 }
 
 /**

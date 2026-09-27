@@ -118,6 +118,7 @@ export function createNodePlatform(options: NodePlatformOptions = {}): RuntimePl
         clock,
         driver: createDriver(dbPath),
         recoverOrphans: opts?.recoverOrphans === true,
+        retentionPolicy: opts?.retentionPolicy,
       });
     },
     createGlobalStorage(opts?: GlobalStorageFactoryOptions): RuntimeStorage {

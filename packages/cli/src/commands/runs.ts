@@ -1,6 +1,7 @@
 import {
   findProjectRoot,
   loadProjectConfig,
+  parseDuration,
 } from "@actiondock/core";
 import {
   filterWithFallbackInfo,
@@ -241,6 +242,9 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
       .description("Clear execution run records")
       .option("-P, --package <id>", "Target package ID or path")
       .option("-a, --action <actionId>", "Filter by action ID")
+      .option("--status <status>", "Filter by run status (e.g. success, failed)")
+      .option("--older-than <duration>", "Only clear runs older than specified duration (e.g. 14d, 7d, 24h, 30m)")
+      .option("--keep <count>", "Keep the most recent N runs and clear older ones")
   )
     .option("--data-dir <path>", "Custom database storage directory")
     .option("--json", "Output as JSON")
@@ -258,21 +262,52 @@ export function registerRunsCommands(program: Command, context?: CliContext): vo
         }
       }
 
+      let olderThanMs: number | undefined;
+      if (options.olderThan) {
+        try {
+          olderThanMs = parseDuration(options.olderThan);
+        } catch (err: any) {
+          throw new ArgumentError(`Invalid --older-than argument: ${err.message}`);
+        }
+      }
+
+      let keep: number | undefined;
+      if (options.keep !== undefined) {
+        const parsed = parseInt(String(options.keep), 10);
+        if (isNaN(parsed) || parsed < 0) {
+          throw new ArgumentError("Invalid --keep argument: must be a non-negative integer");
+        }
+        keep = parsed;
+      }
+
       await withService(
         options,
         context,
         async (service, resolved) => {
           const count = service.runs.clear
-            ? await service.runs.clear({ packageId, actionId: options.action })
+            ? await service.runs.clear({
+                packageId,
+                actionId: options.action,
+                status: options.status,
+                olderThanMs,
+                keep,
+              })
             : 0;
+
+          const filters: string[] = [];
+          if (options.action) filters.push(`action='${options.action}'`);
+          if (options.status) filters.push(`status='${options.status}'`);
+          if (options.olderThan) filters.push(`older than ${options.olderThan}`);
+          if (keep !== undefined) filters.push(`keeping newest ${keep}`);
+          const filterDesc = filters.length > 0 ? ` (${filters.join(", ")})` : "";
 
           const payload = { ok: true, clearedCount: count };
           renderResult(payload, {
             json: options.json,
             humanFormatter: () =>
               resolved.type === "remote"
-                ? `Cleared ${count} execution run(s) on remote server.`
-                : `Cleared ${count} execution run(s) in package '${packageId}'.`,
+                ? `Cleared ${count} execution run(s) on remote server${filterDesc}.`
+                : `Cleared ${count} execution run(s) in package '${packageId}'${filterDesc}.`,
             context,
           });
         },

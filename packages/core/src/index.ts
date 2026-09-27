@@ -31,6 +31,13 @@ export type {
   ListRunsOptions,
   StateScopeOptions,
 } from "./service/types";
+export {
+  DEFAULT_RUNS_RETENTION_MS,
+  DEFAULT_MAX_RUNS_PER_PACKAGE,
+  DEFAULT_MIN_RETAIN_RUNS,
+  type RunsRetentionPolicy,
+} from "./storage/types";
+export { parseDuration } from "./utils";
 
 // 3. 执行配置与结果模型（转引 SDK 规范类型与核心执行契约）
 export type {

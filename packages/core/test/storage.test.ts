@@ -622,5 +622,230 @@ describe("SqliteRuntimeStorage", () => {
       }
     });
   });
+
+  describe("Runs Retention Policy & Filtered Clear", () => {
+    it("基于时间策略清理过期终态记录，保留在途记录并遵守 minRetainRuns 保底", async () => {
+      const createTestClock = (date: Date) => ({
+        now: () => date,
+        monotonic: () => date.getTime(),
+        sleep: async () => {},
+      });
+      let currentTime = new Date("2026-06-01T12:00:00.000Z");
+      const fakeClock = createTestClock(currentTime);
+
+      const storage = new SqliteRuntimeStorage({
+        packageId: "retention-pkg",
+        dbPath: ":memory:",
+        clock: fakeClock,
+      });
+
+      // 插入 5 条旧记录（15 天前）
+      const oldTime = new Date("2026-05-15T00:00:00.000Z").toISOString();
+      for (let i = 1; i <= 5; i++) {
+        storage.createRun({
+          id: `run-old-${i}`,
+          packageId: "retention-pkg",
+          actionId: "act",
+          status: "success",
+          startedAt: oldTime,
+        });
+      }
+
+      // 插入 1 条 15 天前但状态为 running 的记录（非终态）
+      storage.createRun({
+        id: "run-old-running",
+        packageId: "retention-pkg",
+        actionId: "act",
+        status: "running",
+        startedAt: oldTime,
+      });
+
+      // 插入 2 条新记录（2 天前）
+      const newTime = new Date("2026-05-30T00:00:00.000Z").toISOString();
+      for (let i = 1; i <= 2; i++) {
+        storage.createRun({
+          id: `run-new-${i}`,
+          packageId: "retention-pkg",
+          actionId: "act",
+          status: "success",
+          startedAt: newTime,
+        });
+      }
+
+      // 执行基于时间的清理，保留 14 天（14 * 86_400_000），保底保留 2 条
+      const cleaned = storage.cleanExpiredRuns({
+        maxAgeMs: 14 * 86_400_000,
+        maxRuns: 100,
+        minRetainRuns: 2,
+      });
+
+      expect(cleaned).toBe(5);
+
+      // 旧的 running 记录严禁被删除
+      expect(storage.getRun("run-old-running")).not.toBeNull();
+      // 新记录依然存在
+      expect(storage.getRun("run-new-1")).not.toBeNull();
+      expect(storage.getRun("run-new-2")).not.toBeNull();
+      // 旧记录已被删除
+      expect(storage.getRun("run-old-1")).toBeNull();
+
+      await storage.close();
+    });
+
+    it("当所有记录均过期时，minRetainRuns 确保保底保留最近的记录", async () => {
+      let currentTime = new Date("2026-06-01T12:00:00.000Z");
+      const fakeClock = {
+        now: () => currentTime,
+        monotonic: () => currentTime.getTime(),
+        sleep: async () => {},
+      };
+
+      const storage = new SqliteRuntimeStorage({
+        packageId: "retention-pkg-min",
+        dbPath: ":memory:",
+        clock: fakeClock,
+      });
+
+      // 插入 10 条旧记录（各不同时间）
+      for (let i = 1; i <= 10; i++) {
+        storage.createRun({
+          id: `run-old-${i}`,
+          packageId: "retention-pkg-min",
+          actionId: "act",
+          status: "success",
+          startedAt: new Date(new Date("2026-05-01T00:00:00.000Z").getTime() + i * 3600000).toISOString(),
+        });
+      }
+
+      // 全部 10 条都超过 14 天，但 minRetainRuns=3
+      const cleaned = storage.cleanExpiredRuns({
+        maxAgeMs: 14 * 86_400_000,
+        maxRuns: 100,
+        minRetainRuns: 3,
+      });
+
+      // 应清理 10 - 3 = 7 条
+      expect(cleaned).toBe(7);
+      // 最近的 3 条（8, 9, 10）必须保留
+      expect(storage.getRun("run-old-10")).not.toBeNull();
+      expect(storage.getRun("run-old-9")).not.toBeNull();
+      expect(storage.getRun("run-old-8")).not.toBeNull();
+      expect(storage.getRun("run-old-7")).toBeNull();
+
+      await storage.close();
+    });
+
+    it("基于数量策略：当记录总数超过 maxRuns 时按最旧先淘汰", async () => {
+      const storage = new SqliteRuntimeStorage({
+        packageId: "retention-pkg-count",
+        dbPath: ":memory:",
+      });
+
+      for (let i = 1; i <= 20; i++) {
+        storage.createRun({
+          id: `run-seq-${i}`,
+          packageId: "retention-pkg-count",
+          actionId: "act",
+          status: "success",
+          startedAt: new Date(1700000000000 + i * 1000).toISOString(),
+        });
+      }
+
+      // maxRuns=5，不限制时间（maxAgeMs=0）
+      const cleaned = storage.cleanExpiredRuns({
+        maxAgeMs: 0,
+        maxRuns: 5,
+        minRetainRuns: 0,
+      });
+
+      expect(cleaned).toBe(15);
+      // 保留最新的 5 条（16 到 20）
+      for (let i = 16; i <= 20; i++) {
+        expect(storage.getRun(`run-seq-${i}`)).not.toBeNull();
+      }
+      // 前 15 条被删除
+      for (let i = 1; i <= 15; i++) {
+        expect(storage.getRun(`run-seq-${i}`)).toBeNull();
+      }
+
+      await storage.close();
+    });
+
+    it("clearRuns 支持 olderThanMs 和 keep 筛选清理", async () => {
+      let currentTime = new Date("2026-06-01T12:00:00.000Z");
+      const fakeClock = {
+        now: () => currentTime,
+        monotonic: () => currentTime.getTime(),
+        sleep: async () => {},
+      };
+
+      const storage = new SqliteRuntimeStorage({
+        packageId: "clear-filter-pkg",
+        dbPath: ":memory:",
+        clock: fakeClock,
+      });
+
+      for (let i = 1; i <= 10; i++) {
+        storage.createRun({
+          id: `run-f-${i}`,
+          packageId: "clear-filter-pkg",
+          actionId: "act",
+          status: "success",
+          startedAt: new Date(new Date("2026-05-20T00:00:00.000Z").getTime() + i * 3600000).toISOString(),
+        });
+      }
+
+      // 清理超过 7 天（7 * 86_400_000）的数据，但保留最新 2 条
+      const cleared = storage.clearRuns({
+        olderThanMs: 7 * 86_400_000,
+        keep: 2,
+      });
+
+      // 10 条均早于 7 天前，keep 2，所以删除了 8 条
+      expect(cleared).toBe(8);
+      expect(storage.getRun("run-f-10")).not.toBeNull();
+      expect(storage.getRun("run-f-9")).not.toBeNull();
+      expect(storage.getRun("run-f-8")).toBeNull();
+
+      await storage.close();
+    });
+
+    it("支持通过配置 runs.retentionDays 动态解析保留时长", async () => {
+      let currentTime = new Date("2026-06-01T12:00:00.000Z");
+      const fakeClock = {
+        now: () => currentTime,
+        monotonic: () => currentTime.getTime(),
+        sleep: async () => {},
+      };
+
+      const storage = new SqliteRuntimeStorage({
+        packageId: "config-retention-pkg",
+        dbPath: ":memory:",
+        clock: fakeClock,
+      });
+
+      storage.setConfig("runs.retentionDays", 5);
+      storage.setConfig("runs.maxRuns", 3);
+      storage.setConfig("runs.minRetainRuns", 1);
+
+      for (let i = 1; i <= 6; i++) {
+        storage.createRun({
+          id: `run-c-${i}`,
+          packageId: "config-retention-pkg",
+          actionId: "act",
+          status: "success",
+          startedAt: new Date(new Date("2026-05-20T00:00:00.000Z").getTime() + i * 3600000).toISOString(),
+        });
+      }
+
+      // 不传参数，自动从 config 解析 retentionDays=5, maxRuns=3, minRetainRuns=1
+      const cleaned = storage.cleanExpiredRuns();
+      expect(cleaned).toBe(5);
+      expect(storage.getRun("run-c-6")).not.toBeNull();
+      expect(storage.getRun("run-c-5")).toBeNull();
+
+      await storage.close();
+    });
+  });
 });
 

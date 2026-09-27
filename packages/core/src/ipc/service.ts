@@ -267,8 +267,12 @@ export class IpcActionDockService implements ActionDockService {
         return forward<CancelResult>("cancelRun", [runId, reason]);
       },
 
-      async clear(opts?: { packageId?: string; actionId?: string; status?: string; olderThanMs?: number }): Promise<number> {
+      async clear(opts?: { packageId?: string; actionId?: string; status?: string; olderThanMs?: number; keep?: number }): Promise<number> {
         return forward<number>("clearRuns", [opts]);
+      },
+
+      async cleanExpired(policy?: import("../storage/types").RunsRetentionPolicy): Promise<number> {
+        return forward<number>("cleanExpiredRuns", [policy]);
       },
     };
 
