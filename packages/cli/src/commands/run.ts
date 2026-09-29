@@ -10,6 +10,9 @@ import {
 } from "@actiondock/core/server";
 import {
   ACTION_CANCELLED,
+  ACTION_NOT_FOUND,
+  ACTION_TIMEOUT,
+  INPUT_VALIDATION_FAILED,
 } from "@actiondock/core";
 import type { ExecutionResult, JsonValue } from "@actiondock/sdk";
 import { Command } from "commander";
@@ -114,6 +117,13 @@ export function renderRawExecutionResult(
           : JSON.stringify(result.error.details, null, 2),
         context
       );
+    }
+    if (result.error.code === INPUT_VALIDATION_FAILED) {
+      writeStderr(`Tip: Run 'ad describe ${targetRef}' to inspect schema and syntax examples.`, context);
+    } else if (result.error.code === ACTION_NOT_FOUND) {
+      writeStderr("Tip: Run 'ad list' to discover available actions, or 'ad info' to inspect packages.", context);
+    } else if (result.error.code === ACTION_TIMEOUT) {
+      writeStderr("Tip: Increase timeout via '--timeout <duration>', or run in background via '--async' and track with 'ad runs show <runId>'.", context);
     }
     if (context) {
       context.exitCode = 1;
@@ -320,6 +330,13 @@ export function attachRunCommand(parent: Command, context?: CliContext): Command
     .option("-i, --input <json>", "Action input as inline JSON")
     .option("-f, --input-file <path>", "Action input from JSON file, or '-' for stdin")
     .option("-c, --config <key=value...>", "Temporary config override (repeatable)");
+
+  (cmd as any).unknownOption = function (this: Command, flag: string) {
+    this.error(
+      `unknown option '${flag}'\nHint: Separate action inputs from CLI options using '--', e.g.: ad run <id> [options] -- <param>=<val> or <param>:=<json>.`,
+      { code: "commander.unknownOption" }
+    );
+  };
 
   return applyTargetOptions(cmd)
     .option("--timeout <duration>", "Execution timeout (e.g. 30s, 5m, 500ms)")

@@ -14,6 +14,7 @@ import { executeAction } from "../src/commands/run";
 import { main } from "../src/index";
 import { runStandaloneCli } from "../src/standalone";
 import type { CliContext } from "../src/types";
+import { runCliAsync } from "./helpers/run-cli";
 
 describe("Phase 10: CLI Describe / Run 集成与普通 CLI / Standalone 行为对齐", () => {
   let localExecuted = false;
@@ -332,6 +333,137 @@ describe("Phase 10: CLI Describe / Run 集成与普通 CLI / Standalone 行为�
         expect(parsed.error.details?.reason).toBe("FORBIDDEN_PROPERTY");
       } finally {
         console.log = origConsoleLog;
+      }
+    });
+  });
+
+  describe("入参校验失败时引导使用 describe 查看（普通 CLI 与 Standalone 行为一致性）", () => {
+    it("Standalone handleRun 在 INPUT_VALIDATION_FAILED 时向 stderr 输出 Tip 引导", async () => {
+      let stderrOut = "";
+      let stdoutOut = "";
+      const code = await runStandaloneCli(["run", "greet", "--input", '{"age": 20}'], {
+        ...baseStandaloneOpts,
+        stdout: (msg) => (stdoutOut += msg),
+        stderr: (msg) => (stderrOut += msg),
+      });
+
+      expect(code).toBe(ExitCode.FAILURE);
+      expect(stdoutOut.trim()).toBe("");
+      expect(stderrOut).toContain("Error [INPUT_VALIDATION_FAILED]");
+      expect(stderrOut).toContain("Tip: Run 'ad describe greet' to inspect schema and syntax examples.");
+    });
+
+    it("Standalone handleRun 在 --json 模式下 INPUT_VALIDATION_FAILED 严禁输出 Tip 且保持机器输出", async () => {
+      let stderrOut = "";
+      let stdoutOut = "";
+      const code = await runStandaloneCli(["run", "greet", "--input", '{"age": 20}', "--json"], {
+        ...baseStandaloneOpts,
+        stdout: (msg) => (stdoutOut += msg),
+        stderr: (msg) => (stderrOut += msg),
+      });
+
+      expect(code).toBe(ExitCode.FAILURE);
+      expect(stderrOut.trim()).toBe("");
+      const parsed = JSON.parse(stdoutOut);
+      expect(parsed.ok).toBe(false);
+      expect(parsed.error.code).toBe("INPUT_VALIDATION_FAILED");
+    });
+
+    it("Standalone handleRun 在非 INPUT_VALIDATION_FAILED 错误（如 ACTION_FAILED）时严禁输出 Tip", async () => {
+      const failingAction = defineAction({
+        run() {
+          throw new Error("Custom boom");
+        },
+      });
+      let stderrOut = "";
+      let stdoutOut = "";
+      const code = await runStandaloneCli(["run", "boom", "--input", "{}"], {
+        packageId: "test.phase10",
+        version: "1.0.0",
+        actions: [{ id: "boom", action: failingAction }],
+        inMemory: true,
+        stdout: (msg) => (stdoutOut += msg),
+        stderr: (msg) => (stderrOut += msg),
+      });
+
+      expect(code).toBe(ExitCode.FAILURE);
+      expect(stderrOut).toContain("Error [ACTION_FAILED]");
+      expect(stderrOut).not.toContain("Tip: Run 'ad describe");
+    });
+
+    it("普通 CLI 与 Standalone 在入参校验失败时均输出 Tip 引导并保持一致", async () => {
+      const tempPkgDir = mkdtempSync(join(tmpdir(), "ad-phase10-val-cli-"));
+      try {
+        writeFileSync(
+          join(tempPkgDir, "actiondock.json"),
+          JSON.stringify({
+            id: "test.phase10",
+            name: "test.phase10",
+            version: "1.0.0",
+            actions: {
+              greet: {
+                entry: "actions/greet.ts",
+                inputSchema: sampleAction.inputSchema,
+              },
+            },
+          })
+        );
+        mkdirSync(join(tempPkgDir, "actions"), { recursive: true });
+        writeFileSync(
+          join(tempPkgDir, "actions", "greet.ts"),
+          "export default function run(input: any) { return { hello: input?.name }; }\n"
+        );
+
+        const proc = await runCliAsync(
+          ["run", "greet", "--input", '{"age": 30}'],
+          tempPkgDir
+        );
+
+        expect(proc.exitCode).toBe(1);
+        expect(proc.stdout.toString().trim()).toBe("");
+        const stderr = proc.stderr.toString();
+        expect(stderr).toContain("Error [INPUT_VALIDATION_FAILED]");
+        expect(stderr).toContain("Tip: Run 'ad describe greet' to inspect schema and syntax examples.");
+      } finally {
+        rmSync(tempPkgDir, { recursive: true, force: true });
+      }
+    });
+
+    it("普通 CLI 在 --json 模式下入参校验失败严禁输出 Tip 引导", async () => {
+      const tempPkgDir = mkdtempSync(join(tmpdir(), "ad-phase10-val-json-"));
+      try {
+        writeFileSync(
+          join(tempPkgDir, "actiondock.json"),
+          JSON.stringify({
+            id: "test.phase10",
+            name: "test.phase10",
+            version: "1.0.0",
+            actions: {
+              greet: {
+                entry: "actions/greet.ts",
+                inputSchema: sampleAction.inputSchema,
+              },
+            },
+          })
+        );
+        mkdirSync(join(tempPkgDir, "actions"), { recursive: true });
+        writeFileSync(
+          join(tempPkgDir, "actions", "greet.ts"),
+          "export default function run(input: any) { return { hello: input?.name }; }\n"
+        );
+
+        const proc = await runCliAsync(
+          ["run", "greet", "--input", '{"age": 30}', "--json"],
+          tempPkgDir
+        );
+
+        expect(proc.exitCode).toBe(1);
+        expect(proc.stderr.toString().trim()).toBe("");
+        const parsed = JSON.parse(proc.stdout.toString());
+        expect(parsed.ok).toBe(false);
+        expect(parsed.error.code).toBe("INPUT_VALIDATION_FAILED");
+      } finally {
+        rmSync(tempPkgDir, { recursive: true, force: true });
       }
     });
   });

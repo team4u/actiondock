@@ -400,4 +400,81 @@ describe("StandaloneRuntime 独立二进制运行时委托 PackageRuntime", () =
     expect(stderrLogs.some((l) => l.includes("Error:"))).toBe(true);
     expect(stdoutLogs.length).toBe(0);
   });
+
+  it("在入参校验失败时仅向 stderr 追加 describe 引导 Tip", async () => {
+    const stdoutLogs: string[] = [];
+    const stderrLogs: string[] = [];
+
+    const dispatcher = new StandaloneDispatcher({
+      packageId: "pkg.standalone",
+      version: "1.2.3",
+      actions: [
+        {
+          id: "greet",
+          action: greetAction,
+          inputSchema: {
+            type: "object",
+            properties: { name: { type: "string" } },
+            required: ["name"],
+          },
+        },
+      ],
+      stdout: (msg) => stdoutLogs.push(msg),
+      stderr: (msg) => stderrLogs.push(msg),
+    });
+
+    const code = await dispatcher.dispatch([
+      "run",
+      "greet",
+      '--input={"age":25}',
+      `--data-dir=${tmpDir}`,
+    ]);
+    expect(code).toBe(1);
+    expect(stdoutLogs.length).toBe(0);
+    expect(stderrLogs.some((l) => l.includes("Error [INPUT_VALIDATION_FAILED]"))).toBe(true);
+    expect(stderrLogs.some((l) => l.includes("Tip: Run 'ad describe greet' to inspect schema and syntax examples."))).toBe(true);
+
+    // --json 模式严禁输出 Tip
+    stdoutLogs.length = 0;
+    stderrLogs.length = 0;
+    const jsonCode = await dispatcher.dispatch([
+      "run",
+      "greet",
+      '--input={"age":25}',
+      "--json",
+      `--data-dir=${tmpDir}`,
+    ]);
+    expect(jsonCode).toBe(1);
+    expect(stderrLogs.length).toBe(0);
+    const parsed = JSON.parse(stdoutLogs.join("\n"));
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe("INPUT_VALIDATION_FAILED");
+  });
+
+  it("在非 INPUT_VALIDATION_FAILED 错误（如 ACTION_FAILED）时严禁输出 describe 引导 Tip", async () => {
+    const stdoutLogs: string[] = [];
+    const stderrLogs: string[] = [];
+
+    const dispatcher = new StandaloneDispatcher({
+      packageId: "pkg.standalone",
+      version: "1.2.3",
+      actions: [
+        {
+          id: "fail",
+          action: failAction,
+        },
+      ],
+      stdout: (msg) => stdoutLogs.push(msg),
+      stderr: (msg) => stderrLogs.push(msg),
+    });
+
+    const code = await dispatcher.dispatch([
+      "run",
+      "fail",
+      `--data-dir=${tmpDir}`,
+    ]);
+    expect(code).toBe(1);
+    expect(stderrLogs.some((l) => l.includes("Error [ACTION_FAILED]"))).toBe(true);
+    expect(stderrLogs.some((l) => l.includes("Tip: Run 'ad describe"))).toBe(false);
+  });
 });

@@ -17,7 +17,7 @@ import { ArgumentError, ExecutionError, notInProjectError, packageNotFoundError,
  * 「未显式指定包且当前目录无工程」的统一补救提示（单一事实源）。
  */
 export const PACKAGE_HINT_MESSAGE =
-  "Please specify -P, --package <id> or cd into a project directory.";
+  "Hint: Run 'ad init' to start a new project, specify '-P <id|path>' for an existing package, or run 'ad link <path>' to register it.";
 
 /**
  * 远端目标拓扑的最小字段视图（与 core 的 ResolvedTarget 远端分支兼容）。

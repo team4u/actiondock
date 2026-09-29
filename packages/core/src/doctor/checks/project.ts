@@ -132,7 +132,7 @@ async function checkProjectActions(scope: ProjectCheckScope): Promise<void> {
         name: "Actions",
         status: "warn",
         message: `No actions found in '${config.actionsDir || "actions"}'`,
-        fix: "Run 'ad action new <id>' to create your first action",
+        fix: "Run 'ad action create <id>' to create your first action",
       });
     } else {
       ctx.checks.push({
@@ -173,7 +173,7 @@ function checkProjectManifest(scope: ProjectCheckScope): void {
           name: "Action Manifest",
           status: "warn",
           message: `${MANIFEST_FILE_NAME} not found (${actionFiles.length} action source file(s) exist)`,
-          fix: "Run 'ad validate' to generate or check manifest",
+          fix: "Run 'ad init' to initialize project manifest, or manually create 'actiondock.json'",
         });
       }
     } else if (manifest && manifest.actions) {
@@ -195,7 +195,7 @@ function checkProjectManifest(scope: ProjectCheckScope): void {
           name: "Action Manifest",
           status: "warn",
           message: `${missingFiles.length} action(s) in manifest point to missing files: ${missingFiles.join(", ")}`,
-          fix: "Run 'ad validate' to check or update actiondock.json",
+          fix: "Update actiondock.json or use 'ad action create <id>'",
         });
       } else if (untracked.length > 0) {
         ctx.checks.push({
@@ -204,7 +204,7 @@ function checkProjectManifest(scope: ProjectCheckScope): void {
           name: "Action Manifest",
           status: "warn",
           message: `${untracked.length} action file(s) not declared in manifest: ${untracked.join(", ")}`,
-          fix: "Run 'ad validate' to check or update actiondock.json",
+          fix: "Update actiondock.json or use 'ad action create <id>'",
         });
       } else {
         const manifestStat = statSync(manifestPath);

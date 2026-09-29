@@ -251,7 +251,7 @@ export async function loadActions(
           entryPath,
           rootCause: msg,
           hint: isMissingModuleError(msg)
-            ? `项目依赖缺失，请在 '${projectRoot}' 目录下运行 npm install 安装依赖。`
+            ? `项目依赖缺失，请在 '${projectRoot}' 目录下运行 'npm install --omit=dev' 安装依赖后再试。`
             : undefined,
         };
         throw error;

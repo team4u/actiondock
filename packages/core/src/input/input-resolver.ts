@@ -287,7 +287,7 @@ export async function resolveActionInput(
 
   if (modeCount > 1) {
     const err = inputConflict(
-      "Input options conflict: flatArgs, input, and inputFile are mutually exclusive",
+      "Input options conflict: flat arguments (-- key=val), inline JSON (-i/--input), and file (-f/--input-file) are mutually exclusive. Specify only one input mode.",
       {
         reason: "MULTIPLE_INPUT_MODES",
         hasFlatArgs: effectiveFlat,

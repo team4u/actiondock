@@ -177,6 +177,7 @@ export class InvocationPolicy {
       : usesList.some((u) => isUsesDeclared(u, target.packageId, target.actionId));
 
     if (!isAllowed) {
+      const hint = `Hint: Add '${targetRef}' to the 'uses' array of action '${caller.actionId}' in actiondock.json, then run 'ad validate'.`;
       return {
         code: UNDECLARED_ACTION_DEPENDENCY,
         message: `Undeclared cross-package dependency: Action '${caller.packageId}/${caller.actionId}' does not declare dependency on '${targetRef}' in 'uses'`,
@@ -184,6 +185,7 @@ export class InvocationPolicy {
           caller: `${caller.packageId}/${caller.actionId}`,
           target: targetRef,
           declaredUses: usesList,
+          hint,
         },
       };
     }

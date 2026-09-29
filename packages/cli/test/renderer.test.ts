@@ -3,16 +3,22 @@ import {
   ArgumentError,
   ExecutionError,
   formatError,
+  notInProjectError,
+  packageNotFoundError,
   SigintError,
 } from "../src/errors";
 import {
   createErrorEnvelope,
   createSuccessEnvelope,
+  projectDetailToJson,
   renderActionDetail,
   renderActionList,
   renderActionValidation,
   renderConfigList,
   renderError,
+  renderPlaybookDetail,
+  renderPlaybookList,
+  renderProjectDetail,
   renderResult,
   renderRunsList,
   renderStateList,
@@ -146,6 +152,181 @@ describe("CLI - Envelope & Renderer Utilities", () => {
     ]);
     expect(runs).toContain("run-1");
     expect(runs).toContain("greet");
+  });
+
+  it("creates error envelope with hint at root level", () => {
+    const errorEnv = createErrorEnvelope(
+      "TEST_ERROR",
+      "Something failed",
+      { field: "val" },
+      undefined,
+      "Tip: Try fixing field"
+    );
+    expect(errorEnv.ok).toBe(false);
+    expect(errorEnv.error?.code).toBe("TEST_ERROR");
+    expect(errorEnv.error?.message).toBe("Something failed");
+    expect(errorEnv.hint).toBe("Tip: Try fixing field");
+  });
+
+  it("extracts hint from error details if not explicitly passed", () => {
+    const errorEnv = createErrorEnvelope("TEST_ERROR", "Failed", {
+      hint: "Hint: Self-healing tip",
+    });
+    expect(errorEnv.hint).toBe("Hint: Self-healing tip");
+  });
+
+  it("renders error in human and machine formats with hint", () => {
+    let errOut = "";
+    const err = new ArgumentError("Invalid value", undefined, "INVALID_ARGUMENT", "Tip: Check docs");
+    renderError(err, {
+      context: { stderr: (m) => (errOut += m + "\n") },
+    });
+    expect(errOut).toContain("Error: Invalid value");
+    expect(errOut).toContain("Tip: Check docs");
+
+    let jsonErrOut = "";
+    let jsonStderr = "";
+    renderError(err, {
+      json: true,
+      context: {
+        stdout: (m) => (jsonErrOut = m),
+        stderr: (m) => (jsonStderr += m),
+      },
+    });
+    expect(jsonStderr.trim()).toBe("");
+    const parsed = JSON.parse(jsonErrOut);
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe("INVALID_ARGUMENT");
+    expect(parsed.error.message).toBe("Invalid value");
+    expect(parsed.hint).toBe("Tip: Check docs");
+  });
+
+  it("renders action list with guidance tip for playbooks", () => {
+    const rendered = renderActionList([
+      { id: "greet", description: "Greeting" },
+    ]);
+    expect(rendered).toContain("Tip: For composite or multi-step tasks, check 'ad playbook list' for standard operating procedures.");
+  });
+
+  it("renders playbook list and detail with execution guidance tips", () => {
+    const pbList = renderPlaybookList([
+      { id: "deploy", description: "Deploy workflow" },
+    ]);
+    expect(pbList).toContain("deploy");
+    expect(pbList).toContain("Tip: Run 'ad playbook show <id>' to inspect procedure steps before execution.");
+
+    const pbDetail = renderPlaybookDetail({
+      id: "deploy",
+      description: "Deploy workflow",
+      actions: ["build", "publish"],
+      content: "Step 1: build\nStep 2: publish",
+    });
+    expect(pbDetail).toContain("deploy");
+    expect(pbDetail).toContain("Tip: Follow steps sequentially. Invoke constituent actions using 'ad run <action> [options] -- <assignments...>'.");
+  });
+
+  it("renders project detail with config and playbooks before actions, compact actions preview, and guidance tips", () => {
+    const detail = renderProjectDetail({
+      id: "test.pkg",
+      name: "Test Package",
+      version: "1.0.0",
+      description: "A test package",
+      projectRoot: "/path/to/pkg",
+      actionsDir: "actions",
+      playbooksDir: "playbooks",
+      actionsCount: 10,
+      playbooksCount: 1,
+      actions: [
+        "act1", "act2", "act3", "act4", "act5", "act6", "act7", "act8", "act9", "act10"
+      ],
+      playbooks: ["flow1"],
+      configDeclared: ["API_KEY"],
+      configDef: {
+        API_KEY: { description: "API Key", secret: true },
+      },
+    });
+
+    // 检查布局顺序：Declared Config Keys 与 Playbooks 在 Actions 之前
+    const configIdx = detail.indexOf("Declared Config Keys");
+    const playbooksIdx = detail.indexOf("Playbooks (1):");
+    const actionsIdx = detail.indexOf("Actions (10):");
+
+    expect(configIdx).toBeGreaterThan(-1);
+    expect(playbooksIdx).toBeGreaterThan(-1);
+    expect(actionsIdx).toBeGreaterThan(-1);
+    expect(configIdx).toBeLessThan(playbooksIdx);
+    expect(playbooksIdx).toBeLessThan(actionsIdx);
+
+    // 检查动作列表在超过 8 个时收敛展示
+    expect(detail).toContain("... (2 more)");
+    expect(detail).toContain("(Run 'ad list' to view full callable actions with descriptions)");
+
+    // 检查底部提示
+    expect(detail).toContain("Tip: Run 'ad list' to view all callable actions and run-ready IDs.");
+    expect(detail).toContain("Tip: Run 'ad playbook show <id>' to inspect procedure steps before execution.");
+    expect(detail).toContain("Tip: Run 'ad config set <KEY> <val>' to configure required settings.");
+  });
+
+  it("converts project detail info to structured json contract", () => {
+    const info = {
+      id: "test.pkg",
+      name: "Test Package",
+      version: "1.0.0",
+      description: "A test package",
+      projectRoot: "/path/to/pkg",
+      actionsDir: "actions",
+      playbooksDir: "playbooks",
+      actionsCount: 2,
+      playbooksCount: 1,
+      actions: ["act1", "act2"],
+      playbooks: ["flow1"],
+      configDeclared: ["API_KEY"],
+      configDef: {
+        API_KEY: { description: "API Key", secret: true },
+      },
+      actionsMap: new Map([
+        ["act1", { id: "act1", description: "First action" }],
+        ["act2", { id: "act2", description: "Second action" }],
+      ]),
+      playbooksMap: new Map([
+        ["flow1", { id: "flow1", description: "Deployment workflow" }],
+      ]),
+    };
+    const json = projectDetailToJson(info as any);
+    expect(json).toEqual({
+      id: "test.pkg",
+      name: "Test Package",
+      version: "1.0.0",
+      description: "A test package",
+      root: "/path/to/pkg",
+      config: {
+        API_KEY: {
+          description: "API Key",
+          secret: true,
+        },
+      },
+      playbooks: [
+        { id: "flow1", description: "Deployment workflow" },
+      ],
+      actions: [
+        { id: "act1", description: "First action" },
+        { id: "act2", description: "Second action" },
+      ],
+    });
+  });
+
+  it("formats notInProjectError and packageNotFoundError with hints", () => {
+    const nip = notInProjectError();
+    const formattedNip = formatError(nip);
+    expect(formattedNip.hint).toBe(
+      "Hint: Run 'ad init' to start a new project, specify '-P <id|path>' for an existing package, or run 'ad link <path>' to register it."
+    );
+
+    const pnf = packageNotFoundError("foo");
+    const formattedPnf = formatError(pnf);
+    expect(formattedPnf.hint).toBe(
+      "Hint: Package 'foo' not found. Run 'ad add foo' to install project dependency, or 'ad link <path>' for local development."
+    );
   });
 });
 

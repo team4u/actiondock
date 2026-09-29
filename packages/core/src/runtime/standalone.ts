@@ -5,7 +5,12 @@ import { filterWithFallbackInfo } from "../filter";
 import type { ConfigItemDefinition } from "../project/types";
 import { createActionDock } from "../service/factory";
 import type { ActionDockService } from "../service/types";
-import { STANDALONE_ASYNC_UNSUPPORTED } from "../errors";
+import {
+  STANDALONE_ASYNC_UNSUPPORTED,
+  INPUT_VALIDATION_FAILED,
+  ACTION_NOT_FOUND,
+  ACTION_TIMEOUT,
+} from "../errors";
 import {
   resolveActionInput,
   FlatInputError,
@@ -127,10 +132,15 @@ export class StandaloneDispatcher {
     code: string,
     message: string,
     exitCode: number,
-    options?: { textMessage?: string; details?: unknown }
+    options?: { textMessage?: string; details?: unknown; hint?: string }
   ): number {
     if (isJson) {
       const details = options?.details;
+      const hint =
+        options?.hint ??
+        (details && typeof details === "object" && typeof (details as any).hint === "string"
+          ? (details as any).hint
+          : undefined);
       this.writeOut(
         JSON.stringify(
           {
@@ -140,6 +150,7 @@ export class StandaloneDispatcher {
               message,
               ...(details !== undefined ? { details } : {}),
             },
+            ...(hint !== undefined ? { hint } : {}),
           },
           null,
           2
@@ -379,7 +390,17 @@ export class StandaloneDispatcher {
     try {
       action = await service.discovery.describeAction(id);
     } catch {
-      return this.emitError(isJson, "INVALID_ARGUMENT", `Action '${id}' not found`, ExitCode.INVALID_ARGUMENT);
+      const hint = "Tip: Run 'ad list' to discover available actions.";
+      return this.emitError(
+        isJson,
+        "INVALID_ARGUMENT",
+        `Action '${id}' not found`,
+        ExitCode.INVALID_ARGUMENT,
+        {
+          textMessage: `Error: Action '${id}' not found\n${hint}`,
+          hint,
+        }
+      );
     }
 
     const payload = buildActionDescribePayload(action, {
@@ -416,8 +437,12 @@ export class StandaloneDispatcher {
     let inputFile: string | undefined;
     let timeoutMs: number | undefined;
 
+    const recognizedFlags = new Set(["--json", "--async"]);
     for (let i = 0; i < subArgs.length; i++) {
       const arg = subArgs[i];
+      if (arg === id || recognizedFlags.has(arg)) {
+        continue;
+      }
       if (arg === "--timeout" && i + 1 < subArgs.length) {
         try {
           timeoutMs = parseDuration(subArgs[++i]);
@@ -444,10 +469,30 @@ export class StandaloneDispatcher {
         inputStr = subArgs[++i];
       } else if (arg.startsWith("--input=")) {
         inputStr = arg.slice(8);
+      } else if (arg === "-i" && i + 1 < subArgs.length) {
+        inputStr = subArgs[++i];
+      } else if (arg.startsWith("-i=")) {
+        inputStr = arg.slice(3);
       } else if (arg === "--input-file" && i + 1 < subArgs.length) {
         inputFile = subArgs[++i];
       } else if (arg.startsWith("--input-file=")) {
         inputFile = arg.slice(13);
+      } else if (arg === "-f" && i + 1 < subArgs.length) {
+        inputFile = subArgs[++i];
+      } else if (arg.startsWith("-f=")) {
+        inputFile = arg.slice(3);
+      } else if (arg.startsWith("-")) {
+        const hint = "Hint: Separate action inputs from CLI options using '--', e.g.: ad run <id> [options] -- <param>=<val> or <param>:=<json>.";
+        return this.emitError(
+          isJson,
+          "INVALID_ARGUMENT",
+          `error: unknown option '${arg}'`,
+          ExitCode.INVALID_ARGUMENT,
+          {
+            textMessage: `error: unknown option '${arg}'\n${hint}`,
+            hint,
+          }
+        );
       }
     }
 
@@ -554,6 +599,13 @@ export class StandaloneDispatcher {
               ? result.error.details
               : JSON.stringify(result.error.details, null, 2)
           );
+        }
+        if (result.error.code === INPUT_VALIDATION_FAILED) {
+          this.writeErr(`Tip: Run 'ad describe ${id}' to inspect schema and syntax examples.`);
+        } else if (result.error.code === ACTION_NOT_FOUND) {
+          this.writeErr("Tip: Run 'ad list' to discover available actions, or 'ad info' to inspect packages.");
+        } else if (result.error.code === ACTION_TIMEOUT) {
+          this.writeErr("Tip: Increase timeout via '--timeout <duration>', or run in background via '--async' and track with 'ad runs show <runId>'.");
         }
       }
     }

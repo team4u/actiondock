@@ -91,7 +91,7 @@ describe("CLI Workflow - Core Lifecycle", () => {
     expect(infoProc.exitCode).toBe(0);
     const info = JSON.parse(infoProc.stdout.toString());
     expect(info.id).toBe("team.github-ops");
-    expect(info.actions).toContain("sample.greet");
+    expect(info.actions.some((a: any) => a.id === "sample.greet")).toBe(true);
 
     // 3. list & describe & validate (including intent fuzzy search and fallback)
     const listProc = runCli(["list", "--json"], tempDir);

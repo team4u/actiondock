@@ -5,7 +5,17 @@ import {
 import {
   type RegistryStatusReport,
 } from "@actiondock/core/registry";
-import type { Envelope, ProjectDetailInfo, AggregatedPackage, EnvCheckItem, CliContext } from "./types";
+import type {
+  Envelope,
+  ProjectDetailInfo,
+  ProjectDetailJson,
+  ProjectDetailConfigItem,
+  ProjectDetailPlaybookItem,
+  ProjectDetailActionItem,
+  AggregatedPackage,
+  EnvCheckItem,
+  CliContext,
+} from "./types";
 import { formatError } from "./errors";
 
 /**
@@ -37,8 +47,15 @@ export function createErrorEnvelope(
   code: string,
   message: string,
   details?: unknown,
-  meta?: Record<string, unknown>
+  meta?: Record<string, unknown>,
+  hint?: string
 ): Envelope<never> {
+  const effectiveHint =
+    hint ??
+    (details && typeof details === "object" && typeof (details as any).hint === "string"
+      ? (details as any).hint
+      : undefined);
+
   const result: Envelope<never> = {
     ok: false,
     error: {
@@ -47,6 +64,9 @@ export function createErrorEnvelope(
       ...(details !== undefined ? { details } : {}),
     },
   };
+  if (effectiveHint !== undefined) {
+    result.hint = effectiveHint;
+  }
   if (meta && Object.keys(meta).length > 0) {
     result.meta = meta;
   }
@@ -123,31 +143,81 @@ export function renderError(
   const isMachine = Boolean(options.json);
 
   if (isMachine) {
-    const errorEnv = createErrorEnvelope(formatted.code, formatted.message, formatted.details);
+    const errorEnv = createErrorEnvelope(
+      formatted.code,
+      formatted.message,
+      formatted.details,
+      undefined,
+      formatted.hint
+    );
     writeStdout(formatJson(errorEnv), options.context);
   } else {
     writeStderr(`Error: ${formatted.message}`, options.context);
+    if (formatted.hint) {
+      writeStderr(formatted.hint, options.context);
+    }
   }
 }
 
 /**
- * 将工程详情信息转换为机器输出视图（剔除 Map 明细与定义字典）。
+ * 将工程详情信息转换为机器输出视图（结构化配置契约、规程与动作索引）。
  */
-export function projectDetailToJson(info: ProjectDetailInfo) {
-  return {
+export function projectDetailToJson(info: ProjectDetailInfo): ProjectDetailJson {
+  const config: Record<string, ProjectDetailConfigItem> = {};
+  if (info.configDeclared && info.configDeclared.length > 0) {
+    for (const key of info.configDeclared) {
+      const item = info.configDef?.[key];
+      config[key] = {
+        ...(item?.description !== undefined ? { description: item.description } : {}),
+        ...(item?.default !== undefined ? { default: item.default } : {}),
+        secret: Boolean(item?.secret),
+      };
+    }
+  }
+
+  const playbooks: ProjectDetailPlaybookItem[] = [];
+  if (info.playbooksMap && info.playbooksMap.size > 0) {
+    for (const [id, pb] of info.playbooksMap.entries()) {
+      playbooks.push({
+        id,
+        ...(pb?.description ? { description: pb.description } : {}),
+      });
+    }
+  } else if (info.playbooks && info.playbooks.length > 0) {
+    for (const pbId of info.playbooks) {
+      playbooks.push({ id: pbId });
+    }
+  }
+
+  const actions: ProjectDetailActionItem[] = [];
+  if (info.actionsMap && info.actionsMap.size > 0) {
+    for (const [id, act] of info.actionsMap.entries()) {
+      actions.push({
+        id,
+        ...(act?.description ? { description: act.description } : {}),
+      });
+    }
+  } else if (info.actions && info.actions.length > 0) {
+    for (const actId of info.actions) {
+      actions.push({ id: actId });
+    }
+  }
+
+  const result: ProjectDetailJson = {
     id: info.id,
     name: info.name || info.id,
     version: info.version || "0.0.0",
-    description: info.description,
-    projectRoot: info.projectRoot,
-    actionsDir: info.actionsDir,
-    playbooksDir: info.playbooksDir,
-    actionsCount: info.actionsCount,
-    playbooksCount: info.playbooksCount,
-    actions: info.actions,
-    playbooks: info.playbooks,
-    configDeclared: info.configDeclared,
+    root: info.projectRoot,
+    config,
+    playbooks,
+    actions,
   };
+
+  if (info.description) {
+    result.description = info.description;
+  }
+
+  return result;
 }
 
 /**
@@ -162,36 +232,57 @@ export function renderProjectDetail(info: ProjectDetailInfo): string {
   }
   lines.push(`Root:        ${info.projectRoot}`);
 
-  lines.push(`\nActions (${info.actionsCount}):`);
-  if (info.actionsMap) {
-    for (const [id, act] of info.actionsMap.entries()) {
-      lines.push(`  - ${id.padEnd(28)} ${act.description || ""}`);
-    }
-  } else {
-    for (const actId of info.actions) {
-      lines.push(`  - ${actId}`);
-    }
-  }
-
-  lines.push(`\nPlaybooks (${info.playbooksCount}):`);
-  if (info.playbooksMap) {
-    for (const [id, pb] of info.playbooksMap.entries()) {
-      lines.push(`  - ${id.padEnd(28)} ${pb.description || ""}`);
-    }
-  } else {
-    for (const pbId of info.playbooks) {
-      lines.push(`  - ${pbId}`);
-    }
-  }
-
   if (info.configDeclared.length > 0) {
-    lines.push(`\nDeclared Config Keys:`);
+    lines.push(`\nDeclared Config Keys (${info.configDeclared.length}):`);
     for (const k of info.configDeclared) {
       const item = info.configDef?.[k];
       const isSec = item?.secret ? " [secret]" : "";
       const def = item?.default !== undefined ? ` (default: ${JSON.stringify(item.default)})` : "";
       lines.push(`  - ${k.padEnd(24)} ${item?.description || ""}${def}${isSec}`);
     }
+  }
+
+  lines.push(`\nPlaybooks (${info.playbooksCount}):`);
+  if (info.playbooksMap && info.playbooksMap.size > 0) {
+    for (const [id, pb] of info.playbooksMap.entries()) {
+      lines.push(`  - ${id.padEnd(28)} ${pb.description || ""}`);
+    }
+  } else if (info.playbooks && info.playbooks.length > 0) {
+    for (const pbId of info.playbooks) {
+      lines.push(`  - ${pbId}`);
+    }
+  } else {
+    lines.push("  (no playbooks declared)");
+  }
+
+  lines.push(`\nActions (${info.actionsCount}):`);
+  const actionList: Array<{ id: string; description: string }> = [];
+  if (info.actionsMap) {
+    for (const [id, act] of info.actionsMap.entries()) {
+      actionList.push({ id, description: act.description || "" });
+    }
+  } else if (info.actions) {
+    for (const actId of info.actions) {
+      actionList.push({ id: actId, description: "" });
+    }
+  }
+
+  if (actionList.length === 0) {
+    lines.push("  (no actions declared)");
+  } else if (actionList.length > 8) {
+    const preview = actionList.slice(0, 8).map((a) => a.id).join(", ");
+    lines.push(`  ${preview}, ... (${actionList.length - 8} more)`);
+    lines.push("  (Run 'ad list' to view full callable actions with descriptions)");
+  } else {
+    for (const a of actionList) {
+      lines.push(`  - ${a.id.padEnd(28)} ${a.description}`);
+    }
+  }
+
+  lines.push("\nTip: Run 'ad list' to view all callable actions and run-ready IDs.");
+  lines.push("Tip: Run 'ad playbook show <id>' to inspect procedure steps before execution.");
+  if (info.configDeclared.length > 0) {
+    lines.push("Tip: Run 'ad config set <KEY> <val>' to configure required settings.");
   }
 
   return lines.join("\n");
@@ -318,6 +409,7 @@ export function renderActionList(
       lines.push(`  - ${a.id.padEnd(28)} ${a.description}`);
     }
   }
+  lines.push("\nTip: For composite or multi-step tasks, check 'ad playbook list' for standard operating procedures.");
   return lines.join("\n");
 }
 
@@ -373,6 +465,7 @@ export function renderPlaybookList(
       lines.push(`  - ${p.id.padEnd(26)} ${p.description}${pkgDesc}`);
     }
   }
+  lines.push("\nTip: Run 'ad playbook show <id>' to inspect procedure steps before execution.");
   return lines.join("\n");
 }
 
@@ -399,6 +492,7 @@ export function renderPlaybookDetail(pb: {
     lines.push("--- Content ---");
     lines.push(pb.content);
   }
+  lines.push("\nTip: Follow steps sequentially. Invoke constituent actions using 'ad run <action> [options] -- <assignments...>'.");
   return lines.join("\n");
 }
 

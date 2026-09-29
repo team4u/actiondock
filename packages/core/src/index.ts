@@ -204,4 +204,8 @@ export {
   RUN_NOT_FOUND,
   RUN_ALREADY_FINISHED,
   IPC_ERROR,
+  describeActionLoadFailure,
+  type ActionLoadFailureContext,
+  createErrorEnvelope,
+  type ErrorEnvelope,
 } from "./errors";

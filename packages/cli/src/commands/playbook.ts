@@ -252,6 +252,7 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
               lines.push(`    - ${pb.id.padEnd(26)} ${pb.description || ""}`);
             }
           }
+          lines.push("\nTip: Run 'ad playbook show <id>' to inspect procedure steps before execution.");
           return lines.join("\n");
         },
         context,
@@ -276,16 +277,21 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
       const target = resolveTargetFromOptions(options, context);
 
       if (target.type === "remote") {
-        const detail = await fetchRemotePlaybookShow(target.serverUrl!, id, target.token, {
-          allowInsecureHttp: Boolean(options.allowInsecureHttp),
-          insecure: target.insecure,
-        });
-        renderResult(detail, {
-          json: options.json,
-          humanFormatter: () => renderPlaybookDetail(detail),
-          context,
-        });
-        return;
+        try {
+          const detail = await fetchRemotePlaybookShow(target.serverUrl!, id, target.token, {
+            allowInsecureHttp: Boolean(options.allowInsecureHttp),
+            insecure: target.insecure,
+          });
+          renderResult(detail, {
+            json: options.json,
+            humanFormatter: () => renderPlaybookDetail(detail),
+            context,
+          });
+          return;
+        } catch (err: any) {
+          const hint = "Tip: Run 'ad playbook list' to discover available playbooks.";
+          throw new ArgumentError(`${err.message}\n${hint}`, err?.details, err?.code, hint);
+        }
       }
 
       // 2. 本地项目模式
@@ -307,7 +313,8 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
         }).buildSync();
         resolved = resolvePlaybook(showTarget, { graph });
       } catch (err: any) {
-        throw new ArgumentError(err.message);
+        const hint = "Tip: Run 'ad playbook list' to discover available playbooks.";
+        throw new ArgumentError(`${err.message}\n${hint}`, err?.details, err?.code, hint);
       }
 
       const pb = resolved.playbook;
@@ -428,13 +435,13 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
                 try {
                   resolveAction(actRef, { graph, catalog, caller: target.packageId });
                 } catch (e: any) {
-                  errors.push(`Referenced cross-package action '${actRef}' not resolvable: ${e.message}`);
+                  errors.push(`Referenced cross-package action '${actRef}' not resolvable: ${e.message}. Hint: Action '${actRef}' not found. Run 'ad action create ${actRef}' to create local action, or 'ad add <pkg>' to install external dependency.`);
                 }
               } else {
                 const foundInActions = actions.has(actRef);
                 const foundInManifest = Boolean(manifest?.actions?.[actRef]);
                 if (!foundInActions && !foundInManifest) {
-                  errors.push(`Referenced action '${actRef}' not found in project actions`);
+                  errors.push(`Referenced action '${actRef}' not found in project actions. Hint: Action '${actRef}' not found. Run 'ad action create ${actRef}' to create local action, or 'ad add <pkg>' to install external dependency.`);
                 }
               }
             }

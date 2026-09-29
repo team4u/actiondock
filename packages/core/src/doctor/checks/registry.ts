@@ -91,7 +91,7 @@ export const checkLinkedPackageDependencies: DoctorCheck = {
           name: "Linked Package Dependencies",
           status: "warn",
           message: `${missingNodeModules.length} linked package(s) declare dependencies but miss node_modules: ${missingNodeModules.join(", ")}`,
-          fix: "Run 'npm install' in the affected package directories, or execute 'ad run' to auto-install",
+          fix: "Run 'npm install --omit=dev' in the affected package directories",
         });
       } else {
         ctx.checks.push({

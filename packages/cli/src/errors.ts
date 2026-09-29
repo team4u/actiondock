@@ -51,18 +51,21 @@ export class CliError extends Error {
   readonly exitCode: ExitCodeValue;
   readonly code: string;
   readonly details?: unknown;
+  readonly hint?: string;
 
   constructor(
     message: string,
     exitCode: ExitCodeValue = ExitCode.FAILURE,
     code: string = "CLI_ERROR",
-    details?: unknown
+    details?: unknown,
+    hint?: string
   ) {
     super(message);
     this.name = "CliError";
     this.exitCode = exitCode;
     this.code = code;
     this.details = details;
+    this.hint = hint;
   }
 }
 
@@ -70,8 +73,8 @@ export class CliError extends Error {
  * 命令行参数与选项校验错误（退出码为 2）。
  */
 export class ArgumentError extends CliError {
-  constructor(message: string, details?: unknown, code: string = "INVALID_ARGUMENT") {
-    super(message, ExitCode.INVALID_ARGUMENT, code, details);
+  constructor(message: string, details?: unknown, code: string = "INVALID_ARGUMENT", hint?: string) {
+    super(message, ExitCode.INVALID_ARGUMENT, code, details, hint);
     this.name = "ArgumentError";
   }
 }
@@ -80,8 +83,8 @@ export class ArgumentError extends CliError {
  * 业务逻辑或框架执行失败错误（退出码为 1）。
  */
 export class ExecutionError extends CliError {
-  constructor(message: string, details?: unknown, code: string = "EXECUTION_FAILURE") {
-    super(message, ExitCode.FAILURE, code, details);
+  constructor(message: string, details?: unknown, code: string = "EXECUTION_FAILURE", hint?: string) {
+    super(message, ExitCode.FAILURE, code, details, hint);
     this.name = "ExecutionError";
   }
 }
@@ -132,13 +135,16 @@ export interface FormattedError {
   message: string;
   exitCode: ExitCodeValue;
   details?: unknown;
+  hint?: string;
 }
 
 /**
  * 目标包寻址失败错误（-P 指定的包不在链接注册表也无法按路径寻址）。
  */
 export function packageNotFoundError(pkg: string): ArgumentError {
-  return new ArgumentError(`Package '${pkg}' not found in linked packages or path`);
+  const base = `Package '${pkg}' not found in linked packages or path`;
+  const hint = `Hint: Package '${pkg}' not found. Run 'ad add ${pkg}' to install project dependency, or 'ad link <path>' for local development.`;
+  return new ArgumentError(base, undefined, "INVALID_ARGUMENT", hint);
 }
 
 /**
@@ -147,7 +153,10 @@ export function packageNotFoundError(pkg: string): ArgumentError {
  */
 export function notInProjectError(hint?: string): ArgumentError {
   const base = "Not in an ActionDock project (actiondock.json not found)";
-  return new ArgumentError(hint ? `${base}.\n${hint}` : base);
+  const effectiveHint =
+    hint ??
+    "Hint: Run 'ad init' to start a new project, specify '-P <id|path>' for an existing package, or run 'ad link <path>' to register it.";
+  return new ArgumentError(base, undefined, "INVALID_ARGUMENT", effectiveHint);
 }
 
 /**
@@ -168,6 +177,7 @@ export function formatError(err: unknown): FormattedError {
       message: err.message,
       exitCode: err.exitCode,
       details: err.details,
+      hint: err.hint,
     };
   }
 
@@ -177,6 +187,7 @@ export function formatError(err: unknown): FormattedError {
       message: err.message,
       exitCode: ExitCode.INVALID_ARGUMENT,
       details: err.details,
+      hint: (err as any).hint || (err.details as any)?.hint,
     };
   }
 
@@ -194,6 +205,7 @@ export function formatError(err: unknown): FormattedError {
       message: err.message,
       exitCode: isArgument ? ExitCode.INVALID_ARGUMENT : ExitCode.FAILURE,
       details: err.details,
+      hint: err.hint || (err.details as any)?.hint,
     };
   }
 
@@ -207,10 +219,11 @@ export function formatError(err: unknown): FormattedError {
         message: (err as any).message || String(err),
         exitCode: ExitCode.INVALID_ARGUMENT,
         details: (err as any).details,
+        hint: (err as any).hint,
       };
     }
 
-    const commanderErr = err as { code: string; message: string; exitCode?: number };
+    const commanderErr = err as { code: string; message: string; exitCode?: number; hint?: string };
 
     // 参数类异常
     if (
@@ -221,10 +234,16 @@ export function formatError(err: unknown): FormattedError {
       code.startsWith("commander.invalidArgument") ||
       code.startsWith("commander.excessArguments")
     ) {
+      const hint =
+        commanderErr.hint ||
+        (code.startsWith("commander.unknownOption")
+          ? "Hint: Separate action inputs from CLI options using '--', e.g.: ad run <id> [options] -- <param>=<val> or <param>:=<json>."
+          : undefined);
       return {
         code: CLI_CODE_INVALID_ARGUMENT,
         message: commanderErr.message,
         exitCode: ExitCode.INVALID_ARGUMENT,
+        hint,
       };
     }
 
@@ -244,6 +263,7 @@ export function formatError(err: unknown): FormattedError {
       message: err.message,
       exitCode: ExitCode.FAILURE,
       details: (err as any).details,
+      hint: (err as any).hint || ((err as any).details as any)?.hint,
     };
   }
 

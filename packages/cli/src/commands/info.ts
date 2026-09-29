@@ -31,6 +31,26 @@ import {
  * 将远端信息响应归一为本地工程详情视图。
  */
 function remoteInfoToDetail(remoteInfo: any): ProjectDetailInfo {
+  const actionsMap = new Map<string, { id: string; description?: string }>();
+  const rawActions = remoteInfo.actionsDetail || remoteInfo.actions || [];
+  for (const a of rawActions) {
+    if (typeof a === "string") {
+      actionsMap.set(a, { id: a });
+    } else if (a && typeof a === "object") {
+      actionsMap.set(a.id, { id: a.id, description: a.description });
+    }
+  }
+
+  const playbooksMap = new Map<string, any>();
+  const rawPlaybooks = remoteInfo.playbooksDetail || remoteInfo.playbooks || [];
+  for (const pb of rawPlaybooks) {
+    if (typeof pb === "string") {
+      playbooksMap.set(pb, { id: pb });
+    } else if (pb && typeof pb === "object") {
+      playbooksMap.set(pb.id, { id: pb.id, description: pb.description });
+    }
+  }
+
   return {
     id: remoteInfo.id,
     name: remoteInfo.name || remoteInfo.id,
@@ -39,16 +59,14 @@ function remoteInfoToDetail(remoteInfo: any): ProjectDetailInfo {
     projectRoot: remoteInfo.path || remoteInfo.projectRoot || "",
     actionsDir: "remote",
     playbooksDir: "remote",
-    actionsCount: remoteInfo.actionsCount || (remoteInfo.actions ? remoteInfo.actions.length : 0),
-    playbooksCount: remoteInfo.playbooksCount || (remoteInfo.playbooks ? remoteInfo.playbooks.length : 0),
-    actions: (remoteInfo.actionsDetail || remoteInfo.actions || []).map((a: any) =>
-      typeof a === "string" ? a : a.id
-    ),
-    playbooks: (remoteInfo.playbooksDetail || remoteInfo.playbooks || []).map((pb: any) =>
-      typeof pb === "string" ? pb : pb.id
-    ),
+    actionsCount: actionsMap.size,
+    playbooksCount: playbooksMap.size,
+    actions: Array.from(actionsMap.keys()),
+    playbooks: Array.from(playbooksMap.keys()),
     configDeclared: Object.keys(remoteInfo.configDeclared || {}),
     configDef: remoteInfo.configDeclared,
+    actionsMap,
+    playbooksMap,
   };
 }
 

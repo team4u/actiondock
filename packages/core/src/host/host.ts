@@ -480,7 +480,9 @@ export class DefaultActionDockHost implements ActionDockHost {
           this.graph
         );
         if (authErr) {
-          throw new ActionDockError(authErr.code, authErr.message, authErr.details);
+          const hint = (authErr.details as any)?.hint;
+          const msg = hint ? `${authErr.message}\n${hint}` : authErr.message;
+          throw new ActionDockError(authErr.code, msg, authErr.details, undefined, hint);
         }
       }
 

@@ -80,10 +80,13 @@ export class UndeclaredActionDependencyError extends ActionDockError {
   readonly caller?: string;
 
   constructor(targetRef: string, caller?: string, reason?: string) {
+    const hint = caller
+      ? `Hint: Add '${targetRef}' to the 'uses' array of action '${caller}' in actiondock.json, then run 'ad validate'.`
+      : undefined;
     const msg = caller
-      ? `UNDECLARED_ACTION_DEPENDENCY: Action '${caller}' 未在 'uses' 中声明对 '${targetRef}' 的跨包依赖`
+      ? `UNDECLARED_ACTION_DEPENDENCY: Action '${caller}' 未在 'uses' 中声明对 '${targetRef}' 的跨包依赖${hint ? `\n${hint}` : ""}`
       : `UNDECLARED_ACTION_DEPENDENCY: 根调用 Action '${targetRef}' 被拒绝: 目标包既非 actiondock.json 直接依赖，亦未被可见 Playbook 委托${reason ? ` (${reason})` : ""}`;
-    super(UNDECLARED_ACTION_DEPENDENCY, msg);
+    super(UNDECLARED_ACTION_DEPENDENCY, msg, hint ? { hint } : undefined, undefined, hint);
     this.name = "UndeclaredActionDependencyError";
     this.targetRef = targetRef;
     this.caller = caller;

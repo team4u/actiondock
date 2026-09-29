@@ -29,6 +29,7 @@ export interface Envelope<T = unknown> {
     message: string;
     details?: unknown;
   };
+  hint?: string;
   meta?: Record<string, unknown>;
 }
 
@@ -104,6 +105,45 @@ export interface ProjectDetailInfo {
   configDef?: Record<string, ConfigItemDefinition>;
   actionsMap?: Map<string, { id?: string; description?: string }>;
   playbooksMap?: Map<string, any>;
+}
+
+/**
+ * 机器视图工程配置声明条目。
+ */
+export interface ProjectDetailConfigItem {
+  description?: string;
+  default?: unknown;
+  secret: boolean;
+}
+
+/**
+ * 机器视图规程条目。
+ */
+export interface ProjectDetailPlaybookItem {
+  id: string;
+  description?: string;
+}
+
+/**
+ * 机器视图动作条目。
+ */
+export interface ProjectDetailActionItem {
+  id: string;
+  description?: string;
+}
+
+/**
+ * 机器模式工程详情输出结构。
+ */
+export interface ProjectDetailJson {
+  id: string;
+  name: string;
+  version: string;
+  description?: string;
+  root: string;
+  config: Record<string, ProjectDetailConfigItem>;
+  playbooks: ProjectDetailPlaybookItem[];
+  actions: ProjectDetailActionItem[];
 }
 
 /**

@@ -174,7 +174,7 @@ export async function runCliAsync(
         process.env[key] = val;
       }
 
-      process.exitCode = origExitCode;
+      process.exitCode = origExitCode !== undefined ? origExitCode : 0;
 
       if (process.cwd() !== origCwd) {
         try {

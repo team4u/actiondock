@@ -88,6 +88,27 @@ export function createCliProgram(context?: CliContext): Command {
     throw err;
   });
 
+  if (context?.stdout || context?.stderr) {
+    program.configureOutput({
+      writeOut: (str) => {
+        if (context.stdout) context.stdout(str);
+        else process.stdout.write(str);
+      },
+      writeErr: (str) => {
+        if (context.stderr) context.stderr(str);
+        else process.stderr.write(str);
+      },
+    });
+  }
+
+  program.addHelpText(
+    "after",
+    `
+Workflow Guidance:
+  For multi-step workflows, run 'ad playbook list' before invoking atomic actions.
+  Run 'ad info [intent]' to discover packages and playbooks by keyword.`
+  );
+
   registerInitCommand(program);
   registerAddCommand(program, context);
   registerRemoveCommand(program, context);

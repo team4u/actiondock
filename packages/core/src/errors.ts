@@ -282,7 +282,7 @@ export function describeActionLoadFailure(
   const rootCause = err instanceof Error ? err.message : String(err ?? "");
   const isMissingModule = isMissingModuleError(rootCause);
   const hint = isMissingModule
-    ? `依赖未安装，在 '${context.projectRoot}' 执行 npm install 或先执行 'ad run ${context.packageId}/${context.actionId}'`
+    ? `项目依赖缺失，请在 '${context.projectRoot}' 目录下运行 'npm install --omit=dev' 安装依赖后再试。`
     : undefined;
 
   return {
@@ -401,15 +401,68 @@ export class ActionDockError<T = any> extends Error {
   public readonly code: ErrorCode;
   public readonly details?: T;
   public readonly status?: number;
+  public readonly hint?: string;
 
-  constructor(code: ErrorCode, message: string, details?: T, status?: number) {
+  constructor(code: ErrorCode, message: string, details?: T, status?: number, hint?: string) {
     super(message);
     this.name = "ActionDockError";
     this.code = code;
     this.details = details;
     this.status = status;
+    this.hint =
+      hint ??
+      (details && typeof details === "object" && typeof (details as any).hint === "string"
+        ? (details as any).hint
+        : undefined);
     Object.setPrototypeOf(this, ActionDockError.prototype);
   }
+}
+
+/**
+ * 结构化机器错误信封。
+ */
+export interface ErrorEnvelope {
+  ok: false;
+  error: {
+    code: string;
+    message: string;
+    details?: unknown;
+  };
+  hint?: string;
+  meta?: Record<string, unknown>;
+}
+
+/**
+ * 统一构造机器错误信封。
+ */
+export function createErrorEnvelope(
+  code: string,
+  message: string,
+  details?: unknown,
+  meta?: Record<string, unknown>,
+  hint?: string
+): ErrorEnvelope {
+  const effectiveHint =
+    hint ??
+    (details && typeof details === "object" && typeof (details as any).hint === "string"
+      ? (details as any).hint
+      : undefined);
+
+  const result: ErrorEnvelope = {
+    ok: false,
+    error: {
+      code,
+      message,
+      ...(details !== undefined ? { details } : {}),
+    },
+  };
+  if (effectiveHint !== undefined) {
+    result.hint = effectiveHint;
+  }
+  if (meta && Object.keys(meta).length > 0) {
+    result.meta = meta;
+  }
+  return result;
 }
 
 /**

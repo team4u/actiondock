@@ -170,7 +170,7 @@ $data | ConvertTo-Json -Depth 100 | ad run complex-action --input-file -
 | `ad run <id>` | 本地或远程执行指定 Action（规范语法 `ad run <id> [options] -- <assignments...>`，支持 `--json` 输出标准信封） |
 | `ad validate [id]` | 校验 Action 规范与模式规范 |
 | `ad doctor` | 执行运行环境与项目结构健康诊断 |
-| `ad action create <id>` | 创建新 Action 源码（别名 `ad action new`） |
+| `ad action create <id>` | 创建新 Action 源码 |
 | `ad playbook list` / `show` | 查看智能体操作规程 Playbook |
 | `ad config list` / `get` / `set` | 管理包运行时配置与环境变量绑定 |
 | `ad state list` / `get` / `set` / `delete` / `clear` | 查看与维护 SQLite 持久化状态 |

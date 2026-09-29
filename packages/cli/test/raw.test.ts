@@ -180,6 +180,69 @@ describe("CLI Action Raw Output Mode - Unit Tests", () => {
 
       expect(stdoutLogs.length).toBe(0);
       expect(stderrLogs.join("\n")).toContain("Error [FILE_NOT_FOUND]: File could not be opened");
+      expect(stderrLogs.join("\n")).not.toContain("Tip: Run 'ad describe");
+      expect(process.exitCode).toBe(1);
+    } finally {
+      process.exitCode = prevExitCode ?? 0;
+    }
+  });
+
+  it("renders describe guidance tip to stderr when error code is INPUT_VALIDATION_FAILED", () => {
+    const stdoutLogs: string[] = [];
+    const stderrLogs: string[] = [];
+
+    const prevExitCode = process.exitCode;
+    try {
+      const mockResult: ExecutionResult = {
+        ok: false,
+        runId: "test-run-input-val-err",
+        error: {
+          code: "INPUT_VALIDATION_FAILED",
+          message: "Input schema validation failed for action 'files.read'",
+          details: ["must have required property 'path'"],
+        },
+      };
+
+      renderRawExecutionResult("files.read", mockResult, {
+        stdout: (msg) => stdoutLogs.push(msg),
+        stderr: (msg) => stderrLogs.push(msg),
+      });
+
+      expect(stdoutLogs.length).toBe(0);
+      const stderr = stderrLogs.join("\n");
+      expect(stderr).toContain("Error [INPUT_VALIDATION_FAILED]: Input schema validation failed for action 'files.read'");
+      expect(stderr).toContain("must have required property 'path'");
+      expect(stderr).toContain("Tip: Run 'ad describe files.read' to inspect schema and syntax examples.");
+      expect(process.exitCode).toBe(1);
+    } finally {
+      process.exitCode = prevExitCode ?? 0;
+    }
+  });
+
+  it("does not render describe guidance tip when error code is ACTION_FAILED", () => {
+    const stdoutLogs: string[] = [];
+    const stderrLogs: string[] = [];
+
+    const prevExitCode = process.exitCode;
+    try {
+      const mockResult: ExecutionResult = {
+        ok: false,
+        runId: "test-run-action-failed",
+        error: {
+          code: "ACTION_FAILED",
+          message: "Action business logic threw an unhandled error",
+        },
+      };
+
+      renderRawExecutionResult("files.read", mockResult, {
+        stdout: (msg) => stdoutLogs.push(msg),
+        stderr: (msg) => stderrLogs.push(msg),
+      });
+
+      expect(stdoutLogs.length).toBe(0);
+      const stderr = stderrLogs.join("\n");
+      expect(stderr).toContain("Error [ACTION_FAILED]: Action business logic threw an unhandled error");
+      expect(stderr).not.toContain("Tip: Run 'ad describe");
       expect(process.exitCode).toBe(1);
     } finally {
       process.exitCode = prevExitCode ?? 0;
@@ -231,6 +294,13 @@ export default defineAction(async (input: { path: string }) => {
     existingConfig.actions["files.read"] = {
       entry: "actions/read.ts",
       description: "Read file content",
+      inputSchema: {
+        type: "object",
+        properties: {
+          path: { type: "string" },
+        },
+        required: ["path"],
+      },
     };
     writeFileSync(configPath, JSON.stringify(existingConfig, null, 2), "utf-8");
   });
@@ -320,6 +390,7 @@ export default defineAction(async (input: { path: string }) => {
     expect(stdout.trim()).toBe("");
     expect(stderr).toContain("Error");
     expect(stderr).toContain("File not found: missing.txt");
+    expect(stderr).not.toContain("Tip: Run 'ad describe");
   });
 
   it("handles action error properly by outputting JSON envelope when --json is provided", async () => {
@@ -333,5 +404,36 @@ export default defineAction(async (input: { path: string }) => {
     const parsed = JSON.parse(stdout);
     expect(parsed.ok).toBe(false);
     expect(parsed.error.message).toContain("File not found: missing.txt");
+  });
+
+  it("renders describe guidance tip to stderr on INPUT_VALIDATION_FAILED in raw mode", async () => {
+    const proc = await runCli(
+      ["run", "files.read", "-i", JSON.stringify({ wrongField: "val" })],
+      tempDir
+    );
+    expect(proc.exitCode).toBe(1);
+
+    const stdout = proc.stdout.toString();
+    const stderr = proc.stderr.toString();
+
+    expect(stdout.trim()).toBe("");
+    expect(stderr).toContain("Error [INPUT_VALIDATION_FAILED]");
+    expect(stderr).toContain("Tip: Run 'ad describe files.read' to inspect schema and syntax examples.");
+  });
+
+  it("does not output describe guidance tip on INPUT_VALIDATION_FAILED when --json is provided", async () => {
+    const proc = await runCli(
+      ["run", "files.read", "-i", JSON.stringify({ wrongField: "val" }), "--json"],
+      tempDir
+    );
+    expect(proc.exitCode).toBe(1);
+
+    const stdout = proc.stdout.toString();
+    const stderr = proc.stderr.toString();
+
+    expect(stderr.trim()).toBe("");
+    const parsed = JSON.parse(stdout);
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe("INPUT_VALIDATION_FAILED");
   });
 });
