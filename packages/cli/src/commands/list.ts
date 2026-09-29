@@ -92,9 +92,25 @@ export function attachListCommand(parent: Command, context?: CliContext): Comman
             shouldFallback
           );
 
-          if (filterRes.isFallback && isMachine) {
+          const hints = [
+            "Tip: For composite or multi-step tasks, check 'ad playbook list' for standard operating procedures.",
+          ];
+
+          if (isMachine) {
+            if (filterRes.isFallback) {
+              renderResult(
+                { items: filterRes.items, isFallback: true, matchedCount: 0, hints },
+                { json: options.json, context }
+              );
+              return;
+            }
+
             renderResult(
-              { items: filterRes.items, isFallback: true, matchedCount: 0 },
+              {
+                items: filterRes.items,
+                ...(filterRes.matchedCount !== undefined ? { matchedCount: filterRes.matchedCount } : {}),
+                hints,
+              },
               { json: options.json, context }
             );
             return;

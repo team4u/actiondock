@@ -458,4 +458,193 @@ describe("ActionDock CLI 全自提示与零文档依赖增强体系", () => {
       }
     });
   });
+
+  describe("第三阶段：机器模式与人类模式完全对等信封与全自提示体系", () => {
+    it("ad list --json 输出顶层对象信封且携带根节点 hints，列表项未被污染", async () => {
+      const tempHomeDir = mkdtempSync(join(tmpdir(), "ad-guidance-list-home-"));
+      const tempPkgDir = mkdtempSync(join(tmpdir(), "ad-guidance-list-json-"));
+      try {
+        writeFileSync(
+          join(tempPkgDir, "actiondock.json"),
+          JSON.stringify({
+            id: "test.pkg",
+            name: "test.pkg",
+            version: "1.0.0",
+            actions: {
+              "demo.echo": { entry: "actions/echo.ts", description: "Echo action" },
+            },
+          })
+        );
+
+        const proc = await runCliAsync(["list", "--json"], tempPkgDir, {
+          ACTIONDOCK_HOME: tempHomeDir,
+        });
+        expect(proc.exitCode).toBe(0);
+        const parsed = JSON.parse(proc.stdout.toString());
+        expect(Array.isArray(parsed)).toBe(false);
+        expect(Array.isArray(parsed.items)).toBe(true);
+        expect(parsed.items.length).toBe(1);
+        expect(parsed.items[0].id).toBe("demo.echo");
+        expect(parsed.items[0].hints).toBeUndefined();
+        expect(parsed.hints).toEqual([
+          "Tip: For composite or multi-step tasks, check 'ad playbook list' for standard operating procedures.",
+        ]);
+      } finally {
+        rmSync(tempHomeDir, { recursive: true, force: true });
+        rmSync(tempPkgDir, { recursive: true, force: true });
+      }
+    });
+
+    it("ad playbook list --json 输出顶层对象信封且携带根节点 hints", async () => {
+      const tempHomeDir = mkdtempSync(join(tmpdir(), "ad-guidance-pb-home-"));
+      const tempPkgDir = mkdtempSync(join(tmpdir(), "ad-guidance-pb-list-json-"));
+      try {
+        mkdirSync(join(tempPkgDir, "playbooks"), { recursive: true });
+        writeFileSync(join(tempPkgDir, "playbooks", "deploy.md"), "# Deploy\n");
+        writeFileSync(
+          join(tempPkgDir, "actiondock.json"),
+          JSON.stringify({
+            id: "test.pkg",
+            name: "test.pkg",
+            version: "1.0.0",
+            actions: {},
+            playbooks: {
+              "sop-deploy": { entry: "playbooks/deploy.md", description: "Deploy SOP" },
+            },
+          })
+        );
+
+        const proc = await runCliAsync(["playbook", "list", "--json"], tempPkgDir, {
+          ACTIONDOCK_HOME: tempHomeDir,
+        });
+        expect(proc.exitCode).toBe(0);
+        const parsed = JSON.parse(proc.stdout.toString());
+        expect(Array.isArray(parsed)).toBe(false);
+        expect(Array.isArray(parsed.items)).toBe(true);
+        expect(parsed.items.length).toBe(1);
+        expect(parsed.items[0].id).toBe("sop-deploy");
+        expect(parsed.hints).toEqual([
+          "Tip: Run 'ad playbook show <id>' to inspect procedure steps before execution.",
+        ]);
+      } finally {
+        rmSync(tempHomeDir, { recursive: true, force: true });
+        rmSync(tempPkgDir, { recursive: true, force: true });
+      }
+    });
+
+    it("ad info 多包查询与回退在 --json 模式下根节点注入 hints", async () => {
+      const tempHomeDir = mkdtempSync(join(tmpdir(), "ad-guidance-info-home-"));
+      const tempPkgDir = mkdtempSync(join(tmpdir(), "ad-guidance-info-pkg-"));
+      try {
+        writeFileSync(
+          join(tempPkgDir, "actiondock.json"),
+          JSON.stringify({
+            id: "test.multi-pkg",
+            name: "test.multi-pkg",
+            version: "1.0.0",
+            actions: {},
+          })
+        );
+
+        // 搜索无匹配时
+        const noMatchProc = await runCliAsync(
+          ["info", "--intent", "nonexistent-xyz", "--json"],
+          tempPkgDir,
+          { ACTIONDOCK_HOME: tempHomeDir }
+        );
+        expect(noMatchProc.exitCode).toBe(0);
+        const noMatchParsed = JSON.parse(noMatchProc.stdout.toString());
+        expect(noMatchParsed.hints).toEqual([
+          "Tip: Run 'ad info <package-id>' to view detailed package configuration and schema.",
+        ]);
+
+        // 搜索命中时
+        const matchProc = await runCliAsync(
+          ["info", "--intent", "multi", "--json"],
+          tempPkgDir,
+          { ACTIONDOCK_HOME: tempHomeDir }
+        );
+        expect(matchProc.exitCode).toBe(0);
+        const matchParsed = JSON.parse(matchProc.stdout.toString());
+        expect(matchParsed.hints).toEqual([
+          "Tip: Run 'ad info <package-id>' to view detailed package configuration and schema.",
+        ]);
+      } finally {
+        rmSync(tempHomeDir, { recursive: true, force: true });
+        rmSync(tempPkgDir, { recursive: true, force: true });
+      }
+    });
+
+    it("ad config schema 在存在未配置必需项时向根节点追加自愈 hints", async () => {
+      const tempPkgDir = mkdtempSync(join(tmpdir(), "ad-guidance-cfg-schema-"));
+      try {
+        writeFileSync(
+          join(tempPkgDir, "actiondock.json"),
+          JSON.stringify({
+            id: "test.cfg-req",
+            name: "test.cfg-req",
+            version: "1.0.0",
+            config: {
+              DATABASE_URL: {
+                description: "Main DB connection URL",
+                required: true,
+              },
+            },
+            actions: {},
+          })
+        );
+
+        const proc = await runCliAsync(["config", "schema", "--json"], tempPkgDir);
+        expect(proc.exitCode).toBe(1);
+        const parsed = JSON.parse(proc.stdout.toString());
+        expect(parsed.ok).toBe(false);
+        expect(parsed.missingCount).toBe(1);
+        expect(parsed.hints).toEqual([
+          "Tip: Run 'ad config set <KEY> <val>' to configure required settings.",
+        ]);
+      } finally {
+        rmSync(tempPkgDir, { recursive: true, force: true });
+      }
+    });
+
+    it("ad describe --json 自省载荷下沉 syntaxReference 语法速查", async () => {
+      const tempPkgDir = mkdtempSync(join(tmpdir(), "ad-guidance-describe-json-"));
+      try {
+        writeFileSync(
+          join(tempPkgDir, "actiondock.json"),
+          JSON.stringify({
+            id: "test.describe-pkg",
+            name: "test.describe-pkg",
+            version: "1.0.0",
+            actions: {
+              "demo.greet": {
+                entry: "actions/greet.ts",
+                description: "Greet user",
+                inputSchema: {
+                  type: "object",
+                  properties: {
+                    name: { type: "string" },
+                    count: { type: "number" },
+                  },
+                  required: ["name"],
+                },
+              },
+            },
+          })
+        );
+
+        const proc = await runCliAsync(["describe", "demo.greet", "--json"], tempPkgDir);
+        expect(proc.exitCode).toBe(0);
+        const parsed = JSON.parse(proc.stdout.toString());
+        expect(parsed.id).toBe("demo.greet");
+        expect(parsed.inputAdvice.recommendedMode).toBe("flat");
+        expect(Array.isArray(parsed.syntaxReference)).toBe(true);
+        expect(parsed.syntaxReference.some((l: string) => l.includes('key="value"'))).toBe(true);
+        expect(parsed.syntaxReference.some((l: string) => l.includes("count:=10"))).toBe(true);
+        expect(parsed.syntaxReference.some((l: string) => l.includes("--input-file"))).toBe(true);
+      } finally {
+        rmSync(tempPkgDir, { recursive: true, force: true });
+      }
+    });
+  });
 });

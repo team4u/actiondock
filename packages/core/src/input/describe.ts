@@ -55,6 +55,8 @@ export interface ActionDescribePayload {
 
   /** 统一输入模式建议 */
   inputAdvice: ActionDescribeAdvice;
+  /** 扁平输入通用语法速查行列表 */
+  syntaxReference?: string[];
 }
 
 /**
@@ -193,6 +195,14 @@ export function buildActionDescribePayload(
     inputAdvice: computeActionDescribeAdvice(spec.inputSchema),
   };
 
+  const hasAssignments = Boolean(
+    payload.inputAdvice.assignments &&
+      Object.keys(payload.inputAdvice.assignments).length > 0
+  );
+  if (payload.inputAdvice.recommendedMode === "flat" || hasAssignments) {
+    payload.syntaxReference = [...ACTION_DESCRIBE_SYNTAX_REFERENCE];
+  }
+
   return payload;
 }
 
@@ -301,7 +311,7 @@ export function formatActionDetail(
   if (payload.inputAdvice.recommendedMode === "flat" || hasAssignments) {
     lines.push("");
     lines.push("Syntax Reference:");
-    lines.push(...ACTION_DESCRIBE_SYNTAX_REFERENCE);
+    lines.push(...(payload.syntaxReference || ACTION_DESCRIBE_SYNTAX_REFERENCE));
   }
 
   if (payload.inputAdvice.issues && payload.inputAdvice.issues.length > 0) {

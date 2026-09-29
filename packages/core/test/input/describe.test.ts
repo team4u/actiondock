@@ -48,6 +48,7 @@ describe("ActionDock describe 输出统一设计", () => {
           enabled: ":=",
         },
       });
+      expect(payload.syntaxReference).toEqual([...ACTION_DESCRIBE_SYNTAX_REFERENCE]);
     });
 
     it("空对象 Schema 推荐 flat 模式且 assignments 为空对象", () => {
@@ -98,6 +99,7 @@ describe("ActionDock describe 输出统一设计", () => {
       expect(payload.inputAdvice.recommendedMode).toBe("full-json");
       expect(payload.inputAdvice.reason).toBe("COMPLEX_SCHEMA");
       expect(payload.inputAdvice.assignments).toBeUndefined();
+      expect(payload.syntaxReference).toBeUndefined();
     });
 
     it("非对象根模式标记为 full-json 并给出 NON_OBJECT_SCHEMA 原因", () => {

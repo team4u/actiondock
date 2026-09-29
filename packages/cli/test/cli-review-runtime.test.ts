@@ -260,7 +260,7 @@ describe("CLI Review - Runtime & Project Regression", () => {
       const actionListProc = runCli(["list", "--json"], noManifestDir);
       expect(actionListProc.exitCode).toBe(0);
       const actionList = JSON.parse(actionListProc.stdout.toString());
-      expect(actionList.length).toBe(0);
+      expect(actionList.items.length).toBe(0);
       expect(existsSync(join(noManifestDir, "node_modules"))).toBe(false);
 
       const doctorProc = runCli(["doctor", "--json"], noManifestDir);
@@ -297,8 +297,8 @@ describe("CLI Review - Runtime & Project Regression", () => {
       const actionListWithManifestProc = runCli(["list", "--json"], noManifestDir);
       expect(actionListWithManifestProc.exitCode).toBe(0);
       const actionListWithManifest = JSON.parse(actionListWithManifestProc.stdout.toString());
-      expect(actionListWithManifest.length).toBe(1);
-      expect(actionListWithManifest[0].id).toBe("team.foo");
+      expect(actionListWithManifest.items.length).toBe(1);
+      expect(actionListWithManifest.items[0].id).toBe("team.foo");
       expect(existsSync(join(noManifestDir, "node_modules"))).toBe(false);
 
       const actionShowProc = runCli(["describe", "team.foo", "--json"], noManifestDir);

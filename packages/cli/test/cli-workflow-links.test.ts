@@ -85,13 +85,13 @@ describe("CLI Workflow - Package Links & Outside Discovery", () => {
     const preJson = runCli(["--json", "list"], tempDir);
     expect(preJson.exitCode).toBe(0);
     const preJsonList = JSON.parse(preJson.stdout.toString());
-    expect(Array.isArray(preJsonList)).toBe(true);
+    expect(Array.isArray(preJsonList.items)).toBe(true);
 
     // After subcommand: ad list --json
     const postJson = runCli(["list", "--json"], tempDir);
     expect(postJson.exitCode).toBe(0);
     const postJsonList = JSON.parse(postJson.stdout.toString());
-    expect(Array.isArray(postJsonList)).toBe(true);
+    expect(Array.isArray(postJsonList.items)).toBe(true);
   });
 
   it("links package and discovers/executes actions and playbooks from outside directory", () => {
@@ -159,7 +159,7 @@ describe("CLI Workflow - Package Links & Outside Discovery", () => {
     const outsidePbList = runCli(["playbook", "list", "--json"], tmpdir());
     expect(outsidePbList.exitCode).toBe(0);
     const outsidePbListData = JSON.parse(outsidePbList.stdout.toString());
-    const pkgInList = outsidePbListData.find((p: any) => p.packageId === "team.github-ops");
+    const pkgInList = outsidePbListData.packages.find((p: any) => p.packageId === "team.github-ops");
     expect(pkgInList).toBeDefined();
     expect(pkgInList.playbooks.length).toBe(1);
     expect(pkgInList.playbooks[0].id).toBe("greet-user");
@@ -281,7 +281,7 @@ describe("CLI Workflow - Package Links & Outside Discovery", () => {
     const listProc = runCli(["list", "-P", "symlink-pkg.demo", "--json"], tmpdir(), customEnv);
     expect(listProc.exitCode).toBe(0);
     const listData = JSON.parse(listProc.stdout.toString());
-    expect(Array.isArray(listData)).toBe(true);
-    expect(listData.length).toBeGreaterThan(0);
+    expect(Array.isArray(listData.items)).toBe(true);
+    expect(listData.items.length).toBeGreaterThan(0);
   });
 });

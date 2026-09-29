@@ -57,13 +57,40 @@ describe("CLI Machine-Mode Fallback Consistency", () => {
 
     const noMatch = "nomatch-intent-xyz";
     const cases: Array<{ label: string; args: string[]; empty: unknown }> = [
-      { label: "list", args: ["list", "--intent", noMatch, "--json"], empty: [] },
+      {
+        label: "list",
+        args: ["list", "--intent", noMatch, "--json"],
+        empty: {
+          items: [],
+          matchedCount: 0,
+          hints: [
+            "Tip: For composite or multi-step tasks, check 'ad playbook list' for standard operating procedures.",
+          ],
+        },
+      },
       {
         label: "info",
         args: ["info", "--intent", noMatch, "--json"],
-        empty: { linkedPackages: [], matchedCount: 0, isFallback: false },
+        empty: {
+          linkedPackages: [],
+          matchedCount: 0,
+          isFallback: false,
+          hints: [
+            "Tip: Run 'ad info <package-id>' to view detailed package configuration and schema.",
+          ],
+        },
       },
-      { label: "playbook list", args: ["playbook", "list", "--intent", noMatch, "--json"], empty: [] },
+      {
+        label: "playbook list",
+        args: ["playbook", "list", "--intent", noMatch, "--json"],
+        empty: {
+          items: [],
+          matchedCount: 0,
+          hints: [
+            "Tip: Run 'ad playbook show <id>' to inspect procedure steps before execution.",
+          ],
+        },
+      },
       { label: "state list", args: ["state", "list", "--intent", noMatch, "--json"], empty: [] },
       { label: "runs list", args: ["runs", "list", "--intent", noMatch, "--json"], empty: [] },
       { label: "config list", args: ["config", "list", "--intent", noMatch, "--json"], empty: [] },
@@ -81,17 +108,17 @@ describe("CLI Machine-Mode Fallback Consistency", () => {
       {
         label: "list",
         args: ["list", "--intent", noMatch, "--fallback", "--json"],
-        check: (p) => p.isFallback === true && Array.isArray(p.items) && p.items.length > 0,
+        check: (p) => p.isFallback === true && Array.isArray(p.items) && p.items.length > 0 && Array.isArray(p.hints),
       },
       {
         label: "info",
         args: ["info", "--intent", noMatch, "--fallback", "--json"],
-        check: (p) => p.isFallback === true && Array.isArray(p.linkedPackages) && p.linkedPackages.length > 0,
+        check: (p) => p.isFallback === true && Array.isArray(p.linkedPackages) && p.linkedPackages.length > 0 && Array.isArray(p.hints),
       },
       {
         label: "playbook list",
         args: ["playbook", "list", "--intent", noMatch, "--fallback", "--json"],
-        check: (p) => p.isFallback === true,
+        check: (p) => p.isFallback === true && Array.isArray(p.items) && p.items.length > 0 && Array.isArray(p.hints),
       },
       {
         label: "state list",

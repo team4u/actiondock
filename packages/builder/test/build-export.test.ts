@@ -102,18 +102,21 @@ describe("Build & Skill Export Contract", () => {
     const listProc = runBin([buildRes.executablePath, "list", "--json"]);
     expect(listProc.exitCode).toBe(0);
     const listJson = JSON.parse(listProc.stdout.toString());
-    expect(listJson).toEqual([
+    expect(listJson.items).toEqual([
       { id: "sample.greet", description: "Greeting action demonstrating basic input, config, and state usage" },
+    ]);
+    expect(listJson.hints).toEqual([
+      "Tip: For composite or multi-step tasks, check 'ad playbook list' for standard operating procedures.",
     ]);
 
     // 1b. Test binary `list --intent greet --json` and `list nonexist --no-fallback --json`
     const listIntentProc = runBin([buildRes.executablePath, "list", "--intent", "greet|other", "--json"]);
     expect(listIntentProc.exitCode).toBe(0);
-    expect(JSON.parse(listIntentProc.stdout.toString()).length).toBe(1);
+    expect(JSON.parse(listIntentProc.stdout.toString()).items.length).toBe(1);
 
     const listStrictProc = runBin([buildRes.executablePath, "list", "nomatch", "--no-fallback", "--json"]);
     expect(listStrictProc.exitCode).toBe(0);
-    expect(JSON.parse(listStrictProc.stdout.toString())).toEqual([]);
+    expect(JSON.parse(listStrictProc.stdout.toString()).items).toEqual([]);
 
     // 2. Test binary `describe <id> --json`
     const descProc = runBin([buildRes.executablePath, "describe", "sample.greet", "--json"]);
@@ -358,8 +361,8 @@ export default defineAction({
     const listProc = runBin([selectiveEntry, "list", "--json"]);
     expect(listProc.exitCode).toBe(0);
     const listData = JSON.parse(listProc.stdout.toString());
-    expect(listData.length).toBe(1);
-    expect(listData[0].id).toBe("sample.greet");
+    expect(listData.items.length).toBe(1);
+    expect(listData.items[0].id).toBe("sample.greet");
   }, 30000);
 });
 

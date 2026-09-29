@@ -367,8 +367,12 @@ export class StandaloneDispatcher {
       !noFallback
     );
 
+    const hints = [
+      "Tip: For composite or multi-step tasks, check 'ad playbook list' for standard operating procedures.",
+    ];
+
     if (isJson) {
-      this.writeOut(JSON.stringify(filterRes.items, null, 2));
+      this.writeOut(JSON.stringify({ items: filterRes.items, hints }, null, 2));
     } else {
       let text = `Actions in ${this.options.packageId} (v${this.options.version}):\n\n`;
       for (const a of filterRes.items) {

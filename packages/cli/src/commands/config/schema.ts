@@ -92,24 +92,31 @@ export function registerConfigSchemaCommand(configCmd: Command, context?: CliCon
           const missingRequired = items.filter((i) => i.required && i.status === "MISSING");
           const ok = missingRequired.length === 0;
 
-          const result = {
+          const result: Record<string, any> = {
             packageId: projConfig.id,
             projectRoot: root,
             ok,
             missingCount: missingRequired.length,
             configs: items,
+            ...(!ok
+              ? {
+                  hints: [
+                    "Tip: Run 'ad config set <KEY> <val>' to configure required settings.",
+                  ],
+                }
+              : {}),
           };
 
-          if (options.json) {
-            renderResult(result, {
-              json: options.json,
-              context,
-            });
-          } else {
-            writeStdout(renderConfigSchema(items, projConfig.id, root) + "\n", context);
-          }
+          renderResult(result, {
+            json: options.json,
+            humanFormatter: () => renderConfigSchema(items, projConfig.id, root) + "\n",
+            context,
+          });
 
           if (!ok) {
+            if (context) {
+              context.exitCode = 1;
+            }
             process.exitCode = 1;
           }
         },

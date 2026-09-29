@@ -83,7 +83,7 @@ describe("CLI Review - Commands & Arguments Regression", () => {
     const listProc = await runCliAsync(["action", "list", "--json"], tempDir);
     expect(listProc.exitCode).toBe(0);
     const listData = JSON.parse(listProc.stdout.toString());
-    expect(listData.some((a: any) => a.id === "sample.greet")).toBe(true);
+    expect(listData.items.some((a: any) => a.id === "sample.greet")).toBe(true);
 
     // 2. ad action describe / show
     const descProc = await runCliAsync(["action", "describe", "sample.greet", "--json"], tempDir);

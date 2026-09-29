@@ -704,8 +704,8 @@ export default defineAction({
       }
       expect(listProc.exitCode).toBe(0);
       const listJson = JSON.parse(listProc.stdout.toString());
-      expect(listJson.length).toBe(1);
-      expect(listJson[0].id).toBe("sample.greet");
+      expect(listJson.items.length).toBe(1);
+      expect(listJson.items[0].id).toBe("sample.greet");
     });
 
     it("支持 options.archive 生成标准 zip 压缩归档交付产物", async () => {

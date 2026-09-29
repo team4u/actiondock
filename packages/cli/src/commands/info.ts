@@ -181,6 +181,10 @@ export function registerInfoCommand(program: Command, context?: CliContext): voi
       // 扫描本地候选包（当前工程根目录 + 全局已链接包）
       const { currentRoot, aggregated } = scanLocalAggregatedPackages(context);
 
+      const infoHints = [
+        "Tip: Run 'ad info <package-id>' to view detailed package configuration and schema.",
+      ];
+
       // 无关键字过滤场景
       if (!effectiveIntent) {
         if (currentRoot) {
@@ -202,7 +206,7 @@ export function registerInfoCommand(program: Command, context?: CliContext): voi
         }
 
         renderResult(
-          { linkedPackages: aggregated },
+          { linkedPackages: aggregated, hints: infoHints },
           {
             ...outOpts,
             humanFormatter: () => renderAggregatedPackages(aggregated),
@@ -224,7 +228,7 @@ export function registerInfoCommand(program: Command, context?: CliContext): voi
       if (aggregated.length === 0) {
         if (isMachine) {
           renderResult(
-            { linkedPackages: [], matchedCount: 0, isFallback: false },
+            { linkedPackages: [], matchedCount: 0, isFallback: false, hints: infoHints },
             outOpts
           );
           return;
@@ -253,7 +257,7 @@ export function registerInfoCommand(program: Command, context?: CliContext): voi
         if (!filterRes.isFallback) {
           if (isMachine) {
             renderResult(
-              { linkedPackages: [], matchedCount: 0, isFallback: false },
+              { linkedPackages: [], matchedCount: 0, isFallback: false, hints: infoHints },
               outOpts
             );
             return;
@@ -264,7 +268,7 @@ export function registerInfoCommand(program: Command, context?: CliContext): voi
         // 回退模式：展示全部包并附带提示
         if (isMachine) {
           renderResult(
-            { linkedPackages: filterRes.items, isFallback: true, matchedCount: 0 },
+            { linkedPackages: filterRes.items, isFallback: true, matchedCount: 0, hints: infoHints },
             outOpts
           );
           return;
@@ -285,7 +289,7 @@ export function registerInfoCommand(program: Command, context?: CliContext): voi
       // 机器模式下搜索：稳定返回列表结构，不因为 matchedCount === 1 突变为详情
       if (isMachine) {
         renderResult(
-          { linkedPackages: filterRes.items, matchedCount: filterRes.matchedCount, isFallback: false },
+          { linkedPackages: filterRes.items, matchedCount: filterRes.matchedCount, isFallback: false, hints: infoHints },
           outOpts
         );
         return;

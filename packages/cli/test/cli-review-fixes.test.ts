@@ -109,14 +109,14 @@ describe("CLI Review Fixes", () => {
       const proc = await runCliAsync(["list", "-P", "review.pkg-a", "--json"], tmpdir());
       expect(proc.exitCode).toBe(0);
       const actions = JSON.parse(proc.stdout.toString());
-      expect(actions.length).toBe(1);
-      expect((actions[0] as any).id).toBe("shared.echo");
+      expect(actions.items.length).toBe(1);
+      expect((actions.items[0] as any).id).toBe("shared.echo");
 
       // 不指定 -P（链接包聚合视图）：两个包的条目均可列出
       const all = await runCliAsync(["list", "--json"], tmpdir());
       expect(all.exitCode).toBe(0);
       const allActions = JSON.parse(all.stdout.toString());
-      expect(allActions.length).toBe(2);
+      expect(allActions.items.length).toBe(2);
     } finally {
       await runCliAsync(["unlink", "review.pkg-a"], tmpdir()).catch(() => {});
       await runCliAsync(["unlink", "review.pkg-b"], tmpdir()).catch(() => {});

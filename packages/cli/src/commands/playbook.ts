@@ -80,6 +80,10 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
       const effectiveIntent = resolveIntent(options.intent, patterns);
       const { shouldFallback, isMachine } = resolveFallbackStrategy(options);
 
+      const hints = [
+        "Tip: Run 'ad playbook show <id>' to inspect procedure steps before execution.",
+      ];
+
       // 1. 远端服务分支
       const target = resolveTargetFromOptions(options, context);
 
@@ -90,6 +94,14 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
           allowInsecureHttp: Boolean(options.allowInsecureHttp),
           insecure: target.insecure,
         });
+
+        if (isMachine) {
+          renderResult(
+            { items: remotePbs, hints },
+            { json: options.json, context }
+          );
+          return;
+        }
 
         renderResult(remotePbs, {
           json: options.json,
@@ -132,9 +144,21 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
           shouldFallback
         );
 
-        if (filterRes.isFallback && isMachine) {
+        if (isMachine) {
+          if (filterRes.isFallback) {
+            renderResult(
+              { items: filterRes.items, isFallback: true, matchedCount: 0, hints },
+              { json: options.json, context }
+            );
+            return;
+          }
+
           renderResult(
-            { items: filterRes.items, isFallback: true, matchedCount: 0 },
+            {
+              items: filterRes.items,
+              ...(filterRes.matchedCount !== undefined ? { matchedCount: filterRes.matchedCount } : {}),
+              hints,
+            },
             { json: options.json, context }
           );
           return;
@@ -157,6 +181,13 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
       // 3. 扫描所有已链接的外部包
       const linkedList = listLinkedPackages(context?.customHome);
       if (linkedList.length === 0) {
+        if (isMachine) {
+          renderResult(
+            { packages: [], hints },
+            { json: options.json, context }
+          );
+          return;
+        }
         renderResult(
           [],
           {
@@ -234,9 +265,17 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
         }
       }
 
-      if (isFallback && isMachine) {
+      if (isMachine) {
+        if (isFallback) {
+          renderResult(
+            { packages: filteredPackages, isFallback: true, matchedCount: 0, hints },
+            { json: options.json, context }
+          );
+          return;
+        }
+
         renderResult(
-          { packages: filteredPackages, isFallback: true, matchedCount: 0 },
+          { packages: filteredPackages, hints },
           { json: options.json, context }
         );
         return;

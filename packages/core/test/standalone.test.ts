@@ -62,8 +62,11 @@ describe("StandaloneRuntime 独立二进制运行时委托 PackageRuntime", () =
       logs.length = 0;
       await runtime.run(["list", "--json", `--data-dir=${tmpDir}`]);
       const parsed = JSON.parse(logs.join("\n"));
-      expect(Array.isArray(parsed)).toBe(true);
-      expect(parsed.some((item: any) => item.id === "greet")).toBe(true);
+      expect(Array.isArray(parsed.items)).toBe(true);
+      expect(parsed.items.some((item: any) => item.id === "greet")).toBe(true);
+      expect(parsed.hints).toEqual([
+        "Tip: For composite or multi-step tasks, check 'ad playbook list' for standard operating procedures.",
+      ]);
     } finally {
       console.log = origLog;
     }

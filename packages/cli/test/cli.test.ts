@@ -155,7 +155,7 @@ describe("CLI End-to-End", () => {
       const remoteListProc = runCli(["list", "--profile", "cloud-aliyun", "--json"], tmpdir(), env);
       expect(remoteListProc.exitCode).toBe(0);
       const remoteActions = JSON.parse(remoteListProc.stdout.toString());
-      expect(remoteActions.some((a: any) => a.id === "sample.greet")).toBe(true);
+      expect(remoteActions.items.some((a: any) => a.id === "sample.greet")).toBe(true);
 
       const remoteListIntentProc = runCli(
         ["list", "--profile", "cloud-aliyun", "--intent", "sample.greet", "--json"],
@@ -163,7 +163,7 @@ describe("CLI End-to-End", () => {
         env
       );
       expect(remoteListIntentProc.exitCode).toBe(0);
-      expect(JSON.parse(remoteListIntentProc.stdout.toString()).length).toBe(1);
+      expect(JSON.parse(remoteListIntentProc.stdout.toString()).items.length).toBe(1);
 
       // 机器模式（--json）无匹配且未显式 --fallback 时不回退：返回空集
       const remoteListNoMatchProc = runCli(
@@ -172,7 +172,7 @@ describe("CLI End-to-End", () => {
         env
       );
       expect(remoteListNoMatchProc.exitCode).toBe(0);
-      expect(JSON.parse(remoteListNoMatchProc.stdout.toString())).toEqual([]);
+      expect(JSON.parse(remoteListNoMatchProc.stdout.toString()).items).toEqual([]);
 
       // 6. Execute action on remote server via ad run --profile
       const remoteRunProc = runCli(
@@ -384,7 +384,7 @@ describe("CLI End-to-End", () => {
       const actionListProc = runCli(["list", "--json"], noManifestDir);
       expect(actionListProc.exitCode).toBe(0);
       const actionList = JSON.parse(actionListProc.stdout.toString());
-      expect(actionList.length).toBe(0);
+      expect(actionList.items.length).toBe(0);
       expect(existsSync(join(noManifestDir, "node_modules"))).toBe(false);
 
       const doctorProc = runCli(["doctor", "--json"], noManifestDir);
@@ -421,8 +421,8 @@ describe("CLI End-to-End", () => {
       const actionListWithManifestProc = runCli(["list", "--json"], noManifestDir);
       expect(actionListWithManifestProc.exitCode).toBe(0);
       const actionListWithManifest = JSON.parse(actionListWithManifestProc.stdout.toString());
-      expect(actionListWithManifest.length).toBe(1);
-      expect(actionListWithManifest[0].id).toBe("team.foo");
+      expect(actionListWithManifest.items.length).toBe(1);
+      expect(actionListWithManifest.items[0].id).toBe("team.foo");
       expect(existsSync(join(noManifestDir, "node_modules"))).toBe(false);
 
       const actionShowProc = runCli(["describe", "team.foo", "--json"], noManifestDir);

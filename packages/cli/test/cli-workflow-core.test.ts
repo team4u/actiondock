@@ -97,22 +97,22 @@ describe("CLI Workflow - Core Lifecycle", () => {
     const listProc = runCli(["list", "--json"], tempDir);
     expect(listProc.exitCode).toBe(0);
     const actionsList = JSON.parse(listProc.stdout.toString());
-    expect(actionsList.length).toBe(1);
-    expect(actionsList[0].id).toBe("sample.greet");
+    expect(actionsList.items.length).toBe(1);
+    expect(actionsList.items[0].id).toBe("sample.greet");
 
     // 3b. Test list with --intent and positional fuzzy search
     const listIntentProc = runCli(["list", "--intent", "greet|hello", "--json"], tempDir);
     expect(listIntentProc.exitCode).toBe(0);
-    expect(JSON.parse(listIntentProc.stdout.toString()).length).toBe(1);
+    expect(JSON.parse(listIntentProc.stdout.toString()).items.length).toBe(1);
 
     const listPositionalProc = runCli(["list", "greet", "--json"], tempDir);
     expect(listPositionalProc.exitCode).toBe(0);
-    expect(JSON.parse(listPositionalProc.stdout.toString()).length).toBe(1);
+    expect(JSON.parse(listPositionalProc.stdout.toString()).items.length).toBe(1);
 
     // In machine mode (--json), no fallback by default when no match: returns empty array
     const listNoMatchProc = runCli(["list", "--intent", "nomatch", "--json"], tempDir);
     expect(listNoMatchProc.exitCode).toBe(0);
-    expect(JSON.parse(listNoMatchProc.stdout.toString()).length).toBe(0);
+    expect(JSON.parse(listNoMatchProc.stdout.toString()).items.length).toBe(0);
 
     // Fallback only when explicitly requested via --fallback in machine mode
     const listFallbackProc = runCli(
@@ -130,7 +130,7 @@ describe("CLI Workflow - Core Lifecycle", () => {
       tempDir
     );
     expect(listNoFallbackProc.exitCode).toBe(0);
-    expect(JSON.parse(listNoFallbackProc.stdout.toString()).length).toBe(0);
+    expect(JSON.parse(listNoFallbackProc.stdout.toString()).items.length).toBe(0);
 
     const showProc = runCli(["describe", "sample.greet", "--json"], tempDir);
     expect(showProc.exitCode).toBe(0);
@@ -165,15 +165,15 @@ describe("CLI Workflow - Core Lifecycle", () => {
     const pbListProc = runCli(["playbook", "list", "--json"], tempDir);
     expect(pbListProc.exitCode).toBe(0);
     const pbList = JSON.parse(pbListProc.stdout.toString());
-    expect(pbList.length).toBe(1);
+    expect(pbList.items.length).toBe(1);
 
     const pbListIntent = runCli(["playbook", "list", "greet", "--json"], tempDir);
     expect(pbListIntent.exitCode).toBe(0);
-    expect(JSON.parse(pbListIntent.stdout.toString()).length).toBe(1);
+    expect(JSON.parse(pbListIntent.stdout.toString()).items.length).toBe(1);
 
     const pbListStrict = runCli(["playbook", "list", "nomatch", "--no-fallback", "--json"], tempDir);
     expect(pbListStrict.exitCode).toBe(0);
-    expect(JSON.parse(pbListStrict.stdout.toString()).length).toBe(0);
+    expect(JSON.parse(pbListStrict.stdout.toString()).items.length).toBe(0);
 
     const pbShowProc = runCli(["playbook", "show", "greet-user", "--json"], tempDir);
     expect(pbShowProc.exitCode).toBe(0);

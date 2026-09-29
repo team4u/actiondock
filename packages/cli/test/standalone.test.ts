@@ -83,8 +83,9 @@ describe("CLI - Standalone Mode Dispatcher", () => {
     });
     expect(codeJson).toBe(ExitCode.SUCCESS);
     const parsed = JSON.parse(jsonOut);
-    expect(parsed.length).toBe(2);
-    expect(parsed.some((a: any) => a.id === "greet")).toBe(true);
+    expect(parsed.items.length).toBe(2);
+    expect(parsed.items.some((a: any) => a.id === "greet")).toBe(true);
+    expect(Array.isArray(parsed.hints)).toBe(true);
   });
 
   it("describes action specification and schema", async () => {
