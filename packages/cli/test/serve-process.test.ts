@@ -158,7 +158,7 @@ export default defineAction({
 
     // 等待服务监听就绪
     let ready = false;
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 120; i++) {
       try {
         const res = await fetch(`${serverUrl}/api/v2/health`, {
           headers: { Authorization: `Bearer ${SECRET}` },

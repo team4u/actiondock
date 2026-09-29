@@ -285,14 +285,14 @@ export default defineAction({
       bannerOutput += chunk.toString();
     });
 
-    // 轮询等待服务监听就绪
+    // 轮询等待服务监听就绪与横幅输出
     let ready = false;
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 120; i++) {
       try {
         const res = await fetch(`${serverUrl}/api/v2/health`, {
           headers: { Authorization: `Bearer ${ADMIN_TOKEN}` },
         });
-        if (res.status === 200) {
+        if (res.status === 200 && bannerOutput.includes("* Views:")) {
           ready = true;
           break;
         }
@@ -301,6 +301,7 @@ export default defineAction({
       }
       await new Promise((r) => setTimeout(r, 100));
     }
+    expect(ready).toBe(true);
     // 1. 验证横幅展示配置的多视图标识与端点信息
     expect(bannerOutput).toContain("* Views:");
     expect(bannerOutput).toContain("- admin:");

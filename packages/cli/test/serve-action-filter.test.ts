@@ -255,14 +255,14 @@ export default defineAction({
       bannerOutput += chunk.toString();
     });
 
-    // 等待服务监听就绪
+    // 等待服务监听就绪与横幅输出
     let ready = false;
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 120; i++) {
       try {
         const res = await fetch(`${serverUrl}/api/v2/health`, {
           headers: { Authorization: `Bearer ${SECRET}` },
         });
-        if (res.status === 200) {
+        if (res.status === 200 && bannerOutput.includes("* Actions:")) {
           ready = true;
           break;
         }
@@ -437,12 +437,12 @@ export default defineAction({
     });
 
     let ready = false;
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 120; i++) {
       try {
         const res = await fetch(`${serverUrl}/api/v2/health`, {
           headers: { Authorization: `Bearer ${SECRET}` },
         });
-        if (res.status === 200) {
+        if (res.status === 200 && bannerOutput.includes("test.pkg-a/echo-a")) {
           ready = true;
           break;
         }
@@ -528,12 +528,12 @@ export default defineAction({
     });
 
     let ready = false;
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 120; i++) {
       try {
         const res = await fetch(`${serverUrl}/api/v2/health`, {
           headers: { Authorization: `Bearer ${SECRET}` },
         });
-        if (res.status === 200) {
+        if (res.status === 200 && stderrOutput.includes("Warning: Package 'nonexistent-pkg'")) {
           ready = true;
           break;
         }
