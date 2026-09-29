@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defineAction } from "@actiondock/sdk";
@@ -335,6 +335,39 @@ describe("ActionDock CLI 全自提示与零文档依赖增强体系", () => {
         expect(parsed.hint).toContain("Run 'ad init' to start a new project");
       } finally {
         rmSync(emptyDir, { recursive: true, force: true });
+      }
+    });
+
+    it("机器模式与文本模式功能完全对等：ad info --json 携带 hints 数组", async () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "ad-guidance-info-json-"));
+      try {
+        await runCliAsync(["init", "--id", "test.hints-pkg", "--name", "Hints Pkg"], tempDir);
+        const infoProc = await runCliAsync(["info", "--json"], tempDir);
+        expect(infoProc.exitCode).toBe(0);
+
+        const info = JSON.parse(infoProc.stdout.toString());
+        expect(info.id).toBe("test.hints-pkg");
+        expect(Array.isArray(info.hints)).toBe(true);
+        expect(info.hints.some((h: string) => h.includes("Run 'ad list'"))).toBe(true);
+        expect(info.hints.some((h: string) => h.includes("Run 'ad playbook show <id>'"))).toBe(true);
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it("机器模式与文本模式功能完全对等：ad playbook show --json 携带 hints 数组", async () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "ad-guidance-pb-show-json-"));
+      try {
+        await runCliAsync(["init", "--id", "test.pb-hints", "--name", "Playbook Hints"], tempDir);
+        const pbShowProc = await runCliAsync(["playbook", "show", "greet-user", "--json"], tempDir);
+        expect(pbShowProc.exitCode).toBe(0);
+
+        const detail = JSON.parse(pbShowProc.stdout.toString());
+        expect(detail.id).toBe("greet-user");
+        expect(Array.isArray(detail.hints)).toBe(true);
+        expect(detail.hints.some((h: string) => h.includes("Follow steps sequentially"))).toBe(true);
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
       }
     });
   });

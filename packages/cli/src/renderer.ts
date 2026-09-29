@@ -203,6 +203,14 @@ export function projectDetailToJson(info: ProjectDetailInfo): ProjectDetailJson 
     }
   }
 
+  const hints: string[] = [
+    "Tip: Run 'ad list' to view all callable actions and run-ready IDs.",
+    "Tip: Run 'ad playbook show <id>' to inspect procedure steps before execution.",
+  ];
+  if (info.configDeclared && info.configDeclared.length > 0) {
+    hints.push("Tip: Run 'ad config set <KEY> <val>' to configure required settings.");
+  }
+
   const result: ProjectDetailJson = {
     id: info.id,
     name: info.name || info.id,
@@ -211,6 +219,7 @@ export function projectDetailToJson(info: ProjectDetailInfo): ProjectDetailJson 
     config,
     playbooks,
     actions,
+    hints,
   };
 
   if (info.description) {
@@ -269,10 +278,6 @@ export function renderProjectDetail(info: ProjectDetailInfo): string {
 
   if (actionList.length === 0) {
     lines.push("  (no actions declared)");
-  } else if (actionList.length > 8) {
-    const preview = actionList.slice(0, 8).map((a) => a.id).join(", ");
-    lines.push(`  ${preview}, ... (${actionList.length - 8} more)`);
-    lines.push("  (Run 'ad list' to view full callable actions with descriptions)");
   } else {
     for (const a of actionList) {
       lines.push(`  - ${a.id.padEnd(28)} ${a.description}`);

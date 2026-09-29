@@ -318,6 +318,9 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
       }
 
       const pb = resolved.playbook;
+      const hints = [
+        "Tip: Follow steps sequentially. Invoke constituent actions using 'ad run <action> [options] -- <assignments...>'.",
+      ];
       const detail = {
         id: pb.id,
         packageId: resolved.packageId,
@@ -325,6 +328,7 @@ export function registerPlaybookCommands(program: Command, context?: CliContext)
         actions: pb.actions,
         filePath: pb.filePath,
         content: pb.content,
+        hints,
       };
 
       renderResult(detail, {

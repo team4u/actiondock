@@ -144,6 +144,7 @@ export interface ProjectDetailJson {
   config: Record<string, ProjectDetailConfigItem>;
   playbooks: ProjectDetailPlaybookItem[];
   actions: ProjectDetailActionItem[];
+  hints?: string[];
 }
 
 /**

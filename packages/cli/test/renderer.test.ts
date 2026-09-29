@@ -225,7 +225,7 @@ describe("CLI - Envelope & Renderer Utilities", () => {
     expect(pbDetail).toContain("Tip: Follow steps sequentially. Invoke constituent actions using 'ad run <action> [options] -- <assignments...>'.");
   });
 
-  it("renders project detail with config and playbooks before actions, compact actions preview, and guidance tips", () => {
+  it("renders project detail with config and playbooks before actions, full actions list, and guidance tips", () => {
     const detail = renderProjectDetail({
       id: "test.pkg",
       name: "Test Package",
@@ -257,9 +257,10 @@ describe("CLI - Envelope & Renderer Utilities", () => {
     expect(configIdx).toBeLessThan(playbooksIdx);
     expect(playbooksIdx).toBeLessThan(actionsIdx);
 
-    // 检查动作列表在超过 8 个时收敛展示
-    expect(detail).toContain("... (2 more)");
-    expect(detail).toContain("(Run 'ad list' to view full callable actions with descriptions)");
+    // 方案一：全量平铺展示所有动作，不截断
+    expect(detail).toContain("act1");
+    expect(detail).toContain("act10");
+    expect(detail).not.toContain("more)");
 
     // 检查底部提示
     expect(detail).toContain("Tip: Run 'ad list' to view all callable actions and run-ready IDs.");
@@ -267,7 +268,7 @@ describe("CLI - Envelope & Renderer Utilities", () => {
     expect(detail).toContain("Tip: Run 'ad config set <KEY> <val>' to configure required settings.");
   });
 
-  it("converts project detail info to structured json contract", () => {
+  it("converts project detail info to structured json contract with aligned hints", () => {
     const info = {
       id: "test.pkg",
       name: "Test Package",
@@ -311,6 +312,11 @@ describe("CLI - Envelope & Renderer Utilities", () => {
       actions: [
         { id: "act1", description: "First action" },
         { id: "act2", description: "Second action" },
+      ],
+      hints: [
+        "Tip: Run 'ad list' to view all callable actions and run-ready IDs.",
+        "Tip: Run 'ad playbook show <id>' to inspect procedure steps before execution.",
+        "Tip: Run 'ad config set <KEY> <val>' to configure required settings.",
       ],
     });
   });
