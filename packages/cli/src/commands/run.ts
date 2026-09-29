@@ -275,6 +275,37 @@ export async function executeAction(
   }
 }
 
+const RUN_HELP_AFTER_TEXT = `
+Introspection & Guidance:
+  If uncertain about an action's inputs or schemas:
+    ad describe <id>               Inspect action schema, required fields, and assignment examples
+  If handling multi-step tasks or complex workflows:
+    ad playbook list               List available Standard Operating Procedures (SOPs)
+    ad playbook show <id>          View step-by-step procedure and execution rules
+
+Flat Input Syntax & Examples:
+  Standard invocation syntax:
+    ad run <id> [control-options] [-- <assignments...>]
+
+  Flat parameter assignments:
+    # String assignment (= keeps raw string, no type coercion)
+    ad run <id> -- key="value" path="src/index.ts"
+
+    # Typed / JSON assignment (:= parses numbers, booleans, arrays, objects)
+    ad run <id> -- count:=10 enabled:=true timeoutMs:=5000
+
+    # Sequential array indexing (zero-indexed, consecutive)
+    ad run <id> -- paths.0="src" paths.1="docs"
+    # Or direct JSON array
+    ad run <id> -- paths:='["src", "docs"]'
+
+    # Nested object properties
+    ad run <id> -- user.name="alice" user.age:=30
+
+  Complex or multiline inputs:
+    # Pass via JSON file with --input-file to avoid shell escaping issues
+    ad run <id> --input-file input.json`;
+
 /**
  * 挂载 run 子命令至指定 Commander 节点。
  * 
@@ -296,6 +327,7 @@ export function attachRunCommand(parent: Command, context?: CliContext): Command
     .option("--async", "Execute asynchronously in background (requires remote server or profile)")
     .option("--data-dir <path>", "Custom database directory")
     .option("--json", "Output as JSON")
+    .addHelpText("after", RUN_HELP_AFTER_TEXT)
     .action(async (id: string, params: string[] | any, rawOptions: any, cmd: any) => {
       let flatArgs: string[] | undefined;
       let effectiveRawOptions = rawOptions;

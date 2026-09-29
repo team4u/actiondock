@@ -267,4 +267,22 @@ describe("CLI Review - Commands & Arguments Regression", () => {
     expect(runRes.ok).toBe(true);
     expect(runRes.data.message).toBe("Hello, Tester!");
   });
+
+  it("displays introspection guidance and flat input syntax in ad run and action run help", async () => {
+    for (const cmdArgs of [["run", "--help"], ["action", "run", "--help"]]) {
+      const res = await runCliAsync(cmdArgs, tempDir, env);
+      expect(res.exitCode).toBe(0);
+      const output = res.stdout.toString();
+      expect(output).toContain("Introspection & Guidance:");
+      expect(output).toContain("ad describe <id>");
+      expect(output).toContain("ad playbook list");
+      expect(output).toContain("ad playbook show <id>");
+      expect(output).toContain("Flat Input Syntax & Examples:");
+      expect(output).toContain("key=\"value\"");
+      expect(output).toContain("count:=10");
+      expect(output).toContain("paths.0=\"src\"");
+      expect(output).toContain("--input-file");
+    }
+  });
 });
+
