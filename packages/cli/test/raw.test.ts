@@ -421,7 +421,7 @@ export default defineAction(async (input: { path: string }) => {
     expect(stderr).toContain("Tip: Run 'ad describe files.read' to inspect schema and syntax examples.");
   });
 
-  it("does not output describe guidance tip on INPUT_VALIDATION_FAILED when --json is provided", async () => {
+  it("outputs describe guidance hint on INPUT_VALIDATION_FAILED in machine output when --json is provided", async () => {
     const proc = await runCli(
       ["run", "files.read", "-i", JSON.stringify({ wrongField: "val" }), "--json"],
       tempDir
@@ -435,5 +435,6 @@ export default defineAction(async (input: { path: string }) => {
     const parsed = JSON.parse(stdout);
     expect(parsed.ok).toBe(false);
     expect(parsed.error.code).toBe("INPUT_VALIDATION_FAILED");
+    expect(parsed.hint).toBe("Tip: Run 'ad describe files.read' to inspect schema and syntax examples.");
   });
 });

@@ -61,7 +61,7 @@ export function attachDescribeCommand(parent: Command, context?: CliContext): Co
             if (code === ACTION_NOT_FOUND || code === NOT_FOUND || code === PACKAGE_NOT_FOUND) {
               const hint = (code === ACTION_NOT_FOUND || code === NOT_FOUND)
                 ? "Tip: Run 'ad list' to discover available actions."
-                : undefined;
+                : (err?.hint || (err?.details as any)?.hint);
               throw new ArgumentError(err?.message || String(err), err?.details, code, hint);
             }
             throw new ExecutionError(err?.message || String(err), err?.details, code);

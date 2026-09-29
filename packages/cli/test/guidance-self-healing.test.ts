@@ -348,7 +348,7 @@ describe("ActionDock CLI 全自提示与零文档依赖增强体系", () => {
         const info = JSON.parse(infoProc.stdout.toString());
         expect(info.id).toBe("test.hints-pkg");
         expect(Array.isArray(info.hints)).toBe(true);
-        expect(info.hints.some((h: string) => h.includes("Run 'ad list'"))).toBe(true);
+        expect(info.hints.some((h: string) => h.includes("Run 'ad list'"))).toBe(false);
         expect(info.hints.some((h: string) => h.includes("Run 'ad playbook show <id>'"))).toBe(true);
       } finally {
         rmSync(tempDir, { recursive: true, force: true });
@@ -368,6 +368,93 @@ describe("ActionDock CLI 全自提示与零文档依赖增强体系", () => {
         expect(detail.hints.some((h: string) => h.includes("Follow steps sequentially"))).toBe(true);
       } finally {
         rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it("ad describe 动作未找到时在 --json 模式下其错误信封根节点携带 discover tip", async () => {
+      const tempPkgDir = mkdtempSync(join(tmpdir(), "ad-guidance-desc-json-"));
+      try {
+        writeFileSync(
+          join(tempPkgDir, "actiondock.json"),
+          JSON.stringify({
+            id: "test.pkg",
+            name: "test.pkg",
+            version: "1.0.0",
+            actions: {},
+          })
+        );
+
+        const proc = await runCliAsync(["describe", "missing-action", "--json"], tempPkgDir);
+        expect(proc.exitCode).toBe(ExitCode.INVALID_ARGUMENT);
+        expect(proc.stderr.toString().trim()).toBe("");
+
+        const parsed = JSON.parse(proc.stdout.toString());
+        expect(parsed.ok).toBe(false);
+        expect(parsed.error.code).toBe("ACTION_NOT_FOUND");
+        expect(parsed.hint).toBe("Tip: Run 'ad list' to discover available actions.");
+      } finally {
+        rmSync(tempPkgDir, { recursive: true, force: true });
+      }
+    });
+
+    it("CLI run 当 ACTION_NOT_FOUND 时在 --json 模式下向根节点写入发现提示", async () => {
+      const tempPkgDir = mkdtempSync(join(tmpdir(), "ad-guidance-run-notfound-json-"));
+      try {
+        writeFileSync(
+          join(tempPkgDir, "actiondock.json"),
+          JSON.stringify({
+            id: "test.pkg",
+            name: "test.pkg",
+            version: "1.0.0",
+            actions: {},
+          })
+        );
+
+        const proc = await runCliAsync(["run", "nonexistent-action", "--json"], tempPkgDir);
+        expect(proc.exitCode).toBe(1);
+        expect(proc.stderr.toString().trim()).toBe("");
+
+        const parsed = JSON.parse(proc.stdout.toString());
+        expect(parsed.ok).toBe(false);
+        expect(parsed.error.code).toBe("ACTION_NOT_FOUND");
+        expect(parsed.hint).toBe("Tip: Run 'ad list' to discover available actions, or 'ad info' to inspect packages.");
+      } finally {
+        rmSync(tempPkgDir, { recursive: true, force: true });
+      }
+    });
+
+    it("CLI run 当 ACTION_TIMEOUT 时在 --json 模式下向根节点写入超时调优与异步排队提示", async () => {
+      const tempPkgDir = mkdtempSync(join(tmpdir(), "ad-guidance-timeout-json-"));
+      try {
+        writeFileSync(
+          join(tempPkgDir, "actiondock.json"),
+          JSON.stringify({
+            id: "test.pkg",
+            name: "test.pkg",
+            version: "1.0.0",
+            actions: {
+              slow: { entry: "actions/slow.ts" },
+            },
+          })
+        );
+        mkdirSync(join(tempPkgDir, "actions"), { recursive: true });
+        writeFileSync(
+          join(tempPkgDir, "actions", "slow.ts"),
+          "export default async function run() { await new Promise((r) => setTimeout(r, 2000)); return {}; }\n"
+        );
+
+        const proc = await runCliAsync(["run", "slow", "--timeout", "10ms", "--json"], tempPkgDir);
+        expect(proc.exitCode).toBe(1);
+        expect(proc.stderr.toString().trim()).toBe("");
+
+        const parsed = JSON.parse(proc.stdout.toString());
+        expect(parsed.ok).toBe(false);
+        expect(parsed.error.code).toBe("ACTION_TIMEOUT");
+        expect(parsed.hint).toBe(
+          "Tip: Increase timeout via '--timeout <duration>', or run in background via '--async' and track with 'ad runs show <runId>'."
+        );
+      } finally {
+        rmSync(tempPkgDir, { recursive: true, force: true });
       }
     });
   });

@@ -263,7 +263,7 @@ describe("CLI - Envelope & Renderer Utilities", () => {
     expect(detail).not.toContain("more)");
 
     // 检查底部提示
-    expect(detail).toContain("Tip: Run 'ad list' to view all callable actions and run-ready IDs.");
+    expect(detail).not.toContain("Tip: Run 'ad list' to view all callable actions and run-ready IDs.");
     expect(detail).toContain("Tip: Run 'ad playbook show <id>' to inspect procedure steps before execution.");
     expect(detail).toContain("Tip: Run 'ad config set <KEY> <val>' to configure required settings.");
   });
@@ -314,7 +314,6 @@ describe("CLI - Envelope & Renderer Utilities", () => {
         { id: "act2", description: "Second action" },
       ],
       hints: [
-        "Tip: Run 'ad list' to view all callable actions and run-ready IDs.",
         "Tip: Run 'ad playbook show <id>' to inspect procedure steps before execution.",
         "Tip: Run 'ad config set <KEY> <val>' to configure required settings.",
       ],

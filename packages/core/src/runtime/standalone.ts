@@ -10,6 +10,7 @@ import {
   INPUT_VALIDATION_FAILED,
   ACTION_NOT_FOUND,
   ACTION_TIMEOUT,
+  resolveExecutionHint,
 } from "../errors";
 import {
   resolveActionInput,
@@ -520,7 +521,13 @@ export class StandaloneDispatcher {
     });
 
     if (isJson) {
-      this.writeOut(JSON.stringify(result, null, 2));
+      if (!result.ok) {
+        const hint = resolveExecutionHint(id, result.error);
+        const machineOutput = hint !== undefined ? { ...result, hint } : result;
+        this.writeOut(JSON.stringify(machineOutput, null, 2));
+      } else {
+        this.writeOut(JSON.stringify(result, null, 2));
+      }
     } else {
       if (result.ok) {
         const data: any = result.data;
@@ -600,12 +607,9 @@ export class StandaloneDispatcher {
               : JSON.stringify(result.error.details, null, 2)
           );
         }
-        if (result.error.code === INPUT_VALIDATION_FAILED) {
-          this.writeErr(`Tip: Run 'ad describe ${id}' to inspect schema and syntax examples.`);
-        } else if (result.error.code === ACTION_NOT_FOUND) {
-          this.writeErr("Tip: Run 'ad list' to discover available actions, or 'ad info' to inspect packages.");
-        } else if (result.error.code === ACTION_TIMEOUT) {
-          this.writeErr("Tip: Increase timeout via '--timeout <duration>', or run in background via '--async' and track with 'ad runs show <runId>'.");
+        const hint = resolveExecutionHint(id, result.error);
+        if (hint) {
+          this.writeErr(hint);
         }
       }
     }

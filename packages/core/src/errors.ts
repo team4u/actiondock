@@ -466,6 +466,41 @@ export function createErrorEnvelope(
 }
 
 /**
+ * 根据 Action 执行失败错误解析自愈指引提示文案。
+ *
+ * 作为 CLI 与独立分发器（StandaloneDispatcher）执行失败时提示解析的单一事实源。
+ *
+ * @param targetRef 目标 Action 引用标识（如 "greet" 或 "pkg/greet"）
+ * @param error 执行失败错误对象
+ */
+export function resolveExecutionHint(
+  targetRef: string,
+  error?: { code?: string; details?: unknown; hint?: string }
+): string | undefined {
+  if (!error) return undefined;
+  if (error.code === INPUT_VALIDATION_FAILED) {
+    return `Tip: Run 'ad describe ${targetRef}' to inspect schema and syntax examples.`;
+  }
+  if (error.code === ACTION_NOT_FOUND) {
+    return "Tip: Run 'ad list' to discover available actions, or 'ad info' to inspect packages.";
+  }
+  if (error.code === ACTION_TIMEOUT) {
+    return "Tip: Increase timeout via '--timeout <duration>', or run in background via '--async' and track with 'ad runs show <runId>'.";
+  }
+  if (error.hint && typeof error.hint === "string") {
+    return error.hint;
+  }
+  if (
+    error.details &&
+    typeof error.details === "object" &&
+    typeof (error.details as any).hint === "string"
+  ) {
+    return (error.details as any).hint;
+  }
+  return undefined;
+}
+
+/**
  * 集中定义的标准结构化错误码联合类型。
  */
 export type ErrorCode =

@@ -13,6 +13,7 @@ import {
   ACTION_NOT_FOUND,
   ACTION_TIMEOUT,
   INPUT_VALIDATION_FAILED,
+  resolveExecutionHint,
 } from "@actiondock/core";
 import type { ExecutionResult, JsonValue } from "@actiondock/sdk";
 import { Command } from "commander";
@@ -118,12 +119,9 @@ export function renderRawExecutionResult(
         context
       );
     }
-    if (result.error.code === INPUT_VALIDATION_FAILED) {
-      writeStderr(`Tip: Run 'ad describe ${targetRef}' to inspect schema and syntax examples.`, context);
-    } else if (result.error.code === ACTION_NOT_FOUND) {
-      writeStderr("Tip: Run 'ad list' to discover available actions, or 'ad info' to inspect packages.", context);
-    } else if (result.error.code === ACTION_TIMEOUT) {
-      writeStderr("Tip: Increase timeout via '--timeout <duration>', or run in background via '--async' and track with 'ad runs show <runId>'.", context);
+    const hint = resolveExecutionHint(targetRef, result.error);
+    if (hint) {
+      writeStderr(hint, context);
     }
     if (context) {
       context.exitCode = 1;
@@ -255,7 +253,13 @@ export async function executeAction(
           }
 
           if (isMachine) {
-            writeStdout(JSON.stringify(result, null, 2), context);
+            if (!result.ok) {
+              const hint = resolveExecutionHint(targetRef, result.error);
+              const machineOutput = hint !== undefined ? { ...result, hint } : result;
+              writeStdout(JSON.stringify(machineOutput, null, 2), context);
+            } else {
+              writeStdout(JSON.stringify(result, null, 2), context);
+            }
           } else {
             renderRawExecutionResult(targetRef, result, context);
           }

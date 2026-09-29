@@ -204,7 +204,6 @@ export function projectDetailToJson(info: ProjectDetailInfo): ProjectDetailJson 
   }
 
   const hints: string[] = [
-    "Tip: Run 'ad list' to view all callable actions and run-ready IDs.",
     "Tip: Run 'ad playbook show <id>' to inspect procedure steps before execution.",
   ];
   if (info.configDeclared && info.configDeclared.length > 0) {
@@ -284,8 +283,7 @@ export function renderProjectDetail(info: ProjectDetailInfo): string {
     }
   }
 
-  lines.push("\nTip: Run 'ad list' to view all callable actions and run-ready IDs.");
-  lines.push("Tip: Run 'ad playbook show <id>' to inspect procedure steps before execution.");
+  lines.push("\nTip: Run 'ad playbook show <id>' to inspect procedure steps before execution.");
   if (info.configDeclared.length > 0) {
     lines.push("Tip: Run 'ad config set <KEY> <val>' to configure required settings.");
   }

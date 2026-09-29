@@ -208,4 +208,5 @@ export {
   type ActionLoadFailureContext,
   createErrorEnvelope,
   type ErrorEnvelope,
+  resolveExecutionHint,
 } from "./errors";
