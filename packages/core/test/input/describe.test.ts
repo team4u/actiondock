@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import {
   buildActionDescribePayload,
   formatActionDetail,
+  ACTION_DESCRIBE_SYNTAX_REFERENCE,
   type ActionDescribePayload,
 } from "../../src/input";
 
@@ -235,7 +236,18 @@ describe("ActionDock describe 输出统一设计", () => {
       expect(text).toContain("Output Schema:\n{\n  \"type\": \"object\"\n}");
       expect(text).toContain("Recommended Input: flat");
       expect(text).toContain("Assignments:\n  name=\n  age:=");
+      expect(text).toContain("Syntax Reference:");
+      expect(text).toContain('key="value"');
+      expect(text).toContain("count:=10  enabled:=true");
+      expect(text).toContain('tags:=\'["a", "b"]\' (or tags.0="a" tags.1="b")');
+      expect(text).toContain("--input-file input.json");
       expect(text).not.toContain("Reason:");
+
+      // 验证 Assignments 在 Syntax Reference 上方
+      const assignmentsIdx = text.indexOf("Assignments:");
+      const syntaxRefIdx = text.indexOf("Syntax Reference:");
+      expect(assignmentsIdx).toBeGreaterThanOrEqual(0);
+      expect(syntaxRefIdx).toBeGreaterThan(assignmentsIdx);
     });
 
     it("正确格式化复杂模式输出", () => {
@@ -254,6 +266,7 @@ describe("ActionDock describe 输出统一设计", () => {
       expect(text).toContain("Recommended Input: full-json");
       expect(text).toContain("Reason: COMPLEX_SCHEMA");
       expect(text).not.toContain("Assignments:");
+      expect(text).not.toContain("Syntax Reference:");
     });
 
     it("正确格式化不可输入模式输出", () => {
@@ -272,9 +285,10 @@ describe("ActionDock describe 输出统一设计", () => {
       expect(text).toContain("Recommended Input: none");
       expect(text).toContain("Reason: SCHEMA_REJECTS_ALL");
       expect(text).not.toContain("Assignments:");
+      expect(text).not.toContain("Syntax Reference:");
     });
 
-    it("包含 issues 时正确展示 Issues 列表", () => {
+    it("包含 issues 时正确展示 Issues 列表且位于 Syntax Reference 下方", () => {
       const payload: ActionDescribePayload = {
         id: "with-issues",
         inputAdvice: {
@@ -293,7 +307,69 @@ describe("ActionDock describe 输出统一设计", () => {
 
       expect(text).toContain("Recommended Input: flat");
       expect(text).toContain("Assignments:\n  name=");
+      expect(text).toContain("Syntax Reference:");
       expect(text).toContain("Issues:\n  - bad_prop: UNSAFE_FLAT_PROPERTY");
+
+      const syntaxRefIdx = text.indexOf("Syntax Reference:");
+      const issuesIdx = text.indexOf("Issues:");
+      expect(syntaxRefIdx).toBeGreaterThanOrEqual(0);
+      expect(issuesIdx).toBeGreaterThan(syntaxRefIdx);
+    });
+
+    it("当 recommendedMode 为 flat 但无 assignments 时仍输出 Syntax Reference", () => {
+      const payload: ActionDescribePayload = {
+        id: "empty-object",
+        inputAdvice: {
+          version: 1,
+          recommendedMode: "flat",
+          assignments: {},
+        },
+      };
+
+      const text = formatActionDetail(payload);
+
+      expect(text).toContain("Recommended Input: flat");
+      expect(text).not.toContain("Assignments:");
+      expect(text).toContain("Syntax Reference:");
+      expect(text).toContain('key="value"');
+      expect(text).toContain("count:=10  enabled:=true");
+      expect(text).toContain('tags:=\'["a", "b"]\' (or tags.0="a" tags.1="b")');
+      expect(text).toContain("--input-file input.json");
+    });
+
+    it("当存在 assignments 且 recommendedMode 为 full-json 时仍追加 Syntax Reference", () => {
+      const payload: ActionDescribePayload = {
+        id: "partial-flat",
+        inputAdvice: {
+          version: 1,
+          recommendedMode: "full-json",
+          reason: "REQUIRED_FIELD_NOT_FLAT_SAFE",
+          assignments: {
+            optionalTag: "=",
+          },
+        },
+      };
+
+      const text = formatActionDetail(payload);
+
+      expect(text).toContain("Recommended Input: full-json");
+      expect(text).toContain("Reason: REQUIRED_FIELD_NOT_FLAT_SAFE");
+      expect(text).toContain("Assignments:\n  optionalTag=");
+      expect(text).toContain("Syntax Reference:");
+      expect(text).toContain('key="value"');
+    });
+
+    it("ACTION_DESCRIBE_SYNTAX_REFERENCE 包含四个核心维度的入参速查", () => {
+      const joined = ACTION_DESCRIBE_SYNTAX_REFERENCE.join("\n");
+      // 1. 字符串赋值
+      expect(joined).toContain('key="value"');
+      // 2. 类型化字面量（数值/布尔）
+      expect(joined).toContain("count:=10  enabled:=true");
+      // 3. 数组结构（连续索引与直接 JSON 数组）
+      expect(joined).toContain('tags:=\'["a", "b"]\'');
+      expect(joined).toContain('tags.0="a" tags.1="b"');
+      // 4. 复杂/文件输入
+      expect(joined).toContain("--input-file input.json");
     });
   });
 });

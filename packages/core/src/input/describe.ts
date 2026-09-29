@@ -197,6 +197,20 @@ export function buildActionDescribePayload(
 }
 
 /**
+ * 扁平输入通用语法速查行列表。
+ */
+export const ACTION_DESCRIBE_SYNTAX_REFERENCE: readonly string[] = [
+  "  # String assignment (= keeps raw string, no type coercion)",
+  '  key="value"',
+  "  # Typed / JSON assignment (:= parses numbers, booleans, arrays, objects)",
+  "  count:=10  enabled:=true",
+  "  # Array structure (direct JSON array or sequential index)",
+  '  tags:=\'["a", "b"]\' (or tags.0="a" tags.1="b")',
+  "  # Complex or multiline inputs (pass via JSON file)",
+  "  --input-file input.json",
+];
+
+/**
  * 格式化渲染 Action 详情人类可读文本。
  * 普通 CLI 与 Standalone 统一复用该函数，避免长期排版漂移。
  *
@@ -271,12 +285,23 @@ export function formatActionDetail(
     lines.push(`Reason: ${payload.inputAdvice.reason}`);
   }
 
-  if (payload.inputAdvice.assignments && Object.keys(payload.inputAdvice.assignments).length > 0) {
+  const hasAssignments = Boolean(
+    payload.inputAdvice.assignments &&
+      Object.keys(payload.inputAdvice.assignments).length > 0
+  );
+
+  if (hasAssignments) {
     lines.push("");
     lines.push("Assignments:");
-    for (const [key, op] of Object.entries(payload.inputAdvice.assignments)) {
+    for (const [key, op] of Object.entries(payload.inputAdvice.assignments!)) {
       lines.push(`  ${key}${op}`);
     }
+  }
+
+  if (payload.inputAdvice.recommendedMode === "flat" || hasAssignments) {
+    lines.push("");
+    lines.push("Syntax Reference:");
+    lines.push(...ACTION_DESCRIBE_SYNTAX_REFERENCE);
   }
 
   if (payload.inputAdvice.issues && payload.inputAdvice.issues.length > 0) {

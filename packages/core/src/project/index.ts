@@ -43,6 +43,7 @@ export {
   buildActionInputAdvice,
   formatActionDetail,
   buildActionDescribePayload,
+  ACTION_DESCRIBE_SYNTAX_REFERENCE,
   mapInputValidationFailure,
   stripBom,
   readStdinBounded,

@@ -224,5 +224,10 @@ export default defineAction(async (input: any) => {
     expect(formatted).toContain("  name=");
     expect(formatted).toContain("  count:=");
     expect(formatted).toContain("  meta:=");
+    expect(formatted).toContain("Syntax Reference:");
+    expect(formatted).toContain('key="value"');
+    expect(formatted).toContain("count:=10  enabled:=true");
+    expect(formatted).toContain('tags:=\'["a", "b"]\' (or tags.0="a" tags.1="b")');
+    expect(formatted).toContain("--input-file input.json");
   });
 });

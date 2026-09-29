@@ -138,6 +138,77 @@ describe("Phase 10: CLI Describe / Run 集成与普通 CLI / Standalone 行为�
         rmSync(tempPkgDir, { recursive: true, force: true });
       }
     });
+
+    it("普通 CLI describe 与 Standalone describe 人类可读文本均包含 Syntax Reference 语法速查", async () => {
+      // 1. standalone describe (human-readable)
+      let standaloneOut = "";
+      const standaloneCode = await runStandaloneCli(["describe", "greet"], {
+        ...baseStandaloneOpts,
+        stdout: (msg) => (standaloneOut += msg),
+      });
+      expect(standaloneCode).toBe(ExitCode.SUCCESS);
+      expect(standaloneOut).toContain("Action: greet");
+      expect(standaloneOut).toContain("Recommended Input: flat");
+      expect(standaloneOut).toContain("Assignments:");
+      expect(standaloneOut).toContain("Syntax Reference:");
+      expect(standaloneOut).toContain('key="value"');
+      expect(standaloneOut).toContain("count:=10  enabled:=true");
+      expect(standaloneOut).toContain('tags:=\'["a", "b"]\' (or tags.0="a" tags.1="b")');
+      expect(standaloneOut).toContain("--input-file input.json");
+
+      // 2. 真实调用普通 CLI describe (human-readable)
+      const tempPkgDir = mkdtempSync(join(tmpdir(), "ad-phase10-cli-human-"));
+      try {
+        writeFileSync(
+          join(tempPkgDir, "actiondock.json"),
+          JSON.stringify({
+            id: "test.phase10",
+            name: "test.phase10",
+            version: "1.0.0",
+            actions: {
+              greet: {
+                inputSchema: sampleAction.inputSchema,
+              },
+            },
+          })
+        );
+        mkdirSync(join(tempPkgDir, "actions"), { recursive: true });
+        writeFileSync(
+          join(tempPkgDir, "actions", "greet.ts"),
+          "export default function run(input: any) { return { hello: input?.name }; }\n"
+        );
+
+        let cliOut = "";
+        const origConsoleLog = console.log;
+        console.log = (msg: any) => {
+          cliOut += String(msg);
+        };
+        try {
+          const exitCode = await main([
+            "node",
+            "ad",
+            "describe",
+            "greet",
+            "-P",
+            tempPkgDir,
+          ]);
+          expect(exitCode).toBe(0);
+        } finally {
+          console.log = origConsoleLog;
+        }
+
+        expect(cliOut).toContain("Action: greet");
+        expect(cliOut).toContain("Recommended Input: flat");
+        expect(cliOut).toContain("Assignments:");
+        expect(cliOut).toContain("Syntax Reference:");
+        expect(cliOut).toContain('key="value"');
+        expect(cliOut).toContain("count:=10  enabled:=true");
+        expect(cliOut).toContain('tags:=\'["a", "b"]\' (or tags.0="a" tags.1="b")');
+        expect(cliOut).toContain("--input-file input.json");
+      } finally {
+        rmSync(tempPkgDir, { recursive: true, force: true });
+      }
+    });
   });
 
   describe("CLI Pre-Target Policy 强制执行（Section 25）", () => {
