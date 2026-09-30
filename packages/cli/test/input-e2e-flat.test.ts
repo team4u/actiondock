@@ -4,9 +4,9 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSy
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
-  buildActionInputAdvice,
   formatActionDetail,
 } from "../src/utils/input";
+import { buildActionInputAdvice } from "@actiondock/core/project";
 
 import { runCliAsync } from "./helpers/run-cli";
 

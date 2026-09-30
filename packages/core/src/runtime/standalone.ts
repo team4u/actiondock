@@ -22,7 +22,6 @@ import {
   FLAT_INPUT_LIMIT_EXCEEDED,
   formatActionDetail,
   buildActionDescribePayload,
-  buildCliDescribeInputMetadataV1,
   mapInputValidationFailure,
 } from "../input";
 import { validateActionInputValue } from "../json/value-validator";
