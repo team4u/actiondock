@@ -25,11 +25,20 @@ function getExamplePackages(): string[] {
   }
 }
 
-function getTargetVersion(): string {
-  const args = process.argv.slice(2);
-  let rawVersion = args[0];
+interface BumpOptions {
+  version: string;
+  skipInstall: boolean;
+  skipBuild: boolean;
+}
 
-  if (rawVersion === "--from-git-tag") {
+function getBumpOptions(): BumpOptions {
+  const args = process.argv.slice(2);
+  const skipInstall = args.includes("--no-install") || args.includes("--skip-install");
+  const skipBuild = args.includes("--no-build") || args.includes("--skip-build");
+  const positionalArgs = args.filter((a) => !a.startsWith("--"));
+  let rawVersion = positionalArgs[0];
+
+  if (args.includes("--from-git-tag")) {
     rawVersion = process.env.GITHUB_REF_NAME || "";
     if (!rawVersion) {
       const gitRes = spawnSync("git", ["describe", "--tags", "--exact-match"], {
@@ -42,7 +51,7 @@ function getTargetVersion(): string {
   }
 
   if (!rawVersion) {
-    console.error("Usage: node ./scripts/bump-version.ts <version | --from-git-tag>");
+    console.error("Usage: node ./scripts/bump-version.ts <version | --from-git-tag> [--no-install] [--no-build]");
     process.exit(1);
   }
 
@@ -57,7 +66,7 @@ function getTargetVersion(): string {
     process.exit(1);
   }
 
-  return normalized;
+  return { version: normalized, skipInstall, skipBuild };
 }
 
 function updateJsonFile(filePath: string, updater: (json: any) => void): void {
@@ -68,7 +77,7 @@ function updateJsonFile(filePath: string, updater: (json: any) => void): void {
 }
 
 function main() {
-  const targetVersion = getTargetVersion();
+  const { version: targetVersion, skipInstall, skipBuild } = getBumpOptions();
   const isPrerelease = targetVersion.includes("-");
   console.log(`Synchronizing version to: ${targetVersion} (prerelease: ${isPrerelease})`);
 
@@ -175,33 +184,41 @@ function main() {
   console.log("Updated packages/core/src/version.ts");
 
   // 4. Update lockfile
-  console.log("Updating lockfile via npm install...");
-  const npmCmd = process.env.npm_execpath || (process.platform === "win32" ? "npm.cmd" : "npm");
-  const isNpmJs = npmCmd.endsWith(".js") || npmCmd.endsWith(".cjs") || npmCmd.endsWith(".mjs");
-  const installRes = isNpmJs
-    ? spawnSync(process.execPath, [npmCmd, "install"], {
-        cwd: rootDir,
-        stdio: "inherit",
-      })
-    : spawnSync(npmCmd, ["install"], {
-        cwd: rootDir,
-        stdio: "inherit",
-        shell: process.platform === "win32",
-      });
-  if (installRes.status !== 0) {
-    console.error("Failed to update lockfile");
-    process.exit(1);
+  if (skipInstall) {
+    console.log("Skipping lockfile update via npm install (--no-install specified)");
+  } else {
+    console.log("Updating lockfile via npm install...");
+    const npmCmd = process.env.npm_execpath || (process.platform === "win32" ? "npm.cmd" : "npm");
+    const isNpmJs = npmCmd.endsWith(".js") || npmCmd.endsWith(".cjs") || npmCmd.endsWith(".mjs");
+    const installRes = isNpmJs
+      ? spawnSync(process.execPath, [npmCmd, "install"], {
+          cwd: rootDir,
+          stdio: "inherit",
+        })
+      : spawnSync(npmCmd, ["install"], {
+          cwd: rootDir,
+          stdio: "inherit",
+          shell: process.platform === "win32",
+        });
+    if (installRes.status !== 0) {
+      console.error("Failed to update lockfile");
+      process.exit(1);
+    }
   }
 
   // 5. Rebuild packages dist
-  console.log("Rebuilding monorepo packages dist...");
-  const buildRes = spawnSync(process.execPath, [join(rootDir, "scripts", "build.ts")], {
-    cwd: rootDir,
-    stdio: "inherit",
-  });
-  if (buildRes.status !== 0) {
-    console.error("Failed to build monorepo packages dist");
-    process.exit(1);
+  if (skipBuild) {
+    console.log("Skipping packages build (--no-build specified)");
+  } else {
+    console.log("Rebuilding monorepo packages dist...");
+    const buildRes = spawnSync(process.execPath, [join(rootDir, "scripts", "build.ts")], {
+      cwd: rootDir,
+      stdio: "inherit",
+    });
+    if (buildRes.status !== 0) {
+      console.error("Failed to build monorepo packages dist");
+      process.exit(1);
+    }
   }
 
   console.log(`Version bump to ${targetVersion} completed successfully!`);

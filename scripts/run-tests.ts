@@ -1,4 +1,5 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
+import { availableParallelism } from "node:os";
 import { join, resolve } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
@@ -100,10 +101,18 @@ async function main() {
     process.exit(0);
   }
 
-  console.log(`[TEST] Running ${targetFiles.length} test files via Node.js native test runner...\n`);
+  const concurrencyEnv = process.env.ACTIONDOCK_TEST_CONCURRENCY;
+  const concurrency = concurrencyEnv
+    ? parseInt(concurrencyEnv, 10)
+    : Math.max(1, availableParallelism());
+
+  console.log(
+    `[TEST] Running ${targetFiles.length} test files via Node.js native test runner (concurrency: ${concurrency})...\n`
+  );
 
   const nodeArgs = [
     "--no-deprecation",
+    `--test-concurrency=${concurrency}`,
     "--import",
     // Windows 兼容：--import 说明符按 URL 解析，裸绝对路径（D:\...）会被当成
     // "d:" 协议导致 ERR_UNSUPPORTED_ESM_URL_SCHEME，必须转为 file:// URL

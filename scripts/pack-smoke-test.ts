@@ -12,14 +12,29 @@ const packages = discoverWorkspacePackages(rootDir).map((pkg) => pkg.shortName);
 
 console.log("[START] Starting ActionDock Pack Smoke Test...");
 
-// Build all packages before packaging
-console.log("[BUILD] Building all packages via build script...");
-const preBuild = spawnSync(process.execPath, [join(rootDir, "scripts", "build.ts")], {
-  cwd: rootDir,
-  stdio: "inherit",
-});
-if (preBuild.status !== 0) {
-  throw new Error("Pre-pack build failed with non-zero exit code");
+const skipBuild =
+  process.argv.includes("--no-build") ||
+  process.argv.includes("--skip-build") ||
+  process.env.ACTIONDOCK_SMOKE_NO_BUILD === "1";
+
+if (skipBuild) {
+  console.log("[BUILD] Skipping pre-pack build (--no-build specified), verifying existing dist outputs...");
+  for (const pkg of packages) {
+    const entry = join(rootDir, "packages", pkg, "dist", "index.js");
+    if (!existsSync(entry)) {
+      throw new Error(`Pre-pack build skipped but missing build output for @actiondock/${pkg} at: ${entry}`);
+    }
+  }
+} else {
+  // Build all packages before packaging
+  console.log("[BUILD] Building all packages via build script...");
+  const preBuild = spawnSync(process.execPath, [join(rootDir, "scripts", "build.ts")], {
+    cwd: rootDir,
+    stdio: "inherit",
+  });
+  if (preBuild.status !== 0) {
+    throw new Error("Pre-pack build failed with non-zero exit code");
+  }
 }
 
 const tarballPaths: Record<string, string> = {};

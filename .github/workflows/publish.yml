@@ -30,12 +30,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "24.x"
+          cache: "npm"
 
       - name: Install Dependencies
         run: npm ci
 
       - name: Sync Monorepo Versions from Release
-        run: node ./scripts/bump-version.ts "${{ github.event.release.tag_name || inputs.version || github.ref_name }}"
+        run: node ./scripts/bump-version.ts "${{ github.event.release.tag_name || inputs.version || github.ref_name }}" --no-install --no-build
 
       - name: Build Packages
         run: npm run build
@@ -47,7 +48,7 @@ jobs:
         run: npm test
 
       - name: Pack Smoke Test
-        run: npm run test:pack
+        run: npm run test:pack -- --no-build
 
   publish:
     name: Publish to npm
@@ -62,12 +63,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "24.x"
+          cache: "npm"
 
       - name: Install Dependencies
         run: npm ci
 
       - name: Sync Monorepo Versions from Release
-        run: node ./scripts/bump-version.ts "${{ github.event.release.tag_name || inputs.version || github.ref_name }}"
+        run: node ./scripts/bump-version.ts "${{ github.event.release.tag_name || inputs.version || github.ref_name }}" --no-install --no-build
 
       - name: Build Packages
         run: npm run build
