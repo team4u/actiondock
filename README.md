@@ -9,58 +9,57 @@
 
 Write once. Deliver as CLI, MCP, HTTP, and Agent Skill.
 
-Built-in testing sandbox, persistent state, config fallback, run tracking, and reproducible packaging.
+An engineering toolchain for developing, testing, building, and distributing AI agent actions and skills. Built-in in-memory testing sandboxes, persistent state, config fallback, run tracking, and reproducible packaging.
 
-```text
-$ npm install -g @actiondock/cli
-$ ad init hello && cd hello
-[OK] Initialized ActionDock project in hello
+```bash
+# Install globally and initialize project
+npm install -g @actiondock/cli
+ad init hello && cd hello
 
-$ ad action create greet --input name:string --output message:string
-[OK] Created action greet (actions/greet.ts)
-[OK] Generated contract types (.actiondock/generated/actions.d.ts)
+# Scaffold Action and generate typed contracts
+ad action create greet --input name:string --output message:string
 
-$ ad test
-[PASS] tests/greet.test.ts (1.2ms, in-memory sandbox)
-1 passed, 0 failed
+# Run sub-second in-memory sandbox tests
+ad test
 
-$ ad run greet --json -- name=World
-{
-  "ok": true,
-  "runId": "01JMB394K8V6C1T9A2",
-  "data": { "message": "Hello, World!" }
-}
+# Verify execution locally
+ad run greet -- name=World
 
-$ ad mcp          --> [READY] Model Context Protocol (STDIO/SSE)
-$ ad serve        --> [READY] RESTful HTTP Microservice (:8080)
-$ ad export skill --> [EXPORT] Self-contained Agent Skill bundle
+# Multi-target instant delivery
+ad mcp          # MCP server (for Cursor, Windsurf, Claude Desktop)
+ad serve        # RESTful HTTP microservice (:8080)
+ad export skill # Agent skill bundle (for Claude Code, Codex, Antigravity)
 ```
 
 ---
 
-## 5-Minute Quick Start
+## Key Features
 
-No manual JSON Schema required. Five core commands guide you from scaffolding to multi-target delivery:
+- **Contract-Driven Development**: Treats Action as the sole product atom. Scaffolds typed contracts automatically without manual JSON Schema authoring.
+- **Deterministic Testing Sandbox**: In-memory testing sandboxes and virtual clocks allow full test execution without spinning up external dependencies.
+- **Write Once, Deliver Anywhere**: Author business logic once, and instantly ship as CLI, MCP protocol server, RESTful HTTP microservice, or Agent Skill asset.
+- **Modern Native Runtime**: Built natively on Node.js 24+ type stripping, `node:sqlite` embedded storage, and `node:http` microservice engine with zero transpilation overhead.
+- **Human Playbooks & Guardrails**: Pairs plain Markdown operational SOPs with atomic Actions to define workflows and enforce strict safety boundaries.
 
-- Install CLI globally:
+---
+
+## Quick Start
+
+- Install CLI and initialize project:
   ```bash
   npm install -g @actiondock/cli
-  ```
-
-- Initialize project scaffold:
-  ```bash
   ad init hello
   cd hello
   ```
 
-- Declare and scaffold Action:
-  The CLI parses field types, generates typed contracts, and registers the manifest automatically:
+- Scaffold an Action:
+  CLI parses field declarations, creates typed contracts, and updates manifest:
   ```bash
   ad action create greet --input name:string --output message:string
   ```
 
-- Write pure business logic:
-  Implement business logic directly in `actions/greet.ts` with strongly typed contracts:
+- Implement business logic:
+  Consume generated types directly in `actions/greet.ts`:
   ```ts
   import { defineAction } from "@actiondock/sdk";
   import type { ActionInput, ActionOutput } from "../.actiondock/generated/actions.d.ts";
@@ -76,222 +75,55 @@ No manual JSON Schema required. Five core commands guide you from scaffolding to
   });
   ```
 
-- Run sandbox test and local execution:
-  Execute sub-second unit tests in the in-memory sandbox and verify outputs locally via CLI:
+- Test and run locally:
   ```bash
   # Execute in-memory sandbox tests
   ad test
 
-  # Run locally via CLI using Flat JsonValue Encoding v1 (recommended)
+  # Run locally via CLI
   ad run greet -- name=World
-
-  # Pass JSON values with ':=' (recursive finite number validation)
-  ad run greet -- name=World count:=1
-
-  # Pass complex or multiline payload via JSON file (mutually exclusive with flat args)
-  ad run greet --input-file input.json
   ```
 
 - Multi-target instant delivery:
-  Ship the exact same Action code into multiple production targets without writing glue code:
   ```bash
-  # Launch as a standard MCP protocol server (for Cursor, Windsurf, or Claude Desktop)
+  # Standard MCP protocol server
   ad mcp
 
-  # Launch as a production RESTful HTTP/HTTPS microservice (supports -P/--package allowlist, --https zero-config TLS)
+  # Production RESTful HTTP microservice
   ad serve
 
-  # Export as a self-contained portable Agent Skill bundle
+  # Self-contained Agent Skill bundle
   ad export skill
   ```
 
 ---
 
-## Why ActionDock
+## Packages
 
-As AI generates more functional code, the core engineering bottlenecks shift toward determinism, guardrails, and low-maintenance delivery:
+ActionDock is structured as a modular monorepo:
 
-- More reliable than ad-hoc scripts: Ad-hoc scripts break easily from missing dependencies or environment drift. ActionDock provides in-memory testing sandboxes and closed-loop validation.
-- Safer than exposed raw functions: Exposing naked functions directly to language models leads to sequence errors and unauthorized destructive operations. ActionDock uses human-defined Playbooks to enforce strict workflow bounds.
-- More efficient than writing protocol glue: Traditional approaches require hand-crafting separate layers for CLI, MCP, and HTTP. ActionDock treats Action as the sole product atom, enabling write-once multi-target delivery.
-
----
-
-## Advanced Features and Mechanics
-
-### Contract Model and Manifest Single Source of Truth
-
-The underlying `actiondock.json` serves as the single source of truth for project metadata and action manifests. Developers can let `ad action create` manage it automatically or configure it manually:
-
-```json
-{
-  "$schema": "https://actiondock.dev/schema/v2/actiondock.json",
-  "schemaVersion": 2,
-  "id": "hello",
-  "name": "Hello Tools",
-  "version": "0.1.0",
-  "actions": {
-    "greet": {
-      "entry": "actions/greet.ts",
-      "description": "Greeting action",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "name": { "type": "string" }
-        },
-        "required": ["name"]
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "message": { "type": "string" }
-        },
-        "required": ["message"]
-      }
-    }
-  }
-}
-```
-
-Whenever the manifest changes, regenerate typed contracts with:
-
-```bash
-ad generate types
-```
-
-### Encoding Advisor and Flat Call Protocol
-
-To eliminate parameter hallucinations and simplify command-line interaction for agents, ActionDock provides an Encoding Advisor and Flat JsonValue Encoding protocol:
-
-- Encoding Advisor: Running `ad describe <id>` displays schema properties, field requirements, Flat encoding guides, and suggested assignments.
-- Standard call syntax: `ad run <action> [control-options] -- <assignments...>`.
-- Protocol boundary: The `--` separator isolates control plane options (such as `--json`, `--config`, `--data-dir`, `--profile`) from data plane action inputs.
-- Two assignment operators:
-  - `path=value`: Strictly preserved as a string without JSON parsing or type guessing.
-  - `path:=json`: Strictly parsed as a JSON value, recursively validating that all numbers are finite (`Number.isFinite`).
-- Path syntax rules:
-  - Named segments (`^[A-Za-z_][A-Za-z0-9_-]*$`) represent object properties.
-  - Numeric segments (`^(0|[1-9][0-9]*)$`) represent array indices. Array indices must be contiguous starting from 0, rejecting sparse arrays.
-  - Root node always materializes as an object.
-  - Path conflicts (leaf/container conflict, object/array conflict, duplicate assignments) are strictly rejected.
-  - Prototype pollution sensitive properties (`__proto__`, `constructor`, `prototype`) are blocked.
-- Three mutually exclusive input modes: Flat arguments, `--input`, and `--input-file` are strictly mutually exclusive and cannot be mixed; defaults to `{}` when omitted.
-- Machine mode: Passing `--json` outputs standard JSON execution envelopes; exits with code 2 on parameter error.
-
-### Human Playbooks and Safety Guardrails
-
-ActionDock maintains a strict division between human intent and autonomous agent implementation:
-
-- Humans author operational Playbooks: Define operational steps, prerequisites, and safety boundaries in plain Markdown.
-- Agents implement atomic Actions: Fulfill deterministic typed contracts and verify correctness using the in-memory testing sandbox.
-
-```text
-Playbook = Human-defined SOPs (workflow sequences, branches, guardrails)
-Action   = Agent-implemented code (strongly typed contracts, atomic capabilities)
-
-             ↓ Unified Delivery
-
-          Agent Skill portable package / MCP protocol server / HTTP microservice
-```
-
-### State Persistence and Context Mechanism
-
-Access core runtime primitives safely via `ActionContext`:
-
-- Persistent state: Access embedded key-value storage through `ctx.state`.
-- Configuration hierarchy: Retrieve environment variables and default values with fallback support via `ctx.config`.
-- Channel isolation: Write diagnostic logs via `ctx.log`, redirecting to stderr to prevent contaminating stdout data payloads.
-- Run tracking: Every execution receives a unique run identifier for lifecycle auditing and graceful cancellation.
-
-### Modern Native Runtime Foundation
-
-ActionDock natively targets Node.js >= 24.12.0 to unlock substantial native engineering advantages:
-
-- Native type stripping: Run TypeScript code directly without Babel, esbuild, or compilation overhead.
-- Native lightweight storage: Leverage built-in `node:sqlite` for embedded persistence without native binary compilation.
-- Native HTTP server: Power microservices via built-in `node:http` without heavy web framework dependencies.
-- Lean dependency tree: Eliminate bloated build tooling for an agile development lifecycle.
-
----
-
-## Architecture and Monorepo Packages
-
-ActionDock is structured as a cohesive, layered monorepo:
-
-```text
-┌─────────────────────────────────────────────────────────────┐
-│                      @actiondock/cli                        │
-│          Node.js CLI facade, dispatcher & envelope output   │
-│    ad init / ad action create / ad test / ad run / ad mcp   │
-└──────────────┬──────────────┬───────────────┬───────────────┘
-               │              │               │
-               ▼              ▼               ▼
-┌─────────────────────────────┐┌──────────────────────────────┐
-│     @actiondock/mcp         ││    @actiondock/builder       │
-│   MCP protocol & tasks      ││  Node build, npm pack & skill│
-└──────────────┬──────────────┘└──────────────┬───────────────┘
-               │                              │
-               ▼                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      @actiondock/core                       │
-│   Node native runtime, domain models, service ports & facade│
-│   NodeSqliteDriver / NodeProcessDriver / NodeHttpServer     │
-└─────────────────────────────┬───────────────┬───────────────┘
-                              │               │
-                              ▼               ▼
-                       ┌─────────────┐ ┌──────────────┐
-                       │   testing   │ │     sdk      │
-                       │In-memory test│ │Minimal SDK  │
-                       │runtime & clock│ │Zero-dep types│
-                       └─────────────┘ └──────────────┘
-```
-
----
-
-## Frequently Asked Questions
-
-- What is ActionDock?
-  ActionDock is an engineering toolchain for developing, testing, building, and distributing AI agent actions and skills. With Action as its sole product atom, ActionDock transforms fragile scripts into robust, production-grade software assets.
-
-- Why is it better than writing MCP directly?
-  Raw MCP implementations lack deterministic testing sandboxes, suffer from runtime dependency drift, and lack human-defined guardrails. ActionDock provides upstream engineering guarantees and delivers the exact same code as MCP, HTTP, Agent Skill, or CLI targets without rewriting business logic.
-
-- Do I need to write JSON Schema by hand?
-  No. Running `ad action create` scaffolds typed schemas and updates project manifests automatically.
-
----
-
-## Underlying Maintenance Commands
-
-Commands for framework development and deep integration:
-
-```bash
-# Run all unit and integration tests
-npm test
-
-# Run TypeScript type checks
-npm run typecheck
-
-# Build all packages
-npm run build
-
-# Run package smoke tests
-npm run test:pack
-```
+| Package | Purpose |
+| --- | --- |
+| `@actiondock/sdk` | Minimal core SDK and types (`defineAction`, `ActionContext`) with zero dependencies |
+| `@actiondock/core` | Native runtime drivers, unified facade, standard port models, and storage |
+| `@actiondock/cli` | CLI toolchain, dispatcher, flat argument parser, and execution facade |
+| `@actiondock/mcp` | Model Context Protocol adapter, tool exposure, and cancellation pipeline |
+| `@actiondock/builder` | Dependency planning, directory build, npm packaging, and Agent Skill exporter |
+| `@actiondock/testing` | Deterministic in-memory sandbox, fake clocks, and testing runtime |
 
 ---
 
 ## Documentation
 
-Visit the [Documentation Center](https://team4u.github.io/actiondock/) or explore the key guides:
+For full guides and references, visit the [Documentation Center](https://team4u.github.io/actiondock/) or explore local guides:
 
 - [System Overview](docs/getting-started/overview.md)
 - [Quick Start](docs/getting-started/quick-start.md)
 - [Action Development Guide](docs/developer/first-action.md)
+- [Playbook Authoring](docs/developer/playbooks.md)
 - [Consumer Guide](docs/consumer/overview.md)
-- [API Reference](docs/reference/action-api.md)
-- [Architecture](docs/architecture/runtime.md)
-- [Contributing](docs/developer/contributing.md)
+- [CLI Reference](docs/reference/cli.md)
+- [Architecture Guide](docs/architecture/runtime.md)
 
 ---
 

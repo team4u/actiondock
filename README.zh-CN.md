@@ -5,50 +5,49 @@
 [![MCP](https://img.shields.io/badge/MCP-Protocol%20Compliant-purple)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-[官网文档](https://team4u.github.io/actiondock/) | [English](README.md) | 简体中文
+[官方文档](https://team4u.github.io/actiondock/) | [English](README.md) | 简体中文
 
 写一次 Action，同时交付 CLI、MCP、HTTP 和 Agent Skill。
 
-内置测试沙箱、状态存储、配置体系、运行追踪与可复现打包。
+面向 AI Agent Action 与 Skill 的工程化开发、测试、构建与分发工具链。内置纯内存测试沙箱、状态存储、配置体系、运行追踪与可复现打包。
 
-```text
-$ npm install -g @actiondock/cli
-$ ad init hello && cd hello
-[OK] Initialized ActionDock project in hello
+```bash
+# 全局安装并初始化项目
+npm install -g @actiondock/cli
+ad init hello && cd hello
 
-$ ad action create greet --input name:string --output message:string
-[OK] Created action greet (actions/greet.ts)
-[OK] Generated contract types (.actiondock/generated/actions.d.ts)
+# 声明并创建 Action，自动生成强类型契约
+ad action create greet --input name:string --output message:string
 
-$ ad test
-[PASS] tests/greet.test.ts (1.2ms, in-memory sandbox)
-1 passed, 0 failed
+# 运行毫秒级纯内存沙箱测试
+ad test
 
-$ ad run greet --json -- name=World
-{
-  "ok": true,
-  "runId": "01JMB394K8V6C1T9A2",
-  "data": { "message": "Hello, World!" }
-}
+# 本地验证执行
+ad run greet -- name=World
 
-$ ad mcp          --> [READY] Model Context Protocol (STDIO/SSE)
-$ ad serve        --> [READY] RESTful HTTP Microservice (:8080)
-$ ad export skill --> [EXPORT] Self-contained Agent Skill bundle
+# 一键交付多种目标形态
+ad mcp          # MCP 协议通信服务（供 Cursor、Windsurf、Claude Desktop 挂载）
+ad serve        # RESTful HTTP 微服务（默认端口 8080）
+ad export skill # Agent 技能包（供 Claude Code、Codex、Antigravity 消费）
 ```
 
 ---
 
-## 5 分钟极简上手
+## 核心特性
 
-无需手写复杂 JSON Schema，仅需 5 个核心命令即可完成从脚手架初始化到多目标交付全流程：
+- **契约驱动开发**：以 Action 为唯一核心原子，基于命令行自动生成强类型契约并维护能力清单，告别手动编写 JSON Schema。
+- **确定性测试沙箱**：内置纯内存测试沙箱与虚拟时钟驱动，无需配置真实环境即可执行高可靠确定性测试。
+- **一次编写多形态交付**：业务逻辑仅需编写一次，无缝以本地命令行、MCP 协议服务、RESTful HTTP 微服务或 Agent Skill 资产发布。
+- **现代原生运行底座**：基于 Node.js 24+ 原生类型擦除、`node:sqlite` 嵌入式存储与 `node:http` 微服务引擎，零外部重型依赖。
+- **人定规程与安全红线**：结合纯 Markdown 操作规程与原子 Action 执行，划定业务边界与安全红线，杜绝模型越权与时序混乱。
 
-- 全局安装命令行工具：
+---
+
+## 快速上手
+
+- 安装工具链并初始化项目：
   ```bash
   npm install -g @actiondock/cli
-  ```
-
-- 初始化项目骨架：
-  ```bash
   ad init hello
   cd hello
   ```
@@ -59,8 +58,8 @@ $ ad export skill --> [EXPORT] Self-contained Agent Skill bundle
   ad action create greet --input name:string --output message:string
   ```
 
-- 编写业务逻辑：
-  在 `actions/greet.ts` 中直接消费生成的强类型定义，聚焦纯粹业务实现：
+- 编写业务实现：
+  在 `actions/greet.ts` 中直接使用生成的类型定义，聚焦纯粹业务逻辑：
   ```ts
   import { defineAction } from "@actiondock/sdk";
   import type { ActionInput, ActionOutput } from "../.actiondock/generated/actions.d.ts";
@@ -76,222 +75,55 @@ $ ad export skill --> [EXPORT] Self-contained Agent Skill bundle
   });
   ```
 
-- 纯内存测试与本地运行：
-  在毫秒级沙箱中运行单测，并通过本地命令行即时验证执行结果：
+- 运行测试与本地验证：
   ```bash
   # 运行纯内存沙箱测试
   ad test
 
-  # 本地命令行规范调用（扁平参数赋值，推荐）
+  # 本地规范调用
   ad run greet -- name=World
-
-  # 传递 JSON 标量或结构使用 ':='（递归校验数值为有限数）
-  ad run greet -- name=World count:=1
-
-  # 复杂对象或多行长文本通过文件传参（与扁平参数严格互斥）
-  ad run greet --input-file input.json
   ```
 
 - 多形态即刻交付：
-  同一份 Action 代码无需修改，即可一键交付为多种目标形态：
   ```bash
-  # 启动标准 MCP 协议通信服务（供 Cursor、Windsurf 或 Claude Desktop 挂载）
+  # 启动标准 MCP 协议通信服务
   ad mcp
 
-  # 启动生产级 RESTful HTTP/HTTPS 微服务（支持 -P/--package 指定包白名单，支持 --https 零配置自签名证书或生产机构证书）
+  # 启动 RESTful HTTP 微服务
   ad serve
 
-  # 导出自包含 Agent 技能包（供智能体自主检索规程与调用动作）
+  # 导出自包含 Agent 技能包
   ad export skill
   ```
 
 ---
 
-## 为什么选择 ActionDock
+## 模块架构
 
-在代码生成日益自动化的环境下，工具研发的核心挑战在于确定性、安全防线与低维护交付：
+ActionDock 采用分层解耦的单体多包架构：
 
-- 比直接手写裸脚本更可靠：裸脚本容易因外部环境缺失或依赖漂移而发生脆断，ActionDock 提供确定性测试沙箱与自愈校验机制。
-- 比裸露接口更安全：纯函数接口直接暴露给大模型极易引发时序混乱甚至越权操作，ActionDock 采用人定规程划定业务边界与安全底线。
-- 比手写协议胶水更高效：传统方案需要针对本地命令行、MCP 协议与 HTTP 微服务分别编写封装层，ActionDock 以 Action 为唯一原子，实现一次编写多形态交付。
-
----
-
-## 进阶特性与架构机制
-
-### 契约模型与清单驱动
-
-底层以 `actiondock.json` 作为项目元数据与能力清单的唯一事实源。开发者通过 `ad action create` 自动维护清单，亦可按需手工精细化配置：
-
-```json
-{
-  "$schema": "https://actiondock.dev/schema/v2/actiondock.json",
-  "schemaVersion": 2,
-  "id": "hello",
-  "name": "Hello Tools",
-  "version": "0.1.0",
-  "actions": {
-    "greet": {
-      "entry": "actions/greet.ts",
-      "description": "Greeting action",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "name": { "type": "string" }
-        },
-        "required": ["name"]
-      },
-      "outputSchema": {
-        "type": "object",
-        "properties": {
-          "message": { "type": "string" }
-        },
-        "required": ["message"]
-      }
-    }
-  }
-}
-```
-
-修改清单后，可通过以下命令重新同步生成 TypeScript 契约定义：
-
-```bash
-ad generate types
-```
-
-### 编码顾问与规范调用协议
-
-为了消除智能体调用工具时的参数幻觉并简化终端交互，ActionDock 提供了编码顾问与扁平键值编码协议：
-
-- 编码顾问：执行 `ad describe <id>` 不仅展示模式契约，还提供字段明细（字段名、类型、是否必填、描述）、Flat 编码指引与基于清单的建议赋值样例展示。
-- 规范调用语法：`ad run <action> [control-options] -- <assignments...>`。
-- 协议边界：`--` 分隔符作为控制平面选项（如 `--json`、`--config`、`--data-dir`、`--profile` 等）与数据平面（Action 入参）的协议边界。
-- 两种赋值操作符语义：
-  - `path=value`：严格保留为字符串，不执行 JSON 解析与类型猜测。
-  - `path:=json`：严格解析为 JSON 值，递归校验所有数值为有限数（`Number.isFinite`）。
-- 路径语法规则：
-  - 命名段（`^[A-Za-z_][A-Za-z0-9_-]*$`）表示对象属性。
-  - 纯数字段（`^(0|[1-9][0-9]*)$`）表示数组索引，数组索引必须从 0 开始连续编号，拒绝稀疏数组。
-  - 根节点始终物化为对象。
-  - 路径冲突（叶节点与容器冲突、对象与数组冲突、重复赋值）严格拒绝。
-  - 拦截原型污染敏感属性（`__proto__`、`constructor`、`prototype`）。
-- 三种输入模式互斥：扁平参数、`--input` 与 `--input-file` 严格互斥，不可混用；未指定输入时默认为 `{}`。
-- 机器输出模式：面向智能体调用推荐使用 `--json`，当参数解析出错时输出标准错误信封并以退出码 2 退出。
-
-### 人定规程与安全红线
-
-ActionDock 践行人定规程与智能体自主实现的协作分工：
-
-- 人类编写操作规程 Playbook：在纯 Markdown 规程中沉淀业务步骤、前置条件与不可逾越的安全红线。
-- 智能体编写原子 Action：按照强类型契约实现具体功能，并通过沙箱测试完成自主验证。
-
-```text
-Playbook = 人类定义的业务规程（工作流时序、分支判定、安全红线）
-Action   = 智能体实现的原子代码（强类型契约、纯粹业务能力）
-
-             ↓ 统一交付
-
-          Agent Skill 便携技能包 / MCP 协议服务 / HTTP 微服务
-```
-
-### 状态持久化与上下文机制
-
-通过 `ActionContext` 访问核心运行期能力，全面保持环境隔离与安全性：
-
-- 状态持久化：通过 `ctx.state` 访问嵌入式存储，实现轻量状态存取。
-- 配置体系：通过 `ctx.config` 获取环境变量与默认配置，支持多级回退策略。
-- 通道隔离：通过 `ctx.log` 记录运行期日志，过程日志自动分流至标准错误流，保障标准输出报文纯净。
-- 运行追踪：每次执行均分配唯一运行标识，支持全链路状态审计与取消中断。
-
-### 现代原生运行底座
-
-ActionDock 原生运行于 Node.js 版本大于等于 24.12.0 底座，充分释放原生工程红利：
-
-- 原生类型擦除：直接执行 TypeScript 代码，无需 Babel、esbuild 等转译步骤。
-- 原生轻量存储：依托内置模块 `node:sqlite` 提供嵌入式存储支持，无需编译本地原生数据库驱动。
-- 原生网络服务：依托内置模块 `node:http` 原生承载微服务，杜绝外部重型 Web 框架开销。
-- 极简依赖拓扑：消除冗余构建层，保证全流程纯粹轻快。
+| 子包 | 描述 |
+| --- | --- |
+| `@actiondock/sdk` | 极简核心公共 SDK 与类型定义（`defineAction`、`ActionContext`），零外部依赖 |
+| `@actiondock/core` | 原生运行时驱动、统一服务门面、标准服务端口模型与存储系统 |
+| `@actiondock/cli` | 命令行工具链、分发器、参数扁平编码解析与执行门面 |
+| `@actiondock/mcp` | Model Context Protocol 协议适配、工具暴露与异步取消链路 |
+| `@actiondock/builder` | 依赖规划、目录型构建、npm 打包与 Agent Skill 资产导出 |
+| `@actiondock/testing` | 确定性纯内存沙箱、虚拟时钟与确定性测试运行时框架 |
 
 ---
 
-## 体系架构与子包划分
+## 文档指引
 
-ActionDock 采用高内聚、松耦合的子包分层架构：
-
-```text
-┌─────────────────────────────────────────────────────────────┐
-│                      @actiondock/cli                        │
-│          Node.js 命令行门面、分发器与信封输出渲染器           │
-│    ad init / ad action create / ad test / ad run / ad mcp   │
-└──────────────┬──────────────┬───────────────┬───────────────┘
-               │              │               │
-               ▼              ▼               ▼
-┌─────────────────────────────┐┌──────────────────────────────┐
-│     @actiondock/mcp         ││    @actiondock/builder       │
-│   MCP 协议与异步任务适配器    ││  Node 构建、npm 打包与技能导出 │
-└──────────────┬──────────────┘└──────────────┬───────────────┘
-               │                              │
-               ▼                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      @actiondock/core                       │
-│   Node 原生运行时驱动、领域模型、标准服务端口与统一服务门面   │
-│   NodeSqliteDriver / NodeProcessDriver / NodeHttpServer     │
-└─────────────────────────────┬───────────────┬───────────────┘
-                              │               │
-                              ▼               ▼
-                       ┌─────────────┐ ┌──────────────┐
-                       │   testing   │ │     sdk      │
-                       │沙箱与模拟时钟│ │极简核心开发契约│
-                       │与测试运行时  │ │零外部依赖    │
-                       └─────────────┘ └──────────────┘
-```
-
----
-
-## 常见疑问解答
-
-- ActionDock 是什么？
-  ActionDock 是面向智能体动作与技能的工程化开发、测试、构建与分发工具链。它以 Action 为唯一核心原子，帮助开发者将松散的代码片段转化为结构完备、具备生产保障的工业级软件资产。
-
-- 比直接手写 MCP 好在哪里？
-  手写 MCP 协议代码缺乏本地测试沙箱、易受外部依赖漂移影响，且缺乏规程约束容易导致越权。ActionDock 作为上游工程化底座，不仅提供测试沙箱与依赖保障，还能一键分发为 MCP、HTTP 微服务、Agent Skill 或本地命令行，业务代码零重复。
-
-- 是否必须手写 JSON Schema？
-  完全不需要。通过 `ad action create` 命令行即可一键生成字段模式并自动更新契约，无需手动编写复杂的模式结构。
-
----
-
-## 底层构建与项目维护
-
-面向框架开发者与深度集成场景的底层工程维护命令：
-
-```bash
-# 执行全量单元测试与集成测试
-npm test
-
-# 执行全量 TypeScript 类型检查
-npm run typecheck
-
-# 执行多包产物全量构建
-npm run build
-
-# 执行发布打包冒烟测试
-npm run test:pack
-```
-
----
-
-## 技术文档中心
-
-请访问 [在线官方文档](https://team4u.github.io/actiondock/) 或查阅核心指引：
+更多深度功能与详细说明请访问 [在线官方文档](https://team4u.github.io/actiondock/) 或查阅本地指南：
 
 - [系统概览与核心概念](docs/getting-started/overview.md)
 - [快速上手指南](docs/getting-started/quick-start.md)
-- [Action 核心模型与开发指南](docs/developer/first-action.md)
+- [Action 开发指南](docs/developer/first-action.md)
+- [Playbook 操作规程](docs/developer/playbooks.md)
 - [消费接入选型总览](docs/consumer/overview.md)
-- [参考手册](docs/reference/action-api.md)
-- [底层架构解密](docs/architecture/runtime.md)
-- [贡献指南](docs/developer/contributing.md)
+- [CLI 规范调用参考手册](docs/reference/cli.md)
+- [底层架构设计](docs/architecture/runtime.md)
 
 ---
 
