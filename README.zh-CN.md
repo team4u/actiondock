@@ -12,7 +12,10 @@
 面向 AI Agent Action 与 Skill 的工程化开发、测试、构建与分发工具链。内置纯内存测试沙箱、状态存储、配置体系、运行追踪与可复现打包。
 
 ```bash
-# 全局安装并初始化项目
+# 为智能体一键安装官方技能（供 Cursor、Claude Code、Antigravity 掌握 ActionDock 开发）
+npx skills add team4u/actiondock -g -y
+
+# 或在本地安装命令行工具链并初始化
 npm install -g @actiondock/cli
 ad init hello && cd hello
 
@@ -45,7 +48,13 @@ ad export skill # Agent 技能包（供 Claude Code、Codex、Antigravity 消费
 
 ## 快速上手
 
-- 安装工具链并初始化项目：
+- 安装官方智能体技能（推荐智能体开发场景）：
+  为 AI 编程助手（如 Cursor、Claude Code、Codex、Antigravity 等）一键安装官方技能，让智能体自主按规范编写、测试与交付 Action：
+  ```bash
+  npx skills add team4u/actiondock -g -y
+  ```
+
+- 安装命令行工具链并初始化：
   ```bash
   npm install -g @actiondock/cli
   ad init hello

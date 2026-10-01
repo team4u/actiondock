@@ -12,7 +12,10 @@ Write once. Deliver as CLI, MCP, HTTP, and Agent Skill.
 An engineering toolchain for developing, testing, building, and distributing AI agent actions and skills. Built-in in-memory testing sandboxes, persistent state, config fallback, run tracking, and reproducible packaging.
 
 ```bash
-# Install globally and initialize project
+# Install official skill for AI agents (Cursor, Claude Code, Antigravity)
+npx skills add team4u/actiondock -g -y
+
+# Or install CLI toolchain globally and initialize
 npm install -g @actiondock/cli
 ad init hello && cd hello
 
@@ -44,6 +47,12 @@ ad export skill # Agent skill bundle (for Claude Code, Codex, Antigravity)
 ---
 
 ## Quick Start
+
+- Install official Agent Skill (recommended for AI agents):
+  Equip your AI programming agents (such as Cursor, Claude Code, Codex, Antigravity) to write, test, and ship Actions autonomously:
+  ```bash
+  npx skills add team4u/actiondock -g -y
+  ```
 
 - Install CLI and initialize project:
   ```bash
