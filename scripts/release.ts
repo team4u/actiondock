@@ -8,7 +8,7 @@
  *   解析版本类型决定分发标签并执行 npm 发布；本脚本不直接触碰 npm。
  * 两层各司其职，正式发布以 GitHub Release 为唯一触发事实源。
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { bumpSemver, parseSemver } from "./lib/semver.js";
@@ -24,6 +24,8 @@ interface ReleaseOptions {
   push: boolean;
   allowDirty: boolean;
   customNotes?: string;
+  overview?: string;
+  overviewFile?: string;
 }
 
 function runCmd(
@@ -106,6 +108,26 @@ function getCommitSummarySince(ref: string | null): string {
   return lines.map((l) => `- ${l}`).join("\n");
 }
 
+function printHelp(): void {
+  console.log(`
+用法: node scripts/release.ts [版本号] [选项]
+
+参数选项:
+  --patch                自增修订号补丁版本 (x.y.Z)
+  --minor                自增次版本号 (x.Y.0)
+  --major                自增主版本号 (X.0.0)
+  --prerelease [preId]   自增预发布版本号 (如 beta, alpha)
+  --overview <text>      产品视角解读说明（根据变更体量弹性输入，支持多行文本）
+  --overview-file <path> 产品视角解读文件路径（支持完整 Markdown 文档）
+  --notes <text>         全量发版说明（覆盖模式，忽略提交列表装配）
+  --dry-run              模拟运行模式（不修改文件、不创建提交与 Release）
+  --skip-verify          跳过发布前质量检验套件（类型检查、测试与打包烟雾测试）
+  --push                 发布提交后推送到远程仓库
+  --allow-dirty          允许工作区存在未提交的更改
+  --help, -h             查看使用帮助
+`);
+}
+
 function parseCliArgs(): ReleaseOptions {
   const args = process.argv.slice(2);
   const options: ReleaseOptions = {
@@ -143,6 +165,19 @@ function parseCliArgs(): ReleaseOptions {
         options.customNotes = args[i + 1];
         i++;
       }
+    } else if (arg === "--overview") {
+      if (args[i + 1]) {
+        options.overview = args[i + 1];
+        i++;
+      }
+    } else if (arg === "--overview-file") {
+      if (args[i + 1]) {
+        options.overviewFile = args[i + 1];
+        i++;
+      }
+    } else if (arg === "--help" || arg === "-h") {
+      printHelp();
+      process.exit(0);
     } else if (!arg.startsWith("--") && !options.version) {
       options.version = arg;
     }
@@ -205,12 +240,35 @@ async function main() {
   const currentBranch = branchRes.stdout.trim();
   console.log(`当前分支: ${currentBranch}`);
 
-  // 2. 变更日志提炼
+  // 2. 变更日志提炼与产品解读装配
   const previousRef = getPreviousVersionRef();
   console.log(`基准对照版本: ${previousRef || "初次发布"}`);
-  let changelog = options.customNotes || getCommitSummarySince(previousRef);
-  if (!changelog) {
-    changelog = `- chore(release): release ${targetVersion}`;
+  const rawCommits = getCommitSummarySince(previousRef);
+
+  let changelog = "";
+  if (options.customNotes) {
+    changelog = options.customNotes;
+  } else {
+    let overview = options.overview?.trim() || "";
+    if (options.overviewFile) {
+      const filePath = resolve(process.cwd(), options.overviewFile);
+      if (!existsSync(filePath)) {
+        throw new Error(`指定的产品解读文件不存在: ${filePath}`);
+      }
+      overview = readFileSync(filePath, "utf8").trim();
+    } else if (overview.includes("\\n") && !overview.includes("\n")) {
+      overview = overview.replace(/\\n/g, "\n");
+    }
+
+    if (overview && rawCommits) {
+      changelog = `${overview}\n\n### 变更明细\n\n${rawCommits}`;
+    } else if (overview) {
+      changelog = overview;
+    } else if (rawCommits) {
+      changelog = rawCommits;
+    } else {
+      changelog = `- chore(release): release ${targetVersion}`;
+    }
   }
 
   console.log("\n提炼的发版变更日志:");
