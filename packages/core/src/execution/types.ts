@@ -12,10 +12,10 @@ import type {
 } from "@actiondock/sdk";
 import type { ProjectConfig } from "../project/types";
 import type { ActionRunner, ExecutionHandle } from "../runtime/runner";
-import type { Clock } from "../runtime/clock";
+import type { Clock } from "../storage/clock";
 import type { EventSink } from "../runtime/events";
 import type { RuntimeStorage } from "../storage/types";
-import type { ModuleLoader } from "../runtime/module-loader";
+import type { ModuleLoader } from "../platform/module-loader";
 import type { ProcessOwner } from "../process/process-manager";
 import {
   type PackageIdentity,

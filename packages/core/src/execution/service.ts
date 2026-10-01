@@ -16,8 +16,8 @@ import { parseActionRef } from "../catalog/resolve-action";
 import { computeDigest } from "../project/digest";
 import { loadActions, loadProjectConfig } from "../project/loader";
 import type { ProjectConfig } from "../project/types";
-import type { Clock } from "../runtime/clock";
-import type { ModuleLoader } from "../runtime/module-loader";
+import type { Clock } from "../storage/clock";
+import type { ModuleLoader } from "../platform/module-loader";
 import { type EventSink, InMemoryEventSink } from "../runtime/events";
 import { ActionRunner, type ExecutionHandle } from "../runtime/runner";
 import {

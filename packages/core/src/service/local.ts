@@ -21,8 +21,8 @@ import type { RunOptions } from "../invocation/types";
 import { parseActionRef } from "../catalog/resolve-action";
 import type { ActionDockHost } from "../host/types";
 import type { StateEntry } from "../storage/types";
+import { ActionDockError, SERVICE_CLOSED } from "../errors";
 import {
-  CloseTimeoutError,
   type ConfigValueView,
   type ListRunsOptions,
   type StateScopeOptions,
@@ -234,7 +234,7 @@ export class LocalActionDockService implements ActionDockService {
       let timer: ReturnType<typeof setTimeout> | undefined;
       const timeoutPromise = new Promise<never>((_, reject) => {
         timer = setTimeout(() => {
-          reject(new CloseTimeoutError(`Service close operation timed out after ${timeout}ms`));
+          reject(new ActionDockError(SERVICE_CLOSED, `Service close operation timed out after ${timeout}ms`));
         }, timeout);
       });
       try {

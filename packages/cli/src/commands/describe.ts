@@ -6,10 +6,9 @@ import {
 } from "@actiondock/core";
 import {
   buildActionDescribePayload,
-  formatActionDetail,
 } from "@actiondock/core/project";
 import { ArgumentError, ExecutionError, packageNotFoundError } from "../errors";
-import { renderResult } from "../renderer";
+import { formatActionDetail, renderResult } from "../renderer";
 import type { CliContext } from "../types";
 import {
   applyTargetOptions,

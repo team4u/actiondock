@@ -8,7 +8,6 @@ import type {
 import type { ProcessDriverHandle, ProcessHandle } from "./driver";
 import type { ProcessRequestKey } from "./metadata-store";
 import type { ProcessOutputLog } from "./output-log";
-import type { EvictedOutputTombstone } from "./terminal-output-cache";
 
 /**
  * 受管进程归属所有者身份。
@@ -63,7 +62,6 @@ export interface ManagedProcessRecord {
   handle?: ProcessHandle & ProcessDriverHandle;
   outputLog: ProcessOutputLog;
   outputUnavailable?: boolean;
-  outputTombstone?: EvictedOutputTombstone;
   controlEpoch: number;
   /** 取消纪元：stop 接管输入队列时递增，用于让挂起中的 dispatch 放弃过期结算 */
   cancelEpoch: number;

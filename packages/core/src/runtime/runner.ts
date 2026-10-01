@@ -31,7 +31,7 @@ import {
 import { validateSchemaOnly } from "../schema/validator";
 import { validateActionInputValue } from "../json/value-validator";
 import type { RuntimeStorage } from "../storage/types";
-import type { Clock } from "./clock";
+import type { Clock } from "../storage/clock";
 import { createActionContext, StderrLogger } from "./context";
 import type { ProcessOwner } from "../process";
 import type { PackageIdentity } from "./identity";

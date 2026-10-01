@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { readFile, mkdir, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { isProcessAlive } from "../utils/process";
+import { isProcessAlive } from "../utils";
 
 /**
  * 锁目录最近一次心跳（创建或续期）后超过该时长且持有进程已死亡，

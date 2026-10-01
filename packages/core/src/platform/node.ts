@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { ProcessAPI } from "@actiondock/sdk";
-import { SystemClock, type Clock } from "../runtime/clock";
-import { NodeModuleLoader, type ModuleLoader } from "../node/module-loader";
+import { SystemClock, type Clock } from "../storage/clock";
+import { NodeModuleLoader, type ModuleLoader } from "./module-loader";
 import { NodeProcessDriver } from "../process/process-driver";
 import { ProcessManager } from "../process/process-manager";
 import type { ProcessDriver } from "../process/driver";

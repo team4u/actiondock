@@ -51,9 +51,13 @@ describe("createTestPlatform 测试平台工厂测试", () => {
       const platform = createTestPlatform();
       platform.process.register("git status", { stdout: "On branch main\nnothing to commit" });
 
-      const res = await platform.process.exec("git status");
-      expect(res.ok).toBe(true);
-      expect(res.stdout).toContain("On branch main");
+      const res = await platform.process.run({
+        spec: { executable: "git", args: ["status"], io: { mode: "pipe" } },
+        timeoutMs: 1000,
+        maxOutputBytes: 1024,
+      });
+      expect(res.exit.code).toBe(0);
+      expect(decodeText(res.chunks)).toContain("On branch main");
     });
   });
 

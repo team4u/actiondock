@@ -6,14 +6,13 @@ import { decodeText, defineAction } from "@actiondock/sdk";
 import { createNodePlatform } from "../src";
 import { createInvocationContext } from "../src/execution/types";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
-import { SystemClock } from "../src/runtime/clock";
+import { SystemClock } from "../src/storage/clock";
 import { createPackageIdentity } from "../src/runtime/identity";
 import { DefaultExecutionService } from "../src/execution/service";
 import { NodeFileSystem } from "../src/platform/node-fs";
 import { NodeHttpServer } from "../src/server/http-server";
-import { NodeModuleLoader } from "../src/node/module-loader";
+import { NodeModuleLoader } from "../src/platform/module-loader";
 import { NodeSqliteDriver } from "../src/storage/sqlite-driver";
-import { ExecaProcessExecutor } from "../src/process/process-executor";
 
 describe("createNodePlatform 平台工厂测试", () => {
   let tempDir: string;

@@ -3,7 +3,6 @@ import { decodeText, defineAction, type ActionDefinition } from "@actiondock/sdk
 import {
   ActionRuntimeError,
   createTestRuntime,
-  execCli,
   FakeClock,
   FakeProcessDriver,
   MemoryStorage,
@@ -112,15 +111,17 @@ describe("@actiondock/testing", () => {
     it("支持注册匹配规则并记录执行历史", async () => {
       const proc = new MockProcessExecutor();
       proc.register("git status", {
-        ok: true,
         exitCode: 0,
         stdout: "On branch master\nnothing to commit",
       });
 
-      const res = await proc.exec("git", ["status"]);
-      expect(res.ok).toBe(true);
-      expect(res.exitCode).toBe(0);
-      expect(res.stdout).toBe("On branch master\nnothing to commit");
+      const res = await proc.run({
+        spec: { executable: "git", args: ["status"], io: { mode: "pipe" } },
+        timeoutMs: 1000,
+        maxOutputBytes: 1024,
+      });
+      expect(res.exit.code).toBe(0);
+      expect(decodeText(res.chunks)).toBe("On branch master\nnothing to commit");
 
       expect(proc.calls.length).toBe(1);
       expect(proc.hasCalled("git")).toBe(true);
@@ -136,50 +137,50 @@ describe("@actiondock/testing", () => {
         cancelled: true,
       });
 
-      const timeoutRes = await proc.exec("long-task");
-      expect(timeoutRes.ok).toBe(false);
-      expect(timeoutRes.timedOut).toBe(true);
-      expect(timeoutRes.error?.code).toBe("PROCESS_TIMEOUT");
+      await expect(
+        proc.run({
+          spec: { executable: "long-task", args: [], io: { mode: "pipe" } },
+          timeoutMs: 1000,
+          maxOutputBytes: 1024,
+        })
+      ).rejects.toThrow(/timeout/i);
 
-      const cancelRes = await proc.exec("cancel-task");
-      expect(cancelRes.ok).toBe(false);
-      expect(cancelRes.cancelled).toBe(true);
-      expect(cancelRes.error?.code).toBe("PROCESS_CANCELLED");
-    });
-
-    it("未命中模拟规则时默认拒绝执行真实命令并抛出明确错误", async () => {
-      const proc = new MockProcessExecutor();
-      proc.register("git status", { ok: true });
-
-      let err: any;
-      try {
-        await proc.exec("gti", ["status"]);
-        expect.unreachable();
-      } catch (e) {
-        err = e;
-      }
-
-      expect(err).toBeDefined();
-      expect(err.message).toContain("gti status");
-      expect(err.message).toContain("git status");
-      expect(err.message).toContain("fallbackToReal");
+      await expect(
+        proc.run({
+          spec: { executable: "cancel-task", args: [], io: { mode: "pipe" } },
+          timeoutMs: 1000,
+          maxOutputBytes: 1024,
+        })
+      ).rejects.toThrow(/cancelled/i);
     });
 
     it("字符串匹配器不再前缀匹配，避免命令名误命中", async () => {
-      const proc = new MockProcessExecutor();
+      const driver = new FakeProcessDriver();
+      driver.onSpawn = (handle) => {
+        driver.emitOutput(handle.id, "stdout", "managed-path");
+        driver.emitExit(handle.id, 0);
+        driver.emitOutputClosed(handle.id, "natural");
+      };
+      const proc = new MockProcessExecutor({ driver });
       proc.register("git", { stdout: "should-not-hit" });
 
-      await expect(proc.exec("github-cli", ["repo", "list"])).rejects.toThrow(
-        /未命中任何模拟规则/
-      );
+      const res = await proc.run({
+        spec: { executable: "github-cli", args: ["repo", "list"], io: { mode: "pipe" } },
+        timeoutMs: 1000,
+        maxOutputBytes: 1024,
+      });
+      expect(decodeText(res.chunks)).toBe("managed-path");
     });
 
     it("开启 fallbackToReal 后未命中时回退真实异步子进程执行", async () => {
       const proc = new MockProcessExecutor({ fallbackToReal: true });
-      const res = await proc.exec("node", ["--version"]);
-      expect(res.ok).toBe(true);
-      expect(res.exitCode).toBe(0);
-      expect(res.stdout).toContain("v");
+      const res = await proc.run({
+        spec: { executable: "node", args: ["--version"], io: { mode: "pipe" } },
+        timeoutMs: 5000,
+        maxOutputBytes: 1024 * 1024,
+      });
+      expect(res.exit.code).toBe(0);
+      expect(decodeText(res.chunks)).toContain("v");
     });
 
     it("注册 A 命令 mock 后 run 未命中的 B 命令仍走受管进程路径", async () => {
@@ -218,7 +219,7 @@ describe("@actiondock/testing", () => {
 
     it("带延时控制执行完毕后妥善注销 AbortSignal 监听器", async () => {
       const proc = new MockProcessExecutor();
-      proc.register("delayed-cmd", { delayMs: 10, ok: true });
+      proc.register("delayed-cmd", { delayMs: 10, exitCode: 0 });
 
       const controller = new AbortController();
       let listenerCount = 0;
@@ -234,18 +235,25 @@ describe("@actiondock/testing", () => {
         return originalRemove(type, listener, opts);
       };
 
-      const res = await proc.exec("delayed-cmd", [], { signal: controller.signal });
-      expect(res.ok).toBe(true);
+      const res = await proc.run(
+        { spec: { executable: "delayed-cmd", args: [], io: { mode: "pipe" } }, timeoutMs: 5000, maxOutputBytes: 1024 },
+        { signal: controller.signal }
+      );
+      expect(res.exit.code).toBe(0);
       expect(listenerCount).toBe(0);
     });
 
     it("注入 FakeClock 后 delayMs 由时钟驱动，不占用真实时间", async () => {
       const clock = new FakeClock({ startMonotonic: 0 });
       const proc = new MockProcessExecutor({ clock });
-      proc.register("frozen-cmd", { delayMs: 60000, ok: true, stdout: "after-delay" });
+      proc.register("frozen-cmd", { delayMs: 60000, exitCode: 0, stdout: "after-delay" });
 
       let settled = false;
-      const execPromise = proc.exec("frozen-cmd").then((res) => {
+      const runPromise = proc.run({
+        spec: { executable: "frozen-cmd", args: [], io: { mode: "pipe" } },
+        timeoutMs: 120000,
+        maxOutputBytes: 1024,
+      }).then((res) => {
         settled = true;
         return res;
       });
@@ -257,64 +265,27 @@ describe("@actiondock/testing", () => {
 
       // 一次性推进起过延时窗口，命令立即完成，全程未占用真实时间
       const advanced = clock.advance(60000);
-      const res = await execPromise;
+      const res = await runPromise;
       await advanced;
 
-      expect(res.ok).toBe(true);
-      expect(res.stdout).toBe("after-delay");
+      expect(res.exit.code).toBe(0);
+      expect(decodeText(res.chunks)).toBe("after-delay");
       expect(settled).toBe(true);
     });
 
     it("未注入时钟时 delayMs 回退真实 setTimeout 语义保持可用", async () => {
       const proc = new MockProcessExecutor();
-      proc.register("real-delay-cmd", { delayMs: 20, ok: true });
+      proc.register("real-delay-cmd", { delayMs: 20, exitCode: 0 });
 
       const startedAt = Date.now();
-      const res = await proc.exec("real-delay-cmd");
-      expect(res.ok).toBe(true);
+      const res = await proc.run({
+        spec: { executable: "real-delay-cmd", args: [], io: { mode: "pipe" } },
+        timeoutMs: 5000,
+        maxOutputBytes: 1024,
+      });
+      expect(res.exit.code).toBe(0);
       // 真实回退路径至少等待了设定的延时
       expect(Date.now() - startedAt).toBeGreaterThanOrEqual(15);
-    });
-  });
-
-  describe("execCli", () => {
-    it("执行成功返回标准结果信封", async () => {
-      const res = await execCli("node", ["-e", "process.stdout.write('hello cli')"]);
-      expect(res.ok).toBe(true);
-      expect(res.exitCode).toBe(0);
-      expect(res.stdout).toBe("hello cli");
-    });
-
-    it("开启 throwOnError 时命令失败通过 Promise reject 抛出异常而非未捕获异常", async () => {
-      await expect(
-        execCli("node", ["-e", "process.stderr.write('fatal error'); process.exit(1)"], {
-          throwOnError: true,
-        })
-      ).rejects.toThrow(/fatal error/);
-    });
-
-    it("输出超过 maxOutputBytes 上限时终止进程并标记 truncated", async () => {
-      const res = await execCli(
-        "node",
-        ["-e", "process.stdout.write('x'.repeat(65536));"],
-        { maxOutputBytes: 1024 }
-      );
-
-      // 超限：进程被终止，结果标记截断且 ok 为 false，保留的字节不超过上限
-      expect(res.ok).toBe(false);
-      expect(res.truncated).toBe(true);
-      expect(res.raw.byteLength).toBeLessThanOrEqual(1024 + 2048);
-      expect(res.stderr).toContain("exceeded limit");
-    });
-
-    it("未超限时 maxOutputBytes 不影响正常输出", async () => {
-      const res = await execCli("node", ["-e", "process.stdout.write('tiny output')"], {
-        maxOutputBytes: 1024 * 1024,
-      });
-
-      expect(res.ok).toBe(true);
-      expect(res.truncated).toBeUndefined();
-      expect(res.stdout).toBe("tiny output");
     });
   });
 

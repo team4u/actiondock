@@ -22,7 +22,7 @@ import type {
   ExecutionTicket,
 } from "../execution/types";
 import type { RunOptions } from "../invocation/types";
-import type { Clock } from "../runtime/clock";
+import type { Clock } from "../storage/clock";
 import type { EventSink } from "../runtime/events";
 import type { RuntimePlatform } from "../platform/types";
 import type { ConfigValueView, ListRunsOptions, StateScopeOptions } from "../service/types";

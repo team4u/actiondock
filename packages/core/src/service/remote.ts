@@ -55,7 +55,6 @@ import {
   ACTIONDOCK_PROTOCOL_VERSION,
   PROTOCOL_UNSUPPORTED,
   SERVICE_CLOSED,
-  ServiceError,
   type ConfigValueView,
   type ListRunsOptions,
   type RemoteServiceOptions,
@@ -130,7 +129,7 @@ export class RemoteActionDockService implements ActionDockService {
           const [remoteMajor] = protocolVersion.split(".");
           const [currentMajor] = ACTIONDOCK_PROTOCOL_VERSION.split(".");
           if (remoteMajor !== currentMajor) {
-            throw new ServiceError(
+            throw new ActionDockError(
               PROTOCOL_UNSUPPORTED,
               `PROTOCOL_UNSUPPORTED: Remote server protocol version '${protocolVersion}' is incompatible with expected '${ACTIONDOCK_PROTOCOL_VERSION}'`
             );
@@ -660,7 +659,7 @@ export class RemoteActionDockService implements ActionDockService {
             _opts?: any
           ): Promise<StateEntry[]> {
             self.assertNotClosed();
-            throw new ServiceError(
+            throw new ActionDockError(
               CAPABILITY_UNAVAILABLE,
               "CAPABILITY_UNAVAILABLE: listStateEntries is not supported on remote service"
             );
@@ -672,7 +671,7 @@ export class RemoteActionDockService implements ActionDockService {
 
   private assertNotClosed(): void {
     if (this.isClosed) {
-      throw new ServiceError(
+      throw new ActionDockError(
         SERVICE_CLOSED,
         "RemoteActionDockService is closed"
       );

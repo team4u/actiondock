@@ -1,4 +1,4 @@
-import { isLoopbackHost } from "../utils/net";
+import { isLoopbackHost } from "../utils";
 import { normalizeServerUrl } from "./manager";
 import { getInsecureDispatcher } from "../server/dispatcher";
 import { ActionDockError, INSECURE_TRANSPORT, INVALID_ARGUMENT } from "../errors";

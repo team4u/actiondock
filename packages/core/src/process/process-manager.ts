@@ -45,7 +45,6 @@ import { parseCursor, compareCursorPos } from "./cursor";
 import { ContextProcessAPI } from "./context-process";
 import { ControlArbiter } from "./control-arbiter";
 import { InputDispatcher } from "./input-dispatcher";
-import { DiagnosticsSink } from "./diagnostics-sink";
 import type {
   ProcessDriver,
   ProcessObserver,
@@ -237,6 +236,39 @@ function checkPositiveDurationMs(value: number, field: string): void {
     throw new ProcessError(INPUT_VALIDATION_FAILED, `Invalid ${field}: must be a positive integer (milliseconds)`, {
       [field]: value,
     });
+  }
+}
+
+/**
+ * 内部诊断日志汇聚器（私有实现）。
+ *
+ * 持有最近的持久化失败与驱动终止失败等诊断信息：优先写入注入的 logger，
+ * 缺失时保留在内存环形缓冲区，避免静默吞没异常。
+ */
+class DiagnosticsSink {
+  static readonly DEFAULT_BUFFER_LIMIT = 100;
+
+  private readonly logger?: Logger;
+  private readonly bufferLimit: number;
+  private readonly diagnostics: string[] = [];
+
+  constructor(options?: { logger?: Logger; bufferLimit?: number }) {
+    this.logger = options?.logger;
+    this.bufferLimit = options?.bufferLimit ?? DiagnosticsSink.DEFAULT_BUFFER_LIMIT;
+  }
+
+  record(message: string, err?: unknown): void {
+    const detail = err instanceof Error ? `${err.name}: ${err.message}` : err !== undefined ? String(err) : "";
+    const line = detail ? `${message} (${detail})` : message;
+    this.diagnostics.push(`${new Date().toISOString()} ${line}`);
+    if (this.diagnostics.length > this.bufferLimit) {
+      this.diagnostics.shift();
+    }
+    this.logger?.warn("[ProcessManager] " + line);
+  }
+
+  recent(): string[] {
+    return [...this.diagnostics].reverse();
   }
 }
 
@@ -1092,57 +1124,6 @@ export class ProcessManager {
     const proc = await this.getOrLoadProcess(owner, id);
 
     if (proc.outputUnavailable) {
-      const requestedPos = parseCursor(input.cursor, proc.info.hostEpoch, id);
-      const tombstone = proc.outputTombstone ?? this.terminalOutputCache.getTombstone(id);
-
-      if (tombstone) {
-        const tailPos = parseCursor(tombstone.tailCursor, proc.info.hostEpoch, id);
-        const cmp = compareCursorPos(requestedPos, tailPos);
-
-        if (cmp > 0) {
-          throw new ProcessError(
-            INVALID_CURSOR,
-            "Requested cursor is beyond the end of the output log",
-            {
-              cursor: input.cursor,
-              tailCursor: tombstone.tailCursor,
-            }
-          );
-        }
-
-        if (cmp === 0) {
-          return {
-            chunks: [],
-            nextCursor: tombstone.tailCursor,
-            earliestCursor: tombstone.tailCursor,
-            tailCursor: tombstone.tailCursor,
-            truncated: false,
-            eof: true,
-            process: { ...proc.info },
-          };
-        }
-
-        const gapMode = input.onGap ?? "error";
-        if (gapMode === "error") {
-          throw new ProcessError(
-            OUTPUT_UNAVAILABLE,
-            `Process output for '${id}' is unavailable because it has been evicted from memory`,
-            { processId: id }
-          );
-        }
-
-        return {
-          chunks: [],
-          nextCursor: tombstone.tailCursor,
-          earliestCursor: tombstone.tailCursor,
-          tailCursor: tombstone.tailCursor,
-          truncated: true,
-          gap: { fromCursor: input.cursor, toCursor: tombstone.tailCursor },
-          eof: true,
-          process: { ...proc.info },
-        };
-      }
-
       throw new ProcessError(
         OUTPUT_UNAVAILABLE,
         `Process output for '${id}' is unavailable because it has been evicted from memory`,
@@ -1564,11 +1545,10 @@ export class ProcessManager {
 
     const info = toSdkProcessInfo(record);
     const retainedLog = this.terminalOutputCache.get(processId);
-    const tombstone = this.terminalOutputCache.getTombstone(processId);
     const isTerminalLoaded =
       info.state === "exited" || info.state === "failed" || info.state === "lost";
     const isOutputUnavailable =
-      !retainedLog && (Boolean(tombstone) || (isTerminalLoaded && Boolean(record.outputClosed)));
+      !retainedLog && (isTerminalLoaded && Boolean(record.outputClosed));
 
     const outputLog =
       retainedLog ??
@@ -1591,7 +1571,6 @@ export class ProcessManager {
       scope: formatProcessScope(owner),
       outputLog,
       outputUnavailable: isOutputUnavailable,
-      outputTombstone: tombstone,
       controlEpoch: 0,
       cancelEpoch: 0,
       inputQueue: [],

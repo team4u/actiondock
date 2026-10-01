@@ -1706,45 +1706,20 @@ describe("受管进程管理器 ProcessManager", () => {
       expect(readErr).toBeInstanceOf(ProcessError);
       expect(readErr?.code).toBe(OUTPUT_UNAVAILABLE);
 
-      // 当 onGap="skip" 时，返回明确的淘汰断层信息
-      const skipped = await manager.read(ownerA, p1.process.id, {
-        cursor: p1.initialCursor,
-        maxBytes: 65536,
-        waitMs: 0,
-        onGap: "skip",
-      });
-      expect(skipped.chunks.length).toBe(0);
-      expect(skipped.truncated).toBe(true);
-      expect(skipped.gap).toBeDefined();
-      expect(skipped.eof).toBe(true);
-
-      // 当使用等于 tailCursor 的游标读取时，直接返回 EOF 且无截断
-      const tailRead = await manager.read(ownerA, p1.process.id, {
-        cursor: skipped.tailCursor,
-        maxBytes: 65536,
-        waitMs: 0,
-        onGap: "skip",
-      });
-      expect(tailRead.chunks.length).toBe(0);
-      expect(tailRead.truncated).toBe(false);
-      expect(tailRead.gap).toBeUndefined();
-      expect(tailRead.eof).toBe(true);
-
-      // 当使用超过末尾的未来游标读取时，无论 onGap 是 skip 还是 error，均抛出 INVALID_CURSOR 异常
-      const futureCursor = encodeCursor("epoch-test", p1.process.id, 9999, 0);
-      let futureErr: any;
+      // 墓碑机制移除后，已淘汰进程直接抛出 OUTPUT_UNAVAILABLE
+      let skipErr: any;
       try {
         await manager.read(ownerA, p1.process.id, {
-          cursor: futureCursor,
+          cursor: p1.initialCursor,
           maxBytes: 65536,
           waitMs: 0,
           onGap: "skip",
         });
       } catch (err) {
-        futureErr = err;
+        skipErr = err;
       }
-      expect(futureErr).toBeInstanceOf(ProcessError);
-      expect(futureErr?.code).toBe(INVALID_CURSOR);
+      expect(skipErr).toBeInstanceOf(ProcessError);
+      expect(skipErr?.code).toBe(OUTPUT_UNAVAILABLE);
     });
 
     it("[Issue 7] 底层驱动在 spawn 解决前已触发退出时，启动完成不会覆盖已收到的退出状态", async () => {

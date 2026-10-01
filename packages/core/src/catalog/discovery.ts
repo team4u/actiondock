@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { loadProjectConfig } from "../project/loader";
 import { loadManifest } from "../project/manifest";
 import type { ActionDockManifest } from "../project/types";
-import { DefaultRegistryStore, type RegistryStore } from "../registry/store";
+import { loadRegistry } from "../registry/registry";
 import { discoverProjectConfigs } from "../registry/scan";
 
 import type { PackageIdentity } from "../runtime/identity";
@@ -36,8 +36,6 @@ export interface PackageDiscoveryOptions {
   currentProjectRoot?: string;
   /** 自定义 ActionDock 主目录路径（用于定位注册表） */
   customHome?: string;
-  /** 显式注入的注册表存储实例（可选，默认使用 DefaultRegistryStore） */
-  registryStore?: RegistryStore;
   /** 附加显式包根目录集合 */
   packageRoots?: string[];
   /** 附加显式工作区根目录集合 */
@@ -68,8 +66,6 @@ export class PackageDiscovery {
   public discoverSync(): DiscoveredPackage[] {
     const packages = new Map<string, DiscoveredPackage>();
     this.idRealPaths.clear();
-    const registryStore =
-      this.options.registryStore || new DefaultRegistryStore(this.options.customHome);
     const scanLinked = this.options.scanLinkedPackages !== false;
 
     const registerPackage = (
@@ -134,7 +130,7 @@ export class PackageDiscovery {
     // 3. 注册表登记位置
     if (scanLinked) {
       try {
-        const regData = registryStore.load();
+        const regData = loadRegistry(this.options.customHome);
         if (regData.packages) {
           for (const pkg of Object.values(regData.packages)) {
             if (pkg.path) {

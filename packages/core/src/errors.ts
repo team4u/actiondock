@@ -110,9 +110,6 @@ export const PROJECT_BUSY = "PROJECT_BUSY";
 /** 工程存在未恢复的崩溃事务，需要执行恢复流程 */
 export const PROJECT_RECOVERY_REQUIRED = "PROJECT_RECOVERY_REQUIRED";
 
-/** SQLite 工作线程已退出 */
-export const STORAGE_WORKER_EXITED = "STORAGE_WORKER_EXITED";
-
 /** 事件订阅队列积压超过背压上限 */
 export const EVENT_BACKPRESSURE_LIMIT = "EVENT_BACKPRESSURE_LIMIT";
 export const EVENT_CURSOR_EXPIRED = "EVENT_CURSOR_EXPIRED";
@@ -539,7 +536,6 @@ export type ErrorCode =
   | typeof STORAGE_BUSY
   | typeof PROJECT_BUSY
   | typeof PROJECT_RECOVERY_REQUIRED
-  | typeof STORAGE_WORKER_EXITED
   | typeof EVENT_BACKPRESSURE_LIMIT
   | typeof EVENT_CURSOR_EXPIRED
   | typeof PROCESS_OUTPUT_LIMIT

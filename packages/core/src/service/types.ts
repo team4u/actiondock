@@ -23,8 +23,6 @@ import type { ActionDockHostOptions } from "../host/types";
 import type { RuntimePlatform } from "../platform/types";
 import type { StateEntry } from "../storage/types";
 import {
-  ActionDockError,
-  type ErrorCode,
   PROTOCOL_UNSUPPORTED,
   SERVICE_RESULT_UNKNOWN,
   SERVICE_CLOSED,
@@ -54,31 +52,6 @@ export const ACTIONDOCK_PROTOCOL_VERSION = "2.0";
  * 服务端/通信协议错误码常量（单一事实源引用自 errors.ts）。
  */
 export { PROTOCOL_UNSUPPORTED, SERVICE_RESULT_UNKNOWN, SERVICE_CLOSED };
-
-/**
- * 结构化服务通信异常类。
- */
-export class ServiceError extends ActionDockError {
-  readonly details?: Record<string, unknown>;
-  constructor(code: ErrorCode, message: string, details?: Record<string, unknown>) {
-    super(code, message, details);
-    this.name = "ServiceError";
-    this.details = details;
-    Object.setPrototypeOf(this, ServiceError.prototype);
-  }
-}
-
-/**
- * 服务关闭超时异常类。
- */
-export class CloseTimeoutError extends Error {
-  readonly runIds?: string[];
-  constructor(message = "Service close operation timed out", runIds?: string[]) {
-    super(message);
-    this.name = "CloseTimeoutError";
-    this.runIds = runIds;
-  }
-}
 
 /**
  * 配置项安全视图契约。

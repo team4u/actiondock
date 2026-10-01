@@ -9,10 +9,10 @@ import {
   PackageGraphBuilder,
   resolveAction,
   resolvePlaybook,
-} from "../src/graph";
+} from "../src/catalog";
 import { PackageDiscovery } from "../src/catalog/discovery";
 import { DefaultPackageGraph } from "../src/catalog/graph";
-import { DefaultRegistryStore } from "../src/registry/store";
+import { linkPackage } from "../src/registry/registry";
 
 describe("PackageDiscovery, PackageGraph, ActionCatalog, and resolveAction", () => {
   let tempHome: string;
@@ -128,9 +128,8 @@ describe("PackageDiscovery, PackageGraph, ActionCatalog, and resolveAction", () 
 
   describe("PackageDiscovery", () => {
     it("discovers current project and registered packages", async () => {
-      const store = new DefaultRegistryStore(tempHome);
-      await store.link(pkgBDir);
-      await store.link(pkgCDir);
+      await linkPackage(pkgBDir, tempHome);
+      await linkPackage(pkgCDir, tempHome);
 
       const discovery = new PackageDiscovery({
         currentProjectRoot: pkgADir,

@@ -1,8 +1,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { toSnakeUpperCase } from "../runtime/env";
-import { isLoopbackHost } from "../utils/net";
-import { getActionDockHome } from "../utils";
+import { getActionDockHome, isLoopbackHost } from "../utils";
 import { ActionDockError, INVALID_ARGUMENT } from "../errors";
 import type {
   ProfileEntry,

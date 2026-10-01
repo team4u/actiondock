@@ -10,9 +10,9 @@ import fs, {
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { isProcessAlive } from "../utils/process";
+import { isProcessAlive } from "../utils";
 
-// isProcessAlive 已上移至 utils/process.ts（跨域通用谓词单一事实源），
+// isProcessAlive 已上移至 utils（跨域通用谓词单一事实源），
 // 此处仅保留 re-export 兼容旧引用路径
 export { isProcessAlive };
 

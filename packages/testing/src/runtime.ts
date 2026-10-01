@@ -22,67 +22,12 @@ import type {
   StateStore,
 } from "@actiondock/sdk";
 import { ActionRuntimeError } from "@actiondock/sdk";
-import {
-  decodeStateKey,
-  encodeStateKey,
-  escapeStateSegment,
-  unescapeStateSegment,
-} from "@actiondock/sdk";
 import { FakeClock } from "./clock";
 import { MockProcessExecutor } from "./process";
 import { MemoryStorage } from "./storage";
 import { createTestPlatform } from "./platform";
 
-export { decodeStateKey, encodeStateKey, escapeStateSegment, unescapeStateSegment };
 export { ActionRuntimeError };
-
-/**
- * 基于内存 Map 的只读/可写配置实现，专供单元测试使用。
- */
-export class MemoryConfig implements Config {
-  private store: Map<string, unknown>;
-
-  constructor(initial: Record<string, unknown> = {}) {
-    this.store = new Map(Object.entries(initial));
-  }
-
-  get<T = unknown>(key: string): T | undefined;
-  get<T = unknown>(key: string, defaultValue: T): T;
-  get<T = unknown>(key: string, defaultValue?: T): T | undefined {
-    if (this.store.has(key)) {
-      return this.store.get(key) as T;
-    }
-    return defaultValue;
-  }
-
-  has(key: string): boolean {
-    return this.store.has(key);
-  }
-
-  /**
-   * 在测试期间动态更新或插入配置值。
-   * @param key 配置键名
-   * @param value 配置值
-   */
-  set(key: string, value: unknown): void {
-    this.store.set(key, value);
-  }
-
-  /**
-   * 删除指定配置项。
-   * @param key 配置键名
-   */
-  delete(key: string): boolean {
-    return this.store.delete(key);
-  }
-
-  /**
-   * 列出所有已存储配置项。
-   */
-  list(): Record<string, unknown> {
-    return Object.fromEntries(this.store.entries());
-  }
-}
 
 /**
  * 基于内存存储的状态存储实现，支持命名空间隔离与 TTL 自动失效，专供单元测试使用。

@@ -12,7 +12,6 @@ import {
   DEFAULT_MAX_MATERIALIZED_SIZE_BYTES,
 } from "./flat-parser";
 import { FORBIDDEN_ACTION_INPUT_PROPERTIES } from "./flat-predicates";
-import { buildCliInputAdviceV1, type CliInputAdviceV1 } from "./advice";
 
 /**
  * CLI 输入传输机制元数据契约（v1）。
@@ -67,15 +66,6 @@ export interface InputPolicyV1 {
   forbiddenPropertyNames: readonly string[];
 }
 
-/**
- * CLI describe --json 输入元数据聚合契约（v1）。
- */
-export interface CliDescribeInputMetadataV1 {
-  inputTransport: InputTransportV1;
-  inputEncoding: CliInputEncodingV1;
-  inputPolicy: InputPolicyV1;
-  inputAdvice: CliInputAdviceV1;
-}
 
 /**
  * CLI 输入错误信封结构契约。
@@ -149,20 +139,6 @@ export function buildInputPolicyV1(): InputPolicyV1 {
   };
 }
 
-/**
- * 聚合构造 CLI describe --json 所需的完整输入元数据。
- *
- * @param schema Action 的 inputSchema 定义
- * @returns 包含 transport、encoding、policy 与 advice 的聚合元数据对象
- */
-export function buildCliDescribeInputMetadataV1(schema: unknown): CliDescribeInputMetadataV1 {
-  return {
-    inputTransport: buildInputTransportV1(),
-    inputEncoding: buildCliInputEncodingV1(),
-    inputPolicy: buildInputPolicyV1(),
-    inputAdvice: buildCliInputAdviceV1(schema),
-  };
-}
 
 /**
  * 格式化输入异常为 CLI 人类可读文本。

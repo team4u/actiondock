@@ -6,7 +6,6 @@ import { join, resolve } from "node:path";
 import {
   formatActionDetail,
 } from "../src/utils/input";
-import { buildActionInputAdvice } from "@actiondock/core/project";
 
 import { runCliAsync } from "./helpers/run-cli";
 
@@ -189,20 +188,6 @@ export default defineAction(async (input: any) => {
     expect(res.error.message).toContain("Number is non-finite or NaN");
   });
 
-  // 23. 含有非 flat-safe required 字段时 flatSupported 为 false
-  it("marks flatSupported as false when required field contains non-flat-safe characters", () => {
-    const advice = buildActionInputAdvice({
-      type: "object",
-      properties: {
-        "user name": { type: "string" },
-        age: { type: "number" },
-      },
-      required: ["user name"],
-    });
-    expect(advice.flatSupported).toBe(false);
-    expect(advice.hasFlatFields).toBe(true);
-    expect(advice.notes.some((n) => n.includes("user name"))).toBe(true);
-  });
 
   // 24. 展示扁平推荐模式与建议赋值操作符
   it("generates action detail advice with recommended mode and assignments", () => {

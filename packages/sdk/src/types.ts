@@ -641,35 +641,6 @@ export interface ProcessAPI {
   ): Promise<ProcessInfo>;
 }
 
-/**
- * @deprecated 旧版进程执行参数，将在后续版本中移除
- */
-export interface ProcessExecOptions {
-  cwd?: string;
-  env?: Record<string, string>;
-  input?: string | Uint8Array;
-  timeoutMs?: number;
-  signal?: AbortSignal;
-  encoding?: string;
-  throwOnError?: boolean;
-  maxOutputBytes?: number;
-}
-
-/**
- * @deprecated 旧版进程执行结果，将在后续版本中移除
- */
-export interface ProcessResult {
-  ok: boolean;
-  exitCode: number | null;
-  signal?: string;
-  stdout: string;
-  stderr: string;
-  raw: Uint8Array;
-  timedOut: boolean;
-  cancelled: boolean;
-  durationMs: number;
-  error?: RuntimeError;
-}
 
 /**
  * Action 间相互调用的执行器接口。

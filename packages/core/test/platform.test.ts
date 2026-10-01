@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { decodeText, encodeBytes, type ActionContext, type ProcessAPI, type ProcessResult } from "@actiondock/sdk";
+import { decodeText, encodeBytes, type ActionContext, type ProcessAPI } from "@actiondock/sdk";
 import { ActionRunner } from "../src/runtime/runner";
 import {
   createNodePlatform,
