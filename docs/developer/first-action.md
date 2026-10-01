@@ -123,7 +123,6 @@ export default defineAction<ActionInput<"example.greet">, ActionOutput<"example.
     - `ctx.process.run(input: ProcessRunInput, call?: CallOptions): Promise<ProcessRunResult>`：一次性执行命令并等待退出，内置超时中断与输出缓冲区截断保护。
     - `ctx.process.start(input: ProcessStartInput, call?: CallOptions): Promise<ProcessStartResult>`：拉起长期受管进程，返回元数据快照与输出流游标。
     - `ctx.process.inspect(id: string): Promise<ProcessInfo>`：查询指定受管进程的实时状态。
-    - `ctx.process.acquire(id: string, input: ProcessAcquireInput): Promise<ControlGrant>`：申请进程独占控制权令牌。
     - `ctx.process.write(id: string, input: ProcessWriteInput): Promise<OperationReceipt>`：向受管进程输入流异步写入指令。
   - 使用示例：
     ```ts

@@ -12,7 +12,6 @@ import type {
   ProcessOwner,
   QueuedOperation,
 } from "./managed-record";
-import type { ControlArbiter } from "./control-arbiter";
 import type { ProcessRequestKey, StoredProcessRecord } from "./metadata-store";
 
 /**
@@ -32,7 +31,6 @@ export interface InputDispatcherHost {
   quarantineProcess(
     owner: ProcessOwner,
     processId: string,
-    token?: string,
     reason?: string
   ): Promise<void> | unknown;
   /** 成功输入后的空闲定时器刷新 */
@@ -47,11 +45,30 @@ export interface InputDispatcherHost {
 }
 
 /**
+ * 断言进程仍处于可交互(非隔离、非终态)状态。
+ */
+function assertProcessOperable(proc: ManagedProcessRecord): void {
+  if (proc.info.control === "quarantined") {
+    throw new ProcessError(PROCESS_QUARANTINED, "Process is in quarantined state");
+  }
+  const state = proc.info.state;
+  if (state === "exited" || state === "failed" || state === "lost") {
+    throw new ProcessError(INPUT_CLOSED, `Process is no longer operable (state: ${state})`);
+  }
+}
+
+/**
+ * 进程是否已进入不可交互的终态。
+ */
+function isProcessTerminal(proc: ManagedProcessRecord): boolean {
+  return proc.info.control === "quarantined" || proc.info.control === "closed";
+}
+
+/**
  * write 入队请求参数。
  */
 export interface EnqueueWriteInput {
   requestId: string;
-  token: string;
   data: Uint8Array;
   key: ProcessRequestKey;
   payloadHash: string;
@@ -62,7 +79,6 @@ export interface EnqueueWriteInput {
  */
 export interface EnqueueControlInput {
   requestId: string;
-  token: string;
   action: QueuedOperation["action"];
   key: ProcessRequestKey;
   payloadHash: string;
@@ -80,11 +96,9 @@ export interface EnqueueControlInput {
  */
 export class InputDispatcher {
   private readonly host: InputDispatcherHost;
-  private readonly arbiter: ControlArbiter;
 
-  constructor(host: InputDispatcherHost, arbiter: ControlArbiter) {
+  constructor(host: InputDispatcherHost) {
     this.host = host;
-    this.arbiter = arbiter;
   }
 
   /**
@@ -95,8 +109,8 @@ export class InputDispatcher {
    * 落盘或推送失败时回滚字节预扣并原样抛出。
    */
   async enqueueWrite(proc: ManagedProcessRecord, input: EnqueueWriteInput): Promise<OperationReceipt> {
-    // 入队前校验授权与控制状态
-    this.arbiter.validateOperation(proc, input.token);
+    // 入队前校验进程仍处于可交互状态
+    assertProcessOperable(proc);
 
     if (proc.inputClosed) {
       throw new ProcessError(INPUT_CLOSED, "Input stream is closed");
@@ -134,7 +148,6 @@ export class InputDispatcher {
       proc.inputQueue.push({
         type: "write",
         requestId: input.requestId,
-        token: input.token,
         bytes: rawBytes,
         receipt,
         key: input.key,
@@ -158,8 +171,8 @@ export class InputDispatcher {
    * 入队控制指令：异步阶段落盘排队收据并推送队列，随后触发串行调度。
    */
   async enqueueControl(proc: ManagedProcessRecord, input: EnqueueControlInput): Promise<OperationReceipt> {
-    // 入队前校验授权与控制状态
-    this.arbiter.validateOperation(proc, input.token);
+    // 入队前校验进程仍处于可交互状态
+    assertProcessOperable(proc);
 
     const receipt: OperationReceipt = {
       requestId: input.requestId,
@@ -171,7 +184,6 @@ export class InputDispatcher {
     proc.inputQueue.push({
       type: "control",
       requestId: input.requestId,
-      token: input.token,
       action: input.action,
       receipt,
       key: input.key,
@@ -221,12 +233,9 @@ export class InputDispatcher {
       while (proc.inputQueue.length > 0) {
         const op = proc.inputQueue[0];
 
-        // dispatch 前校验 token、epoch 与授权（经控制权仲裁器委托复核）
+        // dispatch 前校验进程状态与取消纪元
         if (
-          proc.info.control !== "held" ||
-          !proc.currentGrant ||
-          proc.currentGrant.token !== op.token ||
-          new Date(proc.currentGrant.expiresAt).getTime() <= Date.now() ||
+          isProcessTerminal(proc) ||
           op.cancelEpoch !== proc.cancelEpoch
         ) {
           if (op.cancelEpoch === proc.cancelEpoch) {
@@ -274,7 +283,6 @@ export class InputDispatcher {
             await this.host.quarantineProcess(
               proc.owner,
               proc.info.id,
-              op.token,
               "Write failed with uncertain outcome"
             );
             break;

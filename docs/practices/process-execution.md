@@ -2,7 +2,7 @@
 
 在构建智能体工具、运维集成以及代码分析等场景时，调度底层操作系统进程是核心能力之一。然而，未受管控的进程调用往往伴随着系统崩溃、内存溢出、僵尸孤儿空转与并发写竞争等重大风险。
 
-ActionDock 提供了工业级受管进程架构，通过内核统一调度、独占控制权租约、逐流增量解码、有界环形输出日志与资源配额审计，保障进程生命周期的可靠管控。
+ActionDock 提供了工业级受管进程架构，通过内核统一调度、逐流增量解码、有界环形输出日志与资源配额审计，保障进程生命周期的可靠管控。
 
 ---
 
@@ -22,7 +22,6 @@ ActionDock 提供了工业级受管进程架构，通过内核统一调度、独
 
 - 一次性执行 `run`：适用于短时有界命令（如 `git status`、`docker ps`、工具版本查询等）。该方法等待命令结束并收集有限输出，内置超时阻断与输出截断保护。
 - 长期受管进程 `start`：适用于持续交互、长时间构建或交互式会话（如终端解释器、REPL 环境、编译监听等）。启动后返回全局唯一进程标识与初始游标，后续通过独立接口读写与控制。
-- 独占控制权机制 `withControl`：对长期进程发起写操作必须持有有效控制令牌。同一时间仅允许单一调用者持有控制权；`withControl` 自动完成租约申请、后台定期续租、正常完成释放，并在发生异常或中断时执行终止隔离。
 - 逐流增量解码 `createStreamDecoder`：针对不同流（`stdout`、`stderr`、`pty`）独立保留未完整接收的多字节序列，杜绝跨流交错与切块乱码。
 - 有界环形日志与游标读取 `read`：所有进程输出汇聚于内核有界环形日志，支持基于游标的分页拉取与长轮询等待，自动识别缓冲区覆盖断层。
 
@@ -88,16 +87,15 @@ export default defineAction(async (input: GitStatusInput, ctx): Promise<GitStatu
 
 ---
 
-## 实战二：使用 start 与 withControl 管理长期交互进程
+## 实战二：使用 start 管理长期交互进程
 
-对于需要多次输入交互的场景（如交互式解释器），必须先通过 `ctx.process.start` 创建长期受管进程，并在 `withControl` 保护下安全提交指令与读取输出：
+对于需要多次输入交互的场景（如交互式解释器），先通过 `ctx.process.start` 创建长期受管进程，随后直接提交写入指令并按游标读取输出：
 
 ```ts
 import {
   defineAction,
   encodeText,
   createStreamDecoder,
-  withControl,
 } from "@actiondock/sdk";
 
 export interface ReplSessionInput {
@@ -132,55 +130,37 @@ export default defineAction(async (input: ReplSessionInput, ctx): Promise<ReplSe
   let currentCursor = startResult.initialCursor;
   const decoder = createStreamDecoder();
 
-  // 在独占控制权保护下执行业务写入与读取
-  const responseText = await withControl(
-    ctx.process,
-    processId,
-    {
-      requestId: `eval-${ctx.run.id}`,
-      ttlMs: 30000,
-      waitMs: 5000,
-      signal: ctx.signal,
-    },
-    async (grant) => {
-      // 写入命令数据，必须携带当前有效的控制令牌
-      await ctx.process.write({
-        token: grant.token,
-        requestId: `write-${ctx.run.id}-1`,
-        data: encodeText(`${input.command}\n`),
-      });
+  // 直接向运行中的受管进程写入命令数据
+  await ctx.process.write(processId, {
+    requestId: `write-${ctx.run.id}-1`,
+    data: encodeText(`${input.command}\n`),
+  });
 
-      // 基于游标长轮询读取进程响应输出
-      const readResult = await ctx.process.read({
-        cursor: currentCursor,
-        maxBytes: 64 * 1024,
-        waitMs: 2000,
-        onGap: "skip",
-      });
+  // 基于游标长轮询读取进程响应输出
+  const readResult = await ctx.process.read(processId, {
+    cursor: currentCursor,
+    maxBytes: 64 * 1024,
+    waitMs: 2000,
+    onGap: "skip",
+  });
 
-      currentCursor = readResult.nextCursor;
-      return decoder.decodeChunks(readResult.chunks);
-    }
-  );
+  currentCursor = readResult.nextCursor;
 
   return {
     processId,
-    response: responseText,
+    response: decoder.decodeChunks(readResult.chunks),
   };
 });
 ```
 
 ---
 
-## 独占控制权与 withControl 保证契约
+## 长期进程交互安全保证
 
-`withControl` 高层辅助函数封装了严密的控制权生命周期契约：
-
-- 自动申请与排队：调用 `acquire` 申请独占控制令牌，支持设置排队等待超时。
-- 定期自动续租：若未显式关闭，在租约存活期内按三分之一 TTL 周期自动调用 `renew` 延长租约。
-- 正常成功显式释放：业务函数顺利执行完毕后，显式调用 `release` 释放令牌，允许后续排队者获取控制权。
-- 异常中断强制终止：若业务执行出错、外部取消信号触发或后台续租失败，严禁调用 `release` 释放半损坏状态的进程，而是严格按契约调用 `stop` 终止或隔离进程，并将原始异常向外抛出。
-- 临时错误容错保护：若业务成功执行但因临时性繁忙导致释放失败，记录警告并保留业务返回结果，避免对稳定进程进行不必要的误杀。
+- 写入前状态校验：仅允许向运行中的进程提交写入，进程隔离或进入终态后立即拒绝。
+- 输入队列串行调度：同一进程的写入按队列串行派发，结算窗口以取消纪元防御并发接管竞态。
+- 写入不确定失败隔离：底层写入出现不确定结果时，进程自动转入隔离状态并冻结输入队列，杜绝半损坏状态的静默扩散。
+- 有界资源约束：空闲超时、生命周期上限与输出缓冲区配额持续守护，超限进程按优雅终止流程回收。
 
 ---
 

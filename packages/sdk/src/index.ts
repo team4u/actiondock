@@ -14,11 +14,9 @@ export {
   decodeText,
   encodeBytes,
   encodeText,
-  withControl,
 } from "./process";
 export type {
   StreamDecoder,
-  WithControlOptions,
 } from "./process";
 export type {
   ActionContext,
@@ -30,8 +28,6 @@ export type {
   CallOptions,
   Capabilities,
   Config,
-  ControlGrant,
-  ControlState,
   ExecutionEvent,
   ExecutionResult,
   IOConfig,
@@ -43,7 +39,6 @@ export type {
   OperationReceipt,
   OutputChunk,
   ProcessAPI,
-  ProcessAcquireInput,
   ProcessControlAction,
   ProcessControlInput,
   ProcessInfo,

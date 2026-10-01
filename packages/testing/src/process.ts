@@ -16,10 +16,8 @@ import {
 import {
   encodeBytes,
   type CallOptions,
-  type ControlGrant,
   type OperationReceipt,
   type OutputChunk,
-  type ProcessAcquireInput,
   type ProcessAPI,
   type ProcessControlInput,
   type ProcessInfo,
@@ -456,32 +454,24 @@ export class MockProcessExecutor implements ProcessExecutor {
     return this.processManager.list(this.owner, input, call);
   }
 
-  /**
-   * 申请指定受管进程的独占控制令牌。
-   */
-  async acquire(id: string, input: ProcessAcquireInput, call?: CallOptions): Promise<ControlGrant> {
-    return this.processManager.acquire(this.owner, id, input, call);
-  }
 
-  /**
-   * 延长当前有效控制令牌的存活时间。
-   */
-  async renew(id: string, token: string, ttlMs: number, call?: CallOptions): Promise<ControlGrant> {
-    return this.processManager.renew(this.owner, id, token, ttlMs, call);
-  }
 
-  /**
-   * 显式释放控制令牌。
-   */
-  async release(id: string, token: string, call?: CallOptions): Promise<void> {
-    return this.processManager.release(this.owner, id, token, call);
-  }
+
+
+
 
   /**
    * 向受管进程输入流写入原始字节数据。
    */
   async write(id: string, input: ProcessWriteInput, call?: CallOptions): Promise<OperationReceipt> {
     return this.processManager.write(this.owner, id, input, call);
+  }
+
+  /**
+   * 向受管进程发送结构化控制指令。
+   */
+  async control(id: string, input: ProcessControlInput, call?: CallOptions): Promise<OperationReceipt> {
+    return this.processManager.control(this.owner, id, input, call);
   }
 
   /**
@@ -498,12 +488,6 @@ export class MockProcessExecutor implements ProcessExecutor {
     return this.processManager.read(this.owner, id, input, call);
   }
 
-  /**
-   * 向受管进程发送结构化控制指令。
-   */
-  async control(id: string, input: ProcessControlInput, call?: CallOptions): Promise<OperationReceipt> {
-    return this.processManager.control(this.owner, id, input, call);
-  }
 
   /**
    * 终止指定的受管进程资源。

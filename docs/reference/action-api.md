@@ -210,7 +210,7 @@ export interface ActionRef {
 
 ### 统一受管进程接口 ProcessAPI
 
-ActionDock 2.x 提供工业级受管进程接口 ProcessAPI，统一管理短时有界外部命令与长期交互式进程，覆盖进程启动、独占控制权租约、逐流增量读取、结构化控制与优雅终止：
+ActionDock 2.x 提供工业级受管进程接口 ProcessAPI，统一管理短时有界外部命令与长期交互式进程，覆盖进程启动、逐流增量读取、结构化控制与优雅终止：
 
 ```ts
 export interface ProcessAPI {
@@ -227,13 +227,10 @@ export interface ProcessAPI {
   list(input: ProcessListInput, call?: CallOptions): Promise<ProcessListResult>;
 
   /** 申请指定受管进程的独占控制令牌 */
-  acquire(id: string, input: ProcessAcquireInput, call?: CallOptions): Promise<ControlGrant>;
 
   /** 延长当前有效控制令牌的存活时间 */
-  renew(id: string, token: string, ttlMs: number, call?: CallOptions): Promise<ControlGrant>;
 
   /** 显式释放控制令牌，允许后续控制者申请 */
-  release(id: string, token: string, call?: CallOptions): Promise<void>;
 
   /** 向受管进程输入流写入原始字节数据 */
   write(id: string, input: ProcessWriteInput, call?: CallOptions): Promise<OperationReceipt>;
@@ -323,53 +320,10 @@ export interface ProcessInfo {
 
 独占控制与读写交互类型：
 
-```ts
-export interface ControlGrant {
-  /** 控制令牌字符串 */
-  token: string;
-  /** 凭据有效截止时间（UTC ISO 8601 格式） */
-  expiresAt: string;
-}
-
-export interface ProcessWriteInput {
-  token: string;
-  requestId: string;
-  data: Bytes;
-}
-
-export interface ProcessControlInput {
-  token: string;
-  requestId: string;
-  action:
-    | { type: "input-eof" }
-    | { type: "interrupt-foreground" }
-    | { type: "resize"; cols: number; rows: number };
-}
-
-export interface ProcessReadInput {
-  cursor: string;
-  maxBytes: number;
-  waitMs: number;
-  onGap: "error" | "skip";
-}
-
-export interface ReadResult {
-  chunks: OutputChunk[];
-  nextCursor: string;
-  earliestCursor: string;
-  tailCursor: string;
-  truncated: boolean;
-  gap?: { fromCursor: string; toCursor: string };
-  eof: boolean;
-  process: ProcessInfo;
-}
-```
-
 #### SDK 辅助函数与工具库
 
 SDK 导出了针对受管进程交互的高阶工具函数：
 
-- `withControl(api, processId, options, fn)`：在独占控制权保护下安全执行。内部自动申请令牌、按三分之一 TTL 周期自动续租、正常执行完毕后显式调用 `release`；若发生异常或中断则严禁调用 `release`，主动调用 `stop` 隔离或终止并向外抛出原错误。
 - `createStreamDecoder()`（别名 `createIncrementalTextDecoder()`）：创建逐流增量 UTF-8 解码器，针对不同输出流（`stdout`、`stderr`、`pty`）独立缓存残缺多字节字符，杜绝切块乱码与跨流污染。
 - `encodeText(text)` 与 `encodeBytes(data)`：将纯文本或二进制数据编码为标准的 Base64 `Bytes` 结构。
 - `decodeText(bytesOrChunks)` 与 `decodeBytes(bytes)`：将 `Bytes` 结构或 `OutputChunk` 数组快速转换为 UTF-8 文本或二进制数组。
@@ -404,10 +358,10 @@ export default defineAction(async (_input, ctx) => {
 });
 ```
 
-长期进程交互与控制权治理：
+长期进程交互：
 
 ```ts
-import { defineAction, encodeText, withControl, createStreamDecoder } from "@actiondock/sdk";
+import { defineAction, encodeText, createStreamDecoder } from "@actiondock/sdk";
 
 export default defineAction(async (input: { command: string }, ctx) => {
   const started = await ctx.process.start({
@@ -417,29 +371,19 @@ export default defineAction(async (input: { command: string }, ctx) => {
 
   const decoder = createStreamDecoder();
 
-  const output = await withControl(
-    ctx.process,
-    started.process.id,
-    { requestId: `ctl-${ctx.run.id}`, ttlMs: 15000 },
-    async (grant) => {
-      await ctx.process.write({
-        token: grant.token,
-        requestId: `write-${ctx.run.id}`,
-        data: encodeText(`${input.command}\n`),
-      });
+  await ctx.process.write(started.process.id, {
+    requestId: `write-${ctx.run.id}`,
+    data: encodeText(`${input.command}\n`),
+  });
 
-      const res = await ctx.process.read({
-        cursor: started.initialCursor,
-        maxBytes: 32 * 1024,
-        waitMs: 1000,
-        onGap: "skip",
-      });
+  const res = await ctx.process.read(started.process.id, {
+    cursor: started.initialCursor,
+    maxBytes: 32 * 1024,
+    waitMs: 1000,
+    onGap: "skip",
+  });
 
-      return decoder.decodeChunks(res.chunks);
-    }
-  );
-
-  return { output };
+  return { output: decoder.decodeChunks(res.chunks) };
 });
 ```
 
