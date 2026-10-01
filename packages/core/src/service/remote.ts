@@ -46,7 +46,7 @@ import {
   getRemoteStateKey,
   setRemoteConfig,
   setRemoteStateKey,
-} from "../profile/client";
+} from "../client";
 import { isRemoteStateKeyNotFound, wrapRemoteError } from "./remote-errors";
 import { formatTerminalRunResult, pollRunCompletion } from "./remote-polling";
 import { streamRemoteEvents } from "./sse-stream";

@@ -8,7 +8,7 @@ import {
   loadProfiles,
   addProfile,
 } from "../src/profile/manager";
-import { assertSecureTransport } from "../src/profile/client-transport";
+import { assertSecureTransport } from "../src/client";
 import { ActionDockError, INVALID_ARGUMENT } from "../src/errors";
 
 describe("Profiles 配置文件损坏保护", () => {

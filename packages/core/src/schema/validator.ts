@@ -32,16 +32,10 @@ export interface ValidationResult {
 /**
  * 递归检查数据中是否包含危险的原型污染属性键名（__proto__、constructor、prototype）。
  */
-import { validateActionInputValue } from "../json/value-validator";
+import { hasDangerousKeys } from "../json/value-validator";
 
-/**
- * 递归检查数据中是否包含危险的原型污染属性键名（__proto__、constructor、prototype）。
- * 内部委托 validateActionInputValue 执行迭代遍历，确保环路安全、有向无环图安全且无调用栈溢出风险。
- */
-export function hasDangerousKeys(data: unknown): boolean {
-  const result = validateActionInputValue(data);
-  return !result.valid && result.kind === "input-policy";
-}
+export { hasDangerousKeys };
+
 
 /**
  * 内部纯 Schema 校验器。

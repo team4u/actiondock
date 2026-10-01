@@ -195,8 +195,8 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
     });
   });
 
-  describe("事件队列背压截断（EVENT_BACKPRESSURE_LIMIT）", () => {
-    it("慢订阅者队列溢出时主运行非阻塞完成，慢订阅者收到背压终止事件并切断通道", async () => {
+  describe("事件队列缓冲上限与慢订阅者丢弃", () => {
+    it("慢订阅者队列溢出时主运行非阻塞完成，慢订阅者丢弃旧事件并持续接收最新事件", async () => {
       const eventSink = new InMemoryEventSink({ maxSubscriberQueueSize: 3 });
       const receivedEvents: any[] = [];
       let slowDone = false;
@@ -211,7 +211,7 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
         slowDone = true;
       })();
 
-      // 先发送首条事件并稍作等待，让慢订阅者成功确认消费首条事件以确立已确认游标
+      // 先发送首条事件并稍作等待
       eventSink.emit({
         runId: "run-backpressure-1",
         rootRunId: "run-backpressure-1",
@@ -237,14 +237,25 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
         });
       }
 
+      eventSink.emit({
+        runId: "run-backpressure-1",
+        rootRunId: "run-backpressure-1",
+        sequence: 7,
+        timestamp: new Date().toISOString(),
+        type: "finish",
+        result: { ok: true, runId: "run-backpressure-1", data: null },
+      });
+
       await slowConsumer;
       expect(slowDone).toBe(true);
 
+      // 慢订阅者不会被切断通道，没有合成的错误事件
       const errorEvent = receivedEvents.find((e) => e.type === "error");
-      expect(errorEvent).toBeDefined();
-      expect(errorEvent.error.code).toBe("EVENT_BACKPRESSURE_LIMIT");
-      expect(errorEvent.error.details?.lastConfirmedCursor).toBeDefined();
-      expect(errorEvent.error.details?.lastConfirmedSequence).toBe(0);
+      expect(errorEvent).toBeUndefined();
+
+      // 慢订阅者因为消费慢，队列满时丢弃了旧事件，只收到了初始事件和队列保留的最新事件（含终态事件）
+      expect(receivedEvents.length).toBeLessThan(8);
+      expect(receivedEvents[receivedEvents.length - 1].type).toBe("finish");
 
       eventSink.clear("run-backpressure-1");
     });
@@ -293,13 +304,13 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
       await Promise.all([normalConsumer, slowConsumer]);
 
       expect(normalEvents.length).toBe(9);
-      expect(normalEvents.some((e) => e.type === "error" && e.error?.code === "EVENT_BACKPRESSURE_LIMIT")).toBe(false);
+      expect(normalEvents.map((e) => e.sequence)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
 
       eventSink.clear("run-multi-sub");
     });
   });
 
-  describe("基于游标的断点续传与过期清理（EVENT_CURSOR_EXPIRED）", () => {
+  describe("基于游标的断点续传", () => {
     it("基于 after 游标正常续传后续增量事件", async () => {
       const eventSink = new InMemoryEventSink();
       const runId = "run-cursor-1";
@@ -338,8 +349,8 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
       eventSink.close();
     });
 
-    it("传入早于已修剪的最早可用游标时抛出带有 EVENT_CURSOR_EXPIRED 错误码的异常", async () => {
-      const eventSink = new InMemoryEventSink();
+    it("传入早于已淘汰事件的游标时正常返回剩余可用增量事件，不抛出过期异常", async () => {
+      const eventSink = new InMemoryEventSink({ maxEventsPerRun: 5 });
       const runId = "run-pruned-1";
 
       for (let i = 0; i < 10; i++) {
@@ -353,28 +364,30 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
           total: 10,
         });
       }
+      eventSink.emit({
+        runId,
+        rootRunId: runId,
+        sequence: 10,
+        timestamp: new Date().toISOString(),
+        type: "finish",
+        result: { ok: true, runId, data: null },
+      });
 
-      eventSink.pruneEvents(runId, 5);
-
-      let caughtError: any;
-      try {
-        const sub = eventSink.subscribe(runId, { after: 1 });
-        for await (const _evt of sub) {
-          // 不应产出正常数据
-        }
-      } catch (err: any) {
-        caughtError = err;
+      const events: any[] = [];
+      const sub = eventSink.subscribe(runId, { after: 1 });
+      for await (const evt of sub) {
+        events.push(evt);
       }
 
-      expect(caughtError).toBeDefined();
-      expect(caughtError.code).toBe("EVENT_CURSOR_EXPIRED");
-      expect(caughtError.details?.earliestRetainedCursor).toBeDefined();
+      // 缓冲区上限为 5，早期事件已滚动淘汰，订阅直接消费剩余可用的最新 5 条事件
+      expect(events.length).toBe(5);
+      expect(events.map((e) => e.sequence)).toEqual([6, 7, 8, 9, 10]);
 
       eventSink.close();
     });
   });
 
-  describe("HTTP SSE 协议接入（Last-Event-ID、HTTP 409、HTTP 410）", () => {
+  describe("HTTP SSE 协议接入（Last-Event-ID、HTTP 409）", () => {
     const AUTH_TOKEN = "test-stream-secret";
     let serverInstance: any;
     let serverUrl: string;
@@ -510,15 +523,9 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
       expect(bodyText).toContain("data: ");
     });
 
-    it("HTTP GET events 传入已过期游标时直接返回 HTTP 410 与 EVENT_CURSOR_EXPIRED 错误", async () => {
+    it("HTTP GET events 传入早期游标时返回 HTTP 200 并续传后续事件流", async () => {
       const ticket = await service.execution.start("pkg.stream/step", {});
       await ticket.result;
-
-      const app = host.getRuntime("pkg.stream");
-      const eventSink = (app?.executionService as any)?.eventSink;
-      if (eventSink?.pruneEvents) {
-        eventSink.pruneEvents(ticket.runId, 5);
-      }
 
       const eventsRes = await fetch(`${serverUrl}/api/v2/runs/${ticket.runId}/events`, {
         headers: {
@@ -527,11 +534,11 @@ describe("Task F: requestId 幂等去重与高级事件流契约验证", () => {
         },
       });
 
-      expect(eventsRes.status).toBe(410);
-      const errBody = (await eventsRes.json()) as any;
-      expect(errBody.ok).toBe(false);
-      expect(errBody.error?.code).toBe("EVENT_CURSOR_EXPIRED");
-      expect(errBody.error?.details?.earliestRetainedCursor).toBeDefined();
+      expect(eventsRes.status).toBe(200);
+      expect(eventsRes.headers.get("content-type")).toContain("text/event-stream");
+      const bodyText = await eventsRes.text();
+      expect(bodyText).toContain("id: ");
+      expect(bodyText).toContain("event: ");
     });
   });
 });

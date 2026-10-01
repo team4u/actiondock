@@ -2,14 +2,15 @@ import { randomUUID } from "node:crypto";
 import type { ExecutionResult } from "@actiondock/sdk";
 import { ACTION_CANCELLED, ACTION_TIMEOUT, NETWORK_ERROR } from "../errors";
 import { getInsecureDispatcher } from "../server/dispatcher";
-import { normalizeServerUrl } from "./manager";
 import {
   assertSecureTransport,
   buildHeaders,
+  buildQueryString,
+  fetchRemoteJson,
   fetchRemoteRoute,
+  normalizeServerUrl,
   type RemoteClientRequestOptions,
-} from "./client-transport";
-import { buildQueryString, fetchRemoteJson } from "./client-query";
+} from "./transport";
 
 /**
  * 远端 Action 执行与查询域端点。
@@ -50,7 +51,6 @@ export async function executeRemoteAction<T = unknown>(
   configOverridesOrOptions?: Record<string, unknown> | RemoteExecuteOptions,
   tokenArg?: string
 ): Promise<RemoteExecutionResult<T>> {
-  // Parse options / backwards compatibility
   let configOverrides: Record<string, unknown> | undefined;
   let token: string | undefined = tokenArg;
   let timeoutMs: number | undefined;
@@ -101,7 +101,6 @@ export async function executeRemoteAction<T = unknown>(
     executionPayload.requestId = requestId;
   }
 
-  // 组合外部取消信号与本地超时守卫：服务端僵死时仍能在 timeoutMs 内本地中断，避免永久挂起
   let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
   let localTimedOut = false;
 
@@ -172,7 +171,6 @@ export async function executeRemoteAction<T = unknown>(
     }
 
     if (!res.ok) {
-      // 错误信封严禁伪造 runId：与任何真实运行无关的标识会让调用方查询永远 not_found
       return {
         ok: false,
         runId: "",
@@ -190,7 +188,6 @@ export async function executeRemoteAction<T = unknown>(
       data,
     };
   } catch (err: any) {
-    // 本地超时守卫触发时归类为超时；外部信号中止时归类为取消
     if (localTimedOut) {
       return {
         ok: false,

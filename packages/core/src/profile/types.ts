@@ -1,3 +1,4 @@
+export type { RemoteHealthResult } from "../client";
 /**
  * 单个远端配置环境（Profile）实体定义。
  */
@@ -58,20 +59,3 @@ export interface ResolvedTarget {
   allowInsecureHttp?: boolean;
 }
 
-/**
- * 远端服务器健康探测与时延检测结果。
- */
-export interface RemoteHealthResult {
-  /** 服务端是否连通且鉴权成功 */
-  ok: boolean;
-  /** 服务端状态标识（如 "ok"） */
-  status?: string;
-  /** 远端 ActionDock 版本号 */
-  version?: string;
-  /** 远端服务运行时间（秒） */
-  uptime?: number;
-  /** 网络往返延迟（毫秒） */
-  latencyMs: number;
-  /** 探测失败时的错误信息 */
-  error?: string;
-}

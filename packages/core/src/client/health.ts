@@ -1,12 +1,29 @@
-import { normalizeServerUrl } from "./manager";
-import type { RemoteHealthResult } from "./types";
+import { getInsecureDispatcher } from "../server/dispatcher";
 import {
   assertSecureTransport,
   buildHeaders,
   fetchRemoteRoute,
+  normalizeServerUrl,
   type RemoteClientRequestOptions,
-} from "./client-transport";
-import { getInsecureDispatcher } from "../server/dispatcher";
+} from "./transport";
+
+/**
+ * 远端服务器健康探测与时延检测结果。
+ */
+export interface RemoteHealthResult {
+  /** 服务端是否连通且鉴权成功 */
+  ok: boolean;
+  /** 服务端状态标识（如 "ok"） */
+  status?: string;
+  /** 远端 ActionDock 版本号 */
+  version?: string;
+  /** 远端服务运行时间（秒） */
+  uptime?: number;
+  /** 网络往返延迟（毫秒） */
+  latencyMs: number;
+  /** 探测失败时的错误信息 */
+  error?: string;
+}
 
 /**
  * 远端健康检查域端点。
