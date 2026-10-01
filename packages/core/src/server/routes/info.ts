@@ -1,4 +1,4 @@
-import { filterWithFallbackInfo } from "../../filter";
+import { filterWithFallbackInfo } from "../../utils/intent";
 import { INFO_ERROR, PACKAGE_NOT_ALLOWED, PACKAGE_NOT_FOUND, PACKAGES_INFO_ERROR } from "../../errors";
 import { ACTIONDOCK_VERSION } from "../../version";
 import { sanitizeConfigDefinitions } from "../../storage";

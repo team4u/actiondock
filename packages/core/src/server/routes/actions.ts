@@ -1,7 +1,7 @@
 
 import type { ActionRef } from "@actiondock/sdk";
 import { parseActionRef } from "../../catalog/resolve-action";
-import { filterByIntent } from "../../filter";
+import { filterByIntent } from "../../utils/intent";
 import {
   ACTION_EXECUTION_ERROR,
   ACTION_FORBIDDEN,

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { decodeStateKey, type ActionDefinition, type JsonValue } from "@actiondock/sdk";
 import type { ActionSpec } from "../package/types";
-import { filterWithFallbackInfo } from "../filter";
+import { filterWithFallbackInfo } from "../utils/intent";
 import type { ConfigItemDefinition } from "../project/types";
 import { createActionDock } from "../service/factory";
 import type { ActionDockService } from "../service/types";

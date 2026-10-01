@@ -90,7 +90,7 @@ import { CAPABILITY_UNAVAILABLE } from "../errors";
 import { createGlobalStorage, isSecretConfigKey } from "../storage";
 import type { RuntimeStorage, StateEntry } from "../storage/types";
 import type { ConfigItemDefinition } from "../project/types";
-import { filterByIntent } from "../filter";
+import { filterByIntent } from "../utils/intent";
 
 function isPackageRuntime(item: unknown): item is PackageRuntime {
   return (

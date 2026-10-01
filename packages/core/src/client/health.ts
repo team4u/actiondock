@@ -1,4 +1,4 @@
-import { getInsecureDispatcher } from "../server/dispatcher";
+import { getInsecureDispatcher } from "./dispatcher";
 import {
   assertSecureTransport,
   buildHeaders,

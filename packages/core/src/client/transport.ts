@@ -1,5 +1,5 @@
 import { isLoopbackHost } from "../utils";
-import { getInsecureDispatcher } from "../server/dispatcher";
+import { getInsecureDispatcher } from "./dispatcher";
 import { ActionDockError, INSECURE_TRANSPORT, INVALID_ARGUMENT, NOT_FOUND, REMOTE_REQUEST_FAILED, UNAUTHORIZED } from "../errors";
 
 /**

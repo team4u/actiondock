@@ -60,4 +60,4 @@ export {
   compileIntentRegex,
   matchIntent,
   type Extractor,
-} from "../filter/intent";
+} from "../utils/intent";

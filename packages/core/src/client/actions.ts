@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { ExecutionResult } from "@actiondock/sdk";
 import { ACTION_CANCELLED, ACTION_TIMEOUT, NETWORK_ERROR } from "../errors";
-import { getInsecureDispatcher } from "../server/dispatcher";
+import { getInsecureDispatcher } from "./dispatcher";
 import {
   assertSecureTransport,
   buildHeaders,

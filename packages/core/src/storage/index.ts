@@ -9,9 +9,9 @@ export {
   isProcessAlive,
 } from "./data-dir-lock";
 export * from "./clock";
-export * from "./driver";
+export { NodeSqliteDriver } from "./sqlite-driver";
+export { normalizeSqliteParams } from "./params";
 export * from "./sqlite-driver";
-export * from "./lazy";
 export * from "./mask";
 export * from "./params";
 export * from "./sqlite";

@@ -7,7 +7,7 @@ import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 import { createPackageRuntime } from "../src/package";
 import { createActionDockHost } from "../src/host";
-import { createDefaultSqliteDriver } from "../src/storage/driver";
+import { NodeSqliteDriver } from "../src/storage/sqlite-driver";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
 import {
   DataDirLock,
@@ -196,7 +196,7 @@ describe("数据目录排他锁与 Schema 版本保护测试", () => {
     await storage1.close();
 
     // 验证 user_version 精确为 STORAGE_SCHEMA_VERSION (2)
-    const dbCheck = createDefaultSqliteDriver(dbPath);
+    const dbCheck = new NodeSqliteDriver(dbPath);
     const row = dbCheck.prepare("PRAGMA user_version;").get() as any;
     expect(row.user_version).toBe(2);
 

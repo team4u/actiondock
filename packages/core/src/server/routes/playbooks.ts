@@ -1,4 +1,4 @@
-import { filterByIntent } from "../../filter";
+import { filterByIntent } from "../../utils/intent";
 import { PACKAGE_NOT_ALLOWED, PLAYBOOK_NOT_FOUND, PLAYBOOKS_LIST_ERROR } from "../../errors";
 import { assertPackageAllowed, getSubPath, isPackageAllowedByPolicy, jsonResponse, type RouteContext } from "./common";
 
