@@ -1,5 +1,4 @@
 import { createActionDockHost } from "../host/host";
-import { LocalActionDockService } from "./local";
 import { RemoteActionDockService } from "./remote";
 import { ActionDockError, INVALID_ARGUMENT, NOT_FOUND } from "../errors";
 import type {
@@ -30,17 +29,19 @@ export async function createActionDock(
       process: options.runtimeOptions.process,
       logger: options.runtimeOptions.logger,
       recoverOrphans: options.recoverOrphans,
+      enableManagement: options.enableManagement,
     });
-    return new LocalActionDockService(host, { enableManagement: options.enableManagement });
+    return host;
   }
 
   const host = await createActionDockHost({
     scanLinkedPackages: options.scanLinkedPackages ?? true,
     ...options,
     recoverOrphans: options.recoverOrphans ?? true,
+    enableManagement: options.enableManagement,
     ...(options.hostOptions || {}),
   });
-  return new LocalActionDockService(host, { enableManagement: options.enableManagement });
+  return host;
 }
 
 /**

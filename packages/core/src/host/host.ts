@@ -61,6 +61,7 @@ import {
   type PackageNode,
   type ResolvedAction,
 } from "../catalog";
+import { parseActionRef } from "../catalog/resolve-action";
 import { createPackageIdentity } from "../runtime/identity";
 import {
   buildRuntimeError,
@@ -73,8 +74,18 @@ import {
   parseRefLoose,
   resolveProjectRoot,
 } from "./routing";
-import type { ActionDockHost, ActionDockHostOptions } from "./types";
-import type { ConfigValueView, ListRunsOptions, StateScopeOptions } from "../service/types";
+import type { ActionDockHost, ActionDockHostOptions, HostEventsPort } from "./types";
+import type {
+  ConfigPort,
+  ConfigValueView,
+  DiscoveryPort,
+  ExecutionPort,
+  ListRunsOptions,
+  RunEventSubscriptionOptions,
+  RunsPort,
+  StatePort,
+  StateScopeOptions,
+} from "../service/types";
 import { CAPABILITY_UNAVAILABLE } from "../errors";
 import { createGlobalStorage, isSecretConfigKey } from "../storage";
 import type { RuntimeStorage, StateEntry } from "../storage/types";
@@ -111,6 +122,20 @@ export class DefaultActionDockHost implements ActionDockHost {
   private catalog: ActionCatalog;
   private globalStorage?: RuntimeStorage;
 
+  public readonly discovery: DiscoveryPort;
+  public readonly execution: ExecutionPort;
+  public readonly runs: RunsPort;
+  public readonly events: HostEventsPort;
+  public readonly management?: {
+    config: ConfigPort;
+    state: StatePort;
+  };
+
+  /** 自引用 host 属性，向后兼容服务实例字段访问 */
+  public get host(): ActionDockHost {
+    return this;
+  }
+
   constructor(options: ActionDockHostOptions = {}, internalOptions?: { deferInit?: boolean }) {
     this.hostSessionId = randomUUID();
     this.options = options;
@@ -131,6 +156,175 @@ export class DefaultActionDockHost implements ActionDockHost {
       this.dataDirLock = DataDirLock.acquire(options.dataDir, {
         hostSessionId: this.hostSessionId,
       });
+    }
+
+    const self = this;
+
+    this.discovery = {
+      async listPackages(): Promise<PackageInfo[]> {
+        return self.info();
+      },
+
+      async listActions(opts?: ListActionsOptions): Promise<ActionSummary[]> {
+        return self.listActions(opts);
+      },
+
+      async describeAction(ref: ActionRef | string): Promise<ActionSpec> {
+        return self.describeAction(ref);
+      },
+
+      async listPlaybooks(opts?: { intent?: string; package?: string }): Promise<PlaybookSummary[]> {
+        return self.listPlaybooks(opts);
+      },
+
+      async describePlaybook(id: string): Promise<PlaybookSpec> {
+        return self.describePlaybook(id);
+      },
+    };
+
+    this.execution = {
+      async run(
+        ref: ActionRef | string,
+        input?: unknown,
+        opts?: RunOptions
+      ): Promise<ExecutionResult> {
+        const actionRef: ActionRef = typeof ref === "string" ? parseActionRef(ref) : ref;
+        const cleanOpts: RunOptions = {
+          signal: opts?.signal,
+          timeoutMs: opts?.timeoutMs,
+          config: opts?.config,
+          requestId: opts?.requestId,
+        };
+        return self.runAction(actionRef, (input ?? {}) as JsonValue, cleanOpts);
+      },
+
+      async start(
+        ref: ActionRef | string,
+        input?: unknown,
+        opts?: RunOptions
+      ): Promise<ExecutionTicket> {
+        const actionRef: ActionRef = typeof ref === "string" ? parseActionRef(ref) : ref;
+        const cleanOpts: RunOptions = {
+          signal: opts?.signal,
+          timeoutMs: opts?.timeoutMs,
+          config: opts?.config,
+          requestId: opts?.requestId,
+        };
+        return self.startAction(actionRef, (input ?? {}) as JsonValue, cleanOpts);
+      },
+    };
+
+    this.runs = {
+      async list(query?: ListRunsOptions): Promise<RunRecord[]> {
+        return self.listRuns(query);
+      },
+
+      async get(runId: string): Promise<RunRecord | undefined> {
+        return self.getRun(runId);
+      },
+
+      async cancel(runId: string, reason?: string): Promise<CancelResult> {
+        return self.cancelRun(runId, reason);
+      },
+
+      async clear(opts?: { packageId?: string; actionId?: string; status?: string; olderThanMs?: number; keep?: number }): Promise<number> {
+        return self.clearRuns(opts);
+      },
+
+      async cleanExpired(policy?: import("../storage/types").RunsRetentionPolicy): Promise<number> {
+        return self.cleanExpiredRuns(policy);
+      },
+    };
+
+    const eventsFn = ((
+      runId: string,
+      opts?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number }
+    ): AsyncIterable<ExecutionEvent> => {
+      return self.subscribeEvents(runId, opts);
+    }) as HostEventsPort;
+
+    eventsFn.events = (
+      runId: string,
+      opts?: RunEventSubscriptionOptions
+    ): AsyncIterable<ExecutionEvent> => {
+      return self.subscribeEvents(runId, opts);
+    };
+
+    this.events = eventsFn;
+
+    if (options.enableManagement !== false) {
+      this.management = {
+        config: {
+          async get(packageId: string, key: string): Promise<ConfigValueView> {
+            return self.getConfig(packageId, key);
+          },
+
+          async set(packageId: string, key: string, value: JsonValue): Promise<void> {
+            return self.setConfig(packageId, key, value);
+          },
+
+          async delete(packageId: string, key: string): Promise<boolean> {
+            return self.deleteConfig(packageId, key);
+          },
+
+          async list(packageId: string): Promise<ConfigValueView[]> {
+            return self.listConfig(packageId);
+          },
+        },
+
+        state: {
+          async get<T extends JsonValue = JsonValue>(
+            packageId: string,
+            actionId: string,
+            key: string,
+            opts?: StateScopeOptions
+          ): Promise<T | undefined> {
+            return self.getState<T>(packageId, actionId, key, opts);
+          },
+
+          async set<T extends JsonValue = JsonValue>(
+            packageId: string,
+            actionId: string,
+            key: string,
+            value: T,
+            opts?: StateScopeOptions
+          ): Promise<void> {
+            return self.setState<T>(packageId, actionId, key, value, opts);
+          },
+
+          async delete(
+            packageId: string,
+            actionId: string,
+            key: string,
+            opts?: StateScopeOptions
+          ): Promise<boolean> {
+            return self.deleteState(packageId, actionId, key, opts);
+          },
+
+          async list(
+            packageId: string,
+            actionId: string,
+            opts?: StateScopeOptions
+          ): Promise<string[]> {
+            return self.listStateKeys(packageId, actionId, opts);
+          },
+
+          async clear(
+            packageId: string,
+            actionId: string,
+            opts?: StateScopeOptions
+          ): Promise<number> {
+            return self.clearState(packageId, actionId, opts);
+          },
+
+          async listEntries(
+            packageId: string,
+            opts?: any
+          ): Promise<StateEntry[]> {
+            return self.listStateEntries(packageId, opts);
+          },
+        },
+      };
     }
 
     if (internalOptions?.deferInit) {
@@ -905,7 +1099,7 @@ export class DefaultActionDockHost implements ActionDockHost {
     return { outcome: "not_found", runId };
   }
 
-  events(
+  private subscribeEvents(
     runId: string,
     options?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number }
   ): AsyncIterable<ExecutionEvent> {
@@ -1096,7 +1290,7 @@ export class DefaultActionDockHost implements ActionDockHost {
    * 仅对内部创建的 Runtime 实例执行 close 并安全释放底层资源；
    * 外部传入借用的 Runtime 实例生命周期完全由调用方负责管理，Host 关闭时仅解绑引用并清理自身内部实例。
    */
-  async close(options?: { graceMs?: number }): Promise<void> {
+  async close(options?: { timeoutMs?: number; graceMs?: number }): Promise<void> {
     if (this.isClosed) return;
     this.isClosed = true;
 

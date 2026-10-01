@@ -19,38 +19,67 @@ import type { ProjectConfig } from "../project/types";
 import type { Clock } from "../storage/clock";
 import type { ModuleLoader } from "../platform/module-loader";
 import { type EventSink, InMemoryEventSink } from "../runtime/events";
-import { ActionRunner, type ExecutionHandle } from "../runtime/runner";
 import {
   ActionDockError,
+  ACTION_CANCELLED,
+  ACTION_FAILED,
   ACTION_NOT_FOUND,
+  ACTION_TIMEOUT,
   EXECUTION_FAILED,
   IDEMPOTENCY_CONFLICT,
+  INPUT_NOT_JSON,
+  INPUT_VALIDATION_FAILED,
+  INVOCATION_UNSUPPORTED,
+  OUTPUT_NOT_JSON,
+  OUTPUT_VALIDATION_FAILED,
   RUN_REPOSITORY_UNAVAILABLE,
   UNHANDLED_EXECUTION_ERROR,
   describeActionLoadFailure,
 } from "../errors";
 import { resultStatusToRunStatus, type RuntimeStorage } from "../storage/types";
-import { createPackageIdentity, type PackageIdentity } from "../runtime/identity";
+import { type PackageIdentity } from "../runtime/identity";
 import type {
   ActionInvoker,
   CancelResult,
+  ExecutionHandle,
   ExecutionService,
   ExecutionServiceOptions,
   ExecutionTicket,
-  InvocationContext,
   LocalActionResolver,
 } from "./types";
+import {
+  type InvocationContext,
+  type RunOptions,
+  createDefaultProcessOwner,
+} from "../invocation/types";
+import {
+  ActionRegistry,
+  isActionDefinitionObject,
+  resolveAnonymousActionId,
+} from "../runtime/action-registry";
+import {
+  buildInitialRunRecord,
+  createRunFinalizer,
+  createRunOrThrow,
+  tryCreateRun,
+  type InitialRunRecordInput,
+  type RunFinalizer,
+} from "../runtime/run-persistence";
+import { createActionContext, StderrLogger } from "../runtime/context";
+import type { ProcessOwner } from "../process";
+import { validateActionInputValue, validateJsonValue } from "../json/value-validator";
+import { validateSchemaOnly } from "../schema/validator";
 
 export type { ExecutionServiceOptions };
 
 interface ActiveRun {
   runId: string;
-  handle: ExecutionHandle;
   controller: AbortController;
   status: RunStatus;
   startedAt: string;
   signal?: AbortSignal;
   onAbort?: () => void;
+  ticket: ExecutionTicket & ExecutionHandle;
 }
 
 /**
@@ -70,29 +99,53 @@ interface ExecutionEventBridge {
 }
 
 /**
- * 统一执行协调服务实现。
+ * 将输入值校验结果映射为标准运行时错误（单一事实源）。
+ */
+function buildInputValidationError(
+  targetActionId: string,
+  check: Exclude<ReturnType<typeof validateActionInputValue>, { valid: true }>
+): RuntimeError {
+  if (check.kind === "json-value") {
+    return {
+      code: INPUT_NOT_JSON,
+      message: `Input validation failed for action '${targetActionId}': ${check.reason}`,
+    };
+  }
+  return {
+    code: INPUT_VALIDATION_FAILED,
+    message: `Input validation failed for action '${targetActionId}': ${check.reason}`,
+    details: [check.reason],
+  };
+}
+
+/**
+ * 统一执行引擎（融合原协调服务与运行器）。
+ * 消除双层 AbortController 与重复参数透传，收敛唯一生命周期与存储落库。
  */
 export class DefaultExecutionService implements ExecutionService {
   public readonly identity: PackageIdentity;
   public readonly packageId: string;
-  private storage: RuntimeStorage;
-  private projectConfig?: ProjectConfig;
-  private projectRoot?: string;
-  private moduleLoader?: ModuleLoader;
-  public readonly eventSink: EventSink;
   public readonly packageInstanceId: string;
   public readonly generationId: string;
+  public hostSessionId?: string;
+  public readonly eventSink: EventSink;
+
+  private storage: RuntimeStorage;
+  private globalStorage?: RuntimeStorage;
+  private projectConfig?: ProjectConfig;
+  private projectRoot?: string;
+  private configOverrides: Record<string, unknown>;
+  private moduleLoader?: ModuleLoader;
   private maxActiveRuns: number;
   private ownerId: string;
-  public hostSessionId?: string;
-  private _runner: ActionRunner;
+  private actionResolver?: LocalActionResolver;
   private logger?: Logger;
   private clock?: Clock;
   private process?: ProcessAPI;
-  private actionResolver?: LocalActionResolver;
-  private activeRuns = new Map<string, ActiveRun>();
-  private globalStorage?: RuntimeStorage;
   private actionInvoker?: ActionInvoker;
+  private customHome?: string;
+  private registry: ActionRegistry;
+  private activeRuns = new Map<string, ActiveRun>();
   private isClosing = false;
   private reservedSlots = 0;
 
@@ -110,6 +163,7 @@ export class DefaultExecutionService implements ExecutionService {
     this.hostSessionId = options.hostSessionId;
     this.projectConfig = options.projectConfig;
     this.projectRoot = options.projectRoot;
+    this.configOverrides = options.configOverrides || {};
     this.moduleLoader = options.moduleLoader;
     this.eventSink = options.eventSink || new InMemoryEventSink();
     this.maxActiveRuns = options.maxActiveRuns || 32;
@@ -121,83 +175,80 @@ export class DefaultExecutionService implements ExecutionService {
     this.globalStorage = options.globalStorage;
     this.clock = options.clock;
     this.process = options.process;
-
-    this._runner = new ActionRunner({
-      identity: this.identity,
-      hostSessionId: this.hostSessionId,
-      storage: this.storage,
-      globalStorage: this.globalStorage,
-      projectRoot: options.projectRoot,
-      projectConfig: this.projectConfig,
-      configOverrides: options.configOverrides,
-      actions: options.actions,
-      process: this.process,
-      clock: this.clock,
-      actionResolver: this.actionResolver,
-      customHome: options.customHome,
-      actionInvoker: this.actionInvoker,
-    });
+    this.customHome = options.customHome;
+    this.registry = new ActionRegistry(options.actions);
   }
 
-  public setActionInvoker(invoker?: ActionInvoker): void {
-    this.actionInvoker = invoker;
-    this._runner.setActionInvoker(invoker);
+  /** 获取运行底层存储实例 */
+  public getStorage(): RuntimeStorage {
+    return this.storage;
   }
 
-  public registerAction(id: string, action: ActionDefinition): void;
-  public registerAction(action: ({ id: string; action?: ActionDefinition } & Partial<ActionDefinition>) | ActionDefinition): void;
-  public registerAction(
-    idOrAction: string | (({ id: string; action?: ActionDefinition } & Partial<ActionDefinition>) | ActionDefinition),
-    actionDef?: ActionDefinition
-  ): void {
-    if (typeof idOrAction === "string") {
-      this._runner.registerAction(idOrAction, actionDef!);
-    } else {
-      this._runner.registerAction(idOrAction);
-    }
-  }
-
-  public getAction(id: string): ActionDefinition | undefined {
-    return this._runner.getAction(id);
-  }
-
-  public listActions(): ActionDefinition[] {
-    return this._runner.listActions();
-  }
-
-  public getActiveHandle(runId: string): ExecutionHandle | undefined {
-    return this.activeRuns.get(runId)?.handle;
-  }
-
-  async execute(
-    ref: ActionRef | string,
-    input: JsonValue,
-    context: InvocationContext
-  ): Promise<ExecutionResult> {
-    const ticket = await this.start(ref, input, context);
-    if (!ticket.result) {
-      throw new Error(`Execution ticket for run '${ticket.runId}' has no result Promise`);
-    }
-    return ticket.result;
-  }
-
-  async run(
-    ref: ActionRef | string,
-    input: JsonValue,
-    context: InvocationContext
-  ): Promise<ExecutionResult> {
-    return this.execute(ref, input, context);
+  /** 兼容性引用，执行引擎即执行器自身 */
+  public get _runner(): this {
+    return this;
   }
 
   public get activeRunsCount(): number {
     return this.activeRuns.size + this.reservedSlots;
   }
 
-  async start(
-    ref: ActionRef | string,
-    input: JsonValue,
-    context: InvocationContext
-  ): Promise<ExecutionTicket> {
+  public setActionInvoker(invoker?: ActionInvoker): void {
+    this.actionInvoker = invoker;
+  }
+
+  public registerAction(id: string, action: ActionDefinition): void;
+  public registerAction(
+    action: ({ id: string; action?: ActionDefinition } & Partial<ActionDefinition>) | ActionDefinition
+  ): void;
+  public registerAction(
+    idOrAction: string | (({ id: string; action?: ActionDefinition } & Partial<ActionDefinition>) | ActionDefinition),
+    actionDef?: ActionDefinition
+  ): void {
+    if (typeof idOrAction === "string") {
+      this.registry.registerAction(idOrAction, actionDef!);
+    } else {
+      this.registry.registerAction(idOrAction as any);
+    }
+  }
+
+  public getAction(id: string): ActionDefinition | undefined {
+    return this.registry.getAction(id);
+  }
+
+  public listActions(): ActionDefinition[] {
+    return this.registry.listActions();
+  }
+
+  public getActiveHandle(runId: string): ExecutionHandle | undefined {
+    return this.activeRuns.get(runId)?.ticket;
+  }
+
+  public async execute(
+    ref: ActionDefinition | ActionRef | string,
+    input: unknown = {},
+    contextOrOptions?: InvocationContext | RunOptions | Record<string, unknown>
+  ): Promise<ExecutionResult> {
+    const ticket = await this.start(ref, input, contextOrOptions);
+    if (!ticket.result) {
+      throw new Error(`Execution ticket for run '${ticket.runId}' has no result Promise`);
+    }
+    return ticket.result;
+  }
+
+  public async run(
+    ref: ActionDefinition | ActionRef | string,
+    input: unknown = {},
+    contextOrOptions?: InvocationContext | RunOptions | Record<string, unknown>
+  ): Promise<ExecutionResult> {
+    return this.execute(ref, input, contextOrOptions);
+  }
+
+  public async start(
+    ref: ActionDefinition | ActionRef | string,
+    input: unknown = {},
+    contextOrOptions?: InvocationContext | RunOptions | Record<string, unknown>
+  ): Promise<ExecutionTicket & ExecutionHandle> {
     if (this.isClosing) {
       throw new Error("ExecutionService is closing: new tasks rejected");
     }
@@ -220,30 +271,46 @@ export class DefaultExecutionService implements ExecutionService {
 
     try {
       let parsedRef: ActionRef;
-      try {
-        parsedRef = parseActionRef(ref);
-      } catch {
-        parsedRef = typeof ref === "object" ? ref : { actionId: ref };
+      let targetActionDef: ActionDefinition | undefined;
+
+      if (isActionDefinitionObject(ref)) {
+        targetActionDef = ref;
+        const actObj = ref as any;
+        const targetActionId = actObj.id || resolveAnonymousActionId(this.registry.map, ref);
+        this.registry.registerAction(targetActionId, ref);
+        parsedRef = { packageId: this.packageId, actionId: targetActionId };
+      } else {
+        try {
+          parsedRef = parseActionRef(ref);
+        } catch {
+          parsedRef = typeof ref === "object" ? ref : { actionId: ref };
+        }
       }
+
       const targetActionId = parsedRef.actionId;
       const targetPackageId = parsedRef.packageId || this.packageId;
       const actionRef = `${targetPackageId}/${targetActionId}`;
       const effectiveClock = this.clock;
 
+      const context = this.normalizeContext(contextOrOptions);
+
       // requestId 幂等检查与去重处理
       const gateResult = await this.checkIdempotencyGate(
-        input,
+        input as JsonValue,
         context,
         actionRef,
         effectiveClock
       );
       if (gateResult.ticket) {
         releaseSlot();
-        return gateResult.ticket;
+        return gateResult.ticket as ExecutionTicket & ExecutionHandle;
       }
       const designatedRunId = gateResult.designatedRunId;
 
-      const target = await this.resolveExecutionTarget(parsedRef, targetPackageId, targetActionId);
+      const target = targetActionDef
+        ? { action: targetActionDef }
+        : await this.resolveExecutionTarget(parsedRef, targetPackageId, targetActionId);
+
       if (!target.action) {
         releaseSlot();
         return this.failTicketForMissingAction({
@@ -257,89 +324,459 @@ export class DefaultExecutionService implements ExecutionService {
         });
       }
 
+      const currentAction = target.action;
+
       if (this.isClosing) {
         throw new Error("ExecutionService is closing: new tasks rejected");
       }
 
+      const runId = designatedRunId || context.runId || crypto.randomUUID();
+      const rootRunId = context.rootRunId || context.parentRunId || runId;
+      const bridge = this.createEventBridge({ runId, context, effectiveClock });
+
+      // 输入参数 JSON 格式与合法性校验
+      const inputCheck = validateActionInputValue(input);
+      if (!inputCheck.valid) {
+        releaseSlot();
+        const error = buildInputValidationError(targetActionId, inputCheck);
+        tryCreateRun(
+          this.storage,
+          buildInitialRunRecord(
+            this.buildPersistenceInput({
+              runId,
+              rootRunId,
+              context,
+              targetPackageId,
+              targetActionId,
+              input,
+              effectiveClock,
+            }),
+            "failed",
+            error
+          )
+        );
+        bridge.emitEvent({ type: "status", status: "failed" });
+        bridge.emitEvent({ type: "finish", result: { ok: false, runId, error } });
+        return {
+          runId,
+          status: "failed",
+          result: Promise.resolve({ ok: false, runId, error }),
+          cancel: () => false,
+        };
+      }
+
+      // 输入 Schema 校验
+      const schemaError = this.checkActionInputSchema(currentAction, targetActionId, input);
+      if (schemaError) {
+        releaseSlot();
+        tryCreateRun(
+          this.storage,
+          buildInitialRunRecord(
+            this.buildPersistenceInput({
+              runId,
+              rootRunId,
+              context,
+              targetPackageId,
+              targetActionId,
+              input,
+              effectiveClock,
+            }),
+            "failed",
+            schemaError
+          )
+        );
+        bridge.emitEvent({ type: "status", status: "failed" });
+        bridge.emitEvent({ type: "finish", result: { ok: false, runId, error: schemaError } });
+        return {
+          runId,
+          status: "failed",
+          result: Promise.resolve({ ok: false, runId, error: schemaError }),
+          cancel: () => false,
+        };
+      }
+
+      // 持久化 running 初始记录
+      createRunOrThrow(
+        this.storage,
+        buildInitialRunRecord(
+          this.buildPersistenceInput({
+            runId,
+            rootRunId,
+            context,
+            targetPackageId,
+            targetActionId,
+            input,
+            effectiveClock,
+          }),
+          "running"
+        )
+      );
+      const finalizer = createRunFinalizer(this.storage, runId);
+
+      // 调用栈快照跟踪
+      const callStack = context.callStack ? [...context.callStack] : [];
+      const callKey = targetPackageId ? `${targetPackageId}/${targetActionId}` : targetActionId;
+      const lastStackItem = callStack[callStack.length - 1];
+      const isAlreadyAtTop =
+        lastStackItem === callKey ||
+        (targetActionId && lastStackItem === targetActionId) ||
+        (targetPackageId && lastStackItem === `${targetPackageId}/${targetActionId}`);
+      if (!isAlreadyAtTop) {
+        callStack.push(callKey);
+      }
+
+      // 单一 AbortController 控制器
       const controller = new AbortController();
       let onAbort: (() => void) | undefined;
-      if (context.signal && typeof context.signal.addEventListener === "function") {
+      if (context.signal) {
         if (context.signal.aborted) {
           controller.abort(context.signal.reason);
         } else {
           onAbort = () => controller.abort(context.signal?.reason);
-          context.signal.addEventListener(
-            "abort",
-            onAbort,
-            { once: true }
-          );
+          context.signal.addEventListener("abort", onAbort, { once: true });
+          finalizer.signal = context.signal;
+          finalizer.onAbort = onAbort;
         }
       }
 
-      const runId = designatedRunId || context.runId || crypto.randomUUID();
-      const bridge = this.createEventBridge({ runId, context, effectiveClock });
+      if (typeof context.timeoutMs === "number" && context.timeoutMs > 0) {
+        finalizer.startTimeout(controller, context.timeoutMs);
+      }
 
-      target.runner.registerAction(targetActionId, target.action);
-      const handle = target.runner.start(targetActionId, input, {
+      const effectiveOwner: ProcessOwner =
+        context.owner ||
+        createDefaultProcessOwner({
+          tenantId: context.tenantId,
+          principalId: context.principalId,
+          packageInstanceId: this.packageInstanceId,
+          generationId: this.generationId,
+        });
+
+      const effectiveProcess = context.process || this.process;
+
+      const actionCtx = createActionContext({
+        actionId: targetActionId,
+        storage: this.storage,
+        globalStorage: this.globalStorage,
+        overrides: { ...this.configOverrides, ...(context.config || {}) },
+        projectConfig: this.projectConfig,
         runId,
-        rootRunId: context.rootRunId,
+        rootRunId,
         parentRunId: context.parentRunId,
-        callStack: context.callStack ? [...context.callStack] : undefined,
-        hostSessionId: context.hostSessionId || this.hostSessionId,
-        maxCallDepth: context.maxCallDepth,
-        configOverrides: context.config as Record<string, unknown> | undefined,
         signal: controller.signal,
-        timeoutMs: context.timeoutMs,
+        process: effectiveProcess,
+        owner: effectiveOwner,
         progress: bridge.progressReporter,
         logger: bridge.executionLogger,
-        process: context.process || this.process,
-        packageInstanceId: context.package.instanceId,
-        generationId: context.package.generation,
-        tenantId: context.owner?.tenantId || context.tenantId,
-        principalId: context.owner?.principalId || context.principalId,
-        owner: context.owner
-          ? {
-              tenantId: context.owner.tenantId,
-              principalId: context.owner.principalId,
-              packageInstanceId:
-                context.owner.packageInstanceId || context.package.instanceId,
-              generationId:
-                context.owner.generationId || context.package.generation,
-            }
-          : undefined,
-        actionInvoker: this.actionInvoker,
+        onActionInvoke: (childAction, childInput, parentRunId) =>
+          this.invokeChildAction({
+            controller,
+            rootRunId,
+            childAction,
+            childInput,
+            parentRunId: parentRunId || runId,
+            currentActionId: targetActionId,
+            currentAction,
+            callStack,
+            context,
+            effectiveProcess,
+            effectiveOwner,
+          }),
       });
 
+      const executionPromise = this.raceExecution({
+        currentAction,
+        targetActionId,
+        input,
+        actionCtx,
+        controller,
+        finalizer,
+        runId,
+        context,
+      });
+
+      const cancelFn = (reason?: string): boolean => {
+        if (finalizer.finalized || controller.signal.aborted) {
+          return false;
+        }
+        if (context.signal && onAbort) {
+          context.signal.removeEventListener("abort", onAbort);
+          finalizer.onAbort = undefined;
+        }
+        controller.abort(new Error(reason || "Action execution was cancelled"));
+        return true;
+      };
+
+      const ticket: ExecutionTicket & ExecutionHandle = {
+        runId,
+        status: "running",
+        result: executionPromise,
+        cancel: cancelFn,
+      };
+
       const activeItem: ActiveRun = {
-        runId: handle.runId,
-        handle,
+        runId,
         controller,
         status: "running",
         startedAt: (effectiveClock?.now() ?? new Date()).toISOString(),
         signal: context.signal,
         onAbort,
+        ticket,
       };
 
-      this.activeRuns.set(handle.runId, activeItem);
+      this.activeRuns.set(runId, activeItem);
       releaseSlot();
       bridge.emitEvent({ type: "status", status: "running" });
 
-      this.watchHandleCompletion(handle, activeItem, bridge);
+      executionPromise
+        .then((result) => {
+          const finalStatus = resultStatusToRunStatus(
+            result.ok,
+            result.ok ? undefined : result.error?.code
+          );
+          activeItem.status = finalStatus;
+          bridge.emitEvent({ type: "status", status: finalStatus });
+          bridge.emitEvent({ type: "finish", result });
+        })
+        .catch((err: any) => {
+          activeItem.status = "failed";
+          bridge.emitEvent({ type: "status", status: "failed" });
+          bridge.emitEvent({
+            type: "finish",
+            result: {
+              ok: false,
+              runId,
+              error: {
+                code: UNHANDLED_EXECUTION_ERROR,
+                message: err?.message || String(err),
+              },
+            },
+          });
+        })
+        .finally(async () => {
+          if (activeItem.signal && activeItem.onAbort) {
+            activeItem.signal.removeEventListener("abort", activeItem.onAbort);
+            activeItem.onAbort = undefined;
+          }
+          this.activeRuns.delete(runId);
+          if (
+            actionCtx &&
+            (actionCtx as any).process?.runScoped === true &&
+            typeof (actionCtx as any).process.dispose === "function"
+          ) {
+            try {
+              await (actionCtx as any).process.dispose();
+            } catch {}
+          }
+        });
 
-      return {
-        runId: handle.runId,
-        status: "running",
-        result: handle.result,
-      };
+      return ticket;
     } catch (err) {
       releaseSlot();
       throw err;
     }
   }
 
-  /**
-   * 幂等门检查：digest 计算与冲突/重复分流（重复命中时直接返回已有票据）。
-   */
+  private normalizeContext(
+    contextOrOptions?: InvocationContext | RunOptions | Record<string, unknown>
+  ): InvocationContext {
+    if (contextOrOptions && (contextOrOptions as InvocationContext).package) {
+      return contextOrOptions as InvocationContext;
+    }
+    const opts = (contextOrOptions || {}) as any;
+    return {
+      runId: opts.runId,
+      rootRunId: opts.rootRunId,
+      parentRunId: opts.parentRunId,
+      callStack: opts.callStack ? [...opts.callStack] : [],
+      package: opts.package || this.identity,
+      signal: opts.signal,
+      timeoutMs: opts.timeoutMs,
+      maxCallDepth: opts.maxCallDepth,
+      config: opts.config || opts.configOverrides,
+      tenantId: opts.tenantId || opts.owner?.tenantId,
+      principalId: opts.principalId || opts.ownerId || opts.owner?.principalId,
+      hostSessionId: opts.hostSessionId || this.hostSessionId,
+      logger: opts.logger,
+      progress: opts.progress,
+      process: opts.process || this.process,
+      owner: opts.owner,
+      requestId: opts.requestId,
+    };
+  }
+
+  private async raceExecution(args: {
+    currentAction: ActionDefinition;
+    targetActionId: string;
+    input: unknown;
+    actionCtx: any;
+    controller: AbortController;
+    finalizer: RunFinalizer;
+    runId: string;
+    context: InvocationContext;
+  }): Promise<ExecutionResult> {
+    const { currentAction, targetActionId, input, actionCtx, controller, finalizer, runId, context } = args;
+
+    const abortPromise = new Promise<never>((_, reject) => {
+      const rejectWithReason = () =>
+        reject(controller.signal.reason || new Error("Action execution was cancelled"));
+      if (controller.signal.aborted) {
+        rejectWithReason();
+      } else {
+        controller.signal.addEventListener("abort", rejectWithReason, { once: true });
+        finalizer.raceListenerRemovers.push(() => {
+          controller.signal.removeEventListener("abort", rejectWithReason);
+        });
+      }
+    });
+
+    try {
+      const rawOutput = await Promise.race([
+        Promise.resolve().then(() => currentAction.run(input, actionCtx)),
+        abortPromise,
+      ]);
+
+      const outputCheck = validateJsonValue(rawOutput);
+      if (!outputCheck.valid) {
+        const error: RuntimeError = {
+          code: OUTPUT_NOT_JSON,
+          message: `Output validation failed for action '${targetActionId}': ${outputCheck.reason}`,
+        };
+        finalizer.finalize("failed", undefined, error);
+        return { ok: false, runId, error };
+      }
+
+      const outputSchemaError = this.checkActionOutputSchema(currentAction, targetActionId, rawOutput);
+      if (outputSchemaError) {
+        finalizer.finalize("failed", undefined, outputSchemaError);
+        return { ok: false, runId, error: outputSchemaError };
+      }
+
+      finalizer.finalize("success", rawOutput);
+      if (finalizer.persistError) {
+        return { ok: false, runId, error: finalizer.persistError };
+      }
+      return {
+        ok: true,
+        runId,
+        data: rawOutput as JsonValue,
+      };
+    } catch (err: any) {
+      return this.classifyExecutionError(err, runId, context.timeoutMs, controller, finalizer);
+    }
+  }
+
+  private classifyExecutionError(
+    err: any,
+    runId: string,
+    timeoutMs: number | undefined,
+    controller: AbortController,
+    finalizer: RunFinalizer
+  ): ExecutionResult {
+    if (finalizer.isTimeout) {
+      const error: RuntimeError = {
+        code: ACTION_TIMEOUT,
+        message: `Action exceeded timeout of ${timeoutMs}ms`,
+      };
+      finalizer.finalize("timed_out", undefined, error);
+      return { ok: false, runId, error: finalizer.persistError || error };
+    }
+
+    if (controller.signal.aborted) {
+      const reason = controller.signal.reason;
+      const reasonMsg =
+        reason instanceof Error
+          ? reason.message
+          : typeof reason === "string"
+          ? reason
+          : undefined;
+      const error: RuntimeError = {
+        code: ACTION_CANCELLED,
+        message: "Action execution was cancelled",
+        details: reasonMsg ? { reason: reasonMsg } : undefined,
+      };
+      finalizer.finalize("cancelled", undefined, error);
+      return { ok: false, runId, error: finalizer.persistError || error };
+    }
+
+    const error: RuntimeError = {
+      code: err?.code || ACTION_FAILED,
+      message: err?.message || String(err),
+      details: err?.details,
+    };
+    finalizer.finalize("failed", undefined, error);
+    return {
+      ok: false,
+      runId,
+      error: finalizer.persistError || error,
+    };
+  }
+
+  private async invokeChildAction(args: {
+    controller: AbortController;
+    rootRunId: string;
+    childAction: ActionRef | string;
+    childInput: unknown;
+    parentRunId: string;
+    currentActionId: string;
+    currentAction: ActionDefinition;
+    callStack: string[];
+    context: InvocationContext;
+    effectiveProcess: ProcessAPI | undefined;
+    effectiveOwner: ProcessOwner;
+  }): Promise<unknown> {
+    const {
+      controller,
+      rootRunId,
+      childAction,
+      childInput,
+      parentRunId,
+      currentActionId,
+      currentAction,
+      callStack,
+      context,
+      effectiveProcess,
+      effectiveOwner,
+    } = args;
+
+    const invoker = this.actionInvoker;
+    if (!invoker) {
+      throw new ActionDockError(
+        INVOCATION_UNSUPPORTED,
+        "Nested action invocation requires a Host ActionInvoker"
+      );
+    }
+
+    const childRunId = crypto.randomUUID();
+    const invocationContext: InvocationContext = {
+      runId: childRunId,
+      rootRunId,
+      parentRunId,
+      caller: {
+        packageId: this.packageId,
+        actionId: currentActionId,
+        runId: parentRunId,
+        declaredUses:
+          (currentAction as any)?.uses ||
+          this.projectConfig?.actions?.[currentActionId]?.uses,
+      },
+      callStack: [...callStack],
+      package: this.identity,
+      signal: controller.signal,
+      timeoutMs: context.timeoutMs,
+      maxCallDepth: context.maxCallDepth,
+      config: context.config,
+      tenantId: effectiveOwner.tenantId,
+      principalId: effectiveOwner.principalId,
+      hostSessionId: context.hostSessionId || this.hostSessionId,
+      logger: context.logger,
+      progress: context.progress,
+      process: effectiveProcess,
+      owner: effectiveOwner,
+    };
+    return await invoker(childAction, childInput, invocationContext);
+  }
+
   private async checkIdempotencyGate(
     input: JsonValue,
     context: InvocationContext,
@@ -389,11 +826,7 @@ export class DefaultExecutionService implements ExecutionService {
       const active = this.activeRuns.get(existingRunId);
       if (active) {
         return {
-          ticket: {
-            runId: existingRunId,
-            status: active.status,
-            result: active.handle.result,
-          },
+          ticket: active.ticket,
         };
       }
       const record = await this.get(existingRunId);
@@ -414,6 +847,7 @@ export class DefaultExecutionService implements ExecutionService {
             runId: existingRunId,
             status: record.status,
             result: Promise.resolve(execRes),
+            cancel: () => false,
           },
         };
       }
@@ -422,91 +856,93 @@ export class DefaultExecutionService implements ExecutionService {
     return { designatedRunId: provisionalRunId };
   }
 
-  /**
-   * 解析执行目标：确定目标 Action 定义。
-   * 铁律 4：Runner 不找 Package，ExecutionService 仅执行本 Package 的 Action。
-   */
   private async resolveExecutionTarget(
     parsedRef: ActionRef,
     targetPackageId: string,
     targetActionId: string
-  ): Promise<{ runner: ActionRunner; action?: ActionDefinition; resolveError?: RuntimeError }> {
-    const runnerToUse: ActionRunner = this._runner;
-    let resolveError: RuntimeError | undefined;
-
+  ): Promise<{ action?: ActionDefinition; resolveError?: RuntimeError }> {
     if (targetPackageId && targetPackageId !== this.packageId) {
-      resolveError = {
+      const resolveError: RuntimeError = {
         code: ACTION_NOT_FOUND,
         message: `Package '${this.packageId}' cannot execute action for external package '${targetPackageId}'`,
+        details: {
+          reason: `Cross-package action '${targetPackageId}/${targetActionId}' cannot be resolved by ActionRunner of package '${this.packageId}'`,
+        },
       };
-      return { runner: runnerToUse, action: undefined, resolveError };
+      return { action: undefined, resolveError };
     }
 
     let action: ActionDefinition | undefined =
-      runnerToUse.getAction(targetActionId) || runnerToUse.getAction(`${targetPackageId}/${targetActionId}`);
+      this.registry.getAction(targetActionId) ||
+      this.registry.getAction(`${targetPackageId}/${targetActionId}`);
 
-    if (!action) {
-      const resolution = await runnerToUse.resolveAction(parsedRef);
-      if (resolution.status === "found") {
-        action = resolution.action;
-      } else {
-        const targetAction = await this.actionResolver?.(targetActionId);
-        if (targetAction) {
-          action = targetAction;
-        } else if (this.projectRoot && existsSync(this.projectRoot)) {
-          let config: ProjectConfig;
-          try {
-            config = this.projectConfig || loadProjectConfig(this.projectRoot);
-          } catch (err: any) {
-            resolveError = describeActionLoadFailure(err, {
-              actionId: targetActionId,
-              packageId: this.packageId,
-              projectRoot: this.projectRoot,
-            });
-            return { runner: runnerToUse, action: undefined, resolveError };
-          }
+    if (action) {
+      return { action };
+    }
 
-          let actionsMap: Map<string, ActionDefinition>;
-          try {
-            actionsMap = await loadActions(this.projectRoot, config.actionsDir, {
-              loader: this.moduleLoader,
-            });
-          } catch (err: any) {
-            resolveError = describeActionLoadFailure(err, {
-              actionId: targetActionId,
-              packageId: this.packageId,
-              projectRoot: this.projectRoot,
-            });
-            return { runner: runnerToUse, action: undefined, resolveError };
+    if (this.actionResolver) {
+      try {
+        const customResolved = await this.actionResolver(targetActionId);
+        if (customResolved) {
+          this.registry.registerAction(targetActionId, customResolved);
+          if (this.packageId) {
+            this.registry.registerAction(`${this.packageId}/${targetActionId}`, customResolved);
           }
-
-          const matched = actionsMap.get(targetActionId);
-          if (matched) {
-            action = matched;
-            runnerToUse.registerAction(targetActionId, matched);
-          } else {
-            resolveError = {
-              code: ACTION_NOT_FOUND,
-              message: `Action '${targetActionId}' not found in package '${targetPackageId}'`,
-              details: resolution.reason ? { reason: resolution.reason } : undefined,
-            };
-          }
-        } else {
-          resolveError = {
+          return { action: customResolved };
+        }
+      } catch (err: any) {
+        return {
+          action: undefined,
+          resolveError: {
             code: ACTION_NOT_FOUND,
             message: `Action '${targetActionId}' not found in package '${targetPackageId}'`,
-            details: resolution.reason ? { reason: resolution.reason } : undefined,
-          };
-        }
+            details: { reason: err.message },
+          },
+        };
       }
     }
 
-    return { runner: runnerToUse, action, resolveError };
+    if (this.projectRoot && existsSync(this.projectRoot)) {
+      let config: ProjectConfig;
+      try {
+        config = this.projectConfig || loadProjectConfig(this.projectRoot);
+      } catch (err: any) {
+        const resolveError = describeActionLoadFailure(err, {
+          actionId: targetActionId,
+          packageId: this.packageId,
+          projectRoot: this.projectRoot,
+        });
+        return { action: undefined, resolveError };
+      }
+
+      let actionsMap: Map<string, ActionDefinition>;
+      try {
+        actionsMap = await loadActions(this.projectRoot, config.actionsDir, {
+          loader: this.moduleLoader,
+        });
+      } catch (err: any) {
+        const resolveError = describeActionLoadFailure(err, {
+          actionId: targetActionId,
+          packageId: this.packageId,
+          projectRoot: this.projectRoot,
+        });
+        return { action: undefined, resolveError };
+      }
+
+      const matched = actionsMap.get(targetActionId);
+      if (matched) {
+        this.registry.registerAction(targetActionId, matched);
+        return { action: matched };
+      }
+    }
+
+    const resolveError: RuntimeError = {
+      code: ACTION_NOT_FOUND,
+      message: `Action '${targetActionId}' not found in package '${targetPackageId}'`,
+    };
+    return { action: undefined, resolveError };
   }
 
-  /**
-   * 解析指定 Action 定义（供 PackageRuntime 或内部使用）。
-   */
   public async resolveAction(ref: ActionRef | string): Promise<ActionDefinition | undefined> {
     let parsedRef: ActionRef;
     try {
@@ -520,18 +956,15 @@ export class DefaultExecutionService implements ExecutionService {
     return target.action;
   }
 
-  /**
-   * 目标 Action 缺失时的失败票据：落库 failed 记录并补发 status 与 finish 事件。
-   */
   private failTicketForMissingAction(args: {
-    target: { runner: ActionRunner; resolveError?: RuntimeError };
-    input: JsonValue;
+    target: { action?: ActionDefinition; resolveError?: RuntimeError };
+    input: unknown;
     context: InvocationContext;
     targetPackageId: string;
     targetActionId: string;
     designatedRunId?: string;
     effectiveClock?: Clock;
-  }): ExecutionTicket {
+  }): ExecutionTicket & ExecutionHandle {
     const { target, input, context, targetPackageId, targetActionId, designatedRunId, effectiveClock } = args;
     const runId = designatedRunId || context.runId || crypto.randomUUID();
     const now = (effectiveClock?.now() ?? new Date()).toISOString();
@@ -545,19 +978,19 @@ export class DefaultExecutionService implements ExecutionService {
       rootRunId,
       parentRunId: context.parentRunId,
       packageId: targetPackageId,
-      packageInstanceId: context.package.instanceId || target.runner.packageInstanceId,
+      packageInstanceId: context.package?.instanceId || this.packageInstanceId,
       actionId: targetActionId,
-      generationId: context.package.generation || target.runner.generationId,
+      generationId: context.package?.generation || this.generationId,
       ownerId: this.ownerId,
       hostSessionId: context.hostSessionId || this.hostSessionId,
       status: "failed",
-      input,
+      input: input as JsonValue,
       error,
       startedAt: now,
       finishedAt: now,
     };
     try {
-      target.runner.getStorage().createRun(initialRun);
+      this.storage.createRun(initialRun);
     } catch (err: any) {
       throw new ActionDockError(
         RUN_REPOSITORY_UNAVAILABLE,
@@ -595,12 +1028,89 @@ export class DefaultExecutionService implements ExecutionService {
         runId,
         error,
       }),
+      cancel: () => false,
     };
   }
 
-  /**
-   * 创建执行事件桥：事件序列号分配、进度报告器与双写日志适配器。
-   */
+  private buildPersistenceInput(args: {
+    runId: string;
+    rootRunId: string;
+    context: InvocationContext;
+    targetPackageId: string;
+    targetActionId: string;
+    input: unknown;
+    effectiveClock?: Clock;
+  }): InitialRunRecordInput {
+    const { runId, rootRunId, context, targetPackageId, targetActionId, input, effectiveClock } = args;
+    const startedAt =
+      effectiveClock?.now().toISOString() ||
+      (typeof (this.storage as any).clock?.now === "function"
+        ? (this.storage as any).clock.now().toISOString()
+        : new Date().toISOString());
+
+    return {
+      runId,
+      rootRunId,
+      parentRunId: context.parentRunId,
+      ownerId: context.principalId || context.tenantId || this.ownerId,
+      hostSessionId: context.hostSessionId || this.hostSessionId,
+      packageInstanceId: context.package?.instanceId || this.packageInstanceId,
+      generationId: context.package?.generation || this.generationId,
+      targetPackageId,
+      targetActionId,
+      startedAt,
+      input,
+      runnerPackageId: this.packageId,
+      runnerPackageInstanceId: this.packageInstanceId,
+      runnerGenerationId: this.generationId,
+      runnerHostSessionId: this.hostSessionId,
+    };
+  }
+
+  private checkActionInputSchema(
+    action: ActionDefinition | undefined,
+    targetActionId: string,
+    input: unknown
+  ): RuntimeError | undefined {
+    const targetInputSchema =
+      (action as any)?.inputSchema !== undefined
+        ? (action as any).inputSchema
+        : this.projectConfig?.actions?.[targetActionId]?.inputSchema;
+    if (targetInputSchema !== undefined) {
+      const val = validateSchemaOnly(targetInputSchema, input);
+      if (!val.valid) {
+        return {
+          code: INPUT_VALIDATION_FAILED,
+          message: `Input schema validation failed for action '${targetActionId}'`,
+          details: val.errors,
+        };
+      }
+    }
+    return undefined;
+  }
+
+  private checkActionOutputSchema(
+    action: ActionDefinition | undefined,
+    targetActionId: string,
+    rawOutput: unknown
+  ): RuntimeError | undefined {
+    const targetOutputSchema =
+      (action as any)?.outputSchema !== undefined
+        ? (action as any).outputSchema
+        : this.projectConfig?.actions?.[targetActionId]?.outputSchema;
+    if (targetOutputSchema !== undefined) {
+      const outVal = validateSchemaOnly(targetOutputSchema, rawOutput);
+      if (!outVal.valid) {
+        return {
+          code: OUTPUT_VALIDATION_FAILED,
+          message: `Output schema validation failed for action '${targetActionId}'`,
+          details: outVal.errors,
+        };
+      }
+    }
+    return undefined;
+  }
+
   private createEventBridge(args: {
     runId: string;
     context: InvocationContext;
@@ -660,53 +1170,11 @@ export class DefaultExecutionService implements ExecutionService {
     return { emitEvent, progressReporter, executionLogger };
   }
 
-  /**
-   * 监听执行句柄终态：映射终态状态、补发 status 与 finish 事件并注销活跃运行。
-   */
-  private watchHandleCompletion(
-    handle: ExecutionHandle,
-    activeItem: ActiveRun,
-    bridge: ExecutionEventBridge
-  ): void {
-    handle.result
-      .then((result: ExecutionResult) => {
-        const finalStatus = resultStatusToRunStatus(
-          result.ok,
-          result.ok ? undefined : result.error?.code
-        );
-        activeItem.status = finalStatus;
-        bridge.emitEvent({ type: "status", status: finalStatus });
-        bridge.emitEvent({ type: "finish", result });
-      })
-      .catch((err: any) => {
-        activeItem.status = "failed";
-        bridge.emitEvent({ type: "status", status: "failed" });
-        bridge.emitEvent({
-          type: "finish",
-          result: {
-            ok: false,
-            runId: handle.runId,
-            error: {
-              code: UNHANDLED_EXECUTION_ERROR,
-              message: err?.message || String(err),
-            },
-          },
-        });
-      })
-      .finally(() => {
-        if (activeItem.signal && activeItem.onAbort) {
-          activeItem.signal.removeEventListener("abort", activeItem.onAbort);
-          activeItem.onAbort = undefined;
-        }
-        this.activeRuns.delete(handle.runId);
-      });
-  }
-
-  async get(runId: string): Promise<RunRecord | undefined> {
+  public async get(runId: string): Promise<RunRecord | undefined> {
     return this.storage.getRun(runId) ?? undefined;
   }
 
-  async cancel(runId: string, reason?: string): Promise<CancelResult> {
+  public async cancel(runId: string, reason?: string): Promise<CancelResult> {
     const active = this.activeRuns.get(runId);
     if (!active) {
       const record = await this.get(runId);
@@ -721,30 +1189,28 @@ export class DefaultExecutionService implements ExecutionService {
       active.onAbort = undefined;
     }
     active.controller.abort(new Error(reason || "Execution cancelled"));
-    active.handle.cancel(reason);
     return { outcome: "requested", runId };
   }
 
-  events(
+  public events(
     runId: string,
     options: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number } = {}
   ): AsyncIterable<ExecutionEvent> {
     return this.eventSink.subscribe(runId, options);
   }
 
-  async close(options: { graceMs?: number } = {}): Promise<void> {
+  public async close(options: { graceMs?: number } = {}): Promise<void> {
     this.isClosing = true;
     this.reservedSlots = 0;
     const graceMs = options.graceMs ?? 5000;
 
     for (const [_, active] of this.activeRuns) {
       active.controller.abort(new Error("Service shutting down"));
-      active.handle.cancel("Service shutting down");
     }
 
     if (this.activeRuns.size > 0) {
       const waitPromise = Promise.all(
-        Array.from(this.activeRuns.values()).map((a) => a.handle.result.catch(() => {}))
+        Array.from(this.activeRuns.values()).map((a) => a.ticket.result?.catch(() => {}))
       );
       let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
       const timeoutPromise = new Promise((resolve) => {
@@ -760,10 +1226,12 @@ export class DefaultExecutionService implements ExecutionService {
     }
 
     this.activeRuns.clear();
+  }
 
-    await this._runner.dispose();
-
+  public async dispose(): Promise<void> {
+    await this.close();
   }
 }
 
 export { DefaultExecutionService as ExecutionService };
+export { DefaultExecutionService as ActionRunner };

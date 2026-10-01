@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { type ActionContext, defineAction } from "@actiondock/sdk";
 import { createPackageRuntime } from "../src/package";
 import { createActionDockHost } from "../src/host";
-import { createActionDock, LocalActionDockService } from "../src/service";
+import { createActionDock } from "../src/service";
 import { formatHostForUrl, startActionDockServer } from "../src/server";
 
 describe("ActionDock HTTP Server v2 架构重构验证", () => {
@@ -94,7 +94,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
       inMemory: true,
     });
 
-    service = new LocalActionDockService(host);
+    service = host;
     target = service;
 
     serverInstance = await startActionDockServer({
@@ -354,7 +354,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         autoLoadCurrentProject: false,
         inMemory: true,
       });
-      const mgmtService = new LocalActionDockService(mgmtHost);
+      const mgmtService = mgmtHost;
 
       const mgmtServer = await startActionDockServer({
         port: 0,
@@ -792,7 +792,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         inMemory: true,
       });
 
-      const emptyService = new LocalActionDockService(emptyHost);
+      const emptyService = emptyHost;
 
       emptyListServer = await startActionDockServer({
         port: 0,
@@ -1166,7 +1166,7 @@ describe("ActionDock HTTP Server v2 架构重构验证", () => {
         autoLoadCurrentProject: false,
         inMemory: true,
       });
-      const abortService = new LocalActionDockService(abortHost);
+      const abortService = abortHost;
 
       const server = await startActionDockServer({
         port: 0,

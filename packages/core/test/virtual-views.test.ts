@@ -4,7 +4,6 @@ import { createActionDockMcpServer } from "@actiondock/mcp";
 import { createMcpHandler } from "@modelcontextprotocol/server";
 import { createPackageRuntime } from "../src/package";
 import { createActionDockHost } from "../src/host";
-import { LocalActionDockService } from "../src/service";
 import {
   filterActionsByPolicy,
   filterPackagesByPolicy,
@@ -204,7 +203,7 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
         inMemory: true,
       });
 
-      const service = new LocalActionDockService(host);
+      const service = host;
 
       server = await startActionDockServer({
         port: 0,
@@ -523,7 +522,7 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
         inMemory: true,
       });
 
-      const service = new LocalActionDockService(host);
+      const service = host;
 
       mcpServer = await startActionDockServer({
         port: 0,
@@ -763,7 +762,7 @@ describe("虚拟投影视图（Virtual Views）与统一策略守卫验证", () 
         autoLoadCurrentProject: false,
         inMemory: true,
       });
-      const service = new LocalActionDockService(host);
+      const service = host;
 
       const secServer = await startActionDockServer({
         port: 0,

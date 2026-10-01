@@ -859,33 +859,6 @@ export class StandaloneDispatcher {
 }
 
 /**
- * 独立二进制可执行文件运行时（兼容门面包装）。
- */
-export interface StandaloneRuntimeOptions extends StandaloneDispatcherOptions {}
-
-export class StandaloneRuntime {
-  private dispatcher: StandaloneDispatcher;
-
-  constructor(options: StandaloneRuntimeOptions) {
-    this.dispatcher = new StandaloneDispatcher(options);
-  }
-
-  async run(argv: string[]): Promise<void> {
-    const code = await this.dispatcher.dispatch(argv);
-    if (code !== ExitCode.SUCCESS && code !== ExitCode.FAILURE) {
-      process.exit(code);
-    }
-  }
-}
-
-/**
- * 工厂函数：创建独立运行时实例。
- */
-export function createStandaloneRuntime(options: StandaloneRuntimeOptions): StandaloneRuntime {
-  return new StandaloneRuntime(options);
-}
-
-/**
  * 独立二进制进程入口适配器。
  * 仅在命令行可执行入口调用，负责全局 SIGINT 监听与退出状态码写入。
  */

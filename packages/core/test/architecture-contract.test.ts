@@ -5,11 +5,10 @@ import { describe, expect, it } from "bun:test";
 import { defineAction, type ActionContext } from "@actiondock/sdk";
 import { createActionDockHost } from "../src/host/host";
 import { createPackageRuntime, DefaultPackageRuntime } from "../src/package/runtime";
-import { ActionRunner } from "../src/runtime/runner";
+import { DefaultExecutionService as ActionRunner } from "../src/execution/service";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
 import { createPackageIdentity } from "../src/runtime/identity";
 import { IDEMPOTENCY_CONFLICT, INVOCATION_UNSUPPORTED, UNDECLARED_ACTION_DEPENDENCY } from "../src/errors";
-import { LocalActionDockService } from "../src/service/local";
 import { createActionDock } from "../src/service/factory";
 import type { RunOptions } from "../src/service/types";
 import { createNodePlatform } from "../src/platform";
@@ -47,7 +46,7 @@ describe("架构核心契约测试：信任边界与局部执行规范", () => {
       autoLoadCurrentProject: false,
     });
 
-    const service = new LocalActionDockService(host);
+    const service = host;
 
     // 外部传入包含内部血缘字段的非法 options 对象（模拟 JS 动态调用）
     const maliciousOptions = {

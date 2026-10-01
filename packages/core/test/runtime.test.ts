@@ -4,10 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type ActionDefinition, type ActionRef, defineAction } from "@actiondock/sdk";
 import { parseActionRef } from "../src/catalog/resolve-action";
-import { DefaultExecutionService } from "../src/execution/service";
-import { initProject } from "../src/project/init";
-import { linkPackage } from "../src/registry/registry";
-import { ActionRunner } from "../src/runtime/runner";
+import { DefaultExecutionService, DefaultExecutionService as ActionRunner } from "../src/execution/service";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
 import { createPackageIdentity } from "../src/runtime/identity";
 import { createInvocationContext } from "../src/invocation/types";
@@ -744,7 +741,7 @@ describe("ActionRunner", () => {
       actions: new Map([["test.cancellable", cancellableAction]]),
     });
 
-    const handle = runner.start("test.cancellable", {});
+    const handle = await runner.start("test.cancellable", {});
     expect(handle.runId).toBeDefined();
 
     // Cancel execution after 30ms

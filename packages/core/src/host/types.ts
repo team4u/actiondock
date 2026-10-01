@@ -25,8 +25,30 @@ import type { RunOptions } from "../invocation/types";
 import type { Clock } from "../storage/clock";
 import type { EventSink } from "../runtime/events";
 import type { RuntimePlatform } from "../platform/types";
-import type { ConfigValueView, ListRunsOptions, StateScopeOptions } from "../service/types";
+import type {
+  ActionDockService,
+  ConfigPort,
+  ConfigValueView,
+  DiscoveryPort,
+  EventsPort,
+  ExecutionPort,
+  ListRunsOptions,
+  RunEventSubscriptionOptions,
+  RunsPort,
+  StatePort,
+  StateScopeOptions,
+} from "../service/types";
 import type { StateEntry } from "../storage/types";
+
+/**
+ * 宿主事件服务端口（既作为独立方法调用，又满足 EventsPort 规范）。
+ */
+export interface HostEventsPort extends EventsPort {
+  (
+    runId: string,
+    options?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number }
+  ): AsyncIterable<ExecutionEvent>;
+}
 
 /**
  * ActionDock 宿主容器初始化配置选项。
@@ -66,15 +88,21 @@ export interface ActionDockHostOptions {
   inMemory?: boolean;
   /** 事件接收器 */
   eventSink?: EventSink;
+  /** 是否开启配置与状态管理端口（默认 true） */
+  enableManagement?: boolean;
 }
 
 /**
  * ActionDock 多包宿主容器领域契约。
  * 作为多包环境下的全局协调中枢，负责多包生命周期、完全限定引用路由、依赖校验与配额管理。
+ * 同时作为本地默认 ActionDockService 实现，直接挂载 discovery/execution/runs/management 服务端口。
  */
-export interface ActionDockHost {
+export interface ActionDockHost extends ActionDockService {
   /** 宿主容器初始化配置项（只读） */
   readonly options?: ActionDockHostOptions;
+
+  /** 统一事件订阅端口（兼作原生订阅函数与事件服务端口） */
+  readonly events: HostEventsPort;
 
   /** 获取所有已注册包的元数据信息列表 */
   info(): Promise<PackageInfo[]>;
@@ -125,12 +153,6 @@ export interface ActionDockHost {
 
   /** 取消指定在运行的任务 */
   cancelRun(runId: string, reason?: string): Promise<CancelResult>;
-
-  /** 订阅指定运行的事件流 */
-  events(
-    runId: string,
-    options?: { after?: number | string; signal?: AbortSignal; maxQueueSize?: number }
-  ): AsyncIterable<ExecutionEvent>;
 
   /** 获取配置项视图 */
   getConfig(packageId: string, key: string): Promise<ConfigValueView>;
@@ -199,5 +221,5 @@ export interface ActionDockHost {
   registerRuntime(runtime: PackageRuntime): void;
 
   /** 优雅关闭宿主容器。统一完整关闭所管理的所有 Runtime 实例并安全释放底层资源。 */
-  close(options?: { graceMs?: number }): Promise<void>;
+  close(options?: { timeoutMs?: number; graceMs?: number }): Promise<void>;
 }

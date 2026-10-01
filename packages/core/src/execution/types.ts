@@ -11,12 +11,10 @@ import type {
   RunStatus,
 } from "@actiondock/sdk";
 import type { ProjectConfig } from "../project/types";
-import type { ActionRunner, ExecutionHandle } from "../runtime/runner";
 import type { Clock } from "../storage/clock";
 import type { EventSink } from "../runtime/events";
 import type { RuntimeStorage } from "../storage/types";
 import type { ModuleLoader } from "../platform/module-loader";
-import type { ProcessOwner } from "../process/process-manager";
 import {
   type PackageIdentity,
   type RunOptions,
@@ -24,10 +22,32 @@ import {
   createInvocationContext,
   createRootInvocationContext,
 } from "../invocation/types";
-import type { LocalActionResolver } from "../runtime/runner";
 
 export { createInvocationContext, createRootInvocationContext };
-export type { PackageIdentity, RunOptions, InvocationContext, LocalActionResolver };
+export type { PackageIdentity, RunOptions, InvocationContext };
+
+/**
+ * 局部动作解析器委托函数契约（仅限当前包内部动作）。
+ */
+export type LocalActionResolver = (
+  actionId: string
+) => ActionDefinition | undefined | Promise<ActionDefinition | undefined>;
+
+/**
+ * 异步执行句柄，支持获取执行结果 Promise 与主动取消操作。
+ */
+export interface ExecutionHandle {
+  /** 本次执行生成的全局唯一运行 ID */
+  runId: string;
+  /** 最终执行结果信封 Promise */
+  result: Promise<ExecutionResult>;
+  /**
+   * 取消当前正在执行的任务
+   * @param reason 取消原因
+   * @returns 是否成功触发取消
+   */
+  cancel(reason?: string): boolean;
+}
 
 /**
  * 跨包动作调用委托函数。
@@ -73,6 +93,8 @@ export interface ExecutionTicket {
   status: RunStatus;
   /** 任务终态结果 Promise（用于需要异步等待执行结果的场景） */
   result?: Promise<ExecutionResult>;
+  /** 取消执行操作（与 ExecutionHandle 对齐） */
+  cancel?: (reason?: string) => boolean;
 }
 
 /**

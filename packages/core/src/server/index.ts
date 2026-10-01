@@ -22,9 +22,6 @@ export {
   DefaultActionDockHost,
 } from "../host/host";
 export {
-  LocalActionDockService,
-} from "../service/local";
-export {
   RemoteActionDockService,
 } from "../service/remote";
 

@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decodeText, encodeBytes, type ActionContext, type ProcessAPI } from "@actiondock/sdk";
-import { ActionRunner } from "../src/runtime/runner";
+import { DefaultExecutionService as ActionRunner } from "../src/execution/service";
 import {
   createNodePlatform,
 } from "../src";
