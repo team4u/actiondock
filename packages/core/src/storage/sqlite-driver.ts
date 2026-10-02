@@ -1,16 +1,18 @@
 import "../utils/warning";
-import { createRequire } from "node:module";
 import type { DatabaseSync } from "node:sqlite";
 import { normalizeSqliteParams } from "./params";
 import type { SqliteDriver, SqliteStatement } from "./types";
 import { ActionDockError, ASYNC_TRANSACTION_UNSUPPORTED, STORAGE_CLOSED } from "../errors";
 
-const require = createRequire(import.meta.url);
-const DatabaseSyncConstructor = (require("node:sqlite") as { DatabaseSync: typeof DatabaseSync }).DatabaseSync;
+// 基于原生 ESM Top-Level Await 在模块评估期动态加载，确保警告静默拦截器优先就绪且保持纯正 ESM 架构
+const { DatabaseSync: DatabaseSyncConstructor } = (await import("node:sqlite")) as {
+  DatabaseSync: typeof DatabaseSync;
+};
 
 export { normalizeSqliteParams };
 
 /**
+
  * 基于 Node.js 内置 node:sqlite 实现的 SQLite 驱动适配器。
  */
 export class NodeSqliteDriver implements SqliteDriver {
