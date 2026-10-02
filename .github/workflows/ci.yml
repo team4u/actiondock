@@ -34,6 +34,7 @@ jobs:
 
       - name: Run Monorepo Tests
         run: npm test
+        timeout-minutes: 20
 
   pack-smoke:
     name: Pack Smoke Test (Node 24, ${{ matrix.os }})

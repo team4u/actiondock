@@ -113,6 +113,8 @@ async function main() {
   const nodeArgs = [
     "--no-deprecation",
     `--test-concurrency=${concurrency}`,
+    // 单文件级超时上限：防止环境性挂起（如 CI 慢速 runner 上等待条件永不满足）拖死整个测试进程
+    `--test-timeout=${process.env.ACTIONDOCK_TEST_FILE_TIMEOUT_MS || 300000}`,
     "--import",
     // Windows 兼容：--import 说明符按 URL 解析，裸绝对路径（D:\...）会被当成
     // "d:" 协议导致 ERR_UNSUPPORTED_ESM_URL_SCHEME，必须转为 file:// URL

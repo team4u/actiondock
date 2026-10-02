@@ -62,7 +62,8 @@ class DeterministicTestClock implements Clock {
 }
 
 /** 确定存活的非本进程标识（PID 1 恒为 init 进程） */
-const FOREIGN_LIVE_PID = 1;
+// 跨平台稳定存活的外部进程标识：Windows 为 System 进程（PID 4），类 Unix 为 init（PID 1）
+const FOREIGN_LIVE_PID = process.platform === "win32" ? 4 : 1;
 
 describe("文件锁时钟源注入与确定性测试", () => {
   let tempDir: string;
