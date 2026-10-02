@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { Stats } from "node:fs";
 import {
   existsSync,
   mkdirSync,
@@ -319,7 +320,10 @@ export function acquireFileLockSync(
 
       // 锁已存在:判定是否为可接管的陈旧锁
       let stale = false;
+      // 判定时采集对象指纹(类型与修改时间),供接管核验比对改名对象的同一性
+      let judgedStat: Stats;
       try {
+        judgedStat = statSync(lockPath);
         stale = isStaleLockSync(lockPath, staleMs, options, clock);
       } catch (err: any) {
         if (err.code === "ENOENT") {
@@ -338,20 +342,32 @@ export function acquireFileLockSync(
           }
           throw err;
         }
-        // 接管核验:抢走的锁必须是先前判定陈旧的那个。
-        // 若竞争者在判定与改名之间完成了新接管,这里抢到的是活锁,必须还原并回到循环重判。
-        let stolenLive = false;
+        // 接管核验:改名的对象必须与判定陈旧的是同一对象。
+        // 判定与改名之间存在竞态窗口:本方判定的可能是旧锁,而竞争者恰在此间完成新接管,
+        // 导致 rename 抢到的是活锁。通过「对象指纹比对 + 持有者存活探测」双重校验,
+        // 任一不一致即还原并回到循环重判,宁可重试也绝不误抢,严格维护互斥契约。
+        let stolenLive = true;
         try {
-          const takenMeta = readLockMetadataSync(quarantine);
-          if (
-            typeof takenMeta?.pid === "number" &&
-            takenMeta.pid !== process.pid &&
-            isProcessAlive(takenMeta.pid)
-          ) {
+          const takenStat = statSync(quarantine);
+          const identityMatch =
+            takenStat.isDirectory() === judgedStat.isDirectory() &&
+            Math.abs(takenStat.mtimeMs - judgedStat.mtimeMs) < 1;
+          if (!identityMatch) {
             stolenLive = true;
+          } else {
+            const takenMeta = readLockMetadataSync(quarantine);
+            if (typeof takenMeta?.pid === "number") {
+              stolenLive = takenMeta.pid !== process.pid && isProcessAlive(takenMeta.pid);
+            } else if (judgedStat.isDirectory()) {
+              // 目录锁但元数据缺失:还原重判,避免误抢 meta 写入窗口中的活锁
+              stolenLive = true;
+            } else {
+              // 文件锁且无元数据:按陈旧锁归属处理,允许接管
+              stolenLive = false;
+            }
           }
         } catch {
-          // 元数据不可读时保守视为可接管
+          // 校验不可达时保守视为活锁,还原重判
         }
         if (stolenLive) {
           try {
