@@ -10,7 +10,7 @@ import {
   type RunRecord,
 } from "@actiondock/sdk";
 import { type Clock, SystemClock } from "./clock";
-import { createDefaultSqliteDriver } from "./driver";
+import { NodeSqliteDriver } from "./sqlite-driver";
 import { safeParseStoredJson } from "./utils";
 import { ActionDockError, AMBIGUOUS_STATE_KEY, STORED_ERROR_DECODE_FAILED, UNSUPPORTED_STORAGE_SCHEMA } from "../errors";
 import {
@@ -96,7 +96,7 @@ export class SqliteRuntimeStorage implements RuntimeStorage {
       }
     }
 
-    this.driver = options.driver ?? createDefaultSqliteDriver(dbPath);
+    this.driver = options.driver ?? new NodeSqliteDriver(dbPath);
 
     if (dbPath !== ":memory:" && existsSync(dbPath)) {
       try {

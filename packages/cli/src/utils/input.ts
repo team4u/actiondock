@@ -6,8 +6,8 @@ export {
   parseJson,
   InputError,
   FlatInputError,
-  formatActionDetail,
 } from "@actiondock/core/project";
+export { formatActionDetail } from "../renderer";
 
 // BOM 剥离单一事实源转引：core 已提供逐字一致的实现，此处仅保留导出面兼容。
 export { stripBom };

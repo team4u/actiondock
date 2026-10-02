@@ -1,6 +1,6 @@
 # 参考手册：受管进程与系统命令执行指南
 
-本参考手册面向 Action 工具开发者，规范底层操作系统命令与子进程调用的治理原则、核心执行模式、独占控制权租约契约、逐流增量解码机制与确定性单元测试规范。
+本参考手册面向 Action 工具开发者，规范底层操作系统命令与子进程调用的治理原则、核心执行模式、逐流增量解码机制与确定性单元测试规范。
 
 ---
 
@@ -25,7 +25,7 @@ ActionDock 进程体系提供两种核心执行范式：
   - 执行特征：调用方等待命令执行完成，单次返回标准输出、标准错误与退出元数据，内置超时终止与缓冲区截断保护。
 - 长期交互进程 `start`：
   - 适用场景：交互式会话、长时间构建监听或多轮交互环境（如 Python REPL、Node.js 解释器交互、持续日志监听）。
-  - 执行特征：启动后返回全局唯一进程标识符与初始游标。后续所有输入写操作必须在独占控制权租约 `withControl` 下执行，输出拉取基于不透明游标长轮询推进。
+  - 执行特征：启动后返回全局唯一进程标识符与初始游标。后续输入写操作直接提交，输出拉取基于不透明游标长轮询推进。
 
 ---
 
@@ -89,101 +89,42 @@ export default defineAction(async (input: GitStatusInput, ctx): Promise<GitStatu
 
 ---
 
-## 实战范例二：使用 start 与 withControl 管理长期交互进程
+## 实战范例二：使用 start 管理长期交互进程
 
-对于需要多轮输入与输出交互的场景，先通过 `ctx.process.start` 启动长期受管进程，随后在 `withControl` 保护下安全提交指令并读取输出：
+对于需要多轮输入与输出交互的场景，先通过 `ctx.process.start` 启动长期受管进程，随后直接提交写入指令并按游标读取输出：
 
-```typescript
+```ts
 import {
   defineAction,
   encodeText,
   createStreamDecoder,
-  withControl,
 } from "@actiondock/sdk";
 
-export interface ReplSessionInput {
-  command: string;
-}
+export default defineAction(async (input: { command: string }, ctx) => {
+  const startResult = await ctx.process.start({
+    requestId: `start-${ctx.run.id}`,
+    spec: { executable: "node", args: ["-i"], io: { mode: "pipe" } },
+  });
 
-export interface ReplSessionOutput {
-  processId: string;
-  response: string;
-}
-
-export default defineAction(async (input: ReplSessionInput, ctx): Promise<ReplSessionOutput> => {
-  // 启动长期受管进程
-  const startResult = await ctx.process.start(
-    {
-      requestId: `start-${ctx.run.id}`,
-      spec: {
-        executable: "node",
-        args: ["-i"],
-        io: { mode: "pipe" },
-      },
-      limits: {
-        idleMs: 60000,
-        lifetimeMs: 300000,
-        outputBufferBytes: 2 * 1024 * 1024,
-      },
-    },
-    { signal: ctx.signal }
-  );
-
-  const processId = startResult.process.id;
-  let currentCursor = startResult.initialCursor;
   const decoder = createStreamDecoder();
 
-  // 在独占控制权租约保护下安全执行交互写与读
-  const responseText = await withControl(
-    ctx.process,
-    processId,
-    {
-      requestId: `eval-${ctx.run.id}`,
-      ttlMs: 30000,
-      waitMs: 5000,
-      signal: ctx.signal,
-    },
-    async (grant) => {
-      // 写入命令数据，必须附带当前有效的独占控制令牌
-      await ctx.process.write({
-        token: grant.token,
-        requestId: `write-${ctx.run.id}-1`,
-        data: encodeText(`${input.command}\n`),
-      });
+  await ctx.process.write(startResult.process.id, {
+    requestId: `write-${ctx.run.id}`,
+    data: encodeText(`${input.command}\n`),
+  });
 
-      // 基于游标长轮询拉取进程响应输出
-      const readResult = await ctx.process.read({
-        cursor: currentCursor,
-        maxBytes: 64 * 1024,
-        waitMs: 2000,
-        onGap: "skip",
-      });
+  const readResult = await ctx.process.read(startResult.process.id, {
+    cursor: startResult.initialCursor,
+    maxBytes: 64 * 1024,
+    waitMs: 2000,
+    onGap: "skip",
+  });
 
-      currentCursor = readResult.nextCursor;
-      return decoder.decodeChunks(readResult.chunks);
-    }
-  );
-
-  return {
-    processId,
-    response: responseText,
-  };
+  return { output: decoder.decodeChunks(readResult.chunks) };
 });
 ```
 
----
 
-## 独占控制权与 withControl 保证契约
-
-针对长期交互进程，为防止多个调用者并发向同一进程写入指令导致数据交织错乱，SDK 提供了高层辅助函数 `withControl`：
-
-- 自动申请与排队：调用 `acquire` 申请独占控制令牌，支持指定排队等待超时。
-- 定期自动续租：租约存活期间，在后台按三分之一 TTL 周期自动调用 `renew` 维持有效状态。
-- 正常执行显式释放：业务函数顺利执行完成后，显式调用 `release` 归还令牌，允许后续等待者获取控制权。
-- 异常中断强制终止与隔离：若业务闭包抛出异常、外部取消信号触发或后台续租失败，严禁调用 `release` 释放处于不确定状态的进程，而是严格按契约调用 `stop` 终止并隔离进程，同时将原始异常向外抛出。
-- 临时性错误容错保护：若业务执行成功但释放令牌时因临时性繁忙失败，仅记录警告并保留业务成功结果，避免误杀正常进程。
-
----
 
 ## 逐流增量解码与环形缓冲区游标推进
 

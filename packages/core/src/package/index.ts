@@ -34,8 +34,8 @@ export type {
 export {
   type Clock,
   SystemClock,
-} from "../runtime/clock";
-export type { ModuleLoader } from "../node/module-loader";
+} from "../storage/clock";
+export type { ModuleLoader } from "../platform/module-loader";
 export {
   InMemoryEventSink,
   type EventSink,
@@ -44,8 +44,7 @@ export {
   ProcessManager,
   type ProcessOwner,
 } from "../process/process-manager";
-export type { ProcessExecutor } from "../runtime/process";
-export { NodeProcessExecutor } from "../process/process-executor";
+export type { ProcessAPI as ProcessExecutor } from "@actiondock/sdk";
 export type {
   ProcessDriver,
   ProcessDriverCallbacks,

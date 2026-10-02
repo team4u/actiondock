@@ -4,7 +4,6 @@ import {
   buildInputTransportV1,
   buildCliInputEncodingV1,
   buildInputPolicyV1,
-  buildCliDescribeInputMetadataV1,
   formatInputErrorForCli,
   toCliInputErrorEnvelope,
   InputError,
@@ -525,18 +524,6 @@ describe("Phase 9: Input Advice v1 与元数据构建器", () => {
       expect(policy.forbiddenPropertyNames).toContain("prototype");
     });
 
-    it("buildCliDescribeInputMetadataV1 聚合全部元数据", () => {
-      const metadata = buildCliDescribeInputMetadataV1({
-        type: "object",
-        properties: { name: { type: "string" } },
-      });
-      expect(metadata.inputTransport).toBeDefined();
-      expect(metadata.inputEncoding).toBeDefined();
-      expect(metadata.inputPolicy).toBeDefined();
-      expect(metadata.inputAdvice).toBeDefined();
-      expect(metadata.inputPolicy.scope).toBe("cli-pre-target");
-      expect(metadata.inputAdvice.schemaState).toBe("object");
-    });
 
     it("toCliInputErrorEnvelope 与 formatInputErrorForCli 格式化", () => {
       const err = new InputError(INVALID_ARGUMENT, "Something failed", { path: "a.b" });

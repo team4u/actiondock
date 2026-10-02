@@ -32,7 +32,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 | **列出可用 Action** | `ad list [patterns...] [-P <pkg>]` | 按包或关键词列出当前包、工作区或远端的所有 Action | [cli.md](references/cli.md) |
 | **查看 Action 详情** | `ad describe <id> [-P <pkg>]` | 作为编码顾问查看字段明细、Flat 编码指引与建议赋值样例 | [cli.md](references/cli.md) |
 | **执行原子 Action** | `ad run <action> [control-options] [-- <assignments...>] [--json]` | 规范调用语法，支持扁平参数与 `--input` / `--input-file` 互斥输入；传 `--json` 输出标准结构化信封 | [cli.md](references/cli.md) |
-| **执行受管系统命令** | `ctx.process.run` 与 `ctx.process.start` | 短时命令直接运行，长期交互会话通过 withControl 保证独占控制权 | [process-execution.md](references/process-execution.md) |
+| **执行受管系统命令** | `ctx.process.run` 与 `ctx.process.start` | 短时命令直接运行，长期交互会话通过写入与控制指令直接交互 | [process-execution.md](references/process-execution.md) |
 | **异步长任务调用** | `ad run <action> --async`，结合 `ad runs` 追踪 | 提交异步执行任务并获取凭据，追踪执行进度与结果 | [cli.md](references/cli.md) |
 | **执行复合业务任务** | `ad playbook show <id>`，依步骤调度对应 Action | 规程优先原则，阅读规程正文后依步骤编排调度 | [developer.md](references/developer.md) |
 | **校验清单与规程** | `ad validate` 与 `ad playbook validate` | 校验 Action 清单完整性与规程引用合法性 | [developer.md](references/developer.md) |
@@ -108,7 +108,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 
 - [consumer.md](references/consumer.md)：**Agent Skill 消费与使用指南**。当智能体装载技能、运行遇阻执行按需自举、进行规程优先决议、查阅契约规范、执行调用及接入 MCP 时查阅。
 - [developer.md](references/developer.md)：**Action 与规程开发指南**。当创建、编写、修改 Action 业务代码、声明元数据契约、使用运行时上下文 API（配置、状态、子进程、级联调用、日志）、编写 Playbook 规程或编写内存单元测试时查阅。
-- [process-execution.md](references/process-execution.md)：**受管进程与系统命令执行指南**。当调用底层操作系统命令、管理长期交互进程与 REPL、使用 withControl 独占租约与逐流增量解码、或使用 FakeProcessDriver 编写确定性测试时查阅。
+- [process-execution.md](references/process-execution.md)：**受管进程与系统命令执行指南**。当调用底层操作系统命令、管理长期交互进程与 REPL、使用逐流增量解码、或使用 FakeProcessDriver 编写确定性测试时查阅。
 - [build-and-export.md](references/build-and-export.md)：**构建打包与 Skill 导出指南**。当执行交付产物构建、npm 打包、Agent Skill 单包或复合套件导出、配置 `SKILL.custom.md` 自定义说明书模板插槽、或执行 `--skill-md-only` 原位刷新时查阅。
 - [cli.md](references/cli.md)：**命令行全量参考手册**。当需要查询特定命令的完整参数标志、退出码规范、全局选项或 JSON 输出信封格式时查阅。
 - [troubleshooting.md](references/troubleshooting.md)：**故障排查与自愈决策指南**。仅在命令执行报错、发生异常或测试失败时定向查阅，依据错误代码对照表进行自愈修复。
@@ -122,7 +122,7 @@ ActionDock 支持源码型与 Node.js 目录型交付形态，支持开发者使
 - 元数据规范原则：在修改 Action 源码（包括参数模式、描述、依赖）或新增 Action 文件后，在 `actiondock.json` 中完整登记并执行 `ad validate` 确保清单与 Schema 严格匹配；需要类型提示时运行 `ad generate types`。
 - 脚手架命令原则：新增 Action 工具使用 `ad action create <id>`，命令行 `--input` 与 `--output` 仅用于生成基础字段骨架；若包含枚举、嵌套属性、正则或字段描述等复杂语义，必须在 `actiondock.json` 中以标准 JSON Schema 声明，并执行 `ad generate types` 同步类型。新增 Playbook 规程使用 `ad playbook create <id>`。
 - 依赖管理红线：正式项目引入外部 Action 包必须在工程根目录下执行 `ad add <package>` 安装并锁定依赖，严禁使用 `ad link` 替代项目正式依赖；`ad link` 仅限本地未发布源码快速调试与工作区联调。
-- 进程受管隔离原则：严禁在 Action 内部直接调用 Node.js 原生 child_process（如 exec、spawn 等），所有系统命令与外部进程必须通过 ctx.process 统一纳管；长期交互进程写操作必须通过 withControl 保证独占令牌与异常隔离。
+- 进程受管隔离原则：严禁在 Action 内部直接调用 Node.js 原生 child_process（如 exec、spawn 等），所有系统命令与外部进程必须通过 ctx.process 统一纳管。
 - 确定性进程测试红线：编写涉及系统命令的单元测试时，严禁唤起操作系统真实子进程，必须使用 @actiondock/testing 提供的 FakeProcessDriver 进行确定性模拟与事件发射。
 - 通道隔离原则：严禁在 Action 内部调用 `console.log`，所有日志一律使用 `ctx.log`（输出至标准错误流），确保标准输出仅输出标准 JSON 信封。
 - 严格契约原则：必须为每个 Action 定义完备的 `inputSchema` 与 `outputSchema`，推荐为复杂参数补充 `examples` 示例以消除智能体理解歧义与幻觉。

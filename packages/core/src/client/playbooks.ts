@@ -1,5 +1,5 @@
-import type { RemoteClientRequestOptions } from "./client-transport";
-import { buildQueryString, fetchRemoteJson } from "./client-query";
+import type { RemoteClientRequestOptions } from "./transport";
+import { buildQueryString, fetchRemoteJson } from "./transport";
 
 /**
  * 远端 Playbook 规程域端点。

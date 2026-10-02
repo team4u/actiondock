@@ -3,8 +3,42 @@ import { homedir } from "node:os";
 import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { ActionDockError, INVALID_PACKAGE_ID, PATH_TRAVERSAL } from "../errors";
 
-export { isLoopbackHost } from "./net";
-export { isProcessAlive } from "./process";
+/**
+ * 检查指定的主机地址是否为本地回环接口（Loopback Host）。
+ * 支持 127.0.0.1, localhost, ::1 等形式。
+ *
+ * @param host 主机名或 IP 字符串
+ */
+export function isLoopbackHost(host: string): boolean {
+  const trimmed = host.trim().toLowerCase().replace(/^\[|\]$/g, "");
+  return (
+    trimmed === "127.0.0.1" ||
+    trimmed === "::1" ||
+    trimmed === "localhost" ||
+    trimmed === "0:0:0:0:0:0:0:1"
+  );
+}
+
+/**
+ * 检查目标进程是否处于存活状态（跨域通用谓词单一事实源）。
+ *
+ * 基于 process.kill(pid, 0) 探测：无异常视为存活；ESRCH（进程不存在）
+ * 视为已死；其他异常（如 EPERM，权限不足但进程存在）保守视为存活，
+ * 避免权限受限环境下误判他人持有进程死亡而抢占其锁。
+ *
+ * @param pid 待检测的进程标识符
+ */
+export function isProcessAlive(pid: number): boolean {
+  if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0) {
+    return false;
+  }
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err: any) {
+    return err?.code !== "ESRCH";
+  }
+}
 
 /**
  * 语义化版本元数据结构。

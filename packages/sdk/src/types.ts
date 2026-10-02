@@ -208,14 +208,6 @@ export type ProcessState =
   | "failed"
   | "lost";
 
-/**
- * 受管进程控制状态。
- */
-export type ControlState = "free" | "held" | "quarantined" | "closed";
-
-/**
- * 输入输出通道配置。
- */
 export type IOConfig =
   | { mode: "pipe" }
   | { mode: "pty"; cols: number; rows: number; term: string };
@@ -242,6 +234,8 @@ export interface LaunchSpec {
   /** 输入输出模式与终端配置 */
   io: IOConfig;
 }
+
+
 
 /**
  * 进程有界资源约束配置。
@@ -281,8 +275,8 @@ export interface ProcessInfo {
   hostEpoch: string;
   /** 进程当前生命周期状态 */
   state: ProcessState;
-  /** 进程当前控制状态 */
-  control: ControlState;
+  /** 进程当前控制状态(free/quarantined/closed;历史 held 已随控制权令牌机制移除) */
+  control: "free" | "quarantined" | "closed";
   /** 进程输入输出通道配置 */
   io: IOConfig;
   /** 运行时能力特征快照 */
@@ -309,15 +303,7 @@ export interface ProcessInfo {
   effectiveLimits: Required<Limits>;
 }
 
-/**
- * 控制权持有凭证。
- */
-export interface ControlGrant {
-  /** 控制令牌字符串 */
-  token: string;
-  /** 凭据有效截止时间（UTC ISO 8601 格式） */
-  expiresAt: string;
-}
+
 
 /**
  * 单条原始输出数据块。
@@ -433,24 +419,12 @@ export interface ProcessListResult {
   nextPageToken?: string;
 }
 
-/**
- * 申请控制权输入参数。
- */
-export interface ProcessAcquireInput {
-  /** 申请请求幂等标识 */
-  requestId: string;
-  /** 最长排队等待时间（毫秒） */
-  waitMs: number;
-  /** 控制权存活时长（毫秒） */
-  ttlMs: number;
-}
+
 
 /**
  * 写入数据输入参数。
  */
 export interface ProcessWriteInput {
-  /** 控制令牌 */
-  token: string;
   /** 写入请求幂等标识 */
   requestId: string;
   /** 写入的原始字节数据 */
@@ -483,8 +457,6 @@ export type ProcessControlAction =
  * 发送控制指令输入参数。
  */
 export interface ProcessControlInput {
-  /** 控制令牌 */
-  token: string;
   /** 控制请求幂等标识 */
   requestId: string;
   /** 具体控制动作 */
@@ -541,44 +513,6 @@ export interface ProcessAPI {
     input: ProcessListInput,
     call?: CallOptions
   ): Promise<ProcessListResult>;
-
-  /**
-   * 申请指定受管进程的独占控制令牌
-   * @param id 进程标识
-   * @param input 控制权申请参数
-   * @param call 调用选项
-   */
-  acquire(
-    id: string,
-    input: ProcessAcquireInput,
-    call?: CallOptions
-  ): Promise<ControlGrant>;
-
-  /**
-   * 延长当前有效控制令牌的存活时间
-   * @param id 进程标识
-   * @param token 当前有效控制令牌
-   * @param ttlMs 续租有效时长（毫秒）
-   * @param call 调用选项
-   */
-  renew(
-    id: string,
-    token: string,
-    ttlMs: number,
-    call?: CallOptions
-  ): Promise<ControlGrant>;
-
-  /**
-   * 显式释放控制令牌，允许后续控制者申请
-   * @param id 进程标识
-   * @param token 当前有效控制令牌
-   * @param call 调用选项
-   */
-  release(
-    id: string,
-    token: string,
-    call?: CallOptions
-  ): Promise<void>;
 
   /**
    * 向受管进程输入流写入原始字节数据
@@ -641,35 +575,6 @@ export interface ProcessAPI {
   ): Promise<ProcessInfo>;
 }
 
-/**
- * @deprecated 旧版进程执行参数，将在后续版本中移除
- */
-export interface ProcessExecOptions {
-  cwd?: string;
-  env?: Record<string, string>;
-  input?: string | Uint8Array;
-  timeoutMs?: number;
-  signal?: AbortSignal;
-  encoding?: string;
-  throwOnError?: boolean;
-  maxOutputBytes?: number;
-}
-
-/**
- * @deprecated 旧版进程执行结果，将在后续版本中移除
- */
-export interface ProcessResult {
-  ok: boolean;
-  exitCode: number | null;
-  signal?: string;
-  stdout: string;
-  stderr: string;
-  raw: Uint8Array;
-  timedOut: boolean;
-  cancelled: boolean;
-  durationMs: number;
-  error?: RuntimeError;
-}
 
 /**
  * Action 间相互调用的执行器接口。

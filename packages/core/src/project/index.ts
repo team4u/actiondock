@@ -1,4 +1,3 @@
-export * from "./closure";
 export * from "./digest";
 export * from "./init";
 export * from "./loader";
@@ -40,8 +39,6 @@ export {
 // 动作入参解析、校验与格式化（含 BOM 剥离与标准输入有界读取的单一事实源转引）
 export {
   resolveActionInput,
-  buildActionInputAdvice,
-  formatActionDetail,
   buildActionDescribePayload,
   ACTION_DESCRIBE_SYNTAX_REFERENCE,
   mapInputValidationFailure,
@@ -63,4 +60,4 @@ export {
   compileIntentRegex,
   matchIntent,
   type Extractor,
-} from "../filter/intent";
+} from "../utils/intent";

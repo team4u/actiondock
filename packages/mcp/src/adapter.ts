@@ -12,7 +12,6 @@ import {
 import {
   createActionDockHost,
   isActionAllowed,
-  LocalActionDockService,
   type ActionDockHost,
 } from "@actiondock/core/server";
 import { resolvePackageRoot } from "@actiondock/core/registry";
@@ -150,8 +149,7 @@ export async function resolveService(
   }
 
   if (options.host) {
-    const service = new LocalActionDockService(options.host);
-    return { service, ownsService: false };
+    return { service: options.host, ownsService: false };
   }
 
   if (options.runtime) {
@@ -160,8 +158,7 @@ export async function resolveService(
       scanLinkedPackages: false,
     });
     host.registerRuntime(options.runtime);
-    const service = new LocalActionDockService(host);
-    return { service, ownsService: false };
+    return { service: host, ownsService: false };
   }
 
   const packages: PackageRuntimeOptions[] = [];

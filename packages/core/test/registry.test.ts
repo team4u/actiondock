@@ -16,10 +16,9 @@ import {
   PackageGraphBuilder,
   resolveAction,
   resolvePlaybook,
-} from "../src/graph";
+} from "../src/catalog";
 import { PackageDiscovery } from "../src/catalog/discovery";
-import { DefaultRegistryStore } from "../src/registry/store";
-import { loadRegistry } from "../src/registry/registry";
+import { getRegistryFilePath, loadRegistry } from "../src/registry/registry";
 
 describe("Registry and Linking Mechanism", () => {
   let fakeHome: string;
@@ -558,27 +557,25 @@ export default defineAction({
     }
   });
 
-  it("RegistryStore manages links and migrates legacy schemaVersion 1 formats seamlessly", async () => {
-    const store = new DefaultRegistryStore(fakeHome);
-
+  it("manages links and migrates legacy schemaVersion 1 formats seamlessly", async () => {
     // 1. Link packages using standard link
-    await store.link(pkgADir);
-    await store.link(pkgBDir);
+    await linkPackage(pkgADir, fakeHome);
+    await linkPackage(pkgBDir, fakeHome);
 
     // 2. List packages
-    const list = store.listPackages();
+    const list = listLinkedPackages(fakeHome);
     expect(list.length).toBe(2);
     expect(list.some((l) => l.path === pkgADir)).toBe(true);
     expect(list.some((l) => l.path === pkgBDir)).toBe(true);
 
     // 3. Unlink package
-    await store.unlink("team.pkg-a");
-    const updatedList = store.listPackages();
+    await unlinkPackage("team.pkg-a", fakeHome);
+    const updatedList = listLinkedPackages(fakeHome);
     expect(updatedList.length).toBe(1);
     expect(updatedList[0].path).toBe(pkgBDir);
 
     // 4. Test raw migration when registry file contains ONLY schemaVersion 1 links
-    const filePath = store.getFilePath();
+    const filePath = getRegistryFilePath(fakeHome);
     writeFileSync(
       filePath,
       JSON.stringify({
@@ -588,7 +585,7 @@ export default defineAction({
       "utf-8"
     );
 
-    const migrated = store.load();
+    const migrated = loadRegistry(fakeHome);
     expect(migrated.packages["team.pkg-a"]).toBeDefined();
     expect(migrated.packages["team.pkg-a"].path).toBe(pkgADir);
   });

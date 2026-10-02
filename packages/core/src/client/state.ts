@@ -1,5 +1,5 @@
-import type { RemoteClientRequestOptions } from "./client-transport";
-import { buildQueryStringPreservingEmpty, fetchRemoteJson } from "./client-query";
+import type { RemoteClientRequestOptions } from "./transport";
+import { buildQueryStringPreservingEmpty, fetchRemoteJson } from "./transport";
 
 /**
  * 远端状态存储域端点。

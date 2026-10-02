@@ -1,8 +1,6 @@
 import type {
   CallOptions,
-  ControlGrant,
   OperationReceipt,
-  ProcessAcquireInput,
   ProcessAPI,
   ProcessControlInput,
   ProcessInfo,
@@ -24,11 +22,9 @@ import type { ProcessManager, ProcessOwner } from "./process-manager";
  *
  * 核心保证：
  * - 自动注入当前运行上下文的归属所有者与运行标识。
- * - 跟踪由当前 Run 申请成功持有的控制权令牌。
- * - 拦截 Run 退出或异常生命周期：若当前 Run 未显式 release 释放控制权，自动撤销 grant 并将目标进程置入隔离状态 quarantined。
+ * - 跟踪 Run 生命周期终结时的资源清理。
  */
 export class ContextProcessAPI implements ProcessAPI {
-  private readonly heldProcesses = new Map<string, string>();
   private isDisposed = false;
   private onAbortHandler?: () => void;
   public readonly processManager: ProcessManager;
@@ -98,58 +94,6 @@ export class ContextProcessAPI implements ProcessAPI {
   }
 
   /**
-   * 申请指定受管进程的独占控制令牌。
-   */
-  async acquire(
-    id: string,
-    input: ProcessAcquireInput,
-    call?: CallOptions
-  ): Promise<ControlGrant> {
-    const grant = await this.processManager.acquire(
-      this.owner,
-      id,
-      input,
-      this.mergeCallOptions(call),
-      this.runId
-    );
-    this.heldProcesses.set(id, grant.token);
-    return grant;
-  }
-
-  /**
-   * 延长当前有效控制令牌的存活时间。
-   */
-  async renew(
-    id: string,
-    token: string,
-    ttlMs: number,
-    call?: CallOptions
-  ): Promise<ControlGrant> {
-    const renewed = await this.processManager.renew(
-      this.owner,
-      id,
-      token,
-      ttlMs,
-      this.mergeCallOptions(call)
-    );
-    this.heldProcesses.set(id, renewed.token);
-    return renewed;
-  }
-
-  /**
-   * 显式释放控制令牌。
-   */
-  async release(id: string, token: string, call?: CallOptions): Promise<void> {
-    await this.processManager.release(
-      this.owner,
-      id,
-      token,
-      this.mergeCallOptions(call)
-    );
-    this.heldProcesses.delete(id);
-  }
-
-  /**
    * 向受管进程输入流写入原始字节数据。
    */
   async write(
@@ -211,19 +155,16 @@ export class ContextProcessAPI implements ProcessAPI {
     input: ProcessStopInput,
     call?: CallOptions
   ): Promise<ProcessInfo> {
-    const info = await this.processManager.stop(
+    return await this.processManager.stop(
       this.owner,
       id,
       input,
       this.mergeCallOptions(call)
     );
-    this.heldProcesses.delete(id);
-    return info;
   }
 
   /**
-   * 拦截 Action Run 生命周期终结：
-   * 若当前 Run 持有进程控制权且未显式 release，自动撤销 grant 并将目标进程置入隔离状态。
+   * 拦截 Action Run 生命周期终结,执行资源清理。
    */
   async dispose(): Promise<void> {
     if (this.isDisposed) {
@@ -234,26 +175,6 @@ export class ContextProcessAPI implements ProcessAPI {
     if (this.signal && this.onAbortHandler) {
       this.signal.removeEventListener("abort", this.onAbortHandler);
       this.onAbortHandler = undefined;
-    }
-
-    if (this.heldProcesses.size === 0) {
-      return;
-    }
-
-    const pendingEntries = Array.from(this.heldProcesses.entries());
-    this.heldProcesses.clear();
-
-    for (const [processId, token] of pendingEntries) {
-      try {
-        await this.processManager.quarantineProcess(
-          this.owner,
-          processId,
-          token,
-          "Run terminated without explicitly releasing control"
-        );
-      } catch {
-        // 忽略终结清理阶段次级异常
-      }
     }
   }
 

@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 
-// isLoopbackHost 已上移至 utils/net.ts（通用谓词单一事实源），此处仅保留 re-export 兼容旧引用路径
-export { isLoopbackHost } from "../utils/net";
+// isLoopbackHost 已上移至 utils（通用谓词单一事实源），此处仅保留 re-export 兼容旧引用路径
+export { isLoopbackHost } from "../utils";
 
 /**
  * 恒定时间字符串比较（Constant-time comparison）。

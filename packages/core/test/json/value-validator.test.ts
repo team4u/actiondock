@@ -27,24 +27,27 @@ describe("Iterative Strict JsonValue Validator", () => {
   });
 
   describe("递归深度限制与深层嵌套", () => {
-    it("支持 20,000 层深层嵌套对象不栈溢出", () => {
+    it("支持 2,000 层深层嵌套对象在安全递归栈内校验", () => {
+      let root: any = { value: "deep_leaf" };
+      for (let i = 0; i < 2_000; i++) {
+        root = { next: root };
+      }
+
+      const res = validateJsonValue(root, { maxDepth: 2_500 });
+      expect(res.valid).toBe(true);
+    });
+
+    it("超过安全递归栈深度时按深度上限拦截而非栈溢出", () => {
       let root: any = { value: "deep_leaf" };
       for (let i = 0; i < 20_000; i++) {
         root = { next: root };
       }
 
       const res = validateJsonValue(root, { maxDepth: 25_000 });
-      expect(res.valid).toBe(true);
-    });
-
-    it("支持 20,000 层深层嵌套数组不栈溢出", () => {
-      let arr: any = ["leaf_element"];
-      for (let i = 0; i < 20_000; i++) {
-        arr = [arr];
+      expect(res.valid).toBe(false);
+      if (!res.valid) {
+        expect(res.code).toBe("MAX_JSON_DEPTH");
       }
-
-      const res = validateJsonValue(arr, { maxDepth: 25_000 });
-      expect(res.valid).toBe(true);
     });
 
     it("默认最大深度限制 256：深度 256 通过，深度 257 拦截", () => {

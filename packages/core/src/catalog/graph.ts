@@ -840,11 +840,4 @@ export class PackageGraphBuilder {
     // 模式 C：全局包发现构建
     return this.buildFromGlobalDiscovery(nodes, generation);
   }
-
-  /**
-   * 异步构建包依赖拓扑图。
-   */
-  public async build(): Promise<PackageGraph> {
-    return this.buildSync();
-  }
 }

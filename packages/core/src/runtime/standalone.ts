@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { decodeStateKey, type ActionDefinition, type JsonValue } from "@actiondock/sdk";
 import type { ActionSpec } from "../package/types";
-import { filterWithFallbackInfo } from "../filter";
+import { filterWithFallbackInfo } from "../utils/intent";
 import type { ConfigItemDefinition } from "../project/types";
 import { createActionDock } from "../service/factory";
 import type { ActionDockService } from "../service/types";
@@ -856,33 +856,6 @@ export class StandaloneDispatcher {
     this.writeOut("  --data-dir <path>                           Custom runtime database directory");
     this.writeOut("  --config <KEY=val>                          Temporary config override");
   }
-}
-
-/**
- * 独立二进制可执行文件运行时（兼容门面包装）。
- */
-export interface StandaloneRuntimeOptions extends StandaloneDispatcherOptions {}
-
-export class StandaloneRuntime {
-  private dispatcher: StandaloneDispatcher;
-
-  constructor(options: StandaloneRuntimeOptions) {
-    this.dispatcher = new StandaloneDispatcher(options);
-  }
-
-  async run(argv: string[]): Promise<void> {
-    const code = await this.dispatcher.dispatch(argv);
-    if (code !== ExitCode.SUCCESS && code !== ExitCode.FAILURE) {
-      process.exit(code);
-    }
-  }
-}
-
-/**
- * 工厂函数：创建独立运行时实例。
- */
-export function createStandaloneRuntime(options: StandaloneRuntimeOptions): StandaloneRuntime {
-  return new StandaloneRuntime(options);
 }
 
 /**

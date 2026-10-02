@@ -1,8 +1,8 @@
 import type { ExecutionEvent } from "@actiondock/sdk";
 import { ActionDockError, EVENT_CURSOR_EXPIRED, REMOTE_STREAM_UNAVAILABLE } from "../errors";
-import { assertSecureTransport } from "../profile/client";
+import { assertSecureTransport } from "../client";
 import { normalizeServerUrl } from "../profile/manager";
-import { getInsecureDispatcher } from "../server/dispatcher";
+import { getInsecureDispatcher } from "../client/dispatcher";
 import { parseSseMessages, type SseMessage } from "./sse-parser";
 
 /**

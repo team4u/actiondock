@@ -1,8 +1,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { toSnakeUpperCase } from "../runtime/env";
-import { isLoopbackHost } from "../utils/net";
-import { getActionDockHome } from "../utils";
+import { getActionDockHome, isLoopbackHost } from "../utils";
 import { ActionDockError, INVALID_ARGUMENT } from "../errors";
 import type {
   ProfileEntry,
@@ -10,6 +9,9 @@ import type {
   ResolvedTarget,
   TokenResolutionSource,
 } from "./types";
+import { normalizeServerUrl } from "../client";
+
+export { normalizeServerUrl };
 
 const PROFILE_NAME_REGEX = /^[a-zA-Z0-9_\-\.]+$/;
 
@@ -26,36 +28,6 @@ export const DEFAULT_PROFILES_CONFIG: ProfilesConfig = {
   },
 };
 
-/**
- * 格式化并规范化 Server URL 地址（若未指定协议，本地回环地址默认使用 http://，非本地回环地址默认使用 https://，并移除末尾斜杠）。
- */
-export function normalizeServerUrl(url: string): string {
-  let cleaned = url.trim().replace(/\/+$/, "");
-  if (!cleaned || cleaned === "local") {
-    return cleaned;
-  }
-  if (!/^https?:\/\//i.test(cleaned)) {
-    let hostname = cleaned;
-    const slashIdx = hostname.indexOf("/");
-    if (slashIdx !== -1) {
-      hostname = hostname.slice(0, slashIdx);
-    }
-    if (hostname.startsWith("[")) {
-      const endBracket = hostname.indexOf("]");
-      if (endBracket !== -1) {
-        hostname = hostname.slice(1, endBracket);
-      }
-    } else {
-      const colonIdx = hostname.indexOf(":");
-      if (colonIdx !== -1) {
-        hostname = hostname.slice(0, colonIdx);
-      }
-    }
-    const isLoopback = isLoopbackHost(hostname);
-    cleaned = `${isLoopback ? "http" : "https"}://${cleaned}`;
-  }
-  return cleaned;
-}
 
 /**
  * 获取 profiles.json 配置文件的物理绝对路径（~/.actiondock/profiles.json）。

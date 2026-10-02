@@ -68,7 +68,7 @@ describe("InMemoryEventSink", () => {
     expect(new Set(sequences).size).toBe(5);
   });
 
-  it("enforces count quota and evicts non-essential events first while preserving finish event", () => {
+  it("enforces count quota and drops oldest events when buffer is full", () => {
     const sink = new InMemoryEventSink({ maxEventsPerRun: 4 });
     const runId = "run-count-quota";
 
@@ -79,8 +79,9 @@ describe("InMemoryEventSink", () => {
 
     const statsBefore = sink.getRunStats(runId);
     expect(statsBefore?.count).toBe(4);
+    expect(statsBefore?.droppedCount).toBe(0);
 
-    // Emit 5th event -> should evict a non-essential event (log or progress)
+    // Emit 5th event -> should drop oldest event
     sink.emit({
       runId,
       rootRunId: runId,
@@ -91,27 +92,29 @@ describe("InMemoryEventSink", () => {
     });
 
     const statsAfter = sink.getRunStats(runId);
-    expect(statsAfter?.count).toBeLessThanOrEqual(4);
+    expect(statsAfter?.count).toBe(4);
+    expect(statsAfter?.droppedCount).toBe(1);
     expect(statsAfter?.isTerminal).toBe(true);
   });
 
-  it("enforces byte quota and triggers eviction on large events", () => {
-    // 600 bytes quota
-    const sink = new InMemoryEventSink({ maxBytesPerRun: 600 });
-    const runId = "run-byte-quota";
+  it("enforces count quota and drops oldest events when exceeding maxEventsPerRun", () => {
+    const sink = new InMemoryEventSink({ maxEventsPerRun: 3 });
+    const runId = "run-count-drop";
 
-    const largeMessage = "x".repeat(300);
     sink.emit({ runId, rootRunId: runId, sequence: 0, timestamp: "t0", type: "status", status: "running" });
-    sink.emit({ runId, rootRunId: runId, sequence: 1, timestamp: "t1", type: "log", level: "info", message: largeMessage });
+    sink.emit({ runId, rootRunId: runId, sequence: 1, timestamp: "t1", type: "log", level: "info", message: "msg 1" });
+    sink.emit({ runId, rootRunId: runId, sequence: 2, timestamp: "t2", type: "log", level: "info", message: "msg 2" });
 
     const stats1 = sink.getRunStats(runId)!;
-    expect(stats1.bytes).toBeGreaterThan(300);
+    expect(stats1.count).toBe(3);
+    expect(stats1.droppedCount).toBe(0);
 
-    // Emit another large message that exceeds 600 bytes
-    sink.emit({ runId, rootRunId: runId, sequence: 2, timestamp: "t2", type: "log", level: "info", message: largeMessage });
+    sink.emit({ runId, rootRunId: runId, sequence: 3, timestamp: "t3", type: "log", level: "info", message: "msg 3" });
+    sink.emit({ runId, rootRunId: runId, sequence: 4, timestamp: "t4", type: "log", level: "info", message: "msg 4" });
 
     const stats2 = sink.getRunStats(runId)!;
-    expect(stats2.bytes).toBeLessThanOrEqual(600);
+    expect(stats2.count).toBe(3);
+    expect(stats2.droppedCount).toBe(2);
   });
 
   it("enforces global bounded run eviction when exceeding maxRuns", () => {
@@ -217,13 +220,19 @@ describe("InMemoryEventSink", () => {
     expect(received.length).toBe(1);
   });
 
-  it("truncates oversized single log / finish events and rejects buffering if still exceeding quota", () => {
-    // 300 byte quota
-    const sink = new InMemoryEventSink({ maxBytesPerRun: 300 });
-    const runId = "run-single-oversized";
+  it("broadcasts large log and finish events intact without payload truncation or tampering", async () => {
+    const sink = new InMemoryEventSink();
+    const runId = "run-no-tampering";
 
-    // 1. Oversized log message should be truncated
-    const massiveLog = "A".repeat(1000);
+    const received: ExecutionEvent[] = [];
+    const consumer = (async () => {
+      for await (const evt of sink.subscribe(runId)) {
+        received.push(evt);
+      }
+    })();
+
+    // 1. Large log message
+    const massiveLog = "A".repeat(10000);
     sink.emit({
       runId,
       rootRunId: runId,
@@ -234,12 +243,8 @@ describe("InMemoryEventSink", () => {
       message: massiveLog,
     });
 
-    const statsLog = sink.getRunStats(runId);
-    expect(statsLog).toBeDefined();
-    expect(statsLog!.bytes).toBeLessThanOrEqual(300);
-
-    // 2. Oversized finish data should be truncated
-    const massiveFinishData = { payload: "B".repeat(1000) };
+    // 2. Large finish data
+    const massiveFinishData = { payload: "B".repeat(10000) };
     sink.emit({
       runId,
       rootRunId: runId,
@@ -249,29 +254,23 @@ describe("InMemoryEventSink", () => {
       result: { ok: true, runId, data: massiveFinishData },
     });
 
-    const statsFinish = sink.getRunStats(runId);
-    expect(statsFinish).toBeDefined();
-    expect(statsFinish!.bytes).toBeLessThanOrEqual(300);
-    expect(statsFinish!.isTerminal).toBe(true);
+    await consumer;
+    expect(received.length).toBe(2);
 
-    // 3. If a non-truncatable event exceeds quota by itself, buffering is rejected
-    const tinyQuotaSink = new InMemoryEventSink({ maxBytesPerRun: 50 });
-    const runIdTiny = "run-tiny-quota";
+    const logEvt = received[0];
+    expect(logEvt.type).toBe("log");
+    if (logEvt.type === "log") {
+      expect(logEvt.message).toBe(massiveLog);
+      expect(logEvt.message.includes("[TRUNCATED]")).toBe(false);
+    }
 
-    tinyQuotaSink.emit({
-      runId: runIdTiny,
-      rootRunId: runIdTiny,
-      sequence: 0,
-      timestamp: "2026-09-09T00:00:00.000Z",
-      type: "status",
-      status: "running",
-    });
-
-    // The status event itself is ~100 bytes which exceeds 50 bytes, so buffering is rejected
-    const tinyStats = tinyQuotaSink.getRunStats(runIdTiny);
-    expect(tinyStats).toBeDefined();
-    expect(tinyStats!.count).toBe(0);
-    expect(tinyStats!.bytes).toBe(0);
+    const finishEvt = received[1];
+    expect(finishEvt.type).toBe("finish");
+    if (finishEvt.type === "finish") {
+      expect(finishEvt.result.ok).toBe(true);
+      expect(finishEvt.result).toEqual({ ok: true, runId, data: massiveFinishData });
+      expect((finishEvt.result as any).data?._truncated).toBeUndefined();
+    }
   });
 
   it("delivers finish event even after terminal status event during live subscription", async () => {
@@ -302,9 +301,9 @@ describe("InMemoryEventSink", () => {
     expect(received[2].type).toBe("finish");
   });
 
-  it("late subscriber terminates cleanly when run is terminal even if finish was dropped due to quota", async () => {
-    const sink = new InMemoryEventSink({ maxBytesPerRun: 50 });
-    const runId = "run-dropped-finish";
+  it("late subscriber terminates cleanly when run is terminal", async () => {
+    const sink = new InMemoryEventSink({ maxEventsPerRun: 1 });
+    const runId = "run-terminal-late";
 
     sink.emit({ runId, rootRunId: runId, sequence: 0, timestamp: "t0", type: "status", status: "running" });
     sink.emit({
@@ -313,19 +312,20 @@ describe("InMemoryEventSink", () => {
       sequence: 1,
       timestamp: "t1",
       type: "finish",
-      result: { ok: true, runId, data: { huge: "x".repeat(500) } },
+      result: { ok: true, runId, data: { done: true } },
     });
 
     const stats = sink.getRunStats(runId);
     expect(stats?.isTerminal).toBe(true);
-    expect(stats?.count).toBe(0);
+    expect(stats?.count).toBe(1);
 
     const received: ExecutionEvent[] = [];
     for await (const evt of sink.subscribe(runId)) {
       received.push(evt);
     }
 
-    expect(received.length).toBe(0);
+    expect(received.length).toBe(1);
+    expect(received[0].type).toBe("finish");
   });
 
   it("delivers finish event when subscription starts between terminal status and finish", async () => {
@@ -393,35 +393,43 @@ describe("InMemoryEventSink", () => {
     expect(received.length).toBe(1);
   });
 
-  it("strictly enforces maxBytesPerRun without finish breaching memory quota", async () => {
-    const sink = new InMemoryEventSink({ maxBytesPerRun: 32 });
-    const runId = "run-strict-32-bytes";
+  it("drops oldest events in subscriber queue when queue limit is exceeded", async () => {
+    const sink = new InMemoryEventSink({ maxSubscriberQueueSize: 2 });
+    const runId = "run-subscriber-queue-limit";
 
+    const received: ExecutionEvent[] = [];
+    const consumer = (async () => {
+      for await (const evt of sink.subscribe(runId, { maxQueueSize: 2 })) {
+        received.push(evt);
+        await new Promise((r) => setTimeout(r, 40));
+      }
+    })();
+
+    // Emit event 0
+    sink.emit({ runId, rootRunId: runId, sequence: 0, timestamp: "t0", type: "status", status: "running" });
+    await new Promise((r) => setTimeout(r, 10));
+
+    // Emit events 1, 2, 3, 4 quickly while subscriber is slow
+    sink.emit({ runId, rootRunId: runId, sequence: 1, timestamp: "t1", type: "log", level: "info", message: "m1" });
+    sink.emit({ runId, rootRunId: runId, sequence: 2, timestamp: "t2", type: "log", level: "info", message: "m2" });
+    sink.emit({ runId, rootRunId: runId, sequence: 3, timestamp: "t3", type: "log", level: "info", message: "m3" });
     sink.emit({
       runId,
       rootRunId: runId,
-      sequence: 0,
-      timestamp: "t0",
+      sequence: 4,
+      timestamp: "t4",
       type: "finish",
       result: { ok: true, runId, data: null },
     });
 
-    const stats = sink.getRunStats(runId);
-    expect(stats).toBeDefined();
-    // 32 字节配额下，最小完成事件无法入队，缓存字节数严禁突破 32 字节
-    expect(stats!.bytes).toBeLessThanOrEqual(32);
-    expect(stats!.isTerminal).toBe(true);
-
-    // 晚到订阅者能够正常终止退出，避免挂起死等
-    const received: ExecutionEvent[] = [];
-    for await (const evt of sink.subscribe(runId)) {
-      received.push(evt);
-    }
-    expect(received.length).toBe(0);
+    await consumer;
+    expect(received.length).toBeLessThan(5);
+    expect(received.some((e) => e.sequence === 0)).toBe(true);
+    expect(received[received.length - 1].type).toBe("finish");
   });
 
-  it("safely truncates oversized finish error payload and terminates subscription cleanly without dropping finish", async () => {
-    const sink = new InMemoryEventSink({ maxBytesPerRun: 400 });
+  it("preserves finish error payload intact without tampering", async () => {
+    const sink = new InMemoryEventSink();
     const runId = "run-oversized-finish-err";
 
     const received: ExecutionEvent[] = [];
@@ -431,6 +439,7 @@ describe("InMemoryEventSink", () => {
       }
     })();
 
+    const massiveErrMsg = "E".repeat(5000);
     sink.emit({ runId, rootRunId: runId, sequence: 0, timestamp: "t0", type: "status", status: "running" });
     sink.emit({
       runId,
@@ -443,7 +452,7 @@ describe("InMemoryEventSink", () => {
         runId,
         error: {
           code: "HUGE_ERR",
-          message: "E".repeat(2000),
+          message: massiveErrMsg,
         },
       },
     });
@@ -455,8 +464,62 @@ describe("InMemoryEventSink", () => {
     if (finishEvt.type === "finish") {
       expect(finishEvt.result.ok).toBe(false);
       if (!finishEvt.result.ok) {
-        expect(finishEvt.result.error.message).toContain("[TRUNCATED]");
+        expect(finishEvt.result.error.message).toBe(massiveErrMsg);
+        expect(finishEvt.result.error.message.includes("[TRUNCATED]")).toBe(false);
       }
     }
+  });
+
+  it("isolates errors so a throwing subscriber does not disrupt other subscribers or emit", async () => {
+    const sink = new InMemoryEventSink();
+    const runId = "run-error-isolation";
+
+    const received: ExecutionEvent[] = [];
+    const consumer = (async () => {
+      for await (const evt of sink.subscribe(runId)) {
+        received.push(evt);
+      }
+    })();
+
+    // Register a faulty listener that throws on receive
+    (sink as any).listeners.get(runId)?.add(() => {
+      throw new Error("Malicious listener error");
+    });
+
+    sink.emit({ runId, rootRunId: runId, sequence: 0, timestamp: "t0", type: "status", status: "running" });
+    sink.emit({
+      runId,
+      rootRunId: runId,
+      sequence: 1,
+      timestamp: "t1",
+      type: "finish",
+      result: { ok: true, runId, data: null },
+    });
+
+    await consumer;
+    expect(received.length).toBe(2);
+    expect(received.map((e) => e.sequence)).toEqual([0, 1]);
+  });
+
+  it("filters events strictly by runId so subscribers only receive their own events", async () => {
+    const sink = new InMemoryEventSink();
+    const runA = "run-filter-A";
+    const runB = "run-filter-B";
+
+    const receivedA: ExecutionEvent[] = [];
+    const consumerA = (async () => {
+      for await (const evt of sink.subscribe(runA)) {
+        receivedA.push(evt);
+      }
+    })();
+
+    sink.emit({ runId: runB, rootRunId: runB, sequence: 0, timestamp: "t0", type: "status", status: "running" });
+    sink.emit({ runId: runA, rootRunId: runA, sequence: 0, timestamp: "t0", type: "status", status: "running" });
+    sink.emit({ runId: runB, rootRunId: runB, sequence: 1, timestamp: "t1", type: "finish", result: { ok: true, runId: runB, data: null } });
+    sink.emit({ runId: runA, rootRunId: runA, sequence: 1, timestamp: "t1", type: "finish", result: { ok: true, runId: runA, data: null } });
+
+    await consumerA;
+    expect(receivedA.length).toBe(2);
+    expect(receivedA.every((e) => e.runId === runA)).toBe(true);
   });
 });

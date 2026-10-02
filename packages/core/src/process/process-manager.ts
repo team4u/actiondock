@@ -3,13 +3,10 @@ import {
   decodeBytes,
   encodeBytes,
   type CallOptions,
-  type ControlGrant,
-  type ControlState,
   type Limits,
   type Logger,
   type OperationReceipt,
   type OutputChunk,
-  type ProcessAcquireInput,
   type ProcessControlInput,
   type ProcessInfo,
   type ProcessListInput,
@@ -43,9 +40,7 @@ import {
 } from "../errors";
 import { parseCursor, compareCursorPos } from "./cursor";
 import { ContextProcessAPI } from "./context-process";
-import { ControlArbiter } from "./control-arbiter";
 import { InputDispatcher } from "./input-dispatcher";
-import { DiagnosticsSink } from "./diagnostics-sink";
 import type {
   ProcessDriver,
   ProcessObserver,
@@ -72,7 +67,6 @@ import { TerminalOutputCache } from "./terminal-output-cache";
 export type {
   ManagedProcessRecord,
   QueuedOperation,
-  AcquireWaiter,
   ProcessOwner,
 } from "./managed-record";
 
@@ -165,7 +159,7 @@ function hashRequestPayload(payload: unknown): string {
  * 将持久化记录转换为 SDK 标准 ProcessInfo 快照。
  */
 function toSdkProcessInfo(record: StoredProcessRecord): ProcessInfo {
-  const ctrl = (record.control ?? record.controlState ?? "free") as ControlState;
+  const ctrl = (record.control ?? record.controlState ?? "free") as ProcessInfo["control"];
   const exitDetails =
     record.exitCode !== undefined || record.exitSignal !== undefined
       ? { code: record.exitCode ?? null, signal: record.exitSignal ?? null }
@@ -241,6 +235,39 @@ function checkPositiveDurationMs(value: number, field: string): void {
 }
 
 /**
+ * 内部诊断日志汇聚器（私有实现）。
+ *
+ * 持有最近的持久化失败与驱动终止失败等诊断信息：优先写入注入的 logger，
+ * 缺失时保留在内存环形缓冲区，避免静默吞没异常。
+ */
+class DiagnosticsSink {
+  static readonly DEFAULT_BUFFER_LIMIT = 100;
+
+  private readonly logger?: Logger;
+  private readonly bufferLimit: number;
+  private readonly diagnostics: string[] = [];
+
+  constructor(options?: { logger?: Logger; bufferLimit?: number }) {
+    this.logger = options?.logger;
+    this.bufferLimit = options?.bufferLimit ?? DiagnosticsSink.DEFAULT_BUFFER_LIMIT;
+  }
+
+  record(message: string, err?: unknown): void {
+    const detail = err instanceof Error ? `${err.name}: ${err.message}` : err !== undefined ? String(err) : "";
+    const line = detail ? `${message} (${detail})` : message;
+    this.diagnostics.push(`${new Date().toISOString()} ${line}`);
+    if (this.diagnostics.length > this.bufferLimit) {
+      this.diagnostics.shift();
+    }
+    this.logger?.warn("[ProcessManager] " + line);
+  }
+
+  recent(): string[] {
+    return [...this.diagnostics].reverse();
+  }
+}
+
+/**
  * 受管进程核心管理器。
  *
  * 职责范畴：
@@ -269,7 +296,6 @@ export class ProcessManager {
   /** 一次性 run 执行器：仅依赖驱动、错误映射与输入校验，不触碰进程注册表 */
   private readonly runExecutor: RunExecutor;
   /** 控制权仲裁器：独占控制权状态机全部推进路径的唯一持有者 */
-  private readonly controlArbiter: ControlArbiter;
   /** 输入调度器：输入队列入队、串行调度与接管原语的唯一持有者 */
   private readonly inputDispatcher: InputDispatcher;
   private initPromise: Promise<number> | undefined;
@@ -306,39 +332,19 @@ export class ProcessManager {
       maxHostBufferBytes: this.quotas.maxOutputBufferBytesPerHost,
     });
     this.runExecutor = new RunExecutor(this.driver);
-    this.controlArbiter = new ControlArbiter({
-      persistState: (processId, patch) => this.persistState(processId, patch),
-      persistGrantReceipt: (grant, wait, proc) => this.persistReceipt(
-        {
-          hostEpoch: this.hostEpoch,
-          scope: proc.scope,
-          processId: proc.info.id,
-          requestId: wait.requestId,
-        },
-        grant as any,
-        hashRequestPayload({ waitMs: wait.waitMs, ttlMs: wait.ttlMs })
-      ),
-      refreshIdleTimer: (proc) => this.refreshIdleTimer(proc),
-      quarantineProcess: (owner, processId, token, reason) =>
-        this.quarantineProcess(owner, processId, token, reason),
-      countHostAcquireWaiters: () => this.countHostAcquireWaiters(),
-      maxWaitersPerProcess: this.quotas.maxWaitersPerProcess,
-      maxWaitersPerHost: this.quotas.maxWaitersPerHost,
-    });
     this.inputDispatcher = new InputDispatcher(
       {
         persistReceipt: (key, receipt, payloadHash) =>
           this.persistReceipt(key, receipt, payloadHash),
         persistState: (processId, patch) => this.persistState(processId, patch),
-        quarantineProcess: (owner, processId, token, reason) =>
-          this.quarantineProcess(owner, processId, token, reason),
+        quarantineProcess: (owner, processId, reason) =>
+          this.quarantineProcess(owner, processId, reason),
         refreshIdleTimer: (proc) => this.refreshIdleTimer(proc),
         recordDiagnostic: (message, err) => this.recordDiagnostic(message, err),
         countHostPendingInputBytes: () => this.countHostPendingInputBytes(),
         maxPendingQueueBytesPerProcess: this.quotas.maxPendingQueueBytesPerProcess,
         maxPendingQueueBytesPerHost: this.quotas.maxPendingQueueBytesPerHost,
-      },
-      this.controlArbiter
+      }
     );
   }
 
@@ -458,10 +464,6 @@ export class ProcessManager {
 
     // 防御性清理残余定时器（stop 内部已清理，此处兜底）
     for (const proc of this.processes.values()) {
-      if (proc.ttlTimer) {
-        clearTimeout(proc.ttlTimer);
-        proc.ttlTimer = undefined;
-      }
       if (proc.idleTimer) {
         clearTimeout(proc.idleTimer);
         proc.idleTimer = undefined;
@@ -570,11 +572,9 @@ export class ProcessManager {
         owner: { ...owner },
         scope,
         outputLog,
-        controlEpoch: 0,
         cancelEpoch: 0,
         inputQueue: [],
         pendingInputBytes: 0,
-        acquireWaiters: [],
         inputClosed: false,
         isDispatching: false,
         effectiveLimits,
@@ -754,149 +754,6 @@ export class ProcessManager {
   }
 
   /**
-   * 申请指定受管进程的独占控制令牌。
-   */
-  async acquire(
-    owner: ProcessOwner,
-    id: string,
-    input: ProcessAcquireInput,
-    call?: CallOptions,
-    runId?: string
-  ): Promise<ControlGrant> {
-    checkPositiveDurationMs(input.waitMs, "waitMs");
-    checkPositiveDurationMs(input.ttlMs, "ttlMs");
-    await this.ensureInitialized();
-    this.assertNotShutdown();
-    const proc = await this.getOrLoadProcess(owner, id);
-
-    if (
-      proc.info.state === "exited" ||
-      proc.info.state === "failed" ||
-      proc.info.state === "lost"
-    ) {
-      throw new ProcessError(CONTROL_REVOKED, "Process has terminated");
-    }
-
-    if (proc.info.control === "quarantined") {
-      throw new ProcessError(PROCESS_QUARANTINED, "Process is in quarantined state");
-    }
-
-    if (proc.info.control === "closed") {
-      throw new ProcessError(CONTROL_REVOKED, "Process control is closed");
-    }
-
-    const key: ProcessRequestKey = {
-      hostEpoch: this.hostEpoch,
-      scope: proc.scope,
-      processId: id,
-      requestId: input.requestId,
-    };
-    const payloadHash = hashRequestPayload({ waitMs: input.waitMs, ttlMs: input.ttlMs });
-
-    // 同步预占幂等请求，跨 await 窗口内拦截并发同 requestId 双重授权
-    const inFlight = this.reserveRequest(key, payloadHash, "acquire");
-    if (inFlight) {
-      return (await inFlight.promise) as ControlGrant;
-    }
-
-    try {
-      // 幂等去重检查
-      const existing = await this.metadataStore.getRequest(key);
-      if (existing) {
-        if (existing.payloadHash !== payloadHash) {
-          throw new ProcessError(REQUEST_CONFLICT, "Request conflict: identical requestId with different payload", {
-            requestId: input.requestId,
-          });
-        }
-        const cached = existing.receipt as unknown as ControlGrant;
-        this.commitReservation(key, "acquire", cached);
-        return cached;
-      }
-
-      // 控制权仲裁：空闲且无等待者时直接授予，否则 FIFO 排队等待
-      // 排队路径凭据由唤醒方落盘；原请求 resolve 后在此处结算预约，保持两阶段时序不变
-      const outcome = this.controlArbiter.tryAcquire(
-        proc,
-        { requestId: input.requestId, waitMs: input.waitMs, ttlMs: input.ttlMs },
-        call,
-        runId
-      );
-      const grant = await outcome.waiter!;
-      if (outcome.granted) {
-        await this.metadataStore.recordRequest(key, grant as any, payloadHash);
-      }
-      this.commitReservation(key, "acquire", grant);
-      return grant;
-    } catch (err) {
-      // 失败路径：以原始错误结算预占，等待同 requestId 的并发调用方收到真实失败原因而非固定冲突错误
-      this.rejectReservation(key, "acquire", err);
-      throw err;
-    } finally {
-      // 成功路径已在 commit 中移除预占；失败路径已在 catch 中以原始错误结算；
-      // 此处仅为既未 commit 也未 reject 的异常逃逸路径释放预占并唤醒等待方
-      this.rejectReservation(key, "acquire", new ProcessError(
-        REQUEST_CONFLICT,
-        "Concurrent acquire request did not produce a result",
-        { requestId: input.requestId }
-      ));
-    }
-  }
-
-  /**
-   * 延长当前有效控制令牌的存活时间。
-   */
-  async renew(
-    owner: ProcessOwner,
-    id: string,
-    token: string,
-    ttlMs: number,
-    call?: CallOptions
-  ): Promise<ControlGrant> {
-    checkPositiveDurationMs(ttlMs, "ttlMs");
-    await this.ensureInitialized();
-    const proc = await this.getOrLoadProcess(owner, id);
-
-    // 提交前校验持有凭据有效性，随后由仲裁器清理旧定时器并设置新定时器
-    this.controlArbiter.validateHeldGrant(proc, token);
-
-    return this.controlArbiter.renewGrant(proc, ttlMs);
-  }
-
-  /**
-   * 显式释放控制令牌，允许后续控制者申请。
-   */
-  async release(
-    owner: ProcessOwner,
-    id: string,
-    token: string,
-    call?: CallOptions
-  ): Promise<void> {
-    await this.ensureInitialized();
-    const proc = await this.getOrLoadProcess(owner, id);
-
-    // 提交前校验持有凭据有效性
-    if (proc.info.control === "quarantined") {
-      throw new ProcessError(PROCESS_QUARANTINED, "Process is in quarantined state");
-    }
-
-    if (proc.info.control !== "held" || !proc.currentGrant) {
-      throw new ProcessError(CONTROL_REVOKED, "Process control is not currently held");
-    }
-
-    if (proc.currentGrant.token !== token) {
-      throw new ProcessError(ACCESS_DENIED, "Invalid control token");
-    }
-
-    // 当队列中存在待 dispatch 的操作时抛出 CONTROL_BUSY 拒绝 release
-    if (proc.inputQueue.length > 0) {
-      throw new ProcessError(CONTROL_BUSY, "Cannot release control while operations are pending in queue");
-    }
-
-    // 仲裁器完成清理定时器、凭据置空与唯一唤醒下一个等待者
-    this.controlArbiter.releaseGrant(proc);
-  }
-
-  /**
    * 向受管进程输入流写入原始字节数据。
    */
   async write(
@@ -914,7 +771,7 @@ export class ProcessManager {
       processId: id,
       requestId: input.requestId,
     };
-    const payloadHash = hashRequestPayload({ token: input.token, data: input.data });
+    const payloadHash = hashRequestPayload({ data: input.data });
 
     // 同步预占幂等请求，跨 await 窗口内拦截并发同 requestId 双重入队
     const inFlight = this.reserveRequest(key, payloadHash, "write");
@@ -940,7 +797,6 @@ export class ProcessManager {
       const rawBytes = decodeBytes(input.data);
       const queued = await this.inputDispatcher.enqueueWrite(proc, {
         requestId: input.requestId,
-        token: input.token,
         data: rawBytes,
         key,
         payloadHash,
@@ -981,7 +837,7 @@ export class ProcessManager {
       processId: id,
       requestId: input.requestId,
     };
-    const payloadHash = hashRequestPayload({ token: input.token, action: input.action });
+    const payloadHash = hashRequestPayload({ action: input.action });
 
     // 同步预占幂等请求，跨 await 窗口内拦截并发同 requestId 双重入队
     const inFlight = this.reserveRequest(key, payloadHash, "control");
@@ -1029,7 +885,6 @@ export class ProcessManager {
       // 输入调度器完成授权校验、落盘与入队
       const queued = await this.inputDispatcher.enqueueControl(proc, {
         requestId: input.requestId,
-        token: input.token,
         action: input.action,
         key,
         payloadHash,
@@ -1092,57 +947,6 @@ export class ProcessManager {
     const proc = await this.getOrLoadProcess(owner, id);
 
     if (proc.outputUnavailable) {
-      const requestedPos = parseCursor(input.cursor, proc.info.hostEpoch, id);
-      const tombstone = proc.outputTombstone ?? this.terminalOutputCache.getTombstone(id);
-
-      if (tombstone) {
-        const tailPos = parseCursor(tombstone.tailCursor, proc.info.hostEpoch, id);
-        const cmp = compareCursorPos(requestedPos, tailPos);
-
-        if (cmp > 0) {
-          throw new ProcessError(
-            INVALID_CURSOR,
-            "Requested cursor is beyond the end of the output log",
-            {
-              cursor: input.cursor,
-              tailCursor: tombstone.tailCursor,
-            }
-          );
-        }
-
-        if (cmp === 0) {
-          return {
-            chunks: [],
-            nextCursor: tombstone.tailCursor,
-            earliestCursor: tombstone.tailCursor,
-            tailCursor: tombstone.tailCursor,
-            truncated: false,
-            eof: true,
-            process: { ...proc.info },
-          };
-        }
-
-        const gapMode = input.onGap ?? "error";
-        if (gapMode === "error") {
-          throw new ProcessError(
-            OUTPUT_UNAVAILABLE,
-            `Process output for '${id}' is unavailable because it has been evicted from memory`,
-            { processId: id }
-          );
-        }
-
-        return {
-          chunks: [],
-          nextCursor: tombstone.tailCursor,
-          earliestCursor: tombstone.tailCursor,
-          tailCursor: tombstone.tailCursor,
-          truncated: true,
-          gap: { fromCursor: input.cursor, toCursor: tombstone.tailCursor },
-          eof: true,
-          process: { ...proc.info },
-        };
-      }
-
       throw new ProcessError(
         OUTPUT_UNAVAILABLE,
         `Process output for '${id}' is unavailable because it has been evicted from memory`,
@@ -1198,9 +1002,6 @@ export class ProcessManager {
       return { ...proc.info };
     }
 
-    // 撤销控制权与定时器
-    this.controlArbiter.disposeProcess(proc);
-
     if (proc.idleTimer) {
       clearTimeout(proc.idleTimer);
       proc.idleTimer = undefined;
@@ -1216,12 +1017,6 @@ export class ProcessManager {
 
     // 调度器同步原子接管输入队列：纪元递增、标记失败、登记落盘、清空与字节归零
     this.inputDispatcher.takeoverQueue(proc, PROCESS_CANCELLED);
-
-    // 终态拒绝全部排队等待者
-    this.controlArbiter.revokeAllWaiters(proc, {
-      code: CONTROL_REVOKED,
-      message: "Process was stopped",
-    });
 
     proc.info.endReason = proc.info.endReason ?? "requested";
     proc.info.state = "stopping";
@@ -1252,7 +1047,6 @@ export class ProcessManager {
   async quarantineProcess(
     owner: ProcessOwner,
     processId: string,
-    token?: string,
     reason?: string
   ): Promise<void> {
     const proc = this.processes.get(processId);
@@ -1262,29 +1056,14 @@ export class ProcessManager {
 
     checkOwnerAuthorized(owner, proc.owner);
 
-    if (token && proc.currentGrant && proc.currentGrant.token !== token) {
-      return;
-    }
-
     if (proc.info.control === "quarantined" || proc.info.control === "closed") {
       return;
     }
 
     proc.info.control = "quarantined";
-    if (proc.ttlTimer) {
-      clearTimeout(proc.ttlTimer);
-      proc.ttlTimer = undefined;
-    }
-    proc.currentGrant = undefined;
 
     // 调度器同步原子接管输入队列：纪元递增、标记失败、登记落盘、清空与字节归零
     this.inputDispatcher.takeoverQueue(proc, CONTROL_REVOKED);
-
-    // 终态拒绝全部排队等待者
-    this.controlArbiter.revokeAllWaiters(proc, {
-      code: PROCESS_QUARANTINED,
-      message: reason || "Process entered quarantined state",
-    });
 
     await this.persistState(processId, {
       control: "quarantined",
@@ -1412,7 +1191,6 @@ export class ProcessManager {
 
     if (proc.idleTimer) clearTimeout(proc.idleTimer);
     if (proc.lifetimeTimer) clearTimeout(proc.lifetimeTimer);
-    if (proc.ttlTimer) clearTimeout(proc.ttlTimer);
 
     proc.info.state = "exited";
     proc.info.control = "closed";
@@ -1420,14 +1198,6 @@ export class ProcessManager {
     if (!proc.info.endReason) {
       proc.info.endReason = "natural";
     }
-
-    proc.currentGrant = undefined;
-
-    // 终态拒绝全部排队等待者（单一入口）
-    this.controlArbiter.revokeAllWaiters(proc, {
-      code: CONTROL_REVOKED,
-      message: "Process has exited",
-    });
 
     void this.persistState(proc.info.id, {
       state: "exited",
@@ -1494,19 +1264,12 @@ export class ProcessManager {
 
     if (proc.idleTimer) clearTimeout(proc.idleTimer);
     if (proc.lifetimeTimer) clearTimeout(proc.lifetimeTimer);
-    if (proc.ttlTimer) clearTimeout(proc.ttlTimer);
 
     proc.info.state = "failed";
     proc.info.control = "closed";
     proc.info.endReason = "natural";
     proc.outputLog.closeOutput("natural");
     proc.info.outputClosed = true;
-
-    // 终态拒绝全部排队等待者（单一入口）
-    this.controlArbiter.revokeAllWaiters(proc, {
-      code: CONTROL_REVOKED,
-      message: `Process error: ${err.message}`,
-    });
 
     void this.persistState(proc.info.id, {
       state: "failed",
@@ -1564,11 +1327,10 @@ export class ProcessManager {
 
     const info = toSdkProcessInfo(record);
     const retainedLog = this.terminalOutputCache.get(processId);
-    const tombstone = this.terminalOutputCache.getTombstone(processId);
     const isTerminalLoaded =
       info.state === "exited" || info.state === "failed" || info.state === "lost";
     const isOutputUnavailable =
-      !retainedLog && (Boolean(tombstone) || (isTerminalLoaded && Boolean(record.outputClosed)));
+      !retainedLog && (isTerminalLoaded && Boolean(record.outputClosed));
 
     const outputLog =
       retainedLog ??
@@ -1591,12 +1353,9 @@ export class ProcessManager {
       scope: formatProcessScope(owner),
       outputLog,
       outputUnavailable: isOutputUnavailable,
-      outputTombstone: tombstone,
-      controlEpoch: 0,
       cancelEpoch: 0,
       inputQueue: [],
       pendingInputBytes: 0,
-      acquireWaiters: [],
       inputClosed: Boolean(record.inputClosed),
       isDispatching: false,
       effectiveLimits: info.effectiveLimits,
@@ -1629,8 +1388,8 @@ export class ProcessManager {
       return;
     }
 
-    // 仍存在排队等待者或未结算输入时暂缓驱逐
-    if (proc.acquireWaiters.length > 0 || proc.inputQueue.length > 0) {
+    // 仍存在未结算输入时暂缓驱逐
+    if (proc.inputQueue.length > 0) {
       return;
     }
 
@@ -1715,17 +1474,6 @@ export class ProcessManager {
         limit: this.quotas.maxOutputBufferBytesPerHost,
       });
     }
-  }
-
-  /**
-   * 统计当前宿主所有活跃进程累计排队等待控制权的调用者总数。
-   */
-  private countHostAcquireWaiters(): number {
-    let total = 0;
-    for (const p of this.processes.values()) {
-      total += p.acquireWaiters.length;
-    }
-    return total;
   }
 
   /**

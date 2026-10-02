@@ -3,7 +3,6 @@ import { NodeHttpServer } from "./http-server";
 import { createActionDock } from "../service/factory";
 import { NOT_FOUND, UNAUTHORIZED } from "../errors";
 import { parseActionRef } from "../catalog/resolve-action";
-import { ensureDependencyClosure } from "../project/closure";
 import { findProjectRoot } from "../project/loader";
 import { listLinkedPackages, resolvePackageRoot } from "../registry/registry";
 import type { ActionDockService } from "../service/types";
@@ -171,10 +170,6 @@ export async function startActionDockServer(
         }
       } catch {}
     }
-  }
-
-  if (roots.length > 0) {
-    await ensureDependencyClosure(roots, { customHome });
   }
 
   // 3. 为每个启用 MCP 的视图独立装配 MCP 处理器

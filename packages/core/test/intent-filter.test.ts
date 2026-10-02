@@ -4,7 +4,7 @@ import {
   filterByIntent,
   filterWithFallbackInfo,
   matchIntent,
-} from "../src/filter";
+} from "../src/utils/intent";
 
 describe("Intent & Fuzzy Filter", () => {
   it("compiles single and multiple pattern strings", () => {

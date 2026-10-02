@@ -1,13 +1,13 @@
-import { isLoopbackHost } from "../utils/net";
-import { normalizeServerUrl } from "./manager";
-import { getInsecureDispatcher } from "../server/dispatcher";
-import { ActionDockError, INSECURE_TRANSPORT, INVALID_ARGUMENT } from "../errors";
+import { isLoopbackHost } from "../utils";
+import { getInsecureDispatcher } from "./dispatcher";
+import { ActionDockError, INSECURE_TRANSPORT, INVALID_ARGUMENT, NOT_FOUND, REMOTE_REQUEST_FAILED, UNAUTHORIZED } from "../errors";
 
 /**
- * 远端客户端传输层。
+ * 远端客户端传输层单点。
  *
- * 职责单一聚焦：鉴权头拼装、明文传输安全校验与 insecure dispatcher 注入，
- * 作为全部远端端点函数的传输样板单一事实源。
+ * 职责单一聚焦：服务端地址规范化、鉴权头拼装、明文传输安全校验、
+ * insecure dispatcher 注入、JSON 响应解析与查询参数序列化，
+ * 作为全部远端端点函数的统一传输层单一事实源。
  */
 
 /**
@@ -21,11 +21,58 @@ export interface SecureTransportOptions {
 }
 
 /**
+ * 格式化并规范化 Server URL 地址（若未指定协议，本地回环地址默认使用 http://，非本地回环地址默认使用 https://，并移除末尾斜杠）。
+ */
+export function normalizeServerUrl(url: string): string {
+  let cleaned = url.trim().replace(/\/+$/, "");
+  if (!cleaned || cleaned === "local") {
+    return cleaned;
+  }
+  if (!/^https?:\/\//i.test(cleaned)) {
+    let hostname = cleaned;
+    const slashIdx = hostname.indexOf("/");
+    if (slashIdx !== -1) {
+      hostname = hostname.slice(0, slashIdx);
+    }
+    if (hostname.startsWith("[")) {
+      const endBracket = hostname.indexOf("]");
+      if (endBracket !== -1) {
+        hostname = hostname.slice(1, endBracket);
+      }
+    } else {
+      const colonIdx = hostname.indexOf(":");
+      if (colonIdx !== -1) {
+        hostname = hostname.slice(0, colonIdx);
+      }
+    }
+    const isLoopback = isLoopbackHost(hostname);
+    cleaned = `${isLoopback ? "http" : "https"}://${cleaned}`;
+  }
+  return cleaned;
+}
+
+/**
+ * 脱敏 URL：移除 userinfo 凭据与查询串后再返回；仅保留协议、主机与路径。
+ */
+function redactUrl(url: string): string {
+  let candidate = url;
+  try {
+    const u = new URL(candidate);
+    u.username = "";
+    u.password = "";
+    u.search = "";
+    return u.toString();
+  } catch {
+    candidate = candidate.replace(/^([a-zA-Z][a-zA-Z0-9+.-]*:\/\/)[^\/@]+@/, "$1");
+    return candidate.length > 128 ? `${candidate.slice(0, 128)}...` : candidate;
+  }
+}
+
+/**
  * 校验在携带认证 Token 时传输层协议与目标地址是否安全。
  * 若请求携带认证 Token 且目标为非本地回环的明文 http://，默认报错拒绝。
  * 可通过 allowInsecureHttp 选项、insecure 选项、环境变量或命令行参数豁免明文限制。
- * 目标 URL 无法解析时无论豁免与否均 fail-closed 抛 INVALID_ARGUMENT，
- * 杜绝携凭据请求发往不可控的畸形地址。
+ * 目标 URL 无法解析时无论豁免与否均 fail-closed 抛 INVALID_ARGUMENT。
  */
 export function assertSecureTransport(
   serverUrl: string,
@@ -50,9 +97,6 @@ export function assertSecureTransport(
 
   const base = normalizeServerUrl(serverUrl);
 
-  // 目标地址可解析性前置校验（fail-closed）：携带 token 时若目标 URL 无法解析，
-  // 严禁继续放行——后续请求会携凭据发往不可控的畸形目标。错误信息仅携带
-  // 脱敏地址与解析原因。allow 豁免仅作用于明文传输策略，不豁免地址合法性。
   if (base.startsWith("http://") || base.startsWith("https://")) {
     let parsed: URL;
     try {
@@ -65,33 +109,12 @@ export function assertSecureTransport(
       );
     }
 
-    // 明文传输策略：仅非回环明文 http 需要豁免，https 不受限制
     if (!allow && base.startsWith("http://") && !isLoopbackHost(parsed.hostname)) {
       throw new ActionDockError(
         INSECURE_TRANSPORT,
         `Insecure HTTP connection with authentication token to non-loopback host '${parsed.hostname}' is prohibited. Use HTTPS or pass --allow-insecure-http to override.`
       );
     }
-  }
-  // 非 http/https 协议形态（如 local）：交给后续请求层处理，此处无从校验
-}
-
-/**
- * 脱敏 URL：移除 userinfo 凭据与查询串后再返回；仅保留协议、主机与路径。
- */
-function redactUrl(url: string): string {
-  let candidate = url;
-  try {
-    const u = new URL(candidate);
-    u.username = "";
-    u.password = "";
-    u.search = "";
-    return u.toString();
-  } catch {
-    // 解析失败的畸形地址：以正则剥离 userinfo 形态后截断长度，
-    // 避免原始串携带敏感片段外泄到错误信息与日志
-    candidate = candidate.replace(/^([a-zA-Z][a-zA-Z0-9+.-]*:\/\/)[^\/@]+@/, "$1");
-    return candidate.length > 128 ? `${candidate.slice(0, 128)}...` : candidate;
   }
 }
 
@@ -134,10 +157,6 @@ export interface RemoteFetchInit {
 
 /**
  * 构建绑定传输上下文（Token、安全选项与调度器）的远端请求函数。
- *
- * 单一事实源收敛所有 fetchRemoteXxx 端点的传输样板：
- * 调用方仅需声明 path 与查询参数，鉴权头拼装、明文传输校验与
- * insecure dispatcher 注入均在此统一处理。
  */
 export function createRemoteFetch(
   serverUrl: string,
@@ -181,7 +200,7 @@ export function createRemoteFetch(
 }
 
 /**
- * 远端请求单一入口：执行目标协议路由请求。
+ * 远端请求底层入口：执行目标协议路由请求。
  */
 export async function fetchRemoteRoute(
   base: string,
@@ -190,4 +209,79 @@ export async function fetchRemoteRoute(
 ): Promise<Response> {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   return fetch(`${base}${normalizedPath}`, init);
+}
+
+/**
+ * 执行远端请求并将响应解析为 JSON，统一处理错误信封透传。
+ */
+export async function fetchRemoteJson<T = any>(
+  serverUrl: string,
+  path: string,
+  token?: string,
+  options: {
+    method?: string;
+    body?: unknown;
+    errorPrefix?: string;
+  } & RemoteClientRequestOptions = {}
+): Promise<T> {
+  const remoteFetch = createRemoteFetch(serverUrl, token, {
+    allowInsecureHttp: options.allowInsecureHttp,
+    insecure: options.insecure,
+    dispatcher: options.dispatcher,
+  });
+  const res = await remoteFetch(path, {
+    method: options.method,
+    body: options.body,
+  });
+
+  const data = (await res.json().catch(() => ({}))) as any;
+
+  if (!res.ok || (options.method === "POST" && data && data.ok === false)) {
+    const errorPrefix = options.errorPrefix || "Remote request failed";
+    const msg = data?.error?.message || `${errorPrefix} (${res.status}): ${res.statusText}`;
+    const code =
+      data?.error?.code ||
+      (res.status === 404 ? NOT_FOUND : res.status === 401 ? UNAUTHORIZED : REMOTE_REQUEST_FAILED);
+    const details = data?.error?.details ?? data?.error;
+    const err = new ActionDockError(code, msg, details, res.status);
+    (err as any).errorData = data?.error;
+    throw err;
+  }
+
+  return data as T;
+}
+
+/**
+ * 由可选参数字典构造查询串（无参数时返回空串）。
+ * 过滤 undefined 与空串。
+ */
+export function buildQueryString(
+  params: Record<string, string | number | boolean | undefined>
+): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === "") {
+      continue;
+    }
+    search.set(key, String(value));
+  }
+  const qs = search.toString();
+  return qs ? `?${qs}` : "";
+}
+
+/**
+ * 构造保留空串语义的查询串：仅跳过 undefined，保留空串。
+ */
+export function buildQueryStringPreservingEmpty(
+  params: Record<string, string | number | boolean | undefined>
+): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined) {
+      continue;
+    }
+    search.set(key, String(value));
+  }
+  const qs = search.toString();
+  return qs ? `?${qs}` : "";
 }

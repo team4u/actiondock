@@ -1,6 +1,6 @@
 import type { RunRecord } from "@actiondock/sdk";
-import type { RemoteClientRequestOptions } from "./client-transport";
-import { buildQueryString, fetchRemoteJson } from "./client-query";
+import type { RemoteClientRequestOptions } from "./transport";
+import { buildQueryString, fetchRemoteJson } from "./transport";
 
 /**
  * 远端运行记录域端点。

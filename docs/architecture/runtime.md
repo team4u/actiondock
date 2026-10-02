@@ -34,7 +34,7 @@ graph TD
     CORE --> SDK
 ```
 
-- `@actiondock/sdk`：极简纯契约层，零生产依赖，导出 `defineAction`、`ActionContext`、`ProcessAPI`、`Logger`、`Config` 与 `StateStore`，并提供受管进程辅助工具（`withControl`、`createStreamDecoder` 等）。
+- `@actiondock/sdk`：极简纯契约层，零生产依赖，导出 `defineAction`、`ActionContext`、`ProcessAPI`、`Logger`、`Config` 与 `StateStore`，并提供受管进程辅助工具（`createStreamDecoder` 等）。
 - `@actiondock/core`：Node-first 原生运行时与核心领域，包含包图发现、动作目录、调用治理、执行主链、存储驱动（`NodeSqliteDriver`）、受管进程驱动（`NodeProcessDriver`）、HTTP 网络服务（`NodeHttpServer`）、标准服务端口体系（`DiscoveryPort`、`ExecutionPort`、`RunsPort`、`ConfigPort`、`StatePort`）与统一服务门面（`createActionDock`、`connectActionDock`）。
 - `@actiondock/builder`：构建规划与分发构建包，负责依赖闭包规划、Skill 模板生成与规程渲染、Node.js 目录交付产物构建（`ad build`）、npm 打包（`ad pack`）与 Agent Skill 资产导出。
 - `@actiondock/mcp`：MCP 协议适配层，全面对接核心层标准服务端口，将 Action 映射为标准 MCP 工具，支持 STDIO 与 HTTP 通道及取消信号链路。

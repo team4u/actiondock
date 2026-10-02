@@ -10,7 +10,6 @@ import { ActionDockError, CAPABILITY_UNAVAILABLE, STATE_KEY_NOT_FOUND } from "..
 import {
   PROTOCOL_UNSUPPORTED,
   SERVICE_RESULT_UNKNOWN,
-  ServiceError,
 } from "./types";
 
 /**
@@ -24,7 +23,7 @@ export function wrapRemoteError(err: any): never {
     code === "CAPABILITY_UNAVAILABLE" ||
     code === "TARGET_CAPABILITY_UNAVAILABLE"
   ) {
-    throw new ServiceError(
+    throw new ActionDockError(
       CAPABILITY_UNAVAILABLE,
       `CAPABILITY_UNAVAILABLE: Management APIs are not enabled on remote service`,
       { originalMessage: err?.message }
@@ -34,7 +33,7 @@ export function wrapRemoteError(err: any): never {
     code === "PROTOCOL_UNSUPPORTED" ||
     code === "TARGET_PROTOCOL_UNSUPPORTED"
   ) {
-    throw new ServiceError(
+    throw new ActionDockError(
       PROTOCOL_UNSUPPORTED,
       `PROTOCOL_UNSUPPORTED: ${err?.message || ""}`,
       { originalMessage: err?.message }
@@ -45,7 +44,7 @@ export function wrapRemoteError(err: any): never {
     code === "TARGET_RESULT_UNKNOWN" ||
     code === "RESULT_UNKNOWN"
   ) {
-    throw new ServiceError(
+    throw new ActionDockError(
       SERVICE_RESULT_UNKNOWN,
       `SERVICE_RESULT_UNKNOWN: ${err?.message || ""}`,
       { originalMessage: err?.message }

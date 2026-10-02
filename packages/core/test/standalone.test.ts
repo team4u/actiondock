@@ -3,9 +3,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defineAction } from "@actiondock/sdk";
-import { StandaloneDispatcher, StandaloneRuntime } from "../src/runtime/standalone";
+import { StandaloneDispatcher } from "../src/runtime/standalone";
 
-describe("StandaloneRuntime 独立二进制运行时委托 PackageRuntime", () => {
+describe("StandaloneDispatcher 独立二进制运行时委托 PackageRuntime", () => {
   const tmpDir = mkdtempSync(join(tmpdir(), "standalone-test-"));
 
   const greetAction = defineAction({
@@ -20,7 +20,7 @@ describe("StandaloneRuntime 独立二进制运行时委托 PackageRuntime", () =
     },
   });
 
-  const runtime = new StandaloneRuntime({
+  const runtime = new StandaloneDispatcher({
     packageId: "pkg.standalone",
     version: "1.2.3",
     description: "测试用独立二进制运行时包",
@@ -54,13 +54,13 @@ describe("StandaloneRuntime 独立二进制运行时委托 PackageRuntime", () =
 
     try {
       // 文本输出
-      await runtime.run(["list", `--data-dir=${tmpDir}`]);
+      await runtime.dispatch(["list", `--data-dir=${tmpDir}`]);
       expect(logs.some((l) => l.includes("Actions in pkg.standalone (v1.2.3):"))).toBe(true);
       expect(logs.some((l) => l.includes("greet") && l.includes("打招呼动作"))).toBe(true);
 
       // JSON 输出
       logs.length = 0;
-      await runtime.run(["list", "--json", `--data-dir=${tmpDir}`]);
+      await runtime.dispatch(["list", "--json", `--data-dir=${tmpDir}`]);
       const parsed = JSON.parse(logs.join("\n"));
       expect(Array.isArray(parsed.items)).toBe(true);
       expect(parsed.items.some((item: any) => item.id === "greet")).toBe(true);
@@ -79,12 +79,12 @@ describe("StandaloneRuntime 独立二进制运行时委托 PackageRuntime", () =
 
     try {
       // 文本输出
-      await runtime.run(["describe", "greet", `--data-dir=${tmpDir}`]);
+      await runtime.dispatch(["describe", "greet", `--data-dir=${tmpDir}`]);
       expect(logs.some((l) => l.includes("Action: greet"))).toBe(true);
 
       // JSON 输出
       logs.length = 0;
-      await runtime.run(["show", "greet", "--json", `--data-dir=${tmpDir}`]);
+      await runtime.dispatch(["show", "greet", "--json", `--data-dir=${tmpDir}`]);
       const parsed = JSON.parse(logs.join("\n"));
       expect(parsed.id).toBe("greet");
       expect(parsed.description).toBe("打招呼动作");
@@ -101,7 +101,7 @@ describe("StandaloneRuntime 独立二进制运行时委托 PackageRuntime", () =
 
     try {
       // 1. 默认原始纯文本输出
-      await runtime.run([
+      await runtime.dispatch([
         "run",
         "greet",
         '--input={"name":"Alice"}',
@@ -111,7 +111,7 @@ describe("StandaloneRuntime 独立二进制运行时委托 PackageRuntime", () =
 
       // 2. --json 机器信封输出
       logs.length = 0;
-      await runtime.run([
+      await runtime.dispatch([
         "run",
         "greet",
         '--input={"name":"Alice"}',
@@ -134,23 +134,23 @@ describe("StandaloneRuntime 独立二进制运行时委托 PackageRuntime", () =
 
     try {
       // set
-      await runtime.run(["config", "set", "theme", '"dark"', `--data-dir=${tmpDir}`]);
+      await runtime.dispatch(["config", "set", "theme", '"dark"', `--data-dir=${tmpDir}`]);
       expect(logs.some((l) => l.includes("Config 'theme' updated"))).toBe(true);
 
       // get
       logs.length = 0;
-      await runtime.run(["config", "get", "theme", `--data-dir=${tmpDir}`]);
+      await runtime.dispatch(["config", "get", "theme", `--data-dir=${tmpDir}`]);
       expect(logs.some((l) => l.includes('"dark"'))).toBe(true);
 
       // list
       logs.length = 0;
-      await runtime.run(["config", "list", `--data-dir=${tmpDir}`]);
+      await runtime.dispatch(["config", "list", `--data-dir=${tmpDir}`]);
       const listParsed = JSON.parse(logs.join("\n"));
       expect(listParsed.theme).toBe("dark");
 
       // delete
       logs.length = 0;
-      await runtime.run(["config", "delete", "theme", `--data-dir=${tmpDir}`]);
+      await runtime.dispatch(["config", "delete", "theme", `--data-dir=${tmpDir}`]);
       expect(logs.some((l) => l.includes("Config 'theme' deleted"))).toBe(true);
     } finally {
       console.log = origLog;
@@ -164,7 +164,7 @@ describe("StandaloneRuntime 独立二进制运行时委托 PackageRuntime", () =
 
     try {
       // set
-      await runtime.run([
+      await runtime.dispatch([
         "state",
         "set",
         "count",
@@ -176,7 +176,7 @@ describe("StandaloneRuntime 独立二进制运行时委托 PackageRuntime", () =
 
       // get
       logs.length = 0;
-      await runtime.run([
+      await runtime.dispatch([
         "state",
         "get",
         "count",
@@ -190,7 +190,7 @@ describe("StandaloneRuntime 独立二进制运行时委托 PackageRuntime", () =
 
       // list
       logs.length = 0;
-      await runtime.run([
+      await runtime.dispatch([
         "state",
         "list",
         "--namespace=session",
@@ -202,7 +202,7 @@ describe("StandaloneRuntime 独立二进制运行时委托 PackageRuntime", () =
 
       // delete
       logs.length = 0;
-      await runtime.run([
+      await runtime.dispatch([
         "state",
         "delete",
         "count",
@@ -213,7 +213,7 @@ describe("StandaloneRuntime 独立二进制运行时委托 PackageRuntime", () =
 
       // clear
       logs.length = 0;
-      await runtime.run([
+      await runtime.dispatch([
         "state",
         "clear",
         "--namespace=session",

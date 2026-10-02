@@ -1,6 +1,6 @@
 import type { ProcessAPI } from "@actiondock/sdk";
-import type { Clock } from "../runtime/clock";
-import type { ModuleLoader } from "../runtime/module-loader";
+import type { Clock } from "../storage/clock";
+import type { ModuleLoader } from "./module-loader";
 import type { RunsRetentionPolicy, RuntimeStorage } from "../storage/types";
 
 /**

@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import * as sdk from "@actiondock/sdk";
 import * as coreStorage from "../src/storage";
 import { resolveDatabasePath } from "../src/storage";
-import { createDefaultSqliteDriver } from "../src/storage/driver";
+import { NodeSqliteDriver } from "../src/storage/sqlite-driver";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
 
 describe("SqliteRuntimeStorage", () => {
@@ -157,7 +157,7 @@ describe("SqliteRuntimeStorage", () => {
           currentTime += ms;
         },
       };
-      const innerDriver = createDefaultSqliteDriver(":memory:");
+      const innerDriver = new NodeSqliteDriver(":memory:");
       // 包装驱动：仅拦截 DELETE FROM state 使其抛错，其余透传，
       // 保证读取路径正常而惰性删除路径可注入失败
       const failingDeleteDriver = {
@@ -264,7 +264,7 @@ describe("SqliteRuntimeStorage", () => {
       const tempDbPath = join(tmpdir(), `test-old-version-${Date.now()}.db`);
 
       // 创建版本 1 旧结构数据库
-      const rawDb = createDefaultSqliteDriver(tempDbPath);
+      const rawDb = new NodeSqliteDriver(tempDbPath);
       rawDb.exec(`
         CREATE TABLE IF NOT EXISTS config (
           package_id TEXT NOT NULL,
@@ -286,7 +286,7 @@ describe("SqliteRuntimeStorage", () => {
       }).toThrow(/UNSUPPORTED_STORAGE_SCHEMA/);
 
       // 验证原数据库未被修改且保留原版本号
-      const checkDb = createDefaultSqliteDriver(tempDbPath);
+      const checkDb = new NodeSqliteDriver(tempDbPath);
       const row = checkDb.prepare("PRAGMA user_version;").get() as any;
       expect(row.user_version).toBe(1);
       checkDb.close();
@@ -300,7 +300,7 @@ describe("SqliteRuntimeStorage", () => {
       const tempDbPath = join(tmpdir(), `test-incompatible-${Date.now()}.db`);
 
       // 手动创建未来不兼容版本数据库
-      const rawDb = createDefaultSqliteDriver(tempDbPath);
+      const rawDb = new NodeSqliteDriver(tempDbPath);
       rawDb.exec(`
         CREATE TABLE config (
           package_id TEXT NOT NULL,
@@ -322,7 +322,7 @@ describe("SqliteRuntimeStorage", () => {
       }).toThrow(/UNSUPPORTED_STORAGE_SCHEMA/);
 
       // 验证原数据库文件与 user_version 保持未修改
-      const checkDb = createDefaultSqliteDriver(tempDbPath);
+      const checkDb = new NodeSqliteDriver(tempDbPath);
       const row = checkDb.prepare("PRAGMA user_version;").get() as any;
       expect(row.user_version).toBe(999);
       checkDb.close();
@@ -547,43 +547,6 @@ describe("SqliteRuntimeStorage", () => {
     });
   });
 
-  describe("createLazyStorage", () => {
-    it("defers initialization until properties or methods are accessed", () => {
-      let initialized = false;
-      const fakeStorage = {
-        packageId: "lazy-pkg",
-        isOpen: true,
-        closed: false,
-        getConfig: (k: string) => (k === "FOO" ? "BAR" : undefined),
-        close: () => {
-          fakeStorage.isOpen = false;
-          fakeStorage.closed = true;
-        },
-      } as any;
-
-      const lazy = coreStorage.createLazyStorage(() => {
-        initialized = true;
-        return fakeStorage;
-      });
-
-      expect(initialized).toBe(false);
-      expect(lazy.isOpen).toBe(false);
-      expect(initialized).toBe(false);
-
-      // close on uninitialized proxy is a no-op and does not trigger initialization
-      lazy.close();
-      expect(initialized).toBe(false);
-
-      // Calling a method triggers initialization
-      const val = lazy.getConfig("FOO");
-      expect(initialized).toBe(true);
-      expect(val).toBe("BAR");
-      expect(lazy.isOpen).toBe(true);
-
-      lazy.close();
-      expect(fakeStorage.closed).toBe(true);
-    });
-  });
 
   describe("Symlink support in resolveDatabasePath", () => {
     it("allows dataDir or customHome with symlinked ancestor without throwing boundary escape error", async () => {

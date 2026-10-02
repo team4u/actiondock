@@ -25,31 +25,11 @@ export interface CursorPosition {
 }
 
 function toBase64Url(str: string): string {
-  if (typeof Buffer !== "undefined") {
-    return Buffer.from(str, "utf8").toString("base64url");
-  }
-  const bytes = new TextEncoder().encode(str);
-  let binary = "";
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return Buffer.from(str, "utf8").toString("base64url");
 }
 
 function fromBase64Url(base64url: string): string {
-  if (typeof Buffer !== "undefined") {
-    return Buffer.from(base64url, "base64url").toString("utf8");
-  }
-  let base64 = base64url.replace(/-/g, "+").replace(/_/g, "/");
-  while (base64.length % 4) {
-    base64 += "=";
-  }
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return new TextDecoder("utf-8").decode(bytes);
+  return Buffer.from(base64url, "base64url").toString("utf8");
 }
 
 /**

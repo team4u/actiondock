@@ -5,7 +5,6 @@ export * from "./body";
 export * from "./routes";
 export * from "./server";
 export * from "./mcp-endpoint";
-export * from "./dispatcher";
 export * from "./http-server";
 export { serveParentIpc } from "../ipc/host";
 export { IpcActionDockService } from "../ipc/service";
@@ -21,9 +20,6 @@ export {
   createActionDockHost,
   DefaultActionDockHost,
 } from "../host/host";
-export {
-  LocalActionDockService,
-} from "../service/local";
 export {
   RemoteActionDockService,
 } from "../service/remote";

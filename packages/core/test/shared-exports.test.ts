@@ -7,10 +7,7 @@ import {
   verifyBearerToken,
   DEFAULT_MAX_BODY_BYTES,
 } from "@actiondock/core/server";
-import {
-  createNonClosingStorageView,
-  NodeProcessExecutor,
-} from "@actiondock/core/package";
+import { createNonClosingStorageView } from "@actiondock/core/package";
 
 describe("共享导出面验证", () => {
   it("server 子路径导出 readBodyWithLimit 与 RequestTooLargeError", () => {
@@ -21,9 +18,8 @@ describe("共享导出面验证", () => {
     expect(DEFAULT_MAX_BODY_BYTES).toBe(1024 * 1024);
   });
 
-  it("package 子路径导出 createNonClosingStorageView 与 NodeProcessExecutor", () => {
+  it("package 子路径导出 createNonClosingStorageView", () => {
     expect(typeof createNonClosingStorageView).toBe("function");
-    expect(typeof NodeProcessExecutor).toBe("function");
   });
 
   it("createNonClosingStorageView 拦截 close 并转发其余成员", () => {
@@ -117,12 +113,5 @@ describe("共享导出面验证", () => {
     }));
     expect(ok!.headers.get("Access-Control-Allow-Origin")).toBe("https://app.example");
     expect(ok!.headers.get("X-Origin")).toBe("mcp");
-  });
-
-  it("NodeProcessExecutor 可实例化并执行命令", async () => {
-    const executor = new NodeProcessExecutor();
-    const result = await executor.exec("echo", ["hello"]);
-    expect(result.ok).toBe(true);
-    expect(result.stdout).toBe("hello");
   });
 });

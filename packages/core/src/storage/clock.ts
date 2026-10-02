@@ -1,7 +1,7 @@
 /**
  * 统一时间与时钟基础契约。
  *
- * 单一事实源：Clock 接口与 SystemClock 实现定义于此，runtime/clock.ts 与
+ * 单一事实源：Clock 接口与 SystemClock 实现定义于此，
  * storage/types.ts 一律从本文件引用或转发，禁止重复实现。
  */
 

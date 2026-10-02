@@ -2,240 +2,112 @@ import { createHash } from "node:crypto";
 
 /**
  * 解析 JSON 文本并在检测到重复键时抛出错误。
- * 遵循 RFC 8785 清单校验规范：解析阶段必须率先拦截并拒绝重复键。
+ * 遵循 RFC 8785 清单校验规范:解析阶段必须率先拦截并拒绝重复键。
+ *
+ * 实现策略:JSON.parse 主解析 + 轻量键名扫描器做重复键检测。
+ * 扫描器以状态机遍历原始文本,仅在对象键位置(冒号前的字符串字面量)记录键名,
+ * 同一对象层级内出现重复键名即抛错;字符串内部与转义字符不参与键名提取。
  */
 export function parseJsonWithoutDuplicates<T = unknown>(jsonText: string): T {
-  let pos = 0;
+  detectDuplicateKeys(jsonText);
+  return JSON.parse(jsonText) as T;
+}
+
+/**
+ * 扫描 JSON 文本,检测同一对象层级内的重复键名。
+ *
+ * 状态机只关心「是否处于字符串内」与「对象层级」:
+ * - 遇到未转义引号时切换 inString 状态;
+ * - 字符串闭合后若紧邻(跳过空白)冒号,则该字符串是键:提取键名登记到当前层级;
+ * - 对象层级入栈出栈维护各自已见键集合。
+ */
+function detectDuplicateKeys(jsonText: string): void {
   const len = jsonText.length;
+  let pos = 0;
+  let inString = false;
+  let depth = -1;
+  // 每层对象的已见键集合;keyStartStack 记录每个未闭合字符串字面量的起点
+  const seenPerDepth: Set<string>[] = [];
+  const keyStartStack: number[] = [];
 
-  function skipWhitespace(): void {
-    while (pos < len) {
-      const ch = jsonText.charCodeAt(pos);
-      if (ch === 0x20 || ch === 0x09 || ch === 0x0a || ch === 0x0d) {
-        pos++;
-      } else {
-        break;
-      }
-    }
-  }
-
-  function parseString(): string {
-    if (jsonText[pos] !== '"') {
-      throw new SyntaxError(`Expected string at position ${pos}`);
-    }
-    const start = pos;
-    pos++; // 跳过开头的引号
-    let result = "";
-    while (pos < len) {
-      const ch = jsonText[pos];
-      if (ch === '"') {
-        pos++; // 跳过结束的引号
-        return result;
-      }
-      if (ch === "\\") {
-        pos++;
-        if (pos >= len) {
-          throw new SyntaxError(`Unterminated escape sequence in string at ${pos}`);
-        }
-        const esc = jsonText[pos];
-        if (esc === '"' || esc === "\\" || esc === "/") {
-          result += esc;
-          pos++;
-        } else if (esc === "b") {
-          result += "\b";
-          pos++;
-        } else if (esc === "f") {
-          result += "\f";
-          pos++;
-        } else if (esc === "n") {
-          result += "\n";
-          pos++;
-        } else if (esc === "r") {
-          result += "\r";
-          pos++;
-        } else if (esc === "t") {
-          result += "\t";
-          pos++;
-        } else if (esc === "u") {
-          pos++;
-          const hex = jsonText.slice(pos, pos + 4);
-          if (hex.length < 4 || !/^[0-9a-fA-F]{4}$/.test(hex)) {
-            throw new SyntaxError(`Invalid unicode escape sequence \\u${hex} at ${pos}`);
-          }
-          result += String.fromCharCode(parseInt(hex, 16));
-          pos += 4;
-        } else {
-          throw new SyntaxError(`Invalid escape character '\\${esc}' at ${pos}`);
-        }
-      } else {
-        result += ch;
-        pos++;
-      }
-    }
-    throw new SyntaxError(`Unterminated string starting at ${start}`);
-  }
-
-  function parseNumber(): number {
-    const start = pos;
-    if (jsonText[pos] === "-") {
-      pos++;
-    }
-    if (pos >= len) {
-      throw new SyntaxError(`Expected digits at position ${pos}`);
-    }
-    if (jsonText[pos] === "0") {
-      pos++;
-    } else if (jsonText[pos] >= "1" && jsonText[pos] <= "9") {
-      while (pos < len && jsonText[pos] >= "0" && jsonText[pos] <= "9") {
-        pos++;
-      }
-    } else {
-      throw new SyntaxError(`Invalid number at position ${pos}`);
-    }
-
-    if (pos < len && jsonText[pos] === ".") {
-      pos++;
-      if (pos >= len || jsonText[pos] < "0" || jsonText[pos] > "9") {
-        throw new SyntaxError(`Expected digit after decimal point at position ${pos}`);
-      }
-      while (pos < len && jsonText[pos] >= "0" && jsonText[pos] <= "9") {
-        pos++;
-      }
-    }
-
-    if (pos < len && (jsonText[pos] === "e" || jsonText[pos] === "E")) {
-      pos++;
-      if (pos < len && (jsonText[pos] === "+" || jsonText[pos] === "-")) {
-        pos++;
-      }
-      if (pos >= len || jsonText[pos] < "0" || jsonText[pos] > "9") {
-        throw new SyntaxError(`Expected digit after exponent at position ${pos}`);
-      }
-      while (pos < len && jsonText[pos] >= "0" && jsonText[pos] <= "9") {
-        pos++;
-      }
-    }
-
-    const numStr = jsonText.slice(start, pos);
-    const num = Number(numStr);
-    if (!Number.isFinite(num)) {
-      throw new SyntaxError(`Number out of range: ${numStr}`);
-    }
-    return num;
-  }
-
-  function parseObject(): Record<string, unknown> {
-    const obj: Record<string, unknown> = {};
-    const keys = new Set<string>();
-    pos++; // 跳过 '{'
-    skipWhitespace();
-
-    if (pos < len && jsonText[pos] === "}") {
-      pos++;
-      return obj;
-    }
-
-    while (pos < len) {
-      skipWhitespace();
-      if (jsonText[pos] !== '"') {
-        throw new SyntaxError(`Expected string key in object at position ${pos}`);
-      }
-      const key = parseString();
-      if (keys.has(key)) {
-        throw new Error(`Duplicate key '${key}' detected in JSON`);
-      }
-      keys.add(key);
-
-      skipWhitespace();
-      if (pos >= len || jsonText[pos] !== ":") {
-        throw new SyntaxError(`Expected ':' after key '${key}' at position ${pos}`);
-      }
-      pos++; // 跳过 ':'
-
-      skipWhitespace();
-      const val = parseValue();
-      obj[key] = val;
-
-      skipWhitespace();
-      if (pos >= len) {
-        throw new SyntaxError("Unexpected end of JSON in object");
-      }
-      if (jsonText[pos] === ",") {
-        pos++;
-        skipWhitespace();
-      } else if (jsonText[pos] === "}") {
-        pos++;
-        return obj;
-      } else {
-        throw new SyntaxError(`Expected ',' or '}' in object at position ${pos}`);
-      }
-    }
-    throw new SyntaxError("Unterminated object in JSON");
-  }
-
-  function parseArray(): unknown[] {
-    const arr: unknown[] = [];
-    pos++; // 跳过 '['
-    skipWhitespace();
-
-    if (pos < len && jsonText[pos] === "]") {
-      pos++;
-      return arr;
-    }
-
-    while (pos < len) {
-      skipWhitespace();
-      const val = parseValue();
-      arr.push(val);
-
-      skipWhitespace();
-      if (pos >= len) {
-        throw new SyntaxError("Unexpected end of JSON in array");
-      }
-      if (jsonText[pos] === ",") {
-        pos++;
-        skipWhitespace();
-      } else if (jsonText[pos] === "]") {
-        pos++;
-        return arr;
-      } else {
-        throw new SyntaxError(`Expected ',' or ']' in array at position ${pos}`);
-      }
-    }
-    throw new SyntaxError("Unterminated array in JSON");
-  }
-
-  function parseValue(): unknown {
-    skipWhitespace();
-    if (pos >= len) {
-      throw new SyntaxError("Unexpected end of JSON input");
-    }
+  while (pos < len) {
     const ch = jsonText[pos];
-    if (ch === "{") return parseObject();
-    if (ch === "[") return parseArray();
-    if (ch === '"') return parseString();
-    if (ch === "-" || (ch >= "0" && ch <= "9")) return parseNumber();
-    if (jsonText.startsWith("true", pos)) {
-      pos += 4;
-      return true;
-    }
-    if (jsonText.startsWith("false", pos)) {
-      pos += 5;
-      return false;
-    }
-    if (jsonText.startsWith("null", pos)) {
-      pos += 4;
-      return null;
-    }
-    throw new SyntaxError(`Unexpected token '${ch}' at position ${pos}`);
-  }
 
-  const result = parseValue() as T;
-  skipWhitespace();
-  if (pos < len) {
-    throw new SyntaxError(`Unexpected trailing characters at position ${pos}`);
+    if (inString) {
+      if (ch === "\\") {
+        pos += 2;
+        continue;
+      }
+      if (ch === '"') {
+        inString = false;
+        const start = keyStartStack.pop();
+        // 判断该字符串是否为对象键:向后跳过空白,若紧邻冒号则为键
+        let look = pos + 1;
+        while (look < len && /\s/.test(jsonText[look])) look++;
+        if (start !== undefined && look < len && jsonText[look] === ":") {
+          registerKey(jsonText, start, pos, seenPerDepth, depth);
+        }
+      }
+      pos++;
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+      keyStartStack.push(pos + 1);
+      pos++;
+      continue;
+    }
+
+    if (ch === "{") {
+      depth++;
+      if (seenPerDepth.length <= depth) seenPerDepth.push(new Set());
+      else seenPerDepth[depth] = new Set();
+      pos++;
+      continue;
+    }
+
+    if (ch === "}") {
+      depth--;
+      pos++;
+      continue;
+    }
+
+    pos++;
   }
-  return result;
+}
+
+/**
+ * 登记一个对象键:回溯提取键名,在当前层级做重复检测。
+ */
+function registerKey(
+  jsonText: string,
+  start: number,
+  quoteEndPos: number,
+  seenPerDepth: Set<string>[],
+  depth: number
+): void {
+  if (depth < 0) return;
+  // quoteEndPos 是闭合引号的位置,键内容为 [start, quoteEndPos)
+  if (quoteEndPos <= start) return;
+  const raw = jsonText.slice(start, quoteEndPos);
+  const key = unescapeJsonKey(raw);
+  const seen = seenPerDepth[depth];
+  if (seen.has(key)) {
+    throw new SyntaxError(`Duplicate key '${key}' in object at depth ${depth}`);
+  }
+  seen.add(key);
+}
+
+/**
+ * 反转义 JSON 键名字符串字面量内容。
+ */
+function unescapeJsonKey(raw: string): string {
+  try {
+    return JSON.parse(`"${raw}"`) as string;
+  } catch {
+    return raw;
+  }
 }
 
 /**

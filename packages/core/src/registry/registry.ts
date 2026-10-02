@@ -207,23 +207,7 @@ function buildUnifiedPayload(data: GlobalRegistryData): object {
 let tmpFileSeq = 0;
 
 /**
- * 原子写入注册表：临时文件写盘后 rename，持锁执行，避免并发撕裂。
- */
-export async function saveRegistry(data: GlobalRegistryData, customHome?: string): Promise<void> {
-  const filePath = getRegistryFilePath(customHome);
-  ensureRegistryDir(filePath);
-
-  const unifiedData = buildUnifiedPayload(data);
-  const payload = JSON.stringify(unifiedData, null, 2) + "\n";
-
-  await withRegistryLock(filePath, async () => {
-    await writeRegistryPayloadLocked(filePath, payload);
-  });
-}
-
-/**
- * 在已持有注册表锁的上下文中直接原子落盘（供复合读改写流程使用，
- * 避免与 saveRegistry 的锁重入死等）；调用方必须已持有对应锁。
+ * 在已持有注册表锁的上下文中直接原子落盘（供复合读改写流程使用）；调用方必须已持有对应锁。
  */
 export async function writeRegistryLocked(data: GlobalRegistryData, customHome?: string): Promise<void> {
   const filePath = getRegistryFilePath(customHome);

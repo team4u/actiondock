@@ -17,7 +17,6 @@ import {
   INPUT_PATH_CONFLICT,
   FLAT_INPUT_LIMIT_EXCEEDED,
   INPUT_CONFLICT,
-  buildActionInputAdvice,
   formatActionDetail,
   invalidJson,
   inputFileNotFound,
@@ -858,156 +857,7 @@ describe("Flat JsonValue Encoding v1", () => {
   });
 
   describe("编码顾问（Encoding Advisor）与格式化渲染", () => {
-    it("根模式为 object 且有合法属性时返回 flatSupported: true 并生成正确建议", () => {
-      const schema = {
-        type: "object",
-        properties: {
-          name: { type: "string", description: "用户名称" },
-          age: { type: "number", description: "年龄" },
-          active: { type: "boolean", description: "是否激活" },
-          tags: {
-            type: "array",
-            items: { type: "string" },
-            description: "标签列表",
-          },
-          meta: {
-            type: "object",
-            description: "元数据",
-          },
-        },
-        required: ["name"],
-      };
 
-      const advice = buildActionInputAdvice(schema);
-      expect(advice.flatSupported).toBe(true);
-      expect(advice.hasFlatFields).toBe(true);
-      expect(advice.requiredTemplates).toEqual(["name=TEXT"]);
-      expect(advice.optionalTemplates).toContain("age:=NUMBER");
-      expect(advice.optionalTemplates).toContain("active:=BOOLEAN");
-      expect(advice.optionalTemplates).toContain("tags.0=TEXT");
-      expect(advice.optionalTemplates).toContain("meta:=JSON");
-
-      const metaField = advice.fields.find((f) => f.path === "meta");
-      expect(metaField).toBeDefined();
-      expect(metaField?.flatSafe).toBe(true);
-      expect(metaField?.assignmentTemplate).toBe("meta:=JSON");
-      expect(metaField?.hint).toBe("大型结构建议使用 --input-file");
-    });
-
-    it("根模式为 array 时降级提示使用 --input-file", () => {
-      const schema = {
-        type: "array",
-        items: { type: "string" },
-      };
-
-      const advice = buildActionInputAdvice(schema);
-      expect(advice.flatSupported).toBe(false);
-      expect(advice.hasFlatFields).toBe(false);
-      expect(advice.notes.some((n) => n.includes("--input-file"))).toBe(true);
-    });
-
-    it("根模式为基本类型时降级提示使用 --input-file", () => {
-      const schema = {
-        type: "string",
-      };
-
-      const advice = buildActionInputAdvice(schema);
-      expect(advice.flatSupported).toBe(false);
-      expect(advice.hasFlatFields).toBe(false);
-      expect(advice.notes.some((n) => n.includes("--input-file"))).toBe(true);
-    });
-
-    it("根模式为无声明属性对象时降级提示使用 --input-file", () => {
-      const schema = {
-        type: "object",
-        properties: {},
-      };
-
-      const advice = buildActionInputAdvice(schema);
-      expect(advice.flatSupported).toBe(false);
-      expect(advice.hasFlatFields).toBe(false);
-      expect(advice.notes.some((n) => n.includes("--input-file"))).toBe(true);
-    });
-
-    it("属性名包含非安全字符时跳过扁平建议并添加提示", () => {
-      const schema = {
-        type: "object",
-        properties: {
-          "user name": { type: "string" },
-          "valid_key": { type: "string" },
-        },
-      };
-
-      const advice = buildActionInputAdvice(schema);
-      expect(advice.flatSupported).toBe(true);
-      expect(advice.hasFlatFields).toBe(true);
-      expect(advice.optionalTemplates).toContain("valid_key=TEXT");
-      expect(advice.optionalTemplates).not.toContain("user name=TEXT");
-      const unsafeField = advice.fields.find((f) => f.path === "user name");
-      expect(unsafeField?.flatSafe).toBe(false);
-      expect(unsafeField?.assignmentTemplate).toBeUndefined();
-      expect(advice.notes.some((n) => n.includes("user name"))).toBe(true);
-    });
-
-    it("禁止属性（__proto__ 等）不产出 flatSafe 赋值模板，与解析器判定一致", () => {
-      // 回归：旧引擎曾用独立正则判定 flatSafe，未叠加禁止属性过滤，
-      // 会为 __proto__ 生成赋值模板，而解析器会拒绝该属性，建议与解析自相矛盾
-      for (const forbidden of ["__proto__", "constructor", "prototype"]) {
-        const schema = {
-          type: "object",
-          properties: {
-            [forbidden]: { type: "string" },
-            normal_field: { type: "string" },
-          },
-        };
-
-        const advice = buildActionInputAdvice(schema);
-
-        const forbiddenField = advice.fields.find((f) => f.path === forbidden);
-        expect(forbiddenField?.flatSafe).toBe(false);
-        expect(forbiddenField?.assignmentTemplate).toBeUndefined();
-
-        // 任何模板清单都不包含禁止属性的赋值形态
-        const allTemplates = [...advice.requiredTemplates, ...advice.optionalTemplates];
-        expect(allTemplates.some((t) => t.startsWith(`${forbidden}=`) || t.startsWith(`${forbidden}:=`))).toBe(false);
-        expect(allTemplates.some((t) => t.startsWith(`${forbidden}.`))).toBe(false);
-
-        // 正常属性不受影响，仍可扁平赋值
-        expect(advice.optionalTemplates).toContain("normal_field=TEXT");
-      }
-    });
-
-    it("禁止属性作为 required 字段时 flatSupported 为 false", () => {
-      const schema = {
-        type: "object",
-        properties: {
-          __proto__: { type: "string" },
-          normal_field: { type: "string" },
-        },
-        required: ["__proto__"],
-      };
-
-      const advice = buildActionInputAdvice(schema);
-      expect(advice.flatSupported).toBe(false);
-      expect(advice.hasFlatFields).toBe(true);
-      expect(advice.requiredTemplates).toEqual([]);
-    });
-
-    it("含有非 flat-safe required 字段时 flatSupported 为 false", () => {
-      const schema = {
-        type: "object",
-        properties: {
-          "user name": { type: "string" },
-          valid_key: { type: "string" },
-        },
-        required: ["user name"],
-      };
-
-      const advice = buildActionInputAdvice(schema);
-      expect(advice.flatSupported).toBe(false);
-      expect(advice.hasFlatFields).toBe(true);
-      expect(advice.notes.some((n) => n.includes("user name"))).toBe(true);
-    });
 
     it("展示扁平推荐模式与建议赋值操作符", () => {
       const formatted = formatActionDetail({
@@ -1066,29 +916,6 @@ describe("Flat JsonValue Encoding v1", () => {
       expect(formatted).toContain("Assignments:\n  title=");
     });
 
-    it("布尔模式 false 返回拒绝所有输入建议报告", () => {
-      const advice = buildActionInputAdvice(false);
-      expect(advice.flatSupported).toBe(false);
-      expect(advice.hasFlatFields).toBe(false);
-      expect(advice.fields).toEqual([]);
-      expect(advice.requiredTemplates).toEqual([]);
-      expect(advice.optionalTemplates).toEqual([]);
-      expect(advice.notes).toEqual([
-        "布尔模式 false：拒绝所有输入，任何调用参数均判定为非法",
-      ]);
-    });
-
-    it("布尔模式 true 返回接受任意合法输入建议报告", () => {
-      const advice = buildActionInputAdvice(true);
-      expect(advice.flatSupported).toBe(false);
-      expect(advice.hasFlatFields).toBe(false);
-      expect(advice.fields).toEqual([]);
-      expect(advice.requiredTemplates).toEqual([]);
-      expect(advice.optionalTemplates).toEqual([]);
-      expect(advice.notes).toEqual([
-        "布尔模式 true：接受任意合法 JSON 输入；调用时无需指定必填参数，非对象根输入请使用 --input-file 或 --input",
-      ]);
-    });
 
     it("formatActionDetail 正确渲染布尔模式 false", () => {
       const formatted = formatActionDetail({

@@ -21,7 +21,6 @@ import { findProjectRoot, loadProjectConfig } from "../project/loader";
 import type { ProjectConfig } from "../project/types";
 import { RuntimeConfig } from "../runtime/context";
 import { normalizeActionCollection } from "../runtime/action-collection";
-import { createLazyStorage } from "../storage";
 import { isSecretConfigKey, sanitizeConfigDefinitions } from "../storage/mask";
 import { decodeStateKey, SqliteRuntimeStorage } from "../storage/sqlite";
 import type { RuntimeStorage } from "../storage/types";
@@ -139,15 +138,7 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
         recoverOrphans: options.recoverOrphans !== false,
       };
 
-      const initStorage = () => {
-        return this.platform.storage.createStorage(this.packageId, storageOpts);
-      };
-
-      if (options.inMemory) {
-        this.storage = initStorage();
-      } else {
-        this.storage = createLazyStorage(initStorage);
-      }
+      this.storage = this.platform.storage.createStorage(this.packageId, storageOpts);
     }
 
     // 5. 确定全局存储实例
@@ -169,11 +160,7 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
         recoverOrphans: options.recoverOrphans !== false,
       };
 
-      const initGlobalStorage = () => {
-        return this.platform.storage.createGlobalStorage(globalOpts);
-      };
-
-      this.globalStorage = createLazyStorage(initGlobalStorage);
+      this.globalStorage = this.platform.storage.createGlobalStorage(globalOpts);
       this.injectedGlobalStorage = false;
     }
 
@@ -514,12 +501,18 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
   }
 
   /**
-   * 状态作用域统一解析辅助函数（单一事实源）。
-   *
-   * 完成重载消歧后委托 mergeStateScope 计算最终生效的命名空间：
-   * - (actionId, key, options) 形态：位置 actionId 参与冲突校验；
-   * - (key, options) 扁平形态：首参是状态键，options.actionId 属合法显式指定。
+   * 将可能携带命名空间前缀的状态键解码为 (namespace, key)。
+   * 解码失败时按无命名空间处理。
    */
+  private decodeStateKeyParts(key: string): { namespace: string; key: string } {
+    try {
+      const decoded = decodeStateKey(key);
+      return { namespace: decoded.namespace, key: decoded.key };
+    } catch {
+      return { namespace: "", key };
+    }
+  }
+
   private resolveStateScope(
     actionIdOrKey: string | undefined,
     keyOrOptions: string | StateScopeOptions | undefined,
@@ -648,16 +641,8 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
       return;
     }
 
-    let targetKey = key;
-    let targetNs = "";
-    try {
-      const decoded = decodeStateKey(key);
-      targetNs = decoded.namespace;
-      targetKey = decoded.key;
-    } catch {
-      targetNs = "";
-    }
-    await this.storage.setState<T>(targetNs, targetKey, value, opts?.ttl);
+    const target = this.decodeStateKeyParts(key);
+    await this.storage.setState<T>(target.namespace, target.key, value, opts?.ttl);
   }
 
   deleteState(
@@ -681,16 +666,8 @@ export class DefaultPackageRuntime implements HostManagedPackageRuntime {
       return await this.storage.deleteState(ns, key);
     }
 
-    let targetKey = key;
-    let targetNs = "";
-    try {
-      const decoded = decodeStateKey(key);
-      targetNs = decoded.namespace;
-      targetKey = decoded.key;
-    } catch {
-      targetNs = "";
-    }
-    return await this.storage.deleteState(targetNs, targetKey);
+    const target = this.decodeStateKeyParts(key);
+    return await this.storage.deleteState(target.namespace, target.key);
   }
 
   async getActionState<T extends JsonValue = JsonValue>(

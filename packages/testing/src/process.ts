@@ -1,11 +1,13 @@
+import { spawn } from "node:child_process";
 import {
   PROCESS_TIMEOUT,
   PROCESS_CANCELLED,
   PROCESS_FAILED,
+  ProcessError,
 } from "@actiondock/core";
 import {
   ProcessManager,
-  NodeProcessExecutor,
+  findExecutable,
   type ProcessDriver,
   type ProcessExecutor,
   type ProcessOwner,
@@ -14,18 +16,14 @@ import {
 import {
   encodeBytes,
   type CallOptions,
-  type ControlGrant,
   type OperationReceipt,
   type OutputChunk,
-  type ProcessAcquireInput,
   type ProcessAPI,
   type ProcessControlInput,
-  type ProcessExecOptions,
   type ProcessInfo,
   type ProcessListInput,
   type ProcessListResult,
   type ProcessReadInput,
-  type ProcessResult,
   type ProcessRunInput,
   type ProcessRunResult,
   type ProcessStartInput,
@@ -37,40 +35,46 @@ import {
 } from "@actiondock/sdk";
 import { FakeProcessDriver } from "./process-driver";
 
+export { findExecutable };
+
 /**
  * 模拟命令匹配器。
  */
 export type CommandMatcher =
   | string
   | RegExp
-  | ((command: string, args: string[], options: ProcessExecOptions) => boolean);
+  | ((command: string, args: string[], input: ProcessRunInput) => boolean);
 
 /**
  * 模拟进程执行结果选项。
  */
 export interface MockProcessResultOptions {
-  /** 命令是否执行成功 */
+  /** 命令是否执行成功（未显式提供 exitCode 时作为置 0 或 1 的依据） */
   ok?: boolean;
   /** 退出状态码 */
   exitCode?: number | null;
   /** 终止信号名称 */
-  signal?: string;
-  /** 标准输出内容 */
+  signal?: string | null;
+  /** 标准输出文本 */
   stdout?: string;
-  /** 标准错误内容 */
+  /** 标准错误文本 */
   stderr?: string;
-  /** 原始字节数组输出 */
+  /** 原始字节输出 */
   raw?: Uint8Array;
-  /** 是否标记为超时 */
+  /** 结构化输出块列表 */
+  chunks?: OutputChunk[];
+  /** 进程退出结构 */
+  exit?: { code: number | null; signal: string | null };
+  /** 是否标记为超时（为 true 时抛出 PROCESS_TIMEOUT 异常） */
   timedOut?: boolean;
-  /** 是否标记为已取消 */
+  /** 是否标记为已取消（为 true 时抛出 PROCESS_CANCELLED 异常） */
   cancelled?: boolean;
-  /** 执行耗时毫秒数 */
-  durationMs?: number;
-  /** 运行时结构化错误 */
+  /** 运行时结构化错误（提供时抛出相应异常） */
   error?: RuntimeError;
   /** 模拟执行延迟毫秒数 */
   delayMs?: number;
+  /** 输出是否标记为截断 */
+  truncated?: boolean;
 }
 
 /**
@@ -79,11 +83,11 @@ export interface MockProcessResultOptions {
 export type MockProcessHandler = (
   command: string,
   args: string[],
-  options: ProcessExecOptions
+  input: ProcessRunInput
 ) =>
   | MockProcessResultOptions
-  | ProcessResult
-  | Promise<MockProcessResultOptions | ProcessResult>;
+  | ProcessRunResult
+  | Promise<MockProcessResultOptions | ProcessRunResult>;
 
 /**
  * 已记录的命令调用历史条目。
@@ -93,8 +97,8 @@ export interface ProcessCall {
   command: string;
   /** 执行参数列表 */
   args: string[];
-  /** 执行选项配置 */
-  options: ProcessExecOptions;
+  /** 运行输入规范 */
+  input: ProcessRunInput;
   /** 调用发生时的时间戳 */
   timestamp: number;
 }
@@ -108,7 +112,7 @@ interface RegisteredMock {
  * 模拟进程执行器构造选项。
  */
 export interface MockProcessExecutorOptions {
-  /** 未命中任何模拟规则时是否回退到真实子进程执行（默认 false，未命中即抛错） */
+  /** 未命中任何模拟规则时是否回退到真实子进程执行（默认 false） */
   fallbackToReal?: boolean;
   /** 可选注入的底层进程驱动（默认使用 FakeProcessDriver） */
   driver?: ProcessDriver;
@@ -121,22 +125,165 @@ export interface MockProcessExecutorOptions {
 }
 
 /**
- * fallbackToReal 真实回退共享执行器。
- *
- * 未命中模拟规则且显式开启真实回退时直接委托 core 执行器：进程组派生、
- * 两级终止（SIGTERM 后宽限升级 SIGKILL）、AbortSignal 全程生效与输出上限
- * 截断等关键语义与生产路径完全同源，返回结构直接满足 ProcessResult 契约，
- * 无需任何适配层。
+ * 基于 node:child_process spawn 的原生真实命令执行回退。
  */
-const realExecutor = new NodeProcessExecutor();
+async function executeRealProcess(
+  input: ProcessRunInput,
+  call?: CallOptions
+): Promise<ProcessRunResult> {
+  const executable = input.spec.executable;
+  const args = input.spec.args ?? [];
+  const maxOutputBytes = input.maxOutputBytes ?? 10 * 1024 * 1024;
+  const timeoutMs = input.timeoutMs ?? 0;
+
+  if (call?.signal?.aborted) {
+    throw call.signal.reason instanceof ProcessError
+      ? call.signal.reason
+      : new ProcessError(PROCESS_CANCELLED, "Process run was cancelled");
+  }
+
+  const env: Record<string, string | undefined> =
+    input.spec.env?.inherit === "none"
+      ? { ...(input.spec.env?.set ?? {}) }
+      : { ...process.env, ...(input.spec.env?.set ?? {}) };
+  if (input.spec.env?.unset) {
+    for (const key of input.spec.env.unset) {
+      delete env[key];
+    }
+  }
+
+  return new Promise<ProcessRunResult>((resolve, reject) => {
+    let settled = false;
+    let timedOut = false;
+    let cancelled = false;
+    let truncated = false;
+    let totalBytes = 0;
+    const chunks: OutputChunk[] = [];
+
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawn(executable, args, {
+        cwd: input.spec.cwd,
+        env: env as Record<string, string>,
+        stdio: ["ignore", "pipe", "pipe"],
+        detached: process.platform !== "win32",
+      });
+    } catch (err: any) {
+      reject(new ProcessError(PROCESS_FAILED, err?.message || String(err)));
+      return;
+    }
+
+    const terminateChild = () => {
+      if (child.pid && process.platform !== "win32") {
+        try {
+          process.kill(-child.pid, "SIGKILL");
+        } catch {
+          try {
+            child.kill("SIGKILL");
+          } catch {}
+        }
+      } else {
+        try {
+          child.kill("SIGKILL");
+        } catch {}
+      }
+    };
+
+    let timeoutTimer: NodeJS.Timeout | undefined;
+    if (timeoutMs > 0) {
+      timeoutTimer = setTimeout(() => {
+        timedOut = true;
+        terminateChild();
+      }, timeoutMs);
+      if (typeof (timeoutTimer as any)?.unref === "function") {
+        (timeoutTimer as any).unref();
+      }
+    }
+
+    let onAbort: (() => void) | undefined;
+    if (call?.signal) {
+      onAbort = () => {
+        cancelled = true;
+        terminateChild();
+      };
+      call.signal.addEventListener("abort", onAbort, { once: true });
+    }
+
+    const cleanup = () => {
+      if (timeoutTimer) {
+        clearTimeout(timeoutTimer);
+        timeoutTimer = undefined;
+      }
+      if (call?.signal && onAbort) {
+        call.signal.removeEventListener("abort", onAbort);
+        onAbort = undefined;
+      }
+    };
+
+    const appendChunk = (stream: "stdout" | "stderr", buf: Buffer) => {
+      if (truncated) return;
+      const len = buf.byteLength;
+      if (totalBytes + len > maxOutputBytes) {
+        const remaining = Math.max(0, maxOutputBytes - totalBytes);
+        if (remaining > 0) {
+          chunks.push({
+            stream,
+            data: encodeBytes(new Uint8Array(buf.buffer, buf.byteOffset, remaining)),
+          });
+        }
+        totalBytes = maxOutputBytes;
+        truncated = true;
+        terminateChild();
+      } else {
+        chunks.push({
+          stream,
+          data: encodeBytes(new Uint8Array(buf.buffer, buf.byteOffset, len)),
+        });
+        totalBytes += len;
+      }
+    };
+
+    child.stdout?.on("data", (data: Buffer) => appendChunk("stdout", data));
+    child.stderr?.on("data", (data: Buffer) => appendChunk("stderr", data));
+
+    child.on("error", (err) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new ProcessError(PROCESS_FAILED, err.message));
+    });
+
+    child.on("close", (code, signal) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+
+      if (timedOut) {
+        reject(new ProcessError(PROCESS_TIMEOUT, `Process exceeded timeout of ${timeoutMs}ms`));
+        return;
+      }
+      if (cancelled || call?.signal?.aborted) {
+        reject(
+          call?.signal?.reason instanceof ProcessError
+            ? call.signal.reason
+            : new ProcessError(PROCESS_CANCELLED, "Process run was cancelled")
+        );
+        return;
+      }
+
+      resolve({
+        exit: { code, signal: signal ?? null },
+        chunks,
+        truncated,
+      });
+    });
+  });
+}
 
 /**
  * 模拟进程执行器实现。
  * 遵循 ProcessExecutor / ProcessAPI 接口契约，支持预设命令响应、跟踪调用历史、
  * 并无缝接入 ProcessManager 与 FakeProcessDriver 支撑受管进程全生命周期。
- *
- * 默认不回退真实子进程执行：未命中任何模拟规则时抛出明确错误，避免测试中的拼写失误穿透到真实系统命令。
- * 如确需真实回退（例如集成本地 CLI），可显式传入 fallbackToReal: true。
  */
 export class MockProcessExecutor implements ProcessExecutor {
   private mocks: RegisteredMock[] = [];
@@ -177,207 +324,103 @@ export class MockProcessExecutor implements ProcessExecutor {
   }
 
   /**
-   * 执行外部命令并返回模拟结果。
-   *
-   * @param command 执行命令
-   * @param args 参数列表
-   * @param options 执行选项
-   */
-  async exec(
-    command: string,
-    args: string[] = [],
-    options: ProcessExecOptions = {}
-  ): Promise<ProcessResult> {
-    const startTime = Date.now();
-    this.calls.push({
-      command,
-      args: [...args],
-      options: { ...options },
-      timestamp: startTime,
-    });
-
-    // 检查调用前是否已中断：退出码语义与真实执行器对齐（信号终止即无退出码，为 null）
-    if (options.signal?.aborted) {
-      const res: ProcessResult = {
-        ok: false,
-        exitCode: null,
-        signal: "SIGTERM",
-        stdout: "",
-        stderr: "Command aborted before execution by signal",
-        raw: new Uint8Array(),
-        timedOut: false,
-        cancelled: true,
-        durationMs: 0,
-        error: {
-          code: "PROCESS_CANCELLED",
-          message: "Process was cancelled by AbortSignal",
-        },
-      };
-      if (options.throwOnError) {
-        throw new Error(res.stderr);
-      }
-      return res;
-    }
-
-    const matchedMock = this.findMock(command, args, options);
-    const fullCommandLine = [command, ...args].join(" ").trim();
-    let resolved: MockProcessResultOptions | ProcessResult;
-
-    if (!matchedMock) {
-      if (!this.fallbackToReal) {
-        throw new Error(
-          `MockProcessExecutor: 未命中任何模拟规则，且未开启 fallbackToReal，拒绝执行真实命令: ${fullCommandLine}\n已注册匹配器列表:\n${this.describeMatchers()}`
-        );
-      }
-      try {
-        // 直接委托 core 执行器：真实回退与生产语义完全一致（进程组派生、
-        // 两级终止、AbortSignal、输出上限），返回结构即 ProcessResult 契约
-        resolved = await realExecutor.exec(command, args, {
-          cwd: options.cwd,
-          env: options.env,
-          input: options.input,
-          timeoutMs: options.timeoutMs,
-          signal: options.signal,
-          encoding: options.encoding,
-          maxOutputBytes: options.maxOutputBytes,
-        });
-      } catch (err: any) {
-        // throwOnError 路径由 core 执行器直接抛出，此处统一还原为结果信封
-        resolved = {
-          ok: false,
-          exitCode: null,
-          stdout: "",
-          stderr: err?.message || String(err),
-          raw: new Uint8Array(),
-          durationMs: Date.now() - startTime,
-        };
-      }
-    } else if (typeof matchedMock.handler === "function") {
-      resolved = await matchedMock.handler(command, args, options);
-    } else {
-      resolved = matchedMock.handler;
-    }
-
-    // 模拟延时控制
-    const maybeMock = resolved as MockProcessResultOptions;
-    if (typeof maybeMock.delayMs === "number" && maybeMock.delayMs > 0) {
-      await this.waitDelay(maybeMock.delayMs, options);
-    }
-
-    // 组装标准化结果
-    const timedOut = Boolean(resolved.timedOut);
-    const cancelled = Boolean(resolved.cancelled || options.signal?.aborted);
-    const stdout = resolved.stdout ?? "";
-    const stderr = resolved.stderr ?? (timedOut ? "Process timed out" : cancelled ? "Process cancelled" : "");
-    const raw = resolved.raw ?? new TextEncoder().encode(stdout);
-    const exitCode =
-      resolved.exitCode !== undefined
-        ? resolved.exitCode
-        : timedOut || cancelled
-        ? null
-        : resolved.ok === false
-        ? 1
-        : 0;
-    const ok =
-      resolved.ok !== undefined
-        ? resolved.ok
-        : exitCode === 0 && !timedOut && !cancelled && !resolved.error;
-    const durationMs = resolved.durationMs ?? Date.now() - startTime;
-
-    let error = resolved.error;
-    if (!error) {
-      if (timedOut) {
-        error = {
-          code: PROCESS_TIMEOUT,
-          message: `Process exceeded timeout of ${options.timeoutMs ?? durationMs}ms`,
-        };
-      } else if (cancelled) {
-        error = {
-          code: PROCESS_CANCELLED,
-          message: "Process was cancelled by AbortSignal",
-        };
-      } else if (!ok) {
-        error = {
-          code: PROCESS_FAILED,
-          message: stderr || `Process exited with code ${exitCode}`,
-        };
-      }
-    }
-
-    const finalResult: ProcessResult = {
-      ok,
-      exitCode,
-      signal: resolved.signal,
-      stdout,
-      stderr,
-      raw,
-      timedOut,
-      cancelled,
-      durationMs,
-      error,
-    };
-
-    if (!ok && options.throwOnError) {
-      throw new Error(stderr || `Process exited with code ${exitCode}`);
-    }
-
-    return finalResult;
-  }
-
-  async spawn(
-    command: string,
-    args: string[] = [],
-    options: ProcessExecOptions = {}
-  ): Promise<ProcessResult> {
-    return this.exec(command, args, options);
-  }
-
-  /**
-   * 优先匹配 mock 规则运行命令，未命中时委托至 ProcessManager。
+   * 优先匹配 mock 规则运行命令，未命中时委托至真实回退或 ProcessManager。
    */
   private async runWithMock(
     input: ProcessRunInput,
     owner: ProcessOwner,
     call?: CallOptions
   ): Promise<ProcessRunResult> {
+    const command = input.spec.executable;
     const args = input.spec.args ?? [];
-    const matchedMock = this.findMock(input.spec.executable, args, {
-      cwd: input.spec.cwd,
-      env: input.spec.env?.set,
-      timeoutMs: input.timeoutMs,
-      maxOutputBytes: input.maxOutputBytes,
-      signal: call?.signal,
+    this.calls.push({
+      command,
+      args: [...args],
+      input,
+      timestamp: Date.now(),
     });
 
-    // 仅在确实命中 mock 或显式开启真实回退时走 exec 路径；
-    // 其余情况（含已注册其他 mock 但本命令未命中）一律落入受管进程路径，
-    // 避免任意 mock 注册后未命中命令被错误拦截并抛「未命中」
-    if (matchedMock || this.fallbackToReal) {
-      const res = await this.exec(input.spec.executable, args, {
-        cwd: input.spec.cwd,
-        env: input.spec.env?.set,
-        timeoutMs: input.timeoutMs,
-        maxOutputBytes: input.maxOutputBytes,
-        signal: call?.signal,
-      });
+    if (call?.signal?.aborted) {
+      throw call.signal.reason instanceof ProcessError
+        ? call.signal.reason
+        : new ProcessError(PROCESS_CANCELLED, "Process run was cancelled");
+    }
+
+    const matchedMock = this.findMock(command, args, input);
+
+    if (matchedMock) {
+      let resolved: MockProcessResultOptions | ProcessRunResult;
+      if (typeof matchedMock.handler === "function") {
+        resolved = await matchedMock.handler(command, args, input);
+      } else {
+        resolved = matchedMock.handler;
+      }
+
+      const maybeMock = resolved as MockProcessResultOptions;
+      if (typeof maybeMock.delayMs === "number" && maybeMock.delayMs > 0) {
+        await this.waitDelay(maybeMock.delayMs, call?.signal);
+      }
+
+      if (call?.signal?.aborted) {
+        throw call.signal.reason instanceof ProcessError
+          ? call.signal.reason
+          : new ProcessError(PROCESS_CANCELLED, "Process run was cancelled");
+      }
+
+      if (maybeMock.timedOut) {
+        throw new ProcessError(PROCESS_TIMEOUT, `Process exceeded timeout of ${input.timeoutMs}ms`);
+      }
+      if (maybeMock.cancelled) {
+        throw new ProcessError(PROCESS_CANCELLED, "Process was cancelled");
+      }
+      if (maybeMock.error) {
+        throw new ProcessError(maybeMock.error.code as any, maybeMock.error.message);
+      }
+
       const chunks: OutputChunk[] = [];
-      if (res.stdout) {
-        chunks.push({
-          stream: "stdout",
-          data: encodeBytes(res.stdout),
-        });
+      if (maybeMock.chunks) {
+        chunks.push(...maybeMock.chunks);
+      } else {
+        if (maybeMock.stdout) {
+          chunks.push({
+            stream: "stdout",
+            data: encodeBytes(maybeMock.stdout),
+          });
+        }
+        if (maybeMock.stderr) {
+          chunks.push({
+            stream: "stderr",
+            data: encodeBytes(maybeMock.stderr),
+          });
+        }
+        if (maybeMock.raw && !maybeMock.stdout) {
+          chunks.push({
+            stream: "stdout",
+            data: encodeBytes(maybeMock.raw),
+          });
+        }
       }
-      if (res.stderr) {
-        chunks.push({
-          stream: "stderr",
-          data: encodeBytes(res.stderr),
-        });
-      }
+
+      const exitCode =
+        maybeMock.exit?.code !== undefined
+          ? maybeMock.exit.code
+          : maybeMock.exitCode !== undefined
+          ? maybeMock.exitCode
+          : maybeMock.ok === false
+          ? 1
+          : 0;
+
+      const signal = maybeMock.exit?.signal ?? (maybeMock.signal ? String(maybeMock.signal) : null);
+
       return {
-        exit: { code: res.exitCode, signal: res.signal ?? null },
+        exit: { code: exitCode, signal },
         chunks,
-        truncated: Boolean(res.error?.code === "PROCESS_OUTPUT_LIMIT"),
+        truncated: Boolean(maybeMock.truncated),
       };
+    }
+
+    if (this.fallbackToReal) {
+      return executeRealProcess(input, call);
     }
 
     return this.processManager.run(owner, input, call);
@@ -411,32 +454,24 @@ export class MockProcessExecutor implements ProcessExecutor {
     return this.processManager.list(this.owner, input, call);
   }
 
-  /**
-   * 申请指定受管进程的独占控制令牌。
-   */
-  async acquire(id: string, input: ProcessAcquireInput, call?: CallOptions): Promise<ControlGrant> {
-    return this.processManager.acquire(this.owner, id, input, call);
-  }
 
-  /**
-   * 延长当前有效控制令牌的存活时间。
-   */
-  async renew(id: string, token: string, ttlMs: number, call?: CallOptions): Promise<ControlGrant> {
-    return this.processManager.renew(this.owner, id, token, ttlMs, call);
-  }
 
-  /**
-   * 显式释放控制令牌。
-   */
-  async release(id: string, token: string, call?: CallOptions): Promise<void> {
-    return this.processManager.release(this.owner, id, token, call);
-  }
+
+
+
 
   /**
    * 向受管进程输入流写入原始字节数据。
    */
   async write(id: string, input: ProcessWriteInput, call?: CallOptions): Promise<OperationReceipt> {
     return this.processManager.write(this.owner, id, input, call);
+  }
+
+  /**
+   * 向受管进程发送结构化控制指令。
+   */
+  async control(id: string, input: ProcessControlInput, call?: CallOptions): Promise<OperationReceipt> {
+    return this.processManager.control(this.owner, id, input, call);
   }
 
   /**
@@ -453,12 +488,6 @@ export class MockProcessExecutor implements ProcessExecutor {
     return this.processManager.read(this.owner, id, input, call);
   }
 
-  /**
-   * 向受管进程发送结构化控制指令。
-   */
-  async control(id: string, input: ProcessControlInput, call?: CallOptions): Promise<OperationReceipt> {
-    return this.processManager.control(this.owner, id, input, call);
-  }
 
   /**
    * 终止指定的受管进程资源。
@@ -555,7 +584,7 @@ export class MockProcessExecutor implements ProcessExecutor {
   private findMock(
     command: string,
     args: string[],
-    options: ProcessExecOptions
+    input: ProcessRunInput
   ): RegisteredMock | undefined {
     const fullCommandLine = [command, ...args].join(" ").trim();
 
@@ -571,7 +600,7 @@ export class MockProcessExecutor implements ProcessExecutor {
           return mock;
         }
       } else if (typeof mock.matcher === "function") {
-        if (mock.matcher(command, args, options)) {
+        if (mock.matcher(command, args, input)) {
           return mock;
         }
       }
@@ -581,9 +610,8 @@ export class MockProcessExecutor implements ProcessExecutor {
 
   private async waitDelay(
     delayMs: number,
-    options: ProcessExecOptions
+    signal?: AbortSignal
   ): Promise<void> {
-    // 注入时钟时优先 clock.sleep：由 FakeClock.advance 确定性驱动，不占用真实时间
     if (this.clock) {
       await this.clock.sleep(delayMs);
       return;
@@ -598,14 +626,14 @@ export class MockProcessExecutor implements ProcessExecutor {
           clearTimeout(timer);
           timer = undefined;
         }
-        if (options.signal && onAbort) {
-          options.signal.removeEventListener("abort", onAbort);
+        if (signal && onAbort) {
+          signal.removeEventListener("abort", onAbort);
           onAbort = undefined;
         }
       };
 
-      if (options.signal) {
-        if (options.signal.aborted) {
+      if (signal) {
+        if (signal.aborted) {
           resolve();
           return;
         }
@@ -613,11 +641,7 @@ export class MockProcessExecutor implements ProcessExecutor {
           cleanup();
           resolve();
         };
-        options.signal.addEventListener(
-          "abort",
-          onAbort,
-          { once: true }
-        );
+        signal.addEventListener("abort", onAbort, { once: true });
       }
 
       timer = setTimeout(() => {

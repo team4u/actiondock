@@ -4,7 +4,6 @@ import type { ProcessAPI, ProcessInfo } from "../src";
 import {
   ActionRuntimeError,
   createTestRuntime,
-  MemoryConfig,
   MemoryLogger,
   MemoryStateStore,
 } from "@actiondock/testing";
@@ -55,19 +54,6 @@ describe("@actiondock/sdk", () => {
 
     expect(runtime.logger.logs.length).toBe(2);
     expect(runtime.logger.logs[0].message).toContain("Updated count to 6");
-  });
-
-  it("supports MemoryConfig get, set, has, and fallback defaults", () => {
-    const config = new MemoryConfig({ API_KEY: "secret_123" });
-    expect(config.has("API_KEY")).toBe(true);
-    expect(config.has("NON_EXISTENT")).toBe(false);
-    expect(config.get<string>("API_KEY")).toBe("secret_123");
-    expect(config.get("NON_EXISTENT")).toBeUndefined();
-    expect(config.get("NON_EXISTENT", "default_val")).toBe("default_val");
-
-    config.set("NEW_KEY", 42);
-    expect(config.get<number>("NEW_KEY")).toBe(42);
-    expect(config.has("NEW_KEY")).toBe(true);
   });
 
   it("supports MemoryStateStore scoping, prefix listing, and deletion", async () => {
@@ -393,9 +379,6 @@ describe("@actiondock/sdk", () => {
       async start() { throw new Error("not implemented"); },
       async inspect() { throw new Error("not implemented"); },
       async list() { return { processes: [] }; },
-      async acquire() { throw new Error("not implemented"); },
-      async renew() { throw new Error("not implemented"); },
-      async release() {},
       async write() { throw new Error("not implemented"); },
       async operation() { throw new Error("not implemented"); },
       async read() { throw new Error("not implemented"); },
@@ -455,9 +438,6 @@ describe("@actiondock/sdk", () => {
         return { ...dummyInfo, id };
       },
       async list() { return { processes: [dummyInfo] }; },
-      async acquire() { throw new Error("not implemented"); },
-      async renew() { throw new Error("not implemented"); },
-      async release() {},
       async write() { throw new Error("not implemented"); },
       async operation() { throw new Error("not implemented"); },
       async read() { throw new Error("not implemented"); },

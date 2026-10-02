@@ -12,16 +12,11 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import {
-  acquireDirectoryLock,
-  checkReclaimGuard,
-  cleanStaleQuarantines,
-  isProcessAlive,
-  parseQuarantineTimestamp as parseQuarantineTimestampCore,
-  readLockWithGracePeriod,
-  safeReleaseLock as coreSafeReleaseLock,
-  safeRemoveStaleReclaimGuard,
-  safeRollbackLock,
-} from "../storage/lock-core";
+  acquireFileLockSync,
+  isLockHeld,
+  safeReleaseFileLockSync,
+} from "../storage/file-lock";
+import { isProcessAlive } from "../utils";
 import { ActionDockError, PROJECT_BUSY, PROJECT_RECOVERY_REQUIRED } from "../errors";
 import { LOCKFILE_NAME } from "./lockfile";
 import { MANIFEST_FILE_NAME } from "./manifest";
@@ -70,68 +65,14 @@ export function isPidAlive(pid: number): boolean {
 }
 
 /**
- * 从工程锁隔离或回滚临时目录名称中解析操作者 PID 与隔离生成时间戳。
- * 命名规范：*.(quarantine|rollback|release).<pid>.<timestamp>.<uuid> 或 *.orphan.<timestamp>.<uuid>
- */
-export function parseProjectQuarantineTimestamp(entryName: string): {
-  operatorPid?: number;
-  timestamp?: number;
-} {
-  return parseQuarantineTimestampCore(entryName);
-}
-
-export const parseQuarantineTimestamp = parseProjectQuarantineTimestamp;
-
-/**
- * 安全清理陈旧接管守卫（reclaim guard）。
- * 采用原子重命名检疫并严格核对 guardToken 与持有者存活状态，确保仅删除目标陈旧 guard，严禁误删活跃守卫或并发新守卫。
- *
- * @param reclaimPath 目标守卫路径
- * @param expectedGuardToken 预期持有的守卫令牌（必填，拒绝未指定令牌的盲目清理）
- */
-export function safeRemoveStaleProjectReclaimGuard(
-  reclaimPath: string,
-  expectedGuardToken: string
-): void {
-  safeRemoveStaleReclaimGuard(reclaimPath, expectedGuardToken);
-}
-
-/**
- * 安全回滚当前进程创建的工程修改锁。
- * 优先核对 lockToken，回退核对 sessionToken，防止误删接管者或并发新锁。
- */
-export function safeRollbackProjectLock(
-  lockPath: string,
-  expectedSessionToken: string,
-  expectedLockToken?: string
-): void {
-  safeRollbackLock(lockPath, expectedSessionToken, expectedLockToken);
-}
-
-/**
- * 清理过期的工程锁隔离目录（GC 回收机制）。
- * 实施分流存活校验，防止误删活跃持锁者与回滚中目录，同时防止孤儿目录无限泄漏，语义由目录锁内核统一承载。
- */
-export function cleanStaleProjectQuarantines(
-  parentDir: string,
-  basePrefix: string,
-  maxAgeMs = 10000,
-  deadline?: number
-): void {
-  cleanStaleQuarantines(parentDir, basePrefix, maxAgeMs, deadline);
-}
-
-/**
  * 安全释放工程主锁。
- * 仅当锁目录中持有当前 lockToken / sessionToken 时才删除，杜绝删除他人新锁。
- * 释放后同步触发一轮工程锁隔离目录 GC。
  */
 export function safeReleaseProjectLock(
   lockPath: string,
-  expectedSessionToken: string,
+  expectedSessionToken?: string,
   expectedLockToken?: string
 ): void {
-  coreSafeReleaseLock(lockPath, expectedSessionToken, expectedLockToken, { gcAfterRelease: true });
+  safeReleaseFileLockSync(lockPath, expectedLockToken, expectedSessionToken);
 }
 
 /**
@@ -142,44 +83,12 @@ export function safeReleaseProjectLock(
  */
 export function isProjectLockHeld(projectRoot: string, excludeSelf = true): boolean {
   const lockPath = join(projectRoot, ".actiondock", LOCK_DIR_NAME);
-  const reclaimPath = `${lockPath}.reclaim`;
-  if (existsSync(reclaimPath)) {
-    const reclaimState = checkReclaimGuard(reclaimPath, 1000);
-    if (reclaimState.active) {
-      if (!excludeSelf || reclaimState.holderPid !== process.pid) {
-        return true;
-      }
-    }
-  }
-
-  if (!existsSync(lockPath)) {
-    return false;
-  }
-  try {
-    const lockState = readLockWithGracePeriod(lockPath, 3000);
-    if (!lockState.exists) {
-      return false;
-    }
-    if (lockState.inGracePeriod) {
-      return true;
-    }
-    if (lockState.info && typeof lockState.info.pid === "number") {
-      if (excludeSelf && lockState.info.pid === process.pid) {
-        return false;
-      }
-      return isProcessAlive(lockState.info.pid);
-    }
-  } catch {
-    // 忽略读取解析异常
-  }
-  return false;
+  return isLockHeld(lockPath, excludeSelf);
 }
 
 /**
  * 获取工程修改排他锁（.actiondock/project.lock）。
- * 引入所有竞争者均遵守的原子 reclaim guard 机制（project.lock.reclaim）。
- * 采用 mkdirSync 原子排他目录创建、renameSync 元数据写入、宽限期重试检测与基于 sessionToken 的释放函数。
- * 避免空文件窗口与 truncate。
+ * 基于统一轻量文件锁原语实现，非阻塞且支持原子抢占与崩溃恢复。
  *
  * @param projectRoot 项目根目录
  * @param options 锁配置参数
@@ -188,7 +97,6 @@ export function acquireProjectLock(
   projectRoot: string,
   options: { sessionToken?: string; acquireTimeoutMs?: number } = {}
 ): () => void {
-  const timeoutMs = options.acquireTimeoutMs ?? 5000;
   const metaDir = join(projectRoot, ".actiondock");
   if (!existsSync(metaDir)) {
     mkdirSync(metaDir, { recursive: true });
@@ -197,60 +105,37 @@ export function acquireProjectLock(
   const lockPath = join(metaDir, LOCK_DIR_NAME);
   const sessionToken = options.sessionToken || randomUUID();
   const lockToken = randomUUID();
-  const currentPid = process.pid;
   const lockData = {
-    pid: currentPid,
+    pid: process.pid,
     sessionToken,
     lockToken,
     createdAt: Date.now(),
   };
-  const content = JSON.stringify(lockData, null, 2);
 
-  acquireDirectoryLock({
-    lockPath,
-    parentDir: metaDir,
-    basePrefix: LOCK_DIR_NAME,
-    metadataContent: content,
-    sessionToken,
-    lockToken,
-    acquireTimeoutMs: options.acquireTimeoutMs,
-    createLockError(message) {
-      return new ActionDockError(PROJECT_BUSY, message);
+  const handle = acquireFileLockSync(lockPath, {
+    metadata: lockData,
+    createLockError() {
+      return new ActionDockError(
+        PROJECT_BUSY,
+        `PROJECT_BUSY: Project modification lock is held by another process. Another command is running in ${projectRoot}.`
+      );
     },
-    messages: {
-      timeoutWaitingReclaimGuard: (holderPid?: number) =>
-        `PROJECT_BUSY: Timeout waiting for active reclaim guard (PID ${holderPid ?? "unknown"}) on project '${projectRoot}' after ${timeoutMs}ms`,
-      timeoutAcquireBlockedByGuard: (holderPid?: number) =>
-        `PROJECT_BUSY: Timeout acquiring project lock on '${projectRoot}' due to active reclaim guard (PID ${holderPid}) after ${timeoutMs}ms`,
-      timeoutAcquire: () =>
-        `PROJECT_BUSY: Timeout acquiring project lock on '${projectRoot}' after ${timeoutMs}ms`,
-      timeoutGracePeriod: () =>
-        `PROJECT_BUSY: Timeout waiting for project lock grace period on '${projectRoot}' after ${timeoutMs}ms`,
-      timeoutGuardContention: () =>
-        `PROJECT_BUSY: Timeout contending for project reclaim guard on '${projectRoot}' after ${timeoutMs}ms`,
-      timeoutReclaimStale: () =>
-        `PROJECT_BUSY: Timeout reclaiming stale project lock on '${projectRoot}' after ${timeoutMs}ms`,
-      timeoutCreate: () =>
-        `PROJECT_BUSY: Timeout creating project lock on '${projectRoot}' after ${timeoutMs}ms`,
-    },
-    assertStaleHolderReclaimable(info) {
-      const holderPid = info.pid as number;
-      if (isProcessAlive(holderPid)) {
+    assertHolderReclaimable(info) {
+      const holderPid = info.pid as number | undefined;
+      if (holderPid && isProcessAlive(holderPid)) {
         throw new ActionDockError(
           PROJECT_BUSY,
           `PROJECT_BUSY: Project modification lock is held by PID ${holderPid}. Another command is running in ${projectRoot}.`
         );
       }
     },
-    onAcquired: () => true,
   });
 
   let released = false;
   return () => {
     if (released) return;
     released = true;
-    safeReleaseProjectLock(lockPath, sessionToken, lockToken);
-    cleanStaleQuarantines(metaDir, LOCK_DIR_NAME);
+    handle.release();
   };
 }
 
@@ -284,8 +169,6 @@ export function runFrozenInstall(projectRoot: string): void {
   try {
     const check = spawnSync(cmd, ["--version"], {
       stdio: "pipe",
-      // Windows 兼容：npm 为 .cmd 脚本，无 shell 直接 spawn 必然 ENOENT，
-      // 会误判 npm 缺失而把冻结安装降级为普通 install
       shell: process.platform === "win32",
     });
     if (check.status !== 0) {
@@ -303,8 +186,6 @@ export function runFrozenInstall(projectRoot: string): void {
     shell: process.platform === "win32",
     env: {
       ...process.env,
-      // 项目级安装禁用 npm 的 allow-scripts 白名单机制，避免用户全局 .npmrc
-      // 的 allow-scripts 约束触发 EALLOWSCRIPTS 导致恢复失败（本安装已带 --ignore-scripts）
       npm_config_allow_scripts: "",
       NPM_CONFIG_ALLOW_SCRIPTS: "",
     },
@@ -399,7 +280,6 @@ export async function beginTransaction(
       meta.status = "committed";
       try {
         writeFileSync(join(txDir, "transaction.json"), JSON.stringify(meta, null, 2) + "\n", "utf-8");
-        // 成功提交后清理事务目录
         rmSync(txDir, { recursive: true, force: true });
       } finally {
         releaseLock();
@@ -411,7 +291,6 @@ export async function beginTransaction(
       isFinalized = true;
 
       try {
-        // 逐个恢复快照文件
         for (const rec of fileRecords) {
           const targetPath = join(projectRoot, rec.name);
           const snapPath = join(snapshotDir, rec.name);
@@ -420,14 +299,12 @@ export async function beginTransaction(
               copyFileSync(snapPath, targetPath);
             }
           } else {
-            // 原先不存在的文件若在事务中被创建，予以删除
             if (existsSync(targetPath)) {
               unlinkSync(targetPath);
             }
           }
         }
 
-        // 执行冻结安装使 node_modules 与恢复后的声明重新一致
         if (options?.frozenInstall !== false) {
           runFrozenInstall(projectRoot);
         }
@@ -456,9 +333,6 @@ export async function beginTransaction(
 
 /**
  * 依据事务日志恢复所有待恢复的悬空事务快照，并在成功后执行冻结安装。
- * 进入恢复前通过 acquireProjectLock 原子获取排他锁，持有锁执行恢复，完成后通过释放函数安全释放锁。
- * 若获取锁失败（已有活跃进程正在执行）则安全退出并返回空数组，杜绝 TOCTOU 竞争。
- * 若冻结安装失败则抛出 PROJECT_RECOVERY_REQUIRED 并阻止 Host 启动。
  */
 export async function recoverPendingTransactions(
   projectRoot: string,
@@ -474,10 +348,8 @@ export async function recoverPendingTransactions(
     releaseLock = acquireProjectLock(projectRoot);
   } catch (err: any) {
     if (err?.code === "PROJECT_BUSY") {
-      // 仅当项目锁被其他活跃进程占用时，安全退出并返回空数组
       return [];
     }
-    // 底层系统异常（如 EACCES、ENOSPC、ENOENT 等），向外抛出，严禁静默吞掉
     throw err;
   }
 
@@ -499,7 +371,6 @@ export async function recoverPendingTransactions(
 
       if (meta.status === "pending") {
         const snapshotDir = join(txDir, "snapshot");
-        // 逐个恢复快照文件
         for (const rec of meta.files) {
           const targetPath = join(projectRoot, rec.name);
           const snapPath = join(snapshotDir, rec.name);

@@ -2,7 +2,6 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { type ActionContext, defineAction } from "@actiondock/sdk";
 import { createPackageRuntime } from "../src/package";
 import { createActionDockHost } from "../src/host";
-import { LocalActionDockService } from "../src/service";
 import { startActionDockServer } from "../src/server";
 import { ACTION_FORBIDDEN } from "../src/errors";
 
@@ -99,7 +98,7 @@ async function createTestService() {
     inMemory: true,
   });
 
-  return new LocalActionDockService(host);
+  return host;
 }
 
 describe("Action 级别白名单 actionAllowlist 路由拦截与隔离验证", () => {

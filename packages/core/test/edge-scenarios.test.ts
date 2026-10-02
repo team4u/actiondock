@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { defineAction, type ActionContext } from "@actiondock/sdk";
-import { ActionRunner } from "../src/runtime/runner";
+import { DefaultExecutionService as ActionRunner } from "../src/execution/service";
 import { SqliteRuntimeStorage } from "../src/storage/sqlite";
 import { createPackageRuntime } from "../src/package";
 import { createActionDockHost } from "../src/host";

@@ -173,7 +173,7 @@ const executor = new MockProcessExecutor({
 
 ## 确定性进程驱动桩：FakeProcessDriver
 
-`FakeProcessDriver` 完整实现 Core 层的 `ProcessDriver` 契约，专为长期受管进程、流式输出、独占控制权与异常注入测试而设计。
+`FakeProcessDriver` 完整实现 Core 层的 `ProcessDriver` 契约，专为长期受管进程、流式输出与异常注入测试而设计。
 
 ```ts
 import { FakeProcessDriver } from "@actiondock/testing";
@@ -279,15 +279,8 @@ it("验证长期受管进程的独占写入与读取", async () => {
     spec: { executable: "sh", args: [], io: { mode: "pipe" } },
   });
 
-  const grant = await runtime.process.acquire(started.process.id, {
-    requestId: "acq-1",
-    waitMs: 1000,
-    ttlMs: 5000,
-  });
-
   // 验证写入记录
   await runtime.process.write(started.process.id, {
-    token: grant.token,
     requestId: "write-1",
     data: { encoding: "base64", data: Buffer.from("echo 1\n").toString("base64") },
   });

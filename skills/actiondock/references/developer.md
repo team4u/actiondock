@@ -158,7 +158,6 @@ export default defineAction<Input, Output>(async (input, ctx) => {
 | | `scope(namespace: string): StateStore` | 派生出隔离命名的子状态存储 |
 | `ctx.process` | `run(input: ProcessRunInput, call?: CallOptions): Promise<ProcessRunResult>` | 一次性运行外部命令，超时终止并收集有限输出（详见 [process-execution.md](process-execution.md)） |
 | | `start(input: ProcessStartInput, call?: CallOptions): Promise<ProcessStartResult>` | 创建长期受管进程，返回资源元数据与初始游标 |
-| | `acquire(id: string, input: ProcessAcquireInput, call?: CallOptions): Promise<ControlGrant>` | 申请受管进程独占控制令牌，支持排队等待与续租 |
 | | `read(id: string, input: ProcessReadInput, call?: CallOptions): Promise<ReadResult>` | 基于游标读取有界原始输出日志，支持长轮询与断层跳跃 |
 | | `write(id: string, input: ProcessWriteInput, call?: CallOptions): Promise<OperationReceipt>` | 向受管进程输入流写入原始字节数据，需持有有效控制令牌 |
 | | `stop(id: string, input: ProcessStopInput, call?: CallOptions): Promise<ProcessInfo>` | 优雅终止受管进程并执行跨平台进程树清理 |
@@ -203,8 +202,7 @@ Action 之间的相互调度必须通过 `ctx.actions.invoke` 执行，严禁通
 当 Action 需要调用底层系统命令或与外部进程交互时，严禁使用 Node.js 原生 `node:child_process`，必须使用 `ctx.process` 统一接口。核心规则与交互模式如下（详见 [process-execution.md](process-execution.md)）：
 
 - 一次性执行 `run`：适用于短时有界命令，自动收集有限输出并提供超时强制阻断与缓冲区截断保护，配合 SDK 导出的 `decodeText` 安全解码。
-- 长期交互进程 `start` 与 `withControl`：对于交互式会话（如 REPL、终端交互），通过 `start` 启动后，所有输入写操作必须在 `withControl` 独占控制权租约下执行，杜绝并发交错冲突；输出通过游标 `read` 长轮询获取，配合 `createStreamDecoder` 增量多字节解码避免跨分块乱码。
-- 独占控制权与异常隔离：`withControl` 自动申请令牌并在后台定期续租；业务执行正常完成后释放；遇到异常、中断信号或续租失败时，严格调用 `stop` 强制终止并隔离进程，杜绝将脏状态暴露给后续等待者。
+- 长期交互进程 `start`：对于交互式会话（如 REPL、终端交互），通过 `start` 启动后直接调用 `write` 提交指令（进程运行中即可写入）；输出通过游标 `read` 长轮询获取，配合 `createStreamDecoder` 增量多字节解码避免跨分块乱码。
 - 确定性测试红线：单元测试中严禁唤起操作系统真实子进程，必须使用 `@actiondock/testing` 提供的 `FakeProcessDriver` 进行确定性全生命周期模拟。
 
 ---
