@@ -388,3 +388,6 @@ export function assertWithinProjectRoot(
   }
   assertPathWithinRoot(projectRoot, subDir, fieldName);
 }
+
+export { suppressExperimentalWarnings } from "./warning";
+

@@ -1,7 +1,12 @@
-import { DatabaseSync } from "node:sqlite";
+import "../utils/warning";
+import { createRequire } from "node:module";
+import type { DatabaseSync } from "node:sqlite";
 import { normalizeSqliteParams } from "./params";
 import type { SqliteDriver, SqliteStatement } from "./types";
 import { ActionDockError, ASYNC_TRANSACTION_UNSUPPORTED, STORAGE_CLOSED } from "../errors";
+
+const require = createRequire(import.meta.url);
+const DatabaseSyncConstructor = (require("node:sqlite") as { DatabaseSync: typeof DatabaseSync }).DatabaseSync;
 
 export { normalizeSqliteParams };
 
@@ -14,11 +19,12 @@ export class NodeSqliteDriver implements SqliteDriver {
 
   constructor(dbPath: string | DatabaseSync = ":memory:", options?: any) {
     if (typeof dbPath === "string") {
-      this.db = options !== undefined ? new DatabaseSync(dbPath, options) : new DatabaseSync(dbPath);
+      this.db = options !== undefined ? new DatabaseSyncConstructor(dbPath, options) : new DatabaseSyncConstructor(dbPath);
     } else {
       this.db = dbPath;
     }
   }
+
 
   /**
    * 检查底层连接是否处于开启状态。

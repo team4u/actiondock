@@ -1,4 +1,29 @@
 #!/usr/bin/env node
+const kExperimentalWarningSuppressed = Symbol.for("actiondock.experimental_warning_suppressed");
+if (!globalThis[kExperimentalWarningSuppressed]) {
+  globalThis[kExperimentalWarningSuppressed] = true;
+  const originalEmitWarning = process.emitWarning;
+  if (typeof originalEmitWarning === "function") {
+    process.emitWarning = function (warning, ...args) {
+      if (typeof warning === "string") {
+        const type = typeof args[0] === "string" ? args[0] : (args[0]?.type || args[1]);
+        if (type === "ExperimentalWarning") return;
+      } else if (warning && (warning.name === "ExperimentalWarning" || warning.type === "ExperimentalWarning")) {
+        return;
+      }
+      return Reflect.apply(originalEmitWarning, process, [warning, ...args]);
+    };
+  }
+  const originalListeners = process.listeners("warning");
+  process.removeAllListeners("warning");
+  process.on("warning", (warning) => {
+    if (warning && (warning.name === "ExperimentalWarning" || warning.type === "ExperimentalWarning")) return;
+    for (const listener of originalListeners) {
+      listener.call(process, warning);
+    }
+  });
+}
+
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -26,11 +51,12 @@ if (!isBun && !hasTsx) {
   if (tsxSpecifier) {
     const child = spawn(
       process.execPath,
-      ["--import", tsxSpecifier, fileURLToPath(import.meta.url), ...process.argv.slice(2)],
+      ["--no-warnings=ExperimentalWarning", "--import", tsxSpecifier, fileURLToPath(import.meta.url), ...process.argv.slice(2)],
       {
         stdio: "inherit",
       }
     );
+
 
     const forwardSignal = (sig) => {
       if (child.pid && !child.killed) {

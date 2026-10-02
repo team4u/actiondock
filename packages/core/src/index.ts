@@ -6,6 +6,8 @@
  * ./profile, ./graph, ./package），严格杜绝在根导出泄露内部执行与平台上下文机制。
  */
 
+import "./utils/warning";
+
 // 1. 核心版本号单一事实源
 export { ACTIONDOCK_VERSION } from "./version";
 

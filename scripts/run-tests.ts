@@ -112,6 +112,7 @@ async function main() {
 
   const nodeArgs = [
     "--no-deprecation",
+    "--no-warnings=ExperimentalWarning",
     `--test-concurrency=${concurrency}`,
     // 单文件级超时上限：防止环境性挂起（如 CI 慢速 runner 上等待条件永不满足）拖死整个测试进程
     `--test-timeout=${process.env.ACTIONDOCK_TEST_FILE_TIMEOUT_MS || 300000}`,
