@@ -25,10 +25,10 @@ export class NodeSqliteDriver implements SqliteDriver {
     }
   }
 
-
   /**
    * 检查底层连接是否处于开启状态。
    */
+
   get isOpen(): boolean {
     return !this.closed;
   }

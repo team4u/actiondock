@@ -54,4 +54,24 @@ describe("ExperimentalWarning 全局静默机制", () => {
       `stderr should not contain ExperimentalWarning, got: ${res.stderr}`
     );
   });
+
+  it("显式设置 ACTIONDOCK_SILENCE_WARNINGS=0 时应保留实验性警告（逃生通道）", () => {
+    const code = `
+      import "./packages/core/dist/utils/warning.js";
+      process.emitWarning("Explicit experimental check", "ExperimentalWarning");
+    `;
+
+    const res = spawnSync(process.execPath, ["--input-type=module", "-e", code], {
+      cwd: process.cwd(),
+      encoding: "utf-8",
+      env: { ...process.env, ACTIONDOCK_SILENCE_WARNINGS: "0" },
+    });
+
+    assert.strictEqual(res.status, 0);
+    assert.ok(
+      res.stderr.includes("ExperimentalWarning"),
+      `stderr should retain ExperimentalWarning when disabled, got: ${res.stderr}`
+    );
+  });
 });
+

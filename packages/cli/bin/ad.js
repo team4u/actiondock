@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 const kExperimentalWarningSuppressed = Symbol.for("actiondock.experimental_warning_suppressed");
-if (!globalThis[kExperimentalWarningSuppressed]) {
+if (!globalThis[kExperimentalWarningSuppressed] && process.env.ACTIONDOCK_SILENCE_WARNINGS !== "0") {
   globalThis[kExperimentalWarningSuppressed] = true;
   const originalEmitWarning = process.emitWarning;
   if (typeof originalEmitWarning === "function") {
@@ -57,9 +57,9 @@ if (!isBun && !hasTsx) {
       }
     );
 
-
     const forwardSignal = (sig) => {
       if (child.pid && !child.killed) {
+
         try {
           child.kill(sig);
         } catch {}

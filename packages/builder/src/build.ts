@@ -87,6 +87,36 @@ function calculateDirectoryDigest(dir: string): string {
 }
 
 /**
+ * 生成注入独立执行入口脚本的全局实验性警告静默代码片段（单一事实源）。
+ */
+function generateWarningSuppressionSnippet(): string {
+  return `const kExperimentalWarningSuppressed = Symbol.for("actiondock.experimental_warning_suppressed");
+if (!globalThis[kExperimentalWarningSuppressed] && process.env.ACTIONDOCK_SILENCE_WARNINGS !== "0") {
+  globalThis[kExperimentalWarningSuppressed] = true;
+  const originalEmitWarning = process.emitWarning;
+  if (typeof originalEmitWarning === "function") {
+    process.emitWarning = function (warning, ...args) {
+      if (typeof warning === "string") {
+        const type = typeof args[0] === "string" ? args[0] : (args[0]?.type || args[1]);
+        if (type === "ExperimentalWarning") return;
+      } else if (warning && (warning.name === "ExperimentalWarning" || warning.type === "ExperimentalWarning")) {
+        return;
+      }
+      return Reflect.apply(originalEmitWarning, process, [warning, ...args]);
+    };
+  }
+  const originalListeners = process.listeners("warning");
+  process.removeAllListeners("warning");
+  process.on("warning", (warning) => {
+    if (warning && (warning.name === "ExperimentalWarning" || warning.type === "ExperimentalWarning")) return;
+    for (const listener of originalListeners) {
+      listener.call(process, warning);
+    }
+  });
+}`;
+}
+
+/**
  * 生成 Host 子进程入口脚本源码（负责运行 ActionDockHost，通过 Node IPC 暴露 Target）。
  * 与 serializePlanManifest / stageSources 的过滤条件保持一致：跨包外部 Action 不进入 import 与运行时注册，
  * 避免入口 import 清单没有的源文件产生孤儿模块（外部源码未物化进本包目录，运行时必然加载失败）。
@@ -129,36 +159,13 @@ function generateNodeHostEntrySource(plan: SelectionPlan): string {
 
   return `#!/usr/bin/env node
 // AUTO-GENERATED HOST ENTRYPOINT BY ACTIONDOCK BUILDER. DO NOT EDIT.
-const kExperimentalWarningSuppressed = Symbol.for("actiondock.experimental_warning_suppressed");
-if (!globalThis[kExperimentalWarningSuppressed]) {
-  globalThis[kExperimentalWarningSuppressed] = true;
-  const originalEmitWarning = process.emitWarning;
-  if (typeof originalEmitWarning === "function") {
-    process.emitWarning = function (warning, ...args) {
-      if (typeof warning === "string") {
-        const type = typeof args[0] === "string" ? args[0] : (args[0]?.type || args[1]);
-        if (type === "ExperimentalWarning") return;
-      } else if (warning && (warning.name === "ExperimentalWarning" || warning.type === "ExperimentalWarning")) {
-        return;
-      }
-      return Reflect.apply(originalEmitWarning, process, [warning, ...args]);
-    };
-  }
-  const originalListeners = process.listeners("warning");
-  process.removeAllListeners("warning");
-  process.on("warning", (warning) => {
-    if (warning && (warning.name === "ExperimentalWarning" || warning.type === "ExperimentalWarning")) return;
-    for (const listener of originalListeners) {
-      listener.call(process, warning);
-    }
-  });
-}
+${generateWarningSuppressionSnippet()}
 import {
   createActionDock,
   createNodePlatform,
 } from "@actiondock/core";
-
 import { serveParentIpc } from "@actiondock/core/server";
+
 ${imports}
 
 let dataDir;
@@ -213,36 +220,13 @@ await serveParentIpc(service);
 function generateNodeSupervisorEntrySource(plan: SelectionPlan): string {
   return `#!/usr/bin/env node
 // AUTO-GENERATED SUPERVISOR ENTRYPOINT BY ACTIONDOCK BUILDER. DO NOT EDIT.
-const kExperimentalWarningSuppressed = Symbol.for("actiondock.experimental_warning_suppressed");
-if (!globalThis[kExperimentalWarningSuppressed]) {
-  globalThis[kExperimentalWarningSuppressed] = true;
-  const originalEmitWarning = process.emitWarning;
-  if (typeof originalEmitWarning === "function") {
-    process.emitWarning = function (warning, ...args) {
-      if (typeof warning === "string") {
-        const type = typeof args[0] === "string" ? args[0] : (args[0]?.type || args[1]);
-        if (type === "ExperimentalWarning") return;
-      } else if (warning && (warning.name === "ExperimentalWarning" || warning.type === "ExperimentalWarning")) {
-        return;
-      }
-      return Reflect.apply(originalEmitWarning, process, [warning, ...args]);
-    };
-  }
-  const originalListeners = process.listeners("warning");
-  process.removeAllListeners("warning");
-  process.on("warning", (warning) => {
-    if (warning && (warning.name === "ExperimentalWarning" || warning.type === "ExperimentalWarning")) return;
-    for (const listener of originalListeners) {
-      listener.call(process, warning);
-    }
-  });
-}
+${generateWarningSuppressionSnippet()}
 import { spawn } from "node:child_process";
 import { join } from "node:path";
-
 import {
   STANDALONE_ASYNC_UNSUPPORTED,
 } from "@actiondock/core";
+
 import {
   ExitCode,
   IpcActionDockService,
@@ -308,12 +292,12 @@ if (argv.includes("-h") || argv.includes("--help") || argv[0] === "help") {
 const hostScript = join(import.meta.dirname, "entry-host.js");
 const child = spawn(process.execPath, ["--no-warnings=ExperimentalWarning", hostScript, ...argv], {
   cwd: process.cwd(),
-
   env: process.env,
   stdio: ["pipe", "pipe", "pipe", "ipc"],
 });
 
 // 4. 标准输出通道物理隔离与受控限流排空
+
 const service = new IpcActionDockService({
   childProcess: child,
   maxDiagnosticBytes: 512 * 1024,
